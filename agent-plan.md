@@ -1086,8 +1086,22 @@ hook matcher 对插件 MCP 工具必须写 scoped 形态（`mcp__plugin_<p>_<s>_
 
 ### 10.5 卡片组件库（renderer）
 
+**组件层 = shadcn/ui（复制式，源码进仓库），底层 Radix**（2026-09-09 定稿，实测见 附录 C.9）。卡片外壳一律用现成件，不自造基础件；卡片内容仍走 §10.3 的 card_type 注册表。
 
-白名单组件词汇直接复用 dsh-ui 经验：diff、表单、审批按钮对、表格、进度、计划卡、报告卡。卡片交互全部回写为 `card_action` 事件。
+| card_type | 外壳用现成件 | 仍需自研 |
+|-----------|-------------|---------|
+| approval | Message + Card + Badge(risk) + Button | 事件回写（card_action） |
+| plan | Card + Collapsible + Table + Button | 行级评论锚点 |
+| clarify_form | Field + Input/Select/RadioGroup + Button | 表单 → tool_result 合成 |
+| diff | Card + Marker + Button | diff 视图本身（无现成件） |
+| verify_result | Card + Badge + Collapsible | 命令输出整形 |
+| agent_card | Message + Badge + Progress + Button | 血缘树投影 |
+| report | Card + Typeset（流式 markdown） | 报告 schema 渲染 |
+| usage_summary | Card + Chart | token 口径聚合 |
+
+- 对话流容器 = `Message Scroller`（锚定轮次、流式跟随、历史加载不跳）；附件卡 = `Attachment`；系统提示/分隔 = `Marker`；空态 = `Empty`；加载 = `Skeleton`/`Spinner`
+- 卡片交互仍全部回写为 `card_action` 事件（§10.3 不变量）
+- 组件源码进仓库后不跟上游自动升级：改过的文件加 `// @shadcn-modified` 标记，升级前先 diff
 
 ### 10.6 模块边界
 
@@ -1103,7 +1117,9 @@ hook matcher 对插件 MCP 工具必须写 scoped 形态（`mcp__plugin_<p>_<s>_
 |----|------|------|------|
 | renderer 框架 | **React 19 + TypeScript** | 取证 5/5 React：CherryStudio react@19.2.0、Chatbox react@18.2.0、LobeChat react@19.2.7（npm/jsdelivr package.json 级），Vibe Kanban/OpenHands 附录 A 已证；卡片词汇与 dsh-ui 同构 | 全部 UI |
 | 构建链 | electron-vite | CherryStudio electron-vite@5、Chatbox electron-vite@4 实证（main/preload/renderer 一体化） | 工程 |
-| 布局原语 | **react-resizable-panels v4**（MIT） | npm latest 4.12.4 活跃维护；README 实证：Panel `collapsible/collapsedSize/defaultSize(px/%/em)`、命令式 `collapse()/expand()/resize()`、`onLayoutChange(isUserInteraction)` 持久化钩子——纯抽屉全需求覆盖 | 左栏/右抽屉宽度与折叠态、M3 worker 列分栏 |
+| 组件层 | **shadcn/ui**（复制式，源码进仓库；`--base radix`，style `radix-nova`） | 2026-09-09 实测：`init --base radix --preset nova` + `add message bubble message-scroller attachment marker` 全部成功、Vite 构建通过（附录 C.9） | 全部 UI 组件 |
+| 对话与卡片外壳 | shadcn AI 组件族：Message / MessageGroup / Bubble / BubbleGroup / Marker / Attachment / Message Scroller | 同上；Message Scroller 官方定位「锚定轮次、流式跟随、历史加载不跳」 | §10.5 映射表 |
+| 布局原语 | **shadcn `Resizable` + `Sidebar`**（底层 react-resizable-panels v4，MIT） | 组件层已封装，不直接引 rrp；原证据仍成立（Panel `collapsible/collapsedSize/defaultSize`、`onLayoutChange` 持久化钩子） | 左栏/右抽屉宽度与折叠态、M3 worker 列分栏 |
 | ❌ 不引入停靠库 | dockview（⭐3.4k）/ golden-layout（⭐6.7k） | 均为完整 docking 系统（tabs/groups/grids/浮动）；纯抽屉用不到，引入即 §16 第 5 条 反面的自造抽象 | — |
 | 状态容器 | zustand | Chatbox zustand@5.0.6、LobeChat zustand@5.0.4 实证；边界纪律：只放事件流订阅缓存 + 布局偏好，业务状态仍归事件流 | renderer 状态 |
 | 样式 | Tailwind CSS 4 | CherryStudio tailwindcss@4.1.13 实证 | 全部样式 |
@@ -1567,7 +1583,8 @@ MCP 工具进统一工具注册表，与内置工具同权、同审批、无豁�
 | 符号解析 / LSP | web-tree-sitter（WASM）+ tree-sitter-wasms；LSP 客户端用 vscode-languageserver-protocol，server 由用户配置不内置 | 零原生依赖（免 electron-rebuild）；标准协议 |
 | 进程通信 | Electron typed IPC | 平台原生 |
 | 包管理 | pnpm workspaces（M3 前仍单包） | 编排层出现后再拆包 |
-| renderer 框架 | React 19 + zustand + Tailwind CSS 4 + Radix UI + react-resizable-panels v4 + react-virtuoso | 取证见 §10.7（5/5 产品 React、package.json 级） |
+| renderer 框架 | React 19 + zustand + Tailwind CSS 4 + **shadcn/ui（Radix 底）** + react-virtuoso | 取证见 §10.7（5/5 产品 React、package.json 级） |
+| 组件层 | **shadcn/ui**（复制式，源码进仓库；`--base radix`；AI 组件族 Message/Bubble/Message Scroller/Attachment/Marker） | 实测 init + add + build 全通过（附录 C.9）；**不引**完整组件库（Mantine/HeroUI 主题锁死）与 assistant-ui（自带消息模型，与事件流投影冲突） |
 
 ## 16. 防跑偏纪律
 
@@ -2210,3 +2227,25 @@ MCP 工具进统一工具注册表，与内置工具同权、同审批、无豁�
 | P17 | 团队形态 = V1 个人专业版；团队版另立，路径（本地仓库共享 / 自托管同步 / 不做）留待 V1.1 | §1 / §8.1.9 / 决策 #10 |
 
 **文档状态**：v5，待拍板项 0；下一步 = M0 骨架（§14）。
+
+### C.9 桌面端组件层定稿：shadcn/ui（2026-09-09）
+
+> 用户裁决：「桌面端不要全部自造车轮子，用组件」。四问收敛：组件策略 = 复制式 shadcn/ui；落地 = 立刻重做 M0b 界面；卡片 = 用 shadcn AI 组件族承载外壳、内容自研；主题 = 跟随系统深浅双 token；底层 = Radix。
+
+**实测证据（本机 macOS 26.6.2，2026-09-09）**
+
+| 项 | 结果 |
+|---|------|
+| `npx shadcn@latest init --base radix --template vite --preset nova` | ✅ 生成 `components.json` → `style: "radix-nova"` |
+| 既有 electron-vite 布局（renderer 在 `src/renderer`，alias `@/*`） | ✅ init 走 existing-project 路径，组件落到 `src/renderer/components/ui/` |
+| `npx shadcn@latest add message bubble message-scroller attachment marker -y` | ✅ 五个 AI 组件全部生成，**Radix 底可用**（非 Base UI 专属） |
+| `vite build` | ✅ 通过（CSS 37KB / JS 190KB） |
+| TS 版本陷阱 | ⚠️ TS ≥ 6 已移除 `baseUrl`；实测 **TS 5.9.3 下用 `paths` 不带 `baseUrl` 正常**（tsc 0、build 通过） |
+
+**依赖清单（实测生成）**：`radix-ui`、`cn`、`class-variance-authority`、`lucide-react`、`@shadcn/react`、`tailwindcss@4` + `@tailwindcss/vite`、`tw-animate-css`、`@fontsource-variable/geist`、`shadcn`(CLI)
+
+**评估过但未选**：Mantine 31.7k⭐、HeroUI 30.6k⭐（整库主题锁死）；Base UI 10.9k⭐（shadcn 新组件默认底，但生态示例少于 Radix）；assistant-ui 12.1k⭐（自带消息模型，与「事件流投影 + card_type 注册表」冲突）；React Aria（无障碍最强，但 shadcn 生态示例最少）。
+
+**仍需自研的四件**：card_type 注册表与事件投影；diff 视图（shadcn 无现成件，候选 react-diff-view / diff2html）；多 agent 血缘树（Table + Collapsible 组装）；终端/日志输出视图。
+
+**维护约定**：组件源码进仓库后不跟上游自动升级——改过的文件加 `// @shadcn-modified`，升级前先 diff。
