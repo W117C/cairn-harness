@@ -11,7 +11,7 @@
     "agent": "node --import tsx scripts/agent.ts",
     "build": "electron-vite build",
     "dev": "electron-vite dev",
-    "start": "pnpm exec electron-vite build && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron .",
+    "start": "electron-vite build && electron .",
     "ipc:check": "node --import tsx scripts/ipc-check.ts",
     "sandbox:check": "node --import tsx scripts/sandbox-check.ts"
   },
