@@ -1,0 +1,5 @@
+{
+  "fixtures/mock/todo-bug.ts": "3edc93434ece7cdc390cc9f8b7c9419f6d7b9de86b854b2e4a50f46f03d1a773",
+  "fixtures/mock/todo-fix.jsonl": "e253aae90285ecd4eff1b8dc47dd69a8a9e03cb613275f14ac268119d36cd793",
+  "fixtures/todo-app/tests/todo.test.ts": "9179db7de0cec5525d40336fed76c571716b51e200b5de933be7847e7f23a47c"
+}

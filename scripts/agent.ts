@@ -1,0 +1,26 @@
+// 通用入口：pnpm agent [workspace] [fixture.jsonl] [用户消息]
+// 用 mock provider 跑一轮 agent loop，事件日志写到 fixtures/agent-log.jsonl。
+import { rm } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { runLoop } from "../src/agent/loop";
+import { createEventLog, replay } from "../src/events";
+import { createMockProvider } from "../src/providers/mock";
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const workspace = resolve(ROOT, process.argv[2] ?? "fixtures/todo-app");
+const fixture = resolve(ROOT, process.argv[3] ?? "fixtures/mock/todo-fix.jsonl");
+const message = process.argv[4] ?? "修复 fixtures/todo-app 中失败的测试";
+const LOG = join(ROOT, "fixtures", "agent-log.jsonl");
+
+await rm(LOG, { force: true });
+await runLoop({
+  provider: createMockProvider(fixture),
+  events: createEventLog(LOG),
+  workspace,
+  mode: "auto",
+  userMessage: message,
+});
+const log = await replay(LOG);
+console.log(`agent loop 完成：${log.length} 条事件 → ${LOG}`);
+for (const e of log) console.log(`  ${e.type}`);

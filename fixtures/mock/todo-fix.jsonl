@@ -1,0 +1,7 @@
+{"type":"assistant_message","content":"我先读一下 src/todo.ts，定位失败原因。"}
+{"type":"tool_call","id":"c1","name":"read_file","args":{"path":"src/todo.ts"}}
+{"type":"assistant_message","content":"找到了：completedCount 没有过滤 done。我来修复。"}
+{"type":"tool_call","id":"c2","name":"write_file","args":{"path":"src/todo.ts","content":"// 最小 todo 模块：内含 1 个已知 bug，等 agent 修复。\nexport interface Todo {\n  id: number;\n  text: string;\n  done: boolean;\n}\n\nlet nextId = 1;\nconst todos: Todo[] = [];\n\nexport function addTodo(text: string): Todo {\n  const todo: Todo = { id: nextId++, text, done: false };\n  todos.push(todo);\n  return todo;\n}\n\nexport function toggleTodo(id: number): Todo | undefined {\n  const todo = todos.find((t) => t.id === id);\n  if (todo) todo.done = !todo.done;\n  return todo;\n}\n\n// 已知 bug：completedCount 没有过滤 done，把所有 todo 都数进去了。\nexport function completedCount(): number {\n  return todos.filter((t) => t.done).length;\n}\n\nexport function listTodos(): Todo[] {\n  return [...todos];\n}\n"}}
+{"type":"assistant_message","content":"修复完成，跑测试验证。"}
+{"type":"tool_call","id":"c3","name":"run_shell","args":{"command":"pnpm test"}}
+{"type":"assistant_message","content":"3 条测试全部通过，bug 已修复，任务完成。"}

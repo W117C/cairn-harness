@@ -1,0 +1,94 @@
+import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { read_file } from "../src/tools/read_file";
+import { run_shell } from "../src/tools/run_shell";
+import { write_file } from "../src/tools/write_file";
+import type { ToolContext } from "../src/tools";
+
+let ws = "";
+afterEach(async () => { if (ws) await rm(ws, { recursive: true, force: true }); });
+
+async function newCtx(): Promise<ToolContext> {
+  ws = await mkdtemp(join(tmpdir(), "m0-tools-"));
+  return { workspace: ws };
+}
+
+describe("read_file", () => {
+  it("正常：读回文件内容", async () => {
+    const ctx = await newCtx();
+    await writeFile(join(ws, "a.txt"), "hello m0", "utf8");
+    const res = await read_file.run({ path: "a.txt" }, ctx);
+    expect(res.ok).toBe(true);
+    expect(res.output).toBe("hello m0");
+  });
+
+  it("超限：超过 50KB 截断并附一行提示", async () => {
+    const ctx = await newCtx();
+    await writeFile(join(ws, "big.txt"), "y".repeat(60_000), "utf8");
+    const res = await read_file.run({ path: "big.txt" }, ctx);
+    expect(res.ok).toBe(true);
+    expect(res.output).toContain("已截断");
+    expect(res.output.startsWith("y")).toBe(true);
+    expect(Buffer.byteLength(res.output, "utf8")).toBeLessThanOrEqual(50 * 1024 + 100);
+  });
+
+  it("错误路径：不存在 / 绝对路径都被拒", async () => {
+    const ctx = await newCtx();
+    await expect(read_file.run({ path: "missing.txt" }, ctx)).rejects.toThrow(/文件不存在/);
+    await expect(read_file.run({ path: "/etc/passwd" }, ctx)).rejects.toThrow(/绝对路径/);
+  });
+});
+
+describe("write_file", () => {
+  it("正常：写入并可读回，输出带 workspace 相对路径", async () => {
+    const ctx = await newCtx();
+    const res = await write_file.run({ path: "src/nested/b.txt", content: "data-1" }, ctx);
+    expect(res.ok).toBe(true);
+    expect(res.output).toContain("src/nested/b.txt");
+    expect(await readFile(join(ws, "src/nested/b.txt"), "utf8")).toBe("data-1");
+  });
+
+  it("超限：内容超过 50KB 拒绝写入（截断写入会损坏数据）", async () => {
+    const ctx = await newCtx();
+    await expect(
+      write_file.run({ path: "big.txt", content: "z".repeat(60_000) }, ctx),
+    ).rejects.toThrow(/超过 50KB 上限/);
+    await expect(readFile(join(ws, "big.txt"), "utf8")).rejects.toThrow(); // 文件不应被创建
+  });
+
+  it("错误路径：越出 workspace 边界被拒", async () => {
+    const ctx = await newCtx();
+    await expect(write_file.run({ path: "../evil.txt", content: "x" }, ctx)).rejects.toThrow(/越出 workspace 边界/);
+  });
+});
+
+describe("run_shell", () => {
+  it("正常：在指定 workspace 下执行并回传输出", async () => {
+    const ctx = await newCtx();
+    const res = await run_shell.run({ command: "pwd && echo hello-m0" }, ctx);
+    expect(res.ok).toBe(true);
+    expect(res.output).toContain("hello-m0");
+    expect(res.output).toBe((await realpath(ws)) + "\nhello-m0"); // 只在该 workspace 下执行（realpath 对齐 macOS /var 符号链接）
+  });
+
+  it("超限：输出超过 32KB 截断并附一行提示", async () => {
+    const ctx = await newCtx();
+    const res = await run_shell.run(
+      { command: `node -e "process.stdout.write('x'.repeat(40000))"` },
+      ctx,
+    );
+    expect(res.ok).toBe(true);
+    expect(res.output).toContain("已截断");
+    expect(Buffer.byteLength(res.output, "utf8")).toBeLessThanOrEqual(32 * 1024 + 100);
+  });
+
+  it("错误路径：非零退出码 → ok:false 且保留输出", async () => {
+    const ctx = await newCtx();
+    const res = await run_shell.run({ command: "echo boom >&2; exit 3" }, ctx);
+    expect(res.ok).toBe(false);
+    expect(res.output).toContain("boom");
+    expect(res.output).toContain("exit code: 3");
+  });
+});
