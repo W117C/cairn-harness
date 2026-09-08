@@ -2,3 +2,5 @@
 oh-src/
 node_modules/
 dist/
+out/
+.tmp/
