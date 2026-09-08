@@ -3,11 +3,10 @@
 //          ②靶子从 1 失败 → 0 失败  ③判卷文件 sha256 与冻结基线一致。
 // 任一断言失败 → 退出码非 0。
 import { cp, rm } from "node:fs/promises";
-import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runLoop } from "../src/agent/loop";
+import { sha256MatchesFrozen } from "../src/frozen";
 import { createEventLog, replay } from "../src/events";
 import { createMockProvider } from "../src/providers/mock";
 import { TOOLS } from "../src/tools";
@@ -16,7 +15,6 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const APP = join(ROOT, "fixtures", "todo-app");
 const MOCK = join(ROOT, "fixtures", "mock");
 const EVENT_LOG = join(ROOT, "fixtures", "e2e-log.jsonl");
-const FROZEN = join(ROOT, "scripts", "frozen-sha256.json");
 
 let failures = 0;
 function assert(cond: boolean, label: string): void {
@@ -28,16 +26,10 @@ function assert(cond: boolean, label: string): void {
   }
 }
 
-async function sha256MatchesFrozen(): Promise<boolean> {
-  const frozen = JSON.parse(await readFile(FROZEN, "utf8")) as Record<string, string>;
-  for (const [rel, expected] of Object.entries(frozen)) {
-    const actual = createHash("sha256").update(await readFile(join(ROOT, rel))).digest("hex");
-    if (actual !== expected) {
-      console.error(`  判卷文件被改动: ${rel}`);
-      return false;
-    }
-  }
-  return true;
+async function frozenOk(): Promise<boolean> {
+  const res = await sha256MatchesFrozen(ROOT);
+  if (!res.ok) console.error(`  判卷文件被改动: ${res.broken}`);
+  return res.ok;
 }
 
 async function runAppTests(): Promise<{ failed: number; passed: number; exitOk: boolean }> {
@@ -54,7 +46,7 @@ async function runAppTests(): Promise<{ failed: number; passed: number; exitOk: 
 
 // ---- 前置：判卷文件必须与冻结基线一致（开工即校验）----
 console.log("[e2e] 前置校验：判卷文件 sha256 与冻结基线一致");
-assert(await sha256MatchesFrozen(), "fixtures/todo-app/tests/** 与 fixtures/mock/** sha256 = 冻结基线");
+assert(await frozenOk(), "fixtures/todo-app/tests/** 与 fixtures/mock/** sha256 = 冻结基线");
 
 // ---- 准备：重置靶子到带 bug 状态，确认开工基线 1 failed ----
 console.log("[e2e] 重置靶子 fixtures/todo-app（从 fixtures/mock/todo-bug.ts）");
@@ -97,7 +89,7 @@ assert(after.failed === 0 && after.passed >= 3 && after.exitOk, "靶子 1 失败
 
 // ---- 断言③：判卷文件 sha256 仍与冻结基线逐字一致 ----
 console.log("[e2e] 断言③ 判卷文件未被改动");
-assert(await sha256MatchesFrozen(), "交付时 sha256 与开工冻结逐字一致");
+assert(await frozenOk(), "交付时 sha256 与开工冻结逐字一致");
 
 if (failures > 0) {
   console.error(`[e2e] 失败: ${failures} 项断言未通过`);

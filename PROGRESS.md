@@ -30,7 +30,7 @@
 - [x] 任务 4 三工具（9 用例绿，skipped 0）：read 50KB/shell 32KB 截断+一行提示、路径一律 workspace 相对且越界拒绝、run_shell 仅在指定 workspace 执行+60s 超时
 - [x] 任务 5 权限门（3 用例绿）：read-only 档 write_file→deny；default 档 run_shell→ask、非交互 fail-closed 按 deny；auto 全放行
 - [x] 任务 6 靶子：fixtures/todo-app 内 pnpm test 输出 1 failed | 2 passed、退出码 1（completedCount 未过滤 done 的已知 bug）
-- [x] 任务 7 e2e 闭环：`pnpm e2e` 退出码 0，事件流 11 条（user_message → 3×tool_call/tool_result → 收尾 assistant_message），自断言 ①tool_call(write_file)+tool_result(run_shell) ②1 失败→0 失败(3 passed) ③判卷 sha256 与冻结一致；反向验证（mock write_file 改空 diff）红：仍 1 failed、退出码 1，还原后绿。
+- [x] 任务 7 e2e 闭环（另见文末 M0b 段）：`pnpm e2e` 退出码 0，事件流 11 条（user_message → 3×tool_call/tool_result → 收尾 assistant_message），自断言 ①tool_call(write_file)+tool_result(run_shell) ②1 失败→0 失败(3 passed) ③判卷 sha256 与冻结一致；反向验证（mock write_file 改空 diff）红：仍 1 failed、退出码 1，还原后绿。
 
 ## 冻结基线（开工时记录，交付时逐字一致，e2e 每次自动复核）
 | 文件 | sha256 |
@@ -38,3 +38,10 @@
 | fixtures/mock/todo-bug.ts | 3edc93434ece7cdc390cc9f8b7c9419f6d7b9de86b854b2e4a50f46f03d1a773 |
 | fixtures/mock/todo-fix.jsonl | e253aae90285ecd4eff1b8dc47dd69a8a9e03cb613275f14ac268119d36cd793 |
 | fixtures/todo-app/tests/todo.test.ts | 9179db7de0cec5525d40336fed76c571716b51e200b5de933be7847e7f23a47c |
+## M0b：真实模型接入（2026-09-09）
+- 领导提供 GLM 接入三要素（OpenAI 兼容端点 / key / glm-5.3-flash）；key 只落 .env.local（已加 .gitignore，未入库、未回显）。
+- 新增 src/providers/glm.ts：OpenAI 兼容协议真实 provider——复用 events.replay 从事件日志重建对话历史；一次响应的文本+多个 tool_call 按队列逐个吐出（适配 M0 loop 单输出契约）；每轮 API 的 token 用量以 usage 事件落回日志（UsageEvent 类型首次真实启用）；reasoning_content 不回传历史。
+- scripts/agent-real.ts（pnpm agent:real）：冻结校验 → 重置靶子 → 真模型闭环 → 复核测试与判卷。scripts/show-log.ts：事件轨迹查看器。判卷校验逻辑抽到 src/frozen.ts 供 e2e 与 agent-real 共用（e2e 回归全绿）。
+- 真实闭环实测一次通过：20 条事件、5781 tokens，靶子 3/3 全绿，修复为根因修复（completedCount 过滤 done）。
+- 有价值的观察：模型首轮把 user message 里的 "fixtures/todo-app" 误解为 workspace 内路径，read_file 报"文件不存在"后自行 ls/find 定位、修正路径——事件轨迹见 fixtures/agent-real-log.jsonl。改进点（记录不实施）：user message 应显式声明 workspace 根语义，减少模型试错。
+- 密钥安全：.env.local 未被 git 跟踪（git status 复核），密钥未出现在任何提交、日志或文档中。
