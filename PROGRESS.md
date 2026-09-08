@@ -45,3 +45,33 @@
 - 真实闭环实测一次通过：20 条事件、5781 tokens，靶子 3/3 全绿，修复为根因修复（completedCount 过滤 done）。
 - 有价值的观察：模型首轮把 user message 里的 "fixtures/todo-app" 误解为 workspace 内路径，read_file 报"文件不存在"后自行 ls/find 定位、修正路径——事件轨迹见 fixtures/agent-real-log.jsonl。改进点（记录不实施）：user message 应显式声明 workspace 根语义，减少模型试错。
 - 密钥安全：.env.local 未被 git 跟踪（git status 复核），密钥未出现在任何提交、日志或文档中。
+
+## M0b-UI：桌面壳 + 沙箱（本轮 goal，2026-09-09）
+
+### 理解的目标 / 顺序 / 最大风险（≤10 行）
+- 目标：让 M0 内核「看得见 + 关得住」——electron 窗口发一句话，agent 在 macOS Seatbelt 沙箱内读/改/测 fixtures/todo-app，事件流实时上屏。
+- 顺序：任务1 建壳 → 基线核对（typecheck/test/e2e）→ 2 IPC 接线(ipc:check) → 3 权限门 UI(假时钟测试) → 4 Seatbelt(sandbox:check+反向红→绿) → 5 真机端到端+截图。
+- 风险①：tsconfig.json 不在白名单 → jsx/DOM 走 typecheck 脚本的 CLI 参数（--jsx react-jsx --lib …），tsconfig 一字未动。
+- 风险②：冻结 runLoop 对 ask 一律 deny（gate 非 allow 即拒绝）→ loop 固定 auto 档，真实门在 src/main 的工具包装里复用 checkPermission，语义不变。
+- 风险③：冻结剧本的 run_shell 命令是 pnpm test，Seatbelt 下 pnpm 起不来（坑三）→ 沙箱内映射为坑三直连 vitest 命令（任务 5 明确要求）。
+- 风险④：pnpm 11 拦 electron postinstall → 新建 pnpm-workspace.yaml（onlyBuiltDependencies），不在白名单，已记 BLOCKED.md。
+
+### 建壳与基线（任务 0+1，全部实测）
+- 依赖：electron 44.2.0 / electron-vite 5.0.0 / vite 8.2.2 / react 19.2.8（pnpm add -D，exit 0）。
+- `pnpm exec electron-vite build` exit 0，out/main/index.js、out/preload/index.js、out/renderer/index.html 齐全。
+- 坑五复现：首次 electron --version 打印 "Downloading Electron binary..." 后正常，v44.2.0。
+- 基线：`pnpm typecheck` exit 0（CLI 加 --jsx react-jsx --lib ES2022,DOM,DOM.Iterable，tsconfig 未动）；`pnpm test` 26 用例全绿（M0 的 18 条不变 + 新增 ask-gate 5 条、sandbox 3 条）；`pnpm e2e` exit 0 全断言通过。
+- 结构：src/main/（index.ts 壳 / agent-runner.ts IPC 入口 / ask-gate.ts 状态机 / sandbox.ts Seatbelt / ipc-protocol.ts 共享类型）、src/preload/（contextBridge）、src/renderer/（React 19 对话流+composer）。
+### 任务 2-5 结果（全部实测，证据在对话流中）
+- 任务 2 IPC：`pnpm ipc:check` exit 0 —— 直调 main 同一入口 handleAgentRun，11 条事件含 tool_call(write_file) + tool_result(run_shell)，靶子 1 失败 → 0 失败（3 passed）。
+- 任务 3 权限门 UI：ask-gate 假时钟 5 用例（批准/拒绝/默认 60s 超时拒绝/幂等/自定义超时）+ gated-tools 3 条接线用例（批准才执行/拒绝不执行/沙箱降级强制审批 fail-closed）全绿；真机用 System Events 点击真实「批准」按钮驱动，UI 渲染已批准/已拒绝状态。
+- 任务 4 沙箱：`pnpm sandbox:check` exit 0 —— ①工作区内写成功 ②工作区外写 EPERM 拒绝 ③~/.ssh 与 ~/Library/Keychains 读取 EPERM 拒绝 ④connect 1.1.1.1:80 EPERM 断网。反向验证：--bogus-root（可写根=/nonexistent/m0b-bogus-root）→ ①变红（EPERM）退出码 1；还原后全绿退出码 0。
+- 任务 5 真机端到端：`pnpm start` 启动，界面键入「修复 fixtures/todo-app 中失败的测试」（default 档），对话流实时上屏 11 条事件，两次「批准」点击后 agent 在 Seatbelt 内以坑三直连命令跑 vitest（3 passed, 69ms），收尾 assistant_message「3 条测试全部通过，bug 已修复，任务完成」。截图 docs/m0b-ui.png（窗口裁剪 1960×1520）。
+- 硬指标：typecheck / test / e2e / ipc:check / sandbox:check / electron-vite build 六条 exit 0；sha256 三判卷文件逐字一致；git diff --stat 无 agent-plan.md 与上一轮 src/*。
+
+### 本轮新增坑记录
+- 坑六（DSH 环境特有）：DSH 的 pnpm shim 用 DSH Desktop 二进制（ELECTRON_RUN_AS_NODE）跑 pnpm，`pnpm exec electron` 会被 electron 包 index.js 的自动下载分支带偏（把 install.js 当 app 加载）→ package.json 的 start 改为直启 node_modules/electron/dist 二进制。
+- 坑七：electron 在 devDependencies，electron-vite 不自动外置 → electron/index.js 被打进 bundle，__dirname 变成 out/main/ → path.txt 误判缺失 → 误触发下载分支崩溃。修复 = main/preload 显式 external: ["electron"]。
+- 坑八：`app.setAccessibilitySupportEnabled(true)` 必须在 ready 之后调用（模块顶层调用会让 main 加载失败，default_app 报 Unable to find Electron app）。
+- 环境怪癖：/usr/local/bin/node 是个 245MB 的 Electron-as-node（v24.18.1）；pnpm 脚本进程链内 `node` 解析到它，沙箱内 vitest 实际跑在其上（功能正常，测试全过）。DSH pnpm shim 还带 clear-env.mjs，会重排 PATH。
+- 截图链路：系统 screencapture 需录屏授权（曾失败），改用应用内 webContents.capturePage（M0B_SCREENSHOT 环境变量门控，不设置零行为）；交互自动化用 AX + 键盘（需辅助功能授权）。

@@ -7,5 +7,5 @@
 {"type":"tool_result","callId":"c2","ok":true,"output":"已写入 src/todo.ts（725 字节）"}
 {"type":"assistant_message","content":"修复完成，跑测试验证。"}
 {"type":"tool_call","id":"c3","name":"run_shell","args":{"command":"pnpm test"}}
-{"type":"tool_result","callId":"c3","ok":true,"output":"$ vitest run\n\n RUN  v5.0.0 /Users/ze/Downloads/deepseek harness/fixtures/todo-app\n\n ✓ tests/todo.test.ts (3 tests) 2ms\n\n Test Files  1 passed (1)\n      Tests  3 passed (3)\n   Start at  00:53:00\n   Duration  125ms (transform 59%, import 24%, tests 9%, worker 8%)"}
+{"type":"tool_result","callId":"c3","ok":true,"output":"$ vitest run\n\n RUN  v5.0.0 /Users/ze/Downloads/deepseek harness/fixtures/todo-app\n\n ✓ tests/todo.test.ts (3 tests) 2ms\n\n Test Files  1 passed (1)\n      Tests  3 passed (3)\n   Start at  02:21:56\n   Duration  125ms (transform 62%, import 22%, tests 8%, worker 8%)"}
 {"type":"assistant_message","content":"3 条测试全部通过，bug 已修复，任务完成。"}

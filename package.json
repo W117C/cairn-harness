@@ -3,16 +3,30 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
+  "main": "out/main/index.js",
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit --jsx react-jsx --lib ES2022,DOM,DOM.Iterable",
     "test": "vitest run --config tests/vitest.config.ts",
     "e2e": "node --import tsx scripts/e2e.ts",
-    "agent": "node --import tsx scripts/agent.ts"
+    "agent": "node --import tsx scripts/agent.ts",
+    "build": "electron-vite build",
+    "dev": "electron-vite dev",
+    "start": "pnpm exec electron-vite build && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron .",
+    "ipc:check": "node --import tsx scripts/ipc-check.ts",
+    "sandbox:check": "node --import tsx scripts/sandbox-check.ts"
   },
   "devDependencies": {
     "@types/node": "^26.5.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "electron": "^44.2.0",
+    "electron-vite": "^5.0.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "tsx": "^4.23.13",
     "typescript": "^5.9.3",
+    "vite": "^8.2.2",
     "vitest": "^5.0.0"
   }
 }
