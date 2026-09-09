@@ -265,15 +265,20 @@ async function phaseElectron(root: string): Promise<void> {
       return disk.layout?.open?.git === true && disk.layout?.activePanel === "git" ? true : null;
     }, 10_000);
     ok(diskOk, "UI 开关 git 面板 → settings.json 落盘 open.git=true + activePanel=git");
-    const shot1 = await cdp.send("Page.captureScreenshot", { format: "png" });
-    await writeFile(join(process.cwd(), "docs", "m1e-panels.png"), Buffer.from(shot1.data as string, "base64"));
-    console.log("  📷 docs/m1e-panels.png");
+    // 截图是运行产物：默认不写盘（否则每次跑门禁都把工作树弄脏）。需要刷新交付截图时设 M1E_SCREENSHOT=1。
+    if (process.env.M1E_SCREENSHOT) {
+      const shot1 = await cdp.send("Page.captureScreenshot", { format: "png" });
+      await writeFile(join(process.cwd(), "docs", "m1e-panels.png"), Buffer.from(shot1.data as string, "base64"));
+      console.log("  📷 docs/m1e-panels.png");
+    }
 
     await cdp.eval("(() => { document.querySelector('[data-m1e-settings-open]')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true; })()");
     await new Promise((r) => setTimeout(r, 700));
-    const shot2 = await cdp.send("Page.captureScreenshot", { format: "png" });
-    await writeFile(join(process.cwd(), "docs", "m1e-settings.png"), Buffer.from(shot2.data as string, "base64"));
-    console.log("  📷 docs/m1e-settings.png");
+    if (process.env.M1E_SCREENSHOT) {
+      const shot2 = await cdp.send("Page.captureScreenshot", { format: "png" });
+      await writeFile(join(process.cwd(), "docs", "m1e-settings.png"), Buffer.from(shot2.data as string, "base64"));
+      console.log("  📷 docs/m1e-settings.png");
+    }
 
     await killElectron(electron);
 
