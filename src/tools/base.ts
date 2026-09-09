@@ -1,11 +1,27 @@
 import { isAbsolute, relative, resolve } from "node:path";
+import type { AgentEvent, ClarifyAnswerMap } from "../events";
 
 /** 工具可预期失败的统一错误类型：loop 捕获后转成 ok:false 的 tool_result。 */
 export class ToolError extends Error {}
 
+/** 澄清门通道：clarify 工具挂起等表单提交（仿 AskGate；缺省 = fail-closed）。 */
+export interface ClarifyChannel {
+  wait(callId: string): Promise<ClarifyAnswerMap>;
+}
+/** 方案门通道：propose_plan 工具挂起等批准（缺省 = fail-closed）。 */
+export interface PlanChannel {
+  waitApproval(callId: string): Promise<"approved" | "rejected">;
+}
+
 export interface ToolContext {
   /** 工具执行的工作区（绝对路径）。 */
   workspace: string;
+  /** 事件旁路出口：门工具用它把 clarify_requested / plan_proposed 落进事件流。 */
+  emit?: (e: AgentEvent) => void | Promise<void>;
+  /** 原工具调用 id（门事件与 tool_result 挂回同一 id 用）。 */
+  callId?: string;
+  clarify?: ClarifyChannel;
+  plan?: PlanChannel;
 }
 
 export interface ToolResult {
@@ -13,7 +29,7 @@ export interface ToolResult {
   output: string;
 }
 
-export type ToolName = "read_file" | "write_file" | "run_shell";
+export type ToolName = "read_file" | "write_file" | "run_shell" | "clarify" | "propose_plan" | "verify";
 
 export interface Tool {
   name: ToolName;

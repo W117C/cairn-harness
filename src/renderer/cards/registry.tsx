@@ -1,12 +1,18 @@
 // 卡片注册表：card_type → 组件。M1a 落 approval / diff / report / usage_summary 四类，
-// 外壳用现有 shadcn 组件；未知 card_type 落兜底卡，绝不抛异常。
+// M1b 增 clarify_form / plan / verify_result 三类（三门），外壳用现有 shadcn 组件；
+// 未知 card_type 落兜底卡，绝不抛异常。
 // （文件用 .tsx 后缀：卡片组件含 JSX，.ts 无法编译。）
 import type { ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ClarifyFormCard } from "./clarify-form";
+import { PlanCard } from "./plan";
+import { VerifyResultCard } from "./verify-result";
 
 export interface CardProps {
   payload: Record<string, unknown>;
+  /** 卡片动作回传（表单提交 / 方案批准），由宿主（main.tsx → IPC）接线；缺省 = 纯展示。 */
+  onAction?: (action: string, data: unknown) => void;
 }
 export type CardComponent = (props: CardProps) => ReactElement;
 
@@ -102,6 +108,9 @@ const REGISTRY: Record<string, CardComponent> = {
   diff: DiffCard,
   report: ReportCard,
   usage_summary: UsageSummaryCard,
+  clarify_form: ClarifyFormCard,
+  plan: PlanCard,
+  verify_result: VerifyResultCard,
 };
 
 export const KNOWN_CARD_TYPES = Object.keys(REGISTRY);

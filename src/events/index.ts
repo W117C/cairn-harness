@@ -11,6 +11,43 @@ export interface ToolResultEvent { type: "tool_result"; callId: string; ok: bool
 export interface UsageEvent { type: "usage"; inputTokens: number; outputTokens: number }
 /** 会话元信息：分支会话首行携带 branch_of 指向原会话。 */
 export interface SessionMetaEvent { type: "session_meta"; branch_of: string }
+
+// ---- M1b 三门事件（澄清门 / 方案门 / 验证门）----
+/** 澄清问题：question 必填；options 给定时渲染选项（2–4 个），缺省为自由补充输入。 */
+export interface ClarifyQuestion {
+  question: string;
+  header?: string;
+  options?: { label: string; description?: string }[];
+  multiSelect?: boolean;
+}
+/** 表单提交值：key = 问题原文，value = 选中项（单选 string / 多选 string[]）或自由补充文本。 */
+export type ClarifyAnswerMap = Record<string, string | string[]>;
+/** 澄清门：模型发起澄清，等人填表（callId = 原工具调用 id，tool_result 挂回同一 id）。 */
+export interface ClarifyRequestedEvent { type: "clarify_requested"; callId: string; questions: ClarifyQuestion[] }
+
+export interface PlanFileChange { path: string; action: "create" | "edit" | "delete"; summary: string }
+export interface PlanProposal {
+  goal: string;
+  files: PlanFileChange[];
+  approach?: string;
+  verify?: { lint?: string[]; test?: string[] };
+}
+/** 方案门：模型提交计划，等人批准；批准前写工具在权限层被拒。 */
+export interface PlanProposedEvent { type: "plan_proposed"; callId: string; plan: PlanProposal }
+/** 方案决议（批准 / 拒绝），落日志供 plan 卡显示状态。 */
+export interface PlanApprovedEvent { type: "plan_approved"; callId: string; approved: boolean }
+
+export interface VerifyCommandResult { command: string; ok: boolean; output: string }
+/** 验证门：一次 lint/test 执行结果。attempt 从 1 起；失败时错误输出经 tool_result 注入同轮继续修。 */
+export interface VerifyResultEvent {
+  type: "verify_result";
+  callId: string;
+  ok: boolean;
+  attempt: number;
+  maxAttempts: number;
+  results: VerifyCommandResult[];
+}
+
 export type AgentEvent =
   | UserMessageEvent
   | AssistantMessageEvent
@@ -18,7 +55,11 @@ export type AgentEvent =
   | ToolCallEvent
   | ToolResultEvent
   | UsageEvent
-  | SessionMetaEvent;
+  | SessionMetaEvent
+  | ClarifyRequestedEvent
+  | PlanProposedEvent
+  | PlanApprovedEvent
+  | VerifyResultEvent;
 
 const KNOWN_TYPES = new Set([
   "user_message",
@@ -28,6 +69,10 @@ const KNOWN_TYPES = new Set([
   "tool_result",
   "usage",
   "session_meta",
+  "clarify_requested",
+  "plan_proposed",
+  "plan_approved",
+  "verify_result",
 ]);
 
 export interface EventLog {

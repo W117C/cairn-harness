@@ -171,3 +171,50 @@
 - 真模型流式截图：agent-runner 增 env 门控演示通道（M0A_PROVIDER=glm，缺省 mock 字节不变；单轮流式无 tools、pull-based 逐事件吐出，完整 loop 接线归 M1b），CDP 驱动真实发送，捕获瞬间气泡 DOM 文本 = 「我是Z.ai开发的GLM▍」（模型仍在生成）；docs/m1a-stream.png 已更新为真模型版。
 - key 安全复查：全仓 grep key 字面量零命中（排除 node_modules/.git/out/.tmp）。
 - 最终：六道门 + fork-check CHAIN_EXIT=0（test 43/skipped 0）+ provider:check exit 0——硬指标一补验后完整达成。
+
+## M1b：三门——澄清门 / 方案门 / 验证门（2026-09-09）
+
+### 理解的目标 / 顺序 / 最大风险（≤10 行）
+- 目标：三门落地为事件流上的门，不靠提示词自觉——clarify 不猜方向（表单挂回原 tool_use id）、propose_plan 先批后写（权限层写禁）、verify 改完必跑（失败注入同轮继续修，上限 3 次）。
+- 顺序：任务0 基线（六道门+fork-check 绿，test=43，M0_API_KEY 缺失→暗卷走跳过路径并标 BLOCKED）→ 1 事件流+4 类型 → 2 权限层写禁 → 3 clarify/propose_plan/verify 三工具+反射循环 → 4 注册表 +3 卡 → 5 gate-check 明卷 → 6 暗卷（无 key 跳过）→ 反向验证红→绿。
+- 风险①：写禁状态放哪——放 src/permissions 模块内（会话级），gate() 与 checkPermission() 双口生效，loop/gatedTool 零改动拿到写禁（单一事实源）。
+- 风险②：src/providers 只读——暗卷的「工具结果反馈回模型」需要会话型 provider，新建在 src/agent/（白名单内），只调用 glm.ts 不改它。
+- 风险③：mock 是线性剧本，门需要「暂停等人」——clarify/propose_plan 工具用 gate（仿 AskGate）挂起等待，驱动方经 submit/approve 解挂，与 turn 解耦。
+- 风险④：verify 反射循环与「停止不再调模型」——在 loop 内特判 verify 工具调用：成功即停、3 连败即停，provider.next() 不再被调。
+
+### 任务 0 基线（2026-09-09 实测）
+- 一条链 `pnpm typecheck && pnpm test && pnpm e2e && pnpm ipc:check && pnpm sandbox:check && pnpm build && pnpm fork-check` → CHAIN_EXIT=0。
+- 测试数：Test Files 11 passed (11)，Tests 43 passed (43)，skipped 0（= M1a 收口基线，一字不差）。
+- M0_API_KEY：环境变量与 .env.local 均不存在 → 暗卷按任务书走「退出码 0 + 打印暗卷跳过」，BLOCKED.md 备案（key 在场时可直接重跑）。
+- 工作树现状：fixtures/e2e-log.jsonl 与 fixtures/todo-app/src/todo.ts 为 e2e 每轮运行产物（非判卷文件，冻结清单不含），M1a 收口后即存在，不属本轮改动。
+
+### 任务 1–3 内核层（完成，2026-09-09 实测）
+- 事件流 +4 类型：clarify_requested / plan_proposed / plan_approved / verify_result（KNOWN_TYPES 同步，坏日志防线不变）。
+- 权限层写禁（方案门，唯一强制力）：src/permissions 持会话级 plan 状态（markPlanProposed / approvePlan / resetPlanState），checkPermission 与 gate 双口生效——存在未批准 plan 时 write_file/run_shell 一律 deny（任何档位），只读与门工具（clarify/propose_plan/verify）不拦；denyReason() 给出人话原因。loop/gatedTool 零签名改动拿到写禁。
+- clarify / propose_plan 工具（src/tools/）：规格校验（1–4 问、2–4 选项；goal/files[action]/verify）→ 先登记等待、再落事件、再挂起（顺序即正确性：广播事件可能瞬间引来提交/批准，注册竞态在源头关闭）；propose_plan 先 markPlanProposed 再 emit（批准不会被打回未批准态）。无门接线 fail-closed。
+- ClarifyGate / PlanGate（src/agent/gates.ts，仿 AskGate）：submit/approve/reject 与 turn 解耦；approve 同步调 approvePlan 解锁写禁；reject 保持写禁（须重新提议再批）。
+- verify 反射循环（src/agent/verify.ts + loop 特判）：配置读 .agent/config.json 的 verify 字段，缺省探测 package.json scripts（lint/test → pnpm run <name>）；两者皆无 fail-closed ok:false；成功即停（不再调模型）、失败错误输出注入同轮、连续 3 次耗尽即停并出 verify_result(failed)；上限可配（LoopOptions.verify.maxAttempts，缺省 3）。verify 不进 TOOLS（系统门，未接线 = fail-closed）。
+- 单测 23 条新增（clarify 6 / plan-gate 6 / verify 8 / 待补注册表），66/66 全绿（基线 43 不退化）。
+- 坑十六：门工具必须「先登记等待→再 emit→再挂起」——否则事件驱动的提交方（queueMicrotask 驱动 / UI）会跑在 waiter 注册之前，提交落空挂死。propose_plan 还必须先 mark 再 emit，防止批准瞬间被 emit 后的 mark 覆盖回未批准态。
+
+### 任务 4 卡片注册表 +3（完成，实测）
+- src/renderer/cards/clarify-form.tsx（Field + RadioGroup/Checkbox + Input 自由补充 + Button，提交后表单冻结）/ plan.tsx（目标 + 文件清单 action 徽章 + 草图 + verify 命令 + 批准/拒绝）/ verify-result.tsx（通过徽章 + 第 N/3 次 + 逐条命令输出）。
+- CardProps 增可选 onAction(action, data)（缺省纯展示）；form_submit → IPC submitClarify；plan_decide → IPC decidePlan。
+- 注册表 7 类：approval / diff / report / usage_summary / clarify_form / plan / verify_result；未知仍落兜底卡。radio-group + checkbox 经 shadcn CLI add（src/renderer/** 白名单内）。
+- 单测：7 类注册断言 + SSR 冒烟（renderToStaticMarkup，hook 组件不能函数直调）+ 未知类型不抛异常。cards.test.ts 3 用例。
+
+### 任务 5–6 全链 + 暗卷（完成/跳过，实测）
+- scripts/gate-check.ts（任务书白名单内）+ fixtures/gate/gate-flow.jsonl 冻结剧本（歧义任务 → clarify → plan → 批准 → 写 → verify，写入内容 = 修复 completedCount + addTodo defaultDone 开关，测试保持 3 passed）。
+- pnpm gate-check 退出码 0：写禁三断言 ①②③ + 序列断言 clarify_requested → plan_proposed → tool_call(write_file) → verify_result(ok) + 先批后写 + 提交值逐字挂回 + 靶子 1 failed → 0 failed。
+- 暗卷：M0_API_KEY 缺失 → 打印「暗卷跳过（无 M0_API_KEY）」退出码 0（任务书规定路径）；真实 GLM 通道已实现（src/agent/glm-session.ts，只调用只读的 src/providers/glm.ts，从事件日志重建 OpenAI 兼容历史含 tool 角色，纯文本回复即收束），key 在场即可跑。
+- IPC 级验收（tests/runner-gates.test.ts）：clarify_requested → handleClarifySubmit → tool_result 逐字挂回原 tool_use id；handlePlanDecide(true) → plan_approved 事件经会话管线落盘并推送；批准后写放行 + verify 通过。
+- 反向验证（任务书要求）：把 planBlocks() 临时短路（写禁失效）→ pnpm gate-check ❶❶❶「未批准时写工具返回拒绝」三条断言全红、退出码 1；还原后全绿退出码 0。写禁是权限层拦截不是提示词——实证拦得住。
+- 半托项：docs/m1b-gates.png（1960×1456）——M1B_GATE_FLOW=1 起 UI，CDP 真实 DOM 事件驱动：clarify 卡点选 → 提交 → plan 卡批准 → verify 通过卡，DOM 断言四卡全在屏（clarify/plan/approved/verify = true）。
+
+### 收口（2026-09-09，全部实测）
+- 一条链 `pnpm typecheck && pnpm test && pnpm e2e && pnpm ipc:check && pnpm sandbox:check && pnpm build && pnpm fork-check && pnpm gate-check` → CHAIN_EXIT=0。
+- 测试数：Test Files 15 passed (15)，Tests 68 passed (68)，skipped 0（基线 43 → 68，+25 条新用例）。
+- 硬指标二：git diff --stat 无 agent-plan.md、无 fixtures/todo-app/tests/、无 fixtures/mock/；判卷 sha256 三件套与冻结基线逐字一致（3edc934…/e253aae…/9179db7…）。fixtures/e2e-log.jsonl 与 fixtures/todo-app/src/todo.ts 为 e2e/明卷每轮运行产物（冻结清单不含）。
+- 坑十七：tests/runner-gates 与 gated-tools 并行共用 fixtures/todo-app 靶子 → 文件竞争偶发红。根因修复：tests/vitest.config.ts 增 fileParallelism: false（文件级串行，模块隔离不变），连跑 3 轮稳定。
+- 坑十八：plan 决议事件起初走 app 级 hooks，绕开了当次 run 的 onEvent → 修正为 session.emit 统一管线（落盘 + 推送同路），handlePlanDecide 与 loop 事件同一条道。
+- key 安全：全仓 grep M0_API_KEY 赋值零命中（src/scripts/tests）；git ls-files 无 .env；暗卷 key 只从当次进程环境变量读。

@@ -42,7 +42,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { resolveCard } from "./cards/registry";
-import type { AgentEvent } from "../events";
+import type { AgentEvent, ClarifyAnswerMap } from "../events";
 import type {
   AgentApi,
   AskOutcomePayload,
@@ -100,7 +100,62 @@ function toTimeline(items: Item[]): TimelineItem[] {
   return out;
 }
 
-function EventView({ e }: { e: AgentEvent }) {
+/** plan 决议状态表：callId → approved/rejected（由 plan_approved 事件归纳）。 */
+type PlanStatuses = Record<string, "approved" | "rejected">;
+
+function EventView({
+  e,
+  onAction,
+  planStatuses,
+  clarifySubmitted,
+}: {
+  e: AgentEvent;
+  onAction: (action: string, data: unknown) => void;
+  planStatuses: PlanStatuses;
+  clarifySubmitted: Set<string>;
+}) {
+  if (e.type === "clarify_requested") {
+    const Card = resolveCard("clarify_form");
+    return (
+      <Card
+        payload={{ type: "clarify_form", callId: e.callId, questions: e.questions, submitted: clarifySubmitted.has(e.callId) }}
+        onAction={onAction}
+      />
+    );
+  }
+  if (e.type === "plan_proposed") {
+    const Card = resolveCard("plan");
+    return (
+      <Card
+        payload={{ type: "plan", callId: e.callId, plan: e.plan, status: planStatuses[e.callId] ?? "pending" }}
+        onAction={onAction}
+      />
+    );
+  }
+  if (e.type === "plan_approved") {
+    return (
+      <Card className="py-3">
+        <CardContent className="flex items-center gap-2 px-3 text-sm">
+          <Badge variant={e.approved ? "secondary" : "destructive"}>{e.approved ? "方案已批准，写工具解锁" : "方案已拒绝"}</Badge>
+        </CardContent>
+      </Card>
+    );
+  }
+  if (e.type === "verify_result") {
+    const Card = resolveCard("verify_result");
+    return (
+      <Card
+        payload={{
+          type: "verify_result",
+          callId: e.callId,
+          ok: e.ok,
+          attempt: e.attempt,
+          maxAttempts: e.maxAttempts,
+          results: e.results,
+        }}
+      />
+    );
+  }
   if (e.type === "user_message") {
     return (
       <Message align="end">
@@ -235,6 +290,27 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<PermissionMode>("default");
   const [input, setInput] = useState("");
+  const [clarifySubmitted, setClarifySubmitted] = useState<Set<string>>(new Set());
+
+  // plan 决议状态：plan_approved 事件归纳（同 callId 后到者优先）
+  const planStatuses: PlanStatuses = {};
+  for (const it of items) {
+    if (it.kind === "event" && it.e.type === "plan_approved") {
+      planStatuses[it.e.callId] = it.e.approved ? "approved" : "rejected";
+    }
+  }
+
+  // 卡片动作回传：表单提交 → 澄清门；批准/拒绝 → 方案门（IPC，与 turn 解耦）
+  const onCardAction = (action: string, data: unknown): void => {
+    if (action === "form_submit") {
+      const d = data as { callId: string; answers: ClarifyAnswerMap };
+      setClarifySubmitted((v) => new Set(v).add(d.callId));
+      void window.agent.submitClarify(d.callId, d.answers);
+    } else if (action === "plan_decide") {
+      const d = data as { callId: string; approved: boolean };
+      void window.agent.decidePlan(d.approved, d.callId);
+    }
+  };
 
   useEffect(() => watchSystemTheme(window.matchMedia(DARK_QUERY), document.documentElement), []);
 
@@ -371,7 +447,7 @@ function App() {
                       {toTimeline(items).map((it, i) => (
                         <MessageScrollerItem key={i}>
                           {it.kind === "event" ? (
-                            <EventView e={it.e} />
+                            <EventView e={it.e} onAction={onCardAction} planStatuses={planStatuses} clarifySubmitted={clarifySubmitted} />
                           ) : it.kind === "stream" ? (
                             <StreamView s={it} running={running} />
                           ) : (

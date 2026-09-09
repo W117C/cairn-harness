@@ -27,3 +27,8 @@
 2. **scripts/ipc-check.ts 白名单矛盾**：任务 6 明确要求「`pnpm ipc:check` 扩展为重放验收」，但界限清单未列该文件（只列了 provider-check.ts / fork-check.ts 两个新脚本）。按任务执行且改动压到最小（import replay + logPath 提取 + 7 行重放比对断言）。待追认；若判违规可整体 revert 该文件，把比对逻辑迁进 src/main（白名单内）。
 3. **registry 文件后缀偏差**：任务书写 `src/renderer/cards/registry.ts`，卡片组件含 JSX 必须 .tsx（现为 registry.tsx），功能与验收不受影响。
 4. ~~流式截图的演示通道~~ **已解决（2026-09-09 真模型版交付）**：docs/m1a-stream.png 现为真模型（glm-5.3-flash）流式中间态（捕获瞬间气泡 = 「我是Z.ai开发的GLM▍」，模型仍在生成）。mock 演示通道（M0A_MOCK_DELTA=1）保留为无 key 时的演示路径，与真模型共用同一条 delta 合成管线；真模型 UI 通道走 M0A_PROVIDER=glm（env 门控、单轮、无 tools，完整 loop 接线归 M1b）。
+## M1b 轮新增待裁决（2026-09-09）
+1. ~~【真阻塞】M0_API_KEY 缺失 → 暗卷（任务 6）无法执行~~ **非阻塞，走任务书规定跳过路径**：`pnpm gate-check` 检测无 key → 打印「暗卷跳过（无 M0_API_KEY）」退出码 0，其余断言全绿。暗卷通道已备好（src/agent/glm-session.ts：从事件日志重建 OpenAI 兼容对话历史含 tool 角色反馈回模型；gate-check 暗卷段断言模型至少各调一次 clarify 与 propose_plan + 判卷 sha256 不破）。**领导提供 key 后重跑 `pnpm gate-check` 即自动执行暗卷**（注意 M1a 教训：代理 key 必须 M0_ENDPOINT 同传）。
+2. **verify 配置来源取舍**：任务书「verify 配置读 .agent/config.json 的 verify 字段，缺省探测 package.json 的 scripts」已按序实现；propose_plan 的 verify 字段仅作计划卡展示（未作为执行器第三来源）——若领导希望 plan.verify 覆盖 config，M1c 一行改动即可（loadVerifyConfig 加一层入参）。
+3. **verify 在 read-only 档不拦**：verify 执行的是仓库自身配置的 lint/test 命令（读为主），权限层按非副作用工具放行；若领导认为 verify 命令也要过 ask，M1c 在 checkPermission 增加 verify 分支即可。
+4. **registry 文件后缀**（沿袭 M1a 备案）：registry.tsx 含 JSX 必须 .tsx；本轮新增三个卡片文件同为 .tsx。

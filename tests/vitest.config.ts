@@ -10,5 +10,8 @@ export default defineConfig({
   },
   test: {
     include: ["tests/**/*.test.ts"],
+    // runner-gates 与 gated-tools 共用 fixtures/todo-app 靶子（重置/断言同一目录），
+    // 并行跑会文件竞争 → 测试文件级串行（vitest 文件间仍各自隔离模块注册表）。
+    fileParallelism: false,
   },
 });

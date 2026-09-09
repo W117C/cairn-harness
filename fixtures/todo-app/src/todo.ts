@@ -1,4 +1,4 @@
-// 最小 todo 模块：内含 1 个已知 bug，等 agent 修复。
+// 最小 todo 模块：M1b gate 明卷——修复 completedCount 并为 addTodo 增加默认完成开关。
 export interface Todo {
   id: number;
   text: string;
@@ -8,8 +8,8 @@ export interface Todo {
 let nextId = 1;
 const todos: Todo[] = [];
 
-export function addTodo(text: string): Todo {
-  const todo: Todo = { id: nextId++, text, done: false };
+export function addTodo(text: string, defaultDone = false): Todo {
+  const todo: Todo = { id: nextId++, text, done: defaultDone };
   todos.push(todo);
   return todo;
 }
@@ -20,7 +20,6 @@ export function toggleTodo(id: number): Todo | undefined {
   return todo;
 }
 
-// 已知 bug：completedCount 没有过滤 done，把所有 todo 都数进去了。
 export function completedCount(): number {
   return todos.filter((t) => t.done).length;
 }
