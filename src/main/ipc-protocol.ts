@@ -19,6 +19,10 @@ export interface AskPayload {
   askId: string;
   tool: ToolName;
   args: Record<string, unknown>;
+  /** M1c：送审原因与风险注记（审批卡必显，§11.1）。 */
+  reason?: string;
+  risk?: "none" | "low" | "medium" | "high" | "critical";
+  riskReasons?: string[];
 }
 export interface AskOutcomePayload {
   askId: string;
@@ -35,7 +39,7 @@ export type ClarifyAnswers = Record<string, string | string[]>;
 /** preload 暴露给 renderer 的 API（window.agent）。 */
 export interface AgentApi {
   run(req: RunRequest): Promise<RunResponse>;
-  decide(askId: string, approved: boolean): Promise<boolean>;
+  decide(askId: string, approved: boolean, scope?: "once" | "session_kind" | "always"): Promise<boolean>;
   /** 澄清门：表单提交（card_action form_submit），值挂回原 tool_use id。 */
   submitClarify(callId: string, answers: ClarifyAnswers): Promise<boolean>;
   /** 方案门：批准 / 拒绝当前 plan（card_action plan_decide）。 */

@@ -7,7 +7,9 @@ export interface AssistantMessageEvent { type: "assistant_message"; content: str
 /** 流式增量片段：callId 标识同一轮回复，text 为逐字追加的一小段。 */
 export interface AssistantDeltaEvent { type: "assistant_delta"; callId: string; text: string }
 export interface ToolCallEvent { type: "tool_call"; id: string; name: string; args: Record<string, unknown> }
-export interface ToolResultEvent { type: "tool_result"; callId: string; ok: boolean; output: string }
+/** M1c 自动放行来源审计（§11.7.5）：仅自动放行的 tool_result 携带，零新事件类型。 */
+export interface AutoApproveMeta { source: "rule" | "session_scope"; ruleId?: string }
+export interface ToolResultEvent { type: "tool_result"; callId: string; ok: boolean; output: string; auto?: AutoApproveMeta }
 export interface UsageEvent { type: "usage"; inputTokens: number; outputTokens: number }
 /** 会话元信息：分支会话首行携带 branch_of 指向原会话。 */
 export interface SessionMetaEvent { type: "session_meta"; branch_of: string }

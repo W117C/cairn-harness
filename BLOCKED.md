@@ -2,6 +2,12 @@
 
 无阻塞事项。
 
+## M1c 轮新增待裁决（2026-09-09）
+1. **M0_API_KEY 缺失 → 暗卷（任务 7）走观察项路径**：pnpm autonomy-check 检测无 key → 打印「暗卷跳过（无 M0_API_KEY）」退出 0（任务书规定路径，不算失败）。暗卷通道已实现（真实 GLM requires_approval 约定调用 + 解析断言；不输出标记则打印观察项退出 0）。**领导提供 key 后重跑 pnpm autonomy-check 即自动执行**（注意 M1a 教训：代理 key 必须 M0_ENDPOINT 同传）。
+2. **「最长前缀」与「deny>ask>allow 固定序」的取舍**：§11.7.3 同时采纳 Roo「同段取最长前缀」与 Claude「规则特异性不改评估序」，两者在「短 deny + 长 allow 同段命中」场景冲突。本轮按任务书验收④实现为：同段多规则命中取最长前缀（其行为生效），同长才按 deny>ask>allow；管线层序 deny→ask 不变。若领导希望 deny 恒压 allow（特异性无效），匹配函数一行可改，但验收④的『git push origin main → allow』会随之翻红，需先换判据。
+3. **session_kind 记忆键粒度**：run_shell 按归一化命令全串（同命令免二次审批，不同命令仍问——出网审计不放宽）、write_file 按工具级（批准一次写 = 本会话写类放行，「此类」语义）。write_file 的粒度偏宽，若领导认为应按路径前缀（更细但记忆几乎不命中），M1c 只改 scopeKey() 一处。
+4. **verify 在只读/审批面的位置**（沿袭 M1b 备案 3）：verify 执行 lint/test（读为主），本轮维持不拦；toolTableFor 含 verify（与 gateToolSpecs 同源）。如需 verify 也过 ask，autonomy.ts 的 isSideEffectTool 加一个名字即可。
+5. **审批卡降档提示形态**：critical 连拒 3 次的降档提示本轮走主进程 console.warn（审批行内 UI 提示需改 renderer 状态流，归 M1d 设置页一起做）。
 ## 待裁决（非阻塞，不影响交付）
 1. **pnpm-workspace.yaml 的去留**：`pnpm add` 期间 pnpm 11 自动生成（内容仅 ignoredBuiltDependencies: [esbuild]，即任务书"坑一"的官方记录方式）。不在任务书白名单内，故未提交 git；也未删除（删文件属不可逆操作）。建议：领导拍板后 `git add pnpm-workspace.yaml` 入库或直接删除，二选一即可，删除后下次 install pnpm 会重新生成。
 2. **pnpm-lock.yaml 已随任务 1 入库**：lockfile 不在白名单字面列表中，但它是 `pnpm add`（任务 1 明确要求）的直接产物，为可复现性随 package.json 一并提交。若不允许，`git rm --cached pnpm-lock.yaml` 即可。

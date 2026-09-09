@@ -217,4 +217,70 @@
 - 硬指标二：git diff --stat 无 agent-plan.md、无 fixtures/todo-app/tests/、无 fixtures/mock/；判卷 sha256 三件套与冻结基线逐字一致（3edc934…/e253aae…/9179db7…）。fixtures/e2e-log.jsonl 与 fixtures/todo-app/src/todo.ts 为 e2e/明卷每轮运行产物（冻结清单不含）。
 - 坑十七：tests/runner-gates 与 gated-tools 并行共用 fixtures/todo-app 靶子 → 文件竞争偶发红。根因修复：tests/vitest.config.ts 增 fileParallelism: false（文件级串行，模块隔离不变），连跑 3 轮稳定。
 - 坑十八：plan 决议事件起初走 app 级 hooks，绕开了当次 run 的 onEvent → 修正为 session.emit 统一管线（落盘 + 推送同路），handlePlanDecide 与 loop 事件同一条道。
+
+## M1c：自治等级——评估管线 / 规则库 / 风险三通道 / scope / 断路器（2026-09-09）
+
+### 理解的目标 / 顺序 / 最大风险（≤10 行）
+- 目标：三档升级为可审计、可记忆、关得住的审批体系——四层纯函数管线 evaluate（deny 规则→ask 规则→档位→风险，先命中先短路），规则库链式拆分最长前缀，风险三通道取 max，critical 任何档强制审批，断路器防疲劳。
+- 顺序：任务0 基线（六道门+fork-check+gate-check 绿，test=68，M0_API_KEY 缺失→暗卷走观察项路径）→ 1 evaluate 四层 → 2 规则库两层存储+原子写+拒载 → 3 风险三通道 → 4 scope 三档 → 5 断路器 → 6 autonomy-check 明卷三路径 → 7 暗卷（无 key 跳过）→ 反向验证 critical 红→绿。
+- 风险①：evaluate 纯函数与断路器计数有张力——计数器放 session 入参，evaluate 只读不写（调用方经 helper 更新），纯函数断言可保。
+- 风险②：loop/gatedTool 是既有接线（M1b 写禁在里面）——M1c 把 evaluate 塞进 gatedTool 与 loop 的门位，方案门 planBlocks 保持优先（deny 位次最高）。
+- 风险③：autonomy-check 明卷要冻结剧本驱动三条路径——仿 fixtures/gate + scripts/gate-check 模式，剧本放 fixtures/autonomy/**（白名单内）。
+- 风险④：只读档「写向工具从工具表消失」动 TOOLS——安装时机在 runAgent 前按档位过滤，不改 src/tools 本体。
+
+### 任务 0 基线（2026-09-09 实测）
+- 一条链六道门 + fork-check + gate-check → CHAIN_EXIT=0；测试 15 files / 68 passed / skipped 0（= M1b 收口基线）。
+- M0_API_KEY：环境与 .env.local 均不存在 → 暗卷（任务 7）走「打印跳过 + 退出 0」路径，BLOCKED.md 备案。
+
+### 任务 1 评估管线（完成，实测）
+- src/permissions/autonomy.ts：纯函数 evaluate(tool, args, session) 四层固定序——L0 硬边界（只读摘除 + M1b 方案门，deny 位次最前）→ L1 deny 规则 → L2 ask 规则（任何档位绕不过）→ L3 档位层（allow 规则命中放行 / session_kind 记忆 / 逐次审批）→ L4 风险层（三通道，critical 任何档强制审批——allow 规则也批不掉）。
+- 零私有状态：规则库与放行集是仅有的输入源；断路器计数在 session 入参、evaluate 只读（调用方经 note* helper 更新）。
+- toolTableFor(mode)：只读档把 write_file/run_shell 从模型可见工具表摘除（glm-session gateToolSpecs(mode?) 同源过滤）；evaluate 内只读摘除兜底 deny。
+- 单测（tests/autonomy.test.ts）：四层各自短路一条用例 + 同一输入两次调用结果一致且 session 逐字未动（structuredClone 比对）。
+- 设计说明：层序上「只读摘除」压过规则库（摘除的工具不能被 allow 复活，§4.4.3 单调不可提权）；「allow 规则」归入档位层（§11.7.2 矩阵把「规则库 allow 命中放行」写在档位列）；critical 检查同时压在 allow 命中位（Claude "no allow rule or hook approves"）。
+
+### 任务 2 规则库（完成，实测）
+- src/permissions/rules.ts：条目 {behavior, tool, pattern?, scope:"always", id}；命令按 &&/||/;/| 拆链逐段判定，任一段 deny 全链 deny，任一段未命中整链落回档位层，同段取最长前缀（同长按 deny>ask>allow）。
+- 两层存储：项目 <workspace>/.agent/permissions.json + 全局 globalPermissionsPath()（<appData>/permissions.json 占位，M1d 接设置页）；合并为并集，优先序 + 最长前缀使项目层只能收紧不可放宽全局层。
+- 原子写：临时文件 + rename，写前清理残留 tmp（中断自愈）；解析失败 / schema 不合法 → 抛错拒载，不静默回退。
+- always 批准落库为 allow（persistAlwaysRule，gatedTool 内）；拒绝路径零写库（集成断言：拒绝跑完 .agent/permissions.json 不存在）。
+- pnpm autonomy-check 六断言全绿：①allow 命中放行（含 rule_id 审计）②deny 命中拦截 ③echo && rm -rf / 全链 deny ④最长前缀三条（origin main→allow / git push→deny / --force→deny）⑤坏 JSON 与坏 schema 均拒载 ⑥中断后目标文件逐字未变 + v2 原子替换 + 无残留 tmp。
+
+### 任务 3 风险三通道（完成，实测）
+- src/permissions/risk.ts：静态威胁表六类四级（文件破坏/远程代码执行/数据外送/系统修改/权限提升/命令注入；rm -rf 根、dd 写盘、mkfs、curl|bash = critical；Roo 元字符展开表收编为 medium）+ 模型通道（args.requires_approval 或 <requires_approval> 标记 → high）+ 沙箱通道（自检过但降级 + 副作用工具 → high；未接线 null 不触发，与 M1b sandboxOff 语义一致）。
+- risk = max(三通道)；critical 任何档位强制审批（L4 + L3 allow 命中位双保险）。
+- 单测：三通道任一命中即产生审批（静态 curl|bash critical / 模型标记在 auto 档读类工具也送审 / 沙箱降级 high）+ critical 在 auto 档仍被拦 + max 合成 + allow 规则不豁免 critical。
+- 网络类命令判定 isNetworkCommand：default 档不吃 scope 放行（强制 once）；auto 档 risk≥medium 送审（出网审计）。
+
+### 任务 4 scope 三档（完成，实测）
+- once / session_kind（会话内存放行集，不落盘）/ always（落库 allow）；键 = run_shell 归一化命令全串（出网审计粒度）/ write_file 工具级（「此类」语义）。
+- 审计：自动放行的 tool_result 附 auto:{source: rule|session_scope, ruleId}（src/events 增可选字段，零新事件类型；loop 透传；src/tools 白名单外故用结构扩展类型 ToolResultWithAudit）；手工批准不记 auto。
+- IPC 全链：AskGate.decide 增 scope 参数 → handleAgentDecide → preload → 审批卡四按钮（批准（本次）/ 本会话此类放行 / 永久放行 / 拒绝）。
+- 单测：session_kind 第二次同类调用 approve{source:session_scope, ruleId}；网络命令 scope 不放行；拒绝路径规则数组逐字不变 + 集成断言无落库。
+
+### 任务 5 断路器（完成，实测）
+- noteScopeApproval：连续 scope 自动放行计数 ≥50 触发 breakerTripped，此后 scope 记忆失效、逐次审批（原因注明断路器），手工批准打断「连续」链但不解除（直至会话重开）。
+- noteCriticalDenial / downgradeSuggestion：critical 连续被拒 3 次 → 「建议降档回默认档」提示（gatedTool 内 console.warn，UI 提示归 M1d 设置页）。
+- 单测：第 51 次送审（50 次放行后下一次 ask 且清空 scope 集也不恢复）+ 连拒 3 次出降档提示。
+
+### 任务 6 全链明卷（完成，实测）
+- fixtures/autonomy/ 三份冻结剧本（default-flow / auto-flow / readonly-flow）经 M1C_AUTONOMY_SCRIPT env 通道（仿 M1B_GATE_FLOW）驱动 runAgent 三条路径。
+- 默认档：第一次询问（审批卡带原因「默认档逐次审批」）→ 批准（session_kind）真实执行 → 第二次同命令零询问自动放行 + tool_result 记 {source:"session_scope", ruleId:"run_shell␟pnpm test"}；事件序列与 §4.6 走查一致；session_kind 不落盘。
+- 自主档：普通命令零审批直接执行；rm -rf / 触发唯一一次送审（原因 = critical 任何档位强制审批）→ 拒绝 → 结果 not ok；全程零批准。
+- 只读档：工具表无 write_file/run_shell（模型不可见）；read_file 照常；write_file 兜底拦「只读档摘除写向工具」；零送审；写目标未落盘。
+
+### 任务 7 暗卷（通道就绪；无 key 走观察项路径）
+- M0_API_KEY 缺失 → 「暗卷跳过（无 M0_API_KEY）」退出 0（任务书规定路径）；BLOCKED.md 备案。
+- 通道已实现：真实 GLM system 约定「破坏性操作参数加 requires_approval: true」→ 输出标记则断言 modelRisk 映射 high + evaluate 任何档位送审；不输出则打印「模型未触发该标记（观察项）」退出 0。key 在场（M0_ENDPOINT 同传，M1a 教训）重跑 pnpm autonomy-check 即自动执行。
+
+### 反向验证（红→绿，实测）
+- 红：【REVERSE-TEST】临时移除 L4 critical 强制审批与 L3 allow 位 critical 守卫 → pnpm autonomy-check ❌「自主档：全程仅 critical 触发 1 次送审」（送审原因退化为「风险≥high 送审」）→ 失败 1 项，退出码 1。
+- 绿：还原后全绿退出码 0（36 ✅ / 0 ❌）。critical 强制批是管线里的一层，实证拦得住。
+
+### 收口（2026-09-09，全部实测）
+- 一条链 typecheck → test → e2e → ipc:check → sandbox:check → build → fork-check → gate-check → autonomy-check → CHAIN_EXIT=0。
+- 测试数：Test Files 16 passed (16)，Tests 87 passed (87)，skipped 0（基线 68 → 87，+19：autonomy 17 + ask-gate scope/risk 2）。
+- 半托项：docs/m1c-approval.png——CDP 真实 DOM 事件驱动发送，审批卡在屏（DOM 断言 待审批/reason/scope 按钮/run_shell 全 true；卡面文本 = 待审批 run_shell {"command":"pnpm test"} 默认档逐次审批 + 四按钮），观感由领导亲验。
+- 坑十九：截图时旧 electron 进程残留占住 9222 调试端口且持有旧会话状态（job_kill 只杀 bash 包装不杀 electron 子进程）——先 pkill 全部 m0-agent-loop Electron 再启动，probe 确认 0 事件初始态后再驱动。
+- key 安全：.agent/permissions.json 只含 {"rules":[]}（无密钥无绝对路径）；全仓无 M0_API_KEY 赋值（沿袭 M1b 复查）。
 - key 安全：全仓 grep M0_API_KEY 赋值零命中（src/scripts/tests）；git ls-files 无 .env；暗卷 key 只从当次进程环境变量读。

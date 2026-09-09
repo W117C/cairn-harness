@@ -3,6 +3,51 @@ import type { ToolName } from "../tools";
 export type PermissionMode = "read-only" | "default" | "auto";
 export type Decision = "allow" | "ask" | "deny";
 
+// ---- M1c 自治等级：规则库 / 风险三通道 / 评估管线 / scope / 断路器（§11.7）----
+export {
+  loadPermissionRules,
+  savePermissionRules,
+  parsePermissionsFile,
+  globalPermissionsPath,
+  judgeChain,
+  splitCommandChain,
+  normalizeCommand,
+  type PermissionRule,
+  type RuleBehavior,
+  type ChainVerdict,
+} from "./rules";
+export {
+  staticRisk,
+  modelRisk,
+  sandboxRisk,
+  isNetworkCommand,
+  maxRisk,
+  THREAT_TABLE,
+  type RiskLevel,
+  type RiskFinding,
+  type ThreatCategory,
+} from "./risk";
+export {
+  evaluate,
+  newAutonomySession,
+  noteScopeApproval,
+  noteManualDecision,
+  noteCriticalDenial,
+  noteCriticalResolved,
+  downgradeSuggestion,
+  toolTableFor,
+  scopeKey,
+  isNetworkCommandCall,
+  isSideEffectTool,
+  MAX_AUTO_APPROVALS,
+  CRITICAL_DENIAL_LIMIT,
+  type AutonomySession,
+  type AutoMeta,
+  type AskScope,
+  type EvaluateDecision,
+  type ToolResultWithAudit,
+} from "./autonomy";
+
 // ---- 方案门状态（M1b）：存在未批准 plan 时，副作用工具在权限层被拒 ----
 // 状态是会话级的单一事实源：gate()（loop 路径）与 checkPermission()（gatedTool 路径）
 // 双口生效，调用方零改动拿到写禁。只读工具与门工具（clarify/propose_plan/verify）不受拦。

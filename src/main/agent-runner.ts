@@ -11,13 +11,29 @@ import { ClarifyGate, PlanGate } from "../agent/gates";
 import { createVerifyHook, defaultExec, type ExecFn } from "../agent/verify";
 import type { AgentEvent, ClarifyAnswerMap, EventLog } from "../events";
 import { createEventLog, replay } from "../events";
-import { checkPermission, type PermissionMode } from "../permissions";
+import { checkPermission, getPlanState, type PermissionMode } from "../permissions";
+import {
+  evaluate,
+  isNetworkCommandCall,
+  loadPermissionRules,
+  newAutonomySession,
+  noteCriticalDenial,
+  noteCriticalResolved,
+  noteManualDecision,
+  noteScopeApproval,
+  downgradeSuggestion,
+  scopeKey,
+  type AskScope,
+  type PermissionRule,
+  type ToolResultWithAudit,
+} from "../permissions";
+import { globalPermissionsPath, savePermissionRules } from "../permissions/rules";
 import { createMockProvider } from "../providers/mock";
 import { streamGlm } from "../providers/glm";
 import type { Provider } from "../providers";
 import { TOOLS, type Tool, type ToolResult } from "../tools";
 import type { ToolName } from "../tools/base";
-import { AskGate, type AskOutcome } from "./ask-gate";
+import { AskGate } from "./ask-gate";
 import type { AskOutcomePayload, AskPayload, RunRequest } from "./ipc-protocol";
 import { checkSandbox, runInSandbox, type SandboxStatus } from "./sandbox";
 
@@ -38,6 +54,8 @@ interface Session {
   sandbox: SandboxStatus | null;
   /** 当前会话事件管线（落盘 + onEvent 推送）：plan 决议等系统事件经它与 loop 事件同路（与 turn 解耦）。 */
   emit: ((e: AgentEvent) => Promise<void>) | null;
+  /** M1c 自治等级会话状态：规则库 / scope 记忆 / 断路器（evaluate 的 session 入参）。 */
+  autonomy: ReturnType<typeof newAutonomySession>;
 }
 // 单窗口单任务：UI 串行发 run；ipc:check 亦串行。会话状态仅存活于一次 runAgent。
 let session: Session | null = null;
@@ -68,23 +86,65 @@ function gatedTool(name: "write_file" | "run_shell", original: Tool): Tool {
     async run(args, ctx) {
       const s = session;
       if (!s) return denied(name, "default", "工具门未接线（fail-closed）");
-      const decision = checkPermission(s.mode, name);
-      if (decision === "deny") return denied(name, s.mode, "档位拒绝");
-      // 沙箱不可用（降级）→ 写工具强制逐条审批，连 auto 档也不例外
-      const sandboxOff = s.sandbox !== null && !s.sandbox.available;
-      if (decision === "ask" || sandboxOff) {
-        if (!s.askGate) return denied(name, s.mode, "非交互模式（fail-closed）");
-        const outcome: AskOutcome = await s.askGate.request(name, args);
-        if (outcome !== "approved") return denied(name, s.mode, "未获批准");
+      // M1c：四层评估管线（deny 规则 → ask 规则 → 档位 → 风险）；方案门状态每次刷新进 session 入参
+      const ps = getPlanState();
+      s.autonomy.planBlocked = ps.proposed && !ps.approved;
+      const d = evaluate(name, args, s.autonomy);
+      if (d.verdict === "deny") return denied(name, s.autonomy.mode, d.reason);
+      if (d.verdict === "ask") {
+        if (!s.askGate) return denied(name, s.autonomy.mode, "非交互模式（fail-closed）");
+        const r = await s.askGate.request(name, args, {
+          reason: d.reason,
+          risk: d.risk,
+          riskReasons: d.riskReasons,
+        });
+        if (r.outcome !== "approved") {
+          if (d.risk === "critical") {
+            noteCriticalDenial(s.autonomy);
+            const tip = downgradeSuggestion(s.autonomy);
+            if (tip) console.warn("[permissions] " + tip);
+          }
+          return denied(name, s.autonomy.mode, "未获批准");
+        }
+        // scope 回写（§10.4）：网络类命令强制 once（出网审计，scope 不放行）
+        const effScope: AskScope = isNetworkCommandCall(name, args) ? "once" : r.scope;
+        if (effScope === "session_kind") {
+          (s.autonomy.sessionScopes as Set<string>).add(scopeKey(name, args));
+        } else if (effScope === "always") {
+          await persistAlwaysRule(ctx.workspace, name, args);
+        }
+        if (d.risk === "critical") noteCriticalResolved(s.autonomy);
+        noteManualDecision(s.autonomy);
+      } else if (d.auto?.source === "session_scope") {
+        noteScopeApproval(s.autonomy); // 断路器计数（连续 scope 自动放行）
       }
       if (name === "run_shell" && s.sandbox !== null && s.sandbox.available) {
         const command = typeof args.command === "string" ? args.command : "";
         const mapped = command.trim() === "pnpm test" ? VITEST_DIRECT : command;
         return await runInSandbox(mapped, { cwd: ctx.workspace });
       }
-      return await original.run(args, ctx);
+      const result = await original.run(args, ctx);
+      // 自动放行审计（§11.7.5）：{source, rule_id} 进 tool_result 元数据（loop 透传，零新事件类型）
+      const audit = d.verdict === "approve" ? d.auto : undefined;
+      return (audit ? { ...result, auto: audit } : result) as ToolResultWithAudit;
     },
   };
+}
+
+/** always scope 批准落库为 allow 条目（项目规则库，原子写）；拒绝永不生成规则。 */
+async function persistAlwaysRule(workspace: string, name: string, args: Record<string, unknown>): Promise<void> {
+  const path = join(workspace, ".agent", "permissions.json");
+  try {
+    const existing = loadPermissionRules(path);
+    const rule: PermissionRule =
+      name === "run_shell" && typeof args.command === "string"
+        ? { behavior: "allow", tool: name, pattern: args.command.trim(), scope: "always" }
+        : { behavior: "allow", tool: name, scope: "always" };
+    await savePermissionRules(path, [...existing, rule]);
+  } catch (err) {
+    // 落库失败不阻断本次已批准的执行，但必须可见（审计优先于静默）
+    console.error("[permissions] always 规则落库失败:", err instanceof Error ? err.message : String(err));
+  }
 }
 
 let installed = false;
@@ -123,7 +183,10 @@ export interface RunOptions {
 // M1a 真流式演示通道：M0A_PROVIDER=glm 时用真模型单轮流式（无 tools，纯文本；
 // 事件按网络节奏逐条 pull，UI 逐字上屏）。缺省仍为 mock，M0 事件流字节不变。
 function createProvider(userMessage: string): Provider {
+  // M1c 明卷通道：M1C_AUTONOMY_SCRIPT 指向冻结剧本（autonomy-check 三条路径复用同一接线）。
+  const autonomyScript = process.env.M1C_AUTONOMY_SCRIPT;
   if (process.env.M1B_GATE_FLOW === "1") return createMockProvider(GATE_FIXTURE);
+  if (autonomyScript) return createMockProvider(autonomyScript);
   if (process.env.M0A_PROVIDER !== "glm") return createMockProvider(MOCK_FIXTURE);
   let gen: AsyncGenerator<AgentEvent> | null = null;
   return {
@@ -149,7 +212,21 @@ function verifyExec(sandbox: SandboxStatus | null): ExecFn {
  *  M1b：接线三门 —— clarify/plan 通道（挂起等人）+ verify 反射循环钩子。 */
 export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   installAppTools();
-  session = { mode: opts.mode, askGate: opts.askGate ?? null, sandbox: opts.sandbox ?? null, emit: null };
+  // M1c：两层规则库加载（项目 <workspace>/.agent/permissions.json + 全局占位）；解析失败 fail loud 拒载
+  const rules = loadPermissionRules(
+    join(opts.workspace, ".agent", "permissions.json"),
+    globalPermissionsPath(),
+  );
+  session = {
+    mode: opts.mode,
+    askGate: opts.askGate ?? null,
+    sandbox: opts.sandbox ?? null,
+    emit: null,
+    autonomy: newAutonomySession(opts.mode, {
+      rules,
+      sandboxAvailable: opts.sandbox ? opts.sandbox.available : null,
+    }),
+  };
   try {
     await rm(opts.logPath, { force: true });
     const log = createEventLog(opts.logPath);
@@ -204,9 +281,9 @@ export async function handleAgentRun(
   }
 }
 
-/** IPC "agent:decide" 的处理函数。 */
-export function handleAgentDecide(askId: string, approved: boolean): boolean {
-  return appAskGate.decide(askId, approved);
+/** IPC "agent:decide" 的处理函数（scope: once / session_kind / always，§10.4 审批卡回写）。 */
+export function handleAgentDecide(askId: string, approved: boolean, scope?: AskScope): boolean {
+  return appAskGate.decide(askId, approved, "user", scope ?? "once");
 }
 
 /** IPC "agent:clarify" 的处理函数：澄清表单提交，值挂回原 tool_use id（与 turn 解耦）。 */

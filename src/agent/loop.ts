@@ -1,5 +1,5 @@
 import type { EventLog } from "../events";
-import { denyReason, gate, type PermissionMode } from "../permissions";
+import { denyReason, gate, type PermissionMode, type ToolResultWithAudit } from "../permissions";
 import type { Provider } from "../providers";
 import type { VerifyHook } from "./verify";
 import { failureDigest } from "./verify";
@@ -127,7 +127,15 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         result = { ok: false, output: err instanceof Error ? err.message : String(err) };
       }
     }
-    await events.append({ type: "tool_result", callId: output.id, ok: result.ok, output: result.output });
+    // M1c：gatedTool 自动放行时在结果上附带审计元数据（结构扩展），透传进 tool_result 事件
+    const audit = (result as ToolResultWithAudit).auto;
+    await events.append({
+      type: "tool_result",
+      callId: output.id,
+      ok: result.ok,
+      output: result.output,
+      ...(audit ? { auto: audit } : {}),
+    });
   }
   throw new Error(`agent loop 超过 maxSteps=${String(maxSteps)}，强制中止`);
 }

@@ -242,9 +242,24 @@ function AskView({
   onDecide,
 }: {
   it: Extract<Item, { kind: "ask" }>;
-  onDecide: (askId: string, approved: boolean) => void;
+  onDecide: (askId: string, approved: boolean, scope?: "once" | "session_kind" | "always") => void;
 }) {
   const a = it.a;
+  const riskBadge =
+    a.risk === undefined || a.risk === "none"
+      ? null
+      : (
+          <Badge
+            className={
+              a.risk === "critical" || a.risk === "high"
+                ? "border-red-500/60 bg-red-500/15 text-red-700 dark:text-red-400"
+                : "border-amber-500/60 bg-amber-500/15 text-amber-700 dark:text-amber-400"
+            }
+            variant="outline"
+          >
+            risk: {a.risk}
+          </Badge>
+        );
   if (it.resolved) {
     const label =
       it.resolved === "approved"
@@ -267,11 +282,19 @@ function AskView({
         <Badge className="border-amber-500/60 bg-amber-500/15 text-amber-700 dark:text-amber-400" variant="outline">
           待审批
         </Badge>
+        {riskBadge}
         <span className="font-mono text-xs">{a.tool}</span>
         <span className="max-w-full truncate font-mono text-xs text-muted-foreground">{short(a.args, 200)}</span>
-        <span className="flex gap-2">
+        {a.reason !== undefined && <span className="text-xs text-muted-foreground">{a.reason}</span>}
+        <span className="flex flex-wrap gap-2">
           <Button size="sm" variant="default" onClick={() => onDecide(a.askId, true)}>
-            批准
+            批准（本次）
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => onDecide(a.askId, true, "session_kind")}>
+            本会话此类放行
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => onDecide(a.askId, true, "always")}>
+            永久放行
           </Button>
           <Button size="sm" variant="outline" onClick={() => onDecide(a.askId, false)}>
             拒绝
@@ -346,8 +369,8 @@ function App() {
     if (!res.ok) setError(res.error ?? "未知错误");
   };
 
-  const decide = (askId: string, approved: boolean): void => {
-    void window.agent.decide(askId, approved);
+  const decide = (askId: string, approved: boolean, scope?: "once" | "session_kind" | "always"): void => {
+    void window.agent.decide(askId, approved, scope);
   };
 
   const sandbox = status?.sandbox;

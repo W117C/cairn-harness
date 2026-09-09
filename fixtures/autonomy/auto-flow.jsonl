@@ -1,0 +1,4 @@
+{"type":"assistant_message","content":"自主档直接开干，不等人。"}
+{"type":"tool_call","id":"s-ok","name":"run_shell","args":{"command":"echo autonomy-ok"}}
+{"type":"tool_call","id":"s-crit","name":"run_shell","args":{"command":"rm -rf /"}}
+{"type":"assistant_message","content":"critical 已被拦，任务收束。"}

@@ -1,13 +1,25 @@
 // 批准门状态机：pending → approved / rejected；默认 60 秒无响应按拒绝。
 // 纯逻辑、零 electron 依赖；超时用 setTimeout（vitest 假时钟可测，测试不真等 60 秒）。
+// M1c：决议携带 scope（once / session_kind / always，§10.4 回写）；请求携带 risk 上下文（审批卡必显）。
+import type { AskScope, RiskLevel } from "../permissions";
 import type { ToolName } from "../tools/base";
 
 export interface AskRequest {
   askId: string;
   tool: ToolName;
   args: Record<string, unknown>;
+  /** 送审原因（如「默认档逐次审批」「critical 任何档位强制审批」）。 */
+  reason?: string;
+  /** 风险评级与依据（§11.7.4 三通道合成结果）。 */
+  risk?: RiskLevel;
+  riskReasons?: string[];
 }
 export type AskOutcome = "approved" | "rejected";
+/** 决议结果：批准时携带用户选择的 scope（缺省 once）。 */
+export interface AskOutcomeResult {
+  outcome: AskOutcome;
+  scope: AskScope;
+}
 export type AskOutcomeReason = "user" | "timeout";
 
 export interface AskGateOptions {
@@ -21,7 +33,7 @@ export interface AskGateOptions {
 
 export class AskGate {
   private seq = 0;
-  private readonly pending = new Map<string, { resolve: (outcome: AskOutcome) => void }>();
+  private readonly pending = new Map<string, { resolve: (r: AskOutcomeResult) => void }>();
   private readonly timeoutMs: number;
 
   constructor(private readonly opts: AskGateOptions = {}) {
@@ -33,29 +45,39 @@ export class AskGate {
   }
 
   /** 发起一次审批；默认 60 秒无响应按拒绝。 */
-  request(tool: ToolName, args: Record<string, unknown>): Promise<AskOutcome> {
+  request(
+    tool: ToolName,
+    args: Record<string, unknown>,
+    ctx: { reason?: string; risk?: RiskLevel; riskReasons?: string[] } = {},
+  ): Promise<AskOutcomeResult> {
     const askId = "ask-" + String(++this.seq);
-    return new Promise<AskOutcome>((resolve) => {
+    return new Promise<AskOutcomeResult>((resolve) => {
       const timer = setTimeout(() => {
         this.decide(askId, false, "timeout");
       }, this.timeoutMs);
       this.pending.set(askId, {
-        resolve: (outcome) => {
+        resolve: (r) => {
           clearTimeout(timer);
-          resolve(outcome);
+          resolve(r);
         },
       });
-      this.opts.notify?.({ askId, tool, args });
+      this.opts.notify?.({ askId, tool, args, ...ctx });
     });
   }
 
-  /** 决议一次审批；未知或已决议的 askId 返回 false（幂等，不误伤）。 */
-  decide(askId: string, approved: boolean, reason: AskOutcomeReason = "user"): boolean {
+  /** 决议一次审批；未知或已决议的 askId 返回 false（幂等，不误伤）。
+   * scope 仅在批准时有意义（once / session_kind / always，§11.7.5）。 */
+  decide(
+    askId: string,
+    approved: boolean,
+    reason: AskOutcomeReason = "user",
+    scope: AskScope = "once",
+  ): boolean {
     const entry = this.pending.get(askId);
     if (!entry) return false;
     this.pending.delete(askId);
     const outcome: AskOutcome = approved ? "approved" : "rejected";
-    entry.resolve(outcome);
+    entry.resolve({ outcome, scope: approved ? scope : "once" });
     this.opts.notifyOutcome?.(askId, outcome, reason);
     return true;
   }

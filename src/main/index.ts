@@ -84,8 +84,8 @@ setAppHooks({
 });
 
 ipcMain.handle("agent:run", (_event, req: RunRequest) => handleAgentRun(req));
-ipcMain.handle("agent:decide", (_event, askId: string, approved: boolean) =>
-  handleAgentDecide(askId, approved),
+ipcMain.handle("agent:decide", (_event, askId: string, approved: boolean, scope?: "once" | "session_kind" | "always") =>
+  handleAgentDecide(askId, approved, scope),
 );
 ipcMain.handle("agent:clarify", (_event, callId: string, answers: Record<string, string | string[]>) =>
   handleClarifySubmit(callId, answers),

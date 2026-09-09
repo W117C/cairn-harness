@@ -2,19 +2,21 @@
 // 职责：从事件日志重建 OpenAI 兼容对话历史（含 tool_calls / tool 角色），把工具结果反馈回模型，
 // 使真实 GLM 能多轮调用 clarify / propose_plan / write_file / verify。
 import { replay, type AgentEvent } from "../events";
+import { isSideEffectTool, type PermissionMode } from "../permissions";
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "../providers/glm";
 import type { ModelOutput, Provider } from "../providers";
 
 type RawMessage = Record<string, unknown>;
 
-/** 三门 + 基础工具的 OpenAI function 规格（暗卷把工具面暴露给真实模型）。 */
-export function gateToolSpecs(): GlmToolSpec[] {
+/** 三门 + 基础工具的 OpenAI function 规格（暗卷把工具面暴露给真实模型）。
+ * M1c：mode=read-only 时写向工具从工具表摘除（§11.7.2，与 toolTableFor 同源）。 */
+export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
   const obj = (props: Record<string, unknown>, required: string[]): Record<string, unknown> => ({
     type: "object",
     properties: props,
     required,
   });
-  return [
+  const specs: GlmToolSpec[] = [
     {
       type: "function",
       function: {
@@ -116,6 +118,10 @@ export function gateToolSpecs(): GlmToolSpec[] {
       },
     },
   ];
+  if (mode === "read-only") {
+    return specs.filter((s) => !isSideEffectTool(s.function.name));
+  }
+  return specs;
 }
 
 /** 事件日志 → OpenAI 兼容消息序列（assistant_delta 按 callId 合并；tool_result → tool 角色）。 */

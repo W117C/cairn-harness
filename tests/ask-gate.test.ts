@@ -14,7 +14,7 @@ describe("AskGate", () => {
     expect(askIds.length).toBe(1);
     expect(gate.pendingCount).toBe(1);
     expect(gate.decide(askIds[0] as string, true)).toBe(true);
-    await expect(promise).resolves.toBe("approved");
+    await expect(promise).resolves.toMatchObject({ outcome: "approved", scope: "once" });
     expect(gate.pendingCount).toBe(0);
   });
 
@@ -23,7 +23,7 @@ describe("AskGate", () => {
     const gate = new AskGate({ notify: (r) => askIds.push(r.askId) });
     const promise = gate.request("write_file", { path: "src/todo.ts" });
     expect(gate.decide(askIds[0] as string, false)).toBe(true);
-    await expect(promise).resolves.toBe("rejected");
+    await expect(promise).resolves.toMatchObject({ outcome: "rejected", scope: "once" });
   });
 
   it("默认 60 秒无响应 → 按拒绝（假时钟，不真等）", async () => {
@@ -33,7 +33,7 @@ describe("AskGate", () => {
       notifyOutcome: (id, outcome, reason) => outcomes.push({ id, outcome, reason }),
     });
     const promise = gate.request("run_shell", {});
-    const expectation = expect(promise).resolves.toBe("rejected");
+    const expectation = expect(promise).resolves.toMatchObject({ outcome: "rejected" });
     await vi.advanceTimersByTimeAsync(60_000);
     await expectation;
     expect(outcomes).toHaveLength(1);
@@ -45,9 +45,33 @@ describe("AskGate", () => {
     vi.useFakeTimers();
     const gate = new AskGate({ timeoutMs: 1000 });
     const promise = gate.request("write_file", {});
-    const expectation = expect(promise).resolves.toBe("rejected");
+    const expectation = expect(promise).resolves.toMatchObject({ outcome: "rejected" });
     await vi.advanceTimersByTimeAsync(1000);
     await expectation;
+  });
+
+  it("M1c：决议携带 scope（批准 + session_kind → 回传同 scope）", async () => {
+    const askIds: string[] = [];
+    const gate = new AskGate({ notify: (r) => askIds.push(r.askId) });
+    const promise = gate.request("run_shell", { command: "pnpm test" });
+    expect(gate.decide(askIds[0] as string, true, "user", "session_kind")).toBe(true);
+    await expect(promise).resolves.toMatchObject({ outcome: "approved", scope: "session_kind" });
+  });
+
+  it("M1c：请求携带 risk 上下文（审批卡必显）", async () => {
+    const seen: Array<{ reason?: string; risk?: string }> = [];
+    const gate = new AskGate({
+      notify: (r) => {
+        seen.push({ reason: r.reason, risk: r.risk });
+        gate.decide(r.askId, false);
+      },
+    });
+    await gate.request("run_shell", { command: "rm -rf /" }, {
+      reason: "critical 任何档位强制审批",
+      risk: "critical",
+      riskReasons: ["rm 递归删除根路径"],
+    });
+    expect(seen[0]).toMatchObject({ reason: "critical 任何档位强制审批", risk: "critical" });
   });
 
   it("未知 / 已决议的 askId 决议为无操作（幂等）", async () => {
@@ -58,6 +82,6 @@ describe("AskGate", () => {
     const promise = gate2.request("write_file", {});
     expect(gate2.decide(askIds[0] as string, true)).toBe(true);
     expect(gate2.decide(askIds[0] as string, false)).toBe(false); // 已决议，二次决议无效
-    await expect(promise).resolves.toBe("approved");
+    await expect(promise).resolves.toMatchObject({ outcome: "approved", scope: "once" });
   });
 });
