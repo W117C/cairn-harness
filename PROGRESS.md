@@ -283,4 +283,10 @@
 - 半托项：docs/m1c-approval.png——CDP 真实 DOM 事件驱动发送，审批卡在屏（DOM 断言 待审批/reason/scope 按钮/run_shell 全 true；卡面文本 = 待审批 run_shell {"command":"pnpm test"} 默认档逐次审批 + 四按钮），观感由领导亲验。
 - 坑十九：截图时旧 electron 进程残留占住 9222 调试端口且持有旧会话状态（job_kill 只杀 bash 包装不杀 electron 子进程）——先 pkill 全部 m0-agent-loop Electron 再启动，probe 确认 0 事件初始态后再驱动。
 - key 安全：.agent/permissions.json 只含 {"rules":[]}（无密钥无绝对路径）；全仓无 M0_API_KEY 赋值（沿袭 M1b 复查）。
+
+### 暗卷补验（领导提供 key 后，2026-09-09）
+- 三要素：M0_ENDPOINT=https://api.b.ai/v1/chat/completions（**必须带全路径**——glm.ts 把 M0_ENDPOINT 当完整 URL 用，缺省值本身含 /chat/completions；裸 https://api.b.ai/v1 会被代理 403 拒「only allows inference API paths」，M1a 轮的 v1 记法以此为准修正）、M0_MODEL=glm-5.3-flash、M0_API_KEY 当次进程环境变量注入。
+- 首跑 403 即端点裸路径问题，改全路径后 pnpm autonomy-check 全绿 exit 0：**真实 GLM 输出了 requires_approval 标记** → ①解析正确（modelRisk 映射 high）②带标记调用在任何档位产生审批（管线层强制）——暗卷正路径通过，连观察项路径都没用上。
+- 明卷 36 断言同轮依旧全绿；key 卫生复查：全仓 grep key 字面量 0 命中、git 无 .env 跟踪、工作树无残留。
+
 - key 安全：全仓 grep M0_API_KEY 赋值零命中（src/scripts/tests）；git ls-files 无 .env；暗卷 key 只从当次进程环境变量读。

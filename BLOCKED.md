@@ -3,7 +3,7 @@
 无阻塞事项。
 
 ## M1c 轮新增待裁决（2026-09-09）
-1. **M0_API_KEY 缺失 → 暗卷（任务 7）走观察项路径**：pnpm autonomy-check 检测无 key → 打印「暗卷跳过（无 M0_API_KEY）」退出 0（任务书规定路径，不算失败）。暗卷通道已实现（真实 GLM requires_approval 约定调用 + 解析断言；不输出标记则打印观察项退出 0）。**领导提供 key 后重跑 pnpm autonomy-check 即自动执行**（注意 M1a 教训：代理 key 必须 M0_ENDPOINT 同传）。
+1. ~~M0_API_KEY 缺失 → 暗卷（任务 7）走观察项路径~~ **已解决（2026-09-09 领导提供 key）**：真实 GLM（glm-5.3-flash）在 requires_approval 约定下输出了标记 → 解析映射 high + 管线任何档位强制审批，两断言绿、autonomy-check 全绿 exit 0（暗卷正路径，未动用观察项）。环境教训修正：M0_ENDPOINT 必须是**含路径的完整 URL**（https://api.b.ai/v1/chat/completions）——glm.ts 不自行拼 /chat/completions，裸 v1 根路径会被代理 403 拒（M1a 轮的「M0_ENDPOINT=https://api.b.ai/v1」记法不准）。key 只进当次进程环境变量，全仓字面量 0 命中。
 2. **「最长前缀」与「deny>ask>allow 固定序」的取舍**：§11.7.3 同时采纳 Roo「同段取最长前缀」与 Claude「规则特异性不改评估序」，两者在「短 deny + 长 allow 同段命中」场景冲突。本轮按任务书验收④实现为：同段多规则命中取最长前缀（其行为生效），同长才按 deny>ask>allow；管线层序 deny→ask 不变。若领导希望 deny 恒压 allow（特异性无效），匹配函数一行可改，但验收④的『git push origin main → allow』会随之翻红，需先换判据。
 3. **session_kind 记忆键粒度**：run_shell 按归一化命令全串（同命令免二次审批，不同命令仍问——出网审计不放宽）、write_file 按工具级（批准一次写 = 本会话写类放行，「此类」语义）。write_file 的粒度偏宽，若领导认为应按路径前缀（更细但记忆几乎不命中），M1c 只改 scopeKey() 一处。
 4. **verify 在只读/审批面的位置**（沿袭 M1b 备案 3）：verify 执行 lint/test（读为主），本轮维持不拦；toolTableFor 含 verify（与 gateToolSpecs 同源）。如需 verify 也过 ask，autonomy.ts 的 isSideEffectTool 加一个名字即可。
