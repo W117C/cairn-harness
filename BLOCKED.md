@@ -15,3 +15,9 @@
 3. ~~环境怪癖备案~~ **原诊断有误，已更正（2026-09-09 管理者复核）**：`/usr/local/bin/node` 是**真实 Node v24.19.0**（234MB universal binary，`process.versions.electron === undefined`）。pnpm 脚本链内出现的 Electron-as-node（v24.18.1，electron=43.3.0）来自 DSH 自己的 pnpm 运行链，与该二进制无关。**无需清理任何系统文件**；六道门在真实 Node v22.23.2 下复跑同样全绿。详见 `AGENTS.md` 环境注意。
 4. **UI 自动化**：拍板否了 Playwright；本轮截图与交互演示改用（a）应用内 capturePage 截图钩子（M0B_SCREENSHOT env 门控）与（b）macOS AX + 键盘事件（需辅助功能授权，已由领导现场授予）。两者均为交付手段，不进验收链。
 5. **mock 提示**：UI 发送的任意消息都驱动同一份冻结 mock 剧本（剧本内容与消息文本无关），这是 M0b 的既定边界；真实模型接入后此差异自然消除。
+## M0c 轮新增待裁决（2026-09-09）
+1. **shadcn init 框架检测不识别 electron-vite 布局**：CLI 只认 vite.config.*（任务书现状说实测成功，本机复现失败——检测代码 chunk-B2MD6U5O.js 只 startsWith("vite.config.")）。已改走官方 manual 路线（手写 components.json + nova token CSS，组件仍由 CLI add 产出，非手抄）。待裁决：接受 manual 路线为标准，或给 shadcn 提 electron-vite 支持 issue。
+2. **反向验证前提偏差**：strict CSP 下构建应用样式不失效——Tailwind v4 构建产物是 <link> 同源文件，style-src 'self' 本就放行；坑二只约束 dev 注入路径。机制级红→绿已用构建产物注入内联 <style> 证明（'self' 拦截 / 'unsafe-inline' 放行）。待裁决：验收口径是否改为 dev 模式或机制级证明（本轮两者都留了证据）。
+3. **System Events AX 窗口枚举再次失效**（invalid index，授权后一度可用）：UI 驱动与截图改用 CDP（Runtime.evaluate 真实 DOM 事件 + Page.captureScreenshot）。待裁决：是否需要稳定的 AX 环境（影响后续自动化验收方式）。
+4. **pnpm-workspace.yaml 曾被外部提交 61a2b94 固化**：本轮 pnpm 又自动追加 allowBuilds 占位行，已按白名单还原。pnpm add 时 ERR_PNPM_IGNORED_BUILDS 警告仍会让 shadcn add 误判失败（重跑即可），根治需 onlyBuiltDependencies 增补或 pnpm 配置调整，待裁决。
+5. **组件源码不跟上游**：本轮未改任何 components/ui 生成文件，故无 @shadcn-modified 标记；后续改动时按拍板加标记。

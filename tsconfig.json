@@ -9,6 +9,9 @@
       "node"
     ],
     "skipLibCheck": true,
+    "paths": {
+      "@/*": ["./src/renderer/*"]
+    },
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "isolatedModules": true,

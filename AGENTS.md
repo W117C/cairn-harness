@@ -11,7 +11,7 @@
 
 ## 技术栈
 
-Node 22 / TypeScript 5 / electron-vite 5 / Electron 44 / React 19 / vitest 5。
+Node 22 / TypeScript 5 / electron-vite 5 / Electron 44 / React 19 / vitest 5 / Tailwind CSS 4 + shadcn/ui（radix-nova preset，组件源码在 src/renderer/components/ui/，不跟上游自动升级）。
 
 ## 目录与约定
 
@@ -26,7 +26,9 @@ Node 22 / TypeScript 5 / electron-vite 5 / Electron 44 / React 19 / vitest 5。
 - 在 DSH 里跑时，pnpm 脚本内的 `node` 解析到 DSH 的 Electron-as-node（v24.18.1），不是 `/usr/local/bin/node`（真实 Node v24.19.0）。两套运行时下六道门实测都过；怀疑环境问题时用 `pnpm exec node -p "process.versions"` 确认。
 - 沙箱内跑不了 `pnpm test`（pnpm 依赖检查失败）；用 `node node_modules/vitest/vitest.mjs run --pool=threads`。`src/main/agent-runner.ts` 已自动把 `pnpm test` 映射成这条。
 - macOS 沙箱规则里的路径必须是 realpath（`/tmp` 实为 `/private/tmp`），否则规则静默失效。
+- shadcn CLI 的 init 不识别 electron-vite 布局（框架检测只认 vite.config.*）：组件用 components.json（style=radix-nova）+ `npx shadcn add <name> -y` 管理；改过生成组件时在文件头加 `// @shadcn-modified`。
+- renderer 的 CSP 是 `style-src 'self' 'unsafe-inline'`：dev 下 Tailwind 注入内联样式，收紧会被拦（构建产物是 <link> 文件，不受影响）。
 
 ## 当前状态
 
-M0 完成（M0a 内核 + M0b 界面/沙箱，六道门全绿）。下一步 = M1 会话内核（见 `agent-plan.md` §14）。
+M0 完成（M0a 内核 + M0b 界面/沙箱 + M0c shadcn/ui 组件层与系统主题，六道门全绿，32 测试）。下一步 = M1 会话内核（见 `agent-plan.md` §14）。

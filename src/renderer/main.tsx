@@ -1,5 +1,46 @@
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Message, MessageContent } from "@/components/ui/message";
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from "@/components/ui/message-scroller";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
+import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
 import type { AgentEvent } from "../events";
 import type {
   AgentApi,
@@ -9,6 +50,7 @@ import type {
   RunRequest,
   StateResponse,
 } from "../main/ipc-protocol";
+import { DARK_QUERY, watchSystemTheme } from "./theme";
 import "./styles.css";
 
 declare global {
@@ -17,10 +59,7 @@ declare global {
   }
 }
 
-// 会话时间线：事件与审批行按到达顺序混排；审批行原地显示决议结果。
-type Item =
-  | { kind: "event"; e: AgentEvent }
-  | { kind: "ask"; a: AskPayload; resolved?: "approved" | "rejected"; timedOut?: boolean };
+const DEMO_HINT = "修复 fixtures/todo-app 中失败的测试";
 
 function short(v: unknown, max = 260): string {
   const s = typeof v === "string" ? v : JSON.stringify(v);
@@ -28,27 +67,66 @@ function short(v: unknown, max = 260): string {
   return s.length > max ? s.slice(0, max) + " …" : s;
 }
 
+// 会话时间线：事件与审批行按到达顺序混排；审批行原地显示决议结果。
+type Item =
+  | { kind: "event"; e: AgentEvent }
+  | { kind: "ask"; a: AskPayload; resolved?: "approved" | "rejected"; timedOut?: boolean };
+
 function EventView({ e }: { e: AgentEvent }) {
-  if (e.type === "user_message") return <div className="msg user">{e.content}</div>;
-  if (e.type === "assistant_message") return <div className="msg assistant">{e.content}</div>;
+  if (e.type === "user_message") {
+    return (
+      <Message align="end">
+        <MessageContent>
+          <Bubble align="end" variant="default">
+            <BubbleContent className="whitespace-pre-wrap">{e.content}</BubbleContent>
+          </Bubble>
+        </MessageContent>
+      </Message>
+    );
+  }
+  if (e.type === "assistant_message") {
+    return (
+      <Message align="start">
+        <MessageContent>
+          <Bubble align="start" variant="outline">
+            <BubbleContent className="whitespace-pre-wrap">{e.content}</BubbleContent>
+          </Bubble>
+        </MessageContent>
+      </Message>
+    );
+  }
   if (e.type === "tool_call") {
     return (
-      <div className="tool">
-        <span className="tool-name">🔧 {e.name}</span>
-        <span className="tool-args">{short(e.args)}</span>
-      </div>
+      <Message align="start">
+        <MessageContent>
+          <Bubble align="start" variant="muted">
+            <BubbleContent className="font-mono text-xs">
+              <span className="font-semibold text-foreground">🔧 {e.name}</span>
+              <span className="text-muted-foreground">{short(e.args)}</span>
+            </BubbleContent>
+          </Bubble>
+        </MessageContent>
+      </Message>
     );
   }
   if (e.type === "tool_result") {
     return (
-      <div className={"result " + (e.ok ? "ok" : "err")}>
-        <span className="mark">{e.ok ? "✓" : "✗"}</span>
-        <span className="out">{short(e.output, 400)}</span>
-      </div>
+      <Message align="start">
+        <MessageContent>
+          <Bubble align="start" variant="ghost">
+            <BubbleContent className="font-mono text-xs">
+              <span className={e.ok ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
+                {e.ok ? "✓" : "✗"}
+              </span>
+              <span className="whitespace-pre-wrap text-muted-foreground">{short(e.output, 400)}</span>
+            </BubbleContent>
+          </Bubble>
+        </MessageContent>
+      </Message>
     );
   }
   return (
-    <div className="usage">
+    <div className="text-center text-xs text-muted-foreground">
       tokens：{e.inputTokens} in / {e.outputTokens} out
     </div>
   );
@@ -70,26 +148,33 @@ function AskView({
           ? "已拒绝（60 秒无响应，自动拒绝）"
           : "已拒绝";
     return (
-      <div className={"ask resolved " + it.resolved}>
-        {label}：{a.tool}
-      </div>
+      <Card className="py-3">
+        <CardContent className="flex items-center gap-2 px-3 text-sm">
+          <Badge variant={it.resolved === "approved" ? "secondary" : "destructive"}>{label}</Badge>
+          <span className="font-mono text-xs text-muted-foreground">{a.tool}</span>
+        </CardContent>
+      </Card>
     );
   }
   return (
-    <div className="ask pending">
-      <span className="ask-label">
-        ⚠️ 请求批准：<b>{a.tool}</b> {short(a.args, 200)}
-      </span>
-      <span className="ask-actions">
-        <button className="approve" onClick={() => onDecide(a.askId, true)}>
-          批准
-        </button>
-        <button className="deny" onClick={() => onDecide(a.askId, false)}>
-          拒绝
-        </button>
-      </span>
-      <span className="hint">60 秒无响应自动拒绝</span>
-    </div>
+    <Card className="border-amber-500/40 bg-amber-500/5 py-3">
+      <CardContent className="flex flex-wrap items-center gap-2 px-3 text-sm">
+        <Badge className="border-amber-500/60 bg-amber-500/15 text-amber-700 dark:text-amber-400" variant="outline">
+          待审批
+        </Badge>
+        <span className="font-mono text-xs">{a.tool}</span>
+        <span className="max-w-full truncate font-mono text-xs text-muted-foreground">{short(a.args, 200)}</span>
+        <span className="flex gap-2">
+          <Button size="sm" variant="default" onClick={() => onDecide(a.askId, true)}>
+            批准
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => onDecide(a.askId, false)}>
+            拒绝
+          </Button>
+        </span>
+        <span className="text-xs text-muted-foreground">60 秒无响应自动拒绝</span>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -100,6 +185,8 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<PermissionMode>("default");
   const [input, setInput] = useState("");
+
+  useEffect(() => watchSystemTheme(window.matchMedia(DARK_QUERY), document.documentElement), []);
 
   useEffect(() => {
     const offEvent = window.agent.onEvent((e) => setItems((v) => [...v, { kind: "event", e }]));
@@ -137,64 +224,162 @@ function App() {
     void window.agent.decide(askId, approved);
   };
 
+  const sandbox = status?.sandbox;
+  const tokens = items.reduce(
+    (acc, it) =>
+      it.kind === "event" && it.e.type === "usage"
+        ? { in: acc.in + it.e.inputTokens, out: acc.out + it.e.outputTokens }
+        : acc,
+    { in: 0, out: 0 },
+  );
+
   return (
-    <div className="app">
-      <header>
-        <h1>M0b · 桌面 Agent</h1>
-        {status &&
-          (status.sandbox.available ? (
-            <span className="badge ok">沙箱：Seatbelt 已启用</span>
-          ) : (
-            <span className="badge warn">
-              ⚠️ 沙箱不可用：{status.sandbox.reason ?? "未知"}（写操作将逐条强制审批）
-            </span>
-          ))}
-      </header>
-      {error && <div className="banner">运行失败：{error}</div>}
-      <main className="stream">
-        {items.length === 0 && (
-          <div className="empty">在下方给 agent 派活，例如：修复 fixtures/todo-app 中失败的测试</div>
-        )}
-        {items.map((it, i) =>
-          it.kind === "event" ? (
-            <EventView key={i} e={it.e} />
-          ) : (
-            <AskView key={i} it={it} onDecide={decide} />
-          ),
-        )}
-      </main>
-      <footer>
-        <select
-          value={mode}
-          disabled={running}
-          onChange={(e) => setMode(e.target.value as PermissionMode)}
-        >
-          <option value="read-only">read-only</option>
-          <option value="default">default（写操作需批准）</option>
-          <option value="auto">auto</option>
-        </select>
-        <textarea
-          value={input}
-          rows={2}
-          disabled={running}
-          placeholder={running ? "agent 运行中…" : "给 agent 派活…"}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              void send();
-            }
-          }}
-        />
-        <button
-          className="send"
-          onClick={() => void send()}
-          disabled={running || input.trim().length === 0}
-        >
-          {running ? "运行中…" : "发送"}
-        </button>
-      </footer>
-    </div>
+    <SidebarProvider>
+      <Sidebar collapsible="icon">
+        <SidebarHeader>
+          <div className="flex items-center gap-2 px-2 py-1.5">
+            <span className="text-sm font-semibold">M0c · 桌面 Agent</span>
+          </div>
+        </SidebarHeader>
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupLabel>运行状态</SidebarGroupLabel>
+            <SidebarGroupContent className="px-2 text-xs">
+              <div className="flex flex-col gap-2">
+                {sandbox ? (
+                  sandbox.available ? (
+                    <Badge className="w-fit" variant="secondary">
+                      沙箱：Seatbelt 已启用
+                    </Badge>
+                  ) : (
+                    <Badge className="w-fit" variant="destructive">
+                      沙箱不可用：{sandbox.reason ?? "未知"}
+                    </Badge>
+                  )
+                ) : (
+                  <Badge className="w-fit" variant="outline">
+                    沙箱检测中…
+                  </Badge>
+                )}
+                <div className="text-muted-foreground">事件：{items.length} 条</div>
+                <div className="text-muted-foreground">
+                  tokens：{tokens.in} in / {tokens.out} out
+                </div>
+              </div>
+            </SidebarGroupContent>
+          </SidebarGroup>
+          <SidebarGroup>
+            <SidebarGroupLabel>权限档</SidebarGroupLabel>
+            <SidebarGroupContent className="px-2">
+              <Select value={mode} onValueChange={(v) => setMode(v as PermissionMode)}>
+                <SelectTrigger className="w-full" disabled={running}>
+                  <SelectValue placeholder="选择权限档" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="read-only">read-only</SelectItem>
+                  <SelectItem value="default">default（写操作需批准）</SelectItem>
+                  <SelectItem value="auto">auto</SelectItem>
+                </SelectContent>
+              </Select>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+        <SidebarFooter>
+          <div className="px-2 text-xs text-muted-foreground">macOS Seatbelt · mock 模型</div>
+        </SidebarFooter>
+      </Sidebar>
+      <SidebarInset>
+        <ResizablePanelGroup orientation="horizontal" className="h-screen">
+          <ResizablePanel defaultSize={68} minSize={40}>
+            <div className="flex h-full flex-col">
+              <header className="flex items-center gap-2 border-b px-3 py-2">
+                <SidebarTrigger />
+                <Separator orientation="vertical" className="data-[orientation=vertical]:h-4" />
+                <span className="text-sm font-medium">会话</span>
+              </header>
+              {error && (
+                <div className="bg-destructive/10 px-4 py-2 text-xs text-destructive">运行失败：{error}</div>
+              )}
+              {sandbox && !sandbox.available && (
+                <div className="bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-400">
+                  ⚠️ 沙箱不可用：{sandbox.reason ?? "未知"} —— 已降级为无沙箱 + 写操作逐条强制审批
+                </div>
+              )}
+              <MessageScrollerProvider>
+                <MessageScroller className="min-h-0 flex-1">
+                  <MessageScrollerViewport>
+                    <MessageScrollerContent className="p-4">
+                      {items.length === 0 && (
+                        <Empty>
+                          <EmptyHeader>
+                            <EmptyMedia variant="icon">💬</EmptyMedia>
+                            <EmptyTitle>还没有会话</EmptyTitle>
+                            <EmptyDescription>在下方给 agent 派活，例如：{DEMO_HINT}</EmptyDescription>
+                          </EmptyHeader>
+                        </Empty>
+                      )}
+                      {items.map((it, i) => (
+                        <MessageScrollerItem key={i}>
+                          {it.kind === "event" ? (
+                            <EventView e={it.e} />
+                          ) : (
+                            <AskView it={it} onDecide={decide} />
+                          )}
+                        </MessageScrollerItem>
+                      ))}
+                    </MessageScrollerContent>
+                  </MessageScrollerViewport>
+                  <MessageScrollerButton />
+                </MessageScroller>
+              </MessageScrollerProvider>
+              <footer className="flex items-end gap-2 border-t p-3">
+                <Textarea
+                  value={input}
+                  rows={2}
+                  disabled={running}
+                  placeholder={running ? "agent 运行中…" : "给 agent 派活…"}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      void send();
+                    }
+                  }}
+                />
+                <Button
+                  size="lg"
+                  onClick={() => void send()}
+                  disabled={running || input.trim().length === 0}
+                >
+                  {running ? "运行中…" : "发送"}
+                </Button>
+              </footer>
+            </div>
+          </ResizablePanel>
+          <ResizableHandle withHandle />
+          <ResizablePanel defaultSize={32} minSize={20}>
+            <div className="flex h-full flex-col">
+              <header className="border-b px-3 py-2 text-sm font-medium">事件流（原始 JSONL）</header>
+              <ScrollArea className="min-h-0 flex-1">
+                <pre className="p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all text-muted-foreground">
+                  {items
+                    .map((it) => {
+                      if (it.kind === "ask") {
+                        if (it.resolved) {
+                          return JSON.stringify({ type: "ask-done", askId: it.a.askId, outcome: it.resolved });
+                        }
+                        return JSON.stringify({ type: "ask", tool: it.a.tool, args: it.a.args });
+                      }
+                      return JSON.stringify(it.e);
+                    })
+                    .join("\n") || "（空）"}
+                </pre>
+              </ScrollArea>
+            </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
 

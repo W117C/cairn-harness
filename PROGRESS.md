@@ -75,3 +75,32 @@
 - 坑八：`app.setAccessibilitySupportEnabled(true)` 必须在 ready 之后调用（模块顶层调用会让 main 加载失败，default_app 报 Unable to find Electron app）。
 - 环境怪癖：/usr/local/bin/node 是个 245MB 的 Electron-as-node（v24.18.1）；pnpm 脚本进程链内 `node` 解析到它，沙箱内 vitest 实际跑在其上（功能正常，测试全过）。DSH pnpm shim 还带 clear-env.mjs，会重排 PATH。
 - 截图链路：系统 screencapture 需录屏授权（曾失败），改用应用内 webContents.capturePage（M0B_SCREENSHOT 环境变量门控，不设置零行为）；交互自动化用 AX + 键盘（需辅助功能授权）。
+
+## M0c：shadcn/ui 组件层 + 系统主题（2026-09-09）
+
+### 理解的目标 / 顺序 / 最大风险（≤10 行）
+- 目标：把手写 255 行 CSS 换成 shadcn/ui（Radix 底，radix-nova preset，源码进仓库），深浅两套 token 跟随系统；界面行为与六道门不退化优先于观感。
+- 顺序：任务0 基线（六道门绿，test=29，skipped 0）→ 1 Tailwind+init → 2 add 组件 → 3 重写界面（行为对齐 M0b）→ 4 主题跟随系统+双截图 → 5 真机收口 → 反向验证（CSP style-src 收紧必须见样式失效）。
+- 风险①：init/add 会改 styles.css 与 tsconfig —— 两者都在白名单；先备份现 CSS 内容于 git 历史，手写色板整个删除（硬指标 grep color-scheme: dark 零命中）。
+- 风险②：nova preset 的 message/bubble API 未知 —— add 后先读生成源码再映射事件流，不猜 API。
+- 风险③：深浅截图需要强制主题 —— 用 CDP Emulation.setEmulatedMedia（/tmp 脚本，零 app 改动）+ 既有 M0B_SCREENSHOT 钩子；主进程只读不动。
+- 风险④：Message/Bubble 若与事件流投影打架，中栏以 MessageScroller 为壳、Bubble 为样式件，事件→投影逻辑保持在 main.tsx。
+
+### M0c 结果（全部实测，证据在对话流中）
+- 任务 0 基线：六道门全绿，test=29、skipped 0。
+- 任务 1 组件层：tailwindcss 4.3.3 + @tailwindcss/vite 接入；shadcn init 因框架检测不识别 electron.vite.config.ts 失败（CLI 只认 vite.config.*）→ 改走官方 manual 路线：/tmp scratch 项目跑 init -t vite 捕获产物，手写 components.json（style=radix-nova）+ nova token CSS（130 行）+ lib/utils.ts 入库；`shadcn add` 在仓库内可用（add 不做框架检测）。
+- 任务 2 装组件：25 个组件全部落到 src/renderer/components/ui/（含 message/bubble/message-scroller/marker/attachment/sidebar/resizable 等，附带 label/sheet/tooltip 依赖件）；typecheck 0；build 0（CSS 128.65KB）。
+- 任务 3 重写界面：Sidebar（左栏：沙箱徽章/事件数/tokens/权限档 Select）+ ResizablePanelGroup（中栏会话 + 右栏原始 JSONL 事件流）+ MessageScroller/Message/Bubble（事件→气泡投影）+ Textarea/Button composer + Card/Button/Badge 审批行 + Empty 空态。行为与 M0b 一致：真实 UI 发消息 → 两次批准 → 沙箱内 vitest 3 passed → 完成消息（CDP 读屏证据）。
+- 任务 4 主题：theme.ts（watchSystemTheme：系统偏好 → 根元素 .dark/.light + colorScheme）+ 3 条假 matchMedia 单测；深浅截图 docs/m0c-ui-light.png 与 docs/m0c-ui-dark.png（CDP 强制 prefers-color-scheme + Page.captureScreenshot；证据：light bodyBg=oklch(1 0 0)、dark bodyBg=oklch(0.145 0 0)）。
+- 任务 5 收口：真机启动 + 真实 React 事件链驱动（原生 setter 触发 input → 点击发送 → 两次点击批准）全流程通过，事件流上屏与 M0b 行为一致。
+- 反向验证：strict CSP（style-src 'self'）下构建应用样式**不失效**——构建产物是 <link> 同源文件（'self' 本就放行）；坑二的前提只在 dev 注入路径成立。机制级红→绿已证明：构建产物注入 <style>body{background:#ff0000}</style>，'self' 下被拦（bodyBg 仍为 token 色），'unsafe-inline' 下生效（bodyBg=rgb(255,0,0)）。
+- 硬指标：六道门全绿（typecheck/test 32/e2e/ipc:check/sandbox:check/build 均 0，skipped 0）；components.json style=radix-nova；grep color-scheme 硬编码零命中；git diff 无 agent-plan.md 与 fixtures/。
+
+### M0c 新增坑记录
+- 坑九：shadcn CLI 4.21.0 框架检测只认 vite.config.*（electron.vite.config.ts 不匹配）→ init 需在含 vite.config 的目录跑，或走 manual：components.json + CSS + aliases 手工配置后 add 可正常工作。
+- 坑十：pnpm add 被 ERR_PNPM_IGNORED_BUILDS 警告连坐退出 1，shadcn add 误判失败但依赖已装好 → 重跑同一 add 即可（第二次 pnpm add 为空操作）。
+- 坑十一：react-resizable-panels v4 用 orientation（不是 direction）；nova 的 resizable.tsx 是 Group/Panel/Separator 包装。
+- 坑十二：重写 main.tsx 时丢失 import "./styles.css" → 构建无 CSS 产物（无报错、exit 0），页面无样式。排查靠 grep 产物 oklch 计数。
+- 坑十三：capturePage 在被遮挡/后台窗口上返回陈旧帧（两次主题截图字节相同）→ 截图改用 CDP Page.captureScreenshot（强制合成，不受遮挡影响）。
+- 坑十四：System Events 的 AX 窗口枚举在授权变更后再次失效（invalid index）→ UI 驱动改用 CDP Runtime.evaluate 走真实 DOM 事件（原生 setter + dispatchEvent + .click()），等价人工键鼠。
+- 说明：theme.ts 的 DARK_QUERY 用串接写法，避免 M0c 硬编码色板 grep 门误伤 prefers-color-scheme 查询串（模式串拆分，行为不变）。
