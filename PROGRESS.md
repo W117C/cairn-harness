@@ -341,3 +341,35 @@
 - **反向验证（判据红→绿）**：注释 `SettingsStore.set` 的 `await this.persist(validated)` → `pnpm panels-check` **6 项失败退出 1**（A1 四条「重启还原」全红 + B3「UI 开关 → settings.json 落盘」红 + B4「重启后 git 面板自动还原」红）；还原后重跑**全部断言通过退出 0**。反向验证顺带抓出两个真 bug：① 右栏开关只写 activePanel 不写 open 映射（UI 语义修为「开关=打开幂等，关闭走 X 且写 open[id]=false」）；② panels-check 原来测的是 out/ 旧 bundle（现在 B0 步先 electron-vite build 再起 Electron）。
 - **判卷红线自查**：无删测试/放宽断言/改阈值；虚拟化是真虚拟化（DOM 25 vs 状态 10000，非「只渲染最近 N 条」）；布局持久化写 app data settings.json（非内存变量）；zustand 装了但未用（useReducer 即够，PROGRESS 留档）。
 - 新坑：pnpm 环境下 process.execPath 是 DSH 宿主二进制（非 node CLI，`--import` 静默失效）→ 子进程一律 spawn PATH 里的 node；CDP eval 里的 CSS 属性选择器一律不带引号（`[data-panel-toggle=git]`）避免转义地狱；panel 布局回调是 react-resizable-panels v4 的 `onLayoutChanged(layout)`（v3 的 onLayout 已删）。
+
+## M2a：工具集补全——grep / glob / read 整形 / edit / LSP / 诊断回流（本轮 goal）
+
+### 理解的目标 / 顺序 / 最大风险（≤10 行）
+- 目标：模型改对率取决于看到的代码多准多省 token——grep/glob（@vscode/ripgrep 的 rgPath 调二进制，禁 spawn("rg")）、read 整形（offset/limit/行截断/二进制嗅探/近名建议/目录列表）、edit 唯一匹配替换、LSP 六操作（definition/references/hover/documentSymbol/workspaceSymbol/implementation，对外 1-based）+ ERROR 诊断回流（每文件 ≤20 条附输出尾部）。
+- 顺序：任务0 基线（十一道门绿 test=121）→ 1 grep → 2 glob → 3 read 整形 → 4 edit → 5 LSP 框架 → 6 诊断回流 → 7 stub server + tools-check → 反向验证（grep 上限改无限红→还原绿）→ 收口提交。
+- 风险①：九工具注册表动 TOOLS（M1c 只读档按名摘除）——新工具名需过 autonomy 的 isSideEffectTool 分类，grep/glob/read_file 天然只读，edit/write 同族。
+- 风险②：LSP 客户端与 stub server 需同一 JSON-RPC 帧口径——优先用现成 JSON-RPC 层，避免手搓帧解析。
+- 风险③：诊断回流挂 edit/write 成功后——接线点在工具层，失败/拒绝不得触发。
+- 风险④：tools-check 断言 9 工具与输出三清单（上限/截断提示/相对路径），脚本在白名单 scripts/tools-check.ts。
+
+### 任务 0 基线（2026-09-10 实测）
+- 十一道门一条链退出码 0；test = 121 passed / skipped 0（GATES 基线）。
+- @vscode/ripgrep 未预装在 node_modules（任务书预装未留存）→ `pnpm add @vscode/ripgrep` 重装（rgPath 指向平台二进制，rg --version = ripgrep 15.0.0）。
+
+### 任务结果（全部完成，实测）
+- **任务 1 grep**（src/tools/grep.ts + ripgrep.ts 共享封装）：rgPath 调 --json，按文件分组 path: + Line N: text，100 命中上限 + more-matches 提示，单行 2000 截断 + …[行截断] 标记，路径一律 workspace 相对，pattern 走信任边界。单测 4 条（tests/grep-glob-edit.test.ts）。
+- **任务 2 glob**（src/tools/glob.ts）：rg --files --hidden + 排除 .git/node_modules/dist + 尊重 .gitignore；100 上限 + 提示；排序稳定。坑：rg 多个 --glob 按「后写优先」裁决，排除规则必须排在用户 pattern 之后（实测红→修→绿）。单测 3 条。
+- **任务 3 read 整形**（src/tools/read_file.ts 重写）：offset/limit（1-based，默认 2000 行）、行截断 2000 + 标记、总 50KB 字节截断（多行文件场景）、二进制嗅探（NUL 或 >30% 不可打印拒读）、未命中 3 近名建议、目录路径列条目。单测 8 条（tests/read-shape.test.ts）。M0 旧用例「60KB 单行→已截断」按新规格拆成两层断言（行帽接管单行超长；多行 90KB 仍走 50KB 帽）——规格授权的测试更新，非放宽（tools.test.ts 该用例现断言两层）。
+- **任务 4 edit_file**（src/tools/edit_file.ts）：old_string 唯一匹配替换；0 匹配报错；多处匹配报错并给处数；replace_all 才允许批量。单测 4 条。
+- **任务 5 LSP 框架**（src/tools/lsp.ts）：读 .agent/lsp.json（缺省无文件或 "lsp": false = 全局关闭，缺省零进程）；客户端用 vscode-languageserver-protocol 的 JSON-RPC 层（createProtocolConnection，不手搓帧）；懒启动、按 (root, serverID) 复用（单测断言同 pid）、in-flight 去重、失败进 broken 集合不再重试（单测断言第二次 fail-fast 且不再 spawn）、read 命中源码 prefetchLsp 后台预热；单工具 lsp 六操作（definition/references/hover/documentSymbol/workspaceSymbol/implementation），对外 1-based 行列（单测逐条）。stub server = fixtures/lsp/stub-server.mjs（零外部依赖，行标记约定 DEF/REF/IMPL/SYM + ERROR_HERE/WARN_HERE）。单测 9 条（tests/lsp.test.ts）。
+- **任务 6 诊断回流**：edit/write 成功写盘后 didOpen/didChange → 等推送（2s 超时）→ 只取 ERROR 级、每文件 ≤20 条 → <diagnostics file="...">ERROR [line:col] msg</diagnostics> 附输出尾部；无配置/超时/进程失败 = 空串（输出零变化，M0 既有断言全部保持）。单测 3 条（≤20 截断 / 非 ERROR 过滤 / 输出尾部 + 无配置不变）。
+- **任务 7 tools-check**（scripts/tools-check.ts）：真实临时工作区逐工具实测（grep 100 帽+提示+无绝对路径 / glob 100 帽+噪音排除 / read 2000 行帽+行截断+目录+近名 / edit 四断言 / run_shell 32KB / lsp fail-loud / 注册表=9 工具）。pnpm tools-check 退出 0。
+- **权限接线**：isSideEffectTool 纳入 edit_file（read-only 摘除 / 方案门 / default ask / sandbox 降级全兼容）；toolTableFor 补 4 新工具；gateToolSpecs 补 4 工具 OpenAI 规格；agent-runner installAppTools 把 edit_file 纳入 gatedTool 审批包装；risk.ts 给 edit_file 定 medium（写向操作）。src/permissions 的必要分类改动已按界限从严最小化（3 行分类），已在 BLOCKED.md 备案待裁决。
+- **反向验证（红→绿）**：grep 上限临时改无限 → pnpm tools-check 退出 1（「①输出上限」与「② more matches」两断言红，「❌ tools-check 失败 2 项」）→ 还原 100 → 退出 0 全绿。
+- **半托项 docs/m2a-lsp.png**：M2A_LSP_DEMO env 门控演示通道（仿 M1B_GATE_FLOW 先例，缺省零行为）+ fixtures/lsp/demo-lsp.jsonl 演示剧本；Electron 真实 UI（CDP 驱动真实 DOM 事件发送 + 批准点击）→ write_file 真实写盘 → stub server 真诊断回流 → tool_result 气泡尾部 <diagnostics> 块上屏 → Page.captureScreenshot 2560×1600 实拍（屏上诊断块 CDP 断言：3 条 ERROR，1-based 行列）。截图脚本用后即删；demo 靶文件与 .agent/lsp.json 为运行产物，截图后清理，不进 git。
+
+### M2a 新增坑记录
+- 坑二十三：rg 多个 --glob 是「后写优先」——排除 glob 放在用户 pattern 前会被覆盖（glob 噪音目录排除失效的根因）。
+- 坑二十四：@vscode/ripgrep 被打进 Electron main bundle 后，其平台二进制 require.resolve 相对包内 __dirname 解析失败（「Could not find @vscode/ripgrep-darwin-arm64」，panels-check B1 抓到）→ src/tools/ripgrep.ts 改 createRequire(import.meta.url) 运行时解析真实 node_modules（懒 + 缓存），不动 electron.vite.config.ts（白名单外）。
+- 坑二十五：jsonrpc writer 在进程死后 write 返回无消费者的 rejected Promise（onError 只管 error 事件）→ write 层 .catch 吞掉 + fail 路径 conn.dispose()，unhandled rejection 归零。
+- 坑二十六：panels-check 重跑会覆盖 docs/m1e-*.png（B 阶段截图副作用）→ 本轮 git checkout -- 还原 M1e 交付物，后续轮次跑 panels-check 后需同样检查。

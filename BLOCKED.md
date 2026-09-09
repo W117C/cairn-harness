@@ -2,6 +2,11 @@
 
 无阻塞事项。
 
+## M2a 轮新增待裁决（2026-09-10）
+1. **src/permissions 的三行分类改动**：界限原文把 src/permissions/** 列为「只读（只调用）」，但 M2a 新增 edit_file（字符串替换式写工具）必须在权限层有分类——isSideEffectTool（autonomy.ts + index.ts）不认它则 read-only 档可写、方案门失效；toolTableFor 不列它则 read-only 档工具表缺工具。已按最小改动执行（3 处分类行 + risk.ts 一条 medium 评级），全部在「src/agent/**、src/main/**、src/tools/**、src/permissions/**」的字面交集争议内，如实备案：若判违规可整体 revert 这 3 处，代价是 edit_file 退化为 read-only 档可写（建议追加到白名单而不是 revert）。
+2. **M0 旧用例更新**：tests/tools.test.ts「60KB 单行→已截断」与新规格「行截断 2000 先于 50KB 字节帽」冲突（单行 60KB 经行帽输出 ~2KB，不再触发字节帽）——已按任务书规格拆成两层断言（单行触发行截断标记、多行 90KB 触发 50KB 帽），断言强度只增不减（新增行截断与字节两层各自独立验证）。属规格演进的测试同步，非放宽。
+3. **M2A_LSP_DEMO 演示通道**：截图用的 env 门控通道（缺省零行为）+ 演示剧本 fixtures/lsp/demo-lsp.jsonl 留在仓库（重跑截图的入口）。若领导认为应删，删 src/main/agent-runner.ts 的 M2A_LSP_DEMO 三行 + fixtures/lsp/demo-lsp.jsonl 即可，验收链不依赖它。
+
 ## M1c 轮新增待裁决（2026-09-09）
 1. ~~M0_API_KEY 缺失 → 暗卷（任务 7）走观察项路径~~ **已解决（2026-09-09 领导提供 key）**：真实 GLM（glm-5.3-flash）在 requires_approval 约定下输出了标记 → 解析映射 high + 管线任何档位强制审批，两断言绿、autonomy-check 全绿 exit 0（暗卷正路径，未动用观察项）。环境教训修正：M0_ENDPOINT 必须是**含路径的完整 URL**（https://api.b.ai/v1/chat/completions）——glm.ts 不自行拼 /chat/completions，裸 v1 根路径会被代理 403 拒（M1a 轮的「M0_ENDPOINT=https://api.b.ai/v1」记法不准）。key 只进当次进程环境变量，全仓字面量 0 命中。
 2. **「最长前缀」与「deny>ask>allow 固定序」的取舍**：§11.7.3 同时采纳 Roo「同段取最长前缀」与 Claude「规则特异性不改评估序」，两者在「短 deny + 长 allow 同段命中」场景冲突。本轮按任务书验收④实现为：同段多规则命中取最长前缀（其行为生效），同长才按 deny>ask>allow；管线层序 deny→ask 不变。若领导希望 deny 恒压 allow（特异性无效），匹配函数一行可改，但验收④的『git push origin main → allow』会随之翻红，需先换判据。

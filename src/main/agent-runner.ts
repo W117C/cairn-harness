@@ -95,7 +95,7 @@ function denied(name: ToolName, mode: PermissionMode, why: string): ToolResult {
   return { ok: false, output: "[permission denied] " + name + " 在 " + mode + " 档下被门拒绝（" + why + "）" };
 }
 
-function gatedTool(name: "write_file" | "run_shell", original: Tool): Tool {
+function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Tool): Tool {
   return {
     name,
     async run(args, ctx) {
@@ -246,6 +246,7 @@ export function installAppTools(): void {
   if (installed) return;
   installed = true;
   TOOLS.write_file = gatedTool("write_file", TOOLS.write_file);
+  TOOLS.edit_file = gatedTool("edit_file", TOOLS.edit_file);
   TOOLS.run_shell = gatedTool("run_shell", TOOLS.run_shell);
 }
 
@@ -282,6 +283,8 @@ function createProvider(userMessage: string): Provider {
   const autonomyScript = process.env.M1C_AUTONOMY_SCRIPT;
   if (process.env.M1B_GATE_FLOW === "1") return createMockProvider(GATE_FIXTURE);
   if (autonomyScript) return createMockProvider(autonomyScript);
+  // M2a 截图通道：M2A_LSP_DEMO 指向演示剧本（write_file → 真实诊断回流管线），缺省零行为
+  if (process.env.M2A_LSP_DEMO) return createMockProvider(process.env.M2A_LSP_DEMO);
   if (process.env.M0A_PROVIDER !== "glm") return createMockProvider(MOCK_FIXTURE);
   let gen: AsyncGenerator<AgentEvent> | null = null;
   return {

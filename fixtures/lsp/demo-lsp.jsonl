@@ -1,0 +1,3 @@
+{"type":"assistant_message","content":"我先写一个带错误的示例文件，观察诊断回流。"}
+{"type":"tool_call","id":"d1","name":"write_file","args":{"path":"demo-lsp.ts","content":"// M2a 诊断回流演示：ERROR_HERE 行会由 stub LSP server 发布 ERROR 级诊断\nconst rate = 0.1;\nfunction demo(input) {\n  return input.value * rate; // ERROR_HERE\n}\nconst broken = ; // ERROR_HERE\n// WARN_HERE\n"}}
+{"type":"assistant_message","content":"写入完成——tool_result 尾部已带回 LSP 诊断（<diagnostics> 块，ERROR 级，每文件 ≤20 条）。任务完成。"}

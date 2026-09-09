@@ -34,8 +34,61 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
       type: "function",
       function: {
         name: "read_file",
-        description: "读取工作区内文件（workspace 相对路径）",
-        parameters: obj({ path: { type: "string", description: "workspace 相对路径" } }, ["path"]),
+        description:
+          "读取工作区内文件（workspace 相对路径）；支持 offset/limit（1-based 行号）；目录路径列出条目；二进制文件拒读",
+        parameters: obj(
+          {
+            path: { type: "string", description: "workspace 相对路径" },
+            offset: { type: "number", description: "起始行（1-based，缺省 1）" },
+            limit: { type: "number", description: "最多读取行数（缺省 2000）" },
+          },
+          ["path"],
+        ),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "grep",
+        description: "工作区内容搜索（ripgrep 正则）；按文件分组返回，上限 100 命中",
+        parameters: obj(
+          {
+            pattern: { type: "string", description: "正则表达式" },
+            path: { type: "string", description: "限定目录或文件（workspace 相对，缺省全工作区）" },
+          },
+          ["pattern"],
+        ),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "glob",
+        description: "按 glob 模式列文件（尊重 .gitignore，排除 .git/node_modules/dist，上限 100）",
+        parameters: obj(
+          {
+            pattern: { type: "string", description: "glob 模式（如 src/**/*.ts，缺省 **/*）" },
+            path: { type: "string", description: "限定目录（workspace 相对，缺省全工作区）" },
+          },
+          [],
+        ),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "edit_file",
+        description:
+          "精确字符串替换编辑；old_string 必须唯一匹配（多处匹配报错并给出处数），确要全部替换加 replace_all: true",
+        parameters: obj(
+          {
+            path: { type: "string" },
+            old_string: { type: "string", description: "要被替换的原文（必须唯一）" },
+            new_string: { type: "string", description: "替换后的新文本" },
+            replace_all: { type: "boolean", description: "全部替换（缺省 false）" },
+          },
+          ["path", "old_string", "new_string"],
+        ),
       },
     },
     {

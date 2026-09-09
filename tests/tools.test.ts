@@ -24,13 +24,22 @@ describe("read_file", () => {
     expect(res.output).toBe("hello m0");
   });
 
-  it("超限：超过 50KB 截断并附一行提示", async () => {
+  it("超限：50KB 上限截断并附一行提示（M2a 起行截断 2000 先接管单行超长）", async () => {
     const ctx = await newCtx();
-    await writeFile(join(ws, "big.txt"), "y".repeat(60_000), "utf8");
+    // M2a 规格两层：单行 >2000 字符由行截断处理（输出 <50KB，不再触发字节截断）
+    await writeFile(join(ws, "long-line.txt"), "y".repeat(60_000), "utf8");
+    const resLine = await read_file.run({ path: "long-line.txt" }, ctx);
+    expect(resLine.ok).toBe(true);
+    expect(resLine.output).toContain("行截断");
+    expect(resLine.output.startsWith("y")).toBe(true);
+    expect(Buffer.byteLength(resLine.output, "utf8")).toBeLessThanOrEqual(3_000);
+    // 多行（行数 ≤2000）但总字节 >50KB → 仍由 50KB 字节上限截断 + 提示
+    const line = "z".repeat(89);
+    await writeFile(join(ws, "big.txt"), (line + "\n").repeat(1000), "utf8");
     const res = await read_file.run({ path: "big.txt" }, ctx);
     expect(res.ok).toBe(true);
     expect(res.output).toContain("已截断");
-    expect(res.output.startsWith("y")).toBe(true);
+    expect(res.output.startsWith("z")).toBe(true);
     expect(Buffer.byteLength(res.output, "utf8")).toBeLessThanOrEqual(50 * 1024 + 100);
   });
 

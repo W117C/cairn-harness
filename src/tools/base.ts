@@ -29,7 +29,17 @@ export interface ToolResult {
   output: string;
 }
 
-export type ToolName = "read_file" | "write_file" | "run_shell" | "clarify" | "propose_plan" | "verify";
+export type ToolName =
+  | "read_file"
+  | "write_file"
+  | "edit_file"
+  | "run_shell"
+  | "grep"
+  | "glob"
+  | "lsp"
+  | "clarify"
+  | "propose_plan"
+  | "verify";
 
 export interface Tool {
   name: ToolName;

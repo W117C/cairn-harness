@@ -83,7 +83,7 @@ export function newAutonomySession(
 }
 
 export function isSideEffectTool(tool: string): boolean {
-  return tool === "write_file" || tool === "run_shell";
+  return tool === "write_file" || tool === "edit_file" || tool === "run_shell";
 }
 
 /** scope 记忆键：run_shell 按归一化命令全串（出网审计粒度），write_file 按工具级（「此类」语义）。 */
@@ -244,7 +244,10 @@ export function downgradeSuggestion(s: AutonomySession): string | null {
 /** 模型可见工具表：只读档把写向工具摘除（§11.7.2，Claude bare-name deny 同构）。
  * 与 gateToolSpecs 的工具集同源（含 verify 系统门）。 */
 export function toolTableFor(mode: PermissionMode): ToolName[] {
-  const all: ToolName[] = ["read_file", "write_file", "run_shell", "clarify", "propose_plan", "verify"];
+  const all: ToolName[] = [
+    "read_file", "write_file", "edit_file", "run_shell", "grep", "glob", "lsp",
+    "clarify", "propose_plan", "verify",
+  ];
   if (mode === "read-only") {
     return all.filter((t) => !isSideEffectTool(t));
   }

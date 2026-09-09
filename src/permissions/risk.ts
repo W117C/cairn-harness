@@ -65,6 +65,10 @@ const NONE: RiskFinding = { level: "none", reason: "" };
 
 /** 静态通道：扫描命令（含链）命中威胁表取最高级。 */
 export function staticRisk(tool: ToolName, args: Record<string, unknown>): RiskFinding {
+  // edit_file：就地改文件（文件破坏面 ≤ write_file 的覆盖写，但仍是写向操作）
+  if (tool === "edit_file") {
+    return { level: "medium", reason: "编辑文件（写向操作）" };
+  }
   if (tool !== "run_shell") return NONE;
   const command = typeof args.command === "string" ? args.command : "";
   if (command.trim() === "") return NONE;

@@ -84,7 +84,7 @@ function planBlocks(): boolean {
 }
 
 function isSideEffectTool(tool: ToolName): boolean {
-  return tool === "write_file" || tool === "run_shell";
+  return tool === "write_file" || tool === "edit_file" || tool === "run_shell";
 }
 
 // 原始判定：read_file 与三门工具（clarify/propose_plan/verify）不产生用户数据副作用，任何档都放行；
