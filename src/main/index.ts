@@ -1,4 +1,5 @@
-// 桌面壳入口：建窗口、接三条 IPC、装工具门、自检沙箱。
+// 桌面壳入口：建窗口、接 IPC、装工具门、自检沙箱。
+// M1e：settings 存储（布局/档位/主题，app data）+ 会话目录（JSONL 即会话）+ 审批徽标注入通道。
 // 沙箱不可用 → 降级为无沙箱 + 写工具强制审批（agent-runner 内），renderer 以常驻警示条提示。
 import { writeFile } from "node:fs/promises";
 import { app, BrowserWindow, ipcMain } from "electron";
@@ -10,18 +11,28 @@ import {
   handleClarifySubmit,
   handleCompact,
   handlePlanDecide,
+  handleSessionCreate,
+  handleSessionDelete,
+  handleSessionList,
+  handleSessionOpen,
+  handleSessionRename,
+  getSettings,
+  setSettings,
   initSandbox,
+  initSessionsDir,
+  initSettingsStore,
+  providerInfo,
   setAppHooks,
 } from "./agent-runner";
-import type { RunRequest } from "./ipc-protocol";
+import type { AppSettings, RunRequest } from "./ipc-protocol";
 
 let win: BrowserWindow | null = null;
 
 function createWindow(): void {
   win = new BrowserWindow({
-    width: 980,
-    height: 760,
-    title: "M0b · 桌面 Agent",
+    width: 1280,
+    height: 832,
+    title: "M1e · 桌面 Agent",
     webPreferences: {
       preload: join(app.getAppPath(), "out", "preload", "index.js"),
       // ESM preload 需要 sandbox:false；contextIsolation 仍开启，renderer 拿不到任何 Node 能力
@@ -51,7 +62,31 @@ function createWindow(): void {
       }, delay);
     });
   }
+
+  // M1e 验收通道：M1E_INJECT_ASK=1 时，加载完成后延迟推送一条假审批（徽标 ≤1s 时间戳断言用）。
+  // 不设置零行为；沿 M0B_SCREENSHOT / M1D_COMPACTION_DEMO 演示通道先例。
+  const injectAsk = process.env.M1E_INJECT_ASK === "1";
+  if (injectAsk && win) {
+    const delay = Number(process.env.M1E_INJECT_ASK_DELAY_MS ?? "2500");
+    win.webContents.once("did-finish-load", () => {
+      setTimeout(() => {
+        const sentAt = Date.now();
+        console.log("[m1e] inject-ask at", sentAt);
+        hooksProxy.onAsk?.({
+          askId: "m1e-inject-ask",
+          tool: "run_shell",
+          args: { command: "echo m1e-check" },
+          reason: "验收注入（M1E_INJECT_ASK）",
+          risk: "none",
+          sentAt,
+        });
+      }, delay);
+    });
+  }
 }
+
+/** hooks 的间接引用（createWindow 里的注入通道在 setAppHooks 之后注册，用 getter 取最新值）。 */
+const hooksProxy: { onAsk?: (p: unknown) => void } = {};
 
 function push(channel: string, payload: unknown): void {
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
@@ -83,6 +118,7 @@ setAppHooks({
   onAsk: (p) => push("agent:ask", p),
   onAskOutcome: (p) => push("agent:ask-done", p),
 });
+hooksProxy.onAsk = (p) => push("agent:ask", p);
 
 ipcMain.handle("agent:run", (_event, req: RunRequest) => handleAgentRun(req));
 ipcMain.handle("agent:decide", (_event, askId: string, approved: boolean, scope?: "once" | "session_kind" | "always") =>
@@ -95,9 +131,22 @@ ipcMain.handle("agent:plan", (_event, approved: boolean, callId?: string) => han
 ipcMain.handle("agent:compact", (_event) => handleCompact());
 ipcMain.handle("agent:state", () => handleAgentState());
 
+// ---- M1e：settings + 会话列表 IPC ----
+ipcMain.handle("agent:settings-get", () => getSettings());
+ipcMain.handle("agent:settings-set", (_event, patch: Partial<AppSettings>) => setSettings(patch));
+ipcMain.handle("agent:provider-info", () => providerInfo());
+ipcMain.handle("agent:sessions-list", () => handleSessionList());
+ipcMain.handle("agent:sessions-create", (_event, name?: string) => handleSessionCreate(name));
+ipcMain.handle("agent:sessions-open", (_event, id: string) => handleSessionOpen(id));
+ipcMain.handle("agent:sessions-rename", (_event, oldId: string, newName: string) => handleSessionRename(oldId, newName));
+ipcMain.handle("agent:sessions-delete", (_event, id: string) => handleSessionDelete(id));
+
 void app.whenReady().then(async () => {
   // 暴露完整 AX 树给系统辅助功能（System Events / VoiceOver 等）；必须在 ready 之后调用
   app.setAccessibilitySupportEnabled(true);
+  // M1e 存储：settings 与会话目录缺省 userData；验收脚本用 M1E_SETTINGS_PATH / M1E_SESSIONS_DIR 覆盖
+  initSettingsStore(process.env.M1E_SETTINGS_PATH ?? join(app.getPath("userData"), "settings.json"));
+  initSessionsDir(process.env.M1E_SESSIONS_DIR ?? join(app.getPath("userData"), "sessions"));
   await initSandbox(); // 先自检沙箱，renderer 首帧 getState 即拿到结论
   createWindow();
   app.on("activate", () => {

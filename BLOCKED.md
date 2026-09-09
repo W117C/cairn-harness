@@ -44,3 +44,7 @@
 1. **M0_API_KEY 缺失 → 暗卷无法执行（任务书任务 6 的 A 路）**。已按任务书规定路径处理：`pnpm compaction-check` 与九道门里打印「暗卷跳过（无 M0_API_KEY）」并退出 0；通道本身已实现并单测（`createGlmSummarizer` 非流式单轮，断言非空/未膨胀/最小进度），key 在场重跑即自动真跑。需要领导在配 key 的环境复跑一次确认。
 2. **src/preload/** 不在 M1d 白名单（任务书冻结）**，renderer 无法调用 `window.dshAgent.compact()`（preload 的 AgentApi 不认识该字段）。已按判据处理：`src/main/ipc-protocol.ts` 声明 `AgentApi.compact?`（optional，一行激活点）、main 进程 handler 与 mock 明卷压缩通道就绪；等 preload 白名单放开后加一行 `compact: () => ipcRenderer.invoke("agent:compact")` 即可接通 UI 入口。**不属改判据，仅列清地界**。
 3. **切点纪律 2 实现口径需要领导确认（非缺陷，是解释选择）**：任务书「最近一条 typed user 消息永不吞」若实现为「tail 覆盖最近 user 消息」，在 agent 形会话（用户中途一句 + 数百工具轮）会把全部后续事件拖进 tail，压缩失效。已采用 CC/CL 先例口径：**全部 user_message 事件进固定回注名单**（永不压缩、永在投影可见），纪律 2 因此平凡成立且 tail 保持 clamp 有界；用户输入零丢失。PROGRESS.md 坑二十有记录；若领导要求字面口径（tail 必须含最近 user 消息），需重开任务确认.
+
+## M1e 轮新增待裁决（2026-09-09）
+
+无阻塞事项。全部 7 项任务 + 反向验证红→绿 + 十一道门（十道门 + panels-check）完成。过程中发现并修复的两个实现 bug（右栏开关未写 open 映射、panels-check 曾测 out/ 旧 bundle）见 PROGRESS.md「任务结果」条目——均属代码缺陷而非判据缺陷，不触发换判据。

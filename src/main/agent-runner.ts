@@ -30,6 +30,17 @@ import {
   type ToolResultWithAudit,
 } from "../permissions";
 import { globalPermissionsPath, savePermissionRules } from "../permissions/rules";
+import { SettingsStore, type AppSettings } from "./settings";
+import {
+  createSession,
+  deleteSession,
+  listSessions,
+  pathOf,
+  readSessionEvents,
+  renameSession,
+  sessionExists,
+  type SessionInfo,
+} from "./sessions";
 import { createMockProvider } from "../providers/mock";
 import { streamGlm } from "../providers/glm";
 import type { Provider } from "../providers";
@@ -58,6 +69,8 @@ interface Session {
   emit: ((e: AgentEvent) => Promise<void>) | null;
   /** M1c 自治等级会话状态：规则库 / scope 记忆 / 断路器（evaluate 的 session 入参）。 */
   autonomy: ReturnType<typeof newAutonomySession>;
+  /** M1e：会话模式（sessionId 在场 = append 到既有会话，不 rm 日志；headless 脚本 = 旧行为）。 */
+  sessionId?: string;
 }
 // 单窗口单任务：UI 串行发 run；ipc:check 亦串行。会话状态仅存活于一次 runAgent。
 let session: Session | null = null;
@@ -91,6 +104,13 @@ function gatedTool(name: "write_file" | "run_shell", original: Tool): Tool {
       // M1c：四层评估管线（deny 规则 → ask 规则 → 档位 → 风险）；方案门状态每次刷新进 session 入参
       const ps = getPlanState();
       s.autonomy.planBlocked = ps.proposed && !ps.approved;
+      // M1e 设置页「产出代码安全模式」最小语义（§11.6）：gate = 写向工具在管线之前强制审批
+      //（setSettings 转发 M1E_SAFE_MODE；src/permissions 冻结，最小接线在本模块）
+      if (process.env.M1E_SAFE_MODE === "gate") {
+        if (!s.askGate) return denied(name, s.autonomy.mode, "安全模式 gate 非交互（fail-closed）");
+        const gateR = await s.askGate.request(name, args, { reason: "安全模式 gate：写工具强制审批", risk: "none" });
+        if (gateR.outcome !== "approved") return denied(name, s.autonomy.mode, "安全模式 gate 未批准");
+      }
       const d = evaluate(name, args, s.autonomy);
       if (d.verdict === "deny") return denied(name, s.autonomy.mode, d.reason);
       if (d.verdict === "ask") {
@@ -246,6 +266,8 @@ export interface RunOptions {
   message: string;
   mode: PermissionMode;
   logPath: string;
+  /** M1e：会话模式 —— 日志 append 到既有会话（不 rm）。缺省 false（旧行为：fresh 日志）。 */
+  sessionId?: string;
   onEvent?: (e: AgentEvent) => void;
   /** 缺省 = 非交互（ask 按 deny，fail-closed，与 M0 一致）。 */
   askGate?: AskGate;
@@ -295,13 +317,16 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     askGate: opts.askGate ?? null,
     sandbox: opts.sandbox ?? null,
     emit: null,
+    sessionId: opts.sessionId,
     autonomy: newAutonomySession(opts.mode, {
       rules,
       sandboxAvailable: opts.sandbox ? opts.sandbox.available : null,
     }),
   };
   try {
-    await rm(opts.logPath, { force: true });
+    // M1e 会话模式：sessionId 在场 = 会话列表里的既有会话，append（JSONL 即会话，重放无损）；
+    // 无 sessionId = 旧行为（每轮新日志，e2e/ipc-check 等脚本路径字节不变）。
+    if (!opts.sessionId) await rm(opts.logPath, { force: true });
     lastLogPath = opts.logPath; // /compact（handleCompact）缺省压缩对象
     const log = createEventLog(opts.logPath);
     const pipeline = async (e: AgentEvent): Promise<void> => {
@@ -334,6 +359,8 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
 export interface RunOverrides {
   workspace?: string;
   logPath?: string;
+  /** M1e：会话模式 —— run 追加到该会话（不 rm 日志），消息落该会话 JSONL。 */
+  sessionId?: string;
   onEvent?: (e: AgentEvent) => void;
 }
 
@@ -343,11 +370,16 @@ export async function handleAgentRun(
   over: RunOverrides = {},
 ): Promise<{ ok: boolean; error?: string }> {
   try {
+    // M1e 会话模式：sessionId 在场 → logPath = 会话 JSONL（append；不 rm）；
+    // 旧行为（无 sessionId）= tmp 日志 + 每轮 rm（e2e/ipc-check 等脚本路径字节不变）。
+    const sessionMode = over.sessionId !== undefined;
+    const logPath = over.logPath ?? (sessionMode && over.sessionId ? pathOf(requireSessionsDir(), over.sessionId) : join(tmpdir(), "m0b-agent-events.jsonl"));
     await runAgent({
       workspace: over.workspace ?? WORKSPACE,
       message: req.message,
       mode: req.mode,
-      logPath: over.logPath ?? join(tmpdir(), "m0b-agent-events.jsonl"),
+      logPath,
+      ...(sessionMode ? { sessionId: over.sessionId } : {}),
       onEvent: (e) => {
         over.onEvent?.(e);
         hooks.onEvent?.(e);
@@ -387,4 +419,90 @@ export async function handlePlanDecide(approved: boolean, callId?: string): Prom
 /** IPC "agent:state" 的处理函数。 */
 export function handleAgentState(): { sandbox: SandboxStatus } {
   return { sandbox: sandboxState };
+}
+
+// ---- M1e：settings 存储 + 会话目录 + Provider 只读信息 ----
+// settings 文件与会话目录由 shell（index.ts）按环境初始化：M1E_SETTINGS_PATH / M1E_SESSIONS_DIR
+// （验收脚本注入临时目录；electron 壳缺省 userData）。store 惰性建（headless 脚本未初始化时用缺省值）。
+let settingsStore: SettingsStore | null = null;
+
+/** shell 启动时初始化 settings 存储（文件路径）。 */
+export function initSettingsStore(filePath: string): void {
+  settingsStore = new SettingsStore(filePath);
+}
+
+function store(): SettingsStore {
+  if (!settingsStore) settingsStore = new SettingsStore("/tmp/m1e-default-settings.json");
+  return settingsStore;
+}
+
+export async function getSettings(): Promise<AppSettings> {
+  return await store().get();
+}
+
+export async function setSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
+  const next = await store().set(patch);
+  // 环境转发：gatedTool 读 M1E_SAFE_MODE（M1e 最小语义）；主题/档位由 renderer 持有并随 run 传回
+  if (patch.safeMode !== undefined) {
+    if (next.safeMode === "off") delete process.env.M1E_SAFE_MODE;
+    else process.env.M1E_SAFE_MODE = next.safeMode;
+  }
+  return next;
+}
+
+/** Provider 只读展示（设置页）：当前 provider 与模型名，不读 key 不落日志。 */
+export function providerInfo(): { provider: string; model: string } {
+  if (process.env.M0A_PROVIDER === "glm") {
+    return { provider: "GLM（OpenAI 兼容）", model: process.env.M0_MODEL ?? "glm-5.2" };
+  }
+  return { provider: "mock（冻结剧本）", model: "mock-script" };
+}
+
+// ---- M1e：会话列表 IPC（会话目录由 index.ts 初始化；headless 脚本未初始化 → 未配置错误） ----
+let sessionsDir: string | null = null;
+
+/** shell 启动时初始化会话目录。 */
+export function initSessionsDir(dir: string): void {
+  sessionsDir = dir;
+}
+
+function requireSessionsDir(): string {
+  if (!sessionsDir) throw new Error("会话目录未初始化（shell 未启动？）");
+  return sessionsDir;
+}
+
+export async function handleSessionList(): Promise<SessionInfo[]> {
+  return await listSessions(requireSessionsDir());
+}
+
+export async function handleSessionCreate(name?: string): Promise<{ id: string }> {
+  return { id: await createSession(requireSessionsDir(), name) };
+}
+
+/** 切换会话：settings.currentSession 落盘（重启还原）；返回该会话全部事件（重放投影）。 */
+export async function handleSessionOpen(id: string): Promise<{ events: AgentEvent[] }> {
+  const dir = requireSessionsDir();
+  if (!(await sessionExists(dir, id))) throw new Error(`会话不存在: ${id}`);
+  await store().set({ currentSession: id });
+  return { events: await readSessionEvents(dir, id) };
+}
+
+export async function handleSessionRename(oldId: string, newName: string): Promise<{ id: string }> {
+  const dir = requireSessionsDir();
+  const id = await renameSession(dir, oldId, newName);
+  const cur = await store().get();
+  if (cur.currentSession === oldId) await store().set({ currentSession: id });
+  return { id };
+}
+
+/** 删除会话：若删的是当前会话 → 回退到最近一个（列表 mtime 降序首个）；无会话 → null。 */
+export async function handleSessionDelete(id: string): Promise<{ currentSession: string | null }> {
+  const dir = requireSessionsDir();
+  await deleteSession(dir, id);
+  const cur = await store().get();
+  if (cur.currentSession !== id) return { currentSession: cur.currentSession };
+  const rest = await listSessions(dir);
+  const next = rest[0]?.id ?? null;
+  await store().set({ currentSession: next });
+  return { currentSession: next };
 }

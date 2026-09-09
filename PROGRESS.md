@@ -320,3 +320,24 @@
 - 坑二十二（复现坑十九）：9222 端口被上一里程碑旧 Electron 占住（pkill 模式匹配不到 argv 不含包名的进程）→ 截图前先 lsof -ti :9222 | xargs kill -9；macOS 无 timeout 命令。
 - 决策：摘要输出帽 4096 以「事后质量闸」执行（providers 只读、GlmOptions 无 max_tokens 通道）；B 条件（破硬预算）映射 trigger=overflow + 半分截断（紧急、零摘要器调用），与「overflow 紧急→半分截断兜底」同构，且使双条件各自独立可触发。
 - 决策：计划内未做两处（任务书任务清单未列）——「压缩自身超窗逐条摘除最旧重试」（2k 工具结果截断已压住摘要输入尺寸）、「多次压缩建议开新会话」（D11，与 token 面板标记同归 M1e）。
+
+## M1e：面板注册表 + 会话列表 + 虚拟化 + 设置页（M1 收口，本轮 goal）
+
+### 理解的目标 / 顺序 / 最大风险（≤10 行）
+- 目标：右栏从「写死的原始 JSONL」变成面板注册表（approvals/token/git + 兜底），左栏变成真会话列表（目录扫描，JSONL 即会话，新建/切换/重命名/删除），对话流 react-virtuoso 虚拟化扛 1 万条，补设置页（权限档位+UI+Provider 只读）；面板状态 100% 事件流投影，重启重放无损。
+- 顺序：任务0 基线（十道门绿 test=106）→ 1 面板注册表+三面板 → 2 布局持久化（主进程 settings，重启还原）→ 3 virtuoso 虚拟化 → 4 会话列表 → 5 重启重放无损 → 6 审批徽标 ≤1s → 7 设置页 → panels-check 明卷 + 反向验证（布局持久化写入摘除红→绿）→ 收口提交。
+- 风险①：虚拟化判据（DOM ≤300 + 滚动一屏 ≤200ms）需要真浏览器——panels-check 起 Electron + CDP 实测（沿 M1a-M1d CDP 先例），随机调试端口避开坑二十二。
+- 风险②：会话切换 = 重放投影，与活事件流投影必须同一条折叠函数（toTimeline 增量化，O(1) 摊还），否则「逐字一致」假红。
+
+### 任务结果（实测输出，M1e 收口）
+
+- **任务1 面板注册表** `src/renderer/panels/registry.tsx`：approvals/token/git 三面板 + 未知 panel_id 落 FallbackPanel（不抛）。`pnpm test`：**Test Files 20 passed / Tests 121 passed**（基线 106 → 121，skipped 0），其中 panels.test.ts 6 例（注册表三类型、未知兜底、SSR 冒烟、token/diff/审批投影）。
+- **任务2 布局持久化** `src/main/settings.ts`：SettingsStore 原子写（tmp+rename）+ 每字段校验回退；panels-check A1/A2 实测「写→新实例读一致（open.git/activePanel/width/mode）」「宽度 9999 / open 非布尔 / 未知 activePanel / 非法档位 / JSON 损坏 → 全部回退默认」全绿。
+- **任务3 虚拟化** react-virtuoso 4.18.13 + `conversation.tsx`（followOutput + atBottomStateChange 与 MessageScroller 流式跟随共存）。panels-check B1 实测：**状态 10000 条，DOM 消息节点 25 ≤ 300；滚动一屏 max 16.6ms ≤ 200ms；滚至中段 DOM 仍 25**。
+- **任务4 会话列表** `src/main/sessions.ts`（目录扫描 mtime 降序 + 新建/重命名/删除/回退）+ 左栏 UI。panels-check A3 实测全绿；tests/sessions.test.ts 5 例（改名内容不变、删除、非法名 fail-closed）。
+- **任务5 重启重放无损** panels-check A4：会话 run（mock 闭环）→ 子进程丢弃内存态重放 → 同一投影函数（token/diff/事件数）**逐字一致** ✅。关键修复：handleAgentRun 会话模式 logPath 必须解析到会话 JSONL（原来只防了 rm，没改路径——投影「一致」靠的是巧合）。
+- **任务6 审批徽标 ≤1s** panels-check B2：主进程 M1E_INJECT_ASK 渠道注入（payload.sentAt），**徽标出现距审批推送 13ms ≤ 1000ms** ✅。
+- **任务7 设置页** SettingsDialog（档位 read-only/default/auto + 沙箱状态徽标 + 安全模式 off/gate/report + 主题 system/light/dark + Provider 只读），档位/布局/主题写主进程 settings（app data），重启还原；tests/settings.test.ts 4 例（写后重载一致、非法值回退、深合并、无 .tmp 残留）。截图 `docs/m1e-panels.png` + `docs/m1e-settings.png`（2560×1600 CDP 实拍）。
+- **反向验证（判据红→绿）**：注释 `SettingsStore.set` 的 `await this.persist(validated)` → `pnpm panels-check` **6 项失败退出 1**（A1 四条「重启还原」全红 + B3「UI 开关 → settings.json 落盘」红 + B4「重启后 git 面板自动还原」红）；还原后重跑**全部断言通过退出 0**。反向验证顺带抓出两个真 bug：① 右栏开关只写 activePanel 不写 open 映射（UI 语义修为「开关=打开幂等，关闭走 X 且写 open[id]=false」）；② panels-check 原来测的是 out/ 旧 bundle（现在 B0 步先 electron-vite build 再起 Electron）。
+- **判卷红线自查**：无删测试/放宽断言/改阈值；虚拟化是真虚拟化（DOM 25 vs 状态 10000，非「只渲染最近 N 条」）；布局持久化写 app data settings.json（非内存变量）；zustand 装了但未用（useReducer 即够，PROGRESS 留档）。
+- 新坑：pnpm 环境下 process.execPath 是 DSH 宿主二进制（非 node CLI，`--import` 静默失效）→ 子进程一律 spawn PATH 里的 node；CDP eval 里的 CSS 属性选择器一律不带引号（`[data-panel-toggle=git]`）避免转义地狱；panel 布局回调是 react-resizable-panels v4 的 `onLayoutChanged(layout)`（v3 的 onLayout 已删）。
