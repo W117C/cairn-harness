@@ -33,6 +33,13 @@ export interface StateResponse {
   sandbox: SandboxStatus;
 }
 
+/** M1d：手动 /compact 结果（压缩卡 payload 与 compaction-check 同源）。 */
+export interface CompactResponse {
+  ok: boolean;
+  error?: string;
+  cardPayload?: Record<string, unknown>;
+}
+
 /** 澄清表单提交值：key = 问题原文，value = 选中项或自由补充。 */
 export type ClarifyAnswers = Record<string, string | string[]>;
 
@@ -44,6 +51,8 @@ export interface AgentApi {
   submitClarify(callId: string, answers: ClarifyAnswers): Promise<boolean>;
   /** 方案门：批准 / 拒绝当前 plan（card_action plan_decide）。 */
   decidePlan(approved: boolean, callId?: string): Promise<boolean>;
+  /** M1d 手动压缩入口（preload 暴露待追认，见 BLOCKED.md；main 侧已接线，renderer 暂不可达）。 */
+  compact?(): Promise<CompactResponse>;
   onEvent(cb: (e: AgentEvent) => void): () => void;
   onAsk(cb: (p: AskPayload) => void): () => void;
   onAskDone(cb: (p: AskOutcomePayload) => void): () => void;

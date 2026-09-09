@@ -38,3 +38,9 @@
 2. **verify 配置来源取舍**：任务书「verify 配置读 .agent/config.json 的 verify 字段，缺省探测 package.json 的 scripts」已按序实现；propose_plan 的 verify 字段仅作计划卡展示（未作为执行器第三来源）——若领导希望 plan.verify 覆盖 config，M1c 一行改动即可（loadVerifyConfig 加一层入参）。
 3. **verify 在 read-only 档不拦**：verify 执行的是仓库自身配置的 lint/test 命令（读为主），权限层按非副作用工具放行；若领导认为 verify 命令也要过 ask，M1c 在 checkPermission 增加 verify 分支即可。
 4. **registry 文件后缀**（沿袭 M1a 备案）：registry.tsx 含 JSX 必须 .tsx；本轮新增三个卡片文件同为 .tsx。
+
+## 2026-09-09（M1d 阈值摘要压缩）
+
+1. **M0_API_KEY 缺失 → 暗卷无法执行（任务书任务 6 的 A 路）**。已按任务书规定路径处理：`pnpm compaction-check` 与九道门里打印「暗卷跳过（无 M0_API_KEY）」并退出 0；通道本身已实现并单测（`createGlmSummarizer` 非流式单轮，断言非空/未膨胀/最小进度），key 在场重跑即自动真跑。需要领导在配 key 的环境复跑一次确认。
+2. **src/preload/** 不在 M1d 白名单（任务书冻结）**，renderer 无法调用 `window.dshAgent.compact()`（preload 的 AgentApi 不认识该字段）。已按判据处理：`src/main/ipc-protocol.ts` 声明 `AgentApi.compact?`（optional，一行激活点）、main 进程 handler 与 mock 明卷压缩通道就绪；等 preload 白名单放开后加一行 `compact: () => ipcRenderer.invoke("agent:compact")` 即可接通 UI 入口。**不属改判据，仅列清地界**。
+3. **切点纪律 2 实现口径需要领导确认（非缺陷，是解释选择）**：任务书「最近一条 typed user 消息永不吞」若实现为「tail 覆盖最近 user 消息」，在 agent 形会话（用户中途一句 + 数百工具轮）会把全部后续事件拖进 tail，压缩失效。已采用 CC/CL 先例口径：**全部 user_message 事件进固定回注名单**（永不压缩、永在投影可见），纪律 2 因此平凡成立且 tail 保持 clamp 有界；用户输入零丢失。PROGRESS.md 坑二十有记录；若领导要求字面口径（tail 必须含最近 user 消息），需重开任务确认.

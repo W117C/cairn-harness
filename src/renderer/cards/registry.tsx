@@ -6,6 +6,7 @@ import type { ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ClarifyFormCard } from "./clarify-form";
+import { CompactionCard } from "./compaction-card";
 import { PlanCard } from "./plan";
 import { VerifyResultCard } from "./verify-result";
 
@@ -111,6 +112,7 @@ const REGISTRY: Record<string, CardComponent> = {
   clarify_form: ClarifyFormCard,
   plan: PlanCard,
   verify_result: VerifyResultCard,
+  compaction: CompactionCard,
 };
 
 export const KNOWN_CARD_TYPES = Object.keys(REGISTRY);

@@ -42,6 +42,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { resolveCard } from "./cards/registry";
+import { compactionCardPayload } from "../agent/compaction";
 import type { AgentEvent, ClarifyAnswerMap } from "../events";
 import type {
   AgentApi,
@@ -140,6 +141,11 @@ function EventView({
         </CardContent>
       </Card>
     );
+  }
+  if (e.type === "compaction") {
+    // 压缩必出卡（§7.7）：payload 与 compaction-check 脚本同源
+    const CompactionCard = resolveCard("compaction");
+    return <CompactionCard payload={compactionCardPayload(e)} />;
   }
   if (e.type === "verify_result") {
     const Card = resolveCard("verify_result");

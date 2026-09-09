@@ -290,3 +290,33 @@
 - 明卷 36 断言同轮依旧全绿；key 卫生复查：全仓 grep key 字面量 0 命中、git 无 .env 跟踪、工作树无残留。
 
 - key 安全：全仓 grep M0_API_KEY 赋值零命中（src/scripts/tests）；git ls-files 无 .env；暗卷 key 只从当次进程环境变量读。
+- key 安全：全仓 grep M0_API_KEY 赋值零命中（src/scripts/tests）；git ls-files 无 .env；暗卷 key 只从当次进程环境变量读。
+
+## M1d：阈值摘要压缩（2026-09-09）
+
+### 理解的目标 / 顺序 / 最大风险（≤10 行）
+- 目标：超阈值时把旧轮次压成结构化摘要——事件流永不删改，压缩只是组装时的投影（compaction 事件 = 摘除 id 集 + offset 注入），fresh start（模型只看摘要+tail）。
+- 顺序：任务0 基线（九道门绿 test=87，M0_API_KEY 缺失→暗卷走跳过路径）→ 1 估算器+双条件触发 → 2 compaction 事件+组装投影（幂等/滚动合并）→ 3 摘要执行器+三闸+降级链 → 4 /compact+压缩卡 → 5 compaction-check 长会话模拟 → 反向验证（膨胀闸红→绿）。
+- 风险①：组装器现在不存在——投影落在 src/agent/context.ts（纯函数事件→消息），glm-session 的 buildGlmHistory 改为走它（唯一真实组装点，mock loop 无组装不触发压缩）。
+- 风险②：src/providers 只读 → GLM 摘要器放 src/agent/glm-session.ts（只调用 streamGlm）；摘要 4096 输出帽无法走 max_tokens 参数（provider 无此口）→ 以质量闸形式事后拒绝执行。
+- 风险③：preload/** 不在白名单 → /compact 的 composer→preload 最后一跳留 BLOCKED 备案；main 侧 handleCompact+IPC 注册齐全，截图走 M1D_COMPACTION_DEMO 演示通道（M1a M0A_MOCK_DELTA 同族先例）。
+- 风险④：硬兜底条件（B）映射为 trigger=overflow + 半分截断（紧急、不调摘要器）——比例条件（A）走摘要路径；两条件可各自独立触发（验收②）。
+- 领导拍板参数全量落 config：ratio 0.9 / tail clamp(可用×0.25, 2k, 15k) / 帽 4096 / 工具结果截 2000 字 / 最小进度 0.1 / 重试 1 次退避 / 连续 2 败停用。
+
+### M1d 结果（全部实测，证据在对话流中）
+- 任务 0 基线：九道门全绿（CHAIN_EXIT=0），test=87 / skipped 0；M0_API_KEY 缺失 → 暗卷走任务书规定跳过路径（BLOCKED 备案）。
+- 任务 1 估算器+触发：estimateContextTokens = 消息投影 JSON chars + system/工具 schema/记忆注入开销全量计入，chars/4 + calibrateFactor（usage 事件 output tokens ↔ 本轮输出 chars 实测比，夹紧 [2,8]）；双条件 shouldCompact：A（est ≥ 可用×0.9）→ auto/threshold，B（est > 可用）→ overflow/hard_buffer。单测：同段对话去 system 后不触发（开销证明计入）；A/B 各自独立触发。
+- 任务 2 事件+投影：CompactionEvent（11 字段照任务书；usage 可选——mock/截断路径无 API 用量不伪造）；src/agent/context.ts 组装投影 = 纯函数：跳过 compressed ids（并集）、最新一份摘要在 summary_offset 前以 user 角色注入（滚动合并 + fresh start）、compaction 事件本体不进消息。单测：幂等、重放投影===活投影、旧 compaction 永不被吞。
+- 任务 3 执行器+三闸+降级链：六段模板（内置 prompt 注册表 BUILTIN_PROMPTS["/compact"]，含注入免疫与滚动合并规则）+ 程序化 Files 兜底 + 工具结果 2k 截断；三闸（空/膨胀/最小进度）+ 摘要输出帽 4096 以质量闸执行（providers 只读无 max_tokens 口）；重试 1 次退避、连续 2 败停用（CompactionCoordinator，停用后仅 overflow 截断照走）；overflow = 半分截断（原子单元整丢、不调摘要器、tokens_after < before）。三闸各拒一次 + 连续 2 败停用 + overflow 兜底均单测断言。
+- 任务 4 手动入口+卡：handleCompact（agent-runner）→ compactSessionLog（trigger=manual, reason=user_request）→ 事件经会话管线上屏；IPC "agent:compact" 已注册、AgentApi.compact 类型已声明（preload 不在白名单未暴露，BLOCKED 备案）；压缩卡 compaction-card.tsx 注册进 registry，payload = compactionCardPayload（触发方式/被压范围/前后 token/节省/预览），compaction-check 与 renderer 同源断言。脚本断言手动触发事件与 payload 字段齐全 ✅。
+- 任务 5 长会话：pnpm compaction-check 退出 0——200k 级流（500 轮 ≈ 213k token 估算 + usage 校准），断言 ①摘要含原始目标关键词（且不含压缩段 canary = 非假压缩，原始流仍含 canary = 事件流零删改）②tail 落 clamp 区间 ③compressed ids 不含固定回注名单 ④fresh start 投影 + 重放===活 + 幂等 ⑤二次压缩滚动合并。
+- 任务 6 暗卷：无 key →「暗卷跳过（无 M0_API_KEY）」退出 0（任务书路径）；通道就绪（createGlmSummarizer 非流式单轮 + 断言非空/未膨胀/最小进度），key 在场重跑即自动执行。
+- 反向验证：临时 if (false) 摘掉膨胀闸 → compaction-check 红（❌「膨胀摘要未被拒绝（膨胀闸失效？）」exit 1）→ 还原后全绿 exit 0。红绿输出均已贴对话流。
+- 收口：九道门 + compaction-check 全部退出 0；test=106（基线 87 → +19，skipped 0）；判卷 sha256 逐字一致；半托项 docs/m1d-compaction.png（CDP 真实 DOM 驱动发送 + 两次批准 + 压缩卡上屏；DOM 断言 手动 /compact/范围/tokens/省 全 true，1960×1456）。
+
+### M1d 新增坑与决策记录
+- 坑二十：切点纪律 2 的朴素实现（tailStart 拉到最近 typed user 消息）在 agent 形会话（用户中途说一句 + 数百工具轮）会把整个会话拖进 tail，压缩彻底失效——修正为全部 user_message 入固定回注名单（CC/CL 先例：用户轮次跨压缩存活），纪律 2 因此自然成立且 tail 保持有界；用户轮次可见性零损失。
+- 坑二十一：selectCut 的 tail 估算必须与触发/验收用同一 calibrateFactor 口径——脚本自造简化校准（只算 assistant_message）与生产（含 tool_call）不一致导致 ② 断言假红。
+- 坑二十二（复现坑十九）：9222 端口被上一里程碑旧 Electron 占住（pkill 模式匹配不到 argv 不含包名的进程）→ 截图前先 lsof -ti :9222 | xargs kill -9；macOS 无 timeout 命令。
+- 决策：摘要输出帽 4096 以「事后质量闸」执行（providers 只读、GlmOptions 无 max_tokens 通道）；B 条件（破硬预算）映射 trigger=overflow + 半分截断（紧急、零摘要器调用），与「overflow 紧急→半分截断兜底」同构，且使双条件各自独立可触发。
+- 决策：计划内未做两处（任务书任务清单未列）——「压缩自身超窗逐条摘除最旧重试」（2k 工具结果截断已压住摘要输入尺寸）、「多次压缩建议开新会话」（D11，与 token 面板标记同归 M1e）。

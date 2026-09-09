@@ -7,6 +7,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runLoop } from "../agent/loop";
+import { runCompaction, createMockSummarizer, compactionCardPayload } from "../agent/compaction";
+import { createGlmSummarizer } from "../agent/glm-session";
 import { ClarifyGate, PlanGate } from "../agent/gates";
 import { createVerifyHook, defaultExec, type ExecFn } from "../agent/verify";
 import type { AgentEvent, ClarifyAnswerMap, EventLog } from "../events";
@@ -147,6 +149,77 @@ async function persistAlwaysRule(workspace: string, name: string, args: Record<s
   }
 }
 
+
+// ---- M1d：/compact 手动入口（压缩必出卡，走 BUILTIN_PROMPTS 内置模板）----
+// 摘要器：M0_API_KEY 在场 → GLM 暗卷；缺 key 且 M1D_COMPACTION_DEMO=1 → 冻结 mock（演示通道，
+// M1a M0A_MOCK_DELTA 同族先例）；否则 fail-closed 报错，绝不静默压缩。
+// 演示通道同时收小 tail 预算（演示会话只有十几条事件，默认预算会把全部事件留在 tail 内无可压缩）。
+const DEMO_SUMMARY = [
+  "## Objective",
+  "- 修复 fixtures/todo-app 中失败的测试（completedCount 未过滤 done 项），由 agent 按 mock 剧本完成。",
+  "",
+  "## Important Details",
+  "- 事件流在 out 会话日志中；权限走 auto 档，写文件与跑测试均已批准。",
+  "",
+  "## Work State",
+  "### Completed",
+  "- read_file 读源码 → write_file 修复 completedCount 过滤 → run_shell 跑 vitest（3 passed）。",
+  "",
+  "### Active",
+  "- 无。",
+  "",
+  "### Blocked",
+  "- 无。",
+  "",
+  "## Next Move",
+  "- 继续下一个任务即可；靶子已恢复全绿。",
+  "",
+  "## Relevant Files",
+  "- fixtures/todo-app/src/todo.ts（写，修复点）",
+  "- fixtures/todo-app/tests/todo.test.ts（读，判卷用例）",
+].join("\n");
+
+/** 对一份会话日志执行手动压缩（trigger=manual, reason=user_request）。
+ *  emit = 会话管线（落盘+推送同路，M1b 坑十八口径）；缺省直接落盘（headless/脚本）。 */
+export async function compactSessionLog(
+  logPath: string,
+  emit?: (e: AgentEvent) => Promise<void>,
+): Promise<{ ok: boolean; error?: string; event?: AgentEvent; cardPayload?: Record<string, unknown> }> {
+  const events = await replay(logPath);
+  if (events.length === 0) return { ok: false, error: "会话为空，无可压缩" };
+  const demo = process.env.M1D_COMPACTION_DEMO === "1";
+  const summarizer = process.env.M0_API_KEY
+    ? createGlmSummarizer()
+    : demo
+      ? createMockSummarizer(DEMO_SUMMARY)
+      : undefined;
+  if (!summarizer) return { ok: false, error: "无 M0_API_KEY，手动压缩不可用（fail-closed，不静默压缩）" };
+  const outcome = await runCompaction({
+    events,
+    trigger: "manual",
+    reason: "user_request",
+    summarizer,
+    ...(demo ? { config: { tailMinTokens: 150, tailMaxTokens: 300 } } : {}),
+  });
+  if (!outcome.ok) return { ok: false, error: outcome.why };
+  if (emit) await emit(outcome.event);
+  else await createEventLog(logPath).append(outcome.event);
+  return { ok: true, event: outcome.event, cardPayload: compactionCardPayload(outcome.event) };
+}
+
+// 最近一次会话日志路径：/compact 缺省压缩对象（UI 单窗口单任务，与 session 同生命周期语义）。
+let lastLogPath: string | null = null;
+
+/** IPC "agent:compact" 的处理函数：手动 /compact 入口（preload 暴露待追认，见 BLOCKED.md）。 */
+export async function handleCompact(
+  over: { logPath?: string } = {},
+): Promise<{ ok: boolean; error?: string; cardPayload?: Record<string, unknown> }> {
+  const logPath = over.logPath ?? lastLogPath;
+  if (!logPath) return { ok: false, error: "无会话日志（先跑一轮会话再 /compact）" };
+  const res = await compactSessionLog(logPath, async (e) => Promise.resolve(hooks.onEvent?.(e)));
+  return { ok: res.ok, error: res.error, cardPayload: res.cardPayload };
+}
+
 let installed = false;
 /** 一次性把 TOOLS 里的写工具换成带门 + 沙箱的包装（runLoop 直接读 TOOLS，无注入点）。 */
 export function installAppTools(): void {
@@ -229,6 +302,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   };
   try {
     await rm(opts.logPath, { force: true });
+    lastLogPath = opts.logPath; // /compact（handleCompact）缺省压缩对象
     const log = createEventLog(opts.logPath);
     const pipeline = async (e: AgentEvent): Promise<void> => {
       await log.append(e);
@@ -245,6 +319,12 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       plan: appPlanGate,
       verify: createVerifyHook(opts.workspace, { exec: verifyExec(opts.sandbox ?? null) }),
     });
+    // M1d 演示通道：M1D_COMPACTION_DEMO=1 时每轮跑完对手动压缩走一遍真实链路
+    //（compactSessionLog 同 handleCompact 共用代码，事件经会话管线上屏压缩卡）。缺省零行为。
+    if (process.env.M1D_COMPACTION_DEMO === "1") {
+      const res = await compactSessionLog(opts.logPath, pipeline);
+      if (!res.ok) console.warn("[compaction] 演示通道压缩未发生:", res.error);
+    }
   } finally {
     session = null;
   }

@@ -50,6 +50,25 @@ export interface VerifyResultEvent {
   results: VerifyCommandResult[];
 }
 
+// ---- M1d 压缩事件（§7.2 事件契约：摘除 id 集 + offset 注入，投影语义零删改）----
+/** 压缩发生记录：trigger=auto（比例阈值）/ manual（/compact）/ overflow（硬兜底紧急截断）。
+ *  usage 缺省 = 摘要器无 API 用量（mock/紧急截断不伪造）；model 缺省 = 会话同模型。 */
+export interface CompactionUsage { inputTokens: number; outputTokens: number }
+export interface CompactionEvent {
+  type: "compaction";
+  trigger: "auto" | "manual" | "overflow";
+  reason: "threshold" | "hard_buffer" | "user_request";
+  /** 被摘除事件的 id（1-based 行号）；永不含 compaction 事件本体（摘要不二次被压）。 */
+  compressed_event_ids: number[];
+  summary: string;
+  /** 注入位置：投影在该 id 的事件之前插一条 user 角色摘要消息（fresh start）。 */
+  summary_offset: number;
+  tokens_before: number;
+  tokens_after: number;
+  usage?: CompactionUsage;
+  model?: string;
+}
+
 export type AgentEvent =
   | UserMessageEvent
   | AssistantMessageEvent
@@ -61,7 +80,8 @@ export type AgentEvent =
   | ClarifyRequestedEvent
   | PlanProposedEvent
   | PlanApprovedEvent
-  | VerifyResultEvent;
+  | VerifyResultEvent
+  | CompactionEvent;
 
 const KNOWN_TYPES = new Set([
   "user_message",
@@ -75,6 +95,7 @@ const KNOWN_TYPES = new Set([
   "plan_proposed",
   "plan_approved",
   "verify_result",
+  "compaction",
 ]);
 
 export interface EventLog {

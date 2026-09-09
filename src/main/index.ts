@@ -8,6 +8,7 @@ import {
   handleAgentRun,
   handleAgentState,
   handleClarifySubmit,
+  handleCompact,
   handlePlanDecide,
   initSandbox,
   setAppHooks,
@@ -91,6 +92,7 @@ ipcMain.handle("agent:clarify", (_event, callId: string, answers: Record<string,
   handleClarifySubmit(callId, answers),
 );
 ipcMain.handle("agent:plan", (_event, approved: boolean, callId?: string) => handlePlanDecide(approved, callId));
+ipcMain.handle("agent:compact", (_event) => handleCompact());
 ipcMain.handle("agent:state", () => handleAgentState());
 
 void app.whenReady().then(async () => {
