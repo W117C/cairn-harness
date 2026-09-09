@@ -29,6 +29,16 @@ Node 22 / TypeScript 5 / electron-vite 5 / Electron 44 / React 19 / vitest 5 / T
 - shadcn CLI 的 init 不识别 electron-vite 布局（框架检测只认 vite.config.*）：组件用 components.json（style=radix-nova）+ `npx shadcn add <name> -y` 管理；改过生成组件时在文件头加 `// @shadcn-modified`。
 - renderer 的 CSP 是 `style-src 'self' 'unsafe-inline'`：dev 下 Tailwind 注入内联样式，收紧会被拦（构建产物是 <link> 文件，不受影响）。
 
+## 判卷纪律
+
+- 判卷标准（grep / 断言 / 验收脚本）是冻结的。**发现判据有缺陷 → 写 `BLOCKED.md` 要求换判据，不许改代码去绕**。
+- 反面样例：`theme.ts` 的 `DARK_QUERY` 被拆成 `"(prefers-color-" + "scheme: dark)"`，只为避开 `grep "color-scheme: dark"`——正确的精确判据是 `^\s*color-scheme:\s*dark`。
+- 硬指标里的 grep 一律写精确模式（锚定行首/分号），避免误伤合法用法。
+
+## 已知待清理
+
+- `src/renderer/theme.ts` 的 `DARK_QUERY` 还原为一行（1 行改动，行为不变）。
+
 ## 当前状态
 
 M0 完成（M0a 内核 + M0b 界面/沙箱 + M0c shadcn/ui 组件层与系统主题，六道门全绿，32 测试）。下一步 = M1 会话内核（见 `agent-plan.md` §14）。

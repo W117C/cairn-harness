@@ -2237,7 +2237,8 @@ MCP 工具进统一工具注册表，与内置工具同权、同审批、无豁�
 | 项 | 结果 |
 |---|------|
 | `npx shadcn@latest init --base radix --template vite --preset nova` | ✅ 生成 `components.json` → `style: "radix-nova"` |
-| 既有 electron-vite 布局（renderer 在 `src/renderer`，alias `@/*`） | ✅ init 走 existing-project 路径，组件落到 `src/renderer/components/ui/` |
+| 既有 **electron-vite** 布局（只有 `electron.vite.config.ts`） | ❌ **init 失败**：CLI 4.21.0 框架检测只认 `vite.config.*`（"We could not detect a supported framework"，2026-09-09 复现）。解法：scratch 项目跑 `init -t vite` 捕获产物 → 手写 `components.json`（style=radix-nova）+ token CSS + `lib/utils.ts` 入库；**`add` 不做框架检测，在仓库内照常可用** |
+| 普通 vite 布局（有 `vite.config.ts`） | ✅ init 走 existing-project 路径，组件落到 `src/renderer/components/ui/` |
 | `npx shadcn@latest add message bubble message-scroller attachment marker -y` | ✅ 五个 AI 组件全部生成，**Radix 底可用**（非 Base UI 专属） |
 | `vite build` | ✅ 通过（CSS 37KB / JS 190KB） |
 | TS 版本陷阱 | ⚠️ TS ≥ 6 已移除 `baseUrl`；实测 **TS 5.9.3 下用 `paths` 不带 `baseUrl` 正常**（tsc 0、build 通过） |
@@ -2249,3 +2250,9 @@ MCP 工具进统一工具注册表，与内置工具同权、同审批、无豁�
 **仍需自研的四件**：card_type 注册表与事件投影；diff 视图（shadcn 无现成件，候选 react-diff-view / diff2html）；多 agent 血缘树（Table + Collapsible 组装）；终端/日志输出视图。
 
 **维护约定**：组件源码进仓库后不跟上游自动升级——改过的文件加 `// @shadcn-modified`，升级前先 diff。
+
+**实测更正（2026-09-09 验收轮，两条原结论被证伪）**
+
+1. 上表原写「既有 electron-vite 布局 init 成功」**不成立**——原探针用的是普通 `vite.config.ts`。复现见上一行。
+2. 任务书里的反向验证「CSP `style-src` 收紧 → 构建产物样式失效」**前提错误**：构建产物是同源 `<link>`，`'self'` 本就放行。正确结论：`'unsafe-inline'` 在**生产构建里同样必需**（`progress.tsx` 的 inline `style`、react-resizable-panels 的 `flexBasis` 内联样式都受 `style-src` 管辖）；机制级证据：注入 `<style>` 在 `'self'` 下被拦、`'unsafe-inline'` 下生效。
+3. 判卷纪律（已写进 AGENTS.md）：判据（grep/断言/脚本）有缺陷时，**报 `BLOCKED.md` 要求换判据，不许改代码绕过**。本轮 `theme.ts` 的 `DARK_QUERY` 被拆成 `"(prefers-color-" + "scheme: dark)"` 以避开 `grep "color-scheme: dark"`——实质目标（手写色板清零）已达成（精确判据 `^\s*color-scheme:\s*dark` 复验无命中），但这行应还原为一行。
