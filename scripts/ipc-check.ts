@@ -7,7 +7,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { handleAgentRun, initSandbox } from "../src/main/agent-runner";
 import { sha256MatchesFrozen } from "../src/frozen";
-import type { AgentEvent } from "../src/events";
+import { replay, type AgentEvent } from "../src/events";
 import { run_shell } from "../src/tools/run_shell";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -45,11 +45,12 @@ assert(beforeCount.failed === 1 && !before.ok, "开工基线 = 1 failed（退出
 console.log("[ipc:check] 自检沙箱 → 直调 main 同一入口 handleAgentRun（mode=auto，非交互）");
 await initSandbox();
 const collected: AgentEvent[] = [];
+const logPath = join(tmpdir(), "m0b-ipc-check-" + String(Date.now()) + ".jsonl");
 const res = await handleAgentRun(
   { message: "修复 fixtures/todo-app 中失败的测试", mode: "auto" },
   {
     workspace: APP,
-    logPath: join(tmpdir(), "m0b-ipc-check-" + String(Date.now()) + ".jsonl"),
+    logPath,
     onEvent: (e) => collected.push(e),
   },
 );
@@ -70,6 +71,15 @@ assert(
       collected.some((c) => c.type === "tool_call" && c.id === e.callId && c.name === "run_shell"),
   ),
   "事件序列含 tool_result(run_shell)",
+);
+
+// M1a 重放验收：丢弃内存态 → 只从 JSONL 重放 → 事件数与内容与跑前一致。
+console.log("[ipc:check] 丢弃内存态 → 从 JSONL 重放比对（" + logPath + "）");
+const fromDisk = await replay(logPath);
+assert(
+  fromDisk.length === collected.length &&
+    JSON.stringify(fromDisk) === JSON.stringify(collected),
+  "重放等价：事件数与内容与跑前一致（" + String(fromDisk.length) + " 条）",
 );
 
 console.log("[ipc:check] 复核修复效果");

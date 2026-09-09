@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import { resolveCard } from "./cards/registry";
 import type { AgentEvent } from "../events";
 import type {
   AgentApi,
@@ -71,6 +72,33 @@ function short(v: unknown, max = 260): string {
 type Item =
   | { kind: "event"; e: AgentEvent }
   | { kind: "ask"; a: AskPayload; resolved?: "approved" | "rejected"; timedOut?: boolean };
+
+// 投影时间线：assistant_delta 按 callId 折叠为一条「流式中」气泡（逐字增长），
+// 其余事件与审批行原样透传。纯函数：右栏原始 JSONL 面板仍显示逐条 delta。
+type TimelineItem =
+  | { kind: "event"; e: AgentEvent }
+  | { kind: "stream"; callId: string; text: string }
+  | { kind: "ask"; a: AskPayload; resolved?: "approved" | "rejected"; timedOut?: boolean };
+
+function toTimeline(items: Item[]): TimelineItem[] {
+  const out: TimelineItem[] = [];
+  const pos = new Map<string, number>();
+  for (const it of items) {
+    if (it.kind === "event" && it.e.type === "assistant_delta") {
+      const i = pos.get(it.e.callId);
+      if (i === undefined) {
+        pos.set(it.e.callId, out.length);
+        out.push({ kind: "stream", callId: it.e.callId, text: it.e.text });
+      } else {
+        const s = out[i];
+        if (s.kind === "stream") out[i] = { ...s, text: s.text + it.e.text };
+      }
+    } else {
+      out.push(it);
+    }
+  }
+  return out;
+}
 
 function EventView({ e }: { e: AgentEvent }) {
   if (e.type === "user_message") {
@@ -125,10 +153,32 @@ function EventView({ e }: { e: AgentEvent }) {
       </Message>
     );
   }
+  if (e.type === "usage") {
+    // usage 事件走卡片注册表投影（M1a 注册表的首个真实接线点）
+    const UsageCard = resolveCard("usage_summary");
+    return <UsageCard payload={{ type: "usage_summary", inputTokens: e.inputTokens, outputTokens: e.outputTokens }} />;
+  }
+  return null; // assistant_delta 由 toTimeline 折叠，不单独成泡
+}
+
+function StreamView({
+  s,
+  running,
+}: {
+  s: Extract<TimelineItem, { kind: "stream" }>;
+  running: boolean;
+}) {
   return (
-    <div className="text-center text-xs text-muted-foreground">
-      tokens：{e.inputTokens} in / {e.outputTokens} out
-    </div>
+    <Message align="start">
+      <MessageContent>
+        <Bubble align="start" variant="outline">
+          <BubbleContent className="whitespace-pre-wrap">
+            {s.text}
+            {running && <span className="animate-pulse">▍</span>}
+          </BubbleContent>
+        </Bubble>
+      </MessageContent>
+    </Message>
   );
 }
 
@@ -318,10 +368,12 @@ function App() {
                           </EmptyHeader>
                         </Empty>
                       )}
-                      {items.map((it, i) => (
+                      {toTimeline(items).map((it, i) => (
                         <MessageScrollerItem key={i}>
                           {it.kind === "event" ? (
                             <EventView e={it.e} />
+                          ) : it.kind === "stream" ? (
+                            <StreamView s={it} running={running} />
                           ) : (
                             <AskView it={it} onDecide={decide} />
                           )}

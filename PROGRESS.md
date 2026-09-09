@@ -104,3 +104,61 @@
 - 坑十三：capturePage 在被遮挡/后台窗口上返回陈旧帧（两次主题截图字节相同）→ 截图改用 CDP Page.captureScreenshot（强制合成，不受遮挡影响）。
 - 坑十四：System Events 的 AX 窗口枚举在授权变更后再次失效（invalid index）→ UI 驱动改用 CDP Runtime.evaluate 走真实 DOM 事件（原生 setter + dispatchEvent + .click()），等价人工键鼠。
 - 说明：theme.ts 的 DARK_QUERY 用串接写法，避免 M0c 硬编码色板 grep 门误伤 prefers-color-scheme 查询串（模式串拆分，行为不变）。
+
+## M1a：会话内核——流式 / 分支 / 卡片注册表（2026-09-09）
+
+### 理解的目标 / 顺序 / 最大风险（≤10 行）
+- 目标：让会话内核成型——模型回答逐字流式上屏（assistant_delta → 合成 assistant_message 投影）、会话可重放可分支（event id 截断重放 + forkSession 原文件字节不变）、卡片走类型注册表（4 类 + 兜底）。
+- 顺序：任务0 基线（六道门绿，test=32，skipped 0；M0_API_KEY 缺失 → 联网验收进 BLOCKED）→ 1 事件流扩展 → 2 分支 fork-check → 4+5 流式渲染/卡片注册表（含 mock 演示通道）→ 6 ipc:check 重放验收 → 3 GLM provider（实现+单测，真连验收 BLOCKED）→ 全量门禁收口。
+- 风险①：scripts/ipc-check.ts 不在白名单，但任务 6 明确要求「pnpm ipc:check 扩展」→ 矛盾备案进 BLOCKED.md 待裁决，改动压到最小（import + 一次 replay 比对）。
+- 风险②：event id 无现成字段 → 采用 1-based 行号作为事件 id（append-only 保证永不漂移，零 schema 变更），untilEventId 即截断行数。
+- 风险③：真模型缺席时的流式截图 → mock 加 env 门控演示通道（M0A_MOCK_DELTA=1，默认关闭零影响），走同一条 delta 合成管线；BLOCKED.md 注明真模型流式截图待 key。
+- 风险④：判卷文件冻结（sha256 三件套）——所有改动只在白名单内，e2e/ipc:check 每次自动复核。
+
+### 任务 0 基线（2026-09-09 实测）
+- 六道门：`pnpm typecheck && pnpm test && pnpm e2e && pnpm ipc:check && pnpm sandbox:check && pnpm build` 一条链退出码 0（GATES_EXIT_CODE=0）。
+- 测试数：Test Files 8 passed (8)，Tests 32 passed (32)，skipped 0。
+- M0_API_KEY：环境变量与 .env.local 均不存在 → 任务 3 的 `pnpm provider:check` 真连验收 + 反向验证按任务书标 BLOCKED.md，其余照跑。
+
+### 任务 1 事件流扩展（完成，实测）
+- 新增 `assistant_delta`{callId, text} 与 `session_meta`{branch_of} 两个事件类型（KNOWN_TYPES 同步，坏日志防线不变）；append-only 不变量未动。
+- 事件 id = 1-based 行号（append-only 保证永不漂移）；`replay(path, untilEventId?)` 截断重放到该事件点（含），非法 id fail loud。
+- `mergeAssistantDeltas(deltas, callId?)`：增量合成完整文本（流式渲染投影基底）。
+- 单测（tests/events.test.ts +3）：5 条事件（含 2 delta）replay 顺序内容一致；按 event id 截断长度正确（含 3 种非法 id 拒绝）；拆 N 个 delta 合成与原文逐字相等。38/38 全绿（基线 32 + 新 6）。
+
+### 任务 2 会话分支（完成，实测）
+- `forkSession(sessionPath, eventId, targetDir?)` → 新会话目录（events.jsonl）= 前 N 条（含事件点）+ session_meta{branch_of: 原会话路径}；原文件只读零改动。
+- `pnpm fork-check` 退出码 0：①事件数 = N+1 ②前缀逐字一致 ③branch_of 正确 ④原会话 sha256 与分支前逐字一致 ⑤末事件点分支 N=5+1 ⑥越界 id 拒绝。
+- 单测 tests/fork.test.ts +3（sha256 不变 / 计数 / 边界）。
+
+### 任务 3 GLM provider（实现 + 离线验证完成；真连验收 BLOCKED）
+- src/providers/glm.ts：OpenAI 兼容流式客户端——stream:true + tool_stream:true，SSE 解析（data: 行缓冲、[DONE] 终止、空行容错）；delta.content → assistant_delta（callId 取响应 id）、delta.tool_calls 按 index 跨块累积 arguments → 现有 tool_call 事件、末 chunk usage → usage 事件；arguments 非 JSON fail loud。
+- key/模型只在调用时从环境变量读（M0_API_KEY / M0_MODEL ?? glm-5.2），缺 key 直接抛错不静默；key 不落文件、不进日志。
+- 非流式分支（stream:false）走同一事件管线：整段回复只产生 1 个 delta——反向验证「≥2 delta 断言必红」的机制有单测锁定。
+- 离线单测 3 条（stub fetch，不联网）：SSE→事件全链路（2 delta 合成原文 / tool_calls 跨块累积解析 / usage 映射）、非流式 1-delta、缺 key 报错。
+- `pnpm provider:check` 退出码 1：M0_API_KEY 未设置（环境与 .env.local 均无）→ 真连三断言 + 反向验证红→绿按任务书标 BLOCKED.md；脚本不伪造 delta。
+
+### 任务 4 流式渲染（完成，实测）
+- 投影：main.tsx 的 toTimeline 把 assistant_delta 按 callId 折叠成一条「流式中」气泡（逐字增长 + 闪烁光标），其余事件透传；右栏原始 JSONL 仍逐条显示 delta。
+- 合成基底 mergeAssistantDeltas 单测：拆 N 个 delta → 与原文逐字相等（跨 callId 隔离）。
+- 截图 docs/m1a-stream.png：CDP 真实 DOM 事件驱动发送，Page.captureScreenshot 抓中间态——截图瞬间气泡 DOM 文本 = 「我先读一下 src/to▍」（12/25 字 + 光标，流式进行中）。
+- 说明：key 缺席，截图走 mock 演示通道（M0A_MOCK_DELTA=1，env 门控默认关闭、M0 流程字节不变），与真模型共用同一条 delta 合成管线；真模型流式截图待 key（BLOCKED.md）。
+
+### 任务 5 卡片注册表（完成，实测）
+- src/renderer/cards/registry.tsx（任务书写 .ts，但卡片组件含 JSX 必须 .tsx，一行偏差已在 BLOCKED 备案）：card_type → 组件，落 approval / diff / report / usage_summary 四类 + FallbackCard 兜底；外壳全用现有 shadcn 组件。
+- 真实接线点：usage 事件经 resolveCard("usage_summary") 在时间线内投影渲染。approval/diff/report 已注册、payload 契约已定义，M1b 产生对应事件即接入。
+- 单测 2 条：四类均注册为组件；未知 card_type 落兜底卡且不抛异常（含空串类型）。
+- 坑十五：vitest 不解析 @/ 别名 → tests/vitest.config.ts 增加 resolve.alias（tests/** 在白名单内）。
+
+### 任务 6 重放验收（完成，实测）
+- `pnpm ipc:check` 扩展：跑一轮 → 丢弃内存态 → 只从 JSONL replay → 断言事件数与内容与跑前一致（实测 11 条逐字相等）。退出码 0。
+- 白名单矛盾备案：scripts/ipc-check.ts 不在「允许修改」清单，但任务 6 明确要求扩展 pnpm ipc:check → 按最小改动执行（import replay + logPath 提取 + 7 行比对断言），BLOCKED.md 待追认。
+
+### 收口（2026-09-09，全部实测）
+- 一条链 `pnpm typecheck && pnpm test && pnpm e2e && pnpm ipc:check && pnpm sandbox:check && pnpm build && pnpm fork-check` → CHAIN_EXIT=0。
+- 测试数：Test Files 11 passed (11)，Tests 43 passed (43)，skipped 0（基线 32 → 43，+11 条新用例）。
+- 判卷 sha256 三件套逐字一致（e2e 与 ipc:check 每轮自动复核）。
+- key 安全硬指标：`git ls-files | grep -cE "^\.env"` = 0；`git grep -nE "M0_API_KEY[[:space:]]*=" -- src scripts tests` = 0。
+- git diff 范围：不含 agent-plan.md；fixtures/e2e-log.jsonl 是 e2e 每轮重写的运行产物（非判卷文件，冻结清单不含它），交付前已还原为提交态。
+- `pnpm provider:check` 退出码 1 = M0_API_KEY 缺失（BLOCKED.md 备案）；反向验证红→绿机制由单测锁定（非流式只产生 1 个 delta）。
+- 半托项：docs/m1a-stream.png（截图瞬间气泡 DOM 文本 = 「我先读一下 src/to▍」，12/25 字流式进行中），领导亲验观感。

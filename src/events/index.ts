@@ -1,24 +1,33 @@
 // 事件流：append-only JSONL，一事件一行。
-import { appendFile, readFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 
 export interface UserMessageEvent { type: "user_message"; content: string }
 export interface AssistantMessageEvent { type: "assistant_message"; content: string }
+/** 流式增量片段：callId 标识同一轮回复，text 为逐字追加的一小段。 */
+export interface AssistantDeltaEvent { type: "assistant_delta"; callId: string; text: string }
 export interface ToolCallEvent { type: "tool_call"; id: string; name: string; args: Record<string, unknown> }
 export interface ToolResultEvent { type: "tool_result"; callId: string; ok: boolean; output: string }
 export interface UsageEvent { type: "usage"; inputTokens: number; outputTokens: number }
+/** 会话元信息：分支会话首行携带 branch_of 指向原会话。 */
+export interface SessionMetaEvent { type: "session_meta"; branch_of: string }
 export type AgentEvent =
   | UserMessageEvent
   | AssistantMessageEvent
+  | AssistantDeltaEvent
   | ToolCallEvent
   | ToolResultEvent
-  | UsageEvent;
+  | UsageEvent
+  | SessionMetaEvent;
 
 const KNOWN_TYPES = new Set([
   "user_message",
   "assistant_message",
+  "assistant_delta",
   "tool_call",
   "tool_result",
   "usage",
+  "session_meta",
 ]);
 
 export interface EventLog {
@@ -38,8 +47,9 @@ export function createEventLog(path: string): EventLog {
   };
 }
 
-/** 重放：按写入顺序读回全部事件。 */
-export async function replay(path: string): Promise<AgentEvent[]> {
+/** 重放：按写入顺序读回全部事件。untilEventId 给定时只重放到该事件点（含）。
+ * 事件 id = 1-based 行号（append-only 保证永不漂移），即「事件点」。 */
+export async function replay(path: string, untilEventId?: string): Promise<AgentEvent[]> {
   const raw = await readFile(path, "utf8");
   const events: AgentEvent[] = [];
   for (const line of raw.split("\n")) {
@@ -47,5 +57,45 @@ export async function replay(path: string): Promise<AgentEvent[]> {
     if (!t) continue; // 容忍文件末尾空行
     events.push(JSON.parse(t) as AgentEvent);
   }
-  return events;
+  if (untilEventId === undefined) return events;
+  const n = Number(untilEventId);
+  if (!Number.isInteger(n) || n < 1 || n > events.length) {
+    throw new Error(`无效 untilEventId: ${JSON.stringify(untilEventId)}（会话共 ${events.length} 条事件）`);
+  }
+  return events.slice(0, n);
+}
+
+/** 流式渲染的合成基底：同一轮回复的增量片段按序拼回完整文本。 */
+export function mergeAssistantDeltas(deltas: AssistantDeltaEvent[], callId?: string): string {
+  return deltas
+    .filter((d) => callId === undefined || d.callId === callId)
+    .map((d) => d.text)
+    .join("");
+}
+
+export interface ForkResult {
+  /** 新会话目录。 */
+  sessionDir: string;
+  /** 新会话事件文件路径。 */
+  eventsPath: string;
+  /** 新会话事件条数 = N + 1（session_meta）。 */
+  count: number;
+}
+
+/** 会话分支：从事件点 eventId 派生新会话目录。
+ * 内容 = 原会话前 N 条（含该事件点）+ 一条 session_meta{branch_of: 原会话路径}。
+ * 原会话文件只读，字节不变；新文件从空日志 append-only 写出。 */
+export async function forkSession(sessionPath: string, eventId: string, targetDir?: string): Promise<ForkResult> {
+  const all = await replay(sessionPath);
+  const n = Number(eventId);
+  if (!Number.isInteger(n) || n < 1 || n > all.length) {
+    throw new Error(`无效 eventId: ${JSON.stringify(eventId)}（会话共 ${all.length} 条事件）`);
+  }
+  const dir = targetDir ?? join(dirname(sessionPath), `${basename(sessionPath, ".jsonl")}-fork-${Date.now()}`);
+  const eventsPath = join(dir, "events.jsonl");
+  await mkdir(dir, { recursive: true });
+  const log = createEventLog(eventsPath);
+  for (const e of all.slice(0, n)) await log.append(e);
+  await log.append({ type: "session_meta", branch_of: sessionPath });
+  return { sessionDir: dir, eventsPath, count: n + 1 };
 }

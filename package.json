@@ -13,7 +13,9 @@
     "dev": "electron-vite dev",
     "start": "electron-vite build && electron .",
     "ipc:check": "node --import tsx scripts/ipc-check.ts",
-    "sandbox:check": "node --import tsx scripts/sandbox-check.ts"
+    "sandbox:check": "node --import tsx scripts/sandbox-check.ts",
+    "fork-check": "node --import tsx scripts/fork-check.ts",
+    "provider:check": "node --import tsx scripts/provider-check.ts"
   },
   "devDependencies": {
     "@fontsource-variable/geist": "^5.3.0",

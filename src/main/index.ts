@@ -54,8 +54,29 @@ function push(channel: string, payload: unknown): void {
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
 }
 
+// M1a 流式截图钩子：M1A_STREAM_SHOT=<绝对路径> 时，流式气泡增长中途自动截屏
+//（第 2 个 assistant_delta 到达后延迟 M1A_STREAM_SHOT_AFTER_MS，默认 200ms；演示节奏见 mock.ts）。
+// 不设置该环境变量时零行为；仅用于产出 docs/m1a-stream.png。
+const streamShotPath = process.env.M1A_STREAM_SHOT;
+let streamDeltas = 0;
+
 setAppHooks({
-  onEvent: (e) => push("agent:event", e),
+  onEvent: (e) => {
+    push("agent:event", e);
+    if (streamShotPath && e.type === "assistant_delta") {
+      streamDeltas++;
+      if (streamDeltas === 2) {
+        const delay = Number(process.env.M1A_STREAM_SHOT_AFTER_MS ?? "200");
+        setTimeout(() => {
+          void win
+            ?.capturePage()
+            .then((img) => writeFile(streamShotPath, img.toPNG()))
+            .then(() => console.log("[m1a] stream screenshot saved:", streamShotPath))
+            .catch((err) => console.error("[m1a] stream screenshot FAILED:", err));
+        }, delay);
+      }
+    }
+  },
   onAsk: (p) => push("agent:ask", p),
   onAskOutcome: (p) => push("agent:ask-done", p),
 });
