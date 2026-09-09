@@ -162,3 +162,12 @@
 - git diff 范围：不含 agent-plan.md；fixtures/e2e-log.jsonl 是 e2e 每轮重写的运行产物（非判卷文件，冻结清单不含它），交付前已还原为提交态。
 - `pnpm provider:check` 退出码 1 = M0_API_KEY 缺失（BLOCKED.md 备案）；反向验证红→绿机制由单测锁定（非流式只产生 1 个 delta）。
 - 半托项：docs/m1a-stream.png（截图瞬间气泡 DOM 文本 = 「我先读一下 src/to▍」，12/25 字流式进行中），领导亲验观感。
+
+### 补验（领导提供 key 后，2026-09-09）
+- 接入三要素：端点 https://api.b.ai/v1（OpenAI 兼容代理 → 完整 URL /v1/chat/completions）、模型 glm-5.3-flash、key 经环境变量 M0_API_KEY 注入（当次进程 env，不落文件不入库不复述）。
+- glm.ts 端点缺省改为 `process.env.M0_ENDPOINT ?? GLM_ENDPOINT`（key/模型/端点三环境变量单一来源）；provider-check 直呼不再自行拼 opts。
+- `pnpm provider:check` 真连 **exit 0**：①148 个 delta ②usage 22/754 ③tool_call(read_file,{path:"src/todo.ts"})；151 条事件 JSONL 重放逐字一致。（首次收口跑 PROVIDER_EXIT=1 系漏传 M0_ENDPOINT——代理 key 打默认 bigmodel 端点 401；三要素必须同传，带端点重跑即绿。）
+- 反向验证红→绿（任务书要求）：glm.ts 默认 stream 暂改 false → `❌ ①收到 ≥2 个 delta（实际 1）` exit 1；还原 true → 全绿 exit 0（125 delta）。
+- 真模型流式截图：agent-runner 增 env 门控演示通道（M0A_PROVIDER=glm，缺省 mock 字节不变；单轮流式无 tools、pull-based 逐事件吐出，完整 loop 接线归 M1b），CDP 驱动真实发送，捕获瞬间气泡 DOM 文本 = 「我是Z.ai开发的GLM▍」（模型仍在生成）；docs/m1a-stream.png 已更新为真模型版。
+- key 安全复查：全仓 grep key 字面量零命中（排除 node_modules/.git/out/.tmp）。
+- 最终：六道门 + fork-check CHAIN_EXIT=0（test 43/skipped 0）+ provider:check exit 0——硬指标一补验后完整达成。

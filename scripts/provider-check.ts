@@ -33,6 +33,7 @@ if (!process.env.M0_API_KEY) {
   try {
     const logPath = join(dir, "glm-events.jsonl");
     const log = createEventLog(logPath);
+    // 端点/模型/key 均由 glm.ts 从环境变量读取（M0_ENDPOINT / M0_MODEL / M0_API_KEY）
 
     console.log("[provider:check] 调用①：纯文本流式（无 tools，stream=true + 默认模型）");
     const events1: AgentEvent[] = [];
@@ -70,7 +71,7 @@ if (!process.env.M0_API_KEY) {
       },
     ];
     const events2: AgentEvent[] = [];
-    for await (const e of streamGlm([{ role: "user", content: "请调用工具读取 src/todo.ts 的内容。" }], {}, tools)) {
+    for await (const e of streamGlm([{ role: "user", content: "请调用工具读取 src/todo.ts 的内容。" }], undefined, tools)) {
       events2.push(e);
       await log.append(e);
     }

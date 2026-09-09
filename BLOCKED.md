@@ -23,7 +23,7 @@
 5. **组件源码不跟上游**：本轮未改任何 components/ui 生成文件，故无 @shadcn-modified 标记；后续改动时按拍板加标记。
 
 ## M1a 轮新增待裁决（2026-09-09）
-1. **【真阻塞】M0_API_KEY 缺失 → 联网验收无法执行**：环境变量与 .env.local 均不存在。受影响验收：①`pnpm provider:check` 真连三断言（≥2 delta / usage input>0 且 output>0 / 带 tools 解析出 tool_call）②反向验证 stream:false 红→绿 ③真模型流式截图。GLM provider（src/providers/glm.ts）实现与离线解析单测（stub fetch 3 条）已完成；key 就绪后跑 `pnpm provider:check` 即可补验。key 只进环境变量，不落文件、不入库。
+1. ~~【真阻塞】M0_API_KEY 缺失 → 联网验收无法执行~~ **已解决（2026-09-09 领导提供 key）**：`pnpm provider:check` 真连 exit 0（148 delta / usage 22/754 / tool_call 解析成功 / 151 条事件重放一致）；反向验证 stream:false 红（1 delta，exit 1）→还原→绿（exit 0）完成；docs/m1a-stream.png 已更新为真模型流式版。key 只进当次进程环境变量，全仓 grep 字面量零命中，未落任何文件、未入库。注意：该 key 端点绑定代理（M0_ENDPOINT 必须同传，打默认 bigmodel 端点会 401）。
 2. **scripts/ipc-check.ts 白名单矛盾**：任务 6 明确要求「`pnpm ipc:check` 扩展为重放验收」，但界限清单未列该文件（只列了 provider-check.ts / fork-check.ts 两个新脚本）。按任务执行且改动压到最小（import replay + logPath 提取 + 7 行重放比对断言）。待追认；若判违规可整体 revert 该文件，把比对逻辑迁进 src/main（白名单内）。
 3. **registry 文件后缀偏差**：任务书写 `src/renderer/cards/registry.ts`，卡片组件含 JSX 必须 .tsx（现为 registry.tsx），功能与验收不受影响。
-4. **流式截图的演示通道**：key 缺席时，UI 逐字流式用 mock 演示通道（M0A_MOCK_DELTA=1，env 门控、默认关闭、M0 事件流字节不变）驱动，与 GLM 真流式共用同一条 delta 合成管线（mergeAssistantDeltas + toTimeline）；docs/m1a-stream.png 为该通道中间态（半托项，领导亲验），真模型版截图待 key。
+4. ~~流式截图的演示通道~~ **已解决（2026-09-09 真模型版交付）**：docs/m1a-stream.png 现为真模型（glm-5.3-flash）流式中间态（捕获瞬间气泡 = 「我是Z.ai开发的GLM▍」，模型仍在生成）。mock 演示通道（M0A_MOCK_DELTA=1）保留为无 key 时的演示路径，与真模型共用同一条 delta 合成管线；真模型 UI 通道走 M0A_PROVIDER=glm（env 门控、单轮、无 tools，完整 loop 接线归 M1b）。

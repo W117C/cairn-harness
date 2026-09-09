@@ -11,6 +11,8 @@ import type { AgentEvent } from "../events";
 import { createEventLog, replay } from "../events";
 import { checkPermission, type PermissionMode } from "../permissions";
 import { createMockProvider } from "../providers/mock";
+import { streamGlm } from "../providers/glm";
+import type { Provider } from "../providers";
 import { TOOLS, type Tool, type ToolResult } from "../tools";
 import type { ToolName } from "../tools/base";
 import { AskGate, type AskOutcome } from "./ask-gate";
@@ -107,7 +109,22 @@ export interface RunOptions {
   sandbox?: SandboxStatus | null;
 }
 
-/** 核心：mock 驱动跑一轮 loop；每条事件先落 JSONL 再回调。返回完整事件流。 */
+// M1a 真流式演示通道：M0A_PROVIDER=glm 时用真模型单轮流式（无 tools，纯文本；
+// 事件按网络节奏逐条 pull，UI 逐字上屏）。缺省仍为 mock，M0 事件流字节不变。
+// 完整 loop 接线（对话历史反馈 / 多轮工具调用）归 M1b。
+function createProvider(userMessage: string): Provider {
+  if (process.env.M0A_PROVIDER !== "glm") return createMockProvider(MOCK_FIXTURE);
+  let gen: AsyncGenerator<AgentEvent> | null = null;
+  return {
+    async next() {
+      if (!gen) gen = streamGlm([{ role: "user", content: userMessage }]);
+      const { value } = await gen.next();
+      return value ?? null;
+    },
+  };
+}
+
+/** 核心：mock（或演示通道）驱动跑一轮 loop；每条事件先落 JSONL 再回调。返回完整事件流。 */
 export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   installAppTools();
   session = { mode: opts.mode, askGate: opts.askGate ?? null, sandbox: opts.sandbox ?? null };
@@ -115,7 +132,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     await rm(opts.logPath, { force: true });
     const log = createEventLog(opts.logPath);
     await runLoop({
-      provider: createMockProvider(MOCK_FIXTURE),
+      provider: createProvider(opts.message),
       events: {
         append: async (e) => {
           await log.append(e);

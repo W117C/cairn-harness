@@ -21,7 +21,7 @@ export interface GlmOptions {
   apiKey?: string;
   /** 缺省读 process.env.M0_MODEL ?? "glm-5.2"。 */
   model?: string;
-  /** 缺省智谱 OpenAI 兼容端点。 */
+  /** 缺省读 process.env.M0_ENDPOINT ?? 智谱 OpenAI 兼容端点。 */
   endpoint?: string;
   /** 反向验证开关：false = 非流式（整段回复只算 1 个 delta），缺省 true。 */
   stream?: boolean;
@@ -69,7 +69,7 @@ export async function* streamGlm(
   const apiKey = opts.apiKey ?? process.env.M0_API_KEY;
   if (!apiKey) throw new Error("M0_API_KEY 未设置（key 只从环境变量读取，不落文件）");
   const model = opts.model ?? process.env.M0_MODEL ?? "glm-5.2";
-  const endpoint = opts.endpoint ?? GLM_ENDPOINT;
+  const endpoint = opts.endpoint ?? process.env.M0_ENDPOINT ?? GLM_ENDPOINT;
   const stream = opts.stream ?? true;
   const doFetch = opts.fetchImpl ?? fetch;
 
