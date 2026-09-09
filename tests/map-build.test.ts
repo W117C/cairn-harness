@@ -1,0 +1,93 @@
+// M2b 任务 4+5 验收（缓存与注入 / 失败降级）：
+// ①未改文件 → 命中缓存且结果逐字相同 ②改一个文件 → 重算且结果变化 ③用户仓库里没有 tags 缓存文件
+// ④坏 grammar 路径 → 不抛异常、返回空地图（降级）
+import { describe, expect, it, beforeEach } from "vitest";
+import { mkdtemp, rm, mkdir, writeFile, utimes, readdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createMapBuilder, defaultTagsCacheDir } from "../src/agent/map/build.js";
+import { __resetLangCache, __resetQueryCache } from "../src/agent/map/parse.js";
+
+let ws = "";
+let cacheDir = "";
+
+beforeEach(async () => {
+  ws = await mkdtemp(join(tmpdir(), "m2b-map-"));
+  cacheDir = await mkdtemp(join(tmpdir(), "m2b-tags-"));
+  await mkdir(join(ws, "src"), { recursive: true });
+  await writeFile(
+    join(ws, "src", "alpha.ts"),
+    "export function alpha(): number { return helper(); }\nfunction helper() { return 1; }\n",
+    "utf8",
+  );
+  await writeFile(
+    join(ws, "src", "beta.py"),
+    "def beta():\n    return gamma()\n\ndef gamma():\n    return 2\n",
+    "utf8",
+  );
+});
+
+describe("map build（任务 4+5）", () => {
+  it("未改文件 → 渲染缓存命中、结果逐字相同且 tags 全命中；用户仓库里没有 tags 缓存文件", async () => {
+    const b = createMapBuilder({ tagsCacheDir: cacheDir });
+    const first = await b.build({ workspace: ws });
+    expect(first.ok).toBe(true);
+    expect(first.text).toContain("alpha");
+    expect(first.fromRenderCache).toBe(false);
+    const second = await b.build({ workspace: ws, nowRound: 1 });
+    expect(second.fromRenderCache).toBe(true);
+    expect(second.text).toBe(first.text); // 逐字相同
+    expect(second.tokens).toBe(first.tokens);
+    // tags 磁盘缓存写在 cacheDir，用户工作区无缓存文件
+    const wsEntries = await readdir(ws, { recursive: true });
+    expect(wsEntries.some((p) => p.includes("symbol-map") || p.endsWith(".tags.json"))).toBe(false);
+    const cacheEntries = await readdir(cacheDir);
+    expect(cacheEntries.length).toBeGreaterThan(0); // 缓存在应用数据目录一侧
+  });
+
+  it("改一个文件 → 指纹变化重算且结果变化；tags 磁盘缓存 {mtime,size} 键控生效", async () => {
+    const b = createMapBuilder({ tagsCacheDir: cacheDir });
+    const first = await b.build({ workspace: ws });
+    expect(first.parsed).toBe(2);
+    // 未改文件第二次构建（绕过渲染缓存：强制 nowRound 超过 recomputeEvery）
+    const again = await b.build({ workspace: ws, nowRound: 99, recomputeEvery: 10 });
+    expect(again.fromTagsCache).toBe(2); // {mtime,size} 未变 → tags 全命中
+    expect(again.parsed).toBe(0);
+    // 改 alpha.ts 内容 → mtime/size 变 → tags 重解析
+    await new Promise((r) => setTimeout(r, 20));
+    await writeFile(join(ws, "src", "alpha.ts"), "export function alpha2(): number { return 42; }\n", "utf8");
+    const changed = await b.build({ workspace: ws, nowRound: 100, recomputeEvery: 10 });
+    expect(changed.fromTagsCache).toBe(1);
+    expect(changed.parsed).toBe(1);
+    expect(changed.text).not.toBe(first.text); // 重算且结果变化
+    expect(changed.text).toContain("alpha2");
+  });
+
+  it("坏 grammar（wasm 加载失败）→ 不抛异常、返回空地图（静默降级）", async () => {
+    __resetLangCache();
+    __resetQueryCache();
+    const { __setWts } = await import("../src/agent/map/parse.js");
+    __setWts({
+      Parser: Object.assign(function () {
+        throw new Error("boom");
+      }, { init: () => Promise.resolve() }),
+      Language: { load: () => Promise.reject(new Error("bad wasm")) },
+      Query: class {},
+    } as never);
+    const b = createMapBuilder({ tagsCacheDir: cacheDir });
+    const r = await b.build({ workspace: ws });
+    expect(r.ok).toBe(false);
+    expect(r.text).toBe(""); // 空地图：退回纯 agentic 探索
+    __setWts(null);
+    __resetLangCache();
+    __resetQueryCache();
+  });
+
+  it("rg 不可用（工作区不存在）→ 空地图不抛；defaultTagsCacheDir 不在用户仓库", async () => {
+    const b = createMapBuilder({ tagsCacheDir: cacheDir });
+    const r = await b.build({ workspace: join(ws, "no-such-dir") });
+    expect(r.ok).toBe(false);
+    expect(r.text).toBe("");
+    expect(defaultTagsCacheDir()).not.toContain(ws);
+  });
+});

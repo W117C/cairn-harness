@@ -4,6 +4,7 @@
 // 事件 id = 1-based 行号（M1a 定稿，append-only 永不漂移）。
 import type { AgentEvent, CompactionEvent, CompactionUsage } from "../events";
 import { eventIdAt, excludedIds, projectContext, type ContextMessage } from "./context";
+import { classifyResult, shapeResult, summaryTruncate } from "./shape";
 
 // ---- 参数（§7.3(f) 定稿默认值；全部可配）----
 export interface CompactionConfig {
@@ -314,7 +315,12 @@ function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max) + "…(截断)" : s;
 }
 
-export function serializeConversation(events: AgentEvent[], truncateChars: number): string {
+export function serializeConversation(
+  events: AgentEvent[],
+  truncateChars: number,
+  toolNameOf?: (callId: string) => string | undefined,
+  argsOf?: (callId: string) => Record<string, unknown> | undefined,
+): string {
   const lines: string[] = [];
   let deltaBuf = "";
   let deltaOpen = false;
@@ -338,7 +344,13 @@ export function serializeConversation(events: AgentEvent[], truncateChars: numbe
       lines.push("[tool call] " + e.name + " " + truncate(JSON.stringify(e.args), truncateChars));
     } else if (e.type === "tool_result") {
       flushDelta();
-      lines.push("[Tool result " + (e.ok ? "ok" : "error") + "] " + truncate(e.output, truncateChars));
+      // M2b：进摘要输入的工具结果走类型化整形 + 统一 2k 截断（§7.4 = §6.2 同一份规则表）
+      const name = toolNameOf?.(e.callId);
+      let text = e.output;
+      if (name && argsOf) {
+        text = shapeResult(classifyResult(name, argsOf(e.callId) ?? {}, e.output), e.output, truncateChars);
+      }
+      lines.push("[Tool result " + (e.ok ? "ok" : "error") + "] " + summaryTruncate(text));
     } else if (e.type === "clarify_requested") {
       flushDelta();
       lines.push("[Assistant 澄清提问] " + truncate(JSON.stringify(e.questions), truncateChars));
@@ -478,7 +490,21 @@ export async function runCompaction(args: RunCompactionArgs): Promise<Compaction
   const compressedEvents = cut.compressedIds.map((id) => events[id - 1]);
   const compactions = events.filter((e): e is CompactionEvent => e.type === "compaction");
   const priorSummary = compactions.length > 0 ? compactions[compactions.length - 1].summary : undefined;
-  const conversation = serializeConversation(compressedEvents, config.toolResultTruncateChars);
+  // M2b：摘要输入的工具结果走类型化整形（同一份规则表 §6.2/§7.4）
+  const callName = new Map<string, string>();
+  const callArgs = new Map<string, Record<string, unknown>>();
+  for (const e of events) {
+    if (e.type === "tool_call") {
+      callName.set(e.id, e.name);
+      callArgs.set(e.id, e.args);
+    }
+  }
+  const conversation = serializeConversation(
+    compressedEvents,
+    config.toolResultTruncateChars,
+    (callId) => callName.get(callId),
+    (callId) => callArgs.get(callId),
+  );
   const prompt = BUILTIN_PROMPTS["/compact"];
 
   // 降级链：失败退避重试 1 次；三闸逐把（空 / 超帽 / 膨胀）

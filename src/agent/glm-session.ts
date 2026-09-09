@@ -6,6 +6,8 @@ import { isSideEffectTool, type PermissionMode } from "../permissions";
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "../providers/glm";
 import type { ModelOutput, Provider } from "../providers";
 import { projectContext } from "./context";
+import { computePrune } from "./prune";
+import { createMapBuilder, type MapBuilder } from "./map/build";
 import {
   DEFAULT_COMPACTION_CONFIG,
   CompactionCoordinator,
@@ -230,22 +232,66 @@ export interface GlmSessionCompaction {
 }
 
 /** 会话型 provider：队列耗尽且上一轮含 tool_call 时重建历史再要下一轮；纯文本回复 = 任务结束。
- *  M1d：每次组装前做双条件触发检查——命中即压缩（compaction 事件落盘）再重组装（fresh start）。 */
+ *  M1d：每次组装前做双条件触发检查——命中即压缩（compaction 事件落盘）再重组装（fresh start）。
+ *  M2b：组装投影叠加 prune 类型化裁剪（§7.4，本地零 LLM）+ 符号地图注入（§6.4，指纹缓存；
+ *  两者任一异常静默降级为无裁剪/无地图，绝不阻断 loop）。 */
 export function createGlmSessionProvider(
   logPath: string,
-  opts: { system?: string; tools?: GlmToolSpec[]; compaction?: GlmSessionCompaction } = {},
+  opts: {
+    system?: string;
+    tools?: GlmToolSpec[];
+    compaction?: GlmSessionCompaction;
+    /** M2b：符号地图构建器（缺省 = 自建一个；workspace 从 M2B_WORKSPACE env 或 process.cwd()）。 */
+    mapBuilder?: MapBuilder;
+    /** M2b：地图工作区（缺省 M2B_WORKSPACE env 或 process.cwd()）。 */
+    workspace?: string;
+    /** M2b：地图开关（缺省开；单测/暗卷可关）。 */
+    map?: boolean;
+  } = {},
 ): Provider {
   let queue: AgentEvent[] = [];
   let lastHadToolCalls: boolean | null = null; // null = 尚未请求过
+  let round = 0; // 注入轮次（地图每 N 轮重算用）
   const coordinator = opts.compaction
     ? new CompactionCoordinator({
         config: opts.compaction.config,
         summarizer: opts.compaction.summarizer ?? (process.env.M0_API_KEY ? createGlmSummarizer() : undefined),
       })
     : null;
+  const mapBuilder = opts.map === false ? null : opts.mapBuilder ?? createMapBuilder();
+  const workspace = opts.workspace ?? process.env.M2B_WORKSPACE ?? process.cwd();
   const assemble = async (): Promise<{ events: AgentEvent[]; history: ReturnType<typeof projectContext> }> => {
     const events = await replay(logPath);
-    return { events, history: projectContext(events) };
+    // M2b prune：本地计算裁剪投影（异常静默 → 无裁剪）
+    let replacements: Map<number, string> | undefined;
+    try {
+      const outcome = computePrune({ events });
+      if (outcome.why === "saved" && outcome.replacements.size > 0) replacements = outcome.replacements;
+    } catch (err) {
+      console.debug("[prune] 计算失败，本轮跳过裁剪:", err instanceof Error ? err.message : String(err));
+    }
+    return { events, history: projectContext(events, replacements) };
+  };
+  // M2b 地图：上下文文件 = 最近 2 个 user_message 里提到的 workspace 相对路径 + 最近 read/edit 的文件
+  const contextFilesFromEvents = (events: AgentEvent[]): string[] => {
+    const out = new Set<string>();
+    for (let i = events.length - 1; i >= 0 && out.size < 8; i--) {
+      const e = events[i];
+      if (e.type === "tool_call" && (e.name === "read_file" || e.name === "edit_file" || e.name === "write_file")) {
+        const p = e.args.path;
+        if (typeof p === "string") out.add(p);
+      } else if (e.type === "user_message") {
+        for (const m of e.content.match(/[\w./-]+\.[a-z]{1,5}/g) ?? []) out.add(m);
+      }
+    }
+    return [...out];
+  };
+  const mentionedFromEvents = (events: AgentEvent[]): string[] => {
+    const lastUser = [...events].reverse().find((e) => e.type === "user_message");
+    if (!lastUser || lastUser.type !== "user_message") return [];
+    const idents = new Set<string>();
+    for (const m of lastUser.content.match(/[A-Za-z_][A-Za-z0-9_]{3,}/g) ?? []) idents.add(m);
+    return [...idents];
   };
   return {
     async next(): Promise<ModelOutput | null> {
@@ -270,6 +316,26 @@ export function createGlmSessionProvider(
       }
       const msgs: GlmMessage[] = [];
       if (opts.system) msgs.push({ role: "system", content: opts.system });
+      // M2b 符号地图：仅首轮（历史尚短）注入；异常静默跳过（§6.4 失败降级）
+      if (mapBuilder && history.length <= 2) {
+        try {
+          const built = await mapBuilder.build({
+            workspace,
+            mentionedIdents: mentionedFromEvents(events),
+            contextFiles: contextFilesFromEvents(events),
+            maxInputTokens: 128_000,
+            nowRound: round++,
+          });
+          if (built.text) {
+            msgs.push({
+              role: "system",
+              content: "[符号地图] 仓库符号索引（def/ref 排名，预算内渲染；用于先看仓库结构再探索）：\n" + built.text,
+            });
+          }
+        } catch (err) {
+          console.debug("[map] 注入失败，静默跳过:", err instanceof Error ? err.message : String(err));
+        }
+      }
       for (const m of history) msgs.push(m as unknown as GlmMessage);
       queue = [];
       for await (const e of streamGlm(msgs, {}, opts.tools)) queue.push(e);

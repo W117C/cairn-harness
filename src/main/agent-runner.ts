@@ -8,6 +8,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runLoop } from "../agent/loop";
 import { runCompaction, createMockSummarizer, compactionCardPayload } from "../agent/compaction";
+import { buildMap } from "../agent/map/build";
+import { computePrune } from "../agent/prune";
 import { createGlmSummarizer } from "../agent/glm-session";
 import { ClarifyGate, PlanGate } from "../agent/gates";
 import { createVerifyHook, defaultExec, type ExecFn } from "../agent/verify";
@@ -352,6 +354,33 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     if (process.env.M1D_COMPACTION_DEMO === "1") {
       const res = await compactSessionLog(opts.logPath, pipeline);
       if (!res.ok) console.warn("[compaction] 演示通道压缩未发生:", res.error);
+    }
+    // M2b 演示通道：M2B_MAP_DEMO=1 时对本次事件流跑真实 buildMap + computePrune，
+    // 结果以 tool_result 气泡上屏（renderer 零改动；M2A_LSP_DEMO 同族）。缺省零行为。
+    // M2B_MAP_WORKSPACE 可指定地图扫描工作区（缺省本次 run 的工作区）。
+    if (process.env.M2B_MAP_DEMO === "1") {
+      try {
+        const events2 = await replay(opts.logPath);
+        const built = await buildMap({
+          workspace: process.env.M2B_MAP_WORKSPACE ?? opts.workspace,
+          maxInputTokens: 128_000,
+          nowRound: 0,
+        });
+        const pruned = computePrune({ events: events2 });
+        const body =
+          "[符号地图] " +
+          (built.ok && built.text
+            ? `token=${String(built.tokens)} 文件=${String(built.parsed + built.fromTagsCache)}\n${built.text}`
+            : "构建失败（静默降级为无地图）" + (built.error ? "：" + built.error : "")) +
+        "\n\n[prune] " +
+          (pruned.why === "saved"
+            ? `裁剪 ${String(pruned.replacements.size)} 条旧工具结果，省 ${String(pruned.savedTokens)} token（原文可从附件目录回取）`
+            : `未触发（${pruned.why}）`);
+        await pipeline({ type: "tool_call", id: "m2b-map-demo", name: "read_file", args: { path: "(符号地图演示)" } });
+        await pipeline({ type: "tool_result", callId: "m2b-map-demo", ok: true, output: body });
+      } catch (err) {
+        console.warn("[map] 演示通道失败:", err instanceof Error ? err.message : String(err));
+      }
     }
   } finally {
     session = null;

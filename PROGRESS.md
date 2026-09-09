@@ -373,3 +373,36 @@
 - 坑二十四：@vscode/ripgrep 被打进 Electron main bundle 后，其平台二进制 require.resolve 相对包内 __dirname 解析失败（「Could not find @vscode/ripgrep-darwin-arm64」，panels-check B1 抓到）→ src/tools/ripgrep.ts 改 createRequire(import.meta.url) 运行时解析真实 node_modules（懒 + 缓存），不动 electron.vite.config.ts（白名单外）。
 - 坑二十五：jsonrpc writer 在进程死后 write 返回无消费者的 rejected Promise（onError 只管 error 事件）→ write 层 .catch 吞掉 + fail 路径 conn.dispose()，unhandled rejection 归零。
 - 坑二十六：panels-check 重跑会覆盖 docs/m1e-*.png（B 阶段截图副作用）→ 本轮 git checkout -- 还原 M1e 交付物，后续轮次跑 panels-check 后需同样检查。
+
+## M2b：符号地图 + prune 类型化裁剪（本轮 goal）
+
+### 理解的目标 / 顺序 / 最大风险（≤10 行）
+- 目标：两件省 token 的事——①符号地图（aider repo map TS 移植）：tree-sitter 四语言抽 def/ref → 加权图 → 个性化 PageRank → 1024 token 预算渲染，先看「仓库里有什么」；②prune 类型化裁剪（OC 参数）：组装期本地把旧工具结果按类型压掉（40k 保护区/20k 最小修剪/最近 2 轮免剪），prune 先降峰、摘要兜底。
+- 顺序：任务0 基线（十二道门绿 test=149）→ 1 解析层 → 2 图与排名 → 3 渲染与预算 → 4 缓存与注入 → 5 失败降级 → 6 prune 执行器 → 7 类型化规则 → map-check/prune-check 明卷 → 反向验证（预算上限摘除红→绿；免剪名单清空红→绿）→ 截图 → 收口提交。
+- 风险①：web-tree-sitter 被 electron-vite 打进 main bundle 后 wasm 路径解析会重蹈坑二十四 → 沿用 createRequire(import.meta.url) 运行时解析。
+- 风险②：renderer 白名单外 → 地图上屏走 agent-runner 演示通道（M2B_MAP_DEMO，M1E_INJECT_ASK 先例）：真实 buildMap 渲染结果以 tool_result 气泡呈现，零 renderer 改动。
+- 风险③：prune 是投影不是事件——projectContext 增可选 replacements 参数（缺省零行为），纯函数与「事件流零删改」不破；被裁原文写会话附件目录。
+- 风险④：地图扫描仓库噪音（oh-src/node_modules）→ rg --files 同款排除 + 文件数帽，超帽取 mtime 最新。
+
+### 任务 0 基线（2026-09-10 实测）
+- 十二道门一条链 CHAIN_EXIT=0；test = 23 files / 149 passed / skipped 0（M2a 收口基线）。
+- web-tree-sitter@0.25.10 + tree-sitter-wasms@0.1.13 按领导拍板版本重装（package.json +2 deps）；wasm 加载与 Query 抽取探针复测通过（hasError=false，def/ref 双 capture）。
+
+### 任务结果（全部完成，实测）
+- **任务 1 解析层**（src/agent/map/parse.ts）：四语言 grammar 懒加载 + 缓存；.scm 模式池按语言取交集编译（单模式不兼容静默跳过，避免一处 Bad node name 炸整语言——0.25.10 各 grammar 节点类型有差异）；单文件 tags（名字/def|ref/1-based 行号）。单测 3 条：四语言各抽到 def+ref / 语法错误文件返回空 tags 不抛 / 行号 1-based 指向声明与引用。
+- **任务 2 图与排名**（src/agent/map/rank.ts）：自实现邻接表 + aider 边权（mul·√num_refs，mentioned ×10 / 上下文文件 ×50 / 长名≥8 ×10 / 下划线 ×0.1 / 定义点>5 ×0.1，def-only 自环 0.1）+ 个性化 PageRank 幂迭代（dangling 质量 personalization 摊回，L1 差 < eps 停，迭代次数可观测）。单测 5 条：边权随 num_refs 单调（√4=2×√1）/ personalization 让被提及标识符排名上升 / 收敛判定有效（eps 放宽更早停、结果确定）/ 五条 mul 规则逐条验证 / 自环与空图。
+- **任务 3 渲染与预算**（src/agent/map/render.ts）：按文件聚合 + 树形缩略（文件头 + │ 行号 种类 名字）+ 单行截断 100 字符；预算二分（默认 1024，夹 [1024,4096]，上限=maxInput/8，pct_err<0.15 早停）。token 复用 compaction 的 estimateTokens（chars/4，零 tokenizer 依赖）。
+- **任务 4+5 缓存/注入/降级**（src/agent/map/build.ts）：rg --files 扫描（gitignore + 噪音排除，同 glob 口径）→ 源码后缀过滤 → mtime 降序 400 文件帽；per-file tags 按 {mtime,size} 缓存于应用数据目录（M2B_TAGS_DIR 可覆盖；用户仓库零缓存文件）；渲染按（文件集指纹+mentioned+预算）内存缓存，指纹不变复用、每 N 轮（缺省 10）重算；任何异常 → ok:false + 空文本静默降级（error 字段留诊断，不进上下文）。单测 4 条：未改文件缓存命中且逐字相同 / 改一个文件重算且结果变化 + 磁盘 {mtime,size} 键控生效 / 坏 grammar 静默降级（ok=false 空地图不抛）/ 坏工作区不抛。
+- **任务 6 prune**（src/agent/prune.ts）：保护区 40k（从最新回退）+ 最小修剪 20k + 最近 2 轮免剪；免剪名单 skill/remember/memory（工具名配置）+ 固定回注（user_message）+ 卡片投影（clarify/plan/verify）+ grep/glob/lsp（已是整形产物）+ 错误结果；打桩文案 [Old tool result content cleared]；被裁原文写会话附件目录可回取（writePruneAttachments）。产出 replacements Map<事件id, 占位文本>，由 projectContext 可选参数消费（事件流零删改）。
+- **任务 7 类型化规则**（src/agent/shape.ts，与 §6.2 共用一份）：代码→头部+签名行、日志→错误行(≤10)+尾部、文档→大纲+开头；进摘要输入一律 summaryTruncate 2k（接进 compaction.serializeConversation，runCompaction 传 tool 名/args 映射）。单测：三类各一条 + 2k 截断。
+- **注入接线**（src/agent/glm-session.ts）：assemble() 叠加 prune 投影（异常静默跳过）；首轮（history ≤2 条）注入符号地图 system 消息（上下文文件=最近 read/edit 路径 + user 消息里的路径，mentioned=最近 user 的长标识符）；两处都 catch → 退回原路径，绝不阻断 loop。gate-check（暗卷通道同一 provider）实测全绿。
+- **map-check / prune-check**（scripts/）：pnpm map-check 全绿——真实本仓库 129 文件，①默认预算渲染 token=985 ≤1024 ②预算 4096 vs 1024 输出变短 ③单行≤100 ④未改文件 tags 全命中(129/129)+渲染逐字相同 ⑤改 rank.ts → parsed=1 + 结果变化 ⑥用户仓库无缓存文件+tmp 目录缓存 129 条。pnpm prune-check 全绿——①被剪量 25591 ≥20k ②最近 2 轮（第 2、3 轮 5 条）全部保留 ③skill/grep/错误/卡片投影/user_message 不被剪，唯一被剪=旧轮普通 read ④原文 102400 字节从附件目录读回逐字一致 ⑤投影打桩生效+事件流零删改 ⑥投影后上下文 451933→349566 字符。
+- **反向验证（红→绿，判据真实可红）**：①MAP_TOKENS_DEFAULT 1024→100_000（预算默认摘除）→ pnpm map-check 红：「❌ ①渲染结果 token ≤ 1024（tokens=3743）」「❌ ②改小预算时输出确实变短」，map-check 失败 2 项退出 1；还原后全绿。②exemptTools 清空 → pnpm prune-check 红：「❌ ③免剪名单：skill 内容不被剪（pruned=[3,5]）」等 3 项失败退出 1；还原后全绿。
+- **半托项 docs/m2b-map.png**：M2B_MAP_DEMO=1 演示通道（agent-runner，M2A_LSP_DEMO 同族，缺省零行为）——真实 buildMap+computePrune 结果以 tool_result 气泡上屏；M2B_MAP_WORKSPACE 指定扫描工作区。CDP 驱动真实发送+批准点击，截到「[符号地图] token=970 文件=129」真地图气泡（2560×1600）。截图脚本用后即删。
+- **收口基线**：test = 28 files / 173 passed / skipped 0（149→173，+24）；frozen sha256 3/3 一致；用户仓库无地图缓存文件。
+
+### M2b 新增坑记录
+- 坑二十七：web-tree-sitter 0.25 的合并 query 一个模式不兼容整 query 抛 QueryError（Bad node name / Bad pattern structure）→ 模式池逐条试编译取有效并集。
+- 坑二十八：electron-vite 打包后 Parser.init 缺省从 bundle 同目录找 tree-sitter.wasm → init({ locateFile }) 运行时 require.resolve("web-tree-sitter/")（坑二十四同族）。
+- 坑二十九：rg --files 输出绝对路径，glob.ts 靠 resolveInWorkspace 收敛、map 扫描必须显式 relative() 转相对，否则后缀过滤全空。
+- 坑三十：prune「最近 2 轮免剪」边界 = 从尾数第 2 条 user_message 的位置（免剪区含它），错一位会把全部轮次判进免剪区。

@@ -40,8 +40,13 @@ export function excludedIds(events: AgentEvent[]): Set<number> {
   return out;
 }
 
-/** 组装投影：events（内存态或 replay 产物）→ 消息序列。 */
-export function projectContext(events: AgentEvent[]): ContextMessage[] {
+/** 组装投影：events（内存态或 replay 产物）→ 消息序列。
+ *  M2b：replacements（事件 id → 替换文本）= prune 类型化裁剪投影（§7.4）——
+ *  只动 tool_result 的 content，不动消息结构；缺省空 = 零行为（既有路径字节不变）。 */
+export function projectContext(
+  events: AgentEvent[],
+  replacements?: Map<number, string>,
+): ContextMessage[] {
   const excluded = excludedIds(events);
   // 最新一份 compaction（滚动合并：其摘要已整合旧摘要，旧摘要不再单独注入）
   let latest: (typeof events)[number] | null = null;
@@ -95,7 +100,8 @@ export function projectContext(events: AgentEvent[]): ContextMessage[] {
       });
     } else if (e.type === "tool_result") {
       flushDeltas();
-      msgs.push({ role: "tool", tool_call_id: e.callId, content: e.output });
+      const pruned = replacements?.get(id);
+      msgs.push({ role: "tool", tool_call_id: e.callId, content: pruned ?? e.output });
     }
     // clarify_requested / plan_proposed / plan_approved / verify_result / usage / session_meta：
     // 语义已在 tool_result / 卡片侧，模型上下文不需要（与既有 buildGlmHistory 口径一致）

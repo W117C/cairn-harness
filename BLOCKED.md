@@ -2,6 +2,12 @@
 
 无阻塞事项。
 
+## M2b 轮新增待裁决（2026-09-10）
+
+无阻塞事项。全部 7 项任务 + 反向验证①②红→绿 + 十二道门 + map-check/prune-check + 半托截图（docs/m2b-map.png）完成。备案两点（非阻塞）：
+1. **web-tree-sitter@0.25.10 无 @types**（DefinitelyTyped 无配套包）：parse.ts 以最小结构类型（WtsModule 局部 interface + 断言）声明用到的 API 面；tsc 全绿，无 any 泄漏到图/渲染层。
+2. **M2B_MAP_DEMO 演示通道**（沿 M2A_LSP_DEMO 同族备案）：env 门控（缺省零行为）留在 src/main/agent-runner.ts（+M2B_MAP_WORKSPACE 覆盖扫描工作区）；若领导认为应删，删该段即可，验收链不依赖它。截图脚本（.tmp/m2b-screenshot.mjs）用后已删。
+
 ## M2a 轮新增待裁决（2026-09-10）
 1. **src/permissions 的三行分类改动**：界限原文把 src/permissions/** 列为「只读（只调用）」，但 M2a 新增 edit_file（字符串替换式写工具）必须在权限层有分类——isSideEffectTool（autonomy.ts + index.ts）不认它则 read-only 档可写、方案门失效；toolTableFor 不列它则 read-only 档工具表缺工具。已按最小改动执行（3 处分类行 + risk.ts 一条 medium 评级），全部在「src/agent/**、src/main/**、src/tools/**、src/permissions/**」的字面交集争议内，如实备案：若判违规可整体 revert 这 3 处，代价是 edit_file 退化为 read-only 档可写（建议追加到白名单而不是 revert）。
 2. **M0 旧用例更新**：tests/tools.test.ts「60KB 单行→已截断」与新规格「行截断 2000 先于 50KB 字节帽」冲突（单行 60KB 经行帽输出 ~2KB，不再触发字节帽）——已按任务书规格拆成两层断言（单行触发行截断标记、多行 90KB 触发 50KB 帽），断言强度只增不减（新增行截断与字节两层各自独立验证）。属规格演进的测试同步，非放宽。
