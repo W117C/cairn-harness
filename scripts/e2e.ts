@@ -2,7 +2,7 @@
 // 自行断言：①事件流含 tool_call(write_file) 与 tool_result(run_shell)
 //          ②靶子从 1 失败 → 0 失败  ③判卷文件 sha256 与冻结基线一致。
 // 任一断言失败 → 退出码非 0。
-import { cp, rm } from "node:fs/promises";
+import { cp, mkdir, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runLoop } from "../src/agent/loop";
@@ -14,7 +14,7 @@ import { TOOLS } from "../src/tools";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const APP = join(ROOT, "fixtures", "todo-app");
 const MOCK = join(ROOT, "fixtures", "mock");
-const EVENT_LOG = join(ROOT, "fixtures", "e2e-log.jsonl");
+const EVENT_LOG = join(ROOT, ".tmp", "e2e-log.jsonl"); // 运行产物，不进 git
 
 let failures = 0;
 function assert(cond: boolean, label: string): void {
@@ -57,6 +57,7 @@ assert(before.failed === 1 && !before.exitOk, "靶子开工状态 = 1 failed（p
 
 // ---- 闭环：事件流 → mock 模型 → 工具 → 事件流 ----
 console.log("[e2e] 运行 agent loop（mock provider, auto 档, workspace=fixtures/todo-app）");
+await mkdir(join(ROOT, ".tmp"), { recursive: true });
 await rm(EVENT_LOG, { force: true }); // 每轮 e2e 从空日志开始
 const events = createEventLog(EVENT_LOG);
 const provider = createMockProvider(join(MOCK, "todo-fix.jsonl"));
