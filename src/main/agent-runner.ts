@@ -47,7 +47,22 @@ import { createMockProvider } from "../providers/mock";
 import { streamGlm } from "../providers/glm";
 import type { ModelOutput, Provider } from "../providers";
 import { TOOLS, type Tool, type ToolResult } from "../tools";
+import { remember } from "../tools/remember";
 import type { ToolName } from "../tools/base";
+import {
+  initMemoryHome,
+  globalMemoryDir,
+  listTopics,
+  loadExternalRefState,
+  projectMemoryDir,
+  readTextOrNull,
+  deleteTopic,
+  type TopicEntry,
+} from "../agent/memory/store";
+import { runSessionEndDistill } from "../agent/memory/distill";
+export { initMemoryHome } from "../agent/memory/store"; // shell 启动时注入 userData/memory
+import { extractExternalRefs } from "../agent/memory/inject";
+import type { MemoryLayerSnapshot, MemorySnapshot } from "./ipc-protocol";
 import { AskGate } from "./ask-gate";
 import type { AskOutcomePayload, AskPayload, RunRequest } from "./ipc-protocol";
 import { checkSandbox, runInSandbox, type SandboxStatus } from "./sandbox";
@@ -76,6 +91,8 @@ interface Session {
 }
 // 单窗口单任务：UI 串行发 run；ipc:check 亦串行。会话状态仅存活于一次 runAgent。
 let session: Session | null = null;
+// M2d：最近一次 run 的工作区（记忆快照的项目层根；缺省 = 默认靶工作区）。
+let lastWorkspace: string | null = null;
 
 // 三门通道（模块级，仿 appAskGate）：clarify 表单提交 / plan 批准决议
 const appClarifyGate = new ClarifyGate();
@@ -93,7 +110,7 @@ export function setAppHooks(h: Hooks): void {
   Object.assign(hooks, h);
 }
 
-function denied(name: ToolName, mode: PermissionMode, why: string): ToolResult {
+function denied(name: ToolName | string, mode: PermissionMode, why: string): ToolResult {
   return { ok: false, output: "[permission denied] " + name + " 在 " + mode + " 档下被门拒绝（" + why + "）" };
 }
 
@@ -243,6 +260,29 @@ export async function handleCompact(
 }
 
 let installed = false;
+/** M2d：remember 门语义（可测工厂）：方案门写禁 / read-only 拒 / default 逐次审批 / auto 放行。
+ *  §8.1.4「remember 属写动作走权限门」；无权限 → ok:false 且不落盘。 */
+export function createGatedRemember(deps: {
+  getMode(): PermissionMode;
+  isPlanBlocked(): boolean;
+  /** default 档的审批口；缺省 = 非交互 fail-closed 拒绝。 */
+  getAsk(): ((args: Record<string, unknown>) => Promise<boolean>) | undefined;
+}): Tool {
+  return {
+    name: "remember",
+    async run(args, ctx) {
+      if (deps.isPlanBlocked()) return denied("remember", deps.getMode(), "存在未批准 plan（方案门：先批后写）");
+      const mode = deps.getMode();
+      if (mode === "read-only") return denied("remember", mode, "只读档拒写向工具");
+      if (mode === "default") {
+        const ask = deps.getAsk();
+        if (!ask) return denied("remember", mode, "非交互模式（fail-closed）");
+        if (!(await ask(args))) return denied("remember", mode, "未获批准");
+      }
+      return await remember.run(args, ctx);
+    },
+  };
+}
 /** 一次性把 TOOLS 里的写工具换成带门 + 沙箱的包装（runLoop 直接读 TOOLS，无注入点）。 */
 export function installAppTools(): void {
   if (installed) return;
@@ -250,6 +290,22 @@ export function installAppTools(): void {
   TOOLS.write_file = gatedTool("write_file", TOOLS.write_file);
   TOOLS.edit_file = gatedTool("edit_file", TOOLS.edit_file);
   TOOLS.run_shell = gatedTool("run_shell", TOOLS.run_shell);
+  // M2d：remember 运行时注入（静态注册表冻结为 9 工具，tools-check 判据）
+  (TOOLS as unknown as Record<string, Tool>).remember = createGatedRemember({
+    getMode: () => session?.autonomy.mode ?? "default",
+    isPlanBlocked: () => {
+      const ps = getPlanState();
+      return ps.proposed && !ps.approved;
+    },
+    getAsk: () => {
+      const s = session;
+      if (!s?.askGate) return undefined;
+      return async (args: Record<string, unknown>) => {
+        const r = await s.askGate!.request("remember", args, { reason: "记忆写入（默认档逐次审批）", risk: "low" });
+        return r.outcome === "approved";
+      };
+    },
+  });
 }
 
 const appAskGate = new AskGate({
@@ -327,6 +383,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       sandboxAvailable: opts.sandbox ? opts.sandbox.available : null,
     }),
   };
+  lastWorkspace = opts.workspace;
   try {
     // M1e 会话模式：sessionId 在场 = 会话列表里的既有会话，append（JSONL 即会话，重放无损）；
     // 无 sessionId = 旧行为（每轮新日志，e2e/ipc-check 等脚本路径字节不变）。
@@ -380,6 +437,34 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       } catch (err) {
         console.warn("[map] 演示通道失败:", err instanceof Error ? err.message : String(err));
       }
+    }
+    // M2d 双轨②：会话结束自动沉淀（设置页可关默认开；read-only 档不触发）。
+    // 写入即事件：remember 的 tool_call/tool_result 照常落事件流；脚本型 provider 剧本耗尽后产出为空 = 判无。
+    try {
+      const autoMemory = (await store().get()).autoMemory;
+      const outcome = await runSessionEndDistill({
+        enabled: autoMemory && opts.mode !== "read-only",
+        logPath: opts.logPath,
+        workspace: opts.workspace,
+        provider: createProvider(opts.message),
+        rememberTool: remember, // 合并审批即本轮权限门（未加门的工具本体）
+        emit: pipeline,
+        ...(opts.askGate
+          ? {
+              mergedApproval: async () => {
+                const r = await opts.askGate!.request(
+                  "remember",
+                  { trigger: "session_end_distill" },
+                  { reason: "会话结束自动沉淀（合并审批：批准=本轮全部记忆写入，拒绝=全部不写）", risk: "low" },
+                );
+                return r.outcome === "approved";
+              },
+            }
+          : {}),
+      });
+      if (outcome.kind !== "disabled") console.log("[memory] 会话结束沉淀:", JSON.stringify(outcome));
+    } catch (err) {
+      console.warn("[memory] 沉淀轮失败:", err instanceof Error ? err.message : String(err));
     }
   } finally {
     session = null;
@@ -447,9 +532,63 @@ export async function handlePlanDecide(approved: boolean, callId?: string): Prom
   return ok;
 }
 
+// ---- M2d：记忆快照（getState 透传）+ 记忆删除（仅用户；IPC 通道 main 侧就绪，preload 暴露见 BLOCKED 备案）----
+
+async function memoryLayerSnapshot(dir: string, scanWorkspace: string | null): Promise<MemoryLayerSnapshot> {
+  const state = await loadExternalRefState();
+  const index = await readTextOrNull(dir + "/MEMORY.md");
+  const topics: TopicEntry[] = await listTopics(dir);
+  // 外部引用扫描：索引 + 全部 topic 正文 + （项目层）根三文件
+  const texts: string[] = [];
+  if (index) texts.push(index);
+  for (const t of topics) {
+    const body = await readTextOrNull(dir + "/" + t.topic + ".md");
+    if (body) texts.push(body);
+  }
+  if (scanWorkspace) {
+    for (const f of ["ARCHITECTURE.md", "DECISIONS.md", "preferences.md"]) {
+      const body = await readTextOrNull(scanWorkspace + "/.agent/" + f);
+      if (body) texts.push(body);
+    }
+  }
+  const found = new Set<string>();
+  if (scanWorkspace) for (const t of texts) for (const r of extractExternalRefs(t, scanWorkspace)) found.add(r);
+  return {
+    path: dir,
+    index,
+    topics,
+    pendingExternalRefs: [...found].filter((r) => !state.approved.includes(r) && !state.declined.includes(r)),
+  };
+}
+
+async function memorySnapshot(): Promise<MemorySnapshot> {
+  const ws = lastWorkspace;
+  return {
+    project: await memoryLayerSnapshot(ws ? projectMemoryDir(ws) : projectMemoryDir(process.cwd()), ws),
+    global: await memoryLayerSnapshot(globalMemoryDir(), ws),
+  };
+}
+
 /** IPC "agent:state" 的处理函数。 */
-export function handleAgentState(): { sandbox: SandboxStatus } {
-  return { sandbox: sandboxState };
+export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memory?: MemorySnapshot }> {
+  let memory: MemorySnapshot | undefined;
+  try {
+    memory = await memorySnapshot();
+  } catch {
+    memory = undefined; // 快照失败不阻塞 state（沙箱状态是主应答）
+  }
+  return { sandbox: sandboxState, memory };
+}
+
+/** IPC "agent:memory-delete"：用户经记忆面板显式删除（§8.1.7：删除仅用户，模型无删除权）。 */
+export async function handleMemoryDelete(scope: "project" | "global", topic: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const dir = scope === "project" ? projectMemoryDir(lastWorkspace ?? process.cwd()) : globalMemoryDir();
+    const ok = await deleteTopic(dir, topic);
+    return ok ? { ok: true } : { ok: false, error: "topic 不存在: " + topic };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 // ---- M1e：settings 存储 + 会话目录 + Provider 只读信息 ----

@@ -42,7 +42,8 @@ export type ToolName =
   | "verify";
 
 export interface Tool {
-  name: ToolName;
+  // M2d：name 是展示/查表字符串（注册表键域仍是 ToolName；remember 等运行时注入工具不进静态键域）
+  name: ToolName | string;
   run(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult>;
 }
 

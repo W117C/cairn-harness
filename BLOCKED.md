@@ -99,3 +99,9 @@
 ## M1e 轮新增待裁决（2026-09-09）
 
 无阻塞事项。全部 7 项任务 + 反向验证红→绿 + 十一道门（十道门 + panels-check）完成。过程中发现并修复的两个实现 bug（右栏开关未写 open 映射、panels-check 曾测 out/ 旧 bundle）见 PROGRESS.md「任务结果」条目——均属代码缺陷而非判据缺陷，不触发换判据。
+
+## M2d 轮新增待裁决（2026-09-10）
+
+1. **src/preload/ 不在 M2d 白名单**，两处 renderer→main 通道未接线（main 侧已就绪）：① `AgentApi.deleteMemory?`（ipc-protocol 已声明 optional，main handler `agent:memory-delete` 已挂）——记忆面板删除按钮当前禁用并注明「待 preload 接线」；记忆快照经 getState 透传不受影响。② 外部引用「首次批准对话框」当前为 main 侧回调通道（memoryLayerSnapshot fail-closed 停用 + external-refs.json 落账），GUI 批准入口等 preload 白名单放开后一行接通（M1d compact 同款先例）。均不属改判据，仅列清地界。
+2. **反向验证摘除的判据补强**：原 memory-check 只有「顶层 scope 合法 + metadata 混入」用例（B5），摘除顶层检查（改 metadata 兜底）不会红——因顶层在场时本来就赢。已补 B5b「无顶层只塞 metadata.scope」用例后反向验证红→绿成立（判据加严，非放宽）。
+3. **BLOCKED.md 无其他阻塞**。十六道门 + memory-check 全绿后随本轮 commit 提交。

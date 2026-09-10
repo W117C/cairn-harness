@@ -1,0 +1,90 @@
+// M2d 会话结束自动沉淀（§8.1.4 双轨触发②）：hook 提示模型按四类型检查本轮是否有值得沉淀项，
+// 模型自行调 remember 或判无。写入即事件：remember 的 tool_call/tool_result 照常落事件流（审计），
+// 沉淀指令只在 provider 调用时以 user 角色出现，不落 user_message 事件（不污染固定回注名单）。
+// 合并审批：整个沉淀轮只发一次审批请求——批准 = 本轮全部 remember 写入放行，拒绝 = 全部不写
+//（防审批疲劳，§10.4 scope 机制复用）。「调用失败」与「无内容可沉淀」显式分型（mem0 main.py:963-969）。
+import { replay, type AgentEvent } from "../../events";
+import { projectContext, type ContextMessage } from "../context";
+import type { Provider } from "../../providers";
+import type { Tool, ToolContext } from "../../tools/base";
+
+/** 沉淀指令（§6.5 雏形：四类型检查 + skip 纪律 + 唯一写入口）。 */
+export const DISTILL_INSTRUCTION = [
+  "[系统操作·会话结束沉淀检查] 本任务是跨会话记忆沉淀，不是用户对话；请按以下纪律检查本轮会话是否有值得写入长期记忆的内容：",
+  "1. 四类型：user（用户角色/偏好）、feedback（用户纠正）、project（代码/git 推导不出的进行中事项）、reference（外部信息源位置）。",
+  "2. skip 纪律：能从代码/git 历史推导的内容不入记忆；任务进度/计划不是记忆（那是事件流与 plan 卡）。",
+  "3. 写入只经 remember 工具（scope=project 写项目层、scope=global 写用户全局；kind=memory 必带 type 与 topic）。",
+  "4. 禁止把密钥/API key/凭据写入记忆。",
+  "5. 没有值得沉淀的内容就只回答「无」三个字，不要调用工具。",
+].join("\n");
+
+export type DistillOutcome =
+  | { kind: "disabled" } // 开关关闭：完全不触发（无 provider 调用、无审批、无写入）
+  | { kind: "no_content" } // 模型判无（或会话为空）：合法终态，不是失败
+  | { kind: "saved"; writes: number; asks: number }
+  | { kind: "failed"; why: string }; // provider 异常等调用失败：显式分型，不静默
+
+export interface DistillOptions {
+  enabled: boolean;
+  logPath: string;
+  workspace: string;
+  /** 沉淀轮 provider（与会话同源；脚本耗尽后产出为空 = 判无）。 */
+  provider: Provider;
+  /** 未加门的 remember 工具（合并审批本身就是本轮的权限门）。 */
+  rememberTool: Tool;
+  emit: (e: AgentEvent) => Promise<void>;
+  /** 合并审批口：整个沉淀轮只应请求一次；返回是否批准。缺省 = fail-closed 拒绝。 */
+  mergedApproval?: () => Promise<boolean>;
+}
+
+export async function runSessionEndDistill(opts: DistillOptions): Promise<DistillOutcome> {
+  if (!opts.enabled) return { kind: "disabled" };
+  let events: Awaited<ReturnType<typeof replay>>;
+  try {
+    events = await replay(opts.logPath);
+  } catch {
+    events = [];
+  }
+  if (events.length === 0) return { kind: "no_content" };
+  const history = projectContext(events) as unknown as ContextMessage[];
+  const messages = [...history, { role: "user", content: DISTILL_INSTRUCTION }];
+  let asks = 0;
+  let writes = 0;
+  let sawRemember = false;
+  let approval: boolean | null = null;
+  const ctx: ToolContext = { workspace: opts.workspace };
+  try {
+    for await (const out of opts.provider.stream(messages as never, [])) {
+      if (out.type === "assistant_delta" || out.type === "assistant_message" || out.type === "usage") {
+        await opts.emit(out as AgentEvent);
+        continue;
+      }
+      if (out.type !== "tool_call") continue;
+      if (out.name !== "remember") {
+        await opts.emit({ type: "tool_result", callId: out.id, ok: false, output: "[distill] 沉淀轮只允许 remember 工具，" + out.name + " 已拒绝" });
+        continue;
+      }
+      sawRemember = true;
+      await opts.emit({ type: "tool_call", id: out.id, name: out.name, args: out.args });
+      if (approval === null) {
+        asks += 1;
+        approval = opts.mergedApproval ? await opts.mergedApproval() : false;
+      }
+      if (!approval) {
+        await opts.emit({ type: "tool_result", callId: out.id, ok: false, output: "[permission denied] remember 会话结束自动沉淀未获批准（合并审批一次，本轮全部拒绝）" });
+        continue;
+      }
+      try {
+        const r = await opts.rememberTool.run(out.args, ctx);
+        if (r.ok) writes += 1;
+        await opts.emit({ type: "tool_result", callId: out.id, ok: r.ok, output: r.output });
+      } catch (err) {
+        await opts.emit({ type: "tool_result", callId: out.id, ok: false, output: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  } catch (err) {
+    return { kind: "failed", why: err instanceof Error ? err.message : String(err) };
+  }
+  if (sawRemember && writes > 0) return { kind: "saved", writes, asks };
+  return { kind: "no_content" };
+}

@@ -6,7 +6,8 @@ import type { ToolName } from "../tools/base";
 
 export interface AskRequest {
   askId: string;
-  tool: ToolName;
+  // M2d：remember 等运行时注入工具不进 ToolName 静态键域，审批卡只作展示串
+  tool: ToolName | string;
   args: Record<string, unknown>;
   /** 送审原因（如「默认档逐次审批」「critical 任何档位强制审批」）。 */
   reason?: string;
@@ -46,7 +47,7 @@ export class AskGate {
 
   /** 发起一次审批；默认 60 秒无响应按拒绝。 */
   request(
-    tool: ToolName,
+    tool: ToolName | string,
     args: Record<string, unknown>,
     ctx: { reason?: string; risk?: RiskLevel; riskReasons?: string[] } = {},
   ): Promise<AskOutcomeResult> {

@@ -23,7 +23,8 @@
     "panels-check": "node --import tsx scripts/panels-check.ts",
     "tools-check": "node --import tsx scripts/tools-check.ts",
     "map-check": "node --import tsx scripts/map-check.ts",
-    "prune-check": "node --import tsx scripts/prune-check.ts"
+    "prune-check": "node --import tsx scripts/prune-check.ts",
+    "memory-check": "node --import tsx scripts/memory-check.ts"
   },
   "devDependencies": {
     "@fontsource-variable/geist": "^5.3.0",

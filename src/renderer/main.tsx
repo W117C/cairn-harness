@@ -38,12 +38,14 @@ import {
 } from "@/components/ui/sidebar";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { GitBranch, Coins, ShieldCheck, Settings as SettingsIcon, Plus, Pencil, Trash2, X } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { GitBranch, Coins, ShieldCheck, Database, Settings as SettingsIcon, Plus, Pencil, Trash2, X } from "lucide-react";
 import { resolveCard } from "./cards/registry";
 import { compactionCardPayload } from "../agent/compaction";
 import { Conversation } from "./conversation";
 import {
   diffCardsOf,
+  memoryWritesOf,
   pendingApprovalsOf,
   planStatusesOf,
   reducer,
@@ -75,6 +77,7 @@ const PANEL_ICONS: Record<PanelId, React.ReactNode> = {
   approvals: <ShieldCheck className="h-4 w-4" />,
   token: <Coins className="h-4 w-4" />,
   git: <GitBranch className="h-4 w-4" />,
+  memory: <Database className="h-4 w-4" />,
 };
 
 function short(v: unknown, max = 260): string {
@@ -297,6 +300,20 @@ function SettingsDialog({
                 </Select>
               </div>
             </section>
+            <section className="flex flex-col gap-2" data-m2d-memory-section="">
+              <div className="font-medium">记忆</div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">会话结束自动沉淀</span>
+                <Checkbox
+                  checked={settings.autoMemory}
+                  onCheckedChange={(v) => onSettings({ autoMemory: v === true })}
+                  data-m2d-auto-memory=""
+                />
+              </div>
+              <div className="text-xs text-muted-foreground">
+                开启时会话结束引导模型检查可沉淀项（合并为一次审批，拒绝则全部不写）；面板可在右栏「记忆」查看。
+              </div>
+            </section>
             <section className="flex flex-col gap-2">
               <div className="font-medium">UI</div>
               <div className="flex items-center justify-between gap-3">
@@ -503,6 +520,7 @@ function App() {
     asks: pending.map((a) => ({ askId: a.askId, tool: a.tool, args: a.args, reason: a.reason, risk: a.risk })),
     tokens,
     diffs,
+    memoryWrites: memoryWritesOf(state),
     eventCount: state.events.length,
   };
   const activePanelId = settings?.layout.activePanel ?? null;
@@ -625,7 +643,7 @@ function App() {
             if (typeof w === "number" && Number.isFinite(w)) patchLayoutDebounced({ width: Math.round(w * 10) / 10 });
           }}
         >
-          <ResizablePanel id="chat-left" defaultSize={68} minSize={40}>
+          <ResizablePanel id="chat-left" defaultSize="68%" minSize="40%">
             <div className="flex h-full flex-col">
               <header className="flex items-center gap-2 border-b px-3 py-2">
                 <SidebarTrigger />
@@ -664,9 +682,10 @@ function App() {
           <ResizableHandle withHandle />
           <ResizablePanel
             id="chat-right"
-            defaultSize={settings?.layout.width ?? 32}
-            minSize={10}
-            maxSize={70}
+            // react-resizable-panels v4：数字=像素，字符串=百分比（M1e 遗留坑：裸数字曾把右栏钳到 70px）
+            defaultSize={String(settings?.layout.width ?? 32) + "%"}
+            minSize="10%"
+            maxSize="70%"
             className={activePanelId ? "" : "hidden"}
           >
             <div className="flex h-full flex-col" data-m1e-right-panel="">

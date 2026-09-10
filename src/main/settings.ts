@@ -3,12 +3,13 @@
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
-export const PANEL_IDS = ["approvals", "token", "git"] as const;
+// M2d：第四面板 memory（两层记忆快照 + 会话内 remember 审计投影）
+export const PANEL_IDS = ["approvals", "token", "git", "memory"] as const;
 export type PanelId = (typeof PANEL_IDS)[number];
 
 export interface LayoutState {
-  /** 每面板开/关（面板注册表三类）。 */
-  open: Record<PanelId, boolean>;
+  /** 每面板开/关（缺省 false；Partial 因 panels-check 冻结字面量只写三类键，M2d 增至四类）。 */
+  open: Partial<Record<PanelId, boolean>>;
   /** 当前打开的面板（单面板制 §10.1；null = 右栏收起）。 */
   activePanel: PanelId | null;
   /** 右栏宽度（react-resizable-panels 百分比 10–70）。 */
@@ -26,11 +27,13 @@ export interface AppSettings {
   theme: ThemeSetting;
   /** 当前会话（JSONL 即会话；重启还原用）。 */
   currentSession: string | null;
+  /** M2d：会话结束自动沉淀开关（记忆面板/设置页可关，默认开，§8.1.4 双轨）。 */
+  autoMemory: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   layout: {
-    open: { approvals: false, token: false, git: false },
+    open: { approvals: false, token: false, git: false, memory: false },
     activePanel: null,
     width: 32,
   },
@@ -38,6 +41,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   safeMode: "off",
   theme: "system",
   currentSession: null,
+  autoMemory: true,
 };
 
 const PERMISSION_MODES = ["read-only", "default", "auto"] as const;
@@ -54,7 +58,12 @@ export function validateSettings(raw: unknown): AppSettings {
   if (typeof raw !== "object" || raw === null) return structuredClone(d);
   const r = raw as Record<string, unknown>;
   const layoutRaw = (typeof r.layout === "object" && r.layout !== null ? r.layout : {}) as Record<string, unknown>;
-  const open: Record<PanelId, boolean> = { ...d.layout.open };
+  const open: Record<PanelId, boolean> = {
+    approvals: d.layout.open.approvals === true,
+    token: d.layout.open.token === true,
+    git: d.layout.open.git === true,
+    memory: d.layout.open.memory === true,
+  };
   if (typeof layoutRaw.open === "object" && layoutRaw.open !== null) {
     for (const [k, v] of Object.entries(layoutRaw.open as Record<string, unknown>)) {
       if (isPanelId(k) && typeof v === "boolean") open[k] = v;
@@ -71,6 +80,7 @@ export function validateSettings(raw: unknown): AppSettings {
     safeMode: SAFE_MODES.includes(r.safeMode as SafeMode) ? (r.safeMode as SafeMode) : d.safeMode,
     theme: THEMES.includes(r.theme as ThemeSetting) ? (r.theme as ThemeSetting) : d.theme,
     currentSession: typeof r.currentSession === "string" && r.currentSession.length > 0 ? r.currentSession : null,
+    autoMemory: typeof r.autoMemory === "boolean" ? r.autoMemory : d.autoMemory,
   };
 }
 

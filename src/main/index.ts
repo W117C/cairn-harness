@@ -16,11 +16,13 @@ import {
   handleSessionList,
   handleSessionOpen,
   handleSessionRename,
+  handleMemoryDelete,
   getSettings,
   setSettings,
   initSandbox,
   initSessionsDir,
   initSettingsStore,
+  initMemoryHome,
   providerInfo,
   setAppHooks,
 } from "./agent-runner";
@@ -140,6 +142,8 @@ ipcMain.handle("agent:sessions-create", (_event, name?: string) => handleSession
 ipcMain.handle("agent:sessions-open", (_event, id: string) => handleSessionOpen(id));
 ipcMain.handle("agent:sessions-rename", (_event, oldId: string, newName: string) => handleSessionRename(oldId, newName));
 ipcMain.handle("agent:sessions-delete", (_event, id: string) => handleSessionDelete(id));
+// M2d：记忆删除（仅用户经记忆面板；模型无删除权）。preload 暴露待白名单轮接线（M1d compact 同款先例）。
+ipcMain.handle("agent:memory-delete", (_event, scope: "project" | "global", topic: string) => handleMemoryDelete(scope, topic));
 
 void app.whenReady().then(async () => {
   // 暴露完整 AX 树给系统辅助功能（System Events / VoiceOver 等）；必须在 ready 之后调用
@@ -147,6 +151,8 @@ void app.whenReady().then(async () => {
   // M1e 存储：settings 与会话目录缺省 userData；验收脚本用 M1E_SETTINGS_PATH / M1E_SESSIONS_DIR 覆盖
   initSettingsStore(process.env.M1E_SETTINGS_PATH ?? join(app.getPath("userData"), "settings.json"));
   initSessionsDir(process.env.M1E_SESSIONS_DIR ?? join(app.getPath("userData"), "sessions"));
+  // M2d：全局记忆层 = 应用数据目录下的 memory/（可配 M2D_MEMORY_HOME，测试用临时目录）
+  initMemoryHome(process.env.M2D_MEMORY_HOME ?? join(app.getPath("userData"), "memory"));
   await initSandbox(); // 先自检沙箱，renderer 首帧 getState 即拿到结论
   createWindow();
   app.on("activate", () => {

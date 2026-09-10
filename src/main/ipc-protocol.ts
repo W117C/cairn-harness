@@ -20,7 +20,8 @@ export interface RunResponse {
 }
 export interface AskPayload {
   askId: string;
-  tool: ToolName;
+  // M2d：remember 等运行时注入工具不进 ToolName 静态键域，审批卡只作展示串
+  tool: ToolName | string;
   args: Record<string, unknown>;
   /** M1c：送审原因与风险注记（审批卡必显，§11.1）。 */
   reason?: string;
@@ -36,6 +37,8 @@ export interface AskOutcomePayload {
 }
 export interface StateResponse {
   sandbox: SandboxStatus;
+  /** M2d：记忆两层快照（缺省 = 尚未初始化）。 */
+  memory?: MemorySnapshot;
 }
 
 /** M1d：手动 /compact 结果（压缩卡 payload 与 compaction-check 同源）。 */
@@ -53,6 +56,27 @@ export interface SessionInfoPayload {
   id: string;
   mtimeMs: number;
   lines: number;
+}
+
+// ---- M2d 记忆快照（getState 透传：两层记忆 + 外部引用待批清单）----
+export interface MemoryTopicPayload {
+  topic: string;
+  type: string;
+  modified: string;
+  bytes: number;
+}
+export interface MemoryLayerSnapshot {
+  /** 该层根目录（展示用绝对路径——面板向人展示，不进模型上下文）。 */
+  path: string;
+  /** MEMORY.md 索引全文（null = 尚无索引）。 */
+  index: string | null;
+  topics: MemoryTopicPayload[];
+  /** 已发现但未批准/未拒绝的工作区外 @path 引用。 */
+  pendingExternalRefs: string[];
+}
+export interface MemorySnapshot {
+  project: MemoryLayerSnapshot;
+  global: MemoryLayerSnapshot;
 }
 
 /** preload 暴露给 renderer 的 API（window.agent）。 */
@@ -80,4 +104,7 @@ export interface AgentApi {
   openSession(id: string): Promise<{ events: AgentEvent[] }>;
   renameSession(oldId: string, newName: string): Promise<{ id: string }>;
   deleteSession(id: string): Promise<{ currentSession: string | null }>;
+  /** M2d：记忆删除（仅用户经记忆面板；模型无删除权，§8.1.7）。
+   *  optional —— preload 白名单本轮未含（M1d compact 同款先例），接线后可用。 */
+  deleteMemory?(scope: "project" | "global", topic: string): Promise<{ ok: boolean; error?: string }>;
 }

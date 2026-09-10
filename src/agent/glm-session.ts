@@ -5,7 +5,9 @@ import { createEventLog, replay, type AgentEvent, type CompactionUsage } from ".
 import { isSideEffectTool, type PermissionMode } from "../permissions";
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "../providers/glm";
 import type { ModelOutput, Provider } from "../providers";
-import { projectContext } from "./context";
+import { projectContext, type ContextMessage } from "./context";
+import { buildMemoryInjection, type MemoryInjection } from "./memory/inject";
+import { REMEMBER_DESCRIPTION } from "../tools/remember";
 import { computePrune } from "./prune";
 import { createMapBuilder, type MapBuilder } from "./map/build";
 import {
@@ -185,9 +187,29 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         parameters: obj({}, []),
       },
     },
+    // M2d：记忆写入唯一入口（§8.1.4）；只读档随写向工具一并摘除
+    {
+      type: "function",
+      function: {
+        name: "remember",
+        description: REMEMBER_DESCRIPTION,
+        parameters: obj(
+          {
+            scope: { type: "string", enum: ["project", "global"], description: "只认顶层参数：project=项目层 .agent/（团队共享），global=用户全局记忆" },
+            kind: { type: "string", enum: ["architecture", "decision", "preference", "memory"], description: "写入目标：前三者映射项目层根三文件，memory 写记忆笔记" },
+            op: { type: "string", enum: ["append", "replace"], description: "append 追加（decision/memory 缺省）、replace 整段改写（architecture/preference 缺省）" },
+            type: { type: "string", enum: ["user", "feedback", "project", "reference"], description: "kind=memory 必带" },
+            topic: { type: "string", description: "kind=memory 必带（1-64 位字母/数字/连字符/下划线）" },
+            content: { type: "string", description: "要写入的正文原文" },
+            old_content: { type: "string", description: "op=replace 必带：当前原文（精确命中）" },
+          },
+          ["scope", "kind", "content"],
+        ),
+      },
+    },
   ];
   if (mode === "read-only") {
-    return specs.filter((s) => !isSideEffectTool(s.function.name));
+    return specs.filter((s) => !isSideEffectTool(s.function.name) && s.function.name !== "remember");
   }
   return specs;
 }
@@ -235,6 +257,28 @@ export interface GlmSessionCompaction {
  *  M1d：每次组装前做双条件触发检查——命中即压缩（compaction 事件落盘）再重组装（fresh start）。
  *  M2b：组装投影叠加 prune 类型化裁剪（§7.4，本地零 LLM）+ 符号地图注入（§6.4，指纹缓存；
  *  两者任一异常静默降级为无裁剪/无地图，绝不阻断 loop）。 */
+/** M2d：单轮消息组装（纯函数）——system → 记忆块（固定回注，每轮重注）→ 符号地图（首轮）→ 历史投影。
+ *  压缩接缝（§8.1.9）：记忆块在组装层注入，压缩器永不触达；压缩后重组装自然重注。 */
+export function composeTurnMessages(opts: {
+  system?: string;
+  mapText?: string | null;
+  memory?: Pick<MemoryInjection, "project" | "global">;
+  history: ContextMessage[];
+}): GlmMessage[] {
+  const msgs: GlmMessage[] = [];
+  if (opts.system) msgs.push({ role: "system", content: opts.system });
+  if (opts.memory?.project) msgs.push({ role: "system", content: opts.memory.project });
+  if (opts.memory?.global) msgs.push({ role: "system", content: opts.memory.global });
+  if (opts.mapText) {
+    msgs.push({
+      role: "system",
+      content: "[符号地图] 仓库符号索引（def/ref 排名，预算内渲染；用于先看仓库结构再探索）：\n" + opts.mapText,
+    });
+  }
+  for (const m of opts.history) msgs.push(m);
+  return msgs;
+}
+
 export function createGlmSessionProvider(
   logPath: string,
   opts: {
@@ -305,10 +349,18 @@ export function createGlmSessionProvider(
     if (queue.length === 0) {
       if (lastHadToolCalls === false) return; // 模型收尾（纯文本）→ 任务结束
       let { events, history } = await assemble();
+      // M2d 固定回注（§8.1.5/§8.1.9）：每轮组装重读两层记忆并重注（压缩后自然重注）；异常静默跳过
+      let memory: MemoryInjection = { project: null, global: null, charsCurrent: 0, charsLimit: 0, tokens: 0, truncated: false };
+      try {
+        memory = await buildMemoryInjection({ workspace });
+      } catch (err) {
+        console.debug("[memory] 注入失败，静默跳过:", err instanceof Error ? err.message : String(err));
+      }
+      const memoryChars = (memory.project?.length ?? 0) + (memory.global?.length ?? 0);
       // M1d 触发检查：估算含 system/tools/记忆全量开销；B（硬兜底）→ overflow 紧急截断
       if (coordinator && opts.compaction) {
         const factor = calibrateFactor(events);
-        const estimate = estimateContextTokens(history, opts.compaction.overhead ?? {}, factor);
+        const estimate = estimateContextTokens(history, { ...(opts.compaction.overhead ?? {}), memoryChars }, factor);
         const decision = shouldCompact(estimate, {
           ...DEFAULT_COMPACTION_CONFIG,
           ...opts.compaction.config,
@@ -321,9 +373,8 @@ export function createGlmSessionProvider(
           console.warn("[compaction] 连续摘要失败已达上限，本会话停用摘要（仅 overflow 紧急截断可用）");
         }
       }
-      const msgs: GlmMessage[] = [];
-      if (opts.system) msgs.push({ role: "system", content: opts.system });
       // M2b 符号地图：仅首轮（历史尚短）注入；异常静默跳过（§6.4 失败降级）
+      let mapText: string | null = null;
       if (mapBuilder && history.length <= 2) {
         try {
           const built = await mapBuilder.build({
@@ -333,17 +384,12 @@ export function createGlmSessionProvider(
             maxInputTokens: 128_000,
             nowRound: round++,
           });
-          if (built.text) {
-            msgs.push({
-              role: "system",
-              content: "[符号地图] 仓库符号索引（def/ref 排名，预算内渲染；用于先看仓库结构再探索）：\n" + built.text,
-            });
-          }
+          mapText = built.text || null;
         } catch (err) {
           console.debug("[map] 注入失败，静默跳过:", err instanceof Error ? err.message : String(err));
         }
       }
-      for (const m of history) msgs.push(m);
+      const msgs = composeTurnMessages({ system: opts.system, mapText, memory, history });
       queue = [];
       for await (const e of streamGlm(msgs, {}, opts.tools)) queue.push(e);
       lastHadToolCalls = queue.some((e) => e.type === "tool_call");

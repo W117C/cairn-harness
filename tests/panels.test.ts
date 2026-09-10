@@ -1,14 +1,14 @@
-// M1e 面板注册表单测：三类注册断言 + 未知 panel_id 兜底不抛 + SSR 冒烟。
+// M1e 面板注册表单测：注册断言（M2d 起 +memory 面板）+ 未知 panel_id 兜底不抛 + SSR 冒烟。
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { FallbackPanel, KNOWN_PANEL_IDS, resolvePanel } from "../src/renderer/panels/registry";
-import { projectDiffCards, projectTokenUsage, pendingApprovals } from "../src/renderer/projections";
+import { projectDiffCards, projectMemoryWrites, projectTokenUsage, pendingApprovals } from "../src/renderer/projections";
 import type { AgentEvent } from "../src/events";
 
-describe("面板注册表（M1e）", () => {
-  it("注册表含三类（approvals / token / git），全部为组件", () => {
-    expect([...KNOWN_PANEL_IDS].sort()).toEqual(["approvals", "git", "token"]);
+describe("面板注册表（M1e + M2d memory）", () => {
+  it("注册表含四类（approvals / token / git / memory），全部为组件", () => {
+    expect([...KNOWN_PANEL_IDS].sort()).toEqual(["approvals", "git", "memory", "token"]);
     for (const id of KNOWN_PANEL_IDS) {
       expect(typeof resolvePanel(id)).toBe("function");
       expect(resolvePanel(id)).not.toBe(FallbackPanel);
@@ -45,6 +45,15 @@ describe("面板注册表（M1e）", () => {
     );
     expect(gitHtml).toContain("src/todo.ts");
     expect(gitHtml).toContain("+ fixed");
+
+    // M2d：记忆面板 SSR 冒烟（自获取快照渲染不抛 + 会话审计块在场）
+    const memoryHtml = renderToStaticMarkup(
+      createElement(resolvePanel("memory"), {
+        payload: { memoryWrites: [{ callId: "c1", scope: "project", kind: "memory", topic: "note", ok: true, output: "已记录" }] },
+      }),
+    );
+    expect(memoryHtml).toContain("本会话 remember 写入");
+    expect(memoryHtml).toContain("note");
   });
 
   it("token 投影：usage 累计 + compaction 计数（D11 ≥2 提示）", () => {
@@ -60,6 +69,16 @@ describe("面板注册表（M1e）", () => {
     expect(p.usageCount).toBe(2);
     expect(p.compactionCount).toBe(1);
     expect(p.suggestNewSession).toBe(false);
+  });
+
+  it("memory 投影：remember tool_call/tool_result 配对（M2d）", () => {
+    const events: AgentEvent[] = [
+      { type: "tool_call", id: "m1", name: "remember", args: { scope: "project", kind: "memory", topic: "note" } },
+      { type: "tool_result", callId: "m1", ok: true, output: "已记录" },
+    ];
+    const writes = projectMemoryWrites(events);
+    expect(writes.length).toBe(1);
+    expect(writes[0]).toMatchObject({ callId: "m1", scope: "project", kind: "memory", topic: "note", ok: true });
   });
 
   it("diff 投影：write_file 聚合 + tool_result 配对状态；空事件 → 空列表", () => {

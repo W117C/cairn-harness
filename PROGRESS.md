@@ -445,3 +445,41 @@
 - 冻结链 pnpm provider:check 真连全绿：156 delta / usage 22/684 / tool_call=read_file(src/todo.ts) 解析成功 / 159 条事件 JSONL 重放逐字一致。
 - 新 openai 适配器（glm 预设）暗卷 PASS：30 deltas ≥2、真实流式文本、usage 154/76 经统一 UsageEvent 映射（问句未触发工具，tool_call=0 属预期；tool_call 解析已由冻结链调用②覆盖）。
 - 坑三十四（环境）：本机 shell 的 HTTPS_PROXY 只对 curl 生效；真实 Node v22 的 fetch 直连 api.b.ai 会被 distributor 按 TLS 指纹 403（access_denied/premium 门控，UA/HTTP 版本/代理路径已逐一排除，curl 全 200）；**pnpm 脚本链的 Electron-as-node（Chromium 网络栈）不受影响**——GLM 真连验收一律走 pnpm 脚本或 pnpm exec node，不要用 /usr/local/bin/node 直跑适配器。
+
+## M2d：记忆两层——写入唯一入口 remember + 固定回注注入（本轮 goal）
+
+### 理解的目标 / 顺序 / 最大风险（≤10 行）
+- 目标：跨会话记忆两层（项目层 .agent/{ARCHITECTURE.md,DECISIONS.md,preferences.md,memory/}，全局层 <appData>/memory/）；写入唯一入口 remember（scope 只认顶层参数）；注入固定回注名单、6K token 预算、超限整行丢弃保尾部；安全六条（来源标注/仿冒控制标签转义/外部 @path 引用首次批准/唯一写入口/密钥卫生/worker 隔离延后 M3）；压缩接缝（压缩后重注、压缩器禁触记忆文件）；双轨触发（显式 + 会话结束 hook 引导，合并一次审批，设置页可关默认开）；生命周期失效不删（模型无删除权，删除仅用户经记忆面板）。
+- 顺序：任务0 基线 → 1 布局与读写/frontmatter → 2 remember 工具 → 3 操作集分型 → 4 注入预算 → 5 索引硬上限 → 6 双轨触发 → 7 生命周期 → 8 安全 → 9 压缩接缝 → memory-check 明卷 → 反向验证（scope 顶层检查摘除红→绿）→ 面板/截图 → 收口提交。
+- 风险①：TOOLS 注册表冻结为 9 工具（tools-check 判据）→ remember 走 installAppTools 运行时注入（gatedTool 同款先例），不进静态注册表。
+- 风险②：src/permissions 只读 → remember 门语义（只读档拒/默认档问/自主档放行/方案门写禁）落在 agent-runner 的 gatedRemember 包装内，复用 AskGate，零 permissions 改动。
+- 风险③：src/preload 不在白名单 → 记忆快照走 getState 透传（StateResponse 加可选字段，preload 零改动）；删除/批准 IPC 备案 BLOCKED（M1d compact 同款先例，preload 一行待下轮接通）。
+- 风险④：会话结束 hook 无处可挂 → 沉淀轮走独立 provider 调用；remember 的 tool_call/result 照常落事件流审计（写入即事件），沉淀指令消息不落 user_message（不污染固定回注名单）。
+
+### 任务 0 基线（2026-09-10 实测）
+- 十五道门（六道门 typecheck/test/e2e/ipc:check/sandbox:check/build + fork-check/gate-check/autonomy-check/compaction-check/panels-check/tools-check/map-check/prune-check/providers-check，任务书「十六道门」按此清单逐个跑齐）全部退出 0；test = 29 files / 192 passed / skipped 0。
+- panels-check 重跑后 git status 干净（本轮未触发 docs/m1e-*.png 覆盖副作用，坑二十六未复现）。
+
+
+### M2d 任务结果（2026-09-10）
+
+- 任务1 布局/读写/frontmatter：`src/agent/memory/store.ts`（布局常量 + initMemoryHome/globalMemoryDir(M2D_MEMORY_HOME 可配) + tmp+rename 原子写 + external-refs.json 落账）；单测「两层的路径与文件名符合规格」「frontmatter 往返不丢字段」（tests/memory.test.ts A 组）。skip 纪律在 REMEMBER_DESCRIPTION 明文（能从代码/git 推导的不入记忆）。
+- 任务2 remember 工具：`src/tools/remember.ts`；scope 只认顶层参数（metadata 混入侦测报错）；三种 kind 各写对文件 / metadata 里的 scope 被忽略 / 无权限时不落盘（createGatedRemember 工厂，方案门写禁 + read-only 拒 + default 逐次审批 + auto 放行）单测全绿。运行时注入 TOOLS.remember（installAppTools，gatedTool 同款），静态注册表 9 工具不动（tools-check 绿）。
+- 任务3 操作集与分型：append/replace（old_content 精确命中否则 old_content_mismatch 可重试）；空变更 empty_change「无内容可沉淀」与 call_failed「调用失败」错误码/消息可区分（MemoryError.code）；DECISIONS 拒 replace（追加式，修订=新条目「取代」）。四种情况单测各一条。
+- 任务4 注入：`src/agent/memory/inject.ts` buildMemoryInjection——固定回注名单（ARCHITECTURE >4KB 大纲 shapeDoc 复用 + DECISIONS 最近 20 条 + 项目/全局 MEMORY.md 索引）；6K token 预算、超限整行丢弃保尾部 + 截断提示；`<memory source>` + 立场声明 + chars_current/chars_limit 渲染进块。memory-check C 组 9 断言全绿。
+- 任务5 索引硬上限：>200 行或 >25KB 写入端 index_overflow 拒绝（错误含「改写索引」提示，topic 不落盘不静默截断）；单测 + memory-check D 组。
+- 任务6 双轨触发：设置页「会话结束自动沉淀」开关（AppSettings.autoMemory，默认开，radix Checkbox）；`src/agent/memory/distill.ts` runSessionEndDistill——关闭完全不触发；开启合并为一次审批（拒绝则全部不写）；provider 失败显式 failed 分型；沉淀指令不落 user_message（不污染固定回注名单），remember 的 tool_call/result 照常落事件流（写入即事件）。
+- 任务7 生命周期：DECISIONS 修订=新条目「取代 <旧条引用>」旧条保留（单测断言取代关系可查）；topic 更新走 replace + modified 落账；remember 工具面无 delete（单测 + deleteTopic 仅经 IPC agent:memory-delete 供用户删除）。
+- 任务8 记忆安全：escapeControlTags（<system-reminder> 类转义 + 行首 Human/Assistant/System: 中和）；@path 工作区外首次批准/拒绝停用持久（external-refs.json，注入侧 fail-closed）；REMEMBER_DESCRIPTION 密钥卫生明文。修复真 bug：绝对路径 @/etc/hosts 曾按 workspace 相对解析（"." 前缀），改为按文件系统根解析判外。
+- 任务9 压缩接缝：composeTurnMessages 把 memory 块排进 system 后（压缩前后都在，重注=每次组装现拼）；压缩器 canary 逐字不变 + compaction.ts 静态无 fs/.agent/MEMORY.md 引用（单测 + memory-check G 组）。
+- memory-check（scripts/memory-check.ts，白名单内）：A–G 六段 50 断言全绿（pnpm memory-check exit 0，输出见对话）。
+- 反向验证：摘除 scope 顶层检查（改 metadata 兜底）→ 新增 B5b「只塞 metadata.scope 无顶层」用例红（❌ B5b 只塞 metadata.scope（无顶层）→ 拒绝且不落盘 / memory-check 失败 1 项）；还原后全绿。红→绿输出均贴对话。
+- 测试：32 files / 229 passed / skipped 0（基线 192→229，+37：memory/remember/memory-runner 三新文件 + panels 投影/SSR 扩两例）；panels.test.ts 面板清单断言按 M2d 规格更新为四类（+memory，非削弱）；MemoryPanel 补 SSR guard（headless 无 window 不抛，面板注册表规约）。
+- 半托：docs/m2d-memory.png 记忆面板截图（CDP 程序化截取，.tmp/ 演示脚本不进 git）。
+
+### M2d 新增坑记录
+- 坑三十五：注入超限场景必须按「DECISIONS 最近 20 条窗口」构造——窗口截断发生在预算循环之前，单条过小的历史条目根本进不了窗口，超限断言永远打不红；先想清两级截断的先后再造数据。
+- 坑三十六：@绝对路径 的工作区外判定——resolve(workspace, "." + ref) 会把 @/etc/hosts 折进 workspace 内部；绝对引用必须 relative(resolve(workspace), resolve(ref)) 按根解析。
+- 坑三十七：新面板必须 SSR 安全（typeof window 守卫），panels SSR 冒烟会遍历注册表全部面板（含新增 memory），一个裸 window 引用就炸整条门。
+- 坑三十八（M1e 遗留，M2d 截图时暴露）：react-resizable-panels 升 v4 后单位语义变了——数字=像素、字符串=百分比；右栏 minSize={10}/maxSize={70} 三个裸数字把抽屉钳死在 70px（panels-check 只断言 DOM 存在测不出来）。已改百分比字符串（"68%"/"32%"/"10%"/"70%"），键盘/拖拽 resize 与布局持久化（width 落 % 值）全部恢复语义。MemoryPanel 长路径同步补 break-all/min-w-0 防横向溢出。
+- 半托修正：docs/m2d-memory.png 为真实 Electron 窗口 CDP 截图（记忆面板打开：两层条目 + 删除钮 + 会话审计 ok 卡 + remember 调用卡；演示种子全在临时目录，仓库零污染）。

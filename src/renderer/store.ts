@@ -3,7 +3,7 @@
 // 折叠语义与 toTimeline 全量折叠逐字一致（活流 O(1) 摊还 + 重放全量折叠同一实现）。
 import type { AgentEvent, ClarifyAnswerMap } from "../events";
 import type { AskOutcomePayload, AskPayload } from "../main/ipc-protocol";
-import { pendingApprovals, projectDiffCards, projectTokenUsage, type DiffCardProjection, type TokenProjection } from "./projections";
+import { pendingApprovals, projectDiffCards, projectMemoryWrites, projectTokenUsage, type DiffCardProjection, type MemoryWriteProjection, type TokenProjection } from "./projections";
 
 export type PlanStatuses = Record<string, "approved" | "rejected">;
 
@@ -105,4 +105,8 @@ export function diffCardsOf(state: AppState): DiffCardProjection[] {
 
 export function pendingApprovalsOf(state: AppState) {
   return pendingApprovals(state.asks);
+}
+
+export function memoryWritesOf(state: AppState): MemoryWriteProjection[] {
+  return projectMemoryWrites(state.events);
 }
