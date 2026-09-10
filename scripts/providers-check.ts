@@ -63,6 +63,7 @@ interface TurnSummary {
   text: string;
   calls: { name: string; args: Record<string, unknown> }[];
   usage: { inputTokens: number; outputTokens: number } | null;
+  error?: string;
 }
 function summarize(events: AgentEvent[]): TurnSummary {
   const deltas = events.filter((e): e is AssistantDeltaEvent => e.type === "assistant_delta");
@@ -101,7 +102,12 @@ const USER: ProviderMessage[] = [{ role: "user", content: "hi" }];
 async function replayTurn(dir: string, fixture: string, fetchImpl: typeof fetch): Promise<TurnSummary> {
   const lines = await loadLines(join(dir, fixture));
   const adapter = ADAPTERS.find((a) => a.dir === dir) as (typeof ADAPTERS)[number];
-  return summarize(await collect(adapter.run(USER, [SPEC], fetchImpl)));
+  try {
+    return summarize(await collect(adapter.run(USER, [SPEC], fetchImpl)));
+  } catch (err) {
+    // 适配器抛错 = 该家该轮失败（判为红，错误信息进断言标签，不让脚本崩溃丢上下文）
+    return { text: "", calls: [], usage: null, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 // ---- ① 文本流等价：三家文本逐字相同、usage 均 > 0 ----
@@ -135,7 +141,8 @@ console.log("[providers-check] ② 工具调用等价（anthropic 分片参数�
     `三家 tool_call 数量一致且并行调用全解析（各 ${String(summaries[0].calls.length)} 条）`,
   );
   assert(new Set(nameSets).size === 1, `三家 tool_call 名相同：${nameSets.join(" | ")}`);
-  assert(new Set(argSets).size === 1, `三家 tool_call 参数相同（分片参数拼成完整 JSON）：${argSets.join(" | ")}`);
+  const errNotes = summaries.map((s, i) => (s.error ? " [" + ADAPTERS[i].key + ": " + s.error + "]" : "")).join("");
+  assert(new Set(argSets).size === 1, "三家 tool_call 参数相同（分片参数拼成完整 JSON）：" + argSets.join(" | ") + errNotes);
   assert(
     JSON.stringify(summaries[0].calls) ===
       JSON.stringify([
