@@ -572,9 +572,9 @@ Neovim 模式：产品只做框架、生命周期管理和工具暴露；server 
 
 选型依据：aider 的 map 是纯静态计算、按 token 预算渲染的中间态——不是 embedding，不违反决策 #13。token 效率视角：一张 1024 token 的签名地图常省掉十次整文件 read。
 
-- **解析**：web-tree-sitter（WASM）+ tree-sitter-wasms 预编译 grammar；tag 抽取用 .scm query（def/ref capture）；首批 TS/TSX/JS/Python 四语言（自研吃狗粮 + 最高频），后续按需加
-- **图**：MultiDiGraph（graphology）；def-only 节点自环权重 0.1；ref→def 边权 = mul·√num_refs；mul 规则照抄 aider：对话提到的标识符 ×10、referencer 是当前上下文文件 ×50、标识符长度≥8 ×10、下划线开头 ×0.1、定义点>5 ×0.1
-- **排名**：加权 PageRank + personalization（上下文文件加权）；graphology-metrics 不支持 personalization，自实现幂迭代（约 60 行）
+- **解析**：web-tree-sitter（WASM）+ tree-sitter-wasms 预编译 grammar；tag 抽取用 .scm query（def/ref capture）；首批 TS/TSX/JS/Python 四语言（自研吃狗粮 + 最高频），后续按需加。**版本实测（2026-09-09）**：web-tree-sitter@0.27 与 tree-sitter-wasms 的 wasm 不兼容（getDylinkMetadata 直接失败），**锁 0.25.10**；四语言解析 + Query 抓 def/ref 实测通过
+- **图**：**自实现邻接表**（2026-09-09 修订：原选型 graphology 已弃用——地图只需「节点 + 带权边 + 个性化 PageRank」，graphology-metrics 又不支持 personalization，引库只用到邻接结构）；def-only 节点自环权重 0.1；ref→def 边权 = mul·√num_refs；mul 规则照抄 aider：对话提到的标识符 ×10、referencer 是当前上下文文件 ×50、标识符长度≥8 ×10、下划线开头 ×0.1、定义点>5 ×0.1
+- **排名**：加权 PageRank + personalization（上下文文件加权）；自实现幂迭代（实测：提及某标识符后其排名从 0.32 升到 0.59，未提及者降到 0.06）
 - **渲染**：按文件聚合命中行、TreeContext 风格树形缩略、单行截断 100 字符
 - **预算二分**：默认 map_tokens=1024（夹在 [1024, 4096]，上限 = max_input/8）；前缀渲染计 token，pct_err<0.15 早停
 - **缓存**：per-file tags 按 {mtime, size} 键缓存于应用数据目录（不进用户仓库）；渲染结果按 (上下文文件签名, mentioned_idents, budget) 内存缓存
