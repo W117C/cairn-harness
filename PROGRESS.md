@@ -418,3 +418,22 @@
 - 最大风险①：冻结脚本约束——gate-check 注入 {next()} 形态 provider、autonomy/provider-check 直接 import streamGlm → loop 保留 legacy next() 分支（新流式分支优先），glm.ts 保留 streamGlm 同签名导出、内部委托 openai 适配器（GLM=预设，不算「三家互引」）。
 - 最大风险②：mock 迁移流式后事件日志必须逐字节不变 → 用「惰性产出 + loop 逐事件执行工具」的 for-await 语义（拉取与执行交错），实测与旧 next() 逐条拉取日志同序。
 - 最大风险③：anthropic usage 累计值（message_delta）不可累加、gemini 一 chunk 多 functionCall 全解析——fixture 按官方文档手写并逐条断言。
+
+### 任务结果（全部完成，实测 2026-09-10）
+- **任务 1 统一接口**：src/providers/index.ts —— Provider = stream(messages, tools) → AsyncIterable<ModelOutput>（§3.3）；ModelOutput 增加 UsageEvent；ProviderMessage/ProviderToolSpec 中立交换形态（与 projectContext 投影产物同构）。loop 重写为 for-await 逐事件消费（拉取与工具执行交错）：assistant_delta/usage 直接落流、tool_call 过门执行后轮内继续、纯文本轮即收束；保留 legacy {next()} 分支（streamFromNextSource：遇 tool_call 断轮）兼容冻结脚本注入形态。mock 迁移 stream()（事件流逐字节同序，mock.test 改断言流式空转等价）。十四道门全绿（173→192 测试）。
+- **任务 2 openai 适配器**：src/providers/openai.ts（glm.ts 泛化）：baseURL/model/apiKeyEnv/modelEnv/baseURLEnv/extraBody/label 全可配；GLM = 预设（glm.ts 保留 streamGlm/GlmToolSpec 冻结签名，内部转换后委托 streamOpenAI，行为逐字等价——tests/glm.test.ts 原样通过即等价证据）。单测 4+（glm.test 3 条原样 + providers.test openai 4 条 fixture 回放）。
+- **任务 3 anthropic 适配器**：src/providers/anthropic.ts 原生解析 message_start/content_block_start/input_json_delta(拼接)/content_block_stop/message_delta(累计 usage 覆盖不累加)/message_stop；ping/未知事件/type 未知跳过；error → 可读错误；system 抽顶层 system、tool_result 合并 user 块、tool_calls→tool_use 块。验收断言：分片拼完整 JSON / 两次 message_delta 不累加（3→7 取 7）/ 未知事件不抛。
+- **任务 4 gemini 适配器**：src/providers/gemini.ts 原生解析 parts[]：text→assistant_delta、每 functionCall→一条 tool_call（一 chunk 多个全解析，单测 3 连发）、usageMetadata(prompt+candidates+thoughts)→usage；functionResponse 回传 name 从配对 tool_call 反查 + response 对象化。
+- **任务 5 协议 fixture**：fixtures/providers/{openai,anthropic,gemini}/{text-stream,tool-call,error,unknown}.sse 共 12 份，头部注释标注官方文档 URL 与手写日期；覆盖文本流/工具调用/错误/未知事件四类；每份都被 providers.test.ts（16 条回放）与 providers-check.ts 双通道消费。
+- **任务 6 跨家契约**：scripts/providers-check.ts（pnpm providers-check）——同一逻辑对话三家等价（文本逐字「你好，世界」、tool_call 名/参数 JSON 串相同、usage 均>0）+ 错误可读 + 未知跳过 + grep 三家互不引用（文件名级）+ 暗卷段。全部通过 exit 0。
+- **反向验证（红→绿）**：anthropic.ts 拼接改「只取首片」→ pnpm providers-check 红：4 断言失败 exit 1（❌ 数量一致 ❌ 名相同 ❌ 参数相同 [anthropic: Unterminated string in JSON at position 4] ❌ usage>0）——判据真实可红；还原拼接 → 全绿 exit 0。
+- **任务 7 暗卷**：providers-check ⑥ 检测 OPENAI_API_KEY/ANTHROPIC_API_KEY/GEMINI_API_KEY，有哪家跑哪家断言 ≥2 delta；无 key → 「暗卷跳过」exit 0（当前环境三家皆无，实测走跳过路径）。GLM 真连（M0_API_KEY）沿 provider:check 冻结脚本不受影响。
+
+### 收口基线
+- test = 29 files / 192 passed / skipped 0（173→192，+19）；frozen sha256 3/3 一致；git grep key 扫描 0 真实命中（7 行全是 ask-gate 合法标识符 AskGate/ask-done，模式误伤，判据原文如此未动）；git status 干净；全部改动已分 4 笔 commit。
+- provider:check 在无 M0_API_KEY 时按冻结契约 exit 1（联网验收阻塞 = 设计行为）；M2c 验收链用 providers-check（暗卷跳过 exit 0）。
+
+### M2c 新增坑记录
+- 坑三十一：task 封面「Provider.next() → stream()」迁移的顺序陷阱——mock 事件流必须逐字节同序，关键在「拉取与工具执行交错」（for-await 惰性消费），若先整轮收集再执行，连续 tool_call 的 tool_result 会整体后移破坏序。
+- 坑三十二：projectContext 产物即 ProviderMessage 的中立场——system 顶层化是三家各自的 wire 需求（openai 消息角色/anthropic system 参数/gemini systemInstruction），中立交换形态保 consumer 不感知。
+- 坑三十三：new Set(JSON.stringify(...)) 会把 JSON 串按字符拆集——等价断言必须先对每家整体 JSON.stringify 再进 Set。

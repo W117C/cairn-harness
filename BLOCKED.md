@@ -2,6 +2,13 @@
 
 无阻塞事项。
 
+## M2c 轮新增待裁决（2026-09-10）
+
+无阻塞事项。全部 7 项任务 + 反向验证红→绿 + 十四道门 + providers-check + 暗卷跳过路径完成。备案三点（非阻塞）：
+1. **loop 保留 legacy {next()} 分支**（src/agent/loop.ts + streamFromNextSource）：任务书界限把 scripts/** 全列只读（仅 providers-check.ts 可写），而冻结的 gate-check.ts 向 runLoop 注入 {next()} 形态 scripted provider、autonomy/provider-check 直接 import streamGlm——故 Provider 本体已改为 stream() 统一接口，loop 以「stream 优先、next() 兼容」双形态收敛；新适配器全部走 stream 分支。若领导允许动 scripts/，可删兼容分支（loop.ts 一处 + streamFromNextSource）。
+2. **会话型 provider 忽略 stream 入参 messages/tools**（glm-session.ts）：loop 无事件日志读权限（EventLog 只 append），compaction/prune/符号地图组装都在日志投影上；会话 provider 以 logPath 为唯一事实源、沿用构造时 opts.tools（gate-check 冻结契约）。中立 messages 形态留给无状态适配器（openai/anthropic/gemini 直连场景）。
+3. **key 扫描判据误伤**：任务书硬指标 grep "sk-|AIza|api[_-]?key\s*=" 命中 7 行，全部为合法标识符 AskGate / ask-done（"As**k-**Gate" 被无词边界的 sk- 模式误伤）。按判卷纪律不改代码绕判据，如实备案：真实 API key 0 命中，建议判据收紧为 \bsk-。半托截图 docs/m2c-providers.png = providers-check 全绿输出（见 PROGRESS.md）。
+
 ## M2b 轮新增待裁决（2026-09-10）
 
 无阻塞事项。全部 7 项任务 + 反向验证①②红→绿 + 十二道门 + map-check/prune-check + 半托截图（docs/m2b-map.png）完成。备案两点（非阻塞）：
