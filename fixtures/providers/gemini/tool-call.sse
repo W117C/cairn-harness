@@ -1,0 +1,4 @@
+: 来源: https://ai.google.dev/api/generate-content（models.streamGenerateContent?alt=sse 的 GenerateContentResponse chunk）与 https://ai.google.dev/gemini-api/docs/function-calling，2026-09-10 按官方文档手写（离线回放，无真实 key）
+: chunk 结构：candidates[0].content.parts[]（{text} 或 {functionCall:{name,args,id?}}）；usageMetadata: promptTokenCount/candidatesTokenCount/thoughtsTokenCount/totalTokenCount（累计，末 chunk 为准）
+: 覆盖类②工具调用：一个 chunk 内两个并行 functionCall（全部必须解析）+ 末 chunk usageMetadata
+data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"read_file","args":{"path":"a.ts"}}},{"functionCall":{"name":"read_file","args":{"path":"b.ts"}}}],"role":"model"},"finishReason":"STOP","index":0}],"usageMetadata":{"promptTokenCount":11,"candidatesTokenCount":9,"thoughtsTokenCount":4,"totalTokenCount":24},"modelVersion":"gemini-2.5-flash"}

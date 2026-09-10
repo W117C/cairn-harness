@@ -16,6 +16,7 @@
     "sandbox:check": "node --import tsx scripts/sandbox-check.ts",
     "fork-check": "node --import tsx scripts/fork-check.ts",
     "provider:check": "node --import tsx scripts/provider-check.ts",
+    "providers-check": "node --import tsx scripts/providers-check.ts",
     "gate-check": "node --import tsx scripts/gate-check.ts",
     "autonomy-check": "node --import tsx scripts/autonomy-check.ts",
     "compaction-check": "node --import tsx scripts/compaction-check.ts",

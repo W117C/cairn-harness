@@ -1,0 +1,9 @@
+: 来源: https://platform.openai.com/docs/api-reference/chat/streaming（Chat Completions 流式 chunk），2026-09-10 按官方文档手写（离线回放，无真实 key）
+: 覆盖类①文本流：两个 content 增量 + 末 chunk usage + [DONE]
+data: {"id":"chatcmpl-m2c","object":"chat.completion.chunk","created":1757457600,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"role":"assistant","content":"你好"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-m2c","object":"chat.completion.chunk","created":1757457600,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"content":"，世界"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-m2c","object":"chat.completion.chunk","created":1757457600,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":11,"completion_tokens":7,"total_tokens":18}}
+
+data: [DONE]

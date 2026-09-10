@@ -1,0 +1,4 @@
+: 来源: https://docs.anthropic.com/en/api/messages-streaming（Messages API SSE 事件流）与 https://docs.anthropic.com/en/docs/build-with-claude/tool-use，2026-09-10 按官方文档手写（离线回放，无真实 key）
+: 覆盖类③错误：error 事件 → 必须转可读错误抛出
+event: error
+data: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}

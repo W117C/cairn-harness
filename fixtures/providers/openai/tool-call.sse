@@ -1,0 +1,11 @@
+: 来源: https://platform.openai.com/docs/api-reference/chat/streaming（Chat Completions 流式 chunk），2026-09-10 按官方文档手写（离线回放，无真实 key）
+: 覆盖类②工具调用：两个 tool_call（index 0/1），第一个 arguments 跨两块拼接、第二个整块到齐；末 chunk usage
+data: {"id":"chatcmpl-m2c","object":"chat.completion.chunk","created":1757457600,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_m2c_a","type":"function","function":{"name":"read_file","arguments":"{\"pa"}}]},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-m2c","object":"chat.completion.chunk","created":1757457600,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"th\":\"a.ts\"}"}}]},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-m2c","object":"chat.completion.chunk","created":1757457600,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"tool_calls":[{"index":1,"id":"call_m2c_b","type":"function","function":{"name":"read_file","arguments":"{\"path\":\"b.ts\"}"}}]},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-m2c","object":"chat.completion.chunk","created":1757457600,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":11,"completion_tokens":7,"total_tokens":18}}
+
+data: [DONE]

@@ -1,0 +1,11 @@
+: 来源: https://platform.openai.com/docs/api-reference/chat/streaming（Chat Completions 流式 chunk），2026-09-10 按官方文档手写（离线回放，无真实 key）
+: 覆盖类④未知事件：未知 chunk 结构（无 choices/未知字段）必须被优雅跳过，不抛错，正常文本继续
+data: {"object":"chat.completion.chunk.extension","x_custom":{"future_field":1}}
+
+data: {"id":"chatcmpl-m2c","object":"chat.completion.chunk","created":1757457600,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"content":"你好"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-m2c","object":"chat.completion.chunk","created":1757457600,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"content":"，世界"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-m2c","object":"chat.completion.chunk","created":1757457600,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":11,"completion_tokens":7,"total_tokens":18}}
+
+data: [DONE]

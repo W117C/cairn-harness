@@ -1,0 +1,3 @@
+: 来源: https://ai.google.dev/api/generate-content（models.streamGenerateContent?alt=sse 的 GenerateContentResponse chunk）与 https://ai.google.dev/gemini-api/docs/function-calling，2026-09-10 按官方文档手写（离线回放，无真实 key）
+: 覆盖类③错误：chunk error 对象 → 必须抛可读错误
+data: {"error":{"code":429,"message":"Resource has been exhausted (e.g. check quota).","status":"RESOURCE_EXHAUSTED"}}

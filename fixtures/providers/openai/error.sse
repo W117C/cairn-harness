@@ -1,0 +1,5 @@
+: 来源: https://platform.openai.com/docs/api-reference/chat/streaming（Chat Completions 流式 chunk），2026-09-10 按官方文档手写（离线回放，无真实 key）
+: 覆盖类③错误：流中段 error 事件（HTTP 200 但 payload 为 error 对象）→ 必须抛可读错误
+data: {"error":{"message":"The server had an error while processing your request.","type":"server_error","param":null,"code":null}}
+
+data: [DONE]

@@ -1,0 +1,224 @@
+// Anthropic Messages API 原生适配器（https://docs.anthropic.com/en/api/messages-streaming）。
+// SSE 事件序：message_start → 每内容块 content_block_start / 一条或多条 content_block_delta
+//（text_delta 或 input_json_delta.partial_json）/ content_block_stop（每块带 index）→
+// 一条或多条 message_delta → message_stop；ping 与未知事件优雅跳过；error 事件转可读错误。
+// message_delta 里的 usage 是【累计值】——直接取最后一条，不得跨事件累加。
+// 解析直接消费 Anthropic 原生字段（content_block_delta.delta.text_delta 等），
+// 不经过任何 OpenAI 中间格式。
+import type { ModelOutput, ProviderMessage, ProviderToolSpec } from "./index";
+
+export interface AnthropicOptions {
+  /** 缺省读 process.env.ANTHROPIC_API_KEY。 */
+  apiKey?: string;
+  /** 缺失 key 时的环境变量名（进错误消息），缺省 ANTHROPIC_API_KEY。 */
+  apiKeyEnv?: string;
+  model?: string;
+  /** max_tokens 为 Anthropic 必填字段（单轮输出上限），缺省 4096。 */
+  maxTokens?: number;
+  baseURL?: string;
+  /** anthropic-version 请求头，缺省 2023-06-01。 */
+  version?: string;
+  /** 单测注入点（缺省全局 fetch）。 */
+  fetchImpl?: typeof fetch;
+  /** 错误消息前缀，缺省 "Anthropic"。 */
+  label?: string;
+}
+
+interface AnthropicSseEvent {
+  type?: string;
+  message?: { id?: string; usage?: { input_tokens?: number; output_tokens?: number } };
+  content_block?: { type?: string; id?: string; name?: string; input?: unknown };
+  index?: number;
+  delta?: {
+    type?: string;
+    text?: string;
+    partial_json?: string;
+    stop_reason?: string | null;
+  };
+  usage?: { input_tokens?: number; output_tokens?: number };
+  error?: { type?: string; message?: string };
+}
+
+function parseArgs(raw: string, label: string): Record<string, unknown> {
+  if (raw.trim() === "") return {};
+  // 分片拼接后的参数 JSON 损坏属协议级异常，fail loud，不静默吞掉
+  const parsed = JSON.parse(raw) as unknown;
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error(`${label} tool_use input 不是对象: ${raw.slice(0, 100)}`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
+// ProviderMessage → Anthropic wire 格式：system 抽成顶层 system 参数；
+// user/assistant 文本；assistant 的 tool_calls → tool_use 块；tool 结果（连续合并为一条
+// user 消息）→ tool_result 块。全部按 Anthropic 官方 content-block 结构原生构造。
+export function toAnthropicBody(
+  messages: ProviderMessage[],
+  opts: { model: string; maxTokens: number; stream: boolean },
+  tools?: ProviderToolSpec[],
+): Record<string, unknown> {
+  const systemParts: string[] = [];
+  const wire: { role: "user" | "assistant"; content: unknown }[] = [];
+  const pendingToolResults: Record<string, unknown>[] = [];
+  const flushToolResults = (): void => {
+    if (pendingToolResults.length === 0) return;
+    wire.push({ role: "user", content: pendingToolResults.splice(0) });
+  };
+  for (const m of messages) {
+    if (m.role === "system") {
+      if (m.content) systemParts.push(m.content);
+      continue;
+    }
+    if (m.role === "tool") {
+      pendingToolResults.push({ type: "tool_result", tool_use_id: m.tool_call_id ?? "", content: m.content ?? "" });
+      continue;
+    }
+    flushToolResults();
+    if (m.role === "assistant") {
+      const blocks: Record<string, unknown>[] = [];
+      if (m.content) blocks.push({ type: "text", text: m.content });
+      for (const tc of m.tool_calls ?? []) {
+        let input: unknown = {};
+        try {
+          input = tc.function.arguments.trim() === "" ? {} : (JSON.parse(tc.function.arguments) as unknown);
+        } catch {
+          input = {}; // 历史里损坏的参数按空 input 回传（原始请求已 fail loud 过）
+        }
+        blocks.push({ type: "tool_use", id: tc.id, name: tc.function.name, input });
+      }
+      wire.push({ role: "assistant", content: blocks.length > 0 ? blocks : m.content ?? "" });
+      continue;
+    }
+    wire.push({ role: "user", content: m.content ?? "" });
+  }
+  flushToolResults();
+  const body: Record<string, unknown> = {
+    model: opts.model,
+    max_tokens: opts.maxTokens,
+    stream: opts.stream,
+    messages: wire,
+  };
+  if (systemParts.length > 0) body.system = systemParts.join("\n\n");
+  if (tools && tools.length > 0) {
+    body.tools = tools.map((t) => ({
+      name: t.name,
+      ...(t.description ? { description: t.description } : {}),
+      input_schema: t.parameters,
+    }));
+  }
+  return body;
+}
+
+/** 流式一轮对话：SSE 事件 → 统一事件流。 */
+export async function* streamAnthropic(
+  messages: ProviderMessage[],
+  opts: AnthropicOptions = {},
+  tools?: ProviderToolSpec[],
+): AsyncGenerator<ModelOutput> {
+  const label = opts.label ?? "Anthropic";
+  const envName = opts.apiKeyEnv ?? "ANTHROPIC_API_KEY";
+  const apiKey = opts.apiKey ?? process.env[envName];
+  if (!apiKey) throw new Error(`${envName} 未设置（key 只从环境变量读取，不落文件）`);
+  const model = opts.model ?? process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5";
+  const baseURL = opts.baseURL ?? "https://api.anthropic.com";
+  const maxTokens = opts.maxTokens ?? 4096;
+  const doFetch = opts.fetchImpl ?? fetch;
+
+  const res = await doFetch(`${baseURL}/v1/messages`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": opts.version ?? "2023-06-01",
+    },
+    body: JSON.stringify(toAnthropicBody(messages, { model, maxTokens, stream: true }, tools)),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`${label} 请求失败 HTTP ${String(res.status)}: ${text.slice(0, 300)}`);
+  }
+  if (!res.body) throw new Error(`${label} 流式响应缺少 body`);
+
+  const decoder = new TextDecoder();
+  const reader = res.body.getReader();
+  let buf = "";
+  let callId = "anthropic-a";
+  let inputTokens: number | null = null;
+  let outputTokens: number | null = null;
+  // 内容块聚合：index → { id, name, json }（input_json_delta 分片跨事件拼接）
+  const blocks = new Map<number, { id: string; name: string; json: string }>();
+
+  const handleEvent = function* (event: AnthropicSseEvent): Generator<ModelOutput> {
+    switch (event.type) {
+      case "message_start": {
+        if (event.message?.id) callId = event.message.id;
+        if (event.message?.usage?.input_tokens !== undefined) inputTokens = event.message.usage.input_tokens;
+        return;
+      }
+      case "content_block_start": {
+        const cb = event.content_block;
+        if (cb?.type === "tool_use" && event.index !== undefined) {
+          const seed = cb.input !== undefined && cb.input !== null && Object.keys(cb.input as object).length > 0
+            ? JSON.stringify(cb.input)
+            : "";
+          blocks.set(event.index, { id: cb.id ?? `toolu-${String(event.index)}`, name: cb.name ?? "", json: seed });
+        }
+        return;
+      }
+      case "content_block_delta": {
+        const d = event.delta;
+        if (d?.type === "text_delta" && d.text) {
+          yield { type: "assistant_delta", callId, text: d.text };
+        } else if (d?.type === "input_json_delta" && d.partial_json && event.index !== undefined) {
+          const acc = blocks.get(event.index);
+          if (acc) acc.json += d.partial_json; // 分片拼接成完整 JSON（流末 block_stop 时解析）
+        }
+        // 其余 delta 子类型（thinking_delta / signature_delta / citations_delta …）按未知优雅跳过
+        return;
+      }
+      case "content_block_stop": {
+        const acc = event.index !== undefined ? blocks.get(event.index) : undefined;
+        if (acc) {
+          yield { type: "tool_call", id: acc.id, name: acc.name, args: parseArgs(acc.json, label) };
+          blocks.delete(event.index as number);
+        }
+        return;
+      }
+      case "message_delta": {
+        // usage 为累计值：直接覆盖，绝不累加
+        if (event.usage?.output_tokens !== undefined) outputTokens = event.usage.output_tokens;
+        if (event.usage?.input_tokens !== undefined) inputTokens = event.usage.input_tokens;
+        return;
+      }
+      case "message_stop":
+      case "ping":
+        return; // ping 按协议要求优雅跳过
+      case "error": {
+        const e = event.error ?? {};
+        throw new Error(`${label} 流错误 ${e.type ?? "unknown"}: ${e.message ?? ""}`);
+      }
+      default:
+        return; // 未知事件类型：优雅跳过，不抛错
+    }
+  };
+
+  let done = false;
+  while (!done) {
+    const read = await reader.read();
+    if (read.done) break;
+    buf += decoder.decode(read.value, { stream: true });
+    let nl: number;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line.startsWith("data:")) continue; // event:/注释/空行跳过（type 以 data JSON 为准）
+      const payload = line.slice(5).trim();
+      if (!payload) continue;
+      const event = JSON.parse(payload) as AnthropicSseEvent;
+      yield* handleEvent(event);
+    }
+  }
+  if (inputTokens !== null || outputTokens !== null) {
+    yield { type: "usage", inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 };
+  }
+}
