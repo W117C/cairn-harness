@@ -3,8 +3,8 @@
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
-// M2d：第四面板 memory（两层记忆快照 + 会话内 remember 审计投影）
-export const PANEL_IDS = ["approvals", "token", "git", "memory"] as const;
+// M2d：第四面板 memory（两层记忆快照 + 会话内 remember 审计投影）；M2e：第五面板 plugins（插件容器）。
+export const PANEL_IDS = ["approvals", "token", "git", "memory", "plugins"] as const;
 export type PanelId = (typeof PANEL_IDS)[number];
 
 export interface LayoutState {
@@ -33,7 +33,7 @@ export interface AppSettings {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   layout: {
-    open: { approvals: false, token: false, git: false, memory: false },
+    open: { approvals: false, token: false, git: false, memory: false, plugins: false },
     activePanel: null,
     width: 32,
   },
@@ -63,6 +63,7 @@ export function validateSettings(raw: unknown): AppSettings {
     token: d.layout.open.token === true,
     git: d.layout.open.git === true,
     memory: d.layout.open.memory === true,
+    plugins: d.layout.open.plugins === true,
   };
   if (typeof layoutRaw.open === "object" && layoutRaw.open !== null) {
     for (const [k, v] of Object.entries(layoutRaw.open as Record<string, unknown>)) {

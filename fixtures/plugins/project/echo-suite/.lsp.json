@@ -1,0 +1,19 @@
+{
+  "servers": {
+    "stub-ts": {
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/lsp-server/stub.mjs"],
+      "extensionToLanguage": { ".ts": "typescript", ".tsx": "typescript" },
+      "initializationOptions": { "stub": true },
+      "startupTimeout": 5,
+      "restartOnCrash": false,
+      "diagnostics": { "enabled": true, "maxPerFile": 20 },
+      "unknownLspField": "警告不阻断的判卷样本"
+    },
+    "socket-only": {
+      "command": "node",
+      "transport": "socket",
+      "port": 0
+    }
+  }
+}

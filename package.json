@@ -24,7 +24,8 @@
     "tools-check": "node --import tsx scripts/tools-check.ts",
     "map-check": "node --import tsx scripts/map-check.ts",
     "prune-check": "node --import tsx scripts/prune-check.ts",
-    "memory-check": "node --import tsx scripts/memory-check.ts"
+    "memory-check": "node --import tsx scripts/memory-check.ts",
+    "plugins-check": "node --import tsx scripts/plugins-check.ts"
   },
   "devDependencies": {
     "@fontsource-variable/geist": "^5.3.0",
@@ -50,6 +51,7 @@
     "vitest": "^5.0.0"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@shadcn/react": "^0.3.1",
     "@vscode/ripgrep": "^1.18.0",
     "react-resizable-panels": "^4.12.4",

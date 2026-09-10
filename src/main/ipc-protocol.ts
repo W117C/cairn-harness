@@ -39,6 +39,8 @@ export interface StateResponse {
   sandbox: SandboxStatus;
   /** M2d：记忆两层快照（缺省 = 尚未初始化）。 */
   memory?: MemorySnapshot;
+  /** M2e：插件面板快照（加载清单 + 信任 + MCP 状态；缺省 = 无插件运行时）。 */
+  plugins?: import("../agent/plugins").PluginPanelSnapshot;
 }
 
 /** M1d：手动 /compact 结果（压缩卡 payload 与 compaction-check 同源）。 */
@@ -107,4 +109,7 @@ export interface AgentApi {
   /** M2d：记忆删除（仅用户经记忆面板；模型无删除权，§8.1.7）。
    *  optional —— preload 白名单本轮未含（M1d compact 同款先例），接线后可用。 */
   deleteMemory?(scope: "project" | "global", topic: string): Promise<{ ok: boolean; error?: string }>;
+  /** M2e：插件信任卡决议（仅用户经插件面板；主进程通道已就绪）。
+   *  optional —— preload 白名单本轮未含（deleteMemory 同款先例），接线后可用。 */
+  pluginDecide?(plugin: string, trusted: boolean): Promise<{ ok: boolean; error?: string }>;
 }

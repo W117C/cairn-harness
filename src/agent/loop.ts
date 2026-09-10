@@ -1,5 +1,6 @@
 import type { AgentEvent, EventLog } from "../events";
 import { denyReason, gate, type PermissionMode, type ToolResultWithAudit } from "../permissions";
+import type { HookEngine } from "./plugins/hooks";
 import { projectContext } from "./context";
 import type { LegacyNextProvider, ModelOutput, Provider } from "../providers";
 import { streamFromNextSource } from "../providers";
@@ -28,6 +29,8 @@ export interface LoopOptions {
   plan?: PlanChannel;
   /** 验证门钩子：接了才支持 verify 反射循环（成功即停 / 上限耗尽即停）。 */
   verify?: VerifyHook;
+  /** M2e 插件 hook 引擎：未接线 = 零行为（无插件会话事件流字节不变）。 */
+  hooks?: HookEngine;
 }
 
 // agent loop：事件流 → 模型 → 工具 → 事件流。
@@ -111,6 +114,30 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         continue;
       }
 
+      // M2e：PreToolUse hook 先于权限门（CC 语义）；deny/exit2 阻断该次工具调用，
+      // allow/ask 继续走原有权限管线（hook 无特权，§9.8 让步序）。
+      if (opts.hooks) {
+        try {
+          const pre = await opts.hooks.run("PreToolUse", {
+            event: "PreToolUse",
+            tool_name: output.name,
+            tool_args: output.args,
+          });
+          if (pre.blocked) {
+            await events.append({
+              type: "tool_result",
+              callId: output.id,
+              ok: false,
+              output: "[hook blocked] " + (pre.blockReason ?? "PreToolUse hook 阻断"),
+            });
+            continue;
+          }
+        } catch (err) {
+          // hook 引擎自身故障不得炸 loop（与 prune/地图同族的静默降级面）
+          console.warn("[hooks] PreToolUse 引擎失败:", err instanceof Error ? err.message : String(err));
+        }
+      }
+
       // 权限门：先过门再动手（verify 已在上面分支处理，此处 name 不含 verify）
       const name = output.name as Exclude<ToolName, "verify">;
       const decision = gate(mode, name, interactive);
@@ -145,11 +172,26 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       }
       // M1c：gatedTool 自动放行时在结果上附带审计元数据（结构扩展），透传进 tool_result 事件
       const audit = (result as ToolResultWithAudit).auto;
+      // M2e：PostToolUse（成功）/ PostToolUseFailure（失败）——additionalContext 回注 tool_result 尾部
+      let postContext = "";
+      if (opts.hooks) {
+        try {
+          const post = await opts.hooks.run(result.ok ? "PostToolUse" : "PostToolUseFailure", {
+            event: result.ok ? "PostToolUse" : "PostToolUseFailure",
+            tool_name: output.name,
+            tool_args: output.args,
+            tool_response: result.output,
+          });
+          if (post.additionalContext !== "") postContext = "\n[hook] " + post.additionalContext;
+        } catch (err) {
+          console.warn("[hooks] PostToolUse 引擎失败:", err instanceof Error ? err.message : String(err));
+        }
+      }
       await events.append({
         type: "tool_result",
         callId: output.id,
         ok: result.ok,
-        output: result.output,
+        output: result.output + postContext,
         ...(audit ? { auto: audit } : {}),
       });
     }

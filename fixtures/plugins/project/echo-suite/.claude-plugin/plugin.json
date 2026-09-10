@@ -1,0 +1,7 @@
+{
+  "name": "echo-suite",
+  "description": "M2e 明卷样本：hook 双路径 + MCP stub + skill/command/agent/lsp 全容器",
+  "version": "1.0.0",
+  "author": { "name": "M2e Fixture" },
+  "futureField": "未知顶层字段（警告不阻断的判卷样本）"
+}

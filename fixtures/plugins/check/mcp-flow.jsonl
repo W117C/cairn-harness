@@ -1,0 +1,2 @@
+{"type":"tool_call","id":"c-mcp","name":"mcp__plugin_echo-suite_stub__echo","args":{"text":"你好"}}
+{"type":"assistant_message","content":"mcp 场景完成"}

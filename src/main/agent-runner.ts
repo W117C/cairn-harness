@@ -66,6 +66,9 @@ import type { MemoryLayerSnapshot, MemorySnapshot } from "./ipc-protocol";
 import { AskGate } from "./ask-gate";
 import type { AskOutcomePayload, AskPayload, RunRequest } from "./ipc-protocol";
 import { checkSandbox, runInSandbox, type SandboxStatus } from "./sandbox";
+import { PluginRuntime, setCurrentPluginRuntime, currentPluginRuntime, type PluginPanelSnapshot } from "../agent/plugins";
+import type { HookEngine } from "../agent/plugins/hooks";
+import type { McpToolInfo } from "../agent/plugins/mcp";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const WORKSPACE = join(ROOT, "fixtures", "todo-app");
@@ -93,6 +96,8 @@ interface Session {
 let session: Session | null = null;
 // M2d：最近一次 run 的工作区（记忆快照的项目层根；缺省 = 默认靶工作区）。
 let lastWorkspace: string | null = null;
+// M2e：最近一次 run 的插件面板快照（纯投影的留档，供 run 间隙的 agent:state 查询）。
+let lastPluginSnapshot: PluginPanelSnapshot | null = null;
 
 // 三门通道（模块级，仿 appAskGate）：clarify 表单提交 / plan 批准决议
 const appClarifyGate = new ClarifyGate();
@@ -172,6 +177,58 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
   };
 }
 
+/** M2e：MCP 工具统一注册表入口——与写工具同一条 evaluate 权限管线（无特权，§9.7）。 */
+function gatedMcpTool(name: string, info: McpToolInfo & { plugin: string; server: string }, rt: PluginRuntime): Tool {
+  return {
+    name,
+    async run(args, ctx) {
+      const s = session;
+      if (!s) return denied(name, "default", "工具门未接线（fail-closed）");
+      const ps = getPlanState();
+      s.autonomy.planBlocked = ps.proposed && !ps.approved;
+      const d = evaluate(name as ToolName, args, s.autonomy); // MCP scoped 名进同一管线（规则/风险/档位全生效）
+      if (d.verdict === "deny") return denied(name, s.autonomy.mode, d.reason);
+      if (d.verdict === "ask") {
+        if (!s.askGate) return denied(name, s.autonomy.mode, "非交互模式（fail-closed）");
+        const r = await s.askGate.request(name, args, {
+          reason: d.reason,
+          risk: d.risk,
+          riskReasons: d.riskReasons,
+        });
+        if (r.outcome !== "approved") return denied(name, s.autonomy.mode, "未获批准");
+        noteManualDecision(s.autonomy);
+      } else if (d.auto?.source === "session_scope") {
+        noteScopeApproval(s.autonomy);
+      }
+      void ctx;
+      const res = await rt.mcp.callTool(info.plugin, info.server, info.name, args);
+      return { ok: res.ok, output: res.output };
+    },
+  };
+}
+
+/** M2e：把插件面装进统一注册表——skill 工具 + 各 MCP 工具（scoped 名）；返回注入名清单（会话结束摘除）。 */
+function installPluginTools(rt: PluginRuntime): string[] {
+  const injected: string[] = [];
+  const table = TOOLS as unknown as Record<string, Tool>;
+  if (rt.skills().length > 0) {
+    table["skill"] = {
+      name: "skill",
+      async run(args) {
+        const name = typeof args.name === "string" ? args.name : "";
+        if (name.trim() === "") return { ok: false, output: "skill: name 参数必填（/plugin:name 或 /name）" };
+        return rt.triggerSkill(name);
+      },
+    };
+    injected.push("skill");
+  }
+  for (const [scoped, info] of rt.mcpTools) {
+    table[scoped] = gatedMcpTool(scoped, info, rt);
+    injected.push(scoped);
+  }
+  return injected;
+}
+
 /** always scope 批准落库为 allow 条目（项目规则库，原子写）；拒绝永不生成规则。 */
 async function persistAlwaysRule(workspace: string, name: string, args: Record<string, unknown>): Promise<void> {
   const path = join(workspace, ".agent", "permissions.json");
@@ -223,9 +280,18 @@ const DEMO_SUMMARY = [
 export async function compactSessionLog(
   logPath: string,
   emit?: (e: AgentEvent) => Promise<void>,
+  hooks?: HookEngine,
 ): Promise<{ ok: boolean; error?: string; event?: AgentEvent; cardPayload?: Record<string, unknown> }> {
   const events = await replay(logPath);
   if (events.length === 0) return { ok: false, error: "会话为空，无可压缩" };
+  // M2e：PreCompact hook（压缩前触发；失败只告警不阻断压缩）
+  if (hooks) {
+    try {
+      await hooks.run("PreCompact", { event: "PreCompact", trigger: "compact" });
+    } catch (err) {
+      console.warn("[hooks] PreCompact 失败:", err instanceof Error ? err.message : String(err));
+    }
+  }
   const demo = process.env.M1D_COMPACTION_DEMO === "1";
   const summarizer = process.env.M0_API_KEY
     ? createGlmSummarizer()
@@ -255,7 +321,7 @@ export async function handleCompact(
 ): Promise<{ ok: boolean; error?: string; cardPayload?: Record<string, unknown> }> {
   const logPath = over.logPath ?? lastLogPath;
   if (!logPath) return { ok: false, error: "无会话日志（先跑一轮会话再 /compact）" };
-  const res = await compactSessionLog(logPath, async (e) => Promise.resolve(hooks.onEvent?.(e)));
+  const res = await compactSessionLog(logPath, async (e) => Promise.resolve(hooks.onEvent?.(e)), currentPluginRuntime()?.hooks);
   return { ok: res.ok, error: res.error, cardPayload: res.cardPayload };
 }
 
@@ -336,7 +402,7 @@ export interface RunOptions {
 
 // M1a 真流式演示通道：M0A_PROVIDER=glm 时用真模型单轮流式（无 tools，纯文本；
 // 事件按网络节奏逐条 pull，UI 逐字上屏）。缺省仍为 mock，M0 事件流字节不变。
-function createProvider(userMessage: string): Provider {
+function createProvider(userMessage: string, systemPrefix?: string): Provider {
   // M1c 明卷通道：M1C_AUTONOMY_SCRIPT 指向冻结剧本（autonomy-check 三条路径复用同一接线）。
   const autonomyScript = process.env.M1C_AUTONOMY_SCRIPT;
   if (process.env.M1B_GATE_FLOW === "1") return createMockProvider(GATE_FIXTURE);
@@ -347,7 +413,13 @@ function createProvider(userMessage: string): Provider {
   let gen: AsyncIterable<ModelOutput> | null = null;
   return {
     stream() {
-      if (!gen) gen = streamGlm([{ role: "user", content: userMessage }]);
+      if (!gen) {
+        // M2e：插件注入面（skill 路由清单 + hook 上下文）以 system 前缀进真实会话；空 = 字节不变
+        const prefix = systemPrefix && systemPrefix.trim() !== ""
+          ? [{ role: "system", content: systemPrefix } as const]
+          : [];
+        gen = streamGlm([...prefix, { role: "user", content: userMessage }]);
+      }
       return gen;
     },
   };
@@ -384,6 +456,8 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     }),
   };
   lastWorkspace = opts.workspace;
+  // M2e：本 run 注入统一注册表的插件工具名（会话结束摘除，零残留）；声明在 try 外防 finally TDZ
+  let injectedToolNames: string[] = [];
   try {
     // M1e 会话模式：sessionId 在场 = 会话列表里的既有会话，append（JSONL 即会话，重放无损）；
     // 无 sessionId = 旧行为（每轮新日志，e2e/ipc-check 等脚本路径字节不变）。
@@ -395,8 +469,51 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       opts.onEvent?.(e);
     };
     session.emit = pipeline;
+    // M2e：插件运行时（会话启动静态扫描产加载清单，不新增事件类型）。
+    // 零插件环境（无 .agent/plugins、无 M2E_USER_PLUGINS/M2E_LOOSE_SKILLS）= 空清单 = 零行为。
+    let rt: PluginRuntime | null = null;
+    try {
+      rt = await PluginRuntime.load({
+        ...(process.env.M2E_USER_PLUGINS ? { userPluginsDir: process.env.M2E_USER_PLUGINS } : {}),
+        projectPluginsDir: join(opts.workspace, ".agent", "plugins"),
+        ...(process.env.M2E_LOOSE_SKILLS ? { looseRoots: [process.env.M2E_LOOSE_SKILLS] } : {}),
+        workspace: opts.workspace,
+        pluginDataRoot: process.env.M2E_PLUGIN_DATA ?? join(tmpdir(), "m2e-plugin-data"),
+        ...(process.env.M2E_TRUST_FILE ? { trustFile: process.env.M2E_TRUST_FILE } : {}),
+        mode: opts.mode,
+      });
+      setCurrentPluginRuntime(rt);
+      await rt.connectMcp(); // 仅受信插件；pending/declined 不连接（§9.8 信任门）
+      injectedToolNames = installPluginTools(rt);
+    } catch (err) {
+      console.warn("[plugins] 运行时装载失败，零插件降级:", err instanceof Error ? err.message : String(err));
+      rt = null;
+    }
+    // M2e：SessionStart（上下文注入）→ UserPromptSubmit（阻断 / 上下文）；SubagentStart/SubagentStop
+    // 事件源在 M3——引擎支持事件名但无源，静默不触发。
+    let hookContext = "";
+    if (rt) {
+      try {
+        const ss = await rt.hooks.run("SessionStart", { event: "SessionStart", trigger: "startup" });
+        hookContext = ss.additionalContext;
+      } catch (err) {
+        console.warn("[hooks] SessionStart 失败:", err instanceof Error ? err.message : String(err));
+      }
+      try {
+        const ups = await rt.hooks.run("UserPromptSubmit", { event: "UserPromptSubmit", prompt: opts.message });
+        if (ups.blocked) {
+          await pipeline({ type: "assistant_message", content: "[hook blocked prompt] " + (ups.blockReason ?? "UserPromptSubmit hook 阻断") });
+          return await replay(opts.logPath);
+        }
+        if (ups.additionalContext !== "") hookContext += (hookContext === "" ? "" : "\n") + ups.additionalContext;
+      } catch (err) {
+        console.warn("[hooks] UserPromptSubmit 失败:", err instanceof Error ? err.message : String(err));
+      }
+    }
+    const skillsRouting = rt && rt.routingList().text !== "" ? rt.routingList().text : null;
+    const systemPrefix = [skillsRouting, hookContext !== "" ? hookContext : null].filter((s): s is string => s !== null).join("\n\n");
     await runLoop({
-      provider: createProvider(opts.message),
+      provider: createProvider(opts.message, systemPrefix !== "" ? systemPrefix : undefined),
       events: { append: pipeline },
       workspace: opts.workspace,
       mode: "auto", // 冻结 loop 对 ask 一律拒绝；真实门在 gatedTool（复用 checkPermission）
@@ -404,7 +521,18 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       clarify: appClarifyGate,
       plan: appPlanGate,
       verify: createVerifyHook(opts.workspace, { exec: verifyExec(opts.sandbox ?? null) }),
+      ...(rt ? { hooks: rt.hooks } : {}),
     });
+    // M2e：Stop（agent 收束）与 SessionEnd（会话收尾）——fire-and-forget，失败只告警。
+    if (rt) {
+      for (const evt of ["Stop", "SessionEnd"] as const) {
+        try {
+          await rt.hooks.run(evt, { event: evt, trigger: "run_complete" });
+        } catch (err) {
+          console.warn("[hooks] " + evt + " 失败:", err instanceof Error ? err.message : String(err));
+        }
+      }
+    }
     // M1d 演示通道：M1D_COMPACTION_DEMO=1 时每轮跑完对手动压缩走一遍真实链路
     //（compactSessionLog 同 handleCompact 共用代码，事件经会话管线上屏压缩卡）。缺省零行为。
     if (process.env.M1D_COMPACTION_DEMO === "1") {
@@ -468,6 +596,14 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     }
   } finally {
     session = null;
+    // 会话结束 = MCP server 子进程一并回收（stdio 流不挂事件循环）；快照留档供 run 间隙查询
+    const rtNow = currentPluginRuntime();
+    if (rtNow) lastPluginSnapshot = rtNow.snapshot();
+    await rtNow?.shutdown().catch(() => {});
+    // M2e：会话结束摘除本 run 注入的插件工具（TOOLS 是模块级注册表，零残留）
+    const table = TOOLS as unknown as Record<string, unknown>;
+    for (const n of injectedToolNames) delete table[n];
+    setCurrentPluginRuntime(null);
   }
   return await replay(opts.logPath);
 }
@@ -491,7 +627,9 @@ export async function handleAgentRun(
     const sessionMode = over.sessionId !== undefined;
     const logPath = over.logPath ?? (sessionMode && over.sessionId ? pathOf(requireSessionsDir(), over.sessionId) : join(tmpdir(), "m0b-agent-events.jsonl"));
     await runAgent({
-      workspace: over.workspace ?? WORKSPACE,
+      // M2e：M0B_WORKSPACE 工作区覆盖（M2B_MAP_WORKSPACE 同族演示通道，env 门控缺省零行为）——
+      // 面板截图/演示指向带 .agent/plugins 的临时工作区，验收与生产路径不变。
+      workspace: over.workspace ?? (process.env.M0B_WORKSPACE ? resolve(process.env.M0B_WORKSPACE) : WORKSPACE),
       message: req.message,
       mode: req.mode,
       logPath,
@@ -570,14 +708,31 @@ async function memorySnapshot(): Promise<MemorySnapshot> {
 }
 
 /** IPC "agent:state" 的处理函数。 */
-export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memory?: MemorySnapshot }> {
+export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memory?: MemorySnapshot; plugins?: PluginPanelSnapshot }> {
   let memory: MemorySnapshot | undefined;
   try {
     memory = await memorySnapshot();
   } catch {
     memory = undefined; // 快照失败不阻塞 state（沙箱状态是主应答）
   }
-  return { sandbox: sandboxState, memory };
+  let plugins: PluginPanelSnapshot | undefined;
+  try {
+    const rt = currentPluginRuntime();
+    plugins = rt ? rt.snapshot() : (lastPluginSnapshot ?? undefined);
+  } catch {
+    plugins = undefined;
+  }
+  return { sandbox: sandboxState, memory, plugins };
+}
+
+/** IPC "agent:plugin-decide"：信任卡决议（批准/拒绝）→ 决议持久化 + 同样本重新激活（M2e §9.8）。 */
+export async function handlePluginDecide(pluginName: string, trusted: boolean): Promise<{ ok: boolean; snapshot?: PluginPanelSnapshot }> {
+  const rt = currentPluginRuntime();
+  if (!rt) return { ok: false };
+  const found = await rt.trustDecide(pluginName, trusted);
+  if (!found) return { ok: false };
+  await rt.connectMcp(); // 信任后同样本开始生效（MCP 补连；hook 引擎已在重建后的 runtime 内）
+  return { ok: true, snapshot: rt.snapshot() };
 }
 
 /** IPC "agent:memory-delete"：用户经记忆面板显式删除（§8.1.7：删除仅用户，模型无删除权）。 */

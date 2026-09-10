@@ -1,6 +1,13 @@
 # BLOCKED.md（待裁决清单）
 
-无阻塞事项。
+## M2e 轮备案（2026-09-10）
+
+1. **任务书门数口径**：任务书写「十七道门（六道门 + fork/gate/autonomy/compaction/panels/tools/map/prune/providers/memory-check）」，括号清单实为 6+10=**16 道**。按清单逐个跑齐 16 道全绿，不多不少；「第十七道」无法对应到任何现有脚本（provider:check 在无 key 时按冻结契约 exit 1，不属「继续全绿」集合）。请裁决：门数口径以括号清单（16）为准。
+2. **hook 命令环境变量「只给 PLUGIN_ROOT/PLUGIN_DATA/PROJECT_DIR」的读法**：严格执行「只有三个变量」会导致 hook 子进程连 `node`/`sh` 都无法解析（PATH 缺失），插件生态不可用。按「插件相关变量只给这三个」实现：env = 消毒基础集（PATH/HOME/LANG/TMPDIR/SHELL/USER）+ 三插件变量，且显式剥离含 KEY/TOKEN/SECRET 字样的宿主变量（M0_API_KEY 等）。安全边界（不泄密）保留，可用性修复。请追认。
+3. **hook JSON decision「allow」不绕过权限门**：CC 语义 hook allow 可 bypass 权限系统；按任务书「工具进统一注册表、走同一权限门、无特权」让步序（CC 格式兼容 > 纯声明式边界），格式兼容但安全语义从本地：hook deny/exit2 阻断，allow 继续走原权限管线。请追认。
+4. **插件信任卡决议通道未接线（preload 白名单外）**：主进程 `plugin:decide` IPC handler 已就绪、`AgentApi.pluginDecide` 类型已声明（optional）；但 `src/preload/**` 不在本轮白名单，桥接层无法加通道。插件面板决议按钮按 deleteMemory 同款先例**禁用并注明**（BLOCKED 备案），未信任不激活的安全语义不受影响（D1–D5 明卷实证）。下轮放开 preload 后接线即可用。
+
+无阻塞事项（上述为备案待追认，不阻塞推进）。
 
 ## 裁决记录（2026-09-10，此前各轮备案全部裁决完毕）
 

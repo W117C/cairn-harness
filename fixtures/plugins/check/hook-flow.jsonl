@@ -1,0 +1,4 @@
+{"type":"tool_call","id":"c-read","name":"read_file","args":{"path":"src/todo.ts"}}
+{"type":"tool_call","id":"c-glob","name":"glob","args":{"pattern":"*.md"}}
+{"type":"tool_call","id":"c-slow","name":"slow_tool","args":{}}
+{"type":"assistant_message","content":"hook 场景完成"}

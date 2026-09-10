@@ -6,10 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ApprovalCard } from "../cards/registry";
 import type { DiffCardProjection, MemoryWriteProjection, TokenProjection } from "../projections";
-import type { MemorySnapshot } from "../../main/ipc-protocol";
+import type { MemorySnapshot, StateResponse } from "../../main/ipc-protocol";
+import type { PluginPanelSnapshot } from "../../agent/plugins";
 
-/** M1 面板三类（§10.2 清单的 M1 里程碑行）+ M2d memory；与 main/settings 的 PANEL_IDS 同源字符串。 */
-export type PanelId = "approvals" | "token" | "git" | "memory";
+/** M1 面板三类（§10.2 清单的 M1 里程碑行）+ M2d memory + M2e plugins；与 main/settings 的 PANEL_IDS 同源字符串。 */
+export type PanelId = "approvals" | "token" | "git" | "memory" | "plugins";
 
 export interface PanelProps {
   /** 当前会话事件流投影载荷（各面板字段可选）。 */
@@ -28,6 +29,8 @@ export interface PanelProps {
     diffs?: DiffCardProjection[];
     /** M2d memory：本会话 remember 调用审计投影。 */
     memoryWrites?: MemoryWriteProjection[];
+    /** M2e plugins：插件面板快照（缺省由面板自行 getState 拉取）。 */
+    plugins?: PluginPanelSnapshot;
     /** 全部事件数（面板头展示）。 */
     eventCount?: number;
   };
@@ -220,11 +223,117 @@ function MemoryPanel({ payload }: PanelProps): ReactElement {
   );
 }
 
+/** M2e 插件面板：加载清单（三级作用域）+ 信任卡（pending 出卡，决议走 pluginDecide）+ MCP 状态。
+ *  快照来源：payload.plugins（宿主透传）或 getState().plugins 自取——全部是投影，无私有状态。
+ *  决议通道 optional：preload 白名单本轮未含（deleteMemory 同款先例），未接线时按钮禁用并注明（BLOCKED 备案）。 */
+function PluginsPanel({ payload }: PanelProps): ReactElement {
+  const [snap, setSnap] = useState<PluginPanelSnapshot | null>(payload.plugins ?? null);
+  const [busy, setBusy] = useState(false);
+  const canDecide = typeof window !== "undefined" && typeof window.agent?.pluginDecide === "function";
+  const reload = useCallback(async () => {
+    try {
+      const st: StateResponse = await window.agent.getState();
+      setSnap(st.plugins ?? null);
+    } catch {
+      setSnap(null);
+    }
+  }, []);
+  useEffect(() => {
+    if (payload.plugins === undefined) void reload();
+  }, [payload.plugins, reload]);
+  const decide = async (name: string, trusted: boolean): Promise<void> => {
+    if (!window.agent.pluginDecide) return;
+    setBusy(true);
+    try {
+      await window.agent.pluginDecide(name, trusted);
+      await reload();
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!snap) {
+    return (<div className="p-3 text-sm text-muted-foreground">插件快照不可用（会话未装配 PluginRuntime）。</div>);
+  }
+  const trustBadge = (t: string): ReactElement =>
+    t === "trusted" ? <Badge variant="default">已信任</Badge> :
+    t === "declined" ? <Badge variant="outline">已拒绝</Badge> : <Badge variant="destructive">待信任</Badge>;
+  return (
+    <div className="space-y-2 p-3" data-m2e-plugin-panel>
+      {snap.plugins.map((pl) => (
+        <Card key={pl.root} data-m2e-plugin={pl.name}>
+          <CardHeader>
+            <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
+              🧩 {pl.name}
+              <Badge variant="outline">{pl.scope}</Badge>
+              {trustBadge(pl.trust)}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 text-xs">
+            <div className="font-mono break-all text-muted-foreground">{pl.root}</div>
+            <div className="flex flex-wrap gap-1">
+              <Badge variant="secondary">skill × {pl.counts.skills}</Badge>
+              <Badge variant="secondary">prompt × {pl.counts.commands}</Badge>
+              <Badge variant="secondary">agent × {pl.counts.agents}</Badge>
+              <Badge variant="secondary">hook × {pl.counts.hooks}</Badge>
+              <Badge variant="secondary">mcp × {pl.counts.mcp}</Badge>
+              <Badge variant="secondary">lsp × {pl.counts.lsp}</Badge>
+            </div>
+            {pl.trust === "pending" && (
+              <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-2 py-1.5">
+                <span className="text-amber-700 dark:text-amber-400">首次加载：信任后 hook / MCP / LSP 才会激活。</span>
+                <Button size="sm" variant="default" disabled={!canDecide || busy}
+                  title={canDecide ? "信任该插件" : "决议通道待 preload 接线（BLOCKED 备案）"}
+                  onClick={() => void decide(pl.name, true)}>批准</Button>
+                <Button size="sm" variant="outline" disabled={!canDecide || busy}
+                  title={canDecide ? "拒绝该插件（不激活）" : "决议通道待 preload 接线（BLOCKED 备案）"}
+                  onClick={() => void decide(pl.name, false)}>拒绝</Button>
+              </div>
+            )}
+            {pl.errors.length > 0 && <div className="text-red-600">错误：{pl.errors.join("；")}</div>}
+            {pl.warnings.length > 0 && <div className="text-amber-600">警告：{pl.warnings.join("；")}</div>}
+          </CardContent>
+        </Card>
+      ))}
+      {snap.looseSkills.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-sm">散装 skill（免包装）</CardTitle></CardHeader>
+          <CardContent className="space-y-1 text-xs">
+            {snap.looseSkills.map((s) => (<div key={s.invoke} className="font-mono">{s.invoke}</div>))}
+          </CardContent>
+        </Card>
+      )}
+      <Card>
+        <CardHeader><CardTitle className="text-sm">MCP server 状态（投影）</CardTitle></CardHeader>
+        <CardContent className="space-y-1 text-xs">
+          {snap.mcpServers.length === 0 && <div className="text-muted-foreground">（无已连接 server）</div>}
+          {snap.mcpServers.map((m) => (
+            <div key={m.plugin + "/" + m.server} className="font-mono">
+              <Badge variant={m.state === "connected" ? "default" : "destructive"}>{m.state}</Badge> {m.plugin}/{m.server} · tools × {m.tools.length}
+              {m.tools.length > 0 && <div className="break-all pl-1 text-[11px] text-muted-foreground">{m.tools.join("、")}</div>}
+              {m.error && <span className="text-red-600"> {m.error}</span>}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+      {(snap.errors.length > 0 || snap.warnings.length > 0) && (
+        <Card>
+          <CardHeader><CardTitle className="text-sm">加载清单异常</CardTitle></CardHeader>
+          <CardContent className="space-y-1 text-xs">
+            {snap.errors.map((e, i) => (<div key={"e" + String(i)} className="text-red-600">[{e.plugin}] {e.message}</div>))}
+            {snap.warnings.map((w, i) => (<div key={"w" + String(i)} className="text-amber-600">[{w.plugin}] {w.message}</div>))}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 const REGISTRY: Record<string, PanelComponent> = {
   approvals: ApprovalsPanel,
   token: TokenPanel,
   git: GitPanel,
   memory: MemoryPanel,
+  plugins: PluginsPanel,
 };
 
 export const KNOWN_PANEL_IDS = Object.keys(REGISTRY);

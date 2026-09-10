@@ -1,0 +1,60 @@
+{
+  "description": "echo-suite 明卷 hooks：exit2 阻断 / JSON allow / 上下文回注 / 超时强杀 / exec form",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"$PLUGIN_ROOT/hooks/context.mjs\" hookctx:session-start" }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"$PLUGIN_ROOT/hooks/context.mjs\" hookctx:prompt-submit" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__stub__echo",
+        "hooks": [
+          { "type": "command", "command": "node \"$PLUGIN_ROOT/hooks/context.mjs\" hookctx:bare-matcher" }
+        ]
+      },
+      {
+        "matcher": "read_file",
+        "hooks": [
+          { "type": "command", "command": "node \"$PLUGIN_ROOT/hooks/blocker.mjs\"" }
+        ]
+      },
+      {
+        "matcher": "glob",
+        "hooks": [
+          { "type": "command", "command": "node \"$PLUGIN_ROOT/hooks/allow-json.mjs\"" }
+        ]
+      },
+      {
+        "matcher": "slow_tool",
+        "hooks": [
+          { "type": "command", "command": "node \"$PLUGIN_ROOT/hooks/slow.mjs\"", "timeout": 1 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "glob",
+        "hooks": [
+          { "type": "command", "command": "node \"$PLUGIN_ROOT/hooks/context.mjs\" hookctx:post-tooluse" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": ["echo", "hookctx:stop-exec-form"] }
+        ]
+      }
+    ]
+  }
+}

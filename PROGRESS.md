@@ -483,3 +483,30 @@
 - 坑三十七：新面板必须 SSR 安全（typeof window 守卫），panels SSR 冒烟会遍历注册表全部面板（含新增 memory），一个裸 window 引用就炸整条门。
 - 坑三十八（M1e 遗留，M2d 截图时暴露）：react-resizable-panels 升 v4 后单位语义变了——数字=像素、字符串=百分比；右栏 minSize={10}/maxSize={70} 三个裸数字把抽屉钳死在 70px（panels-check 只断言 DOM 存在测不出来）。已改百分比字符串（"68%"/"32%"/"10%"/"70%"），键盘/拖拽 resize 与布局持久化（width 落 % 值）全部恢复语义。MemoryPanel 长路径同步补 break-all/min-w-0 防横向溢出。
 - 半托修正：docs/m2d-memory.png 为真实 Electron 窗口 CDP 截图（记忆面板打开：两层条目 + 删除钮 + 会话审计 ok 卡 + remember 调用卡；演示种子全在临时目录，仓库零污染）。
+
+## M2e：扩展容器——插件（skill/prompt/hook/agent）+ MCP 适配器（本轮 goal，2026-09-10 开工）
+
+### 任务 0 基线（2026-09-10 实测）
+- 十六道门（任务书叫「十七道门」，但括号清单实为 六道门 typecheck/test/e2e/ipc:check/sandbox:check/build + fork/gate/autonomy/compaction/panels/tools/map/prune/providers/memory-check = 16 道，按清单逐个跑齐）全部退出 0。
+- test = 32 files / 229 passed / skipped 0（M2d 收口基线）；git 工作树干净（HEAD 50a5ffd）。
+- plugin / MCP / hook / skill 代码实测零行（src/ 无 plugins 目录）；@modelcontextprotocol/sdk 未安装（任务书实测 1.30.0 可装）。
+
+### 理解的目标 / 顺序 / 最大风险（≤10 行）
+- 目标：一个容器装四类内容（skill/prompt/hook/agent），MCP 唯一外部协议；格式 = CC 现行规范，真实 CC 插件免改加载。让步序：CC 格式兼容 > 纯声明式边界 > 功能多。
+- 顺序：任务0 基线 → 1 容器与发现（三级作用域/manifest 超集/散装 skill）→ 2 加载器纪律（失败隔离/代码插件拒载）→ 3 skill（渐进披露 1536/重挂 5000+25000）→ 4 prompt（$ARGUMENTS/$1）→ 5 hook（10 事件/exit 2/JSON decision/10k/timeout）→ 6 信任门 → 7 MCP（官方 SDK/stub server/统一注册表）→ 8 agent 角色+LSP 对齐 → plugins-check 明卷 → 反向验证（信任门摘除红→绿）→ 面板截图 → 暗卷（可跳）→ 收口提交。
+- 最大风险①：hook 接线点在 loop/agent-runner —— 既有 mock 流零插件时必须零行为（引擎空注册表 = 零 subprocess、事件流字节不变），否则 16 道门全炸。
+- 最大风险②：MCP 官方 SDK 进 Electron main bundle 的路径解析（坑二十四同族）→ createRequire(import.meta.url) 先例沿用。
+- 最大风险③：CC hook 语义与本地权限门冲突（hook allow 是否绕过权限门）→ 按任务书「无特权」拍板：hook deny 阻断、allow 继续走原权限门（安全 > CC 语义，PROGRESS 记录）。
+- 最大风险④：stub MCP server 用官方 SDK 的 Server 类（fixtures/plugins 白名单内），避免手搓 JSON-RPC 帧口径漂移。
+
+### M2e 完成记录
+- **实现面**：`src/agent/plugins/`（types/frontmatter/manifest/discover/trust/skills/hooks/mcp/index 组合根 PluginRuntime）+ 接线三件（loop PreToolUse/PostToolUse(Failure) 钩子、agent-runner PluginRuntime 装配 + skill/MCP 工具注入 + gatedMcpTool 同权限门 + handlePluginDecide、glm-session skills 注入位）；hooks/mcp 事件全 10 个（SubagentStart/Stop 仅静默路径）。
+- **单测**：tests/plugins-{discover,skills,hooks,mcp}.test.ts 38 条（三级作用域/失败隔离/JS 入口拒载/user_config 禁入 shell-form/bare matcher 警告/LSP 对齐/1536 截断/替换/重挂预算/exit2/JSON decision/超时强杀/去重/env 消毒/真 stub MCP 回传/信任门流转）；全套 36 files / 267 passed / skipped 0（≥ 基线 229）。
+- **明卷**：scripts/plugins-check.ts 30 断言全绿 exit 0——A 发现/隔离/拒载、B 1536+触发全文（runAgent 事件流实证）+重挂预算、C exit2 真阻断+JSON 放行+SIGKILL@1s、D 未信任 hook 不执行 MCP 不连接→信任后同样本生效（决议持久化）、E scoped 注册+call 回传+deny 规则命中 scoped 名、F 暗卷实测（anthropics/skills + anthropics/claude-plugins-community 双源克隆，51 个真实 CC SKILL.md 免改解析）。
+- **反向验证**：摘除「未信任不激活」（pending→trusted 临时补丁）→ plugins-check A5/D1/D2/D3 四红 exit 1（未信任 hook 真执行、MCP 真连接）；还原 → 30 绿 exit 0。
+- **面板**：plugins 面板（注册表第五类）——双作用域卡片 + 信任卡（批准/拒绝，决议通道 preload 白名单外→按钮禁用注明，BLOCKED 备案④）+ MCP server 投影 + 加载清单异常；settings PANEL_IDS/default layout/validate 同步扩键；runAgent 收尾留存 lastPluginSnapshot 供 run 间隙 agent:state 查询。
+- **半托截图**：docs/m2e-plugins.png = 真实 Electron CDP 截图（临时目录种 user+project 双作用域插件，真实发送消息跑完 mock 流后开面板；一次性脚本用后即删，仓库零污染）。为演示补 M0B_WORKSPACE env 工作区覆盖（M2B_MAP_WORKSPACE 同族演示通道，缺省零行为）。
+- **坑三十九**：hook 子进程 cwd 必须真实存在——测试用 /tmp/ws 假路径让全部 node hook 静默 ENOENT（exit code null），误以为引擎坏；spawn 错误要区分 exit code null（error 事件）与非零退出。
+- **坑四十**：复制插件目录到工作区外会断掉裸导入解析（@modelcontextprotocol/sdk 向上找不到 node_modules）——判卷用 symlink 回仓库内 fixtures，ESM realpath 解析自然可达；同时避免复制拷贝漂移。
+- **坑四十一**：MCP Client 持有 stdio 流 → 不 disconnect 事件循环不空转（进程挂住不退出）——runAgent finally 必须 shutdown 回收 MCP server 子进程；plugins-check 以「摘要打印后 REAL_EXIT=0」锁定该语义。
+- **终验（2026-09-11）**：17 道门（六道门 + fork/gate/autonomy/compaction/panels/tools/map/prune/providers/memory-check + plugins-check）逐个 EXIT=0（/tmp/gate-*.log 实录）；test = 36 files / 267 passed / skipped 0；冻结判卷文件 sha256 3/3 逐字一致；fixtures/plugins 密钥词界扫描 = 0 命中；pnpm-lock.yaml 变更是 @modelcontextprotocol/sdk@1.30.0 按任务书安装的直接产物（package.json 白名单内改动的生成物）。

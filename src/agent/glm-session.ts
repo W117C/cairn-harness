@@ -264,11 +264,14 @@ export function composeTurnMessages(opts: {
   mapText?: string | null;
   memory?: Pick<MemoryInjection, "project" | "global">;
   history: ContextMessage[];
+  /** M2e：插件注入面（skill 路由清单 + SessionStart/重挂上下文），缺省零行为。 */
+  skills?: string;
 }): GlmMessage[] {
   const msgs: GlmMessage[] = [];
   if (opts.system) msgs.push({ role: "system", content: opts.system });
   if (opts.memory?.project) msgs.push({ role: "system", content: opts.memory.project });
   if (opts.memory?.global) msgs.push({ role: "system", content: opts.memory.global });
+  if (opts.skills) msgs.push({ role: "system", content: opts.skills });
   if (opts.mapText) {
     msgs.push({
       role: "system",
@@ -291,6 +294,12 @@ export function createGlmSessionProvider(
     workspace?: string;
     /** M2b：地图开关（缺省开；单测/暗卷可关）。 */
     map?: boolean;
+    /** M2e：插件注入面（skill 路由清单 / SessionStart 上下文 / 压缩后重挂投影）。缺省零行为。 */
+    plugins?: {
+      skillsRouting?: string;
+      hookContext?: string;
+      deriveRemount?: (events: AgentEvent[]) => string | null;
+    };
   } = {},
 ): Provider {
   let queue: ModelOutput[] = [];
@@ -389,7 +398,23 @@ export function createGlmSessionProvider(
           console.debug("[map] 注入失败，静默跳过:", err instanceof Error ? err.message : String(err));
         }
       }
-      const msgs = composeTurnMessages({ system: opts.system, mapText, memory, history });
+      // M2e：插件注入面——skill 路由清单 + SessionStart 上下文 + 压缩后重挂（异常静默，零行为缺省）
+      let skillsBlock: string | undefined;
+      if (opts.plugins) {
+        const parts: string[] = [];
+        if (opts.plugins.skillsRouting) parts.push(opts.plugins.skillsRouting);
+        if (opts.plugins.hookContext) parts.push(opts.plugins.hookContext);
+        if (opts.plugins.deriveRemount) {
+          try {
+            const remount = opts.plugins.deriveRemount(events);
+            if (remount) parts.push(remount);
+          } catch (err) {
+            console.debug("[plugins] 重挂投影失败，跳过:", err instanceof Error ? err.message : String(err));
+          }
+        }
+        if (parts.length > 0) skillsBlock = parts.join("\n\n");
+      }
+      const msgs = composeTurnMessages({ system: opts.system, mapText, memory, history, ...(skillsBlock ? { skills: skillsBlock } : {}) });
       queue = [];
       for await (const e of streamGlm(msgs, {}, opts.tools)) queue.push(e);
       lastHadToolCalls = queue.some((e) => e.type === "tool_call");

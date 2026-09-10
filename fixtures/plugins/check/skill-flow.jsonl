@@ -1,0 +1,2 @@
+{"type":"tool_call","id":"c-skill","name":"skill","args":{"name":"/echo-suite:greet"}}
+{"type":"assistant_message","content":"skill 场景完成"}

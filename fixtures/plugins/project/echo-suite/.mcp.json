@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "stub": {
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/mcp-server/server.mjs"]
+    }
+  }
+}

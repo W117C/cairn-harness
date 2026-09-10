@@ -1,0 +1,4 @@
+{
+  "name": "js-entry-plugin",
+  "description": "代码插件拒载判卷样本（根 index.js = 进程内第三方代码边界）"
+}

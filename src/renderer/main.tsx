@@ -39,7 +39,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
-import { GitBranch, Coins, ShieldCheck, Database, Settings as SettingsIcon, Plus, Pencil, Trash2, X } from "lucide-react";
+import { GitBranch, Coins, ShieldCheck, Database, Puzzle, Settings as SettingsIcon, Plus, Pencil, Trash2, X } from "lucide-react";
 import { resolveCard } from "./cards/registry";
 import { compactionCardPayload } from "../agent/compaction";
 import { Conversation } from "./conversation";
@@ -78,6 +78,7 @@ const PANEL_ICONS: Record<PanelId, React.ReactNode> = {
   token: <Coins className="h-4 w-4" />,
   git: <GitBranch className="h-4 w-4" />,
   memory: <Database className="h-4 w-4" />,
+  plugins: <Puzzle className="h-4 w-4" />,
 };
 
 function short(v: unknown, max = 260): string {

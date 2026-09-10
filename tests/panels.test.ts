@@ -1,4 +1,4 @@
-// M1e 面板注册表单测：注册断言（M2d 起 +memory 面板）+ 未知 panel_id 兜底不抛 + SSR 冒烟。
+// M1e 面板注册表单测：注册断言（M2d 起 +memory 面板；M2e 起 +plugins 面板）+ 未知 panel_id 兜底不抛 + SSR 冒烟。
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -6,9 +6,9 @@ import { FallbackPanel, KNOWN_PANEL_IDS, resolvePanel } from "../src/renderer/pa
 import { projectDiffCards, projectMemoryWrites, projectTokenUsage, pendingApprovals } from "../src/renderer/projections";
 import type { AgentEvent } from "../src/events";
 
-describe("面板注册表（M1e + M2d memory）", () => {
-  it("注册表含四类（approvals / token / git / memory），全部为组件", () => {
-    expect([...KNOWN_PANEL_IDS].sort()).toEqual(["approvals", "git", "memory", "token"]);
+describe("面板注册表（M1e + M2d memory + M2e plugins）", () => {
+  it("注册表含五类（approvals / token / git / memory / plugins），全部为组件", () => {
+    expect([...KNOWN_PANEL_IDS].sort()).toEqual(["approvals", "git", "memory", "plugins", "token"]);
     for (const id of KNOWN_PANEL_IDS) {
       expect(typeof resolvePanel(id)).toBe("function");
       expect(resolvePanel(id)).not.toBe(FallbackPanel);
@@ -54,6 +54,33 @@ describe("面板注册表（M1e + M2d memory）", () => {
     );
     expect(memoryHtml).toContain("本会话 remember 写入");
     expect(memoryHtml).toContain("note");
+
+    // M2e：插件面板 SSR 冒烟（pending 出信任卡 + 按钮禁用因 preload 未接线 + MCP 状态投影）
+    const pluginsHtml = renderToStaticMarkup(
+      createElement(resolvePanel("plugins"), {
+        payload: {
+          plugins: {
+            plugins: [{
+              name: "echo-suite", scope: "project", trust: "pending", root: "/ws/.agent/plugins/echo-suite",
+              counts: { skills: 1, commands: 1, agents: 1, hooks: 8, mcp: 1, lsp: 1 },
+              errors: [], warnings: ["未知顶层字段：futureField"],
+            }],
+            looseSkills: [{ invoke: "/standalone-skill", description: "散装" }],
+            mcpServers: [{ plugin: "echo-suite", server: "stub", state: "connected", tools: ["mcp__plugin_echo-suite_stub__echo"] }],
+            errors: [{ plugin: "broken-plugin", message: "plugin.json 解析失败" }],
+            warnings: [],
+          },
+        },
+      }),
+    );
+    expect(pluginsHtml).toContain("echo-suite");
+    expect(pluginsHtml).toContain("待信任");
+    expect(pluginsHtml).toContain("首次加载");
+    expect(pluginsHtml).toContain("/standalone-skill");
+    expect(pluginsHtml).toContain("mcp__plugin_echo-suite_stub__echo");
+    expect(pluginsHtml).toContain("broken-plugin");
+    expect(pluginsHtml).toContain("futureField");
+    expect(pluginsHtml).toContain("disabled"); // 决议通道未接线 → 按钮禁用（BLOCKED 备案）
   });
 
   it("token 投影：usage 累计 + compaction 计数（D11 ≥2 提示）", () => {

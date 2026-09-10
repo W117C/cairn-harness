@@ -1,0 +1,167 @@
+// M2e 任务 3/4 单测：frontmatter 全量字段解析 / 渐进披露 1536 截断 / 触发全文 /
+// $ARGUMENTS·$1 替换（含缺省行为）/ 压缩后重挂预算（单 5000 / 合 25000）/ 激活的事件流投影。
+import { describe, expect, it } from "vitest";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  parseFrontmatter, buildSkillRoutingList, substituteArgs, renderPromptCommand,
+  skillRemount, clampSkillBody, estimateTokens, activationsFromEvents,
+  SKILL_ROUTING_CHAR_LIMIT, SKILL_REMOUNT_TOKENS_PER_SKILL, SKILL_REMOUNT_TOKENS_TOTAL,
+  PluginRuntime,
+} from "../src/agent/plugins";
+import type { AgentEvent } from "../src/events";
+
+function fx(...parts: string[]): string {
+  return join(process.cwd(), "fixtures", "plugins", ...parts);
+}
+
+describe("M2e skill：frontmatter 与路由清单（任务 3）", () => {
+  it("frontmatter 全量字段解析（标量/数组/嵌套/正文分离）", () => {
+    const text = [
+      "---",
+      "name: greet",
+      'description: 用固定句式打招呼。',
+      "argument-hint: [名字]",
+      "allowed-tools: read_file, glob",
+      "metadata:",
+      "  author: m2e",
+      "  level: 3",
+      "---",
+      "",
+      "# 正文",
+    ].join("\n");
+    const { frontmatter, body } = parseFrontmatter(text);
+    expect(frontmatter["name"]).toBe("greet");
+    expect(frontmatter["description"]).toBe("用固定句式打招呼。");
+    expect(frontmatter["argument-hint"]).toEqual(["名字"]); // YAML 行内数组语义
+    expect(frontmatter["allowed-tools"]).toBe("read_file, glob");
+    expect(frontmatter["metadata"]).toEqual({ author: "m2e", level: 3 });
+    expect(body).toContain("# 正文");
+  });
+
+  it("无 frontmatter 的 markdown 原样返回", () => {
+    const { frontmatter, body } = parseFrontmatter("# 只有正文\n第二行");
+    expect(frontmatter).toEqual({});
+    expect(body).toContain("第二行");
+  });
+
+  it("路由清单 = /plugin:name — description；超 1536 字符截断且不出半个条目", () => {
+    const skills = [
+      { plugin: "a", name: "one", description: "短描述" },
+      { plugin: "a", name: "two", description: "x".repeat(2000) },
+      { plugin: "b", name: "three", description: "y".repeat(2000) },
+      { plugin: null, name: "loose", description: "散装" },
+    ];
+    const r = buildSkillRoutingList(skills);
+    expect(r.truncated).toBe(true);
+    expect(r.text.length).toBeLessThanOrEqual(SKILL_ROUTING_CHAR_LIMIT);
+    expect(r.text).toContain("/a:one — 短描述");
+    expect(r.text).toContain("已截断");
+    expect(r.text.endsWith("— 短描述") || r.text.split("\n").every((l) => l.startsWith("- ") || l.startsWith("[") || l === "")).toBe(true);
+    // 散装 skill 无插件前缀
+    expect(skillListHas(r.text, "/loose — 散装")).toBe(false); // 截断后可能被裁掉——单独验证非截断路径
+    const small = buildSkillRoutingList([{ plugin: null, name: "loose", description: "散装" }]);
+    expect(small.truncated).toBe(false);
+    expect(small.text).toBe("- /loose — 散装");
+  });
+});
+
+function skillListHas(text: string, line: string): boolean {
+  return text.split("\n").includes("- " + line.replace(/^- /, ""));
+}
+
+describe("M2e skill/prompt：参数替换（任务 4）", () => {
+  it("$ARGUMENTS 全文 / $1..$9 位置 / 缺位空串 / 未知变量原样", () => {
+    expect(substituteArgs("对 $ARGUMENTS 问好", "张三 李四")).toBe("对 张三 李四 问好");
+    expect(substituteArgs("把 $1 部署到 $2", "dev us")).toBe("把 dev 部署到 us");
+    expect(substituteArgs("缺位：[$9] 结束", "only-one")).toBe("缺位：[] 结束");
+    expect(substituteArgs("未知 $HOME 不展开", "x")).toBe("未知 $HOME 不展开");
+    expect(substituteArgs("无参数调用 $1", "")).toBe("无参数调用 ");
+  });
+
+  it("prompt command 渲染成用户消息（复用同一替换器）", () => {
+    const out = renderPromptCommand(
+      { plugin: "echo-suite", name: "deploy", description: "", path: "", frontmatter: {}, body: "把 $1 环境部署到 $2。" },
+      "staging us-east",
+    );
+    expect(out).toBe("把 staging 环境部署到 us-east。");
+  });
+});
+
+describe("M2e skill：渐进披露与触发全文（任务 3）", () => {
+  it("触发返回全文（tool_result 携带全文进上下文）；未注册报错", async () => {
+    const rt = await PluginRuntime.load({
+      projectPluginsDir: fx("project"),
+      looseRoots: [fx("loose")],
+      workspace: process.cwd(),
+      pluginDataRoot: join(tmpdir(), "m2e-skills-data"),
+      trustFile: join(tmpdir(), "m2e-skills-data", "trust-skills.json"),
+    });
+    await rt.trustDecide("echo-suite", true); // 项目级插件首次加载 = pending，触发前先信任
+    const hit = rt.triggerSkill("/echo-suite:greet");
+    expect(hit.ok).toBe(true);
+    expect(hit.output).toContain("# Greet Skill");
+    expect(hit.output).toContain("$ARGUMENTS");
+    const loose = rt.triggerSkill("/standalone-skill");
+    expect(loose.ok).toBe(true);
+    expect(loose.output).toContain("无需容器");
+    const miss = rt.triggerSkill("/nope");
+    expect(miss.ok).toBe(false);
+    await rt.shutdown();
+  });
+});
+
+describe("M2e skill：压缩后重挂预算（任务 3）", () => {
+  it("未被压缩的激活不重挂；被压缩的重挂全文", () => {
+    const activated = [
+      { invoke: "/echo-suite:greet", body: "GREET-BODY", triggerEventId: 5, seq: 0 },
+    ];
+    const r = skillRemount(activated, (id) => id === 5);
+    expect(r.text).not.toBeNull();
+    expect(r.mounted).toEqual(["/echo-suite:greet"]);
+    expect(r.text).toContain("GREET-BODY");
+    const r2 = skillRemount(activated, () => false);
+    expect(r2.text).toBeNull();
+    expect(r2.mounted).toEqual([]);
+  });
+
+  it("单 skill 前 5000 token 截断；合计 25000 token 封顶", () => {
+    const bigBody = "x".repeat(6000 * 4); // 6000 token
+    const one = clampSkillBody(bigBody, SKILL_REMOUNT_TOKENS_PER_SKILL);
+    expect(estimateTokens(one)).toBeLessThanOrEqual(SKILL_REMOUNT_TOKENS_PER_SKILL + 1); // chars/4 ceil 口径
+    expect(one).toContain("已截断");
+    // 6 个 5k skill → 合计帽 25000，只有 5 个能挂上
+    const activated = Array.from({ length: 6 }, (_, i) => ({
+      invoke: "/p:s" + String(i),
+      body: "y".repeat(4900 * 4),
+      triggerEventId: i + 1,
+      seq: i,
+    }));
+    const r = skillRemount(activated, () => true);
+    // 合计帽 25000：前 5 个各花 4900，第 6 个只剩 500 预算（最近激活优先，预算从最近的开始花）
+    expect(r.tokens).toBeLessThanOrEqual(SKILL_REMOUNT_TOKENS_TOTAL);
+    expect(r.mounted).toHaveLength(6);
+    expect(estimateTokens(r.text!)).toBeLessThanOrEqual(SKILL_REMOUNT_TOKENS_TOTAL + 50); // 头行开销
+    // 最近激活优先（seq 大的先占预算）
+    expect(r.mounted[0]).toBe("/p:s5");
+  });
+});
+
+describe("M2e skill 激活的事件流投影（无隐藏状态）", () => {
+  it("tool_call(skill) → 同 callId tool_result 的 1-based 行号 = 触发事件 id", () => {
+    const events: AgentEvent[] = [
+      { type: "user_message", content: "hi" },
+      { type: "tool_call", id: "c1", name: "skill", args: { name: "/echo-suite:greet" } },
+      { type: "tool_result", callId: "c1", ok: true, output: "GREET-BODY" },
+      { type: "tool_call", id: "c2", name: "read_file", args: { path: "x" } },
+      { type: "tool_result", callId: "c2", ok: true, output: "file" },
+    ];
+    const act = activationsFromEvents(events, (invoke) =>
+      invoke === "/echo-suite:greet" ? { body: "GREET-BODY" } : null,
+    );
+    expect(act).toHaveLength(1);
+    expect(act[0]!.invoke).toBe("/echo-suite:greet");
+    expect(act[0]!.triggerEventId).toBe(3); // 第 3 行 = tool_result
+    expect(act[0]!.body).toBe("GREET-BODY");
+  });
+});
