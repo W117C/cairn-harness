@@ -421,7 +421,11 @@ describe("glm-session 压缩接线", () => {
       },
     });
     // 压缩后仍要调模型 → 无 key 在此抛错（压缩发生在抛错之前 = 接线生效）
-    await expect(provider.next()).rejects.toThrow(/M0_API_KEY/);
+    await expect(async () => {
+      for await (const _e of provider.stream([], [])) {
+        void _e;
+      }
+    }).rejects.toThrow(/M0_API_KEY/);
     expect(calls).toEqual(["summarize"]);
     const after = await replay(logPath);
     const last = after[after.length - 1];

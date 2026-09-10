@@ -406,3 +406,15 @@
 - 坑二十八：electron-vite 打包后 Parser.init 缺省从 bundle 同目录找 tree-sitter.wasm → init({ locateFile }) 运行时 require.resolve("web-tree-sitter/")（坑二十四同族）。
 - 坑二十九：rg --files 输出绝对路径，glob.ts 靠 resolveInWorkspace 收敛、map 扫描必须显式 relative() 转相对，否则后缀过滤全空。
 - 坑三十：prune「最近 2 轮免剪」边界 = 从尾数第 2 条 user_message 的位置（免剪区含它），错一位会把全部轮次判进免剪区。
+
+## M2c 多协议原生适配（2026-09-10 开工）
+
+### 任务 0 基线（2026-09-09→10 复测）
+- 十四道门全绿：typecheck / test(28 files 173 passed skipped 0) / e2e / ipc:check / sandbox:check / build / fork / gate / autonomy / compaction / panels / tools / map / prune 全部退出 0；git 工作树干净。
+
+### 理解的目标 / 顺序 / 最大风险（≤10 行）
+- 目标：Provider 统一为 stream(messages, tools) → AsyncIterable<Event>（§3.3）；openai/anthropic/gemini 三家各按原生协议解析（互不 import），openai 由 glm.ts 泛化（GLM=预设），fixture 回放 + 跨家等价契约 + 暗卷。
+- 顺序：任务1 接口+loop 走流 → 2 openai 泛化 → 5 fixtures → 3 anthropic → 4 gemini → 6 providers-check（含 grep 互不引用）→ 反向验证（红→绿）→ 7 暗卷（无 key 即跳过）→ 截图/收口。
+- 最大风险①：冻结脚本约束——gate-check 注入 {next()} 形态 provider、autonomy/provider-check 直接 import streamGlm → loop 保留 legacy next() 分支（新流式分支优先），glm.ts 保留 streamGlm 同签名导出、内部委托 openai 适配器（GLM=预设，不算「三家互引」）。
+- 最大风险②：mock 迁移流式后事件日志必须逐字节不变 → 用「惰性产出 + loop 逐事件执行工具」的 for-await 语义（拉取与执行交错），实测与旧 next() 逐条拉取日志同序。
+- 最大风险③：anthropic usage 累计值（message_delta）不可累加、gemini 一 chunk 多 functionCall 全解析——fixture 按官方文档手写并逐条断言。

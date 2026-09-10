@@ -8,15 +8,11 @@ const FIXTURE = join(import.meta.dirname, "..", "fixtures", "mock", "todo-fix.js
 async function drain(fixturePath: string): Promise<ModelOutput[]> {
   const provider = createMockProvider(fixturePath);
   const out: ModelOutput[] = [];
-  for (let i = 0; i < 100; i++) {
-    const e = await provider.next();
-    if (!e) break;
-    out.push(e);
-  }
+  for await (const e of provider.stream([], [])) out.push(e);
   return out;
 }
 
-describe("mock provider", () => {
+describe("mock provider（统一流式接口）", () => {
   it("同一 fixture 跑两次，tool_call 序列完全一致", async () => {
     const run1 = (await drain(FIXTURE)).filter((e) => e.type === "tool_call");
     const run2 = (await drain(FIXTURE)).filter((e) => e.type === "tool_call");
@@ -33,10 +29,16 @@ describe("mock provider", () => {
     ]);
   });
 
-  it("序列跑完即停：之后 next() 恒为 null", async () => {
+  it("序列跑完即停：之后 stream() 恒为空（与旧 next() 恒 null 等价）", async () => {
     const provider = createMockProvider(FIXTURE);
-    for (let i = 0; i < 7; i++) await provider.next();
-    expect(await provider.next()).toBeNull();
-    expect(await provider.next()).toBeNull();
+    const first: ModelOutput[] = [];
+    for await (const e of provider.stream([], [])) first.push(e);
+    expect(first.length).toBe(7);
+    const again1: ModelOutput[] = [];
+    for await (const e of provider.stream([], [])) again1.push(e);
+    const again2: ModelOutput[] = [];
+    for await (const e of provider.stream([], [])) again2.push(e);
+    expect(again1).toEqual([]);
+    expect(again2).toEqual([]);
   });
 });

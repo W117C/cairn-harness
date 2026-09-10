@@ -249,7 +249,7 @@ export function createGlmSessionProvider(
     map?: boolean;
   } = {},
 ): Provider {
-  let queue: AgentEvent[] = [];
+  let queue: ModelOutput[] = [];
   let lastHadToolCalls: boolean | null = null; // null = 尚未请求过
   let round = 0; // 注入轮次（地图每 N 轮重算用）
   const coordinator = opts.compaction
@@ -293,10 +293,17 @@ export function createGlmSessionProvider(
     for (const m of lastUser.content.match(/[A-Za-z_][A-Za-z0-9_]{3,}/g) ?? []) idents.add(m);
     return [...idents];
   };
+  // stream(messages, tools)：一次调用 = 一轮模型输出。messages/tools 由 loop 传入，但本会话型
+  // provider 以事件日志为唯一事实源（compaction/prune/符号地图组装都在日志投影上，loop 拿不到），
+  // 故忽略入参沿用构造时的 opts（gate-check 暗卷路径冻结依赖此契约）。
   return {
-    async next(): Promise<ModelOutput | null> {
-      if (queue.length > 0) return queue.shift() as ModelOutput;
-      if (lastHadToolCalls === false) return null; // 模型收尾（纯文本）→ 任务结束
+    stream(_messages, _tools): AsyncIterable<ModelOutput> {
+      return turnGenerator();
+    },
+  };
+  async function* turnGenerator(): AsyncGenerator<ModelOutput> {
+    if (queue.length === 0) {
+      if (lastHadToolCalls === false) return; // 模型收尾（纯文本）→ 任务结束
       let { events, history } = await assemble();
       // M1d 触发检查：估算含 system/tools/记忆全量开销；B（硬兜底）→ overflow 紧急截断
       if (coordinator && opts.compaction) {
@@ -336,12 +343,12 @@ export function createGlmSessionProvider(
           console.debug("[map] 注入失败，静默跳过:", err instanceof Error ? err.message : String(err));
         }
       }
-      for (const m of history) msgs.push(m as unknown as GlmMessage);
+      for (const m of history) msgs.push(m);
       queue = [];
       for await (const e of streamGlm(msgs, {}, opts.tools)) queue.push(e);
       lastHadToolCalls = queue.some((e) => e.type === "tool_call");
-      if (queue.length === 0) return null;
-      return queue.shift() as ModelOutput;
-    },
-  };
+      if (queue.length === 0) return;
+    }
+    yield* queue.splice(0);
+  }
 }

@@ -1,12 +1,16 @@
-import type { EventLog } from "../events";
+import type { AgentEvent, EventLog } from "../events";
 import { denyReason, gate, type PermissionMode, type ToolResultWithAudit } from "../permissions";
-import type { Provider } from "../providers";
+import { projectContext } from "./context";
+import type { LegacyNextProvider, ModelOutput, Provider } from "../providers";
+import { streamFromNextSource } from "../providers";
 import type { VerifyHook } from "./verify";
 import { failureDigest } from "./verify";
 import { TOOLS, type ClarifyChannel, type PlanChannel, type ToolName } from "../tools";
 
 export interface LoopOptions {
-  provider: Provider;
+  /** 新形态：stream(messages, tools) → AsyncIterable<Event>（§3.3 统一接口）；
+   *  兼容旧形态：{ next() }（冻结脚本注入的 scripted provider），两种都走同一条事件管线。 */
+  provider: Provider | LegacyNextProvider;
   events: EventLog;
   /** 工作区：工具的路径根、run_shell 的 cwd。 */
   workspace: string;
@@ -27,115 +31,129 @@ export interface LoopOptions {
 }
 
 // agent loop：事件流 → 模型 → 工具 → 事件流。
-// 每轮向 provider 要下一条输出：assistant_message 直接落事件流；
-// tool_call 落事件流 → 过权限门 → 执行 → tool_result 落事件流，继续下一轮；
-// provider 序列耗尽（next() 返回 null）即任务结束。
+// 每轮向 provider 要一轮事件流（stream(messages, tools)），逐事件落日志：拉取与工具执行交错
+//（for-await 语义：消费一条、执行一条、再拉下一条），与旧 next() 逐条拉取的日志逐字节同序。
+// assistant_delta / assistant_message / usage 直接落事件流；
+// tool_call 落事件流 → 过权限门 → 执行 → tool_result 落事件流，轮内继续；
+// 一轮无 tool_call（纯文本）即任务结束。
 // verify 是系统门不是普通工具：调 verify_hook 跑 lint/test，
 //   通过 → 立即停止（不再调用模型）；失败 → 错误输出注入同轮继续修；
 //   连续失败达上限（缺省 3）→ verify_result(failed) 后停止（不再调用模型）。
 export async function runLoop(opts: LoopOptions): Promise<void> {
-  const { provider, events, workspace, userMessage } = opts;
+  const { events, workspace, userMessage } = opts;
   const mode = opts.mode ?? "default";
   const interactive = opts.interactive ?? false;
   const maxSteps = opts.maxSteps ?? 50;
   const maxVerify = opts.verify?.maxAttempts ?? 3;
   let verifyAttempts = 0;
 
+  // 新旧形态统一收敛成流式事件源（legacy next() 源遇 tool_call 断轮，日志同序）
+  const provider = opts.provider;
+  const streamFn: (messages: Parameters<Provider["stream"]>[0]) => AsyncIterable<ModelOutput> =
+    "stream" in provider ? (messages) => provider.stream(messages) : streamFromNextSource(provider);
+  const seen: AgentEvent[] = []; // loop 视角的完整事件流（stream(messages) 的上下文投影源）
+
   if (userMessage !== undefined) {
-    await events.append({ type: "user_message", content: userMessage });
+    const event = { type: "user_message", content: userMessage } as const;
+    await events.append(event);
+    seen.push(event);
   }
 
   for (let step = 0; step < maxSteps; step++) {
-    const output = await provider.next();
-    if (!output) return; // 模型认为任务结束
+    let sawToolCall = false;
+    for await (const output of streamFn(projectContext(seen))) {
+      await events.append(output);
+      seen.push(output);
+      if (output.type !== "tool_call") continue; // assistant_message / delta / usage：继续
 
-    await events.append(output);
-    if (output.type !== "tool_call") continue; // assistant_message：继续下一轮
+      sawToolCall = true;
 
-    // ---- verify 反射循环（系统门，优先于权限门与 TOOLS）----
-    if (output.name === "verify") {
-      if (!opts.verify) {
+      // ---- verify 反射循环（系统门，优先于权限门与 TOOLS）----
+      if (output.name === "verify") {
+        if (!opts.verify) {
+          await events.append({
+            type: "tool_result",
+            callId: output.id,
+            ok: false,
+            output: "verify: 未接线验证门（fail-closed）",
+          });
+          continue;
+        }
+        verifyAttempts++;
+        const attempt = verifyAttempts;
+        const outcome = await opts.verify.run();
+        await events.append({
+          type: "verify_result",
+          callId: output.id,
+          ok: outcome.ok,
+          attempt,
+          maxAttempts: maxVerify,
+          results: outcome.results,
+        });
+        if (outcome.ok) return; // 验证通过 → 立即停止，不再调用模型
+        if (attempt >= maxVerify) {
+          // 上限耗尽 → verify_result(failed) 已落，停止且不再调用模型
+          await events.append({
+            type: "tool_result",
+            callId: output.id,
+            ok: false,
+            output: `[verify] 连续失败 ${String(attempt)}/${String(maxVerify)} 次，已达上限，停止`,
+          });
+          return;
+        }
+        // 失败 → 错误输出注入同轮继续修
         await events.append({
           type: "tool_result",
           callId: output.id,
           ok: false,
-          output: "verify: 未接线验证门（fail-closed）",
+          output: failureDigest(outcome),
         });
         continue;
       }
-      verifyAttempts++;
-      const attempt = verifyAttempts;
-      const outcome = await opts.verify.run();
-      await events.append({
-        type: "verify_result",
-        callId: output.id,
-        ok: outcome.ok,
-        attempt,
-        maxAttempts: maxVerify,
-        results: outcome.results,
-      });
-      if (outcome.ok) return; // 验证通过 → 立即停止，不再调用模型
-      if (attempt >= maxVerify) {
-        // 上限耗尽 → verify_result(failed) 已落，停止且不再调用模型
+
+      // 权限门：先过门再动手（verify 已在上面分支处理，此处 name 不含 verify）
+      const name = output.name as Exclude<ToolName, "verify">;
+      const decision = gate(mode, name, interactive);
+      if (decision !== "allow") {
+        const reason = decision === "deny" ? denyReason(name) : null;
         await events.append({
           type: "tool_result",
           callId: output.id,
           ok: false,
-          output: `[verify] 连续失败 ${String(attempt)}/${String(maxVerify)} 次，已达上限，停止`,
+          output: `[permission denied] ${output.name} 在 ${mode} 档（${interactive ? "交互" : "非交互"}）下被门拒绝（${decision}${reason ? `：${reason}` : ""}）`,
         });
-        return;
+        continue;
       }
-      // 失败 → 错误输出注入同轮继续修
+
+      const tool = TOOLS[name];
+      let result;
+      if (!tool) {
+        result = { ok: false, output: `unknown tool: ${output.name}` };
+      } else {
+        const ctx = {
+          workspace,
+          emit: (e: Parameters<EventLog["append"]>[0]) => events.append(e),
+          callId: output.id,
+          clarify: opts.clarify,
+          plan: opts.plan,
+        };
+        try {
+          result = await tool.run(output.args, ctx);
+        } catch (err) {
+          result = { ok: false, output: err instanceof Error ? err.message : String(err) };
+        }
+      }
+      // M1c：gatedTool 自动放行时在结果上附带审计元数据（结构扩展），透传进 tool_result 事件
+      const audit = (result as ToolResultWithAudit).auto;
       await events.append({
         type: "tool_result",
         callId: output.id,
-        ok: false,
-        output: failureDigest(outcome),
+        ok: result.ok,
+        output: result.output,
+        ...(audit ? { auto: audit } : {}),
       });
-      continue;
     }
-
-    // 权限门：先过门再动手（verify 已在上面分支处理，此处 name 不含 verify）
-    const name = output.name as Exclude<ToolName, "verify">;
-    const decision = gate(mode, name, interactive);
-    if (decision !== "allow") {
-      const reason = decision === "deny" ? denyReason(name) : null;
-      await events.append({
-        type: "tool_result",
-        callId: output.id,
-        ok: false,
-        output: `[permission denied] ${output.name} 在 ${mode} 档（${interactive ? "交互" : "非交互"}）下被门拒绝（${decision}${reason ? `：${reason}` : ""}）`,
-      });
-      continue;
-    }
-
-    const tool = TOOLS[name];
-    let result;
-    if (!tool) {
-      result = { ok: false, output: `unknown tool: ${output.name}` };
-    } else {
-      const ctx = {
-        workspace,
-        emit: (e: Parameters<EventLog["append"]>[0]) => events.append(e),
-        callId: output.id,
-        clarify: opts.clarify,
-        plan: opts.plan,
-      };
-      try {
-        result = await tool.run(output.args, ctx);
-      } catch (err) {
-        result = { ok: false, output: err instanceof Error ? err.message : String(err) };
-      }
-    }
-    // M1c：gatedTool 自动放行时在结果上附带审计元数据（结构扩展），透传进 tool_result 事件
-    const audit = (result as ToolResultWithAudit).auto;
-    await events.append({
-      type: "tool_result",
-      callId: output.id,
-      ok: result.ok,
-      output: result.output,
-      ...(audit ? { auto: audit } : {}),
-    });
+    if (!sawToolCall) return; // 模型认为任务结束（纯文本轮 / 事件源耗尽）
   }
   throw new Error(`agent loop 超过 maxSteps=${String(maxSteps)}，强制中止`);
 }

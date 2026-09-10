@@ -3,7 +3,7 @@ import type { AgentEvent } from "../events";
 import type { ModelOutput, Provider } from "./index.js";
 
 // 演示通道：M0A_MOCK_DELTA=1 时把剧本里的 assistant_message 拆成 assistant_delta 逐段吐出，
-// 走与 GLM 真流式完全相同的 delta 事件管线（合并→上屏）。默认关闭，M0 事件流逐字节不变。
+// 走与真流式完全相同的 delta 事件管线（合并→上屏）。默认关闭，M0 事件流逐字节不变。
 const DELTA_MODE = process.env.M0A_MOCK_DELTA === "1";
 const DELTA_CHUNK = 4; // 每段字符数（按码点切，避免劈开代理对）
 const DELTA_PACE_MS = 120; // 演示节奏：人眼可见的逐字上屏
@@ -12,8 +12,9 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// 从 fixture JSONL 预录序列创建 mock provider：
-// 按序吐出预录的 assistant_message / tool_call，序列跑完即停（之后 next() 恒为 null）。
+// 从 fixture JSONL 预录序列创建 mock provider（统一流式接口）：
+// 按序惰性吐出预录的 assistant_message / tool_call（for-await 拉取与工具执行交错，与旧
+// next() 逐条拉取的日志顺序逐字节一致），序列跑完即停（之后 stream 产出为空 = 任务结束）。
 export function createMockProvider(fixturePath: string): Provider {
   let script: ModelOutput[] | null = null;
   let cursor = 0;
@@ -32,7 +33,7 @@ export function createMockProvider(fixturePath: string): Provider {
         if (DELTA_MODE) {
           const chars = Array.from(e.content);
           for (let i = 0; i < chars.length; i += DELTA_CHUNK) {
-            out.push({ type: "assistant_delta", callId: `mock-a${turn}`, text: chars.slice(i, i + DELTA_CHUNK).join("") });
+            out.push({ type: "assistant_delta", callId: `mock-a${String(turn)}`, text: chars.slice(i, i + DELTA_CHUNK).join("") });
           }
         } else {
           out.push(e);
@@ -48,11 +49,14 @@ export function createMockProvider(fixturePath: string): Provider {
   }
 
   return {
-    async next() {
+    async *stream() {
       await load();
-      const event = script![cursor++];
-      if (event && DELTA_MODE && event.type === "assistant_delta") await sleep(DELTA_PACE_MS);
-      return event ?? null; // 序列跑完即停
+      while (cursor < script!.length) {
+        const event = script![cursor++];
+        if (event && DELTA_MODE && event.type === "assistant_delta") await sleep(DELTA_PACE_MS);
+        yield event;
+      }
+      // 序列跑完即停：之后 stream() 产出为空
     },
   };
 }

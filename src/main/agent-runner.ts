@@ -45,7 +45,7 @@ import {
 } from "./sessions";
 import { createMockProvider } from "../providers/mock";
 import { streamGlm } from "../providers/glm";
-import type { Provider } from "../providers";
+import type { ModelOutput, Provider } from "../providers";
 import { TOOLS, type Tool, type ToolResult } from "../tools";
 import type { ToolName } from "../tools/base";
 import { AskGate } from "./ask-gate";
@@ -288,12 +288,11 @@ function createProvider(userMessage: string): Provider {
   // M2a 截图通道：M2A_LSP_DEMO 指向演示剧本（write_file → 真实诊断回流管线），缺省零行为
   if (process.env.M2A_LSP_DEMO) return createMockProvider(process.env.M2A_LSP_DEMO);
   if (process.env.M0A_PROVIDER !== "glm") return createMockProvider(MOCK_FIXTURE);
-  let gen: AsyncGenerator<AgentEvent> | null = null;
+  let gen: AsyncIterable<ModelOutput> | null = null;
   return {
-    async next() {
+    stream() {
       if (!gen) gen = streamGlm([{ role: "user", content: userMessage }]);
-      const { value } = await gen.next();
-      return value ?? null;
+      return gen;
     },
   };
 }
