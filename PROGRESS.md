@@ -437,3 +437,6 @@
 - 坑三十一：task 封面「Provider.next() → stream()」迁移的顺序陷阱——mock 事件流必须逐字节同序，关键在「拉取与工具执行交错」（for-await 惰性消费），若先整轮收集再执行，连续 tool_call 的 tool_result 会整体后移破坏序。
 - 坑三十二：projectContext 产物即 ProviderMessage 的中立场——system 顶层化是三家各自的 wire 需求（openai 消息角色/anthropic system 参数/gemini systemInstruction），中立交换形态保 consumer 不感知。
 - 坑三十三：new Set(JSON.stringify(...)) 会把 JSON 串按字符拆集——等价断言必须先对每家整体 JSON.stringify 再进 Set。
+
+### 半托证据
+- docs/m2c-providers.png = pnpm providers-check 全绿输出（exit 0，/tmp/pc-green.out 实录）程序化渲染的终端风格图（PIL + Hiragino Sans GB，因 Menlo 无 CJK 字形首渲全方框已重渲）；非屏幕抓图，文本逐字来自真实命令输出。
