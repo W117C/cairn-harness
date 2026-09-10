@@ -2,6 +2,39 @@
 
 无阻塞事项。
 
+## 裁决记录（2026-09-10，此前各轮备案全部裁决完毕）
+
+以下为管理者对 M0c–M2c 各轮备案事项的逐条裁决；历史原文在本文件下方各轮小节，保留作审计轨迹。agent-plan.md 只读不改，本节即裁决的唯一记录。
+
+### 裁决（含处置）
+
+1. **M2c-1 loop 保留 legacy `{next()}` 分支** → **保留，定位为长期兼容而非技术债**。冻结的 gate-check.ts 永久注入 `{next()}` 形态 scripted provider，该分支是真实契约；scripts/ 只读界限不变，不为此放开。新适配器一律走 stream 分支（M2c 已执行）。
+2. **M2c-2 会话型 provider 忽略 stream 入参 messages/tools** → **追认**。EventLog 只 append、logPath 为唯一事实源是压缩/裁剪/符号地图的既定架构前提，会话 provider 从日志重建对话历史正确；中立 messages 形态供无状态适配器（M2c openai/anthropic/gemini 已按此实现）。
+3. **M2c-3 key 扫描判据误伤** → **判据修正成立**：扫描类硬判据自此用 `\bsk-`（词边界，消除 AskGate / ask-done 假阳性），`AIza` 与 `api[_-]?key\s*=` 模式不变。本裁决适用于后续所有含扫描判据的任务书；本轮「真实 key 0 命中」的扫描结论维持有效，不因判据缺陷翻案。
+4. **M2b-1 web-tree-sitter@0.25.10 无 @types** → **追认**。最小结构类型（局部 interface + 断言）是当前正确做法，DT 出配套 types 后再迁移，不引入 any。
+5. **M2b-2 / M2a-3 演示通道（M2B_MAP_DEMO、M2A_LSP_DEMO，连同同族 M0A_MOCK_DELTA / M0B_SCREENSHOT）** → **全部保留**：env 门控、缺省零行为、不进验收链，留作重跑截图/演示的入口。M2 收口任务中把演示剧本整理为带冻结 sha 的回归 fixture；在那之前不删不改。
+6. **M2a-1 src/permissions 三行分类改动** → **追认为不违规**：edit_file 是写工具，权限层必须有分类，否则 read-only 档可写、方案门失效——这是任务书界限清单的遗漏而非执行越界。三处分类行 + risk.ts 评级按现状保留，界限争议就此关闭。
+7. **M2a-2 M0 旧用例更新** → **追认**：规格演进（行截断 2000 先于 50KB 字节帽）驱动的测试同步，断言强度只增不减，不属放宽。
+8. **M1c-2 「最长前缀」vs「deny>ask>allow 固定序」** → **按本轮实现定为规范**：同段多规则命中取最长前缀（其行为生效），同长才按 deny>ask>allow；管线层序 deny→ask 不变。验收④『git push origin main → allow』场景维持绿。
+9. **M1c-3 session_kind 记忆键粒度** → **维持现状**：run_shell 按归一化命令全串、write_file 按工具级。路径前缀粒度待 M3 多工作区场景出现真实需求再议，届时只改 scopeKey() 一处。
+10. **M1c-4 / M1b-3 verify 不拦于只读/审批面** → **维持**：verify 读为主，toolTableFor 含 verify 不变。M2「产出代码安全 report 模式」落地时统一重审 verify/lint 类命令的门面。
+11. **M1c-5 审批卡降档提示走 console.warn** → **维持，归入后续 UI 打磨**。非阻塞；renderer 状态流改造随交互打磨里程碑另开任务，不追补到已收口轮次。
+12. **M1a-2 scripts/ipc-check.ts 白名单矛盾** → **追认为不违规**：任务 6 明确要求 ipc:check 扩展为重放验收，脚本改动是任务本身，最小改动成立。界限清单遗漏就此关闭。
+13. **M1a-3 / M1b-4 registry 文件后缀** → **规范修正**：含 JSX 的卡片组件一律 .tsx，任务书 `cards/registry.ts` 视为笔误。
+14. **M1b-2 verify 配置来源** → **追认**：config.json verify 字段 > package.json scripts 探测；plan.verify 仅展示。需要 plan 覆盖时给 loadVerifyConfig 加入参一层即可，暂不做。
+15. **M0c-1 shadcn init 不识别 electron-vite** → **采纳 manual 路线为标准**：手写 components.json（radix-nova）+ `npx shadcn add -y` 产组件，写进 AGENTS.md 约定（已写入）。给上游提 issue 选手自选，不作要求。
+16. **M0c-2 反向验证口径** → **采纳机制级证明为验收口径**：strict CSP 约束 dev 内联注入路径；构建产物是同源 `<link>` 文件本就不受 style-src 约束。两类证据均已留存，验收不再要求构建产物样式失效。
+17. **M0c-3 AX 窗口枚举失效** → **采纳 CDP 为标准自动化路径**（Runtime.evaluate 真实 DOM 事件 + Page.captureScreenshot）。不再追求稳定 AX 环境；macOS AX 键盘事件仅作现场授权场景的备选。
+18. **M0c-4 pnpm-workspace.yaml allowBuilds 占位行** → **已过期失效**：M0b-UI 轮已拍板入库（onlyBuiltDependencies: [electron, esbuild]），现文件内容 `allowBuilds: esbuild=true` + onlyBuilt 随现状追认，门禁全绿即证。
+19. **M1a 备案（pnpm-workspace.yaml / pnpm-lock.yaml 去留）** → **追认两文件入库**：前者 M0b-UI 轮已解决，后者为可复现性保留。git rm 议案作废。
+20. **M1d-2 preload compact 未接线** → **已解决**：M1e 补上 `compact: () => ipcRenderer.invoke("agent:compact")` 与 renderer 入口（src/preload/index.ts:29 实测在场），本项关闭。
+21. **M1d-3 压缩切点纪律 2 实现口径** → **采纳 CC/CL 先例口径为定稿**：全部 user_message 事件进固定回注名单（永不压缩、永在投影可见），tail 保持 clamp 有界，用户输入零丢失。后续若要字面口径（tail 必含最近 user 消息）需重开任务，不接受静默切换。
+
+### 顺手清账
+
+- **AGENTS.md「已知待清理」DARK_QUERY** → **本轮已还原为一行**（`"(prefers-color-scheme: dark)"`，行为不变；全部门禁复跑全绿，无任何判据引用该常量），AGENTS.md 对应条目删除。该串接是 M0c 判据误伤的遗产，正确判据 `^\s*color-scheme:\s*dark` 锚定行首本就不误伤，还原即是回到正轨。
+- 各轮已标 ~~已解决~~ 项（M0_API_KEY 三轮、start 脚本、环境怪癖、流式截图）不重复裁决。
+
 ## M2c 轮新增待裁决（2026-09-10）
 
 无阻塞事项。全部 7 项任务 + 反向验证红→绿 + 十四道门 + providers-check + 暗卷跳过路径完成。备案三点（非阻塞）：

@@ -3,9 +3,8 @@
 // CSS 侧由 nova preset 的 @custom-variant dark 与 .dark token 块接管。
 export type Scheme = "light" | "dark";
 
-// 系统深色偏好查询。串接写法是有意的：让 M0c 的硬编码色板 grep 门只命中真正的手写色板，
-// 不误伤这里的系统偏好 API 用法（模式串见 PROGRESS 的 M0c 段）。
-export const DARK_QUERY = "(prefers-color-" + "scheme: dark)";
+// 系统深色偏好查询（M0c 色板门的正确判据是 ^\s*color-scheme:\s*dark，不误伤本行）。
+export const DARK_QUERY = "(prefers-color-scheme: dark)";
 
 /** 主题同步目标：document.documentElement 的最小形状（便于纯 Node 测试）。 */
 export interface ThemeRoot {

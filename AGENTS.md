@@ -32,13 +32,9 @@ Node 22 / TypeScript 5 / electron-vite 5 / Electron 44 / React 19 / vitest 5 / T
 ## 判卷纪律
 
 - 判卷标准（grep / 断言 / 验收脚本）是冻结的。**发现判据有缺陷 → 写 `BLOCKED.md` 要求换判据，不许改代码去绕**。
-- 反面样例：`theme.ts` 的 `DARK_QUERY` 被拆成 `"(prefers-color-" + "scheme: dark)"`，只为避开 `grep "color-scheme: dark"`——正确的精确判据是 `^\s*color-scheme:\s*dark`。
-- 硬指标里的 grep 一律写精确模式（锚定行首/分号），避免误伤合法用法。
-
-## 已知待清理
-
-- `src/renderer/theme.ts` 的 `DARK_QUERY` 还原为一行（1 行改动，行为不变）。
+- 反面样例（已结案）：`theme.ts` 的 `DARK_QUERY` 曾被拆行避开 `grep "color-scheme: dark"`，2026-09-10 已还原为一行；正确精确判据是 `^\s*color-scheme:\s*dark`（锚定行首，不误伤合法用法）。
+- 硬指标里的 grep 一律写精确模式（锚定行首/分号）；**扫描类判据（如 key 扫描）自此用词边界**（`\bsk-` 而非 `sk-`），消除 AskGate 类假阳性（裁决见 BLOCKED.md 裁决记录 §3）。
 
 ## 当前状态
 
-M0 完成（M0a 内核 + M0b 界面/沙箱 + M0c shadcn/ui 组件层与系统主题，六道门全绿，32 测试）。下一步 = M1 会话内核（见 `agent-plan.md` §14）。
+M0–M2c 完成（内核 + 沙箱 + shadcn/ui + 会话内核/三门/自治等级 + 阈值摘要压缩 + grep/glob/read/edit/LSP + 符号地图 + prune + 三 provider 接齐；门禁全绿，192 测试）。BLOCKED.md 各轮备案已全部裁决（见其裁决记录节）。下一步 = M2 收尾（记忆两层、扩展容器/MCP、辅助对话、产出代码安全 report 模式，见 `agent-plan.md` §14）。
