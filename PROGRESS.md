@@ -440,3 +440,8 @@
 
 ### 半托证据
 - docs/m2c-providers.png = pnpm providers-check 全绿输出（exit 0，/tmp/pc-green.out 实录）程序化渲染的终端风格图（PIL + Hiragino Sans GB，因 Menlo 无 CJK 字形首渲全方框已重渲）；非屏幕抓图，文本逐字来自真实命令输出。
+
+### 暗卷正路径（2026-09-10 领导提供 GLM key，key 只进当次进程环境变量）
+- 冻结链 pnpm provider:check 真连全绿：156 delta / usage 22/684 / tool_call=read_file(src/todo.ts) 解析成功 / 159 条事件 JSONL 重放逐字一致。
+- 新 openai 适配器（glm 预设）暗卷 PASS：30 deltas ≥2、真实流式文本、usage 154/76 经统一 UsageEvent 映射（问句未触发工具，tool_call=0 属预期；tool_call 解析已由冻结链调用②覆盖）。
+- 坑三十四（环境）：本机 shell 的 HTTPS_PROXY 只对 curl 生效；真实 Node v22 的 fetch 直连 api.b.ai 会被 distributor 按 TLS 指纹 403（access_denied/premium 门控，UA/HTTP 版本/代理路径已逐一排除，curl 全 200）；**pnpm 脚本链的 Electron-as-node（Chromium 网络栈）不受影响**——GLM 真连验收一律走 pnpm 脚本或 pnpm exec node，不要用 /usr/local/bin/node 直跑适配器。
