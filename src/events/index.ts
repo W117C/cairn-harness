@@ -16,11 +16,13 @@ export interface UserMessageEvent { type: "user_message"; content: string; origi
 export interface AssistantMessageEvent { type: "assistant_message"; content: string }
 /** 流式增量片段：callId 标识同一轮回复，text 为逐字追加的一小段。 */
 export interface AssistantDeltaEvent { type: "assistant_delta"; callId: string; text: string }
-export interface ToolCallEvent { type: "tool_call"; id: string; name: string; args: Record<string, unknown> }
+/** M3a：worker 子流的工具调用（§4.4.9 落主流口径）——agent_id 在场 = 该事件属于该 worker 子流，
+ *  主上下文投影（projectContext）跳过带 agent_id 的事件（父上下文唯一接收物 = agent_result，§4.4.4）。 */
+export interface ToolCallEvent { type: "tool_call"; id: string; name: string; args: Record<string, unknown>; agent_id?: string }
 /** M1c 自动放行来源审计（§11.7.5）：仅自动放行的 tool_result 携带，零新事件类型。 */
 export interface AutoApproveMeta { source: "rule" | "session_scope"; ruleId?: string }
-export interface ToolResultEvent { type: "tool_result"; callId: string; ok: boolean; output: string; auto?: AutoApproveMeta }
-export interface UsageEvent { type: "usage"; inputTokens: number; outputTokens: number }
+export interface ToolResultEvent { type: "tool_result"; callId: string; ok: boolean; output: string; auto?: AutoApproveMeta; agent_id?: string }
+export interface UsageEvent { type: "usage"; inputTokens: number; outputTokens: number; /** M3a §4.4.10：usage 按 agent 归因（主 loop usage 无此字段）。 */ agent_id?: string }
 /** 会话元信息：分支会话首行携带 branch_of 指向原会话；
  *  M2f：sidechat 会话首行携带 kind="sidechat" + parent_session_id 指向主会话。 */
 export interface SessionMetaEvent {
@@ -132,6 +134,109 @@ export interface SecurityReportEvent {
   scannedAt?: string;
 }
 
+// ---- M3a 多 agent 编排（§3.4 / §4.4）：agent 子流事件 + 审批事件协议 ----
+// 子流纪律（§4.4.9 / 任务书裁决 1）：worker 事件落主会话 JSONL——agent_* 事件 + 该 worker 的
+// tool_call/tool_result/usage 均带 agent_id；agent_spawned 携 parent_event_id（spawn tool_call 的
+// 1-based 事件 id）建立血缘树。心跳 = 子流 tool_call/tool_result 天然时间戳，不造独立心跳事件。
+
+/** spawn_agent 的 mode（§4.1）：M3a 只接入 read；write/pipeline spawn 即拒绝（M3b）。 */
+export type AgentMode = "read" | "write" | "pipeline";
+/** worker 状态机五态 + cancelled（§4.4.8）。 */
+export type AgentStatus = "running" | "waiting_approval" | "waiting_input" | "done" | "failed" | "cancelled";
+/** 权限档（与 src/permissions 的 PermissionMode 同字面量；events 层零依赖不自引）。 */
+export type AgentPermissionMode = "read-only" | "default" | "auto";
+
+export interface AgentSpawnedEvent {
+  type: "agent_spawned";
+  agent_id: string;
+  /** 血缘：主流里 spawn_agent tool_call 的事件 id（1-based 行号）。 */
+  parent_event_id: number;
+  mode: AgentMode;
+  task: string;
+  /** 写租约声明（M3a 仅解析存档，租约求交与警告 M3b 落地）。 */
+  resources?: string[];
+  /** 依赖链（M3a 仅解析存档，事件驱动链接 M3c）。 */
+  depends_on?: string[];
+  model?: string;
+  max_turns: number;
+  /** worker 有效权限档（§11.7.6 单调继承：worker ≤ 父，越界裁到父档）。 */
+  permission_mode: AgentPermissionMode;
+  /** 越界请求的原档（未越界 = 缺省）。 */
+  permission_mode_requested?: AgentPermissionMode;
+  /** 越界裁剪警告（审批卡必显）。 */
+  tier_warning?: string;
+  /** 派生时间戳（Date.now 毫秒；面板「时长」的起算点，纯事件投影）。 */
+  ts?: number;
+}
+
+export interface AgentStatusEvent {
+  type: "agent_status";
+  agent_id: string;
+  status: AgentStatus;
+  /** failed 的分型原因（max_turns / interrupted / 异常摘要）；cancelled 可带发起方注记。 */
+  reason?: string;
+  /** 终态时间戳（时长投影用；非终态缺省）。 */
+  ts?: number;
+}
+
+export interface AgentMessageEvent {
+  type: "agent_message";
+  agent_id: string;
+  kind: "progress" | "report";
+  text: string;
+}
+
+/** 终态回传（§4.4.4）：父上下文唯一接收物。错误永不冒充结果——failed 走 status/reason 分型。 */
+export interface AgentResultEvent {
+  type: "agent_result";
+  agent_id: string;
+  status: "done" | "failed";
+  reason?: string;
+  /** ≤2000 token，超限类型化裁剪（summary_truncated = true + 尾部截断提示）。 */
+  summary: string;
+  summary_truncated?: boolean;
+  artifacts: { report?: string; files_changed?: string[] };
+  usage: { inputTokens: number; outputTokens: number };
+  tool_stats: Record<string, number>;
+}
+
+// ---- 审批事件协议（§4.4.3 与 turn 解耦）：请求（落流）与等待（订阅 approval_resolved by id）两段 ----
+export interface ApprovalRequestedEvent {
+  type: "approval_requested";
+  id: string;
+  /** 发起 worker 的归因（主会话审批不落此事件，走 IPC AskGate 通道）。 */
+  agent_id?: string;
+  tool: string;
+  /** 参数摘要（digest，不落全量 args——审批卡必显的最小面）。 */
+  args_digest: string;
+  risk: string;
+  risk_reasons?: string[];
+  /** 越界裁剪警告透传（审批卡必显）。 */
+  tier_warning?: string;
+}
+
+export interface ApprovalResolvedEvent {
+  type: "approval_resolved";
+  id: string;
+  agent_id?: string;
+  decision: "approved" | "rejected";
+  scope: "once" | "session_kind" | "always";
+  /** 决议注记（含 always 拒发等拒绝理由）。 */
+  reason?: string;
+}
+
+/** 卡片回写协议（§10.3）：卡片动作的唯一事件形态。target_agent_id = 多 agent 归因。 */
+export interface CardActionEvent {
+  type: "card_action";
+  card_id: string;
+  source_event_id: number;
+  card_type: string;
+  action: string;
+  payload?: Record<string, unknown>;
+  scope?: "once" | "session_kind" | "always";
+  target_agent_id?: string;
+}
+
 export type AgentEvent =
   | UserMessageEvent
   | AssistantMessageEvent
@@ -145,7 +250,14 @@ export type AgentEvent =
   | PlanApprovedEvent
   | VerifyResultEvent
   | CompactionEvent
-  | SecurityReportEvent;
+  | SecurityReportEvent
+  | AgentSpawnedEvent
+  | AgentStatusEvent
+  | AgentMessageEvent
+  | AgentResultEvent
+  | ApprovalRequestedEvent
+  | ApprovalResolvedEvent
+  | CardActionEvent;
 
 const KNOWN_TYPES = new Set([
   "user_message",
@@ -161,6 +273,13 @@ const KNOWN_TYPES = new Set([
   "verify_result",
   "compaction",
   "security_report",
+  "agent_spawned",
+  "agent_status",
+  "agent_message",
+  "agent_result",
+  "approval_requested",
+  "approval_resolved",
+  "card_action",
 ]);
 
 export interface EventLog {

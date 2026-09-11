@@ -133,6 +133,13 @@ function renderProjectionLine(e: AgentEvent): string | null {
       return "[主会话·安全报告] findings=" + String(e.findings.length);
     case "usage":
     case "session_meta":
+    case "agent_spawned":
+    case "agent_status":
+    case "agent_message":
+    case "agent_result":
+    case "approval_requested":
+    case "approval_resolved":
+    case "card_action":
       return null;
   }
 }

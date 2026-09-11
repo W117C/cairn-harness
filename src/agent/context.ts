@@ -76,6 +76,15 @@ export function projectContext(
     const id = eventIdAt(i);
     if (isCompaction(e)) return; // 压缩事件本体不进消息（其效果 = 排除集 + 注入）
     if (excluded.has(id)) return; // 被摘除事件按 id 引用排除（幂等的关键）
+    // M3a §4.4.4：worker 子流事件（带 agent_id 的 tool_call/tool_result/usage + agent_* 事件）
+    // 不进主上下文——父上下文唯一接收物 = agent_result（合成 tool_result，不带 agent_id）。
+    if ("agent_id" in e && typeof e.agent_id === "string" && e.agent_id !== "") return;
+    if (
+      e.type === "agent_spawned" || e.type === "agent_status" || e.type === "agent_message" ||
+      e.type === "approval_requested" || e.type === "approval_resolved" || e.type === "card_action"
+    ) {
+      return; // 编排/审批协议事件：语义在面板与卡片侧，模型上下文不需要（与 clarify/plan 同口径）
+    }
     if (id >= offset) {
       flushDeltas(); // offset 之前的待并 delta 先落位，保证注入点次序
       injectOnce(); // 到达注入位（首个 tail 事件或末尾）
