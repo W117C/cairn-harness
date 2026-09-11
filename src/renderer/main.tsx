@@ -53,7 +53,7 @@ import {
   tokenProjectionOf,
   type TimelineItem,
 } from "./store";
-import { projectAgentPanel, projectTokenUsageByAgent, type AgentColumn } from "./projections";
+import { projectAgentPanel, projectMergeTower, projectTokenUsageByAgent, type AgentColumn } from "./projections";
 import { resolvePanel, type PanelId } from "./panels/registry";
 import type { AgentEvent, ClarifyAnswerMap } from "../events";
 import type {
@@ -481,6 +481,7 @@ function App() {
   const agentCols = useMemo(() => projectAgentPanel(state.events), [state]);
   const agentColsById = useMemo(() => Object.fromEntries(agentCols.map((a) => [a.agent_id, a])), [agentCols]);
   const tokensByAgent = useMemo(() => projectTokenUsageByAgent(state.events), [state]);
+  const mergeTower = useMemo(() => projectMergeTower(state.events), [state]);
 
   const patchSettings = (patch: Partial<AppSettings>): void => {
     if (!settings) return;
@@ -627,6 +628,30 @@ function App() {
       if (d && Array.isArray(d.sourceEventIds)) {
         void window.agent.sidechatState?.(d.sessionId).catch(() => {});
       }
+    } else if (action === "merge_tower_merge" || action === "merge_tower_reject" || action === "merge_tower_comment") {
+      // M3b：合并控制塔（批准合并/拒绝/行级评论）→ card_action 协议（合并唯一出口 = git 面板，§4.3）
+      const d = data as { agentId: string; force?: boolean; keepBranch?: boolean; path?: string; line?: number; body?: string; sourceEventId?: number };
+      void window.agent
+        .cardAction({
+          cardId: "diff:" + d.agentId,
+          sourceEventId: d.sourceEventId ?? 0,
+          cardType: "diff",
+          action: action === "merge_tower_merge" ? "merge" : action === "merge_tower_reject" ? "reject" : "comment",
+          payload:
+            action === "merge_tower_merge"
+              ? { force: d.force === true }
+              : action === "merge_tower_reject"
+                ? { keep_branch: d.keepBranch === true }
+                : { path: d.path, line: d.line, body: d.body },
+          targetAgentId: d.agentId,
+        })
+        .catch(() => {});
+    } else if (action === "orphan_clean") {
+      // M3b：孤儿 worktree 手动清理（§4.4.9 只列不自动删；清理 = 用户显式动作）
+      const d = data as { name: string };
+      void window.agent
+        .cardAction({ cardId: "orphan:" + d.name, sourceEventId: 0, cardType: "orphan", action: "clean", payload: { name: d.name } })
+        .catch(() => {});
     } else if (action === "agent_cancel") {
       // M3a：agents 面板/agent 卡取消钮 → card_action(cancel, target_agent_id) → AbortController 树
       const d = data as { agentId: string };
@@ -671,6 +696,8 @@ function App() {
     // M3a：多 agent 面板列 + token 按 agent 分解（纯事件流投影）
     agents: agentCols,
     tokensByAgent,
+    // M3b：合并控制塔列（write worker 合并卡，纯事件流投影）
+    mergeTower,
   };
   const activePanelId = settings?.layout.activePanel ?? null;
   const ActivePanel = activePanelId ? resolvePanel(activePanelId) : null;
@@ -884,6 +911,8 @@ function App() {
                     onAction={(action: string, data?: unknown) => {
                       if (action === "compact") void window.agent.compact?.();
                       else if (action === "agent_cancel") onCardAction("agent_cancel", data);
+                      else if (action === "merge" || action === "reject" || action === "comment") onCardAction("merge_tower_" + action, data);
+                      else if (action === "orphan_clean") onCardAction("orphan_clean", data);
                     }}
                   />
                 )}

@@ -1,17 +1,18 @@
 // 面板注册表（§10.2）：panel_id → 组件。M1 三类：approvals / token / git；M2d memory、M2e plugins、
-// M2f sidechat、M3a agents（多 agent 状态）。
+// M2f sidechat、M3a agents（多 agent 状态）、M3b git 合并控制塔。
 // 未知 panel_id 落兜底面板，绝不抛异常（与卡片注册表同构）。
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ApprovalCard } from "../cards/registry";
+import { ApprovalCard, DiffCard } from "../cards/registry";
 import {
   EMPTY_SIDECHAT_USAGE,
   mergeTokenProjections,
   type AgentColumn,
   type DiffCardProjection,
   type MemoryWriteProjection,
+  type MergeTowerColumn,
   type TokenByAgentProjection,
   type TokenKindBreakdown,
   type TokenProjection,
@@ -38,6 +39,8 @@ export interface PanelProps {
     tokens?: TokenProjection;
     /** git：diff 卡列表。 */
     diffs?: DiffCardProjection[];
+    /** M3b git：合并控制塔列（write worker 合并卡投影）。 */
+    mergeTower?: MergeTowerColumn[];
     /** M2d memory：本会话 remember 调用审计投影。 */
     memoryWrites?: MemoryWriteProjection[];
     /** M2e plugins：插件面板快照（缺省由面板自行 getState 拉取）。 */
@@ -190,16 +193,228 @@ export function TokenPanel({ payload, onAction }: PanelProps): ReactElement {
   );
 }
 
-/** Git 面板：diff 卡列表（agent 写动作聚合；合并控制塔留 M3）。 */
-export function GitPanel({ payload }: PanelProps): ReactElement {
+/** M3b 合并控制塔合并卡（§4.3/§4.4.5/§4.5）：分支/基线 + diff 卡（行级评论，复用扩展版 DiffCard）
+ *  + 安全 findings（gate 红标 + findings 转评论）+ 批准合并/拒绝（可选留分支）/冲突人工介入。
+ *  数据 100% 来自事件流投影（payload.mergeTower）。 */
+function MergeTowerCard({ col, onAction }: { col: MergeTowerColumn; onAction?: PanelProps["onAction"] }): ReactElement {
+  const canAct = typeof window !== "undefined" && typeof window.agent?.cardAction === "function";
+  const latest = col.diffs.length > 0 ? col.diffs[col.diffs.length - 1]! : null;
+  const gateRed = col.report !== null && col.report.mode === "gate" && (col.report.summary.critical > 0 || col.report.summary.high > 0);
+  const decided = col.outcome === "merged" || col.outcome === "rejected" || col.outcome === "cleaned";
+  return (
+    <Card size="sm" data-m3b-merge-card={col.agent_id} className={gateRed && !decided ? "border-red-500/60" : undefined}>
+      <CardHeader className="border-b px-3 py-2">
+        <CardTitle className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
+          🌿 {col.branch}
+          <Badge variant="outline" className="font-mono text-[10px]">{col.agent_id}</Badge>
+          <Badge variant="secondary" className="font-mono text-[10px]">{col.status}</Badge>
+          {col.outcome === "merged" && <Badge variant="default">已合并</Badge>}
+          {col.outcome === "rejected" && <Badge variant="outline">已拒绝</Badge>}
+          {col.outcome === "cleaned" && <Badge variant="outline">已清理</Badge>}
+          {col.outcome === "conflict" && <Badge variant="destructive">冲突·人工介入</Badge>}
+          {gateRed && !decided && <Badge variant="destructive" data-m3b-gate-red="">gate：critical|high</Badge>}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2 px-3 pb-3 pt-2 text-xs">
+        <div className="font-mono text-[11px] text-muted-foreground">
+          base {col.base_commit.slice(0, 12)} · worktree {col.worktree}
+          {col.task !== "" && <span className="block truncate">task：{col.task}</span>}
+        </div>
+        {col.outcomeText !== "" && (
+          <div
+            className={
+              "whitespace-pre-wrap rounded px-2 py-1 font-mono text-[11px] " +
+              (col.outcome === "conflict" || col.outcome === "gate-confirm"
+                ? "border border-red-500/40 bg-red-500/5 text-red-700 dark:text-red-400"
+                : "bg-muted/40 text-muted-foreground")
+            }
+            data-m3b-outcome={col.agent_id}
+          >
+            {col.outcomeText}
+          </div>
+        )}
+        {latest && (
+          <div data-m3b-diff={col.agent_id}>
+            <div className="mb-1 flex items-center gap-2 text-muted-foreground">
+              <Badge variant="outline">diff v{String(latest.version)}</Badge>
+              <span className="font-mono text-[10px]">{latest.stat === "" ? "（无改动）" : latest.stat.split("\n").slice(-1)[0]}</span>
+            </div>
+            <DiffCard
+              payload={{
+                type: "diff",
+                path: firstPathOfStat(latest.stat) ?? col.worktree,
+                stat: latest.stat,
+                patch: latest.patch,
+                agent_id: col.agent_id,
+                ...(decided ? {} : { commentable: true }),
+                comments: col.comments,
+              }}
+              onAction={(action, data) => {
+                if (action === "diff_line_comment") {
+                  const d = data as { agent_id: string; path: string; line: number; body: string };
+                  onAction?.("comment", { agentId: d.agent_id, path: d.path, line: d.line, body: d.body });
+                }
+              }}
+            />
+          </div>
+        )}
+        {col.report && (
+          <div className="rounded border px-2 py-1" data-m3b-findings={col.agent_id}>
+            <div className="mb-1 flex flex-wrap items-center gap-1.5">
+              <Badge variant={col.report.summary.total > 0 ? "destructive" : "secondary"}>
+                安全快筛 {String(col.report.summary.total)} 条
+              </Badge>
+              <Badge variant="outline">{col.report.mode}</Badge>
+              {col.report.llmReviewed && <Badge variant="outline">LLM 已审</Badge>}
+            </div>
+            {col.report.findings.slice(0, 6).map((f, i) => (
+              <div key={String(i)} className="flex items-start justify-between gap-2 py-0.5 font-mono text-[11px]" data-m3b-finding={String(i)}>
+                <span className="min-w-0 flex-1">
+                  <Badge variant={f.severity === "critical" || f.severity === "high" ? "destructive" : "secondary"}>{f.severity}</Badge>{" "}
+                  {f.path}:{String(f.line)} {f.title}
+                </span>
+                {!decided && onAction && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-5 px-1 text-[10px]"
+                    title="转评论回传修复（diff_comment → worker 子流）"
+                    data-m3b-finding-comment={String(i)}
+                    onClick={() =>
+                      onAction("comment", {
+                        agentId: col.agent_id,
+                        path: f.path,
+                        line: f.line,
+                        body: "[安全] " + f.title + "：" + f.description + (f.suggestion !== undefined ? "（建议：" + f.suggestion + "）" : ""),
+                      })
+                    }
+                  >
+                    转评论
+                  </Button>
+                )}
+              </div>
+            ))}
+            {col.report.summary.total === 0 && <div className="text-muted-foreground">未发现可疑项。</div>}
+          </div>
+        )}
+        {col.comments.length > 0 && (
+          <div className="rounded bg-muted/40 px-2 py-1 font-mono text-[11px]" data-m3b-comments={col.agent_id}>
+            {col.comments.map((c, i) => (
+              <div key={String(i)} className="truncate" data-m3b-comment={String(i)}>
+                💬 {c.path}:{String(c.line)} {c.body}
+              </div>
+            ))}
+          </div>
+        )}
+        {!decided && onAction && (
+          <div className="flex flex-wrap items-center gap-2">
+            {gateRed ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={!canAct}
+                  title="gate 模式：存在 critical|high findings，第一次点击仅记录红标确认请求"
+                  data-m3b-merge-confirm={col.agent_id}
+                  onClick={() => onAction("merge", { agentId: col.agent_id })}
+                >
+                  请求合并（红标）
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={!canAct}
+                  title="仍要合并（二次确认：跳过 gate 红标，合并权永远在人）"
+                  data-m3b-merge-force={col.agent_id}
+                  onClick={() => onAction("merge", { agentId: col.agent_id, force: true })}
+                >
+                  仍要合并
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" disabled={!canAct} data-m3b-merge-approve={col.agent_id} onClick={() => onAction("merge", { agentId: col.agent_id })}>
+                批准合并（--no-ff）
+              </Button>
+            )}
+            <Button size="sm" variant="outline" disabled={!canAct} data-m3b-reject={col.agent_id} onClick={() => onAction("reject", { agentId: col.agent_id })}>
+              拒绝并清理
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!canAct}
+              data-m3b-reject-keep={col.agent_id}
+              onClick={() => onAction("reject", { agentId: col.agent_id, keepBranch: true })}
+            >
+              拒绝（留分支）
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** stat 首个文件路径（行级评论 path 的缺省凭据）。 */
+function firstPathOfStat(stat: string): string | null {
+  for (const line of stat.split("\n")) {
+    if (line.includes("|")) return line.trim().split(/\s+\|/)[0]!.replace(/"/g, "");
+  }
+  return null;
+}
+
+/** M3b 孤儿 worktree 列表（§4.4.9：只列不自动删；清理 = 用户显式动作）。快照经 getState 现算（FS 态，
+ *  与 memory/plugins 同族——非事件流数据，不落第二事实源）。 */
+function OrphanWorktrees({ eventCount, onAction }: { eventCount?: number; onAction?: PanelProps["onAction"] }): ReactElement {
+  const [orphans, setOrphans] = useState<string[]>([]);
+  const reload = useCallback(async () => {
+    try {
+      const st: StateResponse = await window.agent.getState();
+      setOrphans(st.worktree?.orphans ?? []);
+    } catch {
+      setOrphans([]);
+    }
+  }, []);
+  useEffect(() => {
+    const t = setTimeout(() => { void reload(); }, 500);
+    return () => clearTimeout(t);
+  }, [reload, eventCount]);
+  if (orphans.length === 0) return (<></>);
+  return (
+    <Card size="sm" data-m3b-orphans="">
+      <CardHeader className="px-3 py-2">
+        <CardTitle className="text-sm">孤儿 worktree（可清理 · 不自动删）</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-1 px-3 pb-2 text-xs">
+        {orphans.map((n) => (
+          <div key={n} className="flex items-center justify-between gap-2 font-mono" data-m3b-orphan={n}>
+            <span>.agents/wt-{n}</span>
+            <Button size="sm" variant="outline" className="h-6" data-m3b-orphan-clean={n} onClick={() => onAction?.("orphan_clean", { name: n })}>
+              清理
+            </Button>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Git 面板：diff 卡列表（主会话写动作聚合）+ M3b 合并控制塔（write worker 合并卡）+ 孤儿列表。 */
+export function GitPanel({ payload, onAction }: PanelProps): ReactElement {
   const diffs = payload.diffs ?? [];
+  const tower = payload.mergeTower ?? [];
   return (
     <div className="flex flex-col gap-3 p-3">
       <div className="flex items-center gap-2">
         <Badge variant="outline">diff × {diffs.length}</Badge>
-        <span className="text-xs text-muted-foreground">写动作聚合 · 合并控制塔 M3</span>
+        {tower.length > 0 && <Badge variant="outline">合并塔 × {tower.length}</Badge>}
+        <span className="text-xs text-muted-foreground">写动作聚合 · 合并唯一出口（§4.3）</span>
       </div>
-      {diffs.length === 0 && <div className="text-sm text-muted-foreground">本会话还没有写动作。</div>}
+      {diffs.length === 0 && tower.length === 0 && <div className="text-sm text-muted-foreground">本会话还没有写动作。</div>}
+      {tower.map((col) => (
+        <MergeTowerCard key={col.agent_id} col={col} onAction={onAction} />
+      ))}
+      <OrphanWorktrees eventCount={payload.eventCount} onAction={onAction} />
       {diffs.map((d) => (
         <Card key={d.id} size="sm">
           <CardHeader className="border-b px-3 py-2">

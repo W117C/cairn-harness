@@ -3,15 +3,19 @@
 // M3a agent_card（多 agent 指挥卡：steer/cancel/open_report）；外壳用现有 shadcn 组件；
 // 未知 card_type 落兜底卡，绝不抛异常。
 // （文件用 .tsx 后缀：卡片组件含 JSX，.ts 无法编译。）
-import type { ReactElement } from "react";
+// M3b（§4.5 评审闭环 / 任务书裁决 8）：diff 卡扩行级评论动作——payload.commentable=true 时补丁逐行
+// 可点击评论（hunk 行号推导 → diff_comment 事件），卡片注册表不加新类型。
+import { useMemo, useState, type ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { AgentCard } from "./agent-card";
 import { ClarifyFormCard } from "./clarify-form";
 import { CompactionCard } from "./compaction-card";
 import { PlanCard } from "./plan";
 import { PromoteCard } from "./promote";
 import { VerifyResultCard } from "./verify-result";
+import { parsePatchLines } from "../projections";
 
 export interface CardProps {
   payload: Record<string, unknown>;
@@ -47,20 +51,98 @@ export function ApprovalCard({ payload }: CardProps): ReactElement {
   );
 }
 
-/** diff 卡：文件路径 + 补丁内容。payload: { path, patch } */
-export function DiffCard({ payload }: CardProps): ReactElement {
+/** diff 卡：文件路径 + 补丁内容。payload: { path, patch }
+ *  M3b 扩展（裁决 8，不加新卡片类型）：payload.commentable=true（携 agent_id）→ 补丁逐行可点击
+ *  行级评论（新文件侧行号由 hunk 头推导），提交经 onAction("diff_line_comment", {agent_id, path, line, body})。 */
+export function DiffCard({ payload, onAction }: CardProps): ReactElement {
+  const patch = str(payload.patch);
+  const agentId = str(payload.agent_id);
+  const commentable = payload.commentable === true && agentId !== "" && onAction !== undefined && patch !== "";
+  const comments = Array.isArray(payload.comments)
+    ? (payload.comments as { path: string; line: number; body: string }[])
+    : [];
+  const [pendingLine, setPendingLine] = useState<number | null>(null);
+  const [body, setBody] = useState("");
+  const lines = useMemo(() => (commentable ? parsePatchLines(patch) : null), [commentable, patch]);
+  const path = commentPath(payload, patch);
+  const submit = (): void => {
+    if (pendingLine === null || body.trim() === "" || !onAction) return;
+    onAction("diff_line_comment", { agent_id: agentId, path, line: pendingLine, body: body.trim() });
+    setBody("");
+    setPendingLine(null);
+  };
   return (
     <Card size="sm">
       <CardHeader className="border-b px-3 py-2">
-        <CardTitle className="font-mono text-xs">📝 {str(payload.path)}</CardTitle>
+        <CardTitle className="font-mono text-xs">📝 {str(payload.path, path)}</CardTitle>
       </CardHeader>
       <CardContent className="px-0 pb-0">
-        <pre className="max-h-64 overflow-auto px-3 py-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all">
-          {str(payload.patch)}
-        </pre>
+        {lines !== null ? (
+          <>
+            <pre className="max-h-64 overflow-auto px-3 py-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all">
+              {lines.map((l, i) => (
+                <div
+                  key={String(i)}
+                  className={pendingLine === l.newLine && l.newLine !== null ? "cursor-pointer bg-amber-500/10" : "cursor-pointer hover:bg-muted/60"}
+                  data-m3b-diff-line={l.newLine ?? undefined}
+                  title={l.newLine !== null ? "第 " + String(l.newLine) + " 行 · 点击行级评论" : undefined}
+                  onClick={() => {
+                    if (l.newLine !== null) setPendingLine(l.newLine);
+                  }}
+                >
+                  {l.text}
+                </div>
+              ))}
+            </pre>
+            {pendingLine !== null && (
+              <div className="flex items-end gap-2 px-3 pb-2" data-m3b-comment-box="">
+                <span className="whitespace-nowrap font-mono text-[11px] text-muted-foreground">评论 {path}:{String(pendingLine)}</span>
+                <input
+                  className="min-w-0 flex-1 rounded border bg-background px-2 py-1 text-xs"
+                  value={body}
+                  autoFocus
+                  data-m3b-comment-input=""
+                  placeholder="评审意见（将注入该 worker 子流）"
+                  onChange={(e) => setBody(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      submit();
+                    }
+                  }}
+                />
+                <Button size="sm" data-m3b-comment-send="" onClick={submit}>发送</Button>
+              </div>
+            )}
+          </>
+        ) : (
+          <pre className="max-h-64 overflow-auto px-3 py-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all">
+            {patch}
+          </pre>
+        )}
+        {comments.length > 0 && (
+          <div className="space-y-0.5 px-3 pb-2 font-mono text-[11px] text-muted-foreground" data-m3b-comments="">
+            {comments.map((c, i) => (
+              <div key={String(i)}>💬 {c.path}:{String(c.line)} {c.body}</div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
+}
+
+/** 行级评论落点文件：patch 的 +++ b/<path> 头 → stat 首路径 → payload.path（三级回退）。 */
+function commentPath(payload: Record<string, unknown>, patch: string): string {
+  for (const line of patch.split("\n")) {
+    if (line.startsWith("+++ b/")) return line.slice("+++ b/".length).replace(/\t.*$/, "");
+    if (line.startsWith("+++ /dev/null")) break;
+  }
+  const stat = typeof payload.stat === "string" ? payload.stat : "";
+  for (const line of stat.split("\n")) {
+    if (line.includes("|")) return line.trim().split(/\s+\|/)[0]!.replace(/"/g, "");
+  }
+  return str(payload.path);
 }
 
 /** 报告卡：标题 + 正文。payload: { title, body } */

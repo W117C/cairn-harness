@@ -155,6 +155,152 @@ export function projectDiffCards(events: AgentEvent[]): DiffCardProjection[] {
   return [...calls.entries()].map(([id, c]) => ({ id, path: c.path, content: c.content, ok: results.get(id) ?? null }));
 }
 
+// ---- M3b 合并控制塔投影（§4.3 / §4.4.5 / §4.5 评审闭环；纯事件流投影，零私有状态）----
+
+/** 合并控制塔列：每个 write worker 一张合并卡（分支/基线/diff 快照/findings/评论/收尾态）。 */
+export interface MergeTowerColumn {
+  agent_id: string;
+  task: string;
+  worktree: string;
+  base_commit: string;
+  branch: string;
+  /** worker 当前状态（agent_status 最新一拍）。 */
+  status: string;
+  /** diff 快照（按序累积；最新 = 最后一份——评审闭环 v1→v2）。 */
+  diffs: { version: number; stat: string; patch: string }[];
+  /** 最新安全报告（agent_id 归因的最新一份 security_report；off 模式缺省 null）。 */
+  report: {
+    mode: string;
+    findings: { severity: string; path: string; line: number; title: string; description: string; ruleId: string; suggestion?: string }[];
+    summary: { total: number; critical: number; high: number };
+    llmReviewed: boolean;
+  } | null;
+  /** 行级评论（diff_comment 事件投影）。 */
+  comments: { path: string; line: number; body: string; ts?: number }[];
+  /** 收尾态：merged / rejected / conflict / gate-confirm / cleaned / null（待决策）。 */
+  outcome: "merged" | "rejected" | "conflict" | "gate-confirm" | "cleaned" | null;
+  outcomeText: string;
+}
+
+const SEV_RANK: Record<string, number> = { low: 0, medium: 1, high: 2, critical: 3 };
+
+/** unified diff 行解析（纯函数）：每行带新文件侧行号（hunk @@ -a,b +c,d @@ 推导；上下文/新增行有行号，删除行 null）。
+ *  评审闭环行级评论的行号凭据：diff 卡第 i 行 → 文件真实行号（diff_comment.line）。 */
+export interface PatchLine {
+  text: string;
+  /** 新文件侧 1-based 行号；文件头（---/+++/diff index）与删除行为 null。 */
+  newLine: number | null;
+}
+
+export function parsePatchLines(patch: string): PatchLine[] {
+  const out: PatchLine[] = [];
+  let newLine: number | null = null;
+  for (const raw of patch.split("\n")) {
+    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw);
+    if (hunk) {
+      newLine = Number(hunk[1]);
+      out.push({ text: raw, newLine: null });
+      continue;
+    }
+    if (raw.startsWith("diff ") || raw.startsWith("index ") || raw.startsWith("--- ") || raw.startsWith("+++ ")) {
+      out.push({ text: raw, newLine: null });
+      continue;
+    }
+    if (raw.startsWith("+")) {
+      out.push({ text: raw, newLine });
+      if (newLine !== null) newLine++;
+      continue;
+    }
+    if (raw.startsWith("-")) {
+      out.push({ text: raw, newLine: null });
+      continue;
+    }
+    out.push({ text: raw, newLine });
+    if (newLine !== null) newLine++;
+  }
+  return out;
+}
+
+/** 合并控制塔投影（纯函数）：agent_spawned(mode=write) → 列；diff tool_result（子流）→ diff 快照；
+ *  security_report(agent_id) → findings；diff_comment → 评论；merge-/wt-cleanup- tool_result → 收尾态。 */
+export function projectMergeTower(events: AgentEvent[]): MergeTowerColumn[] {
+  const cols = new Map<string, MergeTowerColumn>();
+  for (const e of events) {
+    if (e.type === "agent_spawned" && e.mode === "write") {
+      cols.set(e.agent_id, {
+        agent_id: e.agent_id,
+        task: e.task,
+        worktree: e.worktree ?? "",
+        base_commit: e.base_commit ?? "",
+        branch: "agent/*-" + e.agent_id,
+        status: "running",
+        diffs: [],
+        report: null,
+        comments: [],
+        outcome: null,
+        outcomeText: "",
+      });
+    }
+  }
+  for (const e of events) {
+    if (e.type === "tool_result" && typeof e.callId === "string" && e.callId.startsWith("diff-")) {
+      const agentId = e.callId.slice("diff-".length);
+      const col = cols.get(agentId);
+      if (!col) continue;
+      const m = /## stat\n([\s\S]*?)(?:\n## patch\n([\s\S]*?))?(?:\n## LLM 审查\n[\s\S]*)?$/.exec(e.output);
+      col.diffs.push({ version: col.diffs.length + 1, stat: (m?.[1] ?? "").trim(), patch: (m?.[2] ?? "").trim() });
+    } else if (e.type === "security_report" && e.agent_id !== undefined) {
+      const col = cols.get(e.agent_id);
+      if (!col) continue;
+      col.report = {
+        mode: e.mode,
+        findings: e.findings.map((f) => ({
+          severity: f.severity,
+          path: f.path,
+          line: f.line,
+          title: f.title,
+          description: f.description,
+          ruleId: f.ruleId,
+          ...(f.suggestion !== undefined ? { suggestion: f.suggestion } : {}),
+        })),
+        summary: { total: e.summary.total, critical: e.summary.bySeverity.critical ?? 0, high: e.summary.bySeverity.high ?? 0 },
+        llmReviewed: e.llm_reviewed === true,
+      };
+    } else if (e.type === "diff_comment") {
+      const col = cols.get(e.agent_id);
+      if (col) col.comments.push({ path: e.path, line: e.line, body: e.body, ...(e.ts !== undefined ? { ts: e.ts } : {}) });
+    } else if (e.type === "tool_result" && typeof e.callId === "string" && (e.callId.startsWith("merge-") || e.callId.startsWith("wt-cleanup-"))) {
+      const agentId = e.callId.replace(/^(merge|wt-cleanup)-/, "");
+      const col = cols.get(agentId);
+      if (!col) continue;
+      const out = e.output;
+      if (out.startsWith("[merged]")) {
+        col.outcome = "merged";
+        col.outcomeText = out;
+      } else if (out.startsWith("[rejected]")) {
+        col.outcome = "rejected";
+        col.outcomeText = out;
+      } else if (out.startsWith("[conflict]")) {
+        col.outcome = "conflict";
+        col.outcomeText = out;
+      } else if (out.startsWith("[gate]")) {
+        col.outcome = "gate-confirm";
+        col.outcomeText = out;
+      } else if (out.startsWith("[worktree]") && col.outcome === null) {
+        col.outcome = "cleaned";
+        col.outcomeText = out;
+      }
+    } else if (e.type === "agent_status" && cols.has(e.agent_id)) {
+      cols.get(e.agent_id)!.status = e.status;
+    }
+  }
+  // findings 按严重度降序（合并卡红标显示面）
+  for (const col of cols.values()) {
+    col.report?.findings.sort((a, b) => (SEV_RANK[b.severity] ?? 0) - (SEV_RANK[a.severity] ?? 0));
+  }
+  return [...cols.values()];
+}
+
 /** 待批卡聚合：未 resolved 的审批（活通道投影；重启后 pending 必空 = 与重启前一致）。 */
 export function pendingApprovals(asks: AskLike[]): AskLike[] {
   return asks.filter((a) => !a.resolved);
