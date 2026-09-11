@@ -1,5 +1,34 @@
 # BLOCKED.md（待裁决清单）
 
+## M2g 轮备案（2026-09-11 收口执行轮）
+
+无阻塞事项。以下为备案（不阻塞推进）：
+
+1. **环境口径修正**：M2f 备案的「宿主拒 apply 含 deny 规则的 sandbox-exec profile」为 **DSH 宿主特有限制**；收口执行轮实测当前 ZCode 环境 sandbox-exec **可用**（deny profile 正常 apply，`/bin/echo` exit 71 是 profile 正确拒绝 exec——当时把「沙箱生效」误读成「apply 失败」）。终版 gates 三门（sandbox:check / ipc:check / panels-check）走**分支 A 真断言**。AGENTS.md 已改为「按宿主自动选分支 + 输出显式打印走哪支」的口径。
+2. **收口补验发现并修复 3 个真缺陷**（均属实现缺陷非判据缺陷，不触发换判据；以四通道真机点击 E2E 为证据，详见 PROGRESS「收口执行轮补验」）：
+   ① `agent:run` IPC 把 renderer 传入的 `sessionId` 丢弃（`handleAgentRun(req)` 未转 `over`）→ **UI run 从不落会话 JSONL**、重放恒空、promote 归因断链——M1e 会话模式的接线缝，panels-check 直种 JSONL 的路径未覆盖它；修复 = 按 `RunOverrides` 转交（src/main/index.ts）。
+   ② 面板快照**挂载后不刷新**（Sidechat/Memory/Plugins 三面板同款：只在挂载时取一次 getState）——boot 即挂载的面板对 run 期间的变化永久失明；M2f 截图均为「run 后才开面板」故未暴露；修复 = 以 `payload.eventCount` 为刷新信号 + 500ms 防抖 reload（纯投影、零私有状态）。
+   ③ 信任卡**运行间隙点击静默失效**（`handlePluginDecide` 无活 runtime 时返回 `{ok:false}`，而 runtime 在 run 结束即回收）→ 补回退路径：按 run 同款配置轻量发现 + 决议落信任文件（下次 load 生效）+ 留档快照同步改写。运行中点击语义不变（D4 同路径）。
+   三者皆无单测覆盖（IPC 边界 / renderer 时序），候选后续：给 `agent:run` 的 over 转交补一条 ipc:check 断言。
+3. **恒真式体检 3 命中修复**（收口基线复跑发现，与对表文档「零命中」声明矛盾）：plugins-check F8 `assert(true,…)` 空断言 → 真断言（scoped 名形态校验，连接成功分支走到即实测）；gates.ts 两条为体检扫到自己（文档注释 + 日志头含字面模式）→ 剥行内块注释 + 日志头去字面模式。修复后体检零命中、gates exit 0。
+4. **测试计数偏差**：对表文档记 286，收口实测 **285**（37 files / 285 passed / 0 skipped，≥ 任务书硬底线 279 ✓）——以实测为准，对表文档已同步。
+5. **RV4 说明**：任务书建议的反向验证④「`--force-available` 强制分支 A 而沙箱实际不可用 → 红」在本环境**不可构造**（沙箱真实可用，分支 A 正当通过）；改用同族反向通道 `--bogus-root`（可写根换成不存在路径 → 分支 A 断言①红 exit 1 ✓，还原绿 ✓），同为「分支 A 断言不真空通过」的证明。`--force-available` 通道保留给沙箱不可用宿主。
+6. **未证项状态**：testdino 远程 http MCP **实际连接**仍未证（401 需凭据，对表文档保持「未证」标注）；真机 GUI 四通道点击链路截图**已补齐**（docs/m2g-preload.png，2×2 实录 + 逐通道点击断言），对表文档 §五-2 已关闭。
+
+## 裁决记录（2026-09-11，M2f 轮备案九条全裁）
+
+以下为审查方任务书（.workbuddy-ai/taskbook-M2g.md §2）对 M2f 轮九条备案的逐条裁决，按其要求转录进本节；历史原文见下方 M2f 轮备案小节。agent-plan.md 只读不改，本节即裁决记录。
+
+1. **M2f-1 环境限制：三门在 HEAD 基线即红** → **采纳方案 (c)**：M2f 按「15 道门 + 2 道新门全绿 + 3 门环境阻塞备案」记为有效交付，不改历史判据、不改代码绕。**并授权** M2g 给三门加「降级路径断言」→ 已执行（M2g 任务 5：分支 A/B 化 + fail-visible）。
+2. **M2f-2 门数口径（自报 18 / 清单 17）** → **追认以括号清单为准**，并**规范**：M2g 起新增 `pnpm gates` 一条命令跑齐全部门并打印清单，**清单即事实源**，任务书不再自报门数 → 已执行（scripts/gates.ts）。
+3. **M2f-3 src/preload 不在白名单 → 4 条通道未接线** → **追认现状**（与 M1d/M2d/M2e 同款先例）。M2g **放开 src/preload 白名单**，接通通道并清掉 UI「待接线」禁用注记 → 已执行（任务 4：六条通道 + 注记清零）。
+4. **M2f-4 sidechat 会话型 provider 忽略 loop 入参 messages/tools** → **追认**（沿 M2c-2 口径：logPath 为唯一事实源是既定架构前提）。
+5. **M2f-5 TERM 环境敏感导致假红** → **判据修正成立，修在脚本里**：e2e.ts / ipc-check.ts 自行剥离 ANSI / 自设 NO_COLOR，不依赖调用者 TERM → 已执行（任务 5）。
+6. **M2f-6 edit_file findings 行号相对变更集** → **追认本轮口径**；绝对行号需写前快照，M3 gate 模式若需行级定位再引入。
+7. **M2f-7 sidechat 目录布局（sidechats/<id>/events.jsonl，主列表只扫顶层）** → **追认**。主会话列表不被污染是正确取舍。
+8. **M2f-8 M2F_SIDECHAT_DEMO 演示通道** → **保留**（env 门控、缺省零行为、不进验收链），并按裁决记录第 5 条整理演示剧本为带冻结 sha 的回归 fixture → 已执行（任务 6：fixtures/demo/** + 独立冻结表 frozen-demo-sha256.json）。
+9. **M2f-9 fixtures/security/audit-demo.ts 判卷样例入库** → **追认入库**（仅被 security-check 读取，不进运行路径）。
+
 ## M2f 轮备案（2026-09-11）
 
 ### 【环境限制·基线不符，需领导裁决】sandbox-exec 受限 → 三道具在 HEAD 基线即红

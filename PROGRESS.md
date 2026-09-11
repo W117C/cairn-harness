@@ -551,3 +551,45 @@
 - 坑四十三：**验收脚本不要走 `handleAgentRun`**（它带 `sandboxState`，宿主沙箱不可用时会把写动作变成 60s 超时送审）。sidechat-check / security-check 直接调 `runAgent({sandbox: null})` 或 `runSidechatTurn`，与沙箱可用性解耦，才能在任何机器上稳定判定 M2f 逻辑。
 - 坑四十四：`pnpm <script>` 会先做依赖状态检查，**symlink 的 node_modules 会被 pnpm 拒绝**（ERR_PNPM_UNSAFE_MODULES_DIR）→ 基线对照 worktree 里要直接 `node --import tsx scripts/xxx.ts`，绕开 pnpm 包装。
 - 坑四十五：`session_meta` 的 `branch_of` 由必填转可选时，fork 路径不受影响，但**类型联合的穷尽分支**（`renderProjectionLine` 的 switch）必须补全新事件类型，否则 `tsc` 的 never 收窄报错会把新事件挡在联合之外。
+
+## M2g：M2 收口——验收总对表 + 补闭合 + 判据健壮化（本轮 goal，2026-09-11 开工）
+
+> 任务书：`.workbuddy-ai/taskbook-M2g.md`（审查方出具，git info/exclude 排除不进仓库）。前置 = M2f 有条件通过（HEAD `8e2f2f8`），审查方已独立复现 19 道门 + 判卷 sha 3/3。
+> 执行序：任务 0 基线 → 1 验收总对表 → 2 实仓插件补验 + sensitive → 3 sidechat 经济性 → 4 preload 清账 → 5 判据健壮化 → 6 演示通道 fixture 化 → 7 ponytail-audit + 文档同步 → 反向验证 → 半托证据 → 收口提交。
+
+### 任务结果（任务 1–7，任务 2–6 已分笔提交）
+- **任务1 验收总对表**：`docs/m2-acceptance.md` —— §14 M2 行 4 条 + §9.11 硬验收 6 条 + §10.8.4 四条（含实施序第 4 项）+ §11.6 范围收敛，全部三态（**已证 / 未证 / M3**）+ 逐条证据指针（脚本名 + 断言编号 / 文件:行）；§六 = M3 欠账清单（编排采纳 / gate 模式 / 绝对行号 / 编排侧审批 / 多 agent 面板 / 记忆多工作区）。
+- **任务2 实仓插件补验 + userConfig sensitive 落地**（3f0e1c1）：darkBox 改断言型并修 walker 根因（容器解析 0 → 4）；testdino 7 skills + 远程 http MCP 配置解析 + scoped 名 + 真权限管线 deny/放行对照（F3–F7，远程连接 401 → 显式记「未证」）；anthropics/skills 的 pdf 渐进披露全链路跑真实 skill（F18–F21，重挂 ≤25000 token 实测 1879）；`src/agent/plugins/secrets.ts` 安全后端（Electron safeStorage 注入，headless fail-closed 拒存不退回明文）+ 三处零明文 + 往返一致（F9–F17）。
+- **任务3 sidechat 会话经济性**（31d305f）：TokenProjection 增 byKind（纯投影，总量=各分解之和，sidechat 不并入 main）+ TokenPanel 分解视图；sidechat 自身历史预算 `sidechatHistoryBudget` + `SIDECHAT_COMPACTION_CONFIG`（32k/0.8）——超限走同一 runCompaction 链路，compaction 事件只落自己的 JSONL。
+- **任务4 preload 清账**（2929f2d）：六条桥接（deleteMemory/pluginDecide/sidechat×4）；`ipc-protocol` 的 `?` 收紧为必选；补挂 `plugin:decide` handler（「preload 未接线」的背面还叠着「handler 都没挂」）；UI「待 preload 接线」禁用注记清零；promote 进主上下文断言（projectContext/composeTurnMessages/端到端可追溯/徽标反向投影）。
+- **任务5 判据健壮化**（ca3a0d2）：`scripts/gates.ts` + `pnpm gates`（清单即事实源 + 内置恒真式体检）；三门降级分支 A/B 化（`--force-available`/`--bogus-root` 反向通道）；ANSI 剥离；tools-check 空断言清理 + lsp 三项补验（`capLspOutput` 32KB）；compaction-check 恒真式改真断言；autonomy-check 暗卷段补无条件断言。
+- **任务6 演示通道 fixture 化**（f12b1e9）：`fixtures/demo/**`（lsp/sidechat 剧本）+ **独立**冻结表 `scripts/frozen-demo-sha256.json`（判卷区 `frozen-sha256.json` 逐字节未改）；映射表见 fixtures/demo/README.md。
+- **任务7 ponytail-audit + 文档同步**：`docs/m2-audit.md`（8 项候选逐条处置：0 删 / 全保留有据 + 2 个 M3 观察项）；AGENTS.md「当前状态」M2c → M2 收口（含 pnpm gates 用法 / TERM=dumb / 沙箱分支口径）。
+
+### 收口执行轮补验（2026-09-11 晚；体检修复 + 反向验证 + 三缺陷修复 + 半托证据）
+- **恒真式体检 3 命中修复**（收口基线复跑发现，恰是对表文档「零命中」声明的反例）：plugins-check F8 `assert(true,…)` 空断言 → 真断言（连接成功分支实测 scoped 名形态）；gates.ts 两条 = 体检扫到自己（文档注释 + 日志头含 `|| true` 字面）→ 剥行内块注释 + 日志头去字面模式。修复后体检零命中。
+- **反向验证 4 条红→绿**：①让 scoped 名绕过权限门（evaluate 传裸名）→ plugins-check F6 红（49✅/1❌，实际 approve）→ 还原绿（50✅/0❌ exit 0）；②摘 token kind 归因（非 main 分解项清零）→ 单测「sidechat usage 不出现在 main 分解里」红 exit 1 → 还原 3/3 绿；③摘 sidechat 预算帽（decision 恒 null）→ 单测「超预算触发自身 compaction 且主会话字节不变」红 exit 1 → 还原 18/18 绿；④`--bogus-root`（分支 A 断言①红 exit 1）→ 正常跑绿 exit 0。④的 `--force-available` 红相在本环境不可构造（沙箱真实可用）——见 BLOCKED M2g 备案 5。
+- **发现并修复 3 个真缺陷**（四通道真机点击链路暴露；均属实现缺陷非判据缺陷，判据零改动）：①`agent:run` IPC 丢 `sessionId` → UI run 从不落会话 JSONL（修复：按 RunOverrides 转交）；②面板快照挂载后不刷新（Sidechat/Memory/Plugins 同款；修复：eventCount 信号 + 500ms 防抖 reload）；③信任卡运行间隙点击静默 `{ok:false}`（修复：轻量发现 + 决议落信任文件 + 留档快照改写，运行中语义不变）。备案与后续候选见 BLOCKED M2g 轮备案 2。
+- **半托证据**：`docs/m2g-preload.png` = 四通道真实点击链路 2×2 实录（①记忆删除：按钮可用态，点击后实测 3→2；②插件信任：run 中点击批准，徽标实测变「已信任」；③sidechat 提问：提问框可用，点击后回答落面板 msgs=8；④promote 跳回：卡在场，点击后 sidechatState 实测 promoted=2）。演示数据全由真实代码路径在临时目录生成，用后即删，仓库零污染。`docs/m2g-gates.png` = 终版 pnpm gates 全绿实录渲染（log 逐字上屏）。
+
+### M2g 新增坑记录
+- 坑四十六：CDP `Input.insertText` 后 React 受控按钮的 disabled **不会立刻重算**——insert 后立即 `el.click()` 会打在仍 disabled 的元素上（空点击）；先等「按钮随输入启用」再点。
+- 坑四十七：异步探针别拿「发送键恢复可用」当完成信号——该按钮 disabled 含 `input.trim()===""`，输入清空后**必然**禁用（自相矛盾条件）；完成判定要用数据侧口径（消息数/落盘）。
+- 坑四十八：Chromium 不认 `--remote-debugging-port <port>` 空格形态（值被丢弃 → DevTools 落随机端口）；必须 `--flag=value`，并从 stderr「DevTools listening on ws://…」解析实际端口做兜底。
+- 坑四十九：waitFor 类探针对数值返回值要写**显式谓词**（如 `length >= 3`）——0 与正数同为 truthy，裸 `querySelectorAll(...).length` 探针会把 0 当「已就绪」立刻通过。
+- 坑五十：面板「快照陈旧」类缺陷只在「面板先于数据挂载」时暴露——截图演示要把面板在**数据产生前**就打开才测得出来；run 后才开面板的截图永远测不到它。
+
+### 收口基线（2026-09-11 终版实测）
+- `pnpm gates`：**19/19 绿 + 恒真式体检零命中 + exit 0**（实录 `.tmp/m2g-gates-final2.log`；本环境三门走分支 A 真断言——沙箱真实可用，M2f 备案的「宿主拒 apply」为 DSH 宿主限制，见 BLOCKED M2g 备案 1）。
+- test = **37 files / 285 passed / 0 skipped**（≥ 任务书硬底线 279；对表文档曾记 286，1 例计数偏差以实测为准，见 BLOCKED M2g 备案 4）。
+- 冻结判卷 sha256 3/3 逐字一致；`scripts/frozen-sha256.json` 本体逐字节未改（sha256 = `9b7f44f9ce0b4da12d82b18643eb13fff936a4b0fe2db6500428059d1858c4ba`）；演示区 `frozen-demo-sha256.json` 校验通过。
+- 密钥卫生：`git grep -nE "\bsk-|AIza|api[_-]?key\s*="` 真实 key 0 命中；tres-finance sensitive 三处零明文（plugins-check F11–F17）。
+- git status 干净；任务书文件不入仓库（.git/info/exclude）。
+
+### 分笔提交清单（本轮）
+1. `M2g 任务2/3/4/5/6`（前会话已提交：3f0e1c1 / 31d305f / 2929f2d / ca3a0d2 / f12b1e9）。
+2. `M2g 收口补验: 恒真式体检 3 命中修复`（gates.ts + plugins-check.ts F8）。
+3. `M2g 收口补验: 三处接线真缺陷修复`（agent:run sessionId / 面板快照刷新 / 信任决议间隙回退）。
+4. `M2g 任务1: M2 验收总对表三态表`（docs/m2-acceptance.md）。
+5. `M2g 任务7: ponytail-audit + AGENTS.md 状态同步`（docs/m2-audit.md + AGENTS.md）。
+6. `M2g 收口: PROGRESS 全记录 + BLOCKED 裁决转录/备案 + 半托证据`（PROGRESS.md + BLOCKED.md + docs/m2g-preload.png + docs/m2g-gates.png）。
