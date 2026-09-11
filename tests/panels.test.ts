@@ -32,11 +32,24 @@ describe("面板注册表（M1e + M2d memory + M2e plugins + M2f sidechat）", (
 
     const tokenHtml = renderToStaticMarkup(
       createElement(resolvePanel("token"), {
-        payload: { tokens: { inputTokens: 100, outputTokens: 50, totalTokens: 150, usageCount: 2, compactionCount: 2, suggestNewSession: true } },
+        payload: {
+          tokens: {
+            inputTokens: 100,
+            outputTokens: 50,
+            totalTokens: 150,
+            usageCount: 2,
+            compactionCount: 2,
+            suggestNewSession: true,
+            byKind: [{ kind: "main", inputTokens: 100, outputTokens: 50, totalTokens: 150, usageCount: 2, compactionCount: 2 }],
+          },
+        },
       }),
     );
     expect(tokenHtml).toContain("150");
     expect(tokenHtml).toContain("建议开新会话");
+    // M2g：按会话 kind 分解视图在场（主会话 / 辅助对话两行）
+    expect(tokenHtml).toContain("按会话分解");
+    expect(tokenHtml).toContain("辅助对话（sidechat）");
 
     const gitHtml = renderToStaticMarkup(
       createElement(resolvePanel("git"), {

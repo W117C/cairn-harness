@@ -16,6 +16,19 @@ export interface AskLike {
   resolved?: "approved" | "rejected";
 }
 
+/** 会话 kind（M2g §10.8.4 序 4 / §7.5）：token 归因的维度。
+ *  **不加事件字段**——kind 由「事件来自哪个会话文件」推导（§4.4.10 会话文件分离天然归因）。 */
+export type SessionKind = "main" | "sidechat";
+
+export interface TokenKindBreakdown {
+  kind: SessionKind;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  usageCount: number;
+  compactionCount: number;
+}
+
 export interface TokenProjection {
   inputTokens: number;
   outputTokens: number;
@@ -24,21 +37,49 @@ export interface TokenProjection {
   compactionCount: number;
   /** D11：压缩 ≥2 次提示开新会话。 */
   suggestNewSession: boolean;
+  /** M2g：按会话 kind 分解（纯投影；总量 = 各分解之和）。单源投影 = 只含一项。 */
+  byKind: TokenKindBreakdown[];
 }
 
+/** 单源投影（向后兼容：现有调用方只有一份事件流）。 */
 export function projectTokenUsage(events: AgentEvent[]): TokenProjection {
+  return projectTokenUsageByKind([{ kind: "main", events }]);
+}
+
+/** 多源投影（M2g §10.8.4 序 4）：按会话 kind 归因，总量 = 各分解之和。
+ *  sidechat 的 usage 只进自己的分解项，**不计入 main 分解**（会话文件归属即归因依据）。 */
+export function projectTokenUsageByKind(sources: { kind: SessionKind; events: AgentEvent[] }[]): TokenProjection {
+  const byKind: TokenKindBreakdown[] = [];
   let inputTokens = 0;
   let outputTokens = 0;
   let usageCount = 0;
   let compactionCount = 0;
-  for (const e of events) {
-    if (e.type === "usage") {
-      inputTokens += e.inputTokens;
-      outputTokens += e.outputTokens;
-      usageCount++;
-    } else if (e.type === "compaction") {
-      compactionCount++;
+  for (const src of sources) {
+    let kIn = 0;
+    let kOut = 0;
+    let kUsage = 0;
+    let kComp = 0;
+    for (const e of src.events) {
+      if (e.type === "usage") {
+        kIn += e.inputTokens;
+        kOut += e.outputTokens;
+        kUsage++;
+      } else if (e.type === "compaction") {
+        kComp++;
+      }
     }
+    byKind.push({
+      kind: src.kind,
+      inputTokens: kIn,
+      outputTokens: kOut,
+      totalTokens: kIn + kOut,
+      usageCount: kUsage,
+      compactionCount: kComp,
+    });
+    inputTokens += kIn;
+    outputTokens += kOut;
+    usageCount += kUsage;
+    compactionCount += kComp;
   }
   return {
     inputTokens,
@@ -47,8 +88,45 @@ export function projectTokenUsage(events: AgentEvent[]): TokenProjection {
     usageCount,
     compactionCount,
     suggestNewSession: compactionCount >= 2,
+    byKind,
   };
 }
+
+/** M2g：把「主会话单源投影」与「sidechat 聚合」合成一张按 kind 分解的投影。
+ *  totalTokens = 各分解之和；main 分解保持主会话自身口径（sidechat 不并入 main）。 */
+export function mergeTokenProjections(main: TokenProjection, sidechat: TokenKindBreakdown): TokenProjection {
+  const mainBreak: TokenKindBreakdown = main.byKind[0] ?? {
+    kind: "main",
+    inputTokens: main.inputTokens,
+    outputTokens: main.outputTokens,
+    totalTokens: main.totalTokens,
+    usageCount: main.usageCount,
+    compactionCount: main.compactionCount,
+  };
+  const byKind: TokenKindBreakdown[] = [mainBreak, { ...sidechat, kind: "sidechat" }];
+  const inputTokens = mainBreak.inputTokens + sidechat.inputTokens;
+  const outputTokens = mainBreak.outputTokens + sidechat.outputTokens;
+  const compactionCount = mainBreak.compactionCount + sidechat.compactionCount;
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+    usageCount: mainBreak.usageCount + sidechat.usageCount,
+    compactionCount,
+    suggestNewSession: compactionCount >= 2,
+    byKind,
+  };
+}
+
+/** 空 sidechat 分解（无旁路会话时的缺省值）。 */
+export const EMPTY_SIDECHAT_USAGE: TokenKindBreakdown = {
+  kind: "sidechat",
+  inputTokens: 0,
+  outputTokens: 0,
+  totalTokens: 0,
+  usageCount: 0,
+  compactionCount: 0,
+};
 
 export interface DiffCardProjection {
   /** tool_call id（键）。 */

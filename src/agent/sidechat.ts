@@ -5,12 +5,22 @@
 // 让步序（任务书）：主会话不受打扰 > 结论可追溯 > 界面好看。
 import { readFileSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { createEventLog, replay, type AgentEvent, type PromoteOrigin, type UserMessageEvent } from "../events";
+import { createEventLog, replay, type AgentEvent, type CompactionEvent, type PromoteOrigin, type UserMessageEvent } from "../events";
 import type { ModelOutput, Provider } from "../providers";
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "../providers/glm";
 import type { ToolName } from "../tools/base";
 import { runLoop } from "./loop";
 import { projectContext, summaryEnvelope, type ContextMessage } from "./context";
+import {
+  DEFAULT_COMPACTION_CONFIG,
+  calibrateFactor,
+  estimateContextTokens,
+  runCompaction,
+  shouldCompact,
+  type CompactDecision,
+  type CompactionConfig,
+  type Summarizer,
+} from "./compaction";
 import { gateToolSpecs } from "./glm-session";
 import { buildMemoryInjection } from "./memory/inject";
 import { redactSecrets } from "./security/scan";
@@ -32,6 +42,58 @@ export const SIDECHAT_PROJECTION_ROUNDS = 20;
 export const SIDECHAT_PROJECTION_MAX_CHARS = 8_000;
 /** 单事件渲染上限（截断视图逐条压缩）。 */
 const PROJECTION_EVENT_CHARS = 400;
+
+// ---- M2g §7.5：sidechat 自身历史预算 + 压缩（同一压缩器实例化，参数独立配置）----
+/** sidechat 会话 kind 的压缩参数（与主会话**独立配置**，§7.5 明文设计）。
+ *  比主会话更早触发：辅助会话是短问答，长历史价值低、纯烧 token。 */
+export const SIDECHAT_COMPACTION_CONFIG: Partial<CompactionConfig> = {
+  inputLimit: 32_000,
+  maxOutputReserve: 4_096,
+  ratio: 0.8,
+  tailRatio: 0.3,
+  tailMinTokens: 1_000,
+  tailMaxTokens: 6_000,
+};
+
+/** sidechat 自身历史的预算判定（纯函数）：估算 = 自身投影 + system 开销。 */
+export function sidechatHistoryBudget(
+  ownEvents: AgentEvent[],
+  config: Partial<CompactionConfig> = SIDECHAT_COMPACTION_CONFIG,
+): { estimate: number; decision: CompactDecision | null } {
+  const factor = calibrateFactor(ownEvents);
+  const estimate = estimateContextTokens(projectContext(ownEvents), { systemChars: SIDECHAT_SYSTEM.length }, factor);
+  return { estimate, decision: shouldCompact(estimate, { ...DEFAULT_COMPACTION_CONFIG, ...config }) };
+}
+
+export type SidechatCompactionOutcome =
+  | { kind: "none"; estimate: number }
+  | { kind: "compacted"; event: CompactionEvent }
+  | { kind: "failed"; why: string };
+
+/** 超预算 → 走**同一压缩链路**（runCompaction，不自造第二套摘要实现）；
+ *  compaction 事件只 append 进 sidechat **自己的** JSONL（主会话零写入）。 */
+export async function compactSidechatHistory(opts: {
+  sidechatLogPath: string;
+  summarizer?: Summarizer;
+  config?: Partial<CompactionConfig>;
+}): Promise<SidechatCompactionOutcome> {
+  const events = await replay(opts.sidechatLogPath).catch((): AgentEvent[] => []);
+  const config = opts.config ?? SIDECHAT_COMPACTION_CONFIG;
+  const { estimate, decision } = sidechatHistoryBudget(events, config);
+  if (!decision) return { kind: "none", estimate };
+  // 阈值路径需要摘要器；无摘要器时退到既有 overflow 紧急截断（同一条降级链，不静默）
+  const useOverflow = decision.trigger === "overflow" || !opts.summarizer;
+  const outcome = await runCompaction({
+    events,
+    trigger: useOverflow ? "overflow" : decision.trigger,
+    reason: useOverflow && decision.trigger !== "overflow" ? "hard_buffer" : decision.reason,
+    ...(useOverflow ? {} : { summarizer: opts.summarizer }),
+    config,
+  });
+  if (!outcome.ok) return { kind: "failed", why: outcome.why };
+  await createEventLog(opts.sidechatLogPath).append(outcome.event);
+  return { kind: "compacted", event: outcome.event };
+}
 
 export interface MainProjection {
   /** empty = 主会话无内容；summary = 主会话已压缩（用摘要产物）；truncated = 最近 N 轮截断视图。 */
@@ -259,11 +321,28 @@ export interface SidechatTurnOptions {
   model?: SidechatModel;
   onEvent?: (e: AgentEvent) => void;
   rounds?: number;
+  /** M2g：自身历史压缩用的摘要器（缺省无 → 走既有 overflow 紧急截断）。 */
+  summarizer?: Summarizer;
+  /** M2g：sidechat 会话 kind 的压缩参数（缺省 SIDECHAT_COMPACTION_CONFIG）。 */
+  compactionConfig?: Partial<CompactionConfig>;
 }
 
 /** 跑一轮 sidechat：own loop（read-only 档 + allowedTools 硬闸），事件只落自己的 JSONL。 */
 export async function runSidechatTurn(opts: SidechatTurnOptions): Promise<AgentEvent[]> {
   const eventsPath = joinEvents(opts.sidechatDir);
+  // M2g §7.5：进模型前先给**自身历史**过预算帽——超限走同一压缩链路，compaction 事件记在自己流内。
+  // 主会话文件全程只读（本函数内不存在任何对 mainLogPath 的写路径）。
+  try {
+    const r = await compactSidechatHistory({
+      sidechatLogPath: eventsPath,
+      ...(opts.summarizer ? { summarizer: opts.summarizer } : {}),
+      ...(opts.compactionConfig ? { config: opts.compactionConfig } : {}),
+    });
+    if (r.kind === "compacted") opts.onEvent?.(r.event);
+    else if (r.kind === "failed") console.warn("[sidechat] 自身历史压缩失败（不静默）:", r.why);
+  } catch (err) {
+    console.warn("[sidechat] 自身历史压缩异常（不阻断本轮）:", err instanceof Error ? err.message : String(err));
+  }
   const log = createEventLog(eventsPath);
   const pipeline = async (e: AgentEvent): Promise<void> => {
     await log.append(e);

@@ -2,12 +2,13 @@
 // 工具门：冻结的 runLoop 对 ask 一律拒绝（gate 非 allow 即 deny），因此 loop 固定走 auto 档，
 // 真实门在本模块的工具包装里 —— 复用 src/permissions 的 checkPermission，语义与 M0 一致：
 // read-only 拒副作用 / default 询问（UI 批准才执行）/ auto 放行；沙箱不可用时写工具强制逐条审批。
+import { readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runLoop } from "../agent/loop";
-import { runCompaction, createMockSummarizer, compactionCardPayload } from "../agent/compaction";
+import { runCompaction, createMockSummarizer, compactionCardPayload, type Summarizer } from "../agent/compaction";
 import { buildMap } from "../agent/map/build";
 import { computePrune } from "../agent/prune";
 import { createGlmSummarizer } from "../agent/glm-session";
@@ -88,6 +89,11 @@ const MOCK_FIXTURE = join(ROOT, "fixtures", "mock", "todo-fix.jsonl");
 // M1b 三门演示通道：M1B_GATE_FLOW=1 时用 fixtures/gate/gate-flow.jsonl 驱动（clarify/plan 卡片真人交互）。
 // env 门控缺省关闭，M0 事件流字节不变。
 const GATE_FIXTURE = join(ROOT, "fixtures", "gate", "gate-flow.jsonl");
+// M2g 任务 6：演示通道剧本外部化（fixtures/demo/**，带冻结 sha 于 scripts/frozen-demo-sha256.json；
+// **独立**于判卷区 frozen-sha256.json）。缺省零行为不变；显式给路径的旧用法保留。
+const DEMO_DIR = join(ROOT, "fixtures", "demo");
+const LSP_DEMO_FIXTURE = join(DEMO_DIR, "lsp-demo.jsonl");
+const SIDECHAT_DEMO_FIXTURE = join(DEMO_DIR, "sidechat-demo.jsonl");
 // 坑三：Seatbelt 下 pnpm 起不来（依赖检查失败）。冻结剧本里的 run_shell 命令是 "pnpm test"（sha 不可改），
 // 沙箱内映射为坑三实测可用的直连命令；TMPDIR 由 runInSandbox 指到工作区内 .tmp。
 const VITEST_DIRECT =
@@ -446,8 +452,11 @@ function createProvider(userMessage: string, systemPrefix?: string): Provider {
   const autonomyScript = process.env.M1C_AUTONOMY_SCRIPT;
   if (process.env.M1B_GATE_FLOW === "1") return createMockProvider(GATE_FIXTURE);
   if (autonomyScript) return createMockProvider(autonomyScript);
-  // M2a 截图通道：M2A_LSP_DEMO 指向演示剧本（write_file → 真实诊断回流管线），缺省零行为
-  if (process.env.M2A_LSP_DEMO) return createMockProvider(process.env.M2A_LSP_DEMO);
+  // M2a 截图通道：M2A_LSP_DEMO 指向演示剧本（write_file → 真实诊断回流管线），缺省零行为。
+  // M2g：M2A_LSP_DEMO=1 → 剧本取 fixtures/demo/lsp-demo.jsonl（显式路径仍可覆盖）。
+  if (process.env.M2A_LSP_DEMO) {
+    return createMockProvider(process.env.M2A_LSP_DEMO === "1" ? LSP_DEMO_FIXTURE : process.env.M2A_LSP_DEMO);
+  }
   if (process.env.M0A_PROVIDER !== "glm") return createMockProvider(MOCK_FIXTURE);
   let gen: AsyncIterable<ModelOutput> | null = null;
   return {
@@ -890,16 +899,32 @@ export async function handleSessionDelete(id: string): Promise<{ currentSession:
 // 独立会话：own JSONL 文件组 + own loop + own 上下文；写向工具从工具表摘除（只读白名单硬闸）。
 // 主会话零打扰：sidechat 只读主会话 JSONL，永不 append 它（唯一写主会话的路径是用户显式 /promote）。
 
-/** M2F_SIDECHAT_DEMO 演示剧本（env 门控；缺省零行为）——截图/演示用，不进验收链。 */
+/** M2F_SIDECHAT_DEMO 演示剧本（env 门控；缺省零行为）——截图/演示用，不进验收链。
+ *  M2g：剧本外置为 fixtures/demo/sidechat-demo.jsonl（冻结 sha 在 scripts/frozen-demo-sha256.json）；
+ *  读不到时回退这份内联常量并告警（fail-visible，不静默换剧本）。 */
+const SIDECHAT_DEMO_INLINE = [
+  {
+    type: "assistant_message",
+    content:
+      "旁路只读调查（不改主会话）：我读了 src/agent/loop.ts 与 src/agent/context.ts。" +
+      "结论：runLoop 的上下文来自 projectContext(seen) 投影，压缩只产出 compaction 事件、事件流零删改（loop.ts:67 / context.ts:46）。",
+  },
+] as Parameters<typeof scriptedSidechatModel>[0];
+
 function sidechatDemoScript(): ReturnType<typeof scriptedSidechatModel> {
-  return scriptedSidechatModel([
-    {
-      type: "assistant_message",
-      content:
-        "旁路只读调查（不改主会话）：我读了 src/agent/loop.ts 与 src/agent/context.ts。" +
-        "结论：runLoop 的上下文来自 projectContext(seen) 投影，压缩只产出 compaction 事件、事件流零删改（loop.ts:67 / context.ts:46）。",
-    },
-  ]);
+  let script: Parameters<typeof scriptedSidechatModel>[0] = SIDECHAT_DEMO_INLINE;
+  try {
+    const raw = readFileSync(SIDECHAT_DEMO_FIXTURE, "utf8");
+    const parsed = raw
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l !== "")
+      .map((l) => JSON.parse(l) as Parameters<typeof scriptedSidechatModel>[0][number]);
+    if (parsed.length > 0) script = parsed;
+  } catch (err) {
+    console.warn("[sidechat] 演示剧本读取失败，回退内联常量:", err instanceof Error ? err.message : String(err));
+  }
+  return scriptedSidechatModel(script);
 }
 
 /** 选模型：M0_API_KEY 在场 → GLM（createSidechatProvider 缺省）；演示通道 → 脚本；否则 fail-closed。 */
@@ -910,6 +935,16 @@ function resolveSidechatModel(explicit?: SidechatModel): { model?: SidechatModel
   return { error: "无 M0_API_KEY：sidechat 真实模型不可用（fail-closed，可注入脚本模型）" };
 }
 
+/** M2g §7.5：sidechat 自身历史压缩用的摘要器（与主会话**同一实现**，参数独立配置）。
+ *  M0_API_KEY → GLM；演示通道 → 冻结 mock；都没有 → undefined（走既有 overflow 紧急截断）。 */
+function resolveSidechatSummarizer(): ReturnType<typeof createGlmSummarizer> | undefined {
+  if (process.env.M0_API_KEY) return createGlmSummarizer();
+  if (process.env.M2F_SIDECHAT_DEMO === "1") {
+    return createMockSummarizer("## Objective\n- 旁路会话自身历史压缩（演示通道，冻结摘要）。\n");
+  }
+  return undefined;
+}
+
 export async function handleSidechatCreate(parentSessionId: string, name?: string): Promise<{ id: string }> {
   return { id: await createSidechatSession(requireSessionsDir(), parentSessionId, name) };
 }
@@ -918,7 +953,7 @@ export async function handleSidechatCreate(parentSessionId: string, name?: strin
 export async function handleSidechatAsk(
   sidechatId: string,
   message: string,
-  over: { parentSessionId?: string; model?: SidechatModel; onEvent?: (e: AgentEvent) => void } = {},
+  over: { parentSessionId?: string; model?: SidechatModel; summarizer?: Summarizer; onEvent?: (e: AgentEvent) => void } = {},
 ): Promise<{ ok: boolean; error?: string; events?: AgentEvent[] }> {
   try {
     const dir = requireSessionsDir();
@@ -932,6 +967,7 @@ export async function handleSidechatAsk(
       workspace: lastWorkspace ?? WORKSPACE,
       message,
       ...(picked.model ? { model: picked.model } : {}),
+      ...(over.summarizer ? { summarizer: over.summarizer } : { summarizer: resolveSidechatSummarizer() }),
       onEvent: (e) => over.onEvent?.(e),
     });
     return { ok: true, events };
@@ -983,11 +1019,17 @@ export async function handleSidechatState(parentSessionId?: string): Promise<Sid
       events = [];
     }
     const messages: SidechatPanelSnapshot["sessions"][number]["messages"] = [];
+    let usage = { inputTokens: 0, outputTokens: 0, usageCount: 0, compactionCount: 0 };
     events.forEach((e, i) => {
       if (e.type === "user_message") messages.push({ eventId: i + 1, role: "user", text: e.content });
       else if (e.type === "assistant_message") messages.push({ eventId: i + 1, role: "assistant", text: e.content });
+      else if (e.type === "usage") {
+        usage.inputTokens += e.inputTokens;
+        usage.outputTokens += e.outputTokens;
+        usage.usageCount++;
+      } else if (e.type === "compaction") usage.compactionCount++;
     });
-    sessions.push({ id: info.id, parentId: info.parentId, lines: info.lines, mtimeMs: info.mtimeMs, messages });
+    sessions.push({ id: info.id, parentId: info.parentId, lines: info.lines, mtimeMs: info.mtimeMs, messages, usage });
   }
   // 已提升：主会话里带 origin 的 user_message（反向投影，零新增事件类型）
   const promoted: SidechatPanelSnapshot["promoted"] = [];

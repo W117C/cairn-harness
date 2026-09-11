@@ -45,7 +45,8 @@ export interface StateResponse {
   sidechat?: SidechatPanelSnapshot;
 }
 
-/** M2f sidechat 面板快照（纯投影：会话清单 + 最近消息 + 已提升记录）。 */
+/** M2f sidechat 面板快照（纯投影：会话清单 + 最近消息 + 已提升记录）。
+ *  M2g：每会话带 usage 聚合（token 面板按会话 kind 分解的数据源；§10.8.4 序 4）。 */
 export interface SidechatPanelSnapshot {
   parentSessionId: string | null;
   sessions: {
@@ -54,6 +55,8 @@ export interface SidechatPanelSnapshot {
     lines: number;
     mtimeMs: number;
     messages: { eventId: number; role: "user" | "assistant"; text: string }[];
+    /** M2g：该旁路会话的 usage 聚合（从自身 JSONL 投影，sidechat kind 的归因依据）。 */
+    usage: { inputTokens: number; outputTokens: number; usageCount: number; compactionCount: number };
   }[];
   /** 已提升记录（主会话 user_message.origin 反向投影）。 */
   promoted: { eventId: number; sessionId: string; sourceEventIds: number[]; note?: string }[];
@@ -122,21 +125,22 @@ export interface AgentApi {
   openSession(id: string): Promise<{ events: AgentEvent[] }>;
   renameSession(oldId: string, newName: string): Promise<{ id: string }>;
   deleteSession(id: string): Promise<{ currentSession: string | null }>;
-  /** M2d：记忆删除（仅用户经记忆面板；模型无删除权，§8.1.7）。
-   *  optional —— preload 白名单本轮未含（M1d compact 同款先例），接线后可用。 */
-  deleteMemory?(scope: "project" | "global", topic: string): Promise<{ ok: boolean; error?: string }>;
-  /** M2e：插件信任卡决议（仅用户经插件面板；主进程通道已就绪）。
-   *  optional —— preload 白名单本轮未含（deleteMemory 同款先例），接线后可用。 */
-  pluginDecide?(plugin: string, trusted: boolean): Promise<{ ok: boolean; error?: string }>;
-  // ---- M2f：辅助对话（sidechat）+ /promote（主进程通道就绪；preload 白名单本轮未含，同款先例）----
-  sidechatCreate?(parentSessionId: string, name?: string): Promise<{ id: string }>;
-  sidechatAsk?(sidechatId: string, message: string, parentSessionId?: string): Promise<{ ok: boolean; error?: string; events?: AgentEvent[] }>;
+  // ---- M2g：preload 清账（六条通道全部桥接完成，`?` 按实际**收紧**为必选）----
+  // 收紧理由：preload 现已无条件暴露这六条，optional 只会掩盖「桥接被删」的回归——
+  // 收紧后谁删桥接行 typecheck 即红（静态兜住，不再靠运行时 typeof 探测）。
+  /** M2d：记忆删除（仅用户经记忆面板；模型无删除权，§8.1.7）。 */
+  deleteMemory(scope: "project" | "global", topic: string): Promise<{ ok: boolean; error?: string }>;
+  /** M2e：插件信任卡决议（仅用户经插件面板；未信任不激活）。 */
+  pluginDecide(plugin: string, trusted: boolean): Promise<{ ok: boolean; error?: string }>;
+  /** M2f：辅助对话（sidechat）+ /promote。 */
+  sidechatCreate(parentSessionId: string, name?: string): Promise<{ id: string }>;
+  sidechatAsk(sidechatId: string, message: string, parentSessionId?: string): Promise<{ ok: boolean; error?: string; events?: AgentEvent[] }>;
   /** /promote：把 sidechat 结论提升进主会话（渲染为主会话一条 user_message + origin）。 */
-  sidechatPromote?(req: {
+  sidechatPromote(req: {
     sidechatId: string;
     parentSessionId: string;
     sourceEventIds: number[];
     note?: string;
   }): Promise<{ ok: boolean; error?: string }>;
-  sidechatState?(parentSessionId?: string): Promise<SidechatPanelSnapshot>;
+  sidechatState(parentSessionId?: string): Promise<SidechatPanelSnapshot>;
 }

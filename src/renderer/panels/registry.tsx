@@ -5,7 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ApprovalCard } from "../cards/registry";
-import type { DiffCardProjection, MemoryWriteProjection, TokenProjection } from "../projections";
+import {
+  EMPTY_SIDECHAT_USAGE,
+  mergeTokenProjections,
+  type DiffCardProjection,
+  type MemoryWriteProjection,
+  type TokenKindBreakdown,
+  type TokenProjection,
+} from "../projections";
 import type { MemorySnapshot, StateResponse, SidechatPanelSnapshot } from "../../main/ipc-protocol";
 import type { PluginPanelSnapshot } from "../../agent/plugins";
 
@@ -59,23 +66,85 @@ export function ApprovalsPanel({ payload }: PanelProps): ReactElement {
   );
 }
 
-/** Token 面板：usage 事件累计 + 压缩计数（D11 多次压缩建议开新会话）。 */
+/** Token 面板：usage 事件累计 + 压缩计数（D11 多次压缩建议开新会话）。
+ *  M2g：按会话 kind 分解（§10.8.4 序 4）——主会话 / 辅助对话（sidechat）分开列，总量 = 各分解之和。
+ *  分解是**纯投影**：主会话来自 payload.tokens（事件流订阅），sidechat 来自 getState().sidechat（各自 JSONL 的投影）。 */
 export function TokenPanel({ payload, onAction }: PanelProps): ReactElement {
-  const t = payload.tokens;
+  const base = payload.tokens;
+  const [side, setSide] = useState<TokenKindBreakdown | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const st: StateResponse = await window.agent.getState();
+        const ss = st.sidechat?.sessions ?? [];
+        const agg = ss.reduce(
+          (a, s) => {
+            a.inputTokens += s.usage?.inputTokens ?? 0;
+            a.outputTokens += s.usage?.outputTokens ?? 0;
+            a.usageCount += s.usage?.usageCount ?? 0;
+            a.compactionCount += s.usage?.compactionCount ?? 0;
+            return a;
+          },
+          { inputTokens: 0, outputTokens: 0, usageCount: 0, compactionCount: 0 },
+        );
+        if (alive) {
+          setSide({
+            kind: "sidechat",
+            inputTokens: agg.inputTokens,
+            outputTokens: agg.outputTokens,
+            totalTokens: agg.inputTokens + agg.outputTokens,
+            usageCount: agg.usageCount,
+            compactionCount: agg.compactionCount,
+          });
+        }
+      } catch {
+        if (alive) setSide(null);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [base]);
+  const t = base ? mergeTokenProjections(base, side ?? EMPTY_SIDECHAT_USAGE) : null;
+  const mainKind = t?.byKind.find((k) => k.kind === "main") ?? null;
+  const sideKind = t?.byKind.find((k) => k.kind === "sidechat") ?? null;
   return (
-    <div className="flex flex-col gap-3 p-3 text-sm">
+    <div className="flex flex-col gap-3 p-3 text-sm" data-m2g-token-panel="">
       {t ? (
         <>
           <div className="flex items-center gap-2">
             <Badge variant="outline">usage × {t.usageCount}</Badge>
-            <span className="text-muted-foreground">事件流投影</span>
+            <span className="text-muted-foreground">事件流投影 · 按会话 kind 分解</span>
           </div>
           <div>
             输入 <span className="font-mono">{t.inputTokens}</span> · 输出{" "}
             <span className="font-mono">{t.outputTokens}</span> · 合计{" "}
             <span className="font-mono font-semibold">{t.totalTokens}</span> tokens
           </div>
-          <div className="text-xs text-muted-foreground">压缩次数：{t.compactionCount}</div>
+          <div className="rounded-md border px-3 py-2 text-xs" data-m2g-token-bykind="">
+            <div className="mb-1 font-medium text-muted-foreground">按会话分解</div>
+            <div className="flex items-center justify-between gap-2" data-m2g-token-kind="main">
+              <span>主会话</span>
+              <span className="font-mono">
+                {mainKind?.inputTokens ?? 0} in / {mainKind?.outputTokens ?? 0} out · 合计{" "}
+                <span className="font-semibold">{mainKind?.totalTokens ?? 0}</span>
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2" data-m2g-token-kind="sidechat">
+              <span>辅助对话（sidechat）</span>
+              <span className="font-mono">
+                {sideKind?.inputTokens ?? 0} in / {sideKind?.outputTokens ?? 0} out · 合计{" "}
+                <span className="font-semibold">{sideKind?.totalTokens ?? 0}</span>
+              </span>
+            </div>
+            <div className="mt-1 text-[11px] text-muted-foreground">
+              旁路会话用量单独归因，不并入主会话总量（§4.4.10 会话文件分离天然归因）。
+            </div>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            压缩次数：主会话 {mainKind?.compactionCount ?? 0} · 辅助对话 {sideKind?.compactionCount ?? 0}
+          </div>
           {t.suggestNewSession && (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
               已压缩 {t.compactionCount} 次，建议开新会话（上下文准确性衰减）。
@@ -126,8 +195,8 @@ export function GitPanel({ payload }: PanelProps): ReactElement {
 }
 
 /** M2f 辅助对话面板：只读旁路会话（独立 JSONL）+ 消息投影 + 提升记录 + 提升入口。
- *  两个入口：①每会话的「提升到主会话」按钮 ②composer 命令 `/promote #<事件号>`。
- *  通道 optional（preload 白名单本轮未含，deleteMemory 同款先例）：未接线时按钮禁用并注明。 */
+ *  两个入口：①每会话的「提升到主会话」按钮 ②输入 `/promote #<事件号>`。
+ *  M2g：preload 已接线（六条通道全部桥接），按钮常态可用；can* 守卫仅用于 headless SSR 兜底。 */
 function SidechatPanel({ payload }: PanelProps): ReactElement {
   const [snap, setSnap] = useState<SidechatPanelSnapshot | null>(payload.sidechat ?? null);
   const [active, setActive] = useState<string | null>(null);
@@ -207,8 +276,8 @@ function SidechatPanel({ payload }: PanelProps): ReactElement {
           size="sm"
           variant="outline"
           disabled={!canCreate || !snap?.parentSessionId || busy}
-          title={canCreate ? "新建旁路会话" : "通道待 preload 接线（BLOCKED 备案）"}
-          data-m2f-sidechat-new=""
+          title={snap?.parentSessionId ? "新建旁路会话（独立 JSONL，不打扰主会话）" : "未打开主会话"}
+          data-m2g-sidechat-new=""
           onClick={() => {
             void (async () => {
               if (!snap?.parentSessionId) return;
@@ -255,7 +324,8 @@ function SidechatPanel({ payload }: PanelProps): ReactElement {
                     size="sm"
                     variant="ghost"
                     disabled={!canPromote || busy}
-                    title={canPromote ? "把该条提升进主会话" : "通道待 preload 接线（BLOCKED 备案）"}
+                    title="把该条提升进主会话（主流 +1 user_message + origin，可跳回源消息）"
+                    data-m2g-sidechat-promote-btn=""
                     onClick={() => void promote([m.eventId])}
                   >
                     提升
@@ -271,8 +341,8 @@ function SidechatPanel({ payload }: PanelProps): ReactElement {
           className="min-w-0 flex-1 rounded border bg-background px-2 py-1 text-xs"
           value={input}
           disabled={!canAsk || !active || busy}
-          placeholder={canAsk ? "旁路提问…（/promote #12 提升结论）" : "通道待 preload 接线（BLOCKED 备案）"}
-          data-m2f-sidechat-input=""
+          placeholder={active ? "旁路提问…（/promote #12 提升结论）" : "先在上方新建一个旁路会话"}
+          data-m2g-sidechat-input=""
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -370,7 +440,8 @@ function MemoryPanel({ payload }: PanelProps): ReactElement {
                 variant="ghost"
                 size="sm"
                 disabled={!deletable || busy}
-                title={canDelete ? "删除该记忆（仅用户可删）" : "删除通道待 preload 接线（BLOCKED 备案）"}
+                title="删除该记忆（仅用户可删，模型无删除权）"
+                data-m2g-memory-delete-btn=""
                 onClick={() => void del(scope, t.topic)}
               >
                 删除
@@ -466,10 +537,11 @@ function PluginsPanel({ payload }: PanelProps): ReactElement {
               <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-2 py-1.5">
                 <span className="text-amber-700 dark:text-amber-400">首次加载：信任后 hook / MCP / LSP 才会激活。</span>
                 <Button size="sm" variant="default" disabled={!canDecide || busy}
-                  title={canDecide ? "信任该插件" : "决议通道待 preload 接线（BLOCKED 备案）"}
+                  title="信任该插件（hook / MCP / LSP 随即激活）"
+                  data-m2g-plugin-trust-btn=""
                   onClick={() => void decide(pl.name, true)}>批准</Button>
                 <Button size="sm" variant="outline" disabled={!canDecide || busy}
-                  title={canDecide ? "拒绝该插件（不激活）" : "决议通道待 preload 接线（BLOCKED 备案）"}
+                  title="拒绝该插件（不激活，只列出）"
                   onClick={() => void decide(pl.name, false)}>拒绝</Button>
               </div>
             )}

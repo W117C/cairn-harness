@@ -8,8 +8,15 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { FallbackPanel, KNOWN_PANEL_IDS, resolvePanel } from "../src/renderer/panels/registry";
 import { FallbackCard, KNOWN_CARD_TYPES, resolveCard } from "../src/renderer/cards/registry";
-import { projectPromoteBadges } from "../src/renderer/projections";
 import {
+  EMPTY_SIDECHAT_USAGE,
+  mergeTokenProjections,
+  projectPromoteBadges,
+  projectTokenUsage,
+  projectTokenUsageByKind,
+} from "../src/renderer/projections";
+import {
+  SIDECHAT_COMPACTION_CONFIG,
   SIDECHAT_FORBIDDEN_TOOLS,
   SIDECHAT_PROJECTION_ROUNDS,
   buildMainProjection,
@@ -19,9 +26,12 @@ import {
   readAtRef,
   runSidechatTurn,
   scriptedSidechatModel,
+  sidechatHistoryBudget,
   sidechatToolSpecs,
 } from "../src/agent/sidechat";
-import { createEventLog, replay, type AgentEvent } from "../src/events";
+import { createEventLog, replay, type AgentEvent, type UserMessageEvent } from "../src/events";
+import { projectContext } from "../src/agent/context";
+import { composeTurnMessages } from "../src/agent/glm-session";
 
 const tmpDirs: string[] = [];
 async function mkTmp(): Promise<string> {
@@ -207,6 +217,43 @@ describe("M2f /promote", () => {
     expect(badges[0]?.sourceEventIds).toEqual([2]);
   });
 
+  // M2g 补验（闭合 §1.3-5）：旧版只证「事件 +1」，没证「提升内容真的进了主上下文」。
+  it("promote → 提升内容进主上下文（projectContext/composeTurnMessages 可见）+ 端到端可追溯", async () => {
+    const KEYWORD = "runLoop 的上下文来自 projectContext 投影（loop.ts:67）";
+    const d = await mkTmp();
+    const mainLog = join(d, "main.jsonl");
+    const scDir = join(d, "sidechats", "s1");
+    await mkdir(scDir, { recursive: true });
+    const scLog = join(scDir, "events.jsonl");
+    const w = createEventLog(scLog);
+    await w.append({ type: "user_message", content: "旁路问一句" });
+    await w.append({ type: "assistant_message", content: "旁路结论：" + KEYWORD });
+    const m = createEventLog(mainLog);
+    await m.append({ type: "user_message", content: "主会话目标" });
+
+    const res = await promoteToMain({ mainLogPath: mainLog, sidechatLogPath: scLog, sidechatId: "s1", sourceEventIds: [2] });
+    expect(res.ok).toBe(true);
+    const mainEvents = await replay(mainLog);
+    // ① 主流 +1 user_message，origin 四字段完整
+    const promoted = mainEvents.at(-1)! as UserMessageEvent;
+    expect(promoted.type).toBe("user_message");
+    expect(promoted.origin?.kind).toBe("sidechat");
+    expect(promoted.origin?.session_id).toBe("s1");
+    expect(promoted.origin?.source_event_ids).toEqual([2]);
+    // ② 提升正文进了主上下文（projectContext = 主 agent 下一 turn 的输入来源）
+    expect(JSON.stringify(projectContext(mainEvents))).toContain(KEYWORD);
+    // ③ 模型侧可见（composeTurnMessages = 主会话 provider 的模型输入组装）
+    const msgs = composeTurnMessages({ history: projectContext(mainEvents) });
+    expect(msgs.some((x) => JSON.stringify(x).includes(KEYWORD))).toBe(true);
+    // ④ 端到端可追溯：主流正文 == 源 sidechat 事件重建正文
+    expect(promoted.content).toBe(derivePromotionContent(await replay(scLog), [2]));
+    // ⑤ 反向投影徽标定位到主流第 2 条
+    const badges = projectPromoteBadges(mainEvents);
+    expect(badges.length).toBe(1);
+    expect(badges[0]?.eventId).toBe(2);
+    expect(badges[0]?.sourceEventIds).toEqual([2]);
+  });
+
   it("source_event_ids 为空 → 拒绝（结论须可追溯）", async () => {
     const d = await mkTmp();
     const mainLog = join(d, "main.jsonl");
@@ -224,5 +271,124 @@ describe("M2f /promote", () => {
     ];
     expect(derivePromotionContent(events, [2, 3])).toBe("答一\n\n答二");
     expect(derivePromotionContent(events, [1])).toBeNull();
+  });
+});
+
+// ---- M2g 任务 3：会话经济性（token 按 kind 分解 + sidechat 自身历史预算）----
+describe("M2g token 归因分解（纯投影，零私有状态）", () => {
+  const mainEvents: AgentEvent[] = [
+    { type: "user_message", content: "主会话目标" },
+    { type: "usage", inputTokens: 100, outputTokens: 50 },
+    { type: "assistant_message", content: "主会话回复" },
+    { type: "usage", inputTokens: 200, outputTokens: 25 },
+  ];
+  const sideEvents: AgentEvent[] = [
+    { type: "user_message", content: "旁路提问" },
+    { type: "usage", inputTokens: 10, outputTokens: 5 },
+    { type: "compaction", trigger: "auto", reason: "threshold", compressed_event_ids: [1], summary: "s", summary_offset: 1, tokens_before: 10, tokens_after: 3 },
+  ];
+
+  it("① sidechat usage 不出现在 main 分解里（按会话文件归属推导，不加事件字段）", () => {
+    const p = projectTokenUsageByKind([
+      { kind: "main", events: mainEvents },
+      { kind: "sidechat", events: sideEvents },
+    ]);
+    const main = p.byKind.find((k) => k.kind === "main")!;
+    const side = p.byKind.find((k) => k.kind === "sidechat")!;
+    expect(main.inputTokens).toBe(300);
+    expect(main.outputTokens).toBe(75);
+    expect(main.totalTokens).toBe(375);
+    expect(main.compactionCount).toBe(0); // sidechat 的 compaction 不落到 main 分解
+    expect(side.inputTokens).toBe(10);
+    expect(side.totalTokens).toBe(15);
+    expect(side.compactionCount).toBe(1);
+  });
+
+  it("② 总量 = 各分解之和（合成投影口径一致）", () => {
+    const main = projectTokenUsage(mainEvents); // 单源（main）
+    const side = { kind: "sidechat" as const, inputTokens: 10, outputTokens: 5, totalTokens: 15, usageCount: 1, compactionCount: 1 };
+    const merged = mergeTokenProjections(main, side);
+    expect(merged.totalTokens).toBe(375 + 15);
+    expect(merged.totalTokens).toBe(merged.byKind.reduce((n, k) => n + k.totalTokens, 0));
+    // main 分解保持主会话自身口径（sidechat 不并入 main）
+    expect(merged.byKind.find((k) => k.kind === "main")!.totalTokens).toBe(375);
+    expect(mergeTokenProjections(main, EMPTY_SIDECHAT_USAGE).totalTokens).toBe(375);
+  });
+
+  it("③ 重放后分解无损（JSONL → replay → 同一投影）", async () => {
+    const d = await mkTmp();
+    const log = join(d, "main.jsonl");
+    const w = createEventLog(log);
+    for (const e of mainEvents) await w.append(e);
+    const before = projectTokenUsage(mainEvents);
+    const after = projectTokenUsage(await replay(log));
+    expect(after).toEqual(before);
+  });
+});
+
+describe("M2g sidechat 自身历史预算 + 压缩（§7.5）", () => {
+  /** 大自身历史：user 少、assistant/tool_result 大（keep-first 只护 user，故可压）。 */
+  async function seedOwnHistory(sidechatDir: string): Promise<void> {
+    await mkdir(sidechatDir, { recursive: true });
+    const log = createEventLog(join(sidechatDir, "events.jsonl"));
+    await log.append({ type: "user_message", content: "旁路开场" });
+    for (let i = 0; i < 40; i++) {
+      await log.append({ type: "assistant_message", content: "分析 " + String(i) + "：" + "细节".repeat(400) });
+      await log.append({ type: "tool_call", id: "t" + String(i), name: "read_file", args: { path: "src/x.ts" } });
+      await log.append({ type: "tool_result", callId: "t" + String(i), ok: true, output: "内容 " + "数据".repeat(400) });
+    }
+  }
+  const TIGHT = { inputLimit: 3_000, maxOutputReserve: 500, ratio: 0.5, tailMinTokens: 100, tailMaxTokens: 300, minProgress: 0.05, summaryCapTokens: 2_000 };
+  const mockSummarizer = async (): Promise<{ text: string }> => ({ text: "## Objective\n- 旁路会话自身历史压缩（单测冻结摘要）\n" });
+
+  it("超预算触发自身 compaction，compaction 事件记在自己流内，主会话字节不变", async () => {
+    const d = await mkTmp();
+    const sidechatDir = join(d, "sidechats", "s1");
+    await seedOwnHistory(sidechatDir);
+    const mainLog = join(d, "main.jsonl");
+    const mainBytes = '{"type":"user_message","content":"主会话原样"}\n';
+    await writeFile(mainLog, mainBytes, "utf8");
+    const mainBefore = await readFile(mainLog);
+
+    const events = await runSidechatTurn({
+      sidechatDir,
+      mainLogPath: mainLog,
+      workspace: d,
+      message: "继续追问",
+      model: scriptedSidechatModel([{ type: "assistant_message", content: "结论" }]),
+      summarizer: mockSummarizer,
+      compactionConfig: TIGHT,
+    });
+    const compactions = events.filter((e) => e.type === "compaction");
+    expect(compactions.length).toBe(1);
+    expect(compactions[0]!.compressed_event_ids.length).toBeGreaterThan(0);
+    // 主会话零写入（字节逐字不变）
+    expect((await readFile(mainLog)).equals(mainBefore)).toBe(true);
+    // 压缩事件确实落在自己的 JSONL（重放可见），且本轮 user/assistant 照常
+    expect(events.some((e) => e.type === "user_message" && e.content === "继续追问")).toBe(true);
+    expect(events.some((e) => e.type === "assistant_message" && e.content === "结论")).toBe(true);
+  });
+
+  it("预算内不压缩（零行为）；预算判定是纯函数", async () => {
+    const d = await mkTmp();
+    const sidechatDir = join(d, "sidechats", "s2");
+    await mkdir(sidechatDir, { recursive: true });
+    const log = createEventLog(join(sidechatDir, "events.jsonl"));
+    await log.append({ type: "user_message", content: "短会话" });
+    const events = await runSidechatTurn({
+      sidechatDir,
+      mainLogPath: join(d, "main.jsonl"),
+      workspace: d,
+      message: "问一句",
+      model: scriptedSidechatModel([{ type: "assistant_message", content: "答" }]),
+      summarizer: mockSummarizer,
+      compactionConfig: TIGHT,
+    });
+    expect(events.filter((e) => e.type === "compaction").length).toBe(0);
+    const small = sidechatHistoryBudget([{ type: "user_message", content: "x" }]);
+    expect(small.decision).toBeNull();
+    expect(small.estimate).toBeGreaterThan(0);
+    // 缺省参数独立于主会话（§7.5「参数独立配置」）
+    expect(SIDECHAT_COMPACTION_CONFIG.inputLimit).not.toBe(128_000);
   });
 });
