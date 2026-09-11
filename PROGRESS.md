@@ -593,3 +593,60 @@
 4. `M2g 任务1: M2 验收总对表三态表`（docs/m2-acceptance.md）。
 5. `M2g 任务7: ponytail-audit + AGENTS.md 状态同步`（docs/m2-audit.md + AGENTS.md）。
 6. `M2g 收口: PROGRESS 全记录 + BLOCKED 裁决转录/备案 + 半托证据`（PROGRESS.md + BLOCKED.md + docs/m2g-preload.png + docs/m2g-gates.png）。
+
+---
+
+## M3a · 编排内核第一轮（spawn_agent 原语 + read mode + 多 agent 面板）（2026-09-12）
+
+> 任务书 `.workbuddy-ai/taskbook-M3a.md`；前置 M2 收口（HEAD `87c75e4`，19 道门 + 体检零命中，285 tests）。
+> 范围：§4.4.11 内部实施序第 1–2 步 + M2 移交欠账——spawn_agent 原语 / agent 子流事件契约 / 审批与 turn 解耦 / read mode / agents 面板 + agent_card / 取消链 / usage 按 agent 归因。write/pipeline mode spawn 即拒绝（M3b）；depends_on/resources 仅解析存档（M3b/M3c）。
+
+### 基线（2026-09-12 实测）
+- HEAD `87c75e4`；`pnpm gates` 19/19 绿 + 体检零命中 + exit 0；test 37 files / 285 passed / 0 skipped；冻结 sha 本体 `9b7f44f9…` 逐字节一致；工作树干净。
+
+### 任务结果（任务 0–10，任务粒度分笔提交）
+- **任务1 事件契约**（7a416d3）：`src/events/index.ts` 新增 agent_spawned（agent_id/parent_event_id 血缘/mode/task/resources?/depends_on?/max_turns/permission_mode(+requested/tier_warning)/ts）、agent_status（五态+cancelled + reason/ts）、agent_message（progress|report）、agent_result（done|failed + summary/artifacts/usage/tool_stats）、approval_requested（id/agent_id 归因/args_digest/risk/tier_warning）、approval_resolved、card_action（card_id/source_event_id/card_type/action/scope?/target_agent_id?）七类入 KNOWN_TYPES；usage/tool_call/tool_result 增可选 agent_id；`src/agent/context.ts` projectContext 跳过带 agent_id 的子流事件与编排协议事件（父上下文唯一接收物 = agent_result）；sidechat 投影穷尽分支补全。旧日志零 agent_id → 重放投影逐字不变（agents-check A 段断言）。
+- **任务2 spawn_agent 原语**（c49509d）：`src/agent/orchestrator.ts`（新模块）——签名 {task,mode,resources?,context?,depends_on?,model?,max_turns?,tier?} → {agent_id}；并发上限 4（`MAX_CONCURRENT_WORKERS`，超限 tool_result「并发已达上限（4），不排队」）；深度恒 1（worker 工具规格/执行表**构造时即不含** spawn_agent，`WORKER_FORBIDDEN_TOOLS` 判据面）；worker 上下文 = task + context + `buildMemoryInjection`（`buildWorkerSystemMessages`；canary 断言主对话内容不进 worker 上下文）；注册沿 installAppTools 运行时注入先例（TOOLS 静态 9 工具不动，tools-check 绿）；模型解析 fail-closed（无 modelFor 且无 M0_API_KEY → spawn 拒绝，不造必败 worker）；fixtures/agents/*.jsonl worker 剧本（新目录，非冻结区）。
+- **任务3 审批解耦 + 继承**（c49509d + 5e3e9b5）：`requestWorkerApproval` = 请求落流（approval_requested + agent_status waiting_approval）+ 等待订阅式 promise（pendingApprovals 注册表 + `orchestratorForApproval` 跨编排器路由——编排器与 worker 生命周期长于父 turn，runAgent 收束后 activeOrchestrator 不清空）；`handleCardAction`（agent:card-action IPC，session.emit 不可达时走 orchestrator.appendProtocol——父 turn 结束后应答仍生效）；档位单调继承 `clampTier`（worker > 父 → 裁到父档 + tier_warning 上 agent_spawned 与 approval_requested）；scope=always 且带 target_agent_id 的 card_action **拒绝落流**（先于写入返回 ok:false，审批保持 pending 可再决议——任务书「拒绝落流」按此解释实现）；单次拒绝不杀 worker（denied tool_result 后 worker 继续跑完，agents-check D6/D6b/D7）。
+- **任务4 read mode 三重硬闸**（c49509d）：①worker 工具规格/执行表（写工具与 spawn_agent 摘除，新增 `shell_ro` 只读 bash 工具）②loop `allowedTools` 白名单（`WORKER_TOOL_TABLE`）③权限层 evaluate（worker AutonomySession，read-only 档 + modelRisk/风险通道照常生效——worker 审批路径由此触发）。`shell_ro` 静态过滤 `isReadOnlyShellCommand`：白名单命令集（ls/cat/head/tail/wc/pwd/echo/grep/rg/file/stat/which + git status|log|diff|show|branch|rev-parse|ls-files|blame|describe|shortlog），链段全查（; && || |），重定向/命令替换/heredoc 一票否决；直连 run_shell 原始实现（不过主会话工具门）。max_turns 默认 40（`READ_MODE_MAX_TURNS`）→ 超限 runLoop maxSteps 抛出 → failed(reason=max_turns) + partial 报告。
+- **任务5 回传协议**（c49509d）：worker 收敛 → agent_message{kind:report} + agent_status done + agent_result（typed 全字段）+ 合成 tool_result 挂回原 spawn tool_call id（callId = spawn 的 id；主 loop 先有 ack 拍，收敛后合成拍）；summary 超 2000 token `clipWorkerSummary` 类型化裁剪（截断提示 + summary_truncated）；输出扫描 `scanWorkerOutput` = escapeControlTags（仿冒控制标签 + Human:/Assistant: → [harness] 前缀）+ redactSecrets；failed 走 status/reason 分型不冒充结果；worker 子流落流前文本过 redactSecrets（`scanStreamEvent`——子流也进主 JSONL，密钥不外泄；worker 内存态保持原始事件）。
+- **任务6 面板/卡片/usage 归因**（f6c6682 + 33c260d）：`projectAgentPanel`（每 worker 一列：状态徽标 + 子流最近事件 + cost_so_far + 时长（ts 投影）+ 血缘分组（parent_event_id）+ 待批徽标 + 取消/查看报告动作）；agents 面板注册表 6→7（panels/registry.tsx + settings PANEL_IDS/default layout/validate）；`AgentCard` 卡片注册表 9→10（agent_card：steer 留 M3b/cancel/open_report）；`projectTokenUsageByAgent`（main 分解不含带 agent_id 的 usage；总量 = main + Σworker）+ projectTokenUsageByKind 同步排除（旧日志零 agent_id 行为不变）+ TokenPanel「按 agent 分解」段；PANEL_ICONS/EventView 渲染 agent_* 与审批协议事件（worker 审批卡带批准/拒绝回写）；全程纯事件流投影零私有状态，SSR 安全。
+- **任务7 取消链**（c49509d）：Orchestrator.root AbortController 树——`cancelAgent` 只 abort 该 worker（pending 审批一并释放防悬挂）→ cancelled 终态（子流终止 + 合成 tool_result 标 cancelled）；`cancelAll` 全树（root.abort + 逐 worker）；runLoop 增可选 `signal`（轮界收束，缺省零行为）+ `tools` 工具表覆盖（worker 独立工具面）；取消经 card_action(cancel, target_agent_id) 事件流协议（preload `cardAction` 通道）。重放后 cancelled 终态无损（E6）。
+- **任务8 agents-check 第 20 道门**（5e3e9b5）：`scripts/agents-check.ts` 七段 A–G（+H 暗卷段：无 M0_API_KEY 显式跳过）共 **79 断言**；gates.ts 清单 19→20 + package.json scripts 增一行（清单行的必要配套，白名单外最小越界，见偏离说明）；A 旧日志重放无损 / B spawn 纪律 / C read 闭环（经 handleAgentRun 全链路）/ D 审批解耦 / E 取消链 / F usage 归因 / G 输出扫描。
+- **vitest 单测**（f6c6682）：tests/agents.test.ts 22 项（事件契约 roundtrip / projectContext 隔离 / 只读 bash 白名单拒绝集 / 深度闸 / clampTier / clipWorkerSummary / scanWorkerOutput / lastAssistantText / token 归因 / spawn 纪律 / read 闭环 canary / 单取消+兄弟 / cancelAll / max_turns / shell_ro 实跑 / 面板投影）；tests/sidechat、panels、cards 注册表计数同步（6→7 / 9→10，tests/** 白名单内）。
+- **任务9 反向验证 4 条红→绿**（实录见下节）。
+- **任务10 半托截图**（173676f）：`docs/m3a-agents.png`（agents 面板两 worker：worker-1 done + worker-2 running、血缘分组 spawn@#3/#7、cost_so_far、取消钮；对话流 agent_result 卡 + [harness] 合成 tool_result）+ `docs/m3a-agents-token.png`（token 面板按 agent 分解：worker-1 300 / worker-2 340 / 会话总量 640 = main+Σworker）。真实 Electron 窗口 + CDP 程序化（--no-sandbox --disable-gpu、`--remote-debugging-port=N` 等号形态 + stderr「DevTools listening on ws://…」端口兜底）；面板在数据产生前打开（坑五十）；完成判定全数据侧显式谓词（坑四十九）；React 受控输入 native setter + 等发送键启用再点（坑四十六/四十七）；演示数据全走真实代码路径（M3A_AGENTS_DEMO + fixtures/agents 剧本）落临时目录，驱动脚本用后即删，仓库零污染。
+
+### 反向验证 4 条红→绿实录（补丁 → 哪条断言红 + 退出码 → 还原后绿）
+1. **摘深度闸**（worker 执行表重新放入 spawn_agent）→ agents-check **B4b「执行表不含 spawn_agent」红**：`❌ B4b …`，1 项失败（78✅/1❌），**exit 1** → `git checkout` 还原 → 全部断言通过（79✅/0❌）**exit 0**。
+2. **审批挂父 turn**（requestWorkerApproval 改为不注册 pending、立即按拒绝收场——等待通道随 turn 死）→ agents-check **D4c「审批保持 pending」红 + D5「reject 决议受理」红**：2 项失败（77✅/2❌），**exit 1** → 还原 → 79✅/0❌ **exit 0**。
+3. **取消语义破坏**（cancelAgent 单 worker abort 改成遍历全树 abort + root.abort）→ agents-check **E3「单取消不影响兄弟」红 + E5「全树 cancelled 终态计数（1+2）」红 + E6「重放后 cancelled 终态无损」红**：3 项失败（76✅/3❌），**exit 1** → 还原 → 79✅/0❌ **exit 0**。（第一版补丁写成 cancelAgent→cancelAll 递归，栈溢出崩溃式红——不算断言红，已改为无递归版重做。）
+4. **worker usage 并进 main 分解**（projectTokenUsageByAgent 的 agent_id 归因分支置空）→ 单测 **「worker usage 不并入 main；总量 = main + Σworker」红**：`AssertionError: expected 140 to be 100`，exit 1 → 还原 → tests/agents.test.ts 22/22 绿 exit 0。
+
+### M3a 新增坑记录
+- 坑五十一：fixtures 剧本驱动 scripted 模型时**光标共享**——同名剧本缓存同一模型实例，第二次 spawn 拿到的是耗尽剧本（空 worker）。模型要按 spawn 实例化（缓存剧本、每次 `scriptedWorkerModel(script)` 造新实例）。
+- 坑五十二：会话结束自动沉淀（distill）会用**主剧本再跑一轮 provider**，非 remember 的 tool_call 会以原 callId 落一条 rejected tool_result——同 callId 的 tool_result 计数与「两拍」断言会被它污染。验收脚本要关 autoMemory（或让判据容忍 distill 拍）。
+- 坑五十三：macOS `git grep -E "\bsk-"` 的 `\b` 不按词边界解释（按字面 b）——词边界扫描要用 `git grep -P "(?<![\w-])sk-"` 口径复核；`\b` 版在本仓会把「\bsk-」文档字面当命中、漏掉真命中。
+- 坑五十四：worker 子流也落主 JSONL——凡落流文本（progress/assistant_message/tool_result）都要过输出扫描，否则「事件流零完整密钥」不成立；worker 自身内存态（模型上下文）保持原始事件不受影响。
+
+### 收口基线（2026-09-12 终版实测）
+- `pnpm gates`：**20/20 绿 + 恒真式体检零命中 + exit 0**（逐道退出码：typecheck=0 test=0 e2e=0 ipc:check=0 sandbox:check=0 build=0 fork-check=0 gate-check=0 autonomy-check=0 compaction-check=0 panels-check=0 tools-check=0 map-check=0 prune-check=0 providers-check=0 memory-check=0 plugins-check=0 sidechat-check=0 security-check=0 agents-check=0；二次实测 exit 0）。
+- test = **38 files / 307 passed / 0 skipped**（≥ 任务书硬底线 285，只增不减）。
+- 冻结判卷 sha256 3/3 逐字一致（`3edc9343…` / `e253aae9…` / `9179db7d…`）；`scripts/frozen-sha256.json` 本体 sha256 = `9b7f44f9ce0b4da12d82b18643eb13fff936a4b0fe2db6500428059d1858c4ba` 逐字节未改。
+- 密钥卫生：精确词边界扫描（`git grep -P "(?<![\w-])sk-|AIza|api[_-]?key\s*="`）命中 12 行，**全部**为 M2f 起沿用的同一枚假密钥字面量 `sk-abcdefghijklmnopqrstuvwxyz012345`（sidechat-check/security-check/audit-demo 既有 + 本轮 fixtures/agents/secret-worker.jsonl 与 agents-check.ts 同款演练用）与文档；真实 key 0 命中。
+- git status 干净；任务书文件不入仓库（.git/info/exclude）。
+
+### 分笔提交清单（本轮）
+1. `M3a 任务1: 事件契约`（7a416d3）——agent_* 四事件 + approval/card_action + agent_id 扩键 + 投影隔离。
+2. `M3a 任务2-5+7: 编排内核`（c49509d）——orchestrator + agent-runner 接线 + shell_ro + 审批解耦 + 回传协议 + 取消链 + card_action IPC。
+3. `M3a 任务6+单测`（f6c6682）——agents 面板 6→7 / agent_card 9→10 / token 按 agent 分解 + tests/agents.test.ts。
+4. `M3a 任务8: agents-check 第20道门`（5e3e9b5）——A–G 七段 79 断言 + gates 清单 + 子流落流脱敏。
+5. `M3a 任务6 补提交: settings PANEL_IDS 扩键 + slow-worker usage`（33c260d）。
+6. `M3a 任务10: 半托截图`（173676f）——docs/m3a-agents.png + docs/m3a-agents-token.png。
+7. `M3a 收口: PROGRESS M3a 段`（本条）。
+
+### 偏离任务书的决定（全部显式备案，无判据绕行）
+1. **package.json 增 `agents-check` 脚本行**：白名单只含 scripts/gates.ts（仅加清单行），但 `pnpm gates` 以 `pnpm run <name>` 驱动清单——无脚本行则第 20 道门无法执行，硬指标 1 自相矛盾。按硬指标优先，加一行脚本（最小配套），未动其他任何字段。
+2. **「worker scope=always 的 card_action 拒绝落流」语义**：实现为「先于落流拒绝」（handleCardAction 检查 scope=always && target_agent_id → 不写任何事件直接 ok:false，审批保持 pending 可再以 once/session_kind 决议）。理由：§11.7.6「scope=always 的 card_action 仅主会话可发」的执行点就是流写入闸；若先落流再拒绝，会产生「已记录的 always 动作」与「worker 永不写 always」的字面矛盾。
+3. **「时长」列数据来源**：事件流本无时间戳，给 agent_spawned / 终态 agent_status 增可选 ts 字段（Date.now，新事件自带字段，旧日志零影响）；面板时长 = 终态 ts − spawn ts（纯事件投影）。
+4. **M3a 未接线 IPC 的审批卡**：worker 审批卡渲染在对话流（approval_requested），决议走 card_action 通道；审批队列面板（approvals）本轮不聚合 worker 审批（面板 payload.asks 仍是主会话 IPC 审批）——§10.4「跨 agent 聚合队列」留 M3b 正式化。
