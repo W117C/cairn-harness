@@ -34,6 +34,12 @@ export interface LoopOptions {
   /** M2f 工具表白名单（硬闸）：给出时不在表内的工具一律拒绝执行——不是提示词自觉，是工具表摘除。
    *  缺省 undefined = 全表可见（既有路径字节不变）。 */
   allowedTools?: readonly ToolName[];
+  /** M3a worker 工具表覆盖（编排内核注入独立工具面，如只读 shell_ro）；缺省 undefined = 全局 TOOLS
+   *  （既有路径字节不变）。先于 allowedTools 硬闸之后的执行面查表。 */
+  tools?: Record<string, import("../tools").Tool>;
+  /** M3a 取消信号（编排器 AbortController 树）：中止于轮界（工具执行中不打断，轮末收束）。
+   *  缺省 undefined = 无取消（既有路径字节不变）。 */
+  signal?: AbortSignal;
 }
 
 // agent loop：事件流 → 模型 → 工具 → 事件流。
@@ -66,6 +72,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
   }
 
   for (let step = 0; step < maxSteps; step++) {
+    if (opts.signal?.aborted) return; // M3a：取消信号于轮界收束（终态由编排器分类：cancelled）
     let sawToolCall = false;
     for await (const output of streamFn(projectContext(seen))) {
       await events.append(output);
@@ -167,7 +174,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         continue;
       }
 
-      const tool = TOOLS[name];
+      const tool = (opts.tools ?? TOOLS)[name];
       let result;
       if (!tool) {
         result = { ok: false, output: `unknown tool: ${output.name}` };

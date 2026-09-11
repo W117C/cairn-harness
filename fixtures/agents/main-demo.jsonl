@@ -1,0 +1,4 @@
+{"type":"assistant_message","content":"派出两个只读 worker 并行调研：一个快查根因，一个慢扫结构。"}
+{"type":"tool_call","id":"spawn-1","name":"spawn_agent","args":{"task":"调研 fixtures/todo-app 失败测试的根因并出结构化报告","mode":"read","model":"read-worker.jsonl"}}
+{"type":"tool_call","id":"spawn-2","name":"spawn_agent","args":{"task":"统计 todo-app 源码结构（只读慢扫）并出报告","mode":"read","model":"slow-worker.jsonl"}}
+{"type":"assistant_message","content":"两个只读 worker 已在后台运行；完成后 agent_result 会挂回各自的 spawn 调用，父上下文只收结构化报告。"}

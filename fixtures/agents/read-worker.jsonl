@@ -1,0 +1,4 @@
+{"type":"usage","inputTokens":120,"outputTokens":40}
+{"type":"tool_call","id":"r1","name":"read_file","args":{"path":"src/todo.ts"}}
+{"type":"usage","inputTokens":80,"outputTokens":60}
+{"type":"assistant_message","content":"## 结论\n- completedCount 的统计未过滤 done 项（todo.ts 第 12 行），是测试失败的根因。\n\n## 证据路径\n- src/todo.ts:12（getCompletedCount 直接累加全部条目）\n- tests/todo.test.ts:8（期望过滤 done）\n\n## 风险\n- 修改统计口径会影响「已完成」徽标展示（低风险）。\n\n## 未决问题\n- 是否需要保留历史行为的兼容开关。"}

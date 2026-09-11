@@ -81,6 +81,15 @@ import {
   scriptedSidechatModel,
   type SidechatModel,
 } from "../agent/sidechat";
+import {
+  Orchestrator,
+  orchestratorForAgent,
+  orchestratorForApproval,
+  loadWorkerScript,
+  scriptedWorkerModel,
+  type SpawnArgs,
+  type WorkerModel,
+} from "../agent/orchestrator";
 import { buildSecurityReport } from "../agent/security/scan";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -120,6 +129,39 @@ let lastPluginSnapshot: PluginPanelSnapshot | null = null;
 // 三门通道（模块级，仿 appAskGate）：clarify 表单提交 / plan 批准决议
 const appClarifyGate = new ClarifyGate();
 const appPlanGate = new PlanGate();
+
+// ---- M3a 编排内核（§4.4）：会话级编排器（worker 生命周期长于父 turn——审批解耦的前提）----
+// activeOrchestrator 在 runAgent 收束后**不清空**：worker 的审批应答/取消路由须在父 turn 结束后
+// 仍可达（§4.4.3 最大前车之鉴）；跨编排器路由走 orchestratorForAgent / orchestratorForApproval。
+let activeOrchestrator: Orchestrator | null = null;
+
+/** M3A_AGENTS_DEMO 演示通道：spawn 的 model 字段 → fixtures/agents/<name> 脚本模型（预加载）。
+ *  slow- 前缀的剧本逐事件延迟（截图节奏：一 worker done、一 worker running）。 */
+async function loadDemoWorkerModels(): Promise<(args: SpawnArgs) => WorkerModel | undefined> {
+  const dir = join(ROOT, "fixtures", "agents");
+  const cache = new Map<string, WorkerModel>();
+  const load = async (name: string): Promise<WorkerModel> => {
+    const hit = cache.get(name);
+    if (hit) return hit;
+    const script = await loadWorkerScript(join(dir, name));
+    const base = scriptedWorkerModel(script);
+    const model: WorkerModel =
+      name.startsWith("slow-")
+        ? async function* (messages, tools) {
+            for await (const out of base(messages, tools)) {
+              await new Promise((r) => setTimeout(r, 700));
+              yield out;
+            }
+          }
+        : base;
+    cache.set(name, model);
+    return model;
+  };
+  // 预热演示剧本（fail-visible：缺文件直接抛，不静默换剧本）
+  await load("read-worker.jsonl");
+  await load("slow-worker.jsonl");
+  return (args: SpawnArgs) => (typeof args.model === "string" ? cache.get(args.model) : undefined);
+}
 
 interface Hooks {
   onEvent?: (e: AgentEvent) => void;
@@ -417,6 +459,16 @@ export function installAppTools(): void {
       };
     },
   });
+  // M3a：spawn_agent 运行时注入（installAppTools 运行时注入先例；静态注册表 9 工具不动）。
+  // 编排器未接线（headless 直调 loop）= fail-closed 拒绝。
+  (TOOLS as unknown as Record<string, Tool>).spawn_agent = {
+    name: "spawn_agent",
+    async run(args, ctx) {
+      const orch = activeOrchestrator;
+      if (!orch) return { ok: false, output: "spawn_agent: 编排器未接线（fail-closed）" };
+      return await orch.spawn(args as SpawnArgs, { callId: ctx.callId });
+    },
+  };
 }
 
 const appAskGate = new AskGate({
@@ -450,6 +502,8 @@ export interface RunOptions {
 function createProvider(userMessage: string, systemPrefix?: string): Provider {
   // M1c 明卷通道：M1C_AUTONOMY_SCRIPT 指向冻结剧本（autonomy-check 三条路径复用同一接线）。
   const autonomyScript = process.env.M1C_AUTONOMY_SCRIPT;
+  // M3a 演示通道：M3A_AGENTS_DEMO=1 → 主剧本取 fixtures/agents/main-demo.jsonl（spawn_agent 闭环演示）。
+  if (process.env.M3A_AGENTS_DEMO === "1") return createMockProvider(join(ROOT, "fixtures", "agents", "main-demo.jsonl"));
   if (process.env.M1B_GATE_FLOW === "1") return createMockProvider(GATE_FIXTURE);
   if (autonomyScript) return createMockProvider(autonomyScript);
   // M2a 截图通道：M2A_LSP_DEMO 指向演示剧本（write_file → 真实诊断回流管线），缺省零行为。
@@ -517,6 +571,17 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       opts.onEvent?.(e);
     };
     session.emit = pipeline;
+    // M3a：会话级编排器（worker 子流落主流 JSONL；父 turn 收束后编排器存活，审批/取消路由不断）
+    let demoModelFor: ((args: SpawnArgs) => WorkerModel | undefined) | undefined;
+    if (process.env.M3A_AGENTS_DEMO === "1") demoModelFor = await loadDemoWorkerModels();
+    const orchestrator = new Orchestrator({
+      logPath: opts.logPath,
+      workspace: opts.workspace,
+      parentMode: opts.mode,
+      emit: pipeline,
+      ...(demoModelFor ? { modelFor: demoModelFor } : {}),
+    });
+    activeOrchestrator = orchestrator;
     // M2e：插件运行时（会话启动静态扫描产加载清单，不新增事件类型）。
     // 零插件环境（无 .agent/plugins、无 M2E_USER_PLUGINS/M2E_LOOSE_SKILLS）= 空清单 = 零行为。
     let rt: PluginRuntime | null = null;
@@ -699,6 +764,66 @@ export async function handleAgentRun(
 /** IPC "agent:decide" 的处理函数（scope: once / session_kind / always，§10.4 审批卡回写）。 */
 export function handleAgentDecide(askId: string, approved: boolean, scope?: AskScope): boolean {
   return appAskGate.decide(askId, approved, "user", scope ?? "once");
+}
+
+// ---- M3a：card_action 回写协议（§10.3）——审批应答与取消的唯一事件流入口 ----
+
+export interface CardActionRequest {
+  cardId: string;
+  sourceEventId: number;
+  cardType: string;
+  action: string;
+  payload?: Record<string, unknown>;
+  scope?: AskScope;
+  targetAgentId?: string;
+}
+
+/** card_action 处理：落流（card_action 事件）→ 路由（worker 审批决议 / agent 取消）。
+ *  审批解耦（§4.4.3）：父 turn 结束后仍可应答——落流与路由走编排器绑定管线，不依赖活动 session。
+ *  §11.7.6：worker scope=always 的 card_action 拒绝落流（先于写入检查，审批保持 pending 可再决议）。 */
+export async function handleCardAction(req: CardActionRequest): Promise<{ ok: boolean; error?: string }> {
+  if (req.scope === "always" && req.targetAgentId) {
+    return {
+      ok: false,
+      error: "worker 永不写 always：scope=always 仅主会话可发（§11.7.6），该 card_action 拒绝落流",
+    };
+  }
+  const approvalId =
+    req.cardType === "approval"
+      ? typeof req.payload?.approval_id === "string"
+        ? req.payload.approval_id
+        : req.cardId
+      : null;
+  const orch =
+    (req.targetAgentId ? orchestratorForAgent(req.targetAgentId) : null) ??
+    (approvalId ? orchestratorForApproval(approvalId) : null) ??
+    activeOrchestrator;
+  const emit = session?.emit ?? (orch ? (e: AgentEvent) => orch.appendProtocol(e) : null);
+  if (!emit) return { ok: false, error: "无可用事件管线（fail-closed）" };
+  const event: AgentEvent = {
+    type: "card_action",
+    card_id: req.cardId,
+    source_event_id: req.sourceEventId,
+    card_type: req.cardType,
+    action: req.action,
+    ...(req.payload ? { payload: req.payload } : {}),
+    ...(req.scope ? { scope: req.scope } : {}),
+    ...(req.targetAgentId ? { target_agent_id: req.targetAgentId } : {}),
+  };
+  await emit(event);
+  if (approvalId !== null) {
+    const owner = orchestratorForApproval(approvalId);
+    if (!owner) return { ok: false, error: "审批发起编排器已不可达（fail-closed）" };
+    const r = owner.decideWorkerApproval(approvalId, req.action === "approve", req.scope ?? "once");
+    return r.ok ? { ok: true } : { ok: false, error: r.error };
+  }
+  if (req.action === "cancel" && req.targetAgentId) {
+    const owner = orchestratorForAgent(req.targetAgentId);
+    if (!owner) return { ok: false, error: "该 agent 无归属编排器（未知）" };
+    const okCancel = owner.cancelAgent(req.targetAgentId);
+    return okCancel ? { ok: true } : { ok: false, error: "agent 不存在或已终态: " + req.targetAgentId };
+  }
+  return { ok: true };
 }
 
 /** IPC "agent:clarify" 的处理函数：澄清表单提交，值挂回原 tool_use id（与 turn 解耦）。 */

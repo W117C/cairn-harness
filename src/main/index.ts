@@ -8,6 +8,7 @@ import {
   handleAgentDecide,
   handleAgentRun,
   handleAgentState,
+  handleCardAction,
   handleClarifySubmit,
   handleCompact,
   handlePlanDecide,
@@ -168,6 +169,8 @@ ipcMain.handle(
     handleSidechatPromote(req),
 );
 ipcMain.handle("agent:sidechat-state", (_event, parentSessionId?: string) => handleSidechatState(parentSessionId));
+// M3a：card_action 回写协议（worker 审批应答 / agent 取消——审批与 turn 解耦的事件流入口）
+ipcMain.handle("agent:card-action", (_event, req: Parameters<typeof handleCardAction>[0]) => handleCardAction(req));
 
 void app.whenReady().then(async () => {
   // 暴露完整 AX 树给系统辅助功能（System Events / VoiceOver 等）；必须在 ready 之后调用

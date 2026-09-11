@@ -58,6 +58,16 @@ const api: AgentApi = {
     note?: string;
   }) => ipcRenderer.invoke("agent:sidechat-promote", req),
   sidechatState: (parentSessionId?: string) => ipcRenderer.invoke("agent:sidechat-state", parentSessionId),
+  // M3a：card_action 回写协议（worker 审批应答 / agent 取消）
+  cardAction: (req: {
+    cardId: string;
+    sourceEventId: number;
+    cardType: string;
+    action: string;
+    payload?: Record<string, unknown>;
+    scope?: "once" | "session_kind" | "always";
+    targetAgentId?: string;
+  }) => ipcRenderer.invoke("agent:card-action", req),
 };
 
 contextBridge.exposeInMainWorld("agent", api);

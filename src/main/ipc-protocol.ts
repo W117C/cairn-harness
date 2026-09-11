@@ -143,4 +143,14 @@ export interface AgentApi {
     note?: string;
   }): Promise<{ ok: boolean; error?: string }>;
   sidechatState(parentSessionId?: string): Promise<SidechatPanelSnapshot>;
+  /** M3a：card_action 回写协议（§10.3）——worker 审批应答 / agent 取消的唯一事件流入口。 */
+  cardAction(req: {
+    cardId: string;
+    sourceEventId: number;
+    cardType: string;
+    action: string;
+    payload?: Record<string, unknown>;
+    scope?: "once" | "session_kind" | "always";
+    targetAgentId?: string;
+  }): Promise<{ ok: boolean; error?: string }>;
 }
