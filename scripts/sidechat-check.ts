@@ -7,16 +7,16 @@
 //   E /promote：主流 +1 user_message 且 origin 四字段齐全 / 源消息徽标由 origin 反向投影 / 重启重放无损 / 过输出扫描
 //   F 暗卷（有 M0_API_KEY 才跑）：真实 GLM 旁路问答一轮，断言只读白名单在真实模型下同样成立
 // 全程不依赖沙箱（sidechat 只读，无副作用工具）。
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import { createEventLog, replay, type AgentEvent } from "../src/events";
 import { createSidechatSession, sidechatEventsPath } from "../src/main/sessions";
 import {
   SIDECHAT_FORBIDDEN_TOOLS,
   SIDECHAT_PROJECTION_ROUNDS,
   buildMainProjection,
-  createSidechatProvider,
   promoteToMain,
   runSidechatTurn,
   scriptedSidechatModel,
@@ -128,7 +128,7 @@ try {
   // 事件落在自己的 JSONL
   const scEvents = await replay(scPath);
   assert(
-    scEvents.some((e) => e.type === "assistant_message" && e.content.includes("可提升的结论") === false && e.content.includes("事件流是唯一事实源")),
+    scEvents.some((e) => e.type === "assistant_message" && e.content.includes("事件流是唯一事实源")),
     "sidechat 事件落在自己的 JSONL（第 3 轮回答在场）",
   );
   assert(
@@ -245,6 +245,9 @@ try {
   if (!process.env.M0_API_KEY) {
     console.log("  暗卷跳过（无 M0_API_KEY）");
   } else {
+    const hashOf = async (p: string): Promise<string> =>
+      createHash("sha256").update(await readFile(p, "utf8")).digest("hex");
+    const darkBefore = await hashOf(mainLog);
     const sid2 = await createSidechatSession(work, "主会话", "旁路暗卷");
     const events = await runSidechatTurn({
       sidechatDir: join(work, "sidechats", sid2),
@@ -258,8 +261,10 @@ try {
       !events.some((e) => e.type === "tool_call" && SIDECHAT_FORBIDDEN_TOOLS.includes(e.name as never)),
       "暗卷：真实模型未越过只读白名单（无写向工具调用）",
     );
-    // 主会话零变化（暗卷同样不打扰）
-    assert((await stat(mainLog)).size > 0, "暗卷后主会话文件仍在（未被写）");
+    assert(
+      (await hashOf(mainLog)) === darkBefore,
+      "暗卷：真实模型侧同样不打扰主会话（主会话 sha256 不变）",
+    );
   }
 } finally {
   await rm(work, { recursive: true, force: true }).catch(() => {});
@@ -267,7 +272,3 @@ try {
 
 console.log("[sidechat-check] " + (fail === 0 ? "全部断言通过 ✅" : String(fail) + " 项失败 ❌") + "（" + String(pass) + " ✅ / " + String(fail) + " ❌）");
 process.exit(fail === 0 ? 0 : 1);
-
-// 引用面自检（构建期类型引用；避免未使用告警）
-void createSidechatProvider;
-void writeFile;

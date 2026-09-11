@@ -2,7 +2,7 @@
 // 主会话只读投影（20 轮窗口 / 摘要产物 / 截断）+ /promote（origin 四字段 + 输出扫描 + 反向投影）。
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -17,6 +17,8 @@ import {
   extractAtRefs,
   promoteToMain,
   readAtRef,
+  runSidechatTurn,
+  scriptedSidechatModel,
   sidechatToolSpecs,
 } from "../src/agent/sidechat";
 import { createEventLog, replay, type AgentEvent } from "../src/events";
@@ -74,6 +76,37 @@ describe("M2f sidechat 只读白名单（工具表摘除）", () => {
     }
     expect(names).toContain("read_file");
     expect(names).toContain("grep");
+  });
+
+  it("sidechat 事件落在自己的 JSONL，主会话文件字节不变（单测口径）", async () => {
+    const d = await mkTmp();
+    const mainLog = join(d, "主会话.jsonl");
+    const main = createEventLog(mainLog);
+    await main.append({ type: "user_message", content: "主会话任务" });
+    await main.append({ type: "assistant_message", content: "主会话回答" });
+    const mainBefore = await readFile(mainLog, "utf8");
+
+    const sid = "旁路单元";
+    const scDir = join(d, "sidechats", sid);
+    await mkdir(scDir, { recursive: true });
+    await createEventLog(join(scDir, "events.jsonl")).append({
+      type: "session_meta",
+      kind: "sidechat",
+      parent_session_id: "主会话",
+    });
+    const own = await runSidechatTurn({
+      sidechatDir: scDir,
+      mainLogPath: mainLog,
+      workspace: d,
+      message: "旁路只读提问",
+      model: scriptedSidechatModel([{ type: "assistant_message", content: "旁路回答" }]),
+    });
+    // 事件落在自己的 JSONL
+    expect(own.some((e) => e.type === "user_message" && e.content === "旁路只读提问")).toBe(true);
+    expect(own.some((e) => e.type === "assistant_message" && e.content === "旁路回答")).toBe(true);
+    expect(own[0]).toMatchObject({ type: "session_meta", kind: "sidechat", parent_session_id: "主会话" });
+    // 主会话字节不变（sidechat 只读主会话）
+    expect(await readFile(mainLog, "utf8")).toBe(mainBefore);
   });
 });
 
