@@ -3,8 +3,9 @@
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
-// M2d：第四面板 memory（两层记忆快照 + 会话内 remember 审计投影）；M2e：第五面板 plugins（插件容器）。
-export const PANEL_IDS = ["approvals", "token", "git", "memory", "plugins"] as const;
+// M2d：第四面板 memory（两层记忆快照 + 会话内 remember 审计投影）；M2e：第五面板 plugins（插件容器）；
+// M2f：第六面板 sidechat（辅助对话：只读旁路会话 + 提升记录投影）。
+export const PANEL_IDS = ["approvals", "token", "git", "memory", "plugins", "sidechat"] as const;
 export type PanelId = (typeof PANEL_IDS)[number];
 
 export interface LayoutState {
@@ -33,12 +34,12 @@ export interface AppSettings {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   layout: {
-    open: { approvals: false, token: false, git: false, memory: false, plugins: false },
+    open: { approvals: false, token: false, git: false, memory: false, plugins: false, sidechat: false },
     activePanel: null,
     width: 32,
   },
   mode: "default",
-  safeMode: "off",
+  safeMode: "report",
   theme: "system",
   currentSession: null,
   autoMemory: true,
@@ -64,6 +65,7 @@ export function validateSettings(raw: unknown): AppSettings {
     git: d.layout.open.git === true,
     memory: d.layout.open.memory === true,
     plugins: d.layout.open.plugins === true,
+    sidechat: d.layout.open.sidechat === true,
   };
   if (typeof layoutRaw.open === "object" && layoutRaw.open !== null) {
     for (const [k, v] of Object.entries(layoutRaw.open as Record<string, unknown>)) {

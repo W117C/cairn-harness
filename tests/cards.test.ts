@@ -4,13 +4,14 @@ import { describe, expect, it } from "vitest";
 import { FallbackCard, KNOWN_CARD_TYPES, resolveCard } from "../src/renderer/cards/registry";
 
 describe("卡片注册表", () => {
-  it("八类已知 card_type 均注册为组件（M1a 四类 + M1b 三门三类 + M1d 压缩卡）", () => {
+  it("九类已知 card_type 均注册为组件（M1a 四类 + M1b 三门三类 + M1d 压缩卡 + M2f promote 卡）", () => {
     expect([...KNOWN_CARD_TYPES].sort()).toEqual([
       "approval",
       "clarify_form",
       "compaction",
       "diff",
       "plan",
+      "promote",
       "report",
       "usage_summary",
       "verify_result",

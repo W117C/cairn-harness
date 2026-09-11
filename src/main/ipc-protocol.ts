@@ -41,6 +41,22 @@ export interface StateResponse {
   memory?: MemorySnapshot;
   /** M2e：插件面板快照（加载清单 + 信任 + MCP 状态；缺省 = 无插件运行时）。 */
   plugins?: import("../agent/plugins").PluginPanelSnapshot;
+  /** M2f：辅助对话面板快照（sidechat 会话清单 + 已提升记录；缺省 = 无会话目录）。 */
+  sidechat?: SidechatPanelSnapshot;
+}
+
+/** M2f sidechat 面板快照（纯投影：会话清单 + 最近消息 + 已提升记录）。 */
+export interface SidechatPanelSnapshot {
+  parentSessionId: string | null;
+  sessions: {
+    id: string;
+    parentId: string | null;
+    lines: number;
+    mtimeMs: number;
+    messages: { eventId: number; role: "user" | "assistant"; text: string }[];
+  }[];
+  /** 已提升记录（主会话 user_message.origin 反向投影）。 */
+  promoted: { eventId: number; sessionId: string; sourceEventIds: number[]; note?: string }[];
 }
 
 /** M1d：手动 /compact 结果（压缩卡 payload 与 compaction-check 同源）。 */
@@ -112,4 +128,15 @@ export interface AgentApi {
   /** M2e：插件信任卡决议（仅用户经插件面板；主进程通道已就绪）。
    *  optional —— preload 白名单本轮未含（deleteMemory 同款先例），接线后可用。 */
   pluginDecide?(plugin: string, trusted: boolean): Promise<{ ok: boolean; error?: string }>;
+  // ---- M2f：辅助对话（sidechat）+ /promote（主进程通道就绪；preload 白名单本轮未含，同款先例）----
+  sidechatCreate?(parentSessionId: string, name?: string): Promise<{ id: string }>;
+  sidechatAsk?(sidechatId: string, message: string, parentSessionId?: string): Promise<{ ok: boolean; error?: string; events?: AgentEvent[] }>;
+  /** /promote：把 sidechat 结论提升进主会话（渲染为主会话一条 user_message + origin）。 */
+  sidechatPromote?(req: {
+    sidechatId: string;
+    parentSessionId: string;
+    sourceEventIds: number[];
+    note?: string;
+  }): Promise<{ ok: boolean; error?: string }>;
+  sidechatState?(parentSessionId?: string): Promise<SidechatPanelSnapshot>;
 }

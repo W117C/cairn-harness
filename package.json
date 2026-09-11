@@ -25,7 +25,9 @@
     "map-check": "node --import tsx scripts/map-check.ts",
     "prune-check": "node --import tsx scripts/prune-check.ts",
     "memory-check": "node --import tsx scripts/memory-check.ts",
-    "plugins-check": "node --import tsx scripts/plugins-check.ts"
+    "plugins-check": "node --import tsx scripts/plugins-check.ts",
+    "sidechat-check": "node --import tsx scripts/sidechat-check.ts",
+    "security-check": "node --import tsx scripts/security-check.ts"
   },
   "devDependencies": {
     "@fontsource-variable/geist": "^5.3.0",

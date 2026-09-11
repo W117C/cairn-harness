@@ -17,6 +17,10 @@ import {
   handleSessionOpen,
   handleSessionRename,
   handleMemoryDelete,
+  handleSidechatCreate,
+  handleSidechatAsk,
+  handleSidechatPromote,
+  handleSidechatState,
   getSettings,
   setSettings,
   initSandbox,
@@ -144,6 +148,17 @@ ipcMain.handle("agent:sessions-rename", (_event, oldId: string, newName: string)
 ipcMain.handle("agent:sessions-delete", (_event, id: string) => handleSessionDelete(id));
 // M2d：记忆删除（仅用户经记忆面板；模型无删除权）。preload 暴露待白名单轮接线（M1d compact 同款先例）。
 ipcMain.handle("agent:memory-delete", (_event, scope: "project" | "global", topic: string) => handleMemoryDelete(scope, topic));
+// M2f：辅助对话（sidechat）+ /promote。主进程通道就绪；preload 暴露待白名单轮接线（同款先例）。
+ipcMain.handle("agent:sidechat-create", (_event, parentSessionId: string, name?: string) => handleSidechatCreate(parentSessionId, name));
+ipcMain.handle("agent:sidechat-ask", (_event, sidechatId: string, message: string, parentSessionId?: string) =>
+  handleSidechatAsk(sidechatId, message, parentSessionId !== undefined ? { parentSessionId } : {}),
+);
+ipcMain.handle(
+  "agent:sidechat-promote",
+  (_event, req: { sidechatId: string; parentSessionId: string; sourceEventIds: number[]; note?: string }) =>
+    handleSidechatPromote(req),
+);
+ipcMain.handle("agent:sidechat-state", (_event, parentSessionId?: string) => handleSidechatState(parentSessionId));
 
 void app.whenReady().then(async () => {
   // 暴露完整 AX 树给系统辅助功能（System Events / VoiceOver 等）；必须在 ready 之后调用

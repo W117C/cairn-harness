@@ -2,7 +2,17 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
-export interface UserMessageEvent { type: "user_message"; content: string }
+/** M2f：/promote 来源（sidechat 结论提升进主会话）。零新增事件类型——主流仍是 user_message，
+ *  只多一个可选 origin 字段，重启后从 JSONL 重放无损（徽标由 origin 反向投影）。 */
+export interface PromoteOrigin {
+  kind: "sidechat";
+  /** 来源 sidechat 会话 id（独立 JSONL 文件组的目录名）。 */
+  session_id: string;
+  /** 来源 sidechat 事件 id（1-based 行号，可跳回源消息）。 */
+  source_event_ids: number[];
+  note?: string;
+}
+export interface UserMessageEvent { type: "user_message"; content: string; origin?: PromoteOrigin }
 export interface AssistantMessageEvent { type: "assistant_message"; content: string }
 /** 流式增量片段：callId 标识同一轮回复，text 为逐字追加的一小段。 */
 export interface AssistantDeltaEvent { type: "assistant_delta"; callId: string; text: string }
@@ -11,8 +21,14 @@ export interface ToolCallEvent { type: "tool_call"; id: string; name: string; ar
 export interface AutoApproveMeta { source: "rule" | "session_scope"; ruleId?: string }
 export interface ToolResultEvent { type: "tool_result"; callId: string; ok: boolean; output: string; auto?: AutoApproveMeta }
 export interface UsageEvent { type: "usage"; inputTokens: number; outputTokens: number }
-/** 会话元信息：分支会话首行携带 branch_of 指向原会话。 */
-export interface SessionMetaEvent { type: "session_meta"; branch_of: string }
+/** 会话元信息：分支会话首行携带 branch_of 指向原会话；
+ *  M2f：sidechat 会话首行携带 kind="sidechat" + parent_session_id 指向主会话。 */
+export interface SessionMetaEvent {
+  type: "session_meta";
+  branch_of?: string;
+  kind?: "sidechat";
+  parent_session_id?: string;
+}
 
 // ---- M1b 三门事件（澄清门 / 方案门 / 验证门）----
 /** 澄清问题：question 必填；options 给定时渲染选项（2–4 个），缺省为自由补充输入。 */
@@ -69,6 +85,53 @@ export interface CompactionEvent {
   model?: string;
 }
 
+// ---- M2f 产出代码安全 report（§11.6 定稿，本轮只做 off/report）----
+// 静态快筛（零 token、本地）：从事件流写动作重建变更集 → 密钥扫描（熵 + 已知模式）+ 危险 API 六类规则。
+// findings 走严格 schema；被审内容是数据不是指令；报告进事件流前过输出扫描（密钥脱敏）。
+export type SecuritySeverity = "low" | "medium" | "high" | "critical";
+export type SecurityConfidence = "low" | "medium" | "high";
+/** 危险 API 六类 + 密钥类（密钥非「危险 API」，单列以便验收计数）。 */
+export type SecurityCategory =
+  | "secret"
+  | "eval"
+  | "deserialization"
+  | "weak_random"
+  | "command_injection"
+  | "sql_injection"
+  | "path_traversal";
+
+export interface SecurityFinding {
+  /** 规则 id（稳定可审计）。 */
+  ruleId: string;
+  category: SecurityCategory;
+  severity: SecuritySeverity;
+  /** 命中文件（workspace 相对）。 */
+  path: string;
+  /** 行号（1-based，落在变更集内）。 */
+  line: number;
+  title: string;
+  description: string;
+  confidence: SecurityConfidence;
+}
+
+/** 变更集条目（从事件流写动作重建：write_file 的 content / edit_file 的 new_string）。
+ *  lines = 新增内容的行；findings 行号一律相对本条目（1-based）。 */
+export interface SecurityChangeRef {
+  path: string;
+  op: "write" | "edit";
+  lines: number;
+}
+
+export interface SecurityReportEvent {
+  type: "security_report";
+  mode: "report";
+  findings: SecurityFinding[];
+  changeSet: SecurityChangeRef[];
+  summary: { total: number; bySeverity: Record<SecuritySeverity, number>; byCategory: Record<string, number> };
+  /** 扫描时间（ISO 串；缺省 = 未标注）。 */
+  scannedAt?: string;
+}
+
 export type AgentEvent =
   | UserMessageEvent
   | AssistantMessageEvent
@@ -81,7 +144,8 @@ export type AgentEvent =
   | PlanProposedEvent
   | PlanApprovedEvent
   | VerifyResultEvent
-  | CompactionEvent;
+  | CompactionEvent
+  | SecurityReportEvent;
 
 const KNOWN_TYPES = new Set([
   "user_message",
@@ -96,6 +160,7 @@ const KNOWN_TYPES = new Set([
   "plan_approved",
   "verify_result",
   "compaction",
+  "security_report",
 ]);
 
 export interface EventLog {

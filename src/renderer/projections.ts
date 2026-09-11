@@ -80,6 +80,35 @@ export function pendingApprovals(asks: AskLike[]): AskLike[] {
   return asks.filter((a) => !a.resolved);
 }
 
+/** M2f：提升记录反向投影——主会话里带 origin 的 user_message → 源消息徽标定位。
+ *  「源消息徽标由 origin 反向投影」即本函数：零新增事件类型，四字段全部来自 origin。 */
+export interface PromoteBadge {
+  /** 主流里的 user_message 事件号（1-based）。 */
+  eventId: number;
+  kind: string;
+  sessionId: string;
+  sourceEventIds: number[];
+  note?: string;
+  content: string;
+}
+
+export function projectPromoteBadges(events: AgentEvent[]): PromoteBadge[] {
+  const out: PromoteBadge[] = [];
+  events.forEach((e, i) => {
+    if (e.type === "user_message" && e.origin) {
+      out.push({
+        eventId: i + 1,
+        kind: e.origin.kind,
+        sessionId: e.origin.session_id,
+        sourceEventIds: [...e.origin.source_event_ids],
+        ...(e.origin.note !== undefined ? { note: e.origin.note } : {}),
+        content: e.content,
+      });
+    }
+  });
+  return out;
+}
+
 /** M2d：会话内 remember 调用审计（写入即事件投影；scope/kind/topic 取自调用参数）。 */
 export interface MemoryWriteProjection {
   callId: string;

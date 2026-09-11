@@ -39,9 +39,10 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
-import { GitBranch, Coins, ShieldCheck, Database, Puzzle, Settings as SettingsIcon, Plus, Pencil, Trash2, X } from "lucide-react";
+import { GitBranch, Coins, ShieldCheck, Database, Puzzle, MessageSquarePlus, Settings as SettingsIcon, Plus, Pencil, Trash2, X } from "lucide-react";
 import { resolveCard } from "./cards/registry";
 import { compactionCardPayload } from "../agent/compaction";
+import { securityReportCardPayload } from "../agent/security/scan";
 import { Conversation } from "./conversation";
 import {
   diffCardsOf,
@@ -79,6 +80,7 @@ const PANEL_ICONS: Record<PanelId, React.ReactNode> = {
   git: <GitBranch className="h-4 w-4" />,
   memory: <Database className="h-4 w-4" />,
   plugins: <Puzzle className="h-4 w-4" />,
+  sidechat: <MessageSquarePlus className="h-4 w-4" />,
 };
 
 function short(v: unknown, max = 260): string {
@@ -168,7 +170,17 @@ function EventView({
       />
     );
   }
+  if (e.type === "security_report") {
+    // M2f：安全报告复用现有 report 卡片类型（不新增卡片类型），不阻断主流程
+    const Card = resolveCard("report");
+    return <Card payload={securityReportCardPayload(e)} />;
+  }
   if (e.type === "user_message") {
+    // M2f：带 origin 的 user_message = sidechat 提升结论 → promote 卡（源消息徽标由 origin 反向投影）
+    if (e.origin) {
+      const PromoteCard = resolveCard("promote");
+      return <PromoteCard payload={{ type: "promote", content: e.content, origin: e.origin }} onAction={onAction} />;
+    }
     return <UserBubble content={e.content} />;
   }
   if (e.type === "assistant_message") {
@@ -296,7 +308,7 @@ function SettingsDialog({
                   <SelectContent>
                     <SelectItem value="off">off（关闭）</SelectItem>
                     <SelectItem value="gate">gate（写工具强制审批，已生效）</SelectItem>
-                    <SelectItem value="report">report（审查流水，M2）</SelectItem>
+                    <SelectItem value="report">report（验证门收敛后静态快筛，默认）</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -510,6 +522,13 @@ function App() {
     } else if (action === "plan_decide") {
       const d = data as { callId: string; approved: boolean };
       void window.agent.decidePlan(d.approved, d.callId);
+    } else if (action === "jump_source") {
+      // M2f：promote 卡「跳回源消息」——源定位在 sidechat 面板（origin 四字段即定位凭据）。
+      // 这里只做可视化提示（面板打开后按 session/事件号定位），不改变主会话状态。
+      const d = data as { sessionId: string; sourceEventIds: number[] };
+      if (d && Array.isArray(d.sourceEventIds)) {
+        void window.agent.sidechatState?.(d.sessionId).catch(() => {});
+      }
     }
   };
 
@@ -522,6 +541,7 @@ function App() {
     tokens,
     diffs,
     memoryWrites: memoryWritesOf(state),
+    // M2f sidechat 面板自行经 getState 拉取最新快照（不在此透传启动期旧值，避免不刷新）
     eventCount: state.events.length,
   };
   const activePanelId = settings?.layout.activePanel ?? null;

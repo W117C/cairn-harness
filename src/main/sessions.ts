@@ -5,7 +5,7 @@
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentEvent } from "../events";
-import { replay } from "../events";
+import { createEventLog, replay } from "../events";
 
 export interface SessionInfo {
   /** 会话名 = 文件名（去 .jsonl 后缀）。 */
@@ -113,4 +113,86 @@ export async function sessionExists(root: string, id: string): Promise<boolean> 
   } catch {
     return false;
   }
+}
+
+// ---- M2f：sidechat 会话（独立 JSONL 文件组）----
+// 主会话仍是 sessionsRoot/<id>.jsonl；sidechat 落在 sessionsRoot/sidechats/<id>/events.jsonl
+// —— 每个 sidechat 一个目录（文件组），主会话列表扫描只看 *.jsonl 故不受污染。
+// 首行 session_meta{kind:"sidechat", parent_session_id} 即会话类型标记。
+
+export const SIDECHAT_DIR = "sidechats";
+
+export function sidechatRoot(root: string): string {
+  return join(root, SIDECHAT_DIR);
+}
+
+export function sidechatDir(root: string, id: string): string {
+  if (!isValidSessionName(id)) throw new Error(`非法 sidechat 名: ${JSON.stringify(id)}`);
+  return join(sidechatRoot(root), id);
+}
+
+/** sidechat 的事件文件（独立 JSONL）。 */
+export function sidechatEventsPath(root: string, id: string): string {
+  return join(sidechatDir(root, id), "events.jsonl");
+}
+
+/** 新建 sidechat 会话：建目录 + 空 events.jsonl + 首行 session_meta（kind/parent）。 */
+export async function createSidechatSession(root: string, parentSessionId: string, name?: string): Promise<string> {
+  const base = name?.trim() || `sidechat ${new Date().toLocaleString("sv-SE").replace(/[T]/g, " ").slice(0, 16)}`;
+  if (!isValidSessionName(base)) throw new Error(`非法 sidechat 名: ${JSON.stringify(name)}`);
+  let id = base;
+  for (let i = 2; ; i++) {
+    try {
+      await stat(sidechatDir(root, id));
+      id = `${base} (${String(i)})`;
+    } catch {
+      break;
+    }
+  }
+  await mkdir(sidechatDir(root, id), { recursive: true });
+  await writeFile(sidechatEventsPath(root, id), "", "utf8");
+  await createEventLog(sidechatEventsPath(root, id)).append({
+    type: "session_meta",
+    kind: "sidechat",
+    parent_session_id: parentSessionId,
+  });
+  return id;
+}
+
+export interface SidechatInfo {
+  id: string;
+  parentId: string | null;
+  mtimeMs: number;
+  lines: number;
+}
+
+/** 扫描 sidechat 会话（可按父会话过滤）；mtime 降序。 */
+export async function listSidechatSessions(root: string, parentId?: string): Promise<SidechatInfo[]> {
+  let names: string[] = [];
+  try {
+    names = await readdir(sidechatRoot(root));
+  } catch {
+    return [];
+  }
+  const out: SidechatInfo[] = [];
+  for (const name of names) {
+    try {
+      const st = await stat(join(sidechatRoot(root), name));
+      if (!st.isDirectory()) continue;
+      const p = sidechatEventsPath(root, name);
+      const events = await replay(p);
+      const meta = events.find((e) => e.type === "session_meta");
+      const parent = meta && meta.type === "session_meta" ? (meta.parent_session_id ?? null) : null;
+      if (parentId !== undefined && parent !== parentId) continue;
+      out.push({ id: name, parentId: parent, mtimeMs: st.mtimeMs, lines: events.length });
+    } catch {
+      // 竞态/坏文件：跳过
+    }
+  }
+  return out.sort((a, b) => b.mtimeMs - a.mtimeMs);
+}
+
+/** sidechat 事件（重放）。 */
+export function readSidechatEvents(root: string, id: string): Promise<AgentEvent[]> {
+  return replay(sidechatEventsPath(root, id));
 }

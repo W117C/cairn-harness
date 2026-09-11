@@ -6,11 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ApprovalCard } from "../cards/registry";
 import type { DiffCardProjection, MemoryWriteProjection, TokenProjection } from "../projections";
-import type { MemorySnapshot, StateResponse } from "../../main/ipc-protocol";
+import type { MemorySnapshot, StateResponse, SidechatPanelSnapshot } from "../../main/ipc-protocol";
 import type { PluginPanelSnapshot } from "../../agent/plugins";
 
-/** M1 面板三类（§10.2 清单的 M1 里程碑行）+ M2d memory + M2e plugins；与 main/settings 的 PANEL_IDS 同源字符串。 */
-export type PanelId = "approvals" | "token" | "git" | "memory" | "plugins";
+/** M1 面板三类（§10.2 清单的 M1 里程碑行）+ M2d memory + M2e plugins + M2f sidechat；
+ *  与 main/settings 的 PANEL_IDS 同源字符串。 */
+export type PanelId = "approvals" | "token" | "git" | "memory" | "plugins" | "sidechat";
 
 export interface PanelProps {
   /** 当前会话事件流投影载荷（各面板字段可选）。 */
@@ -31,6 +32,8 @@ export interface PanelProps {
     memoryWrites?: MemoryWriteProjection[];
     /** M2e plugins：插件面板快照（缺省由面板自行 getState 拉取）。 */
     plugins?: PluginPanelSnapshot;
+    /** M2f sidechat：辅助对话快照（缺省由面板自行 getState 拉取）。 */
+    sidechat?: SidechatPanelSnapshot;
     /** 全部事件数（面板头展示）。 */
     eventCount?: number;
   };
@@ -118,6 +121,187 @@ export function GitPanel({ payload }: PanelProps): ReactElement {
           </CardContent>
         </Card>
       ))}
+    </div>
+  );
+}
+
+/** M2f 辅助对话面板：只读旁路会话（独立 JSONL）+ 消息投影 + 提升记录 + 提升入口。
+ *  两个入口：①每会话的「提升到主会话」按钮 ②composer 命令 `/promote #<事件号>`。
+ *  通道 optional（preload 白名单本轮未含，deleteMemory 同款先例）：未接线时按钮禁用并注明。 */
+function SidechatPanel({ payload }: PanelProps): ReactElement {
+  const [snap, setSnap] = useState<SidechatPanelSnapshot | null>(payload.sidechat ?? null);
+  const [active, setActive] = useState<string | null>(null);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const canAsk = typeof window !== "undefined" && typeof window.agent?.sidechatAsk === "function";
+  const canCreate = typeof window !== "undefined" && typeof window.agent?.sidechatCreate === "function";
+  const canPromote = typeof window !== "undefined" && typeof window.agent?.sidechatPromote === "function";
+  const reload = useCallback(async () => {
+    try {
+      const st: StateResponse = await window.agent.getState();
+      setSnap(st.sidechat ?? null);
+    } catch {
+      setSnap(null);
+    }
+  }, []);
+  useEffect(() => {
+    if (payload.sidechat === undefined) void reload();
+  }, [payload.sidechat, reload]);
+  useEffect(() => {
+    if (active === null && snap && snap.sessions.length > 0) setActive(snap.sessions[0]?.id ?? null);
+  }, [snap, active]);
+
+  const cur = snap?.sessions.find((s) => s.id === active) ?? null;
+
+  const promote = async (sourceEventIds: number[]): Promise<void> => {
+    if (!canPromote || !snap?.parentSessionId || !active || sourceEventIds.length === 0) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      const r = await window.agent.sidechatPromote?.({
+        sidechatId: active,
+        parentSessionId: snap.parentSessionId,
+        sourceEventIds,
+      });
+      setNote(r?.ok ? "已提升进主会话（+1 user_message，带 origin）" : "提升失败：" + (r?.error ?? "未知"));
+      await reload();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const send = async (): Promise<void> => {
+    const text = input.trim();
+    if (text === "" || busy || !active) return;
+    setInput("");
+    setBusy(true);
+    setNote(null);
+    try {
+      if (text.startsWith("/promote")) {
+        const ids = [...text.matchAll(/#(\d+)/g)].map((m) => Number(m[1]));
+        if (ids.length === 0) {
+          // 缺省 = 提升该会话最后一条助手消息
+          const last = [...(cur?.messages ?? [])].reverse().find((m) => m.role === "assistant");
+          if (last) await promote([last.eventId]);
+          else setNote("/promote 需要 #事件号，或该会话至少有一条助手消息");
+        } else {
+          await promote(ids);
+        }
+      } else {
+        const r = await window.agent.sidechatAsk?.(active, text, snap?.parentSessionId ?? undefined);
+        setNote(r?.ok ? null : "提问失败：" + (r?.error ?? "未知"));
+        await reload();
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2 p-3" data-m2f-sidechat-panel="">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <Badge variant="outline">辅助对话（只读旁路）</Badge>
+        <span className="text-muted-foreground">独立会话 · 写向工具已摘除 · 不打扰主会话</span>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!canCreate || !snap?.parentSessionId || busy}
+          title={canCreate ? "新建旁路会话" : "通道待 preload 接线（BLOCKED 备案）"}
+          data-m2f-sidechat-new=""
+          onClick={() => {
+            void (async () => {
+              if (!snap?.parentSessionId) return;
+              const r = await window.agent.sidechatCreate?.(snap.parentSessionId);
+              if (r) setActive(r.id);
+              await reload();
+            })();
+          }}
+        >
+          新建旁路会话
+        </Button>
+      </div>
+      {(snap?.sessions.length ?? 0) === 0 && <div className="text-sm text-muted-foreground">（暂无旁路会话）</div>}
+      <div className="flex flex-wrap gap-1">
+        {snap?.sessions.map((s) => (
+          <Button
+            key={s.id}
+            size="sm"
+            variant={s.id === active ? "default" : "outline"}
+            data-m2f-sidechat-tab={s.id}
+            onClick={() => setActive(s.id)}
+          >
+            {s.id}
+            <span className="ml-1 text-[10px] opacity-70">{s.lines}</span>
+          </Button>
+        ))}
+      </div>
+      {cur && (
+        <Card data-m2f-sidechat-session={cur.id}>
+          <CardHeader>
+            <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
+              {cur.id}
+              <Badge variant="secondary">事件 × {cur.lines}</Badge>
+              <span className="font-mono text-[11px] text-muted-foreground">parent: {cur.parentId ?? "?"}</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 text-xs">
+            {cur.messages.map((m) => (
+              <div key={String(m.eventId)} className="flex gap-2" data-m2f-sidechat-msg={String(m.eventId)}>
+                <Badge variant={m.role === "user" ? "default" : "outline"}>#{m.eventId} {m.role}</Badge>
+                <span className="min-w-0 flex-1 whitespace-pre-wrap">{m.text}</span>
+                {m.role === "assistant" && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={!canPromote || busy}
+                    title={canPromote ? "把该条提升进主会话" : "通道待 preload 接线（BLOCKED 备案）"}
+                    onClick={() => void promote([m.eventId])}
+                  >
+                    提升
+                  </Button>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+      <div className="flex items-end gap-2">
+        <input
+          className="min-w-0 flex-1 rounded border bg-background px-2 py-1 text-xs"
+          value={input}
+          disabled={!canAsk || !active || busy}
+          placeholder={canAsk ? "旁路提问…（/promote #12 提升结论）" : "通道待 preload 接线（BLOCKED 备案）"}
+          data-m2f-sidechat-input=""
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void send();
+            }
+          }}
+        />
+        <Button size="sm" disabled={!canAsk || !active || busy || input.trim() === ""} data-m2f-sidechat-send="" onClick={() => void send()}>
+          发送
+        </Button>
+      </div>
+      {note !== null && <div className="text-xs text-muted-foreground" data-m2f-sidechat-note="">{note}</div>}
+      {(snap?.promoted.length ?? 0) > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">已提升进主会话（origin 反向投影）</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 text-xs">
+            {snap?.promoted.map((p) => (
+              <div key={String(p.eventId)} className="font-mono" data-m2f-promoted={String(p.eventId)}>
+                <Badge variant="outline">#{p.eventId}</Badge> ← {p.sessionId} 源事件{" "}
+                {p.sourceEventIds.map((n) => "#" + String(n)).join("、")}
+                {p.note !== undefined ? " · " + p.note : ""}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
@@ -334,6 +518,7 @@ const REGISTRY: Record<string, PanelComponent> = {
   git: GitPanel,
   memory: MemoryPanel,
   plugins: PluginsPanel,
+  sidechat: SidechatPanel, // M2f：辅助对话（只读旁路）
 };
 
 export const KNOWN_PANEL_IDS = Object.keys(REGISTRY);

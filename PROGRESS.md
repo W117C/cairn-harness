@@ -510,3 +510,44 @@
 - **坑四十**：复制插件目录到工作区外会断掉裸导入解析（@modelcontextprotocol/sdk 向上找不到 node_modules）——判卷用 symlink 回仓库内 fixtures，ESM realpath 解析自然可达；同时避免复制拷贝漂移。
 - **坑四十一**：MCP Client 持有 stdio 流 → 不 disconnect 事件循环不空转（进程挂住不退出）——runAgent finally 必须 shutdown 回收 MCP server 子进程；plugins-check 以「摘要打印后 REAL_EXIT=0」锁定该语义。
 - **终验（2026-09-11）**：17 道门（六道门 + fork/gate/autonomy/compaction/panels/tools/map/prune/providers/memory-check + plugins-check）逐个 EXIT=0（/tmp/gate-*.log 实录）；test = 36 files / 267 passed / skipped 0；冻结判卷文件 sha256 3/3 逐字一致；fixtures/plugins 密钥词界扫描 = 0 命中；pnpm-lock.yaml 变更是 @modelcontextprotocol/sdk@1.30.0 按任务书安装的直接产物（package.json 白名单内改动的生成物）。
+
+## M2f：辅助对话（sidechat）+ 产出代码安全 report（本轮 goal，2026-09-11 开工）
+
+### 任务 0 基线（2026-09-11 实测）
+- **基线对不上，根因在宿主**：本机 macOS 26.6.2 下**任何含 `deny` 规则的 `sandbox-exec` profile 都 apply 不了**（`sandbox_apply: Operation not permitted`，exit 71），
+  纯放行 profile 正常。连锁：`checkSandbox()` 判不可用 → `sandboxRisk` 判写工具 high → auto 档改送审 → 非交互 AskGate 等 60s 超时拒绝 → 写不落盘。
+  受影响三门在 **HEAD clean worktree 复现同样失败**（`git worktree add /tmp/m2f-base HEAD`，panels-check 逐字同点失败）：`sandbox:check` / `ipc:check` / `panels-check`。
+  证据与裁决请求见 BLOCKED.md 最上面。
+- 其余十五道门逐个 EXIT=0；test = 36 files / **267 passed / skipped 0**（M2e 收口基线）；git 工作树干净（HEAD 3e934ca）。
+- 另一处环境敏感：`TERM=xterm-256color` 会让 vitest 输出 ANSI 序列，`e2e.ts`/`ipc-check.ts` 的摘要正则假红；本轮全部在 `TERM=dumb` 下验收。
+
+### 理解的目标 / 顺序 / 最大风险（≤10 行）
+- 目标：两件事——**辅助对话**（指挥官不打断主 agent 地旁路提问，结论按需提升进主上下文）+ **产出代码安全 report**（改完的代码先过本地静态快筛）。
+- 顺序：任务0 基线核对+备案 → 1 sidechat 会话内核（类型/独立 JSONL/own loop/投影/记忆/@引用）→ 2 只读白名单硬闸 → 3 不打扰主会话 → 4 /promote + 输出扫描 → 5 面板与卡注册表 → 6 变更集+快筛 → 7 触发与呈现 → 两个验收脚本 → 反向验证红→绿 → 截图 → 收口提交。
+- 让步序：主会话不受打扰 > 结论可追溯 > 界面好看。
+- 最大风险①：sidechat 若做成「复用主会话但过滤输出」即点名作弊 → 必须独立 JSONL 文件组 + own loop，主会话文件字节零变化。
+- 最大风险②：`report` 默认档 + 验证门收敛后 hook 会往事件流追加事件 → 可能炸既有门（gate-check/panels-check/ipc-check 的事件序列断言）→ 用「仅在 verify_result(ok) 在场且 safeMode=report 时才追加」把爆炸半径压到零（既有 mock 流都不调 verify）。
+- 最大风险③：report 若做成只打印固定文案即点名作弊 → findings 必须真由变更集词法扫描产出，且反向验证能摘掉熵检查打红。
+- 最大风险④：写向工具必须从 sidechat **工具表摘除**（不是提示词自觉）→ loop 加 `allowedTools` 硬闸 + 权限层 read-only 二次拦截。
+
+### M2f 完成记录
+- **任务1 会话类型与独立 JSONL**：`SessionMetaEvent` 扩 `kind?: "sidechat"` + `parent_session_id?`（`branch_of` 转可选，fork 路径字节不变）；`src/main/sessions.ts` 增 `sidechats/<id>/events.jsonl` 文件组 + `createSidechatSession`/`listSidechatSessions`/`readSidechatEvents`（主会话列表只扫顶层 `*.jsonl`，不被污染）。
+- **任务1 上下文**：`src/agent/sidechat.ts` 的 `buildSidechatContext` = system + 两层记忆（`buildMemoryInjection` 固定回注）+ 主会话只读投影 + 用户 @ 引用（工作区外 fail-closed）+ 自身历史投影；`createSidechatProvider` = own loop 的会话型 provider（logPath 为唯一事实源，同 M2c 备案 2 口径）。
+- **任务1 投影**：`buildMainProjection` 纯函数——已压缩 → 用最新 compaction 的摘要产物（`summaryEnvelope`）；未压缩 → 最近 **20 轮**（user_message 分轮）截断视图（逐事件 400 字符 + 总 8000 字符双帽，保尾部）。
+- **任务2 只读白名单硬闸**：`SIDECHAT_TOOL_WHITELIST = [read_file, grep, glob, lsp]`；`sidechatToolSpecs()` 从会话规格过滤（写向工具根本不在表里）；`loop.ts` 新增 `allowedTools` 硬闸（不在表内 → tool_result 拒绝「不在本会话工具表」）；再叠 `mode:"read-only"` 权限层拦截 = 三重 fail-closed。
+- **任务3 不打扰主会话**：sidechat 只读主会话 JSONL，唯一写主会话的路径是用户显式 `/promote`。验收实测：3 轮问答后主会话 **行数 60→60、字节逐字不变、主上下文 token 877→877**。
+- **任务4 /promote**：`UserMessageEvent` 扩可选 `origin{kind,session_id,source_event_ids,note?}`（零新增事件类型）；`promoteToMain` 从源事件重建正文 → 过 `redactSecrets` 输出扫描（密钥脱敏、私钥块阻断）→ append 到主会话；`projectPromoteBadges` 由 origin 反向投影徽标；renderer 把带 origin 的 user_message 渲染为 promote 卡（可跳回源消息）。两个入口（面板按钮 + composer `/promote #<事件号>`）已实现，preload 桥接未接线（BLOCKED 备案 2）。
+- **任务5 面板与卡**：面板注册表 5→**6**（+`sidechat`，SidechatPanel：会话清单/消息投影/提升记录/提问与提升入口）；卡片注册表 8→**9**（+`promote`，PromoteCard 含 origin 徽标与跳回按钮）；未知类型仍走兜底（单测断言）。`PANEL_IDS`/default layout/validate 同步扩键；`StateResponse.sidechat` + `agent:sidechat-*` 四通道。
+- **任务6 变更集与快筛**：`src/agent/security/scan.ts` —— `collectChangeSet` 从事件流写动作重建（write_file 的 content / edit_file 的 new_string；不引入快照、不用 git diff）；密钥扫描 = 7 条已知模式（sk-/AIza/AKIA/ghp_/xox?/私钥块/赋值式）+ Shannon 高熵（≥24 字符、熵≥4.0、含字母+数字、排除 SCREAMING_SNAKE）；危险 API 六类规则（eval/反序列化/弱随机/命令拼接/SQL 拼接/路径穿越，路径穿越须参与文件 API）；findings 走 `validateFinding` 严格 schema；被审内容纯词法处理（数据不是指令）。
+- **任务7 触发与呈现**：触发点 = 验证门收敛后 hook（`runSecurityReportHook`，`shouldRunSecurityReport` 要求 `safeMode==="report"` 且事件流里有 `verify_result(ok)`）；默认 report（`DEFAULT_SETTINGS.safeMode: "off" → "report"`）、off 不跑；新增 `security_report` 事件（**卡片类型复用现有 `report`，不新增**），追加在主流末尾、不阻断；报告进事件流前过输出扫描（findings 标题/描述脱敏）。
+- **验收脚本**：`scripts/sidechat-check.ts` **33 ✅ / 0 ❌ exit 0**（A 会话类型与独立 JSONL / B 工具表摘除 / C ≥3 轮问答 + 主会话行数与 token 零变化 / D 20 轮窗口 + 摘要分支 + canary 不在投影 / E promote 四字段 + 反向投影 + 重放无损 + 输出扫描）；`scripts/security-check.ts` **42 ✅ / 0 ❌ exit 0**（变更集重建 / 六类各命中 / 已知模式 + 高熵 / 干净代码零误报 / schema + 行号落在变更集内 / 注入防线 / 触发与 off / 不改动主流程结果 / report 卡复用 / 输出扫描脱敏 / 事件往返）。
+- **单测**：新增 `tests/sidechat.test.ts` 11 条（注册表各 +1 + 未知兜底 + promote 卡 SSR + 工具表 + 投影三分支 + @引用 + promote 四字段/脱敏/拒绝）；`tests/cards.test.ts` 八类→九类、`tests/panels.test.ts` 五类→六类（按 M2f 规格同步，断言强度不降）。全套 **37 files / 278 passed / skipped 0**（≥ 基线 267）。
+- **反向验证①**：`sidechatToolSpecs()` 临时去掉白名单过滤 → `sidechat-check` 三红（工具表里不存在 write_file/edit_file/run_shell）exit 1；还原 → 33 绿 exit 0。
+- **反向验证②**：`DEFAULT_ENTROPY.enabled` 临时置 false → `security-check` 五红（高熵密钥串被命中 0 条 / 熵探测 / 注入文本未压制 / 输出扫描脱敏高熵串）exit 1；还原 → 42 绿 exit 0。顺手把「高熵命中落在被审文件」加严为 `length>=1 && every(...)`（消除空数组真空成立）。
+- **半托**：`docs/m2f-sidechat.png` = 真实 Electron 窗口截图（左主会话含 promote 卡「来自 sidechat · 旁路调查 · 源事件 #7」+ 跳回源消息；右 sidechat 面板三问三答 + 已提升记录 origin 反向投影）。演示数据由真实代码路径（`createSidechatSession` + `runSidechatTurn` ×3 + `promoteToMain`）在 `.tmp/` 生成，用后即删，仓库零污染。
+
+### M2f 新增坑记录
+- 坑四十二：**Electron 在宿主受限环境下必须 `--no-sandbox --disable-gpu`**，否则 `sandbox initialization failed: Operation not permitted` → GPU/Network 进程连环崩 → 窗口起不来、截图为空。应用内 `checkSandbox()` 与 Electron 自身沙箱是两回事，前者失败只降级，后者失败直接起不来。
+- 坑四十三：**验收脚本不要走 `handleAgentRun`**（它带 `sandboxState`，宿主沙箱不可用时会把写动作变成 60s 超时送审）。sidechat-check / security-check 直接调 `runAgent({sandbox: null})` 或 `runSidechatTurn`，与沙箱可用性解耦，才能在任何机器上稳定判定 M2f 逻辑。
+- 坑四十四：`pnpm <script>` 会先做依赖状态检查，**symlink 的 node_modules 会被 pnpm 拒绝**（ERR_PNPM_UNSAFE_MODULES_DIR）→ 基线对照 worktree 里要直接 `node --import tsx scripts/xxx.ts`，绕开 pnpm 包装。
+- 坑四十五：`session_meta` 的 `branch_of` 由必填转可选时，fork 路径不受影响，但**类型联合的穷尽分支**（`renderProjectionLine` 的 switch）必须补全新事件类型，否则 `tsc` 的 never 收窄报错会把新事件挡在联合之外。

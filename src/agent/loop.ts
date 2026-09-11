@@ -31,6 +31,9 @@ export interface LoopOptions {
   verify?: VerifyHook;
   /** M2e 插件 hook 引擎：未接线 = 零行为（无插件会话事件流字节不变）。 */
   hooks?: HookEngine;
+  /** M2f 工具表白名单（硬闸）：给出时不在表内的工具一律拒绝执行——不是提示词自觉，是工具表摘除。
+   *  缺省 undefined = 全表可见（既有路径字节不变）。 */
+  allowedTools?: readonly ToolName[];
 }
 
 // agent loop：事件流 → 模型 → 工具 → 事件流。
@@ -110,6 +113,18 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
           callId: output.id,
           ok: false,
           output: failureDigest(outcome),
+        });
+        continue;
+      }
+
+      // M2f 工具表摘除（sidechat 只读白名单）：不在表内的工具根本不进入执行面——
+      // 与提示词无关的硬闸，工具调用被拒且给出明确原因（fail-closed）。
+      if (opts.allowedTools && !opts.allowedTools.includes(output.name as ToolName)) {
+        await events.append({
+          type: "tool_result",
+          callId: output.id,
+          ok: false,
+          output: `[tool table] ${output.name} 不在本会话工具表（只读白名单摘除）`,
         });
         continue;
       }

@@ -41,6 +41,11 @@ import {
   readSessionEvents,
   renameSession,
   sessionExists,
+  createSidechatSession,
+  listSidechatSessions,
+  readSidechatEvents,
+  sidechatDir,
+  sidechatEventsPath,
   type SessionInfo,
 } from "./sessions";
 import { createMockProvider } from "../providers/mock";
@@ -64,11 +69,18 @@ export { initMemoryHome } from "../agent/memory/store"; // shell 启动时注入
 import { extractExternalRefs } from "../agent/memory/inject";
 import type { MemoryLayerSnapshot, MemorySnapshot } from "./ipc-protocol";
 import { AskGate } from "./ask-gate";
-import type { AskOutcomePayload, AskPayload, RunRequest } from "./ipc-protocol";
+import type { AskOutcomePayload, AskPayload, RunRequest, SidechatPanelSnapshot } from "./ipc-protocol";
 import { checkSandbox, runInSandbox, type SandboxStatus } from "./sandbox";
 import { PluginRuntime, setCurrentPluginRuntime, currentPluginRuntime, type PluginPanelSnapshot } from "../agent/plugins";
 import type { HookEngine } from "../agent/plugins/hooks";
 import type { McpToolInfo } from "../agent/plugins/mcp";
+import {
+  runSidechatTurn,
+  promoteToMain,
+  scriptedSidechatModel,
+  type SidechatModel,
+} from "../agent/sidechat";
+import { buildSecurityReport } from "../agent/security/scan";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const WORKSPACE = join(ROOT, "fixtures", "todo-app");
@@ -312,6 +324,33 @@ export async function compactSessionLog(
   return { ok: true, event: outcome.event, cardPayload: compactionCardPayload(outcome.event) };
 }
 
+// ---- M2f：产出代码安全 report 的触发点（验证门收敛后 hook；默认 report，off 不跑）----
+// 只做静态快筛（零 token、本地）：从事件流写动作重建变更集 → findings → 一条 security_report 事件。
+// 不阻断主流程（loop 已收束，报告只是事后审计事件）；无写动作 / 未收敛 / off → 零行为。
+export function shouldRunSecurityReport(safeMode: string, events: AgentEvent[]): boolean {
+  if (safeMode !== "report") return false;
+  return events.some((e) => e.type === "verify_result" && e.ok);
+}
+
+/** 验证门收敛后的安全快筛 hook：产出报告事件（经 emit 落盘 + 上屏）。返回是否产出。 */
+export async function runSecurityReportHook(
+  logPath: string,
+  safeMode: string,
+  emit: (e: AgentEvent) => Promise<void>,
+): Promise<boolean> {
+  try {
+    const events = await replay(logPath);
+    if (!shouldRunSecurityReport(safeMode, events)) return false;
+    const report = buildSecurityReport(events, { scannedAt: new Date().toISOString() });
+    if (!report) return false;
+    await emit(report);
+    return true;
+  } catch (err) {
+    console.warn("[security] 快筛失败（不阻断主流程）:", err instanceof Error ? err.message : String(err));
+    return false;
+  }
+}
+
 // 最近一次会话日志路径：/compact 缺省压缩对象（UI 单窗口单任务，与 session 同生命周期语义）。
 let lastLogPath: string | null = null;
 
@@ -533,6 +572,15 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
         }
       }
     }
+    // M2f 安全 report：验证门收敛后 hook 触发（默认 report / off 不跑；不阻断主流程）
+    {
+      const safeMode = (await store().get()).safeMode;
+      await runSecurityReportHook(opts.logPath, safeMode, pipeline);
+    }
+    // M2f sidechat 演示通道（env 门控，缺省零行为）：3 轮旁路问答 + 一次 /promote 上屏
+    if (process.env.M2F_SIDECHAT_DEMO === "1") {
+      await runSidechatDemo(opts.sessionId, opts.logPath, pipeline);
+    }
     // M1d 演示通道：M1D_COMPACTION_DEMO=1 时每轮跑完对手动压缩走一遍真实链路
     //（compactSessionLog 同 handleCompact 共用代码，事件经会话管线上屏压缩卡）。缺省零行为。
     if (process.env.M1D_COMPACTION_DEMO === "1") {
@@ -708,7 +756,7 @@ async function memorySnapshot(): Promise<MemorySnapshot> {
 }
 
 /** IPC "agent:state" 的处理函数。 */
-export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memory?: MemorySnapshot; plugins?: PluginPanelSnapshot }> {
+export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memory?: MemorySnapshot; plugins?: PluginPanelSnapshot; sidechat?: SidechatPanelSnapshot }> {
   let memory: MemorySnapshot | undefined;
   try {
     memory = await memorySnapshot();
@@ -722,7 +770,13 @@ export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memo
   } catch {
     plugins = undefined;
   }
-  return { sandbox: sandboxState, memory, plugins };
+  let sidechat: SidechatPanelSnapshot | undefined;
+  try {
+    sidechat = await handleSidechatState();
+  } catch {
+    sidechat = undefined;
+  }
+  return { sandbox: sandboxState, memory, plugins, sidechat };
 }
 
 /** IPC "agent:plugin-decide"：信任卡决议（批准/拒绝）→ 决议持久化 + 同样本重新激活（M2e §9.8）。 */
@@ -830,4 +884,160 @@ export async function handleSessionDelete(id: string): Promise<{ currentSession:
   const next = rest[0]?.id ?? null;
   await store().set({ currentSession: next });
   return { currentSession: next };
+}
+
+// ---- M2f：辅助对话（sidechat）IPC 面 ----
+// 独立会话：own JSONL 文件组 + own loop + own 上下文；写向工具从工具表摘除（只读白名单硬闸）。
+// 主会话零打扰：sidechat 只读主会话 JSONL，永不 append 它（唯一写主会话的路径是用户显式 /promote）。
+
+/** M2F_SIDECHAT_DEMO 演示剧本（env 门控；缺省零行为）——截图/演示用，不进验收链。 */
+function sidechatDemoScript(): ReturnType<typeof scriptedSidechatModel> {
+  return scriptedSidechatModel([
+    {
+      type: "assistant_message",
+      content:
+        "旁路只读调查（不改主会话）：我读了 src/agent/loop.ts 与 src/agent/context.ts。" +
+        "结论：runLoop 的上下文来自 projectContext(seen) 投影，压缩只产出 compaction 事件、事件流零删改（loop.ts:67 / context.ts:46）。",
+    },
+  ]);
+}
+
+/** 选模型：M0_API_KEY 在场 → GLM（createSidechatProvider 缺省）；演示通道 → 脚本；否则 fail-closed。 */
+function resolveSidechatModel(explicit?: SidechatModel): { model?: SidechatModel; error?: string } {
+  if (explicit) return { model: explicit };
+  if (process.env.M0_API_KEY) return {}; // 缺省 = GLM 暗卷
+  if (process.env.M2F_SIDECHAT_DEMO === "1") return { model: sidechatDemoScript() };
+  return { error: "无 M0_API_KEY：sidechat 真实模型不可用（fail-closed，可注入脚本模型）" };
+}
+
+export async function handleSidechatCreate(parentSessionId: string, name?: string): Promise<{ id: string }> {
+  return { id: await createSidechatSession(requireSessionsDir(), parentSessionId, name) };
+}
+
+/** 跑一轮 sidechat（own loop）。事件只落 sidechat 自己的 JSONL；主会话文件字节不变。 */
+export async function handleSidechatAsk(
+  sidechatId: string,
+  message: string,
+  over: { parentSessionId?: string; model?: SidechatModel; onEvent?: (e: AgentEvent) => void } = {},
+): Promise<{ ok: boolean; error?: string; events?: AgentEvent[] }> {
+  try {
+    const dir = requireSessionsDir();
+    const parentId = over.parentSessionId ?? (await store().get()).currentSession ?? "";
+    const mainLogPath = parentId !== "" ? pathOf(dir, parentId) : (lastLogPath ?? "");
+    const picked = resolveSidechatModel(over.model);
+    if (picked.error) return { ok: false, error: picked.error };
+    const events = await runSidechatTurn({
+      sidechatDir: sidechatDir(dir, sidechatId),
+      mainLogPath,
+      workspace: lastWorkspace ?? WORKSPACE,
+      message,
+      ...(picked.model ? { model: picked.model } : {}),
+      onEvent: (e) => over.onEvent?.(e),
+    });
+    return { ok: true, events };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** /promote：sidechat 结论 → 主会话一条 user_message（带 origin）；过输出扫描。 */
+export async function handleSidechatPromote(req: {
+  sidechatId: string;
+  parentSessionId: string;
+  sourceEventIds: number[];
+  note?: string;
+  content?: string;
+}): Promise<{ ok: boolean; error?: string; event?: AgentEvent }> {
+  try {
+    const dir = requireSessionsDir();
+    const mainLogPath = pathOf(dir, req.parentSessionId);
+    const res = await promoteToMain({
+      mainLogPath,
+      sidechatLogPath: sidechatEventsPath(dir, req.sidechatId),
+      sidechatId: req.sidechatId,
+      sourceEventIds: req.sourceEventIds,
+      ...(req.note !== undefined ? { note: req.note } : {}),
+      ...(req.content !== undefined ? { content: req.content } : {}),
+    });
+    if (!res.ok) return { ok: false, error: res.error };
+    // 上屏：主会话活流（renderer 渲染为 promote 卡）
+    if (res.event) hooks.onEvent?.(res.event);
+    return { ok: true, event: res.event };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** sidechat 面板快照（纯投影）：会话清单 + 各自最近消息 + 已提升记录（由主会话 origin 反向投影）。 */
+export async function handleSidechatState(parentSessionId?: string): Promise<SidechatPanelSnapshot> {
+  const dir = sessionsDir;
+  if (!dir) return { parentSessionId: null, sessions: [], promoted: [] };
+  const parent = parentSessionId ?? (await store().get()).currentSession ?? null;
+  const infos = await listSidechatSessions(dir, parent ?? undefined);
+  const sessions = [] as SidechatPanelSnapshot["sessions"];
+  for (const info of infos) {
+    let events: AgentEvent[] = [];
+    try {
+      events = await readSidechatEvents(dir, info.id);
+    } catch {
+      events = [];
+    }
+    const messages: SidechatPanelSnapshot["sessions"][number]["messages"] = [];
+    events.forEach((e, i) => {
+      if (e.type === "user_message") messages.push({ eventId: i + 1, role: "user", text: e.content });
+      else if (e.type === "assistant_message") messages.push({ eventId: i + 1, role: "assistant", text: e.content });
+    });
+    sessions.push({ id: info.id, parentId: info.parentId, lines: info.lines, mtimeMs: info.mtimeMs, messages });
+  }
+  // 已提升：主会话里带 origin 的 user_message（反向投影，零新增事件类型）
+  const promoted: SidechatPanelSnapshot["promoted"] = [];
+  if (parent) {
+    try {
+      const mainEvents = await readSessionEvents(dir, parent);
+      mainEvents.forEach((e, i) => {
+        if (e.type === "user_message" && e.origin) {
+          promoted.push({
+            eventId: i + 1,
+            sessionId: e.origin.session_id,
+            sourceEventIds: e.origin.source_event_ids,
+            ...(e.origin.note !== undefined ? { note: e.origin.note } : {}),
+          });
+        }
+      });
+    } catch {
+      /* 主会话不存在：无已提升记录 */
+    }
+  }
+  return { parentSessionId: parent, sessions, promoted };
+}
+
+/** M2F_SIDECHAT_DEMO=1：主 run 收束后跑 3 轮 sidechat + 一次 promote（截图/演示通道，缺省零行为）。 */
+async function runSidechatDemo(sessionId: string | undefined, parentLogPath: string, pipeline: (e: AgentEvent) => Promise<void>): Promise<void> {
+  try {
+    const dir = requireSessionsDir();
+    const parentId = sessionId ?? (await store().get()).currentSession ?? "demo";
+    const id = await createSidechatSession(dir, parentId, "旁路调查");
+    const questions = [
+      "主会话现在在改哪个文件？",
+      "压缩之后上下文是怎么重组的？",
+      "总结一句可提升的结论。",
+    ];
+    for (const q of questions) {
+      await handleSidechatAsk(id, q, { parentSessionId: parentId, model: sidechatDemoScript() });
+    }
+    const events = await readSidechatEvents(dir, id);
+    const lastAssistant = [...events.keys()].filter((i) => events[i].type === "assistant_message").pop();
+    if (lastAssistant !== undefined) {
+      const res = await promoteToMain({
+        mainLogPath: parentLogPath,
+        sidechatLogPath: sidechatEventsPath(dir, id),
+        sidechatId: id,
+        sourceEventIds: [lastAssistant + 1],
+        note: "旁路结论提升（演示）",
+      });
+      if (res.ok && res.event) await pipeline(res.event);
+    }
+  } catch (err) {
+    console.warn("[sidechat] 演示通道失败:", err instanceof Error ? err.message : String(err));
+  }
 }

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ClarifyFormCard } from "./clarify-form";
 import { CompactionCard } from "./compaction-card";
 import { PlanCard } from "./plan";
+import { PromoteCard } from "./promote";
 import { VerifyResultCard } from "./verify-result";
 
 export interface CardProps {
@@ -113,6 +114,7 @@ const REGISTRY: Record<string, CardComponent> = {
   plan: PlanCard,
   verify_result: VerifyResultCard,
   compaction: CompactionCard,
+  promote: PromoteCard, // M2f：sidechat 结论提升卡（可跳回源消息）
 };
 
 export const KNOWN_CARD_TYPES = Object.keys(REGISTRY);
