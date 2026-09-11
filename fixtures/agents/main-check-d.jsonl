@@ -1,0 +1,3 @@
+{"type":"assistant_message","content":"派一个需要审批的只读 worker。"}
+{"type":"tool_call","id":"spawn-d1","name":"spawn_agent","args":{"task":"只读检查 todo-app（触发审批协议）","mode":"read","model":"approving-worker.jsonl"}}
+{"type":"assistant_message","content":"等待审批期间我继续做别的。"}

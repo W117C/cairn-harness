@@ -106,21 +106,41 @@ export const shell_ro: Tool = {
 
 // ---- worker 工具规格（模型可见面）：从 gateToolSpecs 过滤 + shell_ro 规格 ----
 
-/** worker 模型可见工具规格：白名单过滤（写工具与 spawn_agent 根本不在表内，§4.4.1 深度恒 1）。 */
+/** worker 模型可见工具规格：白名单过滤（写工具与 spawn_agent 根本不在表内，§4.4.1 深度恒 1）。
+ *  gateToolSpecs 不含 lsp 规格——这里显式补齐（lsp 在 worker 工具执行表中真实存在）。 */
 export function workerToolSpecs(): GlmToolSpec[] {
   const allow = new Set<string>(["read_file", "grep", "glob", "lsp"]);
   const specs = gateToolSpecs().filter((s) => allow.has(s.function.name));
-  specs.push({
-    type: "function",
-    function: {
-      name: "shell_ro",
-      description:
-        "只读 shell（静态白名单硬闸）：允许 ls/cat/head/tail/wc/pwd/echo/grep/rg/file/stat/which 与 " +
-        "git status|log|diff|show|branch|rev-parse|ls-files|blame|describe|shortlog；" +
-        "重定向、命令替换、非白名单命令一律拒绝",
-      parameters: { type: "object", properties: { command: { type: "string", description: "只读 shell 命令" } }, required: ["command"] },
+  specs.push(
+    {
+      type: "function",
+      function: {
+        name: "lsp",
+        description: "LSP 操作（hover/definition/references/documentSymbol/diagnostics；需工作区 .agent/lsp.json 配置）",
+        parameters: {
+          type: "object",
+          properties: {
+            operation: { type: "string", description: "hover | definition | references | documentSymbol | diagnostics" },
+            path: { type: "string", description: "workspace 相对路径" },
+            line: { type: "number", description: "行号（1-based）" },
+            column: { type: "number", description: "列号（1-based）" },
+          },
+          required: ["operation", "path"],
+        },
+      },
     },
-  });
+    {
+      type: "function",
+      function: {
+        name: "shell_ro",
+        description:
+          "只读 shell（静态白名单硬闸）：允许 ls/cat/head/tail/wc/pwd/echo/grep/rg/file/stat/which 与 " +
+          "git status|log|diff|show|branch|rev-parse|ls-files|blame|describe|shortlog；" +
+          "重定向、命令替换、非白名单命令一律拒绝",
+        parameters: { type: "object", properties: { command: { type: "string", description: "只读 shell 命令" } }, required: ["command"] },
+      },
+    },
+  );
   return specs;
 }
 
@@ -466,7 +486,8 @@ export class Orchestrator {
     }
   }
 
-  /** worker 事件管线：装饰 agent_id → 落主流（emit）→ 进 worker 内存态（上下文组装源）。 */
+  /** worker 事件管线：装饰 agent_id → 落主流（emit，文本先过输出扫描——密钥不进主转录）
+   *  → 进 worker 内存态（上下文组装源，保持原始事件）。 */
   private async workerPipeline(w: WorkerHandle, e: AgentEvent): Promise<void> {
     if (w.controller.signal.aborted) throw new WorkerCancelled();
     // 进内存态（原始事件，provider 投影用）
@@ -477,15 +498,17 @@ export class Orchestrator {
     } else if (e.type === "tool_call") {
       w.toolStats[e.name] = (w.toolStats[e.name] ?? 0) + 1;
     }
-    // 落主流（带 agent_id 的子流）
-    await this.opts.emit(withAgentId(e, w.agentId));
+    // 落主流（带 agent_id 的子流；文本字段过 redactSecrets——子流也落 JSONL，密钥不外泄）
+    const streamed = scanStreamEvent(withAgentId(e, w.agentId));
+    await this.opts.emit(streamed);
     // progress 消息（§4.4.8：agent_message{kind:progress}；面板子流最近事件的数据源之一）
     if (e.type === "assistant_message" && e.content.trim() !== "") {
+      const scannedContent = streamed.type === "assistant_message" ? streamed.content : e.content;
       await this.opts.emit({
         type: "agent_message",
         agent_id: w.agentId,
         kind: "progress",
-        text: e.content.slice(0, 500),
+        text: scannedContent.slice(0, 500),
       } as AgentEvent);
     }
   }
@@ -640,6 +663,17 @@ function withAgentId(e: AgentEvent, agentId: string): AgentEvent {
   return e;
 }
 
+/** 子流落流扫描：文本字段过 redactSecrets（密钥不进主转录 JSONL；worker 内存态保持原始事件）。 */
+function scanStreamEvent(e: AgentEvent): AgentEvent {
+  if (e.type === "assistant_message") {
+    return { ...e, content: redactSecrets(e.content).text };
+  }
+  if (e.type === "tool_result") {
+    return { ...e, output: redactSecrets(e.output).text };
+  }
+  return e;
+}
+
 function digestArgs(args: Record<string, unknown>): string {
   const s = JSON.stringify(args);
   return s.length > 200 ? s.slice(0, 200) + "…" : s;
@@ -677,19 +711,21 @@ export async function findToolCallEventId(logPath: string, callId: string): Prom
   return 0;
 }
 
-/** worker 最后一轮正文（结构化报告来源）：最后一条 assistant_message，否则合并最后一组 delta。 */
+/** worker 最后一轮正文（结构化报告来源）：从尾部回扫，先命中的文本事件组即最后一轮——
+ *  assistant_message 或最后一组同 callId 的 delta 合并。 */
 export function lastAssistantText(events: AgentEvent[]): string | null {
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i]!;
     if (e.type === "assistant_message") return e.content;
+    if (e.type === "assistant_delta") {
+      let text = "";
+      for (const x of events) {
+        if (x.type === "assistant_delta" && x.callId === e.callId) text += x.text;
+      }
+      if (text !== "") return text;
+    }
   }
-  const lastDelta = [...events].reverse().find((e) => e.type === "assistant_delta");
-  if (!lastDelta || lastDelta.type !== "assistant_delta") return null;
-  let text = "";
-  for (const e of events) {
-    if (e.type === "assistant_delta" && e.callId === lastDelta.callId) text += e.text;
-  }
-  return text === "" ? null : text;
+  return null;
 }
 
 /** worker system 块：纪律 + 任务书（task + context，数据不是指令）+ 两层记忆注入（永不继承主对话）。 */

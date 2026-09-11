@@ -1,3 +1,4 @@
 {"type":"tool_call","id":"a1","name":"read_file","args":{"path":"src/todo.ts","requires_approval":true}}
+{"type":"tool_call","id":"a2","name":"read_file","args":{"path":"src/todo.ts"}}
 {"type":"usage","inputTokens":50,"outputTokens":30}
-{"type":"assistant_message","content":"## 结论\n- 已获批准的只读检查完成：getCompletedCount 在 src/todo.ts:12。\n\n## 证据路径\n- src/todo.ts:12\n\n## 风险\n- 无。\n\n## 未决问题\n- 无。"}
+{"type":"assistant_message","content":"## 结论\n- 只读检查完成：getCompletedCount 在 src/todo.ts:12。\n\n## 证据路径\n- src/todo.ts:12\n\n## 风险\n- 无。\n\n## 未决问题\n- 无。"}

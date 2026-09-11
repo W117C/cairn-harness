@@ -3,7 +3,7 @@
 // 真实门在本模块的工具包装里 —— 复用 src/permissions 的 checkPermission，语义与 M0 一致：
 // read-only 拒副作用 / default 询问（UI 批准才执行）/ auto 放行；沙箱不可用时写工具强制逐条审批。
 import { readFileSync } from "node:fs";
-import { rm } from "node:fs/promises";
+import { rm, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -135,32 +135,32 @@ const appPlanGate = new PlanGate();
 // 仍可达（§4.4.3 最大前车之鉴）；跨编排器路由走 orchestratorForAgent / orchestratorForApproval。
 let activeOrchestrator: Orchestrator | null = null;
 
-/** M3A_AGENTS_DEMO 演示通道：spawn 的 model 字段 → fixtures/agents/<name> 脚本模型（预加载）。
+/** M3A_AGENTS_DEMO 演示通道：spawn 的 model 字段 → fixtures/agents/<name> 脚本模型。
+ *  缓存**剧本**而非模型实例——每次 spawn 造新 scriptedWorkerModel（光标独立，同名多 spawn 各自跑全本）。
  *  slow- 前缀的剧本逐事件延迟（截图节奏：一 worker done、一 worker running）。 */
 async function loadDemoWorkerModels(): Promise<(args: SpawnArgs) => WorkerModel | undefined> {
   const dir = join(ROOT, "fixtures", "agents");
-  const cache = new Map<string, WorkerModel>();
-  const load = async (name: string): Promise<WorkerModel> => {
-    const hit = cache.get(name);
-    if (hit) return hit;
-    const script = await loadWorkerScript(join(dir, name));
-    const base = scriptedWorkerModel(script);
-    const model: WorkerModel =
-      name.startsWith("slow-")
-        ? async function* (messages, tools) {
-            for await (const out of base(messages, tools)) {
-              await new Promise((r) => setTimeout(r, 700));
-              yield out;
-            }
-          }
-        : base;
-    cache.set(name, model);
-    return model;
+  const scripts = new Map<string, Parameters<typeof scriptedWorkerModel>[0]>();
+  const names = (await readdir(dir)).filter((f) => f.endsWith(".jsonl") && !f.startsWith("main-"));
+  if (names.length === 0) throw new Error("M3A_AGENTS_DEMO：fixtures/agents 下没有 worker 剧本");
+  for (const n of names) {
+    scripts.set(n, await loadWorkerScript(join(dir, n)));
+  }
+  return (args: SpawnArgs) => {
+    const name = typeof args.model === "string" ? args.model : "";
+    const script = scripts.get(name);
+    if (!script) return undefined; // 未知剧本名 → 上层 fail-closed 拒绝 spawn
+    if (name.startsWith("slow-")) {
+      const base = scriptedWorkerModel(script);
+      return async function* (messages, tools) {
+        for await (const out of base(messages, tools)) {
+          await new Promise((r) => setTimeout(r, 700));
+          yield out;
+        }
+      };
+    }
+    return scriptedWorkerModel(script);
   };
-  // 预热演示剧本（fail-visible：缺文件直接抛，不静默换剧本）
-  await load("read-worker.jsonl");
-  await load("slow-worker.jsonl");
-  return (args: SpawnArgs) => (typeof args.model === "string" ? cache.get(args.model) : undefined);
 }
 
 interface Hooks {
@@ -502,7 +502,9 @@ export interface RunOptions {
 function createProvider(userMessage: string, systemPrefix?: string): Provider {
   // M1c 明卷通道：M1C_AUTONOMY_SCRIPT 指向冻结剧本（autonomy-check 三条路径复用同一接线）。
   const autonomyScript = process.env.M1C_AUTONOMY_SCRIPT;
-  // M3a 演示通道：M3A_AGENTS_DEMO=1 → 主剧本取 fixtures/agents/main-demo.jsonl（spawn_agent 闭环演示）。
+  // M3a 演示通道：M3A_MAIN_SCRIPT 指定主剧本（显式路径优先）；M3A_AGENTS_DEMO=1 → main-demo.jsonl
+  //（spawn_agent 闭环演示）。worker 模型经 loadDemoWorkerModels 从 fixtures/agents 装载。
+  if (process.env.M3A_MAIN_SCRIPT) return createMockProvider(resolve(process.env.M3A_MAIN_SCRIPT));
   if (process.env.M3A_AGENTS_DEMO === "1") return createMockProvider(join(ROOT, "fixtures", "agents", "main-demo.jsonl"));
   if (process.env.M1B_GATE_FLOW === "1") return createMockProvider(GATE_FIXTURE);
   if (autonomyScript) return createMockProvider(autonomyScript);
