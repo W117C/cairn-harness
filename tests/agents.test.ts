@@ -214,15 +214,16 @@ describe("M3a token 按 agent 分解（§4.4.10）", () => {
 });
 
 describe("M3a spawn 纪律（§4.4.1）", () => {
-  it("pipeline mode 拒绝（M3c 接入）；write mode 在非 git 工作区 fail-visible 拒绝（M3b 已接入）", async () => {
+  it("pipeline 缺 stages 拒绝（M3c 已接入，stages 是链条唯一来源）；write mode 在非 git 工作区 fail-visible 拒绝（M3b 已接入）", async () => {
     const { orch } = makeOrch({ model: () => scriptedWorkerModel([]) });
     const r1 = await orch.spawn({ mode: "write", task: "x" }, { callId: "s1" });
     expect(r1.ok).toBe(false);
     // M3b：write mode 已接入，但临时目录不是 git 仓库 → worktree 创建失败（fail-visible，不造半成品 worker）
     expect(r1.output).toContain("worktree 创建失败");
+    // M3c：pipeline 已接入（整链由 agents-check N 段判卷）；缺 stages 在解析口拒绝（fail-visible）
     const r2 = await orch.spawn({ mode: "pipeline", task: "x" }, { callId: "s2" });
     expect(r2.ok).toBe(false);
-    expect(r2.output).toContain("M3c 接入");
+    expect(r2.output).toContain("stages 必须是非空数组");
   });
 
   it("task 缺失拒绝；并发上限 4 超限拒绝且不排队", async () => {

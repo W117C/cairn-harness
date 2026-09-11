@@ -36,6 +36,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -224,6 +225,36 @@ function EventView({
     );
   }
   if (e.type === "agent_result") {
+    // M3c 崩溃恢复卡（§4.4.9）：failed(reason=interrupted) + respawn 载荷 → 「重派」= 全新 agent_id 再 spawn
+    if (e.reason === "interrupted" && e.artifacts.respawn) {
+      return (
+        <div className="flex justify-start">
+          <div className="flex max-w-[90%] flex-col gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/5 px-2.5 py-2 text-sm" data-m3c-recovery-card={e.agent_id}>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge className="border-amber-500/60 bg-amber-500/15 text-amber-700 dark:text-amber-400" variant="outline">恢复卡</Badge>
+              <span className="font-mono text-xs">{e.agent_id}</span>
+              <Badge variant="destructive">failed · interrupted</Badge>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              上次会话被中断（重启扫描无终态事件）。「重派」= 全新 agent_id 按原 spawn 参数再 spawn（V1 无热恢复）；或忽略。write worker 旧 worktree 走孤儿列表。
+            </div>
+            <div className="max-w-full truncate font-mono text-xs text-muted-foreground">
+              原任务：{e.artifacts.respawn.task}（mode={e.artifacts.respawn.mode}）
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                data-m3c-respawn={e.agent_id}
+                onClick={() => onAction("agent_respawn", { agentId: e.agent_id, respawn: e.artifacts.respawn })}
+              >
+                重派
+              </Button>
+              <span className="self-center text-[10px] text-muted-foreground">或忽略（不重派）</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
     const Card = resolveCard("report");
     const body = [
       "status: " + e.status + (e.reason !== undefined ? "（" + e.reason + "）" : ""),
@@ -419,6 +450,36 @@ function SettingsDialog({
               </div>
               <div className="text-xs text-muted-foreground">
                 开启时会话结束引导模型检查可沉淀项（合并为一次审批，拒绝则全部不写）；面板可在右栏「记忆」查看。
+              </div>
+            </section>
+            <section className="flex flex-col gap-2" data-m3c-budget-section="">
+              <div className="font-medium">成本闸（会话级，M3c §4.4.8）</div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">maxBudgetUsd</span>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.5"
+                  className="w-52"
+                  data-m3c-budget-max=""
+                  value={String(settings.maxBudgetUsd ?? 0)}
+                  onChange={(e) => onSettings({ maxBudgetUsd: Math.max(0, Number(e.target.value) || 0) })}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">单价（USD / 百万 token）</span>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.1"
+                  className="w-52"
+                  data-m3c-budget-price=""
+                  value={String(settings.budgetPricePerMTok ?? 0)}
+                  onChange={(e) => onSettings({ budgetPricePerMTok: Math.max(0, Number(e.target.value) || 0) })}
+                />
+              </div>
+              <div className="text-xs text-muted-foreground">
+                估价 = Σusage tokens × 单价；超限拒绝新 spawn（主 loop 不受闸）。两项均 0 = 关（缺省零行为）。
               </div>
             </section>
             <section className="flex flex-col gap-2">
@@ -651,6 +712,31 @@ function App() {
       const d = data as { name: string };
       void window.agent
         .cardAction({ cardId: "orphan:" + d.name, sourceEventId: 0, cardType: "orphan", action: "clean", payload: { name: d.name } })
+        .catch(() => {});
+    } else if (action === "agent_resume") {
+      // M3c 卡死出口一（§4.4.8）：resume 清除 stuck 态 → card_action(resume, target_agent_id)
+      const d = data as { agentId: string };
+      const colR = agentColsById[d.agentId];
+      void window.agent
+        .cardAction({
+          cardId: "agent_card:" + d.agentId,
+          sourceEventId: colR?.parent_event_id ?? 0,
+          cardType: "agent_card",
+          action: "resume",
+          targetAgentId: d.agentId,
+        })
+        .catch(() => {});
+    } else if (action === "agent_respawn") {
+      // M3c 崩溃恢复出口（§4.4.9）：重派 = card_action(respawn) 携原 spawn 参数
+      const d = data as { agentId: string; respawn: Record<string, unknown> };
+      void window.agent
+        .cardAction({
+          cardId: "recovery:" + d.agentId,
+          sourceEventId: 0,
+          cardType: "agent_result",
+          action: "respawn",
+          payload: { respawn: d.respawn },
+        })
         .catch(() => {});
     } else if (action === "agent_cancel") {
       // M3a：agents 面板/agent 卡取消钮 → card_action(cancel, target_agent_id) → AbortController 树

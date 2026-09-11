@@ -72,7 +72,8 @@ describe("M2e 容器发现（任务 1）", () => {
       looseRoots: [fx("loose")],
       trustStatus: () => "pending",
     });
-    expect(pendingPlugins(m).map((p) => p.name)).toEqual(["echo-suite"]);
+    // M3c：pipeline-crew（agents/*.md 角色 fixture）入列——它有 manifest 无 skill，pending 口径照常聚合
+    expect(pendingPlugins(m).map((p) => p.name)).toEqual(["echo-suite", "pipeline-crew"]);
     expect(m.looseSkills).toHaveLength(1); // 散装照常可见
   });
 });

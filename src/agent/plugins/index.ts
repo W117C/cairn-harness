@@ -193,14 +193,25 @@ export class PluginRuntime {
     return out;
   }
 
-  /** 受信插件的 agent 角色（plugin-name:agent-name；采纳留 M3）。 */
-  agentRoles(): { invoke: string; description: string }[] {
-    const out: { invoke: string; description: string }[] = [];
+  /** 受信插件的 agent 角色全集（plugin-name:agent-name）。M3c：返回完整定义（正文=roleDefinition、
+   *  frontmatter=工具组/模型/上限，§9.6）供编排器采纳（§9.11-4 闭合）。 */
+  agentRoles(): { invoke: string; description: string; plugin: string; name: string; path: string; frontmatter: Record<string, unknown>; body: string }[] {
+    const out: { invoke: string; description: string; plugin: string; name: string; path: string; frontmatter: Record<string, unknown>; body: string }[] = [];
     for (const p of this.manifest.plugins) {
       if (p.trust !== "trusted") continue;
-      for (const a of p.agents) out.push({ invoke: p.name + ":" + a.name, description: a.description });
+      for (const a of p.agents) {
+        out.push({ invoke: p.name + ":" + a.name, description: a.description, plugin: p.name, name: a.name, path: a.path, frontmatter: a.frontmatter, body: a.body });
+      }
     }
     return out;
+  }
+
+  /** 按 invoke（plugin-name:agent-name）取插件 agent 角色定义（编排器 stages[].role 解析口；§9.6）。
+   *  未信任插件的角色不可见（信任门一致）；未命中 = null（编排器 fail-visible 拒绝该环）。 */
+  findAgentRole(invoke: string): { name: string; body: string; frontmatter: Record<string, unknown> } | null {
+    const hit = this.agentRoles().find((a) => a.invoke === invoke);
+    if (!hit) return null;
+    return { name: hit.name, body: hit.body, frontmatter: hit.frontmatter };
   }
 
   /** 渐进披露路由清单（1536 截断）。 */

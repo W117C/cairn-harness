@@ -31,11 +31,19 @@ export function isCompaction(e: AgentEvent): e is CompactionEvent {
   return e.type === "compaction";
 }
 
-/** 全部 compaction 事件声明的摘除 id 并集（滚动合并：多次压缩的排除集累加）。 */
+/** M3c：worker 子流的压缩事件（§7.5，agent_id 在场）不是主上下文的投影指令——
+ *  其 compressed_event_ids 是 worker 内存态事件序，对主流照搬会错误摘除主事件/注入 worker 摘要。
+ *  worker 自身投影不受影响：worker 内存态里的压缩事件不带 agent_id（落主流时才加 agent_id 归因）。 */
+export function isWorkerCompaction(e: AgentEvent): boolean {
+  return isCompaction(e) && typeof e.agent_id === "string" && e.agent_id !== "";
+}
+
+/** 全部 compaction 事件声明的摘除 id 并集（滚动合并：多次压缩的排除集累加）。
+ *  M3c：worker 子流压缩事件（agent_id 在场）不参与主投影的排除集。 */
 export function excludedIds(events: AgentEvent[]): Set<number> {
   const out = new Set<number>();
   for (const e of events) {
-    if (isCompaction(e)) for (const id of e.compressed_event_ids) out.add(id);
+    if (isCompaction(e) && !isWorkerCompaction(e)) for (const id of e.compressed_event_ids) out.add(id);
   }
   return out;
 }
@@ -49,8 +57,9 @@ export function projectContext(
 ): ContextMessage[] {
   const excluded = excludedIds(events);
   // 最新一份 compaction（滚动合并：其摘要已整合旧摘要，旧摘要不再单独注入）
+  // M3c：worker 子流压缩事件（agent_id 在场）不作为主投影的摘要注入源。
   let latest: (typeof events)[number] | null = null;
-  for (const e of events) if (isCompaction(e)) latest = e;
+  for (const e of events) if (isCompaction(e) && !isWorkerCompaction(e)) latest = e;
   const offset = latest ? latest.summary_offset : Number.POSITIVE_INFINITY;
   const envelope = latest ? summaryEnvelope(latest.summary) : null;
 

@@ -88,9 +88,11 @@ import {
   orchestratorForMerge,
   loadWorkerScript,
   scriptedWorkerModel,
+  type OrchestratorOptions,
   type SpawnArgs,
   type WorkerModel,
 } from "../agent/orchestrator";
+import { interruptedWorkers, respawnArgsFrom, type RespawnArgs } from "../agent/recovery";
 import { buildSecurityReport } from "../agent/security/scan";
 import {
   listWorktreeDirs,
@@ -141,6 +143,41 @@ const appPlanGate = new PlanGate();
 // activeOrchestrator 在 runAgent 收束后**不清空**：worker 的审批应答/取消路由须在父 turn 结束后
 // 仍可达（§4.4.3 最大前车之鉴）；跨编排器路由走 orchestratorForAgent / orchestratorForApproval。
 let activeOrchestrator: Orchestrator | null = null;
+
+/** M3c 编排器扩展接线（agentRoleFor / workerSummarizer / budget）：runAgent 与会话重派共用同一口径。
+ *  - agentRoleFor：插件 agent 角色解析（stages[].role = "plugin-name:agent-name"，§9.6/§9.11-4）；
+ *  - workerSummarizer：worker 压缩摘要器（§7.5 同一 runCompaction 链；GLM 暗卷需 M0_API_KEY）；
+ *  - budget：会话成本闸（§4.4.8 maxBudgetUsd；0 = off 零行为）。 */
+async function orchestratorExtras(): Promise<Pick<OrchestratorOptions, "agentRoleFor" | "workerSummarizer" | "budget">> {
+  const s = await store().get();
+  return {
+    agentRoleFor: (invoke: string) => currentPluginRuntime()?.findAgentRole(invoke) ?? null,
+    ...(process.env.M0_API_KEY ? { workerSummarizer: createGlmSummarizer() } : {}),
+    ...(s.maxBudgetUsd > 0 ? { budget: { maxUsd: s.maxBudgetUsd, pricePerMTok: s.budgetPricePerMTok } } : {}),
+  };
+}
+
+/** M3c 会话编排器兜底（崩溃恢复「重派」路径）：run 间隙无 activeOrchestrator 时按会话现状建一个
+ *  （同 logPath/workspace/档位；emit = 落盘 + UI 推送同路），保证恢复卡按钮真实可达。 */
+async function ensureSessionOrchestrator(): Promise<Orchestrator | null> {
+  if (activeOrchestrator) return activeOrchestrator;
+  const logPath = lastLogPath;
+  if (!logPath) return null;
+  const log = createEventLog(logPath);
+  const orch = new Orchestrator({
+    logPath,
+    workspace: lastWorkspace ?? WORKSPACE,
+    parentMode: (await store().get()).mode,
+    emit: async (e: AgentEvent) => {
+      await log.append(e);
+      hooks.onEvent?.(e);
+    },
+    safeMode: await resolveSafeMode(),
+    ...(await orchestratorExtras()),
+  });
+  activeOrchestrator = orch;
+  return orch;
+}
 
 /** M3A_AGENTS_DEMO 演示通道：spawn 的 model 字段 → fixtures/agents/<name> 脚本模型。
  *  缓存**剧本**而非模型实例——每次 spawn 造新 scriptedWorkerModel（光标独立，同名多 spawn 各自跑全本）。
@@ -598,6 +635,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       parentMode: opts.mode,
       emit: pipeline,
       safeMode: await resolveSafeMode(), // M3b §11.6：off 不跑 / report 只标 / gate 红标 + 二次确认
+      ...(await orchestratorExtras()), // M3c：插件角色 / worker 压缩摘要器 / 成本闸
       ...(demoModelFor ? { modelFor: demoModelFor } : {}),
     });
     activeOrchestrator = orchestrator;
@@ -863,6 +901,24 @@ export async function handleCardAction(req: CardActionRequest): Promise<{ ok: bo
     const r: WorktreeCleanupResult = await cleanOrphanWorktree(ws, name);
     return r.removed ? { ok: true } : { ok: false, error: "孤儿 worktree 清理失败：" + (r.error ?? "未知") };
   }
+  // ---- M3c 卡死出口一（§4.4.8）：「继续」= card_action(resume) 清除 stuck 态（worker 恢复运行）----
+  if (req.action === "resume" && req.targetAgentId) {
+    const owner = orchestratorForAgent(req.targetAgentId);
+    if (!owner) return { ok: false, error: "该 agent 无归属编排器（未知或已终态）" };
+    const okResume = owner.resumeAgent(req.targetAgentId);
+    return okResume ? { ok: true } : { ok: false, error: "agent 无卡死态: " + req.targetAgentId };
+  }
+  // ---- M3c 崩溃恢复出口（§4.4.9）：恢复卡「重派」= 全新 agent_id 按原 spawn 参数再 spawn ----
+  if (req.action === "respawn" && req.cardType === "agent_result") {
+    const r = req.payload?.respawn as RespawnArgs | undefined;
+    if (!r || typeof r.task !== "string" || r.task.trim() === "" || (r.mode !== "read" && r.mode !== "write")) {
+      return { ok: false, error: "respawn 需要 payload.respawn（恢复卡原 spawn 参数：mode/task 必填）" };
+    }
+    const orch = activeOrchestrator ?? (await ensureSessionOrchestrator());
+    if (!orch) return { ok: false, error: "无可用会话日志（重派需要会话上下文；fail-closed）" };
+    const rr = await orch.respawn(r, { callId: "respawn-" + String(Date.now()) });
+    return rr.ok ? { ok: true } : { ok: false, error: rr.output };
+  }
   if (approvalId !== null) {
     const owner = orchestratorForApproval(approvalId);
     if (!owner) return { ok: false, error: "审批发起编排器已不可达（fail-closed）" };
@@ -1085,12 +1141,49 @@ export async function handleSessionCreate(name?: string): Promise<{ id: string }
   return { id: await createSession(requireSessionsDir(), name) };
 }
 
-/** 切换会话：settings.currentSession 落盘（重启还原）；返回该会话全部事件（重放投影）。 */
+/** 切换会话：settings.currentSession 落盘（重启还原）；返回该会话全部事件（重放投影）。
+ *  M3c 崩溃恢复（§4.4.9）：重开即扫描无终态 worker → 补发 failed(interrupted) + 恢复卡载荷
+ *  （幂等：补发即有终态，重扫不再命中；V1 不做热恢复，重派 = 全新 agent_id）。 */
 export async function handleSessionOpen(id: string): Promise<{ events: AgentEvent[] }> {
   const dir = requireSessionsDir();
   if (!(await sessionExists(dir, id))) throw new Error(`会话不存在: ${id}`);
   await store().set({ currentSession: id });
+  const logPath = pathOf(dir, id);
+  await applyCrashRecovery(logPath);
   return { events: await readSessionEvents(dir, id) };
+}
+
+/** M3c 崩溃恢复扫描 + 补发（§4.4.9）：无终态 worker → failed(interrupted) + 恢复卡（respawn 载荷）。
+ *  纯投影层模拟口径（裁决 5）：headless 验收直接对本函数断言；UI 走 session:open 同路。 */
+export async function applyCrashRecovery(logPath: string, emit?: (e: AgentEvent) => Promise<void>): Promise<string[]> {
+  const events = await replay(logPath).catch(() => [] as AgentEvent[]);
+  const interrupted = interruptedWorkers(events);
+  if (interrupted.length === 0) return [];
+  const out: string[] = [];
+  const sink = emit ?? (async (e: AgentEvent) => { await createEventLog(logPath).append(e); });
+  for (const iw of interrupted) {
+    const respawn = respawnArgsFrom(iw.spawned);
+    const ts = Date.now();
+    await sink({ type: "agent_status", agent_id: iw.agentId, status: "failed", reason: "interrupted", ts } as AgentEvent);
+    await sink({
+      type: "agent_result",
+      agent_id: iw.agentId,
+      status: "failed",
+      reason: "interrupted",
+      summary:
+        "[recovery] 崩溃恢复：该 worker 上次会话被中断（重启扫描无终态事件）。" +
+        "可在恢复卡「重派」（全新 agent_id 按原 spawn 参数再 spawn，V1 无热恢复）或忽略。" +
+        "write worker 的旧 worktree 走孤儿列表（可清理，不自动删）。",
+      artifacts: {
+        report: "[recovery] interrupted（无终态事件；重派参数见 artifacts.respawn）",
+        respawn,
+      },
+      usage: { inputTokens: 0, outputTokens: 0 },
+      tool_stats: {},
+    } as AgentEvent);
+    out.push(iw.agentId);
+  }
+  return out;
 }
 
 export async function handleSessionRename(oldId: string, newName: string): Promise<{ id: string }> {

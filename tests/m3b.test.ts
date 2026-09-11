@@ -443,6 +443,8 @@ describe("M3b write worker 闭环（临时 git 仓库端到端）", () => {
       controller: new AbortController(), autonomy: {} as never, toolAutonomy: {} as never, resources: [],
       snapshots: new Map(), editAnchors: new Map(), lastFindings: [], events: [],
       usage: { inputTokens: 0, outputTokens: 0 }, toolStats: {}, finished: false, closed: true,
+      dependsOn: [], stuckActive: false, paused: false, pauseWaiters: [], stuckTurns: [],
+      stuckCallActions: new Map(), stuckTimer: null, lastActivityAt: 0,
     };
     const { orch } = makeOrch({ model: () => scriptedWorkerModel([]) });
     const table = buildWorkerToolTable(w, orch);

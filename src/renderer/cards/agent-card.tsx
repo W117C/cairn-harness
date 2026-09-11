@@ -51,6 +51,20 @@ export function AgentCard({ payload, onAction }: { payload: AgentCardPayload; on
         )}
         {payload.pendingApproval && <div className="text-amber-700 dark:text-amber-400">⏳ 有待批审批（审批队列/agents 面板可决议）</div>}
         {payload.reason && <div className="text-muted-foreground">原因：{payload.reason}</div>}
+        {/* M3c 卡死态（§4.4.8）：waiting_input(reason=stuck) → 「继续」resume 清除卡死态 / 「取消」走取消链 */}
+        {status === "waiting_input" && payload.reason === "stuck" && onAction && (
+          <div className="flex items-center gap-2" data-m3c-stuck-actions={payload.agent_id}>
+            <Button
+              size="sm"
+              variant="outline"
+              data-m3c-agent-resume={payload.agent_id}
+              onClick={() => onAction("agent_resume", { agentId: payload.agent_id })}
+            >
+              继续（resume）
+            </Button>
+            <span className="text-[10px] text-muted-foreground">或取消——worker 已在事件边界暂停</span>
+          </div>
+        )}
         {payload.report && (
           <details data-m3a-agent-card-report={payload.agent_id}>
             <summary className="cursor-pointer text-muted-foreground">open_report</summary>

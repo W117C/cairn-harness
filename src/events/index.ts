@@ -85,6 +85,8 @@ export interface CompactionEvent {
   tokens_after: number;
   usage?: CompactionUsage;
   model?: string;
+  /** M3c：worker 归因（§7.5 worker 压缩事件落子流；主会话压缩无此字段）。 */
+  agent_id?: string;
 }
 
 // ---- M2f 产出代码安全 report（§11.6 定稿，本轮只做 off/report）----
@@ -207,7 +209,14 @@ export interface AgentResultEvent {
   /** ≤2000 token，超限类型化裁剪（summary_truncated = true + 尾部截断提示）。 */
   summary: string;
   summary_truncated?: boolean;
-  artifacts: { report?: string; files_changed?: string[]; /** M3b write mode：diff 出处引用（worktree 路径@base_commit）；diff 本体只进 git 面板（§4.4.4）。 */ diff_ref?: string };
+  artifacts: {
+    report?: string;
+    files_changed?: string[];
+    /** M3b write mode：diff 出处引用（worktree 路径@base_commit）；diff 本体只进 git 面板（§4.4.4）。 */
+    diff_ref?: string;
+    /** M3c 崩溃恢复（§4.4.9）：reason=interrupted 时携带原 spawn 参数（恢复卡「重派」的数据源）。 */
+    respawn?: { mode: string; task: string; resources?: string[]; max_turns?: number; tier?: string; model?: string };
+  };
   usage: { inputTokens: number; outputTokens: number };
   tool_stats: Record<string, number>;
 }

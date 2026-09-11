@@ -20,8 +20,30 @@ import { edit_file } from "../tools/edit_file";
 import { remember } from "../tools/remember";
 import { runLoop } from "./loop";
 import { projectContext } from "./context";
-import { estimateTokens } from "./compaction";
+import {
+  DEFAULT_COMPACTION_CONFIG,
+  estimateContextTokens,
+  estimateTokens,
+  calibrateFactor,
+  runCompaction,
+  shouldCompact,
+  type CompactionConfig,
+  type Summarizer,
+} from "./compaction";
 import { escapeControlTags } from "./memory/inject";
+import {
+  BUILTIN_ROLES,
+  concatStageTask,
+  dependsOnCycle,
+  parseStages,
+  parseVerdict,
+  resolvePluginRole,
+  type FrozenStage,
+  type PluginAgentRoleDef,
+  type ResolvedPluginRole,
+} from "./sequencer";
+import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckConfig, type StuckTurn } from "./stuck";
+import type { RespawnArgs } from "./recovery";
 import {
   collectChangeSet,
   mapFindingsToAbsolute,
@@ -76,6 +98,19 @@ export const WRITE_WORKER_TOOL_TABLE: readonly string[] = [
 export const WRITE_WORKER_FORBIDDEN_TOOLS: readonly string[] = [
   "spawn_agent", "run_shell", "clarify", "propose_plan", "verify", "merge", "commit",
 ];
+
+// ---- M3c：pipeline sequencer / 卡死检测 / 成本闸 / worker 压缩 参数 ----
+
+/** worker 压缩参数（§7.5：同一压缩器实例化、参数独立配置——worker 触发更晚 ratio 0.95；
+ *  max_turns 闸门在先，压缩是第二道防线；keep_first 映射 = task 任务书 + context 交接，
+ *  由 worker 上下文组装结构性保障：task/context 在 system 块，压缩只作用于子流事件投影）。 */
+export const WORKER_COMPACTION_CONFIG: Partial<CompactionConfig> = { ratio: 0.95 };
+
+/** pipeline stages 上限（V1 链长收敛）。 */
+export const MAX_PIPELINE_STAGES = 8;
+
+/** 卡死检测缺省阈值（§4.4.8；OrchestratorOptions.stuckConfig 可配短阈值供验收）。 */
+export const ORCHESTRATOR_STUCK_CONFIG: StuckConfig = DEFAULT_STUCK_CONFIG;
 
 // ---- 只读 bash 静态过滤（§4.4.6：显式白名单命令集，其余拒绝） ----
 /** 纯读命令集（首词精确匹配）。 */
@@ -359,10 +394,30 @@ export interface SpawnArgs {
   mode?: unknown;
   resources?: unknown;
   context?: unknown;
+  stages?: unknown;
   depends_on?: unknown;
   model?: unknown;
   max_turns?: unknown;
   tier?: unknown;
+}
+
+/** pipeline stage 的原始形态（M3c；sequencer 解析冻结）。 */
+export interface RawStageArgs {
+  role?: unknown;
+  task?: unknown;
+  gate?: unknown;
+}
+
+/** sequencer 解析出的 stage 运行参数（代码注入 spawnStage；模型不可伪造角色面）。 */
+export interface StageRoleResolution {
+  mode: "read" | "write";
+  roleDefinition?: string;
+  maxTurns?: number;
+  model?: string;
+  /** 插件角色工具面裁剪（frontmatter.tools）。 */
+  allowedTools?: string[];
+  disallowedTools?: string[];
+  warnings?: string[];
 }
 
 export interface WorkerContext {
@@ -407,6 +462,51 @@ interface WorkerHandle {
   /** M3b：终态事件（agent_result/diff/清理）全部落完才算 closed——write worker 的 finish 含
    *  git diff + 安全流水（秒级），activeCount/waitAll 必须等 closed，否则进程会在 finish 中途退出。 */
   closed: boolean;
+  // ---- M3c：依赖链 / 卡死检测（内存态运行参数；状态事实源仍是事件流投影） ----
+  /** 本 worker 依赖的前环 agent_id（depends_on 原样；后环 agent_spawned 已记录）。 */
+  dependsOn: string[];
+  /** 卡死态（waiting_input(reason=stuck) 在场）：触发后 worker 在下一事件 append 处暂停，resume 解除。 */
+  stuckActive: boolean;
+  paused: boolean;
+  pauseWaiters: (() => void)[];
+  /** 卡死规则一/二的滑动窗口（action+observation 摘要）。 */
+  stuckTurns: StuckTurn[];
+  /** tool_call id → action 摘要（tool_result 到达时配对成 StuckTurn）。 */
+  stuckCallActions: Map<string, string>;
+  /** 静默计时器（每次子流事件刷新；silenceMs 超时 → stuck）。 */
+  stuckTimer: ReturnType<typeof setTimeout> | null;
+  lastActivityAt: number;
+  /** 角色定义（M3c：内置角色/插件角色进 system 首块；缺省无）。 */
+  roleDefinition?: string;
+  /** M3c 插件角色工具面裁剪（frontmatter.tools 白名单；缺省 = 角色默认面）。 */
+  allowedTools?: string[];
+  /** M3c 插件角色 disallowedTools（从默认面剔除）。 */
+  disallowedTools?: string[];
+  /** 终态标记（finishInner 写入；依赖链终态裁决与 sequencer 同步点复用）。 */
+  terminalStatus?: "done" | "failed" | "cancelled";
+  lastResult?: Extract<AgentEvent, { type: "agent_result" }>;
+}
+
+// ---- M3c pipeline 链状态（sequencer 只读呈现；stages 批准后冻结） ----
+
+export interface PipelineChainStageState {
+  index: number;
+  role: string;
+  task: string;
+  agentId: string | null;
+  status: "pending" | "running" | "done" | "failed";
+  verdict?: "pass" | "fail" | "unspecified";
+  reportPreview?: string;
+}
+
+export interface PipelineChain {
+  /** 链 id = spawn 的 callId（整链一个审批；sequencer 状态只读呈现的锚点）。 */
+  callId: string;
+  /** 批准后冻结的 stages（parseStages 产物，Object.freeze）。 */
+  stages: readonly FrozenStage[];
+  state: PipelineChainStageState[];
+  status: "running" | "done" | "failed";
+  reason?: string;
 }
 
 export interface OrchestratorOptions {
@@ -423,6 +523,18 @@ export interface OrchestratorOptions {
   approvalTimeoutMs?: number;
   /** M3b 产出代码安全模式（§11.6 三档，缺省 report）：off 不跑 / report 只标 / gate critical|high 红标 + 二次确认。 */
   safeMode?: "off" | "report" | "gate";
+  // ---- M3c ----
+  /** 插件 agent 角色解析（stages[].role = "plugin:agent-name" → agents/*.md 定义；§9.6/§9.11-4）。
+   *  缺省 null 解析失败 = 该环拒绝（fail-visible）。 */
+  agentRoleFor?: (invoke: string) => PluginAgentRoleDef | null;
+  /** worker 压缩摘要器（§7.5：与主会话同一 runCompaction 实现链；缺省 undefined = 只走 overflow 截断）。 */
+  workerSummarizer?: Summarizer;
+  /** worker 压缩参数覆盖（缺省 WORKER_COMPACTION_CONFIG；验收注入小 inputLimit 触发）。 */
+  workerCompaction?: Partial<CompactionConfig>;
+  /** 会话级成本闸（§4.4.8 maxBudgetUsd）：maxUsd/pricePerMTok 任一 ≤0 = 闸无效（缺省零行为）。 */
+  budget?: { maxUsd: number; pricePerMTok: number };
+  /** 卡死检测阈值（缺省 ORCHESTRATOR_STUCK_CONFIG；验收注入短阈值）。 */
+  stuckConfig?: Partial<StuckConfig>;
 }
 
 export class Orchestrator {
@@ -438,10 +550,51 @@ export class Orchestrator {
   private readonly safeMode: "off" | "report" | "gate";
   /** write worker diff 快照版本计数（评审闭环 v1→v2：同 agent 每次收敛出新 diff）。 */
   private readonly diffVersions = new Map<string, number>();
+  // ---- M3c ----
+  private readonly opts: OrchestratorOptions;
+  /** 会话成本闸（§4.4.8）：maxUsd/pricePerMTok 任一 ≤0 = 闸无效。 */
+  private readonly budget: { maxUsd: number; pricePerMTok: number } | null;
+  private readonly stuckConf: StuckConfig;
+  /** 会话累计 usage（emit 包装统计全部 usage 事件 = 主 loop + Σworker，§4.4.10 口径）。 */
+  readonly sessionUsage = { inputTokens: 0, outputTokens: 0 };
+  /** 依赖链：延迟 spawn 登记（前环未收敛；前环 done 事件驱动触发，无轮询调度器 §4.5）。 */
+  private readonly deferredSpawns = new Map<string, { callId: string; args: SpawnArgs; dependsOn: string[] }>();
+  /** pipeline 链（callId → 链状态；stages 批准后冻结，重复请求 = 变更请求被拒）。 */
+  private readonly chains = new Map<string, PipelineChain>();
+  /** worker 终态等待（sequencer 逐环同步点；finishInner 解析）。 */
+  private readonly terminalWaiters = new Map<string, Array<(r: { status: string; result: Extract<AgentEvent, { type: "agent_result" }> | null }) => void>>();
 
-  constructor(private readonly opts: OrchestratorOptions) {
+  constructor(opts: OrchestratorOptions) {
     this.approvalTimeoutMs = opts.approvalTimeoutMs ?? 120_000;
     this.safeMode = opts.safeMode ?? "report";
+    this.budget = opts.budget ?? null;
+    this.stuckConf = { ...DEFAULT_STUCK_CONFIG, ...(opts.stuckConfig ?? {}) };
+    const rawEmit = opts.emit;
+    this.opts = {
+      ...opts,
+      emit: async (e: AgentEvent) => {
+        if (e.type === "usage") {
+          this.sessionUsage.inputTokens += e.inputTokens;
+          this.sessionUsage.outputTokens += e.outputTokens;
+        }
+        await rawEmit(e);
+      },
+    };
+  }
+
+  // ---- M3c 成本闸（§4.4.8）：估价 = Σusage tokens × 可配单价；缺省零行为（单价/上限任一为 0 → 闸无效） ----
+
+  /** 预算估价（纯查询）：会话累计 token × 单价。pricePerMTok = 每百万 token 单价（USD）。 */
+  budgetEstimateUsd(): number {
+    if (!this.budget || !(this.budget.pricePerMTok > 0)) return 0;
+    const tokens = this.sessionUsage.inputTokens + this.sessionUsage.outputTokens;
+    return (tokens / 1_000_000) * this.budget.pricePerMTok;
+  }
+
+  /** 闸判定：maxUsd 与单价均 >0 且估价 ≥ 上限 → 拒绝新 spawn。 */
+  budgetBlocked(): boolean {
+    if (!this.budget || !(this.budget.maxUsd > 0) || !(this.budget.pricePerMTok > 0)) return false;
+    return this.budgetEstimateUsd() >= this.budget.maxUsd;
   }
 
   /** 活跃 worker 数（running / waiting_approval / waiting_input 计入并发上限；
@@ -476,22 +629,128 @@ export class Orchestrator {
     return this.safeMode;
   }
 
-  /** spawn_agent 工具体（loop 经 TOOLS 注入调用；验收脚本可携 ctx.callId 直调）。 */
+  /** spawn_agent 工具体（loop 经 TOOLS 注入调用；验收脚本可携 ctx.callId 直调）。
+   *  M3c：pipeline mode = 哑 sequencer（一个审批授权全链，零 LLM 展开）；depends_on 事件驱动依赖链。 */
   async spawn(args: SpawnArgs, ctx: { callId?: string }): Promise<ToolResult> {
     const mode = typeof args.mode === "string" ? args.mode : "";
     if (!SPAWN_MODES.includes(mode)) {
       return { ok: false, output: "spawn_agent: mode 必须是 read|write|pipeline" };
     }
-    if (mode === "pipeline") {
-      return { ok: false, output: `spawn_agent: mode=${mode} 本轮未接入（pipeline M3c 接入）` };
-    }
     const task = typeof args.task === "string" ? args.task.trim() : "";
-    if (task === "") return { ok: false, output: "spawn_agent: task 参数必填（worker 上下文唯一来源，自包含任务书）" };
+    if (mode !== "pipeline" && task === "") {
+      return { ok: false, output: "spawn_agent: task 参数必填（worker 上下文唯一来源，自包含任务书）" };
+    }
+    // stages 冻结闸（§4.4.7）：同 callId 的 pipeline 已批准运行 → 再次请求 = 变更请求，拒绝并落流
+    if (mode === "pipeline" && ctx.callId !== undefined && this.chains.has(ctx.callId)) {
+      await this.opts.emit({
+        type: "tool_result",
+        callId: "pipeline-" + ctx.callId,
+        ok: false,
+        output: "[sequencer] stages 变更请求被拒（批准后冻结，§4.4.7；该链仍在按原 stages 运行）",
+      } as AgentEvent).catch(() => {});
+      return { ok: false, output: "spawn_agent: 该 pipeline 已批准运行（stages 批准后冻结，变更请求被拒 §4.4.7）" };
+    }
+    // ---- depends_on 校验与延迟登记（§4.5/§2.1；pipeline 亦然——整链延迟到前环收敛）----
+    const dependsOn = parseStringList(args.depends_on);
+    if (dependsOn.length > 0) {
+      const v = this.validateDependsOn(dependsOn);
+      if (!v.ok) return { ok: false, output: "spawn_agent: " + v.why };
+      if (v.waiting.length > 0) {
+        // 前环未收敛：登记延迟 spawn（事件驱动——前环 done 触发真正 spawn，无轮询调度器）
+        if (ctx.callId === undefined || ctx.callId === "") {
+          return { ok: false, output: "spawn_agent: depends_on 依赖未收敛且无 callId（无法事件驱动触发）" };
+        }
+        this.deferredSpawns.set(ctx.callId, { callId: ctx.callId, args, dependsOn });
+        return { ok: true, output: JSON.stringify({ deferred: true, depends_on: dependsOn, waiting_on: v.waiting }) };
+      }
+    }
+    // 会话成本闸（§4.4.8）：超限拒绝新 spawn（含 sequencer 后环）；主 loop 不受闸（V1 口径：闸管编排扩张）
+    if (this.budgetBlocked()) {
+      return await this.rejectOnBudget();
+    }
+    if (mode === "pipeline") {
+      return await this.spawnPipeline(args, ctx);
+    }
+    return await this.spawnInternal(args, ctx, task);
+  }
+
+  /** sequencer 的逐环 spawn 入口（不经过模型 spawn 面——stage_role 由代码注入，模型不可伪造角色面）。 */
+  private async spawnStage(args: SpawnArgs, ctx: { callId?: string }, stageRole: StageRoleResolution): Promise<ToolResult> {
+    return await this.spawnInternal(args, ctx, typeof args.task === "string" ? args.task.trim() : "", stageRole);
+  }
+
+  /** M3c 崩溃恢复「重派」（§4.4.9）：全新 agent_id 按原 spawn 参数重新 spawn（V1 无 transcript resume）。 */
+  async respawn(args: RespawnArgs, ctx: { callId?: string } = {}): Promise<ToolResult> {
+    return await this.spawn(
+      {
+        task: args.task,
+        mode: args.mode,
+        ...(args.resources !== undefined ? { resources: args.resources } : {}),
+        ...(args.max_turns !== undefined ? { max_turns: args.max_turns } : {}),
+        ...(args.tier !== undefined ? { tier: args.tier } : {}),
+        ...(args.model !== undefined ? { model: args.model } : {}),
+      },
+      ctx,
+    );
+  }
+
+  /** depends_on 校验（共享）：存在性（跨会话拒绝）→ 环（DFS）→ 前环终态裁决。waiting = 尚未 done 的依赖。 */
+  private validateDependsOn(dependsOn: string[]): { ok: true; waiting: string[] } | { ok: false; why: string } {
+    for (const dep of dependsOn) {
+      if (!this.workers.has(dep)) {
+        return { ok: false, why: "depends_on 引用不存在或不在本会话的 agent: " + dep + "（跨会话依赖拒绝）" };
+      }
+    }
+    const edges = new Map<string, string[]>();
+    for (const w of this.workers.values()) {
+      if (w.dependsOn.length > 0) edges.set(w.agentId, w.dependsOn);
+    }
+    if (dependsOnCycle(dependsOn, edges)) {
+      return { ok: false, why: "depends_on 成环（" + dependsOn.join("→") + "；依赖图不允许环 §2.1）" };
+    }
+    for (const dep of dependsOn) {
+      const st = this.workers.get(dep)?.terminalStatus;
+      if (st === "failed" || st === "cancelled") {
+        return { ok: false, why: "前环 " + dep + " " + st + " → 后环标记 failed（reason=dependency_failed，不静默跳过 §2.1）" };
+      }
+    }
+    return { ok: true, waiting: dependsOn.filter((dep) => this.workers.get(dep)?.terminalStatus !== "done") };
+  }
+
+  /** 成本闸拒绝（落流警告 + tool_result 拒绝，§2.4）。 */
+  private async rejectOnBudget(): Promise<ToolResult> {
+    const estimate = this.budgetEstimateUsd().toFixed(4);
+    const cap = String(this.budget?.maxUsd ?? 0);
+    await this.opts.emit({
+      type: "tool_result",
+      callId: "budget-" + String(Date.now()),
+      ok: false,
+      output: "[budget] 会话成本超限：估价 $" + estimate + " ≥ maxBudgetUsd $" + cap + "（编排扩张被拒；主 loop 不受闸）",
+    } as AgentEvent).catch(() => {});
+    return { ok: false, output: "spawn_agent: [budget] 会话成本超限（估价 $" + estimate + " ≥ maxBudgetUsd $" + cap + "），新 spawn 被拒" };
+  }
+
+  /** spawn 内核（模型面与 sequencer 逐环共用；stageRole 只由 sequencer 代码注入）。 */
+  private async spawnInternal(args: SpawnArgs, ctx: { callId?: string }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
+    const mode = typeof args.mode === "string" ? args.mode : "";
     if (this.activeCount() >= MAX_CONCURRENT_WORKERS) {
       return {
         ok: false,
         output: `spawn_agent: 并发已达上限（${String(MAX_CONCURRENT_WORKERS)}），不排队——请等现有 worker 收敛或取消后再试`,
       };
+    }
+    // ---- M3c depends_on 轻校验（sequencer 后环路径；与 spawn() 同语义，前环必已收敛）----
+    const dependsOn = parseStringList(args.depends_on);
+    if (dependsOn.length > 0) {
+      const v = this.validateDependsOn(dependsOn);
+      if (!v.ok) return { ok: false, output: "spawn_agent: " + v.why };
+      if (v.waiting.length > 0 && ctx.callId !== undefined && ctx.callId !== "") {
+        this.deferredSpawns.set(ctx.callId, { callId: ctx.callId, args, dependsOn });
+        return { ok: true, output: JSON.stringify({ deferred: true, depends_on: dependsOn, waiting_on: v.waiting }) };
+      }
+    }
+    if (this.budgetBlocked()) {
+      return await this.rejectOnBudget();
     }
     // 模型可用性 fail-closed：无 modelFor 且无 M0_API_KEY → 直接拒绝（不造必败 worker）
     const model = this.opts.modelFor ? this.opts.modelFor(args) : undefined;
@@ -501,9 +760,11 @@ export class Orchestrator {
     const requested = isPermissionMode(args.tier) ? args.tier : this.opts.parentMode;
     const { mode: tier, clamped, warning } = clampTier(requested, this.opts.parentMode);
     const maxTurns =
-      typeof args.max_turns === "number" && Number.isInteger(args.max_turns) && args.max_turns >= 1 && args.max_turns <= 200
-        ? args.max_turns
-        : READ_MODE_MAX_TURNS;
+      stageRole?.maxTurns !== undefined
+        ? stageRole.maxTurns
+        : typeof args.max_turns === "number" && Number.isInteger(args.max_turns) && args.max_turns >= 1 && args.max_turns <= 200
+          ? args.max_turns
+          : READ_MODE_MAX_TURNS;
     const resources = parseStringList(args.resources);
 
     // ---- M3b 写租约表（§4.4.5）：resources glob 与活跃 write worker 租约求交 ----
@@ -565,6 +826,17 @@ export class Orchestrator {
       toolStats: {},
       finished: false,
       closed: false,
+      dependsOn,
+      stuckActive: false,
+      paused: false,
+      pauseWaiters: [],
+      stuckTurns: [],
+      stuckCallActions: new Map(),
+      stuckTimer: null,
+      lastActivityAt: Date.now(),
+      ...(stageRole?.roleDefinition !== undefined ? { roleDefinition: stageRole.roleDefinition } : {}),
+      ...(stageRole?.allowedTools !== undefined ? { allowedTools: stageRole.allowedTools } : {}),
+      ...(stageRole?.disallowedTools !== undefined ? { disallowedTools: stageRole.disallowedTools } : {}),
     };
     this.workers.set(agentId, handle);
     agentOwners.set(agentId, this);
@@ -600,6 +872,10 @@ export class Orchestrator {
     }
     for (const w2 of symlinkWarnings) {
       await this.opts.emit({ type: "agent_message", agent_id: agentId, kind: "progress", text: "[worktree] " + w2 } as AgentEvent);
+    }
+    // M3c 插件角色 frontmatter 警告（hooks/mcpServers/permissionMode 忽略 + 警告，§9.6）落 worker 子流
+    for (const w3 of stageRole?.warnings ?? []) {
+      await this.opts.emit({ type: "agent_message", agent_id: agentId, kind: "progress", text: "[role] " + w3 } as AgentEvent);
     }
     void this.runWorker(handle).catch(() => {}); // 失败隔离：worker 边界永不炸主 loop（双保险，runWorker 内已 catch-all）
     return {
@@ -676,11 +952,21 @@ export class Orchestrator {
     return true;
   }
 
-  /** 取消全树（主会话取消沿树全 abort，§4.4.2）。返回实际取消的 agent_id 清单。 */
+  /** 取消全树（主会话取消沿树全 abort，§4.4.2）。返回实际取消的 agent_id 清单。
+   *  M3c：未触发的延迟后环一并撤销（落流可见，不静默）。 */
   cancelAll(): string[] {
     const cancelled: string[] = [];
     for (const w of this.workers.values()) {
       if (!w.finished && this.cancelAgent(w.agentId)) cancelled.push(w.agentId);
+    }
+    for (const [callId] of [...this.deferredSpawns]) {
+      this.deferredSpawns.delete(callId);
+      void this.opts.emit({
+        type: "tool_result",
+        callId,
+        ok: false,
+        output: "[harness] 后环 spawn 撤销（主会话已取消）",
+      } as AgentEvent).catch(() => {});
     }
     this.root.abort();
     return cancelled;
@@ -705,7 +991,365 @@ export class Orchestrator {
     return [...this.pendingApprovals.keys()];
   }
 
-  /** 等待全部 worker 收敛（验收/收口辅助；非事件源，不进生产路径）。 */
+  // ---- M3c：pipeline 哑 sequencer（§4.4.7 V1；零 LLM——展开路径只做解析/拼接/触发，不 import 任何 provider）----
+
+  /** sequencer 状态只读快照（验收断言面；不提供任何变更通道——stages 批准后冻结）。 */
+  pipelineSnapshot(callId: string): PipelineChain | null {
+    return this.chains.get(callId) ?? null;
+  }
+
+  /** pipeline spawn：stages 解析冻结 → 整链一个审批（stages 全表 + 链内租约合并警告）→ 后台逐环 spawn。 */
+  private async spawnPipeline(args: SpawnArgs, ctx: { callId?: string }): Promise<ToolResult> {
+    const parsed = parseStages(args.stages);
+    if (!parsed.ok) return { ok: false, output: "spawn_agent(pipeline): " + parsed.why };
+    const callId = ctx.callId ?? "";
+    if (callId === "") {
+      return { ok: false, output: "spawn_agent(pipeline): 缺 callId（无法挂回整链合成结果）" };
+    }
+    const stages = parsed.stages;
+    // 整链一个审批（§2.2 裁决 2）：批准即授权全链；链内各环写租约在审批卡合并警告
+    const chainResources = parseStringList(args.resources);
+    const conflicts = this.leaseConflicts(chainResources);
+    const reasons = [
+      "pipeline 整链一个审批：批准即授权全部 " + String(stages.length) + " 环（stages 批准后冻结，模型不可增删改）",
+      "stages 全表: " + stages.map((s, i) => String(i + 1) + "." + s.role + "：" + s.task.slice(0, 40)).join(" → "),
+      ...(conflicts.length > 0 ? ["链内写租约相交：" + conflicts.map((c) => c.resource).join("、") + "（合并冲突预测）"] : []),
+    ];
+    const approved = await this.requestChainApproval(callId, reasons);
+    if (!approved) {
+      return { ok: false, output: "spawn_agent(pipeline): 未获批准（整链一个审批，fail-closed）" };
+    }
+    const chain: PipelineChain = {
+      callId,
+      stages,
+      state: stages.map((s, i) => ({ index: i, role: s.role, task: s.task, agentId: null, status: "pending" as const })),
+      status: "running",
+    };
+    this.chains.set(callId, chain);
+    await this.emitSequencerStatus(chain, "链已批准启动：" + String(stages.length) + " 环（" + stages.map((s) => s.role).join(" → ") + "）");
+    void this.runChain(chain).catch(() => {}); // sequencer 边界永不炸主 loop
+    return { ok: true, output: JSON.stringify({ pipeline: true, chain_id: callId, stages: stages.length, stage_roles: stages.map((s) => s.role) }) };
+  }
+
+  /** 整链审批（§4.4.3 与 turn 解耦；agent_id 缺省——链没有 worker 身份，审批以 id 路由）。 */
+  private async requestChainApproval(callId: string, reasons: string[]): Promise<boolean> {
+    const id = "apr-" + String(++this.approvalSeq) + "-pipeline";
+    let resolveOutcome: (r: { approved: boolean }) => void = () => {};
+    const outcomePromise = new Promise<{ approved: boolean }>((resolve) => {
+      resolveOutcome = resolve;
+      const timer = setTimeout(() => {
+        this.pendingApprovals.delete(id);
+        approvalOwners.delete(id);
+        resolveOutcome({ approved: false });
+      }, this.approvalTimeoutMs);
+      this.pendingApprovals.set(id, { agentId: "", resolve: (r) => resolveOutcome({ approved: r.approved }), timer });
+      approvalOwners.set(id, this);
+    });
+    await this.opts.emit({
+      type: "approval_requested",
+      id,
+      tool: "spawn_agent",
+      args_digest: "pipeline 整链审批（stages 批准后冻结）：" + reasons.slice(0, 2).join("；").slice(0, 180),
+      risk: "medium",
+      risk_reasons: reasons,
+    } as AgentEvent);
+    const outcome = await outcomePromise;
+    await this.opts.emit({
+      type: "approval_resolved",
+      id,
+      decision: outcome.approved ? "approved" : "rejected",
+      scope: "once",
+      ...(outcome.approved ? {} : { reason: "pipeline 整链未获批准（fail-closed）" }),
+    } as AgentEvent);
+    return outcome.approved;
+  }
+
+  /** 哑 sequencer 主循环（零 LLM）：逐环 spawn → 等终态 → 报告拼接 → verdict 标注（不重跑）→ 整链终态。 */
+  private async runChain(chain: PipelineChain): Promise<void> {
+    let prevReport = "";
+    let prevAgentId = "";
+    for (let i = 0; i < chain.stages.length; i++) {
+      const stage = chain.stages[i]!;
+      const st = chain.state[i]!;
+      const resolved = this.resolveStageRole(stage.role);
+      if ("error" in resolved) {
+        await this.failChain(chain, "stage " + String(i + 1) + " 角色解析失败：" + resolved.error);
+        return;
+      }
+      const budgetBlock = this.budgetBlocked();
+      if (budgetBlock) {
+        await this.failChain(chain, "成本闸：会话成本超限（maxBudgetUsd），stage " + String(i + 1) + " spawn 被拒");
+        return;
+      }
+      await this.emitSequencerStatus(chain, "stage " + String(i + 1) + "/" + String(chain.stages.length) + "（" + stage.role + "）启动");
+      st.status = "running";
+      const stageCallId = chain.callId + "-s" + String(i + 1);
+      // 前环 agent_result.report 由代码拼进后环 task（[harness] 标注；§4.4.7）
+      const stageTask = i === 0 ? stage.task : concatStageTask(stage.task, prevAgentId, prevReport);
+      const stageArgs: SpawnArgs = {
+        task: stageTask,
+        mode: resolved.mode,
+        ...(i > 0 ? { depends_on: [prevAgentId] } : {}), // depends_on sugar：后环 depends_on 前环（§4.5 预置链）
+        ...(resolved.maxTurns !== undefined ? { max_turns: resolved.maxTurns } : {}),
+        ...(resolved.model !== undefined ? { model: resolved.model } : {}),
+      };
+      const r = await this.spawnStage(stageArgs, { callId: stageCallId }, resolved);
+      if (!r.ok) {
+        await this.failChain(chain, "stage " + String(i + 1) + "（" + stage.role + "）spawn 失败：" + r.output);
+        return;
+      }
+      let agentId = "";
+      try {
+        agentId = (JSON.parse(r.output) as { agent_id?: string }).agent_id ?? "";
+      } catch {
+        agentId = "";
+      }
+      if (agentId === "") {
+        await this.failChain(chain, "stage " + String(i + 1) + " spawn 应答异常（无 agent_id）");
+        return;
+      }
+      st.agentId = agentId;
+      const term = await this.waitForAgentTerminal(agentId);
+      if (term.status !== "done" || term.result === null) {
+        st.status = "failed";
+        await this.failChain(chain, "stage " + String(i + 1) + "（" + stage.role + "，" + agentId + "）终态 " + term.status + " → 整链 failed（各环报告可见）");
+        return;
+      }
+      st.status = "done";
+      const report = term.result.artifacts.report ?? term.result.summary;
+      st.reportPreview = report.slice(0, 160);
+      // gate 环 verdict 标注（V1 只标注不重跑，§4.4.7 范围收敛）
+      if (stage.gate === true || BUILTIN_ROLES[stage.role]?.gate === true) {
+        const verdict = parseVerdict(report);
+        st.verdict = verdict;
+        await this.opts.emit({
+          type: "agent_message",
+          agent_id: agentId,
+          kind: "progress",
+          text: "[sequencer] gate verdict=" + verdict + "（标注落流；V1 不重跑，loopback 随压力测试后再定）",
+        } as AgentEvent);
+      }
+      prevReport = report;
+      prevAgentId = agentId;
+    }
+    chain.status = "done";
+    await this.emitSequencerStatus(chain, "整链 done：\n" + chainTable(chain));
+    await this.opts.emit({
+      type: "tool_result",
+      callId: chain.callId,
+      ok: true,
+      output: "[harness] pipeline 整链 done（sequencer 零 LLM 展开）：\n" + chainTable(chain),
+    } as AgentEvent);
+  }
+
+  /** 整链失败（任一环 failed → 整链 failed；各环报告可见）。 */
+  private async failChain(chain: PipelineChain, reason: string): Promise<void> {
+    chain.status = "failed";
+    chain.reason = reason;
+    for (const st of chain.state) {
+      if (st.status === "pending" || st.status === "running") st.status = "failed";
+    }
+    await this.emitSequencerStatus(chain, "整链 failed：" + reason + "\n" + chainTable(chain));
+    await this.opts.emit({
+      type: "tool_result",
+      callId: chain.callId,
+      ok: false,
+      output: "[harness] pipeline 整链 failed（各环报告可见）：\n" + chainTable(chain) + "\n原因：" + reason,
+    } as AgentEvent);
+  }
+
+  /** sequencer 状态只读呈现（tool_result；§4.4.7「pipeline worker 的 tool_result 里 sequencer 状态只读呈现」）。 */
+  private async emitSequencerStatus(chain: PipelineChain, text: string): Promise<void> {
+    await this.opts.emit({
+      type: "tool_result",
+      callId: "pipeline-" + chain.callId,
+      ok: chain.status !== "failed",
+      output: "[sequencer] （只读状态·模型不可改 §4.4.7）" + text,
+    } as AgentEvent);
+  }
+
+  /** stage 角色解析：内置 implement/review/test；"plugin:agent-name" 形态走 agentRoleFor（§9.6）。 */
+  private resolveStageRole(role: string): StageRoleResolution | { error: string } {
+    const builtin = BUILTIN_ROLES[role];
+    if (builtin) {
+      return { mode: builtin.mode, maxTurns: builtin.maxTurns, roleDefinition: builtin.roleDefinition };
+    }
+    if (role.includes(":")) {
+      const def = this.opts.agentRoleFor ? this.opts.agentRoleFor(role) : null;
+      if (!def) return { error: "插件 agent 角色未注册: " + role + "（agentRoleFor 未命中）" };
+      const mapped = resolvePluginRole(def);
+      return {
+        mode: mapped.mode,
+        ...(mapped.maxTurns !== undefined ? { maxTurns: mapped.maxTurns } : {}),
+        ...(mapped.model !== undefined ? { model: mapped.model } : {}),
+        roleDefinition: mapped.roleDefinition,
+        ...(mapped.tools !== undefined ? { allowedTools: mapped.tools } : {}),
+        ...(mapped.disallowedTools !== undefined ? { disallowedTools: mapped.disallowedTools } : {}),
+        warnings: mapped.warnings,
+      };
+    }
+    return { error: "未知角色: " + role + "（内置 implement|review|test 或 plugin-name:agent-name 形态）" };
+  }
+
+  // ---- M3c：depends_on 事件驱动触发（§4.5：前环 done 自动触发后环 spawn，无轮询调度器）----
+
+  /** worker 终态后解析依赖链：done → 唤醒等待的后环；failed/cancelled → 后环标记 dependency_failed（不静默跳过）。 */
+  private resolveDependents(agentId: string, status: "done" | "failed" | "cancelled"): void {
+    for (const [callId, d] of [...this.deferredSpawns]) {
+      if (!d.dependsOn.includes(agentId)) continue;
+      if (status !== "done") {
+        this.deferredSpawns.delete(callId);
+        void this.opts.emit({
+          type: "tool_result",
+          callId,
+          ok: false,
+          output: "[harness] 后环 spawn 标记 failed（reason=dependency_failed）：前环 " + agentId + " " + status,
+        } as AgentEvent).catch(() => {});
+        continue;
+      }
+      if (d.dependsOn.every((dep) => this.workers.get(dep)?.terminalStatus === "done")) {
+        this.deferredSpawns.delete(callId);
+        void this.triggerDeferredSpawn(d).catch(() => {});
+      }
+    }
+  }
+
+  private async triggerDeferredSpawn(d: { callId: string; args: SpawnArgs; dependsOn: string[] }): Promise<void> {
+    if (this.root.signal.aborted) {
+      await this.opts.emit({
+        type: "tool_result",
+        callId: d.callId,
+        ok: false,
+        output: "[harness] 后环 spawn 撤销（主会话已取消）",
+      } as AgentEvent).catch(() => {});
+      return;
+    }
+    const r = await this.spawn(d.args, { callId: d.callId });
+    if (!r.ok) {
+      const reason = r.output.includes("并发") ? "concurrency_limit" : r.output.includes("[budget]") ? "budget_exceeded" : "dependency_failed";
+      await this.opts.emit({
+        type: "tool_result",
+        callId: d.callId,
+        ok: false,
+        output: "[harness] 后环 spawn 失败（reason=" + reason + "）：" + r.output,
+      } as AgentEvent).catch(() => {});
+    }
+  }
+
+  // ---- M3c：sequencer 与 worker 终态的同步点 ----
+
+  /** 等待指定 agent 终态（sequencer 逐环同步；finishInner 解析）。已终态则立即返回。 */
+  private waitForAgentTerminal(agentId: string): Promise<{ status: string; result: Extract<AgentEvent, { type: "agent_result" }> | null }> {
+    const w = this.workers.get(agentId);
+    if (w && w.finished) {
+      return Promise.resolve({ status: w.terminalStatus ?? "done", result: w.lastResult ?? null });
+    }
+    return new Promise((resolve) => {
+      const list = this.terminalWaiters.get(agentId) ?? [];
+      list.push(resolve);
+      this.terminalWaiters.set(agentId, list);
+    });
+  }
+
+  private resolveTerminalWaiters(agentId: string, status: "done" | "failed" | "cancelled", result: Extract<AgentEvent, { type: "agent_result" }> | null): void {
+    const list = this.terminalWaiters.get(agentId);
+    if (!list) return;
+    this.terminalWaiters.delete(agentId);
+    for (const fn of list) fn({ status, result });
+  }
+
+  // ---- M3c：卡死检测出口（§4.4.8：人决定继续/取消）----
+
+  /** 卡死出口一：用户「继续」= card_action(resume) 清除 stuck 态（worker 在暂停点恢复）。 */
+  resumeAgent(agentId: string): boolean {
+    const w = this.workers.get(agentId);
+    if (!w || !w.stuckActive) return false;
+    w.stuckActive = false;
+    w.paused = false;
+    const waiters = [...w.pauseWaiters];
+    w.pauseWaiters.length = 0;
+    for (const fn of waiters) fn();
+    this.armStuckSilence(w); // 重新武装静默计时
+    void this.opts.emit({ type: "agent_status", agent_id: agentId, status: "running" } as AgentEvent).catch(() => {});
+    return true;
+  }
+
+  /** 卡死暂停闸：stuck 态下在下一事件 append 处阻塞 worker loop（provider 拉取随之暂停）；resume/abort 解除。 */
+  private async stuckGate(w: WorkerHandle): Promise<void> {
+    if (!w.paused) return;
+    await new Promise<void>((resolve) => {
+      const cleanup = (): void => {
+        const idx = w.pauseWaiters.indexOf(done);
+        if (idx >= 0) w.pauseWaiters.splice(idx, 1);
+        w.controller.signal.removeEventListener("abort", onAbort);
+      };
+      const onAbort = (): void => {
+        cleanup();
+        resolve();
+      };
+      const done = (): void => {
+        cleanup();
+        resolve();
+      };
+      w.pauseWaiters.push(done);
+      w.controller.signal.addEventListener("abort", onAbort, { once: true });
+    });
+  }
+
+  /** 心跳 = 子流事件天然时间戳：每次事件刷新静默计时器（不造独立心跳事件，§4.4.8）。 */
+  private armStuckSilence(w: WorkerHandle): void {
+    if (w.stuckTimer !== null) clearTimeout(w.stuckTimer);
+    w.lastActivityAt = Date.now();
+    if (!(this.stuckConf.silenceMs > 0)) return;
+    const t = setTimeout(() => {
+      if (!w.finished && !w.stuckActive && !w.controller.signal.aborted) {
+        void this.triggerStuck(w, "静默超过 " + String(Math.round(this.stuckConf.silenceMs / 1000)) + "s（子流无新事件）").catch(() => {});
+      }
+    }, this.stuckConf.silenceMs);
+    t.unref?.(); // 计时器绝不拽住进程退出（验收脚本 waitAll 后进程必须能自然收束）
+    w.stuckTimer = t;
+  }
+
+  private async triggerStuck(w: WorkerHandle, detail: string): Promise<void> {
+    if (w.stuckActive || w.finished || w.controller.signal.aborted) return;
+    w.stuckActive = true;
+    w.paused = true;
+    await this.opts.emit({ type: "agent_status", agent_id: w.agentId, status: "waiting_input", reason: "stuck" } as AgentEvent);
+    await this.opts.emit({
+      type: "agent_message",
+      agent_id: w.agentId,
+      kind: "progress",
+      text: "[stuck] 疑似卡死：" + detail + "。人决定：继续（resume 清除卡死态）或取消（既有取消链）。worker 已在事件边界暂停。",
+    } as AgentEvent);
+  }
+
+  /** 卡死判定（纯函数消费点）：tool_result 到达后跑检测器；命中 → waiting_input(stuck) + 提醒 + 暂停。 */
+  private async evaluateStuck(w: WorkerHandle): Promise<void> {
+    if (w.stuckActive || w.finished) return;
+    const v = detectStuck(w.stuckTurns, this.stuckConf);
+    if (!v.stuck) return;
+    const detail =
+      v.rule === "same_action_obs_x4"
+        ? "同动作+同观察连续 " + String(v.repeats) + " 轮"
+        : "同动作+报错连续 " + String(v.repeats) + " 轮";
+    await this.triggerStuck(w, "rule=" + v.rule + "（" + detail + "）");
+  }
+
+  /** 卡死窗口记账：tool_call → action 摘要；tool_result → 配对成 StuckTurn（滑动窗口，内存帽）。 */
+  private recordStuckTurn(w: WorkerHandle, e: AgentEvent): void {
+    if (e.type === "tool_call") {
+      w.stuckCallActions.set(e.id, stuckActionOf(e.name, e.args));
+    } else if (e.type === "tool_result") {
+      const action = w.stuckCallActions.get(e.callId);
+      if (action !== undefined) {
+        w.stuckTurns.push({ action, observation: stuckObservationOf(e.output), ok: e.ok });
+        const cap = Math.max(this.stuckConf.windowSize, this.stuckConf.maxActionObsRepeats, this.stuckConf.maxActionErrorRepeats);
+        while (w.stuckTurns.length > cap) w.stuckTurns.shift();
+        w.stuckCallActions.delete(e.callId);
+      }
+    }
+  }
+
   async waitAll(timeoutMs = 30_000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (this.activeCount() > 0 && Date.now() < deadline) {
@@ -718,14 +1362,35 @@ export class Orchestrator {
   private async runWorker(w: WorkerHandle): Promise<void> {
     try {
       const system = await buildWorkerSystemMessages(w, this.opts.workspace); // 记忆注入恒读主 checkout（裁决 2）
-      const table = buildWorkerToolTable(w, this);
-      const specs = workerToolSpecs(w.mode);
+      // M3c：插件角色工具面裁剪（frontmatter.tools 白名单 − disallowedTools；裁剪后必须非空）
+      const baseTable = buildWorkerToolTable(w, this);
+      const table = filterWorkerTable(w, baseTable);
+      const specs = filterWorkerSpecs(w, workerToolSpecs(w.mode));
       const provider = createWorkerProvider({
         readEvents: () => w.events,
         system,
         ...(w.model ? { model: w.model } : {}),
         tools: specs,
         signal: w.controller.signal,
+        // M3c worker 压缩（§7.5）：同一 runCompaction 链路、参数独立（ratio 0.95）、keep_first=task+context
+        //（worker 的 task/context 在 system 块永不被压缩——结构性 keep_first）。
+        ...(this.opts.workerSummarizer || this.opts.workerCompaction
+          ? {
+              compaction: {
+                agentId: w.agentId,
+                config: { ...DEFAULT_COMPACTION_CONFIG, ...WORKER_COMPACTION_CONFIG, ...(this.opts.workerCompaction ?? {}) },
+                ...(this.opts.workerSummarizer ? { summarizer: this.opts.workerSummarizer } : {}),
+                toolsSchemaChars: JSON.stringify(specs).length,
+                onCompaction: async (ev: AgentEvent) => {
+                  await this.opts.emit(ev);
+                },
+                onUsage: (u: { inputTokens: number; outputTokens: number }) => {
+                  w.usage.inputTokens += u.inputTokens;
+                  w.usage.outputTokens += u.outputTokens;
+                },
+              },
+            }
+          : {}),
       });
       // M3b write mode：runLoop 的 workspace = worktree（文件工具 cwd 锁定 + run_shell cwd 同源）——
       // worktree 对 worker 完全可写（§4.4.5）；read worker 维持主 workspace（只读面不变）。
@@ -752,12 +1417,15 @@ export class Orchestrator {
     }
   }
 
-  /** worker 事件管线：装饰 agent_id → 落主流（emit，文本先过输出扫描——密钥不进主转录）
-   *  → 进 worker 内存态（上下文组装源，保持原始事件）。 */
+  /** worker 事件管线：卡死暂停闸 → 装饰 agent_id → 落主流（emit，文本先过输出扫描——密钥不进主转录）
+   *  → 进 worker 内存态（上下文组装源，保持原始事件）。M3c：本管线也是卡死检测的心跳与判定点。 */
   private async workerPipeline(w: WorkerHandle, e: AgentEvent): Promise<void> {
     if (w.controller.signal.aborted) throw new WorkerCancelled();
+    await this.stuckGate(w); // stuck 态：worker 在事件边界暂停（resume/取消解除）
     // 进内存态（原始事件，provider 投影用）
     w.events.push(e);
+    this.armStuckSilence(w); // 心跳 = 子流事件天然时间戳（§4.4.8 不造独立心跳）
+    this.recordStuckTurn(w, e);
     if (e.type === "usage") {
       w.usage.inputTokens += e.inputTokens;
       w.usage.outputTokens += e.outputTokens;
@@ -777,6 +1445,11 @@ export class Orchestrator {
         text: scannedContent.slice(0, 500),
       } as AgentEvent);
     }
+    // M3c 卡死判定：tool_result 到达后跑纯函数检测器（触发 → waiting_input(stuck) + 提醒 + 暂停）
+    if (e.type === "tool_result") {
+      await this.evaluateStuck(w);
+      if (w.controller.signal.aborted) throw new WorkerCancelled();
+    }
   }
 
   /** 终态收束（§4.4.4/§4.4.8）：done/failed 出 agent_result + 合成 tool_result；cancelled 出终止态 + tool_result。
@@ -794,6 +1467,11 @@ export class Orchestrator {
     if (w.finished) return;
     w.finished = true;
     w.closed = false;
+    w.terminalStatus = status;
+    if (w.stuckTimer !== null) {
+      clearTimeout(w.stuckTimer);
+      w.stuckTimer = null;
+    }
     for (const [id, p] of this.pendingApprovals) {
       if (p.agentId === w.agentId) {
         clearTimeout(p.timer);
@@ -810,6 +1488,9 @@ export class Orchestrator {
         ok: false,
         body: { agent_id: w.agentId, status: "cancelled", reason: reason ?? "用户取消" },
       });
+      // M3c：sequencer 同步点 + 依赖链（cancelled 也是依赖失败——后环不静默跳过）
+      this.resolveTerminalWaiters(w.agentId, "cancelled", null);
+      this.resolveDependents(w.agentId, "cancelled");
       agentOwners.delete(w.agentId);
       return;
     }
@@ -844,7 +1525,7 @@ export class Orchestrator {
       await this.opts.emit({ type: "agent_status", agent_id: w.agentId, status: "done", ts } as AgentEvent);
       const filesChanged = diff?.files ?? [];
       const diffRef = w.mode === "write" && w.worktree && w.baseCommit ? w.worktree + "@" + w.baseCommit : undefined;
-      await this.opts.emit({
+      const doneResult: Extract<AgentEvent, { type: "agent_result" }> = {
         type: "agent_result",
         agent_id: w.agentId,
         status: "done",
@@ -857,7 +1538,12 @@ export class Orchestrator {
         },
         usage: { inputTokens: w.usage.inputTokens, outputTokens: w.usage.outputTokens },
         tool_stats: { ...w.toolStats },
-      } as AgentEvent);
+      } as Extract<AgentEvent, { type: "agent_result" }>;
+      await this.opts.emit(doneResult);
+      // M3c：sequencer 同步点 + 依赖链（done 唤醒后环，事件驱动无轮询）
+      w.lastResult = doneResult;
+      this.resolveTerminalWaiters(w.agentId, "done", doneResult);
+      this.resolveDependents(w.agentId, "done");
       await this.emitSyntheticResult(w, {
         ok: true,
         body: {
@@ -878,7 +1564,7 @@ export class Orchestrator {
       if (w.mode === "write") await this.cleanupWrite(w, "failed");
       // failed：错误永不冒充结果——status/reason 分型；max_turns 附 partial 报告（§4.4.8 闸门）
       await this.opts.emit({ type: "agent_status", agent_id: w.agentId, status: "failed", reason, ts } as AgentEvent);
-      await this.opts.emit({
+      const failedResult: Extract<AgentEvent, { type: "agent_result" }> = {
         type: "agent_result",
         agent_id: w.agentId,
         status: "failed",
@@ -888,7 +1574,12 @@ export class Orchestrator {
         artifacts: { report: clipped.text },
         usage: { inputTokens: w.usage.inputTokens, outputTokens: w.usage.outputTokens },
         tool_stats: { ...w.toolStats },
-      } as AgentEvent);
+      } as Extract<AgentEvent, { type: "agent_result" }>;
+      await this.opts.emit(failedResult);
+      // M3c：sequencer 同步点 + 依赖链（failed → 后环 dependency_failed，不静默跳过）
+      w.lastResult = failedResult;
+      this.resolveTerminalWaiters(w.agentId, "failed", failedResult);
+      this.resolveDependents(w.agentId, "failed");
       await this.emitSyntheticResult(w, {
         ok: false,
         body: {
@@ -1148,6 +1839,43 @@ export class Orchestrator {
 
 // ---- 模块级辅助（纯函数为主） ----
 
+/** M3c 插件角色工具面裁剪（执行表）：allowedTools 白名单 ∩ 默认表 − disallowedTools；裁空 → 报错 fail-visible。
+ *  铁律不变：无论怎么裁，spawn_agent/run_shell/merge/commit 根本不在默认表内（深度闸/合并权闸无法被「白名单」放大）。 */
+export function filterWorkerTable(w: Pick<WorkerHandle, "allowedTools" | "disallowedTools" | "agentId">, table: Record<string, Tool>): Record<string, Tool> {
+  const allow = w.allowedTools;
+  const deny = new Set(w.disallowedTools ?? []);
+  if ((allow === undefined || allow.length === 0) && deny.size === 0) return table;
+  const out: Record<string, Tool> = {};
+  for (const [name, tool] of Object.entries(table)) {
+    if (deny.has(name)) continue;
+    if (allow !== undefined && allow.length > 0 && !allow.includes(name)) continue;
+    out[name] = tool;
+  }
+  if (Object.keys(out).length === 0) {
+    throw new Error("worker " + w.agentId + " 工具面裁剪为空（frontmatter.tools 与默认面无交集；fail-visible）");
+  }
+  return out;
+}
+
+/** M3c 插件角色工具面裁剪（模型规格面）：与执行表同一 allow/deny 口径（两面一致，防「规格可见执行不可用」）。 */
+export function filterWorkerSpecs(w: Pick<WorkerHandle, "allowedTools" | "disallowedTools">, specs: GlmToolSpec[]): GlmToolSpec[] {
+  const allow = w.allowedTools;
+  const deny = new Set(w.disallowedTools ?? []);
+  if ((allow === undefined || allow.length === 0) && deny.size === 0) return specs;
+  return specs.filter((s) => !deny.has(s.function.name) && (allow === undefined || allow.length === 0 || allow.includes(s.function.name)));
+}
+
+/** pipeline 链状态表（sequencer 只读呈现 + 整链 tool_result 的正文）。 */
+function chainTable(chain: PipelineChain): string {
+  return chain.state
+    .map((s) => {
+      const verdict = s.verdict !== undefined ? " verdict=" + s.verdict : "";
+      const preview = s.reportPreview !== undefined ? "｜" + s.reportPreview.replace(/\n/g, " ").slice(0, 80) : "";
+      return "#" + String(s.index + 1) + " " + s.role + " " + (s.agentId ?? "（未 spawn）") + " " + s.status + verdict + preview;
+    })
+    .join("\n");
+}
+
 /** 子流装饰：worker 的 tool_call/tool_result/usage 带 agent_id（其余事件类型本体已带）。 */
 function withAgentId(e: AgentEvent, agentId: string): AgentEvent {
   if (e.type === "tool_call" || e.type === "tool_result" || e.type === "usage") {
@@ -1264,9 +1992,11 @@ export function lastAssistantText(events: AgentEvent[]): string | null {
 }
 
 /** worker system 块：纪律 + 任务书（task + context，数据不是指令）+ 两层记忆注入（永不继承主对话；
- *  记忆恒读主 checkout——M3b 裁决 2：项目记忆属于项目不属于 worktree）。 */
+ *  记忆恒读主 checkout——M3b 裁决 2：项目记忆属于项目不属于 worktree）。
+ *  M3c：roleDefinition（内置角色/插件角色）为 system 首块——它在压缩之外（keep_first=task+context 的
+ *  结构性保障，§7.5：压缩只作用于子流事件投影，任务书与角色定义永不进摘要输入）。 */
 export async function buildWorkerSystemMessages(
-  w: { task: string; context: WorkerContext; mode?: "read" | "write" },
+  w: { task: string; context: WorkerContext; mode?: "read" | "write"; roleDefinition?: string },
   workspace: string,
 ): Promise<GlmMessage[]> {
   const { buildMemoryInjection } = await import("./memory/inject");
@@ -1279,7 +2009,11 @@ export async function buildWorkerSystemMessages(
       ? "产出要求：改了什么 / 为什么 / 验证方式 / 风险。不要自行宣布「已合并」（合并由人在 git 面板批准）。"
       : "产出要求：结构化报告——结论 / 证据路径（文件:行号）/ 风险 / 未决问题。",
   );
-  const messages: GlmMessage[] = [{ role: "system", content: w.mode === "write" ? WORKER_WRITE_SYSTEM : WORKER_SYSTEM }];
+  const messages: GlmMessage[] = [];
+  if (w.roleDefinition !== undefined && w.roleDefinition !== "") {
+    messages.push({ role: "system", content: "[role] " + w.roleDefinition });
+  }
+  messages.push({ role: "system", content: w.mode === "write" ? WORKER_WRITE_SYSTEM : WORKER_SYSTEM });
   try {
     const mem = await buildMemoryInjection({ workspace });
     if (mem.project) messages.push({ role: "system", content: mem.project });
@@ -1409,13 +2143,28 @@ function gatedWorkerTool(name: string, inner: Tool, w: WorkerHandle, orch: Orche
   };
 }
 
-/** worker 会话型 provider：忽略 loop 传入 messages，每轮从 worker 内存态事件现拼上下文（sidechat 同构）。 */
+/** worker 会话型 provider：忽略 loop 传入 messages，每轮从 worker 内存态事件现拼上下文（sidechat 同构）。
+ *  M3c：worker 压缩（§7.5）挂在每轮组装前——超阈值走同一 runCompaction 链路（零第二套摘要实现），
+ *  compaction 事件进 worker 内存态（投影生效）+ 落主流（agent_id 归因）+ 摘要 usage 计入该 worker。 */
+export interface WorkerCompactionRuntime {
+  agentId: string;
+  config: CompactionConfig;
+  summarizer?: Summarizer;
+  toolsSchemaChars: number;
+  /** 压缩事件落流口（主流 emit；agent_id 已在事件上）。 */
+  onCompaction: (e: AgentEvent) => Promise<void>;
+  /** 摘要调用 usage 归因（§7.5 计入 usage(agent_id)，§4.4.10 不破例）。 */
+  onUsage: (u: { inputTokens: number; outputTokens: number }) => void;
+}
+
 export function createWorkerProvider(opts: {
   readEvents: () => AgentEvent[];
   system: GlmMessage[];
   model?: WorkerModel;
   tools?: GlmToolSpec[];
   signal?: AbortSignal;
+  /** M3c：worker 压缩运行时（缺省 undefined = 不压缩——既有路径字节不变）。 */
+  compaction?: WorkerCompactionRuntime;
 }): Provider {
   const tools = opts.tools ?? workerToolSpecs();
   return {
@@ -1425,9 +2174,47 @@ export function createWorkerProvider(opts: {
   };
   async function* runOneRound(): AsyncGenerator<ModelOutput> {
     if (opts.signal?.aborted) throw new WorkerCancelled();
+    if (opts.compaction) await maybeCompactWorkerEvents(opts.compaction, opts.readEvents, opts.system);
     const msgs: GlmMessage[] = [...opts.system, ...(projectContext(opts.readEvents()) as GlmMessage[])];
     const model = opts.model ?? defaultWorkerModel;
     yield* model(msgs, tools);
     if (opts.signal?.aborted) throw new WorkerCancelled();
+  }
+}
+
+/** worker 子流压缩（§7.5）：估算（system+工具 schema 全量计入）→ shouldCompact → runCompaction。
+ *  成功：compaction 事件（agent_id 归因）进 worker 内存态 + 落主流；摘要 usage 追加 usage(agent_id) 事件。 */
+async function maybeCompactWorkerEvents(
+  c: WorkerCompactionRuntime,
+  readEvents: () => AgentEvent[],
+  system: GlmMessage[],
+): Promise<void> {
+  const events = readEvents();
+  const factor = calibrateFactor(events);
+  const systemChars = system.reduce((n, m) => n + (m.content?.length ?? 0), 0);
+  const estimate = estimateContextTokens(projectContext(events), { systemChars, toolSchemaChars: c.toolsSchemaChars }, factor);
+  const decision = shouldCompact(estimate, c.config);
+  if (!decision) return;
+  const outcome = await runCompaction({
+    events,
+    trigger: decision.trigger,
+    reason: decision.reason,
+    ...(decision.trigger !== "overflow" && c.summarizer ? { summarizer: c.summarizer } : {}),
+    config: c.config,
+  });
+  if (!outcome.ok) return; // 压缩失败不阻断 worker（下一轮重判；overflow 兜底仍在）
+  // worker 内存态推入**不带 agent_id** 的压缩事件（worker 投影生效，keep_first=task+context 由
+  // system 块结构性保障）；落主流时才加 agent_id 归因（主投影按 agent_id 跳过 worker 压缩事件，
+  // 其 compressed_event_ids 是 worker 内存态序号，对主流照搬会错误摘除主事件——context.isWorkerCompaction）。
+  events.push(outcome.event);
+  await c.onCompaction({ ...outcome.event, agent_id: c.agentId } as AgentEvent);
+  if (outcome.event.usage) {
+    c.onUsage(outcome.event.usage);
+    await c.onCompaction({
+      type: "usage",
+      inputTokens: outcome.event.usage.inputTokens,
+      outputTokens: outcome.event.usage.outputTokens,
+      agent_id: c.agentId,
+    } as AgentEvent);
   }
 }

@@ -1,0 +1,6 @@
+{
+  "name": "pipeline-crew",
+  "description": "M3c 明卷样本：agents/*.md 插件角色被编排采纳（§9.11-4 闭合）",
+  "version": "1.0.0",
+  "author": { "name": "M3c Fixture" }
+}

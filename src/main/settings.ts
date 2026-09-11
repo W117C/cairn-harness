@@ -31,6 +31,10 @@ export interface AppSettings {
   currentSession: string | null;
   /** M2d：会话结束自动沉淀开关（记忆面板/设置页可关，默认开，§8.1.4 双轨）。 */
   autoMemory: boolean;
+  /** M3c §4.4.8：会话级成本闸上限（USD）；0 = off（缺省零行为，不破坏既有门）。 */
+  maxBudgetUsd: number;
+  /** M3c：每百万 token 单价（USD）；0 = 闸无效化（缺省零行为）。 */
+  budgetPricePerMTok: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -44,6 +48,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   theme: "system",
   currentSession: null,
   autoMemory: true,
+  maxBudgetUsd: 0,
+  budgetPricePerMTok: 0,
 };
 
 const PERMISSION_MODES = ["read-only", "default", "auto"] as const;
@@ -79,6 +85,8 @@ export function validateSettings(raw: unknown): AppSettings {
       ? layoutRaw.width
       : d.layout.width;
   const activePanel = isPanelId(layoutRaw.activePanel) ? layoutRaw.activePanel : null;
+  const nonNegNumber = (v: unknown): number | null =>
+    typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
   return {
     layout: { open, activePanel, width },
     mode: PERMISSION_MODES.includes(r.mode as PermissionMode) ? (r.mode as PermissionMode) : d.mode,
@@ -86,6 +94,8 @@ export function validateSettings(raw: unknown): AppSettings {
     theme: THEMES.includes(r.theme as ThemeSetting) ? (r.theme as ThemeSetting) : d.theme,
     currentSession: typeof r.currentSession === "string" && r.currentSession.length > 0 ? r.currentSession : null,
     autoMemory: typeof r.autoMemory === "boolean" ? r.autoMemory : d.autoMemory,
+    maxBudgetUsd: nonNegNumber(r.maxBudgetUsd) ?? d.maxBudgetUsd,
+    budgetPricePerMTok: nonNegNumber(r.budgetPricePerMTok) ?? d.budgetPricePerMTok,
   };
 }
 
@@ -113,7 +123,10 @@ export class SettingsStore {
     const cur = await this.get();
     const next: AppSettings = {
       ...cur,
-      ...("mode" in patch || "safeMode" in patch || "theme" in patch || "currentSession" in patch ? patch : {}),
+      ...("mode" in patch || "safeMode" in patch || "theme" in patch || "currentSession" in patch ||
+        "autoMemory" in patch || "maxBudgetUsd" in patch || "budgetPricePerMTok" in patch
+        ? patch
+        : {}),
       layout: patch.layout
         ? {
             open: patch.layout.open ? { ...cur.layout.open, ...patch.layout.open } : cur.layout.open,
