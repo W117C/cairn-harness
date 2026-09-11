@@ -46,7 +46,7 @@ afterEach(async () => {
 describe("M2f 注册表（各 +1 类 + 未知兜底）", () => {
   it("面板注册表 +1：含 sidechat，且未知 panel_id 仍落兜底", () => {
     expect(KNOWN_PANEL_IDS).toContain("sidechat");
-    expect(KNOWN_PANEL_IDS.length).toBe(6);
+    expect(KNOWN_PANEL_IDS.length).toBe(7); // M3a：+agents
     expect(resolvePanel("sidechat")).not.toBe(FallbackPanel);
     expect(resolvePanel("bogus_m2f")).toBe(FallbackPanel);
     expect(() => resolvePanel("bogus_m2f")({ payload: {} })).not.toThrow();
@@ -54,7 +54,7 @@ describe("M2f 注册表（各 +1 类 + 未知兜底）", () => {
 
   it("卡片注册表 +1：含 promote，且未知 card_type 仍落兜底", () => {
     expect(KNOWN_CARD_TYPES).toContain("promote");
-    expect(KNOWN_CARD_TYPES.length).toBe(9);
+    expect(KNOWN_CARD_TYPES.length).toBe(10); // M3a：+agent_card
     expect(resolveCard("promote")).not.toBe(FallbackCard);
     expect(resolveCard("bogus_m2f_card")).toBe(FallbackCard);
   });

@@ -1,4 +1,5 @@
-// 面板注册表（§10.2）：panel_id → 组件。M1 三类：approvals / token / git；M2d 增 memory。
+// 面板注册表（§10.2）：panel_id → 组件。M1 三类：approvals / token / git；M2d memory、M2e plugins、
+// M2f sidechat、M3a agents（多 agent 状态）。
 // 未知 panel_id 落兜底面板，绝不抛异常（与卡片注册表同构）。
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -8,17 +9,19 @@ import { ApprovalCard } from "../cards/registry";
 import {
   EMPTY_SIDECHAT_USAGE,
   mergeTokenProjections,
+  type AgentColumn,
   type DiffCardProjection,
   type MemoryWriteProjection,
+  type TokenByAgentProjection,
   type TokenKindBreakdown,
   type TokenProjection,
 } from "../projections";
 import type { MemorySnapshot, StateResponse, SidechatPanelSnapshot } from "../../main/ipc-protocol";
 import type { PluginPanelSnapshot } from "../../agent/plugins";
 
-/** M1 面板三类（§10.2 清单的 M1 里程碑行）+ M2d memory + M2e plugins + M2f sidechat；
+/** M1 面板三类（§10.2 清单的 M1 里程碑行）+ M2d memory + M2e plugins + M2f sidechat + M3a agents；
  *  与 main/settings 的 PANEL_IDS 同源字符串。 */
-export type PanelId = "approvals" | "token" | "git" | "memory" | "plugins" | "sidechat";
+export type PanelId = "approvals" | "token" | "git" | "memory" | "plugins" | "sidechat" | "agents";
 
 export interface PanelProps {
   /** 当前会话事件流投影载荷（各面板字段可选）。 */
@@ -41,11 +44,15 @@ export interface PanelProps {
     plugins?: PluginPanelSnapshot;
     /** M2f sidechat：辅助对话快照（缺省由面板自行 getState 拉取）。 */
     sidechat?: SidechatPanelSnapshot;
+    /** M3a agents：每 worker 一列（agent 子流事件投影）。 */
+    agents?: AgentColumn[];
+    /** M3a token：usage 按 agent 分解（§4.4.10，总量 = main + Σworker）。 */
+    tokensByAgent?: TokenByAgentProjection;
     /** 全部事件数（面板头展示）。 */
     eventCount?: number;
   };
-  /** 面板动作（compact 等），宿主接线。 */
-  onAction?: (action: string) => void;
+  /** 面板动作（compact / agent_cancel 等），宿主接线。 */
+  onAction?: (action: string, data?: unknown) => void;
 }
 export type PanelComponent = (props: PanelProps) => ReactElement;
 
@@ -145,6 +152,26 @@ export function TokenPanel({ payload, onAction }: PanelProps): ReactElement {
           <div className="text-xs text-muted-foreground">
             压缩次数：主会话 {mainKind?.compactionCount ?? 0} · 辅助对话 {sideKind?.compactionCount ?? 0}
           </div>
+          {payload.tokensByAgent && payload.tokensByAgent.agents.length > 0 && (
+            <div className="rounded-md border px-3 py-2 text-xs" data-m3a-token-byagent="">
+              <div className="mb-1 font-medium text-muted-foreground">按 agent 分解（§4.4.10）</div>
+              {payload.tokensByAgent.agents.map((a) => (
+                <div key={a.agent_id} className="flex items-center justify-between gap-2" data-m3a-token-agent={a.agent_id}>
+                  <span className="font-mono">{a.agent_id}</span>
+                  <span className="font-mono">
+                    {a.inputTokens} in / {a.outputTokens} out · 合计 <span className="font-semibold">{a.totalTokens}</span>
+                  </span>
+                </div>
+              ))}
+              <div className="mt-1 flex items-center justify-between gap-2 border-t pt-1">
+                <span>会话总量（main + Σworker）</span>
+                <span className="font-mono font-semibold">{payload.tokensByAgent.totalTokens}</span>
+              </div>
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                worker usage 独立归因，不并入主 loop 分解；总量 = 主 loop + 全部 worker 合计。
+              </div>
+            </div>
+          )}
           {t.suggestNewSession && (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
               已压缩 {t.compactionCount} 次，建议开新会话（上下文准确性衰减）。
@@ -591,6 +618,113 @@ function PluginsPanel({ payload }: PanelProps): ReactElement {
   );
 }
 
+/** M3a agents 面板（§10.2 / §4.4.8）：每 worker 一列 = 状态徽标 + 当前动作/子流最近事件 +
+ *  cost_so_far（usage 投影）+ 时长 + 血缘分组（spawn@#事件号）+ 待批徽标 + 取消/查看报告动作。
+ *  数据 100% 来自 agent 子流事件投影（payload.agents），零事件流外私有状态（§3.1 判据）。 */
+function statusBadge(status: AgentColumn["status"]): ReactElement {
+  if (status === "running") return <Badge variant="secondary">running</Badge>;
+  if (status === "waiting_approval") return <Badge variant="destructive">waiting_approval</Badge>;
+  if (status === "waiting_input") return <Badge variant="destructive">waiting_input</Badge>;
+  if (status === "done") return <Badge variant="default">done</Badge>;
+  if (status === "failed") return <Badge variant="destructive">failed</Badge>;
+  return <Badge variant="outline">cancelled</Badge>;
+}
+
+export function AgentsPanel({ payload, onAction }: PanelProps): ReactElement {
+  const agents = payload.agents ?? [];
+  const active = agents.filter((a) => a.status === "running" || a.status === "waiting_approval" || a.status === "waiting_input").length;
+  const pending = agents.filter((a) => a.pendingApproval !== null).length;
+  const canCancel = typeof window !== "undefined" && typeof window.agent?.cardAction === "function";
+  // 血缘分组树（parent_event_id → 组）：同一次派生的兄弟 worker 折进同组（M3a 深度恒 1，组 = 单父）
+  const groups = new Map<number, AgentColumn[]>();
+  for (const a of agents) {
+    const list = groups.get(a.parent_event_id) ?? [];
+    list.push(a);
+    groups.set(a.parent_event_id, list);
+  }
+  return (
+    <div className="space-y-2 p-3" data-m3a-agents-panel="">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <Badge variant={active > 0 ? "default" : "outline"}>活跃 {active}</Badge>
+        {pending > 0 && <Badge variant="destructive">待批 {pending}</Badge>}
+        <span className="text-muted-foreground">agent 子流事件投影 · 零私有状态</span>
+      </div>
+      {agents.length === 0 && <div className="text-sm text-muted-foreground">（本会话还没有 worker）</div>}
+      {[...groups.entries()].map(([parentEventId, cols]) => (
+        <div key={String(parentEventId)} className="space-y-2 border-l-2 pl-2" data-m3a-agent-group={String(parentEventId)}>
+          <div className="font-mono text-[11px] text-muted-foreground">spawn@#{String(parentEventId)}</div>
+          {cols.map((a) => (
+            <Card key={a.agent_id} size="sm" data-m3a-agent={a.agent_id}>
+              <CardHeader className="px-3 py-2">
+                <CardTitle className="flex flex-wrap items-center gap-1.5 text-sm">
+                  <span className="font-mono">{a.agent_id}</span>
+                  <Badge variant="outline">{a.mode}</Badge>
+                  {statusBadge(a.status)}
+                  <Badge variant="outline" className="font-mono text-[10px]">{a.permission_mode}</Badge>
+                  {a.durationMs !== null && (
+                    <span className="font-mono text-[10px] text-muted-foreground">{(a.durationMs / 1000).toFixed(1)}s</span>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1 px-3 pb-2 text-xs">
+                {a.task !== "" && <div className="line-clamp-2 text-muted-foreground">{a.task}</div>}
+                {a.tier_warning && (
+                  <div className="rounded border border-amber-500/40 bg-amber-500/5 px-2 py-1 text-amber-700 dark:text-amber-400" data-m3a-tier-warning="">
+                    ⚠ {a.tier_warning}
+                  </div>
+                )}
+                {a.pendingApproval && (
+                  <div className="flex items-center gap-1.5 rounded border border-amber-500/40 bg-amber-500/5 px-2 py-1" data-m3a-agent-pending={a.pendingApproval.id}>
+                    <Badge variant="destructive">待批</Badge>
+                    <span className="font-mono">{a.pendingApproval.tool}</span>
+                    <span className="text-muted-foreground">risk: {a.pendingApproval.risk}</span>
+                  </div>
+                )}
+                {a.reason && <div className="text-muted-foreground">原因：{a.reason}</div>}
+                {a.recent.length > 0 && (
+                  <div className="space-y-0.5 font-mono text-[11px] text-muted-foreground" data-m3a-agent-recent={a.agent_id}>
+                    {a.recent.map((r, i) => (
+                      <div key={String(i)} className="truncate">{r}</div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                  <span data-m3a-agent-cost={a.agent_id}>
+                    cost_so_far: {a.usage.inputTokens} in / {a.usage.outputTokens} out
+                  </span>
+                  {Object.keys(a.toolStats).length > 0 && (
+                    <span className="font-mono">
+                      {Object.entries(a.toolStats).map(([k, v]) => k + "×" + String(v)).join(" ")}
+                    </span>
+                  )}
+                </div>
+                {a.report && (
+                  <details data-m3a-agent-report={a.agent_id}>
+                    <summary className="cursor-pointer text-muted-foreground">查看报告</summary>
+                    <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-2 font-mono text-[11px]">{a.report}</pre>
+                  </details>
+                )}
+                {(a.status === "running" || a.status === "waiting_approval" || a.status === "waiting_input") && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!canCancel}
+                    title="取消该 worker（AbortController 树：单 worker abort 只中止该 worker）"
+                    data-m3a-agent-cancel={a.agent_id}
+                    onClick={() => onAction?.("agent_cancel", { agentId: a.agent_id })}
+                  >
+                    取消
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const REGISTRY: Record<string, PanelComponent> = {
   approvals: ApprovalsPanel,
   token: TokenPanel,
@@ -598,6 +732,7 @@ const REGISTRY: Record<string, PanelComponent> = {
   memory: MemoryPanel,
   plugins: PluginsPanel,
   sidechat: SidechatPanel, // M2f：辅助对话（只读旁路）
+  agents: AgentsPanel, // M3a：多 agent 状态（每 worker 一列）
 };
 
 export const KNOWN_PANEL_IDS = Object.keys(REGISTRY);

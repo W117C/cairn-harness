@@ -6,9 +6,9 @@ import { FallbackPanel, KNOWN_PANEL_IDS, resolvePanel } from "../src/renderer/pa
 import { projectDiffCards, projectMemoryWrites, projectTokenUsage, pendingApprovals } from "../src/renderer/projections";
 import type { AgentEvent } from "../src/events";
 
-describe("面板注册表（M1e + M2d memory + M2e plugins + M2f sidechat）", () => {
-  it("注册表含六类（approvals / token / git / memory / plugins / sidechat），全部为组件", () => {
-    expect([...KNOWN_PANEL_IDS].sort()).toEqual(["approvals", "git", "memory", "plugins", "sidechat", "token"]);
+describe("面板注册表（M1e + M2d memory + M2e plugins + M2f sidechat + M3a agents）", () => {
+  it("注册表含七类（approvals / token / git / memory / plugins / sidechat / agents），全部为组件", () => {
+    expect([...KNOWN_PANEL_IDS].sort()).toEqual(["agents", "approvals", "git", "memory", "plugins", "sidechat", "token"]);
     for (const id of KNOWN_PANEL_IDS) {
       expect(typeof resolvePanel(id)).toBe("function");
       expect(resolvePanel(id)).not.toBe(FallbackPanel);

@@ -1,10 +1,12 @@
 // 卡片注册表：card_type → 组件。M1a 落 approval / diff / report / usage_summary 四类，
-// M1b 增 clarify_form / plan / verify_result 三类（三门），外壳用现有 shadcn 组件；
+// M1b 增 clarify_form / plan / verify_result 三类（三门），M2f compaction/promote，
+// M3a agent_card（多 agent 指挥卡：steer/cancel/open_report）；外壳用现有 shadcn 组件；
 // 未知 card_type 落兜底卡，绝不抛异常。
 // （文件用 .tsx 后缀：卡片组件含 JSX，.ts 无法编译。）
 import type { ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AgentCard } from "./agent-card";
 import { ClarifyFormCard } from "./clarify-form";
 import { CompactionCard } from "./compaction-card";
 import { PlanCard } from "./plan";
@@ -115,6 +117,7 @@ const REGISTRY: Record<string, CardComponent> = {
   verify_result: VerifyResultCard,
   compaction: CompactionCard,
   promote: PromoteCard, // M2f：sidechat 结论提升卡（可跳回源消息）
+  agent_card: AgentCard as unknown as CardComponent, // M3a：多 agent 指挥卡（steer/cancel/open_report）
 };
 
 export const KNOWN_CARD_TYPES = Object.keys(REGISTRY);

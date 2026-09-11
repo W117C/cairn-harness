@@ -39,7 +39,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
-import { GitBranch, Coins, ShieldCheck, Database, Puzzle, MessageSquarePlus, Settings as SettingsIcon, Plus, Pencil, Trash2, X } from "lucide-react";
+import { GitBranch, Coins, ShieldCheck, Database, Puzzle, MessageSquarePlus, Bot, Settings as SettingsIcon, Plus, Pencil, Trash2, X } from "lucide-react";
 import { resolveCard } from "./cards/registry";
 import { compactionCardPayload } from "../agent/compaction";
 import { securityReportCardPayload } from "../agent/security/scan";
@@ -53,6 +53,7 @@ import {
   tokenProjectionOf,
   type TimelineItem,
 } from "./store";
+import { projectAgentPanel, projectTokenUsageByAgent, type AgentColumn } from "./projections";
 import { resolvePanel, type PanelId } from "./panels/registry";
 import type { AgentEvent, ClarifyAnswerMap } from "../events";
 import type {
@@ -81,6 +82,7 @@ const PANEL_ICONS: Record<PanelId, React.ReactNode> = {
   memory: <Database className="h-4 w-4" />,
   plugins: <Puzzle className="h-4 w-4" />,
   sidechat: <MessageSquarePlus className="h-4 w-4" />,
+  agents: <Bot className="h-4 w-4" />,
 };
 
 function short(v: unknown, max = 260): string {
@@ -124,10 +126,12 @@ function EventView({
   e,
   onAction,
   planStatuses,
+  agentCols,
 }: {
   e: AgentEvent;
   onAction: (action: string, data: unknown) => void;
   planStatuses: Record<string, "approved" | "rejected">;
+  agentCols: Record<string, AgentColumn>;
 }) {
   if (e.type === "clarify_requested") {
     const Card = resolveCard("clarify_form");
@@ -175,6 +179,94 @@ function EventView({
     const Card = resolveCard("report");
     return <Card payload={securityReportCardPayload(e)} />;
   }
+  // ---- M3a：agent 子流 / 审批协议事件的对话流渲染（状态由 agentCols 投影注入，零私有状态）----
+  if (e.type === "agent_spawned") {
+    const Card = resolveCard("agent_card");
+    const col = agentCols[e.agent_id];
+    return (
+      <Card
+        payload={{
+          type: "agent_card",
+          agent_id: e.agent_id,
+          mode: e.mode,
+          task: e.task,
+          status: col?.status ?? "running",
+          reason: col?.reason,
+          permission_mode: e.permission_mode,
+          tier_warning: e.tier_warning,
+          usage: col ? { inputTokens: col.usage.inputTokens, outputTokens: col.usage.outputTokens } : undefined,
+          pendingApproval: col?.pendingApproval !== null && col?.pendingApproval !== undefined ? true : undefined,
+          report: col?.report,
+        }}
+        onAction={onAction}
+      />
+    );
+  }
+  if (e.type === "agent_status") {
+    return (
+      <ToolRow>
+        <span className="font-semibold text-foreground">🤖 {e.agent_id}</span>
+        <Badge variant={e.status === "done" ? "secondary" : e.status === "running" ? "outline" : "destructive"}>{e.status}</Badge>
+        {e.reason !== undefined && <span className="text-muted-foreground">{e.reason}</span>}
+      </ToolRow>
+    );
+  }
+  if (e.type === "agent_message") {
+    if (e.kind === "report") {
+      const Card = resolveCard("report");
+      return <Card payload={{ type: "report", title: "worker 报告 · " + e.agent_id, body: e.text }} />;
+    }
+    return (
+      <ToolRow>
+        <span className="font-semibold text-foreground">🤖 {e.agent_id}</span>
+        <span className="whitespace-pre-wrap text-muted-foreground">{short(e.text, 300)}</span>
+      </ToolRow>
+    );
+  }
+  if (e.type === "agent_result") {
+    const Card = resolveCard("report");
+    const body = [
+      "status: " + e.status + (e.reason !== undefined ? "（" + e.reason + "）" : ""),
+      "usage: " + String(e.usage.inputTokens) + " in / " + String(e.usage.outputTokens) + " out",
+      "tool_stats: " + JSON.stringify(e.tool_stats),
+      "",
+      e.summary,
+    ].join("\n");
+    return <Card payload={{ type: "report", title: "agent_result · " + e.agent_id + "（父上下文唯一接收物）", body }} />;
+  }
+  if (e.type === "approval_requested") {
+    return (
+      <div className="flex justify-start">
+        <div className="flex max-w-[90%] flex-col gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/5 px-2.5 py-2 text-sm">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge className="border-amber-500/60 bg-amber-500/15 text-amber-700 dark:text-amber-400" variant="outline">worker 审批</Badge>
+            {e.agent_id !== undefined && <span className="font-mono text-xs">{e.agent_id}</span>}
+            <span className="font-mono text-xs">{e.tool}</span>
+            <Badge variant="outline">risk: {e.risk}</Badge>
+          </div>
+          <div className="max-w-full truncate font-mono text-xs text-muted-foreground">{e.args_digest}</div>
+          {e.tier_warning !== undefined && <div className="text-xs text-amber-700 dark:text-amber-400">⚠ {e.tier_warning}</div>}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => onAction("worker_approval", { approvalId: e.id, approved: true, agentId: e.agent_id })}>批准（本次）</Button>
+            <Button size="sm" variant="outline" onClick={() => onAction("worker_approval", { approvalId: e.id, approved: true, agentId: e.agent_id, scope: "session_kind" })}>本会话此类放行</Button>
+            <Button size="sm" variant="outline" onClick={() => onAction("worker_approval", { approvalId: e.id, approved: false, agentId: e.agent_id })}>拒绝</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (e.type === "approval_resolved") {
+    return (
+      <ToolRow>
+        <Badge variant={e.decision === "approved" ? "secondary" : "destructive"}>{e.decision === "approved" ? "已批准" : "已拒绝"}</Badge>
+        <span className="font-mono text-xs">{e.id}</span>
+        <span className="text-muted-foreground">scope: {e.scope}{e.reason !== undefined ? " · " + e.reason : ""}</span>
+      </ToolRow>
+    );
+  }
+  if (e.type === "card_action") {
+    return null; // 回写动作本身不渲染（决议状态由对应卡的 resolved 投影呈现）
+  }
   if (e.type === "user_message") {
     // M2f：带 origin 的 user_message = sidechat 提升结论 → promote 卡（源消息徽标由 origin 反向投影）
     if (e.origin) {
@@ -189,6 +281,7 @@ function EventView({
   if (e.type === "tool_call") {
     return (
       <ToolRow>
+        {e.agent_id !== undefined && <Badge variant="outline" className="font-mono text-[10px]">🤖 {e.agent_id}</Badge>}
         <span className="font-semibold text-foreground">🔧 {e.name}</span>
         <span className="text-muted-foreground">{short(e.args)}</span>
       </ToolRow>
@@ -197,6 +290,7 @@ function EventView({
   if (e.type === "tool_result") {
     return (
       <ToolRow>
+        {e.agent_id !== undefined && <Badge variant="outline" className="font-mono text-[10px]">🤖 {e.agent_id}</Badge>}
         <span className={e.ok ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
           {e.ok ? "✓" : "✗"}
         </span>
@@ -383,6 +477,10 @@ function App() {
   const tokens = useMemo(() => tokenProjectionOf(state), [state]);
   const diffs = useMemo(() => diffCardsOf(state), [state]);
   const pending = useMemo(() => pendingApprovalsOf(state), [state]);
+  // M3a：agents 面板/agent 卡的投影源（agent 子流事件，零私有状态）+ usage 按 agent 分解
+  const agentCols = useMemo(() => projectAgentPanel(state.events), [state]);
+  const agentColsById = useMemo(() => Object.fromEntries(agentCols.map((a) => [a.agent_id, a])), [agentCols]);
+  const tokensByAgent = useMemo(() => projectTokenUsageByAgent(state.events), [state]);
 
   const patchSettings = (patch: Partial<AppSettings>): void => {
     if (!settings) return;
@@ -529,6 +627,33 @@ function App() {
       if (d && Array.isArray(d.sourceEventIds)) {
         void window.agent.sidechatState?.(d.sessionId).catch(() => {});
       }
+    } else if (action === "agent_cancel") {
+      // M3a：agents 面板/agent 卡取消钮 → card_action(cancel, target_agent_id) → AbortController 树
+      const d = data as { agentId: string };
+      const col = agentColsById[d.agentId];
+      void window.agent
+        .cardAction({
+          cardId: "agent_card:" + d.agentId,
+          sourceEventId: col?.parent_event_id ?? 0,
+          cardType: "agent_card",
+          action: "cancel",
+          targetAgentId: d.agentId,
+        })
+        .catch(() => {});
+    } else if (action === "worker_approval") {
+      // M3a：worker 审批卡（approval_requested）决议 → card_action(approval) → 审批协议解耦应答
+      const d = data as { approvalId: string; approved: boolean; agentId?: string; scope?: "once" | "session_kind" | "always" };
+      void window.agent
+        .cardAction({
+          cardId: "approval:" + d.approvalId,
+          sourceEventId: 0,
+          cardType: "approval",
+          action: d.approved ? "approve" : "reject",
+          payload: { approval_id: d.approvalId },
+          scope: d.scope ?? "once",
+          targetAgentId: d.agentId,
+        })
+        .catch(() => {});
     }
   };
 
@@ -543,12 +668,15 @@ function App() {
     memoryWrites: memoryWritesOf(state),
     // M2f sidechat 面板自行经 getState 拉取最新快照（不在此透传启动期旧值，避免不刷新）
     eventCount: state.events.length,
+    // M3a：多 agent 面板列 + token 按 agent 分解（纯事件流投影）
+    agents: agentCols,
+    tokensByAgent,
   };
   const activePanelId = settings?.layout.activePanel ?? null;
   const ActivePanel = activePanelId ? resolvePanel(activePanelId) : null;
 
   const renderTimelineItem = (it: TimelineItem): React.ReactNode => {
-    if (it.kind === "event") return <EventView e={it.e} onAction={onCardAction} planStatuses={planStatuses} />;
+    if (it.kind === "event") return <EventView e={it.e} onAction={onCardAction} planStatuses={planStatuses} agentCols={agentColsById} />;
     if (it.kind === "stream") return <AssistantBubble content={it.text} running={state.running} />;
     return <AskView it={it} onDecide={decide} />;
   };
@@ -753,8 +881,9 @@ function App() {
                 {ActivePanel && (
                   <ActivePanel
                     payload={panelPayload}
-                    onAction={(action) => {
+                    onAction={(action: string, data?: unknown) => {
                       if (action === "compact") void window.agent.compact?.();
+                      else if (action === "agent_cancel") onCardAction("agent_cancel", data);
                     }}
                   />
                 )}

@@ -61,6 +61,8 @@ export function projectTokenUsageByKind(sources: { kind: SessionKind; events: Ag
     let kComp = 0;
     for (const e of src.events) {
       if (e.type === "usage") {
+        // M3a §4.4.10：带 agent_id 的 usage 归属 worker 分解，不并入会话 kind 桶（归因不重复计）
+        if ("agent_id" in e && typeof e.agent_id === "string" && e.agent_id !== "") continue;
         kIn += e.inputTokens;
         kOut += e.outputTokens;
         kUsage++;
@@ -218,4 +220,178 @@ export function projectMemoryWrites(events: AgentEvent[]): MemoryWriteProjection
       output: r ? r.output : "",
     };
   });
+}
+
+// ---- M3a §4.4.10：usage 按 agent 分解（纯投影；总量 = main + Σworker） ----
+
+export interface AgentTokenBreakdown {
+  agent_id: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  usageCount: number;
+}
+
+export interface TokenByAgentProjection {
+  /** 主 loop 口径（不带 agent_id 的 usage）。 */
+  main: { inputTokens: number; outputTokens: number; totalTokens: number; usageCount: number };
+  agents: AgentTokenBreakdown[];
+  /** 会话总量 = main + Σworker（独立口径聚合，§4.4.10）。 */
+  totalTokens: number;
+}
+
+export function projectTokenUsageByAgent(events: AgentEvent[]): TokenByAgentProjection {
+  const main = { inputTokens: 0, outputTokens: 0, usageCount: 0 };
+  const byAgent = new Map<string, AgentTokenBreakdown>();
+  for (const e of events) {
+    if (e.type !== "usage") continue;
+    const agentId = "agent_id" in e && typeof e.agent_id === "string" ? e.agent_id : "";
+    if (agentId === "") {
+      main.inputTokens += e.inputTokens;
+      main.outputTokens += e.outputTokens;
+      main.usageCount++;
+      continue;
+    }
+    const cur = byAgent.get(agentId) ?? { agent_id: agentId, inputTokens: 0, outputTokens: 0, totalTokens: 0, usageCount: 0 };
+    cur.inputTokens += e.inputTokens;
+    cur.outputTokens += e.outputTokens;
+    cur.totalTokens = cur.inputTokens + cur.outputTokens;
+    cur.usageCount++;
+    byAgent.set(agentId, cur);
+  }
+  const agents = [...byAgent.values()];
+  const agentsTotal = agents.reduce((n, a) => n + a.totalTokens, 0);
+  return {
+    main: { ...main, totalTokens: main.inputTokens + main.outputTokens },
+    agents,
+    totalTokens: main.inputTokens + main.outputTokens + agentsTotal,
+  };
+}
+
+// ---- M3a §10.2 agents 面板投影（每 worker 一列，零事件流外私有状态） ----
+
+export type AgentPanelStatus = "running" | "waiting_approval" | "waiting_input" | "done" | "failed" | "cancelled";
+
+export interface AgentColumn {
+  agent_id: string;
+  mode: string;
+  task: string;
+  /** 血缘：spawn tool_call 的主流事件 id（分组树键）。 */
+  parent_event_id: number;
+  permission_mode: string;
+  tier_warning?: string;
+  max_turns: number;
+  status: AgentPanelStatus;
+  reason?: string;
+  /** 子流最近事件（compact 行，≤3 条）。 */
+  recent: string[];
+  /** 该 agent 的 usage 合计（usage 事件投影）。 */
+  usage: { inputTokens: number; outputTokens: number };
+  /** 工具调用计数（tool_stats 投影）。 */
+  toolStats: Record<string, number>;
+  /** 待批审批（approval_requested 无对应 resolved）。 */
+  pendingApproval: { id: string; tool: string; risk: string } | null;
+  /** 终态报告（agent_result.summary / artifacts.report）。 */
+  report?: string;
+  statusFailed?: boolean;
+  /** 时长（ms；ts 纯事件投影：spawn.ts → 终态 ts；未终态为 null）。 */
+  durationMs: number | null;
+  startedTs?: number;
+}
+
+export function projectAgentPanel(events: AgentEvent[]): AgentColumn[] {
+  interface Acc {
+    col: AgentColumn;
+    resolved: Set<string>;
+    lastResult?: Extract<AgentEvent, { type: "agent_result" }>;
+  }
+  const order: string[] = [];
+  const acc = new Map<string, Acc>();
+  const get = (agentId: string): Acc => {
+    const existing = acc.get(agentId);
+    if (existing) return existing;
+    // agent_status 等先于 agent_spawned 到达（理论不可达）时容错建列
+    const fresh: Acc = {
+      col: {
+        agent_id: agentId,
+        mode: "?",
+        task: "",
+        parent_event_id: 0,
+        permission_mode: "?",
+        max_turns: 0,
+        status: "running",
+        recent: [],
+        usage: { inputTokens: 0, outputTokens: 0 },
+        toolStats: {},
+        pendingApproval: null,
+        durationMs: null,
+      },
+      resolved: new Set<string>(),
+    };
+    acc.set(agentId, fresh);
+    order.push(agentId);
+    return fresh;
+  };
+  for (const e of events) {
+    if (e.type === "agent_spawned") {
+      const a = get(e.agent_id);
+      a.col = {
+        ...a.col,
+        agent_id: e.agent_id,
+        mode: e.mode,
+        task: e.task,
+        parent_event_id: e.parent_event_id,
+        permission_mode: e.permission_mode,
+        ...(e.tier_warning ? { tier_warning: e.tier_warning } : {}),
+        max_turns: e.max_turns,
+        startedTs: e.ts,
+      };
+    } else if (e.type === "agent_status") {
+      const a = get(e.agent_id);
+      a.col = {
+        ...a.col,
+        status: e.status,
+        ...(e.reason !== undefined ? { reason: e.reason } : {}),
+        ...(e.ts !== undefined && (e.status === "done" || e.status === "failed" || e.status === "cancelled") && a.col.startedTs !== undefined
+          ? { durationMs: e.ts - a.col.startedTs }
+          : {}),
+      };
+    } else if (e.type === "agent_message") {
+      const a = get(e.agent_id);
+      a.col.recent = [...a.col.recent, (e.kind === "report" ? "[报告] " : "[进展] ") + e.text.slice(0, 120)].slice(-3);
+    } else if (e.type === "tool_call" && typeof e.agent_id === "string" && e.agent_id !== "") {
+      const a = get(e.agent_id);
+      a.col.recent = [...a.col.recent, "🔧 " + e.name].slice(-3);
+      a.col.toolStats = { ...a.col.toolStats, [e.name]: (a.col.toolStats[e.name] ?? 0) + 1 };
+    } else if (e.type === "usage" && typeof e.agent_id === "string" && e.agent_id !== "") {
+      const a = get(e.agent_id);
+      a.col.usage = {
+        inputTokens: a.col.usage.inputTokens + e.inputTokens,
+        outputTokens: a.col.usage.outputTokens + e.outputTokens,
+      };
+    } else if (e.type === "approval_requested" && typeof e.agent_id === "string" && e.agent_id !== "") {
+      const a = get(e.agent_id);
+      a.col.pendingApproval = { id: e.id, tool: e.tool, risk: e.risk };
+      a.col.status = "waiting_approval";
+    } else if (e.type === "approval_resolved" && typeof e.agent_id === "string" && e.agent_id !== "") {
+      const a = get(e.agent_id);
+      a.resolved.add(e.id);
+      a.col.pendingApproval = null;
+      if (e.decision === "approved") a.col.status = "running";
+    } else if (e.type === "agent_result") {
+      const a = get(e.agent_id);
+      a.lastResult = e;
+      a.col = {
+        ...a.col,
+        ...(e.summary !== "" ? { report: e.summary } : {}),
+        statusFailed: e.status === "failed",
+        ...(e.reason !== undefined ? { reason: e.reason } : {}),
+      };
+    }
+  }
+  // 待批审批以 resolved 集复核（resolved 可能后于 status 更新）
+  for (const a of acc.values()) {
+    if (a.col.pendingApproval && a.resolved.has(a.col.pendingApproval.id)) a.col.pendingApproval = null;
+  }
+  return order.map((id) => acc.get(id)!.col);
 }
