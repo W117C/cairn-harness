@@ -2,7 +2,7 @@
 // M1e：settings 存储（布局/档位/主题，app data）+ 会话目录（JSONL 即会话）+ 审批徽标注入通道。
 // 沙箱不可用 → 降级为无沙箱 + 写工具强制审批（agent-runner 内），renderer 以常驻警示条提示。
 import { writeFile } from "node:fs/promises";
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, safeStorage } from "electron";
 import { join } from "node:path";
 import {
   handleAgentDecide,
@@ -17,6 +17,7 @@ import {
   handleSessionOpen,
   handleSessionRename,
   handleMemoryDelete,
+  handlePluginDecide,
   handleSidechatCreate,
   handleSidechatAsk,
   handleSidechatPromote,
@@ -31,6 +32,7 @@ import {
   setAppHooks,
 } from "./agent-runner";
 import type { AppSettings, RunRequest } from "./ipc-protocol";
+import { installSafeStorageBackend } from "../agent/plugins/secrets";
 
 let win: BrowserWindow | null = null;
 
@@ -148,7 +150,10 @@ ipcMain.handle("agent:sessions-rename", (_event, oldId: string, newName: string)
 ipcMain.handle("agent:sessions-delete", (_event, id: string) => handleSessionDelete(id));
 // M2d：记忆删除（仅用户经记忆面板；模型无删除权）。preload 暴露待白名单轮接线（M1d compact 同款先例）。
 ipcMain.handle("agent:memory-delete", (_event, scope: "project" | "global", topic: string) => handleMemoryDelete(scope, topic));
-// M2f：辅助对话（sidechat）+ /promote。主进程通道就绪；preload 暴露待白名单轮接线（同款先例）。
+// M2e：插件信任卡决议（M2g 补挂：此前 handlePluginDecide 已就绪但**从未注册**通道——
+// 即「主进程就绪、preload 未接线」的背面还有一层「连 handler 都没挂」。本轮一并清账。）
+ipcMain.handle("plugin:decide", (_event, plugin: string, trusted: boolean) => handlePluginDecide(plugin, trusted));
+// M2f：辅助对话（sidechat）+ /promote。M2g 起 preload 已接线，通道可用。
 ipcMain.handle("agent:sidechat-create", (_event, parentSessionId: string, name?: string) => handleSidechatCreate(parentSessionId, name));
 ipcMain.handle("agent:sidechat-ask", (_event, sidechatId: string, message: string, parentSessionId?: string) =>
   handleSidechatAsk(sidechatId, message, parentSessionId !== undefined ? { parentSessionId } : {}),
@@ -168,6 +173,17 @@ void app.whenReady().then(async () => {
   initSessionsDir(process.env.M1E_SESSIONS_DIR ?? join(app.getPath("userData"), "sessions"));
   // M2d：全局记忆层 = 应用数据目录下的 memory/（可配 M2D_MEMORY_HOME，测试用临时目录）
   initMemoryHome(process.env.M2D_MEMORY_HOME ?? join(app.getPath("userData"), "memory"));
+  // M2g §9.11-2：插件 userConfig 的 sensitive 值走 safeStorage（平台原生加密）。
+  // 不可用时**不注入后端** → putPluginSecret 走 fail-closed 拒存（绝不静默退回明文）。
+  const secretsOk = installSafeStorageBackend(
+    {
+      isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+      encryptString: (s: string) => safeStorage.encryptString(s),
+      decryptString: (b: Buffer) => safeStorage.decryptString(b),
+    },
+    join(app.getPath("userData"), "plugin-secrets.json"),
+  );
+  if (!secretsOk) console.warn("[secrets] safeStorage 不可用 → 插件敏感配置拒存（fail-closed）");
   await initSandbox(); // 先自检沙箱，renderer 首帧 getState 即拿到结论
   createWindow();
   app.on("activate", () => {

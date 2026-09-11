@@ -39,6 +39,25 @@ const api: AgentApi = {
   openSession: (id: string) => ipcRenderer.invoke("agent:sessions-open", id),
   renameSession: (oldId: string, newName: string) => ipcRenderer.invoke("agent:sessions-rename", oldId, newName),
   deleteSession: (id: string) => ipcRenderer.invoke("agent:sessions-delete", id),
+  // ---- M2g 任务 4：preload 清账（三条历史欠账 + sidechat 四通道一次性接通）----
+  // M2d 遗留：记忆删除（仅用户经记忆面板；模型无删除权 §8.1.7）
+  deleteMemory: (scope: "project" | "global", topic: string) =>
+    ipcRenderer.invoke("agent:memory-delete", scope, topic),
+  // M2e 遗留：插件信任卡决议（未信任不激活）
+  pluginDecide: (plugin: string, trusted: boolean) =>
+    ipcRenderer.invoke("plugin:decide", plugin, trusted),
+  // M2f 遗留：辅助对话（sidechat）+ /promote
+  sidechatCreate: (parentSessionId: string, name?: string) =>
+    ipcRenderer.invoke("agent:sidechat-create", parentSessionId, name),
+  sidechatAsk: (sidechatId: string, message: string, parentSessionId?: string) =>
+    ipcRenderer.invoke("agent:sidechat-ask", sidechatId, message, parentSessionId),
+  sidechatPromote: (req: {
+    sidechatId: string;
+    parentSessionId: string;
+    sourceEventIds: number[];
+    note?: string;
+  }) => ipcRenderer.invoke("agent:sidechat-promote", req),
+  sidechatState: (parentSessionId?: string) => ipcRenderer.invoke("agent:sidechat-state", parentSessionId),
 };
 
 contextBridge.exposeInMainWorld("agent", api);
