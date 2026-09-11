@@ -1,4 +1,7 @@
 {"type":"tool_call","id":"s1","name":"glob","args":{"pattern":"**/*.ts"}}
+{"type":"usage","inputTokens":90,"outputTokens":60}
 {"type":"tool_call","id":"s2","name":"grep","args":{"pattern":"function","path":"src"}}
+{"type":"usage","inputTokens":70,"outputTokens":40}
 {"type":"tool_call","id":"s3","name":"read_file","args":{"path":"src/todo.ts"}}
+{"type":"usage","inputTokens":50,"outputTokens":30}
 {"type":"assistant_message","content":"## 结论\n- 慢速只读调研（演示通道）：todo-app 的源码面很小，统计入口集中在 src/todo.ts。\n\n## 证据路径\n- src/todo.ts\n\n## 风险\n- 无。\n\n## 未决问题\n- 无。"}
