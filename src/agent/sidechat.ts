@@ -140,6 +140,7 @@ function renderProjectionLine(e: AgentEvent): string | null {
     case "approval_requested":
     case "approval_resolved":
     case "card_action":
+    case "diff_comment":
       return null;
   }
 }

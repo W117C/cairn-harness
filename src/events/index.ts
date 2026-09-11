@@ -92,7 +92,7 @@ export interface CompactionEvent {
 // findings 走严格 schema；被审内容是数据不是指令；报告进事件流前过输出扫描（密钥脱敏）。
 export type SecuritySeverity = "low" | "medium" | "high" | "critical";
 export type SecurityConfidence = "low" | "medium" | "high";
-/** 危险 API 六类 + 密钥类（密钥非「危险 API」，单列以便验收计数）。 */
+/** 危险 API 六类 + 密钥类（密钥非「危险 API」，单列以便验收计数）+ M3b LLM 审查类。 */
 export type SecurityCategory =
   | "secret"
   | "eval"
@@ -100,20 +100,23 @@ export type SecurityCategory =
   | "weak_random"
   | "command_injection"
   | "sql_injection"
-  | "path_traversal";
+  | "path_traversal"
+  | "llm_review";
 
 export interface SecurityFinding {
-  /** 规则 id（稳定可审计）。 */
+  /** 规则 id（稳定可审计；M3b LLM findings 用 llm.<序号>）。 */
   ruleId: string;
   category: SecurityCategory;
   severity: SecuritySeverity;
   /** 命中文件（workspace 相对）。 */
   path: string;
-  /** 行号（1-based，落在变更集内）。 */
+  /** 行号（1-based，落在变更集内；M3b write worker 路径 = 相对最终文件的绝对行号，§11.6/M2f 裁决 6）。 */
   line: number;
   title: string;
   description: string;
   confidence: SecurityConfidence;
+  /** M3b：修复建议（LLM 两段流水产出；静态快筛缺省）。 */
+  suggestion?: string;
 }
 
 /** 变更集条目（从事件流写动作重建：write_file 的 content / edit_file 的 new_string）。
@@ -126,12 +129,17 @@ export interface SecurityChangeRef {
 
 export interface SecurityReportEvent {
   type: "security_report";
-  mode: "report";
+  /** M2f 主会话验证门后 report；M3b write worker diff 快照（mode=gate 供合并卡红标判定，report 只标不拦）。 */
+  mode: "report" | "gate";
   findings: SecurityFinding[];
   changeSet: SecurityChangeRef[];
   summary: { total: number; bySeverity: Record<SecuritySeverity, number>; byCategory: Record<string, number> };
   /** 扫描时间（ISO 串；缺省 = 未标注）。 */
   scannedAt?: string;
+  /** M3b：write worker 归因（面板合并卡按 agent 取最新一份报告）。 */
+  agent_id?: string;
+  /** M3b：LLM 第二段是否执行（false/缺省 = 静态快筛 only 或 off）。 */
+  llm_reviewed?: boolean;
 }
 
 // ---- M3a 多 agent 编排（§3.4 / §4.4）：agent 子流事件 + 审批事件协议 ----
@@ -157,6 +165,10 @@ export interface AgentSpawnedEvent {
   resources?: string[];
   /** 依赖链（M3a 仅解析存档，事件驱动链接 M3c）。 */
   depends_on?: string[];
+  /** M3b write mode：worktree 主 checkout 根相对路径（.agents/wt-<agent_id>）。 */
+  worktree?: string;
+  /** M3b write mode：spawn 时主 checkout HEAD（diff 与合并的对比基线）。 */
+  base_commit?: string;
   model?: string;
   max_turns: number;
   /** worker 有效权限档（§11.7.6 单调继承：worker ≤ 父，越界裁到父档）。 */
@@ -195,7 +207,7 @@ export interface AgentResultEvent {
   /** ≤2000 token，超限类型化裁剪（summary_truncated = true + 尾部截断提示）。 */
   summary: string;
   summary_truncated?: boolean;
-  artifacts: { report?: string; files_changed?: string[] };
+  artifacts: { report?: string; files_changed?: string[]; /** M3b write mode：diff 出处引用（worktree 路径@base_commit）；diff 本体只进 git 面板（§4.4.4）。 */ diff_ref?: string };
   usage: { inputTokens: number; outputTokens: number };
   tool_stats: Record<string, number>;
 }
@@ -237,6 +249,19 @@ export interface CardActionEvent {
   target_agent_id?: string;
 }
 
+/** M3b 评审闭环（§3.4 / §4.5）：diff 卡行级评论 → 定向 user_message 注入该 worker 子流 → 修正 → diff 卡 v2。
+ *  评论回传不挂 turn、走事件流协议（与 card_action 同族）。 */
+export interface DiffCommentEvent {
+  type: "diff_comment";
+  agent_id: string;
+  /** 评论落点文件（workspace 相对）。 */
+  path: string;
+  /** 行号（1-based，diff 卡行级定位）。 */
+  line: number;
+  body: string;
+  ts?: number;
+}
+
 export type AgentEvent =
   | UserMessageEvent
   | AssistantMessageEvent
@@ -257,7 +282,8 @@ export type AgentEvent =
   | AgentResultEvent
   | ApprovalRequestedEvent
   | ApprovalResolvedEvent
-  | CardActionEvent;
+  | CardActionEvent
+  | DiffCommentEvent;
 
 const KNOWN_TYPES = new Set([
   "user_message",
@@ -280,6 +306,7 @@ const KNOWN_TYPES = new Set([
   "approval_requested",
   "approval_resolved",
   "card_action",
+  "diff_comment",
 ]);
 
 export interface EventLog {

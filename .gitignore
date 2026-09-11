@@ -7,3 +7,6 @@ out/
 # 靶子源码是运行产物：每个消费方（e2e/ipc/gate/autonomy/compaction 与相关测试）都从
 # fixtures/mock/todo-bug.ts 重置它，跑完留下的状态不该进 git。
 fixtures/todo-app/src/todo.ts
+
+# M3b：write worker worktree（.agents/wt-<agent_id>，合并控制塔管理）
+.agents/

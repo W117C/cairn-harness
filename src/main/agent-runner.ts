@@ -85,12 +85,19 @@ import {
   Orchestrator,
   orchestratorForAgent,
   orchestratorForApproval,
+  orchestratorForMerge,
   loadWorkerScript,
   scriptedWorkerModel,
   type SpawnArgs,
   type WorkerModel,
 } from "../agent/orchestrator";
 import { buildSecurityReport } from "../agent/security/scan";
+import {
+  listWorktreeDirs,
+  orphanWorktrees,
+  cleanOrphanWorktree,
+  type WorktreeCleanupResult,
+} from "../agent/worktree";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const WORKSPACE = join(ROOT, "fixtures", "todo-app");
@@ -402,6 +409,15 @@ export async function runSecurityReportHook(
 // 最近一次会话日志路径：/compact 缺省压缩对象（UI 单窗口单任务，与 session 同生命周期语义）。
 let lastLogPath: string | null = null;
 
+/** M3b：产出代码安全模式解析（编排器与验收脚本共用口径）：显式 env 优先，缺省读设置页（默认 report）。 */
+export async function resolveSafeMode(): Promise<"off" | "report" | "gate"> {
+  const env = process.env.M1E_SAFE_MODE;
+  if (env === "off" || env === "report" || env === "gate") return env;
+  if (env !== undefined) delete process.env.M1E_SAFE_MODE; // 非法值清除（fail-visible 于下一次 get）
+  const safeMode = (await store().get()).safeMode;
+  return safeMode === "off" || safeMode === "gate" ? safeMode : "report";
+}
+
 /** IPC "agent:compact" 的处理函数：手动 /compact 入口（preload 暴露待追认，见 BLOCKED.md）。 */
 export async function handleCompact(
   over: { logPath?: string } = {},
@@ -581,6 +597,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       workspace: opts.workspace,
       parentMode: opts.mode,
       emit: pipeline,
+      safeMode: await resolveSafeMode(), // M3b §11.6：off 不跑 / report 只标 / gate 红标 + 二次确认
       ...(demoModelFor ? { modelFor: demoModelFor } : {}),
     });
     activeOrchestrator = orchestrator;
@@ -813,6 +830,38 @@ export async function handleCardAction(req: CardActionRequest): Promise<{ ok: bo
     ...(req.targetAgentId ? { target_agent_id: req.targetAgentId } : {}),
   };
   await emit(event);
+  // ---- M3b：合并控制塔 + 评审闭环（diff 卡动作经同一 card_action 协议；合并唯一出口 = git 面板，§4.3）----
+  if (req.action === "merge" && req.targetAgentId && (req.cardType === "diff" || req.cardType === "merge_tower")) {
+    const owner = orchestratorForMerge(req.targetAgentId);
+    if (!owner) return { ok: false, error: "该 agent 无合并控制塔归属（未知或 worktree 已收尾）: " + req.targetAgentId };
+    return await owner.mergeWorker(req.targetAgentId, { force: req.payload?.force === true });
+  }
+  if (req.action === "reject" && req.targetAgentId && (req.cardType === "diff" || req.cardType === "merge_tower")) {
+    const owner = orchestratorForMerge(req.targetAgentId);
+    if (!owner) return { ok: false, error: "该 agent 无合并控制塔归属（未知或 worktree 已收尾）: " + req.targetAgentId };
+    return await owner.rejectWorker(req.targetAgentId, { keepBranch: req.payload?.keep_branch === true });
+  }
+  if (req.action === "comment" && req.targetAgentId && req.cardType === "diff") {
+    const owner = orchestratorForAgent(req.targetAgentId) ?? orchestratorForMerge(req.targetAgentId);
+    if (!owner) return { ok: false, error: "该 agent 无归属编排器: " + req.targetAgentId };
+    const path = typeof req.payload?.path === "string" ? req.payload.path : "";
+    const line = typeof req.payload?.line === "number" ? req.payload.line : Number(req.payload?.line);
+    const body = typeof req.payload?.body === "string" ? req.payload.body : "";
+    if (path === "" || !Number.isInteger(line) || (line as number) < 1 || body.trim() === "") {
+      return { ok: false, error: "comment 需要 payload{path, line>=1, body 非空}" };
+    }
+    // diff_comment 落流（§3.4 新事件）→ 定向 user_message 注入 worker 子流（评审闭环；评论回传不挂 turn）
+    await emit({ type: "diff_comment", agent_id: req.targetAgentId, path, line: line as number, body, ts: Date.now() } as AgentEvent);
+    const r = await owner.injectComment(req.targetAgentId, path, line as number, body);
+    return r.ok ? { ok: true } : { ok: false, error: r.error };
+  }
+  if (req.action === "clean" && req.cardType === "orphan") {
+    const name = typeof req.payload?.name === "string" ? req.payload.name : "";
+    if (name === "" || !/^[A-Za-z0-9_-]+$/.test(name)) return { ok: false, error: "orphan clean 需要 payload{name（wt- 后的 agent_id）}" };
+    const ws = lastWorkspace ?? WORKSPACE;
+    const r: WorktreeCleanupResult = await cleanOrphanWorktree(ws, name);
+    return r.removed ? { ok: true } : { ok: false, error: "孤儿 worktree 清理失败：" + (r.error ?? "未知") };
+  }
   if (approvalId !== null) {
     const owner = orchestratorForApproval(approvalId);
     if (!owner) return { ok: false, error: "审批发起编排器已不可达（fail-closed）" };
@@ -884,7 +933,7 @@ async function memorySnapshot(): Promise<MemorySnapshot> {
 }
 
 /** IPC "agent:state" 的处理函数。 */
-export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memory?: MemorySnapshot; plugins?: PluginPanelSnapshot; sidechat?: SidechatPanelSnapshot }> {
+export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memory?: MemorySnapshot; plugins?: PluginPanelSnapshot; sidechat?: SidechatPanelSnapshot; worktree?: { orphans: string[] } }> {
   let memory: MemorySnapshot | undefined;
   try {
     memory = await memorySnapshot();
@@ -904,7 +953,26 @@ export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memo
   } catch {
     sidechat = undefined;
   }
-  return { sandbox: sandboxState, memory, plugins, sidechat };
+  // M3b 孤儿 worktree 扫描（§4.4.9：启动/会话重开语义 = state 拉取时现算；只列不自动删）
+  let worktree: { orphans: string[] } | undefined;
+  try {
+    worktree = { orphans: await scanOrphanWorktrees() };
+  } catch {
+    worktree = undefined;
+  }
+  return { sandbox: sandboxState, memory, plugins, sidechat, worktree };
+}
+
+/** M3b 孤儿 worktree 扫描（纯投影面）：.agents/wt-* 目录 − 事件流有终态/收尾记录的 agent。 */
+export async function scanOrphanWorktrees(workspace?: string): Promise<string[]> {
+  const ws = workspace ?? lastWorkspace ?? WORKSPACE;
+  const dirs = await listWorktreeDirs(ws);
+  if (dirs.length === 0) return [];
+  const events = lastLogPath ? await replay(lastLogPath).catch(() => []) : [];
+  return orphanWorktrees(
+    dirs,
+    events.map((e) => e as { type: string; agent_id?: string; status?: string; callId?: string }),
+  );
 }
 
 /** M2e run 装配与 M2g 运行间隙决议共用的插件运行时配置（信任文件路径的单一事实源在 PluginRuntime.load）。 */

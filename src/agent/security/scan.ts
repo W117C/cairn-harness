@@ -192,7 +192,7 @@ export const DANGER_RULES: readonly {
 
 const SEVERITIES: readonly string[] = ["low", "medium", "high", "critical"];
 const CONFIDENCES: readonly string[] = ["low", "medium", "high"];
-const CATEGORIES: readonly string[] = ["secret", ...DANGER_CATEGORIES];
+const CATEGORIES: readonly string[] = ["secret", ...DANGER_CATEGORIES, "llm_review"];
 
 /** 严格 schema 校验：字段齐全、类型正确、枚举合法、行号 ≥1。 */
 export function validateFinding(f: unknown): f is SecurityFinding {
@@ -287,6 +287,68 @@ export function scanChangeSet(entries: ChangeSetEntry[], opts: ScanOptions = {})
     });
   }
   return out;
+}
+
+// ---- M3b：write worker 路径的 findings 绝对行号（M2f 裁决 6 移交项：写前快照定位）----
+
+/**
+ * 把变更集相对行号映射为相对最终文件的绝对行号（1-based）。
+ * scanChangeSet 的行号是**条目内相对**（1-based），且 finding 本身不带 (op,path) 归属——
+ * 本函数按条目独立重扫定位每条 finding 的条目归属（scanChangeSet 确定性：按条目序拼接），再换算：
+ * - write op：整文件重写 → 绝对行号 = 条目内行号（该 write 为该 path 最终态时精确）。
+ * - edit op：写前快照锚点（old_string 首字符在改前文件中的 1-based 行号）→ 绝对行号 = 锚点 + 相对偏移。
+ * anchors 键 = path（edit 调用序），值 = 每次编辑的锚点行号；锚点缺失（快照失败等）降级为相对行号。
+ * 纯函数：security-check 既有「行号相对变更集」断言路径不受影响（本函数只被 write worker 路径调用）。
+ */
+export function mapFindingsToAbsolute(
+  entries: ChangeSetEntry[],
+  findings: SecurityFinding[],
+  anchors: Map<string, number[]>,
+): SecurityFinding[] {
+  if (findings.length === 0) return findings;
+  // 每条目独立扫描 → 得出各条目产出的 finding 数（顺序切分全局 findings）
+  const counts = entries.map((e) => scanChangeSet([e]).length);
+  const out: SecurityFinding[] = [];
+  const editIdxByPath = new Map<string, number>();
+  let fi = 0;
+  for (let ei = 0; ei < entries.length; ei++) {
+    const entry = entries[ei]!;
+    for (let k = 0; k < counts[ei]!; k++) {
+      const f = findings[fi++]!;
+      let abs = f.line;
+      if (entry.op !== "write") {
+        const idx = editIdxByPath.get(entry.path) ?? 0;
+        const anchor = anchors.get(entry.path)?.[idx];
+        if (anchor !== undefined) abs = anchor + f.line - 1;
+        editIdxByPath.set(entry.path, idx + 1);
+      }
+      out.push({ ...f, line: abs });
+    }
+  }
+  while (fi < findings.length) out.push(findings[fi++]!); // 外部额外 findings 原样保留
+  return out;
+}
+
+// ---- M3b：LLM findings 第二遍 FP 过滤 pass（§11.6：DoS/限流/无影响面的输入校验类默认降级）----
+
+const FP_PATTERN = /(dos|拒绝服务|限流|rate[_ -]?limit|输入校验|input validation|缺少校验|未校验输入)/i;
+
+/** FP 过滤（纯函数）：命中 FP 模式且无影响面证据（未提及可利用/凭据/RCE 等实词）→ 降级 low + note。
+ *  静态快筛 findings 不做降级（词法命中本身就是影响面证据）；本 pass 只作用于 LLM findings。 */
+export function filterFalsePositives(findings: SecurityFinding[]): SecurityFinding[] {
+  return findings.map((f) => {
+    if (f.severity === "low" || f.severity === "medium") return f;
+    const text = f.title + " " + f.description;
+    const hasImpactEvidence = /(凭据|密钥|secret|rce|代码执行|注入|越权|privilege|deserializ|eval)/i.test(text);
+    if (FP_PATTERN.test(text) && !hasImpactEvidence) {
+      return {
+        ...f,
+        severity: "low",
+        description: f.description + "（FP 过滤 pass：DoS/限流/无影响面的输入校验类，默认降级为 low）",
+      };
+    }
+    return f;
+  });
 }
 
 // ---- 输出扫描（进事件流 / 进主上下文前的脱敏）----

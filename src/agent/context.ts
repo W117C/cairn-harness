@@ -81,7 +81,8 @@ export function projectContext(
     if ("agent_id" in e && typeof e.agent_id === "string" && e.agent_id !== "") return;
     if (
       e.type === "agent_spawned" || e.type === "agent_status" || e.type === "agent_message" ||
-      e.type === "approval_requested" || e.type === "approval_resolved" || e.type === "card_action"
+      e.type === "approval_requested" || e.type === "approval_resolved" || e.type === "card_action" ||
+      e.type === "diff_comment"
     ) {
       return; // 编排/审批协议事件：语义在面板与卡片侧，模型上下文不需要（与 clarify/plan 同口径）
     }
