@@ -433,7 +433,12 @@ async function darkBox(): Promise<void> {
     const connected = await rt.connectMcp().then(() => true, () => false);
     await rt.shutdown().catch(() => {});
     if (connected && rt.mcpTools.size > 0) {
-      assert(true, "F8 远程 MCP 连接成功，工具以 scoped 名进注册表");
+      const names = [...rt.mcpTools.keys()];
+      assert(
+        names.length > 0 && names.every((n) => /^mcp__plugin_testdino_/.test(n)),
+        "F8 远程 MCP 连接成功，工具以 scoped 名进注册表",
+        "工具 " + String(names.length) + " 个：" + names.slice(0, 5).join(","),
+      );
     } else {
       unverified.push("§9.11-2 testdino 远程 http MCP 实际连接：mcp.testdino.com 返回 401（需凭据）→ 未证；已证的只是配置解析 + scoped 名过权限门（F4–F7）");
       console.log("  ⚠️  F8 远程 MCP 实际连接未证（401 需凭据）——已证项见 F4–F7");

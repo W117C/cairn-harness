@@ -86,7 +86,7 @@ export function scanAssertionHealth(file: string, src: string): ScanHit[] {
   const hits: ScanHit[] = [];
   const lines = src.split("\n");
   lines.forEach((raw, i) => {
-    const line = raw.replace(/\/\/.*$/, ""); // 去行注释，避免注释里的示例误伤
+    const line = raw.replace(/\/\*.*?\*\//g, "").replace(/\/\/.*$/, ""); // 去注释（行内块注释 + 行注释），避免注释/文档串里的示例误伤
     if (EMPTY_ASSERT.test(line)) hits.push({ file, line: i + 1, kind: "empty-assert", text: raw.trim() });
     else if (TAUTOLOGY.test(line)) hits.push({ file, line: i + 1, kind: "tautology", text: raw.trim() });
   });
@@ -148,7 +148,7 @@ async function main(): Promise<void> {
   let scanHits: ScanHit[] = [];
   if (!noScan) {
     console.log("");
-    console.log("== 恒真式体检（空断言 / || true / 暗卷段零断言）==");
+    console.log("== 恒真式体检（空断言 / 恒真式 / 暗卷段零断言）==");
     scanHits = await scanAll();
     if (scanHits.length === 0) console.log("  ✅ 零命中");
     else for (const h of scanHits) console.log("  ❌ " + h.file + ":" + String(h.line) + " [" + h.kind + "] " + h.text);
