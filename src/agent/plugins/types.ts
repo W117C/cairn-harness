@@ -3,6 +3,8 @@
 // 命名空间（§9.3）：skill/prompt = /plugin-name:skill-name；agent 角色 = plugin-name:agent-name；
 // MCP 工具 = mcp__plugin_<plugin>_<server>__<tool>；hook matcher 匹配插件 MCP 工具必须写 scoped 形态。
 
+import type { UserConfigField } from "./manifest";
+
 export type PluginScope = "user" | "project" | "loose";
 
 export type HookEventName =
@@ -85,6 +87,8 @@ export interface DiscoveredPlugin {
   lsp: Record<string, LspServerConfig>;
   /** 未知顶层 manifest 字段（只警告不阻断）。 */
   unknownFields: string[];
+  /** M2g：userConfig 敏感字段（值入 safeStorage，不落明文；§9.11-2）。 */
+  userConfigFields: UserConfigField[];
   /** 解析期错误（单插件失败隔离：坏 manifest/坏 hook JSON 只影响自身）。 */
   errors: string[];
   /** 解析期警告（未知字段 / bare matcher / transport: socket 等）。 */

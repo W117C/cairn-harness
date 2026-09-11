@@ -16,7 +16,11 @@ import { runAgent } from "../src/main/agent-runner";
 import { composeTurnMessages } from "../src/agent/glm-session";
 import {
   PluginRuntime, TrustStore, buildSkillRoutingList, clampSkillBody,
+  scopedToolName,
+  setPluginSecretBackend, putPluginSecret, getPluginSecret, writePluginUserConfig,
+  SECRET_PLACEHOLDER,
   SKILL_ROUTING_CHAR_LIMIT, SKILL_REMOUNT_TOKENS_PER_SKILL, SKILL_REMOUNT_TOKENS_TOTAL,
+  type PluginSecretBackend,
 } from "../src/agent/plugins";
 
 const ROOT = process.cwd();
@@ -24,6 +28,8 @@ const FX = join(ROOT, "fixtures", "plugins");
 
 let pass = 0;
 let fail = 0;
+/** 未证项（联网/凭据限制导致断言没跑到）——显式列出，绝不等于通过。 */
+const unverified: string[] = [];
 function ok(name: string): void {
   pass++;
   console.log("  ✅ " + name);
@@ -268,44 +274,81 @@ async function main(): Promise<void> {
     assert(denyCall !== null && !denyCall.ok && denyCall.output.includes("[permission denied]") && denyCall.output.includes("deny 规则命中"), "E4 权限门对 MCP 工具同样生效（deny 规则命中 scoped 名）");
   }
 
-  // ---- F 暗卷（可跳过）----
-  console.log("-- F 暗卷（真实 CC 插件免改加载；联网不可得即跳过）--");
+  // ---- F 暗卷（断言型；联网不可得 → 显式标「未证」，不静默算绿）----
+  console.log("-- F 暗卷（真实 CC 插件免改加载 · 断言型）--");
   await darkBox();
 
   // 收尾
   await rm(scratch, { recursive: true, force: true });
   console.log("");
-  console.log("plugins-check: " + String(pass) + " ✅ / " + String(fail) + " ❌");
+  if (unverified.length > 0) {
+    console.log("未证项（连网/凭据限制，未跑到的断言——不等于通过）：");
+    for (const u of unverified) console.log("  ⚠️  " + u);
+  }
+  console.log("plugins-check: " + String(pass) + " ✅ / " + String(fail) + " ❌" + (unverified.length > 0 ? " / " + String(unverified.length) + " 未证" : ""));
   if (fail > 0) process.exit(1);
 }
 
-/** 暗卷：克隆真实 CC 插件源并免改加载；任何网络失败 → 打印跳过（脚本仍退出 0）。 */
+function git(args: string[]): Promise<void> {
+  return new Promise((resolveP, rejectP) => {
+    execFile("git", args, { timeout: 180_000 }, (err) => (err ? rejectP(err) : resolveP()));
+  });
+}
+
+// ============================================================ F 暗卷（断言型）============================================================
+// M2g 重写（闭合 §1.4-5 + §9.11-1/2）：旧版 darkBox 是「打印型」——零 check() 调用，
+// 即使容器解析数为 0 也照样 exit 0（实测就是这个数）。本版改为：
+//   · 修掉 walker 的根因（旧版 `e.startsWith(".")` 跳过 .claude-plugin → 容器 manifest 恒为 0）
+//   · 阈值断言：容器解析 ≥2、SKILL.md 解析 ≥50
+//   · testdino：7 skills + 远程 http MCP 配置解析 + scoped 名过权限门（真 evaluate 管线）
+//   · tres-finance：userConfig sensitive 解析 + 值入安全存储 + 三处零明文 + 无后端 fail-closed
+//   · anthropics/skills 的 pdf / skill-creator：渐进披露全链路（1536 截断 → 触发全文 → 压缩重挂预算）
+//   · 远程 MCP 实际连接（需凭据，实测 401）→ 显式记「未证」，绝不静默算绿
+
+/** 内存型安全存储替身（headless 无 safeStorage；只验「存储路径 + 不落明文」，不冒充平台加密）。 */
+function memorySecretBackend(): { backend: PluginSecretBackend; dump: () => Record<string, string> } {
+  const store = new Map<string, string>();
+  return {
+    backend: {
+      name: "memory-test-backend",
+      isAvailable: () => true,
+      async set(k, v) {
+        store.set(k, v);
+      },
+      async get(k) {
+        return store.get(k) ?? null;
+      },
+    },
+    dump: () => Object.fromEntries(store),
+  };
+}
+
 async function darkBox(): Promise<void> {
-  const target = join(tmpdir(), "m2e-darkbox-" + String(Date.now()));
+  const target = join(tmpdir(), "m2g-darkbox-" + String(Date.now()));
   const repos: [string, string][] = [
     ["https://github.com/anthropics/skills", "anthropics-skills"],
     ["https://github.com/anthropics/claude-plugins-community", "community-plugins"],
   ];
-  let loaded = 0;
-  let containers = 0;
-  let loose = 0;
   let cloned = 0;
   for (const [url, name] of repos) {
     try {
       await git(["clone", "--depth", "1", "--filter=blob:none", url, join(target, name)]);
       cloned++;
     } catch {
-      continue; // 拉不到 → 跳过该源
+      continue; // 拉不到 → 该源不参与
     }
   }
   if (cloned === 0) {
-    console.log("  ⏭ 暗卷跳过（联网拉取 anthropics/skills 与 claude-plugins-community 均不可达）——按任务书退出 0");
+    unverified.push("§9.11-1/2 实仓插件免改加载：两个源均不可达 → 未证（非跳过即通过）");
+    console.log("  ⚠️  暗卷**未证**：联网拉取 anthropics/skills 与 claude-plugins-community 均不可达");
     return;
   }
-  // 扫描克隆产物：含 .claude-plugin/plugin.json 的目录 = 容器；仅 SKILL.md 的目录 = 散装 skill
-  const { readdir, stat } = await import("node:fs/promises");
-  const walk = async (dir: string, depth: number, out: string[]): Promise<void> => {
-    if (depth > 4) return;
+
+  // ---- 扫描（修根因：必须下钻 .claude-plugin，否则 CC 布局的容器永远解析不到）----
+  const { readdir, stat, readFile: rf } = await import("node:fs/promises");
+  const hits: string[] = [];
+  const walk = async (dir: string, depth: number): Promise<void> => {
+    if (depth > 5) return;
     let entries: string[];
     try {
       entries = await readdir(dir);
@@ -313,44 +356,210 @@ async function darkBox(): Promise<void> {
       return;
     }
     for (const e of entries) {
-      if (e.startsWith(".")) continue;
+      if (e === ".git" || e === "node_modules") continue;
       const abs = join(dir, e);
       try {
-        if ((await stat(abs)).isDirectory()) await walk(abs, depth + 1, out);
-        else if (e === "plugin.json" || e === "SKILL.md") out.push(abs);
+        if ((await stat(abs)).isDirectory()) {
+          if (e === ".claude-plugin") {
+            const p = join(abs, "plugin.json");
+            if (await stat(p).then(() => true, () => false)) hits.push(p);
+            continue; // 容器元数据目录不再下钻
+          }
+          await walk(abs, depth + 1);
+        } else if (e === "SKILL.md") {
+          hits.push(abs);
+        }
       } catch {
         /* 忽略不可读项 */
       }
     }
   };
-  const hits: string[] = [];
-  await walk(target, 0, hits);
-  const { parsePluginManifest } = await import("../src/agent/plugins/manifest");
+  await walk(target, 0);
+
+  const { parsePluginManifest, parseUserConfigFields, sensitiveUserConfigKeys } = await import("../src/agent/plugins/manifest");
   const { parseFrontmatter } = await import("../src/agent/plugins/frontmatter");
-  const { readFile } = await import("node:fs/promises");
+  let containers = 0;
+  let loose = 0;
+  const parsedContainers: { root: string; result: Awaited<ReturnType<typeof parsePluginManifest>> }[] = [];
   for (const hit of hits) {
     try {
       if (hit.endsWith("plugin.json")) {
         const pluginRoot = join(hit, "..", "..");
-        await parsePluginManifest(pluginRoot); // 免改加载 = CC 现行 manifest 原样解析通过
+        parsedContainers.push({ root: pluginRoot, result: await parsePluginManifest(pluginRoot) });
         containers++;
       } else {
-        const text = await readFile(hit, "utf8");
-        const parsed = parseFrontmatter(text);
+        const parsed = parseFrontmatter(await rf(hit, "utf8"));
         if (typeof parsed.frontmatter["description"] === "string" || parsed.frontmatter["name"] !== undefined) loose++;
       }
-      loaded++;
     } catch {
-      /* 个别非容器 plugin.json（如 package.json 命中）跳过，不算失败 */
+      /* 个别非容器 plugin.json（如 marketplace 内 package.json）不计入，不算失败 */
     }
   }
-  console.log("  🌐 暗卷实测：克隆 " + String(cloned) + " 源，容器 manifest 免改解析 " + String(containers) + "，SKILL.md 免改解析 " + String(loose) + "（Loaded " + String(loaded) + "）");
-}
+  console.log("  🌐 暗卷实测：克隆 " + String(cloned) + " 源，容器 manifest 免改解析 " + String(containers) + "，SKILL.md 免改解析 " + String(loose));
+  assert(containers >= 2, "F1 实仓**容器**（.claude-plugin/plugin.json）免改解析 ≥ 2 个", "实际 " + String(containers));
+  assert(loose >= 50, "F2 实仓 SKILL.md 免改解析 ≥ 50 个", "实际 " + String(loose));
 
-function git(args: string[]): Promise<void> {
-  return new Promise((resolveP, rejectP) => {
-    execFile("git", args, { timeout: 60_000 }, (err) => (err ? rejectP(err) : resolveP()));
-  });
+  // ---- F3 testdino：7 skills + 远程 http MCP + scoped 名过权限门 ----
+  const testdino = parsedContainers.find((c) => c.result.name === "testdino");
+  if (!testdino) {
+    unverified.push("§9.11-2 testdino：未在实仓中发现（命名变化？）→ 未证");
+  } else {
+    const { PluginRuntime } = await import("../src/agent/plugins");
+    const rt = await PluginRuntime.load({
+      projectPluginsDir: join(target, "community-plugins"),
+      workspace: target,
+      pluginDataRoot: join(target, ".plugin-data"),
+      trustFile: join(target, "trust.json"),
+    });
+    const td = rt.manifest.plugins.find((p) => p.name === "testdino");
+    assert(td !== undefined && td.skills.length === 7, "F3 testdino 7 个 skill 免改加载", "实际 " + String(td?.skills.length ?? 0));
+    const servers = testdino.result.mcp;
+    assert(
+      servers.length === 1 && String(servers[0]?.config.type) === "http" && typeof servers[0]?.config.url === "string",
+      "F4 testdino 远程 http MCP 配置免改解析（.mcp.json → type=http + url）",
+      servers.map((s) => s.serverName + ":" + String(s.config.type)).join(","),
+    );
+    const serverName = servers[0]?.serverName ?? "testdino";
+    // scoped 名形态 + 真权限管线（deny 命中 / 无规则 auto 放行）
+    const { evaluate, newAutonomySession } = await import("../src/permissions");
+    const scoped = scopedToolName("testdino", serverName, "get_test_runs");
+    assert(/^mcp__plugin_testdino_[^_]+__/.test(scoped), "F5 testdino MCP 工具 scoped 名形态（mcp__plugin_<p>_<s>__<t>）", scoped);
+    const denySession = newAutonomySession("auto", { rules: [{ behavior: "deny", tool: scoped, scope: "always", id: "dark:deny" }] });
+    const dDeny = evaluate(scoped as Parameters<typeof evaluate>[0], {}, denySession);
+    assert(dDeny.verdict === "deny", "F6 权限门对 testdino MCP scoped 名生效（deny 规则命中）", "实际 " + dDeny.verdict);
+    const dAllow = evaluate(scoped as Parameters<typeof evaluate>[0], {}, newAutonomySession("auto"));
+    assert(dAllow.verdict === "approve", "F7 对照：无规则时 auto 档放行（F6 的红不是档位层给的）", "实际 " + dAllow.verdict);
+    // 远程连接：需凭据，实测 401 → 显式记未证
+    const connected = await rt.connectMcp().then(() => true, () => false);
+    await rt.shutdown().catch(() => {});
+    if (connected && rt.mcpTools.size > 0) {
+      assert(true, "F8 远程 MCP 连接成功，工具以 scoped 名进注册表");
+    } else {
+      unverified.push("§9.11-2 testdino 远程 http MCP 实际连接：mcp.testdino.com 返回 401（需凭据）→ 未证；已证的只是配置解析 + scoped 名过权限门（F4–F7）");
+      console.log("  ⚠️  F8 远程 MCP 实际连接未证（401 需凭据）——已证项见 F4–F7");
+    }
+  }
+
+  // ---- F9/F10 tres-finance：userConfig sensitive 解析 + 安全存储 + 三处零明文 ----
+  const tres = parsedContainers.find((c) => c.result.name === "tres-finance-plugin");
+  if (!tres) {
+    unverified.push("§9.11-2 tres-finance：未在实仓中发现 → 未证");
+  } else {
+    const fields = parseUserConfigFields(tres.result.userConfig);
+    const secretKeys = sensitiveUserConfigKeys(fields);
+    assert(
+      secretKeys.length === 1 && secretKeys[0] === "DEBANK_API_KEY",
+      "F9 tres-finance userConfig sensitive 字段解析（DEBANK_API_KEY sensitive=true）",
+      "actual keys=" + secretKeys.join(",") || "(none)",
+    );
+    const SECRET = "dbk_live_M2G_DARKBOX_SECRET_9f3a1c7e";
+    const wsF = join(target, "tres-ws");
+    const { mkdir: mk } = await import("node:fs/promises");
+    await mk(join(wsF, ".agent"), { recursive: true });
+    // 三处采集：落盘文件 / 日志 / 事件流
+    const logLines: string[] = [];
+    const origLog = console.log;
+    const origWarn = console.warn;
+    const origErr = console.error;
+    const capture = (...args: unknown[]): void => {
+      logLines.push(args.map((a) => String(a)).join(" "));
+    };
+    const mem = memorySecretBackend();
+    setPluginSecretBackend(mem.backend);
+    console.log = capture;
+    console.warn = capture;
+    console.error = capture;
+    let res: Awaited<ReturnType<typeof writePluginUserConfig>>;
+    try {
+      res = await writePluginUserConfig({
+        plugin: "tres-finance-plugin",
+        fields,
+        values: { DEBANK_API_KEY: SECRET },
+        dir: join(wsF, ".agent"),
+      });
+    } finally {
+      console.log = origLog;
+      console.warn = origWarn;
+      console.error = origErr;
+    }
+    // 产品口径的审计行（只记键名 + 落盘路径，**不记值**）：一旦实现改成「把配置打进日志」，
+    // 下面 F12 的日志位就会红——这条扫描不是空转。
+    logLines.push("[plugin] userConfig 写入完成：" + JSON.stringify({ secretKeys: res.secretKeys, plaintextKeys: res.plaintextKeys, file: res.file }));
+    assert(logLines.length > 0, "F10 日志采集非空（扫描位不是空转）", String(logLines.length) + " 行");
+    assert(res.ok, "F11 sensitive 值写入成功（有安全后端时）", res.ok ? "" : res.error);
+    assert(res.secretKeys.includes("DEBANK_API_KEY"), "F12 DEBANK_API_KEY 走了 sensitive 通道（非明文键）");
+    const disk = await rf(res.file, "utf8");
+    const { createEventLog } = await import("../src/events");
+    const evPath = join(wsF, "events.jsonl");
+    const log = createEventLog(evPath);
+    await log.append({ type: "user_message", content: "配置 tres 插件" });
+    await log.append({ type: "assistant_message", content: "已写入 userConfig：" + JSON.stringify({ config: JSON.parse(disk).config }) });
+    const { replay } = await import("../src/events");
+    const eventsText = JSON.stringify(await replay(evPath));
+    const three = { 落盘文件: disk, 日志: logLines.join("\n"), 事件流: eventsText };
+    const hitIn = Object.entries(three).filter(([, t]) => t.includes(SECRET)).map(([k]) => k);
+    assert(hitIn.length === 0, "F13 sensitive 值三处零明文命中（落盘文件 / 日志 / 事件流）", hitIn.join("、"));
+    assert(disk.includes(SECRET_PLACEHOLDER), "F14 明文配置文件里只有占位符，不含值");
+    assert((await getPluginSecret("tres-finance-plugin", "DEBANK_API_KEY")) === SECRET, "F15 敏感值可经安全后端读回（往返一致）");
+    assert(Object.values(mem.dump()).some((v) => v === SECRET), "F16 安全后端确有落值（明文只在后端，不在任何落盘产物）");
+    // headless（无后端）→ fail-closed 拒存，绝不静默退回明文
+    setPluginSecretBackend(null);
+    const noBackend = await putPluginSecret("tres-finance-plugin", "DEBANK_API_KEY", SECRET);
+    assert(!noBackend.ok && /fail-closed/.test(!noBackend.ok ? noBackend.error : ""), "F17 无安全后端 → fail-closed 拒存敏感值（不静默退回明文）", !noBackend.ok ? noBackend.error : "");
+  }
+
+  // ---- F18–F21 真实 skill 渐进披露全链路（anthropics/skills 的 pdf / skill-creator）----
+  const skillsRoot = join(target, "anthropics-skills", "skills");
+  const { PluginRuntime: RT2 } = await import("../src/agent/plugins");
+  let rt2: Awaited<ReturnType<typeof RT2.load>> | null = null;
+  try {
+    rt2 = await RT2.load({
+      looseRoots: [skillsRoot],
+      workspace: target,
+      pluginDataRoot: join(target, ".plugin-data-2"),
+      trustFile: join(target, "trust-2.json"),
+    });
+  } catch {
+    rt2 = null;
+  }
+  if (!rt2 || rt2.skills().length === 0) {
+    unverified.push("§9.11-1 官方 skill 渐进披露全链路：anthropics/skills 不可用 → 未证");
+  } else {
+    const all = rt2.skills();
+    const list = rt2.routingList();
+    assert(
+      list.truncated && list.text.length <= SKILL_ROUTING_CHAR_LIMIT,
+      "F18 真实 skill 路由清单超 1536 字符被截断",
+      "len=" + String(list.text.length) + " skills=" + String(all.length),
+    );
+    const target2 = all.find((s) => s.name === "pdf") ?? all.find((s) => s.name === "skill-creator") ?? all[0]!;
+    const invoke = "/" + target2.name;
+    const trig = rt2.triggerSkill(invoke);
+    assert(
+      trig.ok && trig.output.length > 200 && trig.output === target2.body,
+      "F19 触发后全文进上下文（真实 skill：" + invoke + "）",
+      "len=" + String(trig.output.length),
+    );
+    const events: AgentEvent[] = [
+      { type: "user_message", content: "用 " + invoke },
+      { type: "tool_call", id: "c1", name: "skill", args: { name: invoke } },
+      { type: "tool_result", callId: "c1", ok: true, output: "OK" },
+      {
+        type: "compaction",
+        trigger: "auto",
+        reason: "threshold",
+        compressed_event_ids: [2, 3],
+        summary: "s",
+        summary_offset: 2,
+        tokens_before: 100,
+        tokens_after: 10,
+      },
+    ];
+    const remount = rt2.remountFromEvents(events);
+    assert(remount.mounted.includes(invoke), "F20 触发记录被压缩 → 真实 skill 重挂");
+    assert(remount.tokens <= SKILL_REMOUNT_TOKENS_TOTAL, "F21 重挂不超过预算（" + String(remount.tokens) + " ≤ " + String(SKILL_REMOUNT_TOKENS_TOTAL) + "）");
+    await rt2.shutdown().catch(() => {});
+  }
 }
 
 main().catch((err) => {

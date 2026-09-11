@@ -55,6 +55,49 @@ export interface ManifestParseResult {
   hooksRef: { kind: "inline"; file: HooksFile } | { kind: "path"; path: string } | { kind: "none" };
   mcp: { serverName: string; config: McpServerConfig }[];
   userConfig: Record<string, unknown> | null;
+  /** M2g：userConfig 的敏感字段解析结果（sensitive 值入 safeStorage 的消费依据）。 */
+  userConfigFields: UserConfigField[];
+}
+
+/** userConfig 单字段（CC 形态：`"KEY": { title?, description?, type?, sensitive?, required?, default? }`；
+ *  也容忍裸标量写法）。此前 userConfig 是「解析了但没人用」的字段——M2g 给出真实消费路径。 */
+export interface UserConfigField {
+  key: string;
+  type: string;
+  title?: string;
+  description?: string;
+  required: boolean;
+  /** sensitive=true → 值入 safeStorage，**不落明文**（§9.11-2 / §11.8 信任边界底线）。 */
+  sensitive: boolean;
+  hasDefault: boolean;
+}
+
+/** userConfig 对象 → 字段表（未知形态按 string 兜底，不抛）。 */
+export function parseUserConfigFields(raw: Record<string, unknown> | null): UserConfigField[] {
+  if (!raw) return [];
+  const out: UserConfigField[] = [];
+  for (const [key, v] of Object.entries(raw)) {
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      const o = v as Record<string, unknown>;
+      out.push({
+        key,
+        type: typeof o.type === "string" ? o.type : "string",
+        ...(typeof o.title === "string" ? { title: o.title } : {}),
+        ...(typeof o.description === "string" ? { description: o.description } : {}),
+        required: o.required === true,
+        sensitive: o.sensitive === true,
+        hasDefault: o.default !== undefined,
+      });
+    } else {
+      out.push({ key, type: typeof v === "number" ? "number" : typeof v === "boolean" ? "boolean" : "string", required: false, sensitive: false, hasDefault: true });
+    }
+  }
+  return out;
+}
+
+/** 敏感字段的键（值不得出现在任何落盘产物 / 日志 / 事件流里）。 */
+export function sensitiveUserConfigKeys(fields: UserConfigField[]): string[] {
+  return fields.filter((f) => f.sensitive).map((f) => f.key);
 }
 
 /** 解析 .claude-plugin/plugin.json；结构性错误抛 PluginLoadError（隔离），非结构缺陷只警告。 */
@@ -121,7 +164,18 @@ export async function parsePluginManifest(root: string): Promise<ManifestParseRe
     }
   }
   const userConfig = m.userConfig && typeof m.userConfig === "object" ? (m.userConfig as Record<string, unknown>) : null;
-  return { name, unknownFields, warnings, commandsDir, agentsDir, skillsDir, hooksRef, mcp, userConfig };
+  return {
+    name,
+    unknownFields,
+    warnings,
+    commandsDir,
+    agentsDir,
+    skillsDir,
+    hooksRef,
+    mcp,
+    userConfig,
+    userConfigFields: parseUserConfigFields(userConfig),
+  };
 }
 
 /** mcpServers 对象 → 规范化条目；command → stdio，url → http（type 可标 sse）。 */

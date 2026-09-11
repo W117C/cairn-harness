@@ -18,6 +18,25 @@ import type {
 } from "./types";
 
 export * from "./types";
+export {
+  parseUserConfigFields,
+  sensitiveUserConfigKeys,
+  type UserConfigField,
+} from "./manifest";
+export {
+  installSafeStorageBackend,
+  setPluginSecretBackend,
+  pluginSecretBackend,
+  putPluginSecret,
+  getPluginSecret,
+  secretKey,
+  writePluginUserConfig,
+  SECRET_PLACEHOLDER,
+  NO_BACKEND_ERROR,
+  type PluginSecretBackend,
+  type SafeStorageIo,
+  type UserConfigWriteResult,
+} from "./secrets";
 export { parseFrontmatter, fmString } from "./frontmatter";
 export { discoverPlugins, activeHooks, pendingPlugins } from "./discover";
 export { TrustStore } from "./trust";

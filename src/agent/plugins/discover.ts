@@ -184,6 +184,7 @@ async function loadContainer(
     mcp: m.mcp,
     lsp,
     unknownFields: m.unknownFields,
+    userConfigFields: m.userConfigFields,
     errors,
     warnings,
     trust,
