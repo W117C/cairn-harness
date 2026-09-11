@@ -190,3 +190,15 @@
 1. **src/preload/ 不在 M2d 白名单**，两处 renderer→main 通道未接线（main 侧已就绪）：① `AgentApi.deleteMemory?`（ipc-protocol 已声明 optional，main handler `agent:memory-delete` 已挂）——记忆面板删除按钮当前禁用并注明「待 preload 接线」；记忆快照经 getState 透传不受影响。② 外部引用「首次批准对话框」当前为 main 侧回调通道（memoryLayerSnapshot fail-closed 停用 + external-refs.json 落账），GUI 批准入口等 preload 白名单放开后一行接通（M1d compact 同款先例）。均不属改判据，仅列清地界。
 2. **反向验证摘除的判据补强**：原 memory-check 只有「顶层 scope 合法 + metadata 混入」用例（B5），摘除顶层检查（改 metadata 兜底）不会红——因顶层在场时本来就赢。已补 B5b「无顶层只塞 metadata.scope」用例后反向验证红→绿成立（判据加严，非放宽）。
 3. **BLOCKED.md 无其他阻塞**。十六道门 + memory-check 全绿后随本轮 commit 提交。
+
+## M3b 轮新增备案（2026-09-12）
+
+无判据阻塞。六项偏离任务书的实现决定已全部显式备案于 PROGRESS.md「M3b 偏离任务书的决定」（逐条含理由）：
+① 原暗卷段 H 改序 M（新段 H–L 字母让位）；② B1 判据随 write 接入更新为 pipeline 拒绝（断言 79→165 只增）；
+③ 评审闭环以「评审重启」承载 done 后评论修正（不属 §4.4.9 崩溃热恢复范围）；④ write worker 文件面/shell 面
+独立 auto 档（§4.4.5「worktree 完全可写」的机制化，critical/deny/ask 规则不变）；⑤ diff 本体以子流
+tool_result（callId=diff-<id>）承载（零新事件类型、主上下文零泄漏、面板可重建）；⑥ security_report 扩
+mode/agent_id/llm_reviewed/suggestion 与 llm_review 类别（可缺省、旧日志零影响）。
+另发现并修复 3 个实现真缺陷（agent_id 跨 run 撞 worktree / waitAll 在 write finish 中途提前返回 /
+card_action emit 缺 merge 路由回退），均由本轮新增验收断言抓出，判据零改动（PROGRESS 坑五十五~五十九）。
+反向验证 4 条红→绿实录见 PROGRESS M3b 段（第 3 条先加严判据 J7d 再打红，属判据加严非放宽）。

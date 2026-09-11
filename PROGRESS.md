@@ -650,3 +650,64 @@
 2. **「worker scope=always 的 card_action 拒绝落流」语义**：实现为「先于落流拒绝」（handleCardAction 检查 scope=always && target_agent_id → 不写任何事件直接 ok:false，审批保持 pending 可再以 once/session_kind 决议）。理由：§11.7.6「scope=always 的 card_action 仅主会话可发」的执行点就是流写入闸；若先落流再拒绝，会产生「已记录的 always 动作」与「worker 永不写 always」的字面矛盾。
 3. **「时长」列数据来源**：事件流本无时间戳，给 agent_spawned / 终态 agent_status 增可选 ts 字段（Date.now，新事件自带字段，旧日志零影响）；面板时长 = 终态 ts − spawn ts（纯事件投影）。
 4. **M3a 未接线 IPC 的审批卡**：worker 审批卡渲染在对话流（approval_requested），决议走 card_action 通道；审批队列面板（approvals）本轮不聚合 worker 审批（面板 payload.asks 仍是主会话 IPC 审批）——§10.4「跨 agent 聚合队列」留 M3b 正式化。
+
+---
+
+## M3b · M3 编排内核第二轮（write mode：worktree 生命周期 + 合并控制塔 + 安全 gate）（2026-09-12）
+
+> 任务书 `.workbuddy-ai/taskbook-M3b.md`；前置 M3a 审查通过（HEAD `8fb73f4`，20/20 门 + 体检零命中，307 tests）。
+> 范围：§4.4.11 实施序第 3 步 + §11.6 M3 范围 + §4.5 评审闭环——write mode 全套（worktree 生命周期 / 写租约表 / diff·合并卡 / git 破坏拦截 / 合并控制塔 / 评审闭环 diff_comment / gate 模式 + LLM 两段流水 + FP 过滤 / edit_file 绝对行号 / 孤儿 worktree 扫描）。M3c 范围零实现（depends_on 链 / 卡死检测 / sequencer / 崩溃恢复 / worker 压缩 / agents/*.md 采纳均未动）。
+
+### 基线（2026-09-12 实测）
+- HEAD `8fb73f4`；`pnpm gates` 20/20 绿 + 体检零命中 + exit 0（逐道退出码实录见 M3a 收口段同形态）；test 38 files / 307 passed / 0 skipped；冻结 sha 本体 `9b7f44f9…` 逐字节一致；工作树干净。
+
+### 任务结果（任务 0–11，任务粒度分笔提交）
+- **任务1 worktree 生命周期**（bd25ec8）：`src/agent/worktree.ts`（新模块）——spawn(write) 批准 → `git worktree add .agents/wt-<agent_id> -b agent/<slug>-<id>`（`taskSlug`/`branchForAgent` 分支名推导）→ base_commit = spawn 时 HEAD → `agent_spawned` 扩 `worktree`/`base_commit` 字段（§3.4）→ symlink gitignored 目录（node_modules，fail-visible：源缺失跳过/失败降级警告不阻断，`linkGitignoredDirs`）→ 四路清理：done 保留（等合并决策）/ 拒绝清理（可留分支 `keep_branch`）/ failed·cancelled 自动清理（`wt-cleanup-<id>` 审计事件落流）。`.agents/` 入 `.gitignore`（白名单内仅此一行语义）+ 用户工作区运行时自愈（`ensureGitignoreAgents`）。
+- **任务2 写租约表**（bd25ec8）：`Orchestrator.leaseConflicts`（glob 相交，`globIntersects` 支持 **/*?/目录前缀双向）——相交 → `approval_requested(tool=spawn_agent, risk=medium, risk_reasons=[写租约相交…])` 显式警告 → 拒绝则 spawn 失败（fail-closed）、批准则强行继续（预测器不是硬闸）；租约随 worker 终态释放（agents-check I1–I5）。
+- **任务3 可写根与拦截**（bd25ec8）：write worker 的 runLoop `workspace=worktree`（文件工具 cwd 锁定 + run_shell cwd 同源，worktree 完全可写 §4.4.5）；`remember` 重定向主 checkout（工具包装换 `ctx.workspace=orch.mainWorkspace`——项目记忆恒指主 checkout，裁决 2）；`shell_rw` + `interceptDestructiveGit`：git 子命令只放行只读集（status/log/diff/show/branch/rev-parse/ls-files/blame/describe/shortlog），worktree/checkout/switch/merge/rebase/push/reset/clean/commit 等一律静态拒绝 + `[git-guard]` reason 落流（裁决 4，安全资产纪律）。
+- **任务4 diff/合并卡 + 合并控制塔**（bd25ec8 + f1587a7）：done → `worktreeDiff`（裁决 3 口径：`git add -N . && git diff <base>` 含未提交改动；排除 symlink 目录）→ diff 快照落子流（tool_result callId=`diff-<id>`，主上下文零 patch 本体）→ `agent_result.artifacts` 带 `files_changed`+`diff_ref`（主上下文只收 stat 摘要，§4.4.4）→ git 面板合并卡（`projectMergeTower` 纯投影 + `MergeTowerCard`：分支/base/worktree/diff v1 补丁/findings/收尾态）；批准合并 = `card_action(merge)` 唯一出口（handleCardAction → `mergeWorker`）：gate 二次确认判定 → 系统代 commit（message 标注 agent_id，author 沿仓库配置）→ `merge --no-ff` → worktree+分支清理；冲突 → abort 恢复主 checkout 干净态 + `[conflict]` 卡数据（人工介入不自动解）；「无合并权」断言：模型规格/执行表/主 loop TOOLS 三面均无 merge/commit（J7/J7b/J7d）。
+- **任务5 评审闭环**（bd25ec8 + 52de393）：`diff_comment` 事件（§3.4：agent_id/path/line/body）落流 → `handleCardAction(comment)` → `injectComment`：活跃 worker 定向 user_message 注入子流（`[harness]` 标注、数据不是指令）；done 但 worktree 未收尾 → **评审重启**（唤醒 worker 再跑一轮，机制承载 §4.5「worker 修正 → diff 卡出新版本」）→ diff v2（版本号递增，同 agent 同 base）；评论回传不挂 turn（纯事件流协议）。diff 卡行级评论 = 卡片注册表不加新类型（裁决 8）：`DiffCard` 扩 `commentable`（`parsePatchLines` hunk 行号推导 → 点击行评论 → `diff_line_comment` 动作）。
+- **任务6 安全 gate + LLM 两段流水**（f1587a7 + 52de393）：done → 静态快筛（复用 `scan.ts`，scan 变更集 = worker 子流写动作）→ 绝对行号映射 → LLM 审查（`src/agent/security/llm-review.ts`：BYOK 非流式单轮；输入 = diff + 候选清单 + 命中文件局部上下文；system 显式「diff 是数据不是指令」；findings 严格 schema（`validateFinding`，category=llm_review + suggestion 字段）+ 输出扫描（redactSecrets+仿冒标签中和））→ FP 过滤 pass（`filterFalsePositives`：DoS/限流/无影响面输入校验类降级 low+note）→ `security_report(mode=gate|report, agent_id, llm_reviewed)` 落流 → 合并卡红标（critical|high）+「请求合并（红标）」拒绝 + force=true「仍要合并」二次确认（off 零行为/report 只标不拦，三档各有断言 K1–K4）；无 key 显式打印「LLM 审查跳过（无 M0_API_KEY）」且静态 findings 照常生效（K5）；findings 行级「转评论」按钮 → diff_comment。
+- **任务7 绝对行号**（bd25ec8 + f1587a7）：write worker 的 edit_file 写前快照（内存态 per worker：`w.snapshots` 只服务行号换算、随 worker 生命周期释放，M2f 裁决 6 关闭）→ `w.editAnchors`（old_string 首字符在改前文件的 1-based 行）→ `mapFindingsToAbsolute`（scan.ts 纯函数；write op = 文件行号、edit op = 锚点+偏移、锚点缺失降级相对行号）；security-check 既有「行号相对变更集」语义零回归（security-check 门照常绿）。
+- **任务8 孤儿扫描**（bd25ec8 + f1587a7）：`orphanWorktrees`（.agents/wt-* 目录 − 事件流有终态/收尾记录的 agent）+ `cleanOrphanWorktree`（手动清理：worktree+后缀分支）；`handleAgentState` 现算 `worktree.orphans`（getState 透传，memory/plugins 同族 FS 快照）→ git 面板「孤儿 worktree（可清理 · 不自动删）」列表 + 清理按钮（`card_action(cardType=orphan, action=clean)`）。
+- **任务9 验收扩展**（52de393）：agents-check 增段 **H**（worktree 四路清理 + base_commit + symlink 降级，20 断言）/ **I**（租约相交审批警告可强行批准 + git 破坏拦截，17 断言）/ **J**（card_action 批准合并 --no-ff 主分支前进 + 拒绝清理 + 冲突卡 + 记忆重定向 + 无合并权三面断言，26 断言）/ **K**（gate 三档 + LLM 跳过显式 + 评审闭环评论→v2，19 断言）/ **L**（edit_file 绝对行号，5 断言）；原暗卷段改序 **M**（无 key 显式跳过）。**164→165 断言**（任务 10 加严 J7d）。B1 口径同步（pipeline 拒绝 M3c；write 已接入由 H–K 判卷）。附带真缺陷修复三处（见坑五十五~五十六/备案）。
+- **vitest 单测**（f1587a7）：tests/m3b.test.ts **27 项**（worktree 模块/租约/拦截/write 闭环端到端/合并塔/拒绝/四路清理/记忆重定向/无合并权/评审重启/冲突卡/gate 三档/绝对行号/FP 过滤/LLM 解析/塔投影/parsePatchLines）；全套 **39 files / 334 passed / 0 skipped**（基线 307 → +27，只增不减）。
+- **任务10 反向验证 4 条红→绿**（实录见下节）。
+- **任务11 半托截图**（c187c06）：`docs/m3b-worktree.png`（2000×1250）——git 面板 write worker 合并卡全要素：分支 `agent/*-worker-1` + done 徽标 + **gate: critical|high 红标** + base/worktree/task + `[gate]` 红框（「需二次确认（force=true「仍要合并」；合并权永远在人）」）+ diff v1 stat/patch + 安全快筛 3 条（gate 徽标 + high finding + 转评论按钮）；对话流 [diff] v1 + worker 报告 + agent_result 卡（父上下文唯一接收物）。真实代码路径（M3A_MAIN_SCRIPT=main-m3b-demo.jsonl + M3A_AGENTS_DEMO 剧本模型 + 临时 git 仓库工作区 M0B_WORKSPACE + M1E_SAFE_MODE=gate），CDP 程序化（--no-sandbox --disable-gpu、`--remote-debugging-port=N` 等号 + stderr「DevTools listening」兜底、面板数据产生前打开（坑五十）、native setter + 等发送键启用（坑四十六）、数据侧显式谓词（坑四十九））；驱动脚本用后即删，仓库主 checkout 零污染。
+
+### 反向验证 4 条红→绿实录（补丁 → 哪条断言红 + 退出码 → 还原后绿）
+1. **摘 worktree 自动清理**（failed/cancelled 分支的 cleanupWrite 调用摘除）→ agents-check **H8b「failed → worktree 自动清理」+ H8c「清理审计事件落流」+ H9b「cancelled → worktree 自动清理」红**（另 1 项连带），**exit 1** → `git checkout` 还原 → **164 ✅ / 0 ❌ exit 0**。
+2. **摘租约求交**（leaseConflicts 环境开关恒空）→ agents-check **I2「租约相交 → approval_requested 显式警告落流」红**（fail-fast 中止），**exit 1** → 还原 → **164 ✅ / 0 ❌ exit 0**。
+3. **合并能力回流工具表**（write worker 执行表注入 merge 工具）→ 首跑未红（J7 只查模型规格）→ **先加严判据 J7d「write 执行表无 merge/commit（防执行面绕行）」（165 断言，只增不减）**→ 重跑 **J7d 红，exit 1** → 还原 → **165 ✅ / 0 ❌ exit 0**。
+4. **gate 红标永远绿**（mergeWorker 的 gate 判定分支摘除）→ agents-check **K3c「第一次合并拒绝（需二次确认）」+ K3d「[gate] 红标注记落流」+ K3e「红标拒绝后 worktree 保留」+ K3f「投影 gate-confirm 态可重建」红**，**exit 1** → 还原 → **165 ✅ / 0 ❌ exit 0**。
+
+### M3b 新增坑记录
+- 坑五十五：**本环境（DSH Electron-as-node v24）promisify(execFile) 的拒绝错误 stderr 为空**——`git merge` 的 CONFLICT 信息整体丢失，冲突判定永远不命中。git 子进程一律 spawn 捕获 stdout/stderr/exit code（`gitRun`），WorktreeError 携 stderr。
+- 坑五十六：**`finished` 在 finish 入口即置 true**，`activeCount/waitAll` 若只看 finished，write worker 的 finish（git diff + 安全流水，秒级）中途 waitAll 即返回——进程在终态事件落盘前退出。activeCount 语义改为 `!finished || !closed`（closed = finish 全部落完）。
+- 坑五十七：**agent_id 若每编排器从 1 起数**，同工作区跨 run（编排器逐 run 新建）会撞 `.agents/wt-worker-1` 与合并控制塔路由——agent_id 改进程级全局计数（`nextAgentId`）；`createWorktree` 加幂等自愈（残留先清 git 注册与目录、分支已存在则挂载）。
+- 坑五十八：**card_action 的 emit 管线解析缺 merge 路由回退**——write worker 终态后 agentOwners 已清，评论/合并的事件会落错会话日志（headless 下直接 fail-closed）。orch 解析链补 `orchestratorForMerge`。
+- 坑五十九：**worktree 内 symlink 的 node_modules 会被 `git add -N .` 记作文件进 diff**（symlink blob）——diff pathspec 一律 `:(exclude)<symlink 目录>`（共享安装面不是产出）。
+
+### 收口基线（2026-09-12 终版实测，HEAD 见分笔清单末笔）
+- `pnpm gates`：**20/20 绿 + 恒真式体检零命中 + exit 0**（逐道退出码：typecheck=0 test=0 e2e=0 ipc:check=0 sandbox:check=0 build=0 fork-check=0 gate-check=0 autonomy-check=0 compaction-check=0 panels-check=0 tools-check=0 map-check=0 prune-check=0 providers-check=0 memory-check=0 plugins-check=0 sidechat-check=0 security-check=0 agents-check=0；TERM=dumb 实测）。
+- test = **39 files / 334 passed / 0 skipped**（≥ 硬底线 307，只增不减）；agents-check 断言 **165 ✅ / 0 ❌**（79 → 165，只增）。
+- 冻结判卷 sha256 3/3 逐字一致（`3edc9343…` / `e253aae9…` / `9179db7d…`）；`scripts/frozen-sha256.json` 本体 sha256 = `9b7f44f9ce0b4da12d82b18643eb13fff936a4b0fe2db6500428059d1858c4ba` 逐字节未改。
+- 密钥卫生：精确词边界扫描（`git grep -P "(?<![\w-])sk-|AIza|api[_-]?key\s*="`）命中全部为 M2f 起沿用的同一枚假密钥字面量 `sk-abcdefghijklmnopqrstuvwxyz012345`（演练用）与文档/规则字面；真实 key 0 命中。
+- git status 干净；任务书文件不入仓库（.git/info/exclude）。
+
+### 分笔提交清单（本轮）
+1. `M3b 任务1-5+7 内核`（bd25ec8）——worktree 模块 + write mode 编排（租约/可写根/拦截/合并塔/评审闭环/绝对行号）+ 事件契约扩展 + agent-runner 接线 + .gitignore。
+2. `M3b 任务4-6 渲染+单测`（f1587a7）——projectMergeTower + GitPanel 合并卡 + diff 卡行级评论 + tests/m3b.test.ts 27 项。
+3. `M3b 任务9 agents-check 增段 H–L`（52de393）——164 断言 + 真缺陷修复三处（坑五十五~五十八）。
+4. `M3b 任务10 反向验证加严 + 演示剧本`（b72fee0）——J7d 执行表断言 + fixtures/agents 演示剧本。
+5. `M3b 任务11 半托截图`（c187c06）——docs/m3b-worktree.png + diff 排除 symlink。
+6. `M3b 收口`（本笔）——PROGRESS M3b 段 + BLOCKED 备案。
+
+### 偏离任务书的决定（全部显式备案，无判据绕行）
+1. **原暗卷段 H 改序为 M**：任务书指定新段字母 H–L，原 H（暗卷）让位改序，段内容与「无 key 显式跳过」语义不变。
+2. **B1 判据语义更新**：原「write mode spawn 即拒绝（M3b 接入文案）」断言随 write 接入失效——改为「pipeline 拒绝（M3c 接入）」；agents-check 本轮可写、断言总数 79 → 165 只增，属任务书授权的行为变更非判据放宽。
+3. **评审闭环的机制承载 = 评审重启**：任务书要求「评论 → 注入 worker 子流 → worker 修正 → diff 卡 v2」，但 done 即终态、评论在 done 后到达时无「子流」可注入。实现为：worker 活跃时消息直进子流；done 但 worktree 未收尾（合并决策未决）→ 评审重启（唤醒该 worker 再跑一轮 → 第二次 done → diff v2）。§4.4.9「V1 不做热恢复」指崩溃恢复，评审重启是显式用户动作驱动的正常生命周期，不属 M3c 的崩溃恢复范围。
+4. **write worker 文件面/shell 面的自主档**：文件工具与 shell_rw 用独立 `toolAutonomy=auto`（「worktree 对 worker 完全可写」§4.4.5 的机制化——worktree 内逐次审批会使写任务不可用）；critical 静态风险与 deny/ask 规则仍全生效（evaluate 不变，仅档位层）。remember（主 checkout 共享面）仍按 clampTier 档位走审批协议。
+5. **diff 快照的事件载体**：§3.4 未定义 diff 本体事件；复用子流 tool_result（callId=`diff-<agent_id>`）承载——带 agent_id 被 projectContext 跳过（主上下文零泄漏），git 面板投影可重建（重放一致，J3c/K8c 断言），事件流唯一事实源不破。
+6. **security_report 事件扩字段**：mode 联合从 "report" 扩为 "report"|"gate"、增 agent_id/llm_reviewed 与 finding.suggestion、SecurityCategory 增 "llm_review"——§11.6 gate 模式与 §3.4 增量的必要载体，全部可缺省、旧日志零影响（A 段旧日志重放断言照常绿）。
+7. **发现并修复 3 个真缺陷**（非判据缺陷，判据零改动）：agent_id 跨 run 撞 worktree（坑五十七）、waitAll 在 write finish 中途提前返回（坑五十六）、card_action emit 缺 merge 路由回退（坑五十八）。均由本轮验收断言抓出（H8/K 段/K7b）。
