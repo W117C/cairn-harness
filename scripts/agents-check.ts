@@ -12,6 +12,8 @@
 //   J 合并控制塔 + 记忆重定向（M3b：card_action 批准合并 --no-ff 主分支前进 / 拒绝清理 / 冲突卡 / remember 恒指主 checkout / 无合并权断言）
 //   K 安全 gate + 评审闭环（M3b：off 零行为 / report 只标 / gate 红标二次确认 / LLM 跳过显式 / 评论→重启→diff v2）
 //   L 绝对行号（M3b：edit_file 写前快照锚点换算到真实文件行号）
+//   N M3c 压力段（§14 M3 行验收：depends_on 依赖链 + pipeline 哑 sequencer 零 LLM + ≥3 worker 并行
+//     （写+读+审查）+ 中途取消 + stages 冻结 + 成本闸 + 卡死检测 + 崩溃恢复（投影层模拟 + 重派）+ worker 压缩）
 //   M 暗卷（真实 GLM，有 M0_API_KEY 才跑）
 // 全程 mock 驱动（fixtures/agents/*.jsonl 剧本 + 程序化剧本，新目录非冻结区）；真连 GLM 暗卷（M0_API_KEY）缺席走跳过并显式打印。
 import { execFile } from "node:child_process";
@@ -27,6 +29,7 @@ import {
   Orchestrator,
   WORKER_FORBIDDEN_TOOLS,
   WRITE_WORKER_FORBIDDEN_TOOLS,
+  buildWorkerSystemMessages,
   buildWorkerToolTable,
   clampTier,
   interceptDestructiveGit,
@@ -41,6 +44,7 @@ import {
   handleCardAction,
   initSessionsDir,
   initSettingsStore,
+  applyCrashRecovery,
 } from "../src/main/agent-runner";
 import { createSession, pathOf } from "../src/main/sessions";
 
@@ -205,9 +209,9 @@ try {
     const hang = new Map<string, () => void>();
     const { orch, events } = directOrch(bPath, { model: makeHangModel(hang) });
 
-    // B1 pipeline spawn 即拒绝（M3c 接入）；write mode 已接入（M3b），其 spawn 纪律由 H–K 段判卷
+    // B1 pipeline 缺 stages 解析口拒绝（M3c 已接入，整链语义由 N 段判卷）；write mode 已接入（M3b），其 spawn 纪律由 H–K 段判卷
     const p = await orch.spawn({ mode: "pipeline", task: "x" }, { callId: "b-p" });
-    check(!p.ok && p.output.includes("M3c 接入"), "B1 pipeline mode spawn 即拒绝（M3c 接入；write 已接入由 H–K 段判卷）");
+    check(!p.ok && p.output.includes("stages 必须是非空数组"), "B1 pipeline 缺 stages 解析口拒绝（M3c 已接入；整链由 N 段判卷）");
 
     // B2 并发上限 4：第 5 个直接拒绝
     for (let i = 0; i < MAX_CONCURRENT_WORKERS; i++) {
@@ -785,6 +789,342 @@ try {
     check(evalFinding?.line === 10, "L3 findings 绝对行号 = 真实文件行号（10，非变更集相对行号 1）", "实际 " + String(evalFinding?.line));
     const wtLine = (await readFile(join(worktreePathFor(repoL, idL), "code.ts"), "utf8")).split("\n")[9];
     check(wtLine === "const x = eval(input);", "L3b 行号可定位到 worktree 真实代码行（diff_comment 行级评论的凭据）");
+  }
+
+  // ============================== N M3c 压力段（任务书 §3 任务 8 / §14 M3 行验收） ==============================
+  console.log("[agents-check] N M3c 压力段（依赖链 + pipeline sequencer + ≥3 worker 并行写读审查 + 中途取消 + 恢复 + 成本闸 + 卡死 + worker 压缩）");
+  {
+    const repoN = await mkRepo(join(work, "repo-n"));
+
+    // ---- N1 ≥3 worker 并行（write + read + pipeline implement→review）同时 running → 中途取消其一 ----
+    {
+      const nPath = join(work, "n-pressure.jsonl");
+      await writeFile(nPath, "", "utf8");
+      const events: AgentEvent[] = [];
+      const hang = new Map<string, () => void>();
+      let modelCalls = 0;
+      /** 挂起生成器（armed 闭包在 per-spawn 作用域：第二轮直接收束报告）。 */
+      const hangGen = (key: string, pre: { type: string; id: string; name: string; args: Record<string, unknown> } | null, report: string): ReturnType<typeof scriptedWorkerModel> => {
+        let armed = false;
+        return (async function* () {
+          if (!armed) {
+            armed = true;
+            if (pre) yield pre as AgentEvent;
+            await new Promise<void>((resolve) => {
+              hang.set(key, () => {
+                hang.delete(key);
+                resolve();
+              });
+            });
+          }
+          yield { type: "assistant_message", content: report } as AgentEvent;
+        }) as unknown as ReturnType<typeof scriptedWorkerModel>;
+      };
+      const orch = new Orchestrator({
+        logPath: nPath,
+        workspace: repoN,
+        parentMode: "default",
+        emit: async (e) => {
+          events.push(e);
+          await createEventLog(nPath).append(e);
+        },
+        modelFor: (args: SpawnArgs) => {
+          modelCalls++;
+          const task = String(args.task ?? "");
+          if (task === "压力写任务") {
+            return hangGen("压力写任务", { type: "tool_call", id: "pw-1", name: "write_file", args: { path: "p.txt", content: "压力写产出\n" } }, "改了什么：写 p.txt。为什么：压力验收。验证方式：无。风险：低。");
+          }
+          if (task === "压力读任务") {
+            return hangGen("压力读任务", { type: "tool_call", id: "pr-1", name: "read_file", args: { path: "README.md" } }, "## 结论\n压力读完成。");
+          }
+          if (task === "链实现X") {
+            return hangGen("链实现X", { type: "tool_call", id: "pc-1", name: "write_file", args: { path: "chain.txt", content: "链实现产出\n" } }, "改了什么：写 chain.txt。为什么：链一环。验证方式：无。风险：低。");
+          }
+          // 链 stage2（review，task 含 [harness] 前环报告拼接）
+          return scriptedWorkerModel([{ type: "assistant_message", content: "## 结论\n链产出已核验。\nverdict: pass" } as unknown as AgentEvent] as unknown as Parameters<typeof scriptedWorkerModel>[0]);
+        },
+      });
+      const rW = await orch.spawn({ mode: "write", task: "压力写任务" }, { callId: "n-w" });
+      check(rW.ok, "N1 write worker 受理（写租约无冲突）");
+      const rR = await orch.spawn({ mode: "read", task: "压力读任务" }, { callId: "n-r" });
+      check(rR.ok, "N1b read worker 受理");
+      const spawnP = orch.spawn(
+        { mode: "pipeline", stages: [{ role: "implement", task: "链实现X" }, { role: "review", task: "链评审X" }] },
+        { callId: "n-p" },
+      );
+      check(await waitFor(() => events.some((e) => e.type === "approval_requested")), "N1c pipeline 整链一个审批（approval_requested 落流）");
+      const aprN = events.find((e) => e.type === "approval_requested") as Extract<AgentEvent, { type: "approval_requested" }>;
+      check((aprN.risk_reasons ?? []).join("\n").includes("批准即授权全部 2 环"), "N1d 审批卡展示 stages 全表（批准即授权全链）");
+      check(orch.decideWorkerApproval(aprN.id, true, "once").ok, "N1e 整链审批决议受理");
+      check((await spawnP).ok, "N1f 链批准后启动");
+      // 三路同时挂起 = 同时 running（无轮询等待：挂起表由 worker 事件驱动登记）
+      check(await waitFor(() => hang.size === 3, 20_000), "N2 ≥3 worker 同时 running（write+read+pipeline stage1 全部挂起）");
+      check(orch.activeCount() >= 3, "N2b activeCount ≥ 3（并发并行在场）");
+      const idR = (JSON.parse(rR.output) as { agent_id: string }).agent_id;
+      const idW = (JSON.parse(rW.output) as { agent_id: string }).agent_id;
+      const spawnedAll = events.filter((e) => e.type === "agent_spawned").map((e) => e as Extract<AgentEvent, { type: "agent_spawned" }>);
+      const stage1 = spawnedAll.find((s) => s.task === "链实现X");
+      check(spawnedAll.find((s) => s.agent_id === idW)?.mode === "write" && spawnedAll.find((s) => s.agent_id === idW)?.worktree !== undefined, "N2c write worker 可写根 = worktree（agent_spawned 记 worktree）");
+      // 中途取消其一（read）——取消于轮界收束：先放行该挂起
+      check(orch.cancelAgent(idR), "N3 中途取消 read worker 受理");
+      hang.get("压力读任务")?.();
+      check(await waitFor(() => events.some((e) => e.type === "agent_status" && e.agent_id === idR && e.status === "cancelled")), "N3b read worker cancelled 落终态");
+      // 兄弟不受影响：放行 write 与链 stage1 → 全部收敛
+      hang.get("压力写任务")?.();
+      hang.get("链实现X")?.();
+      await orch.waitAll(20_000);
+      const wStatus = events.filter((e) => e.type === "agent_status" && e.agent_id === idW).map((e) => (e as { status: string }).status).pop();
+      check(wStatus === "done", "N3c 兄弟不受影响：write worker done", "实际 " + String(wStatus));
+      check(events.some((e) => e.type === "tool_result" && e.callId === "diff-" + idW), "N3d write worker 产 diff 快照（worktree 产出）");
+      // pipeline 链语义：stage2 depends_on 前环 + 前环报告代码拼接 + verdict 标注 + 整链 done
+      check(await waitFor(() => events.some((e) => e.type === "tool_result" && (e as { output: string }).output.includes("整链 done"))), "N4 pipeline 整链 done");
+      const allSpawned = events.filter((e) => e.type === "agent_spawned").map((e) => e as Extract<AgentEvent, { type: "agent_spawned" }>);
+      const stage1b = allSpawned.find((s) => s.task === "链实现X");
+      const stage2b = allSpawned.find((s) => (s.depends_on ?? []).includes(stage1b?.agent_id ?? ""));
+      check(stage2b !== undefined && stage1b !== undefined, "N4b 后环 agent_spawned 记 depends_on（前环 done 事件驱动触发）");
+      check((stage2b?.task ?? "").includes("[harness] 前环 " + (stage1b?.agent_id ?? "") + " 的 agent_result.report"), "N4c 前环报告由代码拼进后环 task（[harness] 标注）");
+      check(events.some((e) => e.type === "agent_message" && (e as { text: string }).text.includes("[sequencer] gate verdict=pass")), "N4d gate 环 verdict 标注落流（V1 不重跑）");
+      const snapN = orch.pipelineSnapshot("n-p");
+      check(snapN?.status === "done" && snapN?.state[1]?.verdict === "pass" && Object.isFrozen(snapN?.stages), "N4e 链快照 done + verdict 可重建 + stages 冻结");
+      // stages 冻结：同 callId 变更请求拒绝 + 落流
+      const mutateN = await orch.spawn({ mode: "pipeline", stages: [{ task: "改链" }] }, { callId: "n-p" });
+      check(!mutateN.ok && mutateN.output.includes("批准后冻结"), "N5 批准后 stages 变更请求被拒");
+      check(events.some((e) => e.type === "tool_result" && (e as { output: string }).output.includes("[sequencer] stages 变更请求被拒")), "N5b 变更拒绝落流");
+      // sequencer 零 LLM 动态证：modelFor 调用恰 = worker 数（write+read+2 环 = 4，无第 5 次调用）
+      check(modelCalls === 4, "N6 sequencer 零 LLM（模型调用恰 = 环数 4，展开路径零额外调用）", "实际 " + String(modelCalls));
+      // sequencer 零 LLM 静态证：sequencer.ts 无 provider 引用；orchestrator.runChain 段无模型/摘要器直调
+      const seqSrc = await readFile(join(ROOT, "src", "agent", "sequencer.ts"), "utf8");
+      check(!/from\s+"\.\.\/providers"/.test(seqSrc) && !/modelFor\s*\(/.test(seqSrc) && !/\bmodel\s*\(/.test(seqSrc) && !/summariz/i.test(seqSrc), "N6b sequencer.ts 静态零 provider/模型/摘要器引用");
+      const orchSrc = await readFile(join(ROOT, "src", "agent", "orchestrator.ts"), "utf8");
+      const runChainSeg = orchSrc.slice(orchSrc.indexOf("private async runChain"), orchSrc.indexOf("private async failChain"));
+      check(runChainSeg.length > 0 && !/provider/i.test(runChainSeg) && !/summariz/i.test(runChainSeg), "N6c runChain 源码段零 provider/摘要器（哑 sequencer，拼接只做字符串加工）");
+    }
+
+    // ---- N7 依赖链：depends_on 事件驱动触发 + 前环失败不静默 ----
+    {
+      const dPath = join(work, "n-dep.jsonl");
+      await writeFile(dPath, "", "utf8");
+      const events: AgentEvent[] = [];
+      const hang = new Map<string, () => void>();
+      const orch = new Orchestrator({
+        logPath: dPath,
+        workspace: repoN,
+        parentMode: "default",
+        emit: async (e) => {
+          events.push(e);
+          await createEventLog(dPath).append(e);
+        },
+        modelFor: (args: SpawnArgs) => {
+          const task = String(args.task ?? "");
+          let armed = false;
+          return (async function* () {
+            if (!armed) {
+              armed = true;
+              yield { type: "tool_call", id: "d-" + task, name: "read_file", args: { path: "README.md" } } as AgentEvent;
+              await new Promise<void>((resolve) => {
+                hang.set(task, () => {
+                  hang.delete(task);
+                  resolve();
+                });
+              });
+            }
+            yield { type: "assistant_message", content: "## 结论\n依赖环收束。" } as AgentEvent;
+          }) as unknown as ReturnType<typeof scriptedWorkerModel>;
+        },
+      });
+      const rA = await orch.spawn({ mode: "read", task: "前环A" }, { callId: "nd-a" });
+      const rB = await orch.spawn({ mode: "read", task: "后环B", depends_on: [(JSON.parse(rA.output) as { agent_id: string }).agent_id] }, { callId: "nd-b" });
+      check(rB.ok && JSON.parse(rB.output).deferred === true, "N7 前环未收敛 → 延迟登记（deferred 应答）");
+      check(await waitFor(() => hang.has("前环A")), "N7b 前环挂起就绪");
+      const rC = await orch.spawn({ mode: "read", task: "后环C", depends_on: [(JSON.parse(rA.output) as { agent_id: string }).agent_id] }, {});
+      check(!rC.ok && rC.output.includes("depends_on 依赖未收敛且无 callId"), "N7c 无 callId 的未收敛依赖拒绝（无法事件驱动触发）");
+      const idA = (JSON.parse(rA.output) as { agent_id: string }).agent_id;
+      orch.cancelAgent(idA);
+      hang.get("前环A")?.(); // 取消于轮界收束
+      check(await waitFor(() => events.some((e) => e.type === "tool_result" && (e as { output: string }).output.includes("reason=dependency_failed"))), "N7d 前环 cancelled → 后环 dependency_failed 落流（不静默跳过）");
+      await orch.waitAll(15_000);
+      check(events.filter((e) => e.type === "agent_spawned").length === 1, "N7e 后环从未 spawn（依赖失败即断链）");
+      // 前环 done → 后环自动触发（事件驱动，无轮询调度器）
+      const events2: AgentEvent[] = [];
+      const d2Path = join(work, "n-dep2.jsonl");
+      await writeFile(d2Path, "", "utf8");
+      const orch2 = new Orchestrator({
+        logPath: d2Path,
+        workspace: repoN,
+        parentMode: "default",
+        emit: async (e) => {
+          events2.push(e);
+          await createEventLog(d2Path).append(e);
+        },
+        modelFor: () => scriptedWorkerModel([{ type: "assistant_message", content: "## 结论\ndone 触发。" } as unknown as AgentEvent] as unknown as Parameters<typeof scriptedWorkerModel>[0]),
+      });
+      const rA2 = await orch2.spawn({ mode: "read", task: "前环A2" }, { callId: "nd2-a" });
+      const rB2 = await orch2.spawn({ mode: "read", task: "后环B2", depends_on: [(JSON.parse(rA2.output) as { agent_id: string }).agent_id] }, { callId: "nd2-b" });
+      check(rB2.ok, "N7f 后环延迟登记受理");
+      check(await waitFor(() => events2.filter((e) => e.type === "agent_spawned").length === 2, 15_000), "N7g 前环 done → 后环自动 spawn（事件驱动）");
+      await orch2.waitAll(15_000);
+      const spawnedB2 = events2.filter((e) => e.type === "agent_spawned").map((e) => e as Extract<AgentEvent, { type: "agent_spawned" }>)[1]!;
+      check(JSON.stringify(spawnedB2.depends_on) === JSON.stringify([(JSON.parse(rA2.output) as { agent_id: string }).agent_id]), "N7h 后环 agent_spawned 记 depends_on");
+    }
+
+    // ---- N8 会话成本闸（§4.4.8 maxBudgetUsd）：缺省零行为 + 超限拒绝并落流 ----
+    {
+      const bPath = join(work, "n-budget.jsonl");
+      await writeFile(bPath, "", "utf8");
+      const events: AgentEvent[] = [];
+      const orchB = new Orchestrator({
+        logPath: bPath,
+        workspace: repoN,
+        parentMode: "default",
+        budget: { maxUsd: 0.5, pricePerMTok: 1 },
+        emit: async (e) => {
+          events.push(e);
+          await createEventLog(bPath).append(e);
+        },
+      });
+      check(!orchB.budgetBlocked(), "N8 未超限前闸不拦（估价 < 上限）");
+      await orchB.appendProtocol({ type: "usage", inputTokens: 700_000, outputTokens: 400_000 } as AgentEvent); // 1.1M token × $1/M
+      check(orchB.budgetBlocked() && orchB.budgetEstimateUsd() >= 1.09, "N8b usage 累计估价 ≥ maxBudgetUsd");
+      const rb = await orchB.spawn({ mode: "read", task: "x" }, { callId: "n-b" });
+      check(!rb.ok && rb.output.includes("[budget] 会话成本超限"), "N8c 超限拒绝新 spawn（含 sequencer 后环的统一入口）");
+      check(events.some((e) => e.type === "tool_result" && (e as { output: string }).output.includes("[budget] 会话成本超限")), "N8d 成本闸拒绝落流警告");
+    }
+
+    // ---- N9 卡死检测（§4.4.8，短阈值验收）：waiting_input(stuck) + 提醒 + resume/取消双出口 ----
+    {
+      const sPath = join(work, "n-stuck.jsonl");
+      await writeFile(sPath, "", "utf8");
+      const events: AgentEvent[] = [];
+      const hang = new Map<string, () => void>();
+      const orchS = new Orchestrator({
+        logPath: sPath,
+        workspace: repoN,
+        parentMode: "default",
+        stuckConfig: { silenceMs: 150 },
+        emit: async (e) => {
+          events.push(e);
+          await createEventLog(sPath).append(e);
+        },
+        modelFor: (args: SpawnArgs) => {
+          const task = String(args.task ?? "");
+          let armed = false;
+          return (async function* () {
+            if (!armed) {
+              armed = true;
+              yield { type: "tool_call", id: "s-" + task, name: "read_file", args: { path: "README.md" } } as AgentEvent;
+              await new Promise<void>((resolve) => {
+                hang.set(task, () => {
+                  hang.delete(task);
+                  resolve();
+                });
+              });
+            }
+            yield { type: "assistant_message", content: "## 结论\n卡死解除后收束。" } as AgentEvent;
+          }) as unknown as ReturnType<typeof scriptedWorkerModel>;
+        },
+      });
+      const rs = await orchS.spawn({ mode: "read", task: "静默演练" }, { callId: "n-s" });
+      const idS = (JSON.parse(rs.output) as { agent_id: string }).agent_id;
+      check(await waitFor(() => events.some((e) => e.type === "agent_status" && e.agent_id === idS && (e as { reason?: string }).reason === "stuck"), 8_000), "N9 静默超时 → waiting_input(reason=stuck)");
+      check(await waitFor(() => events.some((e) => e.type === "agent_message" && (e as { text: string }).text.includes("[stuck]"))), "N9b 卡死提醒落流（复用 agent_message 不新增卡片类型）");
+      check(orchS.resumeAgent(idS), "N9c 出口一：resume 清除卡死态受理");
+      hang.get("静默演练")?.(); // 放行收尾
+      await orchS.waitAll(15_000);
+      const sDone = events.find((e) => e.type === "agent_result" && e.agent_id === idS) as Extract<AgentEvent, { type: "agent_result" }> | undefined;
+      check(sDone?.status === "done", "N9d resume 后 worker 跑通 done");
+      check(!orchS.resumeAgent(idS), "N9e 非 stuck 态 resume 拒绝（幂等闸）");
+    }
+
+    // ---- N10 崩溃恢复（§4.4.9，投影层模拟口径）：无终态扫描 + 恢复卡 + 重派跑通 ----
+    {
+      const cPath = join(work, "n-crash.jsonl");
+      const log = createEventLog(cPath);
+      await log.append({ type: "user_message", content: "压力会话（崩溃前）" } as AgentEvent);
+      await log.append({
+        type: "agent_spawned",
+        agent_id: "w-crash",
+        parent_event_id: 2,
+        mode: "read",
+        task: "崩溃恢复演练任务",
+        max_turns: 40,
+        permission_mode: "default",
+      } as AgentEvent);
+      await log.append({ type: "tool_call", id: "cx-1", name: "read_file", args: { path: "README.md" }, agent_id: "w-crash" } as AgentEvent);
+      const hit = await applyCrashRecovery(cPath);
+      check(JSON.stringify(hit) === JSON.stringify(["w-crash"]), "N10 重开扫描命中无终态 worker");
+      const crashEvents = await replay(cPath);
+      const cst = crashEvents.find((e) => e.type === "agent_status" && e.agent_id === "w-crash") as Extract<AgentEvent, { type: "agent_status" }> | undefined;
+      check(cst?.status === "failed" && cst?.reason === "interrupted", "N10b 补发 failed(reason=interrupted) 落流");
+      const cres = crashEvents.find((e) => e.type === "agent_result" && e.agent_id === "w-crash") as Extract<AgentEvent, { type: "agent_result" }> | undefined;
+      check(cres?.artifacts.respawn?.task === "崩溃恢复演练任务" && cres?.artifacts.respawn?.mode === "read", "N10c 恢复卡载荷 respawn（原 spawn 参数）");
+      check((await applyCrashRecovery(cPath)).length === 0, "N10d 幂等：补发终态后重扫归零");
+      // 重派 = 全新 agent_id 全参重 spawn（真实编排器路径跑通）
+      const rPath = join(work, "n-respawn.jsonl");
+      await writeFile(rPath, "", "utf8");
+      const eventsR: AgentEvent[] = [];
+      const orchR = new Orchestrator({
+        logPath: rPath,
+        workspace: repoN,
+        parentMode: "default",
+        emit: async (e) => {
+          eventsR.push(e);
+          await createEventLog(rPath).append(e);
+        },
+        modelFor: () => scriptedWorkerModel([{ type: "assistant_message", content: "## 结论\n重派后完成。" } as unknown as AgentEvent] as unknown as Parameters<typeof scriptedWorkerModel>[0]),
+      });
+      const rr = await orchR.respawn({ mode: "read", task: "崩溃恢复演练任务" }, { callId: "n-respawn" });
+      check(rr.ok, "N10e 重派受理（respawn = 全参重 spawn）");
+      await orchR.waitAll(15_000);
+      const newId = (JSON.parse(rr.output) as { agent_id: string }).agent_id;
+      const doneR = eventsR.find((e) => e.type === "agent_result") as Extract<AgentEvent, { type: "agent_result" }> | undefined;
+      check(doneR?.status === "done" && newId !== "w-crash", "N10f 重派跑通（全新 agent_id，V1 无热恢复）");
+    }
+
+    // ---- N11 worker 压缩（§7.5）：同一 runCompaction 链路 + agent_id 归因 + usage 计入 ----
+    {
+      const taskTextN = "压缩演练：请通读 README 并给出结构化报告（压缩后任务书必须仍可见）。";
+      const specsN = workerToolSpecs("read") as never;
+      const toolSchemaChars = JSON.stringify(specsN).length;
+      const sysN = await buildWorkerSystemMessages({ task: taskTextN, context: {}, mode: "read" }, repoN);
+      const systemChars = sysN.reduce((n: number, m: { content?: string | null }) => n + (m.content?.length ?? 0), 0);
+      const baselineTokens = Math.ceil((systemChars + toolSchemaChars) / 4);
+      const bigContent = "结果".repeat(6000);
+      const perMsgTokens = Math.ceil(JSON.stringify({ role: "assistant", content: bigContent }).length / 4);
+      const kPath = join(work, "n-comp.jsonl");
+      await writeFile(kPath, "", "utf8");
+      const events: AgentEvent[] = [];
+      const scriptN: unknown[] = [
+        { type: "tool_call", id: "k0", name: "read_file", args: { path: "README.md" } },
+        { type: "assistant_message", content: "第 0 轮中间笔记：" + bigContent },
+        { type: "tool_call", id: "k1", name: "read_file", args: { path: "README.md" } },
+        { type: "assistant_message", content: "第 1 轮中间笔记：" + bigContent },
+        { type: "assistant_message", content: "## 结论\n压缩演练收束。" },
+      ];
+      const orchC = new Orchestrator({
+        logPath: kPath,
+        workspace: repoN,
+        parentMode: "default",
+        emit: async (e) => {
+          events.push(e);
+          await createEventLog(kPath).append(e);
+        },
+        modelFor: () => scriptedWorkerModel(scriptN as unknown as Parameters<typeof scriptedWorkerModel>[0]),
+        workerSummarizer: async () => ({ text: "## Objective\n压缩摘要占位", usage: { inputTokens: 33, outputTokens: 7 }, model: "mock-sum" }),
+        workerCompaction: { inputLimit: baselineTokens + 2 * perMsgTokens + 400, maxOutputReserve: 100, ratio: 0.95, tailRatio: 0.1, tailMinTokens: 20, tailMaxTokens: 300, minProgress: 0.05 },
+      });
+      const rk = await orchC.spawn({ mode: "read", task: taskTextN }, { callId: "n-c" });
+      check(rk.ok, "N11 压缩演练 worker 受理");
+      await orchC.waitAll(20_000);
+      const comp = events.find((e) => e.type === "compaction") as Extract<AgentEvent, { type: "compaction" }> | undefined;
+      check(comp !== undefined && typeof comp?.agent_id === "string" && (comp?.agent_id ?? "").startsWith("worker-"), "N11b worker 压缩事件带 agent_id 落流（子流归因）");
+      check(comp?.trigger === "auto", "N11c 阈值摘要路径触发（ratio 0.95 比 main 0.9 更晚，参数独立）");
+      check(events.some((e) => e.type === "usage" && (e as { agent_id?: string }).agent_id !== undefined && (e as { inputTokens: number }).inputTokens >= 33), "N11d 摘要调用 usage 计入 usage(agent_id)（§4.4.10 不破例）");
+      const doneC = events.find((e) => e.type === "agent_result") as Extract<AgentEvent, { type: "agent_result" }> | undefined;
+      check(doneC?.status === "done" && (doneC?.usage.inputTokens ?? 0) >= 33, "N11e worker done + agent_result.usage 汇总含摘要调用");
+      // 无第二套摘要实现（静态扫描 compaction 引用面）：orchestrator 走 runCompaction，六段模板字面零复制
+      const orchSrcN = await readFile(join(ROOT, "src", "agent", "orchestrator.ts"), "utf8");
+      check(orchSrcN.includes("runCompaction(") && !orchSrcN.includes("## Objective"), "N11f 同一 runCompaction 链路（orchestrator 无第二套摘要实现/模板字面）");
+    }
   }
 
   // ============================== M 暗卷（真实 GLM，有 key 才跑） ==============================
