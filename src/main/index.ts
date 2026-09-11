@@ -128,7 +128,11 @@ setAppHooks({
 });
 hooksProxy.onAsk = (p) => push("agent:ask", p);
 
-ipcMain.handle("agent:run", (_event, req: RunRequest) => handleAgentRun(req));
+// M2g 收口修复：renderer 传入的 sessionId 此前在 IPC 边界被丢弃（over 未传），UI run 永远走
+// tmp 日志、会话 JSONL 恒空、重放/提升归因全断。现按 RunOverrides 转交（与 preload 类型一致）。
+ipcMain.handle("agent:run", (_event, req: RunRequest & { sessionId?: string }) =>
+  handleAgentRun(req, req.sessionId !== undefined ? { sessionId: req.sessionId } : {}),
+);
 ipcMain.handle("agent:decide", (_event, askId: string, approved: boolean, scope?: "once" | "session_kind" | "always") =>
   handleAgentDecide(askId, approved, scope),
 );

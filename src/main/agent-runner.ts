@@ -521,15 +521,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // 零插件环境（无 .agent/plugins、无 M2E_USER_PLUGINS/M2E_LOOSE_SKILLS）= 空清单 = 零行为。
     let rt: PluginRuntime | null = null;
     try {
-      rt = await PluginRuntime.load({
-        ...(process.env.M2E_USER_PLUGINS ? { userPluginsDir: process.env.M2E_USER_PLUGINS } : {}),
-        projectPluginsDir: join(opts.workspace, ".agent", "plugins"),
-        ...(process.env.M2E_LOOSE_SKILLS ? { looseRoots: [process.env.M2E_LOOSE_SKILLS] } : {}),
-        workspace: opts.workspace,
-        pluginDataRoot: process.env.M2E_PLUGIN_DATA ?? join(tmpdir(), "m2e-plugin-data"),
-        ...(process.env.M2E_TRUST_FILE ? { trustFile: process.env.M2E_TRUST_FILE } : {}),
-        mode: opts.mode,
-      });
+      rt = await PluginRuntime.load({ ...pluginRuntimeOpts(opts.workspace), mode: opts.mode });
       setCurrentPluginRuntime(rt);
       await rt.connectMcp(); // 仅受信插件；pending/declined 不连接（§9.8 信任门）
       injectedToolNames = installPluginTools(rt);
@@ -788,14 +780,44 @@ export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memo
   return { sandbox: sandboxState, memory, plugins, sidechat };
 }
 
-/** IPC "agent:plugin-decide"：信任卡决议（批准/拒绝）→ 决议持久化 + 同样本重新激活（M2e §9.8）。 */
+/** M2e run 装配与 M2g 运行间隙决议共用的插件运行时配置（信任文件路径的单一事实源在 PluginRuntime.load）。 */
+function pluginRuntimeOpts(workspace: string): Omit<Parameters<typeof PluginRuntime.load>[0], "mode"> {
+  return {
+    ...(process.env.M2E_USER_PLUGINS ? { userPluginsDir: process.env.M2E_USER_PLUGINS } : {}),
+    projectPluginsDir: join(workspace, ".agent", "plugins"),
+    ...(process.env.M2E_LOOSE_SKILLS ? { looseRoots: [process.env.M2E_LOOSE_SKILLS] } : {}),
+    workspace,
+    pluginDataRoot: process.env.M2E_PLUGIN_DATA ?? join(tmpdir(), "m2e-plugin-data"),
+    ...(process.env.M2E_TRUST_FILE ? { trustFile: process.env.M2E_TRUST_FILE } : {}),
+  };
+}
+
+/** IPC "agent:plugin-decide"：信任卡决议（批准/拒绝）→ 决议持久化 + 同样本重新激活（M2e §9.8）。
+ *  M2g 收口修复：运行间隙（runtime 已回收）点击不再静默 ok:false——按 run 同款配置做一次轻量
+ *  发现 + 决议落信任文件（下次 load 生效），留档快照同步改写（面板徽标即时反映）。 */
 export async function handlePluginDecide(pluginName: string, trusted: boolean): Promise<{ ok: boolean; snapshot?: PluginPanelSnapshot }> {
   const rt = currentPluginRuntime();
-  if (!rt) return { ok: false };
-  const found = await rt.trustDecide(pluginName, trusted);
-  if (!found) return { ok: false };
-  await rt.connectMcp(); // 信任后同样本开始生效（MCP 补连；hook 引擎已在重建后的 runtime 内）
-  return { ok: true, snapshot: rt.snapshot() };
+  if (rt) {
+    const found = await rt.trustDecide(pluginName, trusted);
+    if (!found) return { ok: false };
+    await rt.connectMcp(); // 信任后同样本开始生效（MCP 补连；hook 引擎已在重建后的 runtime 内）
+    return { ok: true, snapshot: rt.snapshot() };
+  }
+  const lite = await PluginRuntime.load(pluginRuntimeOpts(lastWorkspace ?? WORKSPACE));
+  let decided = false;
+  try {
+    decided = await lite.trustDecide(pluginName, trusted);
+  } finally {
+    await lite.shutdown().catch(() => {});
+  }
+  if (!decided) return { ok: false };
+  if (lastPluginSnapshot) {
+    lastPluginSnapshot = {
+      ...lastPluginSnapshot,
+      plugins: lastPluginSnapshot.plugins.map((p) => (p.name === pluginName ? { ...p, trust: trusted ? "trusted" : "declined" } : p)),
+    };
+  }
+  return { ok: true, snapshot: lastPluginSnapshot ?? undefined };
 }
 
 /** IPC "agent:memory-delete"：用户经记忆面板显式删除（§8.1.7：删除仅用户，模型无删除权）。 */

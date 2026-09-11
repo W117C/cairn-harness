@@ -214,9 +214,12 @@ function SidechatPanel({ payload }: PanelProps): ReactElement {
       setSnap(null);
     }
   }, []);
+  // M2g 收口修复：面板在挂载期也可能落后于外部变化（run 新建旁路会话 / promote 等）——
+  // 以事件数为刷新信号、防抖自取 getState 快照（纯投影，零私有状态，不逐事件放大请求）。
   useEffect(() => {
-    if (payload.sidechat === undefined) void reload();
-  }, [payload.sidechat, reload]);
+    const t = setTimeout(() => { void reload(); }, 500);
+    return () => clearTimeout(t);
+  }, [reload, payload.eventCount]);
   useEffect(() => {
     if (active === null && snap && snap.sessions.length > 0) setActive(snap.sessions[0]?.id ?? null);
   }, [snap, active]);
@@ -402,9 +405,11 @@ function MemoryPanel({ payload }: PanelProps): ReactElement {
       setSnap(null);
     }
   }, []);
+  // M2g 收口修复：同 SidechatPanel——挂载期外部变化（agent 沉淀新记忆 / 用户他面删除）也须可见。
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    const t = setTimeout(() => { void reload(); }, 500);
+    return () => clearTimeout(t);
+  }, [reload, payload.eventCount]);
   const del = async (scope: "project" | "global", topic: string): Promise<void> => {
     if (!window.agent.deleteMemory) return;
     setBusy(true);
@@ -493,9 +498,11 @@ function PluginsPanel({ payload }: PanelProps): ReactElement {
       setSnap(null);
     }
   }, []);
+  // M2g 收口修复：同 SidechatPanel——挂载期外部变化（agent 沉淀新记忆 / 用户他面删除）也须可见。
   useEffect(() => {
-    if (payload.plugins === undefined) void reload();
-  }, [payload.plugins, reload]);
+    const t = setTimeout(() => { void reload(); }, 500);
+    return () => clearTimeout(t);
+  }, [reload, payload.eventCount]);
   const decide = async (name: string, trusted: boolean): Promise<void> => {
     if (!window.agent.pluginDecide) return;
     setBusy(true);
