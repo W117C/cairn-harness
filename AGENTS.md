@@ -41,9 +41,9 @@ Node 22 / TypeScript 5 / electron-vite 5 / Electron 44 / React 19 / vitest 5 / T
 
 ## 当前状态
 
-**M0–M2 全部完成（2026-09-11 M2g 收口）**：内核 + 沙箱 + shadcn/ui + 会话内核/三门/自治等级 + 阈值摘要压缩 + grep/glob/read/edit/LSP + 符号地图 + prune + 三 provider 接齐（M0–M2c）→ 记忆两层 + remember 工具（M2d）→ 扩展容器（插件 skill/prompt/hook/agent + MCP 适配器 + 信任门，M2e）→ 辅助对话 sidechat + 产出代码安全 report（M2f）→ 收口轮（M2g：验收总对表三态表 + 实仓插件补验/sensitive 落 safeStorage + token 按 kind 分解 + sidechat 经济性 + preload 六通道接线 + 判据健壮化 `pnpm gates` + 演示通道 fixture 化 + ponytail-audit）。
+**M0–M3 全部完成（2026-09-12 M3c 收口）**：M0–M2g（内核/沙箱/会话内核/三门/压缩/prune/地图/provider/记忆/插件/MCP/sidechat/安全 report，详见 `docs/m2-acceptance.md`）→ **M3 编排内核三轮交付**：M3a（spawn_agent 三 mode 原语 + 子流事件契约 + 审批解耦 + 取消链 + read mode + agents 面板，HEAD 8fb73f4）→ M3b（write mode：worktree 生命周期 + 写租约表 + 合并控制塔 + 评审闭环 + 产出代码安全 gate 模式 + edit_file 绝对行号，HEAD 3431e72）→ M3c（depends_on 依赖链 + pipeline 哑 sequencer（零 LLM/stages 冻结/verdict 标注）+ agents/*.md 插件角色采纳（§9.11-4 闭合）+ 卡死检测 + maxBudgetUsd 成本闸 + 崩溃恢复（重派）+ worker 压缩（§7.5）+ ≥3 worker 压力验收）。
 
-- 门禁：`pnpm gates` 19 道全绿 + 恒真式体检零命中（收口终版实测走分支 A 真断言，见环境注意）；测试 37 files / 285 passed / 0 skipped。
-- M2 验收三态表（已证/未证/M3，带证据指针）见 `docs/m2-acceptance.md`；自研抽象审计见 `docs/m2-audit.md`；未证项仅 1（testdino 远程 MCP 实际连接 401 需凭据）。
-- BLOCKED.md 各轮备案已全部裁决（含 2026-09-11 M2f 轮九条，见其裁决记录节）。
-- 下一步 = **M3 编排内核**（`agent-plan.md` §4.4.11 + §14 M3 行；M3 任务书待出）。M3 之前禁止写编排代码（§16 纪律 1）；M3 欠账清单见 `docs/m2-acceptance.md` §六。
+- 门禁：`pnpm gates` **20 道全绿 + 恒真式体检零命中**；测试 40 files / 357 passed / 0 skipped；agents-check 233 断言（A–M + N 压力段）。
+- M3 验收三态表（§14 M3 行 + §4.4.7/8/9 + §4.5 + §7.5 + §9.11-4 + §11.6，带证据指针）见 `docs/m3-acceptance.md`；自研抽象审计见 `docs/m3-audit.md`。
+- BLOCKED.md 各轮备案已全部裁决（见其裁决记录节）。
+- 下一步 = **M4 商业化**（`agent-plan.md` §12.2 定时任务 + safeStorage 打包/license/更新/引导；M4 任务书待出）。
