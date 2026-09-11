@@ -153,7 +153,17 @@ async function waitFor<T>(probe: () => Promise<T | null>, timeoutMs: number, eve
 function spawnElectron(env: NodeJS.ProcessEnv): { proc: ChildProcess; output: () => string } {
   const bin = join(process.cwd(), "node_modules", "electron", "dist", "Electron.app", "Contents", "MacOS", "Electron");
   const chunks: string[] = [];
-  const proc = spawn(bin, [".", "--remote-debugging-port=" + String(PORT)], {
+  // M2g 环境适配（fail-visible）：本宿主拒载 Chromium 自带沙箱（`sandbox initialization failed:
+  // Operation not permitted`，GPU/network 子进程连锁崩溃），Electron 起不来 → B 相全部断言无从谈起。
+  // 这是**宿主限制**而非产品沙箱：应用自身的 Seatbelt 工具沙箱是另一套（src/main/sandbox.ts），
+  // 与本开关无关。此处仅给验收脚本的 Electron 进程加 --no-sandbox 让窗口真的起来，
+  // 使 B 相断言从「真空通过」回到「真测到」。可用 --require-chromium-sandbox 关闭该适配。
+  const chromiumSandbox = process.argv.includes("--require-chromium-sandbox");
+  const extraArgs = chromiumSandbox ? [] : ["--no-sandbox"];
+  if (!chromiumSandbox) {
+    console.log("  ℹ️  宿主拒载 Chromium 沙箱 → Electron 以 --no-sandbox 启动（产品 Seatbelt 工具沙箱不受影响）");
+  }
+  const proc = spawn(bin, [".", ...extraArgs, "--remote-debugging-port=" + String(PORT)], {
     env: { ...process.env, ...env },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -213,12 +223,19 @@ async function phaseElectron(root: string): Promise<void> {
     M1E_INJECT_ASK_DELAY_MS: "5000",
   });
   try {
-    await waitFor(async () => {
+    const up = await tryWait(async () => {
       try {
         const r = await fetch(CDP_URL + "/json/version");
         return r.ok ? true : null;
       } catch { return null; }
     }, 25_000);
+    if (!up) {
+      // fail-visible：窗口没起来 = 本相**未验证**，不得静默算绿（M2g §1.4-1）
+      ok(false, "B0 Electron 起不来 → B 相未验证（CDP 不可达，窗口从未启动）");
+      console.log("    诊断（进程输出尾 8 行）：");
+      for (const l of output().trim().split("\n").slice(-8)) console.log("      " + l);
+      return;
+    }
     const cdp = new Cdp();
     await cdp.connect();
 
@@ -283,13 +300,20 @@ async function phaseElectron(root: string): Promise<void> {
     await killElectron(electron);
 
     console.log("[panels-check] B4 重启还原（新进程）");
-    const { proc: electron2 } = spawnElectron({ M1E_SESSIONS_DIR: root, M1E_SETTINGS_PATH: join(root, "settings.json") });
-    await waitFor(async () => {
+    const { proc: electron2, output: output2 } = spawnElectron({ M1E_SESSIONS_DIR: root, M1E_SETTINGS_PATH: join(root, "settings.json") });
+    const up2 = await tryWait(async () => {
       try {
         const r = await fetch(CDP_URL + "/json/version");
         return r.ok ? true : null;
       } catch { return null; }
     }, 25_000);
+    if (!up2) {
+      ok(false, "B4 重启进程起不来 → 未验证");
+      console.log("    诊断（进程输出尾 8 行）：");
+      for (const l of output2().trim().split("\n").slice(-8)) console.log("      " + l);
+      await killElectron(electron2);
+      return;
+    }
     const cdp2 = new Cdp();
     await cdp2.connect();
     const restored = await tryWait(async () => {
@@ -341,7 +365,12 @@ try {
   await phaseSettings(work);
   await phaseSessions(work);
   await phaseReplay(work, sid);
-  await phaseElectron(work);
+  try {
+    await phaseElectron(work);
+  } catch (err) {
+    // fail-visible：任何未预期异常都不许静默——计失败并打印原因（M2g §1.4-1）
+    ok(false, "B 相异常（未验证）：" + (err instanceof Error ? err.message : String(err)));
+  }
 } finally {
   if (!ROOT_DIR) await rm(work, { recursive: true, force: true }).catch(() => {});
 }

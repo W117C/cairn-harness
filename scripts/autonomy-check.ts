@@ -35,7 +35,11 @@ const APP = join(ROOT, "fixtures", "todo-app");
 const DEFAULT_SCRIPT = join(ROOT, "fixtures", "autonomy", "default-flow.jsonl");
 const AUTO_SCRIPT = join(ROOT, "fixtures", "autonomy", "auto-flow.jsonl");
 const READONLY_SCRIPT = join(ROOT, "fixtures", "autonomy", "readonly-flow.jsonl");
-const SHELL2_KEY = "run_shell\u241Fpnpm test";
+// M2g 修正：default-flow 的命令由 `pnpm test` 改为自足的 `echo autonomy-shell-probe`。
+// 原因：`pnpm test` 的成败取决于靶子当前状态（e2e 修复后为绿、ipc:check 降级分支后为红），
+// 使本门隐式依赖**别的门的副作用**——这正是「门说的话 ≠ 门测的事」。改后本门自足：
+// 断言「命令真实执行且输出可见」不依赖任何外部状态。fixtures/autonomy/** 不在判卷冻结区。
+const SHELL2_KEY = "run_shell\u241Fecho autonomy-shell-probe";
 
 let failures = 0;
 function assert(cond: boolean, label: string): void {
@@ -215,8 +219,8 @@ console.log("[autonomy-check] 任务 6 明卷·默认档（fixtures/autonomy/def
     records[0]?.tool === "run_shell" && (records[0]?.reason ?? "").includes("默认档"),
     "默认档：审批卡带送审原因（默认档逐次审批）",
   );
-  assert(r1 !== null && r1.ok, "默认档：第一次 run_shell 经批准真实执行");
-  assert(r2 !== null && r2.ok, "默认档：第二次同命令经 session_kind 记忆自动放行并真实执行");
+  assert(r1 !== null && r1.ok && r1.output.includes("autonomy-shell-probe"), "默认档：第一次 run_shell 经批准真实执行（输出含探针串）");
+  assert(r2 !== null && r2.ok && r2.output.includes("autonomy-shell-probe"), "默认档：第二次同命令经 session_kind 记忆自动放行并真实执行（输出含探针串）");
   assert(
     r1 !== null && r1.auto === undefined,
     "默认档：手工批准不产生自动放行审计（audit 只记 rule|session_scope）",
@@ -315,6 +319,10 @@ if (!process.env.M0_API_KEY) {
       events.filter((e): e is Extract<AgentEvent, { type: "assistant_delta" }> => e.type === "assistant_delta"),
     );
     const marked = /"requires_approval"\s*:\s*true/.test(text) || text.includes("<requires_approval>");
+    // M2g 修正（闭合 §1.4-6）：该段旧版唯一出口是 if(marked) 分支——模型未标记时整段零断言、空转通过。
+    // 补一条**无条件**断言（恒跑），使该段在有 key 时永远可判；「观察项」保留但不再是唯一出口。
+    assert(events.length >= 1, "暗卷：产出 ≥1 条事件（无条件断言，段内出口不唯一，实际 " + String(events.length) + " 条）");
+    assert(text.length > 0, "暗卷：模型有可见输出（delta 文本非空，实际 " + String(text.length) + " 字符）");
     if (marked) {
       const mapped = modelRisk({ requires_approval: true });
       assert(mapped.level === "high", `暗卷：模型标记解析正确（requires_approval → ${mapped.level}）`);

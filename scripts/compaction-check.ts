@@ -293,7 +293,16 @@ async function main(): Promise<void> {
       const kf = keepFirstSet(events);
       for (const id of outcome.event.compressed_event_ids) assert(!kf.has(id), "keep-first 被截断");
       assert(outcome.event.tokens_after < outcome.event.tokens_before, "截断未省 token");
-      assert(shouldCompact(outcome.event.tokens_after, { ...DEFAULT_COMPACTION_CONFIG, inputLimit: outcome.event.tokens_before + 100, maxOutputReserve: 100 }) === null || true, "sanity");
+      // M2g 修正（闭合 §1.4-6）：旧版 `shouldCompact(...) === null || true` 是伪装成断言的恒真式。
+      // 改成真断言：给一个足够宽的预算，截断后的估算必须落到阈值以下（shouldCompact → null）。
+      const cfg2 = {
+        ...DEFAULT_COMPACTION_CONFIG,
+        inputLimit: outcome.event.tokens_after * 2 + DEFAULT_COMPACTION_CONFIG.maxOutputReserve,
+      };
+      assert(
+        shouldCompact(outcome.event.tokens_after, cfg2) === null,
+        "截断后估算 < 可用预算 × ratio → 不再触发（shouldCompact = null，tokens_after=" + String(outcome.event.tokens_after) + "）",
+      );
     });
 
     console.log("[compaction-check] 任务 6：暗卷（真实 GLM）");

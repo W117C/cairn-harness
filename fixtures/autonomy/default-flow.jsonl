@@ -1,5 +1,5 @@
-{"type":"assistant_message","content":"先跑一次测试确认基线。"}
-{"type":"tool_call","id":"a-shell-1","name":"run_shell","args":{"command":"pnpm test"}}
+{"type":"assistant_message","content":"先跑一次确认基线。"}
+{"type":"tool_call","id":"a-shell-1","name":"run_shell","args":{"command":"echo autonomy-shell-probe"}}
 {"type":"assistant_message","content":"再跑一次确认稳定。"}
-{"type":"tool_call","id":"a-shell-2","name":"run_shell","args":{"command":"pnpm test"}}
-{"type":"assistant_message","content":"两次测试都稳定，任务完成。"}
+{"type":"tool_call","id":"a-shell-2","name":"run_shell","args":{"command":"echo autonomy-shell-probe"}}
+{"type":"assistant_message","content":"两次都稳定，任务完成。"}

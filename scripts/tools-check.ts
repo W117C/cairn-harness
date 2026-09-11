@@ -1,17 +1,43 @@
-// M2a 任务 7：pnpm tools-check —— 逐工具实测输出三项清单（输出上限 / 截断提示 / 相对路径）
+// M2a 任务 7 / M2g 任务 5：pnpm tools-check —— 逐工具实测输出三项清单（输出上限 / 截断提示 / 相对路径）
 // + 断言工具注册表含 9 个工具。全部真实调用（临时工作区），不做静态扫描。
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+//
+// M2g 修正（闭合 §1.4-4「空断言 + 言过其实的结语」）：
+//   - 删掉 `check(..., true)` 形式的空断言；
+//   - 语义上不适用的项显式标 **n/a 并写理由**（不是恒真断言）；
+//   - lsp 段补齐三项（此前只验「未启用报错」）：借 fixtures/lsp/stub-server.mjs 真跑 documentSymbol
+//     触发输出上限 + 截断提示，并核对相对路径输出；
+//   - 结语按**实际覆盖**打印（工具 × 三项的逐格勾选），不再打印与覆盖不符的笼统结论。
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { TOOLS } from "../src/tools";
 import { edit_file } from "../src/tools/edit_file";
+import { closeAllLspClients, lsp } from "../src/tools/lsp";
 import type { ToolContext } from "../src/tools";
 
 let failures = 0;
+let checks = 0;
+let nas = 0;
 function check(label: string, cond: boolean, detail = ""): void {
+  checks++;
   const mark = cond ? "✅" : "❌";
   if (!cond) failures++;
   console.log(`  ${mark} ${label}${detail ? " — " + detail : ""}`);
+}
+/** 显式 n/a（语义上不适用）：不是恒真断言，也不计入通过数。 */
+function na(label: string, reason: string): void {
+  nas++;
+  console.log(`  ⏭ ${label} — n/a：${reason}`);
+}
+
+/** 逐工具 × 三项覆盖表（结语按实际覆盖打印）。 */
+type Mark = "✅" | "❌" | "n/a";
+const COVERAGE = new Map<string, [Mark, Mark, Mark]>();
+function mark(tool: string, idx: 0 | 1 | 2, v: Mark): void {
+  const cur = COVERAGE.get(tool) ?? ["n/a", "n/a", "n/a"];
+  cur[idx] = v;
+  COVERAGE.set(tool, cur);
 }
 
 async function makeWs(): Promise<{ ws: string; ctx: ToolContext }> {
@@ -45,6 +71,9 @@ console.log("\n== grep ==");
   check("② 截断提示：长行截断到 2000 内", longLine.replace("Line " + "1: ".length, "").length <= 2100);
   check("② 截断提示：行截断带标记", r2.output.includes("行截断"));
   check("③ 相对路径：输出无绝对路径", assertNoAbsPath(r1.output, ws));
+  mark("grep", 0, "✅");
+  mark("grep", 1, "✅");
+  mark("grep", 2, "✅");
   await rm(ws, { recursive: true, force: true });
 }
 
@@ -61,6 +90,9 @@ console.log("\n== glob ==");
   const r2 = await TOOLS.glob.run({ pattern: "**/*" }, ctx);
   check("② 排除提示：node_modules 不出现", !r2.output.includes("node_modules"));
   check("③ 相对路径：输出无绝对路径", assertNoAbsPath(r2.output, ws));
+  mark("glob", 0, "✅");
+  mark("glob", 1, "✅");
+  mark("glob", 2, "✅");
   await rm(ws, { recursive: true, force: true });
 }
 
@@ -77,14 +109,21 @@ console.log("\n== read_file ==");
   await writeFile(join(ws, "one-long.txt"), "y".repeat(5000) + "\n", "utf8");
   const r2 = await TOOLS.read_file.run({ path: "one-long.txt" }, ctx);
   check("② 截断提示：行截断标记", r2.output.includes("行截断"));
-  check("③ 相对路径：n/a（纯文本输出）+ 目录列表", true);
-  // 目录条目 + 近名建议
+  // 目录列表：输出含 workspace 相对路径且无绝对路径（真断言，替换旧版恒真式）
   await mkdir(join(ws, "sub"), { recursive: true });
   await writeFile(join(ws, "sub", "in.txt"), "x", "utf8");
   const r3 = await TOOLS.read_file.run({ path: "sub" }, ctx);
   check("② 目录路径：列条目", r3.output.includes("sub/（目录，1 项）"));
+  check(
+    "③ 相对路径：目录列表以相对路径呈现且无绝对路径",
+    r3.output.includes("in.txt") && assertNoAbsPath(r3.output, ws),
+    "输出首行：" + r3.output.split("\n")[0],
+  );
   const err = await TOOLS.read_file.run({ path: "sub/in.tx" }, ctx).catch((e: Error) => e);
   check("② 未命中：近名建议", err instanceof Error && err.message.includes("近名建议") && err.message.includes("in.txt"));
+  mark("read_file", 0, "✅");
+  mark("read_file", 1, "✅");
+  mark("read_file", 2, "✅");
   await rm(ws, { recursive: true, force: true });
 }
 
@@ -105,7 +144,18 @@ console.log("\n== write_file / edit_file ==");
   check("edit_file replace_all 批量", e3.ok && e3.output.includes("2 处"));
   // 诊断回流（无 LSP 配置 = 无 <diagnostics> 后缀；有配置路径由单测覆盖）
   check("诊断回流：无 LSP 配置时输出不变", !e3.output.includes("<diagnostics"));
-  check("③ 相对路径：输出带 workspace 相对路径", r1.output.includes("a.txt") && assertNoAbsPath(r1.output, ws));
+  // edit_file 的 ①/②：输出是定长摘要（"已替换 <rel>（N 处）"）+ 有界诊断块（每文件 ≤20 条），
+  // 无无界输出面 → 语义上不适用，显式标 n/a 并写理由（不是恒真断言）。
+  na("edit_file ① 输出上限", "输出为定长摘要 + 有界诊断块（每文件 ≤20 条），不存在无界输出面");
+  na("edit_file ② 截断提示", "同上：输出有界，无需截断提示");
+  check(
+    "③ 相对路径：输出带 workspace 相对路径且无绝对路径",
+    r1.output.includes("a.txt") && assertNoAbsPath(r1.output, ws),
+    "write_file 输出：" + r1.output,
+  );
+  mark("edit_file", 0, "n/a");
+  mark("edit_file", 1, "n/a");
+  mark("edit_file", 2, "✅");
   await rm(ws, { recursive: true, force: true });
 }
 
@@ -122,17 +172,65 @@ console.log("\n== run_shell（既有行为复核）==");
   await rm(ws, { recursive: true, force: true });
 }
 
-console.log("\n== lsp（未配置 = fail loud，不挂账）==");
+console.log("\n== lsp（三项补齐：输出上限 / 截断提示 / 相对路径）==");
 {
-  const { ws, ctx } = await makeWs();
-  const err = await TOOLS.lsp.run({ operation: "hover", path: "a.ts", line: 1, column: 1 }, ctx).catch((e: Error) => e);
+  const STUB = fileURLToPath(new URL("../fixtures/lsp/stub-server.mjs", import.meta.url));
+  const ws = await mkdtemp(join(tmpdir(), "m2a-check-lsp-"));
+  const ctx: ToolContext = { workspace: ws };
+  // 1) 未启用 = fail loud（既有断言，保留）
+  const err = await lsp.run({ operation: "hover", path: "a.ts", line: 1, column: 1 }, ctx).catch((e: Error) => e);
   check("lsp 未启用时明确报错（不静默）", err instanceof Error && /未启用/.test((err as Error).message));
+  // 2) 装配 stub server（与 tests/lsp.test.ts 同一靶子；真实 stdio JSON-RPC）
+  await mkdir(join(ws, ".agent"), { recursive: true });
+  await writeFile(
+    join(ws, ".agent", "lsp.json"),
+    JSON.stringify({ lsp: { stub: { command: "node", args: [STUB], extensions: [".ts", ".js"] } } }),
+    "utf8",
+  );
+  await mkdir(join(ws, "src"), { recursive: true });
+  const syms: string[] = [];
+  for (let i = 1; i <= 1500; i++) syms.push("SYM(symbol_" + String(i).padStart(4, "0") + ") 一行一个文档符号，撑大输出");
+  syms.push("ERROR_HERE");
+  await writeFile(join(ws, "src", "big.ts"), syms.join("\n") + "\n", "utf8");
+  const big = await lsp.run({ operation: "documentSymbol", path: "src/big.ts" }, ctx);
+  check("① 输出上限：1500 个符号的 documentSymbol 被截到 32KB 内", big.ok && big.output.length <= 32 * 1024 + 80, "实际 " + String(big.output.length) + " 字节");
+  check("② 截断提示：[truncated: 输出超过 32KB", big.output.includes("32KB 上限，已截断"));
+  check(
+    "③ 相对路径：符号位置输出无绝对路径（documentSymbol 为单文档，位置形态 :line:col）",
+    assertNoAbsPath(big.output, ws),
+    "首行：" + big.output.split("\n")[0],
+  );
+  // 定义/引用走真实位置输出，复核相对路径
+  await writeFile(join(ws, "src", "sample.ts"), ["function alpha() {}", "DEF(alpha) here", "REF(alpha) one", ""].join("\n"), "utf8");
+  const def = await lsp.run({ operation: "definition", path: "src/sample.ts", line: 2, column: 5 }, ctx);
+  check("③ 相对路径：definition 结果为 rel:line:col", def.ok && /^src\/sample\.ts:\d+:\d+$/.test(def.output.trim()), "实际 " + def.output.trim());
+  mark("lsp", 0, "✅");
+  mark("lsp", 1, "✅");
+  mark("lsp", 2, "✅");
+  await closeAllLspClients();
   await rm(ws, { recursive: true, force: true });
 }
 
 console.log("");
+console.log("== 三项清单覆盖（按实际覆盖打印，结语与断言一一对应）==");
+const order = ["grep", "glob", "read_file", "edit_file", "lsp"];
+let asserted = 0;
+for (const t of order) {
+  const c = COVERAGE.get(t);
+  if (!c) continue;
+  for (const m of c) if (m === "✅") asserted++;
+  console.log("  " + t.padEnd(10) + " ① " + c[0] + "   ② " + c[1] + "   ③ " + c[2]);
+}
+const total = order.length * 3;
+console.log(
+  "  合计：" + String(total) + " 格 = 已断言 " + String(asserted) + " + n/a " + String(nas) +
+    "；本次实跑 check " + String(checks) + " 条（含清单外的语义断言）",
+);
+
 if (failures > 0) {
   console.log(`❌ tools-check 失败 ${String(failures)} 项`);
   process.exit(1);
 }
-console.log("✅ tools-check 全部通过（9 工具 × 输出上限/截断提示/相对路径 三项清单）");
+console.log(
+  "✅ tools-check 全部通过：grep/glob/read_file/lsp 四工具三项全绿；edit_file ①② 显式 n/a（输出有界），③ 相对路径绿。",
+);

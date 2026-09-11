@@ -31,7 +31,7 @@ import {
   type Location,
   type SymbolInformation,
 } from "vscode-languageserver-protocol/node";
-import { resolveInWorkspace, ToolError, type Tool, type ToolContext, type ToolResult } from "./base.js";
+import { resolveInWorkspace, truncationNotice, ToolError, type Tool, type ToolContext, type ToolResult } from "./base.js";
 
 export interface LspServerConfig {
   command: string;
@@ -456,6 +456,14 @@ function requirePos(v: unknown, label: string, fallback: number): number {
   return fallback;
 }
 
+/** M2g：lsp 输出上限（§14 M2「每个工具具备输出上限/截断提示/相对路径三项」）。
+ *  与 run_shell 同口径 32KB；超限截断并附统一截断提示（truncationNotice）。 */
+export const LSP_OUTPUT_LIMIT = 32 * 1024;
+export function capLspOutput(text: string): string {
+  if (text.length <= LSP_OUTPUT_LIMIT) return text;
+  return text.slice(0, LSP_OUTPUT_LIMIT) + "\n" + truncationNotice(32);
+}
+
 export const lsp: Tool = {
   name: "lsp",
   async run(rawArgs, ctx: ToolContext): Promise<ToolResult> {
@@ -479,7 +487,7 @@ export const lsp: Tool = {
         const kindName = SYMBOL_KIND_NAMES[s.kind] ?? "Symbol";
         return (s as SymbolInformation).name + " " + kindName + " " + formatLocation(ctx.workspace, (s as SymbolInformation).location);
       });
-      return { ok: true, output: lines.length ? lines.join("\n") : "无结果" };
+      return { ok: true, output: capLspOutput(lines.length ? lines.join("\n") : "无结果") };
     }
 
     // 其余五操作都需要文件 + 位置
@@ -502,7 +510,7 @@ export const lsp: Tool = {
       const result = await client.request<unknown>(method, { textDocument, position });
       const locations = normalizeLocations(result);
       if (!locations.length) return { ok: true, output: "无结果" };
-      return { ok: true, output: locations.map((l) => formatLocation(ctx.workspace, l)).join("\n") };
+      return { ok: true, output: capLspOutput(locations.map((l) => formatLocation(ctx.workspace, l)).join("\n")) };
     }
     if (operation === "references") {
       const result = await client.request<Location[] | null>(ReferencesRequest.method, {
@@ -511,16 +519,16 @@ export const lsp: Tool = {
         context: { includeDeclaration: false },
       });
       if (!result?.length) return { ok: true, output: "无结果" };
-      return { ok: true, output: result.map((l) => formatLocation(ctx.workspace, l)).join("\n") };
+      return { ok: true, output: capLspOutput(result.map((l) => formatLocation(ctx.workspace, l)).join("\n")) };
     }
     if (operation === "hover") {
       const result = await client.request<{ contents: unknown } | null>(HoverRequest.method, { textDocument, position });
       const text = result ? hoverText(result.contents) : "";
-      return { ok: true, output: text || "无结果" };
+      return { ok: true, output: capLspOutput(text || "无结果") };
     }
     // documentSymbol
     const symbols = await client.request<(DocumentSymbol | SymbolInformation)[] | null>(DocumentSymbolRequest.method, { textDocument });
     const lines = symbolLines(ctx.workspace, symbols ?? []);
-    return { ok: true, output: lines.length ? lines.join("\n") : "无结果" };
+    return { ok: true, output: capLspOutput(lines.length ? lines.join("\n") : "无结果") };
   },
 };
