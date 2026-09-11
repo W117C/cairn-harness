@@ -1,30 +1,41 @@
-// M3a 验收脚本（pnpm agents-check，第 20 道门；仿 sidechat-check / panels-check 体例）。
-// 七段（任务书 §3 任务 8）：
+// M3 验收脚本（pnpm agents-check，第 20 道门；仿 sidechat-check / panels-check 体例）。
+// 段（M3a A–G + M3b 任务书 §3 任务 9 增段 H–L + 暗卷段改序为 M）：
 //   A 事件契约与旧日志重放无损（旧形态日志投影逐字不变 + 新事件 roundtrip）
-//   B spawn 纪律（并发 4 拒绝 / worker 工具表无 spawn_agent（深度闸）/ write 拒绝文案 / 越界裁剪 / always 拒发）
+//   B spawn 纪律（并发 4 拒绝 / worker 工具表无 spawn_agent（深度闸）/ pipeline 拒绝 / 越界裁剪 / always 拒发）
 //   C read 闭环（spawn → 子流事件 → 结构化报告 → 合成 tool_result 挂回原 id → 主上下文零转录泄漏只有 agent_result）
 //   D 审批解耦（worker 请求审批 → 父 turn 结束 → 应答仍生效；父会话期间可继续对话；单次拒绝不杀 worker）
 //   E 取消链（单取消不影响兄弟 / 主取消全树 / 重放后 cancelled 终态无损）
 //   F usage 归因（worker usage 不并入 main、总量 = 各 agent 之和、重放无损）
 //   G 输出扫描（仿冒标签中和 / 密钥脱敏 / 2000 token 裁剪）
-// 全程 mock 驱动（fixtures/agents/*.jsonl 剧本，新目录非冻结区）；真连 GLM 暗卷（M0_API_KEY）缺席走跳过并显式打印。
-import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
+//   H worktree 生命周期（M3b：base_commit 记录 / 四路清理 done·reject·failed·cancelled / symlink 降级）
+//   I 写租约 + git 破坏拦截（M3b：resources 相交审批警告可强行批准 / shell_rw 写向 git 子命令全拦）
+//   J 合并控制塔 + 记忆重定向（M3b：card_action 批准合并 --no-ff 主分支前进 / 拒绝清理 / 冲突卡 / remember 恒指主 checkout / 无合并权断言）
+//   K 安全 gate + 评审闭环（M3b：off 零行为 / report 只标 / gate 红标二次确认 / LLM 跳过显式 / 评论→重启→diff v2）
+//   L 绝对行号（M3b：edit_file 写前快照锚点换算到真实文件行号）
+//   M 暗卷（真实 GLM，有 M0_API_KEY 才跑）
+// 全程 mock 驱动（fixtures/agents/*.jsonl 剧本 + 程序化剧本，新目录非冻结区）；真连 GLM 暗卷（M0_API_KEY）缺席走跳过并显式打印。
+import { execFile } from "node:child_process";
+import { mkdtemp, rm, writeFile, readFile, mkdir, lstat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { createEventLog, replay, type AgentEvent } from "../src/events";
 import { projectContext } from "../src/agent/context";
-import { projectTokenUsageByAgent } from "../src/renderer/projections";
+import { projectTokenUsageByAgent, projectMergeTower } from "../src/renderer/projections";
 import {
   MAX_CONCURRENT_WORKERS,
   Orchestrator,
   WORKER_FORBIDDEN_TOOLS,
+  WRITE_WORKER_FORBIDDEN_TOOLS,
   buildWorkerToolTable,
   clampTier,
+  interceptDestructiveGit,
   orchestratorForApproval,
   scriptedWorkerModel,
   workerToolSpecs,
   type SpawnArgs,
 } from "../src/agent/orchestrator";
+import { worktreePathFor } from "../src/agent/worktree";
 import {
   handleAgentRun,
   handleCardAction,
@@ -32,6 +43,8 @@ import {
   initSettingsStore,
 } from "../src/main/agent-runner";
 import { createSession, pathOf } from "../src/main/sessions";
+
+const exec = promisify(execFile);
 
 let pass = 0;
 let fail = 0;
@@ -80,10 +93,56 @@ function makeHangModel(hang: Map<string, () => void>): (args: SpawnArgs) => Retu
       if (!armed) {
         armed = true;
         yield { type: "tool_call", id: "t-" + task, name: "read_file", args: { path: "src/todo.ts" } } as AgentEvent;
-        await new Promise<void>((resolve) => hang.set(task, () => { hang.delete(task); resolve(); }));
+        await new Promise<void>((resolve) => { hang.set(task, () => { hang.delete(task); resolve(); }); });
       }
     }) as unknown as ReturnType<typeof scriptedWorkerModel>;
   };
+}
+
+/** 临时 git 仓库（M3b write worker 工作区；用后随 work 目录整体删除，仓库主 checkout 零污染）。 */
+async function mkRepo(dir: string): Promise<string> {
+  await mkdir(dir, { recursive: true });
+  const g = (...args: string[]): Promise<{ stdout: string }> => exec("git", args, { cwd: dir });
+  await g("init");
+  await g("config", "user.email", "m3b-check@test.local");
+  await g("config", "user.name", "M3b Check");
+  await writeFile(join(dir, "README.md"), "line1\nline2\nline3\n", "utf8");
+  await g("add", ".");
+  await g("commit", "-m", "init");
+  return dir;
+}
+
+/** 直连编排器（指定工作区变体）：事件收集 + 落盘同路。 */
+function directOrchAt(
+  logPath: string,
+  workspace: string,
+  over: { parentMode?: "read-only" | "default" | "auto"; model?: (a: SpawnArgs) => ReturnType<typeof scriptedWorkerModel>; approvalTimeoutMs?: number; safeMode?: "off" | "report" | "gate" } = {},
+): {
+  orch: Orchestrator;
+  events: AgentEvent[];
+} {
+  const events: AgentEvent[] = [];
+  const orch = new Orchestrator({
+    logPath,
+    workspace,
+    parentMode: over.parentMode ?? "default",
+    emit: async (e) => {
+      events.push(e);
+      await createEventLog(logPath).append(e);
+    },
+    ...(over.safeMode ? { safeMode: over.safeMode } : {}),
+    ...(over.model ? { modelFor: over.model } : {}),
+    ...(over.approvalTimeoutMs !== undefined ? { approvalTimeoutMs: over.approvalTimeoutMs } : {}),
+  });
+  return { orch, events };
+}
+
+/** 写剧本：一次 write_file → 收束报告。 */
+function writeScript(path: string, content: string, report = "改了什么：写文件。为什么：任务。验证方式：无。风险：低。"): Parameters<typeof scriptedWorkerModel>[0] {
+  return [
+    { type: "tool_call", id: "w-1", name: "write_file", args: { path, content } },
+    { type: "assistant_message", content: report },
+  ] as unknown as Parameters<typeof scriptedWorkerModel>[0];
 }
 
 async function waitFor(pred: () => boolean, timeoutMs = 15_000): Promise<boolean> {
@@ -146,11 +205,9 @@ try {
     const hang = new Map<string, () => void>();
     const { orch, events } = directOrch(bPath, { model: makeHangModel(hang) });
 
-    // B1 write/pipeline spawn 即拒绝
-    const w = await orch.spawn({ mode: "write", task: "x" }, { callId: "b-w" });
-    check(!w.ok && w.output.includes("M3b 接入"), "B1 write mode spawn 即拒绝（M3b 接入文案）", w.output.slice(0, 60));
+    // B1 pipeline spawn 即拒绝（M3c 接入）；write mode 已接入（M3b），其 spawn 纪律由 H–K 段判卷
     const p = await orch.spawn({ mode: "pipeline", task: "x" }, { callId: "b-p" });
-    check(!p.ok && p.output.includes("M3b 接入"), "B1b pipeline mode spawn 即拒绝");
+    check(!p.ok && p.output.includes("M3c 接入"), "B1 pipeline mode spawn 即拒绝（M3c 接入；write 已接入由 H–K 段判卷）");
 
     // B2 并发上限 4：第 5 个直接拒绝
     for (let i = 0; i < MAX_CONCURRENT_WORKERS; i++) {
@@ -390,7 +447,338 @@ try {
     check(resultG2 !== undefined && resultG2.summary.length < 2000 * 4 + 200, "G5c 裁剪后 summary 长度受控");
   }
 
-  // ============================== H 暗卷（真实 GLM，有 key 才跑） ==============================
+  // ============================== H worktree 生命周期（M3b 任务书任务 9-H） ==============================
+  console.log("[agents-check] H worktree 生命周期（base_commit 记录 / 四路清理 / symlink 降级）");
+  {
+    const repoH = await mkRepo(join(work, "repo-h"));
+    await mkdir(join(repoH, "node_modules"), { recursive: true }); // symlink 目标在场
+    const hPath = join(work, "h.jsonl");
+    await writeFile(hPath, "", "utf8");
+    const { orch, events } = directOrchAt(hPath, repoH, { model: () => scriptedWorkerModel(writeScript("feat.txt", "feat-1\nfeat-2\n")) });
+    const h1 = await orch.spawn({ mode: "write", task: "新增 feat 文件" }, { callId: "h1" });
+    check(h1.ok, "H1 spawn(mode=write) 受理（worktree 创建成功）");
+    const agentH = (JSON.parse(h1.output) as { agent_id: string }).agent_id;
+    const spawnedH = events.find((e) => e.type === "agent_spawned") as Extract<AgentEvent, { type: "agent_spawned" }> | undefined;
+    check(spawnedH?.worktree === ".agents/wt-" + agentH, "H2 agent_spawned 记 worktree 路径（.agents/wt-<agent_id>）");
+    check(typeof spawnedH?.base_commit === "string" && /^[0-9a-f]{40}$/.test(spawnedH!.base_commit!), "H2b agent_spawned 记 base_commit（spawn 时 HEAD）");
+    const branchH = (await exec("git", ["branch", "--list"], { cwd: repoH })).stdout;
+    check(branchH.includes("agent/"), "H2c 独立分支 agent/<slug>-<id> 已建");
+    check(await waitForStreamEvent(hPath, (e) => e.type === "agent_result"), "H3 done 落 agent_result");
+    // symlink：worktree 内 node_modules 是符号链接（防重复安装）
+    const linked = await lstat(join(worktreePathFor(repoH, agentH), "node_modules")).catch(() => null);
+    check(linked !== null && linked.isSymbolicLink(), "H4 node_modules symlink 防重复安装");
+    // done 路不清理（等合并决策）；diff 快照 + artifacts 在场
+    const wtAlive = await lstat(worktreePathFor(repoH, agentH)).then(() => true, () => false);
+    check(wtAlive, "H5 done 后 worktree 保留（合并唯一出口 = git 面板，不自动合并）");
+    check(await waitForStreamEvent(hPath, (e) => e.type === "tool_result" && e.callId === "diff-" + agentH), "H5b diff 快照落流（callId=diff-<agent_id>）");
+    const resultH = events.find((e) => e.type === "agent_result") as Extract<AgentEvent, { type: "agent_result" }> | undefined;
+    check((resultH?.artifacts.files_changed ?? []).includes("feat.txt") && (resultH?.artifacts.diff_ref ?? "").includes(agentH), "H6 artifacts 带 files_changed + diff_ref（主上下文只收 stat 摘要）");
+    const synH = events.filter((e) => e.type === "tool_result" && e.callId === "h1").pop() as Extract<AgentEvent, { type: "tool_result" }> | undefined;
+    check(synH !== undefined && !synH.output.includes("+feat-1"), "H6b 合成 tool_result 无 diff 本体（diff 本体只进 git 面板，§4.4.4）");
+    // symlink 降级：主 checkout 无 node_modules → 不链、不阻断（fail-visible）
+    const repoH2 = await mkRepo(join(work, "repo-h2"));
+    const { orch: orchH2, events: evH2 } = directOrchAt(join(work, "h2.jsonl"), repoH2, { model: () => scriptedWorkerModel(writeScript("a.txt", "a\n")) });
+    const h2 = await orchH2.spawn({ mode: "write", task: "无依赖目录" }, { callId: "h2" });
+    check(h2.ok, "H7 symlink 降级：主 checkout 无 node_modules → spawn 仍受理（不链不阻断）");
+    const idH2 = (JSON.parse(h2.output) as { agent_id: string }).agent_id;
+    const notLinked = await lstat(join(worktreePathFor(repoH2, idH2), "node_modules")).catch(() => null);
+    check(notLinked === null, "H7b 无 node_modules 时不产 symlink");
+    // failed 路自动清理
+    let iH = 0;
+    const failing = (async function* () {
+      yield { type: "tool_call", id: "e" + String(iH++), name: "write_file", args: { path: "x.txt", content: "y" } } as AgentEvent;
+    }) as unknown as ReturnType<typeof scriptedWorkerModel>;
+    const { orch: orchH3, events: evH3 } = directOrchAt(join(work, "h3.jsonl"), repoH, { model: () => failing });
+    const h3 = await orchH3.spawn({ mode: "write", task: "失败演练", max_turns: 1 }, { callId: "h3" });
+    const idH3 = (JSON.parse(h3.output) as { agent_id: string }).agent_id;
+    check(await waitFor(() => evH3.some((e) => e.type === "agent_status" && e.agent_id === idH3 && e.status === "failed")), "H8 failed 落终态");
+    const failedClean = await lstat(worktreePathFor(repoH, idH3)).then(() => false, () => true);
+    check(failedClean, "H8b failed → worktree 自动清理（四路清理之三）");
+    check(evH3.some((e) => e.type === "tool_result" && e.callId === "wt-cleanup-" + idH3), "H8c 清理审计事件落流（wt-cleanup-<id>）");
+    // cancelled 路自动清理
+    const hangH = new Map<string, () => void>();
+    const { orch: orchH4, events: evH4 } = directOrchAt(join(work, "h4.jsonl"), repoH, {
+      model: (args) => {
+        const task = String(args.task);
+        return (async function* () {
+          yield { type: "tool_call", id: "c-" + task, name: "write_file", args: { path: "c-" + task + ".txt", content: "x" } } as AgentEvent;
+          await new Promise<void>((r) => hangH.set(task, r));
+        }) as unknown as ReturnType<typeof scriptedWorkerModel>;
+      },
+    });
+    const h4 = await orchH4.spawn({ mode: "write", task: "取消演练" }, { callId: "h4" });
+    const idH4 = (JSON.parse(h4.output) as { agent_id: string }).agent_id;
+    for (let k = 0; k < 60 && hangH.size < 1; k++) await new Promise((r) => setTimeout(r, 25));
+    check(orchH4.cancelAgent(idH4), "H9 取消受理");
+    hangH.get("取消演练")?.();
+    await orchH4.waitAll(10_000);
+    const cancelledClean = await lstat(worktreePathFor(repoH, idH4)).then(() => false, () => true);
+    check(cancelledClean, "H9b cancelled → worktree 自动清理（四路清理之四）");
+    // reject 路（H10 在 J 段经 card_action 协议判卷）
+    const { orch: orchH5 } = directOrchAt(join(work, "h5.jsonl"), repoH, { model: () => scriptedWorkerModel(writeScript("rj.txt", "rj\n")) });
+    const h5 = await orchH5.spawn({ mode: "write", task: "拒绝演练" }, { callId: "h5" });
+    const idH5 = (JSON.parse(h5.output) as { agent_id: string }).agent_id;
+    await orchH5.waitAll(10_000);
+    const rej = await orchH5.rejectWorker(idH5);
+    check(rej.ok, "H10 拒绝受理（done 后 git 面板拒绝路）");
+    const rejClean = await lstat(worktreePathFor(repoH, idH5)).then(() => false, () => true);
+    check(rejClean, "H10b 拒绝 → worktree 清理（四路清理之二）");
+    const branchGone = (await exec("git", ["branch", "--list", "agent/*-" + idH5], { cwd: repoH })).stdout.trim();
+    check(branchGone === "", "H10c 拒绝 → 分支已删（keep_branch 缺省）");
+  }
+
+  // ============================== I 写租约 + git 破坏拦截（M3b 任务书任务 9-I） ==============================
+  console.log("[agents-check] I 写租约相交警告（可强行批准）+ git 破坏命令静态拦截");
+  {
+    const repoI = await mkRepo(join(work, "repo-i"));
+    const iPath = join(work, "i.jsonl");
+    await writeFile(iPath, "", "utf8");
+    const hangI = new Map<string, () => void>();
+    const { orch, events } = directOrchAt(iPath, repoI, {
+      approvalTimeoutMs: 8_000,
+      model: (args) => {
+        const task = String(args.task);
+        return (async function* () {
+          yield { type: "tool_call", id: "t-" + task, name: "write_file", args: { path: "f-" + task + ".txt", content: "x" } } as AgentEvent;
+          if (task === "lease-a") await new Promise<void>((r) => hangI.set(task, r));
+        }) as unknown as ReturnType<typeof scriptedWorkerModel>;
+      },
+    });
+    const i1 = await orch.spawn({ mode: "write", task: "lease-a", resources: ["src/**"] }, { callId: "i1" });
+    check(i1.ok, "I1 首个 write worker spawn 受理（无租约冲突零审批）");
+    for (let k = 0; k < 60 && hangI.size < 1; k++) await new Promise((r) => setTimeout(r, 25));
+    // 相交 spawn：approval_requested 显式警告 → 拒绝 → spawn 失败
+    const pReject = orch.spawn({ mode: "write", task: "lease-b", resources: ["src/todo.ts"] }, { callId: "i2" });
+    check(await waitFor(() => events.some((e) => e.type === "approval_requested" && (e as { tool?: string }).tool === "spawn_agent" && ((e as { risk_reasons?: string[] }).risk_reasons ?? []).join(" ").includes("写租约相交"))), "I2 租约相交 → approval_requested 显式警告落流");
+    const aprI = events.find((e) => e.type === "approval_requested" && (e as { tool?: string }).tool === "spawn_agent") as Extract<AgentEvent, { type: "approval_requested" }>;
+    check(orch.decideWorkerApproval(aprI.id, false, "once").ok, "I2b 决议受理");
+    const rejectedSpawn = await pReject;
+    check(!rejectedSpawn.ok && rejectedSpawn.output.includes("未获批准"), "I3 租约相交未获批准 → spawn 拒绝（审批可失败）");
+    // 相交 spawn：强行批准 → 继续（租约是预测器不是硬闸）
+    const pForce = orch.spawn({ mode: "write", task: "lease-c", resources: ["src/todo.ts"] }, { callId: "i3" });
+    check(await waitFor(() => events.filter((e) => e.type === "approval_requested" && (e as { tool?: string }).tool === "spawn_agent").length >= 2), "I4 第二次相交 → 再次送审");
+    const aprI2 = events.filter((e) => e.type === "approval_requested" && (e as { tool?: string }).tool === "spawn_agent").pop() as Extract<AgentEvent, { type: "approval_requested" }>;
+    check(orch.decideWorkerApproval(aprI2.id, true, "once").ok, "I4b 强行批准决议受理");
+    const forcedSpawn = await pForce;
+    check(forcedSpawn.ok, "I5 强行批准 → spawn 继续（预测器不是硬闸）");
+    // git 破坏拦截：write worker shell_rw 跑写向 git 子命令 → 全拦 + reason 落流；只读放行
+    const gitScript = [
+      { type: "tool_call", id: "g-push", name: "shell_rw", args: { command: "git push origin main" } },
+      { type: "tool_call", id: "g-commit", name: "shell_rw", args: { command: "git commit -m x" } },
+      { type: "tool_call", id: "g-reset", name: "shell_rw", args: { command: "git reset --hard HEAD~1" } },
+      { type: "tool_call", id: "g-wt", name: "shell_rw", args: { command: "git worktree remove .agents/wt-lease-a" } },
+      { type: "tool_call", id: "g-merge", name: "shell_rw", args: { command: "cat f-lease-a.txt && git merge main" } },
+      { type: "tool_call", id: "g-status", name: "shell_rw", args: { command: "git status" } },
+      { type: "tool_call", id: "g-diff", name: "shell_rw", args: { command: "git diff HEAD" } },
+      { type: "assistant_message", content: "git 面演练完成。" },
+    ] as unknown as Parameters<typeof scriptedWorkerModel>[0];
+    const { orch: orchI2, events: evI2 } = directOrchAt(join(work, "i2b.jsonl"), repoI, { model: () => scriptedWorkerModel(gitScript) });
+    const i6 = await orchI2.spawn({ mode: "write", task: "git 面演练" }, { callId: "i6" });
+    check(i6.ok, "I6 git 拦截演练 worker 受理");
+    await orchI2.waitAll(15_000);
+    const resultsI = new Map(evI2.filter((e) => e.type === "tool_result").map((e) => [(e as { callId: string }).callId, e as { ok: boolean; output: string }]));
+    for (const [cid, label] of [["g-push", "push"], ["g-commit", "commit"], ["g-reset", "reset --hard"], ["g-wt", "worktree remove"], ["g-merge", "merge（链段）"]] as const) {
+      const r = resultsI.get(cid);
+      check(r !== undefined && !r.ok && r.output.includes("[git-guard]"), "I7 shell_rw " + label + " 静态拦截 + reason 落流");
+    }
+    check(resultsI.get("g-status")?.ok === true && resultsI.get("g-diff")?.ok === true, "I8 shell_rw git status/diff 只读放行");
+    check(!events.some((e) => e.type === "tool_result" && (e as { output: string }).output.includes("main 分支已被 worker 改写")), "I8b 主 checkout 零 worker 写痕（拦截在执行前）");
+    // 静态规则函数直接复核（worker shell 白名单对齐面）
+    check(interceptDestructiveGit("git checkout main").ok === false && interceptDestructiveGit("git clean -fd").ok === false, "I9 checkout/clean 同在拦截清单（裁决 4 规则集）");
+    orch.cancelAll();
+    for (const fn of [...hangI.values()]) fn();
+    await orch.waitAll(10_000);
+  }
+
+  // ============================== J 合并控制塔 + 记忆重定向（M3b 任务书任务 9-J） ==============================
+  console.log("[agents-check] J 合并控制塔（card_action 批准合并 --no-ff / 拒绝清理 / 冲突卡）+ 记忆重定向 + 无合并权断言");
+  {
+    const repoJ = await mkRepo(join(work, "repo-j"));
+    // J1 批准合并（经 card_action 协议 = git 面板唯一出口）：主分支前进 + worktree 清理
+    const { orch, events } = directOrchAt(join(work, "j.jsonl"), repoJ, { model: () => scriptedWorkerModel(writeScript("m.txt", "m-1\n")) });
+    const j1 = await orch.spawn({ mode: "write", task: "写 m 文件" }, { callId: "j1" });
+    check(j1.ok, "J1 write worker 受理");
+    const agentJ = (JSON.parse(j1.output) as { agent_id: string }).agent_id;
+    await orch.waitAll(15_000);
+    const baseJ = (await exec("git", ["rev-parse", "HEAD"], { cwd: repoJ })).stdout.trim();
+    const mergeR = await handleCardAction({
+      cardId: "diff:" + agentJ,
+      sourceEventId: 0,
+      cardType: "diff",
+      action: "merge",
+      payload: {},
+      targetAgentId: agentJ,
+    });
+    check(mergeR.ok, "J2 card_action(merge) 受理（合并唯一出口 = git 面板协议）");
+    const headJ = (await exec("git", ["rev-parse", "HEAD"], { cwd: repoJ })).stdout.trim();
+    check(headJ !== baseJ, "J2b 主分支前进");
+    const parentsJ = (await exec("git", ["rev-list", "--parents", "-n", "1", "HEAD"], { cwd: repoJ })).stdout.trim().split(" ");
+    check(parentsJ.length === 3, "J2c merge --no-ff 双亲（合并提交在案）");
+    const mFile = await readFile(join(repoJ, "m.txt"), "utf8");
+    check(mFile === "m-1\n", "J2d worktree 产出真实落在主 checkout");
+    const wtGone = await lstat(worktreePathFor(repoJ, agentJ)).then(() => false, () => true);
+    check(wtGone, "J3 合并后 worktree 清理");
+    check(events.some((e) => e.type === "tool_result" && e.callId === "merge-" + agentJ && (e as { output: string }).output.startsWith("[merged]")), "J3b [merged] 收尾态落流（投影数据源）");
+    const towerJ = projectMergeTower(events);
+    check(towerJ.some((c) => c.agent_id === agentJ && c.outcome === "merged"), "J3c 合并控制塔投影：merged 态可重建（重放一致）");
+    // J4 拒绝清理（经 card_action reject；keep_branch=false）
+    const { orch: orchJ2 } = directOrchAt(join(work, "j2.jsonl"), repoJ, { model: () => scriptedWorkerModel(writeScript("rj2.txt", "x\n")) });
+    const j4 = await orchJ2.spawn({ mode: "write", task: "写 rj2" }, { callId: "j4" });
+    const agentJ2 = (JSON.parse(j4.output) as { agent_id: string }).agent_id;
+    await orchJ2.waitAll(15_000);
+    const rejR = await handleCardAction({ cardId: "diff:" + agentJ2, sourceEventId: 0, cardType: "diff", action: "reject", payload: {}, targetAgentId: agentJ2 });
+    check(rejR.ok, "J4 card_action(reject) 受理");
+    check(await lstat(worktreePathFor(repoJ, agentJ2)).then(() => false, () => true), "J4b 拒绝 → worktree 清理");
+    // J5 冲突卡：主分支前进后合并同区 → [conflict] + 主 checkout 干净（人工介入，不自动解）
+    const conflictScript = writeScript("README.md", "line1\nworker 改\nline3\n");
+    const { orch: orchJ3, events: evJ3 } = directOrchAt(join(work, "j3.jsonl"), repoJ, { model: () => scriptedWorkerModel(conflictScript) });
+    const j5 = await orchJ3.spawn({ mode: "write", task: "改 README" }, { callId: "j5" });
+    const agentJ3 = (JSON.parse(j5.output) as { agent_id: string }).agent_id;
+    await orchJ3.waitAll(15_000);
+    await writeFile(join(repoJ, "README.md"), "line1\n主 checkout 改\nline3\n", "utf8");
+    await exec("git", ["add", "."], { cwd: repoJ });
+    await exec("git", ["commit", "-m", "main advance"], { cwd: repoJ });
+    const conflictR = await orchJ3.mergeWorker(agentJ3);
+    check(!conflictR.ok && (conflictR.error ?? "").includes("冲突"), "J5 冲突 → 合并拒绝（人工介入）");
+    check(evJ3.some((e) => e.type === "tool_result" && e.callId === "merge-" + agentJ3 && (e as { output: string }).output.startsWith("[conflict]")), "J5b 冲突卡数据落流（[conflict] + 清单）");
+    const statusJ = (await exec("git", ["status", "--porcelain"], { cwd: repoJ })).stdout;
+    check(!/^UU/m.test(statusJ), "J5c 主 checkout 恢复干净态（merge 已 abort，零半合并态）");
+    // J6 记忆重定向（裁决 2）：write worker remember → 主 checkout 有、worktree 零 .agent/memory
+    process.env.M2D_MEMORY_HOME = join(work, "global-mem");
+    const memScript = [
+      { type: "tool_call", id: "mm-1", name: "remember", args: { scope: "project", kind: "memory", type: "project", topic: "m3b-check-mem", content: "M3B-CHECK-MEMORY-CANARY" } },
+      { type: "assistant_message", content: "记忆已沉淀。" },
+    ] as unknown as Parameters<typeof scriptedWorkerModel>[0];
+    const { orch: orchJ4, events: evJ4 } = directOrchAt(join(work, "j4.jsonl"), repoJ, { model: () => scriptedWorkerModel(memScript) });
+    const j6 = await orchJ4.spawn({ mode: "write", task: "写并记忆" }, { callId: "j6" });
+    const agentJ4 = (JSON.parse(j6.output) as { agent_id: string }).agent_id;
+    await orchJ4.waitAll(15_000);
+    const memMain = await readFile(join(repoJ, ".agent", "memory", "m3b-check-mem.md"), "utf8").catch(() => null);
+    check(memMain !== null && memMain.includes("M3B-CHECK-MEMORY-CANARY"), "J6 write worker 记忆落在主 checkout（.agent/memory 可见）");
+    const memWt = await readFile(join(worktreePathFor(repoJ, agentJ4), ".agent", "memory", "m3b-check-mem.md"), "utf8").catch(() => null);
+    check(memWt === null, "J6b worktree 内零 .agent/memory（记忆属于项目不属于 worktree）");
+    delete process.env.M2D_MEMORY_HOME;
+    // J7 无合并权断言：两套 worker 工具表 + 主 loop TOOLS 均无 merge/commit 能力
+    const readSpecs = workerToolSpecs("read").map((s) => s.function.name);
+    const writeSpecs = workerToolSpecs("write").map((s) => s.function.name);
+    const { TOOLS } = await import("../src/tools");
+    const mainTools = Object.keys(TOOLS);
+    check([...readSpecs, ...writeSpecs, ...mainTools].every((n) => !/merge|commit/i.test(n)), "J7 worker 与主 loop 工具表均无 merge/commit 能力（合并唯一出口 = git 面板）");
+    for (const banned of WRITE_WORKER_FORBIDDEN_TOOLS) {
+      check(!writeSpecs.includes(banned), "J7b write 工具表禁入 " + banned);
+    }
+    check(!WORKER_FORBIDDEN_TOOLS.includes("shell_rw") || !readSpecs.includes("shell_rw"), "J7c read 工具表不含 shell_rw（只读面不变）");
+  }
+
+  // ============================== K 安全 gate + 评审闭环（M3b 任务书任务 9-K） ==============================
+  console.log("[agents-check] K 安全 gate 三档（off 零行为 / report 只标 / gate 红标二次确认 + LLM 跳过显式）+ 评审闭环（评论 → diff v2）");
+  {
+    const repoK = await mkRepo(join(work, "repo-k"));
+    // K1 off：零行为（无 security_report）；合并不拦
+    {
+      const { orch, events } = directOrchAt(join(work, "k1.jsonl"), repoK, { safeMode: "off", model: () => scriptedWorkerModel(writeScript("off.txt", "safe\n")) });
+      const r = await orch.spawn({ mode: "write", task: "off 演练" }, { callId: "k1" });
+      check(r.ok, "K1 off spawn 受理");
+      await orch.waitAll(15_000);
+      check(!events.some((e) => e.type === "security_report"), "K1b off → 零 security_report（零行为）");
+      const idK1 = (JSON.parse(r.output) as { agent_id: string }).agent_id;
+      check((await orch.mergeWorker(idK1)).ok, "K1c off → 合并不拦");
+    }
+    // K2 report：报告在场只标不拦
+    {
+      const { orch, events } = directOrchAt(join(work, "k2.jsonl"), repoK, { safeMode: "report", model: () => scriptedWorkerModel(writeScript("rep.txt", "safe\n")) });
+      const r = await orch.spawn({ mode: "write", task: "report 演练" }, { callId: "k2" });
+      const idK2 = (JSON.parse(r.output) as { agent_id: string }).agent_id;
+      await orch.waitAll(15_000);
+      const rep = events.find((e) => e.type === "security_report") as Extract<AgentEvent, { type: "security_report" }> | undefined;
+      check(rep !== undefined && rep.mode === "report" && rep.agent_id === idK2, "K2 report → security_report(mode=report, agent_id 归因)");
+      check((await orch.mergeWorker(idK2)).ok, "K2b report 只标不拦（合并直接成功）");
+    }
+    // K3 gate：critical（私钥块）→ 红标 + 第一次合并拒绝 + force 二次确认；LLM 跳过显式（无 key）
+    const PRIVATE_KEY = "-----BEGIN RSA PRIVATE KEY-----\nMIIB\n-----END RSA PRIVATE KEY-----";
+    {
+      const hasKey = process.env.M0_API_KEY !== undefined;
+      const { orch, events } = directOrchAt(join(work, "k3.jsonl"), repoK, { safeMode: "gate", model: () => scriptedWorkerModel(writeScript("leak.txt", PRIVATE_KEY + "\n")) });
+      const r = await orch.spawn({ mode: "write", task: "密钥演练" }, { callId: "k3" });
+      const idK3 = (JSON.parse(r.output) as { agent_id: string }).agent_id;
+      await orch.waitAll(15_000);
+      const rep = events.find((e) => e.type === "security_report") as Extract<AgentEvent, { type: "security_report" }> | undefined;
+      check(rep !== undefined && rep.mode === "gate", "K3 gate → security_report(mode=gate)");
+      check((rep?.summary.bySeverity.critical ?? 0) >= 1, "K3b critical finding 在案（私钥块）");
+      const firstMerge = await orch.mergeWorker(idK3);
+      check(!firstMerge.ok && (firstMerge.error ?? "").includes("二次确认"), "K3c gate 红标：第一次合并拒绝（需二次确认）");
+      check(events.some((e) => e.type === "tool_result" && e.callId === "merge-" + idK3 && (e as { output: string }).output.startsWith("[gate]")), "K3d [gate] 红标注记落流");
+      check(await lstat(worktreePathFor(repoK, idK3)).then(() => true, () => false), "K3e 红标拒绝后 worktree 保留（合并权永远在人）");
+      const towerK = projectMergeTower(events);
+      check(towerK.some((c) => c.agent_id === idK3 && c.outcome === "gate-confirm"), "K3f 投影：gate-confirm 态可重建");
+      const forced = await orch.mergeWorker(idK3, { force: true });
+      check(forced.ok, "K4 「仍要合并」force=true → 二次确认后合并成功（不硬禁）");
+      const diffEvent = events.find((e) => e.type === "tool_result" && e.callId === "diff-" + idK3) as Extract<AgentEvent, { type: "tool_result" }> | undefined;
+      if (!hasKey) {
+        check(diffEvent !== undefined && diffEvent.output.includes("LLM 审查跳过（无 M0_API_KEY）"), "K5 LLM 审查跳过显式打印（无 key，静态 findings 照常生效）");
+      } else {
+        check(diffEvent !== undefined && diffEvent.output.includes("## LLM 审查"), "K5 LLM 审查段在场（BYOK 已跑）");
+      }
+      check(rep !== undefined && (rep.llm_reviewed === true || !process.env.M0_API_KEY), "K5b llm_reviewed 标志与 key 在场性一致");
+    }
+    // K6 评审闭环（经 card_action comment 协议）：done → diff v1 → 评论 → 重启 → diff v2
+    {
+      const reviewScript = [
+        { type: "tool_call", id: "rv-1", name: "write_file", args: { path: "rv.txt", content: "v1\n" } },
+        { type: "assistant_message", content: "v1 完成。" },
+        { type: "tool_call", id: "rv-2", name: "write_file", args: { path: "rv.txt", content: "v1\nv2-修正\n" } },
+        { type: "assistant_message", content: "按评审意见补了 v2。" },
+      ] as unknown as Parameters<typeof scriptedWorkerModel>[0];
+      const { orch, events } = directOrchAt(join(work, "k6.jsonl"), repoK, { model: () => scriptedWorkerModel(reviewScript) });
+      const r = await orch.spawn({ mode: "write", task: "评审演练" }, { callId: "k6" });
+      const idK6 = (JSON.parse(r.output) as { agent_id: string }).agent_id;
+      check(await waitFor(() => events.some((e) => e.type === "agent_result")), "K6 done 落 agent_result");
+      const v1 = events.filter((e) => e.type === "tool_result" && e.callId === "diff-" + idK6);
+      check(v1.length === 1, "K6b diff v1 在场");
+      const commentR = await handleCardAction({
+        cardId: "diff:" + idK6,
+        sourceEventId: 0,
+        cardType: "diff",
+        action: "comment",
+        payload: { path: "rv.txt", line: 1, body: "请补第二行" },
+        targetAgentId: idK6,
+      });
+      check(commentR.ok, "K7 card_action(comment) 受理（评论回传不挂 turn）");
+      check(await waitForStreamEvent(join(work, "k6.jsonl"), (e) => e.type === "diff_comment" && e.agent_id === idK6), "K7b diff_comment 事件落流（agent_id/path/line/body）");
+      check(await waitFor(() => events.filter((e) => e.type === "tool_result" && e.callId === "diff-" + idK6).length >= 2), "K8 评审重启 → diff v2");
+      const v2 = events.filter((e) => e.type === "tool_result" && e.callId === "diff-" + idK6).pop() as Extract<AgentEvent, { type: "tool_result" }>;
+      check(v2.output.includes("+v2-修正") && v2.output.includes("v2 vs"), "K8b v2 diff 与版本号递增（同 agent 同 base）");
+      const towerK6 = projectMergeTower(events);
+      check(towerK6.some((c) => c.agent_id === idK6 && c.diffs.length >= 2 && c.comments.length >= 1), "K8c 投影：多版本 diff + 评论可重建");
+    }
+  }
+
+  // ============================== L 绝对行号（M3b 任务书任务 9-L） ==============================
+  console.log("[agents-check] L edit_file findings 绝对行号（写前快照锚点；write worker 路径）");
+  {
+    const repoL = await mkRepo(join(work, "repo-l"));
+    await writeFile(join(repoL, "code.ts"), "a\nb\nc\nd\ne\nf\ng\nh\ni\nconst x = 1;\n", "utf8"); // 目标第 10 行
+    await exec("git", ["add", "."], { cwd: repoL });
+    await exec("git", ["commit", "-m", "code"], { cwd: repoL });
+    const editScript = [
+      { type: "tool_call", id: "ed-1", name: "edit_file", args: { path: "code.ts", old_string: "const x = 1;", new_string: "const x = eval(input);" } },
+      { type: "assistant_message", content: "改完第 10 行。" },
+    ] as unknown as Parameters<typeof scriptedWorkerModel>[0];
+    const { orch, events } = directOrchAt(join(work, "l.jsonl"), repoL, { safeMode: "report", model: () => scriptedWorkerModel(editScript) });
+    const r = await orch.spawn({ mode: "write", task: "改 code 第 10 行" }, { callId: "l1" });
+    const idL = (JSON.parse(r.output) as { agent_id: string }).agent_id;
+    check(r.ok, "L1 write worker 受理");
+    await orch.waitAll(15_000);
+    const rep = events.find((e) => e.type === "security_report") as Extract<AgentEvent, { type: "security_report" }> | undefined;
+    const evalFinding = rep?.findings.find((f) => f.ruleId === "danger.eval");
+    check(evalFinding !== undefined, "L2 danger.eval finding 在案");
+    check(evalFinding?.path === "code.ts", "L2b finding 路径正确");
+    check(evalFinding?.line === 10, "L3 findings 绝对行号 = 真实文件行号（10，非变更集相对行号 1）", "实际 " + String(evalFinding?.line));
+    const wtLine = (await readFile(join(worktreePathFor(repoL, idL), "code.ts"), "utf8")).split("\n")[9];
+    check(wtLine === "const x = eval(input);", "L3b 行号可定位到 worktree 真实代码行（diff_comment 行级评论的凭据）");
+  }
+
+  // ============================== M 暗卷（真实 GLM，有 key 才跑） ==============================
   console.log("[agents-check] H 暗卷（真实 GLM，有 M0_API_KEY 才跑）");
   if (!process.env.M0_API_KEY) {
     console.log("  暗卷跳过（无 M0_API_KEY）——任务书允许：缺席走跳过路径并显式打印");

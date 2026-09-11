@@ -94,14 +94,18 @@ export interface CreatedWorktree {
 }
 
 /** spawn 批准后的 worktree 创建：base = 当前 HEAD → worktree add -b → symlink gitignored 目录。
- *  幂等保护：同 agent 旧目录残留（上次清理失败）先强制移除再建（fail-visible，不留悬状态）。 */
+ *  幂等加固：同路径残留（同 id 撞车/上次清理失败）先清 git 注册与目录再建；分支已存在则挂载而非重建。 */
 export async function createWorktree(root: string, agentId: string, task: string): Promise<CreatedWorktree> {
   const baseCommit = (await git(root, "rev-parse", "HEAD")).trim();
   const branch = branchForAgent(task, agentId);
   const rel = join(WORKTREE_ROOT_DIR, "wt-" + agentId);
-  // 残留清理（孤儿手动清理之外的自愈路径）：目录存在但 git 已不认 → 直接 rm
+  // 残留自愈（fail-visible 于 add 失败）：先清 git 注册（ignore 失败）再清目录
+  await git(root, "worktree", "remove", "--force", rel).catch(() => {});
   await rm(worktreePathFor(root, agentId), { recursive: true, force: true });
-  await git(root, "worktree", "add", rel, "-b", branch);
+  // 分支已存在（同 agent 重启语义）→ 挂载既有分支；否则 -b 新建
+  const branchExists = await git(root, "rev-parse", "--verify", "--quiet", branch).then(() => true, () => false);
+  if (branchExists) await git(root, "worktree", "add", rel, branch);
+  else await git(root, "worktree", "add", rel, "-b", branch);
   const symlinkWarnings = await linkGitignoredDirs(root, worktreePathFor(root, agentId));
   await ensureGitignoreAgents(root);
   return { worktree: rel, branch, baseCommit, symlinkWarnings };

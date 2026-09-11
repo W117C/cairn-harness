@@ -43,6 +43,8 @@ export interface StateResponse {
   plugins?: import("../agent/plugins").PluginPanelSnapshot;
   /** M2f：辅助对话面板快照（sidechat 会话清单 + 已提升记录；缺省 = 无会话目录）。 */
   sidechat?: SidechatPanelSnapshot;
+  /** M3b：孤儿 worktree 扫描（§4.4.9 只列不自动删；git 面板「可清理」列表数据源）。 */
+  worktree?: { orphans: string[] };
 }
 
 /** M2f sidechat 面板快照（纯投影：会话清单 + 最近消息 + 已提升记录）。

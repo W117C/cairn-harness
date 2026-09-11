@@ -331,6 +331,14 @@ const approvalOwners = new Map<string, Orchestrator>();
 // 注册于 spawn(write)，注销于 worktree 收尾（merge/reject/failed/cancelled 四路清理完成时）。
 const mergeOwners = new Map<string, Orchestrator>();
 
+// M3b：agent_id 进程级全局计数——编排器逐 run 新建，若各自从 1 起数，同工作区跨 run 会撞
+// worktree（.agents/wt-worker-1）与合并控制塔路由；全局唯一 id 是 worktree 生命周期的前提。
+let globalAgentSeq = 0;
+
+function nextAgentId(): string {
+  return "worker-" + String(++globalAgentSeq);
+}
+
 export function orchestratorForAgent(agentId: string): Orchestrator | null {
   return agentOwners.get(agentId) ?? null;
 }
@@ -396,6 +404,9 @@ interface WorkerHandle {
   usage: { inputTokens: number; outputTokens: number };
   toolStats: Record<string, number>;
   finished: boolean;
+  /** M3b：终态事件（agent_result/diff/清理）全部落完才算 closed——write worker 的 finish 含
+   *  git diff + 安全流水（秒级），activeCount/waitAll 必须等 closed，否则进程会在 finish 中途退出。 */
+  closed: boolean;
 }
 
 export interface OrchestratorOptions {
@@ -433,10 +444,11 @@ export class Orchestrator {
     this.safeMode = opts.safeMode ?? "report";
   }
 
-  /** 活跃 worker 数（running / waiting_approval / waiting_input 计入并发上限）。 */
+  /** 活跃 worker 数（running / waiting_approval / waiting_input 计入并发上限；
+   *  M3b：finish 进行中（未 closed）也计入——waitAll 等到终态事件全部落完）。 */
   activeCount(): number {
     let n = 0;
-    for (const w of this.workers.values()) if (!w.finished) n++;
+    for (const w of this.workers.values()) if (!w.finished || !w.closed) n++;
     return n;
   }
 
@@ -496,7 +508,7 @@ export class Orchestrator {
 
     // ---- M3b 写租约表（§4.4.5）：resources glob 与活跃 write worker 租约求交 ----
     // 相交 → 审批卡显式警告（可强行批准）——租约是合并冲突预测器，不是硬闸。
-    const agentId = "worker-" + String(++this.seq);
+    const agentId = nextAgentId();
     if (mode === "write") {
       const conflicts = this.leaseConflicts(resources);
       if (conflicts.length > 0) {
@@ -552,6 +564,7 @@ export class Orchestrator {
       usage: { inputTokens: 0, outputTokens: 0 },
       toolStats: {},
       finished: false,
+      closed: false,
     };
     this.workers.set(agentId, handle);
     agentOwners.set(agentId, this);
@@ -770,8 +783,17 @@ export class Orchestrator {
    *  M3b write mode：done → diff 快照（vs base_commit）+ 安全 gate 流水 + artifacts（stat 摘要/diff_ref）；
    *  failed/cancelled → worktree 自动清理（四路清理之三/四路）。 */
   private async finish(w: WorkerHandle, status: "done" | "failed" | "cancelled", reason?: string): Promise<void> {
+    try {
+      await this.finishInner(w, status, reason);
+    } finally {
+      w.closed = true;
+    }
+  }
+
+  private async finishInner(w: WorkerHandle, status: "done" | "failed" | "cancelled", reason?: string): Promise<void> {
     if (w.finished) return;
     w.finished = true;
+    w.closed = false;
     for (const [id, p] of this.pendingApprovals) {
       if (p.agentId === w.agentId) {
         clearTimeout(p.timer);

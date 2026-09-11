@@ -815,6 +815,7 @@ export async function handleCardAction(req: CardActionRequest): Promise<{ ok: bo
       : null;
   const orch =
     (req.targetAgentId ? orchestratorForAgent(req.targetAgentId) : null) ??
+    (req.targetAgentId ? orchestratorForMerge(req.targetAgentId) : null) ?? // M3b：write worker 终态后 emit 仍须经控制塔路由（合并/评论发生在 done 之后）
     (approvalId ? orchestratorForApproval(approvalId) : null) ??
     activeOrchestrator;
   const emit = session?.emit ?? (orch ? (e: AgentEvent) => orch.appendProtocol(e) : null);
