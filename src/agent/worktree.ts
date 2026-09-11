@@ -165,8 +165,10 @@ async function ensureGitignoreAgents(root: string): Promise<void> {
  *  先 `git add -N .`（intent-to-add 让未跟踪文件进 diff），再 `git diff <base>`。 */
 export async function worktreeDiff(wtPath: string, baseCommit: string): Promise<{ stat: string; patch: string; files: string[] }> {
   await git(wtPath, "add", "-N", ".").catch(() => {}); // 无改动时 add -N 也可能非零：吞掉，diff 兜底
-  const stat = (await git(wtPath, "diff", baseCommit, "--stat")).trim();
-  const patch = (await git(wtPath, "diff", baseCommit)).trimEnd();
+  // symlink 目录（node_modules 等）是安装共享面不是产出：diff 一律排除
+  const excludes = WORKTREE_SYMLINK_DIRS.map((d) => ":(exclude)" + d);
+  const stat = (await git(wtPath, "diff", baseCommit, "--stat", ".", ...excludes)).trim();
+  const patch = (await git(wtPath, "diff", baseCommit, ".", ...excludes)).trimEnd();
   const files =
     stat === ""
       ? []
