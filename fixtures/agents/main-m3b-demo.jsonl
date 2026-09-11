@@ -1,0 +1,3 @@
+{"type":"assistant_message","content":"派一个 write worker 在 worktree 里补一个带密钥的示例文件，合并前走 gate 审查。"}
+{"type":"tool_call","id":"spawn-m3b","name":"spawn_agent","args":{"task":"在 worktree 新增 demo/config.ts 示例配置","mode":"write","model":"write-demo.jsonl"}}
+{"type":"assistant_message","content":"write worker 已在 worktree 里开工；完成后 diff 卡会进 git 面板，合并由人在面板批准。"}

@@ -664,6 +664,15 @@ try {
     const { TOOLS } = await import("../src/tools");
     const mainTools = Object.keys(TOOLS);
     check([...readSpecs, ...writeSpecs, ...mainTools].every((n) => !/merge|commit/i.test(n)), "J7 worker 与主 loop 工具表均无 merge/commit 能力（合并唯一出口 = git 面板）");
+    // 执行表同查（模型规格与执行面都要无 merge/commit——防「规格不在表、执行可调」的绕行）
+    const writeHandleJ = {
+      agentId: "j7", spawnCallId: "", mode: "write", task: "t", context: {}, maxTurns: 5, tier: "default",
+      controller: new AbortController(), autonomy: {} as never, toolAutonomy: {} as never, resources: [],
+      snapshots: new Map(), editAnchors: new Map(), lastFindings: [], events: [],
+      usage: { inputTokens: 0, outputTokens: 0 }, toolStats: {}, finished: false, closed: true,
+    } as never;
+    const writeExecTableJ = Object.keys(buildWorkerToolTable(writeHandleJ, orch));
+    check(writeExecTableJ.every((n) => !/merge|commit/i.test(n)), "J7d write 执行表无 merge/commit（防执行面绕行）");
     for (const banned of WRITE_WORKER_FORBIDDEN_TOOLS) {
       check(!writeSpecs.includes(banned), "J7b write 工具表禁入 " + banned);
     }
