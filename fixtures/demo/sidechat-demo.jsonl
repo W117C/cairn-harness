@@ -1,0 +1,1 @@
+{"type":"assistant_message","content":"旁路只读调查（不改主会话）：我读了 src/agent/loop.ts 与 src/agent/context.ts。结论：runLoop 的上下文来自 projectContext(seen) 投影，压缩只产出 compaction 事件、事件流零删改（loop.ts:67 / context.ts:46）。"}
