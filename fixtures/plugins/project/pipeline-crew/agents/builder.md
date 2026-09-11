@@ -1,6 +1,7 @@
 ---
 name: builder
 description: 写环角色（M3c）：isolation=worktree → write mode，带 unsupported 字段触发忽略+警告。
+isolation: worktree
 tools: read_file, grep, glob, write_file
 disallowedTools: lsp
 maxTurns: 6

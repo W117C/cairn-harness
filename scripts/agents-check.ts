@@ -39,6 +39,7 @@ import {
   type SpawnArgs,
 } from "../src/agent/orchestrator";
 import { worktreePathFor } from "../src/agent/worktree";
+import { PluginRuntime, TrustStore } from "../src/agent/plugins";
 import {
   handleAgentRun,
   handleCardAction,
@@ -1124,6 +1125,74 @@ try {
       // 无第二套摘要实现（静态扫描 compaction 引用面）：orchestrator 走 runCompaction，六段模板字面零复制
       const orchSrcN = await readFile(join(ROOT, "src", "agent", "orchestrator.ts"), "utf8");
       check(orchSrcN.includes("runCompaction(") && !orchSrcN.includes("## Objective"), "N11f 同一 runCompaction 链路（orchestrator 无第二套摘要实现/模板字面）");
+    }
+
+    // ---- N12 agents/*.md 插件角色采纳（§9.11-4 闭合）：真实 fixture 经 PluginRuntime → stages[].role 跑通一环 ----
+    {
+      const scratchN = join(work, "n-plugin-scratch");
+      await mkdir(scratchN, { recursive: true });
+      const trustN = join(scratchN, "trust.json");
+      const pluginRootN = join(ROOT, "fixtures", "plugins", "project", "pipeline-crew");
+      await new TrustStore(trustN).decide(pluginRootN, true); // 信任门先决（未信任角色不可见，同 plugins-check D）
+      const rtN = await PluginRuntime.load({
+        projectPluginsDir: join(ROOT, "fixtures", "plugins", "project"),
+        workspace: scratchN,
+        pluginDataRoot: join(scratchN, "data"),
+        trustFile: trustN,
+      });
+      const roleN = rtN.findAgentRole("pipeline-crew:scout");
+      check(roleN !== null && roleN!.body.includes("pipeline-crew scout"), "N12 真实 fixture agents/*.md 经 agentRoles 解析（正文=roleDefinition）");
+      check(roleN !== null && (roleN!.frontmatter.tools as string).includes("grep") && roleN!.frontmatter.maxTurns === 6, "N12b frontmatter（tools/maxTurns）随角色带出（§9.6 映射源）");
+      const mPath = join(work, "n-plugin.jsonl");
+      await writeFile(mPath, "", "utf8");
+      const eventsM: AgentEvent[] = [];
+      const capturesM: { role: string; content: string | null }[][] = [];
+      const orchM = new Orchestrator({
+        logPath: mPath,
+        workspace: repoN,
+        parentMode: "default",
+        emit: async (e) => {
+          eventsM.push(e);
+          await createEventLog(mPath).append(e);
+        },
+        modelFor: () =>
+          scriptedWorkerModel(
+            [
+              { type: "tool_call", id: "m0", name: "remember", args: { content: "越权写记忆" } }, // 表外工具：frontmatter.tools 裁剪后不可达
+              { type: "assistant_message", content: "## 结论\nscout 报告。\nverdict: pass" },
+            ] as unknown as Parameters<typeof scriptedWorkerModel>[0],
+            capturesM as never,
+          ),
+        agentRoleFor: (invoke: string) => rtN.findAgentRole(invoke),
+      });
+      const spawnM = orchM.spawn({ mode: "pipeline", stages: [{ role: "pipeline-crew:scout", task: "只读调研 fixture" }] }, { callId: "n-m" });
+      check(await waitFor(() => eventsM.some((e) => e.type === "approval_requested")), "N12c 插件角色链整链审批落流");
+      const aprM = eventsM.find((e) => e.type === "approval_requested") as Extract<AgentEvent, { type: "approval_requested" }>;
+      check(orchM.decideWorkerApproval(aprM.id, true, "once").ok, "N12d 整链决议受理");
+      check((await spawnM).ok, "N12e 插件角色经 depends_on sugar 跑通一环（stage spawn 受理）");
+      check(await waitFor(() => eventsM.some((e) => e.type === "tool_result" && (e as { output: string }).output.includes("整链 done")), 15_000), "N12f 整链 done（插件角色 stage 收敛）");
+      await orchM.waitAll(15_000);
+      const spawnedM = eventsM.find((e) => e.type === "agent_spawned") as Extract<AgentEvent, { type: "agent_spawned" }> | undefined;
+      check(spawnedM?.max_turns === 6, "N12g frontmatter.maxTurns 采纳（agent_spawned 记 6）");
+      check(eventsM.some((e) => e.type === "tool_result" && (e as { output: string }).output.includes("remember 不在本会话工具表")), "N12h 工具面按 frontmatter.tools 裁剪（表外工具不可达）");
+      const sysFirst = capturesM[0]?.[0];
+      check(sysFirst?.role === "system" && (sysFirst?.content ?? "").includes("[role] You are the pipeline-crew scout: a read-only research worker."), "N12j 插件角色正文进 system 首块");
+      // builder 角色（isolation=worktree → write mode）：CC 不支持键（hooks/mcpServers/permissionMode）忽略 + 警告
+      const roleB = rtN.findAgentRole("pipeline-crew:builder");
+      check(roleB !== null && roleB!.frontmatter.isolation === "worktree" && roleB!.frontmatter.hooks !== undefined && roleB!.frontmatter.mcpServers !== undefined, "N12k builder 角色（isolation=worktree + 不支持键在场）");
+      const spawnB = orchM.spawn({ mode: "pipeline", stages: [{ role: "pipeline-crew:builder", task: "写 fixture 产出" }] }, { callId: "n-m2" });
+      check(await waitFor(() => eventsM.filter((e) => e.type === "approval_requested").length >= 2), "N12l builder 链整链审批落流");
+      const aprB = eventsM.filter((e) => e.type === "approval_requested").pop() as Extract<AgentEvent, { type: "approval_requested" }>;
+      check(orchM.decideWorkerApproval(aprB.id, true, "once").ok, "N12m builder 链决议受理");
+      check((await spawnB).ok, "N12n builder（isolation=worktree）映射 write mode 跑通");
+      // builder 链异步展开：必须等它真正收敛（waitAll 对尚未注册的 worker 是空转——竞态教训记 PROGRESS 坑六十）
+      check(await waitFor(() => eventsM.some((e) => e.type === "tool_result" && (e as { callId?: string }).callId === "pipeline-n-m2" && (e as { output: string }).output.includes("整链 done")), 15_000), "N12o builder 链整链 done（按链 id 精确收敛）");
+      await orchM.waitAll(15_000);
+      const texts = eventsM.filter((e) => e.type === "agent_message" && (e as { text: string }).text.startsWith("[role]")).map((e) => (e as { text: string }).text).join("\n");
+      check(texts.includes("hooks") && texts.includes("mcpServers") && texts.includes("permissionMode"), "N12p CC 不支持键忽略 + 警告落流（§9.6 照抄）");
+      const spawnedB = eventsM.filter((e) => e.type === "agent_spawned").map((e) => e as Extract<AgentEvent, { type: "agent_spawned" }>).pop()!;
+      check(spawnedB.mode === "write" && spawnedB.worktree !== undefined && spawnedB.max_turns === 6, "N12q isolation=worktree → write mode（可写根 = worktree）+ maxTurns 采纳");
+      await rtN.shutdown();
     }
   }
 
