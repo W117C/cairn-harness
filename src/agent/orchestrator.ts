@@ -86,6 +86,9 @@ export const WORKER_TOOL_TABLE: readonly string[] = ["read_file", "grep", "glob"
 /** worker 工具表禁入名单（验收断言面：深度闸 + 写闸 + M4a automation_*——定时任务里再嵌套定时 = 配置面失控，§12.2.5）。 */
 export const WORKER_FORBIDDEN_TOOLS: readonly string[] = [
   "spawn_agent", "write_file", "edit_file", "run_shell", "clarify", "propose_plan", "verify", "remember",
+  // P0-1 同源补漏：read 面的实际排除靠 workerToolSpecs 的 allow 列表（本就不含 shell_rw），
+  // 但本常量是「验收断言面」——漏了 shell_rw，J7c 就退化成「碰巧为真」而非名单驱动。
+  "shell_rw",
   "automation_create", "automation_update", "automation_delete", "automation_run_now", "automation_list",
 ];
 
@@ -904,21 +907,27 @@ export class Orchestrator {
     return out;
   }
 
-  /** 租约相交的 spawn 审批（§4.4.3 与 turn 解耦：请求落流 + 等待订阅式应答；超时 fail-closed 拒绝）。
-   *  坑十六先例（M3b 复训）：**先登记等待、再 emit**——事件驱动的决议方可能在 emit await 解析前就到。 */
-  private async requestSpawnApproval(agentId: string, warning: string, conflicts: { agentId: string; resource: string }[]): Promise<boolean> {
-    const id = "apr-" + String(++this.approvalSeq) + "-" + agentId;
-    let resolveOutcome: (r: { approved: boolean }) => void = () => {};
-    const outcomePromise = new Promise<{ approved: boolean }>((resolve) => {
-      resolveOutcome = resolve;
+  /** 审批等待内核（三处审批协议共用：spawn / pipeline 整链 / worker 工具）。
+   *  登记等待 → 超时 fail-closed → 所有者路由（approvalOwners 供 approval_resolved 反查编排器）。
+   *  坑十六先例（M3b 复训）：调用方必须**先拿到本 promise、再 emit 请求**——事件驱动的决议方
+   *  可能在 emit 的 await 解析前就到，先 emit 会丢掉决议。
+   *  调用方只负责各自的 approval_requested / approval_resolved 载荷（三处字段不同）。 */
+  private waitForApproval(id: string, agentId: string): Promise<{ approved: boolean; scope: AskScope; note?: string }> {
+    return new Promise<{ approved: boolean; scope: AskScope; note?: string }>((resolve) => {
       const timer = setTimeout(() => {
         this.pendingApprovals.delete(id);
         approvalOwners.delete(id);
-        resolveOutcome({ approved: false });
+        resolve({ approved: false, scope: "once", note: "审批超时（fail-closed 拒绝）" });
       }, this.approvalTimeoutMs);
-      this.pendingApprovals.set(id, { agentId, resolve: (r) => resolveOutcome({ approved: r.approved }), timer });
+      this.pendingApprovals.set(id, { agentId, resolve, timer });
       approvalOwners.set(id, this);
     });
+  }
+
+  /** 租约相交的 spawn 审批（§4.4.3 与 turn 解耦：请求落流 + 等待订阅式应答；超时 fail-closed 拒绝）。 */
+  private async requestSpawnApproval(agentId: string, warning: string, conflicts: { agentId: string; resource: string }[]): Promise<boolean> {
+    const id = "apr-" + String(++this.approvalSeq) + "-" + agentId;
+    const outcomePromise = this.waitForApproval(id, agentId);
     await this.opts.emit({
       type: "approval_requested",
       id,
@@ -1050,17 +1059,7 @@ export class Orchestrator {
   /** 整链审批（§4.4.3 与 turn 解耦；agent_id 缺省——链没有 worker 身份，审批以 id 路由）。 */
   private async requestChainApproval(callId: string, reasons: string[]): Promise<boolean> {
     const id = "apr-" + String(++this.approvalSeq) + "-pipeline";
-    let resolveOutcome: (r: { approved: boolean }) => void = () => {};
-    const outcomePromise = new Promise<{ approved: boolean }>((resolve) => {
-      resolveOutcome = resolve;
-      const timer = setTimeout(() => {
-        this.pendingApprovals.delete(id);
-        approvalOwners.delete(id);
-        resolveOutcome({ approved: false });
-      }, this.approvalTimeoutMs);
-      this.pendingApprovals.set(id, { agentId: "", resolve: (r) => resolveOutcome({ approved: r.approved }), timer });
-      approvalOwners.set(id, this);
-    });
+    const outcomePromise = this.waitForApproval(id, ""); // 链没有 worker 身份，agentId 空串
     await this.opts.emit({
       type: "approval_requested",
       id,
@@ -1810,18 +1809,8 @@ export class Orchestrator {
     riskReasons: string[],
   ): Promise<{ approved: boolean; scope: AskScope; note?: string }> {
     const id = "apr-" + String(++this.approvalSeq) + "-" + w.agentId;
-    // 坑十六先例（M3b 复训）：先登记等待、再 emit 请求——决议方可能在 emit await 解析前就到
-    let resolveOutcome: (r: { approved: boolean; scope: AskScope; note?: string }) => void = () => {};
-    const outcomePromise = new Promise<{ approved: boolean; scope: AskScope; note?: string }>((resolve) => {
-      resolveOutcome = resolve;
-      const timer = setTimeout(() => {
-        this.pendingApprovals.delete(id);
-        approvalOwners.delete(id);
-        resolveOutcome({ approved: false, scope: "once", note: "审批超时（fail-closed 拒绝）" });
-      }, this.approvalTimeoutMs);
-      this.pendingApprovals.set(id, { agentId: w.agentId, resolve: (r) => resolveOutcome(r), timer });
-      approvalOwners.set(id, this);
-    });
+    // 先登记等待、再 emit 请求（waitForApproval 内部同步登记；坑十六）
+    const outcomePromise = this.waitForApproval(id, w.agentId);
     await this.opts.emit({
       type: "approval_requested",
       id,

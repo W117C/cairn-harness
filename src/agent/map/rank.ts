@@ -44,15 +44,6 @@ export interface BuiltGraph {
   contextFiles: Set<string>;
 }
 
-/** 标识符池（构图/渲染共用的名字级索引）：name → def 节点 key 列表。 */
-export function defSitesOf(g: BuiltGraph, name: string): string[] {
-  const out: string[] = [];
-  for (const n of g.nodes) {
-    if (n.kind === "def" && n.name === name) out.push(nodeKey(n.file, n.name, "def"));
-  }
-  return out;
-}
-
 /**
  * 构图：ref→def 边权 = mul·√num_refs。
  * mul 规则（aider 照抄）：mentioned ×10；referencer ∈ contextFiles ×50；
@@ -106,13 +97,22 @@ export function buildGraph(files: FileTagsInput[], opts: GraphBuildOptions = {})
     }
   }
 
-  // def 计数（定义点 >5 的常见名降权）
+  // 名字级索引：def 计数与「同名 def 清单」一次建好。
+  // 原实现「每个 ref 遍历全部节点找同名 def」与「每个 def 遍历全部节点找入边」
+  // 是两处 O(N²)（400 文件规模下 ~10^8 次比较），这里各降为一次线性扫描。
   const defCount = new Map<string, number>();
+  const defsByName = new Map<string, string[]>();
   for (const n of nodes) {
-    if (n.kind === "def") defCount.set(n.name, (defCount.get(n.name) ?? 0) + 1);
+    if (n.kind !== "def") continue;
+    defCount.set(n.name, (defCount.get(n.name) ?? 0) + 1);
+    const dk = nodeKey(n.file, n.name, "def");
+    const list = defsByName.get(n.name);
+    if (list) list.push(dk);
+    else defsByName.set(n.name, [dk]);
   }
 
   // ref→def 边：同名 def 全连（aider 同构）
+  const referencedDefs = new Set<string>(); // 收到过 ref 入边的 def key（自环判定的索引版）
   for (const n of nodes) {
     if (n.kind !== "ref") continue;
     const k = nodeKey(n.file, n.name, "ref");
@@ -123,10 +123,9 @@ export function buildGraph(files: FileTagsInput[], opts: GraphBuildOptions = {})
     if (n.name.startsWith("_")) mul *= 0.1;
     if ((defCount.get(n.name) ?? 0) > 5) mul *= 0.1;
     const w = mul * Math.sqrt(numRefs.get(k) ?? 1);
-    for (const n2 of nodes) {
-      if (n2.kind === "def" && n2.name === n.name) {
-        addEdge(k, nodeKey(n2.file, n2.name, "def"), w);
-      }
+    for (const defKey of defsByName.get(n.name) ?? []) {
+      addEdge(k, defKey, w);
+      referencedDefs.add(defKey);
     }
   }
 
@@ -134,8 +133,7 @@ export function buildGraph(files: FileTagsInput[], opts: GraphBuildOptions = {})
   for (const n of nodes) {
     if (n.kind !== "def") continue;
     const k = nodeKey(n.file, n.name, "def");
-    const hasIncoming = nodes.some((n2) => n2.kind === "ref" && adj.get(nodeKey(n2.file, n2.name, "ref"))?.has(k));
-    if (!hasIncoming) addEdge(k, k, 0.1);
+    if (!referencedDefs.has(k)) addEdge(k, k, 0.1);
   }
 
   return { nodes, index, adj, numRefs, mentioned, contextFiles };
@@ -192,6 +190,9 @@ export function personalizedPageRank(g: BuiltGraph, opts: RankOptions = {}): num
     for (const w of m.values()) s += w;
     outW.set(u, s);
   }
+  // dangling 判定是循环不变量：预计算一次，避免每次迭代为每个节点重建 key 字符串。
+  const hasOut = new Array<boolean>(n);
+  for (let i = 0; i < n; i++) hasOut[i] = g.adj.has(nodeKeyOf(g, i));
 
   let iters = 0;
   for (; iters < maxIterations; iters++) {
@@ -210,8 +211,7 @@ export function personalizedPageRank(g: BuiltGraph, opts: RankOptions = {}): num
     // dangling 质量（无出边节点）按 personalization 摊回
     let dangling = 0;
     for (let i = 0; i < n; i++) {
-      const u = nodeKeyOf(g, i);
-      if (!g.adj.has(u)) dangling += rank[i];
+      if (!hasOut[i]) dangling += rank[i];
     }
     for (let i = 0; i < n; i++) next[i] += (1 - damping) * p[i] + damping * dangling * p[i];
     // L1 差 < eps 即停（收敛判定）

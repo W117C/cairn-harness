@@ -595,6 +595,8 @@ describe("M3c 卡死检测集成", () => {
     expect(await waitFor(() => events.some((e) => e.type === "agent_status" && (e as { reason?: string }).reason === "stuck"))).toBe(true);
     const stuckStatus = events.find((e) => e.type === "agent_status" && (e as { reason?: string }).reason === "stuck") as Extract<AgentEvent, { type: "agent_status" }>;
     expect(stuckStatus.agent_id).toBe(id);
+    // 同 §静默超时：agent_status(stuck) 先落、提醒消息后落——等 status 就立刻 find 会竞态。
+    expect(await waitFor(() => events.some((e) => e.type === "agent_message" && (e as { text: string }).text.includes("[stuck]")))).toBe(true);
     const remind = events.find((e) => e.type === "agent_message" && (e as { text: string }).text.includes("[stuck]")) as Extract<AgentEvent, { type: "agent_message" }> | undefined;
     expect(remind?.text).toContain("same_action_obs_x4");
     // resume：清除卡死态 → worker 收束
@@ -612,6 +614,9 @@ describe("M3c 卡死检测集成", () => {
     const r = await orch.spawn({ mode: "read", task: "静默任务" }, { callId: "stuck-2" });
     const id = (JSON.parse(r.output) as { agent_id: string }).agent_id;
     expect(await waitFor(() => events.some((e) => e.type === "agent_status" && (e as { reason?: string }).reason === "stuck"), 5_000)).toBe(true);
+    // triggerStuck 先落 agent_status(stuck) 再落提醒消息：等 status 就立刻 find 会与消息落盘竞态
+    // （重负载下必现假红）。这里对消息本身再等一次——断言强度不变，只去掉时序假设。
+    expect(await waitFor(() => events.some((e) => e.type === "agent_message" && (e as { text: string }).text.includes("静默超过")), 5_000)).toBe(true);
     const remind = events.find((e) => e.type === "agent_message" && (e as { text: string }).text.includes("静默超过"));
     expect(remind).toBeDefined();
     // 取消出口：stuck 挂起中取消 → cancelled 终态（既有取消链）

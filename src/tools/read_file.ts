@@ -1,4 +1,4 @@
-import { readFile, readdir, stat } from "node:fs/promises";
+import { open, readFile, readdir, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { resolveInWorkspace, truncationNotice, ToolError, type Tool, type ToolResult } from "./base.js";
 import { prefetchLsp } from "./lsp.js";
@@ -7,6 +7,21 @@ import { prefetchLsp } from "./lsp.js";
 const READ_LIMIT_BYTES = 50 * 1024;
 const MAX_LINE_CHARS = 2000;
 const DEFAULT_MAX_LINES = 2000;
+// 整读上限：超过只读前缀。输出本身已限 50KB，但旧实现「先整文件读进内存再截断」，
+// 一个 GB 级文件（日志/打包产物/数据库转储）会把 Electron 主进程读爆。
+const LARGE_FILE_PREFIX_BYTES = 16 * 1024 * 1024;
+
+/** 只读文件前 bytes 字节（大文件路径用；返回可能被截断的 Buffer）。 */
+async function readPrefix(abs: string, bytes: number): Promise<Buffer> {
+  const fh = await open(abs, "r");
+  try {
+    const buf = Buffer.allocUnsafe(bytes);
+    const { bytesRead } = await fh.read(buf, 0, bytes, 0);
+    return buf.subarray(0, bytesRead);
+  } finally {
+    await fh.close();
+  }
+}
 
 // 二进制嗅探：出现 NUL 即拒读；不可打印字节（除少数常见空白）占比 >30% 也拒读。
 function looksBinary(buf: Buffer): boolean {
@@ -66,9 +81,13 @@ export const read_file: Tool = {
       return { ok: true, output: rel + "/（目录，" + entries.length + " 项）\n" + lines.join("\n") };
     }
 
+    // 大文件只读前缀（stat 已在上面取过，零额外系统调用）。
+    // 前缀边界可能切断一个多字节 UTF-8 序列，末尾会解码成替换字符——输出已显式声明截断，
+    // 不影响语义；这里不做额外修补，避免误改文件本身合法的 U+FFFD。
+    const oversized = (st?.size ?? 0) > LARGE_FILE_PREFIX_BYTES;
     let buf: Buffer;
     try {
-      buf = await readFile(abs);
+      buf = oversized ? await readPrefix(abs, LARGE_FILE_PREFIX_BYTES) : await readFile(abs);
     } catch {
       const suggestions = await nearNameSuggestions(ctx.workspace, rel);
       const hint = suggestions.length ? "（近名建议: " + suggestions.join(", ") + "）" : "";
@@ -100,6 +119,9 @@ export const read_file: Tool = {
       byteTruncated = true;
     }
     const notices: string[] = [];
+    if (oversized) {
+      notices.push("[truncated: 文件超过 " + String(LARGE_FILE_PREFIX_BYTES / (1024 * 1024)) + " MB，仅读取前 " + String(LARGE_FILE_PREFIX_BYTES / (1024 * 1024)) + " MB 参与解析；建议用 grep 定位后再按 offset 读]");
+    }
     if (byteTruncated) notices.push(truncationNotice(50));
     if (truncatedLines) notices.push("[truncated: 从第 " + offset + " 行起共 " + lines.length + " 行，仅显示 " + selected.length + " 行；可用 offset/limit 继续读]");
     if (offset > 1 && !truncatedLines) notices.push("[offset: 从第 " + offset + " 行起读，文件共 " + lines.length + " 行]");

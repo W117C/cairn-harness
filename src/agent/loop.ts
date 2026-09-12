@@ -4,8 +4,7 @@ import type { HookEngine } from "./plugins/hooks";
 import { projectContext } from "./context";
 import type { LegacyNextProvider, ModelOutput, Provider } from "../providers";
 import { streamFromNextSource } from "../providers";
-import type { VerifyHook } from "./verify";
-import { failureDigest } from "./verify";
+import { failureDigest, type VerifyHook, type VerifyOutcome } from "./verify";
 import { TOOLS, type ClarifyChannel, type PlanChannel, type ToolName } from "../tools";
 
 export interface LoopOptions {
@@ -94,7 +93,17 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         }
         verifyAttempts++;
         const attempt = verifyAttempts;
-        const outcome = await opts.verify.run();
+        // verify 是系统门：钩子自身抛错（.agent/config.json 损坏、沙箱 exec 异常）应当记为
+        // 「一次验证失败」，而不是把整轮任务炸掉。工具执行早有同族 try/catch，这里补齐同一口径；
+        // 异常原因进 tool_result（fail-visible），不让模型只看到「无详细输出」。
+        let outcome: VerifyOutcome;
+        let hookError: string | null = null;
+        try {
+          outcome = await opts.verify.run();
+        } catch (err) {
+          hookError = err instanceof Error ? err.message : String(err);
+          outcome = { ok: false, results: [] };
+        }
         await events.append({
           type: "verify_result",
           callId: output.id,
@@ -119,7 +128,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
           type: "tool_result",
           callId: output.id,
           ok: false,
-          output: failureDigest(outcome),
+          output: hookError !== null ? "[verify] 钩子异常（记为一次验证失败）：" + hookError : failureDigest(outcome),
         });
         continue;
       }

@@ -3,6 +3,7 @@
 // 免剪名单：skill 内容 + 固定回注（user_message / 最新摘要注入）+ 方案/验证卡投影（plan/verify/clarify）。
 // 打桩：投影期替换 "[Old tool result content cleared]"；被裁原文写会话附件目录可回取（GEM 同构）。
 // 事件流零删改：prune 只产出「事件 id → 替换文本」映射，由组装投影（context.ts）消费。
+import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentEvent } from "../events";
@@ -78,27 +79,59 @@ export interface PruneOutcome {
   attachments: string[];
 }
 
-/** 免剪判定（单测/检查脚本复用）。 */
-export function isPruneExempt(events: AgentEvent[], index: number, config: PruneConfig): boolean {
+/** prune 判定用的预建索引（一次 O(n) 扫描的产物）。 */
+export interface PruneIndex {
+  /** 最近 N 轮免剪边界（recentRoundBoundaries 的预计算结果）。 */
+  boundary: number;
+  /** tool_call id → 工具名。callId 由 provider 生成、每次调用唯一，故「全量建表」与
+   *  旧的「每个候选反向扫描取最近一次」同语义，但把 O(n)/次 降到 O(1)/次。 */
+  callTool: Map<string, string>;
+}
+
+/** 预建索引：computePrune 单遍扫描，供全部候选复用。 */
+export function buildPruneIndex(events: AgentEvent[], config: PruneConfig): PruneIndex {
+  const callTool = new Map<string, string>();
+  for (const e of events) {
+    if (e.type === "tool_call") callTool.set(e.id, e.name);
+  }
+  return { boundary: recentRoundBoundaries(events, config.recentRounds), callTool };
+}
+
+/** 免剪判定（单测/检查脚本复用）。传 precomputed 时复用索引（computePrune 的 O(n) 路径）；
+ *  不传则就地建索引（单点调用的兼容路径，语义一致）。 */
+export function isPruneExempt(
+  events: AgentEvent[],
+  index: number,
+  config: PruneConfig,
+  precomputed?: PruneIndex,
+): boolean {
   const e = events[index];
   if (e.type !== "tool_result") return true; // 只动 tool_result
   if (isCardProjection(e) || isFixedReinjection(e)) return true;
-  // 免剪名单：本事件之前的 tool_call（同 callId）名字在名单里 = skill 内容注入
-  const call = [...events.slice(0, index)].reverse().find((x) => x.type === "tool_call" && x.id === (e as { callId: string }).callId);
-  if (call && call.type === "tool_call" && config.exemptTools.includes(call.name)) return true;
+  const idx = precomputed ?? buildPruneIndex(events, config);
+  // 免剪名单：同 callId 的 tool_call 名字在名单里 = skill 内容注入
+  const callName = idx.callTool.get((e as { callId: string }).callId);
+  if (callName !== undefined && config.exemptTools.includes(callName)) return true;
   // grep/glob 命中已经是整形产物（§6.2 上限内），裁掉信息损失大于收益——只裁大块 read/shell 类
-  if (call && call.type === "tool_call" && (call.name === "grep" || call.name === "glob" || call.name === "lsp")) return true;
+  if (callName === "grep" || callName === "glob" || callName === "lsp") return true;
   // 最近 N 轮免剪
-  const boundary = recentRoundBoundaries(events, config.recentRounds);
-  if (index >= boundary) return true;
+  if (index >= idx.boundary) return true;
   // 权限拒绝/错误结果通常很短且高价值，不裁
   if (!(e as { ok?: boolean }).ok) return true;
   return false;
 }
 
-/** 原文回取：附件文件名（sha1 前缀防碰撞 + callId）。 */
+/** 附件名安全化：sessionId/callId 都可能来自模型侧输入，直接拼路径会被 `../` 越出
+ *  attachmentsDir（目录穿越）。清洗到安全字符集，再用原值 sha1 前 8 位防碰撞
+ *  （清洗会把不同原值映射到同一串，如 "a/b" 与 "a:b"）。 */
+function safeSegment(raw: string, maxLen: number): string {
+  return raw.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, maxLen);
+}
+
+/** 原文回取：附件文件名（sha1 前缀防碰撞 + 清洗后的 sessionId/callId）。 */
 function attachmentName(sessionId: string, callId: string): string {
-  return `${sessionId}-${callId}.txt`;
+  const digest = createHash("sha1").update(callId).digest("hex").slice(0, 8);
+  return `${safeSegment(sessionId, 32)}-${digest}-${safeSegment(callId, 64)}.txt`;
 }
 
 /**
@@ -111,7 +144,11 @@ export function computePrune(input: PruneInput): PruneOutcome {
   const out: PruneOutcome = { replacements: new Map(), savedTokens: 0, why: "none", attachments: [] };
   if (events.length === 0) return out;
 
-  const boundary = recentRoundBoundaries(events, config.recentRounds);
+  // 索引只建一次：boundary 与 callId→工具名 都是全量不变量，循环内复用。
+  // （原实现对每个候选都重算 recentRoundBoundaries 并反向扫描定位 tool_call → O(n²)；
+  //  长会话下这是组装路径上最大的一处平方开销。）
+  const idx = buildPruneIndex(events, config);
+  const boundary = idx.boundary;
   // 从最新回退累计到 protectTokens 为止是保护区；区外候选按从旧到新裁
   let acc = 0;
   let protectStart = events.length; // [protectStart, end) = 保护区
@@ -133,7 +170,7 @@ export function computePrune(input: PruneInput): PruneOutcome {
 
   const candidates: number[] = [];
   for (let i = 0; i < protectStart && i < boundary; i++) {
-    if (!isPruneExempt(events, i, config)) candidates.push(i);
+    if (!isPruneExempt(events, i, config, idx)) candidates.push(i);
   }
   if (candidates.length === 0) {
     out.why = "none";

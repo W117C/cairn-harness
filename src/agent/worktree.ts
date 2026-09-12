@@ -204,12 +204,24 @@ export async function commitAndMerge(
   try {
     await git(root, "merge", "--no-ff", branch, "-m", "Merge branch '" + branch + "' (agent " + agentId + ")");
   } catch (err) {
-    const stderr = err instanceof WorktreeError ? err.stderr : "";
     const msg = err instanceof Error ? err.message : String(err);
-    const conflicted = [...msg.matchAll(/CONFLICT \([^)]*\): ([^\n]+)/g)].map((m) => m[1]!.split(/\s+/)[0]!);
+    // 冲突清单以 git 的权威输出为准（`--diff-filter=U` = 未合并项），且必须在 merge --abort 之前取
+    // （abort 会清掉冲突状态）。旧实现从 git 文案 `CONFLICT (content): Merge conflict in <path>` 里
+    // 取第一个空白分词 → 恒得 "Merge"，用户看到的是假清单（测试只断言 length > 0，故漏过）。
+    const unmerged = (await git(root, "diff", "--name-only", "--diff-filter=U").catch(() => "")).trim();
+    const conflicted = unmerged.split("\n").map((s) => s.trim()).filter((s) => s !== "");
     if (conflicted.length > 0) {
       await git(root, "merge", "--abort").catch(() => {}); // 恢复主 checkout 干净态（人工介入前零半合并态）
       return { ok: false, conflict: true, conflictedFiles: [...new Set(conflicted)], error: "合并冲突（人工介入，主 checkout 已恢复干净态）" };
+    }
+    // 兜底：diff 无 U 项但文案含 CONFLICT（如 modify/delete 类）——按「Merge conflict in <path>」取路径，
+    // 并显式滤掉旧实现那个恒真的 "Merge" 伪路径。
+    const fromText = [...msg.matchAll(/CONFLICT \([^)]*\):\s*(?:Merge conflict in\s+)?(\S+)/g)]
+      .map((m) => m[1]!)
+      .filter((f) => f !== "Merge");
+    if (fromText.length > 0) {
+      await git(root, "merge", "--abort").catch(() => {});
+      return { ok: false, conflict: true, conflictedFiles: [...new Set(fromText)], error: "合并冲突（人工介入，主 checkout 已恢复干净态）" };
     }
     return { ok: false, error: msg.slice(0, 400) };
   }

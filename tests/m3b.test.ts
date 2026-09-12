@@ -179,7 +179,9 @@ describe("M3b worktree 模块（§4.4.5）", () => {
     const outcome = await commitAndMerge(repo, wt, created.branch, "worker-c", "task");
     expect(outcome.ok).toBe(false);
     expect(outcome.conflict).toBe(true);
-    expect(outcome.conflictedFiles?.length).toBeGreaterThan(0);
+    // 断言真实冲突路径，而不是「清单非空」：旧实现从 git 文案里取第一个空白分词，
+    // 恒得 "Merge"（假文件名）；只断言 length > 0 会让它漏过。本行即该缺陷的回归防线。
+    expect(outcome.conflictedFiles).toEqual(["README.md"]);
     // 主 checkout 干净态（merge 已 abort，无未合并路径）
     const status = (await exec("git", ["status", "--porcelain"], { cwd: repo })).stdout;
     expect(status).not.toMatch(/^UU/m);
@@ -487,7 +489,11 @@ describe("M3b write worker 闭环（临时 git 仓库端到端）", () => {
     expect(diffs[1]!.output).toContain("+v2-修正"); // v2 diff（同 agent 同 base）
     expect(diffs[1]!.output).toContain("v2 vs"); // 版本号递增
     expect(events.some((e) => e.type === "agent_message" && (e as { text: string }).text.includes("[review]"))).toBe(true);
-    // 重启后再次终态：agent_result 两拍（v1 与 v2）
+    // 重启后再次终态：agent_result 两拍（v1 与 v2）。
+    // 落流顺序是 finishInner 有意设计：diff 先于 agent_result（面板先有 diff）——
+    // 所以等到 diff#2 就立刻数 agent_result 会竞态（实测重负载下必现假红）。
+    // 对 agent_result 本身再等一次；断言强度不变（仍要求恰好两拍）。
+    expect(await waitFor(() => events.filter((e) => e.type === "agent_result" && e.agent_id === agentId).length === 2)).toBe(true);
     expect(events.filter((e) => e.type === "agent_result" && e.agent_id === agentId)).toHaveLength(2);
     // worktree 已收尾（merged/rejected/cleaned）后注入 → 只落流
     const rej = await orch.rejectWorker(agentId);

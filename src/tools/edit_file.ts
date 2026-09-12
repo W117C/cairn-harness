@@ -35,7 +35,10 @@ export const edit_file: Tool = {
     if (count > 1 && !replaceAll) {
       throw new ToolError("edit_file: old_string 匹配 " + count + " 处（要求唯一）。若确要全部替换，加 replace_all: true: " + rel);
     }
-    const updated = replaceAll ? content.split(oldString).join(newString) : content.replace(oldString, newString);
+    // 替换一律用「字面量」语义：replace_all 走 split/join；单次替换用回调形式。
+    // 若直接写 content.replace(old, new)，new_string 里的 $& / $1 / $` / $' 会被当成
+    // 替换模式解释（把匹配到的原文插回去），静默写出错误内容——两个分支必须同口径。
+    const updated = replaceAll ? content.split(oldString).join(newString) : content.replace(oldString, () => newString);
     await writeFile(abs, updated, "utf8");
     const replacements = replaceAll ? count : 1;
     // M2a 诊断回流：成功写盘后等诊断（LSP 未配置 = 空串，输出不变）
