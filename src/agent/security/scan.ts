@@ -123,6 +123,9 @@ export const DANGER_CATEGORIES: readonly SecurityCategory[] = [
 
 const FILE_API_RE = /(join|resolve|readFile|writeFile|readFileSync|writeFileSync|createReadStream|createWriteStream|existsSync|\bstat\b|unlink|mkdir|\bopen\b)/;
 
+// H2（审查 E-8）：词法快筛是**启发式**——大小写变体（Eval(）、包装别名、多行拼接均可绕过，
+// 注释里的命中也会误报；这些是已知取舍（低成本高召回的粗筛），由 LLM 审查段兜底精判。
+// 本批加严：danger 规则统一加 i 标志（大小写变体不再漏）、deserialize 补 unsafe_load（Ruby）。
 export const DANGER_RULES: readonly {
   ruleId: string;
   category: SecurityCategory;
@@ -135,7 +138,7 @@ export const DANGER_RULES: readonly {
   {
     ruleId: "danger.eval",
     category: "eval",
-    re: /\beval\s*\(/,
+    re: /\beval\s*\(/i,
     severity: "high",
     confidence: "high",
     title: "动态代码执行（eval）",
@@ -144,7 +147,7 @@ export const DANGER_RULES: readonly {
   {
     ruleId: "danger.deserialize",
     category: "deserialization",
-    re: /\b(?:pickle\.loads?|yaml\.load|marshal\.loads?|unserialize|cPickle\.loads?)\s*\(/,
+    re: /\b(?:pickle\.loads?|yaml\.load|marshal\.loads?|unserialize|cPickle\.loads?|unsafe_load)\s*\(/i,
     severity: "high",
     confidence: "high",
     title: "不安全反序列化",
@@ -153,7 +156,7 @@ export const DANGER_RULES: readonly {
   {
     ruleId: "danger.weak_random",
     category: "weak_random",
-    re: /\b(?:Math\.random|random\.random)\s*\(/,
+    re: /\b(?:Math\.random|random\.random)\s*\(/i,
     severity: "medium",
     confidence: "medium",
     title: "弱随机数",
@@ -162,7 +165,7 @@ export const DANGER_RULES: readonly {
   {
     ruleId: "danger.command_injection",
     category: "command_injection",
-    re: /\b(?:exec|execSync|spawnSync|os\.system|child_process\.exec)\s*\([^)]*(?:\+|\$\{)/,
+    re: /\b(?:exec|execSync|spawnSync|os\.system|child_process\.exec)\s*\([^)]*(?:\+|\$\{)/i,
     severity: "high",
     confidence: "medium",
     title: "命令拼接",
