@@ -181,16 +181,47 @@ export const shell_ro: Tool = {
 // reason（命中规则显式落流可审计——安全资产纪律 §16.8）。非 git 命令不受本层限制，
 // 仍走 gatedWorkerTool 的 evaluate 管线（critical 静态风险任何档强制审批）。
 
-/** git 破坏命令静态拦截（纯函数）：链段全查，任何一段出现 git + 非只读子命令即拒绝。 */
+// H2（审查 B-1）：拦截按「有效二进制」判定，不再只认段首字面 `git`——
+// 绝对路径（/usr/bin/git）、exec 包装（command/env/…）、换行分隔、shell -c 内嵌都要拦。
+const EXEC_WRAPPERS: ReadonlySet<string> = new Set(["command", "env", "exec", "nice", "nohup", "sudo", "timeout"]);
+const SHELL_INVOKERS: ReadonlySet<string> = new Set(["bash", "sh", "zsh", "dash", "ksh"]);
+
+/** 一段命令文本的 git 调用判定：跳过环境赋值与 exec 包装后，有效二进制是否为 git 及其子命令。 */
+function gitInvocation(segText: string): { invoked: boolean; sub: string } {
+  const words = segText.trim().split(/\s+/).filter((w) => w !== "");
+  let i = 0;
+  while (i < words.length && (EXEC_WRAPPERS.has(words[i]!) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i]!))) i++;
+  const bin = words[i] ?? "";
+  if (!/(?:^|\/)git$/.test(bin)) return { invoked: false, sub: "" };
+  return { invoked: true, sub: words[i + 1] ?? "" };
+}
+
+/** git 破坏命令静态拦截（纯函数）：链段全查，任何一段有效二进制为 git 且子命令非只读即拒绝。 */
 export function interceptDestructiveGit(command: string): { ok: boolean; why?: string } {
   if (typeof command !== "string" || command.trim() === "") return { ok: false, why: "空命令" };
-  const segments = command.split(/&&|\|\||;|\|/);
+  // 换行也是命令分隔符（bash 语义）：先归一化为 `;` 再切段，否则 `echo hi\ngit push` 整段首词是 echo 而漏判。
+  const segments = command.replace(/\r?\n/g, ";").split(/&&|\|\||;|\|/);
   for (const seg of segments) {
+    const g = gitInvocation(seg);
     const words = seg.trim().split(/\s+/).filter((w) => w !== "");
-    if (words.length === 0) continue;
-    if (words[0] !== "git") continue;
-    // 跳过全局参数后取第一个子命令（git -C path status 的子命令是 status；-C 本身不在白名单 → 拒绝）
-    const sub = words[1] ?? "";
+    // shell -c '<payload>'：payload 剥引号后按同一套分隔符切段、同一套有效二进制规则判定——
+    // 只拦「payload 里真以 git 为命令」的段；`echo no git here` 这类 git 作参数的合法命令照常放行。
+    if (!g.invoked && SHELL_INVOKERS.has(words[0] ?? "") && words.includes("-c")) {
+      const cAt = seg.indexOf("-c");
+      const payload = cAt >= 0 ? seg.slice(cAt + 2).replace(/^[\s'"]+|[\s'"]+$/g, "") : "";
+      for (const sub of payload.split(/&&|\|\||;|\|/)) {
+        const pg = gitInvocation(sub);
+        if (pg.invoked && !READONLY_GIT_SUBCOMMANDS.includes(pg.sub)) {
+          return {
+            ok: false,
+            why: `shell -c 内嵌 git ${pg.sub} 被拦截（worker 无合并/提交/分支权：合并唯一出口是 git 面板 §4.3）`,
+          };
+        }
+      }
+      continue;
+    }
+    if (!g.invoked) continue;
+    const sub = g.sub;
     if (!READONLY_GIT_SUBCOMMANDS.includes(sub)) {
       return {
         ok: false,
@@ -741,6 +772,11 @@ export class Orchestrator {
   /** spawn 内核（模型面与 sequencer 逐环共用；stageRole 只由 sequencer 代码注入）。 */
   private async spawnInternal(args: SpawnArgs, ctx: { callId?: string }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
     const mode = typeof args.mode === "string" ? args.mode : "";
+    // H2（审查 B-3）：入口 fail-closed——主会话已取消时不再派发任何 worker
+    //（addEventListener 对已 abort 的 signal 不会触发，靠入口检查补上取消窗口）。
+    if (this.root.signal.aborted) {
+      return { ok: false, output: "spawn_agent: 主会话已取消（fail-closed，不再派发 worker）" };
+    }
     if (this.activeCount() >= MAX_CONCURRENT_WORKERS) {
       return {
         ok: false,
@@ -1084,6 +1120,12 @@ export class Orchestrator {
     let prevReport = "";
     let prevAgentId = "";
     for (let i = 0; i < chain.stages.length; i++) {
+      // H2（审查 B-3）：环与环之间检查取消——否则 cancelAll 后链停在两环之间，
+      // 会 spawn 出一个永不被取消的 worker 并跑完（addEventListener 不追认已 abort）。
+      if (this.root.signal.aborted) {
+        await this.failChain(chain, "stage " + String(i + 1) + " 未启动：主会话已取消（fail-closed，不再派发）");
+        return;
+      }
       const stage = chain.stages[i]!;
       const st = chain.state[i]!;
       const resolved = chain.resolutions[i]!; // 批准时冻结的角色解析（不依赖运行时存活期）

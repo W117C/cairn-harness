@@ -800,6 +800,9 @@ function verifyExec(sandbox: SandboxStatus | null): ExecFn {
  *  M1b：接线三门 —— clarify/plan 通道（挂起等人）+ verify 反射循环钩子。 */
 export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   installAppTools();
+  // H2（A-2）：无人值守 run 的等人门上限——定时触发的 clarify/plan 挂起 60s 后 fail-closed。
+  // 交互 run 不限时（等人语义不变，仅随取消信号收束）。
+  const UNATTENDED_GATE_WAIT_MS = 60_000;
   // M1c：两层规则库加载（项目 <workspace>/.agent/permissions.json + 全局占位）；解析失败 fail loud 拒载
   const rules = loadPermissionRules(
     join(opts.workspace, ".agent", "permissions.json"),
@@ -884,8 +887,24 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       workspace: opts.workspace,
       mode: "auto", // 冻结 loop 对 ask 一律拒绝；真实门在 gatedTool（复用 checkPermission）
       userMessage: opts.message,
-      clarify: appClarifyGate,
-      plan: appPlanGate,
+      clarify: {
+        // H2（A-2）：等人门可收束——run 取消信号随门透传；无人值守 run 的 clarify/plan
+        // 挂起 60s 后 fail-closed（不再悬到 runTimeoutMs 30min 才被超时闸收走）。
+        wait: (id, o) =>
+          appClarifyGate.wait(id, {
+            ...o,
+            ...(opts.signal ? { signal: opts.signal } : {}),
+            ...(opts.unattended ? { timeoutMs: UNATTENDED_GATE_WAIT_MS } : {}),
+          }),
+      },
+      plan: {
+        waitApproval: (id, o) =>
+          appPlanGate.waitApproval(id, {
+            ...o,
+            ...(opts.signal ? { signal: opts.signal } : {}),
+            ...(opts.unattended ? { timeoutMs: UNATTENDED_GATE_WAIT_MS } : {}),
+          }),
+      },
       verify: createVerifyHook(opts.workspace, { exec: verifyExec(opts.sandbox ?? null) }),
       ...(rt ? { hooks: rt.hooks } : {}),
       ...(opts.signal ? { signal: opts.signal } : {}),

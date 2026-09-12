@@ -5,13 +5,21 @@ import type { AgentEvent, ClarifyAnswerMap } from "../events";
 /** 工具可预期失败的统一错误类型：loop 捕获后转成 ok:false 的 tool_result。 */
 export class ToolError extends Error {}
 
+/** 等人门等待选项（审查 A-2）：挂起等待必须可被取消/超时收束，否则 pending 解析器永久泄漏。 */
+export interface GateWaitOptions {
+  /** 会话取消信号：abort 时等待立即拒绝（fail-closed），不悬到进程结束。 */
+  signal?: AbortSignal;
+  /** 等待上限 ms：超时拒绝。缺省不限时（交互等人语义不变）。 */
+  timeoutMs?: number;
+}
+
 /** 澄清门通道：clarify 工具挂起等表单提交（仿 AskGate；缺省 = fail-closed）。 */
 export interface ClarifyChannel {
-  wait(callId: string): Promise<ClarifyAnswerMap>;
+  wait(callId: string, opts?: GateWaitOptions): Promise<ClarifyAnswerMap>;
 }
 /** 方案门通道：propose_plan 工具挂起等批准（缺省 = fail-closed）。 */
 export interface PlanChannel {
-  waitApproval(callId: string): Promise<"approved" | "rejected">;
+  waitApproval(callId: string, opts?: GateWaitOptions): Promise<"approved" | "rejected">;
 }
 
 export interface ToolContext {
