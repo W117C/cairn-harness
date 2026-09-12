@@ -13,6 +13,7 @@
     "build": "electron-vite build",
     "dev": "electron-vite dev",
     "start": "electron-vite build && electron .",
+    "dist": "electron-vite build && electron-builder --mac",
     "ipc:check": "node --import tsx scripts/ipc-check.ts",
     "sandbox:check": "node --import tsx scripts/sandbox-check.ts",
     "fork-check": "node --import tsx scripts/fork-check.ts",
@@ -30,7 +31,8 @@
     "sidechat-check": "node --import tsx scripts/sidechat-check.ts",
     "security-check": "node --import tsx scripts/security-check.ts",
     "agents-check": "node --import tsx scripts/agents-check.ts",
-    "schedule-check": "node --import tsx scripts/schedule-check.ts"
+    "schedule-check": "node --import tsx scripts/schedule-check.ts",
+    "commercial-check": "node --import tsx scripts/commercial-check.ts"
   },
   "devDependencies": {
     "@fontsource-variable/geist": "^5.3.0",
@@ -42,6 +44,7 @@
     "class-variance-authority": "^0.7.1",
     "cn": "^0.2.6",
     "electron": "^44.2.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "lucide-react": "^1.43.0",
     "radix-ui": "^1.6.7",

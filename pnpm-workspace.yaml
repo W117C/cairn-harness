@@ -1,4 +1,7 @@
 allowBuilds:
+  # M4b：electron-builder 的传递依赖（Windows 安装器链路），macOS 打包不需要其 postinstall——
+  # 占位值「set this to true or false」会让所有 pnpm 命令以 ERR_PNPM_IGNORED_BUILDS 失败，显式置 false。
+  electron-winstaller: false
   esbuild: true
 onlyBuiltDependencies:
   - electron
