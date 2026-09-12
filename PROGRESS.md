@@ -823,3 +823,38 @@
 4. **automation_completed 双落点**：§12.2.4「完成回写投完成卡到主时间线」实现为——终态事件落定时会话日志（终态记录）+ 经 emitTimeline 落当前会话日志并推 UI（主时间线完成卡复用 report 卡类型）；journal 仍是调度事实源（§12.2.7）。
 5. **反向验证①先加严判据再打红**（见反向实录注）：C4 原断言（中断期产物）可被其他闸链路误绿，加严为三重断言——属判据加严非放宽。
 6. **断言计数口径**：test 357→384（+27 schedule 单测 +3 面板/投影，-0 删减）；第 21 道门新增后 gates 总数 20→21（清单即事实源）。
+
+## M4b · M4 收口（可安装包 + BYOK 全流程 + license/更新/引导）（2026-09-12）
+
+> 任务书：`.workbuddy-ai/taskbook-M4b.md`。**执行方式说明**：两次子代理派发分别因「配额超限」与「模型空响应」失败，第一次留下任务 1–4 中间态（8 新增 + 6 修改文件）；按 M3c ③/M4a ③ 中断续跑先例，**主对话接管执行**（干净树基线复测 → stash pop 逐文件审查采纳 → 续作 → 全量重验），审查相应改为交叉验证（独立复跑 22 道门 + 结构抽查 + 反向验证由执行者与审查者同一主体承担，判据面全部可失败兜底）。
+
+### 任务结果
+- **任务1 safeStorage 存 key**：`src/main/provider-keys.ts`（PluginSecretBackend 同族 fail-closed——safeStorage 不可用**拒装配不退回明文**；密文 base64 落 provider-keys.json；storedProviders 零值清单）+ `injectStoredProviderKey`（启动解密注入，**env 优先零行为**）+ 设置页 Provider 管理（保存到钥匙串/删除/状态徽标）+ IPC 三通道；单测 tests/provider-keys.test.ts。
+- **任务2 license V1**：`src/main/license.ts`——离线 Ed25519（node:crypto 零新依赖；canonical body 字段序固定；四态 valid/expired/inactive/invalid；**验证失败/缺失不阻断功能**只显状态）+ 内置公钥常量（私钥不入仓库，.tmp 一次性工具签发测试 license）+ 设置/关于页状态 + 未激活引导横幅；单测验签矩阵七项。
+- **任务3 轻量更新检查**：`src/main/updater.ts`（manifest fetch 可注入 fetchImpl；未配置/网络失败/结构坏**显式态绝不静默**；semver 手写比对零依赖；未知字段拒绝；下载页 http(s) 白名单防 openExternal 注入）+ 设置页 updateManifestUrl + 检查更新按钮 + 有新版出卡；单测比对矩阵。
+- **任务4 新手引导**：`src/renderer/onboarding.tsx`（4 步向导 = §13 七组逐一走通：欢迎+BYOK / 权限+UI / 定时+记忆+遥测 / 关于·更新；onboarded 持久化缺省 false 首启必弹、完成不再弹、设置页可重跑；SSR 安全）+ main.tsx 挂载。
+- **任务5 可安装包**：electron-builder 26.15.3（唯一新 devDep）+ electron-builder.yml（输出 dist/ 已 gitignore 零 .gitignore 改动；asarUnpack rg 二进制与 wasm；`identity: null` 显式 unsigned V1 边界）+ `pnpm dist` → **dist/M0 Agent-0.0.1-arm64.dmg + .zip**；打包产物冒烟：CDP 起 .app 验证主界面 + 首启向导出现（onboarded 缺省）与不再弹（预置 true）两态。
+- **任务7 第 22 道门**：`scripts/commercial-check.ts` 45 断言（A license 验签矩阵 8 / B 更新检查矩阵 8 / C provider key 安全往返与 fail-closed 10 / D 引导七组覆盖 + settings 状态机 11 + 收口）；gates 清单 21→22。
+- **任务6 收口文档**：docs/m4-acceptance.md（§14 M4 两行 + §13 七组 + license 边界 + **计划完成声明**）+ docs/m4-audit.md（M4 新增 10 抽象全有消费者 0 删）+ AGENTS.md 状态段（M0–M4 计划完成）。
+
+### 反向验证 4 条红→绿实录（全部修复后绿 exit 0）
+1. **safeStorage 不可用静默放行**（installProviderKeyBackend 不可用分支 return true）→ commercial-check **C4b 红**（44✅/1❌ exit 1）→ 还原绿。
+2. **摘 license 签名比对**（sigOk 恒 true，edVerify 结果弃元）→ **A2/A3/A4 三红**（42✅/3❌ exit 1；篡改 body/错公钥/坏 base64 全变 valid）→ 还原绿。
+3. **更新比对恒判「无新版」**（cmp 恒 -1）→ **B5 红**（44✅/1❌ exit 1）→ 还原绿。
+4. **onboarded 缺省 true**（永不再现向导）→ **D2/D2b/D2d 三红 + onboarding 反向锚单测红**（双 exit 1；该单测注释即为此锚设计）→ 还原双绿。
+
+### M4b 新增坑记录
+- 坑七十：radix Dialog 走 portal——`renderToStaticMarkup` 不含 portal 内容，**对话框组件的 SSR 冒烟必须拆内层**（OnboardingWizard 壳 + OnboardingSteps 内层；内层不得用 DialogTitle 等上下文原语，a11y 标题以 sr-only 留在壳内）。
+- 坑七十一：pnpm 11 会向 pnpm-workspace.yaml **自动追加 `allowBuilds` 占位行**（值 = 「set this to true or false」字面量）——这个坏值让**所有 pnpm 命令**以 ERR_PNPM_IGNORED_BUILDS 失败（本轮工具门测试的 pnpm test 探针因此假红）。处置：显式置 `electron-winstaller: false`；新依赖引入后 pnpm 报此错先查 workspace 文件。
+- 坑七十二：electron-builder 打包 electron-vite 布局——产物在 out/（非 dist/），files 配 out/** + package.json；spawn 二进制（@vscode/ripgrep 的 rg）必须 asarUnpack，纯 fs 读取（tree-sitter wasm）asar 内透明可用。
+
+### BLOCKED 备案（BLOCKED.md M4b 段同步）
+1. **pnpm-workspace.yaml 白名单外必要越界**：electron-builder 引入 electron-winstaller 传递依赖 → pnpm 自动追加占位 allowBuilds 行炸掉全部 pnpm 命令 → 显式置 false（最小修复，唯一解）。已由主对话执行并验证。
+2. **BYOK 真连未证**：打包产物内「设置 key → 重启解密 → 真连 GLM」的最后一跳需真实凭据（M0_API_KEY）；本机无 key，按「未证 ≠ 通过」口径在对表标注，key 在场重跑 provider:check 即闭合。
+
+### 收口基线（2026-09-12）
+- `pnpm gates`：22 道全绿 + 恒真式体检零命中 + exit 0（终审实录 `.tmp/m4b-final-gates.log`）。
+- test = 45 files / 413 passed / 0 skipped（M4a 后 384 → +29）。
+- 冻结判卷 sha256 3/3；`scripts/frozen-sha256.json` sha256 = `9b7f44f9…8c4ba` 逐字节未改。
+- 打包产物：`dist/M0 Agent-0.0.1-arm64.dmg` / `.zip` / `mac-arm64/M0 Agent.app`（冒烟两态通过）。
+- **计划完成**：M0–M4 五里程碑全部收口（各对表见 docs/）。

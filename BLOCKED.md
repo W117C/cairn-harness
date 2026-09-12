@@ -232,3 +232,10 @@ card_action emit 缺 merge 路由回退），均由本轮新增验收断言抓�
 2. **plugins-check F2 非密封判据瞬时抖动**：本轮全量门禁两次复跑间出现一次 F2 红（实仓 SKILL.md 解析 31 < 50）+ 一次绿（51 ≥ 50）。该断言实时克隆 anthropics/skills 与 claude-plugins-community（`--depth 1 --filter=blob:none`）计数，依赖上游实时内容与网络完整性，红点为部分克隆截断而非本仓代码。待裁决：是否给 F2 增加重试/缓存或降级为「不可达即未证」通道（与 F 段其余联网断言同口径）。
 3. **中断续跑采纳备案（M3c ③ 先例）**：本轮任务 1–6 内核为上一被中断执行轮的未提交改动（16 修改 + 3 新增文件：automations.ts/scheduler.ts/schedule.test.ts；未含 gates/schedule-check）。主对话按任务书处置纪律执行：干净树基线复测（20/20 门 + 40 files/357 tests + exit 0）→ stash pop → 逐文件审查 → 续作 → 全量重验。审查修正中断期测试断言缺陷 6 处（月度短月断言问错日期[1月31日本身合法] / catchUp=skip 边界测试漏传 UTC 时区 / 卡死靶漏传 createdAt 使断言空转 / once 决策标签期望错档[启动 tick 补跑=catchup 而非 triggered] / run_now 去重测试用 hang executor 被重叠闸干扰 / sidechat 面板计数未随注册表增长），修复实现真缺陷 2 处（坑六十三/六十四，见 PROGRESS M4a 段）。全部最终改动在本轮重验，无「未验证即收口」。
 4. **反向验证暴露的新门判据缺陷先修后红（判据加严非放宽）**：schedule-check C4（occurrenceKey 去重）原断言仅锚错误串，摘除 pipeline 去重后可经「重叠闸 → decideSkip 内层 key 查重」链路误绿——先加严为「错误串含去重 + journal 零增长 + 会话数不变」三重断言，再执行反向打红（实录见 PROGRESS M4a 段）。沿 M3b J7d「先加严再打红」先例。
+
+## M4b 轮新增备案（2026-09-12）
+
+无判据阻塞（判卷文件零改动）。备案两项：
+
+1. **pnpm-workspace.yaml 白名单外必要越界**：任务书白名单未含 pnpm-workspace.yaml，但 `pnpm add -D electron-builder` 引入传递依赖 electron-winstaller 后，pnpm 11 自动追加占位行 `allowBuilds.electron-winstaller: "set this to true or false"`——该坏值使**全部 pnpm 命令**（含既有门的 pnpm test 探针）以 ERR_PNPM_IGNORED_BUILDS 失败（tests/gated-tools.test.ts 两用例假红即此因）。唯一修复 = 显式置 `electron-winstaller: false`（macOS 打包不需要其 Windows 安装器 postinstall）。已由主对话执行、验证（pnpm 恢复 + 两用例回绿）；主对话在 BLOCKED 留此备案备查。
+2. **BYOK 真连未证**：可安装包 BYOK 全流程的「真实 GLM 拨号」一跳需要 M0_API_KEY（本机无 key）；存储/解密/注入/设置链路全部已证（commercial-check C 段 + 打包冒烟），真连按「未证 ≠ 通过」标注于 docs/m4-acceptance.md §一-1，key 在场重跑 `pnpm provider:check` 即闭合。沿 M1a-1/M2g 先例。

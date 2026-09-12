@@ -41,9 +41,9 @@ Node 22 / TypeScript 5 / electron-vite 5 / Electron 44 / React 19 / vitest 5 / T
 
 ## 当前状态
 
-**M0–M3 全部完成（2026-09-12 M3c 收口）**：M0–M2g（内核/沙箱/会话内核/三门/压缩/prune/地图/provider/记忆/插件/MCP/sidechat/安全 report，详见 `docs/m2-acceptance.md`）→ **M3 编排内核三轮交付**：M3a（spawn_agent 三 mode 原语 + 子流事件契约 + 审批解耦 + 取消链 + read mode + agents 面板，HEAD 8fb73f4）→ M3b（write mode：worktree 生命周期 + 写租约表 + 合并控制塔 + 评审闭环 + 产出代码安全 gate 模式 + edit_file 绝对行号，HEAD 3431e72）→ M3c（depends_on 依赖链 + pipeline 哑 sequencer（零 LLM/stages 冻结/verdict 标注）+ agents/*.md 插件角色采纳（§9.11-4 闭合）+ 卡死检测 + maxBudgetUsd 成本闸 + 崩溃恢复（重派）+ worker 压缩（§7.5）+ ≥3 worker 压力验收）。
+**计划全部完成（2026-09-12 M4b 收口，M0–M4 五里程碑）**：M0–M2g（内核/沙箱/会话内核/三门/压缩/prune/地图/provider/记忆/插件/MCP/sidechat/安全 report，详见 `docs/m2-acceptance.md`）→ **M3 编排内核三轮**（M3a spawn_agent 原语/read mode/agents 面板，HEAD 8fb73f4 → M3b write mode/worktree/合并控制塔/安全 gate，HEAD 3431e72 → M3c 依赖链/pipeline sequencer/卡死/崩溃恢复/≥3 worker 压力验收，详见 `docs/m3-acceptance.md`）→ **M4 商业化两轮**（M4a 定时任务全链路 §12.2：双轨存储 + 1min tick + 三闸 + 无人值守 fail-closed + 工具五件 + schedule 面板 → M4b 可安装包/BYOK key 入 safeStorage/license 离线 Ed25519/轻量更新检查/新手引导走通 §13 七组，详见 `docs/m4-acceptance.md`）。
 
-- 门禁：`pnpm gates` **20 道全绿 + 恒真式体检零命中**；测试 40 files / 357 passed / 0 skipped；agents-check 233 断言（A–M + N 压力段）。
-- M3 验收三态表（§14 M3 行 + §4.4.7/8/9 + §4.5 + §7.5 + §9.11-4 + §11.6，带证据指针）见 `docs/m3-acceptance.md`；自研抽象审计见 `docs/m3-audit.md`。
-- BLOCKED.md 各轮备案已全部裁决（见其裁决记录节）。
-- 下一步 = **M4 商业化**（`agent-plan.md` §12.2 定时任务 + safeStorage 打包/license/更新/引导；M4 任务书待出）。
+- 门禁：`pnpm gates` **22 道全绿 + 恒真式体检零命中**；测试 45 files / 413 passed / 0 skipped；agents-check 233 断言、schedule-check 67、commercial-check 45。
+- 可安装包：`pnpm dist` → `dist/*.dmg`（macOS arm64，**unsigned V1 边界**——无签名/公证，首次打开需右键→打开；`electron-builder.yml identity: null`）。
+- 四份验收三态表（带证据指针）+ 三份 ponytail-audit 见 `docs/m{2,3,4}-acceptance.md` 与 `docs/m{3,4}-audit.md`；BLOCKED.md 各轮备案已全部裁决（见其裁决记录节）。
+- **计划完成**：§14 里程碑表 M0→M4 全行收口；M4+ 候选（hourly/monthly kind、gate/loopback 重跑、worker 热恢复、license 服务端、签名公证、遥测上报）均留位未偷做（见各对表「未证/留位」节）。
