@@ -711,3 +711,64 @@
 5. **diff 快照的事件载体**：§3.4 未定义 diff 本体事件；复用子流 tool_result（callId=`diff-<agent_id>`）承载——带 agent_id 被 projectContext 跳过（主上下文零泄漏），git 面板投影可重建（重放一致，J3c/K8c 断言），事件流唯一事实源不破。
 6. **security_report 事件扩字段**：mode 联合从 "report" 扩为 "report"|"gate"、增 agent_id/llm_reviewed 与 finding.suggestion、SecurityCategory 增 "llm_review"——§11.6 gate 模式与 §3.4 增量的必要载体，全部可缺省、旧日志零影响（A 段旧日志重放断言照常绿）。
 7. **发现并修复 3 个真缺陷**（非判据缺陷，判据零改动）：agent_id 跨 run 撞 worktree（坑五十七）、waitAll 在 write finish 中途提前返回（坑五十六）、card_action emit 缺 merge 路由回退（坑五十八）。均由本轮验收断言抓出（H8/K 段/K7b）。
+
+---
+
+## M3c · M3 编排内核收口轮（依赖链 + pipeline sugar + 卡死/成本闸/崩溃恢复 + ≥3 worker 压力验收）（2026-09-12）
+
+> 任务书 `.workbuddy-ai/taskbook-M3c.md`；前置 M3a/M3b 均通过主对话审查（HEAD `3431e72`）。
+> 范围：§4.4.11 实施序第 4–5 步 + §4.4.7 V1 范围收敛 + §9.11-4 + §7.5 worker 压缩 + §4.4.9 崩溃恢复 + §14 M3 行验收。
+> 不做：gate/loopback 重跑（随 M3 压力测试后再定）、worker 热恢复（transcript resume）、M4 全部内容。
+> 本轮为**中断续跑**：上一执行轮完成任务 1–7 内核后被中断（未提交），主对话按纪律重测基线后采纳续作（见 BLOCKED M3c ③）。
+
+### 基线（2026-09-12 主对话重测）
+- HEAD `3431e72`（stash 脏树后实测）；`pnpm gates` **20/20 绿 + 体检零命中 + exit 0**，逐道退出码：typecheck=0 test=0 e2e=0 ipc:check=0 sandbox:check=0 build=0 fork-check=0 gate-check=0 autonomy-check=0 compaction-check=0 panels-check=0 tools-check=0 map-check=0 prune-check=0 providers-check=0 memory-check=0 plugins-check=0 sidechat-check=0 security-check=0 agents-check=0（TERM=dumb 实测）。
+- test = 39 files / **334 passed / 0 skipped**；冻结判卷 sha256 3/3 逐字一致（`3edc9343…` / `e253aae9…` / `9179db7d…`）；`scripts/frozen-sha256.json` 本体 sha256 = `9b7f44f9ce0b4da12d82b18643eb13fff936a4b0fe2db6500428059d1858c4ba` 逐字节未改；工作树干净（stash 恢复后）。
+
+### 任务结果（任务 0–11，任务粒度分笔提交）
+- **任务1 depends_on 依赖链**：`Orchestrator.validateDependsOn`（存在性/跨会话拒绝 → `dependsOnCycle` 三色 DFS 环检测（菱形非环）/ 前环终态裁决）+ `deferredSpawns` 延迟登记 + `resolveDependents`（finishInner 终态解析：done → 触发后环 spawn，failed/cancelled → 后环 `dependency_failed` 落流不静默；无 callId 的未收敛依赖拒绝）。事件驱动零轮询（§4.5）。断言：agents-check N7:938–968 + `tests/m3c.test.ts` 依赖链 3 项。
+- **任务2 pipeline 哑 sequencer**：`src/agent/sequencer.ts`（parseStages 双层 Object.freeze 冻结 / BUILTIN_ROLES implement(write 80)·review(read+gate 40)·test(read+gate 40) / concatStageTask 代码拼接 `[harness]` + 8000 字符帽 / parseVerdict 锚定行首 + 大小写归一 / dependsOnCycle）；`Orchestrator.spawnPipeline/runChain/failChain`——整链一个审批（审批卡 stages 全表 + 链内租约合并警告）、逐环 spawn、后环 depends_on 前环 sugar、gate 环 verdict 标注落流（不重跑）、整链 done/failed 链表落流、stages 批准后变更请求拒绝且落流。**零 LLM 静态+动态双证**（N6b 文件级扫 provider=0；N6c runChain 源码段扫 provider/摘要器=0；N6 modelFor 调用恰=环数）。断言：N1c–N5 + 单测。
+- **任务3 agents/*.md 插件角色采纳（§9.11-4 闭合）**：`PluginRuntime.agentRoles/findAgentRole`（信任门一致）；`resolvePluginRole`（§9.6 映射：正文=roleDefinition、tools/disallowedTools/maxTurns/model/isolation=worktree→write mode 采纳；hooks/mcpServers/permissionMode 忽略+警告）；`filterWorkerTable/filterWorkerSpecs` 执行表+模型规格双面同口径裁剪（裁空 fail-visible；spawn_agent/run_shell/merge/commit 根本不在默认表，白名单无法放大深度闸/合并权闸）。fixture：`fixtures/plugins/project/pipeline-crew`（builder=write/isolation=worktree + 不支持键、scout=read、pilot/checker=演示链环）。验收：agents-check **N12:1143–1181**——真实 fixture 经 `PluginRuntime.findAgentRole` → stages[].role → depends_on sugar 跑通一环（正文进 system 首块/工具面裁剪表外工具不可达/maxTurns 采纳/不支持键警告落流/write mode 可写根=worktree）。
+- **任务4 卡死检测（§4.4.8）**：`src/agent/stuck.ts` 纯函数（规则一同 action+obs ×4 优先、规则二同 action+error ×3、静默阈值；窗口滑动内存帽）；`Orchestrator` 集成：workerPipeline 事件心跳（armStuckSilence 刷新计时器 + recordStuckTurn call 配对，不造独立心跳事件）、触发 → `waiting_input(reason=stuck)` + `[stuck]` 提醒（复用 agent_message）+ stuckGate 事件边界暂停；`resumeAgent`（card_action(resume) 清除卡死态）+ 既有取消链双出口；阈值 `stuckConfig` 可配（验收短阈值）。断言：N9 + 单测（三规则/优先级/集成 resume/静默+取消）。
+- **任务5 maxBudgetUsd 成本闸（§4.4.8）**：设置字段 `maxBudgetUsd/budgetPricePerMTok`（缺省 0 = off 零行为）+ 设置页 UI（成本闸 section）；`sessionUsage` 累计（emit 包装）+ `budgetEstimateUsd/budgetBlocked`（maxUsd/单价任一 ≤0 = 闸无效）+ `rejectOnBudget`（`[budget]` 落流警告 + spawn 拒绝）；闸只拦编排扩张（spawn 入口统一校验，主 loop 不受闸，V1 口径）。断言：N8 + 单测。
+- **任务6 崩溃恢复（§4.4.9）**：`src/agent/recovery.ts` 纯投影（`interruptedWorkers` 无终态扫描幂等 / `respawnArgsFrom` 原参映射）；`applyCrashRecovery`（重开扫描 → 补发 `failed(reason=interrupted)` + 恢复卡载荷 artifacts.respawn）挂 `handleSessionOpen`（UI boot 自动重开即触发）；恢复卡渲染（amber 卡 + 重派按钮）+ `handleCardAction(respawn)` → `Orchestrator.respawn`（全新 agent_id 全参重 spawn，V1 无热恢复）；write 旧 worktree 走孤儿列表（不自动删）。断言：N10 + 单测；真实 kill -9 半托：`docs/m3c-recovery.png`。
+- **任务7 worker 压缩（§7.5）**：`WORKER_COMPACTION_CONFIG`（ratio 0.95，与主会话 0.9 同族独立）+ `maybeCompactWorkerEvents`（每轮组装前估算：system+工具 schema 全量计入 → shouldCompact → **同一 runCompaction**，零第二套摘要实现）；keep_first=task+context 结构性保障（task/context 在 buildWorkerSystemMessages 产物、永不进子流事件投影）；压缩事件 agent_id 归因落子流 + 摘要 usage 计入 usage(agent_id)（§4.4.10 不破例）；主投影隔离 `context.isWorkerCompaction`（worker 压缩事件不参与主投影排除集/摘要注入——其 id 序是 worker 内存态序号）。断言：N11（auto 路径/归因/静态无复制）+ 单测（精确基线计算触发带 + keep_first + 隔离）。
+- **任务8 压力验收段**：agents-check 增 **N 段**（N1–N11）+ **N12**（插件角色真实 fixture 链）——≥3 worker 并行（write+read+pipeline implement→review）同时 running（N2 hang.size===3 + activeCount≥3）/中途取消其一 cancelled、兄弟 done（N3）/write 产 diff（N3d）/pipeline 链语义（N4–N5）/零 LLM 双证（N6）/依赖链（N7）/成本闸（N8）/卡死短阈值（N9）/崩溃恢复投影层+重派（N10）/worker 压缩（N11）/插件角色真实 fixture（N12）。**165→233 断言**。
+- **任务9 M3 收口 docs**：`docs/m3-acceptance.md`（§14 M3 行 + §4.4.11 五步 + §4.4.7/8/9 + §4.5 + §7.5 + §9.11-4 + §11.6 三态对表，证据指针全部为可复跑断言）+ `docs/m3-audit.md`（§16.5 ponytail-audit：orchestrator/worktree/sequencer/stuck/recovery 12 项新抽象逐条判定，全部有真实消费路径，删除项为零）+ AGENTS.md 状态段 M2 收口 → M3 收口。
+- **任务10 反向验证 4 条红→绿**（实录见下节）。
+- **任务11 半托截图**（21a8517）：`docs/m3c-parallel.png`（agents 面板 write running + read running + pipeline pilot done/checker running 四列同屏；对话流 `[sequencer] stage 2/2（pipeline-crew:checker）启动` + agent_result 卡 + `[harness]` 前环报告拼接任务可见）+ `docs/m3c-recovery.png`（**真实 kill -9 进程组**后重开：worker-2 `failed·interrupted` 红标 + 恢复卡（重派按钮/原任务/孤儿列表说明）+ pipeline 整链 done verdict: pass）。真实代码路径（M3A_MAIN_SCRIPT=main-m3c-demo.jsonl + M3A_AGENTS_DEMO + 临时 git 仓库 M0B_WORKSPACE + M2E_TRUST_FILE 预信任）；CDP 程序化（坑四十六/四十八/四十九/五十全遵守）；驱动脚本用后即删，主 checkout 零污染。演示资产入库：main-m3c-demo.jsonl + slow-m3c-{write,impl,rev}.jsonl + pipeline-crew agents/{pilot,checker}.md。
+
+### 反向验证 4 条红→绿实录（补丁 → 哪条断言红 + 退出码 → 还原后绿）
+1. **摘 depends_on 触发**（`resolveDependents` 的 done 分支 `triggerDeferredSpawn` 调用摘除）→ agents-check **N7g「前环 done → 后环自动 spawn（事件驱动）」红** + `tests/m3c.test.ts` 依赖链「前环未收敛 → 延迟登记；前环 done → 后环自动 spawn」红，**agents-check exit 1 / vitest exit 1** → `git checkout` 还原 → **233 ✅ / 0 ❌ exit 0**。
+2. **摘卡死规则判定**（`detectStuck` 首行恒 `return { stuck: false }`）→ `tests/m3c.test.ts` **卡死纯函数规则一/规则二/集成 resume 三项红，vitest exit 1** → 还原 → **5 passed（-t 卡死）/ 全套 357 绿，exit 0**。
+3. **摘恢复扫描**（`interruptedWorkers` 首行恒 `return []`）→ agents-check **N10「重开扫描命中无终态 worker」+ N10b「补发 failed(interrupted) 落流」+ N10c「恢复卡载荷」红（214 ✅ / 3 ❌），exit 1**；vitest 恢复段 2 项红 exit 1 → 还原 → **233 ✅ / 0 ❌ exit 0**。
+4. **worker 压缩改用主会话参数**（`WORKER_COMPACTION_CONFIG.ratio` 0.95 → 0.9）→ `tests/m3c.test.ts` **「WORKER_COMPACTION_CONFIG：ratio 0.95（比主会话 0.9 更晚触发，参数独立）」红，exit 1** → 还原 → **40 files / 357 passed，exit 0**。
+
+### M3c 新增坑记录
+- 坑六十：**`waitAll` 对「尚未注册的 worker」是空转**——异步 sequencer/延迟后环在 `spawn()` 应答返回后才注册 worker，期间 `activeCount()=0`，紧跟其后的 waitAll 立即返回，断言跑在 worker 注册之前（N12 builder 链三连红、脚本末尾 `rm(work)` 删掉还在跑的链的工作区、甚至表现为离谱的「not a git repository」——全是这一个竞态的投影）。验收脚本对异步链必须**按链 id 精确 waitFor 收敛事件**，不能拿 waitAll 当完成信号。
+- 坑六十一：**主 run 结束 `setCurrentPluginRuntime(null)`，异步 sequencer 的后环会失去插件角色解析**——链的 stage 2 晚于主 run 收束时 `agentRoleFor 未命中` 断链。修复 = stage 角色解析在**审批时**完成并随链冻结（`chain.resolutions`，与 stages 批准后冻结同语义）：后环按批准时角色面跑完，不依赖运行时存活期。推论：任何「run 作用域资源」都不该被跨 run 的异步编排路径引用。
+- 坑六十二（复训）：挂起模型（hang map keyed by task）在取消/收尾时**必须 release**（agents-check E 段先例）；且 stage 任务的 key 是**拼接后**的完整 task（含 `[harness]` 前环报告），按裸 stage task 取 key 会漏——放行一律遍历 hang 表全量 release。
+
+### 收口基线（2026-09-12 终版实测，HEAD 见分笔清单末笔）
+- `pnpm gates`：**20/20 绿 + 恒真式体检零命中 + exit 0**（逐道退出码见下；TERM=dumb 实测）。
+  逐道退出码：typecheck=0 test=0 e2e=0 ipc:check=0 sandbox:check=0 build=0 fork-check=0 gate-check=0 autonomy-check=0 compaction-check=0 panels-check=0 tools-check=0 map-check=0 prune-check=0 providers-check=0 memory-check=0 plugins-check=0 sidechat-check=0 security-check=0 agents-check=0。
+- test = **40 files / 357 passed / 0 skipped**（≥ 硬底线 334，只增不减）；agents-check 断言 **233 ✅ / 0 ❌**（165 → 233，只增）。
+- 冻结判卷 sha256 3/3 逐字一致（`3edc9343…` / `e253aae9…` / `9179db7d…`）；`scripts/frozen-sha256.json` 本体 sha256 = `9b7f44f9ce0b4da12d82b18643eb13fff936a4b0fe2db6500428059d1858c4ba` 逐字节未改。
+- 密钥卫生：精确词边界扫描（`git grep -P "(?<![\w-])sk-|AIza|api[_-]?key\s*="`）命中 29 行，全部为 M2f 起沿用的同一枚假密钥字面量 `sk-abcdefghijklmnopqrstuvwxyz012345`（演练用）、扫描规则自身字面（security-check/scan.ts 的已知模式表）与文档/裁决记录；真实 key 0 命中。
+- git status 干净；任务书文件不入仓库（.git/info/exclude）。
+
+### 分笔提交清单（本轮）
+1. `M3c 任务1-7 内核`（c0db90a）——depends_on 依赖链 + pipeline 哑 sequencer + agents/*.md 采纳 + 卡死检测 + maxBudgetUsd + 崩溃恢复 + worker 压缩 + tests/m3c.test.ts 23 项（334→357）+ 真缺陷修复 parseVerdict 大小写。
+2. `M3c 任务8 agents-check 增段 N`（46f0bc8）——≥3 worker 压力 + 取消 + 依赖链 + 成本闸 + 卡死 + 恢复 + 压缩，165→217 断言 + B1 口径同步。
+3. `M3c 任务3+8 补强 N12`（8f87e24）——真实 fixture 插件角色经 depends_on sugar 跑通一环（§9.11-4 闭合）+ builder.md 补 isolation 字段 + N12o 竞态修复，217→233 断言。
+4. `M3c 任务9 docs`（2314199）——m3-acceptance.md 三态对表 + m3-audit.md（12 项抽象判定）+ AGENTS.md 状态段。
+5. `M3c 真缺陷修复`（940ee6f）——pipeline stage 角色解析批准时冻结（chain.resolutions；主 run 结束清空插件运行时后后环断链）。
+6. `M3c 任务11 半托截图`（21a8517）——docs/m3c-parallel.png + docs/m3c-recovery.png + 演示资产。
+7. `M3c 收口`（本笔）——PROGRESS M3c 段 + BLOCKED M3c 备案。
+
+### 偏离任务书的决定（全部显式备案，无判据绕行）
+1. **B1 / tests/agents.test 的 pipeline 口径更新**：原「pipeline spawn 即拒绝（M3c 接入）」随本轮接入失效——改为「缺 stages 解析口拒绝（整链由 N 段判卷）」；agents-check 本轮可写、断言 165→233 只增，属任务书授权的行为变更非判据放宽（M3b ② 同款先例）。
+2. **plugins-discover pendingPlugins 期望扩一员**：任务 3 新增 pipeline-crew fixture 使项目插件集合合法增长；「散装 skill 不进 trust pending」的原断言语义不变。
+3. **中断续跑的采纳**：任务 1–7 内核为上一被中断执行轮的未提交改动；主对话按「先测基线、审查后采纳、全量重验」处理（基线 20/20 门实测 + 续跑全量重验），无判据改动。任务书任务 0 要求「工作树干净」以 stash 后实测满足。
+4. **反向验证④口径**：任务书建议「worker 压缩改用主会话参数（ratio 破坏独立性断言）」——按建议执行（ratio 0.95→0.9），红点 = `tests/m3c.test.ts` 的参数独立断言（agents-check N11 的触发断言对 0.9/0.95 同为 auto，不因此红；独立性由单测判卷）。
+5. **agents-check 断言编号**：任务书建议段号执行方定——M3c 断言落 **N 段**（N1–N12），M2 移交的插件角色欠账验收占 N12；原 M 段（暗卷）保持段号不变。

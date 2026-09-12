@@ -202,3 +202,17 @@ mode/agent_id/llm_reviewed/suggestion 与 llm_review 类别（可缺省、旧日
 另发现并修复 3 个实现真缺陷（agent_id 跨 run 撞 worktree / waitAll 在 write finish 中途提前返回 /
 card_action emit 缺 merge 路由回退），均由本轮新增验收断言抓出，判据零改动（PROGRESS 坑五十五~五十九）。
 反向验证 4 条红→绿实录见 PROGRESS M3b 段（第 3 条先加严判据 J7d 再打红，属判据加严非放宽）。
+
+## M3c 轮新增备案（2026-09-12）
+
+无判据阻塞。偏离任务书的决定已全部显式备案于 PROGRESS.md「M3c 偏离任务书的决定」（逐条含理由）：
+① B1 / tests/agents.test 的 pipeline 口径随本轮接入更新为「缺 stages 解析口拒绝、整链由 N 段判卷」（断言 165→233 只增，M3b ② 同款先例）；
+② tests/plugins-discover 的 pendingPlugins 期望随新增 pipeline-crew fixture 由 ["echo-suite"] 扩为 ["echo-suite","pipeline-crew"]
+   （任务 3 新 fixture 使插件集合合法增长；「散装 skill 不进 trust pending」的原断言语义不变）；
+③ 本轮系中断续跑：上一执行轮在任务 1–7 内核完成后被中断（未提交），主对话以 HEAD 3431e72 重新实测基线（20/20 门 +
+   39 files/334 tests + 冻结 sha 3/3）后采纳续作，全部内核/测试改动在续跑轮内重新验证（typecheck + 40 files/357 tests +
+   agents-check 233 断言 + 反向验证 4 条），无任何「未验证即收口」的改动。
+另发现并修复 2 个实现真缺陷（均非判据缺陷，判据零改动）：parseVerdict 捕获组未归一小写（verdict: PASS 被判 fail，
+单测抓出）；pipeline stage 角色解析改批准时冻结（主 run 结束 setCurrentPluginRuntime(null) 后，异步 sequencer 的后环
+插件角色 stage 断链，半托演示抓出）——详见 PROGRESS 坑六十~六十一。
+反向验证 4 条红→绿实录见 PROGRESS M3c 段。
