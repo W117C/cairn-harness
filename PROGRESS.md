@@ -772,3 +772,54 @@
 3. **中断续跑的采纳**：任务 1–7 内核为上一被中断执行轮的未提交改动；主对话按「先测基线、审查后采纳、全量重验」处理（基线 20/20 门实测 + 续跑全量重验），无判据改动。任务书任务 0 要求「工作树干净」以 stash 后实测满足。
 4. **反向验证④口径**：任务书建议「worker 压缩改用主会话参数（ratio 破坏独立性断言）」——按建议执行（ratio 0.95→0.9），红点 = `tests/m3c.test.ts` 的参数独立断言（agents-check N11 的触发断言对 0.9/0.95 同为 auto，不因此红；独立性由单测判卷）。
 5. **agents-check 断言编号**：任务书建议段号执行方定——M3c 断言落 **N 段**（N1–N12），M2 移交的插件角色欠账验收占 N12；原 M 段（暗卷）保持段号不变。
+
+## M4a · M4 商业化第一轮（定时任务全链路 §12.2 定稿）（2026-09-12）
+
+> 任务书 `.workbuddy-ai/taskbook-M4a.md`；前置 = M3 三轮审查通过（HEAD 8b83d3b，20/20 门 + 40 files/357 tests 实测基线）。
+> 本轮系**中断续跑**（M3c ③ 先例）：上一派发在任务 1–6 内核完成后因模型请求失败中断（未提交），按「先测干净树基线 → stash pop 采纳 → 逐文件审查 → 续作 → 全量重验」处置，全程无「未验证即收口」改动。
+
+### 任务结果（0–9）
+- **任务0 基线**：`git stash -u` → 干净树 HEAD 8b83d3b 实测 **20/20 门 + 恒真式体检零命中 + exit 0**、test 40 files / 357 passed / 0 skipped → `git stash pop` 采纳中断期改动（16 修改 + 3 新增文件），逐文件审查（automations/scheduler/agent-runner/ask-gate/events/sessions/settings/ipc-protocol/preload/renderer 全读）。
+- **任务1–6 内核（采纳+续作）**：`src/main/automations.ts`（AutomationDefinition 七 kind 数据模型 + 四 kind 表单白名单 + ulid + IANA 规范化 + 严格校验：未知字段拒绝/prompt 非空 ≤4k/interval ≥5/name 会话名安全）+ `src/main/scheduler.ts`（双轨存储原子写 + journal append-only + occurrenceKey 去重 + croner next-run（hourly/daily/weekly/monthly 表达式 + once/interval/custom 锚点步进）+ 单一 1min tick + 启动抖动（M4A_JITTER_MS 可注入）+ 准入三闸顺序短路 + 超时双闸（runTimeoutMs 30min + settlesWithin）+ summarizeRun 纯投影 + 六态历史）+ `src/events/index.ts` 三事件 automation_triggered/skipped/completed 入 KNOWN_TYPES + session_meta.origin/automation_id/name + `src/main/ask-gate.ts` unattended 门（立即拒绝 fail-closed，不进 60s 等待）+ `src/main/agent-runner.ts`（initScheduler/startScheduler/stopScheduler + makeScheduledExecutor 真实触发执行器 + agent 工具五件 installAutomationTools（审批卡 + 红字标注 + 4k 防线）+ RunOverrides.unattended/signal）+ orchestrator 双 FORBIDDEN 清单补 automation_* + settings PANEL_IDS 7→8 + scheduleConcurrencyCap（1-8 缺省 2）+ IPC 四通道 + preload + renderer（schedule 面板：列表/表单四 kind/历史六态筛选/skipped hover 原因；会话列表「定时」徽标 + 按任务过滤；主时间线三事件投影 + 完成卡复用 report 类型；审批卡红字 + prompt 全文展示；设置页并发上限组）。单测 tests/schedule.test.ts 27 项 + panels/sidechat 注册表更新。
+- **任务7 第 21 道门**：`scripts/schedule-check.ts`（A 校验矩阵 / B 双轨存储 / C occurrenceKey 去重双触发免疫 / D 三闸逐个 + 独立计数 / E catchUp 两档 + 7 天边界 / F fail-closed 无人值守真实路径（handleScheduleRunNow → handleAgentRun：只读跑完 + 写请求立即拒且落流 + 写不落盘 + 零审批等待）/ G 超时双闸短阈值 / H 工具五件审批卡红字 FORBIDDEN 4k / I 六态历史 / J 三事件重放无损 / K 旧日志零破坏），**67 断言**；gates.ts 清单 20→21；package.json 补 schedule-check 脚本行。
+- **任务8 反向验证 4 条红→绿**（备份→补丁→实测→还原，实录见下）。
+- **任务9 半托截图**：`docs/m4a-schedule.png`（2000×1250）——主时间线（⏰定时跳过 ×2 带可见「过期」原因 + ⏰定时触发[补跑] + 定时会话 user_message（prompt+工作区+无人值守声明）+ read_file 真实执行 + 日报 assistant + **定时任务完成 · 每日报表** report 卡：status/occurrence/usage/tool_stats/摘要）+ 会话列表（每日报表 · 2026-09-12 09:00 带「定时」徽标 + 定时过滤下拉）+ schedule 面板（定时任务 ×2 / 运行中 0/上限 2 / 创建表单已填 / 每日报表 daily read-only 卡 + 自动备份 weekly workspace-write 红标 / 运行历史 succeeded[补跑]+skipped×2）。真实代码路径（Electron 主进程 initScheduler + M4A_JITTER_MS=9000 真实 startup tick 补跑 + M3A_MAIN_SCRIPT mock 剧本跑真实 handleAgentRun + emitTimeline 落当前会话 + agent:event 活流推 UI）；CDP 程序化（--no-sandbox --disable-gpu、端口等号形态 + stderr「DevTools listening」整 URL 解析、面板先于数据挂载（坑五十）、数据侧显式谓词（坑四十九）、native setter + input 事件（坑四十六））；驱动脚本用后即删，主 checkout 零污染。
+
+### 真缺陷修复（均非判据缺陷，判据零改动；两处由任务 7/9 真实路径验收抓出）
+1. **initScheduler 未接线触发执行器**（坑六十三）：`makeScheduledExecutor` 已导出但从未挂进 Scheduler 依赖——生产路径每次触发都落「调度器未接线执行器（fail-closed）」。修复 = initScheduler 注入 `runSession: makeScheduledExecutor(ws)`（src/main/agent-runner.ts）。
+2. **handleAgentState 漏挂 schedule 快照**（坑六十四）：schedule 四通道挂了 IPC handler 但 state 应答从未包含 schedule 字段——面板 getState().schedule 恒 undefined，任务列表/运行历史永久为空。修复 = state 应答补 `schedule: await handleScheduleSnapshot()`（fail-soft try/catch）。
+3. **会话列表不随后台定时会话刷新**：定时触发 = main 侧新建会话，renderer 会话列表只在自建/重命名/删除时刷新——补活流接线：automation_triggered 到达即 refreshSessions（徽标实时出现，src/renderer/main.tsx）。
+
+### 反向验证 4 条实录（备份→补丁→schedule-check 实测→还原→绿）
+1. **摘 occurrenceKey 去重**（pipeline 的 journalKeys 检查 → void key）→ **C4 红**（66 ✅ / 1 ❌「C4 冻结时钟 run_now 双击…不重复建会话」，exit 1）→ 还原 → 67 ✅ exit 0。
+2. **摘重叠闸**（inflight 同任务检查移除）→ **D2 红**（66 ✅ / 1 ❌「D2 重叠闸…skipped(overlap) 落账」，exit 1）→ 还原 → 绿。
+3. **无人值守 fail-closed 改放行**（AskGate unattended 分支 rejected→approved）→ **F2c+F2e 红**（65 ✅ / 2 ❌「写请求被立即拒且落流」「被拒写请求未落盘」——写真的落了盘，exit 1）→ 还原 → 绿。
+4. **补跑 7 天窗摘除**（catchupGate 的 windowStart 钳制移除）→ **E3 红**（66 ✅ / 1 ❌「E3 7 天窗外更早错过不枚举不落账」，exit 1）→ 还原 → 绿。
+（反向①先暴露判据缺陷：原 C4 仅断言错误串，可被「重叠闸→decideSkip 内层 key 查重」链路误绿——先加严为「错误串 + journal 零增长 + 会话数不变」三重断言再打红，判据加严非放宽，M3b J7d 先例。）
+
+### M4a 新增坑记录
+- 坑六十三：**调度器与执行器分属两处接线缝**——Scheduler 构造参数 runSession 缺省即 fail-closed（设计正确），但 initScheduler 忘了把 makeScheduledExecutor 挂进去，单测全绿（测试自造 executor 注入）而生产路径零触发能力。凡「可注入依赖」的生产接线，必须有一条**不注入 executor 的真实路径验收**（run_now → handleAgentRun 全链）。
+- 坑六十四：**IPC 新字段要「handler + state 应答 + 面板消费」三点一线**——schedule 的 IPC handler 四通道齐全、面板消费代码齐全，唯独 state 应答漏挂字段，面板永远空（且恒真式体检不覆盖数据链路）。半托截图（UI 谓词打穿）是抓这类缝的唯一手段。
+- 坑六十五：**去重断言不要锚在错误串上**——同一 occurrenceKey 的双触发防护有三层（pipeline 去重 / 并发闸 / 重叠闸→decideSkip 内层查重），摘掉第一层后错误串可能由另一层拼出「去重」字样；判据要锚定语义本体（不重复建会话 = 会话数不变 + journal 零增长）。且 hang 型 executor 会让重叠闸挡住 run_now，掩盖去重缺失——测去重用即完成 executor + whenIdle 先收束。
+- 坑六十六：**DevTools browser WS URL 带随机 UUID 路径**（ws://127.0.0.1:PORT/devtools/browser/<uuid>）——裸 `/devtools/browser` 连不上；要么整取 stderr 的完整 URL，要么走 panels-check 同款 `/json/list` → page 级 webSocketDebuggerUrl。另有：driver 崩溃不杀 Electron 会占住固定调试端口（下轮 bind 48）——端口随机化 + finally kill。
+
+### 收口基线（2026-09-12 终版实测，HEAD 见分笔清单末笔）
+- `pnpm gates`：**21/21 绿 + 恒真式体检零命中 + exit 0**（TERM=dumb 实测）。逐道退出码：typecheck=0 test=0 e2e=0 ipc:check=0 sandbox:check=0 build=0 fork-check=0 gate-check=0 autonomy-check=0 compaction-check=0 panels-check=0 tools-check=0 map-check=0 prune-check=0 providers-check=0 memory-check=0 plugins-check=0 sidechat-check=0 security-check=0 agents-check=0 schedule-check=0。
+- test = **41 files / 384 passed / 0 skipped**（≥ 硬底线 357，只增不减）；schedule-check **67 断言 ✅ / 0 ❌**（新增第 21 道门）。
+- 冻结判卷 sha256 **3/3 逐字一致**；`scripts/frozen-sha256.json` 本体 sha256 = `9b7f44f9ce0b…8c4ba` 逐字节未改（git diff 空）。
+- 密钥卫生：词边界扫描命中均为文档/裁决记录/既有演练假 key 字面量（`sk-abcdefghijklmnopqrstuvwxyz012345` 同款），真实 key 0 命中；git status 终态干净（任务书不入仓库）。
+- 演示实录（半托截图 driver 日志）：badge=1 / historyRows=3 / hover 原因实录 ["过期：错过触发超出 7 天回看窗口，仅补最近一次","过期：错过触发超出 7 天回看窗口，仅补最近一次"]。
+
+### 分笔提交清单（本轮）
+1. `M4a 任务1-6 内核`——定时任务全链路（automations/scheduler/events/ask-gate unattended/sessions 徽标/settings schedule 组/ipc/preload/agent-runner 工具五件+调度接线/orchestrator FORBIDDEN/renderer 三面）+ tests/schedule.test.ts 27 项（357→384）+ croner 依赖（package.json/pnpm-lock 随本笔保每笔可构建）+ 真缺陷修复①（initScheduler 执行器接线）③（活流刷新会话列表）（含中断期改动采纳，见 BLOCKED 备案）。
+2. `M4a 任务7 第21道门`——scripts/schedule-check.ts（67 断言）+ gates.ts 清单 20→21。
+3. `M4a 任务9 半托截图`——docs/m4a-schedule.png（真实代码路径 + CDP 程序化 + 驱动用后即删）。
+4. `M4a 真缺陷修复② + 收口`（本笔）——handleAgentState 补挂 schedule 快照（半托截图路径抓出；与收口同文件轮次无法再拆）+ PROGRESS M4a 段 + BLOCKED M4a 备案。
+
+### 偏离任务书的决定（全部显式备案，无判据绕行）
+1. **「校验走 zod」→ 手写严格校验**：任务书 §1/§2.1 要求校验走 zod，但白名单只允许 croner 一个新依赖，zod 在 pnpm 严格布局下仅为 MCP SDK 传递依赖、根包不可导入（实测 MODULE_NOT_FOUND）——按判卷纪律不改白名单，手写同等保证（未知字段拒绝/判别联合/枚举收窄/错误全量返回），已 BLOCKED 备案待裁决。
+2. **tests/sidechat.test.ts 面板计数 7→8**：本轮新增 schedule 面板使注册表合法增长（M3c ② 同款先例，「未知兜底」原语义不变）；panels.test.ts 同步更新已在任务 6 内。
+3. **automation_list 不走审批卡**：任务书 §12.2.5「一切变更走审批卡」——list 为只读面（返回任务清单 JSON），变更四件（create/update/delete/run_now）全部走审批卡。
+4. **automation_completed 双落点**：§12.2.4「完成回写投完成卡到主时间线」实现为——终态事件落定时会话日志（终态记录）+ 经 emitTimeline 落当前会话日志并推 UI（主时间线完成卡复用 report 卡类型）；journal 仍是调度事实源（§12.2.7）。
+5. **反向验证①先加严判据再打红**（见反向实录注）：C4 原断言（中断期产物）可被其他闸链路误绿，加严为三重断言——属判据加严非放宽。
+6. **断言计数口径**：test 357→384（+27 schedule 单测 +3 面板/投影，-0 删减）；第 21 道门新增后 gates 总数 20→21（清单即事实源）。

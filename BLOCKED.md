@@ -216,3 +216,12 @@ card_action emit 缺 merge 路由回退），均由本轮新增验收断言抓�
 单测抓出）；pipeline stage 角色解析改批准时冻结（主 run 结束 setCurrentPluginRuntime(null) 后，异步 sequencer 的后环
 插件角色 stage 断链，半托演示抓出）——详见 PROGRESS 坑六十~六十一。
 反向验证 4 条红→绿实录见 PROGRESS M3c 段。
+
+## M4a 轮新增备案（2026-09-12）
+
+无判据阻塞（判卷文件零改动）。以下备案待裁决，均不阻塞推进：
+
+1. **「校验走 zod」与依赖白名单冲突（偏离任务书 ①）**：任务书 §1/§2.7 要求「校验走 zod schema」，但 §4 白名单限定 package.json 只可加 croner 一个依赖；实测 pnpm 严格布局下 zod 仅作为 @modelcontextprotocol/sdk 的传递依赖存在（node_modules/.pnpm/zod@3.25.76），根包 `import "zod"` MODULE_NOT_FOUND。按「白名单外不写」纪律，未追加 zod，以手写严格校验实现同等 durable 边界保证（顶层+schedule 内未知字段拒绝 / 判别联合 per-kind 字段白名单 / prompt 非空 ≤4k / interval ≥5 / IANA 规范化非法拒绝 / 枚举收窄 / 错误全量返回，tests/schedule.test.ts A 段矩阵判卷）。待裁决：追认手写校验为标准，或授权追加 zod 依赖重写校验层（automations.ts 单点替换面小）。
+2. **plugins-check F2 非密封判据瞬时抖动**：本轮全量门禁两次复跑间出现一次 F2 红（实仓 SKILL.md 解析 31 < 50）+ 一次绿（51 ≥ 50）。该断言实时克隆 anthropics/skills 与 claude-plugins-community（`--depth 1 --filter=blob:none`）计数，依赖上游实时内容与网络完整性，红点为部分克隆截断而非本仓代码。待裁决：是否给 F2 增加重试/缓存或降级为「不可达即未证」通道（与 F 段其余联网断言同口径）。
+3. **中断续跑采纳备案（M3c ③ 先例）**：本轮任务 1–6 内核为上一被中断执行轮的未提交改动（16 修改 + 3 新增文件：automations.ts/scheduler.ts/schedule.test.ts；未含 gates/schedule-check）。主对话按任务书处置纪律执行：干净树基线复测（20/20 门 + 40 files/357 tests + exit 0）→ stash pop → 逐文件审查 → 续作 → 全量重验。审查修正中断期测试断言缺陷 6 处（月度短月断言问错日期[1月31日本身合法] / catchUp=skip 边界测试漏传 UTC 时区 / 卡死靶漏传 createdAt 使断言空转 / once 决策标签期望错档[启动 tick 补跑=catchup 而非 triggered] / run_now 去重测试用 hang executor 被重叠闸干扰 / sidechat 面板计数未随注册表增长），修复实现真缺陷 2 处（坑六十三/六十四，见 PROGRESS M4a 段）。全部最终改动在本轮重验，无「未验证即收口」。
+4. **反向验证暴露的新门判据缺陷先修后红（判据加严非放宽）**：schedule-check C4（occurrenceKey 去重）原断言仅锚错误串，摘除 pipeline 去重后可经「重叠闸 → decideSkip 内层 key 查重」链路误绿——先加严为「错误串含去重 + journal 零增长 + 会话数不变」三重断言，再执行反向打红（实录见 PROGRESS M4a 段）。沿 M3b J7d「先加严再打红」先例。
