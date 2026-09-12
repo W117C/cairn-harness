@@ -504,6 +504,9 @@ export interface PipelineChain {
   callId: string;
   /** 批准后冻结的 stages（parseStages 产物，Object.freeze）。 */
   stages: readonly FrozenStage[];
+  /** 批准时冻结的角色解析产物（与 stages 同刻冻结：主 run 结束清空插件运行时后，
+   *  后环 spawn 仍按批准时的角色面运行——插件角色/工具面/模型不随运行时生命周期漂移）。 */
+  resolutions: readonly StageRoleResolution[];
   state: PipelineChainStageState[];
   status: "running" | "done" | "failed";
   reason?: string;
@@ -1007,6 +1010,16 @@ export class Orchestrator {
       return { ok: false, output: "spawn_agent(pipeline): 缺 callId（无法挂回整链合成结果）" };
     }
     const stages = parsed.stages;
+    // 角色解析在审批前完成并随链冻结（与 stages 同刻）：runChain 后环 spawn 不再依赖
+    // currentPluginRuntime 的存活期——主 run 结束清空插件运行时后，链仍按批准时的角色面跑完。
+    const resolutions: StageRoleResolution[] = [];
+    for (let i = 0; i < stages.length; i++) {
+      const resolved = this.resolveStageRole(stages[i]!.role);
+      if ("error" in resolved) {
+        return { ok: false, output: "spawn_agent(pipeline): stage " + String(i + 1) + " 角色解析失败：" + resolved.error };
+      }
+      resolutions.push(resolved);
+    }
     // 整链一个审批（§2.2 裁决 2）：批准即授权全链；链内各环写租约在审批卡合并警告
     const chainResources = parseStringList(args.resources);
     const conflicts = this.leaseConflicts(chainResources);
@@ -1022,6 +1035,7 @@ export class Orchestrator {
     const chain: PipelineChain = {
       callId,
       stages,
+      resolutions,
       state: stages.map((s, i) => ({ index: i, role: s.role, task: s.task, agentId: null, status: "pending" as const })),
       status: "running",
     };
@@ -1071,11 +1085,7 @@ export class Orchestrator {
     for (let i = 0; i < chain.stages.length; i++) {
       const stage = chain.stages[i]!;
       const st = chain.state[i]!;
-      const resolved = this.resolveStageRole(stage.role);
-      if ("error" in resolved) {
-        await this.failChain(chain, "stage " + String(i + 1) + " 角色解析失败：" + resolved.error);
-        return;
-      }
+      const resolved = chain.resolutions[i]!; // 批准时冻结的角色解析（不依赖运行时存活期）
       const budgetBlock = this.budgetBlocked();
       if (budgetBlock) {
         await this.failChain(chain, "成本闸：会话成本超限（maxBudgetUsd），stage " + String(i + 1) + " spawn 被拒");
