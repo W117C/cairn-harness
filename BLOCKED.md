@@ -7,6 +7,29 @@
 3. **M4a-3 中断续跑采纳** → **追认**（M3c ③ 同款纪律：干净树基线复测 + stash pop 逐文件审查 + 全量重验；对中断期改动修正断言缺陷 6 处、采纳实现真缺陷修复 2 处的记录充分）。
 4. **M4a-4 schedule-check C4 判据先加严后红** → **追认**（沿 M3b J7d「先加严再打红」先例，判据加严非放宽）。
 
+## 待裁决（2026-09-12，H-1/H-2 门禁自检轮备案）
+
+**背景**：审查报告 `outputs/code-review-report-2026-09-12.md` 的 H-1/H-2 指出「恒真式体检判据面远窄于宣称」与「`unverified` 不影响退出码」。本轮落地时新发现 **2 道永真假门**（旧体检因不识别 `||` 形态而完全漏网），一并备案。
+
+**已落地（不阻塞）**：
+
+1. 体检升级为 **AST 级析取式弱断言扫描**（`scripts/assertion-health.ts`，新文件；`gates.ts` 改为导入 + 再导出，对外接口不变）。规则：断言第一实参的 AST 中**任意位置**出现 `||` 即命中；豁免需显式注释 `// gates:disjunction-ok <理由>`（写在断言行尾或上方 3 行内，**必须给理由**）。抽成独立模块是因为 `gates.ts` 顶层有 `await main()`，直接 import 会跑起全套门禁——抽出去才有单测（`tests/gates-scan.test.ts` 13 条）。
+2. `UNVERIFIED=<n>` 机器可读标记（H-2）：`plugins-check` / `compaction-check` 上报，`gates.ts` 汇总上浮；**有未证时禁止打印「全部通过」**；`DSH_STRICT_UNVERIFIED=1` 或 `--strict-unverified` 让未证直接判红（CI / 有凭据环境用）。默认仍 exit 0——离线开发不可用会拖垮日常门禁，但口径改为「断言全过，但有 N 项未证（不得宣称全绿）」。
+
+**已裁决并落地（2026-09-12，本轮）**：
+
+3. **`WORKER_FORBIDDEN_TOOLS` 缺 `shell_rw`**（`src/agent/orchestrator.ts:87`）→ **已采纳建议并落地**。该常量注释写明是「验收断言面」，含 `run_shell` 却不含 `shell_rw`——与 P0-1 同源（按字面名识别、漏 worker 的 shell 面）。已纳入 `shell_rw`（纯黑名单加法；`workerToolSpecs` 的 allow 列表本就不含它，**行为零变更**，但 J7a/J7c 由「碰巧为真」变为名单驱动可失败）。核对并行批次时间线：`orchestrator.ts` 最后修改 16:15，早于 `agents-check` 的 17:32 改动，未再撞车；若并行批次另有该文件改动，git 层会显式冲突而非静默覆盖。
+
+5. **新增门禁清单漂移护栏 + `provider:check` 回归门禁**（本轮补，见 `.tmp/` 基线与 Step 1 汇报）：
+   - `scripts/gate-manifest.ts`（新）：GATES 清单抽出为可测模块；`checkGateManifest()` 做 **scripts 侧无孤儿**校验——凡 `*-check` / `*:check` 形态的验收脚本必须在 GATES 或用例化的 `EXEMPT_SCRIPTS`（必须带理由）中，否则 `gates.ts` 在跑门前判红。补上「清单即事实源」缺的反向护栏（原缺口正是 `provider:check` 被静默冷落）。
+   - `provider:check` 入列 GATES（原为孤儿脚本）并改为离线自洽：缺 `M0_API_KEY` 时记 `UNVERIFIED=1`、默认 exit 0、严格模式判红——不再因无凭据在离线环境硬红而被排除。门数 22 → **23**。
+   - 反例验证：`tests/gate-manifest.test.ts` 覆盖孤儿 `*-check` / `*:check`、GATES 指向不存在 script、EXEMPT 空白理由等形态；`checkGateManifest(实际 scripts) === []` 锚住当前仓库零漂移。
+
+**已裁决（2026-09-12，用户拍板；口径，不阻塞）**：
+
+6. **未证项是否默认判红** → **追认现状**：本地默认宽松——未证项警告 + exit 0，但禁止宣称「全部通过」（`UNVERIFIED=<n>` 机器可读上浮到 gates 汇总）；`DSH_STRICT_UNVERIFIED=1` / `--strict-unverified` 判红，供 CI 与有凭据环境写死。取舍依据：默认严格会让离线开发环境的 `provider:check` / 联网插件暗卷恒红，拖垮日常门禁；未证的可视化（禁止假宣称全绿）已消除宽松口径的失真面。CI 侧接入时须显式开严格模式（写进 CI 配置，非本仓代码）。
+4. ~~**plan 事件应否被 `keepFirstSet` 识别**~~ → **已结案（2026-09-12 同轮查清，非 src 缺陷）**：原 `compaction-check.ts:164` 为 `includes(4) === false || !kf.has(4)`，实测 `kf={1,2,3,763}` **不含 4** → 恒为 `A || true`，这道门从未生效。根因是**断言指错了 id**：`eventIdAt(i)=i+1`，fixture 里 plan_proposed/plan_approved 在 index 1/2 → **id 2/3**，而 **id 4 是第 0 轮的 assistant 消息（say）**；763 是中段 user 消息。**`keepFirstSet` 本身正确**（确实保留了 2/3）。已改为按类型推导 plan id 后断言「plan 事件必须被 keep-first 保留」，`compaction-check` 复跑 `UNVERIFIED=0` 全绿。无需改 src。
+
 ## M2g 轮备案（2026-09-11 收口执行轮）
 
 无阻塞事项。以下为备案（不阻塞推进）：

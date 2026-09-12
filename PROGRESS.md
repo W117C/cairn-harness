@@ -858,3 +858,47 @@
 - 冻结判卷 sha256 3/3；`scripts/frozen-sha256.json` sha256 = `9b7f44f9…8c4ba` 逐字节未改。
 - 打包产物：`dist/M0 Agent-0.0.1-arm64.dmg` / `.zip` / `mac-arm64/M0 Agent.app`（冒烟两态通过）。
 - **计划完成**：M0–M4 五里程碑全部收口（各对表见 docs/）。
+
+## H · M4 后加固轮（审查 96 条 → 安全/性能两批修复 + 门禁自检升级）（2026-09-12）
+
+> 前置：M4b 收口（HEAD 3a6d63c）。本轮属「计划完成」后的加固收口：不改判卷、不扩 M4+ 留位、不动判据（判据类问题全部走门禁自检批的「修门」而非「绕门」）。
+> 产出物：审查报告 `outputs/code-review-report-2026-09-12.md`（8 子 Agent 分区交叉审 ~42k 行，96 条 = P0×3 / P1×17 / P2×63 / P3×13，聚类 6 条跨区块根因）；修复记录 `outputs/fix-log-2026-09-12.md`（安全/正确性批 8 项）与 `outputs/optimization-log-2026-09-12.md`（性能/边界批 12 项，两批文件集零重叠）；门禁自检（H-1/H-2）裁决与落地见 BLOCKED.md H 轮节。
+
+### 基线（本轮收口起点实测）
+- HEAD 3a6d63c 工作树叠加三批未提交改动（35 修改 + 15 新文件，约 +1700/−400 行）；合并树实测 `pnpm gates` **23/23 exit=0 + 恒真式/析取式体检零命中 + 清单漂移校验通过 + 未证 2 项**（TERM=dumb 实录见会话日志）。
+- 判卷卫生：`scripts/frozen-sha256.json` sha256 = `9b7f44f9…8c4ba` 逐字节未改；fixtures/** 与两份冻结表零 diff；词边界密钥扫描 diff 增量零真实 key；package.json 零改动（provider:check script 行系 M2e 既有，故成孤儿门）。
+
+### 任务结果（三批 + 文档批，分笔见下）
+- **批① 安全/正确性 8 项**（fix-log）：P0-1 权限层按能力域识别 shell（`SHELL_FAMILY`/`hasThreatTableSurface`；shell_rw 纳入威胁表与写向判定，shell_ro 不纳入防 deny→ask 降级）+ P0-2 `judgeChain` deny 短路优先 + 规则按 shell 能力域互通（用户对 run_shell 的 deny 约束 worker 的 shell_rw）+ P0-3 frontmatter 原型污染封堵（`UNSAFE_KEYS`+`ownValue` 双保险）+ P1-1 `sanitizedEnv` 推广全子进程（run_shell/verify/sandbox/lsp；BYOK key 不再经 env 外泄）+ P1-2 `spawnTracked`/`killGroup` 进程组回收（hooks 同步迁移，共 6 处；超时先 settle 再 kill，孙进程持管道不再永挂）+ E-2 redact 全局匹配 + E-3 `</memory>` 注入转义 + 根因4 `src/net.ts` 出网停滞看门狗（stallGuard 接 3 provider + updater；withTimeout 接 MCP connect/listTools，失败先 close 不留僵尸连接）。
+- **批② 性能/边界 12 项**（optimization-log）：prune O(n²)→O(n)（buildPruneIndex）+ 附件名 safeSegment+sha1 防目录穿越 + map/rank 两处 O(N²)→O(N)（PageRank 逐位不变）+ 删死代码 defSitesOf + read_file >16MB 前缀降级读 + edit_file 替换字面量语义（$&/$1 不再展开）+ loop verify 钩子异常兜底 + worktree 冲突清单取 `--diff-filter=U` 权威来源（旧恒得 "Merge" 假清单）+ orchestrator `waitForApproval` 三处合一 + m3b/m3c 三处测试竞态修 + tests/edge-cases 6 项边界回归。
+- **批③ 门禁自检（H-1/H-2）**：恒真式体检升级 AST 级析取式弱断言扫描（`scripts/assertion-health.ts` 新模块；豁免须 `gates:disjunction-ok` + 理由）+ `scripts/gate-manifest.ts` 清单抽出 + scripts 侧无孤儿漂移护栏（provider:check 归队，门数 22→23）+ H-2 `UNVERIFIED=<n>` 机器可读未证记账（plugins/compaction/provider 上报、gates 汇总上浮、有未证禁止宣称全绿、`DSH_STRICT_UNVERIFIED=1` 判红）+ **两条永真假门修复**：compaction-check plan 断言指错 id（id4 实为 assistant 消息，plan 实为 id2/3；改按类型推导）与 agents-check J7c 恒真析取（`WORKER_FORBIDDEN_TOOLS` 补 shell_rw，断言改单一条件）+ K5b 无 key 恒真改分支硬断言。
+- **批④ 文档批**（本笔）：PROGRESS H 段 + AGENTS 门数/清单源口径修正 + BLOCKED H 轮裁决转录 + 四份报告入库 outputs/（WIP patch 用后即删）。
+
+### 反向验证（摘要；全量见 fix-log §1 逐项「旧行为复现 → 新行为验证」双证列）
+- `staticRisk("shell_rw",{command:"rm -rf /"})` none→critical；`judgeChain(echo x && git push --force)` miss→deny；`run_shell` 跑 `echo KEY=[$M0_API_KEY]` 真值→空；孙进程持 stdout 旧实现 close 永不触发→新实现 604ms 主动收束、残留进程 0；同对象原型污染写入→`Object.prototype` 干净。
+- 永真假门修复复验：compaction-check 改按类型推导后 `UNVERIFIED=0` 全绿（keepFirstSet 本身正确，保留 id 2/3）；agents-check J7c/J7a 由名单驱动可失败。
+- **B2 结案（m3c:406）**：优化轮标注「`tests/m3c.test.ts:406` 疑似真实行为缺陷、留作待查」——终态树在**双运行时**复验均绿：真实 Node 22.22.2 定向 23/23（含依赖链事件驱动）+ Electron-as-node（gates test 门）51 files / 471 passed。判定为优化轮并行期部分树 + 沙箱负载的环境性假红，**非 src 缺陷**，结案不立项。
+
+### H 轮新增坑记录
+- 坑七十三：**体检判据面窄于宣称**——字面 `, true)` / `|| true` 抓不住析取式弱断言（`A || 前置不满足` 在条件不满足时恒真、什么也没测），实测 scripts/ 738 条断言中 3 条条件逃逸。体检自身要可单测：gates.ts 顶层 `await main()` 不可 import，抽独立模块是前提。
+- 坑七十四：**「清单即事实源」缺反向护栏**——GATES 与 package.json scripts 双手写、无机械校验，provider:check 即历史孤儿（门清单 22 道里从未跑过它）。无孤儿校验 + EXEMPT 显式豁免补上闭环；「清单即事实源」必须同时约束「清单里的都跑」与「该跑的都在清单」。
+- 坑七十五：**「缺凭据降级」不得写进断言条件**——`rep.llm_reviewed === true || !process.env.M0_API_KEY` 式析取让断言在无 key 时恒真（K5b 形态）。缺凭据走 UNVERIFIED 记账（未证 ≠ 通过），断言本体保持单一硬条件。
+
+### 收口基线（2026-09-12 终版实测）
+- `pnpm gates`：**23/23 exit=0** + 恒真式/析取式体检零命中 + 清单漂移校验通过；⚠️ **未证 2 项**（testdino 远程 MCP 需真实凭据 + provider:check 缺 M0_API_KEY）——按「未证 ≠ 通过」口径如实标注，**不宣称全绿**；`DSH_STRICT_UNVERIFIED=1` 或 `--strict-unverified` 可判红（CI/有凭据环境）。
+- test = **51 files / 471 passed / 0 skipped**（M4b 后 413 → +58：新增 tests/{net,process,redact,edge-cases,gates-scan,gate-manifest} 6 文件 + 各批回归断言）。
+- 冻结判卷 sha256 3/3 逐字一致；`scripts/frozen-sha256.json` sha256 = `9b7f44f9…8c4ba` 逐字节未改。
+
+### 已审未修留位（审查报告剩余项，均不属本轮范围，防丢失登记）
+1. 根因 3 路径边界（文件工具 realpath 归属校验 / manifest 插件路径越界）——工具写路径层，涉及面广，独立立项。
+2. 根因 5 渲染层 O(n²)（store 事件无界 + 全量投影）与 scheduler getState 全量 replay——长会话性能，M4+ 候选。
+3. 结构性拆分（orchestrator 2232 行 / main.tsx 1344 行 / panels registry 1226 行）+ ErrorBoundary + 会话切换序号守卫。
+4. H-8 判据冻结面（fixtures/gate|autonomy|agents|providers 未入 frozen-sha256.json）、H-9 时钟注入化、H-7 门禁跨平台、门禁沙箱内 >18min 性能问题。
+5. 提示词层改进（orchestration-prompt-review：生产主会话无系统提示词、验收暗卷脚本反而更完整——验收与生产不等价）——机制完备度高、对模型自我说明不足的系统性缺口，待裁决是否立项。
+6. Mimosa 提交钩子在分笔期间未能取得完整扫描结论（scanner_enobufs，兼容策略放行）——按其提示需补一次完整审计。
+
+### 分笔提交清单（本轮）
+1. `M4 后加固① 安全/正确性批`（3eed1e5）——P0×3 + P1×2 + E×2 + 根因4 + 新增 tests/{net,process,redact} 与三文件回归。
+2. `M4 后加固② 性能/边界/正确性批`（1c5f46b）——优化记录 12 项 + tests/edge-cases。
+3. `M4 后加固③ 门禁自检批`（983a7c8）——assertion-health/gate-manifest + UNVERIFIED 口径 + 两条永真假门修复 + 门数 22→23。
+4. `M4 后加固④ 收口`（本笔）——PROGRESS/AGENTS/BLOCKED 文档同步 + outputs 四份报告入库。
