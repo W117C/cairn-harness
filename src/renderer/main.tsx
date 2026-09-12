@@ -52,9 +52,11 @@ import {
   planStatusesOf,
   reducer,
   tokenProjectionOf,
+  clarifySubmittedOf,
   type TimelineItem,
 } from "./store";
 import { projectAgentPanel, projectMergeTower, projectTokenUsageByAgent, skipReasonLabel, type AgentColumn } from "./projections";
+import { ErrorBoundary } from "./error-boundary";
 import { resolvePanel, type PanelId } from "./panels/registry";
 import { OnboardingWizard, licenseStatusLabel, updateResultLabel } from "./onboarding";
 import type { AgentEvent, ClarifyAnswerMap } from "../events";
@@ -136,15 +138,18 @@ function EventView({
   onAction,
   planStatuses,
   agentCols,
+  clarifySubmitted,
 }: {
   e: AgentEvent;
   onAction: (action: string, data: unknown) => void;
   planStatuses: Record<string, "approved" | "rejected">;
   agentCols: Record<string, AgentColumn>;
+  clarifySubmitted: Set<string>;
 }) {
   if (e.type === "clarify_requested") {
     const Card = resolveCard("clarify_form");
-    return <Card payload={{ type: "clarify_form", callId: e.callId, questions: e.questions }} onAction={onAction} />;
+    // H2（G-1）：已提交投影随 payload 下传——表单卡据此冻结（旧链路 submitted 恒 undefined，可反复提交）
+    return <Card payload={{ type: "clarify_form", callId: e.callId, questions: e.questions, submitted: clarifySubmitted.has(e.callId) }} onAction={onAction} />;
   }
   if (e.type === "plan_proposed") {
     const Card = resolveCard("plan");
@@ -751,6 +756,7 @@ function App() {
   const providerKeys = status?.providerKeys ?? null;
   const aboutVersion = status?.about?.version ?? "";
   const planStatuses = useMemo(() => planStatusesOf(state), [state]);
+  const clarifySubmitted = useMemo(() => clarifySubmittedOf(state), [state]);
   const tokens = useMemo(() => tokenProjectionOf(state), [state]);
   const diffs = useMemo(() => diffCardsOf(state), [state]);
   const pending = useMemo(() => pendingApprovalsOf(state), [state]);
@@ -925,21 +931,27 @@ function App() {
     if (!message || state.running) return;
     setInput("");
     dispatch({ type: "clearError" });
-    let sessionId = currentSession;
-    if (!sessionId) {
-      const { id } = await window.agent.createSession();
-      sessionId = id;
-      setCurrentSession(id);
-      await refreshSessions();
+    // H2（审查 F-1）：send 全程兜底——IPC invoke 被拒（会话已删/通道抛错）时必须复位
+    // running，否则 UI 永久停在「运行中」、输入框禁用且无恢复入口。
+    try {
+      let sessionId = currentSession;
+      if (!sessionId) {
+        const { id } = await window.agent.createSession();
+        sessionId = id;
+        setCurrentSession(id);
+        await refreshSessions();
+      }
+      dispatch({ type: "running", running: true, error: null });
+      const res = await window.agent.run({
+        message,
+        mode: settings?.mode ?? "default",
+        sessionId,
+      } satisfies RunRequest & { sessionId?: string });
+      if (res.ok) dispatch({ type: "running", running: false });
+      else dispatch({ type: "running", running: false, error: res.error ?? "未知错误" });
+    } catch (err) {
+      dispatch({ type: "running", running: false, error: "发送失败：" + (err instanceof Error ? err.message : String(err)) });
     }
-    dispatch({ type: "running", running: true, error: null });
-    const res = await window.agent.run({
-      message,
-      mode: settings?.mode ?? "default",
-      sessionId,
-    } satisfies RunRequest & { sessionId?: string });
-    if (res.ok) dispatch({ type: "running", running: false });
-    else dispatch({ type: "running", running: false, error: res.error ?? "未知错误" });
   };
 
   const decide = (askId: string, approved: boolean, scope?: "once" | "session_kind" | "always"): void => {
@@ -1060,7 +1072,7 @@ function App() {
   const ActivePanel = activePanelId ? resolvePanel(activePanelId) : null;
 
   const renderTimelineItem = (it: TimelineItem): React.ReactNode => {
-    if (it.kind === "event") return <EventView e={it.e} onAction={onCardAction} planStatuses={planStatuses} agentCols={agentColsById} />;
+    if (it.kind === "event") return <EventView e={it.e} onAction={onCardAction} planStatuses={planStatuses} agentCols={agentColsById} clarifySubmitted={clarifySubmitted} />;
     if (it.kind === "stream") return <AssistantBubble content={it.text} running={state.running} />;
     return <AskView it={it} onDecide={decide} />;
   };
@@ -1339,6 +1351,8 @@ function App() {
 
 createRoot(document.getElementById("root") as HTMLElement).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 );

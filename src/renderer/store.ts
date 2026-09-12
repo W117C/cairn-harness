@@ -28,8 +28,7 @@ export type AppAction =
   | { type: "ask"; a: AskPayload }
   | { type: "askDone"; d: AskOutcomePayload }
   | { type: "running"; running: boolean; error?: string | null }
-  | { type: "clearError" }
-  | { type: "clarifySubmitted"; callId: string };
+  | { type: "clearError" };
 
 /** 单事件折叠步：语义与全量 toTimeline 一致（同 callId delta 就地合并，其余追加）。 */
 function foldEvent(state: AppState, e: AgentEvent): AppState {
@@ -76,14 +75,26 @@ export function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, running: action.running, error: action.error !== undefined ? action.error : state.error };
     case "clearError":
       return { ...state, error: null };
-    case "clarifySubmitted": {
-      // clarify 表单提交状态是 renderer 侧交互态（非事件），只影响表单卡显示
-      return state;
-    }
   }
 }
 
 // ---- 派生投影（面板 100% 事件流订阅投影）----
+
+// H2（审查 G-1）：clarify 已提交投影从事件流派生——clarify_requested 的 callId 出现
+// 同 id tool_result（gate 事件与 tool_result 挂同一 id）即已结算。旧实现的 store 交互态
+// 是无 dispatch 的死代码，表单提交后永不禁用、可反复提交。
+export function clarifySubmittedOf(state: AppState): Set<string> {
+  const requested = new Set<string>();
+  for (const it of state.timeline) {
+    if (it.kind === "event" && it.e.type === "clarify_requested") requested.add(it.e.callId);
+  }
+  const submitted = new Set<string>();
+  if (requested.size === 0) return submitted;
+  for (const it of state.timeline) {
+    if (it.kind === "event" && it.e.type === "tool_result" && requested.has(it.e.callId)) submitted.add(it.e.callId);
+  }
+  return submitted;
+}
 
 export function planStatusesOf(state: AppState): PlanStatuses {
   const ps: PlanStatuses = {};
