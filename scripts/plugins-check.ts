@@ -329,23 +329,62 @@ async function darkBox(): Promise<void> {
     ["https://github.com/anthropics/skills", "anthropics-skills"],
     ["https://github.com/anthropics/claude-plugins-community", "community-plugins"],
   ];
+  // M4a 裁决②：--filter=blob:none 浅克隆可被网络截断成「部分检出」（曾实测 SKILL.md 31<50 的假红）。
+  // 克隆后做内容完整性抽查，不达标重试一次；仍不达标 → 该源按不可达处理（整段显式「未证」，不假红不静默绿）。
+  const { rm: rmTree, readdir, stat } = await import("node:fs/promises");
+  const MIN_SKILLS = 40; // anthropics/skills 实仓 SKILL.md 下限（正式阈值 50 留裕量；截断检出通常远低于此）
+  const countSkillMd = async (dir: string, depth = 0): Promise<number> => {
+    if (depth > 5) return 0;
+    let n = 0;
+    let entries: string[];
+    try {
+      entries = await readdir(dir);
+    } catch {
+      return 0;
+    }
+    for (const e of entries) {
+      if (e === ".git" || e === "node_modules") continue;
+      const abs = join(dir, e);
+      try {
+        if ((await stat(abs)).isDirectory()) n += await countSkillMd(abs, depth + 1);
+        else if (e === "SKILL.md") n++;
+      } catch {
+        /* 忽略不可读项 */
+      }
+    }
+    return n;
+  };
   let cloned = 0;
   for (const [url, name] of repos) {
-    try {
+    const minSkills = name === "anthropics-skills" ? MIN_SKILLS : 0;
+    const attempt = async (): Promise<boolean> => {
       await git(["clone", "--depth", "1", "--filter=blob:none", url, join(target, name)]);
-      cloned++;
+      return minSkills === 0 ? true : (await countSkillMd(join(target, name))) >= minSkills;
+    };
+    try {
+      if (await attempt()) {
+        cloned++;
+        continue;
+      }
+      console.log("  ⚠️  暗卷克隆 " + name + " 内容不完整（疑似网络截断），重试一次");
+      await rmTree(join(target, name), { recursive: true, force: true });
+      if (await attempt()) {
+        cloned++;
+        continue;
+      }
+      console.log("  ⚠️  暗卷克隆 " + name + " 重试后仍不完整 → 该源不参与");
     } catch {
       continue; // 拉不到 → 该源不参与
     }
   }
-  if (cloned === 0) {
-    unverified.push("§9.11-1/2 实仓插件免改加载：两个源均不可达 → 未证（非跳过即通过）");
-    console.log("  ⚠️  暗卷**未证**：联网拉取 anthropics/skills 与 claude-plugins-community 均不可达");
+  if (cloned < 2) {
+    unverified.push("§9.11-1/2 实仓插件免改加载：存在源不可达或截断重试仍不完整 → 未证（非跳过即通过）");
+    console.log("  ⚠️  暗卷**未证**：联网拉取 anthropics/skills 与 claude-plugins-community 未全部成功");
     return;
   }
 
   // ---- 扫描（修根因：必须下钻 .claude-plugin，否则 CC 布局的容器永远解析不到）----
-  const { readdir, stat, readFile: rf } = await import("node:fs/promises");
+  const { readFile: rf } = await import("node:fs/promises");
   const hits: string[] = [];
   const walk = async (dir: string, depth: number): Promise<void> => {
     if (depth > 5) return;
