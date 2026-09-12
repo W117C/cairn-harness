@@ -3,7 +3,7 @@
 //   mcpServers 内联或容器根 .mcp.json。能力边界（§9.8）：插件零进程内第三方代码——
 //   含 JS 入口（根 index.js / package.json main|bin）的包拒载 + 警告。
 import { readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import type { HooksFile, HookMatcherDef, HookEventName, McpConfigFile, McpServerConfig } from "./types";
 
 /** 单插件解析失败（加载器隔离粒度：只影响自身，其余照常）。 */
@@ -132,17 +132,23 @@ export async function parsePluginManifest(root: string): Promise<ManifestParseRe
     warnings.push("未知顶层字段忽略（不阻断）: " + unknownFields.join(", "));
   }
   // 路径覆盖（CC 字段：commands/agents/skills 可为 string 或 string[]；取首个存在的目录）
-  const resolveDir = (v: unknown, fallback: string): string => {
-    if (typeof v === "string" && v.trim() !== "") return v;
-    return fallback;
+  // 包含性校验（审查 E-12）：覆盖路径是不可信输入——resolve 后校验不越出插件根，越界拒载
+  // （fail-closed）。否则一个 "../" 就能让 skills/commands/agents/hooks 挂载扫描目标到插件根外。
+  const resolveDir = (v: unknown, fallback: string, field: string): string => {
+    const chosen = typeof v === "string" && v.trim() !== "" ? v : fallback;
+    const relBack = relative(resolve(root), resolve(root, chosen));
+    if (relBack.length > 0 && (relBack.startsWith("..") || isAbsolute(relBack))) {
+      throw new PluginLoadError(`plugin.json ${field} 路径越出插件根: ${chosen}`);
+    }
+    return chosen;
   };
-  const commandsDir = resolveDir(m.commands, "commands");
-  const agentsDir = resolveDir(m.agents, "agents");
-  const skillsDir = resolveDir(m.skills, "skills");
+  const commandsDir = resolveDir(m.commands, "commands", "commands");
+  const agentsDir = resolveDir(m.agents, "agents", "agents");
+  const skillsDir = resolveDir(m.skills, "skills", "skills");
   // hooks：string = 文件路径；object = 内联
   let hooksRef: ManifestParseResult["hooksRef"] = { kind: "none" };
   if (typeof m.hooks === "string" && m.hooks.trim() !== "") {
-    hooksRef = { kind: "path", path: join(root, m.hooks) };
+    hooksRef = { kind: "path", path: join(root, resolveDir(m.hooks, "", "hooks")) };
   } else if (m.hooks && typeof m.hooks === "object") {
     hooksRef = { kind: "inline", file: m.hooks as HooksFile };
   } else if (await exists(join(root, "hooks", "hooks.json"))) {

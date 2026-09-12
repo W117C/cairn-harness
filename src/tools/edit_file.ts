@@ -1,5 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { resolveInWorkspace, ToolError, type Tool, type ToolResult } from "./base.js";
+import { assertNotAgentArea, assertRealContainment, resolveInWorkspace, ToolError, type Tool, type ToolResult } from "./base.js";
 import { collectDiagnostics } from "./lsp.js";
 
 export const edit_file: Tool = {
@@ -16,6 +16,8 @@ export const edit_file: Tool = {
     }
     const replaceAll = args.replace_all === true;
     const abs = resolveInWorkspace(ctx.workspace, rel, "edit_file");
+    assertNotAgentArea(rel, "edit_file");
+    await assertRealContainment(ctx.workspace, abs, "edit_file");
     let content: string;
     try {
       content = await readFile(abs, "utf8");

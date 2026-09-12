@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { resolveInWorkspace, type Tool, type ToolResult } from "./base.js";
+import { assertNotAgentArea, assertRealContainment, resolveInWorkspace, type Tool, type ToolResult } from "./base.js";
 import { collectDiagnostics } from "./lsp.js";
 
 // 与 read 对称的 50KB 上限：超出直接拒绝写入——截断写入会静默损坏数据，拒绝才是正确语义。
@@ -15,6 +15,8 @@ export const write_file: Tool = {
       throw new Error("write_file: content 参数必须是字符串");
     }
     const abs = resolveInWorkspace(ctx.workspace, rel, "write_file");
+    assertNotAgentArea(rel, "write_file");
+    await assertRealContainment(ctx.workspace, abs, "write_file");
     const bytes = Buffer.byteLength(content, "utf8");
     if (bytes > WRITE_LIMIT_BYTES) {
       throw new Error(`write_file: 内容 ${bytes} 字节，超过 50KB 上限，已拒绝写入: ${rel}`);

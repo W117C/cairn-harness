@@ -1,6 +1,6 @@
 import { open, readFile, readdir, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { resolveInWorkspace, truncationNotice, ToolError, type Tool, type ToolResult } from "./base.js";
+import { assertRealContainment, resolveInWorkspace, truncationNotice, ToolError, type Tool, type ToolResult } from "./base.js";
 import { prefetchLsp } from "./lsp.js";
 
 // 输出上限 50KB；行截断 2000 字符；默认最多 2000 行。
@@ -72,6 +72,7 @@ export const read_file: Tool = {
   async run(args, ctx): Promise<ToolResult> {
     const rel = typeof args.path === "string" ? args.path : "";
     const abs = resolveInWorkspace(ctx.workspace, rel, "read_file");
+    await assertRealContainment(ctx.workspace, abs, "read_file");
 
     // 目录路径：列条目（目录读不了内容，但列条目是有用的输出）。
     const st = await stat(abs).catch(() => null);
