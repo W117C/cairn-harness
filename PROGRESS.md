@@ -902,3 +902,42 @@
 2. `M4 后加固② 性能/边界/正确性批`（1c5f46b）——优化记录 12 项 + tests/edge-cases。
 3. `M4 后加固③ 门禁自检批`（983a7c8）——assertion-health/gate-manifest + UNVERIFIED 口径 + 两条永真假门修复 + 门数 22→23。
 4. `M4 后加固④ 收口`（本笔）——PROGRESS/AGENTS/BLOCKED 文档同步 + outputs 四份报告入库。
+
+## H2 · M4 后加固第二轮（剩余 P1 收口 + 安全面 P2 精选）（2026-09-12）
+
+> 前置：H 轮收口（HEAD 5794796）。范围：审查报告剩余 8 条 P1 中的 7 条 + 安全类 P2 精选 3 条；性能类/结构性拆分/E-10 信任指纹/编排提示词立项不在本轮（留位见 H 轮）。
+
+### 任务结果（4 笔 + 文档笔，分笔见下）
+- **①工具/插件面路径安全**（C-2/C-3/C-11/E-12，根因 3 收口）：内容工具（read/write/edit）路径边界升级为 `assertRealContainment` realpath 归属校验（目标沿现存祖先链 realpath 后必须仍落 realpath(workspace) 内；workspace 本身是软链如 /tmp→/private/tmp 时零行为变化——AGENTS 环境注意项首次在工具层落地）+ `assertNotAgentArea`（.agent/ 系统区对内容工具整体拒写：permissions.json 跨会话提权面、lsp.json RCE 面；记忆走 remember 专用通道不受影响，只禁写不禁读）+ 插件 manifest 路径覆盖（commands/agents/skills/hooks）包含性校验越界拒载。tests/path-boundary 8 项。
+- **②权限与编排安全**（B-1/B-3/A-2/D-5）：git 破坏拦截改「有效二进制」判定（绝对路径 `/usr/bin/git`、exec 包装 `command/env/nohup`、换行分隔全拦；`bash -c` payload 剥引号后按同一套规则递归判定——`echo no git here` 这类 git 作参数的合法命令不误伤）+ spawn 入口与 runChain 环间 `aborted` fail-closed 检查（取消后不再派发不可取消 worker）+ clarify/plan 等人门可收束（`GateWaitOptions`：signal/timeoutMs，abort/超时即拒绝并清 pending，不再永久泄漏；无人值守 run 60s fail-closed，交互 run 语义不变）+ `agent:run` IPC 边界 mode 枚举白名单。tests/hardening2 13 项。
+- **③安全扫描与审查器**（E-7/E-8）：LLM 审查输入侧中和（diff/候选/上下文拼 user 消息前过 escapeControlTags，纵深防御不只靠 system 声明）+ contexts 总预算 24k + buildMessages 导出供单测 + 词法快筛加严（danger 规则统一 i 标志、deserialize 补 unsafe_load；启发式取舍显式文档化）。tests/hardening3 5 项 + security-check 42 断言回归（clean-demo 零误报）。
+- **④渲染层健壮性**（F-1/F-2/G-1）：send() 全程 try/catch 兜底（IPC 拒绝不再把 UI 钉死在「运行中」）+ 顶层 ErrorBoundary（error-boundary 新组件，重试渲染/重新加载双出口）+ clarify 已提交态改事件流投影（clarifySubmittedOf 随 payload 下传冻结表单，删除 store 死 action）。typecheck + build 绿，行为面由 panels-check（真实 Electron CDP）覆盖。
+
+### 反向验证实录（摘修复 → 哪条断言红 → 还原绿）
+1. 摘 `assertRealContainment` 判定（`if (false && …)`）→ path-boundary **3 红**（软链写/read/目录链穿透全变放行——外部 victim 文件真被改写的否定式锚点）→ 还原 **8/8 绿**。
+2. 摘 intercept 换行归一化（去掉 `.replace(/\r?\n/g, ";")`）→ hardening2 **「换行分隔拦截」红**（旧实现漏放复现）→ 还原 **13/13 绿**。
+3. 既有门回归：clarify/plan-gate/m3b 52 项绿、security-check 42 断言绿（case-insensitive + unsafe_load 未破坏 clean-demo 零误报）。
+
+### H2 新增坑记录
+- 坑七十六：**静态拦截的「token 出现」≠「命令调用」**——`bash -c 'echo no git here'` 里 git 是参数，按「段内含 git token 即拒」会误伤合法命令；对 payload 必须剥引号后按同一套「有效二进制」规则递归判定（先跳过赋值与 exec 包装再认命令字）。
+- 坑七十七：**等人门（挂起等待）必须有第三条出口**——clarify/plan 的 wait 只等提交一条路，取消/超时场景 promise 悬挂、pending 永久泄漏；挂起结构的出口集合 = 正常结算 + abort + 超时，缺一就是泄漏。
+- 坑七十八：**Mimosa PreToolUse 钩子拒绝 Bash 直写源码**（sed -i/重定向被拦，要求 Write/Edit 走可审查路径）——反向验证的「摘修复」操作也要走 Edit 工具做，不能图快用 sed。
+
+### 收口基线（2026-09-12）
+- `pnpm gates`：23/23 exit=0 + 体检零命中（终验实录见会话日志）；⚠️ 未证 2 项如实标注（同 H 轮：远程 MCP / provider:check 需凭据）。
+- test = **54 files / 495 passed / 0 skipped**（终验实测；新增 tests/path-boundary 8 + hardening2 12 + hardening3 5 = 3 文件 +25 用例，无删减）。
+- 判卷卫生：frozen-sha256 逐字节未改；判据零改动（本轮全部是 src 侧加固，门禁脚本未动）。
+
+### 分笔提交清单（本轮）
+1. `H2 加固① 工具/插件面路径安全`——base.ts 两闸 + 三工具接线 + manifest 包含性 + tests/path-boundary。
+2. `H2 加固② 权限与编排安全`——git 拦截有效二进制判定 + aborted fail-closed ×2 + 等人门可收束 + mode 白名单 + tests/hardening2。
+3. `H2 加固③ 安全扫描与审查器`——输入侧中和 + 总预算 + 快筛加严 + tests/hardening3。
+4. `H2 加固④ 渲染层健壮性`——send 兜底 + ErrorBoundary + clarify 提交态投影。
+5. `H2 加固⑤ 收口`（本笔）——PROGRESS H2 段 + BLOCKED D-2 立项。
+
+### 已审未修留位（审查报告剩余项，登记防丢失）
+1. **D-2 run 并发覆写权限态** → BLOCKED 立项（见 BLOCKED H2 节，需设计轮：逐 run 上下文重构 agent-runner 单例态）。
+2. 性能类（渲染层事件无界 + 投影 O(n²)、scheduler getState 全量 replay、spawn 全文扫日志）：M4+ 候选。
+3. 结构性拆分（orchestrator/main.tsx/panels registry）+ 会话切换序号守卫（F-3）：独立立项。
+4. E-10 信任按内容指纹（协议设计）、G-3 面板状态上提、F-7/F-8 设置与启动健壮性：择期。
+5. 编排提示词缺口（生产主会话无系统提示词）：待裁决立项（orchestration-prompt-review 有完整方案）。

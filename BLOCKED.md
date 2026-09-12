@@ -7,6 +7,14 @@
 3. **M4a-3 中断续跑采纳** → **追认**（M3c ③ 同款纪律：干净树基线复测 + stash pop 逐文件审查 + 全量重验；对中断期改动修正断言缺陷 6 处、采纳实现真缺陷修复 2 处的记录充分）。
 4. **M4a-4 schedule-check C4 判据先加严后红** → **追认**（沿 M3b J7d「先加严再打红」先例，判据加严非放宽）。
 
+## 立项备案（2026-09-12，H2 轮；不阻塞推进，需设计轮）
+
+**D-2「run 并发覆写权限态」（审查报告 P1，`agent-runner.ts` 模块级单例）→ 立项待设计，本轮不做**。
+
+定性：`handleAgentRun` 的 `session` / `activeOrchestrator` 等模块级单例在并发 run 下互相覆写——UI 交互 run 与定时 unattended run 并发时，后到者覆盖前者的编排器引用与权限/审批路由面。但**并发定时运行是 M4a 已支持的生产路径**（`scheduleConcurrencyCap` 1–8，schedule-check D 段判卷并发闸语义）：进程级 run 互斥会直接破坏该特性，属「修 A 破 B」，不采纳。
+
+需设计轮：逐 run 上下文对象（RunScope）重构单例态的读写面（session / activeOrchestrator / TOOLS 注入面 / ask·clarify·plan 路由），涉及 `agent-runner.ts`（~1600 行）与 IPC decide 路由；回归面宽（ipc / panels / schedule / agents 四门 + 半托截图）。本轮已落的相邻防护：等人门可收束（A-2）、mode 白名单（D-5）、spawn aborted fail-closed（B-3）。**验收标准建议**：并发双 run（1 交互 + 1 unattended）下审批路由与 state 投影互不串门 + 四门全绿 + 反向验证（摘 RunScope 隔离 → 审批串门复现）。
+
 ## 待裁决（2026-09-12，H-1/H-2 门禁自检轮备案）
 
 **背景**：审查报告 `outputs/code-review-report-2026-09-12.md` 的 H-1/H-2 指出「恒真式体检判据面远窄于宣称」与「`unverified` 不影响退出码」。本轮落地时新发现 **2 道永真假门**（旧体检因不识别 `||` 形态而完全漏网），一并备案。
