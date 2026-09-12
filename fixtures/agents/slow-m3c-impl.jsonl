@@ -1,0 +1,2 @@
+{"type":"tool_call","id":"mi-1","name":"write_file","args":{"path":"m3c-impl.txt","content":"M3c pipeline pilot 实现产出\n"}}
+{"type":"assistant_message","content":"改了什么：新增 m3c-impl.txt。为什么：pipeline 第一环（pilot，isolation=worktree）。验证方式：文件存在。风险：低。"}

@@ -1,0 +1,2 @@
+{"type":"tool_call","id":"mr-1","name":"read_file","args":{"path":"README.md"}}
+{"type":"assistant_message","content":"## 结论\npilot 环产出已核验：实现环为只读链环提供了可对照的基线文本。\nverdict: pass\n## 风险\n无新增风险。\n## 未决问题\n无。"}

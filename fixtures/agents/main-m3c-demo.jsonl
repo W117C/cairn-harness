@@ -1,0 +1,5 @@
+{"type":"assistant_message","content":"M3c 并行压力演示：我同时派三路 worker——write（worktree 写产出）、read（只读调研）、pipeline（pilot→checker 两环，整链一个审批，sequencer 零 LLM 展开）。"}
+{"type":"tool_call","id":"m3c-w","name":"spawn_agent","args":{"task":"在 worktree 新增 m3c-write.txt 压力验收样例","mode":"write","model":"slow-m3c-write.jsonl"}}
+{"type":"tool_call","id":"m3c-r","name":"spawn_agent","args":{"task":"只读调研：通读 README 并给出结构化调研报告","mode":"read","model":"slow-worker.jsonl"}}
+{"type":"tool_call","id":"m3c-p","name":"spawn_agent","args":{"mode":"pipeline","stages":[{"role":"pipeline-crew:pilot","task":"实现链产出示例 m3c-impl.txt"},{"role":"pipeline-crew:checker","task":"评审 pilot 的实现产出"}]}}
+{"type":"assistant_message","content":"三路已并行开工。pipeline 整链一个审批（批准即授权全链）；write/read 直接开工，agents 面板可同屏看到三列 running。"}

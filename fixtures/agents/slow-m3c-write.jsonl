@@ -1,0 +1,4 @@
+{"type":"tool_call","id":"mw-1","name":"read_file","args":{"path":"README.md"}}
+{"type":"assistant_message","content":"先看一眼仓库根，再落示例文件。"}
+{"type":"tool_call","id":"mw-2","name":"write_file","args":{"path":"m3c-write.txt","content":"M3c 并行压力验收：write worker 产出\n"}}
+{"type":"assistant_message","content":"改了什么：新增 m3c-write.txt。为什么：三路并行压力验收的写产出。验证方式：文件存在且内容可读。风险：低。"}
