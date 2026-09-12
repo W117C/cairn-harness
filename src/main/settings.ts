@@ -5,8 +5,9 @@ import { dirname } from "node:path";
 
 // M2d：第四面板 memory（两层记忆快照 + 会话内 remember 审计投影）；M2e：第五面板 plugins（插件容器）；
 // M2f：第六面板 sidechat（辅助对话：只读旁路会话 + 提升记录投影）；
-// M3a：第七面板 agents（多 agent 状态：每 worker 一列，§10.2）。
-export const PANEL_IDS = ["approvals", "token", "git", "memory", "plugins", "sidechat", "agents"] as const;
+// M3a：第七面板 agents（多 agent 状态：每 worker 一列，§10.2）；
+// M4a：第八面板 schedule（定时任务：列表/表单/历史六态，§12.2.6）。
+export const PANEL_IDS = ["approvals", "token", "git", "memory", "plugins", "sidechat", "agents", "schedule"] as const;
 export type PanelId = (typeof PANEL_IDS)[number];
 
 export interface LayoutState {
@@ -35,11 +36,13 @@ export interface AppSettings {
   maxBudgetUsd: number;
   /** M3c：每百万 token 单价（USD）；0 = 闸无效化（缺省零行为）。 */
   budgetPricePerMTok: number;
+  /** M4a §12.2.3：同时运行的定时会话上限（1-8；缺省 2）。与 worker 并发上限 4 独立计数。 */
+  scheduleConcurrencyCap: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   layout: {
-    open: { approvals: false, token: false, git: false, memory: false, plugins: false, sidechat: false, agents: false },
+    open: { approvals: false, token: false, git: false, memory: false, plugins: false, sidechat: false, agents: false, schedule: false },
     activePanel: null,
     width: 32,
   },
@@ -50,6 +53,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoMemory: true,
   maxBudgetUsd: 0,
   budgetPricePerMTok: 0,
+  scheduleConcurrencyCap: 2,
 };
 
 const PERMISSION_MODES = ["read-only", "default", "auto"] as const;
@@ -74,6 +78,7 @@ export function validateSettings(raw: unknown): AppSettings {
     plugins: d.layout.open.plugins === true,
     sidechat: d.layout.open.sidechat === true,
     agents: d.layout.open.agents === true,
+    schedule: d.layout.open.schedule === true,
   };
   if (typeof layoutRaw.open === "object" && layoutRaw.open !== null) {
     for (const [k, v] of Object.entries(layoutRaw.open as Record<string, unknown>)) {
@@ -87,6 +92,9 @@ export function validateSettings(raw: unknown): AppSettings {
   const activePanel = isPanelId(layoutRaw.activePanel) ? layoutRaw.activePanel : null;
   const nonNegNumber = (v: unknown): number | null =>
     typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
+  const capRaw = typeof r.scheduleConcurrencyCap === "number" && Number.isInteger(r.scheduleConcurrencyCap)
+    ? r.scheduleConcurrencyCap
+    : null;
   return {
     layout: { open, activePanel, width },
     mode: PERMISSION_MODES.includes(r.mode as PermissionMode) ? (r.mode as PermissionMode) : d.mode,
@@ -96,6 +104,7 @@ export function validateSettings(raw: unknown): AppSettings {
     autoMemory: typeof r.autoMemory === "boolean" ? r.autoMemory : d.autoMemory,
     maxBudgetUsd: nonNegNumber(r.maxBudgetUsd) ?? d.maxBudgetUsd,
     budgetPricePerMTok: nonNegNumber(r.budgetPricePerMTok) ?? d.budgetPricePerMTok,
+    scheduleConcurrencyCap: capRaw !== null && capRaw >= 1 && capRaw <= 8 ? capRaw : d.scheduleConcurrencyCap,
   };
 }
 
@@ -124,7 +133,8 @@ export class SettingsStore {
     const next: AppSettings = {
       ...cur,
       ...("mode" in patch || "safeMode" in patch || "theme" in patch || "currentSession" in patch ||
-        "autoMemory" in patch || "maxBudgetUsd" in patch || "budgetPricePerMTok" in patch
+        "autoMemory" in patch || "maxBudgetUsd" in patch || "budgetPricePerMTok" in patch ||
+        "scheduleConcurrencyCap" in patch
         ? patch
         : {}),
       layout: patch.layout

@@ -83,9 +83,10 @@ export const SPAWN_MODES: readonly string[] = ["read", "write", "pipeline"];
 /** worker 工具表（read mode，§4.4.6）：read/grep/glob/LSP + 只读 bash（shell_ro）。
  *  **构造时即不含 spawn_agent 与任何写工具**（深度恒 1 的机制化，非运行时报错）。 */
 export const WORKER_TOOL_TABLE: readonly string[] = ["read_file", "grep", "glob", "lsp", "shell_ro"];
-/** worker 工具表禁入名单（验收断言面：深度闸 + 写闸）。 */
+/** worker 工具表禁入名单（验收断言面：深度闸 + 写闸 + M4a automation_*——定时任务里再嵌套定时 = 配置面失控，§12.2.5）。 */
 export const WORKER_FORBIDDEN_TOOLS: readonly string[] = [
   "spawn_agent", "write_file", "edit_file", "run_shell", "clarify", "propose_plan", "verify", "remember",
+  "automation_create", "automation_update", "automation_delete", "automation_run_now", "automation_list",
 ];
 
 /** M3b write mode worker 工具表（§4.4.5）：worktree 完全可写 + shell_rw（git 拦截层）+
@@ -94,9 +95,10 @@ export const WORKER_FORBIDDEN_TOOLS: readonly string[] = [
 export const WRITE_WORKER_TOOL_TABLE: readonly string[] = [
   "read_file", "grep", "glob", "lsp", "write_file", "edit_file", "shell_rw", "remember",
 ];
-/** write mode 禁入名单（验收断言面：深度闸 + 合并权闸）。 */
+/** write mode 禁入名单（验收断言面：深度闸 + 合并权闸 + M4a automation_*）。 */
 export const WRITE_WORKER_FORBIDDEN_TOOLS: readonly string[] = [
   "spawn_agent", "run_shell", "clarify", "propose_plan", "verify", "merge", "commit",
+  "automation_create", "automation_update", "automation_delete", "automation_run_now", "automation_list",
 ];
 
 // ---- M3c：pipeline sequencer / 卡死检测 / 成本闸 / worker 压缩 参数 ----

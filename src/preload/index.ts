@@ -68,6 +68,11 @@ const api: AgentApi = {
     scope?: "once" | "session_kind" | "always";
     targetAgentId?: string;
   }) => ipcRenderer.invoke("agent:card-action", req),
+  // M4a：定时任务（schedule 面板四通道，§12.2.6）；upsert form 缺省 true，既有任务开关传 false
+  scheduleSnapshot: () => ipcRenderer.invoke("agent:schedule-snapshot"),
+  scheduleUpsert: (def: unknown, form?: boolean) => ipcRenderer.invoke("agent:schedule-upsert", def, form ?? true),
+  scheduleDelete: (id: string) => ipcRenderer.invoke("agent:schedule-delete", id),
+  scheduleRunNow: (id: string) => ipcRenderer.invoke("agent:schedule-run-now", id),
 };
 
 contextBridge.exposeInMainWorld("agent", api);

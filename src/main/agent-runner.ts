@@ -75,6 +75,8 @@ import { checkSandbox, runInSandbox, type SandboxStatus } from "./sandbox";
 import { PluginRuntime, setCurrentPluginRuntime, currentPluginRuntime, type PluginPanelSnapshot } from "../agent/plugins";
 import type { HookEngine } from "../agent/plugins/hooks";
 import type { McpToolInfo } from "../agent/plugins/mcp";
+import { Scheduler, type ScheduleSnapshot, type TriggerExecutor } from "./scheduler";
+import { validateAutomation, isUnattendedTier } from "./automations";
 import {
   runSidechatTurn,
   promoteToMain,
@@ -254,7 +256,7 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
             const tip = downgradeSuggestion(s.autonomy);
             if (tip) console.warn("[permissions] " + tip);
           }
-          return denied(name, s.autonomy.mode, "未获批准");
+          return denied(name, s.autonomy.mode, r.reason === "unattended" ? "无人值守 fail-closed：审批请求自动拒绝" : "未获批准");
         }
         // scope 回写（§10.4）：网络类命令强制 once（出网审计，scope 不放行）
         const effScope: AskScope = isNetworkCommandCall(name, args) ? "once" : r.scope;
@@ -522,12 +524,202 @@ export function installAppTools(): void {
       return await orch.spawn(args as SpawnArgs, { callId: ctx.callId });
     },
   };
+  // M4a：agent 工具五件（§12.2.5）——automation_create/update/delete/run_now/list。
+  // 一切变更走审批卡（§10.4）；prompt 是持久化攻击面：4k 上限（校验拒）+ 审批卡全文展示（args 原样进审批卡）；
+  // workspace-write 及以上档位 → 审批卡红字「将无人值守执行」（§12.2.5）；调度器未初始化 = fail-closed。
+  installAutomationTools();
 }
 
 const appAskGate = new AskGate({
   notify: (req) => hooks.onAsk?.(req),
   notifyOutcome: (askId, outcome, reason) => hooks.onAskOutcome?.({ askId, outcome, reason }),
 });
+
+// ---- M4a：定时任务调度器接线（§12.2）——初始化 / IPC handlers / 触发执行器 ----
+// 触发 = 全新会话走既有 createSession（调度器内）+ handleAgentRun（真实代码路径，unattended 覆盖）；
+// 主时间线落流 = 当前会话 append（有则落）+ UI 推送；journal 始终留账（双轨之二）。
+let scheduler: Scheduler | null = null;
+let scheduleCapCache = 2;
+
+/** shell / 验收脚本初始化调度器（幂等）。 */
+export function initScheduler(opts: {
+  dataDir: string;
+  sessionsDir: string;
+  workspace?: string;
+  clock?: () => number;
+  jitterMs?: () => number;
+  cap?: number;
+}): void {
+  if (scheduler) return;
+  if (opts.cap !== undefined) scheduleCapCache = opts.cap;
+  const ws = opts.workspace ?? WORKSPACE;
+  scheduler = new Scheduler({
+    dataDir: opts.dataDir,
+    sessionsDir: opts.sessionsDir,
+    workspace: ws,
+    // M4a 触发执行器（真缺陷修复，schedule-check F 段抓出）：makeScheduledExecutor 已导出但从未接线，
+    // 生产路径每次触发都会落「调度器未接线执行器（fail-closed）」——触发 = 全新会话的真实代码路径由此接通。
+    runSession: makeScheduledExecutor(ws),
+    ...(opts.clock ? { clock: opts.clock } : {}),
+    ...(opts.jitterMs ? { jitterMs: opts.jitterMs } : {}),
+    getCap: () => scheduleCapCache,
+    emitTimeline: async (e: AgentEvent) => {
+      const cur = (await store().get()).currentSession;
+      if (sessionsDir && cur) await createEventLog(pathOf(sessionsDir, cur)).append(e);
+      hooks.onEvent?.(e);
+    },
+  });
+}
+
+export function getScheduler(): Scheduler | null {
+  return scheduler;
+}
+
+export async function startScheduler(): Promise<void> {
+  // 并发上限从 settings 预热（getCap 为同步读缓存）
+  try {
+    const s = await store().get();
+    scheduleCapCache = s.scheduleConcurrencyCap;
+  } catch {
+    /* 缺省 2 */
+  }
+  await scheduler?.start();
+}
+
+export function stopScheduler(): void {
+  scheduler?.stop();
+}
+
+/** 设置页并发上限变更 → 调度器即时生效（setSettings 转发）。 */
+export function updateScheduleCap(cap: number): void {
+  if (Number.isInteger(cap) && cap >= 1 && cap <= 8) scheduleCapCache = cap;
+}
+
+/** 定时触发执行器（真实代码路径）：handleAgentRun + unattended 覆盖 + signal 透传。 */
+export function makeScheduledExecutor(workspace: string): TriggerExecutor {
+  return async ({ sessionId, message, mode, signal }) => {
+    return await handleAgentRun({ message, mode }, { sessionId, workspace, unattended: true, signal });
+  };
+}
+
+export async function handleScheduleSnapshot(): Promise<ScheduleSnapshot> {
+  if (!scheduler) return { tasks: [], history: [], running: 0, queued: 0, cap: scheduleCapCache, startupDone: false };
+  return await scheduler.snapshot();
+}
+
+export async function handleScheduleUpsert(raw: unknown, form = true): Promise<{ ok: boolean; error?: string }> {
+  if (!scheduler) return { ok: false, error: "调度器未初始化（fail-closed）" };
+  const r = await scheduler.upsert(raw, { form });
+  return r.ok ? { ok: true } : { ok: false, error: r.errors.join("；") };
+}
+
+export async function handleScheduleDelete(id: string): Promise<{ ok: boolean; error?: string }> {
+  if (!scheduler) return { ok: false, error: "调度器未初始化（fail-closed）" };
+  return await scheduler.remove(id);
+}
+
+export async function handleScheduleRunNow(id: string): Promise<{ ok: boolean; error?: string }> {
+  if (!scheduler) return { ok: false, error: "调度器未初始化（fail-closed）" };
+  return await scheduler.runNow(id);
+}
+
+/** agent 工具五件的实现（§12.2.5）：validate 先行 → 审批卡（全文展示 + 红字判定）→ 落库。 */
+function installAutomationTools(): void {
+  const table = TOOLS as unknown as Record<string, Tool>;
+  const schRef = () => scheduler;
+  const approval = async (tool: string, args: Record<string, unknown>, redNote: boolean): Promise<ToolResult | null> => {
+    const s = session;
+    if (!s) return { ok: false, output: "[permission denied] " + tool + "（工具门未接线，fail-closed）" };
+    if (!s.askGate) return { ok: false, output: "[permission denied] " + tool + "（非交互模式，fail-closed）" };
+    const reason =
+      "定时任务变更（审批卡全文展示）" +
+      (redNote ? " ⚠ 将无人值守执行：触发时一切审批请求自动拒绝（fail-closed）" : "");
+    const r = await s.askGate.request(tool, args, { reason, risk: "medium" });
+    if (r.outcome !== "approved") {
+      const why = r.reason === "unattended" ? "无人值守 fail-closed：审批请求自动拒绝" : "未获批准";
+      return { ok: false, output: "[permission denied] " + tool + "（" + why + "）" };
+    }
+    return null;
+  };
+  const needScheduler = (): ToolResult | null =>
+    schRef() ? null : { ok: false, output: "调度器未初始化（fail-closed）" };
+  table["automation_create"] = {
+    name: "automation_create",
+    async run(args) {
+      const v = validateAutomation(args, { form: true });
+      if (!v.ok) return { ok: false, output: "automation_create 参数无效：" + v.errors.join("；") };
+      const denial = await approval("automation_create", args, isUnattendedTier(v.value.permissionTier));
+      if (denial) return denial;
+      const ns = needScheduler();
+      if (ns) return ns;
+      const r = await schRef()!.upsert(args, { form: true });
+      return r.ok
+        ? { ok: true, output: "已创建定时任务 " + r.value.name + "（id=" + r.value.id + "，permissionTier=" + r.value.permissionTier + "，下次触发 " + (r.value.nextRunAt ?? "无") + "）" }
+        : { ok: false, output: "automation_create 失败：" + r.errors.join("；") };
+    },
+  };
+  table["automation_update"] = {
+    name: "automation_update",
+    async run(args) {
+      const ns0 = needScheduler();
+      if (ns0) return ns0;
+      const sch = schRef()!;
+      const id = typeof args.id === "string" ? args.id : "";
+      if (id === "") return { ok: false, output: "automation_update: id 必填" };
+      const cur = sch.list().find((t) => t.id === id);
+      if (!cur) return { ok: false, output: "automation_update: 任务不存在 " + id };
+      const merged = { ...cur, ...args, id, createdAt: cur.createdAt, updatedAt: cur.updatedAt };
+      const v = validateAutomation(merged, { form: true });
+      if (!v.ok) return { ok: false, output: "automation_update 合并后无效：" + v.errors.join("；") };
+      const denial = await approval("automation_update", { ...v.value }, isUnattendedTier(v.value.permissionTier));
+      if (denial) return denial;
+      const r = await sch.upsert(v.value, { form: true });
+      return r.ok
+        ? { ok: true, output: "已更新定时任务 " + r.value.name + "（id=" + r.value.id + "）" }
+        : { ok: false, output: "automation_update 失败：" + r.errors.join("；") };
+    },
+  };
+  table["automation_delete"] = {
+    name: "automation_delete",
+    async run(args) {
+      const ns0 = needScheduler();
+      if (ns0) return ns0;
+      const sch = schRef()!;
+      const id = typeof args.id === "string" ? args.id : "";
+      if (id === "") return { ok: false, output: "automation_delete: id 必填" };
+      const cur = sch.list().find((t) => t.id === id);
+      const denial = await approval("automation_delete", { id, ...(cur ? { name: cur.name } : {}) }, false);
+      if (denial) return denial;
+      const r = await sch.remove(id);
+      return r.ok ? { ok: true, output: "已删除定时任务 " + id } : { ok: false, output: "automation_delete 失败：" + (r.error ?? "未知") };
+    },
+  };
+  table["automation_run_now"] = {
+    name: "automation_run_now",
+    async run(args) {
+      const ns0 = needScheduler();
+      if (ns0) return ns0;
+      const id = typeof args.id === "string" ? args.id : "";
+      if (id === "") return { ok: false, output: "automation_run_now: id 必填" };
+      const denial = await approval("automation_run_now", { id }, false);
+      if (denial) return denial;
+      const r = await schRef()!.runNow(id);
+      return r.ok ? { ok: true, output: "已手动触发 " + id + "（走准入管线：去重/并发/重叠闸生效）" } : { ok: false, output: "automation_run_now：" + (r.error ?? "未知") };
+    },
+  };
+  table["automation_list"] = {
+    name: "automation_list",
+    async run() {
+      const ns0 = needScheduler();
+      if (ns0) return ns0;
+      const tasks = schRef()!.list().map((t) => ({
+        id: t.id, name: t.name, kind: t.schedule.kind, timeZone: t.timeZone,
+        permissionTier: t.permissionTier, catchUp: t.catchUp, enabled: t.enabled, nextRunAt: t.nextRunAt,
+      }));
+      return { ok: true, output: JSON.stringify(tasks, null, 2) };
+    },
+  };
+}
 
 let sandboxState: SandboxStatus = { available: false, reason: "尚未自检" };
 
@@ -548,6 +740,10 @@ export interface RunOptions {
   askGate?: AskGate;
   /** 缺省 = 不做沙箱包裹。 */
   sandbox?: SandboxStatus | null;
+  /** M4a 无人值守（§12.2.4）：会话尾自动沉淀跳过（审批必被拒 = 纯噪音）；审批门由调用方给 unattended 门。 */
+  unattended?: boolean;
+  /** M4a 超时闸一：取消信号（loop 轮界收束，§4.4.8 AbortController 同族）。 */
+  signal?: AbortSignal;
 }
 
 // M1a 真流式演示通道：M0A_PROVIDER=glm 时用真模型单轮流式（无 tools，纯文本；
@@ -684,6 +880,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       plan: appPlanGate,
       verify: createVerifyHook(opts.workspace, { exec: verifyExec(opts.sandbox ?? null) }),
       ...(rt ? { hooks: rt.hooks } : {}),
+      ...(opts.signal ? { signal: opts.signal } : {}),
     });
     // M2e：Stop（agent 收束）与 SessionEnd（会话收尾）——fire-and-forget，失败只告警。
     if (rt) {
@@ -742,7 +939,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     try {
       const autoMemory = (await store().get()).autoMemory;
       const outcome = await runSessionEndDistill({
-        enabled: autoMemory && opts.mode !== "read-only",
+        enabled: autoMemory && opts.mode !== "read-only" && opts.unattended !== true,
         logPath: opts.logPath,
         workspace: opts.workspace,
         provider: createProvider(opts.message),
@@ -785,9 +982,16 @@ export interface RunOverrides {
   /** M1e：会话模式 —— run 追加到该会话（不 rm 日志），消息落该会话 JSONL。 */
   sessionId?: string;
   onEvent?: (e: AgentEvent) => void;
+  /** M4a 无人值守：unattended 审批门（立即拒绝 fail-closed）+ 跳过会话尾沉淀。 */
+  unattended?: boolean;
+  /** M4a 超时闸一：取消信号（轮界收束）。 */
+  signal?: AbortSignal;
 }
 
-/** IPC "agent:run" 的处理函数 —— main 暴露的同一入口，ipc:check 直调（不经 UI）。 */
+const unattendedAskGate = new AskGate({ unattended: true });
+
+/** IPC "agent:run" 的处理函数 —— main 暴露的同一入口，ipc:check 直调（不经 UI）。
+ *  M4a：定时触发同走本入口（headless、unattended 覆盖 + signal 透传），真实代码路径零分叉。 */
 export async function handleAgentRun(
   req: RunRequest,
   over: RunOverrides = {},
@@ -805,11 +1009,13 @@ export async function handleAgentRun(
       mode: req.mode,
       logPath,
       ...(sessionMode ? { sessionId: over.sessionId } : {}),
+      ...(over.unattended ? { unattended: true as const } : {}),
+      ...(over.signal ? { signal: over.signal } : {}),
       onEvent: (e) => {
         over.onEvent?.(e);
         hooks.onEvent?.(e);
       },
-      askGate: appAskGate,
+      askGate: over.unattended ? unattendedAskGate : appAskGate,
       sandbox: sandboxState,
     });
     return { ok: true };
@@ -990,7 +1196,7 @@ async function memorySnapshot(): Promise<MemorySnapshot> {
 }
 
 /** IPC "agent:state" 的处理函数。 */
-export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memory?: MemorySnapshot; plugins?: PluginPanelSnapshot; sidechat?: SidechatPanelSnapshot; worktree?: { orphans: string[] } }> {
+export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memory?: MemorySnapshot; plugins?: PluginPanelSnapshot; sidechat?: SidechatPanelSnapshot; worktree?: { orphans: string[] }; schedule?: ScheduleSnapshot }> {
   let memory: MemorySnapshot | undefined;
   try {
     memory = await memorySnapshot();
@@ -1017,7 +1223,15 @@ export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memo
   } catch {
     worktree = undefined;
   }
-  return { sandbox: sandboxState, memory, plugins, sidechat, worktree };
+  // M4a schedule 面板快照（真缺陷修复，半托截图路径抓出：schedule 通道挂了 IPC handler 但从未进 state 应答，
+  // 面板 getState().schedule 恒 undefined → 任务列表/运行历史永久为空）
+  let schedule: ScheduleSnapshot | undefined;
+  try {
+    schedule = await handleScheduleSnapshot();
+  } catch {
+    schedule = undefined;
+  }
+  return { sandbox: sandboxState, memory, plugins, sidechat, worktree, schedule };
 }
 
 /** M3b 孤儿 worktree 扫描（纯投影面）：.agents/wt-* 目录 − 事件流有终态/收尾记录的 agent。 */
@@ -1109,6 +1323,8 @@ export async function setSettings(patch: Partial<AppSettings>): Promise<AppSetti
     if (next.safeMode === "off") delete process.env.M1E_SAFE_MODE;
     else process.env.M1E_SAFE_MODE = next.safeMode;
   }
+  // M4a：定时并发上限变更 → 调度器即时生效
+  if (patch.scheduleConcurrencyCap !== undefined) updateScheduleCap(next.scheduleConcurrencyCap);
   return next;
 }
 

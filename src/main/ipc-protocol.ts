@@ -4,6 +4,7 @@ import type { PermissionMode } from "../permissions";
 import type { ToolName } from "../tools/base";
 import type { SandboxStatus } from "./sandbox";
 import type { AppSettings } from "./settings";
+import type { ScheduleSnapshot } from "./scheduler";
 
 export type { AgentEvent } from "../events";
 export type { PermissionMode } from "../permissions";
@@ -33,7 +34,8 @@ export interface AskPayload {
 export interface AskOutcomePayload {
   askId: string;
   outcome: "approved" | "rejected";
-  reason: "user" | "timeout";
+  /** M4a 增 "unattended"：无人值守 fail-closed 自动拒绝（§12.2.4）。 */
+  reason: "user" | "timeout" | "unattended";
 }
 export interface StateResponse {
   sandbox: SandboxStatus;
@@ -45,6 +47,8 @@ export interface StateResponse {
   sidechat?: SidechatPanelSnapshot;
   /** M3b：孤儿 worktree 扫描（§4.4.9 只列不自动删；git 面板「可清理」列表数据源）。 */
   worktree?: { orphans: string[] };
+  /** M4a：定时任务面板快照（任务定义 + 运行历史投影 + 并发计数；journal/会话纯投影）。 */
+  schedule?: ScheduleSnapshot;
 }
 
 /** M2f sidechat 面板快照（纯投影：会话清单 + 最近消息 + 已提升记录）。
@@ -74,11 +78,14 @@ export interface CompactResponse {
 /** 澄清表单提交值：key = 问题原文，value = 选中项或自由补充。 */
 export type ClarifyAnswers = Record<string, string | string[]>;
 
-/** M1e 会话列表条目（main → renderer）。 */
+/** M1e 会话列表条目（main → renderer）。M4a：定时会话徽标投影（origin/automation_id，§12.2.6）。 */
 export interface SessionInfoPayload {
   id: string;
   mtimeMs: number;
   lines: number;
+  origin?: "scheduled";
+  automationId?: string;
+  automationName?: string;
 }
 
 // ---- M2d 记忆快照（getState 透传：两层记忆 + 外部引用待批清单）----
@@ -155,4 +162,10 @@ export interface AgentApi {
     scope?: "once" | "session_kind" | "always";
     targetAgentId?: string;
   }): Promise<{ ok: boolean; error?: string }>;
+  /** M4a：定时任务（§12.2.6 schedule 面板）：快照 / 创建或更新 / 删除 / 手动触发。
+   *  upsert 的 form 缺省 true（表单四 kind 白名单）；既有任务的 enabled 开关等数据模型更新传 false。 */
+  scheduleSnapshot(): Promise<ScheduleSnapshot>;
+  scheduleUpsert(def: unknown, form?: boolean): Promise<{ ok: boolean; error?: string }>;
+  scheduleDelete(id: string): Promise<{ ok: boolean; error?: string }>;
+  scheduleRunNow(id: string): Promise<{ ok: boolean; error?: string }>;
 }

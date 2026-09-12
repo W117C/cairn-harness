@@ -2,7 +2,7 @@
 // sessionsRoot() 下每个 *.jsonl 文件 = 一个会话，文件名 = 会话名。
 // 新建/切换/重命名/删除；删除当前会话回退到最近一个（mtime 降序）。
 // electron-free（root 由调用方传入：app 用 userData，验收脚本用临时目录），可 headless 单测。
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentEvent } from "../events";
 import { createEventLog, replay } from "../events";
@@ -13,6 +13,33 @@ export interface SessionInfo {
   mtimeMs: number;
   /** JSONL 行数（投影事件数 = 行数，验收口径）。 */
   lines: number;
+  /** M4a：定时会话徽标投影（首行 session_meta.origin="scheduled"，§12.2.6）。缺省 = 交互会话。 */
+  origin?: "scheduled";
+  automationId?: string;
+  automationName?: string;
+}
+
+/** 首行 session_meta 投影（定时徽标数据源；坏首行/空文件 = 交互会话）。 */
+async function readMetaHead(p: string): Promise<Pick<SessionInfo, "origin" | "automationId" | "automationName"> | null> {
+  try {
+    const fh = await open(p, "r");
+    try {
+      const buf = Buffer.alloc(1024);
+      const { bytesRead } = await fh.read(buf, 0, 1024, 0);
+      const firstLine = buf.subarray(0, bytesRead).toString("utf8").split("\n")[0] ?? "";
+      const meta = JSON.parse(firstLine) as { type?: string; origin?: string; automation_id?: string; automation_name?: string };
+      if (meta.type !== "session_meta" || meta.origin !== "scheduled") return null;
+      return {
+        origin: "scheduled",
+        ...(typeof meta.automation_id === "string" ? { automationId: meta.automation_id } : {}),
+        ...(typeof meta.automation_name === "string" ? { automationName: meta.automation_name } : {}),
+      };
+    } finally {
+      await fh.close();
+    }
+  } catch {
+    return null;
+  }
 }
 
 /** 会话名合法性：可打印、无路径分隔符、不为点、长度 1–80（renderer IPC 是信任边界，fail-closed）。 */
@@ -43,7 +70,8 @@ export async function listSessions(root: string): Promise<SessionInfo[]> {
       if (!st.isFile()) continue;
       const raw = await readFile(p, "utf8");
       const lines = raw.split("\n").filter((l) => l.trim().length > 0).length;
-      out.push({ id, mtimeMs: st.mtimeMs, lines });
+      const meta = await readMetaHead(p);
+      out.push({ id, mtimeMs: st.mtimeMs, lines, ...(meta ?? {}) });
     } catch {
       // 竞态删除/不可读：跳过，不出现在列表
     }

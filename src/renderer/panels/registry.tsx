@@ -1,16 +1,29 @@
 // 面板注册表（§10.2）：panel_id → 组件。M1 三类：approvals / token / git；M2d memory、M2e plugins、
-// M2f sidechat、M3a agents（多 agent 状态）、M3b git 合并控制塔。
+// M2f sidechat、M3a agents（多 agent 状态）、M3b git 合并控制塔、M4a schedule（定时任务 §12.2.6）。
 // 未知 panel_id 落兜底面板，绝不抛异常（与卡片注册表同构）。
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ApprovalCard, DiffCard } from "../cards/registry";
 import {
   EMPTY_SIDECHAT_USAGE,
+  HISTORY_STATES,
   mergeTokenProjections,
+  skipReasonLabel,
   type AgentColumn,
   type DiffCardProjection,
+  type HistoryFilter,
   type MemoryWriteProjection,
   type MergeTowerColumn,
   type TokenByAgentProjection,
@@ -18,11 +31,12 @@ import {
   type TokenProjection,
 } from "../projections";
 import type { MemorySnapshot, StateResponse, SidechatPanelSnapshot } from "../../main/ipc-protocol";
+import type { ScheduleSnapshot } from "../../main/scheduler";
 import type { PluginPanelSnapshot } from "../../agent/plugins";
 
-/** M1 面板三类（§10.2 清单的 M1 里程碑行）+ M2d memory + M2e plugins + M2f sidechat + M3a agents；
- *  与 main/settings 的 PANEL_IDS 同源字符串。 */
-export type PanelId = "approvals" | "token" | "git" | "memory" | "plugins" | "sidechat" | "agents";
+/** M1 面板三类（§10.2 清单的 M1 里程碑行）+ M2d memory + M2e plugins + M2f sidechat + M3a agents
+ *  + M4a schedule；与 main/settings 的 PANEL_IDS 同源字符串。 */
+export type PanelId = "approvals" | "token" | "git" | "memory" | "plugins" | "sidechat" | "agents" | "schedule";
 
 export interface PanelProps {
   /** 当前会话事件流投影载荷（各面板字段可选）。 */
@@ -940,6 +954,259 @@ export function AgentsPanel({ payload, onAction }: PanelProps): ReactElement {
   );
 }
 
+/** M4a 定时任务面板（§12.2.6）：任务列表（名称/kind/下次触发/上次状态/enabled 开关）
+ *  + 创建表单（kind 联动字段、时区带偏移预览、权限档、catchUp）+ 运行历史（六态筛选；skipped hover 原因）。
+ *  数据 = getState().schedule 快照（journal/会话/内存 inflight 纯投影，零私有状态）。 */
+type FormKind = "once" | "interval" | "daily" | "weekly";
+const FORM_KINDS: FormKind[] = ["once", "interval", "daily", "weekly"];
+const TIERS = ["read-only", "workspace-write", "danger-full-access"] as const;
+
+function SchedulePanel({ payload }: PanelProps): ReactElement {
+  const [snap, setSnap] = useState<ScheduleSnapshot | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [filter, setFilter] = useState<HistoryFilter>("all");
+  const [formOpen, setFormOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [kind, setKind] = useState<FormKind>("daily");
+  const [at, setAt] = useState("");
+  const [everyMinutes, setEveryMinutes] = useState("30");
+  const [time, setTime] = useState("09:00");
+  const [weekdays, setWeekdays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [tier, setTier] = useState<(typeof TIERS)[number]>("read-only");
+  const [catchUp, setCatchUp] = useState<"latest" | "skip">("latest");
+  const [tz, setTz] = useState<string>(() => {
+    if (typeof window === "undefined") return "UTC";
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return "UTC"; }
+  });
+  const canSchedule = typeof window !== "undefined" && typeof window.agent?.scheduleUpsert === "function";
+  const reload = useCallback(async () => {
+    try {
+      const st: StateResponse = await window.agent.getState();
+      setSnap(st.schedule ?? null);
+    } catch {
+      setSnap(null);
+    }
+  }, []);
+  useEffect(() => {
+    const t = setTimeout(() => { void reload(); }, 300);
+    return () => clearTimeout(t);
+  }, [reload, payload.eventCount]);
+
+  const tzOffset = (() => {
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "longOffset" }).formatToParts(new Date());
+      const n = parts.find((p) => p.type === "timeZoneName")?.value ?? "";
+      return n === "" || n === "GMT" ? "UTC+00:00" : n.replace("GMT", "UTC");
+    } catch {
+      return "（IANA 非法，保存会被拒绝）";
+    }
+  })();
+
+  const buildDef = (): Record<string, unknown> => {
+    const schedule: Record<string, unknown> =
+      kind === "once" ? { kind, at } :
+      kind === "interval" ? { kind, everyMinutes: Number(everyMinutes) } :
+      kind === "weekly" ? { kind, weekdays, time } :
+      { kind, time };
+    return {
+      name: name.trim(),
+      prompt,
+      schedule,
+      timeZone: tz.trim(),
+      permissionTier: tier,
+      catchUp,
+      enabled: true,
+    };
+  };
+  const submit = async (): Promise<void> => {
+    setNote(null);
+    try {
+      const r = await window.agent.scheduleUpsert(buildDef());
+      setNote(r.ok ? "已创建任务（下次触发见列表）" : "创建失败：" + (r.error ?? "未知"));
+      if (r.ok) {
+        setFormOpen(false);
+        setName(""); setPrompt(""); setAt(""); setEveryMinutes("30"); setTime("09:00"); setWeekdays([1, 2, 3, 4, 5]);
+        await reload();
+      }
+    } catch (err) {
+      setNote("创建失败：" + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+  const toggleEnabled = async (t: ScheduleSnapshot["tasks"][number]): Promise<void> => {
+    // 已存在任务的 enabled 开关走数据模型校验（form 白名单只限新建表单/agent 工具面）
+    const r = await window.agent.scheduleUpsert({ ...t, enabled: !t.enabled, updatedAt: undefined, nextRunAt: undefined }, false);
+    setNote(r.ok ? null : "开关失败：" + (r.error ?? "未知"));
+    await reload();
+  };
+  const runNow = async (t: ScheduleSnapshot["tasks"][number]): Promise<void> => {
+    const r = await window.agent.scheduleRunNow(t.id);
+    setNote(r.ok ? "已手动触发（走准入管线）" : "触发被拒：" + (r.error ?? "未知"));
+    await reload();
+  };
+  const del = async (t: ScheduleSnapshot["tasks"][number]): Promise<void> => {
+    const r = await window.agent.scheduleDelete(t.id);
+    setNote(r.ok ? "已删除" : "删除失败：" + (r.error ?? "未知"));
+    await reload();
+  };
+  const history = (snap?.history ?? []).filter((h) => filter === "all" || h.state === filter);
+  const lastStateOf = (taskId: string): string | null => {
+    const h = (snap?.history ?? []).find((x) => x.task_id === taskId);
+    return h ? h.state + (h.decision === "skipped" && h.reason ? "（" + skipReasonLabel(h.reason) + "）" : "") : null;
+  };
+  return (
+    <div className="space-y-2 p-3" data-m4a-schedule-panel="">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <Badge variant="outline">定时任务 × {snap?.tasks.length ?? 0}</Badge>
+        <Badge variant={(snap?.running ?? 0) > 0 ? "default" : "secondary"} data-m4a-running-count="">
+          运行中 {snap?.running ?? 0} / 上限 {snap?.cap ?? 2}（排队 {snap?.queued ?? 0}）
+        </Badge>
+        {!snap?.startupDone && <Badge variant="outline">启动抖动中（补跑判定未开始）</Badge>}
+        <Button size="sm" variant="outline" disabled={!canSchedule} data-m4a-form-toggle="" onClick={() => setFormOpen(!formOpen)}>
+          {formOpen ? "收起表单" : "新建任务"}
+        </Button>
+      </div>
+      {note !== null && <div className="rounded bg-muted/40 px-2 py-1 text-xs" data-m4a-note="">{note}</div>}
+      {formOpen && (
+        <Card size="sm" data-m4a-form="">
+          <CardHeader className="px-3 py-2"><CardTitle className="text-sm">新建定时任务（V1 表单：once / interval / daily / weekly）</CardTitle></CardHeader>
+          <CardContent className="space-y-2 px-3 pb-3 text-xs" data-m4a-form-body="">
+            <div className="flex items-center gap-2">
+              <span className="w-16 shrink-0 text-muted-foreground">名称</span>
+              <Input className="h-7 flex-1" value={name} data-m4a-f-name="" onChange={(e) => setName(e.target.value)} placeholder="如：每日报表" />
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="w-16 shrink-0 text-muted-foreground">prompt</span>
+              <Textarea className="min-h-16 flex-1" value={prompt} data-m4a-f-prompt="" onChange={(e) => setPrompt(e.target.value)} placeholder="自包含任务说明（触发时原样成为新会话首条消息，≤4000 字符）" />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-16 shrink-0 text-muted-foreground">kind</span>
+              <Select value={kind} onValueChange={(v) => setKind(v as FormKind)}>
+                <SelectTrigger className="h-7 w-36" data-m4a-f-kind=""><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {FORM_KINDS.map((k) => (<SelectItem key={k} value={k}>{k}</SelectItem>))}
+                </SelectContent>
+              </Select>
+              {kind === "once" && <Input className="h-7 flex-1" value={at} data-m4a-f-at="" onChange={(e) => setAt(e.target.value)} placeholder="ISO 时刻，如 2026-09-20T09:30:00+08:00" />}
+              {kind === "interval" && <Input className="h-7 flex-1" type="number" min={5} value={everyMinutes} data-m4a-f-every="" onChange={(e) => setEveryMinutes(e.target.value)} placeholder="每 N 分钟（≥5）" />}
+              {(kind === "daily" || kind === "weekly") && <Input className="h-7 w-28" value={time} data-m4a-f-time="" onChange={(e) => setTime(e.target.value)} placeholder="HH:mm" />}
+            </div>
+            {kind === "weekly" && (
+              <div className="flex flex-wrap items-center gap-2" data-m4a-f-weekdays="">
+                <span className="text-muted-foreground">周几</span>
+                {["日", "一", "二", "三", "四", "五", "六"].map((label, d) => (
+                  <label key={d} className="flex items-center gap-1">
+                    <Checkbox
+                      checked={weekdays.includes(d)}
+                      data-m4a-f-wd={String(d)}
+                      onCheckedChange={(v) => setWeekdays(v === true ? [...weekdays, d].sort((a, b) => a - b) : weekdays.filter((x) => x !== d))}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <span className="w-16 shrink-0 text-muted-foreground">时区</span>
+              <Input className="h-7 flex-1" value={tz} data-m4a-f-tz="" onChange={(e) => setTz(e.target.value)} />
+              <span className="shrink-0 font-mono text-[10px] text-muted-foreground" data-m4a-tz-offset="">{tzOffset}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-16 shrink-0 text-muted-foreground">权限档</span>
+              <Select value={tier} onValueChange={(v) => setTier(v as (typeof TIERS)[number])}>
+                <SelectTrigger className="h-7 w-44" data-m4a-f-tier=""><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {TIERS.map((t) => (<SelectItem key={t} value={t}>{t}</SelectItem>))}
+                </SelectContent>
+              </Select>
+              <span className="w-12 shrink-0 text-muted-foreground">catchUp</span>
+              <Select value={catchUp} onValueChange={(v) => setCatchUp(v as "latest" | "skip")}>
+                <SelectTrigger className="h-7 w-28" data-m4a-f-catchup=""><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="latest">latest（补最近一次）</SelectItem>
+                  <SelectItem value="skip">skip（不补跑）</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {tier !== "read-only" && (
+              <div className="rounded border border-red-500/40 bg-red-500/5 px-2 py-1 text-red-700 dark:text-red-400" data-m4a-unattended-red="">
+                ⚠ 将无人值守执行：触发时一切审批请求自动拒绝（fail-closed）；写向操作需自主档允许路径。
+              </div>
+            )}
+            <Button size="sm" disabled={!canSchedule || name.trim() === "" || prompt.trim() === ""} data-m4a-form-submit="" onClick={() => void submit()}>
+              创建（name 唯一，保存后立即生效）
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+      {(snap?.tasks.length ?? 0) === 0 && <div className="text-sm text-muted-foreground">（暂无定时任务）</div>}
+      {snap?.tasks.map((t) => {
+        const last = lastStateOf(t.id);
+        return (
+          <Card key={t.id} size="sm" data-m4a-task={t.name}>
+            <CardHeader className="px-3 py-2">
+              <CardTitle className="flex flex-wrap items-center gap-1.5 text-sm">
+                ⏰ {t.name}
+                <Badge variant="outline" className="font-mono text-[10px]">{t.schedule.kind}</Badge>
+                <Badge variant={t.permissionTier === "read-only" ? "secondary" : "destructive"} className="font-mono text-[10px]">{t.permissionTier}</Badge>
+                {!t.enabled && <Badge variant="outline">已停用</Badge>}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-1 px-3 pb-2 text-xs" data-m4a-task-body={t.id}>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-muted-foreground">下次触发：<span className="font-mono">{t.nextRunAt ?? "无（once 已过 / 停用）"}</span></span>
+                {last !== null && <span className="text-muted-foreground">上次状态：<span className="font-mono" data-m4a-last-state={t.id}>{last}</span></span>}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <label className="flex items-center gap-1">
+                  <Checkbox checked={t.enabled} data-m4a-enabled={t.id} onCheckedChange={() => void toggleEnabled(t)} />
+                  <span className="text-muted-foreground">enabled</span>
+                </label>
+                <Button size="sm" variant="outline" className="h-6" disabled={!canSchedule} data-m4a-run-now={t.id} onClick={() => void runNow(t)}>立即触发</Button>
+                <Button size="sm" variant="ghost" className="h-6 text-red-600" disabled={!canSchedule} data-m4a-delete={t.id} onClick={() => void del(t)}>删除</Button>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
+      <Card size="sm" data-m4a-history="">
+        <CardHeader className="px-3 py-2">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            运行历史（journal 投影）
+            <Select value={filter} onValueChange={(v) => setFilter(v as HistoryFilter)}>
+              <SelectTrigger className="h-6 w-28 text-[11px]" data-m4a-history-filter=""><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {HISTORY_STATES.map((s) => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
+              </SelectContent>
+            </Select>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-0.5 px-3 pb-2 text-xs">
+          {history.length === 0 && <div className="text-muted-foreground">（暂无调度记录）</div>}
+          {history.map((h) => (
+            <div
+              key={h.occurrence_key}
+              className="flex flex-wrap items-center gap-2 font-mono text-[11px]"
+              data-m4a-history-row={h.occurrence_key}
+              title={h.decision === "skipped" && h.reason ? skipReasonLabel(h.reason) : h.state}
+            >
+              <Badge
+                variant={h.state === "succeeded" ? "default" : h.state === "failed" || h.state === "skipped" ? "destructive" : "secondary"}
+                className="font-mono text-[10px]"
+              >
+                {h.state}
+              </Badge>
+              <span>{h.task_name}</span>
+              <span className="text-muted-foreground">{h.due_at}</span>
+              {h.decision === "catchup" && <Badge variant="outline" className="text-[10px]">补跑</Badge>}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 const REGISTRY: Record<string, PanelComponent> = {
   approvals: ApprovalsPanel,
   token: TokenPanel,
@@ -948,6 +1215,7 @@ const REGISTRY: Record<string, PanelComponent> = {
   plugins: PluginsPanel,
   sidechat: SidechatPanel, // M2f：辅助对话（只读旁路）
   agents: AgentsPanel, // M3a：多 agent 状态（每 worker 一列）
+  schedule: SchedulePanel, // M4a：定时任务（列表/表单/历史，§12.2.6）
 };
 
 export const KNOWN_PANEL_IDS = Object.keys(REGISTRY);

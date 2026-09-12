@@ -6,9 +6,9 @@ import { FallbackPanel, KNOWN_PANEL_IDS, resolvePanel } from "../src/renderer/pa
 import { projectDiffCards, projectMemoryWrites, projectTokenUsage, pendingApprovals } from "../src/renderer/projections";
 import type { AgentEvent } from "../src/events";
 
-describe("面板注册表（M1e + M2d memory + M2e plugins + M2f sidechat + M3a agents）", () => {
-  it("注册表含七类（approvals / token / git / memory / plugins / sidechat / agents），全部为组件", () => {
-    expect([...KNOWN_PANEL_IDS].sort()).toEqual(["agents", "approvals", "git", "memory", "plugins", "sidechat", "token"]);
+describe("面板注册表（M1e + M2d memory + M2e plugins + M2f sidechat + M3a agents + M4a schedule）", () => {
+  it("注册表含八类（approvals / token / git / memory / plugins / sidechat / agents / schedule），全部为组件", () => {
+    expect([...KNOWN_PANEL_IDS].sort()).toEqual(["agents", "approvals", "git", "memory", "plugins", "schedule", "sidechat", "token"]);
     for (const id of KNOWN_PANEL_IDS) {
       expect(typeof resolvePanel(id)).toBe("function");
       expect(resolvePanel(id)).not.toBe(FallbackPanel);
@@ -142,5 +142,23 @@ describe("面板注册表（M1e + M2d memory + M2e plugins + M2f sidechat + M3a 
     ];
     expect(pendingApprovals(asks).map((a) => a.askId)).toEqual(["a1"]);
     expect(pendingApprovals([])).toEqual([]);
+  });
+
+  it("M4a schedule 面板 SSR 冒烟：任务卡/历史行渲染不抛（无 window 时按钮禁用，SSR 安全）", () => {
+    const scheduleHtml = renderToStaticMarkup(
+      createElement(resolvePanel("schedule"), { payload: {} }),
+    );
+    expect(scheduleHtml).toContain("定时任务 × 0");
+    expect(scheduleHtml).toContain("运行历史");
+    expect(scheduleHtml).toContain("新建任务");
+  });
+
+  it("M4a skipReasonLabel：四原因 + 未知回退原文", async () => {
+    const { skipReasonLabel } = await import("../src/renderer/projections");
+    expect(skipReasonLabel("too-old")).toContain("过期");
+    expect(skipReasonLabel("catch-up-skip")).toContain("休眠");
+    expect(skipReasonLabel("overlap")).toContain("重叠");
+    expect(skipReasonLabel("concurrency-cap")).toContain("并发满");
+    expect(skipReasonLabel("custom-reason")).toBe("custom-reason");
   });
 });

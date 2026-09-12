@@ -24,12 +24,16 @@ export interface AutoApproveMeta { source: "rule" | "session_scope"; ruleId?: st
 export interface ToolResultEvent { type: "tool_result"; callId: string; ok: boolean; output: string; auto?: AutoApproveMeta; agent_id?: string }
 export interface UsageEvent { type: "usage"; inputTokens: number; outputTokens: number; /** M3a §4.4.10：usage 按 agent 归因（主 loop usage 无此字段）。 */ agent_id?: string }
 /** 会话元信息：分支会话首行携带 branch_of 指向原会话；
- *  M2f：sidechat 会话首行携带 kind="sidechat" + parent_session_id 指向主会话。 */
+ *  M2f：sidechat 会话首行携带 kind="sidechat" + parent_session_id 指向主会话；
+ *  M4a：定时任务触发的新会话首行携带 origin="scheduled" + automation_id/automation_name（§12.2.2）。 */
 export interface SessionMetaEvent {
   type: "session_meta";
   branch_of?: string;
   kind?: "sidechat";
   parent_session_id?: string;
+  origin?: "scheduled";
+  automation_id?: string;
+  automation_name?: string;
 }
 
 // ---- M1b 三门事件（澄清门 / 方案门 / 验证门）----
@@ -271,6 +275,47 @@ export interface DiffCommentEvent {
   ts?: number;
 }
 
+// ---- M4a 定时任务三事件（§12.2.7）：journal 即调度事件流，面板订阅投影 ----
+// 全部为增量类型（KNOWN_TYPES 扩集），旧日志重放逐字不变。
+export interface AutomationTriggeredEvent {
+  type: "automation_triggered";
+  automation_id: string;
+  task_name: string;
+  occurrence_key: string;
+  due_at: string;
+  session_id?: string;
+  /** 启动补跑（catchUp=latest）标记。 */
+  catchup?: boolean;
+  ts?: number;
+}
+
+export interface AutomationSkippedEvent {
+  type: "automation_skipped";
+  automation_id: string;
+  task_name: string;
+  occurrence_key: string;
+  due_at: string;
+  /** too-old=过期 / catch-up-skip=休眠 / overlap=重叠 / concurrency-cap=并发满（SKIP_REASON_LABELS）。 */
+  reason: string;
+  ts?: number;
+}
+
+/** 终态回写（§12.2.4 完成回写）：落定时会话日志（终态记录）+ 主时间线（完成卡，复用 report 卡类型）。 */
+export interface AutomationCompletedEvent {
+  type: "automation_completed";
+  automation_id: string;
+  task_name: string;
+  occurrence_key: string;
+  session_id: string;
+  status: "succeeded" | "failed";
+  reason?: string;
+  /** summarizeRun 纯投影摘要（零新 LLM 调用）。 */
+  summary: string;
+  usage: { inputTokens: number; outputTokens: number };
+  tool_stats: Record<string, number>;
+  ts?: number;
+}
+
 export type AgentEvent =
   | UserMessageEvent
   | AssistantMessageEvent
@@ -292,7 +337,10 @@ export type AgentEvent =
   | ApprovalRequestedEvent
   | ApprovalResolvedEvent
   | CardActionEvent
-  | DiffCommentEvent;
+  | DiffCommentEvent
+  | AutomationTriggeredEvent
+  | AutomationSkippedEvent
+  | AutomationCompletedEvent;
 
 const KNOWN_TYPES = new Set([
   "user_message",
@@ -316,6 +364,9 @@ const KNOWN_TYPES = new Set([
   "approval_resolved",
   "card_action",
   "diff_comment",
+  "automation_triggered",
+  "automation_skipped",
+  "automation_completed",
 ]);
 
 export interface EventLog {

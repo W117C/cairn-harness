@@ -46,7 +46,7 @@ afterEach(async () => {
 describe("M2f 注册表（各 +1 类 + 未知兜底）", () => {
   it("面板注册表 +1：含 sidechat，且未知 panel_id 仍落兜底", () => {
     expect(KNOWN_PANEL_IDS).toContain("sidechat");
-    expect(KNOWN_PANEL_IDS.length).toBe(7); // M3a：+agents
+    expect(KNOWN_PANEL_IDS.length).toBe(8); // M3a：+agents；M4a：+schedule
     expect(resolvePanel("sidechat")).not.toBe(FallbackPanel);
     expect(resolvePanel("bogus_m2f")).toBe(FallbackPanel);
     expect(() => resolvePanel("bogus_m2f")({ payload: {} })).not.toThrow();

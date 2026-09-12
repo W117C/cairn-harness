@@ -40,7 +40,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
-import { GitBranch, Coins, ShieldCheck, Database, Puzzle, MessageSquarePlus, Bot, Settings as SettingsIcon, Plus, Pencil, Trash2, X } from "lucide-react";
+import { GitBranch, Coins, ShieldCheck, Database, Puzzle, MessageSquarePlus, Bot, Clock, Settings as SettingsIcon, Plus, Pencil, Trash2, X } from "lucide-react";
 import { resolveCard } from "./cards/registry";
 import { compactionCardPayload } from "../agent/compaction";
 import { securityReportCardPayload } from "../agent/security/scan";
@@ -54,7 +54,7 @@ import {
   tokenProjectionOf,
   type TimelineItem,
 } from "./store";
-import { projectAgentPanel, projectMergeTower, projectTokenUsageByAgent, type AgentColumn } from "./projections";
+import { projectAgentPanel, projectMergeTower, projectTokenUsageByAgent, skipReasonLabel, type AgentColumn } from "./projections";
 import { resolvePanel, type PanelId } from "./panels/registry";
 import type { AgentEvent, ClarifyAnswerMap } from "../events";
 import type {
@@ -84,7 +84,13 @@ const PANEL_ICONS: Record<PanelId, React.ReactNode> = {
   plugins: <Puzzle className="h-4 w-4" />,
   sidechat: <MessageSquarePlus className="h-4 w-4" />,
   agents: <Bot className="h-4 w-4" />,
+  schedule: <Clock className="h-4 w-4" />,
 };
+
+/** M4a：定时会话徽标/过滤的任务名清单（会话列表 origin 投影）。 */
+function scheduledNamesOf(sessions: SessionInfoPayload[]): string[] {
+  return [...new Set(sessions.filter((s) => s.origin === "scheduled" && s.automationName).map((s) => s.automationName!))];
+}
 
 function short(v: unknown, max = 260): string {
   const s = typeof v === "string" ? v : JSON.stringify(v);
@@ -295,6 +301,48 @@ function EventView({
       </ToolRow>
     );
   }
+  if (e.type === "automation_triggered") {
+    // M4a：定时触发行（主时间线投影；补跑带标签）
+    return (
+      <ToolRow>
+        <span className="font-semibold text-foreground">⏰ 定时触发</span>
+        <span>{e.task_name}</span>
+        {e.catchup === true && <Badge variant="outline">补跑</Badge>}
+        {e.session_id !== undefined && <span className="text-muted-foreground">会话：{e.session_id}</span>}
+      </ToolRow>
+    );
+  }
+  if (e.type === "automation_skipped") {
+    return (
+      <ToolRow>
+        <span className="font-semibold text-foreground">⏰ 定时跳过</span>
+        <span>{e.task_name}</span>
+        <Badge variant="destructive">{e.reason}</Badge>
+        <span className="text-muted-foreground" title={skipReasonLabel(e.reason)}>{skipReasonLabel(e.reason)}</span>
+      </ToolRow>
+    );
+  }
+  if (e.type === "automation_completed") {
+    // M4a 完成回写（§12.2.4）：复用 report 卡类型（不新增卡片类型，§10.3 纪律）
+    const Card = resolveCard("report");
+    const body = [
+      "status: " + e.status + (e.reason !== undefined ? "（" + e.reason + "）" : ""),
+      "occurrence: " + e.occurrence_key,
+      "usage: " + String(e.usage.inputTokens) + " in / " + String(e.usage.outputTokens) + " out",
+      "tool_stats: " + JSON.stringify(e.tool_stats),
+      "",
+      e.summary,
+    ].join("\n");
+    return (
+      <Card
+        payload={{
+          type: "report",
+          title: "定时任务" + (e.status === "succeeded" ? "完成" : "失败") + " · " + e.task_name,
+          body,
+        }}
+      />
+    );
+  }
   if (e.type === "card_action") {
     return null; // 回写动作本身不渲染（决议状态由对应卡的 resolved 投影呈现）
   }
@@ -364,7 +412,19 @@ function AskView({
         {a.risk !== undefined && a.risk !== "none" && <Badge variant="outline">risk: {a.risk}</Badge>}
         <span className="font-mono text-xs">{a.tool}</span>
         <span className="max-w-full truncate font-mono text-xs text-muted-foreground">{short(a.args, 200)}</span>
-        {a.reason !== undefined && <span className="text-xs text-muted-foreground">{a.reason}</span>}
+        {a.reason !== undefined && (
+          a.reason.includes("将无人值守执行") ? (
+            <span className="w-full font-medium text-red-600 dark:text-red-400" data-m4a-unattended-red="">{a.reason}</span>
+          ) : (
+            <span className="text-xs text-muted-foreground">{a.reason}</span>
+          )
+        )}
+        {typeof (a.args as Record<string, unknown> | undefined)?.prompt === "string" && (
+          // M4a §12.2.5：prompt 是持久化攻击面——审批卡全文展示（不截断）
+          <pre className="mt-1 max-h-40 w-full overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-2 font-mono text-[11px]" data-m4a-automation-prompt="">
+            {String((a.args as Record<string, unknown>).prompt)}
+          </pre>
+        )}
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
         <Button size="sm" onClick={() => onDecide(a.askId, true)}>批准（本次）</Button>
@@ -482,6 +542,24 @@ function SettingsDialog({
                 估价 = Σusage tokens × 单价；超限拒绝新 spawn（主 loop 不受闸）。两项均 0 = 关（缺省零行为）。
               </div>
             </section>
+            <section className="flex flex-col gap-2" data-m4a-settings-schedule="">
+              <div className="font-medium">定时任务（M4a §12.2）</div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">同时运行的定时会话上限</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={8}
+                  className="w-52"
+                  data-m4a-cap-input=""
+                  value={String(settings.scheduleConcurrencyCap ?? 2)}
+                  onChange={(e) => onSettings({ scheduleConcurrencyCap: Math.min(8, Math.max(1, Number(e.target.value) || 1)) })}
+                />
+              </div>
+              <div className="text-xs text-muted-foreground">
+                与 worker 并发上限（4）独立计数（§12.2.3）；任务管理在右栏「schedule」面板：列表 / 创建表单 / 运行历史六态筛选。
+              </div>
+            </section>
             <section className="flex flex-col gap-2">
               <div className="font-medium">UI</div>
               <div className="flex items-center justify-between gap-3">
@@ -531,6 +609,7 @@ function App() {
   const [input, setInput] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
+  const [scheduleFilter, setScheduleFilter] = useState<string>("all");
   const layoutDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const sandbox = status?.sandbox ?? null;
@@ -543,6 +622,12 @@ function App() {
   const agentColsById = useMemo(() => Object.fromEntries(agentCols.map((a) => [a.agent_id, a])), [agentCols]);
   const tokensByAgent = useMemo(() => projectTokenUsageByAgent(state.events), [state]);
   const mergeTower = useMemo(() => projectMergeTower(state.events), [state]);
+  // M4a：会话列表「定时」徽标 + 按任务过滤（origin 投影）
+  const automationNames = useMemo(() => scheduledNamesOf(sessions), [sessions]);
+  const visibleSessions = useMemo(
+    () => sessions.filter((s) => scheduleFilter === "all" || (s.origin === "scheduled" && s.automationName === scheduleFilter)),
+    [sessions, scheduleFilter],
+  );
 
   const patchSettings = (patch: Partial<AppSettings>): void => {
     if (!settings) return;
@@ -626,7 +711,11 @@ function App() {
 
   // 活事件流订阅（与重放同一 reducer 折叠管线）
   useEffect(() => {
-    const offEvent = window.agent.onEvent((e) => dispatch({ type: "event", e }));
+    // M4a：定时触发 = main 侧后台新建会话 → 活流收到 automation_triggered 即刷新会话列表（定时徽标实时出现）
+    const offEvent = window.agent.onEvent((e) => {
+      dispatch({ type: "event", e });
+      if (e.type === "automation_triggered") void refreshSessions();
+    });
     const offAsk = (a: AskPayload): void => dispatch({ type: "ask", a });
     const offDone = (d: AskOutcomePayload): void => dispatch({ type: "askDone", d });
     const un1 = window.agent.onAsk(offAsk);
@@ -811,9 +900,25 @@ function App() {
               </Button>
             </SidebarGroupLabel>
             <SidebarGroupContent className="px-1">
+              {automationNames.length > 0 && (
+                <div className="flex items-center gap-1 px-1 pb-1" data-m4a-session-filter="">
+                  <span className="text-[10px] text-muted-foreground">定时过滤</span>
+                  <Select value={scheduleFilter} onValueChange={setScheduleFilter}>
+                    <SelectTrigger className="h-6 w-32 text-[10px]" data-m4a-session-filter-select="">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">全部会话</SelectItem>
+                      {automationNames.map((n) => (
+                        <SelectItem key={n} value={n}>⏰ {n}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="flex max-h-64 flex-col gap-0.5 overflow-y-auto" data-m1e-session-list="">
-                {sessions.length === 0 && <div className="px-2 py-1 text-xs text-muted-foreground">（无会话）</div>}
-                {sessions.map((s) => (
+                {visibleSessions.length === 0 && <div className="px-2 py-1 text-xs text-muted-foreground">（无会话）</div>}
+                {visibleSessions.map((s) => (
                   <div
                     key={s.id}
                     className={
@@ -843,6 +948,11 @@ function App() {
                         >
                           {s.id}
                         </button>
+                        {s.origin === "scheduled" && (
+                          <Badge variant="outline" className="shrink-0 px-1 text-[9px]" data-m4a-scheduled-badge={s.automationName ?? ""}>
+                            定时
+                          </Badge>
+                        )}
                         <span className="hidden shrink-0 gap-0.5 group-hover:flex">
                           <button
                             aria-label={"重命名 " + s.id}

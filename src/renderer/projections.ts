@@ -541,3 +541,27 @@ export function projectAgentPanel(events: AgentEvent[]): AgentColumn[] {
   }
   return order.map((id) => acc.get(id)!.col);
 }
+
+// ---- M4a 定时任务投影辅助（renderer 纯函数，不 import main/scheduler——避免 node:fs 进 bundle）----
+
+/** skipped 原因 → UI hover 中文标签（休眠/重叠/并发满/过期，Claude Desktop 同款，§12.2.6）。 */
+export function skipReasonLabel(reason: string | undefined): string {
+  switch (reason) {
+    case "too-old":
+      return "过期：错过触发超出 7 天回看窗口，仅补最近一次";
+    case "catch-up-skip":
+      return "休眠错过：catchUp=skip 档不补跑，已对齐下次触发";
+    case "overlap":
+      return "重叠：该任务上一次运行仍在进行中";
+    case "concurrency-cap":
+      return "并发满：同时运行的定时会话已达上限";
+    case "interrupted（重启后无终态记录；V1 不自动重试，可 run_now 兜底）":
+      return "中断：应用重启时该次运行无终态记录（V1 不自动重试）";
+    default:
+      return reason ?? "";
+  }
+}
+
+/** 运行历史六态筛选值（§12.1 运行历史；cancelled 为保留态——V1 无取消入口）。 */
+export const HISTORY_STATES = ["all", "queued", "running", "succeeded", "failed", "skipped", "cancelled"] as const;
+export type HistoryFilter = (typeof HISTORY_STATES)[number];

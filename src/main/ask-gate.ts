@@ -16,12 +16,13 @@ export interface AskRequest {
   riskReasons?: string[];
 }
 export type AskOutcome = "approved" | "rejected";
-/** 决议结果：批准时携带用户选择的 scope（缺省 once）。 */
+/** 决议结果：批准时携带用户选择的 scope（缺省 once）；拒绝时携带拒绝原因（unattended/timeout）。 */
 export interface AskOutcomeResult {
   outcome: AskOutcome;
   scope: AskScope;
+  reason?: AskOutcomeReason;
 }
-export type AskOutcomeReason = "user" | "timeout";
+export type AskOutcomeReason = "user" | "timeout" | "unattended";
 
 export interface AskGateOptions {
   /** 询问 UI（渲染批准/拒绝行）。 */
@@ -30,6 +31,9 @@ export interface AskGateOptions {
   notifyOutcome?: (askId: string, outcome: AskOutcome, reason: AskOutcomeReason) => void;
   /** 无响应超时，默认 60_000ms。 */
   timeoutMs?: number;
+  /** M4a 无人值守（§11.7.6/§12.2.4）：一切审批请求 fail-closed **立即拒绝**，不进 60s 等待；
+   *  拒绝原因落流（notifyOutcome reason="unattended"）。自主档任务的自动放行不经过本门，不受影响。 */
+  unattended?: boolean;
 }
 
 export class AskGate {
@@ -45,13 +49,18 @@ export class AskGate {
     return this.pending.size;
   }
 
-  /** 发起一次审批；默认 60 秒无响应按拒绝。 */
+  /** 发起一次审批；默认 60 秒无响应按拒绝；unattended 门 = 立即拒绝（fail-closed，不等待）。 */
   request(
     tool: ToolName | string,
     args: Record<string, unknown>,
     ctx: { reason?: string; risk?: RiskLevel; riskReasons?: string[] } = {},
   ): Promise<AskOutcomeResult> {
     const askId = "ask-" + String(++this.seq);
+    if (this.opts.unattended) {
+      // 无人值守：不进 pending、不挂 timer——审批请求即刻拒绝并落流（§12.2.4 fail-closed）
+      this.opts.notifyOutcome?.(askId, "rejected", "unattended");
+      return Promise.resolve({ outcome: "rejected", scope: "once", reason: "unattended" });
+    }
     return new Promise<AskOutcomeResult>((resolve) => {
       const timer = setTimeout(() => {
         this.decide(askId, false, "timeout");
@@ -78,7 +87,7 @@ export class AskGate {
     if (!entry) return false;
     this.pending.delete(askId);
     const outcome: AskOutcome = approved ? "approved" : "rejected";
-    entry.resolve({ outcome, scope: approved ? scope : "once" });
+    entry.resolve({ outcome, scope: approved ? scope : "once", reason });
     this.opts.notifyOutcome?.(askId, outcome, reason);
     return true;
   }

@@ -141,6 +141,9 @@ function renderProjectionLine(e: AgentEvent): string | null {
     case "approval_resolved":
     case "card_action":
     case "diff_comment":
+    case "automation_triggered": // M4a：调度事件不进 sidechat 只读投影（调度面归 schedule 面板/journal）
+    case "automation_skipped":
+    case "automation_completed":
       return null;
   }
 }

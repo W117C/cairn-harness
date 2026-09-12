@@ -29,6 +29,13 @@ import {
   initSessionsDir,
   initSettingsStore,
   initMemoryHome,
+  initScheduler,
+  startScheduler,
+  stopScheduler,
+  handleScheduleSnapshot,
+  handleScheduleUpsert,
+  handleScheduleDelete,
+  handleScheduleRunNow,
   providerInfo,
   setAppHooks,
 } from "./agent-runner";
@@ -171,6 +178,11 @@ ipcMain.handle(
 ipcMain.handle("agent:sidechat-state", (_event, parentSessionId?: string) => handleSidechatState(parentSessionId));
 // M3a：card_action 回写协议（worker 审批应答 / agent 取消——审批与 turn 解耦的事件流入口）
 ipcMain.handle("agent:card-action", (_event, req: Parameters<typeof handleCardAction>[0]) => handleCardAction(req));
+// M4a：定时任务（schedule 面板）——快照 / 创建或更新 / 删除 / 手动立即触发（§12.2.6）
+ipcMain.handle("agent:schedule-snapshot", () => handleScheduleSnapshot());
+ipcMain.handle("agent:schedule-upsert", (_event, def: unknown, form?: boolean) => handleScheduleUpsert(def, form ?? true));
+ipcMain.handle("agent:schedule-delete", (_event, id: string) => handleScheduleDelete(id));
+ipcMain.handle("agent:schedule-run-now", (_event, id: string) => handleScheduleRunNow(id));
 
 void app.whenReady().then(async () => {
   // 暴露完整 AX 树给系统辅助功能（System Events / VoiceOver 等）；必须在 ready 之后调用
@@ -178,6 +190,15 @@ void app.whenReady().then(async () => {
   // M1e 存储：settings 与会话目录缺省 userData；验收脚本用 M1E_SETTINGS_PATH / M1E_SESSIONS_DIR 覆盖
   initSettingsStore(process.env.M1E_SETTINGS_PATH ?? join(app.getPath("userData"), "settings.json"));
   initSessionsDir(process.env.M1E_SESSIONS_DIR ?? join(app.getPath("userData"), "sessions"));
+  // M4a：定时任务调度器（shell 生命周期 = app 生命周期；数据目录可 M4A_DATA_DIR 覆盖供验收）。
+  // 启动抖动缺省 1-3 分钟（M4A_JITTER_MS 覆盖，0 = 立即判定，验收/演示用）。
+  initScheduler({
+    dataDir: process.env.M4A_DATA_DIR ?? join(app.getPath("userData"), "automations"),
+    sessionsDir: process.env.M1E_SESSIONS_DIR ?? join(app.getPath("userData"), "sessions"),
+    ...(process.env.M0B_WORKSPACE ? { workspace: process.env.M0B_WORKSPACE } : {}),
+    ...(process.env.M4A_JITTER_MS !== undefined ? { jitterMs: () => Number(process.env.M4A_JITTER_MS ?? "0") } : {}),
+  });
+  void startScheduler();
   // M2d：全局记忆层 = 应用数据目录下的 memory/（可配 M2D_MEMORY_HOME，测试用临时目录）
   initMemoryHome(process.env.M2D_MEMORY_HOME ?? join(app.getPath("userData"), "memory"));
   // M2g §9.11-2：插件 userConfig 的 sensitive 值走 safeStorage（平台原生加密）。
@@ -199,4 +220,8 @@ void app.whenReady().then(async () => {
 });
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+// M4a：关闭 app 即停调度（§12.3.1 决策 #18：不做系统级常驻，错过由补跑闸兜底）
+app.on("will-quit", () => {
+  stopScheduler();
 });
