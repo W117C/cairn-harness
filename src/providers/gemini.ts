@@ -4,6 +4,7 @@
 // 一个 chunk 可含多个 functionCall（并行调用，全部解析成一条条 tool_call）；
 // usageMetadata 含 promptTokenCount / candidatesTokenCount / thoughtsTokenCount / totalTokenCount
 //（chunk 间累计，末 chunk 为准——直接覆盖不累加）。解析直接消费 Gemini 原生字段，不经 OpenAI 中间格式。
+import { DEFAULT_STALL_MS, stallGuard } from "../net";
 import type { ModelOutput, ProviderMessage, ProviderToolSpec } from "./index";
 
 export interface GeminiOptions {
@@ -17,6 +18,8 @@ export interface GeminiOptions {
   fetchImpl?: typeof fetch;
   /** 错误消息前缀，缺省 "Gemini"。 */
   label?: string;
+  /** 停滞守卫静默窗口 ms（根因 4）；缺省 60s，<=0 关闭守卫。 */
+  stallTimeoutMs?: number;
 }
 
 interface GeminiChunk {
@@ -132,16 +135,29 @@ export async function* streamGemini(
   const baseURL = opts.baseURL ?? "https://generativelanguage.googleapis.com";
   const doFetch = opts.fetchImpl ?? fetch;
 
-  const res = await doFetch(`${baseURL}/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-    body: JSON.stringify(toGeminiBody(messages, tools)),
-  });
+  // 根因 4：停滞守卫（静默窗口，不是总时长）——对端挂起时不再永久悬空。
+  const guard = stallGuard(opts.stallTimeoutMs ?? DEFAULT_STALL_MS, label);
+  let res: Response;
+  try {
+    res = await doFetch(`${baseURL}/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+      body: JSON.stringify(toGeminiBody(messages, tools)),
+      signal: guard.signal,
+    });
+  } catch (err) {
+    guard.dispose(); // 建连阶段失败：看门狗不能留下
+    throw err;
+  }
   if (!res.ok) {
+    guard.dispose();
     const text = await res.text().catch(() => "");
     throw new Error(`${label} 请求失败 HTTP ${String(res.status)}: ${text.slice(0, 300)}`);
   }
-  if (!res.body) throw new Error(`${label} 流式响应缺少 body`);
+  if (!res.body) {
+    guard.dispose();
+    throw new Error(`${label} 流式响应缺少 body`);
+  }
 
   const decoder = new TextDecoder();
   const reader = res.body.getReader();
@@ -151,47 +167,54 @@ export async function* streamGemini(
   let outputTokens: number | null = null;
   let callSeq = 0;
 
-  let done = false;
-  while (!done) {
-    const read = await reader.read();
-    if (read.done) break;
-    buf += decoder.decode(read.value, { stream: true });
-    let nl: number;
-    while ((nl = buf.indexOf("\n")) >= 0) {
-      const line = buf.slice(0, nl).trim();
-      buf = buf.slice(nl + 1);
-      if (!line.startsWith("data:")) continue;
-      const payload = line.slice(5).trim();
-      if (!payload) continue;
-      const chunk = JSON.parse(payload) as GeminiChunk;
-      if (chunk.error) {
-        const e = chunk.error;
-        throw new Error(`${label} 流错误 ${e.status ?? String(e.code ?? "unknown")}: ${e.message ?? ""}`);
-      }
-      if (chunk.usageMetadata) {
-        // chunk 间为累计值：直接覆盖，绝不累加
-        const u = chunk.usageMetadata;
-        inputTokens = u.promptTokenCount ?? inputTokens;
-        outputTokens = (u.candidatesTokenCount ?? 0) + (u.thoughtsTokenCount ?? 0) || outputTokens;
-      }
-      const parts = chunk.candidates?.[0]?.content?.parts ?? [];
-      for (const part of parts) {
-        if (part.text) {
-          yield { type: "assistant_delta", callId, text: part.text };
-        } else if (part.functionCall) {
-          const fc = part.functionCall;
-          yield {
-            type: "tool_call",
-            id: fc.id ?? `gemini-call-${String(callSeq++)}`,
-            name: fc.name ?? "",
-            args: parseArgs(fc.args, label),
-          };
+  try {
+    let done = false;
+    while (!done) {
+      const read = await reader.read();
+      if (read.done) break;
+      guard.bump(); // 有分片 → 续期（只有完全静默才会到点）
+      buf += decoder.decode(read.value, { stream: true });
+      let nl: number;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line.startsWith("data:")) continue;
+        const payload = line.slice(5).trim();
+        if (!payload) continue;
+        const chunk = JSON.parse(payload) as GeminiChunk;
+        if (chunk.error) {
+          const e = chunk.error;
+          throw new Error(`${label} 流错误 ${e.status ?? String(e.code ?? "unknown")}: ${e.message ?? ""}`);
         }
-        // 其余 part 形态（未知扩展）优雅跳过
+        if (chunk.usageMetadata) {
+          // chunk 间为累计值：直接覆盖，绝不累加
+          const u = chunk.usageMetadata;
+          inputTokens = u.promptTokenCount ?? inputTokens;
+          outputTokens = (u.candidatesTokenCount ?? 0) + (u.thoughtsTokenCount ?? 0) || outputTokens;
+        }
+        const parts = chunk.candidates?.[0]?.content?.parts ?? [];
+        for (const part of parts) {
+          if (part.text) {
+            yield { type: "assistant_delta", callId, text: part.text };
+          } else if (part.functionCall) {
+            const fc = part.functionCall;
+            yield {
+              type: "tool_call",
+              id: fc.id ?? `gemini-call-${String(callSeq++)}`,
+              name: fc.name ?? "",
+              args: parseArgs(fc.args, label),
+            };
+          }
+          // 其余 part 形态（未知扩展）优雅跳过
+        }
       }
     }
-  }
-  if (inputTokens !== null || outputTokens !== null) {
-    yield { type: "usage", inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 };
+    if (inputTokens !== null || outputTokens !== null) {
+      yield { type: "usage", inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 };
+    }
+  } finally {
+    guard.dispose();
+    // 消费者提前 break / 出错退出时主动取消 body，否则连接与对端资源一直挂着。
+    void reader.cancel().catch(() => {});
   }
 }

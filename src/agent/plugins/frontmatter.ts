@@ -25,6 +25,25 @@ function parseScalar(raw: string): unknown {
   return t; // description / allowed-tools 等保持字符串（CC 语义）
 }
 
+/** 原型链危险键（M0 复盘 P0-3）：扩展内容是**外部不可信输入**（未信任插件在发现期即被解析），
+ *  旧实现用普通对象承载 + `fm[lastTop]` 直取，`__proto__:` 会取到 Object.prototype 并把
+ *  后续嵌套行写到它上面——未信任仓库里的一个 SKILL.md 即可污染整个进程的对象原型。
+ *  这里显式拒绝：`__proto__` 是唯一的访问器键（必须拦），`constructor`/`prototype` 属卫生拦截。 */
+const UNSAFE_KEYS: ReadonlySet<string> = new Set(["__proto__", "constructor", "prototype"]);
+
+/** 取安全的 frontmatter 键名；空键与原型链危险键一律返回 null（该行整体忽略）。 */
+function safeKey(raw: string): string | null {
+  const t = raw.trim();
+  if (t === "" || UNSAFE_KEYS.has(t)) return null;
+  return t;
+}
+
+/** 只读自有属性：杜绝 `fm[key]` 命中原型链上的方法（toString/hasOwnProperty 等）。
+ *  与 UNSAFE_KEYS 互为兜底——前者拦访问器键，后者保证读取永不越出自身属性。 */
+function ownValue(fm: Record<string, unknown>, key: string): unknown {
+  return Object.prototype.hasOwnProperty.call(fm, key) ? fm[key] : undefined;
+}
+
 /** 解析 frontmatter（--- 包裹）；无 frontmatter 返回 { frontmatter: {}, body: 原文 }。 */
 export function parseFrontmatter(text: string): ParsedMarkdown {
   const normalized = text.replace(/\r\n/g, "\n");
@@ -41,19 +60,22 @@ export function parseFrontmatter(text: string): ParsedMarkdown {
     if (line.trim() === "" || line.trim().startsWith("#")) continue;
     const nested = /^\s{2,}([^:]+):\s?(.*)$/.exec(line);
     if (nested && lastTop !== null) {
-      const cur = fm[lastTop];
+      const nestedKey = safeKey(nested[1]);
+      if (nestedKey === null) continue;
+      const cur = ownValue(fm, lastTop);
       if (typeof cur === "object" && cur !== null && !Array.isArray(cur)) {
-        (cur as Record<string, unknown>)[nested[1].trim()] = parseScalar(nested[2]);
+        (cur as Record<string, unknown>)[nestedKey] = parseScalar(nested[2]);
       } else {
         const obj: Record<string, unknown> = {};
-        obj[nested[1].trim()] = parseScalar(nested[2]);
+        obj[nestedKey] = parseScalar(nested[2]);
         fm[lastTop] = obj;
       }
       continue;
     }
     const top = /^([^:\s][^:]*):\s?(.*)$/.exec(line);
     if (!top) continue;
-    const key = top[1].trim();
+    const key = safeKey(top[1]);
+    if (key === null) continue;
     fm[key] = parseScalar(top[2]);
     lastTop = key;
   }

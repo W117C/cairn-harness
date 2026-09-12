@@ -371,9 +371,15 @@ export function redactSecrets(text: string, opts: ScanOptions = {}): RedactResul
     for (const f of hits) {
       findings.push(f);
       // 用掩码替换原文中的密钥字面量（按规则重新定位，避免描述串误替换）
+      // 必须**全局**匹配：旧实现只取 `p.re.exec(line)` 的首个匹配，
+      // 同一行出现两个同模式密钥时第二个原样留在文本里 → 明文外泄（M0 复盘 E-2）。
       for (const p of SECRET_PATTERNS) {
-        const m = p.re.exec(line);
-        if (m) out = out.split(m[0]).join(mask(m[0]));
+        const re = new RegExp(p.re.source, p.re.flags.includes("g") ? p.re.flags : p.re.flags + "g");
+        for (const m of line.matchAll(re)) {
+          const secret = m[0];
+          if (secret === "") continue; // 空匹配会让 split("") 把整串拆散
+          out = out.split(secret).join(mask(secret));
+        }
       }
       for (const t of findHighEntropyTokens(line, entropy)) {
         out = out.split(t.token).join(mask(t.token));

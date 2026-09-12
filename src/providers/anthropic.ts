@@ -5,6 +5,7 @@
 // message_delta 里的 usage 是【累计值】——直接取最后一条，不得跨事件累加。
 // 解析直接消费 Anthropic 原生字段（content_block_delta.delta.text_delta 等），
 // 不经过任何 OpenAI 中间格式。
+import { DEFAULT_STALL_MS, stallGuard } from "../net";
 import type { ModelOutput, ProviderMessage, ProviderToolSpec } from "./index";
 
 export interface AnthropicOptions {
@@ -22,6 +23,8 @@ export interface AnthropicOptions {
   fetchImpl?: typeof fetch;
   /** 错误消息前缀，缺省 "Anthropic"。 */
   label?: string;
+  /** 停滞守卫静默窗口 ms（根因 4）；缺省 60s，<=0 关闭守卫。 */
+  stallTimeoutMs?: number;
 }
 
 interface AnthropicSseEvent {
@@ -124,20 +127,33 @@ export async function* streamAnthropic(
   const maxTokens = opts.maxTokens ?? 4096;
   const doFetch = opts.fetchImpl ?? fetch;
 
-  const res = await doFetch(`${baseURL}/v1/messages`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": opts.version ?? "2023-06-01",
-    },
-    body: JSON.stringify(toAnthropicBody(messages, { model, maxTokens, stream: true }, tools)),
-  });
+  // 根因 4：停滞守卫（静默窗口，不是总时长）——对端挂起时不再永久悬空。
+  const guard = stallGuard(opts.stallTimeoutMs ?? DEFAULT_STALL_MS, label);
+  let res: Response;
+  try {
+    res = await doFetch(`${baseURL}/v1/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": opts.version ?? "2023-06-01",
+      },
+      body: JSON.stringify(toAnthropicBody(messages, { model, maxTokens, stream: true }, tools)),
+      signal: guard.signal,
+    });
+  } catch (err) {
+    guard.dispose(); // 建连阶段失败：看门狗不能留下
+    throw err;
+  }
   if (!res.ok) {
+    guard.dispose();
     const text = await res.text().catch(() => "");
     throw new Error(`${label} 请求失败 HTTP ${String(res.status)}: ${text.slice(0, 300)}`);
   }
-  if (!res.body) throw new Error(`${label} 流式响应缺少 body`);
+  if (!res.body) {
+    guard.dispose();
+    throw new Error(`${label} 流式响应缺少 body`);
+  }
 
   const decoder = new TextDecoder();
   const reader = res.body.getReader();
@@ -202,23 +218,30 @@ export async function* streamAnthropic(
     }
   };
 
-  let done = false;
-  while (!done) {
-    const read = await reader.read();
-    if (read.done) break;
-    buf += decoder.decode(read.value, { stream: true });
-    let nl: number;
-    while ((nl = buf.indexOf("\n")) >= 0) {
-      const line = buf.slice(0, nl).trim();
-      buf = buf.slice(nl + 1);
-      if (!line.startsWith("data:")) continue; // event:/注释/空行跳过（type 以 data JSON 为准）
-      const payload = line.slice(5).trim();
-      if (!payload) continue;
-      const event = JSON.parse(payload) as AnthropicSseEvent;
-      yield* handleEvent(event);
+  try {
+    let done = false;
+    while (!done) {
+      const read = await reader.read();
+      if (read.done) break;
+      guard.bump(); // 有分片 → 续期（只有完全静默才会到点）
+      buf += decoder.decode(read.value, { stream: true });
+      let nl: number;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line.startsWith("data:")) continue; // event:/注释/空行跳过（type 以 data JSON 为准）
+        const payload = line.slice(5).trim();
+        if (!payload) continue;
+        const event = JSON.parse(payload) as AnthropicSseEvent;
+        yield* handleEvent(event);
+      }
     }
-  }
-  if (inputTokens !== null || outputTokens !== null) {
-    yield { type: "usage", inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 };
+    if (inputTokens !== null || outputTokens !== null) {
+      yield { type: "usage", inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 };
+    }
+  } finally {
+    guard.dispose();
+    // 消费者提前 break / 出错退出时主动取消 body，否则连接与对端资源一直挂着。
+    void reader.cancel().catch(() => {});
   }
 }

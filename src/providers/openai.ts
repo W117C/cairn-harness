@@ -2,6 +2,7 @@
 // baseURL / model / 额外 body 参数（extraBody）/ 环境变量名均可配，GLM 是它的一组预设（见 glm.ts）。
 // 解码规则与迁移前逐字一致：增量在 choices[0].delta.content；tool_calls 按 index 跨块累积
 //（id 首块、name 非空即记、arguments 拼接）；末 chunk 带 usage（后到覆盖）；data: [DONE] 结束。
+import { DEFAULT_STALL_MS, stallGuard } from "../net";
 import type { ModelOutput, ProviderMessage, ProviderToolSpec } from "./index";
 
 export type OpenAiMessage = ProviderMessage;
@@ -31,6 +32,8 @@ export interface OpenAiOptions {
   label?: string;
   /** 单测注入点（缺省全局 fetch）。 */
   fetchImpl?: typeof fetch;
+  /** 停滞守卫静默窗口 ms（根因 4）；缺省 60s，<=0 关闭守卫。 */
+  stallTimeoutMs?: number;
 }
 
 interface DeltaToolCall {
@@ -102,35 +105,52 @@ export async function* streamOpenAI(
   if (opts.extraBody) Object.assign(body, opts.extraBody);
   if (tools && tools.length > 0) body.tools = toWireTools(tools);
 
-  const res = await doFetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify(body),
-  });
+  // 根因 4：停滞守卫（静默窗口，不是总时长）——对端挂起时不再永久悬空。
+  const guard = stallGuard(opts.stallTimeoutMs ?? DEFAULT_STALL_MS, label);
+  let res: Response;
+  try {
+    res = await doFetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+      signal: guard.signal,
+    });
+  } catch (err) {
+    guard.dispose(); // 建连阶段失败：看门狗不能留下
+    throw err;
+  }
   if (!res.ok) {
+    guard.dispose();
     const text = await res.text().catch(() => "");
     throw new Error(`${label} 请求失败 HTTP ${String(res.status)}: ${text.slice(0, 300)}`);
   }
 
   if (!stream) {
     // 非流式分支（摘要器/反向验证用）：整段回复转成同一条事件管线，delta 只有 1 个
-    const data = (await res.json()) as ChatChunk;
-    const callId = data.id ?? "a-0";
-    const msg = data.choices?.[0]?.message;
-    if (msg?.content) yield { type: "assistant_delta", callId, text: msg.content };
-    for (const c of msg?.tool_calls ?? []) {
-      yield {
-        type: "tool_call",
-        id: c.id ?? `call-${String(c.index)}`,
-        name: c.function?.name ?? "",
-        args: parseArgs(c.function?.arguments, label),
-      };
+    try {
+      const data = (await res.json()) as ChatChunk;
+      const callId = data.id ?? "a-0";
+      const msg = data.choices?.[0]?.message;
+      if (msg?.content) yield { type: "assistant_delta", callId, text: msg.content };
+      for (const c of msg?.tool_calls ?? []) {
+        yield {
+          type: "tool_call",
+          id: c.id ?? `call-${String(c.index)}`,
+          name: c.function?.name ?? "",
+          args: parseArgs(c.function?.arguments, label),
+        };
+      }
+      if (data.usage) yield toUsage(data.usage);
+    } finally {
+      guard.dispose();
     }
-    if (data.usage) yield toUsage(data.usage);
     return;
   }
 
-  if (!res.body) throw new Error(`${label} 流式响应缺少 body`);
+  if (!res.body) {
+    guard.dispose();
+    throw new Error(`${label} 流式响应缺少 body`);
+  }
   const decoder = new TextDecoder();
   const reader = res.body.getReader();
   let buf = "";
@@ -140,53 +160,60 @@ export async function* streamOpenAI(
   const pending = new Map<number, { id?: string; name: string; args: string }>();
   let usage: (ModelOutput & { type: "usage" }) | null = null;
 
-  while (!finished) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    let nl: number;
-    while ((nl = buf.indexOf("\n")) >= 0) {
-      const line = buf.slice(0, nl).trim();
-      buf = buf.slice(nl + 1);
-      if (!line.startsWith("data:")) continue;
-      const payload = line.slice(5).trim();
-      if (!payload) continue;
-      if (payload === "[DONE]") {
-        finished = true;
-        break;
-      }
-      const chunk = JSON.parse(payload) as ChatChunk;
-      if (chunk.error) {
-        const e = chunk.error;
-        throw new Error(`${label} 流错误 ${e.type ?? e.code ?? "unknown"}: ${e.message ?? ""}`);
-      }
-      if (chunk.id) callId = chunk.id;
-      if (chunk.usage) usage = toUsage(chunk.usage);
-      const delta = chunk.choices?.[0]?.delta;
-      if (delta?.content) {
-        yield { type: "assistant_delta", callId, text: delta.content };
-      }
-      if (delta?.tool_calls) {
-        for (const tc of delta.tool_calls) {
-          const acc = pending.get(tc.index) ?? { id: undefined, name: "", args: "" };
-          if (tc.id) acc.id = tc.id;
-          if (tc.function?.name) acc.name = tc.function.name; // name 只在首块出现
-          if (tc.function?.arguments) acc.args += tc.function.arguments; // arguments 跨块拼接
-          pending.set(tc.index, acc);
+  try {
+    while (!finished) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      guard.bump(); // 有分片 → 续期（只有完全静默才会到点）
+      buf += decoder.decode(value, { stream: true });
+      let nl: number;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line.startsWith("data:")) continue;
+        const payload = line.slice(5).trim();
+        if (!payload) continue;
+        if (payload === "[DONE]") {
+          finished = true;
+          break;
+        }
+        const chunk = JSON.parse(payload) as ChatChunk;
+        if (chunk.error) {
+          const e = chunk.error;
+          throw new Error(`${label} 流错误 ${e.type ?? e.code ?? "unknown"}: ${e.message ?? ""}`);
+        }
+        if (chunk.id) callId = chunk.id;
+        if (chunk.usage) usage = toUsage(chunk.usage);
+        const delta = chunk.choices?.[0]?.delta;
+        if (delta?.content) {
+          yield { type: "assistant_delta", callId, text: delta.content };
+        }
+        if (delta?.tool_calls) {
+          for (const tc of delta.tool_calls) {
+            const acc = pending.get(tc.index) ?? { id: undefined, name: "", args: "" };
+            if (tc.id) acc.id = tc.id;
+            if (tc.function?.name) acc.name = tc.function.name; // name 只在首块出现
+            if (tc.function?.arguments) acc.args += tc.function.arguments; // arguments 跨块拼接
+            pending.set(tc.index, acc);
+          }
         }
       }
     }
-  }
 
-  // 流结束：吐出累积完成的 tool_call（按 index 稳定排序），再吐 usage
-  const ordered = [...pending.entries()].sort((a, b) => a[0] - b[0]);
-  for (const [index, acc] of ordered) {
-    yield {
-      type: "tool_call",
-      id: acc.id ?? `call-${String(index)}`,
-      name: acc.name,
-      args: parseArgs(acc.args, label),
-    };
+    // 流结束：吐出累积完成的 tool_call（按 index 稳定排序），再吐 usage
+    const ordered = [...pending.entries()].sort((a, b) => a[0] - b[0]);
+    for (const [index, acc] of ordered) {
+      yield {
+        type: "tool_call",
+        id: acc.id ?? `call-${String(index)}`,
+        name: acc.name,
+        args: parseArgs(acc.args, label),
+      };
+    }
+    if (usage) yield usage;
+  } finally {
+    guard.dispose();
+    // 消费者提前 break / 出错退出时主动取消 body，否则连接与对端资源一直挂着。
+    void reader.cancel().catch(() => {});
   }
-  if (usage) yield usage;
 }

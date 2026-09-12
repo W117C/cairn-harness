@@ -5,10 +5,10 @@
 // 输出 10k 上限、超限全文落盘；timeout 缺省 600s（UserPromptSubmit 降 30s）、到点 SIGKILL 强杀；
 // 同事件多 handler 并行；跨层按 (command+args) 去重；${user_config.*} 禁入 shell-form（装载已拒）。
 // 环境变量：插件相关只给 PLUGIN_ROOT / PLUGIN_DATA / PROJECT_DIR（宿主密钥类变量显式剥离）。
-import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { staticRisk } from "../../permissions/risk";
+import { spawnTracked } from "../../tools/process";
 import type { HookEventName, LoadedHookDef } from "./types";
 
 /** 输出上限（每流，字符）。 */
@@ -159,21 +159,30 @@ function defaultExec(): HookExecFn {
       let stdout = "";
       let stderr = "";
       let killed = false;
-      const child = shell
-        ? spawn(command, { shell: true, env, cwd })
-        : spawn(argv[0] ?? "", argv.slice(1), { env, cwd });
-      const timer = setTimeout(() => {
-        killed = true;
-        try { child.kill("SIGKILL"); } catch { /* 已退出 */ }
-      }, Math.max(1, timeoutSec) * 1000);
-      child.stdout?.on("data", (d: Buffer) => { stdout += d.toString("utf8"); });
-      child.stderr?.on("data", (d: Buffer) => { stderr += d.toString("utf8"); });
-      const done = (code: number | null) => {
-        clearTimeout(timer);
+      let settled = false;
+      const done = (code: number | null): void => {
+        if (settled) return;
+        settled = true;
+        handle.dispose();
         resolveP({ code, stdout, stderr, killed });
       };
-      child.on("error", () => done(null));
-      child.on("close", (code) => done(code));
+      // 进程组 + 超时强制收束：hook 命令是插件提供的 shell 串，孙进程持有 stdout 时
+      // 'close' 永不触发会让 hook 永久挂起（P1-2）。env 已由 hookEnv 白名单消毒。
+      // shell form：整串交给 /bin/sh；exec form：argv[0] 为可执行文件、其余为参数。
+      const handle = spawnTracked(shell ? command : (argv[0] ?? ""), shell ? [] : argv.slice(1), {
+        cwd,
+        env,
+        shell,
+        timeoutMs: Math.max(1, timeoutSec) * 1000,
+        onTimeout: () => {
+          killed = true;
+          done(null);
+        },
+      });
+      handle.child.stdout?.on("data", (d: Buffer) => { stdout += d.toString("utf8"); });
+      handle.child.stderr?.on("data", (d: Buffer) => { stderr += d.toString("utf8"); });
+      handle.child.on("error", () => done(null));
+      handle.child.on("close", (code) => done(code));
     });
   };
 }

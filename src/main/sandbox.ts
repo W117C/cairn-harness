@@ -3,22 +3,18 @@
 //       路径不存在时按原样写入 profile（规则对不上 = 拒绝，fail-closed）。
 // 坑二：必须 (allow process*) 与 (allow signal)，否则子进程 Abort / EPERM（vitest worker 要 signal）。
 // 坑四：sandbox-exec 不清环境变量 —— env 消毒是本模块的活（白名单 + 秘密名剥除）。
-import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { truncationNotice, type ToolResult } from "../tools/base";
+import { sanitizedEnv, spawnTracked } from "../tools/process";
 
 const OUTPUT_LIMIT = 32 * 1024;
 const DEFAULT_TIMEOUT_MS = 60_000;
 
 /** 敏感目录（相对 HOME）：读取一律拒绝。 */
 const SENSITIVE = [".ssh", ".aws", ".config/gcloud", "Library/Keychains"];
-
-/** env 白名单：只传这些；名字含 KEY/TOKEN/SECRET/PASSWORD 的一律剥除（双保险）。 */
-const ENV_KEYS = ["PATH", "HOME", "TERM", "SHELL", "LANG", "TMPDIR"] as const;
-const SECRET_PATTERN = /(KEY|TOKEN|SECRET|PASSWORD)/i;
 
 export interface SandboxStatus {
   available: boolean;
@@ -53,18 +49,10 @@ export function buildSandboxProfile(writableRoot: string): string {
   return lines.join("\n");
 }
 
-/** 沙箱子进程环境：白名单 + 秘密剥除 + TMPDIR 指向工作区内 .tmp（写收敛）。 */
+/** 沙箱子进程环境：白名单 + 秘密剥除 + TMPDIR 指向工作区内 .tmp（写收敛）。
+ *  实现在 src/tools/process（与 run_shell / verify / LSP 共用同一套消毒——见 P1-1）。 */
 export function sandboxEnv(tmpDir: string): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {};
-  for (const k of ENV_KEYS) {
-    const v = process.env[k];
-    if (v !== undefined) env[k] = v;
-  }
-  for (const k of Object.keys(env)) {
-    if (SECRET_PATTERN.test(k)) delete env[k];
-  }
-  env.TMPDIR = tmpDir;
-  return env;
+  return sanitizedEnv(tmpDir);
 }
 
 export interface SandboxRunOptions {
@@ -80,13 +68,10 @@ export async function runInSandbox(command: string, opts: SandboxRunOptions): Pr
   const tmp = join(real(opts.cwd), ".tmp");
   await mkdir(tmp, { recursive: true });
   return await new Promise<ToolResult>((settle) => {
-    const child = spawn("sandbox-exec", ["-p", profile, "bash", "-c", command], {
-      cwd: opts.cwd,
-      env: sandboxEnv(tmp),
-    });
     let out = "";
     let truncated = false;
     let timedOut = false;
+    let settled = false;
     const collect = (chunk: Buffer): void => {
       if (out.length >= OUTPUT_LIMIT) {
         truncated = true;
@@ -98,25 +83,36 @@ export async function runInSandbox(command: string, opts: SandboxRunOptions): Pr
         truncated = true;
       }
     };
-    child.stdout?.on("data", collect);
-    child.stderr?.on("data", collect);
     const timeout = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGKILL");
-    }, timeout);
-    child.on("error", (err) => {
-      clearTimeout(timer);
-      settle({ ok: false, output: "sandbox-exec: " + err.message });
-    });
-    child.on("close", (code) => {
-      clearTimeout(timer);
+    /** 幂等收束：超时主动 settle，不等孙进程放掉 stdout（P1-2）。 */
+    const finish = (code: number | null): void => {
+      if (settled) return;
+      settled = true;
+      handle.dispose();
       let output = out;
       if (truncated) output += "\n" + truncationNotice(32);
       if (timedOut) output += "\n[error: 沙箱命令超时（" + String(Math.round(timeout / 1000)) + "s），已强制终止]";
       if (code !== 0 && !timedOut) output += "\n[exit code: " + String(code) + "]";
       settle({ ok: code === 0 && !timedOut, output: output.replace(/\n+$/, "") });
+    };
+    const handle = spawnTracked("sandbox-exec", ["-p", profile, "bash", "-c", command], {
+      cwd: opts.cwd,
+      env: sandboxEnv(tmp),
+      timeoutMs: timeout,
+      onTimeout: () => {
+        timedOut = true;
+        finish(null);
+      },
     });
+    handle.child.stdout?.on("data", collect);
+    handle.child.stderr?.on("data", collect);
+    handle.child.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      handle.dispose();
+      settle({ ok: false, output: "sandbox-exec: " + err.message });
+    });
+    handle.child.on("close", (code) => finish(code));
   });
 }
 

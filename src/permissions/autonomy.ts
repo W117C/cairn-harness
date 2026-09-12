@@ -10,6 +10,7 @@ import type { PermissionMode } from "./index";
 import { judgeChain, normalizeCommand, type PermissionRule } from "./rules";
 import {
   isNetworkCommand,
+  isShellFamily,
   maxRisk,
   modelRisk,
   RISK_ORDER,
@@ -82,20 +83,31 @@ export function newAutonomySession(
   };
 }
 
+/** 写向工具（含 shell 写面）：只读档摘除、方案门、沙箱通道按此判定。
+ *  注：shell_ro 是静态白名单只读面，**不算**写向——否则只读档会把 worker 的只读 shell 一并摘掉；
+ *  shell_rw 可执行任意非 git 命令，必须计入写向（否则沙箱降级通道对它整体失效）。 */
+const SIDE_EFFECT_TOOLS: ReadonlySet<string> = new Set([
+  "write_file",
+  "edit_file",
+  "run_shell",
+  "shell_rw",
+]);
+
 export function isSideEffectTool(tool: string): boolean {
-  return tool === "write_file" || tool === "edit_file" || tool === "run_shell";
+  return SIDE_EFFECT_TOOLS.has(tool);
 }
 
-/** scope 记忆键：run_shell 按归一化命令全串（出网审计粒度），write_file 按工具级（「此类」语义）。 */
+/** scope 记忆键：shell 类按归一化命令全串（出网审计粒度），其余按工具级（「此类」语义）。
+ *  键里保留字面工具名——主会话 run_shell 与 worker shell_rw/shell_ro 的放行集不互相串门。 */
 export function scopeKey(tool: ToolName, args: Record<string, unknown>): string {
-  if (tool === "run_shell" && typeof args.command === "string") {
-    return "run_shell\u241F" + normalizeCommand(args.command);
+  if (isShellFamily(tool) && typeof args.command === "string") {
+    return tool + "\u241F" + normalizeCommand(args.command);
   }
   return tool + "\u241F*";
 }
 
 export function isNetworkCommandCall(tool: ToolName, args: Record<string, unknown>): boolean {
-  if (tool !== "run_shell") return false;
+  if (!isShellFamily(tool)) return false;
   return isNetworkCommand(typeof args.command === "string" ? args.command : undefined);
 }
 
@@ -130,7 +142,7 @@ export function evaluate(
   args: Record<string, unknown>,
   s: AutonomySession,
 ): EvaluateDecision {
-  const cmd = tool === "run_shell" && typeof args.command === "string" ? args.command : undefined;
+  const cmd = isShellFamily(tool) && typeof args.command === "string" ? args.command : undefined;
   const channels = collectRisk(tool, args, s);
   const risk = channels.risk;
 

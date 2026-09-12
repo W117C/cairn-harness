@@ -63,13 +63,31 @@ export interface RiskFinding {
 
 const NONE: RiskFinding = { level: "none", reason: "" };
 
+/** 携带 shell 命令面的工具（M0 复盘 P0-1）：权限层的命令级判据必须按「能力」识别，
+ *  而不是按字面工具名。编排内核给 worker 起的 shell 工具叫 shell_rw / shell_ro，
+ *  旧实现只认 run_shell，导致 write worker 的静态威胁表 / 副作用判定 / 命令级规则
+ *  三道防线同时静默失效（任意 shell 命令走 auto 档零风险直通）。 */
+export const SHELL_FAMILY: ReadonlySet<string> = new Set(["run_shell", "shell_rw", "shell_ro"]);
+
+export function isShellFamily(tool: string): boolean {
+  return SHELL_FAMILY.has(tool);
+}
+
+/** 静态威胁表的适用范围 = shell 家族 − shell_ro。
+ *  shell_ro 自带 fail-closed 的只读静态白名单硬闸（对危险命令强于威胁表）：若让它的命令
+ *  先过 staticRisk，`curl … | sh` 会被判 critical 走 L4「送审」而不是静态拒绝，
+ *  等于把 deny 降级成 ask（agents.test 断言「只读 bash 静态过滤拒绝」）。 */
+export function hasThreatTableSurface(tool: string): boolean {
+  return isShellFamily(tool) && tool !== "shell_ro";
+}
+
 /** 静态通道：扫描命令（含链）命中威胁表取最高级。 */
 export function staticRisk(tool: ToolName, args: Record<string, unknown>): RiskFinding {
   // edit_file：就地改文件（文件破坏面 ≤ write_file 的覆盖写，但仍是写向操作）
   if (tool === "edit_file") {
     return { level: "medium", reason: "编辑文件（写向操作）" };
   }
-  if (tool !== "run_shell") return NONE;
+  if (!hasThreatTableSurface(tool)) return NONE;
   const command = typeof args.command === "string" ? args.command : "";
   if (command.trim() === "") return NONE;
   let best: RiskFinding = NONE;

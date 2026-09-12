@@ -6,7 +6,11 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { withTimeout } from "../../net";
 import type { McpServerConfig, McpServerStatus } from "./types";
+
+/** MCP 连接/列工具的默认总时长上限（根因 4）：server 挂起时不让 IPC promise 永久悬空。 */
+export const DEFAULT_MCP_CONNECT_MS = 30_000;
 
 /** MCP 工具 scoped 名（§9.3）：mcp__plugin_<plugin>_<server>__<tool>。 */
 export function scopedToolName(plugin: string, server: string, tool: string): string {
@@ -95,9 +99,11 @@ export function expandMcpConfig(cfg: McpServerConfig, roots: { pluginRoot?: stri
 export class McpManager {
   private connections = new Map<string, Connection>();
   private factory: McpClientFactory;
+  private readonly connectTimeoutMs: number;
 
-  constructor(factory?: McpClientFactory) {
+  constructor(factory?: McpClientFactory, connectTimeoutMs: number = DEFAULT_MCP_CONNECT_MS) {
     this.factory = factory ?? (async (cfg) => defaultClientFactory(cfg));
+    this.connectTimeoutMs = connectTimeoutMs;
   }
 
   private key(plugin: string, server: string): string {
@@ -112,10 +118,17 @@ export class McpManager {
       return c.error ? { ok: false, tools: [], error: c.error } : { ok: true, tools: c.tools };
     }
     const resolved = roots ? expandMcpConfig(cfg, roots) : cfg;
+    let client: Client | undefined;
+    let transport: Transport | undefined;
     try {
-      const { client, transport } = await this.factory(resolved, plugin, server);
-      await client.connect(transport);
-      const listed = await client.listTools();
+      const made = await this.factory(resolved, plugin, server);
+      client = made.client;
+      transport = made.transport;
+      // 根因 4：连接与 tools/list 都是一次性请求，用总时长语义的超时——
+      // server 挂起（不响应握手/不回 tools/list）时不再永久悬空。
+      const label = `MCP server ${plugin}/${server}`;
+      await withTimeout(client.connect(transport), this.connectTimeoutMs, label + " 连接");
+      const listed = await withTimeout(client.listTools(), this.connectTimeoutMs, label + " tools/list");
       const tools: McpToolInfo[] = (listed.tools ?? []).map((t) => ({
         name: t.name,
         description: typeof t.description === "string" ? t.description : "",
@@ -126,6 +139,17 @@ export class McpManager {
       this.connections.set(k, conn);
       return { ok: true, tools };
     } catch (err) {
+      // 超时/失败：底层连接可能仍挂着 → 先尽力关掉，再记失败态（fail-visible，不留僵尸连接）。
+      try {
+        await client?.close();
+      } catch {
+        /* 已断 */
+      }
+      try {
+        await transport?.close();
+      } catch {
+        /* 已断 */
+      }
       const msg = err instanceof Error ? err.message : String(err);
       this.connections.set(k, {
         plugin, server,

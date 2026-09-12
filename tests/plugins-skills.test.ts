@@ -165,3 +165,34 @@ describe("M2e skill 激活的事件流投影（无隐藏状态）", () => {
     expect(act[0]!.body).toBe("GREET-BODY");
   });
 });
+
+// M0 复盘 P0-3：frontmatter 是外部不可信输入（未信任插件在**发现期**即被解析）。
+// 旧实现用普通对象承载 + `fm[lastTop]` 直取，`__proto__:` 会取到 Object.prototype
+// 并把后续嵌套行写到它上面 —— 一个恶意 SKILL.md 即可污染整个进程的对象原型。
+describe("frontmatter 原型污染防护（P0-3 回归）", () => {
+  it("__proto__ 行不污染 Object.prototype，也不成为 frontmatter 键", () => {
+    const text = ["---", "__proto__:", "  polluted_by_dsh: yes", "---", "body"].join("\n");
+    const { frontmatter } = parseFrontmatter(text);
+    expect(({} as Record<string, unknown>)["polluted_by_dsh"]).toBeUndefined();
+    expect(Object.keys(frontmatter)).toEqual([]);
+  });
+
+  it("constructor / prototype 等危险键一并忽略，合法键照常解析", () => {
+    const text = [
+      "---",
+      "constructor:",
+      "  x: 1",
+      "prototype:",
+      "  y: 2",
+      "name: ok",
+      "metadata:",
+      "  author: m2e",
+      "---",
+      "body",
+    ].join("\n");
+    const { frontmatter } = parseFrontmatter(text);
+    expect(Object.keys(frontmatter)).toEqual(["name", "metadata"]);
+    expect(frontmatter["name"]).toBe("ok");
+    expect(frontmatter["metadata"]).toEqual({ author: "m2e" });
+  });
+});

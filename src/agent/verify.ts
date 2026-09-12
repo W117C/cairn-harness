@@ -1,10 +1,10 @@
 // 验证门执行器：按目标仓库的 verify 配置跑 lint/test。
 // 配置来源（规格 §5.4）：①目标仓库 .agent/config.json 的 verify 字段；②缺省探测 package.json 的
 // scripts（lint/test 存在才收）。两者皆无 → fail-closed（ok:false，验证门不空转放行）。
-import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { truncationNotice } from "../tools/base";
+import { sanitizedEnv, spawnTracked } from "../tools/process";
 import type { VerifyCommandResult } from "../events";
 
 export interface VerifyConfig {
@@ -22,13 +22,15 @@ export type ExecFn = (command: string, cwd: string) => Promise<VerifyCommandResu
 const OUTPUT_LIMIT = 32 * 1024;
 const TIMEOUT_MS = 60_000;
 
-/** 缺省执行器：bash -c，语义与 run_shell 对齐（32KB 截断 / 60s 强杀 / 退出码）。 */
+/** 缺省执行器：bash -c，语义与 run_shell 对齐（32KB 截断 / 60s 强杀 / 退出码）。
+ *  env 走 sanitizedEnv、进程走 spawnTracked（进程组 + 超时强制收束）——verify 命令来自目标仓库的
+ *  .agent/config.json，属外部输入；不消毒就等于把 BYOK key 交给它（P1-1/P1-2）。 */
 export const defaultExec: ExecFn = (command, cwd) => {
   return new Promise<VerifyCommandResult>((settle) => {
-    const child = spawn("bash", ["-c", command], { cwd });
     let out = "";
     let truncated = false;
     let timedOut = false;
+    let settled = false;
     const collect = (chunk: Buffer): void => {
       if (out.length >= OUTPUT_LIMIT) {
         truncated = true;
@@ -40,24 +42,34 @@ export const defaultExec: ExecFn = (command, cwd) => {
         truncated = true;
       }
     };
-    child.stdout?.on("data", collect);
-    child.stderr?.on("data", collect);
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGKILL");
-    }, TIMEOUT_MS);
-    child.on("error", (err) => {
-      clearTimeout(timer);
-      settle({ command, ok: false, output: "verify exec: " + err.message });
-    });
-    child.on("close", (code) => {
-      clearTimeout(timer);
+    const finish = (code: number | null): void => {
+      if (settled) return;
+      settled = true;
+      handle.dispose();
       let output = out;
       if (truncated) output += "\n" + truncationNotice(32);
       if (timedOut) output += "\n[error: verify 命令超时（60s），已强制终止]";
       if (code !== 0 && !timedOut) output += `\n[exit code: ${String(code)}]`;
       settle({ command, ok: code === 0 && !timedOut, output: output.replace(/\n+$/, "") });
+    };
+    const handle = spawnTracked("bash", ["-c", command], {
+      cwd,
+      env: sanitizedEnv(),
+      timeoutMs: TIMEOUT_MS,
+      onTimeout: () => {
+        timedOut = true;
+        finish(null);
+      },
     });
+    handle.child.stdout?.on("data", collect);
+    handle.child.stderr?.on("data", collect);
+    handle.child.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      handle.dispose();
+      settle({ command, ok: false, output: "verify exec: " + err.message });
+    });
+    handle.child.on("close", (code) => finish(code));
   });
 };
 

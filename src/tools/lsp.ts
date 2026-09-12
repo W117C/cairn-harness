@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { spawn, type ChildProcess } from "node:child_process";
 import { extname, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
+import { killGroup, sanitizedEnv } from "./process.js";
 import {
   createProtocolConnection,
   StreamMessageReader,
@@ -239,7 +240,8 @@ export class LspClient {
     } catch {
       /* 尽力而为 */
     }
-    this.child.kill();
+    // 杀整棵进程树：语言服务器常自己再派生子进程（tsserver 等），只杀直接子进程会留孤儿（P1-2）
+    killGroup(this.child);
   }
 }
 
@@ -263,7 +265,13 @@ export async function getLspClient(root: string, cfg: LspConfig, serverId: strin
 
 async function startClient(root: string, server: LspServerConfig, key: string): Promise<LspClient> {
   const args = (server.args ?? []).map((a) => resolve(root, a));
-  const child = spawn(server.command, args, { cwd: root, stdio: ["pipe", "pipe", "pipe"] });
+  const child = spawn(server.command, args, {
+    cwd: root,
+    stdio: ["pipe", "pipe", "pipe"],
+    // env 消毒：server.command 来自 .agent/lsp.json（可被 write_file 改写），
+    // 不消毒就等于把 BYOK key 交给一个可配置的任意可执行文件（P1-1）。
+    env: sanitizedEnv(),
+  });
   if (!child.stdout || !child.stdin) throw new ToolError("lsp: server 进程 stdio 不可用");
   // spawn 失败/进程退出时管道会销毁；jsonrpc 的写错误走 unhandled rejection，这里吞掉管道层错误
   //（生命周期错误已由 LspClient 的 fail 闭包统一处理，不丢语义）
@@ -303,7 +311,7 @@ async function startClient(root: string, server: LspServerConfig, key: string): 
     } catch {
       /* 尽力而为 */
     }
-    child.kill();
+    killGroup(child);
     throw err instanceof Error ? err : new Error(String(err));
   });
   return client;

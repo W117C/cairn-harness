@@ -3,6 +3,8 @@
 // 「检查更新」= fetch manifest {version, url, notes} → 手写三段 semver 比较 → 有新版返回卡载荷
 // （renderer 出卡引导打开下载页，shell.openExternal 走 IPC agent:update-open，仅 https 白名单）。
 // 网络失败 / 坏 manifest = 显式 error 态，绝不静默。
+import { DEFAULT_STALL_MS, stallGuard } from "../net";
+
 export interface UpdateManifest {
   version: string;
   url: string;
@@ -42,15 +44,21 @@ export async function checkUpdate(opts: {
   manifestUrl: string;
   currentVersion: string;
   fetchImpl?: typeof fetch;
+  /** 停滞守卫静默窗口 ms（根因 4）；缺省 60s，<=0 关闭守卫。 */
+  stallTimeoutMs?: number;
 }): Promise<UpdateCheckResult> {
   const url = opts.manifestUrl.trim();
   if (url === "") return { state: "unconfigured" };
   const doFetch = opts.fetchImpl ?? fetch;
+  // 根因 4：更新源挂起时不再让 IPC promise 永久悬空（UI 永久转圈）。
+  const guard = stallGuard(opts.stallTimeoutMs ?? DEFAULT_STALL_MS, "更新源");
   let res: Response;
   try {
-    res = await doFetch(url, { headers: { accept: "application/json" } });
+    res = await doFetch(url, { headers: { accept: "application/json" }, signal: guard.signal });
   } catch (err) {
     return { state: "error", message: "更新源不可达：" + (err instanceof Error ? err.message : String(err)) };
+  } finally {
+    guard.dispose();
   }
   if (!res.ok) return { state: "error", message: "更新源响应 HTTP " + String(res.status) };
   let raw: unknown;

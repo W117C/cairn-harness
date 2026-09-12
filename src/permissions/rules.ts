@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { isShellFamily } from "./risk";
 
 export type RuleBehavior = "allow" | "ask" | "deny";
 
@@ -158,17 +159,31 @@ export type ChainVerdict =
   | { verdict: "allow" | "ask" | "deny"; ruleId: string }
   | { verdict: "miss" };
 
-/** 链式判定：任一段未命中 → miss（落回档位层）；任一段 deny → 全链 deny；
- * 全段命中时取最坏行为（deny > ask > allow）。 */
+/** 规则适用工具判定：shell 能力域内互通（run_shell ↔ shell_rw ↔ shell_ro）。
+ *  用户为 run_shell 写的 deny/ask 必须同样约束 worker 的 shell_rw——否则「按能力设防」
+ *  在编排侧整条失效（M3b worker 的 shell 工具名不是 run_shell）。 */
+function ruleApplies(ruleTool: string, tool: string): boolean {
+  if (ruleTool === tool) return true;
+  return isShellFamily(ruleTool) && isShellFamily(tool);
+}
+
+/** 链式判定：任一段命中 deny → 全链 deny（deny 短路优先，不受其他段未命中影响）；
+ *  全段命中时取最坏行为（deny > ask > allow）；任一段无规则命中 → miss（落回档位层）。
+ *  deny 短路必须先于 miss 判定：否则 `echo x && git push --force` 里那个无规则命中的
+ *  无害前缀会把整链打回档位层，用户显式 deny 被击穿（P0-2）。 */
 export function judgeChain(rules: PermissionRule[], tool: string, command?: string): ChainVerdict {
-  const applicable = rules.filter((r) => r.tool === tool);
+  const applicable = rules.filter((r) => ruleApplies(r.tool, tool));
   if (applicable.length === 0) return { verdict: "miss" };
   const segments = command === undefined ? [""] : splitCommandChain(command);
   if (segments.length === 0) return { verdict: "miss" };
   let worst: RuleHit | null = null;
+  let allHit = true;
   for (const seg of segments) {
     const hit = matchSegment(applicable, seg);
-    if (!hit) return { verdict: "miss" }; // 任一段没有规则命中 → 整链落回档位层
+    if (!hit) {
+      allHit = false; // 本段无规则：不再立即 miss——后面的段仍可能命中 deny 并短路整链
+      continue;
+    }
     if (hit.rule.behavior === "deny") {
       return { verdict: "deny", ruleId: hit.rule.id ?? "" }; // 任一段 deny 全链 deny
     }
@@ -176,6 +191,6 @@ export function judgeChain(rules: PermissionRule[], tool: string, command?: stri
       worst = hit;
     }
   }
-  if (worst === null) return { verdict: "miss" };
+  if (!allHit || worst === null) return { verdict: "miss" };
   return { verdict: worst.rule.behavior, ruleId: worst.rule.id ?? "" };
 }
