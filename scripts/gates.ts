@@ -36,6 +36,7 @@ export const GATES: readonly string[] = [
   "sidechat-check",
   "security-check",
   "agents-check",
+  "schedule-check",
 ];
 
 interface GateResult {
