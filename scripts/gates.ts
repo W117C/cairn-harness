@@ -11,40 +11,36 @@ import { spawn } from "node:child_process";
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { countUnverified, scanAssertionHealth, scanDisjunctions, type ScanHit } from "./assertion-health";
+import { checkGateManifest, EXEMPT_SCRIPTS, GATES } from "./gate-manifest";
+
+// 断言体检实现已抽到 ./assertion-health.ts：gates.ts 顶层有 `await main()`，
+// 直接 import 会跑起全套门禁——抽出去才能单测。此处再导出，对外接口不变。
+export { countUnverified, scanAssertionHealth, scanDisjunctions };
+export type { ScanHit };
+// 清单/漂移护栏同族：清单抽到 ./gate-manifest.ts，此处再导出，对外接口不变。
+export { GATES, checkGateManifest, EXEMPT_SCRIPTS };
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-
-/** 全部门清单（清单即事实源）：六道门 + 13 个 -check。 */
-export const GATES: readonly string[] = [
-  "typecheck",
-  "test",
-  "e2e",
-  "ipc:check",
-  "sandbox:check",
-  "build",
-  "fork-check",
-  "gate-check",
-  "autonomy-check",
-  "compaction-check",
-  "panels-check",
-  "tools-check",
-  "map-check",
-  "prune-check",
-  "providers-check",
-  "memory-check",
-  "plugins-check",
-  "sidechat-check",
-  "security-check",
-  "agents-check",
-  "schedule-check",
-  "commercial-check",
-];
 
 interface GateResult {
   name: string;
   code: number;
   ms: number;
   output: string;
+}
+
+/** 全量体检：空断言 / 恒真式 / 无断言段 + H-1 的 AST 级析取式弱断言。 */
+async function scanAll(): Promise<ScanHit[]> {
+  const dir = join(ROOT, "scripts");
+  const files = (await readdir(dir)).filter((f) => f.endsWith(".ts")).sort();
+  const hits: ScanHit[] = [];
+  for (const f of files) {
+    const src = await readFile(join(dir, f), "utf8");
+    hits.push(...scanAssertionHealth(f, src));
+    hits.push(...scanDisjunctions(f, src)); // H-1：AST 级析取式弱断言
+  }
+  return hits;
 }
 
 function runGate(name: string): Promise<GateResult> {
@@ -68,78 +64,37 @@ function runGate(name: string): Promise<GateResult> {
   });
 }
 
-// ---- 恒真式体检（静态扫描，机械可执行）----
-/** 空断言：check/assert/ok 的第一或第二实参字面量 true。 */
-const EMPTY_ASSERT = /(?:check|assert|ok)\s*\(\s*(?:[^()]*,\s*true\s*\)|true\s*,)/;
-/** 恒真式：`X || true` / `X === null || true`。 */
-const TAUTOLOGY = /\|\|\s*true\b/;
-/** 暗卷/暗盒段：函数名或紧邻注释含「暗卷」「暗盒」「darkBox」「dark」。 */
-const DARK_SEGMENT = /(暗卷|暗盒|darkBox)/;
-const HAS_ASSERTION = /(?:check|assert|ok)\s*\(/;
-
-export interface ScanHit {
-  file: string;
-  line: number;
-  kind: "empty-assert" | "tautology" | "dark-no-assert";
-  text: string;
-}
-
-/** 扫描一个脚本源码：返回命中清单（纯函数，可单测）。 */
-export function scanAssertionHealth(file: string, src: string): ScanHit[] {
-  const hits: ScanHit[] = [];
-  const lines = src.split("\n");
-  lines.forEach((raw, i) => {
-    const line = raw.replace(/\/\*.*?\*\//g, "").replace(/\/\/.*$/, ""); // 去注释（行内块注释 + 行注释），避免注释/文档串里的示例误伤
-    if (EMPTY_ASSERT.test(line)) hits.push({ file, line: i + 1, kind: "empty-assert", text: raw.trim() });
-    else if (TAUTOLOGY.test(line)) hits.push({ file, line: i + 1, kind: "tautology", text: raw.trim() });
-  });
-  // 暗卷段零断言：以顶层 async function 为粒度，段内无 check/assert/ok 即报警
-  const fnRe = /^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/gm;
-  const marks: { name: string; start: number; headerLine: number }[] = [];
-  for (let m = fnRe.exec(src); m !== null; m = fnRe.exec(src)) {
-    marks.push({ name: m[1]!, start: m.index, headerLine: src.slice(0, m.index).split("\n").length });
-  }
-  for (let k = 0; k < marks.length; k++) {
-    const cur = marks[k]!;
-    const end = k + 1 < marks.length ? marks[k + 1]!.start : src.length;
-    const body = src.slice(cur.start, end);
-    // 段头注释（函数声明前 3 行）或函数名含暗卷标记
-    const headerFrom = Math.max(0, cur.headerLine - 4);
-    const header = lines.slice(headerFrom, cur.headerLine).join("\n");
-    if (!DARK_SEGMENT.test(cur.name) && !DARK_SEGMENT.test(header)) continue;
-    if (!HAS_ASSERTION.test(body)) {
-      hits.push({ file, line: cur.headerLine, kind: "dark-no-assert", text: "function " + cur.name + "（暗卷段内无 check/assert）" });
-    }
-  }
-  return hits;
-}
-
-async function scanAll(): Promise<ScanHit[]> {
-  const dir = join(ROOT, "scripts");
-  const files = (await readdir(dir)).filter((f) => f.endsWith(".ts")).sort();
-  const hits: ScanHit[] = [];
-  for (const f of files) {
-    const src = await readFile(join(dir, f), "utf8");
-    hits.push(...scanAssertionHealth(f, src));
-  }
-  return hits;
-}
-
 async function main(): Promise<void> {
   const onlyArg = process.argv.find((a) => a.startsWith("--only="));
   const only = onlyArg ? new Set(onlyArg.slice("--only=".length).split(",").map((s) => s.trim())) : null;
   const noScan = process.argv.includes("--no-scan");
+  /** H-2：严格模式——未证项直接判红（CI / 有凭据环境用）。 */
+  const strictUnverified = process.argv.includes("--strict-unverified") || process.env.DSH_STRICT_UNVERIFIED === "1";
   const gates = only ? GATES.filter((g) => only.has(g)) : GATES;
+
+  // 清单漂移护栏（在跑门之前）：GATES ↔ package.json scripts 双向一致。
+  // 发现验收形态脚本既不在 GATES 也不在 EXEMPT_SCRIPTS（曾经的 provider:check），
+  // 或 GATES 列了不存在的 script，一律判红——不静默冷落任何一道门。
+  const pkg = JSON.parse(await readFile(join(ROOT, "package.json"), "utf8")) as { scripts?: Record<string, string> };
+  const drift = checkGateManifest(pkg.scripts ?? {});
 
   console.log("== pnpm gates ==");
   console.log("门清单（" + String(gates.length) + " 道，清单即事实源）：" + gates.join(" "));
+  if (drift.length === 0) {
+    console.log("  清单漂移校验：✅ GATES ↔ package.json scripts 一致（无孤儿验收脚本）");
+  } else {
+    console.log("  清单漂移校验：❌ " + String(drift.length) + " 条");
+    for (const d of drift) console.log("    [" + d.kind + "] " + d.detail);
+  }
   console.log("");
 
   const results: GateResult[] = [];
+  let unverified = 0;
   for (const g of gates) {
     process.stdout.write("  ▶ " + g + " …");
     const r = await runGate(g);
     results.push(r);
+    unverified += countUnverified(r.output); // H-2：未证数上浮到门禁汇总
     process.stdout.write("\r  " + (r.code === 0 ? "✅" : "❌") + " " + g.padEnd(18) + " exit=" + String(r.code) + "  " + String(r.ms) + "ms\n");
     if (r.code !== 0) {
       const tail = r.output.trim().split("\n").slice(-12).join("\n");
@@ -151,7 +106,7 @@ async function main(): Promise<void> {
   let scanHits: ScanHit[] = [];
   if (!noScan) {
     console.log("");
-    console.log("== 恒真式体检（空断言 / 恒真式 / 暗卷段零断言）==");
+    console.log("== 断言体检（空断言 / 恒真式 / 暗卷段零断言 / 析取式弱断言）==");
     scanHits = await scanAll();
     if (scanHits.length === 0) console.log("  ✅ 零命中");
     else for (const h of scanHits) console.log("  ❌ " + h.file + ":" + String(h.line) + " [" + h.kind + "] " + h.text);
@@ -163,11 +118,22 @@ async function main(): Promise<void> {
   console.log("  绿 " + String(results.length - failed.length) + " / " + String(results.length) + "，红 " + String(failed.length) + (failed.length > 0 ? "（" + failed.map((f) => f.name).join("、") + "）" : ""));
   console.log("  逐道退出码：" + results.map((r) => r.name + "=" + String(r.code)).join(" "));
   if (scanHits.length > 0) console.log("  体检命中 " + String(scanHits.length) + " 条（见上）");
+  if (unverified > 0) {
+    console.log("  ⚠️  未证 " + String(unverified) + " 项（连网/凭据限制未跑到的断言——**不等于通过**）");
+    console.log("     严格模式：DSH_STRICT_UNVERIFIED=1 或 --strict-unverified 可让未证直接判红");
+  }
 
-  if (failed.length > 0 || scanHits.length > 0) {
+  if (drift.length > 0 || failed.length > 0 || scanHits.length > 0) {
     process.exitCode = 1;
+  } else if (strictUnverified && unverified > 0) {
+    // H-2：严格模式下未证 = 红（CI / 有凭据环境用），杜绝「降级成未证 yet 全绿」。
+    console.log("  ❌ 严格模式：存在 " + String(unverified) + " 项未证，判红");
+    process.exitCode = 1;
+  } else if (unverified > 0) {
+    // 未证不算绿：明确改写口径，禁止宣称「全部通过」。
+    console.log("  ⚠️  " + String(results.length) + " 道门退出码全 0，但有 " + String(unverified) + " 项未证——不得宣称「全部通过」");
   } else {
-    console.log("  ✅ pnpm gates 全部通过（" + String(results.length) + " 道门 + 体检零命中）");
+    console.log("  ✅ pnpm gates 全部通过（" + String(results.length) + " 道门 + 体检零命中 + 零未证）");
   }
 }
 

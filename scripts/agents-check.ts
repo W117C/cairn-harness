@@ -681,7 +681,11 @@ try {
     for (const banned of WRITE_WORKER_FORBIDDEN_TOOLS) {
       check(!writeSpecs.includes(banned), "J7b write 工具表禁入 " + banned);
     }
-    check(!WORKER_FORBIDDEN_TOOLS.includes("shell_rw") || !readSpecs.includes("shell_rw"), "J7c read 工具表不含 shell_rw（只读面不变）");
+    // 原为 `!WORKER_FORBIDDEN_TOOLS.includes("shell_rw") || !readSpecs.includes("shell_rw")`。
+    // 当时 WORKER_FORBIDDEN_TOOLS 不含 shell_rw → 第一析取项**恒真** → 该断言永不失败（假门）。
+    // 现两处都修：断言改单一条件（J7c 的真实意图本就是「读工具表不含 shell_rw」），
+    // 且 WORKER_FORBIDDEN_TOOLS 补上 shell_rw（P0-1 同源漏项）——J7a 因此也覆盖该工具。
+    check(!readSpecs.includes("shell_rw"), "J7c read 工具表不含 shell_rw（只读面不变）");
   }
 
   // ============================== K 安全 gate + 评审闭环（M3b 任务书任务 9-K） ==============================
@@ -733,7 +737,13 @@ try {
       } else {
         check(diffEvent !== undefined && diffEvent.output.includes("## LLM 审查"), "K5 LLM 审查段在场（BYOK 已跑）");
       }
-      check(rep !== undefined && (rep.llm_reviewed === true || !process.env.M0_API_KEY), "K5b llm_reviewed 标志与 key 在场性一致");
+      // 原为 `rep.llm_reviewed === true || !process.env.M0_API_KEY`：无 key 时**恒真**、什么也没测。
+      // 上文 K5 已按 hasKey 分支，这里沿用同一分支，两个方向各一条无逃逸的硬断言。
+      if (hasKey) {
+        check(rep !== undefined && rep.llm_reviewed === true, "K5b 有 key → llm_reviewed=true（BYOK 已跑）");
+      } else {
+        check(rep !== undefined && !rep.llm_reviewed, "K5b 无 key → llm_reviewed 非 true（跳过显式）");
+      }
     }
     // K6 评审闭环（经 card_action comment 协议）：done → diff v1 → 评论 → 重启 → diff v2
     {

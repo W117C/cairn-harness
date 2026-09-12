@@ -285,7 +285,16 @@ async function main(): Promise<void> {
     console.log("未证项（连网/凭据限制，未跑到的断言——不等于通过）：");
     for (const u of unverified) console.log("  ⚠️  " + u);
   }
+  // 机器可读标记（H-2）：让 pnpm gates 能把「未证」上浮到门禁汇总与退出码判定，
+  // 而不是只在本脚本里打印一行——旧行为下联网失败时整段降级为「未证」，
+  // 而 gates 仍会打印「全部通过」，与「fail-visible，不真空通过」的承诺相矛盾。
+  console.log("UNVERIFIED=" + String(unverified.length));
   console.log("plugins-check: " + String(pass) + " ✅ / " + String(fail) + " ❌" + (unverified.length > 0 ? " / " + String(unverified.length) + " 未证" : ""));
+  const strict = process.env.DSH_STRICT_UNVERIFIED === "1";
+  if (strict && unverified.length > 0) {
+    console.log("严格模式（DSH_STRICT_UNVERIFIED=1）：存在未证项，判红");
+    process.exit(1);
+  }
   if (fail > 0) process.exit(1);
 }
 

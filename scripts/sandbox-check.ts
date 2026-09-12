@@ -77,6 +77,7 @@ if (!degraded) {
   );
   console.log("    " + w2.output.split("\n").join(" | "));
   assert(applied(w2), "② 沙箱确实 apply", APPLY_FAILED.test(w2.output) ? "未验证：sandbox_apply 被拒（绿 ≠ 测到了）" : "已 apply");
+  // gates:disjunction-ok 合法析取：「被拒」有两种合理表现——非零退出，或 stderr 报 operation not permitted 而退出码仍为 0（取决于 EPERM 如何上报）；两者任一即证明被拦。
   assert(!w2.ok || /operation not permitted/i.test(w2.output), "② 工作区外写被拒");
 
   console.log("[sandbox:check] ③ 敏感目录读取");
@@ -93,6 +94,7 @@ if (!degraded) {
   const n1 = await runInSandbox("node -e \"require('net').connect(80, '1.1.1.1')\"", { cwd: ws, writableRoot, timeoutMs: 15000 });
   console.log("    " + n1.output.split("\n").join(" | "));
   assert(applied(n1), "④ 沙箱确实 apply（断网）", APPLY_FAILED.test(n1.output) ? "未验证：sandbox_apply 被拒" : "已 apply");
+  // gates:disjunction-ok 合法析取：同上——断网可表现为非零退出，或 stderr 报 operation not permitted 而退出码为 0。
   assert(!n1.ok || /operation not permitted/i.test(n1.output), "④ 沙箱内无法建立 TCP 连接");
 } else {
   // ---------------- 分支 B：沙箱不可用 → 断言降级链正确（§2.1 红线） ----------------

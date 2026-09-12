@@ -26,6 +26,8 @@ const ROOT = process.cwd();
 const CANARY = "CANARY-被压缩段-原文不得出现在压缩后投影";
 
 let failed = 0;
+/** H-2：未证项（前提不成立、断言无从谈起的场景）——显式记账并上报，绝不静默算绿。 */
+const unverified: string[] = [];
 async function check(name: string, fn: () => void | Promise<void>): Promise<void> {
   try {
     await fn();
@@ -161,7 +163,17 @@ async function main(): Promise<void> {
       const kf = keepFirstSet(st.all);
       assert(kf.has(1), "用户目标未被识别为 keep-first");
       for (const id of st.event.compressed_event_ids) assert(!kf.has(id), "keep-first 事件 " + id + " 被压缩");
-      assert(st.event.compressed_event_ids.includes(4) === false || !kf.has(4), "plan 事件被压缩");
+      // 原为 `includes(4) === false || !kf.has(4)`：实测 **kf={1,2,3,763} 不含 4** → 恒为 `A || true`，
+      // 这道门**从未测过任何东西**（H-1 析取式弱断言的典型形态）。
+      // 根因是**指错了 id**：eventIdAt(i)=i+1，fixture 里 plan_proposed/plan_approved 在 index 1/2 →
+      // **id 2/3**；而 id 4 是第 0 轮的 assistant 消息（say），根本不是 plan。keepFirstSet 本身没问题。
+      // 改为对真实 plan 事件断言（按类型推导，不硬编码 id）；「plan 不被压缩」由上面
+      // 「compressed ∩ kf = ∅」那条保证，无需重复。
+      const planIds = st.all
+        .map((e, i) => (e.type === "plan_proposed" || e.type === "plan_approved" ? i + 1 : -1))
+        .filter((id) => id > 0);
+      assert(planIds.length >= 2, "fixture 应含 plan_proposed 与 plan_approved（实得 " + planIds.length + " 个）");
+      for (const id of planIds) assert(kf.has(id), "plan 事件 " + id + " 未被识别为 keep-first");
     });
     await check("长会话④：fresh start 投影（摘要注入 + 被压内容不可见）且重放投影 === 活投影、幂等", async () => {
       const st = state();
@@ -332,7 +344,20 @@ async function main(): Promise<void> {
       });
     }
 
-    console.log("[compaction-check] " + (failed === 0 ? "全部断言通过" : failed + " 项失败"));
+    // 机器可读标记（H-2）：让 pnpm gates 能把未证数上浮到汇总与严格模式判定。
+    console.log("UNVERIFIED=" + String(unverified.length));
+    if (unverified.length > 0) {
+      console.log("[compaction-check] 未证项（前提不成立、断言无从谈起——不等于通过）：");
+      for (const u of unverified) console.log("  ⚠️  " + u);
+    }
+    console.log(
+      "[compaction-check] " +
+        (failed === 0
+          ? unverified.length > 0
+            ? "断言全过，但有 " + unverified.length + " 项未证（不得宣称全绿）"
+            : "全部断言通过"
+          : failed + " 项失败"),
+    );
     process.exitCode = failed === 0 ? 0 : 1;
   } finally {
     await rm(dir, { recursive: true, force: true });

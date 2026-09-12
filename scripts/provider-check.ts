@@ -1,7 +1,9 @@
 // provider:check —— GLM 真连验收（联网）。断言：
 //   ①真实流式调用收到 ≥2 个 delta   ②usage 的 input/output 均 > 0
-//   ③带 tools 的请求能解析出至少一个 tool_call。
-// 环境缺 M0_API_KEY → 退出码 1（联网验收被阻塞，见 BLOCKED.md），绝不伪造 delta。
+//   ③带 tools 的请求能解析出至少一个 tool_call   ④事件落 JSONL 重放逐字一致。
+// 环境缺 M0_API_KEY → 记 UNVERIFIED=1（联网验收被阻塞，见 BLOCKED.md），
+// 默认 exit 0 但由 gates 汇总为「未证，不得宣称全绿」；DSH_STRICT_UNVERIFIED=1
+// 或 --strict-unverified 时判红（CI / 有凭据环境）。绝不伪造 delta。
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,6 +18,8 @@ import { createEventLog, replay } from "../src/events";
 import { streamGlm, type GlmToolSpec } from "../src/providers/glm";
 
 let failures = 0;
+/** 未证项（前提不成立、断言无从谈起的场景）——显式记账并上报，绝不静默算绿。 */
+const unverified: string[] = [];
 function assert(cond: boolean, label: string): void {
   if (cond) {
     console.log("  ✅ " + label);
@@ -26,8 +30,8 @@ function assert(cond: boolean, label: string): void {
 }
 
 if (!process.env.M0_API_KEY) {
-  console.error("[provider:check] M0_API_KEY 未设置 —— 真连验收被阻塞（BLOCKED.md 已备案），退出码 1。");
-  process.exitCode = 1;
+  console.error("[provider:check] M0_API_KEY 未设置 —— 真连验收被阻塞（BLOCKED.md 已备案）。");
+  unverified.push("GLM 真连 ①②③④：缺 M0_API_KEY → 未证（非跳过即通过）");
 } else {
   const dir = await mkdtemp(join(tmpdir(), "m1a-provider-check-"));
   try {
@@ -94,6 +98,25 @@ if (!process.env.M0_API_KEY) {
 if (failures > 0) {
   console.error("[provider:check] 失败: " + String(failures) + " 项断言未通过");
   process.exitCode = 1;
-} else if (process.exitCode !== 1) {
-  console.log("[provider:check] 全部断言通过");
+}
+
+// 机器可读标记（H-2）：让 pnpm gates 把「未证」上浮到门禁汇总与严格模式判定。
+console.log("UNVERIFIED=" + String(unverified.length));
+if (unverified.length > 0) {
+  console.log("[provider:check] 未证项（前提不成立、断言无从谈起——不等于通过）：");
+  for (const u of unverified) console.log("  ⚠️  " + u);
+}
+
+const strict = process.env.DSH_STRICT_UNVERIFIED === "1" || process.argv.includes("--strict-unverified");
+if (strict && unverified.length > 0) {
+  console.error("[provider:check] 严格模式（DSH_STRICT_UNVERIFIED=1）：存在未证项，判红");
+  process.exitCode = 1;
+}
+
+if (failures === 0 && process.exitCode !== 1) {
+  console.log(
+    unverified.length > 0
+      ? "[provider:check] 断言全过，但有 " + String(unverified.length) + " 项未证（不得宣称全绿）"
+      : "[provider:check] 全部断言通过",
+  );
 }
