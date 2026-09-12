@@ -5,6 +5,8 @@ import type { ToolName } from "../tools/base";
 import type { SandboxStatus } from "./sandbox";
 import type { AppSettings } from "./settings";
 import type { ScheduleSnapshot } from "./scheduler";
+import type { LicenseState } from "./license";
+import type { UpdateCheckResult } from "./updater";
 
 export type { AgentEvent } from "../events";
 export type { PermissionMode } from "../permissions";
@@ -49,6 +51,12 @@ export interface StateResponse {
   worktree?: { orphans: string[] };
   /** M4a：定时任务面板快照（任务定义 + 运行历史投影 + 并发计数；journal/会话纯投影）。 */
   schedule?: ScheduleSnapshot;
+  /** M4b：license 状态（valid/expired/inactive/invalid；inactive → 引导横幅，§2.2）。 */
+  license?: LicenseState;
+  /** M4b：provider key 状态面（safeStorage 可用性 + 已存 provider 清单 + env 并存提示；不含 key 值）。 */
+  providerKeys?: { available: boolean; stored: string[]; envActive: boolean };
+  /** M4b：关于信息（版本展示；关于/更新组与引导第 4 步消费）。 */
+  about?: { version: string };
 }
 
 /** M2f sidechat 面板快照（纯投影：会话清单 + 最近消息 + 已提升记录）。
@@ -168,4 +176,15 @@ export interface AgentApi {
   scheduleUpsert(def: unknown, form?: boolean): Promise<{ ok: boolean; error?: string }>;
   scheduleDelete(id: string): Promise<{ ok: boolean; error?: string }>;
   scheduleRunNow(id: string): Promise<{ ok: boolean; error?: string }>;
+  // ---- M4b：BYOK key（safeStorage）/ license / 更新检查（§2.1/§2.2/§2.3）----
+  /** M4b §2.1：保存 provider key 到钥匙串（safeStorage；不可用 = fail-closed 拒绝，不落明文）。 */
+  providerKeySet(provider: string, key: string): Promise<{ ok: boolean; error?: string }>;
+  /** M4b §2.1：删除已存 provider key。 */
+  providerKeyDelete(provider: string): Promise<{ ok: boolean; error?: string }>;
+  /** M4b §2.1：key 状态面（不含 key 值）：safeStorage 可用性 / 已存 provider / env 并存提示。 */
+  providerKeyStatus(): Promise<{ available: boolean; stored: string[]; envActive: boolean }>;
+  /** M4b §2.3：轻量更新检查（未配置 / 网络失败 / 已最新 / 有新版 全显式态）。 */
+  checkUpdate(): Promise<UpdateCheckResult>;
+  /** M4b §2.3：打开下载页（shell.openExternal，仅 http(s) 白名单——防 manifest 注入协议）。 */
+  openExternal(url: string): Promise<{ ok: boolean; error?: string }>;
 }

@@ -1,0 +1,93 @@
+// M4b 任务 3：更新检查单测——手写三段 semver 比对矩阵 + checkUpdate 全显式态
+//（未配置 / 网络失败 / HTTP 非 2xx / 坏 JSON / 未知字段 / 缺 version / 缺 url / 已最新 / 有新版 notes+url 透传）
+// + 下载页 URL 白名单。fetch 全 mock，零网络依赖。
+import { describe, expect, it } from "vitest";
+import { checkUpdate, compareSemver, isSafeExternalUrl, parseSemver } from "../src/main/updater";
+
+function fetchOk(body: unknown): typeof fetch {
+  return (async () => new Response(typeof body === "string" ? body : JSON.stringify(body), { status: 200 })) as typeof fetch;
+}
+function fetchStatus(status: number): typeof fetch {
+  return (async () => new Response("err", { status })) as typeof fetch;
+}
+function fetchThrows(): typeof fetch {
+  return (async () => {
+    throw new Error("ECONNREFUSED 模拟断网");
+  }) as typeof fetch;
+}
+
+describe("更新检查 V1（手写 semver + 显式态）", () => {
+  it("semver 比对矩阵（三段逐段数值比较；非法 = null）", () => {
+    expect(compareSemver("1.2.3", "1.2.3")).toBe(0);
+    expect(compareSemver("1.2.4", "1.2.3")).toBe(1);
+    expect(compareSemver("1.2.2", "1.2.3")).toBe(-1);
+    expect(compareSemver("2.0.0", "1.99.99")).toBe(1);
+    expect(compareSemver("1.10.0", "1.9.0")).toBe(1); // 数值比较，非字典序
+    expect(compareSemver("0.0.10", "0.0.9")).toBe(1);
+    expect(compareSemver("1.2", "1.2.3")).toBeNull();
+    expect(compareSemver("1.2.3.4", "1.2.3")).toBeNull();
+    expect(compareSemver("v1.2.3", "1.2.3")).toBeNull();
+    expect(compareSemver("", "1.2.3")).toBeNull();
+    expect(parseSemver("10.20.30")).toEqual([10, 20, 30]);
+  });
+
+  it("checkUpdate：未配置 manifest URL = 显式 unconfigured（缺省空串 / 空白串同态）", async () => {
+    expect(await checkUpdate({ manifestUrl: "", currentVersion: "0.0.1" })).toEqual({ state: "unconfigured" });
+    expect(await checkUpdate({ manifestUrl: "   ", currentVersion: "0.0.1" })).toEqual({ state: "unconfigured" });
+  });
+
+  it("checkUpdate：网络失败 / HTTP 非 2xx / 坏 JSON → error 显式态（绝不静默）", async () => {
+    const netErr = await checkUpdate({ manifestUrl: "https://e.example/manifest.json", currentVersion: "0.0.1", fetchImpl: fetchThrows() });
+    expect(netErr.state).toBe("error");
+    if (netErr.state === "error") expect(netErr.message).toContain("ECONNREFUSED");
+    expect(await checkUpdate({ manifestUrl: "https://e/x.json", currentVersion: "0.0.1", fetchImpl: fetchStatus(500) })).toEqual({
+      state: "error",
+      message: "更新源响应 HTTP 500",
+    });
+    const badJson = await checkUpdate({ manifestUrl: "https://e/x.json", currentVersion: "0.0.1", fetchImpl: fetchOk("not json") });
+    expect(badJson.state).toBe("error");
+  });
+
+  it("checkUpdate：manifest 结构坏（未知字段 / version 非法 / 缺 url / 当前版本非法）→ error", async () => {
+    const base = { manifestUrl: "https://e/x.json", currentVersion: "0.0.1" };
+    expect((await checkUpdate({ ...base, fetchImpl: fetchOk({ version: "1.0.0", url: "u", extra: 1 }) })).state).toBe("error");
+    expect((await checkUpdate({ ...base, fetchImpl: fetchOk({ url: "u" }) })).state).toBe("error");
+    expect((await checkUpdate({ ...base, fetchImpl: fetchOk({ version: "1.0", url: "u" }) })).state).toBe("error");
+    expect((await checkUpdate({ ...base, fetchImpl: fetchOk({ version: "1.0.0" }) })).state).toBe("error");
+    expect((await checkUpdate({ ...base, currentVersion: "dev", fetchImpl: fetchOk({ version: "1.0.0", url: "u" }) })).state).toBe("error");
+  });
+
+  it("checkUpdate：有新版 → available（version/url/notes 透传，出卡打开下载页的载荷）", async () => {
+    const r = await checkUpdate({
+      manifestUrl: "https://e/x.json",
+      currentVersion: "0.0.1",
+      fetchImpl: fetchOk({ version: "1.2.3", url: "https://example.com/download", notes: "修复与优化" }),
+    });
+    expect(r).toEqual({
+      state: "available",
+      currentVersion: "0.0.1",
+      version: "1.2.3",
+      url: "https://example.com/download",
+      notes: "修复与优化",
+    });
+  });
+
+  it("checkUpdate：同版 / 旧版 → up-to-date（显式「已是最新」）", async () => {
+    const base = { manifestUrl: "https://e/x.json", currentVersion: "1.2.3" };
+    expect(await checkUpdate({ ...base, fetchImpl: fetchOk({ version: "1.2.3", url: "u" }) })).toEqual({
+      state: "up-to-date",
+      currentVersion: "1.2.3",
+      manifestVersion: "1.2.3",
+    });
+    expect((await checkUpdate({ ...base, fetchImpl: fetchOk({ version: "1.2.2", url: "u" }) })).state).toBe("up-to-date");
+  });
+
+  it("下载页白名单：仅 http(s) 可 openExternal（防 manifest 注入 file:/自定义协议）", () => {
+    expect(isSafeExternalUrl("https://example.com/d")).toBe(true);
+    expect(isSafeExternalUrl("http://example.com/d")).toBe(true);
+    expect(isSafeExternalUrl("file:///etc/passwd")).toBe(false);
+    expect(isSafeExternalUrl("javascript:alert(1)")).toBe(false);
+    expect(isSafeExternalUrl("")).toBe(false);
+    expect(isSafeExternalUrl("not a url")).toBe(false);
+  });
+});

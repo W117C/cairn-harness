@@ -2,7 +2,7 @@
 // M1e：settings 存储（布局/档位/主题，app data）+ 会话目录（JSONL 即会话）+ 审批徽标注入通道。
 // 沙箱不可用 → 降级为无沙箱 + 写工具强制审批（agent-runner 内），renderer 以常驻警示条提示。
 import { writeFile } from "node:fs/promises";
-import { app, BrowserWindow, ipcMain, safeStorage } from "electron";
+import { app, BrowserWindow, ipcMain, safeStorage, shell } from "electron";
 import { join } from "node:path";
 import {
   handleAgentDecide,
@@ -38,9 +38,19 @@ import {
   handleScheduleRunNow,
   providerInfo,
   setAppHooks,
+  handleProviderKeySet,
+  handleProviderKeyDelete,
+  handleProviderKeyStatus,
+  handleLicenseStatus,
+  handleUpdateCheck,
+  initLicenseStore,
+  initUpdateContext,
+  injectStoredProviderKey,
 } from "./agent-runner";
 import type { AppSettings, RunRequest } from "./ipc-protocol";
 import { installSafeStorageBackend } from "../agent/plugins/secrets";
+import { installProviderKeyBackend } from "./provider-keys";
+import { isSafeExternalUrl } from "./updater";
 
 let win: BrowserWindow | null = null;
 
@@ -183,6 +193,20 @@ ipcMain.handle("agent:schedule-snapshot", () => handleScheduleSnapshot());
 ipcMain.handle("agent:schedule-upsert", (_event, def: unknown, form?: boolean) => handleScheduleUpsert(def, form ?? true));
 ipcMain.handle("agent:schedule-delete", (_event, id: string) => handleScheduleDelete(id));
 ipcMain.handle("agent:schedule-run-now", (_event, id: string) => handleScheduleRunNow(id));
+// M4b：BYOK key（safeStorage）/ license / 更新检查（§2.1/§2.2/§2.3）。
+// openExternal 仅放行 http(s)（防 manifest 注入 file:/自定义协议）。
+ipcMain.handle("agent:provider-key-set", (_event, provider: string, key: string) => handleProviderKeySet(provider, key));
+ipcMain.handle("agent:provider-key-delete", (_event, provider: string) => handleProviderKeyDelete(provider));
+ipcMain.handle("agent:provider-key-status", () => handleProviderKeyStatus());
+ipcMain.handle("agent:license-status", () => handleLicenseStatus());
+ipcMain.handle("agent:update-check", () => handleUpdateCheck());
+ipcMain.handle("agent:update-open", async (_event, url: string) => {
+  if (typeof url !== "string" || !isSafeExternalUrl(url)) {
+    return { ok: false, error: "URL 非法或非 http(s)（拒绝打开）" };
+  }
+  await shell.openExternal(url);
+  return { ok: true };
+});
 
 void app.whenReady().then(async () => {
   // 暴露完整 AX 树给系统辅助功能（System Events / VoiceOver 等）；必须在 ready 之后调用
@@ -212,6 +236,21 @@ void app.whenReady().then(async () => {
     join(app.getPath("userData"), "plugin-secrets.json"),
   );
   if (!secretsOk) console.warn("[secrets] safeStorage 不可用 → 插件敏感配置拒存（fail-closed）");
+  // M4b §2.1：provider key（BYOK）同款 safeStorage 装配——不可用不注入后端（设置页拒存 + 显式提示，不落明文）。
+  // 可用时启动即解密注入 provider 配置（env 优先：M0_API_KEY 已在 = 零行为；进程内，不进日志/事件流）。
+  const providerKeysOk = installProviderKeyBackend(
+    {
+      isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+      encryptString: (s: string) => safeStorage.encryptString(s),
+      decryptString: (b: Buffer) => safeStorage.decryptString(b),
+    },
+    join(app.getPath("userData"), "provider-keys.json"),
+  );
+  if (!providerKeysOk) console.warn("[provider-keys] safeStorage 不可用 → provider key 拒存（fail-closed）");
+  else await injectStoredProviderKey();
+  // M4b §2.2/§2.3：license 文件（未激活不阻断）+ 更新检查上下文（当前版本）。
+  initLicenseStore(join(app.getPath("userData"), "license.json"));
+  initUpdateContext({ currentVersion: app.getVersion() });
   await initSandbox(); // 先自检沙箱，renderer 首帧 getState 即拿到结论
   createWindow();
   app.on("activate", () => {

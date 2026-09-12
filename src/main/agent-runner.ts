@@ -78,6 +78,14 @@ import type { McpToolInfo } from "../agent/plugins/mcp";
 import { Scheduler, type ScheduleSnapshot, type TriggerExecutor } from "./scheduler";
 import { validateAutomation, isUnattendedTier } from "./automations";
 import {
+  deleteProviderKey,
+  getProviderKey,
+  providerKeyStatus,
+  putProviderKey,
+} from "./provider-keys";
+import { verifyLicenseFile, type LicenseState } from "./license";
+import { checkUpdate, type UpdateCheckResult } from "./updater";
+import {
   runSidechatTurn,
   promoteToMain,
   scriptedSidechatModel,
@@ -1196,7 +1204,7 @@ async function memorySnapshot(): Promise<MemorySnapshot> {
 }
 
 /** IPC "agent:state" 的处理函数。 */
-export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memory?: MemorySnapshot; plugins?: PluginPanelSnapshot; sidechat?: SidechatPanelSnapshot; worktree?: { orphans: string[] }; schedule?: ScheduleSnapshot }> {
+export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memory?: MemorySnapshot; plugins?: PluginPanelSnapshot; sidechat?: SidechatPanelSnapshot; worktree?: { orphans: string[] }; schedule?: ScheduleSnapshot; license?: LicenseState; providerKeys?: { available: boolean; stored: string[]; envActive: boolean }; about?: { version: string } }> {
   let memory: MemorySnapshot | undefined;
   try {
     memory = await memorySnapshot();
@@ -1231,7 +1239,20 @@ export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memo
   } catch {
     schedule = undefined;
   }
-  return { sandbox: sandboxState, memory, plugins, sidechat, worktree, schedule };
+  // M4b：license 状态（valid/expired/inactive/invalid；未激活 → renderer 引导横幅）与 provider key 状态面
+  let license: LicenseState | undefined;
+  try {
+    license = await handleLicenseStatus();
+  } catch {
+    license = undefined;
+  }
+  let providerKeys: { available: boolean; stored: string[]; envActive: boolean } | undefined;
+  try {
+    providerKeys = await handleProviderKeyStatus();
+  } catch {
+    providerKeys = undefined;
+  }
+  return { sandbox: sandboxState, memory, plugins, sidechat, worktree, schedule, license, providerKeys, about: { version: appVersion } };
 }
 
 /** M3b 孤儿 worktree 扫描（纯投影面）：.agents/wt-* 目录 − 事件流有终态/收尾记录的 agent。 */
@@ -1334,6 +1355,57 @@ export function providerInfo(): { provider: string; model: string } {
     return { provider: "GLM（OpenAI 兼容）", model: process.env.M0_MODEL ?? "glm-5.2" };
   }
   return { provider: "mock（冻结剧本）", model: "mock-script" };
+}
+
+// ---- M4b：BYOK key（safeStorage）+ license V1 + 更新检查（§2.1/§2.2/§2.3）----
+// 装配由 electron 壳（index.ts）注入；headless（未装配）= fail-closed / inactive / unconfigured 显式态。
+
+/** M4b §2.1：启动时把已存 provider key 解密注入 provider 配置（env 优先：M0_API_KEY 已在 = 零行为）。
+ *  注入只发生在进程内 env——不落日志、不进事件流（明文零落盘三处纪律）。 */
+export async function injectStoredProviderKey(): Promise<boolean> {
+  if (process.env.M0_API_KEY) return false; // env 路径（M0_API_KEY）优先，两者并存
+  const stored = await getProviderKey("glm");
+  if (!stored) return false; // 未存 key / 解密失败（换机器）→ 不注入，UI 显式提示
+  process.env.M0_API_KEY = stored;
+  return true;
+}
+
+export async function handleProviderKeySet(provider: string, key: string): Promise<{ ok: boolean; error?: string }> {
+  return await putProviderKey(provider, key);
+}
+
+export async function handleProviderKeyDelete(provider: string): Promise<{ ok: boolean; error?: string }> {
+  return await deleteProviderKey(provider);
+}
+
+/** 状态面（设置页徽标 + env 并存提示；不含 key 值）。 */
+export async function handleProviderKeyStatus(): Promise<{ available: boolean; stored: string[]; envActive: boolean }> {
+  const st = await providerKeyStatus();
+  return { ...st, envActive: !!process.env.M0_API_KEY };
+}
+
+let licenseFilePath: string | null = null;
+
+/** shell 启动时初始化 license 文件路径（<appData>/license.json）。 */
+export function initLicenseStore(filePath: string): void {
+  licenseFilePath = filePath;
+}
+
+export async function handleLicenseStatus(): Promise<LicenseState> {
+  if (!licenseFilePath) return { state: "inactive" };
+  return await verifyLicenseFile(licenseFilePath);
+}
+
+let appVersion = "0.0.1";
+
+/** shell 启动时注入当前版本（app.getVersion()；headless 缺省 package.json 版本）。 */
+export function initUpdateContext(opts: { currentVersion: string }): void {
+  appVersion = opts.currentVersion;
+}
+
+export async function handleUpdateCheck(): Promise<UpdateCheckResult> {
+  const manifestUrl = (await store().get()).updateManifestUrl;
+  return await checkUpdate({ manifestUrl, currentVersion: appVersion });
 }
 
 // ---- M1e：会话列表 IPC（会话目录由 index.ts 初始化；headless 脚本未初始化 → 未配置错误） ----

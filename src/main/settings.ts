@@ -38,6 +38,12 @@ export interface AppSettings {
   budgetPricePerMTok: number;
   /** M4a §12.2.3：同时运行的定时会话上限（1-8；缺省 2）。与 worker 并发上限 4 独立计数。 */
   scheduleConcurrencyCap: number;
+  /** M4b §2.4：新手引导完成标记（缺省 false = 首启弹向导；完成后不再弹，设置页可重跑）。 */
+  onboarded: boolean;
+  /** M4b §2.3：更新 manifest URL（缺省空 = 「未配置更新源」显式态；V1 轻量检查不做自动下载）。 */
+  updateManifestUrl: string;
+  /** M4b §2.6：遥测开关（§13 默认关；V1 无上报实现 = 最强「零数据出门」保证，关于页注明）。 */
+  telemetry: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -54,6 +60,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   maxBudgetUsd: 0,
   budgetPricePerMTok: 0,
   scheduleConcurrencyCap: 2,
+  onboarded: false,
+  updateManifestUrl: "",
+  telemetry: false,
 };
 
 const PERMISSION_MODES = ["read-only", "default", "auto"] as const;
@@ -105,6 +114,10 @@ export function validateSettings(raw: unknown): AppSettings {
     maxBudgetUsd: nonNegNumber(r.maxBudgetUsd) ?? d.maxBudgetUsd,
     budgetPricePerMTok: nonNegNumber(r.budgetPricePerMTok) ?? d.budgetPricePerMTok,
     scheduleConcurrencyCap: capRaw !== null && capRaw >= 1 && capRaw <= 8 ? capRaw : d.scheduleConcurrencyCap,
+    // M4b：onboarded / telemetry 非布尔回退默认；updateManifestUrl 非字符串回退空（未配置显式态）
+    onboarded: typeof r.onboarded === "boolean" ? r.onboarded : d.onboarded,
+    updateManifestUrl: typeof r.updateManifestUrl === "string" ? r.updateManifestUrl : d.updateManifestUrl,
+    telemetry: typeof r.telemetry === "boolean" ? r.telemetry : d.telemetry,
   };
 }
 
@@ -134,7 +147,8 @@ export class SettingsStore {
       ...cur,
       ...("mode" in patch || "safeMode" in patch || "theme" in patch || "currentSession" in patch ||
         "autoMemory" in patch || "maxBudgetUsd" in patch || "budgetPricePerMTok" in patch ||
-        "scheduleConcurrencyCap" in patch
+        "scheduleConcurrencyCap" in patch || "onboarded" in patch || "updateManifestUrl" in patch ||
+        "telemetry" in patch
         ? patch
         : {}),
       layout: patch.layout

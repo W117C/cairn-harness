@@ -73,6 +73,12 @@ const api: AgentApi = {
   scheduleUpsert: (def: unknown, form?: boolean) => ipcRenderer.invoke("agent:schedule-upsert", def, form ?? true),
   scheduleDelete: (id: string) => ipcRenderer.invoke("agent:schedule-delete", id),
   scheduleRunNow: (id: string) => ipcRenderer.invoke("agent:schedule-run-now", id),
+  // M4b：BYOK key（safeStorage）/ license / 更新检查（§2.1/§2.2/§2.3）
+  providerKeySet: (provider: string, key: string) => ipcRenderer.invoke("agent:provider-key-set", provider, key),
+  providerKeyDelete: (provider: string) => ipcRenderer.invoke("agent:provider-key-delete", provider),
+  providerKeyStatus: () => ipcRenderer.invoke("agent:provider-key-status"),
+  checkUpdate: () => ipcRenderer.invoke("agent:update-check"),
+  openExternal: (url: string) => ipcRenderer.invoke("agent:update-open", url),
 };
 
 contextBridge.exposeInMainWorld("agent", api);

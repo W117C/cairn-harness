@@ -56,6 +56,7 @@ import {
 } from "./store";
 import { projectAgentPanel, projectMergeTower, projectTokenUsageByAgent, skipReasonLabel, type AgentColumn } from "./projections";
 import { resolvePanel, type PanelId } from "./panels/registry";
+import { OnboardingWizard, licenseStatusLabel, updateResultLabel } from "./onboarding";
 import type { AgentEvent, ClarifyAnswerMap } from "../events";
 import type {
   AgentApi,
@@ -67,6 +68,7 @@ import type {
   SessionInfoPayload,
   StateResponse,
 } from "../main/ipc-protocol";
+import type { UpdateCheckResult } from "../main/updater";
 import { DARK_QUERY, watchSystemTheme, applyScheme } from "./theme";
 import "./styles.css";
 
@@ -436,31 +438,115 @@ function AskView({
   );
 }
 
-// ---- 设置页（模态，§10.1 规则 7）：权限档位（沙箱状态 + 安全模式）+ UI（主题）+ Provider 只读 ----
+// ---- 设置页（模态，§10.1 规则 7）：§13 七组——Provider 管理（BYOK key · 单价表）/ 权限档位（沙箱 + 安全模式）/
+// UI（主题）/ 定时任务 / 记忆 / 遥测（默认关）/ 关于·更新（版本 · license · 检查更新 · 重跑引导）。
+// M4b：Provider 组从「只读」升级为 key 管理（safeStorage 密文落盘，明文零落盘）。
 function SettingsDialog({
   open,
   onOpenChange,
   settings,
   sandbox,
   provider,
+  license,
+  providerKeys,
+  aboutVersion,
+  updateResult,
   onSettings,
+  onCheckUpdate,
+  onOpenDownload,
+  onSaveKey,
+  onDeleteKey,
+  onRerunOnboarding,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   settings: AppSettings | null;
   sandbox: StateResponse["sandbox"] | null;
   provider: { provider: string; model: string } | null;
+  license: StateResponse["license"] | null;
+  providerKeys: StateResponse["providerKeys"] | null;
+  aboutVersion: string;
+  updateResult: UpdateCheckResult | null;
   onSettings: (patch: Partial<AppSettings>) => void;
+  onCheckUpdate: () => void;
+  onOpenDownload: (url: string) => void;
+  onSaveKey: (key: string) => Promise<string | null>;
+  onDeleteKey: () => Promise<string | null>;
+  onRerunOnboarding: () => void;
 }) {
+  const [keyInput, setKeyInput] = useState("");
+  const [keyNote, setKeyNote] = useState<string | null>(null);
+  const licenseBadge = (l: NonNullable<StateResponse["license"]>): React.ReactElement => (
+    <Badge
+      variant={l.state === "valid" ? "secondary" : l.state === "invalid" ? "destructive" : "outline"}
+      data-m4b-license-badge=""
+    >
+      {licenseStatusLabel(l)}
+    </Badge>
+  );
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg" data-m1e-settings="">
+      <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto" data-m1e-settings="">
         <DialogHeader>
           <DialogTitle>设置</DialogTitle>
-          <DialogDescription>权限档位与 UI 偏好（落主进程 settings，重启还原）。</DialogDescription>
+          <DialogDescription>§13 七组偏好（落主进程 settings，重启还原）。</DialogDescription>
         </DialogHeader>
         {settings && (
           <div className="flex flex-col gap-5 py-1 text-sm">
+            <section className="flex flex-col gap-2" data-m4b-provider-section="">
+              <div className="font-medium">Provider 管理（BYOK）</div>
+              <div className="rounded-md border px-3 py-2 text-xs text-muted-foreground" data-m1e-provider-info="">
+                {provider ? provider.provider + " · " + provider.model : "检测中…"}
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="password"
+                  className="h-8 flex-1"
+                  placeholder={providerKeys?.envActive ? "M0_API_KEY env 已在（优先；钥匙串 key 并存）" : "provider key（保存到钥匙串，密文落盘，明文零落盘）"}
+                  value={keyInput}
+                  data-m4b-provider-key-input=""
+                  onChange={(e) => setKeyInput(e.target.value)}
+                />
+                <Button
+                  size="sm"
+                  disabled={keyInput.trim() === ""}
+                  data-m4b-provider-key-save=""
+                  onClick={() => {
+                    void onSaveKey(keyInput).then((err) => {
+                      setKeyNote(err === null ? "已保存到钥匙串（重启后自动解密生效；env 路径优先）" : err);
+                      if (err === null) setKeyInput("");
+                    });
+                  }}
+                >
+                  保存到钥匙串
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={(providerKeys?.stored.length ?? 0) === 0}
+                  title="删除已存 key（glm）"
+                  data-m4b-provider-key-delete=""
+                  onClick={() => {
+                    void onDeleteKey().then((err) => setKeyNote(err ?? "已删除"));
+                  }}
+                >
+                  删除
+                </Button>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 text-xs" data-m4b-provider-key-status="">
+                {providerKeys?.available ? (
+                  <Badge variant="secondary">safeStorage 可用</Badge>
+                ) : (
+                  <Badge variant="destructive">safeStorage 不可用 → 拒存（fail-closed，不落明文）</Badge>
+                )}
+                {(providerKeys?.stored.length ?? 0) > 0 && <Badge variant="outline">已存：{providerKeys?.stored.join("、")}</Badge>}
+                {providerKeys?.envActive && <Badge variant="outline">M0_API_KEY env 优先</Badge>}
+              </div>
+              {keyNote !== null && <div className="text-xs text-muted-foreground" data-m4b-provider-key-note="">{keyNote}</div>}
+              <div className="text-xs text-muted-foreground">
+                单价表：当前单价（USD / 百万 token）= {String(settings.budgetPricePerMTok ?? 0)}（下方成本闸组修改，随成本闸估价使用）。
+              </div>
+            </section>
             <section className="flex flex-col gap-2">
               <div className="font-medium">权限档位</div>
               <div className="flex items-center justify-between gap-3">
@@ -496,6 +582,43 @@ function SettingsDialog({
                     <SelectItem value="report">report（验证门收敛后静态快筛，默认）</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </section>
+            <section className="flex flex-col gap-2">
+              <div className="font-medium">UI</div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">主题</span>
+                <Select value={settings.theme} onValueChange={(v) => onSettings({ theme: v as AppSettings["theme"] })}>
+                  <SelectTrigger className="w-52" data-m1e-theme-select="">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="system">跟随系统</SelectItem>
+                    <SelectItem value="light">浅色</SelectItem>
+                    <SelectItem value="dark">深色</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                面板布局：右栏切换器开/关/调宽自动保存，重启还原。
+              </div>
+            </section>
+            <section className="flex flex-col gap-2" data-m4a-settings-schedule="">
+              <div className="font-medium">定时任务（M4a §12.2）</div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">同时运行的定时会话上限</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={8}
+                  className="w-52"
+                  data-m4a-cap-input=""
+                  value={String(settings.scheduleConcurrencyCap ?? 2)}
+                  onChange={(e) => onSettings({ scheduleConcurrencyCap: Math.min(8, Math.max(1, Number(e.target.value) || 1)) })}
+                />
+              </div>
+              <div className="text-xs text-muted-foreground">
+                与 worker 并发上限（4）独立计数（§12.2.3）；任务管理在右栏「schedule」面板：列表 / 创建表单 / 运行历史六态筛选。
               </div>
             </section>
             <section className="flex flex-col gap-2" data-m2d-memory-section="">
@@ -542,47 +665,55 @@ function SettingsDialog({
                 估价 = Σusage tokens × 单价；超限拒绝新 spawn（主 loop 不受闸）。两项均 0 = 关（缺省零行为）。
               </div>
             </section>
-            <section className="flex flex-col gap-2" data-m4a-settings-schedule="">
-              <div className="font-medium">定时任务（M4a §12.2）</div>
+            <section className="flex flex-col gap-2" data-m4b-telemetry-section="">
+              <div className="font-medium">遥测</div>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">同时运行的定时会话上限</span>
-                <Input
-                  type="number"
-                  min={1}
-                  max={8}
-                  className="w-52"
-                  data-m4a-cap-input=""
-                  value={String(settings.scheduleConcurrencyCap ?? 2)}
-                  onChange={(e) => onSettings({ scheduleConcurrencyCap: Math.min(8, Math.max(1, Number(e.target.value) || 1)) })}
+                <span className="text-muted-foreground">遥测开关</span>
+                <Checkbox
+                  checked={settings.telemetry}
+                  onCheckedChange={(v) => onSettings({ telemetry: v === true })}
+                  data-m4b-telemetry-switch=""
                 />
               </div>
               <div className="text-xs text-muted-foreground">
-                与 worker 并发上限（4）独立计数（§12.2.3）；任务管理在右栏「schedule」面板：列表 / 创建表单 / 运行历史六态筛选。
+                默认关（§13：BYOK 用户零数据出门）。V1 无任何上报实现——没有通道 = 最强保证；关于页同样注明。
               </div>
             </section>
-            <section className="flex flex-col gap-2">
-              <div className="font-medium">UI</div>
+            <section className="flex flex-col gap-2" data-m4b-about-section="">
+              <div className="font-medium">关于 / 更新</div>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <Badge variant="outline" data-m4b-about-version="">版本 {aboutVersion || "…"}</Badge>
+                {license && licenseBadge(license)}
+                <Badge variant="outline">遥测：{settings.telemetry ? "开" : "关（V1 无上报通道）"}</Badge>
+              </div>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">主题</span>
-                <Select value={settings.theme} onValueChange={(v) => onSettings({ theme: v as AppSettings["theme"] })}>
-                  <SelectTrigger className="w-52" data-m1e-theme-select="">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="system">跟随系统</SelectItem>
-                    <SelectItem value="light">浅色</SelectItem>
-                    <SelectItem value="dark">深色</SelectItem>
-                  </SelectContent>
-                </Select>
+                <span className="text-muted-foreground">更新 manifest URL</span>
+                <Input
+                  className="h-8 flex-1"
+                  placeholder="https://example.com/updates.json（空 = 未配置更新源）"
+                  value={settings.updateManifestUrl}
+                  data-m4b-update-url=""
+                  onChange={(e) => onSettings({ updateManifestUrl: e.target.value })}
+                />
               </div>
-              <div className="text-xs text-muted-foreground">
-                面板布局：右栏切换器开/关/调宽自动保存，重启还原。
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" variant="outline" data-m4b-update-check="" onClick={onCheckUpdate}>
+                  检查更新
+                </Button>
+                {updateResult && (
+                  <span className="text-xs text-muted-foreground" data-m4b-update-result="">{updateResultLabel(updateResult)}</span>
+                )}
+                {updateResult?.state === "available" && (
+                  <Button size="sm" data-m4b-update-open="" onClick={() => onOpenDownload(updateResult.url)}>
+                    打开下载页
+                  </Button>
+                )}
               </div>
-            </section>
-            <section className="flex flex-col gap-2">
-              <div className="font-medium">Provider（只读）</div>
-              <div className="rounded-md border px-3 py-2 text-xs text-muted-foreground" data-m1e-provider-info="">
-                {provider ? provider.provider + " · " + provider.model : "检测中…"}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="text-muted-foreground">新手引导</span>
+                <Button size="sm" variant="outline" data-m4b-onboard-rerun="" onClick={onRerunOnboarding}>
+                  重新运行引导（覆盖 §13 七组）
+                </Button>
               </div>
             </section>
           </div>
@@ -610,9 +741,15 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
   const [scheduleFilter, setScheduleFilter] = useState<string>("all");
+  // M4b：新手向导（首启 !onboarded 自动弹；完成/重跑经 settings.onboarded 持久化）+ 更新检查显式态
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
   const layoutDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const sandbox = status?.sandbox ?? null;
+  const license = status?.license ?? null;
+  const providerKeys = status?.providerKeys ?? null;
+  const aboutVersion = status?.about?.version ?? "";
   const planStatuses = useMemo(() => planStatusesOf(state), [state]);
   const tokens = useMemo(() => tokenProjectionOf(state), [state]);
   const diffs = useMemo(() => diffCardsOf(state), [state]);
@@ -645,6 +782,49 @@ function App() {
   const patchLayoutDebounced = (patch: Partial<AppSettings["layout"]>): void => {
     if (layoutDebounce.current) clearTimeout(layoutDebounce.current);
     layoutDebounce.current = setTimeout(() => patchLayout(patch), 300);
+  };
+
+  // ---- M4b：BYOK key / license / 更新 / 引导 handlers（window.agent 桥接 + state 刷新）----
+  const refreshState = async (): Promise<void> => {
+    setStatus(await window.agent.getState());
+  };
+  /** 保存 key 到钥匙串；返回 null = 成功（错误串供 UI 显示）。明文只经 IPC 传给主进程 safeStorage。 */
+  const saveProviderKey = async (key: string): Promise<string | null> => {
+    try {
+      const r = await window.agent.providerKeySet("glm", key);
+      await refreshState();
+      return r.ok ? null : (r.error ?? "保存失败");
+    } catch (err) {
+      return err instanceof Error ? err.message : String(err);
+    }
+  };
+  const deleteProviderKey = async (): Promise<string | null> => {
+    try {
+      const r = await window.agent.providerKeyDelete("glm");
+      await refreshState();
+      return r.ok ? null : (r.error ?? "删除失败");
+    } catch (err) {
+      return err instanceof Error ? err.message : String(err);
+    }
+  };
+  const runUpdateCheck = (): void => {
+    void window.agent
+      .checkUpdate()
+      .then(setUpdateResult)
+      .catch((err: unknown) => setUpdateResult({ state: "error", message: err instanceof Error ? err.message : String(err) }));
+  };
+  const openDownload = (url: string): void => {
+    void window.agent.openExternal(url).then((r) => {
+      if (!r.ok) setUpdateResult({ state: "error", message: r.error ?? "打开下载页失败" });
+    });
+  };
+  const rerunOnboarding = (): void => {
+    patchSettings({ onboarded: false });
+    setWizardOpen(true);
+  };
+  const finishOnboarding = (): void => {
+    patchSettings({ onboarded: true });
+    setWizardOpen(false);
   };
 
   const refreshSessions = async (): Promise<void> => {
@@ -699,6 +879,8 @@ function App() {
       setSessions(list);
       setStatus(st);
       setProvider(info);
+      // M4b §2.4：首启（onboarded 缺省 false）弹新手引导；完成后不再弹
+      if (!s.onboarded) setWizardOpen(true);
       const cur =
         s.currentSession && list.some((x) => x.id === s.currentSession) ? s.currentSession : (list[0]?.id ?? null);
       if (cur) {
@@ -1030,6 +1212,12 @@ function App() {
                   ⚠️ 沙箱不可用：{sandbox.reason ?? "未知"} —— 已降级为无沙箱 + 写操作逐条强制审批
                 </div>
               )}
+              {license && license.state === "inactive" && (
+                <div className="bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-400" data-m4b-license-banner="">
+                  🔑 license 未激活：桌面 BYOK 版功能不受限（V1 收敛）。购买后把 license.json 放入应用数据目录；
+                  状态见 设置 → 关于 / 更新。
+                </div>
+              )}
               <Conversation items={state.timeline} running={state.running} lastStreamText={lastStreamText} renderItem={renderTimelineItem} />
               <footer className="flex items-end gap-2 border-t p-3">
                 <Textarea
@@ -1123,7 +1311,27 @@ function App() {
         settings={settings}
         sandbox={sandbox}
         provider={provider}
+        license={license}
+        providerKeys={providerKeys}
+        aboutVersion={aboutVersion}
+        updateResult={updateResult}
         onSettings={patchSettings}
+        onCheckUpdate={runUpdateCheck}
+        onOpenDownload={openDownload}
+        onSaveKey={saveProviderKey}
+        onDeleteKey={deleteProviderKey}
+        onRerunOnboarding={rerunOnboarding}
+      />
+      <OnboardingWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        settings={settings}
+        sandbox={sandbox}
+        license={license}
+        providerKeys={providerKeys}
+        appVersion={aboutVersion}
+        onSettings={patchSettings}
+        onFinish={finishOnboarding}
       />
     </SidebarProvider>
   );
