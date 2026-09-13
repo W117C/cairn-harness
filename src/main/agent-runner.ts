@@ -911,7 +911,21 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       }
     }
     const skillsRouting = rt && rt.routingList().text !== "" ? rt.routingList().text : null;
-    const systemPrefix = [skillsRouting, hookContext !== "" ? hookContext : null].filter((s): s is string => s !== null).join("\n\n");
+    // H3-P4（编排提示词审查 §一）：生产主会话必须有基座系统提示词——此前只有插件路由 + hook 上下文，
+    // 模型在撞墙前不知道墙存在（机制成本已付、收益只兑现一半），验收暗卷脚本反而比生产多了角色说明。
+    const BASE_SYSTEM = [
+      "你是 M0 桌面编程 agent：在指定工作区内读代码、改代码、跑测试、交付结果。",
+      "纪律：",
+      "1) 任务有歧义先调用 clarify 提问（1–4 问），不要猜；",
+      "2) 写/改文件前先 propose_plan 提交方案并等批准（未批准的写操作会被权限层拒绝）；",
+      "3) 修改完成后调用 verify 跑测试；verify 通过后用一句话收尾；",
+      "4) 只改任务需要的文件，不改测试与判卷文件。",
+      "机制边界（撞墙时读报错原因调整策略，不要原样重试）：",
+      "- 子代理不能再 spawn 子代理（深度恒 1），spawn 并发有上限；write worker 的合并/提交唯一出口是用户侧 git 面板；",
+      "- deny 规则与 critical 风险的强制审批不可绕过；会话成本超限会拒绝新 spawn；长时间无进展会被暂停等待恢复指令；",
+      "- 权限被拒 → 换合规路径或先提交方案；测试失败 → 按失败信息修复后重跑 verify。",
+    ].join("\n");
+    const systemPrefix = [BASE_SYSTEM, skillsRouting, hookContext !== "" ? hookContext : null].filter((s): s is string => s !== null).join("\n\n");
     await runLoop({
       provider: createProvider(opts.message, systemPrefix !== "" ? systemPrefix : undefined),
       events: { append: pipeline },
