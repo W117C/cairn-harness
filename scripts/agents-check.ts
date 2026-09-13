@@ -39,7 +39,7 @@ import {
   type SpawnArgs,
 } from "../src/agent/orchestrator";
 import { worktreePathFor } from "../src/agent/worktree";
-import { PluginRuntime, TrustStore } from "../src/agent/plugins";
+import { PluginRuntime, TrustStore, pluginFingerprint } from "../src/agent/plugins";
 import {
   handleAgentRun,
   handleCardAction,
@@ -1143,7 +1143,7 @@ try {
       await mkdir(scratchN, { recursive: true });
       const trustN = join(scratchN, "trust.json");
       const pluginRootN = join(ROOT, "fixtures", "plugins", "project", "pipeline-crew");
-      await new TrustStore(trustN).decide(pluginRootN, true); // 信任门先决（未信任角色不可见，同 plugins-check D）
+      await new TrustStore(trustN).decide(pluginRootN, true, await pluginFingerprint(pluginRootN)); // 信任门先决（未信任角色不可见，同 plugins-check D）
       const rtN = await PluginRuntime.load({
         projectPluginsDir: join(ROOT, "fixtures", "plugins", "project"),
         workspace: scratchN,

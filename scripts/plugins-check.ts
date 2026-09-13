@@ -15,7 +15,7 @@ import type { AgentEvent } from "../src/events";
 import { runAgent } from "../src/main/agent-runner";
 import { composeTurnMessages } from "../src/agent/glm-session";
 import {
-  PluginRuntime, TrustStore, buildSkillRoutingList, clampSkillBody,
+  PluginRuntime, TrustStore, pluginFingerprint, buildSkillRoutingList, clampSkillBody,
   scopedToolName,
   setPluginSecretBackend, putPluginSecret, getPluginSecret, writePluginUserConfig,
   SECRET_PLACEHOLDER,
@@ -135,7 +135,7 @@ async function main(): Promise<void> {
     // 触发全文：runAgent 事件流实证（信任预置 → skill 工具在统一注册表）
     const wsB = await makeWorkspace("skill");
     const trustB = join(wsB.ws, "trust.json");
-    await new TrustStore(trustB).decide(wsB.pluginRoot, true);
+    await new TrustStore(trustB).decide(wsB.pluginRoot, true, await pluginFingerprint(wsB.pluginRoot));
     const evB = await run(wsB.ws, "skill-flow.jsonl", trustB, "skill");
     const res = resultOf(evB, "c-skill");
     assert(res !== null && res.ok && res.output.includes("# Greet Skill") && res.output.includes("$ARGUMENTS"), "B2 触发后全文进上下文（tool_result 携带 SKILL.md 全文）");
@@ -179,7 +179,7 @@ async function main(): Promise<void> {
   {
     const wsC = await makeWorkspace("hook");
     const trustC = join(wsC.ws, "trust.json");
-    await new TrustStore(trustC).decide(wsC.pluginRoot, true);
+    await new TrustStore(trustC).decide(wsC.pluginRoot, true, await pluginFingerprint(wsC.pluginRoot));
     const t0 = Date.now();
     const evC = await run(wsC.ws, "hook-flow.jsonl", trustC, "hook");
     const elapsed = Date.now() - t0;
@@ -247,7 +247,7 @@ async function main(): Promise<void> {
   {
     const wsE = await makeWorkspace("mcp");
     const trustE = join(wsE.ws, "trust.json");
-    await new TrustStore(trustE).decide(wsE.pluginRoot, true);
+    await new TrustStore(trustE).decide(wsE.pluginRoot, true, await pluginFingerprint(wsE.pluginRoot));
     const rtE = await PluginRuntime.load({
       projectPluginsDir: join(wsE.ws, ".agent", "plugins"),
       workspace: wsE.ws,

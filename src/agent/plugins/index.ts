@@ -5,7 +5,7 @@ import { join } from "node:path";
 import {
   discoverPlugins, activeHooks, pendingPlugins,
 } from "./discover";
-import { TrustStore } from "./trust";
+import { TrustStore, pluginFingerprint } from "./trust";
 import { HookEngine } from "./hooks";
 import { McpManager, type McpToolInfo } from "./mcp";
 import {
@@ -39,7 +39,7 @@ export {
 } from "./secrets";
 export { parseFrontmatter, fmString } from "./frontmatter";
 export { discoverPlugins, activeHooks, pendingPlugins } from "./discover";
-export { TrustStore } from "./trust";
+export { TrustStore, pluginFingerprint } from "./trust";
 export { HookEngine, hookEnv, parseHookDecision, mergeDecision, HOOK_OUTPUT_CAP, HOOK_TIMEOUT_DEFAULT, HOOK_TIMEOUT_USER_PROMPT, type HookEngineOptions } from "./hooks";
 export { McpManager, scopedToolName, parseScopedToolName, type McpToolInfo, type McpConnectResult } from "./mcp";
 export {
@@ -135,16 +135,16 @@ export class PluginRuntime {
       ...(opts.userPluginsDir ? { userPluginsDir: opts.userPluginsDir } : {}),
       ...(opts.projectPluginsDir ? { projectPluginsDir: opts.projectPluginsDir } : {}),
       ...(opts.looseRoots ? { looseRoots: opts.looseRoots } : {}),
-      trustStatus: (abs) => trust.statusSync(abs),
+      trustStatus: (abs, fp) => trust.statusSync(abs, fp),
     });
     return new PluginRuntime(manifest, opts);
   }
 
-  /** 信任卡决议（批准/拒绝）→ 按决议重建激活面（同一样本信任后开始生效）。 */
+  /** 信任卡决议（批准/拒绝）→ 按决议重建激活面（同一样本信任后开始生效）。H3-P5：决议绑内容指纹。 */
   async trustDecide(pluginName: string, trusted: boolean): Promise<boolean> {
     const p = this.manifest.plugins.find((x) => x.name === pluginName);
     if (!p) return false;
-    await this.trust.decide(p.root, trusted);
+    await this.trust.decide(p.root, trusted, await pluginFingerprint(p.root));
     const reloaded = await PluginRuntime.load(this.opts);
     this.manifest = reloaded.manifest;
     this.hooks = reloaded.hooks;

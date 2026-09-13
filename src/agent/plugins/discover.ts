@@ -7,6 +7,7 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { parseFrontmatter, fmString } from "./frontmatter";
+import { pluginFingerprint } from "./trust";
 import { parsePluginManifest, parseHooksFile, detectJsEntry, PluginLoadError } from "./manifest";
 import type {
   DiscoveredPlugin, LooseSkill, PluginScope, PluginsManifest, SkillEntry, PromptCommandEntry,
@@ -21,7 +22,7 @@ async function dirExists(p: string): Promise<boolean> {
 async function scanScopeRoot(
   root: string,
   scope: PluginScope,
-  trustOf: (absRoot: string) => "trusted" | "pending" | "declined",
+  trustOf: (absRoot: string, fingerprint: string) => "trusted" | "pending" | "declined",
 ): Promise<{ plugins: DiscoveredPlugin[]; loose: LooseSkill[]; errors: PluginsManifest["errors"]; warnings: PluginsManifest["warnings"] }> {
   const plugins: DiscoveredPlugin[] = [];
   const loose: LooseSkill[] = [];
@@ -41,7 +42,7 @@ async function scanScopeRoot(
     const hasSkillMd = await stat(join(abs, "SKILL.md")).then(() => true, () => false);
     if (hasManifest) {
       try {
-        plugins.push(await loadContainer(abs, scope, trustOf(abs)));
+        plugins.push(await loadContainer(abs, scope, trustOf(abs, await pluginFingerprint(abs))));
       } catch (err) {
         // 单插件失败隔离：坏 manifest 只影响自身
         errors.push({ plugin: name, message: err instanceof Error ? err.message : String(err) });
@@ -240,13 +241,13 @@ export interface DiscoverOptions {
   projectPluginsDir?: string;
   /** 散装 skill 根（目录下每个含 SKILL.md 的子目录 = 独立 skill）。 */
   looseRoots?: string[];
-  /** 项目级插件信任决议源（缺省全部 pending）。 */
-  trustStatus?: (absRoot: string) => "trusted" | "pending" | "declined";
+  /** 项目级插件信任决议源（缺省全部 pending）。H3-P5（E-10）：附带插件内容指纹（abs@fp 绑定）。 */
+  trustStatus?: (absRoot: string, fingerprint: string) => "trusted" | "pending" | "declined";
 }
 
 /** 加载清单（会话启动静态扫描产物；不新增事件类型）。 */
 export async function discoverPlugins(opts: DiscoverOptions): Promise<PluginsManifest> {
-  const trustOf = opts.trustStatus ?? (() => "pending");
+  const trustOf: NonNullable<DiscoverOptions["trustStatus"]> = opts.trustStatus ?? (() => "pending");
   const plugins: DiscoveredPlugin[] = [];
   const looseSkills: LooseSkill[] = [];
   const errors: PluginsManifest["errors"] = [];
