@@ -898,20 +898,50 @@ function App() {
   }, []);
 
   // 活事件流订阅（与重放同一 reducer 折叠管线）
+  // H3-P2（审查 F-4/A-8）：流式 delta 按帧批量 dispatch——旧实现每个 delta 一次 dispatch，
+  // 多个 O(n) 投影全量重算 → 整条流 O(n²)；缓冲一帧合并后每帧至多一次重渲染，折叠语义不变
+  //（fold 对同 callId delta 是纯文本拼接）。非 delta 事件先冲缓冲再落本事件（保序）。
+  const deltaBufRef = useRef<Extract<AgentEvent, { type: "assistant_delta" }>[]>([]);
+  const deltaTimerRef = useRef<number | null>(null);
+  const flushDeltaBuf = (): void => {
+    if (deltaTimerRef.current !== null) {
+      window.clearTimeout(deltaTimerRef.current);
+      deltaTimerRef.current = null;
+    }
+    const buf = deltaBufRef.current;
+    if (buf.length === 0) return;
+    deltaBufRef.current = [];
+    for (const d of buf) dispatch({ type: "event", e: d }); // dispatch 恒等，闭包捕获安全
+  };
   useEffect(() => {
     // M4a：定时触发 = main 侧后台新建会话 → 活流收到 automation_triggered 即刷新会话列表（定时徽标实时出现）
     const offEvent = window.agent.onEvent((e) => {
+      if (e.type === "assistant_delta") {
+        deltaBufRef.current.push(e);
+        if (deltaTimerRef.current === null) {
+          deltaTimerRef.current = window.setTimeout(flushDeltaBuf, 20);
+        }
+        return;
+      }
+      flushDeltaBuf();
       dispatch({ type: "event", e });
       if (e.type === "automation_triggered") void refreshSessions();
     });
-    const offAsk = (a: AskPayload): void => dispatch({ type: "ask", a });
-    const offDone = (d: AskOutcomePayload): void => dispatch({ type: "askDone", d });
+    const offAsk = (a: AskPayload): void => {
+      flushDeltaBuf();
+      dispatch({ type: "ask", a });
+    };
+    const offDone = (d: AskOutcomePayload): void => {
+      flushDeltaBuf();
+      dispatch({ type: "askDone", d });
+    };
     const un1 = window.agent.onAsk(offAsk);
     const un2 = window.agent.onAskDone(offDone);
     return () => {
       offEvent();
       un1();
       un2();
+      flushDeltaBuf(); // 卸载前收束缓冲（不丢尾部 delta）
     };
   }, []);
 

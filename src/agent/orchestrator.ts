@@ -4,7 +4,7 @@
 // spawn_agent（非运行时报错）；worker 上下文 = task + context + 项目记忆注入，永不继承主对话。
 // 事件纪律（§4.4.9 / 任务书裁决 1）：worker 事件落主会话 JSONL（子流：agent_* + 带 agent_id 的
 // tool_call/tool_result/usage），agent_spawned 携 parent_event_id 建立血缘树；重放主流后投影一致。
-import { readFile } from "node:fs/promises";
+import { open, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentEvent, AgentPermissionMode, SecurityFinding } from "../events";
 import type { ModelOutput, Provider } from "../providers";
@@ -2000,21 +2000,50 @@ function globToRegExp(glob: string): RegExp {
   return new RegExp("^" + re + "$");
 }
 
-/** 在主流 JSONL 里定位 spawn tool_call 的事件 id（1-based 行号；agent_spawned.parent_event_id 的来源）。 */
+/** H3-P2（审查 B-8）：spawn 血缘定位的增量索引——旧实现每次 spawn 全量读日志逐行 parse。
+ *  会话 JSONL append-only：按 (logPath → 字节偏移/已扫行号/callId→行号) 增量解析新尾部。
+ *  行号语义与全量版逐位一致：空行/坏行照常占行号，未完整落盘的尾行留待下次（字节偏移只推进完整行）。 */
+const callIdIndexCache = new Map<string, { ino: number; offset: number; lines: number; index: Map<string, number> }>();
+
 export async function findToolCallEventId(logPath: string, callId: string): Promise<number> {
-  const raw = await readFile(logPath, "utf8").catch(() => "");
-  const lines = raw.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const t = lines[i]!.trim();
-    if (t === "") continue;
+  const st = await stat(logPath).catch(() => null);
+  if (!st) return 0;
+  let c = callIdIndexCache.get(logPath);
+  if (!c || c.ino !== st.ino || c.offset > st.size) {
+    // 首访 / 文件被重建（同路径 rm 后新建，inode 变化）/ 被截断 → 全量重扫
+    c = { ino: st.ino, offset: 0, lines: 0, index: new Map() };
+    callIdIndexCache.set(logPath, c);
+  }
+  if (c.offset < st.size) {
+    const fh = await open(logPath, "r");
     try {
-      const e = JSON.parse(t) as { type?: string; id?: string };
-      if (e.type === "tool_call" && e.id === callId) return i + 1;
-    } catch {
-      /* 坏行跳过（append-only 流的最后半行） */
+      const len = st.size - c.offset;
+      const buf = Buffer.allocUnsafe(len);
+      await fh.read(buf, 0, len, c.offset);
+      const parts = buf.toString("utf8").split("\n");
+      const trailing = parts.pop() ?? ""; // 未以 \n 结尾的半行不计入（append-only 写整行，通常为 ""）
+      let consumed = 0;
+      let lineNo = c.lines;
+      for (const line of parts) {
+        lineNo++;
+        consumed += Buffer.byteLength(line, "utf8") + 1; // +1 = 换行符
+        const t = line.trim();
+        if (t === "") continue;
+        try {
+          const e = JSON.parse(t) as { type?: string; id?: string };
+          if (e.type === "tool_call" && typeof e.id === "string") c.index.set(e.id, lineNo);
+        } catch {
+          /* 坏行跳过（照常占行号） */
+        }
+      }
+      void trailing;
+      c.offset += consumed;
+      c.lines = lineNo;
+    } finally {
+      await fh.close();
     }
   }
-  return 0;
+  return c.index.get(callId) ?? 0;
 }
 
 /** worker 最后一轮正文（结构化报告来源）：从尾部回扫，先命中的文本事件组即最后一轮——

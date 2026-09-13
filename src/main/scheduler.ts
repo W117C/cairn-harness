@@ -11,7 +11,7 @@
 //   AskGate 承担；超时双闸 = runTimeoutMs（到点 abort，轮界收束）+ settlesWithin（宿主不响应时的二道退出）。
 // - 完成回写：summarizeRun 纯投影摘要（零新 LLM 调用）→ automation_completed 事件（复用 report 卡类型）。
 // electron-free；tick/jitter/clock/executor 全部可注入，验收禁止真实 sleep 等触发。
-import { mkdir, appendFile, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, appendFile, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Cron } from "croner";
 import type { AgentEvent } from "../events";
@@ -374,6 +374,8 @@ export class Scheduler {
   private journalByTask = new Map<string, JournalEntry[]>();
   private inflight = new Map<string, Inflight>();
   private completions = new Map<string, { status: "succeeded" | "failed"; reason?: string }>();
+  // H3-P2（审查 D-4）：会话终态缓存（(size:mtime) 签名失效；有界 512 条，LRU 简化为淘汰首个）
+  private termCache = new Map<string, { sig: string; state: HistoryState; reason?: string }>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private jitterTimer: ReturnType<typeof setTimeout> | null = null;
   private firstTickDone = false;
@@ -770,19 +772,16 @@ export class Scheduler {
           continue;
         }
         // 跨重启：读会话终态（automation_completed）；无终态记录 = interrupted（V1 不自动重试，§12.3.4）
+        // H3-P2（审查 D-4）：终态按 (size+mtime) 签名缓存——旧实现每次 getState 都对每条历史全量
+        // replay 会话 JSONL，面板轮询下是反复全量读盘；会话文件 append-only，签名不变即终态不变。
         const sid = e.session_id ?? this.findSessionIdByKey(e.occurrence_key);
         let state: HistoryState = "failed";
         let reason: string | undefined = "interrupted（重启后无终态记录；V1 不自动重试，可 run_now 兜底）";
         if (sid) {
-          try {
-            const events = await replay(pathOf(this.deps.sessionsDir, sid));
-            const term = [...events].reverse().find((x): x is Extract<AgentEvent, { type: "automation_completed" }> => x.type === "automation_completed");
-            if (term) {
-              state = term.status;
-              reason = term.reason;
-            }
-          } catch {
-            /* 会话文件缺失：保持 failed/interrupted */
+          const term = await this.terminalOf(sid);
+          if (term) {
+            state = term.state;
+            reason = term.reason;
           }
         }
         history.push({ task_id: taskId, task_name: name, occurrence_key: e.occurrence_key, due_at: e.due_at, decision: e.decision, ...(sid ? { session_id: sid } : {}), state, ...(reason !== undefined ? { reason } : {}), at: e.at });
@@ -804,6 +803,37 @@ export class Scheduler {
       if (hit?.session_id) return hit.session_id;
     }
     return undefined;
+  }
+
+  /** H3-P2：会话终态（automation_completed）按文件签名缓存读取。签名 = size:mtimeMs——
+   *  会话 JSONL 是 append-only，签名不变则终态不可能变化，免全量 replay。 */
+  private async terminalOf(sid: string): Promise<{ state: HistoryState; reason?: string } | null> {
+    const p = pathOf(this.deps.sessionsDir, sid);
+    const st = await stat(p).catch(() => null);
+    if (!st) {
+      this.termCache.delete(sid);
+      return null;
+    }
+    const sig = String(st.size) + ":" + String(st.mtimeMs);
+    const hit = this.termCache.get(sid);
+    if (hit && hit.sig === sig) return { state: hit.state, reason: hit.reason };
+    try {
+      const events = await replay(p);
+      const term = [...events].reverse().find((x): x is Extract<AgentEvent, { type: "automation_completed" }> => x.type === "automation_completed");
+      if (!term) {
+        this.termCache.delete(sid);
+        return null;
+      }
+      const out: { state: HistoryState; reason?: string } = { state: term.status, ...(term.reason !== undefined ? { reason: term.reason } : {}) };
+      if (this.termCache.size >= 512) {
+        const first = this.termCache.keys().next().value;
+        if (first !== undefined) this.termCache.delete(first);
+      }
+      this.termCache.set(sid, { sig, ...out });
+      return out;
+    } catch {
+      return null; /* 会话文件缺失/坏行：保持 failed/interrupted */
+    }
   }
 
   /** 运行历史六态过滤（纯函数面，UI 与验收共用）。 */
