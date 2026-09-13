@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import { rm, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runLoop } from "../agent/loop";
@@ -154,6 +155,29 @@ const appPlanGate = new PlanGate();
 // 仍可达（§4.4.3 最大前车之鉴）；跨编排器路由走 orchestratorForAgent / orchestratorForApproval。
 let activeOrchestrator: Orchestrator | null = null;
 
+// ---- H3（审查 D-2 立项落地）：RunScope —— run 级会话态随异步链传播 ----
+// 旧实现 session/activeOrchestrator 是模块级单例，「后到 run 覆写在途 run」：并发的定时 unattended
+// run 会（a）把交互 run 在途工具的审批路由抢到 unattendedAskGate（自动拒绝）、（b）结束时把
+// session 置 null 使交互 run 的后续工具全部 fail-closed 假死。AsyncLocalStorage 让每个 runAgent
+// 调用的整条异步链（loop await / 门等待 / 工具执行）都读到自己的 scope，工具闭包零签名改动。
+// 交互面全局（session/activeOrchestrator）语义不变：只由交互 run 写入、UI decide/state 投影/
+// 产后审批路由照旧；unattended run 不再触碰全局。已知边界（显式备案）：插件运行时（M2e 全局
+// runtime + TOOLS 注入面）与 appClarify/appPlan 共享门仍是共享面——v1 隔离面 = D-2 验收所限定的
+// 审批路由与权限态投影。
+interface RunScope {
+  session: Session;
+  orchestrator: Orchestrator | null;
+}
+const runScopeALS = new AsyncLocalStorage<RunScope>();
+/** 工具闭包取「当前 run」的会话态：run 内 = scope（并发隔离）；run 外遗留路径 = 交互面全局（行为不变）。 */
+function currentSession(): Session | null {
+  return runScopeALS.getStore()?.session ?? session;
+}
+/** 工具闭包取「当前 run」的编排器：语义同上。 */
+function currentOrchestrator(): Orchestrator | null {
+  return runScopeALS.getStore()?.orchestrator ?? activeOrchestrator;
+}
+
 /** M3c 编排器扩展接线（agentRoleFor / workerSummarizer / budget）：runAgent 与会话重派共用同一口径。
  *  - agentRoleFor：插件 agent 角色解析（stages[].role = "plugin-name:agent-name"，§9.6/§9.11-4）；
  *  - workerSummarizer：worker 压缩摘要器（§7.5 同一 runCompaction 链；GLM 暗卷需 M0_API_KEY）；
@@ -237,7 +261,7 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
   return {
     name,
     async run(args, ctx) {
-      const s = session;
+      const s = currentSession();
       if (!s) return denied(name, "default", "工具门未接线（fail-closed）");
       // M1c：四层评估管线（deny 规则 → ask 规则 → 档位 → 风险）；方案门状态每次刷新进 session 入参
       const ps = getPlanState();
@@ -296,7 +320,7 @@ function gatedMcpTool(name: string, info: McpToolInfo & { plugin: string; server
   return {
     name,
     async run(args, ctx) {
-      const s = session;
+      const s = currentSession();
       if (!s) return denied(name, "default", "工具门未接线（fail-closed）");
       const ps = getPlanState();
       s.autonomy.planBlocked = ps.proposed && !ps.approved;
@@ -508,13 +532,13 @@ export function installAppTools(): void {
   TOOLS.run_shell = gatedTool("run_shell", TOOLS.run_shell);
   // M2d：remember 运行时注入（静态注册表冻结为 9 工具，tools-check 判据）
   (TOOLS as unknown as Record<string, Tool>).remember = createGatedRemember({
-    getMode: () => session?.autonomy.mode ?? "default",
+    getMode: () => currentSession()?.autonomy.mode ?? "default",
     isPlanBlocked: () => {
       const ps = getPlanState();
       return ps.proposed && !ps.approved;
     },
     getAsk: () => {
-      const s = session;
+      const s = currentSession();
       if (!s?.askGate) return undefined;
       return async (args: Record<string, unknown>) => {
         const r = await s.askGate!.request("remember", args, { reason: "记忆写入（默认档逐次审批）", risk: "low" });
@@ -527,7 +551,7 @@ export function installAppTools(): void {
   (TOOLS as unknown as Record<string, Tool>).spawn_agent = {
     name: "spawn_agent",
     async run(args, ctx) {
-      const orch = activeOrchestrator;
+      const orch = currentOrchestrator();
       if (!orch) return { ok: false, output: "spawn_agent: 编排器未接线（fail-closed）" };
       return await orch.spawn(args as SpawnArgs, { callId: ctx.callId });
     },
@@ -636,7 +660,7 @@ function installAutomationTools(): void {
   const table = TOOLS as unknown as Record<string, Tool>;
   const schRef = () => scheduler;
   const approval = async (tool: string, args: Record<string, unknown>, redNote: boolean): Promise<ToolResult | null> => {
-    const s = session;
+    const s = currentSession();
     if (!s) return { ok: false, output: "[permission denied] " + tool + "（工具门未接线，fail-closed）" };
     if (!s.askGate) return { ok: false, output: "[permission denied] " + tool + "（非交互模式，fail-closed）" };
     const reason =
@@ -808,7 +832,10 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     join(opts.workspace, ".agent", "permissions.json"),
     globalPermissionsPath(),
   );
-  session = {
+  // H3（D-2 RunScope）：交互面全局只由交互 run 写入；unattended run 的会话态只活在 scope 里，
+  // 结束时不再把全局 session 置 null（旧实现会话间相互覆写/假死布防的根源）。
+  const interactive = opts.unattended !== true;
+  const sessionObj: Session = {
     mode: opts.mode,
     askGate: opts.askGate ?? null,
     sandbox: opts.sandbox ?? null,
@@ -819,7 +846,10 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       sandboxAvailable: opts.sandbox ? opts.sandbox.available : null,
     }),
   };
+  if (interactive) session = sessionObj;
   lastWorkspace = opts.workspace;
+  const runScope: RunScope = { session: sessionObj, orchestrator: null };
+  runScopeALS.enterWith(runScope); // 本 run 整条异步链（loop await / 门等待 / 工具执行）都在 scope 内
   // M2e：本 run 注入统一注册表的插件工具名（会话结束摘除，零残留）；声明在 try 外防 finally TDZ
   let injectedToolNames: string[] = [];
   try {
@@ -832,7 +862,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       await log.append(e);
       opts.onEvent?.(e);
     };
-    session.emit = pipeline;
+    sessionObj.emit = pipeline; // H3 D-2：写在 scope 的会话对象上（交互 run 的全局指向同一对象）
     // M3a：会话级编排器（worker 子流落主流 JSONL；父 turn 收束后编排器存活，审批/取消路由不断）
     let demoModelFor: ((args: SpawnArgs) => WorkerModel | undefined) | undefined;
     if (process.env.M3A_AGENTS_DEMO === "1") demoModelFor = await loadDemoWorkerModels();
@@ -845,7 +875,8 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       ...(await orchestratorExtras()), // M3c：插件角色 / worker 压缩摘要器 / 成本闸
       ...(demoModelFor ? { modelFor: demoModelFor } : {}),
     });
-    activeOrchestrator = orchestrator;
+    runScope.orchestrator = orchestrator;
+    if (interactive) activeOrchestrator = orchestrator; // H3 D-2：unattended 不抢交互面的审批路由
     // M2e：插件运行时（会话启动静态扫描产加载清单，不新增事件类型）。
     // 零插件环境（无 .agent/plugins、无 M2E_USER_PLUGINS/M2E_LOOSE_SKILLS）= 空清单 = 零行为。
     let rt: PluginRuntime | null = null;
@@ -990,7 +1021,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       console.warn("[memory] 沉淀轮失败:", err instanceof Error ? err.message : String(err));
     }
   } finally {
-    session = null;
+    if (interactive) session = null; // H3 D-2：unattended run 不清交互面全局（旧实现把在途交互 run 假死）
     // 会话结束 = MCP server 子进程一并回收（stdio 流不挂事件循环）；快照留档供 run 间隙查询
     const rtNow = currentPluginRuntime();
     if (rtNow) lastPluginSnapshot = rtNow.snapshot();
