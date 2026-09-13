@@ -941,3 +941,42 @@
 3. 结构性拆分（orchestrator/main.tsx/panels registry）+ 会话切换序号守卫（F-3）：独立立项。
 4. E-10 信任按内容指纹（协议设计）、G-3 面板状态上提、F-7/F-8 设置与启动健壮性：择期。
 5. 编排提示词缺口（生产主会话无系统提示词）：待裁决立项（orchestration-prompt-review 有完整方案）。
+
+## H3 · M4 后加固第三轮（D-2 RunScope + 性能三处 + 提示词基座 + 信任指纹 + Mimosa 分诊）（2026-09-13）
+
+> 前置：H2 收口（HEAD 471fb16）。目标：清「已审未修留位」与「未证」——7 项中 5 项完成、1 项产出分诊报告、1 项（凭据类未证）写死闭合操作待 key。
+
+### 任务结果
+- **P1 D-2 RunScope（BLOCKED 立项的验收闭环）**：`AsyncLocalStorage` 承载 run 级会话态（`enterWith` 使 runAgent 整条异步链读到本 run scope，工具闭包零签名改动）+ 工具闭包统一改 `currentSession()`/`currentOrchestrator()`（gatedTool/gatedMcpTool/remember 三闭包/spawn_agent/automation 审批五处）+ **交互面全局只由交互 run 写入**：unattended run 不再抢交互 run 的审批路由、结束不再把全局 session 置 null（旧实现两连写假死的根源）。tests/runscope 并发验收（同剧本双 run 重叠：交互 run 两次写审批穿过 unattended run 完整生命周期）。已知边界显式备案：插件运行时全局与 appClarify/appPlan 共享门为 v1 隔离面之外。**D-2 结案，BLOCKED 立项节关闭。**
+- **P2 性能三处（根因 5 精选，行为保真）**：渲染层流式 delta 按帧批量 dispatch（20ms 缓冲 + 非 delta 事件先冲缓冲保序，旧实现每 delta 全量重算投影 O(n²)）+ scheduler 会话终态按 (size:mtime) 签名缓存（旧实现每次 getState 全量 replay）+ spawn 血缘定位增量索引（inode+字节偏移，行号语义与全量版逐位一致，m3b/m3c 血缘重放一致性断言为正确性锚点）。
+- **P3 F-3 会话切换序号守卫**：switch/create/delete/启动重放四处统一 seq 守卫，迟到响应只同步列表不抢当前会话。
+- **P4 主会话 BASE_SYSTEM**（编排提示词审查 §一 落地）：生产主会话此前只有插件路由 + hook 上下文；补齐角色 + 四条纪律 + 机制边界预告 + 撞墙应对策略。mock 通道不受影响（e2e/gate-check 全绿）。
+- **P5 E-10 信任绑定内容指纹**：`pluginFingerprint`（全量文件 relpath+sha1 排序取 sha256）+ TrustStore 条目升级 `abs@指纹`（新决议内容绑定，插件被替换即重新出卡；旧版裸路径记录兼容命中——显式备案的兼容边界）+ 4 处验收预信任点同步升级。
+- **P6 Mimosa 266 条分诊**（`outputs/mimosa-triage-2026-09-13.md`）：**0 条需立即修复**——237 条在 oh-src 外来参考目录（不进构建零引用）；13 条验收工具面 by-design；4 条假阳（remove 的 traversal 被 sessionPath 白名单证伪、approval 的 SSRF 无出网证伪）；命令注入类为产品本体 + 控制面已闭环；9 条 business-logic inconclusive 留待有凭据运行时审计。仓库卫生建议：oh-src 移出仓库或加扫描排除（留给维护者决定）。
+- **P0 未证闭合操作（凭据不在场，写死待 key）**：`M0_API_KEY` 本机未设置。闭合方式：**key 在场后跑 `TERM=dumb M0_API_KEY=<key> pnpm gates`，provider:check 即转真连判定**（UNVERIFIED 归零）；testdino 远程 MCP 同理需其插件配置内有效凭据。两项均无需改代码。
+
+### 反向验证实录
+1. 摘 RunScope 的 ALS 回退（`currentSession()` 改回直读全局）→ tests/runscope **红**（交互 run 第二次写审批在 unattended run 结束后挂起至超时，5007ms 复现旧实现假死）→ 还原 **1/1 绿**。e2e + ipc:check + schedule-check 67 断言回归绿。
+2. P2/P3/P5 的正确性锚点：m3b/m3c 血缘重放一致性 87 项绿（增量索引行号逐位一致）；plugins-check 30✅ + agents-check 250✅（指纹升级后预信任通道不破坏）；trust-fingerprint 3 项（含「内容被替换 → pending 重新出卡」的否定式锚点）。
+
+### H3 新增坑记录
+- 坑七十九：**ALS 的上下文边界在「跨 run 的异步延续」处**——sequencer 后环/评审重启由编排器事件驱动延续，不在发起 run 的 scope 内；实测无害（worker 工具走 per-worker autonomy，spawn_agent 由编排器直调不经模块闭包），但任何新「模块级闭包读会话态」的代码必须走 `currentSession()` 才能被 scope 覆盖。
+- 坑八十：**全仓扫描必须先切干净被审面**——oh-src 一目录贡献 88.7% finding，分诊成本远大于修复成本；外来参考资料入库前先决定「进不进扫描边界」。
+- 坑八十一：**给既有记录格式加维度时，预信任/演练通道是第一兼容面**——信任条目升级 `abs@fp` 后，验收脚本 4 处直写 trust 文件的预信任点全部要同步升级；先 grep 判卷面再改格式。
+
+### 收口基线（2026-09-13）
+- `pnpm gates`：23/23 exit=0 + 体检零命中（终验实录见会话日志）；⚠️ 未证 2 项待 key（闭合操作见上）。
+- test = **56 files / 499 passed / 0 skipped**（终验实测；新增 tests/runscope 1 + trust-fingerprint 3 = 2 文件 +4 用例）。
+- 判卷卫生：frozen-sha256 逐字节未改；判据零改动。
+
+### 分笔提交清单（本轮）
+1. `H3-P1 D-2 RunScope 落地`——ALS 隔离 + current* 五处 + 并发验收测试 + 反向验证。
+2. `H3-P2 性能三处`——帧批 flush / 终态签名缓存 / 血缘增量索引。
+3. `H3-P3 会话切换序号守卫`。
+4. `H3-P4 主会话 BASE_SYSTEM`。
+5. `H3-P5 信任绑定内容指纹`。
+6. `H3-P6/P7 收口`（本笔）——PROGRESS H3 段 + Mimosa 分诊报告入库 + BLOCKED D-2 结案标注。
+
+### 留位更新（相对 H2 段）
+- **已清**：D-2（RunScope）、性能三处、F-3、E-10、编排提示词主会话基座。
+- **仍在留位**：结构拆分（orchestrator/main.tsx/registry 大文件）、G-3 面板状态上提、F-7/F-8 设置健壮性、worker 提示词与输出契约（提示词审查 §二的后续）、CI 接入时写死严格未证模式、有凭据环境的运行时注入审计。
