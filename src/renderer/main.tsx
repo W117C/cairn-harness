@@ -838,16 +838,25 @@ function App() {
   };
 
   // 会话切换：session:open → 重放投影（reset 全量折叠，与活流同一 foldEvent）
+  // H3-P3（审查 F-3）：请求序号守卫——A→B 连点时 A 的迟到重放响应不得覆盖 B（reset 竞态）。
+  const sessionSeqRef = useRef(0);
   const switchSession = async (id: string): Promise<void> => {
     if (state.running) return;
+    const seq = ++sessionSeqRef.current;
     const { events } = await window.agent.openSession(id);
+    if (seq !== sessionSeqRef.current) return; // 已有更新的切换请求：丢弃迟到响应
     setCurrentSession(id);
     dispatch({ type: "reset", events });
     await refreshSessions();
   };
 
   const createSession = async (): Promise<void> => {
+    const seq = ++sessionSeqRef.current;
     const { id } = await window.agent.createSession();
+    if (seq !== sessionSeqRef.current) {
+      await refreshSessions(); // 迟到的创建请求：只同步列表，不抢当前会话
+      return;
+    }
     setCurrentSession(id);
     dispatch({ type: "reset", events: [] });
     await refreshSessions();
@@ -861,10 +870,20 @@ function App() {
   };
 
   const deleteSession = async (id: string): Promise<void> => {
+    const seq = ++sessionSeqRef.current;
     const { currentSession: next } = await window.agent.deleteSession(id);
+    if (seq !== sessionSeqRef.current) {
+      await refreshSessions(); // 迟到的删除响应：只同步列表
+      return;
+    }
     setCurrentSession(next);
     if (next) {
+      const seqOpen = ++sessionSeqRef.current;
       const { events } = await window.agent.openSession(next);
+      if (seqOpen !== sessionSeqRef.current) {
+        await refreshSessions();
+        return;
+      }
       dispatch({ type: "reset", events });
     } else {
       dispatch({ type: "reset", events: [] });
@@ -890,7 +909,9 @@ function App() {
       const cur =
         s.currentSession && list.some((x) => x.id === s.currentSession) ? s.currentSession : (list[0]?.id ?? null);
       if (cur) {
+        const seq = ++sessionSeqRef.current; // 启动重放参与同一序号守卫（用户先点击则让位）
         const { events } = await window.agent.openSession(cur);
+        if (seq !== sessionSeqRef.current) return;
         setCurrentSession(cur);
         dispatch({ type: "reset", events });
       }
