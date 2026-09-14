@@ -14,7 +14,8 @@ import { createEventLog, type AgentEvent } from "../src/events";
 import { Orchestrator, scriptedWorkerModel } from "../src/agent/orchestrator";
 import type { RespawnArgs } from "../src/agent/recovery";
 import { DEFAULT_MODEL_TABLE } from "../src/providers/registry";
-import { createRng, newBanditState, nextRandom, selectArm, update } from "../src/routing/bandit";
+import { createRng, newBanditState, nextRandom, selectArm, update, updatePriced } from "../src/routing/bandit";
+import { costUsd, DEFAULT_PRICE_TABLE, priceCoverage, priceOf } from "../src/routing/pricing";
 import { routeFor } from "../src/routing/policy";
 import { runCascade } from "../src/routing/cascade";
 import { DEFAULT_SETTINGS, SettingsStore, validateSettings } from "../src/main/settings";
@@ -265,6 +266,42 @@ console.log("[routing-check] C 级联升级（恰好升级一次 / maxRungs 有�
   });
   check(!r3.ok && r3.upgrades === 0, "C3 无 verify 配置 → 断言不升级");
   check((r3.blockedNote ?? "").includes("无 verify 判据"), "C3b fail-closed 显式说明落流（不静默放行）");
+}
+
+// ============================== F 价格表接线（M6：bandit 代价项换真钱） ==============================
+console.log("[routing-check] F 价格表接线（覆盖护栏 / 真钱折算 / 真钱代价 bandit 收敛 / 反向验证）");
+
+{
+  // F1：价格表覆盖档位表全部 id（新增 model 忘配价 = 显式失败）
+  check(priceCoverage().length === 0, "F1 价格表覆盖档位表全部 " + String(DEFAULT_MODEL_TABLE.length) + " 个 id（漂移护栏）");
+  // F2：真钱折算已知用例（输入/输出分列计价）
+  const c = costUsd("anthropic-standard", { inputTokens: 1_000_000, outputTokens: 1_000_000 });
+  check(Math.abs(c - 18.0) < 1e-9, "F2 costUsd 真钱折算（1M in + 1M out @anthropic-standard = $18）", "cost=" + String(c));
+  check(priceOf("gemini-cheap").inputPerMTok === 0.1, "F2b 价格表读取");
+  // F3/F4：真钱代价驱动的 bandit 收敛（cheap $0.2 vs strong $8 每 MTok，每轮 500 token）
+  const moneyRun = (prices: { cheap: number; strong: number }, seed = 42, envSeed = 7): { cheapPicks: number; strongPicks: number } => {
+    const state = newBanditState(seed);
+    const envRng = createRng(envSeed);
+    let cheapPicks = 0;
+    let strongPicks = 0;
+    for (let i = 0; i < 200; i++) {
+      const arm = selectArm(state.posteriors, state.rngState, B_ARMS, 0.05);
+      if (arm.tier === "cheap") cheapPicks++;
+      else strongPicks++;
+      const successProb = arm.tier === "cheap" ? 0.9 : 0.95;
+      const pmt = arm.tier === "cheap" ? prices.cheap : prices.strong;
+      const usd = (500 * pmt) / 1_000_000;
+      const reward = nextRandom(envRng) < successProb ? 1 : 0;
+      updatePriced(state.posteriors, arm, reward, usd);
+    }
+    return { cheapPicks, strongPicks };
+  };
+  const normal = moneyRun({ cheap: 0.2, strong: 8 });
+  check(normal.cheapPicks / 200 > 0.8, "F3 真钱代价：cheap $0.2 vs strong $8 → 200 轮便宜档被选 > 0.8", "cheap=" + String(normal.cheapPicks) + "/200");
+  const flipped = moneyRun({ cheap: 8, strong: 0.2 });
+  check(flipped.strongPicks / 200 > 0.8, "F4 反向验证：价格对调（strong 便宜）→ 收敛强档（证明 F3 非恒真，真钱驱动）", "strong=" + String(flipped.strongPicks) + "/200");
+  const again = moneyRun({ cheap: 0.2, strong: 8 });
+  check(again.cheapPicks === normal.cheapPicks && again.strongPicks === normal.strongPicks, "F5 同 seed 两次跑计数一致（真钱代价确定性）");
 }
 
 await rm(work, { recursive: true, force: true }).catch(() => {});

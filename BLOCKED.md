@@ -330,3 +330,20 @@ after.text !== first.text 收紧为 after.text.includes(探针名)——判据�
 （render.ts:42 组内按 line 升序；renderMapBudget 按分数降序取 top-k 截断）。若日后有人调 rank 平手
 规则、或把探针文件挪出 contextFiles，⑤b 会重新变成尺寸敏感假红；真踩到再换结构断言（我在 9873e56
 里写下的归因与这里的压测数字就是换判据时的依据）。
+
+### G-1 首个实锤机理（2026-09-15 01:4x，P1 修复轮全量门禁观测）
+
+**状态升级：机理未证 → 已证一例**。00:33 全量门禁 26/26 绿（含未提交 M6 接线）。01:12 起，并发会话
+对本仓跑起 codegraph daemon（.codegraph/daemon.sock mtime 01:12、daemon.pid 01:12、codegraph.db
+01:34-01:35 仍在写）。01:37 全量门禁 map-check 红，两次复跑同因：
+
+- 失败点：map-check 建临时工作区做整目录拷贝，cp 撞上 .codegraph/daemon.sock（socket 文件）→
+  `EINVAL: cannot copy a socket file` → 门红（.tmp/m2b-mapcheck-ws-*/.codegraph/daemon.sock）。
+- 归因证据链：红点 100% 落在 socket 拷贝；socket 诞生（01:12）晚于绿轮（00:33）；本轮 P1 修复不触碰
+  map/codegraph 任何路径；daemon 存活期间复跑稳定复现。
+
+这是 G-1 备案「同一 checkout 共享面并发争抢」的第一个实锤：共享面不只 fixtures/out/tmp，还有
+**活动 daemon 的运行时文件**（.codegraph/daemon.sock）。修复建议（不动判据，留 map-check 责任方）：
+临时工作区拷贝跳过 socket/fifo，或排除 .codegraph 运行时文件（该目录已在 .codegraph/.gitignore）。
+本轮不改 map-check（该文件正被并发会话持有 in-flight 改动，避免撞车）；daemon 本体是并发会话的
+活动进程，不由本轮处置。

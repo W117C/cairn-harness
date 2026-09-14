@@ -17,7 +17,7 @@ import { ClarifyGate, PlanGate } from "../agent/gates";
 import { createVerifyHook, defaultExec, type ExecFn } from "../agent/verify";
 import type { AgentEvent, ClarifyAnswerMap, EventLog } from "../events";
 import { createEventLog, replay } from "../events";
-import { checkPermission, getPlanState, type PermissionMode } from "../permissions";
+import { checkPermission, enterPlanRunScope, getPlanState, type PermissionMode } from "../permissions";
 import {
   evaluate,
   isNetworkCommandCall,
@@ -862,6 +862,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   lastWorkspace = opts.workspace;
   const runScope: RunScope = { session: sessionObj, orchestrator: null };
   runScopeALS.enterWith(runScope); // 本 run 整条异步链（loop await / 门等待 / 工具执行）都在 scope 内
+  enterPlanRunScope(); // P1（审查）：plan 门状态随 run 隔离——并发 run 互不污染（permissions ALS）
   // M2e：本 run 注入统一注册表的插件工具名（会话结束摘除，零残留）；声明在 try 外防 finally TDZ
   let injectedToolNames: string[] = [];
   try {

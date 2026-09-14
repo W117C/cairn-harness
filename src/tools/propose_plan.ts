@@ -1,7 +1,7 @@
 // 方案门工具（唯一有强制力的门）：模型提交计划 → plan_proposed 事件 →
 // 权限层进入写禁（存在未批准 plan 时 write_file/run_shell 一律拒绝）→ 挂起等人批准。
 // 规格 §5.3：goal + files[{path, action, summary}]，action ∈ create|edit|delete；approach/verify 可选。
-import { markPlanProposed } from "../permissions";
+import { approvePlan, markPlanProposed } from "../permissions";
 import type { PlanFileChange, PlanProposal, PlanProposedEvent } from "../events";
 import { ToolError, type Tool, type ToolResult } from "./base.js";
 
@@ -72,6 +72,9 @@ export const propose_plan: Tool = {
     if (decision !== "approved") {
       return { ok: false, output: "方案被拒绝：写禁保持（存在未批准 plan），请修订后重新 propose_plan" };
     }
+    // P1（审查）：解锁在 run 链内落地——决议处理器不在本 run 异步链，plan 态已 run 级隔离，
+    // 谁的 plan 谁解锁（挂起期间本 run 的 loop 停在本工具上，解锁窗口无并发写面）。
+    approvePlan();
     return { ok: true, output: "方案已批准，写工具解锁" };
   },
 };

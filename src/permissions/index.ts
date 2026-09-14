@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { ToolName } from "../tools";
 // C9（审查根因 2）：能力域判定唯一实现——旧的模块内私有副本只认三个字面工具名（缺 shell_rw），
 // 使 loop 路径（checkPermission/gate/denyReason）对 shell 家族新成员失效。删副本统一从 autonomy 导入。
@@ -62,28 +63,54 @@ export interface PlanState {
 }
 
 let planState: PlanState = { proposed: false, approved: false };
+// P1（审查）：plan 门状态挂 run 级 AsyncLocalStorage——并发 run（交互 vs 定时 unattended）各持
+// 独立 plan 态：A 会话的未批准 plan 不再拦死 B run 的写工具，A 的批准也不再解锁 B。
+// run 外遗留路径（脚本/测试直调）回落模块态，行为不变。
+const planScopeALS = new AsyncLocalStorage<{ state: PlanState }>();
+
+/** 进入 run 级 plan 门作用域（agent-runner 在 runAgent 入口与 RunScope 同点接线）。 */
+export function enterPlanRunScope(): void {
+  planScopeALS.enterWith({ state: { proposed: false, approved: false } });
+}
+
+/** 在全新隔离 plan 作用域内执行 fn（als.run 语义：不泄漏到调用方上下文；测试/工具用）。 */
+export function runWithPlanScope<T>(fn: () => T): T {
+  return planScopeALS.run({ state: { proposed: false, approved: false } }, fn);
+}
+
+function currentPlanState(): PlanState {
+  return planScopeALS.getStore()?.state ?? planState;
+}
+
+function setPlanState(next: PlanState): void {
+  const scope = planScopeALS.getStore();
+  if (scope) scope.state = next;
+  else planState = next;
+}
 
 export function getPlanState(): PlanState {
-  return { ...planState };
+  return { ...currentPlanState() };
 }
 
 /** propose_plan 工具落计划时调用：进入「未批准即写禁」状态。 */
 export function markPlanProposed(): void {
-  planState = { proposed: true, approved: false };
+  setPlanState({ proposed: true, approved: false });
 }
 
-/** 批准当前 plan：解锁写工具。 */
+/** 批准当前 plan：解锁写工具。propose_plan 工具在收到 approved 决议后于 run 链内调用——
+ *  决议处理器（IPC/gate-check）不在本 run 异步链内，plan 态已 run 级隔离，谁的 plan 谁解锁。 */
 export function approvePlan(): void {
-  planState = { proposed: true, approved: true };
+  setPlanState({ proposed: true, approved: true });
 }
 
 /** 回到无 plan 状态（新会话/测试复位用）。 */
 export function resetPlanState(): void {
-  planState = { proposed: false, approved: false };
+  setPlanState({ proposed: false, approved: false });
 }
 
 function planBlocks(): boolean {
-  return planState.proposed && !planState.approved;
+  const ps = currentPlanState();
+  return ps.proposed && !ps.approved;
 }
 
 // 原始判定：read_file 与三门工具（clarify/propose_plan/verify）不产生用户数据副作用，任何档都放行；

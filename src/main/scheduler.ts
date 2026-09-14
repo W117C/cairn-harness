@@ -467,11 +467,20 @@ export class Scheduler {
     this.journalAppendsSinceCompact = 0;
     const jitter = this.jitterMs();
     this.jitterTimer = setTimeout(() => {
-      void this.tick({ startup: true });
+      this.tickGuarded({ startup: true });
     }, jitter);
     this.timer = setInterval(() => {
-      void this.tick();
+      this.tickGuarded();
     }, TICK_MS);
+  }
+
+  /** P1（审查）：常驻路径的 tick 拒绝必须就地捕获——journal/会话落盘 IO 失败（磁盘满/数据目录
+   *  被清/唤醒后路径异常）原样上抛会成为 unhandled rejection，Node≥15 默认 throw 模式下崩掉主进程。
+   *  手动 tick（验收/单测 await）仍保留原拒绝语义，不受本护栏影响。 */
+  private tickGuarded(opts: { startup?: boolean } = {}): void {
+    this.tick(opts).catch((err: unknown) =>
+      this.warn("[scheduler] tick 异常（已捕获，不影响下一 tick）：" + (err instanceof Error ? err.message : String(err))),
+    );
   }
 
   /** 停止（app 关闭即停；不中断已 inflight 的执行——进程随之退出）。 */

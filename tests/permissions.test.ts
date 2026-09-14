@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkPermission, gate } from "../src/permissions";
+import { approvePlan, checkPermission, gate, getPlanState, markPlanProposed, resetPlanState, runWithPlanScope } from "../src/permissions";
 import { evaluate, isSideEffectTool, newAutonomySession } from "../src/permissions/autonomy";
 import { judgeChain, type PermissionRule } from "../src/permissions/rules";
 import { hasThreatTableSurface, staticRisk } from "../src/permissions/risk";
@@ -133,5 +133,37 @@ describe("规则链 deny 短路（P0-2 回归）", () => {
     ];
     expect(judgeChain(r3, "run_shell", "git push origin main").verdict).toBe("allow");
     expect(judgeChain(r3, "run_shell", "git push --force").verdict).toBe("deny");
+  });
+});
+
+// P1（审查）回归：plan 门状态 run 级隔离——并发 run（交互 vs 定时 unattended）互不污染：
+// A 会话的未批准 plan 不再拦死 B run 的写工具，A 的批准也不再解锁 B；run 外遗留路径回落模块态。
+describe("plan 门 run 级隔离（P1 回归）", () => {
+  it("A run 提案写禁只拦 A；B run 独立不受污染", async () => {
+    const runA = runWithPlanScope(async () => {
+      markPlanProposed();
+      expect(checkPermission("auto", "write_file")).toBe("deny");
+      await new Promise((r) => setTimeout(r, 30)); // 给 B 留出并发窗口
+      expect(checkPermission("auto", "write_file")).toBe("deny"); // A 自身仍被拦
+      return "a";
+    });
+    const runB = runWithPlanScope(async () => {
+      await new Promise((r) => setTimeout(r, 10)); // 等 A 先提案
+      expect(checkPermission("auto", "write_file")).toBe("allow"); // B 不受 A 污染
+      approvePlan(); // B 自己批准 → 只解锁 B
+      expect(checkPermission("auto", "write_file")).toBe("allow");
+      return "b";
+    });
+    expect(await Promise.all([runA, runB])).toEqual(["a", "b"]);
+  });
+
+  it("run 外遗留路径回落模块态（脚本/测试行为不变）", () => {
+    markPlanProposed();
+    expect(getPlanState()).toEqual({ proposed: true, approved: false });
+    expect(checkPermission("auto", "write_file")).toBe("deny");
+    approvePlan();
+    expect(checkPermission("auto", "write_file")).toBe("allow");
+    resetPlanState();
+    expect(getPlanState()).toEqual({ proposed: false, approved: false });
   });
 });

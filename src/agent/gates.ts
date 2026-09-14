@@ -4,7 +4,8 @@
 // 无人等待时提交返回 false（会话已不在等，不误挂）。
 // H2（审查 A-2）：等待可被取消/超时收束——abort 或超时即拒绝并清 pending，
 // 不再让解析器永久泄漏（旧实现 wait() 无出口，取消/超时场景 promise 悬挂）。
-import { approvePlan } from "../permissions";
+// P1（审查）：本类只解挂等待，不再代写 plan 门状态——plan 态已 run 级隔离（permissions ALS），
+// 解锁由 propose_plan 工具在收到 approved 决议后于 run 链内自落（谁的 plan 谁解锁，跨 run 不串台）。
 import { ToolError, type GateWaitOptions } from "../tools/base";
 import type { ClarifyAnswerMap } from "../events";
 
@@ -101,7 +102,7 @@ export class PlanGate {
     );
   }
 
-  /** 批准：权限层解锁写工具 + 解挂等待中的 propose_plan。 */
+  /** 批准：解挂等待中的 propose_plan（写工具解锁由工具在 run 链内自落，见类头注）。 */
   approve(callId?: string): boolean {
     return this.settle(callId, "approved");
   }
@@ -117,13 +118,11 @@ export class PlanGate {
       const resolve = this.pending.get(callId);
       if (!resolve) return false;
       this.pending.delete(callId);
-      if (decision === "approved") approvePlan();
       resolve(decision);
       return true;
     }
     // 未指定 callId：结算全部等待（同一时刻至多一个 propose_plan 挂起，此为兜底）
     const ids = [...this.pending.keys()];
-    if (decision === "approved") approvePlan();
     for (const id of ids) {
       const resolve = this.pending.get(id);
       this.pending.delete(id);

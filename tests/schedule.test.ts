@@ -582,3 +582,27 @@ describe("M4a 触发执行与完成回写", () => {
     expect(rn2.error).toContain("concurrency-cap");
   });
 });
+
+// P1（审查）回归：常驻路径（interval/启动补跑）的 tick 拒绝不逃逸——journal/会话落盘 IO 失败
+// 曾以 unhandled rejection 直达主进程崩溃面。手动 tick 的 await 语义不变（照常 reject）。
+describe("tick 拒绝护栏（P1 回归）", () => {
+  it("tickGuarded 就地捕获 tick 拒绝并走 onWarn（vitest 对 unhandled rejection 直接判红）", async () => {
+    const warns: string[] = [];
+    const { s } = makeScheduler({ onWarn: (m: string) => warns.push(m) });
+    const boom = async (): Promise<never> => {
+      throw new Error("boom-io");
+    };
+    (s as unknown as { tick: () => Promise<never> }).tick = boom; // 模拟落盘 IO 失败
+    (s as unknown as { tickGuarded(opts?: { startup?: boolean }): void }).tickGuarded({ startup: true });
+    await new Promise((r) => setTimeout(r, 20)); // 给 catch 回调执行机会
+    expect(warns.some((m) => m.includes("boom-io"))).toBe(true);
+  });
+
+  it("手动 tick 仍保留原拒绝语义（await 方可见错误）", async () => {
+    const { s } = makeScheduler();
+    (s as unknown as { tick: () => Promise<never> }).tick = async () => {
+      throw new Error("boom-manual");
+    };
+    await expect(s.tick()).rejects.toThrow("boom-manual");
+  });
+});

@@ -68,7 +68,7 @@ export function Conversation({ items, running, lastStreamText, renderItem }: Con
           scrollerRef.current = el instanceof HTMLDivElement ? el : null;
         }}
         itemContent={(index, it) => (
-          <div data-m1e-item="" data-m1e-index={index} className="px-4 py-1.5">
+          <div data-m1e-item="" data-m1e-index={index} className="px-5 py-1">
             {renderItem(it)}
           </div>
         )}

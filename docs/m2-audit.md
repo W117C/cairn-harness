@@ -14,18 +14,18 @@
 
 ### 2. `manifest.unknownFields`
 
-- **审计结果**：声明于 `manifest.ts:48/:130`；消费者 = `discover.ts:186`（透传进 `DiscoveredPlugin`）→ `scripts/plugins-check.ts:115`（A4 断言）+ `tests/plugins-discover.test.ts:41`。**面板不展示**（warnings 面板展示，unknownFields 只进 warning 文案 `manifest.ts:132`）。
+- **审计结果**：声明于 `manifest.ts`；消费者 = `discover.ts`（透传进 `DiscoveredPlugin`）→ `scripts/plugins-check.ts`（A4 断言）+ `tests/plugins-discover.test.ts`。**面板不展示**（warnings 面板展示，unknownFields 只进 warning 文案 `manifest.ts`）。
 - **判定**：有真实消费路径（超集契约的**验收面**——「未知顶层字段忽略 + 警告不阻断」是 §9.2 的明文行为，A4 直接断言它）。
 - **处置**：**保留**。它不是给 UI 的，是给契约测试的；删掉等于删掉「超集不阻断」的可证性。
 
 ### 3. `manifest.warnings`
 
-- **审计结果**：消费者三处：`panels/registry.tsx:549/:574/:579`（面板「加载清单异常」块）、`plugins-check.ts` A9（断言警告面在场）、`tests/plugins-*`。
+- **审计结果**：消费者三处：`panels/registry.tsx`（面板「加载清单异常」块）、`plugins-check.ts` A9（断言警告面在场）、`tests/plugins-*`。
 - **处置**：**保留**（消费充分：UI + 验收 + 单测）。
 
 ### 4. `manifest.hooksRef`
 
-- **审计结果**：`manifest.ts:55` 声明三态（inline / path / none）；唯一消费 = `discover.ts:139–148`（据此装载 hooks）。**第二消费者不存在**。
+- **审计结果**：`manifest.ts` 声明三态（inline / path / none）；唯一消费 = `discover.ts`（据此装载 hooks）。**第二消费者不存在**。
 - **判定**：它是 `parsePluginManifest` → `loadContainer` 之间的**内部数据通道**，不是对外抽象——「一个解析函数返回结构化结果给唯一调用方」不构成自造抽象。
 - **处置**：**保留**。若 M3 出现第二个 hooks 装载点再议。
 
@@ -36,19 +36,19 @@
 | 字段 | 消费者 | 判定 |
 |---|---|---|
 | `sessions[].id` | 面板 tab 键 + active 定位 | 消费 ✓ |
-| `sessions[].parentId` | 面板 `parent: {cur.parentId}`（registry.tsx:314） | 消费 ✓ |
+| `sessions[].parentId` | 面板 `parent: {cur.parentId}`（registry.tsx） | 消费 ✓ |
 | `sessions[].lines` | 面板 tab 右侧计数 | 消费 ✓ |
 | `sessions[].mtimeMs` | **无消费者**（renderer 零引用；main 里只用于排序） | 见处置 |
 | `sessions[].messages[].eventId` | 面板 `#id` 徽标 + promote 源定位 | 消费 ✓ |
 | `promoted[]` | 面板「已提升进主会话」块 | 消费 ✓ |
 
-- **处置（mtimeMs）**：**保留**。理由：它是快照的**排序依据**（`sessions.ts:192` 按 mtime 降序），删掉字段但排序逻辑仍在 = 把事实源藏进函数；面板虽未展示，但「会话列表稳定按最近活动排序」依赖它。若嫌冗余，正确动作是在面板展示（如悬停提示），不是删。
+- **处置（mtimeMs）**：**保留**。理由：它是快照的**排序依据**（`sessions.ts` 按 mtime 降序），删掉字段但排序逻辑仍在 = 把事实源藏进函数；面板虽未展示，但「会话列表稳定按最近活动排序」依赖它。若嫌冗余，正确动作是在面板展示（如悬停提示），不是删。
 
 ### 6. `M2B_MAP_WORKSPACE` / `M0B_WORKSPACE` 合并可能
 
-- **审计结果**：两者都是 env 门控演示通道（缺省零行为，不进验收链）：`M0B_WORKSPACE` 覆盖**整个 run 的工作区**（agent-runner.ts:689）；`M2B_MAP_WORKSPACE` 只覆盖**地图演示的扫描工作区**（agent-runner.ts:606）。语义不同：前者换靶子，后者只换地图输入。
+- **审计结果**：两者都是 env 门控演示通道（缺省零行为，不进验收链）：`M0B_WORKSPACE` 覆盖**整个 run 的工作区**（agent-runner.ts）；`M2B_MAP_WORKSPACE` 只覆盖**地图演示的扫描工作区**（agent-runner.ts）。语义不同：前者换靶子，后者只换地图输入。
 - **判定**：**不合并**。合并 = 让「只想看地图效果」的用户被迫连 run 工作区一起换（或反过来，写工具落到演示工作区——语义事故）。两个变量同名不同义才是问题，现在名字已经把差异说清了。
-- **处置**：保留，并在各自注释里交叉引用（已做：agent-runner.ts:687 注明「M2B_MAP_WORKSPACE 同族」）。
+- **处置**：保留，并在各自注释里交叉引用（已做：agent-runner.ts 注明「M2B_MAP_WORKSPACE 同族」）。
 
 ## 二、自查补充（横向扫了全部 M2 新增面）
 
@@ -66,7 +66,7 @@
 
 ## 三、M0–M2 既有抽象的抽查（非本轮新增，顺带过一遍）
 
-- `session_meta.branch_of`：消费者 = `forkSession`（events/index.ts:232）+ `tests/fork.test.ts`。✓
+- `session_meta.branch_of`：消费者 = `forkSession`（events/index.ts）+ `tests/fork.test.ts`。✓
 - `EventLog` 接口（`append` 单方法）：消费者 = loop / runner / 全部检查脚本。✓
 - `CompactionCoordinator`：消费者 = glm-session / compaction-check。✓
 - `truncationNotice`：消费者 = run_shell / sandbox / lsp（M2g 新增第三个）。✓（本轮消费 +1）

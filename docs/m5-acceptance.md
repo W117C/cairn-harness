@@ -27,7 +27,7 @@
 | B3 | 编排器接入：每次 spawn 恰一条 `routing_decision` + agent_id 匹配 + respawn 按 pin | **已证** | `routing-check` 段 A（A1/A2/A3/A4 共 11 断言）；agent_spawned.model 填 picked；老路径零 routing_decision |
 | B4 | bandit 在线学习（可播种 RNG / Thompson / 代价感知） | **已证** | `routing-check` 段 B（B1 200 轮便宜档 >0.8 / B2 奖励取反收敛强档（非恒真）/ B4 同 seed 轨迹逐字段一致 / B3 settings 白名单未吞 + 非布尔回退） |
 | B5 | 级联升级（verify 门控 / maxRungs 有界 / fail-closed） | **已证** | `routing-check` 段 C（C1 恰好升级一次 / C2 maxRungs 上限 / C3 无 verify 不升级 + 显式说明） |
-| B6 | 真多 provider 拨号 / 价格表 / bandit 运行时接线 | **M6** | §4.3 权衡：单 provider 多档位（零新依赖/零新 key 面）；registry 预留 `provider` 字段 M6 开白名单零重构；档位模型名为占位，M5b 步骤 6 实测校准（见 Follow-up 2） |
+| B6 | 真多 provider 白名单 / 价格表接线 | **已证**（M6 收口，2026-09-14） | `PROVIDER_IDS = [glm, openai, anthropic, gemini]` + 12 档位 spec（§4.3 预留面开闸，零重构）；`toWorkerModel` 按 provider 路由（tests/providers.test.ts：anthropic 格式 SSE 只被 anthropic 消化 = 路由判别）；`src/routing/pricing.ts` 价格表 + `costUsd` 真钱折算 + `priceCoverage` 漂移护栏（routing-check 段 F：覆盖 12 id / $18 已知用例 / 真钱代价 bandit 收敛 cheap>0.8 / 价格对调反向验证 / 同 seed 确定性）；`updatePriced` 接进 bandit 代价项（§1.3 口径升级：token 代理 → 真钱）。**留位**：bandit 运行时接线（app 读 settings.routingBandit + 真实 usage 喂 routeFor）仍 M6；价格/模型名为占位，需联网实测校准（C5） |
 
 ## M5c：编排自适应
 
@@ -36,7 +36,7 @@
 | C1 | 受限 Supervisor：封闭动作枚举 + 有界三重保险（maxStages / 预算闸 / 防死循环） | **已证** | `supervisor-check` 段 A（任意输入 → 枚举，畸形 → escalate）/ 段 B（B1 永远 fail → 第 6 环后必 abort / B2 第 3 次出现 → escalate）；src/agent/supervisor.ts 纯规则 V1 |
 | C2 | Best-of-N 竞争编排 spawnRace（N≤3 / judge 命中早停 / 复用取消链与成本闸） | **已证** | `supervisor-check` 段 C/D（C 选中全绿者 + 早停触发 / D 其余终态 cancelled + accountable usage 严格小于跑满 80<1080） |
 | C3 | gate/loopback 留位闭合 | **已证** | `docs/m3-acceptance.md` 九之 2 改「已证」，证据指针 supervisor-check 段 B |
-| C4 | supervise 模式运行时接线（AgentMode 扩 supervise + 审批卡双轨 {goal,budget,forbidden,maxStages} 落地编排器/渲染面） | **M6** | 理由（诚实留位）：这是 M5 中爆炸半径最大的改动面——动审批卡即动 M3c 冻结语义（§5.1 最高风险），agent-plan 门禁要求合并即全绿；已交付双轨契约形态与摘要（supervisor-check A3 + src/agent/supervisor.ts SuperviseApprovalContract），编排器 spawn 路径与渲染接线留 M6 单独一轮，不在同一 PR 里赌既有 23 道门 |
+| C4 | supervise 模式运行时接线（AgentMode 扩 supervise + 审批卡双轨 {goal,budget,forbidden,maxStages} 落地编排器） | **已证**（M6 收口，2026-09-14） | `supervisor-check` 段 E（16 断言：E1 审批卡批准 {goal,budget,forbidden,maxStages} 双轨契约（非 stages 全表）/ E3 永远 fail → maxStages 有界中止 + [supervisor] 审计轨迹 + approval_resolved / E4 拒绝 fail-closed 零环 / E5 单环 pass → 接受（gate loopback 闭合））；实现 `src/agent/orchestrator.ts` spawnSupervise + requestSuperviseApproval；**渲染卡零改动**——审批卡只渲染 args_digest/risk_reasons（无 stages 硬编码），双轨手术在数据层完成；环 worktree 生命周期：accept 合并最终环（mergeWorker）/ 其余 reject，零泄漏（supervisor-check 后 .agents/ 空）；agents-check 252 断言（pipeline 冻结语义）不变红 |
 | C5 | 档位表实测校准 / 主会话路由（providerInfo 硬编码 GLM） | **M6** | §1.3 口径备案：M5 不引入价格表，「成本」= token 用量代理；M5b 步骤 6 落地后先做档位可用性抽样再承诺指标（实施 Follow-up 2） |
 
 ## 反向验证（§6.3 纪律）

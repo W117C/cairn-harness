@@ -258,7 +258,10 @@ export function OnboardingSteps(props: OnboardingStepsProps): ReactElement {
   return (
     <>
       <div className="flex flex-col gap-2" data-slot="dialog-header">
-        <h2 className="text-base leading-none font-semibold">新手引导 · {String(step)}/4 {ONBOARDING_STEP_TITLES[step - 1]}</h2>
+        <h2 className="text-base leading-none font-semibold">
+          <span className="mr-2 rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[11px] font-medium text-primary">新手引导 {String(step)}/4</span>
+          {ONBOARDING_STEP_TITLES[step - 1]}
+        </h2>
         <p className="text-sm text-muted-foreground">
           走通全部设置项（§13 七组）；每步可跳过，随时可在设置页回看或「重新运行引导」。
         </p>
@@ -269,7 +272,7 @@ export function OnboardingSteps(props: OnboardingStepsProps): ReactElement {
             <section key={g.id} className="flex flex-col gap-1.5">
               <div className="flex items-baseline justify-between gap-2">
                 <div className="font-medium">{g.label}</div>
-                <Badge variant="outline" className="shrink-0 text-[10px]">{g.id}</Badge>
+                <Badge variant="outline" className="shrink-0 font-mono text-[10px]">{g.id}</Badge>
               </div>
               <div className="text-xs text-muted-foreground">{g.entry}</div>
               {groupControl(g.id, props, ctx)}

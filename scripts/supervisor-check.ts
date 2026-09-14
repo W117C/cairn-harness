@@ -5,11 +5,13 @@
 //   C Best-of-N 竞争（步骤 12）：N=3 明卷其中恰一个全绿 → 选中项为全绿者 + 早停触发
 //   D 早停省钱（步骤 12）：非选中候选终态 cancelled，且 accountable usage 严格小于跑满（全收敛对照）
 // 双轨备案（§5.1）：supervisor 审批契约与 pipeline stages 全表分开（supervise 模式接线留 M6，不动旧门）。
-import { mkdtemp, rm } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent } from "../src/events";
 import type { ModelOutput } from "../src/providers";
+import type { GlmMessage } from "../src/providers/glm";
 import { Orchestrator, scriptedWorkerModel, type WorkerModel } from "../src/agent/orchestrator";
 import { decideSupervisor, isSupervisorAction, superviseApprovalDigest, type SupervisorAction, type SupervisorContext } from "../src/agent/supervisor";
 import { createEventLog } from "../src/events";
@@ -198,6 +200,46 @@ function newOrchSup(logPath: string, script: ModelOutput[]): { orch: Orchestrato
   return { orch, events };
 }
 
+/** E6/E7 专用：可指定 workspace（一次性临时 git repo——合并场景不污染 fixtures/todo-app 靶子）
+ *  与 capture（抓 worker 每轮真实上下文，提示词层断言用）。 */
+function newOrchSupWs(
+  logPath: string,
+  script: ModelOutput[],
+  workspace: string,
+  capture?: GlmMessage[][],
+): { orch: Orchestrator; events: AgentEvent[] } {
+  const events: AgentEvent[] = [];
+  const orch = new Orchestrator({
+    logPath,
+    workspace,
+    parentMode: "default",
+    emit: async (e) => {
+      events.push(e);
+      await createEventLog(logPath).append(e);
+    },
+    modelFor: () => scriptedWorkerModel(script, capture),
+  });
+  return { orch, events };
+}
+
+/** 一次性 git repo（seed 一个 README 初始提交）：E6 合并 / E7 禁改面场景的隔离工作区。 */
+async function makeTempRepo(parent: string): Promise<string> {
+  const ws = join(parent, "repo-" + Math.random().toString(36).slice(2, 8));
+  await mkdir(ws, { recursive: true });
+  const g = async (...args: string[]): Promise<void> => {
+    await new Promise<void>((resolve, reject) => {
+      execFile("git", args, { cwd: ws }, (err) => (err === null ? resolve() : reject(err)));
+    });
+  };
+  await g("init");
+  await g("config", "user.email", "check@local");
+  await g("config", "user.name", "supervisor-check");
+  await writeFile(join(ws, "README.md"), "seed\n", "utf8");
+  await g("add", "-A");
+  await g("commit", "-m", "seed");
+  return ws;
+}
+
 async function waitFor(pred: () => boolean, timeoutMs = 10_000): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -264,6 +306,59 @@ async function waitFor(pred: () => boolean, timeoutMs = 10_000): Promise<boolean
   await orch.waitAll(10_000);
   check(r5.ok && (r5.output ?? "").includes('"status":"accepted"'), "E5c 单环 verdict:pass → 接受（gate loopback 闭合）");
   check(events.filter((e) => e.type === "agent_spawned").length === 1, "E5d 恰好 1 环");
+}
+
+{
+  // E6（P1 回归）：写面改动全部来自 shell_rw（toolStats.write_file/edit_file 恒 0）→ accept 后必须
+  // 走合并落盘。旧实现按 write_file/edit_file 的工具调用计数判「有真实写改动」：shell_rw 改的文件
+  // 计数为 0 → 已 accept 的成果被 cleanupWrite("rejected") 静默删光（功能成功 + 数据丢失）。
+  // 改后以 finishInner 的 worktreeDiff files_changed 为准。工作区 = 一次性临时 repo（不污染靶子）。
+  const repoE6 = await makeTempRepo(work);
+  const p6 = join(work, "e6.jsonl");
+  const { orch, events } = newOrchSupWs(p6, [
+    { type: "tool_call", id: "c1", name: "shell_rw", args: { command: "printf 'x' >> note.txt" } },
+    { type: "assistant_message", content: "已通过 shell_rw 完成修改。" },
+    { type: "assistant_message", content: "verdict: pass" },
+  ], repoE6);
+  const spawnP = orch.spawn({ mode: "supervise", task: "在 note.txt 追加一行", supervise: { maxStages: 3 } }, { callId: "sup-e6" });
+  check(await waitFor(() => events.some((e) => e.type === "approval_requested")), "E6a 审批落流");
+  const apr6 = events.find((e) => e.type === "approval_requested") as Extract<AgentEvent, { type: "approval_requested" }> | undefined;
+  check(apr6 !== undefined && orch.decideWorkerApproval(apr6.id, true, "once").ok, "E6b 决议受理");
+  const r6 = await spawnP;
+  await orch.waitAll(15_000);
+  check(r6.ok && (r6.output ?? "").includes('"merged":true'), "E6 shell_rw-only 改动 → accept 合并落盘（不再静默清理）", (r6.output ?? "").slice(0, 90));
+  check(events.some((e) => e.type === "tool_result" && e.ok === true && typeof e.output === "string" && e.output.startsWith("[merged]")), "E6b [merged] 审计事件落流");
+  const { readFile: readFileE6 } = await import("node:fs/promises");
+  const landed = await readFileE6(join(repoE6, "note.txt"), "utf8").then(() => true).catch(() => false);
+  check(landed, "E6c 成果真实落盘（主 checkout 出现 note.txt）");
+}
+
+{
+  // E7（P1 回归）：forbidden 契约强制层——worker 触碰禁改面（tests）→ 报告 verdict 不采信，注入
+  // fail 走既有有界决策机 → maxStages 耗尽 abort（不 accept、不合并、主 checkout 零污染）；
+  // 提示词层 constraints 同步可见（旧实现 forbidden 塞字符串被 parseWorkerContext 丢弃，零落地）。
+  const repoE7 = await makeTempRepo(work);
+  const p7 = join(work, "e7.jsonl");
+  const captured: GlmMessage[][] = [];
+  const { orch, events } = newOrchSupWs(p7, [
+    { type: "tool_call", id: "c1", name: "shell_rw", args: { command: "mkdir -p tests && printf 'v' >> tests/violated.txt" } },
+    { type: "assistant_message", content: "改完了。" },
+    { type: "assistant_message", content: "verdict: pass" },
+  ], repoE7, captured);
+  const spawnP = orch.spawn(
+    { mode: "supervise", task: "修改 completedCount", supervise: { maxStages: 3, forbidden: ["tests"] } },
+    { callId: "sup-e7" },
+  );
+  check(await waitFor(() => events.some((e) => e.type === "approval_requested")), "E7a 审批落流");
+  const apr7 = events.find((e) => e.type === "approval_requested") as Extract<AgentEvent, { type: "approval_requested" }> | undefined;
+  check(apr7 !== undefined && orch.decideWorkerApproval(apr7.id, true, "once").ok, "E7b 决议受理");
+  const r7 = await spawnP;
+  await orch.waitAll(15_000);
+  check(!r7.ok && (r7.output ?? "").includes("maxStages 耗尽"), "E7 forbidden 触碰 → verdict 不采信 → 有界中止（不 accept）", (r7.output ?? "").slice(0, 90));
+  check(events.filter((e) => e.type === "agent_spawned").length === 3, "E7b 恰好 3 环（每环触碰禁改面 → 全部按 fail 处理，防死循环兜底不变）");
+  check(!events.some((e) => e.type === "tool_result" && typeof e.output === "string" && e.output.startsWith("[merged]")), "E7c 零合并（禁改面改动不落盘）");
+  check(events.some((e) => e.type === "agent_message" && e.kind === "progress" && (e as { text: string }).text.includes("forbidden 违反")), "E7d [supervisor] 违反决策落流");
+  check(captured.some((msgs) => msgs.some((m) => typeof m.content === "string" && m.content.includes("supervise-forbidden"))), "E7e 提示词层：constraints 含 supervise-forbidden（禁改面）");
 }
 
 await rm(work, { recursive: true, force: true }).catch(() => {});

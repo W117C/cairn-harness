@@ -14,7 +14,9 @@ import {
   getPlanState,
   markPlanProposed,
   resetPlanState,
+  runWithPlanScope,
 } from "../src/permissions";
+import type { ToolResult } from "../src/tools/base";
 import { createEventLog, replay, type AgentEvent } from "../src/events";
 import { propose_plan } from "../src/tools/propose_plan";
 import type { ModelOutput } from "../src/providers";
@@ -187,5 +189,41 @@ describe("方案门（loop 级）", () => {
     await expect(
       propose_plan.run({ goal: "g", files: [{ path: "a", action: "touch", summary: "s" }] }, { workspace: "/tmp" }),
     ).rejects.toThrow("action");
+  });
+});
+
+// P1（审查）回归：plan 门解锁在 run 链内落地——propose_plan 收到 approved 决议后自行 approvePlan
+//（决议处理器不在 run 异步链内，plan 态已 run 级隔离）。run 内解锁对 run 可见，模块态（run 外
+// 遗留路径）不受污染。
+describe("方案门 run 级隔离（P1 回归）", () => {
+  it("run 内 propose → 批准 → run 态解锁且模块态不动；run 外模块态行为不变", async () => {
+    const planGate = new PlanGate();
+    const emitted: AgentEvent[] = [];
+    const emit = (e: AgentEvent): void => {
+      emitted.push(e);
+    };
+    let outcome: Promise<ToolResult> | null = null;
+    runWithPlanScope(() => {
+      outcome = propose_plan.run(
+        { goal: PLAN.goal, files: PLAN.files },
+        { workspace: "/tmp", callId: "p1", emit, plan: planGate },
+      );
+      // markPlanProposed 已同步落 run 态：本 run 写禁即刻生效
+      expect(checkPermission("auto", "write_file")).toBe("deny");
+      return outcome; // 不同步等待：批准从 run 外到达（生产语义：决议处理器不在 run 链内）
+    });
+    // run 外（模拟另一 run / IPC 决议处理器）：模块态未被 A 的提案污染
+    expect(getPlanState()).toEqual({ proposed: false, approved: false });
+    expect(planGate.approve("p1")).toBe(true);
+    const done = await outcome!;
+    expect(done.ok).toBe(true);
+    // 解锁由工具在 run 链内自落：只落 run 态，模块态不动
+    expect(getPlanState()).toEqual({ proposed: false, approved: false });
+    // run 外模块态照常可用（脚本/测试遗留路径行为不变）
+    markPlanProposed();
+    expect(checkPermission("auto", "write_file")).toBe("deny");
+    approvePlan();
+    expect(checkPermission("auto", "write_file")).toBe("allow");
+    resetPlanState();
   });
 });

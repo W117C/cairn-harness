@@ -112,6 +112,22 @@ export function update(
   posteriors[key] = p;
 }
 
+/** M6 真钱代价回灌（§m5-proposal §1.3 口径升级）：costUsd = 价格表折算的真钱成本，
+ *  scale 让代价与 0/1 奖励同量级（缺省 1000：$0.001 ≈ 1 单位代价）。 */
+export function updatePriced(
+  posteriors: Posteriors,
+  arm: ArmKey,
+  reward: number,
+  costUsd: number,
+  scale = 1_000,
+): void {
+  const key = armKeyOf(arm);
+  const p = posteriors[key] ?? defaultPosterior();
+  p.alpha += reward;
+  p.beta += 1 - reward + costUsd * scale;
+  posteriors[key] = p;
+}
+
 // ---- 持久化（原子写 tmp + rename，照抄 SettingsStore.persist；seed 首次生成后不变） ----
 export interface BanditState {
   seed: number;

@@ -198,18 +198,19 @@ describe("跨 provider 契约（任务6：同一逻辑对话三家等价）", ()
   });
 });
 
-describe("M5b provider 档位表（步骤 6）", () => {
-  it("PROVIDER_IDS 本期只装配 GLM（单 provider 多档位，M6 才开白名单）", () => {
-    expect(PROVIDER_IDS).toEqual(["glm"]);
+describe("M5b/M6 provider 档位表", () => {
+  it("M6 白名单：PROVIDER_IDS = glm/openai/anthropic/gemini 四家（§4.3 预留面开闸）", () => {
+    expect(PROVIDER_IDS).toEqual(["glm", "openai", "anthropic", "gemini"]);
   });
 
-  it("档位表 spec 解析往返：三档齐备、字段完整、id 唯一", () => {
+  it("档位表 spec 解析往返：四家 × 三档齐备、字段完整、id 唯一", () => {
     const tiers = new Set(DEFAULT_MODEL_TABLE.map((s) => s.tier));
     expect(tiers).toEqual(new Set(["cheap", "standard", "strong"]));
+    const providers = new Set(DEFAULT_MODEL_TABLE.map((s) => s.provider));
+    expect(providers).toEqual(new Set(["glm", "openai", "anthropic", "gemini"]));
     const ids = new Set(DEFAULT_MODEL_TABLE.map((s) => s.id));
     expect(ids.size).toBe(DEFAULT_MODEL_TABLE.length); // id 唯一
     for (const s of DEFAULT_MODEL_TABLE) {
-      expect(s.provider).toBe("glm");
       expect(typeof s.model).toBe("string");
       expect(s.ctxWindow).toBeGreaterThan(0);
       expect(lookupModel(DEFAULT_MODEL_TABLE, s.id)).toBe(s); // 往返一致
@@ -221,13 +222,13 @@ describe("M5b provider 档位表（步骤 6）", () => {
     expect(lookupModel(DEFAULT_MODEL_TABLE, "glm-nonexistent")).toBeUndefined();
   });
 
-  it("specsByTier 按档位分组", () => {
-    expect(specsByTier(DEFAULT_MODEL_TABLE, "cheap").map((s) => s.id)).toEqual(["glm-flash"]);
-    expect(specsByTier(DEFAULT_MODEL_TABLE, "standard").map((s) => s.id)).toEqual(["glm-standard"]);
-    expect(specsByTier(DEFAULT_MODEL_TABLE, "strong").map((s) => s.id)).toEqual(["glm-strong"]);
+  it("specsByTier 按档位分组（每档 4 家）", () => {
+    for (const t of ["cheap", "standard", "strong"] as const) {
+      expect(specsByTier(DEFAULT_MODEL_TABLE, t).length).toBe(4);
+    }
   });
 
-  it("toWorkerModel 构造不拨号；无 key 时调用才失败（fail-closed）", async () => {
+  it("toWorkerModel 构造不拨号；glm 无 key 时调用才失败（fail-closed）", async () => {
     const wm = toWorkerModel(resolveModel(DEFAULT_MODEL_TABLE, "glm-standard"));
     // 构造本身零副作用：不会因为缺少 M0_API_KEY 而抛
     expect(typeof wm).toBe("function");
@@ -235,5 +236,28 @@ describe("M5b provider 档位表（步骤 6）", () => {
     await expect(async () => {
       for await (const _e of wm(USER, [])) void _e;
     }).rejects.toThrow(/M0_API_KEY/);
+  });
+
+  it("toWorkerModel 按 provider 路由：anthropic 格式 SSE 只被 anthropic 适配器消化（路由判别）", async () => {
+    // 环境变量按 provider 注入（缺 key 同步抛错，路由面先于 key 面）
+    const oldA = process.env.ANTHROPIC_API_KEY;
+    const oldG = process.env.GEMINI_API_KEY;
+    process.env.ANTHROPIC_API_KEY = "test";
+    process.env.GEMINI_API_KEY = "test";
+    try {
+      const lines = await loadLines("anthropic/text-stream.sse");
+      const wmA = toWorkerModel(resolveModel(DEFAULT_MODEL_TABLE, "anthropic-cheap"), { fetchImpl: stubFetch(lines) });
+      const evA = await collect(wmA(USER, []));
+      expect(mergeAssistantDeltas(deltasOf(evA))).toBe("你好，世界"); // anthropic 格式被正确消化 → 路由到 anthropic
+      // 同格式喂 gemini 适配器 → 不产出同一文本（证明路由不是恒真；适配器对陌生事件优雅跳过）
+      const wmG = toWorkerModel(resolveModel(DEFAULT_MODEL_TABLE, "gemini-cheap"), { fetchImpl: stubFetch(lines) });
+      const evG = await collect(wmG(USER, []));
+      expect(mergeAssistantDeltas(deltasOf(evG))).not.toBe("你好，世界");
+    } finally {
+      if (oldA === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = oldA;
+      if (oldG === undefined) delete process.env.GEMINI_API_KEY;
+      else process.env.GEMINI_API_KEY = oldG;
+    }
   });
 });

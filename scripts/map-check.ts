@@ -74,11 +74,13 @@ async function main(): Promise<void> {
   const bak = await mkdtemp(join(tmpdir(), "m2b-mapcheck-bak-"));
   await writeFile(join(bak, "rank.ts"), orig, "utf8");
   try {
-    const newSym = "\nexport function __map_check_probe_symbol_x9(): number { return 42; }\n";
-    await writeFile(join(workspace, target), orig + newSym, "utf8");
-    const after = await builder.build({ workspace, nowRound: 100, recomputeEvery: 10 });
+    // 顶部锚定 + contextFiles boost：rank.ts 是上下文文件（×50），boost 后必在预算渲染面内。
+    // 旧实现既未锚顶也无 boost——probe 符号随仓库增长（新增源文件）落到 top-k 截断区外（⑤b 假红）。
+    const newSym = "export function __map_check_probe_symbol_x9(): number { return 42; }\n\n";
+    await writeFile(join(workspace, target), newSym + orig, "utf8");
+    const after = await builder.build({ workspace, nowRound: 100, recomputeEvery: 10, contextFiles: [target] });
     check("⑤改一个文件 → 重算（parsed=1）", after.parsed === 1, `parsed=${after.parsed} fromTagsCache=${after.fromTagsCache}`);
-    check("⑤b 结果变化（新符号入图）", after.text !== first.text, "");
+    check("⑤b 结果变化（新符号入图）", after.text.includes("__map_check_probe_symbol_x9"), "");
   } finally {
     await writeFile(join(workspace, target), orig, "utf8"); // 还原（git checkout 双保险在 finally 后）
   }

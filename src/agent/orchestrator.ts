@@ -1368,6 +1368,15 @@ export class Orchestrator {
     }
     const stageRole: StageRoleResolution = { ...roleResolved, role: "implement" };
     const repeats = new Map<string, number>();
+    // M6：环 worktree 生命周期——write 环 worker done 后 worktree 留待合并，supervise 没有合并塔介入，
+    // 循环出口必须显式收尾（accept 合并最终环 / 其余 reject），否则 worktree 泄漏污染 workspace。
+    const ringAgentIds: string[] = [];
+    const rejectRings = async (ids: string[]): Promise<void> => {
+      for (const id of ids) {
+        const w = this.workers.get(id);
+        if (w && w.mode === "write" && w.worktree) await this.cleanupWrite(w, "rejected");
+      }
+    };
     let lastAgentId = "";
     let lastFailure = "";
     let lastReport = "";
@@ -1376,10 +1385,12 @@ export class Orchestrator {
       stageCount++;
       // H2（审查 B-3）：环与环之间检查取消（与 runChain 同纪律）
       if (this.root.signal.aborted) {
+        await rejectRings(ringAgentIds);
         return { ok: false, output: "spawn_agent(supervise): 主会话已取消，受限循环中止（fail-closed）" };
       }
       if (this.budgetBlocked()) {
         await this.rejectOnBudget();
+        await rejectRings(ringAgentIds);
         return { ok: false, output: "spawn_agent(supervise): 成本闸超限，受限循环中止" };
       }
       // 有界保险③：同 (role, task-hash) 出现次数（≥3 强制 escalate，防死循环）
@@ -1394,12 +1405,17 @@ export class Orchestrator {
         {
           task: stageTask,
           mode: stageRole.mode,
-          ...(forbidden.length > 0 ? { context: "supervise-forbidden:" + forbidden.join(",") } : {}),
+          // P1（审查）：forbidden 进 WorkerContext.constraints（提示词层，buildWorkerSystemMessages 渲染
+          // context.constraints）——旧实现塞字符串被 parseWorkerContext 丢弃，契约提示全程零落地。
+          ...(forbidden.length > 0
+            ? { context: { constraints: forbidden.map((f) => "supervise-forbidden（禁改面）：" + f) } }
+            : {}),
         },
         { callId: stageCallId },
         stageRole,
       );
       if (!r.ok) {
+        await rejectRings(ringAgentIds);
         return { ok: false, output: "spawn_agent(supervise): 环 " + String(stageCount) + " spawn 失败：" + r.output };
       }
       let agentId = "";
@@ -1409,15 +1425,26 @@ export class Orchestrator {
         agentId = "";
       }
       if (agentId === "") {
+        await rejectRings(ringAgentIds);
         return { ok: false, output: "spawn_agent(supervise): 环 " + String(stageCount) + " spawn 应答异常（无 agent_id）" };
       }
+      ringAgentIds.push(agentId);
       const term = await this.waitForAgentTerminal(agentId);
       if (term.result === null) {
+        await rejectRings(ringAgentIds);
         return { ok: false, output: "spawn_agent(supervise): 环 " + String(stageCount) + " 终态 " + term.status + "（无结果）→ 受限循环中止" };
       }
       const report = term.result.artifacts.report ?? term.result.summary;
+      // P1（审查）：forbidden 契约强制层——diff 触碰禁改面 = 本环失败（报告 verdict 不采信）。
+      // 注入 fail 进既有决策机（retry/spawn/escalate/abort 有界：repeat 防死循环与 maxStages 照常兜底），
+      // 不绕过 decideSupervisor；lastFailure 随注入文本点名被触碰面，下一环反馈可读。
+      const changedFiles = term.result.artifacts?.files_changed ?? [];
+      const violated = forbidden.filter((g) => changedFiles.some((f) => globIntersects(f, g)));
+      const effectiveReport = violated.length > 0
+        ? "verdict: fail\nforbidden 违反：" + violated.join("、") + "（禁改面被触碰，报告 verdict 不采信）\n" + report
+        : report;
       // verdict 映射：pass / fail / unspecified（畸形 → null → escalate）
-      const v = parseVerdict(report);
+      const v = parseVerdict(effectiveReport);
       const verdict = v === "pass" ? "pass" : v === "fail" ? "fail" : null;
       const action: SupervisorAction = decideSupervisor({
         verdict,
@@ -1443,18 +1470,42 @@ export class Orchestrator {
         text: "[supervisor] 环 " + String(stageCount) + "/" + String(maxStages) + "（" + term.status + "，verdict=" + (verdict ?? "unspecified") + "）→ " + decisionText,
       } as AgentEvent).catch(() => {});
       if (action.kind === "accept") {
-        return { ok: true, output: JSON.stringify({ supervise: true, chain_id: callId, stages: stageCount, status: "accepted", final_agent: agentId }) };
+        // 收尾：最终环有真实写改动（以 finishInner 的 worktreeDiff files_changed 为准——工具调用
+        // 计数会把 shell_rw 改的文件漏成 0、把失败的 write_file 尝试误算成有改动）→ 合并落盘
+        // （mergeWorker 自带清理）；无改动 → 直接清理。前序环一律 reject（supervise 不建合并塔）。
+        const finalHandle = this.workers.get(agentId);
+        const hasChanges = (term.result.artifacts?.files_changed?.length ?? 0) > 0;
+        let merged = false;
+        if (hasChanges && finalHandle?.mode === "write" && finalHandle.worktree) {
+          const m = await this.mergeWorker(agentId);
+          merged = m.ok;
+          if (!m.ok) {
+            // P1（审查）：合并失败保留最终环 worktree+分支——冲突路径刚承诺「在 worktree 内人工
+            // 解决后重试合并」，gate 模式 force 二次确认也还活着；只 reject 前序环。
+            await rejectRings(ringAgentIds.filter((id) => id !== agentId));
+            return { ok: false, output: "spawn_agent(supervise): 最终环合并失败（worktree 已保留：冲突可在 git 面板人工解决/force 合并）：" + m.error };
+          }
+        } else if (finalHandle?.worktree) {
+          await this.cleanupWrite(finalHandle, "rejected");
+        }
+        await rejectRings(ringAgentIds.filter((id) => id !== agentId));
+        return {
+          ok: true,
+          output: JSON.stringify({ supervise: true, chain_id: callId, stages: stageCount, status: "accepted", final_agent: agentId, merged }),
+        };
       }
       if (action.kind === "escalate") {
+        await rejectRings(ringAgentIds);
         return { ok: false, output: "spawn_agent(supervise): 已升级人工裁决：" + action.why };
       }
       if (action.kind === "abort") {
+        await rejectRings(ringAgentIds);
         return { ok: false, output: "spawn_agent(supervise): " + action.why };
       }
-      // retry / spawn → 续环：更新前环上下文（错误永不冒充结果）
+      // retry / spawn → 续环：更新前环上下文（错误永不冒充结果；forbidden 注入的 fail 理由随行）
       lastAgentId = agentId;
-      lastFailure = report.slice(0, 300);
-      lastReport = report;
+      lastFailure = effectiveReport.slice(0, 300);
+      lastReport = effectiveReport;
     }
   }
 

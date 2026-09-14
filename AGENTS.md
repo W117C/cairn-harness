@@ -48,4 +48,4 @@ Node 22 / TypeScript 5 / electron-vite 5 / Electron 44 / React 19 / vitest 5 / T
 - **已声明取舍（备案）**：renderer `webPreferences.sandbox: false`（ESM preload 需要，contextIsolation 仍开启；后续可改 CJS preload 恢复）。
 - 可安装包：`pnpm dist` → `dist/*.dmg`（macOS arm64，**unsigned V1 边界**——无签名/公证，首次打开需右键→打开；`electron-builder.yml identity: null`）。
 - 四份验收三态表（带证据指针）+ 三份 ponytail-audit 见 `docs/m{2,3,4,5}-acceptance.md` 与 `docs/m{3,4}-audit.md`；BLOCKED.md 各轮备案已全部裁决（见其裁决记录节）。
-- **计划完成**：§14 里程碑表 M0→M5 全行收口；M5+ 候选（supervise 模式运行时接线与审批卡双轨、真多 provider 白名单、价格表、bandit 运行时接线、hourly/monthly kind、worker 热恢复、license 服务端、签名公证、遥测上报）均留位未偷做（见 m5-acceptance「未证/留位」节与 m5-proposal §1.4）。
+- **计划完成**：§14 里程碑表 M0→M5 全行收口；**M6 已收**：supervise 模式运行时接线与审批卡双轨（spawnSupervise + requestSuperviseApproval，渲染卡零改动，supervisor-check 段 E 16 断言）+ 真多 provider 白名单与价格表接线（PROVIDER_IDS 四家 + toWorkerModel 按 provider 路由 + pricing 真钱代价接进 bandit，routing-check 段 F）；M6+ 候选（bandit 运行时接线、supervise 环合并语义扩展、档位模型/价格联网实测校准、hourly/monthly kind、worker 热恢复、license 服务端、签名公证、遥测上报）均留位未偷做（见 m5-acceptance「未证/留位」节与 m5-proposal §1.4）。
