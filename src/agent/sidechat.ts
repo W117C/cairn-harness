@@ -3,9 +3,9 @@
 // 工具白名单**只读强制**：write_file / run_shell / edit_file 从工具表摘除（不是提示词自觉），
 // 且 loop 以 allowedTools 硬闸兜底 + 权限层 read-only 档二次拦截（三重 fail-closed）。
 // 让步序（任务书）：主会话不受打扰 > 结论可追溯 > 界面好看。
-import { readFileSync } from "node:fs";
+import { lstatSync, readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { createEventLog, replay, type AgentEvent, type CompactionEvent, type PromoteOrigin, type UserMessageEvent } from "../events";
+import { createEventLog, replay, replayIncremental, type AgentEvent, type CompactionEvent, type PromoteOrigin, type UserMessageEvent } from "../events";
 import type { ModelOutput, Provider } from "../providers";
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "../providers/glm";
 import type { ToolName } from "../tools/base";
@@ -141,6 +141,7 @@ function renderProjectionLine(e: AgentEvent): string | null {
     case "approval_resolved":
     case "card_action":
     case "diff_comment":
+    case "routing_decision": // M5a：策略层事件不进只读投影（路由决策归 routing-check / 面板审计）
     case "automation_triggered": // M4a：调度事件不进 sidechat 只读投影（调度面归 schedule 面板/journal）
     case "automation_skipped":
     case "automation_completed":
@@ -191,13 +192,21 @@ export function extractAtRefs(message: string): string[] {
   return out;
 }
 
-/** 读 @ 引用（只读，工作区外 fail-closed 跳过——sidechat 不收外参）。 */
+/** 读 @ 引用（只读，工作区外 fail-closed 跳过——sidechat 不收外参）。
+ *  A3（审查根因 3）：词法包含挡不住「工作区内软链指向 ~/.ssh/id_rsa」——@ 引用目标
+ *  本身不许是软链，且 realpath 落点必须仍在 realpath(workspace) 内（与 assertRealContainment
+ *  同口径），否则内容会进模型上下文并发往外部 provider（外泄面）。 */
 export function readAtRef(workspace: string, ref: string): { path: string; content: string } | null {
   const abs = isAbsolute(ref) ? resolve(ref) : resolve(workspace, ref);
   const rel = relative(resolve(workspace), abs);
   if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) return null; // 工作区外/自身：拒绝
   try {
-    const raw = readFileSync(abs, "utf8");
+    const st = lstatSync(abs);
+    if (st.isSymbolicLink() || !st.isFile()) return null; // 软链/非常规文件：fail-closed
+    const real = realpathSync(abs);
+    const relReal = relative(realpathSync(workspace), real);
+    if (relReal === "" || relReal.startsWith("..") || isAbsolute(relReal)) return null; // 软链逃逸出工作区
+    const raw = readFileSync(real, "utf8");
     return { path: rel.split(sep).join("/"), content: clip(raw, 4_000) };
   } catch {
     return null;
@@ -228,12 +237,12 @@ export async function buildSidechatContext(opts: {
   workspace: string;
   rounds?: number;
 }): Promise<SidechatContext> {
-  const own = await replay(opts.sidechatLogPath).catch((): AgentEvent[] => []);
+  const own = await replayIncremental(opts.sidechatLogPath).catch((): AgentEvent[] => []);
   const history = projectContext(own);
   // 主会话只读投影（读不到 = 空投影，不阻塞）
   let mainEvents: AgentEvent[] = [];
   try {
-    mainEvents = await replay(opts.mainLogPath);
+    mainEvents = await replayIncremental(opts.mainLogPath);
   } catch {
     mainEvents = [];
   }

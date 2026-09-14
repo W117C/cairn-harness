@@ -243,7 +243,9 @@ try {
 
   console.log("[sidechat-check] F 暗卷（真实 GLM，有 key 才跑）");
   if (!process.env.M0_API_KEY) {
+    // H2（审查 P1-16）：跳过 ≠ 通过——按 UNVERIFIED 标记行上浮到门禁汇总。
     console.log("  暗卷跳过（无 M0_API_KEY）");
+    console.log("UNVERIFIED=1");
   } else {
     const hashOf = async (p: string): Promise<string> =>
       createHash("sha256").update(await readFile(p, "utf8")).digest("hex");

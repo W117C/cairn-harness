@@ -1,3 +1,3 @@
 {"type":"assistant_message","content":"派一个只读 worker 调研根因。"}
-{"type":"tool_call","id":"spawn-c1","name":"spawn_agent","args":{"task":"调研 fixtures/todo-app 失败测试根因","mode":"read","model":"read-worker.jsonl"}}
+{"type":"tool_call","id":"spawn-c1","name":"spawn_agent","args":{"task":"调研 fixtures/todo-app 失败测试根因（隔离哨兵：CANARY-MAIN-CONTEXT-主会话哨兵-不应进worker上下文）","mode":"read","model":"read-worker.jsonl"}}
 {"type":"assistant_message","content":"worker 已在后台运行，我先汇报派工结果。"}

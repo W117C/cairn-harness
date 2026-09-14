@@ -63,6 +63,20 @@ function check(cond: boolean, name: string, detail?: string): void {
   }
 }
 
+/** P0-4b（审查根因 8）：致命断言变体——前置失败必须显式短路（throw），让"后续 N 条已跳过"
+ *  可见而不是静默。旧行为：check 只累加计数、坏值继续被使用、`!` 把断言失败升级成 TypeError
+ *  崩溃并中止约 190 条断言（覆盖率损失 76% 无任何提示）。 */
+function checkFatal(cond: boolean, name: string, detail?: string): asserts cond {
+  if (!cond) {
+    fail++;
+    const msg = name + (detail ? "（" + detail + "）" : "");
+    console.log("  ❌ [FATAL] " + msg + " —— 前置失败，后续断言不再执行（避免在坏值上继续；覆盖率损失显式化）");
+    throw new Error("[agents-check] 致命断言失败：" + msg);
+  }
+  pass++;
+  console.log("  ✅ " + name);
+}
+
 const ROOT = process.cwd();
 const AGENTS_DIR = join(ROOT, "fixtures", "agents");
 const work = await mkdtemp(join(tmpdir(), "m3a-agents-check-"));
@@ -288,8 +302,13 @@ try {
     check((syntheticC[1] as { ok: boolean; output: string } | undefined)?.ok === true && ((syntheticC[1] as { output: string } | undefined)?.output.includes("[harness]") ?? false), "C8b 合成 tool_result 挂回原 spawn id（ok + [harness] 标注）");
     // 主上下文零转录泄漏只有 agent_result
     const ctxC = JSON.stringify(projectContext(events));
-    check(ctxC.includes("agent_result") && ctxC.includes("## 结论"), "C9 主上下文含 agent_result（唯一接收物）");    check(!events.some((e) => e.type === "user_message" && (e as { content: string }).content.includes("getCompletedCount 的统计")), "C9b 主上下文零 canary（worker 上下文隔离的另一面：worker 事件不回流）");
-    check(events.filter((e) => e.type === "assistant_message").every((e) => !(e as { content: string }).content.includes("getCompletedCount 的统计")), "C9c worker 报告不以 assistant 正文进主流（只有 agent_result/合成 tool_result 形态）");
+    check(ctxC.includes("agent_result") && ctxC.includes("## 结论"), "C9 主上下文含 agent_result（唯一接收物）");
+    // P0-3（审查）：旧断言的目标串全仓不存在（grep 只命中断言自身）→ 恒真。改用 CANARY 具名
+    // 哨兵（:69 定义 + 嵌入 worker 任务书 fixture），并先断言哨兵存在性（可机械校验）。
+    const mainCheckC = await readFile(join(AGENTS_DIR, "main-check-c.jsonl"), "utf8");
+    check(mainCheckC.includes(CANARY), "C9a 哨兵已嵌入 worker 任务书 fixture（存在性可机械校验，防哨兵失踪后断言退化恒真）");
+    check(!events.some((e) => e.type === "user_message" && (e as { content: string }).content.includes(CANARY)), "C9b 主上下文零 canary（worker 上下文隔离的另一面：worker 任务书不回流为主 user_message）");
+    check(events.filter((e) => e.type === "assistant_message").every((e) => !(e as { content: string }).content.includes(CANARY)), "C9c worker 任务书不以 assistant 正文进主流（只有 agent_result/合成 tool_result 形态）");
     delete process.env.M3A_MAIN_SCRIPT;
   }
 
@@ -302,9 +321,15 @@ try {
     const logD = pathOf(work, sessionD);
     const runD = await handleAgentRun({ message: "派需要审批的 worker", mode: "default" }, { sessionId: sessionD });
     check(runD.ok, "D1 父 run 返回（turn 结束，worker 仍在后台等审批）");
-    const eventsBeforeDecide = await replay(logD);
-    const apr = eventsBeforeDecide.find((e) => e.type === "approval_requested") as Extract<AgentEvent, { type: "approval_requested" }> | undefined;
-    check(apr !== undefined && apr.agent_id !== undefined && apr.tool === "read_file", "D2 approval_requested 落流（agent_id 归因）");
+    // P0-4b（审查根因 8）：先等审批落流并断言等待成功，再取快照——旧实现快照早于等待
+    //（handleAgentRun 返回后审批事件实测约 56ms 才落流，快照时 apr 恒 undefined → check 不短路
+    // → `apr!.id` TypeError 崩溃，中止后续约 190 条断言）。前置用 checkFatal：失败显式短路。
+    const runDEndCount = (await replay(logD)).length; // D8 基准：run 收束时的事件数（计数快照，非事件快照）
+    checkFatal(await waitForStreamEvent(logD, (e) => e.type === "approval_requested"), "D2a approval_requested 落流（等待成功；先等再取快照）");
+    const apr = ((await replay(logD)).find((e) => e.type === "approval_requested")) as Extract<AgentEvent, { type: "approval_requested" }> | undefined;
+    const aprId = apr?.id ?? "";
+    const aprAgentId = apr?.agent_id ?? "";
+    checkFatal(apr !== undefined && aprId !== "" && aprAgentId !== "" && apr.tool === "read_file", "D2 approval_requested 落流（agent_id 归因）");
     // 父会话期间可继续对话：worker 等待期间再跑一轮主会话
     process.env.M3A_MAIN_SCRIPT = join(AGENTS_DIR, "main-check-c.jsonl");
     const sessionD2 = await createSession(work, "D继续会话");
@@ -314,27 +339,27 @@ try {
     // always 拒发（§11.7.6）：拒绝落流（无 card_action 事件）且审批保持 pending
     const beforeAlways = (await replay(logD)).length;
     const refuseAlways = await handleCardAction({
-      cardId: "approval:" + apr!.id,
+      cardId: "approval:" + aprId,
       sourceEventId: 0,
       cardType: "approval",
       action: "approve",
-      payload: { approval_id: apr!.id },
+      payload: { approval_id: aprId },
       scope: "always",
-      targetAgentId: apr!.agent_id,
+      targetAgentId: aprAgentId,
     });
     const afterAlways = await replay(logD);
     check(!refuseAlways.ok && (refuseAlways.error ?? "").includes("worker 永不写 always"), "D4 scope=always 的 card_action 被拒绝（§11.7.6）");
     check(afterAlways.length === beforeAlways, "D4b always card_action 拒绝落流（主流零新增事件）");
-    check(orchestratorForApproval(apr!.id) !== null, "D4c 审批保持 pending（编排器仍可决议）");
+    check(orchestratorForApproval(aprId) !== null, "D4c 审批保持 pending（编排器仍可决议）");
     // 单次拒绝不杀 worker：先拒绝一次
     const rejectR = await handleCardAction({
-      cardId: "approval:" + apr!.id,
+      cardId: "approval:" + aprId,
       sourceEventId: 0,
       cardType: "approval",
       action: "reject",
-      payload: { approval_id: apr!.id },
+      payload: { approval_id: aprId },
       scope: "once",
-      targetAgentId: apr!.agent_id,
+      targetAgentId: aprAgentId,
     });
     check(rejectR.ok, "D5 reject 决议受理");
     // worker 剧本第二段（a2 无 requires_approval）仍会请求？不——a2 自动放行；等待 worker 收敛（拒绝后继续跑完）
@@ -347,7 +372,7 @@ try {
     check(resultD?.status === "done", "D7 worker 最终 done（报告照常回传）");
     // 应答发生在父 turn 结束之后：approval_resolved 事件序位于第一次 run 的最后事件之后
     const resolvedIdx = eventsD.findIndex((e) => e.type === "approval_resolved");
-    check(resolvedIdx > eventsBeforeDecide.length - 1, "D8 审批应答发生于父 turn 结束后（事件序在 run 收束之后）", "resolved@#" + String(resolvedIdx + 1) + " runEnd=#" + String(eventsBeforeDecide.length));
+    check(resolvedIdx > runDEndCount - 1, "D8 审批应答发生于父 turn 结束后（事件序在 run 收束之后）", "resolved@#" + String(resolvedIdx + 1) + " runEnd=#" + String(runDEndCount));
     delete process.env.M3A_MAIN_SCRIPT;
     delete process.env.M3A_AGENTS_DEMO;
   }
@@ -567,6 +592,7 @@ try {
     const forcedSpawn = await pForce;
     check(forcedSpawn.ok, "I5 强行批准 → spawn 继续（预测器不是硬闸）");
     // git 破坏拦截：write worker shell_rw 跑写向 git 子命令 → 全拦 + reason 落流；只读放行
+    const headBeforeI = (await exec("git", ["rev-parse", "HEAD"], { cwd: repoI })).stdout.trim();
     const gitScript = [
       { type: "tool_call", id: "g-push", name: "shell_rw", args: { command: "git push origin main" } },
       { type: "tool_call", id: "g-commit", name: "shell_rw", args: { command: "git commit -m x" } },
@@ -587,7 +613,13 @@ try {
       check(r !== undefined && !r.ok && r.output.includes("[git-guard]"), "I7 shell_rw " + label + " 静态拦截 + reason 落流");
     }
     check(resultsI.get("g-status")?.ok === true && resultsI.get("g-diff")?.ok === true, "I8 shell_rw git status/diff 只读放行");
-    check(!events.some((e) => e.type === "tool_result" && (e as { output: string }).output.includes("main 分支已被 worker 改写")), "I8b 主 checkout 零 worker 写痕（拦截在执行前）");
+    // P0-3（审查）：旧断言目标串"main 分支已被 worker 改写"全仓不存在（恒真）——改为真实状态
+    // 断言：主 checkout HEAD 未动 + 工作树干净 = worker 写痕为零（git 拦截在执行前的可验证形式）。
+    // 已知设计内产物：createWorktree 运行时自愈会往主 checkout 根写 .gitignore（worktree.ts:141）。
+    const headAfterI = (await exec("git", ["rev-parse", "HEAD"], { cwd: repoI })).stdout.trim();
+    const porcelainI = (await exec("git", ["status", "--porcelain"], { cwd: repoI })).stdout.trim();
+    const workerTracesI = porcelainI.split("\n").filter((l) => l.trim() !== "" && !l.trim().endsWith(".gitignore"));
+    check(headAfterI === headBeforeI && workerTracesI.length === 0, "I8b 主 checkout 零 worker 写痕（HEAD 未动 + 工作树干净，拦截在执行前）", "head=" + String(headAfterI === headBeforeI) + " traces=" + JSON.stringify(workerTracesI.slice(0, 5)));
     // 静态规则函数直接复核（worker shell 白名单对齐面）
     check(interceptDestructiveGit("git checkout main").ok === false && interceptDestructiveGit("git clean -fd").ok === false, "I9 checkout/clean 同在拦截清单（裁决 4 规则集）");
     orch.cancelAll();
@@ -1210,6 +1242,7 @@ try {
   console.log("[agents-check] H 暗卷（真实 GLM，有 M0_API_KEY 才跑）");
   if (!process.env.M0_API_KEY) {
     console.log("  暗卷跳过（无 M0_API_KEY）——任务书允许：缺席走跳过路径并显式打印");
+    console.log("UNVERIFIED=1"); // H2（审查 P1-16）：跳过 ≠ 通过，上浮到门禁汇总
   } else {
     const hPath = join(work, "h.jsonl");
     await writeFile(hPath, "", "utf8");

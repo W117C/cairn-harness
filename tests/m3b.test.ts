@@ -352,7 +352,9 @@ describe("M3b write worker 闭环（临时 git 仓库端到端）", () => {
     expect(ctx).not.toContain("+feat-1");
     expect(ctx).toContain("diff_ref");
     // done 不清 worktree（等合并决策）
-    expect(await lstat(worktreePathFor(repo, agentId))).toBeTruthy();
+    // I11（审查 P3）：toBeTruthy 对 lstat 恒真（lstat 只要目标存在就返回对象）——
+    // 改断言"是目录"，worktree 被误删/变成普通文件都会红。
+    expect((await lstat(worktreePathFor(repo, agentId))).isDirectory()).toBe(true);
   }, 20_000);
 
   it("合并控制塔：mergeWorker → 主分支前进 + worktree/分支清理；拒绝 → 清理（可留分支）", async () => {

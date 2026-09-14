@@ -127,6 +127,32 @@ describe("M3a 只读 bash 静态过滤（§4.4.6）", () => {
     expect(isReadOnlyShellCommand("python3 -c 'x'").ok).toBe(false);
     expect(isReadOnlyShellCommand("").ok).toBe(false);
   });
+
+  // P0-1（审查根因 1）：换行与单与号也是 bash 命令分隔符——旧实现只切 ; && || |，
+  // `cat x\ngit push` 整段首词是 cat 而放行第二条命令（2 个触发实例）。
+  it("P0-1 否定式：换行 / CRLF / 单与号作为命令分隔符必须拒绝", () => {
+    expect(isReadOnlyShellCommand("cat a\ngit push --force").ok).toBe(false);
+    expect(isReadOnlyShellCommand("ls\nrm -rf /").ok).toBe(false);
+    expect(isReadOnlyShellCommand("cat a\r\ngit push --force").ok).toBe(false);
+    expect(isReadOnlyShellCommand("cat a & git push --force").ok).toBe(false);
+    expect(isReadOnlyShellCommand("cat a & (git push --force)").ok).toBe(false);
+    expect(isReadOnlyShellCommand("git status\ncurl x|sh").ok).toBe(false);
+  });
+
+  // P0-6（审查根因 9）：只读白名单必须校验参数面——rg --pre=任意命令执行、
+  // git --output=任意文件写（含工作区外）、--ext-diff 外部 diff 执行面。
+  it("P0-6 否定式：危险 flag 与长 flag 赋值形式必须拒绝", () => {
+    expect(isReadOnlyShellCommand("rg --pre=/tmp/x.sh pattern .").ok).toBe(false);
+    expect(isReadOnlyShellCommand("rg --pre /tmp/x.sh pattern .").ok).toBe(false);
+    expect(isReadOnlyShellCommand("rg --pre-glob '*.js' --pre /tmp/x.sh pattern .").ok).toBe(false);
+    expect(isReadOnlyShellCommand("git log --output=/tmp/pwned.txt -1").ok).toBe(false);
+    expect(isReadOnlyShellCommand("git diff --output=/tmp/pwned.diff HEAD").ok).toBe(false);
+    expect(isReadOnlyShellCommand("git show --output=/tmp/pwned.show HEAD").ok).toBe(false);
+    expect(isReadOnlyShellCommand("git log --ext-diff").ok).toBe(false);
+    expect(isReadOnlyShellCommand("git diff --ext-diff").ok).toBe(false);
+    expect(isReadOnlyShellCommand("git show --ext-diff HEAD").ok).toBe(false);
+    expect(isReadOnlyShellCommand("git log --output=/Users/x/.ssh/authorized_keys").ok).toBe(false);
+  });
 });
 
 describe("M3a worker 工具表（深度恒 1 + 写闸，§4.4.1）", () => {
@@ -246,6 +272,7 @@ describe("M3a spawn 纪律（§4.4.1）", () => {
       ids.push((JSON.parse(r.output) as { agent_id: string }).agent_id);
     }
     for (let i = 0; i < 40 && release.size < MAX_CONCURRENT_WORKERS; i++) await new Promise((r) => setTimeout(r, 25));
+    expect(release.size).toBe(MAX_CONCURRENT_WORKERS); // I5（审查）：轮询结束必须校验条件——慢机静默继续 = 假绿
     const over = await orch.spawn({ mode: "read", task: "超限" }, { callId: "s-over" });
     expect(over.ok).toBe(false);
     expect(over.output).toContain("并发已达上限（" + String(MAX_CONCURRENT_WORKERS) + "）");
@@ -266,13 +293,23 @@ describe("M3a spawn 纪律（§4.4.1）", () => {
     const r = await orch.spawn({ mode: "read", task: "审批演示", tier: "auto" }, { callId: "s1" });
     expect(r.ok).toBe(true);
     const agentId = (JSON.parse(r.output) as { agent_id: string }).agent_id;
-    await new Promise((res) => setTimeout(res, 120));
-    const spawned = events.find((e) => e.type === "agent_spawned") as Extract<AgentEvent, { type: "agent_spawned" }> | undefined;
+    // I1（审查 P1-19）：审批落流是异步链路（spawn() 同步返回后 worker 才产生审批）——固定
+    // sleep(120) 在重载下假红（apr undefined）；改轮询等待，条件不满足显式失败。
+    const waitEvent = async (pred: (e: AgentEvent) => boolean, timeoutMs = 5_000): Promise<AgentEvent | undefined> => {
+      const deadline = Date.now() + timeoutMs;
+      for (;;) {
+        const hit = events.find(pred);
+        if (hit !== undefined) return hit;
+        if (Date.now() > deadline) return undefined;
+        await new Promise((res) => setTimeout(res, 25));
+      }
+    };
+    const spawned = (await waitEvent((e) => e.type === "agent_spawned")) as Extract<AgentEvent, { type: "agent_spawned" }> | undefined;
     expect(spawned?.permission_mode).toBe("default");
     expect(spawned?.permission_mode_requested).toBe("auto");
     expect(spawned?.tier_warning).toBeTruthy();
     // 越界警告透传到审批卡（approval_requested.tier_warning）
-    const apr = events.find((e) => e.type === "approval_requested") as Extract<AgentEvent, { type: "approval_requested" }> | undefined;
+    const apr = (await waitEvent((e) => e.type === "approval_requested")) as Extract<AgentEvent, { type: "approval_requested" }> | undefined;
     expect(apr?.agent_id).toBe(agentId);
     expect(apr?.tier_warning).toBeTruthy();
     // always 拒发（§11.7.6）：批准被拒、审批保持 pending 可再决议

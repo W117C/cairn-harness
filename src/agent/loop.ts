@@ -60,8 +60,11 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
 
   // 新旧形态统一收敛成流式事件源（legacy next() 源遇 tool_call 断轮，日志同序）
   const provider = opts.provider;
+  // C12（审查 P2）：取消信号随轮传入 provider——在途 fetch 随 abort 收束，不再只等静默窗。
   const streamFn: (messages: Parameters<Provider["stream"]>[0]) => AsyncIterable<ModelOutput> =
-    "stream" in provider ? (messages) => provider.stream(messages) : streamFromNextSource(provider);
+    "stream" in provider
+      ? (messages) => provider.stream(messages, undefined, opts.signal ? { signal: opts.signal } : undefined)
+      : streamFromNextSource(provider);
   const seen: AgentEvent[] = []; // loop 视角的完整事件流（stream(messages) 的上下文投影源）
 
   if (userMessage !== undefined) {
@@ -194,6 +197,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
           callId: output.id,
           clarify: opts.clarify,
           plan: opts.plan,
+          ...(opts.signal ? { signal: opts.signal } : {}), // C12：取消信号透传进长驻工具
         };
         try {
           result = await tool.run(output.args, ctx);

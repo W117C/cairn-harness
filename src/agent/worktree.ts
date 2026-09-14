@@ -10,6 +10,7 @@ import { execFile, spawn } from "node:child_process";
 import { readdir, rm, symlink, lstat } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { sanitizedEnv } from "../tools/process.js";
 
 const exec = promisify(execFile);
 
@@ -39,17 +40,30 @@ interface GitRun {
  *  （坑五十五：DSH Electron-as-node v24 的 execFile 拒绝错误 stderr 为空——merge 冲突信息会整体丢失）。 */
 function gitRun(cwd: string, args: string[]): Promise<GitRun> {
   return new Promise((settle) => {
-    const child = spawn("git", args, { cwd });
+    // D1（审查 P1-9）：env 消毒——git 会在工作区仓库执行 .git/hooks/*，不消毒等于把
+    // process.env.M0_API_KEY（BYOK 明文）交给克隆来的任意 hook 脚本。
+    const child = spawn("git", args, { cwd, env: sanitizedEnv() });
+    // A7（审查）：输出累积设字节上限——worktreeDiff 大变更集可产出数百 MB 全驻内存；超限杀进程。
+    const OUTPUT_CAP_BYTES = 32 * 1024 * 1024;
     let stdout = "";
     let stderr = "";
+    let bytes = 0;
     child.stdout?.on("data", (d: Buffer) => {
+      bytes += d.length;
       stdout += String(d);
+      if (bytes > OUTPUT_CAP_BYTES) child.kill("SIGKILL");
     });
     child.stderr?.on("data", (d: Buffer) => {
       stderr += String(d);
     });
     child.on("error", (err) => settle({ stdout: "", stderr: String(err), code: 127 }));
-    child.on("close", (code) => settle({ stdout, stderr, code: code ?? 1 }));
+    child.on("close", (code) => {
+      if (bytes > OUTPUT_CAP_BYTES) {
+        settle({ stdout: stdout.slice(0, OUTPUT_CAP_BYTES), stderr: stderr + "\n[truncated: git 输出超 32MB 上限，已截断]", code: code ?? 1 });
+        return;
+      }
+      settle({ stdout, stderr, code: code ?? 1 });
+    });
   });
 }
 
@@ -294,15 +308,20 @@ export function orphanWorktrees(dirNames: string[], events: { type: string; agen
     .filter((agentId) => !terminalAgents.has(agentId));
 }
 
-/** 孤儿手动清理（§4.4.9：面板只列不自动删，清理 = 用户显式动作）：移除 worktree + 按后缀删 agent/*-<id> 分支。 */
+/** 孤儿手动清理（§4.4.9：面板只列不自动删，清理 = 用户显式动作）：移除 worktree + 按后缀删 agent/*-<id> 分支。
+ *  A6（审查）：agentId 先过字符白名单——目录名含 glob 元字符（[ ? *）拼进 `branch --list`
+ *  会匹配全部 agent 分支并循环删除；列出的分支名还须**精确以后缀 -<id> 结尾**才删（双保险）。 */
 export async function cleanOrphanWorktree(root: string, agentId: string): Promise<WorktreeCleanupResult> {
+  if (!/^[A-Za-z0-9_-]+$/.test(agentId)) {
+    return { removed: false, branchDeleted: false, error: "agentId 含非法字符（只允许 [A-Za-z0-9_-]），已拒绝清理" };
+  }
   const r = await removeWorktree(root, agentId);
   if (r.removed) {
     try {
       const out = await exec("git", ["branch", "--list", "agent/*-" + agentId], { cwd: root, maxBuffer: 1024 * 1024 });
       for (const line of out.stdout.split("\n")) {
         const name = line.replace(/^\*?\s*/, "").trim();
-        if (name !== "") await git(root, "branch", "-D", name).catch(() => {});
+        if (name !== "" && name.endsWith("-" + agentId)) await git(root, "branch", "-D", name).catch(() => {});
       }
     } catch {
       /* 分支清点失败不掩盖 worktree 清理结果 */

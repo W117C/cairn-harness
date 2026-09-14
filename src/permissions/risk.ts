@@ -36,13 +36,21 @@ export const THREAT_TABLE: ThreatEntry[] = [
   { re: /\bmkfs/, level: "critical", category: "文件破坏", note: "格式化文件系统" },
   { re: />\s*\/dev\/(sd|disk|nvme)/, level: "critical", category: "文件破坏", note: "重定向覆盖块设备" },
   // ---- 远程代码执行 ----
-  { re: /\b(?:curl|wget)\b[^;|&]*\|\s*(?:ba|z|da|fi)?sh/, level: "critical", category: "远程代码执行", note: "下载内容直接管道进 shell" },
-  { re: /\b(?:curl|wget)\b[^;|&]*\|\s*(?:sudo\s+)?(?:ba)?sh/, level: "critical", category: "远程代码执行", note: "远程脚本执行" },
+  // C11（审查 P2）：带路径前缀的 shell（/bin/sh、/usr/bin/zsh）——旧正则只认裸 sh 系名。
+  { re: /\b(?:curl|wget)\b[^;|&]*\|\s*(?:sudo\s+)?(?:[\w./-]*\/)?(?:ba|z|da|fi)?sh\b/, level: "critical", category: "远程代码执行", note: "下载内容直接管道进 shell（含绝对路径 shell）" },
+  { re: /\bawk\b[^;|&]*system\s*\(/, level: "critical", category: "远程代码执行", note: "awk system() 调用（执行面）" },
+  { re: /\b(?:perl|python3?)\b[^;|&]*(?:os\.system|subprocess|exec\s*\()/, level: "critical", category: "远程代码执行", note: "脚本语言内嵌进程执行" },
   // ---- 数据外送 ----
   { re: /\b(?:curl|wget|scp|rsync|nc|netcat|ftp|telnet|ssh)\b/, level: "medium", category: "数据外送", note: "外联命令（出网通道）" },
   { re: /\b(?:npm|pnpm|yarn|pip|pip3|brew)\s+(?:i|install|add)\s+(?:-[a-zA-Z]*g|--global)/, level: "medium", category: "数据外送", note: "全局安装（外联）" },
+  // C11（审查 P2）：包管理器 install 会执行第三方包生命周期脚本（postinstall 面）。
+  { re: /\b(?:npm|pnpm|yarn)\s+(?:i|install|add)\b/, level: "medium", category: "数据外送", note: "安装第三方包（执行其 postinstall 生命周期脚本）" },
   // ---- 系统修改 ----
   { re: /\bchmod\s+(?:-R\s+)?777/, level: "high", category: "系统修改", note: "chmod 777 放开权限" },
+  // C11（审查 P2）：递归改权限（不限于 777）——对仓库/系统文件的大面积权限变更面。
+  { re: /\bchmod\s+-[a-zA-Z]*[Rr]/, level: "medium", category: "系统修改", note: "chmod 递归改权限" },
+  // C11（审查 P2）：dd 任意写（不限于 /dev/）——of= 指向任何路径都是底层覆写。
+  { re: /\bdd\b[^;|&]*\bof=/, level: "high", category: "文件破坏", note: "dd 任意路径覆写" },
   { re: /\b(?:crontab|launchctl|systemctl|defaults\s+write)\b/, level: "high", category: "系统修改", note: "系统配置写入" },
   { re: /\b(?:chown|chgrp)\b/, level: "medium", category: "系统修改", note: "改变属主" },
   // ---- 权限提升 ----

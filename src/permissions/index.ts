@@ -1,4 +1,7 @@
 import type { ToolName } from "../tools";
+// C9（审查根因 2）：能力域判定唯一实现——旧的模块内私有副本只认三个字面工具名（缺 shell_rw），
+// 使 loop 路径（checkPermission/gate/denyReason）对 shell 家族新成员失效。删副本统一从 autonomy 导入。
+import { isSideEffectTool } from "./autonomy";
 
 export type PermissionMode = "read-only" | "default" | "auto";
 export type Decision = "allow" | "ask" | "deny";
@@ -81,10 +84,6 @@ export function resetPlanState(): void {
 
 function planBlocks(): boolean {
   return planState.proposed && !planState.approved;
-}
-
-function isSideEffectTool(tool: ToolName): boolean {
-  return tool === "write_file" || tool === "edit_file" || tool === "run_shell";
 }
 
 // 原始判定：read_file 与三门工具（clarify/propose_plan/verify）不产生用户数据副作用，任何档都放行；

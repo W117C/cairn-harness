@@ -115,9 +115,11 @@ export async function savePermissionRules(path: string, rules: PermissionRule[])
 
 // ---- 命令链式拆分与最长前缀匹配（Roo 引擎语义，§11.7.3 采纳）----
 
-const CHAIN_SPLIT = /\s*(?:&&|\|\||[;|])\s*/;
+// P1-5（审查根因 1）：换行与单与号也是 shell 命令分隔符——旧切分不认它们，
+// `echo hi\ngit push --force` 归一成一段且不以 git push 开头 → deny 命中不了 → 放行。
+const CHAIN_SPLIT = /\s*(?:&&|\|\||[;|&]|[\r\n]+)\s*/;
 
-/** 按 &&、||、;、| 拆链；空白归一（多空格折成单空格）。 */
+/** 按 &&、||、;、|、&、换行拆链；空白归一（多空格折成单空格）。 */
 export function splitCommandChain(command: string): string[] {
   return command
     .split(CHAIN_SPLIT)
@@ -187,7 +189,9 @@ export function judgeChain(rules: PermissionRule[], tool: string, command?: stri
     if (hit.rule.behavior === "deny") {
       return { verdict: "deny", ruleId: hit.rule.id ?? "" }; // 任一段 deny 全链 deny
     }
-    if (worst === null || BEHAVIOR_RANK[hit.rule.behavior] > BEHAVIOR_RANK[worst.rule.behavior]) {
+    // 审查 S1-1：跨段必须取最严（rank 小者优先，deny<ask<allow）。旧实现用 > 取的是
+    // rank 最高=最宽，于是一条 allow 前缀就把同链任意 ask 段击穿（与上方注释相反）。
+    if (worst === null || BEHAVIOR_RANK[hit.rule.behavior] < BEHAVIOR_RANK[worst.rule.behavior]) {
       worst = hit;
     }
   }

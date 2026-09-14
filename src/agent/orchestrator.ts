@@ -7,8 +7,11 @@
 import { open, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentEvent, AgentPermissionMode, SecurityFinding } from "../events";
+import { replay } from "../events";
 import type { ModelOutput, Provider } from "../providers";
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "../providers/glm";
+import { DEFAULT_MODEL_TABLE, resolveModel, toWorkerModel } from "../providers/registry";
+import { routeFor, TIER_ORDER as MODEL_TIER_ORDER } from "../routing/policy";
 import type { Tool, ToolResult, ToolContext } from "../tools/base";
 import { read_file } from "../tools/read_file";
 import { grep } from "../tools/grep";
@@ -19,7 +22,7 @@ import { write_file } from "../tools/write_file";
 import { edit_file } from "../tools/edit_file";
 import { remember } from "../tools/remember";
 import { runLoop } from "./loop";
-import { projectContext } from "./context";
+import { projectContext, type ContextMessage } from "./context";
 import {
   DEFAULT_COMPACTION_CONFIG,
   estimateContextTokens,
@@ -43,6 +46,7 @@ import {
   type ResolvedPluginRole,
 } from "./sequencer";
 import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckConfig, type StuckTurn } from "./stuck";
+import { decideSupervisor, superviseApprovalDigest, type SupervisorAction } from "./supervisor";
 import type { RespawnArgs } from "./recovery";
 import {
   collectChangeSet,
@@ -67,6 +71,7 @@ import {
   type AskScope,
   type AutonomySession,
   type EvaluateDecision,
+  type PermissionRule,
   type RiskLevel,
 } from "../permissions";
 import { gateToolSpecs } from "./glm-session";
@@ -78,7 +83,7 @@ export const READ_MODE_MAX_TURNS = 40;
 /** agent_result.summary 上限 2000 token（§4.4.4），超限类型化裁剪。 */
 export const SUMMARY_TOKEN_CAP = 2_000;
 /** spawn_agent 的 mode 白名单：本轮只接入 read（§0 范围）。 */
-export const SPAWN_MODES: readonly string[] = ["read", "write", "pipeline"];
+export const SPAWN_MODES: readonly string[] = ["read", "write", "pipeline", "supervise"];
 
 /** worker 工具表（read mode，§4.4.6）：read/grep/glob/LSP + 只读 bash（shell_ro）。
  *  **构造时即不含 spawn_agent 与任何写工具**（深度恒 1 的机制化，非运行时报错）。 */
@@ -129,6 +134,37 @@ export const READONLY_GIT_SUBCOMMANDS: readonly string[] = [
 /** 结构性拒绝：重定向 / 命令替换 / heredoc / 进程替换（写面与逃逸面，一票否决）。 */
 const SHELL_WRITE_META = /[<>`]|\$\(|\$\{|\+\+|<<<|\(\(/;
 
+// P0-6（审查根因 9）：只读白名单必须校验参数面——「命令名只读」不等于「命令只读」。
+// rg --pre=<脚本> = 任意命令执行；git log --output=<路径> = 任意文件写（含工作区外）；
+// --ext-diff = 外部 diff 驱动执行面。一律拒绝长 flag 赋值形式（--xxx=yyy）+ 危险 flag 黑名单。
+// 治本方向（原生只读工具 / Seatbelt 只读沙箱）留位：白名单字符串过滤的每次失败都靠本层收口。
+const GIT_DANGEROUS_FLAGS: ReadonlySet<string> = new Set(["--output", "--ext-diff", "--exec-path"]);
+const RG_DANGEROUS_FLAGS: ReadonlySet<string> = new Set(["--pre", "--pre-glob", "--hostname-bin"]);
+const DANGEROUS_FLAGS_BY_HEAD: Readonly<Record<string, ReadonlySet<string>>> = { git: GIT_DANGEROUS_FLAGS, rg: RG_DANGEROUS_FLAGS };
+
+function flagViolation(head: string, words: string[]): string | null {
+  const rest = head === "git" ? words.slice(2) : words.slice(1);
+  const deny = DANGEROUS_FLAGS_BY_HEAD[head];
+  // 审查 S3 / 4.11：git 配置注入面必须显式拒绝，且不能只扫 rest——rest 从 words[2] 起，
+  // 把紧跟 git 的第一个 token 当子命令跳过了：`git -ccore.fsmonitor=/tmp/x log`（合并写法、
+  // 无空格）整串落在 words[1] 上，正好从缝里漏过去。core.fsmonitor / askPass / pager /
+  // sequence.editor 全是「配置指向可执行文件」= 任意执行面，结论钉在代码里，不赌 git 语义。
+  // 代价：`git log -c`（combined diff，只读）一并拒绝——只读白名单不需要它。
+  const gitCfg = head === "git" ? words.slice(1).find((w) => w === "-c" || w.startsWith("-c") || w.startsWith("--config")) : undefined;
+  if (gitCfg !== undefined) {
+    return "git 配置面 flag（" + gitCfg + "）一律拒绝（core.fsmonitor/askPass/pager 皆为执行面，P0-6）";
+  }
+  for (const w of rest) {
+    if (w.startsWith("-") && w.includes("=")) {
+      return `长 flag 赋值形式（${w}）一律拒绝（只读面不需要，P0-6）`;
+    }
+    if (deny?.has(w)) {
+      return `危险 flag ${w} 被拒绝（只读白名单不允许：执行面/写面参数）`;
+    }
+  }
+  return null;
+}
+
 function checkShellSegment(segment: string): string | null {
   const words = segment.trim().split(/\s+/).filter((w) => w !== "");
   if (words.length === 0) return "空命令段";
@@ -138,22 +174,24 @@ function checkShellSegment(segment: string): string | null {
     if (!READONLY_GIT_SUBCOMMANDS.includes(sub)) {
       return `git ${sub} 不在只读白名单（允许：${READONLY_GIT_SUBCOMMANDS.join(" ")}）`;
     }
-    return null;
+    return flagViolation(head, words);
   }
   if (!READONLY_SHELL_COMMANDS.includes(head)) {
     return `${head} 不在只读白名单（允许：${READONLY_SHELL_COMMANDS.join(" ")} 与 git 只读子命令）`;
   }
-  return null;
+  return flagViolation(head, words);
 }
 
-/** 只读 bash 静态过滤（纯函数）：白名单命令集 + 链段全查 + 写面元字符一票否决；其余拒绝。 */
+/** 只读 bash 静态过滤（纯函数）：白名单命令集 + 链段全查 + 写面元字符一票否决；其余拒绝。
+ *  P0-1（审查根因 1）：换行与单与号也是 bash 命令分隔符——先归一化再切段，
+ *  否则 `cat x\ngit push` / `cat x & git push` 整段首词是 cat 而放行第二条命令。 */
 export function isReadOnlyShellCommand(command: string): { ok: boolean; why?: string } {
   if (typeof command !== "string" || command.trim() === "") return { ok: false, why: "空命令" };
   if (SHELL_WRITE_META.test(command)) {
     return { ok: false, why: "含重定向/命令替换/heredoc 等写面元字符（只读 bash 一票否决）" };
   }
-  // 链段切分：; && || | —— 每段都必须落在白名单内（cat x | wc -l 允许；cat x | tee out 拒绝）
-  const segments = command.split(/&&|\|\||;|\|/);
+  // 链段切分：; && || | & 换行 —— 每段都必须落在白名单内（cat x | wc -l 允许；cat x | tee out 拒绝）
+  const segments = command.replace(/\r\n?|\n/g, ";").split(/&&|\|\||;|\||&/);
   for (const seg of segments) {
     const why = checkShellSegment(seg);
     if (why) return { ok: false, why };
@@ -319,6 +357,16 @@ const REMEMBER_SPEC_DESCRIPTION =
   "纪律：能从代码推导的不写入；禁止把密钥写入记忆。";
 
 // ---- 档位单调继承（§11.7.6）：worker ≤ 父，越界裁到父档 + 审批卡警告 ----
+/** spawn 成功回执 → agent_id（拿不到即 undefined：不猜、不回落到日志反查）。审查 S2-8 配套。 */
+function parseSpawnedAgentId(output: string): string | undefined {
+  try {
+    const v = JSON.parse(output) as { agent_id?: unknown };
+    return typeof v.agent_id === "string" && v.agent_id !== "" ? v.agent_id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 const TIER_ORDER: Record<AgentPermissionMode, number> = { "read-only": 0, default: 1, auto: 2 };
 
 export function isPermissionMode(v: unknown): v is AgentPermissionMode {
@@ -435,6 +483,8 @@ export interface SpawnArgs {
   model?: unknown;
   max_turns?: unknown;
   tier?: unknown;
+  /** M5c supervise：{ maxStages?, forbidden? }（受限循环参数；goal=task，budget=会话成本闸）。 */
+  supervise?: unknown;
 }
 
 /** pipeline stage 的原始形态（M3c；sequencer 解析冻结）。 */
@@ -450,6 +500,8 @@ export interface StageRoleResolution {
   roleDefinition?: string;
   maxTurns?: number;
   model?: string;
+  /** M5b：环角色名（implement/review/test/plugin:agent-name）——routing_decision.stage 与路由选档的来源。 */
+  role?: string;
   /** 插件角色工具面裁剪（frontmatter.tools）。 */
   allowedTools?: string[];
   disallowedTools?: string[];
@@ -512,6 +564,8 @@ interface WorkerHandle {
   /** 静默计时器（每次子流事件刷新；silenceMs 超时 → stuck）。 */
   stuckTimer: ReturnType<typeof setTimeout> | null;
   lastActivityAt: number;
+  /** B7（审查）：root abort 监听器引用——终态摘除用（once 监听不触发即永久驻留）。 */
+  onRootAbort?: () => void;
   /** 角色定义（M3c：内置角色/插件角色进 system 首块；缺省无）。 */
   roleDefinition?: string;
   /** M3c 插件角色工具面裁剪（frontmatter.tools 白名单；缺省 = 角色默认面）。 */
@@ -558,8 +612,13 @@ export interface OrchestratorOptions {
   emit: (e: AgentEvent) => Promise<void>;
   /** worker 模型解析（演示/验收通道注入脚本模型）；缺省 = GLM 暗卷（需 M0_API_KEY）。 */
   modelFor?: (args: SpawnArgs) => WorkerModel | undefined;
+  /** M5b 模型路由（§m5-proposal 步骤 8）：启用时每次 spawn routeFor 决策 → 落 routing_decision →
+   *  toWorkerModel(档位)。缺省 false = 零行为（modelFor / defaultWorkerModel 原路径逐字不变，零 routing_decision）。 */
+  routing?: boolean;
   /** worker 审批无响应超时（缺省 120s，超时按拒绝 fail-closed）。 */
   approvalTimeoutMs?: number;
+  /** M5c 竞速收敛超时（缺省 120s；测试注入短值以验「超时必收杀候选」，不放宽生产语义）。 */
+  raceDeadlineMs?: number;
   /** M3b 产出代码安全模式（§11.6 三档，缺省 report）：off 不跑 / report 只标 / gate critical|high 红标 + 二次确认。 */
   safeMode?: "off" | "report" | "gate";
   // ---- M3c ----
@@ -574,6 +633,11 @@ export interface OrchestratorOptions {
   budget?: { maxUsd: number; pricePerMTok: number };
   /** 卡死检测阈值（缺省 ORCHESTRATOR_STUCK_CONFIG；验收注入短阈值）。 */
   stuckConfig?: Partial<StuckConfig>;
+  /** P0-2（审查）：父 run 已加载的权限规则库——worker 自主会话必须同口径构造，
+   *  否则项目级 deny/ask 规则对 worker 全表失效（deny read_file 主会话拒、worker 放行）。 */
+  rules?: PermissionRule[];
+  /** P0-2（审查）：父 run 的沙箱自检结果（null = 未接线）——worker 沙箱降级送审通道同口径。 */
+  sandboxAvailable?: boolean | null;
 }
 
 export class Orchestrator {
@@ -586,6 +650,7 @@ export class Orchestrator {
   >();
   readonly root = new AbortController();
   private readonly approvalTimeoutMs: number;
+  private readonly raceDeadlineMs: number;
   private readonly safeMode: "off" | "report" | "gate";
   /** write worker diff 快照版本计数（评审闭环 v1→v2：同 agent 每次收敛出新 diff）。 */
   private readonly diffVersions = new Map<string, number>();
@@ -605,6 +670,7 @@ export class Orchestrator {
 
   constructor(opts: OrchestratorOptions) {
     this.approvalTimeoutMs = opts.approvalTimeoutMs ?? 120_000;
+    this.raceDeadlineMs = opts.raceDeadlineMs ?? 120_000;
     this.safeMode = opts.safeMode ?? "report";
     this.budget = opts.budget ?? null;
     this.stuckConf = { ...DEFAULT_STUCK_CONFIG, ...(opts.stuckConfig ?? {}) };
@@ -710,6 +776,9 @@ export class Orchestrator {
     if (mode === "pipeline") {
       return await this.spawnPipeline(args, ctx);
     }
+    if (mode === "supervise") {
+      return await this.spawnSupervise(args, ctx);
+    }
     return await this.spawnInternal(args, ctx, task);
   }
 
@@ -731,6 +800,84 @@ export class Orchestrator {
       },
       ctx,
     );
+  }
+
+  /** M5c Best-of-N 竞争编排（§m5-proposal 步骤 12）：N 个候选并行，judge 命中即早停取消其余。
+   *  judge 可插拔（verify 全绿 > LLM judge > diff 规模最小，调用方注入——worker 侧 verify 是禁用的，
+   *  判据来自候选产物而非 worker 自证）。N 硬上限 3（MAX_CONCURRENT_WORKERS=4，留 1 给审查环）。
+   *  成本闸复用 budgetBlocked；早停复用既有 cancelAgent（不新造取消机制）。 */
+  async spawnRace(
+    task: string,
+    n: number,
+    judge: (r: Extract<AgentEvent, { type: "agent_result" }>) => boolean,
+    ctx: { callId?: string } = {},
+  ): Promise<ToolResult> {
+    const k = Math.min(Math.max(n, 1), 3);
+    if (this.budgetBlocked()) return await this.rejectOnBudget();
+    if (this.activeCount() + this.spawnReserve + k >= MAX_CONCURRENT_WORKERS) {
+      return {
+        ok: false,
+        output: `spawn_agent(race): 并发预算不足（${String(k)} 候选 + 1 余量 > ${String(MAX_CONCURRENT_WORKERS)}），不排队`,
+      };
+    }
+    const base = ctx.callId ?? "";
+    const agentIds: string[] = [];
+    for (let i = 0; i < k; i++) {
+      const cid = base === "" ? "race-" + String(i) : base + "-c" + String(i);
+      // context 传候选序号（candidate-i）：调用方 modelFor 可据此为每个候选注入不同剧本
+      const r = await this.spawn({ mode: "read", task, context: "race-candidate-" + String(i) }, { callId: cid });
+      if (!r.ok) {
+        for (const id of agentIds) this.cancelAgent(id); // 半成品竞速：已派发候选全部取消
+        return { ok: false, output: "spawn_agent(race): 候选 " + String(i) + " spawn 失败：" + r.output };
+      }
+      // 审查 S2-8：候选身份直接取 spawn 回执里的 agent_id（成功回执恒为 {agent_id,...}）。
+      // 旧实现每轮全量 replay 日志找「新出现的 agent_spawned」：① 每次候选都重读整条事件流；
+      // ② sequencer/respawn 等别的登记路径在同窗口落流时会错认（find 取到的可能是别人的
+      //    worker）或漏认；③ replay 一旦失败被 catch 成 []，agentIds 静默为空 → 下面的
+      //    「全收敛」判定立刻成立 → 返回失败而这 k 个 worker 已被派出且无人取消 = 失控。
+      const id = parseSpawnedAgentId(r.output);
+      if (id === undefined) {
+        for (const done of agentIds) this.cancelAgent(done);
+        return {
+          ok: false,
+          output: "spawn_agent(race): 候选 " + String(i) + " spawn 回执无 agent_id（fail-visible，不留无主 worker）：" + r.output,
+        };
+      }
+      agentIds.push(id);
+    }
+    // 竞速：等 agent_result 到达，judge 命中即早停（取消其余候选，返回胜者）
+    const deadline = Date.now() + this.raceDeadlineMs;
+    const winners: Array<Extract<AgentEvent, { type: "agent_result" }>> = [];
+    while (Date.now() < deadline) {
+      if (this.root.signal.aborted) break; // 审查 S2-8：主会话已取消就不再空转竞速轮（旧实现最坏再等满 120s）
+      const log = await replay(this.opts.logPath).catch(() => [] as AgentEvent[]);
+      for (const id of agentIds) {
+        const done = log.find(
+          (e: AgentEvent): e is Extract<AgentEvent, { type: "agent_result" }> =>
+            e.type === "agent_result" && e.agent_id === id && !winners.some((w) => w.agent_id === id),
+        );
+        if (done) {
+          winners.push(done);
+          if (judge(done)) {
+            for (const other of agentIds) if (other !== id) this.cancelAgent(other); // 早停：取消其余
+            return {
+              ok: true,
+              output: JSON.stringify({ race: true, picked: id, candidates: agentIds, early_stop: true }),
+            };
+          }
+        }
+      }
+      if (agentIds.length > 0 && winners.length >= agentIds.length) break; // 全收敛且无 judge 命中
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    // 审查 S2-9：超时 / 全收敛无命中 / 主会话取消 —— 退出竞速前一律收杀未终态候选。
+    // 旧实现直接 return 失败，被判负与未收敛的 worker 继续在后台跑（占并发预算、烧 token，
+    // write 侧还留着 worktree），而调用方已经拿到失败结果。cancelAgent 对终态幂等。
+    for (const id of agentIds) this.cancelAgent(id);
+    return {
+      ok: false,
+      output: "spawn_agent(race): 无候选 judge 命中（N=" + String(k) + "，全收敛或超时；未终态候选已收杀）",
+    };
   }
 
   /** depends_on 校验（共享）：存在性（跨会话拒绝）→ 环（DFS）→ 前环终态裁决。waiting = 尚未 done 的依赖。 */
@@ -769,7 +916,12 @@ export class Orchestrator {
     return { ok: false, output: "spawn_agent: [budget] 会话成本超限（估价 $" + estimate + " ≥ maxBudgetUsd $" + cap + "），新 spawn 被拒" };
   }
 
-  /** spawn 内核（模型面与 sequencer 逐环共用；stageRole 只由 sequencer 代码注入）。 */
+  /** B4（审查）：并发上限 check-then-act 旁路面——判定与 workers.set 之间隔着审批/worktree/emit
+   *  多个 await，triggerDeferredSpawn 与 sequencer 并发触发可同时过判定 → 突破上限。
+   *  同步占位（spawnReserve），失败路径 finally 回滚；登记成功后由 activeCount 接管计数。 */
+  private spawnReserve = 0;
+
+  /** spawn 内核入口（模型面与 sequencer 逐环共用；stageRole 只由 sequencer 代码注入）。 */
   private async spawnInternal(args: SpawnArgs, ctx: { callId?: string }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
     const mode = typeof args.mode === "string" ? args.mode : "";
     // H2（审查 B-3）：入口 fail-closed——主会话已取消时不再派发任何 worker
@@ -777,11 +929,27 @@ export class Orchestrator {
     if (this.root.signal.aborted) {
       return { ok: false, output: "spawn_agent: 主会话已取消（fail-closed，不再派发 worker）" };
     }
-    if (this.activeCount() >= MAX_CONCURRENT_WORKERS) {
+    if (this.activeCount() + this.spawnReserve >= MAX_CONCURRENT_WORKERS) {
       return {
         ok: false,
         output: `spawn_agent: 并发已达上限（${String(MAX_CONCURRENT_WORKERS)}），不排队——请等现有 worker 收敛或取消后再试`,
       };
+    }
+    this.spawnReserve++;
+    try {
+      return await this.spawnReserved(args, ctx, task, stageRole);
+    } finally {
+      this.spawnReserve--;
+    }
+  }
+
+  /** spawn 预留段（占位后执行）。B2（审查）：read-only 父会话不允许派 write worker——
+   *  worker 有效权限 ≤ 父（§11.7.6）：write worker 文件面/shell 面恒 auto，read-only 父放行
+   *  等于把只读会话变成可写（permission_mode 记 read-only 实写 auto 的记录失真一并消除）。 */
+  private async spawnReserved(args: SpawnArgs, ctx: { callId?: string }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
+    const mode = typeof args.mode === "string" ? args.mode : "";
+    if (mode === "write" && this.opts.parentMode === "read-only") {
+      return { ok: false, output: "spawn_agent: 父会话为 read-only 档，不允许派 write worker（worker 权限 ≤ 父会话，§11.7.6）" };
     }
     // ---- M3c depends_on 轻校验（sequencer 后环路径；与 spawn() 同语义，前环必已收敛）----
     const dependsOn = parseStringList(args.depends_on);
@@ -796,10 +964,46 @@ export class Orchestrator {
     if (this.budgetBlocked()) {
       return await this.rejectOnBudget();
     }
-    // 模型可用性 fail-closed：无 modelFor 且无 M0_API_KEY → 直接拒绝（不造必败 worker）
-    const model = this.opts.modelFor ? this.opts.modelFor(args) : undefined;
+    // ---- M5b 模型路由（§m5-proposal 步骤 8）：opts.routing 启用时决策先行，审计面 = routing_decision ----
+    const routingEnabled = this.opts.routing === true;
+    if (routingEnabled) {
+      // SpawnArgs.model/tier 收窄校验（M5b）：非 string → fail-visible 拒绝，不新增字段、不改 raw 解析
+      const badModel = args.model !== undefined && typeof args.model !== "string";
+      const badTier = args.tier !== undefined && typeof args.tier !== "string";
+      if (badModel || badTier) {
+        return { ok: false, output: "spawn_agent: 路由入参收窄失败（args.model/args.tier 须为 string；fail-visible 拒绝，不静默透传）" };
+      }
+    }
+    // 路由决策（纯函数）：pin（args.model 优先，其次模型档位名）> 档位表（按环角色）> 降级链。
+    // 决策在模型实例化之前完成——先落 routing_decision 再调模型（崩溃后也能审计"当时选了谁"）。
+    const routeDecision = routingEnabled
+      ? routeFor({
+          pin:
+            typeof args.model === "string" && args.model !== ""
+              ? args.model
+              : typeof args.tier === "string" && (MODEL_TIER_ORDER as readonly string[]).includes(args.tier)
+                ? args.tier
+                : undefined,
+          stage: stageRole?.role,
+          table: DEFAULT_MODEL_TABLE,
+        })
+      : null;
+    // 模型可用性 fail-closed。审查 S3-13 两处修正：
+    // ① 注入模型（modelFor：checks 的脚本/mock、demo 面）优先于档位合成——旧实现路由分支
+    //    直接吃 toWorkerModel(spec)，使注入的确定性模型在 routing=true 时被忽略。
+    // ② 路由分支合成的是「真实 provider 模型的 spec」，旧条件 `!model && !M0_API_KEY`
+    //    在 routeDecision 非空时永不成立 → 无凭据也照派 worker，第一跳 401 才死
+    //    （白烧一轮 + 占并发预算 + 留一条必败 worker 记录）。现在同样要求凭据。
+    const model = this.opts.modelFor
+      ? this.opts.modelFor(args)
+      : routeDecision
+        ? toWorkerModel(resolveModel(DEFAULT_MODEL_TABLE, routeDecision.picked))
+        : undefined;
     if (!model && !process.env.M0_API_KEY) {
       return { ok: false, output: "spawn_agent: 无可用模型（无 M0_API_KEY 且未接 modelFor；fail-closed 不造必败 worker）" };
+    }
+    if (routeDecision && !this.opts.modelFor && !process.env.M0_API_KEY) {
+      return { ok: false, output: "spawn_agent: 路由路径需要 M0_API_KEY（无注入模型且无凭据；fail-closed 不造必败 worker）" };
     }
     const requested = isPermissionMode(args.tier) ? args.tier : this.opts.parentMode;
     const { mode: tier, clamped, warning } = clampTier(requested, this.opts.parentMode);
@@ -856,8 +1060,13 @@ export class Orchestrator {
       ...(clamped ? { tierWarning: warning } : {}),
       ...(model ? { model } : {}),
       controller: new AbortController(),
-      autonomy: newAutonomySession(tier),
-      toolAutonomy: newAutonomySession(mode === "write" ? "auto" : tier),
+      // P0-2（审查）：worker 自主会话按父 run 口径构造（规则库 + 沙箱可用性）——空参构造使
+      // 项目级 deny/ask 规则对 worker 全表失效、沙箱降级通道恒 NONE。
+      autonomy: newAutonomySession(tier, { rules: this.opts.rules ?? [], sandboxAvailable: this.opts.sandboxAvailable ?? null }),
+      toolAutonomy: newAutonomySession(mode === "write" ? "auto" : tier, {
+        rules: this.opts.rules ?? [],
+        sandboxAvailable: this.opts.sandboxAvailable ?? null,
+      }),
       resources,
       ...(worktree ? { worktree } : {}),
       ...(branch ? { branch } : {}),
@@ -887,7 +1096,11 @@ export class Orchestrator {
     if (mode === "write") mergeOwners.set(agentId, this); // 合并控制塔路由（done 后仍可达）
     // 取消树：主会话（root）中止沿树全 abort（§4.4.2）；单 worker abort 只中止该 worker
     const onRootAbort = (): void => handle.controller.abort();
+    handle.onRootAbort = onRootAbort; // B7（审查）：引用留 handle，终态摘除（root.signal 监听器不单调增长）
     this.root.signal.addEventListener("abort", onRootAbort, { once: true });
+    // B3（审查）：注册后立即复查——判定与注册之间隔着审批/worktree/emit 多个 await，
+    // root 已在窗口内中止时 addEventListener 对已 abort 的 signal 不再触发，必须显式补 abort。
+    if (this.root.signal.aborted) handle.controller.abort();
 
     const spawned: AgentEvent = {
       type: "agent_spawned",
@@ -899,7 +1112,7 @@ export class Orchestrator {
       ...(parseStringList(args.depends_on).length > 0 ? { depends_on: parseStringList(args.depends_on) } : {}),
       ...(worktree ? { worktree } : {}),
       ...(baseCommit ? { base_commit: baseCommit } : {}),
-      ...(typeof args.model === "string" && args.model !== "" ? { model: args.model } : {}),
+      ...(routeDecision ? { model: routeDecision.picked } : typeof args.model === "string" && args.model !== "" ? { model: args.model } : {}),
       max_turns: maxTurns,
       permission_mode: tier,
       ...(clamped ? { permission_mode_requested: requested } : {}),
@@ -907,11 +1120,38 @@ export class Orchestrator {
       ts: Date.now(),
     };
     try {
+      // M5b：路由决策事件落流（候选/选择/理由，先于 agent_spawned 与任何模型输出——审计面，崩溃后可回放）。
+      // 放同 try：emit 失败 = spawn 未成立，与 spawned 落流失败同语义（回滚 + fail-visible）。
+      // 同时保证「routing_decision ↔ agent_spawned 一对一」——租约拒绝/worktree 失败不会留孤儿决策事件。
+      if (routeDecision) {
+        await this.opts.emit({
+          type: "routing_decision",
+          agent_id: agentId,
+          ...(stageRole?.role !== undefined ? { stage: stageRole.role } : {}),
+          candidates: routeDecision.candidates,
+          picked: routeDecision.picked,
+          reason: routeDecision.reason,
+          ...(routeDecision.from !== undefined ? { from: routeDecision.from } : {}),
+          ts: Date.now(),
+        } as AgentEvent);
+      }
       await this.opts.emit(spawned);
       await this.opts.emit({ type: "agent_status", agent_id: agentId, status: "running" } as AgentEvent);
     } catch (err) {
       // 落流失败 = spawn 未成立：write worker 的 worktree 必须回收（不留孤儿）
       if (mode === "write") await removeWorktree(this.opts.workspace, agentId, { branch }).catch(() => {});
+      // 审查 S2-6：回滚必须同时把登记面摘干净。旧实现只回收 worktree——workers/agentOwners
+      // 留下一个从未跑过的 phantom handle（activeCount 计得到它 → 并发预算被永久占用，
+      // 4 个失败即把整会话的 spawn 面堵死）、root.signal 的 abort 监听器永久驻留（B7 正是
+      // 为防这个），而调用方拿到失败结果、根本不知道有这个 agent_id。该 worker 无终态可查
+      // （没有 agent_spawned，面板/依赖链/合并塔都路由不到），直接整体摘除。
+      this.workers.delete(agentId);
+      agentOwners.delete(agentId);
+      mergeOwners.delete(agentId);
+      this.releaseWorkerMemory(handle);
+      handle.finished = true;
+      handle.closed = true;
+      handle.controller.abort();
       return { ok: false, output: "spawn_agent: 事件落流失败，已回滚：" + (err instanceof Error ? err.message : String(err)) };
     }
     for (const w2 of symlinkWarnings) {
@@ -1065,7 +1305,7 @@ export class Orchestrator {
       if ("error" in resolved) {
         return { ok: false, output: "spawn_agent(pipeline): stage " + String(i + 1) + " 角色解析失败：" + resolved.error };
       }
-      resolutions.push(resolved);
+      resolutions.push({ ...resolved, role: stages[i]!.role }); // M5b：角色名随解析冻结，供路由选档/审计
     }
     // 整链一个审批（§2.2 裁决 2）：批准即授权全链；链内各环写租约在审批卡合并警告
     const chainResources = parseStringList(args.resources);
@@ -1090,6 +1330,161 @@ export class Orchestrator {
     await this.emitSequencerStatus(chain, "链已批准启动：" + String(stages.length) + " 环（" + stages.map((s) => s.role).join(" → ") + "）");
     void this.runChain(chain).catch(() => {}); // sequencer 边界永不炸主 loop
     return { ok: true, output: JSON.stringify({ pipeline: true, chain_id: callId, stages: stages.length, stage_roles: stages.map((s) => s.role) }) };
+  }
+
+  /** M5c supervise：受限自适应循环（§m5-proposal 步骤 11 / §5.1 双轨）。
+   *  审批卡批准的是 { goal, budget, forbidden, maxStages }——与 pipeline 的 stages 全表**分开**（数据层双轨：
+   *  渲染卡只渲染 args_digest/risk_reasons，放什么契约是编排器的职责，pipeline 冻结断言不受影响）。
+   *  循环：spawn 环 worker → verdict → decideSupervisor → accept / retry / spawn / escalate / abort（有界）。
+   *  V1 单角色 implement（write）自适应重试；畸形 report（verdict 缺失）→ escalate（fail-visible，不静默猜）。
+   *  决策经 agent_message 落流（[supervisor] 审计轨迹，无需新事件类型）。 */
+  private async spawnSupervise(args: SpawnArgs, ctx: { callId?: string }): Promise<ToolResult> {
+    const callId = ctx.callId ?? "";
+    if (callId === "") {
+      return { ok: false, output: "spawn_agent(supervise): 缺 callId（无法挂回受限循环结果）" };
+    }
+    const goal = typeof args.task === "string" ? args.task.trim() : "";
+    if (goal === "") {
+      return { ok: false, output: "spawn_agent(supervise): task（goal）必填" };
+    }
+    // 受限循环参数解析（fail-visible：非法参数拒绝，不静默回落）
+    const sup = (typeof args.supervise === "object" && args.supervise !== null ? args.supervise : {}) as Record<string, unknown>;
+    const mRaw = sup.maxStages;
+    const maxStages =
+      mRaw === undefined ? 6 : typeof mRaw === "number" && Number.isInteger(mRaw) && mRaw >= 1 && mRaw <= 20 ? mRaw : null;
+    if (maxStages === null) {
+      return { ok: false, output: "spawn_agent(supervise): supervise.maxStages 须为 1–20 整数（fail-visible 拒绝）" };
+    }
+    const forbidden = parseStringList(sup.forbidden);
+    const budget = this.opts.budget?.maxUsd ?? 0;
+    // 审批双轨：批准 {goal, budget, forbidden, maxStages}（§5.1：与 pipeline stages 全表分开）
+    const approved = await this.requestSuperviseApproval(callId, { goal, budget, forbidden, maxStages });
+    if (!approved) {
+      return { ok: false, output: "spawn_agent(supervise): 未获批准（受限循环授权，fail-closed）" };
+    }
+    const roleResolved = this.resolveStageRole("implement");
+    if ("error" in roleResolved) {
+      return { ok: false, output: "spawn_agent(supervise): implement 角色解析失败：" + roleResolved.error };
+    }
+    const stageRole: StageRoleResolution = { ...roleResolved, role: "implement" };
+    const repeats = new Map<string, number>();
+    let lastAgentId = "";
+    let lastFailure = "";
+    let lastReport = "";
+    let stageCount = 0;
+    for (;;) {
+      stageCount++;
+      // H2（审查 B-3）：环与环之间检查取消（与 runChain 同纪律）
+      if (this.root.signal.aborted) {
+        return { ok: false, output: "spawn_agent(supervise): 主会话已取消，受限循环中止（fail-closed）" };
+      }
+      if (this.budgetBlocked()) {
+        await this.rejectOnBudget();
+        return { ok: false, output: "spawn_agent(supervise): 成本闸超限，受限循环中止" };
+      }
+      // 有界保险③：同 (role, task-hash) 出现次数（≥3 强制 escalate，防死循环）
+      const taskHash = String(goal.length) + ":" + lastFailure.slice(0, 60);
+      const key = "implement|" + taskHash;
+      const repeatCount = (repeats.get(key) ?? 0) + 1;
+      repeats.set(key, repeatCount);
+
+      const stageCallId = callId + "-sup" + String(stageCount);
+      const stageTask = stageCount === 1 ? goal : concatStageTask(goal, lastAgentId, lastReport);
+      const r = await this.spawnStage(
+        {
+          task: stageTask,
+          mode: stageRole.mode,
+          ...(forbidden.length > 0 ? { context: "supervise-forbidden:" + forbidden.join(",") } : {}),
+        },
+        { callId: stageCallId },
+        stageRole,
+      );
+      if (!r.ok) {
+        return { ok: false, output: "spawn_agent(supervise): 环 " + String(stageCount) + " spawn 失败：" + r.output };
+      }
+      let agentId = "";
+      try {
+        agentId = (JSON.parse(r.output) as { agent_id?: string }).agent_id ?? "";
+      } catch {
+        agentId = "";
+      }
+      if (agentId === "") {
+        return { ok: false, output: "spawn_agent(supervise): 环 " + String(stageCount) + " spawn 应答异常（无 agent_id）" };
+      }
+      const term = await this.waitForAgentTerminal(agentId);
+      if (term.result === null) {
+        return { ok: false, output: "spawn_agent(supervise): 环 " + String(stageCount) + " 终态 " + term.status + "（无结果）→ 受限循环中止" };
+      }
+      const report = term.result.artifacts.report ?? term.result.summary;
+      // verdict 映射：pass / fail / unspecified（畸形 → null → escalate）
+      const v = parseVerdict(report);
+      const verdict = v === "pass" ? "pass" : v === "fail" ? "fail" : null;
+      const action: SupervisorAction = decideSupervisor({
+        verdict,
+        stageCount,
+        maxStages,
+        budgetBlocked: this.budgetBlocked(),
+        repeatCount,
+        lastAgentId,
+        lastFailure,
+        nextRole: "implement",
+      });
+      // 决策审计轨迹落流（agent_message，无需新事件类型）
+      const decisionText =
+        action.kind === "retry" ? "retry " + action.agent_id + "：" + action.feedback.slice(0, 80)
+        : action.kind === "spawn" ? "spawn " + action.role
+        : action.kind === "escalate" ? "escalate：" + action.why
+        : action.kind === "abort" ? "abort：" + action.why
+        : "accept";
+      await this.opts.emit({
+        type: "agent_message",
+        agent_id: agentId,
+        kind: "progress",
+        text: "[supervisor] 环 " + String(stageCount) + "/" + String(maxStages) + "（" + term.status + "，verdict=" + (verdict ?? "unspecified") + "）→ " + decisionText,
+      } as AgentEvent).catch(() => {});
+      if (action.kind === "accept") {
+        return { ok: true, output: JSON.stringify({ supervise: true, chain_id: callId, stages: stageCount, status: "accepted", final_agent: agentId }) };
+      }
+      if (action.kind === "escalate") {
+        return { ok: false, output: "spawn_agent(supervise): 已升级人工裁决：" + action.why };
+      }
+      if (action.kind === "abort") {
+        return { ok: false, output: "spawn_agent(supervise): " + action.why };
+      }
+      // retry / spawn → 续环：更新前环上下文（错误永不冒充结果）
+      lastAgentId = agentId;
+      lastFailure = report.slice(0, 300);
+      lastReport = report;
+    }
+  }
+
+  /** supervise 整链审批（§5.1 双轨：批准 {goal, budget, forbidden, maxStages}；agent_id 缺省——链没有 worker 身份）。 */
+  private async requestSuperviseApproval(
+    callId: string,
+    contract: { goal: string; budget: number; forbidden: string[]; maxStages: number },
+  ): Promise<boolean> {
+    const id = "apr-" + String(++this.approvalSeq) + "-supervise";
+    const outcomePromise = this.waitForApproval(id, "");
+    const digest = superviseApprovalDigest(contract);
+    await this.opts.emit({
+      type: "approval_requested",
+      id,
+      tool: "spawn_agent",
+      args_digest: digest,
+      risk: "medium",
+      risk_reasons: [
+        "supervise 受限循环授权（非 stages 全表，§5.1 双轨）：批准即授权 ≤" + String(contract.maxStages) + " 环自适应执行（实现→客观判据→失败重试/升级/中止）",
+      ],
+    } as AgentEvent);
+    const outcome = await outcomePromise;
+    await this.opts.emit({
+      type: "approval_resolved",
+      id,
+      decision: outcome.approved ? "approved" : "rejected",
+      scope: "once",
+      ...(outcome.approved ? {} : { reason: "supervise 受限循环未获批准（fail-closed）" }),
+    } as AgentEvent);
+    return outcome.approved;
   }
 
   /** 整链审批（§4.4.3 与 turn 解耦；agent_id 缺省——链没有 worker 身份，审批以 id 路由）。 */
@@ -1448,6 +1843,9 @@ export class Orchestrator {
       // M3b write mode：runLoop 的 workspace = worktree（文件工具 cwd 锁定 + run_shell cwd 同源）——
       // worktree 对 worker 完全可写（§4.4.5）；read worker 维持主 workspace（只读面不变）。
       const loopWorkspace = w.mode === "write" && w.worktree ? worktreePathFor(this.opts.workspace, w.agentId) : this.opts.workspace;
+      // B6（审查）：runLoop 前武装静默计时——旧实现只在收到子流事件时武装，worker 在首个模型
+      // 调用挂起（无任何事件）时静默规则永不触发。缺省 silenceMs 10min，不改变正常路径。
+      this.armStuckSilence(w);
       await runLoop({
         provider,
         events: { append: (e) => this.workerPipeline(w, e) },
@@ -1545,6 +1943,7 @@ export class Orchestrator {
       this.resolveTerminalWaiters(w.agentId, "cancelled", null);
       this.resolveDependents(w.agentId, "cancelled");
       agentOwners.delete(w.agentId);
+      this.releaseWorkerMemory(w);
       return;
     }
     const report = lastAssistantText(w.events) ?? "";
@@ -1561,6 +1960,9 @@ export class Orchestrator {
         }
         if (diff !== null) {
           const patchCapped = diff.patch.length > 32_000 ? diff.patch.slice(0, 32_000) + "\n[truncated: diff 超 32KB 上限，已截断]" : diff.patch;
+          // B5（审查）：diff 快照 emit 前脱敏——patch 是 write_file content 的聚合，密钥不进主转录
+          const scannedPatch = redactSecrets(patchCapped).text;
+          const scannedStat = redactSecrets(diff.stat).text;
           await this.opts.emit({
             type: "tool_result",
             callId: "diff-" + w.agentId,
@@ -1569,7 +1971,7 @@ export class Orchestrator {
             output:
               "[diff] v" + String(this.diffVersion(w.agentId)) + " vs " + w.baseCommit.slice(0, 12) +
               "（worktree " + w.worktree + "，含未提交改动）\n" +
-              "## stat\n" + (diff.stat === "" ? "（无改动）" : diff.stat) + "\n## patch\n" + patchCapped +
+              "## stat\n" + (diff.stat === "" ? "（无改动）" : scannedStat) + "\n## patch\n" + scannedPatch +
               (llmNote !== "" ? "\n## LLM 审查\n" + llmNote : ""),
           } as AgentEvent);
         }
@@ -1646,6 +2048,22 @@ export class Orchestrator {
       });
     }
     agentOwners.delete(w.agentId);
+    this.releaseWorkerMemory(w);
+  }
+
+  /** B7（审查）：终态资源回收——root abort 监听器摘除（once 监听不触发即永久驻留，长会话单调增长）
+   *  + 子流内存态裁剪（w.events 是 handle 的内存大头）。handle 本体保留：依赖链 terminalStatus 查询 /
+   *  合并控制塔 / 评审重启都要读终态 handle（直接 workers.delete 会砍断这三条路由）。
+   *  评审重启（injectComment：write 且合并决策未决）需要 w.events 作上下文——只在不可重启态
+   *  （read worker，或 write 已过合并决策点）裁剪。幂等，可多处调用。 */
+  private releaseWorkerMemory(w: WorkerHandle): void {
+    if (w.onRootAbort) {
+      this.root.signal.removeEventListener("abort", w.onRootAbort);
+      w.onRootAbort = undefined;
+    }
+    if (w.mode !== "write" || !mergeOwners.has(w.agentId)) {
+      w.events.length = 0;
+    }
   }
 
   /** worker diff 已产出版本数（评审闭环 v2 口径：每次收敛出新 diff 快照，同 agent 递增）。 */
@@ -1723,6 +2141,7 @@ export class Orchestrator {
       error: err instanceof Error ? err.message : String(err),
     }));
     mergeOwners.delete(w.agentId);
+    this.releaseWorkerMemory(w);
     await this.opts.emit({
       type: "tool_result",
       callId: "wt-cleanup-" + w.agentId,
@@ -1737,6 +2156,10 @@ export class Orchestrator {
   /** 批准合并：gate 二次确认（critical|high 且未 force → 拒绝并红标注记）→ 系统代为 commit → merge --no-ff
    *  → 清理 worktree + 分支。冲突 → abort 恢复主 checkout 干净态 + 冲突卡数据（人工介入，不自动解）。 */
   async mergeWorker(agentId: string, opts: { force?: boolean } = {}): Promise<{ ok: boolean; error?: string }> {
+    // B10（审查）：公共方法自守——合并唯一出口的登记校验不假定路由层已把关（公共方法可被直调）。
+    if (!mergeOwners.has(agentId)) {
+      return { ok: false, error: "merge 未登记（合并唯一出口 = git 面板路由 §4.3；该 agent 已收尾或非 write worker）: " + agentId };
+    }
     const w = this.workers.get(agentId);
     if (!w || w.mode !== "write" || !w.worktree || !w.branch || !w.baseCommit) {
       return { ok: false, error: "未知或已收尾的 write agent: " + agentId };
@@ -1753,8 +2176,12 @@ export class Orchestrator {
         return { ok: false, error: msg };
       }
     }
+    // B10：入口同步摘除登记——并发二次 merge 可在 commitAndMerge 的 await 窗口内同时过校验；
+    // 失败路径回滚登记（合并可重试），成功路径保持摘除。
+    mergeOwners.delete(agentId);
     const outcome = await commitAndMerge(this.opts.workspace, worktreePathFor(this.opts.workspace, agentId), w.branch, agentId, w.task);
     if (!outcome.ok) {
+      mergeOwners.set(agentId, this);
       await this.opts.emit({
         type: "tool_result",
         callId: "merge-" + agentId,
@@ -1768,7 +2195,8 @@ export class Orchestrator {
       } as AgentEvent);
       return { ok: false, error: outcome.error };
     }
-    mergeOwners.delete(agentId);
+    mergeOwners.delete(agentId); // 已在入口摘除（B10）；幂等保留语义：成功 = 登记注销
+    this.releaseWorkerMemory(w);
     await removeWorktree(this.opts.workspace, agentId, { branch: w.branch }).catch(() => ({ removed: false, branchDeleted: false }));
     await this.opts.emit({
       type: "tool_result",
@@ -1927,13 +2355,22 @@ function withAgentId(e: AgentEvent, agentId: string): AgentEvent {
   return e;
 }
 
-/** 子流落流扫描：文本字段过 redactSecrets（密钥不进主转录 JSONL；worker 内存态保持原始事件）。 */
+/** 子流落流扫描：文本字段过 redactSecrets（密钥不进主转录 JSONL；worker 内存态保持原始事件）。
+ *  B5（审查）：tool_call 的 args（write_file content 等）同样落主 JSONL——一并脱敏。 */
 function scanStreamEvent(e: AgentEvent): AgentEvent {
   if (e.type === "assistant_message") {
     return { ...e, content: redactSecrets(e.content).text };
   }
   if (e.type === "tool_result") {
     return { ...e, output: redactSecrets(e.output).text };
+  }
+  if (e.type === "tool_call") {
+    try {
+      const redacted = JSON.parse(redactSecrets(JSON.stringify(e.args)).text) as Record<string, unknown>;
+      return { ...e, args: redacted };
+    } catch {
+      return e;
+    }
   }
   return e;
 }
@@ -2005,45 +2442,60 @@ function globToRegExp(glob: string): RegExp {
  *  行号语义与全量版逐位一致：空行/坏行照常占行号，未完整落盘的尾行留待下次（字节偏移只推进完整行）。 */
 const callIdIndexCache = new Map<string, { ino: number; offset: number; lines: number; index: Map<string, number> }>();
 
-export async function findToolCallEventId(logPath: string, callId: string): Promise<number> {
-  const st = await stat(logPath).catch(() => null);
-  if (!st) return 0;
+/** B8（审查）：共享可变缓存（offset/lines 增量推进）在 await 间隙会被并发 spawn 交错读写，
+ *  同一尾部被两路各推进一次 → 行号翻倍。按 logPath 维护在途 Promise 串行队列。 */
+const callIdIndexChain = new Map<string, Promise<void>>();
+
+async function advanceCallIdIndex(logPath: string, st: { ino: number; size: number }): Promise<void> {
   let c = callIdIndexCache.get(logPath);
   if (!c || c.ino !== st.ino || c.offset > st.size) {
     // 首访 / 文件被重建（同路径 rm 后新建，inode 变化）/ 被截断 → 全量重扫
     c = { ino: st.ino, offset: 0, lines: 0, index: new Map() };
     callIdIndexCache.set(logPath, c);
   }
-  if (c.offset < st.size) {
-    const fh = await open(logPath, "r");
-    try {
-      const len = st.size - c.offset;
-      const buf = Buffer.allocUnsafe(len);
-      await fh.read(buf, 0, len, c.offset);
-      const parts = buf.toString("utf8").split("\n");
-      const trailing = parts.pop() ?? ""; // 未以 \n 结尾的半行不计入（append-only 写整行，通常为 ""）
-      let consumed = 0;
-      let lineNo = c.lines;
-      for (const line of parts) {
-        lineNo++;
-        consumed += Buffer.byteLength(line, "utf8") + 1; // +1 = 换行符
-        const t = line.trim();
-        if (t === "") continue;
-        try {
-          const e = JSON.parse(t) as { type?: string; id?: string };
-          if (e.type === "tool_call" && typeof e.id === "string") c.index.set(e.id, lineNo);
-        } catch {
-          /* 坏行跳过（照常占行号） */
-        }
+  if (c.offset >= st.size) return;
+  const fh = await open(logPath, "r");
+  try {
+    const len = st.size - c.offset;
+    const buf = Buffer.allocUnsafe(len);
+    await fh.read(buf, 0, len, c.offset);
+    const parts = buf.toString("utf8").split("\n");
+    const trailing = parts.pop() ?? ""; // 未以 \n 结尾的半行不计入（append-only 写整行，通常为 ""）
+    let consumed = 0;
+    let lineNo = c.lines;
+    for (const line of parts) {
+      lineNo++;
+      consumed += Buffer.byteLength(line, "utf8") + 1; // +1 = 换行符
+      const t = line.trim();
+      if (t === "") continue;
+      try {
+        const e = JSON.parse(t) as { type?: string; id?: string };
+        if (e.type === "tool_call" && typeof e.id === "string") c.index.set(e.id, lineNo);
+      } catch {
+        /* 坏行跳过（照常占行号） */
       }
-      void trailing;
-      c.offset += consumed;
-      c.lines = lineNo;
-    } finally {
-      await fh.close();
     }
+    void trailing;
+    c.offset += consumed;
+    c.lines = lineNo;
+  } finally {
+    await fh.close();
   }
-  return c.index.get(callId) ?? 0;
+}
+
+export async function findToolCallEventId(logPath: string, callId: string): Promise<number> {
+  const st = await stat(logPath).catch(() => null);
+  if (!st) return 0;
+  const prev = callIdIndexChain.get(logPath) ?? Promise.resolve();
+  const job = prev.catch(() => {}).then(() => advanceCallIdIndex(logPath, st));
+  callIdIndexChain.set(logPath, job);
+  try {
+    await job;
+  } finally {
+    if (callIdIndexChain.get(logPath) === job) callIdIndexChain.delete(logPath); // 无并发即回收（有界）
+  }
+  const c = callIdIndexCache.get(logPath);
+  return c ? (c.index.get(callId) ?? 0) : 0;
 }
 
 /** worker 最后一轮正文（结构化报告来源）：从尾部回扫，先命中的文本事件组即最后一轮——
@@ -2246,8 +2698,19 @@ export function createWorkerProvider(opts: {
   };
   async function* runOneRound(): AsyncGenerator<ModelOutput> {
     if (opts.signal?.aborted) throw new WorkerCancelled();
-    if (opts.compaction) await maybeCompactWorkerEvents(opts.compaction, opts.readEvents, opts.system);
-    const msgs: GlmMessage[] = [...opts.system, ...(projectContext(opts.readEvents()) as GlmMessage[])];
+    // B9（审查）：每轮只投影一次——压缩估算与消息组装共用同一投影，压缩真正发生时才重投影
+    //（旧实现估算投影一次、组装再投影一次，O(n)×2/轮）。跨轮增量投影留位第三批：compaction
+    // 追加会使既有投影整体失效（excludedIds/summary_offset 改写历史），增量折叠需显式失效语义。
+    const events = opts.readEvents();
+    const factor = calibrateFactor(events);
+    let projected: ContextMessage[] = projectContext(events);
+    if (opts.compaction) {
+      const compacted = await maybeCompactWorkerEvents(opts.compaction, events, projected, factor, opts.system);
+      if (compacted) {
+        projected = projectContext(opts.readEvents());
+      }
+    }
+    const msgs: GlmMessage[] = [...opts.system, ...(projected as GlmMessage[])];
     const model = opts.model ?? defaultWorkerModel;
     yield* model(msgs, tools);
     if (opts.signal?.aborted) throw new WorkerCancelled();
@@ -2255,18 +2718,19 @@ export function createWorkerProvider(opts: {
 }
 
 /** worker 子流压缩（§7.5）：估算（system+工具 schema 全量计入）→ shouldCompact → runCompaction。
- *  成功：compaction 事件（agent_id 归因）进 worker 内存态 + 落主流；摘要 usage 追加 usage(agent_id) 事件。 */
+ *  成功：compaction 事件（agent_id 归因）进 worker 内存态 + 落主流；摘要 usage 追加 usage(agent_id) 事件。
+ *  B9：投影由调用方传入（每轮一次）；返回是否发生了压缩（调用方据此重投影）。 */
 async function maybeCompactWorkerEvents(
   c: WorkerCompactionRuntime,
-  readEvents: () => AgentEvent[],
+  events: AgentEvent[],
+  projected: ContextMessage[],
+  factor: number,
   system: GlmMessage[],
-): Promise<void> {
-  const events = readEvents();
-  const factor = calibrateFactor(events);
+): Promise<boolean> {
   const systemChars = system.reduce((n, m) => n + (m.content?.length ?? 0), 0);
-  const estimate = estimateContextTokens(projectContext(events), { systemChars, toolSchemaChars: c.toolsSchemaChars }, factor);
+  const estimate = estimateContextTokens(projected, { systemChars, toolSchemaChars: c.toolsSchemaChars }, factor);
   const decision = shouldCompact(estimate, c.config);
-  if (!decision) return;
+  if (!decision) return false;
   const outcome = await runCompaction({
     events,
     trigger: decision.trigger,
@@ -2274,7 +2738,7 @@ async function maybeCompactWorkerEvents(
     ...(decision.trigger !== "overflow" && c.summarizer ? { summarizer: c.summarizer } : {}),
     config: c.config,
   });
-  if (!outcome.ok) return; // 压缩失败不阻断 worker（下一轮重判；overflow 兜底仍在）
+  if (!outcome.ok) return false; // 压缩失败不阻断 worker（下一轮重判；overflow 兜底仍在）
   // worker 内存态推入**不带 agent_id** 的压缩事件（worker 投影生效，keep_first=task+context 由
   // system 块结构性保障）；落主流时才加 agent_id 归因（主投影按 agent_id 跳过 worker 压缩事件，
   // 其 compressed_event_ids 是 worker 内存态序号，对主流照搬会错误摘除主事件——context.isWorkerCompaction）。
@@ -2289,4 +2753,5 @@ async function maybeCompactWorkerEvents(
       agent_id: c.agentId,
     } as AgentEvent);
   }
+  return true;
 }

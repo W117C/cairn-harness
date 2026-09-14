@@ -404,6 +404,9 @@ describe("M3c 依赖链（depends_on 事件驱动）", () => {
     expect(events.filter((e) => e.type === "agent_spawned")).toHaveLength(1);
     hang.get("前环任务A")?.(); // 前环收束 → 事件驱动触发后环（无轮询调度器）
     expect(await waitFor(() => events.filter((e) => e.type === "agent_spawned").length === 2)).toBe(true);
+    // P0-4a（审查根因 8）：agent_spawned 落流 ≠ 后环模型已登记释放函数——必须等状态（hang.has）
+    // 而非等事件，否则 `?.()` 在登记完成前是静默 no-op → 后环永不收敛（重载机确定性红，~10.3s 超时）。
+    expect(await waitFor(() => hang.has("后环任务B"))).toBe(true);
     hang.get("后环任务B")?.(); // 后环收束
     await orch.waitAll(10_000);
     const spawnedB = events.filter((e) => e.type === "agent_spawned").map((e) => e as Extract<AgentEvent, { type: "agent_spawned" }>)[1]!;
@@ -698,6 +701,5 @@ describe("M3c worker 压缩", () => {
     const mainCtx = projectContext(mainEvents).map((m) => m.content ?? "").join("\n");
     expect(mainCtx).toContain("主流结果"); // worker 压缩的 id 引用不误摘主事件
     expect(mainCtx).not.toContain("[系统操作·上下文压缩摘要]"); // worker 摘要不注入主上下文
-    void inputLimit;
   }, 30_000);
 });
