@@ -1,7 +1,7 @@
 // 暗卷用会话型 provider：src/providers 只读（M1a 定稿），本文件只调用 streamGlm 不改它。
 // 职责：从事件日志重建 OpenAI 兼容对话历史（含 tool_calls / tool 角色），把工具结果反馈回模型，
 // 使真实 GLM 能多轮调用 clarify / propose_plan / write_file / verify。
-import { createEventLog, replay, type AgentEvent, type CompactionUsage } from "../events";
+import { createEventLog, replayIncremental, type AgentEvent, type CompactionUsage } from "../events";
 import { isSideEffectTool, type PermissionMode } from "../permissions";
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "../providers/glm";
 import type { ModelOutput, Provider } from "../providers";
@@ -218,7 +218,7 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
  *  M1d：改走组装器投影 projectContext——compaction 感知（跳过被压 id、offset 注入摘要、fresh start），
  *  assistant_delta 合并与 tool 角色映射逻辑与旧版逐字同构。 */
 export async function buildGlmHistory(logPath: string): Promise<RawMessage[]> {
-  return projectContext(await replay(logPath)) as unknown as RawMessage[];
+  return projectContext(await replayIncremental(logPath)) as unknown as RawMessage[];
 }
 
 /** GLM 暗卷摘要器：非流式单轮调用（thinking/streaming 关），只调用只读的 src/providers/glm.ts。 */
@@ -314,7 +314,8 @@ export function createGlmSessionProvider(
   const mapBuilder = opts.map === false ? null : opts.mapBuilder ?? createMapBuilder();
   const workspace = opts.workspace ?? process.env.M2B_WORKSPACE ?? process.cwd();
   const assemble = async (): Promise<{ events: AgentEvent[]; history: ReturnType<typeof projectContext> }> => {
-    const events = await replay(logPath);
+    // A5（审查根因 5）：增量重放——每轮只解析追加段（旧实现全量读盘+全量投影，整会话 O(n²)）
+    const events = await replayIncremental(logPath);
     // M2b prune：本地计算裁剪投影（异常静默 → 无裁剪）
     let replacements: Map<number, string> | undefined;
     try {

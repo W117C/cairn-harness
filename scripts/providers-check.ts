@@ -196,15 +196,41 @@ console.log("[providers-check] ④ 未知事件优雅跳过（不抛错，正常
   }
 }
 
-// ---- ⑤ 三家适配器互不 import（文件名 grep）----
-console.log("[providers-check] ⑤ 三家适配器互不 import（grep 彼此文件名）");
+// ---- ⑤ 三家适配器互不 import（H8，审查 P2：AST 提取真实 import 说明符）----
+console.log("[providers-check] ⑤ 三家适配器互不 import（AST import 说明符判定）");
 {
+  // 旧实现用 src.includes("openai.ts") 字符串判定：`import ... from "./openai"`（无扩展名）漏判，
+  // 注释里出现文件名则假红。AST 只认真实 ImportDeclaration 的说明符。
+  const ts = await import("typescript");
+  const importSpecifiers = (src: string): string[] => {
+    const sf = ts.createSourceFile("x.ts", src, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+    const out: string[] = [];
+    // 审查 H-1（agents 分片）：只遍历 sf.statements 会漏掉动态 import（await import("./openai")
+    // 不是 ImportDeclaration）——旧子串判据反而能命中带扩展名的动态导入，AST 化时不能把
+    // 命中面缩小。改为全量下潜：静态说明符 + 动态 import(...) 首参字面量一并收集。
+    const walk = (n: import("typescript").Node): void => {
+      if (ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) {
+        const mod = (n as { moduleSpecifier?: { text?: string } }).moduleSpecifier;
+        if (mod && typeof mod.text === "string") out.push(mod.text);
+      }
+      if (ts.isCallExpression(n) && n.expression.kind === ts.SyntaxKind.ImportKeyword) {
+        const a0 = n.arguments[0];
+        if (a0 !== undefined && ts.isStringLiteralLike(a0)) out.push(a0.text);
+      }
+      ts.forEachChild(n, walk);
+    };
+    walk(sf);
+    return out;
+  };
   const names = ["openai.ts", "anthropic.ts", "gemini.ts"] as const;
   for (const a of ADAPTERS) {
     const src = await readFile(join(ROOT, "src", "providers", `${a.key}.ts`), "utf8");
     const others = names.filter((n) => n !== `${a.key}.ts`);
-    const hit = others.filter((n) => src.includes(n));
-    assert(hit.length === 0, `${a.key}.ts 不引用 ${others.join("/")}${hit.length > 0 ? `（命中: ${hit.join(",")}）` : ""}`);
+    const specs = importSpecifiers(src);
+    const hit = others.filter((n) =>
+      specs.some((s) => s.endsWith("/" + n.replace(/\.ts$/, "")) || s.endsWith("/" + n) || s === "./" + n.replace(/\.ts$/, "")),
+    );
+    assert(hit.length === 0, `${a.key}.ts 不 import ${others.join("/")}${hit.length > 0 ? `（命中: ${hit.join(",")}）` : ""}`);
   }
 }
 
@@ -219,6 +245,7 @@ console.log("[providers-check] ⑥ 暗卷（真实 key，哪家有跑哪家）")
   const present = DARKS.filter((d) => process.env[d.env]);
   if (present.length === 0) {
     console.log("  暗卷跳过（未检测到 OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY）");
+    console.log("UNVERIFIED=1"); // H2（审查 P1-16）：跳过 ≠ 通过，上浮到门禁汇总
   } else {
     for (const d of present) {
       const key = process.env[d.env] as string;

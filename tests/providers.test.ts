@@ -6,6 +6,14 @@ import type { ProviderMessage, ProviderToolSpec } from "../src/providers";
 import { streamOpenAI } from "../src/providers/openai";
 import { streamAnthropic } from "../src/providers/anthropic";
 import { streamGemini } from "../src/providers/gemini";
+import {
+  DEFAULT_MODEL_TABLE,
+  PROVIDER_IDS,
+  lookupModel,
+  resolveModel,
+  specsByTier,
+  toWorkerModel,
+} from "../src/providers/registry";
 
 const ROOT = join(import.meta.dirname, "..");
 const FIX = (p: string) => join(ROOT, "fixtures", "providers", p);
@@ -78,6 +86,24 @@ describe.each([
 
   it("④未知事件：fixture 回放优雅跳过不抛错，正常文本继续", async () => {
     const events = await collect(stream(USER, { apiKey: "test", fetchImpl: stubFetch(await loadLines(join(dir, "unknown.sse"))) }, [SPEC]));
+    expect(mergeAssistantDeltas(deltasOf(events))).toBe("你好，世界");
+  });
+
+  // 审查 S1-6（修复任务书 1.6）：C7 的逐行容错只对「不是帧的行」成立。以 { 开头的真帧被
+  // 上游截断时旧实现静默 continue —— 流随后正常收尾，本轮会以「少一截正文 / 少一个
+  // tool_call」的残缺输出被 loop 当成成功收束（同文件 parseArgs 的 fail-loud 口径相反）。
+  it("⑤真帧截断（以 { 开头的坏 JSON）必须抛出，不静默丢字", async () => {
+    const base = await loadLines(join(dir, "text-stream.sse"));
+    const broken = [...base.slice(0, 1), 'data: {"choices":[{"delta":{"content":"截断', ...base.slice(1)];
+    await expect(async () => {
+      await collect(stream(USER, { apiKey: "test", fetchImpl: stubFetch(broken) }, [SPEC]));
+    }).rejects.toThrow(/SSE \u5e27\u635f\u574f/);
+  });
+
+  it("⑥非 JSON 心跳/注释行仍容忍（C7 原始意图不回退）", async () => {
+    const base = await loadLines(join(dir, "text-stream.sse"));
+    const withNoise = [...base.slice(0, 1), "data: ping", ": keep-alive", ...base.slice(1)];
+    const events = await collect(stream(USER, { apiKey: "test", fetchImpl: stubFetch(withNoise) }, [SPEC]));
     expect(mergeAssistantDeltas(deltasOf(events))).toBe("你好，世界");
   });
 });
@@ -169,5 +195,45 @@ describe("跨 provider 契约（任务6：同一逻辑对话三家等价）", ()
     for (const t of turns) {
       expect(t.usage && t.usage.inputTokens > 0 && t.usage.outputTokens > 0).toBe(true);
     }
+  });
+});
+
+describe("M5b provider 档位表（步骤 6）", () => {
+  it("PROVIDER_IDS 本期只装配 GLM（单 provider 多档位，M6 才开白名单）", () => {
+    expect(PROVIDER_IDS).toEqual(["glm"]);
+  });
+
+  it("档位表 spec 解析往返：三档齐备、字段完整、id 唯一", () => {
+    const tiers = new Set(DEFAULT_MODEL_TABLE.map((s) => s.tier));
+    expect(tiers).toEqual(new Set(["cheap", "standard", "strong"]));
+    const ids = new Set(DEFAULT_MODEL_TABLE.map((s) => s.id));
+    expect(ids.size).toBe(DEFAULT_MODEL_TABLE.length); // id 唯一
+    for (const s of DEFAULT_MODEL_TABLE) {
+      expect(s.provider).toBe("glm");
+      expect(typeof s.model).toBe("string");
+      expect(s.ctxWindow).toBeGreaterThan(0);
+      expect(lookupModel(DEFAULT_MODEL_TABLE, s.id)).toBe(s); // 往返一致
+    }
+  });
+
+  it("未知 id fail-visible 报错，不静默回落", () => {
+    expect(() => resolveModel(DEFAULT_MODEL_TABLE, "glm-nonexistent")).toThrow(/未知 model id/);
+    expect(lookupModel(DEFAULT_MODEL_TABLE, "glm-nonexistent")).toBeUndefined();
+  });
+
+  it("specsByTier 按档位分组", () => {
+    expect(specsByTier(DEFAULT_MODEL_TABLE, "cheap").map((s) => s.id)).toEqual(["glm-flash"]);
+    expect(specsByTier(DEFAULT_MODEL_TABLE, "standard").map((s) => s.id)).toEqual(["glm-standard"]);
+    expect(specsByTier(DEFAULT_MODEL_TABLE, "strong").map((s) => s.id)).toEqual(["glm-strong"]);
+  });
+
+  it("toWorkerModel 构造不拨号；无 key 时调用才失败（fail-closed）", async () => {
+    const wm = toWorkerModel(resolveModel(DEFAULT_MODEL_TABLE, "glm-standard"));
+    // 构造本身零副作用：不会因为缺少 M0_API_KEY 而抛
+    expect(typeof wm).toBe("function");
+    // 调用（消费流）时缺 key → 同步抛错（streamOpenAI 在 fetch 前校验 key），不静默降级
+    await expect(async () => {
+      for await (const _e of wm(USER, [])) void _e;
+    }).rejects.toThrow(/M0_API_KEY/);
   });
 });

@@ -21,10 +21,16 @@ export interface ProviderToolSpec {
   parameters: Record<string, unknown>;
 }
 
+/** 单轮调用参数（C12，审查 P2）：取消信号——中止时在途 fetch/流读取随 signal 收束，
+ *  取消不再只在轮界生效（在途请求至多等 60s 静默窗）。 */
+export interface ProviderCall {
+  signal?: AbortSignal;
+}
+
 /** 统一接口（§3.3）：一次 stream 调用 = 一轮模型输出的事件流。
  *  适配器无状态：按传入对话与工具规格发起该轮请求，把协议原生增量解析成事件逐条产出。 */
 export interface Provider {
-  stream(messages: ProviderMessage[], tools?: ProviderToolSpec[]): AsyncIterable<ModelOutput>;
+  stream(messages: ProviderMessage[], tools?: ProviderToolSpec[], call?: ProviderCall): AsyncIterable<ModelOutput>;
 }
 
 /** 旧 next() 形态（M1a 定稿）；冻结脚本注入的 scripted provider 仍是它，loop 做兼容分支。 */

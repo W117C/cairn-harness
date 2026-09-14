@@ -126,6 +126,7 @@ export async function* streamGemini(
   messages: ProviderMessage[],
   opts: GeminiOptions = {},
   tools?: ProviderToolSpec[],
+  call?: { signal?: AbortSignal },
 ): AsyncGenerator<ModelOutput> {
   const label = opts.label ?? "Gemini";
   const envName = opts.apiKeyEnv ?? "GEMINI_API_KEY";
@@ -143,7 +144,8 @@ export async function* streamGemini(
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify(toGeminiBody(messages, tools)),
-      signal: guard.signal,
+      // C12（审查 P2）：取消信号与停滞守卫合并——会话取消时在途请求立即中止。
+      signal: call?.signal !== undefined ? AbortSignal.any([guard.signal, call.signal]) : guard.signal,
     });
   } catch (err) {
     guard.dispose(); // 建连阶段失败：看门狗不能留下
@@ -181,7 +183,18 @@ export async function* streamGemini(
         if (!line.startsWith("data:")) continue;
         const payload = line.slice(5).trim();
         if (!payload) continue;
-        const chunk = JSON.parse(payload) as GeminiChunk;
+        // C7（审查 P2）容错边界修正（审查 S1-6）：只对「不是帧的行」容错——注释心跳、
+        // 网关塞进来的非 JSON 文本。以 { 开头的真帧 parse 失败不得静默 continue：那意味着
+        // 上游把一帧截断了，跳过 = 少一截正文/少一个 tool_call 分片，而流随后正常收尾会让
+        // 本轮以「不完整输出」成功收束（loop 无从得知）。同文件 parseArgs 的口径就是协议级
+        // 异常 fail loud，这里与之对齐。
+        let chunk: GeminiChunk;
+        try {
+          chunk = JSON.parse(payload) as GeminiChunk;
+        } catch {
+          if (!payload.startsWith("{")) continue; // 心跳/注释/网关杂帧：容忍
+          throw new Error(`${label} SSE 帧损坏（半帧截断？）：JSON 解析失败，拒绝静默丢字`);
+        }
         if (chunk.error) {
           const e = chunk.error;
           throw new Error(`${label} 流错误 ${e.status ?? String(e.code ?? "unknown")}: ${e.message ?? ""}`);

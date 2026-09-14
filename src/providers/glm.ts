@@ -53,11 +53,12 @@ export async function* streamGlm(
   messages: GlmMessage[],
   opts: GlmOptions = {},
   tools?: GlmToolSpec[],
+  call?: { signal?: AbortSignal },
 ): AsyncGenerator<ModelOutput> {
   const unified: ProviderToolSpec[] | undefined = tools?.map((t) => ({
     name: t.function.name,
     ...(t.function.description !== undefined ? { description: t.function.description } : {}),
     parameters: t.function.parameters,
   }));
-  yield* streamOpenAI(messages, toOpenAiOptions(opts), unified);
+  yield* streamOpenAI(messages, toOpenAiOptions(opts), unified, call);
 }

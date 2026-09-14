@@ -118,8 +118,9 @@ describe("provider key（safeStorage，明文零落盘）", () => {
   });
 
   it("env 并存（injectStoredProviderKey）：M0_API_KEY 已在 = env 优先零行为；不在 = 注入已存 key", async () => {
-    // import 放用例内：agent-runner 导入面大，且要控制 process.env 时序
-    const { injectStoredProviderKey } = await import("../src/main/agent-runner");
+    // import 放用例内控制 process.env 时序；injectStoredProviderKey 已抽到 provider-key-inject
+    // 轻模块（原经 agent-runner 导入：依赖链含 MCP SDK/LSP 约 20s，确定性击穿 5s 超时）。
+    const { injectStoredProviderKey } = await import("../src/main/provider-key-inject");
     const saved = process.env.M0_API_KEY;
     try {
       delete process.env.M0_API_KEY;
