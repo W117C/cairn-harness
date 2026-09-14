@@ -103,11 +103,19 @@ describe("M2e hook 引擎：输出上限与超时（任务 5）", () => {
   });
 
   it("UserPromptSubmit 缺省 timeout 30s（配置缺省 600s 的降档）", async () => {
-    // 不真等 30s：只验证 handlersFor→run 的 timeout 选择路径（30s 走 default 分支）
-    const e = await makeEngine([mkHook("UserPromptSubmit", "echo fast")]);
+    // I3（审查 P2）：实际生效的 timeout 经注入 exec 捕获并断言——旧实现只断 blocked/context，
+    // "30s 降档"从未被验证（名实不符的假覆盖）。
+    const seen: number[] = [];
+    const e = await makeEngine([mkHook("UserPromptSubmit", "echo fast")], {
+      exec: async (_c, _a, _shell, _env, _cwd, timeoutSec) => {
+        seen.push(timeoutSec);
+        return { code: 0, stdout: "fast", stderr: "", killed: false };
+      },
+    });
     const r = await e.run("UserPromptSubmit", { event: "UserPromptSubmit", prompt: "hi" });
     expect(r.blocked).toBe(false);
     expect(r.additionalContext).toBe("fast");
+    expect(seen).toEqual([30]); // UserPromptSubmit 缺省 30s（HOOK_TIMEOUT_USER_PROMPT，非 600s）
   });
 });
 

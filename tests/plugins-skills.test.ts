@@ -1,6 +1,7 @@
 // M2e 任务 3/4 单测：frontmatter 全量字段解析 / 渐进披露 1536 截断 / 触发全文 /
 // $ARGUMENTS·$1 替换（含缺省行为）/ 压缩后重挂预算（单 5000 / 合 25000）/ 激活的事件流投影。
 import { describe, expect, it } from "vitest";
+import { cp, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -195,4 +196,41 @@ describe("frontmatter 原型污染防护（P0-3 回归）", () => {
     expect(frontmatter["name"]).toBe("ok");
     expect(frontmatter["metadata"]).toEqual({ author: "m2e" });
   });
+});
+
+// 审查 S2-12（任务 4.6）：项目作用域散装 skill（无 manifest、只有 SKILL.md）与插件同走
+// 信任门（E3：frontmatter description 直进 system prompt = 注入面），却**没有任何决议出口**：
+// trustDecide 只在 manifest.plugins 里找名字 => loose 样本永远查不到；面板快照连 trust 字段
+// 都没有 => 用户只看到「这个 skill 不在路由清单里」，无从批准也无从拒绝。
+describe("项目作用域散装 skill 的信任出口（S2-12 回归）", () => {
+  it("pending loose skill：快照带 trust，批准一次后进路由清单且决议持久化", async () => {
+    const ws = await mkdtemp(join(tmpdir(), "m2e-loose-"));
+    const pluginsDir = join(ws, "plugins");
+    await cp(fx("project"), pluginsDir, { recursive: true });
+    await mkdir(join(pluginsDir, "solo-skill"), { recursive: true });
+    await writeFile(
+      join(pluginsDir, "solo-skill", "SKILL.md"),
+      ["---", "name: solo", "description: 只用于回归的散装 skill。", "---", "", "正文"].join("\n"),
+      "utf8",
+    );
+    const load = (): Promise<PluginRuntime> => PluginRuntime.load({
+      projectPluginsDir: pluginsDir,
+      workspace: ws,
+      pluginDataRoot: join(ws, "data"),
+      trustFile: join(ws, "trust.json"),
+    });
+    const rt = await load();
+    const solo = rt.snapshot().looseSkills.find((l) => l.name === "solo-skill");
+    expect(solo).toBeDefined();
+    expect(solo?.trust).toBe("pending"); // 旧实现：快照无 trust 字段 => undefined
+    expect(rt.skills()).toHaveLength(0); // 未信任不进路由
+    expect(await rt.trustDecide("solo-skill", true)).toBe(true); // 旧实现：false（只在 plugins 里找）
+    expect(rt.snapshot().looseSkills.find((l) => l.name === "solo-skill")?.trust).toBe("trusted");
+    expect(rt.skills().map((s) => s.name)).toContain("solo"); // 批准即进清单
+    const rt2 = await load();
+    expect(rt2.snapshot().looseSkills.find((l) => l.name === "solo-skill")?.trust).toBe("trusted"); // 持久化
+    await rt.shutdown();
+    await rt2.shutdown();
+    await rm(ws, { recursive: true, force: true });
+  }, 30_000);
 });

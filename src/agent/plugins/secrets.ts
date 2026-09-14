@@ -138,5 +138,8 @@ export async function writePluginUserConfig(opts: {
   const file = opts.dir.endsWith("/") ? opts.dir + "plugin-userconfig.json" : opts.dir + "/plugin-userconfig.json";
   await mkdir(opts.dir, { recursive: true });
   await writeFile(file, JSON.stringify({ plugin: opts.plugin, config: plaintext, secretKeys }, null, 2) + "\n", "utf8");
+  // H4（审查 P1-18）：产品口径审计行（只记插件名/键名/落盘路径，**绝不记值**）——userConfig
+  // 写入是用户可见事件，日志可查；这也让验收的日志扫描位有真实捕获对象（不再靠验收脚本手工喂行）。
+  console.log("[plugin] userConfig 写入完成：" + JSON.stringify({ plugin: opts.plugin, secretKeys, plaintextKeys, file }));
   return { ok: true, plaintextKeys, secretKeys, file };
 }

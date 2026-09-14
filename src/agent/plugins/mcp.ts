@@ -12,6 +12,10 @@ import type { McpServerConfig, McpServerStatus } from "./types";
 /** MCP 连接/列工具的默认总时长上限（根因 4）：server 挂起时不让 IPC promise 永久悬空。 */
 export const DEFAULT_MCP_CONNECT_MS = 30_000;
 
+/** 审查 S1-3：tools/call 同属「一次性请求」，旧实现无上限——server 进程死掉而 SDK 的
+ *  pending 结算链被摘时，在途调用会永久悬空、拖死整个 agent loop。给一个宽松的总时长上限。 */
+export const DEFAULT_MCP_CALL_MS = 120_000;
+
 /** MCP 工具 scoped 名（§9.3）：mcp__plugin_<plugin>_<server>__<tool>。 */
 export function scopedToolName(plugin: string, server: string, tool: string): string {
   return "mcp__plugin_" + plugin + "_" + server + "__" + tool;
@@ -100,10 +104,12 @@ export class McpManager {
   private connections = new Map<string, Connection>();
   private factory: McpClientFactory;
   private readonly connectTimeoutMs: number;
+  private readonly callTimeoutMs: number;
 
-  constructor(factory?: McpClientFactory, connectTimeoutMs: number = DEFAULT_MCP_CONNECT_MS) {
+  constructor(factory?: McpClientFactory, connectTimeoutMs: number = DEFAULT_MCP_CONNECT_MS, callTimeoutMs: number = DEFAULT_MCP_CALL_MS) {
     this.factory = factory ?? (async (cfg) => defaultClientFactory(cfg));
     this.connectTimeoutMs = connectTimeoutMs;
+    this.callTimeoutMs = callTimeoutMs;
   }
 
   private key(plugin: string, server: string): string {
@@ -137,19 +143,29 @@ export class McpManager {
       }));
       const conn: Connection = { plugin, server, client, transport, tools };
       this.connections.set(k, conn);
+      // E5（审查 P2）：订阅 transport onclose——server 进程崩溃后 statuses() 不再报
+      // connected 僵尸态（fail-visible 转为 failed；重连入口留位，本轮不自动重连）。
+      // 审查 S1-3：必须**链式**而非覆盖——SDK 的 client.connect() 已在 transport.onclose
+      // 上装了自己的包装（protocol.js:220-224 → _onclose() 把 ConnectionClosed 结算给全部
+      // 在途 responseHandlers）。直接赋值会把那半条链摘掉：server 崩溃时在途 tools/call
+      // 永不 settle，agent loop 卡死在工具调用上（旧行为是 reject 后 fail-visible）。
+      const prevOnClose = transport.onclose;
+      transport.onclose = (): void => {
+        prevOnClose?.(); // 先让 SDK 结算在途请求，再记本层失败态
+        const cur = this.connections.get(k);
+        if (cur && !cur.error) {
+          this.connections.set(k, { ...cur, client: undefined as unknown as Client, error: "MCP server 连接已断开（onclose）" });
+        }
+      };
       return { ok: true, tools };
     } catch (err) {
-      // 超时/失败：底层连接可能仍挂着 → 先尽力关掉，再记失败态（fail-visible，不留僵尸连接）。
+      // 超时/失败：底层连接可能仍挂着 → 先尽力关掉（含 stdio 收杀兜底），再记失败态（fail-visible，不留僵尸连接）。
       try {
         await client?.close();
       } catch {
         /* 已断 */
       }
-      try {
-        await transport?.close();
-      } catch {
-        /* 已断 */
-      }
+      await this.killStdioLeftover(transport);
       const msg = err instanceof Error ? err.message : String(err);
       this.connections.set(k, {
         plugin, server,
@@ -167,7 +183,11 @@ export class McpManager {
     const conn = this.connections.get(this.key(plugin, server));
     if (!conn || conn.error || !conn.client) return { ok: false, output: "MCP server 未连接: " + plugin + "/" + server };
     try {
-      const res = await conn.client.callTool({ name: tool, arguments: args });
+      const res = await withTimeout(
+        conn.client.callTool({ name: tool, arguments: args }),
+        this.callTimeoutMs,
+        `MCP tools/call ${plugin}/${server}/${tool}`,
+      );
       const parts: string[] = [];
       const content = res.content as unknown;
       if (Array.isArray(content)) {
@@ -201,7 +221,27 @@ export class McpManager {
       } catch {
         /* 关闭失败不影响退出路径 */
       }
+      await this.killStdioLeftover(c.transport);
     }
     this.connections.clear();
+  }
+
+  /** D3/D5（审查 P2）：stdio server 收杀兜底——SDK close 对 stdio 子进程发 SIGTERM，但
+   *  不保证整树收束（孙进程可成孤儿）。close 后若进程仍存活，直接 SIGKILL 该 pid
+   *（StdioClientTransport 暴露 pid；非 stdio transport 无 pid，静默跳过）。 */
+  private async killStdioLeftover(transport: Transport | undefined): Promise<void> {
+    try {
+      await transport?.close();
+    } catch {
+      /* 已断 */
+    }
+    const pid = (transport as { pid?: number } | undefined)?.pid;
+    if (typeof pid !== "number" || !Number.isInteger(pid)) return;
+    try {
+      process.kill(pid, 0); // 存活探测
+      process.kill(pid, "SIGKILL");
+    } catch {
+      /* 已退出 */
+    }
   }
 }

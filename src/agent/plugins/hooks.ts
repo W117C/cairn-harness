@@ -75,7 +75,7 @@ interface SanitizedEnv {
 }
 
 const ENV_ALLOW = ["PATH", "HOME", "LANG", "TMPDIR", "SHELL", "USER"];
-const ENV_SECRET_RE = /KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL/i;
+// E11（审查 P3）：ENV_SECRET_RE 已随死循环一并删除——剥离纪律 = ENV_ALLOW 白名单本身。
 
 /** 宿主 env 消毒：白名单基础集 + 剥离密钥类变量 + 三个插件变量。 */
 export function hookEnv(opts: {
@@ -89,12 +89,9 @@ export function hookEnv(opts: {
     const v = process.env[k];
     if (v !== undefined) base[k] = v;
   }
-  // 纵深防御：白名单之外仍混入的密钥类变量不进 hook 子进程
-  for (const [k, v] of Object.entries(process.env)) {
-    if (v === undefined || k in base) continue;
-    if (!ENV_SECRET_RE.test(k)) continue;
-    void v; // 显式丢弃（可读性：这一步是「剥离」不是「保留」）
-  }
+  // E11（审查 P3）：旧实现此处有段"纵深防御剥离密钥变量"的循环，但循环体是 `void v`，
+  // 零副作用（out 只 spread base）——死代码已删。真实的剥离纪律 = ENV_ALLOW 白名单本身
+  //（不在名单的一律不进 hook 子进程）。
   const out: SanitizedEnv["base"] = {
     ...base,
     PLUGIN_ROOT: opts.pluginRoot,

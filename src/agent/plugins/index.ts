@@ -5,7 +5,7 @@ import { join } from "node:path";
 import {
   discoverPlugins, activeHooks, pendingPlugins,
 } from "./discover";
-import { TrustStore, pluginFingerprint } from "./trust";
+import { TrustStore, pluginFingerprint, pluginFingerprintEx } from "./trust";
 import { HookEngine } from "./hooks";
 import { McpManager, type McpToolInfo } from "./mcp";
 import {
@@ -99,7 +99,8 @@ export interface PluginPanelSnapshot {
     errors: string[];
     warnings: string[];
   }[];
-  looseSkills: { invoke: string; description: string }[];
+  /** 审查 S2-12（任务 4.6）：loose 样本同样要能被面板列出并被决议 => 带 name/trust。 */
+  looseSkills: { name: string; invoke: string; description: string; trust: string }[];
   mcpServers: McpServerStatus[];
   errors: { plugin: string; message: string }[];
   warnings: { plugin: string; message: string }[];
@@ -135,16 +136,26 @@ export class PluginRuntime {
       ...(opts.userPluginsDir ? { userPluginsDir: opts.userPluginsDir } : {}),
       ...(opts.projectPluginsDir ? { projectPluginsDir: opts.projectPluginsDir } : {}),
       ...(opts.looseRoots ? { looseRoots: opts.looseRoots } : {}),
-      trustStatus: (abs, fp) => trust.statusSync(abs, fp),
+      trustStatus: (abs, fp, bounded) => trust.statusSync(abs, fp, bounded),
     });
     return new PluginRuntime(manifest, opts);
   }
 
-  /** 信任卡决议（批准/拒绝）→ 按决议重建激活面（同一样本信任后开始生效）。H3-P5：决议绑内容指纹。 */
+  /** 信任卡决议（批准/拒绝）→ 按决议重建激活面（同一样本信任后开始生效）。
+   *  H3-P5：决议绑内容指纹；审查 S1-7：一并写入 bounded 位（abs@fp+b），
+   *  否则有界指纹（含软链/超大文件/超帽）的批准永不命中 = 弹卡死循环。 */
   async trustDecide(pluginName: string, trusted: boolean): Promise<boolean> {
-    const p = this.manifest.plugins.find((x) => x.name === pluginName);
-    if (!p) return false;
-    await this.trust.decide(p.root, trusted, await pluginFingerprint(p.root));
+    // 审查 S2-12（任务 4.6）：项目作用域散装 skill 与插件同走信任门（E3：description 直进
+    // system prompt = 注入面），但这里过去只在 manifest.plugins 里找名字 => loose 样本
+    // **永远查不到出口**（面板既显示不出待信任，批准也点不动，用户只能看着 skill 不在路由清单里）。
+    // 出口统一：按名字在 plugins / looseSkills 两处解析 root，其余流程（指纹 + bounded 位 +
+    // 重建激活面）复用同一条路径；IPC 通道 agent:plugin-decide 原样够用，不新增机制。
+    const target =
+      this.manifest.plugins.find((x) => x.name === pluginName) ??
+      this.manifest.looseSkills.find((x) => x.name === pluginName);
+    if (!target) return false;
+    const { fp, bounded } = await pluginFingerprintEx(target.root);
+    await this.trust.decide(target.root, trusted, fp, bounded);
     const reloaded = await PluginRuntime.load(this.opts);
     this.manifest = reloaded.manifest;
     this.hooks = reloaded.hooks;
@@ -167,14 +178,19 @@ export class PluginRuntime {
     }
   }
 
-  /** 受信插件的 skill 全集（渐进披露路由清单数据源）。 */
+  /** 受信插件的 skill 全集（渐进披露路由清单数据源）。
+   *  E3（审查 P1-13）：散装 skill 同走信任门——只有 trusted 才进路由（description 直进
+   *  system prompt = 注入面；项目作用域克隆仓库丢 SKILL.md 不许免审批入路由）。 */
   skills(): SkillEntry[] {
     const out: SkillEntry[] = [];
     for (const p of this.manifest.plugins) {
       if (p.trust !== "trusted") continue;
       out.push(...p.skills);
     }
-    for (const l of this.manifest.looseSkills) out.push(l.entry);
+    for (const l of this.manifest.looseSkills) {
+      if (l.trust !== "trusted") continue;
+      out.push(l.entry);
+    }
     return out;
   }
 
@@ -264,8 +280,10 @@ export class PluginRuntime {
         warnings: p.warnings,
       })),
       looseSkills: this.manifest.looseSkills.map((l) => ({
+        name: l.name,
         invoke: skillInvokeName(l.entry),
         description: l.entry.description,
+        trust: l.trust,
       })),
       mcpServers: this.mcp.statuses(),
       errors: this.manifest.errors,

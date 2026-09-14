@@ -2,12 +2,15 @@
 // tools/list 进注册表且名字为 scoped 形态 / tools/call 结果回传（含 isError 路径）/
 // 权限门对 MCP 工具同样生效（deny 规则）/ server 状态投影 / 信任门（未信任不激活→信任后生效）。
 import { describe, expect, it } from "vitest";
-import { rm } from "node:fs/promises";
+import { cp, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PluginRuntime, scopedToolName, parseScopedToolName } from "../src/agent/plugins";
 import { evaluate, newAutonomySession } from "../src/permissions";
 import type { ToolName } from "../src/tools/base";
+import { McpManager } from "../src/agent/plugins/mcp";
+import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 const asTool = (s: string): ToolName => s as ToolName;
 
@@ -124,4 +127,64 @@ describe("M2e 信任门（任务 6）", () => {
     expect(rt.mcpTools.size).toBe(0);
     await rt.shutdown();
   });
+
+  // 审查 S1-7（修复任务书 2.1）端到端回归：项目级插件目录里有软链 => 指纹 bounded。
+  // 2026-09-13 那轮把 bounded 在发现侧塌成 pending，而 trustDecide 写的是**无界**条目 =>
+  // 「批准了还弹卡」死循环，含软链的合法开发布局永远装不上（rt2 那一步回到 pending）。
+  it("有软链的项目级插件：批准一次即 trusted，重扫不复现（S1-7 死循环回归）", async () => {
+    const ws = await mkdtemp(join(tmpdir(), "m2e-link-"));
+    const pluginsDir = join(ws, "plugins");
+    await cp(fx("project"), pluginsDir, { recursive: true });
+    await symlink(
+      join(pluginsDir, "echo-suite", ".claude-plugin", "plugin.json"),
+      join(pluginsDir, "echo-suite", "linked.json"),
+      "file",
+    );
+    const trustFile = join(ws, "trust-link.json");
+    const load = (): Promise<PluginRuntime> =>
+      PluginRuntime.load({ projectPluginsDir: pluginsDir, workspace: ws, pluginDataRoot: join(ws, "data"), trustFile });
+    const rt = await load();
+    expect(rt.manifest.plugins.find((p) => p.name === "echo-suite")?.trust).toBe("pending"); // 首次出卡
+    await rt.trustDecide("echo-suite", true);
+    expect(rt.manifest.plugins.find((p) => p.name === "echo-suite")?.trust).toBe("trusted"); // 批准即生效
+    const rt2 = await load();
+    expect(rt2.manifest.plugins.find((p) => p.name === "echo-suite")?.trust).toBe("trusted"); // 旧实现：这里退回 pending
+    await rt.shutdown();
+    await rt2.shutdown();
+    await rm(ws, { recursive: true, force: true });
+  }, 30000);
 });
+
+// 审查 S1-3（修复任务书 1.3）：E5 曾在 client.connect() 之后**覆盖** transport.onclose，
+// 而 SDK 的 connect() 已经在该属性上装了自己的包装（protocol.js:220-224 -> _onclose() 把
+// ConnectionClosed 结算给全部在途 responseHandlers）。覆盖等于摘掉那半条链：server 进程
+// 死掉时在途 tools/call 永不 settle，agent loop 卡死在工具调用上（改前是 reject 后 fail-visible）。
+// 本用例锁两件事：onclose 链式（前一 handler 仍被调用）+ callTool 有总时长上限。
+describe("MCP onclose 链式与 callTool 超时（S1-3 回归）", () => {
+  it("链式包装不摘掉 SDK 那半；server 死亡后挂起的 tools/call 按超时 fail-visible", async () => {
+    let sdkHalfCalls = 0;
+    const transport = {
+      onclose: undefined as (() => void) | undefined,
+      close: async () => {},
+    } as unknown as Transport;
+    const client = {
+      connect: async () => {
+        const prev = transport.onclose; // 模拟 SDK：connect 内包装既有 onclose
+        transport.onclose = () => { prev?.(); sdkHalfCalls++; };
+      },
+      listTools: async () => ({ tools: [] }),
+      callTool: () => new Promise<never>(() => {}), // 永不 settle（server 已死）
+      close: async () => {},
+    } as unknown as Client;
+    const mgr = new McpManager(async () => ({ client, transport }), 300, 120);
+    expect((await mgr.connect("p", "s", { command: "x" })).ok).toBe(true);
+    const inflight = mgr.callTool("p", "s", "hang", {});
+    transport.onclose?.(); // 触发「server 进程死亡」
+    expect(sdkHalfCalls).toBe(1); // 覆盖赋值会把它打成 0（回归点）
+    const res = await inflight;
+    expect(res.ok).toBe(false);
+    expect(res.output).toContain("超时");
+    expect(mgr.statuses()[0]!.state).toBe("failed"); // E5 本意仍成立
+  }, 5000);
+});
+

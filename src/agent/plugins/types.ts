@@ -97,11 +97,14 @@ export interface DiscoveredPlugin {
   trust: "trusted" | "pending" | "declined";
 }
 
-/** 散装 skill（无 manifest 的 foo/SKILL.md = 独立 skill，免包装加载）。 */
+/** 散装 skill（无 manifest 的 foo/SKILL.md = 独立 skill，免包装加载）。
+ *  E3（审查 P1-13）：带信任态——项目作用域不豁免（description 直进 system prompt = 注入面）；
+ *  显式 looseRoots 与用户级安装恒 trusted；routingList 只收录 trusted。 */
 export interface LooseSkill {
   name: string;
   root: string;
   entry: SkillEntry;
+  trust: "trusted" | "pending" | "declined";
 }
 
 export interface SkillEntry {

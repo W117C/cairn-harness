@@ -7,7 +7,7 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { parseFrontmatter, fmString } from "./frontmatter";
-import { pluginFingerprint } from "./trust";
+import { pluginFingerprintEx } from "./trust";
 import { parsePluginManifest, parseHooksFile, detectJsEntry, PluginLoadError } from "./manifest";
 import type {
   DiscoveredPlugin, LooseSkill, PluginScope, PluginsManifest, SkillEntry, PromptCommandEntry,
@@ -22,7 +22,7 @@ async function dirExists(p: string): Promise<boolean> {
 async function scanScopeRoot(
   root: string,
   scope: PluginScope,
-  trustOf: (absRoot: string, fingerprint: string) => "trusted" | "pending" | "declined",
+  trustOf: (absRoot: string, fingerprint: string, bounded: boolean) => "trusted" | "pending" | "declined",
 ): Promise<{ plugins: DiscoveredPlugin[]; loose: LooseSkill[]; errors: PluginsManifest["errors"]; warnings: PluginsManifest["warnings"] }> {
   const plugins: DiscoveredPlugin[] = [];
   const loose: LooseSkill[] = [];
@@ -42,15 +42,24 @@ async function scanScopeRoot(
     const hasSkillMd = await stat(join(abs, "SKILL.md")).then(() => true, () => false);
     if (hasManifest) {
       try {
-        plugins.push(await loadContainer(abs, scope, trustOf(abs, await pluginFingerprint(abs))));
+        // E1/E2（审查 P1-11/P1-12）+ 审查 S1-7 修正：指纹 bounded（超帽/超大/软链）不再无条件
+        // 塌成 pending——那会让 decide 写下的无界条目永不命中，「批准了还弹卡」死循环。
+        // bounded 位随查询一起传给信任库，编进条目键（abs@fp+b）：批准一次即对该形态生效，
+        // 内容有界/无界形态互换或指纹变化都自然不命中 = 重新出卡。
+        const { fp, bounded } = await pluginFingerprintEx(abs);
+        plugins.push(await loadContainer(abs, scope, trustOf(abs, fp, bounded)));
       } catch (err) {
         // 单插件失败隔离：坏 manifest 只影响自身
         errors.push({ plugin: name, message: err instanceof Error ? err.message : String(err) });
       }
     } else if (hasSkillMd) {
-      // 散装 skill：免包装（无 manifest = 独立 skill）
+      // 散装 skill：免包装（无 manifest = 独立 skill）。
+      // E3（审查 P1-13）：项目作用域 loose skill 同走信任门——frontmatter description 随路由
+      // 清单直进 system prompt = 注入面，克隆仓库放一个 SKILL.md 不许免审批；免信任只保留给
+      // 显式 looseRoots 与用户级安装（两处的 trustOf 恒 trusted）。
+      const { fp, bounded } = await pluginFingerprintEx(abs);
       const entry = await loadSkillEntry(null, name, abs);
-      if (entry) loose.push({ name, root: abs, entry });
+      if (entry) loose.push({ name, root: abs, entry, trust: trustOf(abs, fp, bounded) });
     }
   }
   return { plugins, loose, errors, warnings };
@@ -241,8 +250,9 @@ export interface DiscoverOptions {
   projectPluginsDir?: string;
   /** 散装 skill 根（目录下每个含 SKILL.md 的子目录 = 独立 skill）。 */
   looseRoots?: string[];
-  /** 项目级插件信任决议源（缺省全部 pending）。H3-P5（E-10）：附带插件内容指纹（abs@fp 绑定）。 */
-  trustStatus?: (absRoot: string, fingerprint: string) => "trusted" | "pending" | "declined";
+  /** 项目级插件信任决议源（缺省全部 pending）。H3-P5（E-10）：附带插件内容指纹（abs@fp 绑定）。
+   *  审查 S1-7：第三参 bounded = 指纹是否被截断（超帽/超大/软链），由信任库编进条目键参与判定。 */
+  trustStatus?: (absRoot: string, fingerprint: string, bounded: boolean) => "trusted" | "pending" | "declined";
 }
 
 /** 加载清单（会话启动静态扫描产物；不新增事件类型）。 */
@@ -294,7 +304,10 @@ export function activeHooks(manifest: PluginsManifest): LoadedHookDef[] {
   return out;
 }
 
-/** 未信任插件清单（信任卡数据源：只列出、不激活）。 */
-export function pendingPlugins(manifest: PluginsManifest): DiscoveredPlugin[] {
-  return manifest.plugins.filter((p) => p.trust === "pending");
+/** 未信任样本清单（信任卡数据源：只列出、不激活）。
+ *  审查 S2-12（任务 4.6）：项目作用域的散装 skill 与插件同走信任门（E3），过去这个数据源
+ *  只含 plugins => 待信任的 loose skill 在信任卡面上完全不存在（既列不出也决不了）。
+ *  两类样本共有的是 name/root/trust 三件（决议按 root 落指纹条目），故返回联合类型。 */
+export function pendingPlugins(manifest: PluginsManifest): (DiscoveredPlugin | LooseSkill)[] {
+  return [...manifest.plugins.filter((p) => p.trust === "pending"), ...manifest.looseSkills.filter((l) => l.trust === "pending")];
 }

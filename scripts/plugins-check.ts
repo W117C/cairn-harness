@@ -535,10 +535,11 @@ async function darkBox(): Promise<void> {
       console.warn = origWarn;
       console.error = origErr;
     }
-    // 产品口径的审计行（只记键名 + 落盘路径，**不记值**）：一旦实现改成「把配置打进日志」，
-    // 下面 F12 的日志位就会红——这条扫描不是空转。
-    logLines.push("[plugin] userConfig 写入完成：" + JSON.stringify({ secretKeys: res.secretKeys, plaintextKeys: res.plaintextKeys, file: res.file }));
-    assert(logLines.length > 0, "F10 日志采集非空（扫描位不是空转）", String(logLines.length) + " 行");
+    // H4（审查 P1-18）：F10 断言对象 = 扫描面真实捕获的行数——产品函数 writePluginUserConfig
+    // 现在自产审计行（secrets.ts，只含键名与路径）；旧实现在断言前无条件手工 push 一行，
+    // logLines.length 必然 ≥1 = 恒真（F10 自身空转）。手工喂行已删：捕获为空即真红。
+    const captured = logLines.length;
+    assert(captured > 0, "F10 日志采集非空（扫描位不是空转，产品自产审计行）", String(captured) + " 行");
     assert(res.ok, "F11 sensitive 值写入成功（有安全后端时）", res.ok ? "" : res.error);
     assert(res.secretKeys.includes("DEBANK_API_KEY"), "F12 DEBANK_API_KEY 走了 sensitive 通道（非明文键）");
     const disk = await rf(res.file, "utf8");

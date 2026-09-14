@@ -2,7 +2,7 @@
 //   name 必填 kebab-case；未知顶层字段忽略 + 警告不阻断；hooks 可为文件路径或内联对象；
 //   mcpServers 内联或容器根 .mcp.json。能力边界（§9.8）：插件零进程内第三方代码——
 //   含 JS 入口（根 index.js / package.json main|bin）的包拒载 + 警告。
-import { readFile, stat } from "node:fs/promises";
+import { lstat, readFile, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import type { HooksFile, HookMatcherDef, HookEventName, McpConfigFile, McpServerConfig } from "./types";
 
@@ -23,6 +23,18 @@ export const HOOK_EVENTS: readonly HookEventName[] = [
 
 async function exists(p: string): Promise<boolean> {
   try { await stat(p); return true; } catch { return false; }
+}
+
+/** E2（审查 P1-12）：加载侧软链 fail-closed——lstat 判定「真身是常规文件」才存在。
+ *  信任后新增软链 hooks.json/.mcp.json：指纹 walk 不 follow（指纹不变）而读取会 follow，
+ *  组合 = 指纹绑定被绕过。软链一律按不存在处理（不加载，不报错）。 */
+async function existsRegular(p: string): Promise<boolean> {
+  try {
+    const st = await lstat(p);
+    return st.isFile();
+  } catch {
+    return false;
+  }
 }
 
 /** 代码插件拒载：根 JS 入口（进程内第三方代码边界，§9.8）。 */
@@ -148,10 +160,20 @@ export async function parsePluginManifest(root: string): Promise<ManifestParseRe
   // hooks：string = 文件路径；object = 内联
   let hooksRef: ManifestParseResult["hooksRef"] = { kind: "none" };
   if (typeof m.hooks === "string" && m.hooks.trim() !== "") {
-    hooksRef = { kind: "path", path: join(root, resolveDir(m.hooks, "", "hooks")) };
+    const hp = join(root, resolveDir(m.hooks, "", "hooks"));
+    // 审查 S2-9（任务 2.2）：E2 的软链 fail-closed 过去只装在**隐式**默认路径上
+    // （下面 existsRegular(hooks/hooks.json) 那支）；plugin.json 显式写 hooks: "x.json" 时
+    // 直接交给 discover.readFile 读，跟随软链 => 插件根里放一个 x.json -> /tmp/evil.json
+    // 就把「批准的是哪个内容」和「执行的是哪个内容」拆成两件事。显式路径同样只接受常规文件
+    // （lstat 判定）；缺失留给既有 discover 侧 warning（行为不变，只补软链/目录这一类）。
+    const st = await lstat(hp).catch(() => null);
+    if (st !== null && !st.isFile()) {
+      throw new PluginLoadError("plugin.json hooks 指向的不是常规文件（软链/目录一律拒载）: " + String(m.hooks));
+    }
+    hooksRef = { kind: "path", path: hp };
   } else if (m.hooks && typeof m.hooks === "object") {
     hooksRef = { kind: "inline", file: m.hooks as HooksFile };
-  } else if (await exists(join(root, "hooks", "hooks.json"))) {
+  } else if (await existsRegular(join(root, "hooks", "hooks.json"))) {
     hooksRef = { kind: "path", path: join(root, "hooks", "hooks.json") };
   }
   // mcpServers：manifest 内联优先；否则容器根 .mcp.json
@@ -160,7 +182,7 @@ export async function parsePluginManifest(root: string): Promise<ManifestParseRe
     mcp.push(...normalizeMcp(m.mcpServers as Record<string, unknown>));
   } else {
     const mcpPath = join(root, ".mcp.json");
-    if (await exists(mcpPath)) {
+    if (await existsRegular(mcpPath)) {
       try {
         const parsed = JSON.parse(await readFile(mcpPath, "utf8")) as McpConfigFile;
         mcp.push(...normalizeMcp((parsed.mcpServers ?? {}) as Record<string, unknown>));
