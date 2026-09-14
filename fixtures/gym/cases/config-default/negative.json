@@ -1,0 +1,9 @@
+{
+  "reason": "新增文件未改目标 src/config.js：verify 仍失败——尺子必须判它失败",
+  "changes": [
+    {
+      "path": "src/helper.js",
+      "content": "// 无关的新增文件，不是任务要求的修复\nexport const helper = 1;\n"
+    }
+  ]
+}

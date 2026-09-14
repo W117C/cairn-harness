@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "cases": [
+    { "id": "todo-completed-count", "path": "cases/todo-completed-count", "description": "修复 completedCount 只统计已完成 todo" },
+    { "id": "sum-clamp", "path": "cases/sum-clamp", "description": "修复 clampSum 夹取到 [min,max]" },
+    { "id": "config-default", "path": "cases/config-default", "description": "修复 loadConfig 缺 timeout 默认 30000" }
+  ]
+}

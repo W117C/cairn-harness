@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "model": "scripted",
+  "generatedAt": "2026-09-13T17:22:27.411Z",
+  "successRate": 1,
+  "totalTokens": 645,
+  "cases": [
+    {
+      "id": "todo-completed-count",
+      "score": 1,
+      "verifyOk": true,
+      "inputTokens": 264,
+      "outputTokens": 13,
+      "turns": 3,
+      "changedFiles": [
+        "src/todo.js"
+      ]
+    },
+    {
+      "id": "sum-clamp",
+      "score": 1,
+      "verifyOk": true,
+      "inputTokens": 173,
+      "outputTokens": 13,
+      "turns": 3,
+      "changedFiles": [
+        "src/math.js"
+      ]
+    },
+    {
+      "id": "config-default",
+      "score": 1,
+      "verifyOk": true,
+      "inputTokens": 169,
+      "outputTokens": 13,
+      "turns": 3,
+      "changedFiles": [
+        "src/config.js"
+      ]
+    }
+  ]
+}

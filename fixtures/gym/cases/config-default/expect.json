@@ -1,0 +1,6 @@
+{
+  "mustPassVerify": true,
+  "mustChangeFiles": ["src/config.js"],
+  "mustNotChangeFiles": ["tests/run.mjs"],
+  "maxTurns": 8
+}

@@ -1,0 +1,6 @@
+{"type":"assistant_message","content":"我先读 src/config.js 定位 bug。"}
+{"type":"tool_call","id":"c1","name":"read_file","args":{"path":"src/config.js"}}
+{"type":"assistant_message","content":"找到了问题，修复它。"}
+{"type":"tool_call","id":"c2","name":"write_file","args":{"path":"src/config.js","content":"// gym case: config-default\n// BUG: 缺 timeout 时无默认值，返回 undefined。\nexport function loadConfig(raw) {\n  return {\n    host: raw.host ?? \"localhost\",\n    timeout: raw.timeout ?? 30000\n  };\n}\n"}}
+{"type":"assistant_message","content":"修复完成，跑 verify 确认。"}
+{"type":"tool_call","id":"c3","name":"verify","args":{}}

@@ -1,0 +1,9 @@
+{
+  "reason": "源码改错：clampSum 恒返 min，verify 必失败——证明测试本身有牙齿",
+  "changes": [
+    {
+      "path": "src/math.js",
+      "content": "// gym case: sum-clamp（错误解法）\nexport function clampSum(values, min, max) {\n  return min; // 错误：永远返回下界\n}\n"
+    }
+  ]
+}

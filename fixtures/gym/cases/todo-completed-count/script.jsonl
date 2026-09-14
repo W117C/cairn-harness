@@ -1,0 +1,6 @@
+{"type":"assistant_message","content":"我先读 src/todo.js 定位 bug。"}
+{"type":"tool_call","id":"c1","name":"read_file","args":{"path":"src/todo.js"}}
+{"type":"assistant_message","content":"找到了问题，修复它。"}
+{"type":"tool_call","id":"c2","name":"write_file","args":{"path":"src/todo.js","content":"// gym case: todo-completed-count\n// BUG: completedCount 统计了全部 todo，而不是只统计已完成（done）的。\nlet nextId = 1;\nconst todos = [];\n\nexport function addTodo(text, defaultDone = false) {\n  const todo = { id: nextId++, text, done: defaultDone };\n  todos.push(todo);\n  return todo;\n}\n\nexport function toggleTodo(id) {\n  const todo = todos.find((t) => t.id === id);\n  if (todo) todo.done = !todo.done;\n  return todo;\n}\n\nexport function completedCount() {\n  return todos.filter((t) => t.done).length;\n}\n\nexport function listTodos() {\n  return [...todos];\n}\n"}}
+{"type":"assistant_message","content":"修复完成，跑 verify 确认。"}
+{"type":"tool_call","id":"c3","name":"verify","args":{}}

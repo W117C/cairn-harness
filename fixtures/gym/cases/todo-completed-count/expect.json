@@ -1,0 +1,6 @@
+{
+  "mustPassVerify": true,
+  "mustChangeFiles": ["src/todo.js"],
+  "mustNotChangeFiles": ["tests/run.mjs"],
+  "maxTurns": 8
+}
