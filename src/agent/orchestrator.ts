@@ -2191,6 +2191,7 @@ export class Orchestrator {
       branchDeleted: false,
       error: err instanceof Error ? err.message : String(err),
     }));
+    if (r.removed) w.worktree = undefined; // P2（审查）：成功即复位——失败环不因句柄残留被二次清理出重复审计事件；失败路径保留句柄供重试
     mergeOwners.delete(w.agentId);
     this.releaseWorkerMemory(w);
     await this.opts.emit({

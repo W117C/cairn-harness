@@ -1,9 +1,11 @@
 // 桌面壳入口：建窗口、接 IPC、装工具门、自检沙箱。
 // M1e：settings 存储（布局/档位/主题，app data）+ 会话目录（JSONL 即会话）+ 审批徽标注入通道。
 // 沙箱不可用 → 降级为无沙箱 + 写工具强制审批（agent-runner 内），renderer 以常驻警示条提示。
+import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
-import { app, BrowserWindow, ipcMain, safeStorage, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from "electron";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   handleAgentDecide,
   handleAgentRun,
@@ -45,6 +47,7 @@ import {
   initLicenseStore,
   initUpdateContext,
   injectStoredProviderKey,
+  handleRunCancel,
 } from "./agent-runner";
 import type { AppSettings, RunRequest } from "./ipc-protocol";
 import { isValidSessionName } from "./sessions";
@@ -71,6 +74,14 @@ function createWindow(): void {
   });
   win.on("closed", () => {
     win = null;
+  });
+  // P2（审查）：导航/弹窗逃逸面收死——window.open 默认新建继承 preload+sandbox:false 的窗口，
+  // 任何 renderer 侧导航 bug 都会把整套 window.agent IPC 面暴露给远程页。openExternal 由
+  // isSafeExternalUrl 把关；本窗口只认本应用 renderer 目标。
+  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  const expectedRendererUrl = pathToFileURL(join(app.getAppPath(), "out", "renderer", "index.html")).href;
+  win.webContents.on("will-navigate", (e, url) => {
+    if (url !== expectedRendererUrl) e.preventDefault();
   });
   void win.loadFile(join(app.getAppPath(), "out", "renderer", "index.html"));
 
@@ -177,6 +188,8 @@ ipcMain.handle("agent:clarify", (_event, callId: string, answers: Record<string,
 ipcMain.handle("agent:plan", (_event, approved: boolean, callId?: string) => handlePlanDecide(approved, callId));
 ipcMain.handle("agent:compact", (_event) => handleCompact());
 ipcMain.handle("agent:state", () => handleAgentState());
+// P3（审查）：交互 run 取消入口——信号沿 runLoop 轮界/门等待/长驻工具透传（loop.ts）
+ipcMain.handle("agent:run-cancel", () => handleRunCancel());
 
 // ---- M1e：settings + 会话列表 IPC ----
 ipcMain.handle("agent:settings-get", () => getSettings());
@@ -197,12 +210,22 @@ ipcMain.handle("agent:sessions-delete", (_event, id: string) => handleSessionDel
 ipcMain.handle("agent:memory-delete", (_event, scope: "project" | "global", topic: string) => handleMemoryDelete(scope, topic));
 // M2e：插件信任卡决议（M2g 补挂：此前 handlePluginDecide 已就绪但**从未注册**通道——
 // 即「主进程就绪、preload 未接线」的背面还有一层「连 handler 都没挂」。本轮一并清账。）
-ipcMain.handle("plugin:decide", (_event, plugin: string, trusted: boolean) => handlePluginDecide(plugin, trusted));
+ipcMain.handle("plugin:decide", (_event, plugin: string, trusted: boolean) => {
+  // P3（审查）：边界形状守卫（D4 同族）——垃圾入参 fail-visible 拒绝，不进运行时
+  if (typeof plugin !== "string" || plugin === "" || typeof trusted !== "boolean") {
+    return Promise.resolve({ ok: false, error: "plugin:decide: 参数非法（需 plugin 字符串 + trusted 布尔）" });
+  }
+  return handlePluginDecide(plugin, trusted);
+});
 // M2f：辅助对话（sidechat）+ /promote。M2g 起 preload 已接线，通道可用。
 ipcMain.handle("agent:sidechat-create", (_event, parentSessionId: string, name?: string) => handleSidechatCreate(parentSessionId, name));
-ipcMain.handle("agent:sidechat-ask", (_event, sidechatId: string, message: string, parentSessionId?: string) =>
-  handleSidechatAsk(sidechatId, message, parentSessionId !== undefined ? { parentSessionId } : {}),
-);
+ipcMain.handle("agent:sidechat-ask", (_event, sidechatId: string, message: string, parentSessionId?: string) => {
+  // P3（审查）：边界形状守卫（D4 同族）——null/非字符串 fail-visible 拒绝
+  if (typeof sidechatId !== "string" || sidechatId === "" || typeof message !== "string" || message === "") {
+    return Promise.resolve({ ok: false, error: "sidechat-ask: 参数非法（需 sidechatId/message 非空字符串）" });
+  }
+  return handleSidechatAsk(sidechatId, message, parentSessionId !== undefined ? { parentSessionId } : {});
+});
 ipcMain.handle(
   "agent:sidechat-promote",
   (_event, req: { sidechatId: string; parentSessionId: string; sourceEventIds: number[]; note?: string }) =>
@@ -293,6 +316,16 @@ if (gotSingleInstanceLock) void app.whenReady().then(async () => {
   initLicenseStore(join(app.getPath("userData"), "license.json"));
   initUpdateContext({ currentVersion: app.getVersion() });
   await initSandbox(); // 先自检沙箱，renderer 首帧 getState 即拿到结论
+  // P3（审查）分发缺口 1：打包产物不含 fixtures/todo-app 与 vitest（asar 内实测 fixtures=0），
+  // 而执行面硬编码 WORKSPACE=<asar>/fixtures/todo-app——缺工作区时显式弹窗告警（fail-visible），
+  // 不再让 run / 定时任务静默落在不存在的工作区。workspace 选择器留产品决策。
+  if (app.isPackaged && !existsSync(join(app.getAppPath(), "fixtures", "todo-app"))) {
+    dialog.showErrorBox(
+      "验收工作区缺失",
+      "打包版不含 fixtures/todo-app（验收靶子与 vitest 执行面不在交付包内）。\n" +
+        "run / 定时任务 / verify 将不可用。请在开发仓运行，或等待 workspace 选择器落地。",
+    );
+  }
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

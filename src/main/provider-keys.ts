@@ -92,7 +92,7 @@ async function readStore(p: string): Promise<ProviderKeyStore> {
 
 async function writeStore(p: string, store: ProviderKeyStore): Promise<void> {
   await mkdir(dirname(p), { recursive: true });
-  const tmp = p + ".tmp";
+  const tmp = p + ".tmp-" + String(process.pid) + "-" + String(Date.now()); // P3（审查）：固定名 tmp 并发覆写（S2-11 同族，与 scheduler/memory store 同款）
   try {
     await writeFile(tmp, JSON.stringify(store, null, 2) + "\n", "utf8");
     await rename(tmp, p);

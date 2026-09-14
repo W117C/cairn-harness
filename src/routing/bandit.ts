@@ -139,22 +139,27 @@ export function newBanditState(seed: number): BanditState {
   return { seed, rngState: createRng(seed), posteriors: {} };
 }
 
-/** 读取；文件缺失/损坏 → 以当前时间播种的新状态（首启无历史）。 */
-export async function loadBanditState(path: string): Promise<BanditState> {
+/** 读取；文件缺失 = 首启无历史（正常新播种）；文件存在但损坏/畸形 = 学习历史无痕丢失，
+ *  必须经 onCorrupt 显式告警（P2 审查：旧实现两者同路静默重播种，违背 fail-visible 纪律）。 */
+export async function loadBanditState(path: string, onCorrupt?: (reason: string) => void): Promise<BanditState> {
   try {
     const raw = JSON.parse(await readFile(path, "utf8")) as BanditState;
     if (typeof raw.seed !== "number" || typeof raw.rngState?.a !== "number" || typeof raw.posteriors !== "object" || raw.posteriors === null) {
-      throw new Error("bandit 状态损坏");
+      throw new Error("bandit 状态损坏：字段缺失/畸形");
     }
     return raw;
-  } catch {
+  } catch (err) {
+    const missing = (err as NodeJS.ErrnoException)?.code === "ENOENT";
+    if (!missing) {
+      onCorrupt?.("bandit 状态文件损坏，已重播种（学习历史丢失）：" + (err instanceof Error ? err.message : String(err)));
+    }
     return newBanditState(Date.now() >>> 0);
   }
 }
 
 export async function saveBanditState(path: string, state: BanditState): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
-  const tmp = path + ".tmp";
+  const tmp = path + ".tmp-" + String(process.pid) + "-" + String(Date.now()); // P3（审查）：固定名 tmp 并发覆写
   try {
     await writeFile(tmp, JSON.stringify(state, null, 2), "utf8");
     await rename(tmp, path);

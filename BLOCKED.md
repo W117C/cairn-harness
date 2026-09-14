@@ -347,3 +347,11 @@ after.text !== first.text 收紧为 after.text.includes(探针名)——判据�
 临时工作区拷贝跳过 socket/fifo，或排除 .codegraph 运行时文件（该目录已在 .codegraph/.gitignore）。
 本轮不改 map-check（该文件正被并发会话持有 in-flight 改动，避免撞车）；daemon 本体是并发会话的
 活动进程，不由本轮处置。
+
+### 立案：下载页白名单 http 放行判据（2026-09-15 01:5x，P1/P2 修复轮）
+
+**发现**：updater.ts isSafeExternalUrl 放行 `http:`——下载页明文可被劫持导流钓鱼；审查（P1/P2 修复轮）
+建议收紧为仅 https。**按判卷纪律不动代码**：http 放行被两处冻结判据锁定——tests/updater.test.ts:87
+（`http://example.com/d` → true）与 scripts/commercial-check.ts B6（`isSafeExternalUrl("http://e/d")`
+在白名单断言内）。改行为必改判据，需裁决后同步改两处（D5 的 manifest 拉取侧已是 https-only，
+本条只影响 openExternal 下载页）。待裁决。

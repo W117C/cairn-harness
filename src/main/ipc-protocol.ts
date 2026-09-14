@@ -125,6 +125,8 @@ export interface AgentApi {
   submitClarify(callId: string, answers: ClarifyAnswers): Promise<boolean>;
   /** 方案门：批准 / 拒绝当前 plan（card_action plan_decide）。 */
   decidePlan(approved: boolean, callId?: string): Promise<boolean>;
+  /** P3（审查）：取消当前交互 run——信号沿 runLoop 轮界/门等待/长驻工具透传。 */
+  runCancel(): Promise<{ ok: boolean; error?: string }>;
   /** M1d 手动压缩入口（M1e 起 preload 暴露：token 面板按钮）。 */
   compact?(): Promise<CompactResponse>;
   onEvent(cb: (e: AgentEvent) => void): () => void;

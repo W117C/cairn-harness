@@ -154,6 +154,10 @@ const appPlanGate = new PlanGate();
 // 仍可达（§4.4.3 最大前车之鉴）；跨编排器路由走 orchestratorForAgent / orchestratorForApproval。
 let activeOrchestrator: Orchestrator | null = null;
 
+// P3（审查）：交互 run 取消入口——控制器挂模块面，IPC agent:run-cancel 触达；信号沿 runLoop
+// 轮界/门等待/长驻工具透传（loop.ts）。unattended run 不经此通道（其取消归超时闸/门控）。
+let interactiveRunAbort: AbortController | null = null;
+
 // ---- H3（审查 D-2 立项落地）：RunScope —— run 级会话态随异步链传播 ----
 // 旧实现 session/activeOrchestrator 是模块级单例，「后到 run 覆写在途 run」：并发的定时 unattended
 // run 会（a）把交互 run 在途工具的审批路由抢到 unattendedAskGate（自动拒绝）、（b）结束时把
@@ -859,6 +863,8 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     }),
   };
   if (interactive) session = sessionObj;
+  const runAbort = new AbortController(); // P3（审查）：交互 run 取消入口（handleRunCancel 经 IPC 触达）
+  if (interactive) interactiveRunAbort = runAbort;
   lastWorkspace = opts.workspace;
   const runScope: RunScope = { session: sessionObj, orchestrator: null };
   runScopeALS.enterWith(runScope); // 本 run 整条异步链（loop await / 门等待 / 工具执行）都在 scope 内
@@ -948,6 +954,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       events: { append: pipeline },
       workspace: opts.workspace,
       mode: "auto", // 冻结 loop 对 ask 一律拒绝；真实门在 gatedTool（复用 checkPermission）
+      signal: opts.signal ? AbortSignal.any([opts.signal, runAbort.signal]) : runAbort.signal, // P3（审查）：run 取消信号（轮界/门等待/长驻工具透传）
       userMessage: opts.message,
       clarify: {
         // H2（A-2）：等人门可收束——run 取消信号随门透传；无人值守 run 的 clarify/plan
@@ -1053,6 +1060,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     }
   } finally {
     if (interactive) session = null; // H3 D-2：unattended run 不清交互面全局（旧实现把在途交互 run 假死）
+    if (interactive && interactiveRunAbort === runAbort) interactiveRunAbort = null; // P3（审查）：run 收束即摘取消句柄
     // 会话结束 = MCP server 子进程一并回收（stdio 流不挂事件循环）；快照留档供 run 间隙查询
     const rtNow = currentPluginRuntime();
     if (rtNow) lastPluginSnapshot = rtNow.snapshot();
@@ -1137,6 +1145,16 @@ export interface CardActionRequest {
  *  审批解耦（§4.4.3）：父 turn 结束后仍可应答——落流与路由走编排器绑定管线，不依赖活动 session。
  *  §11.7.6：worker scope=always 的 card_action 拒绝落流（先于写入检查，审批保持 pending 可再决议）。 */
 export async function handleCardAction(req: CardActionRequest): Promise<{ ok: boolean; error?: string }> {
+  // P3（审查）：边界形状校验（先于落流）——req=null/缺必备字段时旧实现直接 TypeError 或把垃圾
+  // payload 写进会话 JSONL 审计面。路由级失败（未知 agent 等）仍照常落流（审计语义：动作已发生）。
+  if (
+    typeof req?.cardId !== "string" || req.cardId === "" ||
+    typeof req.sourceEventId !== "number" || !Number.isInteger(req.sourceEventId) ||
+    typeof req.cardType !== "string" || req.cardType === "" ||
+    typeof req.action !== "string" || req.action === ""
+  ) {
+    return { ok: false, error: "card-action: req 非法（需 cardId/sourceEventId(int)/cardType/action 均为非空合法值）" };
+  }
   if (req.scope === "always" && req.targetAgentId) {
     return {
       ok: false,
@@ -1242,12 +1260,22 @@ export async function handlePlanDecide(approved: boolean, callId?: string): Prom
   const pending = appPlanGate.pendingIds;
   const target = callId ?? pending[0];
   const ok = approved ? appPlanGate.approve(callId) : appPlanGate.reject(callId);
+  if (!ok) return false; // P3（审查）：settle=false（陈旧/重复/未知 callId）不落事件——不造「已批准」假记录
   const s = session;
   if (s?.emit) {
     const event: AgentEvent = { type: "plan_approved", callId: target ?? "", approved };
     await s.emit(event);
   }
   return ok;
+}
+
+/** IPC "agent:run-cancel"（P3 审查）：取消当前交互 run——信号沿 runLoop 轮界/门等待/长驻工具透传；
+ *  unattended run 不经此通道（取消归 runTimeout/门控）。无活动交互 run → fail-visible。 */
+export function handleRunCancel(): { ok: boolean; error?: string } {
+  const c = interactiveRunAbort;
+  if (!c) return { ok: false, error: "无活动交互 run（取消不可达）" };
+  c.abort();
+  return { ok: true };
 }
 
 // ---- M2d：记忆快照（getState 透传）+ 记忆删除（仅用户；IPC 通道 main 侧就绪，preload 暴露见 BLOCKED 备案）----

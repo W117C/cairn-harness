@@ -117,3 +117,50 @@ plan-gate.test run 内解锁/模块态不动 ×1；schedule.test tick 拒绝护�
 **验证**：typecheck 干净；相关单测 100/100；supervisor-check 60/60；全量门禁 **25/26 绿 + 断言体检
 零命中**——唯一红 map-check 为环境并发问题（并发会话 01:12 起的 codegraph daemon socket 被 map-check
 临时区拷贝撞上，与本次改动无关，已按判卷纪律记入 BLOCKED.md「G-1 首个实锤机理」，不改判据不碰 daemon）。
+
+## 9. P2/P3 + 壳修复轮实录（2026-09-15 01:5x–02:0x，已收口）
+
+**改动 9 文件**：
+
+1. **cleanupWrite 双清审计失真（P2）**：removeWorktree 成功即 `w.worktree = undefined`——失败环不再被
+   二次清理出重复「已清理」事件；失败路径保留句柄供重试（orchestrator.ts）。
+2. **bandit 损坏静默重播种（P2）**：loadBanditState 区分 ENOENT（首启正常）与损坏（经 onCorrupt 可选
+   回调显式告警），学习历史丢失不再无痕（bandit.ts）。
+3. **窗口导航/弹窗逃逸面（P2）**：createWindow 加 setWindowOpenHandler(deny) + will-navigate 仅放行
+   本应用 renderer 目标（pathToFileURL 精确比对）——sandbox:false 备案取舍的缓解缺口闭合（index.ts）。
+4. **固定名 tmp 并发覆写（P3）**：provider-keys.ts / settings.ts / bandit.ts 三处对齐 scheduler.ts:147
+   同款 `.tmp-pid-时间戳`（S2-11 同族收尾）。
+5. **IPC 边界形状守卫（P3）**：agent:card-action（handleCardAction 顶部必备字段校验，先于落流）、
+   plugin:decide、agent:sidechat-ask 三通道 D4 同族 fail-visible 拒绝；路由级失败仍照常落流（审计语义）。
+6. **plan_decide 假批准记录（P3）**：settle=false（陈旧/重复/未知 callId）直接返回，不再落
+   plan_approved 事件（agent-runner.ts）。
+7. **交互 run 无取消入口（P3）**：新增 agent:run-cancel 通道 + preload runCancel + AgentApi.runCancel；
+   runAgent 内建 AbortController（interactive 限定），信号沿 runLoop 轮界/门等待/长驻工具透传；
+   run 收束即摘句柄，unattended run 取消仍归超时闸。
+
+**留位（需 owner 决策/密钥材料，本轮不修）**：license 测试公钥更换（需真实密钥对）；打包产物
+WORKSPACE 硬编码（需 workspace 选择器产品方案）。
+
+**判据立案（不改代码）**：updater isSafeExternalUrl 的 http 放行被两处冻结判据锁定
+（tests/updater.test.ts:87 + commercial-check B6），按判卷纪律记入 BLOCKED.md「下载页白名单 http
+放行判据」待裁决。
+
+## 10. 分发留位处置实录（2026-09-15 02:1x，已收口）
+
+**① license 测试公钥轮换（分发缺口 2，已修）**：重新生成 Ed25519 密钥对，LICENSE_PUBLIC_KEY 换新
+（license.ts），旧测试签发链作废（旧钥签发的 license 一律 invalid）；新私钥落
+.tmp/license-test-private.pem（gitignore，mode 600）。安全边界如实声明：正式发行前应由发行方自行
+重新生成（.tmp/license-keygen.ts 现成）并把私钥移出本机。判据零破坏：license.test 16/16 +
+commercial-check 45/45（license 段本就自带 keypair 注入，A3 还专门断言内置公钥验不了外来签名）。
+
+**② 打包 WORKSPACE 缺失 fail-visible（分发缺口 1，最小修法落地）**：打包启动时
+app.isPackaged 且 fixtures/todo-app 缺失 → dialog.showErrorBox 显式告警（run/定时/verify 不可用），
+不再静默落空；workspace 选择器仍留产品决策（index.ts）。
+
+**环境注记**：并发会话 02:12 起新增 src/agent/impact/ 半成品（import '../events' 坏路径）——
+typecheck 全仓红点唯一落在此文件（非本轮改动，不处置）。本轮验证：license.test 16/16、
+commercial-check 45/45、typecheck 本轮文件零错误。
+
+**验证**：typecheck 干净；全量门禁 **26/26 绿 + 断言体检零命中**（02:0x 实跑，含本轮全部改动）。
+map-check 上一轮的红（codegraph daemon socket 撞拷贝）本轮自愈转绿——BLOCKED.md「G-1 首个实锤机理」
+的备案仍成立：该环境抖动与仓库改动无关，daemon 存活期间可复现。

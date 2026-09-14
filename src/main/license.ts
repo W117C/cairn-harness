@@ -10,11 +10,13 @@ import { createPublicKey, sign as edSign, verify as edVerify } from "node:crypto
 
 /**
  * 内置 Ed25519 公钥（base64 DER SPKI）。私钥由发行方保管，**不入仓库**（任务书 §2.2）。
- * 测试/验收用密钥对由 .tmp/license-keygen.ts 一次性生成——该公钥即测试公钥，
- * 真实发行时由发行方私钥对应的公钥替换本常量（单点替换面）。
+ * 密钥对由 .tmp/license-keygen.ts 一次性生成——当前公钥为 2026-09-15 轮换后的新对
+ * （P2 审查分发缺口 2：旧测试签发链已随本次轮换作废，旧钥签发的 license 一律 invalid）。
+ * 私钥现落 .tmp/license-test-private.pem（gitignore，mode 600）——正式发行前应由发行方
+ * 自行重新生成并把私钥移出本机（单点替换面 = 本常量）。
  */
 export const LICENSE_PUBLIC_KEY =
-  "MCowBQYDK2VwAyEAGvwU6C0q40n0USdohYREJAIIDu/L78DISv9Cz3RZVls=";
+  "MCowBQYDK2VwAyEAWY394mY3cx78eKoroHttkhEsF7xuUqv1cQnCu0hCUkk=";
 
 export type LicenseState =
   | { state: "valid"; licensee: string; expiresAt: string | null }

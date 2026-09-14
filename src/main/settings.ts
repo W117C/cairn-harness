@@ -172,7 +172,7 @@ export class SettingsStore {
   /** 原子写（临时文件 + rename，中断自愈）。 */
   private async persist(s: AppSettings): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true });
-    const tmp = this.filePath + ".tmp";
+    const tmp = this.filePath + ".tmp-" + String(process.pid) + "-" + String(Date.now()); // P3（审查）：固定名 tmp 并发覆写（S2-11 同族）
     try {
       await writeFile(tmp, JSON.stringify(s, null, 2), "utf8");
       await rename(tmp, this.filePath);
