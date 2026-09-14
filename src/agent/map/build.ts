@@ -8,7 +8,8 @@ import { homedir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
 import { spawn } from "node:child_process";
 import { rgBinary } from "../../tools/ripgrep.js";
-import { fileTags, SUPPORTED_EXTS, type SymbolTag } from "./parse.js";
+import { sanitizedEnv } from "../../tools/process.js";
+import { fileTags, SUPPORTED_EXTS, TreeSitterUnavailableError, type SymbolTag } from "./parse.js";
 import { buildGraph, personalizedPageRank, type FileTagsInput } from "./rank.js";
 import { clampBudget, renderMapBudget } from "./render.js";
 
@@ -39,7 +40,7 @@ export async function scanSourceFiles(workspace: string, maxFiles = MAX_FILES_DE
     workspace,
   ];
   const stdout = await new Promise<string>((resolve, reject) => {
-    const child = spawn(rgBinary(), args, { cwd: workspace });
+    const child = spawn(rgBinary(), args, { cwd: workspace, env: sanitizedEnv() }); // D1：env 消毒
     let out = "";
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (d: string) => (out += d));
@@ -149,17 +150,21 @@ export interface MapBuildResult {
   error?: string;
 }
 
-/** 上下文文件签名：文件集 {rel,mtime,size} + mentioned_idents + 预算 → sha1。 */
+/** 上下文文件签名：文件集 {rel,mtime,size} + mentioned_idents + context_files + 预算 → sha1。
+ *  E6（审查 P2）：contextFiles 影响边权（×50）与 personalization——不入指纹则指纹不变时
+ *  复用陈旧地图（最长滞后 recomputeEvery 轮）。 */
 export function mapFingerprint(
   files: ScannedFile[],
   mentionedIdents: string[] | undefined,
   budget: number,
+  contextFiles?: string[],
 ): string {
   return createHash("sha1")
     .update(
       JSON.stringify({
         f: files.map((x) => [x.rel, Math.round(x.mtimeMs), x.size]),
         m: [...(mentionedIdents ?? [])].sort(),
+        c: [...(contextFiles ?? [])].sort(),
         b: budget,
       }),
     )
@@ -187,7 +192,7 @@ export function createMapBuilder(defaults: Partial<BuildMapOptions> = {}): MapBu
       try {
         const budget = clampBudget(merged.budgetTokens, merged.maxInputTokens);
         const files = await scanSourceFiles(merged.workspace, merged.maxFiles ?? MAX_FILES_DEFAULT);
-        const fingerprint = mapFingerprint(files, merged.mentionedIdents, budget);
+        const fingerprint = mapFingerprint(files, merged.mentionedIdents, budget, merged.contextFiles);
         const cached = cache.get(merged.workspace);
         const round = merged.nowRound ?? 0;
         const every = merged.recomputeEvery ?? RECOMPUTE_EVERY_DEFAULT;
@@ -203,21 +208,44 @@ export function createMapBuilder(defaults: Partial<BuildMapOptions> = {}): MapBu
           };
         }
 
-        // tags：缓存命中直接用，未命中解析并写缓存
+        // tags：缓存命中直接用，未命中解析并写缓存。
+        // E8（审查 P2）：readFile 走顶层导入（旧实现循环内每次动态 import），源码读取并行（纯 I/O）；
+        // 解析保持串行——tree-sitter WASM 初始化/解析共享环境，并发 parse 实测互相干扰（丢 tags）。
+        // E7（审查 P2）：单文件读/解析失败只降级该文件；grammar 环境级失败（TreeSitterUnavailable）
+        // 上抛 → 整图降级（锚定契约：ok:false 静默降级不抛出）。
         const dir = merged.tagsCacheDir ?? defaultTagsCacheDir();
         const inputs: FileTagsInput[] = [];
         let hits = 0;
+        const misses: ScannedFile[] = [];
         for (const f of files) {
           const hit = await readTagsCache(dir, f);
           if (hit) {
             hits++;
             inputs.push({ file: f.rel, tags: hit });
           } else {
-            const src = await (await import("node:fs/promises")).readFile(f.abs, "utf8");
-            const ext = f.rel.slice(f.rel.lastIndexOf(".") + 1).toLowerCase();
-            const tags = await fileTags(src, ext);
-            inputs.push({ file: f.rel, tags });
-            void writeTagsCache(dir, f, tags).catch(() => {});
+            misses.push(f);
+          }
+        }
+        const sources = await Promise.all(
+          misses.map(async (f): Promise<{ f: ScannedFile; src: string } | null> => {
+            try {
+              return { f, src: await readFile(f.abs, "utf8") };
+            } catch (err) {
+              console.debug(`[map] 单文件读取失败（跳过）: ${f.rel}`, err instanceof Error ? err.message : String(err));
+              return null;
+            }
+          }),
+        );
+        for (const s of sources) {
+          if (s === null) continue;
+          try {
+            const ext = s.f.rel.slice(s.f.rel.lastIndexOf(".") + 1).toLowerCase();
+            const tags = await fileTags(s.src, ext);
+            inputs.push({ file: s.f.rel, tags });
+            void writeTagsCache(dir, s.f, tags).catch(() => {});
+          } catch (err) {
+            if (err instanceof TreeSitterUnavailableError) throw err; // 环境级：整图降级
+            console.debug(`[map] 单文件解析失败（跳过）: ${s.f.rel}`, err instanceof Error ? err.message : String(err));
           }
         }
 

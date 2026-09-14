@@ -137,9 +137,13 @@ export function atomicUnits(events: AgentEvent[]): AtomicUnit[] {
     if (last && s.lo <= last.hi) last.hi = Math.max(last.hi, s.hi);
     else merged.push({ lo: s.lo, hi: s.hi, ids: [] });
   }
+  // A4（审查根因 5）：merged 按 lo 升序且互不重叠，事件 id 单调递增——指针推进代替每事件
+  // 对全量单元 find（O(n·m) → O(n + m)）。
+  let mi = 0;
   events.forEach((_, i) => {
     const id = eventIdAt(i);
-    const u = merged.find((m) => id >= m.lo && id <= m.hi);
+    while (mi < merged.length && id > merged[mi]!.hi) mi++;
+    const u = mi < merged.length && id >= merged[mi]!.lo ? merged[mi] : undefined;
     if (u) u.ids.push(id);
   });
   return merged;
@@ -168,18 +172,35 @@ function* iterateUnits(events: AgentEvent[], units: AtomicUnit[]): Generator<{ l
  *  keep-first 按原子单元闭包扩护：单元内任一成员入选，整单元受护。 */
 export function keepFirstSet(events: AgentEvent[]): Set<number> {
   const seeds = new Set<number>();
+  // A2（审查）：旧实现 `Math.max(-1, ...events.map(...))` 把全量数组展开为函数实参——长会话
+  // 抛 RangeError，且恰在"会话已大、正需压缩"时调用。改单次循环。
+  let lastPlanProposed = -1;
+  let lastPlanApproved = -1;
   events.forEach((e, i) => {
     const id = eventIdAt(i);
     if (e.type === "user_message") seeds.add(id); // 用户轮次全部受护（用户目标 + 中途补充）
+    else if (e.type === "plan_proposed") lastPlanProposed = id;
+    else if (e.type === "plan_approved") lastPlanApproved = id;
   });
-  const lastPlanProposed = Math.max(-1, ...events.map((e, i) => (e.type === "plan_proposed" ? eventIdAt(i) : -1)));
-  const lastPlanApproved = Math.max(-1, ...events.map((e, i) => (e.type === "plan_approved" ? eventIdAt(i) : -1)));
   if (lastPlanProposed > 0) seeds.add(lastPlanProposed);
   if (lastPlanApproved > 0) seeds.add(lastPlanApproved);
   const units = atomicUnits(events);
   const out = new Set<number>();
+  // A4（审查根因 5）：units 按 lo 升序互不重叠——二分定位代替每 seed 全量 find。
+  const unitOf = (id: number): AtomicUnit | undefined => {
+    let lo = 0;
+    let hi = units.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const u = units[mid]!;
+      if (id < u.lo) hi = mid - 1;
+      else if (id > u.hi) lo = mid + 1;
+      else return u;
+    }
+    return undefined;
+  };
   for (const id of seeds) {
-    const u = units.find((m) => id >= m.lo && id <= m.hi);
+    const u = unitOf(id);
     if (u) for (const x of u.ids) out.add(x);
     else out.add(id);
   }
@@ -229,15 +250,10 @@ export function selectCut(events: AgentEvent[], config: CompactionConfig, ctx: C
     acc += t;
     tailStart = id;
   }
-  // 纪律 2：最近一条 typed 用户消息永不吞 —— tail 起点前移把它罩住。
-  // 已受固定回注名单保护的（如开场目标）本就不会被压缩，无需拉拽整个 tail。
-  if (
-    ctx.lastUserMsgId >= 1 &&
-    ctx.lastUserMsgId < tailStart &&
-    !ctx.keepFirst.has(ctx.lastUserMsgId)
-  ) {
-    tailStart = ctx.lastUserMsgId;
-  }
+  // 纪律 2：最近一条 typed 用户消息永不吞 —— 由 keep-first **结构性**保障：V1 固定回注名单
+  // 把全部 user_message 计入受护集（keepFirstSet），lastUserMsgId 必在其中，tail 切点永不
+  // 覆盖它。旧实现此处的"tail 起点前移"兜底分支恒不可达（A9，审查 P3）：已删，勿再复写。
+  // overflow 路径（半分截断）不查 keepFirst，仍显式引用 lastUserMsgId。
   // 纪律 1：tailStart 不得落在原子单元内部 → 回退到单元起点（整单元进 tail）
   for (let guard = 0; guard < 1000; guard++) {
     const u = ctx.units.find((m) => tailStart > m.lo && tailStart <= m.hi);

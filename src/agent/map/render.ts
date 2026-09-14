@@ -10,11 +10,14 @@ export const MAP_TOKENS_MIN = 1024;
 export const MAP_TOKENS_MAX = 4096;
 const LINE_CHAR_CAP = 100;
 
-/** 预算参数归一：夹在 [1024, 4096]，再与上限 = maxInput/8 取小。 */
+/** 预算参数归一：先夹进 [1024, 4096]，再与上限 = maxInput/8 取小（**取小后不回弹**）。
+ *  E10（审查 P3）：旧实现先 /8 收紧再 max(MIN, b) 回弹——输入上限 < 8192 时实际预算
+ *  突破声明的 /8 帽。冲突时 /8 帽优先（显式语义）。 */
 export function clampBudget(requested: number | undefined, maxInputTokens?: number): number {
   let b = requested ?? MAP_TOKENS_DEFAULT;
+  b = Math.min(MAP_TOKENS_MAX, Math.max(MAP_TOKENS_MIN, b));
   if (maxInputTokens !== undefined) b = Math.min(b, Math.floor(maxInputTokens / 8));
-  return Math.min(MAP_TOKENS_MAX, Math.max(MAP_TOKENS_MIN, b));
+  return b;
 }
 
 function truncateLine(s: string): string {

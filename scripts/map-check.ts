@@ -3,7 +3,7 @@
 // ③单行超 100 字符被截断 ④未改文件 → 命中缓存且结果逐字相同 ⑤改一个文件 → 重算且结果变化
 // ⑥用户仓库里没有 tags 缓存文件（缓存只落应用数据目录 M2B_TAGS_DIR 指定的临时目录）
 // 真实靶子 = 本仓库 src/agent/**（自研吃狗粮，四语言中的 ts 真实存在）。
-import { mkdtemp, readdir, stat, utimes, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readdir, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createMapBuilder, scanSourceFiles } from "../src/agent/map/build.js";
@@ -20,7 +20,20 @@ function check(name: string, ok: boolean, detail = ""): void {
 }
 
 async function main(): Promise<void> {
-  const workspace = process.cwd();
+  // H9（审查 P2）：工作区改为仓库临时副本——旧实现直接以 process.cwd() 为工作区，⑤的注桩
+  // 写进**受版本控制的源码** src/agent/map/rank.ts，仅靠 finally 还原；进程被 SIGKILL/超时
+  // 打断即留下污染。副本上注桩，真实源码零接触（耗时换数据完整性）。
+  const repoRoot = process.cwd();
+  const workspace = await mkdtemp(join(tmpdir(), "m2b-mapcheck-ws-"));
+  // 审查 S3-9（原 agents 分片 #10）：子串匹配会误伤同名前缀（outputs / dist-staging /
+  // 任何名字里带 "out" 的目录段），也可能因绝对路径里出现 "/.git" 而漏拷或过删。
+  // 按路径段精确比对，跳过集合就是那六个目录名。
+  const SKIP_SEGS = new Set(["node_modules", ".git", "out", "dist", "oh-src", ".tmp"]);
+  await cp(repoRoot, workspace, {
+    recursive: true,
+    filter: (src: string): boolean => !src.split("/").some((seg) => SKIP_SEGS.has(seg)),
+  });
+  check("⓪工作区为临时副本（不改动受版本控制源码）", workspace.startsWith(tmpdir()), workspace.slice(0, 40));
   const tagsDir = await mkdtemp(join(tmpdir(), "m2b-mapcheck-tags-"));
   const builder = createMapBuilder({ tagsCacheDir: tagsDir, maxInputTokens: 128_000 });
 

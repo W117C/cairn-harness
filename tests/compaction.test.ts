@@ -435,9 +435,16 @@ describe("glm-session 压缩接线", () => {
     const proj = projectContext(after);
     expect(proj[0]).toEqual({ role: "user", content: GOAL });
     expect(proj[1].content).toBe(summaryEnvelope(last.summary));
+    // A10（审查 P3）：以唯一指纹（tool_call.id / 消息全文）断言"真摘除"——旧实现取被压事件
+    // JSON 前 40 字符做子串，转义差异下"恰好未命中"与"真摘除"不可区分。
+    // 同时加反向断言：未被压缩的事件仍必须在投影里（排除集没有误伤）。
+    const compressedIds = new Set(last.compressed_event_ids);
     const projText = JSON.stringify(proj);
-    for (const id of last.compressed_event_ids) {
-      expect(projText).not.toContain(JSON.stringify(after[id - 1]).slice(1, 40));
-    }
+    after.forEach((e, i) => {
+      const id = i + 1;
+      const fingerprint = e.type === "tool_call" ? `"${e.id}"` : JSON.stringify(e).slice(1, 80);
+      if (compressedIds.has(id)) expect(projText).not.toContain(fingerprint);
+      else if (e.type === "tool_call") expect(projText).toContain(fingerprint);
+    });
   });
 });

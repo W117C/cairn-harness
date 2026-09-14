@@ -264,10 +264,15 @@ export async function getLspClient(root: string, cfg: LspConfig, serverId: strin
 }
 
 async function startClient(root: string, server: LspServerConfig, key: string): Promise<LspClient> {
-  const args = (server.args ?? []).map((a) => resolve(root, a));
+  // C6（审查）：`-` 开头的 flag 是语言服务器参数（--stdio/--node-ipc），不能被 resolve 成路径；
+  // 相对路径参数仍按 root 解析。
+  const args = (server.args ?? []).map((a) => (a.startsWith("-") ? a : resolve(root, a)));
   const child = spawn(server.command, args, {
     cwd: root,
     stdio: ["pipe", "pipe", "pipe"],
+    // C5（审查 P1-8）：detached 建独立进程组——killGroup 的 process.kill(-pid) 才能收整棵
+    // 进程树（tsserver 派生的孙进程）；旧实现只能杀直接子进程，孙进程成孤儿。
+    detached: true,
     // env 消毒：server.command 来自 .agent/lsp.json（可被 write_file 改写），
     // 不消毒就等于把 BYOK key 交给一个可配置的任意可执行文件（P1-1）。
     env: sanitizedEnv(),

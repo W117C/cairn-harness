@@ -48,14 +48,26 @@ function wasmPath(lang: string): string {
   return nodeRequire.resolve(`tree-sitter-wasms/out/tree-sitter-${lang}.wasm`);
 }
 
+/** E7（审查 P2）：grammar 环境级失败（缺失/损坏）——加载失败也写 null 缓存（本进程不再逐文件
+ *  重试同一失败加载），并以类型化错误上抛：buildMap 据此整图降级（ok:false，锚定契约）。 */
+export class TreeSitterUnavailableError extends Error {}
+
 async function loadLanguage(lang: string): Promise<Lang | null> {
   const hit = langCache.get(lang);
-  if (hit !== undefined) return hit;
-  const w = await getWts();
-  await initParser();
-  const l = await w.Language.load(wasmPath(lang)); // grammar 缺失/损坏：抛（buildMap 捕获 → 静默降级）
-  langCache.set(lang, l);
-  return l;
+  if (hit !== undefined) {
+    if (hit === null) throw new TreeSitterUnavailableError(`tree-sitter grammar 不可用: ${lang}（已缓存失败，本进程不再重试）`);
+    return hit;
+  }
+  try {
+    const w = await getWts();
+    await initParser();
+    const l = await w.Language.load(wasmPath(lang));
+    langCache.set(lang, l);
+    return l;
+  } catch (err) {
+    langCache.set(lang, null); // E7：失败入缓存——旧实现不上缓存，逐文件重试同一失败加载
+    throw new TreeSitterUnavailableError(`tree-sitter grammar 不可用: ${lang}：${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 /** 测试口：清空 language 缓存。 */

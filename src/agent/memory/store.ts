@@ -2,7 +2,7 @@
 // 全局层 <appData>/memory/（可配：M2D_MEMORY_HOME / initMemoryHome，测试用临时目录）。
 // 读写是纯 fs 语义：frontmatter 解析往返不丢字段、modified 写入落账、索引 upsert、索引硬上限写入端拒绝。
 // 本模块是唯一知道记忆文件布局的地方；remember 工具与注入器都经它读写（写入口收敛 §8.1.8 第 4 条）。
-import { mkdir, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, open, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -149,17 +149,35 @@ export async function loadExternalRefState(): Promise<ExternalRefState> {
   }
 }
 
-/** 审批决议落账（approved/declined 二选一入集）；拒绝 = 该引用此后停用（不再询问）。 */
+/** 审批决议落账（approved/declined 二选一入集）；拒绝 = 该引用此后停用（不再询问）。
+ *  E9（审查 P2）：read-modify-write 全程按全局键串行 + 唯一 tmp 名——旧实现固定 .tmp 并发
+ *  clobber、并发决议互相覆盖。 */
+const writeChains = new Map<string, Promise<unknown>>();
+function serializeOn<T>(key: string, job: () => Promise<T>): Promise<T> {
+  const prev = writeChains.get(key) ?? Promise.resolve();
+  const next = prev.catch(() => {}).then(job);
+  writeChains.set(key, next);
+  void next.then(
+    () => {
+      if (writeChains.get(key) === next) writeChains.delete(key); // 无并发即回收（有界）
+    },
+    () => {},
+  );
+  return next;
+}
+
 export async function saveExternalRefDecision(ref: string, approved: boolean): Promise<void> {
-  const state = await loadExternalRefState();
-  const next: ExternalRefState = {
-    approved: approved ? [...new Set([...state.approved, ref])] : state.approved,
-    declined: approved ? state.declined : [...new Set([...state.declined, ref])],
-  };
-  await mkdir(globalMemoryDir(), { recursive: true });
-  const tmp = externalRefsPath() + ".tmp";
-  await writeFile(tmp, JSON.stringify(next, null, 2), "utf8");
-  await rename(tmp, externalRefsPath());
+  return await serializeOn("external-refs", async () => {
+    const state = await loadExternalRefState();
+    const next: ExternalRefState = {
+      approved: approved ? [...new Set([...state.approved, ref])] : state.approved,
+      declined: approved ? state.declined : [...new Set([...state.declined, ref])],
+    };
+    await mkdir(globalMemoryDir(), { recursive: true });
+    const tmp = externalRefsPath() + ".tmp-" + String(process.pid) + "-" + String(Date.now());
+    await writeFile(tmp, JSON.stringify(next, null, 2), "utf8");
+    await rename(tmp, externalRefsPath());
+  });
 }
 
 // ---- 写路径（remember 唯一写入口的底层）----
@@ -176,12 +194,34 @@ async function readOrNull(path: string): Promise<string | null> {
   }
 }
 
-/** 追加根文件（日志型：DECISIONS）。 */
+/** 追加根文件（日志型：DECISIONS）。
+ *  E9（审查 P2）：追加走 appendFile（O_APPEND 单写）——旧实现 read-modify-write 整文件重写，
+ *  并发追加互相覆盖（后写者带着旧全文，先写者的条目被抹掉）。分隔换行只看文件末字节。 */
 export async function appendRootFile(workspace: string, kind: keyof typeof ROOT_FILES, content: string): Promise<void> {
   const path = rootFilePath(workspace, kind);
-  await ensureDir(projectAgentDir(workspace));
-  const cur = (await readOrNull(path)) ?? "";
-  await writeFile(path, cur + (cur === "" || cur.endsWith("\n") ? "" : "\n") + content, "utf8");
+  // E9 收口（审查 S2-14）：末字节探测与 appendFile 是两步，两个并发 remember（交互 run +
+  // 定时 unattended run 同工作区）会读到同一个旧末字节 => 都判「无需补换行」=> 条目粘成
+  // 一行，"## " 分块解析被破坏。整段按文件路径串行（与 writeTopic 按 dir 串行同口径）。
+  await serializeOn(path, async () => {
+    await ensureDir(projectAgentDir(workspace));
+    let prefix = "";
+    try {
+      const fh = await open(path, "r");
+      try {
+        const st = await fh.stat();
+        if (st.size > 0) {
+          const buf = Buffer.alloc(1);
+          await fh.read(buf, 0, 1, st.size - 1);
+          if (buf[0] !== 0x0a) prefix = "\n";
+        }
+      } finally {
+        await fh.close();
+      }
+    } catch {
+      /* 文件不存在：无需分隔 */
+    }
+    await appendFile(path, prefix + content, "utf8");
+  });
 }
 
 /** 整写根文件（状态型 replace：old_content 已由调用方校验精确命中）；原子写。 */
@@ -205,7 +245,9 @@ export function recentDecisionEntries(raw: string, n: number): string[] {
 }
 
 /** 写 topic 文件（frontmatter 系统落账 modified）+ 索引 upsert。
- *  索引硬上限在写盘前检查：投影超限 → index_overflow，topic 与索引都不写（不静默截断）。 */
+ *  索引硬上限在写盘前检查：投影超限 → index_overflow，topic 与索引都不写（不静默截断）。
+ *  E9（审查 P2）：读索引→upsert→写索引全程按目录键串行，索引写走原子替换（tmp+rename）——
+ *  旧实现索引直写，与 topic 文件可不同步、并发写互相 clobber。 */
 export async function writeTopic(
   dir: string,
   topic: string,
@@ -214,17 +256,22 @@ export async function writeTopic(
   nowISO: string,
 ): Promise<{ bytes: number }> {
   validateTopic(topic);
-  const firstLine = (body.split("\n")[0] ?? "").trim();
-  const projected = upsertIndexLine(await readIndex(dir), topic, indexLine(topic, type, nowISO, firstLine));
-  checkIndexLimit(projected);
-  await ensureDir(dir);
-  const doc = renderTopicDoc({ type, modified: nowISO }, body);
-  const path = join(dir, topic + ".md");
-  const tmp = path + ".tmp";
-  await writeFile(tmp, doc, "utf8");
-  await rename(tmp, path);
-  await writeFile(join(dir, MEMORY_INDEX), projected, "utf8");
-  return { bytes: Buffer.byteLength(doc, "utf8") };
+  return await serializeOn(dir, async () => {
+    const firstLine = (body.split("\n")[0] ?? "").trim();
+    const projected = upsertIndexLine(await readIndex(dir), topic, indexLine(topic, type, nowISO, firstLine));
+    checkIndexLimit(projected);
+    await ensureDir(dir);
+    const doc = renderTopicDoc({ type, modified: nowISO }, body);
+    const path = join(dir, topic + ".md");
+    const tmp = path + ".tmp-" + String(process.pid) + "-" + String(Date.now());
+    await writeFile(tmp, doc, "utf8");
+    await rename(tmp, path);
+    const idxPath = join(dir, MEMORY_INDEX);
+    const idxTmp = idxPath + ".tmp-" + String(process.pid) + "-" + String(Date.now());
+    await writeFile(idxTmp, projected, "utf8");
+    await rename(idxTmp, idxPath);
+    return { bytes: Buffer.byteLength(doc, "utf8") };
+  });
 }
 
 /** 读 topic 正文（不含 frontmatter）。 */
@@ -273,13 +320,21 @@ export async function readTextOrNull(path: string): Promise<string | null> {
 export async function deleteTopic(dir: string, topic: string): Promise<boolean> {
   validateTopic(topic);
   const path = join(dir, topic + ".md");
-  try {
-    await unlink(path);
-  } catch {
-    return false;
-  }
-  const cur = await readIndex(dir);
-  const kept = cur.split("\n").filter((l) => l.trim().length > 0 && !l.startsWith("- " + topic + " ·"));
-  await writeFile(join(dir, MEMORY_INDEX), kept.length > 0 ? kept.join("\n") + "\n" : "", "utf8");
-  return true;
+  // 审查 S2-11：必须与 writeTopic 同锁（dir 键）串行，索引走 tmp+rename。旧实现不在锁内
+  // 且直写：并发 writeTopic 刚 rename 的新索引会被这里的旧全文覆盖（topic 文件在、
+  // MEMORY.md 行丢 = 注入器与面板看不见），直写还可能被读到半截索引。
+  return await serializeOn(dir, async () => {
+    try {
+      await unlink(path);
+    } catch {
+      return false;
+    }
+    const cur = await readIndex(dir);
+    const kept = cur.split("\n").filter((l) => l.trim().length > 0 && !l.startsWith("- " + topic + " ·"));
+    const idxPath = join(dir, MEMORY_INDEX);
+    const idxTmp = idxPath + ".tmp-" + String(process.pid) + "-" + String(Date.now());
+    await writeFile(idxTmp, kept.length > 0 ? kept.join("\n") + "\n" : "", "utf8");
+    await rename(idxTmp, idxPath);
+    return true;
+  });
 }

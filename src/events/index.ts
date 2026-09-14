@@ -1,5 +1,5 @@
 // 事件流：append-only JSONL，一事件一行。
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { appendFile, mkdir, open, readFile, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 /** M2f：/promote 来源（sidechat 结论提升进主会话）。零新增事件类型——主流仍是 user_message，
@@ -153,8 +153,8 @@ export interface SecurityReportEvent {
 // tool_call/tool_result/usage 均带 agent_id；agent_spawned 携 parent_event_id（spawn tool_call 的
 // 1-based 事件 id）建立血缘树。心跳 = 子流 tool_call/tool_result 天然时间戳，不造独立心跳事件。
 
-/** spawn_agent 的 mode（§4.1）：M3a 只接入 read；write/pipeline spawn 即拒绝（M3b）。 */
-export type AgentMode = "read" | "write" | "pipeline";
+/** spawn_agent 的 mode（§4.1）：M3a 只接入 read；write/pipeline spawn 即拒绝（M3b）；M5c supervise（受限自适应循环）。 */
+export type AgentMode = "read" | "write" | "pipeline" | "supervise";
 /** worker 状态机五态 + cancelled（§4.4.8）。 */
 export type AgentStatus = "running" | "waiting_approval" | "waiting_input" | "done" | "failed" | "cancelled";
 /** 权限档（与 src/permissions 的 PermissionMode 同字面量；events 层零依赖不自引）。 */
@@ -275,6 +275,24 @@ export interface DiffCommentEvent {
   ts?: number;
 }
 
+// ---- M5a 路由决策（§m5-proposal 步骤 1）：结果信号回流的策略层落点 ----
+// 可审计面：不止记结果，还记「当时有哪些候选」。事件里绝不出现 key / 凭据，只记 model id。
+export interface RoutingDecisionEvent {
+  type: "routing_decision";
+  /** worker 归因（主会话路由缺省 = 主 loop）。 */
+  agent_id?: string;
+  /** 环角色（implement/review/test/自定义 plugin 角色名）。 */
+  stage?: string;
+  /** 候选档位（决策的可审计面：不是只记结果，要记"当时有哪些选择"）。 */
+  candidates: { id: string; tier: string }[];
+  picked: string;
+  /** pinned（显式指定）/ tier-default（档位表）/ bandit（学习）/ cascade-upgrade（级联升级）/ fallback（降级）。 */
+  reason: "pinned" | "tier-default" | "bandit" | "cascade-upgrade" | "fallback";
+  /** 级联升级的来源档位（reason=cascade-upgrade 时必填）。 */
+  from?: string;
+  ts?: number;
+}
+
 // ---- M4a 定时任务三事件（§12.2.7）：journal 即调度事件流，面板订阅投影 ----
 // 全部为增量类型（KNOWN_TYPES 扩集），旧日志重放逐字不变。
 export interface AutomationTriggeredEvent {
@@ -338,6 +356,7 @@ export type AgentEvent =
   | ApprovalResolvedEvent
   | CardActionEvent
   | DiffCommentEvent
+  | RoutingDecisionEvent
   | AutomationTriggeredEvent
   | AutomationSkippedEvent
   | AutomationCompletedEvent;
@@ -364,6 +383,7 @@ const KNOWN_TYPES = new Set([
   "approval_resolved",
   "card_action",
   "diff_comment",
+  "routing_decision",
   "automation_triggered",
   "automation_skipped",
   "automation_completed",
@@ -381,27 +401,157 @@ export function createEventLog(path: string): EventLog {
       if (!event || typeof event.type !== "string" || !KNOWN_TYPES.has(event.type)) {
         throw new Error(`未知事件类型: ${JSON.stringify((event as { type?: unknown })?.type)}`);
       }
+      // A8（审查）：轻量 payload 校验——{"type":"tool_result"} 缺 output 会一路流进
+      // serializeConversation 并在压缩时抛错；写入口 fail-loud 比读路径深处的类型错误可诊断得多。
+      if (event.type === "tool_result" && typeof (event as { output?: unknown }).output !== "string") {
+        throw new Error("tool_result 事件缺 output 字符串（写入被拒）");
+      }
+      if (
+        (event.type === "user_message" || event.type === "assistant_message") &&
+        typeof (event as { content?: unknown }).content !== "string"
+      ) {
+        throw new Error(event.type + " 事件缺 content 字符串（写入被拒）");
+      }
       await appendFile(path, JSON.stringify(event) + "\n", "utf8");
     },
   };
 }
 
 /** 重放：按写入顺序读回全部事件。untilEventId 给定时只重放到该事件点（含）。
- * 事件 id = 1-based 行号（append-only 保证永不漂移），即「事件点」。 */
+ * 事件 id = 1-based 行号（append-only 保证永不漂移），即「事件点」。
+ * A1（审查）：逐行容错——崩溃/并发写把尾行写成半行不再炸掉整会话（旧实现一行坏 = 所有
+ * replay 调用点连锁失败 = 会话永久不可打开）。
+ * 容错边界（审查 S1-4 修正）：只容忍**损坏后缀**（最后一个有效事件之后的坏行）。中段坏行
+ * 不得跳过——「id = 1-based 行号」是跨文件契约（origin.source_event_ids、untilEventId、
+ * compaction 的 compressed_event_ids、prune、promote 的 events[id-1] 全按此取事件），
+ * 跳一行会让其后所有 id 静默错位一格：promote 取到错误的源消息、fork/回滚落错事件点。
+ * 那种文件真已损坏，显式失败比静默错数据安全（与 agent-loop「不猜」的口径一致）。 */
 export async function replay(path: string, untilEventId?: string): Promise<AgentEvent[]> {
   const raw = await readFile(path, "utf8");
   const events: AgentEvent[] = [];
-  for (const line of raw.split("\n")) {
-    const t = line.trim();
+  const badLines: number[] = []; // 坏行的 1-based 行号
+  let lastGoodLine = 0;
+  const lines = raw.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
     if (!t) continue; // 容忍文件末尾空行
-    events.push(JSON.parse(t) as AgentEvent);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(t);
+    } catch {
+      badLines.push(i + 1); // 半写行/坏行：先记下，按位置决定容忍还是判坏
+      continue;
+    }
+    if (!parsed || typeof parsed !== "object" || typeof (parsed as { type?: unknown }).type !== "string") {
+      badLines.push(i + 1); // 合法 JSON 但非事件对象（null / 123 / 数组）：同样按位置判定
+      continue;
+    }
+    lastGoodLine = i + 1;
+    events.push(parsed as AgentEvent);
   }
+  const midBad = badLines.filter((l) => l < lastGoodLine);
+  if (midBad.length > 0) {
+    throw new Error(
+      `会话日志有 ${String(midBad.length)} 条非尾部坏行（首在第 ${String(midBad[0])} 行）：跳过会使事件 id 与 1-based 行号错位，` +
+        `血缘/分支/压缩 id 全部失准，请修复该文件或从备份恢复: ${path}`,
+    );
+  }
+  if (badLines.length > 0) console.warn(`[events] replay 跳过尾部 ${String(badLines.length)} 条坏行（降级容错）: ${path}`);
   if (untilEventId === undefined) return events;
   const n = Number(untilEventId);
   if (!Number.isInteger(n) || n < 1 || n > events.length) {
     throw new Error(`无效 untilEventId: ${JSON.stringify(untilEventId)}（会话共 ${events.length} 条事件）`);
   }
   return events.slice(0, n);
+}
+
+// ---- A5（审查根因 5）：增量重放——glm-session/sidechat 每轮全量读盘 → 只解析追加段 ----
+// 会话 JSONL append-only：按 (ino, 完整行字节偏移) 缓存已解析事件数组，每轮只读尾部新行。
+// 语义与 replay 逐位一致：坏行/空行跳过照旧占字节；半写尾行留待下次（append 写整行，通常为空）。
+// 投影本身仍是每轮全量（O(n)），增量折叠需处理 compaction 失效语义——收口留位第三批。
+const replayCache = new Map<string, { ino: number; offset: number; events: AgentEvent[] }>();
+const REPLAY_CACHE_MAX = 32;
+
+function parseReplayLine(t: string): AgentEvent | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(t);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || typeof (parsed as { type?: unknown }).type !== "string") return null;
+  return parsed as AgentEvent;
+}
+
+/** B8 同型（审查 S1-2）：共享缓存的「读尾部 + push + offset 推进」在 await 间隙会被并发
+ *  消费方各推一次（主会话 assemble 与 sidechat 读主会话投影可同时在飞）=> 该轮投影重复事件、
+ *  offset 越界。按 path 维护在途 Promise 链串行化，且每次交出副本，缓存本体不外泄。 */
+const replayChain = new Map<string, Promise<AgentEvent[]>>();
+
+export async function replayIncremental(path: string): Promise<AgentEvent[]> {
+  const prev = replayChain.get(path);
+  const job = (prev === undefined ? Promise.resolve() : prev.catch(() => undefined)).then(() => replayIncrementalInner(path));
+  replayChain.set(path, job);
+  try {
+    return await job;
+  } finally {
+    if (replayChain.get(path) === job) replayChain.delete(path); // 无并发即回收（有界）
+  }
+}
+
+async function replayIncrementalInner(path: string): Promise<AgentEvent[]> {
+  let st;
+  try {
+    st = await stat(path);
+  } catch {
+    replayCache.delete(path); // 会话文件被清理：缓存同步失效
+    return [];
+  }
+  const cached = replayCache.get(path);
+  if (!cached || cached.ino !== st.ino || cached.offset > st.size) {
+    // 首访 / 文件被重建（inode 变化）/ 被截断 → 全量解析并重建缓存
+    const raw = await readFile(path, "utf8").catch(() => "");
+    const events: AgentEvent[] = [];
+    let offset = 0;
+    const allParts = raw.split("\n");
+    const completeInit = raw === "" ? [] : allParts.slice(0, -1); // 最后一段是尾行（空串或半写）
+    for (const line of completeInit) {
+      offset += Buffer.byteLength(line, "utf8") + 1; // 完整行都推进偏移（含空行/坏行）
+      const t = line.trim();
+      if (!t) continue;
+      const e = parseReplayLine(t);
+      if (e) events.push(e);
+    }
+    if (replayCache.size >= REPLAY_CACHE_MAX) {
+      const oldest = replayCache.keys().next().value;
+      if (oldest !== undefined) replayCache.delete(oldest);
+    }
+    const entry = { ino: st.ino, offset: Math.min(offset, st.size), events };
+    replayCache.set(path, entry);
+    return entry.events.slice(); // 交副本：消费方排序/清空不得影响缓存
+  }
+  // 增量：只读上次偏移之后的完整行（半写尾行留待完整落盘——不推进偏移、不重复解析）
+  const len = st.size - cached.offset;
+  if (len <= 0) return cached.events.slice();
+  const fh = await open(path, "r");
+  try {
+    const buf = Buffer.allocUnsafe(len);
+    await fh.read(buf, 0, len, cached.offset);
+    const text = buf.toString("utf8");
+    const parts = text.split("\n");
+    let consumed = 0;
+    for (const line of parts.slice(0, -1)) { // 最后一段是尾行（空串=到 EOF；否则半写）
+      consumed += Buffer.byteLength(line, "utf8") + 1;
+      const t = line.trim();
+      if (!t) continue;
+      const e = parseReplayLine(t);
+      if (e) cached.events.push(e);
+    }
+    cached.offset += consumed;
+  } finally {
+    await fh.close();
+  }
+  return cached.events.slice();
 }
 
 /** 流式渲染的合成基底：同一轮回复的增量片段按序拼回完整文本。 */

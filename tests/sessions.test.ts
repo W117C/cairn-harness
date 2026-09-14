@@ -1,5 +1,5 @@
 // M1e 会话列表存储单测：新建/列表/重命名/删除/行数口径/名字校验/当前会话回退数据面。
-import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -68,8 +68,12 @@ describe("会话列表存储（M1e：JSONL 即会话）", () => {
 
   it("mtime 降序（最近在上）——当前会话回退取列表首个的数据面", async () => {
     const a = await createSession(root, "早");
-    await new Promise((r) => setTimeout(r, 30));
     const b = await createSession(root, "晚");
+    // I4（审查 P2）：不赌 sleep 时长——mtime 粒度粗的卷（部分 CI 为 1s）上 30ms 不保证分出先后。
+    // 显式 utimes 把 b 的 mtime 推到 a 之后（相对固定差值），排序语义本身才是被测对象。
+    const aSt = await stat(pathOf(root, a));
+    const past = new Date(aSt.mtimeMs - 60_000);
+    await utimes(pathOf(root, a), past, past);
     const list = await listSessions(root);
     expect(list[0]?.id).toBe(b);
     expect(list[1]?.id).toBe(a);

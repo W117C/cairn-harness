@@ -31,6 +31,9 @@ export interface ToolContext {
   callId?: string;
   clarify?: ClarifyChannel;
   plan?: PlanChannel;
+  /** C12（审查 P2）：会话取消信号——长驻工具（run_shell/LSP）可订阅它提前收束，
+   *  不再只能等 60s 超时；缺省 undefined = 行为不变。 */
+  signal?: AbortSignal;
 }
 
 export interface ToolResult {
@@ -105,6 +108,29 @@ export async function assertRealContainment(workspace: string, abs: string, labe
 export function assertNotAgentArea(rel: string, label: string): void {
   if (typeof rel === "string" && rel.split(/[\\/]/).includes(".agent")) {
     throw new ToolError(`${label}: .agent/ 是系统区（权限/记忆/插件配置），禁止经内容工具写入: ${rel}`);
+  }
+}
+
+// C3（审查 P1-6）：.agent 拒写只在词法 rel 段判定可被软链绕过——`foo -> .agent` 的 rel 里
+// 没有 ".agent" 字样，两道既有闸（词法 + containment）都放行，写入落到 .agent/lsp.json
+//（任意 command → RCE）或 .agent/permissions.json（跨会话提权）。realpath 解析落点后复查归属。
+export async function assertNotAgentAreaReal(workspace: string, abs: string, label: string): Promise<void> {
+  const wsReal = await realpath(workspace).catch(() => null);
+  if (wsReal === null) return; // workspace 不可解析时由 assertRealContainment 拒绝（职责不在本闸）
+  let cur = abs;
+  for (;;) {
+    try {
+      cur = await realpath(cur);
+      break;
+    } catch {
+      const parent = dirname(cur);
+      if (parent === cur) return; // 链根都不可解析：同上，交 containment 判
+      cur = parent;
+    }
+  }
+  const relReal = relative(wsReal, cur);
+  if (relReal.split(/[\\/]/).includes(".agent")) {
+    throw new ToolError(`${label}: .agent/ 是系统区——路径经软链解析后写入落点在 .agent/ 内（${relReal}），已拒绝: ${abs}`);
   }
 }
 

@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { relative, resolve, sep } from "node:path";
 import { resolveInWorkspace, truncationNotice, type Tool, type ToolResult } from "./base.js";
+import { sanitizedEnv } from "./process.js";
 import { rgBinary } from "./ripgrep.js";
 
 const MAX_FILES = 100;
@@ -16,15 +17,38 @@ export const glob: Tool = {
     // 排除规则必须排在用户 pattern 之后，否则会被 pattern 覆盖（实测坑）。
     const rgArgs = ["--files", "--hidden", "--glob", pattern, ...NOISE_DIRS.flatMap((g) => ["--glob", "!" + g]), abs];
     const files: string[] = await new Promise((resolvePromise, rejectPromise) => {
-      const child = spawn(rgBinary(), rgArgs, { cwd: ctx.workspace });
+      const child = spawn(rgBinary(), rgArgs, { cwd: ctx.workspace, env: sanitizedEnv() }); // D1：env 消毒
       let stdout = "";
       let stderr = "";
+      // C10（审查 P2）：与 runRgJson 同口径——输出上限 + 超时击杀（大仓库不 OOM 不长挂）。
+      let settled = false;
+      let bytes = 0;
+      const killWith = (msg: string): void => {
+        if (settled) return;
+        settled = true;
+        child.kill("SIGKILL");
+        rejectPromise(new Error(msg));
+      };
+      const timer = setTimeout(() => killWith("glob: rg 超时（60s，已终止——查询面过大）"), 60_000);
+      timer.unref?.();
       child.stdout.setEncoding("utf8");
-      child.stdout.on("data", (d: string) => { stdout += d; });
+      child.stdout.on("data", (d: string) => {
+        stdout += d;
+        bytes += Buffer.byteLength(d);
+        if (bytes > 32 * 1024 * 1024) killWith("glob: rg 输出超过 32MB 上限，已终止（请收窄 path/pattern）");
+      });
       child.stderr.setEncoding("utf8");
       child.stderr.on("data", (d: string) => { stderr += d; });
-      child.on("error", rejectPromise);
+      child.on("error", (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        rejectPromise(err);
+      });
       child.on("close", (code) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
         if (code !== 0 && code !== 1) {
           rejectPromise(new Error(`glob: rg 退出码 ${code}${stderr ? ": " + stderr.slice(0, 200) : ""}`));
           return;

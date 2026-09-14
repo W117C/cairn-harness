@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { relative, resolve, sep } from "node:path";
+import { sanitizedEnv } from "./process.js";
 
 // 统一用 @vscode/ripgrep 自带的预编译二进制（本机 PATH 没有 rg，禁 spawn("rg")）。
 // 不能静态 import：该包会被打进 Electron main bundle，__dirname 丢失后其平台二进制
@@ -29,18 +30,47 @@ function toRelative(workspace: string, p: string): string {
   return rel.split(sep).join("/");
 }
 
+/** 输出累积上限（C10，审查 P2）：rg 全量 stdout 无上限拼接在大仓库可 OOM——达到上限即杀进程
+ *  并报错（fail-visible），不静默截断。32MB ≈ 数万条 --json 事件，正常检索远达不到。 */
+const RG_OUTPUT_CAP_BYTES = 32 * 1024 * 1024;
+/** 子进程超时（C10）：无超时 + 无 kill = 大仓库长挂。60s 与 run_shell 既有超时同量级。 */
+const RG_TIMEOUT_MS = 60_000;
+
 /** 跑 rg --json，把 match 事件收成 RawMatch[]；子进程失败抛错（含 stderr 摘要）。 */
 export function runRgJson(workspace: string, args: string[]): Promise<RawMatch[]> {
   return new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn(rgBinary(), args, { cwd: workspace });
+    const child = spawn(rgBinary(), args, { cwd: workspace, env: sanitizedEnv() }); // D1：env 消毒
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    let bytes = 0;
+    const killWith = (msg: string): void => {
+      if (settled) return;
+      settled = true;
+      child.kill("SIGKILL");
+      rejectPromise(new Error(msg));
+    };
+    const timer = setTimeout(() => killWith(`grep: rg 超时（${String(RG_TIMEOUT_MS / 1000)}s，已终止——查询面过大或输出异常）`), RG_TIMEOUT_MS);
+    timer.unref?.();
+    const onFail = (err: unknown): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      rejectPromise(err instanceof Error ? err : new Error(String(err)));
+    };
     child.stdout.setEncoding("utf8");
-    child.stdout.on("data", (d: string) => { stdout += d; });
+    child.stdout.on("data", (d: string) => {
+      stdout += d;
+      bytes += Buffer.byteLength(d);
+      if (bytes > RG_OUTPUT_CAP_BYTES) killWith(`grep: rg 输出超过 ${String(RG_OUTPUT_CAP_BYTES / 1024 / 1024)}MB 上限，已终止（请收窄查询范围）`);
+    });
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (d: string) => { stderr += d; });
-    child.on("error", rejectPromise);
+    child.on("error", onFail);
     child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       if (code !== 0 && code !== 1) {
         // rg 退出码：0=有命中，1=无命中，2+=出错
         rejectPromise(new Error(`grep: rg 退出码 ${code}${stderr ? ": " + stderr.slice(0, 200) : ""}`));

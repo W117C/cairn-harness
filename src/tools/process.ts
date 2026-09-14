@@ -65,6 +65,16 @@ export interface TrackedChild {
   dispose(): void;
 }
 
+/** 存活 tracked 子进程注册表（D8，审查 P2）：will-quit 统一组杀——旧实现退出只停调度器，
+ *  在跑的 bash/sandbox-exec 成孤儿。child 'close' 时自动出册；注册表只持有存活进程。 */
+const liveTracked = new Set<ChildProcess>();
+
+/** 组杀全部存活 tracked 子进程（app will-quit 兜底；幂等，无存活进程时零行为）。 */
+export function killAllTrackedChildren(): void {
+  for (const child of liveTracked) killGroup(child);
+  liveTracked.clear();
+}
+
 /** 启动子进程并纳入「进程组 + 超时强杀 + 超时强制 settle」管理。 */
 export function spawnTracked(file: string, args: readonly string[], opts: TrackedSpawnOptions): TrackedChild {
   const child =
@@ -75,5 +85,7 @@ export function spawnTracked(file: string, args: readonly string[], opts: Tracke
     opts.onTimeout();
     killGroup(child);
   }, opts.timeoutMs);
+  liveTracked.add(child);
+  child.once("close", () => liveTracked.delete(child));
   return { child, dispose: (): void => clearTimeout(timer) };
 }
