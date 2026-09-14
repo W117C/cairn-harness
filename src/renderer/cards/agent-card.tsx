@@ -5,6 +5,7 @@ import type { ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { agentStatusBadge } from "../projections";
 
 export interface AgentCardPayload {
   type: "agent_card";
@@ -22,12 +23,9 @@ export interface AgentCardPayload {
 
 export function AgentCard({ payload, onAction }: { payload: AgentCardPayload; onAction?: (action: string, data: unknown) => void }): ReactElement {
   const status = payload.status ?? "running";
-  const badge =
-    status === "done" ? <Badge variant="default">done</Badge> :
-    status === "failed" ? <Badge variant="destructive">failed</Badge> :
-    status === "cancelled" ? <Badge variant="outline">cancelled</Badge> :
-    status === "waiting_approval" ? <Badge variant="destructive">waiting_approval</Badge> :
-    <Badge variant="secondary">{status}</Badge>;
+  // G10（审查）：状态→徽标映射来自 projections 的唯一实现（agents 面板同源，防两份漂移）。
+  const b = agentStatusBadge(status);
+  const badge = <Badge variant={b.variant}>{b.label}</Badge>;
   const running = status === "running" || status === "waiting_approval" || status === "waiting_input";
   return (
     <Card size="sm" data-m3a-agent-card={payload.agent_id}>

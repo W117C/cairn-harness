@@ -1,6 +1,6 @@
 // M1e 三区 shell（§10.1）：左会话列表 / 中对话流（virtuoso 虚拟化）/ 右面板抽屉（单面板制）。
 // 面板状态 = 事件流订阅投影（§10.2），布局与档位经 settings IPC 持久化（重启还原）。
-import { StrictMode, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { memo, StrictMode, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,7 @@ import { securityReportCardPayload } from "../agent/security/scan";
 import { Conversation } from "./conversation";
 import {
   diffCardsOf,
+  foldsIntoCurrentSession,
   memoryWritesOf,
   pendingApprovalsOf,
   planStatusesOf,
@@ -91,9 +92,14 @@ const PANEL_ICONS: Record<PanelId, React.ReactNode> = {
   schedule: <Clock className="h-4 w-4" />,
 };
 
-/** M4a：定时会话徽标/过滤的任务名清单（会话列表 origin 投影）。 */
+/** M4a：定时会话徽标/过滤的任务名清单（会话列表 origin 投影）。
+ *  F10（审查 P3）：以守卫替代非空断言——字段改名时是类型错误而不是运行时 undefined 串。 */
 function scheduledNamesOf(sessions: SessionInfoPayload[]): string[] {
-  return [...new Set(sessions.filter((s) => s.origin === "scheduled" && s.automationName).map((s) => s.automationName!))];
+  const out = new Set<string>();
+  for (const s of sessions) {
+    if (s.origin === "scheduled" && typeof s.automationName === "string") out.add(s.automationName);
+  }
+  return [...out];
 }
 
 function short(v: unknown, max = 260): string {
@@ -387,6 +393,33 @@ function EventView({
   if (e.type === "usage") {
     const UsageCard = resolveCard("usage_summary");
     return <UsageCard payload={{ type: "usage_summary", inputTokens: e.inputTokens, outputTokens: e.outputTokens }} />;
+  }
+  // G8（审查 P3）：diff_comment 补渲染分支——24 个 KNOWN_TYPES 里唯一无分支的类型，
+  // 旧实现落到 return null → 虚拟列表留一条空 padding 行。
+  if (e.type === "diff_comment") {
+    return (
+      <ToolRow>
+        <span className="font-semibold text-foreground">💬 评审意见</span>
+        <span className="font-mono text-muted-foreground">{e.path}:{String(e.line)}</span>
+        <span className="whitespace-pre-wrap text-muted-foreground">{e.body}</span>
+      </ToolRow>
+    );
+  }
+  // 审查 S3 / 4.4：routing_decision（M5b 审计事件）走 fold 的兜底分支进时间线，但过去
+  // 没有渲染分支 = 一条空 padding 行（G8 同类漏网）。补轻摘要：选了谁、为什么、从哪升上来。
+  if (e.type === "routing_decision") {
+    return (
+      <ToolRow>
+        <span className="font-semibold text-foreground">🧭 模型路由</span>
+        <span className="font-mono text-muted-foreground">{e.picked}</span>
+        <span className="text-muted-foreground">
+          {e.reason}
+          {e.from !== undefined ? ` ← ${e.from}` : ""}
+          {e.stage !== undefined ? ` · ${e.stage}` : ""}
+          {e.agent_id !== undefined ? ` · ${e.agent_id}` : " · 主会话"} · 候选 {String(e.candidates.length)}
+        </span>
+      </ToolRow>
+    );
   }
   return null; // assistant_delta 折叠进流式项；session_meta 不渲染
 }
@@ -772,10 +805,16 @@ function App() {
     [sessions, scheduleFilter],
   );
 
+  // F7（审查 P2）：乐观更新——函数式 setState（同 tick 两次 patch 不丢更新）；失败回滚到
+  // patch 前快照并显式记录（旧实现静默吞掉，UI 与持久化不一致且用闭包 settings 丢更新）。
   const patchSettings = (patch: Partial<AppSettings>): void => {
     if (!settings) return;
-    setSettingsState({ ...settings, ...patch });
-    void window.agent.setSettings(patch).catch(() => {});
+    const before = settings;
+    setSettingsState((prev) => (prev ? { ...prev, ...patch } : prev));
+    void window.agent.setSettings(patch).catch((err: unknown) => {
+      console.error("[settings] 持久化失败（已回滚）:", err instanceof Error ? err.message : String(err));
+      setSettingsState(before);
+    });
   };
 
   // 布局（右栏开/关/调宽/当前面板）持久化：切换立即写，调宽防抖写（onLayoutChange 高频）。
@@ -789,6 +828,15 @@ function App() {
     if (layoutDebounce.current) clearTimeout(layoutDebounce.current);
     layoutDebounce.current = setTimeout(() => patchLayout(patch), 300);
   };
+  // F12（审查 P3）：防抖定时器卸载时清理（组件卸载后 patchLayout 的 setState 是空转）。
+  useEffect(() => {
+    return () => {
+      if (layoutDebounce.current !== null) {
+        clearTimeout(layoutDebounce.current);
+        layoutDebounce.current = null;
+      }
+    };
+  }, []);
 
   // ---- M4b：BYOK key / license / 更新 / 引导 handlers（window.agent 桥接 + state 刷新）----
   const refreshState = async (): Promise<void> => {
@@ -837,6 +885,22 @@ function App() {
     setSessions(await window.agent.listSessions());
   };
 
+  // 活事件流 delta 缓冲（H3-P2 / F-4）：定义上移到会话操作之前——F2（审查 P1-15）：
+  // 会话 reset 前必须收束缓冲，否则切换前缓冲的旧会话 delta 会在 reset 后 flush，
+  // 合并进新会话时间线（"旧会话尾部 delta 落到新会话"）。
+  const deltaBufRef = useRef<Extract<AgentEvent, { type: "assistant_delta" }>[]>([]);
+  const deltaTimerRef = useRef<number | null>(null);
+  const flushDeltaBuf = (): void => {
+    if (deltaTimerRef.current !== null) {
+      window.clearTimeout(deltaTimerRef.current);
+      deltaTimerRef.current = null;
+    }
+    const buf = deltaBufRef.current;
+    if (buf.length === 0) return;
+    deltaBufRef.current = [];
+    for (const d of buf) dispatch({ type: "event", e: d }); // dispatch 恒等，闭包捕获安全
+  };
+
   // 会话切换：session:open → 重放投影（reset 全量折叠，与活流同一 foldEvent）
   // H3-P3（审查 F-3）：请求序号守卫——A→B 连点时 A 的迟到重放响应不得覆盖 B（reset 竞态）。
   const sessionSeqRef = useRef(0);
@@ -845,18 +909,21 @@ function App() {
     const seq = ++sessionSeqRef.current;
     const { events } = await window.agent.openSession(id);
     if (seq !== sessionSeqRef.current) return; // 已有更新的切换请求：丢弃迟到响应
+    flushDeltaBuf(); // F2：reset 前收束旧会话的流式尾巴（不冲进新时间线）
     setCurrentSession(id);
     dispatch({ type: "reset", events });
     await refreshSessions();
   };
 
   const createSession = async (): Promise<void> => {
+    if (state.running) return; // F2（审查 P1-15）：三处会话操作统一 running 守卫（4.7 后按钮同已禁用，这里是兜底）
     const seq = ++sessionSeqRef.current;
     const { id } = await window.agent.createSession();
     if (seq !== sessionSeqRef.current) {
       await refreshSessions(); // 迟到的创建请求：只同步列表，不抢当前会话
       return;
     }
+    flushDeltaBuf();
     setCurrentSession(id);
     dispatch({ type: "reset", events: [] });
     await refreshSessions();
@@ -870,12 +937,14 @@ function App() {
   };
 
   const deleteSession = async (id: string): Promise<void> => {
+    if (state.running) return; // F2（审查 P1-15）：三处会话操作统一 running 守卫（4.7 后按钮同已禁用，这里是兜底）
     const seq = ++sessionSeqRef.current;
     const { currentSession: next } = await window.agent.deleteSession(id);
     if (seq !== sessionSeqRef.current) {
       await refreshSessions(); // 迟到的删除响应：只同步列表
       return;
     }
+    flushDeltaBuf();
     setCurrentSession(next);
     if (next) {
       const seqOpen = ++sessionSeqRef.current;
@@ -892,22 +961,31 @@ function App() {
   };
 
   // 启动：settings（布局/档位/主题/当前会话）+ 会话列表 + 沙箱状态 + 当前会话重放（重启还原）
+  // F6（审查 P2）：任一 IPC reject 不再半初始化 + unhandled rejection——allSettled 分路兜底。
   useEffect(() => {
     void (async () => {
-      const [s, list, st, info] = await Promise.all([
+      const [s, list, st, info] = await Promise.allSettled([
         window.agent.getSettings(),
         window.agent.listSessions(),
         window.agent.getState(),
         window.agent.getProviderInfo(),
       ]);
-      setSettingsState(s);
-      setSessions(list);
-      setStatus(st);
-      setProvider(info);
+      const fail = (label: string, reason: unknown): void =>
+        console.error("[startup] " + label + " 失败:", reason instanceof Error ? reason.message : String(reason));
+      const sVal = s.status === "fulfilled" ? s.value : null;
+      const listVal = list.status === "fulfilled" ? list.value : [];
+      if (s.status === "fulfilled") setSettingsState(sVal);
+      else fail("getSettings", s.reason);
+      if (list.status === "fulfilled") setSessions(listVal);
+      else fail("listSessions", list.reason);
+      if (st.status === "fulfilled") setStatus(st.value);
+      else fail("getState", st.reason);
+      if (info.status === "fulfilled") setProvider(info.value);
+      else fail("getProviderInfo", info.reason);
       // M4b §2.4：首启（onboarded 缺省 false）弹新手引导；完成后不再弹
-      if (!s.onboarded) setWizardOpen(true);
+      if (sVal && !sVal.onboarded) setWizardOpen(true);
       const cur =
-        s.currentSession && list.some((x) => x.id === s.currentSession) ? s.currentSession : (list[0]?.id ?? null);
+        sVal?.currentSession && listVal.some((x) => x.id === sVal.currentSession) ? sVal.currentSession : (listVal[0]?.id ?? null);
       if (cur) {
         const seq = ++sessionSeqRef.current; // 启动重放参与同一序号守卫（用户先点击则让位）
         const { events } = await window.agent.openSession(cur);
@@ -922,21 +1000,20 @@ function App() {
   // H3-P2（审查 F-4/A-8）：流式 delta 按帧批量 dispatch——旧实现每个 delta 一次 dispatch，
   // 多个 O(n) 投影全量重算 → 整条流 O(n²)；缓冲一帧合并后每帧至多一次重渲染，折叠语义不变
   //（fold 对同 callId delta 是纯文本拼接）。非 delta 事件先冲缓冲再落本事件（保序）。
-  const deltaBufRef = useRef<Extract<AgentEvent, { type: "assistant_delta" }>[]>([]);
-  const deltaTimerRef = useRef<number | null>(null);
-  const flushDeltaBuf = (): void => {
-    if (deltaTimerRef.current !== null) {
-      window.clearTimeout(deltaTimerRef.current);
-      deltaTimerRef.current = null;
-    }
-    const buf = deltaBufRef.current;
-    if (buf.length === 0) return;
-    deltaBufRef.current = [];
-    for (const d of buf) dispatch({ type: "event", e: d }); // dispatch 恒等，闭包捕获安全
-  };
+  // F1（审查 P1-14）：currentSession 的 ref 镜像——本 effect 挂载一次，闭包不能读 state，
+  // 过滤逻辑用 ref（与 sessionSeqRef 同一口径）。
+  const currentSessionIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    currentSessionIdRef.current = currentSession;
+  }, [currentSession]);
   useEffect(() => {
     // M4a：定时触发 = main 侧后台新建会话 → 活流收到 automation_triggered 即刷新会话列表（定时徽标实时出现）
     const offEvent = window.agent.onEvent((e) => {
+      if (e.type === "automation_triggered") void refreshSessions(); // 定时徽标：跨会话事件也要刷新列表
+      // F1（审查 P1-14）：agent:event 是全局无会话归因通道——定时/后台 run 的事件会串进
+      // 当前时间线。带 session_id 的事件只折叠进匹配的当前会话（迟到路径守卫，与 seq 守卫同族）；
+      // 无标记（旧脚本路径）保持全收（行为兼容）。跨会话例外（automation_*）见 store.foldsIntoCurrentSession（S1-5）。
+      if (!foldsIntoCurrentSession(e, currentSessionIdRef.current)) return;
       if (e.type === "assistant_delta") {
         deltaBufRef.current.push(e);
         if (deltaTimerRef.current === null) {
@@ -946,7 +1023,6 @@ function App() {
       }
       flushDeltaBuf();
       dispatch({ type: "event", e });
-      if (e.type === "automation_triggered") void refreshSessions();
     });
     const offAsk = (a: AskPayload): void => {
       flushDeltaBuf();
@@ -1005,17 +1081,18 @@ function App() {
     }
   };
 
+  // F8（审查 P2）：IPC reject 不再静默成 unhandled rejection——统一落 console.error（fail-visible）。
   const decide = (askId: string, approved: boolean, scope?: "once" | "session_kind" | "always"): void => {
-    void window.agent.decide(askId, approved, scope);
+    window.agent.decide(askId, approved, scope).catch((err: unknown) => console.error("[decide] 失败:", err instanceof Error ? err.message : String(err)));
   };
 
   const onCardAction = (action: string, data: unknown): void => {
     if (action === "form_submit") {
       const d = data as { callId: string; answers: ClarifyAnswerMap };
-      void window.agent.submitClarify(d.callId, d.answers);
+      window.agent.submitClarify(d.callId, d.answers).catch((err: unknown) => console.error("[clarify] 提交失败:", err instanceof Error ? err.message : String(err)));
     } else if (action === "plan_decide") {
       const d = data as { callId: string; approved: boolean };
-      void window.agent.decidePlan(d.approved, d.callId);
+      window.agent.decidePlan(d.approved, d.callId).catch((err: unknown) => console.error("[plan] 决议失败:", err instanceof Error ? err.message : String(err)));
     } else if (action === "jump_source") {
       // M2f：promote 卡「跳回源消息」——源定位在 sidechat 面板（origin 四字段即定位凭据）。
       // 这里只做可视化提示（面板打开后按 session/事件号定位），不改变主会话状态。
@@ -1106,21 +1183,39 @@ function App() {
   const lastStreamText = lastTimeline?.kind === "stream" ? lastTimeline.text : undefined;
 
   // 右栏面板载荷：全部来自事件流/审批通道投影（无第二事实源）
-  const panelPayload = {
-    asks: pending.map((a) => ({ askId: a.askId, tool: a.tool, args: a.args, reason: a.reason, risk: a.risk })),
-    tokens,
-    diffs,
-    memoryWrites: memoryWritesOf(state),
-    // M2f sidechat 面板自行经 getState 拉取最新快照（不在此透传启动期旧值，避免不刷新）
-    eventCount: state.events.length,
-    // M3a：多 agent 面板列 + token 按 agent 分解（纯事件流投影）
-    agents: agentCols,
-    tokensByAgent,
-    // M3b：合并控制塔列（write worker 合并卡，纯事件流投影）
-    mergeTower,
-  };
+  // F4（审查 P2）：memoryWritesOf 补 useMemo（旧实现面板关闭时每次渲染全量扫 events）。
+  // F5/G6（审查 P2）：panelPayload 对象 memo 化——底下游投影不变时对象身份稳定，
+  // 配合面板 React.memo 使非当前面板/未变化面板跳过重渲染（旧实现每次渲染重建字面量）。
+  const memoryWrites = useMemo(() => memoryWritesOf(state), [state]);
+  const panelPayload = useMemo(
+    () => ({
+      asks: pending.map((a) => ({ askId: a.askId, tool: a.tool, args: a.args, reason: a.reason, risk: a.risk })),
+      tokens,
+      diffs,
+      memoryWrites,
+      // M2f sidechat 面板自行经 getState 拉取最新快照（不在此透传启动期旧值，避免不刷新）
+      eventCount: state.events.length,
+      // M3a：多 agent 面板列 + token 按 agent 分解（纯事件流投影）
+      agents: agentCols,
+      tokensByAgent,
+      // M3b：合并控制塔列（write worker 合并卡，纯事件流投影）
+      mergeTower,
+    }),
+    [pending, tokens, diffs, memoryWrites, state.events.length, agentCols, tokensByAgent, mergeTower],
+  );
   const activePanelId = settings?.layout.activePanel ?? null;
   const ActivePanel = activePanelId ? resolvePanel(activePanelId) : null;
+  // F5：面板组件按类型 memo——payload/回调身份稳定时跳过重渲染（切换面板才重建包装）。
+  const MemoActivePanel = useMemo(() => (ActivePanel ? memo(ActivePanel) : null), [ActivePanel]);
+  // F5：onAction 经 ref 中转——身份稳定（memo 生效）但始终调用最新实现。
+  const onActionImplRef = useRef<(action: string, data?: unknown) => void>(() => {});
+  onActionImplRef.current = (action: string, data?: unknown): void => {
+    if (action === "compact") void window.agent.compact?.();
+    else if (action === "agent_cancel") onCardAction("agent_cancel", data);
+    else if (action === "merge" || action === "reject" || action === "comment") onCardAction("merge_tower_" + action, data);
+    else if (action === "orphan_clean") onCardAction("orphan_clean", data);
+  };
+  const stableOnAction = useCallback((action: string, data?: unknown): void => onActionImplRef.current(action, data), []);
 
   const renderTimelineItem = (it: TimelineItem): React.ReactNode => {
     if (it.kind === "event") return <EventView e={it.e} onAction={onCardAction} planStatuses={planStatuses} agentCols={agentColsById} clarifySubmitted={clarifySubmitted} />;
@@ -1140,7 +1235,7 @@ function App() {
           <SidebarGroup>
             <SidebarGroupLabel className="flex items-center justify-between">
               会话
-              <Button size="icon-sm" variant="ghost" aria-label="新建会话" title="新建会话" data-m1e-session-new="" onClick={() => void createSession()}>
+              <Button size="icon-sm" variant="ghost" aria-label="新建会话" title={state.running ? "agent 运行中——先停止再新建会话" : "新建会话"} disabled={state.running} data-m1e-session-new="" onClick={() => void createSession()}>
                 <Plus className="h-4 w-4" />
               </Button>
             </SidebarGroupLabel>
@@ -1187,8 +1282,9 @@ function App() {
                     ) : (
                       <>
                         <button
-                          className="min-w-0 flex-1 truncate text-left"
-                          title={s.id + " · " + String(s.lines) + " 条事件"}
+                          className="min-w-0 flex-1 truncate text-left disabled:opacity-40"
+                          title={(state.running ? "agent 运行中——先停止再切换会话｜" : "") + s.id + " · " + String(s.lines) + " 条事件"}
+                          disabled={state.running}
                           onClick={() => void switchSession(s.id)}
                         >
                           {s.id}
@@ -1208,7 +1304,9 @@ function App() {
                           </button>
                           <button
                             aria-label={"删除 " + s.id}
-                            className="rounded p-0.5 hover:bg-muted"
+                            className="rounded p-0.5 hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent"
+                            title={state.running ? "agent 运行中——先停止再删除会话" : "删除会话"}
+                            disabled={state.running}
                             onClick={() => void deleteSession(s.id)}
                           >
                             <Trash2 className="h-3 w-3" />
@@ -1352,16 +1450,8 @@ function App() {
                 )}
               </header>
               <div className="min-h-0 flex-1 overflow-y-auto" data-panel-id={activePanelId ?? undefined}>
-                {ActivePanel && (
-                  <ActivePanel
-                    payload={panelPayload}
-                    onAction={(action: string, data?: unknown) => {
-                      if (action === "compact") void window.agent.compact?.();
-                      else if (action === "agent_cancel") onCardAction("agent_cancel", data);
-                      else if (action === "merge" || action === "reject" || action === "comment") onCardAction("merge_tower_" + action, data);
-                      else if (action === "orphan_clean") onCardAction("orphan_clean", data);
-                    }}
-                  />
+                {MemoActivePanel && (
+                  <MemoActivePanel payload={panelPayload} onAction={stableOnAction} />
                 )}
               </div>
             </div>
@@ -1387,7 +1477,12 @@ function App() {
       />
       <OnboardingWizard
         open={wizardOpen}
-        onOpenChange={setWizardOpen}
+        onOpenChange={(open: boolean) => {
+          // F12（审查 P3）：X 关闭视同"跳过"——落 onboarded:true，否则下次启动重复弹
+          //（与"每步可跳过"语义一致）；完成路径 onFinish 同样落 true，二者幂等。
+          if (!open) patchSettings({ onboarded: true });
+          setWizardOpen(open);
+        }}
         settings={settings}
         sandbox={sandbox}
         license={license}

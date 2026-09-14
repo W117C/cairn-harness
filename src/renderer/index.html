@@ -2,9 +2,12 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+    <!-- I8（审查 P2）：object-src/base-uri 收紧为 none（两个方向全适用）。
+         connect-src 的裸 ws: 仅 dev HMR 需要——prod 构建经 electron.vite 的
+         csp-prod-harden 插件移除（renderer 与主进程走 IPC，无出网需求）。 -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws:"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws:; object-src 'none'; base-uri 'none'"
     />
     <title>M0b · 桌面 Agent</title>
   </head>

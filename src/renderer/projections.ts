@@ -290,8 +290,9 @@ export function projectMergeTower(events: AgentEvent[]): MergeTowerColumn[] {
         col.outcome = "cleaned";
         col.outcomeText = out;
       }
-    } else if (e.type === "agent_status" && cols.has(e.agent_id)) {
-      cols.get(e.agent_id)!.status = e.status;
+    } else if (e.type === "agent_status") {
+      const c = cols.get(e.agent_id);
+      if (c) c.status = e.status; // F10（审查）：守卫替代非空断言
     }
   }
   // findings 按严重度降序（合并卡红标显示面）
@@ -539,10 +540,33 @@ export function projectAgentPanel(events: AgentEvent[]): AgentColumn[] {
   for (const a of acc.values()) {
     if (a.col.pendingApproval && a.resolved.has(a.col.pendingApproval.id)) a.col.pendingApproval = null;
   }
-  return order.map((id) => acc.get(id)!.col);
+  // F10（审查）：守卫替代非空断言——order 里的 id 缺 acc 条目（数据异常）时跳过而不是抛
+  return order.flatMap((id) => {
+    const a = acc.get(id);
+    return a ? [a.col] : [];
+  });
 }
 
 // ---- M4a 定时任务投影辅助（renderer 纯函数，不 import main/scheduler——避免 node:fs 进 bundle）----
+
+// ---- G10（审查 P3）：面板与卡片各写一份的公共映射，抽唯一实现防漂移 ----
+
+/** stat 文本的首个文件路径（行级评论 path 的缺省凭据）。 */
+export function firstPathOfStat(stat: string): string | null {
+  for (const line of stat.split("\n")) {
+    if (line.includes("|")) return line.trim().split(/\s+\|/)[0]?.replace(/"/g, "") ?? null;
+  }
+  return null;
+}
+
+/** agent 状态 → Badge variant/label（agents 面板列与指挥卡共用；两份手写映射已实际漂移）。 */
+export function agentStatusBadge(status: string): { variant: "default" | "secondary" | "destructive" | "outline"; label: string } {
+  if (status === "done") return { variant: "default", label: "done" };
+  if (status === "failed") return { variant: "destructive", label: "failed" };
+  if (status === "cancelled") return { variant: "outline", label: "cancelled" };
+  if (status === "waiting_approval" || status === "waiting_input") return { variant: "destructive", label: status };
+  return { variant: "secondary", label: status };
+}
 
 /** skipped 原因 → UI hover 中文标签（休眠/重叠/并发满/过期，Claude Desktop 同款，§12.2.6）。 */
 export function skipReasonLabel(reason: string | undefined): string {

@@ -15,7 +15,7 @@ import { CompactionCard } from "./compaction-card";
 import { PlanCard } from "./plan";
 import { PromoteCard } from "./promote";
 import { VerifyResultCard } from "./verify-result";
-import { parsePatchLines } from "../projections";
+import { firstPathOfStat, parsePatchLines } from "../projections";
 
 export interface CardProps {
   payload: Record<string, unknown>;
@@ -24,10 +24,11 @@ export interface CardProps {
 }
 export type CardComponent = (props: CardProps) => ReactElement;
 
-function str(v: unknown, fallback = ""): string {
+// G5（审查 P2）：导出给各卡片做防御性字段归一（损坏/旧版 JSONL 事件不许让卡片抛 TypeError）。
+export function str(v: unknown, fallback = ""): string {
   return typeof v === "string" ? v : fallback;
 }
-function num(v: unknown, fallback = 0): number {
+export function num(v: unknown, fallback = 0): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
 }
 
@@ -83,11 +84,21 @@ export function DiffCard({ payload, onAction }: CardProps): ReactElement {
               {lines.map((l, i) => (
                 <div
                   key={String(i)}
+                  role="button"
+                  tabIndex={l.newLine !== null ? 0 : -1}
+                  aria-label={l.newLine !== null ? "第 " + String(l.newLine) + " 行，行级评论" : undefined}
                   className={pendingLine === l.newLine && l.newLine !== null ? "cursor-pointer bg-amber-500/10" : "cursor-pointer hover:bg-muted/60"}
                   data-m3b-diff-line={l.newLine ?? undefined}
                   title={l.newLine !== null ? "第 " + String(l.newLine) + " 行 · 点击行级评论" : undefined}
                   onClick={() => {
                     if (l.newLine !== null) setPendingLine(l.newLine);
+                  }}
+                  onKeyDown={(ev: { key: string; preventDefault: () => void }) => {
+                    // G9（审查 P3）：键盘用户也能选行评论（Enter/Space 触发，同点击语义）
+                    if (l.newLine !== null && (ev.key === "Enter" || ev.key === " ")) {
+                      ev.preventDefault();
+                      setPendingLine(l.newLine);
+                    }
                   }}
                 >
                   {l.text}
@@ -132,17 +143,15 @@ export function DiffCard({ payload, onAction }: CardProps): ReactElement {
   );
 }
 
-/** 行级评论落点文件：patch 的 +++ b/<path> 头 → stat 首路径 → payload.path（三级回退）。 */
+/** 行级评论落点文件：patch 的 +++ b/<path> 头 → stat 首路径 → payload.path（三级回退）。
+ *  G10（审查）：stat 首路径解析用 projections 的共享实现（panels 侧同源）。 */
 function commentPath(payload: Record<string, unknown>, patch: string): string {
   for (const line of patch.split("\n")) {
     if (line.startsWith("+++ b/")) return line.slice("+++ b/".length).replace(/\t.*$/, "");
     if (line.startsWith("+++ /dev/null")) break;
   }
   const stat = typeof payload.stat === "string" ? payload.stat : "";
-  for (const line of stat.split("\n")) {
-    if (line.includes("|")) return line.trim().split(/\s+\|/)[0]!.replace(/"/g, "");
-  }
-  return str(payload.path);
+  return firstPathOfStat(stat) ?? str(payload.path);
 }
 
 /** 报告卡：标题 + 正文。payload: { title, body } */

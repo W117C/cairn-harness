@@ -78,7 +78,7 @@ describe("面板注册表（M1e + M2d memory + M2e plugins + M2f sidechat + M3a 
               counts: { skills: 1, commands: 1, agents: 1, hooks: 8, mcp: 1, lsp: 1 },
               errors: [], warnings: ["未知顶层字段：futureField"],
             }],
-            looseSkills: [{ invoke: "/standalone-skill", description: "散装" }],
+            looseSkills: [{ name: "solo-skill", invoke: "/standalone-skill", description: "散装", trust: "pending" }],
             mcpServers: [{ plugin: "echo-suite", server: "stub", state: "connected", tools: ["mcp__plugin_echo-suite_stub__echo"] }],
             errors: [{ plugin: "broken-plugin", message: "plugin.json 解析失败" }],
             warnings: [],
@@ -90,6 +90,8 @@ describe("面板注册表（M1e + M2d memory + M2e plugins + M2f sidechat + M3a 
     expect(pluginsHtml).toContain("待信任");
     expect(pluginsHtml).toContain("首次加载");
     expect(pluginsHtml).toContain("/standalone-skill");
+    // 审查 S2-12：pending 散装 skill 也要有信任出口（徽标 + 按钮），不能只列个名字
+    expect(pluginsHtml).toContain("信任后才进路由清单");
     expect(pluginsHtml).toContain("mcp__plugin_echo-suite_stub__echo");
     expect(pluginsHtml).toContain("broken-plugin");
     expect(pluginsHtml).toContain("futureField");

@@ -20,12 +20,16 @@ export interface ClarifyFormPayload {
 
 export function ClarifyFormCard({ payload, onAction }: CardProps): React.ReactElement {
   const p = payload as unknown as ClarifyFormPayload;
+  // G5（审查 P2）：questions/callId 防御性归一——损坏事件不抛 TypeError。
+  const questions = Array.isArray(p.questions) ? p.questions : [];
+  const callId = typeof p.callId === "string" ? p.callId : "";
+  const submitted = p.submitted === true;
   const [picked, setPicked] = useState<Record<number, string | string[]>>({});
   const [extra, setExtra] = useState<Record<number, string>>({});
 
   const submit = (): void => {
     const answers: ClarifyAnswerMap = {};
-    p.questions.forEach((q, i) => {
+    questions.forEach((q, i) => {
       const selection = picked[i];
       const note = (extra[i] ?? "").trim();
       if (q.options?.length && q.multiSelect) {
@@ -38,16 +42,16 @@ export function ClarifyFormCard({ payload, onAction }: CardProps): React.ReactEl
         answers[q.question] = note;
       }
     });
-    onAction?.("form_submit", { callId: p.callId, answers });
+    onAction?.("form_submit", { callId, answers });
   };
 
   return (
     <Card size="sm">
       <CardHeader className="border-b px-3 py-2">
-        <CardTitle className="text-sm">❓ 需要澄清（{String(p.questions.length)} 个问题）</CardTitle>
+        <CardTitle className="text-sm">❓ 需要澄清（{String(questions.length)} 个问题）</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 px-3 py-3">
-        {p.questions.map((q, i) => (
+        {questions.map((q, i) => (
           <Field key={i}>
             <FieldLabel>
               {q.header ? `【${q.header}】` : ""}
@@ -60,7 +64,7 @@ export function ClarifyFormCard({ payload, onAction }: CardProps): React.ReactEl
                     <Label key={opt.label} className="flex items-center gap-2 text-sm font-normal">
                       <Checkbox
                         checked={Array.isArray(picked[i]) && (picked[i] as string[]).includes(opt.label)}
-                        disabled={p.submitted}
+                        disabled={submitted}
                         onCheckedChange={(checked) => {
                           const cur = Array.isArray(picked[i]) ? [...(picked[i] as string[])] : [];
                           setPicked({
@@ -79,7 +83,7 @@ export function ClarifyFormCard({ payload, onAction }: CardProps): React.ReactEl
               ) : (
                 <RadioGroup
                   value={typeof picked[i] === "string" ? (picked[i] as string) : ""}
-                  disabled={p.submitted}
+                  disabled={submitted}
                   onValueChange={(v) => setPicked({ ...picked, [i]: v })}
                 >
                   {q.options.map((opt) => (
@@ -96,15 +100,15 @@ export function ClarifyFormCard({ payload, onAction }: CardProps): React.ReactEl
             ) : null}
             <Input
               placeholder="自由补充（可选）"
-              disabled={p.submitted}
+              disabled={submitted}
               value={extra[i] ?? ""}
               onChange={(e) => setExtra({ ...extra, [i]: e.target.value })}
             />
             <FieldDescription>补充说明会随选项一起回传给 agent。</FieldDescription>
           </Field>
         ))}
-        <Button size="sm" className="w-fit" disabled={p.submitted} onClick={submit}>
-          {p.submitted ? "已提交" : "提交"}
+        <Button size="sm" className="w-fit" disabled={submitted} onClick={submit}>
+          {submitted ? "已提交" : "提交"}
         </Button>
       </CardContent>
     </Card>

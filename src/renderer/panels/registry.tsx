@@ -17,7 +17,9 @@ import {
 } from "@/components/ui/select";
 import { ApprovalCard, DiffCard } from "../cards/registry";
 import {
+  agentStatusBadge,
   EMPTY_SIDECHAT_USAGE,
+  firstPathOfStat,
   HISTORY_STATES,
   mergeTokenProjections,
   skipReasonLabel,
@@ -35,8 +37,10 @@ import type { ScheduleSnapshot } from "../../main/scheduler";
 import type { PluginPanelSnapshot } from "../../agent/plugins";
 
 /** M1 面板三类（§10.2 清单的 M1 里程碑行）+ M2d memory + M2e plugins + M2f sidechat + M3a agents
- *  + M4a schedule；与 main/settings 的 PANEL_IDS 同源字符串。 */
-export type PanelId = "approvals" | "token" | "git" | "memory" | "plugins" | "sidechat" | "agents" | "schedule";
+ *  + M4a schedule。G7（审查）：类型从 main/settings 的 PANEL_IDS 单源派生（type-only 导入，
+ *  零运行时 bundle 影响）——新增面板只改 PANEL_IDS 与本注册表，不再手动同步联合类型。 */
+import type { PanelId as SettingsPanelId } from "../../main/settings";
+export type PanelId = SettingsPanelId;
 
 export interface PanelProps {
   /** 当前会话事件流投影载荷（各面板字段可选）。 */
@@ -57,9 +61,9 @@ export interface PanelProps {
     mergeTower?: MergeTowerColumn[];
     /** M2d memory：本会话 remember 调用审计投影。 */
     memoryWrites?: MemoryWriteProjection[];
-    /** M2e plugins：插件面板快照（缺省由面板自行 getState 拉取）。 */
+    /** M2e plugins：插件面板快照（缺省由面板自行 getState 拉取；G11：透传时 useEffect 跟随）。 */
     plugins?: PluginPanelSnapshot;
-    /** M2f sidechat：辅助对话快照（缺省由面板自行 getState 拉取）。 */
+    /** M2f sidechat：辅助对话快照（缺省由面板自行 getState 拉取；G11：透传时 useEffect 跟随）。 */
     sidechat?: SidechatPanelSnapshot;
     /** M3a agents：每 worker 一列（agent 子流事件投影）。 */
     agents?: AgentColumn[];
@@ -95,6 +99,10 @@ export function ApprovalsPanel({ payload }: PanelProps): ReactElement {
  *  分解是**纯投影**：主会话来自 payload.tokens（事件流订阅），sidechat 来自 getState().sidechat（各自 JSONL 的投影）。 */
 export function TokenPanel({ payload, onAction }: PanelProps): ReactElement {
   const base = payload.tokens;
+  // G1（审查）：刷新信号改 eventCount——旧实现依赖 payload.tokens 对象身份，而宿主的
+  // useMemo 依赖 [state]，state 每 delta 都换新 → 流式期间每批次都触发一次 getState IPC
+  //（其余自取快照面板都用 eventCount 防抖）。
+  const eventCount = payload.eventCount ?? 0;
   const [side, setSide] = useState<TokenKindBreakdown | null>(null);
   useEffect(() => {
     let alive = true;
@@ -129,7 +137,7 @@ export function TokenPanel({ payload, onAction }: PanelProps): ReactElement {
     return () => {
       alive = false;
     };
-  }, [base]);
+  }, [eventCount]); // G1：以事件数为刷新信号（不再随 tokens 对象身份逐批触发）
   const t = base ? mergeTokenProjections(base, side ?? EMPTY_SIDECHAT_USAGE) : null;
   const mainKind = t?.byKind.find((k) => k.kind === "main") ?? null;
   const sideKind = t?.byKind.find((k) => k.kind === "sidechat") ?? null;
@@ -369,13 +377,7 @@ function MergeTowerCard({ col, onAction }: { col: MergeTowerColumn; onAction?: P
   );
 }
 
-/** stat 首个文件路径（行级评论 path 的缺省凭据）。 */
-function firstPathOfStat(stat: string): string | null {
-  for (const line of stat.split("\n")) {
-    if (line.includes("|")) return line.trim().split(/\s+\|/)[0]!.replace(/"/g, "");
-  }
-  return null;
-}
+// G10（审查 P3）：firstPathOfStat 抽到 projections.ts（cards 侧同款实现共用一份）。
 
 /** M3b 孤儿 worktree 列表（§4.4.9：只列不自动删；清理 = 用户显式动作）。快照经 getState 现算（FS 态，
  *  与 memory/plugins 同族——非事件流数据，不落第二事实源）。 */
@@ -455,6 +457,7 @@ export function GitPanel({ payload, onAction }: PanelProps): ReactElement {
  *  M2g：preload 已接线（六条通道全部桥接），按钮常态可用；can* 守卫仅用于 headless SSR 兜底。 */
 function SidechatPanel({ payload }: PanelProps): ReactElement {
   const [snap, setSnap] = useState<SidechatPanelSnapshot | null>(payload.sidechat ?? null);
+  const [loadFailed, setLoadFailed] = useState(false); // G3（审查）：请求失败 ≠ 数据为空
   const [active, setActive] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -466,7 +469,9 @@ function SidechatPanel({ payload }: PanelProps): ReactElement {
     try {
       const st: StateResponse = await window.agent.getState();
       setSnap(st.sidechat ?? null);
+      setLoadFailed(false);
     } catch {
+      setLoadFailed(true);
       setSnap(null);
     }
   }, []);
@@ -476,6 +481,10 @@ function SidechatPanel({ payload }: PanelProps): ReactElement {
     const t = setTimeout(() => { void reload(); }, 500);
     return () => clearTimeout(t);
   }, [reload, payload.eventCount]);
+  // G11（审查）：props→state 初始化不随宿主更新——透传时经 useEffect 跟随。
+  useEffect(() => {
+    if (payload.sidechat !== undefined) setSnap(payload.sidechat);
+  }, [payload.sidechat]);
   useEffect(() => {
     if (active === null && snap && snap.sessions.length > 0) setActive(snap.sessions[0]?.id ?? null);
   }, [snap, active]);
@@ -494,6 +503,9 @@ function SidechatPanel({ payload }: PanelProps): ReactElement {
       });
       setNote(r?.ok ? "已提升进主会话（+1 user_message，带 origin）" : "提升失败：" + (r?.error ?? "未知"));
       await reload();
+    } catch (err) {
+      // G2（审查）：IPC reject 不再静默（busy 只复位，用户看不到错误）
+      setNote("提升调用失败：" + (err instanceof Error ? err.message : String(err)));
     } finally {
       setBusy(false);
     }
@@ -521,6 +533,9 @@ function SidechatPanel({ payload }: PanelProps): ReactElement {
         setNote(r?.ok ? null : "提问失败：" + (r?.error ?? "未知"));
         await reload();
       }
+    } catch (err) {
+      // G2（审查）：IPC reject 不再静默
+      setNote("发送失败：" + (err instanceof Error ? err.message : String(err)));
     } finally {
       setBusy(false);
     }
@@ -549,7 +564,8 @@ function SidechatPanel({ payload }: PanelProps): ReactElement {
           新建旁路会话
         </Button>
       </div>
-      {(snap?.sessions.length ?? 0) === 0 && <div className="text-sm text-muted-foreground">（暂无旁路会话）</div>}
+      {(snap?.sessions.length ?? 0) === 0 && !loadFailed && <div className="text-sm text-muted-foreground">（暂无旁路会话）</div>}
+      {loadFailed && <div className="text-sm text-red-500">快照获取失败（主进程不可达）——不是“暂无会话”</div>}
       <div className="flex flex-wrap gap-1">
         {snap?.sessions.map((s) => (
           <Button
@@ -650,28 +666,36 @@ export function FallbackPanel({ payload }: PanelProps): ReactElement {
  *  未接线时按钮禁用并注明，主进程通道已就绪）。 */
 function MemoryPanel({ payload }: PanelProps): ReactElement {
   const [snap, setSnap] = useState<MemorySnapshot | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false); // G3（审查）：请求失败 ≠ 数据为空
   const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
   // SSR 安全：headless 渲染无 window（面板注册表规约——渲染绝不抛）
   const canDelete = typeof window !== "undefined" && typeof window.agent?.deleteMemory === "function";
-  const reload = useCallback(async () => {
+  const reloadMemory = useCallback(async () => {
     try {
       const st = await window.agent.getState();
       setSnap(st.memory ?? null);
+      setLoadFailed(false);
     } catch {
+      setLoadFailed(true); // G3（审查）：失败 ≠ 空
       setSnap(null);
     }
   }, []);
   // M2g 收口修复：同 SidechatPanel——挂载期外部变化（agent 沉淀新记忆 / 用户他面删除）也须可见。
   useEffect(() => {
-    const t = setTimeout(() => { void reload(); }, 500);
+    const t = setTimeout(() => { void reloadMemory(); }, 500);
     return () => clearTimeout(t);
-  }, [reload, payload.eventCount]);
+  }, [reloadMemory, payload.eventCount]);
+  // G2（审查）：IPC reject 不再静默（try/finally 只复位 busy，用户看不到错误）
   const del = async (scope: "project" | "global", topic: string): Promise<void> => {
     if (!window.agent.deleteMemory) return;
     setBusy(true);
+    setNote(null);
     try {
       await window.agent.deleteMemory(scope, topic);
-      await reload();
+      await reloadMemory();
+    } catch (err) {
+      setNote("删除失败：" + (err instanceof Error ? err.message : String(err)));
     } finally {
       setBusy(false);
     }
@@ -719,6 +743,8 @@ function MemoryPanel({ payload }: PanelProps): ReactElement {
   };
   return (
     <div className="space-y-2 p-3" data-m2d-memory-panel>
+      {loadFailed && <div className="text-sm text-red-500">快照获取失败（主进程不可达）——不是“无记忆”</div>}
+      {note && <div className="text-sm text-red-500">{note}</div>}
       {layer("项目层（.agent/，随仓库）", "project")}
       {layer("全局层（本机）", "global")}
       <Card>
@@ -744,13 +770,17 @@ function MemoryPanel({ payload }: PanelProps): ReactElement {
  *  决议通道 optional：preload 白名单本轮未含（deleteMemory 同款先例），未接线时按钮禁用并注明（BLOCKED 备案）。 */
 function PluginsPanel({ payload }: PanelProps): ReactElement {
   const [snap, setSnap] = useState<PluginPanelSnapshot | null>(payload.plugins ?? null);
+  const [loadFailed, setLoadFailed] = useState(false); // G3（审查）：请求失败 ≠ 数据为空
   const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
   const canDecide = typeof window !== "undefined" && typeof window.agent?.pluginDecide === "function";
   const reload = useCallback(async () => {
     try {
       const st: StateResponse = await window.agent.getState();
       setSnap(st.plugins ?? null);
+      setLoadFailed(false);
     } catch {
+      setLoadFailed(true); // G3（审查）：失败 ≠ 空
       setSnap(null);
     }
   }, []);
@@ -759,17 +789,26 @@ function PluginsPanel({ payload }: PanelProps): ReactElement {
     const t = setTimeout(() => { void reload(); }, 500);
     return () => clearTimeout(t);
   }, [reload, payload.eventCount]);
+  // G11（审查）：props→state 初始化不随宿主更新——透传时经 useEffect 跟随。
+  useEffect(() => {
+    if (payload.plugins !== undefined) setSnap(payload.plugins);
+  }, [payload.plugins]);
+  // G2（审查）：IPC reject 不再静默
   const decide = async (name: string, trusted: boolean): Promise<void> => {
     if (!window.agent.pluginDecide) return;
     setBusy(true);
+    setNote(null);
     try {
       await window.agent.pluginDecide(name, trusted);
       await reload();
+    } catch (err) {
+      setNote("决议失败：" + (err instanceof Error ? err.message : String(err)));
     } finally {
       setBusy(false);
     }
   };
   if (!snap) {
+    if (loadFailed) return (<div className="p-3 text-sm text-red-500">插件快照获取失败（主进程不可达）——不是“未装配 PluginRuntime”。</div>);
     return (<div className="p-3 text-sm text-muted-foreground">插件快照不可用（会话未装配 PluginRuntime）。</div>);
   }
   const trustBadge = (t: string): ReactElement =>
@@ -817,7 +856,26 @@ function PluginsPanel({ payload }: PanelProps): ReactElement {
         <Card>
           <CardHeader><CardTitle className="text-sm">散装 skill（免包装）</CardTitle></CardHeader>
           <CardContent className="space-y-1 text-xs">
-            {snap.looseSkills.map((s) => (<div key={s.invoke} className="font-mono">{s.invoke}</div>))}
+            {snap.looseSkills.map((s) => (
+              <div key={s.name} className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono">{s.invoke}</span>
+                  {trustBadge(s.trust)}
+                </div>
+                {/* 审查 S2-12（任务 4.6）：pending 的散装 skill 过去只列出、无出口（trustDecide
+                    认不到名字）=> 与插件同款批准/拒绝按钮，复用同一 decide 闭包与既有禁用态。 */}
+                {s.trust === "pending" && (
+                  <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-2 py-1.5">
+                    <span className="text-amber-700 dark:text-amber-400">首次加载：信任后才进路由清单（description 直进 system prompt）。</span>
+                    <Button size="sm" variant="default" disabled={!canDecide || busy} title="信任该 skill（进路由清单）"
+                      data-m2g-loose-trust-btn="" onClick={() => void decide(s.name, true)}>批准</Button>
+                    <Button size="sm" variant="outline" disabled={!canDecide || busy} title="拒绝该 skill（不进路由清单）"
+                      onClick={() => void decide(s.name, false)}>拒绝</Button>
+                  </div>
+                )}
+                {s.description !== "" && <div className="text-muted-foreground">{s.description}</div>}
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}
@@ -851,12 +909,9 @@ function PluginsPanel({ payload }: PanelProps): ReactElement {
  *  cost_so_far（usage 投影）+ 时长 + 血缘分组（spawn@#事件号）+ 待批徽标 + 取消/查看报告动作。
  *  数据 100% 来自 agent 子流事件投影（payload.agents），零事件流外私有状态（§3.1 判据）。 */
 function statusBadge(status: AgentColumn["status"]): ReactElement {
-  if (status === "running") return <Badge variant="secondary">running</Badge>;
-  if (status === "waiting_approval") return <Badge variant="destructive">waiting_approval</Badge>;
-  if (status === "waiting_input") return <Badge variant="destructive">waiting_input</Badge>;
-  if (status === "done") return <Badge variant="default">done</Badge>;
-  if (status === "failed") return <Badge variant="destructive">failed</Badge>;
-  return <Badge variant="outline">cancelled</Badge>;
+  // G10（审查）：状态→徽标映射来自 projections 的唯一实现（agent-card 同源，防两份漂移）。
+  const b = agentStatusBadge(status);
+  return <Badge variant={b.variant}>{b.label}</Badge>;
 }
 
 export function AgentsPanel({ payload, onAction }: PanelProps): ReactElement {

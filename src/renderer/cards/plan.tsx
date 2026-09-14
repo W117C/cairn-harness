@@ -16,7 +16,15 @@ const ACTION_LABEL: Record<string, string> = { create: "新建", edit: "修改",
 
 export function PlanCard({ payload, onAction }: CardProps): React.ReactElement {
   const p = payload as unknown as PlanCardPayload;
-  const plan = p.plan;
+  // G5（审查 P2）：损坏/旧版 JSONL 事件不许让卡片抛 TypeError（顶层 ErrorBoundary 兜底会
+  // 整页替换）——关键字段防御性归一（registry str/num 同款口径）。
+  const plan = (p.plan ?? {}) as Partial<PlanProposal>;
+  const goal = typeof plan.goal === "string" ? plan.goal : "";
+  const files = Array.isArray(plan.files) ? plan.files : [];
+  const approach = typeof plan.approach === "string" ? plan.approach : "";
+  const verify = (plan.verify ?? {}) as { lint?: string[]; test?: string[] };
+  const lint = Array.isArray(verify.lint) ? verify.lint : [];
+  const test = Array.isArray(verify.test) ? verify.test : [];
   const decided = p.status === "approved" || p.status === "rejected";
   return (
     <Card size="sm">
@@ -33,12 +41,12 @@ export function PlanCard({ payload, onAction }: CardProps): React.ReactElement {
       <CardContent className="flex flex-col gap-3 px-3 py-3 text-sm">
         <div>
           <div className="text-xs text-muted-foreground">目标</div>
-          <div>{plan.goal}</div>
+          <div>{goal}</div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground">文件清单（{String(plan.files.length)}）</div>
+          <div className="text-xs text-muted-foreground">文件清单（{String(files.length)}）</div>
           <div className="mt-1 flex flex-col gap-1">
-            {plan.files.map((f) => (
+            {files.map((f) => (
               <div key={f.path} className="flex items-center gap-2">
                 <Badge variant="outline">{ACTION_LABEL[f.action] ?? f.action}</Badge>
                 <span className="font-mono text-xs">{f.path}</span>
@@ -47,20 +55,20 @@ export function PlanCard({ payload, onAction }: CardProps): React.ReactElement {
             ))}
           </div>
         </div>
-        {plan.approach ? (
+        {approach ? (
           <div>
             <div className="text-xs text-muted-foreground">草图 / 思路</div>
-            <pre className="font-mono text-xs whitespace-pre-wrap">{plan.approach}</pre>
+            <pre className="font-mono text-xs whitespace-pre-wrap">{approach}</pre>
           </div>
         ) : null}
-        {plan.verify ? (
+        {lint.length > 0 || test.length > 0 ? (
           <div>
             <div className="text-xs text-muted-foreground">verify 命令</div>
             <div className="font-mono text-xs">
-              {(plan.verify.lint ?? []).map((c) => (
+              {lint.map((c) => (
                 <div key={c}>lint: {c}</div>
               ))}
-              {(plan.verify.test ?? []).map((c) => (
+              {test.map((c) => (
                 <div key={c}>test: {c}</div>
               ))}
             </div>

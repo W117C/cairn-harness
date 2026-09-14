@@ -151,7 +151,14 @@ async function waitFor<T>(probe: () => Promise<T | null>, timeoutMs: number, eve
 }
 
 function spawnElectron(env: NodeJS.ProcessEnv): { proc: ChildProcess; output: () => string } {
-  const bin = join(process.cwd(), "node_modules", "electron", "dist", "Electron.app", "Contents", "MacOS", "Electron");
+  // H12（审查 P3）：Electron 二进制路径按平台分支（旧实现硬编码 macOS .app 布局，非 darwin 不可用）。
+  const rel =
+    process.platform === "darwin"
+      ? join("Electron.app", "Contents", "MacOS", "Electron")
+      : process.platform === "win32"
+        ? "electron.exe"
+        : "electron";
+  const bin = join(process.cwd(), "node_modules", "electron", "dist", ...rel.split("/"));
   const chunks: string[] = [];
   // M2g 环境适配（fail-visible）：本宿主拒载 Chromium 自带沙箱（`sandbox initialization failed:
   // Operation not permitted`，GPU/network 子进程连锁崩溃），Electron 起不来 → B 相全部断言无从谈起。

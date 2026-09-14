@@ -49,6 +49,24 @@ function foldEvent(state: AppState, e: AgentEvent): AppState {
   return { ...state, events: [...state.events, e], timeline: [...state.timeline, { kind: "event", e }] };
 }
 
+/** 活流事件是否折叠进当前会话时间线（F1 会话归因守卫；审查 S1-5 把边界抽成可测纯函数）。
+ *  automation_* 一族按设计是跨会话事件：定时触发即新建会话，事件里的 session_id 指向那个
+ *  新会话。按当前会话过滤会把整条吞掉——活流里永不出「⏰ 定时触发」行与完成 report 卡，
+ *  而 emitTimeline 已把它写进当前会话 JSONL（重放时又看得到 => live≠replay）；且事件不进
+ *  state.events => panelPayload.eventCount 不动 => schedule 面板唯一刷新触发失效。
+ *  其余带 session_id 的事件仍按归因过滤（后台 run 不得串台）；无标记保持全收（行为兼容）。 */
+const CROSS_SESSION_EVENT_TYPES: ReadonlySet<string> = new Set([
+  "automation_triggered",
+  "automation_skipped",
+  "automation_completed",
+]);
+
+export function foldsIntoCurrentSession(e: AgentEvent, currentSessionId: string | null): boolean {
+  if (CROSS_SESSION_EVENT_TYPES.has(e.type)) return true;
+  const sid = (e as { session_id?: string }).session_id;
+  return sid === undefined || sid === currentSessionId;
+}
+
 export function reducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case "reset": {
