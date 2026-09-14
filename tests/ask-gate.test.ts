@@ -84,4 +84,30 @@ describe("AskGate", () => {
     expect(gate2.decide(askIds[0] as string, false)).toBe(false); // 已决议，二次决议无效
     await expect(promise).resolves.toMatchObject({ outcome: "approved", scope: "once" });
   });
+
+  // 审查待确认第 4 条（任务 4.3）：门侧的 ctx.signal 支持（D12）此前**没有任何断言钉住**，
+  // 而调用侧也确实没传 => 取消 run 后审批卡驻留到 60s 超时。补两侧证据：abort 立即按拒绝
+  // 收束且 pending 出表（这里把 timeoutMs 设成 60s，收束不了就是 vitest 超时红）。
+  it("ctx.signal abort：pending 立即按拒绝收束并出表（不等超时）", async () => {
+    const ac = new AbortController();
+    const outcomes: string[] = [];
+    const gate = new AskGate({
+      timeoutMs: 60_000,
+      notifyOutcome: (id, o, reason) => outcomes.push(id + ":" + o + ":" + reason),
+    });
+    const p = gate.request("run_shell", { command: "npm test" }, { signal: ac.signal });
+    expect(gate.pendingCount).toBe(1);
+    ac.abort();
+    await expect(p).resolves.toMatchObject({ outcome: "rejected", reason: "user" });
+    expect(gate.pendingCount).toBe(0);
+    expect(outcomes).toEqual(["ask-1:rejected:user"]);
+    // 已 abort 的信号不进等待：直接拒绝，不产生 pending 也不出卡
+    const ac2 = new AbortController();
+    ac2.abort();
+    const gate2 = new AskGate({ timeoutMs: 60_000 });
+    await expect(
+      gate2.request("edit_file", {}, { signal: ac2.signal }),
+    ).resolves.toMatchObject({ outcome: "rejected", reason: "user" });
+    expect(gate2.pendingCount).toBe(0);
+  });
 });

@@ -44,6 +44,8 @@ export interface AppSettings {
   updateManifestUrl: string;
   /** M4b §2.6：遥测开关（§13 默认关；V1 无上报实现 = 最强「零数据出门」保证，关于页注明）。 */
   telemetry: boolean;
+  /** M5b §m5-proposal 步骤 9：bandit 在线学习开关（缺省 false = 零行为，不写 routing-bandit.json）。 */
+  routingBandit: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -63,6 +65,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   onboarded: false,
   updateManifestUrl: "",
   telemetry: false,
+  routingBandit: false,
 };
 
 const PERMISSION_MODES = ["read-only", "default", "auto"] as const;
@@ -118,6 +121,7 @@ export function validateSettings(raw: unknown): AppSettings {
     onboarded: typeof r.onboarded === "boolean" ? r.onboarded : d.onboarded,
     updateManifestUrl: typeof r.updateManifestUrl === "string" ? r.updateManifestUrl : d.updateManifestUrl,
     telemetry: typeof r.telemetry === "boolean" ? r.telemetry : d.telemetry,
+    routingBandit: typeof r.routingBandit === "boolean" ? r.routingBandit : d.routingBandit,
   };
 }
 
@@ -148,7 +152,7 @@ export class SettingsStore {
       ...("mode" in patch || "safeMode" in patch || "theme" in patch || "currentSession" in patch ||
         "autoMemory" in patch || "maxBudgetUsd" in patch || "budgetPricePerMTok" in patch ||
         "scheduleConcurrencyCap" in patch || "onboarded" in patch || "updateManifestUrl" in patch ||
-        "telemetry" in patch
+        "telemetry" in patch || "routingBandit" in patch
         ? patch
         : {}),
       layout: patch.layout

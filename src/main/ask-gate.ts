@@ -49,11 +49,13 @@ export class AskGate {
     return this.pending.size;
   }
 
-  /** 发起一次审批；默认 60 秒无响应按拒绝；unattended 门 = 立即拒绝（fail-closed，不等待）。 */
+  /** 发起一次审批；默认 60 秒无响应按拒绝；unattended 门 = 立即拒绝（fail-closed，不等待）。
+   *  D12（审查 P3）：ctx.signal 可选接 run 取消信号——run 中止时 pending 立即按拒绝收束
+   *  （不再驻留至 60s 超时）；timer unref，不拽住进程退出。 */
   request(
     tool: ToolName | string,
     args: Record<string, unknown>,
-    ctx: { reason?: string; risk?: RiskLevel; riskReasons?: string[] } = {},
+    ctx: { reason?: string; risk?: RiskLevel; riskReasons?: string[]; signal?: AbortSignal } = {},
   ): Promise<AskOutcomeResult> {
     const askId = "ask-" + String(++this.seq);
     if (this.opts.unattended) {
@@ -61,17 +63,41 @@ export class AskGate {
       this.opts.notifyOutcome?.(askId, "rejected", "unattended");
       return Promise.resolve({ outcome: "rejected", scope: "once", reason: "unattended" });
     }
+    const signal = ctx.signal;
     return new Promise<AskOutcomeResult>((resolve) => {
+      let settled = false;
+      const finish = (r: AskOutcomeResult): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (signal) signal.removeEventListener("abort", onAbort);
+        resolve(r);
+      };
       const timer = setTimeout(() => {
-        this.decide(askId, false, "timeout");
+        this.pending.delete(askId);
+        const outcome: AskOutcome = "rejected";
+        this.opts.notifyOutcome?.(askId, outcome, "timeout");
+        finish({ outcome, scope: "once", reason: "timeout" });
       }, this.timeoutMs);
-      this.pending.set(askId, {
-        resolve: (r) => {
-          clearTimeout(timer);
-          resolve(r);
-        },
-      });
-      this.opts.notify?.({ askId, tool, args, ...ctx });
+      // D12 的 unref 建议实测不采：本门是**进程内**等待（panels-check 顶层 await 直挂门），
+      // unref 后门等待不再维持事件循环 → 进程以"unsettled top-level await"提前退出（exit 13）。
+      // 收束能力由 signal 提供（run 中止时 pending 立即拒绝），超时定时器保持 ref。
+      const onAbort = (): void => {
+        this.pending.delete(askId);
+        const outcome: AskOutcome = "rejected";
+        this.opts.notifyOutcome?.(askId, outcome, "user");
+        finish({ outcome, scope: "once", reason: "user" });
+      };
+      this.pending.set(askId, { resolve: finish });
+      if (signal) {
+        if (signal.aborted) {
+          onAbort();
+          return;
+        }
+        signal.addEventListener("abort", onAbort, { once: true });
+      }
+      const { signal: _signal, ...notifyCtx } = ctx; // signal 是控制面，不进 UI 载荷
+      this.opts.notify?.({ askId, tool, args, ...notifyCtx });
     });
   }
 

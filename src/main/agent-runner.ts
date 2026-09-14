@@ -80,7 +80,6 @@ import { Scheduler, type ScheduleSnapshot, type TriggerExecutor } from "./schedu
 import { validateAutomation, isUnattendedTier } from "./automations";
 import {
   deleteProviderKey,
-  getProviderKey,
   providerKeyStatus,
   putProviderKey,
 } from "./provider-keys";
@@ -270,7 +269,7 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
       //（setSettings 转发 M1E_SAFE_MODE；src/permissions 冻结，最小接线在本模块）
       if (process.env.M1E_SAFE_MODE === "gate") {
         if (!s.askGate) return denied(name, s.autonomy.mode, "安全模式 gate 非交互（fail-closed）");
-        const gateR = await s.askGate.request(name, args, { reason: "安全模式 gate：写工具强制审批", risk: "none" });
+        const gateR = await s.askGate.request(name, args, { reason: "安全模式 gate：写工具强制审批", risk: "none", signal: ctx.signal });
         if (gateR.outcome !== "approved") return denied(name, s.autonomy.mode, "安全模式 gate 未批准");
       }
       const d = evaluate(name, args, s.autonomy);
@@ -281,6 +280,11 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
           reason: d.reason,
           risk: d.risk,
           riskReasons: d.riskReasons,
+          // 审查待确认第 4 条（任务 4.3）：门侧早已支持 ctx.signal（D12），但调用侧没传 =>
+          // run 取消后审批卡驻留到 60s 超时才收，会话/worker 在中间一直挂着。接上运行信号：
+          // 取消即按拒绝收束（pending 同步出表，notifyOutcome 记 user）。gatedTool 与
+          // gatedMcpTool 两处同形，一并接线。
+          signal: ctx.signal,
         });
         if (r.outcome !== "approved") {
           if (d.risk === "critical") {
@@ -332,6 +336,11 @@ function gatedMcpTool(name: string, info: McpToolInfo & { plugin: string; server
           reason: d.reason,
           risk: d.risk,
           riskReasons: d.riskReasons,
+          // 审查待确认第 4 条（任务 4.3）：门侧早已支持 ctx.signal（D12），但调用侧没传 =>
+          // run 取消后审批卡驻留到 60s 超时才收，会话/worker 在中间一直挂着。接上运行信号：
+          // 取消即按拒绝收束（pending 同步出表，notifyOutcome 记 user）。gatedTool 与
+          // gatedMcpTool 两处同形，一并接线。
+          signal: ctx.signal,
         });
         if (r.outcome !== "approved") return denied(name, s.autonomy.mode, "未获批准");
         noteManualDecision(s.autonomy);
@@ -659,14 +668,15 @@ export async function handleScheduleRunNow(id: string): Promise<{ ok: boolean; e
 function installAutomationTools(): void {
   const table = TOOLS as unknown as Record<string, Tool>;
   const schRef = () => scheduler;
-  const approval = async (tool: string, args: Record<string, unknown>, redNote: boolean): Promise<ToolResult | null> => {
+  const approval = async (tool: string, args: Record<string, unknown>, redNote: boolean, signal?: AbortSignal): Promise<ToolResult | null> => {
     const s = currentSession();
     if (!s) return { ok: false, output: "[permission denied] " + tool + "（工具门未接线，fail-closed）" };
     if (!s.askGate) return { ok: false, output: "[permission denied] " + tool + "（非交互模式，fail-closed）" };
     const reason =
       "定时任务变更（审批卡全文展示）" +
       (redNote ? " ⚠ 将无人值守执行：触发时一切审批请求自动拒绝（fail-closed）" : "");
-    const r = await s.askGate.request(tool, args, { reason, risk: "medium" });
+    // 审查 4.3 同口径：定时任务审批卡也接运行信号（取消即按拒绝收束，不留 60s 僵尸卡）
+    const r = await s.askGate.request(tool, args, { reason, risk: "medium", signal });
     if (r.outcome !== "approved") {
       const why = r.reason === "unattended" ? "无人值守 fail-closed：审批请求自动拒绝" : "未获批准";
       return { ok: false, output: "[permission denied] " + tool + "（" + why + "）" };
@@ -677,10 +687,10 @@ function installAutomationTools(): void {
     schRef() ? null : { ok: false, output: "调度器未初始化（fail-closed）" };
   table["automation_create"] = {
     name: "automation_create",
-    async run(args) {
+    async run(args, ctx) { // 审查 4.3：接运行信号（审批卡随取消收束）
       const v = validateAutomation(args, { form: true });
       if (!v.ok) return { ok: false, output: "automation_create 参数无效：" + v.errors.join("；") };
-      const denial = await approval("automation_create", args, isUnattendedTier(v.value.permissionTier));
+      const denial = await approval("automation_create", args, isUnattendedTier(v.value.permissionTier), ctx.signal);
       if (denial) return denial;
       const ns = needScheduler();
       if (ns) return ns;
@@ -692,7 +702,7 @@ function installAutomationTools(): void {
   };
   table["automation_update"] = {
     name: "automation_update",
-    async run(args) {
+    async run(args, ctx) { // 审查 4.3：接运行信号（审批卡随取消收束）
       const ns0 = needScheduler();
       if (ns0) return ns0;
       const sch = schRef()!;
@@ -703,7 +713,7 @@ function installAutomationTools(): void {
       const merged = { ...cur, ...args, id, createdAt: cur.createdAt, updatedAt: cur.updatedAt };
       const v = validateAutomation(merged, { form: true });
       if (!v.ok) return { ok: false, output: "automation_update 合并后无效：" + v.errors.join("；") };
-      const denial = await approval("automation_update", { ...v.value }, isUnattendedTier(v.value.permissionTier));
+      const denial = await approval("automation_update", { ...v.value }, isUnattendedTier(v.value.permissionTier), ctx.signal);
       if (denial) return denial;
       const r = await sch.upsert(v.value, { form: true });
       return r.ok
@@ -713,14 +723,14 @@ function installAutomationTools(): void {
   };
   table["automation_delete"] = {
     name: "automation_delete",
-    async run(args) {
+    async run(args, ctx) { // 审查 4.3：接运行信号（审批卡随取消收束）
       const ns0 = needScheduler();
       if (ns0) return ns0;
       const sch = schRef()!;
       const id = typeof args.id === "string" ? args.id : "";
       if (id === "") return { ok: false, output: "automation_delete: id 必填" };
       const cur = sch.list().find((t) => t.id === id);
-      const denial = await approval("automation_delete", { id, ...(cur ? { name: cur.name } : {}) }, false);
+      const denial = await approval("automation_delete", { id, ...(cur ? { name: cur.name } : {}) }, false, ctx.signal);
       if (denial) return denial;
       const r = await sch.remove(id);
       return r.ok ? { ok: true, output: "已删除定时任务 " + id } : { ok: false, output: "automation_delete 失败：" + (r.error ?? "未知") };
@@ -728,12 +738,12 @@ function installAutomationTools(): void {
   };
   table["automation_run_now"] = {
     name: "automation_run_now",
-    async run(args) {
+    async run(args, ctx) { // 审查 4.3：接运行信号（审批卡随取消收束）
       const ns0 = needScheduler();
       if (ns0) return ns0;
       const id = typeof args.id === "string" ? args.id : "";
       if (id === "") return { ok: false, output: "automation_run_now: id 必填" };
-      const denial = await approval("automation_run_now", { id }, false);
+      const denial = await approval("automation_run_now", { id }, false, ctx.signal);
       if (denial) return denial;
       const r = await schRef()!.runNow(id);
       return r.ok ? { ok: true, output: "已手动触发 " + id + "（走准入管线：去重/并发/重叠闸生效）" } : { ok: false, output: "automation_run_now：" + (r.error ?? "未知") };
@@ -797,13 +807,15 @@ function createProvider(userMessage: string, systemPrefix?: string): Provider {
   if (process.env.M0A_PROVIDER !== "glm") return createMockProvider(MOCK_FIXTURE);
   let gen: AsyncIterable<ModelOutput> | null = null;
   return {
-    stream() {
+    stream(messages, _tools, call) {
       if (!gen) {
         // M2e：插件注入面（skill 路由清单 + hook 上下文）以 system 前缀进真实会话；空 = 字节不变
         const prefix = systemPrefix && systemPrefix.trim() !== ""
           ? [{ role: "system", content: systemPrefix } as const]
           : [];
-        gen = streamGlm([...prefix, { role: "user", content: userMessage }]);
+        // C12（审查 P2）：首轮捕获本 run 的取消信号——会话中止时在途请求立即收束。
+        // 同一 run 内多次 stream 共享同一 signal（runLoop 逐轮调用，signal 不变），缓存语义不破。
+        gen = streamGlm([...prefix, { role: "user", content: userMessage }], {}, undefined, call);
       }
       return gen;
     },
@@ -871,6 +883,10 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       workspace: opts.workspace,
       parentMode: opts.mode,
       emit: pipeline,
+      // P0-2（审查）：父 run 的规则库与沙箱可用性必须传给编排器——worker 自主会话按父 run
+      // 口径构造，否则项目级 deny/ask 规则对 worker 全表失效。
+      rules,
+      sandboxAvailable: opts.sandbox ? opts.sandbox.available : null,
       safeMode: await resolveSafeMode(), // M3b §11.6：off 不跑 / report 只标 / gate 红标 + 二次确认
       ...(await orchestratorExtras()), // M3c：插件角色 / worker 压缩摘要器 / 成本闸
       ...(demoModelFor ? { modelFor: demoModelFor } : {}),
@@ -1085,7 +1101,10 @@ export async function handleAgentRun(
       ...(over.signal ? { signal: over.signal } : {}),
       onEvent: (e) => {
         over.onEvent?.(e);
-        hooks.onEvent?.(e);
+        // F1（审查 P1-14）：agent:event 是全局通道——事件载荷带 session_id，renderer 按当前
+        // 会话过滤（定时/后台 run 的事件不再串进用户正看的会话）。仅标记 UI 推送面，
+        // JSONL 落盘内容不变（pipeline 已 append 原事件）；无 sessionId 的旧脚本路径不带标记。
+        hooks.onEvent?.(over.sessionId !== undefined ? ({ ...e, session_id: over.sessionId } as AgentEvent) : e);
       },
       askGate: over.unattended ? unattendedAskGate : appAskGate,
       sandbox: sandboxState,
@@ -1366,6 +1385,9 @@ export async function handlePluginDecide(pluginName: string, trusted: boolean): 
     lastPluginSnapshot = {
       ...lastPluginSnapshot,
       plugins: lastPluginSnapshot.plugins.map((p) => (p.name === pluginName ? { ...p, trust: trusted ? "trusted" : "declined" } : p)),
+      // 审查 S2-12（任务 4.6）：散装 skill 走同一出口后，留档快照也要同步改写——否则运行间隙
+      // 批准一个 loose skill，面板徽标仍停在「待信任」（rt 在场时走 rt.snapshot() 不受影响）。
+      looseSkills: lastPluginSnapshot.looseSkills.map((l) => (l.name === pluginName ? { ...l, trust: trusted ? "trusted" : "declined" } : l)),
     };
   }
   return { ok: true, snapshot: lastPluginSnapshot ?? undefined };
@@ -1424,15 +1446,9 @@ export function providerInfo(): { provider: string; model: string } {
 // ---- M4b：BYOK key（safeStorage）+ license V1 + 更新检查（§2.1/§2.2/§2.3）----
 // 装配由 electron 壳（index.ts）注入；headless（未装配）= fail-closed / inactive / unconfigured 显式态。
 
-/** M4b §2.1：启动时把已存 provider key 解密注入 provider 配置（env 优先：M0_API_KEY 已在 = 零行为）。
- *  注入只发生在进程内 env——不落日志、不进事件流（明文零落盘三处纪律）。 */
-export async function injectStoredProviderKey(): Promise<boolean> {
-  if (process.env.M0_API_KEY) return false; // env 路径（M0_API_KEY）优先，两者并存
-  const stored = await getProviderKey("glm");
-  if (!stored) return false; // 未存 key / 解密失败（换机器）→ 不注入，UI 显式提示
-  process.env.M0_API_KEY = stored;
-  return true;
-}
+// injectStoredProviderKey 已抽到 ./provider-key-inject（轻模块——本文件依赖链含 MCP SDK/LSP，
+// 单测/启动注入不应被迫导入整条重链）；此处再导出，index.ts 与既有调用方接口不变。
+export { injectStoredProviderKey } from "./provider-key-inject";
 
 export async function handleProviderKeySet(provider: string, key: string): Promise<{ ok: boolean; error?: string }> {
   return await putProviderKey(provider, key);

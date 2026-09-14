@@ -41,16 +41,18 @@ import {
   handleProviderKeySet,
   handleProviderKeyDelete,
   handleProviderKeyStatus,
-  handleLicenseStatus,
   handleUpdateCheck,
   initLicenseStore,
   initUpdateContext,
   injectStoredProviderKey,
 } from "./agent-runner";
 import type { AppSettings, RunRequest } from "./ipc-protocol";
+import { isValidSessionName } from "./sessions";
 import { installSafeStorageBackend } from "../agent/plugins/secrets";
 import { installProviderKeyBackend } from "./provider-keys";
 import { isSafeExternalUrl } from "./updater";
+import { killAllTrackedChildren } from "../tools/process";
+import { closeAllLspClients } from "../tools/lsp";
 
 let win: BrowserWindow | null = null;
 
@@ -149,13 +151,20 @@ hooksProxy.onAsk = (p) => push("agent:ask", p);
 // M2g 收口修复：renderer 传入的 sessionId 此前在 IPC 边界被丢弃（over 未传），UI run 永远走
 // tmp 日志、会话 JSONL 恒空、重放/提升归因全断。现按 RunOverrides 转交（与 preload 类型一致）。
 // H2（审查 D-5）：IPC 边界枚举白名单——renderer 不可信，未知 mode 不许落入比声明更宽的执行路径。
+// D4（审查 P2）：最小运行时校验——req=null 时旧实现 `req.sessionId` 直接抛 TypeError（handler 崩）。
 const RUN_MODES: ReadonlySet<string> = new Set(["read-only", "default", "auto"]);
 ipcMain.handle("agent:run", (_event, req: RunRequest & { sessionId?: string }) => {
-  if (req && typeof req === "object" && req.mode !== undefined && !RUN_MODES.has(req.mode)) {
+  if (req === null || typeof req !== "object" || typeof req.message !== "string" || req.message.trim() === "" || req.message.length > 100_000) {
+    return Promise.resolve({ ok: false, error: "agent:run: message 必须是非空字符串（≤100KB）" } satisfies { ok: boolean; error: string });
+  }
+  if (req.mode !== undefined && !RUN_MODES.has(req.mode)) {
     return Promise.resolve({
       ok: false,
       error: "agent:run: 未知 mode " + JSON.stringify(req.mode) + "（允许 read-only | default | auto）",
     } satisfies { ok: boolean; error: string });
+  }
+  if (req.sessionId !== undefined && (typeof req.sessionId !== "string" || !isValidSessionName(req.sessionId))) {
+    return Promise.resolve({ ok: false, error: "agent:run: sessionId 非法" } satisfies { ok: boolean; error: string });
   }
   return handleAgentRun(req, req.sessionId !== undefined ? { sessionId: req.sessionId } : {});
 });
@@ -171,7 +180,13 @@ ipcMain.handle("agent:state", () => handleAgentState());
 
 // ---- M1e：settings + 会话列表 IPC ----
 ipcMain.handle("agent:settings-get", () => getSettings());
-ipcMain.handle("agent:settings-set", (_event, patch: Partial<AppSettings>) => setSettings(patch));
+// D4（审查 P2）：patch=null 时旧实现 `"mode" in patch` 抛 TypeError——最小运行时校验（reject 让 renderer 的 .catch 收到）。
+ipcMain.handle("agent:settings-set", (_event, patch: Partial<AppSettings>) => {
+  if (patch === null || typeof patch !== "object") {
+    throw new Error("settings-set: patch 必须是对象");
+  }
+  return setSettings(patch);
+});
 ipcMain.handle("agent:provider-info", () => providerInfo());
 ipcMain.handle("agent:sessions-list", () => handleSessionList());
 ipcMain.handle("agent:sessions-create", (_event, name?: string) => handleSessionCreate(name));
@@ -206,7 +221,8 @@ ipcMain.handle("agent:schedule-run-now", (_event, id: string) => handleScheduleR
 ipcMain.handle("agent:provider-key-set", (_event, provider: string, key: string) => handleProviderKeySet(provider, key));
 ipcMain.handle("agent:provider-key-delete", (_event, provider: string) => handleProviderKeyDelete(provider));
 ipcMain.handle("agent:provider-key-status", () => handleProviderKeyStatus());
-ipcMain.handle("agent:license-status", () => handleLicenseStatus());
+// D11（审查 P3）：agent:license-status 死通道已删——license 状态实际经 getState().license
+// 传递，preload 与 AgentApi 均无此通道桥接（renderer 不可达的注册即误导）。
 ipcMain.handle("agent:update-check", () => handleUpdateCheck());
 ipcMain.handle("agent:update-open", async (_event, url: string) => {
   if (typeof url !== "string" || !isSafeExternalUrl(url)) {
@@ -216,7 +232,24 @@ ipcMain.handle("agent:update-open", async (_event, url: string) => {
   return { ok: true };
 });
 
-void app.whenReady().then(async () => {
+// D2（审查 P1-10）：单实例锁——双开时两个 Scheduler 各自把 journal 载入**进程内**去重表，
+// occurrenceKey 跨进程失效 → 同一 due 双触发 + 并发写 automations.json 与 journal。
+// 验收通道豁免：M1E_SESSIONS_DIR 注入 = panels-check 的真实 Electron（单实例 + 独立数据目录），
+// 不能因宿主上恰有用户实例在跑而抢不到锁 → 假红。
+const validationMode = process.env.M1E_SESSIONS_DIR !== undefined;
+const gotSingleInstanceLock = validationMode || app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit(); // 第二实例：立即退出（首实例负责 second-instance 聚焦）
+} else {
+  app.on("second-instance", () => {
+    if (win !== null) {
+      if (win.isMinimized()) win.restore();
+      win.focus();
+    }
+  });
+}
+
+if (gotSingleInstanceLock) void app.whenReady().then(async () => {
   // 暴露完整 AX 树给系统辅助功能（System Events / VoiceOver 等）；必须在 ready 之后调用
   app.setAccessibilitySupportEnabled(true);
   // M1e 存储：settings 与会话目录缺省 userData；验收脚本用 M1E_SETTINGS_PATH / M1E_SESSIONS_DIR 覆盖
@@ -269,6 +302,12 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 // M4a：关闭 app 即停调度（§12.3.1 决策 #18：不做系统级常驻，错过由补跑闸兜底）
+// D8（审查 P2）：退出统一组杀存活 tracked 子进程——旧实现在跑的 bash/sandbox-exec 成孤儿。
 app.on("will-quit", () => {
   stopScheduler();
+  killAllTrackedChildren();
+  // 审查 S2 / 4.1：C5 把 LSP 客户端也改成 detached（自成进程组），但它们不走 spawnTracked
+  // => liveTracked 的组杀覆盖不到；closeAllLspClients 此前只被 tools-check 调过，退出路径漏收
+  // => 用过 lsp 的会话留下 tsserver 孤儿进程。
+  void closeAllLspClients().catch(() => {});
 });
