@@ -87,7 +87,7 @@
 | # | 项 | 状态 | 说明 |
 |---|---|---|---|
 | 1 | 真 LLM 驱动的全链 pipeline（非 scripted 模型） | **未证**（无 M0_API_KEY 环境口径） | agents-check 暗卷段（M 段）与 M3a/M3b 同口径缺席跳过；结构断言（零 LLM/冻结/拼接/verdict）均为模型无关判据，真实模型只在「报告带 verdict 行」这一 prompt 语义上依赖内置角色提示词 |
-| 2 | gate/loopback 重跑机制 | **M4 后再定**（§4.4.7 明文「随 M3 压力测试后再定」） | 本轮只落 verdict 标注（N4d），未实现重跑 |
+| 2 | gate/loopback 重跑机制 | **已证**（M5c §m5-proposal 步骤 13 闭合） | 证据指针：`scripts/supervisor-check.ts` 段 B（B1 永远 fail → 第 6 环后必 abort / B2 同 (role, task-hash) 第 3 次 → escalate）+ 段 A（封闭枚举 + 畸形 escalate）——V1 纯规则受限 Supervisor（src/agent/supervisor.ts）落地「失败不触发系统级反应 → 触发有界重试/升级/中止」；编排器运行时接线（supervise 模式 + 审批卡双轨）留 M6（见 m5-acceptance 未证/留位节） |
 | 3 | 崩溃恢复的「热恢复」（transcript resume） | **V1 明文不做**（§4.4.9） | 重派 = 全新 agent_id 全参重 spawn（N10f） |
 | 4 | 会话中途切换成本闸的动态生效 | **V1 口径** | maxBudgetUsd 为设置项，编排器逐 run 实例化时读取；run 中途改设置下一 run 生效（设置页文案已说明） |
 | 5 | 跨会话聚合审批队列（§10.4 M3 正式化） | **部分** | M3a 备案 4：worker 审批仍走对话流 card_action，approvals 面板聚合主会话 IPC 审批；M3c 未扩展（任务书未列） |

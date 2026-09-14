@@ -980,3 +980,102 @@
 ### 留位更新（相对 H2 段）
 - **已清**：D-2（RunScope）、性能三处、F-3、E-10、编排提示词主会话基座。
 - **仍在留位**：结构拆分（orchestrator/main.tsx/registry 大文件）、G-3 面板状态上提、F-7/F-8 设置健壮性、worker 提示词与输出契约（提示词审查 §二的后续）、CI 接入时写死严格未证模式、有凭据环境的运行时注入审计。
+
+## H4 · 工作树结构加固审查修复轮（波 1–2 全成 + 波 3/4 部分）（2026-09-14）
+
+审查对象 = 未提交工作树（85 文件 +1906/−480，分支 `codex/dsh-structural-hardening`）。
+报告 `outputs/code-review-worktree-2026-09-14.md`，执行契约 `outputs/fix-brief-2026-09-14.md`（含拍板 A–F）。
+纪律：每项修复配红→绿证据；构造不出确定性红的**如实降级**，不假装验过；未证项保留 UNVERIFIED。
+
+### 总验收口径
+
+| 项 | 波 1 前 | 本轮 |
+| --- | --- | --- |
+| vitest | 59 files / 543 passed | **59 files / 550 passed / 0 failed**（+7 条回归测） |
+| typecheck | 0 错 | 0 错 |
+| routing-check | 25 断言 | **30 ✅ / 0 ❌**（A5 三条 + B3d 拆三条真比较） |
+| gym-check | 19 ✅ / UNVERIFIED=1 | **22 ✅ / 0 ❌ / UNVERIFIED=1**（B1b 正向尺子三条） |
+| schedule.test | 25 | **27**（+journal 同链 +运行期补记账上限） |
+
+`M0_API_KEY` 本环境未设置（两次实测）⇒ 暗卷与真 provider 分支继续 UNVERIFIED：未证 ≠ 通过。
+
+### 波 1 · 静默错数据与挂起（6/6）
+
+- **1.1 `permissions/rules.ts` judgeChain 跨段 fail-open**：`"echo hi && git status"` 改前判 `allow`（段间取最坏值的比较方向反了，ask 段被 allow 顶掉）；改后 `ask`。PoC 输出即红证据；`tests/permissions.test.ts` 新增 6 形态用例 ⇒ 14/14。
+- **1.2 `events` replayIncremental 并发**：同 logPath 并发 replay 读到半截缓存 ⇒ per-path `replayChain`（复用 B8 串行链惯用法）+ 三处 `slice()` 缓存泄漏堵口 ⇒ events 55/55。
+- **1.3 `plugins/mcp.ts` onclose 覆盖**：E5 在 `connect()` 之后赋值 `transport.onclose`，摘掉 SDK 那半条链 ⇒ server 死亡时在途 `tools/call` 永不 settle（loop 卡死）。改链式包装 + `callTool` 走 `withTimeout(DEFAULT_MCP_CALL_MS=120_000)`。反向验证：去掉 `prevOnClose?.()` ⇒ `expected +0 to be 1` 红。
+- **1.4 replay 坏行边界**：事件 id = 1-based 行号是跨文件契约（`origin.source_event_ids` / `untilEventId` / `compressed_event_ids` / `events[id-1]`），中段坏行静默跳过 = 血缘错位。改为尾部容忍（带警告计数）+ **中段抛错**；两条回归钉住 `events.length === lastGoodLine`，保证 `n > events.length` 判定继续成立。
+- **1.5 跨会话事件归因（拍板 C）**：会话守卫把跨会话归因的 `automation_*` 一并挡掉 ⇒ 定时任务触发进不了会话流。抽出可测纯函数 `foldsIntoCurrentSession(e, currentSessionId)` 并让 `main.tsx` 用它 ⇒ `tests/store.test.ts` 10/10。
+- **1.6 SSE 半帧静默丢字（拍板 D）**：三家 provider 的 `catch { continue }` 改为「非 `{` 开头载荷（心跳/注释/网关杂帧）容忍，JSON 帧解析失败抛 `SSE 帧损坏`」⇒ `tests/providers.test.ts` ⑤⑥ ×3 = 30/30。
+
+### 波 2 · 信任门与调度（4/4）
+
+- **2.1 有界信任键（拍板 A）**：2026-09-13 那轮把指纹 `bounded`（超帽/超大文件/目录内软链）在 discover 侧塌成 pending，而 `trustDecide` 写的是**无界**条目 ⇒「批准了还弹卡」死循环，含软链的合法开发布局永远装不上。修法：bounded 编进条目键 `abs@fp+b`，`hit/status/statusSync/decide` 全带该位；有界↔无界互不通用（形态互换要重新出卡）；旧版裸路径记录只兼容无界形态（E1/E2 fail-closed 不回退）；user scope 与显式 loose 根免信任不变。证据：3 条单测 + 1 条端到端（软链插件 load→trustDecide→重扫仍 trusted）；反向验证还原三元 ⇒ `expected 'pending' to be 'trusted'` 红。
+- **2.2 显式路径软链门**：`plugin.json` 显式 `hooks: "x.json"` 过去不做 lstat，直接交给 `discover.readFile` 跟随软链 ⇒「批准的内容」与「执行的内容」被拆成两件事。补 lstat 门：存在但非常规文件（软链/目录）⇒ 拒载；缺失仍走既有 discover warning（行为不变）。隐式默认路径早有 `existsRegular`；指纹 walk 侧实测已覆盖（`isSymbolicLink()` 分支排在 `FP_SKIP_DIRS` 判定之前，软链目录也置 bounded）⇒ 不重复改。
+- **2.3 journal 同链（拍板 E）**：压缩的「read 快照 → rename 覆盖」与 `appendJournalEntry` 不互斥 ⇒ 落在窗口里的追加被 rename 抹掉，丢的是「该 occurrence 已决」的唯一凭据（重启即重复补跑）。加 per-file `journalChain`，追加与压缩共用一条链。新增测：10_005 条压顶 + 20 条并发追加 ⇒ 全部存活。**降级说明**：把链换成裸 `job()` 后该测仍 27/27 绿（rename 与 40 个 IO 的完成顺序在本机稳定为「追加先落地」）⇒ 构造不出确定性红，本条判据为交错窗口分析（read→rename 之间无互斥）+ 不变量测，未宣称实测红。
+- **2.4 运行期补记账上限**：合盖数周后第一个运行期 tick 会逐条写约 187 行 skipped 账 + 同等次数投影通知（启动侧有 `catchupGate` 的 20 条上限，运行期这条没有）。改为最近 20 条逐条 + 其余折**一条**聚合账（`occurrence_key` 带 `+foldN` 后缀：不与真实 occurrence 撞键、去重语义不变；`due_at` 取被折叠区间最早一条：时间范围仍可查）。实测红→绿：旧形 ⇒ `AssertionError: expected 174 to be less than or equal to 20`；新形 ⇒ 27/27。启动补跑语义不动——`tests/schedule.test.ts:374/378/397/405` 的 too-old 计数（5/5/6）逐字未改且仍绿。
+
+### 波 3 · 数据完整性与判卷放松（13/13，其中 3.10 以实测结案为「不改」）
+
+- **3.1 / 3.2 记忆写盘**：`deleteTopic` 进 `serializeOn(dir)` + 索引 tmp→rename（与 `writeTopic` 同形）；`appendRootFile` 进 `serializeOn(path)`；`tests/store.test.ts` 加并发 remember 断言（两条记忆各占一块不粘连）。
+- **3.3 spawn emit 失败回收**：catch 内补 `workers/agentOwners/mergeOwners` 清理 + `controller.abort()` + `releaseWorkerMemory` + `finished/closed` ⇒ `tests/agents.test.ts`「emit 抛错后 activeCount 回落 0、写租约释放」；m3a/b/c + agents + schedule 100/100。
+- **3.4 `spawnRace`（拍板 B：修但不接线）**：候选 id 改为解析 `spawn()` 返回值（模块级 `parseSpawnedAgentId`；起初放进 class 体内触发 TS1068 级联，移到模块作用域才成立），删两处全量 replay 与 `seen` 集合；取不到 id ⇒ 取消已派发的并 fail-visible 返回；循环加 `root.signal.aborted`；超时出口逐个 `cancelAgent`；新增 `raceDeadlineMs`（缺省 120s）。仍只有 scripts/supervisor-check 一个调用方，无模型可见入口 ⇒ AGENTS.md「留位未偷做」结论不变。
+- **3.5 providers-check ⑤ 收动态 import**：importSpecifiers 走全 AST（静态 import/export + `import(...)` CallExpression 首参字面量）。反向验证：临时加 `await import("./anthropic")` ⇒ 判红，撤掉复绿。
+- **3.6 gym-check 正向尺子**：B1 只比「两次跑是否一致」，判卷面整体静默失灵时三次全 0 也一致地绿。加 `B1b: r1.verifyOk === true && r1.score === 1` ⇒ 实跑 22 ✅（明卷三条 score=1）。
+- **3.7 routing-check B3d**：换成三条真比较（关档两次逐字一致 / `onD.reason === "bandit"` / `onD.picked !== staticD.picked`），删 `f(x)===f(x)` 恒真式；实测 `on=glm-strong off=glm-flash`。
+- **3.8 gates.ts 超时杀进程组**：spawn 加 `detached: true` + 超时 `process.kill(-pid, "SIGKILL")`（兜底 `child.kill`），不再只杀壳留活口。
+- **3.9 `src/frozen.ts` extraFiles**：先 `stat` 命中才计入盘上集合——旧实现把清单里的单文件无条件计入，文件被删时反而遮住「判卷文件消失」。
+- **3.10 assertion-health 闭包放松：不改（有实测理由）**。全仓闭包含 `||` 的断言实参只有 4 处（`scripts/compaction-check.ts:161,287`、`tests/map-build.test.ts:43`、`tests/plugins-skills.test.ts:60`），全是回调/过滤谓词而非弱断言 ⇒ 加规则只会造噪声，无收益。
+- **3.11 gate-check G12**：`@shadcn-modified` 从「全文 includes」收紧为「前 3 行注释形态命中」——全文判据等于用一行字符串换掉整份哈希基线。前置实测：当前不存在「改过却没在头部标记」的 ui 组件 ⇒ 收紧不误红。
+- **3.12 gym-run `pick`**：flag 缺值 ⇒ `exit 2` 带说明。旧实现静默按缺省跑（`--out` 尾随空值 ⇒ 少写一份报告还 exit 0；`--model` 空值 ⇒ 悄悄退回 scripted 假装真模型）。
+- **3.13 路由注入位**：orchestrator 加 `opts.modelFor`；无注入模型且无 `M0_API_KEY` ⇒ 路由路径 fail-closed 拒派（不造必败 worker）。routing-check 新增 A5 三条（无凭据时显式打印「跳过/未证」而非静默通过）。
+
+### 波 4 · 小修与修复空转（已完成 5/11：4.1 4.2 4.3 4.4 4.9）
+
+- **4.1 LSP 退出收口**：C5 把 LSP 客户端也改成 detached（自成进程组）但它们不走 `spawnTracked` ⇒ 组杀覆盖不到，`closeAllLspClients` 此前只被 tools-check 调过。`will-quit` 补 `void closeAllLspClients().catch(() => {})`。
+- **4.2 `run_shell` abort 监听泄漏**：`handle.child.once("close", () => ctx.signal?.removeEventListener("abort", onAbort))`。
+- **4.3 ask signal（待确认第 4 条结案）**：门侧 `AskGate.request` 早就支持 `ctx.signal`（D12），**但调用侧一处都没传** ⇒ 取消 run 后审批卡驻留到 60s 超时。接线三处（`gatedTool` 安全模式档、`gatedTool`/`gatedMcpTool` ask 档）+ `installAutomationTools` 的 `approval()` 加可选 `signal` 形参、四个 automation 包装器补 `ctx` 形参。新增门侧测（`timeoutMs=60_000` 下 abort 立即 rejected、pending 出表、已 abort 的信号不产生 pending）⇒ `tests/ask-gate.test.ts` 8/8；调用侧以 `grep -c "signal: ctx.signal" = 3` + typecheck 为据。
+- **4.4 `routing_decision` 时间线行**：该事件走 fold 兜底分支进了时间线却没有渲染分支 ⇒ 空 padding 行（G8 同类漏网）。补 ToolRow：picked / reason / `← from` / stage / agent_id / 候选数。
+- **4.9 map-check cp filter**：子串过滤（`includes("/out")` 等）会连带排除 `src/route/output.ts` 这类同名路径段 ⇒ 改按 `split("/")` 精确段比对（六段黑名单）。
+
+### 波 4 未做（如实记录，不含糊）
+
+| 任务 | 为什么没做 |
+| --- | --- |
+| 4.5 / 4.6 / 4.7 | **同轮稍后补做完毕**（见下节「波 4 补做」）——原先挂「跨层 / 超最小改动」，实测后三条都不需要新机制：4.6 走既有 IPC 通道即可、4.5 是守卫自身 API 的正确用法、4.7 复用既有禁用态口径 |
+| 4.8 journal 补 `session_id` 回写 | **已结案：否决（有证据）**。写账刻意发生在建会话之前（`scheduler.ts:599` 注释「spawn 前写账 = 崩溃窗口不双跑」），`sessionId` 在 616 行才存在 ⇒ 追加式账本下「一行回写」只有两种做法：改写入顺序（丢回崩溃窗口）或再追一行（与 `occurrence_key` 去重不变量冲突，`tests/schedule.test.ts:175` 钉住同 key 只 1 条）。投影侧已有补偿：`findSessionIdByKey`（846 行）按 occurrence_key 回填，面板/历史仍显示会话。故磁盘行缺该字段属**已知设计代价**而非缺陷，不改 |
+| 4.10 check 脚本 `ROOT = process.cwd()` 改 `fileURLToPath` | **决定不做（有理由）**：26 道门全部经 `pnpm <script>` 从仓库根启动，cwd 假设由 runner 保证；8 个脚本各自补 `dirname(fileURLToPath(...)) + ".."` 与 import 的风险面大于收益（这些脚本本轮刚实测过）。留此备案 |
+
+### 波 4 补做（同日第二轮：4.6 / 4.5 / 4.7）
+
+| 任务 | 触发条件 → 影响 | 修法 | 红→绿证据 |
+| --- | --- | --- | --- |
+| 4.6 散装 skill 信任出口 | 项目作用域散装 skill（无 manifest、只有 SKILL.md）按 E3 走信任门判成 pending，但 `trustDecide` 只在 `manifest.plugins` 里找名字 ⇒ 查不到即 `ok:false`；`snapshot.looseSkills` 连 `name`/`trust` 都没有 ⇒ 面板列不出「待信任」，用户既批准不了也拒绝不了，只能看着它不进路由清单（静默失效） | 出口统一：按名字在 plugins / looseSkills 两处解析 `root`，其余流程（指纹 + bounded 位 + 重建激活面）原样复用；快照条目补 `name`/`trust`；面板复用同一 `decide` 闭包与 `trustBadge`，pending 时给同款批准/拒绝按钮；`pendingPlugins` 返回联合类型（含 pending loose）；运行间隙的留档快照同步改写 looseSkills 徽标。**preload/IPC 契约零改动**（`agent:plugin-decide` 本就按名字决议） | 红：`expected undefined to be defined`（快照无 name）；反向验证（撤掉 loose 查表）`expected false to be true`；绿：plugins-skills 12/12、panels 新断言「信任后才进路由清单」、4 文件 30 测试全绿 |
+| 4.5 更新检查守卫三处收口 | ①守卫触发 abort 时文案一律印「更新源不可达：<停滞超时原文>」→ 用户去查域名/DNS，真因是对端挂起；②`readBodyCapped` 从不 `bump` ⇒ 弱网下「慢而有进展」的 manifest 被一次性窗口误杀；③fetch 抛错的 `return` 发生在 body 段 try/finally **之外** ⇒ 每次网络失败留一个活定时器 | 分流判据用 `signal.aborted`（确定性，不猜 `err.message` 字面）→ `stallMessage(guard)` 直接给守卫自带的可读原因；body 段 catch 同样分流（原先把停滞吞成「不是合法 JSON」）；失败路径先 `guard.dispose()`；`readBodyCapped` 每收一块 `guard?.bump()`（进展即续命） | 红①：`expected '更新源不可达：更新源 停滞超时：30ms 内无任何数据…' not to contain '不可达'`；红②：4×30ms 分块 + 100ms 窗口 ⇒ `expected {state:'error'} to deeply equal {state:'available'}`；绿：updater 10/10、commercial-check 45 ✅（B3「真断网仍报不可达」口径不变）。③dispose 无用户可见差异 ⇒ 记为**结构证据**（早退在 finally 之外），不造断言 |
+| 4.7 running 守卫给反馈 | 三处 `if (state.running) return;` 静默吞掉点击 ⇒ 按钮看着能点、点了没反应（用户以为界面卡死） | 复用既有禁用态口径（输入框早就是 `disabled={state.running}` + placeholder 说明）：新建/切换/删除三处按钮加 `disabled={state.running}` 与说明性 `title`（原生 button 配 `disabled:opacity-40`）；守卫保留作兜底，F2 注释同步改写 | 结构证据：三处 `disabled={state.running}` grep 实测命中 + typecheck 0 错 + 全量 vitest 554 passed；**未新增任何反馈机制**（无 toast） |
+
+波 4 至此：4.1 4.2 4.3 4.4 4.5 4.6 4.7 4.9 4.11 已做；4.8、4.10 以证据结案为「不改」。**波 4 无遗留。**
+### 待确认（继续挂，写明缺什么证据）
+
+- **worktree `index.lock`**：缺并发创建 worktree 的确定性复现入口（agents-check 现有场景不产生并发 `index.lock`）⇒ 未改代码。
+- **sandbox 取消收杀**：本环境三门走降级分支 B（宿主拒 apply 含 deny 的 profile），要证「取消后进程组真被收杀」必须在走分支 A 的宿主上跑 ⇒ 未做。
+- **`fh.read` 短读**：缺真实短读样本（本地常规文件不会返回 `bytesRead < requested`，需 FIFO/proc 面）⇒ 未改。
+- 其余各条见 `outputs/code-review-worktree-2026-09-14.md` 待确认节：没有证据就不写成缺陷，也不猜着改。
+
+### 门禁实跑（两轮各跑一次；下为波 4 补做后的最终一次）
+
+`TERM=dumb pnpm gates`：**绿 26 / 26，红 0**；清单漂移校验 ✅（26 道与 package.json scripts 一致）；
+断言体检（空断言/恒真式/暗卷段零断言/析取式弱断言）**零命中**。
+
+- 逐道 exit=0；耗时前三：panels-check 132.3s、test 49.8s、plugins-check 16.1s（Electron 面板门最慢）。
+- 变化点：gym-check 19→22 断言、routing-check 25→30 断言、vitest 543→550→**554**（本轮累计 +11 条回归测）、
+  commercial-check 45 ✅（4.5 改文案后 B3「真断网仍报不可达」口径不变）——三处尺子收紧后仍 0 红。
+- ⚠️ **未证 9 项**（`M0_API_KEY` 缺失 ⇒ 各 check 暗卷段与 provider:check 真连网分支未跑到）：退出码全 0 **不等于全部通过**；严格模式 `DSH_STRICT_UNVERIFIED=1` 会把未证判红。
+- 冻结面核对：`git diff --name-only` 命中 `fixtures/(todo-app/tests|mock|gym)` 为空 ⇒ 判卷文件未被本轮触碰；`scripts/frozen-sha256.json` 的 diff 是分支自带的 M5 gym 清单追加（不是本轮改的），且 gate-check/frozen 校验在盘上哈希一致（该门绿）。
+- 工作树规模：92 文件 +2615/−537（波 1 前基线 85 文件 +1906/−480）。
+
+### 未接线/遗留（不影响门禁）
+
+- `spawnRace` 与路由快拒仍是「只有 scripts 调用方、无模型可见入口」（拍板 B 有意保持）。
+- 临时物核对：本轮/上轮的探针与 splice 脚本已全部删除（`scripts/.tmp*` 零命中，含本轮的 `.tmp-app.mts`）；`.tmp/` 是门禁与审计的运行目录（git 已忽略，`git status` 无条目），非待清理残留；早前记的 `.tmp/jc3.ts` 实测已不存在，此条按实测更正。
+
