@@ -25,7 +25,18 @@ export default defineConfig({
     },
   },
   renderer: {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      // I8（审查 P2）：prod CSP 收紧——renderer 与主进程走 IPC、无出网需求，裸 `ws:`
+      // 允许连任意 WebSocket 主机；dev 下 HMR 需要 ws:，故只对 build 产物移除。
+      {
+        name: "csp-prod-harden",
+        apply: "build",
+        transformIndexHtml: (html: string): string =>
+          html.replace("connect-src 'self' ws:", "connect-src 'self'"),
+      },
+    ],
     resolve: {
       alias: {
         "@": resolve(__dirname, "src/renderer"),

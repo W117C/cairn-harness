@@ -30,28 +30,68 @@ interface GateResult {
   output: string;
 }
 
-/** 全量体检：空断言 / 恒真式 / 无断言段 + H-1 的 AST 级析取式弱断言。 */
+/** 全量体检：空断言 / 恒真式 / 无断言段 + H-1 的 AST 级析取式弱断言。
+ *  H5（审查 P2）：不再只扫 *.ts——.mjs/.cjs 验收脚本同样纳入（否则换扩展名即整门逃逸）；
+ *  子目录递归。脚本文件不含 TS 类型语法时 AST 扫描按 JS 解析（ts.createSourceFile 兼容）。 */
 async function scanAll(): Promise<ScanHit[]> {
   const dir = join(ROOT, "scripts");
-  const files = (await readdir(dir)).filter((f) => f.endsWith(".ts")).sort();
   const hits: ScanHit[] = [];
-  for (const f of files) {
-    const src = await readFile(join(dir, f), "utf8");
-    hits.push(...scanAssertionHealth(f, src));
-    hits.push(...scanDisjunctions(f, src)); // H-1：AST 级析取式弱断言
-  }
+  const SCAN_EXT = /\.(?:ts|tsx|mjs|cjs|js)$/;
+  const walk = async (d: string): Promise<void> => {
+    for (const ent of await readdir(d, { withFileTypes: true })) {
+      const p = join(d, ent.name);
+      if (ent.isDirectory()) {
+        if (ent.name === "node_modules") continue;
+        await walk(p);
+        continue;
+      }
+      if (!SCAN_EXT.test(ent.name)) continue;
+      const src = await readFile(p, "utf8");
+      hits.push(...scanAssertionHealth(ent.name, src));
+      hits.push(...scanDisjunctions(ent.name, src)); // H-1：AST 级析取式弱断言
+    }
+  };
+  await walk(dir);
   return hits;
 }
+
+/** H11（审查 P3）：单门超时——旧实现 spawn 无超时，任一门挂起即无限阻塞整套门禁。
+ *  20 分钟 = 当前最慢门（test ~110s）的 10 倍以上余量；超时判红（exit 124）。 */
+const GATE_TIMEOUT_MS = 20 * 60_000;
 
 function runGate(name: string): Promise<GateResult> {
   return new Promise((settle) => {
     const t0 = Date.now();
+    let done = false;
+    let timer: NodeJS.Timeout | null = null;
+    const finish = (code: number, output: string): void => {
+      if (done) return;
+      done = true;
+      if (timer !== null) clearTimeout(timer);
+      settle({ name, code, ms: Date.now() - t0, output });
+    };
     // TERM=dumb + NO_COLOR：判据不依赖调用者 TERM（M2g §1.4-2 修正：假红根因在 ANSI 序列）
+    // detached：让 pnpm 及其子进程同属一个新进程组——超时只能整组杀，否则 SIGKILL 打在
+    // pnpm 包装器上，真正的 check 脚本（固定 CDP 端口、固定 tmpdir 快照名、共享 fixtures
+    // 靶子）活下来与后续门并发互踩，造成连锁假红/假绿（审查 H-4/agents 分片）。
     const child = spawn("pnpm", ["run", name], {
       cwd: ROOT,
       env: { ...process.env, TERM: "dumb", NO_COLOR: "1" },
       stdio: ["ignore", "pipe", "pipe"],
+      detached: true,
     });
+    const killTree = (): void => {
+      try {
+        if (typeof child.pid === "number") process.kill(-child.pid, "SIGKILL");
+        else child.kill("SIGKILL");
+      } catch {
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          /* 已退出 */
+        }
+      }
+    };
     let out = "";
     child.stdout?.on("data", (d: Buffer) => {
       out += String(d);
@@ -59,8 +99,13 @@ function runGate(name: string): Promise<GateResult> {
     child.stderr?.on("data", (d: Buffer) => {
       out += String(d);
     });
-    child.on("error", (err) => settle({ name, code: 127, ms: Date.now() - t0, output: String(err) }));
-    child.on("close", (code) => settle({ name, code: code ?? 1, ms: Date.now() - t0, output: out }));
+    child.on("error", (err) => finish(127, String(err)));
+    child.on("close", (code) => finish(code ?? 1, out));
+    timer = setTimeout(() => {
+      killTree();
+      finish(124, out + "\n[gates] 超时（" + String(GATE_TIMEOUT_MS / 60_000) + " 分钟），已强制终止判红");
+    }, GATE_TIMEOUT_MS);
+    timer.unref?.();
   });
 }
 
@@ -71,6 +116,13 @@ async function main(): Promise<void> {
   /** H-2：严格模式——未证项直接判红（CI / 有凭据环境用）。 */
   const strictUnverified = process.argv.includes("--strict-unverified") || process.env.DSH_STRICT_UNVERIFIED === "1";
   const gates = only ? GATES.filter((g) => only.has(g)) : GATES;
+  // H6（审查 P2）：--only 拼错/为空时旧实现循环零次 → failed=[] → 打印"全部通过"并 exit 0。
+  // 空集一律判红并打印可用门名（fail-visible）。
+  if (only !== null && gates.length === 0) {
+    console.error("--only 未命中任何门：" + onlyArg + "（可用门：" + GATES.join(" ") + "）");
+    process.exitCode = 1;
+    return;
+  }
 
   // 清单漂移护栏（在跑门之前）：GATES ↔ package.json scripts 双向一致。
   // 发现验收形态脚本既不在 GATES 也不在 EXEMPT_SCRIPTS（曾经的 provider:check），
@@ -133,7 +185,11 @@ async function main(): Promise<void> {
     // 未证不算绿：明确改写口径，禁止宣称「全部通过」。
     console.log("  ⚠️  " + String(results.length) + " 道门退出码全 0，但有 " + String(unverified) + " 项未证——不得宣称「全部通过」");
   } else {
-    console.log("  ✅ pnpm gates 全部通过（" + String(results.length) + " 道门 + 体检零命中 + 零未证）");
+    // H6（审查）：子集运行与全量运行在汇总上必须可区分。
+    const scope = only !== null && results.length < GATES.length
+      ? "（子集 " + String(results.length) + "/" + String(GATES.length) + " 道门——非全量运行，不等于全量全绿）"
+      : "（" + String(results.length) + " 道门 + 体检零命中 + 零未证）";
+    console.log("  ✅ pnpm gates 全部通过 " + scope);
   }
 }
 

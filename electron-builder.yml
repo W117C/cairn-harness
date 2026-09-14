@@ -12,10 +12,15 @@ files:
   - "!**/*.map"
 asar: true
 # spawn 二进制与 wasm 不解包无法用（rg 由 grep 工具 spawn；tree-sitter wasm 由 fs 读取——
-# fs 在 asar 内透明可用，spawn 必须真路径）：
+# fs 在 asar 内透明可用，spawn 必须真路径）。
+# I7（审查 P2）：tree-sitter-wasms 全量解包 49M（dmg 120M/.app 310M 的主因）——只解包
+# 实际用到的四个 grammar（parse.ts LANG_BY_EXT：typescript/tsx/javascript/python），其余留 asar。
 asarUnpack:
   - node_modules/@vscode/ripgrep/**
-  - node_modules/tree-sitter-wasms/**
+  - node_modules/tree-sitter-wasms/out/tree-sitter-typescript.wasm
+  - node_modules/tree-sitter-wasms/out/tree-sitter-tsx.wasm
+  - node_modules/tree-sitter-wasms/out/tree-sitter-javascript.wasm
+  - node_modules/tree-sitter-wasms/out/tree-sitter-python.wasm
 mac:
   identity: null
   category: public.app-category.developer-tools

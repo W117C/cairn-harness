@@ -4,6 +4,15 @@ node_modules/
 dist/
 out/
 .tmp/
+# 代码地图/索引工具的运行缓存（17M 级 codegraph.db + daemon.log，非源码）。
+.codegraph/
+# I9（审查 P2）：敏感产物不进 git——凭据文件与运行期记忆（remember 会往 .agent/memory/ 写）。
+# 注意 .agent/permissions.json 是**有意跟踪**的（项目权限库），不整体忽略 .agent/。
+.env
+.env.*
+*.key
+*.pem
+.agent/memory/
 # 靶子源码是运行产物：每个消费方（e2e/ipc/gate/autonomy/compaction 与相关测试）都从
 # fixtures/mock/todo-bug.ts 重置它，跑完留下的状态不该进 git。
 fixtures/todo-app/src/todo.ts

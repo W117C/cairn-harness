@@ -71,16 +71,22 @@ export function scanDisjunctions(file: string, src: string): ScanHit[] {
   const lines = src.split("\n");
   const visit = (n: ts.Node): void => {
     if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && ASSERT_NAMES.has(n.expression.text)) {
-      const a0 = n.arguments[0];
-      if (a0 !== undefined) {
+      // H3（审查 P1-17）：条件实参不再固定取 arguments[0]——本仓至少两套断言签名
+      //（cond-first 与 label-first `check(label, cond, ...)`），只扫第一实参会让 label-first
+      // 门（tools-check/prune-check/map-check）里的析取弱断言全部落在网外。改为扫描前两个实参
+      //（标签是字符串字面量不含二元表达式）。
+      for (const a of n.arguments.slice(0, 2)) {
         const ors: ts.BinaryExpression[] = [];
         const walk = (m: ts.Node): void => {
+          // 闭包/内嵌函数体内的 || 是业务逻辑不是断言条件——不下潜（全量下潜会把
+          // check(label, async () => {...}) 里的实现代码误报为弱断言，实测 3 条假阳）。
+          if (ts.isFunctionExpression(m) || ts.isArrowFunction(m) || ts.isFunctionDeclaration(m)) return;
           if (ts.isBinaryExpression(m) && m.operatorToken.kind === ts.SyntaxKind.BarBarToken) ors.push(m);
           ts.forEachChild(m, walk);
         };
-        walk(a0);
+        walk(a);
         if (ors.length > 0) {
-          const line = sf.getLineAndCharacterOfPosition(a0.getStart(sf)).line + 1;
+          const line = sf.getLineAndCharacterOfPosition(a.getStart(sf)).line + 1;
           // 豁免注释可写在断言所在行（行尾）或**其上 3 行内**——本仓习惯把理由写在断言上方。
           const window = lines.slice(Math.max(0, line - 4), line).join("\n");
           if (!DISJUNCTION_OK.test(window)) {
@@ -88,7 +94,7 @@ export function scanDisjunctions(file: string, src: string): ScanHit[] {
               file,
               line,
               kind: "disjunction",
-              text: "断言含 ||（任一析取项成立即通过）：" + a0.getText(sf).replace(/\s+/g, " "),
+              text: "断言含 ||（任一析取项成立即通过）：" + a.getText(sf).replace(/\s+/g, " "),
             });
           }
         }

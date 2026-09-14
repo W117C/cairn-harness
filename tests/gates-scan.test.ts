@@ -65,6 +65,20 @@ describe("析取式弱断言扫描 scanDisjunctions（H-1）", () => {
     expect(hits).toHaveLength(1);
     expect(hits[0]!.line).toBe(2);
   });
+
+  // H3（审查 P1-17）：label-first 签名（tools-check/prune-check/map-check 的
+  // `check(label, cond, ...)`）条件在第二实参——旧扫描只看 arguments[0]，此形态全部漏网。
+  it("label-first 签名：第二实参里的 || 检出（旧扫描盲区）", () => {
+    const src = 'check("G1 宿主不响应 abort", elapsed < 2_000 || elapsed === undefined, "detail");\n';
+    const hits = scanDisjunctions("t.ts", src);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.kind).toBe("disjunction");
+  });
+
+  it("label-first 签名：豁免注释同样生效", () => {
+    const src = 'check("被拒有两种合理表现", !w.ok || /EPERM/.test(w.output), "x"); // gates:disjunction-ok 两种表现\n';
+    expect(scanDisjunctions("t.ts", src)).toHaveLength(0);
+  });
 });
 
 describe("未证计数 countUnverified（H-2）", () => {

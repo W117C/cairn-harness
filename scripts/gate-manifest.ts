@@ -33,10 +33,15 @@ export const GATES: readonly string[] = [
   "agents-check",
   "schedule-check",
   "commercial-check",
+  "gym-check",
+  "routing-check",
+  "supervisor-check",
 ];
 
-/** 形如验收脚本的 script 名（这些必须有归宿：要么进 GATES，要么进 EXEMPT）。 */
-const ACCEPTANCE_SHAPE = /(?:-check|:check)$/;
+/** 形如验收脚本的 script 名（这些必须有归宿：要么进 GATES，要么进 EXEMPT）。
+ *  H5（审查 P2）：词根匹配——旧实现只认 `-check`/`:check` 结尾，`foo-check.mjs`、
+ *  `bar:check2` 等换后缀命名即逃逸孤儿护栏。含 check 词根即视为验收形态（豁免列表可放行）。 */
+const ACCEPTANCE_SHAPE = /check/i;
 
 /**
  * 显式豁免的验收形态脚本：收尾门 / 真连门 / 被别的门覆盖的同族门。

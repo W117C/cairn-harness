@@ -3,6 +3,8 @@
     "strict": true,
     "noEmit": true,
     "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "types": [
