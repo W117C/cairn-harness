@@ -1074,6 +1074,35 @@
 - 冻结面核对：`git diff --name-only` 命中 `fixtures/(todo-app/tests|mock|gym)` 为空 ⇒ 判卷文件未被本轮触碰；`scripts/frozen-sha256.json` 的 diff 是分支自带的 M5 gym 清单追加（不是本轮改的），且 gate-check/frozen 校验在盘上哈希一致（该门绿）。
 - 工作树规模：92 文件 +2615/−537（波 1 前基线 85 文件 +1906/−480）。
 
+### 提交分笔与并发争抢实录（H4 收口 23:02–23:31）
+
+11 笔入库（按关注点整文件分组，非按波次切 hunk——同一文件常同时含分支自带改动与本轮修复，
+切 hunk 会造出中间不可编译的笔）：
+
+- `3006a06` 工程基座与门禁面（含 3.11 gate-check 头部标记判定）
+- `4f2b018` M5 靶场/路由/监督 + 3.6 / 3.12 / 3.9
+- `b92c073` provider 面 + 1.6 SSE 帧分流
+- `d859ea7` 插件信任面 2.1 / 2.2 / 4.6 / 1.3
+- `ade7e9a` 调度器 2.3 / 2.4
+- `8d4f642` 权限与编排 1.1 / 3.3 / 3.4 / 3.13 / 4.11
+- `b63804d` 事件流与工具面 1.2 / 1.4 / 4.2 / 4.9
+- `c419f4e` 主进程壳 4.1 / 4.3 / 4.5
+- `9c400d3` 渲染层 1.5 / 4.4 / 4.7 / 4.6 面板（含分支自带 G10/F10/I8）
+- `584a9f9` supervisor-check E 段（**非本轮产物**：写入时间晚于我的上一笔，来历与实测 48✅ 写在提交说明里）
+- `2d8f510` 收口文档（PROGRESS / 审查报告 / 任务书 / M5 验收 / CODE-WIKI）
+
+**并发争抢实录（新发现，已进 BLOCKED 备案）**：提交后跑全量门禁得 **绿 22/26，红 test、e2e、
+ipc:check、gate-check**；同时 `ps` 显示另一会话在同一 checkout 跑 `tsx scripts/gates.ts` 已 3 分 23 秒
+（pid 65905）。把 HEAD 拉到独立 worktree 单跑同样 4 门也红（同一时间窗），对方跑完后**同一批门单跑全部转绿**：
+vitest 59 files / 554 passed、e2e 闭环成立、ipc:check 分支 A 全过、gate-check 全过、panels-check 全过。
+⇒ 内容无罪，红是争抢。但**因果没钉死**：双跑 gate-check 未能复现（`A exit=0 / B exit=0`），需要更长交错窗口；
+候选机理是共享可变靶子 `fixtures/todo-app`（e2e/gate-check/ipc-check 都就地改它）与脚本里的固定 tmp 路径
+（`gate-check.ts:30-31`、`panels-check.ts:21-22`、`agent-runner.ts:1091/1360`）。缺的证据：能在双跑下稳定复现的入口。
+
+工作树收尾：`git status --porcelain` 仅剩 3 个**不属于本轮**的文件（`src/agent/orchestrator.ts` +38 的 M6 supervise 环 worktree 收尾、
+`AGENTS.md` 的「M6 已收」一行、`docs/m5-acceptance.md`）——他处 in-flight，不代提交、不代改。
+
+
 ### 未接线/遗留（不影响门禁）
 
 - `spawnRace` 与路由快拒仍是「只有 scripts 调用方、无模型可见入口」（拍板 B 有意保持）。

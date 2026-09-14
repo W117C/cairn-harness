@@ -270,3 +270,24 @@ card_action emit 缺 merge 路由回退），均由本轮新增验收断言抓�
 
 1. **pnpm-workspace.yaml 白名单外必要越界**：任务书白名单未含 pnpm-workspace.yaml，但 `pnpm add -D electron-builder` 引入传递依赖 electron-winstaller 后，pnpm 11 自动追加占位行 `allowBuilds.electron-winstaller: "set this to true or false"`——该坏值使**全部 pnpm 命令**（含既有门的 pnpm test 探针）以 ERR_PNPM_IGNORED_BUILDS 失败（tests/gated-tools.test.ts 两用例假红即此因）。唯一修复 = 显式置 `electron-winstaller: false`（macOS 打包不需要其 Windows 安装器 postinstall）。已由主对话执行、验证（pnpm 恢复 + 两用例回绿）；主对话在 BLOCKED 留此备案备查。
 2. **BYOK 真连未证**：可安装包 BYOK 全流程的「真实 GLM 拨号」一跳需要 M0_API_KEY（本机无 key）；存储/解密/注入/设置链路全部已证（commercial-check C 段 + 打包冒烟），真连按「未证 ≠ 通过」标注于 docs/m4-acceptance.md §一-1，key 在场重跑 `pnpm provider:check` 即闭合。沿 M1a-1/M2g 先例。
+
+## 立项备案（2026-09-14，H4 收口轮）
+
+**G-1「pnpm gates 并发运行不保证隔离」→ 待裁决是否立项修**。
+
+实测：同一 checkout 内两会话同时跑 gates，我方一次得 绿 22/26，红 test/e2e/ipc:check/gate-check；
+独立 worktree（HEAD）同窗口跑同样 4 门同样红；对方跑完后同一批门单跑全部绿（554 passed / e2e 闭环 /
+ipc:check 分支 A / gate-check 全过 / panels-check 全过）⇒ 红不由被测内容产生。
+
+机理候选（未钉死：双跑 gate-check 实测 A exit=0 / B exit=0 不复现，需更长交错窗口）：
+
+1. 共享可变靶子：scripts/e2e.ts:15、scripts/gate-check.ts:26 与 ipc-check 都以 join(ROOT, fixtures, todo-app)
+   为活工作区，两个 run 同时重置/改写同一 src/todo.ts 与 tests 视图 ⇒ verify 事件与判卷 sha256 断言互相踩。
+   可抄先例：map-check ⓪「工作区为临时副本」（scripts/map-check.ts:36 断言 workspace.startsWith(tmpdir())）。
+2. 固定 tmp 路径（跨进程同键）：gate-check.ts:30-31 m1b-gate-events.jsonl / m1b-dark-events.jsonl、
+   panels-check.ts:21-22 m1e-panels-*.json、agent-runner.ts:1091 m0b-agent-events.jsonl、:1360 m2e-plugin-data。
+   同族前例：本轮之上那条「plugins-check F2 非密封判据瞬时抖动」。
+
+待裁决：(a) 按候选 1 把 e2e/ipc:check/gate-check 的靶子改 per-run 临时副本（改动面 3 脚本 + 判卷 sha256
+断言仍成立的核对）；(b) 只做候选 2 的 mkdtemp/pid 化（机械低风险，但已实测不足以单独复现红）；
+(c) 只立规矩「一台机器一次只跑一套 gates」。本轮不擅自扩范围，先记账。
