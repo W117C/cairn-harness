@@ -21,6 +21,7 @@ import {
   DEFAULT_CONCURRENCY_CAP,
   Scheduler,
   appendJournalEntry,
+  compactJournalIfLarge,
   formatLocal,
   loadAutomationsFile,
   nextOccurrence,
@@ -179,6 +180,32 @@ describe("M4a 双轨存储", () => {
     const r2 = await readJournalFile(file);
     expect(r2.entries).toHaveLength(3);
     expect(r2.warnings.join()).toContain("不是合法 JSON");
+  });
+
+  // 审查 S2-10（修复任务书 2.3 / 拍板 E）：压缩（read 快照 → rename 覆盖）必须与追加同链。
+  // 不互斥时，落在 read→rename 窗口里的追加会被 rename 整批抹掉——丢的是「该 occurrence
+  // 已决」的唯一凭据，重启即重复补跑 / 重复记 skipped 账。这里把 20 条追加与一次压缩同时
+  // 发起，断言全部存活（旧实现下 post-* 成片消失）。
+  it("journal 压缩与并发追加同链：追加条目不被 rename 抹掉", async () => {
+    const file = join(dir, "journal-compact.jsonl");
+    const at = new Date("2026-09-12T02:00:00.000Z").toISOString();
+    const pre: Promise<void>[] = [];
+    for (let i = 0; i < 10_005; i++) {
+      pre.push(appendJournalEntry(file, { task_id: "t", occurrence_key: "pre-" + String(i), due_at: at, decision: "skipped", reason: "too-old", at }));
+    }
+    await Promise.all(pre);
+    const tail: string[] = [];
+    const jobs: Promise<unknown>[] = [compactJournalIfLarge(file)];
+    for (let i = 0; i < 20; i++) {
+      const k = "post-" + String(i);
+      tail.push(k);
+      jobs.push(appendJournalEntry(file, { task_id: "t", occurrence_key: k, due_at: at, decision: "triggered", at }));
+    }
+    await Promise.all(jobs);
+    const { entries, warnings } = await readJournalFile(file);
+    expect(warnings).toHaveLength(0);
+    const keys = new Set(entries.map((e) => e.occurrence_key));
+    expect(tail.filter((k) => !keys.has(k))).toEqual([]);
   });
 });
 
@@ -379,6 +406,29 @@ describe("M4a 准入管线（三闸顺序短路 + 去重 + 补跑）", () => {
     const j2 = await readJournalFile(s2.s.journalPath);
     const dues = j2.entries.map((e) => e.due_at).sort();
     expect(dues[0]).toBe("2026-09-14T09:00:00.000Z"); // 7 天窗起点（09-13T09:00）严格之后的首个错过
+  });
+  // 审查 S2-11（任务 2.4）：运行期补记账必须有上限。interval 60min，启动补跑把水位推到
+  // 最近一次，再把时钟推到 09-12 08:30（约 187 条错过）：旧实现这一拍逐条写约 187 行
+  // skipped 账 + 同等次数的投影通知（启动路径有 catchupGate 的 20 条上限，运行期这条没有）。
+  // 修法：最近 RUNTIME_SKIP_DETAIL=20 条逐条，其余折成一条聚合账（occurrence_key 带 +foldN，
+  // 不与真实 occurrence 撞键，去重语义不变；due_at = 被折叠区间最早一条，时间范围仍可查）。
+  it("运行期补记账有上限：20 条逐条 + 一条聚合账", async () => {
+    const { s } = makeScheduler({ runSession: async () => ({ ok: true }), now: new Date("2026-09-05T01:30:00Z").getTime() });
+    await s.start();
+    s.stop();
+    await s.upsert(base({ name: "长睡眠靶", schedule: { kind: "interval", everyMinutes: 60 }, createdAt: "2026-09-05T00:00:00.000Z" }));
+    const r1 = await s.tick({ startup: true });
+    expect(r1.catchup + r1.triggered).toBe(1); // 启动补跑只跑最近一次（语义不变）
+    const r2 = await s.tick({ startup: false, now: Date.parse("2026-09-12T08:30:00Z") });
+    expect(r2.triggered).toBe(1);
+    const j = await readJournalFile(s.journalPath);
+    const foldRe = /\+fold(\d+)$/;
+    const skips = j.entries.filter((e) => e.reason === "too-old");
+    expect(skips.filter((e) => !foldRe.test(e.occurrence_key)).length).toBeLessThanOrEqual(20);
+    const fold = skips.map((e) => foldRe.exec(e.occurrence_key)).find((m) => m !== null);
+    expect(fold).toBeTruthy();
+    expect(Number(fold?.[1] ?? "0")).toBeGreaterThan(100); // 旧实现：没有聚合行，且逐条约 187 行 => 上面两条同时红
+    await s.whenIdle;
   });
 
   it("常规 tick：now ≥ nextRunAt 即进管线（不依赖 tick 命中）；跳过后水位推进不重试", async () => {

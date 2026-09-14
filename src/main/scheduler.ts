@@ -41,6 +41,8 @@ export function defaultJitterMs(): number {
 }
 /** 单任务回看窗口内枚举上限（5min interval × 7 天 ≈ 2016，防御性截断）。 */
 const MAX_MISSED_ENUM = 500;
+/** 运行期补记账的逐条上限（超出折一条聚合账）；与启动侧 catchupGate 的 20 条口径对齐。 */
+const RUNTIME_SKIP_DETAIL = 20;
 
 // ---- 双轨存储之一：任务定义（automations.json，原子写）----
 
@@ -105,9 +107,49 @@ export function occurrenceKeyOf(taskId: string, dueAt: Date): string {
   return taskId + ":" + dueAt.toISOString();
 }
 
+/** 审查 S2-10（修复任务书 2.3 / 拍板 E）：journal 的追加与压缩收敛共用同一条按文件键的 Promise 链。
+ *  旧实现两者无互斥：compact 先 readFile 快照、再 rename 覆盖，中间落入的 append 会被 rename
+ *  直接抹掉——丢的正是「该 occurrence 已决」的唯一凭据，重启后同一 occurrence 会重复补跑或
+ *  重复记 skipped 账（判据面 schedule-check B 段只测坏行容忍，测不到这条交错）。
+ *  链式串行与 events replay / B8 同一口径；链按文件键，跑完即回收（不单调增长）。 */
+const journalChain = new Map<string, Promise<unknown>>();
+
+function onJournalPath<T>(file: string, job: () => Promise<T>): Promise<T> {
+  const prev = journalChain.get(file);
+  const next = (prev === undefined ? Promise.resolve() : prev.catch(() => undefined)).then(job);
+  journalChain.set(file, next);
+  void next.then(
+    () => {
+      if (journalChain.get(file) === next) journalChain.delete(file);
+    },
+    () => {},
+  );
+  return next;
+}
+
 export async function appendJournalEntry(file: string, entry: JournalEntry): Promise<void> {
-  await mkdir(dirname(file), { recursive: true });
-  await appendFile(file, JSON.stringify(entry) + "\n", "utf8");
+  await onJournalPath(file, async () => {
+    await mkdir(dirname(file), { recursive: true });
+    await appendFile(file, JSON.stringify(entry) + "\n", "utf8");
+  });
+}
+
+// ---- D7（审查 P2）：journal 保留上限——append-only 无界增长使 journalKeys/journalByTask/
+// completions 内存单调增长、snapshot 对全部历史逐条投影。超帽收敛到最新 KEEP 条（原子替换）。 ----
+const JOURNAL_MAX_ENTRIES = 10_000;
+const JOURNAL_KEEP_ENTRIES = 4_000;
+
+export async function compactJournalIfLarge(file: string): Promise<number> {
+  return await onJournalPath(file, async () => {
+    const { entries } = await readJournalFile(file);
+    if (entries.length <= JOURNAL_MAX_ENTRIES) return entries.length;
+    const keep = entries.slice(-JOURNAL_KEEP_ENTRIES);
+    const tmp = file + ".tmp-" + String(process.pid) + "-" + String(Date.now());
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(tmp, keep.map((e) => JSON.stringify(e) + "\n").join(""), "utf8");
+    await rename(tmp, file);
+    return keep.length;
+  });
 }
 
 /** 读调度日志（append-only；坏行跳过 + 警告，不断链）。 */
@@ -371,6 +413,8 @@ export const SKIP_REASON_LABELS: Record<string, string> = {
 export class Scheduler {
   private tasks: AutomationDefinition[] = [];
   private journalKeys = new Set<string>();
+  /** D7（审查 P2）：运行期 journal 追加计数——每 1000 条触发一次保留上限检查。 */
+  private journalAppendsSinceCompact = 0;
   private journalByTask = new Map<string, JournalEntry[]>();
   private inflight = new Map<string, Inflight>();
   private completions = new Map<string, { status: "succeeded" | "failed"; reason?: string }>();
@@ -417,6 +461,10 @@ export class Scheduler {
     const j = await readJournalFile(this.journalPath);
     this.ingestJournal(j.entries);
     for (const w of j.warnings) this.warn("[scheduler] " + w);
+    // D7（审查 P2）：启动时对 journal 做保留上限收敛（超帽截到 KEEP 条，原子替换）。
+    const kept = await compactJournalIfLarge(this.journalPath).catch(() => -1);
+    if (kept >= 0) this.warn("[scheduler] journal 保留收敛完成（当前 " + String(kept) + " 条）");
+    this.journalAppendsSinceCompact = 0;
     const jitter = this.jitterMs();
     this.jitterTimer = setTimeout(() => {
       void this.tick({ startup: true });
@@ -467,6 +515,21 @@ export class Scheduler {
         } else {
           const lastDecided = this.lastDecidedAt(def);
           const dueList = occurrencesBetween(def, lastDecided, now);
+          // D6（审查 P2）：运行期错过的多个 occurrence 全部补记账（旧实现只取最后一个进管线，
+          // 中间错过的既不漏账可查）。审查 S2-11（任务 2.4）补上限：枚举帽是 500，笔记本合盖
+          // 数周后醒来的第一个 tick 会逐条写 500 行 skipped 账 + 500 次投影通知（启动路径有
+          // catchupGate 的 20 条上限，这条运行期路径没有）。口径与启动侧对齐：最近 20 条逐条，
+          // 其余折成**一条**聚合账（key 带 +foldN 后缀，不与真实 occurrence 撞键，去重语义不变，
+          // due_at 取被折叠区间最早一条 = 时间范围仍可查）。启动补跑语义不动。
+          const head = dueList.slice(0, -1);
+          const detail = head.slice(-RUNTIME_SKIP_DETAIL);
+          const folded = head.length - detail.length;
+          if (folded > 0) {
+            await this.decideSkip(def, head[0], "too-old", report, "+fold" + String(folded));
+          }
+          for (const occ of detail) {
+            await this.decideSkip(def, occ, "too-old", report);
+          }
           const due = dueList[dueList.length - 1];
           if (due) await this.pipeline(def, due, "triggered", report);
         }
@@ -571,8 +634,8 @@ export class Scheduler {
     this.enqueue(def, key, dueAt, sessionId);
   }
 
-  private async decideSkip(def: AutomationDefinition, dueAt: Date, reason: SkipReason, report: TickReport): Promise<void> {
-    const key = occurrenceKeyOf(def.id, dueAt);
+  private async decideSkip(def: AutomationDefinition, dueAt: Date, reason: SkipReason, report: TickReport, keySuffix = ""): Promise<void> {
+    const key = occurrenceKeyOf(def.id, dueAt) + keySuffix;
     if (this.journalKeys.has(key)) {
       report.duplicates++;
       return;
@@ -605,6 +668,12 @@ export class Scheduler {
     const list = this.journalByTask.get(entry.task_id) ?? [];
     list.push(entry);
     this.journalByTask.set(entry.task_id, list);
+    // D7（审查 P2）：运行期增量收敛——每 1000 条触发一次保留上限检查（防 append-only 无界增长）。
+    this.journalAppendsSinceCompact++;
+    if (this.journalAppendsSinceCompact >= 1_000) {
+      this.journalAppendsSinceCompact = 0;
+      void compactJournalIfLarge(this.journalPath).catch(() => -1);
+    }
   }
 
   private async emitTimelineSafe(e: AgentEvent): Promise<void> {
