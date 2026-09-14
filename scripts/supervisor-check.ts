@@ -171,6 +171,101 @@ function accountableUsage(events: AgentEvent[]): number {
   check(usageEarly < usageFull, "D4 早停 accountable usage 严格小于跑满（" + String(usageEarly) + " < " + String(usageFull) + "）");
 }
 
+// ============================== E supervise 模式运行时接线（M6 双轨 surgery） ==============================
+console.log("[supervisor-check] E supervise 模式运行时（审批双轨契约 / 受限循环 / 有界中止 / 接受路径）");
+
+const E_FAIL_SCRIPT: ModelOutput[] = [
+  { type: "assistant_message", content: "环 worker 尝试修复。" },
+  { type: "assistant_message", content: "verdict: fail" },
+];
+const E_PASS_SCRIPT: ModelOutput[] = [
+  { type: "assistant_message", content: "环 worker 修复完成。" },
+  { type: "assistant_message", content: "verdict: pass" },
+];
+
+function newOrchSup(logPath: string, script: ModelOutput[]): { orch: Orchestrator; events: AgentEvent[] } {
+  const events: AgentEvent[] = [];
+  const orch = new Orchestrator({
+    logPath,
+    workspace: join(ROOT, "fixtures", "todo-app"),
+    parentMode: "default",
+    emit: async (e) => {
+      events.push(e);
+      await createEventLog(logPath).append(e);
+    },
+    modelFor: () => scriptedWorkerModel(script),
+  });
+  return { orch, events };
+}
+
+async function waitFor(pred: () => boolean, timeoutMs = 10_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (pred()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return pred();
+}
+
+{
+  // E1/E2/E3：审批双轨契约 + 永远 fail → maxStages 有界中止（事件流有 [supervisor] 记录）
+  const p = join(work, "e1.jsonl");
+  const { orch, events } = newOrchSup(p, E_FAIL_SCRIPT);
+  const spawnP = orch.spawn(
+    { mode: "supervise", task: "修复 todo 的 completedCount", supervise: { maxStages: 3, forbidden: ["tests"] } },
+    { callId: "sup-e1" },
+  );
+  check(await waitFor(() => events.some((e) => e.type === "approval_requested")), "E1a supervise 审批落流");
+  const apr = events.find((e) => e.type === "approval_requested") as Extract<AgentEvent, { type: "approval_requested" }> | undefined;
+  check(
+    (apr?.args_digest ?? "").includes("supervise 授权") && (apr?.args_digest ?? "").includes("maxStages=3") && (apr?.args_digest ?? "").includes("forbidden=tests"),
+    "E1 审批卡批准 {goal,budget,forbidden,maxStages}（双轨契约，非 stages 全表）",
+  );
+  check(
+    (apr?.risk_reasons ?? []).some((r) => r.includes("非 stages 全表") && r.includes("受限循环授权")),
+    "E1b 双轨标注：与 pipeline stages 全表审批分开",
+  );
+  check(apr !== undefined && orch.decideWorkerApproval(apr.id, true, "once").ok, "E1c 决议受理");
+  const r1 = await spawnP;
+  await orch.waitAll(15_000);
+  check(!r1.ok && r1.output.includes("maxStages 耗尽"), "E3 永远 fail → maxStages=3 有界中止（" + r1.output.slice(0, 60) + "）");
+  const spawnedSup = events.filter((e) => e.type === "agent_spawned");
+  check(spawnedSup.length === 3, "E3b 恰好 3 环（≤ maxStages，不无限爬）");
+  check(
+    events.some((e) => e.type === "agent_message" && e.kind === "progress" && (e as { text: string }).text.includes("[supervisor]") && (e as { text: string }).text.includes("abort")),
+    "E3c 事件流有 [supervisor] abort 决策记录",
+  );
+  check(events.some((e) => e.type === "approval_resolved" && e.decision === "approved"), "E3d approval_resolved(approved) 落流");
+}
+
+{
+  // E4：拒绝 → fail-closed（受限循环不启动，零环 worker）
+  const p = join(work, "e4.jsonl");
+  const { orch, events } = newOrchSup(p, E_FAIL_SCRIPT);
+  const spawnP = orch.spawn({ mode: "supervise", task: "修复 todo", supervise: { maxStages: 3 } }, { callId: "sup-e4" });
+  check(await waitFor(() => events.some((e) => e.type === "approval_requested")), "E4a 审批落流");
+  const apr4 = events.find((e) => e.type === "approval_requested") as Extract<AgentEvent, { type: "approval_requested" }> | undefined;
+  check(apr4 !== undefined && orch.decideWorkerApproval(apr4.id, false, "once").ok, "E4b 拒绝决议受理");
+  const r4 = await spawnP;
+  await orch.waitAll(10_000);
+  check(!r4.ok && r4.output.includes("未获批准"), "E4c 拒绝 → fail-closed 不启动循环");
+  check(events.filter((e) => e.type === "agent_spawned").length === 0, "E4d 拒绝后零环 worker");
+}
+
+{
+  // E5：pass → 单环接受（gate loopback 闭合：实现→判据→接受）
+  const p = join(work, "e5.jsonl");
+  const { orch, events } = newOrchSup(p, E_PASS_SCRIPT);
+  const spawnP = orch.spawn({ mode: "supervise", task: "修复 todo", supervise: { maxStages: 6 } }, { callId: "sup-e5" });
+  check(await waitFor(() => events.some((e) => e.type === "approval_requested")), "E5a 审批落流");
+  const apr5 = events.find((e) => e.type === "approval_requested") as Extract<AgentEvent, { type: "approval_requested" }> | undefined;
+  check(apr5 !== undefined && orch.decideWorkerApproval(apr5.id, true, "once").ok, "E5b 决议受理");
+  const r5 = await spawnP;
+  await orch.waitAll(10_000);
+  check(r5.ok && (r5.output ?? "").includes('"status":"accepted"'), "E5c 单环 verdict:pass → 接受（gate loopback 闭合）");
+  check(events.filter((e) => e.type === "agent_spawned").length === 1, "E5d 恰好 1 环");
+}
+
 await rm(work, { recursive: true, force: true }).catch(() => {});
 
 console.log("[supervisor-check] " + (fail === 0 ? "全部断言通过 ✅" : String(fail) + " 项失败 ❌") + "（" + String(pass) + " ✅ / " + String(fail) + " ❌）");
