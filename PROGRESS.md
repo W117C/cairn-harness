@@ -1091,13 +1091,22 @@
 - `584a9f9` supervisor-check E 段（**非本轮产物**：写入时间晚于我的上一笔，来历与实测 48✅ 写在提交说明里）
 - `2d8f510` 收口文档（PROGRESS / 审查报告 / 任务书 / M5 验收 / CODE-WIKI）
 
-**并发争抢实录（新发现，已进 BLOCKED 备案）**：提交后跑全量门禁得 **绿 22/26，红 test、e2e、
-ipc:check、gate-check**；同时 `ps` 显示另一会话在同一 checkout 跑 `tsx scripts/gates.ts` 已 3 分 23 秒
-（pid 65905）。把 HEAD 拉到独立 worktree 单跑同样 4 门也红（同一时间窗），对方跑完后**同一批门单跑全部转绿**：
-vitest 59 files / 554 passed、e2e 闭环成立、ipc:check 分支 A 全过、gate-check 全过、panels-check 全过。
-⇒ 内容无罪，红是争抢。但**因果没钉死**：双跑 gate-check 未能复现（`A exit=0 / B exit=0`），需要更长交错窗口；
-候选机理是共享可变靶子 `fixtures/todo-app`（e2e/gate-check/ipc-check 都就地改它）与脚本里的固定 tmp 路径
-（`gate-check.ts:30-31`、`panels-check.ts:21-22`、`agent-runner.ts:1091/1360`）。缺的证据：能在双跑下稳定复现的入口。
+**门禁红事件与归因更正（重要：我先归错因，后用判别实验推翻自己）**
+
+1. 23:15 提交后跑全量门禁得 绿 22/26，红 test、e2e、ipc:check、gate-check；同期 `ps` 显示另一会话
+   在同一 checkout 跑 `tsx scripts/gates.ts`（pid 65905，已 3 分 23 秒）。我据此记为「并发争抢」，
+   并在 BLOCKED 立项 G-1。**该结论当时只到「相关」，没到「因果」**（双跑 gate-check 已不复现）。
+2. 23:44–23:52 双跑实验（同一 checkout 两套 gates 并发）：run1 红 map-check；run2 红 test + map-check。
+   接着**单跑** map-check 仍然红（`❌ ⑤b 结果变化（新符号入图）`）⇒ 红与并发无关。
+3. 判别实验：把 HEAD 拉到独立 worktree 跑 map-check ⇒ **全部通过 ✅**（索引 235 文件）；脏树 ⇒ 红
+   （索引 238 文件，①渲染 tokens=873/921 逼近 1024 帽）。⇒ 真因是他处 in-flight 新增文件把地图
+   推到渲染帽边界，暴露的是 **判据缺陷**（⑤b 用「渲染文本变化」断言「新符号入图」，文本被截断时必假红），
+   不是我的提交内容，也不是并发。
+4. 结论校正：我的 12 笔提交在 HEAD 独立树上实测 map-check 全绿；23:23–23:27 那批单跑绿（554 passed /
+   e2e 闭环 / ipc:check 分支 A / gate-check / panels-check）同样是「脏树但那些门绿」的证据 ⇒ 我的提交
+   不背这个红。23:15 的 test/e2e/ipc:check/gate-check 四红仍**未定因**（候选：并发争抢、或他处正在写入
+   的文件被读到中间态），缺的证据：无第三方活动时的双跑复现。G-1 因此降级为「机理未证」，
+   新立 G-2（map-check ⑤b 判据缺陷，要求换判据，不改产品代码去绕）。
 
 工作树收尾：`git status --porcelain` 仅剩 3 个**不属于本轮**的文件（`src/agent/orchestrator.ts` +38 的 M6 supervise 环 worktree 收尾、
 `AGENTS.md` 的「M6 已收」一行、`docs/m5-acceptance.md`）——他处 in-flight，不代提交、不代改。
