@@ -229,6 +229,7 @@ function EventView({
           status: col?.status ?? "running",
           reason: col?.reason,
           permission_mode: e.permission_mode,
+          ...(e.model ? { model: e.model } : {}), // P0（审查）：worker 用哪个模型上卡——model 已发射无人渲染
           tier_warning: e.tier_warning,
           usage: col ? { inputTokens: col.usage.inputTokens, outputTokens: col.usage.outputTokens } : undefined,
           pendingApproval: col?.pendingApproval !== null && col?.pendingApproval !== undefined ? true : undefined,

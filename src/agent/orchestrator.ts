@@ -1440,9 +1440,12 @@ export class Orchestrator {
       // 不绕过 decideSupervisor；lastFailure 随注入文本点名被触碰面，下一环反馈可读。
       const changedFiles = term.result.artifacts?.files_changed ?? [];
       const violated = forbidden.filter((g) => changedFiles.some((f) => globIntersects(f, g)));
-      const effectiveReport = violated.length > 0
+      // P1（审查）：失败环 diff 摘要喂回——已改文件清单随 report 进 lastReport（concatStageTask 拼
+      // 进下一环任务书），下一环不再从零猜波及面。追加在尾部，不干扰 parseVerdict 的行首锚点。
+      const diffNote = changedFiles.length > 0 ? "\n已改文件（worktree diff）：" + changedFiles.join("、") : "";
+      const effectiveReport = (violated.length > 0
         ? "verdict: fail\nforbidden 违反：" + violated.join("、") + "（禁改面被触碰，报告 verdict 不采信）\n" + report
-        : report;
+        : report) + diffNote;
       // verdict 映射：pass / fail / unspecified（畸形 → null → escalate）
       const v = parseVerdict(effectiveReport);
       const verdict = v === "pass" ? "pass" : v === "fail" ? "fail" : null;

@@ -355,3 +355,14 @@ after.text !== first.text 收紧为 after.text.includes(探针名)——判据�
 （`http://example.com/d` → true）与 scripts/commercial-check.ts B6（`isSafeExternalUrl("http://e/d")`
 在白名单断言内）。改行为必改判据，需裁决后同步改两处（D5 的 manifest 拉取侧已是 https-only，
 本条只影响 openExternal 下载页）。待裁决。
+
+### 立案：hourly/monthly 定时表单开闸（2026-09-15 02:2x，优化轮）
+
+**发现**：hourly/monthly 引擎已全就绪（数据模型七 kind + croner next-run 计算已支持），唯一阻塞是
+表单面白名单 FORM_KINDS 四 kind（automations.ts:14）。审查建议纯开闸，**但按判卷纪律不动代码**：
+schedule-check A6 是冻结判据——`assert(!formHo.ok && dataHo.ok, "A6 hourly 数据模型收、表单面拒
+（V1 四 kind 白名单）")`（schedule-check.ts:152-154），monthly 同段应有镜像断言。开闸需同步改：
+① automations.ts FORM_KINDS 放行 + hourly(minute)/monthly(monthDay+time) 表单联动字段校验
+② schedule-check A 段断言翻转（收→放 + 联动字段断言）③ renderer 定时表单加 kind 选项与字段
+（panels/registry.tsx:1015-1016,1127）④ schedule.test.ts「表单四 kind 全过」用例更新。
+行为变更 + 判据变更双冻结面，待裁决后一次性落地。

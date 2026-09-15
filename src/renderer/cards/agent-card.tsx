@@ -15,6 +15,8 @@ export interface AgentCardPayload {
   status?: string;
   reason?: string;
   permission_mode?: string;
+  /** worker 模型（agent_spawned.model 透传；路由开启时有值）。 */
+  model?: string;
   tier_warning?: string;
   usage?: { inputTokens: number; outputTokens: number };
   pendingApproval?: boolean;
@@ -35,6 +37,7 @@ export function AgentCard({ payload, onAction }: { payload: AgentCardPayload; on
           <span className="font-mono">{payload.agent_id}</span>
           {badge}
           {payload.permission_mode && <Badge variant="outline" className="font-mono text-[10px]">{payload.permission_mode}</Badge>}
+          {payload.model && <Badge variant="outline" className="font-mono text-[10px]">{payload.model}</Badge>}
           {payload.usage && (
             <span className="font-mono text-[10px] text-muted-foreground">
               {payload.usage.inputTokens}/{payload.usage.outputTokens} tok

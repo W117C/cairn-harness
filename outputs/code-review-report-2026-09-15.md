@@ -161,6 +161,24 @@ app.isPackaged 且 fixtures/todo-app 缺失 → dialog.showErrorBox 显式告警
 typecheck 全仓红点唯一落在此文件（非本轮改动，不处置）。本轮验证：license.test 16/16、
 commercial-check 45/45、typecheck 本轮文件零错误。
 
+## 11. 优化轮实录（2026-09-15 02:2x，已收口）
+
+1. **worker 卡显示 model（P0 建议 2，已修）**：agent_spawned.model 早已发射但渲染 payload 缺字段——
+   main.tsx agent-card payload 透传 model + AgentCardPayload 加字段 + 卡片标题渲染 model 徽标
+   （与 permission_mode 同排）。路由开启后用户可见 worker 用哪个模型。
+2. **supervise 失败环 diff 喂回（P1 建议 4，最小落地）**：effectiveReport 尾部追加「已改文件
+   （worktree diff）」清单——随 lastReport 进 concatStageTask（8000 帽）拼进下一环任务书，下一环
+   不再从零猜波及面；追加在尾部不干扰 parseVerdict 行首锚点。合并语义未动（不建合并塔，符合备案）。
+3. **hourly/monthly 开闸 → 判据立案（不偷改）**：schedule-check A6 冻结判据断言「hourly 表单面拒」，
+   开闸需同步改 FORM_KINDS + A 段断言 + renderer 表单 + 单测四处（双冻结面），记入 BLOCKED.md 待裁决。
+4. **路由用户入口 → 留位 M7（不偷做）**：settings.routingBandit 仍是零消费者死设置、opts.routing
+   仍无生产构造点——但 bandit 运行时接线是 m5-proposal §1.4 明确留位 M6+ 的项，纪律上不偷做；
+   建议作为 M7 候选（与并发会话的 impact 层并列），入口语义（静态路由开关 vs bandit 学习开关分置）
+   留 owner 拍板。
+
+**验证**：typecheck 全仓唯一错误仍在对方 impact 半成品（本轮文件零错误）；supervisor-check 60/60、
+agents-check 252/252。提交：92eefe8（P2/P3+分发轮）、本轮单独成笔。
+
 **验证**：typecheck 干净；全量门禁 **26/26 绿 + 断言体检零命中**（02:0x 实跑，含本轮全部改动）。
 map-check 上一轮的红（codegraph daemon socket 撞拷贝）本轮自愈转绿——BLOCKED.md「G-1 首个实锤机理」
 的备案仍成立：该环境抖动与仓库改动无关，daemon 存活期间可复现。
