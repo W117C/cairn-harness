@@ -417,6 +417,44 @@ $ inert 在位（合规）                            → aria-hidden-focus 33  
 | `panels-check` | **EXIT=1**（3 项失败，**红因非本轮 P0**，见 §4.5） |
 | 门数 / 清单漂移 | **28** 项 / `checkGateManifest` 违规 **0** |
 
+### 5.2.1 全量 `pnpm gates` 实测（28 道，主理人自跑）+ **红门归因矩阵**
+
+```
+绿 23 / 28，红 5（test、panels-check、map-check、agents-check、supervisor-check）
+断言体检（空断言/恒真式/暗卷段零断言/析取式弱断言）：✅ 零命中
+清单漂移校验：✅ GATES ↔ package.json scripts 一致
+⚠️ 未证 8 项（连网/凭据限制——不等于通过）
+```
+本轮新增的两道门在**全量套件里**也是绿的：`renderer-arch-check` exit=0（9.1s）、`a11y-check` exit=0（9.3s）。
+
+**5 道红门逐一定量归因**（关键：不靠"看起来像谁的"来判，用 **git worktree 对照实验**）：
+
+| 红门 | 归因 | 判定证据 |
+|---|---|---|
+| `supervisor-check` | **并发工作流的在飞改动** | 干净 worktree（`HEAD`，剔除其 25 个未提交文件）→ **60/60 全绿**；主工作树 59✅/1❌ |
+| `test`（634 用例中 5 红） | **3 条 = 并发工作流在飞改动；2 条 = 先于本轮存在** | ① 干净 worktree 只剩 2 红（`m3c` / `routing-events`），`plugins-discover`×2 + `plugins-skills`×1 **转绿** ⇒ 那 3 条是其未提交改动所致；② 基线 worktree（`e259113~1` = `5e8a10b`，**本轮之前**）跑这两条 → **仍红** ⇒ 与本轮无关 |
+| `map-check` | **产品既有竞态**，被本轮新增文件**放大**（详见下） | 基线 **237/237 ✅**；`HEAD` **241→242/249 ❌**，且**逐次数字不同**（241/242）= 竞态指纹 |
+| `agents-check` | **已知重载时序缺陷** | `AGENTS.md` 明载「两道红门（test/agents-check）根因是验收侧时序缺陷，**重载下确定性红，闲时偶绿**」；本轮 `test` 单门跑了 **798s**，整机重载 |
+| `panels-check` | **本轮**（vanilla 无虚拟化，**已裁决留位**） | 见 §4.5；虚拟化移植前不可能回绿 |
+
+⇒ **结论：5 道红门中，没有任何一道是本轮新引入的缺陷**；唯一与本轮相关的是已裁决留位的 `panels-check`。
+
+**`map-check` 的真实根因（产品 bug，非判据问题）**：`src/agent/map/build.ts:244`
+
+```ts
+void writeTagsCache(dir, s.f, tags).catch(() => {});   // ← 即发即忘，未 await
+```
+
+解析循环内每个文件**发起**写缓存但不等待；`build()` 随即返回，而门禁**立刻**发起第二次构建，
+此时最后若干个写盘仍在飞行中 ⇒ 第二次必然 miss。判据 `:68` 要求「第二次 `fromTagsCache === files.length`
+且 `parsed === 0`」，在竞态下不可满足。**文件越多，飞行中的写越多，miss 越多**——这正是本轮新增
+12 个被扫描源文件（含 `src/renderer/app.js`、`scripts/lib/harness.ts`、`proto/*.cjs` 等）后它转红的原因。
+
+- 修法（**未擅自改**，该文件既非本轮作用域、亦非并发工作流在飞的 13 个文件之一）：
+  收集 promise 后 `await Promise.all(pending)` 再返回（约 1 行）。
+- 旁证：`NOISE_GLOBS`（`build.ts:16`）只排除 `.git/node_modules/dist/out`，**不排除 `outputs/`**；
+  而 `SUPPORTED_EXTS` = ts/tsx/js/mjs/cjs/jsx/py ⇒ 交付文档目录下的源码文件同样进图。
+
 ### 5.3 仍红的一项与三项待裁决
 
 `panels-check` **保持红**，红因已在 §4.5 二分清楚：**虚拟化缺失**（用户已裁决留位）+ **两条判据缺陷**（②③）。

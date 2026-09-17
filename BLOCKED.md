@@ -718,3 +718,47 @@ EXIT=1
 
 > 本轮 Fix 2（non-text-contrast）已独立落地并**过门**：`.composer-box` 与 `.search input` 边界改用 `--border-strong`，三态合计 **6 → 0**（light 3.64:1 / dark 3.83:1，两主题均 ≥3:1）。
 
+
+---
+
+### 立案：`map-check` ④「tags 缓存全命中」在产品侧有**即发即忘写盘**竞态（2026-09-17，P0 收口轮全量门禁实测）
+
+**现象**：全量 `pnpm gates` 中 `map-check` ❌ exit=1，唯一失败项
+`④未改文件 → tags 缓存全命中（fromTagsCache=241/249）`；判据 `:68` 要求第二次构建
+`fromTagsCache === files.length && parsed === 0`。
+
+**归因实验（git worktree 对照，非推测）**：
+
+| 样本 | 结果 |
+|---|---|
+| 基线 worktree（`5e8a10b`，本轮之前） | **237/237 ✅ exit=0** |
+| `HEAD` worktree（含本轮 5 次提交）第 1 次 | 241/249 ❌ |
+| `HEAD` worktree 第 2 次（同目录连跑） | **242/249 ❌** |
+
+两次数字**不同**（241 / 242）⇒ **竞态指纹**，排除「某些文件永远解析失败」的确定性解释。
+文件数 237 → 249 是因为本轮新增 12 个被扫描源文件（含 `src/renderer/app.js`、
+`src/renderer/window.d.ts`、`scripts/lib/harness.ts`、`scripts/renderer-arch-check.ts`、
+`scripts/a11y-check.ts`、`proto/*.cjs` 等）。
+
+**根因（产品 bug，非判据问题）**：`src/agent/map/build.ts:244`
+
+```ts
+void writeTagsCache(dir, s.f, tags).catch(() => {});   // 即发即忘，未 await
+```
+
+解析循环对每个 miss 文件**发起**写缓存但不等落地；`build()` 随即返回，门禁紧接着发起第二次构建，
+此时最后若干个写盘仍在飞行中 ⇒ 第二次必然 miss。**文件越多，飞行中的写越多，miss 越多**，
+故本轮新增文件后才跨过阈值转红。
+
+**为什么不是本轮缺陷**：根因行在本轮之前就存在，本轮未改动 `src/agent/map/**`；
+本轮只是把被扫描文件数从 237 推到 249，使既有竞态**显现**。
+
+**待裁决**：
+
+- **(A) 修产品**（推荐，约 1 行）：把 `void writeTagsCache(...)` 改为收集 promise、
+  在 `return` 前 `await Promise.all(pending)`。**未擅自改**——该文件既不在本轮作用域
+  （`src/renderer/`），也不在并发工作流在飞的 13 个文件里，属无人认领的既有缺陷。
+- **(B) 修判据**：把 ④ 的「全命中」放宽为「miss 数 ≤ N」或重试一次。**不推荐**——
+  那会把真实的缓存失效一起放过，正是本门要防的。
+- 附带可选：`NOISE_GLOBS`（`build.ts:16`）只排除 `.git/node_modules/dist/out`，
+  **不排除 `outputs/`**；交付文档目录下的源码文件也会进符号地图。是否一并排除，请一并裁决。
