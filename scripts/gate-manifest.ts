@@ -36,6 +36,8 @@ export const GATES: readonly string[] = [
   "gym-check",
   "routing-check",
   "supervisor-check",
+  "renderer-arch-check",
+  "a11y-check",
 ];
 
 /** 形如验收脚本的 script 名（这些必须有归宿：要么进 GATES，要么进 EXEMPT）。

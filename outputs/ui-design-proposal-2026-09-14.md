@@ -1,3 +1,8 @@
+> **⚠️ 过时（2026-09-17 起）**：本文成文于 **React 渲染层**（`main.tsx` + `cards/` + shadcn/ui + Tailwind），
+> 而当前发货层已是 **vanilla 单文件**（`src/renderer/index.html` + `app.js`），React 树不在运行时路径。
+> 当前权威规范：**`outputs/frontend-refactor-2026-09-17/02-design-system.md`**（整包见同目录 `00`–`06`）。
+> 本文**为存档保留**、正文未改写；其中的组件形态/令牌/行号结论**不可直接施工**。
+
 # 桌面端 UI 设计方案（2026-09-14）
 
 > **⚠️ 风格层已被 v2 取代**：`outputs/ui-design-v2-codex-style-2026-09-14.md`（基于 Codex 桌面端 9 张参考截图）。本文档的布局骨架（四区+状态栏、断点策略、最小窗口）继续有效；配色/组件形态/页面分工以 v2 为准。

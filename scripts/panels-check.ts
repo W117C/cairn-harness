@@ -247,43 +247,62 @@ async function phaseElectron(root: string): Promise<void> {
     await cdp.connect();
 
     // 等重放落定：侧栏事件计数 = 10000
-    await waitFor(async () => {
-      const cnt = await cdp.eval<string | null>("document.querySelector('[data-m1e-event-count]')?.textContent ?? null");
+    // MAINT-06（2026-09-17 判据变更，BLOCKED.md 已裁决授权）：探针改指 vanilla 真实节点。
+    // 原 `[data-m1e-event-count]` 是 React 时代的钩子，在发货 vanilla 层 0 命中 ⇒ 该 waitFor 恒不满足、B 相恒红。
+    // 改指底栏 `.statusbar` 里的 `#eventCount`（VIS-02，真实事件计数节点，随事件流递增）。
+    // 严禁伪造 `data-m1e-*`——`renderer-arch-check` 另有断言专门要求它保持 0 命中。
+    const EVENT_COUNT_SEL = "#eventCount";
+    // 用 tryWait 而非 waitFor：超时不抛异常，好让下面的 ok() 能把**实测值**打出来
+    // （否则只会得到 catch-all 的「B 相异常：waitFor 超时」，分不清「没到 10000」与「节点不存在」）。
+    await tryWait(async () => {
+      const cnt = await cdp.eval<string | null>(`document.querySelector(${JSON.stringify(EVENT_COUNT_SEL)})?.textContent ?? null`);
       return cnt && cnt.includes("10000") ? true : null;
-    }, 40_000, 200);
+    }, 40_000);
+    const seenCount = await cdp.eval<string | null>(`document.querySelector(${JSON.stringify(EVENT_COUNT_SEL)})?.textContent ?? null`);
+    ok(seenCount !== null && seenCount.includes("10000"), "事件计数节点 " + EVENT_COUNT_SEL + " 重放至 10000（实测 " + String(seenCount) + "）");
 
     // 等虚拟化初始渲染落定（首帧 itemContent 经 rAF 挂载）
-    await waitFor(async () => {
-      const c = await cdp.eval<number>("document.querySelectorAll('[data-m1e-item]').length");
+    // 改指：`.stream-inner > .msg`（真实消息 DOM）
+    const MSG_ITEM_SEL = ".stream-inner > .msg";
+    await tryWait(async () => {
+      const c = await cdp.eval<number>(`document.querySelectorAll(${JSON.stringify(MSG_ITEM_SEL)}).length`);
       return c > 0 ? c : null;
-    }, 15_000, 100);
-    const domCount = await cdp.eval<number>("document.querySelectorAll('[data-m1e-item]').length");
+    }, 15_000);
+    const domCount = await cdp.eval<number>(`document.querySelectorAll(${JSON.stringify(MSG_ITEM_SEL)}).length`);
     ok(domCount > 0 && domCount <= 300, "虚拟化挂载：状态 10000 条，DOM 消息节点 " + String(domCount) + " ≤ 300");
 
     // 预热一次（首次滚动吃 JIT/字体/GC 的一次性成本，不计入；连续 3 次取 max 为稳态口径）
-    await cdp.eval<number[]>("(async () => { const sc = document.querySelector('[data-virtuoso-scroller]'); if (!sc) return [-1]; sc.scrollBy(0, 40); await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); sc.scrollBy(0, -40); await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); return [1]; })()");
-    const scrollTimes = await cdp.eval<number[]>("(async () => { const sc = document.querySelector('[data-virtuoso-scroller]'); if (!sc) return [-1]; const times = []; for (let i = 0; i < 3; i++) { const t0 = performance.now(); sc.scrollBy(0, sc.clientHeight); await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); times.push(performance.now() - t0); } return times; })()");
+    // 改指：`.stream`（vanilla 用原生滚动容器，无 react-virtuoso）
+    const SCROLLER_SEL = ".stream";
+    await cdp.eval<number[]>(`(async () => { const sc = document.querySelector(${JSON.stringify(SCROLLER_SEL)}); if (!sc) return [-1]; sc.scrollBy(0, 40); await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); sc.scrollBy(0, -40); await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); return [1]; })()`);
+    const scrollTimes = await cdp.eval<number[]>(`(async () => { const sc = document.querySelector(${JSON.stringify(SCROLLER_SEL)}); if (!sc) return [-1]; const times = []; for (let i = 0; i < 3; i++) { const t0 = performance.now(); sc.scrollBy(0, sc.clientHeight); await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); times.push(performance.now() - t0); } return times; })()`);
     const maxScroll = Math.max(...scrollTimes);
     ok(maxScroll >= 0 && maxScroll <= 200, "滚动一屏耗时 max " + maxScroll.toFixed(1) + "ms ≤ 200ms");
 
-    await cdp.eval("(() => { const sc = document.querySelector('[data-virtuoso-scroller]'); if (sc) sc.scrollTop = sc.scrollHeight / 2; return true; })()");
+    await cdp.eval(`(() => { const sc = document.querySelector(${JSON.stringify(SCROLLER_SEL)}); if (sc) sc.scrollTop = sc.scrollHeight / 2; return true; })()`);
     await new Promise((r) => setTimeout(r, 500));
-    const midCount = await cdp.eval<number>("document.querySelectorAll('[data-m1e-item]').length");
+    const midCount = await cdp.eval<number>(`document.querySelectorAll(${JSON.stringify(MSG_ITEM_SEL)}).length`);
     ok(midCount <= 300, "滚动至中段 DOM 仍 ≤ 300（实际 " + String(midCount) + "）");
 
     console.log("[panels-check] B2 审批徽标 ≤1s");
     const sentAtPromise = readInjectSentAt(output);
 
-    await waitFor(async () => {
-      const badge = await cdp.eval<boolean | null>("!!document.querySelector('[data-approval-badge]')");
+    // 改指：`.card.ask[data-ask]`（live 层唯一审批钩子，app.js 渲染）
+    const BADGE_SEL = ".card.ask[data-ask]";
+    // 同样用 tryWait：超时也要走到下面的耗时断言，而不是被 catch-all 吞成「B 相异常」
+    await tryWait(async () => {
+      const badge = await cdp.eval<boolean | null>(`!!document.querySelector(${JSON.stringify(BADGE_SEL)})`);
       return badge ? true : null;
-    }, 40_000, 40);
+    }, 40_000);
     const tVisible = Date.now(); // 徽标已在 DOM（waitFor 返回即出现时刻上界）
     const sentAt = await sentAtPromise;
     ok(sentAt !== null && tVisible - sentAt <= 1000, "徽标出现距审批推送 " + String(tVisible - (sentAt ?? tVisible)) + "ms ≤ 1000ms");
 
     console.log("[panels-check] B3 布局持久化：UI 开关 → settings 落盘 → 重启还原");
-    await cdp.eval("(() => { document.querySelector('[data-panel-toggle=git]')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true; })()");
+    // 改指（MAINT-06）：`[data-panel-toggle=git]`（React 面板开关，vanilla 0 命中）
+    // → `#qcGit`（vanilla 抽屉里的 git 快捷卡，即真实的「打开该面板」动作）。
+    // 注：快捷卡只在抽屉空态（`#drawerBody[data-empty]`）可见，而 B3 的前提正是「git 面板未打开」。
+    await cdp.eval("(() => { document.querySelector('#qcGit')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true; })()");
     const diskOk = await tryWait(async () => {
       const disk = JSON.parse(await readFile(join(root, "settings.json"), "utf8")) as { layout?: { open?: Record<string, boolean>; activePanel?: string } };
       return disk.layout?.open?.git === true && disk.layout?.activePanel === "git" ? true : null;
@@ -296,7 +315,8 @@ async function phaseElectron(root: string): Promise<void> {
       console.log("  📷 docs/m1e-panels.png");
     }
 
-    await cdp.eval("(() => { document.querySelector('[data-m1e-settings-open]')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true; })()");
+    // 改指：`#settingsOpen`（index.html:1465 的真实设置入口，app.js:521 已接线）
+    await cdp.eval("(() => { document.querySelector('#settingsOpen')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true; })()");
     await new Promise((r) => setTimeout(r, 700));
     if (process.env.M1E_SCREENSHOT) {
       const shot2 = await cdp.send("Page.captureScreenshot", { format: "png" });
@@ -323,11 +343,14 @@ async function phaseElectron(root: string): Promise<void> {
     }
     const cdp2 = new Cdp();
     await cdp2.connect();
+    // 改指（MAINT-06）：`[data-panel-id=git]`（React 面板容器，vanilla 0 命中）
+    // → `.side-page[data-view="git"]` 且**非 hidden**（＝重启后 git 面板不仅「开着」而且「处于激活态」，
+    //    因为 B3 已把 activePanel 落盘为 "git"）。断言强于「元素存在」。
     const restored = await tryWait(async () => {
-      const open = await cdp2.eval<boolean | null>("!!document.querySelector('[data-panel-id=git]')");
+      const open = await cdp2.eval<boolean | null>("!!document.querySelector('.side-page[data-view=\"git\"]:not([hidden])')");
       return open ? true : null;
     }, 25_000);
-    ok(restored, "重启后 git 面板自动还原打开（settings 持久化生效）");
+    ok(restored, "重启后 git 面板自动还原打开且激活（settings 持久化生效）");
     await killElectron(electron2);
   } finally {
     if (electron.exitCode === null) await killElectron(electron);

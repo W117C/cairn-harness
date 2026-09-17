@@ -3,6 +3,13 @@
 > 本 Wiki 是仓库的工程代码地图，覆盖整体架构、模块职责、关键类与函数、依赖关系与运行方式。
 > 权威方案见 `agent-plan.md`（只读）；工程纪律见 `AGENTS.md`；里程碑验收见 `docs/m{2,3,4}-acceptance.md`。
 
+> ⚠️ **渲染层已迁移，本 Wiki 的第 5.8 节与第 1 节「形态/样式」两行已过时**（2026-09-17 注）。
+> 本 Wiki 描述的是 **vanilla 迁移之前的 React 渲染层**。今天发货的是手写 vanilla：
+> `src/renderer/index.html`（单文件，全部 CSS 在一个 `<style>` 里）+ `src/renderer/app.js`（纯 ESM），
+> **没有 React / Tailwind 运行时 / shadcn 运行时**。`main.tsx`、`styles.css`、`error-boundary.tsx` **已删除**。
+> 当前权威现状见 `AGENTS.md` 与 `outputs/frontend-refactor-2026-09-17/`；下方正文为**存档**，未逐行改写。
+> 例外：`projections.ts` 仍被 `scripts/panels-check.ts` 消费，**不是**死代码。
+
 ---
 
 ## 1. 项目概览
@@ -12,8 +19,8 @@
 | 项 | 值 |
 |---|---|
 | 包名 | `m0-agent-loop`（version 0.0.1，private） |
-| 形态 | Electron 44 + React 19 + TypeScript 5，electron-vite 5 构建 |
-| 样式 | Tailwind CSS 4 + shadcn/ui（radix-nova preset，组件源码在 `src/renderer/components/ui/`） |
+| 形态 | Electron 44 + TypeScript 5，electron-vite 5 构建；渲染层为**手写 vanilla**（非 React）——见顶部过时提示 |
+| 样式 | `index.html` 内单块 `<style>` + CSS 自定义属性令牌（无 Tailwind 运行时、无 shadcn 运行时） |
 | 工具链 | pnpm / vitest 5 / tree-sitter-wasms / @vscode/ripgrep / croner / @modelcontextprotocol/sdk |
 | 核心模型 | M0a 内核（agent loop）+ M0b 桌面壳（Electron） |
 | 里程碑 | M0–M2g 内核收口 → M3a/b/c 多 agent 编排 → M4a/b 商业化（定时任务、可安装包、BYOK、license、更新检查） |
@@ -36,8 +43,8 @@
 │  M0b Electron 壳                                            │
 │  ┌────────────┐   IPC (contextBridge)   ┌────────────────┐  │
 │  │ renderer   │ ◄──────────────────────► │ main           │  │
-│  │ React UI   │   window.agent (preload) │ agent-runner   │  │
-│  │ store/面板  │                          │ AskGate/沙箱/…  │  │
+│  │ vanilla UI │   window.agent (preload) │ agent-runner   │  │
+│  │ 侧栏/抽屉    │                          │ AskGate/沙箱/…  │  │
 │  └────────────┘                          └───────┬────────┘  │
 └──────────────────────────────────────────────────┼───────────┘
                                                    │ 直接调用（无 IPC）
@@ -85,11 +92,11 @@ src/
 ├── preload/         contextBridge 桥（window.agent）
 ├── providers/       模型适配器：anthropic/gemini/glm/openai/mock + 统一接口
 ├── permissions/     权限系统：rules（规则库）/ risk（风险三通道）/ autonomy（四层评估）
-├── renderer/        React UI：main/conversation/store/theme/onboarding + panels + cards + ui
+├── renderer/        vanilla UI：index.html + app.js（发货层）；React 树 main/conversation/store/theme/onboarding + panels + cards + ui 正在归档
 ├── tools/           工具层：base + 9 注册工具（含 LSP/进程管理）
 ├── net.ts           （网络工具）
 └── frozen.ts        （冻结常量）
-scripts/             门禁清单与 23 道门（gates/gate-manifest/assertion-health + 各 *-check）
+scripts/             门禁清单与各 *-check（清单即事实源：scripts/gate-manifest.ts 的 GATES）
 tests/               57 个 vitest 文件（fileParallelism:false，共享靶子目录）
 fixtures/            冻结判卷区：mock/（模型剧本）、todo-app/（验收靶子）、agents/、autonomy/
                      demo/、gate/、lsp/、plugins/、providers/、security/
@@ -263,13 +270,13 @@ docs/                m{2,3,4}-acceptance.md（三态验收表）+ audit + UI 截
 
 | 文件 | 职责 |
 |---|---|
-| `main.tsx`（1485 行） | 主应用：布局（resizable 面板）、主题、onboarding、错误边界、token 面板等 |
+| ~~`main.tsx`（1485 行）~~ | **已删除**（vanilla 迁移）。原为主应用：布局、主题、onboarding、错误边界、token 面板 |
 | `conversation.tsx` | 会话流式渲染（assistant_delta 拼合、工具调用卡、审批入口） |
 | `store.ts` | 客户端状态（settings/sessions/state 快照缓存） |
 | `projections.ts` | 事件流 → 面板视图的纯投影（token/usage 聚合、sidechat 归因） |
 | `theme.ts` | 明暗主题（`color-scheme: dark` 精确一行，判卷锚点） |
 | `onboarding.tsx` | 新手引导（M4b §13 七组走通） |
-| `error-boundary.tsx` | 渲染错误兜底 |
+| ~~`error-boundary.tsx`~~ | **已删除**（vanilla 迁移）。原为渲染错误兜底 |
 | `panels/registry.tsx`（1262 行） | 面板注册中心：会话、agents（worker 面板）、schedule（定时任务）、git/diff、记忆、插件、sidechat、设置、关于 |
 | `cards/` | 卡片族：agent-card（worker 状态）、clarify-form（澄清表单）、compaction-card、plan、promote、verify-result、registry |
 | `components/ui/` | shadcn/ui（radix-nova preset）组件，改过生成组件加 `// @shadcn-modified` 头 |
@@ -436,7 +443,7 @@ pnpm agent         # headless 直跑 agent
 |---|---|
 | src/agent/orchestrator.ts | 2424 |
 | src/main/agent-runner.ts | 1757 |
-| src/renderer/main.tsx | 1485 |
+| ~~src/renderer/main.tsx~~ | 1485（已删除） |
 | src/renderer/panels/registry.tsx | 1262 |
 | scripts/agents-check.ts | 1263 |
 | src/main/scheduler.ts | 889 |
