@@ -63,11 +63,27 @@ React 树仍在磁盘上（`cards/`、`components/`（29 个 shadcn/ui 文件）
 
 **计划全部完成（2026-09-14 M5 收口，M0–M5 六里程碑）**：M0–M2g（内核/沙箱/会话内核/三门/压缩/prune/地图/provider/记忆/插件/MCP/sidechat/安全 report，详见 `docs/m2-acceptance.md`）→ **M3 编排内核三轮**（M3a spawn_agent 原语/read mode/agents 面板，HEAD 8fb73f4 → M3b write mode/worktree/合并控制塔/安全 gate，HEAD 3431e72 → M3c 依赖链/pipeline sequencer/卡死/崩溃恢复/≥3 worker 压力验收，详见 `docs/m3-acceptance.md`）→ **M4 商业化两轮**（M4a 定时任务全链路 §12.2：双轨存储 + 1min tick + 三闸 + 无人值守 fail-closed + 工具五件 + schedule 面板 → M4b 可安装包/BYOK key 入 safeStorage/license 离线 Ed25519/轻量更新检查/新手引导走通 §13 七组，详见 `docs/m4-acceptance.md`）→ **M5 结果信号回流策略层**（M5a 反事实靶场：routing_decision 事件 + fixtures/gym 冻结判卷 + 回放跑器 + 基线；M5b 模型路由：档位表 + 纯函数路由 + orchestrator 接入 + 可播种 bandit + verify 门控级联；M5c 编排自适应：受限纯规则 Supervisor + Best-of-N spawnRace，详见 `docs/m5-acceptance.md`）。
 
-- 门禁：`pnpm gates` **不全绿——`panels-check` 当前为红**。红因**已二分清楚，且与本轮 P0 修复无关**：
-  ① **vanilla 渲染层无虚拟化**——`app.js` 的 `selectSession` 无条件 `r.events.forEach(renderEvent)`，全文无渲染上限，10000 事件会话在渲染主线程同步建数千 DOM 节点而阻塞（**独立佐证**：同轮 B2 徽标延迟实测 **90085ms** / 阈值 1000ms）⇒ B1 的 `DOM ≤300` 与 B2 的 `≤1s` 必红。**用户已裁决留位**「先移植虚拟化再归档 React」⇒ **移植前不可能回绿**；
-  ② **两条判据缺陷**：`#eventCount` 与原钩子 `[data-m1e-event-count]`（语义 = **会话级事件统计**）**语义不等价**（`#eventCount` 是 `api.onEvent` 递增的实时运行计数器，且 `selectSession` 从不重置 `real.events`）；`panels-check.ts:280`/`:285` 两条滚动断言**缺 `> 0` 下界，属恒真式**（DOM=0 时反而判绿）。
+- 门禁：`pnpm gates` **不全绿——当前 5 道红**（`test` / `panels-check` / `map-check` / `agents-check` / `supervisor-check`）。
+  **归因已用 git worktree 对照实验逐门定量判定：无一道是本轮 P0 引入的缺陷。**
+  完整矩阵与证据见 `outputs/frontend-refactor-2026-09-17/07-todo-closure.md` §5.2.1；简表：
+
+  | 红门 | 归因 |
+  |---|---|
+  | `supervisor-check` + `test` 里 3 条（`plugins-discover`×2、`plugins-skills`×1） | **并发工作流（M7 impact 层）在飞的未提交改动**——干净 worktree 下转绿 |
+  | `test` 另 2 条（`m3c`、`routing-events`） | **先于本轮存在**——本轮之前的基线亦红 |
+  | `agents-check` | 验收侧时序缺陷，**重载下确定性红**（见下方 2026-09-13 段；本轮 `test` 单门跑 798s） |
+  | `map-check` | **产品既有竞态**：`src/agent/map/build.ts:244` `void writeTagsCache(...)` 即发即忘未 await ⇒ 第二次构建必然 miss；本轮新增 12 个被扫描源文件（237→249）使其跨阈值显现。已立案待裁决 |
+  | `panels-check` | **本轮**（vanilla 无虚拟化），红因二分清楚，见下 |
+
+  `panels-check` 三项红因：① **vanilla 无虚拟化**——`app.js` 的 `selectSession` 无条件 `r.events.forEach(renderEvent)`，
+  10000 事件会话同步建数千 DOM 节点阻塞主线程（**独立佐证**：B2 徽标延迟实测 **90085ms** / 阈值 1000ms）⇒
+  B1/B2 必红。**用户已裁决留位**「先移植虚拟化再归档 React」⇒ **移植前不可能回绿**；
+  ② `#eventCount` 与原钩子 `[data-m1e-event-count]`（语义 = **会话级事件统计**）**语义不等价**
+  （`#eventCount` 是 `api.onEvent` 递增的实时运行计数器，且 `selectSession` 从不重置 `real.events`）；
+  ③ `:285` 是**真恒真式**（一条没渲染时 `0 <= 300` 越坏越绿），`:280` **不是**恒真式但分不出
+  「滚得快」与「根本没滚」——⚠️ **两者修法相反**（计数补 `> 0`；耗时**不能**补 `> 0`，应断言 `scrollTop` 确实移动）。
   **本轮 P0 的 git 面板 + 布局持久化已被该门自己验证通过**（B3/B4 全绿，真实 Electron + CDP，非自评）。
-  详见 `BLOCKED.md`「改指后实测结果 → 揭出三个新缺陷」与 `outputs/frontend-refactor-2026-09-17/07-todo-closure.md` §4.5。
+  详见 `BLOCKED.md` 各立案条目与收口报告 §4.5 / §5.2.1。
   跑该门前若撞 `SAFE_DELETE_BULK_CONFIRM_REQUIRED`，见下方「环境注意」的逃生舱。
   恒真式/析取式体检零命中 + 清单漂移校验通过；⚠️ 未证项如实标注（testdino 远程 MCP、provider:check 均需联网凭据 + 各 check 暗卷段——**未证 ≠ 通过，不宣称全绿**）。
   **门数、测试文件数、各门断言数一律不写死**（事实源 = `scripts/gate-manifest.ts`、`tests/`、各门自身输出；历史值曾出现「23 / 26 / 28 道」三处互斥）。

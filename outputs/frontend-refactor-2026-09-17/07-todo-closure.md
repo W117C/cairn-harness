@@ -410,10 +410,29 @@ $ inert 在位（合规）                            → aria-hidden-focus 33  
 |---|---|
 | `tsc --noEmit` | **EXIT=0**（`error TS` 计数 0） |
 | `renderer-arch-check --static out/renderer` | **EXIT=0**，28/28 ✅ |
-| `renderer-arch-check --static /tmp/dsh-s1neg`（反向对照） | **EXIT=1**，14/28（逐条命中 S-1 签名）✅ |
+| `renderer-arch-check --static <s1neg>`（反向对照） | **EXIT=1**，16/28（12 条失败**全是** S-1 签名）✅ |
 | `a11y-check --static out/renderer` | **EXIT=0**，3/3 ✅（12 条规则全 0） |
-| `a11y-check --static /tmp/dsh-a11y-inert-neg`（反向对照） | **EXIT=1**，`aria-hidden-focus` 33 ✅ |
-| `a11y-check --static /tmp/dsh-a11y-neg`（反向对照） | **EXIT=1**，`duplicate-id` 3 / `color-contrast` 6 ✅ |
+| `a11y-check --static <a11y-inert-neg>`（反向对照） | **EXIT=1**，`aria-hidden-focus` **33**，其余三族 **0** ✅ |
+| `a11y-check --static <a11y-neg>`（反向对照） | **EXIT=1**，`duplicate-id` 3 / `color-contrast` 6，`aria-hidden-focus` **0** ✅ |
+
+**反向对照一律现场生成，不冻结快照**：`node scripts/make-neg-controls.mjs [输出根]`（缺省 `/tmp/dsh-neg`），
+从**当前** `out/renderer` 复制并只施加一处突变。
+
+> ⚠️ **更正一处既往表述**：此前用的 `/tmp/dsh-s1neg` 是**旧构建产物** + S-1 突变——
+> 与当前产物 diff 共 **10 处**，其中只有 `1581a1559,1560` 那 1 处是 S-1 突变，其余 9 处是后续提交
+> （底栏 VIS-02 / inert / border-strong 等）造成的陈旧差异。故它判出的 14 条失败里**混入了陈旧因素**
+> （例如「`#eventCount` 缺失」纯粹因为该快照早于底栏）。改用现场生成的样本后为 **16/28、12 条失败，
+> 全部是 S-1 签名**（`.composer`/`.drawer` 落到 `body`、`main.chat` 丢 composer、`.stream-inner`
+> 出现越界 `.msg-actions`、body 子元素 10），**不再有陈旧噪声**。
+> ⇒ 教训：**反向对照样本必须现场生成**；冻结快照会随时间掺入无关差异，反而削弱对照的说服力。
+
+**稳定性复核**（3 次连跑，绿不抖、红不抖）：
+
+| | #1 | #2 | #3 |
+|---|---|---|---|
+| `renderer-arch-check` 干净产物 | 28/28 ✅ | 28/28 ✅ | 28/28 ✅ |
+| `a11y-check` 干净产物 | 3/3 ✅ | 3/3 ✅ | 3/3 ✅ |
+| 三个反向对照 | EXIT=1 ×2 | EXIT=1 ×2 | — |
 | `panels-check` | **EXIT=1**（3 项失败，**红因非本轮 P0**，见 §4.5） |
 | 门数 / 清单漂移 | **28** 项 / `checkGateManifest` 违规 **0** |
 
