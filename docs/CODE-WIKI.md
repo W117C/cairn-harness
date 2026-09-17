@@ -58,7 +58,8 @@
 
 - **M0a 内核**（`src/agent/`、`src/events/`、`src/tools/`、`src/permissions/`、`src/providers/`）：不依赖 Electron，单一入口 `runLoop`；既可被桌面壳调用，也可被 headless 验收脚本（e2e / 各 check）直调。
 - **M0b 壳层**（`src/main/`、`src/preload/`、`src/renderer/`）：窗口、IPC 接线、审批门、Seatbelt 沙箱、会话/设置/记忆存储、定时任务、license/updater。
-- **验收体系**（`scripts/`、`tests/`、`fixtures/`）：23 道门禁 + 57 个测试文件 + 冻结判卷剧本。
+- **验收体系**（`scripts/`、`tests/`、`fixtures/`）：门禁清单见 `scripts/gate-manifest.ts`（**唯一事实源**）+ 测试文件见 `tests/` + 冻结判卷剧本。
+  ⚠️ 本文件**不写死门数与测试文件数**——两者都在动（曾写死「23 道」而实际已 28 道；测试文件数亦随开发漂移）。
 
 ### 2.2 一次任务的数据流
 
@@ -325,7 +326,7 @@ pnpm install
 ### 7.2 门禁（推荐）
 
 ```bash
-pnpm gates                          # 全部门禁：23 道门 + 恒真式/析取式体检 + 清单漂移校验 + 未证项汇总
+pnpm gates                          # 全部门禁（清单见 scripts/gate-manifest.ts）+ 恒真式/析取式体检 + 清单漂移校验 + 未证项汇总
 pnpm gates --only=test,tools-check  # 只跑指定门（调试）
 pnpm gates --no-scan                # 跳过断言体检
 pnpm gates --strict-unverified      # 未证项直接判红（CI/有凭据环境）
@@ -368,7 +369,7 @@ pnpm agent         # headless 直跑 agent
 
 ## 8. 测试与验收体系
 
-### 8.1 门禁清单（23 道，`scripts/gate-manifest.ts` 为事实源）
+### 8.1 门禁清单（`scripts/gate-manifest.ts` 为唯一事实源；本文件不写死条数）
 
 ```
 基建六道：typecheck · test · e2e · ipc:check · sandbox:check · build
