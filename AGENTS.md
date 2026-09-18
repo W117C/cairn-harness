@@ -93,6 +93,15 @@ React 树仍在磁盘上（`cards/`、`components/`（29 个 shadcn/ui 文件）
   工具表接线（`src/tools/lsp.ts` 模块本身已提交，接法未提交）。
   ⇒ 本质是**测试先于 M7 实现提交**，属正常在飞状态；掐头去尾地单独提交实现会破坏 M7 改动的完整性，
   故留位。工作树里 81 文件 756 测试全绿。判读：M7 收口时这 3 个自然转绿。
+  **M7 收口约束地图（2026-09-18，详见 `outputs/m7-closure-constraints-2026-09-18.md`）**：
+  76 个未提交文件是**一个原子单元**——6 个已修改的已跟踪文件依赖未跟踪模块
+  （compaction→economics；glm-session→economics/metering/solpi-runtime；agent-runner→
+  action-fusion/solpi-runtime；glm+openai provider→metering），solpi-runtime 又聚拢
+  economics/evidence/ledger/metering/observation-capture。**拆开提交必致 HEAD 悬空**
+  （本轮已修了两轮这类断裂）。收口时请按报告第 5 节清单走，含 worktree 实测。
+  簇内 8 个模块原本只有 observation-capture 无测试，已补 `tests/observation-capture.test.ts`
+  （8 条：EAUTH 脱敏闸 / obs_recall 参数白名单 / 错误码消毒防注入）；同样**随簇落地**，
+  单独提交会悬空。进度文档明示「仍在阶段 A、未创建提交」，故不代为收口。
   同轮另一纯卫生修复：`orchestrator.ts:2644` 对 `./memory/inject` 的 `await import` 是无效动态导入
   （该模块同文件 38 行已静态导入，且 inject.ts 不反向依赖 orchestrator，无循环依赖）→ 改用静态绑定，
   消掉构建的 `INEFFECTIVE_DYNAMIC_IMPORT` 告警（typecheck / build / 737 测试 / panels-check 复验全绿）。
