@@ -5,7 +5,7 @@
 ## 怎么跑
 
 - 安装：`pnpm install`
-- 全部门禁：`pnpm gates`（**清单即事实源**——跑齐 `scripts/gate-manifest.ts` 里的全部门并打印逐道退出码 + 恒真式/析取式体检 + 未证项汇总；新增门只改该清单，**本文件与任务书一律不写死门数**（写死即漂移磁铁，曾出现「23 道」与「26 道」互斥而清单实为 28 道）；`DSH_STRICT_UNVERIFIED=1` 或 `--strict-unverified` 让未证判红，CI/有凭据环境用）
+- 全部门禁：`pnpm gates`（**清单即事实源**——跑齐 `scripts/gate-manifest.ts` 里的全部门并打印逐道退出码 + 恒真式/析取式体检 + 未证项汇总；新增门只改该清单，**本文件与任务书一律不写死门数**（写死即漂移磁铁——历史上曾出现「23 道」「26 道」两种说法互斥，而它们各自的当时真值也各不相同，所以**连"纠正当时的真值"都不该写进来**，只留"别写死"这条规矩）；`DSH_STRICT_UNVERIFIED=1` 或 `--strict-unverified` 让未证判红，CI/有凭据环境用）
 - 六道门禁：`pnpm typecheck && pnpm test && pnpm e2e && pnpm ipc:check && pnpm sandbox:check && pnpm build`
 - 起界面：`pnpm start`（构建 + 启动 Electron）
 - 单跑闭环：`pnpm e2e`（mock 模型驱动 loop 修 `fixtures/todo-app` 的 bug）
@@ -78,10 +78,13 @@ React 树已全量归档（2026-09-17 删 45 个 .tsx/测试 + 移除 react 全�
 
 **计划全部完成（2026-09-14 M5 收口，M0–M5 六里程碑）**：M0–M2g（内核/沙箱/会话内核/三门/压缩/prune/地图/provider/记忆/插件/MCP/sidechat/安全 report，详见 `docs/m2-acceptance.md`）→ **M3 编排内核三轮**（M3a spawn_agent 原语/read mode/agents 面板，HEAD 8fb73f4 → M3b write mode/worktree/合并控制塔/安全 gate，HEAD 3431e72 → M3c 依赖链/pipeline sequencer/卡死/崩溃恢复/≥3 worker 压力验收，详见 `docs/m3-acceptance.md`）→ **M4 商业化两轮**（M4a 定时任务全链路 §12.2：双轨存储 + 1min tick + 三闸 + 无人值守 fail-closed + 工具五件 + schedule 面板 → M4b 可安装包/BYOK key 入 safeStorage/license 离线 Ed25519/轻量更新检查/新手引导走通 §13 七组，详见 `docs/m4-acceptance.md`）→ **M5 结果信号回流策略层**（M5a 反事实靶场：routing_decision 事件 + fixtures/gym 冻结判卷 + 回放跑器 + 基线；M5b 模型路由：档位表 + 纯函数路由 + orchestrator 接入 + 可播种 bandit + verify 门控级联；M5c 编排自适应：受限纯规则 Supervisor + Best-of-N spawnRace，详见 `docs/m5-acceptance.md`）。
 
-- 门禁：`pnpm gates` **28 / 28 退出码全 0**（2026-09-17 实测，CODEBUDDY_SAFE_DELETE_BULK_STATE_DIR= 逃生舱下跑齐；
-  恒真式/析取式体检零命中 + 清单漂移校验通过）。⚠️ **另有 9 项断言因联网/凭据限制未跑到
+- 门禁：`pnpm gates` **逐道退出码全 0**（**条数不写死**——见本文件「怎么跑」第一条的规矩，事实源是
+  `scripts/gate-manifest.ts` 与 `pnpm gates` 的输出，不是本文件。历史上这里写死的数字每次加门都会失真一次）。
+  最近两次整跑记录，**均按当时条数、只作该日快照**：2026-09-17 全 0（`CODEBUDDY_SAFE_DELETE_BULK_STATE_DIR=`
+  逃生舱下跑齐，恒真式/析取式体检零命中 + 清单漂移校验通过）；2026-09-18 唯一红是 `mutate-verify`
+  **主动拒变在飞文件**（属正确红，不是回归——见下「判卷纪律」）。⚠️ **另有 9 项断言因联网/凭据限制未跑到
   （testdino 远程 MCP、provider:check 真连、各 check 暗卷段）——未证 ≠ 通过，不宣称「全部通过」；
-  严格模式 `DSH_STRICT_UNVERIFIED=1` 或 `--strict-unverified` 可让未证判红。**
+  严格模式 `DSH_STRICT_UNVERIFIED=1` 或 `--strict-unverified` 可让未证直接判红。**
   ⚠️ **panels-check 有实测时序 flake（2026-09-18 三连跑实证）**：同一份代码连续三次——
   ① 1 项失败（滚动耗时 251.8ms vs ≤200ms）② 5 项失败（虚拟化 DOM 节点 0、scrollTop 0、
   审批徽标 9987ms、观测器启动晚于推送）③ **全绿（exit=0）**。失败项在「DOM 没渲染任何事件」与
