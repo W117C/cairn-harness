@@ -30,12 +30,13 @@
 | --- | --- | --- | --- |
 | D1 | 浮层机制 | **4 套**：`showPop`+`getBoundingClientRect`（`app.js:1194-1215`）/ `.sb-menu` 重挂 body / `#askPop` 运行时构建 / `#modelPop` absolute | `app.js:395,1194,1198,1215,1539` |
 | D2 | 模态机制 | **2 套**：`#settingsOverlay` / `#riskScrim`，手写 `inert` 共 **6 处**（html 2 + `app.js` 4；原记「4 处」漏了 JS 侧写入点，已按 `docs/ui-fact-baseline.md` F11b 复跑更正） | `index.html:1795,1943`；`app.js:521,529,1442,1448` |
-| D3 | 折叠机制 | **3 套且状态名相反**：`.collapsed`（10 处）vs `.expanded`（3 处）。`<details>` 实测 **1 处**（`app.js:1876`，重放渲染器）——⇒ **两套渲染器在「用不用原生件」上互相矛盾**：重放侧已走原生 `<details>`，live 侧仍手写三套 | `index.html:1031,1677,1690`；`app.js:1876` |
+| D3 | 折叠机制 | **2 套且状态名相反**（R1b 后从 3 降到 2，**不是降到 1**——事实面 F4 原记「1」是过度自证，已同步更正）：① 真跑路径 = 一个委托处理器 `[data-tool-toggle]` → `.collapsed`，卡片/工具项/工具组三类容器共用（`app.js:1736-1744`，落 `4afcee9`）；② 演示路径 = `.think-head` → **`.expanded`**（`app.js:1695-1702`），**只服务演示 `send()`**（`app.js:1100` 打字机假回复 + `index.html:1526` 静态演示转录），真跑路径永不产出 `.think` 块。原生 `<details>` 确已归零（原记 1 处 = 重放渲染器 `app.js:1876`，随 `b696a62` 删第二套渲染器一并消失）⇒ **「两套渲染器在要不要原生件上互相矛盾」这条已随第二套渲染器一起闭环** | 逐笔实测：`details` 1→0 @`b696a62`、`[data-tool-toggle]` 处理器 0→1 @`4afcee9`、`toggle('expanded')` 恒为 1（R1b 全程未触及）；CSS 侧 `.collapsed` 10 / `.expanded` 3 |
 | D4 | 抽屉显示 | **2 套且同名反义**：≥1280 用 `.drawer.collapsed{width:0}`（`:1031`）；≤1279 用 `.drawer.collapsed{width:min(--drawer-w,88vw)}` + `.open-m{transform}` + `.collapsed.open-m{translateX(100%)}`（`:1435-1449`）⇒ **同一个 `.collapsed` 在两个断点下含义不同，窄屏还要第二个 class 反转** | 见行号 |
-| D5 | 函数双实现（后一份覆写前一份） | **7 个**：`openView`/`closeView`（`app.js:1243-1246` `const _openView = openView; openView = function…`）+ `send`:2462 / `selectSession`:2502 / `deleteSession`:2555 / `archiveSession`:2577 / `renderSide`:2598（`window.agent` 分支内） | 见行号 |
-| D6 | 主题令牌两份全量块 | 81 个名字 / **132 处声明 / 44 个名字重复声明** | `(--[\w-]+)\s*:` 计数 |
+| D5 | 函数双实现（后一份覆写前一份） | **7 个**（行号按 HEAD `cd101fa` 重取，原行号随 R1b 入库整体下移）：`openView`:1293 / `closeView`:1295（`const _openView = openView; openView = function…` 那一对）+ `send`:2604 / `selectSession`:2648 / `deleteSession`:2701 / `archiveSession`:2723 / `renderSide`:2744（全在 `window.agent` 块内）。复跑：`grep -nE "^[[:space:]]*(send\|selectSession\|deleteSession\|archiveSession\|renderSide\|openView\|closeView) = (async )?function" src/renderer/app.js` | 见左列 |
+| D6 | 主题令牌两份全量块 | **79 个名字 / 128 处声明 / 42 个名字重复声明**（原记 81 / 132 / 44，差 **−2 / −4 / −2** 恰为 `7d2c880` 删掉的 `--tap-min`+`--rail-w` 各两处声明 —— 三条数同源不同刻，已按 HEAD 重取并与 F9 对齐） | `node -e 'const s=require("fs").readFileSync("src/renderer/index.html","utf8");const a=[...s.matchAll(/(--[\w-]+):/g)].map(m=>m[1]);const d=a.filter((v,i)=>a.indexOf(v)!==i);console.log(a.length,new Set(a).size,new Set(d).size)'` |
 | D7 | 死界面 | **101 个 id 中 37 个无 JS 引用**（部分是 `aria-controls`/CSS 锚点属合法，须逐个归因）；5 张 quick-card 全靠 `[data-view]` 委托，自身 id 从不被读 | 复跑脚本已给 |
-| D8 | 演示残留活在真实模式 | `INITIAL_TRANSCRIPT` 每次切会话重注入；`WORKSPACES`/`BRANCHES` 仍是演示数据（AGENTS.md 归为 R2） | `app.js:922,704,813` |
+| D8 | 演示残留活在真实模式 | **原记两条，复跑后一条已闭环、一条仍在**：<br>① 「`INITIAL_TRANSCRIPT` 每次切会话重注入」——**不成立**（HEAD 复跑）：Electron 里 `selectSession` 被 `window.agent` 块整体覆写（`app.js:2648`），覆写版在取盘事件**之前**就 `clearTranscript()`（`:2662`，且 `showHistory` 首行再清一次 `:2573`）⇒ 假对话进不了真会话的任一时刻。会重注入的是**演示版** `selectSession`（`:260`），它在 `window.agent` 在场时不可达。<br>② `WORKSPACES`（`:709`）/ `BRANCHES`（`:818`）**仍是演示常量**，右栏上下文芯片与权限面板照它们显示 ⇒ 真化要连 IPC，AGENTS.md 已归 R2，仍在账上 | `grep -n "clearTranscript()" src/renderer/app.js` → 定义 1859 + 调用 2573（`showHistory` 首行）/ 2662（覆写版 `selectSession`）/ 2711（删除会话后）；`grep -n "^const WORKSPACES\|^const BRANCHES" src/renderer/app.js` → 709, 818 |
+| D9 | 折叠第二套的**宿主**本身就是演示件（新发现，2026-09-19） | `.think` / `.think-head` / `.expanded` 这一套折叠机制（`app.js:1695-1702`）唯一的产出者是**演示 `send()`**（`app.js:1100-1181`）：假「已深度思考 `2+rand(7)`s」、**两条写死的思考正文**、逐字打字机、以及**伪造的 token 数** `tokN = 700 + full.length * 14`（`:1170`）。⇒ F4 从 2 降到 1 的**前置不是改折叠代码，是裁「浏览器直开原型模式还发不发货」**：删演示 `send()` 一并带走 D3②、`send` 这条双实现（F12 7→6）与假 token 面；保留则必须接受"事实面写 1 套、代码 2 套"长期带限定语 | 演示路径可达性：`grep -n "^function send()" src/renderer/app.js` → 1100；覆写点 `grep -n "send = async function" src/renderer/app.js` → 2604（在 `window.agent` 块内） |
 
 ### 类 3｜文档彼此矛盾（轮间，共 8 处，取有施工影响的）
 
@@ -168,18 +169,22 @@
 - [ ] **T12 先出 `panels-check` 钩子白名单**（F1 未闭），列出哪些 class/id 被探针消费；白名单外的才允许删。
 - [ ] **T13 浮层 4 → 1**（D1）：`popover` + `popovertarget` + CSS 锚点定位。删 `showPop` 测距、outside-click、Esc、焦点管理。
 - [ ] **T14 模态 2 → 1**（D2）：`<dialog>` + `showModal()` + `::backdrop`；删手写 `inert` 4 处与三档 Esc。
-- [ ] **T15 折叠 3 → 1**（D3）：`<details>/<summary>`，`aria-expanded` 与键盘行为由平台负责；统一命名。
+- [ ] **T15 折叠 2 → 1**（D3，**方案已随 R1b 反向**）：轮 3 原建议 `<details>/<summary>`，但 R1b B1 删第二套渲染器时把唯一那处 `<details>` 一并删了（`b696a62`：1→0），B3 又把卡片/工具两套并成**手写单一委托**（`4afcee9`）⇒ 现在改走 `<details>` 等于把已闭环的方向再翻一遍。**剩余那一套是 `.think-head` → `.expanded`（与主流极性相反）**，接线方向应是把 `.think` 并入 `[data-tool-toggle]` + `.collapsed`。⚠️ **前置是 D9 的裁决**：`.think` 的产出者只有演示 `send()`，「原型模式发不发货」没裁之前，这条没有可施工的落点。命名统一（`.collapsed`/`.expanded` 反义并存）同属这条。
 - [ ] **T16 抽屉两机制合一**（D4）：消除 `.collapsed` 在两个断点下的反义。
 - [ ] **T17 monkey-patch 收单实现**（D5）：7 个双实现函数各留一份。
-- [ ] **T18 主题令牌 2 份块 → `light-dark()` 一份**（D6）：44 个重复声明，暗色只写差异项。
+- [ ] **T18 主题令牌 2 份块 → `light-dark()` 一份**（D6）：**42** 个重复声明（原记 44，差 2 = `7d2c880` 删的两个令牌），暗色只写差异项。
 - [ ] **T19 composer 测高改 `field-sizing: content`**：删 `app.js:994` 隐藏 textarea 量高。
 - [ ] **T20 断点 3 档 → 容器查询 `@container`**：删 `--center-w` 三处重算（`:184`/`:205` 等），面板按自身宽度响应。
 - [ ] **T21 37 个无 JS 引用 id 逐个归因**（D7）：合法 aria/CSS 锚点保留并注记，其余删。
-- [ ] **T22 删 `INITIAL_TRANSCRIPT` 静态演示对话**（D8）：空态走 `panelEmptyHTML()` 同口径。
+- [ ] **T22 与 D9 合并为同一条裁决：浏览器直开原型模式发不发货**（原口径「删 `INITIAL_TRANSCRIPT` 静态演示对话，因为演示残留活在真实模式」**前提不成立**，见 D8① 复跑：真 `selectSession` 在任何 await 之前就 `clearTranscript()`）。静态演示转录 + 演示 `send()` + `.think` 假思考块 + 假 token 数，是**同一份不可达代码**的四个面，删与留一次裁完：删 ⇒ F4 2→1、F12 7→6、D3②/D9 同时闭环；留 ⇒ 事实面永久带「真跑路径内」限定语，且 `index.html` 那份演示 markup 继续算在 101 个 id 里（T21 归因时要按此注记）。
 - [ ] **T23 宽屏正文行宽封 72ch**：`--content-max` 1040 封顶在 ≥1660 视口 → 992px ≈ 147 字符/行；prose 收窄，**code/diff 允许更宽**。1440 档（736px）本已在带内，别动。
 
-      *P2 组统一验收*（可判定量，替代"看着简单了"）：界面数 35→≤20；浮层/模态/折叠 4/2/3→**1/1/1**；
-      双实现函数 7→0；无引用 id 37→0；令牌声明 132→≈81；前端依赖数维持 **0**；`index.html`/`app.js` 行数**下降**。
+      *P2 组统一验收*（可判定量，替代"看着简单了"；**基线一律取 `docs/ui-fact-baseline.md` HEAD 态，2026-09-19 已随 R1b 重取**）：
+      浮层 **4** →1（F10）；模态 **2** →1（F11）；折叠 **2** →1（F4，原写 3 是把已删的 `<details>` 算进来了）；
+      双实现函数 **7** →0（F12）；无引用 id **37** →0（F8）；令牌声明 **128** →≈80、去重名 **79** →只减不增（F9/F13）；
+      渲染器份数 **1** →1（F1，已闭）；空态 **2 套 / 3 标识符** →1（F5）；前端依赖数维持 **0**（F19）；
+      `app.js` 行数 **2769** 下降（F18）。⚠️ 原写「132→≈81」「界面数 35→≤20」两个基线：132 是 `7d2c880` 前的旧值（现 128），
+      「界面数 35」在 F1–F20 里**没有对应可判定量**，不再作为验收口径。
 
 ### P3｜依赖内核，先补数据再画 UI
 

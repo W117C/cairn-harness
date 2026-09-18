@@ -2,8 +2,8 @@
 
 **本页只放实测数字 + 各自复跑命令。** 不放色值、尺寸、形态建议（按用户裁决「暂不定形态」，未决）。
 三条约定：① 与 `agent-plan.md` 冲突时**以 `agent-plan.md` 为准**并在此标出；② 数值取自**工作树**，
-全部数值为 **HEAD 态 `cd101fa` 实测**（2026-09-19 全表逐条复跑：4 行随 R1b 入库而更新 = F7/F13/F18/F20，
-其余复跑值未变）；③ **每条命令都已跑过并复现左值**——
+全部数值为 **HEAD 态 `cd101fa` 实测**（2026-09-19 全表逐条复跑：5 行有改 = F4（**原值「1」系本页自证过度**，
+真值 2 套）/F7/F13（28→27，判据假阳性，见 F13c）/F18/F20，其余复跑值未变）；③ **每条命令都已跑过并复现左值**——
 表里没有一个是转抄来的数（这正是 `frontend-refactor` / `desktop-optimize` 旧基线失效的原因）。
 
 shell 侧只用 `grep -E`（`\b` / `\s` 在 BSD grep 静默失效，AGENTS.md 有案）。
@@ -14,7 +14,7 @@ shell 侧只用 `grep -E`（`\b` / `\s` 在 BSD grep 静默失效，AGENTS.md �
 | F1 | 渲染器份数 | **1**（R1b B1 前为 2：`renderEvent` + `renderHistoryRow` 桩；桩已删） | `grep -oE 'function (renderEvent\|renderHistoryRow)\(' src/renderer/app.js \| sort -u \| wc -l` |
 | F2 | 事件类型总数 | **27** | `grep -oE 'type: "[a-z_]+"' src/events/index.ts \| sort -u \| wc -l` |
 | F3 | live 与 replay **都无专属 case** 的类型 | **15**（⚠️ 口径告警：R1b 后这 15 类**已有通用宿主**——单一渲染器的 `default` 分支给它们一张记录卡（中文标签 + `.tag` 归因 + 可展开原文），只是没有**专属** case。本命令看不见 `default`，所以 "15" 现在量的是「缺语义卡」不是「不渲染」；R2 的目标是把它降到 0） | `node -e 'const f=require("fs"),h=x=>f.readFileSync(x,"utf8");const j=h("src/renderer/app.js"),w=h("src/renderer/history-window.js");const t=[...new Set([...h("src/events/index.ts").matchAll(/type: "([a-z_]+)"/g)].map(m=>m[1]))];const L=new Set([...j.matchAll(/case .([a-z_]+).:/g)].map(m=>m[1]));const R=new Set([...w.matchAll(/e\.type === .([a-z_]+)./g)].map(m=>m[1]));const n=t.filter(x=>L.has(x)===false&&R.has(x)===false);console.log(n.length,n.join(" "))'` |
-| F4 | 折叠机制 | **1**（R1b B3 前为 4：卡片 `data-card-toggle` 一套 + 工具 `.ti-head`/`.tg-head` 两套 + 原生 `<details>` 一套。现为**一个**委托处理器、**一个**属性名 `data-tool-toggle`，`<details>` 归零） | `grep -c "createElement('details')" src/renderer/app.js`（=0）<br>`grep -c "e.target.closest('\\[data-tool-toggle\\]')" src/renderer/app.js`（=1 个处理器）<br>`grep -o 'data-card-toggle' src/renderer/app.js \| wc -l`（=1，且只在注释的历史说明里） |
+| F4 | 折叠机制 | **2 套、且状态名相反**（⚠️ 本行原记「1」是**本页又一次 C1 类缺陷**：口径只覆盖了 `[data-tool-toggle]` 一条路，看不见第二条）。真跑路径 = **1 个**委托处理器、**1 个**属性名 `data-tool-toggle` → `.collapsed`（`app.js:1736-1744`）；第二套 `.think-head` → **`.expanded`**（`app.js:1695-1702`）**只服务演示 `send()`**（`app.js:1100` 打字机假回复、`index.html:1526` 静态演示转录），真跑路径不产 `.think` 块 ⇒ 「折叠 1 套」只在真跑路径内成立。R1b B3 前为 4（卡片 `data-card-toggle` 一套 + 工具 `.ti-head`/`.tg-head` 两套 + 原生 `<details>` 一套），`<details>` 确已归零 | `grep -c "e.target.closest('\[data-tool-toggle\]')" src/renderer/app.js`（=1 真跑处理器）<br>`grep -c "e.target.closest('.think-head')" src/renderer/app.js`（=1 演示处理器）<br>`grep -c "createElement('details')" src/renderer/app.js`（=0）<br>`grep -oE '\.collapsed\|\.expanded' src/renderer/index.html \| sort \| uniq -c`（10 / 3 两套极性并存） |
 | F5 | 空态 | **2 套 / 3 标识符**（R1b 后**未降**：把 chat-empty 与 settings-empty 并成一套属定形态，见 spec §8；台账 G2/G3 记的两处假象已修——删除会话路径不再绕过 `showEmptyStream()`，零会话启动不再留 `index.html` 的演示对话） | `grep -oE 'CHAT_EMPTY_HTML\|showEmptyStream\|panelEmptyHTML' src/renderer/app.js \| sort -u`（`CHAT_EMPTY_HTML` 是 `showEmptyStream` 的数据） |
 | F6 | diff 着色 | **2** | `grep -oE 'function (highlightDiffLine\|diffHtml)\(' src/renderer/app.js \| wc -l` |
 | F7 | 内联 SVG 出现次数 | **114**（`index.html` 66 + `app.js` 48；113→114 = `7793fe1` 给记录卡补 chevron，唯一一处） | `cat src/renderer/index.html src/renderer/app.js \| grep -oE '<svg' \| wc -l` |
