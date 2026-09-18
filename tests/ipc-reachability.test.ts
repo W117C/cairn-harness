@@ -44,8 +44,13 @@ describe("parseRendererRefs（别名形态）", () => {
 });
 
 describe("ratchetDiff（只减不增）", () => {
-  it("新增孤儿与基线失效各自成列表（两个方向都算红）", () => {
-    expect(ratchetDiff(["a:1", "b:2"], ["b:2", "c:3"])).toEqual({ added: ["a:1"], fixed: ["c:3"] });
-    expect(ratchetDiff(["b:2"], ["b:2"])).toEqual({ added: [], fixed: [] });
+  it("新增孤儿桥 ⇒ added 点名（A2a 的判据：写一条 UI 不引用的桥就红）", () => {
+    expect(ratchetDiff(["a:1", "b:2"], ["b:2", "c:3"]).added).toEqual(["a:1"]);
+    expect(ratchetDiff(["b:2"], ["b:2"]).added).toEqual([]);
+  });
+
+  it("基线里的通道已接上 UI ⇒ fixed 点名（A2b 的判据：还留着欠账记录也算红）", () => {
+    expect(ratchetDiff(["a:1", "b:2"], ["b:2", "c:3"]).fixed).toEqual(["c:3"]);
+    expect(ratchetDiff(["b:2"], ["b:2"]).fixed).toEqual([]);
   });
 });

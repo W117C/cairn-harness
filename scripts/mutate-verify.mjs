@@ -726,6 +726,55 @@ const MUTATIONS = [
     apply: (s) => s.replace("{ ...withModelBudget(DEFAULT_COMPACTION_CONFIG, window), ...opts.compaction?.config }", "{ ...DEFAULT_COMPACTION_CONFIG, ...opts.compaction?.config }"),
     expectFail: "同一份历史：缺省 128k 帽下 fail-closed 拒发，换 256k 窗口模型后照常发出",
   },
+  // ---- 门 0（ipc-reachability）：可达性棘轮的解析面 ----
+  {
+    id: "ipc-preload-crossline-attribution-lost",
+    src: "scripts/ipc-reachability-check-core.ts",
+    test: "tests/ipc-reachability.test.ts",
+    desc: "方法名归属在遇到任何非键行时被清空（跨行写的箭头体全查不到通道 → A1a 漏红）",
+    apply: (s) => s.replace("if (key) current = key[1];", "if (key) current = key[1]; else current = null;"),
+    expectFail: "invoke 归属最近的方法名；带返回类型注解不算漏；subscribe 记为 push",
+  },
+  {
+    id: "ipc-preload-push-subscribe-blind",
+    src: "scripts/ipc-reachability-check-core.ts",
+    test: "tests/ipc-reachability.test.ts",
+    desc: "push 识别只认 ipcRenderer.on、不认 subscribe 包装（preload 三条推送桥全蒸发，A1c 变成空判）",
+    apply: (s) => s.replace("subscribe[\\w<>,\\s]*|", ""),
+    expectFail: "invoke 归属最近的方法名；带返回类型注解不算漏；subscribe 记为 push",
+  },
+  {
+    id: "ipc-preload-orphan-call-misattributed",
+    src: "scripts/ipc-reachability-check-core.ts",
+    test: "tests/ipc-reachability.test.ts",
+    desc: "去掉「不在对象内就不归属」前置（对象外的 ipcRenderer 调用被挂到上一个键上 = 桥表凭空多出一条，棘轮基线被污染）",
+    apply: (s) => s.replace("    if (!current) continue;\n", ""),
+    expectFail: "对象外的 ipcRenderer 调用不归属任何方法（不误挂到上一个键上）",
+  },
+  {
+    id: "ipc-renderer-bracket-chain-name-lost",
+    src: "scripts/ipc-reachability-check-core.ts",
+    test: "tests/ipc-reachability.test.ts",
+    desc: "全括号链 `window[\"agent\"][\"X\"]()` 收的是整段匹配而非方法名（这类引用一律判成「渲染层没调」→ 已接上 UI 的桥被误算成孤儿）",
+    apply: (s) => s.replace('for (const m of src.matchAll(/\\]\\s*\\[\\s*"(\\w+)"\\s*\\]/g)) out.add(m[1]);', 'for (const m of src.matchAll(/\\]\\s*\\[\\s*"(\\w+)"\\s*\\]/g)) out.add(m[0]);'),
+    expectFail: 'api.X / window.agent.X / agent?.X / api["X"] 都算引用',
+  },
+  {
+    id: "ipc-ratchet-added-blind",
+    src: "scripts/ipc-reachability-check-core.ts",
+    test: "tests/ipc-reachability.test.ts",
+    desc: "棘轮只查「变好」不查「变坏」（新写一条 UI 不引用的桥不再红 → 门 0 要防的那种塌陷正好漏掉）",
+    apply: (s) => s.replace("added: [...o].filter((c) => !b.has(c)).sort(),", "added: [],"),
+    expectFail: "新增孤儿桥 ⇒ added 点名（A2a 的判据：写一条 UI 不引用的桥就红）",
+  },
+  {
+    id: "ipc-ratchet-stale-blind",
+    src: "scripts/ipc-reachability-check-core.ts",
+    test: "tests/ipc-reachability.test.ts",
+    desc: "基线失效方向不再比对（欠账只增不减：接上了也不删记录，基线沦为免检声明）",
+    apply: (s) => s.replace("fixed: [...b].filter((c) => !o.has(c)).sort(),", "fixed: [],"),
+    expectFail: "基线里的通道已接上 UI ⇒ fixed 点名（A2b 的判据：还留着欠账记录也算红）",
+  },
 ];
 
 function runTest(testRel) {
