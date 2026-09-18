@@ -68,8 +68,22 @@ function parseArgs(raw: string | undefined, label: string): Record<string, unkno
   return parsed as Record<string, unknown>;
 }
 
+/** 计量口径统一：非数 / 负数一律算「未上报」(null)，绝不折算成 0——缺报与零命中是两件事。 */
+function tokenCount(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
+}
+
 function toUsage(u: NonNullable<ChatChunk["usage"]>): ModelOutput & { type: "usage" } {
-  return { type: "usage", inputTokens: u.prompt_tokens ?? 0, outputTokens: u.completion_tokens ?? 0 };
+  // prompt_tokens 本身含缓存命中量 → 事件口径已一致；这里只是把分块透出，让命中率可见（缺报不落 0）
+  const read = tokenCount(u.prompt_tokens_details?.cached_tokens);
+  const write = tokenCount(u.cache_creation_input_tokens);
+  return {
+    type: "usage",
+    inputTokens: u.prompt_tokens ?? 0,
+    outputTokens: u.completion_tokens ?? 0,
+    ...(read !== null ? { cacheReadInputTokens: read } : {}),
+    ...(write !== null ? { cacheWriteInputTokens: write } : {}),
+  };
 }
 
 function toWireMessages(messages: OpenAiMessage[]): unknown[] {
@@ -123,12 +137,11 @@ export async function* streamOpenAI(
   let meterOutcome: RequestOutcome = "failed";
   let meterUsage: Partial<MeterUsage> = {};
   const observeUsage = (u: NonNullable<ChatChunk["usage"]>): void => {
-    const number = (v: unknown): number | null => typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
-    const input = number(u.prompt_tokens), read = number(u.prompt_tokens_details?.cached_tokens);
+    const input = tokenCount(u.prompt_tokens), read = tokenCount(u.prompt_tokens_details?.cached_tokens);
     // OpenAI/GLM do not report a disjoint cache-write bucket. Do not invent zero.
-    const write = number(u.cache_creation_input_tokens);
+    const write = tokenCount(u.cache_creation_input_tokens);
     meterUsage = { inputTokens: input !== null && read !== null && write !== null && input >= read + write ? input - read - write : null,
-      outputTokens: number(u.completion_tokens), cacheReadInputTokens: read, cacheWriteInputTokens: write };
+      outputTokens: tokenCount(u.completion_tokens), cacheReadInputTokens: read, cacheWriteInputTokens: write };
   };
   try {
   // 建连段：停滞守卫 + 429/5xx/网络抖动的指数退避重试都在 establishStream 里。

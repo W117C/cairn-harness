@@ -30,7 +30,7 @@ export interface AnthropicOptions {
 
 interface AnthropicSseEvent {
   type?: string;
-  message?: { id?: string; usage?: { input_tokens?: number; output_tokens?: number } };
+  message?: { id?: string; usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } };
   content_block?: { type?: string; id?: string; name?: string; input?: unknown };
   index?: number;
   delta?: {
@@ -39,7 +39,7 @@ interface AnthropicSseEvent {
     partial_json?: string;
     stop_reason?: string | null;
   };
-  usage?: { input_tokens?: number; output_tokens?: number };
+  usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
   error?: { type?: string; message?: string };
 }
 
@@ -162,6 +162,10 @@ export async function* streamAnthropic(
   let callId = "anthropic-a";
   let inputTokens: number | null = null;
   let outputTokens: number | null = null;
+  // 缓存分块：Anthropic 的 input_tokens **不含**缓存读写量（与 OpenAI 系 prompt_tokens 含缓存相反），
+  // 事件口径统一成「inputTokens = 含缓存总输入」，分块另列（未上报时不落 0）。
+  let cacheRead: number | null = null;
+  let cacheWrite: number | null = null;
   // 内容块聚合：index → { id, name, json }（input_json_delta 分片跨事件拼接）
   const blocks = new Map<number, { id: string; name: string; json: string }>();
 
@@ -170,6 +174,8 @@ export async function* streamAnthropic(
       case "message_start": {
         if (event.message?.id) callId = event.message.id;
         if (event.message?.usage?.input_tokens !== undefined) inputTokens = event.message.usage.input_tokens;
+        if (event.message?.usage?.cache_read_input_tokens !== undefined) cacheRead = event.message.usage.cache_read_input_tokens;
+        if (event.message?.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.message.usage.cache_creation_input_tokens;
         return;
       }
       case "content_block_start": {
@@ -205,6 +211,8 @@ export async function* streamAnthropic(
         // usage 为累计值：直接覆盖，绝不累加
         if (event.usage?.output_tokens !== undefined) outputTokens = event.usage.output_tokens;
         if (event.usage?.input_tokens !== undefined) inputTokens = event.usage.input_tokens;
+        if (event.usage?.cache_read_input_tokens !== undefined) cacheRead = event.usage.cache_read_input_tokens;
+        if (event.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.usage.cache_creation_input_tokens;
         return;
       }
       case "message_stop":
@@ -248,8 +256,15 @@ export async function* streamAnthropic(
         yield* handleEvent(event);
       }
     }
-    if (inputTokens !== null || outputTokens !== null) {
-      yield { type: "usage", inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 };
+    if (inputTokens !== null || outputTokens !== null || cacheRead !== null || cacheWrite !== null) {
+      yield {
+        type: "usage",
+        // Anthropic 的 input_tokens 是「未命中缓存的那一段」，加上读/写缓存才是本次真实输入
+        inputTokens: (inputTokens ?? 0) + (cacheRead ?? 0) + (cacheWrite ?? 0),
+        outputTokens: outputTokens ?? 0,
+        ...(cacheRead !== null ? { cacheReadInputTokens: cacheRead } : {}),
+        ...(cacheWrite !== null ? { cacheWriteInputTokens: cacheWrite } : {}),
+      };
     }
   } finally {
     guard?.dispose();
