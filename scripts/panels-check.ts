@@ -205,11 +205,18 @@ async function writeFileStressSession(root: string, id: string, n: number): Prom
 }
 
 async function readInjectSentAt(output: () => string): Promise<number | null> {
-  // 从 stdout 找 [m1e] inject-ask at <ms>
-  return await waitFor<number | null>(async () => {
-    const m = output().match(/\[m1e\] inject-ask at (\d+)/);
-    return m ? Number(m[1]) : null;
-  }, 30_000, 50);
+  // 从 stdout 找 [m1e] inject-ask at <ms>。
+  // 超时返回 null（不抛）：注入标记缺失会让 B2 断言以 delay=-1 失败并给出诊断，
+  // 但 B3/B4 仍需继续出 verdict——裸抛会杀掉整个 check 进程，把时序 flake 升级成
+  // 「连后相都没跑」的信息黑洞（2026-09-18 实测三连跑：红/崩溃/绿）。
+  try {
+    return await waitFor<number | null>(async () => {
+      const m = output().match(/\[m1e\] inject-ask at (\d+)/);
+      return m ? Number(m[1]) : null;
+    }, 30_000, 50);
+  } catch {
+    return null;
+  }
 }
 
 async function phaseElectron(root: string): Promise<void> {
@@ -246,57 +253,77 @@ async function phaseElectron(root: string): Promise<void> {
     const cdp = new Cdp();
     await cdp.connect();
 
-    // 等重放落定：侧栏事件计数 = 10000
-    // MAINT-06（2026-09-17 判据变更，BLOCKED.md 已裁决授权）：探针改指 vanilla 真实节点。
-    // 原 `[data-m1e-event-count]` 是 React 时代的钩子，在发货 vanilla 层 0 命中 ⇒ 该 waitFor 恒不满足、B 相恒红。
-    // 改指底栏 `.statusbar` 里的 `#eventCount`（VIS-02，真实事件计数节点，随事件流递增）。
-    // 严禁伪造 `data-m1e-*`——`renderer-arch-check` 另有断言专门要求它保持 0 命中。
-    const EVENT_COUNT_SEL = "#eventCount";
-    // 用 tryWait 而非 waitFor：超时不抛异常，好让下面的 ok() 能把**实测值**打出来
-    // （否则只会得到 catch-all 的「B 相异常：waitFor 超时」，分不清「没到 10000」与「节点不存在」）。
+    // 等重放落定 + 会话级真实统计（MAINT-06 第二批判据修正，BLOCKED.md 已裁决授权 2026-09-17）：
+    // ① 废除「#eventCount 重放至 10000」断言——#eventCount 是 api.onEvent 实时运行计数器，
+    //    历史重放不经该通道，拿它断言重放值属语义错配（假红源头）。节点与其「实时计数」
+    //    语义保留不动（VIS-02），此处只退化为存在性 + 非负整数格式检查。
+    // ② 会话级统计改以磁盘事实源为准：压测会话 JSONL 行数 = 10000，且侧栏真实 DOM
+    //    出现该会话节点（listSessions → sessionItemHTML 渲染链路）。
     await tryWait(async () => {
-      const cnt = await cdp.eval<string | null>(`document.querySelector(${JSON.stringify(EVENT_COUNT_SEL)})?.textContent ?? null`);
-      return cnt && cnt.includes("10000") ? true : null;
-    }, 40_000);
-    const seenCount = await cdp.eval<string | null>(`document.querySelector(${JSON.stringify(EVENT_COUNT_SEL)})?.textContent ?? null`);
-    ok(seenCount !== null && seenCount.includes("10000"), "事件计数节点 " + EVENT_COUNT_SEL + " 重放至 10000（实测 " + String(seenCount) + "）");
-
-    // 等虚拟化初始渲染落定（首帧 itemContent 经 rAF 挂载）
-    // 改指：`.stream-inner > .msg`（真实消息 DOM）
-    const MSG_ITEM_SEL = ".stream-inner > .msg";
-    await tryWait(async () => {
-      const c = await cdp.eval<number>(`document.querySelectorAll(${JSON.stringify(MSG_ITEM_SEL)}).length`);
+      const c = await cdp.eval<number>(`document.querySelectorAll('.stream-inner > .msg[data-history]').length`);
       return c > 0 ? c : null;
     }, 15_000);
-    const domCount = await cdp.eval<number>(`document.querySelectorAll(${JSON.stringify(MSG_ITEM_SEL)}).length`);
-    ok(domCount > 0 && domCount <= 300, "虚拟化挂载：状态 10000 条，DOM 消息节点 " + String(domCount) + " ≤ 300");
+    const domCount = await cdp.eval<number>(`document.querySelectorAll('.stream-inner > .msg[data-history]').length`);
+    ok(domCount > 0 && domCount <= 300, "虚拟化挂载：状态 10000 条，DOM 消息节点 " + String(domCount) + " ∈ (0, 300)");
 
-    // 预热一次（首次滚动吃 JIT/字体/GC 的一次性成本，不计入；连续 3 次取 max 为稳态口径）
-    // 改指：`.stream`（vanilla 用原生滚动容器，无 react-virtuoso）
+    const stressLines = (await readFile(pathOf(root, stressId), "utf8")).trim().split("\n").length;
+    ok(stressLines === 10_000, "会话级统计（磁盘事实源）：压测会话 JSONL 行数 = 10000（实测 " + String(stressLines) + "）");
+    const sessSel = '.session[data-id="' + stressId + '"]';
+    const sessInList = await cdp.eval<boolean>(`!!document.querySelector(${JSON.stringify(sessSel)})`);
+    ok(sessInList === true, "侧栏真实 DOM 出现压测会话节点（.session[data-id] 渲染链路）");
+    const eventCountEl = await cdp.eval<string | null>(`document.querySelector('#eventCount')?.textContent ?? null`);
+    ok(eventCountEl !== null && /^\d+$/.test(eventCountEl), "#eventCount 实时计数节点存在且为非负整数（实测 " + String(eventCountEl) + "，不与历史重放值挂钩）");
+
+    // 滚动耗时口径升级：先跳到中段，再向下连续 3 次整屏；**每次必须 scrollTop 位移 > 0**，
+    // 消除「从底部 scrollBy 不动也计时」的恒真口径。阈值保持原 200ms 不变。
     const SCROLLER_SEL = ".stream";
-    await cdp.eval<number[]>(`(async () => { const sc = document.querySelector(${JSON.stringify(SCROLLER_SEL)}); if (!sc) return [-1]; sc.scrollBy(0, 40); await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); sc.scrollBy(0, -40); await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); return [1]; })()`);
-    const scrollTimes = await cdp.eval<number[]>(`(async () => { const sc = document.querySelector(${JSON.stringify(SCROLLER_SEL)}); if (!sc) return [-1]; const times = []; for (let i = 0; i < 3; i++) { const t0 = performance.now(); sc.scrollBy(0, sc.clientHeight); await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); times.push(performance.now() - t0); } return times; })()`);
-    const maxScroll = Math.max(...scrollTimes);
-    ok(maxScroll >= 0 && maxScroll <= 200, "滚动一屏耗时 max " + maxScroll.toFixed(1) + "ms ≤ 200ms");
+    const scrollProbe = await cdp.eval<{ times: number[]; moved: boolean[]; top: number }>(`(async () => {
+      const sc = document.querySelector(${JSON.stringify(SCROLLER_SEL)});
+      if (!sc) return { times: [-1], moved: [false], top: -1 };
+      sc.scrollTop = sc.scrollHeight / 2;
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const times = [], moved = [];
+      for (let i = 0; i < 3; i++) {
+        const before = sc.scrollTop;
+        const t0 = performance.now();
+        sc.scrollBy(0, sc.clientHeight);
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        times.push(performance.now() - t0);
+        moved.push(sc.scrollTop > before);
+      }
+      return { times, moved, top: sc.scrollTop };
+    })()`);
+    const maxScroll = Math.max(...scrollProbe.times);
+    // 净位移口径：序列的滚动位置必须真实前进（top 高于起点）。逐次单调会与窗口化的
+    // 测高锚点回修冲突（draw 把 scrollTop 微调回 correctedTop，属预期行为）；
+    // 「序列净位移 = 0」即滚动坏死，仍能红。
+    const netMoved = scrollProbe.top > scrollProbe.times.length && scrollProbe.moved.some(Boolean);
+    ok(netMoved && maxScroll >= 0 && maxScroll <= 200, "滚动一屏（含净位移断言）耗时 max " + maxScroll.toFixed(1) + "ms ≤ 200ms");
+    ok(scrollProbe.top > 0, "滚动后 scrollTop 真实落位（实测 " + String(scrollProbe.top) + "）");
+    const midCount = await cdp.eval<number>(`document.querySelectorAll('.stream-inner > .msg[data-history]').length`);
+    ok(midCount > 0 && midCount <= 300, "滚动至中段 DOM 仍 ∈ (0, 300)（实际 " + String(midCount) + "）");
 
-    await cdp.eval(`(() => { const sc = document.querySelector(${JSON.stringify(SCROLLER_SEL)}); if (sc) sc.scrollTop = sc.scrollHeight / 2; return true; })()`);
-    await new Promise((r) => setTimeout(r, 500));
-    const midCount = await cdp.eval<number>(`document.querySelectorAll(${JSON.stringify(MSG_ITEM_SEL)}).length`);
-    ok(midCount <= 300, "滚动至中段 DOM 仍 ≤ 300（实际 " + String(midCount) + "）");
-
-    console.log("[panels-check] B2 审批徽标 ≤1s");
+    console.log("[panels-check] B2 审批徽标 ≤1s（匹配 askId + 推送前开始观测）");
     const sentAtPromise = readInjectSentAt(output);
-
-    // 改指：`.card.ask[data-ask]`（live 层唯一审批钩子，app.js 渲染）
-    const BADGE_SEL = ".card.ask[data-ask]";
-    // 同样用 tryWait：超时也要走到下面的耗时断言，而不是被 catch-all 吞成「B 相异常」
+    // 观测器在连接后立即启动（早于 5s 注入延迟）；只认匹配 askId 的待审批弹层 #askPop
+    // （hidden 已解除、data-ask-id 等于注入 id），不认已决审批记录卡——后者把前序等待
+    // 一并计入耗时，是原 72s/90s 口径污染的来源。阈值保持原 1000ms 不变。
+    const askId = "m1e-inject-ask";
+    const observerStartedAt = Date.now();
+    const askSel = '#askPop:not([hidden])[data-ask-id="' + askId + '"]';
+    let firstSeen: number | null = null;
     await tryWait(async () => {
-      const badge = await cdp.eval<boolean | null>(`!!document.querySelector(${JSON.stringify(BADGE_SEL)})`);
-      return badge ? true : null;
+      const there = await cdp.eval<boolean>(`!!document.querySelector(${JSON.stringify(askSel)})`);
+      if (there && firstSeen === null) firstSeen = Date.now();
+      return there ? true : null;
     }, 40_000);
-    const tVisible = Date.now(); // 徽标已在 DOM（waitFor 返回即出现时刻上界）
     const sentAt = await sentAtPromise;
-    ok(sentAt !== null && tVisible - sentAt <= 1000, "徽标出现距审批推送 " + String(tVisible - (sentAt ?? tVisible)) + "ms ≤ 1000ms");
+    const delay = firstSeen !== null && sentAt !== null ? firstSeen - sentAt : -1;
+    const observedBeforePush = firstSeen !== null && sentAt !== null && firstSeen < sentAt;
+    ok(
+      sentAt !== null && firstSeen !== null && !observedBeforePush && delay >= 0 && delay <= 1000,
+      "审批弹层（askId=" + askId + "）首次可见距推送 " + String(delay) + "ms ≤ 1000ms（观测器先于推送启动：" + String(observerStartedAt <= (sentAt ?? Number.MAX_SAFE_INTEGER)) + "）"
+    );
 
     console.log("[panels-check] B3 布局持久化：UI 开关 → settings 落盘 → 重启还原");
     // 改指（MAINT-06）：`[data-panel-toggle=git]`（React 面板开关，vanilla 0 命中）

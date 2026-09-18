@@ -63,33 +63,65 @@ React 树仍在磁盘上（`cards/`、`components/`（29 个 shadcn/ui 文件）
 
 **计划全部完成（2026-09-14 M5 收口，M0–M5 六里程碑）**：M0–M2g（内核/沙箱/会话内核/三门/压缩/prune/地图/provider/记忆/插件/MCP/sidechat/安全 report，详见 `docs/m2-acceptance.md`）→ **M3 编排内核三轮**（M3a spawn_agent 原语/read mode/agents 面板，HEAD 8fb73f4 → M3b write mode/worktree/合并控制塔/安全 gate，HEAD 3431e72 → M3c 依赖链/pipeline sequencer/卡死/崩溃恢复/≥3 worker 压力验收，详见 `docs/m3-acceptance.md`）→ **M4 商业化两轮**（M4a 定时任务全链路 §12.2：双轨存储 + 1min tick + 三闸 + 无人值守 fail-closed + 工具五件 + schedule 面板 → M4b 可安装包/BYOK key 入 safeStorage/license 离线 Ed25519/轻量更新检查/新手引导走通 §13 七组，详见 `docs/m4-acceptance.md`）→ **M5 结果信号回流策略层**（M5a 反事实靶场：routing_decision 事件 + fixtures/gym 冻结判卷 + 回放跑器 + 基线；M5b 模型路由：档位表 + 纯函数路由 + orchestrator 接入 + 可播种 bandit + verify 门控级联；M5c 编排自适应：受限纯规则 Supervisor + Best-of-N spawnRace，详见 `docs/m5-acceptance.md`）。
 
-- 门禁：`pnpm gates` **不全绿——当前 5 道红**（`test` / `panels-check` / `map-check` / `agents-check` / `supervisor-check`）。
-  **归因已用 git worktree 对照实验逐门定量判定：无一道是本轮 P0 引入的缺陷。**
-  完整矩阵与证据见 `outputs/frontend-refactor-2026-09-17/07-todo-closure.md` §5.2.1；简表：
-
-  | 红门 | 归因 |
-  |---|---|
-  | `supervisor-check` + `test` 里 3 条（`plugins-discover`×2、`plugins-skills`×1） | **并发工作流（M7 impact 层）在飞的未提交改动**——干净 worktree 下转绿 |
-  | `test` 另 2 条（`m3c`、`routing-events`） | **先于本轮存在**——本轮之前的基线亦红 |
-  | `agents-check` | 验收侧时序缺陷，**重载下确定性红**（见下方 2026-09-13 段；本轮 `test` 单门跑 798s） |
-  | `map-check` | **产品既有竞态**：`src/agent/map/build.ts:244` `void writeTagsCache(...)` 即发即忘未 await ⇒ 第二次构建必然 miss；本轮新增 12 个被扫描源文件（237→249）使其跨阈值显现。已立案待裁决 |
-  | `panels-check` | **本轮**（vanilla 无虚拟化），红因二分清楚，见下 |
-
-  `panels-check` 三项红因：① **vanilla 无虚拟化**——`app.js` 的 `selectSession` 无条件 `r.events.forEach(renderEvent)`，
-  10000 事件会话同步建数千 DOM 节点阻塞主线程（**独立佐证**：B2 徽标延迟实测 **90085ms** / 阈值 1000ms）⇒
-  B1/B2 必红。**用户已裁决留位**「先移植虚拟化再归档 React」⇒ **移植前不可能回绿**；
-  ② `#eventCount` 与原钩子 `[data-m1e-event-count]`（语义 = **会话级事件统计**）**语义不等价**
-  （`#eventCount` 是 `api.onEvent` 递增的实时运行计数器，且 `selectSession` 从不重置 `real.events`）；
-  ③ `:285` 是**真恒真式**（一条没渲染时 `0 <= 300` 越坏越绿），`:280` **不是**恒真式但分不出
-  「滚得快」与「根本没滚」——⚠️ **两者修法相反**（计数补 `> 0`；耗时**不能**补 `> 0`，应断言 `scrollTop` 确实移动）。
-  **本轮 P0 的 git 面板 + 布局持久化已被该门自己验证通过**（B3/B4 全绿，真实 Electron + CDP，非自评）。
-  详见 `BLOCKED.md` 各立案条目与收口报告 §4.5 / §5.2.1。
-  跑该门前若撞 `SAFE_DELETE_BULK_CONFIRM_REQUIRED`，见下方「环境注意」的逃生舱。
-  恒真式/析取式体检零命中 + 清单漂移校验通过；⚠️ 未证项如实标注（testdino 远程 MCP、provider:check 均需联网凭据 + 各 check 暗卷段——**未证 ≠ 通过，不宣称全绿**）。
+- 门禁：`pnpm gates` **28 / 28 退出码全 0**（2026-09-17 实测，CODEBUDDY_SAFE_DELETE_BULK_STATE_DIR= 逃生舱下跑齐；
+  恒真式/析取式体检零命中 + 清单漂移校验通过）。⚠️ **另有 9 项断言因联网/凭据限制未跑到
+  （testdino 远程 MCP、provider:check 真连、各 check 暗卷段）——未证 ≠ 通过，不宣称「全部通过」；
+  严格模式 `DSH_STRICT_UNVERIFIED=1` 或 `--strict-unverified` 可让未证判红。**
+  ⚠️ **panels-check 有实测时序 flake（2026-09-18 三连跑实证）**：同一份代码连续三次——
+  ① 1 项失败（滚动耗时 251.8ms vs ≤200ms）② 5 项失败（虚拟化 DOM 节点 0、scrollTop 0、
+  审批徽标 9987ms、观测器启动晚于推送）③ **全绿（exit=0）**。失败项在「DOM 没渲染任何事件」与
+  「渲染了但慢」之间漂移 ⇒ 是 Electron/CDP 在宿主负载下的挂载时序问题，**不是代码回归**
+  （本轮改动是纯后端 distill/impact，不触及 renderer 滚动路径）。判读法：单跑
+  `pnpm panels-check` 复跑一次；连续两三次都红同一批断言才是真问题。
+  同日复核（全面检查轮）：`pnpm gates` 单跑 27/28（panels-check 红 5 项，B2 徽标 9925ms），
+  随后 standalone 四连跑 = 崩溃 / 全绿 / 全绿（B2 分别 17ms / 118ms）。第四种失败形态已出现：
+  `readInjectSentAt` 的 `waitFor` 超时是**裸抛异常**，直接杀掉 check 进程，B3/B4 根本没跑、
+  连 verdict 都没有（信息黑洞）。已修：超时改为返回 null，走既有 `sentAt !== null` 分支以
+  delay=-1 失败并打印诊断，后相照常出 verdict——**断言阈值（≤1000ms）一字未改**。
+  同轮另一纯卫生修复：`orchestrator.ts:2644` 对 `./memory/inject` 的 `await import` 是无效动态导入
+  （该模块同文件 38 行已静态导入，且 inject.ts 不反向依赖 orchestrator，无循环依赖）→ 改用静态绑定，
+  消掉构建的 `INEFFECTIVE_DYNAMIC_IMPORT` 告警（typecheck / build / 737 测试 / panels-check 复验全绿）。
+  历史归因（曾红的 5 门及原因，均已闭环，备查）：`panels-check`（vanilla 无虚拟化 → 虚拟化已移植，
+  `showHistory` 只渲染窗口、DOM ≤300；断言同步修正为 `domCount ∈ (0,300]` + `scrollTop` 真实位移）、
+  `agents-check` / `supervisor-check`（验收侧时序 + M7 未提交改动 → 已提交入库后转绿）、
+  `test`（见下条）、`map-check`（见下条）。
+  **本轮（2026-09-17）修复的三处门禁接线缺陷——都是「门禁自身环境/接线」而非被测代码缺陷：**
+  1. `test`：新 M7 测试（ledger / solpi-review-regression / final-budget / session-tools）用
+     `PI_SCRATCH_DIR!` 非空断言但 vitest 配置未注入该环境变量、也未建目录 ⇒ 整 describe 0ms 全挂
+     （31 条假红；对比 action-fusion 等文件用 `?? tmpdir()` 兜底故不挂）。已在 `tests/vitest.config.ts`
+     加载期统一兜底：缺省指向 `os.tmpdir()/dsh-pi-scratch` 并 `mkdirSync`（配置在 worker fork 前加载，全 pool 生效）。
+     修复后 76 文件 720 测试全绿。
+  2. `gate-check` 的 G12：`walkUi` 对已整体归档删除的 `src/renderer/components/ui` 抛 ENOENT
+     （React 树不是发货路径，正在归档）。目录不存在时比较面为空，约束 vacuously true —— 已改为
+     `existsSync` 守卫后跳过；将来恢复该目录 walkUi 自动重新生效。
+  3. `map-check`：工作区拷贝（`cp`）未跳过 `.codegraph`（CodeGraph 工具自身的索引目录，含守护进程
+     `daemon.sock` socket 文件）⇒ `ERR_FS_CP_SOCKET` 把门卡在拷贝阶段。已在 SKIP_SEGS 加 `.codegraph`
+     并用 `lstatSync` 双保险挡掉所有非普通文件。修复后 ⓪–⑥b 全绿（④ tags 缓存命中 240/240，
+     「`build.ts` 的 `void writeTagsCache` 未 await 必然 miss」在当前代码已不复现）。
   **门数、测试文件数、各门断言数一律不写死**（事实源 = `scripts/gate-manifest.ts`、`tests/`、各门自身输出；历史值曾出现「23 / 26 / 28 道」三处互斥）。
   M4 后加固轮（审查 96 条修复 + 门禁自检升级）已收口，详见 PROGRESS.md「H」段与 `outputs/*-2026-09-12.md`。
 - **2026-09-13 审查修复轮**：`outputs/code-review-report-2026-09-13.md`（106 条：6 P0/20 P1/61 P2/19 P3）逐项修复收口——只读 bash 硬闸（分隔符归一 + 参数面校验）、worker 权限规则接线、agents-check D2 时序 + CANARY 哨兵 + checkFatal、replay 逐行容错、4 处 spawn env 消毒、指纹 bounded fail-closed、loose skill 信任门、单实例锁、renderer 会话归因/缓冲收束、门禁体检网（label-first/扩展名/递归）等；两道红门（test/agents-check）根因是验收侧时序缺陷（重载下确定性红，闲时偶绿），已按"等状态不等事件"修法收口。
 - **已声明取舍（备案）**：renderer `webPreferences.sandbox: false`（ESM preload 需要，contextIsolation 仍开启；后续可改 CJS preload 恢复）。
 - 可安装包：`pnpm dist` → `dist/*.dmg`（macOS arm64，**unsigned V1 边界**——无签名/公证，首次打开需右键→打开；`electron-builder.yml identity: null`）。
 - 四份验收三态表（带证据指针）+ 三份 ponytail-audit 见 `docs/m{2,3,4,5}-acceptance.md` 与 `docs/m{3,4}-audit.md`；BLOCKED.md 各轮备案已全部裁决（见其裁决记录节）。
-- **计划完成**：§14 里程碑表 M0→M5 全行收口；**M6 已收**：supervise 模式运行时接线与审批卡双轨（spawnSupervise + requestSuperviseApproval，渲染卡零改动，supervisor-check 段 E 16 断言）+ 真多 provider 白名单与价格表接线（PROVIDER_IDS 四家 + toWorkerModel 按 provider 路由 + pricing 真钱代价接进 bandit，routing-check 段 F）；M6+ 候选（bandit 运行时接线、supervise 环合并语义扩展、档位模型/价格联网实测校准、hourly/monthly kind、worker 热恢复、license 服务端、签名公证、遥测上报）均留位未偷做（见 m5-acceptance「未证/留位」节与 m5-proposal §1.4）。
+- **计划完成**：§14 里程碑表 M0→M5 全行收口；**M6 已收**：supervise 模式运行时接线与审批卡双轨（spawnSupervise + requestSuperviseApproval，渲染卡零改动，supervisor-check 段 E 16 断言）+ 真多 provider 白名单与价格表接线（PROVIDER_IDS 四家 + toWorkerModel 按 provider 路由 + pricing 真钱代价接进 bandit，routing-check 段 F）；M6+ 候选（supervise 环合并语义扩展、档位模型/价格联网实测校准、hourly/monthly kind、worker 热恢复、license 服务端、签名公证、遥测上报）均留位未偷做（见 m5-acceptance「未证/留位」节与 m5-proposal §1.4）。
+- **bandit 运行时接线已闭合（2026-09-18）**：此前 bandit 机器齐全（selectArm/updatePriced/原子持久化）但两头断——
+  `routeFor` 从不收 `bandit` 上下文（reason 永远非 "bandit"）、`updatePriced` 全仓库零调用者、agent-runner 也从没传 `routing`。
+  现已端到端接通：`settings.routingBandit` → `orchestratorExtras` 同时开 `routing:true` + `banditStatePath`（`.agent/routing-bandit.json`）→
+  spawn 时 `routeFor` 收 bandit 上下文（Thompson Sampling 选档，`reason:"bandit"`）→ WorkerHandle 记臂 →
+  `finish` 在终态事件落流后回灌奖励（done→α+1 / failed|cancelled→β 增长，代价按 `pricing.costUsd` 真钱折算）→ 原子持久化。
+  学习是侧信道：回灌/持久化失败只 `console.warn`，绝不阻断 worker 终态流。非 bandit 路由（pin/tier-default）不记臂、不污染学习面。
+  验收：`tests/bandit-runtime.test.ts`（3 条：done 后验 α=3 且持久化可 reload、failed 时 β 增长 α 不动、未启用零 routing_decision 零行为）。
+- **M7 影响面接线已闭合（2026-09-18）**：`defaultImpactHook` 此前在 src/ 零调用者、`ImpactReportEvent` 无生产者、sidechat 的 `impact_report` 投影是死代码——模块/事件/消费端三层齐了但写路径没接。现已端到端闭合：
+  `ToolContext.impact`（`src/tools/base.ts`，缺省 undefined = 零行为）→ `write_file`/`edit_file` 落盘成功后调 `appendImpact`（best-effort：钩子抛错只 `console.warn`，**写入已成功不得回滚**）→ `impact_report` 事件先于 tool_result 落流 + 波及摘要回注输出；`runLoop` 透传钩子；`agent-runner` 经 `impactAnalysis` 设置（同 actionFusion 口径，默认关）构造 `defaultImpactHook`。
+  验收：`tests/impact-wiring.test.ts`（6 条：edit/write 发事件+波及 app.js 调用点、无钩子零行为、非源码文件静默、钩子抛错不影响写入、摘要按文件汇聚且限量）。**这是「减少犯错/返工」的直接能力**——改一处立刻看到跨文件调用点，不用等测试炸了才知道波及谁。
+  **token 成本收紧（2026-09-18）**：`contextNote` 原本把最多 `IMPACT_SITE_LIMIT=200` 个调用点逐条注入 tool_result（`symbol ← file:line`），
+  被广泛调用的符号单次写入会带出上千 token——与「消耗 token 最少」直接冲突。现改为文件级汇聚摘要：
+  `IMPACT_CONTEXT_FILES=6` 个文件 × `IMPACT_CONTEXT_SYMBOLS_PER_FILE=4` 个符号（`symbol(L行)`），超出记「另有 N 个文件未列出」。
+  **完整调用点清单仍保留在 `impact_report` 事件的 `up` 字段里**（面板/sidechat 投影依赖 `e.up.length`，不受影响）。
+  实测体积：最坏情形 ≈2112 token / 201 行 → ≈168 token / 8 行（**-92%**）。
+- **失败轨迹沉淀引导（2026-09-18，能力 6/10）**：`runSessionEndDistill` 原本只是把整段事件回放给模型——
+  失败（验证未过、工具报错）恰是「下次怎么不重犯」的最高价值素材，但回放不含注意力引导，模型不会自动盯着失败看。
+  新增纯函数 `failureDigestFromEvents`（`src/agent/memory/distill.ts`）：把 `verify_result(ok:false)`（含达上限停止）与
+  `tool_result(ok:false)`（按工具名归并计数）聚成一行显式证据，并入沉淀指令；**无失败时返回空串，指令逐字不变（零回归）**。
+  验收：`tests/distill.test.ts`（8 条：纯函数四种形态、注入/零回归/disabled 零调用）。该模块此前零覆盖，现补齐。

@@ -12,6 +12,8 @@ import type { ModelOutput, Provider } from "../providers";
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "../providers/glm";
 import { DEFAULT_MODEL_TABLE, resolveModel, toWorkerModel } from "../providers/registry";
 import { routeFor, TIER_ORDER as MODEL_TIER_ORDER } from "../routing/policy";
+import { loadBanditState, saveBanditState, updatePriced, type ArmKey, type BanditState } from "../routing/bandit";
+import { costUsd } from "../routing/pricing";
 import type { Tool, ToolResult, ToolContext } from "../tools/base";
 import { read_file } from "../tools/read_file";
 import { grep } from "../tools/grep";
@@ -33,7 +35,7 @@ import {
   type CompactionConfig,
   type Summarizer,
 } from "./compaction";
-import { escapeControlTags } from "./memory/inject";
+import { buildMemoryInjection, escapeControlTags } from "./memory/inject";
 import {
   BUILTIN_ROLES,
   concatStageTask,
@@ -286,32 +288,22 @@ export const shell_rw: Tool = {
 // ---- worker 工具规格（模型可见面）：从 gateToolSpecs 过滤 + shell_ro 规格 ----
 
 /** worker 模型可见工具规格：白名单过滤（写工具与 spawn_agent 根本不在表内，§4.4.1 深度恒 1）。
- *  gateToolSpecs 不含 lsp 规格——这里显式补齐（lsp 在 worker 工具执行表中真实存在）。
+ *  P-1 补漏后 gateToolSpecs 已含 lsp（与可执行面同源），此处不再另行补齐重复规格；shell 家族
+ *  是 worker 专属面（`shell_ro`/`shell_rw` 不进主会话），仍在此处追加。
  *  M3b：mode=write 时补写面规格（write_file/edit_file/shell_rw/remember）——spawn_agent 与
  *  run_shell/merge/commit 依旧根本不在表内（合并权只在 git 面板）。 */
 export function workerToolSpecs(mode: "read" | "write" = "read"): GlmToolSpec[] {
   const allow = mode === "write"
     ? new Set<string>(["read_file", "grep", "glob", "lsp", "write_file", "edit_file", "remember"])
     : new Set<string>(["read_file", "grep", "glob", "lsp"]);
-  const specs = gateToolSpecs().filter((s) => allow.has(s.function.name));
-  specs.push(
-    {
-      type: "function",
-      function: {
-        name: "lsp",
-        description: "LSP 操作（hover/definition/references/documentSymbol/diagnostics；需工作区 .agent/lsp.json 配置）",
-        parameters: {
-          type: "object",
-          properties: {
-            operation: { type: "string", description: "hover | definition | references | documentSymbol | diagnostics" },
-            path: { type: "string", description: "workspace 相对路径" },
-            line: { type: "number", description: "行号（1-based）" },
-            column: { type: "number", description: "列号（1-based）" },
-          },
-          required: ["operation", "path"],
-        },
-      },
-    },
+  const specs = gateToolSpecs().filter((s) => allow.has(s.function.name)).map((spec) =>
+    spec.function.name === "remember"
+      ? { ...spec, function: { ...spec.function, description: REMEMBER_SPEC_DESCRIPTION } }
+      : spec,
+  );
+  // 防御：追加前按名字去重（同名规格出现两次会让「每个可执行工具恰好一次」的验收假红/假绿都不可信）
+  const seen = new Set(specs.map((s) => s.function.name));
+  const shells: GlmToolSpec[] = [
     {
       type: "function",
       function: {
@@ -325,28 +317,11 @@ export function workerToolSpecs(mode: "read" | "write" = "read"): GlmToolSpec[] 
         parameters: { type: "object", properties: { command: { type: "string", description: mode === "write" ? "worktree 内 shell 命令" : "只读 shell 命令" } }, required: ["command"] },
       },
     },
-  );
-  if (mode === "write") {
-    specs.push({
-      type: "function",
-      function: {
-        name: "remember",
-        description: REMEMBER_SPEC_DESCRIPTION,
-        parameters: {
-          type: "object",
-          properties: {
-            scope: { type: "string", description: "project | global（只认顶层参数）" },
-            kind: { type: "string", description: "architecture | decision | preference | memory" },
-            type: { type: "string", description: "kind=memory 时必带：user|feedback|project|reference" },
-            topic: { type: "string", description: "kind=memory 时必带（1-64 位字母/数字/连字符/下划线）" },
-            content: { type: "string", description: "记忆内容" },
-            op: { type: "string", description: "append | replace（缺省按 kind 推导）" },
-            old_content: { type: "string", description: "op=replace 时必带（精确命中原文）" },
-          },
-          required: ["scope", "kind", "content"],
-        },
-      },
-    });
+  ];
+  for (const spec of shells) {
+    if (seen.has(spec.function.name)) continue;
+    seen.add(spec.function.name);
+    specs.push(spec);
   }
   return specs;
 }
@@ -555,6 +530,10 @@ interface WorkerHandle {
   dependsOn: string[];
   /** 卡死态（waiting_input(reason=stuck) 在场）：触发后 worker 在下一事件 append 处暂停，resume 解除。 */
   stuckActive: boolean;
+  /** M5b 步骤 9：bandit 选中的臂（仅 reason=bandit 的 worker 有值——回灌奖励用）。 */
+  routeArm?: ArmKey;
+  /** bandit 臂对应的模型 id（真钱代价折算用，pricing.costUsd）。 */
+  routeModelId?: string;
   paused: boolean;
   pauseWaiters: (() => void)[];
   /** 卡死规则一/二的滑动窗口（action+observation 摘要）。 */
@@ -615,6 +594,10 @@ export interface OrchestratorOptions {
   /** M5b 模型路由（§m5-proposal 步骤 8）：启用时每次 spawn routeFor 决策 → 落 routing_decision →
    *  toWorkerModel(档位)。缺省 false = 零行为（modelFor / defaultWorkerModel 原路径逐字不变，零 routing_decision）。 */
   routing?: boolean;
+  /** M5b 步骤 9：bandit 学习状态文件（routingBandit 开关开启；要求 routing=true——
+   *  无路由则无档位决策可学）。状态在 .agent/ 系统区（同 permissions.json 口径）。
+   *  学习是侧信道：回灌/持久化失败只记日志，不阻断 worker 终态流。 */
+  banditStatePath?: string;
   /** worker 审批无响应超时（缺省 120s，超时按拒绝 fail-closed）。 */
   approvalTimeoutMs?: number;
   /** M5c 竞速收敛超时（缺省 120s；测试注入短值以验「超时必收杀候选」，不放宽生产语义）。 */
@@ -659,6 +642,9 @@ export class Orchestrator {
   /** 会话成本闸（§4.4.8）：maxUsd/pricePerMTok 任一 ≤0 = 闸无效。 */
   private readonly budget: { maxUsd: number; pricePerMTok: number } | null;
   private readonly stuckConf: StuckConfig;
+  /** M5b 步骤 9：bandit 在线学习状态（懒加载；routing+banditStatePath 双开才激活）。 */
+  private banditState: BanditState | null = null;
+  private banditLoading: Promise<BanditState | null> | null = null;
   /** 会话累计 usage（emit 包装统计全部 usage 事件 = 主 loop + Σworker，§4.4.10 口径）。 */
   readonly sessionUsage = { inputTokens: 0, outputTokens: 0 };
   /** 依赖链：延迟 spawn 登记（前环未收敛；前环 done 事件驱动触发，无轮询调度器 §4.5）。 */
@@ -976,6 +962,9 @@ export class Orchestrator {
     }
     // 路由决策（纯函数）：pin（args.model 优先，其次模型档位名）> 档位表（按环角色）> 降级链。
     // 决策在模型实例化之前完成——先落 routing_decision 再调模型（崩溃后也能审计"当时选了谁"）。
+    // M5b 步骤 9：bandit 启用时把学习上下文喂给 routeFor（Thompson Sampling 选档，reason=bandit）。
+    // 状态懒加载——首次 spawn 才读盘；加载失败返回 null = 本次会话只走静态档位表（降级链不受影响）。
+    const banditState = this.banditEnabled() ? await this.bandit() : null;
     const routeDecision = routingEnabled
       ? routeFor({
           pin:
@@ -985,7 +974,11 @@ export class Orchestrator {
                 ? args.tier
                 : undefined,
           stage: stageRole?.role,
+          mode: mode as "read" | "write",
           table: DEFAULT_MODEL_TABLE,
+          ...(banditState !== null
+            ? { bandit: { posteriors: banditState.posteriors, rngState: banditState.rngState } }
+            : {}),
         })
       : null;
     // 模型可用性 fail-closed。审查 S3-13 两处修正：
@@ -1074,6 +1067,13 @@ export class Orchestrator {
       snapshots: new Map(),
       editAnchors: new Map(),
       lastFindings: [],
+      // M5b 步骤 9：仅 bandit 选出的 worker 记臂（非 bandit 路由不参与学习）
+      ...(routeDecision && routeDecision.reason === "bandit"
+        ? {
+            routeArm: { stage: stageRole?.role ?? "default", tier: routeDecision.tier },
+            routeModelId: routeDecision.picked,
+          }
+        : {}),
       events: [],
       usage: { inputTokens: 0, outputTokens: 0 },
       toolStats: {},
@@ -1960,9 +1960,59 @@ export class Orchestrator {
   /** 终态收束（§4.4.4/§4.4.8）：done/failed 出 agent_result + 合成 tool_result；cancelled 出终止态 + tool_result。
    *  M3b write mode：done → diff 快照（vs base_commit）+ 安全 gate 流水 + artifacts（stat 摘要/diff_ref）；
    *  failed/cancelled → worktree 自动清理（四路清理之三/四路）。 */
+  // ---- M5b 步骤 9：bandit 在线学习运行时接线（路由侧信道） ----
+  // 背景：routeFor/toWorkerModel/routing_decision 在步骤 8 已落，bandit 机器（selectArm/
+  //  updatePriced/持久化）也齐了，但两头都没接运行时——routeFor 从不收 bandit 上下文（reason
+  //  永远不是 "bandit"），worker 完成时也没人回灌奖励。本段闭合：启用判定 → 懒加载 → 回灌。
+  private banditEnabled(): boolean {
+    return this.opts.routing === true && typeof this.opts.banditStatePath === "string" && this.opts.banditStatePath !== "";
+  }
+
+  /** 懒加载 bandit 状态（首次 spawn 才读盘）。加载失败 → null：本次会话只走静态档位表，
+   *  路由主路径与降级链完全不受影响（学习缺位不是路由失败）。 */
+  private async bandit(): Promise<BanditState | null> {
+    if (!this.banditEnabled()) return null;
+    if (this.banditState !== null) return this.banditState;
+    if (this.banditLoading === null) {
+      const path = this.opts.banditStatePath as string;
+      this.banditLoading = loadBanditState(path, (reason: string) => console.warn("[bandit] " + reason))
+        .then((st) => {
+          this.banditState = st;
+          return st;
+        })
+        .catch((err) => {
+          console.warn(
+            "[bandit] 状态加载失败，本次会话不学习（路由降级链不受影响）:",
+            err instanceof Error ? err.message : String(err),
+          );
+          return null;
+        });
+    }
+    return this.banditLoading;
+  }
+
+  /** 奖励回灌：done → reward=1；failed/cancelled → 0；代价按真钱 usage 折算（pricing.costUsd，
+   *  §m5-proposal §1.3 口径）。仅 reason=bandit 的 worker 记了臂——其余路由不污染学习面。
+   *  best-effort 纪律：任何失败只 console.warn——学习是侧信道，绝不改写 worker 终态或阻断收束。 */
+  private async rewardBandit(w: WorkerHandle, status: "done" | "failed" | "cancelled"): Promise<void> {
+    if (w.routeArm === undefined || w.routeModelId === undefined) return;
+    const st = await this.bandit();
+    if (st === null) return;
+    try {
+      const reward = status === "done" ? 1 : 0;
+      const cost = costUsd(w.routeModelId, w.usage);
+      updatePriced(st.posteriors, w.routeArm, reward, cost);
+      await saveBanditState(this.opts.banditStatePath as string, st);
+    } catch (err) {
+      console.warn("[bandit] 奖励回灌失败（不影响 worker 终态）:", err instanceof Error ? err.message : String(err));
+    }
+  }
+
   private async finish(w: WorkerHandle, status: "done" | "failed" | "cancelled", reason?: string): Promise<void> {
     try {
       await this.finishInner(w, status, reason);
+      // M5b 步骤 9：终态事件已落流 → 回灌奖励（学习侧信道：best-effort，内部自吞错误，不阻断收束）
+      await this.rewardBandit(w, status);
     } finally {
       w.closed = true;
     }
@@ -2117,6 +2167,11 @@ export class Orchestrator {
     }
     if (w.mode !== "write" || !mergeOwners.has(w.agentId)) {
       w.events.length = 0;
+      // P2-8（审查）：diff 版本计数同批回收（diffVersions 以 agentId 为键、只增不减，字段见
+      // diffVersion）。**与 w.events 同门槛**：write worker 合并决策未决时可被 injectComment 评审
+      // 重启（第二次 done → diff v2，见 2026 行），该计数必须跨重启存活——否则 v2 会被重置回 v1。
+      // 只在不可重启态（read worker / write 已过合并决策点）回收，泄漏被 cleanupWrite 兜底。
+      this.diffVersions.delete(w.agentId);
     }
   }
 
@@ -2496,6 +2551,9 @@ function globToRegExp(glob: string): RegExp {
  *  会话 JSONL append-only：按 (logPath → 字节偏移/已扫行号/callId→行号) 增量解析新尾部。
  *  行号语义与全量版逐位一致：空行/坏行照常占行号，未完整落盘的尾行留待下次（字节偏移只推进完整行）。 */
 const callIdIndexCache = new Map<string, { ino: number; offset: number; lines: number; index: Map<string, number> }>();
+/** P2-2（审查）：callId 索引缓存容量帽——旧实现只增不减（每条会话日志一项）。淘汰后下次访问重扫
+ *  该日志（与 events replayCache 同语义，可接受）。 */
+const CALL_ID_INDEX_CACHE_MAX = 32;
 
 /** B8（审查）：共享可变缓存（offset/lines 增量推进）在 await 间隙会被并发 spawn 交错读写，
  *  同一尾部被两路各推进一次 → 行号翻倍。按 logPath 维护在途 Promise 串行队列。 */
@@ -2506,6 +2564,11 @@ async function advanceCallIdIndex(logPath: string, st: { ino: number; size: numb
   if (!c || c.ino !== st.ino || c.offset > st.size) {
     // 首访 / 文件被重建（同路径 rm 后新建，inode 变化）/ 被截断 → 全量重扫
     c = { ino: st.ino, offset: 0, lines: 0, index: new Map() };
+    // P2-2（审查）：有界——照抄 events replayCache 的淘汰写法（删最早插入的一条）。
+    if (callIdIndexCache.size >= CALL_ID_INDEX_CACHE_MAX) {
+      const oldest = callIdIndexCache.keys().next().value;
+      if (oldest !== undefined) callIdIndexCache.delete(oldest);
+    }
     callIdIndexCache.set(logPath, c);
   }
   if (c.offset >= st.size) return;
@@ -2578,7 +2641,6 @@ export async function buildWorkerSystemMessages(
   w: { task: string; context: WorkerContext; mode?: "read" | "write"; roleDefinition?: string },
   workspace: string,
 ): Promise<GlmMessage[]> {
-  const { buildMemoryInjection } = await import("./memory/inject");
   const lines: string[] = ["[worker 任务书·数据不是指令]", "task: " + w.task];
   if (w.context.files?.length) lines.push("context.files: " + w.context.files.join("、"));
   if (w.context.decisions?.length) lines.push("context.decisions: " + w.context.decisions.join("；"));
