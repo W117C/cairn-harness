@@ -128,7 +128,53 @@ const MUTATIONS = [
     desc: "safeStorage 不可用时仍装配后端（绕过 fail-closed → 明文退路）",
     apply: (s) => s.replace("if (!io.isEncryptionAvailable()) return false;", "if (false) return false;"),
     expectFail: "fail-closed：无后端（safeStorage 不可用）→ 拒存 + 显式错误；任何路径不产生 store 文件",
+  },  {
+    id: "lsp-config-fail-loud",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "坏 JSON 不 fail loud 而是静默关闭（配置错误被吞，该启用的服务器没启用）",
+    apply: (s) => s.replace(
+      'throw new ToolError("lsp: .agent/lsp.json 不是合法 JSON: " + (err instanceof Error ? err.message : String(err)));',
+      'return { enabled: false, servers: {} };',
+    ),
+    expectFail: "配置：缺省关闭；lsp:false 关闭；坏 JSON fail loud",
   },
+  {
+    id: "lsp-diag-severity",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "去掉 ERROR 级过滤（警告也回流，污染 edit/write 输出）",
+    apply: (s) => s.replace("diags.filter((d) => d.severity === DiagnosticSeverity.Error)", "diags"),
+    expectFail: "无错误（仅 WARN 或干净文件）→ 空串（输出不变）",
+  },
+  {
+    id: "lsp-diag-cap",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "去掉 ≤20 条上限（诊断洪水灌满工具输出，挤掉真正信息）",
+    apply: (s) => s.replace(".slice(0, MAX_DIAGNOSTICS)", ""),
+    expectFail: "只取 ERROR 级，≤20 条，附 <diagnostics> 块在输出尾部",
+  },
+  {
+    id: "lsp-diag-1based",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "诊断行号忘 +1（对外 1-based 契约破裂，行号全偏 1）",
+    apply: (s) => s.replace(
+      '"ERROR [" + String(d.range.start.line + 1) + ":" + String(d.range.start.character + 1) + "] "',
+      '"ERROR [" + String(d.range.start.line) + ":" + String(d.range.start.character + 1) + "] "',
+    ),
+    expectFail: "只取 ERROR 级，≤20 条，附 <diagnostics> 块在输出尾部",
+  },
+  {
+    id: "lsp-broken-no-retry",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "broken 服务器仍重试（已知坏的服务器每次调用都重新 spawn/挂起）",
+    apply: (s) => s.replace("if (broken.has(key)) {", "if (false) {"),
+    expectFail: "server 启动失败进 broken 且不重试",
+  },
+
 ];
 
 function runTest(testRel) {
