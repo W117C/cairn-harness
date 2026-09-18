@@ -24,6 +24,8 @@ function boot() {
     // 否则 Promise 链抛未捕获拒绝——断言照样绿但整道 test 门 exit 1（假绿 + 假红混合体）。
     showEmptyStream: vi.fn(),
     $: vi.fn(() => ({ textContent: "" })), selectSession: vi.fn(),
+    // R1b B2：零会话时启动分支会走空态（原型段函数，切片外，故需桩）
+    showEmptyStream: vi.fn(),
   };
   runInNewContext(source.slice(loadStart, loadEnd) + source.slice(start, end), context);
   const flush = () => new Promise<void>((done) => setImmediate(done));
@@ -43,6 +45,8 @@ it("does not open a mock session when the real list is empty", async () => {
   resolve([]);
   await flush();
   expect(context.selectSession).not.toHaveBeenCalled();
+  // R1b B2：零会话必须落到空态，否则界面留着 index.html 里的演示对话（假象）
+  expect(context.showEmptyStream).toHaveBeenCalledOnce();
 });
 
 it("reports list failure without opening the stale mock session", async () => {
