@@ -335,3 +335,49 @@ export function defaultImpactHook(workspace: string, cacheDir?: string): ImpactH
     };
   };
 }
+
+// ---- B1：把影响面从「回注给模型看的提示」升级成 spawn 准入判据 ----
+// 依据：多 agent 最大的未解项不是行冲突而是**写时语义冲突**（worktree 只解决物理层）。
+// 两个 worker 各改各的文件、glob 不相交，却都波及同一批调用点 ⇒ 合并时照样打架。
+// 这份数据在 M7 只用了一次（写后回注摘要），这里让它第二次变现。
+
+/** glob → 仓库相对路径匹配（`**` 跨目录、`*` 段内、`?` 单字符）。 */
+export function globMatchesPath(glob: string, path: string): boolean {
+  const g = glob.replace(/\\/g, "/");
+  const p = path.replace(/\\/g, "/");
+  let re = "";
+  for (let i = 0; i < g.length; i++) {
+    const c = g[i];
+    if (c === "*") {
+      if (g[i + 1] === "*") {
+        re += ".*";
+        i++;
+        if (g[i + 1] === "/") i++; // `**/` 允许匹配零段目录
+      } else re += "[^/]*";
+    } else if (c === "?") re += "[^/]";
+    else if ("\\^$.|+()[]{}".includes(c)) re += "\\" + c;
+    else re += c;
+  }
+  return new RegExp("^" + re + "$").test(p);
+}
+
+/** 声明「要写这些 glob」⇒ 实际会波及哪些文件（含被声明文件自身，排序去重）。
+ *  grammar/索引不可用 ⇒ 抛 ImpactUnavailableError（调用方按降级处理，不静默返回空集）。 */
+export async function affectedFilesOf(
+  workspace: string,
+  globs: readonly string[],
+  cacheDir?: string,
+): Promise<string[]> {
+  if (globs.length === 0) return [];
+  const graph = await buildImpact({ workspace, cacheDir });
+  const out = new Set<string>();
+  for (const file of graph.files) {
+    if (!globs.some((g) => globMatchesPath(g, file))) continue;
+    out.add(file);
+    for (const sym of graph.defs.keys()) {
+      if (!(graph.defs.get(sym) ?? []).some((d) => d.file === file)) continue;
+      for (const site of upward(graph, sym)) out.add(site.file);
+    }
+  }
+  return [...out].sort();
+}

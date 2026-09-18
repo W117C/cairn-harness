@@ -1235,3 +1235,29 @@ BLOCKED 同条里。开闸判据（准确率/返工率 vs `$/成功任务`）与
 验证（逐道 exit 0）：typecheck 0 错、`test` 89 files/**857 passed**（新 `tests/http-retry.test.ts` 12 条）、
 providers-check、e2e、ipc:check、sidechat-check。未证：真实 provider 的 429 行为（`provider:check`
 联网分支仍受凭据限制）——本轮只宣称本地替身下的语义正确，不宣称线上省了多少。
+
+## B1 语义合并闸：影响面从「提示」升级成 spawn 准入判据
+
+M7 的 impact 层此前只用一次（写后把波及摘要回注给模型看）。多 agent 最大的未解项不是行冲突而是
+**写时语义冲突**（worktree 只解决物理层），而这份数据正好能判它 ⇒ 让它第二次变现。
+
+- `impact/affectedFilesOf(workspace, globs, cacheDir?)`：声明「要写这些 glob」⇒ 实际波及哪些文件
+  （含自身，排序去重）；配 `globMatchesPath`（`**`/`*`/`?`，正则元字符按字面）。
+- `orchestrator/semanticConflictsVia(hook, resources, workers)`：判定内核**纯异步、可单测**
+  （不必真起 worker / git worktree）。四条边界都是判据：未接钩子/无声明/无活跃 worker ⇒ 零行为；
+  波及集为空 ⇒ 不报（宁漏不误伤）；钩子抛错 ⇒ 降级不报但 `console.warn` 出声；每冲突最多列 6 个文件
+  （审批卡给人看，全量在 `impact_report` 事件里）。
+- spawn 接线：`mode === "write"` 时**先算既有 glob 租约求交，只有它没抓到才问语义层**（省一次建图，
+  也让纯 glob 场景的审批文案与事件字节逐字不变）；语义冲突走同一张 spawn 审批卡，
+  文案在既有 `写租约相交：` 前缀后追加「其中为**语义波及**相交」——不新建一条判据面、不拆已有断言。
+- 钩子由 `agent-runner` 在 `impactAnalysis === true` 时注入 ⇒ 与影响面同一开关、同样默认关。
+- 实测证据（真跑 `fixtures/impact/mini-repo` 的图，非手搭假数据）：
+  `globIntersects("utils.js","math.js") === false`（旧判据放行并行），
+  而 `affectedFilesOf(["utils.js"]) = {utils.js, math.js, app.js}` 与
+  `affectedFilesOf(["math.js"]) = {math.js, app.js, metrics.ts}` 在 **math.js 上相交** ⇒ 语义闸报冲突；
+  反向 `utils.js × metrics.ts` 闭包不相交 ⇒ 不误伤。
+
+验证：typecheck 0 错、`test` 90 files/**867 passed**（新 `tests/impact-admission.test.ts` 10 条）、
+agents-check / supervisor-check / gate-check / e2e 逐道 exit 0。
+留位（不掩盖）：spawn 处那段「glob 没抓到才问语义」的**接线本身**只有单测间接覆盖，
+缺一条起真 git repo + 两个 write worker 的端到端审批卡测（m3b 里有现成 harness，下轮补）。

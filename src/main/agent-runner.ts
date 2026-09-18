@@ -23,7 +23,7 @@ import { ClarifyGate, PlanGate } from "../agent/gates";
 import { createVerifyHook, defaultExec, type ExecFn } from "../agent/verify";
 import { createActionFusion } from "../agent/action-fusion";
 import { SolpiRuntime, privateSessionDirectory, removePrivateSessionData, observationRecallSpec, solpiEnabled, type SolpiFlags } from "../agent/solpi-runtime";
-import { defaultImpactHook } from "../agent/impact/index.js";
+import { affectedFilesOf, defaultImpactHook } from "../agent/impact/index.js";
 import { run_shell } from "../tools/run_shell";
 import type { AgentEvent, ClarifyAnswerMap, EventLog } from "../events";
 import { createEventLog, replay } from "../events";
@@ -1043,6 +1043,9 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       workspace: opts.workspace,
       parentMode: opts.mode,
       emit: pipeline,
+      // B1 语义合并闸：影响面开启时，spawn 的写租约判定多问一层「波及集相交」——
+      // 两个 worker 各改各的文件（glob 不相交）但改动波及同一批调用点，合并时同样会打架。
+      ...(opts.impactAnalysis === true ? { semanticLease: (globs: string[]) => affectedFilesOf(opts.workspace, globs) } : {}),
       // P0-2（审查）：父 run 的规则库与沙箱可用性必须传给编排器——worker 自主会话按父 run
       // 口径构造，否则项目级 deny/ask 规则对 worker 全表失效。
       rules,

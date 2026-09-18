@@ -589,6 +589,10 @@ export interface OrchestratorOptions {
   parentMode: AgentPermissionMode;
   /** 主流事件管线（落盘 + onEvent 推送同路，M1b 坑十八口径）。 */
   emit: (e: AgentEvent) => Promise<void>;
+  /** B1 语义合并闸：把「声明要写这批 glob」换算成「实际会波及哪些文件」（仓库相对路径）。
+   *  缺省 undefined = 零行为（只有既有 glob 租约求交，spawn 流程与事件字节完全不变）。
+   *  抛错 = 记 warn 并降级为「仅 glob 判定」——语义闸是额外探测器，不得把 spawn 炸掉。 */
+  semanticLease?: (resources: string[]) => Promise<string[]>;
   /** worker 模型解析（演示/验收通道注入脚本模型）；缺省 = GLM 暗卷（需 M0_API_KEY）。 */
   modelFor?: (args: SpawnArgs) => WorkerModel | undefined;
   /** M5b 模型路由（§m5-proposal 步骤 8）：启用时每次 spawn routeFor 决策 → 落 routing_decision →
@@ -1013,10 +1017,14 @@ export class Orchestrator {
     const agentId = nextAgentId();
     if (mode === "write") {
       const conflicts = this.leaseConflicts(resources);
-      if (conflicts.length > 0) {
-        const detail = conflicts.map((c) => c.resource + "（" + c.agentId + "）").join("、");
-        const warningMsg = `写租约相交：${detail}——并行写可能产生合并冲突（租约是预测器不是硬闸，可强行批准）`;
-        const approved = await this.requestSpawnApproval(agentId, warningMsg, conflicts);
+      // glob 没抓到才问语义层（省一次建图，也让既有事件流/审批文案在纯 glob 场景逐字不变）
+      const semantic = conflicts.length === 0 ? await this.semanticLeaseConflicts(resources) : [];
+      const all = [...conflicts, ...semantic];
+      if (all.length > 0) {
+        const detail = all.map((c) => c.resource + "（" + c.agentId + "）").join("、");
+        const warningMsg = `写租约相交：${detail}——并行写可能产生合并冲突（租约是预测器不是硬闸，可强行批准）`
+          + (semantic.length > 0 ? "；其中为**语义波及**相交（glob 不相交，但两侧改动波及同一批文件）" : "");
+        const approved = await this.requestSpawnApproval(agentId, warningMsg, all);
         if (!approved) {
           return { ok: false, output: "spawn_agent: 未获批准（写租约相交未强行批准：" + detail + "）" };
         }
@@ -1181,6 +1189,16 @@ export class Orchestrator {
       }
     }
     return out;
+  }
+
+  /** B1 语义合并闸：glob 不相交 ≠ 不打架。两个 write worker 各改自己的文件，
+   *  但改动的**波及集**（跨文件调用点所在文件）相交 ⇒ 合并时同样语义冲突。
+   *  与 leaseConflicts 同形状返回，走同一张审批卡；未接钩子时恒为空（零行为）。 */
+  async semanticLeaseConflicts(resources: string[]): Promise<{ agentId: string; resource: string }[]> {
+    const active = [...this.workers.values()]
+      .filter((w) => w.mode === "write" && !w.finished)
+      .map((w) => ({ agentId: w.agentId, resources: w.resources }));
+    return await semanticConflictsVia(this.opts.semanticLease, resources, active);
   }
 
   /** 审批等待内核（三处审批协议共用：spawn / pipeline 整链 / worker 工具）。
@@ -2507,6 +2525,39 @@ function parseWorkerContext(v: unknown): WorkerContext {
 
 /** 写租约 glob 相交判定（纯函数）：支持 ** / * / ?；无通配符 = 前缀目录语义（"src" 匹配 "src/**"）。
  *  双向匹配：任一方向命中即相交（A 声明 src/**，B 声明 src/todo.ts → 相交）。 */
+/** B1 语义合并闸的判定内核（纯异步、可单测：不必真起 worker / git worktree）。
+ *  hook 把「声明的 glob 集」映射成「实际波及的文件集」（agent-runner 用 impact 层接）。
+ *  四条边界都是判据的一部分：
+ *   ① 未接钩子 / 无声明 ⇒ []（零行为，既有 spawn 流程与事件字节不变）；
+ *   ② 波及集为空 ⇒ 不报（宁漏不误伤：无跨文件调用点就不该拦并行）；
+ *   ③ 钩子抛错 ⇒ []，并 **出声**（额外探测器不得炸掉 spawn，但静默降级等于把故障藏起来）；
+ *   ④ 每个冲突最多列 6 个文件（审批卡是给人看的，全量清单在 impact_report 事件里）。 */
+export async function semanticConflictsVia(
+  hook: ((globs: string[]) => Promise<string[]>) | undefined,
+  resources: readonly string[],
+  workers: readonly { agentId: string; resources: readonly string[] }[],
+): Promise<{ agentId: string; resource: string }[]> {
+  if (!hook || resources.length === 0 || workers.length === 0) return [];
+  const closure = async (globs: readonly string[]): Promise<Set<string> | null> => {
+    try {
+      return new Set(await hook([...globs]));
+    } catch (err) {
+      console.warn("[impact] 语义波及计算失败，本轮只按 glob 租约判定:", err instanceof Error ? err.message : String(err));
+      return null;
+    }
+  };
+  const mine = await closure(resources);
+  if (!mine || mine.size === 0) return [];
+  const out: { agentId: string; resource: string }[] = [];
+  for (const w of workers) {
+    const theirs = await closure(w.resources);
+    if (!theirs || theirs.size === 0) continue;
+    const shared = [...mine].filter((f) => theirs.has(f)).slice(0, 6);
+    if (shared.length > 0) out.push({ agentId: w.agentId, resource: "波及 " + shared.join("、") });
+  }
+  return out;
+}
+
 export function globIntersects(a: string, b: string): boolean {
   if (a === b) return true;
   const ma = matchesGlob(a, b);
