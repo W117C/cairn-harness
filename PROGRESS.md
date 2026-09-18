@@ -1292,3 +1292,12 @@ A3（`api.X` 拼写防线）刻意不做——`api` 只是 `window.agent` 的局
 ② `AGENTS.md:81` 硬写的「28 / 28」已被自家「门数一律不写死」规则作废（实测 30 道），归文档持有者；
 ③ 能力 5 的两项 BLOCKED 裁决（harness→模型注入通道、开闸成本记账）仍待用户拍板；
 ④ A1（prompt caching）前置已满足（A2 形态入库），但缓存断点须按新边界重算，未开工。
+
+**A1 第一步已落（`444fdcd` + 锚点 `2004ae0`）**：先做**能看见命中**，再谈制造命中——
+`UsageEvent` 增可选 `cacheReadInputTokens`/`cacheWriteInputTokens`（约定：`inputTokens` 是含缓存总输入，
+分块是其中一部分，不得相加；缺报不落 0 键）。顺带修一条用户可见的错数：Anthropic 的
+`input_tokens` **不含**缓存量，此前直接透传 ⇒ 长会话输入少算一个量级。
+全表 `mutate-verify` 此刻 **96/96 全杀**、全量 `test` 93 files/**885 passed**、typecheck 0 错。
+A1 剩余两半**待用户拍板**（不偷做）：① Anthropic `cache_control` 写侧断点 + `composeTurnMessages`
+稳定前缀重排（记忆按轮检索、地图每 N 轮重算都排在整段历史之前，任一变动即打断含历史的前缀——
+重排会改模型看到的内容顺序，属产品决策）；② `pricing` 缓存价列（该文件自陈价格为占位、须联网实测）。
