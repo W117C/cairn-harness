@@ -41,6 +41,18 @@
 
 负向探针（必须保持 0 命中，不得"顺手补上"）：`data-m1e-*` / `data-approval-badge` / `data-virtuoso-scroller`。
 
+### 2.1 等待期审计：P0 三条 vs 白名单（2026-09-18，只读）
+
+P0 三条由并发会话落库（补停止键 / 失败可见性 / 滚动只在距底 100px 内跟随）。逐条对照结论：
+
+| P0 项 | 撞不撞白名单 | 依据与红线 |
+|---|---|---|
+| 补停止键 | **不撞，但有硬余量** | `renderer-arch-check` 断言 `document.body` 直接子元素 **≤ 6（现值 5，只剩 1 个槽）**、`.composer` **恰好 1**、`aside.drawer` **恰好 1**。⇒ 停止键必须落在现有容器内（`.composer` / `.composer-foot` / `.ctx-rail`），新增 body 级节点即红。图标按钮需带 `aria-label`，且不得引入第 2 个 `[data-msg-act]` 语义之外的裸按钮（a11y 探针普查该属性） |
+| 失败可见性 | **不撞白名单，撞在飞簇的落点** | 内核侧已在飞：`src/events/index.ts` 新增 `RunErrorEvent{type:"error"}` **且已注册进 `KNOWN_TYPES`**（实测集合含 `error` ⇒ 重放不会 `未知事件类型` 抛）。渲染侧 `app.js renderEvent` **零个 `case 'error'`** ⇒ live 什么都不显示、replay 显示「error + 查看记录」。⇒ 渲染半属于 `app.js` 写面，按排队规则由 P0 会话先落；R1b 后续只需在**单一落点**里保住它，不再补第二份 |
+| 滚动只在距底 100px 内跟随 | **一处需盯，不是红线** | `panels-check` 对滚动只有两条：`moved` 每次位移 > 0 与序列净位移 > 0（**无任何「在底部」断言**，实测 `scrollHeight` 仅出现在 `sc.scrollTop = sc.scrollHeight / 2` 起点设置）。`scrollStream()` 现是无条件吸底（`app.js:932-938`），**15 处调用点**。风险不在门控本身，而在若新增 scroll 监听器回拉 `scrollTop`：`panels-check:304-306` 已注明「逐次单调会与窗口化测高锚点回修冲突（`draw` 把 scrollTop 微调回 correctedTop）」⇒ 净位移口径。⇒ 若 P0 用「监听 scroll 再写 scrollTop」实现跟随，B1 探针可能假红；用「推流时判断距离」实现则无此风险 |
+
+**结论：三条均无需改门禁判据。** 唯一要盯的是滚动实现形态（监听回拉 vs 推流时判断），且它落在 `panels-check` 已知的测高回修张力上——若 B1 复跑出现「DOM 0 节点 / 净位移 0」，先按 AGENTS.md 判读法单跑复验，再怀疑代码。
+
 ## 3. B1 — 删重放桩路径（核心）
 
 ### 3.1 先定形：unit 节点 = 一条 `.msg`，工具组是其内部结构
@@ -130,7 +142,7 @@ B1/B2/B3 各自独立提交（同分支内三笔），任一笔红即可单独 r
 
 | 项 | 实测规模 | 为何不做 |
 |---|---|---|
-| 设置弹窗/风险遮罩换 `<dialog>` | `<dialog>`=0、`popover`=0，两处手写 overlay | 属定形态；且 `#settingsOverlay` 在白名单内 |
+| 设置弹窗/风险遮罩换 `<dialog>` | `<dialog>`=0、`popover`=0，两处手写 overlay | **双重理由**：① 用户 2026-09-18 约束「暂不定形态」；② `#settingsOverlay` / `#drawer` / `#drawerToggle` 等**白名单钩子的生产者**正挂在这两处手写结构上，迁移即动判据面。⇒ 下一轮不得单凭「Chromium 152 原生件是免费减法」重提，须先解钩子依赖 |
 | 内联 SVG 收 sprite | `<svg viewBox>` 共 **106 处**（app.js 47 + index.html 59）。但 app.js 侧集中在 `ICONS` / `TOOL_ICONS` / `MSG_ICONS` 表里（定义后复用），**真重复面 = `index.html` 静态标记 59 份与 JS 表各写一份** | 收益大但改动面铺满全渲染层，且要先决定 sprite 形态，需单独立项 |
 | 孤儿 id 清理 | 101 个 id 中 **37 个疑似无引用（上界）**，抽样确认真死 4 个（`tsFill`/`think-block-1`/`riskCard`/`runStatusLive`） | 需逐个甄别（`aria-describedby` 类是活锚点），误删即污染判据；`#runStatusLive` 属运行态未接线，归 R2 |
 | `WORKSPACES` / `BRANCHES` 真化 | 仍驱动工作区切换器与分支面板 | R2 范围，需连 IPC |
