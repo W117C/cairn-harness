@@ -646,6 +646,38 @@ const MUTATIONS = [
     apply: (s) => s.replace("if (meta.type !== \"session_meta\" || meta.origin !== \"scheduled\") return null;", "if (false) return null;"),
     expectFail: "交互会话不投影 scheduled 徽标（只有首行 session_meta origin=scheduled 才投影）",
   },
+  {
+    id: "auto-verify-default-on",
+    src: "src/agent/loop.ts",
+    test: "tests/loop.test.ts",
+    desc: "收束闸缺省变开（每 run 多拍一次真 lint/test，撞 action-fusion 已钉的验证执行次数记账）",
+    apply: (s) => s.replace("opts.verify && opts.autoVerify === true && wroteThisRun", "opts.verify && opts.autoVerify !== false && wroteThisRun"),
+    expectFail: "零行为回退：缺省不开闸（未给 autoVerify） → 无 verify_result、请求数与旧行为同形",
+  },
+  {
+    id: "auto-verify-surface-probe-unguarded",
+    src: "src/agent/loop.ts",
+    test: "tests/loop.test.ts",
+    desc: "可验面探测的 catch 翻成放行（写坏 .agent/config.json 时整轮被 SyntaxError 炸掉）",
+    apply: (s) => s.replace("          hasSurface = false;\n          console.warn(", "          hasSurface = true;\n          console.warn("),
+    expectFail: "可验面探测炸（config 存在但 JSON 坏）⇒ 不炸 run、不补拍",
+  },
+  {
+    id: "session-spawn-visible-side-effect",
+    src: "src/permissions/autonomy.ts",
+    test: "tests/session-tools.test.ts",
+    desc: "spawn_agent 从写向工具集合里摘掉（只读档会话就能派 worker：花真钱 + write 档 worker 会写盘）",
+    apply: (s) => s.replace('  "spawn_agent",\n', ""),
+    expectFail: "主会话模型可见面含 spawn_agent；只读档随写向工具一并摘除",
+  },
+  {
+    id: "context-budget-ignores-model-window",
+    src: "src/agent/glm-session.ts",
+    test: "tests/session-provider.test.ts",
+    desc: "预算基线退回硬编码 128k（高档位模型提前压缩 = 多烧一次摘要 + 白丢冷细节；误拒合法请求）",
+    apply: (s) => s.replace("{ ...withModelBudget(DEFAULT_COMPACTION_CONFIG, window), ...opts.compaction?.config }", "{ ...DEFAULT_COMPACTION_CONFIG, ...opts.compaction?.config }"),
+    expectFail: "同一份历史：缺省 128k 帽下 fail-closed 拒发，换 256k 窗口模型后照常发出",
+  },
 ];
 
 function runTest(testRel) {
