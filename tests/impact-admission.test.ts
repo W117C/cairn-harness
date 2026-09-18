@@ -71,11 +71,18 @@ describe("semanticConflictsVia 的四条边界", () => {
   const fake = (map: Record<string, string[]>) => async (globs: string[]): Promise<string[]> =>
     globs.flatMap((g) => map[g] ?? []);
 
-  it("未接钩子 / 无声明 / 无活跃 worker ⇒ []（既有 spawn 路径零行为）", async () => {
+  it("未接钩子 / 无声明 / 无活跃 worker ⇒ []（零行为 = 连 warn 噪声都没有）", async () => {
     const w = [{ agentId: "w-1", resources: ["b.ts"] }];
-    expect(await semanticConflictsVia(undefined, ["a.ts"], w)).toEqual([]);
-    expect(await semanticConflictsVia(async () => ["a.ts"], [], w)).toEqual([]);
-    expect(await semanticConflictsVia(async () => ["a.ts"], ["a.ts"], [])).toEqual([]);
+    const warns: string[] = [];
+    const warn = console.warn;
+    console.warn = (...a: unknown[]) => { warns.push(a.map(String).join(" ")); };
+    try {
+      expect(await semanticConflictsVia(undefined, ["a.ts"], w)).toEqual([]);
+      expect(await semanticConflictsVia(async () => ["a.ts"], [], w)).toEqual([]);
+      expect(await semanticConflictsVia(async () => ["a.ts"], ["a.ts"], [])).toEqual([]);
+    } finally { console.warn = warn; }
+    // 前置守卫必须真的在那儿：只靠 catch 兜「undefined 钩子」会把降级路径变成常态噪声
+    expect(warns).toEqual([]);
   });
 
   it("波及集为空 ⇒ 不报（宁漏不误伤）", async () => {
