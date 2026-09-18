@@ -76,6 +76,10 @@ unitKey(e) = (e.agent_id ?? "main") + 分组类别
 分组类别：user | ai(assistant_message/assistant_delta 段) | tools(连续 tool_call/tool_result/verify_result) | card(其余单事件)
 ```
 
+⇒ **`error` 必须落 card 类**：P0 只给 live 加了 `case 'error'`（`app.js` 在飞 diff 实测），重放仍走
+`projectHistory` 的 record 桩。B1 若分组表漏列 `error`，会把 P0 刚修的失败可见性**整条丢掉**——
+故 §6 增一条断言：含 `error` 事件的会话，replay 后流内必须出现 `.card.err`。
+
 顺带修掉一个既有归因缺陷：`renderEvent` 从不读 `agent_id`，worker 的 tool_call 在 live 时被并进
 主 loop 工具组显示。按 unitKey 分组后 worker 自成 unit，归因自然正确。
 
