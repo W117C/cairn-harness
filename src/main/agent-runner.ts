@@ -627,6 +627,9 @@ export function installAppTools(): void {
   });
   // M3a：spawn_agent 运行时注入（installAppTools 运行时注入先例；静态注册表 9 工具不动）。
   // 编排器未接线（headless 直调 loop）= fail-closed 拒绝。
+  // 派生审批**由 orchestrator 按风险分级**出卡（写租约相交 / pipeline / supervise / merge 四处
+  // approval_requested），此处不再叠一张 blanket 卡：实测那样会让 agents-check C 段 9 条全红
+  // （default 档的只读调研 spawn 也被拦，worker 根本派不出来），且与 pipeline 的既有卡重复。
   (TOOLS as unknown as Record<string, Tool>).spawn_agent = {
     name: "spawn_agent",
     async run(args, ctx) {

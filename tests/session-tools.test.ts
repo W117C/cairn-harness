@@ -13,12 +13,12 @@ import { fileURLToPath } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 import { estimateContextTokens } from "../src/agent/compaction";
 import { sessionToolSpecs, type SessionPluginTool } from "../src/agent/glm-session";
-import { workerToolSpecs } from "../src/agent/orchestrator";
+import { SPAWN_MODES, workerToolSpecs } from "../src/agent/orchestrator";
 import { PluginRuntime } from "../src/agent/plugins";
 import { skillInvokeName } from "../src/agent/plugins/skills";
 import type { McpToolInfo } from "../src/agent/plugins/mcp";
 import { closeAllEventLogs, createEventLog } from "../src/events";
-import { toolTableFor } from "../src/permissions";
+import { isSideEffectTool, toolTableFor } from "../src/permissions";
 import {
   handleAgentRun,
   handleSessionCreate,
@@ -335,4 +335,28 @@ it("production settings forward C2/D flags and reopen private reports across two
     expect(report.metering.totals.requests).toBeGreaterThan(0);
     expect(report.realModelBenefits).toBe("unverified");
   }
+});
+
+/* ---- 能力 4（长程规划）：主会话模型可见面必须含编排原语 ----
+   spawn_agent 曾在执行面（TOOLS 运行时注入）而不在模型面 ⇒ 主会话永远无法分解任务/派 worker，
+   与 lsp 的「可执行但不可见」同类缺陷。派生 worker 花真钱且 write 档写盘，故一并计入写向工具：
+   只读档摘除的链条只有这一处依据，集合漏了它 = 只读会话也能派 worker。 */
+it("主会话模型可见面含 spawn_agent；只读档随写向工具一并摘除", () => {
+  const namesOf = (mode: "default" | "auto" | "read-only") =>
+    sessionToolSpecs({ mode }).specs.map((s) => s.function.name);
+  expect(namesOf("default")).toContain("spawn_agent");
+  expect(namesOf("auto")).toContain("spawn_agent");
+  expect(namesOf("read-only")).not.toContain("spawn_agent");
+  expect(isSideEffectTool("spawn_agent")).toBe(true);
+});
+
+it("spawn_agent 规格与执行器同源（mode 枚举 = SPAWN_MODES，必填 = task+mode）", () => {
+  const spec = sessionToolSpecs({ mode: "default" }).specs.find((s) => s.function.name === "spawn_agent");
+  const params = spec?.function.parameters as {
+    properties: Record<string, { enum?: string[] } | undefined>;
+    required: string[];
+  };
+  expect(params.properties.mode?.enum).toEqual([...SPAWN_MODES]);
+  expect(params.required).toEqual(["task", "mode"]);
+  expect(params.properties.task).toBeDefined();
 });

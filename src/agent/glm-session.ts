@@ -215,6 +215,34 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         parameters: obj({}, []),
       },
     },
+    // M3 编排原语此前「可执行但不可见」：TOOLS.spawn_agent 早已运行时注入（agent-runner），
+    // 模型面却没有它的规格 ⇒ 主会话永远无法分解任务/派 worker（与 lsp 同类缺陷）。
+    // tier/model 故意不写 enum：权威校验在 orchestrator（clampTier + fail-visible 收窄），
+    // 在此再抄一份档位表就是两套真相漂移。
+    {
+      type: "function",
+      function: {
+        name: "spawn_agent",
+        description:
+          "派生子 agent 分担任务：read=只读调研，write=写盘实现（声明写租约），pipeline=多阶段依赖链，supervise=受限自环。worker 看不到本会话历史，task 必须自包含。",
+        parameters: obj(
+          {
+            task: { type: "string", description: "自包含任务书：目标 / 涉及文件 / 验收口径（mode=pipeline 时可空，由 stages 承载）" },
+            mode: { type: "string", enum: ["read", "write", "pipeline", "supervise"], description: "worker 档位" },
+            resources: { type: "array", items: { type: "string" }, description: "mode=write 的写租约 glob（与活跃写 worker 相交即拒）" },
+            stages: {
+              type: "array",
+              items: obj({ role: { type: "string" }, task: { type: "string" }, gate: { type: "boolean" } }, ["role"]),
+              description: "mode=pipeline 的阶段序列（批准后冻结，变更请求被拒）",
+            },
+            depends_on: { type: "array", items: { type: "string" }, description: "依赖的 agent_id（上游终态后才放行）" },
+            tier: { type: "string", description: "模型档位名（缺省走档位表路由；非法值 fail-visible 拒绝/钳制）" },
+            max_turns: { type: "integer", description: "worker 轮次上限" },
+          },
+          ["task", "mode"],
+        ),
+      },
+    },
     // M2d：记忆写入唯一入口（§8.1.4）；只读档随写向工具一并摘除
     {
       type: "function",

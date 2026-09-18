@@ -91,6 +91,10 @@ const SIDE_EFFECT_TOOLS: ReadonlySet<string> = new Set([
   "edit_file",
   "run_shell",
   "shell_rw",
+  // 派生 worker 会写盘且花真钱（并发预算 + token 代价）：计入写向 ⇒ 只读档从模型面一并摘除。
+  // 派生本身的审批在 orchestrator 按风险分级出卡（租约相交 / pipeline / supervise / merge）。
+  // 变异锚点：删掉本行 ⇒ session-tools「只读档随写向工具一并摘除」必红（实测）。
+  "spawn_agent",
 ]);
 
 export function isSideEffectTool(tool: string): boolean {
