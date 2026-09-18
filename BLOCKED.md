@@ -1,5 +1,13 @@
 # BLOCKED.md（待裁决清单）
 
+## 备案（2026-09-17，SoL-Pi A–D + R1–R3 收口轮）
+
+1. **typecheck 红门归因（非本轮缺陷）**：`pnpm typecheck` / `pnpm gates` 的唯一红因是并发工作流的未跟踪脚本 `scripts/tmp-proto-check.ts(5,65) TS5097`（allowImportingTsExtensions）。实测多次（`final-typecheck.log`、`typecheck-boundary-confirm.log`、两轮 gates），除该文件外零类型错误；不删不改不排除（属并发工作流文件，含 scratch 备份 `tmp-proto-check.ts.backup` SHA256=4930450544c3eb276486429d423d9f800303643fa936cf20ea0c210e918d1d05）。该红门在干净 worktree 下预期转绿，不为本轮扩大判据授权。
+2. **已授权 panels-check 判据修正（本轮唯一冻结判据修改）**：历史会话统计改用盘面事实（JSONL）替代 `#eventCount` 实时计数（语义保持实时计数器不变）；非空节点断言加 `>0`（避免「没渲染也 0<=300」恒真）；滚动判据改为净位移（scrollTop 实际移动）；审批观测改为「推送前启动 + 按 askId 匹配的首次可见」。理由与实现见 `scripts/panels-check.ts` 注释与 `outputs/repair-and-solpi-plan.md` R2 段；终局 `TERM=dumb pnpm panels-check` 退出码 0（含 131s 真实 Electron 相）， Approval 196ms/滚动 17ms 口径已在日志。
+3. **审查修复备案**（code-reviewer 42826978 + 二轮审计）：ledger `.index.tmp` 残留恢复（持锁下安全回收，符号链接 ELOOP 拒绝 + nlink 检查，回归 `tests/solpi-review-regression.test.ts`）；prune 收据前缀豁免删除（原始 shell 输出不可信，真实收据由 SolpiRuntime.project 在 computePrune 之后生成，`tests/solpi-receipt-integration.test.ts`）；evidence 状态对称校验；action-fusion 取消语义（取消→ok:false + fused_lint:failed，写入回执保留）；scheduler runNow/tick 准入互斥（cap=1 并发回归）；renderer 历史/实时流归因与代际守卫（同载荷重叠去重依赖 IPC 有序，已在 app.js 注明限制）；settings→IPC 补传 evidenceReceipts/economicCompaction（生产入口回归 `tests/session-tools.test.ts` 最后一例：两会话报告落盘 + metering.totals.requests>0）。solpi-runtime 私有目录 mkdir EEXIST 容忍（二次运行不再整组停用优化）。
+4. **真实模型未证项**：B1 计量为结构计量（字节/请求数/usage 形状），`offline-comparison.json` 为合成快照对照（byte-identical rerun），非真实模型收益；D 经济压缩未知 horizon/cache 恒 null、硬窗口兜底保留；优化默认关闭。真实 A/B、token/成本/正确率改善一律未证。
+5. **本轮核心失败记录**：core-integration fixer（20d14216）22 轮后失败无报告，agent-runner.ts 留截断行 1307，由主对话修复；其 solpi-runtime 集成（997–1016/1088–1098/1218–1224）复检可用。IPC 探针 fixer（64f65de7）被主对话 `ipc-min-probe.mjs`（真实 Electron CDP，5 断言 PASS）取代后停止。
+
 ## 裁决记录（2026-09-12，M4a 轮备案裁决；此前各轮见下方裁决记录节）
 
 1. **M4a-1「校验走 zod」白名单冲突** → **追认手写严格校验为标准**：主对话核实 automations.ts 校验强度（判别联合 + 顶层与 schedule 内未知字段拒绝 + tests/schedule.test.ts A 段矩阵判卷）与 zod 同等保证；zod 仅是 MCP SDK 的传递依赖（根包不可导入），不为此破轻依赖纪律。后续任务书「校验走 zod schema」一律按「严格 schema 校验（实现形式不限）」理解。
@@ -762,3 +770,51 @@ void writeTagsCache(dir, s.f, tags).catch(() => {});   // 即发即忘，未 awa
   那会把真实的缓存失效一起放过，正是本门要防的。
 - 附带可选：`NOISE_GLOBS`（`build.ts:16`）只排除 `.git/node_modules/dist/out`，
   **不排除 `outputs/`**；交付文档目录下的源码文件也会进符号地图。是否一并排除，请一并裁决。
+
+## 启动修复轮：panels-check 审批测量更正（待裁决）
+
+本轮只修复 `src/renderer/app.js` 启动未等待真实会话列表的问题，并新增独立 `tests/renderer-startup.test.ts`；不修改冻结验收脚本。
+
+历史记录中把 B2 的约 90 秒（本次基线 87039ms）当作渲染阻塞的独立佐证，证据不足，应撤回该归因：`scripts/panels-check.ts:291` 查询 `.card.ask[data-ask]`（已决记录），而待审批展示为 `#askPop[data-ask-id]`；B2 在 B1 多段等待结束后才观察，且 `:293–297` 忽略 tryWait 成败，把超时返回时刻也记为 tVisible。此值不是实际首次可见延迟。
+
+启动旧实现立即打开初始 mock s1，未等待真实列表；本轮 VM 回归执行真实 loadSessions 与启动片段，修复前因选择 s1 失败，修复后延迟成功、空列表、加载失败与用户已选场景通过。这是启动逻辑证据，不代替 Electron 端到端证据。
+
+请裁决允许后续修订 `scripts/panels-check.ts`：明确选中压测会话并验证回放完成；使用会话级而非实时运行计数；中段节点须非零且滚动须有实际位移；在注入前观察对应 askId 的待审批可见状态，分别报告未出现与真实延迟。保留原性能阈值，不伪造计数或钩子。既有全量同步渲染缺口仍成立，但其耗时须在有效测量后重新定量。本条未代表裁决通过。
+
+## 2026-09-17 目标约定裁决：panels-check 有限授权已执行
+
+用户批准 `.pi/goal/完成桌面-agent-修复与-sol-pi-a-d-优化及离线验收-20260917-2037.md`，仅授权本门历史统计、非空节点、实际滚动和匹配 askId 首次可见判据修正。上述「待裁决」现更新为已裁决，不扩展到其他冻结脚本。
+
+- `#eventCount` 保留实时运行计数语义，仅检查存在且为非负整数字符串；历史会话总量用压测 JSONL 的磁盘事实验证。
+- 历史节点检查非空且不超过原 300 上限；从中段真实 scrollBy，检查净位移（窗口化锚点校正不保证每一步单调），原 200ms 阈值不变。
+- 推送前开始观察 `#askPop:not([hidden])[data-ask-id="m1e-inject-ask"]`，与主进程 stdout sentAt 关联；不再把超时结束当首次可见，原 1000ms 阈值不变。
+- 实跑证据：scratch `goal-panels-r2b.log/.exit`，exit=0，scroll max 17.0ms、审批 196ms、observerStartedBeforePush=true。全量 `goal-gates.log` 中 panels-check exit=0。
+
+### 并发工作流边界阻塞：全仓 typecheck
+
+`scripts/tmp-proto-check.ts` 是并发工作流在飞文件，不移动、不删除、不注释、不加入 tsconfig 排除。`TERM=dumb pnpm exec tsc --noEmit` 于本轮复查仍报该文件 `(5,65) TS5097`，其余错误为零，证据 scratch `goal-tsc-selfcheck.log`。本轮 evidence 的 TS2352 已修复，prune 原有函数经 git diff 确认完整保留；`tests/evidence.test.ts` 实跑 3 passed、`pnpm prune-check` exit=0。全仓 typecheck 仍记未满足，不将环境/并发阻塞算通过。
+
+
+## 收口轮备案（2026-09-18，M7 簇入库 + 能力 4）
+
+### 未证（要求裁决，不改代码去绕）
+
+1. **default 档「派生只读 worker」是否必须出确认卡**——现状：`spawn_agent` 已进模型可见面，
+   写向集合分类只保证**只读档摘除**；`auto`/`workspace-write` 档与 `default` 档的只读调研 spawn
+   都**不出卡即派生**（token 花费 + 占并发预算），风险分级卡只在 orchestrator 的
+   租约相交 / pipeline / supervise / merge 四处出。本轮试过在注入 handler 叠一张 blanket 卡，
+   实测 agents-check C 段 9 条全红后撤回。**缺什么证据**：需要产品口径（派生本身算不算高风险
+   操作）。要判红请给判据：期望哪一档、哪种 mode（read/write/pipeline/supervise）出卡。
+2. **worktree 探针对 run_shell 类测试不适用**（详见 PROGRESS 同轮条目）：`gated-tools` /
+   `runner-gates` 各有 1 条断言在**任何** fresh worktree 里红、主工作树绿，已排除三条误因。
+   影响：`outputs/m7-closure-constraints-2026-09-18.md` §5 收口清单第 3 条
+   （「worktree 实测 tsc + build + 全量 test」）作为**判据**有缺陷——它对纯静态面有效
+   （tsc 确实靠它抓到本轮 TS2493），对需宿主安装态的 run_shell 面必然假红。
+   **要求换判据**：worktree 只跑 `tsc --noEmit` + `build` + 非 run_shell 测试子集，
+   run_shell 类断言仍以主工作树 `pnpm gates` 为权威。本轮未据此改判卷，只立此条。
+
+### 结案（有实测理由）
+
+- **原「并发工作流边界阻塞：全仓 typecheck」条目已消失**：`scripts/tmp-proto-check.ts`
+  现已不存在（且从未被跟踪），`pnpm exec tsc --noEmit` 于 2026-09-18 实测 **0 错**。
+  该条记为已结案，不再算未满足项。

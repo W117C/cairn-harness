@@ -1117,3 +1117,64 @@
 - `spawnRace` 与路由快拒仍是「只有 scripts 调用方、无模型可见入口」（拍板 B 有意保持）。
 - 临时物核对：本轮/上轮的探针与 splice 脚本已全部删除（`scripts/.tmp*` 零命中，含本轮的 `.tmp-app.mts`）；`.tmp/` 是门禁与审计的运行目录（git 已忽略，`git status` 无条目），非待清理残留；早前记的 `.tmp/jc3.ts` 实测已不存在，此条按实测更正。
 
+
+## M7：影响面分析（impact 层，2026-09-15 开工）
+
+### 开工回执（≤10 行）
+- 目标：每次代码编辑后自动算跨文件影响面（谁在调用我刚改的东西），impact_report 事件回传模型——改代码自带波及半径。
+- 顺序：任务 0 清 socket+提交 M6+三数字复验 → 1 src/agent/impact/（tree-sitter 调用边 + mtime/size 增量 + 应用目录缓存）→ 2 src/tools/impact.ts（注册表第 10 个工具，32KB 上限）→ 3 loop.ts 编辑后算影响面发事件+降级 → 4 scripts/impact-check.ts + 判卷冻结 + manifest 登记。
+- 复用：map/parse.ts 的 grammar 加载与失败缓存、map/build.ts 的 tags 增量模式；verify.ts 的 ExecFn 注入是同类接口先例。
+- 最大风险①：tree-sitter 对 js/jsx/ts 跨文件解析的调用点抽取精度 → mini-repo 判卷定死调用集，增量只动变更文件。
+- 最大风险②：loop 钩子必须 fail-safe（impact 抛错不崩 loop、不发事件）→ 降级同 map 的纪律。
+- 最大风险③：坏 wasm 要 fail-loud（文案含 unavailable），不许静默降级。
+- 地雷预案：跑门禁前 find .codegraph -type s，有 socket 先 mv 出仓库。
+- 边界：零 UI、零新依赖、agent-plan.md 零 diff、判卷文件进 frozen-sha256.json 后不得再改。
+
+## 收口轮：M7 簇入库 + 判卷冻结补漏 + 能力 4 编排原语接进模型面（2026-09-18）
+
+不新开里程碑，只做两件事：把在飞的 M7/SoL-Pi 原子簇落库（HEAD 自洽），并补上主会话
+「无法分解任务」这一处能力缺口。全程零新依赖、零 UI、`agent-plan.md` 零 diff。
+
+- **收口前基线实测**：`TERM=dumb CODEBUDDY_SAFE_DELETE_BULK_STATE_DIR= pnpm gates` =
+  **绿 29 / 29，红 0**（含 mutate-verify 119.8s、panels-check 132.1s；断言体检零命中；
+  清单漂移校验通过）。⚠️ 另有 9 项因联网/凭据未证，不宣称「全部通过」。
+  前置：跑门禁前把 `.codegraph/daemon.sock` mv 出仓库（AGENTS.md 地雷预案），跑完移回。
+- **落库 3 笔**：`860d6b4`（63 文件 +6009/−217，8 个未跟踪模块 + 6 个耦合已跟踪文件同笔，
+  按 `outputs/m7-closure-constraints-2026-09-18.md` §2 的依赖图，拆开必致 HEAD 悬空）→
+  `9202164`（撤销误扫，见下）→ `1db73d1`（能力 4）。中间并发会话落了 `d063003`（R1a 前端）。
+- **M7 遗漏的判卷冻结已补**（收口清单第 5 条）：`fixtures/impact/**` 是 `tests/impact.test.ts`
+  的冻结靶子，其文件头注释自称「sha256 冻结」，但 `src/frozen.ts` 的判卷区**从未含它**——
+  改判卷等于作弊却抓不住。现已纳入 areas + 5 个哈希入表，gate-check 的 H7 双向一致断言随之生效。
+  反向验证：给 `expect-edges.json` 追加一个空格 ⇒ `sha256MatchesFrozen = {ok:false,
+  broken:"fixtures/impact/expect-edges.json"}`；还原 ⇒ `{ok:true}`。实测
+  `drift onDiskNotInTable=[] inTableNotOnDisk=[]`。
+- **实踩并纠正：目录级 `git add` 在并发会话下会扫进别人刚落盘的文件**。本轮 `git add tests`
+  把并发前端会话在**门禁进行中**（typecheck 步跑完后的 20:46）新建的
+  `tests/renderer-panels-real-data.test.ts`、`tests/panel-data.test.ts` 一并扫进 HEAD，
+  后果用 `git worktree add --detach HEAD` 隔离实测：tsc 报 TS2493、该测试 2 failed（它依赖
+  同会话尚未提交的 `app.js` 接线）⇒ **HEAD 双红**。修法 `git rm --cached` 两个文件、
+  工作树原样保留。规则：**并发环境下收口一律 `git add <显式文件列表>`**，且提交后必做
+  worktree 复验（AGENTS.md「提交前相交检查」的加强版——原条目只防「改别人的」，没防「扫别人的」）。
+- **worktree 复验结论（如实）**：clean HEAD `tsc --noEmit` **exit 0**；`tests/agents.test.ts`
+  的 worker 工具表 `lsp` 断言随簇入库转绿。但 `tests/gated-tools.test.ts` / `tests/runner-gates.test.ts`
+  在**任何** fresh worktree 里都红（各自 1 条，断言点是 `shells[0]?.ok`），主工作树里 4/4 绿。
+  已排除三条误因：不是 gitignored 靶子文件（拷进 `fixtures/mock/todo-bug.ts` 仍红）、
+  不是 /tmp 路径的 Seatbelt 限制（挪到工作区内 `.tmp/hverify` 同样红）、不是簇没提交全
+  （两文件在主树跑绿）。归因指向 worktree 缺宿主本地安装态（`node_modules` 是符号链接、
+  fixture 无自身 `node_modules`，`run_shell` 真实执行那一拍跑不起）。
+  **判读**：`pnpm gates` 的 `test` 门在主工作树跑，是权威面；worktree 探针对本仓库的
+  run_shell 类测试不适用——写新收口清单前先把这条算进去，别再拿 worktree 红当代码回归。
+- **能力 4（长程规划）真缺陷**：`spawn_agent` 在执行面（`agent-runner.ts` 运行时注入）却不在
+  模型可见面（`gateToolSpecs`/`sessionToolSpecs`/`toolTableFor` 三处均无规格）⇒ 交互主会话
+  **永远无法派 worker / 分解任务**，M3 编排只在 scripts 与调度器路径验收过。与 A-1 修掉的
+  `lsp` 是同一类「可执行但不可见」。现已补规格（`mode` 枚举直接引用 `SPAWN_MODES` 常量防两套
+  真相漂移；`tier/model` 故意不写 enum，权威校验留在 orchestrator 的 clampTier + fail-visible），
+  并计入 `SIDE_EFFECT_TOOLS`（只读档摘除的唯一依据）。深度闸不受影响：worker 侧仍在构造时
+  摘除 `spawn_agent`（`tests/agents.test.ts` 两条 + agents-check B4 仍绿）。
+- **试过并撤回的做法（证据留在代码注释）**：在注入 handler 里叠一张 default 档 blanket 审批卡
+  ⇒ agents-check C 段 9 条全红（连只读调研 spawn 都被拦，worker 派不出来），且与 pipeline /
+  supervise 既有卡重复。派生审批的正确归处是 orchestrator 的风险分级出卡（租约相交 /
+  pipeline / supervise / merge 四处 `approval_requested`，`tests/m3b.test.ts:276` 已钉）。
+- 本轮验证（逐道 exit 0）：typecheck、test 85 files/808 passed、agents-check 252✅/0❌、e2e、
+  ipc:check、autonomy-check、tools-check、sidechat-check、supervisor-check、security-check、
+  gate-check（含 H7 冻结双向一致）。变异锚点双向实测（删 `"spawn_agent"` ⇒ 只读摘除断言必红）。
