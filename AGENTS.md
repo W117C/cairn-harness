@@ -86,8 +86,13 @@ React 树仍在磁盘上（`cards/`、`components/`（29 个 shadcn/ui 文件）
   **教训**：删一个被 commit 代码引用的模块时，必须同提交带上「新定义位置 + 所有 importer 改指 +
   依赖/构建配置变更」；用 `git worktree add <tmp> HEAD` + `tsc --noEmit` 实测可一次性抓全。
   ⚠️ **HEAD 仍有 3 个已提交测试失败**（`agents` / `gated-tools` / `runner-gates` 各 1，
-  均为「run_shell/write_file 门接线」类行为断言），在动手前的 `89ef69d` 就已存在——
-  修它们的源码改动属 M7 在飞未提交部分，**不是本轮引入**；工作树里是绿的。
+  均为「run_shell/write_file 门接线 / lsp 入工具表」类断言），在动手前的 `89ef69d` 就已存在，
+  **不是本轮引入**。worktree 隔离实验已精确归因（逐文件换入工作树版本跑同一组测试）：
+  换入未提交的 `src/main/agent-runner.ts`（M7，+314 行）⇒ gated-tools + runner-gates 立刻转绿；
+  剩 agents.test.ts 的 1 个（worker 工具表缺 `lsp`）需 `src/tools/base.ts` 的 `"lsp"` 联合类型 +
+  工具表接线（`src/tools/lsp.ts` 模块本身已提交，接法未提交）。
+  ⇒ 本质是**测试先于 M7 实现提交**，属正常在飞状态；掐头去尾地单独提交实现会破坏 M7 改动的完整性，
+  故留位。工作树里 81 文件 756 测试全绿。判读：M7 收口时这 3 个自然转绿。
   同轮另一纯卫生修复：`orchestrator.ts:2644` 对 `./memory/inject` 的 `await import` 是无效动态导入
   （该模块同文件 38 行已静态导入，且 inject.ts 不反向依赖 orchestrator，无循环依赖）→ 改用静态绑定，
   消掉构建的 `INEFFECTIVE_DYNAMIC_IMPORT` 告警（typecheck / build / 737 测试 / panels-check 复验全绿）。
