@@ -32,6 +32,22 @@
 抽样复核：`tsFill` / `think-block-1` / `riskCard` / `runStatusLive` 四者全仓零引用，是**真死标记**；
 其中 `#runStatusLive` 是「运行状态」live region 却无人写——归 R2（运行态呈现未接线），不在本轮。
 
+## 1.1 条文依据（逐条标明管辖范围，防越权引用造新矛盾）
+
+权威 = `agent-plan.md` §10.1 布局定稿（AGENTS.md 钦定唯一权威方案）。三轮旧设计文档
+（`ui-v3-forge` / `frontend-refactor` / `desktop-optimize`）已于 T4 降为存档，
+**其色值/令牌/尺寸不得再当依据**。
+
+| 项 | 依据 | 是否条文直接辖 |
+|---|---|---|
+| R1a（已落库 `d063003`） | §10.1 第 4 条后半句「同一事件流的两个视图，不产生第二事实源」 | **是，直接适用**——抽屉挂演示常量即第二事实源 |
+| B1 删重放桩 | §10.1 第 4 条**前半句**「对话流是全部卡片的默认宿主」：15 类事件（含 P0 的 `error`）在流里无宿主；叠加实测「live/replay 对同一事件流给出不同呈现」 | **部分**——条文管数据视图，live/replay 属同一视图的两个时刻，此处是**类推**，不是直接辖 |
+| B2 空态 2→1 | 用户 2026-09-18 减法指令 + 可判定量（R1a 自欠的重复） | **否，无条文**——纯实现重复 |
+| B3 折叠 4→2 | 同上（实测 4 份实现） | **否，无条文**——纯实现重复 |
+
+⇒ 本 spec 不写「依据 §10.1 第 4 条」于 B1/B2/B3 的条目头上冒充条文辖内项；
+把条文用在它真管的地方（R1a 与「卡片必须有宿主」），其余以**复跑实测数 + 用户指令**为据。
+
 ## 2. 红线：钩子白名单（本轮不得断任何一条的生产者）
 
 `#eventCount` `#settingsOpen` `#settingsOverlay` `#drawer` `#drawerToggle` `#qcGit`
@@ -119,8 +135,11 @@ function renderEvent(e)                              // live：定位/新建当�
 - `createElement('details')` 那份随 B1 的 `renderHistoryRow` 一并删除；
 - `data-card-toggle` 与 `data-tool-toggle` 合并为**一个**处理器与**一个**属性名，
   属性名保留 `data-tool-toggle`（门禁断言 `[data-tool-toggle] ≥ 1`，改名即断链）；
-- 形态不变：仍是 `button + hidden`。**不引入 `<details>`/`<dialog>`/`popover`**——换原生件属"定形态"，
-  按用户 2026-09-18 约束本轮不做，只出清单（见 §8）。
+- 形态不变：仍是 `button + hidden`。**不引入 `<details>`/`<dialog>`/`popover`** —— 理由**不是**「不许定形态」：
+  §10.1 第 7 条其实**已经**把设置页形态定为「模态（Claude Desktop 同款），不占面板位」，
+  所以换原生 `<dialog>` 只是实现替换而非形态决定。本轮不换的真实理由是 ①**白名单钩子依赖**
+  （`#settingsOverlay` / `#drawer` / `#drawerToggle` 的生产者就挂在手写结构上）
+  ②**范围**：R1b 是机制减法（渲染器/空态/折叠份数），不是控件替换。见 §8。
 
 ## 6. 测试与验收（TDD 顺序）
 
@@ -146,7 +165,7 @@ B1/B2/B3 各自独立提交（同分支内三笔），任一笔红即可单独 r
 
 | 项 | 实测规模 | 为何不做 |
 |---|---|---|
-| 设置弹窗/风险遮罩换 `<dialog>` | `<dialog>`=0、`popover`=0，两处手写 overlay | **双重理由**：① 用户 2026-09-18 约束「暂不定形态」；② `#settingsOverlay` / `#drawer` / `#drawerToggle` 等**白名单钩子的生产者**正挂在这两处手写结构上，迁移即动判据面。⇒ 下一轮不得单凭「Chromium 152 原生件是免费减法」重提，须先解钩子依赖 |
+| 设置弹窗/风险遮罩换 `<dialog>` | `<dialog>`=0、`popover`=0，两处手写 overlay | ①**白名单钩子依赖**：`#settingsOverlay`/`#drawer`/`#drawerToggle` 的生产者就挂在这两处手写结构上，迁移即动判据面；②**范围**：R1b 是机制减法不是控件替换。注意「用户约束不许定形态」这条理由**不成立**——§10.1 第 7 条已把设置页定为「模态」，换 `<dialog>` 只是实现替换。⇒ 下一轮若要提，须先解钩子依赖，别拿 Chromium 152 当理由 |
 | 内联 SVG 收 sprite | `<svg viewBox>` 共 **106 处**（app.js 47 + index.html 59）。但 app.js 侧集中在 `ICONS` / `TOOL_ICONS` / `MSG_ICONS` 表里（定义后复用），**真重复面 = `index.html` 静态标记 59 份与 JS 表各写一份** | 收益大但改动面铺满全渲染层，且要先决定 sprite 形态，需单独立项 |
 | 孤儿 id 清理 | 101 个 id 中 **37 个疑似无引用（上界）**，抽样确认真死 4 个（`tsFill`/`think-block-1`/`riskCard`/`runStatusLive`） | 需逐个甄别（`aria-describedby` 类是活锚点），误删即污染判据；`#runStatusLive` 属运行态未接线，归 R2 |
 | `WORKSPACES` / `BRANCHES` 真化 | 仍驱动工作区切换器与分支面板 | R2 范围，需连 IPC |
