@@ -1,6 +1,5 @@
 import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "node:path";
-import react from "@vitejs/plugin-react";
 import { defineConfig } from "electron-vite";
 
 // 产物路径固定为 out/main/index.js、out/preload/index.js、out/renderer/index.html（任务 1 验收锚点）。
@@ -26,7 +25,6 @@ export default defineConfig({
   },
   renderer: {
     plugins: [
-      react(),
       tailwindcss(),
       // I8（审查 P2）：prod CSP 收紧——renderer 与主进程走 IPC、无出网需求，裸 `ws:`
       // 允许连任意 WebSocket 主机；dev 下 HMR 需要 ws:，故只对 build 产物移除。

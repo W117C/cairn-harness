@@ -1,13 +1,12 @@
-// M2f 单测：注册表 +1（面板 sidechat / 卡片 promote）+ 未知类型兜底 + 只读白名单 +
-// 主会话只读投影（20 轮窗口 / 摘要产物 / 截断）+ /promote（origin 四字段 + 输出扫描 + 反向投影）。
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+// M2f sidechat 单测（React-free 重建版）：原 tests/sidechat.test.ts 随 React 树归档被删，
+// 但它只有前 3 条测面板/卡片注册表（已随 panels/registry.tsx 归档，不再适用）；
+// 其余 ~15 条测的是**核心 agent 逻辑**——只读白名单、独立 JSONL 归属、20 轮窗口/摘要投影、
+// @path 提取与工作区 fail-closed、/promote 端到端、usage 分解、预算压缩。
+// 本文件恢复后者（否则 src/agent/sidechat 全仓库零单测覆盖）；注册表/SSR 部分不重建。
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { FallbackPanel, KNOWN_PANEL_IDS, resolvePanel } from "../src/renderer/panels/registry";
-import { FallbackCard, KNOWN_CARD_TYPES, resolveCard } from "../src/renderer/cards/registry";
 import {
   EMPTY_SIDECHAT_USAGE,
   mergeTokenProjections,
@@ -41,41 +40,6 @@ async function mkTmp(): Promise<string> {
 }
 afterEach(async () => {
   for (const d of tmpDirs.splice(0)) await rm(d, { recursive: true, force: true });
-});
-
-describe("M2f 注册表（各 +1 类 + 未知兜底）", () => {
-  it("面板注册表 +1：含 sidechat，且未知 panel_id 仍落兜底", () => {
-    expect(KNOWN_PANEL_IDS).toContain("sidechat");
-    expect(KNOWN_PANEL_IDS.length).toBe(8); // M3a：+agents；M4a：+schedule
-    expect(resolvePanel("sidechat")).not.toBe(FallbackPanel);
-    expect(resolvePanel("bogus_m2f")).toBe(FallbackPanel);
-    expect(() => resolvePanel("bogus_m2f")({ payload: {} })).not.toThrow();
-  });
-
-  it("卡片注册表 +1：含 promote，且未知 card_type 仍落兜底", () => {
-    expect(KNOWN_CARD_TYPES).toContain("promote");
-    expect(KNOWN_CARD_TYPES.length).toBe(10); // M3a：+agent_card
-    expect(resolveCard("promote")).not.toBe(FallbackCard);
-    expect(resolveCard("bogus_m2f_card")).toBe(FallbackCard);
-  });
-
-  it("promote 卡 SSR 冒烟：origin 四字段（session/源事件/note）可见，跳回源消息按钮在场", () => {
-    const html = renderToStaticMarkup(
-      createElement(resolveCard("promote"), {
-        payload: {
-          type: "promote",
-          content: "结论：completedCount 需要过滤 done。",
-          origin: { kind: "sidechat", session_id: "旁路调查", source_event_ids: [2, 4], note: "来自旁路" },
-        },
-      }),
-    );
-    expect(html).toContain("来自 sidechat");
-    expect(html).toContain("旁路调查");
-    expect(html).toContain("#2");
-    expect(html).toContain("#4");
-    expect(html).toContain("来自旁路");
-    expect(html).toContain("跳回源消息");
-  });
 });
 
 describe("M2f sidechat 只读白名单（工具表摘除）", () => {
