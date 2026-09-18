@@ -95,7 +95,7 @@ describe("license V1（Ed25519 离线验签）", () => {
     expect(verifyLicense({ signature: "abc" }).state).toBe("invalid");
     expect(verifyLicense({ licensee: "a" }).state).toBe("invalid");
     const lic = signedLicense("a", null);
-    expect(verifyLicense({ ...lic, extra: 1 }).state).toBe("invalid");
+    expect(verifyLicense({ ...lic, extra: 1 }, { publicKey: PUBLIC_KEY_B64 }).state).toBe("invalid");
     expect(verifyLicense({ licensee: "a", expires_at: "明天", signature: "abc" }).state).toBe("invalid");
   });
 
