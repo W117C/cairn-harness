@@ -232,7 +232,12 @@ function showEmptyStream() {
   transcriptOpen = false;
   streamInner.innerHTML = CHAT_EMPTY_HTML;
   const back = $('#backToLast');
-  if (back) back.addEventListener('click', () => { selectSession(selectedId, true); });
+  // 按调用时解析 selectSession / sessions（与 P0 修 send 同一教训：按值捕获会拿到演示版）。
+  if (back) back.addEventListener('click', () => {
+    const target = selectedId || (sessions[0] && sessions[0].id) || null;
+    if (target) void selectSession(target, true);
+    else toast('没有可返回的会话');
+  });
 }
 function restoreTranscript() {
   transcriptOpen = true;
@@ -1709,7 +1714,7 @@ function clearFileHighlight() {
   if (activeFileDoc) { activeFileDoc = null; renderSide(); }
 }
 function followCard(card, collapsed) {
-  const head = card.querySelector('[data-card-toggle]');
+  const head = card.querySelector('[data-tool-toggle]');
   const kind = head && head.dataset.card;
   if (!kind || !TOOL_VIEW[kind]) return;
   if (collapsed) {
@@ -1724,32 +1729,18 @@ function followCard(card, collapsed) {
     openView(TOOL_VIEW[kind]);
   }
 }
+/* 折叠的唯一实现（R1b B3）：一个委托处理器 + 一个属性名 data-tool-toggle。
+   此前是两套并存——卡片认 data-card-toggle、工具认 .ti-head/.tg-head 类名——
+   同一职责两份代码，改一处忘另一处就是 F4 从 4 降到 2 之后仍会回涨的路径。
+   容器用就近匹配：工具项 ⊂ 工具组、卡片独立；组头不在 .tool-item 内故不会串扰。 */
 document.addEventListener('click', e => {
-  const head = e.target.closest('[data-card-toggle]');
+  const head = e.target.closest('[data-tool-toggle]');
   if (!head) return;
-  const card = head.closest('.card');
-  if (!card) return;
-  const collapsed = card.classList.toggle('collapsed');
+  const box = head.closest('.tool-item, .card, .toolgroup');
+  if (!box) return;
+  const collapsed = box.classList.toggle('collapsed');
   head.setAttribute('aria-expanded', String(!collapsed));
-  followCard(card, collapsed);
-});
-/* 工具调用组的两级折叠：先判内层（单个工具），再判外层（整组），互不串扰 */
-document.addEventListener('click', e => {
-  const tiHead = e.target.closest('.ti-head');
-  if (tiHead) {
-    const item = tiHead.closest('.tool-item');
-    if (!item) return;
-    const collapsed = item.classList.toggle('collapsed');
-    tiHead.setAttribute('aria-expanded', String(!collapsed));
-    return;
-  }
-  const tgHead = e.target.closest('.tg-head');
-  if (tgHead) {
-    const g = tgHead.closest('.toolgroup');
-    if (!g) return;
-    const collapsed = g.classList.toggle('collapsed');
-    tgHead.setAttribute('aria-expanded', String(!collapsed));
-  }
+  if (box.classList.contains('card')) followCard(box, collapsed);
 });
 
 render();
@@ -1918,21 +1909,7 @@ render();
       rc = prev;
     }
     const first = frag.querySelector('.msg');
-    return first || openEmptyHistoryMsg();
-  }
-  /** 单元里没有任何可见产物（理论上不该发生）时的诚实空壳——不静默吞事件。 */
-  function openEmptyHistoryMsg() {
-    const m = document.createElement('div');
-    m.className = 'msg ai';
-    m.dataset.history = '';
-    const body = document.createElement('div');
-    body.className = 'msg-body';
-    const note = document.createElement('div');
-    note.className = 'ai-text dim';
-    note.textContent = '（该事件无可呈现内容）';
-    body.appendChild(note);
-    m.appendChild(body);
-    return m;
+    return first;
   }
 
   /* ---------- 会话列表 ---------- */
@@ -2252,7 +2229,7 @@ render();
           '<li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg><span>' +
           esc((f.action || '') + ' · ' + f.path) + '</span></li>').join('');
         c.innerHTML =
-          '<button class="card-head" type="button" data-card-toggle data-card="plan">' +
+          '<button class="card-head" type="button" data-tool-toggle data-card="plan">' +
             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/></svg>' +
             '执行计划 <span class="tag">待确认</span>' +
             '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>' +
@@ -2371,7 +2348,7 @@ render();
     const head = document.createElement('button');
     head.className = 'card-head';
     head.type = 'button';
-    head.setAttribute('data-card-toggle', '');
+    head.setAttribute('data-tool-toggle', '');
     head.setAttribute('aria-expanded', 'false');
     head.textContent = title;
     const body = document.createElement('div');
@@ -2513,7 +2490,7 @@ render();
     const scopeLabel = (ASK_SCOPES.find(s => s.v === scope) || ASK_SCOPES[0]).l;
     const argsH = askArgsHtml(p);
     c.innerHTML =
-      '<button class="card-head" type="button" data-card-toggle aria-expanded="false">' + ASK_ICON +
+      '<button class="card-head" type="button" data-tool-toggle aria-expanded="false">' + ASK_ICON +
         '<span class="ask-tool">' + esc(p.tool) + '</span>' +
         '<span class="tag">' + (approved ? '已批准' : '已拒绝') + ' · ' + scopeLabel + '</span>' + ASK_CHEV +
       '</button>' +
@@ -2725,7 +2702,7 @@ render();
       clearTranscript();
       real.id = null;
       selectedId = null;
-      streamInner.innerHTML = CHAT_EMPTY_HTML;
+      showEmptyStream();
       $('#chatTitle').textContent = 'Forge';
       toast('已删除会话');
     } else {
@@ -2766,6 +2743,9 @@ render();
     const loaded = await loadSessions();
     // Never select the prototype list, or replace a session opened during loading.
     if (loaded && !real.id && sessions.length) await selectSession(sessions[0].id, true);
+    // 零会话时必须清掉 index.html 里那段演示对话——否则首次启动看到的是
+    // 「假对话」而不是空态（与 R1a 删 REVIEW/终端 seeds 同一判据：假象比空白更坏）。
+    else if (loaded && !real.id && !sessions.length) showEmptyStream();
   })();
   syncStatusbar();
   void initSandboxState();
