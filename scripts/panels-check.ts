@@ -273,6 +273,17 @@ async function phaseElectron(root: string): Promise<void> {
     const domCount = await cdp.eval<number>(`document.querySelectorAll('.stream-inner > .msg[data-history]').length`);
     ok(domCount > 0 && domCount <= 300, "虚拟化挂载：状态 10000 条，DOM 消息节点 " + String(domCount) + " ∈ (0, 300)");
 
+    // 打开会话必须落在末尾：这是 showHistory 的 scrollStream(true)（结构性重挂 = 强制跟随）
+    // 唯一被量的地方。R1b B1 把重放收敛进单一渲染器后，这条路径由 buildUnit 产出，
+    // 一旦 force 丢失，用户重开会话会停在顶部且门上一路无人发现。
+    const landed = await cdp.eval<{ gap: number; h: number }>(`(() => {
+      const sc = document.querySelector('.stream');
+      if (!sc) return { gap: -1, h: 0 };
+      return { gap: sc.scrollHeight - sc.scrollTop - sc.clientHeight, h: sc.scrollHeight };
+    })()`);
+    ok(landed.h > 0 && landed.gap >= 0 && landed.gap <= 1,
+      "打开会话后视图落在末尾（距底 " + landed.gap.toFixed(1) + "px ≤ 1，scrollHeight " + String(landed.h) + "）");
+
     const stressLines = (await readFile(pathOf(root, stressId), "utf8")).trim().split("\n").length;
     ok(stressLines === 10_000, "会话级统计（磁盘事实源）：压测会话 JSONL 行数 = 10000（实测 " + String(stressLines) + "）");
     const sessSel = '.session[data-id="' + stressId + '"]';

@@ -71,6 +71,9 @@ export function mountHistory({ container, scroller, units, renderUnit }) {
   function draw() {
     frame = 0;
     if (disposed) return;
+    // 用户是否贴在底部：测高回修会改变总高度，若不记住这个状态，"打开会话落在末尾"
+    // 会在第一次测高后被挪走（实测万条会话停在距底 88.5px，最后一条消息被切一半）。
+    const wasAtBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 1;
     const base = origin(), top = Math.max(0, scroller.scrollTop - base);
     const anchor = windowRange(offsets, top, 0, 0).start;
     const oldAnchor = offsets[anchor] || 0;
@@ -100,7 +103,7 @@ export function mountHistory({ container, scroller, units, renderUnit }) {
       if (node.nextSibling !== next) container.insertBefore(node, next);
       next = node;
     }
-    scroller.scrollTop = correctedTop;
+    scroller.scrollTop = wasAtBottom ? scroller.scrollHeight : correctedTop;
     if (changed) schedule();
   }
   scroller.addEventListener('scroll', schedule, { passive: true });
