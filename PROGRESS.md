@@ -1301,3 +1301,28 @@ A3（`api.X` 拼写防线）刻意不做——`api` 只是 `window.agent` 的局
 A1 剩余两半**待用户拍板**（不偷做）：① Anthropic `cache_control` 写侧断点 + `composeTurnMessages`
 稳定前缀重排（记忆按轮检索、地图每 N 轮重算都排在整段历史之前，任一变动即打断含历史的前缀——
 重排会改模型看到的内容顺序，属产品决策）；② `pricing` 缓存价列（该文件自陈价格为占位、须联网实测）。
+
+**用户裁决后 A1 写侧已落（`27cadba` + 锚点 `33062fb`）**：断点按裁决「只标静态段、不动排布」——
+Anthropic `cache_control` 打在 ① 末个 tool（会话内工具表逐字不变，唯一纯静态段）
+② system **首块**=基础提示。刻意不给整串 system 打点：记忆按轮检索 + 地图每 N 轮重算都拼在
+system 里，打点等于每次变动重写一条大缓存条目（写价 1.25×），比不打更贵——这条推理被
+`anthropic-breakpoint-on-last-system-block` 锚点钉住（挪到末块必红）。
+开关 `promptCache` 缺省 false，且**接到底**：settings → orchestratorExtras（开了缓存却没开路由
+给一条 warn，不静默零效果）→ OrchestratorOptions → 路由分支 `toWorkerModel(spec,{promptCache})` → 适配器。
+可达性用真 Orchestrator + 真路由 + 全局 fetch 桩证明（只看发出的字节），因为「函数对、调用点断线」
+是本轮 `orchestrator-prompt-cache-not-plumbed` 锚点专门罚的形态。
+价格面按第二条裁决：`ModelPrice` 加 `cacheReadPerMTok`/`cacheWritePerMTok`，12 档全 null = **待联网实测校准**
+（不编数），`uncalibratedCachePrices()` 让「待校准」成为可审计清单；`costUsd` 分桶计价，
+未标定时回落输入价上界 ⇒ 与今天逐字同值（零回归），标定一处即该档转精确。
+一条变异存活（`pricing-cache-buckets-unclamped`）逼出测例升级：拿未标定表测钳制是**无分辨力**的
+（读桶按输入价计，钳与不钳同值），换已标定表断精确值才杀得掉。
+
+**顺带修了一条 HEAD 级门红（`7168f0f`）**：`pnpm test` 在 `3fe672d`+`4afcee9` 之后
+打印「906 passed」却 exit=1 —— `tests/renderer-startup.test.ts` 用 vm 跑 app.js 的两段切片，
+R1b 在启动切片里新增了对 `showEmptyStream()` 的调用，函数在切片外、桩也没补 ⇒ 未捕获拒绝。
+只补一条 `vi.fn()` 桩，四条断言一字未改。**备案给渲染层**：这类「切片 + vm」测对 app.js 的
+函数作用域是隐式依赖，每在切片里新增一次跨段调用就得同步补桩，否则以「断言全绿、门红」复发。
+
+本轮验证（HEAD 态 `33062fb`）：typecheck 0 错；全量 `test` 95 files/**908 passed** exit 0；
+全表 `mutate-verify` **102/102 全杀** exit 0。留位：`promptCache` 尚无渲染层开关
+（`app.js` 归 R1b，与底栏 token 展示同一格一起做）；缓存价待联网实测校准。
