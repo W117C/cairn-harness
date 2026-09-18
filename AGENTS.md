@@ -17,7 +17,7 @@ Node 22 / TypeScript 5 / electron-vite 5 / Electron 44 / vitest 5。
 
 **渲染层是手写 vanilla，不是 React**：`src/renderer/index.html`（单文件，全部 CSS 在一个 `<style>` 里 + 静态标记）+ `src/renderer/app.js`（纯 ESM）。**没有 React、没有 Tailwind 运行时、没有 shadcn 运行时**（CSP `script-src 'self'`，`index.html` 无构建链）。
 
-React 树仍在磁盘上（`cards/`、`components/`（29 个 shadcn/ui 文件）、`hooks/`、`lib/`、`panels/`、`store.ts`、`theme.ts`、`conversation.tsx`、`onboarding.tsx`）但**不是发货路径**，正在逐项归档：`main.tsx` / `styles.css` / `error-boundary.tsx` 已删。**例外：`src/renderer/projections.ts` 仍被 `scripts/panels-check.ts` 消费，不是死代码。** 归档前置是先把 `message-scroller` 的虚拟化能力移植到 vanilla（判定表见 `outputs/frontend-refactor-2026-09-17/03-refactor-design.md`）。
+React 树已全量归档（2026-09-17 删 45 个 .tsx/测试 + 移除 react 全套依赖；2026-09-18 收尾删 `theme.ts`/`store.ts` 及其单测）：`cards/`、`components/`（29 个 shadcn/ui）、`hooks/`、`lib/`、`panels/`、`conversation.tsx`、`onboarding.tsx`、`main.tsx`、`styles.css`、`error-boundary.tsx` 全删。`src/renderer/` 现存 5 个文件：`index.html`、`app.js`、`projections.ts`（纯投影，被 panels-check/agents-check/sidechat-check 与多个测试消费，**不是死代码**）、`history-window.js`、`window.d.ts`（`window.agent` 类型胶水）。
 
 > 历史：技术栈一行曾写「React 19 / Tailwind CSS 4 + shadcn/ui」并当作现状——那是 vanilla 迁移**之前**的描述。迁移未提交期间两份说法并存过一段时间，2026-09-17 统一为上面这段。
 
@@ -46,7 +46,7 @@ React 树仍在磁盘上（`cards/`、`components/`（29 个 shadcn/ui 文件）
   **对 token 计数不要写裸数字断言**，否则是自造假红。
 - macOS 沙箱规则里的路径必须是 realpath（`/tmp` 实为 `/private/tmp`），否则规则静默失效。
 - shadcn CLI 的 init 不识别 electron-vite 布局（框架检测只认 vite.config.*）：组件用 components.json（style=radix-nova）+ `npx shadcn add <name> -y` 管理；改过生成组件时在文件头加 `// @shadcn-modified`。
-- renderer 的 CSP 是 `style-src 'self' 'unsafe-inline'`：dev 下 Tailwind 注入内联样式，收紧会被拦（构建产物是 <link> 文件，不受影响）。
+- renderer 的 CSP 是 `style-src 'self' 'unsafe-inline'`：`index.html` 的全部 CSS 是**单个内联 <style> 标签**（dev 与构建产物都内联，产物零独立 CSS 文件），故 unsafe-inline 必须保留。Tailwind 插件与 `tailwindcss`/`@tailwindcss/vite`/`@fontsource-variable/geist` 三个依赖已随 React 归档删除（renderer 无 Tailwind 入口、构建零 CSS 产物，实测确认）。
 
 ## 判卷纪律
 

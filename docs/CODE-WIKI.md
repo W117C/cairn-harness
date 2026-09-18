@@ -272,15 +272,15 @@ docs/                m{2,3,4}-acceptance.md（三态验收表）+ audit + UI 截
 | 文件 | 职责 |
 |---|---|
 | ~~`main.tsx`（1485 行）~~ | **已删除**（vanilla 迁移）。原为主应用：布局、主题、onboarding、错误边界、token 面板 |
-| `conversation.tsx` | 会话流式渲染（assistant_delta 拼合、工具调用卡、审批入口） |
-| `store.ts` | 客户端状态（settings/sessions/state 快照缓存） |
+| ~~`conversation.tsx`~~ | 会话流式渲染（assistant_delta 拼合、工具调用卡、审批入口） | **已删除**（vanilla 迁移）
+| ~~`store.ts`~~ | 客户端状态（settings/sessions/state 快照缓存） | **已删除**（2026-09-18，纯 reducer 仅自测消费，不在发货路径）
 | `projections.ts` | 事件流 → 面板视图的纯投影（token/usage 聚合、sidechat 归因） |
-| `theme.ts` | 明暗主题（`color-scheme: dark` 精确一行，判卷锚点） |
-| `onboarding.tsx` | 新手引导（M4b §13 七组走通） |
+| ~~`theme.ts`~~ | 明暗主题（`color-scheme: dark` 精确一行，判卷锚点） | **已删除**（2026-09-18，主题已在 app.js 内联实现，零导入者）
+| ~~`onboarding.tsx`~~ | 新手引导（M4b §13 七组走通） | **已删除**（vanilla 迁移）
 | ~~`error-boundary.tsx`~~ | **已删除**（vanilla 迁移）。原为渲染错误兜底 |
-| `panels/registry.tsx`（1262 行） | 面板注册中心：会话、agents（worker 面板）、schedule（定时任务）、git/diff、记忆、插件、sidechat、设置、关于 |
-| `cards/` | 卡片族：agent-card（worker 状态）、clarify-form（澄清表单）、compaction-card、plan、promote、verify-result、registry |
-| `components/ui/` | shadcn/ui（radix-nova preset）组件，改过生成组件加 `// @shadcn-modified` 头 |
+| ~~`panels/registry.tsx`~~（1262 行） | 面板注册中心：会话、agents（worker 面板）、schedule（定时任务）、git/diff、记忆、插件、sidechat、设置、关于 | **已删除**（vanilla 迁移）
+| ~~`cards/`~~ | **已删除**（vanilla 迁移） |
+| ~~`components/ui/`~~ | **已删除**（vanilla 迁移） |
 
 ---
 

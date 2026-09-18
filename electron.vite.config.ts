@@ -1,4 +1,3 @@
-import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "node:path";
 import { defineConfig } from "electron-vite";
 
@@ -25,7 +24,6 @@ export default defineConfig({
   },
   renderer: {
     plugins: [
-      tailwindcss(),
       // I8（审查 P2）：prod CSP 收紧——renderer 与主进程走 IPC、无出网需求，裸 `ws:`
       // 允许连任意 WebSocket 主机；dev 下 HMR 需要 ws:，故只对 build 产物移除。
       {
