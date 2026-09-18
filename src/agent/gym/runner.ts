@@ -14,8 +14,9 @@ import { runLoop } from "../loop";
 import { runVerifyOutcome } from "../verify";
 import { changedFilesBetween, scoreCase } from "./score";
 import { copyRepoAndApply, gymTempDir, type GymCase } from "./case";
+import { probeAssembly, type AssemblyReport } from "./probe";
 
-export type GymModelKind = "scripted" | "real";
+export type GymModelKind = "scripted" | "real" | "probe";
 
 export interface GymCaseResult {
   caseId: string;
@@ -28,7 +29,14 @@ export interface GymCaseResult {
   eventsPath: string;
   sessionDir: string;
   forked: boolean;
+  /** 仅 `model: "probe"`：这次 run 的上下文装配账（可缓存 / 易变 system / 历史）。 */
+  assembly?: AssemblyReport;
 }
+
+/** 探针用的基线系统提示。注意：这是**探针自己的**固定串，不等于 app 的真实提示
+ *  （真实提示更长）⇒ 由此算出的 cacheableBytes 是可缓存前缀的**下界**。
+ *  要量真实装配就把 app 的 systemPrefix 传进 probeAssembly。 */
+export const GYM_PROBE_SYSTEM = "你是桌面编程 agent：先读再改，改完必验。";
 
 /** 明卷确定性 usage：按冻结剧本内容折算（input = 每行 JSON 字节/4，output = assistant 文本字符/4）。
  *  同剧本必同 usage——B1「同 case 两次跑逐字段一致」的 usage 面；剧本冻结，改剧本 = 改基线。 */
@@ -121,8 +129,16 @@ export async function runCase(c: GymCase, opts: RunCaseOptions): Promise<GymCase
   await copyRepoAndApply(c.repoDir, workDir, []);
   const eventsPath = join(sessionDir, "events.jsonl");
   const events = createEventLog(eventsPath);
-  const scriptPath = opts.model === "scripted" ? opts.resumeScript ?? join(c.dir, "script.jsonl") : null;
-  const provider = opts.model === "real" ? createRealGlmProvider(c.task) : createGymScriptedProvider(scriptPath!);
+  const scriptPath = opts.model !== "real" ? opts.resumeScript ?? join(c.dir, "script.jsonl") : null;
+  // 探针档：走真会话 provider（composeTurnMessages / 压缩 / 预算全在链上），只换掉出网 transport。
+  const probe = opts.model === "probe"
+    ? await probeAssembly({ caseId: c.id, eventsPath, workspace: workDir, system: GYM_PROBE_SYSTEM, scriptPath: scriptPath!, mode: "default" })
+    : null;
+  const provider = probe
+    ? probe.provider
+    : opts.model === "real"
+      ? createRealGlmProvider(c.task)
+      : createGymScriptedProvider(scriptPath!);
   await runLoop({
     provider,
     events,
@@ -131,7 +147,8 @@ export async function runCase(c: GymCase, opts: RunCaseOptions): Promise<GymCase
     userMessage: c.task,
     verify: { maxAttempts: 1, run: () => runVerifyOutcome(workDir) },
   });
-  return await computeResult(c, workDir, eventsPath, sessionDir, opts.model, scriptPath, false);
+  const result = await computeResult(c, workDir, eventsPath, sessionDir, opts.model, scriptPath, false);
+  return probe ? { ...result, assembly: probe.report() } : result;
 }
 
 /** 模式② 分叉重跑：从父会话事件点 forkSession 派生新会话，复用父会话的 repo 状态续跑（反事实）。 */
@@ -141,6 +158,9 @@ export async function forkCase(
   eventId: string,
   opts: RunCaseOptions,
 ): Promise<GymCaseResult> {
+  if (opts.model === "probe") {
+    throw new Error("forkCase: 探针档只做从头跑（gym-run --model probe）——分叉续跑的装配基线含父会话状态，量出来不是同一条链");
+  }
   const sessionDir = await gymTempDir("gym-fork-");
   const fork = await forkSession(parent.eventsPath, eventId, join(sessionDir, "fork"));
   const workDir = join(sessionDir, "work");

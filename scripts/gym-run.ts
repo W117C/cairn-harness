@@ -74,6 +74,16 @@ for (const entry of entries) {
     } else {
       results.push(parent);
       console.log(`[gym-run] ${c.id} ${model} → score=${String(parent.score)} turns=${String(parent.turns)} in=${String(parent.inputTokens)} out=${String(parent.outputTokens)} changed=${JSON.stringify(parent.changedFiles)}`);
+      // 探针档多打一行装配账（能力 9/10：harness 装了多少钱进模型）
+      if (parent.assembly) {
+        const a = parent.assembly;
+        console.log(
+          `  装配：请求 ${String(a.requests)} 次，prompt 合计 ${String(a.totalPromptBytes)}B（峰值 ${String(a.peakPromptBytes)}B）`
+          + `｜可缓存前缀 ${String(a.cacheableBytes)}B｜易变 system ${String(a.turns.reduce((n, t) => n + t.volatileSystemBytes, 0))}B`
+          + `｜历史 ${String(a.turns.reduce((n, t) => n + t.historyBytes, 0))}B`
+          + `｜估算 ${String(a.turns.reduce((n, t) => n + t.estTokens, 0))} tok`,
+        );
+      }
     }
   } finally {
     if (forkEventId !== null) await cleanupRun(parent);
@@ -98,6 +108,8 @@ if (outPath) {
       outputTokens: r.outputTokens,
       turns: r.turns,
       changedFiles: r.changedFiles,
+      // 探针档基线多记一条装配账；scripted/real 恒为 undefined（JSON 里直接消失，旧基线形状不变）
+      ...(r.assembly ? { assembly: r.assembly } : {}),
     })),
   };
   await writeFile(outPath, JSON.stringify(baseline, null, 2) + "\n", "utf8");
