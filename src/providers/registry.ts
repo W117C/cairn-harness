@@ -88,6 +88,10 @@ export function toProviderTools(tools: GlmToolSpec[] | undefined): ProviderToolS
 export interface ToWorkerModelOptions {
   /** 测试注入点（各适配器 fetchImpl；缺省全局 fetch）。 */
   fetchImpl?: typeof fetch;
+  /** A1 写侧缓存断点：目前**只有 Anthropic 有语义**（显式 cache_control）。
+   *  OpenAI/GLM 是自动前缀缓存（无写侧标记，收益受排布约束），Gemini 要另建 cachedContent
+   *  资源——两者都不吃这个开关，传了也是零行为。 */
+  promptCache?: boolean;
 }
 
 /** 薄适配器：按 spec.provider 路由到对应适配器（M6 白名单）。未知 provider fail-visible 抛错。 */
@@ -101,7 +105,11 @@ export function toWorkerModel(spec: ModelSpec, opts: ToWorkerModelOptions = {}):
         streamOpenAI(messages as ProviderMessage[], { model: spec.model, ...(fetchImpl ? { fetchImpl } : {}) }, toProviderTools(tools));
     case "anthropic":
       return (messages, tools) =>
-        streamAnthropic(messages, { model: spec.model, ...(fetchImpl ? { fetchImpl } : {}) }, toProviderTools(tools));
+        streamAnthropic(
+          messages,
+          { model: spec.model, ...(fetchImpl ? { fetchImpl } : {}), ...(opts.promptCache === true ? { promptCache: true } : {}) },
+          toProviderTools(tools),
+        );
     case "gemini":
       return (messages, tools) =>
         streamGemini(messages, { model: spec.model, ...(fetchImpl ? { fetchImpl } : {}) }, toProviderTools(tools));

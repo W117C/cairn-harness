@@ -56,6 +56,9 @@ export interface AppSettings {
   workspace: string | null;
   /** SoL-Pi C1：写入后执行配置检查，显式开启，默认关闭。 */
   actionFusion: boolean;
+  /** A1 写侧 prompt 缓存断点（Anthropic cache_control）。只有路由合成真实 provider 档位时才有语义
+   *  （GLM/OpenAI 自动前缀缓存不吃写侧标记）；两者都不开时是零效果，运行时会给一条 warn 不静默。 */
+  promptCache: boolean;
   requestMetering: boolean;
   observationPack: boolean;
   evidenceReceipts: boolean;
@@ -89,6 +92,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   model: "",
   workspace: null,
   actionFusion: false,
+  promptCache: false,
   requestMetering: false,
   observationPack: false,
   evidenceReceipts: false,
@@ -153,6 +157,7 @@ export function validateSettings(raw: unknown): AppSettings {
     telemetry: typeof r.telemetry === "boolean" ? r.telemetry : d.telemetry,
     routingBandit: typeof r.routingBandit === "boolean" ? r.routingBandit : d.routingBandit,
     actionFusion: r.actionFusion === true,
+    promptCache: r.promptCache === true,
     requestMetering: r.requestMetering === true,
     observationPack: r.observationPack === true,
     evidenceReceipts: r.evidenceReceipts === true,
@@ -197,7 +202,7 @@ export class SettingsStore {
         "autoMemory" in patch || "maxBudgetUsd" in patch || "budgetPricePerMTok" in patch ||
         "scheduleConcurrencyCap" in patch || "onboarded" in patch || "updateManifestUrl" in patch ||
         "telemetry" in patch || "routingBandit" in patch || "provider" in patch || "model" in patch ||
-        "workspace" in patch || "actionFusion" in patch || "requestMetering" in patch || "observationPack" in patch ||
+        "workspace" in patch || "actionFusion" in patch || "promptCache" in patch || "requestMetering" in patch || "observationPack" in patch ||
         "evidenceReceipts" in patch || "economicCompaction" in patch || "impactAnalysis" in patch ||
         "autoVerify" in patch
         ? patch

@@ -197,7 +197,7 @@ function currentOrchestrator(): Orchestrator | null {
  *  - workerSummarizer：worker 压缩摘要器（§7.5 同一 runCompaction 链；GLM 暗卷需 M0_API_KEY）；
  *  - budget：会话成本闸（§4.4.8 maxBudgetUsd；0 = off 零行为）。 */
 async function orchestratorExtras(): Promise<
-  Pick<OrchestratorOptions, "agentRoleFor" | "workerSummarizer" | "budget" | "routing" | "banditStatePath">
+  Pick<OrchestratorOptions, "agentRoleFor" | "workerSummarizer" | "budget" | "routing" | "banditStatePath" | "promptCache">
 > {
   const s = await store().get();
   return {
@@ -208,6 +208,14 @@ async function orchestratorExtras(): Promise<
     // 无路由则无档位决策可学）。状态文件在 .agent/ 系统区（同 permissions.json 口径）。
     ...(s.routingBandit
       ? { routing: true, banditStatePath: join(ROOT, ".agent", "routing-bandit.json") }
+      : {}),
+    // A1 写侧断点：只有路由合成真实 provider 档位时才落到 wire（当前唯一有语义的是 Anthropic）。
+    // 开了缓存断点却没开路由 = 静默零效果，这里给一条 warn，不让人对着关掉的开关调参。
+    ...(s.promptCache
+      ? (() => {
+          if (!s.routingBandit) console.warn("[promptCache] 已开启但路由未开（routingBandit=false）：无真实 provider 档位可合成，断点不会落到请求体");
+          return { promptCache: true };
+        })()
       : {}),
   };
 }

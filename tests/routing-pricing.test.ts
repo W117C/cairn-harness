@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { costUsd, DEFAULT_PRICE_TABLE, priceCoverage, priceOf } from "../src/routing/pricing";
+import { costUsd, DEFAULT_PRICE_TABLE, priceCoverage, priceOf, type ModelPrice } from "../src/routing/pricing";
 import { DEFAULT_MODEL_TABLE } from "../src/providers/registry";
 import { createRng, newBanditState, selectArm, updatePriced } from "../src/routing/bandit";
 
 describe("M6 价格表", () => {
   it("priceOf 已知 id 返回单价；未知 id fail-visible 抛错", () => {
-    expect(priceOf("glm-flash")).toEqual({ inputPerMTok: 0.2, outputPerMTok: 0.2 });
+    // 缓存两列随 A1 一起入表，值 = null（待联网实测校准，2026-09-19 裁决不编数）
+    expect(priceOf("glm-flash")).toEqual({ inputPerMTok: 0.2, outputPerMTok: 0.2, cacheReadPerMTok: null, cacheWritePerMTok: null });
     expect(priceOf("openai-cheap").inputPerMTok).toBe(0.15);
     expect(() => priceOf("nope-model")).toThrow(/未知 model 价格/);
   });
@@ -23,7 +24,7 @@ describe("M6 价格表", () => {
   it("价格表覆盖档位表全部 id（漂移护栏：新增 model 忘配价 = 显式失败）", () => {
     expect(priceCoverage()).toEqual([]);
     // 反向：故意漏配一个 → 必须被列出（证明护栏不是恒真）
-    const broken = { ...DEFAULT_PRICE_TABLE } as Record<string, { inputPerMTok: number; outputPerMTok: number }>;
+    const broken = { ...DEFAULT_PRICE_TABLE } as Record<string, ModelPrice>;
     delete broken["glm-flash"];
     expect(priceCoverage(broken)).toEqual(["glm-flash"]);
     // 每个档位表 spec 都能在价格表查到价（一一对应）

@@ -26,6 +26,12 @@ export interface AnthropicOptions {
   label?: string;
   /** 停滞守卫静默窗口 ms（根因 4）；缺省 60s，<=0 关闭守卫。 */
   stallTimeoutMs?: number;
+  /** prompt 缓存断点（A1 写侧）：在**静态段**尾上打 `cache_control:{type:"ephemeral"}`——
+   *  末个 tool 与末个 system 块各一处（断点分层级联：工具条目恒命中，tools+system 条目只在
+   *  system 未变时命中；本仓的记忆/地图随轮变化，落在 system 串内，故第二条目会周期性重写，
+   *  这是排布事实不是本开关的副作用——按用户裁决「只标静态段，不动排布」）。
+   *  缺省 false = 请求体逐字不变（含 `system` 仍为整串）。 */
+  promptCache?: boolean;
 }
 
 interface AnthropicSseEvent {
@@ -58,7 +64,7 @@ function parseArgs(raw: string, label: string): Record<string, unknown> {
 // user 消息）→ tool_result 块。全部按 Anthropic 官方 content-block 结构原生构造。
 export function toAnthropicBody(
   messages: ProviderMessage[],
-  opts: { model: string; maxTokens: number; stream: boolean },
+  opts: { model: string; maxTokens: number; stream: boolean; promptCache?: boolean },
   tools?: ProviderToolSpec[],
 ): Record<string, unknown> {
   const systemParts: string[] = [];
@@ -102,12 +108,24 @@ export function toAnthropicBody(
     stream: opts.stream,
     messages: wire,
   };
-  if (systemParts.length > 0) body.system = systemParts.join("\n\n");
+  // 静态段断点（用户裁决「只标静态段，不动排布」）：
+  // ① 末个 tool——本会话内工具表逐字不变，是唯一的纯静态段；
+  // ② system 的**首块**=基础提示（composeTurnMessages 恒把 opts.system 放第一位），
+  //    其后的记忆/skills/地图随轮变化，一律留在断点之后不参与缓存——
+  //    给整串 system 打点会每轮重写缓存条目（写价 1.25×），比不打更贵，故不打。
+  // 关闭时逐字旧行为：system 仍是 join 后的整串，且全站零 cache_control 键。
+  if (systemParts.length > 0) {
+    body.system = opts.promptCache === true
+      ? systemParts.map((text, i) => ({ type: "text", text, ...(i === 0 ? { cache_control: { type: "ephemeral" } } : {}) }))
+      : systemParts.join("\n\n");
+  }
   if (tools && tools.length > 0) {
-    body.tools = tools.map((t) => ({
+    const last = tools.length - 1;
+    body.tools = tools.map((t, i) => ({
       name: t.name,
       ...(t.description ? { description: t.description } : {}),
       input_schema: t.parameters,
+      ...(opts.promptCache === true && i === last ? { cache_control: { type: "ephemeral" } } : {}),
     }));
   }
   return body;
@@ -143,7 +161,7 @@ export async function* streamAnthropic(
         "x-api-key": apiKey,
         "anthropic-version": opts.version ?? "2023-06-01",
       },
-      body: JSON.stringify(toAnthropicBody(messages, { model, maxTokens, stream: true }, tools)),
+      body: JSON.stringify(toAnthropicBody(messages, { model, maxTokens, stream: true, promptCache: opts.promptCache === true }, tools)),
     },
     fetchImpl: doFetch,
     stallMs: opts.stallTimeoutMs ?? DEFAULT_STALL_MS,

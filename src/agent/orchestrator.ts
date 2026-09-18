@@ -616,6 +616,11 @@ export interface OrchestratorOptions {
   semanticLease?: (resources: string[]) => Promise<string[]>;
   /** worker 模型解析（演示/验收通道注入脚本模型）；缺省 = GLM 暗卷（需 M0_API_KEY）。 */
   modelFor?: (args: SpawnArgs) => WorkerModel | undefined;
+  /** A1 写侧 prompt 缓存断点（路由分支合成的真实 provider 模型才吃）。
+   *  目前只有 Anthropic 有语义（显式 cache_control 打在静态段：末个 tool + system 首块）；
+   *  GLM/OpenAI 是自动前缀缓存、Gemini 需另建 cachedContent 资源 ⇒ 传了也是零行为。
+   *  缺省 false = 请求体逐字不变。 */
+  promptCache?: boolean;
   /** M5b 模型路由（§m5-proposal 步骤 8）：启用时每次 spawn routeFor 决策 → 落 routing_decision →
    *  toWorkerModel(档位)。缺省 false = 零行为（modelFor / defaultWorkerModel 原路径逐字不变，零 routing_decision）。 */
   routing?: boolean;
@@ -1016,7 +1021,7 @@ export class Orchestrator {
     const model = this.opts.modelFor
       ? this.opts.modelFor(args)
       : routedSpec
-        ? toWorkerModel(routedSpec)
+        ? toWorkerModel(routedSpec, this.opts.promptCache === true ? { promptCache: true } : {})
         : undefined;
     if (!model && !process.env.M0_API_KEY) {
       return { ok: false, output: "spawn_agent: 无可用模型（无 M0_API_KEY 且未接 modelFor；fail-closed 不造必败 worker）" };
