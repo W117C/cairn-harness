@@ -111,3 +111,33 @@ describe("AskGate", () => {
     expect(gate2.pendingCount).toBe(0);
   });
 });
+
+  it("M4a unattended：无人值守立即拒绝（fail-closed 不等 60s），落流 reason=unattended", async () => {
+    const outcomes: Array<{ askId: string; outcome: string; reason: string }> = [];
+    const gate = new AskGate({
+      unattended: true,
+      notifyOutcome: (askId, outcome, reason) => outcomes.push({ askId, outcome, reason }),
+    });
+    const t0 = Date.now();
+    const promise = gate.request("run_shell", { command: "rm -rf /" });
+    const r = await promise;
+    const elapsed = Date.now() - t0;
+    // fail-closed 的核心：不等 60 秒，即刻拒绝
+    expect(elapsed).toBeLessThan(5_000);
+    expect(r).toEqual({ outcome: "rejected", scope: "once", reason: "unattended" });
+    expect(outcomes).toEqual([{ askId: expect.any(String), outcome: "rejected", reason: "unattended" }]);
+    // 不进 pending、不挂 timer（多次请求也不会堆积）
+    expect(gate.pendingCount).toBe(0);
+    await gate.request("write_file", { path: "x" });
+    expect(gate.pendingCount).toBe(0);
+  });
+
+  it("unattended 下 notify 不被调用（无 UI 等待，直接拒绝）", async () => {
+    const notifyCalls: string[] = [];
+    const gate = new AskGate({
+      unattended: true,
+      notify: (r) => notifyCalls.push(r.askId),
+    });
+    await gate.request("run_shell", { command: "ls" });
+    expect(notifyCalls).toEqual([]);
+  });
