@@ -4,6 +4,7 @@
 // （zod 在 pnpm 严格布局下只是 MCP SDK 的传递依赖，根包不可导入）——按判卷纪律以手写严格校验
 // 实现同等保证（未知字段拒绝 / 字段类型与范围 / 判别联合），已写 BLOCKED.md 备案（M4a §1）。
 // electron-free（纯数据 + 纯函数），可 headless 单测。
+import { randomBytes } from "node:crypto";
 import { isValidSessionName } from "./sessions";
 
 // ---- 七 kind 数据模型（表单与验收只暴露 once/interval/daily/weekly，§12.2.1 V1 收敛）----
@@ -60,8 +61,11 @@ let lastUlidRandom: number[] = [];
 /** ulid 生成（单调性：同一毫秒内随机位 +1，保证排序稳定）。 */
 export function makeUlid(now = Date.now()): string {
   let time = now;
+  // ULID 规范要求随机位密码学安全：Math.random() 可预测、非碰撞 resistant（扫描器真阳性
+  // danger.weak_random）。改用 crypto.randomBytes——256 % 32 == 0，byte % 32 零偏差均匀映射到
+  // Crockford Base32；单调性逻辑（同毫秒 +1 进位）不受影响。
   const random: number[] = [];
-  for (let i = 0; i < 16; i++) random.push(Math.floor(Math.random() * 32));
+  for (const b of randomBytes(16)) random.push(b % 32);
   if (time === lastUlidTime) {
     for (let i = 15; i >= 0; i--) {
       random[i] = random[i]! + 1;

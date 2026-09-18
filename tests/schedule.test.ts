@@ -65,6 +65,22 @@ describe("M4a 任务模型（automations.ts）", () => {
     expect(makeUlid(1_700_000_000_000)).not.toBe(makeUlid(1_700_000_000_000)); // 同毫秒随机位不同
   });
 
+  it("ulid 随机位不依赖 Math.random（密码学安全，不可预测）", () => {
+    // 回归：曾用 Math.random() 生成 80bit 随机位（扫描器真阳性 danger.weak_random）——
+    // ULID 规范要求密码学安全随机。若回退 Math.random，本测试在常量 stub 下必红。
+    const orig = Math.random;
+    Math.random = () => 0.42;
+    try {
+      const a = makeUlid(1_700_000_000_000);
+      const b = makeUlid(1_700_000_000_000);
+      expect(isValidUlid(a)).toBe(true);
+      expect(a).not.toBe(b); // 常量 Math.random 下仍须不同 ⇒ 走的是 crypto 路径
+    } finally {
+      Math.random = orig;
+    }
+  });
+
+
   it("表单四 kind 全过；hourly/monthly/custom 数据模型收、表单面拒", () => {
     expect(validateAutomation(base()).ok).toBe(true);
     expect(validateAutomation(base({ schedule: { kind: "once", at: "2026-09-20T09:30:00+08:00" } }), { form: true }).ok).toBe(true);

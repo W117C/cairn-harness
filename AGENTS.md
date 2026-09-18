@@ -41,6 +41,7 @@ React 树已全量归档（2026-09-17 删 45 个 .tsx/测试 + 移除 react 全�
   绕法（**只影响该次调用的守卫计数，不改删除语义**）：`CODEBUDDY_SAFE_DELETE_BULK_STATE_DIR= pnpm build`
   （原理：`node-safe-delete-shim.cjs:195` 是「state dir 为空即提前 return」）。**只用于构建/门禁，别拿它做别的删除。**
   鉴别要点：若日志里没有 `B0 Electron 起不来` 也没有探针断言失败、只停在 build，先怀疑这条，别去改探针。
+- **提交前相交检查（2026-09-18 实踩）**：编辑任何已跟踪文件前，先 `git status --short <file>` 或 `git diff HEAD -- <file>`——若它**已在在飞改动集里**（本轮曾把 M7 未提交的 `tests/schedule.test.ts` 误当自己的改动一并提交，致干净 HEAD 悬空：4 条 atomic admission 测试依赖未提交的 scheduler 改动而红）。判据：工作树对 HEAD 有 diff 且该 diff 不是你刚写的 ⇒ 属于别人的原子单元，只追加不改写，或先把 M7 diff 备份再重建。
 - **底栏节点格式契约**（写新门禁前必读）：`#eventCount` 写的是**裸整数**（`String(real.events || 0)`，`app.js:1759-1761`），
   故 10000 时正好是 `"10000"`，可安全 `includes("10000")`；但 `#tokenTotal` 走 `tokStr()`（`app.js:1754`）**会缩写成 `"1.5k"`**——
   **对 token 计数不要写裸数字断言**，否则是自造假红。
