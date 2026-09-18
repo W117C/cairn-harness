@@ -3,7 +3,7 @@
 **用途**：回答「现在的 agent 项目在做什么、我们缺什么、我们强什么」，并给出可执行的优先级。
 **方法**：三路证据交叉——① 联网调研主流编程 agent 产品能力清单（15+ 产品，带来源）；
 ② 联网调研 2025H2→2026 前沿方向（8 个主题，区分【共识】/【争议】/【未证实】）；
-③ 本项目代码实读盘点（97 文件 25,843 行 src；测试以实测 **85 文件 / 814 用例** 为准 + 29 道门禁）。
+③ 本项目代码实读盘点（HEAD 态 **96 文件 / 26,237 行** src；套件实测 **90 文件 / 867 用例全绿** + 29 道门禁 + 79 条变异）。
 本报告里所有「我们这边」的断言都带 `路径:行号`；**可信度分级见 §8**（实测 / 继承未复验 / 外部未复现三档）。
 
 **修订记录**：
@@ -13,8 +13,13 @@
   现判「重试已落 / 限流器仍缺」）；A2 由在飞转**已收口 `d64084e`**；变异表 **72→79 条 / 16→22 源文件**；
   缺省开关 **7→8 个**（新增 `autoVerify` 收束闸）；`settings.ts` / `orchestrator.ts` / `app.js` / `openai.ts` 等
   十余处行号按新树校正。**门数仍 29、provider 白名单仍 `demo|glm`、`cache_control` 仍零。**
-- **下游若按本报告派单，请只读 23:25 版**：初版第 1 优先项把 A1+A2 捆在一起，现 A2 已收口、只剩 A1，
-  且 A1 的前置（cache 断点须按 `budgetConfig()` 移动后的真实裁剪落点定稳定前缀）已明确。
+- **23:4x 第二轮入库前重测**（HEAD 已到 `0183550`）：**第二处过期结论 B1**——「impact 只是提示、未成准入」
+  已被 `semanticLeaseConflicts`（`orchestrator.ts:1194`）+ `agent-runner.ts:1048` 接线推翻，
+  §2 B1 / §5 矩阵 / §6 第 2 件 改判为**已完成**（并记下两处语义差：走审批卡非自动串行、挂 `impactAnalysis` 缺省关）。
+  §8 原「继承未复验」档 13 组参数**全批复验通过、无一处被推翻**，已升入实测档（残余仅 3 条）。
+  A1 已派单（writer = 协调会话），§6 第 1 件补入**撞面表**。
+- **本仓时效声明**：本报告的任何「我们这边」断言只在标注的 HEAD 上成立；同日 2.5 小时内已两次被并发实现推翻。
+  引用前请先 `git log --oneline -8` 看有没有更新的能力提交。
 
 **结论一句话**：我们的**引擎面（上下文/权限/编排/评测纪律）已追平或超过主流**，
 缺的是**外围基础设施与对外接口**（缓存、快照、联网、外部 benchmark、协议对齐）；
@@ -46,8 +51,8 @@
 | A1 | **Prompt caching / 缓存边界工程** | 跨三家 provider 的长时程缓存评测：成本 −41~80%、TTFT −13~31%；结论是「**战略性缓存边界控制**优于整段缓存」（[arXiv 2601.06007](https://arxiv.org/html/2601.06007v2)）；Anthropic 已把 cache miss 当生产事故（[Implicator](https://www.implicator.ai/anthropic-says-cache-misses-are-production-incidents-reveals-caching-shaped-claude-code/)） | **零** `cache_control`（全仓 grep 仅 `solpi-runtime.ts` 1 处注释）。openai 只**读** `cached_tokens` 记账（`src/providers/openai.ts:56,127`），不**写**断点 |
 | A2 | ~~上下文预算不认模型~~ → **已收口（`d64084e`，21:39）**<br>**worker 面残留未修，见下方 ⚠️** | — | **原缺陷**：`ctxWindow` 在 `src/providers/registry.ts:19` 声明、12 个模型逐个填值（gemini 1_000_000 / anthropic 200_000 / glm 128_000），却**除 registry 自身外零消费者**；主会话无论路由到哪个模型都吃硬编码 `inputLimit: 128_000`（`src/agent/compaction.ts:31`），超预算在 `src/agent/glm-session.ts:554-556` 抛 `context_budget_exceeded` 拒发。<br>**修法（已入库 `d64084e`，6 文件簇）**：新增纯函数 `withModelBudget`（`compaction.ts:47`）+ 双态解析 `findSpecByNameOrId`（`registry.ts:61`，档位 id 与 provider 模型名都认、同名取**最小**窗口）+ `budgetConfig()`（`glm-session.ts:407-411`）；**触发判定 / 硬闸 / 压缩器裁剪目标三处共用同一个 `budgetConfig()`**（`:414`、`:519`、`:551`）——否则 200k 档上「触发按 200k、裁剪仍按 128k」会白丢一段冷细节。<br>钳制语义**分两层，别混**：**第一层** `withModelBudget` 的语义是「窗口可得就**一律取窗口**」——实现是 `{ ...config, inputLimit: ctxWindow }`（**替换，不是取小**），所以它在 200k 档上是**上调**（128k→200k）、在小窗模型上是下调；其唯一保守分支是「窗口不可得 / 非有限 / ≤ 输出预留 ⇒ 原样返回」。**第二层**才是放大保护：`glm-session.ts:410` 的 `Math.min(merged.inputLimit, window)` 专挡「调用方显式 config 越窗」（`:409` 的 `{...base, ...explicit}` 会让显式 900k 覆盖掉第一层的结果，故必须再钳一次）。⇒ **调用方显式 config 只能往下调，绝不许越过模型真实窗口**（超窗交给远端 400 不如本地 fail-closed）。<br>⚠️ **残留（本轮实测，报告初稿没有）**：修复只覆盖**主会话**。worker 走 `createWorkerProvider`（`orchestrator.ts:2852`），其入参是 `model?: WorkerModel`（`:2855`）= **一个闭包函数而非模型名**——`toWorkerModel`（`registry.ts:94-111`）在把 spec 变成流函数时**丢掉了 `ctxWindow`**，故 worker 压缩配置仍是 `DEFAULT_COMPACTION_CONFIG + {ratio:0.95}`（`orchestrator.ts:1901`）= **一律 128k**，且**没有本地硬闸**。⇒ 路由到 gemini-2.5-pro(1M)/o3(200k)/claude-opus(200k)/glm-5.2-pro(256k) 的 worker 依旧提前 ~100k 压缩，超窗直接吃远端 400。sidechat 的 `inputLimit: 32_000`（`sidechat.ts:49-51`）是**有意的保守策略**（辅助短问答早触发），32k < 任何模型窗口，**不算缺陷** |
 | A3 | **快照 / rewind** | CC `/rewind` 同时快照文件与对话（[docs](https://code.claude.com/docs/en/checkpointing)）、Gemini git checkpointing、Cline/Roo/Cursor 皆有 | 会话是 append-only JSONL（可重放），但**无 per-turn 文件快照** ⇒「对话回到某点」与「工作树回到同一状态」无法对齐。worktree 只服务 worker 隔离，不服务用户回退 |
-| A4 | **网络工具（web search / fetch）** | Copilot/Gemini grounding、Devin、Cursor 内置 | `src/tools/` grep `websearch\|fetch\|http` **零命中**（`src/net.ts` 只是分片停滞看门狗）。模型可见工具仅 12 个。**写代码时查不到文档**，只能靠外挂 MCP |
-| A5 | ~~provider 重试 / 429~~ → **重试已落（`887ffb6`）**，**限流器仍缺** | 必备运维面 | **21:29 初判已过期**：当时 HTTP 层零重试、真实负载下首个 429 即整轮红。**现状**：`src/providers/retry.ts`（99 行）三家 provider 共用一条建连链——`retryableStatus` 认 408/409/425/429/5xx（`:8-9`）、`retryAfterMs` 支持秒数与 HTTP-date 两形态并被 `capMs` 钳住（`:12-13`）、`backoffMs` 指数退避 + **full jitter**（AWS 口径，防同批 worker 齐步重试二次打满限流窗，`:24-26`）、缺省 `attempts=3`（`:65`），且**只重试「响应体尚未被消费」的失败**（`:57`、`guard.stalled()` 即放弃 `:79`）。<br>**残余缺口**：**无限流器 / 无并发闸**（`grep rateLimit\|p-limit\|semaphore src/providers/` 零命中）⇒ 只有被动退避、没有主动限速；`maxConsecutiveFailures=2` 的摘要器停用另在 `compaction.ts:39` |
+| A4 | **网络工具（web search / fetch）** | Copilot/Gemini grounding、Devin、Cursor 内置 | `src/tools/` grep `websearch\|fetch\|http` **零命中**（`src/net.ts` 只是分片停滞看门狗）。模型可见工具仅 12 个。**写代码时查不到文档**，只能靠外挂 MCP。<br>**与 A7 无依赖**（初稿隐含的排序错觉已纠）：Seatbelt 只包**子进程**（`sandbox-exec`，经 `src/tools/process.ts` 服务 run_shell / verify / LSP），而 provider 出网走**主进程** `fetch`（`src/providers/glm.ts:30` `fetchImpl`）⇒ 补 web 工具**不必**先做出口 allowlist |
+| A5 | ~~provider 重试 / 429~~ → **重试已落（`887ffb6`）**，**限流器仍缺** | 必备运维面 | **21:29 初判已过期**：当时 HTTP 层零重试、真实负载下首个 429 即整轮红。**现状**：`src/providers/retry.ts`（99 行）三家 provider 共用一条建连链——`retryableStatus` 认 408/409/425/429/5xx（`:8-9`）、`retryAfterMs` 支持秒数与 HTTP-date 两形态并被 `capMs` 钳住（`:12-13`）、`backoffMs` 指数退避 + **full jitter**（AWS 口径，防同批 worker 齐步重试二次打满限流窗，`:24-26`）、缺省 `attempts=3`（`:65`），且**只重试「响应体尚未被消费」的失败**（`:57`、`guard.stalled()` 即放弃 `:79`）。<br>**残余缺口**：**无限流器 / 无并发闸**（`grep rateLimit\|p-limit\|semaphore src/providers/` 零命中）⇒ 只有被动退避、没有主动限速；`maxConsecutiveFailures=2` 的摘要器停用另在 `compaction.ts:39`。<br>**判读分歧（保留事实、不下结论）**：另一会话在 `best-agent-roadmap@96464f3` 把 A5 判为**已闭**；本档只记录实测（`rateLimit`/`p-limit`/`semaphore` 在 `src/providers/` 零命中），「主动限速算不算必备」留给派单方定。 |
 | A6 | **后台长任务进程控制** | CC BashOutput/KillShell、Codex 后台任务 | `run_shell` 32KB / 60s 硬顶（`src/tools/run_shell.ts:5-6`），超限后 `return` 直接丢弃尾字节（`:21-27`）⇒ 跑不了 build / dev-server / 大测试套件 |
 | A7 | **网络出口策略（allowlist）** | CC 域名 allowlist 或代理审批；Codex 三档；Gemini profile 化 | Seatbelt `deny default` + **无任何 network 放行 = 默认全断网**（`src/main/sandbox.ts:36-49`）。安全上是最强 fail-closed，代价是 `pnpm install` 类真实工作直接死（AGENTS.md 已自述沙箱内 `pnpm test` 跑不了）。缺的是**「默认断网 + 显式域名放行」**这一层，不是放开 |
 | A8 | **路径级权限规则** | 文件/目录粒度批准是常见能力 | `PermissionRule` 只有 `tool` + `pattern`（命令段前缀）+ `scope:"always"`（`src/permissions/rules.ts:11-19`），**无路径匹配字段**。粒度停在工具级/命令级 |
@@ -55,11 +60,18 @@
 
 ## 2. B 档差距：前沿正在收敛，我们已有半截（补齐成本最低）
 
-**B1 · 语义合并闸（最高性价比）。**
-多 agent 最大的未解项不是行冲突而是**写时语义冲突**，写时状态检查实证 +18.7（[STORM arXiv 2605.20563](https://arxiv.org/html/2605.20563v1)）；
-worktree 隔离只解决物理层。我们**已经有** `impact_report` 的跨文件波及集（`src/agent/impact/index.ts:208,215,256`）
-和租约冲突检测（`src/agent/orchestrator.ts:1180`），但 impact 目前只是**回注给模型看的提示**。
-把它升级成准入判据（两 worker 波及集相交即串行化/仲裁）= 同一份数据二次变现。
+**B1 · 语义合并闸 —— ✅ 已落地（`0183550` 前后入库，本报告 23:4x 复验时才发现自己这条已过期）。**
+原论断（多 agent 最大未解项是**写时语义冲突**而非行冲突，写时状态检查实证 +18.7，
+[STORM arXiv 2605.20563](https://arxiv.org/html/2605.20563v1)；worktree 隔离只解决物理层）成立，
+而修法已进代码：`src/agent/impact/index.ts:339` 起把影响面**从「回注给模型看的提示」升级成 spawn 准入判据**——
+`globMatchesPath` / `affectedFilesOf`（声明要写哪些 glob ⇒ 实际波及哪些文件）+
+`orchestrator.ts:1194-1201` `semanticLeaseConflicts()`（工厂函数 `semanticConflictsVia` 在 `:2535`）。
+**实测语义与初稿设想有两处不同，别照初稿理解**：
+① 与 `leaseConflicts` **同形状返回、走同一张审批卡**（交人裁决），**不是自动串行化**；
+② 接线挂在 **`impactAnalysis` 同一个开关**下（`agent-runner.ts:1048` 注入 `semanticLease`，`:1124` 同族），
+即**缺省关**，未接钩子时恒为空（其变异锚点把「零行为」收紧到连 `console.warn` 都不许有）。
+差分证据在 `tests/impact-admission.test.ts:57`：`utils.js × math.js` **glob 不相交但波及集相交 ⇒ 报冲突**，
+`:65` 的 `utils.js × metrics.ts` 闭包也不相交 ⇒ 不误伤、并行照放。3 条变异锚点全杀（82/82）。
 
 **B2 · 反事实靶场的根基被动摇（最危险的自我认知风险）。**
 `fixtures/gym` 是 `fork@event` 静态回放（`src/agent/gym/runner.ts:2-4`）+ **3 个本地冻结 mini-case**
@@ -105,8 +117,8 @@ Seatbelt 无 Linux（Landlock+seccomp）/ Windows 对应。发 dmg 够用，但�
 
 ### 4.1 判卷完整性工程 —— 行业未找到同构实现（最深护城河）
 
-- **29 道门禁**（`scripts/gate-manifest.ts:12-44`），且**门数不写进文档**，由清单自身作事实源 + 漂移护栏四违例类（孤儿验收脚本 / 无脚本的门 / 陈旧豁免 / 无由豁免，`:73-108`）
-- **79 条变异测试表**（`scripts/mutate-verify.mjs:26` 起，22 个源文件；初版记 72/16，`abf6991` +4 与 `f0bf5a5` +3 后为 79/22）：每条 = 一处语义突变 + 必须被杀死的**具体用例标题**；跑前备份、finally 还原、退出前强制 `git diff HEAD --quiet`，还原失败即判红
+- **29 道门禁**（`scripts/gate-manifest.ts:11-44`，HEAD `96464f3` 态实测；⚠️ 工作树已有**第 30 道在飞**：`ipc-reachability-check`「能力已发货但用户点不到 = 零价值」——正对应本档 §0 与 §4.10 的关切），且**门数不写进文档**，由清单自身作事实源 + 漂移护栏四违例类（孤儿验收脚本 / 无脚本的门 / 陈旧豁免 / 无由豁免，`:73-108`）
+- **82 条变异测试表**（`scripts/mutate-verify.mjs:26` 起；HEAD 态 79 条 / 22 源文件 → 23:4x 复测 **82**，B1 三条锚点入库后）：每条 = 一处语义突变 + 必须被杀死的**具体用例标题**；跑前备份、finally 还原、退出前强制 `git diff HEAD --quiet`，还原失败即判红
 - **AST 级断言体检**：空断言 / 恒真式 / 析取式弱断言 / 暗卷零断言，豁免必须带行内理由注释（`scripts/assertion-health.ts:5-22`）
 - **sha256 冻结判卷文件**（`scripts/frozen-sha256.json`、`src/frozen.ts`）+ 判据缺陷走 `BLOCKED.md` 要求换判据、不许改代码绕
 - **fail-visible 沙箱三门**：自动选分支并显式打印走了哪支，不真空通过；还有反向验证通道（`--force-available` / `--bogus-root`）证明 A 相会红
@@ -169,7 +181,7 @@ supervisor 封闭动作枚举 + 三重有界（maxStages 6 / 预算闸 / 同任�
 
 ### 4.9 规模与工程纪律
 
-25,843 行 src / 86 测试文件 ≈768 用例 / 101 fixtures；
+26,237 行 src（96 文件，HEAD `0183550` 态）/ 90 测试文件 867 用例全绿 / 101 fixtures；
 vanilla renderer **零构建链** + CSP `script-src 'self'` + 万条事件 DOM ≤300，
 且用**真 Electron + CDP** 做性能门（`scripts/panels-check.ts:153-248`）而非 mock；
 不引 tokenizer（chars/4 + usage 校准）；src 内 **零 TODO/FIXME**，半成品全部以「留位」显式自述。
@@ -196,7 +208,7 @@ vanilla renderer **零构建链** + CSP `script-src 'self'` + 万条事件 DOM �
 | prompt caching | 头部实践，量化 −41~80% | 零 | **最大缺口**（A1） |
 | 联网工具 | 常见 | 零 | **缺**（A4） |
 | 子 agent / 编排 | 主流（pi、Amp 明确不做） | 完整（四模式 + worktree + 依赖链 + 恢复 + 卡死） | 追平偏前 |
-| 语义合并 | 未解项 | 有数据、只是提示，未成准入 | **可超车**（B1） |
+| 语义合并 | 未解项（写时状态检查实证 +18.7） | **已落**：波及集相交 ⇒ 报冲突、走同一张审批卡（`orchestrator.ts:1194`），缺省关 | **已超车**（B1，见 §2） |
 | 跨会话记忆 | 差异化（CC auto memory / Devin knowledge） | 完整（inject 预算 6k + distill 四类型 + 索引硬上限 200 行/25KB） | 追平 |
 | 插件 / hooks / skills | SKILL.md 快速收敛 | 完整（三级作用域 + 10 hook 事件 + 渐进披露 + 指纹信任） | 追平，信任面**领先** |
 | MCP | client 必备 | client 三 transport，无 server/registry/重连 | 半档落后（B4） |
@@ -228,6 +240,19 @@ vanilla renderer **零构建链** + CSP `script-src 'self'` + 万条事件 DOM �
 4. 事件流显式记 cache 断点与命中率，miss 当**缺陷**统计并进门禁指标。
    ⚠️ 计量落点用 `#tokenTotal` 之外的新字段——`tokStr()` 会缩写成 `"1.5k"`，**不得写裸数字断言**（AGENTS.md 底栏契约）。
 
+**→ 第 1 件的 A1 部分已派单（23:35），writer = 协调会话本人，A2 簇 `d64084e` 已入库故前置满足。**
+撞面表（供其他会话回避；本报告的作者不会自己动这些文件）：
+
+| 文件 | 会动到什么 | 当前是否有别的写者 |
+|---|---|---|
+| `src/providers/anthropic.ts` | 写 `cache_control` 断点（原生 ephemeral） | 无 |
+| `src/providers/openai.ts` / `gemini.ts` | 隐式缓存规则下的断点位置 + 命中读取 | 无 |
+| `src/providers/glm.ts:48-51` | 隐式前缀缓存（**已回读 cached 字段、此前无人接进计量**），是否补显式断点由写者定 | 无 |
+| `src/agent/compaction.ts` 裁剪落点 / `src/agent/glm-session.ts:490,551` | 决定稳定前缀边界（A2 后触发点已随 `budgetConfig()` 移动） | 无（`d64084e` 已释放） |
+| `src/events/index.ts` + `src/agent/metering.ts` | 新增 cache 命中率字段；metering 已有互斥 cache 桶可复用 | 无 |
+| `src/renderer/app.js` 底栏 | 命中率读数**必须新开字段**，不复用 `#tokenTotal`（`tokStr()` 缩写成 `1.5k`，裸数字断言会自造假红） | 渲染层归 `316c777c`/`316c75f9`，**此处有撞面**，改前先对齐 |
+| `src/agent/impact/index.ts` + `src/agent/orchestrator.ts` | **A1 不需要碰**；但这两份此刻正被别的会话在飞改写，回避即无撞面 | 有（他会话） |
+
 **A2 的残留尾巴（建议另立一项，优先级高于 A3/A4）**：worker 面结构性未修。三个 `model` 字段是**三个不同东西**，别当一处：
 
 | 位置 | 类型 | 含义 |
@@ -254,16 +279,19 @@ worker 面仍无。⚠️ `orchestrator.ts` 正被并发写者持有，本表行
 该修法**只剩 `orchestrator.ts` 一个文件**，无撞面；已由协调会话排给 `6a8c777c`（编号「A2 残留：worker 预算认模型」，
 排在其 2 个在飞项之后）。**不要据此直接开工**——以协调会话的派单为准。
 
-### 第 2 件：impact 从提示升级为准入 —— 语义合并闸（B1）— 成本最低、区分度最高
+### ~~第 2 件：impact 从提示升级为准入 —— 语义合并闸（B1）~~ **已完成（勿再开工）**
 
-复用已有 `impact_report.up` 与 `leaseConflicts`，波及集相交即串行化/仲裁，走已有审批卡出口。
-新增变异条目：波及集相交却未串行化 ⇒ 必红。
+见 §2 B1 的落地实况：机制 + 接线 + 3 条变异锚点已在 `0183550` 前后的树里，
+`tests/impact-admission.test.ts` 给出「glob 不相交而波及集相交 ⇒ 报冲突」的差分证据。
+**残余两件事**（这才是真待办，优先级低于第 1 件）：① 它挂在 `impactAnalysis` 开关下且**缺省关**，
+要拿真模型/真多 worker 证据才谈得上默认开；② 目前只**报冲突交人裁决**，未做「相交即自动串行化」——
+是否要自动串行是个策略选择，别当缺陷补。
 
 ### 第 3 件：让自评结论可外推（B2 + B3）— 不修则前两件无法证明
 
 1. gym 补**分叉回放**：同 prefix 真跑 K 分支，记录动作分歧率与终态分布，把「回放可外推性」本身做成一道门禁指标；
 2. 接一个非自有任务集（**不追 SWE-bench Verified**，可选 Terminal-bench 或自建多仓小集）；
-3. 六开关里至少 `impactAnalysis` + `economicCompaction` 拿到**真模型**收益证据，才允许默认开。
+3. 八个缺省关的开关里至少 `impactAnalysis`（含 B1 语义闸）+ `economicCompaction` 拿到**真模型**收益证据，才允许默认开。
 
 ---
 
@@ -304,12 +332,14 @@ worker 面仍无。⚠️ `orchestrator.ts` 正被并发写者持有，本表行
 | `withModelBudget` 是「替换」不是「取小」（放大保护只在 `:410`） | 读 `compaction.ts:47-50` 与 `glm-session.ts:409-410` 原文 | 确认：前者 `{ ...config, inputLimit: ctxWindow }`；后者 `{ ...merged, inputLimit: Math.min(merged.inputLimit, window) }`。`:409` 展开序 `{...base, ...explicit}` 决定显式值会覆盖第一层 ⇒ 两层缺一不可 |
 | worker 侧「三个 model 字段」的类型区分 | 读 `orchestrator.ts:477`（`string`）/ `:501`（`WorkerModel`）/ `:2855`（`WorkerModel`）/ `:993-997` 唯一转换点 | 确认 `w.model` 是函数不是名字 ⇒ 窗口无处可取；`resolveModel` 在 `:997` 手里有完整 spec，原地取最省。**协调会话已复核并采纳此口径**（其早先「13 处 `w.model`」实为误计 `routeDecision.picked`） |
 | **本报告自纠一处过期结论：A5「provider 无重试」已被 `887ffb6` 推翻** | `grep -rln "retry\|backoff\|jitter\|429" src/providers/` → 新文件 `retry.ts`；读 `retry.ts:8-9,12-13,24-26,57,65,79` | 21:29 判定「零重试」在当时为真；23:08 入库出网重试层后**该结论过期**，已把 A5 改判为「重试已落 / 限流器仍缺」。**教训**：本仓并发推进速度下，报告的时效窗口以小时计——入库前必须重测（见顶部修订记录） |
+| **本报告第二处自纠：B1「impact 只是提示、未成准入」已被 `0183550` 前后的实现推翻** | 读 `impact/index.ts:339` 段 + `orchestrator.ts:1194-1201`（`semanticLeaseConflicts`）+ `:2535`（`semanticConflictsVia`）+ `agent-runner.ts:1048`（经 `impactAnalysis` 注入 `semanticLease`）+ `tests/impact-admission.test.ts:57,65` | 准入判据**已落且已接线**，但两处与初稿设想不同：走同一张审批卡交人裁决（非自动串行化）、挂在 `impactAnalysis` 同一开关下（**缺省关**）。§2 B1 / §5 矩阵 / §6 第 2 件已同步改判 |
+| **原「继承未复验」档全批复验（无一处被推翻）** | `compaction.ts:30-38`（ratio 0.9 / reserve 8_192 / tail 0.25·2k·15k / 摘要帽 4_096 / minProgress 0.1）、`prune.ts:11-13`（40_000 / 20_000 / `RECENT_ROUNDS_EXEMPT = 2`）、`inject.ts:21,24,106`（6_000 / DECISIONS 20 / ARCHITECTURE >4KB 注大纲）、`loop.ts:81-82`（maxSteps 50 / maxVerify 3）、`memory/store.ts:22-23`（200 行 / 25KB）、`lsp.ts:387,343`（6 只读操作 / 诊断帽 20）、`map/render.ts:8-10` + `map/rank.ts:33`（1024–4096 / damping 0.85）、`routing/bandit.ts:35`（冷启动 α=β=2）+`:3`（禁 `Math.random`）、`routing/cascade.ts:2-4`（无客观判据即 fail-closed）、`orchestrator.ts:82,84,88,122`（并发 4 / read 40 轮 / 四模式 / pipeline 8 环）、`supervisor.ts:4,17`（maxStages 6 / 5 动作枚举）、`permissions/risk.ts:14-20`（六类：文件破坏·远程代码执行·数据外送·系统修改·权限提升·命令注入）、`events/index.ts` KNOWN_TYPES = **27** | **全部与报告陈述一致** ⇒ 这些条目从「继承未复验」升入本档。附带确认 `writePruneAttachments`（`prune.ts:201`）**在 src/ 内零调用者**（定义孤立，附件回取确为未接线的原型）。唯一仍存疑：「模型可见规格 = 12」的口径（`grep -c 'name: "'` 会混入非规格字段），**标未确认** |
+| **规模与用例数按 HEAD 态重测（读数各自都对，差别只在 HEAD）** | `git ls-tree -r HEAD`（只数已提交文件）+ 全量 vitest | **21:37 @ HEAD `9371865`**（工作树含 A2 在飞 6 文件）＝ 85 文件 / 814 用例 exit 0；**23:31 @ HEAD `0183550`**（A2 `d64084e` 与 B1 已入库、工作树 `src/ tests/ scripts/` 全干净）＝ **90 文件 / 867 用例 exit 0**，47.6s。⇒ 两次都是真值，**增长来自新测试入库，不是前一次漏计**。<br>src 规模同理：盘点轮「97 文件 / 25,843 行」把 `window.d.ts` 计入（TS 94 + JS 2 + d.ts 1），本轮按「排除 `.d.ts`」口径得 **96 文件 / 26,237 行**（含 `retry.ts` 等新模块的实际增长）。<br>**教训（本仓并发速度下）**：文档报数**必须带 HEAD hash**，否则两个都对的历史读数会被后来人读成「前一个漏计」。 |
 
-**继承自代码盘点轮、本轮未复验（读时打折）**：各模块的行内细节行号（如 `orchestrator.ts:870` 的 DFS 环检测、
-`loop.ts:126-136` 的 verify 反射上限、`impact` 的 `:208/:215/:256`）、规模计数（25,843 行 src；
-用例数以本表「全量回归」行的 **85 文件 / 814 用例**为准，早期静态 grep 得到的 ≈768 系少计且已被并发会话的新增用例推翻）、
-`compaction` 的 0.9× 阈值与 tail 预算公式、`prune` 的 40k/20k/2 轮参数、`inject` 的 6k 预算与
-`writePruneAttachments` 零生产调用者。这些来自同一路径的系统性盘点，抽样一致性良好，但**不构成本轮独立证据**。
+**仍属「继承未复验」的残余（23:4x 复验后只剩这三条）**：① `orchestrator.ts:885` 只给到「`depends_on` 成环即拒」的**文案级**证据，
+初稿写的「DFS 环检测」是盘点轮的措辞，**算法形态未复核**；② 「模型可见规格 = 12 个」的计数口径；
+③ `prune` 的免剪名单具体条目（`skill/remember/memory`）与 `inject` 的两层 MEMORY.md 结构（参数已验，名单未逐条对）。
+这些来自同一路径的系统性盘点，抽样一致性良好，但**不构成本轮独立证据**。
 
 **外部来源一律未复现**：第 1/2/3 节的行业与论文论断全部来自公开材料（第 9 节链接），
 产品能力清单**随版本失效风险高**；论文数字（−41~80%、+18.7、61–94%、15×、84%）按原文引用，未验证实验方法细节。
