@@ -823,8 +823,8 @@ button.tg-head{transition:color .12s}
 @keyframes blink{50%{opacity:0}}
 
 /* ============ composer：芯片行 + 单行输入 + 底部控制行 ============ */
-.composer{flex:none;padding:10px 24px 14px}
-.composer-inner{max-width:var(--content-max);margin:0 auto;display:flex;flex-direction:column;gap:8px}
+.composer{flex:none;padding:10px 0 14px}
+.composer-inner{max-width:var(--content-max);margin:0 auto;padding:0 24px;display:flex;flex-direction:column;gap:8px}
 /* 上下文芯片行：框外上方，参考稿式灰底胶囊 */
 .ctx-rail{display:flex;align-items:center;gap:8px;min-height:30px}
 .ctx-chip{
@@ -1424,7 +1424,6 @@ html.reduce-motion .quick-card{opacity:1}
   .shell{ --content-max: min(100%, 1040px); }
 }
 /* 1280–1599 标准三栏：无需额外规则，仅固化 --content-max（基础层已定义） */
-@media (max-width:1599px){ }
 /* 1024–1279 收窄：侧栏收为窄列（保留文字）；右板转覆盖式 Sheet；取消固定列拖拽（RESP-04） */
 @media (max-width:1279px){
   /* R-1 修正：侧栏会话行不含图标（sessionItemHTML 只有 running/pinned 两种修饰，
