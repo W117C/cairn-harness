@@ -1,4 +1,4 @@
-
+import { projectHistory, mountHistory } from './history-window.js';
 /* ============ 图标 ============ */
 const ICONS = {
   pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 3h6l-1 7 3 2.5V15H7v-2.5L10 10Z"/></svg>',
@@ -699,7 +699,7 @@ const VIEW_META = {
   git:      { title: 'Git',        icon: BRANCH_ICON }
 };
 
-/* 工作区列表：每个工作区是一套独立的文件夹与文件树 */
+/* 展示用文件树；path 不是可执行工作区，真实运行目录仅取 AppSettings.workspace。 */
 const WORKSPACES = [
   { id: 'ws1', name: 'coding-suite', path: '~/dev/coding-suite', current: true, tree: [
     { dir: 'src/auth', files: [
@@ -1233,7 +1233,9 @@ syncCtxChipState();
 
 /* 工作区看板：列出可选文件夹，点选即切换工作区 */
 function workspaceViewHTML() {
-  return '<div class="ws-head">选择工作区文件夹</div>' +
+  return (window.agent
+    ? '<button class="ws-row" type="button" id="workspaceConfigure"><span class="w-text"><span class="w-name">设置真实运行目录…</span><span class="w-path">设置 → 通用；下方仅为文件树预览，不影响运行目录</span></span></button>'
+    : '<div class="ws-head">选择工作区文件夹</div>') +
     WORKSPACES.map(w =>
       '<button class="ws-row' + (w === currentWs ? ' is-current' : '') + '" type="button" data-ws="' + esc(w.id) + '" role="radio" aria-checked="' + String(w === currentWs) + '">' +
         '<svg class="w-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>' +
@@ -1250,6 +1252,12 @@ function renderWorkspacePanel() { workspacePanelBody.innerHTML = workspaceViewHT
 registerPop(workspacePanel, ctxWorkspace, renderWorkspacePanel, syncCtxChipState);
 ctxWorkspace.addEventListener('click', () => togglePop(workspacePanel));
 workspacePanel.addEventListener('click', (e) => {
+  if (e.target.closest('#workspaceConfigure')) {
+    closeAllPops(false);
+    openSettings('general');
+    $('#workspacePath')?.focus();
+    return;
+  }
   const add = e.target.closest('#wsAdd');
   if (add) { openFileDialog('workspace'); return; }
   const row = e.target.closest('.ws-row');
@@ -1698,6 +1706,140 @@ render();
 
   const PERM_MAP = { strict: 'read-only', standard: 'default', yolo: 'auto' };
   const real = { id: null, title: '新会话', running: false, askCards: new Map(), cards: new Map(), usageIn: 0, usageOut: 0, events: 0, runStart: 0, toolGroup: null };
+  let historyWindow = null;
+  let openGeneration = 0;
+  let pendingHistory = null;
+  let historyEvents = null;
+
+  /* ---------- 真实运行目录：与 WORKSPACES 文件树演示数据严格隔离 ---------- */
+  const workspaceForm = document.createElement('form');
+  workspaceForm.className = 'set-row';
+  workspaceForm.innerHTML = '<div class="sr-text">' +
+    '<label class="sr-name" for="workspacePath">真实运行目录</label>' +
+    '<p class="sr-sub" id="workspaceHelp">请输入本机绝对路径（如 /Users/me/project）；留空使用宿主环境 / 默认目录。文件树预览不会改变运行目录。</p>' +
+    '<input id="workspacePath" type="text" placeholder="/Users/me/project" aria-describedby="workspaceHelp workspaceStatus" autocomplete="off" spellcheck="false" disabled>' +
+    '<p class="sr-sub" id="workspaceStatus" role="status" aria-live="polite">正在读取运行目录…</p></div>' +
+    '<div class="set-choice"><button id="workspaceSave" type="submit" disabled>保存目录</button></div>';
+  $('.set-sec[data-sec="general"]').prepend(workspaceForm);
+  const workspaceInput = workspaceForm.querySelector('#workspacePath');
+  const workspaceSave = workspaceForm.querySelector('#workspaceSave');
+  const workspaceStatus = workspaceForm.querySelector('#workspaceStatus');
+  let configuredWorkspace = null;
+  let workspaceError = '';
+  let workspaceSaving = false;
+  let workspaceDirty = false;
+  let sending = false;
+  // This desktop build targets macOS: no shell expansion of ~, $HOME or relative paths.
+  function parseWorkspace(value) {
+    const path = value == null ? '' : String(value).trim();
+    if (!path) return null;
+    if (!path.startsWith('/') || /[\x00-\x1f\x7f]/.test(path) || path.length > 4096) {
+      throw new Error('运行目录必须是本机绝对路径（以 / 开头），不能使用 ~ 或相对路径');
+    }
+    return path;
+  }
+  const baseSyncCtxChipState = syncCtxChipState;
+  syncCtxChipState = function () {
+    baseSyncCtxChipState();
+    ctxWorkspaceLabel.textContent = configuredWorkspace ? '运行目录 · ' + (configuredWorkspace.split('/').filter(Boolean).pop() || '/') : '运行目录 · 宿主默认';
+    ctxWorkspace.title = workspaceError || configuredWorkspace || '使用宿主环境 / 默认目录；点击可设置';
+  };
+  function workspaceFailure(message) {
+    workspaceError = message;
+    workspaceStatus.textContent = message;
+    workspaceInput.setAttribute('aria-invalid', 'true');
+    syncCtxChipState();
+    toast(message);
+  }
+  // Share one startup read with layout restoration. Sending waits for this read;
+  // disabled controls prevent a late snapshot from overwriting a user's saved path.
+  const settingsReady = (async () => {
+    try {
+      const settings = typeof api.getSettings === 'function' ? await api.getSettings() : null;
+      workspaceInput.value = settings?.workspace ?? '';
+      configuredWorkspace = parseWorkspace(settings?.workspace);
+      workspaceStatus.textContent = configuredWorkspace ? '已配置：' + configuredWorkspace : '未指定运行目录：使用宿主环境 / 默认目录';
+      return settings;
+    } catch (err) {
+      workspaceFailure('读取运行目录失败：' + (err?.message || err) + '；请重新保存目录');
+      return null;
+    } finally {
+      workspaceInput.disabled = false;
+      workspaceSave.disabled = typeof api.setSettings !== 'function';
+      syncCtxChipState();
+    }
+  })();
+  workspaceInput.addEventListener('input', () => {
+    workspaceDirty = true;
+    workspaceStatus.textContent = '目录尚未保存；保存后才能运行';
+  });
+  workspaceForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (workspaceInput.disabled || workspaceSaving || sending || real.running) {
+      toast('请等待读取、保存或当前运行完成后再设置目录');
+      return;
+    }
+    try {
+      const path = parseWorkspace(workspaceInput.value);
+      if (typeof api.setSettings !== 'function') throw new Error('宿主不支持保存设置');
+      workspaceSaving = true;
+      workspaceInput.disabled = workspaceSave.disabled = true;
+      workspaceStatus.textContent = '正在保存运行目录…';
+      await api.setSettings({ workspace: path });
+      configuredWorkspace = path;
+      workspaceInput.value = path || '';
+      workspaceDirty = false;
+      workspaceError = '';
+      workspaceInput.setAttribute('aria-invalid', 'false');
+      workspaceStatus.textContent = path ? '已保存：' + path : '已清除：使用宿主环境 / 默认目录';
+      syncCtxChipState();
+    } catch (err) {
+      workspaceFailure('保存运行目录失败：' + (err?.message || err));
+    } finally {
+      workspaceSaving = false;
+      workspaceInput.disabled = false;
+      workspaceSave.disabled = typeof api.setSettings !== 'function';
+    }
+  });
+  /* ---------- 运行目录接线结束 ---------- */
+  function clearTranscript() {
+    historyWindow?.destroy();
+    historyWindow = null;
+    streamInner.querySelectorAll('.msg').forEach(m => {
+      revealObserver.unobserve(m);
+      if (m._st) clearInterval(m._st);
+    });
+    real.cards.clear();
+    real.toolGroup = null;
+    streamInner.innerHTML = '';
+  }
+  function renderHistoryRow(row) {
+    const node = document.createElement('div');
+    node.className = 'msg ' + (row.kind === 'user' ? 'user' : 'ai');
+    node.dataset.history = '';
+    const body = document.createElement('div');
+    body.className = 'msg-body';
+    const text = document.createElement('div');
+    text.className = row.kind === 'user' ? 'bubble' : 'ai-text';
+    text.style.whiteSpace = 'pre-wrap';
+    text.textContent = row.text;
+    body.appendChild(text);
+    if (row.detail !== undefined || row.result !== undefined) {
+      const details = document.createElement('details');
+      const summary = document.createElement('summary');
+      summary.textContent = row.kind === 'tool' ? (row.ok === null ? '执行记录（无结果）' : row.ok ? '执行成功' : '执行失败') : '查看记录';
+      const content = document.createElement('pre');
+      content.className = 'ti-code';
+      content.style.whiteSpace = 'pre-wrap';
+      content.style.overflowWrap = 'anywhere';
+      content.textContent = (row.detail || '') + (row.result != null ? '\n\n输出：\n' + row.result : '');
+      details.append(summary, content);
+      if (row.ok === false) details.open = true;
+      body.appendChild(details);
+    }
+    node.appendChild(body);
+    return node;
+  }
 
   /* ---------- 会话列表 ---------- */
   function fmtTime(ms) {
@@ -1719,7 +1861,11 @@ render();
       }));
       if (!selectedId && sessions.length) selectedId = sessions[0].id;
       render();
-    } catch (err) { toast('会话列表加载失败：' + (err && err.message ? err.message : err)); }
+      return true;
+    } catch (err) {
+      toast('会话列表加载失败：' + (err && err.message ? err.message : err));
+      return false;
+    }
   }
 
   /* ---------- 消息流构造（复用原型 DOM 契约，CSS 全兼容） ---------- */
@@ -1859,7 +2005,7 @@ render();
   }
   /** 与 newCard 同宿主：挂到最后一条 AI 消息体内，没有则退回消息流。 */
   function lastAiHost() {
-    const lastAi = streamInner.querySelector('.msg.ai:last-of-type');
+    const lastAi = Array.from(streamInner.querySelectorAll('.msg.ai:not([data-history])')).at(-1);
     return lastAi && lastAi.isConnected ? lastAi.querySelector('.msg-body') : null;
   }
   const TG_CHEV = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
@@ -2000,7 +2146,7 @@ render();
             '<button class="risk-btn ghost plan-approve" type="button">批准</button>' +
             '<button class="risk-btn ghost plan-reject" type="button">拒绝</button>' +
           '</div>';
-        const lastAi = streamInner.querySelector('.msg.ai:last-of-type');
+        const lastAi = Array.from(streamInner.querySelectorAll('.msg.ai:not([data-history])')).at(-1);
         const host = lastAi && lastAi.isConnected ? lastAi.querySelector('.msg-body') : streamInner;
         host.appendChild(c);
         c.querySelector('.plan-approve').addEventListener('click', () => {
@@ -2017,7 +2163,7 @@ render();
         break;
       }
       case 'plan_approved': {
-        const tag = streamInner.querySelector('.card .tag');
+        const tag = streamInner.querySelector('.msg:not([data-history]) .card .tag, :scope > .card .tag');
         if (tag) tag.textContent = e.approved ? '已批准' : '已拒绝';
         break;
       }
@@ -2225,18 +2371,72 @@ render();
   });
 
   /* ---------- 事件订阅 ---------- */
+  // JSONL has no event sequence IDs; reconcile the ordered snapshot/live overlap,
+  // never a Set of payloads (identical deltas and usage records may be legitimate).
+  // session_id is added only to IPC, not to the persisted event.
+  // Exact disambiguation of an old identical suffix vs. a newly persisted prefix
+  // requires a main-process sequence/watermark; payload overlap assumes ordered IPC.
+  function historyEventKey(event) {
+    const { session_id, ...payload } = event;
+    const canonical = value => Array.isArray(value) ? value.map(canonical)
+      : value && typeof value === 'object'
+        ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
+    return JSON.stringify(canonical(payload));
+  }
+  function reconcileHistory(snapshot, live) {
+    if (!live.length) return snapshot.slice();
+    const keys = live.map(historyEventKey), prefix = new Array(keys.length).fill(0);
+    for (let i = 1, n = 0; i < keys.length; i++) {
+      while (n && keys[i] !== keys[n]) n = prefix[n - 1];
+      if (keys[i] === keys[n]) n++;
+      prefix[i] = n;
+    }
+    let overlap = 0;
+    for (const event of snapshot) {
+      const key = historyEventKey(event);
+      while (overlap && (overlap === keys.length || key !== keys[overlap])) overlap = prefix[overlap - 1];
+      if (key === keys[overlap]) overlap++;
+    }
+    return snapshot.concat(live.slice(overlap));
+  }
+  function showHistory(events) {
+    clearTranscript();
+    historyEvents = events;
+    real.usageIn = 0; real.usageOut = 0;
+    for (const e of events) {
+      if (e.type === 'usage') { real.usageIn += e.inputTokens || 0; real.usageOut += e.outputTokens || 0; }
+    }
+    syncStatusbar();
+    historyWindow = mountHistory({ container: streamInner, scroller: $('.stream'), rows: projectHistory(events), renderRow: renderHistoryRow });
+    scrollStream();
+  }
   api.onEvent(e => {
     real.events += 1;               // VIS-02：每次收到事件真实递增底栏计数
     syncStatusbar();
-    renderEvent(e);
+    // Untagged legacy traffic cannot safely be attributed to the selected session.
+    if (!real.id || e.session_id !== real.id) return;
+    if (pendingHistory) { pendingHistory.events.push(e); return; }
+    // A selected background stream can continue an assistant/tool row in the
+    // snapshot. Re-project together rather than creating a disconnected live tail.
+    if (historyEvents && !real.running) showHistory(historyEvents.concat(e));
+    else renderEvent(e);
   });
 
   /* ---------- 行为覆写：发送 / 会话切换 / 新建 / 删除 / 归档 ---------- */
   send = async function () {
     const text = promptInput.value.trim();
     if (!text) return;
-    if (real.running) { toast('agent 正在运行，请先等待完成'); return; }
+    if (real.historyPending) { toast('正在打开会话，请稍候'); return; }
+    if (real.running || sending) { toast('agent 正在运行，请先等待完成'); return; }
+    sending = true;
     try {
+      await settingsReady;
+      if (real.historyPending) { toast('正在打开会话，请稍候'); return; }
+      if (workspaceSaving || workspaceDirty || workspaceError) {
+        toast(workspaceError || '请先保存运行目录，再发送消息');
+        return;
+      }
+      const workspace = configuredWorkspace;
       if (!real.id) {
         const r = await api.createSession();
         real.id = r.id;
@@ -2253,34 +2453,47 @@ render();
       real.usageIn = 0; real.usageOut = 0; real.events = 0;
       syncStatusbar();
       setRunning(real.id, true);
-      const res = await api.run({ message: text, mode: PERM_MAP[permMode.id], sessionId: real.id });
+      const res = await api.run({ message: text, mode: PERM_MAP[permMode.id], sessionId: real.id, ...(workspace ? { workspace } : {}) });
       if (!res.ok) { real.running = false; setRunning(real.id, false); toast('启动失败：' + (res.error || '未知')); }
     } catch (err) {
       real.running = false;
       setRunning(real.id, false);
       toast('启动失败：' + (err && err.message ? err.message : err));
+    } finally {
+      sending = false;
     }
   };
   selectSession = async function (id, force) {
-    if (real.running) { toast('agent 运行中，先等待完成再切换'); return; }
+    if (real.running || sending) { toast('agent 运行中，先等待完成再切换'); return; }
     if (id === real.id && !force) { render(); return; }
+    const generation = ++openGeneration;
+    const pending = { events: [] };
+    pendingHistory = pending;
+    real.historyPending = true;
+    historyEvents = null;
     real.id = id;
     selectedId = id;
     closeSbMenus();
     render();
     const s = sessions.find(x => x.id === id);
     if (s) $('#chatTitle').textContent = s.title;
-    streamInner.innerHTML = '';
+    clearTranscript();
+    real.usageIn = 0; real.usageOut = 0;
+    syncStatusbar();
     try {
       const r = await api.openSession(id);
-      streamInner.innerHTML = '';
-      real.usageIn = 0; real.usageOut = 0;
-      r.events.forEach(renderEvent);
-      finalizePending();
-      scrollStream();
+      if (generation !== openGeneration || real.id !== id) return;
+      showHistory(reconcileHistory(r.events, pending.events));
     } catch (err) {
-      streamInner.innerHTML = '';
+      if (generation !== openGeneration || real.id !== id) return;
+      // A failed disk read must not discard events received while it was pending.
+      showHistory(pending.events);
       toast('打开会话失败：' + (err && err.message ? err.message : err));
+    } finally {
+      if (generation === openGeneration && real.id === id) {
+        pendingHistory = null;
+        real.historyPending = false;
+      }
     }
   };
   const _newChatBtn = document.querySelector('#newChat');
@@ -2289,7 +2502,7 @@ render();
       if (e.defaultPrevented) return;
       e.stopImmediatePropagation();
       e.preventDefault();
-      if (real.running) { toast('agent 运行中，先停止再新建'); return; }
+      if (real.running || sending) { toast('agent 运行中，先停止再新建'); return; }
       void (async () => {
         try {
           const r = await api.createSession();
@@ -2309,6 +2522,11 @@ render();
     const i = sessions.findIndex(x => x.id === id);
     if (i >= 0) sessions.splice(i, 1);
     if (selectedId === id) {
+      ++openGeneration;
+      pendingHistory = null;
+      real.historyPending = false;
+      historyEvents = null;
+      clearTranscript();
       real.id = null;
       selectedId = null;
       streamInner.innerHTML = CHAT_EMPTY_HTML;
@@ -2348,15 +2566,17 @@ render();
 
   /* ---------- 启动 ---------- */
   $('#chatTitle').textContent = 'Forge';
-  void loadSessions();
-  if (sessions.length) selectSession(sessions[0].id, true);
+  void (async () => {
+    const loaded = await loadSessions();
+    // Never select the prototype list, or replace a session opened during loading.
+    if (loaded && !real.id && sessions.length) await selectSession(sessions[0].id, true);
+  })();
   syncStatusbar();
   void initSandboxState();
   /* 恢复上次的 git 视图（仅 git；窗口重开后续上） */
   (async () => {
-    if (typeof api.getSettings !== 'function') return;
     try {
-      const st = await api.getSettings();
+      const st = await settingsReady;
       const ly = st && st.layout;
       if (ly && ly.open && ly.open.git) openView('git');
     } catch (_) {}
