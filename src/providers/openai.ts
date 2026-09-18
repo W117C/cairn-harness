@@ -2,7 +2,8 @@
 // baseURL / model / 额外 body 参数（extraBody）/ 环境变量名均可配，GLM 是它的一组预设（见 glm.ts）。
 // 解码规则与迁移前逐字一致：增量在 choices[0].delta.content；tool_calls 按 index 跨块累积
 //（id 首块、name 非空即记、arguments 拼接）；末 chunk 带 usage（后到覆盖）；data: [DONE] 结束。
-import { DEFAULT_STALL_MS, stallGuard } from "../net";
+import { DEFAULT_STALL_MS, type StallGuard } from "../net";
+import { establishStream } from "./retry";
 import type { ModelOutput, ProviderMessage, ProviderToolSpec } from "./index";
 import type { RequestMeter, RequestCategory, MeterUsage, RequestOutcome } from "../agent/metering";
 
@@ -112,8 +113,9 @@ export async function* streamOpenAI(
   if (opts.extraBody) Object.assign(body, opts.extraBody);
   if (tools && tools.length > 0) body.tools = toWireTools(tools);
 
-  // 根因 4：停滞守卫（静默窗口，不是总时长）——对端挂起时不再永久悬空。
-  const guard = stallGuard(opts.stallTimeoutMs ?? DEFAULT_STALL_MS, label);
+  // 根因 4：停滞守卫改由 establishStream 逐次新建（静默窗口，不是总时长）；
+  // 成功建连后交回本函数继续管流体（bump / dispose）。
+  let guard: StallGuard | undefined;
   let res: Response;
   const serializedBody = JSON.stringify(body);
   call?.signal?.throwIfAborted();
@@ -129,23 +131,23 @@ export async function* streamOpenAI(
       outputTokens: number(u.completion_tokens), cacheReadInputTokens: read, cacheWriteInputTokens: write };
   };
   try {
-  try {
-    res = await doFetch(endpoint, {
+  // 建连段：停滞守卫 + 429/5xx/网络抖动的指数退避重试都在 establishStream 里。
+  // 不变量：一旦 res.ok 就交回本函数，**绝不重放**（流已开始产出后重放会把同一轮 delta 吐两遍）；
+  // 调用方取消与停滞都不重试（前者是用户意图，后者重试等于白挂三分钟）。
+  const est = await establishStream({
+    label,
+    url: endpoint,
+    init: {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: serializedBody,
-      // C12（审查 P2）：取消信号与停滞守卫合并——会话取消时在途请求立即中止。
-      signal: call?.signal !== undefined ? AbortSignal.any([guard.signal, call.signal]) : guard.signal,
-    });
-  } catch (err) {
-    guard.dispose(); // 建连阶段失败：看门狗不能留下
-    throw err;
-  }
-  if (!res.ok) {
-    guard.dispose();
-    const text = await res.text().catch(() => "");
-    throw new Error(`${label} 请求失败 HTTP ${String(res.status)}: ${text.slice(0, 300)}`);
-  }
+    },
+    fetchImpl: doFetch,
+    stallMs: opts.stallTimeoutMs ?? DEFAULT_STALL_MS,
+    ...(call?.signal !== undefined ? { callerSignal: call.signal } : {}),
+  });
+  res = est.res;
+  guard = est.guard;
 
   if (!stream) {
     // 非流式分支（摘要器/反向验证用）：整段回复转成同一条事件管线，delta 只有 1 个
@@ -166,13 +168,13 @@ export async function* streamOpenAI(
       if (data.usage) yield toUsage(data.usage);
       meterOutcome = "ok";
     } finally {
-      guard.dispose();
+      guard?.dispose();
     }
     return;
   }
 
   if (!res.body) {
-    guard.dispose();
+    guard?.dispose();
     throw new Error(`${label} 流式响应缺少 body`);
   }
   const decoder = new TextDecoder();
@@ -188,7 +190,7 @@ export async function* streamOpenAI(
     while (!finished) {
       const { done, value } = await reader.read();
       if (done) break;
-      guard.bump(); // 有分片 → 续期（只有完全静默才会到点）
+      guard?.bump(); // 有分片 → 续期（只有完全静默才会到点）
       buf += decoder.decode(value, { stream: true });
       let nl: number;
       while ((nl = buf.indexOf("\n")) >= 0) {
@@ -248,12 +250,12 @@ export async function* streamOpenAI(
     if (usage) yield usage;
     meterOutcome = "ok";
   } finally {
-    guard.dispose();
+    guard?.dispose();
     // 消费者提前 break / 出错退出时主动取消 body，否则连接与对端资源一直挂着。
     void reader.cancel().catch(() => {});
   }
   } finally {
-    guard.dispose();
+    guard?.dispose();
     if (requestId !== undefined) opts.metering!.meter.finishRequest(requestId, call?.signal?.aborted ? "cancelled" : meterOutcome, meterUsage);
   }
 }

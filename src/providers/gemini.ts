@@ -4,7 +4,8 @@
 // 一个 chunk 可含多个 functionCall（并行调用，全部解析成一条条 tool_call）；
 // usageMetadata 含 promptTokenCount / candidatesTokenCount / thoughtsTokenCount / totalTokenCount
 //（chunk 间累计，末 chunk 为准——直接覆盖不累加）。解析直接消费 Gemini 原生字段，不经 OpenAI 中间格式。
-import { DEFAULT_STALL_MS, stallGuard } from "../net";
+import { DEFAULT_STALL_MS, type StallGuard } from "../net";
+import { establishStream } from "./retry";
 import type { ModelOutput, ProviderMessage, ProviderToolSpec } from "./index";
 
 export interface GeminiOptions {
@@ -136,28 +137,26 @@ export async function* streamGemini(
   const baseURL = opts.baseURL ?? "https://generativelanguage.googleapis.com";
   const doFetch = opts.fetchImpl ?? fetch;
 
-  // 根因 4：停滞守卫（静默窗口，不是总时长）——对端挂起时不再永久悬空。
-  const guard = stallGuard(opts.stallTimeoutMs ?? DEFAULT_STALL_MS, label);
-  let res: Response;
-  try {
-    res = await doFetch(`${baseURL}/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
+  // 根因 4：停滞守卫改由 establishStream 逐次新建（静默窗口，不是总时长），成功建连后交回
+  // 本函数继续管流体。建连期失败（429/5xx/网络抖动）按指数退避 + full jitter 重试；
+  // 不变量：res.ok 之后绝不重放（流已产出），调用方取消与停滞都不重试。
+  let guard: StallGuard | undefined;
+  const est = await establishStream({
+    label,
+    url: `${baseURL}/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`,
+    init: {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify(toGeminiBody(messages, tools)),
-      // C12（审查 P2）：取消信号与停滞守卫合并——会话取消时在途请求立即中止。
-      signal: call?.signal !== undefined ? AbortSignal.any([guard.signal, call.signal]) : guard.signal,
-    });
-  } catch (err) {
-    guard.dispose(); // 建连阶段失败：看门狗不能留下
-    throw err;
-  }
-  if (!res.ok) {
-    guard.dispose();
-    const text = await res.text().catch(() => "");
-    throw new Error(`${label} 请求失败 HTTP ${String(res.status)}: ${text.slice(0, 300)}`);
-  }
+    },
+    fetchImpl: doFetch,
+    stallMs: opts.stallTimeoutMs ?? DEFAULT_STALL_MS,
+    ...(call?.signal !== undefined ? { callerSignal: call.signal } : {}),
+  });
+  const res = est.res;
+  guard = est.guard;
   if (!res.body) {
-    guard.dispose();
+    guard?.dispose();
     throw new Error(`${label} 流式响应缺少 body`);
   }
 
@@ -174,7 +173,7 @@ export async function* streamGemini(
     while (!done) {
       const read = await reader.read();
       if (read.done) break;
-      guard.bump(); // 有分片 → 续期（只有完全静默才会到点）
+      guard?.bump(); // 有分片 → 续期（只有完全静默才会到点）
       buf += decoder.decode(read.value, { stream: true });
       let nl: number;
       while ((nl = buf.indexOf("\n")) >= 0) {
@@ -226,7 +225,7 @@ export async function* streamGemini(
       yield { type: "usage", inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 };
     }
   } finally {
-    guard.dispose();
+    guard?.dispose();
     // 消费者提前 break / 出错退出时主动取消 body，否则连接与对端资源一直挂着。
     void reader.cancel().catch(() => {});
   }

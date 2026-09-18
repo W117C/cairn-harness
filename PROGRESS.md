@@ -1214,3 +1214,24 @@ verify ⇒ harness 补一拍，红字落 `verify_result{auto:true}`。开关三�
 隔离 worktree 验证 + 主树短暂换入提交再换回」可以既不代提交、又不切 hunk 地干净落库；
 落库后用 `git diff | grep -c '^[+-].*<自己的标识>' = 0` 证明对方内容未被动过。步骤与判据都记在
 BLOCKED 同条里。开闸判据（准确率/返工率 vs `$/成功任务`）与渲染层设置项仍留位。
+
+## 能力 4/9：出网建连重试层（provider 零重试 → 指数退避 + full jitter）
+
+此前 HTTP 层**零重试、无 429 处理、无限流器**（三家 provider 的建连段是逐字同构的一段代码）：
+真实负载下首个 429/5xx 或一次网络抖动就把整轮任务打死——「遇到失败能重试、换路径，而不是卡死」
+这一条在出网路径上是空的。
+
+- 新增 `src/providers/retry.ts`：`establishStream()` 统一建连（停滞守卫逐次新建 + 429/408/409/425/5xx
+  与网络错误按**指数退避 + full jitter** 重试，默认 3 次、上限 8s），`Retry-After` 认秒数与 HTTP-date
+  且一律钳在上限内。三条 provider（openai/anthropic/gemini，GLM 复用 openai 预设）改走这一条链，
+  **错误文案逐字不变**（多条既有测与门禁按 `${label} 请求失败 HTTP <status>` 断言）。
+- 三条不重量的边界（都是设计约束，不是疏漏）：① `res.ok` 之后绝不重放（流已产出，重放=模型看到
+  重复 delta）；② 停滞不重试（60s 量级等三次 = 白挂三分钟）；③ 调用方取消不重试。
+- 每条重试都 `onRetry` 可见（fail-visible：静默重试等于把故障藏起来），三家共用 ⇒ 记账只有一处。
+- **本轮由自己的测抓出的真 bug**：取消语义最初只加在网络错误分支，`503 + 用户已停止` 仍把 5 次
+  attempts 全跑完（实测 `expected 5 to be less than or equal to 2`）⇒ 状态码分支补
+  `|| o.callerSignal?.aborted === true`。改的是实现，没放宽测的断言。
+
+验证（逐道 exit 0）：typecheck 0 错、`test` 89 files/**857 passed**（新 `tests/http-retry.test.ts` 12 条）、
+providers-check、e2e、ipc:check、sidechat-check。未证：真实 provider 的 429 行为（`provider:check`
+联网分支仍受凭据限制）——本轮只宣称本地替身下的语义正确，不宣称线上省了多少。

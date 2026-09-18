@@ -5,7 +5,8 @@
 // message_delta 里的 usage 是【累计值】——直接取最后一条，不得跨事件累加。
 // 解析直接消费 Anthropic 原生字段（content_block_delta.delta.text_delta 等），
 // 不经过任何 OpenAI 中间格式。
-import { DEFAULT_STALL_MS, stallGuard } from "../net";
+import { DEFAULT_STALL_MS, type StallGuard } from "../net";
+import { establishStream } from "./retry";
 import type { ModelOutput, ProviderMessage, ProviderToolSpec } from "./index";
 
 export interface AnthropicOptions {
@@ -128,11 +129,14 @@ export async function* streamAnthropic(
   const maxTokens = opts.maxTokens ?? 4096;
   const doFetch = opts.fetchImpl ?? fetch;
 
-  // 根因 4：停滞守卫（静默窗口，不是总时长）——对端挂起时不再永久悬空。
-  const guard = stallGuard(opts.stallTimeoutMs ?? DEFAULT_STALL_MS, label);
-  let res: Response;
-  try {
-    res = await doFetch(`${baseURL}/v1/messages`, {
+  // 根因 4：停滞守卫改由 establishStream 逐次新建（静默窗口，不是总时长），成功建连后交回
+  // 本函数继续管流体。建连期失败（429/5xx/网络抖动）按指数退避 + full jitter 重试；
+  // 不变量：res.ok 之后绝不重放（流已产出），调用方取消与停滞都不重试。
+  let guard: StallGuard | undefined;
+  const est = await establishStream({
+    label,
+    url: `${baseURL}/v1/messages`,
+    init: {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -140,20 +144,15 @@ export async function* streamAnthropic(
         "anthropic-version": opts.version ?? "2023-06-01",
       },
       body: JSON.stringify(toAnthropicBody(messages, { model, maxTokens, stream: true }, tools)),
-      // C12（审查 P2）：取消信号与停滞守卫合并——会话取消时在途请求立即中止。
-      signal: call?.signal !== undefined ? AbortSignal.any([guard.signal, call.signal]) : guard.signal,
-    });
-  } catch (err) {
-    guard.dispose(); // 建连阶段失败：看门狗不能留下
-    throw err;
-  }
-  if (!res.ok) {
-    guard.dispose();
-    const text = await res.text().catch(() => "");
-    throw new Error(`${label} 请求失败 HTTP ${String(res.status)}: ${text.slice(0, 300)}`);
-  }
+    },
+    fetchImpl: doFetch,
+    stallMs: opts.stallTimeoutMs ?? DEFAULT_STALL_MS,
+    ...(call?.signal !== undefined ? { callerSignal: call.signal } : {}),
+  });
+  const res = est.res;
+  guard = est.guard;
   if (!res.body) {
-    guard.dispose();
+    guard?.dispose();
     throw new Error(`${label} 流式响应缺少 body`);
   }
 
@@ -225,7 +224,7 @@ export async function* streamAnthropic(
     while (!done) {
       const read = await reader.read();
       if (read.done) break;
-      guard.bump(); // 有分片 → 续期（只有完全静默才会到点）
+      guard?.bump(); // 有分片 → 续期（只有完全静默才会到点）
       buf += decoder.decode(read.value, { stream: true });
       let nl: number;
       while ((nl = buf.indexOf("\n")) >= 0) {
@@ -253,7 +252,7 @@ export async function* streamAnthropic(
       yield { type: "usage", inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 };
     }
   } finally {
-    guard.dispose();
+    guard?.dispose();
     // 消费者提前 break / 出错退出时主动取消 body，否则连接与对端资源一直挂着。
     void reader.cancel().catch(() => {});
   }
