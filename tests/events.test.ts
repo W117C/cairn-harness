@@ -160,3 +160,81 @@ describe("replay 坏行容错边界（S1-4 回归）", () => {
   });
 });
 
+// A1（P0-A）：事件落盘改常驻 FileHandle——锁住四条边界：大量顺序写、rm 重建（inode 校验）、
+// 同实例并发写（无半行/无重复）、多 path 缓存淘汰后文件内容仍正确。
+describe("A1 常驻句柄（事件落盘）", () => {
+  const um = (t: string): AgentEvent => ({ type: "user_message", content: t } as AgentEvent);
+
+  it("(a) 连续 append 200 条 → replay 200 条且逐条深相等", async () => {
+    dir = await mkdtemp(join(tmpdir(), "m0-handle-a-"));
+    const logPath = join(dir, "events.jsonl");
+    const log = createEventLog(logPath);
+    const written: AgentEvent[] = [];
+    for (let i = 0; i < 200; i++) {
+      const e = um("m" + String(i));
+      written.push(e);
+      await log.append(e);
+    }
+    const events = await replay(logPath);
+    expect(events).toHaveLength(200);
+    expect(events).toEqual(written);
+  });
+
+  it("(b) rm 后重建：新句柄写到新 inode（不写进已 unlink 的旧 inode）", async () => {
+    dir = await mkdtemp(join(tmpdir(), "m0-handle-b-"));
+    const logPath = join(dir, "events.jsonl");
+    const first = createEventLog(logPath);
+    await first.append(um("旧"));
+    expect(await replay(logPath)).toHaveLength(1);
+    await rm(logPath, { force: true }); // agent-runner:877 的形态：先 rm 再 createEventLog
+    const second = createEventLog(logPath); // 新实例；文件已 unlink（重建 = 新 inode）
+    await second.append(um("新"));
+    const events = await replay(logPath);
+    expect(events).toHaveLength(1);
+    expect((events[0] as { content?: string }).content).toBe("新");
+  });
+
+  it("(c) 同实例并发写 50 条：无半行、无重复、每行合法 JSON", async () => {
+    dir = await mkdtemp(join(tmpdir(), "m0-handle-c-"));
+    const logPath = join(dir, "events.jsonl");
+    const log = createEventLog(logPath);
+    await Promise.all(Array.from({ length: 50 }, (_, i) => log.append(um("c" + String(i)))));
+    const raw = await readFile(logPath, "utf8");
+    const lines = raw.split("\n").filter((l) => l.trim() !== "");
+    expect(lines).toHaveLength(50);
+    for (const l of lines) expect(() => JSON.parse(l) as unknown).not.toThrow();
+    const events = await replay(logPath);
+    expect(events).toHaveLength(50);
+    expect(new Set(events.map((e) => (e as { content?: string }).content)).size).toBe(50); // 无重复
+  });
+
+  it("(e) X1：句柄被有界缓存挤出后，同一实例后续 append 仍成功（每次核对缓存引用）", async () => {
+    dir = await mkdtemp(join(tmpdir(), "m0-handle-e-"));
+    const mainPath = join(dir, "main.jsonl");
+    const main = createEventLog(mainPath);
+    await main.append(um("before"));
+    // 用 ≥ LOG_HANDLE_MAX(32) 个其它 path 把 main 的句柄挤出缓存并 close（真实形态：长会话里
+    // 32+ 个 sidechat/会话 path）。旧实现（按实例只记忆化一次句柄）此处 write 到已关闭句柄
+    // → ERR_FILE_HANDLE_CLOSED → 整个 run 失败。
+    for (let i = 0; i < 40; i++) {
+      await createEventLog(join(dir, "other" + String(i) + ".jsonl")).append(um("o" + String(i)));
+    }
+    await main.append(um("after"));
+    const events = await replay(mainPath);
+    expect(events.map((e) => (e as { content?: string }).content)).toEqual(["before", "after"]);
+  });
+
+  it("(d) 40 个不同 path 各 append 1 条（超 LOG_HANDLE_MAX=32，淘汰后仍可用）", async () => {
+    dir = await mkdtemp(join(tmpdir(), "m0-handle-d-"));
+    const paths = Array.from({ length: 40 }, (_, i) => join(dir, "e" + String(i) + ".jsonl"));
+    for (let i = 0; i < paths.length; i++) {
+      await createEventLog(paths[i]!).append(um("p" + String(i)));
+    }
+    for (let i = 0; i < paths.length; i++) {
+      const events = await replay(paths[i]!);
+      expect(events).toHaveLength(1);
+      expect((events[0] as { content?: string }).content).toBe("p" + String(i));
+    }
+  });
+});
+

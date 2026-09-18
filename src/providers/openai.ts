@@ -4,6 +4,7 @@
 //（id 首块、name 非空即记、arguments 拼接）；末 chunk 带 usage（后到覆盖）；data: [DONE] 结束。
 import { DEFAULT_STALL_MS, stallGuard } from "../net";
 import type { ModelOutput, ProviderMessage, ProviderToolSpec } from "./index";
+import type { RequestMeter, RequestCategory, MeterUsage, RequestOutcome } from "../agent/metering";
 
 export type OpenAiMessage = ProviderMessage;
 export type OpenAiToolSpec = ProviderToolSpec;
@@ -34,6 +35,8 @@ export interface OpenAiOptions {
   fetchImpl?: typeof fetch;
   /** 停滞守卫静默窗口 ms（根因 4）；缺省 60s，<=0 关闭守卫。 */
   stallTimeoutMs?: number;
+  /** Opt-in wire-boundary accounting; never stores payload/key text. */
+  metering?: { meter: RequestMeter; category: RequestCategory };
 }
 
 interface DeltaToolCall {
@@ -49,7 +52,7 @@ interface ChatChunk {
     message?: { content?: string; tool_calls?: DeltaToolCall[] };
     finish_reason?: string | null;
   }[];
-  usage?: { prompt_tokens?: number; completion_tokens?: number } | null;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number }; cache_creation_input_tokens?: number } | null;
   // OpenAI 流中段错误事件（如内容审查），出现即按协议错误抛出
   error?: { message?: string; type?: string; code?: string } | null;
 }
@@ -112,11 +115,25 @@ export async function* streamOpenAI(
   // 根因 4：停滞守卫（静默窗口，不是总时长）——对端挂起时不再永久悬空。
   const guard = stallGuard(opts.stallTimeoutMs ?? DEFAULT_STALL_MS, label);
   let res: Response;
+  const serializedBody = JSON.stringify(body);
+  call?.signal?.throwIfAborted();
+  const requestId = opts.metering?.meter.beginRequest(opts.metering.category, serializedBody);
+  let meterOutcome: RequestOutcome = "failed";
+  let meterUsage: Partial<MeterUsage> = {};
+  const observeUsage = (u: NonNullable<ChatChunk["usage"]>): void => {
+    const number = (v: unknown): number | null => typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
+    const input = number(u.prompt_tokens), read = number(u.prompt_tokens_details?.cached_tokens);
+    // OpenAI/GLM do not report a disjoint cache-write bucket. Do not invent zero.
+    const write = number(u.cache_creation_input_tokens);
+    meterUsage = { inputTokens: input !== null && read !== null && write !== null && input >= read + write ? input - read - write : null,
+      outputTokens: number(u.completion_tokens), cacheReadInputTokens: read, cacheWriteInputTokens: write };
+  };
+  try {
   try {
     res = await doFetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(body),
+      body: serializedBody,
       // C12（审查 P2）：取消信号与停滞守卫合并——会话取消时在途请求立即中止。
       signal: call?.signal !== undefined ? AbortSignal.any([guard.signal, call.signal]) : guard.signal,
     });
@@ -134,6 +151,7 @@ export async function* streamOpenAI(
     // 非流式分支（摘要器/反向验证用）：整段回复转成同一条事件管线，delta 只有 1 个
     try {
       const data = (await res.json()) as ChatChunk;
+      if (data.usage) observeUsage(data.usage);
       const callId = data.id ?? "a-0";
       const msg = data.choices?.[0]?.message;
       if (msg?.content) yield { type: "assistant_delta", callId, text: msg.content };
@@ -146,6 +164,7 @@ export async function* streamOpenAI(
         };
       }
       if (data.usage) yield toUsage(data.usage);
+      meterOutcome = "ok";
     } finally {
       guard.dispose();
     }
@@ -199,7 +218,7 @@ export async function* streamOpenAI(
           throw new Error(`${label} 流错误 ${e.type ?? e.code ?? "unknown"}: ${e.message ?? ""}`);
         }
         if (chunk.id) callId = chunk.id;
-        if (chunk.usage) usage = toUsage(chunk.usage);
+        if (chunk.usage) { usage = toUsage(chunk.usage); observeUsage(chunk.usage); }
         const delta = chunk.choices?.[0]?.delta;
         if (delta?.content) {
           yield { type: "assistant_delta", callId, text: delta.content };
@@ -227,9 +246,14 @@ export async function* streamOpenAI(
       };
     }
     if (usage) yield usage;
+    meterOutcome = "ok";
   } finally {
     guard.dispose();
     // 消费者提前 break / 出错退出时主动取消 body，否则连接与对端资源一直挂着。
     void reader.cancel().catch(() => {});
+  }
+  } finally {
+    guard.dispose();
+    if (requestId !== undefined) opts.metering!.meter.finishRequest(requestId, call?.signal?.aborted ? "cancelled" : meterOutcome, meterUsage);
   }
 }

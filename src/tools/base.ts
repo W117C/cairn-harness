@@ -1,6 +1,6 @@
 import { realpath } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
-import type { AgentEvent, ClarifyAnswerMap } from "../events";
+import type { AgentEvent, ClarifyAnswerMap, ImpactReportEvent } from "../events";
 
 /** 工具可预期失败的统一错误类型：loop 捕获后转成 ok:false 的 tool_result。 */
 export class ToolError extends Error {}
@@ -34,6 +34,9 @@ export interface ToolContext {
   /** C12（审查 P2）：会话取消信号——长驻工具（run_shell/LSP）可订阅它提前收束，
    *  不再只能等 60s 超时；缺省 undefined = 行为不变。 */
   signal?: AbortSignal;
+  /** M7 影响面：write_file/edit_file 成功落盘后计算跨文件波及。缺省 undefined = 零行为
+   *  （门禁/单测路径不注入）。best-effort：钩子自身失败不得影响已成功的写入。 */
+  impact?: ImpactHook;
 }
 
 export interface ToolResult {
@@ -131,6 +134,29 @@ export async function assertNotAgentAreaReal(workspace: string, abs: string, lab
   const relReal = relative(wsReal, cur);
   if (relReal.split(/[\\/]/).includes(".agent")) {
     throw new ToolError(`${label}: .agent/ 是系统区——路径经软链解析后写入落点在 .agent/ 内（${relReal}），已拒绝: ${abs}`);
+  }
+}
+
+/** M7 影响面钩子：write_file/edit_file 成功后由 loop 注入。返回 null = 文件不在影响图内
+ *  （非 js/ts、未扫描、不存在）→ 不发事件；返回报告 = 发 impact_report 事件并把可读摘要回注
+ *  tool_result（模型据此知道改这一处会波及哪些调用点，是「返工少」的护栏）。
+ *  抛错（含 grammar 环境级缺失的 ImpactUnavailableError）由 appendImpact 统一吞掉并记日志。 */
+export type ImpactHook = (
+  fileRel: string,
+) => Promise<{ event: ImpactReportEvent; contextNote: string } | null>;
+
+/** 写工具成功后的影响面富化：事件先于 tool_result 落流（顺序可读），摘要并进输出。
+ *  钩子缺省/返回 null/抛错都不改写盘结果——写入已成功，护栏缺位不能把成功回滚成失败。 */
+export async function appendImpact(ctx: ToolContext, rel: string, base: string): Promise<string> {
+  if (!ctx.impact) return base;
+  try {
+    const r = await ctx.impact(rel);
+    if (r === null) return base;
+    if (ctx.emit) await ctx.emit(r.event);
+    return base + "\n" + r.contextNote;
+  } catch (err) {
+    console.warn("[impact] 影响面计算失败，跳过事件（写入已成功，不受影响）:", err instanceof Error ? err.message : String(err));
+    return base;
   }
 }
 

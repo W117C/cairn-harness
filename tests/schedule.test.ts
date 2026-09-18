@@ -4,7 +4,7 @@
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEventLog, replay, type AgentEvent } from "../src/events";
 import {
   MAX_PROMPT_CHARS,
@@ -35,6 +35,7 @@ import {
 } from "../src/main/scheduler";
 import { MAX_CONCURRENT_WORKERS } from "../src/agent/orchestrator";
 import { listSessions } from "../src/main/sessions";
+import * as sessionStore from "../src/main/sessions";
 
 let dir: string;
 
@@ -223,6 +224,28 @@ describe("M4a 双轨存储", () => {
     const keys = new Set(entries.map((e) => e.occurrence_key));
     expect(tail.filter((k) => !keys.has(k))).toEqual([]);
   });
+
+  // X2（P0-A 同族）：journal 改常驻句柄后，收敛（read 快照 → rename 覆盖写）必须让旧句柄失效
+  // ——rename 之后旧句柄指向已被覆盖的旧 inode，后续写入会静默丢失（丢的正是"该 occurrence
+  // 已决"的唯一凭据，重启后重复补跑）。当前实现里 resolveHandle 的 inode 校验已能捕获该覆盖，
+  // 本用例是**回归锁**：将来若给 journal 写路径加 X1 式记忆化快路径而漏掉显式失效，这里必红。
+  it("journal 收敛后旧句柄失效：后写的条目一条不丢（X2 回归）", async () => {
+    const file = join(dir, "journal-invalidate.jsonl");
+    const at = new Date("2026-09-12T02:00:00.000Z").toISOString();
+    for (let i = 0; i < 10_005; i++) {
+      await appendJournalEntry(file, { task_id: "t", occurrence_key: "pre-" + String(i), due_at: at, decision: "triggered", at });
+    }
+    const kept = await compactJournalIfLarge(file);
+    expect(kept).toBe(4_000); // 收敛到 JOURNAL_KEEP_ENTRIES
+    const post = Array.from({ length: 5 }, (_, i) => "post-" + String(i));
+    for (const k of post) {
+      await appendJournalEntry(file, { task_id: "t", occurrence_key: k, due_at: at, decision: "triggered", at });
+    }
+    const { entries } = await readJournalFile(file);
+    expect(entries).toHaveLength(4_005);
+    const keys = new Set(entries.map((e) => e.occurrence_key));
+    expect(post.filter((k) => !keys.has(k))).toEqual([]); // 后写的 5 条一条不丢
+  });
 });
 
 describe("M4a next-run 计算（croner + 锚点步进）", () => {
@@ -312,6 +335,90 @@ const hangOnSignal: TriggerExecutor = ({ signal }) =>
 const CREATED = "2026-09-11T00:00:00.000Z"; // 显式 createdAt（早于所有 fake now 的 dueAt）
 
 describe("M4a 准入管线（三闸顺序短路 + 去重 + 补跑）", () => {
+  it.each([
+    { source: "manual", sameTask: false, cap: 1, reason: "concurrency-cap" },
+    { source: "tick", sameTask: false, cap: 1, reason: "concurrency-cap" },
+    { source: "manual", sameTask: true, cap: 4, reason: "overlap" },
+    { source: "tick", sameTask: true, cap: 4, reason: "overlap" },
+  ])("atomic admission: $source/manual sameTask=$sameTask cap=$cap", async ({ source, sameTask, cap, reason }) => {
+    let now = Date.parse("2026-09-12T02:00:00Z");
+    let releaseSession!: () => void;
+    let sessionEntered!: () => void;
+    let finishRun!: (result: { ok: boolean }) => void;
+    const sessionGate = new Promise<void>((resolve) => { releaseSession = resolve; });
+    const entered = new Promise<void>((resolve) => { sessionEntered = resolve; });
+    const execution = new Promise<{ ok: boolean }>((resolve) => { finishRun = resolve; });
+    const executor = vi.fn<TriggerExecutor>(() => execution);
+    const { s, sessions } = makeScheduler({ now: () => now, getCap: () => cap, runSession: executor, runTimeoutMs: 60_000 });
+    const first = await s.upsert(base({ name: "first", schedule: { kind: "once", at: "2026-09-12T01:00:00Z" }, createdAt: CREATED }));
+    const second = sameTask ? first : await s.upsert(base({ name: "second", enabled: false, createdAt: CREATED }));
+    if (!first.ok || !second.ok) throw new Error("upsert fail");
+    // Pause after journal but before inflight.set: force the audited IO window, without sleeps.
+    const create = sessionStore.createSession;
+    const createSpy = vi.spyOn(sessionStore, "createSession").mockImplementationOnce(async (...args) => {
+      sessionEntered();
+      await sessionGate;
+      return create(...args);
+    });
+    const firstRequest = source === "tick" ? s.tick({ startup: true }) : s.runNow(first.value.id);
+    let secondRequest: ReturnType<Scheduler["runNow"]> | undefined;
+    try {
+      await entered;
+      now += 1; // same-task test must reach overlap, not occurrence-key dedup
+      secondRequest = s.runNow(second.value.id);
+      releaseSession();
+      const [accepted, rejected] = await Promise.all([firstRequest, secondRequest]);
+      if ("catchup" in accepted) expect(accepted.catchup).toBe(1);
+      else expect(accepted.ok).toBe(true);
+      expect(rejected).toEqual({ ok: false, error: "触发被闸拒绝: " + reason });
+      expect(s.inflightCount).toBe(1);
+      expect(createSpy).toHaveBeenCalledTimes(1);
+      expect(executor).toHaveBeenCalledTimes(1);
+      expect(executor.mock.calls[0]![0].mode).toBe("read-only");
+      const { entries } = await readJournalFile(s.journalPath);
+      expect(entries).toHaveLength(2);
+      expect(entries[0]!.decision).toBe(source === "tick" ? "catchup" : "triggered");
+      expect(entries[1]).toMatchObject({ task_id: second.value.id, decision: "skipped", reason, due_at: new Date(now).toISOString() });
+      expect(await listSessions(sessions)).toHaveLength(1);
+      // Rejected occurrence stays decided: no retry/new journal row even after the winner finishes.
+      finishRun({ ok: true });
+      await s.whenIdle;
+      expect(s.inflightCount).toBe(0);
+      expect((await s.runNow(second.value.id)).error).toContain("去重");
+      expect((await readJournalFile(s.journalPath)).entries).toHaveLength(2);
+    } finally {
+      releaseSession();
+      finishRun({ ok: true });
+      await Promise.allSettled([firstRequest, ...(secondRequest ? [secondRequest] : [])]);
+      await s.whenIdle;
+      createSpy.mockRestore();
+      s.stop();
+    }
+  });
+
+  it("admission IO failure releases the lock without rolling back the decided journal", async () => {
+    const { s } = makeScheduler({ getCap: () => 1, runSession: async () => ({ ok: true }) });
+    const first = await s.upsert(base({ name: "failed admission" }));
+    const second = await s.upsert(base({ name: "next admission" }));
+    if (!first.ok || !second.ok) throw new Error("upsert fail");
+    const createSpy = vi.spyOn(sessionStore, "createSession").mockRejectedValueOnce(new Error("session IO failed"));
+    try {
+      const [failed, admitted] = await Promise.allSettled([s.runNow(first.value.id), s.runNow(second.value.id)]);
+      expect(failed).toMatchObject({ status: "rejected", reason: { message: "session IO failed" } });
+      expect(admitted).toEqual({ status: "fulfilled", value: { ok: true } });
+      await s.whenIdle;
+      expect(s.inflightCount).toBe(0);
+      expect((await s.runNow(first.value.id)).error).toContain("去重");
+      const { entries } = await readJournalFile(s.journalPath);
+      expect(entries.map((entry) => [entry.task_id, entry.decision])).toEqual([
+        [first.value.id, "triggered"], [second.value.id, "triggered"],
+      ]);
+    } finally {
+      await s.whenIdle;
+      createSpy.mockRestore();
+    }
+  });
+
   it("并发闸：cap=2 三任务同时到期 → 第三 skipped(concurrency-cap)；inflight 独立计数", async () => {
     const { s } = makeScheduler({ runSession: hangOnSignal, getCap: () => 2, now: new Date("2026-09-12T02:00:00Z").getTime() });
     await s.start();
@@ -435,6 +542,11 @@ describe("M4a 准入管线（三闸顺序短路 + 去重 + 补跑）", () => {
     await s.upsert(base({ name: "长睡眠靶", schedule: { kind: "interval", everyMinutes: 60 }, createdAt: "2026-09-05T00:00:00.000Z" }));
     const r1 = await s.tick({ startup: true });
     expect(r1.catchup + r1.triggered).toBe(1); // 启动补跑只跑最近一次（语义不变）
+    // X2（appendJournalEntry 改常驻句柄，2.2ms/次 → 23µs/次）后 r1 那一跑不再「天然」收束：
+    // 旧实现靠 appendFile 的毫秒级 IO 把这一跑放完，r2 才不会被重叠闸挡。本用例断言的是
+    // 「运行期补记账的上限」，不是重叠闸——显式等 r1 收束，消除时序依赖（r1 未收束时 r2 的末条
+    // occurrence 会被**正确地**判成 skipped(overlap)，triggered=0，与记账上限无关）。
+    await s.whenIdle;
     const r2 = await s.tick({ startup: false, now: Date.parse("2026-09-12T08:30:00Z") });
     expect(r2.triggered).toBe(1);
     const j = await readJournalFile(s.journalPath);

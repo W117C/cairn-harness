@@ -11,11 +11,11 @@
 //   AskGate 承担；超时双闸 = runTimeoutMs（到点 abort，轮界收束）+ settlesWithin（宿主不响应时的二道退出）。
 // - 完成回写：summarizeRun 纯投影摘要（零新 LLM 调用）→ automation_completed 事件（复用 report 卡类型）。
 // electron-free；tick/jitter/clock/executor 全部可注入，验收禁止真实 sleep 等触发。
-import { mkdir, appendFile, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Cron } from "croner";
 import type { AgentEvent } from "../events";
-import { createEventLog, replay } from "../events";
+import { createEventLog, hasEventLogHandle, invalidateEventLogHandle, replay, resolveHandle } from "../events";
 import { createSession, isValidSessionName, pathOf } from "./sessions";
 import {
   validateAutomation,
@@ -43,6 +43,9 @@ export function defaultJitterMs(): number {
 const MAX_MISSED_ENUM = 500;
 /** 运行期补记账的逐条上限（超出折一条聚合账）；与启动侧 catchupGate 的 20 条口径对齐。 */
 const RUNTIME_SKIP_DETAIL = 20;
+/** P1-9（审查）：completions 内存表容量帽——每个 occurrence 一条、永不删，长运行下无界增长。
+ *  超帽淘汰最早插入的一条（照抄 termCache 的「512 + 淘汰首个」写法）。 */
+const COMPLETIONS_MAX = 500;
 
 // ---- 双轨存储之一：任务定义（automations.json，原子写）----
 
@@ -129,8 +132,13 @@ function onJournalPath<T>(file: string, job: () => Promise<T>): Promise<T> {
 
 export async function appendJournalEntry(file: string, entry: JournalEntry): Promise<void> {
   await onJournalPath(file, async () => {
-    await mkdir(dirname(file), { recursive: true });
-    await appendFile(file, JSON.stringify(entry) + "\n", "utf8");
+    // X2：常驻文件句柄直写（与 A1 同族）——裸 appendFile 是 open+write+close 三连（实测 2,220µs/次），
+    // journal 是 append-only，复用 events 的 resolveHandle（含 inode 校验 + 有界缓存 + 串行化）。
+    // mkdir 只在**首次**（该 path 尚无句柄）时做：本机 mkdir(recursive) 实测 ≈2,126µs/次，是 10k
+    // 级 append 的主成本；目录已存在时每次都做会把这条路径钉死在毫秒级。
+    if (!hasEventLogHandle(file)) await mkdir(dirname(file), { recursive: true });
+    const fh = await resolveHandle(file);
+    await fh.write(JSON.stringify(entry) + "\n");
   });
 }
 
@@ -139,7 +147,10 @@ export async function appendJournalEntry(file: string, entry: JournalEntry): Pro
 const JOURNAL_MAX_ENTRIES = 10_000;
 const JOURNAL_KEEP_ENTRIES = 4_000;
 
-export async function compactJournalIfLarge(file: string): Promise<number> {
+export async function compactJournalIfLarge(
+  file: string,
+  onCompacted?: (kept: JournalEntry[]) => void,
+): Promise<number> {
   return await onJournalPath(file, async () => {
     const { entries } = await readJournalFile(file);
     if (entries.length <= JOURNAL_MAX_ENTRIES) return entries.length;
@@ -148,6 +159,14 @@ export async function compactJournalIfLarge(file: string): Promise<number> {
     await mkdir(dirname(file), { recursive: true });
     await writeFile(tmp, keep.map((e) => JSON.stringify(e) + "\n").join(""), "utf8");
     await rename(tmp, file);
+    // X2（关键）：覆盖写完成后**同链内**显式失效该 path 的常驻句柄——rename 之后缓存句柄仍指向
+    // 已被覆盖掉的旧 inode，不失效则后续 appendJournalEntry 复用旧句柄，journal 写入静默丢失。
+    // 与 A1 的 inode 校验同一类失效，但这里必须**显式**做（inode 校验只在 spawn 侧自然捕获）。
+    await invalidateEventLogHandle(file);
+    // P1-9（审查）：磁盘收敛后同步重建内存表——回调在**同链**内执行（不与并发追加交错），由
+    // Scheduler 用保留条目回灌 journalKeys/journalByTask/sessionIdByKey（旧实现只截磁盘文件，
+    // 内存三表对已截断历史仍单调增长）。
+    onCompacted?.(keep);
     return keep.length;
   });
 }
@@ -416,6 +435,8 @@ export class Scheduler {
   /** D7（审查 P2）：运行期 journal 追加计数——每 1000 条触发一次保留上限检查。 */
   private journalAppendsSinceCompact = 0;
   private journalByTask = new Map<string, JournalEntry[]>();
+  /** P2-6（审查）：occurrence_key → session_id 反查表（snapshot 逐条查会话 id 由 O(n²) 降 O(1)）。 */
+  private sessionIdByKey = new Map<string, string>();
   private inflight = new Map<string, Inflight>();
   private completions = new Map<string, { status: "succeeded" | "failed"; reason?: string }>();
   // H3-P2（审查 D-4）：会话终态缓存（(size:mtime) 签名失效；有界 512 条，LRU 简化为淘汰首个）
@@ -426,6 +447,8 @@ export class Scheduler {
   private started = false;
   private chain: Promise<void> = Promise.resolve();
   private tickMutex: Promise<void> = Promise.resolve();
+  // tick 与 run_now 共用准入锁；覆盖检查到 queued 入表，不能跨 IO 留空位。
+  private admissionMutex: Promise<void> = Promise.resolve();
   private readonly clock: () => number;
   private readonly runTimeoutMs: number;
   private readonly settlesWithinMs: number;
@@ -462,7 +485,7 @@ export class Scheduler {
     this.ingestJournal(j.entries);
     for (const w of j.warnings) this.warn("[scheduler] " + w);
     // D7（审查 P2）：启动时对 journal 做保留上限收敛（超帽截到 KEEP 条，原子替换）。
-    const kept = await compactJournalIfLarge(this.journalPath).catch(() => -1);
+    const kept = await compactJournalIfLarge(this.journalPath, (keep) => this.rebuildJournalMemory(keep)).catch(() => -1);
     if (kept >= 0) this.warn("[scheduler] journal 保留收敛完成（当前 " + String(kept) + " 条）");
     this.journalAppendsSinceCompact = 0;
     const jitter = this.jitterMs();
@@ -493,12 +516,26 @@ export class Scheduler {
   }
 
   private ingestJournal(entries: JournalEntry[]): void {
-    for (const e of entries) {
-      this.journalKeys.add(e.occurrence_key);
-      const list = this.journalByTask.get(e.task_id) ?? [];
-      list.push(e);
-      this.journalByTask.set(e.task_id, list);
-    }
+    for (const e of entries) this.addJournalEntry(e);
+  }
+
+  /** 单条入账（内存表 upsert）：journalKeys / journalByTask / sessionIdByKey 三表同步。
+   *  P2-6（审查）：sessionIdByKey 同 key 以**最新**一条为准（原 findSessionIdByKey 取 journalByTask
+   *  迭代序首个带 session_id 的条目；occurrence_key 全局唯一，二者等价）。 */
+  private addJournalEntry(entry: JournalEntry): void {
+    this.journalKeys.add(entry.occurrence_key);
+    const list = this.journalByTask.get(entry.task_id) ?? [];
+    list.push(entry);
+    this.journalByTask.set(entry.task_id, list);
+    if (entry.session_id !== undefined) this.sessionIdByKey.set(entry.occurrence_key, entry.session_id);
+  }
+
+  /** P1-9（审查）：用保留条目回灌内存三表（先 clear 再填）——与磁盘收敛同链执行。 */
+  private rebuildJournalMemory(entries: JournalEntry[]): void {
+    this.journalKeys.clear();
+    this.journalByTask.clear();
+    this.sessionIdByKey.clear();
+    for (const e of entries) this.addJournalEntry(e);
   }
 
   /** 手动 tick（验收注入；生产由 interval 驱动）。startup=true = 启动 tick（补跑闸生效）。 */
@@ -582,6 +619,20 @@ export class Scheduler {
 
   /** 准入管线（顺序短路；dedup → 并发闸 → 重叠闸 → journal + spawn）。 */
   private async pipeline(
+    def: AutomationDefinition,
+    dueAt: Date,
+    kind: "triggered" | "catchup",
+    report: TickReport,
+  ): Promise<void> {
+    const run = () => this.admitOccurrence(def, dueAt, kind, report);
+    const next = this.admissionMutex.then(run, run);
+    // IO 失败仍释放锁；原始拒绝交还调用者，journal 的已决水位不回滚。
+    this.admissionMutex = next.then(() => undefined, () => undefined);
+    return next;
+  }
+
+  /** 仅在准入锁内调用；执行队列不持锁，queued + running 仍共同占用 cap。 */
+  private async admitOccurrence(
     def: AutomationDefinition,
     dueAt: Date,
     kind: "triggered" | "catchup",
@@ -674,14 +725,16 @@ export class Scheduler {
   }
 
   private pushJournalEntry(entry: JournalEntry): void {
-    const list = this.journalByTask.get(entry.task_id) ?? [];
-    list.push(entry);
-    this.journalByTask.set(entry.task_id, list);
+    this.addJournalEntry(entry);
     // D7（审查 P2）：运行期增量收敛——每 1000 条触发一次保留上限检查（防 append-only 无界增长）。
     this.journalAppendsSinceCompact++;
     if (this.journalAppendsSinceCompact >= 1_000) {
       this.journalAppendsSinceCompact = 0;
-      void compactJournalIfLarge(this.journalPath).catch(() => -1);
+      // P1-9（审查）：收敛后同链重建内存表。**延到微任务**：让本条的 appendJournalEntry 先入
+      // journalChain，保证重建读到的磁盘态已含本条（否则内存会丢这一条，journalKeys 去重漏判）。
+      queueMicrotask(() => {
+        void compactJournalIfLarge(this.journalPath, (kept) => this.rebuildJournalMemory(kept)).catch(() => -1);
+      });
     }
   }
 
@@ -773,6 +826,11 @@ export class Scheduler {
       this.warn("[scheduler] 终态事件落会话失败: " + (err instanceof Error ? err.message : String(err)));
     }
     await this.emitTimelineSafe(completed);
+    // P1-9（审查）：completions 加容量帽（每个 occurrence 一条、永不删 → 无界增长）；淘汰最早插入。
+    if (this.completions.size >= COMPLETIONS_MAX) {
+      const oldest = this.completions.keys().next().value;
+      if (oldest !== undefined) this.completions.delete(oldest);
+    }
     this.completions.set(key, { status, ...(reason !== undefined ? { reason } : {}) });
     this.inflight.delete(key);
     if (timedOut) {
@@ -876,11 +934,8 @@ export class Scheduler {
   }
 
   private findSessionIdByKey(key: string): string | undefined {
-    for (const list of this.journalByTask.values()) {
-      const hit = list.find((e) => e.occurrence_key === key && e.session_id !== undefined);
-      if (hit?.session_id) return hit.session_id;
-    }
-    return undefined;
+    // P2-6（审查）：O(1) 反查（旧实现遍历全部任务的全部条目 = snapshot 的 O(n²) 根因）。
+    return this.sessionIdByKey.get(key);
   }
 
   /** H3-P2：会话终态（automation_completed）按文件签名缓存读取。签名 = size:mtimeMs——

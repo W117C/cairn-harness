@@ -131,6 +131,8 @@ function renderProjectionLine(e: AgentEvent): string | null {
       return null; // 压缩事件本体不进投影（其摘要已单独注入）
     case "security_report":
       return "[主会话·安全报告] findings=" + String(e.findings.length);
+    case "impact_report":
+      return "[主会话·影响面] " + e.file + (e.up.length > 0 ? " 跨文件波及 " + String(e.up.length) + " 处" : " 无跨文件调用点");
     case "usage":
     case "session_meta":
     case "agent_spawned":

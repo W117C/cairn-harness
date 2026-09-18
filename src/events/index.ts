@@ -1,5 +1,5 @@
 // 事件流：append-only JSONL，一事件一行。
-import { appendFile, mkdir, open, readFile, stat } from "node:fs/promises";
+import { mkdir, open, readFile, stat, type FileHandle } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 /** M2f：/promote 来源（sidechat 结论提升进主会话）。零新增事件类型——主流仍是 user_message，
@@ -146,6 +146,16 @@ export interface SecurityReportEvent {
   agent_id?: string;
   /** M3b：LLM 第二段是否执行（false/缺省 = 静态快筛 only 或 off）。 */
   llm_reviewed?: boolean;
+}
+
+// ---- M7 影响面（impact）：写文件后的跨文件波及报告（见 src/agent/impact）----
+export interface ImpactReportEvent {
+  type: "impact_report";
+  file: string;
+  symbols: string[];
+  /** 跨文件调用点（谁调用了我，向上波及）；空数组 = 波及半径 0。 */
+  up: { symbol: string; file: string; line: number }[];
+  truncated: boolean;
 }
 
 // ---- M3a 多 agent 编排（§3.4 / §4.4）：agent 子流事件 + 审批事件协议 ----
@@ -348,6 +358,7 @@ export type AgentEvent =
   | VerifyResultEvent
   | CompactionEvent
   | SecurityReportEvent
+  | ImpactReportEvent
   | AgentSpawnedEvent
   | AgentStatusEvent
   | AgentMessageEvent
@@ -375,6 +386,7 @@ const KNOWN_TYPES = new Set([
   "verify_result",
   "compaction",
   "security_report",
+  "impact_report",
   "agent_spawned",
   "agent_status",
   "agent_message",
@@ -389,13 +401,77 @@ const KNOWN_TYPES = new Set([
   "automation_completed",
 ]);
 
+// ---- A1（P0-A）：事件落盘常驻文件句柄 ----
+// 旧实现 appendFile 每事件 open+write+close（实测 1,930 µs/事件）；createEventLog().append 被
+// loop 对每个事件（含每个流式 token 块）调用。改为常驻 FileHandle 直写（实测 9.83 µs，196×）：
+// 有界句柄缓存 + 按 path 串行解析。逐事件立即 write——**不引入用户态缓冲**，「先落 JSONL 再回调」
+// 与崩溃窗口语义不变（不做微批）。
+const LOG_HANDLE_MAX = 32;
+interface CachedHandle {
+  fh: FileHandle;
+  ino: number;
+}
+const logHandles = new Map<string, CachedHandle>();
+/** 按 path 串行化句柄解析（照抄 replayChain 写法）：并发 append 在 await 间隙不得各开一次句柄。 */
+const logHandleChain = new Map<string, Promise<FileHandle>>();
+
+/** 解析（必要时新建）path 的常驻句柄。inode 校验是必须的：agent-runner 会先 rm(logPath) 再
+ *  createEventLog——不校验会把事件写进已 unlink 的旧 inode（静默丢数据）。 */
+async function resolveHandleInner(path: string): Promise<FileHandle> {
+  const st = await stat(path).catch(() => null);
+  const cached = logHandles.get(path);
+  if (cached && st !== null && st.ino === cached.ino) return cached.fh; // 同 inode → 复用
+  if (cached) {
+    // 旧 inode 已被 unlink/替换：关掉旧句柄（忽略错误）并从缓存删除
+    logHandles.delete(path);
+    await cached.fh.close().catch(() => undefined);
+  }
+  const fh = await open(path, "a");
+  const ino = (await fh.stat()).ino;
+  if (logHandles.size >= LOG_HANDLE_MAX) {
+    // 有界：淘汰最早插入的一条并关闭其句柄（照抄 replayCache 的淘汰写法；Map 插入序即 LRU-ish，
+    // 不做访问序更新，保持简单）。
+    const oldest = logHandles.keys().next().value;
+    if (oldest !== undefined) {
+      const old = logHandles.get(oldest);
+      logHandles.delete(oldest);
+      if (old) await old.fh.close().catch(() => undefined);
+    }
+  }
+  logHandles.set(path, { fh, ino });
+  return fh;
+}
+
+/** 串行化入口（照抄 replayIncremental）：同一 path 的解析按到达顺序执行，跑完即回收链（有界）。
+ *  导出给同族的 append-only 写路径复用（scheduler journal），不另造一套缓存/链。 */
+export async function resolveHandle(path: string): Promise<FileHandle> {
+  const prev = logHandleChain.get(path);
+  const job = (prev === undefined ? Promise.resolve() : prev.catch(() => undefined)).then(() =>
+    resolveHandleInner(path),
+  );
+  logHandleChain.set(path, job);
+  try {
+    return await job;
+  } finally {
+    if (logHandleChain.get(path) === job) logHandleChain.delete(path); // 无并发即回收（有界）
+  }
+}
+
 export interface EventLog {
   /** 追加一个事件到日志末尾；只追加，永不改写已有内容。 */
   append(event: AgentEvent): Promise<void>;
+  /** A1：关闭本实例常驻句柄（可选）。退出路径由 closeAllEventLogs 统一收；单实例可显式回收。 */
+  close?(): Promise<void>;
 }
 
 /** 创建绑定到日志路径的事件流。 */
 export function createEventLog(path: string): EventLog {
+  // A1 + X1：按实例缓存句柄引用 `cur`，但**每次 append 都核对它是否仍是缓存里的当前句柄**
+  // （1 次 Map.get + 1 次指针比较，纳秒级，不引入 await）。有界缓存（LOG_HANDLE_MAX=32）淘汰、
+  // 或 rm 重建 / invalidateEventLogHandle 显式失效后，cur 与缓存失配 → 自动重新 resolve，
+  // 避免 write 到已关闭句柄（ERR_FILE_HANDLE_CLOSED）。真实触发路径：长会话里 32+ 个 sidechat/
+  // 会话 path 会把主 run 的句柄挤出缓存并 close。
+  let cur: FileHandle | null = null;
   return {
     async append(event) {
       if (!event || typeof event.type !== "string" || !KNOWN_TYPES.has(event.type)) {
@@ -412,9 +488,50 @@ export function createEventLog(path: string): EventLog {
       ) {
         throw new Error(event.type + " 事件缺 content 字符串（写入被拒）");
       }
-      await appendFile(path, JSON.stringify(event) + "\n", "utf8");
+      // 校验全部通过后才解析句柄并 write（校验必须在 write 之前）。
+      const cached = logHandles.get(path);
+      if (cur === null || cached === undefined || cached.fh !== cur) cur = await resolveHandle(path);
+      await cur.write(JSON.stringify(event) + "\n");
+    },
+    async close() {
+      // 关闭本实例对应 path 的缓存句柄（仅当缓存中仍是本实例解析的那个）。不在 append 后自动关闭。
+      if (cur === null) return;
+      const cached = logHandles.get(path);
+      if (cached && cached.fh === cur) {
+        logHandles.delete(path);
+        await cur.close().catch(() => undefined);
+      }
+      cur = null;
     },
   };
+}
+
+/** X2：查询某 path 当前是否已有常驻句柄（供调用方决定是否需要先建父目录——本机实测
+ *  `mkdir(recursive)` ≈ 2.1ms/次，是 10k 级 append 的主成本，已解析过就必须跳过）。 */
+export function hasEventLogHandle(path: string): boolean {
+  return logHandles.has(path);
+}
+
+/** X2：显式失效某个 path 的常驻句柄（从缓存删除并 close，错误一律吞掉）。**幂等**（不存在时无操作）。
+ *  用途：同路径文件被**覆盖写**（如 journal 的 read→rename 收敛）后，缓存句柄仍指向旧 inode，
+ *  后续写入会静默丢失——必须显式失效，让下次写入重新 resolve 到新 inode。
+ *  实例侧的 cur 引用会在下次 append 的核对中自然失配（cur !== 缓存当前句柄）→ 自动重新解析。
+ *  ⚠️ 这是**显式契约，不是补丁**：当前 `resolveHandleInner` 的 inode 校验已能兜住 rename 覆盖
+ *  （旧句柄 ino ≠ 新文件 ino → 自动关旧开新），保留本函数是为了**不依赖该隐式行为**，并在将来
+ *  journal 路径也引入实例级句柄记忆化（如 X1 的 cur 快路径，会绕过 inode 校验）时仍然安全——
+ *  **不要因为它看起来冗余就删掉**。 */
+export async function invalidateEventLogHandle(path: string): Promise<void> {
+  const cached = logHandles.get(path);
+  if (cached === undefined) return;
+  logHandles.delete(path);
+  await cached.fh.close().catch(() => undefined);
+}
+
+/** A1：退出路径统一关闭全部常驻句柄（错误一律吞掉——退出路径不能抛）。 */
+export async function closeAllEventLogs(): Promise<void> {
+  const handles = [...logHandles.values()];
+  logHandles.clear();
+  for (const h of handles) await h.fh.close().catch(() => undefined);
 }
 
 /** 重放：按写入顺序读回全部事件。untilEventId 给定时只重放到该事件点（含）。

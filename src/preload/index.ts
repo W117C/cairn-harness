@@ -20,7 +20,7 @@ function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
 }
 
 const api: AgentApi = {
-  run: (req: RunRequest & { sessionId?: string }) => ipcRenderer.invoke("agent:run", req),
+  run: (req: RunRequest) => ipcRenderer.invoke("agent:run", req),
   decide: (askId: string, approved: boolean, scope?: "once" | "session_kind" | "always") =>
     ipcRenderer.invoke("agent:decide", askId, approved, scope),
   submitClarify: (callId: string, answers: Record<string, string | string[]>) =>

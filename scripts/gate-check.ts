@@ -266,11 +266,16 @@ assert(
 // 旧约定处于"空转"状态（grep 0 命中、无任何门检查）。基线 = scripts/ui-baseline-sha256.json
 //（生成时刻的全部 29 个未改组件哈希）；改动组件必须带 // @shadcn-modified 头标记。
 {
-  const { readdirSync, readFileSync: rf } = await import("node:fs");
+  const { readdirSync, readFileSync: rf, existsSync } = await import("node:fs");
   const { createHash } = await import("node:crypto");
   const uiDir = join(ROOT, "src", "renderer", "components", "ui");
   const baseline = JSON.parse(rf(join(ROOT, "scripts", "ui-baseline-sha256.json"), "utf8")) as Record<string, string>;
   const offenders: string[] = [];
+  // 前端 vanilla 迁移：src/renderer/components/ui 已整体归档删除（React 树不是发货路径）。
+  // 目录不存在时 G12 的比较面为空——基线里的 29 个组件已无对应文件，「改过必须带标记」的约束
+  // 自然满足（vacuously true）。显式跳过而非抛 ENOENT：本门是「改过的组件必须带标记」，
+  // 不是「components/ui 必须存在」。将来若恢复该目录，walkUi 自动重新生效。
+  const uiExists = existsSync(uiDir);
   const walkUi = (d: string): void => {
     for (const e of readdirSync(d, { withFileTypes: true })) {
       const p = join(d, e.name);
@@ -288,7 +293,7 @@ assert(
       }
     }
   };
-  walkUi(uiDir);
+  if (uiExists) walkUi(uiDir);
   assert(offenders.length === 0, "G12 ui 组件与基线不一致处均带 @shadcn-modified 标记" + (offenders.length > 0 ? "：" + offenders.slice(0, 3).join(",") : ""));
 }
 

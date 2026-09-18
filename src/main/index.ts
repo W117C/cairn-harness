@@ -56,6 +56,7 @@ import { installProviderKeyBackend } from "./provider-keys";
 import { isSafeExternalUrl } from "./updater";
 import { killAllTrackedChildren } from "../tools/process";
 import { closeAllLspClients } from "../tools/lsp";
+import { closeAllEventLogs } from "../events";
 
 let win: BrowserWindow | null = null;
 
@@ -63,7 +64,13 @@ function createWindow(): void {
   win = new BrowserWindow({
     width: 1280,
     height: 832,
+    // RESP-02（P0）：最小窗口尺寸对齐四档断点最低档 960–1023，防止拖到更小布局碎裂。
+    minWidth: 960,
+    minHeight: 600,
     title: "M1e · 桌面 Agent",
+    // 原生交通灯仅保留一套：hiddenInset 隐藏标题文字、保留原生红绿灯与拖拽区，
+    // 避免与 renderer 自绘 .traffic 圆点叠成"双交通灯"（复用自绘版易出现重叠）。
+    titleBarStyle: "hiddenInset",
     webPreferences: {
       preload: join(app.getAppPath(), "out", "preload", "index.js"),
       // ESM preload 需要 sandbox:false；contextIsolation 仍开启，renderer 拿不到任何 Node 能力
@@ -164,7 +171,7 @@ hooksProxy.onAsk = (p) => push("agent:ask", p);
 // H2（审查 D-5）：IPC 边界枚举白名单——renderer 不可信，未知 mode 不许落入比声明更宽的执行路径。
 // D4（审查 P2）：最小运行时校验——req=null 时旧实现 `req.sessionId` 直接抛 TypeError（handler 崩）。
 const RUN_MODES: ReadonlySet<string> = new Set(["read-only", "default", "auto"]);
-ipcMain.handle("agent:run", (_event, req: RunRequest & { sessionId?: string }) => {
+ipcMain.handle("agent:run", (_event, req: RunRequest) => {
   if (req === null || typeof req !== "object" || typeof req.message !== "string" || req.message.trim() === "" || req.message.length > 100_000) {
     return Promise.resolve({ ok: false, error: "agent:run: message 必须是非空字符串（≤100KB）" } satisfies { ok: boolean; error: string });
   }
@@ -177,7 +184,15 @@ ipcMain.handle("agent:run", (_event, req: RunRequest & { sessionId?: string }) =
   if (req.sessionId !== undefined && (typeof req.sessionId !== "string" || !isValidSessionName(req.sessionId))) {
     return Promise.resolve({ ok: false, error: "agent:run: sessionId 非法" } satisfies { ok: boolean; error: string });
   }
-  return handleAgentRun(req, req.sessionId !== undefined ? { sessionId: req.sessionId } : {});
+  // P-1 步骤 3：工作区走同一道边界校验（renderer 不可信）。只做形状/长度校验；
+  // 路径是否存在由 run 侧 fail-visible（工具与 verify 会给出明确失败），不在 IPC 层静默改写。
+  if (req.workspace !== undefined && (typeof req.workspace !== "string" || req.workspace.trim() === "" || req.workspace.length > 4096)) {
+    return Promise.resolve({ ok: false, error: "agent:run: workspace 非法（须为非空字符串，≤4096）" } satisfies { ok: boolean; error: string });
+  }
+  return handleAgentRun(req, {
+    ...(req.sessionId !== undefined ? { sessionId: req.sessionId } : {}),
+    ...(req.workspace !== undefined ? { workspace: req.workspace } : {}),
+  });
 });
 ipcMain.handle("agent:decide", (_event, askId: string, approved: boolean, scope?: "once" | "session_kind" | "always") =>
   handleAgentDecide(askId, approved, scope),
@@ -343,4 +358,6 @@ app.on("will-quit", () => {
   // => liveTracked 的组杀覆盖不到；closeAllLspClients 此前只被 tools-check 调过，退出路径漏收
   // => 用过 lsp 的会话留下 tsserver 孤儿进程。
   void closeAllLspClients().catch(() => {});
+  // A1（P0-A）：事件落盘改常驻 FileHandle 后，退出路径统一收掉全部常驻句柄（否则 fd 泄漏）。
+  void closeAllEventLogs().catch(() => {});
 });

@@ -9,11 +9,12 @@ export async function sha256MatchesFrozen(root: string): Promise<{ ok: boolean; 
 }
 
 /** H7（审查 P2）：冻结覆盖漂移——冻结表是白名单枚举，**新增**判卷文件不会被发现。
- *  对判卷区（fixtures/mock/** + fixtures/todo-app/tests/** + M5a fixtures/gym/cases/**）
+ *  对判卷区（fixtures/mock/** + fixtures/todo-app/tests/** + M5a fixtures/gym/cases/**
+ *  + M7 fixtures/impact/**）
  *  做目录枚举并与冻结表双向集合比对：盘上有而表没有（新判卷文件未入表）/ 表有而盘上无（陈旧条目）均记漂移。
  *  M5a 扩展：fixtures/gym/index.json 是 case 清单（判据），单文件不属目录区，显式并入盘上集合。 */
 export async function frozenCoverageDrift(root: string): Promise<{ onDiskNotInTable: string[]; inTableNotOnDisk: string[] }> {
-  const areas = [join("fixtures", "mock"), join("fixtures", "todo-app", "tests"), join("fixtures", "gym", "cases")];
+  const areas = [join("fixtures", "mock"), join("fixtures", "todo-app", "tests"), join("fixtures", "gym", "cases"), join("fixtures", "impact")];
   const extraFiles = ["fixtures/gym/index.json"];
   // 审查 S3-9（agents 分片 #5）：清单里的单文件过去**无条件**计入盘上集合，文件被删时
   // 它仍在集合里 → 表里也有 → 报不出 inTableNotOnDisk，反而把「判卷文件消失」这件事

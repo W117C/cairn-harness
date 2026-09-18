@@ -45,6 +45,24 @@ const call = (id: string, name: string, args: Record<string, unknown>): AgentEve
 const result = (id: string, output: string): AgentEvent => ({ type: "tool_result", callId: id, ok: true, output });
 
 describe("双轨触发：会话结束自动沉淀（任务6）", () => {
+  it("cancellation during approval prevents a subsequent memory write", async () => {
+    const logPath = join(ws, "cancel.jsonl");
+    await seedSession(logPath);
+    const abort = new AbortController();
+    let writes = 0;
+    const outcome = await runSessionEndDistill({
+      enabled: true, logPath, workspace: ws, signal: abort.signal,
+      provider: { async *stream(_messages, _tools, call) {
+        expect(call?.signal).toBe(abort.signal);
+        yield { type: "tool_call", id: "cancel-memory", name: "remember", args: {} };
+      } },
+      rememberTool: { name: "remember", async run() { writes++; return { ok: true, output: "saved" }; } },
+      emit: async () => {},
+      mergedApproval: async () => { abort.abort(); return true; },
+    });
+    expect(outcome.kind).toBe("failed");
+    expect(writes).toBe(0);
+  });
   it("开关关闭 → 完全不触发（无 provider 调用、无审批、无写入）", async () => {
     const logPath = join(ws, "s.jsonl");
     await seedSession(logPath);

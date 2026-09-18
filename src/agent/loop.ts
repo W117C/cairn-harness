@@ -5,7 +5,7 @@ import { projectContext } from "./context";
 import type { LegacyNextProvider, ModelOutput, Provider } from "../providers";
 import { streamFromNextSource } from "../providers";
 import { failureDigest, type VerifyHook, type VerifyOutcome } from "./verify";
-import { TOOLS, type ClarifyChannel, type PlanChannel, type ToolName } from "../tools";
+import { TOOLS, type ClarifyChannel, type PlanChannel, type ToolContext, type ToolName } from "../tools";
 
 export interface LoopOptions {
   /** 新形态：stream(messages, tools) → AsyncIterable<Event>（§3.3 统一接口）；
@@ -28,6 +28,9 @@ export interface LoopOptions {
   plan?: PlanChannel;
   /** 验证门钩子：接了才支持 verify 反射循环（成功即停 / 上限耗尽即停）。 */
   verify?: VerifyHook;
+  /** M7 影响面钩子：注入后 write_file/edit_file 成功落盘会回注跨文件波及。
+   *  缺省 undefined = 零行为（与 ToolContext.impact 同源，透传不加工）。 */
+  impact?: ToolContext["impact"];
   /** M2e 插件 hook 引擎：未接线 = 零行为（无插件会话事件流字节不变）。 */
   hooks?: HookEngine;
   /** M2f 工具表白名单（硬闸）：给出时不在表内的工具一律拒绝执行——不是提示词自觉，是工具表摘除。
@@ -51,7 +54,15 @@ export interface LoopOptions {
 //   通过 → 立即停止（不再调用模型）；失败 → 错误输出注入同轮继续修；
 //   连续失败达上限（缺省 3）→ verify_result(failed) 后停止（不再调用模型）。
 export async function runLoop(opts: LoopOptions): Promise<void> {
-  const { events, workspace, userMessage } = opts;
+  const { workspace, userMessage } = opts;
+  const seen: AgentEvent[] = [];
+  // Persist first: failed writes must not become model-visible history.
+  const events: EventLog = {
+    async append(event) {
+      await opts.events.append(event);
+      seen.push(event);
+    },
+  };
   const mode = opts.mode ?? "default";
   const interactive = opts.interactive ?? false;
   const maxSteps = opts.maxSteps ?? 50;
@@ -65,12 +76,10 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
     "stream" in provider
       ? (messages) => provider.stream(messages, undefined, opts.signal ? { signal: opts.signal } : undefined)
       : streamFromNextSource(provider);
-  const seen: AgentEvent[] = []; // loop 视角的完整事件流（stream(messages) 的上下文投影源）
 
   if (userMessage !== undefined) {
     const event = { type: "user_message", content: userMessage } as const;
     await events.append(event);
-    seen.push(event);
   }
 
   for (let step = 0; step < maxSteps; step++) {
@@ -78,7 +87,6 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
     let sawToolCall = false;
     for await (const output of streamFn(projectContext(seen))) {
       await events.append(output);
-      seen.push(output);
       if (output.type !== "tool_call") continue; // assistant_message / delta / usage：继续
 
       sawToolCall = true;
@@ -198,6 +206,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
           clarify: opts.clarify,
           plan: opts.plan,
           ...(opts.signal ? { signal: opts.signal } : {}), // C12：取消信号透传进长驻工具
+          ...(opts.impact ? { impact: opts.impact } : {}), // M7：影响面钩子透传进写工具
         };
         try {
           result = await tool.run(output.args, ctx);

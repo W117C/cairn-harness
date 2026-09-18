@@ -1,0 +1,8 @@
+[
+  { "from": "app.js", "to": "math.js", "symbol": "compute", "refLine": 5, "defLine": 3 },
+  { "from": "app.js", "to": "utils.js", "symbol": "add", "refLine": 6, "defLine": 1 },
+  { "from": "math.js", "to": "utils.js", "symbol": "add", "refLine": 4, "defLine": 1 },
+  { "from": "math.js", "to": "utils.js", "symbol": "add", "refLine": 10, "defLine": 1 },
+  { "from": "math.js", "to": "utils.js", "symbol": "mul", "refLine": 5, "defLine": 5 },
+  { "from": "metrics.ts", "to": "math.js", "symbol": "compute", "refLine": 4, "defLine": 3 }
+]

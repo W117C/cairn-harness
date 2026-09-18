@@ -22,6 +22,8 @@ export interface LayoutState {
 export type PermissionMode = "read-only" | "default" | "auto";
 export type SafeMode = "off" | "report" | "gate";
 export type ThemeSetting = "system" | "light" | "dark";
+/** 主对话模型通道：demo = 冻结剧本（无 key 也能跑通的显式演示档）；glm = 真实 OpenAI 兼容通道。 */
+export type ProviderKind = "demo" | "glm";
 
 export interface AppSettings {
   layout: LayoutState;
@@ -46,6 +48,20 @@ export interface AppSettings {
   telemetry: boolean;
   /** M5b §m5-proposal 步骤 9：bandit 在线学习开关（缺省 false = 零行为，不写 routing-bandit.json）。 */
   routingBandit: boolean;
+  /** SoL-Pi P-1 步骤 2：主对话 provider 档位（缺省 demo = 显式演示，不再是「未设 env 就静默 mock」）。 */
+  provider: ProviderKind;
+  /** 真实通道的模型名（缺省空 = 由 provider 层取缺省，如 glm-5.2）。 */
+  model: string;
+  /** SoL-Pi P-1 步骤 2：主对话工作区（缺省 null = 回落 M0B_WORKSPACE / 内置的 fixtures/todo-app）。 */
+  workspace: string | null;
+  /** SoL-Pi C1：写入后执行配置检查，显式开启，默认关闭。 */
+  actionFusion: boolean;
+  requestMetering: boolean;
+  observationPack: boolean;
+  evidenceReceipts: boolean;
+  economicCompaction: boolean;
+  /** M7 影响面：write_file/edit_file 成功后回注跨文件波及（护栏，显式开启，默认关闭）。 */
+  impactAnalysis: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -66,11 +82,21 @@ export const DEFAULT_SETTINGS: AppSettings = {
   updateManifestUrl: "",
   telemetry: false,
   routingBandit: false,
+  provider: "demo",
+  model: "",
+  workspace: null,
+  actionFusion: false,
+  requestMetering: false,
+  observationPack: false,
+  evidenceReceipts: false,
+  economicCompaction: false,
+  impactAnalysis: false,
 };
 
 const PERMISSION_MODES = ["read-only", "default", "auto"] as const;
 const SAFE_MODES = ["off", "report", "gate"] as const;
 const THEMES = ["system", "light", "dark"] as const;
+const PROVIDER_KINDS = ["demo", "glm"] as const;
 
 function isPanelId(v: unknown): v is PanelId {
   return typeof v === "string" && (PANEL_IDS as readonly string[]).includes(v);
@@ -122,6 +148,19 @@ export function validateSettings(raw: unknown): AppSettings {
     updateManifestUrl: typeof r.updateManifestUrl === "string" ? r.updateManifestUrl : d.updateManifestUrl,
     telemetry: typeof r.telemetry === "boolean" ? r.telemetry : d.telemetry,
     routingBandit: typeof r.routingBandit === "boolean" ? r.routingBandit : d.routingBandit,
+    actionFusion: r.actionFusion === true,
+    requestMetering: r.requestMetering === true,
+    observationPack: r.observationPack === true,
+    evidenceReceipts: r.evidenceReceipts === true,
+    economicCompaction: r.economicCompaction === true,
+    impactAnalysis: r.impactAnalysis === true,
+    provider: PROVIDER_KINDS.includes(r.provider as ProviderKind) ? (r.provider as ProviderKind) : d.provider,
+    model: typeof r.model === "string" ? r.model.slice(0, 200) : d.model,
+    // 工作区：非空字符串取原值（越界长度回退默认，避免把畸形路径带进 run 装配）；其余回退 null
+    workspace:
+      typeof r.workspace === "string" && r.workspace.trim() !== "" && r.workspace.length <= 4096
+        ? r.workspace
+        : d.workspace,
   };
 }
 
@@ -152,7 +191,9 @@ export class SettingsStore {
       ...("mode" in patch || "safeMode" in patch || "theme" in patch || "currentSession" in patch ||
         "autoMemory" in patch || "maxBudgetUsd" in patch || "budgetPricePerMTok" in patch ||
         "scheduleConcurrencyCap" in patch || "onboarded" in patch || "updateManifestUrl" in patch ||
-        "telemetry" in patch || "routingBandit" in patch
+        "telemetry" in patch || "routingBandit" in patch || "provider" in patch || "model" in patch ||
+        "workspace" in patch || "actionFusion" in patch || "requestMetering" in patch || "observationPack" in patch ||
+        "evidenceReceipts" in patch || "economicCompaction" in patch || "impactAnalysis" in patch
         ? patch
         : {}),
       layout: patch.layout

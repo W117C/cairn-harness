@@ -26,5 +26,10 @@
   "fixtures/gym/cases/todo-completed-count/repo/package.json": "c85abe3feefc6e26fc62466cd267e8432d29486f6d846056c5c24242bcb7a7b1",
   "fixtures/gym/cases/todo-completed-count/repo/src/todo.js": "9ac21e452d6a5362f52c8113ea3591a48b8c0b5b58c4e64bb7a1217890b07c9c",
   "fixtures/gym/cases/todo-completed-count/repo/tests/run.mjs": "ace1534b1322693f2a3be87b8257a5fac3fc8df8c93a7ab9ec4db617b488686d",
-  "fixtures/gym/cases/todo-completed-count/task.md": "73f89feddc9e6135d79e933f030c8f3e9df090f962b8e0863c9e6385a95e92f4"
+  "fixtures/gym/cases/todo-completed-count/task.md": "73f89feddc9e6135d79e933f030c8f3e9df090f962b8e0863c9e6385a95e92f4",
+  "fixtures/impact/expect-edges.json": "60ff334c1530369ada6b73a2bd09b267b23abe4277118775165fc7211c30e960",
+  "fixtures/impact/mini-repo/app.js": "40e75b2ebc509a8ee88fc9a3016340620037d567a5f4c697c2390391b14a077a",
+  "fixtures/impact/mini-repo/math.js": "35f3f467a90c0d9a23146ddfc0fe9f255b5a5a87735bcb6236a2a03082188635",
+  "fixtures/impact/mini-repo/metrics.ts": "5b6891683a352e07ec95354a04923a929581bd4781daf8c75ad30a50bb8b7899",
+  "fixtures/impact/mini-repo/utils.js": "a960c81e66aa79037aa8bcf002f4370ef21c152608aa536d068a556062a364cc"
 }

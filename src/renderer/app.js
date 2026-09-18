@@ -730,69 +730,84 @@ const WORKSPACES = [
 ];
 let currentWs = WORKSPACES[0];
 const currentTree = () => currentWs.tree;
-const REVIEW = [
-  { path: 'src/auth/session.ts', plus: '+12', minus: '−4' },
-  { path: 'src/auth/ttl.ts', plus: '+31', tag: '新增' },
-  { path: 'tests/auth/session.spec.ts', plus: '+8', minus: '−2' }
-];
-const TERMINAL_SEEDS = [
-  { name: 'forge dev', html: '<div><span class="p">$</span> forge dev --watch</div><div class="dim">[vite] 已连接 · http://localhost:5173</div><div><span class="p">$</span> forge lint --staged</div><div><span class="ok">✓</span> 12 个文件，无问题 <span class="dim">(0.9s)</span></div><div><span class="p">$</span> git status -s</div><div> M src/auth/session.ts</div><div><span class="ok">A</span> src/auth/ttl.ts</div><div> M tests/auth/session.spec.ts</div><div class="dim">等待文件变更…</div>' },
-  { name: 'pnpm test', html: '<div><span class="p">$</span> pnpm test</div><div><span class="ok">✓</span> src/auth/session.spec.ts <span class="dim">(12 tests)</span></div><div><span class="ok">✓</span> src/auth/ttl.spec.ts <span class="dim">(8 tests)</span></div><div class="ok">✓ 20 passed · 0 failed</div><div class="dim">耗时 2.4s · 覆盖率 91.3%</div>' },
-  { name: 'git log', html: '<div><span class="p">$</span> git log --oneline -5</div><div><span class="ok">a3f92c1</span> feat(auth): 引入作用域化 TTL 与 token 轮换</div><div><span class="ok">7b4e08d</span> test: 补充 grace window 边界用例</div><div><span class="ok">e19d5a7</span> refactor: 提取 ttlFor(scope) 映射</div><div><span class="ok">c02b6f4</span> chore: 升级 vite 至 6.1</div><div class="dim">HEAD → main · 工作区干净</div>' }
-];
+/* 右栏五面板的唯一数据源：真实桥接层用 projectPanelData(会话事件, 运行目录) 填充。
+   缺省为空 = 面板走空态。原先这里挂着审阅与终端两组演示常量，真运行时照样渲染
+   「本会话从未碰过的文件 + 假测试输出」——假象比空白更坏，故一并删除
+   （projections.ts 头注「面板 100% 事件流投影，无第二事实源」）。 */
+let panelData = { workspace: null, files: [], tree: [], terminal: [], merge: [] };
 
 /* 右栏"文件树高亮"目标：diff 卡展开时置为对应文档路径，收折清空 */
 let activeFileDoc = null;
 
+function panelEmptyHTML(title) {
+  return '<div class="settings-empty">' + FILE_ICON +
+    '<p>' + esc(title) + '<br><span class="dim">内容由本会话事件流投影，无数据即空</span></p></div>';
+}
 function filesViewHTML() {
-  return '<div class="side-page-pad">' +
-    '<div class="tree-ws">' + FOLDER_ICON +
-      '<span class="tw-text"><span class="tw-name">' + esc(currentWs.name) + '</span>' +
-      '<span class="tw-path">' + esc(currentWs.path) + '</span></span>' +
-    '</div>' +
-    currentTree().map(g =>
-    '<div class="tree-group">' +
-      '<div class="tree-dir">' + FOLDER_ICON + '<span>' + esc(g.dir) + '</span><span class="cnt">' + g.files.length + '</span></div>' +
-      g.files.map(f => {
-        const doc = g.dir + '/' + f.name;
-        const act = activeFileDoc === doc;
-        return '<div class="tree-file' + (act ? ' is-active' : '') + '"' + (act ? ' data-doc-active="' + esc(doc) + '"' : '') + '>' + FILE_ICON + '<span class="nm">' + esc(f.name) + '</span>' +
-        (f.plus ? '<span class="plus">' + f.plus + '</span>' : '') +
-        (f.minus ? '<span class="minus">' + f.minus + '</span>' : '') +
-        (f.tag ? '<span class="new">' + f.tag + '</span>' : '') +
-        '</div>';
-      }).join('') +
-    '</div>').join('') + '</div>';
+  const ws = panelData.workspace;
+  const head = '<div class="tree-ws">' + FOLDER_ICON +
+    '<span class="tw-text"><span class="tw-name">' + esc(ws ? ws.name : '未配置运行目录') + '</span>' +
+    '<span class="tw-path">' + esc(ws ? ws.path : '设置 → 通用 → 真实运行目录') + '</span></span></div>';
+  const body = panelData.tree.length
+    ? panelData.tree.map(g =>
+      '<div class="tree-group">' +
+        '<div class="tree-dir">' + FOLDER_ICON + '<span>' + esc(g.dir || '（根目录）') + '</span><span class="cnt">' + g.files.length + '</span></div>' +
+        g.files.map(f => {
+          const name = f.path.slice(f.path.lastIndexOf('/') + 1);
+          const act = activeFileDoc === f.path;
+          return '<div class="tree-file' + (act ? ' is-active' : '') + '"' + (act ? ' data-doc-active="' + esc(f.path) + '"' : '') + '>' + FILE_ICON + '<span class="nm">' + esc(name) + '</span>' +
+            (f.added ? '<span class="plus">+' + f.added + '</span>' : '') +
+            (f.removed ? '<span class="minus">−' + f.removed + '</span>' : '') +
+            (f.created ? '<span class="new">新增</span>' : '') +
+            '</div>';
+        }).join('') +
+      '</div>').join('')
+    : panelEmptyHTML('本会话尚无写入文件');
+  return '<div class="side-page-pad">' + head + body + '</div>';
 }
 function reviewViewHTML() {
-  return '<div class="side-page-pad">' + REVIEW.map(f =>
+  if (!panelData.files.length) return '<div class="side-page-pad">' + panelEmptyHTML('本会话尚无写入文件') + '</div>';
+  return '<div class="side-page-pad">' + panelData.files.map(f =>
     '<div class="file-item">' + FILE_ICON + '<span class="path">' + esc(f.path) + '</span>' +
-    '<span class="plus">' + f.plus + '</span>' +
-    (f.minus ? '<span class="minus">' + f.minus + '</span>' : '') +
-    (f.tag ? '<span class="new">' + f.tag + '</span>' : '') +
+    (f.added ? '<span class="plus">+' + f.added + '</span>' : '') +
+    (f.removed ? '<span class="minus">−' + f.removed + '</span>' : '') +
+    (f.created ? '<span class="new">新增</span>' : '') +
+    (f.ok === false ? '<span class="new">未落盘</span>' : '') +
     '</div>').join('') + '</div>';
 }
 function browserViewHTML() {
-  return '<div class="browser-bar">' +
-    '<span class="url"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>localhost:5173</span>' +
-    '<button class="icon-btn" aria-label="刷新" title="刷新"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 11a8 8 0 1 0-2.3 5.6"/><path d="M20 5v6h-6"/></svg></button>' +
-    '</div>' +
-    '<div class="browser-stage"><div class="mini-frame"><div class="bar"><i></i><i></i><i></i></div>' +
-    '<div class="body"><div class="sk-title"></div><div class="sk-line"></div><div class="sk-line short"></div><div class="sk-btn"></div></div>' +
-    '</div></div>';
+  return '<div class="side-page-pad">' + panelEmptyHTML('内置浏览器尚未接入') + '</div>';
+}
+/** 一条 shell 调用 → 终端行（命令 + 输出；输出转义，不解析为 HTML）。 */
+function termBodyHTML(entry) {
+  if (!entry) return '';
+  const lines = ['<div><span class="p">$</span> ' + esc(entry.command) + '</div>'];
+  if (entry.ok === null) lines.push('<div class="dim">执行中…</div>');
+  else lines.push('<div class="' + (entry.ok ? 'ok' : 'dim') + '">' + (entry.ok ? '✓ 执行完成' : '✗ 执行失败') + '</div>');
+  for (const ln of String(entry.output || '').split('\n')) lines.push('<div>' + esc(ln) + '</div>');
+  return lines.join('');
 }
 function terminalViewHTML() {
+  const rows = panelData.terminal;
+  if (!rows.length) return '<div class="side-page-pad">' + panelEmptyHTML('本会话尚无命令执行') + '</div>';
   return '<div class="term-view"><div class="term-subtabs">' +
-    TERMINAL_SEEDS.map((s, i) => '<button class="term-subtab' + (i === 0 ? ' active' : '') + '" data-term="' + i + '">' + esc(s.name) + '</button>').join('') +
-    '</div><div class="term" id="termBody">' + TERMINAL_SEEDS[0].html + '</div></div>';
+    rows.map((s, i) => '<button class="term-subtab' + (i === 0 ? ' active' : '') + '" data-term="' + i + '">' + esc(s.command.split('\n')[0].slice(0, 24) || '(空命令)') + '</button>').join('') +
+    '</div><div class="term" id="termBody">' + termBodyHTML(rows[0]) + '</div></div>';
 }
-/* git 视图（第 5 视图）：渲染层占位空态，版本操作由 CLI 承接；开关状态经 agent settings 持久化 */
+/* git 视图（第 5 视图）：write worker 合并列由事件流投影；无 worker 时保持诚实空态，
+   版本操作由 CLI 承接；开关状态经 agent settings 持久化 */
 function gitViewHTML() {
-  return '<div class="side-page-pad">' +
-    '<div class="settings-empty">' + BRANCH_ICON +
-      '<p>Git 面板尚未接入<br><span class="dim">版本操作暂由命令行承接</span></p>' +
-    '</div>' +
-  '</div>';
+  const cols = panelData.merge;
+  if (!cols.length) {
+    return '<div class="side-page-pad">' +
+      '<div class="settings-empty">' + BRANCH_ICON +
+        '<p>Git 面板尚未接入<br><span class="dim">版本操作暂由命令行承接</span></p>' +
+      '</div>' +
+    '</div>';
+  }
+  return '<div class="side-page-pad">' + cols.map(c =>
+    '<div class="file-item">' + BRANCH_ICON + '<span class="path">' + esc(c.agent_id) + '</span>' +
+    '<span class="new">' + esc(c.outcome || c.status) + '</span></div>').join('') + '</div>';
 }
 /* git 分支数据：当前分支 ahead/behind 计数与其他分支 */
 const BRANCHES = [
@@ -879,11 +894,11 @@ sideLauncher.addEventListener('click', (e) => {
 sidePagesEl.addEventListener('click', (e) => {
   const sub = e.target.closest('.term-subtab');
   if (!sub) return;
-  const seed = TERMINAL_SEEDS[Number(sub.dataset.term)];
+  const seed = panelData.terminal[Number(sub.dataset.term)];
   if (!seed) return;
   sidePagesEl.querySelectorAll('.term-subtab').forEach(b => b.classList.toggle('active', b === sub));
   const body = $('#termBody');
-  if (body) body.innerHTML = seed.html;
+  if (body) body.innerHTML = termBodyHTML(seed);
 });
 
 /* 快捷键：⌘⌥E 文件 / ⌘T 浏览器 / ⌘⇧G 审阅 / ⌘⇧J 终端 */

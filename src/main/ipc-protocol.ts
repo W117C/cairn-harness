@@ -15,6 +15,10 @@ export type { AppSettings } from "./settings";
 export interface RunRequest {
   message: string;
   mode: PermissionMode;
+  /** M1e 会话模式：带上它 run 才追加到既有会话 JSONL（缺省 = 临时日志 + 每轮 rm 的旧行为）。 */
+  sessionId?: string;
+  /** SoL-Pi P-1 步骤 3：本次 run 的工作区（绝对路径）；缺省按 overrides → env → settings → 内置靶子解析。 */
+  workspace?: string;
 }
 
 export interface RunResponse {

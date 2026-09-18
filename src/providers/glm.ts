@@ -28,6 +28,7 @@ export interface GlmOptions {
   stream?: boolean;
   /** 单测注入点（缺省全局 fetch）。 */
   fetchImpl?: typeof fetch;
+  metering?: OpenAiOptions["metering"];
 }
 
 function toOpenAiOptions(opts: GlmOptions): OpenAiOptions {
@@ -45,6 +46,7 @@ function toOpenAiOptions(opts: GlmOptions): OpenAiOptions {
     stream: opts.stream,
     label: "GLM",
     fetchImpl: opts.fetchImpl,
+    metering: opts.metering,
   };
 }
 

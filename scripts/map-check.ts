@@ -4,6 +4,7 @@
 // ⑥用户仓库里没有 tags 缓存文件（缓存只落应用数据目录 M2B_TAGS_DIR 指定的临时目录）
 // 真实靶子 = 本仓库 src/agent/**（自研吃狗粮，四语言中的 ts 真实存在）。
 import { cp, mkdtemp, readdir, stat, utimes, writeFile } from "node:fs/promises";
+import { lstatSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createMapBuilder, scanSourceFiles } from "../src/agent/map/build.js";
@@ -28,10 +29,18 @@ async function main(): Promise<void> {
   // 审查 S3-9（原 agents 分片 #10）：子串匹配会误伤同名前缀（outputs / dist-staging /
   // 任何名字里带 "out" 的目录段），也可能因绝对路径里出现 "/.git" 而漏拷或过删。
   // 按路径段精确比对，跳过集合就是那六个目录名。
-  const SKIP_SEGS = new Set(["node_modules", ".git", "out", "dist", "oh-src", ".tmp"]);
+  // 跳过集合再加 .codegraph：它是 CodeGraph 工具自身的索引目录（含守护进程 socket），
+  // 与 node_modules 同类——不属于被测源码，且 daemon.sock 是 socket 文件，cp 复制会抛
+  // ERR_FS_CP_SOCKET（在有 CodeGraph 守护进程运行的环境下必现，把门禁卡在拷贝阶段）。
+  const SKIP_SEGS = new Set(["node_modules", ".git", "out", "dist", "oh-src", ".tmp", ".codegraph"]);
   await cp(repoRoot, workspace, {
     recursive: true,
-    filter: (src: string): boolean => !src.split("/").some((seg) => SKIP_SEGS.has(seg)),
+    // 双保险：任何非普通文件（socket / fifo / 设备）一律跳过，不依赖目录名枚举。
+    filter: (src: string): boolean => {
+      if (src.split("/").some((seg) => SKIP_SEGS.has(seg))) return false;
+      const st = lstatSync(src, { throwIfNoEntry: false });
+      return st === undefined || st.isFile() || st.isDirectory();
+    },
   });
   check("⓪工作区为临时副本（不改动受版本控制源码）", workspace.startsWith(tmpdir()), workspace.slice(0, 40));
   const tagsDir = await mkdtemp(join(tmpdir(), "m2b-mapcheck-tags-"));

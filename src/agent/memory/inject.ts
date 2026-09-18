@@ -183,18 +183,30 @@ export async function buildMemoryInjection(opts: MemoryInjectionOptions): Promis
   }
 
   // 预算治理：超限整行丢弃保尾部（投影顺序 = 项目 ARCH → DECISIONS → 项目索引 → 全局索引）。
-  const flatten = (secs: Section[]): { sec: Section; idx: number }[] =>
-    secs.flatMap((sec) => sec.lines.map((_, idx) => ({ sec, idx })));
+  // P1-1（审查）：旧实现每轮只删 1 行却重建 flatten 数组 + 重算 totalChars（都是 O(总行数)）→ O(L²)。
+  // 改为一次建有序 section 列表 + 维护累计字符游标，按序从各 section **首部**整行丢弃（保尾部）。
+  // 逐位等价：删除顺序 = flatten(projectSections) ++ flatten(globalSections)（按 section 顺序、
+  // 每 section 从首行起删）；判定 estimateTokens(c,1) > charsLimit 等价于 c > charsLimit；空 section
+  // 不参与；删空后由 keptProject/keptGlobal 过滤掉。
   let truncated = false;
   const totalChars = (): number =>
     projectSections.reduce((n, s) => n + s.header.length + s.lines.reduce((m, l) => m + l.length + 1, 0), 0) +
     globalSections.reduce((n, s) => n + s.header.length + s.lines.reduce((m, l) => m + l.length + 1, 0), 0);
-  while (estimateTokens(totalChars(), 1) > charsLimit) {
-    const ordered = [...flatten(projectSections), ...flatten(globalSections)];
-    const victim = ordered[0];
-    if (!victim) break; // 只剩头行/空块
-    victim.sec.lines.splice(victim.idx, 1);
-    truncated = true;
+  let runningChars = totalChars();
+  if (runningChars > charsLimit) {
+    for (const sec of [...projectSections, ...globalSections]) {
+      if (runningChars <= charsLimit) break;
+      let drop = 0;
+      // 从本 section 首部累计可删行数（与 totalChars 同计法：每行 l.length + 1 换行符）
+      while (drop < sec.lines.length && runningChars > charsLimit) {
+        runningChars -= sec.lines[drop]!.length + 1;
+        drop++;
+      }
+      if (drop > 0) {
+        sec.lines.splice(0, drop); // 一次搬移，避免逐行 shift 的二次开销
+        truncated = true;
+      }
+    }
   }
   const keptProject = projectSections.filter((s) => s.lines.length > 0);
   const keptGlobal = globalSections.filter((s) => s.lines.length > 0);

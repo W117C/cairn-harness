@@ -3,7 +3,7 @@
 // 真实门在本模块的工具包装里 —— 复用 src/permissions 的 checkPermission，语义与 M0 一致：
 // read-only 拒副作用 / default 询问（UI 批准才执行）/ auto 放行；沙箱不可用时写工具强制逐条审批。
 import { readFileSync } from "node:fs";
-import { rm, readdir } from "node:fs/promises";
+import { rm, readdir, mkdir, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { dirname, join, resolve } from "node:path";
@@ -12,9 +12,19 @@ import { runLoop } from "../agent/loop";
 import { runCompaction, createMockSummarizer, compactionCardPayload, type Summarizer } from "../agent/compaction";
 import { buildMap } from "../agent/map/build";
 import { computePrune } from "../agent/prune";
-import { createGlmSummarizer } from "../agent/glm-session";
+import {
+  createGlmSessionProvider,
+  createGlmSummarizer,
+  gateToolSpecs,
+  sessionToolSpecs,
+  type SessionPluginTool,
+} from "../agent/glm-session";
 import { ClarifyGate, PlanGate } from "../agent/gates";
 import { createVerifyHook, defaultExec, type ExecFn } from "../agent/verify";
+import { createActionFusion } from "../agent/action-fusion";
+import { SolpiRuntime, privateSessionDirectory, removePrivateSessionData, observationRecallSpec, solpiEnabled, type SolpiFlags } from "../agent/solpi-runtime";
+import { defaultImpactHook } from "../agent/impact/index.js";
+import { run_shell } from "../tools/run_shell";
 import type { AgentEvent, ClarifyAnswerMap, EventLog } from "../events";
 import { createEventLog, replay } from "../events";
 import { checkPermission, enterPlanRunScope, getPlanState, type PermissionMode } from "../permissions";
@@ -34,7 +44,7 @@ import {
   type ToolResultWithAudit,
 } from "../permissions";
 import { globalPermissionsPath, savePermissionRules } from "../permissions/rules";
-import { SettingsStore, type AppSettings } from "./settings";
+import { SettingsStore, type AppSettings, type ProviderKind } from "./settings";
 import {
   createSession,
   deleteSession,
@@ -72,7 +82,7 @@ import { extractExternalRefs } from "../agent/memory/inject";
 import type { MemoryLayerSnapshot, MemorySnapshot } from "./ipc-protocol";
 import { AskGate } from "./ask-gate";
 import type { AskOutcomePayload, AskPayload, RunRequest, SidechatPanelSnapshot } from "./ipc-protocol";
-import { checkSandbox, runInSandbox, type SandboxStatus } from "./sandbox";
+import { buildSandboxProfile, checkSandbox, runInSandbox, type SandboxStatus } from "./sandbox";
 import { PluginRuntime, setCurrentPluginRuntime, currentPluginRuntime, type PluginPanelSnapshot } from "../agent/plugins";
 import type { HookEngine } from "../agent/plugins/hooks";
 import type { McpToolInfo } from "../agent/plugins/mcp";
@@ -137,6 +147,7 @@ interface Session {
   autonomy: ReturnType<typeof newAutonomySession>;
   /** M1e：会话模式（sessionId 在场 = append 到既有会话，不 rm 日志；headless 脚本 = 旧行为）。 */
   sessionId?: string;
+  actionFusion?: ReturnType<typeof createActionFusion>;
 }
 // 单窗口单任务：UI 串行发 run；ipc:check 亦串行。会话状态仅存活于一次 runAgent。
 let session: Session | null = null;
@@ -185,12 +196,19 @@ function currentOrchestrator(): Orchestrator | null {
  *  - agentRoleFor：插件 agent 角色解析（stages[].role = "plugin-name:agent-name"，§9.6/§9.11-4）；
  *  - workerSummarizer：worker 压缩摘要器（§7.5 同一 runCompaction 链；GLM 暗卷需 M0_API_KEY）；
  *  - budget：会话成本闸（§4.4.8 maxBudgetUsd；0 = off 零行为）。 */
-async function orchestratorExtras(): Promise<Pick<OrchestratorOptions, "agentRoleFor" | "workerSummarizer" | "budget">> {
+async function orchestratorExtras(): Promise<
+  Pick<OrchestratorOptions, "agentRoleFor" | "workerSummarizer" | "budget" | "routing" | "banditStatePath">
+> {
   const s = await store().get();
   return {
     agentRoleFor: (invoke: string) => currentPluginRuntime()?.findAgentRole(invoke) ?? null,
     ...(process.env.M0_API_KEY ? { workerSummarizer: createGlmSummarizer() } : {}),
     ...(s.maxBudgetUsd > 0 ? { budget: { maxUsd: s.maxBudgetUsd, pricePerMTok: s.budgetPricePerMTok } } : {}),
+    // M5b 步骤 9：routingBandit 开关同时开启路由与学习状态持久化（bandit 蕴含 routing——
+    // 无路由则无档位决策可学）。状态文件在 .agent/ 系统区（同 permissions.json 口径）。
+    ...(s.routingBandit
+      ? { routing: true, banditStatePath: join(ROOT, ".agent", "routing-bandit.json") }
+      : {}),
   };
 }
 
@@ -260,7 +278,7 @@ function denied(name: ToolName | string, mode: PermissionMode, why: string): Too
   return { ok: false, output: "[permission denied] " + name + " 在 " + mode + " 档下被门拒绝（" + why + "）" };
 }
 
-function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Tool): Tool {
+function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Tool, beforeExecute?: () => Promise<ToolResult | null>): Tool {
   return {
     name,
     async run(args, ctx) {
@@ -310,12 +328,30 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
       } else if (d.auto?.source === "session_scope") {
         noteScopeApproval(s.autonomy); // 断路器计数（连续 scope 自动放行）
       }
+      // Internal fusion callback, never a model argument: revalidate after approval (which may wait).
+      if (beforeExecute) {
+        const blocked = await beforeExecute();
+        if (blocked) return blocked;
+      }
       if (name === "run_shell" && s.sandbox !== null && s.sandbox.available) {
         const command = typeof args.command === "string" ? args.command : "";
         const mapped = command.trim() === "pnpm test" ? VITEST_DIRECT : command;
+        if (beforeExecute) {
+          // runInSandbox has no cancellation input. Reuse its profile, but launch via the existing
+          // run_shell process-group/cancellation path; approval above evaluated the original lint.
+          const tmp = join(await realpath(ctx.workspace), ".tmp");
+          await mkdir(tmp, { recursive: true });
+          if (ctx.signal?.aborted) return { ok: false, output: "cancelled before sandbox lint" };
+          const quote = (s: string): string => "'" + s.replace(/'/g, "'\\''") + "'";
+          const command = `TMPDIR=${quote(tmp)} exec /usr/bin/sandbox-exec -p ${quote(buildSandboxProfile(ctx.workspace))} bash -c ${quote(mapped)}`;
+          return await original.run({ command }, ctx);
+        }
         return await runInSandbox(mapped, { cwd: ctx.workspace });
       }
-      const result = await original.run(args, ctx);
+      let result = await original.run(args, ctx);
+      if (name !== "run_shell" && result.ok && s.actionFusion) {
+        result = await s.actionFusion(result, args.path, ctx);
+      }
       // 自动放行审计（§11.7.5）：{source, rule_id} 进 tool_result 元数据（loop 透传，零新事件类型）
       const audit = d.verdict === "approve" ? d.auto : undefined;
       return (audit ? { ...result, auto: audit } : result) as ToolResultWithAudit;
@@ -378,6 +414,36 @@ function installPluginTools(rt: PluginRuntime): string[] {
     injected.push(scoped);
   }
   return injected;
+}
+
+/** 运行时注入工具的**模型可见规格**（与 installPluginTools 的可执行面一一对应）：
+ *  skill（有受信 skill 时）与 MCP scoped 工具。MCP 参数直接复用 server 的 inputSchema 原文，
+ *  不翻译不裁剪——两套 schema 各写一份正是「模型看到的工具 ≠ 能执行的工具」的根因。 */
+export interface PluginToolSource {
+  skills(): readonly unknown[];
+  mcpTools: Map<string, McpToolInfo & { plugin: string; server: string }>;
+}
+
+export function pluginToolSpecsFromRuntime(rt: PluginToolSource | null): SessionPluginTool[] {
+  if (!rt) return [];
+  const out: SessionPluginTool[] = [];
+  if (rt.skills().length > 0) {
+    out.push({
+      name: "skill",
+      description:
+        "触发已加载的插件 skill（调用名见系统提示的 skill 路由表：/plugin:name 或 /name）；" +
+        "返回该 skill 的全文指令，按指令继续执行",
+      parameters: {
+        type: "object",
+        properties: { name: { type: "string", description: "skill 调用名（/plugin:name 或 /name）" } },
+        required: ["name"],
+      },
+    });
+  }
+  for (const [scoped, info] of rt.mcpTools) {
+    out.push({ name: scoped, description: info.description, parameters: info.inputSchema });
+  }
+  return out;
 }
 
 /** always scope 批准落库为 allow 条目（项目规则库，原子写）；拒绝永不生成规则。 */
@@ -774,7 +840,12 @@ export async function initSandbox(): Promise<void> {
   sandboxState = await checkSandbox();
 }
 
-export interface RunOptions {
+/** M7 影响面：写工具成功后回注跨文件波及（护栏能力，显式开启，默认关闭——与 actionFusion 同族）。 */
+export interface ImpactOptions {
+  impactAnalysis?: boolean;
+}
+
+export interface RunOptions extends SolpiFlags, ImpactOptions {
   workspace: string;
   message: string;
   mode: PermissionMode;
@@ -790,11 +861,39 @@ export interface RunOptions {
   unattended?: boolean;
   /** M4a 超时闸一：取消信号（loop 轮界收束，§4.4.8 AbortController 同族）。 */
   signal?: AbortSignal;
+  /** C1: opt-in main-run write/edit + configured lint; never forwarded to workers. */
+  actionFusion?: boolean;
 }
 
-// M1a 真流式演示通道：M0A_PROVIDER=glm 时用真模型单轮流式（无 tools，纯文本；
-// 事件按网络节奏逐条 pull，UI 逐字上屏）。缺省仍为 mock，M0 事件流字节不变。
-function createProvider(userMessage: string, systemPrefix?: string): Provider {
+/** 主对话 provider 档位解析：env 覆盖优先（既有 check/演示脚本依赖），否则读 settings。
+ *  P-1 步骤 2：此前全仓无人写 M0A_PROVIDER ⇒ 打包后的主对话恒走冻结剧本；档位进 settings 后
+ *  设置页/用户配置才真正可选中真实通道。 */
+export async function resolveProviderKind(): Promise<ProviderKind> {
+  const env = process.env.M0A_PROVIDER;
+  if (env === "glm") return "glm";
+  if (env === "demo" || env === "mock") return "demo";
+  return (await store().get()).provider;
+}
+
+/** 真实通道缺 key 的显式失败（不静默回落 mock——静默回落会让用户以为在用真模型）。 */
+function assertRealProviderReady(kind: ProviderKind): void {
+  if (kind !== "glm") return;
+  if (process.env.M0_API_KEY) return;
+  throw new Error(
+    "provider=glm 但未配置 API key（BYOK / M0_API_KEY 缺失）：真实模型通道不可用。" +
+      "请先在设置页配置 key，或把 provider 切回 demo（冻结剧本，显式演示档）——不静默回落 mock。",
+  );
+}
+
+// 主 GLM 会话按日志逐轮组装；显式演示通道和 demo 档保持兼容。
+// 未传 sessionOptions 的分支仅供会话尾沉淀，消费调用方组装的消息。
+function createProvider(userMessage: string, systemPrefix?: string, sessionOptions?: Pick<RunOptions, "logPath" | "workspace" | "mode"> & {
+  emit: (event: AgentEvent) => Promise<void>;
+  plugins?: NonNullable<Parameters<typeof createGlmSessionProvider>[1]>["plugins"];
+  /** 运行时注入的插件/MCP 工具规格（与可执行面同源，见 sessionToolSpecs）。 */
+  pluginTools?: readonly SessionPluginTool[];
+  solpi?: SolpiRuntime;
+}, kindOverride?: ProviderKind, modelOverride?: string): Provider {
   // M1c 明卷通道：M1C_AUTONOMY_SCRIPT 指向冻结剧本（autonomy-check 三条路径复用同一接线）。
   const autonomyScript = process.env.M1C_AUTONOMY_SCRIPT;
   // M3a 演示通道：M3A_MAIN_SCRIPT 指定主剧本（显式路径优先）；M3A_AGENTS_DEMO=1 → main-demo.jsonl
@@ -808,20 +907,37 @@ function createProvider(userMessage: string, systemPrefix?: string): Provider {
   if (process.env.M2A_LSP_DEMO) {
     return createMockProvider(process.env.M2A_LSP_DEMO === "1" ? LSP_DEMO_FIXTURE : process.env.M2A_LSP_DEMO);
   }
-  if (process.env.M0A_PROVIDER !== "glm") return createMockProvider(MOCK_FIXTURE);
-  let gen: AsyncIterable<ModelOutput> | null = null;
+  const kind = kindOverride ?? (process.env.M0A_PROVIDER === "glm" ? "glm" : "demo");
+  if (kind !== "glm") return createMockProvider(MOCK_FIXTURE);
+  assertRealProviderReady(kind);
+  if (sessionOptions) {
+    const { specs, skipped } = sessionToolSpecs({
+      mode: sessionOptions.mode,
+      pluginTools: sessionOptions.pluginTools ?? [],
+    });
+    if (skipped.length > 0) {
+      // 同名冲突是配置问题，不静默丢：可见告警（基础工具优先，插件规格不进模型面）
+      console.warn("[tools] 插件/MCP 工具名与基础工具同名，已跳过注入:", skipped.join(", "));
+    }
+    return createGlmSessionProvider(sessionOptions.logPath, {
+      system: systemPrefix,
+      workspace: sessionOptions.workspace,
+      tools: specs,
+      compaction: {},
+      emit: sessionOptions.emit,
+      plugins: sessionOptions.plugins,
+      solpi: sessionOptions.solpi,
+      ...(modelOverride ? { model: modelOverride } : {}),
+    });
+  }
   return {
     stream(messages, _tools, call) {
-      if (!gen) {
-        // M2e：插件注入面（skill 路由清单 + hook 上下文）以 system 前缀进真实会话；空 = 字节不变
-        const prefix = systemPrefix && systemPrefix.trim() !== ""
-          ? [{ role: "system", content: systemPrefix } as const]
-          : [];
-        // C12（审查 P2）：首轮捕获本 run 的取消信号——会话中止时在途请求立即收束。
-        // 同一 run 内多次 stream 共享同一 signal（runLoop 逐轮调用，signal 不变），缓存语义不破。
-        gen = streamGlm([...prefix, { role: "user", content: userMessage }], {}, undefined, call);
-      }
-      return gen;
+      return streamGlm(
+        messages,
+        modelOverride ? { model: modelOverride } : {},
+        gateToolSpecs().filter((spec) => spec.function.name === "remember"),
+        call,
+      );
     },
   };
 }
@@ -838,6 +954,9 @@ function verifyExec(sandbox: SandboxStatus | null): ExecFn {
 
 /** 核心：mock（或演示通道）驱动跑一轮 loop；每条事件先落 JSONL 再回调。返回完整事件流。
  *  M1b：接线三门 —— clarify/plan 通道（挂起等人）+ verify 反射循环钩子。 */
+const liveRunPaths = new Set<string>();
+const sessionOrchestrators = new Map<string, Orchestrator>();
+const deletingSessionPaths = new Set<string>();
 export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   installAppTools();
   // H2（A-2）：无人值守 run 的等人门上限——定时触发的 clarify/plan 挂起 60s 后 fail-closed。
@@ -857,6 +976,10 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     sandbox: opts.sandbox ?? null,
     emit: null,
     sessionId: opts.sessionId,
+    ...(opts.actionFusion === true ? {
+      actionFusion: createActionFusion((command, ctx, guard) =>
+        gatedTool("run_shell", run_shell, guard).run({ command }, ctx)),
+    } : {}),
     autonomy: newAutonomySession(opts.mode, {
       rules,
       sandboxAvailable: opts.sandbox ? opts.sandbox.available : null,
@@ -864,6 +987,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   };
   if (interactive) session = sessionObj;
   const runAbort = new AbortController(); // P3（审查）：交互 run 取消入口（handleRunCancel 经 IPC 触达）
+  const signal = opts.signal ? AbortSignal.any([opts.signal, runAbort.signal]) : runAbort.signal;
   if (interactive) interactiveRunAbort = runAbort;
   lastWorkspace = opts.workspace;
   const runScope: RunScope = { session: sessionObj, orchestrator: null };
@@ -871,15 +995,37 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   enterPlanRunScope(); // P1（审查）：plan 门状态随 run 隔离——并发 run 互不污染（permissions ALS）
   // M2e：本 run 注入统一注册表的插件工具名（会话结束摘除，零残留）；声明在 try 外防 finally TDZ
   let injectedToolNames: string[] = [];
+  if (liveRunPaths.has(resolve(opts.logPath)) || deletingSessionPaths.has(resolve(opts.logPath))) throw new Error("session already running or being deleted");
+  liveRunPaths.add(resolve(opts.logPath));
+  let log: EventLog | undefined;
+  let solpi: SolpiRuntime | undefined;
+  let parentFinished = false;
+  let eventQueue: Promise<void> = Promise.resolve();
   try {
     // M1e 会话模式：sessionId 在场 = 会话列表里的既有会话，append（JSONL 即会话，重放无损）；
     // 无 sessionId = 旧行为（每轮新日志，e2e/ipc-check 等脚本路径字节不变）。
     if (!opts.sessionId) await rm(opts.logPath, { force: true });
     lastLogPath = opts.logPath; // /compact（handleCompact）缺省压缩对象
-    const log = createEventLog(opts.logPath);
-    const pipeline = async (e: AgentEvent): Promise<void> => {
-      await log.append(e);
-      opts.onEvent?.(e);
+    log = createEventLog(opts.logPath);
+    if (solpiEnabled({ requestMetering: opts.requestMetering, observationPack: opts.observationPack,
+      evidenceReceipts: opts.evidenceReceipts, economicCompaction: opts.economicCompaction })) {
+      // Fresh headless logs do not exist yet. Open through the event API without a fake event.
+      const { open } = await import("node:fs/promises");
+      const file = await open(opts.logPath, "a", 0o600); await file.close();
+      try { solpi = new SolpiRuntime(await privateSessionDirectory(opts.logPath, opts.workspace), opts); }
+      catch (err) { console.warn("[solpi] private storage unavailable; optimizations disabled:", err instanceof Error ? err.message : String(err)); }
+    }
+    const pipeline = (e: AgentEvent): Promise<void> => {
+      const task = eventQueue.then(async () => {
+        await log!.append(e);
+        if (!parentFinished && !(e as { agent_id?: string }).agent_id && e.type === "verify_result") solpi?.meter?.recordVerification({ id: `${e.callId}:${e.attempt}`, ok: e.ok, elapsedMs: null }); // worker 子流不进父验证计量（同投影同口径）
+        opts.onEvent?.(e);
+        // Workers retain this pipeline after the parent turn. Its queue serializes
+        // close with append; a late worker append reopens through createEventLog.
+        if (parentFinished) await log!.close?.();
+      });
+      eventQueue = task.catch(() => {});
+      return task;
     };
     sessionObj.emit = pipeline; // H3 D-2：写在 scope 的会话对象上（交互 run 的全局指向同一对象）
     // M3a：会话级编排器（worker 子流落主流 JSONL；父 turn 收束后编排器存活，审批/取消路由不断）
@@ -899,6 +1045,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       ...(demoModelFor ? { modelFor: demoModelFor } : {}),
     });
     runScope.orchestrator = orchestrator;
+    sessionOrchestrators.set(resolve(opts.logPath), orchestrator);
     if (interactive) activeOrchestrator = orchestrator; // H3 D-2：unattended 不抢交互面的审批路由
     // M2e：插件运行时（会话启动静态扫描产加载清单，不新增事件类型）。
     // 零插件环境（无 .agent/plugins、无 M2E_USER_PLUGINS/M2E_LOOSE_SKILLS）= 空清单 = 零行为。
@@ -934,6 +1081,9 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       }
     }
     const skillsRouting = rt && rt.routingList().text !== "" ? rt.routingList().text : null;
+    // P-1 步骤 2：主对话 provider 档位与模型（settings 为准；M0A_PROVIDER / M0_MODEL env 仍是覆盖通道）。
+    const providerKind = await resolveProviderKind();
+    const settingsModel = (await store().get()).model;
     // H3-P4（编排提示词审查 §一）：生产主会话必须有基座系统提示词——此前只有插件路由 + hook 上下文，
     // 模型在撞墙前不知道墙存在（机制成本已付、收益只兑现一半），验收暗卷脚本反而比生产多了角色说明。
     const BASE_SYSTEM = [
@@ -948,13 +1098,36 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       "- deny 规则与 critical 风险的强制审批不可绕过；会话成本超限会拒绝新 spawn；长时间无进展会被暂停等待恢复指令；",
       "- 权限被拒 → 换合规路径或先提交方案；测试失败 → 按失败信息修复后重跑 verify。",
     ].join("\n");
-    const systemPrefix = [BASE_SYSTEM, skillsRouting, hookContext !== "" ? hookContext : null].filter((s): s is string => s !== null).join("\n\n");
+    const recall = solpi?.recallTool(async (args, recallSignal) => {
+      const ps = getPlanState();
+      sessionObj.autonomy.planBlocked = ps.proposed && !ps.approved;
+      const decision = evaluate("obs_recall" as ToolName, args, sessionObj.autonomy); // 运行时注入工具（同 remember/MCP 先例：不进静态键域，走同一权限管线）
+      if (decision.verdict === "deny") return false;
+      if (decision.verdict === "ask") {
+        if (!sessionObj.askGate) return false;
+        return (await sessionObj.askGate.request("obs_recall", args, { reason: decision.reason, risk: decision.risk, signal: recallSignal })).outcome === "approved";
+      }
+      return true;
+    });
+    // M7 影响面：开启时构造缺省钩子（磁盘缓存落应用数据目录，绝不写用户仓库）。
+    //  钩子失败（grammar 缺失 / 大仓库超时）由 appendImpact 统一吞掉——写入结果不受影响。
+    const impactHook = opts.impactAnalysis === true ? defaultImpactHook(opts.workspace) : undefined;
     await runLoop({
-      provider: createProvider(opts.message, systemPrefix !== "" ? systemPrefix : undefined),
+      ...(impactHook ? { impact: impactHook } : {}),
+      provider: createProvider(opts.message, BASE_SYSTEM, {
+        ...opts, emit: pipeline, solpi,
+        pluginTools: [...(recall ? [observationRecallSpec] : []), ...pluginToolSpecsFromRuntime(rt).filter(t => !recall || t.name !== "obs_recall")],
+        ...(rt ? { plugins: {
+          skillsRouting: skillsRouting ?? undefined,
+          hookContext,
+          deriveRemount: (events: AgentEvent[]) => rt.remountFromEvents(events).text,
+        } } : {}),
+      }, providerKind, settingsModel),
       events: { append: pipeline },
+      ...(recall ? { tools: { ...TOOLS, obs_recall: recall } } : {}),
       workspace: opts.workspace,
       mode: "auto", // 冻结 loop 对 ask 一律拒绝；真实门在 gatedTool（复用 checkPermission）
-      signal: opts.signal ? AbortSignal.any([opts.signal, runAbort.signal]) : runAbort.signal, // P3（审查）：run 取消信号（轮界/门等待/长驻工具透传）
+      signal,
       userMessage: opts.message,
       clarify: {
         // H2（A-2）：等人门可收束——run 取消信号随门透传；无人值守 run 的 clarify/plan
@@ -962,7 +1135,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
         wait: (id, o) =>
           appClarifyGate.wait(id, {
             ...o,
-            ...(opts.signal ? { signal: opts.signal } : {}),
+            signal,
             ...(opts.unattended ? { timeoutMs: UNATTENDED_GATE_WAIT_MS } : {}),
           }),
       },
@@ -970,13 +1143,12 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
         waitApproval: (id, o) =>
           appPlanGate.waitApproval(id, {
             ...o,
-            ...(opts.signal ? { signal: opts.signal } : {}),
+            signal,
             ...(opts.unattended ? { timeoutMs: UNATTENDED_GATE_WAIT_MS } : {}),
           }),
       },
       verify: createVerifyHook(opts.workspace, { exec: verifyExec(opts.sandbox ?? null) }),
       ...(rt ? { hooks: rt.hooks } : {}),
-      ...(opts.signal ? { signal: opts.signal } : {}),
     });
     // M2e：Stop（agent 收束）与 SessionEnd（会话收尾）——fire-and-forget，失败只告警。
     if (rt) {
@@ -1038,7 +1210,8 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
         enabled: autoMemory && opts.mode !== "read-only" && opts.unattended !== true,
         logPath: opts.logPath,
         workspace: opts.workspace,
-        provider: createProvider(opts.message),
+        provider: createProvider(opts.message, undefined, undefined, providerKind, settingsModel),
+        signal,
         rememberTool: remember, // 合并审批即本轮权限门（未加门的工具本体）
         emit: pipeline,
         ...(opts.askGate
@@ -1047,7 +1220,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
                 const r = await opts.askGate!.request(
                   "remember",
                   { trigger: "session_end_distill" },
-                  { reason: "会话结束自动沉淀（合并审批：批准=本轮全部记忆写入，拒绝=全部不写）", risk: "low" },
+                  { reason: "会话结束自动沉淀（合并审批：批准=本轮全部记忆写入，拒绝=全部不写）", risk: "low", signal },
                 );
                 return r.outcome === "approved";
               },
@@ -1059,6 +1232,15 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       console.warn("[memory] 沉淀轮失败:", err instanceof Error ? err.message : String(err));
     }
   } finally {
+    parentFinished = true;
+    // Same queue as retained orchestrator pipeline, so no close/write race.
+    await eventQueue;
+    await log?.close?.();
+    if (solpi) {
+      try { await solpi.finish(await replay(opts.logPath)); }
+      catch (err) { console.warn("[solpi] report persistence failed:", err instanceof Error ? err.message : String(err)); }
+    }
+    liveRunPaths.delete(resolve(opts.logPath));
     if (interactive) session = null; // H3 D-2：unattended run 不清交互面全局（旧实现把在途交互 run 假死）
     if (interactive && interactiveRunAbort === runAbort) interactiveRunAbort = null; // P3（审查）：run 收束即摘取消句柄
     // 会话结束 = MCP server 子进程一并回收（stdio 流不挂事件循环）；快照留档供 run 间隙查询
@@ -1073,7 +1255,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   return await replay(opts.logPath);
 }
 
-export interface RunOverrides {
+export interface RunOverrides extends SolpiFlags, ImpactOptions {
   workspace?: string;
   logPath?: string;
   /** M1e：会话模式 —— run 追加到该会话（不 rm 日志），消息落该会话 JSONL。 */
@@ -1083,9 +1265,30 @@ export interface RunOverrides {
   unattended?: boolean;
   /** M4a 超时闸一：取消信号（轮界收束）。 */
   signal?: AbortSignal;
+  /** C1 runtime override; settings/IPC enablement is separate, default off. */
+  actionFusion?: boolean;
+  /** M7 影响面 runtime override（同 actionFusion 口径）。 */
+  impactAnalysis?: boolean;
 }
 
 const unattendedAskGate = new AskGate({ unattended: true });
+
+/** 工作区解析链（P-1 步骤 3）：调用方 overrides > IPC 请求 > M0B_WORKSPACE 演示通道 > settings > 内置靶子。
+ *  纯函数以便单测钉住优先级（此前只有前两条，UI 主对话恒落在 fixtures/todo-app）。 */
+export function resolveRunWorkspace(
+  override: string | undefined,
+  request: string | undefined,
+  envValue: string | undefined,
+  settingsValue: string | null,
+  fallback: string,
+): string {
+  if (override !== undefined) return override;
+  if (request !== undefined && request.trim() !== "") return resolve(request);
+  if (envValue !== undefined && envValue.trim() !== "") return resolve(envValue);
+  // 三条来源统一走 resolve()：相对路径也锚到 cwd，别让「设置里填了相对路径」变成随调用方 cwd 漂的隐式行为
+  if (settingsValue !== null && settingsValue.trim() !== "") return resolve(settingsValue);
+  return fallback;
+}
 
 /** IPC "agent:run" 的处理函数 —— main 暴露的同一入口，ipc:check 直调（不经 UI）。
  *  M4a：定时触发同走本入口（headless、unattended 覆盖 + signal 透传），真实代码路径零分叉。 */
@@ -1096,24 +1299,40 @@ export async function handleAgentRun(
   try {
     // M1e 会话模式：sessionId 在场 → logPath = 会话 JSONL（append；不 rm）；
     // 旧行为（无 sessionId）= tmp 日志 + 每轮 rm（e2e/ipc-check 等脚本路径字节不变）。
-    const sessionMode = over.sessionId !== undefined;
-    const logPath = over.logPath ?? (sessionMode && over.sessionId ? pathOf(requireSessionsDir(), over.sessionId) : join(tmpdir(), "m0b-agent-events.jsonl"));
+    // P-1 步骤 3 补漏：请求体里的 sessionId 此前被静默忽略（只认 overrides）——IPC 层恰好同时传了两处
+    // 才没暴露，直调方（脚本/测试/内部调用）传了 req.sessionId 却仍落临时日志。现取并集，语义一致。
+    const sessionId = over.sessionId ?? req.sessionId;
+    const sessionMode = sessionId !== undefined;
+    const logPath = over.logPath ?? (sessionMode ? pathOf(requireSessionsDir(), sessionId) : join(tmpdir(), "m0b-agent-events.jsonl"));
+    const workspace = resolveRunWorkspace(
+      over.workspace,
+      req.workspace,
+      process.env.M0B_WORKSPACE,
+      (await store().get()).workspace,
+      WORKSPACE,
+    );
     await runAgent({
       // M2e：M0B_WORKSPACE 工作区覆盖（M2B_MAP_WORKSPACE 同族演示通道，env 门控缺省零行为）——
       // 面板截图/演示指向带 .agent/plugins 的临时工作区，验收与生产路径不变。
-      workspace: over.workspace ?? (process.env.M0B_WORKSPACE ? resolve(process.env.M0B_WORKSPACE) : WORKSPACE),
+      workspace,
       message: req.message,
       mode: req.mode,
       logPath,
-      ...(sessionMode ? { sessionId: over.sessionId } : {}),
+      ...(sessionMode ? { sessionId } : {}),
       ...(over.unattended ? { unattended: true as const } : {}),
       ...(over.signal ? { signal: over.signal } : {}),
+      actionFusion: over.actionFusion ?? (await store().get()).actionFusion,
+      impactAnalysis: over.impactAnalysis ?? (await store().get()).impactAnalysis,
+      requestMetering: over.requestMetering ?? (await store().get()).requestMetering,
+      observationPack: over.observationPack ?? (await store().get()).observationPack,
+      evidenceReceipts: over.evidenceReceipts ?? (await store().get()).evidenceReceipts,
+      economicCompaction: over.economicCompaction ?? (await store().get()).economicCompaction,
       onEvent: (e) => {
         over.onEvent?.(e);
         // F1（审查 P1-14）：agent:event 是全局通道——事件载荷带 session_id，renderer 按当前
         // 会话过滤（定时/后台 run 的事件不再串进用户正看的会话）。仅标记 UI 推送面，
         // JSONL 落盘内容不变（pipeline 已 append 原事件）；无 sessionId 的旧脚本路径不带标记。
-        hooks.onEvent?.(over.sessionId !== undefined ? ({ ...e, session_id: over.sessionId } as AgentEvent) : e);
+        hooks.onEvent?.(sessionId !== undefined ? ({ ...e, session_id: sessionId } as AgentEvent) : e);
       },
       askGate: over.unattended ? unattendedAskGate : appAskGate,
       sandbox: sandboxState,
@@ -1464,12 +1683,15 @@ export async function setSettings(patch: Partial<AppSettings>): Promise<AppSetti
   return next;
 }
 
-/** Provider 只读展示（设置页）：当前 provider 与模型名，不读 key 不落日志。 */
-export function providerInfo(): { provider: string; model: string } {
-  if (process.env.M0A_PROVIDER === "glm") {
-    return { provider: "GLM（OpenAI 兼容）", model: process.env.M0_MODEL ?? "glm-5.2" };
+/** Provider 只读展示（设置页）：与 run 同源（settings + env 覆盖），不读 key 不落日志。
+ *  P-1 步骤 2：此前只认 M0A_PROVIDER env ⇒ 设置页永远显示 mock，与「用户其实选了真模型」脱节。 */
+export async function providerInfo(): Promise<{ provider: string; model: string; kind: ProviderKind }> {
+  const kind = await resolveProviderKind();
+  if (kind === "glm") {
+    const model = (await store().get()).model || process.env.M0_MODEL || "glm-5.2";
+    return { provider: "GLM（OpenAI 兼容）", model, kind };
   }
-  return { provider: "mock（冻结剧本）", model: "mock-script" };
+  return { provider: "demo（冻结剧本，非真实模型）", model: "mock-script", kind };
 }
 
 // ---- M4b：BYOK key（safeStorage）+ license V1 + 更新检查（§2.1/§2.2/§2.3）----

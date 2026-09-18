@@ -1,5 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { assertNotAgentArea, assertNotAgentAreaReal, assertRealContainment, resolveInWorkspace, ToolError, type Tool, type ToolResult } from "./base.js";
+import { appendImpact, assertNotAgentArea, assertNotAgentAreaReal, assertRealContainment, resolveInWorkspace, ToolError, type Tool, type ToolResult } from "./base.js";
 import { collectDiagnostics } from "./lsp.js";
 
 export const edit_file: Tool = {
@@ -46,6 +46,8 @@ export const edit_file: Tool = {
     const replacements = replaceAll ? count : 1;
     // M2a 诊断回流：成功写盘后等诊断（LSP 未配置 = 空串，输出不变）
     const diag = await collectDiagnostics(ctx.workspace, abs);
-    return { ok: true, output: "已替换 " + rel + "（" + replacements + " 处）" + diag };
+    // M7 影响面：替换成功后回注跨文件波及（best-effort，见 appendImpact）。
+    const output = await appendImpact(ctx, rel, "已替换 " + rel + "（" + replacements + " 处）" + diag);
+    return { ok: true, output };
   },
 };

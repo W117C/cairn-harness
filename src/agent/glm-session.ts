@@ -4,7 +4,7 @@
 import { createEventLog, replayIncremental, type AgentEvent, type CompactionUsage } from "../events";
 import { isSideEffectTool, type PermissionMode } from "../permissions";
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "../providers/glm";
-import type { ModelOutput, Provider } from "../providers";
+import type { ModelOutput, Provider, ProviderCall } from "../providers";
 import { projectContext, type ContextMessage } from "./context";
 import { buildMemoryInjection, type MemoryInjection } from "./memory/inject";
 import { REMEMBER_DESCRIPTION } from "../tools/remember";
@@ -22,6 +22,9 @@ import {
   type SummarizerInput,
   type SummarizerOutput,
 } from "./compaction";
+import type { SolpiRuntime } from "./solpi-runtime";
+import type { RequestMeter } from "./metering";
+import { deriveProgressBoundaries } from "./economics";
 
 type RawMessage = Record<string, unknown>;
 
@@ -75,6 +78,31 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
             path: { type: "string", description: "限定目录（workspace 相对，缺省全工作区）" },
           },
           [],
+        ),
+      },
+    },
+    // P-1 补漏：lsp 在可执行面真实存在（TOOLS / toolTableFor / sidechat 白名单都在表内），
+    // 但模型可见面此前没有它 ⇒ 模型永远调不到一个已接线的工具。二者必须同源。
+    {
+      type: "function",
+      function: {
+        name: "lsp",
+        description:
+          "LSP 查询（需工作区 .agent/lsp.json 配置；未配置时返回明确不可用原因）：" +
+          "definition / references / hover / documentSymbol / workspaceSymbol / implementation；行列均 1-based",
+        parameters: obj(
+          {
+            operation: {
+              type: "string",
+              enum: ["definition", "references", "hover", "documentSymbol", "workspaceSymbol", "implementation"],
+              description: "查询类型",
+            },
+            path: { type: "string", description: "workspace 相对路径（workspaceSymbol 可省略）" },
+            line: { type: "number", description: "行号（1-based）" },
+            column: { type: "number", description: "列号（1-based）" },
+            symbol: { type: "string", description: "workspaceSymbol 的查询串" },
+          },
+          ["operation"],
         ),
       },
     },
@@ -214,6 +242,37 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
   return specs;
 }
 
+/** 运行时注入的工具（插件 skill / MCP server 工具）的模型可见规格。
+ *  MCP 侧 parameters 直接是 server 的 inputSchema 原文——不翻译、不裁剪，避免两套 schema 漂移。 */
+export interface SessionPluginTool {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
+/** 主会话模型可见工具面：与可执行面同源的唯一组装入口。
+ *  基础规格来自 gateToolSpecs（按 mode 摘除写向工具），再叠加运行时注入的插件/MCP 工具规格。
+ *  同名冲突 = 跳过注入项并计入 skipped（fail-visible 返回给调用方，不静默覆盖基础工具）。 */
+export function sessionToolSpecs(
+  opts: { mode?: PermissionMode; pluginTools?: readonly SessionPluginTool[] } = {},
+): { specs: GlmToolSpec[]; skipped: string[] } {
+  const specs = gateToolSpecs(opts.mode);
+  const seen = new Set(specs.map((s) => s.function.name));
+  const skipped: string[] = [];
+  for (const tool of opts.pluginTools ?? []) {
+    if (tool.name === "" || seen.has(tool.name)) {
+      skipped.push(tool.name);
+      continue;
+    }
+    seen.add(tool.name);
+    specs.push({
+      type: "function",
+      function: { name: tool.name, description: tool.description, parameters: tool.parameters },
+    });
+  }
+  return { specs, skipped };
+}
+
 /** 事件日志 → OpenAI 兼容消息序列。
  *  M1d：改走组装器投影 projectContext——compaction 感知（跳过被压 id、offset 注入摘要、fresh start），
  *  assistant_delta 合并与 tool 角色映射逻辑与旧版逐字同构。 */
@@ -222,8 +281,9 @@ export async function buildGlmHistory(logPath: string): Promise<RawMessage[]> {
 }
 
 /** GLM 暗卷摘要器：非流式单轮调用（thinking/streaming 关），只调用只读的 src/providers/glm.ts。 */
-export function createGlmSummarizer(): Summarizer {
+export function createGlmSummarizer(model?: string, meter?: RequestMeter, transport: typeof streamGlm = streamGlm): Summarizer {
   return async (input: SummarizerInput): Promise<SummarizerOutput> => {
+    const modelName = model && model !== "" ? model : (process.env.M0_MODEL ?? "glm-5.2");
     const msgs: GlmMessage[] = [
       { role: "system", content: input.system },
       {
@@ -236,12 +296,12 @@ export function createGlmSummarizer(): Summarizer {
     ];
     let text = "";
     let usage: CompactionUsage | undefined;
-    for await (const e of streamGlm(msgs, { stream: false })) {
+    for await (const e of transport(msgs, { stream: false, model: modelName, ...(meter ? { metering: { meter, category: "summary" as const } } : {}) }, undefined, { signal: input.signal })) {
       if (e.type === "assistant_delta") text += e.text;
       else if (e.type === "usage") usage = { inputTokens: e.inputTokens, outputTokens: e.outputTokens };
     }
     if (!text.trim()) throw new Error("GLM 摘要器返回空摘要");
-    return { text, usage, model: process.env.M0_MODEL ?? "glm-5.2" };
+    return { text, usage, model: modelName };
   };
 }
 
@@ -253,7 +313,7 @@ export interface GlmSessionCompaction {
   overhead?: AssemblyOverhead;
 }
 
-/** 会话型 provider：队列耗尽且上一轮含 tool_call 时重建历史再要下一轮；纯文本回复 = 任务结束。
+/** 会话型 provider：每次 stream 从日志重建历史，直接转发网络增量；轮次结束由 loop 控制。
  *  M1d：每次组装前做双条件触发检查——命中即压缩（compaction 事件落盘）再重组装（fresh start）。
  *  M2b：组装投影叠加 prune 类型化裁剪（§7.4，本地零 LLM）+ 符号地图注入（§6.4，指纹缓存；
  *  两者任一异常静默降级为无裁剪/无地图，绝不阻断 loop）。 */
@@ -287,6 +347,9 @@ export function createGlmSessionProvider(
   opts: {
     system?: string;
     tools?: GlmToolSpec[];
+    transport?: typeof streamGlm;
+    /** Persist and publish system events through the owning session pipeline. */
+    emit?: (event: AgentEvent) => Promise<void>;
     compaction?: GlmSessionCompaction;
     /** M2b：符号地图构建器（缺省 = 自建一个；workspace 从 M2B_WORKSPACE env 或 process.cwd()）。 */
     mapBuilder?: MapBuilder;
@@ -300,19 +363,31 @@ export function createGlmSessionProvider(
       hookContext?: string;
       deriveRemount?: (events: AgentEvent[]) => string | null;
     };
+    /** 真实通道模型名（缺省 = provider 层读 M0_MODEL env；settings.model 在场时优先）。 */
+    model?: string;
+    solpi?: SolpiRuntime;
   } = {},
 ): Provider {
-  let queue: ModelOutput[] = [];
-  let lastHadToolCalls: boolean | null = null; // null = 尚未请求过
   let round = 0; // 注入轮次（地图每 N 轮重算用）
   const coordinator = opts.compaction
     ? new CompactionCoordinator({
         config: opts.compaction.config,
-        summarizer: opts.compaction.summarizer ?? (process.env.M0_API_KEY ? createGlmSummarizer() : undefined),
+        summarizer: opts.compaction.summarizer ?? (process.env.M0_API_KEY ? createGlmSummarizer(opts.model, opts.solpi?.meter, opts.transport) : undefined),
       })
     : null;
   const mapBuilder = opts.map === false ? null : opts.mapBuilder ?? createMapBuilder();
   const workspace = opts.workspace ?? process.env.M2B_WORKSPACE ?? process.cwd();
+  const pluginContext = (events: AgentEvent[]): string | undefined => {
+    if (!opts.plugins) return undefined;
+    const parts = [opts.plugins.skillsRouting, opts.plugins.hookContext].filter((part): part is string => Boolean(part));
+    try {
+      const remount = opts.plugins.deriveRemount?.(events);
+      if (remount) parts.push(remount);
+    } catch (err) {
+      console.debug("[plugins] 重挂投影失败，跳过:", err instanceof Error ? err.message : String(err));
+    }
+    return parts.length ? parts.join("\n\n") : undefined;
+  };
   const assemble = async (): Promise<{ events: AgentEvent[]; history: ReturnType<typeof projectContext> }> => {
     // A5（审查根因 5）：增量重放——每轮只解析追加段（旧实现全量读盘+全量投影，整会话 O(n²)）
     const events = await replayIncremental(logPath);
@@ -324,6 +399,7 @@ export function createGlmSessionProvider(
     } catch (err) {
       console.debug("[prune] 计算失败，本轮跳过裁剪:", err instanceof Error ? err.message : String(err));
     }
+    if (opts.solpi?.ledger) replacements = await opts.solpi.project(events, replacements);
     return { events, history: projectContext(events, replacements) };
   };
   // M2b 地图：上下文文件 = 最近 2 个 user_message 里提到的 workspace 相对路径 + 最近 read/edit 的文件
@@ -350,14 +426,15 @@ export function createGlmSessionProvider(
   // stream(messages, tools)：一次调用 = 一轮模型输出。messages/tools 由 loop 传入，但本会话型
   // provider 以事件日志为唯一事实源（compaction/prune/符号地图组装都在日志投影上，loop 拿不到），
   // 故忽略入参沿用构造时的 opts（gate-check 暗卷路径冻结依赖此契约）。
+  let successfulRequests = 0, requestsAtBoundary = 0, lastBoundaryCount = 0;
+  const boundarySamples: number[] = [];
   return {
-    stream(_messages, _tools): AsyncIterable<ModelOutput> {
-      return turnGenerator();
+    stream(_messages, _tools, call): AsyncIterable<ModelOutput> {
+      return turnGenerator(call);
     },
   };
-  async function* turnGenerator(): AsyncGenerator<ModelOutput> {
-    if (queue.length === 0) {
-      if (lastHadToolCalls === false) return; // 模型收尾（纯文本）→ 任务结束
+  async function* turnGenerator(call?: ProviderCall): AsyncGenerator<ModelOutput> {
+      call?.signal?.throwIfAborted();
       let { events, history } = await assemble();
       // M2d 固定回注（§8.1.5/§8.1.9）：每轮组装重读两层记忆并重注（压缩后自然重注）；异常静默跳过
       let memory: MemoryInjection = { project: null, global: null, charsCurrent: 0, charsLimit: 0, tokens: 0, truncated: false };
@@ -367,25 +444,12 @@ export function createGlmSessionProvider(
         console.debug("[memory] 注入失败，静默跳过:", err instanceof Error ? err.message : String(err));
       }
       const memoryChars = (memory.project?.length ?? 0) + (memory.global?.length ?? 0);
-      // M1d 触发检查：估算含 system/tools/记忆全量开销；B（硬兜底）→ overflow 紧急截断
-      if (coordinator && opts.compaction) {
-        const factor = calibrateFactor(events);
-        const estimate = estimateContextTokens(history, { ...(opts.compaction.overhead ?? {}), memoryChars }, factor);
-        const decision = shouldCompact(estimate, {
-          ...DEFAULT_COMPACTION_CONFIG,
-          ...opts.compaction.config,
-        });
-        const outcome = await coordinator.maybeCompact(events, decision);
-        if (outcome?.ok) {
-          await createEventLog(logPath).append(outcome.event);
-          ({ events, history } = await assemble()); // fresh start：重组装（摘要 + tail）
-        } else if (outcome && outcome.kind === "failed" && coordinator.summarizerDisabled) {
-          console.warn("[compaction] 连续摘要失败已达上限，本会话停用摘要（仅 overflow 紧急截断可用）");
-        }
-      }
-      // M2b 符号地图：仅首轮（历史尚短）注入；异常静默跳过（§6.4 失败降级）
-      let mapText: string | null = null;
-      if (mapBuilder && history.length <= 2) {
+      let skillsBlock = pluginContext(events);
+      // M2b 符号地图：仅首轮（历史尚短）注入；异常静默跳过（§6.4 失败降级）。
+      // A-4：地图文本先于压缩判定构建——它是**本请求真实要发出去的内容**，
+      // 不计进 overhead 的硬预算判定会偏低（与 §7.3(a)「全量计入」同源）。
+      const buildMapText = async (historyForMap: ContextMessage[]): Promise<string | null> => {
+        if (!mapBuilder || historyForMap.length > 2) return null;
         try {
           const built = await mapBuilder.build({
             workspace,
@@ -394,33 +458,70 @@ export function createGlmSessionProvider(
             maxInputTokens: 128_000,
             nowRound: round++,
           });
-          mapText = built.text || null;
+          return built.text || null;
         } catch (err) {
           console.debug("[map] 注入失败，静默跳过:", err instanceof Error ? err.message : String(err));
+          return null;
         }
-      }
-      // M2e：插件注入面——skill 路由清单 + SessionStart 上下文 + 压缩后重挂（异常静默，零行为缺省）
-      let skillsBlock: string | undefined;
-      if (opts.plugins) {
-        const parts: string[] = [];
-        if (opts.plugins.skillsRouting) parts.push(opts.plugins.skillsRouting);
-        if (opts.plugins.hookContext) parts.push(opts.plugins.hookContext);
-        if (opts.plugins.deriveRemount) {
-          try {
-            const remount = opts.plugins.deriveRemount(events);
-            if (remount) parts.push(remount);
-          } catch (err) {
-            console.debug("[plugins] 重挂投影失败，跳过:", err instanceof Error ? err.message : String(err));
+      };
+      let mapText = await buildMapText(history);
+      // M1d 触发检查：估算含 system/tools/记忆全量开销；B（硬兜底）→ overflow 紧急截断
+      if (coordinator && opts.compaction) {
+        const factor = calibrateFactor(events);
+        const overhead: AssemblyOverhead = {
+          systemChars: (opts.system?.length ?? 0) + (skillsBlock?.length ?? 0),
+          toolSchemaChars: opts.tools ? JSON.stringify(opts.tools).length : 0,
+          ...opts.compaction.overhead,
+          memoryChars,
+          mapChars: mapText?.length ?? 0,
+        };
+        const estimate = estimateContextTokens(history, overhead, factor);
+        const decision = shouldCompact(estimate, {
+          ...DEFAULT_COMPACTION_CONFIG,
+          ...opts.compaction.config,
+        });
+        const boundaries = opts.solpi?.flags.economicCompaction ? deriveProgressBoundaries(events) : [];
+        const outcome = await coordinator.maybeCompact(events, decision, { overhead, signal: call?.signal,
+          ...(opts.solpi?.flags.economicCompaction ? { economics: {
+            state: opts.solpi.economics(events), requestsPerBoundary: boundarySamples,
+            // Plans specify files, not a trusted count of remaining completion boundaries.
+            // Never invent horizon or cache pricing from assistant prose/default ratios.
+            remainingBoundaries: null, avgIncrementTokens: null, cacheWriteReadRatio: null,
+          } } : {}) });
+        if (boundaries.length > lastBoundaryCount) {
+          if (lastBoundaryCount > 0) boundarySamples.push(successfulRequests - requestsAtBoundary);
+          requestsAtBoundary = successfulRequests;
+          lastBoundaryCount = boundaries.length;
+        }
+        call?.signal?.throwIfAborted();
+        if (outcome?.ok) {
+          if (opts.emit) await opts.emit(outcome.event);
+          else {
+            const log = createEventLog(logPath);
+            try { await log.append(outcome.event); }
+            finally { await log.close?.(); }
           }
+          ({ events, history } = await assemble()); // fresh start：重组装（摘要 + tail）
+          skillsBlock = pluginContext(events);
+          mapText = await buildMapText(history);
+        } else if (outcome && outcome.kind === "failed" && coordinator.summarizerDisabled) {
+          console.warn("[compaction] 连续摘要失败已达上限，本会话停用摘要（仅 overflow 紧急截断可用）");
         }
-        if (parts.length > 0) skillsBlock = parts.join("\n\n");
       }
       const msgs = composeTurnMessages({ system: opts.system, mapText, memory, history, ...(skillsBlock ? { skills: skillsBlock } : {}) });
-      queue = [];
-      for await (const e of streamGlm(msgs, {}, opts.tools)) queue.push(e);
-      lastHadToolCalls = queue.some((e) => e.type === "tool_call");
-      if (queue.length === 0) return;
-    }
-    yield* queue.splice(0);
+      // 最终装配硬闸：重挂/地图/JSON 包装均已确定，不能只检查压缩前的 overhead。
+      // 无 tokenizer：沿用既有校准估算口径；超限 fail-closed，事件历史不删改。
+      const finalConfig = { ...DEFAULT_COMPACTION_CONFIG, ...opts.compaction?.config };
+      const finalChars = JSON.stringify({ messages: msgs, tools: opts.tools ?? [] }).length;
+      const finalEstimate = Math.ceil(finalChars / calibrateFactor(events));
+      if (!Number.isFinite(finalConfig.inputLimit) || !Number.isFinite(finalConfig.maxOutputReserve) ||
+          finalEstimate > finalConfig.inputLimit - finalConfig.maxOutputReserve) {
+        throw new Error(`[context_budget_exceeded] final estimated input ${finalEstimate}; available ${finalConfig.inputLimit - finalConfig.maxOutputReserve}; request not sent`);
+      }
+      call?.signal?.throwIfAborted();
+      yield* (opts.transport ?? streamGlm)(msgs, { ...(opts.model ? { model: opts.model } : {}),
+        ...(opts.solpi?.meter ? { metering: { meter: opts.solpi.meter, category: "main" as const } } : {}) }, opts.tools, call);
+      successfulRequests++;
+      opts.solpi?.sent(msgs, events);
   }
 }

@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { assertNotAgentArea, assertNotAgentAreaReal, assertRealContainment, resolveInWorkspace, type Tool, type ToolResult } from "./base.js";
+import { appendImpact, assertNotAgentArea, assertNotAgentAreaReal, assertRealContainment, resolveInWorkspace, type Tool, type ToolResult } from "./base.js";
 import { collectDiagnostics } from "./lsp.js";
 
 // 与 read 对称的 50KB 上限：超出直接拒绝写入——截断写入会静默损坏数据，拒绝才是正确语义。
@@ -26,6 +26,8 @@ export const write_file: Tool = {
     await writeFile(abs, content, "utf8");
     // M2a 诊断回流：成功写盘后等诊断（LSP 未配置 = 空串，输出不变）
     const diag = await collectDiagnostics(ctx.workspace, abs);
-    return { ok: true, output: `已写入 ${rel}（${bytes} 字节）` + diag };
+    // M7 影响面：写盘成功后回注跨文件波及（best-effort，见 appendImpact）。
+    const output = await appendImpact(ctx, rel, `已写入 ${rel}（${bytes} 字节）` + diag);
+    return { ok: true, output };
   },
 };

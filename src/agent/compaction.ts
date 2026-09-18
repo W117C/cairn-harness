@@ -5,6 +5,8 @@
 import type { AgentEvent, CompactionEvent, CompactionUsage } from "../events";
 import { eventIdAt, excludedIds, projectContext, type ContextMessage } from "./context";
 import { classifyResult, shapeResult, summaryTruncate } from "./shape";
+import { setTimeout as delay } from "node:timers/promises";
+import { deriveBoundaries, snapToProgressBoundary, economicGate, type EconomicState } from "./economics";
 
 // ---- 参数（§7.3(f) 定稿默认值；全部可配）----
 export interface CompactionConfig {
@@ -71,6 +73,8 @@ export interface AssemblyOverhead {
   systemChars?: number;
   toolSchemaChars?: number;
   memoryChars?: number;
+  /** 符号地图注入字符数（M2b）；缺省 0 = 未注入。不计入会让首轮硬预算判定偏低。 */
+  mapChars?: number;
 }
 
 export function assemblyChars(messages: ContextMessage[]): number {
@@ -87,7 +91,8 @@ export function estimateContextTokens(
     assemblyChars(messages) +
     (overhead.systemChars ?? 0) +
     (overhead.toolSchemaChars ?? 0) +
-    (overhead.memoryChars ?? 0);
+    (overhead.memoryChars ?? 0) +
+    (overhead.mapChars ?? 0);
   return estimateTokens(chars, factor);
 }
 
@@ -255,8 +260,23 @@ export function selectCut(events: AgentEvent[], config: CompactionConfig, ctx: C
   // 覆盖它。旧实现此处的"tail 起点前移"兜底分支恒不可达（A9，审查 P3）：已删，勿再复写。
   // overflow 路径（半分截断）不查 keepFirst，仍显式引用 lastUserMsgId。
   // 纪律 1：tailStart 不得落在原子单元内部 → 回退到单元起点（整单元进 tail）
+  // P2-4（审查）：units 按 lo 升序互不重叠（见 atomicUnits）→ 二分定位包含 tailStart 的单元，
+  // 替代每轮 find 的 O(units) 线性扫描（照抄同文件 keepFirstSet 的二分写法，保持风格一致）。
+  // 语义逐位等价：原 find 取「tailStart > lo && tailStart <= hi」的首个单元；非重叠下至多一个命中。
+  const unitContaining = (id: number): AtomicUnit | undefined => {
+    let lo = 0;
+    let hi = ctx.units.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const u = ctx.units[mid]!;
+      if (id <= u.lo) hi = mid - 1;
+      else if (id > u.hi) lo = mid + 1;
+      else return u; // u.lo < id <= u.hi
+    }
+    return undefined;
+  };
   for (let guard = 0; guard < 1000; guard++) {
-    const u = ctx.units.find((m) => tailStart > m.lo && tailStart <= m.hi);
+    const u = unitContaining(tailStart);
     if (!u) break;
     tailStart = u.lo;
   }
@@ -414,6 +434,7 @@ function applyFilesFallback(text: string, compressedEvents: AgentEvent[]): strin
 
 // ---- 摘要器 ----
 export interface SummarizerInput {
+  signal?: AbortSignal;
   /** 内置模板（BUILTIN_PROMPTS["/compact"].system）。 */
   system: string;
   /** 压缩范围序列化会话。 */
@@ -433,8 +454,6 @@ export function createMockSummarizer(text: string): Summarizer {
   return async () => ({ text });
 }
 
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
-
 // ---- 压缩执行 ----
 export type CompactionOutcome =
   | { ok: true; event: CompactionEvent }
@@ -442,6 +461,7 @@ export type CompactionOutcome =
   | { ok: false; kind: "failed"; why: string }; // 执行失败：重试耗尽 / 无摘要器 / 无可截断
 
 export interface RunCompactionArgs {
+  signal?: AbortSignal;
   events: AgentEvent[];
   trigger: "auto" | "manual" | "overflow";
   reason: "threshold" | "hard_buffer" | "user_request";
@@ -450,10 +470,19 @@ export interface RunCompactionArgs {
   config?: Partial<CompactionConfig>;
   /** 组装开销（触发估算与前后 token 全量计入）。 */
   overhead?: AssemblyOverhead;
+  /** Opt-in gate AFTER legacy trigger; unknown provider costs remain null. */
+  economics?: {
+    state: EconomicState;
+    requestsPerBoundary: readonly number[];
+    remainingBoundaries: number | null;
+    avgIncrementTokens: number | null;
+    cacheWriteReadRatio: number | null;
+  };
 }
 
 /** 执行一次压缩：产出 compaction 事件（调用方 append）；不落流、不静默。 */
 export async function runCompaction(args: RunCompactionArgs): Promise<CompactionOutcome> {
+  args.signal?.throwIfAborted();
   const config: CompactionConfig = { ...DEFAULT_COMPACTION_CONFIG, ...args.config };
   const events = args.events;
   const factor = calibrateFactor(events);
@@ -492,6 +521,24 @@ export async function runCompaction(args: RunCompactionArgs): Promise<Compaction
     return e.type !== "compaction" && !excluded.has(id);
   }).length;
   const cut = selectCut(events, config, ctx);
+  if (args.economics && args.trigger === "auto") {
+    const boundary = snapToProgressBoundary(cut.offset, deriveBoundaries(events));
+    const hardProtection = tokensBefore >= ctx.availableTokens - 16_384;
+    if (!hardProtection) {
+      if (boundary === null) return { ok: false, kind: "rejected", why: "economic: no trusted progress boundary" };
+      // Snap backwards only, preserving keep-first/excluded/atomic constraints.
+      const safeBoundary = units.reduce((b, u) => u.lo < b && b <= u.hi ? u.lo : b, boundary);
+      cut.compressedIds = cut.compressedIds.filter(id => id < safeBoundary);
+      cut.offset = safeBoundary;
+      cut.tailIds = events.map((_, i) => i + 1).filter(id => id >= safeBoundary);
+    }
+    const archiveTokens = estimateTokens(cut.compressedIds.reduce((n, id) => n + eventChars(events[id - 1]), 0), factor);
+    const gate = economicGate({ ...args.economics, contextTokens: tokensBefore, windowTokens: ctx.availableTokens,
+      archiveTokens, memoTokens: config.summaryCapTokens, writeTokens: tokensBefore - archiveTokens + config.summaryCapTokens,
+      hardWindowProtection: hardProtection });
+    if (!gate.compact && !gate.windowProtection) return { ok: false, kind: "rejected", why: `economic: ${gate.reason}` };
+    // Even invalid/expanding economic candidates cannot disable hard-window protection.
+  }
   if (cut.compressedIds.length === 0) {
     return { ok: false, kind: "rejected", why: "无可压缩事件（会话在 tail 预算内）" };
   }
@@ -526,9 +573,11 @@ export async function runCompaction(args: RunCompactionArgs): Promise<Compaction
   // 降级链：失败退避重试 1 次；三闸逐把（空 / 超帽 / 膨胀）
   let lastErr: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
-    if (attempt > 0) await sleep(config.retryBackoffMs);
+    if (attempt > 0) await delay(config.retryBackoffMs, undefined, { signal: args.signal });
+    args.signal?.throwIfAborted();
     try {
-      const out = await summarizer({ system: prompt.system, conversation, priorSummary });
+      const out = await summarizer({ system: prompt.system, conversation, priorSummary, ...(args.signal ? { signal: args.signal } : {}) });
+      args.signal?.throwIfAborted();
       if (out.text.trim() === "") return { ok: false, kind: "rejected", why: "空摘要被拒" };
       const text = applyFilesFallback(out.text.trim(), compressedEvents);
       if (estimateTokens(text.length, factor) > config.summaryCapTokens) {
@@ -552,6 +601,7 @@ export async function runCompaction(args: RunCompactionArgs): Promise<Compaction
       }
       return { ok: true, event };
     } catch (err) {
+      args.signal?.throwIfAborted();
       lastErr = err;
     }
   }
@@ -579,7 +629,7 @@ export class CompactionCoordinator {
   }
 
   /** 触发判定命中后的入口；decision=null 直接跳过。停用时摘要路径跳过（overflow 截断照走）。 */
-  async maybeCompact(events: AgentEvent[], decision: CompactDecision | null): Promise<CompactionOutcome | null> {
+  async maybeCompact(events: AgentEvent[], decision: CompactDecision | null, options: Pick<RunCompactionArgs, "overhead" | "signal" | "economics"> = {}): Promise<CompactionOutcome | null> {
     if (!decision) return null;
     if (decision.trigger !== "overflow" && this.summarizerDisabled) return null;
     const outcome = await runCompaction({
@@ -588,6 +638,9 @@ export class CompactionCoordinator {
       reason: decision.reason,
       summarizer: decision.trigger === "overflow" ? undefined : this.summarizer,
       config: this.config,
+      overhead: options.overhead,
+      signal: options.signal,
+      economics: options.economics,
     });
     if (outcome.ok) this.consecutiveFailures = 0;
     else if (outcome.kind === "failed") this.consecutiveFailures++;

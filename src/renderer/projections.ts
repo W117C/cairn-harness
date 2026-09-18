@@ -589,3 +589,93 @@ export function skipReasonLabel(reason: string | undefined): string {
 /** 运行历史六态筛选值（§12.1 运行历史；cancelled 为保留态——V1 无取消入口）。 */
 export const HISTORY_STATES = ["all", "queued", "running", "succeeded", "failed", "skipped", "cancelled"] as const;
 export type HistoryFilter = (typeof HISTORY_STATES)[number];
+
+// ---- R1a 抽屉面板投影（右栏五面板的唯一数据源；渲染层不再持有任何演示数据）----
+
+export interface PanelFileEntry {
+  path: string;
+  /** 新增行数（write_file 内容行数；edit_file 不在 projectDiffCards 口径内，故恒 0 删除行）。 */
+  added: number;
+  removed: number;
+  created: boolean;
+  ok: boolean | null;
+}
+
+export interface PanelTreeGroup {
+  /** 目录（workspace 相对）；根目录文件为空串。 */
+  dir: string;
+  files: PanelFileEntry[];
+}
+
+export interface PanelTerminalEntry {
+  callId: string;
+  command: string;
+  /** null = 结果未回（运行中）。 */
+  ok: boolean | null;
+  output: string;
+}
+
+export interface PanelMergeEntry {
+  agent_id: string;
+  task: string;
+  status: string;
+  outcome: string | null;
+}
+
+export interface PanelData {
+  workspace: { name: string; path: string } | null;
+  files: PanelFileEntry[];
+  tree: PanelTreeGroup[];
+  terminal: PanelTerminalEntry[];
+  merge: PanelMergeEntry[];
+}
+
+/** 空面板数据（无事件流时的缺省：四块全空，渲染层据此走空态而非演示数据）。 */
+export const EMPTY_PANEL_DATA: PanelData = { workspace: null, files: [], tree: [], terminal: [], merge: [] };
+
+/** 右栏面板数据：审阅/文件树共用 diff 投影（同一事实源，两处不得各算各的），
+ *  终端取 run_shell 调用-结果配对，合并取 write worker 列。 */
+export function projectPanelData(events: AgentEvent[], workspace: string | null): PanelData {
+  const files: PanelFileEntry[] = projectDiffCards(events).map((d) => ({
+    path: d.path,
+    added: d.content === "" ? 0 : d.content.split("\n").length,
+    removed: 0,
+    created: true,
+    ok: d.ok,
+  }));
+  const groups = new Map<string, PanelFileEntry[]>();
+  for (const f of files) {
+    const cut = f.path.lastIndexOf("/");
+    const dir = cut < 0 ? "" : f.path.slice(0, cut);
+    const bucket = groups.get(dir) ?? [];
+    bucket.push(f);
+    groups.set(dir, bucket);
+  }
+  const terminal: PanelTerminalEntry[] = [];
+  const seen = new Map<string, PanelTerminalEntry>();
+  for (const e of events) {
+    if (e.type === "tool_call" && e.name === "run_shell") {
+      const row: PanelTerminalEntry = {
+        callId: e.id,
+        command: typeof e.args.command === "string" ? e.args.command : "",
+        ok: null,
+        output: "",
+      };
+      terminal.push(row);
+      seen.set(e.id, row);
+    } else if (e.type === "tool_result" && seen.has(e.callId)) {
+      const row = seen.get(e.callId)!;
+      row.ok = e.ok;
+      row.output = e.output;
+    }
+  }
+  const trimmed = typeof workspace === "string" ? workspace.trim() : "";
+  const name = trimmed.slice(trimmed.lastIndexOf("/") + 1);
+  return {
+    workspace: trimmed === "" ? null : { name: name === "" ? trimmed : name, path: trimmed },
+    files,
+    tree: [...groups.entries()].map(([dir, fs]) => ({ dir, files: fs })),
+    terminal,
+    merge: projectMergeTower(events).map((c) => ({ agent_id: c.agent_id, task: c.task, status: c.status, outcome: c.outcome })),
+  };
+}

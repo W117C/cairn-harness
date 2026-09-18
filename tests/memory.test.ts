@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildMemoryInjection, escapeControlTags, extractExternalRefs, isExternalRef, MEMORY_TOKEN_BUDGET_DEFAULT } from "../src/agent/memory/inject";
@@ -137,5 +138,57 @@ describe("记忆块标签转义（E-3 回归）", () => {
 
   it("合法记忆内容不受影响", () => {
     expect(escapeControlTags("普通记忆内容")).toBe("普通记忆内容");
+  });
+});
+
+// P1-1（审查）：记忆预算裁剪 O(L²) → O(L)（旧实现每轮只删 1 行却重建 flatten + 重算 totalChars）。
+// 「逐位等价」由黄金哈希锁定：期望值取自改造前（pristine HEAD）实现的同一构造输出——改造后必须
+// 逐字节一致；另单测删除顺序语义（先删项目侧、全局索引保尾）。
+describe("P1-1 记忆预算裁剪线性化（等价回归）", () => {
+  const sha256 = (s: string): string => createHash("sha256").update(s, "utf8").digest("hex");
+
+  const buildTruncCase = async (): Promise<Awaited<ReturnType<typeof buildMemoryInjection>>> => {
+    const arch = ["# 架构"];
+    for (let i = 0; i < 400; i++) arch.push("## 区块" + String(i) + "\n" + "述".repeat(80));
+    seed(".agent/ARCHITECTURE.md", arch.join("\n"));
+    const dec: string[] = [];
+    for (let i = 0; i < 40; i++) dec.push("## 2026-01-0" + String((i % 9) + 1) + "\n决策" + String(i) + "：" + "长".repeat(300));
+    seed(".agent/DECISIONS.md", dec.join("\n") + "\n");
+    seed(".agent/memory/MEMORY.md", "- p1 · user · 2026 · 项目索引短行\n");
+    const g: string[] = [];
+    for (let i = 0; i < 120; i++) g.push("- g" + String(i) + " · user · 2026 · " + "球".repeat(200));
+    writeFileSync(join(home, "MEMORY.md"), g.join("\n") + "\n", "utf8");
+    return await buildMemoryInjection({ workspace: ws });
+  };
+
+  it("触发截断：truncated + 预算内 + 与改造前逐字节一致（黄金哈希）", async () => {
+    const r = await buildTruncCase();
+    expect(r.truncated).toBe(true);
+    expect(r.charsCurrent).toBeLessThanOrEqual(r.charsLimit);
+    const canonical = JSON.stringify({
+      project: r.project, global: r.global,
+      charsCurrent: r.charsCurrent, charsLimit: r.charsLimit, tokens: r.tokens, truncated: r.truncated,
+    });
+    // 期望哈希 = pristine HEAD 实现的同一构造输出（改造前后 diff 为空）。
+    expect(sha256(canonical)).toBe("c7581132edf3da4b8538ecd58f28dabbfb8614f163c712a33c0b5a418b27e055");
+  });
+
+  it("删除顺序：先删项目侧（保尾），全局索引一行不少", async () => {
+    // 项目索引与全局索引各 40 行，预算只需删掉项目索引的前若干行
+    const projLines = Array.from({ length: 40 }, (_, i) => "- p" + String(i) + " · " + "甲".repeat(40));
+    seed(".agent/memory/MEMORY.md", projLines.join("\n") + "\n");
+    const globLines = Array.from({ length: 40 }, (_, i) => "- g" + String(i) + " · " + "乙".repeat(40));
+    writeFileSync(join(home, "MEMORY.md"), globLines.join("\n") + "\n", "utf8");
+    const probe = await buildMemoryInjection({ workspace: ws, tokenBudget: 100_000 }); // 不截断，量总长
+    expect(probe.truncated).toBe(false);
+    const limit = probe.charsCurrent - 200; // 只需删 ~200 字符
+    const r = await buildMemoryInjection({ workspace: ws, tokenBudget: Math.ceil(limit / 4) });
+    expect(r.truncated).toBe(true);
+    expect(r.charsCurrent).toBeLessThanOrEqual(r.charsLimit);
+    // 全局侧原样保留（一行不少）——项目侧未删够前不碰全局
+    for (const l of globLines) expect(r.global).toContain(l);
+    // 项目侧从首行起丢（保尾部）：末行在、首行不在
+    expect(r.project).toContain(projLines[projLines.length - 1]!);
+    expect(r.project).not.toContain(projLines[0]!);
   });
 });
