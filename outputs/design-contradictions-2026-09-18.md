@@ -63,6 +63,8 @@
 | # | 原记载 | 现状 |
 | --- | --- | --- |
 | G1 | `desktop-optimize/07` §5.1「960×600 最小窗口已编码但**未提交**」 | **已提交**：`src/main/index.ts:68 minWidth: 960`，`git diff HEAD` 无输出 |
+| G2 | 「空态已统一」——无人这么写过，但代码形状会让人这么假设 | **曾是两处假象**：删除当前会话那条路径直写 `streamInner.innerHTML = CHAT_EMPTY_HTML`，绕过 `showEmptyStream()` ⇒ 「返回上一个对话」按钮**没接监听器 = 死控件**。已由 R1b 修（`4afcee9`：改回复用 `showEmptyStream()`，并把按钮目标改成按调用时解析 `selectedId || sessions[0].id`，无会话时给提示而非静默） |
+| G3 | 同上——「空态就是那个空态卡片」 | **曾是真的**：真实 app 在零会话（首次启动 / 删完最后一个）时，`.stream-inner` 里留着 `index.html` 的演示对话（`INITIAL_TRANSCRIPT = streamInner.innerHTML` 就是从那段抓的）⇒ 用户看到的是**假对话**而不是空态。已由 R1b 修（`4afcee9`：启动分支补 `else if (loaded && !real.id && !sessions.length) showEmptyStream()`） |
 
 ---
 
