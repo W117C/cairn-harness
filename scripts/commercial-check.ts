@@ -21,7 +21,7 @@ import {
   setProviderKeyBackend,
 } from "../src/main/provider-keys";
 import { DEFAULT_SETTINGS, SettingsStore, validateSettings } from "../src/main/settings";
-import { ONBOARDING_GROUPS } from "../src/renderer/onboarding";
+import { ONBOARDING_GROUPS } from "../src/main/onboarding-groups";
 
 let pass = 0;
 let fail = 0;
