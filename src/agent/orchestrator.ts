@@ -32,6 +32,7 @@ import {
   calibrateFactor,
   runCompaction,
   shouldCompact,
+  withModelBudget,
   type CompactionConfig,
   type Summarizer,
 } from "./compaction";
@@ -117,6 +118,23 @@ export const WRITE_WORKER_FORBIDDEN_TOOLS: readonly string[] = [
  *  max_turns 闸门在先，压缩是第二道防线；keep_first 映射 = task 任务书 + context 交接，
  *  由 worker 上下文组装结构性保障：task/context 在 system 块，压缩只作用于子流事件投影）。 */
 export const WORKER_COMPACTION_CONFIG: Partial<CompactionConfig> = { ratio: 0.95 };
+
+/** worker 的压缩/预算配置：inputLimit 认被路由模型的真实窗口（与主会话 budgetConfig 同口径）。
+ *  窗口只定基线，调用方显式覆盖仍可提前触发；但**显式值也绝不超出模型窗口**——超窗 provider 必
+ *  400，把 fail-closed 让给远端不如本地钳住。
+ *  窗口未知（注入模型 modelFor / 未开路由 / 恢复的旧 handle）⇒ 逐字退回旧行为。
+ *  同一份 config 同时喂 shouldCompact 与 runCompaction（触发判定与裁切目标不得两副口径）。 */
+export function workerBudgetConfig(
+  handle: { modelCtxWindow?: number },
+  overrides: Partial<CompactionConfig> = {},
+): CompactionConfig {
+  const window = handle.modelCtxWindow;
+  const base: CompactionConfig = { ...DEFAULT_COMPACTION_CONFIG, ...WORKER_COMPACTION_CONFIG };
+  // withModelBudget 未采信窗口时按同一性原样返回（退化窗口：非数 / ≤ 输出预留），据此判窗口是否生效
+  const budgeted = withModelBudget(base, window);
+  const merged: CompactionConfig = { ...budgeted, ...overrides };
+  return budgeted !== base ? { ...merged, inputLimit: Math.min(merged.inputLimit, budgeted.inputLimit) } : merged;
+}
 
 /** pipeline stages 上限（V1 链长收敛）。 */
 export const MAX_PIPELINE_STAGES = 8;
@@ -499,6 +517,9 @@ interface WorkerHandle {
   tier: AgentPermissionMode;
   tierWarning?: string;
   model?: WorkerModel;
+  /** 路由选中模型的真实上下文窗口（registry ctxWindow）。只有路由分支拿得到 spec 时才有值；
+   *  注入模型（modelFor）与未开路由时缺省 ⇒ worker 预算退回硬编码基线（旧行为逐字不变）。 */
+  modelCtxWindow?: number;
   controller: AbortController;
   autonomy: AutonomySession;
   /** M3b write mode：文件面/shell 面的自主会话（worktree 完全可写 §4.4.5 → auto；critical 仍强制审批；
@@ -991,10 +1012,11 @@ export class Orchestrator {
     // ② 路由分支合成的是「真实 provider 模型的 spec」，旧条件 `!model && !M0_API_KEY`
     //    在 routeDecision 非空时永不成立 → 无凭据也照派 worker，第一跳 401 才死
     //    （白烧一轮 + 占并发预算 + 留一条必败 worker 记录）。现在同样要求凭据。
+    const routedSpec = !this.opts.modelFor && routeDecision ? resolveModel(DEFAULT_MODEL_TABLE, routeDecision.picked) : null;
     const model = this.opts.modelFor
       ? this.opts.modelFor(args)
-      : routeDecision
-        ? toWorkerModel(resolveModel(DEFAULT_MODEL_TABLE, routeDecision.picked))
+      : routedSpec
+        ? toWorkerModel(routedSpec)
         : undefined;
     if (!model && !process.env.M0_API_KEY) {
       return { ok: false, output: "spawn_agent: 无可用模型（无 M0_API_KEY 且未接 modelFor；fail-closed 不造必败 worker）" };
@@ -1060,6 +1082,7 @@ export class Orchestrator {
       tier,
       ...(clamped ? { tierWarning: warning } : {}),
       ...(model ? { model } : {}),
+      ...(routedSpec ? { modelCtxWindow: routedSpec.ctxWindow } : {}),
       controller: new AbortController(),
       // P0-2（审查）：worker 自主会话按父 run 口径构造（规则库 + 沙箱可用性）——空参构造使
       // 项目级 deny/ask 规则对 worker 全表失效、沙箱降级通道恒 NONE。
@@ -1898,7 +1921,7 @@ export class Orchestrator {
           ? {
               compaction: {
                 agentId: w.agentId,
-                config: { ...DEFAULT_COMPACTION_CONFIG, ...WORKER_COMPACTION_CONFIG, ...(this.opts.workerCompaction ?? {}) },
+                config: workerBudgetConfig(w, this.opts.workerCompaction ?? {}),
                 ...(this.opts.workerSummarizer ? { summarizer: this.opts.workerSummarizer } : {}),
                 toolsSchemaChars: JSON.stringify(specs).length,
                 onCompaction: async (ev: AgentEvent) => {
