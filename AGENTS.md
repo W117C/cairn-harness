@@ -71,8 +71,15 @@ React 树仍在磁盘上（`cards/`、`components/`（29 个 shadcn/ui 文件）
   ① 1 项失败（滚动耗时 251.8ms vs ≤200ms）② 5 项失败（虚拟化 DOM 节点 0、scrollTop 0、
   审批徽标 9987ms、观测器启动晚于推送）③ **全绿（exit=0）**。失败项在「DOM 没渲染任何事件」与
   「渲染了但慢」之间漂移 ⇒ 是 Electron/CDP 在宿主负载下的挂载时序问题，**不是代码回归**
-  （本轮改动是纯后端 distill/impact，不触及 renderer 滚动路径）。判读法：单跑
-  `pnpm panels-check` 复跑一次；连续两三次都红同一批断言才是真问题。
+  （本轮改动是纯后端 distill/impact，不触及 renderer 滚动路径）。
+  **假红主因已根治（2026-09-18）**：原 settle 只等「首个历史节点 > 0」且预算仅 15s，
+  高负载宿主上重放未落定就测量 ⇒ DOM 0 / scrollTop 0 假红（约 1/5 概率）；现改为
+  「读数连续两次稳定」+ 预算 40s，**断言阈值与 fail-visible 语义一字未改**（真起不来仍带
+  实测数字红）。残余 B2 徽标时延类 flake 仍用判读法：单跑 `pnpm panels-check` 复跑，
+  连续两三次红同一批断言才是真问题。
+  顺带修了同簇一个会撞 typecheck 的坑：`pnpm typecheck`（tsc 全量）扫描未跟踪的
+  `tests/observation-capture.test.ts`，其 fake ledger 参数缺类型 ⇒ 整树 tsc 报错；
+  已补显式参数类型 + `AuthorizedRedactedText` 导入（该测试 8 条本身全绿）。
   同日复核（全面检查轮）：`pnpm gates` 单跑 27/28（panels-check 红 5 项，B2 徽标 9925ms），
   随后 standalone 四连跑 = 崩溃 / 全绿 / 全绿（B2 分别 17ms / 118ms）。第四种失败形态已出现：
   `readInjectSentAt` 的 `waitFor` 超时是**裸抛异常**，直接杀掉 check 进程，B3/B4 根本没跑、
