@@ -66,6 +66,9 @@ export interface VerifyCommandResult { command: string; ok: boolean; output: str
 export interface VerifyResultEvent {
   type: "verify_result";
   callId: string;
+  /** 缺省（false/缺席）= 模型自调 verify；true = harness 在收束前补的自动验证拍
+   *  （能力 5「写过盘必须有证据」）。审计与时间线靠它区分归属，不冒充模型行为。 */
+  auto?: boolean;
   ok: boolean;
   attempt: number;
   maxAttempts: number;

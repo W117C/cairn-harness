@@ -62,6 +62,9 @@ export interface AppSettings {
   economicCompaction: boolean;
   /** M7 影响面：write_file/edit_file 成功后回注跨文件波及（护栏，显式开启，默认关闭）。 */
   impactAnalysis: boolean;
+  /** 能力 5 收束闸：写过盘但模型没自调 verify ⇒ 收束前 harness 补一拍验证（红字落事件流）。
+   *  缺省关：一拍 = 真跑一遍 lint/test，成本与开闸判据见 BLOCKED「能力 5 收束闸」。 */
+  autoVerify: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -91,6 +94,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   evidenceReceipts: false,
   economicCompaction: false,
   impactAnalysis: false,
+  autoVerify: false,
 };
 
 const PERMISSION_MODES = ["read-only", "default", "auto"] as const;
@@ -154,6 +158,7 @@ export function validateSettings(raw: unknown): AppSettings {
     evidenceReceipts: r.evidenceReceipts === true,
     economicCompaction: r.economicCompaction === true,
     impactAnalysis: r.impactAnalysis === true,
+    autoVerify: r.autoVerify === true,
     provider: PROVIDER_KINDS.includes(r.provider as ProviderKind) ? (r.provider as ProviderKind) : d.provider,
     model: typeof r.model === "string" ? r.model.slice(0, 200) : d.model,
     // 工作区：非空字符串取原值（越界长度回退默认，避免把畸形路径带进 run 装配）；其余回退 null
@@ -193,7 +198,8 @@ export class SettingsStore {
         "scheduleConcurrencyCap" in patch || "onboarded" in patch || "updateManifestUrl" in patch ||
         "telemetry" in patch || "routingBandit" in patch || "provider" in patch || "model" in patch ||
         "workspace" in patch || "actionFusion" in patch || "requestMetering" in patch || "observationPack" in patch ||
-        "evidenceReceipts" in patch || "economicCompaction" in patch || "impactAnalysis" in patch
+        "evidenceReceipts" in patch || "economicCompaction" in patch || "impactAnalysis" in patch ||
+        "autoVerify" in patch
         ? patch
         : {}),
       layout: patch.layout

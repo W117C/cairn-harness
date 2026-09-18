@@ -28,6 +28,13 @@ export interface LoopOptions {
   plan?: PlanChannel;
   /** 验证门钩子：接了才支持 verify 反射循环（成功即停 / 上限耗尽即停）。 */
   verify?: VerifyHook;
+  /** 能力 5 收束闸：本轮写过盘但模型自始至终没自调 verify 时，harness 在收束前补一拍验证，
+   *  把「说了」和「验了」分开——红字落 verify_result{auto:true} 进事件流（证据拍，不改写模型上下文）。
+   *  **缺省 false**：一拍 = 真跑一遍 lint/test（有成本，且 action-fusion 的「验证执行次数」记账
+   *  断言把它算成额外执行）。开闸前需要先裁两件事，见 BLOCKED「能力 5 收束闸」立案：
+   *  ① 失败自动返修所需的 harness→模型注入通道；② 准确率 vs `$/成功任务` 的实测口径。
+   *  硬上限（开启时）：每 run 至多一拍、模型自调过即让位、无可验面或探测炸则整段跳过。 */
+  autoVerify?: boolean;
   /** M7 影响面钩子：注入后 write_file/edit_file 成功落盘会回注跨文件波及。
    *  缺省 undefined = 零行为（与 ToolContext.impact 同源，透传不加工）。 */
   impact?: ToolContext["impact"];
@@ -68,6 +75,55 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
   const maxSteps = opts.maxSteps ?? 50;
   const maxVerify = opts.verify?.maxAttempts ?? 3;
   let verifyAttempts = 0;
+  // 能力 5：本 run 是否真的落过盘（决定要不要补自动验证拍）。
+  let wroteThisRun = false;
+  /** 跑一拍 verify 系统门。两种形态：
+   *  - manual（模型自调）：有配对的 tool_call ⇒ 失败原文注入同轮继续修，返回 "continue"。
+   *  - auto（harness 收束前补拍）：**没有**配对的 tool_call，也就没有合法注入通道
+   *    （裸 tool_result 会让 provider 侧 tool 消息失去前置 tool_calls 而 400；合成 tool_call
+   *     又违反 action-fusion 明写的「no extra tool calls」不变量）⇒ 只落 verify_result 证据，
+   *    红在时间线上可见，不冒充模型行为、也不偷偷多要一轮。返回恒为 "stop"。 */
+  const verifyBeat = async (callId: string, auto: boolean): Promise<"stop" | "continue"> => {
+    verifyAttempts++;
+    const attempt = verifyAttempts;
+    let outcome: VerifyOutcome;
+    let hookError: string | null = null;
+    try {
+      outcome = await (opts.verify as VerifyHook).run();
+    } catch (err) {
+      hookError = err instanceof Error ? err.message : String(err);
+      outcome = { ok: false, results: [] };
+    }
+    await events.append({
+      type: "verify_result",
+      callId,
+      ok: outcome.ok,
+      attempt,
+      maxAttempts: maxVerify,
+      results: outcome.results,
+      ...(auto ? { auto: true } : {}),
+    });
+    if (outcome.ok) return "stop"; // 验证通过 → 立即停止，不再调用模型
+    if (auto) return "stop"; // 自动拍：证据已落，不外注（见上）
+    if (attempt >= maxVerify) {
+      await events.append({
+        type: "tool_result",
+        callId,
+        ok: false,
+        output: `[verify] 连续失败 ${String(attempt)}/${String(maxVerify)} 次，已达上限，停止`,
+      });
+      return "stop";
+    }
+    await events.append({
+      type: "tool_result",
+      callId,
+      ok: false,
+      output: hookError !== null
+        ? "[verify] 钩子异常（记为一次验证失败）：" + hookError
+        : (auto ? "[harness 自动验证] " : "") + failureDigest(outcome),
+    });
+    return "continue";
+  };
 
   // 新旧形态统一收敛成流式事件源（legacy next() 源遇 tool_call 断轮，日志同序）
   const provider = opts.provider;
@@ -102,46 +158,9 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
           });
           continue;
         }
-        verifyAttempts++;
-        const attempt = verifyAttempts;
-        // verify 是系统门：钩子自身抛错（.agent/config.json 损坏、沙箱 exec 异常）应当记为
-        // 「一次验证失败」，而不是把整轮任务炸掉。工具执行早有同族 try/catch，这里补齐同一口径；
-        // 异常原因进 tool_result（fail-visible），不让模型只看到「无详细输出」。
-        let outcome: VerifyOutcome;
-        let hookError: string | null = null;
-        try {
-          outcome = await opts.verify.run();
-        } catch (err) {
-          hookError = err instanceof Error ? err.message : String(err);
-          outcome = { ok: false, results: [] };
-        }
-        await events.append({
-          type: "verify_result",
-          callId: output.id,
-          ok: outcome.ok,
-          attempt,
-          maxAttempts: maxVerify,
-          results: outcome.results,
-        });
-        if (outcome.ok) return; // 验证通过 → 立即停止，不再调用模型
-        if (attempt >= maxVerify) {
-          // 上限耗尽 → verify_result(failed) 已落，停止且不再调用模型
-          await events.append({
-            type: "tool_result",
-            callId: output.id,
-            ok: false,
-            output: `[verify] 连续失败 ${String(attempt)}/${String(maxVerify)} 次，已达上限，停止`,
-          });
-          return;
-        }
-        // 失败 → 错误输出注入同轮继续修
-        await events.append({
-          type: "tool_result",
-          callId: output.id,
-          ok: false,
-          output: hookError !== null ? "[verify] 钩子异常（记为一次验证失败）：" + hookError : failureDigest(outcome),
-        });
-        continue;
+        const beat = await verifyBeat(output.id, false);
+        if (beat === "stop") return; // 通过或达上限 → 收束，不再调用模型
+        continue; // 失败已回注，同轮继续修
       }
 
       // M2f 工具表摘除（sidechat 只读白名单）：不在表内的工具根本不进入执行面——
@@ -238,8 +257,28 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         output: result.output + postContext,
         ...(audit ? { auto: audit } : {}),
       });
+      if (result.ok && (name === "write_file" || name === "edit_file")) wroteThisRun = true;
     }
-    if (!sawToolCall) return; // 模型认为任务结束（纯文本轮 / 事件源耗尽）
+    if (!sawToolCall) {
+      // ---- 能力 5 收束闸：写过盘却从未自调 verify ⇒ harness 补一拍验证，别把「说了」当「验了」----
+      // 旧行为：只有模型自己调 verify 才会验证（提示词写着「修改完成后调用 verify」，纯靠自觉），
+      // 「顶尖 Agent 能证明代码真的能跑」这条在自动路径上是空的。
+      // 边界：① 每 run 至多一拍（verifyAttempts>0 即让位给模型自调路）；② 仓库没有 verify 面
+      // （无 config verify 字段且 package.json 无 lint/test）⇒ 整段跳过，零行为零额外调用；
+      // ③ 探测本身失败（config 存在但 JSON 坏）⇒ 同样跳过并告警——**绝不让探针炸掉 run**
+      // （verify 门自身的异常早有同族 try/catch，这里同口径）；④ 缺省不开（autoVerify !== true 零行为）。
+      if (opts.verify && opts.autoVerify === true && wroteThisRun && verifyAttempts === 0) {
+        let hasSurface = true;
+        try {
+          hasSurface = (await opts.verify.surface?.()) !== false;
+        } catch (err) {
+          hasSurface = false;
+          console.warn("[verify] 可验面探测失败，跳过自动验证拍:", err instanceof Error ? err.message : String(err));
+        }
+        if (hasSurface) await verifyBeat("harness-auto-verify", true);
+      }
+      return; // 模型认为任务结束（纯文本轮 / 事件源耗尽）
+    }
   }
   throw new Error(`agent loop 超过 maxSteps=${String(maxSteps)}，强制中止`);
 }

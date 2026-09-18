@@ -144,6 +144,9 @@ export async function runVerifyOutcome(repoDir: string, exec: ExecFn = defaultEx
 /** loop 的 verify 反射循环钩子：上限可配（缺省 3 次），耗尽即停。 */
 export interface VerifyHook {
   maxAttempts?: number;
+  /** 目标仓库有没有可验面（verify 命令非空）。false ⇒ harness 的自动验证拍整段跳过：
+   *  没东西可验还回注「未找到 verify 配置」= 白烧一轮模型调用。缺省视为有面。 */
+  surface?(): Promise<boolean>;
   run(): Promise<VerifyOutcome>;
 }
 
@@ -151,6 +154,10 @@ export interface VerifyHook {
 export function createVerifyHook(repoDir: string, opts: { maxAttempts?: number; exec?: ExecFn } = {}): VerifyHook {
   return {
     maxAttempts: opts.maxAttempts,
+    surface: async () => {
+      const { config } = await loadVerifyConfig(repoDir);
+      return [...(config.lint ?? []), ...(config.test ?? [])].length > 0;
+    },
     run: () => runVerifyOutcome(repoDir, opts.exec),
   };
 }

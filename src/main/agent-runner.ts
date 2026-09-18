@@ -849,6 +849,10 @@ export interface ImpactOptions {
 }
 
 export interface RunOptions extends SolpiFlags, ImpactOptions {
+  /** 能力 5 收束闸：写过盘但模型没自调 verify 时，收束前补一拍验证并把红字落进事件流。
+   *  缺省关闭（与 actionFusion / impactAnalysis 同族口径）；一拍 = 真跑一遍 lint/test，
+   *  开闸的代价与判据见 BLOCKED「能力 5 收束闸」立案。 */
+  autoVerify?: boolean;
   workspace: string;
   message: string;
   mode: PermissionMode;
@@ -1117,6 +1121,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     const impactHook = opts.impactAnalysis === true ? defaultImpactHook(opts.workspace) : undefined;
     await runLoop({
       ...(impactHook ? { impact: impactHook } : {}),
+      ...(opts.autoVerify === true ? { autoVerify: true } : {}),
       provider: createProvider(opts.message, BASE_SYSTEM, {
         ...opts, emit: pipeline, solpi,
         pluginTools: [...(recall ? [observationRecallSpec] : []), ...pluginToolSpecsFromRuntime(rt).filter(t => !recall || t.name !== "obs_recall")],
@@ -1272,6 +1277,8 @@ export interface RunOverrides extends SolpiFlags, ImpactOptions {
   actionFusion?: boolean;
   /** M7 影响面 runtime override（同 actionFusion 口径）。 */
   impactAnalysis?: boolean;
+  /** 能力 5 收束闸 runtime override（同 actionFusion / impactAnalysis 口径：settings 与 IPC 开闸另议）。 */
+  autoVerify?: boolean;
 }
 
 const unattendedAskGate = new AskGate({ unattended: true });
@@ -1326,6 +1333,7 @@ export async function handleAgentRun(
       ...(over.signal ? { signal: over.signal } : {}),
       actionFusion: over.actionFusion ?? (await store().get()).actionFusion,
       impactAnalysis: over.impactAnalysis ?? (await store().get()).impactAnalysis,
+      autoVerify: over.autoVerify ?? (await store().get()).autoVerify,
       requestMetering: over.requestMetering ?? (await store().get()).requestMetering,
       observationPack: over.observationPack ?? (await store().get()).observationPack,
       evidenceReceipts: over.evidenceReceipts ?? (await store().get()).evidenceReceipts,

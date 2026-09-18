@@ -128,3 +128,99 @@ describe("loop context feedback", () => {
     expect(log.at(-1)).toEqual({ type: "tool_result", callId: "c1", ok: false, output: "cancelled" });
   });
 });
+
+/* ---- 能力 5 收束闸：写过盘就必须留下验证证据（此前只有提示词里的「修改完成后调用 verify」）----
+   注：自动拍只落证据、不注入模型上下文——没有配对的 tool_call 就没有合法注入通道
+  （裸 tool_result 会让 provider 侧 tool 消息失去前置 tool_calls 而 400；合成 tool_call 违反
+   action-fusion 明写的「no extra tool calls」不变量）。要「验证失败自动返修」需要先裁一条
+   harness→模型的注入通道，见 BLOCKED 立案。 */
+describe("auto-verify on completion (harness 补拍，证据 only)", () => {
+  const failHook = { async run() { return { ok: false as const, results: [{ command: "pnpm test", ok: false as const, output: "1 failed" }] }; } };
+  const okHook = { async run() { return { ok: true as const, results: [{ command: "pnpm test", ok: true as const, output: "4 passed" }] }; } };
+
+  /** 剧本：第 1 请求写盘成功，之后每请求都是纯文本（模型自认为收工）。 */
+  async function runWritesFirst(opts: Partial<LoopOptions> = {}, script?: (n: number) => ModelOutput | null) {
+    const log: AgentEvent[] = [];
+    const requests: ProviderMessage[][] = [];
+    await runLoop({
+      workspace: "/tmp",
+      userMessage: "fix the bug",
+      mode: "auto",
+      interactive: true,
+      events: { async append(event) { log.push(event); } },
+      tools: { write_file: { name: "write_file", async run() { return { ok: true, output: "written" }; } } },
+      provider: {
+        async *stream(messages) {
+          requests.push(messages);
+          if (requests.length === 1) yield { type: "tool_call", id: "w1", name: "write_file", args: { path: "a.ts" } };
+          else if (script) { const o = script(requests.length); if (o) yield o; }
+        },
+      },
+      ...opts,
+    });
+    return { log, requests };
+  }
+
+  it("写盘后纯文本收束 → 补一拍并把红字落进事件流（零额外模型调用）", async () => {
+    const { log, requests } = await runWritesFirst({ verify: failHook, autoVerify: true });
+    expect(log.filter((e) => e.type === "verify_result")).toMatchObject([
+      { type: "verify_result", callId: "harness-auto-verify", ok: false, auto: true, attempt: 1 },
+    ]);
+    expect(requests).toHaveLength(2); // 证据拍不偷要一轮模型
+    expect(log.filter((e) => e.type === "tool_result")).toHaveLength(1); // 只有一拍 = 写盘本身
+    expect(log.some((e) => e.type === "tool_call" && e.name === "verify")).toBe(false); // 不合成工具调用
+  });
+
+  it("每 run 至多一拍：自动拍红字后模型仍纯文本收束 ⇒ 不叠加", async () => {
+    const { log, requests } = await runWritesFirst({ verify: failHook, autoVerify: true });
+    expect(log.filter((e) => e.type === "verify_result" && e.auto === true)).toHaveLength(1);
+    expect(requests).toHaveLength(2);
+  });
+
+  it("自动拍验证通过 → 绿证据落流", async () => {
+    const { log } = await runWritesFirst({ verify: okHook, autoVerify: true });
+    expect(log.some((e) => e.type === "verify_result" && e.auto === true && e.ok)).toBe(true);
+  });
+
+  it("模型自调过 verify ⇒ harness 让位，且手动拍事件形态零变化（连 auto 键都不出现）", async () => {
+    const { log, requests } = await runWritesFirst({ verify: okHook, autoVerify: true }, (n) =>
+      n === 2 ? ({ type: "tool_call", id: "v1", name: "verify", args: {} } as ModelOutput) : null);
+    const beats = log.filter((e) => e.type === "verify_result");
+    expect(beats).toHaveLength(1);
+    expect("auto" in (beats[0] as object)).toBe(false);
+    expect(requests).toHaveLength(2); // verify 通过即停
+  });
+
+  it("可验面探测炸（config 存在但 JSON 坏）⇒ 不炸 run、不补拍", async () => {
+    const boom = { surface: async () => { throw new SyntaxError("Unexpected token 'I'"); }, run: async () => ({ ok: false as const, results: [] }) };
+    const { log } = await runWritesFirst({ verify: boom, autoVerify: true });
+    expect(log.filter((e) => e.type === "verify_result")).toHaveLength(0);
+  });
+
+  it.each([
+    { label: "未写盘（只读动作）", call: "read_file", opts: {} },
+    { label: "仓库无 verify 面（surface=false）", call: "write_file", opts: { verify: { surface: async () => false, run: async () => ({ ok: false as const, results: [] }) } } },
+    { label: "缺省不开闸（未给 autoVerify）", call: "write_file", opts: { verify: failHook } },
+    { label: "显式 autoVerify:false", call: "write_file", opts: { verify: failHook, autoVerify: false } },
+  ])("零行为回退：$label → 无 verify_result、请求数与旧行为同形", async ({ call, opts }) => {
+    const log: AgentEvent[] = [];
+    const requests: ProviderMessage[][] = [];
+    await runLoop({
+      workspace: "/tmp", userMessage: "t", mode: "auto", interactive: true,
+      events: { async append(e) { log.push(e); } },
+      tools: {
+        read_file: { name: "read_file", async run() { return { ok: true, output: "x" }; } },
+        write_file: { name: "write_file", async run() { return { ok: true, output: "written" }; } },
+      },
+      provider: {
+        async *stream(messages) {
+          requests.push(messages);
+          if (requests.length === 1) yield { type: "tool_call", id: "c1", name: call, args: {} };
+        },
+      },
+      ...opts,
+    });
+    expect(log.filter((e) => e.type === "verify_result")).toHaveLength(0);
+    expect(requests).toHaveLength(2);
+  });
+});
