@@ -148,6 +148,9 @@ function renderProjectionLine(e: AgentEvent): string | null {
     case "automation_skipped":
     case "automation_completed":
       return null;
+    case "error":
+      // 失败是用户后续提问的前提事实，进只读投影（不同于调度/路由这类纯审计面事件）。
+      return "[主会话·运行失败] " + e.message;
   }
 }
 

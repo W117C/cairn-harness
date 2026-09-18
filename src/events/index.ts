@@ -347,6 +347,19 @@ export interface AutomationCompletedEvent {
   ts?: number;
 }
 
+// ---- P0 错误即事件：模型/网络失败此前只活在进程里，事件流与 UI 一律看不见 ----
+/** 一次 run 的失败事实。loop 在模型流边界落此事件后把原错误继续上抛，
+ *  调用方语义逐字不变（仍是 reject）；增量类型，旧日志重放不受影响。 */
+export interface RunErrorEvent {
+  type: "error";
+  /** 失败原因原文（provider / 网络 / 额度 / 解析）。渲染侧负责转义。 */
+  message: string;
+  /** 失败所在轮次（0-based）。 */
+  step?: number;
+  session_id?: string;
+  ts?: number;
+}
+
 export type AgentEvent =
   | UserMessageEvent
   | AssistantMessageEvent
@@ -373,7 +386,8 @@ export type AgentEvent =
   | RoutingDecisionEvent
   | AutomationTriggeredEvent
   | AutomationSkippedEvent
-  | AutomationCompletedEvent;
+  | AutomationCompletedEvent
+  | RunErrorEvent;
 
 const KNOWN_TYPES = new Set([
   "user_message",
@@ -402,6 +416,7 @@ const KNOWN_TYPES = new Set([
   "automation_triggered",
   "automation_skipped",
   "automation_completed",
+  "error",
 ]);
 
 // ---- A1（P0-A）：事件落盘常驻文件句柄 ----

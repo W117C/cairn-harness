@@ -39,6 +39,7 @@ function boot() {
     selectedId: null, sessions: [], sending: false,
     streamInner: element(), document: { createElement: element }, revealObserver: { unobserve: vi.fn() },
     $: vi.fn(element), render: vi.fn(), closeSbMenus: vi.fn(), syncStatusbar: vi.fn(), scrollStream: vi.fn(),
+    syncRunButton: vi.fn(), runControl: { isRunning: () => false, cancel: null as (() => void) | null },
     toast: vi.fn(), askCard: vi.fn(), setInterval: vi.fn(), clearInterval: vi.fn(), setTimeout: vi.fn(),
     // Exercise the shipped projection and inert DOM row builder; only layout is stubbed.
     mountHistory: vi.fn((options: any) => {

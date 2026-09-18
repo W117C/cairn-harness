@@ -30,6 +30,8 @@ it("renderer sends the active session ID through the run IPC API", async () => {
     appendUser: vi.fn(),
     ensureAi: vi.fn(),
     setRunning: vi.fn(),
+    syncRunButton: vi.fn(),
+    runControl: { isRunning: () => false, cancel: null as (() => void) | null },
     toast: vi.fn(),
     // 生产 send 体自 2026-09-17 P0 起还会叫这两个：底栏同步与会话列表重载。
     // 桩面必须与生产依赖同步——漏一个就让整段被 try/catch 吞掉，断言退化成「一次都没调」。

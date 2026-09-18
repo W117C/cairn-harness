@@ -696,6 +696,10 @@ body.resizing .stream-inner,body.resizing .composer-inner{transition:none}
 }
 .card{background:none}
 .card + .card,.ai-text + .card,.card + .ai-text{margin-top:10px}
+/* 失败卡：原因逐字（等宽 + 可折），文字用既有状态语义色 --st-fail-fg（双主题已校对比度），不新增色相 */
+.card.err .err-hd{font-size:13px;font-weight:600;color:var(--st-fail-fg)}
+.card.err .err-msg{margin-top:4px;font-family:var(--font-mono);font-size:12.5px;line-height:1.5;color:var(--fg);white-space:pre-wrap;overflow-wrap:anywhere}
+.card.err .err-hint{margin-top:6px;font-size:12.5px;color:var(--muted)}
 /* 卡片头部：统一保留前导图标（计划/文件/终端各有图案，不再藏起）。
    图标给一枚 soft 底座块，头部更"实"，与正文/折叠态拉开层次 */
 .chat .card-head{padding:4px 0;font-size:13px;font-weight:400;color:var(--dim)}
@@ -863,6 +867,10 @@ button.tg-head{transition:color .12s}
 .inline-send:active{background:color-mix(in oklab, var(--fg) 68%, var(--bg));color:var(--bg);transform:translateY(0)}
 .inline-send:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .inline-send svg{width:15px;height:15px}
+/* 运行中：同一个键换成停止。只换形状（↑→■）不换色相，避免与「失败」语义撞色。 */
+.inline-send .ic-stop{display:none}
+.inline-send.stop .ic-send{display:none}
+.inline-send.stop .ic-stop{display:block}
 /* 底部控制行：权限模式 + 附件在左，模型与思考程度在右 */
 .composer-foot{display:flex;align-items:center;gap:6px}
 .composer-foot .c-btn-label{font-size:12px}
@@ -1634,7 +1642,8 @@ html.reduce-motion .quick-card{opacity:1}
           <div class="composer-box">
             <textarea id="promptInput" rows="1" placeholder="向 Forge 描述任务，或粘贴报错堆栈…" aria-label="输入消息"></textarea>
             <button class="inline-send" id="sendBtn" data-od-id="send-btn" aria-label="发送" title="发送">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+              <svg class="ic-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+              <svg class="ic-stop" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="2"/></svg>
             </button>
           </div>
           <div class="composer-foot" data-od-id="composer-foot">

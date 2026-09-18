@@ -41,6 +41,7 @@ function boot() {
     selectedId: null, sessions: [], sending: false,
     streamInner: element(), document: { createElement: element }, revealObserver: { unobserve: vi.fn() },
     $: vi.fn((s: string) => els[s] ?? element()), render: vi.fn(), closeSbMenus: vi.fn(), scrollStream: vi.fn(),
+    syncRunButton: vi.fn(), runControl: { isRunning: () => false, cancel: null as (() => void) | null },
     toast: vi.fn(), askCard: vi.fn(), setInterval: vi.fn(), clearInterval: vi.fn(), setTimeout: vi.fn(),
     mountHistory: vi.fn(() => ({ destroy: vi.fn() })),
     // 抽屉刷新：桥接层只负责喂数据 + 请求重绘，渲染函数留在原型段

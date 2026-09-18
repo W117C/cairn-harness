@@ -42,6 +42,7 @@ function boot() {
     promptInput: { value: 'fix this' }, toast: vi.fn(), send: undefined as unknown as () => Promise<void>,
     loadSessions: vi.fn(), activeFileDoc: null, openView: vi.fn(), finalizePending: vi.fn(),
     appendUser: vi.fn(), ensureAi: vi.fn(), syncStatusbar: vi.fn(), setRunning: vi.fn(),
+    syncRunButton: vi.fn(), runControl: { isRunning: () => false, cancel: null as (() => void) | null },
     PERM_MAP: { standard: 'default' }, permMode: { id: 'standard' },
     // Deliberately present: actual sending must ignore all demo path variants.
     currentWs: { path: '~/dev/coding-suite' },

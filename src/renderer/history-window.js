@@ -26,6 +26,8 @@ export function projectHistory(events) {
       const row = calls.get(e.callId || e.id);
       if (row) { row.result = String(e.output ?? ''); row.ok = !!e.ok; calls.delete(e.callId || e.id); }
       else rows.push({ kind: 'record', text: '工具结果', detail: String(e.output ?? '') });
+    } else if (e.type === 'error') {
+      rows.push({ kind: 'error', text: String(e.message || '未知错误') });
     } else {
       // Historical records never re-run approval handlers, toasts, or usage accounting.
       rows.push({ kind: 'record', text: e.type, detail: JSON.stringify(e, null, 2) });

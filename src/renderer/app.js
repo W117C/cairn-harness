@@ -632,7 +632,7 @@ const gutters = [$('#gutterLeft'), $('#gutterRight')].filter(Boolean).map((el) =
     el.classList.remove('dragging');
     document.body.classList.remove('resizing');
     commit();
-    if (typeof scrollStream === 'function') scrollStream();  // 宽度变化后重新吸附底部
+    if (typeof scrollStream === 'function') scrollStream(true);  // 宽度变化后重新吸附底部
   }
   el.addEventListener('pointerup', endDrag);
   el.addEventListener('pointercancel', endDrag);
@@ -926,15 +926,20 @@ function nowTime() {
   return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
 }
 
-// PERF-02（F-4）：rAF 合帧——同一帧内多次调用只执行一次（打字机每 6 字符调一次）。
-// 语义不变：仍滚到底部；只是把「读 scrollHeight 强制同步重排」收敛到每帧至多一次。
+// PERF-02（F-4）：rAF 合帧——同一帧内多次调用只执行一次（打字机每 6 字符调一次），
+// 把「读 scrollHeight 强制同步重排」收敛到每帧至多一次。
 let scrollPending = false;
-function scrollStream() {
+/** 与底部的距离超过此值即视为「用户在读上面的内容」，流式输出不得再把视口拽回底部。 */
+const SCROLL_FOLLOW_LOCK_PX = 100;
+function scrollStream(force) {
   if (scrollPending) return;
   scrollPending = true;
   requestAnimationFrame(() => {
     scrollPending = false;
     const stream = $('.stream');
+    // force = 结构性重挂（打开会话 / 用户自己发言 / 拖完分隔条改宽），必须吸底；
+    // 其余一律只在本来就贴底时跟随——无条件 scrollTop=scrollHeight 会打断用户上翻。
+    if (!force && stream.scrollHeight - stream.scrollTop - stream.clientHeight > SCROLL_FOLLOW_LOCK_PX) return;
     stream.scrollTop = stream.scrollHeight;
   });
 }
@@ -1170,7 +1175,33 @@ function send() {
   }, 1100 * thinkSecs / 4);
 }
 
-$('#sendBtn').addEventListener('click', send);
+/* ============ 运行控制：一个键两用（发送 / 停止） ============
+   此前这里是 `addEventListener('click', send)`——按**值**捕获了演示版 send，而真实 send
+   要到 window.agent 块里才被重赋值 ⇒ 点按钮走打字机假回复、按回车才走真 agent。
+   运行态与取消能力由该块注入 runControl；缺省态 = 浏览器直开原型（可发送、无取消）。 */
+const runControl = { isRunning: () => false, cancel: null };
+function onRunButton() {
+  if (runControl.isRunning()) { if (runControl.cancel) runControl.cancel(); return; }
+  void send();
+}
+function syncRunButton() {
+  const stop = runControl.isRunning();
+  const btn = $('#sendBtn');
+  btn.classList.toggle('stop', stop);
+  btn.setAttribute('aria-label', stop ? '停止' : '发送');
+  btn.title = stop ? '停止运行' : '发送';
+}
+/** 失败卡的恢复动作——live 与重放两条渲染路共用同一句，避免造出第二事实源。 */
+const RUN_ERROR_HINT = '检查设置 → 模型与网络后，重新发送一次即可重试。';
+/** 失败卡：原因逐字呈现（esc 挡注入），恢复动作只给一个。 */
+function errorCardHTML(message) {
+  return '<div class="card err" role="alert">' +
+    '<div class="err-hd">运行失败</div>' +
+    '<div class="err-msg">' + esc(message) + '</div>' +
+    '<div class="err-hint">' + RUN_ERROR_HINT + '</div>' +
+    '</div>';
+}
+$('#sendBtn').addEventListener('click', onRunButton);
 promptInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
 });
@@ -1838,6 +1869,20 @@ render();
     node.dataset.history = '';
     const body = document.createElement('div');
     body.className = 'msg-body';
+    if (row.kind === 'error') {
+      // 重放必须与 live 渲染同一张失败卡，否则重开会话时刚补的失败可见性又退回「查看记录」桩。
+      const card = document.createElement('div');
+      card.className = 'card err';
+      card.setAttribute('role', 'alert');
+      card.append(
+        historyTextDiv('err-hd', '运行失败'),
+        historyTextDiv('err-msg', row.text),
+        historyTextDiv('err-hint', RUN_ERROR_HINT),
+      );
+      body.appendChild(card);
+      node.appendChild(body);
+      return node;
+    }
     const text = document.createElement('div');
     text.className = row.kind === 'user' ? 'bubble' : 'ai-text';
     text.style.whiteSpace = 'pre-wrap';
@@ -1858,6 +1903,13 @@ render();
     }
     node.appendChild(body);
     return node;
+  }
+  /** 重放侧的纯文本块：textContent 建节点，不经 innerHTML——失败原因可能含服务端回显内容。 */
+  function historyTextDiv(className, text) {
+    const el = document.createElement('div');
+    el.className = className;
+    el.textContent = text;
+    return el;
   }
 
   /* ---------- 会话列表 ---------- */
@@ -1894,7 +1946,7 @@ render();
     d.innerHTML = '<div class="msg-body"><div class="msg-meta"></div><div class="bubble"></div><div class="msg-actions"></div></div>';
     d.querySelector('.bubble').textContent = text;
     d.querySelector('.msg-actions').innerHTML = actionsHTML('user', nowTime());
-    streamInner.appendChild(d); observeMsg(d); scrollStream();
+    streamInner.appendChild(d); observeMsg(d); scrollStream(true);  // 用户自己发言：无视上翻锁定
     return d;
   }
   function ensureAi() {
@@ -2220,6 +2272,17 @@ render();
         scrollStream();
         break;
       }
+      case 'error': {
+        // P0 失败可见：此前 error 类型不存在，模型/网络炸掉时消息流什么都不显示。
+        finalizePending();
+        const m = document.createElement('div');
+        m.className = 'msg ai';
+        m.innerHTML = '<div class="msg-body">' + errorCardHTML(e.message || '未知错误') + '</div>';
+        streamInner.appendChild(m);
+        observeMsg(m);
+        scrollStream();
+        break;
+      }
       case 'usage':
         real.usageIn += e.inputTokens || 0;
         real.usageOut += e.outputTokens || 0;
@@ -2441,7 +2504,7 @@ render();
     syncStatusbar();
     refreshPanels();
     historyWindow = mountHistory({ container: streamInner, scroller: $('.stream'), rows: projectHistory(events), renderRow: renderHistoryRow });
-    scrollStream();
+    scrollStream(true);  // 打开/切换会话：落在末尾，不受上翻锁定影响
   }
   api.onEvent(e => {
     real.events += 1;               // VIS-02：每次收到事件真实递增底栏计数
@@ -2459,6 +2522,9 @@ render();
   });
 
   /* ---------- 行为覆写：发送 / 会话切换 / 新建 / 删除 / 归档 ---------- */
+  // 把运行态与取消能力接进顶层的单一分派器（onRunButton）：运行中点按钮 = 停止，其余 = 发送。
+  runControl.isRunning = () => real.running === true;
+  runControl.cancel = () => { void api.runCancel(); };
   send = async function () {
     const text = promptInput.value.trim();
     if (!text) return;
@@ -2489,14 +2555,18 @@ render();
       real.usageIn = 0; real.usageOut = 0; real.events = 0;
       syncStatusbar();
       setRunning(real.id, true);
+      syncRunButton();
       const res = await api.run({ message: text, mode: PERM_MAP[permMode.id], sessionId: real.id, ...(workspace ? { workspace } : {}) });
-      if (!res.ok) { real.running = false; setRunning(real.id, false); toast('启动失败：' + (res.error || '未知')); }
+      if (!res.ok) toast('启动失败：' + (res.error || '未知'));
     } catch (err) {
-      real.running = false;
-      setRunning(real.id, false);
       toast('启动失败：' + (err && err.message ? err.message : err));
     } finally {
       sending = false;
+      // api.run 要等整轮跑完（含被取消）才 resolve——成功路径此前无人复位 real.running，
+      // 于是跑完一轮后发送 / 切会话 / 新建全被自己的「请先等待完成」永久挡死。
+      real.running = false;
+      setRunning(real.id, false);
+      syncRunButton();
     }
   };
   selectSession = async function (id, force) {

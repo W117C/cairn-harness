@@ -28,7 +28,7 @@ export interface LoopOptions {
   plan?: PlanChannel;
   /** 验证门钩子：接了才支持 verify 反射循环（成功即停 / 上限耗尽即停）。 */
   verify?: VerifyHook;
-  /** 能力 5 收束闸：本轮写过盘但模型自始至终没自调 verify 时，harness 在收束前补一拍验证，
+  /** 能力 5（收束闸）：本轮写过盘但模型自始至终没自调 verify 时，harness 在收束前补一拍验证，
    *  把「说了」和「验了」分开——红字落 verify_result{auto:true} 进事件流（证据拍，不改写模型上下文）。
    *  **缺省 false**：一拍 = 真跑一遍 lint/test（有成本，且 action-fusion 的「验证执行次数」记账
    *  断言把它算成额外执行）。开闸前需要先裁两件事，见 BLOCKED「能力 5 收束闸」立案：
@@ -60,6 +60,12 @@ export interface LoopOptions {
 // verify 是系统门不是普通工具：调 verify_hook 跑 lint/test，
 //   通过 → 立即停止（不再调用模型）；失败 → 错误输出注入同轮继续修；
 //   连续失败达上限（缺省 3）→ verify_result(failed) 后停止（不再调用模型）。
+/** 取消与失败的边界：AbortError（Error 与 DOMException 两种形态）是取消，不是出错。 */
+function isAbortLike(err: unknown): boolean {
+  return typeof err === "object" && err !== null &&
+    (err as { name?: unknown }).name === "AbortError";
+}
+
 export async function runLoop(opts: LoopOptions): Promise<void> {
   const { workspace, userMessage } = opts;
   const seen: AgentEvent[] = [];
@@ -75,17 +81,20 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
   const maxSteps = opts.maxSteps ?? 50;
   const maxVerify = opts.verify?.maxAttempts ?? 3;
   let verifyAttempts = 0;
-  // 能力 5：本 run 是否真的落过盘（决定要不要补自动验证拍）。
+  // 能力 5：本 run 是否真的落过盘（决定要不要补自动验证），以及自动拍是否已用过。
   let wroteThisRun = false;
   /** 跑一拍 verify 系统门。两种形态：
    *  - manual（模型自调）：有配对的 tool_call ⇒ 失败原文注入同轮继续修，返回 "continue"。
    *  - auto（harness 收束前补拍）：**没有**配对的 tool_call，也就没有合法注入通道
    *    （裸 tool_result 会让 provider 侧 tool 消息失去前置 tool_calls 而 400；合成 tool_call
-   *     又违反 action-fusion 明写的「no extra tool calls」不变量）⇒ 只落 verify_result 证据，
+   *    又违反 action-fusion 明写的「no extra tool calls」不变量）⇒ 只落 verify_result 证据，
    *    红在时间线上可见，不冒充模型行为、也不偷偷多要一轮。返回恒为 "stop"。 */
   const verifyBeat = async (callId: string, auto: boolean): Promise<"stop" | "continue"> => {
     verifyAttempts++;
     const attempt = verifyAttempts;
+    // verify 是系统门：钩子自身抛错（.agent/config.json 损坏、沙箱 exec 异常）应当记为
+    // 「一次验证失败」，而不是把整轮任务炸掉。工具执行早有同族 try/catch，这里补齐同一口径；
+    // 异常原因进 tool_result（fail-visible），不让模型只看到「无详细输出」。
     let outcome: VerifyOutcome;
     let hookError: string | null = null;
     try {
@@ -106,6 +115,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
     if (outcome.ok) return "stop"; // 验证通过 → 立即停止，不再调用模型
     if (auto) return "stop"; // 自动拍：证据已落，不外注（见上）
     if (attempt >= maxVerify) {
+      // 上限耗尽 → verify_result(failed) 已落，停止且不再调用模型
       await events.append({
         type: "tool_result",
         callId,
@@ -114,6 +124,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       });
       return "stop";
     }
+    // 失败 → 错误输出注入同轮继续修（自动拍加 [harness] 前缀：这条不是模型自己调的）
     await events.append({
       type: "tool_result",
       callId,
@@ -128,10 +139,30 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
   // 新旧形态统一收敛成流式事件源（legacy next() 源遇 tool_call 断轮，日志同序）
   const provider = opts.provider;
   // C12（审查 P2）：取消信号随轮传入 provider——在途 fetch 随 abort 收束，不再只等静默窗。
-  const streamFn: (messages: Parameters<Provider["stream"]>[0]) => AsyncIterable<ModelOutput> =
+  const rawStream: (messages: Parameters<Provider["stream"]>[0]) => AsyncIterable<ModelOutput> =
     "stream" in provider
       ? (messages) => provider.stream(messages, undefined, opts.signal ? { signal: opts.signal } : undefined)
       : streamFromNextSource(provider);
+  // P0 错误即事件：模型流抛错（断网 / 额度 / 鉴权 / 响应解析）此前只向上冒泡，
+  // 事件流与 UI 一律看不见失败。这里在边界落一条 error 后把原错误继续上抛——
+  // 调用方语义逐字不变。取消不是失败（终态由编排器分类为 cancelled），不落。
+  let currentStep = 0;
+  const streamFn = async function* (
+    messages: Parameters<Provider["stream"]>[0],
+  ): AsyncGenerator<ModelOutput> {
+    try {
+      yield* rawStream(messages);
+    } catch (err) {
+      if (!isAbortLike(err) && !opts.signal?.aborted) {
+        await events.append({
+          type: "error",
+          message: err instanceof Error ? err.message : String(err),
+          step: currentStep,
+        });
+      }
+      throw err;
+    }
+  };
 
   if (userMessage !== undefined) {
     const event = { type: "user_message", content: userMessage } as const;
@@ -140,6 +171,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
 
   for (let step = 0; step < maxSteps; step++) {
     if (opts.signal?.aborted) return; // M3a：取消信号于轮界收束（终态由编排器分类：cancelled）
+    currentStep = step;
     let sawToolCall = false;
     for await (const output of streamFn(projectContext(seen))) {
       await events.append(output);
