@@ -128,7 +128,7 @@ React 树已全量归档（2026-09-17 删 45 个 .tsx/测试 + 移除 react 全�
   3. `map-check`：工作区拷贝（`cp`）未跳过 `.codegraph`（CodeGraph 工具自身的索引目录，含守护进程
      `daemon.sock` socket 文件）⇒ `ERR_FS_CP_SOCKET` 把门卡在拷贝阶段。已在 SKIP_SEGS 加 `.codegraph`
      并用 `lstatSync` 双保险挡掉所有非普通文件。修复后 ⓪–⑥b 全绿（④ tags 缓存命中 240/240，
-     「`build.ts` 的 `void writeTagsCache` 未 await 必然 miss」在当前代码已不复现）。
+     「`build.ts` 的 `void writeTagsCache` 未 await 必然 miss」此前「不复现」是样本太小——2026-09-18 加 120 文件确定性回归测试后 buggy 版必红（返回时 122 个写仅 120 落盘）；`build.ts:239-253` 已改为收集写 + 返回前 `await Promise.allSettled`，变异测试双向验证）。
   **门数、测试文件数、各门断言数一律不写死**（事实源 = `scripts/gate-manifest.ts`、`tests/`、各门自身输出；历史值曾出现「23 / 26 / 28 道」三处互斥）。
   M4 后加固轮（审查 96 条修复 + 门禁自检升级）已收口，详见 PROGRESS.md「H」段与 `outputs/*-2026-09-12.md`。
 - **2026-09-13 审查修复轮**：`outputs/code-review-report-2026-09-13.md`（106 条：6 P0/20 P1/61 P2/19 P3）逐项修复收口——只读 bash 硬闸（分隔符归一 + 参数面校验）、worker 权限规则接线、agents-check D2 时序 + CANARY 哨兵 + checkFatal、replay 逐行容错、4 处 spawn env 消毒、指纹 bounded fail-closed、loose skill 信任门、单实例锁、renderer 会话归因/缓冲收束、门禁体检网（label-first/扩展名/递归）等；两道红门（test/agents-check）根因是验收侧时序缺陷（重载下确定性红，闲时偶绿），已按"等状态不等事件"修法收口。

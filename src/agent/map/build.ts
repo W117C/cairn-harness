@@ -236,19 +236,21 @@ export function createMapBuilder(defaults: Partial<BuildMapOptions> = {}): MapBu
             }
           }),
         );
+        const cacheWrites: Promise<void>[] = []; // 竞态修复：写缓存曾为即发即忘 → 第二次构建必然 miss
         for (const s of sources) {
           if (s === null) continue;
           try {
             const ext = s.f.rel.slice(s.f.rel.lastIndexOf(".") + 1).toLowerCase();
             const tags = await fileTags(s.src, ext);
             inputs.push({ file: s.f.rel, tags });
-            void writeTagsCache(dir, s.f, tags).catch(() => {});
+            cacheWrites.push(writeTagsCache(dir, s.f, tags).catch(() => {})); // 竞态修复：收集，返回前统一 await（见循环后）
           } catch (err) {
             if (err instanceof TreeSitterUnavailableError) throw err; // 环境级：整图降级
             console.debug(`[map] 单文件解析失败（跳过）: ${s.f.rel}`, err instanceof Error ? err.message : String(err));
           }
         }
 
+        await Promise.allSettled(cacheWrites); // 竞态修复：确保落盘再返回，否则下一轮 readTagsCache 必然 miss
         const graph = buildGraph(inputs, {
           mentionedIdents: merged.mentionedIdents,
           contextFiles: merged.contextFiles,

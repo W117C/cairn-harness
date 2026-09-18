@@ -90,4 +90,26 @@ describe("map build（任务 4+5）", () => {
     expect(r.text).toBe("");
     expect(defaultTagsCacheDir()).not.toContain(ws);
   });
+  it("竞态回归：build() 返回 ⟹ 所有 tags 缓存已落盘（多文件确定性检验）", async () => {
+    // 修复前 writeTagsCache 是即发即忘（void ... .catch()）：build 返回时仍有未落盘的写
+    // → 紧接的第二次构建 readTagsCache 必然 miss。本测试用足够多的文件让「返回后仍有未决写」
+    // 在修复前的实现下几乎必然发生，锁定「返回即落盘」不变量。
+    const N = 120;
+    for (let i = 0; i < N; i++) {
+      await writeFile(join(ws, "src", `mod${i}.ts`), `export function fn${i}(): number { return ${i}; }\n`, "utf8");
+    }
+    const total = N + 2; // + alpha.ts + beta.py
+    const b = createMapBuilder({ tagsCacheDir: cacheDir });
+    const first = await b.build({ workspace: ws, maxFiles: total });
+    expect(first.ok).toBe(true);
+    expect(first.parsed).toBe(total);
+    // 返回后立即清点磁盘缓存：必须与已解析文件数逐字一致（落盘完成才许返回）
+    const entries = await readdir(cacheDir);
+    expect(entries.length).toBe(total);
+    // 紧接第二次构建（绕过渲染缓存）：tags 必须全命中，零重解析
+    const again = await b.build({ workspace: ws, maxFiles: total, nowRound: 99, recomputeEvery: 10 });
+    expect(again.fromTagsCache).toBe(total);
+    expect(again.parsed).toBe(0);
+  });
+
 });
