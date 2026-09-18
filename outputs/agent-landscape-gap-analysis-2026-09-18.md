@@ -105,7 +105,7 @@ Seatbelt 无 Linux（Landlock+seccomp）/ Windows 对应。发 dmg 够用，但�
 | 项 | 不做的论据 |
 |---|---|
 | 平权 swarm | 新证据普遍偏向单 agent：多跳任务单 agent 胜 MAS（[arXiv 2604.02460](https://arxiv.org/html/2604.02460v1)）、「强单 agent + 好工具即可」（[arXiv 2601.12307](https://arxiv.org/html/2601.12307v1)）、[Cognition: Don't Build Multi-Agents](https://cognition.com/blog/dont-build-multi-agents) |
-| 默认 Best-of-N 竞跑 | orchestrator-worker 的 token ≈ chat 的 **15×**（[Anthropic](https://www.anthropic.com/engineering/multi-agent-research-system)）；收益-成本比无稳定结论。我们的 `spawnRace` 保持显式开启即可（`MAX_CONCURRENT_WORKERS=4`，`orchestrator.ts:82`） |
+| 默认 Best-of-N 竞跑 | orchestrator-worker 的 token ≈ chat 的 **15×**（[Anthropic](https://www.anthropic.com/engineering/multi-agent-research-system)）；收益-成本比无稳定结论。**实测现状（比"要不要开"更前置）**：`spawnRace` 只有定义（`orchestrator.ts:799`）+ 验收脚本调用（`scripts/supervisor-check.ts:146,160,169`），**产品路径零调用者**（`src/main/` 零引用，不进 `spawn_agent` 入参面）⇒ 用户今天**无法**触发它。保持不接线即可，别顺手接线。并发预算 `MAX_CONCURRENT_WORKERS=4`（`:82`） |
 | 自建 embedding 索引 | 检索式 vs 索引式**无定论**：[Is Grep All You Need?](https://arxiv.org/pdf/2605.15184) 的可提取结论是「排序高度依赖 harness」，一手经验则称 grep 胜 embedding（[Augment](https://jxnl.co/writing/2025-09-11/why-grep-beat-embeddings-in-our-swe-bench-agent-lessons-from-augment/)）。我们零 embedding 且已有 tree-sitter + PageRank 地图（`src/agent/map/`），**维持现状，别补** |
 | LLM-as-judge 当主判据 | judge 在偏差测试上前沿模型失败 >50%（[Adaline](https://www.adaline.ai/blog/llm-as-a-judge-reliability-bias)）、因果回放论文里 judge 基线命中仅 ~14%。我们的判卷是「验证器 + sha256 冻结 + 变异测试」，**方向正确，别改** |
 | computer use / 浏览器操控 | 读数不可信：OSWorld 人类基线 72.36% vs 学术 agent 12.24% vs 2026 厂商自榜 85.6%（[Zylos](https://zylos.ai/research/2026-02-08-computer-use-gui-agents/)）。renderer 的 browser 面板保持诚实空态（`src/renderer/app.js:779`）即可 |
@@ -298,7 +298,7 @@ worker 面仍无。⚠️ `orchestrator.ts` 正被并发写者持有，本表行
 ## 7. 未证 / 保留（不宣称清单）
 
 - 「我们路由省了钱」——**未证**。bandit 与 gym 同建立在离线回放假设上（§B2），且 bandit 路由三大坑公开无解法【未证实】。
-- 「我们的多 agent 有正收益」——未证。`spawnRace` 收益-成本比无稳定结论，在 15× token 乘数下默认应保持关。
+- 「我们的多 agent 有正收益」——未证。`spawnRace` 收益-成本比无稳定结论，且实测**产品路径零调用者**（仅验收脚本调它，见 §3），保持不接线。
 - 「28/29 道全绿」——不宣称全部通过。另有联网/凭据限制的未证项（远程 MCP、provider:check 真连、各 check 暗卷段）；严格模式可判红。
 - 「harness 极简派是否长期占优」——未证实（pi 四工具、Auggie −53%、mini-SWE-agent 是同一条线索的反证，值得读但没定论）。
 - 本报告的「行业现状」全部来自外部二手/一手混合来源（第 9 节），**逐条未经我方复现**；
