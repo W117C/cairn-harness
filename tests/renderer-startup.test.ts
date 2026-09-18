@@ -20,9 +20,6 @@ function boot() {
     sessions: [{ id: "s1" }], selectedId: "s1",
     real: { id: null as string | null, running: false },
     fmtTime: String, render: vi.fn(), toast: vi.fn(),
-    // 启动切片会调它（4afcee9 空态收口新增）：函数在切片段之外，vm 里必须给桩，
-    // 否则 Promise 链抛未捕获拒绝——断言照样绿但整道 test 门 exit 1（假绿 + 假红混合体）。
-    showEmptyStream: vi.fn(),
     $: vi.fn(() => ({ textContent: "" })), selectSession: vi.fn(),
     // R1b B2：零会话时启动分支会走空态（原型段函数，切片外，故需桩）
     showEmptyStream: vi.fn(),
