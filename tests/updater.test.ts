@@ -90,6 +90,23 @@ describe("更新检查 V1（手写 semver + 显式态）", () => {
     expect(isSafeExternalUrl("")).toBe(false);
     expect(isSafeExternalUrl("not a url")).toBe(false);
   });
+  it("manifest URL 只允许 https（D5：放行 http/file = 借主进程做 SSRF/明文劫持）", async () => {
+    // 用 fetchOk 而非真网络：变异绕过协议检查时必须走到 available，不能靠断网误伤成 error
+    const r1 = await checkUpdate({
+      manifestUrl: "http://e.example/m.json",
+      currentVersion: "0.0.1",
+      fetchImpl: fetchOk({ version: "1.0.0", url: "https://d.example" }),
+    });
+    expect(r1.state).toBe("error");
+    if (r1.state === "error") expect(r1.message).toContain("https");
+    const r2 = await checkUpdate({
+      manifestUrl: "file:///etc/manifest.json",
+      currentVersion: "0.0.1",
+      fetchImpl: fetchOk({ version: "1.0.0", url: "https://d.example" }),
+    });
+    expect(r2.state).toBe("error");
+  });
+
 });
 
 // 审查 S3（任务 4.5）：停滞守卫三处收口——
