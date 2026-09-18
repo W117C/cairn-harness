@@ -1346,3 +1346,24 @@ R1b 在启动切片里新增了对 `showEmptyStream()` 的调用，函数在切�
 
 本轮验证（HEAD 态 `b9050fc`）：typecheck 0 错；全量 `test` 96 files/**916 passed** exit 0；
 全表 `mutate-verify` **107/107 全杀** exit 0。
+
+**工具面拆账（`0a445b3` + 锚点 3 条）**：`rankToolSpecs` 把 7517B 工具 schema 按条拆开（括号与逗号
+按位置计入首/末项 ⇒ 排行相加恰等于总字节），CLI 打前三名。本仓实测：12 条工具里
+`remember 1710B`、`spawn_agent 1302B`、`lsp 778B` 占工具面 50%。
+一条查证防住一次误动：曾想「autoMemory 关掉就藏 remember」以省 1710B，读 §8.1.4 双轨与
+settings 注释后**否决**——`autoMemory` 只管会话结束自动沉淀，模型显式 remember 是另一轨、本来就该可见。
+
+**新开 BLOCKED 裁决 3（请求改判据）**：靶场三条 case 实测全是 `requests=1` ⇒ 缓存命中、压缩触发、
+per-turn 回注、跨轮检索这些**只在多轮生效**的机制在靶场内一次都触发不到，基线
+`successRate:1 / 645 tokens` 是天花板——任何 harness 改动在这里只能证明「不掉分」，
+不能证明「买到分」。而 `fixtures/gym/cases/**` + `index.json` 在冻结判卷区内，所以我不动它，
+给出两个方案等裁决（① 新增一条 ≥10 轮的冻结 case；② 只给探针加 `--long` 放大重放，不动判卷文件）。
+
+**并发记账（不是我改的）**：另一会话把 `settings.promptCache` 缺省从 false 翻成 **true**，
+并顺手修了 sanitizer（`typeof r.promptCache === "boolean" ? … : d.promptCache`，否则老 JSON 读不到新缺省）。
+provider/API 层缺省仍是关（`AnthropicOptions.promptCache` 与 `OrchestratorOptions.promptCache`，
+被锚点 `anthropic-prompt-cache-default-on` 钉住），所以这次翻转改变的是**产品默认值**：
+Anthropic worker 现在默认带 cache_control 断点。这一格属产品决策，已向用户上报，不擅自改回。
+
+本轮验证（HEAD 态 `0a445b3` 之后）：typecheck 0 错；全量 `test` 96 files/**919 passed** exit 0；
+全表 `mutate-verify` **110/110 全杀** exit 0。
