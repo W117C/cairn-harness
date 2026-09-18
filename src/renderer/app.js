@@ -2337,11 +2337,11 @@ render();
   };
   function eventLabel(e) {
     const base = EVENT_LABELS[e.type] || String(e.type);
-    const who = typeof e.agent_id === 'string' && e.agent_id ? ' · ' + e.agent_id : '';
-    const extra = e.type === 'agent_status' && e.status ? ' · ' + e.status : '';
-    return base + who + extra;
+    // agent 归因走 .tag，状态留在标题里（failed / waiting_approval 是需要一眼看到的词）
+    return typeof e.status === 'string' && e.status ? base + ' · ' + e.status : base;
   }
-  /** 通用记录卡：一行标题 + 可展开原文。textContent 建节点，事件内容绝不进 innerHTML。 */
+  /** 通用记录卡：一行标题 + 可展开原文。动态内容一律 textContent，只有 chevron 是静态 SVG。 */
+  const RECORD_CHEV = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
   function appendRecordCard(host, title, e, detailText) {
     const c = document.createElement('div');
     c.className = 'card collapsed';
@@ -2351,6 +2351,15 @@ render();
     head.setAttribute('data-tool-toggle', '');
     head.setAttribute('aria-expanded', 'false');
     head.textContent = title;
+    // 归因/状态放进 .tag（既有 mono 样式），标题不被拼接污染
+    const tagText = typeof e.agent_id === 'string' && e.agent_id ? e.agent_id : (typeof e.status === 'string' ? e.status : '');
+    if (tagText) {
+      const tag = document.createElement('span');
+      tag.className = 'tag';
+      tag.textContent = tagText;
+      head.appendChild(tag);
+    }
+    head.insertAdjacentHTML('beforeend', RECORD_CHEV);
     const body = document.createElement('div');
     body.className = 'card-body';
     const pre = document.createElement('pre');

@@ -26,6 +26,7 @@ type FakeNode = {
   appendChild: (node: FakeNode) => FakeNode;
   setAttribute: (name: string, value: string) => void;
   removeAttribute: (name: string) => void;
+  insertAdjacentHTML: (pos: string, html: string) => void;
   querySelector: (sel: string) => FakeNode | null;
   querySelectorAll: (sel: string) => FakeNode[];
 };
@@ -37,6 +38,8 @@ function fakeEl(tag: string): FakeNode {
     appendChild(child: FakeNode) { node.children.push(child); return child; },
     setAttribute(name: string, value: string) { node.attrs[name] = value; },
     removeAttribute(name: string) { delete node.attrs[name]; },
+    // 静态 chevron 的插入点：测试不解析 HTML，占位即可（断言只认 textContent 通道）
+    insertAdjacentHTML() {},
     // 只按 class 查——够覆盖渲染器用到的 .msg-body 一类查询；不解析 HTML，故无注入面可测漏。
     querySelector(sel: string) {
       const want = sel.replace(/^\./, "");
