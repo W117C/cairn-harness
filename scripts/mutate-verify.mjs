@@ -890,6 +890,47 @@ const MUTATIONS = [
     apply: (s) => s.replace("toWorkerModel(routedSpec, this.opts.promptCache === true ? { promptCache: true } : {})", "toWorkerModel(routedSpec)"),
     expectFail: "开 promptCache ⇒ worker 出网的请求体里确有 cache_control（能力真可达，不是纸面开关）",
   },
+  // ---- 靶场装配探针（fdc1e7b）----
+  {
+    id: "probe-all-system-counted-static",
+    src: "src/agent/gym/probe.ts",
+    test: "tests/gym-probe.test.ts",
+    desc: "把全部 system 块都算成可缓存前缀（记忆/地图逐轮变化被当成静态段 → A1 的收益与成本全被高估）",
+    apply: (s) => s.replace("if (!seenSystem) { firstSystemBytes = b; seenSystem = true; } else volatileSystemBytes += b;", "firstSystemBytes += b; seenSystem = true;"),
+    expectFail: "可缓存 = 首条 system + 工具 schema；易变 system 与历史各归各段",
+  },
+  {
+    id: "probe-tool-schema-not-counted",
+    src: "src/agent/gym/probe.ts",
+    test: "tests/gym-probe.test.ts",
+    desc: "装配账里漏掉工具 schema（实测占短任务 prompt 的九成——漏掉它，探针就专门量不到最贵的那一块）",
+    apply: (s) => s.replace('const toolsJson = tools && tools.length > 0 ? JSON.stringify(tools) : "";', 'const toolsJson = "";'),
+    expectFail: "没有工具 ⇒ 工具面 0 字节（可缓存段只剩基础提示）",
+  },
+  {
+    id: "probe-delta-sign-reversed",
+    src: "src/agent/gym/probe.ts",
+    test: "tests/gym-probe.test.ts",
+    desc: "A/B 差分前后颠倒（省了报成多花、多花报成省了——这张表就是为这个判断存在的）",
+    apply: (s) => s.replace("totalPromptBytes: after.totalPromptBytes - before.totalPromptBytes,", "totalPromptBytes: before.totalPromptBytes - after.totalPromptBytes,"),
+    expectFail: "A/B：只读档工具面更小 ⇒ 可缓存前缀变小（差分表能报出这次装载省了多少）",
+  },
+  {
+    id: "probe-script-shape-check-removed",
+    src: "src/agent/gym/probe.ts",
+    test: "tests/gym-probe.test.ts",
+    desc: "剧本出现非模型产出类型时不报错继续跑（装配账照发，但回放的是残缺剧本 = 假数）",
+    apply: (s) => s.replace("else throw new Error(`装配探针剧本只接受", "else void (`装配探针剧本只接受"),
+    expectFail: "剧本形状不合（非 assistant/tool_call）⇒ 显式抛错，不静默少装",
+  },
+  {
+    id: "probe-assembly-not-returned",
+    src: "src/agent/gym/runner.ts",
+    test: "tests/gym-probe.test.ts",
+    desc: "runCase 算出装配账却不带回结果（CLI 与基线永远看不到那一行——探针退化成只有单测能碰的死码）",
+    apply: (s) => s.replace("return probe ? { ...result, assembly: probe.report() } : result;", "return result;"),
+    expectFail: "runCase 的 probe 档把装配账带出来（CLI 走的就是这条路，不是只测纯函数）",
+  },
 ];
 
 function runTest(testRel) {

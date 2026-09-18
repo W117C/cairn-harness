@@ -8,6 +8,8 @@ import { beforeEach, afterEach, describe, expect, it } from "vitest";
 import { createEventLog, type AgentEvent } from "../src/events";
 import { runLoop } from "../src/agent/loop";
 import { createMockProvider } from "../src/providers/mock";
+import { loadCase, loadGymIndex } from "../src/agent/gym/case";
+import { cleanupRun, runCase } from "../src/agent/gym/runner";
 import type { GlmToolSpec } from "../src/providers/glm";
 import {
   classifyAssembly,
@@ -118,6 +120,20 @@ describe("探针驱动真装配链（走 composeTurnMessages，不出网）", ()
     // 数组里多一项：自身 JSON 字节 + 一个逗号分隔符
     const expected = Buffer.byteLength(JSON.stringify(big), "utf8") + 1;
     expect(diffAssembly(before, after).cacheableBytes).toBe(expected);
+  });
+
+  it("runCase 的 probe 档把装配账带出来（CLI 走的就是这条路，不是只测纯函数）", async () => {
+    const gymRoot = join(process.cwd(), "fixtures", "gym");
+    const c = await loadCase(gymRoot, (await loadGymIndex(gymRoot)).cases.find((x) => x.id === "sum-clamp")!);
+    const r = await runCase(c, { model: "probe" });
+    try {
+      expect(r.score, "探针档不得改变任务结果").toBe(1);
+      expect(r.assembly, "probe 档必须带回装配账").toBeDefined();
+      expect(r.assembly!.requests).toBeGreaterThanOrEqual(1);
+      expect(r.assembly!.cacheableBytes).toBeGreaterThan(0);
+    } finally {
+      await cleanupRun(r);
+    }
   });
 
   it("剧本形状不合（非 assistant/tool_call）⇒ 显式抛错，不静默少装", async () => {
