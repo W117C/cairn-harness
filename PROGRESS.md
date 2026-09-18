@@ -1326,3 +1326,23 @@ R1b 在启动切片里新增了对 `showEmptyStream()` 的调用，函数在切�
 本轮验证（HEAD 态 `33062fb`）：typecheck 0 错；全量 `test` 95 files/**908 passed** exit 0；
 全表 `mutate-verify` **102/102 全杀** exit 0。留位：`promptCache` 尚无渲染层开关
 （`app.js` 归 R1b，与底栏 token 展示同一格一起做）；缓存价待联网实测校准。
+
+**能力 10：靶场第一次量到装配成本（`fdc1e7b` + 锚点 `b9050fc`）**。缺口不在用例数：三条 case 用冻结
+剧本跑，`scriptedUsageOf` 从**剧本文件字节**折算 token ⇒ 量的是剧本大小，不是 harness 装了多少，
+所以本轮所有上下文决策（预算认模型 / 影响面回注 / 记忆注入 / 工具表面 / A1 断点）一个都量不出来。
+新增 `gym-run --all --model probe`：走**真会话 provider**（composeTurnMessages / 压缩 / 预算全在链上），
+只换掉出网 transport，账按可缓存性分三层（可缓存前缀 = 首条 system + 工具 schema｜易变 system =
+记忆·skills·地图｜历史投影），守恒由测钉住（`promptBytes − 三层和 == 2 + (n−1)`）。
+`diffAssembly` 就是 A/B 一个 harness 开关要读的那张表。
+
+**第一次实测（三条 case，本仓自己的数）**：每次请求 prompt ≈ 8.37–8.55KB，其中
+**可缓存前缀 7604B ≈ 90%**，易变 system 322–548B，历史仅 394–492B，估算 ≈1650 tok。
+⇒ 两条判断此前无法得出、现在有了数：① 短任务的钱几乎全在**工具面**，不在历史 ⇒ 工具表瘦身比
+缓存更值钱；② 靶场任务一次 run 只发一次请求 ⇒ **A1 写侧断点对它们近乎零收益**，
+真杠杆在长时程多轮复用（与「harness 只在预算受限 + 长时程买到分」的前提对上了）。
+探针自陈边界：它用自己的基线 system（app 真实提示更长）⇒ `cacheableBytes` 是**下界**；
+`forkCase --model probe` 显式抛错；scripted/real 结果形状逐字不变，既有靶场基线未扰动
+（`gym-check` 22 ✅ / 0 ❌）。
+
+本轮验证（HEAD 态 `b9050fc`）：typecheck 0 错；全量 `test` 96 files/**916 passed** exit 0；
+全表 `mutate-verify` **107/107 全杀** exit 0。
