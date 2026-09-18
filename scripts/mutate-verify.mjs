@@ -775,6 +775,31 @@ const MUTATIONS = [
     apply: (s) => s.replace("fixed: [...b].filter((c) => !o.has(c)).sort(),", "fixed: [],"),
     expectFail: "基线里的通道已接上 UI ⇒ fixed 点名（A2b 的判据：还留着欠账记录也算红）",
   },
+  // ---- worker 上下文预算认模型（1e85544）----
+  {
+    id: "worker-budget-window-ignored",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/worker-budget.test.ts",
+    desc: "worker 预算不再采信模型窗口（256k/1M 档仍按硬编码 128k 提前压缩 = 多烧一次摘要 + 白丢冷细节）",
+    apply: (s) => s.replace("const budgeted = withModelBudget(base, window);", "const budgeted = base;"),
+    expectFail: "窗口比基线大 ⇒ 抬到真实窗口（256k 档不再按 128k 提前压缩），worker 专属 ratio 保留",
+  },
+  {
+    id: "worker-budget-clamp-removed",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/worker-budget.test.ts",
+    desc: "去掉「显式覆盖绝不超出模型窗口」的钳制（超窗请求发给远端吃 400，本地 fail-closed 失效）",
+    apply: (s) => s.replace("return budgeted !== base ? { ...merged, inputLimit: Math.min(merged.inputLimit, budgeted.inputLimit) } : merged;", "return merged;"),
+    expectFail: "显式覆盖超出模型窗口 ⇒ 本地钳到窗口（超窗必吃远端 400，fail-closed 不留给远端）",
+  },
+  {
+    id: "worker-budget-handle-window-lost",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/worker-budget.test.ts",
+    desc: "spawn 处不把 spec 的 ctxWindow 写进 handle（纯函数与调用点断线：路由选到 strong 档，worker 预算照旧 128k）",
+    apply: (s) => s.replace("      ...(routedSpec ? { modelCtxWindow: routedSpec.ctxWindow } : {}),\n", ""),
+    expectFail: "路由选中 strong 档 ⇒ handle 带该档 ctxWindow（无需 registry 二次查名）",
+  },
 ];
 
 function runTest(testRel) {
