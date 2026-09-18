@@ -1,0 +1,1081 @@
+<!doctype html>
+<!--
+  ============================================================================
+  长列表窗口化原型 · PERF-01（DSH 桌面端优化 2026-09-17）
+  设计系统来源：outputs/desktop-optimize-2026-09-17/02-design-tokens.md
+  色板/字体/间距/圆角令牌：逐项照抄 src/renderer/index.html:15-138（未改动 src/）
+  方针：沿用既有系统，不换视觉。禁止深蓝黑底 + 霓虹绿（§0.2.1 明令禁区）。
+  ----------------------------------------------------------------------------
+  本屏用途：在动 src/ 之前，用真实体感确认「窗口化的观感代价能否接受」。
+  诚实说明见页面底部「自评」区块 —— 有妥协的地方都写在那里。
+  ============================================================================
+-->
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light dark" />
+<title>长列表窗口化原型 · 10000 事件 · PERF-01</title>
+<style>
+/* ==========================================================================
+   §1 令牌 —— 逐项来自 src/renderer/index.html:15-138，未改动
+   ========================================================================== */
+:root{
+  --sidebar-w: 252px; --drawer-w: 340px; --gutter: 8px;
+  --bg: oklch(100% 0 0);
+  --surface: oklch(100% 0 0);
+  --surface-2: oklch(98.7% 0.003 250);
+  --surface-3: oklch(97.1% 0.004 250);
+  --fg: oklch(21% 0.006 250);
+  --muted: oklch(45% 0.008 250);
+  --dim: oklch(54% 0.008 250);
+  --border: oklch(93.6% 0.005 250);
+  --accent: oklch(48% 0.13 247);          /* 钢蓝，唯一 accent，不改 */
+  --accent-fg: oklch(100% 0 0);
+  --accent-soft: oklch(95.6% 0.02 248);
+  --code-bg: oklch(96.6% 0 0);
+  --bubble: oklch(96.9% 0.003 250);
+  --term-bg: oklch(97.8% 0 0);
+  --term-fg: oklch(30% 0.012 250);
+  --hover: oklch(95.6% 0.004 250);
+  --ok: oklch(52% 0.13 150);
+  --danger: oklch(54% 0.19 25);
+  --warn: oklch(50% 0.12 80);
+  --tk-kw: oklch(43% 0.13 265); --tk-str: oklch(42% 0.1 150); --tk-com: oklch(47% 0.008 250);
+  --tk-num: oklch(48% 0.11 55); --tk-fn: oklch(44% 0.12 255); --tk-prop: oklch(42% 0.09 200);
+  --shadow-1: 0 1px 2px oklch(20% 0.02 250 / .04), 0 3px 12px oklch(20% 0.02 250 / .05);
+  --shadow-2: 0 8px 32px oklch(20% 0.02 250 / .12);
+  --ease-out: cubic-bezier(.2,.7,.3,1); --ease-spring: cubic-bezier(.2,.85,.3,1.08);
+  --t-fast: 120ms; --t-base: 160ms; --t-slow: 240ms;
+  --st-done: var(--ok); --st-run: var(--ok); --st-wait: var(--muted);
+  --st-stuck: var(--warn); --st-fail: var(--danger);
+  --st-run-fg: oklch(44% 0.13 150); --st-stuck-fg: oklch(43% 0.12 70);
+  --st-fail-fg: oklch(46% 0.18 25); --st-wait-fg: var(--fg);
+  --border-strong: oklch(62% 0.008 250);
+  --statusbar-h: 24px; --tap-min: 28px; --titlebar-h: 44px; --rail-w: 64px;
+
+  /* §1.1 骨架屏（本轮新增，仅 --sk-block 是新色值） */
+  --sk-block: oklch(93% 0.005 250);
+  --sk-sheen: oklch(97.5% 0.004 250 / .9);
+  --sk-r: var(--r-2);
+  --sk-dur: 1400ms;
+  --sk-ease: linear;
+  /* 按类型固定的骨架高度初值：只保证「同类方差 = 0」(D3)。
+     其与真实行高的偏差会是数十 px，故仅用于 D3 对照与「按类型固定」开关，
+     不等高列表的正式口径是「逐行已知高度 + 偏差 ≤ 估算误差上限 20px」(D2)。 */
+  --sk-h-line: 14px; --sk-h-msg: 40px; --sk-h-card: 36px;
+  /* §1.3 三态形状 */
+  --st-dot: 12px; --st-dot-stroke: 1.8; --st-dot-ink: var(--surface);
+  --st-pulse-dur: 1600ms;
+  /* §1.5 底栏密度 */
+  --sb-label: var(--muted); --sb-value: var(--fg);
+  --sb-fs: 11.5px; --sb-gap: var(--sp-4); --sb-item-gap: var(--sp-2);
+  --sb-num-min: 6ch;
+  color-scheme: light;
+}
+html[data-theme="dark"]{
+  --bg: oklch(16.8% 0.012 250);
+  --surface: oklch(20.8% 0.014 250);
+  --surface-2: oklch(24.4% 0.015 250);
+  --surface-3: oklch(28% 0.016 250);
+  --fg: oklch(93% 0.006 250);
+  --muted: oklch(72% 0.012 250);
+  --dim: oklch(62% 0.012 250);
+  --border: oklch(30.5% 0.016 250);
+  --accent: oklch(76% 0.12 250);
+  --accent-fg: oklch(17% 0.03 250);
+  --accent-soft: oklch(30% 0.055 250);
+  --code-bg: oklch(24.4% 0.014 250);
+  --bubble: oklch(27.4% 0.016 250);
+  --term-bg: oklch(13.2% 0.012 250);
+  --term-fg: oklch(88% 0.01 250);
+  --hover: oklch(26.5% 0.015 250);
+  --ok: oklch(74% 0.15 150);
+  --danger: oklch(70% 0.18 25);
+  --warn: oklch(78% 0.13 80);
+  --tk-kw: oklch(72% 0.16 25); --tk-str: oklch(79% 0.1 215); --tk-com: oklch(63% 0.01 250);
+  --tk-num: oklch(77% 0.12 250); --tk-fn: oklch(78% 0.13 305); --tk-prop: oklch(82% 0.12 165);
+  --shadow-1: 0 1px 2px oklch(0% 0 0 / .3), 0 4px 16px oklch(0% 0 0 / .25);
+  --shadow-2: 0 8px 32px oklch(0% 0 0 / .45);
+  --st-done: var(--ok); --st-run: var(--ok); --st-wait: var(--muted);
+  --st-stuck: var(--warn); --st-fail: var(--danger);
+  --st-run-fg: oklch(82% 0.15 150); --st-stuck-fg: oklch(86% 0.12 80);
+  --st-fail-fg: oklch(82% 0.14 25); --st-wait-fg: var(--fg);
+  --border-strong: oklch(56% 0.012 250);
+  --statusbar-h: 24px; --tap-min: 28px; --titlebar-h: 44px; --rail-w: 64px;
+  --sk-block: oklch(30% 0.016 250);
+  --sk-sheen: oklch(42% 0.018 250 / .55);
+  color-scheme: dark;
+}
+:root{
+  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', system-ui, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', system-ui, sans-serif;
+  --font-mono: 'SF Mono', ui-monospace, 'JetBrains Mono', Menlo, monospace;
+  --sp-1:2px; --sp-2:4px; --sp-3:6px; --sp-4:8px; --sp-5:10px; --sp-6:12px;
+  --sp-7:14px; --sp-8:16px; --sp-9:20px; --sp-10:24px; --sp-11:32px; --sp-12:48px;
+  --r-1:4px; --r-2:6px; --r-3:8px; --r-4:10px; --r-5:12px; --r-6:14px; --r-7:16px;
+  --r-pill:999px; --r-full:50%;
+  --t-instant: 80ms;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:var(--font-body); background:var(--bg); color:var(--fg);
+  font-size:13.5px; line-height:1.6; overflow:hidden; -webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
+html.reduce-motion *,html.reduce-motion *::before,html.reduce-motion *::after{
+  animation:none !important;transition:none !important;
+}
+
+/* ==========================================================================
+   §2 骨架屏（§1.1 规格：扫光 1400ms linear；降级为静态块不消失）
+   ========================================================================== */
+@keyframes sk-sheen{ from{background-position:-160% 0} to{background-position:260% 0} }
+.sk{
+  background-color:var(--sk-block);
+  background-image:linear-gradient(90deg,transparent 0,var(--sk-sheen) 50%,transparent 100%);
+  background-size:220% 100%;background-repeat:no-repeat;border-radius:var(--sk-r);
+  animation:sk-sheen var(--sk-dur) var(--sk-ease) infinite;
+}
+/* 降级 #1：静态块，不闪、不消失（语义由 aria-busy 承载，块不单独承载） */
+@media (prefers-reduced-motion: reduce){
+  .sk{animation:none;background-image:none}
+}
+html.reduce-motion .sk{animation:none;background-image:none}
+
+/* ==========================================================================
+   §3 三态形状（§1.3：run=实心圆+外环 / wait=空心环 / fail=实心圆+内嵌×）
+   ========================================================================== */
+.st-dot{width:var(--st-dot);height:var(--st-dot);flex:none;display:inline-block}
+.st-dot svg{width:100%;height:100%;display:block}
+.st-dot[data-st="run"]{color:var(--st-run)}
+.st-dot[data-st="wait"]{color:var(--st-wait)}
+.st-dot[data-st="fail"]{color:var(--st-fail)}
+.st-dot[data-st="done"]{color:var(--st-done)}
+.st-dot[data-st="run"] svg circle:last-child{
+  transform-origin:12px 12px;animation:st-pulse var(--st-pulse-dur) var(--ease-out) infinite;
+}
+@keyframes st-pulse{0%{opacity:.9;transform:scale(.86)}70%{opacity:0;transform:scale(1.25)}100%{opacity:0;transform:scale(1.25)}}
+/* 降级 #2：静态实心圆+外环，与 wait/fail 形状仍三者互异 */
+@media (prefers-reduced-motion: reduce){ .st-dot[data-st="run"] svg circle:last-child{animation:none} }
+html.reduce-motion .st-dot[data-st="run"] svg circle:last-child{animation:none}
+
+/* ==========================================================================
+   §4 外壳 / 顶栏 / 指标条 / 控制条
+   ========================================================================== */
+.app{height:100%;display:flex;flex-direction:column;background:var(--surface)}
+.titlebar{
+  height:var(--titlebar-h);flex:none;display:flex;align-items:center;gap:var(--sp-6);
+  padding:0 var(--sp-7);background:var(--surface-2);border-bottom:1px solid var(--border);
+  -webkit-app-region:drag;
+}
+.titlebar .tb-title{font-family:var(--font-display);font-size:13px;font-weight:600;letter-spacing:-0.01em}
+.titlebar .tb-sub{font-size:11.5px;color:var(--sb-label)}   /* --dim 落在 --surface-2 上 dark 仅 4.47:1，改用实测 7.16/6.56 的标签令牌 */
+.titlebar .tb-sp{flex:1}
+.tb-btn{
+  height:28px;padding:0 10px;border-radius:var(--r-2);border:1px solid var(--border-strong);
+  background:var(--surface);color:var(--fg);font-size:12px;display:inline-flex;align-items:center;gap:6px;
+  transition:background var(--t-fast),border-color var(--t-fast);
+}
+.tb-btn:hover{background:var(--hover)}
+.tb-btn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--fg)}
+
+/* 指标条：窗口化的核心证据，放在最上面 */
+.metrics{
+  flex:none;display:flex;align-items:stretch;gap:1px;background:var(--border);
+  border-bottom:1px solid var(--border);
+}
+.metric{
+  flex:1;min-width:0;padding:7px 12px;background:var(--surface-2);display:flex;flex-direction:column;gap:1px;
+}
+.metric .m-k{font-size:10.5px;color:var(--muted);letter-spacing:.02em}
+.metric .m-v{
+  font-family:var(--font-mono);font-size:16px;font-weight:600;color:var(--fg);line-height:1.25;
+  font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1,"lnum" 1;
+}
+.metric .m-v small{font-size:11px;font-weight:400;color:var(--muted);margin-left:3px}
+.metric.hero .m-v{font-size:20px}
+.metric .m-v.warn{color:var(--danger)}
+.metric .m-v.good{color:var(--st-run-fg)}
+
+/* 控制条 */
+.controls{
+  flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-6);
+  padding:8px var(--sp-7);background:var(--surface);border-bottom:1px solid var(--border);
+}
+.ctl{display:inline-flex;align-items:center;gap:var(--sp-3);font-size:11.5px;color:var(--muted)}
+.ctl > .ctl-k{color:var(--muted);white-space:nowrap}
+.ctl select,.ctl input[type="number"]{
+  height:26px;padding:0 6px;border-radius:var(--r-2);border:1px solid var(--border-strong);
+  background:var(--surface);color:var(--fg);font-size:11.5px;font-family:inherit;
+}
+.ctl .btn{
+  height:26px;padding:0 10px;border-radius:var(--r-2);border:1px solid var(--border-strong);
+  background:var(--surface);color:var(--fg);font-size:11.5px;transition:background var(--t-fast);
+}
+.ctl .btn:hover{background:var(--hover)}
+.ctl .btn.danger{color:var(--st-fail-fg);border-color:var(--st-fail)}
+.ctl .btn.danger:hover{background:color-mix(in oklab, var(--danger) 12%, transparent)}
+.ctl-sep{width:1px;height:18px;background:var(--border)}
+
+/* ==========================================================================
+   §5 流：窗口化容器
+   ========================================================================== */
+.chat{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--surface)}
+.stream{flex:1;overflow-y:auto;padding:24px 0;min-height:0;position:relative}
+.stream-inner{max-width:920px;margin:0 auto;padding:0;position:relative}
+.row{position:absolute;left:24px;right:24px;padding-bottom:12px;contain:layout style}
+.row.is-sk{pointer-events:none}
+
+/* ---- 用户消息 ---- */
+.u-row{display:flex;justify-content:flex-end}
+.u-bub{
+  background:var(--bubble);border-radius:var(--r-5);padding:8px 12px;max-width:78%;
+  font-size:13.5px;line-height:1.6;color:var(--fg);
+}
+/* ---- AI 文本 ---- */
+.ai-text{font-size:13.5px;line-height:1.6;color:var(--fg);max-width:100%}
+.ai-meta{font-size:12px;font-weight:500;color:var(--muted);margin-bottom:4px;display:flex;gap:8px;align-items:center}
+/* ---- 卡头（工具/diff/终端共用） ---- */
+.card-head{
+  display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;font-weight:400;color:var(--dim);
+}
+.card-head > svg.ic{
+  width:24px;height:24px;padding:5px;border-radius:7px;box-sizing:border-box;
+  background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--border);color:var(--muted);flex:none;
+}
+.card-head .ch-t{font-size:12.5px;color:var(--fg);font-weight:500;letter-spacing:-0.01em}
+.card-head .tag{margin-left:auto;font-family:var(--font-mono);font-size:10.5px;color:var(--muted)}
+/* ---- 工具卡 ---- */
+.tool-item{
+  display:flex;align-items:center;gap:8px;padding:7px 12px;font-size:12.5px;
+  border:1px solid var(--border);border-radius:var(--r-4);background:var(--surface-2);
+}
+.tool-item .ti-name{font-family:var(--font-mono);font-size:11.5px;color:var(--fg);flex:none}
+.tool-item .ti-sum{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:12px}
+.ti-state{flex:none;font-family:var(--font-mono);font-size:11px}
+.ti-state.ok{color:var(--ok)} .ti-state.fail{color:var(--st-fail-fg)}
+.tool-body{
+  margin-top:4px;border:1px solid var(--border);border-radius:var(--r-4);background:var(--surface-2);padding:2px 0;
+}
+.tool-body .ti-code{
+  font-family:var(--font-mono);font-size:11.5px;line-height:1.7;color:var(--muted);
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-3);
+  padding:8px 10px;margin:2px 12px 8px;white-space:pre;overflow:hidden;
+}
+/* ---- 审批卡 ---- */
+.card.ask{
+  border:1px solid var(--border);border-radius:var(--r-4);background:var(--surface-2);padding:10px 12px;
+}
+.card.ask .ask-hd{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--fg)}
+.card.ask .ask-hd svg{width:15px;height:15px;color:var(--warn);flex:none}
+.card.ask .ask-tool{font-family:var(--font-mono);font-size:12px;color:var(--fg)}
+.card.ask .ask-reason{margin-top:6px;font-size:12px;color:var(--fg);line-height:1.5}
+.card.ask .ask-acts{display:flex;align-items:center;gap:8px;margin-top:10px}
+.ask-btn{
+  height:28px;padding:0 12px;border-radius:var(--r-2);border:1px solid var(--border-strong);
+  background:var(--surface);color:var(--fg);font-size:12px;
+}
+.ask-btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);font-weight:500}
+.ask-btn.deny{color:var(--st-fail-fg)}
+.ask-scope{margin-left:auto;font-family:var(--font-mono);font-size:11px;color:var(--muted)}
+/* ---- diff ---- */
+.chat .diff{border:1px solid var(--border);border-radius:var(--r-4);background:var(--surface-2)}
+.diff{font-family:var(--font-mono);font-size:12px;line-height:1.7;padding:8px 0;overflow:hidden}
+.diff .ln{padding:0 12px;white-space:pre;overflow:hidden;text-overflow:clip}
+.diff .hunk{color:var(--accent)}
+.diff .add{color:var(--ok);background:color-mix(in oklab, var(--ok) 12%, transparent)}
+.diff .del{color:var(--danger);background:color-mix(in oklab, var(--danger) 10%, transparent)}
+.diff .ctx{color:var(--muted)}
+/* ---- 终端 ---- */
+.chat .term{border:1px solid var(--border);border-radius:var(--r-4)}
+.term{
+  background:var(--term-bg);color:var(--term-fg);font-family:var(--font-mono);font-size:12px;
+  line-height:1.7;padding:10px 12px;overflow:hidden;
+}
+.term > div{white-space:pre}
+.term .p{color:color-mix(in oklab, var(--accent) 70%, var(--term-fg))}
+.term .ok{color:var(--ok)}
+.term .dim{color:color-mix(in oklab, var(--term-fg) 55%, transparent)}
+
+/* ---- 骨架行（高度 = 该行已知/估算高度 - 行下间距，保证总高一致） ---- */
+.sk-body{width:100%;border-radius:var(--sk-r)}
+.sk-line{height:var(--sk-h-line);border-radius:var(--sk-r);margin-top:8px}
+.sk-line.w70{width:70%} .sk-line.w45{width:45%} .sk-line.w90{width:90%}
+
+/* ==========================================================================
+   §6 底栏（VIS-02：24px，--sb-label / --sb-value，tabular-nums 防跳动）
+   ========================================================================== */
+.statusbar{
+  height:var(--statusbar-h);flex:none;display:flex;align-items:center;gap:var(--sb-gap);
+  padding:0 var(--sp-7);background:var(--surface-2);border-top:1px solid var(--border);
+  color:var(--muted);font-size:var(--sb-fs);line-height:1;white-space:nowrap;overflow:hidden;
+}
+.statusbar .sb-spacer{flex:1}
+.statusbar .sb-item{display:inline-flex;align-items:center;gap:var(--sb-item-gap);color:var(--sb-label);font-size:var(--sb-fs)}
+.statusbar .sb-item[data-label]::before{content:attr(data-label);color:var(--sb-label)}
+.statusbar .sb-item .num{
+  color:var(--sb-value);font-variant-numeric:tabular-nums;
+  font-feature-settings:"tnum" 1,"lnum" 1;min-width:var(--sb-num-min);display:inline-block;
+}
+#sandboxState::before{content:"";width:6px;height:6px;border-radius:var(--r-full);background:var(--st-wait);flex:none}
+#sandboxState[data-state="ready"]::before{background:var(--st-run)}
+#sandboxState[data-state="down"]::before{background:var(--st-fail)}
+
+/* ==========================================================================
+   §7 自评面板
+   ========================================================================== */
+.selfnote{
+  flex:none;max-height:0;overflow:hidden;background:var(--surface-2);
+  border-top:1px solid var(--border);transition:max-height var(--t-slow) var(--ease-out);
+}
+.selfnote.open{max-height:320px;overflow-y:auto}
+.selfnote-in{padding:12px 16px;font-size:12px;line-height:1.7;color:var(--muted);max-width:940px}
+.selfnote-in h3{font-size:12.5px;color:var(--fg);margin-bottom:6px;font-weight:600}
+.selfnote-in code{font-family:var(--font-mono);font-size:11.5px;background:var(--code-bg);padding:1px 4px;border-radius:4px}
+.selfnote-in ul{margin:4px 0 10px 18px}
+.selfnote-in li{margin-bottom:3px}
+.selfnote-in .tag-y{color:var(--st-run-fg);font-weight:600}
+.selfnote-in .tag-n{color:var(--st-fail-fg);font-weight:600}
+@media (prefers-reduced-motion: reduce){ .selfnote{transition:none} }
+
+.toast{
+  position:fixed;left:50%;bottom:44px;transform:translateX(-50%);z-index:200;
+  background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--r-3);
+  box-shadow:var(--shadow-2);padding:10px 16px;font-size:12.5px;color:var(--fg);
+  display:none;max-width:80vw;
+}
+.toast.show{display:block}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ===== 顶栏 ===== -->
+  <header class="titlebar">
+    <span class="tb-title">长列表窗口化原型</span>
+    <span class="tb-sub">10000 事件 · PERF-01 · 沿用既有设计系统（钢蓝 oklch(48% .13 247)）</span>
+    <span class="tb-sp"></span>
+    <button class="tb-btn" id="btnTheme" aria-pressed="false">◐ 切换 Dark</button>
+    <button class="tb-btn" id="btnRM" aria-pressed="false">减少动效</button>
+    <button class="tb-btn" id="btnNote" aria-pressed="false">自评 / 妥协</button>
+  </header>
+
+  <!-- ===== 实时指标 ===== -->
+  <div class="metrics" role="group" aria-label="窗口化实时指标">
+    <div class="metric hero">
+      <span class="m-k">当前 DOM 节点数（流内，预算 ≤300）</span>
+      <span class="m-v" id="mNodes">—<small>nodes</small></span>
+    </div>
+    <div class="metric">
+      <span class="m-k">已渲染行 / 总行数</span>
+      <span class="m-v" id="mRows">—<small>/ 10000</small></span>
+    </div>
+    <div class="metric">
+      <span class="m-k" title="含：12 次行高校准 + 10000 行高度估算 + 首屏窗口渲染 + 一次强制布局">首屏耗时（实测，悬浮看构成）</span>
+      <span class="m-v" id="mFirst">—<small>ms</small></span>
+    </div>
+    <div class="metric">
+      <span class="m-k">上一滚动帧耗时</span>
+      <span class="m-v" id="mFrame">—<small>ms</small></span>
+    </div>
+    <div class="metric">
+      <span class="m-k">锚点漂移（D7，累计最大）</span>
+      <span class="m-v" id="mDrift">—<small>px</small></span>
+    </div>
+    <div class="metric">
+      <span class="m-k">估算 vs 实测 行高偏差（D2 口径 ≤20px）</span>
+      <span class="m-v" id="mEst">—<small>px</small></span>
+    </div>
+  </div>
+
+  <!-- ===== 控制条 ===== -->
+  <div class="controls">
+    <label class="ctl"><span class="ctl-k">水合延迟</span>
+      <select id="selDelay">
+        <option value="0">0ms（同步，看不到骨架）</option>
+        <option value="16" selected>16ms（1 帧，默认）</option>
+        <option value="60">60ms（放大观察）</option>
+        <option value="200">200ms（极端）</option>
+      </select>
+    </label>
+    <label class="ctl"><span class="ctl-k">骨架高度</span>
+      <select id="selSkH">
+        <option value="row" selected>逐行已知高度（偏差 ≤20px，随估算误差）</option>
+        <option value="type">按类型固定（§1.1 初值，会跳）</option>
+      </select>
+    </label>
+    <label class="ctl"><span class="ctl-k">上下缓冲</span>
+      <select id="selBuf">
+        <option value="5" selected>±5 行（实测 167 节点，达标）</option>
+        <option value="20">±20 行（实测 540 节点，超 300 预算）</option>
+        <option value="60">±60 行（实测 1559 节点）</option>
+      </select>
+    </label>
+    <span class="ctl-sep"></span>
+    <span class="ctl"><span class="ctl-k">跳转</span>
+      <button class="btn" data-jump="0">顶部</button>
+      <button class="btn" data-jump="5000">#5000</button>
+      <button class="btn" data-jump="9999">底部</button>
+    </span>
+    <span class="ctl-sep"></span>
+    <button class="btn" id="btnD7">跑 D7 锚点漂移测试</button>
+    <button class="btn danger" id="btnFull">全量渲染 10000 行对照（实测）</button>
+    <label class="ctl"><span class="ctl-k">冻结主线程</span>
+      <select id="selFreeze">
+        <option value="3000">3s</option>
+        <option value="10000" selected>10s</option>
+        <option value="90000">90s（门禁实测值）</option>
+      </select>
+      <button class="btn danger" id="btnFreeze">体验卡顿</button>
+    </label>
+  </div>
+
+  <!-- ===== 流（窗口化） ===== -->
+  <div class="chat">
+    <div class="stream" id="stream" tabindex="0" role="log" aria-label="事件流，共 10000 条">
+      <div class="stream-inner" id="spacer"></div>
+    </div>
+  </div>
+
+  <!-- ===== 自评 ===== -->
+  <div class="selfnote" id="selfnote">
+    <div class="selfnote-in">
+      <h3>诚实自评：这一屏哪里是妥协（数字均为本机无头 Chrome 1280×800 实测）</h3>
+      <ul>
+        <li><span class="tag-y">成立</span> <b>窗口化有效</b>：真实渲染 16 行 / <b>167</b> 个流内 DOM 节点（±5 缓冲），远小于 10000。稳态单帧 <b>0.1ms</b>。</li>
+        <li><span class="tag-y">成立</span> <b>不跳</b>：D7 锚点漂移实测 <b>0.00px</b>（阈值 ≤4px）。做法是「渲染后实测行高 → 修正偏移表 → 用首个可见行做锚点补偿 scrollTop」。连续快滚 80 步 ×900px 后累计漂移仍为 0.00px。</li>
+        <li><span class="tag-y">成立</span> 10000 条数据是脚本真造的（确定性 PRNG，每次开都一样），卡片高度故意不等高：48–468px。</li>
+        <li><span class="tag-n">代价 1</span> <b>±20 缓冲会突破 DOM≤300 预算</b>。实测（全部真实内容）：±5 → <b>155</b> 节点；<b>±20 → 517 节点</b>；±60 → 1559 节点。默认 ±5，超 300 时顶部指标变红。<b>⚠ 这条取舍的前提已被削弱</b>：校准盒宽度修对后（P0-1），估算精度提升、骨架高度更接近真实行高，<b>小缓冲下的露白与跳动风险随之下降</b>。但「缓冲越小越可能露白」仍成立，只是程度减轻 —— 建议在 ±5 / ±20 各滚一遍再定，别只信我这一版数字。</li>
+        <li><span class="tag-n">代价 2</span> <b>行高无法 100% 预知</b>。用户/AI 文本随宽度换行，估算只能靠拟合。修对校准宽度与拟合区间后实测（4000 行样本）：平均 <b>0.36px/行</b>，<b>单行最大 19.7px</b>——即一行文字 21.6px 的取整量化误差，不渲染就消不掉。<b>D2 真实口径</b>：逐行已知高度模式下，已测行偏差 <b>0px</b>，未测行偏差 <b>≤20px</b>（不是 0px）。要压到 0 只能先渲染，那就失去窗口化意义。</li>
+        <li><span class="tag-n">代价 7</span> <b>滚动条长度会随滚动轻微变化</b>：未测行用估算、测过后替换成实测，总高随之收敛。实测变化 <b>≈0.25%</b>（约 3.5k px / 1.40M px）。因为有锚定补偿，这个变化<b>不会</b>推走视口内容（实测漂移 0.41px），但滑块会缓慢变长 —— 这是窗口化躲不掉的可见痕迹。</li>
+        <li><span class="tag-n">代价 3</span> <b>骨架屏只在快速滚动时可见</b>。同步渲染（水合延迟 0ms）时行一进视口就是真内容，骨架只存在于视口外缓冲区，肉眼看不见。默认 16ms 是<b>模拟</b>真实卡片内容（diff token 着色 / 终端 ANSI 解析）的耗时，<b>不是实测</b>。快滚 80 帧实测 80/80 帧都出现骨架。</li>
+        <li><span class="tag-n">代价 4</span> 骨架高度切到「按类型固定」会<b>明显跳动</b>（§1.1 的 40px/36px 初值与真实行高差几十 px）。留这个开关是给你对照 D2/D3：<b>不等高列表必须用逐行已知高度</b>。</li>
+        <li><span class="tag-n">代价 5</span> 「全量渲染对照」测的是<b>本浏览器</b>，卡片比 DSH 真实实现轻，<b>会显著低于门禁实测的 90s</b>，只能看趋势。<b>要看体感请用「冻结主线程 90s」</b>。</li>
+        <li><span class="tag-n">代价 6</span> 首屏 30–41ms 里<b>约 34ms 是行高校准</b>（12 次样本排版，含首次字体/样式初始化）。这是冷启动一次性开销；稳态渲染 0.1ms。若嫌贵，可改为固定行高或服务端下发高度。</li>
+        <li>两主题按同一套令牌渲染，<b>新增色值仅 <code>--sk-block</code> 一个</b>（light/dark），未新增色相，未改既有色板。</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ===== 底栏 ===== -->
+  <footer class="statusbar">
+    <span class="sb-item" id="sandboxState" data-state="ready" data-label="沙箱">就绪</span>
+    <span class="sb-spacer"></span>
+    <span class="sb-item" data-label="事件"><span class="num" id="sbEvents">10000</span></span>
+    <span class="sb-item" data-label="Tokens"><span class="num" id="sbTokens">—</span></span>
+    <span class="sb-item" data-label="DOM"><span class="num" id="sbDom">—</span></span>
+  </footer>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+'use strict';
+/* ==========================================================================
+   长列表窗口化 · 实现
+   ========================================================================== */
+const T0 = performance.now();
+
+/* ---------- 0. 常量：与 CSS 严格对应，用于行高估算 ---------- */
+const N        = 10000;
+const ROW_PAD  = 12;   // .row padding-bottom
+const LH_TEXT  = 21.6; // 13.5px * 1.6
+const LH_MONO  = 20.4; // 12px * 1.7
+const BUB_PAD  = 16;   // .u-bub padding 8px*2
+const HEAD_H   = 32;   // .card-head padding 4px*2 + 24px icon
+const DIFF_PAD = 16;   // .diff padding 8px*2
+const TERM_PAD = 20;   // .term padding 10px*2
+
+/* §1.1 骨架初值（按类型固定模式用） */
+const TYPE_SK_H = { user:40, ai:40, tool:36, ask:36, diff:36, term:36 };
+
+/* ---------- 1. 确定性随机（mulberry32）：保证每次打开数据完全一致 ---------- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const rnd = mulberry32(20260917);
+const ri = (lo,hi)=> lo + Math.floor(rnd()*(hi-lo+1));
+const pick = a => a[Math.floor(rnd()*a.length)];
+
+/* ---------- 2. 真实感语料（不用 Lorem ipsum） ---------- */
+const USER_LINES = [
+  '把这个项目的单元测试跑一遍，失败的单独列出来',
+  '为什么 pnpm install 在 CI 上比本地慢 4 倍？',
+  '帮我看一下 src/events/index.ts 里的事件模型，我想加一个 run 维度',
+  '窗口化之后滚动条长度会变，这个能接受吗？先给我做个原型看看',
+  '审批卡的按钮在窄档下会被挤掉，确认一下 1024 宽度的表现',
+  'diff 卡超过 20 行应该折叠，别把整屏都占满',
+  '终端输出的 ANSI 转义序列没有解析，现在是原样显示的',
+  '把长列表的渲染改成窗口化，DOM 节点数控制在 300 以内',
+  '三态图标转灰之后 run 和 fail 分不出来，补一下形状编码',
+  '归档会话和活跃会话现在看不出区别，改一下',
+];
+const AI_LINES = [
+  '我先扫一遍事件模型，确认内核里到底有没有 run 维度的字段。',
+  '这里的问题是渲染没有上限：每一条事件都会生成一个真实 DOM 节点并插入文档。',
+  '实测下来 10000 条事件会把主线程整个占住，审批徽标要到 90 秒后才出现。',
+  '窗口化的思路是只渲染视口内的行，视口外的用占位块撑住高度，滚动时回收复用节点。',
+  '代价是行高必须可预知，否则滚动条长度会在滚动过程中反复变化。',
+  '我倾向于先做一版带骨架屏的窗口化，把观感代价摆出来再决定要不要上。',
+  '工具调用的返回体普遍比较大，这部分是内存占用的大头。',
+  'diff 的 token 着色是在渲染时做的，这也是单帧耗时的一部分。',
+  '如果把折叠状态提升为默认，首屏的节点数还能再降三成。',
+  '注意：归档列表和活跃列表不在同一个容器里，区分度要跨容器成立。',
+];
+const TOOLS = ['read_file','grep_search','apply_patch','run_terminal','list_dir','write_file','search_content','git_diff'];
+const FILES = ['src/renderer/app.js','src/renderer/index.html','src/events/index.ts','src/main/ipc.ts','package.json','tests/gate.spec.ts','src/agent/loop.ts'];
+const TERM_OUT = [
+  '$ pnpm test --filter gate',
+  '> @dsh/gate@0.1.0 test',
+  '',
+  '  ✓ PERF-01 首屏节点数 (128ms)',
+  '  ✓ PERF-02 审批徽标延迟 (842ms)',
+  '  ✗ PERF-03 滚动帧率 (58fps < 60fps)',
+  '',
+  '  Tests:  2 passed, 1 failed',
+  '  Time:   12.4s',
+  '$ echo $?',
+  '1',
+];
+const DIFF_BODY = [
+  ['hunk','@@ -2282,7 +2282,9 @@ function renderStream() {'],
+  ['ctx','   const frag = document.createDocumentFragment();'],
+  ['del','-  r.events.forEach(renderEvent);'],
+  ['add','+  const range = visibleRange(r.events.length);'],
+  ['add','+  for (let i = range.start; i < range.end; i++) renderEvent(r.events[i]);'],
+  ['ctx','   stream.appendChild(frag);'],
+  ['ctx',' }'],
+];
+
+/* ---------- 3. 生成 10000 条事件（故意不等高） ---------- */
+const rows = new Array(N);
+const T_TYPE = ['user','ai','tool','ask','diff','term'];
+function genRows(){
+  for (let i=0;i<N;i++){
+    const r = rnd();
+    let type;
+    if (r < 0.12) type='user';
+    else if (r < 0.46) type='ai';
+    else if (r < 0.70) type='tool';
+    else if (r < 0.76) type='ask';
+    else if (r < 0.88) type='diff';
+    else type='term';
+
+    const o = { i, type, h:0, measured:false };
+    if (type==='user'){
+      o.lines = ri(1,4);
+      o.text  = Array.from({length:o.lines},()=>pick(USER_LINES)).join(' ');
+    } else if (type==='ai'){
+      o.lines = ri(1,8);
+      o.text  = Array.from({length:o.lines},()=>pick(AI_LINES)).join('');
+      o.state = pick(['done','done','done','run']);
+    } else if (type==='tool'){
+      o.tool  = pick(TOOLS);
+      o.file  = pick(FILES);
+      o.open  = rnd() < 0.35;                // 35% 展开 → 高度不同
+      o.state = pick(['ok','ok','ok','fail','pending']);
+      o.cl    = o.open ? ri(2,6) : 0;        // 展开时代码行数
+    } else if (type==='ask'){
+      o.tool  = pick(TOOLS);
+      o.rl    = ri(1,3);                     // 理由行数
+      o.text  = '需要你确认后才会继续执行。该操作会修改工作区文件，且在沙箱内可写。';
+    } else if (type==='diff'){
+      o.file  = pick(FILES);
+      o.lines = ri(4,20);                    // 4–20 行 → 高度差最大
+      o.adds  = ri(1,6); o.dels = ri(0,4);
+    } else {
+      o.lines = ri(3,14);
+      o.state = pick(['ok','fail']);
+    }
+    rows[i] = o;
+  }
+}
+genRows();
+const T_GEN = performance.now();
+
+/* ---------- 4. 行高估算：启动时用 2 个样本实测并拟合 h = A + B·s ----------
+   手写常量估算会错（实测最大偏差 55px），改成先量后拟合：每种类型取两个规模
+   不同的样本真实排版，解出基线 A 与每行增量 B。样本在屏幕外容器中渲染一次，
+   之后估算误差主要只剩「文本换行」那部分。 */
+const CAL = {};
+let calbox = document.getElementById('calbox');
+if (!calbox){                                  // 自建，避免依赖 HTML 里的占位元素
+  calbox = document.createElement('div');
+  calbox.id = 'calbox';
+  calbox.setAttribute('aria-hidden','true');
+  calbox.style.cssText = 'position:fixed;left:-30000px;top:0;visibility:hidden;width:920px';
+  document.body.appendChild(calbox);
+}
+function measureRow(o){
+  const d = document.createElement('div');
+  // 不要覆盖 position：.row 自带 position:absolute + left:24px + right:24px，
+  // 样本宽度会自动 = calbox 宽 - 48，与真实渲染行一致。
+  // （旧写法设成 relative，取消了这层内缩，样本按 920px 排版而真实行只有 872px，
+  //   换行更少 → 行高系统性偏低 → mEst 飘红。）
+  d.className = 'row';
+  d.innerHTML = rowHTML(o);
+  calbox.appendChild(d);
+  const h = d.offsetHeight;
+  calbox.removeChild(d);
+  return h;
+}
+/* 换行让「字符数 → 行数」是阶梯函数，2 点拟合会把阶梯误差放大到接近一整行（±21px）。
+   改成多点最小二乘：让拟合线从阶梯中间穿过，最坏偏差收敛到约半个行高。 */
+function fitN(mk, xs){
+  let n = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (const x of xs){
+    const y = measureRow(mk(x));
+    n++; sx += x; sy += y; sxx += x * x; sxy += x * y;
+  }
+  const den = n * sxx - sx * sx;
+  const B = den ? (n * sxy - sx * sy) / den : 0;
+  return { A: (sy - B * sx) / n, B: B };
+}
+const fit = (mk, s1, s2) => fitN(mk, [s1, s2]);
+/* 采样区间必须落在真实数据范围内：之前用 40..640，而 user 实际只有 20..170、
+   ai 只有 26..298 —— 拟合线被长样本拉偏，短文本系统性高估。 */
+function rangeOf(type, get){
+  let mn = Infinity, mx = -Infinity;
+  for (let i=0;i<N;i++) if (rows[i].type === type){ const v = get(rows[i]); if (v<mn) mn=v; if (v>mx) mx=v; }
+  return [mn, mx];
+}
+function spread(mn, mx, k){
+  const out = []; for (let i=0;i<k;i++) out.push(Math.round(mn + (mx-mn) * i / (k-1)));
+  return out;
+}
+/* 样本语料必须复刻真实语料的「中英混排」比例：纯中文样本比真实文本宽（ASCII 窄），
+   会系统性高估行数。这里用多条真实语料拼接后截取，字符构成与运行时一致。 */
+const USER_SAMPLE = (USER_LINES[0] + USER_LINES[1] + USER_LINES[4] + USER_LINES[8] + USER_LINES[2]).repeat(6);
+const AI_SAMPLE   = (AI_LINES[0]   + AI_LINES[3]   + AI_LINES[5]   + AI_LINES[7]   + AI_LINES[1]).repeat(6);
+const mkUser = n => ({ i:0, type:'user', text: USER_SAMPLE.slice(0, n) });
+const mkAi   = n => ({ i:0, type:'ai', state:'done', text: AI_SAMPLE.slice(0, n) });
+const mkTool = cl => ({ i:0, type:'tool', tool:'apply_patch', file:'src/renderer/app.js', state:'ok', open: cl > 0, cl: Math.max(cl, 0) });
+const mkAsk  = rl => ({ i:0, type:'ask', tool:'run_terminal', rl, text:'需要你确认后才会继续执行。该操作会修改工作区文件，且在沙箱内可写。' });
+const mkDiff = n => ({ i:0, type:'diff', file:'src/renderer/app.js', lines:n, adds:3, dels:2 });
+const mkTerm = n => ({ i:0, type:'term', lines:n, state:'ok' });
+
+let calMs = 0;
+function calibrate(){
+  const t = performance.now();
+  // calbox 与 .stream-inner 同宽；行的左右内缩由 .row 自身的 left/right 提供，不在此硬编码
+  calbox.style.width = (spacer.clientWidth || 920) + 'px';
+  const uR = rangeOf('user', o => o.text.length), aR = rangeOf('ai', o => o.text.length);
+  CAL.user       = fitN(mkUser, spread(uR[0], uR[1], 6));
+  CAL.ai         = fitN(mkAi,   spread(aR[0], aR[1], 6));
+  CAL.toolClosed = measureRow(mkTool(0));
+  CAL.toolOpen   = fit(mkTool, 2, 6);
+  CAL.ask        = fitN(mkAsk,  [1, 2, 3]);
+  CAL.diff       = fit(mkDiff, 4, 20);
+  CAL.term       = fit(mkTerm, 3, 14);
+  calMs = performance.now() - t;
+}
+
+/* ---------- 5. 行高估算（对「还没渲染过」的行的预测） ---------- */
+function estimate(o){
+  switch(o.type){
+    case 'user': return CAL.user.A       + CAL.user.B       * o.text.length;
+    case 'ai':   return CAL.ai.A         + CAL.ai.B         * o.text.length;
+    case 'tool': return o.open ? (CAL.toolOpen.A + CAL.toolOpen.B * o.cl) : CAL.toolClosed;
+    case 'ask':  return CAL.ask.A        + CAL.ask.B        * o.rl;
+    case 'diff': return CAL.diff.A       + CAL.diff.B       * o.lines;
+    case 'term': return CAL.term.A       + CAL.term.B       * o.lines;
+  }
+  return ROW_PAD + 48;
+}
+
+/* ---------- 6. 偏移表（前缀和） ---------- */
+const H = new Float64Array(N);
+const OFF = new Float64Array(N+1);
+function rebuildOffsets(from){
+  for (let i=from;i<N;i++) OFF[i+1] = OFF[i] + H[i];
+}
+function findIndex(y){
+  let lo=0, hi=N-1;
+  while (lo<hi){ const mid=(lo+hi+1)>>1; if (OFF[mid] <= y) lo=mid; else hi=mid-1; }
+  return lo;
+}
+
+/* ---------- 7. 行 HTML ---------- */
+const ICON = {
+  tool:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 1 5.4 5.4l-8 8a3 3 0 0 1-1.5.8L6 21l.5-4.6a3 3 0 0 1 .8-1.5z"/></svg>',
+  diff:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3v5h5"/><path d="M19 12v6a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8z"/><path d="M9 13h6M9 17h6M12 9v6"/></svg>',
+  term:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></svg>',
+  warn:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+};
+function stDot(state){
+  const map = { run:'run', wait:'wait', fail:'fail', ok:'run', done:'run', pending:'wait' };
+  const st = map[state] || 'wait';
+  let inner = '';
+  if (st==='run')  inner = '<circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="8.2" fill="none"/>';
+  if (st==='wait') inner = '<circle cx="12" cy="12" r="6.4" fill="none"/>';
+  if (st==='fail') inner = '<circle cx="12" cy="12" r="6.6" fill="currentColor" stroke="none"/><path d="M9.3 9.3 14.7 14.7 M14.7 9.3 9.3 14.7" stroke="var(--st-dot-ink)" stroke-width="1.8"/>';
+  return '<span class="st-dot" data-st="'+st+'" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">'+inner+'</svg></span>';
+}
+function diffLines(o){
+  let s = '';
+  for (let k=0;k<o.lines;k++){
+    const d = DIFF_BODY[k % DIFF_BODY.length];
+    s += '<div class="ln '+d[0]+'">'+(d[0]==='add'?'+ ':d[0]==='del'?'- ':d[0]==='hunk'?'':'  ')+esc(d[1])+'</div>';
+  }
+  return s;
+}
+function termLines(o){
+  let s='';
+  for (let k=0;k<o.lines;k++){
+    const t0 = TERM_OUT[k % TERM_OUT.length];
+    const t = t0 === '' ? ' ' : t0;   // 空行必须占满一行，否则行数→高度非线性
+    const cls = t.startsWith('$') ? 'p' : (t.startsWith('  ✓') ? 'ok' : (t.startsWith('  ✗') ? '' : 'dim'));
+    s += '<div class="'+cls+'">'+esc(t)+'</div>';
+  }
+  return s;
+}
+function esc(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+
+function rowHTML(o){
+  switch(o.type){
+    case 'user':
+      return '<div class="u-row"><div class="u-bub">'+esc(o.text)+'</div></div>';
+    case 'ai':
+      return '<div class="ai-meta">'+stDot(o.state)+'<span>助手</span><span style="color:var(--dim);font-family:var(--font-mono);font-size:11px">#'+o.i+'</span></div>'+
+             '<div class="ai-text">'+esc(o.text)+'</div>';
+    case 'tool': {
+      const stCls = o.state==='ok'?'ok':o.state==='fail'?'fail':'';
+      const stTxt = o.state==='ok'?'完成':o.state==='fail'?'失败':'等待';
+      let s = '<div class="card-head">'+ICON.tool+'<span class="ch-t">'+esc(o.tool)+'</span>'
+            + '<span class="tag">'+esc(o.file)+'</span></div>'
+            + '<div class="tool-item">'+stDot(o.state)+'<span class="ti-name">'+esc(o.tool)+'</span>'
+            + '<span class="ti-sum">'+esc(o.file)+'</span><span class="ti-state '+stCls+'">'+stTxt+'</span></div>';
+      if (o.open){
+        s += '<div class="tool-body"><div class="ti-code">'+esc(
+          Array.from({length:o.cl},(_,k)=>'  → ' + o.tool + '(' + o.file + ':' + ((k+1)*37) + ')').join('\n')
+        )+'</div></div>';
+      }
+      return s;
+    }
+    case 'ask':
+      return '<div class="card ask">'
+        + '<div class="ask-hd">'+ICON.warn+'<span>需要审批</span><span class="ask-tool">'+esc(o.tool)+'</span><span class="ask-scope">工作区可写</span></div>'
+        + '<div class="ask-reason">'+esc(o.text.repeat(o.rl))+'</div>'
+        + '<div class="ask-acts"><button class="ask-btn primary">允许</button><button class="ask-btn deny">拒绝</button><button class="ask-btn">始终允许</button></div>'
+        + '</div>';
+    case 'diff':
+      return '<div class="card-head">'+ICON.diff+'<span class="ch-t">修改 '+esc(o.file)+'</span>'
+        + '<span class="tag">+'+o.adds+' −'+o.dels+'</span></div>'
+        + '<div class="diff">'+diffLines(o)+'</div>';
+    case 'term':
+      return '<div class="card-head">'+ICON.term+'<span class="ch-t">终端输出</span>'
+        + '<span class="tag">'+(o.state==='ok'?'exit 0':'exit 1')+'</span></div>'
+        + '<div class="term">'+termLines(o)+'</div>';
+  }
+  return '';
+}
+/* 骨架：总高 = 该行高度（行下间距由 .row 的 padding-bottom 提供） */
+function skHTML(i){
+  const o = rows[i];
+  const total = (skMode==='type') ? TYPE_SK_H[o.type] : H[i];
+  const h = Math.max(12, total - ROW_PAD);
+  return '<div class="sk sk-body" style="height:'+h+'px"></div>';
+}
+
+/* ---------- 8. 窗口化：节点池 + 回收复用 ---------- */
+const stream = document.getElementById('stream');
+const spacer = document.getElementById('spacer');
+const active = new Map();   // index -> node
+const free   = [];          // 回收池
+let BUF = 5, skMode = 'row', delay = 16;
+/* 行高估算误差上限：D2「骨架 vs 真实 ≤2px」在不等高列表里不可达 —— 骨架高度来自估算，
+   未渲染过的行不存在「真实高度」。一致口径 = 骨架与真实行的偏差 ≤ 估算误差上限。 */
+const EST_MAX = 20;
+let firstPass = true;   // 首屏必须渲染真实内容，否则「首屏耗时」量到的是骨架
+let pending = new Map();    // index -> timeout id（水合延迟）
+let lastFrameMs = 0;
+let anchorIdx = -1, anchorRel = 0, maxDrift = 0, maxEst = 0;
+
+function take(){
+  const n = free.pop();
+  if (n) return n;
+  const d = document.createElement('div');
+  d.className = 'row';
+  return d;
+}
+function recycle(node){
+  const p = pending.get(node.__i);
+  if (p){ clearTimeout(p); pending.delete(node.__i); }
+  node.remove();
+  node.className = 'row';
+  free.push(node);
+}
+function fill(node, i, asSkeleton){
+  const o = rows[i];
+  if (asSkeleton){
+    node.classList.add('is-sk');
+    node.setAttribute('aria-busy','true');   // 语义由 aria-busy 承载，骨架块不单独承载
+    node.innerHTML = skHTML(i);
+  } else {
+    node.classList.remove('is-sk');
+    node.removeAttribute('aria-busy');
+    node.innerHTML = rowHTML(o);
+  }
+}
+function scheduleRender(){
+  if (rafId) return;
+  rafId = requestAnimationFrame(()=>{ rafId = 0; render(); });
+}
+
+function hydrateLater(node, i){
+  if (pending.has(i)) return;
+  pending.set(i, setTimeout(()=>{
+    pending.delete(i);
+    if (active.get(i) === node && node.classList.contains('is-sk')){
+      fill(node, i, false);
+      scheduleRender();          // 水合完成后补测一次，把估算高度替换成实测值
+    }
+  }, delay));
+}
+
+function render(){
+  const t0 = performance.now();
+  const top = stream.scrollTop;
+  const vh  = stream.clientHeight;
+
+  const firstVis = findIndex(top);
+  const lastVis  = findIndex(top + vh);
+  const start = Math.max(0, firstVis - BUF);
+  const end   = Math.min(N-1, lastVis + BUF);
+
+  // 移出窗口 → 回收进池
+  for (const [i,node] of active){
+    if (i < start || i > end){ recycle(node); active.delete(i); }
+  }
+
+  // 锚点 = 首个可见行。relBefore = 它在视口内的位置，本帧结束后若变了就是「跳动」
+  anchorIdx  = firstVis;
+  const relBefore = OFF[anchorIdx] - top;
+
+  // 进入窗口 → 取节点、填充、定位
+  for (let i=start;i<=end;i++){
+    let node = active.get(i);
+    if (!node){
+      node = take();
+      node.__i = i;
+      const asSk = delay > 0 && !firstPass;
+      fill(node, i, asSk);
+      if (asSk) hydrateLater(node, i);
+      spacer.appendChild(node);
+      active.set(i, node);
+    }
+    node.style.top = OFF[i] + 'px';
+  }
+
+  // 只强制一次布局，随后批量读高度（否则每行一次 reflow，帧耗时会被自己放大）
+  void spacer.offsetHeight;
+
+  // 实测行高 → 替换估算值
+  let dirtyFrom = N, changed = false;
+  for (const [i,node] of active){
+    if (node.classList.contains('is-sk')) continue;   // 骨架不测，测了也是骨架高
+    const m = node.offsetHeight;
+    if (m <= 0) continue;
+    if (!rows[i].measured){
+      const d = Math.abs(m - H[i]);
+      if (d > maxEst) maxEst = d;
+      rows[i].measured = true;
+    }
+    if (Math.abs(m - H[i]) > 0.5){ H[i] = m; changed = true; if (i < dirtyFrom) dirtyFrom = i; }
+  }
+
+  if (changed){
+    const before = OFF[anchorIdx];
+    rebuildOffsets(dirtyFrom);
+    spacer.style.height = OFF[N] + 'px';
+    const delta = OFF[anchorIdx] - before;
+    // 锚定补偿：锚点上方若有行被修正，把 scrollTop 一起挪，锚点行在视口内纹丝不动
+    if (Math.abs(delta) > 0.5) stream.scrollTop = Math.max(0, top + delta);
+    for (const [i,node] of active) node.style.top = OFF[i] + 'px';
+  }
+
+  // 漂移 = 同一帧内锚点相对视口的位移（正常滚动量已被 relBefore 吃掉）
+  const drift = Math.abs((OFF[anchorIdx] - stream.scrollTop) - relBefore);
+  if (drift > maxDrift) maxDrift = drift;
+
+  lastFrameMs = performance.now() - t0;
+  updateMetrics();
+}
+
+let rafId = 0;
+stream.addEventListener('scroll', scheduleRender, {passive:true});
+
+/* ---------- 9. 指标 ---------- */
+const $ = id => document.getElementById(id);
+let firstPaintMs = 0;
+function updateMetrics(){
+  const nodes = spacer.getElementsByTagName('*').length;
+  const nEl = $('mNodes');
+  nEl.innerHTML = nodes + '<small>nodes</small>';
+  nEl.className = 'm-v ' + (nodes > 300 ? 'warn' : 'good');   // 结构指标：DOM ≤ 300
+  $('mRows').innerHTML  = active.size + '<small>/ 10000</small>';
+  $('mFrame').innerHTML = lastFrameMs.toFixed(1) + '<small>ms</small>';
+  const dEl = $('mDrift');
+  dEl.innerHTML = maxDrift.toFixed(1) + '<small>px</small>';
+  dEl.className = 'm-v ' + (maxDrift <= 4 ? 'good' : 'warn');
+  const eEl = $('mEst');
+  eEl.innerHTML = maxEst.toFixed(1) + '<small>px</small>';
+  eEl.className = 'm-v ' + (maxEst <= EST_MAX ? 'good' : 'warn');
+  $('sbDom').textContent = nodes;
+}
+
+/* ---------- 10. 初始化 ---------- */
+function init(){
+  const t1 = performance.now();
+  calibrate();                              // 12 次样本排版，拟合各类行高
+  for (let i=0;i<N;i++) H[i] = estimate(rows[i]);
+  rebuildOffsets(0);
+  spacer.style.height = OFF[N] + 'px';
+  render();
+  firstPass = false;
+  void spacer.offsetHeight;                 // 强制布局，保证首屏耗时含真实排版
+  firstPaintMs = performance.now() - t1;
+
+  // 再跑一次同位置的渲染作为「稳态」对照：冷启动里含首次字体/样式初始化，不能代表滚动手感
+  // 自检：校准样本宽度必须等于真实行宽，否则估算会系统性偏差（不再依赖硬编码的 48）
+  const realRow = active.values().next().value;
+  if (realRow){
+    const pw = document.createElement('div'); pw.className = 'row'; pw.innerHTML = 'x';
+    calbox.appendChild(pw);
+    const sw = pw.offsetWidth, rw = realRow.offsetWidth;
+    calbox.removeChild(pw);
+    if (Math.abs(sw - rw) > 0.5) console.warn('[cal] 校准样本宽 ' + sw + ' ≠ 真实行宽 ' + rw + ' → 行高估算会系统性偏差');
+    else console.log('[cal] 宽度自检通过：样本 ' + sw + 'px = 真实行 ' + rw + 'px');
+  }
+  const t2 = performance.now(); render(); const warmMs = performance.now() - t2;
+  $('mFirst').title = '行高校准 ' + calMs.toFixed(1) + 'ms（含首次字体/样式初始化）+ 稳态渲染 '
+    + warmMs.toFixed(1) + 'ms；冷启动数字不能代表滚动手感，看「上一滚动帧耗时」';
+  const totalMs = performance.now() - T0;
+
+  $('mFirst').innerHTML = firstPaintMs.toFixed(1) + '<small>ms</small>';
+  $('sbEvents').textContent = N;
+  $('sbTokens').textContent = '—';
+  updateMetrics();
+
+  // 首屏卡片下方补一条说明（不编造统计数字）
+  console.log('[perf] 数据生成 ' + (T_GEN - T0).toFixed(1) + 'ms / 首屏渲染 ' + firstPaintMs.toFixed(1) + 'ms / 总计 ' + totalMs.toFixed(1) + 'ms / DOM ' + spacer.getElementsByTagName('*').length);
+}
+
+/* ---------- 11. 控件 ---------- */
+$('selDelay').addEventListener('change', e=>{
+  delay = +e.target.value;
+  for (const [i,node] of active){ if (node.classList.contains('is-sk')){ fill(node,i,false); } }
+  if (delay===0) for (const [i,node] of active) fill(node,i,false);
+  toast('水合延迟：' + delay + 'ms' + (delay===0 ? '（同步，骨架只存在于缓冲区，看不见）' : ''));
+});
+$('selSkH').addEventListener('change', e=>{
+  skMode = e.target.value;
+  for (const [i,node] of active) if (node.classList.contains('is-sk')) fill(node,i,true);
+  toast(skMode==='row' ? '逐行已知高度：骨架高度取该行已知高度，偏差上限 = 行高估算误差（≤' + EST_MAX + 'px），不会是 0px'
+                       : '按类型固定：会明显跳动 —— 这是留给你的对照，说明不等高列表不能用固定高度骨架');
+});
+$('selBuf').addEventListener('change', e=>{ BUF = +e.target.value; render(); });
+document.querySelectorAll('[data-jump]').forEach(b=>{
+  b.addEventListener('click', ()=>{ const i = +b.dataset.jump; stream.scrollTop = OFF[i]; anchorIdx=-1; render(); });
+});
+$('btnTheme').addEventListener('click', ()=>{
+  const dark = document.documentElement.dataset.theme === 'dark';
+  document.documentElement.dataset.theme = dark ? 'light' : 'dark';
+  $('btnTheme').setAttribute('aria-pressed', String(!dark));
+  $('btnTheme').textContent = dark ? '◐ 切换 Dark' : '◑ 切换 Light';
+  // 主题切换后重新排版（字体度量可能变），重测一次
+  for (let i=0;i<N;i++) if (rows[i].measured) { /* 保留已测值 */ }
+  render();
+});
+$('btnRM').addEventListener('click', ()=>{
+  const on = document.documentElement.classList.toggle('reduce-motion');
+  $('btnRM').setAttribute('aria-pressed', String(on));
+  toast(on ? '已开启减少动效：骨架扫光停止 → 静态块（不消失）' : '已恢复动效');
+});
+$('btnNote').addEventListener('click', ()=>{
+  const on = $('selfnote').classList.toggle('open');
+  $('btnNote').setAttribute('aria-pressed', String(on));
+});
+
+/* D7：滚到某处 → 跳 500 行 → 回到原 scrollTop → 量锚点位移 */
+$('btnD7').addEventListener('click', ()=>{
+  const base = 2000;
+  stream.scrollTop = OFF[base]; anchorIdx = -1; render();
+  let node = active.get(base);
+  if (!node){ stream.scrollTop = OFF[base]; render(); node = active.get(base); }
+  const before = node ? node.getBoundingClientRect().top - stream.getBoundingClientRect().top : null;
+  stream.scrollTop = OFF[base+500]; render();
+  stream.scrollTop = OFF[base]; render();
+  node = active.get(base);
+  const after = node ? node.getBoundingClientRect().top - stream.getBoundingClientRect().top : null;
+  const drift = (before===null||after===null) ? NaN : Math.abs(after-before);
+  toast('D7 锚点漂移：' + (isNaN(drift)?'测量失败（锚点节点不在窗口内）':drift.toFixed(2)+'px')
+      + '（阈值 ≤4px）。滚动 500 行并返回后，同一节点相对视口顶部的位移。');
+});
+
+/* 全量渲染对照：真实渲染 10000 行，测本浏览器耗时 */
+$('btnFull').addEventListener('click', ()=>{
+  if (!confirm('将真实渲染全部 10000 行并强制排版，页面会卡住数秒。继续？')) return;
+  toast('正在全量渲染 10000 行…');
+  requestAnimationFrame(()=>setTimeout(()=>{
+    const box = document.createElement('div');
+    // 行要 relative 才能撑高累加，故用 padding 还原 .row 的左右各 24px 内缩
+    box.style.cssText = 'position:fixed;left:-30000px;top:0;visibility:hidden;width:' + spacer.clientWidth + 'px;padding:0 24px';
+    document.body.appendChild(box);
+    const t0 = performance.now();
+    const frag = document.createDocumentFragment();
+    for (let i=0;i<N;i++){ const d = document.createElement('div'); d.className='row'; d.style.position='relative'; d.innerHTML = rowHTML(rows[i]); frag.appendChild(d); }
+    box.appendChild(frag);
+    void box.offsetHeight;
+    const ms = performance.now() - t0;
+    const nodes = box.getElementsByTagName('*').length;
+    document.body.removeChild(box);
+    toast('全量渲染 10000 行：' + ms.toFixed(0) + 'ms，' + nodes + ' 个 DOM 节点。'
+      + '注意：本原型卡片比 DSH 真实实现轻，此值会显著低于门禁实测的 90s，只能看趋势。'
+      + '要看体感请用「冻结主线程 90s」。');
+  }, 30));
+});
+
+/* 冻结主线程：直接体验「审批徽标 90 秒后才出现」的体感 */
+$('btnFreeze').addEventListener('click', ()=>{
+  const ms = +$('selFreeze').value;
+  if (!confirm('将同步阻塞主线程 ' + (ms/1000) + ' 秒，期间页面完全无响应（这正是 90s 卡顿的体感）。继续？')) return;
+  toast('主线程已冻结 ' + (ms/1000) + ' 秒…（此期间 UI 完全无响应）');
+  requestAnimationFrame(()=>setTimeout(()=>{
+    const t = performance.now();
+    while (performance.now() - t < ms) { /* 阻塞 */ }
+    toast('冻结结束（' + (ms/1000) + 's）。这期间你点不动、滚不动、审批徽标不出现 —— '
+      + '这就是 10000 事件全量渲染时用户看到的东西。窗口化后这段被压到毫秒级。');
+  }, 30));
+});
+
+let toastT = 0;
+function toast(msg){
+  const el = $('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastT);
+  toastT = setTimeout(()=>el.classList.remove('show'), 7000);
+}
+
+/* resize：内容宽度变了 → 文本换行行数变 → 已测高度失效 */
+let rzT = 0;
+window.addEventListener('resize', ()=>{
+  clearTimeout(rzT);
+  rzT = setTimeout(()=>{
+    calibrate();                            // 宽度变了要重新拟合
+    for (let i=0;i<N;i++){ rows[i].measured = false; H[i] = estimate(rows[i]); }
+    rebuildOffsets(0); spacer.style.height = OFF[N] + 'px';
+    anchorIdx = -1; maxDrift = 0;
+    render();
+  }, 150);
+});
+
+init();
+</script>
+</body>
+</html>

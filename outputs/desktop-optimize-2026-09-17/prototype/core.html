@@ -1,0 +1,1407 @@
+<!doctype html>
+<!--
+  DSH 桌面端优化 · 核心三屏原型 S1 / S2 / S4
+  ─────────────────────────────────────────────────────────────
+  设计系统来源：outputs/desktop-optimize-2026-09-17/02-design-tokens.md
+               + 实测 src/renderer/index.html:15-138（色板/标尺/断点逐项拷贝）
+  方针：沿用既有系统，不换视觉；新增令牌仅 31 条（§1.6），其中新色值仅 2 个（--sk-block）。
+  单文件：CSS / JS 全内联，不依赖构建与 CDN，双击可开。
+  本文件不涉及 src/** 任何改动。
+-->
+<html lang="zh-CN" data-theme="light" data-page-node-id="WMy1veJ6GipX6CTVK11CVm">
+<head data-page-node-id="1rArM4VfDo8E1fn57sZRtG">
+<meta charset="UTF-8" data-page-node-id="uYvnMoH7X9Qfl0qrDes9K0" />
+<meta name="viewport" content="width=device-width, initial-scale=1" data-page-node-id="Q6W9ljMz0c3UOyAsxs0z8b" />
+<title>DSH · 核心三屏原型 S1/S2/S4</title>
+<style>
+/* ══════════════════════════════════════════════════════════════
+   1) 既有设计令牌（冻结，逐项拷贝自 src/renderer/index.html:15-138）
+   ══════════════════════════════════════════════════════════════ */
+:root{
+  --sidebar-w: 252px;
+  --drawer-w: 340px;
+  --gutter: 8px;
+  --bg:      oklch(100% 0 0);
+  --surface: oklch(100% 0 0);
+  --surface-2: oklch(98.7% 0.003 250);
+  --surface-3: oklch(97.1% 0.004 250);
+  --fg:      oklch(21% 0.006 250);
+  --muted:   oklch(45% 0.008 250);
+  --dim:     oklch(54% 0.008 250);
+  --border:  oklch(93.6% 0.005 250);
+  --accent:  oklch(48% 0.13 247);
+  --accent-fg: oklch(100% 0 0);
+  --accent-soft: oklch(95.6% 0.02 248);
+  --code-bg: oklch(96.6% 0 0);
+  --bubble:  oklch(96.9% 0.003 250);
+  --term-bg: oklch(97.8% 0 0);
+  --term-fg: oklch(30% 0.012 250);
+  --hover:   oklch(95.6% 0.004 250);
+  --ok:      oklch(52% 0.13 150);
+  --danger:  oklch(54% 0.19 25);
+  --warn:    oklch(50% 0.12 80);
+  --tk-kw:   oklch(43% 0.13 265);
+  --tk-str:  oklch(42% 0.1 150);
+  --tk-com:  oklch(47% 0.008 250);
+  --tk-num:  oklch(48% 0.11 55);
+  --tk-fn:   oklch(44% 0.12 255);
+  --tk-prop: oklch(42% 0.09 200);
+  --shadow-1: 0 1px 2px oklch(20% 0.02 250 / 0.04), 0 3px 12px oklch(20% 0.02 250 / 0.05);
+  --shadow-2: 0 8px 32px oklch(20% 0.02 250 / 0.12);
+  --ease-out: cubic-bezier(.2,.7,.3,1);
+  --ease-spring: cubic-bezier(.2,.85,.3,1.08);
+  --t-fast: 120ms;
+  --t-base: 160ms;
+  --t-slow: 240ms;
+  --st-done: var(--ok);
+  --st-run: var(--ok);
+  --st-wait: var(--muted);
+  --st-stuck: var(--warn);
+  --st-fail: var(--danger);
+  --st-run-fg: oklch(44% 0.13 150);
+  --st-stuck-fg: oklch(43% 0.12 70);
+  --st-fail-fg: oklch(46% 0.18 25);
+  --st-wait-fg: var(--fg);
+  --border-strong: oklch(62% 0.008 250);
+  --statusbar-h: 24px;
+  --tap-min: 28px;
+  --titlebar-h: 44px;
+  --rail-w: 64px;
+  color-scheme: light;
+
+  /* ── §1.1 骨架屏 --sk-*（PERF-01 观感） ── */
+  --sk-block: oklch(93% 0.005 250);
+  --sk-sheen: oklch(97.5% 0.004 250 / .9);
+  --sk-r: var(--r-2);
+  --sk-dur: 1400ms;
+  --sk-ease: linear;
+  --sk-h-line: 14px;
+  --sk-h-msg: 40px;
+  --sk-h-card: 36px;
+
+  /* ── §1.2 归档态 --arch-*（VIS-06）── 色值全部别名既有令牌，零新色 ── */
+  --arch-bd: var(--border-strong);
+  --arch-bd-style: dashed;
+  --arch-fg: var(--muted);
+  --arch-ico: var(--muted);
+  --arch-bg: var(--surface-2);
+
+  /* ── §1.3 三态形状 --st-dot*（VIS-03/04/05）── 颜色沿用既有 --st-* ── */
+  --st-dot: 12px;
+  --st-dot-stroke: 1.8;
+  --st-dot-ink: var(--surface);
+  --st-pulse-dur: 1600ms;
+
+  /* ── §1.4 中窄 Sheet --sheet-*（RESP-03/04）── */
+  --sheet-scrim: oklch(24% 0.02 250 / .28);
+  --sheet-scrim-blur: 0px;
+  --sheet-shadow-r: -10px 0 32px oklch(20% 0.02 250 / .14);
+  --sheet-shadow-l: 10px 0 32px oklch(20% 0.02 250 / .14);
+  --z-sheet-scrim: 30;
+  --z-sheet: 40;
+  --sheet-dur: var(--t-base);
+
+  /* ── §1.5 底栏密度 --sb-*（VIS-02）── --sb-label 替换违规的 --dim ── */
+  --sb-label: var(--muted);
+  --sb-value: var(--fg);
+  --sb-fs: 11.5px;
+  --sb-gap: var(--sp-4);
+  --sb-item-gap: var(--sp-2);
+  --sb-num-min: 6ch;
+  --sb-num-feature: "tnum" 1, "lnum" 1;
+}
+html[data-theme="dark"]{
+  --bg:      oklch(16.8% 0.012 250);
+  --surface: oklch(20.8% 0.014 250);
+  --surface-2: oklch(24.4% 0.015 250);
+  --surface-3: oklch(28% 0.016 250);
+  --fg:      oklch(93% 0.006 250);
+  --muted:   oklch(72% 0.012 250);
+  --dim:     oklch(62% 0.012 250);
+  --border:  oklch(30.5% 0.016 250);
+  --accent:  oklch(76% 0.12 250);
+  --accent-fg: oklch(17% 0.03 250);
+  --accent-soft: oklch(30% 0.055 250);
+  --code-bg: oklch(24.4% 0.014 250);
+  --bubble:  oklch(27.4% 0.016 250);
+  --term-bg: oklch(13.2% 0.012 250);
+  --term-fg: oklch(88% 0.01 250);
+  --hover:   oklch(26.5% 0.015 250);
+  --ok:      oklch(74% 0.15 150);
+  --danger:  oklch(70% 0.18 25);
+  --warn:    oklch(78% 0.13 80);
+  --tk-kw:   oklch(72% 0.16 25);
+  --tk-str:  oklch(79% 0.1 215);
+  --tk-com:  oklch(63% 0.01 250);
+  --tk-num:  oklch(77% 0.12 250);
+  --tk-fn:   oklch(78% 0.13 305);
+  --tk-prop: oklch(82% 0.12 165);
+  --shadow-1: 0 1px 2px oklch(0% 0 0 / 0.3), 0 4px 16px oklch(0% 0 0 / 0.25);
+  --shadow-2: 0 8px 32px oklch(0% 0 0 / 0.45);
+  --st-done: var(--ok);
+  --st-run: var(--ok);
+  --st-wait: var(--muted);
+  --st-stuck: var(--warn);
+  --st-fail: var(--danger);
+  --st-run-fg: oklch(82% 0.15 150);
+  --st-stuck-fg: oklch(86% 0.12 80);
+  --st-fail-fg: oklch(82% 0.14 25);
+  --st-wait-fg: var(--fg);
+  --border-strong: oklch(56% 0.012 250);
+  --statusbar-h: 24px;
+  --tap-min: 28px;
+  --titlebar-h: 44px;
+  --rail-w: 64px;
+  color-scheme: dark;
+
+  --sk-block: oklch(30% 0.016 250);
+  --sk-sheen: oklch(42% 0.018 250 / .55);
+  --sheet-scrim: oklch(0% 0 0 / .45);
+  --sheet-shadow-r: -10px 0 32px oklch(0% 0 0 / .5);
+  --sheet-shadow-l: 10px 0 32px oklch(0% 0 0 / .5);
+}
+:root{
+  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', system-ui, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', system-ui, sans-serif;
+  --font-mono: 'SF Mono', ui-monospace, 'JetBrains Mono', Menlo, monospace;
+  --sp-1: 2px;  --sp-2: 4px;  --sp-3: 6px;  --sp-4: 8px;
+  --sp-5: 10px; --sp-6: 12px; --sp-7: 14px; --sp-8: 16px;
+  --sp-9: 20px; --sp-10: 24px; --sp-11: 32px; --sp-12: 48px;
+  --r-1: 4px; --r-2: 6px; --r-3: 8px; --r-4: 10px;
+  --r-5: 12px; --r-6: 14px; --r-7: 16px; --r-pill: 999px; --r-full: 50%;
+  --t-instant: 80ms;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   2) 基础层
+   ══════════════════════════════════════════════════════════════ */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:var(--font-body);
+  background:var(--bg);
+  color:var(--fg);
+  font-size:13.5px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+html.reduce-motion *,html.reduce-motion *::before,html.reduce-motion *::after{
+  animation:none !important;transition:none !important;
+}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ══════════════════════════════════════════════════════════════
+   3) 原型外框（不属于产品 UI；仅用于评审）
+   ══════════════════════════════════════════════════════════════ */
+.proto-bar{
+  position:sticky;top:0;z-index:999;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:10px 14px;background:var(--surface-2);border-bottom:1px solid var(--border);
+  font-size:12px;
+}
+.proto-bar .pb-title{font-weight:600;letter-spacing:.02em;margin-right:4px}
+.proto-bar .pb-sep{width:1px;height:18px;background:var(--border);margin:0 4px}
+.pb-btn{
+  min-height:26px;padding:3px 10px;border:1px solid var(--border-strong);border-radius:var(--r-2);
+  background:var(--surface);color:var(--fg);font-size:12px;
+}
+.pb-btn:hover{background:var(--hover)}
+.pb-btn[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.pb-note{color:var(--muted);font-size:11.5px}
+.stages{padding:18px 14px 60px;display:flex;flex-direction:column;gap:24px;align-items:flex-start}
+.screen-wrap{display:flex;flex-direction:column;gap:8px}
+.screen-cap{display:flex;align-items:baseline;gap:10px;font-size:12px;color:var(--muted)}
+.screen-cap b{font-size:13px;color:var(--fg);font-weight:600}
+.screen-wrap[hidden]{display:none}
+
+/* 每个屏幕是一个独立“视口”：内部用容器查询模拟真实窗口宽度 */
+.screen{
+  position:relative;width:1280px;height:832px;
+  /* overflow:clip —— 不用 hidden：hidden 会让 translateX(100%) 的收起态 Sheet
+     产生可滚动溢出，污染 scrollWidth（A1）。clip 不建滚动容器。 */
+  overflow:hidden;overflow:clip;
+  background:var(--bg);
+  /* 外框用 outline 不用 border：border 会吃掉 1px 内容宽，导致 1280 的舞台
+     容器宽变成 1278，被 @container (max-width:1279px) 误判成中窄档。 */
+  outline:1px solid var(--border-strong);
+  border-radius:var(--r-3);box-shadow:var(--shadow-1);
+  container-type:inline-size;container-name:stage;
+}
+.screen[data-vp="1024"]{width:1024px;height:768px}
+
+/* ══════════════════════════════════════════════════════════════
+   4) 应用骨架
+   ══════════════════════════════════════════════════════════════ */
+.app{display:flex;flex-direction:column;height:100%;background:var(--bg)}
+.titlebar{
+  height:var(--titlebar-h);flex:none;display:flex;align-items:center;gap:10px;
+  padding:0 12px;background:var(--surface-2);border-bottom:1px solid var(--border);
+}
+.tb-spacer{width:64px;flex:none}
+.tb-title{font-weight:600;font-size:12.5px;color:var(--fg)}
+.tb-sub{font-size:11.5px;color:var(--muted)}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:6px}
+.tb-btn{
+  min-height:26px;padding:2px 9px;border:1px solid var(--border-strong);border-radius:var(--r-2);
+  font-size:12px;background:var(--surface);color:var(--fg);display:inline-flex;align-items:center;gap:5px;
+}
+.tb-btn:hover{background:var(--hover)}
+.tb-btn[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+
+.shell{display:flex;flex:1;min-height:0}
+.sidebar{
+  width:var(--sidebar-w);flex:none;background:var(--surface-2);
+  border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0;
+}
+.side-head{padding:10px 10px 8px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--border)}
+.side-search{
+  display:flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:var(--r-2);
+  background:var(--surface);border:1px solid var(--border-strong);color:var(--muted);font-size:12px;
+}
+.side-list{flex:1;min-height:0;overflow:auto;padding:6px}
+.grp-label{
+  display:flex;align-items:center;gap:6px;padding:6px 8px 4px;
+  font-size:11px;color:var(--muted);letter-spacing:.03em;
+}
+.grp-count{margin-left:auto;font-variant-numeric:tabular-nums}
+
+/* 活跃会话行：无描边、无归档图标、操作=选中 */
+.session{
+  display:flex;align-items:flex-start;gap:8px;padding:7px 8px;border-radius:var(--r-2);
+  cursor:pointer;min-height:var(--tap-min);
+}
+.session:hover{background:var(--hover)}
+.session[aria-current="true"]{background:var(--surface-3);box-shadow:inset 2px 0 0 var(--accent)}
+.session .s-title{
+  font-size:12.5px;line-height:1.45;color:var(--fg);flex:1;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.session .s-meta{font-size:11px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+.session .s-more{opacity:0;flex:none;color:var(--muted);padding:0 2px}
+.session:hover .s-more,.session:focus-within .s-more{opacity:1}
+
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg)}
+.stream{flex:1;min-height:0;overflow:auto;padding:16px 0 8px}
+.stream-inner{max-width:var(--content-max,min(100%,1040px));margin:0 auto;padding:0 20px}
+
+.gutter{width:var(--gutter);flex:none;background:transparent;cursor:col-resize}
+.gutter:hover{background:var(--hover)}
+
+.drawer{
+  width:var(--drawer-w);flex:none;background:var(--surface-2);
+  border-left:1px solid var(--border);display:flex;flex-direction:column;min-height:0;
+}
+.drawer[hidden]{display:none}
+.dw-head{flex:none;border-bottom:1px solid var(--border)}
+.dw-tabs{display:flex;gap:2px;padding:6px 8px 0}
+.dw-tab{
+  flex:1;min-height:26px;padding:4px 2px;border-radius:var(--r-2) var(--r-2) 0 0;
+  font-size:11.5px;color:var(--muted);border-bottom:2px solid transparent;
+}
+.dw-tab:hover{background:var(--hover)}
+.dw-tab[aria-selected="true"]{color:var(--fg);font-weight:600;border-bottom-color:var(--accent)}
+.dw-body{flex:1;min-height:0;overflow:auto;padding:10px}
+
+.statusbar{
+  height:var(--statusbar-h);flex:none;display:flex;align-items:center;gap:var(--sb-gap);
+  padding:0 14px;background:var(--surface-2);border-top:1px solid var(--border);
+  font-size:var(--sb-fs);white-space:nowrap;overflow:hidden;
+}
+.sb-item{
+  display:inline-flex;align-items:center;gap:var(--sb-item-gap);
+  color:var(--sb-label);min-width:0;
+}
+.sb-item .sb-val{
+  color:var(--sb-value);font-variant-numeric:tabular-nums;
+  font-feature-settings:var(--sb-num-feature);
+  min-width:var(--sb-num-min);display:inline-block;
+}
+.sb-item + .sb-item{padding-left:var(--sb-gap);border-left:1px solid var(--border)}
+.sb-spacer{margin-left:auto}
+.sb-right{display:inline-flex;align-items:center;gap:var(--sb-item-gap);color:var(--sb-label)}
+
+/* ══════════════════════════════════════════════════════════════
+   5) 三态状态点（§1.3 形状规格 —— 转灰后三者仍互异）
+      run  = 实心圆 + 同心外环（2 circle）
+      wait = 空心环（1 circle，fill=none）
+      fail = 实心圆 + 内嵌 ×（circle + path）
+   ══════════════════════════════════════════════════════════════ */
+.st-dot{
+  width:var(--st-dot);height:var(--st-dot);flex:none;display:inline-block;
+  color:var(--st-wait);vertical-align:-1px;
+}
+.st-dot svg{width:100%;height:100%;display:block}
+.st-dot[data-st="run"]{color:var(--st-run)}
+.st-dot[data-st="wait"]{color:var(--st-wait)}
+.st-dot[data-st="fail"]{color:var(--st-fail)}
+.st-dot[data-st="done"]{color:var(--st-done)}
+.st-dot[data-st="stuck"]{color:var(--st-stuck)}
+@keyframes st-pulse{0%{opacity:.35;transform:scale(.82)}70%{opacity:1;transform:scale(1)}100%{opacity:.35;transform:scale(.82)}}
+.st-dot[data-st="run"] svg circle:last-child{
+  transform-origin:50% 50%;animation:st-pulse var(--st-pulse-dur) var(--ease-out) infinite;
+}
+.st-wrap{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:11.5px}
+.st-wrap b{font-weight:500;color:var(--fg)}
+
+/* ══════════════════════════════════════════════════════════════
+   6) 消息流
+   ══════════════════════════════════════════════════════════════ */
+.msg{display:flex;gap:10px;padding:6px 0 14px}
+.msg .avatar{
+  width:24px;height:24px;flex:none;border-radius:var(--r-2);display:grid;place-items:center;
+  font-size:11px;font-weight:600;background:var(--surface-3);color:var(--muted);border:1px solid var(--border);
+}
+.msg.user .avatar{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.msg .body{flex:1;min-width:0}
+.msg .who{font-size:11.5px;color:var(--muted);margin-bottom:3px}
+.msg p{margin:0 0 8px}
+.msg p:last-child{margin-bottom:0}
+.bubble{background:var(--bubble);border:1px solid var(--border);border-radius:var(--r-3);padding:8px 11px}
+.code{
+  background:var(--code-bg);border:1px solid var(--border);border-radius:var(--r-2);
+  padding:8px 10px;font-family:var(--font-mono);font-size:12px;line-height:1.55;
+  overflow:auto;white-space:pre;
+}
+.tok-kw{color:var(--tk-kw)}.tok-str{color:var(--tk-str)}.tok-com{color:var(--tk-com)}
+.tok-num{color:var(--tk-num)}.tok-fn{color:var(--tk-fn)}.tok-prop{color:var(--tk-prop)}
+
+/* 工具卡片 */
+.card{border:1px solid var(--border);border-radius:var(--r-3);background:var(--surface);margin:8px 0;overflow:hidden}
+.card-head{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surface-2);font-size:12px}
+.card-head .ch-name{font-family:var(--font-mono);font-weight:600}
+.card-head .ch-path{color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card-head .ch-right{margin-left:auto;display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:11px}
+.card-body{padding:8px 10px;font-size:12px;color:var(--muted);border-top:1px solid var(--border)}
+
+/* 终端 */
+.term{background:var(--term-bg);color:var(--term-fg);font-family:var(--font-mono);font-size:11.5px;
+  line-height:1.6;border-radius:var(--r-2);padding:8px 10px;border:1px solid var(--border);white-space:pre-wrap}
+.term .p{color:var(--accent)}
+
+/* composer */
+.composer{flex:none;border-top:1px solid var(--border);background:var(--surface);padding:8px 0 10px}
+.composer-inner{max-width:var(--content-max,min(100%,1040px));margin:0 auto;padding:0 20px}
+.cbox{
+  border:1px solid var(--border-strong);border-radius:var(--r-4);background:var(--surface-2);
+  padding:8px 10px;min-height:60px;display:flex;flex-direction:column;gap:8px;
+}
+.cbox textarea{
+  width:100%;border:none;outline:none;resize:none;background:transparent;color:var(--fg);
+  font:inherit;line-height:1.5;min-height:34px;
+}
+.cbox-foot{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:11px}
+.cbox-foot .sp{margin-left:auto}
+.btn-primary{
+  background:var(--accent);color:var(--accent-fg);border-radius:var(--r-2);
+  padding:3px 10px;font-size:12px;min-height:26px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   7) 归档态（§1.2 VIS-06）
+   ══════════════════════════════════════════════════════════════ */
+/* 原型内注释 chip（评审用，非产品 UI） */
+.pn{
+  display:inline-block;font-size:11px;line-height:1.5;color:var(--muted);
+  padding:3px 8px;background:var(--accent-soft);border-radius:var(--r-2);
+}
+.pn code{font-family:var(--font-mono);font-size:10.5px}
+
+.arch-panel{background:var(--surface);padding:14px 16px;overflow:auto;flex:1;min-height:0}
+.ap-head{display:flex;align-items:baseline;gap:10px;margin-bottom:12px}
+.ap-head h2{font-size:15px;font-weight:600;letter-spacing:.01em}
+.ap-count{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.ap-live{
+  margin-left:auto;font-size:11.5px;color:var(--muted);
+  padding:2px 9px;border:1px solid var(--border);border-radius:var(--r-pill);background:var(--surface-2);
+}
+.ap-live b{font-weight:600;color:var(--fg)}
+
+/* 活跃 / 归档 并置比对 */
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:4px}
+.cmp-col{
+  border:1px solid var(--border);border-radius:var(--r-3);padding:10px;background:var(--surface-2);min-width:0;
+}
+.cmp-tag{font-size:11px;color:var(--muted);margin-bottom:7px}
+.cmp-tag code{font-family:var(--font-mono);font-size:10.5px}
+.cmp-sample{cursor:default;margin-bottom:8px}
+.cmp-sample .s-title{font-size:12.5px}
+.cmp-list{list-style:none;font-size:11px;color:var(--muted);line-height:1.75}
+/* P0 修复：--dim 落在 --surface-2 面上，dark 实测 4.47:1 < 4.5（A11Y-02 禁区）；
+   改用 --muted（= --sb-label 同值），实测 7.16 light / 6.56 dark。 */
+.cmp-list li::before{content:'· ';color:var(--muted)}
+.arch-row{
+  display:flex;align-items:flex-start;gap:9px;padding:9px 10px;margin-bottom:8px;
+  background:var(--arch-bg);border:1px var(--arch-bd-style) var(--arch-bd);border-radius:var(--r-3);
+}
+.arch-row .ar-ico{flex:none;color:var(--arch-ico);margin-top:2px;display:inline-flex}
+.arch-row .ar-ico svg{width:14px;height:14px;display:block}
+.arch-row .ar-main{flex:1;min-width:0}
+.arch-row .ar-title{font-size:12.5px;color:var(--arch-fg);font-weight:500}
+.arch-row .ar-meta{font-size:11px;color:var(--arch-fg);opacity:.85;margin-top:2px;font-variant-numeric:tabular-nums}
+.arch-row .ar-acts{flex:none;display:flex;gap:6px}
+.ar-btn{
+  min-height:24px;padding:1px 9px;font-size:11.5px;border:1px solid var(--border-strong);
+  border-radius:var(--r-2);background:var(--surface);color:var(--fg);
+}
+.ar-btn:hover{background:var(--hover)}
+.ar-btn.danger{color:var(--st-fail-fg);border-color:var(--border-strong)}
+
+/* 空态（GAP-03：占位内 button 数 = 0） */
+.settings-empty{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  padding:26px 16px;text-align:center;color:var(--muted);
+  border:1px solid var(--border);border-radius:var(--r-3);background:var(--surface-2);
+}
+/* P0 修复：同上 --dim → --muted（7.16 / 6.56）。
+   同时去掉 opacity:.9 —— 半透明会把实际渲染对比度压到 6.56 以下，实测值就不再等于令牌值。 */
+.settings-empty svg{width:22px;height:22px;color:var(--muted)}
+.settings-empty p{font-size:12px;line-height:1.7;max-width:44ch}
+.settings-empty .se-code{font-family:var(--font-mono);font-size:11px;opacity:.8}
+
+/* 骨架屏（§1.1） */
+@keyframes sk-sheen{from{background-position:-160% 0}to{background-position:260% 0}}
+.sk{
+  background-color:var(--sk-block);
+  background-image:linear-gradient(90deg,transparent 0,var(--sk-sheen) 50%,transparent 100%);
+  background-size:220% 100%;background-repeat:no-repeat;border-radius:var(--sk-r);
+  animation:sk-sheen var(--sk-dur) var(--sk-ease) infinite;
+}
+.sk-line{height:var(--sk-h-line);margin-bottom:6px}
+.sk-msg{height:var(--sk-h-msg);margin-bottom:10px}
+@media (prefers-reduced-motion: reduce){
+  .sk{animation:none;background-image:none}
+  .st-dot[data-st="run"] svg circle:last-child{animation:none}
+}
+
+/* ══════════════════════════════════════════════════════════════
+   8) 响应式四档（沿用 index.html:1423-1452，改用容器查询以适配屏幕舞台）
+      ⚠ 舞台内 position:fixed 会脱离容器，故原型用 absolute 模拟（视觉等价）
+   ══════════════════════════════════════════════════════════════ */
+@container stage (min-width:1600px){ .shell{--content-max:min(100%,1040px)} }
+@container stage (max-width:1279px){
+  .sidebar{width:min(var(--sidebar-w),208px)}
+  .drawer{
+    position:absolute;right:0;top:var(--titlebar-h);bottom:var(--statusbar-h);
+    z-index:var(--z-sheet);width:min(var(--drawer-w),88vw);
+    transform:translateX(100%);transition:transform var(--sheet-dur) var(--ease-out);
+    box-shadow:var(--sheet-shadow-r);
+  }
+  .drawer.open-m{transform:translateX(0)}
+  .gutter{display:none}
+  .shell{--content-max:none}
+  .sheet-scrim{
+    position:absolute;inset:var(--titlebar-h) 0 var(--statusbar-h) 0;z-index:var(--z-sheet-scrim);
+    background:var(--sheet-scrim);backdrop-filter:blur(var(--sheet-scrim-blur));
+    opacity:0;pointer-events:none;transition:opacity var(--sheet-dur) var(--ease-out);
+  }
+  .sheet-scrim.show{opacity:1;pointer-events:auto}
+}
+@container stage (min-width:1280px){ .sheet-scrim{display:none} }
+
+/* ══════════════════════════════════════════════════════════════
+   9) 上下文抽屉 5 视图
+   ══════════════════════════════════════════════════════════════ */
+.dw-view[hidden]{display:none}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:12px;border-bottom:1px solid var(--border)}
+.kv:last-child{border-bottom:none}
+.kv .k{color:var(--muted)}
+.kv .v{font-family:var(--font-mono);font-size:11.5px;font-variant-numeric:tabular-nums}
+.sec-title{font-size:11px;color:var(--muted);letter-spacing:.03em;margin:12px 0 6px}
+.sec-title:first-child{margin-top:0}
+.file-row{display:flex;align-items:center;gap:7px;padding:4px 6px;border-radius:var(--r-2);font-size:12px}
+.file-row:hover{background:var(--hover)}
+.file-row .fp{font-family:var(--font-mono);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-row .fd{margin-left:auto;flex:none;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.diff{font-family:var(--font-mono);font-size:11.5px;line-height:1.6;border-radius:var(--r-2);overflow:hidden;border:1px solid var(--border)}
+.diff .dl{padding:1px 8px;white-space:pre-wrap;word-break:break-all}
+.diff .add{background:color-mix(in oklab,var(--ok) 14%,transparent)}
+.diff .del{background:color-mix(in oklab,var(--danger) 12%,transparent)}
+.diff .hunk{background:var(--surface-3);color:var(--muted)}
+.browser-bar{display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid var(--border-strong);
+  border-radius:var(--r-2);background:var(--surface);font-size:11.5px;color:var(--muted);margin-bottom:8px}
+.browser-mock{height:150px;border:1px solid var(--border);border-radius:var(--r-2);background:var(--surface);
+  /* 同类隐患一并处理：此处承载面是 --surface，--dim 实测 5.06/4.89 虽已过 4.5，
+     但余量仅 8%，同规则同文件内统一改 --muted（7.43 / 7.18）。 */
+  display:grid;place-items:center;color:var(--muted);font-size:11.5px}
+.rev-item{display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px}
+.rev-item:last-child{border-bottom:none}
+
+/* 原型自评 / 已知差异（评审用，非产品 UI） */
+.proto-notes{
+  max-width:1280px;margin:8px 14px 40px;padding:14px 16px;
+  border:1px solid var(--border);border-radius:var(--r-3);background:var(--surface-2);
+}
+.proto-notes h2{font-size:13px;font-weight:600;margin-bottom:8px}
+.proto-notes ol{margin:0 0 0 18px;font-size:12px;line-height:1.75;color:var(--muted)}
+.proto-notes li{margin-bottom:7px}
+.proto-notes b{color:var(--fg);font-weight:600}
+.proto-notes code{font-family:var(--font-mono);font-size:11px;background:var(--code-bg);padding:1px 5px;border-radius:var(--r-1)}
+.proto-notes .warn{color:var(--st-fail-fg)}
+
+/* Toast（原型反馈，非产品 UI） */
+.toast{
+  position:absolute;left:50%;bottom:44px;transform:translate(-50%,8px);
+  background:var(--fg);color:var(--bg);font-size:11.5px;padding:5px 12px;border-radius:var(--r-pill);
+  opacity:0;pointer-events:none;transition:opacity var(--t-base),transform var(--t-base);z-index:100;
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body data-page-node-id="PPv7yXggnEXT0n6nIPG7pA">
+
+<!-- ══════════ 原型外框：切屏 / 主题 / 动效 / 演示开关 ══════════ -->
+<div class="proto-bar" data-page-node-id="p84W6BOqHFEcslDjpewd2c">
+  <span class="pb-title" data-page-node-id="uNouCkZWS5K09EjDvlKQPW">DSH · 核心三屏原型</span>
+  <button class="pb-btn" data-screen-btn="S1" aria-pressed="true" data-page-node-id="WKIjA3EYStwEEsCCcBSLO3">S1 1280×832</button>
+  <button class="pb-btn" data-screen-btn="S2" aria-pressed="false" data-page-node-id="O9aaHPp7I9ZLVQlsbpAka5">S2 1024×768</button>
+  <button class="pb-btn" data-screen-btn="S4" aria-pressed="false" data-page-node-id="4qR0NTvAu3ubj8OrOcbdcd">S4 1280×832</button>
+  <span class="pb-sep" data-page-node-id="r1xHYibZQT08Kx5IhHr9C0"></span>
+  <button class="pb-btn" id="themeBtn" data-page-node-id="I8Oum3FMRgig64yVdetCFn">主题：light</button>
+  <button class="pb-btn" id="motionBtn" aria-pressed="false" data-page-node-id="4JKznvOgOMhCDaRZ6kiY0N">减少动效</button>
+  <span class="pb-sep" data-page-node-id="rglMIFoHeRkTZhUloq9cqc"></span>
+  <button class="pb-btn" id="sbStateBtn" data-page-node-id="08Bkq6DAOnhGRgaBFqb1UB">沙箱态：ready</button>
+  <button class="pb-btn" id="evAddBtn" data-page-node-id="VaZhHyZOMLdzNN4KoeHzNR">事件数 ×10</button>
+  <span class="pb-note" data-page-node-id="EQvksgYnWkpmaxpMohi2IU">底栏三项常驻；切视图不消失（S1/S2/S4 均如此）</span>
+</div>
+
+<div class="stages" data-page-node-id="sUAs8g7pzaBZjodgSs5F4K">
+
+  <!-- ══════════════════════════ S1 ══════════════════════════ -->
+  <div class="screen-wrap" id="wrap-S1" data-page-node-id="Ypkuh15gRm4CPVuOpGSOwT">
+    <div class="screen-cap" data-page-node-id="QM4eUzlW4Hhv1zh9pSCDZG"><b data-page-node-id="z6sLeF6Z9yDZbrPUE2QL3V">S1</b> 1280×832 · 标准三栏（侧栏 252 / 主区 / 右板 340）· 底栏常驻</div>
+    <section class="screen" id="screen-S1" data-vp="1280" aria-label="S1 标准三栏" data-page-node-id="c3fKUrRBDf2ftEXywz4t2F">
+      <div class="app" data-app="S1" data-page-node-id="NI3kCgieKr4pDJ1WKFMuWS">
+        <header class="titlebar" data-page-node-id="xOL8MoURI9rNHoRUcKDG5P">
+          <div class="tb-spacer" data-page-node-id="7qBBdJtrnNby0AHwF2kzrV"></div>
+          <span class="tb-title" data-page-node-id="BhnHhFf1aSwprb4HjCjCXv">重构事件总线</span>
+          <span class="tb-sub" data-page-node-id="qwGSwpHb5rRkoGDmMZKnXK">· main</span>
+          <div class="tb-right" data-page-node-id="Laeikwz9uesUw30DgCXLd8">
+            <button class="tb-btn" data-page-node-id="sZRkoznQNgltmJEwlPXV5F">模型 claude-3-7</button>
+            <button class="tb-btn" data-drawer-toggle aria-pressed="true" data-page-node-id="Fq1GyX6kbtj9WTech7Ctj9">上下文</button>
+          </div>
+        </header>
+
+        <div class="shell" data-page-node-id="JpFbOYQ1AHPnfK9G2szpLr">
+          <!-- 侧栏 -->
+          <nav class="sidebar" aria-label="会话列表" data-page-node-id="NGg7RcPjrDbbs9n2IDnU4w">
+            <div class="side-head" data-page-node-id="9FqG6SPPvXIDjZzNm6x0qP">
+              <button class="btn-primary" style="width:100%" data-page-node-id="CwX5N2d7gROzpjvBcFZF2x">新建会话</button>
+              <div class="side-search" role="search" data-page-node-id="MWMvfmraFOh08Ip5xPU3TO">⌕ 搜索会话</div>
+            </div>
+            <div class="side-list" data-page-node-id="wCKJaBQyEGznib4OiHeDbC">
+              <div class="grp-label" data-page-node-id="pBIHrBgPfnlAGvIKHesist">活跃 <span class="grp-count" data-page-node-id="jIOHm0Wu6BEDc8c6EYlH26">3</span></div>
+
+              <div class="session" data-sid="s1" aria-current="true" tabindex="0" role="button" data-page-node-id="hSYs7EjShtx5slzj5OXeBq">
+                <span class="st-dot" data-st="run" role="img" aria-label="状态：运行中" data-page-node-id="Rg0doDWLEStXxYDQqwnSfb">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="GABTkwuDlDWgk1CFX6Pswj">
+                    <circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none" data-page-node-id="5McopzCnyQEAmAHse5t6nP"/>
+                    <circle cx="12" cy="12" r="8.2" fill="none" data-page-node-id="2Axd9509PmjxbN5uUNwLoI"/>
+                  </svg>
+                </span>
+                <div class="s-title" style="flex:1" data-page-node-id="f0tM1uWrFVjjuQeDeHFwB0">重构事件总线 EventBus<span class="s-meta" data-page-node-id="JjvHOWrdkzaQWTwqf0ZIe1">main · 2 分钟前</span></div>
+                <button class="s-more" aria-label="更多" data-page-node-id="T365KSFE20IcwwuGVDk2sJ">···</button>
+              </div>
+
+              <div class="session" data-sid="s2" tabindex="0" role="button" data-page-node-id="n7QMxHRvdd3J98DnOW2WnS">
+                <span class="st-dot" data-st="wait" role="img" aria-label="状态：等待中" data-page-node-id="fISaJlxaZwJnmMXSUXKmQP">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="jmjbQScgPZ10WnBWJC7sK1">
+                    <circle cx="12" cy="12" r="6.4" fill="none" data-page-node-id="IEdNlc3OYcHw3PQk6BQIFS"/>
+                  </svg>
+                </span>
+                <div class="s-title" style="flex:1" data-page-node-id="1rQcHEuFODUluFM6NLIumJ">补文件树虚拟滚动测试<span class="s-meta" data-page-node-id="bBFNtc72orwdI7R5yptbOC">feat/tree · 1 小时前</span></div>
+                <button class="s-more" aria-label="更多" data-page-node-id="ykRElDfhmd0orEck8JvwiP">···</button>
+              </div>
+
+              <div class="session" data-sid="s3" tabindex="0" role="button" data-page-node-id="tRuaxAF3P7t19fEulGysu0">
+                <span class="st-dot" data-st="fail" role="img" aria-label="状态：失败" data-page-node-id="TXtW90XuVwx0PRXCVbqEGm">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="5FePcujTsPGJ2MA5TgkF09">
+                    <circle cx="12" cy="12" r="6.6" fill="currentColor" stroke="none" data-page-node-id="FqMsEEhS4Fqqo3nuu1bxUf"/>
+                    <path d="M9.3 9.3 14.7 14.7 M14.7 9.3 9.3 14.7" stroke="var(--st-dot-ink)" stroke-width="1.8" data-page-node-id="etAYb3xyXjPBVOAMq2Swmc"/>
+                  </svg>
+                </span>
+                <div class="s-title" style="flex:1" data-page-node-id="Hvd0Z99xe8m6zGBcafNHvk">修复打包后 preload 路径<span class="s-meta" data-page-node-id="DeUvvTpVSrkbPCjfNN6Y8d">fix/preload · 昨天</span></div>
+                <button class="s-more" aria-label="更多" data-page-node-id="BYQBipEJFjifh1w205KHtg">···</button>
+              </div>
+
+              <div class="grp-label" data-page-node-id="vCcZ1uUKTBWBNXwVI1jGJK">归档 <span class="grp-count" data-page-node-id="SQ7QEV92UDYzkUFiv7AsYE">3</span></div>
+              <div class="pn" data-page-node-id="iyrPB6k0uENwVneWGKrVMT">归档区展开态见 S4</div>
+            </div>
+          </nav>
+
+          <!-- 主区 -->
+          <main class="main" data-page-node-id="71yrGyETiRcwUMDNl19oMz">
+            <div class="stream" id="stream-S1" data-page-node-id="jszXcQf7kSIPpQlTE3WJx4">
+              <div class="stream-inner" data-page-node-id="jiBNAFel1u2NyZ22u3O6Ha">
+                <div class="msg user" data-page-node-id="pr9E6vvEGuAwVjQwBKsLgC">
+                  <div class="avatar" data-page-node-id="fiWFqKy5KGSepp4DJS4QZx">Z</div>
+                  <div class="body" data-page-node-id="ojm3X1qnDJLb4xulO7H11L">
+                    <div class="who" data-page-node-id="B91XoeoJcw8CEqO5tNDRI8">你</div>
+                    <p data-page-node-id="XXPBLF72PPJhKgsJVUGZed">把 <code data-page-node-id="j1tyW7EcAObtBmcXSAQSoH">EventBus</code> 的同步派发改成交错派发，先给出最小改动面，别动 IPC 层。</p>
+                  </div>
+                </div>
+
+                <div class="msg" data-page-node-id="ofgHB0F3WGDMugzC94okXs">
+                  <div class="avatar" data-page-node-id="Jq7C9OqlgZgbrgVnB5AzNT">D</div>
+                  <div class="body" data-page-node-id="J4Gh0RYHAqktruPBQRigtt">
+                    <div class="who" data-page-node-id="Gd5GTptjissHqXKsDBdV8W">DSH</div>
+                    <div class="bubble" data-page-node-id="5Nu3E512lBICDKTCmIGnSi">
+                      <p data-page-node-id="kfyHV9w53v0PX4JEZhtY9X">先定位派发点，再决定改法。最小改动面是 <code data-page-node-id="jAGHM71sFjhkdp052DmsIX">bus.ts</code> 的 <code data-page-node-id="wfKdsdolFfJfRwfDzwHmMQ">emit()</code>，调用方零改动。</p>
+                    </div>
+
+                    <div class="card" data-page-node-id="WQX87M55JHyaKo7X8giJzg">
+                      <div class="card-head" data-page-node-id="RVSuMbXcO3rLipI8HJDqHh">
+                        <span class="ch-name" data-page-node-id="3ynMGHCVnxB8hGcy11Gnvx">Grep</span>
+                        <span class="ch-path" data-page-node-id="0hF6e7pIqTXalm5eZvyqNj">src/events/**</span>
+                        <span class="ch-right" data-page-node-id="ilXUuzstUNWwg4HAbPcaT8">
+                          <span class="st-wrap" data-page-node-id="ctRnngQB47yz6DzwiPOCp6"><span class="st-dot" data-st="run" data-page-node-id="nzoOBSWMfKRasg3KYiVAXz">
+                            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="HFUODrKsMRejAYZQ2XQveh">
+                              <circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none" data-page-node-id="NVRlTbSyloe5zbvPYTTeXe"/>
+                              <circle cx="12" cy="12" r="8.2" fill="none" data-page-node-id="FKs8LmnChkunFUJkriKS6Y"/>
+                            </svg></span><b data-page-node-id="pqWn1xDV9lHOTiw41u6Urb">运行中</b></span>
+                        </span>
+                      </div>
+                      <div class="card-body" data-page-node-id="WScGutGRUDpSVg9XdVxmSx">已匹配 7 个文件 · 命中 23 处 <code data-page-node-id="47hreSnmiG2FSN6svLDSr1">emit(</code></div>
+                    </div>
+
+                    <div class="card" data-page-node-id="ylTiVlUAT0XB1ReIeboo3E">
+                      <div class="card-head" data-page-node-id="JtxScwGOybSDr8HAXZeLgY">
+                        <span class="ch-name" data-page-node-id="Ux9wl7KmvEVeHBKkHJ7eOv">Edit</span>
+                        <span class="ch-path" data-page-node-id="sYiCzRrRd0AUvS66pY5JWD">src/events/bus.ts:88</span>
+                        <span class="ch-right" data-page-node-id="Uzc69Ygg9p5DRs1HsRAVeA">
+                          <span class="st-wrap" data-page-node-id="agMgLtUSQJP7sbShR6Hisn"><span class="st-dot" data-st="wait" data-page-node-id="QehbObyXhGqwqGN33LsnSE">
+                            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="ySLtVEcrpBrr27EiLJ3TdM">
+                              <circle cx="12" cy="12" r="6.4" fill="none" data-page-node-id="waaqPEPCE9pYtFF2NxWzdc"/>
+                            </svg></span><b data-page-node-id="PMWhMDaEAu5StYnPmC2F3S">待审批</b></span>
+                        </span>
+                      </div>
+                      <div class="card-body" data-page-node-id="qyVhmXHcxQ7qeSdTdc2wn8">
+                        <div class="code" data-page-node-id="1alHWCiKhCh0r6l5QiNGsO"><span class="tok-com" data-page-node-id="6W9kkJGHULOBbENTwJIJtL">// 派发改为微任务交错，避免长任务阻塞渲染</span>
+<span class="tok-kw" data-page-node-id="scgOJD5FqC3LIOcJ29yzuZ">export function</span> <span class="tok-fn" data-page-node-id="dSFybWQljMFMIi494WYUFr">emit</span>(type, payload) {
+  <span class="tok-kw" data-page-node-id="E5UKnFv30GkSbv85ZUbNMv">const</span> subs = map.<span class="tok-fn" data-page-node-id="jpQCmdnXsIueAOXafYcxMB">get</span>(type) ?? [];
+-  <span class="tok-kw" data-page-node-id="YJBEedk0y6NiQZ48nTRV75">for</span> (<span class="tok-kw" data-page-node-id="wakL6iuXpVuZtGxxAPfmKb">const</span> fn <span class="tok-kw" data-page-node-id="dS38Wghw1KNkGBgOvHVWGN">of</span> subs) <span class="tok-fn" data-page-node-id="608ROqpXQB92FlDF7O4QtD">fn</span>(payload);
++  <span class="tok-kw" data-page-node-id="JgWq1d0JUJtBTqXGzkFfGq">for</span> (<span class="tok-kw" data-page-node-id="UAZI3vYUsHkN4W0SxQpVQo">const</span> fn <span class="tok-kw" data-page-node-id="GgGMoFnHI8TBL7O5Vgwvc2">of</span> subs) <span class="tok-fn" data-page-node-id="VKwJiAhYRyNXuN5a7dyeqD">queueMicrotask</span>(() =&gt; <span class="tok-fn" data-page-node-id="mqq5uMbVfwV9CKFnWTZKKC">fn</span>(payload));
+}</div>
+                      </div>
+                    </div>
+
+                    <div class="card" data-page-node-id="GzOd0US5iDLt14PfI5XpOy">
+                      <div class="card-head" data-page-node-id="FC122lpTs6QHTVhBfamIZG">
+                        <span class="ch-name" data-page-node-id="bFvfHFHRIPqqdAejibpHG0">Bash</span>
+                        <span class="ch-path" data-page-node-id="tvecZeJIcm1opOVpFEUXZk">pnpm vitest run events</span>
+                        <span class="ch-right" data-page-node-id="rNCE1pIt8xbXWTtKreE7ps">
+                          <span class="st-wrap" data-page-node-id="BX0BvBWgNVvOuDRivIUvaY"><span class="st-dot" data-st="fail" data-page-node-id="3IPMuXq5fBwEN3oy8CSUgL">
+                            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="e0HjfL3kycyfSrQxAF9Osi">
+                              <circle cx="12" cy="12" r="6.6" fill="currentColor" stroke="none" data-page-node-id="EBilEzeY9FTi8BWZCGhigf"/>
+                              <path d="M9.3 9.3 14.7 14.7 M14.7 9.3 9.3 14.7" stroke="var(--st-dot-ink)" stroke-width="1.8" data-page-node-id="3n1lb77fbmFelfjD73ZDHp"/>
+                            </svg></span><b data-page-node-id="k3K3Srq5D4QWNUPO5Hwdih">失败</b></span>
+                        </span>
+                      </div>
+                      <div class="card-body" data-page-node-id="rfBAdeWVwPui5UWRmYwmkW">
+                        <div class="term" data-page-node-id="VEtOJkBKqTYnyse5kjCzZo"><span class="p" data-page-node-id="0w8EYWEY1x9iV1EATETnhs">❯</span> pnpm vitest run events
+ FAIL  src/events/bus.test.ts &gt; emit 顺序
+ AssertionError: expected [ 'a', 'b' ] to equal [ 'b', 'a' ]
+ <span class="p" data-page-node-id="WpR63rumsrnHKHYnRIabGG">Tests</span>  1 failed | 12 passed</div>
+                      </div>
+                    </div>
+
+                    <div class="bubble" data-page-node-id="2ItSBzHtKgFDlIftugqsqB">
+                      <p data-page-node-id="bJ3UAQ9YRPolivhHV4EnF3">1 个用例失败：交错派发改变了顺序语义。要么把该用例改成异步断言，要么保留同步路径给顺序敏感订阅者。你定。</p>
+                    </div>
+
+                    <!-- §1.1 骨架屏：窗口外占位（PERF-01 观感）。高度固定、不随机；
+                         reduced-motion 下退化为静态块（不消失）。 -->
+                    <div class="pn" style="margin:10px 0 6px" data-page-node-id="VLMjbCxAXPniHEe67F87Cc">窗口外占位骨架 · <code data-page-node-id="4lLYMb24FDNEwuoCL6V51i">.sk</code>（滚动到此处前的行高预留）</div>
+                    <div class="sk sk-msg" data-sk="msg" style="width:82%" data-page-node-id="HFWZoUvJsNDFTMZHiEaLLX"></div>
+                    <div class="sk sk-msg" data-sk="msg" style="width:64%" data-page-node-id="gtwhiUHupLWPt6v7dCIe9o"></div>
+                    <div class="sk sk-line" data-sk="line" style="width:46%;margin-top:10px" data-page-node-id="eZDVTSHt4ozaxjxOngyMmX"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="composer" data-page-node-id="Tvv1F0r2GqMTKgMziEEznd">
+              <div class="composer-inner" data-page-node-id="FtO0rH3LUDLBzpjOF8FIQD">
+                <div class="cbox" data-page-node-id="QIT8b4dsrV1oag15rJKVTK">
+                  <textarea rows="2">改成异步断言，顺序敏感的订阅者加 opt-in 同步开关</textarea>
+                  <div class="cbox-foot" data-page-node-id="jZ66xAJpbSnTUoQowJtCH3">
+                    <span data-page-node-id="VHV6misIHpdYyCFozwj2wa">⌘↵ 发送</span><span data-page-node-id="xHxnkOefUIeSjeM3TdeJBD">·</span><span data-page-node-id="stHTx2yx8RHjAMshWJ3vLA">沙箱内改写</span>
+                    <span class="sp" data-page-node-id="Inwhlnttina6hBgXdLqYaQ"></span>
+                    <button class="btn-primary" data-page-node-id="FFT5q62XzD6gNOpYxZuSxH">发送</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+
+          <div class="gutter" role="separator" aria-orientation="vertical" aria-label="调整右板宽度" data-page-node-id="Vieihu7S1xIxR83755fGcC"></div>
+
+          <!-- 右板：5 视图 -->
+          <aside class="drawer" id="drawer-S1" aria-label="上下文" data-page-node-id="BUOS7Bjt16HZnVaBlGFfLH">
+            <div class="dw-head" data-page-node-id="Wc2DAonBwJp5C151LzpEwW">
+              <div class="dw-tabs" role="tablist" aria-label="上下文视图" data-page-node-id="4ne4TulZWw6Y2N7ZRcDdq8">
+                <button class="dw-tab" role="tab" data-view="files" aria-selected="true" data-page-node-id="iyIjKXY6RkbXADFpRByi3q">files</button>
+                <button class="dw-tab" role="tab" data-view="browser" aria-selected="false" data-page-node-id="R0E8DVcWPsLQDlQEIHT6wH">browser</button>
+                <button class="dw-tab" role="tab" data-view="review" aria-selected="false" data-page-node-id="y5RFMmqvEd0fDrvw5gRpqg">review</button>
+                <button class="dw-tab" role="tab" data-view="git" aria-selected="false" data-page-node-id="npeh4PjYlUyEsfDRBvptTa">git</button>
+                <button class="dw-tab" role="tab" data-view="terminal" aria-selected="false" data-page-node-id="7FCB9E1kqasrmojn96mZ69">terminal</button>
+              </div>
+            </div>
+            <div class="dw-body" data-page-node-id="PwHarvUFkKEYJjahMRlAma">
+              <div class="dw-view" data-view-panel="files" data-page-node-id="HclWZ5Ds5hGOPWmoGDT7uh">
+                <div class="sec-title" data-page-node-id="qOMff1m2vUqAVcs9UGjK6p">已改动 4</div>
+                <div class="file-row" data-page-node-id="iufHTBiR8isjqhlYPvKkLN"><span class="fp" data-page-node-id="AEW3mNPaDuoXKIv2mM985q">src/events/bus.ts</span><span class="fd" data-page-node-id="8rMhZSJOoZmsAqoRfYJ5yL">+12 −3</span></div>
+                <div class="file-row" data-page-node-id="dXLlluVVygFcWjptyGvsGl"><span class="fp" data-page-node-id="tAuJdlswHszNMfC2ILoaGk">src/events/index.ts</span><span class="fd" data-page-node-id="XM3MxzrSiHH5huO9CiGHPP">+2 −0</span></div>
+                <div class="file-row" data-page-node-id="FjmEVGhq053VZXRiDIGF3e"><span class="fp" data-page-node-id="59eDYWrgwfUoDN0htBM2nz">src/events/bus.test.ts</span><span class="fd" data-page-node-id="QWRNCj35QCDx0UWtPg4Dpt">+9 −4</span></div>
+                <div class="file-row" data-page-node-id="iGSFDC0ufCF25Ee3v7UXOm"><span class="fp" data-page-node-id="Uez716cGTZuLWWt4xSNOl1">src/renderer/app.js</span><span class="fd" data-page-node-id="cV4YJd4OsjpgXD1HWSJ0GN">+1 −1</span></div>
+                <div class="sec-title" data-page-node-id="83VPcMa06RABelNl9pjso0">工作区</div>
+                <div class="kv" data-page-node-id="6M9Ig3YOMGGIoJ6aHsL2OL"><span class="k" data-page-node-id="hSLfR5kXtwbyxGwTT8Ynw2">分支</span><span class="v" data-page-node-id="jh3Mny0gnqEBA8RKuXxFuV">main</span></div>
+                <div class="kv" data-page-node-id="wJDEmJ3jmwiLMpUQULIwck"><span class="k" data-page-node-id="5s1FVSzGzkrJZTADnRD8Op">未提交</span><span class="v" data-page-node-id="IQKD0BavY9Ffo1ViDksXAT">4</span></div>
+              </div>
+              <div class="dw-view" data-view-panel="browser" hidden data-page-node-id="aCSqG2v6yQE3rGK0XzzMmW">
+                <div class="browser-bar" data-page-node-id="mJ81gEzbBibZ6LxzqFgsVM">🔒 localhost:5173</div>
+                <div class="browser-mock" data-page-node-id="5NTAAPxUykbQnEcirfowxL">页面预览占位</div>
+              </div>
+              <div class="dw-view" data-view-panel="review" hidden data-page-node-id="ZcqUtDCuhvOlDB6i8dSFXv">
+                <div class="sec-title" data-page-node-id="SrbB4E8LqjhgwUGgbJ26Wg">审阅中 2</div>
+                <div class="rev-item" data-page-node-id="PromJR4TN0KpB3N6stC1CP"><span class="st-dot" data-st="wait" data-page-node-id="i1jfWphgP9R2PMI5ebWyEf">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="O597TmJbbus1ayclTLken3">
+                    <circle cx="12" cy="12" r="6.4" fill="none" data-page-node-id="ixVyINpbOcUrqMPLWk0JQo"/></svg></span>
+                  <div data-page-node-id="DAz6PsTLv92fPTY7lgyiWR"><div data-page-node-id="8IQ7HxFPKBRoTYj3yBuKF3">emit() 交错化</div><div style="color:var(--muted);font-size:11px" data-page-node-id="5KpWGTEFRLh0DIh4s8dqX1">bus.ts · 待你确认</div></div></div>
+                <div class="rev-item" data-page-node-id="bwXDmZxSIjohqsBekvG9fB"><span class="st-dot" data-st="fail" data-page-node-id="rukhBQKq2y7ByS3nnWwVZU">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="yhsAKF0qis0O0ENIksOtzz">
+                    <circle cx="12" cy="12" r="6.6" fill="currentColor" stroke="none" data-page-node-id="uoSEOSzKbmEE4JShFTBTF0"/>
+                    <path d="M9.3 9.3 14.7 14.7 M14.7 9.3 9.3 14.7" stroke="var(--st-dot-ink)" stroke-width="1.8" data-page-node-id="CbMvETyWRVcuEhv6RuHiRf"/></svg></span>
+                  <div data-page-node-id="cnGFNte7pYVF8DZ3KPVPNX"><div data-page-node-id="Q79mAQ0UcReCKglOy2U9Ge">用例顺序断言</div><div style="color:var(--muted);font-size:11px" data-page-node-id="HIV5pknDHMg4YjmA9NESeQ">bus.test.ts · 阻塞</div></div></div>
+              </div>
+              <div class="dw-view" data-view-panel="git" hidden data-page-node-id="dMspydVIOUYpCcbL4UNw66">
+                <div class="sec-title" data-page-node-id="wh2psA8lRGH3Cak82TgvhU">git status</div>
+                <div class="file-row" data-page-node-id="ZPt5S5kDCRNu2jHIC7J7QW"><span class="fp" data-page-node-id="EITT5qpTbpylq3dnvAeZ9a">M src/events/bus.ts</span><span class="fd" data-page-node-id="fBGC1nTtDlbQSLvh49AOKX">+12 −3</span></div>
+                <div class="file-row" data-page-node-id="ahLhj07bFzYAL1vGUSMFSi"><span class="fp" data-page-node-id="fBV8khcmE4SJ94PWWiL6Pd">M src/events/index.ts</span><span class="fd" data-page-node-id="ee47dgWG01rUcyJTo9xrJz">+2 −0</span></div>
+                <div class="file-row" data-page-node-id="WAPgxwXpeOA3yam9BlIsUo"><span class="fp" data-page-node-id="eWP0qQ0rIP6BDnfnwFHRG8">M src/renderer/app.js</span><span class="fd" data-page-node-id="FxzyPoG4LRBcU9eCeIzL2G">+1 −1</span></div>
+                <div class="sec-title" data-page-node-id="VW6PSkghmQYGxhox0wqfez">diff · bus.ts</div>
+                <div class="diff" data-page-node-id="2pjIlVaknhec3HSCZKIUad">
+                  <div class="dl hunk" data-page-node-id="ywFPJ7CHShwly4Wp00hmEG">@@ -85,7 +85,7 @@</div>
+                  <div class="dl del" data-page-node-id="mvFAvm9xyuILj4HhlnCHu6">-  for (const fn of subs) fn(payload);</div>
+                  <div class="dl add" data-page-node-id="vkvYi2ShZvhxdlYCj2GxkD">+  for (const fn of subs) queueMicrotask(() =&gt; fn(payload));</div>
+                  <div class="dl" data-page-node-id="N4LhufiHs5U4jiRL87WPDZ">   return subs.length;</div>
+                </div>
+              </div>
+              <div class="dw-view" data-view-panel="terminal" hidden data-page-node-id="fS0GAEBITv8zTvPHuPaXDn">
+                <div class="sec-title" data-page-node-id="XqikixBBaUrfSXwuTLHxLe">sandbox · zsh</div>
+                <div class="term" style="background:var(--term-bg)" data-page-node-id="cgu0fPSOCm9ClxlfvKG6Ju"><span class="p" data-page-node-id="6HPC9vq2IUu7y2M2EzKyut">❯</span> pnpm vitest run events
+ FAIL  src/events/bus.test.ts &gt; emit 顺序
+ <span class="p" data-page-node-id="y4UxXtPPX9WXMmYSJsOHYU">Tests</span>  1 failed | 12 passed
+<span class="p" data-page-node-id="pOrtNx8gghpBgHWHpcvufG">❯</span> </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <!-- 底栏：三项常驻 -->
+        <footer class="statusbar" id="statusbar-S1" role="status" aria-label="状态栏" data-page-node-id="bKneCpwJnpGJDXotQexQQm">
+          <span class="sb-item" data-page-node-id="XSfM6DtNIAZmqpMEYnlyUb"><span class="st-dot" data-st="run" data-sb-dot data-page-node-id="esi6DOMBKtg5IVDN7K1Ti0">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="RxuViiBWVBsC2o09mJbaFC">
+              <circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none" data-page-node-id="tvafrXkyDIWtf6AciN2rst"/>
+              <circle cx="12" cy="12" r="8.2" fill="none" data-page-node-id="XhoEzlbVA1HD8ZsOc6CxVt"/></svg></span>
+            <span data-page-node-id="GgVMB1ZfGj9MAAeP9wuB9w">沙箱</span><span class="sb-val" data-sb-sandbox data-page-node-id="SPo4rZTD3gYldDCsJmNJdY">ready</span></span>
+          <span class="sb-item" data-page-node-id="52EC6ImlMeyhEvXDj6lUg4"><span data-page-node-id="CAtONNfzj5jmeBpRCjWtz5">事件</span><span class="sb-val" data-sb-events data-page-node-id="NX0tHw1iho3jZPVLI90HQv">128</span></span>
+          <span class="sb-item" data-page-node-id="BPySyNTqOZSrQ05LLjqqnM"><span data-page-node-id="GD7gEALJStW1g9lKqO6tzQ">Tokens</span><span class="sb-val" data-sb-tokens data-page-node-id="4Dk9SYtvfezHAAFGBFvCDe">18&#8202;420</span></span>
+          <span class="sb-spacer" data-page-node-id="VEaNduTx90srOx01A99wP0"></span>
+          <span class="sb-right" data-page-node-id="HAB6Vc1EvhCe1vuDWA9qz2">上下文 files</span>
+        </footer>
+      </div>
+      <div class="toast" data-toast data-page-node-id="NFGMc2IeqqoQcUopep4YJ5"></div>
+    </section>
+  </div>
+
+  <!-- ══════════════════════════ S2 ══════════════════════════ -->
+  <div class="screen-wrap" id="wrap-S2" hidden data-page-node-id="eJgDbG1V9cRjgzE6oqD4lE">
+    <div class="screen-cap" data-page-node-id="tjEAVcmdXc3dimym34ItvY"><b data-page-node-id="SvAucFD6NYob1ogZxrJQep">S2</b> 1024×768 · 中窄档：侧栏收窄 <code data-page-node-id="jXgf91VS1a7Xz1HRizk2Zj">min(252px,208px)</code> · 右板转<b data-page-node-id="M8WVwBmRPtwFGO4OsmD88h">覆盖式 Sheet</b>（遮罩 + Esc + 焦点陷阱）· 主区 816px ≥ 480px · 分隔条隐藏</div>
+    <section class="screen" id="screen-S2" data-vp="1024" aria-label="S2 中窄档" data-page-node-id="CRgoFIVAt2TxbNA2OQjaUl">
+      <div class="app" data-app="S2" data-page-node-id="0DvA7wmbVQ4f5sFcJR8FFA">
+        <header class="titlebar" data-page-node-id="b2PkJYxUH5vFLW5DIixDY4">
+          <div class="tb-spacer" data-page-node-id="NrgtisNhar4hDGFNV9keAp"></div>
+          <span class="tb-title" data-page-node-id="nD6XBddjdRECUZgB44tqAX">重构事件总线</span>
+          <span class="tb-sub" data-page-node-id="81CEBWpMlIhh20ktYaptSi">· main</span>
+          <div class="tb-right" data-page-node-id="y5haDFAatgIDeedJDatN1x">
+            <button class="tb-btn" data-page-node-id="rONjddaG2GFIyhOLpza4vz">模型 claude-3-7</button>
+            <button class="tb-btn" data-drawer-toggle aria-pressed="true" aria-expanded="true" data-page-node-id="o9JToeidd0ElwXW2oGqrmx">上下文</button>
+          </div>
+        </header>
+
+        <div class="shell" data-page-node-id="BFjWoQORUQsLEoAaBCFm9w">
+          <!-- 侧栏（收窄至 208px，文字全部保留） -->
+          <nav class="sidebar" aria-label="会话列表" data-page-node-id="pFqY4HB9MdAOd9RaL5tSMO">
+            <div class="side-head" data-page-node-id="ZaAeP5rzWjOqTIaibPBHKD">
+              <button class="btn-primary" style="width:100%" data-page-node-id="UiTGHuCF5DBnoEY0Jb7m0K">新建会话</button>
+              <div class="side-search" role="search" data-page-node-id="Fx0FcgT9HNyzz2NNgkAGVy">⌕ 搜索会话</div>
+            </div>
+            <div class="side-list" data-page-node-id="WpmdobkfknqGWJ9Uu4FQGm">
+              <div class="grp-label" data-page-node-id="j7CRHa3KttYaLfeVNT5Q37">活跃 <span class="grp-count" data-page-node-id="yqnnbEdzdEUCkIKguxCPV6">3</span></div>
+              <div class="session" data-sid="s1" aria-current="true" tabindex="0" role="button" data-page-node-id="wfLZSjzkNj2tAyfnPYLizG">
+                <span class="st-dot" data-st="run" role="img" aria-label="状态：运行中" data-page-node-id="85DKH3cMdmy4yTxESTiYHL">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="DW0mfPb2rRjv2T0PocML5h">
+                    <circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none" data-page-node-id="iBWlezdzPIRPZGgFfBQuZZ"/>
+                    <circle cx="12" cy="12" r="8.2" fill="none" data-page-node-id="gp121nrqCBLAGASxdxG7YD"/></svg></span>
+                <div class="s-title" style="flex:1" data-page-node-id="E7G2b4M0GsX8PQHhIs4q9t">重构事件总线 EventBus<span class="s-meta" data-page-node-id="UrykL9ESsi0gS3gcbDcpW4">main · 2 分钟前</span></div>
+                <button class="s-more" aria-label="更多" data-page-node-id="WBdcg5fTotpmg7TMAyPh0w">···</button>
+              </div>
+              <div class="session" data-sid="s2" tabindex="0" role="button" data-page-node-id="0hZcBC3Gd0U0b5BXnx2uAE">
+                <span class="st-dot" data-st="wait" role="img" aria-label="状态：等待中" data-page-node-id="r5agqHUn5WYCbxcK0LZ8Yo">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="HUwKJMjg4cf3UXoHOre3Z4">
+                    <circle cx="12" cy="12" r="6.4" fill="none" data-page-node-id="2MsjNJ8Wbxt1uONFhWgNaF"/></svg></span>
+                <div class="s-title" style="flex:1" data-page-node-id="8GGOivnxudM38ngzwpzThW">补文件树虚拟滚动测试<span class="s-meta" data-page-node-id="YTHpdAJ1AYaJggZe0ZaHHD">feat/tree · 1 小时前</span></div>
+                <button class="s-more" aria-label="更多" data-page-node-id="EfAmHOamKAdz0kNsDNNvv1">···</button>
+              </div>
+              <div class="session" data-sid="s3" tabindex="0" role="button" data-page-node-id="E8GccX0T6wPavg9AIsvUoy">
+                <span class="st-dot" data-st="fail" role="img" aria-label="状态：失败" data-page-node-id="5VtB2H6oMC79CiWDOK7iX4">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="BlAyBeUginVHqv0zoFfBDV">
+                    <circle cx="12" cy="12" r="6.6" fill="currentColor" stroke="none" data-page-node-id="pgYB9rtfqQsh9xmStON9yz"/>
+                    <path d="M9.3 9.3 14.7 14.7 M14.7 9.3 9.3 14.7" stroke="var(--st-dot-ink)" stroke-width="1.8" data-page-node-id="GISAHwcp25YJqrZsCIVQwa"/></svg></span>
+                <div class="s-title" style="flex:1" data-page-node-id="S7lsZaEJ8O1aSSDAPfXCLO">修复打包后 preload 路径<span class="s-meta" data-page-node-id="GPlbgaNUOWw1AG2JU3MvM1">fix/preload · 昨天</span></div>
+                <button class="s-more" aria-label="更多" data-page-node-id="G7bs8T1wZTX598WKPgOBt4">···</button>
+              </div>
+              <div class="grp-label" data-page-node-id="HMJ3eUBuFUjjSY6VwSCq4g">归档 <span class="grp-count" data-page-node-id="QBDPJOd6ohcygA6u28e8Q4">3</span></div>
+              <div class="pn" data-page-node-id="DU9SkcG5RH1EBvOkmyDNsY">归档区展开态见 S4</div>
+            </div>
+          </nav>
+
+          <!-- 主区：816px（1024 − 208 − 0 分隔条） -->
+          <main class="main" data-page-node-id="eA5XnYTWzWQ4pUW02cvMCh">
+            <div class="stream" id="stream-S2" data-page-node-id="f19AARrPe9dmiuWWrMWnpA">
+              <div class="stream-inner" data-page-node-id="LxAtBRurCPpDKIYL0NCvHn">
+                <div class="msg user" data-page-node-id="i7eVnYGmLq1RFBgWWbavlw">
+                  <div class="avatar" data-page-node-id="RLc5fRQEOUzdfxEScybUTQ">Z</div>
+                  <div class="body" data-page-node-id="FDzifRcuDRjcuYSv0SA2BI">
+                    <div class="who" data-page-node-id="UZx2NQEygHMv2JcTWcsvcq">你</div>
+                    <p data-page-node-id="hjbTtuDK71oKogYoIjfYEO">把 <code data-page-node-id="u25FDQBdgQdTjBh5DrpedB">EventBus</code> 的同步派发改成交错派发，先给出最小改动面，别动 IPC 层。</p>
+                  </div>
+                </div>
+                <div class="msg" data-page-node-id="BETFNvjP0dAxOi5VLsIzrR">
+                  <div class="avatar" data-page-node-id="FCz3re4DWsMW6JS7RzYV7b">D</div>
+                  <div class="body" data-page-node-id="VNBjAgxbEgqK2nizYBkKbB">
+                    <div class="who" data-page-node-id="iTQP8y5aybIs50F01nflP2">DSH</div>
+                    <div class="bubble" data-page-node-id="76ruYIlIlp71Yjwm2ntHu4"><p data-page-node-id="vDco0pf771euiWkbknBakH">最小改动面是 <code data-page-node-id="W6k3U0uS2xvohe5WTuK5hG">bus.ts</code> 的 <code data-page-node-id="5WDV6NtYPJgAelvgtsq1hq">emit()</code>。中窄档下右板已转为覆盖式 Sheet，主区仍保持 816px，无横向滚动。</p></div>
+                    <div class="card" data-page-node-id="fppQ7INB7iN8aOyoTcl5uJ">
+                      <div class="card-head" data-page-node-id="L1VfY3LqSBH0Gcw3gIJMEu">
+                        <span class="ch-name" data-page-node-id="8JyBYEn3XxUpz0nxJG8hX6">Edit</span>
+                        <span class="ch-path" data-page-node-id="1idXcdemGGF6LRI8YNavja">src/events/bus.ts:88</span>
+                        <span class="ch-right" data-page-node-id="3ZFTASj6OlyPAegqciMWkt"><span class="st-wrap" data-page-node-id="N1BxBTFyo8k3SD3XFYfjXz"><span class="st-dot" data-st="wait" data-page-node-id="DxnUQo1wp5vaSverHSHd9Q">
+                          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="tBoyCGCG5wygb9XelBgOcP">
+                            <circle cx="12" cy="12" r="6.4" fill="none" data-page-node-id="i5v89tGacaLPkWDzDFk14X"/></svg></span><b data-page-node-id="DrFqNAhfXVUQxssG1go1q4">待审批</b></span></span>
+                      </div>
+                      <div class="card-body" data-page-node-id="KHX1v691kCqnDYjMBGcpD1">
+                        <div class="code" data-page-node-id="DMBEt5nmXzl5AtlGWVtvuV"><span class="tok-com" data-page-node-id="NDHIMAqcT146KTosKtkVi6">// 派发改为微任务交错</span>
+-  <span class="tok-kw" data-page-node-id="G60ukbeDxrXrHmDEY4SCZV">for</span> (<span class="tok-kw" data-page-node-id="Pxe2rxVucZcjNGscoyUtE9">const</span> fn <span class="tok-kw" data-page-node-id="cEELOUp6l0sOLSRFEY1fyn">of</span> subs) <span class="tok-fn" data-page-node-id="uqU9azCoQoWQB2s4igECrp">fn</span>(payload);
++  <span class="tok-kw" data-page-node-id="ROJuROD9M4TdBAjPNCE0Da">for</span> (<span class="tok-kw" data-page-node-id="QJZowkxpPMkHMW85UiaFxX">const</span> fn <span class="tok-kw" data-page-node-id="3BKUgNAlJVxpPH0Dg9iLOI">of</span> subs) <span class="tok-fn" data-page-node-id="1ZRrnGjb39ZshyUFOvB88P">queueMicrotask</span>(() =&gt; <span class="tok-fn" data-page-node-id="I5eGjVgzOHtBw2yFTHPdjR">fn</span>(payload));</div>
+                      </div>
+                    </div>
+                    <div class="bubble" data-page-node-id="JHjaStahICjIxm4HFPCQ2t"><p data-page-node-id="74OsccFoOx2CTy6dDG3a8D">1 个用例失败：交错派发改变了顺序语义。要么改断言，要么保留同步路径。你定。</p></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="composer" data-page-node-id="qIVTuFgM7NSNr677RunJV9">
+              <div class="composer-inner" data-page-node-id="0nQtfxgeOlpeffbDNl1NXF">
+                <div class="cbox" data-page-node-id="Z5FDjUYqjR2WqL5VY93G3M">
+                  <textarea rows="2">改成异步断言，顺序敏感的订阅者加 opt-in 同步开关</textarea>
+                  <div class="cbox-foot" data-page-node-id="WbHj00lQq8G7UYtGlAHg0L"><span data-page-node-id="m2PLc8dLzSoEnq7bvj2Yte">⌘↵ 发送</span><span data-page-node-id="qVjfjcmCefcIxQMPTWb1kA">·</span><span data-page-node-id="raMpaRRGDUDXTDNqwGQJy0">沙箱内改写</span><span class="sp" data-page-node-id="hnp3PCko1TmeBbGSvdF9DE"></span>
+                    <button class="btn-primary" data-page-node-id="a9TuBG3lwzFfQKOdIIrY2f">发送</button></div>
+                </div>
+              </div>
+            </div>
+          </main>
+
+          <!-- 遮罩：仅 ≤1279 生效，层级 30（低于 Sheet 40，高于内容 6） -->
+          <div class="sheet-scrim show" data-scrim aria-hidden="true" data-page-node-id="3fklVBClFM8sZr0IuNN2DI"></div>
+          <div class="gutter" role="separator" aria-orientation="vertical" aria-label="调整右板宽度" data-page-node-id="WBDRA3w5Nm10mKxZ9yO1Ee"></div>
+
+          <!-- 右板：≤1279 转覆盖式 Sheet，初始为打开态以便检视 -->
+          <aside class="drawer open-m" id="drawer-S2" aria-label="上下文" role="dialog" aria-modal="true" data-page-node-id="Ol2ifwSEqUKPyjTxXlr1qC">
+            <div class="dw-head" data-page-node-id="1FEz7jsEeFOVnJbxzEC82x">
+              <div style="display:flex;align-items:center;gap:6px;padding:6px 8px 0" data-page-node-id="ub53hWnSHhbXPSBTOd0xEP">
+                <span class="pn" style="flex:1" data-page-node-id="XUnlHCAe53CDY02dATeImZ">覆盖式 Sheet · Esc / 点遮罩 关闭</span>
+                <button class="tb-btn" data-sheet-close aria-label="关闭上下文面板" data-page-node-id="VA488X2eK4CH5eHxbqhnEj">✕</button>
+              </div>
+              <div class="dw-tabs" role="tablist" aria-label="上下文视图" data-page-node-id="9doB7tKkWOcO6QfbORYT99">
+                <button class="dw-tab" role="tab" data-view="files" aria-selected="true" data-page-node-id="vNDZ2zpZ0opMlHag6zHMCs">files</button>
+                <button class="dw-tab" role="tab" data-view="browser" aria-selected="false" data-page-node-id="AhgrkXUtiF7tVoRqH3EQgR">browser</button>
+                <button class="dw-tab" role="tab" data-view="review" aria-selected="false" data-page-node-id="1qex7dnDF32hp1F2IitLxo">review</button>
+                <button class="dw-tab" role="tab" data-view="git" aria-selected="false" data-page-node-id="IeafUcFD0JJxEv3KQJ5Aka">git</button>
+                <button class="dw-tab" role="tab" data-view="terminal" aria-selected="false" data-page-node-id="YGvXiPfKE8Vuy2FHDwZ28d">terminal</button>
+              </div>
+            </div>
+            <div class="dw-body" data-page-node-id="zg03kuAQVjeI2v8IcIwkx5">
+              <div class="dw-view" data-view-panel="files" data-page-node-id="GfwL2Jz7etGCcJljrKnTg2">
+                <div class="sec-title" data-page-node-id="hu4gMoxOLhOSK0HnD7zgeR">已改动 4</div>
+                <div class="file-row" data-page-node-id="tLgEOKYFv70SdBlBNKqHOl"><span class="fp" data-page-node-id="LsHCImsL1ZFpMxQbeJ6oRN">src/events/bus.ts</span><span class="fd" data-page-node-id="epKe3VOrIqBKk55KvArym9">+12 −3</span></div>
+                <div class="file-row" data-page-node-id="ES6SlAB73B5LrrHOjJXCHT"><span class="fp" data-page-node-id="ujk6kfo8c6hBY5IVvA2oUW">src/events/index.ts</span><span class="fd" data-page-node-id="73Pt4w1vrzwVc0hlTC3i2A">+2 −0</span></div>
+                <div class="file-row" data-page-node-id="0hzJlh1yPffpj8QJJmrE1d"><span class="fp" data-page-node-id="8TDJpNBUG5mix9XUxYkc4q">src/events/bus.test.ts</span><span class="fd" data-page-node-id="RadX5nZFOt9LjRK9xFUJN6">+9 −4</span></div>
+                <div class="file-row" data-page-node-id="aonykhpPgh2Kb0Uc5hHLlV"><span class="fp" data-page-node-id="KCOGaElezLI4AHNlJZSRrL">src/renderer/app.js</span><span class="fd" data-page-node-id="WcuOT5dXUvPoHBz3BqRfjH">+1 −1</span></div>
+                <div class="sec-title" data-page-node-id="tlSiZ3EkYIDE9Vnj0G3uib">工作区</div>
+                <div class="kv" data-page-node-id="GvYoJSVQatozsaA2Nm6qCK"><span class="k" data-page-node-id="oHWMemGZbFdKWmGCFdn6q1">分支</span><span class="v" data-page-node-id="8aMuPmBCvC2JD5syweeGGR">main</span></div>
+                <div class="kv" data-page-node-id="sglqEA1YFp40KOCP4YBaQy"><span class="k" data-page-node-id="4HBzxPHf4pSIAbEgM1zuCj">未提交</span><span class="v" data-page-node-id="Bq2vxs4THRbhGqNxpw3zFq">4</span></div>
+              </div>
+              <div class="dw-view" data-view-panel="browser" hidden data-page-node-id="7KatMT6uOij5Jqu0qgvFQJ">
+                <div class="browser-bar" data-page-node-id="ybXMrsIuWQ8UpTDDu7Drhi">🔒 localhost:5173</div>
+                <div class="browser-mock" data-page-node-id="8jRfF4B2Pmru5BX9tCiyuN">页面预览占位</div>
+              </div>
+              <div class="dw-view" data-view-panel="review" hidden data-page-node-id="Gp2K5xU7mtaZUr6fZfHqBt">
+                <div class="sec-title" data-page-node-id="Keodg4Zj5z6fMZDuFDOeuF">审阅中 2</div>
+                <div class="rev-item" data-page-node-id="VKGJCbNsYsqrf2xEKMqDYN"><span class="st-dot" data-st="wait" data-page-node-id="1tGy1sb9k2uHWIrmD9r8ss">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="EPS5dxD3Ee8YgaFk9aXpmc">
+                    <circle cx="12" cy="12" r="6.4" fill="none" data-page-node-id="TntoKSWhSsuwQRv8PrMsgl"/></svg></span>
+                  <div data-page-node-id="udbWC3KjsTojRJOBy4OkWD"><div data-page-node-id="lsb8e8nQuVvtZesOt1cYCn">emit() 交错化</div><div style="color:var(--muted);font-size:11px" data-page-node-id="gRVGARsXeX9wFJejlmG5yb">bus.ts · 待你确认</div></div></div>
+              </div>
+              <div class="dw-view" data-view-panel="git" hidden data-page-node-id="Rz94OUAiZH0pZDGPc2XnPx">
+                <div class="sec-title" data-page-node-id="rMF53sv88yLbCNFTTPbVao">git status</div>
+                <div class="file-row" data-page-node-id="mDeI0GH5M9WEpGs3ox0zQo"><span class="fp" data-page-node-id="lNcDDWVDvWJn91wf9KoCa0">M src/events/bus.ts</span><span class="fd" data-page-node-id="uVSHweLX6HRSWaznv5LodQ">+12 −3</span></div>
+                <div class="file-row" data-page-node-id="ajERnaWns13BTzdUDtqegU"><span class="fp" data-page-node-id="HKWw6SAlxlHt4zpHNR0w9m">M src/events/index.ts</span><span class="fd" data-page-node-id="DWe99nbGPDeLVy4RBLv3we">+2 −0</span></div>
+                <div class="sec-title" data-page-node-id="65ph7oi7ammbN6Y1wEeLGL">diff · bus.ts</div>
+                <div class="diff" data-page-node-id="uC7CjnpzRaKQKFPSETVBCy">
+                  <div class="dl hunk" data-page-node-id="EPE9v1n3hWuQLPIDQSEaqe">@@ -85,7 +85,7 @@</div>
+                  <div class="dl del" data-page-node-id="UvvygekNJdlPGEvBC7LFxU">-  for (const fn of subs) fn(payload);</div>
+                  <div class="dl add" data-page-node-id="05kiNNFzG3BolBVTR0dHaU">+  for (const fn of subs) queueMicrotask(() =&gt; fn(payload));</div>
+                </div>
+              </div>
+              <div class="dw-view" data-view-panel="terminal" hidden data-page-node-id="mD2fFVBW1NApd3lZAtU3nO">
+                <div class="sec-title" data-page-node-id="kHC8xuhyFiRgWd4WzkGTfv">sandbox · zsh</div>
+                <div class="term" data-page-node-id="7AHyJctMDiBugyOAJLc7hz"><span class="p" data-page-node-id="JLOZ4QcIAEqOZU6gaVtQYi">❯</span> pnpm vitest run events
+ <span class="p" data-page-node-id="BPwNTdh9I1jD2BnJee1VY2">Tests</span>  1 failed | 12 passed
+<span class="p" data-page-node-id="3UVqwR3F13bwcmvZ5vjipr">❯</span> </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <!-- 底栏：三项常驻（≥1280 与 ≤1279 均不消失） -->
+        <footer class="statusbar" id="statusbar-S2" role="status" aria-label="状态栏" data-page-node-id="qFHastFFt7BldpAHH53aZU">
+          <span class="sb-item" data-page-node-id="LCg7xbxuY43JCklMU7iilf"><span class="st-dot" data-st="run" data-sb-dot data-page-node-id="mvyCdGwKjwIygo8pXMEP8F">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="w9wgsjkBuj3HrGgCBy29GM">
+              <circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none" data-page-node-id="pPD02z0SY6caensPYYWo1i"/>
+              <circle cx="12" cy="12" r="8.2" fill="none" data-page-node-id="gRaKz8x9pZld0qZMnt86iO"/></svg></span>
+            <span data-page-node-id="UAj7W8LmlIQh3xbyFrboLo">沙箱</span><span class="sb-val" data-sb-sandbox data-page-node-id="zHTbhdEvnEL6kCBHAYTrHd">ready</span></span>
+          <span class="sb-item" data-page-node-id="cmLMCAl9zPF4IDz8UHBgiA"><span data-page-node-id="wEtLkbFlyDvc6gmo56xBWg">事件</span><span class="sb-val" data-sb-events data-page-node-id="53UyDCUsOdUl38A6Fg1Fvb">128</span></span>
+          <span class="sb-item" data-page-node-id="xj8zLFH4E4WtoBjQUAVTfR"><span data-page-node-id="oA5oRiufbbW4mzR38v6kur">Tokens</span><span class="sb-val" data-sb-tokens data-page-node-id="e0AcElRRaxKGScn0KPsXOF">18&#8202;420</span></span>
+          <span class="sb-spacer" data-page-node-id="eRkfGl4Aad2xvrEW4V5pTN"></span>
+          <span class="sb-right" data-page-node-id="DGmeuQJ6HTCqARQJmw9kJ2">上下文 files</span>
+        </footer>
+      </div>
+      <div class="toast" data-toast data-page-node-id="YObJ4AHbtkwSBFJbaRd4ED"></div>
+    </section>
+  </div>
+  <!-- ══════════════════════════ S4 ══════════════════════════ -->
+  <div class="screen-wrap" id="wrap-S4" hidden data-page-node-id="5froJ9tMkBw6zUdwfTQjGf">
+    <div class="screen-cap" data-page-node-id="ILQuLOOVgGIEzOaDFT7JXQ"><b data-page-node-id="voGIG05JLKM2lTEDtXa2Bs">S4</b> 1280×832 · 归档区：归档行（虚线 + 归档图标 + 恢复/删除）与活跃行<b data-page-node-id="v85bxbS9xb8xa0NfEZRCJ7">可辨</b>；点归档行非按钮区<b data-page-node-id="JK6f4051AXfSOpB3AgWnga">不选中</b>；run 历史为空态占位（button 数 = 0）</div>
+    <section class="screen" id="screen-S4" data-vp="1280" aria-label="S4 归档区" data-page-node-id="FSJLFqwi4mWjEVa81oHRHN">
+      <div class="app" data-app="S4" data-page-node-id="ofW7ygTick8olcLCOPtCYG">
+        <header class="titlebar" data-page-node-id="MLvEn4LoLd0ByIbz9BHxtd">
+          <div class="tb-spacer" data-page-node-id="JMweeOA0CFhrtRIvIU6HsV"></div>
+          <span class="tb-title" data-page-node-id="wjXOt5VIgSoy1b78MTECAj">重构事件总线</span>
+          <span class="tb-sub" data-page-node-id="5rBczktpdD5OU0s8BdLEHd">· 归档区</span>
+          <div class="tb-right" data-page-node-id="Sn71flkFQXWAnPOdhjdEpJ">
+            <button class="tb-btn" data-drawer-toggle aria-pressed="false" data-page-node-id="YDoQ0Q0gNmackirLH1MiA4">上下文</button>
+          </div>
+        </header>
+
+        <div class="shell" data-page-node-id="P2kBIyDTokC0W7aEzLrEyw">
+          <!-- 活跃会话（承载面 surface-3，无描边、无归档图标） -->
+          <nav class="sidebar" aria-label="会话列表" data-page-node-id="ThYPVzo54VFoZ1SYinpV2S">
+            <div class="side-head" data-page-node-id="MnM4zb7FeimpotbXwcXRbc">
+              <button class="btn-primary" style="width:100%" data-page-node-id="7A1u3P3u14zEP39G71M5Bl">新建会话</button>
+              <div class="side-search" role="search" data-page-node-id="SYfojDuQHd5hH9NcjMF48h">⌕ 搜索会话</div>
+            </div>
+            <div class="side-list" data-page-node-id="kncBVoKEXqsGa0e69AB1Re">
+              <div class="grp-label" data-page-node-id="a2iePcu7E92QKduxNUN1v2">活跃 <span class="grp-count" data-page-node-id="KVXm3PuDWjPW8DVB53abqr">2</span></div>
+              <div class="session" data-sid="s1" aria-current="true" tabindex="0" role="button" data-page-node-id="zBpg0MqelqZaZS4PBl5mhM">
+                <span class="st-dot" data-st="run" role="img" aria-label="状态：运行中" data-page-node-id="kHh0qMEOzuYMr9xCS9OroS">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="xhuGckRajOe4NuDCOiiIKy">
+                    <circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none" data-page-node-id="IrP6RmJmkliZn4Mb3D08fq"/>
+                    <circle cx="12" cy="12" r="8.2" fill="none" data-page-node-id="vWVMpgud4bQGlMCzoV04cx"/></svg></span>
+                <div class="s-title" style="flex:1" data-page-node-id="kXzxfCFsPfZ6diSSeZJU9T">重构事件总线 EventBus<span class="s-meta" data-page-node-id="lGYMpWVfNAK7mdKn6v4ob6">main · 2 分钟前</span></div>
+                <button class="s-more" aria-label="更多" data-page-node-id="iknyhgbyviIfFLJ7As5A5U">···</button>
+              </div>
+              <div class="session" data-sid="s2" tabindex="0" role="button" data-page-node-id="3jwyhzEOYXFQBiYinMK40y">
+                <span class="st-dot" data-st="wait" role="img" aria-label="状态：等待中" data-page-node-id="zG7cRXgfyCKki8EmMznx6Q">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="pGoVyygoqGFAt3dmbux30W">
+                    <circle cx="12" cy="12" r="6.4" fill="none" data-page-node-id="2ETdnXPF9MaWkHb6x6u7n3"/></svg></span>
+                <div class="s-title" style="flex:1" data-page-node-id="WGJBcCezXUGImQAcTyZm1o">补文件树虚拟滚动测试<span class="s-meta" data-page-node-id="TQOsAO6vCIalKV8ipzpSHy">feat/tree · 1 小时前</span></div>
+                <button class="s-more" aria-label="更多" data-page-node-id="I52BrvxaAyQLG92W47Ul9M">···</button>
+              </div>
+              <div class="grp-label" data-page-node-id="KAs3LmfgEB99kNLAFQsr52">归档 <span class="grp-count" data-page-node-id="F3qQEfOCHMDDIcWahdkPej">3</span></div>
+              <div class="pn" data-page-node-id="jl9zxAXh0zAJ8m5ZDOkp3i">已归档会话在此分组右侧面板展开</div>
+            </div>
+          </nav>
+
+          <!-- 归档承载面 = --surface（与侧栏 --surface-2/3 不同容器，区分需跨容器成立） -->
+          <main class="main" data-page-node-id="SMSU0K6NyULrbpvAnSmcFN">
+            <div class="arch-panel" id="archPanel" data-page-node-id="br53k0VEFwCFV1R9KcrhRu">
+              <div class="ap-head" data-page-node-id="MA9ZTp2omk3fnLaQSoV2ja">
+                <h2 data-page-node-id="Rn7oNdEpsI6RejHpuK5E23">归档</h2>
+                <span class="ap-count" data-page-node-id="K2zCGVQ7gosXSl6zBLETFQ">3 个会话</span>
+                <span class="ap-live" data-page-node-id="vnnCfJvQtONbZjqjbmyY9f">当前选中：<b data-live-sel data-page-node-id="J0bHJaSiYgbsaG3U06H3ge">重构事件总线 EventBus</b></span>
+              </div>
+
+              <!-- 图例：同一视口内并置，便于直接比对（原型评审用） -->
+              <div class="cmp" data-page-node-id="GGeD62YTQaIZNg8eAkqHS3">
+                <div class="cmp-col" data-page-node-id="pSe3YQ8cZkP47Ztza9nshl">
+                  <div class="cmp-tag" data-page-node-id="QmzAogBPYwDG00WTNSNoDF">活跃行 · <code data-page-node-id="KQb49j0Iw34uYVEyDXWsK7">.session</code></div>
+                  <div class="session cmp-sample" aria-current="true" data-page-node-id="mBqI969fOqAITiLAAKU0lc">
+                    <div class="s-title" style="flex:1" data-page-node-id="YVqGgNJRzpfLoTIDgttwQx">重构事件总线 EventBus<span class="s-meta" data-page-node-id="zBEtnGY2Kst8Rc508m0897">main · 2 分钟前</span></div>
+                  </div>
+                  <ul class="cmp-list" data-page-node-id="qHcG5hUAZWtR4PAiDD2Cq9">
+                    <li data-page-node-id="7KdvHuv8X1ijeClQSBBQBC">无描边</li><li data-page-node-id="aNoom8y1hume47NsHmQk4J">无归档图标</li><li data-page-node-id="QkbM4Bb4o4YEN9YIs5z17o">操作 = 选中 / 更多</li>
+                  </ul>
+                </div>
+                <div class="cmp-col" data-page-node-id="gm08pLnCREg0rccBgCmdri">
+                  <div class="cmp-tag" data-page-node-id="bFo4ZkW6EgUKYMcmRh4BTQ">归档行 · <code data-page-node-id="9af62CrnaveM0OBNQPvH99">.arch-row</code></div>
+                  <div class="arch-row cmp-sample" data-page-node-id="i7Zv9mg25VAc7n7Asrs569">
+                    <span class="ar-ico" aria-hidden="true" data-page-node-id="7TD4KE0Tc4x1xborYVbIdU">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="RxRGtTabNAmZuxsBx3pvGZ">
+                        <path d="M3 7.5h18v3H3z" data-page-node-id="gph8hNq2fERWoHIGuZVoGi"/><path d="M5 10.5h14V20H5z" data-page-node-id="I3mZ2gCBib8oJ2VyCFxfe2"/><path d="M9.5 14h5" data-page-node-id="854r7x5XpBlkE3iX5ps1Px"/>
+                      </svg>
+                    </span>
+                    <div class="ar-main" data-page-node-id="ltDaCDTwtT89lRCoq1RkIC">
+                      <div class="ar-title" data-page-node-id="FtemHz6AvkOmvgRgH8QUBl">归档行示例</div>
+                      <div class="ar-meta" data-page-node-id="f35HpxVUaOniX6z645CiGP">虚线描边 + 归档图标</div>
+                    </div>
+                  </div>
+                  <ul class="cmp-list" data-page-node-id="Dmr3HFzRpEoqIxlhnVtpbB">
+                    <li data-page-node-id="7dqVbqIPpavxucg7ga2rcQ">虚线描边 <code data-page-node-id="kgrEvJ39BlN6UYdVNuFjox">--arch-bd</code></li><li data-page-node-id="wHaaeAG5tVWwtRB8lzwlo7">归档图标</li><li data-page-node-id="tskGSvo1oC90Fyg3KwxL6z">操作 = 恢复 / 删除</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div class="sec-title" style="margin-top:18px" data-page-node-id="ULVlUykYjrJPnNTSNZACOq">已归档 3</div>
+
+              <!-- 归档行 ×3：非按钮区点击不切会话 -->
+              <div class="arch-row" data-archived="true" data-sid="a1" data-page-node-id="qRkKnFWyaduvADOemWIKUc">
+                <span class="ar-ico" aria-hidden="true" data-page-node-id="IywLtOovDPJSJMWFMzmQNb">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="2e7vFwBxKYAVeqxXcZ6XFW">
+                    <path d="M3 7.5h18v3H3z" data-page-node-id="CDpSm6DUWgKDyXFHSQpDch"/><path d="M5 10.5h14V20H5z" data-page-node-id="TUIacfjSJ2DXlCnXqIRsvF"/><path d="M9.5 14h5" data-page-node-id="VpTHKrPYwEDV5S3D6HZVcF"/>
+                  </svg>
+                </span>
+                <div class="ar-main" data-page-node-id="Vrk2fNqmiLKNqYlGs0fulu">
+                  <div class="ar-title" data-page-node-id="Pjz0h6vAyi8uSSqHGt1sbL">迁移 tailwind v3 → v4</div>
+                  <div class="ar-meta" data-page-node-id="yBDczA18n0DI8Hk0vjDJ5V">归档于 2026-09-12 · 12 条消息 · chore/tw4</div>
+                </div>
+                <div class="ar-acts" data-page-node-id="SoxdkvRj5vO7McnWWpDyVX">
+                  <button class="ar-btn" data-arch-act="restore" data-page-node-id="vE3LcKQw2OGDlpr6Hij1gk">恢复</button>
+                  <button class="ar-btn danger" data-arch-act="delete" data-page-node-id="lGu3EHc83lM7oMegPt5xEi">删除</button>
+                </div>
+              </div>
+
+              <div class="arch-row" data-archived="true" data-sid="a2" data-page-node-id="W447Trwhim3clwfV4qQBhq">
+                <span class="ar-ico" aria-hidden="true" data-page-node-id="z1bSypoVFJQHMBpXzlnzLO">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="cqakyHhDAYMUEmmWO8dwHJ">
+                    <path d="M3 7.5h18v3H3z" data-page-node-id="wx2KL6CDqtoMO3vB3vcGKt"/><path d="M5 10.5h14V20H5z" data-page-node-id="ZYb9rRN4lxm5Gr3z08qJBK"/><path d="M9.5 14h5" data-page-node-id="yluvP4jwTWly6YCxvw0QlY"/>
+                  </svg>
+                </span>
+                <div class="ar-main" data-page-node-id="MYHM7BvmwF3qeVTU4HbVei">
+                  <div class="ar-title" data-page-node-id="GKIhb2aO9A6oN1inEl4172">排查 macOS 窗口抖动</div>
+                  <div class="ar-meta" data-page-node-id="fUBrpSFA1nLfUQDs3l9b1h">归档于 2026-09-08 · 31 条消息 · fix/jitter</div>
+                </div>
+                <div class="ar-acts" data-page-node-id="1xADJR8eBrTx3dEZeIHOWx">
+                  <button class="ar-btn" data-arch-act="restore" data-page-node-id="stGUMwSlzVg3lkJf02JHN0">恢复</button>
+                  <button class="ar-btn danger" data-arch-act="delete" data-page-node-id="DGSk3ndqoZlkaFzut500IY">删除</button>
+                </div>
+              </div>
+
+              <div class="arch-row" data-archived="true" data-sid="a3" data-page-node-id="0hSXp6robhHICc9y3iBmdK">
+                <span class="ar-ico" aria-hidden="true" data-page-node-id="TuYPB3nED5iFWxaItOEZ76">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="kJRvO3cUT34YuGas0CD42N">
+                    <path d="M3 7.5h18v3H3z" data-page-node-id="WRRR3O245ChnB1tfwzgqwx"/><path d="M5 10.5h14V20H5z" data-page-node-id="O33UCTC5mlaTfC3LyMvrtD"/><path d="M9.5 14h5" data-page-node-id="EOKzENHSqEXpKJ6AmB1JIM"/>
+                  </svg>
+                </span>
+                <div class="ar-main" data-page-node-id="urRRNFiKZhwvfAkR0vyn5n">
+                  <div class="ar-title" data-page-node-id="sHbNmLRKMjqtzFfEf3NMYO">补 e2e：窗口尺寸四档</div>
+                  <div class="ar-meta" data-page-node-id="ZiPu7ogeBLMSyXYsGRixgR">归档于 2026-09-02 · 8 条消息 · test/breakpoints</div>
+                </div>
+                <div class="ar-acts" data-page-node-id="mavwDEgBl9YbfJshRUse9l">
+                  <button class="ar-btn" data-arch-act="restore" data-page-node-id="GKBsTXXuFBsCJnHHiYaXwI">恢复</button>
+                  <button class="ar-btn danger" data-arch-act="delete" data-page-node-id="HF67WH07PamJEk7pjRE9CP">删除</button>
+                </div>
+              </div>
+
+              <!-- run 历史：GAP-03 硬阻塞 → 只落空态，占位内 button 数 = 0 -->
+              <div class="sec-title" style="margin-top:20px" data-page-node-id="nGy8dY7WzdtSYipWznHlha">run 历史</div>
+              <div class="settings-empty" role="note" aria-live="polite" data-page-node-id="aldczEqDzwKkqeONcJmAyi">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true" data-page-node-id="6oQuEuvbG60Xrj6ey9sAW6">
+                  <circle cx="12" cy="12" r="8.4" data-page-node-id="hhYqI8saS5Pwye7tPafBqX"/><path d="M12 8.2v.2M12 11v4.8" data-page-node-id="Iz5ap8b3OL0QGLk1ifOpv1"/>
+                </svg>
+                <p data-page-node-id="9eK6ccwuAAKQAaD8GJDTFb">暂无 run 历史。内核事件模型 <span class="se-code" data-page-node-id="O5YgXQqOknyqsst3esbifT">src/events/index.ts</span> 未定义 run 维度字段（实测 <span class="se-code" data-page-node-id="D7vlXsCtzLHykeNl3Ae46D">grep -rn -w 'runId'</span> 命中 0），该视图尚未接入数据源。</p>
+                <p style="opacity:.8" data-page-node-id="IkaxdrdwYZH2eAAdXllHDb">此处不提供重试 / 加载更多 / 跳转 run / 刷新等入口——功能未就绪，不做可点占位。</p>
+              </div>
+            </div>
+          </main>
+
+          <div class="gutter" role="separator" aria-orientation="vertical" aria-label="调整右板宽度" data-page-node-id="y1yoCZRcDL7uM1wZ9xTJ4Y"></div>
+          <aside class="drawer" id="drawer-S4" aria-label="上下文" hidden data-page-node-id="v791wa6tVhGJxBcLdTT50O">
+            <div class="dw-head" data-page-node-id="bipSW10P3En20GJqTmVEnK"><div class="dw-tabs" role="tablist" data-page-node-id="pOSHTqTUji48opxnNtFAGs"><button class="dw-tab" aria-selected="true" data-page-node-id="LGWBISGc6aALlgE3HSfDoJ">files</button></div></div>
+            <div class="dw-body" data-page-node-id="6swO55DgZG0N95ow56kg4Q"><div class="pn" data-page-node-id="tmEYtV5nCBQlENM6sYS7sY">S4 聚焦归档区，右板已收起</div></div>
+          </aside>
+        </div>
+
+        <footer class="statusbar" id="statusbar-S4" role="status" aria-label="状态栏" data-page-node-id="92y61LRyC41JBF9vCO2IED">
+          <span class="sb-item" data-page-node-id="91In8yTmvlviU1YpOmarcY"><span class="st-dot" data-st="run" data-sb-dot data-page-node-id="Gx8GzdIdqtoa3OK2Q0fE3e">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="HEOvkTkIqbx2DPrBEzgHBi">
+              <circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none" data-page-node-id="E8NHoaZ3IeJaZdbH8atAEd"/>
+              <circle cx="12" cy="12" r="8.2" fill="none" data-page-node-id="XSXXdPBsMgaeaQh9CBYZq4"/></svg></span>
+            <span data-page-node-id="Wiw2NsaOiL22DLhGik6vDw">沙箱</span><span class="sb-val" data-sb-sandbox data-page-node-id="G8RjmlFGppZDHdx5JkJCSG">ready</span></span>
+          <span class="sb-item" data-page-node-id="MIvBhLbaBaODTeAETasbHz"><span data-page-node-id="Aaw1MunGfrpkI6JucEcNQr">事件</span><span class="sb-val" data-sb-events data-page-node-id="QXN41TnTD0UE76b8JlcsbD">128</span></span>
+          <span class="sb-item" data-page-node-id="DVVECpBsZCVdZ3usOib7Fd"><span data-page-node-id="eCndey5hlz6wUSOfD3KjJw">Tokens</span><span class="sb-val" data-sb-tokens data-page-node-id="3I1oij1HzEcRFAvAsGDcF2">18&#8202;420</span></span>
+          <span class="sb-spacer" data-page-node-id="ssYsE7tfW0Kis8lzMFTTQ9"></span>
+          <span class="sb-right" data-page-node-id="0MIkDtitdu3dAHtsldpCtZ">归档 3</span>
+        </footer>
+      </div>
+      <div class="toast" data-toast data-page-node-id="FIY4ticGxqsOZyJDiCIP0P"></div>
+    </section>
+  </div>
+
+</div>
+
+<!-- ══════════ 原型自评 · 与真机的已知差异（移植前必读） ══════════ -->
+<section class="proto-notes" id="selfReview" data-page-node-id="yDdrqKXzpUIK7Wcb5oSZ4Q">
+  <h2 data-page-node-id="YLRz1FwBw2ztBlhLVe7LDz">原型自评 · 与真机的已知差异（移植前必读）</h2>
+  <ol data-page-node-id="3OZjwtEcK45K2KgG7qSQyo">
+    <li data-page-node-id="QX3djZDntqDs3U2mpgKTzq"><b data-page-node-id="XRcGdgGSIwn2jSbJMhLC2E">A3：右板用 <code data-page-node-id="N5syoovyhvXmf7g6KkDNsD">position:absolute</code> 而非真机的 <code data-page-node-id="ELVKjIRQ2rWUsd0e5LUhnp">fixed</code>。<span class="warn" data-page-node-id="CBdjL0VuDQ0WQzpEImakP4">后果不止"写法不同"</span></b>——
+      ① 门禁断言 A3 判定的是 <code data-page-node-id="cRhDpDQLLfRzvtWBokhuOZ">getComputedStyle(drawer).position === 'fixed'</code>（≤1279）与 <code data-page-node-id="woqGpr1Vz1mATkILJm0CH2">!== 'fixed'</code>（≥1280）。
+      原型里该值恒为 <code data-page-node-id="SEK9gKU19Rf8K6Hk6lGaHb">absolute</code>，<b data-page-node-id="PSyuJAcvmiiFeEmzjTQJ8h">把原型断言原样搬到真机会得到假阴性（永远不等于 fixed）</b>，移植时必须改回 <code data-page-node-id="abFIKA44tyU0AWiH1dhE0L">fixed</code> 再断言。
+      ② <code data-page-node-id="3l1ajQTTCWjG2hZnq9G6Zc">fixed</code> 元素不产生文档滚动溢出，<code data-page-node-id="hiyjOooXSM5zLLywXvJ0k8">absolute</code> 会；原型舞台为此额外加了 <code data-page-node-id="5WNHkboRSwH535wPu3mUuv">overflow:clip</code> 才能让 A1（无横向溢出）通过——
+      <b data-page-node-id="rNFw9ykDMXVNhrs82VR5mK">真机不需要这行，移植时应删掉</b>，否则会掩盖真实的溢出问题。
+      ③ 包含块不同：原型的 <code data-page-node-id="SdlTGkmveaizwjhwad34XG">top:var(--titlebar-h) / bottom:var(--statusbar-h)</code> 相对"舞台"，真机相对"视口"。
+      两者数值恰好一致只是因为舞台与视口等高，<b data-page-node-id="AJ30oYaJwi0C6XuEtFPxGG">属巧合，不可依赖</b>。</li>
+    <li data-page-node-id="47R2j5El80KH2c2FUDm7Gn"><b data-page-node-id="ZlWIw0GDui8L1yGBwjON2K">断点用 <code data-page-node-id="nqDoQj63nI1EJFRFH6NuRd">@container</code> 而非 <code data-page-node-id="Mg56rVySEbZPjx8MsTTlsX">@media</code></b>：为让 S1/S2/S4 三个不同宽度的舞台在同一页面内各自独立响应。
+      真机用 <code data-page-node-id="k3RJXlXH4rJMfnDNqADFZ6">@media</code>，阈值不变（1600 / 1280 / 1279 / 1023）。注意 <code data-page-node-id="Rj4VSsOAP63c39XoeJiYfe">min(var(--drawer-w),88vw)</code> 里的 <code data-page-node-id="3NFgSGeY9yxtXFNR4RsxbU">vw</code>
+      在原型中指浏览器视口而非舞台宽度（被 <code data-page-node-id="BbCxdEzIQlnUVp8uZvZjCv">min()</code> 兜住，实测无影响）。</li>
+    <li data-page-node-id="riNtpIyy7CcSU1QHgSQETA"><b data-page-node-id="Qycca4r2ZkZ2aMla7Jb67K">舞台外框用 <code data-page-node-id="ccLxkuJsLepjLGD1hqMihR">outline</code> 不用 <code data-page-node-id="zBZootpihjO3BXCQK4GAGM">border</code></b>：<code data-page-node-id="88TXDV3TlP0F0blJ64XN5N">border</code> 会吃掉 1px 内容宽，使 1280 舞台的容器宽变成 1278，
+      被 <code data-page-node-id="0PWEEC5hWE3vyaXcis1O0f">@container (max-width:1279px)</code> 误判进中窄档（曾导致 S1/S4 分隔条消失、右板变浮层、横向溢出 340px）。<b data-page-node-id="lnP0KmW2cX0BRmvmEybYwb">仅原型舞台如此，真机无此问题。</b></li>
+    <li data-page-node-id="ieUHT01Evj3BaRIqTXdqN6"><b data-page-node-id="2eMNPA1q12LDENZzsUsWCN">未验项</b>：骨架屏只放静态占位块、未接真实滚动窗口化，D2（骨架与真实节点高度偏差 ≤2px）与 D7（滚动锚点累计异常位移 ≤4px）<b data-page-node-id="1ObeKbBA7FVx1EYWBHUweD">未验</b>；
+      三态"灰度可辨"是结构断言（C2 形状互异），<b data-page-node-id="78CcaoUgVJL0YyDYU4YHTA">未做真截图转灰比对</b>；归档「恢复」只移除本行并联动计数，未真的插回侧栏列表，删除无二次确认。</li>
+  </ol>
+</section>
+
+<script>
+/* 原型交互：切屏 / 主题 / 动效 / 视图切换 / 归档点击守卫 / Sheet */
+(function(){
+  'use strict';
+  var doc = document;
+
+  /* ── 切屏 ── */
+  var btns = doc.querySelectorAll('[data-screen-btn]');
+  function showScreen(id){
+    ['S1','S2','S4'].forEach(function(k){
+      var w = doc.getElementById('wrap-'+k);
+      if (w) w.hidden = (k !== id);
+    });
+    btns.forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.screenBtn === id)); });
+  }
+  btns.forEach(function(b){ b.addEventListener('click', function(){ showScreen(b.dataset.screenBtn); }); });
+
+  /* ── 主题 ── */
+  var themeBtn = doc.getElementById('themeBtn');
+  themeBtn.addEventListener('click', function(){
+    var next = doc.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    doc.documentElement.dataset.theme = next;
+    themeBtn.textContent = '主题：' + next;
+  });
+
+  /* ── 减少动效（与既有 html.reduce-motion 同口径）── */
+  var motionBtn = doc.getElementById('motionBtn');
+  motionBtn.addEventListener('click', function(){
+    var on = doc.documentElement.classList.toggle('reduce-motion');
+    motionBtn.setAttribute('aria-pressed', String(on));
+  });
+
+  /* ── 右板 5 视图切换（每个屏幕独立） ── */
+  doc.querySelectorAll('.dw-tabs').forEach(function(tabs){
+    var root = tabs.closest('.app');
+    tabs.addEventListener('click', function(e){
+      var tab = e.target.closest('.dw-tab');
+      if (!tab) return;
+      tabs.querySelectorAll('.dw-tab').forEach(function(t){ t.setAttribute('aria-selected', String(t === tab)); });
+      root.querySelectorAll('[data-view-panel]').forEach(function(p){
+        p.hidden = (p.dataset.viewPanel !== tab.dataset.view);
+      });
+      var right = root.querySelector('.sb-right');
+      if (right) right.textContent = '上下文 ' + tab.dataset.view;
+    });
+  });
+
+  /* ── 底栏：沙箱三态循环（演示三态形状，非产品功能） ── */
+  var SB_STATES = ['ready','wait','down'];
+  var sbDotSVG = {
+    ready:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">'+
+          '<circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="8.2" fill="none"/></svg>',
+    wait:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">'+
+         '<circle cx="12" cy="12" r="6.4" fill="none"/></svg>',
+    down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">'+
+         '<circle cx="12" cy="12" r="6.6" fill="currentColor" stroke="none"/>'+
+         '<path d="M9.3 9.3 14.7 14.7 M14.7 9.3 9.3 14.7" stroke="var(--st-dot-ink)" stroke-width="1.8"/></svg>'
+  };
+  var sbDataST = {ready:'run', wait:'wait', down:'fail'};
+  var sbIdx = 0;
+  var sbStateBtn = doc.getElementById('sbStateBtn');
+  sbStateBtn.addEventListener('click', function(){
+    sbIdx = (sbIdx + 1) % SB_STATES.length;
+    var s = SB_STATES[sbIdx];
+    sbStateBtn.textContent = '沙箱态：' + s;
+    doc.querySelectorAll('[data-sb-dot]').forEach(function(d){
+      d.dataset.st = sbDataST[s];
+      d.innerHTML = sbDotSVG[s];
+    });
+    doc.querySelectorAll('[data-sb-sandbox]').forEach(function(v){ v.textContent = s; });
+  });
+
+  /* ── 底栏：事件数 ×10（演示 tabular-nums + 固定槽宽不跳动） ── */
+  doc.getElementById('evAddBtn').addEventListener('click', function(){
+    doc.querySelectorAll('[data-sb-events]').forEach(function(v){
+      var n = parseInt(v.textContent.replace(/[^\d]/g,''),10) || 0;
+      v.textContent = String(n * 10);
+    });
+    doc.querySelectorAll('[data-sb-tokens]').forEach(function(v){
+      var n = parseInt(v.textContent.replace(/[^\d]/g,''),10) || 0;
+      // 不加千分位（§3 B4 口径），位数增长由 tabular-nums + 6ch 固定槽吸收
+      v.textContent = String(Math.round(n * 1.7));
+    });
+  });
+
+  /* ── Toast（原型反馈） ── */
+  function toast(el, msg){
+    var t = el.closest('.screen').querySelector('[data-toast]');
+    if (!t) return;
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._tm);
+    t._tm = setTimeout(function(){ t.classList.remove('show'); }, 1800);
+  }
+
+  /* ── 右板开合：≤1279 覆盖式 Sheet（模态：遮罩/Esc/焦点陷阱）；≥1280 普通列 ── */
+  var FOCUSABLE = 'button,[href],input,textarea,select,[tabindex]:not([tabindex="-1"])';
+  function lastFocused(app, v){ app._prevFocus = v; }
+
+  function openSheet(app){
+    var dr = app.querySelector('.drawer'), sc = app.querySelector('[data-scrim]');
+    var tg = app.querySelector('[data-drawer-toggle]');
+    dr.hidden = false; dr.classList.add('open-m');
+    dr.setAttribute('role','dialog'); dr.setAttribute('aria-modal','true');
+    if (sc) sc.classList.add('show');
+    if (tg){ tg.setAttribute('aria-pressed','true'); tg.setAttribute('aria-expanded','true'); }
+    lastFocused(app, doc.activeElement);
+    var f = dr.querySelector(FOCUSABLE);
+    if (f) f.focus();
+  }
+  function closeSheet(app){
+    var dr = app.querySelector('.drawer'), sc = app.querySelector('[data-scrim]');
+    var tg = app.querySelector('[data-drawer-toggle]');
+    dr.classList.remove('open-m');
+    if (sc) sc.classList.remove('show');
+    dr.removeAttribute('aria-modal');
+    if (tg){ tg.setAttribute('aria-pressed','false'); tg.setAttribute('aria-expanded','false'); }
+    if (app._prevFocus && app._prevFocus.focus) app._prevFocus.focus();
+  }
+  function sheetOpen(app){ return !!app.querySelector('.drawer.open-m'); }
+
+  doc.querySelectorAll('[data-drawer-toggle]').forEach(function(tg){
+    tg.addEventListener('click', function(){
+      var app = tg.closest('.app');
+      var screen = tg.closest('.screen');
+      var isSheet = screen.clientWidth < 1280;   // 与 @container stage (max-width:1279px) 同界
+      if (isSheet){
+        if (sheetOpen(app)) closeSheet(app); else openSheet(app);
+      } else {
+        var dr = app.querySelector('.drawer');
+        dr.hidden = !dr.hidden;
+        tg.setAttribute('aria-pressed', String(!dr.hidden));
+      }
+    });
+  });
+
+  doc.querySelectorAll('[data-sheet-close]').forEach(function(b){
+    b.addEventListener('click', function(){ closeSheet(b.closest('.app')); });
+  });
+  doc.querySelectorAll('[data-scrim]').forEach(function(sc){
+    sc.addEventListener('click', function(){ closeSheet(sc.closest('.app')); });
+  });
+
+  doc.addEventListener('keydown', function(e){
+    if (e.key !== 'Escape') return;
+    doc.querySelectorAll('.app').forEach(function(app){
+      if (sheetOpen(app)) closeSheet(app);
+    });
+  });
+
+  /* 焦点陷阱：Sheet 打开时 Tab 只在面板内循环 */
+  doc.addEventListener('keydown', function(e){
+    if (e.key !== 'Tab') return;
+    var app = doc.activeElement && doc.activeElement.closest ? doc.activeElement.closest('.app') : null;
+    if (!app || !sheetOpen(app)) return;
+    var dr = app.querySelector('.drawer');
+    var items = Array.prototype.filter.call(dr.querySelectorAll(FOCUSABLE), function(el){ return el.offsetParent !== null; });
+    if (!items.length) return;
+    var first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && doc.activeElement === first){ e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && doc.activeElement === last){ e.preventDefault(); first.focus(); }
+    else if (!dr.contains(doc.activeElement)){ e.preventDefault(); first.focus(); }
+  });
+
+  /* ── 活跃会话选中（图例里的 .cmp-sample 不参与） ── */
+  doc.querySelectorAll('.side-list .session').forEach(function(row){
+    row.addEventListener('click', function(){
+      var list = row.closest('.side-list');
+      list.querySelectorAll('.session').forEach(function(s){ s.setAttribute('aria-current','false'); });
+      row.setAttribute('aria-current','true');
+      var live = doc.querySelector('[data-live-sel]');
+      if (live) live.textContent = row.querySelector('.s-title').childNodes[0].nodeValue.trim();
+    });
+    row.addEventListener('keydown', function(e){
+      if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); row.click(); }
+    });
+  });
+
+  /* ── 归档行：非按钮区点击不切会话（VIS-06 / E5） ── */
+  doc.querySelectorAll('.arch-row[data-archived]').forEach(function(row){
+    row.addEventListener('click', function(e){
+      var btn = e.target.closest('button');
+      if (!btn){
+        // 非按钮区：明确"不选中"，并给出可验证反馈
+        toast(row, '归档行非按钮区：不切换会话（选中项未变）');
+        return;
+      }
+      var act = btn.dataset.archAct;
+      var title = row.querySelector('.ar-title').textContent.trim();
+      var panel = row.closest('.arch-panel');
+      if (act === 'restore'){
+        row.remove();
+        toast(panel, '已恢复：' + title + ' → 移到侧栏活跃列表');
+        bumpCount(panel, -1);
+      } else if (act === 'delete'){
+        row.remove();
+        toast(panel, '已删除：' + title);
+        bumpCount(panel, -1);
+      }
+      syncArchCount();
+    });
+  });
+
+  function bumpCount(panel, delta){
+    var c = panel.querySelector('.ap-count');
+    if (!c) return;
+    var n = parseInt(c.textContent, 10) || 0;
+    c.textContent = Math.max(0, n + delta) + ' 个会话';
+  }
+  function syncArchCount(){
+    var n = doc.querySelectorAll('#archPanel .arch-row[data-archived]').length;
+    var lbl = doc.querySelectorAll('#wrap-S4 .grp-count');
+    if (lbl.length) lbl[lbl.length - 1].textContent = String(n);
+    var sec = doc.querySelector('#archPanel .sec-title');
+    if (sec) sec.textContent = '已归档 ' + n;
+  }
+})();
+</script>
+</body>
+</html>
