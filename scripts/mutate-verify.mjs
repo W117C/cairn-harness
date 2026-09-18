@@ -51,6 +51,14 @@ const MUTATIONS = [
     ),
     expectFail: "S3-9 回归：gym/index.json 不存在时不算入盘上集合（不掩盖判卷文件消失）",
   },
+  {
+    id: "provider-keys-fail-closed",
+    src: "src/main/provider-keys.ts",
+    test: "tests/provider-keys.test.ts",
+    desc: "safeStorage 不可用时仍装配后端（绕过 fail-closed → 明文退路）",
+    apply: (s) => s.replace("if (!io.isEncryptionAvailable()) return false;", "if (false) return false;"),
+    expectFail: "fail-closed：无后端（safeStorage 不可用）→ 拒存 + 显式错误；任何路径不产生 store 文件",
+  },
 ];
 
 function runTest(testRel) {
@@ -64,8 +72,22 @@ function runTest(testRel) {
   }
 }
 
+/** 被测源文件必须已跟踪且相对 HEAD 零 diff。
+ *  未跟踪文件（M7 在飞等）不进变异表：还原只能靠内存备份，一旦中途崩溃
+ *  无 HEAD 可回滚 —— 违反零相交纪律。这里 fail-closed 拒绝，而不是赌不会崩。 */
+function assertCommittedToHead(srcAbs, rel) {
+  const tracked = execFileSync("git", ["ls-files", "--", rel], { cwd: ROOT, encoding: "utf8" }).trim();
+  if (!tracked) throw new Error(`${rel} 未跟踪（不在 HEAD 里）—— 变异中途崩溃无回滚兜底，拒绝`);
+  try {
+    execFileSync("git", ["diff", "HEAD", "--quiet", "--", rel], { cwd: ROOT });
+  } catch {
+    throw new Error(`${rel} 相对 HEAD 有工作树改动——属在飞改动集，拒绝变异`);
+  }
+}
+
 function verifyEntry(m) {
   const srcAbs = join(ROOT, m.src);
+  assertCommittedToHead(srcAbs, m.src);
   const backup = `${srcAbs}.mutbak`;
   const original = readFileSync(srcAbs, "utf8");
   cpSync(srcAbs, backup);
@@ -121,11 +143,13 @@ const results = entries.map((m) => {
 
 // 强制收尾校验：所有被测源文件必须零 diff（还原失败 = 判红）
 const srcs = [...new Set(entries.map((m) => m.src))];
-const leftover = execFileSync("git", ["diff", "HEAD", "--name-only", "--", ...srcs], {
+// 收尾校验：git diff HEAD 看不见未跟踪文件，必须用 git status --porcelain 才能抓住
+// 「未跟踪文件被改动」和「已跟踪文件相对 HEAD 漂移」两种残留。
+const statusOut = execFileSync("git", ["status", "--porcelain", "--", ...srcs], {
   cwd: ROOT, encoding: "utf8",
 }).trim();
-if (leftover) {
-  console.error(`⚠️ 还原失败，以下源文件残留突变（必须人工检查）：\n${leftover}`);
+if (statusOut) {
+  console.error(`⚠️ 还原失败，以下源文件残留改动（必须人工检查）：\n${statusOut}`);
   process.exit(1);
 }
 const failed = results.filter((r) => !r.ok);
