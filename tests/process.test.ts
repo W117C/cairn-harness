@@ -101,4 +101,35 @@ describe("spawnTracked / killGroup（P1-2）", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   }, 15_000);
+  it("超时后整棵进程树被杀（孙进程不留孤儿、不泄漏）", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "dsh-pg-to-"));
+    const pidFile = join(dir, "grandchild.pid");
+    try {
+      const h = spawnTracked("bash", ["-c", `sleep 30 & echo $! > ${pidFile}; wait`], {
+        cwd: dir,
+        env: sanitizedEnv(),
+        timeoutMs: 400,
+        onTimeout: () => {},
+      });
+      for (let i = 0; i < 60 && !existsSync(pidFile); i++) await new Promise((r) => setTimeout(r, 50));
+      expect(existsSync(pidFile)).toBe(true);
+      const grandchild = Number(readFileSync(pidFile, "utf8").trim());
+      expect(Number.isFinite(grandchild)).toBe(true);
+      // 超时触发后 killGroup 必须收掉孙进程（不依赖 'close'）
+      let alive = true;
+      for (let i = 0; i < 100 && alive; i++) {
+        await new Promise((r) => setTimeout(r, 50));
+        try {
+          process.kill(grandchild, 0);
+        } catch {
+          alive = false;
+        }
+      }
+      expect(alive).toBe(false);
+      h.dispose();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 15_000);
+
 });

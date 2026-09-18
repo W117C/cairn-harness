@@ -205,4 +205,20 @@ describe("verify 配置装载", () => {
     const outcome = await hook.run();
     expect(outcome.ok).toBe(false); // tmpdir 无配置 → fail-closed，但 hook 本身可运行
   });
+  it("verify 配置字段非数组 → fail loud（外部输入不静默放行）", async () => {
+    const dir = join(tmpdir(), `m1b-verify-badarr-${String(Date.now())}`);
+    await mkdir(join(dir, ".agent"), { recursive: true });
+    await writeFile(join(dir, ".agent", "config.json"), JSON.stringify({ verify: { lint: "echo x" } }), "utf8");
+    await expect(loadVerifyConfig(dir)).rejects.toThrow("必须是字符串数组");
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("config.json 坏 JSON → fail loud（ENOENT 才可降级到探测）", async () => {
+    const dir = join(tmpdir(), `m1b-verify-badjson-${String(Date.now())}`);
+    await mkdir(join(dir, ".agent"), { recursive: true });
+    await writeFile(join(dir, ".agent", "config.json"), "{not json", "utf8");
+    await expect(loadVerifyConfig(dir)).rejects.toThrow();
+    await rm(dir, { recursive: true, force: true });
+  });
+
 });
