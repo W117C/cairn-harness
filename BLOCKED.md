@@ -818,3 +818,40 @@ void writeTagsCache(dir, s.f, tags).catch(() => {});   // 即发即忘，未 awa
 - **原「并发工作流边界阻塞：全仓 typecheck」条目已消失**：`scripts/tmp-proto-check.ts`
   现已不存在（且从未被跟踪），`pnpm exec tsc --noEmit` 于 2026-09-18 实测 **0 错**。
   该条记为已结案，不再算未满足项。
+
+### 能力 5 收束闸（auto-verify）：机制已实现且默认关，**开闸前需两项裁决**（2026-09-18）
+
+**落库状态（已提交 `d60dbcc`）**：簇 = `src/agent/loop.ts` `src/agent/verify.ts` `src/events/index.ts`
+`src/main/agent-runner.ts` `src/main/settings.ts` `tests/loop.test.ts`（loop.test.ts 18 条含 9 条新锚点）。
+提交过程值得记：`src/agent/loop.ts` 与 `src/events/index.ts` 当时**同时含另一会话未提交的 `error` 事件
+改动**（`type:"error"` / AbortError 边界 / 未跟踪的 `tests/loop-error-event.test.ts`，且他们的
+`sidechat.ts` 已依赖那个未提交事件类型）。按协调规则「不代提交他人原子单元」不能整文件入库，
+切 hunk 又会造中间不可编译的笔 ⇒ 做法是：**从 HEAD 重建「HEAD + 我只的部分」**，在隔离 worktree 里
+验（tsc 0 错 / 821 绿 / 仅 gated-tools+runner-gates 两条已知 worktree 环境红），再短暂换入主树一笔提交、
+立刻换回对方工作副本；提交后 `git diff` 对该两文件**只剩对方的 ± 行**（实测 `grep -c '^[+-].*autoVerify'` = 0），
+对方在飞内容一字未丢。顺带实测到 **mutate-verify 有同名防线**：
+`src/agent/verify.ts 相对 HEAD 有工作树改动——属在飞改动集，拒绝变异` ⇒ 该门对任何未提交簇必红，
+提交后自解（不是代码回归）。
+
+机制（已测、已接线、缺省关）：`runLoop` 在纯文本收束前，若本 run 写过盘（`write_file`/`edit_file`
+成功）且模型自始至终没自调 `verify`，则补一拍验证，红字落 `verify_result{auto:true,
+callId:"harness-auto-verify"}`。开关三处：`LoopOptions.autoVerify` / `RunOptions.autoVerify` /
+`settings.autoVerify`（+ `RunOverrides` runtime override，同 actionFusion / impactAnalysis 口径）。
+边界已钉：每 run 至多一拍、模型自调即让位、无可验面（`VerifyHook.surface()` 返回 false）整段跳过、
+**surface 探测抛错也不炸 run**（实测踩到过：action-fusion 故意写坏的 `.agent/config.json` 让我的
+探针抛 SyntaxError 直通 `runLoop` 外，已改为捕获 + 告警 + 跳过）。
+
+**裁决 1（注入通道）**：自动拍目前是「证据 only」——红字上时间线，但**模型看不到**，所以不会自动返修。
+原因不是偷懒，是没有合法通道：① 裸 `tool_result` 会让 provider 侧 tool 消息失去前置 `tool_calls` 而 400；
+② 我试过合成一对 `tool_call`/`tool_result`，实测违反 `tests/action-fusion.test.ts` 明写的
+「no extra tool calls」不变量（该能力拥有这条断言，我不改写别人的判据）。
+要「验证失败 → 自动返修」，需要裁一条 **harness→模型** 的合法注入通道（新事件类型？复用 spawn 那种
+「同 callId 两拍 tool_result」先例？还是收束后由 runner 起第二轮并把失败作为显式 harness 轮？）。
+本轮不自行发明跨切面契约。
+
+**裁决 2（开闸判据与成本记账）**：一拍 = 真跑一遍 lint/test。实测证据：默认开时
+`tests/action-fusion.test.ts` 三条红——其中「three fusion attempts do not consume verify attempts」
+数的是 verify 命令的**真实执行次数**（`attempts` 文件 xxxxx→xxxxxx），即「验证执行次数」是那条能力
+已钉的成本不变量。所以默认开闸要么重基线那三条断言（属 action-fusion 表面，我不代改），
+要么给出实测收益证据：**准确率/返工率提升 vs `$/成功任务`**（与本轮另立的战略前提一致：
+harness 的改动只在预算受限 + 长时程下买分数）。留位：渲染层设置项未接（`app.js` 由并发会话持有）。

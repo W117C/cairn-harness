@@ -1195,3 +1195,22 @@
 `withModelBudget(...)` 换回裸 `DEFAULT_COMPACTION_CONFIG` ⇒ 差分测立刻红。
 逐道 exit 0：typecheck、test 85 files/814 passed、compaction-check、providers-check、
 sidechat-check、e2e、ipc:check、memory-check。
+
+## 能力 5 收束闸：写过盘必须留验证证据（机制入库、缺省关，`d60dbcc`）
+
+`verify` 此前只在模型自己调用时才跑（`BASE_SYSTEM` 里那句「修改完成后调用 verify」是纯提示词自觉），
+所以「执行→验证→修正」在自动路径上是空的：写完盘直接纯文本收束 = 零证据交卷。
+现在 `runLoop` 在纯文本收束前查：本 run 有 `write_file`/`edit_file` 成功落盘、且模型自始至终没自调
+verify ⇒ harness 补一拍，红字落 `verify_result{auto:true}`。开关三处（`LoopOptions` / `RunOptions`+
+`RunOverrides` / `settings.autoVerify`）**默认全关**，同 actionFusion / impactAnalysis 口径。
+
+三条实测结论（本轮跑出来的，不是设计时假设）：① 默认开会撞别人已钉的成本不变量
+（action-fusion 用 `attempts` 文件数 verify 的真实执行次数，`xxxxx`→`xxxxxx` 三条红）⇒ 默认关；
+② 合成 `tool_call`/`tool_result` 给模型看失败，违反同文件「no extra tool calls」；裸 `tool_result`
+又必 400 ⇒ 本拍只出证据，自动返修等 harness→模型通道裁决；③ `surface()` 探针在写坏的配置上抛错
+曾直通 `runLoop` 外炸掉整轮 ⇒ 捕获 + 告警 + 跳过，并钉测。
+
+**结构性收获（并发收口的新工具）**：与他人 hunk 混在同一文件时，「从 HEAD 重建只含自己那部分 +
+隔离 worktree 验证 + 主树短暂换入提交再换回」可以既不代提交、又不切 hunk 地干净落库；
+落库后用 `git diff | grep -c '^[+-].*<自己的标识>' = 0` 证明对方内容未被动过。步骤与判据都记在
+BLOCKED 同条里。开闸判据（准确率/返工率 vs `$/成功任务`）与渲染层设置项仍留位。
