@@ -81,3 +81,49 @@ describe("会话列表存储（M1e：JSONL 即会话）", () => {
     expect((await stat(pathOf(root, b))).isFile()).toBe(true);
   });
 });
+
+describe("会话名边界与重命名守卫（补齐：路径穿越与覆盖式重命名）", () => {
+  it("前后空白的名字非法（trim 规则）", () => {
+    expect(isValidSessionName(" ok")).toBe(false);
+    expect(isValidSessionName("ok ")).toBe(false);
+    expect(isValidSessionName("ok")).toBe(true);
+  });
+  it("控制字符 / 点号开头的名字非法", () => {
+    expect(isValidSessionName("a\u0000b")).toBe(false);
+    expect(isValidSessionName(".hidden")).toBe(false);
+    expect(isValidSessionName("..")).toBe(false);
+  });
+  it("deleteSession / readSessionEvents 对非法名字直接拒绝（消息=非法会话名，而非 ENOENT）", async () => {
+    // sessionPath 的闸在碰文件系统之前：拆掉后 " ok" 会走到 rm/readFile 的 ENOENT
+    await expect(deleteSession(root, " ok")).rejects.toThrow("非法会话名");
+    expect(() => readSessionEvents(root, "a/b")).toThrow("非法会话名"); // 同步抛（sessionPath 在 replay 前）
+    expect((await listSessions(root)).length).toBe(0); // 什么也没被碰
+  });
+  it("重命名到「映射成可写路径」的非法名字被拒，原会话不动", async () => {
+    // " 借道" 通过正则但过不了 trim；守卫拆除后会静默重命名成功（不抛错）
+    const a = await createSession(root, "原名");
+    const log = createEventLog(pathOf(root, a));
+    await log.append({ type: "user_message", content: "留" });
+    await expect(renameSession(root, a, " 借道")).rejects.toThrow();
+    const list = await listSessions(root);
+    expect(list.map((x) => x.id)).toEqual(["原名"]);
+    expect((await readSessionEvents(root, "原名")).length).toBe(1);
+  });
+  it("重命名撞名被拒：目标会话内容不被覆盖", async () => {
+    const a = await createSession(root, "A");
+    const b = await createSession(root, "B");
+    const logB = createEventLog(pathOf(root, b));
+    await logB.append({ type: "user_message", content: "B 的内容" });
+    await expect(renameSession(root, a, "B")).rejects.toThrow();
+    const list = await listSessions(root);
+    expect(list.map((x) => x.id).sort()).toEqual(["A", "B"]);
+    expect((await readSessionEvents(root, "B")).length).toBe(1);
+  });
+  it("交互会话不投影 scheduled 徽标（只有首行 session_meta origin=scheduled 才投影）", async () => {
+    const id = await createSession(root, "交互");
+    const log = createEventLog(pathOf(root, id));
+    await log.append({ type: "user_message", content: "hi" });
+    const list = await listSessions(root);
+    expect(list.find((x) => x.id === "交互")?.origin).toBeUndefined();
+  });
+});

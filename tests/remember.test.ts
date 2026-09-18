@@ -159,3 +159,20 @@ describe("remember：卫生与索引（任务5/8）", () => {
     await expect(remember.run({ scope: "project", kind: "memory", topic: "x", content: "x" }, ctx())).rejects.toThrow("type");
   });
 });
+
+describe("remember：根三文件 replace 守卫（补齐）", () => {
+  it("topic 空串/非串由工具层先拦（必带 topic，先于 store 层格式校验）", async () => {
+    const e1 = await remember.run({ scope: "project", kind: "memory", type: "user", topic: "", content: "x" }, ctx()).catch((e: unknown) => e);
+    expect(e1).toBeInstanceOf(MemoryError);
+    expect((e1 as Error).message).toContain("必带 topic");
+    const e2 = await remember.run({ scope: "project", kind: "memory", type: "user", topic: 42, content: "x" } as Record<string, unknown>, ctx()).catch((e: unknown) => e);
+    expect((e2 as Error).message).toContain("必带 topic");
+  });
+  it("根三文件 replace 不命中 → old_content_mismatch，原文不被静默改写", async () => {
+    await remember.run({ scope: "project", kind: "architecture", op: "append", content: "v1" }, ctx());
+    const e = await remember.run({ scope: "project", kind: "architecture", op: "replace", old_content: "不存在", content: "v2" }, ctx()).catch((e: unknown) => e);
+    expect(e).toBeInstanceOf(MemoryError);
+    expect((e as MemoryError).code).toBe("old_content_mismatch");
+    expect(read(join(ws, ".agent", ROOT_FILES.architecture))).toContain("v1"); // 未被改写
+  });
+});
