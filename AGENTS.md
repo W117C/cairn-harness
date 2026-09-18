@@ -78,6 +78,16 @@ React 树仍在磁盘上（`cards/`、`components/`（29 个 shadcn/ui 文件）
   `readInjectSentAt` 的 `waitFor` 超时是**裸抛异常**，直接杀掉 check 进程，B3/B4 根本没跑、
   连 verdict 都没有（信息黑洞）。已修：超时改为返回 null，走既有 `sentAt !== null` 分支以
   delay=-1 失败并打印诊断，后相照常出 verdict——**断言阈值（≤1000ms）一字未改**。
+  **结构性发现：HEAD 自洽性（worktree 对照实测，2026-09-18）**——归档类改动**必须成组提交**，
+  否则单独 checkout HEAD 会坏。当时的断裂链：删 `src/renderer/onboarding.tsx` 时
+  ONBOARDING_GROUPS 的定义被抽进新模块 `src/main/onboarding-groups.ts`（26 行纯数据），
+  但**新模块未跟踪**、**importer 改指未提交**、**react 依赖移除与 .tsx 删除也未同步** ⇒
+  HEAD 三处悬空（tsc 4 错 + 无法 build）。已三提交收口（归档收尾 / 改指 / 补模块）。
+  **教训**：删一个被 commit 代码引用的模块时，必须同提交带上「新定义位置 + 所有 importer 改指 +
+  依赖/构建配置变更」；用 `git worktree add <tmp> HEAD` + `tsc --noEmit` 实测可一次性抓全。
+  ⚠️ **HEAD 仍有 3 个已提交测试失败**（`agents` / `gated-tools` / `runner-gates` 各 1，
+  均为「run_shell/write_file 门接线」类行为断言），在动手前的 `89ef69d` 就已存在——
+  修它们的源码改动属 M7 在飞未提交部分，**不是本轮引入**；工作树里是绿的。
   同轮另一纯卫生修复：`orchestrator.ts:2644` 对 `./memory/inject` 的 `await import` 是无效动态导入
   （该模块同文件 38 行已静态导入，且 inject.ts 不反向依赖 orchestrator，无循环依赖）→ 改用静态绑定，
   消掉构建的 `INEFFECTIVE_DYNAMIC_IMPORT` 告警（typecheck / build / 737 测试 / panels-check 复验全绿）。
