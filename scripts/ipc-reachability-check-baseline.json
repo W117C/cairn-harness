@@ -1,0 +1,25 @@
+{
+  "note": "渲染层未引用的 IPC 通道（门 0 可达性欠账）。只能减不能增：接上 UI 就把条目删掉，新增桥必须同时接 UI。",
+  "orphans": [
+    "agent:card-action",
+    "agent:clarify",
+    "agent:compact",
+    "agent:memory-delete",
+    "agent:provider-info",
+    "agent:provider-key-delete",
+    "agent:provider-key-set",
+    "agent:provider-key-status",
+    "agent:schedule-delete",
+    "agent:schedule-run-now",
+    "agent:schedule-snapshot",
+    "agent:schedule-upsert",
+    "agent:sessions-rename",
+    "agent:sidechat-ask",
+    "agent:sidechat-create",
+    "agent:sidechat-promote",
+    "agent:sidechat-state",
+    "agent:update-check",
+    "agent:update-open",
+    "plugin:decide"
+  ]
+}

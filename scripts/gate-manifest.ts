@@ -14,6 +14,8 @@ export const GATES: readonly string[] = [
   "test",
   "e2e",
   "ipc:check",
+  // 门 0 可达性：IPC 桥两端对齐 + 渲染层可达性棘轮（能力已发货但用户点不到 = 零价值）。
+  "ipc-reachability-check",
   "sandbox:check",
   "build",
   "fork-check",
