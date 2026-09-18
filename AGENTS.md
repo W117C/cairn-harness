@@ -42,9 +42,18 @@ React 树已全量归档（2026-09-17 删 45 个 .tsx/测试 + 移除 react 全�
   （原理：`node-safe-delete-shim.cjs:195` 是「state dir 为空即提前 return」）。**只用于构建/门禁，别拿它做别的删除。**
   鉴别要点：若日志里没有 `B0 Electron 起不来` 也没有探针断言失败、只停在 build，先怀疑这条，别去改探针。
 - **提交前相交检查（2026-09-18 实踩）**：编辑任何已跟踪文件前，先 `git status --short <file>` 或 `git diff HEAD -- <file>`——若它**已在在飞改动集里**（本轮曾把 M7 未提交的 `tests/schedule.test.ts` 误当自己的改动一并提交，致干净 HEAD 悬空：4 条 atomic admission 测试依赖未提交的 scheduler 改动而红）。判据：工作树对 HEAD 有 diff 且该 diff 不是你刚写的 ⇒ 属于别人的原子单元，只追加不改写，或先把 M7 diff 备份再重建。
-- **底栏节点格式契约**（写新门禁前必读）：`#eventCount` 写的是**裸整数**（`String(real.events || 0)`，`app.js:1759-1761`），
+- **底栏节点格式契约**（写新门禁前必读）：`#eventCount` 写的是**裸整数**（`String(displayedEventCount() || 0)`，
+  `app.js` 桥接段 `syncStatusbar`；R1a 起口径 = **当前展示中会话**的事件数——有历史快照取快照行数，
+  否则取本轮 live 投递数；`real.events` 仍是「live 投递计数」，重放不得伪造），
   故 10000 时正好是 `"10000"`，可安全 `includes("10000")`；但 `#tokenTotal` 走 `tokStr()`（`app.js:1754`）**会缩写成 `"1.5k"`**——
   **对 token 计数不要写裸数字断言**，否则是自造假红。
+- **右栏五面板唯一数据源 = `projectPanelData(会话事件, 运行目录)`**（`projections.ts` R1a 段）。
+  渲染层**不得**再挂任何演示常量：原先的 `REVIEW` / 终端 seeds 让真运行时显示「本会话从未碰过的文件 +12 −4」，
+  假象比空白更坏。无数据走 `panelEmptyHTML()` 空态。留位：`WORKSPACES`（上下文芯片的工作区切换器）与
+  `BRANCHES`（权限面板分支列表）仍是演示数据，真化需连 IPC，属 R2 范围。
+- **渲染层预览一律经 vite**（`pnpm dev`，或 `pnpm build` 后开 `out/renderer/index.html`）：
+  `app.js` 现 `import { projectPanelData } from './projections'`（解析到 `.ts`），
+  **直接把 `src/renderer/index.html` 拖进浏览器会因裸 `.ts` 解析失败整模块挂掉**。
 - **panels-check 的 CDP 超时抖动（非代码回归）**：panels-check 是真实 Electron + CDP 探针
   （B1 虚拟化挂载用 `Runtime.evaluate`）。在 `pnpm gates` 全量链路里，它紧接 ~800s 的 test 门，
   宿主高负载下**首次** `Runtime.evaluate` 可能超时（实测：全量链路里 exit=1 + 「DOM 消息节点 0」，

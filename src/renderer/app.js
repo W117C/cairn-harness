@@ -1,4 +1,5 @@
 import { projectHistory, mountHistory } from './history-window.js';
+import { projectPanelData } from './projections';
 /* ============ 图标 ============ */
 const ICONS = {
   pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 3h6l-1 7 3 2.5V15H7v-2.5L10 10Z"/></svg>',
@@ -729,7 +730,6 @@ const WORKSPACES = [
   ]}
 ];
 let currentWs = WORKSPACES[0];
-const currentTree = () => currentWs.tree;
 /* 右栏五面板的唯一数据源：真实桥接层用 projectPanelData(会话事件, 运行目录) 填充。
    缺省为空 = 面板走空态。原先这里挂着审阅与终端两组演示常量，真运行时照样渲染
    「本会话从未碰过的文件 + 假测试输出」——假象比空白更坏，故一并删除
@@ -1725,6 +1725,10 @@ render();
   let openGeneration = 0;
   let pendingHistory = null;
   let historyEvents = null;
+  /* 右栏面板的事件源：会话打开时 = 历史快照，运行中逐条追加（与流内渲染同源） */
+  let panelEvents = [];
+  /** 会改变面板内容的事件类型（工具与编排）；其余事件不触发重绘，避免随 token 抖动。 */
+  const PANEL_DIRTY = { tool_call: 1, tool_result: 1, agent_spawned: 1, agent_status: 1 };
 
   /* ---------- 真实运行目录：与 WORKSPACES 文件树演示数据严格隔离 ---------- */
   const workspaceForm = document.createElement('form');
@@ -1921,11 +1925,23 @@ render();
     return n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
   }
   /* ---------- 底栏同步（VIS-02）：事件数 / token 合计 / 沙箱可用性 ---------- */
+  /** 底栏事件数 = 当前**展示中**会话的事件数：重放口径取快照行数（与左栏 lines 同口径），
+   *  无快照的新会话取本轮 live 投递数。real.events 保持「live 投递计数」语义不变——
+   *  重放不得伪造 live 副作用是 renderer-history-live 锁住的不变量。 */
+  function displayedEventCount() {
+    return historyEvents ? historyEvents.length : real.events;
+  }
   function syncStatusbar() {
     const ec = $('#eventCount');
-    if (ec) ec.textContent = String(real.events || 0);
+    if (ec) ec.textContent = String(displayedEventCount() || 0);
     const tt = $('#tokenTotal');
     if (tt) tt.textContent = tokStr();
+  }
+  /** 右栏面板刷新：数据 = projectPanelData(会话事件, 运行目录)，渲染仍走原型段的 renderSide。
+   *  只在会话打开与面板相关事件到达时刷新（工具/编排事件每轮个位数，不随 token 抖动）。 */
+  function refreshPanels() {
+    panelData = projectPanelData(panelEvents, configuredWorkspace);
+    renderSide();
   }
   async function initSandboxState() {
     const el = $('#sandboxState');
@@ -2417,11 +2433,13 @@ render();
   function showHistory(events) {
     clearTranscript();
     historyEvents = events;
+    panelEvents = events;
     real.usageIn = 0; real.usageOut = 0;
     for (const e of events) {
       if (e.type === 'usage') { real.usageIn += e.inputTokens || 0; real.usageOut += e.outputTokens || 0; }
     }
     syncStatusbar();
+    refreshPanels();
     historyWindow = mountHistory({ container: streamInner, scroller: $('.stream'), rows: projectHistory(events), renderRow: renderHistoryRow });
     scrollStream();
   }
@@ -2434,7 +2452,10 @@ render();
     // A selected background stream can continue an assistant/tool row in the
     // snapshot. Re-project together rather than creating a disconnected live tail.
     if (historyEvents && !real.running) showHistory(historyEvents.concat(e));
-    else renderEvent(e);
+    else {
+      renderEvent(e);
+      if (PANEL_DIRTY[e.type]) { panelEvents = panelEvents.concat([e]); refreshPanels(); }
+    }
   });
 
   /* ---------- 行为覆写：发送 / 会话切换 / 新建 / 删除 / 归档 ---------- */

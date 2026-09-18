@@ -51,6 +51,7 @@ function boot() {
     promptInput: { value: 'send me' }, settingsReady: Promise.resolve(),
     workspaceSaving: false, workspaceDirty: false, workspaceError: '', configuredWorkspace: null,
     activeFileDoc: null, openView: vi.fn(), finalizePending: vi.fn(), appendUser: vi.fn(), ensureAi: vi.fn(),
+    refreshPanels: vi.fn(),
     setRunning: vi.fn(), PERM_MAP: { standard: 'default' }, permMode: { id: 'standard' }, loadSessions: vi.fn(),
   };
   runInNewContext(
@@ -153,6 +154,8 @@ it('history is inert, untruncated and does not increment live event count or rep
     expect(b.context.real).toMatchObject({ usageIn: 7, usageOut: 3, events: 0 });
   }
   expect(b.destroyed).toHaveBeenCalledTimes(1);
+  // 面板刷新是重放的合法副作用（数据换源，不产生 live 行为）；其余 live 副作用必须为零。
+  expect(b.context.refreshPanels).toHaveBeenCalledTimes(2);
   for (const spy of [b.context.toast, b.context.askCard, b.context.setInterval, b.context.setTimeout, b.context.ensureAi, b.context.appendUser]) {
     expect(spy).not.toHaveBeenCalled();
   }
