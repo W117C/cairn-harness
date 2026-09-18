@@ -931,6 +931,30 @@ const MUTATIONS = [
     apply: (s) => s.replace("return probe ? { ...result, assembly: probe.report() } : result;", "return result;"),
     expectFail: "runCase 的 probe 档把装配账带出来（CLI 走的就是这条路，不是只测纯函数）",
   },
+  {
+    id: "probe-ranking-drops-separators",
+    src: "src/agent/gym/probe.ts",
+    test: "tests/gym-probe.test.ts",
+    desc: "拆账漏掉数组分隔符（排行相加 ≠ 工具面总字节 → 「砍掉这条省 1710B」算少一截，决策账目不闭合）",
+    apply: (s) => s.replace("        + (i < n - 1 ? 1 : 0), // 与下一项之间的 \",\"", "        + 0, // 与下一项之间的 \",\""),
+    expectFail: "排行相加恰等于工具 schema 总字节（含括号与逗号，不留结构开销当糊涂账）",
+  },
+  {
+    id: "probe-ranking-sort-reversed",
+    src: "src/agent/gym/probe.ts",
+    test: "tests/gym-probe.test.ts",
+    desc: "排行改成升序（CLI 前三名打成最便宜的三条 → 照着表砍错刀）",
+    apply: (s) => s.replace(".sort((a, b) => b.bytes - a.bytes);", ".sort((a, b) => a.bytes - b.bytes);"),
+    expectFail: "排行相加恰等于工具 schema 总字节（含括号与逗号，不留结构开销当糊涂账）",
+  },
+  {
+    id: "probe-ranking-not-attached",
+    src: "src/agent/gym/probe.ts",
+    test: "tests/gym-probe.test.ts",
+    desc: "报告不带排行（函数正确但没人拿得到 → CLI 那一行永远不打印）",
+    apply: (s) => s.replace("report: () => ({ ...summarizeAssembly(opts.caseId, turns), toolRanking: rankToolSpecs(tools) }),", "report: () => summarizeAssembly(opts.caseId, turns),"),
+    expectFail: "probe 报告带排行；工具面字节的和 = 可缓存前缀里的工具部分",
+  },
 ];
 
 function runTest(testRel) {
