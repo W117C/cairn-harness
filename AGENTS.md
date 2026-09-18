@@ -45,6 +45,11 @@ React 树已全量归档（2026-09-17 删 45 个 .tsx/测试 + 移除 react 全�
 - **底栏节点格式契约**（写新门禁前必读）：`#eventCount` 写的是**裸整数**（`String(real.events || 0)`，`app.js:1759-1761`），
   故 10000 时正好是 `"10000"`，可安全 `includes("10000")`；但 `#tokenTotal` 走 `tokStr()`（`app.js:1754`）**会缩写成 `"1.5k"`**——
   **对 token 计数不要写裸数字断言**，否则是自造假红。
+- **panels-check 的 CDP 超时抖动（非代码回归）**：panels-check 是真实 Electron + CDP 探针
+  （B1 虚拟化挂载用 `Runtime.evaluate`）。在 `pnpm gates` 全量链路里，它紧接 ~800s 的 test 门，
+  宿主高负载下**首次** `Runtime.evaluate` 可能超时（实测：全量链路里 exit=1 + 「DOM 消息节点 0」，
+  同一提交单跑 `pnpm run panels-check` 立即全绿，耗时 33s vs 全量链路 193s）。
+  判读法：日志里若**只有** CDP 超时/节点 0、没有真断言失败 → 单跑复验，绿即抖动，不要改探针。
 - macOS 沙箱规则里的路径必须是 realpath（`/tmp` 实为 `/private/tmp`），否则规则静默失效。
 - shadcn CLI 的 init 不识别 electron-vite 布局（框架检测只认 vite.config.*）：组件用 components.json（style=radix-nova）+ `npx shadcn add <name> -y` 管理；改过生成组件时在文件头加 `// @shadcn-modified`。
 - renderer 的 CSP 是 `style-src 'self' 'unsafe-inline'`：`index.html` 的全部 CSS 是**单个内联 <style> 标签**（dev 与构建产物都内联，产物零独立 CSS 文件），故 unsafe-inline 必须保留。Tailwind 插件与 `tailwindcss`/`@tailwindcss/vite`/`@fontsource-variable/geist` 三个依赖已随 React 归档删除（renderer 无 Tailwind 入口、构建零 CSS 产物，实测确认）。
