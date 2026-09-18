@@ -41,6 +41,24 @@ export interface AssemblyReport {
   totalPromptBytes: number;
   peakPromptBytes: number;
   cacheableBytes: number;
+  /** 工具面逐条字节排行（降序）。和恰等于工具 schema 总字节——数组括号与逗号按位置计入首/末项，
+   *  所以排行相加就是账，不用另算结构开销。 */
+  toolRanking?: Array<{ name: string; bytes: number }>;
+}
+
+/** 工具面按条拆账：砍谁最省，读这张表而不是猜。 */
+export function rankToolSpecs(tools: readonly GlmToolSpec[]): Array<{ name: string; bytes: number }> {
+  const n = tools.length;
+  return tools
+    .map((t, i) => ({
+      name: t.function.name,
+      bytes:
+        utf8(JSON.stringify(t))
+        + (i === 0 ? 1 : 0) // 前导 "["
+        + (i === n - 1 ? 1 : 0) // 结尾 "]"
+        + (i < n - 1 ? 1 : 0), // 与下一项之间的 ","
+    }))
+    .sort((a, b) => b.bytes - a.bytes);
 }
 
 const utf8 = (s: string): number => Buffer.byteLength(s, "utf8");
@@ -155,5 +173,8 @@ export async function probeAssembly(opts: {
     ...(opts.emit ? { emit: opts.emit } : {}),
     transport: createProbeTransport(opts.scriptPath, (t) => { turns.push(t); }),
   });
-  return { provider, report: () => summarizeAssembly(opts.caseId, turns) };
+  return {
+    provider,
+    report: () => ({ ...summarizeAssembly(opts.caseId, turns), toolRanking: rankToolSpecs(tools) }),
+  };
 }

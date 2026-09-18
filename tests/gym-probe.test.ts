@@ -16,6 +16,7 @@ import {
   createProbeTransport,
   diffAssembly,
   probeAssembly,
+  rankToolSpecs,
   summarizeAssembly,
   type AssemblyTurn,
 } from "../src/agent/gym/probe";
@@ -50,6 +51,45 @@ describe("classifyAssembly 分层守恒", () => {
     const noTools = classifyAssembly(1, msgs, []);
     expect(noTools.cacheableBytes).toBeLessThan(withTools.cacheableBytes);
     expect(noTools.promptBytes).toBe(withTools.promptBytes - (withTools.cacheableBytes - noTools.cacheableBytes));
+  });
+});
+
+describe("rankToolSpecs（工具面按条拆账）", () => {
+  const t = (name: string, desc: string): GlmToolSpec => ({
+    type: "function",
+    function: { name, description: desc, parameters: { type: "object", properties: { a: { type: "string" } } } },
+  });
+
+  it("排行相加恰等于工具 schema 总字节（含括号与逗号，不留结构开销当糊涂账）", () => {
+    const tools = [t("one", "x".repeat(300)), t("two", "y".repeat(80)), t("three", "z".repeat(1500))];
+    const ranked = rankToolSpecs(tools);
+    expect(ranked.reduce((n, x) => n + x.bytes, 0)).toBe(Buffer.byteLength(JSON.stringify(tools), "utf8"));
+    expect(ranked.map((x) => x.name)).toEqual(["three", "one", "two"]); // 降序：砍谁最省一眼可见
+  });
+
+  it("单工具与空表都不越界（n=1 只有方括号，无逗号）", () => {
+    const single = [t("only", "d")];
+    expect(rankToolSpecs(single).reduce((n, x) => n + x.bytes, 0)).toBe(Buffer.byteLength(JSON.stringify(single), "utf8"));
+    expect(rankToolSpecs([])).toEqual([]);
+  });
+
+  it("probe 报告带排行；工具面字节的和 = 可缓存前缀里的工具部分", async () => {
+    const dir2 = await mkdtemp(join(tmpdir(), "gym-probe-rank-"));
+    try {
+      const evPath = join(dir2, "events.jsonl");
+      await writeFile(evPath, "", "utf8");
+      const sc = join(dir2, "s.jsonl");
+      await writeFile(sc, JSON.stringify(turn0("done")) + "\n", "utf8");
+      const { provider, report } = await probeAssembly({ caseId: "c", eventsPath: evPath, workspace: dir2, system: "s", scriptPath: sc, map: false });
+      for await (const _e of provider.stream([] as never)) void _e;
+      const r = report();
+      expect(r.toolRanking?.length).toBeGreaterThan(0);
+      const sum = (r.toolRanking ?? []).reduce((n, x) => n + x.bytes, 0);
+      expect(sum).toBeLessThan(r.cacheableBytes + 1); // 工具面 ⊂ 可缓存前缀（另一块是基础提示）
+      expect(r.turns[0].cacheableBytes).toBeGreaterThan(sum);
+    } finally {
+      await rm(dir2, { recursive: true, force: true });
+    }
   });
 });
 

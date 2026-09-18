@@ -83,6 +83,12 @@ for (const entry of entries) {
           + `｜历史 ${String(a.turns.reduce((n, t) => n + t.historyBytes, 0))}B`
           + `｜估算 ${String(a.turns.reduce((n, t) => n + t.estTokens, 0))} tok`,
         );
+        // 工具面按条拆账：砍谁最省读这张表（前三名 + 未列出的合计）
+        if (a.toolRanking && a.toolRanking.length > 0) {
+          const top = a.toolRanking.slice(0, 3).map((x) => `${x.name} ${String(x.bytes)}B`).join("、");
+          const rest = a.toolRanking.slice(3).reduce((n, x) => n + x.bytes, 0);
+          console.log(`  工具面（共 ${String(a.toolRanking.length)} 条）：${top}${rest > 0 ? `｜其余 ${String(a.toolRanking.length - 3)} 条合计 ${String(rest)}B` : ""}`);
+        }
       }
     }
   } finally {
