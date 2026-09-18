@@ -25,6 +25,9 @@ type FakeNode = {
   append: (...nodes: FakeNode[]) => void;
   appendChild: (node: FakeNode) => FakeNode;
   setAttribute: (name: string, value: string) => void;
+  removeAttribute: (name: string) => void;
+  querySelector: (sel: string) => FakeNode | null;
+  querySelectorAll: (sel: string) => FakeNode[];
 };
 
 function fakeEl(tag: string): FakeNode {
@@ -33,6 +36,20 @@ function fakeEl(tag: string): FakeNode {
     append(...nodes: FakeNode[]) { node.children.push(...nodes); },
     appendChild(child: FakeNode) { node.children.push(child); return child; },
     setAttribute(name: string, value: string) { node.attrs[name] = value; },
+    removeAttribute(name: string) { delete node.attrs[name]; },
+    // 只按 class 查——够覆盖渲染器用到的 .msg-body 一类查询；不解析 HTML，故无注入面可测漏。
+    querySelector(sel: string) {
+      const want = sel.replace(/^\./, "");
+      const walk: FakeNode[] = [];
+      flatten(node, walk);
+      return walk.find((n) => n !== node && (n.className || "").split(/\s+/).includes(want)) ?? null;
+    },
+    querySelectorAll(sel: string) {
+      const want = sel.replace(/^\./, "");
+      const walk: FakeNode[] = [];
+      flatten(node, walk);
+      return walk.filter((n) => n !== node && (n.className || "").split(/\s+/).includes(want));
+    },
   };
   return node;
 }
@@ -80,9 +97,8 @@ function boot(options: { running?: boolean } = {}) {
   };
   const wiring = "\nrunControl.isRunning = () => real.running === true;" +
     "\nrunControl.cancel = () => { calls.push('cancel'); };";
-  const replayRow = section("  function renderHistoryRow(row)", "  /* ---------- 会话列表 ---------- */");
   runInNewContext(
-    section("const runControl = {", "promptInput.addEventListener('keydown'") + replayRow + wiring,
+    section("const runControl = {", "promptInput.addEventListener('keydown'") + wiring,
     context,
   );
   return {
@@ -92,16 +108,53 @@ function boot(options: { running?: boolean } = {}) {
     button,
     setRunning(on: boolean) { (context.real as { running: boolean }).running = on; },
     click() { button.listeners.forEach((fn) => fn()); },
-    renderHistoryRow: context.renderHistoryRow as (row: unknown) => FakeNode,
-    errorCardHTML: context.errorCardHTML as (message: string) => string,
+    errorCardNode: context.errorCardNode as (message: string) => FakeNode,
     syncRunButton: context.syncRunButton as () => void,
   };
 }
 
-function projectHistory(events: unknown[]): { kind: string; text: string }[] {
-  const context: Record<string, unknown> = {};
-  runInNewContext(historySource.replace(/^export /gm, ""), context);
-  return (context.projectHistory as (e: unknown[]) => { kind: string; text: string }[])(events);
+/**
+ * R1b B1 后的单一渲染器：live 与 replay 跑同一条 renderEvent。
+ * 本 boot 把「单一渲染器上下文 + 工具/卡片 + renderEvent」三段拼进同一个 VM 脚本，
+ * 于是可以分别以 live / replay 两种 rc 驱动它，并逐字比对产出。
+ */
+function bootRenderer(events: Record<string, unknown>[]) {
+  const streamInner = fakeEl("div");
+  const context: Record<string, unknown> = {
+    document: { createElement: fakeEl },
+    streamInner,
+    historyEvents: events,
+    real: { running: false, usageIn: 0, usageOut: 0, events: 0, runStart: 0, askCards: new Map() },
+    esc: (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"),
+    actionsHTML: () => "",
+    nowTime: () => "00:00",
+    runGrid: () => "",
+    observeMsg: () => {},
+    scrollStream: () => {},
+    toast: () => {},
+    syncStatusbar: () => {},
+    highlightAllDiffs: () => {},
+    finalizePending: () => {},
+    // 切片里含顶层的 #sendBtn 绑定语句，需要一个可绑定的壳
+    $: (sel: string) => (sel === "#sendBtn"
+      ? { addEventListener() {}, setAttribute() {}, title: "", classList: { toggle() {} } }
+      : null),
+    api: {},
+  };
+  runInNewContext(
+    section("const runControl = {", "promptInput.addEventListener('keydown'") + "\n" +
+    section("  function clearTranscript()", "  /* ---------- 会话列表 ---------- */") + "\n" +
+    section("  /* ---------- 工具 / 卡片 ---------- */", "  /* ---------- 审批（"),
+    context,
+  );
+  return {
+    context,
+    streamInner,
+    /** live：直接喂 renderEvent，产出挂进 streamInner。 */
+    renderLive(index: number) { (context.renderEvent as (e: unknown) => void)(events[index]); return streamInner.children.at(-1) as FakeNode; },
+    /** replay：走 buildUnit（重放路径），产出单个 .msg。 */
+    renderReplay(index: number) { return (context.buildUnit as (u: unknown) => FakeNode)({ key: "main|card", kind: "card", ids: [index] }); },
+  };
 }
 
 describe("运行控制一键两用（P0：停止键 + 按值捕获的旧 send）", () => {
@@ -145,49 +198,55 @@ describe("运行控制一键两用（P0：停止键 + 按值捕获的旧 send）
   });
 });
 
-describe("失败可见性（P0）· live 渲染器", () => {
-  it("错误原因逐字呈现，且经转义——不得让模型/服务端文本注入 HTML", () => {
-    const { errorCardHTML } = boot();
-    const html = errorCardHTML('<img src=x onerror="alert(1)">');
-    expect(html).toContain("&lt;img src=x onerror=");
-    expect(html).not.toContain("<img");
+describe("失败可见性（P0）· R1b B1 后是单一渲染器", () => {
+  it("失败卡走纯 DOM 构造：原因原文只进 textContent，不产生任何元素节点", () => {
+    const { errorCardNode } = boot();
+    const flat = flatten(errorCardNode('<img src=x onerror="alert(1)">'));
+    expect(textOf(flat)).toContain('<img src=x onerror="alert(1)">');
+    // 注入面的判据不是「有没有 esc 过」，而是「有没有把文本交给 HTML 解析」——这里零子节点来自字符串。
+    expect(flat.filter((n) => n.tag === "img")).toHaveLength(0);
   });
 
   it("恰好一个恢复动作，并带 role=alert 让读屏播报", () => {
-    const { errorCardHTML } = boot();
-    const html = errorCardHTML("429 insufficient quota");
-    expect(html).toContain('role="alert"');
-    expect(html).toContain("429 insufficient quota");
-    expect(html.match(/err-hint/g)).toHaveLength(1);
+    const { errorCardNode } = boot();
+    const flat = flatten(errorCardNode("429 insufficient quota"));
+    const card = flat[0];
+    expect(card.attrs["role"]).toBe("alert");
+    expect(textOf(flat)).toContain("429 insufficient quota");
+    expect(flat.filter((n) => (n.className || "").split(/\s+/).includes("err-hint"))).toHaveLength(1);
   });
 
-  it("renderEvent 有 error 分支——事件不再被静默丢弃", () => {
+  it("renderEvent 有 error 分支——事件不被静默丢弃", () => {
     expect(source).toMatch(/case ['"]error['"]:/);
   });
-});
 
-describe("失败可见性（P0）· 重放渲染器（两套渲染器，只补 live 等于没修）", () => {
-  it("projectHistory 把 error 投成 error 行，而不是通用「查看记录」桩", () => {
-    const rows = projectHistory([{ type: "error", message: "429 insufficient quota", step: 2 }]);
-    expect(rows).toEqual([{ kind: "error", text: "429 insufficient quota" }]);
+  it("同一 error 事件：live 与 replay 产出逐字相等（两套渲染器时这条必红）", () => {
+    const r = bootRenderer([{ type: "error", message: "connect ETIMEDOUT api.example.com", step: 2 }]);
+    const live = flatten(r.renderLive(0));
+    const replay = flatten(r.renderReplay(0));
+    expect(textOf(replay)).toBe(textOf(live));
+    expect(textOf(replay)).toContain("connect ETIMEDOUT api.example.com");
+    expect(textOf(replay)).toContain("重新发送一次即可重试");
+    // 重放壳仍带 data-history（panels-check 的虚拟化钩子），且不走 <details> 桩。
+    expect(replay[0].dataset["history"]).toBe("");
+    expect(replay.some((n) => n.tag === "details")).toBe(false);
   });
 
-  it("重开行把原因与恢复动作渲染出来，且走 textContent 不经 innerHTML", () => {
-    const { renderHistoryRow } = boot();
-    const node = renderHistoryRow({ kind: "error", text: "connect ETIMEDOUT api.example.com" });
-    const flat = flatten(node);
-    expect(textOf(flat)).toContain("运行失败");
-    expect(textOf(flat)).toContain("connect ETIMEDOUT api.example.com");
-    expect(textOf(flat)).toContain("重新发送一次即可重试");
-    expect(node.dataset.history).toBe("");
-    // 桩的特征是 <details>/<summary>——错误行不得走那条路。
-    expect(flat.some((n) => n.tag === "details")).toBe(false);
+  it("15 类零渲染器事件在两条路都落一张记录卡，不再是「查看记录」桩", () => {
+    const r = bootRenderer([{ type: "agent_status", agent_id: "w-rev", status: "failed", reason: "max_turns" }]);
+    const live = flatten(r.renderLive(0));
+    const replay = flatten(r.renderReplay(0));
+    expect(textOf(replay)).toBe(textOf(live));
+    expect(textOf(live)).toContain("worker 状态");
+    expect(textOf(live)).toContain("w-rev");
+    expect(textOf(live)).not.toContain("查看记录");
   });
 
-  it("live 与重放共用同一句恢复动作（不产生第二事实源）", () => {
-    const { errorCardHTML, renderHistoryRow } = boot();
-    const hint = errorCardHTML("x").match(/err-hint">([^<]+)</)?.[1];
-    expect(hint).toBeTruthy();
-    expect(textOf(flatten(renderHistoryRow({ kind: "error", text: "x" })))).toContain(String(hint));
+  it("第二套渲染器不得回流：桩渲染器与旧分组函数都已不存在", () => {
+    // 判据打在「定义」上，不是「提及」——注释里回顾历史是允许的。
+    expect(source).not.toMatch(/function renderHistoryRow\s*\(/);
+    expect(source).not.toMatch(/function projectHistory\s*\(/);
+    expect(historySource).not.toMatch(/function projectHistory\s*\(/);
+    expect(source).not.toMatch(/renderRow:/);
   });
 });

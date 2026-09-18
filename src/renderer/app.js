@@ -1,4 +1,4 @@
-import { projectHistory, mountHistory } from './history-window.js';
+import { projectUnits, mountHistory } from './history-window.js';
 import { projectPanelData } from './projections';
 /* ============ 图标 ============ */
 const ICONS = {
@@ -1191,15 +1191,28 @@ function syncRunButton() {
   btn.setAttribute('aria-label', stop ? '停止' : '发送');
   btn.title = stop ? '停止运行' : '发送';
 }
-/** 失败卡的恢复动作——live 与重放两条渲染路共用同一句，避免造出第二事实源。 */
+/** 失败卡的恢复动作——live 与重放共用同一条渲染器与同一句提示，不产生第二事实源。 */
 const RUN_ERROR_HINT = '检查设置 → 模型与网络后，重新发送一次即可重试。';
-/** 失败卡：原因逐字呈现（esc 挡注入），恢复动作只给一个。 */
-function errorCardHTML(message) {
-  return '<div class="card err" role="alert">' +
-    '<div class="err-hd">运行失败</div>' +
-    '<div class="err-msg">' + esc(message) + '</div>' +
-    '<div class="err-hint">' + RUN_ERROR_HINT + '</div>' +
-    '</div>';
+/**
+ * 失败卡：纯 DOM 构造（textContent 落文本，绝不经 innerHTML）——
+ * 原因原文可能含服务端/模型回显内容，字符串拼 HTML 只要漏一次 esc 就是注入面。
+ * 恢复动作只给一个（err-hint 唯一）。
+ */
+function errorCardNode(message) {
+  const card = document.createElement('div');
+  card.className = 'card err';
+  card.setAttribute('role', 'alert');
+  const hd = document.createElement('div');
+  hd.className = 'err-hd';
+  hd.textContent = '运行失败';
+  const msg = document.createElement('div');
+  msg.className = 'err-msg';
+  msg.textContent = String(message == null ? '未知错误' : message);
+  const hint = document.createElement('div');
+  hint.className = 'err-hint';
+  hint.textContent = RUN_ERROR_HINT;
+  card.append(hd, msg, hint);
+  return card;
 }
 $('#sendBtn').addEventListener('click', onRunButton);
 promptInput.addEventListener('keydown', (e) => {
@@ -1751,7 +1764,7 @@ render();
   if (!api || typeof api.listSessions !== 'function') return;
 
   const PERM_MAP = { strict: 'read-only', standard: 'default', yolo: 'auto' };
-  const real = { id: null, title: '新会话', running: false, askCards: new Map(), cards: new Map(), usageIn: 0, usageOut: 0, events: 0, runStart: 0, toolGroup: null };
+  const real = { id: null, title: '新会话', running: false, askCards: new Map(), usageIn: 0, usageOut: 0, events: 0, runStart: 0 };
   let historyWindow = null;
   let openGeneration = 0;
   let pendingHistory = null;
@@ -1859,57 +1872,67 @@ render();
       revealObserver.unobserve(m);
       if (m._st) clearInterval(m._st);
     });
-    real.cards.clear();
-    real.toolGroup = null;
+    resetRenderState(liveRender);
     streamInner.innerHTML = '';
   }
-  function renderHistoryRow(row) {
-    const node = document.createElement('div');
-    node.className = 'msg ' + (row.kind === 'user' ? 'user' : 'ai');
-    node.dataset.history = '';
+
+  /* ---------- 单一渲染器上下文（R1b B1）----------
+     live 与 replay 跑**同一条** renderEvent：replay 只是换一个宿主、并把交互与副作用关掉。
+     依据 agent-plan §10.1 第 4 条前半句「对话流是全部卡片的默认宿主」——同一事件流不得有
+     第二套呈现。旧 renderHistoryRow 是第二套：重开会话时 15 类事件全退化成「事件名 + 查看记录」。
+     不变量：一个展示单元恰好产出一个 .msg，卡片与工具组都嵌进它的 .msg-body。 */
+  const liveRender = { host: streamInner, msg: null, msgKind: null, aiClosed: false, cards: new Map(), group: null, replay: false };
+  let rc = liveRender;
+  function resetRenderState(c) { c.msg = null; c.msgKind = null; c.aiClosed = false; c.cards.clear(); c.group = null; }
+  function openMsg(kind) {
+    const m = document.createElement('div');
+    m.className = 'msg ' + kind;
+    if (rc.replay) m.dataset.history = '';
     const body = document.createElement('div');
     body.className = 'msg-body';
-    if (row.kind === 'error') {
-      // 重放必须与 live 渲染同一张失败卡，否则重开会话时刚补的失败可见性又退回「查看记录」桩。
-      const card = document.createElement('div');
-      card.className = 'card err';
-      card.setAttribute('role', 'alert');
-      card.append(
-        historyTextDiv('err-hd', '运行失败'),
-        historyTextDiv('err-msg', row.text),
-        historyTextDiv('err-hint', RUN_ERROR_HINT),
-      );
-      body.appendChild(card);
-      node.appendChild(body);
-      return node;
-    }
-    const text = document.createElement('div');
-    text.className = row.kind === 'user' ? 'bubble' : 'ai-text';
-    text.style.whiteSpace = 'pre-wrap';
-    text.textContent = row.text;
-    body.appendChild(text);
-    if (row.detail !== undefined || row.result !== undefined) {
-      const details = document.createElement('details');
-      const summary = document.createElement('summary');
-      summary.textContent = row.kind === 'tool' ? (row.ok === null ? '执行记录（无结果）' : row.ok ? '执行成功' : '执行失败') : '查看记录';
-      const content = document.createElement('pre');
-      content.className = 'ti-code';
-      content.style.whiteSpace = 'pre-wrap';
-      content.style.overflowWrap = 'anywhere';
-      content.textContent = (row.detail || '') + (row.result != null ? '\n\n输出：\n' + row.result : '');
-      details.append(summary, content);
-      if (row.ok === false) details.open = true;
-      body.appendChild(details);
-    }
-    node.appendChild(body);
-    return node;
+    m.appendChild(body);
+    rc.host.appendChild(m);
+    rc.msg = m; rc.msgKind = kind; rc.aiClosed = false;
+    if (!rc.replay) observeMsg(m);
+    return m;
   }
-  /** 重放侧的纯文本块：textContent 建节点，不经 innerHTML——失败原因可能含服务端回显内容。 */
-  function historyTextDiv(className, text) {
-    const el = document.createElement('div');
-    el.className = className;
-    el.textContent = text;
-    return el;
+  /** 模型正文壳：当前壳是未收束的 ai 消息则续写，否则开新壳（与旧 ensureAi 同语义）。 */
+  function aiTextMsg() {
+    if (rc.msg && rc.msgKind === 'ai' && !rc.aiClosed) return rc.msg;
+    return openMsg('ai');
+  }
+  /** 卡片 / 工具组壳：嵌进当前 ai 消息（旧 lastAiHost 语义），否则另开一条。 */
+  function cardMsg() {
+    if (rc.msg && rc.msgKind === 'ai') return rc.msg;
+    return openMsg('ai');
+  }
+  const msgBody = () => rc.msg.querySelector('.msg-body');
+  /** 重放：把该单元的临时事件喂给同一条 renderEvent，产出单个 .msg。 */
+  function buildUnit(unit) {
+    const frag = document.createElement('div');
+    const prev = rc;
+    rc = { host: frag, msg: null, msgKind: null, aiClosed: false, cards: new Map(), group: null, replay: true };
+    try {
+      for (const i of unit.ids) renderEvent(historyEvents[i]);
+    } finally {
+      rc = prev;
+    }
+    const first = frag.querySelector('.msg');
+    return first || openEmptyHistoryMsg();
+  }
+  /** 单元里没有任何可见产物（理论上不该发生）时的诚实空壳——不静默吞事件。 */
+  function openEmptyHistoryMsg() {
+    const m = document.createElement('div');
+    m.className = 'msg ai';
+    m.dataset.history = '';
+    const body = document.createElement('div');
+    body.className = 'msg-body';
+    const note = document.createElement('div');
+    note.className = 'ai-text dim';
+    note.textContent = '（该事件无可呈现内容）';
+    body.appendChild(note);
+    m.appendChild(body);
+    return m;
   }
 
   /* ---------- 会话列表 ---------- */
@@ -1941,20 +1964,28 @@ render();
 
   /* ---------- 消息流构造（复用原型 DOM 契约，CSS 全兼容） ---------- */
   function appendUser(text) {
-    const d = document.createElement('div');
-    d.className = 'msg user';
-    d.innerHTML = '<div class="msg-body"><div class="msg-meta"></div><div class="bubble"></div><div class="msg-actions"></div></div>';
-    d.querySelector('.bubble').textContent = text;
-    d.querySelector('.msg-actions').innerHTML = actionsHTML('user', nowTime());
-    streamInner.appendChild(d); observeMsg(d); scrollStream(true);  // 用户自己发言：无视上翻锁定
+    const d = openMsg('user');
+    const body = d.querySelector('.msg-body');
+    const meta = document.createElement('div');
+    meta.className = 'msg-meta';
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = text;
+    body.append(meta, bubble);
+    if (!rc.replay) {
+      const acts = document.createElement('div');
+      acts.className = 'msg-actions';
+      acts.innerHTML = actionsHTML('user', nowTime());
+      body.appendChild(acts);
+      scrollStream(true);  // 用户自己发言：无视上翻锁定
+    }
     return d;
   }
   function ensureAi() {
-    let m = streamInner.querySelector('.msg.ai[data-live]');
-    if (m) return m;
-    m = document.createElement('div');
-    m.className = 'msg ai';
-    m.setAttribute('data-live', '');
+    const m = aiTextMsg();
+    if (m._built) return m;
+    m._built = true;
+    if (!rc.replay) m.setAttribute('data-live', '');
     m.innerHTML =
       '<div class="msg-body">' +
         '<div class="think"><button class="think-head" type="button" aria-expanded="false">' +
@@ -1963,7 +1994,8 @@ render();
         '</button><div class="think-body"><p>…</p></div></div>' +
         '<div class="ai-text"><span class="stream-text"></span></div>' +
       '</div>';
-    streamInner.appendChild(m); observeMsg(m); scrollStream();
+    if (rc.replay) return m;
+    observeMsg(m); scrollStream();
     const start = Date.now();
     const t = m.querySelector('.ttimer');
     if (t) {
@@ -2010,27 +2042,32 @@ render();
     }
   }
   function finalizeAi(fullText) {
-    const m = streamInner.querySelector('.msg.ai[data-live]');
-    if (!m) return;
-    real.toolGroup = null; /* 一段话结束 → 之后的工具调用另起一组 */
+    const m = rc.msg;
+    if (!m || m._finalized) return;
+    m._finalized = true;
+    rc.aiClosed = true; /* 一段话结束 → 之后的工具调用另起一组 */
     m.removeAttribute('data-live');
     if (m._st) clearInterval(m._st);
     m.querySelector('.think-head').setAttribute('aria-expanded', 'true');
     m.querySelector('.think').classList.add('expanded');
-    const tt = m.querySelector('.ttimer');
-    if (tt) tt.textContent = Math.max(1, Math.round((Date.now() - real.runStart) / 1000)) + 's';
+    if (!rc.replay) {
+      const tt = m.querySelector('.ttimer');
+      if (tt) tt.textContent = Math.max(1, Math.round((Date.now() - real.runStart) / 1000)) + 's';
+    }
     const st = m.querySelector('.stream-text');
     if (fullText && st) st.textContent = fullText;
-    const secs = real.runStart ? ((Date.now() - real.runStart) / 1000).toFixed(1) + 's' : null;
-    const wrap = document.createElement('div');
-    wrap.className = 'msg-actions';
-    wrap.innerHTML = actionsHTML('ai', nowTime(), secs, tokStr());
-    m.querySelector('.msg-body').appendChild(wrap);
-    scrollStream();
+    if (!rc.replay) {
+      const secs = real.runStart ? ((Date.now() - real.runStart) / 1000).toFixed(1) + 's' : null;
+      const wrap = document.createElement('div');
+      wrap.className = 'msg-actions';
+      wrap.innerHTML = actionsHTML('ai', nowTime(), secs, tokStr());
+      m.querySelector('.msg-body').appendChild(wrap);
+      scrollStream();
+    }
   }
   function finalizePending() {
-    const m = streamInner.querySelector('.msg.ai[data-live]');
-    if (m) finalizeAi(m.querySelector('.stream-text') ? m.querySelector('.stream-text').textContent : '');
+    const m = rc.msg;
+    if (m && m._built && !m._finalized) finalizeAi(m.querySelector('.stream-text') ? m.querySelector('.stream-text').textContent : '');
   }
 
   /* ---------- 工具 / 卡片 ---------- */
@@ -2086,16 +2123,12 @@ render();
     }
     return h + '</div>';
   }
-  /** 与 newCard 同宿主：挂到最后一条 AI 消息体内，没有则退回消息流。 */
-  function lastAiHost() {
-    const lastAi = Array.from(streamInner.querySelectorAll('.msg.ai:not([data-history])')).at(-1);
-    return lastAi && lastAi.isConnected ? lastAi.querySelector('.msg-body') : null;
-  }
+  /** 与 newCard 同宿主：挂到当前单元的 ai 消息体内（旧实现全仓找最后一条 ai，会跨轮串挂）。 */
+  const cardHost = () => { cardMsg(); return msgBody(); };
   const TG_CHEV = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
   /** 取（或新建）当前这轮的工具调用组；连续 tool_call 会复用同一组。 */
   function ensureToolGroup() {
-    if (real.toolGroup && real.toolGroup.isConnected) return real.toolGroup;
-    const host = lastAiHost() || streamInner;
+    if (rc.group && rc.group.isConnected) return rc.group;
     const g = document.createElement('div');
     g.className = 'toolgroup collapsed';
     g.innerHTML =
@@ -2104,8 +2137,8 @@ render();
         '<span class="tg-title">执行过程</span><span class="tg-count">0 项</span>' +
         '<span class="tg-sum"></span>' + TG_CHEV +
       '</button><div class="tg-body"></div>';
-    host.appendChild(g);
-    real.toolGroup = g;
+    cardHost().appendChild(g);
+    rc.group = g;
     return g;
   }
   /** 刷新组头部的次数与成败汇总（不展开也能知道这批调用的整体结果）。 */
@@ -2140,6 +2173,7 @@ render();
         appendUser(e.content || (e.origin ? '（来自 sidechat 提升）' : ''));
         break;
       case 'assistant_message':
+        ensureAi();
         finalizeAi(e.content);
         break;
       case 'assistant_delta': {
@@ -2167,12 +2201,12 @@ render();
           '</div>';
         g.querySelector('.tg-body').appendChild(item);
         updateToolGroup(g);
-        real.cards.set(id, item);
-        scrollStream();
+        rc.cards.set(id, item);
+        if (!rc.replay) scrollStream();
         break;
       }
       case 'tool_result': {
-        const item = real.cards.get(e.callId);
+        const item = rc.cards.get(e.callId);
         if (!item) break;
         const out = String(e.output || '').slice(0, 4000);
         const ok = !!e.ok;
@@ -2205,8 +2239,8 @@ render();
           }
         }
         updateToolGroup(item.closest('.toolgroup'));
-        real.cards.delete(e.callId);
-        scrollStream();
+        rc.cards.delete(e.callId);
+        if (!rc.replay) scrollStream();
         break;
       }
       case 'plan_proposed': {
@@ -2229,25 +2263,32 @@ render();
             '<button class="risk-btn ghost plan-approve" type="button">批准</button>' +
             '<button class="risk-btn ghost plan-reject" type="button">拒绝</button>' +
           '</div>';
-        const lastAi = Array.from(streamInner.querySelectorAll('.msg.ai:not([data-history])')).at(-1);
-        const host = lastAi && lastAi.isConnected ? lastAi.querySelector('.msg-body') : streamInner;
-        host.appendChild(c);
-        c.querySelector('.plan-approve').addEventListener('click', () => {
-          if (api.decidePlan) void api.decidePlan(true);
-          c.querySelector('.tag').textContent = '已批准';
-          const acts = c.querySelector('.plan-acts'); if (acts) acts.remove();
-        });
-        c.querySelector('.plan-reject').addEventListener('click', () => {
-          if (api.decidePlan) void api.decidePlan(false);
-          c.querySelector('.tag').textContent = '已拒绝';
-          const acts = c.querySelector('.plan-acts'); if (acts) acts.remove();
-        });
-        scrollStream();
+        cardHost().appendChild(c);
+        if (rc.replay) {
+          // 重放是只读的：批准/拒绝属交互动作，不重放（与「重放无副作用」不变量一致）。
+          const acts = c.querySelector('.plan-acts');
+          if (acts) acts.remove();
+        } else {
+          c.querySelector('.plan-approve').addEventListener('click', () => {
+            if (api.decidePlan) void api.decidePlan(true);
+            c.querySelector('.tag').textContent = '已批准';
+            const acts = c.querySelector('.plan-acts'); if (acts) acts.remove();
+          });
+          c.querySelector('.plan-reject').addEventListener('click', () => {
+            if (api.decidePlan) void api.decidePlan(false);
+            c.querySelector('.tag').textContent = '已拒绝';
+            const acts = c.querySelector('.plan-acts'); if (acts) acts.remove();
+          });
+          scrollStream();
+        }
         break;
       }
       case 'plan_approved': {
-        const tag = streamInner.querySelector('.msg:not([data-history]) .card .tag, :scope > .card .tag');
-        if (tag) tag.textContent = e.approved ? '已批准' : '已拒绝';
+        const tag = rc.msg ? rc.msg.querySelector('.card .tag') : null;
+        if (tag) { tag.textContent = e.approved ? '已批准' : '已拒绝'; break; }
+        // 决议与方案卡不在同一单元时，落一条独立记录——不静默丢弃用户拍板过的事实。
+        appendRecordCard(cardHost(), e.approved ? '方案已批准' : '方案已拒绝', e);
+        if (!rc.replay) scrollStream();
         break;
       }
       case 'verify_result': {
@@ -2269,32 +2310,81 @@ render();
           '<div class="ti-body"><div class="term">' + (vrows || '<div class="dim">（无输出）</div>') + '</div></div>';
         g.querySelector('.tg-body').appendChild(item);
         updateToolGroup(g);
-        scrollStream();
+        if (!rc.replay) scrollStream();
         break;
       }
       case 'error': {
-        // P0 失败可见：此前 error 类型不存在，模型/网络炸掉时消息流什么都不显示。
+        // P0 失败可见：live 与 replay 走同一条渲染器出同一张卡（旧状：live 有卡、重开退化成桩）。
         finalizePending();
-        const m = document.createElement('div');
-        m.className = 'msg ai';
-        m.innerHTML = '<div class="msg-body">' + errorCardHTML(e.message || '未知错误') + '</div>';
-        streamInner.appendChild(m);
-        observeMsg(m);
-        scrollStream();
+        cardHost().appendChild(errorCardNode(e.message));
+        if (!rc.replay) scrollStream();
+        break;
+      }
+      case 'compaction': {
+        // 压缩此前只有一条瞬态 toast，事后无痕；改为落卡（live 仍保留 toast）。
+        finalizePending();
+        const label = '上下文已压缩 ' + fmtTokens(e.tokens_before) + ' → ' + fmtTokens(e.tokens_after);
+        appendRecordCard(cardHost(), label, e, e.summary || '');
+        if (!rc.replay) { toast('上下文已压缩，可继续'); scrollStream(); }
         break;
       }
       case 'usage':
-        real.usageIn += e.inputTokens || 0;
-        real.usageOut += e.outputTokens || 0;
-        syncStatusbar();
+        if (!rc.replay) {
+          real.usageIn += e.inputTokens || 0;
+          real.usageOut += e.outputTokens || 0;
+          syncStatusbar();
+        }
         break;
-      case 'compaction':
-        toast('上下文已压缩，可继续');
+      default: {
+        /* 15 类事件（agent_* / approval_* / security_report / impact_report / routing_decision /
+           automation_* / card_action / diff_comment / clarify_requested）此前 live 无痕、replay 只有
+           「事件名 + 查看记录」。单一渲染器下两路都落一张记录卡，语义卡由 R2 逐类补。 */
+        finalizePending();
+        appendRecordCard(cardHost(), eventLabel(e), e);
+        if (!rc.replay) scrollStream();
         break;
-      default:
-        /* agent/automation/security 等事件由右侧对应面板承接，主流先静默 */
-        break;
+      }
     }
+  }
+  function fmtTokens(n) {
+    const v = Number(n) || 0;
+    return v >= 1000 ? (v / 1000).toFixed(1) + 'k' : String(v);
+  }
+  /** 事件类型 → 一行中文标签（R2 会把它们升级成各自的语义卡）。 */
+  const EVENT_LABELS = {
+    agent_spawned: '派生 worker', agent_status: 'worker 状态', agent_message: 'worker 消息',
+    agent_result: 'worker 结果', approval_requested: '请求审批', approval_resolved: '审批已决',
+    security_report: '安全报告', impact_report: '影响面报告', routing_decision: '模型路由决策',
+    card_action: '卡片操作', diff_comment: 'diff 评论', clarify_requested: '澄清提问',
+    automation_triggered: '定时任务触发', automation_skipped: '定时任务跳过', automation_completed: '定时任务完成',
+  };
+  function eventLabel(e) {
+    const base = EVENT_LABELS[e.type] || String(e.type);
+    const who = typeof e.agent_id === 'string' && e.agent_id ? ' · ' + e.agent_id : '';
+    const extra = e.type === 'agent_status' && e.status ? ' · ' + e.status : '';
+    return base + who + extra;
+  }
+  /** 通用记录卡：一行标题 + 可展开原文。textContent 建节点，事件内容绝不进 innerHTML。 */
+  function appendRecordCard(host, title, e, detailText) {
+    const c = document.createElement('div');
+    c.className = 'card collapsed';
+    const head = document.createElement('button');
+    head.className = 'card-head';
+    head.type = 'button';
+    head.setAttribute('data-card-toggle', '');
+    head.setAttribute('aria-expanded', 'false');
+    head.textContent = title;
+    const body = document.createElement('div');
+    body.className = 'card-body';
+    const pre = document.createElement('pre');
+    pre.className = 'ti-code';
+    pre.style.whiteSpace = 'pre-wrap';
+    pre.style.overflowWrap = 'anywhere';
+    pre.textContent = detailText !== undefined ? detailText : JSON.stringify(e, null, 2);
+    body.appendChild(pre);
+    c.append(head, body);
+    host.appendChild(c);
+    return c;
   }
 
   /* ---------- 审批（onAsk / onAskDone → 输入框弹出面板 + 流内已决记录） ----------
@@ -2503,7 +2593,7 @@ render();
     }
     syncStatusbar();
     refreshPanels();
-    historyWindow = mountHistory({ container: streamInner, scroller: $('.stream'), rows: projectHistory(events), renderRow: renderHistoryRow });
+    historyWindow = mountHistory({ container: streamInner, scroller: $('.stream'), units: projectUnits(events), renderUnit: buildUnit });
     scrollStream(true);  // 打开/切换会话：落在末尾，不受上翻锁定影响
   }
   api.onEvent(e => {

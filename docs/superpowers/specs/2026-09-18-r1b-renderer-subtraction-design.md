@@ -13,24 +13,27 @@
 
 真机截图实证（`.tmp/ui-diag-2026-09-18/shots/01、05`）：36 事件的会话重开后，流内连续 10 行清一色「查看记录」。
 
-## 1. 基线可判定量（改前，来自 `.tmp/ui-diag-2026-09-18/hook-census.mjs`）
+## 1. 基线与目标（**数字一律引用 `docs/ui-fact-baseline.md` 的 F 编号，本文件不抄数值**）
 
-| 量 | 现值 | 目标 |
+事实面 = `docs/ui-fact-baseline.md`（F1–F20，每条配可复跑命令）。本 spec 曾自抄一份基线，
+其中两项已被该页复跑推翻（内联 SVG 口径、事件类型分母漏 `error`），故整表改为引用，防两处各自漂。
+
+| 量（F 编号） | 现值口径 | R1b 目标 |
 |---|---|---|
-| 渲染器份数 | 2 | **1** |
-| 两条路都无渲染器的事件类型 | 15 / 26 | 不变（R2 处理），但**单一落点** |
-| 空态机制 | 2（`.settings-empty` + R1a 新造的 `panelEmptyHTML`） | **1** |
-| 折叠机制 | 4（`data-tool-toggle` / `data-card-toggle` / `classList.toggle('collapsed')` / `createElement('details')`） | **2** |
-| `history-window.js` 行数 | 115 | 净减（删类型分类与文本携带） |
-| `app.js` 行数 | 2621 | 净减（删 `renderHistoryRow` 桩） |
-| 门禁引用钩子 | 24 条（22 活 + 2 负向） | **22/22 逐条仍可命中** |
+| **F1** 渲染器份数 | 2（`renderEvent` + `renderHistoryRow`） | **1** |
+| **F3** live 与 replay 都无渲染器的类型 | 15 / 分母见 F2 | 本轮不变（R2 归零），但**单一落点** |
+| **F4** 折叠机制 | 4（手写 3 + 原生 `<details>` 1） | **2** |
+| **F5** 空态 | 2 套 / **3 标识符**（`CHAT_EMPTY_HTML` / `showEmptyStream` / `panelEmptyHTML`） | **1 套 / 1 标识符**（B2 范围比原估大一份——`panelEmptyHTML` 是我 R1a 自欠，另两套是既有的） |
+| **F6** diff 着色 | 2 | 本轮不变（R2 一并看） |
+| **F18** 行数 | `app.js` / `index.html` / `history-window.js` | 净减（删 `renderHistoryRow` 桩与 `projectHistory` 的文本携带） |
+| 门禁引用钩子 | 22 条活 + 2 条负向（本 spec §2 白名单） | **22/22 逐条仍可命中** |
 
-测量脚本：`.tmp/ui-diag-2026-09-18/hook-census.mjs`（只读）。两条已知局限，引用本表时须知：
-① SVG 计数原先只匹配 `<svg viewBox="0 0 24 24` 前缀，会漏计（已按 `<svg viewBox>` 全量重测为 106）；
-② 「37 个无引用 id」是**上界，不是可删数**——普查脚本只把 `aria-labelledby` 计入引用，
-漏了 `aria-describedby`（实测 `gutterHintL` 即被 `index.html:1498` 的 `aria-describedby` 引用，属活锚点）。
-抽样复核：`tsFill` / `think-block-1` / `riskCard` / `runStatusLive` 四者全仓零引用，是**真死标记**；
-其中 `#runStatusLive` 是「运行状态」live region 却无人写——归 R2（运行态呈现未接线），不在本轮。
+测量脚本：`.tmp/ui-diag-2026-09-18/hook-census.mjs`（只读，白名单来源）。两条已知局限：
+① 它按 `<svg viewBox` 前缀匹配会漏计（F7 用 `<svg` 全量，以 F7 为准）；
+② 它把 `aria-describedby` 漏算成"无引用"（F8 口径同此局限，故 37 是**上界不是可删数**——
+实测 `gutterHintL` 即被 `index.html:1498` 的 `aria-describedby` 引用）。
+真死标记抽样确认 4 个：`tsFill` / `think-block-1` / `riskCard` / `runStatusLive`；
+其中 `#runStatusLive` 是「运行状态」live region 却无人写——归 R2，不在本轮。
 
 ## 1.1 条文依据（逐条标明管辖范围，防越权引用造新矛盾）
 
@@ -57,7 +60,20 @@
 
 负向探针（必须保持 0 命中，不得"顺手补上"）：`data-m1e-*` / `data-approval-badge` / `data-virtuoso-scroller`。
 
-### 2.1 等待期审计：P0 三条 vs 白名单（2026-09-18，只读）
+### 2.1 白名单的覆盖面边界（重要，越界使用会埋雷）
+
+本白名单**只量渲染层 DOM 选择器**（`#id` / `.class` / `[data-*]`），来源是各 check 脚本里的
+`querySelector*` / `getElementById` / `q()` 提取。**它不覆盖 preload 桥**（`window.agent.*` 调用面）。
+
+⇒ 硬红线：**「不在白名单里」≠「删了安全」**。本轮不得以"该桥无人引用"为理由删除任何
+`window.agent.*` 调用链；若必须动，**三段同删**（`preload/index.ts` 暴露 / `main/index.ts` handler /
+`renderer` 调用点）——只删一段 = 在 `ipc:check` 与 `typecheck` 都看不见的地方留下运行时地雷
+（删调用点不产生类型错误，也不减通道数）。
+
+B1 自查记录（`git diff` 实测）：`api.decidePlan` 两行为**缩进位移**（移入 `else` 分支），
+删除与新增成对出现，**净零删除桥调用** ✓。
+
+### 2.2 等待期审计：P0 三条 vs 白名单（2026-09-18，只读）
 
 P0 三条由并发会话落库（补停止键 / 失败可见性 / 滚动只在距底 100px 内跟随）。逐条对照结论：
 

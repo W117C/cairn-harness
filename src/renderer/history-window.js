@@ -1,39 +1,44 @@
 // Read-only historical projection. Keep data, not detached DOM trees.
-export function projectHistory(events) {
-  const rows = [];
-  const calls = new Map();
-  let pending = null;
-  for (const e of events) {
-    if (e.type === 'assistant_delta') {
-      if (!pending) { pending = { kind: 'ai', text: '' }; rows.push(pending); }
-      pending.text += e.text || '';
-      continue;
+// R1b B1：这里只做「展示单元」分组，不再认识渲染语义、也不再携带文本/JSON——
+// 文本化与建节点统一由 app.js 的单一渲染器完成（依据 agent-plan §10.1 第 4 条前半句
+// 「对话流是全部卡片的默认宿主」：同一事件流不得有第二套呈现）。
+
+/**
+ * 事件流 → 展示单元。unit.ids 是该单元覆盖的事件下标。
+ * 三类单元：user（一条用户消息）/ turn（一段模型正文 + 其后跟随的工具与验证，
+ * 与 live 的「工具组嵌进当前 ai 消息」同构）/ card（其余单事件，各自一条）。
+ * 合并条件：流序上紧邻 + 同 agent 桶 + 同类；且 turn 内的第二条模型消息另起单元
+ * （live 里 assistant_message 会收束正文壳，见 app.js 的 aiTextMsg/finalizeAi）。
+ * worker 子流事件带 agent_id，插在主流事件之间时自成单元，
+ * 不会把主 loop 的工具组从中间劈开。
+ */
+const AI_TEXT_TYPES = new Set(["assistant_message", "assistant_delta"]);
+const TOOL_TYPES = new Set(["tool_call", "tool_result", "verify_result"]);
+
+export function projectUnits(events) {
+  const units = [];
+  events.forEach((e, i) => {
+    if (e.type === "usage" || e.type === "session_meta") return;
+    const agent = typeof e.agent_id === "string" && e.agent_id !== "" ? e.agent_id : "main";
+    const prev = units[units.length - 1];
+    if (e.type === "user_message") {
+      units.push({ key: agent + "|user", kind: "user", ids: [i] });
+      return;
     }
-    if (e.type === 'assistant_message') {
-      if (pending) pending.text = e.content || pending.text;
-      else rows.push({ kind: 'ai', text: e.content || '' });
-      pending = null;
-      continue;
+    if (AI_TEXT_TYPES.has(e.type) || TOOL_TYPES.has(e.type)) {
+      const joinable = prev && prev.kind === "turn" && prev.agent === agent
+        && !(AI_TEXT_TYPES.has(e.type) && prev.textClosed);
+      if (joinable) {
+        prev.ids.push(i);
+        if (e.type === "assistant_message") prev.textClosed = true;
+        return;
+      }
+      units.push({ key: agent + "|turn", kind: "turn", agent, ids: [i], textClosed: e.type === "assistant_message" });
+      return;
     }
-    if (e.type === 'usage' || e.type === 'session_meta') continue;
-    pending = null;
-    if (e.type === 'user_message') rows.push({ kind: 'user', text: e.content || '（来自 sidechat 提升）' });
-    else if (e.type === 'tool_call') {
-      const row = { kind: 'tool', text: String(e.name || 'tool'), detail: JSON.stringify(e.args ?? {}, null, 2), result: null, ok: null };
-      rows.push(row);
-      calls.set(e.id || e.callId, row);
-    } else if (e.type === 'tool_result') {
-      const row = calls.get(e.callId || e.id);
-      if (row) { row.result = String(e.output ?? ''); row.ok = !!e.ok; calls.delete(e.callId || e.id); }
-      else rows.push({ kind: 'record', text: '工具结果', detail: String(e.output ?? '') });
-    } else if (e.type === 'error') {
-      rows.push({ kind: 'error', text: String(e.message || '未知错误') });
-    } else {
-      // Historical records never re-run approval handlers, toasts, or usage accounting.
-      rows.push({ kind: 'record', text: e.type, detail: JSON.stringify(e, null, 2) });
-    }
-  }
-  return rows;
+    units.push({ key: agent + "|card", kind: "card", ids: [i] });
+  });
+  return units.map(({ key, kind, ids }) => ({ key, kind, ids }));
 }
 
 export function windowRange(offsets, top, height, overscan = 500, max = 80) {
@@ -48,7 +53,7 @@ export function windowRange(offsets, top, height, overscan = 500, max = 80) {
   return { start, end: Math.min(n, start + max, locate(top + height + overscan) + 1) };
 }
 
-export function mountHistory({ container, scroller, rows, renderRow }) {
+export function mountHistory({ container, scroller, units, renderUnit }) {
   const doc = container.ownerDocument;
   // Native anchoring competes with our measured-height anchor when recycling rows.
   const previousAnchor = scroller.style.overflowAnchor;
@@ -56,7 +61,7 @@ export function mountHistory({ container, scroller, rows, renderRow }) {
   const spacer = () => { const d = doc.createElement('div'); d.setAttribute('aria-hidden', 'true'); d.style.flexShrink = '0'; return d; };
   const before = spacer(), after = spacer();
   container.append(before, after);
-  const heights = rows.map(() => 120);
+  const heights = units.map(() => 120);
   let offsets = [], mounted = new Map(), frame = 0, disposed = false;
   const rebuild = () => { offsets = [0]; for (const h of heights) offsets.push(offsets[offsets.length - 1] + h); };
   rebuild();
@@ -81,12 +86,12 @@ export function mountHistory({ container, scroller, rows, renderRow }) {
       if (i < range.start || i >= range.end) { observer?.unobserve(node); node.remove(); mounted.delete(i); }
     }
     before.style.height = offsets[range.start] + 'px';
-    after.style.height = (offsets[rows.length] - offsets[range.end]) + 'px';
+    after.style.height = (offsets[units.length] - offsets[range.end]) + 'px';
     let next = after;
     for (let i = range.end - 1; i >= range.start; i--) {
       let node = mounted.get(i);
       if (!node) {
-        node = renderRow(rows[i], i);
+        node = renderUnit(units[i], i);
         node.style.margin = '0 0 12px';
         node.style.flexShrink = '0';
         mounted.set(i, node);
