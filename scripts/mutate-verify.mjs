@@ -52,6 +52,48 @@ const MUTATIONS = [
     expectFail: "S3-9 回归：gym/index.json 不存在时不算入盘上集合（不掩盖判卷文件消失）",
   },
   {
+    id: "secrets-fail-closed",
+    src: "src/agent/plugins/secrets.ts",
+    test: "tests/secrets.test.ts",
+    desc: "safeStorage 不可用时仍装配后端（绕过 fail-closed → 敏感值明文退路）",
+    apply: (s) => s.replace("if (!io.isEncryptionAvailable()) return false;", "if (false) return false;"),
+    expectFail: "fail-closed：无后端 → 拒存 + 显式错误；safeStorage 不可用 → 不装配且拒存",
+  },
+  {
+    id: "secrets-atomic-rename",
+    src: "src/agent/plugins/secrets.ts",
+    test: "tests/secrets.test.ts",
+    desc: "去掉 rename：tmp 写完不落定（崩溃即丢密文）",
+    apply: (s) => s.replace('    await writeFile(tmp, JSON.stringify(store, null, 2) + "\\n", "utf8");\n    await rename(tmp, p);',
+                            '    await writeFile(tmp, JSON.stringify(store, null, 2) + "\\n", "utf8");'),
+    expectFail: "原子写：经 tmp→rename 落盘，成功后无 .tmp 残留",
+  },
+  {
+    id: "secrets-atomic-direct-write",
+    src: "src/agent/plugins/secrets.ts",
+    test: "tests/secrets.test.ts",
+    desc: "tmp+rename 退回裸 writeFile（写中途崩溃截断密文存储）",
+    apply: (s) => s.replace(
+      '  const tmp = p + ".tmp-" + String(process.pid) + "-" + String(Date.now());\n' +
+      '  try {\n' +
+      '    await writeFile(tmp, JSON.stringify(store, null, 2) + "\\n", "utf8");\n' +
+      '    await rename(tmp, p);\n' +
+      '  } catch (err) {\n' +
+      '    await unlink(tmp).catch(() => {});\n' +
+      '    throw err;\n' +
+      '  }',
+      '  await writeFile(p, JSON.stringify(store, null, 2) + "\\n", "utf8");'),
+    expectFail: "原子写：经 tmp→rename 落盘，成功后无 .tmp 残留",
+  },
+  {
+    id: "secrets-tmp-cleanup",
+    src: "src/agent/plugins/secrets.ts",
+    test: "tests/secrets.test.ts",
+    desc: "写失败分支不清理 tmp（残留临时文件堆积）",
+    apply: (s) => s.replace("    await unlink(tmp).catch(() => {});\n", ""),
+    expectFail: "写失败时 tmp 被清理，且不截断既有密文存储",
+  },
+  {
     id: "provider-keys-fail-closed",
     src: "src/main/provider-keys.ts",
     test: "tests/provider-keys.test.ts",

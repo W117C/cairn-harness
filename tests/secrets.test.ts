@@ -8,7 +8,10 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
   return { ...actual, writeFile: vi.fn(actual.writeFile), rename: vi.fn(actual.rename) };
 });
-import { mkdtemp, readFile, readdir, rename, writeFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rename as renameFn, rm, stat, writeFile as writeFileFn } from "node:fs/promises";
+// 工厂把 rename/writeFile 换成了 vi.fn；vi.mocked() 给出 Mock 类型（.mock/.mockImplementation 才有类型）。
+const rename = vi.mocked(renameFn);
+const writeFile = vi.mocked(writeFileFn);
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -107,13 +110,14 @@ describe("插件敏感值（safeStorage）", () => {
     installSafeStorageBackend(makeFakeSafeStorage(), storePath);
     await putPluginSecret("p", "k", SECRET);
     const before = await readFile(storePath, "utf8");
-    // 模拟写中途失败：writeFile 对 tmp 路径抛一次
-    writeFile.mockImplementation(async (p) => {
-      if (String(p).includes(".tmp-")) throw new Error("模拟磁盘满");
-      return await writeFile(p, "", "utf8");
+    // 真实失败点在落定那一步：tmp 已写完，rename 抛（跨设备/权限等）。
+    // 这才走到 catch 的 unlink 清理——失败必须发生在 tmp 创建之后才有分辨力。
+    rename.mockImplementation(async (from) => {
+      if (String(from).includes(".tmp-")) throw new Error("模拟 rename 失败");
+      return await rename(from, storePath);
     });
-    await expect(putPluginSecret("p", "k2", SECRET)).rejects.toThrow("模拟磁盘满");
-    writeFile.mockReset();
+    await expect(putPluginSecret("p", "k2", SECRET)).rejects.toThrow("模拟 rename 失败");
+    rename.mockReset();
     const left = (await readdir(dir)).filter((f) => f.includes(".tmp-"));
     expect(left).toEqual([]); // 失败分支也清理 tmp
     expect(await readFile(storePath, "utf8")).toBe(before); // 旧密文存储未被截断
@@ -124,7 +128,7 @@ describe("插件敏感值（safeStorage）", () => {
     setPluginSecretBackend(null);
     const r = await writePluginUserConfig({
       plugin: "tres-finance",
-      fields: [{ key: "apiKey", label: "API Key", sensitive: true }],
+      fields: [{ key: "apiKey", type: "string", required: true, sensitive: true, hasDefault: false }],
       values: { apiKey: SECRET },
       dir,
     });
@@ -138,8 +142,8 @@ describe("插件敏感值（safeStorage）", () => {
     const r = await writePluginUserConfig({
       plugin: "tres-finance",
       fields: [
-        { key: "apiKey", label: "API Key", sensitive: true },
-        { key: "baseUrl", label: "Base URL", sensitive: false },
+        { key: "apiKey", type: "password", required: true, sensitive: true, hasDefault: false },
+        { key: "baseUrl", type: "string", required: false, sensitive: false, hasDefault: false },
       ],
       values: { apiKey: SECRET, baseUrl: "https://example.test" },
       dir,
