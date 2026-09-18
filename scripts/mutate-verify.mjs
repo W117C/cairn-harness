@@ -841,6 +841,55 @@ const MUTATIONS = [
     apply: (s) => s.replace("...(write !== null ? { cacheWriteInputTokens: write } : {}),", "cacheWriteInputTokens: write ?? 0,"),
     expectFail: "prompt_tokens_details.cached_tokens 透出为 cacheReadInputTokens（inputTokens 保持含缓存口径）",
   },
+  // ---- A1 写侧断点与缓存价（27cadba）----
+  {
+    id: "anthropic-prompt-cache-default-on",
+    src: "src/providers/anthropic.ts",
+    test: "tests/prompt-cache-breakpoints.test.ts",
+    desc: "断点开关缺省变开（未经用户同意就改写请求体形状：system 从整串变块数组，且每次缓存重写多付 25%）",
+    apply: (s) => s.replace("body.system = opts.promptCache === true", "body.system = true"),
+    expectFail: "缺省与显式 false ⇒ system 仍是整串、全站零 cache_control（逐字旧行为）",
+  },
+  {
+    id: "anthropic-breakpoint-on-last-system-block",
+    src: "src/providers/anthropic.ts",
+    test: "tests/prompt-cache-breakpoints.test.ts",
+    desc: "断点从首块挪到末块（把逐轮变化的记忆/地图圈进缓存条目 = 每轮重写一段大前缀，比不打点更贵）",
+    apply: (s) => s.replace("...(i === 0 ? { cache_control: { type: \"ephemeral\" } } : {})", "...(i === systemParts.length - 1 ? { cache_control: { type: \"ephemeral\" } } : {})"),
+    expectFail: "开启 ⇒ 断点只落在静态段：末个 tool + system 首块（易变的记忆/地图留在断点之后）",
+  },
+  {
+    id: "anthropic-breakpoint-on-every-tool",
+    src: "src/providers/anthropic.ts",
+    test: "tests/prompt-cache-breakpoints.test.ts",
+    desc: "每个 tool 都打断点（Anthropic 上限 4 个断点，工具一多直接 400；且重复条目只会多付写价）",
+    apply: (s) => s.replace("...(opts.promptCache === true && i === last ? { cache_control: { type: \"ephemeral\" } } : {}),", "...(opts.promptCache === true ? { cache_control: { type: \"ephemeral\" } } : {}),"),
+    expectFail: "开启 ⇒ 断点只落在静态段：末个 tool + system 首块（易变的记忆/地图留在断点之后）",
+  },
+  {
+    id: "pricing-cache-null-priced-as-zero",
+    src: "src/routing/pricing.ts",
+    test: "tests/prompt-cache-breakpoints.test.ts",
+    desc: "缓存价未标定当成 0（把「不知道多少钱」冒充「命中免费」，bandit 会为了虚假的省钱信号涌向缓存档）",
+    apply: (s) => s.replace("const readRate = p.cacheReadPerMTok ?? p.inputPerMTok;", "const readRate = p.cacheReadPerMTok ?? 0;"),
+    expectFail: "未标定 ⇒ 带缓存分块与不带的成本逐字同值（上界口径，零回归）",
+  },
+  {
+    id: "pricing-cache-buckets-unclamped",
+    src: "src/routing/pricing.ts",
+    test: "tests/prompt-cache-breakpoints.test.ts",
+    desc: "分块不夹进总输入区间（对端报数不一致时未命中段变负数，成本能被缓存量抵成负的）",
+    apply: (s) => s.replace("const read = Math.max(0, Math.min(usage.cacheReadInputTokens ?? 0, usage.inputTokens));", "const read = Math.max(0, usage.cacheReadInputTokens ?? 0);"),
+    expectFail: "分块大于总输入（对端报数不一致）⇒ 夹到区间内，不出现负数输入",
+  },
+  {
+    id: "orchestrator-prompt-cache-not-plumbed",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/prompt-cache-breakpoints.test.ts",
+    desc: "路由分支合成模型时不把开关交给分派层（断点逻辑全对，但没有任何调用方能打开它 = 又一次「发货了没人接」）",
+    apply: (s) => s.replace("toWorkerModel(routedSpec, this.opts.promptCache === true ? { promptCache: true } : {})", "toWorkerModel(routedSpec)"),
+    expectFail: "开 promptCache ⇒ worker 出网的请求体里确有 cache_control（能力真可达，不是纸面开关）",
+  },
 ];
 
 function runTest(testRel) {
