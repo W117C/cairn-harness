@@ -53,6 +53,18 @@ export function specsByTier(table: readonly ModelSpec[], tier: ModelTier): Model
   return table.filter((s) => s.tier === tier);
 }
 
+/** 按「档位 id 或 provider 模型名」双态解析（纯函数）。
+ *  调用方两态都会遇到：settings 存的是 provider 模型名（如 glm-5.2），路由表存的是 id（glm-standard）。
+ *  同名多条时取 ctxWindow **最小**者——预算只允许保守，绝不因表内重复而放大。
+ *  找不到返回 undefined（调用方走保守缺省；与 resolveModel 的 fail-visible 抛错是两种用途：
+ *  路由必须指名要谁，预算只是「能查到就认」）。 */
+export function findSpecByNameOrId(table: readonly ModelSpec[], name: string | undefined): ModelSpec | undefined {
+  if (!name) return undefined;
+  const hits = table.filter((s) => s.id === name || s.model === name);
+  if (hits.length === 0) return undefined;
+  return hits.reduce((a, b) => (b.ctxWindow < a.ctxWindow ? b : a));
+}
+
 /** 按 id 解析；未知 id fail-visible 报错，绝不静默回落（路由策略层的底座纪律）。 */
 export function resolveModel(table: readonly ModelSpec[], id: string): ModelSpec {
   const spec = lookupModel(table, id);

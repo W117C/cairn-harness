@@ -4,6 +4,7 @@
 import { createEventLog, replayIncremental, type AgentEvent, type CompactionUsage } from "../events";
 import { isSideEffectTool, type PermissionMode } from "../permissions";
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "../providers/glm";
+import { DEFAULT_MODEL_TABLE, findSpecByNameOrId } from "../providers/registry";
 import type { ModelOutput, Provider, ProviderCall } from "../providers";
 import { projectContext, type ContextMessage } from "./context";
 import { buildMemoryInjection, type MemoryInjection } from "./memory/inject";
@@ -16,6 +17,7 @@ import {
   calibrateFactor,
   estimateContextTokens,
   shouldCompact,
+  withModelBudget,
   type AssemblyOverhead,
   type CompactionConfig,
   type Summarizer,
@@ -397,9 +399,19 @@ export function createGlmSessionProvider(
   } = {},
 ): Provider {
   let round = 0; // 注入轮次（地图每 N 轮重算用）
+  /** 本请求的压缩/预算配置：inputLimit 认模型真实窗口（registry.ctxWindow，此前零消费者）。
+   *  优先级 = 模型窗口定基线 < 调用方显式 config；但**显式值也绝不超出模型窗口**——
+   *  超窗 provider 必 400，把 fail-closed 让给远端不如本地钳住。
+   *  触发判定、硬闸与压缩器的裁剪目标**共用这一处**（否则 200k 档上触发按 200k、裁剪仍按
+   *  128k，白丢一段冷细节）。每请求现算：opts.model 可随 settings 改。 */
+  const budgetConfig = (): CompactionConfig => {
+    const window = findSpecByNameOrId(DEFAULT_MODEL_TABLE, opts.model)?.ctxWindow;
+    const merged: CompactionConfig = { ...withModelBudget(DEFAULT_COMPACTION_CONFIG, window), ...opts.compaction?.config };
+    return typeof window === "number" ? { ...merged, inputLimit: Math.min(merged.inputLimit, window) } : merged;
+  };
   const coordinator = opts.compaction
     ? new CompactionCoordinator({
-        config: opts.compaction.config,
+        config: budgetConfig(),
         summarizer: opts.compaction.summarizer ?? (process.env.M0_API_KEY ? createGlmSummarizer(opts.model, opts.solpi?.meter, opts.transport) : undefined),
       })
     : null;
@@ -504,10 +516,7 @@ export function createGlmSessionProvider(
           mapChars: mapText?.length ?? 0,
         };
         const estimate = estimateContextTokens(history, overhead, factor);
-        const decision = shouldCompact(estimate, {
-          ...DEFAULT_COMPACTION_CONFIG,
-          ...opts.compaction.config,
-        });
+        const decision = shouldCompact(estimate, budgetConfig());
         const boundaries = opts.solpi?.flags.economicCompaction ? deriveProgressBoundaries(events) : [];
         const outcome = await coordinator.maybeCompact(events, decision, { overhead, signal: call?.signal,
           ...(opts.solpi?.flags.economicCompaction ? { economics: {
@@ -539,7 +548,7 @@ export function createGlmSessionProvider(
       const msgs = composeTurnMessages({ system: opts.system, mapText, memory, history, ...(skillsBlock ? { skills: skillsBlock } : {}) });
       // 最终装配硬闸：重挂/地图/JSON 包装均已确定，不能只检查压缩前的 overhead。
       // 无 tokenizer：沿用既有校准估算口径；超限 fail-closed，事件历史不删改。
-      const finalConfig = { ...DEFAULT_COMPACTION_CONFIG, ...opts.compaction?.config };
+      const finalConfig = budgetConfig();
       const finalChars = JSON.stringify({ messages: msgs, tools: opts.tools ?? [] }).length;
       const finalEstimate = Math.ceil(finalChars / calibrateFactor(events));
       if (!Number.isFinite(finalConfig.inputLimit) || !Number.isFinite(finalConfig.maxOutputReserve) ||

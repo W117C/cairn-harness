@@ -12,6 +12,7 @@ import {
   compactionCardPayload,
   createMockSummarizer,
   estimateContextTokens,
+  withModelBudget,
   estimateTokens,
   keepFirstSet,
   runCompaction,
@@ -446,5 +447,19 @@ describe("glm-session 压缩接线", () => {
       if (compressedIds.has(id)) expect(projText).not.toContain(fingerprint);
       else if (e.type === "tool_call") expect(projText).toContain(fingerprint);
     });
+  });
+});
+/* 预算认模型的纯函数面（与 session-provider 的端到端差分测同锚点，此处钉回退方向） */
+describe("withModelBudget（inputLimit 换成模型真实窗口）", () => {
+  it("窗口可得 → 上调也下调，一律取窗口", () => {
+    expect(withModelBudget(DEFAULT_COMPACTION_CONFIG, 200_000).inputLimit).toBe(200_000);
+    expect(withModelBudget(DEFAULT_COMPACTION_CONFIG, 32_000).inputLimit).toBe(32_000);
+  });
+  it("窗口不可得 / 非有限 / 放不下输出预留 → 原样返回（保守回落，不放大也不炸）", () => {
+    for (const w of [undefined, Number.NaN, Number.POSITIVE_INFINITY, 0, -1]) {
+      expect(withModelBudget(DEFAULT_COMPACTION_CONFIG, w)).toBe(DEFAULT_COMPACTION_CONFIG);
+    }
+    expect(withModelBudget(DEFAULT_COMPACTION_CONFIG, DEFAULT_COMPACTION_CONFIG.maxOutputReserve))
+      .toBe(DEFAULT_COMPACTION_CONFIG);
   });
 });

@@ -40,6 +40,15 @@ export const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
   retryBackoffMs: 500,
 };
 
+/** 上下文预算认模型：把 inputLimit 换成模型真实窗口（registry.ModelSpec.ctxWindow）。
+ *  此前主会话无论路由到哪个模型都吃硬编码 128_000 —— 200k/1M 档上**提前约 100k token 触发压缩**
+ *  （多烧一次摘要调用 + 白丢冷细节），小窗口模型上又会超预算 400。双向都错。
+ *  窗口不可得 / 非有限 / 连输出预留都放不下 ⇒ 原样返回（保守回落，不放大也不炸）。 */
+export function withModelBudget(config: CompactionConfig, ctxWindow: number | undefined): CompactionConfig {
+  if (typeof ctxWindow !== "number" || !Number.isFinite(ctxWindow) || ctxWindow <= config.maxOutputReserve) return config;
+  return { ...config, inputLimit: ctxWindow };
+}
+
 // ---- token 估算：chars/4 + usage 事件校准（零 tokenizer 依赖，§7.7）----
 /** chars → token 估算；factor = 每 token 字符数（缺省 4）。 */
 export function estimateTokens(chars: number, factor = 4): number {

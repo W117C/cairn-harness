@@ -10,6 +10,7 @@ import {
   DEFAULT_MODEL_TABLE,
   PROVIDER_IDS,
   lookupModel,
+  findSpecByNameOrId,
   resolveModel,
   specsByTier,
   toWorkerModel,
@@ -259,5 +260,25 @@ describe("M5b/M6 provider 档位表", () => {
       if (oldG === undefined) delete process.env.GEMINI_API_KEY;
       else process.env.GEMINI_API_KEY = oldG;
     }
+  });
+});
+
+/* 预算侧的模型解析（双态 + 保守）：路由用 resolveModel（未知即抛），预算用 findSpecByNameOrId
+   （查不到就走缺省帽），两者用途不同故行为不同。 */
+describe("findSpecByNameOrId（档位 id 与 provider 模型名双态，重复取最小窗口）", () => {
+  it("id 与 model 名都认；未知 / 空 → undefined", () => {
+    expect(findSpecByNameOrId(DEFAULT_MODEL_TABLE, "glm-strong")?.ctxWindow).toBe(256_000);
+    expect(findSpecByNameOrId(DEFAULT_MODEL_TABLE, "glm-5.2-pro")?.ctxWindow).toBe(256_000);
+    expect(findSpecByNameOrId(DEFAULT_MODEL_TABLE, "gpt-4o")?.id).toBe("openai-standard");
+    expect(findSpecByNameOrId(DEFAULT_MODEL_TABLE, "no-such-model")).toBeUndefined();
+    expect(findSpecByNameOrId(DEFAULT_MODEL_TABLE, "")).toBeUndefined();
+    expect(findSpecByNameOrId(DEFAULT_MODEL_TABLE, undefined)).toBeUndefined();
+  });
+  it("同名多条 → 取 ctxWindow 最小者（表内重复绝不放大预算）", () => {
+    const dup = [
+      { id: "big", provider: "glm", model: "shared", tier: "strong" as const, ctxWindow: 1_000_000 },
+      { id: "small", provider: "glm", model: "shared", tier: "cheap" as const, ctxWindow: 8_000 },
+    ];
+    expect(findSpecByNameOrId(dup, "shared")?.id).toBe("small");
   });
 });
