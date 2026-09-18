@@ -3,7 +3,7 @@
 //   绝不静默退回明文（§11.8 信任边界底线）。
 // 存储形态：加密后的字节以 base64 落在 <storePath> 的 JSON 里（密文可落盘，明文永不落盘）。
 // src/agent/** 不 import electron：Electron 侧经 installSafeStorageBackend 注入 IO（可测可换）。
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { UserConfigField } from "./manifest";
 
@@ -80,7 +80,16 @@ async function readStore(p: string): Promise<Record<string, string>> {
 
 async function writeStore(p: string, store: Record<string, string>): Promise<void> {
   await mkdir(dirname(p), { recursive: true });
-  await writeFile(p, JSON.stringify(store, null, 2) + "\n", "utf8");
+  // 原子写：tmp → rename（S2-11 同族，与 provider-keys.ts / scheduler / memory store 同款）。
+  // 裸 writeFile 在写中途崩溃会截断密文存储 → 全部插件敏感值不可恢复地丢失。
+  const tmp = p + ".tmp-" + String(process.pid) + "-" + String(Date.now());
+  try {
+    await writeFile(tmp, JSON.stringify(store, null, 2) + "\n", "utf8");
+    await rename(tmp, p);
+  } catch (err) {
+    await unlink(tmp).catch(() => {});
+    throw err;
+  }
 }
 
 /** 存一个敏感值；无后端 → fail-closed 拒绝（绝不静默退回明文）。 */
