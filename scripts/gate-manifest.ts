@@ -38,6 +38,9 @@ export const GATES: readonly string[] = [
   "supervisor-check",
   "renderer-arch-check",
   "a11y-check",
+  // 变异验证：证明单元断言非恒真（注入行为突变必须被测试杀死）。
+  // 与 gate-check 的静态恒真式体检互补——静态查不出「非空但没对准逻辑」的断言。
+  "mutate-verify",
 ];
 
 /** 形如验收脚本的 script 名（这些必须有归宿：要么进 GATES，要么进 EXEMPT）。
