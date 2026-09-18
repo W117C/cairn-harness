@@ -73,6 +73,21 @@ describe("anthropic 缓存分块与总输入口径", () => {
     expect(usageOf(events)).toEqual({ type: "usage", inputTokens: 11, outputTokens: 7 });
   });
 
+  it("缓存量只出现在 message_start（delta 不回缓存字段）时同样要认", async () => {
+    const lines = [
+      'data: {"type":"message_start","message":{"id":"a1","usage":{"input_tokens":200,"cache_read_input_tokens":6000}}}',
+      'data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}',
+      'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"嗨"}}',
+      'data: {"type":"content_block_stop","index":0}',
+      'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":4}}',
+      'data: {"type":"message_stop"}',
+    ];
+    const u = usageOf(await collect(streamAnthropic(USER, { apiKey: "test", fetchImpl: stubFetch(lines) })));
+    expect(u.cacheReadInputTokens).toBe(6000);
+    expect(u.inputTokens).toBe(6200);
+    expect(u.cacheWriteInputTokens, "对端没写写桶：不得凭空补 0").toBeUndefined();
+  });
+
   it("缓存量只出现在 message_delta（累计帧）时也认，且不跨帧累加", async () => {
     const lines = [
       'data: {"type":"message_start","message":{"id":"a1","usage":{"input_tokens":300,"output_tokens":0}}}',

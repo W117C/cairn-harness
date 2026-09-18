@@ -800,6 +800,47 @@ const MUTATIONS = [
     apply: (s) => s.replace("      ...(routedSpec ? { modelCtxWindow: routedSpec.ctxWindow } : {}),\n", ""),
     expectFail: "路由选中 strong 档 ⇒ handle 带该档 ctxWindow（无需 registry 二次查名）",
   },
+  // ---- 缓存分块进事件流（444fdcd）----
+  {
+    id: "anthropic-total-excludes-cache-buckets",
+    src: "src/providers/anthropic.ts",
+    test: "tests/provider-cache-usage.test.ts",
+    desc: "总输入退回只报 input_tokens（Anthropic 的该字段**不含**缓存读写量 → 长会话输入少算一个量级，底栏 1.5k 而模型实吃 300k）",
+    apply: (s) => s.replace("inputTokens: (inputTokens ?? 0) + (cacheRead ?? 0) + (cacheWrite ?? 0),", "inputTokens: inputTokens ?? 0,"),
+    expectFail: "input_tokens 不含缓存 ⇒ 事件 inputTokens 补成含缓存总输入，分块另列",
+  },
+  {
+    id: "anthropic-start-cache-frame-ignored",
+    src: "src/providers/anthropic.ts",
+    test: "tests/provider-cache-usage.test.ts",
+    desc: "只认 message_delta 的缓存字段（对端在 message_start 起报、delta 不再回时，整次命中被判成零）",
+    apply: (s) => s.replace("        if (event.message?.usage?.cache_read_input_tokens !== undefined) cacheRead = event.message.usage.cache_read_input_tokens;\n        if (event.message?.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.message.usage.cache_creation_input_tokens;\n", ""),
+    expectFail: "缓存量只出现在 message_start（delta 不回缓存字段）时同样要认",
+  },
+  {
+    id: "anthropic-delta-cache-frame-ignored",
+    src: "src/providers/anthropic.ts",
+    test: "tests/provider-cache-usage.test.ts",
+    desc: "不认累计帧 message_delta 里的缓存字段（末帧才是权威累计值，漏读即分块恒缺）",
+    apply: (s) => s.replace("        if (event.usage?.cache_read_input_tokens !== undefined) cacheRead = event.usage.cache_read_input_tokens;\n        if (event.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.usage.cache_creation_input_tokens;\n", ""),
+    expectFail: "缓存量只出现在 message_delta（累计帧）时也认，且不跨帧累加",
+  },
+  {
+    id: "openai-cache-read-not-forwarded",
+    src: "src/providers/openai.ts",
+    test: "tests/provider-cache-usage.test.ts",
+    desc: "命中量只进 metering 不进事件（UI/账本/回放/bandit 代价面看不见缓存，A1 开不开没有分母）",
+    apply: (s) => s.replace("    ...(read !== null ? { cacheReadInputTokens: read } : {}),\n", ""),
+    expectFail: "prompt_tokens_details.cached_tokens 透出为 cacheReadInputTokens（inputTokens 保持含缓存口径）",
+  },
+  {
+    id: "openai-invents-zero-for-write-bucket",
+    src: "src/providers/openai.ts",
+    test: "tests/provider-cache-usage.test.ts",
+    desc: "对端没报写桶时凭空补 0（「缺报」被冒充「写缓存零命中」，meteredCost 的 fail-closed 前提被拆掉）",
+    apply: (s) => s.replace("...(write !== null ? { cacheWriteInputTokens: write } : {}),", "cacheWriteInputTokens: write ?? 0,"),
+    expectFail: "prompt_tokens_details.cached_tokens 透出为 cacheReadInputTokens（inputTokens 保持含缓存口径）",
+  },
 ];
 
 function runTest(testRel) {
