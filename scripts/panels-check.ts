@@ -259,10 +259,17 @@ async function phaseElectron(root: string): Promise<void> {
     //    语义保留不动（VIS-02），此处只退化为存在性 + 非负整数格式检查。
     // ② 会话级统计改以磁盘事实源为准：压测会话 JSONL 行数 = 10000，且侧栏真实 DOM
     //    出现该会话节点（listSessions → sessionItemHTML 渲染链路）。
+    // 等重放**落定**：要求历史窗口读数「> 0 且连续两次相同」——只看 >0 会抓住半渲染帧，
+    // 15s 预算在高负载宿主上也不够（实测约 1/5 概率把未落定的 0 当成真红，见
+    // AGENTS.md 的 flake 记录）。**断言阈值一字不改**，只把测量时机推后到真落定；
+    // 若重放真的起不来，tryWait 超时后 ok() 仍会带实测数字红（fail-visible 不变）。
+    let prevCount = -1;
     await tryWait(async () => {
       const c = await cdp.eval<number>(`document.querySelectorAll('.stream-inner > .msg[data-history]').length`);
-      return c > 0 ? c : null;
-    }, 15_000);
+      if (c <= 0) { prevCount = -1; return null; }
+      if (c !== prevCount) { prevCount = c; return null; }
+      return c;
+    }, 40_000);
     const domCount = await cdp.eval<number>(`document.querySelectorAll('.stream-inner > .msg[data-history]').length`);
     ok(domCount > 0 && domCount <= 300, "虚拟化挂载：状态 10000 条，DOM 消息节点 " + String(domCount) + " ∈ (0, 300)");
 
