@@ -1261,3 +1261,34 @@ M7 的 impact 层此前只用一次（写后把波及摘要回注给模型看）
 agents-check / supervisor-check / gate-check / e2e 逐道 exit 0。
 留位（不掩盖）：spawn 处那段「glob 没抓到才问语义」的**接线本身**只有单测间接覆盖，
 缺一条起真 git repo + 两个 write worker 的端到端审批卡测（m3b 里有现成 harness，下轮补）。
+
+## 会话 6a8c777c（2026-09-18 第二轮）：门 0 可达性 + worker 预算认模型
+
+**门 0（`2cfc48b` + 变异表 `1cc7e2c`）**：34 条 preload 桥渲染层只引用 14 条——20 条通道
+handler 全活、有单测、有 M2d–M4b 验收记录，UI 里没入口；`ipc:check` 只校 main↔preload，
+完全不触渲染层，所以「最后一跳没接」第四次发生且规模大一个量级。新门 `ipc-reachability-check`
+按协调裁决**只探门不做减法**（那 20 条 handler 逐条核过是真子系统，「没人调」≠「能力已死」）：
+孤儿桥进基线当显式欠账，棘轮只减不增（A2a 不许新增 / A2b 不许陈旧），反向先删桥后建门会让它永远绿。
+A3（`api.X` 拼写防线）刻意不做——`api` 只是 `window.agent` 的局部别名，同名对象遍布仓库，
+不做作用域解析就会误伤；宁可少一条断言，不要一条会红的假防线。
+基线是 HEAD 态数值（建前实测 `src/renderer`/`preload`/`main` 对 HEAD 零 diff），
+避免把别会话未提交的渲染层引用烤进棘轮、一落地就误红他人。
+
+**worker 上下文预算认模型（`1e85544` + 变异表 `b7b51dd`）**：主会话在 `d64084e` 已让 inputLimit
+认模型窗口，worker 面漏了——`orchestrator.ts` 的 worker 压缩配置一直吃硬编码 128k。
+两个方向都亏：256k/1M 档提前压缩（多烧一次摘要 + 白丢冷细节），窗口小于基线时不本地 fail-closed
+而把超窗请求发给远端吃 400。改法取最小撞面版本（协调给的口径，实测成立）：路由分支
+`resolveModel(...)` 手里本来就有完整 spec ⇒ 原地存 `spec.ctxWindow` 进 handle，
+`toWorkerModel` 一字未改、`registry.ts` 完全未碰，**撞面 1 个文件**。
+自纠一条我自己测出来的缺陷：早先一版写 `Math.min(merged.inputLimit, window)`，退化窗口（NaN/负数）
+会把预算变成 NaN——改成以「窗口是否真被采信」（`withModelBudget` 未采信时按同一性原样返回）为钳制前提。
+
+**本轮验证（HEAD 态 `b7b51dd`）**：typecheck 0 错；全量 `test` 92 files/**879 passed** exit 0；
+全表 `mutate-verify` **91/91 全杀** exit 0；`pnpm gates --only=ipc-reachability-check` 在真实 runner
+里 exit=0 + 清单漂移校验过；`gate-check` 复验 exit=0（首次两红是靶子 `pnpm test` 在并发负载下
+取不到汇总行的假红，复跑即 `1 failed → 0 failed`，断言一字未改）。
+
+**留给他人/下轮的位**：① 20 条孤儿桥的逐条裁决归渲染层表面（已排 R1c），不在本簇；
+② `AGENTS.md:81` 硬写的「28 / 28」已被自家「门数一律不写死」规则作废（实测 30 道），归文档持有者；
+③ 能力 5 的两项 BLOCKED 裁决（harness→模型注入通道、开闸成本记账）仍待用户拍板；
+④ A1（prompt caching）前置已满足（A2 形态入库），但缓存断点须按新边界重算，未开工。
