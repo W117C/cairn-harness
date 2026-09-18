@@ -140,11 +140,15 @@
 
 ### P2｜减法（把重复机制换成平台原生件；0 依赖、0 构建、不碰 CSP）
 
-> **前置 T11（硬闸）**：本组所有条开工前，先做一次 CDP 探针确认
-> `CSS.supports('anchor-name: --a')` / `'popover' in HTMLElement.prototype` /
-> `CSS.supports('color: light-dark(red,blue)')` / `CSS.supports('field-sizing: content')`
-> 在**本仓渲染进程**为 true。运行时是 Chromium 152.0.7977.76（已从二进制实测），
-> 但可用性目前**只是版本推断，未实测** —— 不背书。
+> ✅ **T11 硬闸已开（2026-09-19）**：不再靠「Chromium 152 版本号」推断——已在**本仓真实渲染进程**里
+> 实测 27 项平台能力，**全 true**，连跑两次读数一致；UA 报 `Chrome/152.0.7977.76`，与我从
+> `Electron Framework` 二进制读出的版本号独立吻合。工件：`outputs/native-capability-probe-2026-09-19.js`
+> ＋捕获 `outputs/native-capability-2026-09-19.md`（含逐条对应到 T13/T14/T18/T19/T20 的映射表）。
+> ⚠️ 该探针**不是随时可复跑**：宿主 load 5+ 时启动即挂（连脚本自带的 45s 看门狗都轮不到执行），
+> 必须与 Electron 类门禁串行、低负载时跑。**挂住 ≠ 能力缺失**。
+> 且原生件可用 **只证明平台提供**，不证明替换后行为等价——light-dismiss 对上 outside-click/Esc
+> 是 T13 自己的验收面，且仍须先过 22 条钩子白名单。
+
 - [ ] **T12 先出 `panels-check` 钩子白名单**（F1 未闭），列出哪些 class/id 被探针消费；白名单外的才允许删。
 - [ ] **T13 浮层 4 → 1**（D1）：`popover` + `popovertarget` + CSS 锚点定位。删 `showPop` 测距、outside-click、Esc、焦点管理。
 - [ ] **T14 模态 2 → 1**（D2）：`<dialog>` + `showModal()` + `::backdrop`；删手写 `inert` 4 处与三档 Esc。
@@ -199,7 +203,9 @@ light `17.71 / 7.43 / 5.06`，dark `14.48 / 7.18 / 4.89` —— 正文三级灰�
 
 ## 未证边界
 
-- 原生件可用性由 **Chromium 152 实测版本号**推得，**未在本仓渲染进程跑过 `CSS.supports`**（T11 是硬闸）。
+- ~~原生件可用性由版本号推得、未实测~~ → **已在本仓渲染进程实测 27 项全 true**（`eafcbfb` 之后，
+  见 `outputs/native-capability-2026-09-19.md`）。新留下的未证是：**「平台提供该能力」≠「替换后行为等价」**，
+  且该探针在宿主 load 5+ 时**复跑会挂**（须与 Electron 门串行、低负载跑）——不是随时可复验的工具。
 - 行宽 ≈147 字符按 0.5em 均值**估算**，未实测排版。
 - **P0 与 P1-T5 已跑门禁**（原记「未跑任何门禁」已过期）：`eafcbfb` 落库前跑齐 `test` 845/845、
   `build`、`e2e`、`ipc:check`、`panels-check`、`sidechat-check`、`renderer-arch-check`、`a11y-check` 全 0；
