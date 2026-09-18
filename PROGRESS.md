@@ -1178,3 +1178,20 @@
 - 本轮验证（逐道 exit 0）：typecheck、test 85 files/808 passed、agents-check 252✅/0❌、e2e、
   ipc:check、autonomy-check、tools-check、sidechat-check、supervisor-check、security-check、
   gate-check（含 H7 冻结双向一致）。变异锚点双向实测（删 `"spawn_agent"` ⇒ 只读摘除断言必红）。
+
+## 能力 9/6：上下文预算认模型（`d64084e`，2026-09-18 同轮第二段）
+
+承接 `outputs/agent-landscape-gap-analysis-2026-09-18.md` 的 A2 条（并发会话的调研轮，本文不重复审）。
+实测确认其结论成立后落地：`ModelSpec.ctxWindow` 逐个模型填好值却在 `src/` 零消费者，主会话
+无论路由到哪个模型都吃硬编码 `128_000` ⇒ 高档位模型上提前 ~100k token 触发压缩（多烧一次摘要 +
+白丢冷细节），显式写大 `inputLimit` 时又把超窗 400 让给远端。
+
+三处判定改为共用一份 `budgetConfig()`（压缩器裁剪目标 / shouldCompact 触发 / 发请求前硬闸）——
+只改判定不改裁剪会更糟（200k 档「按 200k 触发、按 128k 裁剪」）。显式 config 可下调但
+`inputLimit` 一律 `min(显式值, 模型窗口)`。sidechat 的 32k **不动**：那是 §7.5 明文的独立预算
+（辅助短问答，长历史纯烧 token），不是脱钩缺陷。
+
+新增 6 条测（`session-provider` 端到端差分 + `compaction`/`providers` 纯函数），变异锚点双向实测：
+`withModelBudget(...)` 换回裸 `DEFAULT_COMPACTION_CONFIG` ⇒ 差分测立刻红。
+逐道 exit 0：typecheck、test 85 files/814 passed、compaction-check、providers-check、
+sidechat-check、e2e、ipc:check、memory-check。
