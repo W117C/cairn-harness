@@ -1368,6 +1368,38 @@ const MUTATIONS = [
     apply: (s) => s.replace("  \"6) 只改任务需要的文件；既有测试与判卷文件不得改写（第 4 条是**新增**用例，不是改判卷面）。\",\n", "  \"6) 只改任务需要的文件，不改测试与判卷文件。\",\n"),
     expectFail: "两条纪律不互斥：明确「第 4 条是新增用例，不是改判卷文件」",
   },
+  {
+    id: "impact-query-deps-mode-ignored",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "deps 分支不进入（参数收了、规格也写了，结果仍只给「谁在调用我」⇒ 反向依赖理解重新变成够不着的能力）",
+    apply: (s) => s.replace("        if (wantDeps) {\n", "        if (false) {\n"),
+    expectFail: "deps 模式列本文件引用的外部定义（我在调用谁），自身文件内的定义不算",
+  },
+  {
+    id: "impact-query-deps-combination-unguarded",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "deps 配 symbol 时不再报错（被静默忽略 ⇒ 模型以为拿到了依赖清单，实际拿到的是波及清单）",
+    apply: (s) => s.replace("      if (wantDeps && fileArg === \"\") {\n", "      if (false) {\n"),
+    expectFail: "deps 只能配 file：配 symbol 或裸给都显式报错（不静默忽略）",
+  },
+  {
+    id: "impact-query-deps-noun-leaks-into-up",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "up 方向改用语义标签（措辞串门）⇒ 不带 deps 的既有调用输出不再逐字不变，「谁在调用我」被说成「我在调用谁」",
+    apply: (s) => s.replace("        return { ok: true, output: sitesNote(head, r.up) };\n", "        return { ok: true, output: sitesNote(head, r.up, DEP_NOUN) };\n"),
+    expectFail: "不带 deps 时 file 模式输出逐字不变（新增方向不得改动既有字节）",
+  },
+  {
+    id: "impact-query-deps-ghost-file-silent",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "deps 分支不查图内成员（路径写错/后缀不支持时报「依赖面为 0」）⇒ 模型把「没扫到」读成「这个文件不依赖任何东西」",
+    apply: (s) => s.replace("          if (!graph.files.includes(rel)) return { ok: false, output: NOT_IN_GRAPH };\n", ""),
+    expectFail: "deps 模式下不在图内的文件仍然 fail-visible",
+  },
 ];
 
 function runTest(testRel) {
