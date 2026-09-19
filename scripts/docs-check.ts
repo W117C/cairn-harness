@@ -8,10 +8,10 @@
 // 水位**只准调低**，不再被命中的条目会报成 stale 红，故豁免不会静默烂在这儿）。
 
 export interface Finding {
-  rule: "D-1" | "D-3" | "D-5" | "W";
+  rule: "D-1" | "D-2" | "D-3" | "D-4" | "D-5" | "D-7" | "W";
   file: string;
   detail: string;
-  /** 该判据的实测量纲值（D-1 = 字节）。有值时水位按"量"豁免；无值时按"条数"豁免。 */
+  /** 该判据的实测量纲值（D-1 = 字节，D-7 = 文件数）。有值时水位按"量"豁免；无值时按"条数"豁免。 */
   value?: number;
 }
 
@@ -109,6 +109,83 @@ export function checkStateRev(text: string, shaExists: (sha: string) => boolean)
   return [];
 }
 
+/* ------------------------------------------------------------------ D-2 / D-4 / D-7 */
+
+/** D-2 与 D-4 的适用面 = 被现行层指向的页。**按可达性定，不按"重不重要"定。** */
+export const LIVE_PAGES: readonly string[] = [
+  "AGENTS.md",
+  STATE_FILE,
+  "docs/README.md",
+  "docs/CODE-WIKI.md",
+  "docs/ui-fact-baseline.md",
+];
+
+/** 规格值免检：带比较符/预算字样的行是契约；`[spec]` / `[facts]` 是显式标记。 */
+const SPEC_CONTEXT = /[≤≥<>]|\[spec\]|\[facts\]|上限|下限|阈值|至少|不超过|不得超过|不低于|预算/;
+const OBSERVED_QUANTITY = /[0-9]+(?:[.,][0-9]+)?[ \t]*(?:ms\b|s\b|秒|分钟|KB\b|MB\b|k?tokens?\b)/i;
+
+/**
+ * D-2：现行层不许手抄观测值。判据刻意**不看**"实测/耗时"这类字样——真病灶那句
+ * "~800s 的 test 门" 一个字都没带，按字样匹配会漏掉它（本仓实测漂了 13 倍）。
+ */
+export function checkObservedValues(pages: readonly SourceFile[]): Finding[] {
+  const out: Finding[] = [];
+  for (const p of pages) {
+    if (!LIVE_PAGES.includes(p.path)) continue; // archive/、dated specs/、源码不受这条管
+    const lines = p.text.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]!;
+      if (SPEC_CONTEXT.test(line)) continue;
+      const m = OBSERVED_QUANTITY.exec(line);
+      if (!m) continue;
+      out.push({
+        rule: "D-2",
+        file: p.path,
+        detail: `第 ${String(i + 1)} 行 手抄了观测值「${m[0].trim()}」——它会随宿主与负载漂；写「见 pnpm facts」指针，` +
+          `确是规格值则同行标 [spec]`,
+      });
+    }
+  }
+  return out;
+}
+
+/** D-4：现行层禁"用追注代替改写"——那正是让文档永不收缩、真相要顺读全文的机制。 */
+const APPEND_CORRECTION = /上面那句|已过期|不(?:再)?表示当前值|当日快照|改写即伪造|上一句|旧的?那句|追注/;
+
+export function checkAppendOnlyCorrections(pages: readonly SourceFile[]): Finding[] {
+  const out: Finding[] = [];
+  for (const p of pages) {
+    if (!LIVE_PAGES.includes(p.path)) continue; // 档案层就是这类字的归宿
+    const lines = p.text.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const m = APPEND_CORRECTION.exec(lines[i]!);
+      if (!m) continue;
+      out.push({
+        rule: "D-4",
+        file: p.path,
+        detail: `第 ${String(i + 1)} 行 出现追注「${m[0]}」——现态页只整体重写，过期字随写消失（${STATE_FILE} 不是历史）；` +
+          `要留当时的判断就挪进 archive/ 对应里程碑段`,
+      });
+    }
+  }
+  return out;
+}
+
+const DOC_BINARY = /^docs\/.*\.(?:png|jpe?g|gif|webp|tiff|bmp)$/i;
+
+/** D-7：docs/ 不留二进制——图片会不会被读到取决于有没有人开多模态，预算不该由它决定。 */
+export function checkDocBinaries(files: readonly string[]): Finding[] {
+  const hits = files.filter((f) => DOC_BINARY.test(f));
+  if (hits.length === 0) return [];
+  return [{
+    rule: "D-7",
+    file: "docs",
+    value: hits.length,
+    detail: `docs/ 下残留 ${String(hits.length)} 个图片——证据图落 outputs/，历史图走 archive/；` +
+      `现况与理由见 docs/README.md`,
+  }];
+}
+
 /* ------------------------------------------------------------------ 存量豁免棘轮 */
 
 export interface Waiver {
@@ -133,6 +210,19 @@ export const LEGACY_WAIVERS: Readonly<Record<string, Waiver>> = {
   [waiverKey("D-3", "scripts/a11y-check.ts")]: { upTo: 1, reason: "存量行号指针，§8 同提交改标签锚点后删除" },
   [waiverKey("D-3", "scripts/lib/harness.ts")]: { upTo: 2, reason: "存量行号指针 ×2，§8 同提交改标签锚点后删除" },
   [waiverKey("D-3", "scripts/renderer-arch-check.ts")]: { upTo: 1, reason: "存量行号指针，§8 同提交改标签锚点后删除" },
+  // 计数类判据按**实测条数原样入表、不留余量**：条数增长需要一个刻意动作（往规矩页抄观测值 /
+  // 用追注代替改写 / 把图塞回 docs/），那正是本门要拦的事——与 D-1 不同，字节数被日常小改就会顶上去。
+  [waiverKey("D-2", "AGENTS.md")]: {
+    upTo: 7,
+    reason: "存量手抄观测值 7 行（含 §0 那句 ~800s），§8 迁移整段进 archive 后本条须整条删除",
+  },
+  [waiverKey("D-2", "docs/CODE-WIKI.md")]: {
+    upTo: 1,
+    reason: "166 行「32KB 截断、60s 超时」实为配置规格值 = 本判据已知假阳性面；§8 给该行补 [spec] 后本条删除",
+  },
+  [waiverKey("D-4", "AGENTS.md")]: { upTo: 2, reason: "存量就地追注 2 处，§8 拆层后删除" },
+  [waiverKey("D-4", "docs/README.md")]: { upTo: 2, reason: "「过时登记表」本身在用散文登记散文的漂移，§8 删表后本条删除" },
+  [waiverKey("D-7", "docs")]: { upTo: 25, reason: "React 时代验收截图 25 张（docs/README.md 已声明全部过时），§8 git mv 走" },
 };
 
 /** 用存量水位筛掉老账，并挑出已不再被命中的豁免条目。 */
@@ -214,6 +304,28 @@ export function listSourceFiles(root: string, dirs: readonly string[] = CITATION
   return out.sort();
 }
 
+/** 递归列出某棵子树里匹配的图片文件（返回相对路径，供 D-7 计数）。 */
+export function listImagesUnder(root: string, sub: string): string[] {
+  const out: string[] = [];
+  const walk = (abs: string, rel: string) => {
+    let entries;
+    try {
+      entries = readdirSync(abs, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.isSymbolicLink()) continue;
+      const a = join(abs, e.name);
+      const r = rel === "" ? e.name : rel + "/" + e.name;
+      if (e.isDirectory()) walk(a, r);
+      else if (e.isFile() && DOC_BINARY.test(r)) out.push(r);
+    }
+  };
+  walk(join(root, sub), sub);
+  return out.sort();
+}
+
 function shaExistsViaGit(sha: string): boolean {
   try {
     execFileSync("git", ["rev-parse", "--verify", "--quiet", sha + "^{commit}"], { cwd: ROOT, stdio: "pipe" });
@@ -244,6 +356,16 @@ export function runDocsCheck(): { findings: Finding[]; skipped: string[]; waived
   const stateAbs = join(ROOT, STATE_FILE);
   if (existsSync(stateAbs)) findings.push(...checkStateRev(readFileSync(stateAbs, "utf8"), shaExistsViaGit));
   else skipped.push(`D-5 ${STATE_FILE} 不存在（迁移前属正常）——rev 真伪未检，不等于通过`);
+
+  const livePages: SourceFile[] = [];
+  for (const path of LIVE_PAGES) {
+    const abs = join(ROOT, path);
+    if (existsSync(abs)) livePages.push({ path, text: readFileSync(abs, "utf8") });
+    else skipped.push(`D-2/D-4 ${path} 不存在（迁移前属正常）——该页未受检，不等于通过`);
+  }
+  findings.push(...checkObservedValues(livePages));
+  findings.push(...checkAppendOnlyCorrections(livePages));
+  findings.push(...checkDocBinaries(listImagesUnder(ROOT, "docs")));
 
   const { kept, stale } = waive(findings);
   return {

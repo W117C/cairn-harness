@@ -6,8 +6,11 @@
 // 真实文件读取只发生在该模块的 main()，由 `pnpm docs-check` 承担。
 import { describe, expect, it } from "vitest";
 import {
+  checkAppendOnlyCorrections,
   checkBudget,
+  checkDocBinaries,
   checkLineCitations,
+  checkObservedValues,
   checkStateRev,
   DOC_BUDGETS,
   LEGACY_WAIVERS,
@@ -181,5 +184,78 @@ describe("存量豁免棘轮（登记进门时不得顺手把老账全判红，�
       expect(v.reason.trim(), key + " 缺理由").not.toBe("");
       expect(v.upTo, key + " 水位必须为正").toBeGreaterThan(0);
     }
+  });
+});
+
+describe("D-2 现行层禁手抄观测值", () => {
+  const p = (path: string, ...lines: string[]): SourceFile => ({ path, text: lines.join("\n") });
+
+  it("真实形状判红：~800s 的 test 门（这句不含任何「实测/耗时」字样也会漂 15 倍）", () => {
+    const d = hit(checkObservedValues([p("AGENTS.md", "它紧接 ~800s 的 test 门，")]), "D-2");
+    expect(d).toHaveLength(1);
+    expect(d[0]!.detail).toContain("800");
+    expect(d[0]!.detail).toContain("pnpm facts");
+  });
+
+  it("带比较符的规格阈值放行（≤1000ms 是契约不是观测）", () => {
+    expect(checkObservedValues([p("AGENTS.md", "断言阈值（≤1000ms）一字未改")])).toHaveLength(0);
+    expect(checkObservedValues([p("scripts/docs-check.ts", "L0 ≤8,000B、L1 ≤6,000B")])).toHaveLength(0);
+  });
+
+  it("配置规格值靠 [spec] 标记放行（CODE-WIKI 的「32KB 截断、60s 超时」就是这类）", () => {
+    expect(checkObservedValues([p("docs/CODE-WIKI.md", "输出 32KB 截断、60s 超时强杀 [spec]")])).toHaveLength(0);
+    expect(hit(checkObservedValues([p("docs/CODE-WIKI.md", "输出 32KB 截断、60s 超时强杀")]), "D-2")).toHaveLength(1);
+  });
+
+  it("只有受管现行页参与判定：archive/ 与 specs/ 与源码都不判", () => {
+    const obs = "耗时 33s vs 全量链路 193s";
+    expect(checkObservedValues([p("archive/progress.md", obs)])).toHaveLength(0);
+    expect(checkObservedValues([p("docs/superpowers/specs/2026-09-19-x.md", obs)])).toHaveLength(0);
+    expect(checkObservedValues([p("src/agent/loop.ts", obs)])).toHaveLength(0);
+    expect(hit(checkObservedValues([p("AGENTS.md", obs)]), "D-2")).toHaveLength(1);
+  });
+
+  it("detail 带行号（可定位）", () => {
+    const text = ["第一行", "第二行", "第三行", "第四行", "第五行", "第六行", "实测 251.8ms"].join("\n");
+    expect(hit(checkObservedValues([p("AGENTS.md", text)]), "D-2")[0]!.detail).toContain("第 7 行");
+  });
+});
+
+describe("D-4 现行层禁「就地追注代替改写」", () => {
+  it("追注模式判红，并给出合规改法", () => {
+    const d = hit(checkAppendOnlyCorrections([
+      { path: "AGENTS.md", text: "上面那句已过期，但当日快照不得改写。\n" },
+    ]), "D-4");
+    expect(d).toHaveLength(1);
+    expect(d[0]!.detail).toContain("STATE.md");
+  });
+
+  it("档案层正是这类字的归宿，不判红", () => {
+    expect(checkAppendOnlyCorrections([
+      { path: "archive/progress.md", text: "上面那句已过期（该日快照，改写即伪造历史）。\n" },
+    ])).toHaveLength(0);
+  });
+
+  it("普通叙述不误伤（带日期不等于追注）", () => {
+    expect(checkAppendOnlyCorrections([
+      { path: "AGENTS.md", text: "这条规矩 2026-09-19 由领导裁决。\n" },
+    ])).toHaveLength(0);
+  });
+});
+
+describe("D-7 docs/ 不留二进制", () => {
+  it("聚合成一条 finding，value = 文件数", () => {
+    const d = hit(checkDocBinaries(["docs/a.png", "docs/sub/b.png", "docs/c.jpeg"]), "D-7");
+    expect(d).toHaveLength(1);
+    expect(d[0]!.value).toBe(3);
+    expect(d[0]!.detail).toContain("3");
+  });
+
+  it("docs 之外的二进制不管（截图该落 outputs/ 或 archive/）", () => {
+    expect(checkDocBinaries(["outputs/x.png", "archive/y.png", "src/z.svg"])).toHaveLength(0);
+  });
+
+  it("零文件不判红（否则等于要求 docs 里永远有图）", () => {
+    expect(checkDocBinaries([])).toHaveLength(0);
   });
 });
