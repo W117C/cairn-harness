@@ -1627,6 +1627,38 @@ const MUTATIONS = [
     apply: (s) => s.replace('"\\n[error: verify 命令超时（" + String(Math.round(timeoutMs / 1000)) + "s），已强制终止', '"\\n[error: verify 命令超时（60s），已强制终止'),
     expectFail: "defaultExec 真按传入上限掐表，消息里的秒数跟着配置走",
   },
+  {
+    id: "verify-exec-timeout-not-forwarded",
+    src: "src/main/agent-runner.ts",
+    test: "tests/verify-exec-sandbox.test.ts",
+    desc: "沙箱出口把 timeoutMs 丢掉 ⇒ 语言探测的 300s 在发货缺省路径上不生效，冷编译照旧被 60s 掐死",
+    apply: (s) => s.replace("const res = await run(mapped, { cwd, ...(timeoutMs ? { timeoutMs } : {}) });", "const res = await run(mapped, { cwd });"),
+    expectFail: "超时透传给 runInSandbox；未给时不写这个键（沿用沙箱自己的缺省，不越权改写）",
+  },
+  {
+    id: "verify-exec-sandbox-bypassed",
+    src: "src/main/agent-runner.ts",
+    test: "tests/verify-exec-sandbox.test.ts",
+    desc: "沙箱可用与否都直接走 defaultExec ⇒ verify 的 lint/test 逃逸到沙箱外跑（写收敛 / 拒读 / 断网三道壁全失效）",
+    apply: (s) => s.replace("  if (!sandbox?.available) return defaultExec;", "  if (true) return defaultExec;"),
+    expectFail: "超时透传给 runInSandbox；未给时不写这个键（沿用沙箱自己的缺省，不越权改写）",
+  },
+  {
+    id: "verify-exec-pnpm-mapping-lost",
+    src: "src/main/agent-runner.ts",
+    test: "tests/verify-exec-sandbox.test.ts",
+    desc: "丢掉「沙箱内 pnpm 映射为直连 vitest」（坑三）⇒ 冻结剧本里的 pnpm test 在 Seatbelt 下必然起不来，验证门空转",
+    apply: (s) => s.replace("const mapped = command.trim() === \"pnpm test\" || command.trim() === \"pnpm run test\" ? VITEST_DIRECT : command;", "const mapped = command;"),
+    expectFail: "pnpm test / pnpm run test 映射为直连 vitest；其它命令逐字不动",
+  },
+  {
+    id: "verify-exec-reports-internal-command",
+    src: "src/main/agent-runner.ts",
+    test: "tests/verify-exec-sandbox.test.ts",
+    desc: "结果里回报内部映射串 ⇒ 事件流与面板显示的是我们拼出来的绝对路径命令，人看不到模型实际下的那条（可审计性受损）",
+    apply: (s) => s.replace("return { command, ok: res.ok, output: res.output };", "return { command: mapped, ok: res.ok, output: res.output };"),
+    expectFail: "结果里的 command 用模型下的原命令（事件流给人看的不是内部映射串）",
+  },
 ];
 
 function runTest(testRel) {
