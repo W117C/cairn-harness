@@ -1835,6 +1835,22 @@ const MUTATIONS = [
     apply: (s) => s.replace("return cutToWeight(text, Math.max(0, allowed)) + marker + suffix;", "return text.slice(0, Math.max(0, tokenBudget * 4 - marker.length - suffix.length)) + marker + suffix;"),
     expectFail: "中文正文截完仍然 ≤ 预算（旧实现按 chars/4 取点，这里会溢出近四倍）",
   },
+  {
+    id: "impact-note-symbols-uncapped",
+    src: "src/agent/impact/index.ts",
+    test: "tests/impact-note-bounds.test.ts",
+    desc: "无调用点分支的符号清单取消每文件帽 ⇒ 这条是**最常见**分支，大文件上百个定义（含局部名）整串进每次写入的 tool_result",
+    apply: (s) => s.replace("const cap = IMPACT_CONTEXT_SYMBOLS_PER_FILE;", "const cap = Number.MAX_SAFE_INTEGER;"),
+    expectFail: "300 个定义只列前 4 个，并如实报出总数与全量位置",
+  },
+  {
+    id: "impact-note-count-lies",
+    src: "src/agent/impact/index.ts",
+    test: "tests/impact-note-bounds.test.ts",
+    desc: "计数尾写死帽值 ⇒ 「等 4 个」与只列 4 个自相矛盾，模型据此以为文件里就这几个定义（少字节的前提是如实报数）",
+    apply: (s) => s.replace(" 等 ${String(r.symbols.length)} 个（全量在 impact_report 事件）", " 等 ${String(cap)} 个（全量在 impact_report 事件）"),
+    expectFail: "300 个定义只列前 4 个，并如实报出总数与全量位置",
+  },
 ];
 
 function runTest(testRel) {
