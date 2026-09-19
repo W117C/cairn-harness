@@ -8,6 +8,7 @@
 //     无 key → 退出码 0 并打印「暗卷跳过（无 M0_API_KEY）」
 // 任一断言失败 → 退出码非 0。
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { vitestSummary } from "./lib/vitest-summary";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -72,13 +73,10 @@ function toolResultFor(log: AgentEvent[], name: string): { ok: boolean; output: 
 
 async function targetTests(): Promise<{ failed: number; passed: number; ok: boolean; output: string }> {
   const res = await TOOLS.run_shell.run({ command: "pnpm test" }, { workspace: APP });
-  const summary = res.output.match(/^\s*Tests\s+([^\n(]*)/m)?.[1] ?? "";
-  return {
-    failed: Number(/(\d+)\s+failed/.exec(summary)?.[1] ?? 0),
-    passed: Number(/(\d+)\s+passed/.exec(summary)?.[1] ?? 0),
-    ok: res.ok,
-    output: res.output,
-  };
+  // 摘要读不到时返回 -1/-1（e2e 同口径）：旧写法把它折成 0/0，于是「测试根本没跑」
+  // 被读成「零个失败」——调用者 TERM 带 ANSI 时就是这样假绿/假红切换的。
+  const sum = vitestSummary(res.output);
+  return { failed: sum.failed, passed: sum.passed, ok: res.ok, output: res.output };
 }
 
 async function resetTarget(): Promise<void> {

@@ -32,23 +32,13 @@ async function frozenOk(): Promise<boolean> {
   return res.ok;
 }
 
-/** ANSI 剥离：判据不依赖调用者 TERM（M2g §1.4-2：TERM=xterm-256color 下 vitest 输出 ANSI 序列，
- *  `^\s*Tests\s+...` 摘要正则曾假红）。 */
-export function stripAnsi(s: string): string {
-  return s.replace(/\x1b\[[0-9;]*m/g, "");
-}
+import { vitestSummary } from "./lib/vitest-summary";
 
 async function runAppTests(): Promise<{ failed: number; passed: number; exitOk: boolean }> {
   const res = await TOOLS.run_shell.run({ command: "pnpm test" }, { workspace: APP });
-  const clean = stripAnsi(res.output);
-  // vitest 摘要两种形态: "Tests  1 failed | 2 passed (3)" / "Tests  3 passed (3)"
-  const summary = clean.match(/^\s*Tests\s+([^\n(]*)/m)?.[1] ?? ""; // 行首锚定，避开 "Failed Tests 1" 横幅
-  if (!summary) return { failed: -1, passed: -1, exitOk: res.ok };
-  return {
-    failed: Number(/(\d+)\s+failed/.exec(summary)?.[1] ?? 0),
-    passed: Number(/(\d+)\s+passed/.exec(summary)?.[1] ?? 0),
-    exitOk: res.ok,
-  };
+  const sum = vitestSummary(res.output); // 解析共用 scripts/lib/vitest-summary（三门一份口径）
+  if (!sum.found) return { failed: -1, passed: -1, exitOk: res.ok };
+  return { failed: sum.failed, passed: sum.passed, exitOk: res.ok };
 }
 
 // ---- 前置：判卷文件必须与冻结基线一致（开工即校验）----
