@@ -1320,6 +1320,30 @@ const MUTATIONS = [
     apply: (s) => s.replace("    const d = lineDelta(content, updated);\n", "    const d = { added: 0, removed: 0 };\n"),
     expectFail: "edit_file 的成功输出带行增减（处数说不了动了多少行）",
   },
+  {
+    id: "worker-impact-spec-not-appended",
+    src: "src/agent/worker-shell-tools.ts",
+    test: "tests/worker-impact-query.test.ts",
+    desc: "worker 规格面不再追加 impact_query（执行表里有、模型看不到 ⇒ 又是一次「能力已发货、模型面不可见」，本仓第 4 例）",
+    apply: (s) => s.replace("  const extras: GlmToolSpec[] = opts.impactAnalysis === true\n", "  const extras: GlmToolSpec[] = false\n"),
+    expectFail: "read 档：开关开启时规格与实例同名同时出现，白名单同步",
+  },
+  {
+    id: "worker-impact-instance-not-attached",
+    src: "src/agent/worker-tool-table.ts",
+    test: "tests/worker-impact-query.test.ts",
+    desc: "只挂规格不挂实例（模型调了就 unknown tool；反向的两头断同样致命）",
+    apply: (s) => s.replace("  if (opts.impactAnalysis === true) {\n", "  if (false) {\n"),
+    expectFail: "开关开启时执行面真的挂着 impact_query 实例（不是只有规格——「模型看得见、一调就 unknown tool」）",
+  },
+  {
+    id: "worker-impact-whitelist-not-appended",
+    src: "src/agent/orchestrator-config.ts",
+    test: "tests/worker-impact-query.test.ts",
+    desc: "白名单忘了追加（规格与实例都挂上了，却被 loop 的 allowedTools 硬闸摘掉 ⇒ 模型一调就「不在本会话工具表」——三重闸各自为政）",
+    apply: (s) => s.replace("  return impactAnalysis ? [...base, WORKER_IMPACT_TOOL] : base;\n", "  return base;\n"),
+    expectFail: "read 档：开关开启时规格与实例同名同时出现，白名单同步",
+  },
 ];
 
 function runTest(testRel) {
