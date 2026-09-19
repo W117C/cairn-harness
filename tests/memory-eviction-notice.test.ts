@@ -32,10 +32,12 @@ describe("整段省略要点名（能力 8：可解释 + 给取回通道）", ()
     const p = r.project ?? "";
     expect(r.truncated).toBe(true);
     expect(p).toContain("[MEMORY.md 索引]");           // 索引确实留下了（顺序未变）
-    expect(p).toContain("已整段省略：");
+    expect(p).toContain("[omitted: ");
     expect(p).toContain("ARCHITECTURE");
     expect(p).toContain("DECISIONS");
     expect(p).toContain("read_file");                  // 取回通道跟着点名一起给出
+    // memory-check 的 C5 钉的是原串的括号闭合形态：点名必须另起一行，不得改写它
+    expect(p).toContain("[truncated: 记忆注入超预算，已整行丢弃前部内容（保尾部）]");
   });
 
   it("只削段内前部、没有任何段被抽干 ⇒ 提示行逐字保持旧文案（零回归）", async () => {
@@ -46,7 +48,7 @@ describe("整段省略要点名（能力 8：可解释 + 给取回通道）", ()
     const p = r.project ?? "";
     expect(r.truncated).toBe(true);
     expect(p).toContain("[truncated: 记忆注入超预算，已整行丢弃前部内容（保尾部）]");
-    expect(p).not.toContain("已整段省略");
+    expect(p).not.toContain("[omitted:");
   });
 
   it("预算宽裕不截断时不打任何提示（零回归）", async () => {

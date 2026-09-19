@@ -166,10 +166,10 @@ export interface MemoryInjection {
 function renderBlock(source: "project" | "global", sections: Section[], charsLimit: number, blockChars: number, tokensCurrent: number, tokenBudget: number, truncated: boolean, evicted: string[]): string {
   const lines: string[] = ['<memory source="' + source + '">', STANCE_LINE];
   if (truncated) {
-    // 点名是能力 8 的底线：整段抽干了哪几段，模型才知道要去 read_file，而不是对着目录猜「怎么没有架构」。
-    let note = "[truncated: 记忆注入超预算，已整行丢弃前部内容（保尾部）";
-    if (evicted.length > 0) note += "；已整段省略：" + evicted.join("、") + "（原文见工作区 .agent/ 与 memory/ 下文件，按需 read_file）";
-    lines.push(note + "]");
+    // 两行各自独立、括号闭合：memory-check 的 C5 钉的是那条完整提示串，把点名并入同一行
+    // 等于改掉一条验收判据——判据不许为了顺代码而改（本仓纪律），所以点名另起一行。
+    lines.push("[truncated: 记忆注入超预算，已整行丢弃前部内容（保尾部）]");
+    if (evicted.length > 0) lines.push("[omitted: " + evicted.join("、") + " 整段未注入（原文见工作区 .agent/ 与 memory/ 下文件，按需 read_file）]");
   }
   for (const s of sections) {
     lines.push(s.header);

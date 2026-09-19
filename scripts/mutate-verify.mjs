@@ -2210,7 +2210,7 @@ const MUTATIONS = [
     src: "src/agent/memory/inject.ts",
     test: "tests/memory-eviction-notice.test.ts",
     desc: "整段抽干了哪几段不点名 ⇒ 模型看到一目录条目却不知道架构/决策被省了，只能重新 grep 或以为项目没架构",
-    apply: (s) => s.replace("    if (evicted.length > 0) note += \"；已整段省略：\"", "    if (evicted.length > 0 && false) note += \"；已整段省略：\""),
+    apply: (s) => s.replace("    if (evicted.length > 0) lines.push(\"[omitted: \"", "    if (evicted.length > 0 && false) lines.push(\"[omitted: \""),
     expectFail: "成熟记忆集在缺省预算下抽干了 ARCHITECTURE 与 DECISIONS ⇒ 提示点名这两段并给 read_file 通道",
   },
   {
