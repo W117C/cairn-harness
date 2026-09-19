@@ -5,19 +5,23 @@
 //   存活（mutation survived）= 测试对该逻辑无分辨力 = 恒真式等价物。
 // 这把「我觉得代码能跑」变成「我证明了换掉这段逻辑，验收会抓住」。
 //
-// 用法：
-//   node scripts/mutate-verify.mjs                 # 跑配置表里全部条目
-//   node scripts/mutate-verify.mjs <id>            # 只跑一条
-//   node scripts/mutate-verify.mjs --list          # 列出条目
+// 用法（须经 tsx 运行——判据本体是 TS，见 scripts/lib/mutate-gates.ts）：
+//   pnpm mutate-verify                    # 跑配置表里全部条目
+//   pnpm mutate-verify <id>               # 只跑一条或几条
+//   pnpm mutate-verify --list             # 列出条目
 //
 // 安全：被测源文件先备份，finally 原样还原；进程退出前强制再校验一次
 // `git diff HEAD --quiet`——还原失败即判红，绝不把突变留在工作树里。
 // （与 M7 在飞集零相交：只动自己登记的源文件，且进出都校验零 diff。）
+// 可判性三分（entryDisposition）：源文件在飞/未跟踪 = 拒绝并抛死（无回滚兜底）；
+// **判卷测试文件**在飞 = 本条记「未证」跳过——否则别人的在飞编辑会伪装成「变异存活」或「基线红」。
 
 import { cpSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+// 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
+import { entryDisposition } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -1033,22 +1037,31 @@ function runTest(testRel) {
   }
 }
 
-/** 被测源文件必须已跟踪且相对 HEAD 零 diff。
- *  未跟踪文件（M7 在飞等）不进变异表：还原只能靠内存备份，一旦中途崩溃
- *  无 HEAD 可回滚 —— 违反零相交纪律。这里 fail-closed 拒绝，而不是赌不会崩。 */
-function assertCommittedToHead(srcAbs, rel) {
+/** 某文件相对 HEAD 的状态（判据本体在 scripts/lib/mutate-gates.ts，那边可单测）。 */
+function headStateOf(rel) {
   const tracked = execFileSync("git", ["ls-files", "--", rel], { cwd: ROOT, encoding: "utf8" }).trim();
-  if (!tracked) throw new Error(`${rel} 未跟踪（不在 HEAD 里）—— 变异中途崩溃无回滚兜底，拒绝`);
+  if (!tracked) return "untracked";
   try {
     execFileSync("git", ["diff", "HEAD", "--quiet", "--", rel], { cwd: ROOT });
   } catch {
-    throw new Error(`${rel} 相对 HEAD 有工作树改动——属在飞改动集，拒绝变异`);
+    return "dirty";
   }
+  return "clean";
 }
 
 function verifyEntry(m) {
+  const disp = entryDisposition({
+    srcRel: m.src,
+    srcState: headStateOf(m.src),
+    testRel: m.test,
+    testState: headStateOf(m.test),
+  });
+  // refused 仍 fail-closed 抛死：源文件无 HEAD 兜底，崩了就回不来。
+  if (disp.kind === "refused") throw new Error(disp.why);
+  // unverified 只跳过本条——判卷文件只读不写，没有回滚风险，但也不能拿它当分辨力证据。
+  if (disp.kind === "unverified") return { m, ok: null, why: disp.why };
+
   const srcAbs = join(ROOT, m.src);
-  assertCommittedToHead(srcAbs, m.src);
   const backup = `${srcAbs}.mutbak`;
   const original = readFileSync(srcAbs, "utf8");
   cpSync(srcAbs, backup);
@@ -1097,8 +1110,9 @@ if (targets.length && entries.length !== targets.length) {
 console.log(`变异验证：${entries.length} 条`);
 const results = entries.map((m) => {
   const r = verifyEntry(m);
-  console.log(`${r.ok ? "✅" : "❌"} ${m.id} — ${m.desc}`);
-  if (!r.ok) console.log(`   ${r.why}`);
+  const mark = r.ok === null ? "⏭️" : r.ok ? "✅" : "❌";
+  console.log(`${mark} ${m.id} — ${m.desc}`);
+  if (r.ok !== true) console.log(`   ${r.why}`);
   return r;
 });
 
@@ -1113,6 +1127,16 @@ if (statusOut) {
   console.error(`⚠️ 还原失败，以下源文件残留改动（必须人工检查）：\n${statusOut}`);
   process.exit(1);
 }
-const failed = results.filter((r) => !r.ok);
-console.log(`\n${failed.length === 0 ? "全部变异被正确杀死（断言非恒真）" : `${failed.length} 条变异存活或误伤`}`);
+const failed = results.filter((r) => r.ok === false);
+const unverified = results.filter((r) => r.ok === null);
+if (unverified.length > 0) {
+  console.log(`  ⚠️  未证 ${String(unverified.length)} 条（判卷文件在飞 ⇒ 该条根本没跑到——不等于已杀死）`);
+  console.log("UNVERIFIED=" + String(unverified.length));
+}
+const killed = results.length - failed.length - unverified.length;
+console.log(`\n${failed.length === 0
+  ? (unverified.length === 0
+      ? "全部变异被正确杀死（断言非恒真）"
+      : `${String(killed)} 条被正确杀死，另 ${String(unverified.length)} 条未证`)
+  : `${String(failed.length)} 条变异存活或误伤`}`);
 process.exit(failed.length === 0 ? 0 : 1);
