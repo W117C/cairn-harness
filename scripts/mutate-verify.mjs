@@ -1699,6 +1699,30 @@ const MUTATIONS = [
     apply: (s) => s.replace("description: typeof t.description === \"string\" ? capMcpDescription(t.description) : \"\",", "description: typeof t.description === \"string\" ? t.description : \"\","),
     expectFail: "tools/list 的 5000 字符描述进注册表时已被收窄（每轮重送的那一份）",
   },
+  {
+    id: "skill-suffix-not-charged-to-budget",
+    src: "src/agent/plugins/skills.ts",
+    test: "tests/skill-body-cap.test.ts",
+    desc: "取回提示不计入预算 ⇒ 「总量 ≤ 预算」这句承诺被提示自己撑破（与 run_shell 的 SHELL_NOTICE_RESERVE 同族坑）",
+    apply: (s) => s.replace("const chars = Math.max(0, tokenBudget * 4 - marker.length - suffix.length);", "const chars = Math.max(0, tokenBudget * 4 - marker.length);"),
+    expectFail: "超限时提示自己不得撑破预算（总量 ≤ 预算，且提示完整保留）",
+  },
+  {
+    id: "skill-primary-budget-abolished",
+    src: "src/agent/plugins/index.ts",
+    test: "tests/skill-body-cap.test.ts",
+    desc: "触发主路径的预算被取消（重挂那头有预算、这头没有）⇒ 200KB 的 SKILL.md 原样进 tool_result，且 skill 免剪 ⇒ 整个会话常驻付费",
+    apply: (s) => s.replace("clampSkillBody(entry.body, SKILL_REMOUNT_TOKENS_PER_SKILL,", "clampSkillBody(entry.body, Number.MAX_SAFE_INTEGER,"),
+    expectFail: "200KB 正文收到单 skill 预算内，头部留住并给出全文路径",
+  },
+  {
+    id: "skill-primary-hint-lost",
+    src: "src/agent/plugins/index.ts",
+    test: "tests/skill-body-cap.test.ts",
+    desc: "截断后不给全文路径 ⇒ 模型只看到「已截断」却没有任何取回通道，只能凭半份正文动手（或反复重触发同一个 skill）",
+    apply: (s) => s.replace("\"\\n[全文见 \" + entry.path + \"]\"),", "\"\"),"),
+    expectFail: "200KB 正文收到单 skill 预算内，头部留住并给出全文路径",
+  },
 ];
 
 function runTest(testRel) {
