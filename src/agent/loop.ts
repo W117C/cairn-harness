@@ -52,6 +52,8 @@ export interface LoopOptions {
   /** M3a 取消信号（编排器 AbortController 树）：中止于轮界（工具执行中不打断，轮末收束）。
    *  缺省 undefined = 无取消（既有路径字节不变）。 */
   signal?: AbortSignal;
+  /** worker 归因（§4.4）：只进 hook 的 stdin JSON（agent_id 字段），主会话缺省 = 该字段缺席。 */
+  agentId?: string;
   /** 换路压力：同一调用连续重复时，在那条 tool_result 尾部追加一行提示（见 loop 内注释）。
    *  **缺省 false = 零行为**——三条既有路径各自的原因：
    *  - worker（编排器跑 runLoop）：那边已有更强的看门（detectStuck → waiting_input 等人），
@@ -247,6 +249,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
             tool_name: output.name,
             tool_args: output.args,
             tool_use_id: output.id,
+            agent_id: opts.agentId,
           });
           if (pre.blocked) {
             await events.append({
@@ -325,6 +328,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
             tool_args: output.args,
             tool_response: result.output,
             tool_use_id: output.id,
+            agent_id: opts.agentId,
           });
           if (post.additionalContext !== "") postContext = "\n[hook] " + post.additionalContext;
         } catch (err) {

@@ -5,6 +5,7 @@ import type { CompactionConfig, Summarizer } from "./compaction";
 import type { FrozenStage, PluginAgentRoleDef } from "./sequencer";
 import type { StuckConfig, StuckTurn } from "./stuck";
 import type { VerifyHook } from "./verify";
+import type { HookEngine } from "./plugins/hooks";
 import type { WorkerModel } from "./worker-model";
 import type { WorkerPrice } from "./orchestrator-join";
 
@@ -211,4 +212,11 @@ export interface OrchestratorOptions {
    *  只有 harness 的自动拍会跑——这正是「给 worker 的是 autoVerify 证据拍，不是 manual verify 门」。
    *  它产出的证据由 W4b 的 `agent_result.artifacts.verified` 如实标注（含 stale/absent）。 */
   workerVerify?: (repoDir: string) => VerifyHook;
+  /** §9.10「worker 继承主会话插件启用集」：worker 的 runLoop 拿同一个钩子引擎跑
+   *  PreToolUse / PostToolUse / PostToolUseFailure。
+   *  **缺省 undefined = 零行为**——那正是此前的状态：worker 有 write_file / edit_file / 可写 shell，
+   *  而用户装的拦截钩子只挡得住主会话（与「表里没有 verify 却能执行 verify」同形状：门装了不锁）。
+   *  工厂入参 = worker 档；视图的权限降档（read worker → 只读档）由 HookEngine.forWorkerMode 定，
+   *  不在调用方各抄一份。零 hook 会话仍是一次字典查找后早退。 */
+  workerHooks?: (mode: "read" | "write") => HookEngine | null;
 }

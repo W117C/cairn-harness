@@ -270,6 +270,13 @@ export class HookEngine {
     this.exec = opts.exec ?? defaultExec();
   }
 
+  /** worker 档视图（§9.10「worker 继承主会话插件启用集」的最小权限半边）：
+   *  read worker 不得拿主会话的宽档去跑有副作用的钩子命令——权限档策略留在引擎这一处，
+   *  不抄到调用方去（本仓点名的「同族出口策略副本」）。write worker 沿用原档。 */
+  forWorkerMode(mode: "read" | "write"): HookEngine {
+    return mode === "read" ? new HookEngine({ ...this.opts, mode: "read-only" }) : this;
+  }
+
   /** 事件 → 匹配且去重后的 handler 列表（跨层按 (command+args) 去重）。 */
   handlersFor(event: HookEventName, payload: HookPayload): LoadedHookDef[] {
     const seen = new Set<string>();

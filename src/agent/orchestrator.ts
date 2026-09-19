@@ -1503,6 +1503,8 @@ export class Orchestrator {
       // W4a：write worker 的收束闸（缺省不接线 = 零行为）。钩子工厂拿 worktree 目录做 cwd，
       // 所以它验的是「即将被合并的那份代码」而不是主 checkout。
       const workerVerify = w.mode === "write" ? this.opts.workerVerify?.(loopWorkspace) : undefined;
+      // §9.10：worker 与主会话共用同一套插件钩子（工厂按 worker 档给视图）。
+      const workerHooks = this.opts.workerHooks?.(w.mode) ?? null;
       // B6（审查）：runLoop 前武装静默计时——旧实现只在收到子流事件时武装，worker 在首个模型
       // 调用挂起（无任何事件）时静默规则永不触发。缺省 silenceMs 10min，不改变正常路径。
       this.armStuckSilence(w);
@@ -1515,6 +1517,8 @@ export class Orchestrator {
         allowedTools: workerToolTable(w.mode, impactOn) as never, // 三重硬闸之二：loop 工具表白名单（与规格/实例同源）
         tools: table,
         signal: w.controller.signal,
+        agentId: w.agentId,
+        ...(workerHooks ? { hooks: workerHooks } : {}),
         ...(workerVerify ? { verify: workerVerify, autoVerify: true } : {}),
       });
       await this.finish(w, "done");

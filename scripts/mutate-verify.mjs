@@ -2552,6 +2552,38 @@ const MUTATIONS = [
     apply: (s) => s.replace("  if (payload.agent_id !== undefined) json.agent_id = payload.agent_id;", "  json.agent_id = payload.agent_id ?? \"\";"),
     expectFail: "stdin 带 tool_use_id 与 agent_id（§4.4 归因；缺席时不折成空串）",
   },
+  {
+    id: "worker-hooks-never-threaded",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/worker-hooks.test.ts",
+    desc: "worker 的 runLoop 不接钩子引擎 ⇒ 用户装的 PreToolUse 拦截钩子挡不住并行 worker 写盘（门装了不锁；§9.10 明文 worker 继承主会话插件启用集）",
+    apply: (s) => s.replace("        ...(workerHooks ? { hooks: workerHooks } : {}),", "        ...(false ? { hooks: workerHooks } : {}),"),
+    expectFail: "PreToolUse 阻断真的挡住 worker 的写：worktree 里不落盘，tool_result 带钩子理由",
+  },
+  {
+    id: "worker-agent-id-not-threaded",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/worker-hooks.test.ts",
+    desc: "编排器不把 w.agentId 交给 loop ⇒ 钩子收到的 stdin 里 agent_id 恒缺席，§4.4 的归因面（哪个 worker 触发的）在钩子侧丢失",
+    apply: (s) => s.replace("        signal: w.controller.signal,\n        agentId: w.agentId,", "        signal: w.controller.signal,\n        agentId: undefined,"),
+    expectFail: "钩子拿到 agent_id = 该 worker 的 id 与模型实下的参数（§4.4 归因）",
+  },
+  {
+    id: "loop-does-not-forward-agent-id",
+    src: "src/agent/loop.ts",
+    test: "tests/worker-hooks.test.ts",
+    desc: "loop 收到了 agentId 却不写进 PreToolUse 载荷 ⇒ 同一格「两头断」的另一头：编排端接了、执行端没传",
+    apply: (s) => s.replace("            tool_use_id: output.id,\n            agent_id: opts.agentId,\n          });\n          if (pre.blocked) {", "            tool_use_id: output.id,\n            agent_id: undefined,\n          });\n          if (pre.blocked) {"),
+    expectFail: "钩子拿到 agent_id = 该 worker 的 id 与模型实下的参数（§4.4 归因）",
+  },
+  {
+    id: "read-worker-inherits-wide-hook-mode",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/worker-hooks.test.ts",
+    desc: "forWorkerMode 原样返回宽档引擎 ⇒ 只读 worker 也能跑有副作用的钩子命令（最小权限半边没接）",
+    apply: (s) => s.replace(`    return mode === "read" ? new HookEngine({ ...this.opts, mode: "read-only" }) : this;`, "    return this;"),
+    expectFail: "forWorkerMode(\"read\") 把引擎降成只读档：中等风险的钩子命令拒跑；\"write\" 沿用原档",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
