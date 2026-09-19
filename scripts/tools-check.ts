@@ -144,7 +144,7 @@ console.log("\n== write_file / edit_file ==");
   check("edit_file replace_all 批量", e3.ok && e3.output.includes("2 处"));
   // 诊断回流（无 LSP 配置 = 无 <diagnostics> 后缀；有配置路径由单测覆盖）
   check("诊断回流：无 LSP 配置时输出不变", !e3.output.includes("<diagnostics"));
-  // edit_file 的 ①/②：输出是定长摘要（"已替换 <rel>（N 处）"）+ 有界诊断块（每文件 ≤20 条），
+  // edit_file 的 ①/②：输出是定长摘要（"已替换 <rel>（N 处，+A −R 行）"）+ 有界诊断块（每文件 ≤20 条），
   // 无无界输出面 → 语义上不适用，显式标 n/a 并写理由（不是恒真断言）。
   na("edit_file ① 输出上限", "输出为定长摘要 + 有界诊断块（每文件 ≤20 条），不存在无界输出面");
   na("edit_file ② 截断提示", "同上：输出有界，无需截断提示");

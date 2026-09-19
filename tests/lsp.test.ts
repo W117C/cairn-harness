@@ -178,6 +178,6 @@ describe("诊断回流（M2a 任务 6）", () => {
     await writeFile(join(ws, "a.ts"), "hello world\n", "utf8");
     const res = await edit_file.run({ path: "a.ts", old_string: "hello", new_string: "bonjour" }, { workspace: ws });
     expect(res.ok).toBe(true);
-    expect(res.output).toBe("已替换 a.ts（1 处）"); // 无 <diagnostics> 后缀
+    expect(res.output).toBe("已替换 a.ts（1 处，+1 −1 行）"); // 无 <diagnostics> 后缀
   });
 });

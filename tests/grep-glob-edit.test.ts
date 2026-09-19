@@ -111,7 +111,7 @@ describe("edit_file（M2a 任务 4）", () => {
     await writeFile(join(ws, "a.ts"), "const a = 1;\nconst b = 2;\n", "utf8");
     const res = await edit_file.run({ path: "a.ts", old_string: "const b = 2;", new_string: "const b = 20;" }, ctx);
     expect(res.ok).toBe(true);
-    expect(res.output).toContain("已替换 a.ts（1 处）");
+    expect(res.output).toContain("已替换 a.ts（1 处，+1 −1 行）");
     expect(await readFile(join(ws, "a.ts"), "utf8")).toBe("const a = 1;\nconst b = 20;\n");
   });
 
@@ -138,7 +138,7 @@ describe("edit_file（M2a 任务 4）", () => {
     await writeFile(join(ws, "a.ts"), "dup\ndup\n", "utf8");
     const res = await edit_file.run({ path: "a.ts", old_string: "dup", new_string: "x", replace_all: true }, ctx);
     expect(res.ok).toBe(true);
-    expect(res.output).toContain("（2 处）");
+    expect(res.output).toContain("（2 处，+2 −2 行）");
     expect(await readFile(join(ws, "a.ts"), "utf8")).toBe("x\nx\n");
   });
 });
