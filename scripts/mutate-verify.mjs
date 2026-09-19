@@ -2181,6 +2181,30 @@ const MUTATIONS = [
     apply: (s) => s.replace("\"编排（派子代理时）：", "\"7) 编排（派子代理时）："),
     expectFail: "六条纪律编号连续（缺号=模型读到断号，会以为后面的约束可省）",
   },
+  {
+    id: "typecheck-triage-scratches-into-tracked",
+    src: "scripts/lib/typecheck-triage.ts",
+    test: "tests/typecheck-triage.test.ts",
+    desc: "归因把所有报错都算成 HEAD 内 ⇒ 别人未跟踪的草稿又会被当本仓回归，白开一次 worktree 对照（已发生两次）",
+    apply: (s) => s.replace("    if (untracked.has(f)) scratch.push(f);", "    if (untracked.has(f) && false) scratch.push(f);"),
+    expectFail: "全在未跟踪草稿：tracked 空、scratch 列出该文件，并明说 HEAD 类型干净",
+  },
+  {
+    id: "typecheck-parse-trims-at-whitespace",
+    src: "scripts/lib/typecheck-triage.ts",
+    test: "tests/typecheck-triage.test.ts",
+    desc: "解析报错行改回按非空白切路径 ⇒ 目录名带空格（本仓目录就叫 deepseek harness）时截出半个路径，整列归因作废",
+    apply: (s) => s.replace("const TSC_ERROR_LINE = /^(.+?)\\(\\d+,\\d+\\): error TS\\d+/u;", "const TSC_ERROR_LINE = /^(\\S+?)\\(\\d+,\\d+\\): error TS\\d+/u;"),
+    expectFail: "路径含空格也能解析（本仓目录名就有空格；按空白切会截出半个路径）",
+  },
+  {
+    id: "typecheck-clean-verdict-unearned",
+    src: "scripts/lib/typecheck-triage.ts",
+    test: "tests/typecheck-triage.test.ts",
+    desc: "「HEAD 态类型干净」改成只要有报错就说 ⇒ 真有 HEAD 缺陷时照样给出一句假绿结论",
+    apply: (s) => s.replace("  if (t.tracked.length === 0) out.push(", "  if (t.total > 0) out.push("),
+    expectFail: "混合：草稿与 HEAD 缺陷分开列（HEAD 那部分照常是红，不给豁免）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
