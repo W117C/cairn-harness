@@ -30,19 +30,11 @@ function assert(cond: boolean, label: string, detail = ""): void {
   }
 }
 
-/** ANSI 剥离：判据不依赖调用者 TERM（§1.4-2）。 */
-export function stripAnsi(s: string): string {
-  return s.replace(/\x1b\[[0-9;]*m/g, "");
-}
+import { vitestSummary } from "./lib/vitest-summary";
 
 function countTests(output: string): { failed: number; passed: number } {
-  const clean = stripAnsi(output);
-  // vitest 摘要两种形态: "Tests  1 failed | 2 passed (3)" / "Tests  3 passed (3)"
-  const summary = clean.match(/^\s*Tests\s+([^\n(]*)/m)?.[1] ?? "";
-  return {
-    failed: Number(/(\d+)\s+failed/.exec(summary)?.[1] ?? 0),
-    passed: Number(/(\d+)\s+passed/.exec(summary)?.[1] ?? 0),
-  };
+  const sum = vitestSummary(output); // 与 e2e / gate-check 共用同一份摘要解析
+  return { failed: sum.failed, passed: sum.passed };
 }
 
 const frozen = await sha256MatchesFrozen(ROOT);
