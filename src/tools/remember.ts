@@ -29,11 +29,11 @@ export type RememberOp = "append" | "replace";
 const KINDS: readonly RememberKind[] = ["architecture", "decision", "preference", "memory"];
 const SCOPES: readonly string[] = ["project", "global"];
 
-/** 工具描述（GLM 规格 + 审批卡共用）：密钥卫生与 skip 纪律明文（§8.1.8 第 6 条 / §8.1.3）。 */
+/** 工具描述（GLM 规格 + 审批卡共用）：密钥卫生与 skip 纪律明文（§8.1.8 第 6 条 / §8.1.3）。
+ *  分层口径：**顶层只放纪律**，参数怎么用留给 parameters 的各条 description（scope/kind/op 此前两处各写一遍，
+ *  每次请求白抄 ~300B）。纪律句一句不删——那是「少返工」的那一半。 */
 export const REMEMBER_DESCRIPTION =
-  "写入跨会话记忆（唯一写入口）。scope=project 写项目层（.agent/，团队共享），scope=global 写用户全局记忆；" +
-  "kind: architecture|decision|preference 映射项目层根三文件，memory 写记忆笔记（必带 type: user|feedback|project|reference 与 topic）。" +
-  "操作：append 追加（日志型 DECISIONS/notes）、replace 整段改写（必须带 old_content 精确命中，否则报错重试）。" +
+  "写入跨会话记忆（唯一写入口）。" +
   "纪律：能从代码/git 历史推导的内容不要写入（skip）；DECISIONS 修订=新条目开头写「取代 <旧条引用>」（旧条保留，本工具无删除操作）；" +
   "禁止把密钥/API key/凭据/令牌写入记忆。";
 

@@ -259,7 +259,7 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
             type: { type: "string", enum: ["user", "feedback", "project", "reference"], description: "kind=memory 必带" },
             topic: { type: "string", description: "kind=memory 必带（1-64 位字母/数字/连字符/下划线）" },
             content: { type: "string", description: "要写入的正文原文" },
-            old_content: { type: "string", description: "op=replace 必带：当前原文（精确命中）" },
+            old_content: { type: "string", description: "op=replace 必带：当前原文（须精确命中，否则报错重试）" },
           },
           ["scope", "kind", "content"],
         ),
