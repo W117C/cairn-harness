@@ -21,7 +21,7 @@ import { execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, needleProblemLine, needleSeverity, classifyArgs } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, needleProblemLine, needleSeverity, classifyArgs, isLineWiseApply } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -207,8 +207,16 @@ const MUTATIONS = [
     src: "src/agent/verify.ts",
     test: "tests/verify.test.ts",
     desc: "config.json 坏 JSON 不重抛（非 ENOENT 也降级到探测，配置错误被掩盖）",
-    apply: (s) => s.replace('if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;', "if (false) throw err;"),
+    apply: (s) => s.replace('if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err; // 配置存在但坏 → fail loud', 'if (false) throw err; // 配置存在但坏 → fail loud'),
     expectFail: "config.json 坏 JSON → fail loud（ENOENT 才可降级到探测）",
+  },
+  {
+    id: "verify-pkgjson-fail-loud",
+    src: "src/agent/verify.ts",
+    test: "tests/verify.test.ts",
+    desc: "package.json 坏 JSON 不重抛（静默降级到语言探测）⇒ 与 config.json 那条是**两道独立闸**，只拆一条另一条仍在，故各须一条锚点",
+    apply: (s) => s.replace('if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err; // package.json 存在但坏 → fail loud', 'if (false) throw err; // package.json 存在但坏 → fail loud'),
+    expectFail: "package.json 坏 JSON → fail loud（不许静默降级到语言探测，那是第二道独立闸）",
   },
   {
     id: "process-env-sanitize",
@@ -1923,6 +1931,22 @@ const MUTATIONS = [
     apply: (s) => s.replace("const targets = args.filter((a) => !a.startsWith(\"--\"));", "const targets = [...args];"),
     expectFail: "已知 flag 各归其 mode，位置参数进 targets",
   },
+  {
+    id: "line-wise-apply-never-recognized",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-needles-check.test.ts",
+    desc: "不认逐行式 apply ⇒ 那些「故意改所有匹配行」的锚点长期挂 ⚠️ 假警；假警报攒多了，真警也会被一起忽略",
+    apply: (s) => s.replace("return applySource.includes(\".split(\");", "return false;"),
+    expectFail: "认得 split/map 式写法，普通单点 replace 不误判",
+  },
+  {
+    id: "line-wise-apply-always-true",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-needles-check.test.ts",
+    desc: "一律当成逐行式 ⇒ 普通单点锚点全都不再核针脚，静态检退回「什么都没看」的空门",
+    apply: (s) => s.replace("return applySource.includes(\".split(\");", "return true;"),
+    expectFail: "认得 split/map 式写法，普通单点 replace 不误判",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
@@ -1939,7 +1963,9 @@ function extractNeedle(apply) {
 function reportNeedles(entries, { showUnparsed = true } = {}) {
   const checkable = [];
   const unparsed = [];
+  const lineWise = [];
   for (const e of entries) {
+    if (isLineWiseApply(String(e.apply))) { lineWise.push(e.id); continue; }
     const needle = extractNeedle(e.apply);
     if (needle === null) unparsed.push(e.id);
     else checkable.push({ id: e.id, srcRel: e.src, needle });
@@ -1954,7 +1980,10 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
   if (showUnparsed && unparsed.length > 0) {
     console.log(`ℹ️ 静态检未覆盖 ${String(unparsed.length)} 条（apply 非通行写法）：${unparsed.join("、")}`);
   }
-  console.log(`针脚体检：${String(entries.length)} 条 —— 阻断 ${String(blocking.length)}，待复认 ${String(warn.length)}，未覆盖 ${String(unparsed.length)}`);
+  if (showUnparsed && lineWise.length > 0) {
+    console.log(`ℹ️ 逐行式 apply ${String(lineWise.length)} 条（多处命中即设计，不核针脚）：${lineWise.join("、")}`);
+  }
+  console.log(`针脚体检：${String(entries.length)} 条 —— 阻断 ${String(blocking.length)}，待复认 ${String(warn.length)}，未覆盖 ${String(unparsed.length)}，逐行式 ${String(lineWise.length)}`);
   return blocking.length;
 }
 

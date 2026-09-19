@@ -3,7 +3,7 @@
 // 而要等整张表跑完才会红——整跑常被并发堵几天。这条秒级门把「重构后改指」变成机械要求。
 import { describe, expect, it } from "vitest";
 import {
-  auditNeedles, classifyArgs, needleHits, needleProblemLine, needleSeverity,
+  auditNeedles, classifyArgs, isLineWiseApply, needleHits, needleProblemLine, needleSeverity,
 } from "../scripts/lib/mutate-gates";
 
 const SRC = "const a = 1;\nconst b = a + 1;\nconst a2 = 1;\n";
@@ -90,5 +90,12 @@ describe("classifyArgs（未知 flag 必须当场拒，不能退化成「跑全�
     const p = classifyArgs(["--cheek-needles", "some-id"]);
     expect(p.unknown).toEqual(["--cheek-needles"]);
     expect(p.targets).toEqual(["some-id"]);
+  });
+});
+
+describe("isLineWiseApply（逐行式 apply 的多处命中即设计）", () => {
+  it("认得 split/map 式写法，普通单点 replace 不误判", () => {
+    expect(isLineWiseApply('(s) => s.split("\\n").map((l) => (l.includes("e.output") ? l : l)).join("\\n")')).toBe(true);
+    expect(isLineWiseApply('(s) => s.replace("if (a) {", "if (false) {")')).toBe(false);
   });
 });

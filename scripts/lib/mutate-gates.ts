@@ -116,3 +116,10 @@ export function classifyArgs(args: readonly string[]): ArgPlan {
   const mode = args.includes("--list") ? "list" : args.includes("--check-needles") ? "check-needles" : "run";
   return { mode, unknown, targets };
 }
+
+/** 逐行式 apply（`s.split("\n").map(...)` 一类）：它**就是**要改所有匹配行，
+ *  所以「针脚命中多处」在这里不是风险信号。不认它，静态检就会长期挂着一排假 ⚠️，
+ *  而假警报备出来的代价是真警被人一起忽略。 */
+export function isLineWiseApply(applySource: string): boolean {
+  return applySource.includes(".split(");
+}

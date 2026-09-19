@@ -221,6 +221,14 @@ describe("verify 配置装载", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
+  it("package.json 坏 JSON → fail loud（不许静默降级到语言探测，那是第二道独立闸）", async () => {
+    const dir = join(tmpdir(), `m1b-verify-badpkg-${String(Date.now())}`);
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "package.json"), "{not json", "utf8");
+    await expect(loadVerifyConfig(dir)).rejects.toThrow();
+    await rm(dir, { recursive: true, force: true });
+  });
+
 });
 
 // 验证门的失败摘要就是模型的修-code 依据：旧执行器抄的是 run_shell 的**旧**截断（只留头部），
