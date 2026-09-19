@@ -2116,6 +2116,38 @@ const MUTATIONS = [
     apply: (s) => s.replace("Math.min(ARCH_OUTLINE_MAX_CHARS, Math.floor(raw.length / 2))", "Math.floor(raw.length / 2)"),
     expectFail: "英文大文档仍按 4096 字符帽（不变小、不变大）",
   },
+  {
+    id: "prune-protect-window-by-chars",
+    src: "src/agent/prune.ts",
+    test: "tests/prune-token-weight.test.ts",
+    desc: "保护区累计回到 chars/4 ⇒ 中文会话里保护区吞掉 4 倍量事件、候选恒空，修剪这条省 token 的机制根本不触发",
+    apply: (s) => s.replace("    acc += estimateTextTokens(text);", "    acc += Math.ceil(text.length / 4);"),
+    expectFail: "中文结果剪得动，且 savedTokens 落在字重口径（旧口径下保护区吞掉全部 ⇒ 候选空 ⇒ 永不修剪）",
+  },
+  {
+    id: "prune-min-gate-by-chars",
+    src: "src/agent/prune.ts",
+    test: "tests/prune-token-weight.test.ts",
+    desc: "最小修剪闸把中文候选的预计节省按 chars/4 记 ⇒ 该裁的报「too-small」，中文大块就此常驻上下文每轮重付",
+    apply: (s) => s.replace("  for (const i of candidates) wouldSave += estimateTextTokens((events[i] as { output: string }).output);", "  for (const i of candidates) wouldSave += Math.ceil((events[i] as { output: string }).output.length / 4);"),
+    expectFail: "最小修剪闸单独一条：窗口由 ASCII 撑住（两口径同界），候选是中文 ⇒ 旧口径误报 too-small 而长期不剪",
+  },
+  {
+    id: "prune-saved-tokens-by-chars",
+    src: "src/agent/prune.ts",
+    test: "tests/prune-token-weight.test.ts",
+    desc: "savedTokens 是给人看的成本读数：按 chars/4 报 ⇒ 中文会话里「省了多少」虚报四倍（判定与读数两副口径）",
+    apply: (s) => s.replace("    out.savedTokens += estimateTextTokens(e.output) - placeholderTokens;", "    out.savedTokens += Math.ceil(e.output.length / 4) - placeholderTokens;"),
+    expectFail: "中文结果剪得动，且 savedTokens 落在字重口径（旧口径下保护区吞掉全部 ⇒ 候选空 ⇒ 永不修剪）",
+  },
+  {
+    id: "prune-placeholder-tokens-by-chars",
+    src: "src/agent/prune.ts",
+    test: "tests/prune-token-weight.test.ts",
+    desc: "占位串自己不计入字重（按 length 扣）⇒ 净节省被少算，纯 ASCII 会话的读数也不再等于 ceil(chars/4)",
+    apply: (s) => s.replace("  const placeholderTokens = estimateTextTokens(PRUNED_PLACEHOLDER);", "  const placeholderTokens = PRUNED_PLACEHOLDER.length;"),
+    expectFail: "纯 ASCII 逐字不变：读数仍是 ceil(chars/4) − ceil(占位/4)",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
