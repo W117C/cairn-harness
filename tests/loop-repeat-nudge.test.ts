@@ -96,6 +96,32 @@ describe("重复调用的换路压力（主循环，非 worker 看门）", () =>
     expect(results(log).every((o) => o === "ENOENT: nope")).toBe(true);
   });
 
+  it("换过动作再回到同一调用 ⇒ 重复段重新计，会再提示一次（不是一 run 只提示一次）", async () => {
+    // a×3 失败（第 3 条提示）→ b 一次 → a×3 失败 ⇒ 第二段的第 3 条也必须提示：
+    // 提示帽按「重复段」解除，否则第一次忽略就永远再也叫不醒。
+    const plan: Record<string, unknown>[] = [
+      { path: "a" }, { path: "a" }, { path: "a" }, { path: "b" }, { path: "a" }, { path: "a" }, { path: "a" },
+    ];
+    const log: AgentEvent[] = [];
+    let step = 0;
+    await runLoop({
+      provider: {
+        async *stream(): AsyncGenerator<ModelOutput> {
+          step += 1;
+          if (step <= plan.length) yield { type: "tool_call", id: "c" + String(step), name: "read_file", args: plan[step - 1]! };
+          else yield { type: "assistant_message", content: "收工" };
+        },
+      },
+      events: { async append(event) { log.push(event); } },
+      workspace: "/tmp",
+      userMessage: "查一下",
+      stuckNudge: true,
+      tools: { read_file: tool(false, "ENOENT: nope") },
+    });
+    const flagged = results(log).map((o, i) => (o.includes("[repeat]") ? i : -1)).filter((i) => i >= 0);
+    expect(flagged).toEqual([2, 6]);
+  });
+
   it("只加一行文本：不新增事件、不多要一轮请求、不改权限与 verify 语义", async () => {
     const { log, requests } = await run(5, { stuckNudge: true, tools: { read_file: tool(false, "ENOENT: nope") } });
     expect(requests).toBe(6); // 5 次工具轮 + 1 次纯文本收束轮（没被提前掐，也没多要）
