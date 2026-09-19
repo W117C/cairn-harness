@@ -2,7 +2,7 @@
 // 单插件失败隔离 / 代码插件拒载 / hook 装载纪律（user_config 禁入 shell-form）/
 // agent 角色命名空间 / .lsp.json 字段对齐（socket 忽略 + 未知字段警告）。
 import { describe, expect, it } from "vitest";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { discoverPlugins, pendingPlugins, activeHooks } from "../src/agent/plugins";
@@ -133,5 +133,34 @@ describe("M2e hook 装载纪律（任务 2/5）", () => {
     expect(socketW).toBeDefined();
     const unknownW = m.warnings.find((x) => x.plugin === "echo-suite" && x.message.includes("unknownLspField"));
     expect(unknownW).toBeDefined();
+  });
+});
+
+/** 装载那一跳：`if` 必须真的被带进 LoadedHookDef。执行面的用例是手工造的 LoadedHookDef，
+ *  看不见这一跳——所以这一组是 `hook-if-not-carried-at-load` 那条变异的唯一分辨力来源。 */
+describe("hook 的 if 走装载（§9.5）", () => {
+  it("hooks.json 里的 if 带到执行面；读不懂的那条出警告", async () => {
+    const root = join(await mkdtemp(join(tmpdir(), "dsh-if-load-")), "user-plugins");
+    const plugin = join(root, "if-suite");
+    await mkdir(join(plugin, ".claude-plugin"), { recursive: true });
+    await mkdir(join(plugin, "hooks"), { recursive: true });
+    await writeFile(join(plugin, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "if-suite", description: "if 装载判据", version: "0.1.0" }), "utf8");
+    await writeFile(join(plugin, "hooks", "hooks.json"), JSON.stringify({
+      hooks: {
+        PreToolUse: [
+          { matcher: "run_shell", if: "Bash(git add:*)", hooks: [{ type: "command", command: "echo guarded" }] },
+          { hooks: [{ type: "command", command: "echo broken" }], if: "Bash(" },
+        ],
+      },
+    }), "utf8");
+
+    const m = await discoverPlugins({ userPluginsDir: root, trustStatus: () => "trusted" });
+    const p = m.plugins.find((x) => x.name === "if-suite");
+    expect(p).toBeDefined();
+    expect(p!.hooks.map((h) => h.if)).toEqual(["Bash(git add:*)", "Bash("]);
+    const w = m.warnings.find((x) => x.plugin === "if-suite" && x.message.includes("if 语法读不懂"));
+    expect(w).toBeDefined();
+    await rm(join(root, ".."), { recursive: true, force: true });
   });
 });

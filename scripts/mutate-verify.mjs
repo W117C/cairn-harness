@@ -2651,10 +2651,10 @@ const MUTATIONS = [
   {
     id: "hook-if-not-carried-at-load",
     src: "src/agent/plugins/discover.ts",
-    test: "tests/hooks-input-contract.test.ts",
+    test: "tests/plugins-discover.test.ts",
     desc: "装载时不把 `if` 带进 LoadedHookDef ⇒ 执行端再怎么写也拿不到，作者那条「只拦这种」的闸被静默降级成每次都跑",
     apply: (s) => s.replace("          ...(m.if !== undefined ? { if: m.if } : {}),", "          ...(false ? { if: m.if } : {}),"),
-    expectFail: "前缀命中才跑：run_shell(git add:*) 挡不住别的命令",
+    expectFail: "hooks.json 里的 if 带到执行面；读不懂的那条出警告",
   },
   {
     id: "hook-if-filter-not-applied",
