@@ -75,4 +75,8 @@ worker 的钱此前**只喂 bandit**：`costUsd(w.routeModelId, w.usage)` 在 `r
   `price-resolver-skipped`、`scripted-marker-never-set`、`glm-default-name-ignores-env`）。
   另把 `join-degraded-row-vanishes` 的针脚改指到加了 `...spent` 之后的那一行（改判据不放宽）。
 - 邻面回归：`agents` / `m3a` / `m3b` / `orchestrator-join` / `worker-evidence` / `bandit-runtime` 共 85 条全绿。
+- 后续加固（`9091480`，写完后自查发现的自家缺陷）：档位表与价格表是两张手写的表，只由 `priceCoverage()`
+  （routing-check）对齐；原来 `spentUsdFor` / `priceTagText` 直接吃 `priceOf(id)`，一旦两表漂移就**抛错**，
+  而它挂在 `finishInner` 的终态事件之前——"算不出钱"会把"交付已完成"一起炸掉。现按 `appendImpact` 同纪律：
+  查不到价 / 非有限花费一律退回「价格未知」并 `console.warn` 出声（不静默吞）。测 +2、锚点 +2。
 - 探针脚本：`/tmp/w3-size-probe.ts`（一次性，不入库；数字照抄自它的输出）。
