@@ -1218,6 +1218,52 @@ const MUTATIONS = [
     apply: (s) => s.replace("        if (lastTurn !== undefined && lastTurn.action !== action) nudgedActions.delete(lastTurn.action);\n", "        if (false) nudgedActions.delete(lastTurn.action);\n"),
     expectFail: "换过动作再回到同一调用 ⇒ 重复段重新计，会再提示一次（不是一 run 只提示一次）",
   },
+  {
+    id: "docs-obs-spec-exempt-blind",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "规格值免检整条摘掉（≤1000ms 这类**契约**被判成手抄观测值 ⇒ 人们只好去改判据，判卷纪律最忌的那一步）",
+    apply: (s) => s.replace("if (SPEC_CONTEXT.test(line)) continue;", "if (false) continue;"),
+    expectFail: "带比较符的规格阈值放行（≤1000ms 是契约不是观测）",
+  },
+  {
+    id: "docs-obs-scope-widened",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "D-2 适用面从「现行层五页」扩到所有页（archive 与 dated spec 里的历史观测值被追溯判红 ⇒ 门变成不可满足，等价于关掉）",
+    apply: (s) => s.replace(
+      "if (!LIVE_PAGES.includes(p.path)) continue; // archive/、dated specs/、源码不受这条管",
+      "if (false) continue; // archive/、dated specs/、源码不受这条管",
+    ),
+    expectFail: "只有受管现行页参与判定：archive/ 与 specs/ 与源码都不判",
+  },
+  {
+    id: "docs-appendnote-scope-widened",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "D-4 的档案层放行被摘（archive 就是「当日快照不得改写」这类话的唯一归宿，判红等于禁止留历史）",
+    apply: (s) => s.replace(
+      "if (!LIVE_PAGES.includes(p.path)) continue; // 档案层就是这类字的归宿",
+      "if (false) continue; // 档案层就是这类字的归宿",
+    ),
+    expectFail: "档案层正是这类字的归宿，不判红",
+  },
+  {
+    id: "docs-appendnote-wordlist-as-any-digit",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "追注词表退化成「含数字即追注」（带日期的正常裁决句被判红，误伤一次就会有人整条关掉 D-4）",
+    apply: (s) => s.replace("const APPEND_CORRECTION = /上面那句|", "const APPEND_CORRECTION = /\\d|上面那句|"),
+    expectFail: "普通叙述不误伤（带日期不等于追注）",
+  },
+  {
+    id: "docs-shots-count-collapsed",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "图片数退化成恒 1（水位 25 变成永远咬不到的摆设，docs/ 可无限塞二进制）",
+    apply: (s) => s.replace("    value: hits.length,", "    value: 1,"),
+    expectFail: "聚合成一条 finding，value = 文件数",
+  },
 ];
 
 function runTest(testRel) {
