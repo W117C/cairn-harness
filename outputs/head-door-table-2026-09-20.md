@@ -76,3 +76,24 @@ git worktree remove --force /tmp/dsh-head        # 跑完清掉
 symlink 的 `node_modules` **只读用途**：不要在里面装包。需要 `out/` 产物或 Electron 的门
 （`build` / `panels-check` / `renderer-arch-check` / `a11y-check`）本次在 worktree 里也是绿的
 ——它们各自会现场构建，不依赖主树的 `out/`。
+
+## 6. 复跑记录：790955e（本通道第二次整表，2026-09-20）
+
+同一条命令在 `790955e` 重跑（worktree `/tmp/dsh-gates`，`DSH_GATE_DIRECT=1`）：
+
+- **绿 27 / 32**，红 5：`test`、`e2e`、`ipc:check`、`gate-check`、**`docs-check`**。
+- 前 4 条同上表「worktree 形状假红」根因（靶子自带 `node_modules` 不在场），原文红项一致
+  （`gate-check` 仍是 `verify 第 1 次即通过` 处 `TypeError`）。
+- **第 5 条是真红**：`docs-check` D-3 命中 `tests/worker-hooks.test.ts:43`——该行的
+  `README.md:1` 是 worker 报告夹具正文里的证据路径，被「文档指针不许带行号」的扫描当成正文指针。
+  ⇒ 这条与运行环境无关：D-3 是纯源码文本扫描，被扫的文件已跟踪，worktree 与主树看到同一份文本，
+  所以**主树同样红**（修法后在主树跑 `docs-check` 复验为绿）。
+  修法是门自己给的同行逃生舱 `docs-check:allow <理由>`，不改判据也不拆字符串（401f1cf）。
+  这次复跑能认出它，是因为第 2 节把"预期内的 4 条"逐条点了名——**没有那张基线表，
+  5 条红会被整体归成"worktree 环境问题"，真红就漏过去了**。
+- `mutate-verify` exit=0（536125ms，当时 322 条锚点）；`mutate-needles-check` exit=0。
+- 体检命中仍 1 条：`commercial-check.ts:152 [empty-assert]`（任务 #15，未动）。
+- **未证 9 项**（该日汇总行原文 `⚠️  未证 9 项（连网/凭据限制未跑到的断言——**不等于通过**）`）。
+  比 27ff34d 那次的 12 少 3 条：红掉的门里那几项根本没跑到，不计数 ⇒ **未证数下降不等于覆盖面变好**，
+  别把这条差异读成进步。
+
