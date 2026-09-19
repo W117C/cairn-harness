@@ -147,6 +147,24 @@ export function expandConfigVars(
   });
 }
 
+/** `${user_config.<key>}` 展开器（§9.5：只进 exec form / MCP·LSP 配置 / 非敏感内容替换）。
+ *  与 expandConfigVars 分开是必要的：那是"这一份配置属于哪个目录"，这是"用户给这个插件填了什么"，
+ *  两件事的取值来源、可见范围、敏感规则都不同——合成一个表会让 sensitive 位漏进内容面。
+ *  没填 / 填不出（safeStorage 解不开）的键 **原样留着**：把 `${user_config.token}` 换成空串，
+ *  插件会拿着一个空 token 去请求远端，然后报一个和配置无关的 401。 */
+export function expandUserConfig(text: string, values: Record<string, string>): string {
+  return text.replace(/\$\{user_config\.([A-Za-z0-9_]+)\}/g, (whole, key: string) => values[key] ?? whole);
+}
+
+/** 收集文本里出现过的 `${user_config.<key>}` 键名（缺值时要点名说哪个没填）。 */
+export function referencedUserConfigKeys(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(/\$\{user_config\.([A-Za-z0-9_]+)\}/g)) {
+    if (m[1] !== undefined && !out.includes(m[1])) out.push(m[1]);
+  }
+  return out;
+}
+
 /** frontmatter `arguments` 的三种合法写法收成声明序名单（CC 用对象数组，散装 skill 常写成逗号串）。 */
 export function declaredArgumentNames(frontmatter: Record<string, unknown> | undefined): string[] {
   const raw = frontmatter?.arguments;

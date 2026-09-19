@@ -7,7 +7,15 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { withTimeout } from "../../net";
+import { expandUserConfig } from "./skills";
 import type { McpServerConfig, McpServerStatus } from "./types";
+
+/** §9.5：MCP 配置的展开上下文（插件根 / 项目根 / 用户给这个插件填的配置值）。 */
+export interface McpExpandRoots {
+  pluginRoot?: string;
+  projectDir?: string;
+  userConfig?: Record<string, string>;
+}
 
 /** MCP 连接/列工具的默认总时长上限（根因 4）：server 挂起时不让 IPC promise 永久悬空。 */
 export const DEFAULT_MCP_CONNECT_MS = 30_000;
@@ -149,12 +157,20 @@ function defaultClientFactory(cfg: McpServerConfig): Promise<{ client: Transport
   return Promise.resolve({ client, transport } as { client: Client; transport: Transport });
 }
 
-/** ${PLUGIN_ROOT} / ${PROJECT_DIR} 展开（CC .mcp.json 同款；stdio 无 shell，展开在本层做）。 */
-export function expandMcpConfig(cfg: McpServerConfig, roots: { pluginRoot?: string; projectDir?: string }): McpServerConfig {
+/** ${PLUGIN_ROOT} / ${PROJECT_DIR} / ${user_config.*} 展开（CC .mcp.json 同款；stdio 无 shell，展开在本层做）。
+ *  覆盖面 = command / args / env / url / headers：远程 server 的 API key 就写在 headers 里
+ *  （§9.11 两个实仓样本都是 http 型），只展开前三项等于那两类插件永远连不上。
+ *  roots.pluginRoot/projectDir 缺省时按空串替换（沿用旧行为）；user_config 的键**缺值即原样留着**
+ *  ——拿空串顶位会让 server 拿着空 token 去请求，报回来的 401 和配置毫无关系。 */
+export function expandMcpConfig(cfg: McpServerConfig, roots: McpExpandRoots): McpServerConfig {
+  const userConfig = roots.userConfig ?? {};
   const sub = (s: string): string =>
-    s
-      .replace(/\$\{PLUGIN_ROOT\}/g, roots.pluginRoot ?? "")
-      .replace(/\$\{PROJECT_DIR\}/g, roots.projectDir ?? "");
+    expandUserConfig(
+      s
+        .replace(/\$\{PLUGIN_ROOT\}/g, roots.pluginRoot ?? "")
+        .replace(/\$\{PROJECT_DIR\}/g, roots.projectDir ?? ""),
+      userConfig,
+    );
   const out: McpServerConfig = { ...cfg };
   if (typeof out.command === "string") out.command = sub(out.command);
   if (Array.isArray(out.args)) out.args = out.args.map((a) => (typeof a === "string" ? sub(a) : a));
@@ -163,6 +179,14 @@ export function expandMcpConfig(cfg: McpServerConfig, roots: { pluginRoot?: stri
     for (const [k, v] of Object.entries(out.env)) env[k] = typeof v === "string" ? sub(v) : v;
     out.env = env;
   }
+  const strMap = <T extends object | undefined>(m: T): T => {
+    if (!m) return m;
+    const out2: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(m)) out2[k] = typeof v === "string" ? sub(v) : v;
+    return out2 as T;
+  };
+  if (typeof out.url === "string") out.url = sub(out.url);
+  out.headers = strMap(out.headers);
   return out;
 }
 
@@ -183,7 +207,7 @@ export class McpManager {
   }
 
   /** 连接一个 server 并拉取 tools/list（scoped 名在此处定型；${PLUGIN_ROOT} 展开在此层做）。 */
-  async connect(plugin: string, server: string, cfg: McpServerConfig, roots?: { pluginRoot?: string; projectDir?: string }): Promise<McpConnectResult> {
+  async connect(plugin: string, server: string, cfg: McpServerConfig, roots?: McpExpandRoots): Promise<McpConnectResult> {
     const k = this.key(plugin, server);
     if (this.connections.has(k)) {
       const c = this.connections.get(k)!;

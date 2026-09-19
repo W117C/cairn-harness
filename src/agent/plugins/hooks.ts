@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { isShellFamily, staticRisk } from "../../permissions/risk";
 import { spawnTracked } from "../../tools/process";
 import type { HookEventName, LoadedHookDef } from "./types";
+import { expandUserConfig } from "./skills";
 
 /** 输出上限（每流，字符）。 */
 export const HOOK_OUTPUT_CAP = 10_000;
@@ -109,6 +110,9 @@ export interface HookExecOutcome {
   stdout: string;
   stderr: string;
   killed: boolean;
+  /** 起不来进程的原因（ENOENT / EACCES…）。与 code:null 配对——没有它，"起都没起来"
+   *  与"起来了但退出码为空"在错误里长得一模一样。 */
+  error?: string;
 }
 
 export type HookExecFn = (
@@ -136,6 +140,9 @@ export interface HookEngineOptions {
   /** 会话标识，进 stdin JSON 的 session_id（§9.5）。缺席时整字段不进 JSON——不伪造。 */
   sessionId?: string;
   exec?: HookExecFn;
+  /** §9.5 userConfig 取值面（按插件给）。缺席 = 不展开、不设 PLUGIN_OPTION_*（零行为，旧调用方逐字不变）。
+   *  由 PluginRuntime 注入：值来自明文配置 + safeStorage，敏感位只进子进程 env。 */
+  userConfigValues?: (plugin: string) => Record<string, string>;
 }
 
 interface SanitizedEnv {
@@ -144,6 +151,16 @@ interface SanitizedEnv {
 
 const ENV_ALLOW = ["PATH", "HOME", "LANG", "TMPDIR", "SHELL", "USER"];
 // E11（审查 P3）：ENV_SECRET_RE 已随死循环一并删除——剥离纪律 = ENV_ALLOW 白名单本身。
+
+/** §9.5 的取值通道：userConfig 键 → `PLUGIN_OPTION_<KEY>`（非字母数字下划线归一为 `_`、转大写）。
+ *  敏感值只走这条路进子进程，不进任何模型可见文本。 */
+export function pluginOptionEnv(values: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(values)) {
+    out["PLUGIN_OPTION_" + k.replace(/[^A-Za-z0-9_]/g, "_").toUpperCase()] = v;
+  }
+  return out;
+}
 
 /** 宿主 env 消毒：白名单基础集 + 剥离密钥类变量 + 三个插件变量。 */
 export function hookEnv(opts: {
@@ -235,16 +252,21 @@ function defaultExec(): HookExecFn {
       let stderr = "";
       let killed = false;
       let settled = false;
+      let spawnError: string | undefined;
       const done = (code: number | null): void => {
         if (settled) return;
         settled = true;
         handle.dispose();
-        resolveP({ code, stdout, stderr, killed });
+        resolveP({ code, stdout, stderr, killed, error: spawnError });
       };
       // 进程组 + 超时强制收束：hook 命令是插件提供的 shell 串，孙进程持有 stdout 时
       // 'close' 永不触发会让 hook 永久挂起（P1-2）。env 已由 hookEnv 白名单消毒。
-      // shell form：整串交给 /bin/sh；exec form：argv[0] 为可执行文件、其余为参数。
-      const handle = spawnTracked(shell ? command : (argv[0] ?? ""), shell ? [] : argv.slice(1), {
+      // shell form：整串交给 /bin/sh；exec form：command = 可执行文件本体、argv = 它的参数。
+      // ⚠️ 这里曾把 `argv[0]` 当可执行文件、把 argv.slice(1) 当参数——而调用方正相反地传
+      // (command, argv)。两侧契约不一致 ⇒ 每条 exec form 钩子都在 spawn 第一个**参数**
+      // （`["node","-e",…]` → spawn "-e"）→ ENOENT → 退出码 null。既有钩子单测一律注入
+      // 替身 exec 且只看 command，真实 spawn 面从没人跑过，所以缺陷活到了今天。
+      const handle = spawnTracked(command, shell ? [] : argv, {
         cwd,
         env,
         shell,
@@ -261,7 +283,9 @@ function defaultExec(): HookExecFn {
       handle.child.stdin?.on("error", () => {});
       handle.child.stdin?.write(stdin);
       handle.child.stdin?.end();
-      handle.child.on("error", () => done(null));
+      // 起不来的原因必须留着：只报「退出码 null」等于把 ENOENT 报成一个不存在的退出码，
+      // 排查的人看不到是谁没找到。
+      handle.child.on("error", (err: Error) => { spawnError = err.message; done(null); });
       handle.child.on("close", (code) => done(code));
     });
   };
@@ -397,13 +421,21 @@ export class HookEngine {
 
     const outcomes = await Promise.all(runnable.map(async (h, i) => {
       const shell = typeof h.handler.command === "string";
-      const command = shell ? (h.handler.command as string) : (h.handler.command as string[])[0] ?? "";
-      const argv = shell ? [] : (h.handler.command as string[]).slice(1);
+      // §9.5：`${user_config.*}` 只进 exec form（shell form 在装载期就被拒载——那串会被 shell 再解析一次）。
+      // 执行端展开而不是装载端展开：值来自 safeStorage，装载期（纯静态扫描）不该去碰密钥环。
+      const cfgValues = this.opts.userConfigValues?.(h.plugin) ?? {};
+      const command = shell
+        ? (h.handler.command as string)
+        : expandUserConfig((h.handler.command as string[])[0] ?? "", cfgValues);
+      const argv = shell ? [] : (h.handler.command as string[]).slice(1).map((a) => expandUserConfig(a, cfgValues));
       const pluginRoot = this.pluginRootOf(h);
       const env = hookEnv({
         pluginRoot,
         pluginData: join(this.opts.pluginDataRoot, h.plugin),
         workspace: this.opts.workspace,
+        // §9.5：hook 进程经 PLUGIN_OPTION_<KEY> 取 userConfig 值（含 sensitive——只进子进程 env，
+        // 不进正文/事件流/日志）。宿主密钥类变量仍由 ENV_ALLOW 白名单拦在外面。
+        extra: pluginOptionEnv(cfgValues),
       });
       const out = await this.exec(command, argv, shell, env, this.opts.workspace, timeouts[i] ?? HOOK_TIMEOUT_DEFAULT,
         hookStdinJson(payload, this.opts.workspace, this.opts.sessionId));
@@ -429,7 +461,8 @@ export class HookEngine {
         continue;
       }
       if (out.code !== 0) {
-        result.errors.push("hook 非零退出 " + String(out.code) + "（插件 " + h.plugin + "，非阻塞）");
+        result.errors.push("hook 非零退出 " + String(out.code) + "（插件 " + h.plugin + "，非阻塞）" +
+          (out.error !== undefined && out.error !== "" ? "：起进程失败 " + out.error.slice(0, 200) : ""));
         continue;
       }
       const parsed = parseHookDecision(stdout);

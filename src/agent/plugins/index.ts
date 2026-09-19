@@ -10,9 +10,13 @@ import { HookEngine } from "./hooks";
 import { McpManager, type McpToolInfo } from "./mcp";
 import {
   buildSkillRoutingList, skillInvokeName, resolveSkillName, skillRemount, modelInvocable,
-  clampSkillBody, substituteVars, declaredArgumentNames, expandConfigVars, SKILL_REMOUNT_TOKENS_PER_SKILL,
+  clampSkillBody, substituteVars, declaredArgumentNames, expandConfigVars, expandUserConfig, referencedUserConfigKeys,
+  SKILL_REMOUNT_TOKENS_PER_SKILL,
   type ActivatedSkill, type RoutingListResult, type RemountResult, type SubstitutionContext,
 } from "./skills";
+import {
+  readPluginUserConfig, pluginUserConfigDir, type PluginUserConfigRead,
+} from "./secrets";
 import {
   registerPluginLspServers, unregisterPluginLspServers, type LspServerConfig as LspRuntimeConfig,
 } from "../../tools/lsp";
@@ -35,19 +39,24 @@ export {
   getPluginSecret,
   secretKey,
   writePluginUserConfig,
+  readPluginUserConfig,
+  pluginUserConfigFile,
+  pluginUserConfigDir,
   SECRET_PLACEHOLDER,
   NO_BACKEND_ERROR,
   type PluginSecretBackend,
   type SafeStorageIo,
   type UserConfigWriteResult,
+  type PluginUserConfigRead,
 } from "./secrets";
 export { parseFrontmatter, fmString } from "./frontmatter";
 export { discoverPlugins, activeHooks, pendingPlugins } from "./discover";
 export { TrustStore, pluginFingerprint } from "./trust";
-export { HookEngine, hookEnv, parseHookDecision, mergeDecision, parseHookIf, hookIfMatches, HOOK_OUTPUT_CAP, HOOK_CONTEXT_TOTAL_CHAR_LIMIT, HOOK_REASON_CHAR_LIMIT, HOOK_TIMEOUT_DEFAULT, HOOK_TIMEOUT_USER_PROMPT, type HookEngineOptions } from "./hooks";
-export { McpManager, scopedToolName, parseScopedToolName, type McpToolInfo, type McpConnectResult } from "./mcp";
+export { HookEngine, hookEnv, pluginOptionEnv, parseHookDecision, mergeDecision, parseHookIf, hookIfMatches, HOOK_OUTPUT_CAP, HOOK_CONTEXT_TOTAL_CHAR_LIMIT, HOOK_REASON_CHAR_LIMIT, HOOK_TIMEOUT_DEFAULT, HOOK_TIMEOUT_USER_PROMPT, type HookEngineOptions } from "./hooks";
+export { McpManager, expandMcpConfig, scopedToolName, parseScopedToolName, type McpToolInfo, type McpConnectResult } from "./mcp";
 export {
   buildSkillRoutingList, skillInvokeName, resolveSkillName, skillRoutingLine, substituteVars, declaredArgumentNames,
+  expandConfigVars, expandUserConfig, referencedUserConfigKeys,
   renderPromptCommand, commandInvokeName, expandPromptCommand, skillRemount, clampSkillBody, estimateTokens,
   type CommandExpansion, type SubstitutionContext,
   SKILL_ROUTING_CHAR_LIMIT, SKILL_REMOUNT_TOKENS_PER_SKILL, SKILL_REMOUNT_TOKENS_TOTAL,
@@ -125,6 +134,8 @@ export class PluginRuntime {
   mcpTools: Map<string, McpToolInfo & { plugin: string; server: string }> = new Map();
   /** 本轮已注册进 LSP 运行时的插件服务器 id（带插件前缀）；shutdown 按这张表摘干净。 */
   private lspServerIds: string[] = [];
+  /** §9.5 userConfig 的读侧（一个受信插件一份）。三条激活面（hook / MCP / LSP）都从这里取值。 */
+  private userConfigs: Map<string, PluginUserConfigRead> = new Map();
 
   private constructor(manifest: PluginsManifest, opts: PluginRuntimeOptions) {
     this.opts = opts;
@@ -136,6 +147,8 @@ export class PluginRuntime {
       pluginDataRoot: opts.pluginDataRoot,
       ...(opts.mode ? { mode: opts.mode } : {}),
       ...(opts.sessionId ? { sessionId: opts.sessionId } : {}),
+      // exec form 的 ${user_config.*} 展开与 PLUGIN_OPTION_* 取值共用这一份解析结果。
+      userConfigValues: (plugin) => this.userConfigs.get(plugin)?.values ?? {},
     });
     this.mcp = new McpManager();
   }
@@ -150,7 +163,38 @@ export class PluginRuntime {
       ...(opts.looseRoots ? { looseRoots: opts.looseRoots } : {}),
       trustStatus: (abs, fp, bounded) => trust.statusSync(abs, fp, bounded),
     });
-    return new PluginRuntime(manifest, opts);
+    const rt = new PluginRuntime(manifest, opts);
+    await rt.resolveUserConfigs(); // 装载即解析：缺项要在激活前就出现在警告里
+    return rt;
+  }
+
+  /** 读每个受信插件的 userConfig（明文值 + safeStorage 里的敏感值），并把
+   *  「插件引用了 `${user_config.K}` 而 K 拿不到值」当场点名——不点名的话插件会带着字面占位串
+   *  去连远端，报回来的错和配置毫无关系（把不可知记成空值是本仓点名的形状）。 */
+  async resolveUserConfigs(): Promise<void> {
+    this.userConfigs.clear();
+    for (const p of this.manifest.plugins) {
+      if (p.trust !== "trusted") continue;
+      const read = await readPluginUserConfig({
+        dir: pluginUserConfigDir(this.opts.pluginDataRoot, p.name),
+        plugin: p.name,
+        fields: p.userConfigFields,
+      });
+      this.userConfigs.set(p.name, read);
+      if (read.missing.length === 0) continue;
+      const texts = JSON.stringify([p.hooks, p.mcp, p.lsp]);
+      const referenced = referencedUserConfigKeys(texts);
+      for (const key of referenced) {
+        if (read.missing.includes(key)) {
+          p.warnings.push("userConfig 缺项：" + p.name + " 引用了 ${user_config." + key + "} 但没有值（未填或敏感值解不开）⇒ 原样保留，不填空串");
+        }
+      }
+    }
+  }
+
+  /** 某插件的 userConfig 取值（配置面：hook exec form / MCP / LSP）。未装载 = 空表。 */
+  userConfigValuesFor(plugin: string): Record<string, string> {
+    return this.userConfigs.get(plugin)?.values ?? {};
   }
 
   /** 信任卡决议（批准/拒绝）→ 按决议重建激活面（同一样本信任后开始生效）。
@@ -182,6 +226,8 @@ export class PluginRuntime {
         const res = await this.mcp.connect(p.name, serverName, config, {
           pluginRoot: p.root,
           projectDir: this.opts.workspace,
+          // §9.5：远程 server 的 API key 就写在 headers/url 里，不展开这一层等于那类插件连不上。
+          userConfig: this.userConfigValuesFor(p.name),
         });
         for (const t of res.tools) {
           this.mcpTools.set(t.scopedName, { ...t, plugin: p.name, server: serverName });
@@ -198,10 +244,14 @@ export class PluginRuntime {
     for (const p of this.manifest.plugins) {
       if (p.trust !== "trusted") continue;
       const servers: Record<string, LspRuntimeConfig> = {};
+      const cfgValues = this.userConfigValuesFor(p.name);
+      const expand = (t: string): string => expandUserConfig(
+        expandConfigVars(t, { pluginRoot: p.root, projectDir: this.opts.workspace }),
+        cfgValues,
+      );
       for (const [id, cfg] of Object.entries(p.lsp)) {
         const extensions = Object.keys(cfg.extensionToLanguage ?? {});
         if (extensions.length === 0) continue; // 没有扩展映射 = 永远不会被选中；装载期已出过声
-        const expand = (t: string): string => expandConfigVars(t, { pluginRoot: p.root, projectDir: this.opts.workspace });
         servers[p.name + ":" + id] = {
           command: expand(cfg.command),
           args: (cfg.args ?? []).map(expand),

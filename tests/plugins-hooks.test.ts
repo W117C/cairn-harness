@@ -189,6 +189,29 @@ describe("M2e hook 引擎：并行、去重、matcher、env、门（任务 5/6�
   });
 });
 
+describe("exec form 钩子：真实 spawn（不靠替身 exec）", () => {
+  // 上面的钩子单测一律注入替身 exec 且只看第一个入参 ⇒ 真实 spawn 那一面从没人跑过，
+  // 于是 defaultExec 的契约错位（把 argv[0] 当可执行文件、丢掉声明的 command）活到今天：
+  // 每条 exec form 钩子都在 spawn 它的第一个**参数**（["node","-e",…] → spawn "-e"）→ ENOENT。
+  it("数组形态：spawn 声明的可执行文件本身，其余参数原样交给它", async () => {
+    const e = await makeEngine([mkHook("SessionStart", [
+      "node", "-e", "process.stdout.write('exe=' + process.argv[1] + ' arg=' + (process.argv[2] ?? '-'))", "PIN",
+    ])]);
+    const r = await e.run("SessionStart", { event: "SessionStart" });
+    expect(r.ran).toBe(1);
+    expect(r.errors).toEqual([]); // 替身 exec 下这条恒绿——真 spawn 失败会红
+    expect(r.additionalContext).toBe("exe=PIN arg=-");
+  });
+
+  it("起不来的进程：错误里带真实原因（ENOENT），不只报一个不存在的退出码", async () => {
+    const e = await makeEngine([mkHook("SessionStart", ["dsh-no-such-executable-xyz", "--flag"])]);
+    const r = await e.run("SessionStart", { event: "SessionStart" });
+    expect(r.ran).toBe(1);
+    expect(r.errors.join(" ")).toContain("ENOENT");
+    expect(r.errors.join(" ")).toContain("dsh-no-such-executable-xyz");
+  });
+});
+
 describe("M2e hook env 构造（消毒面）", () => {
   it("hookEnv 只加三个插件变量，密钥类宿主变量不进白名单", () => {
     const env = hookEnv({ pluginRoot: "/p", pluginData: "/pd", workspace: "/w" });

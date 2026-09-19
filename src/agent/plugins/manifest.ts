@@ -82,6 +82,9 @@ export interface UserConfigField {
   /** sensitive=true → 值入 safeStorage，**不落明文**（§9.11-2 / §11.8 信任边界底线）。 */
   sensitive: boolean;
   hasDefault: boolean;
+  /** 声明里的 default 值本身。此前只留 hasDefault ⇒ 读侧知道"有默认"却不知道是什么，
+   *  只能填空串（把不可知记成免费/空值是本仓点名的形状），所以这里带上原值。 */
+  defaultValue?: string;
 }
 
 /** userConfig 对象 → 字段表（未知形态按 string 兜底，不抛）。 */
@@ -99,9 +102,11 @@ export function parseUserConfigFields(raw: Record<string, unknown> | null): User
         required: o.required === true,
         sensitive: o.sensitive === true,
         hasDefault: o.default !== undefined,
+        ...(o.default !== undefined ? { defaultValue: String(o.default) } : {}),
       });
     } else {
-      out.push({ key, type: typeof v === "number" ? "number" : typeof v === "boolean" ? "boolean" : "string", required: false, sensitive: false, hasDefault: true });
+      // 裸标量简写（"KEY": "value"）：那个值就是默认值——不是"有默认但不知道是什么"。
+      out.push({ key, type: typeof v === "number" ? "number" : typeof v === "boolean" ? "boolean" : "string", required: false, sensitive: false, hasDefault: true, defaultValue: String(v) });
     }
   }
   return out;
