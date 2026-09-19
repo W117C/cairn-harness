@@ -194,6 +194,11 @@ export class Orchestrator {
     return [...this.workers.keys()];
   }
 
+  /** 收队工具的短路判据：一个 worker 都没有就别建等待项（零行为，省一次模型可见的空 payload）。 */
+  hasWorkers(): boolean {
+    return this.workers.size > 0;
+  }
+
   statusOf(agentId: string): AgentEvent | null {
     return null; // 状态一律由事件流投影（§3.1），编排器不设第二事实源
   }

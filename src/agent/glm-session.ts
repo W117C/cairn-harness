@@ -247,6 +247,25 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         ),
       },
     },
+    // W1a 收队原语：与 spawn_agent 同族——「派得出去、收不回来」正是本仓反复复发的
+    // 「能力已发货、产品路径绕过它」缺陷族（join 原语此前只有验收脚本在调）。
+    // 规格面与实例面必须同笔落地，tests/tool-surface-parity.test.ts（G-B）钉这条。
+    {
+      type: "function",
+      function: {
+        name: "wait_for_agents",
+        description:
+          "收队：等本批子 agent 到终态并一次拿回状态/摘要/用量。派生过 worker 后先调它再下结论；" +
+          "缺省等全部，可给 agent_ids 只等其中几个。",
+        parameters: obj(
+          {
+            agent_ids: { type: "array", items: { type: "string" }, description: "缺省 = 本会话全部 worker" },
+            timeout_ms: { type: "number", description: "等待上限 ms（缺省 120000）" },
+          },
+          [],
+        ),
+      },
+    },
     // M2d：记忆写入唯一入口（§8.1.4）；只读档随写向工具一并摘除
     {
       type: "function",
@@ -269,7 +288,11 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
     },
   ];
   if (mode === "read-only") {
-    return specs.filter((s) => !isSideEffectTool(s.function.name) && s.function.name !== "remember");
+    // 只读档连同编排原语一并摘除：spawn_agent 靠 SIDE_EFFECT_TOOLS，wait_for_agents 不是写向工具
+    // （不该被方案门挡），所以只能显式点名——漏摘就是「模型看得见、执行面白名单挡着」那类两头断。
+    return specs.filter((s) =>
+      !isSideEffectTool(s.function.name) && s.function.name !== "remember" && s.function.name !== "wait_for_agents",
+    );
   }
   return specs;
 }
