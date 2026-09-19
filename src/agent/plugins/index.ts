@@ -45,7 +45,8 @@ export { HookEngine, hookEnv, parseHookDecision, mergeDecision, HOOK_OUTPUT_CAP,
 export { McpManager, scopedToolName, parseScopedToolName, type McpToolInfo, type McpConnectResult } from "./mcp";
 export {
   buildSkillRoutingList, skillInvokeName, resolveSkillName, skillRoutingLine, substituteArgs,
-  renderPromptCommand, commandInvokeName, skillRemount, clampSkillBody, estimateTokens,
+  renderPromptCommand, commandInvokeName, expandPromptCommand, skillRemount, clampSkillBody, estimateTokens,
+  type CommandExpansion,
   SKILL_ROUTING_CHAR_LIMIT, SKILL_REMOUNT_TOKENS_PER_SKILL, SKILL_REMOUNT_TOKENS_TOTAL,
   type ActivatedSkill, type RoutingListResult, type RemountResult,
 } from "./skills";

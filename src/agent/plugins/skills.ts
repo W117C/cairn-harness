@@ -73,14 +73,41 @@ export function substituteArgs(template: string, argsString: string): string {
     });
 }
 
-/** 渲染 prompt command（commands/*.md → 用户消息文本）；user-invocable 语义 = /plugin:command args。 */
+/** 渲染 prompt command（commands/*.md → 用户消息文本）；user-invocable 语义 = /plugin:command args。
+ *  首尾空白剥掉：那是 markdown 文件的换行，不是提示词的一部分。 */
 export function renderPromptCommand(cmd: PromptCommandEntry, argsString: string): string {
-  return substituteArgs(cmd.body, argsString);
+  return substituteArgs(cmd.body, argsString).trim();
 }
 
 /** prompt 命令调用名：/plugin-name:command-name。 */
 export function commandInvokeName(c: Pick<PromptCommandEntry, "plugin" | "name">): string {
   return c.plugin ? "/" + c.plugin + ":" + c.name : "/" + c.name;
+}
+
+export interface CommandExpansion {
+  /** 进事件流与模型的正文：命中即渲染结果，未命中 = 原文逐字。 */
+  text: string;
+  /** 命中的调用名（面板/审计用）；未命中 = null。 */
+  invoked: string | null;
+  /** 命中了但**用户侧不可调用**（frontmatter user-invocable:false）的命令名；其余情况 = null。
+   *  单独一档是为了不静默把那串斜杠丢给模型猜——§9.4 的 false 语义是"不进 / 菜单"，
+   *  而不是"当没看见"。 */
+  refused: string | null;
+}
+
+/** §9.4 派发：`/plugin:cmd args`（松散命令 = `/cmd args`）→ 渲染后的用户消息。
+ *  不以 / 开头、或名字没登记 ⇒ 逐字原样返回（既有路径字节不变）。 */
+export function expandPromptCommand(commands: readonly PromptCommandEntry[], text: string): CommandExpansion {
+  if (!text.startsWith("/")) return { text, invoked: null, refused: null };
+  const rest = text.slice(1);
+  const cut = rest.search(/\s/);
+  const name = cut < 0 ? rest : rest.slice(0, cut);
+  const args = cut < 0 ? "" : rest.slice(cut + 1);
+  const hit = commands.find((c) => commandInvokeName(c) === "/" + name);
+  if (!hit) return { text, invoked: null, refused: null };
+  const invocable = hit.frontmatter["user-invocable"];
+  if (invocable === false || invocable === "false") return { text, invoked: null, refused: "/" + name };
+  return { text: renderPromptCommand(hit, args), invoked: "/" + name, refused: null };
 }
 
 // ---- 压缩后重挂（§9.4）：最近激活 skill 的全文按预算重注 ----

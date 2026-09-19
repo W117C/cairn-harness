@@ -63,7 +63,7 @@ import { AskGate } from "./ask-gate";
 import type { LicenseState } from "./license";
 import type { AskOutcomePayload, AskPayload, RunRequest, SidechatPanelSnapshot } from "./ipc-protocol";
 import { buildSandboxProfile, checkSandbox, runInSandbox, type SandboxStatus } from "./sandbox";
-import { PluginRuntime, setCurrentPluginRuntime, currentPluginRuntime, type PluginPanelSnapshot } from "../agent/plugins";
+import { PluginRuntime, setCurrentPluginRuntime, currentPluginRuntime, expandPromptCommand, type PluginPanelSnapshot } from "../agent/plugins";
 import type { HookEngine } from "../agent/plugins/hooks";
 import type { McpToolInfo } from "../agent/plugins/mcp";
 import { Scheduler, type ScheduleSnapshot, type TriggerExecutor } from "./scheduler";
@@ -1101,6 +1101,15 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       console.warn("[plugins] 运行时装载失败，零插件降级:", err instanceof Error ? err.message : String(err));
       rt = null;
     }
+    // §9.4 prompt 命令派发（`commands/*.md` → 渲染成用户消息进事件流）。命中即换正文，未命中逐字
+    // 不变（零行为）。放在 UserPromptSubmit **之前** ⇒ 钩子与模型看到的是真正要出门的那段文本，
+    // 而不是那串用户敲下的斜杠。refused 单列且出声：false 的语义是「不进 / 菜单」，不是「当没看见」。
+    const expanded = expandPromptCommand(rt?.commands() ?? [], opts.message);
+    if (expanded.refused !== null) {
+      await pipeline({ type: "assistant_message", content: "[command 不可用户调用] " + expanded.refused + "（frontmatter user-invocable:false）" });
+      return await replay(opts.logPath);
+    }
+    const promptText = expanded.text;
     // M2e：SessionStart（上下文注入）→ UserPromptSubmit（阻断 / 上下文）；SubagentStart/SubagentStop
     // 事件源在 M3——引擎支持事件名但无源，静默不触发。
     let hookContext = "";
@@ -1112,7 +1121,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
         console.warn("[hooks] SessionStart 失败:", err instanceof Error ? err.message : String(err));
       }
       try {
-        const ups = await rt.hooks.run("UserPromptSubmit", { event: "UserPromptSubmit", prompt: opts.message });
+        const ups = await rt.hooks.run("UserPromptSubmit", { event: "UserPromptSubmit", prompt: promptText });
         if (ups.blocked) {
           await pipeline({ type: "assistant_message", content: "[hook blocked prompt] " + (ups.blockReason ?? "UserPromptSubmit hook 阻断") });
           return await replay(opts.logPath);
@@ -1150,7 +1159,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       ...(impactHook ? { impact: impactHook } : {}),
       ...(opts.autoVerify === true ? { autoVerify: true } : {}),
       stuckNudge: true, // 主会话（人直用那条）才有换路提示：worker 有看门、靶场按字节计量，见 LoopOptions
-      provider: createProvider(opts.message, BASE_SYSTEM, {
+      provider: createProvider(promptText, BASE_SYSTEM, {
         ...opts, emit: pipeline, solpi,
         pluginTools: [...(recall ? [observationRecallSpec] : []), ...(impactTool ? [impactQuerySpec] : []), ...pluginToolSpecsFromRuntime(rt).filter(t => !recall || t.name !== "obs_recall")],
         ...(rt ? { plugins: {
@@ -1166,7 +1175,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       workspace: opts.workspace,
       mode: "auto", // 冻结 loop 对 ask 一律拒绝；真实门在 gatedTool（复用 checkPermission）
       signal,
-      userMessage: opts.message,
+      userMessage: promptText,
       clarify: {
         // H2（A-2）：等人门可收束——run 取消信号随门透传；无人值守 run 的 clarify/plan
         // 挂起 60s 后 fail-closed（不再悬到 runTimeoutMs 30min 才被超时闸收走）。
@@ -1248,7 +1257,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
         enabled: autoMemory && opts.mode !== "read-only" && opts.unattended !== true,
         logPath: opts.logPath,
         workspace: opts.workspace,
-        provider: createProvider(opts.message, undefined, undefined, providerKind, settingsModel),
+        provider: createProvider(promptText, undefined, undefined, providerKind, settingsModel),
         signal,
         rememberTool: remember, // 合并审批即本轮权限门（未加门的工具本体）
         emit: pipeline,

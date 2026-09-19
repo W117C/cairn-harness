@@ -16,7 +16,7 @@ import { runAgent } from "../src/main/agent-runner";
 import { composeTurnMessages } from "../src/agent/glm-session";
 import {
   PluginRuntime, TrustStore, pluginFingerprint, buildSkillRoutingList, clampSkillBody,
-  scopedToolName,
+  scopedToolName, expandPromptCommand,
   setPluginSecretBackend, putPluginSecret, getPluginSecret, writePluginUserConfig,
   SECRET_PLACEHOLDER,
   SKILL_ROUTING_CHAR_LIMIT, SKILL_REMOUNT_TOKENS_PER_SKILL, SKILL_REMOUNT_TOKENS_TOTAL,
@@ -205,6 +205,27 @@ async function main(): Promise<void> {
     const probe = composeTurnMessages({ history: [], skills: "[SessionStart 注入探测]" });
     assert(probe.some((m) => m.role === "system" && String(m.content ?? "").includes("SessionStart 注入探测")), "C6 SessionStart/UserPromptSubmit 上下文经组装层注入（system 位）");
     await rtC.shutdown();
+  }
+
+  // ---- C9 prompt 命令派发（§9.4：装载 → 渲染成用户消息，不是只被面板计数）----
+  console.log("-- C9 prompt 命令（/plugin:cmd → 渲染后的用户消息正文）--");
+  {
+    const wsCmd = await makeWorkspace("cmd");
+    const rtCmd = await PluginRuntime.load({
+      userPluginsDir: join(FX, "user"),
+      projectPluginsDir: join(wsCmd.ws, ".agent", "plugins"),
+      workspace: wsCmd.ws,
+      pluginDataRoot: join(wsCmd.ws, ".plugin-data"),
+    });
+    const wave = rtCmd.commands().find((c) => c.plugin === "hello-plugin" && c.name === "wave");
+    assert(wave !== undefined, "C9a 受信用户级插件的 commands/wave.md 进命令表（不是只有 counts.commands 数字）");
+    const exp = expandPromptCommand(rtCmd.commands(), "/hello-plugin:wave 张三");
+    assert(exp.invoked === "/hello-plugin:wave" && exp.text === "挥挥手，对象：张三",
+      "C9b /plugin:cmd 渲染成用户消息正文（$ARGUMENTS 已替换、markdown 换行已剥）");
+    const plain = expandPromptCommand(rtCmd.commands(), "修个 bug");
+    assert(plain.text === "修个 bug" && plain.invoked === null, "C9c 非命令输入逐字不变（零行为）");
+    await rtCmd.shutdown();
+    await rm(wsCmd.ws, { recursive: true, force: true }).catch(() => {});
   }
 
   // ---- D 信任门（未信任不激活 → 信任后同样样本生效）----

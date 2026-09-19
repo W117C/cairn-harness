@@ -2584,6 +2584,38 @@ const MUTATIONS = [
     apply: (s) => s.replace(`    return mode === "read" ? new HookEngine({ ...this.opts, mode: "read-only" }) : this;`, "    return this;"),
     expectFail: "forWorkerMode(\"read\") 把引擎降成只读档：中等风险的钩子命令拒跑；\"write\" 沿用原档",
   },
+  {
+    id: "prompt-command-dispatch-never-runs",
+    src: "src/main/agent-runner.ts",
+    test: "tests/plugin-commands-dispatch.test.ts",
+    desc: "派发拿到的命令表是空的 ⇒ commands/*.md 又被装载一次却依旧没人解析（§9.4「渲染成用户消息进事件流」回到今日现状），用户敲 /cmd 得到一串死文本",
+    apply: (s) => s.replace("    const expanded = expandPromptCommand(rt?.commands() ?? [], opts.message);", "    const expanded = expandPromptCommand([], opts.message);"),
+    expectFail: "/cmd-demo:wave 张三 → 落流的是渲染后的正文，不是那串斜杠",
+  },
+  {
+    id: "prompt-command-refused-silent",
+    src: "src/main/agent-runner.ts",
+    test: "tests/plugin-commands-dispatch.test.ts",
+    desc: "user-invocable:false 不再出声 ⇒ 那串斜杠原样进模型，模型只能猜（把「不可调用」降级成静默）",
+    apply: (s) => s.replace("    if (expanded.refused !== null) {", "    if (false) {"),
+    expectFail: "user-invocable:false 的命令：不出正文也不静默丢给模型，出声说明被拒",
+  },
+  {
+    id: "command-invoke-name-drops-plugin-prefix",
+    src: "src/agent/plugins/skills.ts",
+    test: "tests/plugin-commands-dispatch.test.ts",
+    desc: "调用名去掉插件前缀 ⇒ 两个插件的同名命令撞成一个（scoped 名是 §9.2/§9.6 的消歧面，面板与派发同名）",
+    apply: (s) => s.replace("  return c.plugin ? \"/\" + c.plugin + \":\" + c.name : \"/\" + c.name;", "  return \"/\" + c.name;"),
+    expectFail: "命中插件命令：整条消息换成渲染结果",
+  },
+  {
+    id: "command-render-keeps-markdown-newline",
+    src: "src/agent/plugins/skills.ts",
+    test: "tests/plugin-commands-dispatch.test.ts",
+    desc: "不剥 markdown 文件自带的首尾换行 ⇒ 每条命令渲染出的用户消息都带一个空白尾巴（事件流与面板多一行空内容）",
+    apply: (s) => s.replace("  return substituteArgs(cmd.body, argsString).trim();", "  return substituteArgs(cmd.body, argsString);"),
+    expectFail: "/cmd-demo:wave 张三 → 落流的是渲染后的正文，不是那串斜杠",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
