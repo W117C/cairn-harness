@@ -25,14 +25,16 @@ export const write_file: Tool = {
     if (bytes > WRITE_LIMIT_BYTES) {
       throw new Error(`write_file: 内容 ${bytes} 字节，超过 50KB 上限，已拒绝写入: ${rel}`);
     }
-    // 覆盖前先拿旧内容：只为算行增减（写盘本身不依赖它）。三种口径分得很清：
-    // "" = 确证不存在或确证空文件（可说"新建"）；null = 读不动（不假装知道，退回旧口径报字节数）。
+    // 覆盖前先拿旧内容：只为算行增减（写盘本身不依赖它）。
+    // "" = 拿不到旧内容 ⇒ 按新建口径报；null = 旧文件大到不值得读 ⇒ 退回旧口径只报字节数，
+    // 不拿「不知道」当「新建」。读失败的非 ENOENT 分支不单独处理：那种路径紧随的 writeFile
+    // 同样会失败，永远走不到这里——为它写一条测不到的分支就是本仓忌的防御性死码。
     let oldText: string | null = null;
     try {
       const st = await stat(abs);
-      if (st.size <= DELTA_READ_LIMIT_BYTES) oldText = await readFile(abs, "utf8");
-    } catch (err) {
-      if ((err as { code?: string }).code === "ENOENT") oldText = "";
+      oldText = st.size <= DELTA_READ_LIMIT_BYTES ? await readFile(abs, "utf8") : null;
+    } catch {
+      oldText = "";
     }
     await mkdir(dirname(abs), { recursive: true });
     await writeFile(abs, content, "utf8");
