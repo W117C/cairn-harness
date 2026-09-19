@@ -2205,6 +2205,22 @@ const MUTATIONS = [
     apply: (s) => s.replace("  if (t.tracked.length === 0) out.push(", "  if (t.total > 0) out.push("),
     expectFail: "混合：草稿与 HEAD 缺陷分开列（HEAD 那部分照常是红，不给豁免）",
   },
+  {
+    id: "mem-eviction-not-named",
+    src: "src/agent/memory/inject.ts",
+    test: "tests/memory-eviction-notice.test.ts",
+    desc: "整段抽干了哪几段不点名 ⇒ 模型看到一目录条目却不知道架构/决策被省了，只能重新 grep 或以为项目没架构",
+    apply: (s) => s.replace("    if (evicted.length > 0) note += \"；已整段省略：\"", "    if (evicted.length > 0 && false) note += \"；已整段省略：\""),
+    expectFail: "成熟记忆集在缺省预算下抽干了 ARCHITECTURE 与 DECISIONS ⇒ 提示点名这两段并给 read_file 通道",
+  },
+  {
+    id: "mem-eviction-had-recorded-after-drop",
+    src: "src/agent/memory/inject.ts",
+    test: "tests/memory-eviction-notice.test.ts",
+    desc: "「原有几行」改记成 0 ⇒ 事后永远判不出谁被抽干（就地 splice 之后再量必然全 0），点名静默失效",
+    apply: (s) => s.replace("had: s.lines.length, block: \"project\" as const", "had: 0, block: \"project\" as const"),
+    expectFail: "成熟记忆集在缺省预算下抽干了 ARCHITECTURE 与 DECISIONS ⇒ 提示点名这两段并给 read_file 通道",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
