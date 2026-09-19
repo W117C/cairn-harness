@@ -16,6 +16,35 @@ export const DEFAULT_MCP_CONNECT_MS = 30_000;
  *  pending 结算链被摘时，在途调用会永久悬空、拖死整个 agent loop。给一个宽松的总时长上限。 */
 export const DEFAULT_MCP_CALL_MS = 120_000;
 
+/** 外部 server 给的文本一律有界（agent-plan §工具规格：「每个工具具备输出上限 + 截断提示」）。
+ *  MCP 面此前是两个例外，而且第二个更贵：`tools/list` 的描述进的是**每轮重送**的工具面
+ *  （×工具数×轮数），一个话痨 server 能把整个会话的固定成本抬高一个数量级。 */
+export const MCP_RESULT_CHAR_LIMIT = 32 * 1024;
+export const MCP_DESCRIPTION_CHAR_LIMIT = 2 * 1024;
+/** 提示行自己占位：留够位置，「≤ 上限」这句承诺才不被提示撑破。 */
+const CAP_NOTE_RESERVE = 220;
+
+/** 结果：头 + 尾都留（结论在哪端取决于 server 的写法），中间省略量如实报出。 */
+export function capMcpResult(text: string, limit = MCP_RESULT_CHAR_LIMIT): string {
+  if (text.length <= limit) return text;
+  const keep = limit - CAP_NOTE_RESERVE;
+  const head = Math.floor(keep * 0.6);
+  const tail = keep - head;
+  return text.slice(0, head)
+    + "\n[truncated: MCP 结果 " + String(text.length) + " 字符超上限 " + String(limit)
+    + "，省略中间 " + String(text.length - head - tail) + " 字符（首尾已保留）——要全文就收窄查询或让 server 分页]\n"
+    + text.slice(text.length - tail);
+}
+
+/** 描述：只留头部，且截在完整行尾（工具说明的关键信息在前几行，尾部按轮重付不值）。 */
+export function capMcpDescription(text: string, limit = MCP_DESCRIPTION_CHAR_LIMIT): string {
+  if (text.length <= limit) return text;
+  const lineEnd = text.lastIndexOf("\n", limit);
+  const cut = lineEnd > Math.floor(limit * 0.5) ? lineEnd : limit;
+  return text.slice(0, cut)
+    + " …[truncated: 描述 " + String(text.length) + " 字符超 " + String(limit) + " 上限]";
+}
+
 /** MCP 工具 scoped 名（§9.3）：mcp__plugin_<plugin>_<server>__<tool>。 */
 export function scopedToolName(plugin: string, server: string, tool: string): string {
   return "mcp__plugin_" + plugin + "_" + server + "__" + tool;
@@ -137,7 +166,7 @@ export class McpManager {
       const listed = await withTimeout(client.listTools(), this.connectTimeoutMs, label + " tools/list");
       const tools: McpToolInfo[] = (listed.tools ?? []).map((t) => ({
         name: t.name,
-        description: typeof t.description === "string" ? t.description : "",
+        description: typeof t.description === "string" ? capMcpDescription(t.description) : "",
         inputSchema: (t.inputSchema ?? {}) as Record<string, unknown>,
         scopedName: scopedToolName(plugin, server, t.name),
       }));
@@ -197,7 +226,7 @@ export class McpManager {
         }
       }
       const isError = (res as { isError?: boolean }).isError === true;
-      return { ok: !isError, output: parts.join("\n") || "(空结果)" };
+      return { ok: !isError, output: capMcpResult(parts.join("\n")) || "(空结果)" };
     } catch (err) {
       return { ok: false, output: "MCP tools/call 失败: " + (err instanceof Error ? err.message : String(err)) };
     }
