@@ -1723,6 +1723,38 @@ const MUTATIONS = [
     apply: (s) => s.replace("\"\\n[全文见 \" + entry.path + \"]\"),", "\"\"),"),
     expectFail: "200KB 正文收到单 skill 预算内，头部留住并给出全文路径",
   },
+  {
+    id: "mcp-schema-leaf-cap-removed",
+    src: "src/agent/plugins/mcp.ts",
+    test: "tests/mcp-bounds.test.ts",
+    desc: "取消单叶上限 ⇒ server 把 8KB 散文写进每个参数的 description，40 参数的工具就是 320KB 进**每轮**工具面",
+    apply: (s) => s.replace("  if (text.length <= MCP_SCHEMA_LEAF_CHAR_LIMIT) return text;", "  return text;"),
+    expectFail: "长 description 叶子被收，但键名/type/required/enum 一个不动",
+  },
+  {
+    id: "mcp-schema-depth-guard-removed",
+    src: "src/agent/plugins/mcp.ts",
+    test: "tests/mcp-bounds.test.ts",
+    desc: "取消深度闸 ⇒ 递归不再是「有界近似」而是「原样透传」，超深嵌套（递归 $ref 展开）照单全收",
+    apply: (s) => s.replace("  if (depth >= MCP_SCHEMA_DEPTH_LIMIT) {", "  if (depth >= Number.MAX_SAFE_INTEGER) {"),
+    expectFail: "超深子树整体换成占位（仍是一个合法 object，且计入收窄数）",
+  },
+  {
+    id: "mcp-schema-clamped-count-lies",
+    src: "src/agent/plugins/mcp.ts",
+    test: "tests/mcp-bounds.test.ts",
+    desc: "收窄处数不计数 ⇒ 模型看到「结构完整」的工具面，实际参数说明是节选，却没有任何信号（fail-silent）",
+    apply: (s) => s.replace("    if (out !== v) tally.clamped++;\n", "    tally.clamped += 0;\n"),
+    expectFail: "长 description 叶子被收，但键名/type/required/enum 一个不动",
+  },
+  {
+    id: "mcp-schema-cap-not-wired",
+    src: "src/agent/plugins/mcp.ts",
+    test: "tests/mcp-bounds.test.ts",
+    desc: "函数写了却没接进 tools/list ⇒ 注册表里仍是原文 schema，「有 cap」只是模块里的死代码（本仓第 8 次同族缺陷）",
+    apply: (s) => s.replace("          inputSchema: capped.schema,", "          inputSchema: (t.inputSchema ?? {}) as Record<string, unknown>,"),
+    expectFail: "tools/list 的长参数说明进注册表前已被收，且描述里如实标注收窄处数",
+  },
 ];
 
 function runTest(testRel) {
