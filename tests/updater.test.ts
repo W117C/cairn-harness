@@ -113,7 +113,7 @@ describe("更新检查 V1（手写 semver + 显式态）", () => {
 // ①真·对端挂起要给「停滞超时」而不是一律「更新源不可达」（用户据此去查 DNS/域名，真因是挂起）；
 // ②慢而有进展的响应体不该被一次性窗口误杀（stallGuard.bump 存在的意义就是按进展续命）；
 // ③fetch 抛错路径的 dispose：早退发生在 body 段 try/finally 之外 => 每次网络失败留一个活定时器
-//   （无用户可见行为差异，属结构修复，故不为其单独造断言，理由记在 PROGRESS.md）。
+//   （无用户可见行为差异，属结构修复，故不为其单独造断言，理由记在 archive/progress.md）。
 describe("更新检查的停滞守卫（S3 回归）", () => {
   it("对端挂起（守卫触发 abort）→ 文案给停滞超时，不再谎报「不可达」", async () => {
     const stall: typeof fetch = (_u, init) =>

@@ -27,8 +27,11 @@ rev: 1d6bbc4
 
 - 迁移收口：本分支合回主树，需要独占工作树 + `pnpm gates` 全量复验（`test` 门与 Electron/CDP 三门
   在 worktree 里不可信，见 `AGENTS.md` 并发纪律）。
-- `docs-check` 还缺 D-6（文档指针与标签存在性）：它的判据最不机械（中文标题锚点规则 + `archive/…「标签」`
-  的取法），必须先量命中面再定判据与水位。
+- `docs-check` 还缺 D-6（文档指针与标签存在性）：它的判据最不机械（要认「」标签而不是 URL 锚点），
+  必须先量命中面再定判据与水位。**命中面已量到**：存档与判卷页（`docs/m*-audit|acceptance|proposal`、
+  `CODE-WIKI`、`agent-plan.md`、根目录 dated 报告）里仍有一批按旧路径写的 `PROGRESS.md` / `BLOCKED.md`
+  引用——按本仓纪律那些**只读不改**，所以 D-6 的适用面应当只管 L0/L1 与 docs 现行页，
+  存档面走白名单；活代码里那处注释指针（`tests/updater.test.ts`）已改指 `archive/progress.md`。
 - **渲染层留位**：上下文芯片的 `WORKSPACES`（工作区切换器）与权限面板的 `BRANCHES`（分支列表）仍是
   演示数据，真化需连 IPC。
 - 权威方案 `agent-plan.md`（仓里最大的一份文档）仍未分层：候选做法是生成分节索引，
