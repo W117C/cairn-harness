@@ -101,6 +101,42 @@ describe("可达性与成本不变量（「发货了没人接」的那类缺陷�
     expect(checkPermission("default", "impact_query" as ToolName)).toBe("allow");
   });
 
+  it("deps 模式列本文件引用的外部定义（我在调用谁），自身文件内的定义不算", async () => {
+    const r = await tool().run({ file: "app.js", deps: true }, ctx());
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("我在调用谁");
+    expect(r.output).toContain("引用的外部定义 2 处，分布在 2 个文件");
+    expect(r.output).toContain("utils.js");
+    expect(r.output).toContain("math.js");
+    // 反向方向不得把被查文件自己列成依赖
+    expect(r.output.split("\n").filter((l) => l.startsWith("  ")).join("\n")).not.toContain("app.js");
+  });
+
+  it("deps 对叶子文件给出「依赖面为 0」的显式结论，而不是空输出", async () => {
+    const r = await tool().run({ file: "utils.js", deps: true }, ctx());
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("依赖面为 0");
+  });
+
+  it("不带 deps 时 file 模式输出逐字不变（新增方向不得改动既有字节）", async () => {
+    const plain = await tool().run({ file: "app.js" }, ctx());
+    const explicitFalse = await tool().run({ file: "app.js", deps: false }, ctx());
+    expect(explicitFalse.output).toBe(plain.output);
+    expect(plain.output).toContain("跨文件调用点");
+    expect(plain.output).not.toContain("我在调用谁");
+  });
+
+  it("deps 只能配 file：配 symbol 或裸给都显式报错（不静默忽略）", async () => {
+    await expect(tool().run({ symbol: "compute", deps: true }, ctx())).rejects.toThrow(/deps 只配合 file/);
+    await expect(tool().run({ deps: true }, ctx())).rejects.toThrow(/参数恰好给一个/);
+  });
+
+  it("deps 模式下不在图内的文件仍然 fail-visible", async () => {
+    const r = await tool().run({ file: "ghost.js", deps: true }, ctx());
+    expect(r.ok).toBe(false);
+    expect(r.output).toContain("不在影响图内");
+  });
+
   it("规格体积有上限（工具面是按轮重送的固定成本，膨胀要当场红）", () => {
     const bytes = Buffer.byteLength(JSON.stringify(impactQuerySpec), "utf8");
     expect(bytes, "impact_query 规格 " + String(bytes) + "B").toBeLessThan(600);
