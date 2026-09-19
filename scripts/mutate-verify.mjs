@@ -955,6 +955,25 @@ const MUTATIONS = [
     apply: (s) => s.replace("report: () => ({ ...summarizeAssembly(opts.caseId, turns), toolRanking: rankToolSpecs(tools) }),", "report: () => summarizeAssembly(opts.caseId, turns),"),
     expectFail: "probe 报告带排行；工具面字节的和 = 可缓存前缀里的工具部分",
   },
+  {
+    id: "prompt-cache-default-flipped-back-off",
+    src: "src/main/settings.ts",
+    test: "tests/settings.test.ts",
+    desc: "缺省翻回 false（2026-09-19 开闸裁决被静默撤销：新用户首启即关，Anthropic 写侧断点整条不上线）",
+    apply: (s) => s.replace("  promptCache: true,\n", "  promptCache: false,\n"),
+    expectFail: "缺省值本身也是开（两处必须同向：DEFAULT_SETTINGS 与读盘回退）",
+  },
+  {
+    id: "prompt-cache-reader-loses-fallback",
+    src: "src/main/settings.ts",
+    test: "tests/settings.test.ts",
+    desc: "读法退回 `=== true`（磁盘上已有 settings JSON 的老用户没这个键 → undefined === true 把「缺省开」读成关；DEFAULT_SETTINGS 仍写着 true，只看对象测不出）",
+    apply: (s) => s.replace(
+      "    promptCache: typeof r.promptCache === \"boolean\" ? r.promptCache : d.promptCache,\n",
+      "    promptCache: r.promptCache === true,\n",
+    ),
+    expectFail: "老 JSON（完全没有该键）读回来必须是 true",
+  },
 ];
 
 function runTest(testRel) {
