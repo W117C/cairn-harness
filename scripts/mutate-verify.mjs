@@ -1186,6 +1186,38 @@ const MUTATIONS = [
     apply: (s) => s.replace("  const shown = best.text.length > 120 ? best.text.slice(0, 120) + \"…\" : best.text;\n", "  const shown = best.text;\n"),
     expectFail: "命中超长行时只抄 120 字符（截断带省略号，整条报错仍有界）",
   },
+  {
+    id: "loop-repeat-nudge-note-dropped",
+    src: "src/agent/loop.ts",
+    test: "tests/loop-repeat-nudge.test.ts",
+    desc: "检测照跑、提示却没落进 tool_result（模型看到的仍是裸错误 ⇒ 换路压力为零，重复照旧烧到 maxSteps）",
+    apply: (s) => s.replace("        output: result.output + postContext + repeatNote,\n", "        output: result.output + postContext,\n"),
+    expectFail: "同一调用连败 3 次：提示挂在那条 tool_result 尾部，前两次一字不加",
+  },
+  {
+    id: "loop-repeat-nudge-defaults-on",
+    src: "src/agent/loop.ts",
+    test: "tests/loop-repeat-nudge.test.ts",
+    desc: "退回「不开也提示」：worker 的 tool_result 被追加尾注 ⇒ 看门比较的观察串从 ×4 相同被打散成 ×3+1 ⇒ orchestrator 卡死永不触发（m3c 实测形态），靶场按字节推的用量也被扰动",
+    apply: (s) => s.replace("      if (opts.stuckNudge === true) {\n", "      if (true) {\n"),
+    expectFail: "缺省不开：worker / 靶场 / sidechat 那三条路径的事件流一字不动",
+  },
+  {
+    id: "loop-repeat-nudge-nags-every-repeat",
+    src: "src/agent/loop.ts",
+    test: "tests/loop-repeat-nudge.test.ts",
+    desc: "提示帽摘掉（每次重复都叠一句）⇒ 第 5、6 次重复各多一份同一句话，提示自己变成 token 泄漏面",
+    apply: (s) => s.replace("        if (verdict.stuck && !nudgedActions.has(action)) {\n", "        if (verdict.stuck) {\n"),
+    expectFail: "每个 rule+action 只提示一次（第 4、5 次重复不再叠同一句话）",
+  },
+  {
+    id: "loop-repeat-nudge-never-rearms",
+    src: "src/agent/loop.ts",
+    test: "tests/loop-repeat-nudge.test.ts",
+    desc: "换动作时不解除提示帽 ⇒ 一个 run 里第一次被忽略后就永远叫不醒（第二段同样的连败拿不到提示）",
+    apply: (s) => s.replace("        if (lastTurn !== undefined && lastTurn.action !== action) nudgedActions.delete(lastTurn.action);\n", "        if (false) nudgedActions.delete(lastTurn.action);\n"),
+    expectFail: "换过动作再回到同一调用 ⇒ 重复段重新计，会再提示一次（不是一 run 只提示一次）",
+  },
 ];
 
 function runTest(testRel) {
