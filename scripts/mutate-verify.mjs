@@ -1024,6 +1024,38 @@ const MUTATIONS = [
     apply: (s) => s.replace("const writeRate = p.cacheWritePerMTok ?? p.inputPerMTok;", "const writeRate = p.cacheWritePerMTok ?? 0;"),
     expectFail: "未标定档位 ⇒ 带缓存分块与不带的成本逐字同值（上界口径，零回归）",
   },
+  {
+    id: "impact-query-param-whitelist-removed",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "参数「恰好给一个」的校验摘掉（两个都给时 file 分支先返回、symbol 被静默忽略；都不给时拿 undefined 去查空图 = 假答案）",
+    apply: (s) => s.replace("      if ((symbol === \"\") === (fileArg === \"\")) {\n", "      if (false) {\n"),
+    expectFail: "参数必须恰好一个：两个都给 / 都不给 / 类型不对都显式报错",
+  },
+  {
+    id: "impact-query-unknown-symbol-silent",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "图里没有的符号不再说明原因（改名后的符号会被报成「波及半径为 0」——模型据此判定没人用，直接删掉它）",
+    apply: (s) => s.replace("      if (defined.length === 0 && (graph.refs.get(symbol) ?? []).length === 0) {\n", "      if (false) {\n"),
+    expectFail: "图里没有的符号：fail-visible 说明原因，不静默返回空",
+  },
+  {
+    id: "impact-query-spec-name-drift",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "模型可见规格与可执行实例改名分叉（模型调 impact_query、工具表只有 impact ⇒ 「执行面有、模型面没有」的原罪复发）",
+    apply: (s) => s.replace("export const impactQuerySpec = {\n  name: \"impact_query\",\n", "export const impactQuerySpec = {\n  name: \"impact\",\n"),
+    expectFail: "规格与实例一一对应，且名字一致",
+  },
+  {
+    id: "impact-query-file-mode-lists-local-symbols",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "file 模式改回照抄 fileImpact.symbols（局部变量 base/boosted 混进摘要：一屏无关名字，token 白花还不给可执行信息）",
+    apply: (s) => s.replace("        const refSyms = [...new Set(r.up.map((s) => s.symbol))].sort();\n", "        const refSyms = [...r.symbols].sort();\n"),
+    expectFail: "file 模式汇聚该文件全部符号的波及面（只列真被外部引用的符号，不抄局部名）",
+  },
 ];
 
 function runTest(testRel) {
