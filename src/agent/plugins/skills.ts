@@ -99,12 +99,13 @@ export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-/** 单 skill 正文按 token 预算截断（前 N token，chars/4 同口径；marker 计入预算，总量精确 ≤ 预算）。 */
-export function clampSkillBody(body: string, tokenBudget: number): string {
+/** 单 skill 正文按 token 预算截断（前 N token，chars/4 同口径；marker 计入预算，总量精确 ≤ 预算）。
+ *  `suffix` 是截断后才追加的取回提示（如全文路径），同样计入预算——否则「≤ 预算」这句承诺会被提示自己撑破。 */
+export function clampSkillBody(body: string, tokenBudget: number, suffix = ""): string {
   if (estimateTokens(body) <= tokenBudget) return body;
   const marker = "\n[skill 正文超 " + String(tokenBudget) + " token，已截断]";
-  const chars = Math.max(0, tokenBudget * 4 - marker.length);
-  return body.slice(0, chars) + marker;
+  const chars = Math.max(0, tokenBudget * 4 - marker.length - suffix.length);
+  return body.slice(0, chars) + marker + suffix;
 }
 
 export interface RemountResult {

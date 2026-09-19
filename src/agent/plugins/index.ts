@@ -10,6 +10,7 @@ import { HookEngine } from "./hooks";
 import { McpManager, type McpToolInfo } from "./mcp";
 import {
   buildSkillRoutingList, skillInvokeName, resolveSkillName, skillRemount,
+  clampSkillBody, SKILL_REMOUNT_TOKENS_PER_SKILL,
   type ActivatedSkill, type RoutingListResult, type RemountResult,
 } from "./skills";
 import type { AgentEvent, ToolCallEvent, ToolResultEvent } from "../../events";
@@ -235,13 +236,20 @@ export class PluginRuntime {
     return buildSkillRoutingList(this.skills());
   }
 
-  /** skill 触发（全文进上下文 = tool_result 携带全文）。 */
+  /** skill 触发。全文进上下文（tool_result），且 skill 结果免剪（prune exemptTools）
+   *  ⇒ 这一份是**常驻**的：一个仓库自带的 200KB SKILL.md 会付满整个会话。
+   *  重挂路径早就按 SKILL_REMOUNT_TOKENS_PER_SKILL 收窄（clampSkillBody），主路径却原样吐——
+   *  同一个预算只在一头生效。现两头同口径。 */
   triggerSkill(input: string): { ok: boolean; output: string } {
     const all = this.skills();
     const hit = resolveSkillName(input, all);
     if (!hit) return { ok: false, output: "skill 未注册: " + input };
     const entry = all.find((s) => s.plugin === hit.plugin && s.name === hit.name)!;
-    return { ok: true, output: entry.body };
+    return {
+      ok: true,
+      output: clampSkillBody(entry.body, SKILL_REMOUNT_TOKENS_PER_SKILL,
+        "\n[全文见 " + entry.path + "]"),
+    };
   }
 
   /** 压缩后重挂（从事件流投影激活记录）。 */
