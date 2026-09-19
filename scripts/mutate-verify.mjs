@@ -1344,6 +1344,30 @@ const MUTATIONS = [
     apply: (s) => s.replace("  return impactAnalysis ? [...base, WORKER_IMPACT_TOOL] : base;\n", "  return base;\n"),
     expectFail: "read 档：开关开启时规格与实例同名同时出现，白名单同步",
   },
+  {
+    id: "base-system-test-first-rule-removed",
+    src: "src/main/agent-runner.ts",
+    test: "tests/base-system-discipline.test.ts",
+    desc: "「先写复现测试跑到红」这条纪律被删（提示词回到「改完就说修好了」，能力 5 最关键那条失去唯一的字面抓手）",
+    apply: (s) => s.replace("  \"4) 修 bug 先写一条能复现它的测试并跑到红，再改代码到绿；没有红过的复现就不要宣称已修复；\",\n", ""),
+    expectFail: "先红后绿写进纪律：修 bug 必须先有跑到红的复现，没红过不得宣称修好（能力 5 的正面）",
+  },
+  {
+    id: "base-system-patch-first-rule-removed",
+    src: "src/main/agent-runner.ts",
+    test: "tests/base-system-discipline.test.ts",
+    desc: "「改已有文件用 edit_file 打补丁」被删 ⇒ 模型继续整文件重抄（write_file 的行数提示只在事后，事前预防更省一轮）",
+    apply: (s) => s.replace("  \"3) 改已有文件用 edit_file 打补丁，write_file 只用于新建文件（整份重抄既费 output 又容易漏抄未改的行）；\",\n", ""),
+    expectFail: "补丁优先写进纪律：改已有文件用 edit_file，write_file 只用于新建（能力 2「补丁级 diff」）",
+  },
+  {
+    id: "base-system-judging-file-conflict-restored",
+    src: "src/main/agent-runner.ts",
+    test: "tests/base-system-discipline.test.ts",
+    desc: "去掉「第 4 条是新增用例，不是改判卷面」的消歧 ⇒ 两条纪律互相矛盾，模型只能二选一（要么不写复现，要么去改判卷文件）",
+    apply: (s) => s.replace("  \"6) 只改任务需要的文件；既有测试与判卷文件不得改写（第 4 条是**新增**用例，不是改判卷面）。\",\n", "  \"6) 只改任务需要的文件，不改测试与判卷文件。\",\n"),
+    expectFail: "两条纪律不互斥：明确「第 4 条是新增用例，不是改判卷文件」",
+  },
 ];
 
 function runTest(testRel) {
