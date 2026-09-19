@@ -1,7 +1,13 @@
 import type { AgentEvent } from "../events";
 import type { GlmMessage } from "../providers/glm";
+import { clampToTokenBudget } from "./text-budget";
 import { buildMemoryInjection } from "./memory/inject";
 import type { WorkerContext } from "./orchestrator-types";
+
+/** 角色块预算（token）。§7.5 明写「任务书与角色定义永不进摘要输入」⇒ 这一块的代价是
+ *  **每个 worker 每一轮**付一次，而不是整会话摊一次。内置角色只用一两百 token，2000 是给插件
+ *  作者的余量，不是给「把整篇文档当角色定义」的余量（插件 `agents/*.md` 是外部文本）。 */
+export const WORKER_ROLE_TOKEN_BUDGET = 2000;
 
 /** worker 最后一轮正文（结构化报告来源）：从尾部回扫，先命中的文本事件组即最后一轮——
  *  assistant_message 或最后一组同 callId 的 delta 合并。 */
@@ -39,7 +45,10 @@ export async function buildWorkerSystemMessages(
   );
   const messages: GlmMessage[] = [];
   if (w.roleDefinition !== undefined && w.roleDefinition !== "") {
-    messages.push({ role: "system", content: "[role] " + w.roleDefinition });
+    // 收窄发生在**这里**而不是插件解析处：roleDefinition 有三个来源（内置角色 / 插件 agents/*.md /
+    // spawn_agent 传入），只有这一处是三者的共同出口，也是它变成 system 消息前的最后一道界。
+    const role = clampToTokenBudget(w.roleDefinition, WORKER_ROLE_TOKEN_BUDGET, "worker 角色定义");
+    messages.push({ role: "system", content: "[role] " + role });
   }
   messages.push({ role: "system", content: w.mode === "write" ? WORKER_WRITE_SYSTEM : WORKER_SYSTEM });
   try {
