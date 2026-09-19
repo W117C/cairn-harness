@@ -59,11 +59,13 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
       type: "function",
       function: {
         name: "grep",
-        description: "工作区内容搜索（ripgrep 正则）；按文件分组返回，上限 100 命中",
+        description: "工作区内容搜索（ripgrep 正则）；按文件分组返回，上限 100 命中。改代码前要现场就给 context，搜字面串给 fixed_strings",
         parameters: obj(
           {
-            pattern: { type: "string", description: "正则表达式" },
+            pattern: { type: "string", description: "正则表达式（Rust 语法，忽略大小写写 (?i) 前缀）" },
             path: { type: "string", description: "限定目录或文件（workspace 相对，缺省全工作区）" },
+            context: { type: "number", description: "命中行前后各 N 行上下文（1–5，缺省 0）：命中行前缀 Line N:，上下文行前缀 \"N |\"。省掉为拼 old_string 再读一次文件的那一轮" },
+            fixed_strings: { type: "boolean", description: "按字面串匹配——搜含 ( . $ [ 的串（路径、报错原文、函数调用形状）时用，否则会被正则语义曲解或直接报错" },
           },
           ["pattern"],
         ),

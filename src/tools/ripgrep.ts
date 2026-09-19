@@ -23,6 +23,9 @@ export interface RawMatch {
   path: string;
   line: number; // 1-based
   text: string; // 原始行文本（不含行尾换行）
+  /** rg `--context` 带出的邻行（命中行为缺省）。
+   *  不新写一个收集器：邻行与命中行同流同序，分开收会丢掉「哪条是命中」这一层信息。 */
+  ctx?: true;
 }
 
 function toRelative(workspace: string, p: string): string {
@@ -81,12 +84,17 @@ export function runRgJson(workspace: string, args: string[]): Promise<RawMatch[]
         if (!line) continue;
         let obj: { type: string; data?: { path?: { text?: string }; line_number?: number; lines?: { text?: string } } };
         try { obj = JSON.parse(line); } catch { continue; } // 坏行跳过，不让单条坏 JSON 炸整个输出
-        if (obj.type !== "match" || !obj.data) continue;
+        if ((obj.type !== "match" && obj.type !== "context") || !obj.data) continue;
         const p = obj.data.path?.text ?? "";
         const lineNo = obj.data.line_number ?? 0;
         const text = obj.data.lines?.text ?? "";
         if (!p || lineNo < 1) continue;
-        matches.push({ path: toRelative(workspace, p), line: lineNo, text: text.replace(/\n$/, "") });
+        matches.push({
+          path: toRelative(workspace, p),
+          line: lineNo,
+          text: text.replace(/\n$/, ""),
+          ...(obj.type === "context" ? { ctx: true as const } : {}),
+        });
       }
       resolvePromise(matches);
     });
