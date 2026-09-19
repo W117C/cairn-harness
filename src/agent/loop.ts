@@ -206,7 +206,23 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
 
       sawToolCall = true;
 
-      // ---- verify 反射循环（系统门，优先于权限门与 TOOLS）----
+      // M2f 工具表摘除（sidechat 只读白名单 / worker 工具面）：不在表内的工具根本不进入执行面——
+      // 与提示词无关的硬闸，工具调用被拒且给出明确原因（fail-closed）。
+      // ⚠️ 排在 verify 反射循环**之前**：那句「系统门优先于权限门与 TOOLS」说的是绕过 ask/approval，
+      //    不含绕过白名单。今天没人同时给 allowedTools 与 verify 钩子（worker 侧 orchestrator.ts:1473
+      //    不传 verify）⇒ 洞未暴露；一旦按 spec §6 W4a 给 worker 接上收束闸，「表里没有 verify 却能
+      //    执行 verify」就是权限旁路。次序由 tests/loop.test.ts「allowedTools 硬闸与 verify 系统门的次序」钉住。
+      if (opts.allowedTools && !opts.allowedTools.includes(output.name as ToolName)) {
+        await events.append({
+          type: "tool_result",
+          callId: output.id,
+          ok: false,
+          output: `[tool table] ${output.name} 不在本会话工具表（只读白名单摘除）`,
+        });
+        continue;
+      }
+
+      // ---- verify 反射循环（系统门：优先于权限门与 TOOLS，但不越过上面的工具表硬闸）----
       if (output.name === "verify") {
         if (!opts.verify) {
           await events.append({
@@ -220,18 +236,6 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         const beat = await verifyBeat(output.id, false);
         if (beat === "stop") return; // 通过或达上限 → 收束，不再调用模型
         continue; // 失败已回注，同轮继续修
-      }
-
-      // M2f 工具表摘除（sidechat 只读白名单）：不在表内的工具根本不进入执行面——
-      // 与提示词无关的硬闸，工具调用被拒且给出明确原因（fail-closed）。
-      if (opts.allowedTools && !opts.allowedTools.includes(output.name as ToolName)) {
-        await events.append({
-          type: "tool_result",
-          callId: output.id,
-          ok: false,
-          output: `[tool table] ${output.name} 不在本会话工具表（只读白名单摘除）`,
-        });
-        continue;
       }
 
       // M2e：PreToolUse hook 先于权限门（CC 语义）；deny/exit2 阻断该次工具调用，

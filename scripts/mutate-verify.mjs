@@ -2286,6 +2286,14 @@ const MUTATIONS = [
     apply: (s) => s.replace("return marker + cutToWeightTail(text, Math.max(0, tokenBudget - weightText(marker)));", "return marker + cutToWeightTail(text, tokenBudget);"),
     expectFail: "超限时保留尾部原文，提示行在前且自己计入预算",
   },
+  {
+    id: "verify-bypasses-tool-table",
+    src: "src/agent/loop.ts",
+    test: "tests/loop.test.ts",
+    desc: "verify 系统门越过工具表硬闸（今天不暴露，因为 worker 不传 verify 钩子；W4a 一接上就是「表里没有 verify 却能执行 verify」的权限旁路）",
+    apply: (s) => s.replace("      if (opts.allowedTools && !opts.allowedTools.includes(output.name as ToolName)) {", "      if (opts.allowedTools && !opts.allowedTools.includes(output.name as ToolName) && output.name !== \"verify\") {"),
+    expectFail: "表内没有 verify ⇒ 钩子一次都不执行，按工具表摘除拒绝",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

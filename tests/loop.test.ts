@@ -224,3 +224,61 @@ describe("auto-verify on completion (harness 补拍，证据 only)", () => {
     expect(requests).toHaveLength(2);
   });
 });
+
+// 工具表硬闸必须**先于** verify 反射循环。spec §6 W4（orchestration-design:96）点名过这条潜在洞：
+// 今天 worker 不传 verify 钩子（orchestrator.ts:1473-1482）所以没暴露，一旦按 W4a 给 worker 接上
+// 收束闸，「表里没有 verify 却能执行 verify」就成权限旁路——三重闸（规格/实例/loop 白名单）各管各的，
+// 系统门「优先于权限门」的那句注释不能顺手把工具表也越过。
+describe("allowedTools 硬闸与 verify 系统门的次序", () => {
+  async function callVerify(over: Partial<LoopOptions>): Promise<{ log: AgentEvent[]; hookRuns: number }> {
+    const log: AgentEvent[] = [];
+    let hookRuns = 0;
+    let calls = 0;
+    const hook = {
+      maxAttempts: 3,
+      surface: async () => true,
+      run: async () => {
+        hookRuns++;
+        return { ok: true as const, results: [] };
+      },
+    };
+    await runLoop({
+      workspace: "/tmp",
+      userMessage: "t",
+      mode: "auto",
+      events: { async append(e) { log.push(e); } },
+      provider: {
+        async *stream() {
+          calls++;
+          if (calls === 1) yield { type: "tool_call", id: "v1", name: "verify", args: {} };
+        },
+      },
+      verify: hook,
+      ...over,
+    });
+    return { log, hookRuns };
+  }
+
+  it("表内没有 verify ⇒ 钩子一次都不执行，按工具表摘除拒绝", async () => {
+    const { log, hookRuns } = await callVerify({ allowedTools: ["read_file"] });
+    expect(hookRuns).toBe(0);
+    expect(log.filter((e) => e.type === "verify_result")).toHaveLength(0);
+    const refused = log.find(
+      (e) => e.type === "tool_result" && (e as { output: string }).output.includes("不在本会话工具表"),
+    ) as Extract<AgentEvent, { type: "tool_result" }> | undefined;
+    expect(refused).toBeDefined();
+    expect(refused!.ok).toBe(false);
+    expect(refused!.callId).toBe("v1"); // 拒绝挂回原调用，模型才换得了路
+  });
+
+  it("表内有 verify ⇒ 系统门照旧执行（反向锁：修法不是一律禁掉 verify）", async () => {
+    const { log, hookRuns } = await callVerify({ allowedTools: ["verify"] });
+    expect(hookRuns).toBe(1);
+    expect(log.filter((e) => e.type === "verify_result")).toHaveLength(1);
+  });
+
+  it("未给工具表（主会话形状）⇒ 行为逐字不变", async () => {
+    const { hookRuns } = await callVerify({});
+    expect(hookRuns).toBe(1);
+  });
+});
