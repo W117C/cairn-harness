@@ -9,7 +9,7 @@ import { TrustStore, pluginFingerprint, pluginFingerprintEx } from "./trust";
 import { HookEngine } from "./hooks";
 import { McpManager, type McpToolInfo } from "./mcp";
 import {
-  buildSkillRoutingList, skillInvokeName, resolveSkillName, skillRemount,
+  buildSkillRoutingList, skillInvokeName, resolveSkillName, skillRemount, modelInvocable,
   clampSkillBody, SKILL_REMOUNT_TOKENS_PER_SKILL,
   type ActivatedSkill, type RoutingListResult, type RemountResult,
 } from "./skills";
@@ -249,6 +249,11 @@ export class PluginRuntime {
     const hit = resolveSkillName(input, all);
     if (!hit) return { ok: false, output: "skill 未注册: " + input };
     const entry = all.find((s) => s.plugin === hit.plugin && s.name === hit.name)!;
+    // 清单挡住 ≠ 执行端挡住：模型硬猜名字时同样要拒（§9.3 disable-model-invocation 的语义面）。
+    // 拒绝理由只说机制、不回显正文——否则一次失败的调用就把全文买进了上下文。
+    if (!modelInvocable(entry)) {
+      return { ok: false, output: "skill " + skillInvokeName(entry) + " 声明 disable-model-invocation，只能由用户触发（模型侧不可调用）" };
+    }
     return {
       ok: true,
       output: clampSkillBody(entry.body, SKILL_REMOUNT_TOKENS_PER_SKILL,

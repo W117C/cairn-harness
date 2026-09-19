@@ -32,10 +32,28 @@ export function resolveSkillName(
   return bare ?? null;
 }
 
-/** 路由清单行（模型按名触发）："- /name — description"。 */
-export function skillRoutingLine(s: Pick<SkillEntry, "plugin" | "name" | "description">): string {
+/** 路由清单的入参面：只要 name/description(+frontmatter)，让既有调用方（只给三字段的对象）照旧编译。 */
+export type RoutingSkillInput = Pick<SkillEntry, "plugin" | "name" | "description"> & Partial<Pick<SkillEntry, "frontmatter">>;
+
+/** frontmatter 布尔位：CC 的 YAML 与我们的解析器都可能给 true 或 "true"，两种都算声明过。 */
+function fmBool(frontmatter: Record<string, unknown> | undefined, key: string): boolean {
+  const v = frontmatter?.[key];
+  return v === true || v === "true";
+}
+
+/** §9.3「disable-model-invocation」：该 skill 只能由用户点，不进模型可见清单。 */
+export function modelInvocable(s: RoutingSkillInput): boolean {
+  return !fmBool(s.frontmatter, "disable-model-invocation");
+}
+
+/** 路由清单行（模型按名触发）："- /name — description"，有 when_to_use 就并到同一行
+ *  （§9.3 明文清单 = name + description(+when_to_use)——只给 description 时，
+ *  模型知道"有这个 skill"却不知道"什么时候该用"，正是路由错选的来源）。 */
+export function skillRoutingLine(s: RoutingSkillInput): string {
   const desc = s.description.replace(/\s+/g, " ").trim();
-  return "- " + skillInvokeName(s) + (desc ? " — " + desc : "");
+  const when = typeof s.frontmatter?.["when_to_use"] === "string"
+    ? (s.frontmatter["when_to_use"] as string).replace(/\s+/g, " ").trim() : "";
+  return "- " + skillInvokeName(s) + (desc ? " — " + desc : "") + (when ? "（适用：" + when + "）" : "");
 }
 
 export interface RoutingListResult {
@@ -44,9 +62,9 @@ export interface RoutingListResult {
   truncated: boolean;
 }
 
-/** 渐进披露路由清单：全部（已激活）skill 的 name + description；超 1536 字符截断。 */
-export function buildSkillRoutingList(skills: Pick<SkillEntry, "plugin" | "name" | "description">[]): RoutingListResult {
-  const lines = skills.map(skillRoutingLine);
+/** 渐进披露路由清单：可模型触发的 skill 的 name + description(+when_to_use)；超 1536 字符截断。 */
+export function buildSkillRoutingList(skills: RoutingSkillInput[]): RoutingListResult {
+  const lines = skills.filter(modelInvocable).map(skillRoutingLine);
   const text = lines.join("\n");
   if (text.length <= SKILL_ROUTING_CHAR_LIMIT) return { text, truncated: false };
   const marker = "\n[skill 清单超 " + String(SKILL_ROUTING_CHAR_LIMIT) + " 字符，已截断]";

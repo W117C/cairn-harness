@@ -2616,6 +2616,38 @@ const MUTATIONS = [
     apply: (s) => s.replace("  return substituteArgs(cmd.body, argsString).trim();", "  return substituteArgs(cmd.body, argsString);"),
     expectFail: "/cmd-demo:wave 张三 → 落流的是渲染后的正文，不是那串斜杠",
   },
+  {
+    id: "skill-routing-drops-when-to-use",
+    src: "src/agent/plugins/skills.ts",
+    test: "tests/skill-invocation-faces.test.ts",
+    desc: "路由清单只留 description ⇒ 模型知道「有这个 skill」却不知道「什么时候该用」，§9.3 的 (+when_to_use) 没落地，触发靠猜",
+    apply: (s) => s.replace("  return \"- \" + skillInvokeName(s) + (desc ? \" — \" + desc : \"\") + (when ? \"（适用：\" + when + \"）\" : \"\");", "  return \"- \" + skillInvokeName(s) + (desc ? \" — \" + desc : \"\");"),
+    expectFail: "when_to_use 在场时并入同一行：模型据此判断何时触发，而不只是知道有个 skill",
+  },
+  {
+    id: "skill-routing-ignores-disable-model-invocation",
+    src: "src/agent/plugins/skills.ts",
+    test: "tests/skill-invocation-faces.test.ts",
+    desc: "清单不做过滤 ⇒ 声明了「只能用户触发」的 skill 仍每轮占用模型上下文并诱导自动触发（白付 token + 违背插件作者意愿）",
+    apply: (s) => s.replace("  const lines = skills.filter(modelInvocable).map(skillRoutingLine);", "  const lines = skills.map(skillRoutingLine);"),
+    expectFail: "disable-model-invocation 的 skill 不进清单；不声明的照常进（布尔与字符串两种写法同效）",
+  },
+  {
+    id: "skill-fm-bool-only-accepts-boolean",
+    src: "src/agent/plugins/skills.ts",
+    test: "tests/skill-invocation-faces.test.ts",
+    desc: "布尔位只认 true 不认 \"true\" ⇒ 我们 frontmatter 解析器给的是字符串，CC 插件的这条声明被静默读成「没声明」",
+    apply: (s) => s.replace(`  return v === true || v === "true";`, `  return v === true;`),
+    expectFail: "disable-model-invocation 的 skill 不进清单；不声明的照常进（布尔与字符串两种写法同效）",
+  },
+  {
+    id: "skill-hidden-in-list-but-still-executable",
+    src: "src/agent/plugins/index.ts",
+    test: "tests/skill-invocation-faces.test.ts",
+    desc: "只把名字从清单里藏掉、执行端不设闸 ⇒ 模型猜中调用名照样拿到全文（「看不见」被当成「挡住了」）",
+    apply: (s) => s.replace("    if (!modelInvocable(entry)) {", "    if (false) {"),
+    expectFail: "模型硬猜被藏起来的名字 ⇒ triggerSkill 明确拒绝并给出原因（不静默放行全文）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
