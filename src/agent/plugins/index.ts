@@ -61,6 +61,8 @@ export interface PluginRuntimeOptions {
   trustFile?: string;
   /** hook 权限档。 */
   mode?: "read-only" | "default" | "auto";
+  /** 会话标识：透传给 hook 引擎进 stdin JSON（§9.5）。缺省 = 该字段不进 JSON，不伪造。 */
+  sessionId?: string;
 }
 
 /** skill 激活投影：tool_call(name="skill") → 同 callId 的 tool_result 事件 id（1-based 行号）。 */
@@ -125,6 +127,7 @@ export class PluginRuntime {
       workspace: opts.workspace,
       pluginDataRoot: opts.pluginDataRoot,
       ...(opts.mode ? { mode: opts.mode } : {}),
+      ...(opts.sessionId ? { sessionId: opts.sessionId } : {}),
     });
     this.mcp = new McpManager();
   }

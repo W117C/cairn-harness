@@ -520,10 +520,12 @@ export async function compactSessionLog(
 ): Promise<{ ok: boolean; error?: string; event?: AgentEvent; cardPayload?: Record<string, unknown> }> {
   const events = await replay(logPath);
   if (events.length === 0) return { ok: false, error: "会话为空，无可压缩" };
-  // M2e：PreCompact hook（压缩前触发；失败只告警不阻断压缩）
+  // M2e：PreCompact hook（压缩前触发；失败只告警不阻断压缩）。trigger 取 §9.5 表里的枚举值：
+  // 本函数文档自己写明是「手动压缩（trigger=manual）」，原先传 "compact" 既不在枚举里、
+  // 也让按 `manual`/`auto` 写 matcher 的钩子永不命中（§9.5：PreCompact 的 matcher 字段 = manual/auto）。
   if (hooks) {
     try {
-      await hooks.run("PreCompact", { event: "PreCompact", trigger: "compact" });
+      await hooks.run("PreCompact", { event: "PreCompact", trigger: "manual" });
     } catch (err) {
       console.warn("[hooks] PreCompact 失败:", err instanceof Error ? err.message : String(err));
     }
@@ -1088,7 +1090,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // 零插件环境（无 .agent/plugins、无 M2E_USER_PLUGINS/M2E_LOOSE_SKILLS）= 空清单 = 零行为。
     let rt: PluginRuntime | null = null;
     try {
-      rt = await PluginRuntime.load({ ...pluginRuntimeOpts(opts.workspace), mode: opts.mode });
+      rt = await PluginRuntime.load({ ...pluginRuntimeOpts(opts.workspace), mode: opts.mode, ...(opts.sessionId ? { sessionId: opts.sessionId } : {}) });
       setCurrentPluginRuntime(rt);
       await rt.connectMcp(); // 仅受信插件；pending/declined 不连接（§9.8 信任门）
       injectedToolNames = installPluginTools(rt);

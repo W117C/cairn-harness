@@ -246,6 +246,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
             event: "PreToolUse",
             tool_name: output.name,
             tool_args: output.args,
+            tool_use_id: output.id,
           });
           if (pre.blocked) {
             await events.append({
@@ -323,6 +324,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
             tool_name: output.name,
             tool_args: output.args,
             tool_response: result.output,
+            tool_use_id: output.id,
           });
           if (post.additionalContext !== "") postContext = "\n[hook] " + post.additionalContext;
         } catch (err) {

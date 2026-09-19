@@ -33,9 +33,52 @@ export interface HookPayload {
   tool_name?: string;
   tool_args?: Record<string, unknown>;
   tool_response?: string;
+  /** 工具调用 id（CC 的 tool_use_id）：钩子要回指同一次调用时唯一的锚。 */
+  tool_use_id?: string;
   prompt?: string;
   trigger?: string;
+  /** worker 归因（§4.4）：主会话缺省 absent，不折成空串。 */
+  agent_id?: string;
+  /** SubagentStart/Stop 的 matcher 字段（§9.5 表：agent type）。 */
+  agent_type?: string;
 }
+
+/** §9.5 的字段名翻译：我们内部叫 tool_args，CC 的钩子读的是 tool_input。
+ *  未给出的字段**整键缺席**——空串/null 会被钩子当成"有值但为空"，那是伪造输入。 */
+export function hookStdinJson(payload: HookPayload, cwd: string, sessionId?: string): string {
+  const json: Record<string, unknown> = { hook_event_name: payload.event, cwd };
+  if (sessionId !== undefined) json.session_id = sessionId;
+  if (payload.tool_name !== undefined) json.tool_name = payload.tool_name;
+  if (payload.tool_args !== undefined) json.tool_input = payload.tool_args;
+  if (payload.tool_use_id !== undefined) json.tool_use_id = payload.tool_use_id;
+  if (payload.tool_response !== undefined) json.tool_response = payload.tool_response;
+  if (payload.prompt !== undefined) json.prompt = payload.prompt;
+  if (payload.trigger !== undefined) json.trigger = payload.trigger;
+  if (payload.agent_id !== undefined) json.agent_id = payload.agent_id;
+  if (payload.agent_type !== undefined) json.agent_type = payload.agent_type;
+  return JSON.stringify(json);
+}
+
+/** matcher 该配 payload 的哪个字段——§9.5 表逐事件规定，全用 tool_name 会让
+ *  SessionStart("startup") / PreCompact("manual") / Subagent*(agent type) 三类 matcher
+ *  只能靠缺省命中（写了具体值的钩子静默永不触发）。 */
+export function matcherFieldOf(event: HookEventName, payload: HookPayload): string | undefined {
+  switch (event) {
+    case "PreToolUse":
+    case "PostToolUse":
+    case "PostToolUseFailure":
+      return payload.tool_name;
+    case "SessionStart":
+    case "PreCompact":
+      return payload.trigger;
+    case "SubagentStart":
+    case "SubagentStop":
+      return payload.agent_type;
+    default:
+      return undefined; // Stop / SessionEnd / UserPromptSubmit：表里 matcher 为"—"（无匹配字段）
+  }
+}
+
 
 export interface HookRunResult {
   /** 任何 handler 以 exit 2 或 deny 决策阻断。 */
@@ -69,6 +112,10 @@ export type HookExecFn = (
   env: Record<string, string>,
   cwd: string,
   timeoutSec: number,
+  /** §9.5 的 stdin JSON：CC 的 command hook 全靠它知道"这次拦的是哪个文件"。
+   *  实现方**必须**写完后 `end()`——不 end 就等于让 `cat`/`jq` 这类读 stdin 的钩子
+   *  一直等到超时（缺省 600s）才被强杀，一次工具调用挂成十分钟。 */
+  stdin: string,
 ) => Promise<HookExecOutcome>;
 
 export interface HookEngineOptions {
@@ -80,6 +127,8 @@ export interface HookEngineOptions {
   overflowDir?: string;
   /** 权限档（hook 命令过权限门：read-only 档拒绝有副作用的 hook 命令）。 */
   mode?: "read-only" | "default" | "auto";
+  /** 会话标识，进 stdin JSON 的 session_id（§9.5）。缺席时整字段不进 JSON——不伪造。 */
+  sessionId?: string;
   exec?: HookExecFn;
 }
 
@@ -115,13 +164,23 @@ export function hookEnv(opts: {
   return out;
 }
 
-function matcherHits(matcher: string | undefined, toolName: string | undefined): boolean {
-  if (matcher === undefined) return true;
-  if (toolName === undefined) return false;
+/** §9.5「matcher 语义照抄」：`*`/空/缺省 = 全配；纯 [字母数字 _ - 空格 , |] = 精确串列表；
+ *  含其他字符 = JS 正则。
+ *  旧实现只有「缺省 = 全配 + 一律 RegExp」两档，于是：`"*"` 走到 `new RegExp("*")` 抛错、
+ *  回落成 `value === "*"` ⇒ CC hooks.json 里最常见的写法**永不命中**；而 `"Edit"` 这类
+ *  纯精确名被当正则做**非锚定**子串匹配 ⇒ 顺手多命中 NotebookEdit / EditFile（钩子在用户
+ *  没点名的工具上跑了，比不跑更坏）。 */
+function matcherHits(matcher: string | undefined, value: string | undefined): boolean {
+  if (matcher === undefined || matcher === "" || matcher === "*") return true;
+  if (value === undefined) return false;
+  if (/^[A-Za-z0-9_,|\- ]+$/.test(matcher)) {
+    const names = matcher.split(/[ ,|]+/).filter((s) => s !== "");
+    return names.length > 0 && names.includes(value);
+  }
   try {
-    return new RegExp(matcher).test(toolName);
+    return new RegExp(matcher).test(value);
   } catch {
-    return toolName === matcher; // 非法正则退化为精确匹配
+    return value === matcher; // 非法正则退化为精确匹配
   }
 }
 
@@ -164,7 +223,7 @@ export function parseHookDecision(stdout: string): ParsedDecision {
 }
 
 function defaultExec(): HookExecFn {
-  return async (command, argv, shell, env, cwd, timeoutSec) => {
+  return async (command, argv, shell, env, cwd, timeoutSec, stdin) => {
     return await new Promise<HookExecOutcome>((resolveP) => {
       let stdout = "";
       let stderr = "";
@@ -191,6 +250,11 @@ function defaultExec(): HookExecFn {
       });
       handle.child.stdout?.on("data", (d: Buffer) => { stdout += d.toString("utf8"); });
       handle.child.stderr?.on("data", (d: Buffer) => { stderr += d.toString("utf8"); });
+      // 写完必 end：读 stdin 的钩子（`cat` / `jq -R`）在拿到 EOF 前永不退出，不 end 就是挂到
+      // 超时被强杀。反过来不读 stdin 的钩子会先退出 ⇒ 写入侧 EPIPE 直接吞（退出码由 close 给）。
+      handle.child.stdin?.on("error", () => {});
+      handle.child.stdin?.write(stdin);
+      handle.child.stdin?.end();
       handle.child.on("error", () => done(null));
       handle.child.on("close", (code) => done(code));
     });
@@ -210,9 +274,10 @@ export class HookEngine {
   handlersFor(event: HookEventName, payload: HookPayload): LoadedHookDef[] {
     const seen = new Set<string>();
     const out: LoadedHookDef[] = [];
+    const value = matcherFieldOf(event, payload);
     for (const h of this.opts.hooks) {
       if (h.event !== event || !h.loaded) continue;
-      if (!matcherHits(h.matcher, payload.tool_name)) continue;
+      if (!matcherHits(h.matcher, value)) continue;
       const key = dedupKey(h);
       if (seen.has(key)) continue;
       seen.add(key);
@@ -272,7 +337,8 @@ export class HookEngine {
         pluginData: join(this.opts.pluginDataRoot, h.plugin),
         workspace: this.opts.workspace,
       });
-      const out = await this.exec(command, argv, shell, env, this.opts.workspace, timeouts[i] ?? HOOK_TIMEOUT_DEFAULT);
+      const out = await this.exec(command, argv, shell, env, this.opts.workspace, timeouts[i] ?? HOOK_TIMEOUT_DEFAULT,
+        hookStdinJson(payload, this.opts.workspace, this.opts.sessionId));
       return { h, out };
     }));
 
