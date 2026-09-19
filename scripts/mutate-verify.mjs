@@ -21,7 +21,7 @@ import { execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, needleProblemLine, needleSeverity } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, needleProblemLine, needleSeverity, classifyArgs } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -1899,6 +1899,22 @@ const MUTATIONS = [
     apply: (s) => s.replace("if (hits !== 1) problems.push({ id: e.id, srcRel: e.srcRel, hits, needle: e.needle });", "if (true) problems.push({ id: e.id, srcRel: e.srcRel, hits, needle: e.needle });"),
     expectFail: "只报命中次数 ≠ 1 的，并按传入顺序",
   },
+  {
+    id: "classify-unknown-flag-ignored",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-needles-check.test.ts",
+    desc: "未知 flag 不再收集 ⇒ 拼错/未合并的 `--check-needles` 被当成无参数，脚本直接开跑全表：在别人的写作窗里就地改源文件几十分钟",
+    apply: (s) => s.replace("const unknown = args.filter((a) => a.startsWith(\"--\") && !(MUTATE_FLAGS as readonly string[]).includes(a));", "const unknown: string[] = [];"),
+    expectFail: "拼错/未实现的 flag 落进 unknown，且不混进 targets",
+  },
+  {
+    id: "classify-flags-counted-as-ids",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-needles-check.test.ts",
+    desc: "flag 混进位置参数 ⇒ `--check-needles` 被当成一个条目 id，报「未知 id」而不是执行针脚体检（门从此静默不跑）",
+    apply: (s) => s.replace("const targets = args.filter((a) => !a.startsWith(\"--\"));", "const targets = [...args];"),
+    expectFail: "已知 flag 各归其 mode，位置参数进 targets",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
@@ -2002,14 +2018,19 @@ function verifyEntry(m) {
   }
 }
 
-const args = process.argv.slice(2);
-if (args.includes("--list")) {
+const plan = classifyArgs(process.argv.slice(2));
+// 认不出的 flag 一律拒跑：本脚本「无参数」的缺省语义是跑全表，那会就地改源文件几十分钟。
+if (plan.unknown.length > 0) {
+  console.error(`未知参数：${plan.unknown.join(" ")} —— 无参数即「跑全表」（就地改源文件），不把拼错的 flag 静默当缺省`);
+  process.exit(2);
+}
+if (plan.mode === "list") {
   for (const m of MUTATIONS) console.log(`${m.id}\t${m.src}\t${m.desc}`);
   process.exit(0);
 }
 /** 只核针脚、不跑测试（秒级）——因此它能进 pnpm gates，而整张变异表要跑几十分钟、
  *  常被并发堵着：那段时间里失效的锚点在「假装守护」。 */
-if (args.includes("--check-needles")) {
+if (plan.mode === "check-needles") {
   const bad = reportNeedles(MUTATIONS);
   console.log(bad === 0
     ? "[mutate-needles-check] 全部锚点针脚可判定 ✅"
@@ -2017,7 +2038,7 @@ if (args.includes("--check-needles")) {
   process.exit(bad === 0 ? 0 : 1);
 }
 
-const targets = args.filter((a) => !a.startsWith("--"));
+const targets = plan.targets;
 const entries = targets.length ? MUTATIONS.filter((m) => targets.includes(m.id)) : MUTATIONS;
 if (targets.length && entries.length !== targets.length) {
   console.error(`未知 id: ${targets.filter((t) => !MUTATIONS.some((m) => m.id === t)).join(", ")}`);

@@ -95,3 +95,24 @@ export function needleProblemLine(p: NeedleProblem): string {
         : `针脚命中 ${String(p.hits)} 处（replace 只改第一处，需人工复认改到的是哪一处）`;
   return `${p.id} — ${p.srcRel} — ${why}：${JSON.stringify(p.needle.slice(0, 60))}`;
 }
+
+// ---- 参数分流：未知 flag 必须当场拒 ----
+// 动因（2026-09-19 实踩）：一条还没合进 HEAD 的 `--check-needles` 在主树里被当成「无参数」，
+// 而该脚本的缺省语义是**跑全表**——它会就地改源文件、跑几十分钟。拼错一个 flag 就等于
+// 在别人的写作窗里放火，所以「看不懂」不能退化成「按缺省办」。
+export const MUTATE_FLAGS = ["--list", "--check-needles"] as const;
+
+export interface ArgPlan {
+  mode: "list" | "check-needles" | "run";
+  /** 认不出来的 flag：非空即应拒绝执行（不静默降级成全跑）。 */
+  unknown: string[];
+  /** 位置参数 = 要跑的条目 id。 */
+  targets: string[];
+}
+
+export function classifyArgs(args: readonly string[]): ArgPlan {
+  const unknown = args.filter((a) => a.startsWith("--") && !(MUTATE_FLAGS as readonly string[]).includes(a));
+  const targets = args.filter((a) => !a.startsWith("--"));
+  const mode = args.includes("--list") ? "list" : args.includes("--check-needles") ? "check-needles" : "run";
+  return { mode, unknown, targets };
+}

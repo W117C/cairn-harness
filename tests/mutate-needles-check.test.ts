@@ -3,7 +3,7 @@
 // 而要等整张表跑完才会红——整跑常被并发堵几天。这条秒级门把「重构后改指」变成机械要求。
 import { describe, expect, it } from "vitest";
 import {
-  auditNeedles, needleHits, needleProblemLine, needleSeverity,
+  auditNeedles, classifyArgs, needleHits, needleProblemLine, needleSeverity,
 } from "../scripts/lib/mutate-gates";
 
 const SRC = "const a = 1;\nconst b = a + 1;\nconst a2 = 1;\n";
@@ -72,5 +72,23 @@ describe("needleProblemLine", () => {
   it("针脚超长只截前 60 字（一行一条，门输出要能扫）", () => {
     const line = needleProblemLine({ id: "long", srcRel: "src/a.ts", hits: 0, needle: "x".repeat(300) });
     expect(line.length).toBeLessThan(160);
+  });
+});
+
+describe("classifyArgs（未知 flag 必须当场拒，不能退化成「跑全表」）", () => {
+  it("已知 flag 各归其 mode，位置参数进 targets", () => {
+    expect(classifyArgs(["--list"])).toEqual({ mode: "list", unknown: [], targets: [] });
+    expect(classifyArgs(["--check-needles"])).toEqual({ mode: "check-needles", unknown: [], targets: [] });
+    expect(classifyArgs(["a-id", "b-id"])).toEqual({ mode: "run", unknown: [], targets: ["a-id", "b-id"] });
+  });
+
+  it("无参数仍是 run（缺省语义不被这条破坏）", () => {
+    expect(classifyArgs([]).mode).toBe("run");
+  });
+
+  it("拼错/未实现的 flag 落进 unknown，且不混进 targets", () => {
+    const p = classifyArgs(["--cheek-needles", "some-id"]);
+    expect(p.unknown).toEqual(["--cheek-needles"]);
+    expect(p.targets).toEqual(["some-id"]);
   });
 });
