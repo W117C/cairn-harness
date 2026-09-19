@@ -15,7 +15,13 @@ export interface ModelPrice {
   cacheWritePerMTok: number | null;
 }
 
-/** 未标定缓存价的档位（审计面：待校准清单，不是 folklore）。 */
+/** 未标定缓存价的档位（审计面：待校准清单，不是 folklore）。
+ *  ⚠️ 这份清单同时是**代价项偏置的知情记录**：`promptCache` 缺省已开（2026-09-19 裁决），
+ *  而这里列出的档位因缓存价仍为 null，`costUsd` 把缓存命中段按**输入价上界**计 ⇒
+ *  bandit 的代价项对重缓存档位**系统性高估**（不是「缓存省钱了」的证据）。
+ *  两条不许走的路：① 为让路由看起来赚了而填一个数——那张表仍须联网实测；
+ *  ② 把这条偏置当已通过项——provider 是否真回 `cache_read_input_tokens` 属**未证 ≠ 通过**，
+ *  `DSH_STRICT_UNVERIFIED=1` 下相关联网项继红。 */
 export function uncalibratedCachePrices(
   table: Readonly<Record<string, ModelPrice>> = DEFAULT_PRICE_TABLE,
 ): string[] {

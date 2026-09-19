@@ -56,8 +56,10 @@ export interface AppSettings {
   workspace: string | null;
   /** SoL-Pi C1：写入后执行配置检查，显式开启，默认关闭。 */
   actionFusion: boolean;
-  /** A1 写侧 prompt 缓存断点（Anthropic cache_control）。只有路由合成真实 provider 档位时才有语义
-   *  （GLM/OpenAI 自动前缀缓存不吃写侧标记）；两者都不开时是零效果，运行时会给一条 warn 不静默。 */
+  /** A1 写侧 prompt 缓存断点（Anthropic cache_control）。**缺省开**（用户裁决 2026-09-19）：
+   *  GLM/OpenAI 是自动前缀缓存、Gemini 需另建 cachedContent 资源 ⇒ 目前只有 Anthropic 吃这个开关。
+   *  生效前提是路由开启（routingBandit=true 才会合成真实 provider 档位）；路由关着时它是惰性配置，
+   *  不打 warn（否则每次 run 都刷一条）。 */
   promptCache: boolean;
   requestMetering: boolean;
   observationPack: boolean;
@@ -92,7 +94,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   model: "",
   workspace: null,
   actionFusion: false,
-  promptCache: false,
+  promptCache: true,
   requestMetering: false,
   observationPack: false,
   evidenceReceipts: false,
@@ -157,7 +159,9 @@ export function validateSettings(raw: unknown): AppSettings {
     telemetry: typeof r.telemetry === "boolean" ? r.telemetry : d.telemetry,
     routingBandit: typeof r.routingBandit === "boolean" ? r.routingBandit : d.routingBandit,
     actionFusion: r.actionFusion === true,
-    promptCache: r.promptCache === true,
+    // promptCache 缺省开 ⇒ 读法回退 `d.`（同 autoMemory/telemetry），不能用 `=== true`：
+    // 旧 settings JSON 里没这个键时 `undefined === true` 会把"缺省开"变成对老用户仍然是关。
+    promptCache: typeof r.promptCache === "boolean" ? r.promptCache : d.promptCache,
     requestMetering: r.requestMetering === true,
     observationPack: r.observationPack === true,
     evidenceReceipts: r.evidenceReceipts === true,

@@ -210,13 +210,9 @@ async function orchestratorExtras(): Promise<
       ? { routing: true, banditStatePath: join(ROOT, ".agent", "routing-bandit.json") }
       : {}),
     // A1 写侧断点：只有路由合成真实 provider 档位时才落到 wire（当前唯一有语义的是 Anthropic）。
-    // 开了缓存断点却没开路由 = 静默零效果，这里给一条 warn，不让人对着关掉的开关调参。
-    ...(s.promptCache
-      ? (() => {
-          if (!s.routingBandit) console.warn("[promptCache] 已开启但路由未开（routingBandit=false）：无真实 provider 档位可合成，断点不会落到请求体");
-          return { promptCache: true };
-        })()
-      : {}),
+    // 缺省即开（用户裁决 2026-09-19），所以这里**不打 warn**——routingBandit 缺省关，
+    // 一条 warn 会变成每次 run 都刷的噪声；「没路由 ⇒ 没断点」写进 settings 的字段注释里。
+    ...(s.promptCache ? { promptCache: true } : {}),
   };
 }
 
