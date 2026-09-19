@@ -37,6 +37,23 @@ describe("BASE_SYSTEM 纪律面", () => {
   });
 
   it("静态段体积有上界（每轮重送的固定成本，随轮数放大）", () => {
-    expect(Buffer.byteLength(BASE_SYSTEM, "utf8")).toBeLessThan(1400);
+    // 帽从 1400 → 1600 是一次**预算裁决**，不是为通过而调：W3 的调度纪律段实测 +115 字符 /
+    // +269 字节（改前 1272B，改后 1542B）。留 58B 余量，再想加句子必须先量数再调帽。
+    expect(Buffer.byteLength(BASE_SYSTEM, "utf8")).toBeLessThan(1600);
+  });
+
+  it("编排段在：拆的判据 / 任务书自包含 / 派完必须收队，三句各锁一句（W1a 的收队义务此前只在工具描述里）", () => {
+    const line = BASE_SYSTEM.split("\n").find((l) => l.startsWith("编排"));
+    if (line === undefined) throw new Error("BASE_SYSTEM 缺「编排」段——模型面没人教何时派子代理、派完怎么收队");
+    expect(line).toContain("能各自独立验收才拆");
+    expect(line).toContain("任务书必须自包含");
+    expect(line).toMatch(/wait_for_agents/);
+    expect(line).toMatch(/未拿到回执不得转述/);
+  });
+
+  it("编排段不占纪律编号（纪律 1–6 的连续性是上一条测钉的，条件段混进编号会造断号）", () => {
+    const line = BASE_SYSTEM.split("\n").find((l) => l.startsWith("编排"));
+    expect(line).toBeDefined();
+    expect(/^\d+\)/.test(line ?? "")).toBe(false);
   });
 });
