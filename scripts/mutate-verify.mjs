@@ -1947,6 +1947,22 @@ const MUTATIONS = [
     apply: (s) => s.replace("return applySource.includes(\".split(\");", "return true;"),
     expectFail: "认得 split/map 式写法，普通单点 replace 不误判",
   },
+  {
+    id: "wizard-definers-not-excluded",
+    src: "scripts/lib/commercial-reachability.ts",
+    test: "tests/commercial-reachability.test.ts",
+    desc: "不排除定义层 ⇒ 数据文件自己引用自己的名字就算「产品可达」，这条门退化成自证通过（正是它要防的那种绿）",
+    apply: (s) => s.replace("    .filter((f) => !WIZARD_DEFINERS.some((p) => f.path.includes(p)))\n", ""),
+    expectFail: "定义层自己写 ONBOARDING_GROUPS / onboarded 不算消费者（否则永远自证通过）",
+  },
+  {
+    id: "wizard-reachability-always-true",
+    src: "scripts/lib/commercial-reachability.ts",
+    test: "tests/commercial-reachability.test.ts",
+    desc: "一律判可达 ⇒ 「首启必弹向导」重新变回假绿，未证计数永远是 0，严格模式也拦不住",
+    apply: (s) => s.replace("return { reachable: consumers.length > 0, consumers };", "return { reachable: true, consumers };"),
+    expectFail: "只有定义层（当前 HEAD 的真实形态）⇒ 不可达，不得算通过",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
