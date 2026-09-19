@@ -2266,9 +2266,9 @@ const MUTATIONS = [
     id: "avnote-ignores-exclusion",
     src: "src/agent/context.ts",
     test: "tests/context-auto-verify-note.test.ts",
-    desc: "注入分支绕过 compaction 排除集 ⇒ 已被摘除的旧红继续每轮重送，压缩对这条通道失效（§7.2 语义破口）",
+    desc: "预扫描不看排除集 ⇒ 已摘除的那拍顶掉存活那拍成为「最新」，主循环早退让它也不注入：整条通道静默失效",
     apply: (s) => s.replace("    if (excluded.has(eventIdAt(i)) || hasWorkerAttribution(e)) return;", "    if (hasWorkerAttribution(e)) return;"),
-    expectFail: "⑥ 被压缩摘除的自动拍不再注入（排除集对这条通道同样生效）",
+    expectFail: "⑥ 被压缩摘除的自动拍不再注入，且它不得顶掉仍然存活的那拍",
   },
   {
     id: "tail-clamp-keeps-head",

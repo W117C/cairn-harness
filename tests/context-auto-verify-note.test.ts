@@ -140,15 +140,23 @@ describe("自动验证拍的红进下一轮上下文", () => {
     expect(body).toContain("Tests 1 failed"); // 最后一条的结论行在
   });
 
-  it("⑥ 被压缩摘除的自动拍不再注入（排除集对这条通道同样生效）", () => {
+  it("⑥ 被压缩摘除的自动拍不再注入，且它不得顶掉仍然存活的那拍", () => {
+    // 排除集由主循环的早退执行，但预扫描也必须知道它：只投「最新那拍」的游标若把已摘除的
+    // 一拍算成最新，存活那拍就被顶掉 ⇒ 整条通道静默失效（测试仍绿的那种失效）。
     const events: AgentEvent[] = [
       { type: "user_message", content: "r1" },
-      autoFail("pnpm test", "Tests 1 failed"), // 事件 id = 2
-      { type: "compaction", trigger: "auto", reason: "threshold", compressed_event_ids: [2], summary: "已摘要", summary_offset: 3, tokens_before: 9000, tokens_after: 1000 },
+      autoFail("pnpm test", "还活着的红-Keeper"), // 事件 id = 2，未被摘除
       { type: "user_message", content: "r2" },
+      autoFail("pnpm lint", "已被摘除的红-Ghost"), // 事件 id = 4，下面摘除它
+      { type: "compaction", trigger: "auto", reason: "threshold", compressed_event_ids: [4], summary: "已摘要", summary_offset: 5, tokens_before: 9000, tokens_after: 1000 },
+      { type: "user_message", content: "r3" },
     ];
     const msgs = projectContext(events);
-    expect(autoNotes(msgs)).toHaveLength(0);
+    const notes = autoNotes(msgs);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]!.content).toContain("Keeper");
+    expect(notes[0]!.content).not.toContain("Ghost");
+    expect(notes[0]!.content).not.toContain("另有"); // 已摘除的那拍不计成「此前另有 1 次」
     expect(withText(msgs, "上下文压缩摘要")).toBe(1); // 摘要注入照常（本测不碰它）
   });
 
