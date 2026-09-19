@@ -4,6 +4,7 @@ import type { ArmKey } from "../routing/bandit";
 import type { CompactionConfig, Summarizer } from "./compaction";
 import type { FrozenStage, PluginAgentRoleDef } from "./sequencer";
 import type { StuckConfig, StuckTurn } from "./stuck";
+import type { VerifyHook } from "./verify";
 import type { WorkerModel } from "./worker-model";
 
 export interface SpawnArgs {
@@ -196,4 +197,13 @@ export interface OrchestratorOptions {
   rules?: PermissionRule[];
   /** P0-2（审查）：父 run 的沙箱自检结果（null = 未接线）——worker 沙箱降级送审通道同口径。 */
   sandboxAvailable?: boolean | null;
+  /** W4a（spec §6:95）：write worker 的收束闸钩子工厂（入参 = 该 worker 的 worktree 目录）。
+   *  **缺省 undefined = 零行为**（worker 的 runLoop 既不接 verify 也不补拍——今日现状）。
+   *  开闸代价与读数见 outputs/auto-verify-readout-2026-09-20.md §2：单次实测百毫秒级起，
+   *  随目标仓库套件时长线性放大（大仓一次 = 一次全量套件），且**零额外模型请求**。
+   *  ⚠️ 前置已闭合：loop 的 allowedTools 硬闸现在排在 verify 系统门之前（锚点
+   *  `verify-bypasses-tool-table`），故 worker 即使接了钩子也无法自调 verify（工具表里没有它），
+   *  只有 harness 的自动拍会跑——这正是「给 worker 的是 autoVerify 证据拍，不是 manual verify 门」。
+   *  它产出的证据由 W4b 的 `agent_result.artifacts.verified` 如实标注（含 stale/absent）。 */
+  workerVerify?: (repoDir: string) => VerifyHook;
 }

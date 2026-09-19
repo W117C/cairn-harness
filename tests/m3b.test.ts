@@ -73,6 +73,8 @@ function makeOrch(
     safeMode?: "off" | "report" | "gate";
     model?: (a: SpawnArgs) => ReturnType<typeof scriptedWorkerModel>;
     approvalTimeoutMs?: number;
+    /** W4a：write worker 的收束闸钩子工厂（缺省不接线 = 今日现状零行为）。 */
+    workerVerify?: (repoDir: string) => { run: () => Promise<{ ok: boolean; results: { command: string; ok: boolean; output: string }[] }>; surface?: () => Promise<boolean>; maxAttempts?: number };
   } = {},
 ): { orch: Orchestrator; events: AgentEvent[] } {
   const events = over.events ?? [];
@@ -87,6 +89,7 @@ function makeOrch(
     ...(over.safeMode ? { safeMode: over.safeMode } : {}),
     ...(over.model ? { modelFor: over.model } : {}),
     ...(over.approvalTimeoutMs !== undefined ? { approvalTimeoutMs: over.approvalTimeoutMs } : {}),
+    ...(over.workerVerify ? { workerVerify: over.workerVerify } : {}),
   });
   return { orch, events };
 }
@@ -687,5 +690,109 @@ describe("M3b 合并控制塔投影（纯函数）", () => {
     const mapped = mapFindingsToAbsolute(entries, findings, anchors);
     expect(mapped.find((f) => f.path === "a.ts")!.line).toBe(2); // write op：文件行号
     expect(mapped.find((f) => f.path === "b.ts")!.line).toBe(42); // edit op：写前快照锚点 + 偏移
+  });
+});
+
+// ---- W4a/W4b：write worker 的收束闸与「代码能跑」的机器凭据 ----
+// 修前：worker 的 runLoop 不接 verify ⇒ 合并准入里没有任何一条跑过测试，而 artifacts 只有
+// report（模型的散文自述）。现在证据从 worker 自己的子流投影出来，父会话与面板都能区分
+// 「验过」与「说验过」。给的是 autoVerify 证据拍，**不是** manual verify 门（§4.4.5 禁表）。
+describe("W4 worker 收束闸与证据标记", () => {
+  const hookOf = (ok: boolean, counter: { runs: number }) => ({
+    maxAttempts: 3,
+    surface: async () => true,
+    run: async () => {
+      counter.runs++;
+      return { ok, results: [{ command: "pnpm test", ok, output: ok ? "All passed" : " Tests 1 failed" }] };
+    },
+  });
+
+  async function finishWriteWorker(over: Parameters<typeof makeOrch>[0]): Promise<{
+    artifacts: Extract<AgentEvent, { type: "agent_result" }>["artifacts"];
+    parentOutput: string;
+    beats: AgentEvent[];
+  }> {
+    const { orch, events } = makeOrch(over);
+    const r = await orch.spawn({ mode: "write", task: "写证据文件" }, { callId: "s-ev" });
+    expect(r.ok).toBe(true);
+    await orch.waitAll(10_000);
+    const result = events.find((e) => e.type === "agent_result") as Extract<AgentEvent, { type: "agent_result" }>;
+    const synthetic = events.filter((e) => e.type === "tool_result" && e.callId === "s-ev");
+    return {
+      artifacts: result.artifacts,
+      parentOutput: String((synthetic[synthetic.length - 1] as { output: string }).output),
+      beats: events.filter((e) => e.type === "verify_result"),
+    };
+  }
+
+  it("不接线（缺省）⇒ 零补拍，但证据如实标 absent，且父上下文看得到", async () => {
+    const { artifacts, beats, parentOutput } = await finishWriteWorker({
+      model: () => scriptedWorkerModel(writeScript("ev-a.txt", "a\n")),
+    });
+    expect(beats).toHaveLength(0);
+    expect(artifacts.files_changed).toContain("ev-a.txt");
+    expect(artifacts.verified).toBe("absent");
+    expect(parentOutput).toContain('"verified": "absent"'); // 父模型收到的 JSON 里就有这条
+  });
+
+  it("开闸且绿 ⇒ 补一拍（零额外模型请求），证据标 verified", async () => {
+    const counter = { runs: 0 };
+    const { artifacts, beats, parentOutput } = await finishWriteWorker({
+      model: () => scriptedWorkerModel(writeScript("ev-b.txt", "b\n")),
+      workerVerify: () => hookOf(true, counter),
+    });
+    expect(counter.runs).toBe(1);
+    expect(beats).toHaveLength(1);
+    expect((beats[0] as { auto?: boolean; ok: boolean }).auto).toBe(true);
+    expect((beats[0] as { ok: boolean }).ok).toBe(true);
+    expect(artifacts.verified).toBe("verified");
+    expect(parentOutput).toContain('"verified": "verified"');
+  });
+
+  it("开闸验出红 ⇒ 标 failed（不粉饰成 pass，也不冒充模型自调）", async () => {
+    const counter = { runs: 0 };
+    const { artifacts, beats } = await finishWriteWorker({
+      model: () => scriptedWorkerModel(writeScript("ev-c.txt", "c\n")),
+      workerVerify: () => hookOf(false, counter),
+    });
+    expect(counter.runs).toBe(1);
+    expect((beats[0] as { ok: boolean }).ok).toBe(false);
+    expect(artifacts.verified).toBe("failed");
+  });
+
+  it("worker 自调 verify 仍被工具表摘除 ⇒ 只有 harness 的自动拍会跑（W4a 不开 manual 面）", async () => {
+    const counter = { runs: 0 };
+    const script = [
+      { type: "tool_call", id: "w-1", name: "write_file", args: { path: "ev-d.txt", content: "d\n" } },
+      { type: "tool_call", id: "v-1", name: "verify", args: {} },
+      { type: "assistant_message", content: "我验过了。" },
+    ] as unknown as Parameters<typeof scriptedWorkerModel>[0];
+    const { orch, events } = makeOrch({
+      model: () => scriptedWorkerModel(script),
+      workerVerify: () => hookOf(true, counter),
+    });
+    await orch.spawn({ mode: "write", task: "试自调 verify" }, { callId: "s-man" });
+    await orch.waitAll(10_000);
+    const refused = events.find(
+      (e) => e.type === "tool_result" && (e as { output: string }).output.includes("verify 不在本会话工具表"),
+    );
+    expect(refused).toBeDefined();
+    const beats = events.filter((e) => e.type === "verify_result");
+    expect(beats.every((e) => (e as { auto?: boolean }).auto === true)).toBe(true); // 没有一条是模型自调
+    expect(counter.runs).toBe(1); // manual 路被摘除后，verifyAttempts 仍为 0 ⇒ 收束闸照补一拍
+  });
+
+  it("read worker（没改过文件）⇒ 根本不打证据标记（无「跑过了」可标）", async () => {
+    const { orch, events } = makeOrch({
+      model: () => scriptedWorkerModel([
+        { type: "assistant_message", content: "读完了，结论：无需改动。" },
+      ] as unknown as Parameters<typeof scriptedWorkerModel>[0]),
+    });
+    const r = await orch.spawn({ mode: "read", task: "只读调研" }, { callId: "s-read" });
+    expect(r.ok).toBe(true);
+    await orch.waitAll(10_000);
+    const result = events.find((e) => e.type === "agent_result") as Extract<AgentEvent, { type: "agent_result" }>;
+    expect(result.status).toBe("done");
+    expect("verified" in result.artifacts).toBe(false);
   });
 });

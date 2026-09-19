@@ -1,4 +1,4 @@
-import type { AgentPermissionMode } from "../events";
+import type { AgentEvent, AgentPermissionMode, WorkerEvidence } from "../events";
 import { escapeControlTags } from "./memory/inject";
 import { SUMMARY_TOKEN_CAP } from "./orchestrator-config";
 import { redactSecrets } from "./security/scan";
@@ -54,4 +54,42 @@ export function clipWorkerSummary(text: string, capTokens: number = SUMMARY_TOKE
   const notice = "\n[truncated: summary 超 " + String(capTokens) + " token 上限，已类型化裁剪]";
   const out = truncateToTokenBudget(text, capTokens, notice);
   return { text: out, truncated: out !== text };
+}
+
+// ---- W4b：worker「代码能跑」这句话的机器凭据（事件流纯投影，不新增事件、不造第二份状态）----
+
+/** 只有这两个工具会改盘（与 spec §4.4.5 的写向清单同源）；`shell_rw` 里的 git 子命令另有拦截层。 */
+const WRITE_TOOLS: ReadonlySet<string> = new Set(["write_file", "edit_file"]);
+
+/** 从 worker 自己的子流里读出证据四态。
+ *  为什么必须有这条：在此之前 `agent_result.artifacts` 只有 `report`——模型的一句散文自述就是全部记录，
+ *  父会话与合并控制塔都无法区分「验过」与「说验过」（spec §2 缺陷 D6）。而 worker 工具表禁 manual verify
+ *  （§4.4.5），所以它的证据只可能来自 W4a 的自动拍或它自己用 shell 跑出来的东西。
+ *  判据刻意只看**次序**不做命令形状启发：
+ *  - stale 单列：验过之后又写了盘 ⇒ 那份绿证据描述的不是即将合并的代码，不能当证据用。
+ *    （把它并入 verified 就是能力 5 最忌的假绿；也不走「再补一拍」——那要改循环语义、多花真钱。）
+ *  - shell 跑过的测试**不**算证据：无法区分「跑了全套」与「跑了一个文件」，
+ *    拿启发式当门 = 给模型一条免费的免责通道（见 outputs/auto-verify-readout-2026-09-20.md §5）。 */
+export function workerVerificationEvidence(events: AgentEvent[]): WorkerEvidence {
+  let lastVerify = -1;
+  let lastVerifyOk = false;
+  let lastWrite = -1;
+  const nameByCall = new Map<string, string>();
+  events.forEach((e, i) => {
+    if (e.type === "tool_call") {
+      nameByCall.set(e.id, e.name);
+      return;
+    }
+    if (e.type === "tool_result") {
+      if (e.ok && WRITE_TOOLS.has(nameByCall.get(e.callId) ?? "")) lastWrite = i;
+      return;
+    }
+    if (e.type === "verify_result") {
+      lastVerify = i;
+      lastVerifyOk = e.ok;
+    }
+  });
+  if (lastVerify < 0) return "absent";
+  if (!lastVerifyOk) return "failed";
+  return lastWrite > lastVerify ? "stale" : "verified";
 }

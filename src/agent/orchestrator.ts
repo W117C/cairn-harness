@@ -77,7 +77,7 @@ import {
 // importer 与变异锚点不必跟着改）。本地引用走 import，公开面由文件尾的 re-export 维持逐字不变。
 import { MAX_CONCURRENT_WORKERS, READ_MODE_MAX_TURNS, SPAWN_MODES, WORKER_TOOL_TABLE, WRITE_WORKER_TOOL_TABLE, workerBudgetConfig, workerToolTable } from "./orchestrator-config";
 import { shell_rw, workerToolSpecs } from "./worker-shell-tools";
-import { clampTier, clipWorkerSummary, isPermissionMode, parseSpawnedAgentId, scanWorkerOutput } from "./worker-report";
+import { clampTier, clipWorkerSummary, isPermissionMode, parseSpawnedAgentId, scanWorkerOutput, workerVerificationEvidence } from "./worker-report";
 import { shapeJoinRows, type JoinInput, type JoinPayloadBody } from "./orchestrator-join";
 import { WorkerCancelled, defaultWorkerModel, type WorkerModel } from "./worker-model";
 import { type OrchestratorOptions, type PipelineChain, type SpawnArgs, type StageRoleResolution, type WorkerContext, type WorkerHandle } from "./orchestrator-types";
@@ -1467,6 +1467,9 @@ export class Orchestrator {
       // M3b write mode：runLoop 的 workspace = worktree（文件工具 cwd 锁定 + run_shell cwd 同源）——
       // worktree 对 worker 完全可写（§4.4.5）；read worker 维持主 workspace（只读面不变）。
       const loopWorkspace = w.mode === "write" && w.worktree ? worktreePathFor(this.opts.workspace, w.agentId) : this.opts.workspace;
+      // W4a：write worker 的收束闸（缺省不接线 = 零行为）。钩子工厂拿 worktree 目录做 cwd，
+      // 所以它验的是「即将被合并的那份代码」而不是主 checkout。
+      const workerVerify = w.mode === "write" ? this.opts.workerVerify?.(loopWorkspace) : undefined;
       // B6（审查）：runLoop 前武装静默计时——旧实现只在收到子流事件时武装，worker 在首个模型
       // 调用挂起（无任何事件）时静默规则永不触发。缺省 silenceMs 10min，不改变正常路径。
       this.armStuckSilence(w);
@@ -1479,6 +1482,7 @@ export class Orchestrator {
         allowedTools: workerToolTable(w.mode, impactOn) as never, // 三重硬闸之二：loop 工具表白名单（与规格/实例同源）
         tools: table,
         signal: w.controller.signal,
+        ...(workerVerify ? { verify: workerVerify, autoVerify: true } : {}),
       });
       await this.finish(w, "done");
     } catch (err) {
@@ -1654,6 +1658,8 @@ export class Orchestrator {
       await this.opts.emit({ type: "agent_status", agent_id: w.agentId, status: "done", ts } as AgentEvent);
       const filesChanged = diff?.files ?? [];
       const diffRef = w.mode === "write" && w.worktree && w.baseCommit ? w.worktree + "@" + w.baseCommit : undefined;
+      // W4b：只在本次真改过文件时标证据（没写代码就无所谓「跑过了」）。
+      const evidence = filesChanged.length > 0 ? workerVerificationEvidence(w.events) : undefined;
       const doneResult: Extract<AgentEvent, { type: "agent_result" }> = {
         type: "agent_result",
         agent_id: w.agentId,
@@ -1664,6 +1670,7 @@ export class Orchestrator {
           report: clipped.text,
           ...(filesChanged.length > 0 ? { files_changed: filesChanged } : {}),
           ...(diffRef ? { diff_ref: diffRef } : {}),
+          ...(evidence ? { verified: evidence } : {}),
         },
         usage: { inputTokens: w.usage.inputTokens, outputTokens: w.usage.outputTokens },
         tool_stats: { ...w.toolStats },
@@ -1684,6 +1691,7 @@ export class Orchestrator {
             report: clipped.text,
             ...(filesChanged.length > 0 ? { files_changed: filesChanged } : {}),
             ...(diffRef ? { diff_ref: diffRef } : {}),
+            ...(evidence ? { verified: evidence } : {}),
           },
           usage: { ...w.usage },
           tool_stats: { ...w.toolStats },

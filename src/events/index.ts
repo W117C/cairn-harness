@@ -220,6 +220,9 @@ export interface AgentMessageEvent {
   text: string;
 }
 
+/** W4b 四态：worker 回程那句「跑过了」到底有没有凭据（判据见 AgentResultEvent.artifacts.verified）。 */
+export type WorkerEvidence = "verified" | "failed" | "stale" | "absent";
+
 /** 终态回传（§4.4.4）：父上下文唯一接收物。错误永不冒充结果——failed 走 status/reason 分型。 */
 export interface AgentResultEvent {
   type: "agent_result";
@@ -236,6 +239,12 @@ export interface AgentResultEvent {
     diff_ref?: string;
     /** M3c 崩溃恢复（§4.4.9）：reason=interrupted 时携带原 spawn 参数（恢复卡「重派」的数据源）。 */
     respawn?: { mode: string; task: string; resources?: string[]; max_turns?: number; tier?: string; model?: string };
+    /** W4b：worker「代码能跑」这句话有没有机器凭据（只在本次真改过文件时出现）。
+     *  纯投影自 worker 自己的子流（`workerVerificationEvidence`），不是第二份状态：
+     *  verified = 最后一次成功写盘之后有绿的 verify 拍；failed = 最后拍是红的；
+     *  stale = 验过但之后又写了盘（证据已过期，不得当证据用）；absent = 全程没有任何验证拍。
+     *  在此之前 artifacts 只有 report（= 模型的散文自述），父会话与合并控制塔都无法区分「验过」与「说验过」。 */
+    verified?: WorkerEvidence;
   };
   usage: { inputTokens: number; outputTokens: number };
   tool_stats: Record<string, number>;

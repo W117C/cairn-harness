@@ -202,8 +202,8 @@ function currentOrchestrator(): Orchestrator | null {
  *  - agentRoleFor：插件 agent 角色解析（stages[].role = "plugin-name:agent-name"，§9.6/§9.11-4）；
  *  - workerSummarizer：worker 压缩摘要器（§7.5 同一 runCompaction 链；GLM 暗卷需 M0_API_KEY）；
  *  - budget：会话成本闸（§4.4.8 maxBudgetUsd；0 = off 零行为）。 */
-async function orchestratorExtras(): Promise<
-  Pick<OrchestratorOptions, "agentRoleFor" | "workerSummarizer" | "budget" | "routing" | "banditStatePath" | "promptCache" | "impactAnalysis">
+async function orchestratorExtras(sandbox: SandboxStatus | null = null): Promise<
+  Pick<OrchestratorOptions, "agentRoleFor" | "workerSummarizer" | "budget" | "routing" | "banditStatePath" | "promptCache" | "impactAnalysis" | "workerVerify">
 > {
   const s = await store().get();
   return {
@@ -212,6 +212,13 @@ async function orchestratorExtras(): Promise<
     ...(s.maxBudgetUsd > 0 ? { budget: { maxUsd: s.maxBudgetUsd, pricePerMTok: s.budgetPricePerMTok } } : {}),
     // M7 影响面读端与主会话同一个设置位（worker 能在动手前问「谁在调用它」）。
     ...(s.impactAnalysis ? { impactAnalysis: true } : {}),
+    // W4a：worker 的收束闸**复用同一个设置位**（`autoVerify`）——不新增开关、不改 UI 文案
+    // （那行字面就是「写过盘但没自测时，收尾前补跑一遍检查」，worker 合并前正是这一刻）。
+    // exec 走沙箱版：worker 的 verify 命令同样来自目标仓库的 .agent/config.json（外部输入）。
+    // 缺省（设置关）= 整段不接线，worker 的 runLoop 与今日逐字同形。
+    ...(s.autoVerify
+      ? { workerVerify: (repoDir: string) => createVerifyHook(repoDir, { exec: verifyExec(sandbox) }) }
+      : {}),
     // M5b 步骤 9：routingBandit 开关同时开启路由与学习状态持久化（bandit 蕴含 routing——
     // 无路由则无档位决策可学）。状态文件在 .agent/ 系统区（同 permissions.json 口径）。
     ...(s.routingBandit
@@ -240,7 +247,7 @@ async function ensureSessionOrchestrator(): Promise<Orchestrator | null> {
       hooks.onEvent?.(e);
     },
     safeMode: await resolveSafeMode(),
-    ...(await orchestratorExtras()),
+    ...(await orchestratorExtras(sandboxState)),
   });
   activeOrchestrator = orch;
   return orch;
@@ -1071,7 +1078,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       rules,
       sandboxAvailable: opts.sandbox ? opts.sandbox.available : null,
       safeMode: await resolveSafeMode(), // M3b §11.6：off 不跑 / report 只标 / gate 红标 + 二次确认
-      ...(await orchestratorExtras()), // M3c：插件角色 / worker 压缩摘要器 / 成本闸
+      ...(await orchestratorExtras(opts.sandbox ?? null)), // M3c：插件角色 / worker 压缩摘要器 / 成本闸 / W4a worker 收束闸
       ...(demoModelFor ? { modelFor: demoModelFor } : {}),
     });
     runScope.orchestrator = orchestrator;

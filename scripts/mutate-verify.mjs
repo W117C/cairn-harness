@@ -2294,6 +2294,47 @@ const MUTATIONS = [
     apply: (s) => s.replace("      if (opts.allowedTools && !opts.allowedTools.includes(output.name as ToolName)) {", "      if (opts.allowedTools && !opts.allowedTools.includes(output.name as ToolName) && output.name !== \"verify\") {"),
     expectFail: "表内没有 verify ⇒ 钩子一次都不执行，按工具表摘除拒绝",
   },
+  // ---- W4a/W4b：worker 收束闸与证据标记（tests/m3b.test.ts + tests/worker-evidence.test.ts）----
+  {
+    id: "worker-verify-missing-autoverify",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/m3b.test.ts",
+    desc: "给 worker 接了钩子却忘了开 autoVerify ⇒ 收束闸永不落拍，worker 回程仍是纯自述",
+    apply: (s) => s.replace("...(workerVerify ? { verify: workerVerify, autoVerify: true } : {}),", "...(workerVerify ? { verify: workerVerify } : {}),"),
+    expectFail: "开闸且绿 ⇒ 补一拍（零额外模型请求），证据标 verified",
+  },
+  {
+    id: "evidence-red-beat-as-verified",
+    src: "src/agent/worker-report.ts",
+    test: "tests/worker-evidence.test.ts",
+    desc: "只看「有没有 verify 拍」不看 ok ⇒ 红的验证拍被读成 verified，证据位反成粉饰工具",
+    apply: (s) => s.replace('  if (!lastVerifyOk) return "failed";', "  if (false) return \"failed\";"),
+    expectFail: "最后拍是红的 ⇒ failed（不粉饰）",
+  },
+  {
+    id: "evidence-ignores-write-order",
+    src: "src/agent/worker-report.ts",
+    test: "tests/worker-evidence.test.ts",
+    desc: "丢掉「验后又写」的次序判定 ⇒ 描述的不是即将合并的那份代码也算证据（能力 5 最忌的假绿）",
+    apply: (s) => s.replace('  return lastWrite > lastVerify ? "stale" : "verified";', '  return "verified";'),
+    expectFail: "验过之后又写了盘 ⇒ stale（那份绿证据描述的不是即将合并的代码）",
+  },
+  {
+    id: "evidence-counts-failed-writes",
+    src: "src/agent/worker-report.ts",
+    test: "tests/worker-evidence.test.ts",
+    desc: "被权限门拒掉的写也算「改过盘」⇒ 一次没落盘的 tool_call 就把绿证据打成 stale（读数反过来不诚实）",
+    apply: (s) => s.replace("      if (e.ok && WRITE_TOOLS.has(nameByCall.get(e.callId) ?? \"\")) lastWrite = i;", "      if (WRITE_TOOLS.has(nameByCall.get(e.callId) ?? \"\")) lastWrite = i;"),
+    expectFail: "被拒的写（ok:false）不构成过期证据",
+  },
+  {
+    id: "evidence-marks-without-writes",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/m3b.test.ts",
+    desc: "不分「有没有改过文件」一律打标记 ⇒ 只读 worker 也背上一个「跑过了」位，父面出现无从谈起的证据",
+    apply: (s) => s.replace("      const evidence = filesChanged.length > 0 ? workerVerificationEvidence(w.events) : undefined;", "      const evidence = workerVerificationEvidence(w.events);"),
+    expectFail: "read worker（没改过文件）⇒ 根本不打证据标记（无「跑过了」可标）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
