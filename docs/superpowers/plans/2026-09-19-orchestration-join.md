@@ -959,7 +959,7 @@ echo "exit=$?"
    一起做，那里本就要接 `metering/pricing`。W1a 只回 `usage`。
 ```
 
-- [ ] **Step 5：全量收口 + 提交**
+- [x] **Step 5：全量收口 + 提交**（结果见文末「收口记录」）
 
 ```bash
 pnpm typecheck && TERM=dumb pnpm gates 2>&1 | tail -40; echo "gates-exit=$?"
@@ -997,7 +997,7 @@ git commit -m "变异表 +8：收队三段帽 / 未知 id 摘除 / abort 越权 
 | 3+4 工具面与两头接线 | 6 测绿；tools-check exit 0 且静态注册表仍 9 工具 | `e9103d1`（**合一笔**，见更正 ①） |
 | 5 G-B 静态门 | 4 测绿；三面实对账未揭示新缺陷、无一条需要豁免 | `9eee2b0` + `cb5671d`（守卫补口，见更正 ⑤） |
 | 6 变异锚点 | 10 条实测全杀 exit=0 | `6127c0d` |
-| 6 全量 `pnpm gates` | **未跑**（唯一留着的勾） | — |
+| 6 全量 `pnpm gates` | 绿 29 / 32，红 3，未证 13；三条红**全部定名于他因**（见文末收口记录） | 本轮无代码改动 |
 
 **计划本身的六条缺陷（照原文执行会踩，逐条已在实现处修掉）**：
 ① Task 4 的 `git add` 清单漏 `src/tools/wait_for_agents.ts` 与其测 ⇒ 照跑会留下「已 import 但文件未跟踪」的悬空 HEAD。改判：**Task 3+4 合一笔提交**（5 文件），那条正确红的测因此从不进 HEAD。
@@ -1007,4 +1007,22 @@ git commit -m "变异表 +8：收队三段帽 / 未知 id 摘除 / abort 越权 
 ⑤ Task 5 的「声明表不可漏项」守卫原本只扫 `installAppTools` 写法，而本仓有**两种**运行期注入形态 ⇒ 仅靠 `runLoop` 覆盖注入的工具（`obs_recall` / `impact_query` 正是这一族）能绕过门。补守卫后 `obs_recall` 当场成唯一未登记项，按同规则下表，**没给它开豁免**。另把实例面抽取收紧到"只取那一行"，避免 `workspace:` / `mode:` 混成噪声键。
 ⑥ Task 6 原列 8 条锚点，实落 10 条：其中「abort 越权顺手 cancelAll」经实测**在当前测试面上不可观察**（`cancelAll` 只同步翻 `controller.aborted`，终态分类要等 worker 从挂起点恢复才发生，脚本模型下最终仍是 `done`）⇒ 撤回该条，另补 `wait-returns-before-terminal`（等待被摘成立即返）与 `wait-timeout-gate-removed`（取消超时闸 ⇒ 无界等待，靠 vitest 用例超时杀红）两条可观察的。
 
-**未证留位（不当通过报）**：① 全量 `pnpm gates` 未跑；② 上一轮全量 `test` 里 `tests/license.test.ts` 一条红，我单跑复验 8/8 绿并归因于并发窗（同窗确有另一会话在跑同一文件），**机制未定名证实**，收口跑 gates 时要再看一次；③ `waitForAgents` 的「取消不动 worker」缺可观察判据（见 ⑥）；④ 收队 payload 的真实体积分布未测——400/2400 是从并发上限推的量级，不是实测。
+**未证留位（不当通过报）**：① ~~全量 gates 未跑~~ → 已跑，见下方收口记录；② ~~license 那条红的归因待复验~~ → 本轮 `test` 门在无并发窗下 **exit=0（59.3s）未复现**，上一轮那条红确为并发窗噪声；③ `waitForAgents` 的「取消不动 worker」缺可观察判据（见更正 ⑥，仍是未证）；④ 收队 payload 的真实体积分布未测——400/2400 是从并发上限推的量级，不是实测；⑤ W1a 的**收益本身**（收队是否提高完成率 / 是否更省）未测，要等 W5a 靶场。
+
+---
+
+## 收口记录（`pnpm gates` 全量，2026-09-20）
+
+逐道退出码：**绿 29 / 32**，红 3（`typecheck=2`、`ipc-reachability-check=1`、`panels-check=1`），`mutate-verify` exit=0（418s，含本轮 +10 条全杀），`test` exit=0（59.3s），`renderer-arch-check` / `a11y-check` / `agents-check` / `supervisor-check` 全 0。未证 13 项（连网/凭据受限，严格模式可判红）。
+
+三条红的定名证据（同一台机器、同一时刻对照跑）：
+
+| 红门 | 判定 | 证据 |
+|---|---|---|
+| `typecheck` | **他因，非本轮**：别人未跟踪的 `scripts/sidebar-probe.ts`（4 条：TS2345 ×1 + TS18046 ×3） | HEAD 态新 worktree（含我五笔、不含那个未跟踪文件）跑 `tsc --noEmit` ⇒ **exit=0，error 计数 0** |
+| `ipc-reachability-check` | **他因**：渲染层会话未提交的 `app.js` / `index.html` hunk 使 8+ 条通道暂时无消费者 | 同一 HEAD 在 worktree 内跑该门 ⇒ **exit=0 全部断言通过**；主树唯一差别就是那半套在飞 hunk |
+| `panels-check` | **不属本轮改动**；但"连续两红=真问题"的判读**被我作废** | HEAD worktree 单跑 ⇒ **exit=0**；而主树两次跑都撞在另一会话正跑自己的全量 `pnpm gates` + `panels-check` 的窗里（PID 7321 / 26878）⇒ 负载假红与对方在飞 hunk 两种可能都未排除，**交回渲染层会话在空闲窗复跑** |
+
+**我自己的纪律失误（记下，别下次再犯）**：主树单跑 `panels-check` 前 `pgrep` 已显示有并发，我打印了警告却还是跑了。本仓规矩是「pgrep 非空即撞窗」，Electron 类门在这种窗里的读数**不能当证据**——我差点用一次被污染的复跑去做"连续两红"的判断，是 HEAD worktree 那次对照把它救回来的。
+
+顺带抓到的别人一笔的新瑕疵（不属本轮，只上报不动手）：本轮 `commercial-check.ts:152` 的 `check(true, "D2e 引导向导在产品里可达…")` 被断言体检判为 `[empty-assert]`——同一次运行里 `ipc-reachability-check` 正在报若干通道无消费者，这条恒真断言与它自己的结论方向相反。
