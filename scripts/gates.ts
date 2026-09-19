@@ -13,6 +13,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { countUnverified, scanAssertionHealth, scanDisjunctions, type ScanHit } from "./assertion-health";
 import { checkGateManifest, EXEMPT_SCRIPTS, GATES } from "./gate-manifest";
+// 耗时账本（同族：判据在 ./facts.ts，那边可单测；本文件只负责「跑完顺手记一笔」）。
+import { appendRun, currentHost, type GateRun } from "./facts";
 
 // 断言体检实现已抽到 ./assertion-health.ts：gates.ts 顶层有 `await main()`，
 // 直接 import 会跑起全套门禁——抽出去才能单测。此处再导出，对外接口不变。
@@ -141,18 +143,29 @@ async function main(): Promise<void> {
   console.log("");
 
   const results: GateResult[] = [];
+  const gateRuns: GateRun[] = [];
   let unverified = 0;
   for (const g of gates) {
     process.stdout.write("  ▶ " + g + " …");
     const r = await runGate(g);
     results.push(r);
-    unverified += countUnverified(r.output); // H-2：未证数上浮到门禁汇总
+    const uv = countUnverified(r.output); // H-2：未证数上浮到门禁汇总
+    unverified += uv;
+    gateRuns.push({ gate: g, exit: r.code, ms: r.ms, unverified: uv });
     process.stdout.write("\r  " + (r.code === 0 ? "✅" : "❌") + " " + g.padEnd(18) + " exit=" + String(r.code) + "  " + String(r.ms) + "ms\n");
     if (r.code !== 0) {
       const tail = r.output.trim().split("\n").slice(-12).join("\n");
       console.log("      ── 失败输出尾 12 行 ──");
       console.log(tail.split("\n").map((l) => "      " + l).join("\n"));
     }
+  }
+
+  // 耗时账本：每道门的 ms 本来就在这儿，落一份生成物就不必再往文档里手抄（`pnpm facts` 读它）。
+  // 侧信道语义——写失败只 warn，绝不改变任何一道门的结论或退出码。
+  try {
+    appendRun({ ts: new Date().toISOString(), host: currentHost(), gates: gateRuns });
+  } catch (e) {
+    console.warn("  ⚠️ 耗时账本写入失败（不影响门禁结论）：" + String(e));
   }
 
   let scanHits: ScanHit[] = [];

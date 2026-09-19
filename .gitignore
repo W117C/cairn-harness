@@ -19,3 +19,6 @@ fixtures/todo-app/src/todo.ts
 
 # M3b：write worker worktree（.agents/wt-<agent_id>，合并控制塔管理）
 .agents/
+
+# 门禁耗时账本：pnpm gates 每次跑完自己写，值只活在这儿（文档写「见 pnpm facts」，不抄值）
+docs/facts/
