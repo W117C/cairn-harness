@@ -40,7 +40,7 @@ afterEach(async () => {
   await rm(work, { recursive: true, force: true }).catch(() => {});
 });
 
-const REPORT = "## 结论\n- 完成。\n\n## 证据路径\n- README.md:1\n\n## 风险\n- 低。\n\n## 未决问题\n- 无。";
+const REPORT = "## 结论\n- 完成。\n\n## 证据路径\n- README.md:1\n\n## 风险\n- 低。\n\n## 未决问题\n- 无。"; // docs-check:allow 夹具正文：worker 报告里的 file:line 证据路径，不是本仓文档的指针
 
 /** 桩引擎：给出确定性 blocked=true（真引擎的阻断面在 hooks-input-contract 那组里测）。 */
 function stubEngine(over: Partial<HookRunResult> = {}): { engine: HookEngine; calls: { event: string; payload: HookPayload }[] } {
