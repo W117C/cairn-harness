@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentEvent } from "../events";
+import { estimateTextTokens } from "./text-budget";
 
 export const PRUNE_PROTECT_TOKENS = 40_000;
 export const PRUNE_MINIMUM_TOKENS = 20_000;
@@ -154,13 +155,16 @@ export function computePrune(input: PruneInput): PruneOutcome {
   let protectStart = events.length; // [protectStart, end) = 保护区
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i];
-    const chars =
-      e.type === "tool_result" ? e.output.length :
-      e.type === "assistant_message" ? e.content.length :
-      e.type === "user_message" ? e.content.length :
-      e.type === "assistant_delta" ? e.text.length :
-      e.type === "tool_call" ? JSON.stringify(e.args).length : 0;
-    acc += Math.ceil(chars / 4);
+    // token 计量按字符类别登记（text-budget 一份字重表）：中文一字≈一 token，旧的 chars/4
+    // 把这条累计低估 4 倍 ⇒ 保护区一口吞掉 4 倍量的事件、候选恒空、修剪在中文会话里根本不触发。
+    // 纯 ASCII 下 estimateTextTokens ≡ ceil(chars/4)，逐字同值（零回归）。
+    const text =
+      e.type === "tool_result" ? e.output :
+      e.type === "assistant_message" ? e.content :
+      e.type === "user_message" ? e.content :
+      e.type === "assistant_delta" ? e.text :
+      e.type === "tool_call" ? JSON.stringify(e.args) : "";
+    acc += estimateTextTokens(text);
     if (acc >= config.protectTokens) {
       protectStart = i;
       break;
@@ -176,18 +180,21 @@ export function computePrune(input: PruneInput): PruneOutcome {
     out.why = "none";
     return out;
   }
-  // 最小修剪闸：预计裁剪 < minimumTokens → 不裁（防无效修剪）
+  // 最小修剪闸：预计裁剪 < minimumTokens → 不裁（防无效修剪）。同一把字重尺——旧口径把中文
+  // 候选的预计节省低估 4 倍 ⇒ 该裁的报「too-small」，那些中文大块就此常驻上下文。
   let wouldSave = 0;
-  for (const i of candidates) wouldSave += Math.ceil((events[i] as { output: string }).output.length / 4);
+  for (const i of candidates) wouldSave += estimateTextTokens((events[i] as { output: string }).output);
   if (wouldSave < config.minimumTokens) {
     out.why = "too-small";
     return out;
   }
 
+  const placeholderTokens = estimateTextTokens(PRUNED_PLACEHOLDER);
   for (const i of candidates) {
     const e = events[i] as { output: string; callId: string };
     out.replacements.set(i + 1, PRUNED_PLACEHOLDER); // 事件 id = 1-based 行号
-    out.savedTokens += Math.ceil(e.output.length / 4) - Math.ceil(PRUNED_PLACEHOLDER.length / 4);
+    // savedTokens 是报给人看的成本读数：跟着同一把尺，否则面板上的「省了多少」在中文会话里虚报 4 倍
+    out.savedTokens += estimateTextTokens(e.output) - placeholderTokens;
     if (input.attachmentsDir) {
       const file = join(input.attachmentsDir, attachmentName(input.sessionId ?? "s", e.callId));
       out.attachments.push(file);
