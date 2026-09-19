@@ -24,6 +24,8 @@ export const MEMORY_TOKEN_BUDGET_DEFAULT = 6_000;
 /** ASCII 口径的字符帽换算（仅用于 chars_limit 这一路**展示**；生效的闸是 token 预算本身）。 */
 export const CHARS_PER_TOKEN = 4;
 export const ARCH_OUTLINE_THRESHOLD_BYTES = 4 * 1024;
+/** 大纲帽的上限（字符）。真正的帽取 `min(此值, 原文字符数/2)`——见 archSection。 */
+export const ARCH_OUTLINE_MAX_CHARS = 4_096;
 export const DECISIONS_RECENT_DEFAULT = 20;
 
 /** 块首立场声明（OpenViking 立场，§8.1.5/§8.1.8）。 */
@@ -105,8 +107,12 @@ async function archSection(workspace: string): Promise<Section | null> {
   if (bytes <= ARCH_OUTLINE_THRESHOLD_BYTES) {
     return { header: "[ARCHITECTURE]", lines: raw.trimEnd().split("\n") };
   }
-  // >4KB 只注大纲（§6.5/§6.2 文档大纲同一份规则）
-  return { header: "[ARCHITECTURE 大纲（原文 " + bytes + " 字节 > 4KB，按需 read_file）]", lines: shapeDoc(raw, 4096).trimEnd().split("\n") };
+  // >4KB 只注大纲（§6.5/§6.2 文档大纲同一份规则）。帽必须**同时**满足两条：
+  // ① 不超过 ARCH_OUTLINE_MAX_CHARS；② 小于原文（取一半）——门槛按字节、帽按字符时，
+  // 一份 4KB–16KB 的中文文档会命中 shapeDoc 的 `output.length <= maxChars ⇒ 逐字返回`，
+  // 「只注大纲」静默不生效，而块首还写着「按需 read_file」（实测 5030 字节 / 1910 字符 → 整份注入）。
+  const outlineCap = Math.min(ARCH_OUTLINE_MAX_CHARS, Math.floor(raw.length / 2));
+  return { header: "[ARCHITECTURE 大纲（原文 " + bytes + " 字节 > 4KB，按需 read_file）]", lines: shapeDoc(raw, outlineCap).trimEnd().split("\n") };
 }
 
 async function decisionsSection(workspace: string, limit: number): Promise<Section | null> {

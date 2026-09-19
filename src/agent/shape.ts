@@ -67,14 +67,18 @@ export function shapeLog(output: string, maxChars: number): string {
   return shaped.length > maxChars ? shaped.slice(0, maxChars) + "\n…[日志整形截断]" : shaped;
 }
 
-/** 文档：大纲（markdown 标题/列表锚点），不足补开头。 */
+/** 文档：大纲（markdown 标题/列表锚点），**只在装得下时**补开头。
+ *  maxChars 是帽不是软目标（与同族 shapeCode / shapeLog / shapeResult 缺省支同口径）：
+ *  原先无条件追加 [开头] + 前 10 行，一个长段落就能把帽撑穿，而两个调用方
+ *  （记忆注入的 ARCHITECTURE 大纲、进摘要前的文档整形）都按帽在记体积。 */
 export function shapeDoc(output: string, maxChars: number): string {
   if (output.length <= maxChars) return output;
   const lines = output.split("\n");
   const outline = lines.filter((l) => /^#{1,6}\s|^\s*[-*]\s|^\s*\d+\.\s/.test(l));
   let shaped = "[大纲]\n" + outline.join("\n");
-  if (shaped.length > maxChars) shaped = shaped.slice(0, maxChars) + "\n…[文档大纲截断]";
-  else shaped += "\n[开头]\n" + lines.slice(0, 10).join("\n");
+  if (shaped.length > maxChars) return shaped.slice(0, maxChars) + "\n…[文档大纲截断]";
+  const head = "\n[开头]\n" + lines.slice(0, 10).join("\n");
+  if (shaped.length + head.length <= maxChars) shaped += head;
   return shaped;
 }
 
