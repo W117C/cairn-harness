@@ -245,6 +245,13 @@ export interface AgentResultEvent {
      *  stale = 验过但之后又写了盘（证据已过期，不得当证据用）；absent = 全程没有任何验证拍。
      *  在此之前 artifacts 只有 report（= 模型的散文自述），父会话与合并控制塔都无法区分「验过」与「说验过」。 */
     verified?: WorkerEvidence;
+    /** W3②「价格标签」：本 worker 的表价花费（USD，按 routing/pricing 档位表折算）。
+     *  **缺席 = 价格不可知**（冻结剧本回放 / 模型名反查不到档位），不当 0——把不可知记成免费
+     *  就是"这轮没花钱"的假证据。worker usage 不分列缓存块 ⇒ 这是**上界**。
+     *  与 `verified` 合起来才是「这份交付花了多少钱、有没有跑过测试」的机器可读账。 */
+    spent_usd?: number;
+    /** 该档位的输入/输出单价是否当日在厂商官方页读到过（false = 占位数，只可横向比较）。 */
+    price_calibrated?: boolean;
   };
   usage: { inputTokens: number; outputTokens: number };
   tool_stats: Record<string, number>;

@@ -6,6 +6,7 @@ import type { FrozenStage, PluginAgentRoleDef } from "./sequencer";
 import type { StuckConfig, StuckTurn } from "./stuck";
 import type { VerifyHook } from "./verify";
 import type { WorkerModel } from "./worker-model";
+import type { WorkerPrice } from "./orchestrator-join";
 
 export interface SpawnArgs {
   task?: unknown;
@@ -61,6 +62,10 @@ export interface WorkerHandle {
   /** 路由选中模型的真实上下文窗口（registry ctxWindow）。只有路由分支拿得到 spec 时才有值；
    *  注入模型（modelFor）与未开路由时缺省 ⇒ worker 预算退回硬编码基线（旧行为逐字不变）。 */
   modelCtxWindow?: number;
+  /** W3② 价格标签：本 worker 真实会用的模型名 + 反查到的档位 id（反查不到只有名字）。
+   *  `null` = 冻结剧本回放（`scriptedWorkerModel`），它不拨号也不付钱 ⇒ 钱的话一律不说，
+   *  而不是报 $0（把不可知记成免费是本仓点名的假绿形状）。 */
+  price?: WorkerPrice | null;
   controller: AbortController;
   autonomy: AutonomySession;
   /** M3b write mode：文件面/shell 面的自主会话（worktree 完全可写 §4.4.5 → auto；critical 仍强制审批；

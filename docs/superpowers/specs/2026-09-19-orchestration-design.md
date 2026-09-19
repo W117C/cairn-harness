@@ -167,3 +167,18 @@
    另外编排段刻意**不占纪律编号**（写成「编排（派子代理时）：…」而非「7) …」），
    这样 `base-system-discipline` 那条「编号连续 + 不含 7)」的守卫一字未改仍然有效，
    并补了一条锚点 `orchestration-rule-renumbered` 反向钉住它。
+8. **item 7 的未做项②已落（2026-09-20，读数见 `outputs/w3-price-tag-readout-2026-09-20.md`）**：
+   worker 的表价花费进三个面——spawn 回执一行、`agent_result.artifacts.spent_usd` +
+   `price_calibrated`（done 与 failed 都带，失败也付过钱）、`wait_for_agents` 每行 + 整批合计。
+   三条施工口径值得留档：
+   ① **不开第二份价源**：只用 `routing/pricing` 的 `costUsd`/`priceOf`；没路由时按 worker 真实模型名
+      （`glmDefaultModelName()`）经既有 `findSpecByNameOrId` 反查档位，不新建反查表、不新建价表。
+   ② **不可知一律不折成 $0**：`scriptedWorkerModel` 打 `scripted: true` 自述标 ⇒ 冻结回放不给钱面
+      （demo 是打包后主对话的缺省 provider，这里若报 $0 就是最近的假绿入口）；
+      全未知时整批合计整行不印，部分未知写明「另有 N 个 worker 价格未知未计入」。
+      被整批帽摘掉摘要的行**仍带花费**（帽摘散文，不摘读数）。
+   ③ 实测代价：回执 +43 token/次 spawn、4-worker 收队 +84 token/次；`price_calibrated` 必须随读数同送
+      （GLM 三档仍是占位数 ⇒ 这些数**不可**当省钱证据）。
+   顺带可见但**未改**的一条现状：未开 `routing` 的 worker 恒走 `defaultWorkerModel`（= streamGlm），
+   不跟随 `settings.model` / `M0A_PROVIDER`——回执现在写明 worker 真实模型名，
+   「worker 是否必须跟随会话档位」留作独立裁决（不是本轮该 silently fix 的东西）。

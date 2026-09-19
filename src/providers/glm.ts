@@ -9,6 +9,16 @@ import type { ModelOutput, ProviderMessage, ProviderToolSpec } from "./index";
 
 export const GLM_ENDPOINT = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
 
+/** 未显式给 model 时的真实模型名。单一事实源：`toOpenAiOptions` 的 defaultModel 与
+ *  `glmDefaultModelName()` 都从这里取——worker 价格标签要按真实模型名反查档位，
+ *  抄第三份 `"glm-5.2"` 字面量就是本仓点名的「同族出口策略副本」。 */
+export const GLM_DEFAULT_MODEL = "glm-5.2";
+
+/** `streamGlm(messages, {})`（= `defaultWorkerModel`，未走档位路由的 worker 那条）真实会用的模型名。 */
+export function glmDefaultModelName(): string {
+  return process.env.M0_MODEL ?? GLM_DEFAULT_MODEL;
+}
+
 export type GlmMessage = ProviderMessage;
 
 /** GLM 工具规格（OpenAI 兼容 wire 形态；scripts/provider-check.ts 冻结消费方按此构造）。 */
@@ -37,7 +47,7 @@ function toOpenAiOptions(opts: GlmOptions): OpenAiOptions {
     apiKeyEnv: "M0_API_KEY",
     model: opts.model,
     modelEnv: "M0_MODEL",
-    defaultModel: "glm-5.2",
+    defaultModel: GLM_DEFAULT_MODEL,
     baseURL: opts.endpoint,
     baseURLEnv: "M0_ENDPOINT",
     defaultBaseURL: GLM_ENDPOINT,

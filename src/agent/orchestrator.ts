@@ -9,8 +9,8 @@ import { join } from "node:path";
 import type { AgentEvent, SecurityFinding } from "../events";
 import { replay } from "../events";
 import type { ModelOutput, Provider } from "../providers";
-import { type GlmMessage, type GlmToolSpec } from "../providers/glm";
-import { DEFAULT_MODEL_TABLE, resolveModel, toWorkerModel } from "../providers/registry";
+import { glmDefaultModelName, type GlmMessage, type GlmToolSpec } from "../providers/glm";
+import { DEFAULT_MODEL_TABLE, findSpecByNameOrId, resolveModel, toWorkerModel } from "../providers/registry";
 import { routeFor, TIER_ORDER as MODEL_TIER_ORDER } from "../routing/policy";
 import { loadBanditState, saveBanditState, updatePriced, type BanditState } from "../routing/bandit";
 import { costUsd } from "../routing/pricing";
@@ -78,8 +78,8 @@ import {
 import { MAX_CONCURRENT_WORKERS, READ_MODE_MAX_TURNS, SPAWN_MODES, WORKER_TOOL_TABLE, WRITE_WORKER_TOOL_TABLE, workerBudgetConfig, workerToolTable } from "./orchestrator-config";
 import { shell_rw, workerToolSpecs } from "./worker-shell-tools";
 import { clampTier, clipWorkerSummary, isPermissionMode, parseSpawnedAgentId, scanWorkerOutput, workerVerificationEvidence } from "./worker-report";
-import { shapeJoinRows, type JoinInput, type JoinPayloadBody } from "./orchestrator-join";
-import { WorkerCancelled, defaultWorkerModel, type WorkerModel } from "./worker-model";
+import { priceTagText, shapeJoinRows, spentUsdFor, type JoinInput, type JoinPayloadBody, type WorkerPrice } from "./orchestrator-join";
+import { WorkerCancelled, defaultWorkerModel, isScriptedModel, type WorkerModel } from "./worker-model";
 import { type OrchestratorOptions, type PipelineChain, type SpawnArgs, type StageRoleResolution, type WorkerContext, type WorkerHandle } from "./orchestrator-types";
 import { chainTable, digestArgs, filterWorkerSpecs, filterWorkerTable, parseStringList, parseWorkerContext, scanStreamEvent, withAgentId } from "./worker-projection";
 import { globIntersects, semanticConflictsVia } from "./lease-conflicts";
@@ -498,6 +498,18 @@ export class Orchestrator {
     if (routeDecision && !this.opts.modelFor && !process.env.M0_API_KEY) {
       return { ok: false, output: "spawn_agent: 路由路径需要 M0_API_KEY（无注入模型且无凭据；fail-closed 不造必败 worker）" };
     }
+    // W3②「价格标签」：worker 的钱此前只喂 bandit（rewardBandit 里算完即丢），派工时模型看不到单价、
+    // 收队时看不到花了多少、终态里也没有机器可读的花费。档位以路由决策为准；没路由时 worker 走
+    // `defaultWorkerModel`（= streamGlm 的 M0_MODEL ?? glm-5.2），按**真实模型名**反查档位表。
+    // 冻结剧本（scriptedWorkerModel 自带 scripted 标）不拨号不付钱 ⇒ price=null：宁可说「价格未知」，
+    // 也不拿 $0 冒充实付（把不可知记成免费是本仓点名的假绿形状）。
+    let price: WorkerPrice | null = null;
+    if (!isScriptedModel(model)) {
+      const name = routedSpec?.model ?? glmDefaultModelName();
+      const id = routeDecision?.picked ?? findSpecByNameOrId(DEFAULT_MODEL_TABLE, name)?.id;
+      if (id !== undefined) price = { model: name, priceId: id };
+      else price = { model: name };
+    }
     const requested = isPermissionMode(args.tier) ? args.tier : this.opts.parentMode;
     const { mode: tier, clamped, warning } = clampTier(requested, this.opts.parentMode);
     const maxTurns =
@@ -556,6 +568,7 @@ export class Orchestrator {
       tier,
       ...(clamped ? { tierWarning: warning } : {}),
       ...(model ? { model } : {}),
+      price,
       ...(routedSpec ? { modelCtxWindow: routedSpec.ctxWindow } : {}),
       controller: new AbortController(),
       // P0-2（审查）：worker 自主会话按父 run 口径构造（规则库 + 沙箱可用性）——空参构造使
@@ -669,8 +682,28 @@ export class Orchestrator {
     void this.runWorker(handle).catch(() => {}); // 失败隔离：worker 边界永不炸主 loop（双保险，runWorker 内已 catch-all）
     return {
       ok: true,
-      output: JSON.stringify({ agent_id: agentId, mode, max_turns: maxTurns, ...(worktree ? { worktree, base_commit: baseCommit } : {}) }),
+      output: JSON.stringify({
+        agent_id: agentId,
+        mode,
+        max_turns: maxTurns,
+        // W3②：派工时就把价格摆在模型面前（不报价 ⇒ 「要不要再拆一个 worker」只能凭感觉）
+        price: priceTagText(price, this.workerSpentSoFarUsd()),
+        ...(worktree ? { worktree, base_commit: baseCommit } : {}),
+      }),
     };
+  }
+
+  /** W3② 本编排器已派 worker 的表价累计（价格不可知的不计；一个都算不出 → null，不报 $0）。
+   *  与 `budgetEstimateUsd()` 是两件事：那条是**成本闸**的粗口径（单一可配单价 × 全部 token，含主 loop），
+   *  这条按每个 worker 真实档位的表价折算，只回答「worker 花掉多少」。 */
+  private workerSpentSoFarUsd(): number | null {
+    let total: number | null = null;
+    for (const w of this.workers.values()) {
+      const s = spentUsdFor(w.price, w.usage);
+      if (s === null) continue;
+      total = (total ?? 0) + s.usd;
+    }
+    return total === null ? null : Math.round(total * 1e6) / 1e6;
   }
 
   /** 写租约求交（纯查询）：与活跃 write worker（未终态）的 resources 做 glob 相交判定。 */
@@ -1291,14 +1324,14 @@ export class Orchestrator {
     const snapshot = (want: string[]): JoinInput[] => want.map((id) => {
       const w = this.workers.get(id);
       if (!w) {
-        return { agentId: id, status: "unknown" as const, task: "", report: "未派生过该 agent_id（问错了名字）", usage: { inputTokens: 0, outputTokens: 0 } };
+        return { agentId: id, status: "unknown" as const, task: "", report: "未派生过该 agent_id（问错了名字）", usage: { inputTokens: 0, outputTokens: 0 }, spent: null };
       }
       const status = !w.finished
         ? "running" as const
         : w.terminalStatus === "failed" ? "failed" as const
           : w.terminalStatus === "cancelled" ? "cancelled" as const
             : "done" as const;
-      return { agentId: id, status, task: w.task, report: w.lastResult?.summary ?? "", usage: { ...w.usage } };
+      return { agentId: id, status, task: w.task, report: w.lastResult?.summary ?? "", usage: { ...w.usage }, spent: spentUsdFor(w.price, w.usage) };
     });
 
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -1660,6 +1693,9 @@ export class Orchestrator {
       const diffRef = w.mode === "write" && w.worktree && w.baseCommit ? w.worktree + "@" + w.baseCommit : undefined;
       // W4b：只在本次真改过文件时标证据（没写代码就无所谓「跑过了」）。
       const evidence = filesChanged.length > 0 ? workerVerificationEvidence(w.events) : undefined;
+      // W3②：钱与证据同桌——「这份交付花了多少、跑没跑过测试」两条都得是机器可读的。
+      const spent = spentUsdFor(w.price, w.usage);
+      const spentFields = spent ? { spent_usd: spent.usd, price_calibrated: spent.calibrated } : {};
       const doneResult: Extract<AgentEvent, { type: "agent_result" }> = {
         type: "agent_result",
         agent_id: w.agentId,
@@ -1671,6 +1707,7 @@ export class Orchestrator {
           ...(filesChanged.length > 0 ? { files_changed: filesChanged } : {}),
           ...(diffRef ? { diff_ref: diffRef } : {}),
           ...(evidence ? { verified: evidence } : {}),
+          ...spentFields,
         },
         usage: { inputTokens: w.usage.inputTokens, outputTokens: w.usage.outputTokens },
         tool_stats: { ...w.toolStats },
@@ -1692,6 +1729,7 @@ export class Orchestrator {
             ...(filesChanged.length > 0 ? { files_changed: filesChanged } : {}),
             ...(diffRef ? { diff_ref: diffRef } : {}),
             ...(evidence ? { verified: evidence } : {}),
+            ...spentFields,
           },
           usage: { ...w.usage },
           tool_stats: { ...w.toolStats },
@@ -1701,6 +1739,7 @@ export class Orchestrator {
       if (w.mode === "write") await this.cleanupWrite(w, "failed");
       // failed：错误永不冒充结果——status/reason 分型；max_turns 附 partial 报告（§4.4.8 闸门）
       await this.opts.emit({ type: "agent_status", agent_id: w.agentId, status: "failed", reason, ts } as AgentEvent);
+      const failedSpent = spentUsdFor(w.price, w.usage);
       const failedResult: Extract<AgentEvent, { type: "agent_result" }> = {
         type: "agent_result",
         agent_id: w.agentId,
@@ -1708,7 +1747,11 @@ export class Orchestrator {
         ...(reason ? { reason } : {}),
         summary: clipped.text,
         ...(clipped.truncated ? { summary_truncated: true } : {}),
-        artifacts: { report: clipped.text },
+        // 失败的 worker 同样付过钱——「花了 $0.01 没拿到东西」正是判分工值不值的分子，缺席就等于免费失败。
+        artifacts: {
+          report: clipped.text,
+          ...(failedSpent ? { spent_usd: failedSpent.usd, price_calibrated: failedSpent.calibrated } : {}),
+        },
         usage: { inputTokens: w.usage.inputTokens, outputTokens: w.usage.outputTokens },
         tool_stats: { ...w.toolStats },
       } as Extract<AgentEvent, { type: "agent_result" }>;
