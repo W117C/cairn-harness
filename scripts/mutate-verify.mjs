@@ -1704,7 +1704,7 @@ const MUTATIONS = [
     src: "src/agent/text-budget.ts",
     test: "tests/skill-body-cap.test.ts",
     desc: "取回提示不计入预算 ⇒ 「总量 ≤ 预算」这句承诺被提示自己撑破（与 run_shell 的 SHELL_NOTICE_RESERVE 同族坑）",
-    apply: (s) => s.replace("const allowed = tokenBudget - weightOf(marker) - weightOf(suffix);", "const allowed = tokenBudget - weightOf(marker);"),
+    apply: (s) => s.replace("return cutToWeight(text, Math.max(0, tokenBudget - weightOf(notice))) + notice;", "return cutToWeight(text, tokenBudget) + notice;"),
     expectFail: "超限时提示自己不得撑破预算（总量 ≤ 预算，且提示完整保留）",
   },
   {
@@ -1850,6 +1850,22 @@ const MUTATIONS = [
     desc: "计数尾写死帽值 ⇒ 「等 4 个」与只列 4 个自相矛盾，模型据此以为文件里就这几个定义（少字节的前提是如实报数）",
     apply: (s) => s.replace(" 等 ${String(r.symbols.length)} 个（全量在 impact_report 事件）", " 等 ${String(cap)} 个（全量在 impact_report 事件）"),
     expectFail: "300 个定义只列前 4 个，并如实报出总数与全量位置",
+  },
+  {
+    id: "worker-report-cjk-count-collapsed",
+    src: "src/agent/worker-report.ts",
+    test: "tests/worker-report-clip.test.ts",
+    desc: "报告裁剪退回 chars/4 ⇒ 中文 worker 报告留 cap*4 字符（≈4× cap token），主会话每轮都要重付这份虚高",
+    apply: (s) => s.replace("const out = truncateToTokenBudget(text, capTokens, notice);", "const out = text.length <= capTokens * 4 ? text : text.slice(0, capTokens * 4) + notice;"),
+    expectFail: "超预算的中文报告截完真的 ≤ 预算，且提示行计入预算",
+  },
+  {
+    id: "worker-report-truncated-flag-lies",
+    src: "src/agent/worker-report.ts",
+    test: "tests/worker-report-clip.test.ts",
+    desc: "truncated 恒报 false ⇒ 上层以为拿到的是完整报告（面板与主会话据此判断 worker 有没有说清楚）",
+    apply: (s) => s.replace("return { text: out, truncated: out !== text };", "return { text: out, truncated: false };"),
+    expectFail: "超预算的中文报告截完真的 ≤ 预算，且提示行计入预算",
   },
 ];
 
