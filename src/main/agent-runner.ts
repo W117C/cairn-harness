@@ -44,43 +44,21 @@ import {
   type ToolResultWithAudit,
 } from "../permissions";
 import { globalPermissionsPath, savePermissionRules } from "../permissions/rules";
-import { SettingsStore, type AppSettings, type ProviderKind } from "./settings";
-import {
-  createSession,
-  deleteSession,
-  listSessions,
-  pathOf,
-  readSessionEvents,
-  renameSession,
-  sessionExists,
-  createSidechatSession,
-  listSidechatSessions,
-  readSidechatEvents,
-  sidechatDir,
-  sidechatEventsPath,
-  type SessionInfo,
-} from "./sessions";
+import { type ProviderKind } from "./settings";
+import { getLastWorkspace, setRunWorkspace } from "./runner-workspace";
+import { createSession, pathOf, readSessionEvents, createSidechatSession, listSidechatSessions, readSidechatEvents, sidechatDir, sidechatEventsPath, type SessionInfo } from "./sessions";
 import { createMockProvider } from "../providers/mock";
 import { streamGlm } from "../providers/glm";
 import type { ModelOutput, Provider } from "../providers";
 import { TOOLS, type Tool, type ToolResult } from "../tools";
 import { remember } from "../tools/remember";
 import type { ToolName } from "../tools/base";
-import {
-  initMemoryHome,
-  globalMemoryDir,
-  listTopics,
-  loadExternalRefState,
-  projectMemoryDir,
-  readTextOrNull,
-  deleteTopic,
-  type TopicEntry,
-} from "../agent/memory/store";
+import { initMemoryHome, type TopicEntry } from "../agent/memory/store";
 import { runSessionEndDistill } from "../agent/memory/distill";
 export { initMemoryHome } from "../agent/memory/store"; // shell 启动时注入 userData/memory
-import { extractExternalRefs } from "../agent/memory/inject";
-import type { MemoryLayerSnapshot, MemorySnapshot } from "./ipc-protocol";
+import type { MemorySnapshot } from "./ipc-protocol";
 import { AskGate } from "./ask-gate";
+import type { LicenseState } from "./license";
 import type { AskOutcomePayload, AskPayload, RunRequest, SidechatPanelSnapshot } from "./ipc-protocol";
 import { buildSandboxProfile, checkSandbox, runInSandbox, type SandboxStatus } from "./sandbox";
 import { PluginRuntime, setCurrentPluginRuntime, currentPluginRuntime, type PluginPanelSnapshot } from "../agent/plugins";
@@ -88,13 +66,6 @@ import type { HookEngine } from "../agent/plugins/hooks";
 import type { McpToolInfo } from "../agent/plugins/mcp";
 import { Scheduler, type ScheduleSnapshot, type TriggerExecutor } from "./scheduler";
 import { validateAutomation, isUnattendedTier } from "./automations";
-import {
-  deleteProviderKey,
-  providerKeyStatus,
-  putProviderKey,
-} from "./provider-keys";
-import { verifyLicenseFile, type LicenseState } from "./license";
-import { checkUpdate, type UpdateCheckResult } from "./updater";
 import {
   runSidechatTurn,
   promoteToMain,
@@ -112,7 +83,7 @@ import {
   type SpawnArgs,
   type WorkerModel,
 } from "../agent/orchestrator";
-import { interruptedWorkers, respawnArgsFrom, type RespawnArgs } from "../agent/recovery";
+import { type RespawnArgs } from "../agent/recovery";
 import { buildSecurityReport } from "../agent/security/scan";
 import {
   listWorktreeDirs,
@@ -120,6 +91,19 @@ import {
   cleanOrphanWorktree,
   type WorktreeCleanupResult,
 } from "../agent/worktree";
+// ---- 拆分面（同 provider-key-inject 先例：实现搬去轻模块，本装配根按原路径继续导出）----
+// settings/BYOK/license/更新面 → ./settings-handlers；会话列表与崩溃恢复 → ./session-handlers；
+// 记忆快照与删除 → ./memory-handlers；「最近一次 run 的工作区」单一事实源 → ./runner-workspace。
+import { getAppVersion, handleLicenseStatus, handleProviderKeyStatus, setSettingsHostDeps, store } from "./settings-handlers";
+import { getSessionsDir, requireSessionsDir } from "./session-handlers";
+import { memorySnapshot } from "./memory-handlers";
+
+// settings 面不反向依赖本模块（避免装配根 ↔ 轻模块成环）：它需要本模块的两处按回调注入。
+setSettingsHostDeps({
+  resolveProviderKind: () => resolveProviderKind(),
+  onScheduleCapChange: (cap) => updateScheduleCap(cap),
+});
+
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const WORKSPACE = join(ROOT, "fixtures", "todo-app");
@@ -151,8 +135,6 @@ interface Session {
 }
 // 单窗口单任务：UI 串行发 run；ipc:check 亦串行。会话状态仅存活于一次 runAgent。
 let session: Session | null = null;
-// M2d：最近一次 run 的工作区（记忆快照的项目层根；缺省 = 默认靶工作区）。
-let lastWorkspace: string | null = null;
 // M2e：最近一次 run 的插件面板快照（纯投影的留档，供 run 间隙的 agent:state 查询）。
 let lastPluginSnapshot: PluginPanelSnapshot | null = null;
 
@@ -225,7 +207,7 @@ async function ensureSessionOrchestrator(): Promise<Orchestrator | null> {
   const log = createEventLog(logPath);
   const orch = new Orchestrator({
     logPath,
-    workspace: lastWorkspace ?? WORKSPACE,
+    workspace: getLastWorkspace() ?? WORKSPACE,
     parentMode: (await store().get()).mode,
     emit: async (e: AgentEvent) => {
       await log.append(e);
@@ -683,7 +665,8 @@ export function initScheduler(opts: {
     getCap: () => scheduleCapCache,
     emitTimeline: async (e: AgentEvent) => {
       const cur = (await store().get()).currentSession;
-      if (sessionsDir && cur) await createEventLog(pathOf(sessionsDir, cur)).append(e);
+      const sdir = getSessionsDir();
+      if (sdir && cur) await createEventLog(pathOf(sdir, cur)).append(e);
       hooks.onEvent?.(e);
     },
   });
@@ -1000,7 +983,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   const runAbort = new AbortController(); // P3（审查）：交互 run 取消入口（handleRunCancel 经 IPC 触达）
   const signal = opts.signal ? AbortSignal.any([opts.signal, runAbort.signal]) : runAbort.signal;
   if (interactive) interactiveRunAbort = runAbort;
-  lastWorkspace = opts.workspace;
+  setRunWorkspace(opts.workspace);
   const runScope: RunScope = { session: sessionObj, orchestrator: null };
   runScopeALS.enterWith(runScope); // 本 run 整条异步链（loop await / 门等待 / 工具执行）都在 scope 内
   enterPlanRunScope(); // P1（审查）：plan 门状态随 run 隔离——并发 run 互不污染（permissions ALS）
@@ -1450,7 +1433,7 @@ export async function handleCardAction(req: CardActionRequest): Promise<{ ok: bo
   if (req.action === "clean" && req.cardType === "orphan") {
     const name = typeof req.payload?.name === "string" ? req.payload.name : "";
     if (name === "" || !/^[A-Za-z0-9_-]+$/.test(name)) return { ok: false, error: "orphan clean 需要 payload{name（wt- 后的 agent_id）}" };
-    const ws = lastWorkspace ?? WORKSPACE;
+    const ws = getLastWorkspace() ?? WORKSPACE;
     const r: WorktreeCleanupResult = await cleanOrphanWorktree(ws, name);
     return r.removed ? { ok: true } : { ok: false, error: "孤儿 worktree 清理失败：" + (r.error ?? "未知") };
   }
@@ -1515,42 +1498,6 @@ export function handleRunCancel(): { ok: boolean; error?: string } {
   return { ok: true };
 }
 
-// ---- M2d：记忆快照（getState 透传）+ 记忆删除（仅用户；IPC 通道 main 侧就绪，preload 暴露见 BLOCKED 备案）----
-
-async function memoryLayerSnapshot(dir: string, scanWorkspace: string | null): Promise<MemoryLayerSnapshot> {
-  const state = await loadExternalRefState();
-  const index = await readTextOrNull(dir + "/MEMORY.md");
-  const topics: TopicEntry[] = await listTopics(dir);
-  // 外部引用扫描：索引 + 全部 topic 正文 + （项目层）根三文件
-  const texts: string[] = [];
-  if (index) texts.push(index);
-  for (const t of topics) {
-    const body = await readTextOrNull(dir + "/" + t.topic + ".md");
-    if (body) texts.push(body);
-  }
-  if (scanWorkspace) {
-    for (const f of ["ARCHITECTURE.md", "DECISIONS.md", "preferences.md"]) {
-      const body = await readTextOrNull(scanWorkspace + "/.agent/" + f);
-      if (body) texts.push(body);
-    }
-  }
-  const found = new Set<string>();
-  if (scanWorkspace) for (const t of texts) for (const r of extractExternalRefs(t, scanWorkspace)) found.add(r);
-  return {
-    path: dir,
-    index,
-    topics,
-    pendingExternalRefs: [...found].filter((r) => !state.approved.includes(r) && !state.declined.includes(r)),
-  };
-}
-
-async function memorySnapshot(): Promise<MemorySnapshot> {
-  const ws = lastWorkspace;
-  return {
-    project: await memoryLayerSnapshot(ws ? projectMemoryDir(ws) : projectMemoryDir(process.cwd()), ws),
-    global: await memoryLayerSnapshot(globalMemoryDir(), ws),
-  };
-}
 
 /** IPC "agent:state" 的处理函数。 */
 export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memory?: MemorySnapshot; plugins?: PluginPanelSnapshot; sidechat?: SidechatPanelSnapshot; worktree?: { orphans: string[] }; schedule?: ScheduleSnapshot; license?: LicenseState; providerKeys?: { available: boolean; stored: string[]; envActive: boolean }; about?: { version: string } }> {
@@ -1601,12 +1548,12 @@ export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memo
   } catch {
     providerKeys = undefined;
   }
-  return { sandbox: sandboxState, memory, plugins, sidechat, worktree, schedule, license, providerKeys, about: { version: appVersion } };
+  return { sandbox: sandboxState, memory, plugins, sidechat, worktree, schedule, license, providerKeys, about: { version: getAppVersion() } };
 }
 
 /** M3b 孤儿 worktree 扫描（纯投影面）：.agents/wt-* 目录 − 事件流有终态/收尾记录的 agent。 */
 export async function scanOrphanWorktrees(workspace?: string): Promise<string[]> {
-  const ws = workspace ?? lastWorkspace ?? WORKSPACE;
+  const ws = workspace ?? getLastWorkspace() ?? WORKSPACE;
   const dirs = await listWorktreeDirs(ws);
   if (dirs.length === 0) return [];
   const events = lastLogPath ? await replay(lastLogPath).catch(() => []) : [];
@@ -1639,7 +1586,7 @@ export async function handlePluginDecide(pluginName: string, trusted: boolean): 
     await rt.connectMcp(); // 信任后同样本开始生效（MCP 补连；hook 引擎已在重建后的 runtime 内）
     return { ok: true, snapshot: rt.snapshot() };
   }
-  const lite = await PluginRuntime.load(pluginRuntimeOpts(lastWorkspace ?? WORKSPACE));
+  const lite = await PluginRuntime.load(pluginRuntimeOpts(getLastWorkspace() ?? WORKSPACE));
   let decided = false;
   try {
     decided = await lite.trustDecide(pluginName, trusted);
@@ -1659,189 +1606,9 @@ export async function handlePluginDecide(pluginName: string, trusted: boolean): 
   return { ok: true, snapshot: lastPluginSnapshot ?? undefined };
 }
 
-/** IPC "agent:memory-delete"：用户经记忆面板显式删除（§8.1.7：删除仅用户，模型无删除权）。 */
-export async function handleMemoryDelete(scope: "project" | "global", topic: string): Promise<{ ok: boolean; error?: string }> {
-  try {
-    const dir = scope === "project" ? projectMemoryDir(lastWorkspace ?? process.cwd()) : globalMemoryDir();
-    const ok = await deleteTopic(dir, topic);
-    return ok ? { ok: true } : { ok: false, error: "topic 不存在: " + topic };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
-}
 
-// ---- M1e：settings 存储 + 会话目录 + Provider 只读信息 ----
-// settings 文件与会话目录由 shell（index.ts）按环境初始化：M1E_SETTINGS_PATH / M1E_SESSIONS_DIR
-// （验收脚本注入临时目录；electron 壳缺省 userData）。store 惰性建（headless 脚本未初始化时用缺省值）。
-let settingsStore: SettingsStore | null = null;
 
-/** shell 启动时初始化 settings 存储（文件路径）。 */
-export function initSettingsStore(filePath: string): void {
-  settingsStore = new SettingsStore(filePath);
-}
 
-function store(): SettingsStore {
-  if (!settingsStore) settingsStore = new SettingsStore("/tmp/m1e-default-settings.json");
-  return settingsStore;
-}
-
-export async function getSettings(): Promise<AppSettings> {
-  return await store().get();
-}
-
-export async function setSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
-  const next = await store().set(patch);
-  // 环境转发：gatedTool 读 M1E_SAFE_MODE（M1e 最小语义）；主题/档位由 renderer 持有并随 run 传回
-  if (patch.safeMode !== undefined) {
-    if (next.safeMode === "off") delete process.env.M1E_SAFE_MODE;
-    else process.env.M1E_SAFE_MODE = next.safeMode;
-  }
-  // M4a：定时并发上限变更 → 调度器即时生效
-  if (patch.scheduleConcurrencyCap !== undefined) updateScheduleCap(next.scheduleConcurrencyCap);
-  return next;
-}
-
-/** Provider 只读展示（设置页）：与 run 同源（settings + env 覆盖），不读 key 不落日志。
- *  P-1 步骤 2：此前只认 M0A_PROVIDER env ⇒ 设置页永远显示 mock，与「用户其实选了真模型」脱节。 */
-export async function providerInfo(): Promise<{ provider: string; model: string; kind: ProviderKind }> {
-  const kind = await resolveProviderKind();
-  if (kind === "glm") {
-    const model = (await store().get()).model || process.env.M0_MODEL || "glm-5.2";
-    return { provider: "GLM（OpenAI 兼容）", model, kind };
-  }
-  return { provider: "demo（冻结剧本，非真实模型）", model: "mock-script", kind };
-}
-
-// ---- M4b：BYOK key（safeStorage）+ license V1 + 更新检查（§2.1/§2.2/§2.3）----
-// 装配由 electron 壳（index.ts）注入；headless（未装配）= fail-closed / inactive / unconfigured 显式态。
-
-// injectStoredProviderKey 已抽到 ./provider-key-inject（轻模块——本文件依赖链含 MCP SDK/LSP，
-// 单测/启动注入不应被迫导入整条重链）；此处再导出，index.ts 与既有调用方接口不变。
-export { injectStoredProviderKey } from "./provider-key-inject";
-
-export async function handleProviderKeySet(provider: string, key: string): Promise<{ ok: boolean; error?: string }> {
-  return await putProviderKey(provider, key);
-}
-
-export async function handleProviderKeyDelete(provider: string): Promise<{ ok: boolean; error?: string }> {
-  return await deleteProviderKey(provider);
-}
-
-/** 状态面（设置页徽标 + env 并存提示；不含 key 值）。 */
-export async function handleProviderKeyStatus(): Promise<{ available: boolean; stored: string[]; envActive: boolean }> {
-  const st = await providerKeyStatus();
-  return { ...st, envActive: !!process.env.M0_API_KEY };
-}
-
-let licenseFilePath: string | null = null;
-
-/** shell 启动时初始化 license 文件路径（<appData>/license.json）。 */
-export function initLicenseStore(filePath: string): void {
-  licenseFilePath = filePath;
-}
-
-export async function handleLicenseStatus(): Promise<LicenseState> {
-  if (!licenseFilePath) return { state: "inactive" };
-  return await verifyLicenseFile(licenseFilePath);
-}
-
-let appVersion = "0.0.1";
-
-/** shell 启动时注入当前版本（app.getVersion()；headless 缺省 package.json 版本）。 */
-export function initUpdateContext(opts: { currentVersion: string }): void {
-  appVersion = opts.currentVersion;
-}
-
-export async function handleUpdateCheck(): Promise<UpdateCheckResult> {
-  const manifestUrl = (await store().get()).updateManifestUrl;
-  return await checkUpdate({ manifestUrl, currentVersion: appVersion });
-}
-
-// ---- M1e：会话列表 IPC（会话目录由 index.ts 初始化；headless 脚本未初始化 → 未配置错误） ----
-let sessionsDir: string | null = null;
-
-/** shell 启动时初始化会话目录。 */
-export function initSessionsDir(dir: string): void {
-  sessionsDir = dir;
-}
-
-function requireSessionsDir(): string {
-  if (!sessionsDir) throw new Error("会话目录未初始化（shell 未启动？）");
-  return sessionsDir;
-}
-
-export async function handleSessionList(): Promise<SessionInfo[]> {
-  return await listSessions(requireSessionsDir());
-}
-
-export async function handleSessionCreate(name?: string): Promise<{ id: string }> {
-  return { id: await createSession(requireSessionsDir(), name) };
-}
-
-/** 切换会话：settings.currentSession 落盘（重启还原）；返回该会话全部事件（重放投影）。
- *  M3c 崩溃恢复（§4.4.9）：重开即扫描无终态 worker → 补发 failed(interrupted) + 恢复卡载荷
- *  （幂等：补发即有终态，重扫不再命中；V1 不做热恢复，重派 = 全新 agent_id）。 */
-export async function handleSessionOpen(id: string): Promise<{ events: AgentEvent[] }> {
-  const dir = requireSessionsDir();
-  if (!(await sessionExists(dir, id))) throw new Error(`会话不存在: ${id}`);
-  await store().set({ currentSession: id });
-  const logPath = pathOf(dir, id);
-  await applyCrashRecovery(logPath);
-  return { events: await readSessionEvents(dir, id) };
-}
-
-/** M3c 崩溃恢复扫描 + 补发（§4.4.9）：无终态 worker → failed(interrupted) + 恢复卡（respawn 载荷）。
- *  纯投影层模拟口径（裁决 5）：headless 验收直接对本函数断言；UI 走 session:open 同路。 */
-export async function applyCrashRecovery(logPath: string, emit?: (e: AgentEvent) => Promise<void>): Promise<string[]> {
-  const events = await replay(logPath).catch(() => [] as AgentEvent[]);
-  const interrupted = interruptedWorkers(events);
-  if (interrupted.length === 0) return [];
-  const out: string[] = [];
-  const sink = emit ?? (async (e: AgentEvent) => { await createEventLog(logPath).append(e); });
-  for (const iw of interrupted) {
-    const respawn = respawnArgsFrom(iw.spawned);
-    const ts = Date.now();
-    await sink({ type: "agent_status", agent_id: iw.agentId, status: "failed", reason: "interrupted", ts } as AgentEvent);
-    await sink({
-      type: "agent_result",
-      agent_id: iw.agentId,
-      status: "failed",
-      reason: "interrupted",
-      summary:
-        "[recovery] 崩溃恢复：该 worker 上次会话被中断（重启扫描无终态事件）。" +
-        "可在恢复卡「重派」（全新 agent_id 按原 spawn 参数再 spawn，V1 无热恢复）或忽略。" +
-        "write worker 的旧 worktree 走孤儿列表（可清理，不自动删）。",
-      artifacts: {
-        report: "[recovery] interrupted（无终态事件；重派参数见 artifacts.respawn）",
-        respawn,
-      },
-      usage: { inputTokens: 0, outputTokens: 0 },
-      tool_stats: {},
-    } as AgentEvent);
-    out.push(iw.agentId);
-  }
-  return out;
-}
-
-export async function handleSessionRename(oldId: string, newName: string): Promise<{ id: string }> {
-  const dir = requireSessionsDir();
-  const id = await renameSession(dir, oldId, newName);
-  const cur = await store().get();
-  if (cur.currentSession === oldId) await store().set({ currentSession: id });
-  return { id };
-}
-
-/** 删除会话：若删的是当前会话 → 回退到最近一个（列表 mtime 降序首个）；无会话 → null。 */
-export async function handleSessionDelete(id: string): Promise<{ currentSession: string | null }> {
-  const dir = requireSessionsDir();
-  await deleteSession(dir, id);
-  const cur = await store().get();
-  if (cur.currentSession !== id) return { currentSession: cur.currentSession };
-  const rest = await listSessions(dir);
-  const next = rest[0]?.id ?? null;
-  await store().set({ currentSession: next });
-  return { currentSession: next };
-}
 
 // ---- M2f：辅助对话（sidechat）IPC 面 ----
 // 独立会话：own JSONL 文件组 + own loop + own 上下文；写向工具从工具表摘除（只读白名单硬闸）。
@@ -1912,7 +1679,7 @@ export async function handleSidechatAsk(
     const events = await runSidechatTurn({
       sidechatDir: sidechatDir(dir, sidechatId),
       mainLogPath,
-      workspace: lastWorkspace ?? WORKSPACE,
+      workspace: getLastWorkspace() ?? WORKSPACE,
       message,
       ...(picked.model ? { model: picked.model } : {}),
       ...(over.summarizer ? { summarizer: over.summarizer } : { summarizer: resolveSidechatSummarizer() }),
@@ -1954,7 +1721,7 @@ export async function handleSidechatPromote(req: {
 
 /** sidechat 面板快照（纯投影）：会话清单 + 各自最近消息 + 已提升记录（由主会话 origin 反向投影）。 */
 export async function handleSidechatState(parentSessionId?: string): Promise<SidechatPanelSnapshot> {
-  const dir = sessionsDir;
+  const dir = getSessionsDir();
   if (!dir) return { parentSessionId: null, sessions: [], promoted: [] };
   const parent = parentSessionId ?? (await store().get()).currentSession ?? null;
   const infos = await listSidechatSessions(dir, parent ?? undefined);
@@ -2031,3 +1798,15 @@ async function runSidechatDemo(sessionId: string | undefined, parentLogPath: str
     console.warn("[sidechat] 演示通道失败:", err instanceof Error ? err.message : String(err));
   }
 }
+
+// ---- 公开面（拆分后不变）：以下实现住在轻模块里，本文件按原路径继续导出 ----
+export {
+  getSettings, handleLicenseStatus, handleProviderKeyDelete, handleProviderKeySet, handleProviderKeyStatus,
+  handleUpdateCheck, initLicenseStore, initSettingsStore, initUpdateContext, providerInfo, setSettings,
+} from "./settings-handlers";
+export { injectStoredProviderKey } from "./provider-key-inject";
+export {
+  applyCrashRecovery, handleSessionCreate, handleSessionDelete, handleSessionList, handleSessionOpen,
+  handleSessionRename, initSessionsDir,
+} from "./session-handlers";
+export { handleMemoryDelete, memorySnapshot } from "./memory-handlers";
