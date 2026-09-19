@@ -1659,6 +1659,46 @@ const MUTATIONS = [
     apply: (s) => s.replace("return { command, ok: res.ok, output: res.output };", "return { command: mapped, ok: res.ok, output: res.output };"),
     expectFail: "结果里的 command 用模型下的原命令（事件流给人看的不是内部映射串）",
   },
+  {
+    id: "mcp-result-cap-removed",
+    src: "src/agent/plugins/mcp.ts",
+    test: "tests/mcp-bounds.test.ts",
+    desc: "tools/call 结果不设有界（外部 server 一次吐 200KB 直接进上下文）⇒ 成本与「输出上限 + 截断提示」的工具面契约破口",
+    apply: (s) => s.replace("return { ok: !isError, output: capMcpResult(parts.join(\"\\n\")) || \"(空结果)\" };", "return { ok: !isError, output: parts.join(\"\\n\") || \"(空结果)\" };"),
+    expectFail: "tools/call 的 200KB 结果被收到 32KB 内，尾部结论留住",
+  },
+  {
+    id: "mcp-result-tail-dropped",
+    src: "src/agent/plugins/mcp.ts",
+    test: "tests/mcp-bounds.test.ts",
+    desc: "结果只留头部（提示却写着「首尾已保留」）⇒ server 把结论写在末尾时（错误摘要/统计行）丢的正是最有用的那段",
+    apply: (s) => s.replace("    + text.slice(text.length - tail);\n", "    + \"\";\n"),
+    expectFail: "超限时长度不越界，且报出的省略数与实现的分段严格相等",
+  },
+  {
+    id: "mcp-omitted-count-lies",
+    src: "src/agent/plugins/mcp.ts",
+    test: "tests/mcp-bounds.test.ts",
+    desc: "省略字符数写死 0 ⇒ 提示说「什么都没省」，模型据此认为手里就是全文（少字节的必要条件是如实报数）",
+    apply: (s) => s.replace("String(text.length - head - tail)", "String(0)"),
+    expectFail: "超限时长度不越界，且报出的省略数与实现的分段严格相等",
+  },
+  {
+    id: "mcp-cap-note-reserve-removed",
+    src: "src/agent/plugins/mcp.ts",
+    test: "tests/mcp-bounds.test.ts",
+    desc: "取消提示行的预算预留 ⇒ 提示自己把「≤ 上限」这句承诺撑破（中文提示一行就上百字节）",
+    apply: (s) => s.replace("const CAP_NOTE_RESERVE = 220;", "const CAP_NOTE_RESERVE = 0;"),
+    expectFail: "超限时长度不越界，且报出的省略数与实现的分段严格相等",
+  },
+  {
+    id: "mcp-description-cap-removed",
+    src: "src/agent/plugins/mcp.ts",
+    test: "tests/mcp-bounds.test.ts",
+    desc: "tools/list 的描述不收窄 ⇒ 外部 server 的话痨说明进的是**每轮重送**的工具面（×工具数×轮数），固定成本被抬高一个数量级",
+    apply: (s) => s.replace("description: typeof t.description === \"string\" ? capMcpDescription(t.description) : \"\",", "description: typeof t.description === \"string\" ? t.description : \"\","),
+    expectFail: "tools/list 的 5000 字符描述进注册表时已被收窄（每轮重送的那一份）",
+  },
 ];
 
 function runTest(testRel) {
