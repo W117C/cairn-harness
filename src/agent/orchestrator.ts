@@ -75,7 +75,7 @@ import {
 // ---- 拆分面（本文件只留 Orchestrator 类本体 + worker 会话 provider/压缩）----
 // 常量与纯函数按职责抽到同级轻模块（同 provider-key-inject 的先例：抽实现、原路径留公开面，
 // importer 与变异锚点不必跟着改）。本地引用走 import，公开面由文件尾的 re-export 维持逐字不变。
-import { MAX_CONCURRENT_WORKERS, READ_MODE_MAX_TURNS, SPAWN_MODES, WORKER_TOOL_TABLE, WRITE_WORKER_TOOL_TABLE, workerBudgetConfig } from "./orchestrator-config";
+import { MAX_CONCURRENT_WORKERS, READ_MODE_MAX_TURNS, SPAWN_MODES, WORKER_TOOL_TABLE, WRITE_WORKER_TOOL_TABLE, workerBudgetConfig, workerToolTable } from "./orchestrator-config";
 import { shell_rw, workerToolSpecs } from "./worker-shell-tools";
 import { clampTier, clipWorkerSummary, isPermissionMode, parseSpawnedAgentId, scanWorkerOutput } from "./worker-report";
 import { WorkerCancelled, defaultWorkerModel, type WorkerModel } from "./worker-model";
@@ -1374,9 +1374,11 @@ export class Orchestrator {
     try {
       const system = await buildWorkerSystemMessages(w, this.opts.workspace); // 记忆注入恒读主 checkout（裁决 2）
       // M3c：插件角色工具面裁剪（frontmatter.tools 白名单 − disallowedTools；裁剪后必须非空）
-      const baseTable = buildWorkerToolTable(w, this);
+      // M7：影响面读端三处同源（规格 / 实例 / loop 白名单），开关关着时一处都不加 ⇒ 零行为。
+      const impactOn = this.opts.impactAnalysis === true;
+      const baseTable = buildWorkerToolTable(w, this, { impactAnalysis: impactOn });
       const table = filterWorkerTable(w, baseTable);
-      const specs = filterWorkerSpecs(w, workerToolSpecs(w.mode));
+      const specs = filterWorkerSpecs(w, workerToolSpecs(w.mode, { impactAnalysis: impactOn }));
       const provider = createWorkerProvider({
         readEvents: () => w.events,
         system,
@@ -1415,7 +1417,7 @@ export class Orchestrator {
         workspace: loopWorkspace,
         mode: w.mode === "write" ? "auto" : "read-only", // 权限层二次拦截（写 worker 的真实门在 gatedWorkerTool 管线）
         maxSteps: w.maxTurns,
-        allowedTools: (w.mode === "write" ? WRITE_WORKER_TOOL_TABLE : WORKER_TOOL_TABLE) as never, // 三重硬闸之二：loop 工具表白名单
+        allowedTools: workerToolTable(w.mode, impactOn) as never, // 三重硬闸之二：loop 工具表白名单（与规格/实例同源）
         tools: table,
         signal: w.controller.signal,
       });

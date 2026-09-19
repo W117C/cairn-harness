@@ -34,6 +34,17 @@ export const WRITE_WORKER_FORBIDDEN_TOOLS: readonly string[] = [
   "automation_create", "automation_update", "automation_delete", "automation_run_now", "automation_list",
 ];
 
+/** 影响面读端工具名（运行时注入工具，与 obs_recall / MCP 同族：不进静态 TOOLS 键域）。 */
+export const WORKER_IMPACT_TOOL = "impact_query";
+
+/** worker 的 loop 侧白名单（三重硬闸之二）。影响面开启时追加读端工具——
+ *  与 `workerToolSpecs` / `buildWorkerToolTable` 三处必须同源，否则会出现
+ *  「模型看得见但执行面没有」或反之（本仓反复踩过的两头断）。 */
+export function workerToolTable(mode: "read" | "write", impactAnalysis: boolean): readonly string[] {
+  const base = mode === "write" ? WRITE_WORKER_TOOL_TABLE : WORKER_TOOL_TABLE;
+  return impactAnalysis ? [...base, WORKER_IMPACT_TOOL] : base;
+}
+
 // ---- M3c：pipeline sequencer / 卡死检测 / 成本闸 / worker 压缩 参数 ----
 
 /** worker 压缩参数（§7.5：同一压缩器实例化、参数独立配置——worker 触发更晚 ratio 0.95；

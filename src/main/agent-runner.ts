@@ -180,13 +180,15 @@ function currentOrchestrator(): Orchestrator | null {
  *  - workerSummarizer：worker 压缩摘要器（§7.5 同一 runCompaction 链；GLM 暗卷需 M0_API_KEY）；
  *  - budget：会话成本闸（§4.4.8 maxBudgetUsd；0 = off 零行为）。 */
 async function orchestratorExtras(): Promise<
-  Pick<OrchestratorOptions, "agentRoleFor" | "workerSummarizer" | "budget" | "routing" | "banditStatePath" | "promptCache">
+  Pick<OrchestratorOptions, "agentRoleFor" | "workerSummarizer" | "budget" | "routing" | "banditStatePath" | "promptCache" | "impactAnalysis">
 > {
   const s = await store().get();
   return {
     agentRoleFor: (invoke: string) => currentPluginRuntime()?.findAgentRole(invoke) ?? null,
     ...(process.env.M0_API_KEY ? { workerSummarizer: createGlmSummarizer() } : {}),
     ...(s.maxBudgetUsd > 0 ? { budget: { maxUsd: s.maxBudgetUsd, pricePerMTok: s.budgetPricePerMTok } } : {}),
+    // M7 影响面读端与主会话同一个设置位（worker 能在动手前问「谁在调用它」）。
+    ...(s.impactAnalysis ? { impactAnalysis: true } : {}),
     // M5b 步骤 9：routingBandit 开关同时开启路由与学习状态持久化（bandit 蕴含 routing——
     // 无路由则无档位决策可学）。状态文件在 .agent/ 系统区（同 permissions.json 口径）。
     ...(s.routingBandit
