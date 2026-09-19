@@ -62,7 +62,7 @@ TERM=dumb node node_modules/vitest/vitest.mjs run --config tests/vitest.config.t
 - Consumes: `estimateTextTokens` / `truncateToTokenBudget`（`src/agent/text-budget.ts`）、`clipWorkerSummary`（`src/agent/worker-report.ts`，`4f66015` 起已按类别权重计量）
 - Produces: `JoinInput`、`JoinRow`、`shapeJoinRows(inputs): { rows, degraded }`、`renderJoinPayload(body): string`、`clampWaitTimeout(raw): { ms, clamped, rejected? }`、常量 `WAIT_ROW_TOKEN_CAP` / `WAIT_BATCH_TOKEN_CAP` / `WAIT_TIMEOUT_DEFAULT_MS` / `WAIT_TIMEOUT_MAX_MS`（Task 2/3 全部按这些名字消费）
 
-- [ ] **Step 0：复认锚点**（前提在动）
+- [x] **Step 0：复认锚点**（前提在动）
 
 ```bash
 grep -nE "^export (function|const)" src/agent/text-budget.ts
@@ -71,7 +71,7 @@ git diff HEAD -- src/agent/text-budget.ts src/agent/worker-report.ts   # 必须�
 ```
 期望看到 `estimateTextTokens`、`truncateToTokenBudget`、`clampToTokenBudget` 三个导出与 `clipWorkerSummary`。若 `truncateToTokenBudget` 不在了，停下来回 spec 立案，不要去改对方刚落的原语。
 
-- [ ] **Step 1：写失败测试** — `tests/orchestrator-join.test.ts`
+- [x] **Step 1：写失败测试** — `tests/orchestrator-join.test.ts`
 
 ```ts
 // W1a 收队的纯数据面测：逐行帽 / 整批帽 / 超时钳制 / CJK 权重反向对照 / 取回通道真实存在。
@@ -137,14 +137,14 @@ describe("wait_for_agents 纯数据面", () => {
 });
 ```
 
-- [ ] **Step 2：跑到红**
+- [x] **Step 2：跑到红**
 
 ```bash
 TERM=dumb node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/orchestrator-join.test.ts
 ```
 期望：整文件红在 `Cannot find module '../src/agent/orchestrator-join'`（模块尚不存在，**不是**断言失败）。
 
-- [ ] **Step 3：写实现** — `src/agent/orchestrator-join.ts`
+- [x] **Step 3：写实现** — `src/agent/orchestrator-join.ts`
 
 ```ts
 // W1a「收队」的纯数据面：把若干 worker 的终态汇成一条给父模型看的 payload。
@@ -242,13 +242,13 @@ export function clampWaitTimeout(raw: unknown): WaitTimeout {
 }
 ```
 
-- [ ] **Step 4：跑到绿**（6 条全绿；`tests/orchestrator-join.test.ts` 里若 `clipWorkerSummary` 的提示文案断言与实际不符，以**测的行为**为准改测，不改 `worker-report.ts`——它被 `agents-check` G5b 按字符串锁着）
+- [x] **Step 4：跑到绿**（6 条全绿；`tests/orchestrator-join.test.ts` 里若 `clipWorkerSummary` 的提示文案断言与实际不符，以**测的行为**为准改测，不改 `worker-report.ts`——它被 `agents-check` G5b 按字符串锁着）
 
 ```bash
 TERM=dumb node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/orchestrator-join.test.ts
 ```
 
-- [ ] **Step 5：提交**
+- [x] **Step 5：提交**
 
 ```bash
 git add src/agent/orchestrator-join.ts tests/orchestrator-join.test.ts
@@ -269,7 +269,7 @@ git commit -m "收队纯数据面：逐行帽 + 整批帽两段裁剪，降级�
 
 ⚠️ **实现前必须知道的一条坑**：`waitForAgentTerminal` 对**不存在的 agent_id** 会把 resolve 推进 `terminalWaiters` 且永不触发（既不 resolve 也不清理）。所以未知 id 必须在调用前摘掉——这正是第 3 条测试要钉住的东西。
 
-- [ ] **Step 0：复认锚点**
+- [x] **Step 0：复认锚点**
 
 ```bash
 grep -n "private waitForAgentTerminal" src/agent/orchestrator.ts
@@ -277,7 +277,7 @@ grep -n "workerIds()\|terminalStatus" src/agent/orchestrator.ts | head
 git diff HEAD -- src/agent/orchestrator.ts   # 必须为空（本文件是全仓改动最频繁面之一）
 ```
 
-- [ ] **Step 1：写失败测试** — `tests/orchestrator-wait.test.ts`
+- [x] **Step 1：写失败测试** — `tests/orchestrator-wait.test.ts`
 
 ```ts
 // 收队等待的编排器面：真 Orchestrator + 脚本化 worker 模型（零网络，临时目录）。
@@ -382,9 +382,9 @@ describe("waitForAgents", () => {
 });
 ```
 
-- [ ] **Step 2：跑到红** — 期望 `orch.waitForAgents is not a function`（**不是**上面的断言失败）
+- [x] **Step 2：跑到红** — 期望 `orch.waitForAgents is not a function`（**不是**上面的断言失败）
 
-- [ ] **Step 3：写实现**（追加在「M3c：sequencer 与 worker 终态的同步点」小节内，紧邻 `waitForAgentTerminal`）
+- [x] **Step 3：写实现**（追加在「M3c：sequencer 与 worker 终态的同步点」小节内，紧邻 `waitForAgentTerminal`）
 
 ```ts
   /** W1a 收队：等一批 worker 到终态。**不新增事件类型**——父模型看到的就是一条普通 tool_result。
@@ -446,9 +446,9 @@ describe("waitForAgents", () => {
 import { shapeJoinRows, type JoinInput, type JoinPayloadBody } from "./orchestrator-join";
 ```
 
-- [ ] **Step 4：跑到绿**（5 条）。若第 2 条 `summary` 断言不中，先确认 `finish` 的 `agent_result.summary` 是否等于 `lastAssistantText`——**不要**为了让测过去而放宽 `clipWorkerSummary`。
+- [x] **Step 4：跑到绿**（5 条）。若第 2 条 `summary` 断言不中，先确认 `finish` 的 `agent_result.summary` 是否等于 `lastAssistantText`——**不要**为了让测过去而放宽 `clipWorkerSummary`。
 
-- [ ] **Step 5：类型自检 + 提交**
+- [x] **Step 5：类型自检 + 提交**
 
 ```bash
 pnpm typecheck
@@ -468,7 +468,7 @@ git commit -m "收队等待接进产品路径：waitForAgents 复用 sequencer �
 - Consumes: Task 2 的 `waitForAgents(ids, timeoutMs, signal?)`、Task 1 的 `clampWaitTimeout` / `renderJoinPayload` / `JoinPayloadBody`
 - Produces: `createWaitForAgentsTool(host: () => WaitForAgentsHost | null): Tool`、`waitForAgentsSpec`（结构同 `SessionPluginTool`：`{ name, description, parameters }`）、常量 `WAIT_FOR_AGENTS_TOOL = "wait_for_agents"`
 
-- [ ] **Step 1：写失败测试** — `tests/wait-for-agents-tool.test.ts`
+- [x] **Step 1：写失败测试** — `tests/wait-for-agents-tool.test.ts`
 
 ```ts
 // 工具面测：参数收窄 fail-visible、编排器未接线、零 worker 零行为、payload 与规格同源。
@@ -531,9 +531,9 @@ describe("wait_for_agents 工具", () => {
 });
 ```
 
-- [ ] **Step 2：跑到红**（模块不存在）
+- [x] **Step 2：跑到红**（模块不存在）
 
-- [ ] **Step 3：写实现** — `src/tools/wait_for_agents.ts`
+- [x] **Step 3：写实现** — `src/tools/wait_for_agents.ts`
 
 ```ts
 // W1a 收队工具：把「派了 worker 却收不回来」这一条结构性缺陷闭合在产品路径上。
@@ -593,7 +593,7 @@ export const waitForAgentsSpec = {
 } as const;
 ```
 
-- [ ] **Step 4：跑到绿** — 最后一条规格测此时仍会红（`gateToolSpecs` 里还没加规格）⇒ **正确红**，Task 4 修。把这条测留在原地，它就是 Task 4 的验收判据。
+- [x] **Step 4：跑到绿** — 最后一条规格测此时仍会红（`gateToolSpecs` 里还没加规格）⇒ **正确红**，Task 4 修。把这条测留在原地，它就是 Task 4 的验收判据。
 
 ---
 
@@ -609,9 +609,9 @@ export const waitForAgentsSpec = {
 - Consumes: Task 3 的 `waitForAgentsSpec` / `createWaitForAgentsTool`、类方法 `waitForAgents` / `workerIds`
 - Produces: 模型在 `default`/`auto` 档看到 `wait_for_agents`、`read-only` 档看不到；`TOOLS[wait_for_agents]` 可执行
 
-- [ ] **Step 1：先跑到红**（Task 3 末已红，无需重写命令）
+- [x] **Step 1：先跑到红**（Task 3 末已红，无需重写命令）
 
-- [ ] **Step 2：加规格** — `src/agent/glm-session.ts`，紧接既有 `spawn_agent` 规格对象之后
+- [x] **Step 2：加规格** — `src/agent/glm-session.ts`，紧接既有 `spawn_agent` 规格对象之后
 
 ```ts
     // W1a 收队原语：与 spawn_agent 同族——「派得出去、收不回来」正是本仓第 5 次复发的
@@ -645,7 +645,7 @@ export const waitForAgentsSpec = {
   }
 ```
 
-- [ ] **Step 3：加实例** — `src/main/agent-runner.ts`「installAppTools」内，紧接 `spawn_agent` 注入块之后
+- [x] **Step 3：加实例** — `src/main/agent-runner.ts`「installAppTools」内，紧接 `spawn_agent` 注入块之后
 
 ```ts
   // W1a：收队工具（与 spawn_agent 同一注入面、同一「编排器未接线即 fail-closed」口径）。
@@ -660,7 +660,7 @@ export const waitForAgentsSpec = {
 import { createWaitForAgentsTool } from "../tools/wait_for_agents";
 ```
 
-- [ ] **Step 4：补 `hasWorkers()`** — `src/agent/orchestrator.ts`，紧接既有 `workerIds()`：
+- [x] **Step 4：补 `hasWorkers()`** — `src/agent/orchestrator.ts`，紧接既有 `workerIds()`：
 
 ```ts
   /** 收队工具的短路判据：一个 worker 都没有就别建等待项（零行为，省一次模型可见的空 payload）。 */
@@ -669,7 +669,7 @@ import { createWaitForAgentsTool } from "../tools/wait_for_agents";
   }
 ```
 
-- [ ] **Step 5：跑到绿 + 全量单测**
+- [x] **Step 5：跑到绿 + 全量单测**
 
 ```bash
 TERM=dumb node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/wait-for-agents-tool.test.ts
@@ -677,7 +677,7 @@ TERM=dumb node node_modules/vitest/vitest.mjs run --config tests/vitest.config.t
 ```
 期望：全绿。若 `agents.test.ts` / `glm-tools` 类文件里有「规格表条数」的计数断言 ⇒ 那是本次新增规格的**预期红**，按 AGENTS.md 判卷纪律处理：**只调整计数常量本身并在提交信息里点名原因**，不改被测代码、不删断言。先 `grep -n "toHaveLength\|gateToolSpecs" tests/*.ts | head` 把撞面找全再动。
 
-- [ ] **Step 6：提交**
+- [x] **Step 6：提交**
 
 ```bash
 git add src/agent/glm-session.ts src/main/agent-runner.ts src/agent/orchestrator.ts tests/wait-for-agents-tool.test.ts
@@ -698,7 +698,7 @@ git commit -m "wait_for_agents 两头接线：规格进 gateToolSpecs（只读�
 
 为什么实例面走源文本而不是执行 `installAppTools()`：那个函数会拉起 AskGate / 调度器 / electron 依赖，在单测里调用它等于起半个主进程。文本对账换一点精度换来「在 `test` 门里跑得起」，且它的失效方向是**假绿**，所以必须配一条反向对照（Step 1 的最后一条测）。
 
-- [ ] **Step 1：写失败测试** — `tests/tool-surface-parity.test.ts`
+- [x] **Step 1：写失败测试** — `tests/tool-surface-parity.test.ts`
 
 ```ts
 // G-B：运行时注入工具的「三面」对账（spec §2 不变量 1 / §7 G-B）。
@@ -792,9 +792,9 @@ describe("G-B 注入工具三面对账", () => {
 import { isSideEffectTool } from "../src/permissions";
 ```
 
-- [ ] **Step 2：跑到红**（`tool-surface` 模块不存在）
+- [x] **Step 2：跑到红**（`tool-surface` 模块不存在）
 
-- [ ] **Step 3：写声明表** — `src/agent/tool-surface.ts`
+- [x] **Step 3：写声明表** — `src/agent/tool-surface.ts`
 
 ```ts
 // 运行时注入工具的**唯一清单**：生产与 G-B 对账共读这一份（测试里再抄一张 = 第二个事实源）。
@@ -834,14 +834,14 @@ export function missingFromFace(names: readonly string[], face: ReadonlySet<stri
 
 ⚠️ **`remember` / `verify` / `impact_query` 三条的预期值以实测为准**：Step 4 若某条红，先读那三个面的真实行为再改**表**——**只有确认「表写错」才改表，若揭示的是真缺陷（某一面确实缺），停手回 spec 立案**，别把静态门调成刚好通过。这是本任务最容易走歪的地方。
 
-- [ ] **Step 4：跑到绿 + 全量**
+- [x] **Step 4：跑到绿 + 全量**
 
 ```bash
 TERM=dumb node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/tool-surface-parity.test.ts
 pnpm typecheck
 ```
 
-- [ ] **Step 5：提交**
+- [x] **Step 5：提交**
 
 ```bash
 git add src/agent/tool-surface.ts tests/tool-surface-parity.test.ts
@@ -856,13 +856,13 @@ git commit -m "G-B 三处同源静态门：注入工具声明表 + 规格/实例
 - Modify: `scripts/mutate-verify.mjs`（`const MUTATIONS = [` 表尾追加 8 条，**动手前重读尾部十几行**——该表在并发下几十秒内就会被别人追加，行号会漂）
 - Modify: `docs/superpowers/specs/2026-09-19-orchestration-design.md`（追加更正节，不改写原文）
 
-- [ ] **Step 1：取表尾插入点**
+- [x] **Step 1：取表尾插入点**
 
 ```bash
 grep -n "^const MUTATIONS\|^];" scripts/mutate-verify.mjs | head -3
 ```
 
-- [ ] **Step 2：追加 8 条锚点**（`apply` 的替换串必须**逐字**来自当前源文件，缩进以 `Read` 结果为准——`.replace` 静默不命中是本仓实测坑）
+- [x] **Step 2：追加 8 条锚点**（`apply` 的替换串必须**逐字**来自当前源文件，缩进以 `Read` 结果为准——`.replace` 静默不命中是本仓实测坑）
 
 ```js
   {
@@ -933,7 +933,7 @@ grep -n "^const MUTATIONS\|^];" scripts/mutate-verify.mjs | head -3
   },
 ```
 
-- [ ] **Step 3：逐条实测「必杀」**（前 7 条的 `expectFail` 与被测用例标题必须**逐字一致**，否则报「红了但没红在期望用例上」是假失败）
+- [x] **Step 3：逐条实测「必杀」**（前 7 条的 `expectFail` 与被测用例标题必须**逐字一致**，否则报「红了但没红在期望用例上」是假失败）
 
 ```bash
 TERM=dumb node --import tsx scripts/mutate-verify.mjs join-row-cap-not-counted join-batch-cap-dropped join-degraded-row-vanishes join-timeout-silently-defaults wait-unknown-id-enters-waiters wait-abort-kills-workers wait-tool-blind-to-no-orchestrator gb-parity-face-blind 2>&1 | tail -20
@@ -941,7 +941,7 @@ echo "exit=$?"
 ```
 期望：`全部杀掉`，exit=0。判绿读它自己打印的汇总行，不读管道尾的退出码。
 
-- [ ] **Step 4：spec 追加口径更正**（原文一字不改，历史不覆写）
+- [x] **Step 4：spec 追加口径更正**（原文一字不改，历史不覆写）
 
 在 `docs/superpowers/specs/2026-09-19-orchestration-design.md` 文件**末尾**追加：
 
@@ -985,3 +985,26 @@ git commit -m "变异表 +8：收队三段帽 / 未知 id 摘除 / abort 越权 
 ② Task 3 的 `hostWith` 桩原本用 `calls.length === 0` 推 `hasWorkers` ⇒ 第一次调用就返回 false，正常收队那条测必然红；拆成 `hasWorkers: () => true` 与独立的 `emptyHost()`。
 ③ Task 5 原本从 `glm-session` 导 `workerToolSpecs` 与 `GlmToolSpec`——前者实际定义在 `src/agent/worker-shell-tools.ts`，后者在 `src/providers/glm.ts`；同时把 `verify` 从声明表里摘掉（它不是 TOOLS 里的工具，是 runLoop 特判的系统门，留在表里只会产生一条必须豁免的假红），并把 `workerReachable` 从布尔改成 `"both"|"read"|"write"|false`（`remember` 只在 write 面，粗粒度布尔会把 read 面判成假红）。
 ④ Task 5 新增 `specFace` 字段：不区分静态/运行期规格面，静态门会去 `gateToolSpecs` 里找 `impact_query`（它只由开关注入）⇒ 假红。四个字段现在都被 `report()` 或某条测读到，没有一项是"声明了没人查"的装饰。
+
+---
+
+## 执行记录（2026-09-19/20 实施，本人下笔；上文任务体是计划原文，不改写）
+
+| Task | 结果 | 提交 |
+|---|---|---|
+| 1 纯数据面 | 6 测绿（先红在模块不存在） | `5c7409e` |
+| 2 waitForAgents | 5 测绿；碰编排器的 15 文件 + 新测 = 18 文件 226 条全绿 | `0df8849` |
+| 3+4 工具面与两头接线 | 6 测绿；tools-check exit 0 且静态注册表仍 9 工具 | `e9103d1`（**合一笔**，见更正 ①） |
+| 5 G-B 静态门 | 4 测绿；三面实对账未揭示新缺陷、无一条需要豁免 | `9eee2b0` + `cb5671d`（守卫补口，见更正 ⑤） |
+| 6 变异锚点 | 10 条实测全杀 exit=0 | `6127c0d` |
+| 6 全量 `pnpm gates` | **未跑**（唯一留着的勾） | — |
+
+**计划本身的六条缺陷（照原文执行会踩，逐条已在实现处修掉）**：
+① Task 4 的 `git add` 清单漏 `src/tools/wait_for_agents.ts` 与其测 ⇒ 照跑会留下「已 import 但文件未跟踪」的悬空 HEAD。改判：**Task 3+4 合一笔提交**（5 文件），那条正确红的测因此从不进 HEAD。
+② Task 2 测试用 `as unknown as AgentEvent[]` 喂 `scriptedWorkerModel` ⇒ tsc 直接拒（要 `ModelOutput[]`）。按 `agents.test.ts` 先例去掉 cast。
+③ Task 2 超时测的轮询条件是空转（`workerIds()` 一 spawn 就非空）⇒ 断言会测时序而非行为。改成等「一个已终态 + 一个挂半路」两前提成立，并在轮询后断言前提本身（撞 `agents-check` I5 同条纪律）。
+④ Task 2 取消测期望 `timedOut` 含未收敛 id，与实现的「`timedOut` 只在超时填」矛盾 ⇒ 按实现对齐语义（取消由 `cancelled` + 行状态 `running` 表达），不为了凑测改生产语义。
+⑤ Task 5 的「声明表不可漏项」守卫原本只扫 `installAppTools` 写法，而本仓有**两种**运行期注入形态 ⇒ 仅靠 `runLoop` 覆盖注入的工具（`obs_recall` / `impact_query` 正是这一族）能绕过门。补守卫后 `obs_recall` 当场成唯一未登记项，按同规则下表，**没给它开豁免**。另把实例面抽取收紧到"只取那一行"，避免 `workspace:` / `mode:` 混成噪声键。
+⑥ Task 6 原列 8 条锚点，实落 10 条：其中「abort 越权顺手 cancelAll」经实测**在当前测试面上不可观察**（`cancelAll` 只同步翻 `controller.aborted`，终态分类要等 worker 从挂起点恢复才发生，脚本模型下最终仍是 `done`）⇒ 撤回该条，另补 `wait-returns-before-terminal`（等待被摘成立即返）与 `wait-timeout-gate-removed`（取消超时闸 ⇒ 无界等待，靠 vitest 用例超时杀红）两条可观察的。
+
+**未证留位（不当通过报）**：① 全量 `pnpm gates` 未跑；② 上一轮全量 `test` 里 `tests/license.test.ts` 一条红，我单跑复验 8/8 绿并归因于并发窗（同窗确有另一会话在跑同一文件），**机制未定名证实**，收口跑 gates 时要再看一次；③ `waitForAgents` 的「取消不动 worker」缺可观察判据（见 ⑥）；④ 收队 payload 的真实体积分布未测——400/2400 是从并发上限推的量级，不是实测。
