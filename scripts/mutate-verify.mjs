@@ -2688,6 +2688,38 @@ const MUTATIONS = [
     apply: (s) => s.replace(`  bash: "run_shell", write: "write_file", edit: "edit_file", read: "read_file",`, `  bash: "run_shell",`),
     expectFail: "CC 工具名作别名：Write 命中 write_file 的主参数前缀",
   },
+  {
+    id: "session-end-producer-removed",
+    src: "src/main/agent-runner.ts",
+    test: "tests/hook-session-end.test.ts",
+    desc: "摘掉 finally 里的 SessionEnd 生产者 ⇒ 事件名还在枚举表上、面板照旧计数，但没有任何会话会触发收尾钩子",
+    apply: (s) => s.replace('        const se = await rtNow.hooks.run("SessionEnd", { event: "SessionEnd", trigger: "exit" });', '        const se = { errors: [], blocked: false };'),
+    expectFail: "提示词被钩子阻断的早退路径也收尾（生产者在 finally，不在 try 尾）",
+  },
+  {
+    id: "session-end-double-producer",
+    src: "src/main/agent-runner.ts",
+    test: "tests/hook-session-end.test.ts",
+    desc: "SessionEnd 在 try 尾与 finally 各挂一处 ⇒ 每次会话终止跑两遍收尾钩子（提交、通知、清理这类有副作用的钩子最恨被跑两遍）。哨兵必须**追加**写才看得见这条：写成功与否是个布尔，看不出 1 次还是 2 次",
+    apply: (s) => s.replace('        await rt.hooks.run("Stop", { event: "Stop", trigger: "run_complete" });', '        await rt.hooks.run("SessionEnd", { event: "SessionEnd", trigger: "run_complete" });\n        await rt.hooks.run("Stop", { event: "Stop", trigger: "run_complete" });'),
+    expectFail: "会话终止真的跑 SessionEnd 钩子，且只跑一次",
+  },
+  {
+    id: "session-end-timeout-cap-removed",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/hook-session-end.test.ts",
+    desc: "去掉 SessionEnd 的 30s 短帽 ⇒ 收尾回落到缺省 600s，一个挂死的钩子能把「退出」拖住十分钟",
+    apply: (s) => s.replace('          : event === "SessionEnd" ? HOOK_TIMEOUT_SESSION_END', '          : false ? HOOK_TIMEOUT_SESSION_END'),
+    expectFail: "未声明 timeout 的 SessionEnd handler 取 30s；别的缺省仍是 600s",
+  },
+  {
+    id: "session-end-matcher-field-removed",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/hook-session-end.test.ts",
+    desc: "matcher 不看结束原因（SessionEnd 落回 default 的 undefined）⇒ 写了具体原因的钩子静默永不触发，作者以为「只在 compact 时收尾」其实一条都不跑",
+    apply: (s) => s.replace('    case "SessionEnd": // §9.5 表：SessionEnd 的 matcher 字段 = 结束原因', '    case "__never__":'),
+    expectFail: "matcher 按结束原因配：写 exit 的那条跑，写 compact 的那条不跑",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

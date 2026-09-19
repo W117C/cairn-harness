@@ -1,5 +1,7 @@
-// M2e：hook 引擎（§9.5–9.6）。10 事件全接（SubagentStart/SubagentStop 事件源在 M3——本引擎支持
-// 事件名，无源时静默不触发）；handler V1 只做 command（http/mcp_tool/prompt/agent 运行跳过 + 警告）。
+// M2e：hook 引擎（§9.5–9.6）。10 事件里 8 个有生产者（SessionStart / UserPromptSubmit / Pre+PostToolUse
+// 与 Failure / PreCompact(手动) / Stop / SessionEnd）；**只有 SubagentStart/SubagentStop 仍缺源**
+// （要接进 orchestrator 的 worker 生命周期）。Stop 虽有源，但**回执全丢**——它的 exit 2 语义是
+// "再多要一轮模型"，那是未裁的成本问题（任务 #32）。PreCompact 也只有手动档有源，自动压缩无。
 // 双形态：string = shell form（经 shell 执行），string[] = exec form（直接 spawn，不经 shell）。
 // 退出码 0 成功 / 2 阻断（stderr 反馈）/ 其他非阻塞错误；stdout JSON 决策字段（CC 格式）；
 // 输出 10k 上限、超限全文落盘；timeout 缺省 600s（UserPromptSubmit 降 30s）、到点 SIGKILL 强杀；
@@ -27,6 +29,9 @@ function capHookReason(text: string): string {
 /** timeout 缺省（秒）。 */
 export const HOOK_TIMEOUT_DEFAULT = 600;
 export const HOOK_TIMEOUT_USER_PROMPT = 30;
+/** 会话终止同样在关键路径上（窗口关闭 / 下一次 run 之前）：不给短帽的话，
+ *  一个挂死的 SessionEnd 钩子能把「退出」拖到缺省 600s。 */
+export const HOOK_TIMEOUT_SESSION_END = 30;
 
 export interface HookPayload {
   event: HookEventName;
@@ -70,12 +75,13 @@ export function matcherFieldOf(event: HookEventName, payload: HookPayload): stri
       return payload.tool_name;
     case "SessionStart":
     case "PreCompact":
+    case "SessionEnd": // §9.5 表：SessionEnd 的 matcher 字段 = 结束原因
       return payload.trigger;
     case "SubagentStart":
     case "SubagentStop":
       return payload.agent_type;
     default:
-      return undefined; // Stop / SessionEnd / UserPromptSubmit：表里 matcher 为"—"（无匹配字段）
+      return undefined; // Stop / UserPromptSubmit：表里 matcher 为"—"（无匹配字段）
   }
 }
 
@@ -382,7 +388,10 @@ export class HookEngine {
         result.errors.push("hook 拒跑（插件 " + h.plugin + "）：" + denied);
         continue;
       }
-      timeouts.push(typeof h.handler.timeout === "number" ? h.handler.timeout : event === "UserPromptSubmit" ? HOOK_TIMEOUT_USER_PROMPT : HOOK_TIMEOUT_DEFAULT);
+      timeouts.push(typeof h.handler.timeout === "number" ? h.handler.timeout
+        : event === "UserPromptSubmit" ? HOOK_TIMEOUT_USER_PROMPT
+          : event === "SessionEnd" ? HOOK_TIMEOUT_SESSION_END
+            : HOOK_TIMEOUT_DEFAULT);
     }
     const runnable = handlers.filter((h) => h.handler.type === "command" && this.gateHook(h) === null);
 

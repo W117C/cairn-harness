@@ -1197,14 +1197,14 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       verify: createVerifyHook(opts.workspace, { exec: verifyExec(opts.sandbox ?? null) }),
       ...(rt ? { hooks: rt.hooks } : {}),
     });
-    // M2e：Stop（agent 收束）与 SessionEnd（会话收尾）——fire-and-forget，失败只告警。
+    // M2e：Stop（一轮 agent 收束）——fire-and-forget，失败只告警。
+    // exit 2 的「再多要一轮」语义未裁，所以回执整体丢弃（任务 #32）；SessionEnd 不在这儿，
+    // 见 finally：会话终止含异常/中断路径，挂在 try 尾上就等于「崩了的会话没有收尾钩子」。
     if (rt) {
-      for (const evt of ["Stop", "SessionEnd"] as const) {
-        try {
-          await rt.hooks.run(evt, { event: evt, trigger: "run_complete" });
-        } catch (err) {
-          console.warn("[hooks] " + evt + " 失败:", err instanceof Error ? err.message : String(err));
-        }
+      try {
+        await rt.hooks.run("Stop", { event: "Stop", trigger: "run_complete" });
+      } catch (err) {
+        console.warn("[hooks] Stop 失败:", err instanceof Error ? err.message : String(err));
       }
     }
     // M2f 安全 report：验证门收敛后 hook 触发（默认 report / off 不跑；不阻断主流程）
@@ -1292,6 +1292,22 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     if (interactive && interactiveRunAbort === runAbort) interactiveRunAbort = null; // P3（审查）：run 收束即摘取消句柄
     // 会话结束 = MCP server 子进程一并回收（stdio 流不挂事件循环）；快照留档供 run 间隙查询
     const rtNow = currentPluginRuntime();
+    // §9.5 SessionEnd：SessionEnd 生产者**只有这一处**（原来挂在 try 尾的那次调用已并进来——
+    // 两处同时存在等于每个会话终止跑两遍收尾钩子，而有副作用的钩子最恨被跑两遍）。
+    // 位置有两件事必须成立：在 shutdown 之前（钩子还要用插件根目录 / MCP 子进程），
+    // 且在 finally（崩了 / 被中断的会话同样要收尾）。结束原因今天只有真实取值 "exit"；
+    // abort/compact 这类更细的分类与 Stop 的 exit 2 裁决一起补（任务 #32），此处不硬造枚举。
+    if (rtNow) {
+      try {
+        const se = await rtNow.hooks.run("SessionEnd", { event: "SessionEnd", trigger: "exit" });
+        // SessionEnd 的 stdout 不进任何上下文（没有人再读这一轮），所以红/阻断只能出声，
+        // 不能像 PostToolUse 那样"回注"——那是这条事件唯一的可见通道。
+        for (const msg of se.errors) console.warn("[hooks] SessionEnd:", msg);
+        if (se.blocked) console.warn("[hooks] SessionEnd 返回阻断（该事件无阻断语义，已忽略）：" + (se.blockReason ?? ""));
+      } catch (err) {
+        console.warn("[hooks] SessionEnd 失败:", err instanceof Error ? err.message : String(err));
+      }
+    }
     if (rtNow) lastPluginSnapshot = rtNow.snapshot();
     await rtNow?.shutdown().catch(() => {});
     // M2e：会话结束摘除本 run 注入的插件工具（TOOLS 是模块级注册表，零残留）
