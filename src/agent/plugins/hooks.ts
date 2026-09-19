@@ -1,7 +1,7 @@
-// M2e：hook 引擎（§9.5–9.6）。10 事件里 8 个有生产者（SessionStart / UserPromptSubmit / Pre+PostToolUse
-// 与 Failure / PreCompact(手动) / Stop / SessionEnd）；**只有 SubagentStart/SubagentStop 仍缺源**
-// （要接进 orchestrator 的 worker 生命周期）。Stop 虽有源，但**回执全丢**——它的 exit 2 语义是
-// "再多要一轮模型"，那是未裁的成本问题（任务 #32）。PreCompact 也只有手动档有源，自动压缩无。
+// M2e：hook 引擎（§9.5–9.6）。**10 个事件全部有生产者**（SessionStart / UserPromptSubmit / Pre+PostToolUse
+// 与 Failure / PreCompact / Stop / SessionEnd / SubagentStart / SubagentStop）。两处口径没打满，都是有意的：
+// ① PreCompact 只有手动 /compact 有源，自动压缩档未接；② Stop 与 Subagent* 的 exit 2 语义是
+// "要求再多跑一轮模型"——那要花真钱，未裁（任务 #32），所以这三条的回执只出声不拦、不改收束行为。
 // 双形态：string = shell form（经 shell 执行），string[] = exec form（直接 spawn，不经 shell）。
 // 退出码 0 成功 / 2 阻断（stderr 反馈）/ 其他非阻塞错误；stdout JSON 决策字段（CC 格式）；
 // 输出 10k 上限、超限全文落盘；timeout 缺省 600s（UserPromptSubmit 降 30s）、到点 SIGKILL 强杀；

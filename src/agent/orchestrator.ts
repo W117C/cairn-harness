@@ -605,6 +605,7 @@ export class Orchestrator {
       stuckCallActions: new Map(),
       stuckTimer: null,
       lastActivityAt: Date.now(),
+      ...(stageRole?.role !== undefined ? { agentType: stageRole.role } : {}),
       ...(stageRole?.roleDefinition !== undefined ? { roleDefinition: stageRole.roleDefinition } : {}),
       ...(stageRole?.allowedTools !== undefined ? { allowedTools: stageRole.allowedTools } : {}),
       ...(stageRole?.disallowedTools !== undefined ? { disallowedTools: stageRole.disallowedTools } : {}),
@@ -1463,8 +1464,16 @@ export class Orchestrator {
   // ---- 内部：worker 运行体 ----
 
   private async runWorker(w: WorkerHandle): Promise<void> {
+    // §9.10：worker 与主会话共用同一套插件钩子（工厂按 worker 档给视图）。
+    // 提到 try 外并挂到 handle 上：SubagentStop 从 finish() 那条漏斗发，那里拿不到本函数的局部量；
+    // 两条 Subagent 事件与 Pre/PostToolUse 必须共用同一视图，否则同一个钩子一边降过档、另一边没降。
+    const workerHooks = this.opts.workerHooks?.(w.mode) ?? null;
+    w.hooks = workerHooks;
     try {
-      const system = await buildWorkerSystemMessages(w, this.opts.workspace); // 记忆注入恒读主 checkout（裁决 2）
+      // §9.5 SubagentStart：matcher 字段 = agent 类型；stdout 的 additionalContext 必须进 worker 的
+      // system 块——只发事件不接回执，就是本面点过多次的「收下即丢」。
+      const startContext = await this.subagentHook(w, "SubagentStart");
+      const system = await buildWorkerSystemMessages(w, this.opts.workspace, startContext); // 记忆注入恒读主 checkout（裁决 2）
       // M3c：插件角色工具面裁剪（frontmatter.tools 白名单 − disallowedTools；裁剪后必须非空）
       // M7：影响面读端三处同源（规格 / 实例 / loop 白名单），开关关着时一处都不加 ⇒ 零行为。
       const impactOn = this.opts.impactAnalysis === true;
@@ -1503,8 +1512,6 @@ export class Orchestrator {
       // W4a：write worker 的收束闸（缺省不接线 = 零行为）。钩子工厂拿 worktree 目录做 cwd，
       // 所以它验的是「即将被合并的那份代码」而不是主 checkout。
       const workerVerify = w.mode === "write" ? this.opts.workerVerify?.(loopWorkspace) : undefined;
-      // §9.10：worker 与主会话共用同一套插件钩子（工厂按 worker 档给视图）。
-      const workerHooks = this.opts.workerHooks?.(w.mode) ?? null;
       // B6（审查）：runLoop 前武装静默计时——旧实现只在收到子流事件时武装，worker 在首个模型
       // 调用挂起（无任何事件）时静默规则永不触发。缺省 silenceMs 10min，不改变正常路径。
       this.armStuckSilence(w);
@@ -1619,11 +1626,37 @@ export class Orchestrator {
     }
   }
 
+  /** §9.5 SubagentStart / SubagentStop 的唯一发送口（两条事件共用一个出口，免得同族策略各抄一份）。
+   *  回执口径：additionalContext 照收（它不额外花模型轮次）；errors 出声；blocked **只标不拦**——
+   *  exit 2 的语义是「要求再多跑一轮」，那是要用户付钱的裁决（任务 #32），裁前不改收束行为。
+   *  SubagentStop 的 additionalContext 则无处可去：该 agent 已终态，没有下一个模型轮，丢弃是有意的。 */
+  private async subagentHook(w: WorkerHandle, event: "SubagentStart" | "SubagentStop"): Promise<string> {
+    const hooks = w.hooks;
+    if (!hooks) return "";
+    try {
+      const r = await hooks.run(event, {
+        event,
+        agent_id: w.agentId,
+        ...(w.agentType !== undefined ? { agent_type: w.agentType } : {}),
+      });
+      for (const msg of r.errors) console.warn("[hooks] " + event + ":", msg);
+      if (r.blocked) console.warn("[hooks] " + event + " 返回阻断（exit 2 的「再多要一轮」未裁，已忽略）：" + (r.blockReason ?? ""));
+      return r.additionalContext;
+    } catch (err) {
+      console.warn("[hooks] " + event + " 失败:", err instanceof Error ? err.message : String(err));
+      return "";
+    }
+  }
+
   private async finish(w: WorkerHandle, status: "done" | "failed" | "cancelled", reason?: string): Promise<void> {
     try {
       await this.finishInner(w, status, reason);
       // M5b 步骤 9：终态事件已落流 → 回灌奖励（学习侧信道：best-effort，内部自吞错误，不阻断收束）
       await this.rewardBandit(w, status);
+      // §9.5 SubagentStop：排在终态事件全部落流之后——审计型钩子要读得到这份产出。
+      // 位置即「每 worker 恰好一次」：三条调用路（done/failed/cancelled）互斥，
+      // 且 finishInner 有 w.finished 幂等闸兜住重入；w.closed 尚未置真，进程不会在钩子中途退出。
+      await this.subagentHook(w, "SubagentStop");
     } finally {
       w.closed = true;
     }

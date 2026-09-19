@@ -115,6 +115,15 @@ export interface WorkerHandle {
   onRootAbort?: () => void;
   /** 角色定义（M3c：内置角色/插件角色进 system 首块；缺省无）。 */
   roleDefinition?: string;
+  /** §9.5 Subagent* 的 matcher 字段 = agent 类型。值就是 spawn 时解析出的那个角色名——
+   *  事件流里它叫 `stage`（routing_decision），钩子契约里它叫 `agent_type`（§9.5 表），同一个串两个名字，
+   *  这里按契约侧命名。模型自己 spawn 的无名 worker ⇒ 缺省 ⇒ stdin JSON 整键不出现
+   *  （拿空串伪造一个"类型"是伪造输入，比缺席更坏）。 */
+  agentType?: string;
+  /** §9.10：本次 runWorker 拿到的钩子视图（`workerHooks(mode)` 的产物）。
+   *  Pre/PostToolUse 经 runLoop 用它，SubagentStart/SubagentStop 经 finish 用它——
+   *  两条路必须同一个视图，否则同一个钩子在一边降过档、另一边没降。 */
+  hooks?: HookEngine | null;
   /** M3c 插件角色工具面裁剪（frontmatter.tools 白名单；缺省 = 角色默认面）。 */
   allowedTools?: string[];
   /** M3c 插件角色 disallowedTools（从默认面剔除）。 */

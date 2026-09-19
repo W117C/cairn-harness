@@ -88,6 +88,16 @@ async function waitTerminal(events: AgentEvent[], timeoutMs = 8_000): Promise<vo
   }
 }
 
+/** 轮询等一个条件成立（同 waitTerminal：定长 sleep 在重载下假红）。 */
+async function waitFor(cond: () => boolean, timeoutMs = 8_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (cond()) return true;
+    if (Date.now() > deadline) return false;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
+
 describe("worker 接插件钩子", () => {
   it("PreToolUse 阻断真的挡住 worker 的写：worktree 里不落盘，tool_result 带钩子理由", async () => {
     const { engine, calls } = stubEngine({ blocked: true, blockReason: "禁改 src/secret.ts" });
@@ -159,5 +169,86 @@ describe("worker 接插件钩子", () => {
     expect(wide.gateHook(h)).toBeNull();
     expect(String(wide.forWorkerMode("read").gateHook(h))).toContain("只读档");
     expect(wide.forWorkerMode("write").gateHook(h)).toBeNull();
+  });
+});
+
+// §9.5 SubagentStart / SubagentStop：此前只有枚举、无生产者（agent_type 因此也从没有生产者填过它）。
+// 这两条事件的价值全在"回执有人接"：SubagentStart 的 stdout 要进 worker 的上下文，
+// SubagentStop 要能让审计钩子在终态事件落流后看到产出。只 run 一下不接 = 收下即丢。
+describe("worker 生命周期发 Subagent 事件", () => {
+  it("SubagentStart 的 additionalContext 真的进模型收到的 system 块（不是发完就丢）", async () => {
+    const captures: { role: string; content: string }[][] = [];
+    const { engine, calls } = stubEngine({ additionalContext: "本仓库禁改 migrations/ 目录" });
+    const { orch, events } = makeOrch(
+      () => scriptedWorkerModel([
+        { type: "assistant_message", content: REPORT },
+      ] as never, captures as never),
+      () => engine,
+    );
+    const agentId = agentIdOf((await orch.spawn({ mode: "read", task: "调研" }, { callId: "sub-1" })).output);
+    await waitTerminal(events);
+    const start = calls.find((c) => c.event === "SubagentStart");
+    expect(start?.payload.agent_id).toBe(agentId);
+    const sys = captures[0]?.filter((m) => m.role === "system").map((m) => m.content).join("\n") ?? "";
+    expect(sys).toContain("本仓库禁改 migrations/ 目录");
+    expect(sys).toContain("[SubagentStart hook]"); // 标明这段是钩子给的，不是任务书里的
+  });
+
+  it("两条事件各恰好一次，且 SubagentStop 晚于 agent_result 落流（审计钩子要看得见产出）", async () => {
+    const seen: { event: string; hadResult: boolean }[] = [];
+    let eventsRef: AgentEvent[] = [];
+    const engine = {
+      run: async (event: string): Promise<HookRunResult> => {
+        if (event === "SubagentStart" || event === "SubagentStop") {
+          seen.push({ event, hadResult: eventsRef.some((e) => e.type === "agent_result") });
+        }
+        return {
+          blocked: false, additionalContext: "", errors: [], overflowFiles: [],
+          droppedContextHandlers: [], ran: 1, skipped: 0,
+        };
+      },
+      forWorkerMode: (): HookEngine => engine as unknown as HookEngine,
+    } as unknown as HookEngine;
+    const { orch, events } = makeOrch(
+      () => scriptedWorkerModel([{ type: "assistant_message", content: REPORT }] as never),
+      () => engine,
+    );
+    eventsRef = events;
+    await orch.spawn({ mode: "read", task: "调研" }, { callId: "sub-2" });
+    await waitTerminal(events);
+    await orch.waitAll(8_000);
+    expect(seen.filter((s) => s.event === "SubagentStart").length).toBe(1);
+    const stops = seen.filter((s) => s.event === "SubagentStop");
+    expect(stops.length).toBe(1);
+    expect(stops[0]?.hadResult).toBe(true);
+  });
+
+  it("普通 spawn 没有角色名 ⇒ agent_type 整键缺席（拿空串伪造一个类型是伪造输入）", async () => {
+    const { engine, calls } = stubEngine();
+    const { orch, events } = makeOrch(
+      () => scriptedWorkerModel([{ type: "assistant_message", content: REPORT }] as never),
+      () => engine,
+    );
+    await orch.spawn({ mode: "read", task: "调研" }, { callId: "sub-3" });
+    await waitTerminal(events);
+    const start = calls.find((c) => c.event === "SubagentStart");
+    expect(start).toBeDefined();
+    expect("agent_type" in (start?.payload ?? {})).toBe(false);
+  });
+
+  it("流水线 stage 的 worker 带 agent_type = 角色名（§9.5 的 matcher 字段有值可配）", async () => {
+    const { engine, calls } = stubEngine();
+    const { orch, events } = makeOrch(
+      () => scriptedWorkerModel([{ type: "assistant_message", content: "## 结论\n审阅完成。\nverdict: pass" }] as never),
+      () => engine,
+    );
+    const spawned = orch.spawn({ mode: "pipeline", stages: [{ role: "review", task: "审 README" }] }, { callId: "sub-4" });
+    expect(await waitFor(() => events.some((e) => e.type === "approval_requested"))).toBe(true);
+    const apr = events.find((e) => e.type === "approval_requested") as Extract<AgentEvent, { type: "approval_requested" }>;
+    expect(orch.decideWorkerApproval(apr.id, true, "once").ok).toBe(true);
+    expect((await spawned).ok).toBe(true);
+    expect(await waitFor(() => calls.some((c) => c.event === "SubagentStop"))).toBe(true);
+    const types = calls.filter((c) => c.event === "SubagentStart").map((c) => c.payload.agent_type);
+    expect(types).toContain("review");
   });
 });
