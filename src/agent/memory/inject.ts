@@ -100,6 +100,13 @@ interface Section {
   lines: string[];
 }
 
+/** 段名取自 header 的首个方括号词（"[ARCHITECTURE 大纲（…）]" → "ARCHITECTURE"），
+ *  省略提示用它点名——不另立第二事实源，header 改了名字跟着改。 */
+function sectionLabel(header: string): string {
+  const m = /^\[([^\s（]+)/u.exec(header);
+  return m !== null ? m[1]! : header;
+}
+
 async function archSection(workspace: string): Promise<Section | null> {
   const raw = await readTextOrNull(rootFilePath(workspace, "architecture"));
   if (raw === null || raw.trim().length === 0) return null;
@@ -156,9 +163,14 @@ export interface MemoryInjection {
   truncated: boolean;
 }
 
-function renderBlock(source: "project" | "global", sections: Section[], charsLimit: number, blockChars: number, tokensCurrent: number, tokenBudget: number, truncated: boolean): string {
+function renderBlock(source: "project" | "global", sections: Section[], charsLimit: number, blockChars: number, tokensCurrent: number, tokenBudget: number, truncated: boolean, evicted: string[]): string {
   const lines: string[] = ['<memory source="' + source + '">', STANCE_LINE];
-  if (truncated) lines.push("[truncated: 记忆注入超预算，已整行丢弃前部内容（保尾部）]");
+  if (truncated) {
+    // 点名是能力 8 的底线：整段抽干了哪几段，模型才知道要去 read_file，而不是对着目录猜「怎么没有架构」。
+    let note = "[truncated: 记忆注入超预算，已整行丢弃前部内容（保尾部）";
+    if (evicted.length > 0) note += "；已整段省略：" + evicted.join("、") + "（原文见工作区 .agent/ 与 memory/ 下文件，按需 read_file）";
+    lines.push(note + "]");
+  }
   for (const s of sections) {
     lines.push(s.header);
     lines.push(...s.lines);
@@ -208,6 +220,11 @@ export async function buildMemoryInjection(opts: MemoryInjectionOptions): Promis
     [...projectSections, ...globalSections].reduce(
       (n, s) => n + weightText(s.header) + s.lines.reduce((m, l) => m + weightText(l) + 0.25, 0), 0);
   let runningWeight = totalWeight();
+  // 点名用：先记下每段原有几行——丢弃循环是就地 splice，事后看不出发过什么。
+  const before = [
+    ...projectSections.map((s) => ({ sec: s, label: sectionLabel(s.header), had: s.lines.length, block: "project" as const })),
+    ...globalSections.map((s) => ({ sec: s, label: sectionLabel(s.header), had: s.lines.length, block: "global" as const })),
+  ];
   if (runningWeight > tokenBudget) {
     for (const sec of [...projectSections, ...globalSections]) {
       if (runningWeight <= tokenBudget) break;
@@ -225,11 +242,13 @@ export async function buildMemoryInjection(opts: MemoryInjectionOptions): Promis
   }
   const keptProject = projectSections.filter((s) => s.lines.length > 0);
   const keptGlobal = globalSections.filter((s) => s.lines.length > 0);
+  const evictedOf = (block: "project" | "global"): string[] =>
+    before.filter((o) => o.block === block && o.had > 0 && o.sec.lines.length === 0).map((o) => o.label);
   const charsCurrent = totalChars();
   const tokensCurrent = Math.ceil(totalWeight());
   return {
-    project: keptProject.length > 0 ? renderBlock("project", keptProject, charsLimit, charsCurrent, tokensCurrent, tokenBudget, truncated) : null,
-    global: keptGlobal.length > 0 ? renderBlock("global", keptGlobal, charsLimit, charsCurrent, tokensCurrent, tokenBudget, truncated) : null,
+    project: keptProject.length > 0 ? renderBlock("project", keptProject, charsLimit, charsCurrent, tokensCurrent, tokenBudget, truncated, evictedOf("project")) : null,
+    global: keptGlobal.length > 0 ? renderBlock("global", keptGlobal, charsLimit, charsCurrent, tokensCurrent, tokenBudget, truncated, evictedOf("global")) : null,
     charsCurrent,
     charsLimit,
     tokens: tokensCurrent,
