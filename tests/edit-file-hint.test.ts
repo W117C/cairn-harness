@@ -18,9 +18,9 @@ const SRC = [
   "",
 ].join("\n");
 const ctx = (): ToolContext => ({ workspace: dir, emit: async () => {} });
-const miss = async (oldString: string): Promise<string> => {
+const miss = async (oldString: string, path = "src/shipping.js"): Promise<string> => {
   try {
-    await edit_file.run({ path: "src/shipping.js", old_string: oldString, new_string: "x" }, ctx());
+    await edit_file.run({ path, old_string: oldString, new_string: "x" }, ctx());
     return "";
   } catch (e) {
     return e instanceof Error ? e.message : String(e);
@@ -57,6 +57,26 @@ describe("edit_file 0 匹配的最像位置提示", () => {
     const msg = await miss("  const zzzQqq = wwwEee();");
     expect(msg).toContain("0 处匹配");
     expect(msg).not.toContain("提示");
+  });
+
+  // 上一条测的是「完全不重合」，但阈值真正的分辨面在 0 < 重合度 < 0.5 这一段：
+  // 只重合四分一行的措辞也算「像」的话，提示会把模型指向完全无关的一行去改。
+  it("只重合四分一不算像（阈值 0.5 是硬闸）：不给提示", async () => {
+    // want = {const, computeTotal, weightKg, perKgExtra}；文件最好的行只重合 weightKg ⇒ 0.25
+    const msg = await miss("  const computeTotal = weightKg * perKgExtra;");
+    expect(msg).toContain("0 处匹配");
+    expect(msg).not.toContain("提示");
+  });
+
+  // 上一轮的 420 上界用短行测不到截断分支（那行才 37 字符）：真实仓库里超长行很常见，
+  // 不截就会把一整行 400 字符原文塞进报错——失败路径反而是最大的 token 泄漏面。
+  it("命中超长行时只抄 120 字符（截断带省略号，整条报错仍有界）", async () => {
+    const ident = "aVeryLongIdentifier".repeat(20);
+    await writeFile(join(dir, "src", "long.js"), `// placeholder\n  const ${ident} = weightKg * perKg;\n`, "utf8");
+    const msg = await miss(`  const ${ident} = weightKg / perKg;`, "src/long.js");
+    expect(msg).toContain("最像");
+    expect(msg).toContain("…");
+    expect(msg.length).toBeLessThan(420);
   });
 
   it("提示有界：整条报错不超过 420 字符（失败路径也不能把上下文撑爆）", async () => {
