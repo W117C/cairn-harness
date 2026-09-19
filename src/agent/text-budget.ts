@@ -55,12 +55,17 @@ function cutToWeight(text: string, allowed: number): string {
   return text.slice(0, i);
 }
 
+/** 用调用方给的提示行收窄：措辞各有其职责（有的面要报「全文见何处」，有的门已在断言提示文案），
+ *  但「按字符类别计量」与「提示行自己计入预算」是一份实现。未超限时逐字不变。 */
+export function truncateToTokenBudget(text: string, tokenBudget: number, notice: string): string {
+  if (estimateTextTokens(text) <= tokenBudget) return text;
+  return cutToWeight(text, Math.max(0, tokenBudget - weightOf(notice))) + notice;
+}
+
 /** 头部保留（关键约定写在前面），marker 与 suffix **一律计入预算**——
  *  否则「≤ 预算」这句承诺会被提示自己撑破（run_shell 的 NOTICE_RESERVE 同族坑）。
  *  未超限时逐字不变（零回归）。 */
 export function clampToTokenBudget(text: string, tokenBudget: number, label: string, suffix = ""): string {
-  if (estimateTextTokens(text) <= tokenBudget) return text;
   const marker = "\n[" + label + "超 " + String(tokenBudget) + " token，已截断]";
-  const allowed = tokenBudget - weightOf(marker) - weightOf(suffix);
-  return cutToWeight(text, Math.max(0, allowed)) + marker + suffix;
+  return truncateToTokenBudget(text, tokenBudget, marker + suffix);
 }

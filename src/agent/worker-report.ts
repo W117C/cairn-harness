@@ -1,8 +1,8 @@
 import type { AgentPermissionMode } from "../events";
-import { estimateTokens } from "./compaction";
 import { escapeControlTags } from "./memory/inject";
 import { SUMMARY_TOKEN_CAP } from "./orchestrator-config";
 import { redactSecrets } from "./security/scan";
+import { truncateToTokenBudget } from "./text-budget";
 
 // ---- 档位单调继承（§11.7.6）：worker ≤ 父，越界裁到父档 + 审批卡警告 ----
 /** spawn 成功回执 → agent_id（拿不到即 undefined：不猜、不回落到日志反查）。审查 S2-8 配套。 */
@@ -47,12 +47,11 @@ export interface ClippedSummary {
   truncated: boolean;
 }
 
-/** summary 超 2000 token 类型化裁剪（沿 §6.2 整形先例：截断提示 + 截断位标记）。 */
+/** summary 超 2000 token 类型化裁剪（沿 §6.2 整形先例：截断提示 + 截断位标记）。
+ *  计量走 text-budget 的按类别权重（中文报告按 chars/4 记会被低估四倍），
+ *  且提示行自己计入预算。提示文案逐字保留——agents-check G5b 按字符串断言它。 */
 export function clipWorkerSummary(text: string, capTokens: number = SUMMARY_TOKEN_CAP): ClippedSummary {
-  if (estimateTokens(text.length) <= capTokens) return { text, truncated: false };
-  const maxChars = capTokens * 4;
-  return {
-    text: text.slice(0, maxChars) + "\n[truncated: summary 超 " + String(capTokens) + " token 上限，已类型化裁剪]",
-    truncated: true,
-  };
+  const notice = "\n[truncated: summary 超 " + String(capTokens) + " token 上限，已类型化裁剪]";
+  const out = truncateToTokenBudget(text, capTokens, notice);
+  return { text: out, truncated: out !== text };
 }
