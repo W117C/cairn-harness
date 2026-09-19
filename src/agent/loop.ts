@@ -32,8 +32,10 @@ export interface LoopOptions {
   /** 能力 5（收束闸）：本轮写过盘但模型自始至终没自调 verify 时，harness 在收束前补一拍验证，
    *  把「说了」和「验了」分开——红字落 verify_result{auto:true} 进事件流（证据拍，不改写模型上下文）。
    *  **缺省 false**：一拍 = 真跑一遍 lint/test（有成本，且 action-fusion 的「验证执行次数」记账
-   *  断言把它算成额外执行）。开闸前需要先裁两件事，见 BLOCKED「能力 5 收束闸」立案：
-   *  ① 失败自动返修所需的 harness→模型注入通道；② 准确率 vs `$/成功任务` 的实测口径。
+   *  断言把它算成额外执行）。开闸前的两件事现在只剩一件：
+   *  ① 注入通道**已落**——红由 context.ts 的 autoVerifyNote 在**下一轮**回流给模型（零额外模型调用）；
+   *     「同轮自动返修」仍需多要一轮，属未裁的成本问题。
+   *  ② 准确率 vs `$/成功任务` 的实测口径仍未裁（见 BLOCKED「能力 5 收束闸」立案）。
    *  硬上限（开启时）：每 run 至多一拍、模型自调过即让位、无可验面或探测炸则整段跳过。 */
   autoVerify?: boolean;
   /** M7 影响面钩子：注入后 write_file/edit_file 成功落盘会回注跨文件波及。
@@ -104,10 +106,11 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
   const nudgedActions = new Set<string>();
   /** 跑一拍 verify 系统门。两种形态：
    *  - manual（模型自调）：有配对的 tool_call ⇒ 失败原文注入同轮继续修，返回 "continue"。
-   *  - auto（harness 收束前补拍）：**没有**配对的 tool_call，也就没有合法注入通道
+   *  - auto（harness 收束前补拍）：**没有**配对的 tool_call，也就没有合法的**同轮**注入通道
    *    （裸 tool_result 会让 provider 侧 tool 消息失去前置 tool_calls 而 400；合成 tool_call
    *    又违反 action-fusion 明写的「no extra tool calls」不变量）⇒ 只落 verify_result 证据，
-   *    红在时间线上可见，不冒充模型行为、也不偷偷多要一轮。返回恒为 "stop"。 */
+   *    红在时间线上可见，不冒充模型行为、也不偷偷多要一轮。返回恒为 "stop"。
+   *    跨轮通道在投影侧：context.ts 的 autoVerifyNote 把这条红投成下一轮可见的 user 消息。 */
   const verifyBeat = async (callId: string, auto: boolean): Promise<"stop" | "continue"> => {
     verifyAttempts++;
     const attempt = verifyAttempts;
@@ -132,7 +135,9 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       ...(auto ? { auto: true } : {}),
     });
     if (outcome.ok) return "stop"; // 验证通过 → 立即停止，不再调用模型
-    if (auto) return "stop"; // 自动拍：证据已落，不外注（见上）
+    // 自动拍：**同轮**不外注（没有合法通道），但红不是到此为止——下一轮的投影会把它
+    // 回流成一条 user 消息（context.ts 的 autoVerifyNote），所以不必为此多要一轮模型。
+    if (auto) return "stop";
     if (attempt >= maxVerify) {
       // 上限耗尽 → verify_result(failed) 已落，停止且不再调用模型
       await events.append({

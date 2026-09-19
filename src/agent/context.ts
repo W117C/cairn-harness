@@ -3,7 +3,9 @@
 // compaction 事件只是投影指令：跳过 compressed_event_ids（并集），在最新一份
 // 摘要的 summary_offset 前注入 user 角色摘要消息（fresh start：旧摘要由新摘要
 // 滚动整合，投影只出现最新一份，不与全历史混合）。
-import type { AgentEvent, CompactionEvent } from "../events";
+import type { AgentEvent, CompactionEvent, VerifyCommandResult } from "../events";
+import { failureDigest } from "./verify";
+import { clampTailToTokenBudget } from "./text-budget";
 
 /** OpenAI 兼容消息（投影产物；system 由调用方按需前置）。 */
 export interface ContextMessage {
@@ -48,6 +50,52 @@ export function excludedIds(events: AgentEvent[]): Set<number> {
   return out;
 }
 
+/** M3c worker 子流归因：带非空 agent_id 的事件不进主上下文（§4.4.4）。
+ *  抽成一份判定是因为自动验证拍的投影也要走同一条闸——两份「谁算子流」的写法迟早漂移。 */
+function hasWorkerAttribution(e: AgentEvent): boolean {
+  return "agent_id" in e && typeof e.agent_id === "string" && e.agent_id !== "";
+}
+
+/** 自动验证拍（能力 5 收束闸）验出的红：harness 补拍没有配对的 tool_call，裸 tool_result 会让
+ *  provider 侧 tool 消息失去前置 tool_calls 而 400，合成 tool_call 又违反 action-fusion 的
+ *  「no extra tool calls」不变量 ⇒ loop 当时只能「落证据不外注」。这里补上那条合法通道：
+ *  投影阶段把它作为一条 user 消息回流，下一轮模型就带着自己的红继续修。 */
+export const AUTO_VERIFY_NOTE_TOKEN_BUDGET = 1200;
+/** 失败命令清单单独一座小帽：命令来自目标仓库的 .agent/config.json，属外界文本。 */
+export const AUTO_VERIFY_COMMANDS_TOKEN_BUDGET = 200;
+
+/** 会被投影成「系统补拍红」的事件下标（未摘除、非子流、auto 且 ok:false）。 */
+function autoVerifyFailureIdx(events: AgentEvent[], excluded: Set<number>): number[] {
+  const out: number[] = [];
+  events.forEach((e, i) => {
+    if (excluded.has(eventIdAt(i)) || hasWorkerAttribution(e)) return;
+    if (e.type === "verify_result" && e.auto === true && !e.ok) out.push(i);
+  });
+  return out;
+}
+
+/** 正文复用 failureDigest 的同一种格式（手动拍与自动拍给模型看到的是同一种东西，不造第二套判读）；
+ *  表头明写归属，免得模型把系统补拍当成自己验过的结果来复述。 */
+function autoVerifyNote(results: VerifyCommandResult[], earlierCount: number): string {
+  const head =
+    "[harness 自动验证] 上一轮收尾前系统补跑的 verify **未通过**（不是模型自调 verify 的结果）" +
+    (earlierCount > 0
+      ? "；此前另有 " + String(earlierCount) + " 次同类补拍未通过（全文见事件流，不重复注入）"
+      : "") +
+    " ⇒ 先处理这条再继续新任务（判断它与本任务无关就显式说明理由）。\n";
+  // 留尾会砍掉前几段的正文，但命令名一条都不能少：不然模型只看到最后一条日志，不知道该重跑哪条
+  // （repeatDigestNote 同族理由——缺「是哪条在红」这句，模型只能把三次额度烧在猜上）。
+  const cmds = results.filter((r) => !r.ok).map((r) => r.command).join(", ");
+  const cmdLine = cmds === ""
+    ? ""
+    : "失败命令：" + clampTailToTokenBudget(cmds, AUTO_VERIFY_COMMANDS_TOKEN_BUDGET, "命令列表") + "\n";
+  return (
+    head +
+    cmdLine +
+    clampTailToTokenBudget(failureDigest({ ok: false, results }), AUTO_VERIFY_NOTE_TOKEN_BUDGET, "自动验证输出")
+  );
+}
+
 /** 组装投影：events（内存态或 replay 产物）→ 消息序列。
  *  M2b：replacements（事件 id → 替换文本）= prune 类型化裁剪投影（§7.4）——
  *  只动 tool_result 的 content，不动消息结构；缺省空 = 零行为（既有路径字节不变）。 */
@@ -56,6 +104,11 @@ export function projectContext(
   replacements?: Map<number, string>,
 ): ContextMessage[] {
   const excluded = excludedIds(events);
+  // 只投最新一份（与 compaction「投影只出现最新一份摘要」同一条口径）：这条是**每轮重送**的
+  // 面，旧拍的全文重投既贵又零增益，但计数如实保留——不假装「只红过一次」。
+  const autoIdx = autoVerifyFailureIdx(events, excluded);
+  const lastAutoIdx = autoIdx.length > 0 ? (autoIdx[autoIdx.length - 1] as number) : -1;
+
   // 最新一份 compaction（滚动合并：其摘要已整合旧摘要，旧摘要不再单独注入）
   // M3c：worker 子流压缩事件（agent_id 在场）不作为主投影的摘要注入源。
   let latest: (typeof events)[number] | null = null;
@@ -87,7 +140,7 @@ export function projectContext(
     if (excluded.has(id)) return; // 被摘除事件按 id 引用排除（幂等的关键）
     // M3a §4.4.4：worker 子流事件（带 agent_id 的 tool_call/tool_result/usage + agent_* 事件）
     // 不进主上下文——父上下文唯一接收物 = agent_result（合成 tool_result，不带 agent_id）。
-    if ("agent_id" in e && typeof e.agent_id === "string" && e.agent_id !== "") return;
+    if (hasWorkerAttribution(e)) return; // 见上：子流不进主上下文
     if (
       e.type === "agent_spawned" || e.type === "agent_status" || e.type === "agent_message" ||
       e.type === "approval_requested" || e.type === "approval_resolved" || e.type === "card_action" ||
@@ -121,8 +174,13 @@ export function projectContext(
       flushDeltas();
       const pruned = replacements?.get(id);
       msgs.push({ role: "tool", tool_call_id: e.callId, content: pruned ?? e.output });
+    } else if (e.type === "verify_result") {
+      flushDeltas();
+      // 只有「系统补拍且红」这一种 verify_result 进上下文（见 autoVerifyNote 的理由）；
+      // 手动拍的红早已由配对的 tool_result 带进来了，这里再注一次就是同一拍的两份事实。
+      if (i === lastAutoIdx) msgs.push({ role: "user", content: autoVerifyNote(e.results, autoIdx.length - 1) });
     }
-    // clarify_requested / plan_proposed / plan_approved / verify_result / usage / session_meta：
+    // clarify_requested / plan_proposed / plan_approved / usage / session_meta：
     // 语义已在 tool_result / 卡片侧，模型上下文不需要（与既有 buildGlmHistory 口径一致）
   });
   flushDeltas();

@@ -32,7 +32,11 @@ React 树已全量归档（2026-09-17 删 45 个 .tsx/测试 + 移除 react 全�
 ## 环境注意
 
 - 在 DSH 里跑时，pnpm 脚本内的 `node` 解析到 DSH 的 Electron-as-node（v24.18.1），不是 `/usr/local/bin/node`（真实 Node v24.19.0）。两套运行时下门禁实测都过；怀疑环境问题时用 `pnpm exec node -p "process.versions"` 确认。
-- 沙箱内跑不了 `pnpm test`（pnpm 依赖检查失败）；用 `node node_modules/vitest/vitest.mjs run --pool=threads`。`src/main/agent-runner.ts` 已自动把 `pnpm test` 映射成这条。
+- 沙箱内跑不了 `pnpm test`（pnpm 依赖检查失败）；用 `node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts`。
+  **`--config` 不是可省的装饰**：该配置在加载期注入 `PI_SCRATCH_DIR` 兜底并 `exclude` 掉 `.worktrees/**`——裸跑会
+  ① 让 ledger/solpi/final-budget 整批以「PI_SCRATCH_DIR required」假红、② 把各 worktree 里的同名测试一起跑成双份计数（2026-09-20 实踩，两次误判为回归）。
+  `src/main/agent-runner.ts` 另有把沙箱内 `pnpm test` 直连 vitest 的映射（`VITEST_DIRECT`，**不含 `--config`**，
+  因为它跑在被编辑的目标工作区而非本仓——别把它当成本条的等价写法）。
 - 沙箱三门（`sandbox:check` / `ipc:check` / `panels-check`）按宿主**自动选分支**，输出显式打印走了哪支（fail-visible，不真空通过）：沙箱可用 → **分支 A 真断言**（2026-09-11 ZCode 环境实测走 A）；宿主拒 apply 含 deny 规则的 profile（曾见于 DSH 宿主，`sandbox_apply: Operation not permitted`）→ **降级分支 B**（断言降级链正确而非沙箱生效）。反向验证通道：`pnpm sandbox:check -- --force-available`（强制 A）/ `-- --bogus-root`（A①必红）。
 - Electron 在拒载 Chromium 沙箱的宿主必须 `--no-sandbox --disable-gpu`，否则窗口起不来（panels-check 会探测并自动附加；自写截图脚本需自加）。
 - **构建假红陷阱（DSH 宿主 safe-delete 守卫）**：同一轮内累计删除 ≥50 项后，宿主 shim 会拒绝 `out/` 清理，`electron-vite build` 直接报

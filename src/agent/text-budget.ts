@@ -26,7 +26,10 @@ function isWideAt(code: number): boolean {
 
 /** 该字符值多少 token：宽字符 1，其余 1/4。 */
 function charWeight(ch: string): number {
-  const code = ch.codePointAt(0) ?? 0;
+  return charWeightCode(ch.codePointAt(0) ?? 0);
+}
+
+function charWeightCode(code: number): number {
   return isWideAt(code) ? 1 : 0.25;
 }
 
@@ -70,4 +73,33 @@ export function truncateToTokenBudget(text: string, tokenBudget: number, notice:
 export function clampToTokenBudget(text: string, tokenBudget: number, label: string, suffix = ""): string {
   const marker = "\n[" + label + "超 " + String(tokenBudget) + " token，已截断]";
   return truncateToTokenBudget(text, tokenBudget, marker + suffix);
+}
+
+/** 按权重从尾部取（代理对整体计一次，绝不切半个——半个是非法 UTF-16，进 provider 变问号）。 */
+function cutToWeightTail(text: string, allowed: number): string {
+  if (allowed <= 0) return "";
+  let w = 0;
+  let start = text.length;
+  for (let i = text.length; i > 0; ) {
+    const lo = text.charCodeAt(i - 1);
+    const paired =
+      lo >= 0xdc00 && lo <= 0xdfff && i >= 2 && text.charCodeAt(i - 2) >= 0xd800 && text.charCodeAt(i - 2) <= 0xdbff;
+    const code = paired ? (text.codePointAt(i - 2) ?? lo) : lo;
+    const cw = charWeightCode(code);
+    if (w + cw > allowed) break;
+    w += cw;
+    i -= code > 0xffff ? 2 : 1;
+    start = i;
+  }
+  return text.slice(start);
+}
+
+/** 尾部保留一支：与 clampToTokenBudget 同一份字重表、同一条「提示自己也算预算」，只差取点方向。
+ *  为什么需要这一支：错误日志的结论在**末行**（`N failed` / stack 末行），留头等于把可执行信息
+ *  整段丢掉——output-ring 为子进程流式输出已经写了「头 + 尾环」，但那是字节环，不是 token 预算；
+ *  跨轮重送的验证摘要要按 token 计量，所以在这一份实现里加，而不是让调用方各写一个 slice。 */
+export function clampTailToTokenBudget(text: string, tokenBudget: number, label: string): string {
+  const marker = "[" + label + "超 " + String(tokenBudget) + " token，已截断（只留尾部）]\n";
+  if (estimateTextTokens(text) <= tokenBudget) return text;
+  return marker + cutToWeightTail(text, Math.max(0, tokenBudget - weightText(marker)));
 }
