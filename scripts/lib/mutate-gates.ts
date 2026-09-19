@@ -35,3 +35,63 @@ export function entryDisposition(info: EntryInfo): Disposition {
   }
   return { kind: "run" };
 }
+
+// ---- 针脚静态预检：不跑测试就知道某条锚点还摸不摸得到代码 ----
+// 动因（2026-09-19 实跑，220 条里揪出 2 条）：把被锚定的实现搬进共用原语（text-budget）后
+// 忘了改指锚点 ⇒ needle 不再出现，那条变异变成**空操作**。跑它会得到「突变未生效」的红，
+// 但这要等整跑；而整跑常被并发堵几天——于是这段时间里这条锚点在假装守护。
+// 静态检是秒级的，因此可以进门禁（mutate-needles-check），把「重构后改指」变成机械要求。
+
+/** 针脚在源文件里逐字出现的次数。特殊值：-1 源文件读不到；-2 空针脚（永远改不动任何东西）。 */
+export function needleHits(needle: string, source: string | null): number {
+  if (source === null) return -1;
+  if (needle === "") return -2;
+  return source.split(needle).length - 1;
+}
+
+export interface NeedleEntry {
+  id: string;
+  srcRel: string;
+  needle: string;
+}
+
+export interface NeedleProblem {
+  id: string;
+  srcRel: string;
+  hits: number;
+  needle: string;
+}
+
+/** 严重度分两档，因为后果不同：
+ *  - `blocking`：hits 0 / 源文件读不到 / 空针脚 ⇒ 这条变异**是空操作**，它在假装守护，必须红。
+ *  - `warn`：hits > 1 ⇒ 锚点仍能改到代码，但 `String.replace` 只改第一处，可能改到同名兄弟行；
+ *    存量条目里有几条属这种（各自都还能杀测试），不当场判死，但必须**打印出来**让人复认——
+ *    静默吞掉它就等于回到「假装守护」。 */
+export function needleSeverity(hits: number): "ok" | "blocking" | "warn" {
+  if (hits === 1) return "ok";
+  return hits > 1 ? "warn" : "blocking";
+}
+
+/** 逐条核针脚，返回所有 hits ≠ 1 的（调用方用 needleSeverity 分档处置）。 */
+export function auditNeedles(entries: readonly NeedleEntry[], readSrc: (rel: string) => string | null): NeedleProblem[] {
+  const cache = new Map<string, string | null>();
+  const problems: NeedleProblem[] = [];
+  for (const e of entries) {
+    if (!cache.has(e.srcRel)) cache.set(e.srcRel, readSrc(e.srcRel));
+    const hits = needleHits(e.needle, cache.get(e.srcRel) ?? null);
+    if (hits !== 1) problems.push({ id: e.id, srcRel: e.srcRel, hits, needle: e.needle });
+  }
+  return problems;
+}
+
+/** 一行可机读的判读结论（门的输出格式：id + 源 + 原因 + 针脚前 60 字）。 */
+export function needleProblemLine(p: NeedleProblem): string {
+  const why = p.hits === -1
+    ? "源文件读不到"
+    : p.hits === -2
+      ? "空针脚（改不动任何东西）"
+      : p.hits === 0
+        ? "针脚已不在源文件里（变异必然不生效——多半是被锚定的实现搬走了，改指它）"
+        : `针脚命中 ${String(p.hits)} 处（replace 只改第一处，需人工复认改到的是哪一处）`;
+  return `${p.id} — ${p.srcRel} — ${why}：${JSON.stringify(p.needle.slice(0, 60))}`;
+}

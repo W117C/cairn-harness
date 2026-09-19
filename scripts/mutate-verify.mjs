@@ -21,7 +21,7 @@ import { execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, needleProblemLine, needleSeverity } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -1696,7 +1696,7 @@ const MUTATIONS = [
     src: "src/agent/plugins/mcp.ts",
     test: "tests/mcp-bounds.test.ts",
     desc: "tools/list 的描述不收窄 ⇒ 外部 server 的话痨说明进的是**每轮重送**的工具面（×工具数×轮数），固定成本被抬高一个数量级",
-    apply: (s) => s.replace("description: typeof t.description === \"string\" ? capMcpDescription(t.description) : \"\",", "description: typeof t.description === \"string\" ? t.description : \"\","),
+    apply: (s) => s.replace("const desc = typeof t.description === \"string\" ? capMcpDescription(t.description) : \"\";", "const desc = typeof t.description === \"string\" ? t.description : \"\";"),
     expectFail: "tools/list 的 5000 字符描述进注册表时已被收窄（每轮重送的那一份）",
   },
   {
@@ -1832,7 +1832,7 @@ const MUTATIONS = [
     src: "src/agent/text-budget.ts",
     test: "tests/text-budget-cjk.test.ts",
     desc: "估算器按类别计数、取点却仍按字符数 ⇒ 中文正文截完仍超预算（估算与执行两套口径，本仓反复踩的同族）",
-    apply: (s) => s.replace("return cutToWeight(text, Math.max(0, allowed)) + marker + suffix;", "return text.slice(0, Math.max(0, tokenBudget * 4 - marker.length - suffix.length)) + marker + suffix;"),
+    apply: (s) => s.replace("return cutToWeight(text, Math.max(0, tokenBudget - weightOf(notice))) + notice;", "return text.slice(0, Math.max(0, tokenBudget * 4 - notice.length)) + notice;"),
     expectFail: "中文正文截完仍然 ≤ 预算（旧实现按 chars/4 取点，这里会溢出近四倍）",
   },
   {
@@ -1867,7 +1867,72 @@ const MUTATIONS = [
     apply: (s) => s.replace("return { text: out, truncated: out !== text };", "return { text: out, truncated: false };"),
     expectFail: "超预算的中文报告截完真的 ≤ 预算，且提示行计入预算",
   },
+  {
+    id: "needle-hits-treats-empty-as-ok",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-needles-check.test.ts",
+    desc: "空针脚不报负值 ⇒ 一条 replace(空串, x) 的锚点看着「命中很多」其实永远改不动目标代码",
+    apply: (s) => s.replace("if (needle === \"\") return -2;", "if (needle === \"\") return 1;"),
+    expectFail: "空针脚与源文件读不到用负值区分开（两者后果不同，不能都算 0）",
+  },
+  {
+    id: "needle-severity-flattens-warn",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-needles-check.test.ts",
+    desc: "多处命中并入阻断 ⇒ 存量条目当场全红，这条门反而变成没人敢修的债；后果不同的两档必须分开",
+    apply: (s) => s.replace("return hits > 1 ? \"warn\" : \"blocking\";", "return \"blocking\";"),
+    expectFail: "hits=1 通过；>1 只待复认；0/负值是阻断",
+  },
+  {
+    id: "audit-re-reads-source-per-entry",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-needles-check.test.ts",
+    desc: "丢掉源文件缓存 ⇒ 220 条逐条重复读文件，秒级门被拖成分钟级（这条门的意义就是秒级可进门禁）",
+    apply: (s) => s.replace("if (!cache.has(e.srcRel)) cache.set(e.srcRel, readSrc(e.srcRel));", "cache.set(e.srcRel, readSrc(e.srcRel));"),
+    expectFail: "读取次数 = 不同源文件数（全表 220 条指向约 90 个文件，逐条重复读会把秒级门拖成分钟级）",
+  },
+  {
+    id: "audit-reports-clean-needles",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-needles-check.test.ts",
+    desc: "把「命中一次」也算问题 ⇒ 门对正常表恒红，于是下一个人的动作是关掉它（假红与假绿同样贵）",
+    apply: (s) => s.replace("if (hits !== 1) problems.push({ id: e.id, srcRel: e.srcRel, hits, needle: e.needle });", "if (true) problems.push({ id: e.id, srcRel: e.srcRel, hits, needle: e.needle });"),
+    expectFail: "只报命中次数 ≠ 1 的，并按传入顺序",
+  },
 ];
+
+/** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
+ *  单双引号与反引号三种写法都认）。取不到不判红：含插值的模板字面量无法静态求值，
+ *  这类如实报「未覆盖」——不假装自己全看见了。 */
+function extractNeedle(apply) {
+  const m = /\.replace(?:All)?\(\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/u.exec(String(apply));
+  if (!m) return null;
+  try { return new Function("return " + m[1])(); } catch { return null; }
+}
+
+/** 针脚体检：blocking = 这条变异是空操作（它在假装守护）；warn = 针脚命中多处，
+ *  replace 只改第一处，需人工复认改到的是哪一处。 */
+function reportNeedles(entries, { showUnparsed = true } = {}) {
+  const checkable = [];
+  const unparsed = [];
+  for (const e of entries) {
+    const needle = extractNeedle(e.apply);
+    if (needle === null) unparsed.push(e.id);
+    else checkable.push({ id: e.id, srcRel: e.src, needle });
+  }
+  const problems = auditNeedles(checkable, (rel) => {
+    try { return readFileSync(join(ROOT, rel), "utf8"); } catch { return null; }
+  });
+  const blocking = problems.filter((p) => needleSeverity(p.hits) === "blocking");
+  const warn = problems.filter((p) => needleSeverity(p.hits) === "warn");
+  for (const p of blocking) console.log("❌ " + needleProblemLine(p));
+  for (const p of warn) console.log("⚠️ " + needleProblemLine(p));
+  if (showUnparsed && unparsed.length > 0) {
+    console.log(`ℹ️ 静态检未覆盖 ${String(unparsed.length)} 条（apply 非通行写法）：${unparsed.join("、")}`);
+  }
+  console.log(`针脚体检：${String(entries.length)} 条 —— 阻断 ${String(blocking.length)}，待复认 ${String(warn.length)}，未覆盖 ${String(unparsed.length)}`);
+  return blocking.length;
+}
 
 function runTest(testRel) {
   try {
@@ -1941,6 +2006,15 @@ const args = process.argv.slice(2);
 if (args.includes("--list")) {
   for (const m of MUTATIONS) console.log(`${m.id}\t${m.src}\t${m.desc}`);
   process.exit(0);
+}
+/** 只核针脚、不跑测试（秒级）——因此它能进 pnpm gates，而整张变异表要跑几十分钟、
+ *  常被并发堵着：那段时间里失效的锚点在「假装守护」。 */
+if (args.includes("--check-needles")) {
+  const bad = reportNeedles(MUTATIONS);
+  console.log(bad === 0
+    ? "[mutate-needles-check] 全部锚点针脚可判定 ✅"
+    : `[mutate-needles-check] ${String(bad)} 条锚点针脚已失效 ❌`);
+  process.exit(bad === 0 ? 0 : 1);
 }
 
 const targets = args.filter((a) => !a.startsWith("--"));
