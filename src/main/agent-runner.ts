@@ -426,7 +426,10 @@ function installPluginTools(rt: PluginRuntime): string[] {
       async run(args) {
         const name = typeof args.name === "string" ? args.name : "";
         if (name.trim() === "") return { ok: false, output: "skill: name 参数必填（/plugin:name 或 /name）" };
-        return rt.triggerSkill(name);
+        // §9.3 参数通道：模型传进来的 args 原文交给替换器（$ARGUMENTS / $1 / $name）。
+        // 缺省空串而不是"不传"——正文里的 $ARGUMENTS 在无参数时按 CC 语义替换成空，
+        // 留裸变量给模型只会让它以为要自己填。
+        return rt.triggerSkill(name, typeof args.args === "string" ? args.args : "");
       },
     };
     injected.push("skill");
@@ -457,7 +460,12 @@ export function pluginToolSpecsFromRuntime(rt: PluginToolSource | null): Session
         "返回该 skill 的全文指令，按指令继续执行",
       parameters: {
         type: "object",
-        properties: { name: { type: "string", description: "skill 调用名（/plugin:name 或 /name）" } },
+        properties: {
+          name: { type: "string", description: "skill 调用名（/plugin:name 或 /name）" },
+          // 规格面与执行面同源：installPluginTools 读的就是 args.args，两处必须一起有
+          //（只在一处加 = 模型看不见参数面，或看得见却传不进替换器）。
+          args: { type: "string", description: "传给 skill 的参数原文（正文里的 $ARGUMENTS / $1 / $name 按此替换；无参数可省略）" },
+        },
         required: ["name"],
       },
     });
@@ -1104,7 +1112,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // §9.4 prompt 命令派发（`commands/*.md` → 渲染成用户消息进事件流）。命中即换正文，未命中逐字
     // 不变（零行为）。放在 UserPromptSubmit **之前** ⇒ 钩子与模型看到的是真正要出门的那段文本，
     // 而不是那串用户敲下的斜杠。refused 单列且出声：false 的语义是「不进 / 菜单」，不是「当没看见」。
-    const expanded = expandPromptCommand(rt?.commands() ?? [], opts.message);
+    const expanded = expandPromptCommand(rt?.commands() ?? [], opts.message, (c) => rt?.substitutionFor(c) ?? {});
     if (expanded.refused !== null) {
       await pipeline({ type: "assistant_message", content: "[command 不可用户调用] " + expanded.refused + "（frontmatter user-invocable:false）" });
       return await replay(opts.logPath);

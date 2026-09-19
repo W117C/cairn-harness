@@ -138,7 +138,13 @@ async function main(): Promise<void> {
     await new TrustStore(trustB).decide(wsB.pluginRoot, true, await pluginFingerprint(wsB.pluginRoot));
     const evB = await run(wsB.ws, "skill-flow.jsonl", trustB, "skill");
     const res = resultOf(evB, "c-skill");
-    assert(res !== null && res.ok && res.output.includes("# Greet Skill") && res.output.includes("$ARGUMENTS"), "B2 触发后全文进上下文（tool_result 携带 SKILL.md 全文）");
+    assert(res !== null && res.ok && res.output.includes("# Greet Skill"), "B2 触发后全文进上下文（tool_result 携带 SKILL.md 全文）");
+    // 判据修正（BLOCKED 裁决 4）：这里原先用 `includes("$ARGUMENTS")` 当「全文到了」的证据，
+    // 而那个串恰好等于「参数一个字都没替换」——夹具 greet 的末行自己写着它验的是「缺位参数替换为空串」。
+    assert(res !== null && !res.output.includes("$ARGUMENTS"), "B2a 无参数触发 ⇒ 正文不留裸 $ARGUMENTS（按 CC 语义换空串）");
+    const resArgs = resultOf(await run(wsB.ws, "skill-args.jsonl", trustB, "skill-args"), "c-skill-args");
+    assert(resArgs !== null && resArgs.ok && resArgs.output.includes("- 你好，张三！") && !resArgs.output.includes("$1"),
+      "B2b 模型经 skill 工具下的 args 真的走到替换器（规格面与执行面那条参数通道没断）");
     // 压缩重挂：投影自事件流（compaction 摘除触发记录 → 重挂；未摘除 → 不重挂）
     const rtB = await PluginRuntime.load({
       projectPluginsDir: join(wsB.ws, ".agent", "plugins"),

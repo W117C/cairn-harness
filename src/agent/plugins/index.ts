@@ -1,7 +1,7 @@
 // M2e：插件运行时组合根。发现（三级作用域）→ 信任过滤（未信任只列出）→ 激活面：
 // hook 引擎 / MCP 连接 / skill 注册表。skill 激活不设私有状态——从事件流投影
 // （tool_call(name=skill) → 同 callId 的 tool_result 事件 id），与「上下文是投影」同构。
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   discoverPlugins, activeHooks, pendingPlugins,
 } from "./discover";
@@ -10,8 +10,8 @@ import { HookEngine } from "./hooks";
 import { McpManager, type McpToolInfo } from "./mcp";
 import {
   buildSkillRoutingList, skillInvokeName, resolveSkillName, skillRemount, modelInvocable,
-  clampSkillBody, SKILL_REMOUNT_TOKENS_PER_SKILL,
-  type ActivatedSkill, type RoutingListResult, type RemountResult,
+  clampSkillBody, substituteVars, declaredArgumentNames, SKILL_REMOUNT_TOKENS_PER_SKILL,
+  type ActivatedSkill, type RoutingListResult, type RemountResult, type SubstitutionContext,
 } from "./skills";
 import type { AgentEvent, ToolCallEvent, ToolResultEvent } from "../../events";
 import type {
@@ -44,9 +44,9 @@ export { TrustStore, pluginFingerprint } from "./trust";
 export { HookEngine, hookEnv, parseHookDecision, mergeDecision, parseHookIf, hookIfMatches, HOOK_OUTPUT_CAP, HOOK_CONTEXT_TOTAL_CHAR_LIMIT, HOOK_REASON_CHAR_LIMIT, HOOK_TIMEOUT_DEFAULT, HOOK_TIMEOUT_USER_PROMPT, type HookEngineOptions } from "./hooks";
 export { McpManager, scopedToolName, parseScopedToolName, type McpToolInfo, type McpConnectResult } from "./mcp";
 export {
-  buildSkillRoutingList, skillInvokeName, resolveSkillName, skillRoutingLine, substituteArgs,
+  buildSkillRoutingList, skillInvokeName, resolveSkillName, skillRoutingLine, substituteVars, declaredArgumentNames,
   renderPromptCommand, commandInvokeName, expandPromptCommand, skillRemount, clampSkillBody, estimateTokens,
-  type CommandExpansion,
+  type CommandExpansion, type SubstitutionContext,
   SKILL_ROUTING_CHAR_LIMIT, SKILL_REMOUNT_TOKENS_PER_SKILL, SKILL_REMOUNT_TOKENS_TOTAL,
   type ActivatedSkill, type RoutingListResult, type RemountResult,
 } from "./skills";
@@ -69,22 +69,24 @@ export interface PluginRuntimeOptions {
 /** skill 激活投影：tool_call(name="skill") → 同 callId 的 tool_result 事件 id（1-based 行号）。 */
 export function activationsFromEvents(
   events: AgentEvent[],
-  resolve: (invokeName: string) => { body: string } | null,
+  /** 第二参 = 那次 tool_call 实下的 `args`（§9.3 的参数替换要在重挂时重放；无参数 = 空串）。 */
+  resolve: (invokeName: string, argsString: string) => { body: string } | null,
 ): ActivatedSkill[] {
   const out: ActivatedSkill[] = [];
-  const pending = new Map<string, { invoke: string; index: number }>();
+  const pending = new Map<string, { invoke: string; args: string; index: number }>();
   events.forEach((e, index) => {
     if (e.type === "tool_call" && (e as ToolCallEvent).name === "skill") {
       const raw = (e as ToolCallEvent).args?.name;
       if (typeof raw === "string") {
-        const resolved = resolve(raw);
-        if (resolved) pending.set((e as ToolCallEvent).id, { invoke: raw, index });
+        const callArgs = (e as ToolCallEvent).args?.args;
+        const resolved = resolve(raw, typeof callArgs === "string" ? callArgs : "");
+        if (resolved) pending.set((e as ToolCallEvent).id, { invoke: raw, args: typeof callArgs === "string" ? callArgs : "", index });
       }
     } else if (e.type === "tool_result") {
       const r = e as ToolResultEvent;
       const p = pending.get(r.callId);
       if (p && r.ok) {
-        out.push({ invoke: p.invoke, body: resolve(p.invoke)?.body ?? "", triggerEventId: index + 1, seq: out.length });
+        out.push({ invoke: p.invoke, body: resolve(p.invoke, p.args)?.body ?? "", triggerEventId: index + 1, seq: out.length });
         pending.delete(r.callId);
       }
     }
@@ -240,11 +242,24 @@ export class PluginRuntime {
     return buildSkillRoutingList(this.skills());
   }
 
+  /** §9.3 替换器的取值面（skill 与 prompt command 共用一份）：目录类变量按条目自己的路径与
+   *  所属插件解析，散装条目没有插件根 ⇒ 整项缺席（`${PLUGIN_ROOT}` 就原样留着，不填假路径）。 */
+  substitutionFor(entry: { plugin: string | null; path: string; frontmatter: Record<string, unknown> }): Omit<SubstitutionContext, "args"> {
+    const root = entry.plugin === null ? undefined : this.manifest.plugins.find((p) => p.name === entry.plugin)?.root;
+    return {
+      named: declaredArgumentNames(entry.frontmatter),
+      skillDir: dirname(entry.path),
+      ...(root !== undefined ? { pluginRoot: root, pluginData: join(this.opts.pluginDataRoot, entry.plugin as string) } : {}),
+      projectDir: this.opts.workspace,
+      ...(this.opts.sessionId !== undefined ? { sessionId: this.opts.sessionId } : {}),
+    };
+  }
+
   /** skill 触发。全文进上下文（tool_result），且 skill 结果免剪（prune exemptTools）
    *  ⇒ 这一份是**常驻**的：一个仓库自带的 200KB SKILL.md 会付满整个会话。
    *  重挂路径早就按 SKILL_REMOUNT_TOKENS_PER_SKILL 收窄（clampSkillBody），主路径却原样吐——
    *  同一个预算只在一头生效。现两头同口径。 */
-  triggerSkill(input: string): { ok: boolean; output: string } {
+  triggerSkill(input: string, argsString = ""): { ok: boolean; output: string } {
     const all = this.skills();
     const hit = resolveSkillName(input, all);
     if (!hit) return { ok: false, output: "skill 未注册: " + input };
@@ -254,21 +269,27 @@ export class PluginRuntime {
     if (!modelInvocable(entry)) {
       return { ok: false, output: "skill " + skillInvokeName(entry) + " 声明 disable-model-invocation，只能由用户触发（模型侧不可调用）" };
     }
+    // 替换在**收窄之前**：clampSkillBody 按 token 记账，先裁后替会让账面与实付的字节数不符
+    //（参数把正文撑长的那部分本来就该算进预算）。
     return {
       ok: true,
-      output: clampSkillBody(entry.body, SKILL_REMOUNT_TOKENS_PER_SKILL,
+      output: clampSkillBody(
+        substituteVars(entry.body, { ...this.substitutionFor(entry), args: argsString }),
+        SKILL_REMOUNT_TOKENS_PER_SKILL,
         "\n[全文见 " + entry.path + "]"),
     };
   }
 
   /** 压缩后重挂（从事件流投影激活记录）。 */
   remountFromEvents(events: AgentEvent[]): RemountResult {
-    const activated = activationsFromEvents(events, (invoke) => {
+    const activated = activationsFromEvents(events, (invoke, callArgs) => {
       const all = this.skills();
       const hit = resolveSkillName(invoke, all);
       if (!hit) return null;
       const entry = all.find((s) => s.plugin === hit.plugin && s.name === hit.name)!;
-      return { body: entry.body };
+      // 重挂必须重放**当年那次调用的参数**：激活记录只存名字，参数在 tool_call 事件里；
+      // 不传就会把一份已经替换过的正文重挂成带裸 $ARGUMENTS 的原始模板（同一 skill 两次进上下文内容不同）。
+      return { body: substituteVars(entry.body, { ...this.substitutionFor(entry), args: callArgs }) };
     });
     const excluded = new Set<number>();
     for (const e of events) {

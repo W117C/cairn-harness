@@ -129,4 +129,58 @@ describe("runAgent 真入口的派发（事件流里那条 user_message）", () 
     });
     expect(firstUserMessage(events)).toBe("念一遍 README 的第一行");
   }, 120_000);
+
+  // §9.3 参数通道的**最后一跳**：模型在 tool_call 里下的 args，要真的走到替换器。
+  // 上面那组只证明 PluginRuntime.triggerSkill(name, args) 会替换；工具面（规格 + 实例 + loop 白名单）
+  // 若把 args 丢掉，替换器就永远收到空串——这一跳正是本仓点名的「接缝都在，最后一步没接」。
+  it("模型经 skill 工具下的 args 真的进替换器（tool_result 里是替换后的正文）", async () => {
+    const skillDir = join(plugins, "skills", "greet");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(join(skillDir, "SKILL.md"),
+      "---\nname: greet\ndescription: 打招呼。\n---\n你好，$1；全部参数：$ARGUMENTS\n", "utf8");
+    const scriptPath = join(dir, "skill-args.jsonl");
+    await writeFile(scriptPath, JSON.stringify({ type: "tool_call", id: "k1", name: "skill", args: { name: "/cmd-demo:greet", args: "张三 李四" } }) + "\n"
+      + JSON.stringify({ type: "assistant_message", content: "参数场景完成" }) + "\n", "utf8");
+    const prevScript = process.env.M1C_AUTONOMY_SCRIPT;
+    process.env.M1C_AUTONOMY_SCRIPT = scriptPath;
+    try {
+      const events = await runAgent({
+        workspace: dir,
+        message: "用 greet skill 打招呼",
+        mode: "read-only",
+        logPath: join(dir, "skill-args-events.jsonl"),
+        sandbox: null,
+        unattended: true,
+      });
+      const res = events.find((x) => x.type === "tool_result" && x.callId === "k1") as Extract<AgentEvent, { type: "tool_result" }> | undefined;
+      expect(res?.ok).toBe(true);
+      expect(res?.output).toContain("你好，张三；全部参数：张三 李四");
+      expect(res?.output).not.toContain("$ARGUMENTS");
+    } finally {
+      if (prevScript === undefined) delete process.env.M1C_AUTONOMY_SCRIPT;
+      else process.env.M1C_AUTONOMY_SCRIPT = prevScript;
+    }
+  }, 120_000);
+
+  it("skill 工具的规格面声明了 args（模型看得见才有那条参数通道；与执行面同源）", async () => {
+    // 每条用例各自建 skill：beforeEach 会换新目录，别依赖上一条留下的文件。
+    const skillDir = join(plugins, "skills", "spec-only");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(join(skillDir, "SKILL.md"),
+      "---\nname: spec-only\ndescription: 只看规格面。\n---\n正文\n", "utf8");
+    const { pluginToolSpecsFromRuntime } = await import("../src/main/agent-runner");
+    const { PluginRuntime } = await import("../src/agent/plugins");
+    const rt = await PluginRuntime.load({
+      userPluginsDir: join(dir, "user-plugins"),
+      workspace: dir,
+      pluginDataRoot: join(dir, "plugin-data-spec"),
+    });
+    try {
+      const spec = pluginToolSpecsFromRuntime(rt).find((t) => t.name === "skill");
+      const props = (spec?.parameters as { properties?: Record<string, unknown> }).properties ?? {};
+      expect(Object.keys(props)).toContain("args");
+    } finally {
+      await rt.shutdown();
+    }
+  });
 });

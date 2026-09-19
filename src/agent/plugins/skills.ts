@@ -76,25 +76,83 @@ export function buildSkillRoutingList(skills: RoutingSkillInput[]): RoutingListR
 }
 
 /**
- * 参数替换器（skill 与 prompt commands 共用，§9.5）：
- *   $ARGUMENTS → 全部参数原文；$1..$9 → 位置参数；缺位 → 空串。
- *   未知的 $VAR 保持原样（不做 shell 语义展开）。
+ * 替换器的输入面（§9.3）：调用参数 + 那五个 `${}` 变量。缺哪一项就不传——
+ * 拿空串顶位等于伪造「这里确实有个目录，只是名字是空的」。
  */
-export function substituteArgs(template: string, argsString: string): string {
-  const args = argsString.trim();
+export interface SubstitutionContext {
+  /** 调用参数原文（`$ARGUMENTS` / `$1..$9` / `$name` 的取值源）。 */
+  args?: string;
+  /** frontmatter `arguments` 声明的命名参数（按声明顺序吃位置参数，§9.3 的 `$name`）。 */
+  named?: readonly string[];
+  skillDir?: string;
+  pluginRoot?: string;
+  pluginData?: string;
+  projectDir?: string;
+  sessionId?: string;
+}
+
+/** `${VAR}` → 上下文取值键。CC 的 `${CLAUDE_*}` 名字按 §9.3 作**解析别名**，同一张表兜住。 */
+const VAR_KEYS: Record<string, "skillDir" | "pluginRoot" | "pluginData" | "projectDir" | "sessionId"> = {
+  SKILL_DIR: "skillDir", CLAUDE_SKILL_DIR: "skillDir",
+  PLUGIN_ROOT: "pluginRoot", CLAUDE_PLUGIN_ROOT: "pluginRoot",
+  PLUGIN_DATA: "pluginData", CLAUDE_PLUGIN_DATA: "pluginData",
+  PROJECT_DIR: "projectDir", CLAUDE_PROJECT_DIR: "projectDir",
+  SESSION_ID: "sessionId",
+};
+
+/** 一处分四支的 alternation（§9.3 明文「替换器一处 alternation 兼容」）：
+ *  `${VAR}` → `$ARGUMENTS` → `$1..$9` → `$name`。顺序即优先级：ARGUMENTS 也是字母串，
+ *  放在 `$name` 之后会被当成一个未声明的命名参数而漏替换。 */
+const SUBSTITUTE_RE = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$(ARGUMENTS)\b|\$(\d)\b|\$([A-Za-z_][A-Za-z0-9_]*)/g;
+
+/**
+ * 参数替换器（skill 与 prompt commands 共用，§9.3 + §9.4「替换器复用 §9.3」）：
+ *   `$ARGUMENTS` → 全部参数原文；`$1..$9` → 位置参数；缺位 → 空串（夹具 greet 的 `$9` 那行钉的就是这条）。
+ *   `$name` → 只认 frontmatter `arguments` 声明过的名字，按声明序取第 i 个位置参数。
+ *   `${SKILL_DIR|PLUGIN_ROOT|PLUGIN_DATA|PROJECT_DIR|SESSION_ID}`（含 `${CLAUDE_*}` 别名）→ 上下文值。
+ *   未声明 / 上下文里没有值的 ⇒ **原样保留**，不展开成空串、不做 shell 语义。
+ */
+export function substituteVars(template: string, ctx: SubstitutionContext = {}): string {
+  const args = (ctx.args ?? "").trim();
   const positional = args === "" ? [] : args.split(/\s+/);
-  return template
-    .replace(/\$ARGUMENTS/g, args)
-    .replace(/\$(\d)/g, (m, d: string) => {
-      const n = Number(d);
-      return n >= 1 && n <= 9 ? (positional[n - 1] ?? "") : m;
-    });
+  const named = ctx.named ?? [];
+  return template.replace(SUBSTITUTE_RE, (whole, braced?: string, argkw?: string, digit?: string, varName?: string) => {
+    if (braced !== undefined) {
+      const key = VAR_KEYS[braced];
+      return key === undefined ? whole : (ctx[key] ?? whole);
+    }
+    if (argkw !== undefined) return args;
+    if (digit !== undefined) {
+      const n = Number(digit);
+      return n >= 1 && n <= 9 ? (positional[n - 1] ?? "") : whole;
+    }
+    if (varName !== undefined) {
+      const i = named.indexOf(varName);
+      return i >= 0 ? (positional[i] ?? "") : whole;
+    }
+    return whole;
+  });
+}
+
+/** frontmatter `arguments` 的三种合法写法收成声明序名单（CC 用对象数组，散装 skill 常写成逗号串）。 */
+export function declaredArgumentNames(frontmatter: Record<string, unknown> | undefined): string[] {
+  const raw = frontmatter?.arguments;
+  if (typeof raw === "string") return raw.split(",").map((s) => s.trim()).filter((s) => s !== "");
+  if (Array.isArray(raw)) {
+    return raw.map((r) => (typeof r === "string" ? r.trim() : typeof (r as { name?: unknown })?.name === "string" ? (r as { name: string }).name.trim() : ""))
+      .filter((s) => s !== "");
+  }
+  return [];
 }
 
 /** 渲染 prompt command（commands/*.md → 用户消息文本）；user-invocable 语义 = /plugin:command args。
  *  首尾空白剥掉：那是 markdown 文件的换行，不是提示词的一部分。 */
-export function renderPromptCommand(cmd: PromptCommandEntry, argsString: string): string {
-  return substituteArgs(cmd.body, argsString).trim();
+export function renderPromptCommand(cmd: PromptCommandEntry, argsString: string, ctx: Omit<SubstitutionContext, "args" | "named"> = {}): string {
+  return substituteVars(cmd.body, {
+    args: argsString,
+    named: declaredArgumentNames(cmd.frontmatter),
+    ...ctx,
+  }).trim();
 }
 
 /** prompt 命令调用名：/plugin-name:command-name。 */
@@ -114,8 +172,14 @@ export interface CommandExpansion {
 }
 
 /** §9.4 派发：`/plugin:cmd args`（松散命令 = `/cmd args`）→ 渲染后的用户消息。
- *  不以 / 开头、或名字没登记 ⇒ 逐字原样返回（既有路径字节不变）。 */
-export function expandPromptCommand(commands: readonly PromptCommandEntry[], text: string): CommandExpansion {
+ *  不以 / 开头、或名字没登记 ⇒ 逐字原样返回（既有路径字节不变）。
+ *  `ctxFor` 给命令自己的替换上下文（§9.4「替换器复用 §9.3」——`${PLUGIN_ROOT}` 这类变量
+ *  在命令正文里同样合法）；缺省 = 只换参数不换变量。 */
+export function expandPromptCommand(
+  commands: readonly PromptCommandEntry[],
+  text: string,
+  ctxFor?: (cmd: PromptCommandEntry) => Omit<SubstitutionContext, "args">,
+): CommandExpansion {
   if (!text.startsWith("/")) return { text, invoked: null, refused: null };
   const rest = text.slice(1);
   const cut = rest.search(/\s/);
@@ -125,7 +189,7 @@ export function expandPromptCommand(commands: readonly PromptCommandEntry[], tex
   if (!hit) return { text, invoked: null, refused: null };
   const invocable = hit.frontmatter["user-invocable"];
   if (invocable === false || invocable === "false") return { text, invoked: null, refused: "/" + name };
-  return { text: renderPromptCommand(hit, args), invoked: "/" + name, refused: null };
+  return { text: renderPromptCommand(hit, args, ctxFor?.(hit) ?? {}), invoked: "/" + name, refused: null };
 }
 
 // ---- 压缩后重挂（§9.4）：最近激活 skill 的全文按预算重注 ----

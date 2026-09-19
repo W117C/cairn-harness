@@ -5,7 +5,7 @@ import { cp, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  parseFrontmatter, buildSkillRoutingList, substituteArgs, renderPromptCommand,
+  parseFrontmatter, buildSkillRoutingList, substituteVars, renderPromptCommand,
   skillRemount, clampSkillBody, estimateTokens, activationsFromEvents,
   SKILL_ROUTING_CHAR_LIMIT, SKILL_REMOUNT_TOKENS_PER_SKILL, SKILL_REMOUNT_TOKENS_TOTAL,
   PluginRuntime,
@@ -71,13 +71,29 @@ function skillListHas(text: string, line: string): boolean {
   return text.split("\n").includes("- " + line.replace(/^- /, ""));
 }
 
-describe("M2e skill/prompt：参数替换（任务 4）", () => {
+describe("M2e skill/prompt：参数替换（任务 4 + §9.3 变量集）", () => {
   it("$ARGUMENTS 全文 / $1..$9 位置 / 缺位空串 / 未知变量原样", () => {
-    expect(substituteArgs("对 $ARGUMENTS 问好", "张三 李四")).toBe("对 张三 李四 问好");
-    expect(substituteArgs("把 $1 部署到 $2", "dev us")).toBe("把 dev 部署到 us");
-    expect(substituteArgs("缺位：[$9] 结束", "only-one")).toBe("缺位：[] 结束");
-    expect(substituteArgs("未知 $HOME 不展开", "x")).toBe("未知 $HOME 不展开");
-    expect(substituteArgs("无参数调用 $1", "")).toBe("无参数调用 ");
+    expect(substituteVars("对 $ARGUMENTS 问好", { args: "张三 李四" })).toBe("对 张三 李四 问好");
+    expect(substituteVars("把 $1 部署到 $2", { args: "dev us" })).toBe("把 dev 部署到 us");
+    expect(substituteVars("缺位：[$9] 结束", { args: "only-one" })).toBe("缺位：[] 结束");
+    expect(substituteVars("未知 $HOME 不展开", { args: "x" })).toBe("未知 $HOME 不展开");
+    expect(substituteVars("无参数调用 $1", { args: "" })).toBe("无参数调用 ");
+  });
+
+  it("$name 只认 frontmatter arguments 声明过的名字（按声明序吃位置参数），未声明的原样留着", () => {
+    const named = { args: "dev 9", named: ["env", "port"] };
+    expect(substituteVars("部署 $env 到端口 $port", named)).toBe("部署 dev 到端口 9");
+    expect(substituteVars("$env 与 $nope", named)).toBe("dev 与 $nope");
+  });
+
+  it("${} 五个变量按上下文展开，${CLAUDE_*} 作别名同值；上下文里没有的整串原样保留", () => {
+    const out = substituteVars(
+      "s=${SKILL_DIR} p=${PLUGIN_ROOT} d=${PLUGIN_DATA} w=${PROJECT_DIR} i=${SESSION_ID} x=${CLAUDE_PLUGIN_ROOT}",
+      { skillDir: "/sd", pluginRoot: "/pr", pluginData: "/pd", projectDir: "/ws", sessionId: "s-1" },
+    );
+    expect(out).toBe("s=/sd p=/pr d=/pd w=/ws i=s-1 x=/pr"); // 别名与正名同一张表，值必相等
+    expect(substituteVars("散装没有根：${PLUGIN_ROOT}", { skillDir: "/sd" })).toBe("散装没有根：${PLUGIN_ROOT}");
+    expect(substituteVars("不认识的 ${FOO} 不动", { projectDir: "/ws" })).toBe("不认识的 ${FOO} 不动");
   });
 
   it("prompt command 渲染成用户消息（复用同一替换器）", () => {
@@ -102,7 +118,13 @@ describe("M2e skill：渐进披露与触发全文（任务 3）", () => {
     const hit = rt.triggerSkill("/echo-suite:greet");
     expect(hit.ok).toBe(true);
     expect(hit.output).toContain("# Greet Skill");
-    expect(hit.output).toContain("$ARGUMENTS");
+    // 无参数触发 ⇒ 变量按 CC 语义换成空串，正文里**不该再有裸 $ARGUMENTS**（夹具末行自己写着
+    // 「本行验证缺位参数替换为空串」——以前这条判据反着钉：断言 $ARGUMENTS 还在，等于把缺陷冻成期望值）。
+    expect(hit.output).toContain("对  说三声你好：");
+    expect(hit.output).toContain("（本行验证缺位参数替换为空串： -> 结束）");
+    expect(hit.output).not.toContain("$ARGUMENTS");
+    const withArgs = rt.triggerSkill("/echo-suite:greet", "张三 李四");
+    expect(withArgs.output).toContain("- 你好，张三！");
     const loose = rt.triggerSkill("/standalone-skill");
     expect(loose.ok).toBe(true);
     expect(loose.output).toContain("无需容器");

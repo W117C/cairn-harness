@@ -877,3 +877,21 @@ prompt 缓存命中（A1）、压缩触发与裁剪（A2/预算认模型）、pe
 
 **为什么不自己绕过**：改判卷文件去迁就测量 = 判卷纪律明令禁止的那一类（`frozen-sha256.json`
 存在就是为了拦这个）。要么改判据走批准，要么在判据外做纯增量测量，二者都写在这里留痕。
+
+## 裁决 4（请求改判据）：plugins-check 的 B2 把「skill 参数没替换」钉成了判据
+
+**事实**：`scripts/plugins-check.ts:141` 的 B2 断言含 `res.output.includes("$ARGUMENTS")`。
+该断言的标签是「触发后全文进上下文」——`$ARGUMENTS` 只是当初从夹具正文里挑的一个「只有全文才有」
+的代理串。但 `triggerSkill(name)`（`src/agent/plugins/index.ts:247`）压根没有 args 通道，
+所以 `$ARGUMENTS` 从来没被替换过 ⇒ 这个代理串**恰好等于「替换没发生」**：判据把一个缺陷钉成了正确，
+而一旦照 §9.3 把参数替换实现出来，这条门会红。
+
+**夹具自己站在实现这一边**：`fixtures/plugins/project/echo-suite/skills/greet/SKILL.md` 末行写着
+「（本行验证缺位参数替换为空串：$9 -> 结束）」——夹具作者是按「会替换」写的，门是按「不替换」判的，
+且夹具那句自述从未被任何判据看过一眼。
+
+**请求（本轮已按此实现，等追认）**：B2 的「全文」证据换成不随替换消失的锚（`# Greet Skill` 标题 +
+夹具末行在带参数时的实际产物形态）；另加 B2b 专测参数面：带 args 触发 ⇒ `$ARGUMENTS`/`$1` 都换掉、
+缺位的 `$9` 落成空串、`${SKILL_DIR}`/`${PLUGIN_ROOT}`/`${PROJECT_DIR}` 展开成真实目录。
+不动夹具、不动冻结判卷区（`fixtures/plugins/**` 不在 `src/frozen.ts` 的 areas 列表内，本轮也不改它）。
+

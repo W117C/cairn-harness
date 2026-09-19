@@ -1,0 +1,2 @@
+{"type":"tool_call","id":"c-skill-args","name":"skill","args":{"name":"/echo-suite:greet","args":"张三 李四"}}
+{"type":"assistant_message","content":"skill 参数场景完成"}

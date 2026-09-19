@@ -90,3 +90,85 @@ describe("清单挡住 ⇒ 执行端也得挡住（同一次装载的 runtime）
     expect(r.output).toContain("自动可路由的正文");
   });
 });
+
+// §9.3 参数替换：正文里的 $ARGUMENTS / $1 / $name 与 ${SKILL_DIR} 一族此前**一个字都没换过**
+// （triggerSkill 连 args 通道都没有）。判据全部走真装载的 runtime——替换器本体的单测在
+// plugins-skills，那一层证明不了「触发这条路上有人调用它」。
+describe("skill 正文的参数与变量替换（§9.3）", () => {
+  let dir: string;
+  let rt: PluginRuntime | null = null;
+
+  const skillFile = async (plugin: string, name: string, frontmatter: string, body: string): Promise<void> => {
+    await mkdir(join(dir, "user-plugins", plugin, "skills", name), { recursive: true });
+    await writeFile(join(dir, "user-plugins", plugin, "skills", name, "SKILL.md"),
+      "---\nname: " + name + "\ndescription: " + name + " 说明。\n" + frontmatter + "---\n" + body + "\n", "utf8");
+  };
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "dsh-skill-args-"));
+    await mkdir(join(dir, "user-plugins", "crew", ".claude-plugin"), { recursive: true });
+    await writeFile(join(dir, "user-plugins", "crew", ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "crew", description: "参数替换判据", version: "0.1.0" }), "utf8");
+    await skillFile("crew", "greet", "", "对 $ARGUMENTS 问好：$1 / 缺位 [$9] 结束");
+    await skillFile("crew", "deploy", "arguments: env, port\n", "把 $env 部署到 $port；裸变量 ${SKILL_DIR} ${PLUGIN_ROOT} ${PLUGIN_DATA} ${PROJECT_DIR} ${SESSION_ID}");
+    await mkdir(join(dir, "loose", "bare"), { recursive: true });
+    await writeFile(join(dir, "loose", "bare", "SKILL.md"),
+      "---\nname: bare\ndescription: 散装 skill。\n---\n没有插件根：${PLUGIN_ROOT}\n", "utf8");
+    rt = await PluginRuntime.load({
+      userPluginsDir: join(dir, "user-plugins"),
+      looseRoots: [join(dir, "loose")],
+      projectPluginsDir: join(dir, "no-project-plugins"),
+      workspace: dir,
+      pluginDataRoot: join(dir, "plugin-data"),
+      sessionId: "sess-7",
+    });
+  });
+
+  afterEach(async () => {
+    await rt?.shutdown();
+    rt = null;
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("带 args 触发 ⇒ $ARGUMENTS 与 $1 换成实参，缺位的 $9 落成空串（不留裸变量给模型）", () => {
+    const r = rt!.triggerSkill("/crew:greet", "张三 李四");
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("对 张三 李四 问好：张三 / 缺位 [] 结束");
+    expect(r.output).not.toContain("$ARGUMENTS");
+    expect(r.output).not.toContain("$1");
+  });
+
+  it("frontmatter arguments 声明过的 $name 按声明序吃位置参数", () => {
+    const r = rt!.triggerSkill("/crew:deploy", "生产 8080");
+    expect(r.output).toContain("把 生产 部署到 8080；");
+  });
+
+  it("五个 ${} 变量展开成这次装载的真实路径与会话 id", () => {
+    const r = rt!.triggerSkill("/crew:deploy", "dev 1");
+    expect(r.output).toContain("裸变量 "
+      + join(dir, "user-plugins", "crew", "skills", "deploy") + " "
+      + join(dir, "user-plugins", "crew") + " "
+      + join(dir, "plugin-data", "crew") + " "
+      + dir + " sess-7");
+    expect(r.output).not.toContain("${");
+  });
+
+  it("散装 skill 没有插件根 ⇒ ${PLUGIN_ROOT} 原样留着（不填一个看起来像路径的空值）", () => {
+    const r = rt!.triggerSkill("/bare");
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("没有插件根：${PLUGIN_ROOT}");
+  });
+
+  it("压缩后重挂重放当年那次调用的参数 ⇒ 同一 skill 两次进上下文内容一致", () => {
+    const events = [
+      { type: "user_message", content: "hi" },
+      { type: "tool_call", id: "c1", name: "skill", args: { name: "/crew:deploy", args: "预发 9090" } },
+      { type: "tool_result", callId: "c1", ok: true, output: "…" },
+      { type: "compaction", ts: Date.now(), compressed_event_ids: [3], summary_offset: 0, tokens_before: 100, tokens_after: 10 },
+    ] as never;
+    const remounted = rt!.remountFromEvents(events);
+    expect(remounted.mounted).toContain("/crew:deploy");
+    expect(remounted.text).toContain("把 预发 部署到 9090；");
+    expect(remounted.text).not.toContain("$env");
+  });
+});
