@@ -1720,7 +1720,7 @@ const MUTATIONS = [
     src: "src/agent/text-budget.ts",
     test: "tests/skill-body-cap.test.ts",
     desc: "取回提示不计入预算 ⇒ 「总量 ≤ 预算」这句承诺被提示自己撑破（与 run_shell 的 SHELL_NOTICE_RESERVE 同族坑）",
-    apply: (s) => s.replace("return cutToWeight(text, Math.max(0, tokenBudget - weightOf(notice))) + notice;", "return cutToWeight(text, tokenBudget) + notice;"),
+    apply: (s) => s.replace("return cutToWeight(text, Math.max(0, tokenBudget - weightText(notice))) + notice;", "return cutToWeight(text, tokenBudget) + notice;"),
     expectFail: "超限时提示自己不得撑破预算（总量 ≤ 预算，且提示完整保留）",
   },
   {
@@ -1848,7 +1848,7 @@ const MUTATIONS = [
     src: "src/agent/text-budget.ts",
     test: "tests/text-budget-cjk.test.ts",
     desc: "估算器按类别计数、取点却仍按字符数 ⇒ 中文正文截完仍超预算（估算与执行两套口径，本仓反复踩的同族）",
-    apply: (s) => s.replace("return cutToWeight(text, Math.max(0, tokenBudget - weightOf(notice))) + notice;", "return text.slice(0, Math.max(0, tokenBudget * 4 - notice.length)) + notice;"),
+    apply: (s) => s.replace("return cutToWeight(text, Math.max(0, tokenBudget - weightText(notice))) + notice;", "return text.slice(0, Math.max(0, tokenBudget * 4 - notice.length)) + notice;"),
     expectFail: "中文正文截完仍然 ≤ 预算（旧实现按 chars/4 取点，这里会溢出近四倍）",
   },
   {
