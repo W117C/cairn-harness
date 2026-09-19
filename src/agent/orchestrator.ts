@@ -78,6 +78,7 @@ import {
 import { MAX_CONCURRENT_WORKERS, READ_MODE_MAX_TURNS, SPAWN_MODES, WORKER_TOOL_TABLE, WRITE_WORKER_TOOL_TABLE, workerBudgetConfig, workerToolTable } from "./orchestrator-config";
 import { shell_rw, workerToolSpecs } from "./worker-shell-tools";
 import { clampTier, clipWorkerSummary, isPermissionMode, parseSpawnedAgentId, scanWorkerOutput } from "./worker-report";
+import { shapeJoinRows, type JoinInput, type JoinPayloadBody } from "./orchestrator-join";
 import { WorkerCancelled, defaultWorkerModel, type WorkerModel } from "./worker-model";
 import { type OrchestratorOptions, type PipelineChain, type SpawnArgs, type StageRoleResolution, type WorkerContext, type WorkerHandle } from "./orchestrator-types";
 import { chainTable, digestArgs, filterWorkerSpecs, filterWorkerTable, parseStringList, parseWorkerContext, scanStreamEvent, withAgentId } from "./worker-projection";
@@ -1267,6 +1268,59 @@ export class Orchestrator {
     if (!list) return;
     this.terminalWaiters.delete(agentId);
     for (const fn of list) fn({ status, result });
+  }
+
+  /** W1a 收队：等一批 worker 到终态。**不新增事件类型**——父模型看到的就是一条普通 tool_result。
+   *  复用 sequencer 的同步点（`waitForAgentTerminal` 已终态即立即返回），因此对已收敛的 worker
+   *  重复调用等价于「读一次快照」，这是 `wait_for_agents` 的取回通道能成立的前提。
+   *  边界三条都是实测教训：
+   *  ① 未知 id 必须先摘——`waitForAgentTerminal` 对不存在的 id 会把 resolve 推进等待表且永不触发；
+   *  ② 超时不算失败（本仓对"等人门"的统一口径）：已收敛的照给，未收敛的点名进 timedOut；
+   *  ③ abort 只结束这次等待，**不动任何 worker**——取消 worker 是 cancelAgent/cancelAll 的职责，
+   *    收队方无权替用户决定杀谁（权限 ≤ 父会话的同一族理由）。 */
+  async waitForAgents(ids: readonly string[], timeoutMs: number, signal?: AbortSignal): Promise<JoinPayloadBody> {
+    const targets = ids.length > 0 ? [...ids] : this.workerIds();
+    if (targets.length === 0) return { rows: [], degraded: [], timedOut: [], cancelled: false };
+    const known = targets.filter((id) => this.workers.has(id));
+    const unknown = targets.filter((id) => !this.workers.has(id));
+    const snapshot = (want: string[]): JoinInput[] => want.map((id) => {
+      const w = this.workers.get(id);
+      if (!w) {
+        return { agentId: id, status: "unknown" as const, task: "", report: "未派生过该 agent_id（问错了名字）", usage: { inputTokens: 0, outputTokens: 0 } };
+      }
+      const status = !w.finished
+        ? "running" as const
+        : w.terminalStatus === "failed" ? "failed" as const
+          : w.terminalStatus === "cancelled" ? "cancelled" as const
+            : "done" as const;
+      return { agentId: id, status, task: w.task, report: w.lastResult?.summary ?? "", usage: { ...w.usage } };
+    });
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let onAbort: (() => void) | undefined;
+    const racers: Promise<"done" | "timeout" | "cancelled">[] = [
+      Promise.all(known.map((id) => this.waitForAgentTerminal(id))).then(() => "done" as const),
+      new Promise<"timeout">((resolve) => { timer = setTimeout(() => resolve("timeout"), timeoutMs); timer.unref?.(); }),
+    ];
+    if (signal) {
+      racers.push(new Promise<"cancelled">((resolve) => {
+        onAbort = () => resolve("cancelled");
+        signal.addEventListener("abort", onAbort, { once: true });
+      }));
+    }
+    const outcome = await Promise.race(racers);
+    if (timer !== undefined) clearTimeout(timer);
+    if (onAbort !== undefined && signal !== undefined) signal.removeEventListener("abort", onAbort);
+
+    const settled = known.filter((id) => this.workers.get(id)?.finished === true);
+    const unsettled = known.filter((id) => !settled.includes(id));
+    const shaped = shapeJoinRows([...snapshot(settled), ...snapshot(unsettled), ...snapshot(unknown)]);
+    return {
+      rows: shaped.rows,
+      degraded: shaped.degraded,
+      timedOut: outcome === "timeout" ? unsettled : [],
+      cancelled: outcome === "cancelled",
+    };
   }
 
   // ---- M3c：卡死检测出口（§4.4.8：人决定继续/取消）----
