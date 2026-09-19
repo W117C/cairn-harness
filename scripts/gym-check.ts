@@ -112,11 +112,12 @@ for (const c of loaded) {
       `B1 ${c.id}: 明卷两次跑逐字段一致（score=${String(r1.score)} in=${String(r1.inputTokens)} out=${String(r1.outputTokens)} turns=${String(r1.turns)}）`,
     );
     // B1c：expect.maxTurns 此前**零消费者**（只在 loadCase 里校验类型）——一条写着却没人 enforce
-    // 的预算就是假刻度。现在它真的会被强制。
+    // 的预算就是假刻度。现在它真的会被强制。（四 case 的冻结数据都显式给了该字段，故这里
+    // 用合取而不是 `undefined ||` 的析取：缺字段就当红，逼后来人显式表态，而不是静默放过。）
     const budget = c.expect.maxTurns;
     check(
-      budget === undefined || r1.turns <= budget,
-      `B1c ${c.id}: 轮数在 expect.maxTurns 预算内（turns=${String(r1.turns)}，预算=${String(budget ?? "未设")}）`,
+      typeof budget === "number" && r1.turns <= budget,
+      `B1c ${c.id}: 轮数在 expect.maxTurns 预算内（turns=${String(r1.turns)}，预算=${String(budget)}）`,
     );
   } finally {
     await cleanupRun(r1);

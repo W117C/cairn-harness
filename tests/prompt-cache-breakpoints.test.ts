@@ -131,6 +131,17 @@ describe("缓存价：待校准清单与上界口径", () => {
     const plain = costUsd("glm-flash", { inputTokens: 100_000, outputTokens: 1_000 });
     const withCache = costUsd("glm-flash", { inputTokens: 100_000, outputTokens: 1_000, cacheReadInputTokens: 80_000 });
     expect(withCache).toBeCloseTo(plain, 12);
+    // 写桶同口径（这条是变异锚点逼出来的：写侧回落此前零覆盖，
+    // pricing-cache-write-bucket-priced-as-zero 因此存活）
+    const withWrite = costUsd("glm-flash", { inputTokens: 100_000, outputTokens: 1_000, cacheWriteInputTokens: 40_000 });
+    expect(withWrite).toBeCloseTo(plain, 12);
+    const withBoth = costUsd("glm-flash", {
+      inputTokens: 100_000,
+      outputTokens: 1_000,
+      cacheReadInputTokens: 30_000,
+      cacheWriteInputTokens: 40_000,
+    });
+    expect(withBoth).toBeCloseTo(plain, 12);
   });
 
   it("Anthropic 现行价：缓存命中段按 ×0.1 计 ⇒ 成本随命中率真降（A1 断点的价格面）", () => {

@@ -872,7 +872,7 @@ const MUTATIONS = [
     test: "tests/prompt-cache-breakpoints.test.ts",
     desc: "缓存价未标定当成 0（把「不知道多少钱」冒充「命中免费」，bandit 会为了虚假的省钱信号涌向缓存档）",
     apply: (s) => s.replace("const readRate = p.cacheReadPerMTok ?? p.inputPerMTok;", "const readRate = p.cacheReadPerMTok ?? 0;"),
-    expectFail: "未标定 ⇒ 带缓存分块与不带的成本逐字同值（上界口径，零回归）",
+    expectFail: "未标定档位 ⇒ 带缓存分块与不带的成本逐字同值（上界口径，零回归）",
   },
   {
     id: "pricing-cache-buckets-unclamped",
@@ -917,7 +917,7 @@ const MUTATIONS = [
   },
   {
     id: "probe-script-shape-check-removed",
-    src: "src/agent/gym/probe.ts",
+    src: "src/agent/gym/script.ts", // 2026-09-19 剧本装载随切轮重构搬进 script.ts，锚点同迁
     test: "tests/gym-probe.test.ts",
     desc: "剧本出现非模型产出类型时不报错继续跑（装配账照发，但回放的是残缺剧本 = 假数）",
     apply: (s) => s.replace("else throw new Error(`装配探针剧本只接受", "else void (`装配探针剧本只接受"),
@@ -1000,6 +1000,25 @@ const MUTATIONS = [
       "    while (cursor < script.length) yield script[cursor++];\n",
     ),
     expectFail: "probe 档逐轮装配：轮号递增、同一输入下账不变、尾部跑完即空",
+  },
+  {
+    id: "pricing-unpriced-audit-always-empty",
+    src: "src/routing/pricing.ts",
+    test: "tests/prompt-cache-breakpoints.test.ts",
+    desc: "占位价审计清单恒空（GLM 三行官方页没抓到数这件事被抹掉 ⇒ 未标定的数被当成实测喂进 bandit 代价项）",
+    apply: (s) => s.replace(
+      "  return Object.keys(table).filter((id) => table[id].calibrated !== true).sort();\n",
+      "  return [];\n",
+    ),
+    expectFail: "输入价仍是占位的档位单独可查（GLM 官方页没抓到数 ⇒ 不许当省钱证据）",
+  },
+  {
+    id: "pricing-cache-write-bucket-priced-as-zero",
+    src: "src/routing/pricing.ts",
+    test: "tests/prompt-cache-breakpoints.test.ts",
+    desc: "缓存写入段按 0 计（Anthropic 建缓存那一笔实测是输入的 ×1.25，抹成免费 ⇒ 首次请求的成本被系统性低估，路由会被「看起来便宜」的档吸走）",
+    apply: (s) => s.replace("const writeRate = p.cacheWritePerMTok ?? p.inputPerMTok;", "const writeRate = p.cacheWritePerMTok ?? 0;"),
+    expectFail: "未标定档位 ⇒ 带缓存分块与不带的成本逐字同值（上界口径，零回归）",
   },
 ];
 
