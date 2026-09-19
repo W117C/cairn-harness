@@ -1779,6 +1779,38 @@ const MUTATIONS = [
     apply: (s) => s.replace("const marker = \"\\n[\" + label + \"超 \"", "const marker = \"\\n[skill 正文超 \""),
     expectFail: "超限时留头部，总量精确 ≤ 预算，且提示用的是调用方给的 label",
   },
+  {
+    id: "hook-context-total-budget-removed",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/hooks-context-budget.test.ts",
+    desc: "取消聚合预算 ⇒ 逐个 handler 各有 10k 也挡不住 N 个拼成 N×10k，而这串进每条 tool_result 尾部与每轮系统文本",
+    apply: (s) => s.replace("if (result.additionalContext.length + text.length > HOOK_CONTEXT_TOTAL_CHAR_LIMIT) {", "if (result.additionalContext.length + text.length > Number.MAX_SAFE_INTEGER) {"),
+    expectFail: "四个 9k handler（逐个都在单块上限内）拼不过聚合预算，超出的整块省略并如实报出",
+  },
+  {
+    id: "hook-context-omission-silent",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/hooks-context-budget.test.ts",
+    desc: "省了 handler 却不报出 ⇒ 模型以为 hook 说的就这些（fail-silent 比截断更坏：它据此继续动手）",
+    apply: (s) => s.replace("if (result.droppedContextHandlers.length > 0) {", "if (false) {"),
+    expectFail: "四个 9k handler（逐个都在单块上限内）拼不过聚合预算，超出的整块省略并如实报出",
+  },
+  {
+    id: "hook-deny-reason-uncapped",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/hooks-context-budget.test.ts",
+    desc: "JSON deny 的 reason 不收窄 ⇒ 插件用一句「理由」把 50KB 塞进 tool_result 的阻断行（同文件 exit 2 那条早就设界，又一处只在一头生效）",
+    apply: (s) => s.replace("result.blockReason = capHookReason(parsed.reason);", "result.blockReason = parsed.reason;"),
+    expectFail: "JSON deny 的 reason 不再无界（它进的是 tool_result 里的一行）",
+  },
+  {
+    id: "hook-exit2-reason-follows-output-cap",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/hooks-context-budget.test.ts",
+    desc: "退回到「理由跟着 10k 输出上限走」⇒ 一行阻断说明可以是 10k 字符（本轮把它收紧到 2k）",
+    apply: (s) => s.replace("const reason = capHookReason(stderr).trim();", "const reason = (stderr.length > HOOK_OUTPUT_CAP ? stderr.slice(0, HOOK_OUTPUT_CAP) : stderr).trim();"),
+    expectFail: "exit 2 的 stderr 同样收到理由预算（原先跟着输出上限走，10k 当理由太长）",
+  },
 ];
 
 function runTest(testRel) {
