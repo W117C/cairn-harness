@@ -159,3 +159,14 @@ export function failureDigest(outcome: VerifyOutcome): string {
   if (failed.length === 0) return "verify 失败（无详细输出）";
   return failed.map((r) => `[verify FAIL] ${r.command}\n${r.output}`).join("\n\n");
 }
+
+/** 连续两拍摘要逐字相同时，替掉重复注入的那一段。
+ *  「逐字相同」是有确定含义的信号：这一拍**没有新信息**（上一拍的全文已在上下文里），
+ *  且说明模型这一轮的改动完全没落到被验的面上。此时重发整段日志（可达 32KB）
+ *  既贵又零增益，而它缺的那句「你白改了」恰恰才是可执行信息。 */
+export function repeatDigestNote(outcome: VerifyOutcome, attempt: number): string {
+  const cmds = outcome.results.filter((r) => !r.ok).map((r) => r.command).join(", ");
+  return "[verify] 第 " + String(attempt) + " 拍结果与上一拍**逐字相同**（失败命令不变：" + (cmds === "" ? "（无）" : cmds)
+    + "）⇒ 这一拍的改动没落到被验的面上。上一拍的完整输出已在上下文里，不再重复注入。"
+    + "下一步二选一：把范围收窄到具体文件/单条测试再跑（看清是哪一条在红），或直接 read 那个文件确认改动是否真的写进去了。";
+}

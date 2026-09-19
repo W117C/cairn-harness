@@ -4,7 +4,7 @@ import type { HookEngine } from "./plugins/hooks";
 import { projectContext } from "./context";
 import type { LegacyNextProvider, ModelOutput, Provider } from "../providers";
 import { streamFromNextSource } from "../providers";
-import { failureDigest, type VerifyHook, type VerifyOutcome } from "./verify";
+import { failureDigest, repeatDigestNote, type VerifyHook, type VerifyOutcome } from "./verify";
 import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckTurn } from "./stuck";
 import { TOOLS, type ClarifyChannel, type PlanChannel, type ToolContext, type ToolName } from "../tools";
 
@@ -91,6 +91,8 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
   const maxSteps = opts.maxSteps ?? 50;
   const maxVerify = opts.verify?.maxAttempts ?? 3;
   let verifyAttempts = 0;
+  // 上一拍注入给模型的失败摘要：逐字相同即「这一拍没带来新信息」，改注一行提示而非重发整段。
+  let lastVerifyDigest: string | null = null;
   // 能力 5：本 run 是否真的落过盘（决定要不要补自动验证），以及自动拍是否已用过。
   let wroteThisRun = false;
   // 换路压力（能力 4/9）：同一调用连败/连抄同一结果时，在那条 tool_result 尾部追加一行提示。
@@ -142,13 +144,16 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       return "stop";
     }
     // 失败 → 错误输出注入同轮继续修（自动拍加 [harness] 前缀：这条不是模型自己调的）
+    const digest = hookError !== null
+      ? "[verify] 钩子异常（记为一次验证失败）：" + hookError
+      : (auto ? "[harness 自动验证] " : "") + failureDigest(outcome);
+    const repeat = digest === lastVerifyDigest;
+    lastVerifyDigest = digest;
     await events.append({
       type: "tool_result",
       callId,
       ok: false,
-      output: hookError !== null
-        ? "[verify] 钩子异常（记为一次验证失败）：" + hookError
-        : (auto ? "[harness 自动验证] " : "") + failureDigest(outcome),
+      output: repeat ? repeatDigestNote(outcome, attempt) : digest,
     });
     return "continue";
   };

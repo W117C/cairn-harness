@@ -246,3 +246,63 @@ describe("defaultExec 超限截断（能力 5：结论在尾部，必须留住�
     expect(r.output).toBe("hi");
   });
 });
+
+// 连续两拍失败摘要逐字相同 = 这一拍没有带来任何新信息（上一拍的全文还在上下文里）。
+// 旧行为是把同一坨日志第二次塞进 prompt：贵，且不给模型「你这次改动没生效」这个真正可执行的信号。
+describe("verify 重复注入去重（能力 5 的修正拍不再白烧 token）", () => {
+  /** 每拍产出一条可控文本的失败钩子（`outcomes()` 的失败文本恒同，喂不出「变了」这一支）。 */
+  function failingHook(...failTexts: string[]): { run(): Promise<VerifyOutcome>; maxAttempts: number } {
+    let n = 0;
+    return {
+      maxAttempts: failTexts.length + 2,
+      run: async () => {
+        const text = failTexts[Math.min(n, failTexts.length - 1)] ?? "";
+        n++;
+        return { ok: false, results: [{ command: "pnpm test", ok: false, output: text }] };
+      },
+    };
+  }
+  const script = (n: number): ModelOutput[] => [
+    ...Array.from({ length: n }, (_, i) => ({ type: "tool_call", id: "v" + String(i), name: "verify", args: {} }) as ModelOutput),
+    { type: "assistant_message", content: "收尾" },
+  ];
+  const injected = (log: Awaited<ReturnType<typeof run>>["log"]): string[] =>
+    log.filter((e) => e.type === "tool_result").map((e) => (e as { output: string }).output);
+
+  it("第 2 拍与第 1 拍逐字相同：改注一行提示，不重发失败正文", async () => {
+    const { log } = await run(script(4), failingHook("FAIL: 2 tests, expected 3 got 2"));
+    const outs = injected(log);
+    expect(outs[0]).toContain("FAIL: 2 tests");              // 第 1 拍：全文
+    expect(outs[1]).toContain("逐字相同");                    // 第 2 拍：重复信号
+    expect(outs[1]).toContain("失败命令不变：pnpm test");      // 且指名是哪些命令没变
+    expect(outs[1]).not.toContain("FAIL: 2 tests");           // 不再重发正文
+    expect(outs[1].length).toBeLessThan(320);
+  });
+
+  it("第 3 拍输出变了 ⇒ 全文照常注入（去重不是「只注入一次」）", async () => {
+    const { log } = await run(script(4), failingHook("FIRST-A", "FIRST-A", "SECOND-B"));
+    const outs = injected(log);
+    expect(outs[0]).toContain("FIRST-A");
+    expect(outs[1]).toContain("逐字相同");
+    expect(outs[2]).toContain("SECOND-B");
+    expect(outs[2]).not.toContain("逐字相同");
+  });
+
+  it("省下的量可测：32KB 级的相同失败摘要，第二拍注入字节 < 第一拍的 1/10", async () => {
+    const big = "x".repeat(30 * 1024) + "\nFAILED: 1 of 42 tests";
+    const { log } = await run(script(4), failingHook(big, big));
+    const outs = injected(log);
+    expect(outs[0].length).toBeGreaterThan(30 * 1024);
+    expect(outs[1].length * 10).toBeLessThan(outs[0].length);
+  });
+
+  it("单次失败不触发任何新文案（零回归：只有一拍时无从比较）", async () => {
+    const { log } = await run(script(1), {
+      maxAttempts: 3,
+      run: outcomes(false).run,
+    });
+    const outs = injected(log);
+    expect(outs[0]).toContain("FAIL: 1 failed | 2 passed");
+    expect(outs.some((o) => o.includes("逐字相同"))).toBe(false);
+  });
+});
