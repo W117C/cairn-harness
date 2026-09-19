@@ -1704,7 +1704,7 @@ const MUTATIONS = [
     src: "src/agent/text-budget.ts",
     test: "tests/skill-body-cap.test.ts",
     desc: "取回提示不计入预算 ⇒ 「总量 ≤ 预算」这句承诺被提示自己撑破（与 run_shell 的 SHELL_NOTICE_RESERVE 同族坑）",
-    apply: (s) => s.replace("const chars = Math.max(0, tokenBudget * 4 - marker.length - suffix.length);", "const chars = Math.max(0, tokenBudget * 4 - marker.length);"),
+    apply: (s) => s.replace("const allowed = tokenBudget - weightOf(marker) - weightOf(suffix);", "const allowed = tokenBudget - weightOf(marker);"),
     expectFail: "超限时提示自己不得撑破预算（总量 ≤ 预算，且提示完整保留）",
   },
   {
@@ -1810,6 +1810,30 @@ const MUTATIONS = [
     desc: "退回到「理由跟着 10k 输出上限走」⇒ 一行阻断说明可以是 10k 字符（本轮把它收紧到 2k）",
     apply: (s) => s.replace("const reason = capHookReason(stderr).trim();", "const reason = (stderr.length > HOOK_OUTPUT_CAP ? stderr.slice(0, HOOK_OUTPUT_CAP) : stderr).trim();"),
     expectFail: "exit 2 的 stderr 同样收到理由预算（原先跟着输出上限走，10k 当理由太长）",
+  },
+  {
+    id: "cjk-weight-collapsed-to-quarter",
+    src: "src/agent/text-budget.ts",
+    test: "tests/text-budget-cjk.test.ts",
+    desc: "退回「一律 chars/4」⇒ 中文段被低估四倍，「≤ 2000 token」的角色块实际能到 6k+，且纯英文测试完全测不出",
+    apply: (s) => s.replace("return isWideAt(code) ? 1 : 0.25;", "return 0.25;"),
+    expectFail: "中文一字计一 token（旧口径会把它记成 1/4，等于预算被低估四倍）",
+  },
+  {
+    id: "cjk-han-range-narrowed",
+    src: "src/agent/text-budget.ts",
+    test: "tests/text-budget-cjk.test.ts",
+    desc: "常用汉字区间被写窄 ⇒ 绝大多数中文正文仍走 1/4 权重（区间表写错比不写更难查：只有生僻字面才露馅）",
+    apply: (s) => s.replace("(code >= 0x4e00 && code <= 0x9fff) ||", "(code >= 0x4e00 && code <= 0x4e00) ||"),
+    expectFail: "中文一字计一 token（旧口径会把它记成 1/4，等于预算被低估四倍）",
+  },
+  {
+    id: "clamp-cut-by-chars-not-weight",
+    src: "src/agent/text-budget.ts",
+    test: "tests/text-budget-cjk.test.ts",
+    desc: "估算器按类别计数、取点却仍按字符数 ⇒ 中文正文截完仍超预算（估算与执行两套口径，本仓反复踩的同族）",
+    apply: (s) => s.replace("return cutToWeight(text, Math.max(0, allowed)) + marker + suffix;", "return text.slice(0, Math.max(0, tokenBudget * 4 - marker.length - suffix.length)) + marker + suffix;"),
+    expectFail: "中文正文截完仍然 ≤ 预算（旧实现按 chars/4 取点，这里会溢出近四倍）",
   },
 ];
 
