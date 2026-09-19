@@ -2,7 +2,7 @@
 // ①预计裁剪未达 20k → 不修剪（too-small，零替换）②最近 2 轮不被剪 ③免剪名单条目不被剪
 // ④被裁原文可从附件目录读回且逐字一致。类型化：code/log/doc 三类 + 摘要 2k 截断。
 import { describe, expect, it, beforeEach } from "vitest";
-import { mkdtemp, writeFile, readFile } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -278,5 +278,60 @@ describe("附件名安全化（目录穿越清洗，sessionId/callId 均为模�
       expect(resolve(path).startsWith(base + "/")).toBe(true); // 归一 .. 后仍在目录内
       expect(path.split("/").pop() ?? "").not.toContain("/"); // 文件名段不含路径分隔符
     }
+  });
+});
+
+// §7.4「被裁原文写会话附件目录可回取」+ §14「prune + 存盘回取」：实现与读回测试一直在，
+// 但生产两个 computePrune 调用点都只传 {events} ⇒ 附件恒空、writePruneAttachments 零调用者，
+// 打桩文案也只说 "cleared" 而不给任何通道 ⇒ 模型侧「回取」是一句空话（本仓「两头断」第 7 例）。
+describe("prune 附件回取接进生产", () => {
+  // 触发裁剪的最小语料：保护区 40k（≈160KB ASCII）+ 最近 2 轮免剪 ⇒ 4 个轮次里最旧两轮的两条
+  // 120KB 结果才落到「区外 + 不免剪」，合计 60k token > 最小修剪 20k。
+  const round = (n: number, ch: string): AgentEvent[] => [
+    { type: "user_message", content: "r" + String(n) },
+    { type: "tool_call", id: ch, name: "read_file", args: { path: ch + ".ts" } },
+    { type: "tool_result", callId: ch, ok: true, output: ch.repeat(120 * KB) },
+  ];
+  const corpus = (): AgentEvent[] => [...round(1, "F"), ...round(2, "G"), ...round(3, "H"), ...round(4, "I")];
+
+  it("①传 attachmentsDir ⇒ 打桩自带路径，且该路径逐字等于实际写出的那个文件", async () => {
+    const events = corpus();
+    const outcome = computePrune({ events, attachmentsDir: attachments, sessionId: "s-1" });
+    expect(outcome.replacements.size).toBeGreaterThan(0);
+    const [id, text] = [...outcome.replacements.entries()][0]!;
+    const e = events[(id ?? 0) - 1] as { callId: string; output: string };
+    const file = attachmentPathFor(attachments, "s-1", e.callId);
+    // 原串逐字在场（新增信息另起一行——往被钉住的提示串里并半句是本仓点名的第三种踩法）
+    expect(text.startsWith(PRUNED_PLACEHOLDER + "\n")).toBe(true);
+    expect(text).toContain(file);
+    await writePruneAttachments(events, outcome, attachments, "s-1");
+    expect(await readFile(file, "utf8")).toBe(e.output);
+    expect(outcome.attachments).toContain(file);
+  });
+
+  it("②未传 attachmentsDir ⇒ 打桩仍是裸占位（零回归：三处逐字等值断言不破）", () => {
+    const outcome = computePrune({ events: corpus() });
+    expect(outcome.replacements.size).toBeGreaterThan(0);
+    expect([...outcome.replacements.values()].every((v) => v === PRUNED_PLACEHOLDER)).toBe(true);
+    expect(outcome.attachments).toHaveLength(0);
+  });
+
+  it("③savedTokens 按**实际替换文本**计量：路径行不得虚报节省", () => {
+    const bare = computePrune({ events: corpus() });
+    const withDir = computePrune({ events: corpus(), attachmentsDir: attachments, sessionId: "s-2" });
+    expect(withDir.savedTokens).toBeLessThan(bare.savedTokens);
+    // 差额必须是"每条一行路径"量级（每行 < 60 token），而不是整段没算
+    expect(bare.savedTokens - withDir.savedTokens).toBeLessThanOrEqual(withDir.replacements.size * 60);
+  });
+
+  it("④同一附件重复装配不重写（幂等；每轮组装都跑，重写 = 白 IO 且打断 mtime 语义）", async () => {
+    const events = corpus();
+    const outcome = computePrune({ events, attachmentsDir: attachments, sessionId: "s-3" });
+    await writePruneAttachments(events, outcome, attachments, "s-3");
+    const file = outcome.attachments[0]!;
+    const mtimeBefore = (await stat(file)).mtimeMs;
+    await new Promise((r) => setTimeout(r, 25));
+    await writePruneAttachments(events, outcome, attachments, "s-3");
+    expect((await stat(file)).mtimeMs).toBe(mtimeBefore);
   });
 });

@@ -4,7 +4,7 @@
 // 打桩：投影期替换 "[Old tool result content cleared]"；被裁原文写会话附件目录可回取（GEM 同构）。
 // 事件流零删改：prune 只产出「事件 id → 替换文本」映射，由组装投影（context.ts）消费。
 import { createHash } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentEvent } from "../events";
 import { estimateTextTokens } from "./text-budget";
@@ -189,16 +189,22 @@ export function computePrune(input: PruneInput): PruneOutcome {
     return out;
   }
 
-  const placeholderTokens = estimateTextTokens(PRUNED_PLACEHOLDER);
   for (const i of candidates) {
     const e = events[i] as { output: string; callId: string };
-    out.replacements.set(i + 1, PRUNED_PLACEHOLDER); // 事件 id = 1-based 行号
-    // savedTokens 是报给人看的成本读数：跟着同一把尺，否则面板上的「省了多少」在中文会话里虚报 4 倍
-    out.savedTokens += estimateTextTokens(e.output) - placeholderTokens;
-    if (input.attachmentsDir) {
-      const file = join(input.attachmentsDir, attachmentName(input.sessionId ?? "s", e.callId));
-      out.attachments.push(file);
-    }
+    // §7.4「被裁原文写会话附件目录可回取」：路径**另起一行**追加，不改 PRUNED_PLACEHOLDER 本体
+    // （那条串被三处逐字断言钉着；往被钉住的提示串里并半句是本仓点名的第三种踩法）。
+    // 不传 attachmentsDir 时仍是裸占位——那才是"纯投影、不落盘"的真实语义，此时也不该假装给了通道。
+    const file = input.attachmentsDir !== undefined
+      ? join(input.attachmentsDir, attachmentName(input.sessionId ?? "s", e.callId))
+      : null;
+    const stub = file === null
+      ? PRUNED_PLACEHOLDER
+      : PRUNED_PLACEHOLDER + "\n[原文已存附件 " + file + "，需要时 read_file 取回]";
+    out.replacements.set(i + 1, stub); // 事件 id = 1-based 行号
+    // savedTokens 是报给人看的成本读数：按**实际替换文本**计（跟着同一把字重尺），
+    // 既不能在中文会话里虚报 4 倍，也不能把新增的那行路径白记成节省。
+    out.savedTokens += estimateTextTokens(e.output) - estimateTextTokens(stub);
+    if (file !== null) out.attachments.push(file);
   }
   out.why = "saved";
   return out;
@@ -217,6 +223,12 @@ export async function writePruneAttachments(
       const e = events[id - 1];
       if (e.type !== "tool_result") continue;
       const file = join(attachmentsDir, attachmentName(sessionId, e.callId));
+      // 已存在即跳过：assemble() 每次模型调用都跑，重写 = 白 IO 且把 mtime 冲成"刚刚写过"。
+      // 附件正文与事件日志里是同一段原文（append-only 日志本就存着），落这里只为给模型一个可指的路径。
+      try {
+        await access(file);
+        continue;
+      } catch { /* 不存在（或被清理）→ 重写 */ }
       await writeFile(file, e.output, "utf8");
     }
   } catch (err) {

@@ -447,7 +447,7 @@ const MUTATIONS = [
     src: "src/agent/prune.ts",
     test: "tests/prune.test.ts",
     desc: "替换映射的 1-based 事件 id 变 0-based（投影行号错位，消费者取错事件）",
-    apply: (s) => s.replace("out.replacements.set(i + 1, PRUNED_PLACEHOLDER);", "out.replacements.set(i, PRUNED_PLACEHOLDER);"),
+    apply: (s) => s.replace("out.replacements.set(i + 1, stub);", "out.replacements.set(i, stub);"),
     expectFail: "②最近 2 轮不被剪；第 1 轮的旧大结果被剪",
   },
   {
@@ -2137,16 +2137,16 @@ const MUTATIONS = [
     src: "src/agent/prune.ts",
     test: "tests/prune-token-weight.test.ts",
     desc: "savedTokens 是给人看的成本读数：按 chars/4 报 ⇒ 中文会话里「省了多少」虚报四倍（判定与读数两副口径）",
-    apply: (s) => s.replace("    out.savedTokens += estimateTextTokens(e.output) - placeholderTokens;", "    out.savedTokens += Math.ceil(e.output.length / 4) - placeholderTokens;"),
+    apply: (s) => s.replace("    out.savedTokens += estimateTextTokens(e.output) - estimateTextTokens(stub);", "    out.savedTokens += Math.ceil(e.output.length / 4) - estimateTextTokens(stub);"),
     expectFail: "中文结果剪得动，且 savedTokens 落在字重口径（旧口径下保护区吞掉全部 ⇒ 候选空 ⇒ 永不修剪）",
   },
   {
     id: "prune-placeholder-tokens-by-chars",
     src: "src/agent/prune.ts",
-    test: "tests/prune-token-weight.test.ts",
-    desc: "占位串自己不计入字重（按 length 扣）⇒ 净节省被少算，纯 ASCII 会话的读数也不再等于 ceil(chars/4)",
-    apply: (s) => s.replace("  const placeholderTokens = estimateTextTokens(PRUNED_PLACEHOLDER);", "  const placeholderTokens = PRUNED_PLACEHOLDER.length;"),
-    expectFail: "纯 ASCII 逐字不变：读数仍是 ceil(chars/4) − ceil(占位/4)",
+    test: "tests/prune.test.ts",
+    desc: "替换文本按裸占位扣（附件路径行不算）⇒「省了多少」被白记一程；改指现实现：savedTokens 只认 PRUNED_PLACEHOLDER，不看 stub",
+    apply: (s) => s.replace("    out.savedTokens += estimateTextTokens(e.output) - estimateTextTokens(stub);", "    out.savedTokens += estimateTextTokens(e.output) - estimateTextTokens(PRUNED_PLACEHOLDER);"),
+    expectFail: "③savedTokens 按**实际替换文本**计量：路径行不得虚报节省",
   },
   // ---- W3 第一段调度纪律（BASE_SYSTEM 的「编排」段）：三句各一条 + 编号不侵占一条 ----
   {
@@ -2334,6 +2334,39 @@ const MUTATIONS = [
     desc: "不分「有没有改过文件」一律打标记 ⇒ 只读 worker 也背上一个「跑过了」位，父面出现无从谈起的证据",
     apply: (s) => s.replace("      const evidence = filesChanged.length > 0 ? workerVerificationEvidence(w.events) : undefined;", "      const evidence = workerVerificationEvidence(w.events);"),
     expectFail: "read worker（没改过文件）⇒ 根本不打证据标记（无「跑过了」可标）",
+  },
+  // ---- prune 存盘回取接进生产（tests/prune.test.ts + tests/session-prune-attachments.test.ts）----
+  {
+    id: "prune-attachment-production-entry",
+    src: "src/agent/glm-session.ts",
+    test: "tests/session-prune-attachments.test.ts",
+    desc: "生产组装退回只传 {events} ⇒ 附件恒空、打桩里那行路径指向空气（§7.4「存盘回取」两头断的正是这一格）",
+    apply: (s) => s.replace("const outcome = computePrune({ events, attachmentsDir: pruneAttachmentsDir, sessionId: pruneSessionId });", "const outcome = computePrune({ events });"),
+    expectFail: "①打桩文本带着附件路径，模型能照着取回全文",
+  },
+  {
+    id: "prune-stub-hides-attachment-path",
+    src: "src/agent/prune.ts",
+    test: "tests/prune.test.ts",
+    desc: "算了附件路径却不写进打桩文本 ⇒ 回取通道对模型不可见，裁剪变成不可逆的信息销毁",
+    apply: (s) => s.replace('      : PRUNED_PLACEHOLDER + "\\n[原文已存附件 " + file + "，需要时 read_file 取回]";', '      : PRUNED_PLACEHOLDER;'),
+    expectFail: "①传 attachmentsDir ⇒ 打桩自带路径，且该路径逐字等于实际写出的那个文件",
+  },
+  {
+    id: "prune-attachment-rewrite-every-turn",
+    src: "src/agent/prune.ts",
+    test: "tests/prune.test.ts",
+    desc: "去掉「已存在即跳过」⇒ 每次模型调用都把全部附件重写一遍（白 IO，且 mtime 失去「何时被裁」的含义）",
+    apply: (s) => s.replace("      try {\n        await access(file);\n        continue;\n      } catch { /* 不存在（或被清理）→ 重写 */ }", "      try {\n        await Promise.resolve();\n      } catch { /* 不存在（或被清理）→ 重写 */ }"),
+    expectFail: "④同一附件重复装配不重写（幂等；每轮组装都跑，重写 = 白 IO 且打断 mtime 语义）",
+  },
+  {
+    id: "prune-saved-tokens-ignores-stub-text",
+    src: "src/agent/prune.ts",
+    test: "tests/prune.test.ts",
+    desc: "节省量按 0 扣 ⇒ 面板上的「省了多少」把新增的打桩文本（含路径行）整个算成白赚",
+    apply: (s) => s.replace("    out.savedTokens += estimateTextTokens(e.output) - estimateTextTokens(stub);", "    out.savedTokens += estimateTextTokens(e.output);"),
+    expectFail: "③savedTokens 按**实际替换文本**计量：路径行不得虚报节省",
   },
 ];
 

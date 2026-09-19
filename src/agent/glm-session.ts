@@ -9,7 +9,8 @@ import type { ModelOutput, Provider, ProviderCall } from "../providers";
 import { projectContext, type ContextMessage } from "./context";
 import { buildMemoryInjection, type MemoryInjection } from "./memory/inject";
 import { REMEMBER_DESCRIPTION } from "../tools/remember";
-import { computePrune } from "./prune";
+import { computePrune, writePruneAttachments } from "./prune";
+import { basename, dirname, join } from "node:path";
 import { createMapBuilder, type MapBuilder } from "./map/build";
 import {
   DEFAULT_COMPACTION_CONFIG,
@@ -453,14 +454,24 @@ export function createGlmSessionProvider(
     }
     return parts.length ? parts.join("\n\n") : undefined;
   };
+  // prune 附件（§7.4 存盘回取）：目录与事件日志同级 ⇒ 与日志同生命周期，删会话目录即一起清掉；
+  // sessionId 取日志文件名，同一目录里并存的多个会话各有各的附件命名空间。
+  const pruneAttachmentsDir = join(dirname(logPath), "prune-attachments");
+  const pruneSessionId = basename(logPath).replace(/\.jsonl$/u, "");
   const assemble = async (): Promise<{ events: AgentEvent[]; history: ReturnType<typeof projectContext> }> => {
     // A5（审查根因 5）：增量重放——每轮只解析追加段（旧实现全量读盘+全量投影，整会话 O(n²)）
     const events = await replayIncremental(logPath);
     // M2b prune：本地计算裁剪投影（异常静默 → 无裁剪）
     let replacements: Map<number, string> | undefined;
     try {
-      const outcome = computePrune({ events });
-      if (outcome.why === "saved" && outcome.replacements.size > 0) replacements = outcome.replacements;
+      // §7.4「存盘回取」的生产入口：附件目录放在事件日志旁边（同生命周期、同一清理面），
+      // sessionId 用日志文件名（同一目录里每个会话一份命名空间）。缺了这一步，打桩里那行
+      // 「原文已存附件 …」就是指向空气的路径 —— 本仓点名的「两头断」。
+      const outcome = computePrune({ events, attachmentsDir: pruneAttachmentsDir, sessionId: pruneSessionId });
+      if (outcome.why === "saved" && outcome.replacements.size > 0) {
+        replacements = outcome.replacements;
+        await writePruneAttachments(events, outcome, pruneAttachmentsDir, pruneSessionId);
+      }
     } catch (err) {
       console.debug("[prune] 计算失败，本轮跳过裁剪:", err instanceof Error ? err.message : String(err));
     }

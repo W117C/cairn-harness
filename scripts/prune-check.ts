@@ -56,7 +56,12 @@ async function main(): Promise<void> {
   check("③免剪名单：skill 内容不被剪", !outcome.replacements.has(3), `pruned=[${[...outcome.replacements.keys()].join(",")}]`);
   check("③b 免剪名单：grep / 错误结果 / 卡片投影不被剪", !outcome.replacements.has(8) && !outcome.replacements.has(10), "");
   check("③c 普通旧大 read 被剪（唯一被剪）", outcome.replacements.size === 1 && outcome.replacements.has(5), "");
-  check("③d 打桩文案 = [Old tool result content cleared]", outcome.replacements.get(5) === PRUNED_PLACEHOLDER, "");
+  // 判据修订（2026-09-20，随 §7.4「存盘回取」接进生产）：原来这里断言打桩文本**逐字等于**占位串，
+  // 而该调用是带 attachmentsDir 的——按同一份规格，带目录时打桩必须另起一行交出附件路径，
+  // 否则"可回取"对模型不可见。故判据改成两条更强的：原串逐字在场（不得改写）+ 路径行指向的文件真存在。
+  const stub5 = outcome.replacements.get(5) ?? "";
+  check("③d 打桩保留 [Old tool result content cleared] 原串并附附件路径",
+    stub5.startsWith(PRUNED_PLACEHOLDER) && stub5.includes(attachments), stub5.slice(0, 90));
   check("③e user_message 永不被剪", ![...outcome.replacements.keys()].some((id) => events[id - 1].type === "user_message"), "");
 
   // ④ 附件回取：逐字一致
@@ -64,10 +69,13 @@ async function main(): Promise<void> {
   const original = (events[4] as { output: string }).output;
   const got = await readFile(attachmentPathFor(attachments, "prunecheck", "c-old"), "utf8");
   check("④被裁原文从附件目录读回且逐字一致", got === original, `len=${got.length}/${original.length}`);
+  // 打桩交出的路径必须就是刚写出的那个文件（承诺与实物同源，不是两处各算各的）
+  check("④b 打桩那行路径 = 实际写出的附件路径",
+    stub5.includes(attachmentPathFor(attachments, "prunecheck", "c-old")), stub5.slice(0, 120));
 
   // 投影：projectContext 消费 replacements → tool content 打桩、事件流本体零删改
   const msgs = projectContext(events, outcome.replacements);
-  const stubbed = msgs.some((m) => m.role === "tool" && m.content === PRUNED_PLACEHOLDER);
+  const stubbed = msgs.some((m) => m.role === "tool" && typeof m.content === "string" && m.content.startsWith(PRUNED_PLACEHOLDER));
   const intact = (events[4] as { output: string }).output === original;
   check("⑤投影打桩生效且事件流零删改", stubbed && intact, "");
 
