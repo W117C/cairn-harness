@@ -1701,7 +1701,7 @@ const MUTATIONS = [
   },
   {
     id: "skill-suffix-not-charged-to-budget",
-    src: "src/agent/plugins/skills.ts",
+    src: "src/agent/text-budget.ts",
     test: "tests/skill-body-cap.test.ts",
     desc: "取回提示不计入预算 ⇒ 「总量 ≤ 预算」这句承诺被提示自己撑破（与 run_shell 的 SHELL_NOTICE_RESERVE 同族坑）",
     apply: (s) => s.replace("const chars = Math.max(0, tokenBudget * 4 - marker.length - suffix.length);", "const chars = Math.max(0, tokenBudget * 4 - marker.length);"),
@@ -1754,6 +1754,30 @@ const MUTATIONS = [
     desc: "函数写了却没接进 tools/list ⇒ 注册表里仍是原文 schema，「有 cap」只是模块里的死代码（本仓第 8 次同族缺陷）",
     apply: (s) => s.replace("          inputSchema: capped.schema,", "          inputSchema: (t.inputSchema ?? {}) as Record<string, unknown>,"),
     expectFail: "tools/list 的长参数说明进注册表前已被收，且描述里如实标注收窄处数",
+  },
+  {
+    id: "worker-role-budget-not-applied",
+    src: "src/agent/worker-prompt.ts",
+    test: "tests/worker-role-budget.test.ts",
+    desc: "角色块不收窄 ⇒ 插件 agents/*.md（或 spawn_agent 传入）整篇文档作为 system 首块，且它永不进摘要输入 ⇒ 每个 worker 每轮付费",
+    apply: (s) => s.replace("clampToTokenBudget(w.roleDefinition, WORKER_ROLE_TOKEN_BUDGET, \"worker 角色定义\")", "w.roleDefinition"),
+    expectFail: "200KB 的插件角色定义被收到预算内，且任务书仍在最后一条 user 里",
+  },
+  {
+    id: "worker-role-budget-zeroed",
+    src: "src/agent/worker-prompt.ts",
+    test: "tests/worker-role-budget.test.ts",
+    desc: "预算写死 0 ⇒ 内置角色也被掐头（一两百 token 的角色定义被截成空壳），worker 的 verdict 纪律整段丢失",
+    apply: (s) => s.replace("export const WORKER_ROLE_TOKEN_BUDGET = 2000;", "export const WORKER_ROLE_TOKEN_BUDGET = 0;"),
+    expectFail: "内置角色逐字进首块（零回归）",
+  },
+  {
+    id: "clamp-marker-label-hardcoded",
+    src: "src/agent/text-budget.ts",
+    test: "tests/worker-role-budget.test.ts",
+    desc: "提示措辞写死成「skill 正文」⇒ 角色块被截时模型看到的是别的面的名字（单位/来源不如实，本仓反复踩过的口径谎言）",
+    apply: (s) => s.replace("const marker = \"\\n[\" + label + \"超 \"", "const marker = \"\\n[skill 正文超 \""),
+    expectFail: "超限时留头部，总量精确 ≤ 预算，且提示用的是调用方给的 label",
   },
 ];
 
