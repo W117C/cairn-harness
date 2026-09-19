@@ -22,9 +22,12 @@ import {
 } from "../src/main/provider-keys";
 import { DEFAULT_SETTINGS, SettingsStore, validateSettings } from "../src/main/settings";
 import { ONBOARDING_GROUPS } from "../src/main/onboarding-groups";
+import { wizardReachability, wizardUnverifiedNote, type SourceFile } from "./lib/commercial-reachability";
 
 let pass = 0;
 let fail = 0;
+/** 断言没跑到 / 被测行为在产品侧无处可达 —— 显式列出，绝不等于通过。 */
+const unverified: string[] = [];
 function check(cond: boolean, name: string, detail?: string): void {
   if (cond) {
     pass++;
@@ -132,9 +135,25 @@ console.log("[commercial-check] D 引导七组覆盖 + settings 状态机");
   check(ONBOARDING_GROUPS.every((g) => g.label.length > 0 && g.entry.length > 0), "D1c 每组 label/entry 非空");
   check(DEFAULT_SETTINGS.onboarded === false && DEFAULT_SETTINGS.telemetry === false && DEFAULT_SETTINGS.updateManifestUrl === "", "D2 缺省：未引导 + 遥测关 + 更新源未配置（三者皆零行为缺省）");
   const store = new SettingsStore(join(work, "settings.json"));
-  check((await store.get()).onboarded === false, "D2b 首启必弹向导（onboarded 缺省 false）");
+  check((await store.get()).onboarded === false, "D2b onboarded 缺省 false（存储面；「首启必弹」另计，见 D2e）");
   await store.set({ onboarded: true });
-  check((await new SettingsStore(join(work, "settings.json")).get()).onboarded === true, "D2c 完成 → true 重载还原（不再弹）");
+  check((await new SettingsStore(join(work, "settings.json")).get()).onboarded === true, "D2c true 重载还原（存储面；「不再弹」需产品消费者，见 D2e）");
+  // D2e：向导是否真在产品里可达。React 树归档后 `onboarding.tsx` 被删、纯数据留在这里，
+  // 若 shipped 源码无人读它，则「必弹/不再弹」两句产品话无处可验——记未证而不是绿。
+  const shipped: SourceFile[] = [];
+  for (const rel of [
+    "src/renderer/app.js", "src/renderer/index.html", "src/renderer/projections.ts",
+    "src/main/index.ts", "src/main/agent-runner.ts", "src/preload/index.ts",
+  ]) {
+    try { shipped.push({ path: rel, text: await readFile(join(process.cwd(), rel), "utf8") }); } catch { /* 读不到 = 该面少一个消费者 */ }
+  }
+  const reach = wizardReachability(shipped);
+  if (reach.reachable) {
+    check(true, "D2e 引导向导在产品里可达（消费者：" + reach.consumers.join("、") + "）");
+  } else {
+    console.log("  ⚠️  " + wizardUnverifiedNote(reach.consumers));
+    unverified.push(wizardUnverifiedNote(reach.consumers));
+  }
   await writeFile(join(work, "settings.json"), JSON.stringify({ onboarded: "yes" }), "utf8");
   check((await new SettingsStore(join(work, "settings.json")).get()).onboarded === false, "D2d 非法值回退 false（防「永不再现」）");
   const v = validateSettings({ updateManifestUrl: "https://e/m.json", telemetry: true, onboarded: true });
@@ -146,5 +165,12 @@ console.log("[commercial-check] D 引导七组覆盖 + settings 状态机");
 // ---- 收口 ----
 await rm(work, { recursive: true, force: true });
 console.log("");
-console.log("commercial-check: " + String(pass) + " ✅ / " + String(fail) + " ❌");
+// 机器可读标记（与 plugins-check 同格式）：让 pnpm gates 把未证上浮到汇总，
+// 而不是本脚本里打一行警告、门禁汇总照样宣称「全部通过」。
+console.log("UNVERIFIED=" + String(unverified.length));
+console.log("commercial-check: " + String(pass) + " ✅ / " + String(fail) + " ❌" + (unverified.length > 0 ? " / " + String(unverified.length) + " 未证" : ""));
+if (process.env.DSH_STRICT_UNVERIFIED === "1" && unverified.length > 0) {
+  console.log("严格模式（DSH_STRICT_UNVERIFIED=1）：存在未证项，判红");
+  process.exit(1);
+}
 process.exit(fail === 0 ? 0 : 1);
