@@ -1,0 +1,6 @@
+{
+  "mustPassVerify": true,
+  "mustChangeFiles": ["src/cart.js", "src/shipping.js", "src/totals.js"],
+  "mustNotChangeFiles": ["tests/run.mjs", "package.json"],
+  "maxTurns": 10
+}

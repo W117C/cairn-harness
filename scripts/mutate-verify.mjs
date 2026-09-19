@@ -974,6 +974,33 @@ const MUTATIONS = [
     ),
     expectFail: "老 JSON（完全没有该键）读回来必须是 true",
   },
+  {
+    id: "gym-round-boundary-never-matches",
+    src: "src/agent/gym/script.ts",
+    test: "tests/gym-script.test.ts",
+    desc: "轮边界判据永不成立（一次请求吐完整条剧本 = 靶场退回单次请求会话，逐轮机制再次没有样本）",
+    apply: (s) => s.replace("    if (script[i].type === \"tool_call\") {\n", "    if (script[i].type === \"never-tool-call\") {\n"),
+    expectFail: "一轮 = 文本 + 它那一个 tool_call（tool_call 含在本轮内）",
+  },
+  {
+    id: "gym-round-cursor-stalls",
+    src: "src/agent/gym/script.ts",
+    test: "tests/gym-script.test.ts",
+    desc: "轮边界处游标不前进（同一条 tool_call 每轮重吐：模型反复执行同一次写入，事件流与判卷全被污染）",
+    apply: (s) => s.replace("      i += 1; // 这一轮到 tool_call 为止，剩下的下轮再给\n", "      // 游标停在 tool_call 上，不前进\n"),
+    expectFail: "切到剧本跑完不丢条、不重复：逐轮串起来恰等于原剧本",
+  },
+  {
+    id: "gym-probe-transport-drains-all",
+    src: "src/agent/gym/probe.ts",
+    test: "tests/gym-script.test.ts",
+    desc: "探针 transport 绕过切源、一次吐完（装配账把 10 轮会话记成 1 次请求，成本面当场少算一个数量级）",
+    apply: (s) => s.replace(
+      "    const round = takeRound(script, cursor);\n    cursor = round.next;\n    for (const output of round.outputs) yield output;\n",
+      "    while (cursor < script.length) yield script[cursor++];\n",
+    ),
+    expectFail: "probe 档：请求数 == 轮数，且历史段逐轮递增（旧语义下这里恒为 1 条）",
+  },
 ];
 
 function runTest(testRel) {

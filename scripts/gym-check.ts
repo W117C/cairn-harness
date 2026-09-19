@@ -86,10 +86,12 @@ for (const c of loaded) {
 console.log("[gym-check] B 回放跑器（明卷确定性 / 分叉重放 / 暗卷缺席）");
 
 // B1 明卷确定性：同一 case 跑两次，score / usage / turns / changedFiles 逐字段一致
+const turnCounts: number[] = [];
 for (const c of loaded) {
   const r1 = await runCase(c, { model: "scripted" });
   const r2 = await runCase(c, { model: "scripted" });
   try {
+    turnCounts.push(r1.turns);
     const same =
       r1.score === r2.score &&
       r1.verifyOk === r2.verifyOk &&
@@ -109,11 +111,23 @@ for (const c of loaded) {
       same,
       `B1 ${c.id}: 明卷两次跑逐字段一致（score=${String(r1.score)} in=${String(r1.inputTokens)} out=${String(r1.outputTokens)} turns=${String(r1.turns)}）`,
     );
+    // B1c：expect.maxTurns 此前**零消费者**（只在 loadCase 里校验类型）——一条写着却没人 enforce
+    // 的预算就是假刻度。现在它真的会被强制。
+    const budget = c.expect.maxTurns;
+    check(
+      budget === undefined || r1.turns <= budget,
+      `B1c ${c.id}: 轮数在 expect.maxTurns 预算内（turns=${String(r1.turns)}，预算=${String(budget ?? "未设")}）`,
+    );
   } finally {
     await cleanupRun(r1);
     await cleanupRun(r2);
   }
 }
+
+// B1d 长时程覆盖：靶场必须至少有一条 ≥8 轮的 case。逐轮机制（缓存命中、压缩触发、跨轮保持
+// 目标、逐轮证据）在 3 轮的题上根本没有样本——切轮之后这条才判得动。
+const longest = turnCounts.length > 0 ? Math.max(...turnCounts) : 0;
+check(longest >= 8, `B1d 靶场含长时程 case（最长 ${String(longest)} 轮，门槛 ≥8）`);
 
 // B2 分叉重放：从 eventId=N 分叉后，新会话前 N 条事件与原会话逐字节一致，且原文件未被修改
 {

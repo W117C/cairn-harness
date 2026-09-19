@@ -8,11 +8,9 @@
 // 探针做的事：用**真**会话 provider（走 composeTurnMessages / 压缩 / 预算那条链），
 // 只把出网的 transport 换成一个「记录装配结果 + 回放冻结剧本」的假件，
 // 于是每装配一次请求就留下一条按可缓存性分层的字节账。
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-
 import { estimateTokens } from "../compaction";
 import { createGlmSessionProvider, sessionToolSpecs } from "../glm-session";
+import { loadScriptOutputs, takeRound } from "./script";
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "../../providers/glm";
 import type { ModelOutput, Provider } from "../../providers";
 import type { AgentEvent } from "../../events";
@@ -63,19 +61,6 @@ export function rankToolSpecs(tools: readonly GlmToolSpec[]): Array<{ name: stri
 
 const utf8 = (s: string): number => Buffer.byteLength(s, "utf8");
 
-async function loadScript(scriptPath: string): Promise<ModelOutput[]> {
-  const raw = await readFile(scriptPath, "utf8");
-  const out: ModelOutput[] = [];
-  for (const line of raw.split("\n")) {
-    const t = line.trim();
-    if (!t) continue;
-    const e = JSON.parse(t) as AgentEvent;
-    if (e.type === "assistant_message" || e.type === "tool_call") out.push(e as unknown as ModelOutput);
-    else throw new Error(`装配探针剧本只接受 assistant_message/tool_call，读到: ${JSON.stringify(e.type)}`);
-  }
-  return out;
-}
-
 /** 纯函数：把一次装配切成「可缓存 / 易变 / 历史」三段。分量和必等于 promptBytes（守恒由测钉住）。 */
 export function classifyAssembly(turn: number, messages: GlmMessage[], tools?: GlmToolSpec[]): AssemblyTurn {
   const msgsJson = JSON.stringify(messages);
@@ -104,7 +89,9 @@ export function classifyAssembly(turn: number, messages: GlmMessage[], tools?: G
   };
 }
 
-/** 记录装配 + 回放剧本的假 transport（语义与 createMockProvider 同：一次 stream() 把剩余剧本吐完）。 */
+/** 记录装配 + 按轮回放剧本的假 transport：**一次调用 = 一轮**（吐到下一个 tool_call 为止，含它），
+ *  与明卷 createRoundScriptedProvider 同一条切轮口径（见 ./script.ts）。于是 requests 真的等于轮数，
+ *  逐轮装配账（历史增长 / 缓存前缀 / 压缩）才量得到。 */
 export function createProbeTransport(scriptPath: string, onAssembly: (t: AssemblyTurn) => void): typeof streamGlm {
   let script: ModelOutput[] | null = null;
   let cursor = 0;
@@ -112,8 +99,11 @@ export function createProbeTransport(scriptPath: string, onAssembly: (t: Assembl
   return async function* (messages, _opts, tools) {
     turn += 1;
     onAssembly(classifyAssembly(turn, messages as GlmMessage[], tools as GlmToolSpec[] | undefined));
-    if (!script) script = await loadScript(scriptPath);
-    while (cursor < script.length) yield script[cursor++];
+    if (!script) script = await loadScriptOutputs(scriptPath);
+    if (cursor >= script.length) return;
+    const round = takeRound(script, cursor);
+    cursor = round.next;
+    for (const output of round.outputs) yield output;
   };
 }
 

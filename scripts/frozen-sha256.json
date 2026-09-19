@@ -2,7 +2,7 @@
   "fixtures/mock/todo-bug.ts": "3edc93434ece7cdc390cc9f8b7c9419f6d7b9de86b854b2e4a50f46f03d1a773",
   "fixtures/mock/todo-fix.jsonl": "e253aae90285ecd4eff1b8dc47dd69a8a9e03cb613275f14ac268119d36cd793",
   "fixtures/todo-app/tests/todo.test.ts": "9179db7de0cec5525d40336fed76c571716b51e200b5de933be7847e7f23a47c",
-  "fixtures/gym/index.json": "9c54720eaa292da8e22ab20ac6d190b00b01b185fdb632b405061575226ff1c6",
+  "fixtures/gym/index.json": "093d545003a22f23fb0ddb080a26d23e8f11cc0b16a94ae788ea7744b3d6130d",
   "fixtures/gym/cases/config-default/expect.json": "60c51abd6a1b312d3f9142f61e4ed73e1dab0347db55ed32efecb9b95d187f50",
   "fixtures/gym/cases/config-default/negative.json": "71897c07f850fc976bf30bcac1d6f6679dde599c46e57b7575457ad2990f0ac6",
   "fixtures/gym/cases/config-default/script.jsonl": "0abd22e92601ce7a40d2a2cba0d7c9245b6e81ab00f841b1044dd24e8bb53e72",
@@ -31,5 +31,15 @@
   "fixtures/impact/mini-repo/app.js": "40e75b2ebc509a8ee88fc9a3016340620037d567a5f4c697c2390391b14a077a",
   "fixtures/impact/mini-repo/math.js": "35f3f467a90c0d9a23146ddfc0fe9f255b5a5a87735bcb6236a2a03082188635",
   "fixtures/impact/mini-repo/metrics.ts": "5b6891683a352e07ec95354a04923a929581bd4781daf8c75ad30a50bb8b7899",
-  "fixtures/impact/mini-repo/utils.js": "a960c81e66aa79037aa8bcf002f4370ef21c152608aa536d068a556062a364cc"
+  "fixtures/impact/mini-repo/utils.js": "a960c81e66aa79037aa8bcf002f4370ef21c152608aa536d068a556062a364cc",
+  "fixtures/gym/cases/order-pricing-triple-fix/expect.json": "c63444001577ca94e767d5f089c0589c1a1e9883cf589943b8b098af013f3bf4",
+  "fixtures/gym/cases/order-pricing-triple-fix/negative.json": "5dfcfc20e927ae7ed2137278f2ad09c828d72e9991789ffd6d51989fbd893fcb",
+  "fixtures/gym/cases/order-pricing-triple-fix/repo/.agent/config.json": "04eecbf955c55d337097224a962586a46bd85df4f1e03e2adae71419eea6894b",
+  "fixtures/gym/cases/order-pricing-triple-fix/repo/package.json": "ebb9f23db261aba61a97fe527fa06f80a4760c54231b2427422ac3620bdb05d3",
+  "fixtures/gym/cases/order-pricing-triple-fix/repo/src/cart.js": "86c6358008c448eb9e1df530a6641abbdbed8cbd18289ef7cc669085b2da4a4f",
+  "fixtures/gym/cases/order-pricing-triple-fix/repo/src/shipping.js": "8360ba062f63393119cef335a8f3a7d40dfb7e014e8418320fb1db6f474f80e7",
+  "fixtures/gym/cases/order-pricing-triple-fix/repo/src/totals.js": "b2a0fb531e262bcf033173057efea819a08fd08e4dc6d09a2fa8a6a762c1fc68",
+  "fixtures/gym/cases/order-pricing-triple-fix/repo/tests/run.mjs": "c14335f19039366cbcaec2ef9ba676063f44b537ff6dd41d89b11fbe6099dfe4",
+  "fixtures/gym/cases/order-pricing-triple-fix/script.jsonl": "69f4dadea43513a26a717c2abd93e15a66016dc37869e56c2de0e6fae50458df",
+  "fixtures/gym/cases/order-pricing-triple-fix/task.md": "2be76ccbb997b57cff3d5666a6a8df87b74d88fea6f4237a3e9784be8eb0b107"
 }

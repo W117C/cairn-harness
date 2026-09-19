@@ -1,9 +1,9 @@
 {
   "version": 1,
   "model": "scripted",
-  "generatedAt": "2026-09-13T17:22:27.411Z",
+  "generatedAt": "2026-09-19T01:15:39.194Z",
   "successRate": 1,
-  "totalTokens": 645,
+  "totalTokens": 1416,
   "cases": [
     {
       "id": "todo-completed-count",
@@ -36,6 +36,19 @@
       "turns": 3,
       "changedFiles": [
         "src/config.js"
+      ]
+    },
+    {
+      "id": "order-pricing-triple-fix",
+      "score": 1,
+      "verifyOk": true,
+      "inputTokens": 671,
+      "outputTokens": 100,
+      "turns": 10,
+      "changedFiles": [
+        "src/cart.js",
+        "src/shipping.js",
+        "src/totals.js"
       ]
     }
   ]

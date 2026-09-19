@@ -3,6 +3,7 @@
   "cases": [
     { "id": "todo-completed-count", "path": "cases/todo-completed-count", "description": "修复 completedCount 只统计已完成 todo" },
     { "id": "sum-clamp", "path": "cases/sum-clamp", "description": "修复 clampSum 夹取到 [min,max]" },
-    { "id": "config-default", "path": "cases/config-default", "description": "修复 loadConfig 缺 timeout 默认 30000" }
+    { "id": "config-default", "path": "cases/config-default", "description": "修复 loadConfig 缺 timeout 默认 30000" },
+    { "id": "order-pricing-triple-fix", "path": "cases/order-pricing-triple-fix", "description": "长时程：三处 bug 十轮修（含一次 edit_file 失败后按原文重发），验「跨轮保持目标 + 读错误改道 + 自验收口」" }
   ]
 }

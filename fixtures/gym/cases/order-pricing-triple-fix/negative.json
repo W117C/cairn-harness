@@ -1,0 +1,17 @@
+{
+  "reason": "「看起来全改了」的解法：cart 与 shipping 都改对、三个文件全动过（mustChangeFiles 满足），但 totals 的税额只除了 100 却漏乘小计（80 元 20% 税算成 80.2）——只有 verify 能抓住它。本 case 的反例因此专测判卷器的「有牙齿」那一维：若把 verify 摘掉，这份错误解会拿满分。",
+  "changes": [
+    {
+      "path": "src/cart.js",
+      "content": "// gym case: order-pricing-triple-fix\n// BUG: subtotal 只累加单价，漏乘数量 qty。\nexport function subtotal(items) {\n  let sum = 0;\n  for (const it of items) sum += it.price * it.qty;\n  return sum;\n}\n\n/** 件数（这条是对的，判卷里也断言了——防「顺手改坏无关函数」）。 */\nexport function itemCount(items) {\n  return items.reduce((n, it) => n + it.qty, 0);\n}\n"
+    },
+    {
+      "path": "src/shipping.js",
+      "content": "// gym case: order-pricing-triple-fix\n// 规则：重量 ≥ freeOver 公斤免运费；否则按**向上取整**的整公斤数 × perKg。\n// BUG: 整公斤数用了向下取整（2.2kg 按 2kg 计价）。\nexport function shippingCost(weightKg, freeOver, perKg) {\n  if (weightKg >= freeOver) return 0;\n  return Math.ceil(weightKg) * perKg;\n}\n"
+    },
+    {
+      "path": "src/totals.js",
+      "content": "// gym case: order-pricing-triple-fix（错误解法：税基漏了 sub）\nexport function withDiscount(sub, ratePct) {\n  return Math.round(sub * (100 - ratePct)) / 100;\n}\n\nexport function grandTotal(sub, taxPct) {\n  return Math.round((sub + taxPct / 100) * 100) / 100;\n}\n"
+    }
+  ]
+}

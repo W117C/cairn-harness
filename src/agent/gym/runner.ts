@@ -8,12 +8,12 @@ import { join } from "node:path";
 import type { AgentEvent } from "../../events";
 import { createEventLog, forkSession, replay } from "../../events";
 import type { ModelOutput, Provider } from "../../providers";
-import { createMockProvider } from "../../providers/mock";
 import { streamGlm } from "../../providers/glm";
 import { runLoop } from "../loop";
 import { runVerifyOutcome } from "../verify";
 import { changedFilesBetween, scoreCase } from "./score";
 import { copyRepoAndApply, gymTempDir, type GymCase } from "./case";
+import { createRoundScriptedProvider } from "./script";
 import { probeAssembly, type AssemblyReport } from "./probe";
 
 export type GymModelKind = "scripted" | "real" | "probe";
@@ -56,9 +56,9 @@ export async function scriptedUsageOf(scriptPath: string): Promise<{ inputTokens
   return { inputTokens, outputTokens };
 }
 
-/** 明卷剧本 provider：复放 script.jsonl（与 createMockProvider 同管线），序列跑完即停。 */
+/** 明卷剧本 provider：按轮复放 script.jsonl（一次请求一轮，见 ./script.ts），序列跑完即停。 */
 function createGymScriptedProvider(scriptPath: string): Provider {
-  return createMockProvider(scriptPath);
+  return createRoundScriptedProvider(scriptPath);
 }
 
 /** 暗卷 GLM provider（主会话同款接线；无 key 时 streamGlm 拨号失败，由调用方显式跳过）。 */
