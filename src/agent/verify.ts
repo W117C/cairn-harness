@@ -40,7 +40,12 @@ export const defaultExec: ExecFn = (command, cwd) => {
       handle.dispose();
       let output = ring.read();
       if (timedOut) output += "\n[error: verify 命令超时（60s），已强制终止]";
-      if (code !== 0 && !timedOut) output += `\n[exit code: ${String(code)}]`;
+      if (code !== 0 && !timedOut) {
+        output += `\n[exit code: ${String(code)}]`;
+        // 127 = bash 找不到这条命令：探到的工具链在这台机器上没装。这一拍说明不了代码对错，
+        // 不点名就会让模型照着它改本来正确的代码，还把 3 次 verify 额度烧光。
+        if (code === 127) output += "\n[verify: 退出码 127 = 命令不存在（工具链缺失）——这不是代码失败，别照它改代码；换可用的 runner 或先装工具链]";
+      }
       settle({ command, ok: code === 0 && !timedOut, output: output.replace(/\n+$/, "") });
     };
     const handle = spawnTracked("bash", ["-c", command], {
@@ -64,7 +69,38 @@ export const defaultExec: ExecFn = (command, cwd) => {
   });
 };
 
-/** 读 verify 配置：.agent/config.json 优先，缺省探测 package.json scripts。 */
+/** 非 npm 仓库的测试面探测（能力 2「多语言多工具链」× 能力 5「能证明代码真的能跑」）。
+ *  旧行为：只看 `.agent/config.json` 与 `package.json`，于是 Python/Go/Rust/Make 仓库一律
+ *  落到 `source:"none"` ⇒ 验证门 fail-closed 空转——「执行-验证-修正」这条闭环在非 JS 靶子上整段是死的。
+ *  只补 **test**，绝不凭空造 lint：action-fusion 读的是 `config.lint`，
+ *  把「风格未整理」造出来会把干净改动报成失败。
+ *  命令是这里写死的固定串（不是仓库脚本文本），因此不执行仓库给的任意代码。 */
+export async function probeLanguageTestCommands(repoDir: string): Promise<string[]> {
+  const readIf = async (name: string): Promise<string | null> => {
+    try {
+      return await readFile(join(repoDir, name), "utf8");
+    } catch {
+      return null;
+    }
+  };
+  const [g, cargo, pyproject, setupCfg, toxIni, pytestIni, conftest, makefile] = await Promise.all([
+    readIf("go.mod"), readIf("Cargo.toml"), readIf("pyproject.toml"), readIf("setup.cfg"),
+    readIf("tox.ini"), readIf("pytest.ini"), readIf("conftest.py"), readIf("Makefile"),
+  ]);
+  if (g !== null) return ["go test ./..."];
+  if (cargo !== null) return ["cargo test"];
+  const pytestDeclared = pytestIni !== null
+    || conftest !== null
+    || (pyproject !== null && /\[tool\.pytest\.ini_options\]/.test(pyproject))
+    || (setupCfg !== null && /^\[pytest\]/m.test(setupCfg))
+    || (toxIni !== null && /^\[pytest\]/m.test(toxIni));
+  if (pytestDeclared) return ["python3 -m pytest -q"];
+  // Makefile：只认 `test:` 目标（行首、可带依赖），别的 target 不猜。
+  if (makefile !== null && /^test[ \t]*:/m.test(makefile)) return ["make test"];
+  return [];
+}
+
+/** 读 verify 配置：① .agent/config.json 优先；② package.json scripts；③ 非 npm 工具链探测。 */
 export async function loadVerifyConfig(
   repoDir: string,
 ): Promise<{ config: VerifyConfig; source: "config" | "probed" | "none" }> {
@@ -100,10 +136,15 @@ export async function loadVerifyConfig(
         config[key] = [`pnpm run ${key}`];
       }
     }
-    return { config, source: Object.keys(config).length > 0 ? "probed" : "none" };
-  } catch {
-    return { config: {}, source: "none" };
+    if (Object.keys(config).length > 0) return { config, source: "probed" };
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err; // package.json 存在但坏 → fail loud（与 config.json 同口径）
   }
+  // ③ 没有 package.json、或有 package.json 却没 lint/test 脚本 ⇒ 探非 npm 工具链。
+  //    旧实现在这里直接返回 "none"，非 JS 仓库因此永远没有验证面。
+  const lang = await probeLanguageTestCommands(repoDir);
+  if (lang.length > 0) return { config: { test: lang }, source: "probed" };
+  return { config: {}, source: "none" };
 }
 
 /** 执行一轮 verify：逐条跑 lint/test 命令，全绿才 ok。 */
@@ -120,7 +161,7 @@ export async function runVerifyOutcome(repoDir: string, exec: ExecFn = defaultEx
           output:
             source === "config"
               ? "verify 配置为空（.agent/config.json 的 verify 字段没有任何命令）"
-              : "未找到 verify 配置（.agent/config.json 无 verify 字段，package.json 无 lint/test scripts）",
+              : "未找到 verify 配置（.agent/config.json 无 verify 字段，package.json 无 lint/test scripts，也未探到 go/cargo/pytest/make 测试面）",
         },
       ],
     };
