@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { parseFrontmatter, fmString } from "./frontmatter";
 import { pluginFingerprintEx } from "./trust";
 import { parsePluginManifest, parseHooksFile, detectJsEntry, PluginLoadError } from "./manifest";
+import { parseHookIf } from "./hooks";
 import type {
   DiscoveredPlugin, LooseSkill, PluginScope, PluginsManifest, SkillEntry, PromptCommandEntry,
   AgentRoleEntry, LoadedHookDef, HookEventName, HookMatcherDef, LspServerConfig,
@@ -214,6 +215,7 @@ function flattenHooks(plugin: string, pluginRoot: string, hooks: Partial<Record<
           pluginRoot,
           event: event as HookEventName,
           ...(m.matcher !== undefined ? { matcher: m.matcher } : {}),
+          ...(m.if !== undefined ? { if: m.if } : {}),
           handler,
           loaded: !banned,
         });
@@ -288,6 +290,10 @@ export async function discoverPlugins(opts: DiscoverOptions): Promise<PluginsMan
     for (const h of p.hooks) {
       if (!h.loaded) {
         warnings.push({ plugin: p.name, message: "hook 被拒载：${user_config.*} 禁入 shell-form hook（" + h.event + "）" });
+      }
+      // `if` 读不懂时钩子照样跑（宁多拦不漏拦），但必须出声——静默按"没写 if"处理等于偷改语义。
+      if (h.if !== undefined && parseHookIf(h.if) === null) {
+        warnings.push({ plugin: p.name, message: "hook 的 if 语法读不懂（" + h.event + "：" + h.if + "）⇒ 本轮按「总是跑」处理；要真硬闸请走权限规则（§9.5）" });
       }
     }
   }

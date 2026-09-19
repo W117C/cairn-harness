@@ -7,7 +7,7 @@
 // 环境变量：插件相关只给 PLUGIN_ROOT / PLUGIN_DATA / PROJECT_DIR（宿主密钥类变量显式剥离）。
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { staticRisk } from "../../permissions/risk";
+import { isShellFamily, staticRisk } from "../../permissions/risk";
 import { spawnTracked } from "../../tools/process";
 import type { HookEventName, LoadedHookDef } from "./types";
 
@@ -261,6 +261,51 @@ function defaultExec(): HookExecFn {
   };
 }
 
+/** §9.5 的 `if`：权限规则语法 best-effort 过滤（CC 原话「硬闸必须走权限系统」——本字段只决定
+ *  这条钩子跑不跑，不放宽任何权限）。形态 `Tool` 或 `Tool(<前缀>)`，前缀对该工具的**主参数**做
+ *  前缀比较，与 PermissionRule.pattern 的「命令段前缀」同一口径——不另立第二套匹配语言。
+ *  CC 的工具名（Bash/Write/…）作解析别名，与 §9.3 的 `${CLAUDE_*}` 别名同思路。 */
+const CC_TOOL_ALIAS: Record<string, string> = {
+  bash: "run_shell", write: "write_file", edit: "edit_file", read: "read_file",
+};
+
+/** 解析不了 → null（装载期出声；执行期按「跑」处理，见 hookIfMatches）。 */
+export function parseHookIf(expr: string): { tool: string; prefix: string | null } | null {
+  const m = /^([A-Za-z0-9_:.-]+)(?:\((.*)\))?$/.exec(expr.trim());
+  const rawTool = m?.[1];
+  if (rawTool === undefined || rawTool === "") return null;
+  const inner = m?.[2];
+  if (inner === undefined) return { tool: rawTool, prefix: null };
+  const prefix = inner.trim().replace(/\*+$/, "").trim().replace(/:$/, "").trim();
+  return { tool: rawTool, prefix: prefix === "" ? null : prefix };
+}
+
+/** 主参数：shell 族取 command，其余取 path/file_path（取不到 = 前缀类 `if` 不匹配）。 */
+function primaryArgOf(toolName: string, args: Record<string, unknown> | undefined): string | undefined {
+  const command = typeof args?.command === "string" ? args.command : undefined;
+  if (isShellFamily(toolName)) return command;
+  for (const k of ["path", "file_path"]) {
+    const v = args?.[k];
+    if (typeof v === "string") return v;
+  }
+  return command;
+}
+
+export function hookIfMatches(expr: string | undefined, toolName: string | undefined,
+  args: Record<string, unknown> | undefined): boolean {
+  if (expr === undefined) return true;
+  const parsed = parseHookIf(expr);
+  // 读不懂的 `if` 一律**跑**：作者写这道闸是为了拦东西，静默不跑等于把守卫关掉（装载期已另出声）。
+  if (parsed === null) return true;
+  if (toolName === undefined) return false;
+  const want = parsed.tool.toLowerCase();
+  const got = toolName.toLowerCase();
+  if ((CC_TOOL_ALIAS[want] ?? want) !== got && want !== got) return false;
+  if (parsed.prefix === null) return true;
+  const value = primaryArgOf(toolName, args);
+  return value !== undefined && value.startsWith(parsed.prefix);
+}
+
 export class HookEngine {
   private opts: HookEngineOptions;
   private exec: HookExecFn;
@@ -285,6 +330,8 @@ export class HookEngine {
     for (const h of this.opts.hooks) {
       if (h.event !== event || !h.loaded) continue;
       if (!matcherHits(h.matcher, value)) continue;
+      // §9.5 的 `if`（权限规则语法 best-effort）：收下不解析等于静默丢弃一条作者写来"只拦这种"的闸。
+      if (!hookIfMatches(h.if, payload.tool_name, payload.tool_args)) continue;
       const key = dedupKey(h);
       if (seen.has(key)) continue;
       seen.add(key);
@@ -319,6 +366,11 @@ export class HookEngine {
 
     const timeouts: number[] = [];
     for (const h of handlers) {
+      // 读不懂的 if 已经"照样跑"了，这里再留一条执行期回执：装载期警告会被面板刷掉，
+      // 而这一次到底按什么语义跑的，得能在当场看见（不静默改语义）。
+      if (h.if !== undefined && parseHookIf(h.if) === null) {
+        result.errors.push("hook 的 if 语法读不懂（" + h.if + "）⇒ 本次按「总是跑」处理");
+      }
       if (h.handler.type !== "command") {
         result.skipped++;
         result.errors.push("handler 类型 " + h.handler.type + " 本轮不支持，跳过 + 警告（插件 " + h.plugin + "）");

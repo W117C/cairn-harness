@@ -123,3 +123,63 @@ describe("hook matcher 语义（§9.5：`*`/空/缺省=全配；纯精确名字�
     expect((await all.run("PreToolUse", { event: "PreToolUse", tool_args: {} })).ran).toBe(1);
   });
 });
+
+/** §9.5 的 `if`（权限规则语法 best-effort）。观测点 = 注入了哪个命令，而不是 parseHookIf 的返回值——
+ *  「收下即丢」这个缺陷正好躲在"解析函数有单测、但没人拿它筛 handler"的那一格。 */
+describe("hook 的 if 过滤（§9.5 权限规则语法 best-effort）", () => {
+  async function engineWith(ifExpr: string | undefined): Promise<{
+    ran: string[];
+    run: (tool: string, args: Record<string, unknown>) => Promise<{ ran: number; errors: string[] }>;
+  }> {
+    const ran: string[] = [];
+    const e = await makeEngine(
+      [mkHook("PreToolUse", "echo hit", ifExpr === undefined ? {} : { if: ifExpr })],
+      {
+        exec: async (command): Promise<{ code: number; stdout: string; stderr: string; killed: boolean }> => {
+          ran.push(command);
+          return { code: 0, stdout: "", stderr: "", killed: false };
+        },
+      },
+    );
+    return {
+      ran,
+      run: async (tool, args) => {
+        const r = await e.run("PreToolUse", { event: "PreToolUse", tool_name: tool, tool_args: args });
+        return { ran: r.ran, errors: r.errors };
+      },
+    };
+  }
+
+  it("前缀命中才跑：run_shell(git add:*) 挡不住别的命令", async () => {
+    const hit = await engineWith("run_shell(git add:*)");
+    expect((await hit.run("run_shell", { command: "git add -A" })).ran).toBe(1);
+    expect(hit.ran.length).toBe(1);
+    expect((await hit.run("run_shell", { command: "npm publish" })).ran).toBe(0);
+    expect(hit.ran.length).toBe(1); // 没多跑
+  });
+
+  it("CC 工具名作别名：Write 命中 write_file 的主参数前缀", async () => {
+    const e = await engineWith("Write(src/**)");
+    expect((await e.run("write_file", { path: "src/a.ts" })).ran).toBe(1);
+    expect((await e.run("write_file", { path: "docs/a.md" })).ran).toBe(0);
+    expect((await e.run("read_file", { path: "src/a.ts" })).ran).toBe(0);
+  });
+
+  it("只写工具名 = 该工具一律跑；缺 if 字段 = 一律跑（零回归）", async () => {
+    const only = await engineWith("read_file");
+    expect((await only.run("read_file", { path: "x" })).ran).toBe(1);
+    expect((await only.run("write_file", { path: "x" })).ran).toBe(0);
+    const none = await engineWith(undefined);
+    expect((await none.run("write_file", { path: "x" })).ran).toBe(1);
+  });
+
+  it("读不懂的 if：一律跑 + 当场回执，且 parseHookIf 如实报 null", async () => {
+    const broken = await engineWith("Bash(");
+    const r = await broken.run("run_shell", { command: "git push" });
+    expect(r.ran).toBe(1);
+    expect(r.errors.join("｜")).toContain("if 语法读不懂");
+    const { parseHookIf } = await import("../src/agent/plugins");
+    expect(parseHookIf("Bash(")).toBeNull();
+    expect(parseHookIf("Write(src/**)")).toEqual({ tool: "Write", prefix: "src/" });
+  });
+});

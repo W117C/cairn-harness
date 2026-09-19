@@ -33,6 +33,9 @@ export interface HookHandlerDef {
 export interface HookMatcherDef {
   /** 工具名 matcher（Pre/PostToolUse 系）；缺省 = 匹配全部。 */
   matcher?: string;
+  /** §9.5 的 `if`：权限规则语法 best-effort 过滤（`Tool` 或 `Tool(<前缀>)`）。
+   *  CC 原话「硬闸必须走权限系统」——本字段只决定**这条钩子跑不跑**，不放宽任何权限。 */
+  if?: string;
   hooks: HookHandlerDef[];
 }
 
@@ -142,6 +145,8 @@ export interface LoadedHookDef {
   pluginRoot: string;
   event: HookEventName;
   matcher?: string;
+  /** §9.5 的 `if`（从 HookMatcherDef 带到执行面；同组 handler 共享一条过滤）。 */
+  if?: string;
   handler: HookHandlerDef;
   /** ${user_config.*} 禁入 shell-form hook：违规条目装载即拒绝（loaded=false + warning）。 */
   loaded: boolean;

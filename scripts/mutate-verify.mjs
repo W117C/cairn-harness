@@ -2648,6 +2648,46 @@ const MUTATIONS = [
     apply: (s) => s.replace("    if (!modelInvocable(entry)) {", "    if (false) {"),
     expectFail: "模型硬猜被藏起来的名字 ⇒ triggerSkill 明确拒绝并给出原因（不静默放行全文）",
   },
+  {
+    id: "hook-if-not-carried-at-load",
+    src: "src/agent/plugins/discover.ts",
+    test: "tests/hooks-input-contract.test.ts",
+    desc: "装载时不把 `if` 带进 LoadedHookDef ⇒ 执行端再怎么写也拿不到，作者那条「只拦这种」的闸被静默降级成每次都跑",
+    apply: (s) => s.replace("          ...(m.if !== undefined ? { if: m.if } : {}),", "          ...(false ? { if: m.if } : {}),"),
+    expectFail: "前缀命中才跑：run_shell(git add:*) 挡不住别的命令",
+  },
+  {
+    id: "hook-if-filter-not-applied",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/hooks-input-contract.test.ts",
+    desc: "handler 选择面不看 `if`（传 undefined）⇒ 解析器与别名全实现了，只是没人拿它筛，等于收下即丢",
+    apply: (s) => s.replace("      if (!hookIfMatches(h.if, payload.tool_name, payload.tool_args)) continue;", "      if (!hookIfMatches(undefined, payload.tool_name, payload.tool_args)) continue;"),
+    expectFail: "前缀命中才跑：run_shell(git add:*) 挡不住别的命令",
+  },
+  {
+    id: "hook-if-malformed-skips-handler",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/hooks-input-contract.test.ts",
+    desc: "读不懂的 `if` 判成「不匹配」⇒ 守卫型钩子（作者想拦东西）因一个拼写错而彻底不跑，且没有任何地方说它被关了",
+    apply: (s) => s.replace("  if (parsed === null) return true;", "  if (parsed === null) return false;"),
+    expectFail: "读不懂的 if：一律跑 + 当场回执，且 parseHookIf 如实报 null",
+  },
+  {
+    id: "hook-if-exec-receipt-removed",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/hooks-input-contract.test.ts",
+    desc: "执行期不留回执 ⇒ 装载期警告被面板刷掉后，这一次到底按什么语义跑的就再也无人知道（不静默改语义这条自身失去凭据）",
+    apply: (s) => s.replace("        result.errors.push(\"hook 的 if 语法读不懂（\" + h.if + \"）⇒ 本次按「总是跑」处理\");", "        void 0;"),
+    expectFail: "读不懂的 if：一律跑 + 当场回执，且 parseHookIf 如实报 null",
+  },
+  {
+    id: "hook-if-cc-tool-alias-removed",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/hooks-input-contract.test.ts",
+    desc: "去掉 CC 工具名别名 ⇒ 为 CC 写的 `Write(...)`/`Edit(...)` 型 if 在我们这里永不匹配，钩子静默不跑（§9.5 照抄语义的另一半）",
+    apply: (s) => s.replace(`  bash: "run_shell", write: "write_file", edit: "edit_file", read: "read_file",`, `  bash: "run_shell",`),
+    expectFail: "CC 工具名作别名：Write 命中 write_file 的主参数前缀",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
