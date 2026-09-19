@@ -1,6 +1,7 @@
 // 门禁清单 + 漂移护栏（从 gates.ts 抽出，便于单测——gates.ts 顶层有 `await main()`，
 // 直接 import 会跑起全套门禁，与 assertion-health.ts 同一处置理由）。
 //
+import { join } from "node:path";
 // 「清单即事实源」的缺口：GATES 是手写的，package.json scripts 也是手写的，
 // 两者之间没有机械校验——新增一条 `pnpm xxx-check` 却忘了登记进 GATES，
 // 就得到一道**从不运行的门**（provider:check 即历史实例）。
@@ -113,4 +114,35 @@ export function checkGateManifest(scripts: Record<string, string>): ManifestViol
   }
 
   return out;
+}
+
+/** 门的执行计划：本函数只回答「跑什么」，spawn 由 gates.ts 负责（gates.ts 顶层有 `await main()`，
+ *  判据放这儿才能单测——与 assertion-health.ts / 本文件同处置）。
+ *
+ *  直跑模式（`--direct` 或 `DSH_GATE_DIRECT=1`）绕开 pnpm：pnpm 11 在任何 run 之前做 deps 状态检查，
+ *  而它拒绝「node_modules 的解析目标不在项目根之内」的目录并试图就地 install（报 ERR_PNPM_UNSAFE_MODULES_DIR）。
+ *  「隔离 worktree + symlink 主树 node_modules」正是这个形状 ⇒ `pnpm gates` 只能在主树跑，
+ *  而主树可能正被另一个会话写入，整表验证就被无限期挂起。门清单与命令事实源都不变，只换执行器。 */
+export interface GateCommand {
+  cmd: string;
+  args: string[];
+  /** 直跑模式要把本仓的 node_modules/.bin 顶到 PATH 前面（脚本正文里的裸 `vitest` 等才找得到）。 */
+  pathPrepend?: string;
+  /** package.json 里没有这条 script ⇒ 调用方必须判红，不得当成"没有要跑的东西"静默跳过。 */
+  missingScript?: boolean;
+}
+
+export function gateCommand(
+  name: string,
+  opts: { direct: boolean; scripts: Record<string, string>; root: string },
+): GateCommand {
+  if (opts.direct !== true) return { cmd: "pnpm", args: ["run", name] };
+  const body = opts.scripts[name];
+  if (typeof body !== "string") {
+    return { cmd: "", args: [], missingScript: true };
+  }
+  if (body.trim() === "") {
+    return { cmd: "", args: [], missingScript: true };
+  }
+  return { cmd: "/bin/sh", args: ["-c", body], pathPrepend: join(opts.root, "node_modules", ".bin") };
 }

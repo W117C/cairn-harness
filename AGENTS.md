@@ -6,6 +6,7 @@
 
 - 安装：`pnpm install`
 - 全部门禁：`pnpm gates`（**清单即事实源**——跑齐 `scripts/gate-manifest.ts` 里的全部门并打印逐道退出码 + 恒真式/析取式体检 + 未证项汇总；新增门只改该清单，**本文件与任务书一律不写死门数**（写死即漂移磁铁——历史上曾出现「23 道」「26 道」两种说法互斥，而它们各自的当时真值也各不相同，所以**连"纠正当时的真值"都不该写进来**，只留"别写死"这条规矩）；`DSH_STRICT_UNVERIFIED=1` 或 `--strict-unverified` 让未证判红，CI/有凭据环境用）
+- 主树被别的会话占着时跑整表：`pnpm gates --direct`（换执行器、门清单不变，可在隔离 worktree 里跑；理由见 `scripts/gate-manifest.ts` 的 `gateCommand` 注释）
 - 六道门禁：`pnpm typecheck && pnpm test && pnpm e2e && pnpm ipc:check && pnpm sandbox:check && pnpm build`
 - 起界面：`pnpm start`（构建 + 启动 Electron）
 - 单跑闭环：`pnpm e2e`（mock 模型驱动 loop 修 `fixtures/todo-app` 的 bug）

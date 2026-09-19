@@ -2408,6 +2408,45 @@ const MUTATIONS = [
     apply: (s) => s.replace("  return process.env.M0_MODEL ?? GLM_DEFAULT_MODEL;", "  return GLM_DEFAULT_MODEL;"),
     expectFail: "glmDefaultModelName 与 streamGlm 真实拨号用的模型名逐字相等（防第四份 env 副本漂移）",
   },
+  // ---- 门的执行计划（scripts/gate-manifest.gateCommand，tests/gate-manifest.test.ts）----
+  {
+    id: "gate-direct-guards-deleted",
+    src: "scripts/gate-manifest.ts",
+    test: "tests/gate-manifest.test.ts",
+    desc: "删掉「脚本查不到」两道守卫 ⇒ 直跑模式对未登记的门 spawn 空命令，退出码 0 = 一道从不运行的门被当成跑过了",
+    apply: (s) => s.replace(`  if (typeof body !== "string") {
+    return { cmd: "", args: [], missingScript: true };
+  }
+  if (body.trim() === "") {
+    return { cmd: "", args: [], missingScript: true };
+  }
+`, "  void body;\n"),
+    expectFail: "直跑但 scripts 里没有这道门 ⇒ missingScript（调用方必须判红，不得当成无事发生）",
+  },
+  {
+    id: "gate-direct-blank-body-passes",
+    src: "scripts/gate-manifest.ts",
+    test: "tests/gate-manifest.test.ts",
+    desc: "空白正文判据写坏（只认 === \"\"）⇒ \"  \" 这种正文放行，`sh -c \"  \"` 退出码 0 同样是一道静默跳过的门",
+    apply: (s) => s.replace('  if (body.trim() === "") {', '  if (body === "") {'),
+    expectFail: "直跑但脚本正文是空白 ⇒ 同样判 missingScript（空命令的退出码 0 就是静默跳门）",
+  },
+  {
+    id: "gate-direct-default-executor-drifts",
+    src: "scripts/gate-manifest.ts",
+    test: "tests/gate-manifest.test.ts",
+    desc: "加直跑模式时顺手改了缺省分支（pnpm run → pnpm exec）⇒ 主树那条路语义跟着变，而新增能力只需多一条路、不需要动旧路",
+    apply: (s) => s.replace('if (opts.direct !== true) return { cmd: "pnpm", args: ["run", name] };', 'if (opts.direct !== true) return { cmd: "pnpm", args: ["exec", name] };'),
+    expectFail: "缺省（非直跑）：门名原样交给 pnpm run，不改写命令",
+  },
+  {
+    id: "gate-direct-path-prepend-dropped",
+    src: "scripts/gate-manifest.ts",
+    test: "tests/gate-manifest.test.ts",
+    desc: "直跑不前置 node_modules/.bin ⇒ 脚本正文里的裸 `vitest`/`electron-vite` 在 sh 下找不到命令，门以 127 假死",
+    apply: (s) => s.replace('return { cmd: "/bin/sh", args: ["-c", body], pathPrepend: join(opts.root, "node_modules", ".bin") };', 'return { cmd: "/bin/sh", args: ["-c", body] };'),
+    expectFail: "直跑：跑 package.json 的脚本正文，并把该仓 node_modules/.bin 顶到 PATH 前",
+  },
   // ---- prune 存盘回取接进生产（tests/prune.test.ts + tests/session-prune-attachments.test.ts）----
   {
     id: "prune-attachment-production-entry",
