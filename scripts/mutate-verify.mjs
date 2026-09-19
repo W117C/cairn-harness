@@ -2044,6 +2044,46 @@ const MUTATIONS = [
     apply: (s) => s.replace("!isSideEffectTool(s.function.name) && s.function.name !== \"remember\" && s.function.name !== \"wait_for_agents\",", "!isSideEffectTool(s.function.name) && s.function.name !== \"remember\","),
     expectFail: "只读档的摘除面与声明一致（只查静态表：运行期注入项由各自的开关管）",
   },
+  {
+    id: "mem-budget-unit-chars",
+    src: "src/agent/memory/inject.ts",
+    test: "tests/memory-inject-token-budget.test.ts",
+    desc: "记忆注入的总预算又按字符帽收（tokenBudget×4）⇒ 中文一字≈一 token，6K 预算实到 14K+，而这块每轮重送",
+    apply: (s) => s.replace("if (runningWeight > tokenBudget) {", "if (runningWeight > tokenBudget * CHARS_PER_TOKEN) {"),
+    expectFail: "中文语料超预算：整块按字重收进声明预算内，且如实报 truncated",
+  },
+  {
+    id: "mem-weight-ascii-count",
+    src: "src/agent/memory/inject.ts",
+    test: "tests/memory-inject-token-budget.test.ts",
+    desc: "丢掉了「按字符类别登记字重」（totalWeight 退回 length×0.25）⇒ 估算器对中文低估 4 倍，预算形同虚设",
+    apply: (s) => s.replace("(n, s) => n + weightText(s.header) + s.lines.reduce((m, l) => m + weightText(l) + 0.25, 0), 0);", "(n, s) => n + s.header.length * 0.25 + s.lines.reduce((m, l) => m + l.length * 0.25 + 0.25, 0), 0);"),
+    expectFail: "中文语料超预算：整块按字重收进声明预算内，且如实报 truncated",
+  },
+  {
+    id: "mem-drop-cursor-ascii",
+    src: "src/agent/memory/inject.ts",
+    test: "tests/memory-inject-token-budget.test.ts",
+    desc: "删行游标的扣减口径与 totalWeight 脱钩（按 length×0.25 扣）⇒ 中文段一路多删几倍行，预算没超但信息丢了",
+    apply: (s) => s.replace("runningWeight -= weightText(sec.lines[drop]!) + 0.25;", "runningWeight -= sec.lines[drop]!.length * 0.25 + 0.25;"),
+    expectFail: "中文语料超预算：整块按字重收进声明预算内，且如实报 truncated",
+  },
+  {
+    id: "mem-metadata-tokens-missing",
+    src: "src/agent/memory/inject.ts",
+    test: "tests/memory-inject-token-budget.test.ts",
+    desc: "元数据行不再报 tokens_current/tokens_limit ⇒ 块里只剩字符帽那把尺，模型自我收敛收敛到错的口径",
+    apply: (s) => s.replace("+ \" tokens_current=\" + String(tokensCurrent) + \"/tokens_limit=\" + String(tokenBudget));", ");"),
+    expectFail: "元数据行两套口径都报，tokens_limit 就是声明的预算（不拿字符帽冒充预算）",
+  },
+  {
+    id: "mem-tokens-reported-ascii",
+    src: "src/agent/memory/inject.ts",
+    test: "tests/memory-inject-token-budget.test.ts",
+    desc: "自报的 tokens 回到 chars/4 ⇒ 判定按字重、读数按英文口径，同一模块两副口径（本仓「估算与执行两套口径」病）",
+    apply: (s) => s.replace("    tokens: tokensCurrent,", "    tokens: Math.ceil(charsCurrent / CHARS_PER_TOKEN),"),
+    expectFail: "元数据行两套口径都报，tokens_limit 就是声明的预算（不拿字符帽冒充预算）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
