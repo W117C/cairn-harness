@@ -2989,7 +2989,7 @@ const MUTATIONS = [
     src: "src/agent/plugins/manifest.ts",
     test: "tests/plugin-user-config.test.ts",
     desc: "userConfig 的 default 在装载期就被丢掉（只剩 hasDefault 布尔）⇒ 读侧再正确也没有值可用",
-    apply: (s) => s.replace("        ...(o.default !== undefined ? { defaultValue: String(o.default) } : {}),", "        void o;"),
+    apply: (s) => s.replace("        ...(o.default !== undefined ? { defaultValue: String(o.default) } : {}),", "        ...(o.default !== undefined ? {} : {}),"),
     expectFail: "第二激活面 MCP：connectMcp 真的把 userConfig 递给 connect（远程 key 就写在 headers 里）",
   },
   {
