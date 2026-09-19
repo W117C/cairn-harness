@@ -20,6 +20,8 @@ export const GATES: readonly string[] = [
   "build",
   "fork-check",
   "gate-check",
+  // 文档分层预算：现行层字节预算 + 文档指针禁行号 + STATE.md rev 真伪（D-2 禁手抄观测值待 spec §12 D 段）。
+  "docs-check",
   "autonomy-check",
   "compaction-check",
   "panels-check",
