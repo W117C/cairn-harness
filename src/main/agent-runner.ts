@@ -1116,6 +1116,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     await runLoop({
       ...(impactHook ? { impact: impactHook } : {}),
       ...(opts.autoVerify === true ? { autoVerify: true } : {}),
+      stuckNudge: true, // 主会话（人直用那条）才有换路提示：worker 有看门、靶场按字节计量，见 LoopOptions
       provider: createProvider(opts.message, BASE_SYSTEM, {
         ...opts, emit: pipeline, solpi,
         pluginTools: [...(recall ? [observationRecallSpec] : []), ...(impactTool ? [impactQuerySpec] : []), ...pluginToolSpecsFromRuntime(rt).filter(t => !recall || t.name !== "obs_recall")],

@@ -5,6 +5,7 @@ import { projectContext } from "./context";
 import type { LegacyNextProvider, ModelOutput, Provider } from "../providers";
 import { streamFromNextSource } from "../providers";
 import { failureDigest, type VerifyHook, type VerifyOutcome } from "./verify";
+import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckTurn } from "./stuck";
 import { TOOLS, type ClarifyChannel, type PlanChannel, type ToolContext, type ToolName } from "../tools";
 
 export interface LoopOptions {
@@ -49,6 +50,15 @@ export interface LoopOptions {
   /** M3a 取消信号（编排器 AbortController 树）：中止于轮界（工具执行中不打断，轮末收束）。
    *  缺省 undefined = 无取消（既有路径字节不变）。 */
   signal?: AbortSignal;
+  /** 换路压力：同一调用连续重复时，在那条 tool_result 尾部追加一行提示（见 loop 内注释）。
+   *  **缺省 false = 零行为**——三条既有路径各自的原因：
+   *  - worker（编排器跑 runLoop）：那边已有更强的看门（detectStuck → waiting_input 等人），
+   *    再叠一层提示是双重指挥；且追加文本会改掉 `stuckObservationOf` 比较的观察串，
+   *    把「×4 相同」打散成「×3 相同 + 1 条带尾注」⇒ 看门永不触发（m3c 集成测实测到）。
+   *  - 靶场（gym）：用量是按字节推的，注入文本会扰动跨 case 基线（测的是模型不是提示措辞）。
+   *  - sidechat：只读问答，重复便宜。
+   *  所以只有人直用的主会话（agent-runner）显式开。 */
+  stuckNudge?: boolean;
 }
 
 // agent loop：事件流 → 模型 → 工具 → 事件流。
@@ -83,6 +93,13 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
   let verifyAttempts = 0;
   // 能力 5：本 run 是否真的落过盘（决定要不要补自动验证），以及自动拍是否已用过。
   let wroteThisRun = false;
+  // 换路压力（能力 4/9）：同一调用连败/连抄同一结果时，在那条 tool_result 尾部追加一行提示。
+  // 复用 worker 看门那颗纯函数（stuck.ts）与它的阈值，不另造检测器。差别在动作：编排器命中
+  // 是把 worker 挂成 waiting_input 等人，交互主循环里暂停会把「一次重复」的代价抬成「整轮等人」，
+  // 比它省下的更贵——所以这里只提示，不动终止语义、不新增事件、不多要一轮。每个 rule+action
+  // 只提示一次：第 5、6 次再叠同一句话本身就是新的 token 开销，而忽略提示的模型不会被复读说服。
+  const stuckTurns: StuckTurn[] = [];
+  const nudgedActions = new Set<string>();
   /** 跑一拍 verify 系统门。两种形态：
    *  - manual（模型自调）：有配对的 tool_call ⇒ 失败原文注入同轮继续修，返回 "continue"。
    *  - auto（harness 收束前补拍）：**没有**配对的 tool_call，也就没有合法注入通道
@@ -267,6 +284,22 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       }
       // M1c：gatedTool 自动放行时在结果上附带审计元数据（结构扩展），透传进 tool_result 事件
       const audit = (result as ToolResultWithAudit).auto;
+      // 换路压力记账（只读，不改事件序）：动作换了 ⇒ 上一轮的重复段结束，解除提示帽
+      let repeatNote = "";
+      if (opts.stuckNudge === true) {
+        const action = stuckActionOf(output.name, output.args);
+        const lastTurn = stuckTurns.length > 0 ? stuckTurns[stuckTurns.length - 1] : undefined;
+        if (lastTurn !== undefined && lastTurn.action !== action) nudgedActions.delete(lastTurn.action);
+        stuckTurns.push({ action, observation: stuckObservationOf(result.output), ok: result.ok });
+        if (stuckTurns.length > DEFAULT_STUCK_CONFIG.windowSize) stuckTurns.shift();
+        const verdict = detectStuck(stuckTurns);
+        if (verdict.stuck && !nudgedActions.has(action)) {
+          nudgedActions.add(action);
+          repeatNote = verdict.rule === "same_action_error_x3"
+            ? `\n[repeat] 同一个 ${output.name} 调用已连续 ${String(verdict.repeats)} 次失败——原样重试不会改变结果：换一个探针（改命令 / 换路径 / 直接 read 那个文件）或说明卡点。`
+            : `\n[repeat] 同一个 ${output.name} 调用已连续 ${String(verdict.repeats)} 次拿到逐字相同的结果——再问一次不会有新信息：换一个探针或说明为何仍需重复。`;
+        }
+      }
       // M2e：PostToolUse（成功）/ PostToolUseFailure（失败）——additionalContext 回注 tool_result 尾部
       let postContext = "";
       if (opts.hooks) {
@@ -286,7 +319,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         type: "tool_result",
         callId: output.id,
         ok: result.ok,
-        output: result.output + postContext,
+        output: result.output + postContext + repeatNote,
         ...(audit ? { auto: audit } : {}),
       });
       if (result.ok && (name === "write_file" || name === "edit_file")) wroteThisRun = true;
