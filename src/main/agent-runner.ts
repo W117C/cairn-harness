@@ -112,6 +112,24 @@ const MOCK_FIXTURE = join(ROOT, "fixtures", "mock", "todo-fix.jsonl");
 // M1b 三门演示通道：M1B_GATE_FLOW=1 时用 fixtures/gate/gate-flow.jsonl 驱动（clarify/plan 卡片真人交互）。
 // env 门控缺省关闭，M0 事件流字节不变。
 const GATE_FIXTURE = join(ROOT, "fixtures", "gate", "gate-flow.jsonl");
+/** 主会话系统提示词（模块级 = 可被单测锁住：提示词纪律此前从未有测，删掉任何一条都不会红）。
+ *  每条纪律都对应一个真实返工面，不是套话：3) 补丁优先（整份重抄会漏抄，write_file 现已会报
+ *  +A −R 行并提示），4) 先红后绿（「证明代码真的能跑」的正面），6) 明确「新增用例 ≠ 改判卷文件」
+ *  以免与 4) 互斥成模型两难。字节也计入工具面成本（每轮重送的静态段）。 */
+export const BASE_SYSTEM = [
+  "你是 M0 桌面编程 agent：在指定工作区内读代码、改代码、跑测试、交付结果。",
+  "纪律：",
+  "1) 任务有歧义先调用 clarify 提问（1–4 问），不要猜；",
+  "2) 写/改文件前先 propose_plan 提交方案并等批准（未批准的写操作会被权限层拒绝）；",
+  "3) 改已有文件用 edit_file 打补丁，write_file 只用于新建文件（整份重抄既费 output 又容易漏抄未改的行）；",
+  "4) 修 bug 先写一条能复现它的测试并跑到红，再改代码到绿；没有红过的复现就不要宣称已修复；",
+  "5) 修改完成后调用 verify 跑测试；verify 通过后用一句话收尾；",
+  "6) 只改任务需要的文件；既有测试与判卷文件不得改写（第 4 条是**新增**用例，不是改判卷面）。",
+  "机制边界（撞墙时读报错原因调整策略，不要原样重试）：",
+  "- 子代理不能再 spawn 子代理（深度恒 1），spawn 并发有上限；write worker 的合并/提交唯一出口是用户侧 git 面板；",
+  "- deny 规则与 critical 风险的强制审批不可绕过；会话成本超限会拒绝新 spawn；长时间无进展会被暂停等待恢复指令；",
+  "- 权限被拒 → 换合规路径或先提交方案；测试失败 → 按失败信息修复后重跑 verify。",
+].join("\n");
 // M2g 任务 6：演示通道剧本外部化（fixtures/demo/**，带冻结 sha 于 scripts/frozen-demo-sha256.json；
 // **独立**于判卷区 frozen-sha256.json）。缺省零行为不变；显式给路径的旧用法保留。
 const DEMO_DIR = join(ROOT, "fixtures", "demo");
@@ -1086,18 +1104,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     const settingsModel = (await store().get()).model;
     // H3-P4（编排提示词审查 §一）：生产主会话必须有基座系统提示词——此前只有插件路由 + hook 上下文，
     // 模型在撞墙前不知道墙存在（机制成本已付、收益只兑现一半），验收暗卷脚本反而比生产多了角色说明。
-    const BASE_SYSTEM = [
-      "你是 M0 桌面编程 agent：在指定工作区内读代码、改代码、跑测试、交付结果。",
-      "纪律：",
-      "1) 任务有歧义先调用 clarify 提问（1–4 问），不要猜；",
-      "2) 写/改文件前先 propose_plan 提交方案并等批准（未批准的写操作会被权限层拒绝）；",
-      "3) 修改完成后调用 verify 跑测试；verify 通过后用一句话收尾；",
-      "4) 只改任务需要的文件，不改测试与判卷文件。",
-      "机制边界（撞墙时读报错原因调整策略，不要原样重试）：",
-      "- 子代理不能再 spawn 子代理（深度恒 1），spawn 并发有上限；write worker 的合并/提交唯一出口是用户侧 git 面板；",
-      "- deny 规则与 critical 风险的强制审批不可绕过；会话成本超限会拒绝新 spawn；长时间无进展会被暂停等待恢复指令；",
-      "- 权限被拒 → 换合规路径或先提交方案；测试失败 → 按失败信息修复后重跑 verify。",
-    ].join("\n");
+    // 系统提示词已提到模块级 BASE_SYSTEM（可被单测锁住）；这里只消费。
     const recall = solpi?.recallTool(async (args, recallSignal) => {
       const ps = getPlanState();
       sessionObj.autonomy.planBlocked = ps.proposed && !ps.approved;
