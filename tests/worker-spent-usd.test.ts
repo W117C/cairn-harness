@@ -121,6 +121,24 @@ describe("W3② 花费折算（priceOf/costUsd 是唯一价源）", () => {
     expect(got!.usd).toBe(0);
   });
 
+  it("价表缺这个档位（两表漂移）⇒ 退化成一行的 warn + null，绝不把 worker 终态炸掉", () => {
+    const warns: unknown[] = [];
+    const warn = console.warn;
+    console.warn = (...a: unknown[]) => { warns.push(a.join(" ")); };
+    try {
+      expect(spentUsdFor({ model: "mystery-9000", priceId: "mystery-9000" }, { inputTokens: 10, outputTokens: 5 })).toBeNull();
+    } finally {
+      console.warn = warn;
+    }
+    expect(warns).toHaveLength(1);
+    expect(String(warns[0])).toContain("mystery-9000");
+    expect(String(warns[0])).toContain("价格未知");
+  });
+
+  it("usage 里冒出非有限数 ⇒ null（NaN 进 JSON 会变成 null，整批合计也会被带成 NaN）", () => {
+    expect(spentUsdFor({ model: "glm-5.2", priceId: "glm-standard" }, { inputTokens: Number.POSITIVE_INFINITY, outputTokens: 0 })).toBeNull();
+  });
+
   it("回执一行：带模型名 + 单价 + 标定态；不可知时出现「价格未知」且没有 $0", () => {
     const priced = priceTagText({ model: "glm-5.2", priceId: "glm-standard" }, 0.0123);
     expect(priced).toContain("glm-5.2");

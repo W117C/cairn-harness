@@ -6,7 +6,7 @@
 // 「数量有界 ≠ 体积有界」（MAX_CONCURRENT_WORKERS=4 时 4×400 仍会把父上下文塞穿）。
 import { clipWorkerSummary } from "./worker-report";
 import { estimateTextTokens } from "./text-budget";
-import { costUsd, priceOf } from "../routing/pricing";
+import { costUsd, priceOf, type ModelPrice } from "../routing/pricing";
 
 /** 单条 worker 摘要上限（token）。`SUMMARY_TOKEN_CAP`(2000) 是给一次 spawn 回执用的，
  *  收队一次最多回 4 个 worker ⇒ 整批帽按 2400、逐行 400，量级与主会话一轮工具结果相称。 */
@@ -38,6 +38,19 @@ function roundUsd(n: number): number {
   return Math.round(n * 1e6) / 1e6;
 }
 
+/** 档位表与价格表是两张手写的表，漂移由 `priceCoverage()`（routing-check）兜底；本地跑门可能漏过。
+ *  钱是**侧信道**：查不到价就当「价格未知」，绝不能把 worker 终态或 spawn 回执炸掉
+ *  （与 `appendImpact` 同纪律——护栏缺位不得把成功变成失败），但必须出声，不静默吞。 */
+function priceRow(id: string): ModelPrice | null {
+  try {
+    return priceOf(id);
+  } catch (err) {
+    console.warn("[pricing] 档位 " + JSON.stringify(id) + " 在价格表里查不到 ⇒ 按价格未知处理（两表漂移？见 priceCoverage）:",
+      err instanceof Error ? err.message : String(err));
+    return null;
+  }
+}
+
 /** 表价花费。**价格不可知 ⇒ null，不是 0**：把不可知记成免费是本仓点名的假绿形状。
  *  worker 的 usage 只有 in/out 两桶（不分列缓存块）⇒ 这是**上界**，宁高不低。 */
 export function spentUsdFor(
@@ -46,20 +59,30 @@ export function spentUsdFor(
 ): WorkerSpend | null {
   const id = price?.priceId;
   if (id === undefined) return null;
-  return { usd: roundUsd(costUsd(id, usage)), calibrated: priceOf(id).calibrated === true };
+  const row = priceRow(id);
+  if (row === null) return null;
+  const usd = costUsd(id, usage);
+  if (!Number.isFinite(usd)) {
+    // 非有限用量（异常 provider 回包）进 JSON 会静默变成 null，整批合计会被带成 NaN ⇒ 按不可知处理
+    console.warn("[pricing] 档位 " + JSON.stringify(id) + " 的花算出非有限值 " + String(usd) + " ⇒ 按价格未知处理");
+    return null;
+  }
+  return { usd: roundUsd(usd), calibrated: row.calibrated === true };
 }
+
+/** 三种「算不出钱」共用一句话：脚本回放 / 档位没注册 / 两张表漂移。 */
+const PRICE_UNKNOWN = "价格未知（脚本回放、未注册档位或价表漂移；不记为免费）";
 
 /** spawn 回执上给人/模型看的一行人话；`sessionSpentUsd` = 派这一条**之前**本会话 worker 已付的表价合计。
  *  措辞里必须带着"表价"与标定态：这张表 GLM 三档仍是占位数（见 pricing.ts 文件头）。 */
 export function priceTagText(price: WorkerPrice | null | undefined, sessionSpentUsd: number | null): string {
-  if (price === null || price === undefined || price.priceId === undefined) {
-    return "价格未知（脚本回放或未注册档位；不记为免费）";
-  }
+  if (price === null || price === undefined || price.priceId === undefined) return PRICE_UNKNOWN;
   const id = price.priceId;
-  const p = priceOf(id);
-  const calib = p.calibrated === true ? "表价已标定" : "表价未标定·不可当省钱证据";
+  const row = priceRow(id);
+  if (row === null) return PRICE_UNKNOWN;
+  const calib = row.calibrated === true ? "表价已标定" : "表价未标定·不可当省钱证据";
   const spent = sessionSpentUsd === null ? "" : "｜本会话 worker 累计≈$" + String(sessionSpentUsd);
-  return `模型 ${price.model}｜档 ${id} 表价 $${String(p.inputPerMTok)}/$${String(p.outputPerMTok)} 每百万 in/out（${calib}）${spent}`;
+  return `模型 ${price.model}｜档 ${id} 表价 $${String(row.inputPerMTok)}/$${String(row.outputPerMTok)} 每百万 in/out（${calib}）${spent}`;
 }
 
 /** 收队整批的花费小结；全未知或空 ⇒ null（不谎报合计，也让 note 少付一行）。 */
