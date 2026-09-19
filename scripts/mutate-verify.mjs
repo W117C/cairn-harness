@@ -1504,6 +1504,41 @@ const MUTATIONS = [
     apply: (s) => s.replace("    tail += s;\n    if (tail.length > tailBytes) tail = tail.slice(tail.length - tailBytes);", "    tail += s;"),
     expectFail: "总输出含提示行也不超上限（提示自己占位，否则「≤ 32KB」这句承诺被提示撑破）",
   },
+  {
+    id: "verify-repeat-never-detected",
+    src: "src/agent/loop.ts",
+    test: "tests/verify.test.ts",
+    desc: "去重的相等判定被摘掉 ⇒ 每一拍都重发整段失败日志（省 token 这件事根本没发生）",
+    apply: (s) => s.replace("const repeat = digest === lastVerifyDigest;", "const repeat = false;"),
+    expectFail: "第 2 拍与第 1 拍逐字相同：改注一行提示，不重发失败正文",
+  },
+  {
+    id: "verify-repeat-note-appends-digest",
+    src: "src/agent/loop.ts",
+    test: "tests/verify.test.ts",
+    desc: "提示行照发、整段摘要还是跟在后面 ⇒ 文案说「不再重复注入」而实现仍然注入（比值断言当场红）",
+    apply: (s) => s.replace("repeat ? repeatDigestNote(outcome, attempt) : digest", "repeat ? repeatDigestNote(outcome, attempt) + digest : digest"),
+    expectFail: "省下的量可测：32KB 级的相同失败摘要，第二拍注入字节 < 第一拍的 1/10",
+  },
+  {
+    id: "verify-repeat-compares-first-line-only",
+    src: "src/agent/loop.ts",
+    test: "tests/verify.test.ts",
+    desc: "按首行（=命令名）判重 ⇒ 命令没变就被当成「结果没变」，后续真正不同的错误输出被误判为重复而永不注入",
+    apply: (s) => s.replace(
+      "const repeat = digest === lastVerifyDigest;",
+      'const repeat = digest.split("\\n")[0] === (lastVerifyDigest ?? "").split("\\n")[0];',
+    ),
+    expectFail: "第 3 拍输出变了 ⇒ 全文照常注入（去重不是「只注入一次」）",
+  },
+  {
+    id: "verify-repeat-note-loses-command-list",
+    src: "src/agent/verify.ts",
+    test: "tests/verify.test.ts",
+    desc: "提示里不写是哪些命令没变 ⇒ 「没新信息」变成一句无法据以行动的空话",
+    apply: (s) => s.replace('(cmds === "" ? "（无）" : cmds)', '"（略）"'),
+    expectFail: "第 2 拍与第 1 拍逐字相同：改注一行提示，不重发失败正文",
+  },
 ];
 
 function runTest(testRel) {
