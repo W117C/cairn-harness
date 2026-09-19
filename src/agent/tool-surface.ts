@@ -3,7 +3,6 @@
 // 进这张表的条件：该工具不在 src/tools/index.ts 的静态注册表里，而是在运行期挂上模型面。
 // 不进表的：插件 skill 与 MCP scoped 工具（名字动态，由 plugins-check 按「规格与可执行面同集合」判）；
 // verify（不在 TOOLS 里，由 runLoop 当系统门特判，塞进工具对账门只会产生一条必须豁免的假红）。
-// 留位：obs_recall 与 impact_query 同族（运行期注入 + 开关控制），下一轮加静态门时一并登记。
 
 export interface InjectedToolSurface {
   name: string;
@@ -24,6 +23,8 @@ export const INJECTED_TOOLS: readonly InjectedToolSurface[] = [
   { name: "remember", specFace: "static", workerReachable: "write", reachableWhenReadOnly: false, mainSessionSideEffect: false },
   // impact_query 的 worker 三处同源另有 3 条变异锚点守着，登记进表 = 再多一道静态兜底
   { name: "impact_query", specFace: "runtime", workerReachable: "both", reachableWhenReadOnly: true, mainSessionSideEffect: false },
+  // 与 impact_query 同族：运行期按开关（solpiEnabled）注入，worker 面不开放
+  { name: "obs_recall", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
 ];
 
 /** 「缺谁」的单一实现——反向对照也走它，保证判据本身被测过而不是被调绿。 */

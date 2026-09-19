@@ -82,7 +82,8 @@ describe("G-B 注入工具三面对账", () => {
 
   it("声明表本身不可漏项：源文本里出现的注入名必须登记（不登记 = 新工具绕过这道门）", () => {
     const declared = new Set(INJECTED_TOOLS.map((s) => s.name));
-    expect(globalInjected().filter((n) => !declared.has(n))).toEqual([]);
+    const injected = [...new Set([...globalInjected(), ...runLoopInjected()])];
+    expect(injected.filter((n) => !declared.has(n))).toEqual([]);
   });
 
   it("对账本身有分辨力（反向对照：没这条的静态门等于没立）", () => {
