@@ -1,28 +1,10 @@
 import { projectUnits, mountHistory } from './history-window.js';
 import { projectPanelData } from './projections';
-/* ============ 图标 ============ */
-const ICONS = {
-  pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 3h6l-1 7 3 2.5V15H7v-2.5L10 10Z"/></svg>',
-  archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8M10 12h4"/></svg>',
-  unarchive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8"/><path d="m9.5 15 2.5-2.5L14.5 15M12 12.5V18"/></svg>',
-  pinSm: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 3h6l-1 7 3 2.5V15H7v-2.5L10 10Z"/></svg>',
-  folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>',
-  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>',
-  chevR: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg>',
-  sort: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 4v13m0 0-3-3m3 3 3-3M17 20V7m0 0-3 3m3-3 3 3"/></svg>',
-  pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
-  dots: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5.5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="18.5" r="1.7"/></svg>',
-  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg>'
-};
+import { $, esc, promptInput, sessionList, streamInner, toast } from './dom.js';
+import { ICONS, RUN_GRID_HTML, runGrid } from './icons.js';
+import { highlightAllDiffs } from './diff-highlight.js';
+import { actionsHTML, backToInput, copyText, markActDone, messageText, retype } from './message-actions.js';
 
-/* 运行中动效：九宫格（9 个小正方形），逐格顺时针点亮 = 颜色转圈加载。
-   格子的相位差写在 CSS 的 nth-child 上，所以这里只需 9 个空 <i>。
-   variant='proc' 用于聊天流的过程层（大一号、走 --dim 浅灰）。
-   纯装饰，状态由所在行的文字与 aria-label 播报 */
-const runGrid = (variant) =>
-  '<span class="run-grid' + (variant ? ' ' + variant : '') + '" aria-hidden="true">' +
-  '<i></i>'.repeat(9) + '</span>';
-const RUN_GRID_HTML = runGrid();
 
 /* ============ 会话数据 ============ */
 /* 排序方式：recent=最近活动在前，title=标题 A→Z */
@@ -60,62 +42,7 @@ let selectedId = 's1';
 let archiveOpen = false;
 let query = '';
 
-/* ============ 工具 ============ */
-const $ = (sel) => document.querySelector(sel);
-const sessionList = $('#sessionList');
-const toastEl = $('#toast');
-let toastTimer;
 
-function toast(text) {
-  toastEl.textContent = text;
-  toastEl.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1800);
-}
-
-function esc(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-/* ============ diff 内置轻量 tokenizer（TS 为主，无外部依赖） ============
-   按优先级分组匹配：注释 > 字符串 > 关键字 > 数字 > 函数调用 > 属性访问。
-   只对 .diff .ln 生效，行首的 +/- 前缀与缩进原样保留 */
-const TS_TOKENS =
-  /(\/\/.*$)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)|((?:\b(?:abstract|as|async|await|break|case|catch|class|const|continue|declare|default|delete|do|else|enum|export|extends|false|finally|for|from|function|get|if|implements|import|in|instanceof|interface|keyof|let|namespace|new|null|of|private|protected|public|readonly|return|satisfies|set|static|super|switch|this|throw|true|try|type|typeof|undefined|var|void|while)\b))|((?:\b(?:0[xXbBoO][\da-fA-F_]+|\d+(?:\.\d+)?)\b))|((?:\b[a-zA-Z_$][\w$]*(?=\s*\()))|((?:\.\b[a-zA-Z_$][\w$]*\b))/g;
-const TK_CLASS = ['', 'tk-com', 'tk-str', 'tk-kw', 'tk-num', 'tk-fn', 'tk-prop'];
-
-function highlightDiffLine(line) {
-  /* 行首 [空格][-+|! 前缀][空格] 原样保留，只对代码部分做 token */
-  const preM = line.match(/^(\s*[-+!]?\s*)/);
-  const pre = preM ? preM[1] : '';
-  if (pre) line = line.slice(pre.length);
-  let html = pre, last = 0;
-  TS_TOKENS.lastIndex = 0;
-  let m;
-  while ((m = TS_TOKENS.exec(line))) {
-    html += esc(line.slice(last, m.index));
-    let cls = '';
-    for (let g = 1; g <= 6; g++) if (m[g] !== undefined) { cls = TK_CLASS[g]; break; }
-    html += cls === 'tk-com'
-      ? '<span class="tk-com">' + esc(m[0]) + '</span>'   // 行注释吞到行尾
-      : cls
-        ? '<span class="' + cls + '">' + esc(m[0]) + '</span>'
-        : esc(m[0]);
-    if (cls === 'tk-com') { last = line.length; break; }
-    last = m.index + m[0].length;
-  }
-  html += esc(line.slice(last));
-  return html;
-}
-
-function highlightAllDiffs(root) {
-  const rows = (root || document).querySelectorAll('.diff .ln:not(.hunk)');
-  rows.forEach(row => {
-    if (row.dataset.tokenized) return;
-    row.innerHTML = highlightDiffLine(row.textContent);
-    row.dataset.tokenized = '1';
-  });
-}
 
 /* ============ 会话列表渲染 ============ */
 function cmpSessions(a, b) {
@@ -919,8 +846,6 @@ document.addEventListener('keydown', (e) => {
 renderSide();
 
 /* ============ 发送模拟 ============ */
-const streamInner = $('#streamInner');
-const promptInput = $('#promptInput');
 /* 新对话会清空整条流，这一份初始转录用于"返回上一个对话"；
    先对初始 diff 做 token 着色，保存的转录即带上高亮 span */
 highlightAllDiffs();
@@ -965,95 +890,7 @@ function observeMsg(el) {
 }
 document.querySelectorAll('.stream-inner .msg').forEach(observeMsg);
 
-/* ============ 消息操作行：复制 / 撤回 / 重新生成 + 发出时间 ============ */
-const MSG_ICONS = {
-  copy: '<svg class="ic-act" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M15.5 6.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h.5"/></svg>',
-  undo: '<svg class="ic-act" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h10a5 5 0 0 1 0 10h-3"/><path d="m8 5-4 4 4 4"/></svg>',
-  regen: '<svg class="ic-act" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 9a8 8 0 1 0 .9 4.4"/><path d="M20 4v5h-5"/></svg>',
-  fork: '<svg class="ic-act" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v9"/><circle cx="6" cy="17" r="2.5"/><circle cx="17" cy="6" r="2.5"/><circle cx="17" cy="17" r="2.5"/><path d="M17 8.5a5 5 0 0 1-5 5h-3.5"/></svg>',
-};
-const MSG_DONE_ICON = '<svg class="ic-done" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 4.5-5"/></svg>';
-function actBtn(kind, label) {
-  return '<button class="msg-act" type="button" data-msg-act="' + kind + '" aria-label="' + label +
-    '" data-label="' + label + '">' + MSG_ICONS[kind] + MSG_DONE_ICON + '</button>';
-}
-/* 用户消息：复制 / 撤回；AI 回复：复制 / 重新生成 / 分叉 / 撤回并重发。
-   时间戳与 token 消耗只挂 AI 侧（回合去重），用户侧操作行保持精简 */
-function actionsHTML(role, time, dur, tokens) {
-  const acts = role === 'user'
-    ? actBtn('copy', '复制这条消息') + actBtn('undo', '撤回这条消息')
-    : actBtn('copy', '复制这条回复') + actBtn('regen', '重新生成这条回复') + actBtn('fork', '从这里分叉对话') + actBtn('undo', '撤回上一条并重发');
-  const meta = dur
-    ? '<span class="dur">输出用时 ' + dur + '</span><span class="sep" aria-hidden="true">·</span>' +
-      (tokens ? '<span class="tok">' + tokens + ' tokens</span><span class="sep" aria-hidden="true">·</span>' : '')
-    : '';
-  return '<div class="msg-actions">' + acts +
-    (role === 'user' ? '' : '<span class="sp"></span>' + meta + '<span class="t">' + time + '</span>') +
-    '</div>';
-}
-function copyText(text) {
-  if (navigator.clipboard && window.isSecureContext) {
-    return navigator.clipboard.writeText(text).then(() => true).catch(() => legacyCopy(text));
-  }
-  return legacyCopy(text);
-}
-function legacyCopy(text) {
-  const ta = document.createElement('textarea');
-  ta.value = text;
-  ta.setAttribute('readonly', '');
-  ta.style.cssText = 'position:fixed;top:0;left:-9999px';
-  document.body.appendChild(ta);
-  ta.select();
-  ta.setSelectionRange(0, ta.value.length);
-  let ok = false;
-  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
-  ta.remove();
-  return ok;
-}
-function messageText(msg) {
-  if (msg.classList.contains('user')) {
-    const b = msg.querySelector('.bubble');
-    return b ? b.innerText.trim() : '';
-  }
-  return Array.from(msg.querySelectorAll('.ai-text'))
-    .map(el => el.innerText.trim()).filter(Boolean).join('\n\n');
-}
-function markActDone(btn) {
-  btn.classList.add('is-done');
-  clearTimeout(btn._doneTimer);
-  btn._doneTimer = setTimeout(() => btn.classList.remove('is-done'), 1400);
-}
-function backToInput(text) {
-  promptInput.value = text;
-  promptInput.style.height = 'auto';
-  promptInput.style.height = Math.min(promptInput.scrollHeight, 140) + 'px';
-  promptInput.focus();
-  const dot = text.length;
-  try { promptInput.setSelectionRange(dot, dot); } catch (e) { /* 非文本控件时忽略 */ }
-}
-function retype(msg) {
-  const target = msg.querySelector('.ai-text');
-  if (!target || msg._retyping) return;
-  const full = target.textContent;
-  if (!full) return;
-  msg._retyping = true;
-  const started = Date.now();
-  target.innerHTML = '<span class="stream-text"></span><span class="stream-caret" aria-hidden="true"></span>';
-  const span = target.querySelector('.stream-text');
-  const durEl = msg.querySelector('.msg-actions .dur');
-  let i = 0;
-  const timer = setInterval(() => {
-    span.textContent = full.slice(0, ++i);
-    if (i % 6 === 0) scrollStream();
-    if (i >= full.length) {
-      clearInterval(timer);
-      target.textContent = full;
-      msg._retyping = false;
-      if (durEl) durEl.textContent = '输出用时 ' + ((Date.now() - started) / 1000).toFixed(1) + 's';
-      scrollStream();
-    }
-  }, 24);
-}
+
 streamInner.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-msg-act]');
   if (!btn) return;
@@ -1067,7 +904,7 @@ streamInner.addEventListener('click', async (e) => {
   } else if (kind === 'regen') {
     markActDone(btn);
     toast('正在重新生成…');
-    retype(msg);
+    retype(msg, scrollStream);
   } else if (kind === 'fork') {
     markActDone(btn);
     const prev = msg.previousElementSibling;
