@@ -120,3 +120,28 @@
 **本轮没做**：不改 `agent-plan.md`（R1 留给裁决）、不动 `spawnRace`、不加 depth>1、不做 UI 新增视图（除 W2 的既有面板投影）、不引框架、不给 worker `clarify`。
 
 **未验证（未证 ≠ 通过）**：本轮全部为静态代码阅读 + 单点实测（`waitAll` 调用者、`runWorker` 的 runLoop 入参、`BASE_SYSTEM` 字节、settings 缺省值、两份 FORBIDDEN 名单）。**没有任何一条收益是实测的**：拆不拆更好、worker 验证值不值这些钱、调度纪律能否提高收队率——三者全部待 G-A 出数，此前不得对外宣称"更强"。
+
+---
+
+## 11. 执行期更正（2026-09-19/20 施工 W1a + G-B 时回写；上文原文一字不改，那是当日真值）
+
+1. **§2 不变量 3 与 §5 W3 的「中文段帽一律以字符登记」前提已失效**：`d98fa19` 把 `estimateTextTokens`
+   改成按字符类别计量（CJK 一字一 token），`4f66015` 又把 worker 报告裁剪接到同一口径。
+   ⇒ 帽可以直接按 token 写。W1a 实测钉住了这条：400-token 帽下 500 个汉字**必须被截**
+   （`tests/orchestrator-join.test.ts` 的 CJK 反向对照；旧 chars/4 口径会判它 125 而放过）。
+2. **§3 W1a 返回体里的 `cost_usd` 移出 W1a**：逐 worker 折算要新铺一条 pricing 路径 = 第二事实源。
+   会话级只有 `budgetEstimateUsd()` 一条现成通道 ⇒ 钱随 §5 W3「spawn 回执与终态结果带累计账」一起做，
+   W1a 只回 `usage`。
+3. **join 原语确实在，但带一条必须在调用方挡的洞**：`waitForAgentTerminal` 对**不存在**的 agent_id
+   会把 resolve 推进 `terminalWaiters` 且永不触发（既不 resolve 也不清理）⇒ 收队前先摘 unknown 名单。
+   这条不在原 spec 里，是接线时读原语读出来的，已落锚点 `wait-unknown-id-enters-waiters`。
+4. **§7 G-B 的落地形态改了**：不立独立门，静态对账进 `test` 门——`gate-manifest` 的
+   `checkGateManifest` 会把任何 `*-check` 形态脚本强制登记，凭空多一道进程换不来分辨力。
+   实例面只能走源文本正则（`installAppTools` 拉起 AskGate/调度器/electron 依赖，单测里调它等于起半个主进程），
+   其失效方向是**假绿** ⇒ 门自身带双向反向对照（造不存在的名要四处全报；谎报不可达要当场抓）。
+5. **一条锚点主动撤回**：「abort 越权（收队时顺手 `cancelAll`）」在当前测试面上**不可观察**——
+   `cancelAll` 只同步翻 `controller.aborted`，终态分类要等 worker 从挂起点恢复才发生，
+   脚本模型下最终仍是 `done`。硬造一条刚好会红的断言就是造恒真锚点，宁缺。
+   语义由方法注释与「取消只结束等待」那条测的行为面部分守着（`cancelled` 标记 + 不动 `timedOut`）。
+6. **默认值按 §2 不变量 4 判为「不加钱 ⇒ 默认开」**：W1a 不给开关。等待本身不多要模型轮，
+   代价只在 payload 体积，已由逐行 400 + 整批 2400 两段帽界住。
