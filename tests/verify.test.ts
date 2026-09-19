@@ -222,3 +222,27 @@ describe("verify 配置装载", () => {
   });
 
 });
+
+// 验证门的失败摘要就是模型的修-code 依据：旧执行器抄的是 run_shell 的**旧**截断（只留头部），
+// 而 `N failed` / 失败用例名 / stack 末行全在尾部——模型拿到一串 ✓ 行，只能白烧完 3 次额度。
+describe("defaultExec 超限截断（能力 5：结论在尾部，必须留住）", () => {
+  it("超 32KB 的失败输出：头尾都在，尾部结论进了 failureDigest", async () => {
+    const r = await defaultExec(
+      "for i in $(seq 1 4000); do echo \"progress-$i\"; done; echo 'FAILED: 2 tests, expected 3 got 2'; exit 1",
+      process.cwd(),
+    );
+    expect(r.ok).toBe(false);
+    expect(r.output).toContain("省略中间");
+    expect(r.output).toContain("progress-1");        // 头部留住
+    expect(r.output).toContain("FAILED: 2 tests");    // 尾部结论也留住
+    expect(r.output).toContain("[exit code: 1]");
+    expect(r.output.length).toBeLessThanOrEqual(32 * 1024 + 64);
+    expect(failureDigest({ ok: false, results: [r] })).toContain("FAILED: 2 tests");
+  });
+
+  it("未超限：输出逐字不变（既有 verify 判据零回归）", async () => {
+    const r = await defaultExec("echo hi", process.cwd());
+    expect(r.ok).toBe(true);
+    expect(r.output).toBe("hi");
+  });
+});

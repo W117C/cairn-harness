@@ -3,7 +3,7 @@
 // scripts（lint/test 存在才收）。两者皆无 → fail-closed（ok:false，验证门不空转放行）。
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { truncationNotice } from "../tools/base";
+import { createOutputRing } from "../tools/output-ring";
 import { sanitizedEnv, spawnTracked } from "../tools/process";
 import type { VerifyCommandResult } from "../events";
 
@@ -24,30 +24,21 @@ const TIMEOUT_MS = 60_000;
 
 /** 缺省执行器：bash -c，语义与 run_shell 对齐（32KB 截断 / 60s 强杀 / 退出码）。
  *  env 走 sanitizedEnv、进程走 spawnTracked（进程组 + 超时强制收束）——verify 命令来自目标仓库的
- *  .agent/config.json，属外部输入；不消毒就等于把 BYOK key 交给它（P1-1/P1-2）。 */
+ *  .agent/config.json，属外部输入；不消毒就等于把 BYOK key 交给它（P1-1/P1-2）。
+ *  截断走同一只头尾环：这里比 run_shell 更需要尾部——`N failed`、失败用例名、stack 末行
+ *  全在输出的最后几行，而这正是 failureDigest 回注给模型去修的全部依据。只留头部时
+ *  模型拿到的是 "RUN v5.0.0" 加一串 ✓ 行，改无可改，只能把 3 次 verify 额度白烧完。 */
 export const defaultExec: ExecFn = (command, cwd) => {
   return new Promise<VerifyCommandResult>((settle) => {
-    let out = "";
-    let truncated = false;
+    const ring = createOutputRing(OUTPUT_LIMIT);
     let timedOut = false;
     let settled = false;
-    const collect = (chunk: Buffer): void => {
-      if (out.length >= OUTPUT_LIMIT) {
-        truncated = true;
-        return;
-      }
-      out += chunk.toString("utf8");
-      if (out.length > OUTPUT_LIMIT) {
-        out = out.slice(0, OUTPUT_LIMIT);
-        truncated = true;
-      }
-    };
+    const collect = (chunk: Buffer): void => ring.push(chunk);
     const finish = (code: number | null): void => {
       if (settled) return;
       settled = true;
       handle.dispose();
-      let output = out;
-      if (truncated) output += "\n" + truncationNotice(32);
+      let output = ring.read();
       if (timedOut) output += "\n[error: verify 命令超时（60s），已强制终止]";
       if (code !== 0 && !timedOut) output += `\n[exit code: ${String(code)}]`;
       settle({ command, ok: code === 0 && !timedOut, output: output.replace(/\n+$/, "") });
