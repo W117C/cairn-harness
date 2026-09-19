@@ -175,4 +175,10 @@ describe("remember：根三文件 replace 守卫（补齐）", () => {
     expect((e as MemoryError).code).toBe("old_content_mismatch");
     expect(read(join(ws, ".agent", ROOT_FILES.architecture))).toContain("v1"); // 未被改写
   });
+  it("根三文件 replace 的空变更同样报 empty_change（与 topic 分支是两道独立闸）", async () => {
+    await remember.run({ scope: "project", kind: "architecture", op: "append", content: "v1" }, ctx());
+    const cur = read(join(ws, ".agent", ROOT_FILES.architecture));
+    const e = await remember.run({ scope: "project", kind: "architecture", op: "replace", old_content: cur, content: cur }, ctx()).catch((e: unknown) => e);
+    expect((e as MemoryError).code).toBe("empty_change");
+  });
 });

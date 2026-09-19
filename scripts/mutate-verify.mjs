@@ -511,8 +511,16 @@ const MUTATIONS = [
     src: "src/tools/remember.ts",
     test: "tests/remember.test.ts",
     desc: "old_content===content 的空变更闸被拆（无写值改写落盘，modified 白滚）",
-    apply: (s) => s.replace("if (oldContent === content) {", "if (false) {"),
+    apply: (s) => s.replace("        if (oldContent === content) {", "        if (false) {"),
     expectFail: "空变更：空白 content 与 old_content===content 都报 empty_change（无内容可沉淀）",
+  },
+  {
+    id: "remember-rootfile-empty-change-same",
+    src: "src/tools/remember.ts",
+    test: "tests/remember.test.ts",
+    desc: "根文件分支的空变更闸被拆 ⇒ 把 MEMORY.md 原样再写一遍也算「有变更」并落盘；topic 分支与这根是两条独立闸，只拆一条另一条仍在（故须各一条锚点）",
+    apply: (s) => s.replace("    if (oldContent === content) {\n      throw new MemoryError(\"empty_change\"", "    if (false) {\n      throw new MemoryError(\"empty_change\""),
+    expectFail: "根三文件 replace 的空变更同样报 empty_change（与 topic 分支是两道独立闸）",
   },
   {
     id: "remember-empty-content-whitespace",
@@ -583,7 +591,7 @@ const MUTATIONS = [
     src: "src/main/sessions.ts",
     test: "tests/sessions.test.ts",
     desc: "会话列表排序反转（最近在上 → 最旧在上，当前会话回退取错）",
-    apply: (s) => s.replace("return out.sort((a, b) => b.mtimeMs - a.mtimeMs);", "return out.sort((a, b) => a.mtimeMs - b.mtimeMs);"),
+    apply: (s) => s.replace("// 竞态删除/不可读：跳过，不出现在列表\n    }\n  }\n  return out.sort((a, b) => b.mtimeMs - a.mtimeMs);", "// 竞态删除/不可读：跳过，不出现在列表\n    }\n  }\n  return out.sort((a, b) => a.mtimeMs - b.mtimeMs);"),
     expectFail: "mtime 降序（最近在上）——当前会话回退取列表首个的数据面",
   },
   {
@@ -591,7 +599,7 @@ const MUTATIONS = [
     src: "src/main/sessions.ts",
     test: "tests/sessions.test.ts",
     desc: "撞名序号从 2 起（① 冲突覆盖：同名会话被新建空文件覆盖）",
-    apply: (s) => s.replace("for (let i = 2; ; i++) {", "for (let i = 1; ; i++) {"),
+    apply: (s) => s.replace("非法会话名: ${JSON.stringify(name)}`);\n  let id = base;\n  for (let i = 2; ; i++) {", "非法会话名: ${JSON.stringify(name)}`);\n  let id = base;\n  for (let i = 1; ; i++) {"),
     expectFail: "新建撞名自动加序号；空目录列表为空",
   },
   {
@@ -623,7 +631,7 @@ const MUTATIONS = [
     src: "src/main/sessions.ts",
     test: "tests/sessions.test.ts",
     desc: "sessionPath 的非法会话名闸被拆（重命名到可写路径的非法名字静默成功）",
-    apply: (s) => s.replace("if (!isValidSessionName(id)) throw new Error(", "if (false) throw new Error("),
+    apply: (s) => s.replace("if (!isValidSessionName(id)) throw new Error(`非法会话名: ", "if (false) throw new Error(`非法会话名: "),
     expectFail: "deleteSession / readSessionEvents 对非法名字直接拒绝（消息=非法会话名，而非 ENOENT）",
   },
   {
