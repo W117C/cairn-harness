@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { edit_file } from "../tools/edit_file";
 import { glob } from "../tools/glob";
 import { grep } from "../tools/grep";
+import { createImpactQueryTool } from "../tools/impact-query";
 import { lsp } from "../tools/lsp";
 import { read_file } from "../tools/read_file";
 import { remember } from "../tools/remember";
@@ -10,13 +11,18 @@ import { run_shell } from "../tools/run_shell";
 import { write_file } from "../tools/write_file";
 import type { Tool } from "../tools/base";
 import { evaluate, scopeKey, type AutonomySession, type EvaluateDecision } from "../permissions";
+import { WORKER_IMPACT_TOOL } from "./orchestrator-config";
 import type { Orchestrator } from "./orchestrator";
 import type { WorkerHandle } from "./orchestrator-types";
 import { shell_ro, shell_rw } from "./worker-shell-tools";
 
 /** worker 工具执行表（三重硬闸之一）：read mode = 只读面；write mode = worktree 可写面 +
  *  remember（重定向主 checkout）。spawn_agent/run_shell/merge/commit 在任何模式都不在表内。 */
-export function buildWorkerToolTable(w: WorkerHandle, orch: Orchestrator): Record<string, Tool> {
+export function buildWorkerToolTable(
+  w: WorkerHandle,
+  orch: Orchestrator,
+  opts: { impactAnalysis?: boolean } = {},
+): Record<string, Tool> {
   const table: Record<string, Tool> = {
     read_file: gatedWorkerTool("read_file", read_file, w, orch),
     grep: gatedWorkerTool("grep", grep, w, orch),
@@ -24,6 +30,12 @@ export function buildWorkerToolTable(w: WorkerHandle, orch: Orchestrator): Recor
     lsp: gatedWorkerTool("lsp", lsp, w, orch),
     shell_ro: gatedWorkerTool("shell_ro", shell_ro, w, orch),
   };
+  // 影响面读端与主会话同一份实现；这里不传 cacheDir ⇒ 用缺省应用数据目录（绝不写用户仓库）。
+  // 刻意**不**接写侧 per-edit 钩子：worker 的 worktree 是仓库副本，缓存按绝对路径键 ⇒ 每个 worker
+  // 冷启动重建整图，且 N 个 worker 的波及面在合并回主树那一刻才真正有意义（读端按需查已够）。
+  if (opts.impactAnalysis === true) {
+    table[WORKER_IMPACT_TOOL] = gatedWorkerTool(WORKER_IMPACT_TOOL, createImpactQueryTool(), w, orch);
+  }
   if (w.mode === "write") {
     delete table.shell_ro;
     // 文件面快照包装（M2f 裁决 6：写前快照只服务 findings 绝对行号换算，内存态随 worker 释放）

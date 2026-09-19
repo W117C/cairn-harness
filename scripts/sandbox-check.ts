@@ -96,6 +96,18 @@ if (!degraded) {
   assert(applied(n1), "④ 沙箱确实 apply（断网）", APPLY_FAILED.test(n1.output) ? "未验证：sandbox_apply 被拒" : "已 apply");
   // gates:disjunction-ok 合法析取：同上——断网可表现为非零退出，或 stderr 报 operation not permitted 而退出码为 0。
   assert(!n1.ok || /operation not permitted/i.test(n1.output), "④ 沙箱内无法建立 TCP 连接");
+
+  // ⑤ 输出截断口径（2026-09-19）：run_shell 与 verify 在**沙箱开着时**都从这里出口，
+  // 它若只留头部，「哪条测试失败」那行就到不了模型——这条断言把三处对齐钉在同一个门面上。
+  console.log("[sandbox:check] ⑤ 超限输出留尾部结论（与 run_shell / verify 同一只头尾环）");
+  const big = await runInSandbox(
+    "for i in $(seq 1 6000); do echo \"sandbox-line-$i\"; done; echo 'SANDBOX-TAIL-CONCLUSION'",
+    { cwd: ws, writableRoot },
+  );
+  assert(applied(big), "⑤ 沙箱确实 apply（超限输出）", APPLY_FAILED.test(big.output) ? "未验证：sandbox_apply 被拒" : "已 apply");
+  assert(big.output.includes("省略中间"), "⑤ 超限提示报出省略量", String(big.output.length) + " 字符");
+  assert(big.output.includes("sandbox-line-1"), "⑤ 头部留住");
+  assert(big.output.includes("SANDBOX-TAIL-CONCLUSION"), "⑤ 尾部结论留住（只留头部时这条必红）");
 } else {
   // ---------------- 分支 B：沙箱不可用 → 断言降级链正确（§2.1 红线） ----------------
   // 链：checkSandbox()=false → sandboxRisk 判写工具 high → auto 档送审 → 非交互 fail-closed 拒绝且不落盘。

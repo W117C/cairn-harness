@@ -70,6 +70,21 @@ console.log("\n== grep ==");
   const longLine = (r2.output.split("\n").find((l) => l.startsWith("Line ")) ?? "").slice(0, 3000);
   check("② 截断提示：长行截断到 2000 内", longLine.replace("Line " + "1: ".length, "").length <= 2100);
   check("② 截断提示：行截断带标记", r2.output.includes("行截断"));
+  // 查改一体两项新能力过门：context 省掉「为拼 old_string 再读一次文件」那一轮，
+  // fixed_strings 治的是含元字符查询词的**静默**假阳性（不报错，只是多命中）。
+  {
+    const r3 = await TOOLS.grep.run({ pattern: "needle item 7$", context: 1 }, ctx);
+    const ctxRows = r3.output.split("\n").filter((l) => /^ {2}\d+ \| /.test(l)).length;
+    check("② context=1 带回邻行且前缀可分辨", r3.output.includes("Line ") && ctxRows === 2, "邻行 " + String(ctxRows));
+  }
+  await writeFile(join(ws, "lit.txt"), "a.b\naxb\n", "utf8");
+  {
+    const hits = (out: string): number => out.split("\n").filter((l) => l.startsWith("Line ")).length;
+    const re = await TOOLS.grep.run({ pattern: "a.b", path: "lit.txt" }, ctx);
+    const fix = await TOOLS.grep.run({ pattern: "a.b", path: "lit.txt", fixed_strings: true }, ctx);
+    check("② fixed_strings 收掉正则假阳性（2 命中 → 1）", hits(re.output) === 2 && hits(fix.output) === 1,
+      String(hits(re.output)) + " → " + String(hits(fix.output)));
+  }
   check("③ 相对路径：输出无绝对路径", assertNoAbsPath(r1.output, ws));
   mark("grep", 0, "✅");
   mark("grep", 1, "✅");
@@ -144,7 +159,7 @@ console.log("\n== write_file / edit_file ==");
   check("edit_file replace_all 批量", e3.ok && e3.output.includes("2 处"));
   // 诊断回流（无 LSP 配置 = 无 <diagnostics> 后缀；有配置路径由单测覆盖）
   check("诊断回流：无 LSP 配置时输出不变", !e3.output.includes("<diagnostics"));
-  // edit_file 的 ①/②：输出是定长摘要（"已替换 <rel>（N 处）"）+ 有界诊断块（每文件 ≤20 条），
+  // edit_file 的 ①/②：输出是定长摘要（"已替换 <rel>（N 处，+A −R 行）"）+ 有界诊断块（每文件 ≤20 条），
   // 无无界输出面 → 语义上不适用，显式标 n/a 并写理由（不是恒真断言）。
   na("edit_file ① 输出上限", "输出为定长摘要 + 有界诊断块（每文件 ≤20 条），不存在无界输出面");
   na("edit_file ② 截断提示", "同上：输出有界，无需截断提示");
@@ -167,7 +182,9 @@ console.log("\n== run_shell（既有行为复核）==");
   const r1 = await TOOLS.run_shell.run({ command: big }, ctx);
   const truncated = r1.output.includes("已截断");
   check("① 输出上限：32KB 截断", truncated);
-  check("② 截断提示：[truncated: 32KB", r1.output.includes("32KB"));
+  // 提示要说清「省了多少字节、留了哪两段」：旧文案只报 32KB 上限，模型无从判断尾部结论还在不在
+  //（run_shell 已从头尾双段截断，见 middleTruncationNotice）。
+  check("② 截断提示：报省略字节数且尾段仍在", /\[truncated: [^\n]*省略中间 \d+ 字节/.test(r1.output) && r1.output.includes("line-5000"));
   check("③ 相对路径：cwd 为工作区", (await TOOLS.run_shell.run({ command: "pwd" }, ctx)).output.includes("m2a-check-"));
   await rm(ws, { recursive: true, force: true });
 }

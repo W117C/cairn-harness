@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { appendImpact, assertNotAgentArea, assertNotAgentAreaReal, assertRealContainment, resolveInWorkspace, ToolError, type Tool, type ToolResult } from "./base.js";
 import { collectDiagnostics } from "./lsp.js";
+import { lineDelta } from "./line-delta.js";
 
 /** 0 匹配时的「最像的位置」提示——把「读错误→重读整个文件→再改」的三轮压成一轮。
  *  只定位不替换：静默改到别处比改不动危险得多，所以这条永远只出现在报错文本里。
@@ -77,10 +78,12 @@ export const edit_file: Tool = {
     const updated = replaceAll ? content.split(oldString).join(newString) : content.replace(oldString, () => newString);
     await writeFile(abs, updated, "utf8");
     const replacements = replaceAll ? count : 1;
+    // 行增减是「改动范围最小」的可核对面：处数只说改了几块，不说动了多少行内容。
+    const d = lineDelta(content, updated);
     // M2a 诊断回流：成功写盘后等诊断（LSP 未配置 = 空串，输出不变）
     const diag = await collectDiagnostics(ctx.workspace, abs);
     // M7 影响面：替换成功后回注跨文件波及（best-effort，见 appendImpact）。
-    const output = await appendImpact(ctx, rel, "已替换 " + rel + "（" + replacements + " 处）" + diag);
+    const output = await appendImpact(ctx, rel, "已替换 " + rel + "（" + replacements + " 处，+" + String(d.added) + " −" + String(d.removed) + " 行）" + diag);
     return { ok: true, output };
   },
 };

@@ -161,6 +161,11 @@ export interface OrchestratorOptions {
    *  GLM/OpenAI 是自动前缀缓存、Gemini 需另建 cachedContent 资源 ⇒ 传了也是零行为。
    *  缺省 false = 请求体逐字不变。 */
   promptCache?: boolean;
+  /** M7 影响面读端（与主会话 `settings.impactAnalysis` 同源开关）：开启时 worker 的工具面
+   *  追加 `impact_query`（只读，查「谁在调用它」）。缺省 false = 规格面/执行面/白名单三处都不出现。
+   *  刻意只接**读端**：写侧 per-edit 钩子要在每个 worker 的 worktree 冷启动重建整图，
+   *  代价随 worker 数线性放大，而波及面真正有意义是在合并回主树那一刻。 */
+  impactAnalysis?: boolean;
   /** M5b 模型路由（§m5-proposal 步骤 8）：启用时每次 spawn routeFor 决策 → 落 routing_decision →
    *  toWorkerModel(档位)。缺省 false = 零行为（modelFor / defaultWorkerModel 原路径逐字不变，零 routing_decision）。 */
   routing?: boolean;

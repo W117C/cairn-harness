@@ -1,5 +1,6 @@
 import type { GlmToolSpec } from "../providers/glm";
 import type { Tool, ToolContext, ToolResult } from "../tools/base";
+import { impactQuerySpec } from "../tools/impact-query";
 import { run_shell } from "../tools/run_shell";
 import { gateToolSpecs } from "./glm-session";
 
@@ -171,7 +172,7 @@ export const shell_rw: Tool = {
  *  是 worker 专属面（`shell_ro`/`shell_rw` 不进主会话），仍在此处追加。
  *  M3b：mode=write 时补写面规格（write_file/edit_file/shell_rw/remember）——spawn_agent 与
  *  run_shell/merge/commit 依旧根本不在表内（合并权只在 git 面板）。 */
-export function workerToolSpecs(mode: "read" | "write" = "read"): GlmToolSpec[] {
+export function workerToolSpecs(mode: "read" | "write" = "read", opts: { impactAnalysis?: boolean } = {}): GlmToolSpec[] {
   const allow = mode === "write"
     ? new Set<string>(["read_file", "grep", "glob", "lsp", "write_file", "edit_file", "remember"])
     : new Set<string>(["read_file", "grep", "glob", "lsp"]);
@@ -197,7 +198,19 @@ export function workerToolSpecs(mode: "read" | "write" = "read"): GlmToolSpec[] 
       },
     },
   ];
-  for (const spec of shells) {
+  // 影响面读端（与主会话同一个规格与同一份实现，开关同源 impactAnalysis）：worker 在 worktree
+  // 里改代码时同样需要「改前先问谁在调用」—— ctx.workspace 在运行时才取，所以实例天然指向 worktree。
+  const extras: GlmToolSpec[] = opts.impactAnalysis === true
+    ? [{
+        type: "function",
+        function: {
+          name: impactQuerySpec.name,
+          description: impactQuerySpec.description,
+          parameters: impactQuerySpec.parameters,
+        },
+      }]
+    : [];
+  for (const spec of [...shells, ...extras]) {
     if (seen.has(spec.function.name)) continue;
     seen.add(spec.function.name);
     specs.push(spec);

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -54,9 +54,12 @@ describe("C1 actual main runner integration (local scripts, no model calls)", ()
   it("default/off is byte-identical and never reads invalid lint config", async () => {
     await writeFile(join(dir, ".agent/config.json"), "INVALID");
     const baseline = await run(undefined, { actionFusion: undefined });
+    // 两次 run 必须从同一文件态起：写盘摘要现在报行增减，
+    // 第二次覆盖自己刚写的 target.txt 天然就是 +0 −0，那是信息不是漂移。
+    await rm(join(dir, "target.txt"), { force: true });
     const disabled = await run(undefined, { actionFusion: false });
     expect(JSON.stringify(disabled)).toBe(JSON.stringify(baseline));
-    expect(toolResults(baseline)[0]?.output).toBe("已写入 target.txt（3 字节）");
+    expect(toolResults(baseline)[0]?.output).toBe("已写入 target.txt（3 字节，新建 +1 行）");
     expect(JSON.stringify(baseline)).not.toContain("fused_lint");
   });
 

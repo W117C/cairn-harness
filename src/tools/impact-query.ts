@@ -8,15 +8,22 @@
 //
 // 注入纪律（同 obs_recall）：只由 agent-runner 在 impactAnalysis 开启时**同时**注入实例与规格，
 // 不进静态工具表 ⇒ 关着的时候一次请求都不为该工具付字节。
-import { defaultImpactCacheDir, fileImpact, upward, buildImpact, IMPACT_CONTEXT_FILES, IMPACT_CONTEXT_SYMBOLS_PER_FILE, type ImpactSite } from "../agent/impact/index.js";
+import { defaultImpactCacheDir, downward, fileImpact, upward, buildImpact, IMPACT_CONTEXT_FILES, IMPACT_CONTEXT_SYMBOLS_PER_FILE, type ImpactSite } from "../agent/impact/index.js";
 import { assertNotAgentArea, assertRealContainment, resolveInWorkspace, ToolError, type Tool, type ToolResult } from "./base.js";
 
 const FILES_CAP = IMPACT_CONTEXT_FILES;
 const SYMS_CAP = IMPACT_CONTEXT_SYMBOLS_PER_FILE;
 
+/** 两个方向共用同一套帽，但措辞不能混：up 回答「谁在调用我」，deps 回答「我在调用谁」。
+ *  缺省 noun = up ⇒ 既有调用的输出字节逐字不变（有测锁）。 */
+interface SiteNoun { item: string; group: string; none: string }
+const UP_NOUN: SiteNoun = { item: "跨文件调用点", group: "波及", none: "：无跨文件调用点（波及半径为 0）" };
+const DEP_NOUN: SiteNoun = { item: "引用的外部定义", group: "分布在", none: "：不引用任何定义在别处的符号（依赖面为 0）" };
+const NOT_IN_GRAPH = "impact_query: 该文件不在影响图内（后缀不支持 / 未扫到 / 路径写错），先 glob 确认相对路径";
+
 /** 调用点按文件汇聚的紧凑清单（与 contextNoteFor 同一套帽：宁少不炸上下文）。 */
-function sitesNote(head: string, sites: ImpactSite[]): string {
-  if (sites.length === 0) return head + "：无跨文件调用点（波及半径为 0）";
+function sitesNote(head: string, sites: ImpactSite[], noun: SiteNoun = UP_NOUN): string {
+  if (sites.length === 0) return head + noun.none;
   const byFile = new Map<string, ImpactSite[]>();
   for (const s of sites) {
     const arr = byFile.get(s.file);
@@ -25,7 +32,7 @@ function sitesNote(head: string, sites: ImpactSite[]): string {
   }
   const files = [...byFile.keys()];
   const shown = files.slice(0, FILES_CAP);
-  const lines = [head + "：跨文件调用点 " + String(sites.length) + " 处，波及 " + String(files.length) + " 个文件"];
+  const lines = [head + "：" + noun.item + " " + String(sites.length) + " 处，" + noun.group + " " + String(files.length) + " 个文件"];
   for (const f of shown) {
     const arr = byFile.get(f)!;
     const syms = arr.slice(0, SYMS_CAP).map((s) => `${s.symbol}(L${String(s.line)})`).join(", ");
@@ -45,12 +52,24 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
       if ((symbol === "") === (fileArg === "")) {
         throw new ToolError('impact_query: 参数恰好给一个——{"symbol":"fn"} 查谁在调用它，{"file":"src/x.js"} 查该文件全部符号的波及面');
       }
+      const wantDeps = args.deps === true;
+      if (wantDeps && fileArg === "") {
+        throw new ToolError('impact_query: deps 只配合 file 使用——{"file":"src/x.js","deps":true} 列本文件引用的外部定义');
+      }
       if (fileArg !== "") {
         const abs = resolveInWorkspace(ctx.workspace, fileArg, "impact_query");
         assertNotAgentArea(fileArg, "impact_query");
         await assertRealContainment(ctx.workspace, abs, "impact_query");
+        if (wantDeps) {
+          // 反向一跳：downward 早就有实现与单测，但模型面够不着 ⇒ 「跨模块理解依赖」只兑现了一半
+          // （只有"谁在用我"，没有"我在用谁"）。图只建一次，不复用 fileImpact（它会再建一遍）。
+          const graph = await buildImpact({ workspace: ctx.workspace, cacheDir: dir });
+          const rel = fileArg.replace(/\\/g, "/");
+          if (!graph.files.includes(rel)) return { ok: false, output: NOT_IN_GRAPH };
+          return { ok: true, output: sitesNote("[impact] " + rel + " 引用的外部定义（我在调用谁）", downward(graph, rel), DEP_NOUN) };
+        }
         const r = await fileImpact(ctx.workspace, fileArg, dir);
-        if (r === null) return { ok: false, output: "impact_query: 该文件不在影响图内（后缀不支持 / 未扫到 / 路径写错），先 glob 确认相对路径" };
+        if (r === null) return { ok: false, output: NOT_IN_GRAPH };
         // 只列**真的被外面引用到**的符号：fileImpact 的 symbols 含函数内局部名（base/boosted…），
         // 照抄会让一屏摘要塞满无关名字——多花 token 还不给可执行信息。
         const refSyms = [...new Set(r.up.map((s) => s.symbol))].sort();
@@ -80,6 +99,7 @@ export const impactQuerySpec = {
     properties: {
       symbol: { type: "string", description: "要查调用点的符号名" },
       file: { type: "string", description: "要查波及面的文件（workspace 相对路径）" },
+      deps: { type: "boolean", description: "配合 file：改列本文件引用的外部定义（我在调用谁）" },
     },
   },
 } as const;
