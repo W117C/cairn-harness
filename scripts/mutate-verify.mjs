@@ -648,7 +648,7 @@ const MUTATIONS = [
   },
   {
     id: "semantic-admission-never-reports",
-    src: "src/agent/orchestrator.ts",
+    src: "src/agent/lease-conflicts.ts",
     test: "tests/impact-admission.test.ts",
     desc: "语义波及相交不再上报（B1 退化回「只看 glob」：两个 worker 各改各文件却波及同一批调用点，合并时才打架）",
     apply: (x) => x.replace('if (shared.length > 0) out.push({ agentId: w.agentId, resource: "波及 " + shared.join("、") });', 'if (false) out.push({ agentId: w.agentId, resource: "波及 " + shared.join("、") });'),
@@ -656,7 +656,7 @@ const MUTATIONS = [
   },
   {
     id: "semantic-admission-guard-removed",
-    src: "src/agent/orchestrator.ts",
+    src: "src/agent/lease-conflicts.ts",
     test: "tests/impact-admission.test.ts",
     desc: "去掉「未接钩子 / 空声明 / 无 worker」前置（impactAnalysis 关闭时 spawn 会被 undefined 钩子炸掉）",
     apply: (x) => x.replace("if (!hook || resources.length === 0 || workers.length === 0) return [];", "if (resources.length === 0 || workers.length === 0) return [];"),
@@ -778,7 +778,7 @@ const MUTATIONS = [
   // ---- worker 上下文预算认模型（1e85544）----
   {
     id: "worker-budget-window-ignored",
-    src: "src/agent/orchestrator.ts",
+    src: "src/agent/orchestrator-config.ts",
     test: "tests/worker-budget.test.ts",
     desc: "worker 预算不再采信模型窗口（256k/1M 档仍按硬编码 128k 提前压缩 = 多烧一次摘要 + 白丢冷细节）",
     apply: (s) => s.replace("const budgeted = withModelBudget(base, window);", "const budgeted = base;"),
@@ -786,7 +786,7 @@ const MUTATIONS = [
   },
   {
     id: "worker-budget-clamp-removed",
-    src: "src/agent/orchestrator.ts",
+    src: "src/agent/orchestrator-config.ts",
     test: "tests/worker-budget.test.ts",
     desc: "去掉「显式覆盖绝不超出模型窗口」的钳制（超窗请求发给远端吃 400，本地 fail-closed 失效）",
     apply: (s) => s.replace("return budgeted !== base ? { ...merged, inputLimit: Math.min(merged.inputLimit, budgeted.inputLimit) } : merged;", "return merged;"),
@@ -993,13 +993,13 @@ const MUTATIONS = [
   {
     id: "gym-probe-transport-drains-all",
     src: "src/agent/gym/probe.ts",
-    test: "tests/gym-script.test.ts",
+    test: "tests/gym-rounds-e2e.test.ts",
     desc: "探针 transport 绕过切源、一次吐完（装配账把 10 轮会话记成 1 次请求，成本面当场少算一个数量级）",
     apply: (s) => s.replace(
       "    const round = takeRound(script, cursor);\n    cursor = round.next;\n    for (const output of round.outputs) yield output;\n",
       "    while (cursor < script.length) yield script[cursor++];\n",
     ),
-    expectFail: "probe 档：请求数 == 轮数，且历史段逐轮递增（旧语义下这里恒为 1 条）",
+    expectFail: "probe 档逐轮装配：轮号递增、同一输入下账不变、尾部跑完即空",
   },
 ];
 
