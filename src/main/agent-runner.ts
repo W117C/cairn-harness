@@ -960,9 +960,10 @@ function createProvider(userMessage: string, systemPrefix?: string, sessionOptio
 // verify 执行器：沙箱可用时命令走 Seatbelt（坑三：pnpm 映射为直连 vitest），否则直跑。
 function verifyExec(sandbox: SandboxStatus | null): ExecFn {
   if (!sandbox?.available) return defaultExec;
-  return async (command, cwd) => {
+  return async (command, cwd, timeoutMs) => {
     const mapped = command.trim() === "pnpm test" || command.trim() === "pnpm run test" ? VITEST_DIRECT : command;
-    const res = await runInSandbox(mapped, { cwd });
+    // 超时同样要穿过去：沙箱是发货缺省路径，这里不接就等于语言探测的 300s 白给。
+    const res = await runInSandbox(mapped, { cwd, ...(timeoutMs ? { timeoutMs } : {}) });
     return { command, ok: res.ok, output: res.output };
   };
 }

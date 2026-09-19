@@ -1560,7 +1560,7 @@ const MUTATIONS = [
     src: "src/agent/verify.ts",
     test: "tests/verify-probe.test.ts",
     desc: "把探到的测试命令同时当 lint 用 ⇒ action-fusion 会拿「风格未整理」把干净改动报成失败",
-    apply: (s) => s.replace("if (lang.length > 0) return { config: { test: lang }, source: \"probed\" };", "if (lang.length > 0) return { config: { test: lang, lint: lang }, source: \"probed\" };"),
+    apply: (s) => s.replace("if (lang.length > 0) return { config: { test: lang, timeoutMs: PROBED_LANG_TIMEOUT_MS }, source: \"probed\" };", "if (lang.length > 0) return { config: { test: lang, lint: lang, timeoutMs: PROBED_LANG_TIMEOUT_MS }, source: \"probed\" };"),
     expectFail: "只补 test 不凭空造 lint（action-fusion 读 config.lint，造出来会把干净改动报成失败）",
   },
   {

@@ -10,6 +10,8 @@ import type { VerifyCommandResult } from "../events";
 export interface VerifyConfig {
   lint?: string[];
   test?: string[];
+  /** 单条 verify 命令的墙钟上限（毫秒）；缺省见 DEFAULT_VERIFY_TIMEOUT_MS。 */
+  timeoutMs?: number;
 }
 
 export interface VerifyOutcome {
@@ -17,10 +19,17 @@ export interface VerifyOutcome {
   results: VerifyCommandResult[];
 }
 
-export type ExecFn = (command: string, cwd: string) => Promise<VerifyCommandResult>;
+export type ExecFn = (command: string, cwd: string, timeoutMs?: number) => Promise<VerifyCommandResult>;
 
 const OUTPUT_LIMIT = 32 * 1024;
-const TIMEOUT_MS = 60_000;
+/** verify 缺省超时：npm 侧脚本 60s 够用（e2e / gym 都跑在这条上，不动它 = 零回归）。 */
+export const DEFAULT_VERIFY_TIMEOUT_MS = 60_000;
+/** 语言探测档的缺省超时：冷编译的 `cargo test` / `go test ./...` 在 60s 内根本跑不完。
+ *  上一轮刚把非 npm 仓库的验证面探测出来，若还按 60s 掐，等于把一条死路换了个方向——
+ *  模型只会连续收到「超时」并烧光 verify 额度。 */
+export const PROBED_LANG_TIMEOUT_MS = 300_000;
+const MIN_VERIFY_TIMEOUT_MS = 1_000;
+const MAX_VERIFY_TIMEOUT_MS = 900_000;
 
 /** 缺省执行器：bash -c，语义与 run_shell 对齐（32KB 截断 / 60s 强杀 / 退出码）。
  *  env 走 sanitizedEnv、进程走 spawnTracked（进程组 + 超时强制收束）——verify 命令来自目标仓库的
@@ -28,7 +37,7 @@ const TIMEOUT_MS = 60_000;
  *  截断走同一只头尾环：这里比 run_shell 更需要尾部——`N failed`、失败用例名、stack 末行
  *  全在输出的最后几行，而这正是 failureDigest 回注给模型去修的全部依据。只留头部时
  *  模型拿到的是 "RUN v5.0.0" 加一串 ✓ 行，改无可改，只能把 3 次 verify 额度白烧完。 */
-export const defaultExec: ExecFn = (command, cwd) => {
+export const defaultExec: ExecFn = (command, cwd, timeoutMs = DEFAULT_VERIFY_TIMEOUT_MS) => {
   return new Promise<VerifyCommandResult>((settle) => {
     const ring = createOutputRing(OUTPUT_LIMIT);
     let timedOut = false;
@@ -39,7 +48,7 @@ export const defaultExec: ExecFn = (command, cwd) => {
       settled = true;
       handle.dispose();
       let output = ring.read();
-      if (timedOut) output += "\n[error: verify 命令超时（60s），已强制终止]";
+      if (timedOut) output += "\n[error: verify 命令超时（" + String(Math.round(timeoutMs / 1000)) + "s），已强制终止——命令确实跑完过吗？范围太大就先跑单条测试]";
       if (code !== 0 && !timedOut) {
         output += `\n[exit code: ${String(code)}]`;
         // 127 = bash 找不到这条命令：探到的工具链在这台机器上没装。这一拍说明不了代码对错，
@@ -51,7 +60,7 @@ export const defaultExec: ExecFn = (command, cwd) => {
     const handle = spawnTracked("bash", ["-c", command], {
       cwd,
       env: sanitizedEnv(),
-      timeoutMs: TIMEOUT_MS,
+      timeoutMs,
       onTimeout: () => {
         timedOut = true;
         finish(null);
@@ -121,6 +130,14 @@ export async function loadVerifyConfig(
           config[key] = arr as string[];
         }
       }
+      const t = (v as Record<string, unknown>).timeoutMs;
+      if (t !== undefined) {
+        if (typeof t !== "number" || !Number.isInteger(t) || t < MIN_VERIFY_TIMEOUT_MS || t > MAX_VERIFY_TIMEOUT_MS) {
+          throw new Error("verify.timeoutMs 必须是 " + String(MIN_VERIFY_TIMEOUT_MS / 1000) + "–"
+            + String(MAX_VERIFY_TIMEOUT_MS / 1000) + " 秒之间的整数毫秒");
+        }
+        config.timeoutMs = t;
+      }
       return { config, source: "config" };
     }
   } catch (err) {
@@ -143,7 +160,8 @@ export async function loadVerifyConfig(
   // ③ 没有 package.json、或有 package.json 却没 lint/test 脚本 ⇒ 探非 npm 工具链。
   //    旧实现在这里直接返回 "none"，非 JS 仓库因此永远没有验证面。
   const lang = await probeLanguageTestCommands(repoDir);
-  if (lang.length > 0) return { config: { test: lang }, source: "probed" };
+  // 探测档自带超时：这条命令不是用户写的，超时预期由我们这一侧负责说清楚。
+  if (lang.length > 0) return { config: { test: lang, timeoutMs: PROBED_LANG_TIMEOUT_MS }, source: "probed" };
   return { config: {}, source: "none" };
 }
 
@@ -167,8 +185,9 @@ export async function runVerifyOutcome(repoDir: string, exec: ExecFn = defaultEx
     };
   }
   const results: VerifyCommandResult[] = [];
+  const timeoutMs = config.timeoutMs ?? DEFAULT_VERIFY_TIMEOUT_MS;
   for (const command of commands) {
-    results.push(await exec(command, repoDir));
+    results.push(await exec(command, repoDir, timeoutMs));
   }
   return { ok: results.every((r) => r.ok), results };
 }
