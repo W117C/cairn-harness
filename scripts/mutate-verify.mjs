@@ -2084,6 +2084,38 @@ const MUTATIONS = [
     apply: (s) => s.replace("    tokens: tokensCurrent,", "    tokens: Math.ceil(charsCurrent / CHARS_PER_TOKEN),"),
     expectFail: "元数据行两套口径都报，tokens_limit 就是声明的预算（不拿字符帽冒充预算）",
   },
+  {
+    id: "shape-doc-head-not-charged-to-cap",
+    src: "src/agent/shape.ts",
+    test: "tests/shape-doc-cap.test.ts",
+    desc: "[开头] 又无条件追加 ⇒ 一个长段落就把 maxChars 撑穿，而同族 shapeCode/shapeLog 都严格切帽（调用方按帽记账）",
+    apply: (s) => s.replace("  if (shaped.length + head.length <= maxChars) shaped += head;", "  shaped += head;"),
+    expectFail: "大纲很短、开头段落很长：合计仍不得越过 maxChars",
+  },
+  {
+    id: "shape-doc-head-always-dropped",
+    src: "src/agent/shape.ts",
+    test: "tests/shape-doc-cap.test.ts",
+    desc: "把「装得下才补」写成永不补 ⇒ 大纲丢掉开头上下文（信息更少并不更安全），零回归侧必须拦住它",
+    apply: (s) => s.replace("  if (shaped.length + head.length <= maxChars) shaped += head;", "  if (shaped.length + head.length <= 0) shaped += head;"),
+    expectFail: "装得下时照旧补 [开头]（零回归：不加也不少加）",
+  },
+  {
+    id: "arch-outline-cap-ignores-source-size",
+    src: "src/agent/memory/inject.ts",
+    test: "tests/memory-arch-outline-cap.test.ts",
+    desc: "大纲帽回到写死 4096 字符 ⇒ 4KB–16KB 的中文文档命中 shapeDoc 的逐字返回支，「只注大纲」静默不生效",
+    apply: (s) => s.replace("Math.min(ARCH_OUTLINE_MAX_CHARS, Math.floor(raw.length / 2))", "ARCH_OUTLINE_MAX_CHARS"),
+    expectFail: "中文文档（>4KB 字节、字符数 <4096）注的确实是大纲，不是整份原文",
+  },
+  {
+    id: "arch-outline-cap-loses-abs-ceiling",
+    src: "src/agent/memory/inject.ts",
+    test: "tests/memory-arch-outline-cap.test.ts",
+    desc: "只按原文一半收、丢掉 4096 的绝对帽 ⇒ 大文档的大纲可以比原来大得多，注入预算被单个段落撑爆",
+    apply: (s) => s.replace("Math.min(ARCH_OUTLINE_MAX_CHARS, Math.floor(raw.length / 2))", "Math.floor(raw.length / 2)"),
+    expectFail: "英文大文档仍按 4096 字符帽（不变小、不变大）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
