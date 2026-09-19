@@ -3,7 +3,7 @@
 //   B. Electron + CDP：1 万条事件虚拟化（DOM ≤300 / 滚动一屏 ≤200ms）+ 审批徽标 ≤1s + 布局重启还原 + 截图
 // 退出码 0 = 全部断言通过；任何断言失败退出码 1。
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createEventLog } from "../src/events";
@@ -354,10 +354,13 @@ async function phaseElectron(root: string): Promise<void> {
     }, 10_000);
     ok(diskOk, "UI 开关 git 面板 → settings.json 落盘 open.git=true + activePanel=git");
     // 截图是运行产物：默认不写盘（否则每次跑门禁都把工作树弄脏）。需要刷新交付截图时设 M1E_SCREENSHOT=1。
+    // 落点在 outputs/shots/ 而不是 docs/ —— docs/ 不留二进制（docs-check D-7：会不会被读进上下文取决于有没有人开多模态）。
     if (process.env.M1E_SCREENSHOT) {
       const shot1 = await cdp.send("Page.captureScreenshot", { format: "png" });
-      await writeFile(join(process.cwd(), "docs", "m1e-panels.png"), Buffer.from(shot1.data as string, "base64"));
-      console.log("  📷 docs/m1e-panels.png");
+      const shotDir = join(process.cwd(), "outputs", "shots");
+      await mkdir(shotDir, { recursive: true });
+      await writeFile(join(shotDir, "m1e-panels.png"), Buffer.from(shot1.data as string, "base64"));
+      console.log("  📷 outputs/shots/m1e-panels.png");
     }
 
     // 改指：`#settingsOpen`（index.html:1465 的真实设置入口，app.js:521 已接线）
@@ -365,8 +368,10 @@ async function phaseElectron(root: string): Promise<void> {
     await new Promise((r) => setTimeout(r, 700));
     if (process.env.M1E_SCREENSHOT) {
       const shot2 = await cdp.send("Page.captureScreenshot", { format: "png" });
-      await writeFile(join(process.cwd(), "docs", "m1e-settings.png"), Buffer.from(shot2.data as string, "base64"));
-      console.log("  📷 docs/m1e-settings.png");
+      const shotDir = join(process.cwd(), "outputs", "shots");
+      await mkdir(shotDir, { recursive: true });
+      await writeFile(join(shotDir, "m1e-settings.png"), Buffer.from(shot2.data as string, "base64"));
+      console.log("  📷 outputs/shots/m1e-settings.png");
     }
 
     await killElectron(electron);

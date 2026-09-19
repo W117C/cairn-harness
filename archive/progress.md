@@ -1367,3 +1367,148 @@ Anthropic worker 现在默认带 cache_control 断点。这一格属产品决策
 
 本轮验证（HEAD 态 `0a445b3` 之后）：typecheck 0 错；全量 `test` 96 files/**919 passed** exit 0；
 全表 `mutate-verify` **110/110 全杀** exit 0。
+
+
+## AGENTS.md「当前状态」段整段归档（2026-09-19 拆层时原样搬入，未改一字）
+
+> 搬入原因：该段属 L1/L2 内容而非每轮必读规矩（spec §2）。
+> 归档面**只追加不改写**；其中带日期的快照与当时真值一致，不表示当前值。
+
+## 当前状态
+
+**计划全部完成（2026-09-14 M5 收口，M0–M5 六里程碑）**：M0–M2g（内核/沙箱/会话内核/三门/压缩/prune/地图/provider/记忆/插件/MCP/sidechat/安全 report，详见 `docs/m2-acceptance.md`）→ **M3 编排内核三轮**（M3a spawn_agent 原语/read mode/agents 面板，HEAD 8fb73f4 → M3b write mode/worktree/合并控制塔/安全 gate，HEAD 3431e72 → M3c 依赖链/pipeline sequencer/卡死/崩溃恢复/≥3 worker 压力验收，详见 `docs/m3-acceptance.md`）→ **M4 商业化两轮**（M4a 定时任务全链路 §12.2：双轨存储 + 1min tick + 三闸 + 无人值守 fail-closed + 工具五件 + schedule 面板 → M4b 可安装包/BYOK key 入 safeStorage/license 离线 Ed25519/轻量更新检查/新手引导走通 §13 七组，详见 `docs/m4-acceptance.md`）→ **M5 结果信号回流策略层**（M5a 反事实靶场：routing_decision 事件 + fixtures/gym 冻结判卷 + 回放跑器 + 基线；M5b 模型路由：档位表 + 纯函数路由 + orchestrator 接入 + 可播种 bandit + verify 门控级联；M5c 编排自适应：受限纯规则 Supervisor + Best-of-N spawnRace，详见 `docs/m5-acceptance.md`）。
+
+- 门禁：`pnpm gates` **逐道退出码全 0**（**条数不写死**——见本文件「怎么跑」第一条的规矩，事实源是
+  `scripts/gate-manifest.ts` 与 `pnpm gates` 的输出，不是本文件。历史上这里写死的数字每次加门都会失真一次）。
+  最近两次整跑记录，**均按当时条数、只作该日快照**：2026-09-17 全 0（`CODEBUDDY_SAFE_DELETE_BULK_STATE_DIR=`
+  逃生舱下跑齐，恒真式/析取式体检零命中 + 清单漂移校验通过）；2026-09-18 唯一红是 `mutate-verify`
+  **主动拒变在飞文件**（属正确红，不是回归——见下「判卷纪律」）。⚠️ **另有 9 项断言因联网/凭据限制未跑到
+  （testdino 远程 MCP、provider:check 真连、各 check 暗卷段）——未证 ≠ 通过，不宣称「全部通过」；
+  严格模式 `DSH_STRICT_UNVERIFIED=1` 或 `--strict-unverified` 可让未证直接判红。**
+  ⚠️ **panels-check 有实测时序 flake（2026-09-18 三连跑实证）**：同一份代码连续三次——
+  ① 1 项失败（滚动耗时 251.8ms vs ≤200ms）② 5 项失败（虚拟化 DOM 节点 0、scrollTop 0、
+  审批徽标 9987ms、观测器启动晚于推送）③ **全绿（exit=0）**。失败项在「DOM 没渲染任何事件」与
+  「渲染了但慢」之间漂移 ⇒ 是 Electron/CDP 在宿主负载下的挂载时序问题，**不是代码回归**
+  （本轮改动是纯后端 distill/impact，不触及 renderer 滚动路径）。
+  **2026-09-19 追注（不回改上面那句原文——那是该日快照，改写即伪造历史）**：上面那句**已过期**。
+  P0-T3（`eafcbfb`）改了 `scrollStream`：加「距底 > 100px 不再把视口拽回底部」的锁定 + `force` 形参
+  （打开会话 / 用户自己发言 / 拖分隔条改宽三处仍强制吸底）。⇒ **滚动类红必须重新纳入嫌疑面**，
+  不得再据上面那句把它排除掉——那正是本仓最忌的假绿式误导。复跑判据 =
+  `tests/renderer-scroll-follow.test.ts`（锁住锁定与 force 两侧语义）。**这条改成带条件的口径**，
+  免得本句自己变成下一颗过期字：主树 HEAD 态下 `panels-check` 暂无「在底部」断言
+  （只有 `moved > 0` 与净位移），所以该门报滚动类红时仍分不清「真回归」与「负载 flake」，
+  单跑复验是第一动作；**但该断言已在渲染层分支 `c579ecb` 落地**——口径 = 打开会话后
+  `scrollHeight − scrollTop − clientHeight ≤ 1px`，且它当场抓到一个测高脱底真 bug 并改了产品。
+  **`c579ecb` 合回后本句即失效**，届时直接读那个距底 px 数判定，不再走"该补锚点"这条。
+  **假红主因已根治（2026-09-18）**：原 settle 只等「首个历史节点 > 0」且预算仅 15s，
+  高负载宿主上重放未落定就测量 ⇒ DOM 0 / scrollTop 0 假红（约 1/5 概率）；现改为
+  「读数连续两次稳定」+ 预算 40s，**断言阈值与 fail-visible 语义一字未改**（真起不来仍带
+  实测数字红）。残余 B2 徽标时延类 flake 仍用判读法：单跑 `pnpm panels-check` 复跑，
+  连续两三次红同一批断言才是真问题。
+  顺带修了同簇一个会撞 typecheck 的坑：`pnpm typecheck`（tsc 全量）扫描未跟踪的
+  `tests/observation-capture.test.ts`，其 fake ledger 参数缺类型 ⇒ 整树 tsc 报错；
+  已补显式参数类型 + `AuthorizedRedactedText` 导入（该测试 8 条本身全绿）。
+  同日复核（全面检查轮）：`pnpm gates` 单跑 27/28（panels-check 红 5 项，B2 徽标 9925ms），
+  随后 standalone 四连跑 = 崩溃 / 全绿 / 全绿（B2 分别 17ms / 118ms）。第四种失败形态已出现：
+  `readInjectSentAt` 的 `waitFor` 超时是**裸抛异常**，直接杀掉 check 进程，B3/B4 根本没跑、
+  连 verdict 都没有（信息黑洞）。已修：超时改为返回 null，走既有 `sentAt !== null` 分支以
+  delay=-1 失败并打印诊断，后相照常出 verdict——**断言阈值（≤1000ms）一字未改**。
+  **结构性发现：HEAD 自洽性（worktree 对照实测，2026-09-18）**——归档类改动**必须成组提交**，
+  否则单独 checkout HEAD 会坏。当时的断裂链：删 `src/renderer/onboarding.tsx` 时
+  ONBOARDING_GROUPS 的定义被抽进新模块 `src/main/onboarding-groups.ts`（26 行纯数据），
+  但**新模块未跟踪**、**importer 改指未提交**、**react 依赖移除与 .tsx 删除也未同步** ⇒
+  HEAD 三处悬空（tsc 4 错 + 无法 build）。已三提交收口（归档收尾 / 改指 / 补模块）。
+  **教训**：删一个被 commit 代码引用的模块时，必须同提交带上「新定义位置 + 所有 importer 改指 +
+  依赖/构建配置变更」；用 `git worktree add <tmp> HEAD` + `tsc --noEmit` 实测可一次性抓全。
+  ⚠️ **HEAD 仍有 3 个已提交测试失败**（`agents` / `gated-tools` / `runner-gates` 各 1，
+  均为「run_shell/write_file 门接线 / lsp 入工具表」类断言），在动手前的 `89ef69d` 就已存在，
+  **不是本轮引入**。worktree 隔离实验已精确归因（逐文件换入工作树版本跑同一组测试）：
+  换入未提交的 `src/main/agent-runner.ts`（M7，+314 行）⇒ gated-tools + runner-gates 立刻转绿；
+  剩 agents.test.ts 的 1 个（worker 工具表缺 `lsp`）需 `src/tools/base.ts` 的 `"lsp"` 联合类型 +
+  工具表接线（`src/tools/lsp.ts` 模块本身已提交，接法未提交）。
+  ⇒ 本质是**测试先于 M7 实现提交**，属正常在飞状态；掐头去尾地单独提交实现会破坏 M7 改动的完整性，
+  故留位。工作树里 81 文件 756 测试全绿。判读：M7 收口时这 3 个自然转绿。
+  **M7 收口约束地图（2026-09-18，详见 `outputs/m7-closure-constraints-2026-09-18.md`）**：
+  76 个未提交文件是**一个原子单元**——6 个已修改的已跟踪文件依赖未跟踪模块
+  （compaction→economics；glm-session→economics/metering/solpi-runtime；agent-runner→
+  action-fusion/solpi-runtime；glm+openai provider→metering），solpi-runtime 又聚拢
+  economics/evidence/ledger/metering/observation-capture。**拆开提交必致 HEAD 悬空**
+  （本轮已修了两轮这类断裂）。收口时请按报告第 5 节清单走，含 worktree 实测。
+  簇内 8 个模块原本只有 observation-capture 无测试，已补 `tests/observation-capture.test.ts`
+  （8 条：EAUTH 脱敏闸 / obs_recall 参数白名单 / 错误码消毒防注入）；同样**随簇落地**，
+  单独提交会悬空。进度文档明示「仍在阶段 A、未创建提交」，故不代为收口。
+  同轮另一纯卫生修复：`orchestrator.ts:2644` 对 `./memory/inject` 的 `await import` 是无效动态导入
+  （该模块同文件 38 行已静态导入，且 inject.ts 不反向依赖 orchestrator，无循环依赖）→ 改用静态绑定，
+  消掉构建的 `INEFFECTIVE_DYNAMIC_IMPORT` 告警（typecheck / build / 737 测试 / panels-check 复验全绿）。
+  历史归因（曾红的 5 门及原因，均已闭环，备查）：`panels-check`（vanilla 无虚拟化 → 虚拟化已移植，
+  `showHistory` 只渲染窗口、DOM ≤300；断言同步修正为 `domCount ∈ (0,300]` + `scrollTop` 真实位移）、
+  `agents-check` / `supervisor-check`（验收侧时序 + M7 未提交改动 → 已提交入库后转绿）、
+  `test`（见下条）、`map-check`（见下条）。
+  **本轮（2026-09-17）修复的三处门禁接线缺陷——都是「门禁自身环境/接线」而非被测代码缺陷：**
+  1. `test`：新 M7 测试（ledger / solpi-review-regression / final-budget / session-tools）用
+     `PI_SCRATCH_DIR!` 非空断言但 vitest 配置未注入该环境变量、也未建目录 ⇒ 整 describe 0ms 全挂
+     （31 条假红；对比 action-fusion 等文件用 `?? tmpdir()` 兜底故不挂）。已在 `tests/vitest.config.ts`
+     加载期统一兜底：缺省指向 `os.tmpdir()/dsh-pi-scratch` 并 `mkdirSync`（配置在 worker fork 前加载，全 pool 生效）。
+     修复后 76 文件 720 测试全绿。
+  2. `gate-check` 的 G12：`walkUi` 对已整体归档删除的 `src/renderer/components/ui` 抛 ENOENT
+     （React 树不是发货路径，正在归档）。目录不存在时比较面为空，约束 vacuously true —— 已改为
+     `existsSync` 守卫后跳过；将来恢复该目录 walkUi 自动重新生效。
+  3. `map-check`：工作区拷贝（`cp`）未跳过 `.codegraph`（CodeGraph 工具自身的索引目录，含守护进程
+     `daemon.sock` socket 文件）⇒ `ERR_FS_CP_SOCKET` 把门卡在拷贝阶段。已在 SKIP_SEGS 加 `.codegraph`
+     并用 `lstatSync` 双保险挡掉所有非普通文件。修复后 ⓪–⑥b 全绿（④ tags 缓存命中 240/240，
+     「`build.ts` 的 `void writeTagsCache` 未 await 必然 miss」此前「不复现」是样本太小——2026-09-18 加 120 文件确定性回归测试后 buggy 版必红（返回时 122 个写仅 120 落盘）；`build.ts:239-253` 已改为收集写 + 返回前 `await Promise.allSettled`，变异测试双向验证）。
+  **门数、测试文件数、各门断言数一律不写死**（事实源 = `scripts/gate-manifest.ts`、`tests/`、各门自身输出；历史值曾出现「23 / 26 / 28 道」三处互斥）。
+  M4 后加固轮（审查 96 条修复 + 门禁自检升级）已收口，详见 PROGRESS.md「H」段与 `outputs/*-2026-09-12.md`。
+- **2026-09-13 审查修复轮**：`outputs/code-review-report-2026-09-13.md`（106 条：6 P0/20 P1/61 P2/19 P3）逐项修复收口——只读 bash 硬闸（分隔符归一 + 参数面校验）、worker 权限规则接线、agents-check D2 时序 + CANARY 哨兵 + checkFatal、replay 逐行容错、4 处 spawn env 消毒、指纹 bounded fail-closed、loose skill 信任门、单实例锁、renderer 会话归因/缓冲收束、门禁体检网（label-first/扩展名/递归）等；两道红门（test/agents-check）根因是验收侧时序缺陷（重载下确定性红，闲时偶绿），已按"等状态不等事件"修法收口。
+- **已声明取舍（备案）**：renderer `webPreferences.sandbox: false`（ESM preload 需要，contextIsolation 仍开启；后续可改 CJS preload 恢复）。
+- 可安装包：`pnpm dist` → `dist/*.dmg`（macOS arm64，**unsigned V1 边界**——无签名/公证，首次打开需右键→打开；`electron-builder.yml identity: null`）。
+- 四份验收三态表（带证据指针）+ 三份 ponytail-audit 见 `docs/m{2,3,4,5}-acceptance.md` 与 `docs/m{3,4}-audit.md`；BLOCKED.md 各轮备案已全部裁决（见其裁决记录节）。
+- **计划完成**：§14 里程碑表 M0→M5 全行收口；**M6 已收**：supervise 模式运行时接线与审批卡双轨（spawnSupervise + requestSuperviseApproval，渲染卡零改动，supervisor-check 段 E 16 断言）+ 真多 provider 白名单与价格表接线（PROVIDER_IDS 四家 + toWorkerModel 按 provider 路由 + pricing 真钱代价接进 bandit，routing-check 段 F）；M6+ 候选（supervise 环合并语义扩展、档位模型/价格联网实测校准、hourly/monthly kind、worker 热恢复、license 服务端、签名公证、遥测上报）均留位未偷做（见 m5-acceptance「未证/留位」节与 m5-proposal §1.4）。
+- **bandit 运行时接线已闭合（2026-09-18）**：此前 bandit 机器齐全（selectArm/updatePriced/原子持久化）但两头断——
+  `routeFor` 从不收 `bandit` 上下文（reason 永远非 "bandit"）、`updatePriced` 全仓库零调用者、agent-runner 也从没传 `routing`。
+  现已端到端接通：`settings.routingBandit` → `orchestratorExtras` 同时开 `routing:true` + `banditStatePath`（`.agent/routing-bandit.json`）→
+  spawn 时 `routeFor` 收 bandit 上下文（Thompson Sampling 选档，`reason:"bandit"`）→ WorkerHandle 记臂 →
+  `finish` 在终态事件落流后回灌奖励（done→α+1 / failed|cancelled→β 增长，代价按 `pricing.costUsd` 真钱折算）→ 原子持久化。
+  学习是侧信道：回灌/持久化失败只 `console.warn`，绝不阻断 worker 终态流。非 bandit 路由（pin/tier-default）不记臂、不污染学习面。
+  验收：`tests/bandit-runtime.test.ts`（3 条：done 后验 α=3 且持久化可 reload、failed 时 β 增长 α 不动、未启用零 routing_decision 零行为）。
+- **M7 影响面接线已闭合（2026-09-18）**：`defaultImpactHook` 此前在 src/ 零调用者、`ImpactReportEvent` 无生产者、sidechat 的 `impact_report` 投影是死代码——模块/事件/消费端三层齐了但写路径没接。现已端到端闭合：
+  `ToolContext.impact`（`src/tools/base.ts`，缺省 undefined = 零行为）→ `write_file`/`edit_file` 落盘成功后调 `appendImpact`（best-effort：钩子抛错只 `console.warn`，**写入已成功不得回滚**）→ `impact_report` 事件先于 tool_result 落流 + 波及摘要回注输出；`runLoop` 透传钩子；`agent-runner` 经 `impactAnalysis` 设置（同 actionFusion 口径，默认关）构造 `defaultImpactHook`。
+  验收：`tests/impact-wiring.test.ts`（6 条：edit/write 发事件+波及 app.js 调用点、无钩子零行为、非源码文件静默、钩子抛错不影响写入、摘要按文件汇聚且限量）。**这是「减少犯错/返工」的直接能力**——改一处立刻看到跨文件调用点，不用等测试炸了才知道波及谁。
+  **token 成本收紧（2026-09-18）**：`contextNote` 原本把最多 `IMPACT_SITE_LIMIT=200` 个调用点逐条注入 tool_result（`symbol ← file:line`），
+  被广泛调用的符号单次写入会带出上千 token——与「消耗 token 最少」直接冲突。现改为文件级汇聚摘要：
+  `IMPACT_CONTEXT_FILES=6` 个文件 × `IMPACT_CONTEXT_SYMBOLS_PER_FILE=4` 个符号（`symbol(L行)`），超出记「另有 N 个文件未列出」。
+  **完整调用点清单仍保留在 `impact_report` 事件的 `up` 字段里**（面板/sidechat 投影依赖 `e.up.length`，不受影响）。
+  实测体积：最坏情形 ≈2112 token / 201 行 → ≈168 token / 8 行（**-92%**）。
+- **失败轨迹沉淀引导（2026-09-18，能力 6/10）**：`runSessionEndDistill` 原本只是把整段事件回放给模型——
+  失败（验证未过、工具报错）恰是「下次怎么不重犯」的最高价值素材，但回放不含注意力引导，模型不会自动盯着失败看。
+  新增纯函数 `failureDigestFromEvents`（`src/agent/memory/distill.ts`）：把 `verify_result(ok:false)`（含达上限停止）与
+  `tool_result(ok:false)`（按工具名归并计数）聚成一行显式证据，并入沉淀指令；**无失败时返回空串，指令逐字不变（零回归）**。
+  验收：`tests/distill.test.ts`（8 条：纯函数四种形态、注入/零回归/disabled 零调用）。该模块此前零覆盖，现补齐。
+
+
+
+## AGENTS.md 拆层时被移出 L0 的条目（2026-09-19，原样保留）
+
+- shadcn CLI 的 init 不识别 electron-vite 布局（框架检测只认 `vite.config.*`）：组件用
+  `components.json`（style=radix-nova）+ `npx shadcn add <name> -y` 管理；手改过生成组件时
+  在文件头加 `// @shadcn-modified`。
+  （移出理由：渲染层已无 shadcn/React 运行时，这条属「若将来再引入」的历史约定，不是每轮会踩的坑。
+  对应的 gate-check G12 在目录不存在时按 existsSync 跳过，实测过。）
+
+
+## AGENTS.md「技术栈」段整段归档（2026-09-19 拆层搬入，未改一字）
+
+> 该段主体是 React 渲染树的归档史，属L2 而非每轮必读规矩（spec §2）。
+
+## 技术栈
+
+Node 22 / TypeScript 5 / electron-vite 5 / Electron 44 / vitest 5。
+
+**渲染层是手写 vanilla，不是 React**：`src/renderer/index.html`（单文件，全部 CSS 在一个 `<style>` 里 + 静态标记）+ `src/renderer/app.js`（纯 ESM）。**没有 React、没有 Tailwind 运行时、没有 shadcn 运行时**（CSP `script-src 'self'`，`index.html` 无构建链）。
+
+React 树已全量归档（2026-09-17 删 45 个 .tsx/测试 + 移除 react 全套依赖；2026-09-18 收尾删 `theme.ts`/`store.ts` 及其单测）：`cards/`、`components/`（29 个 shadcn/ui）、`hooks/`、`lib/`、`panels/`、`conversation.tsx`、`onboarding.tsx`、`main.tsx`、`styles.css`、`error-boundary.tsx` 全删。`src/renderer/` 现存 5 个文件：`index.html`、`app.js`、`projections.ts`（纯投影，被 panels-check/agents-check/sidechat-check 与多个测试消费，**不是死代码**）、`history-window.js`、`window.d.ts`（`window.agent` 类型胶水）。
+
+> 历史：技术栈一行曾写「React 19 / Tailwind CSS 4 + shadcn/ui」并当作现状——那是 vanilla 迁移**之前**的描述。迁移未提交期间两份说法并存过一段时间，2026-09-17 统一为上面这段。
+- 判卷纪律的反面样例（已结案）：把一行拆成两截去躲精确 grep —— 见 `theme.ts` 的 `DARK_QUERY`
+  拆行案，2026-09-10 已还原为一行；正确精确判据是 `^\s*color-scheme:\s*dark`（锚定行首，不误伤合法用法）。
+  （移出理由：规则本体「不许改代码去绕」仍在 L0，这一条是案例史。）

@@ -21,7 +21,8 @@
 // 驱动取舍（裁决 1，2026-09-17）：**默认 `--static out/renderer`**，不走 Electron。
 // 本宿主 Electron 交付壳根本起不来——`import { BrowserWindow } from "electron"` 在本宿主
 // ESM loader 下解析到 npm wrapper 而失败（`Electron --version` 打印 Node v24.20.0 而非
-// 44.2.0），已归档于 BLOCKED.md:432。断言集在两支下**完全相同**，只有启动机制不同；
+// 44.2.0），已归档于 archive/blocked.md「备案：panels-check 红门归属已二分清楚（2026-09-16 01:1x，优化轮收口）」。
+// 断言集在两支下**完全相同**，只有启动机制不同；
 // 而构建产物正是**发货物**。让默认路径永久红只会训练人忽略门禁。Electron 路径**保留**
 // 为显式 opt-in，供能起 Electron 的宿主 / CI 用。刻意不做自动探测降级（白加约 25s 等待）。
 import { mkdtemp, rm } from "node:fs/promises";

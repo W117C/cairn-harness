@@ -163,7 +163,7 @@ docs/                m{2,3,4}-acceptance.md（三态验收表）+ audit + UI 截
 | `read_file` | tools/read_file.ts | 读文件（带 shape 探测） |
 | `write_file` | tools/write_file.ts | 写文件（拒 .agent 系统区） |
 | `edit_file` | tools/edit_file.ts | 精确编辑（new_string 替换） |
-| `run_shell` | tools/run_shell.ts | bash -c 执行；输出 32KB 截断、60s 超时强杀、`sanitizedEnv()` 消毒、会话取消即组杀 |
+| `run_shell` | tools/run_shell.ts | bash -c 执行；输出 32KB 截断、60s 超时强杀、`sanitizedEnv()` 消毒、会话取消即组杀 [spec] |
 | `grep` / `glob` | tools/grep.ts / glob.ts | 内容/文件名检索（@vscode/ripgrep） |
 | `lsp` | tools/lsp.ts | 语言服务：跳转/引用/符号（vscode-languageserver-protocol + tree-sitter） |
 | `clarify` | tools/clarify.ts | 澄清门工具（挂 ClarifyChannel，缺省 fail-closed） |

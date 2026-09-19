@@ -312,7 +312,7 @@ export const DEFAULT_STATIC_DIR = "out/renderer";
  * 取舍（裁决 1，2026-09-17）：**默认走 `--static <构建产物>`**，不走 Electron。
  * 理由：本宿主 Electron 交付壳根本起不来（`import { BrowserWindow } from "electron"`
  * 在本宿主 ESM loader 下解析到 npm wrapper 而失败，`Electron --version` 打印的是
- * Node v24.20.0 而非 44.2.0——已归档于 BLOCKED.md:432）。断言集在两支下**完全相同**，
+ * Node v24.20.0 而非 44.2.0——已归档于 archive/blocked.md「备案：panels-check 红门归属已二分清楚（2026-09-16 01:1x，优化轮收口）」）。断言集在两支下**完全相同**，
  * 只有启动机制不同；而构建产物正是**发货物**。让默认路径永久红只会训练人忽略门禁。
  * Electron 路径**保留**为显式 opt-in，供能起 Electron 的宿主 / CI 强制走严格路径。
  *
@@ -357,7 +357,7 @@ export function parseArgs(argv: string[], defaultPort: number): CliArgs {
 /** 打印判卷目标（fail-visible：别让人误以为测的是 Electron 壳）。 */
 export function printTarget(args: CliArgs): void {
   if (args.staticDir !== null) {
-    console.log("  ℹ️  测试目标：构建产物 " + args.staticDir + "（Electron 交付壳在本宿主起不来，见 BLOCKED.md:432）");
+    console.log("  ℹ️  测试目标：构建产物 " + args.staticDir + "（Electron 交付壳在本宿主起不来，见 archive/blocked.md「备案：panels-check 红门归属已二分清楚（2026-09-16 01:1x，优化轮收口）」）");
   } else {
     console.log("  ℹ️  测试目标：Electron 真实交付壳（--electron 显式指定）");
   }

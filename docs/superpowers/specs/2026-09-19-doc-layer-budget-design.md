@@ -37,7 +37,7 @@
 |---|---|---|---|---|
 | **L0 规矩** | `AGENTS.md` | **8,000 B** 棘轮 | 只写"不知道就会这一轮做错事"的规则。**零状态、零观测值** | 是（harness 自动） |
 | **L1 现态** | `STATE.md`（新） | **6,000 B** 棘轮 | **整体重写，永不追加**；首部含 `rev: <sha>` | 开工按需读一次 |
-| **L2 档案** | `archive/{progress,blocked,reports}.md` | 无 | **只追加不改写**（不可变） | 否；按锚点 grep |
+| **L2 档案** | `archive/{progress,blocked}.md` + `archive/shots/` | 无 | **只追加不改写**（不可变） | 否；按「」标签 grep |
 | **L3 说明** | `docs/**`、`agent-plan.md` | 无（但受 §4/§5 判据） | 生成物不手写 | 否；按节 fetch |
 
 L0 段落去向（六段实测占比：怎么跑 4% / 技术栈 4% / 目录与约定 2% / 环境注意 20% / 判卷纪律 5% / **当前状态 62%**）：
@@ -100,7 +100,8 @@ L1 超预算的**唯一**合规瘦法：把仍有下游价值的结论**迁进 a
 四处代码在用**行号**引用文档（`scripts/renderer-arch-check.ts`、`scripts/a11y-check.ts`、
 `scripts/lib/harness.ts` 两处，均引 `BLOCKED.md:432`）。重排即静默打断，且没有任何门会知道。
 
-改法：`archive/blocked.md#<既有标签>`。仓里已有 MAINT-06 / G-1 / G-2 / H4 这类标签，
+改法（实做校准）：`archive/blocked.md「<段落标题>」`——用「」包标题原文，不用 URL 锚点
+（中文标题的 slug 规则会随渲染器变，那本身又是一颗漂移源）；仓里已有 MAINT-06 / G-1 / G-2 / H4 这类标签，
 **不新造 ID 体系**（新造 = 又一层要维护的表）。规则一句话：
 **文档指针用标签，不用行号；标签不存在即门红（§6 D-6）。** 本 spec 描述那四处时也只给文件名、不给行号——
 行号会在它被读到的那天之前漂掉。
@@ -161,7 +162,7 @@ L1 超预算的**唯一**合规瘦法：把仍有下游价值的结论**迁进 a
 git mv PROGRESS.md  archive/progress.md      # 一字不改
 git mv BLOCKED.md   archive/blocked.md       # 一字不改
 git mv outputs/<dated>.md … archive/reports/ # 清单不手选：= D-6 跑出的「被现行层指向」集合
-git mv docs/*.png   docs/archive-shots/
+git mv docs/*.png   archive/shots/   # 不是 docs/archive-shots/：D-7 判的是 ^docs/，挪进子目录等于没挪
 新增 STATE.md · 重写 AGENTS.md · 重写 docs/README.md（过时登记表删，改为 role 表指针）
 新增 scripts/docs-check.ts + scripts/facts.ts
 scripts/gates.ts 落 facts/gates.json · .gitignore 加 docs/facts/

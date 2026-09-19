@@ -198,32 +198,11 @@ export interface Waiver {
 export const waiverKey = (rule: Finding["rule"], file: string): string => rule + "|" + file;
 
 /**
- * 本门登记进 GATES 之日（2026-09-19）已存在的违规，逐条带理由。
- * **只准调低、迁移提交（spec §8）整条删除**；一旦某条目不再被命中，waive() 会把它
- * 报成 stale 红——豁免不许静默烂在这儿。
+ * 开门之日（2026-09-19）仓里已存在的存量违规曾逐条记在此处（水位只准调低、不再命中即报 stale 红）。
+ * §8 迁移提交（2026-09-19）已把这些存量全部搬走：AGENTS.md 拆层瘦到预算内、四处行号指针改标签、
+ * CODE-WIKI 的规格值补 [spec]、docs/ 的截图移入 archive-shots/。**表已清空**——此后任何违规都是增量，直接红。
  */
-export const LEGACY_WAIVERS: Readonly<Record<string, Waiver>> = {
-  [waiverKey("D-1", "AGENTS.md")]: {
-    upTo: 30_000,
-    reason: "现态 26KB 未拆；水位只留追注余量防误伤并发会话，spec §8 迁移提交须整条删除（届时 >8000B 即红）",
-  },
-  [waiverKey("D-3", "scripts/a11y-check.ts")]: { upTo: 1, reason: "存量行号指针，§8 同提交改标签锚点后删除" },
-  [waiverKey("D-3", "scripts/lib/harness.ts")]: { upTo: 2, reason: "存量行号指针 ×2，§8 同提交改标签锚点后删除" },
-  [waiverKey("D-3", "scripts/renderer-arch-check.ts")]: { upTo: 1, reason: "存量行号指针，§8 同提交改标签锚点后删除" },
-  // 计数类判据按**实测条数原样入表、不留余量**：条数增长需要一个刻意动作（往规矩页抄观测值 /
-  // 用追注代替改写 / 把图塞回 docs/），那正是本门要拦的事——与 D-1 不同，字节数被日常小改就会顶上去。
-  [waiverKey("D-2", "AGENTS.md")]: {
-    upTo: 7,
-    reason: "存量手抄观测值 7 行（含 §0 那句 ~800s），§8 迁移整段进 archive 后本条须整条删除",
-  },
-  [waiverKey("D-2", "docs/CODE-WIKI.md")]: {
-    upTo: 1,
-    reason: "166 行「32KB 截断、60s 超时」实为配置规格值 = 本判据已知假阳性面；§8 给该行补 [spec] 后本条删除",
-  },
-  [waiverKey("D-4", "AGENTS.md")]: { upTo: 2, reason: "存量就地追注 2 处，§8 拆层后删除" },
-  [waiverKey("D-4", "docs/README.md")]: { upTo: 2, reason: "「过时登记表」本身在用散文登记散文的漂移，§8 删表后本条删除" },
-  [waiverKey("D-7", "docs")]: { upTo: 25, reason: "React 时代验收截图 25 张（docs/README.md 已声明全部过时），§8 git mv 走" },
-};
+export const LEGACY_WAIVERS: Readonly<Record<string, Waiver>> = {};
 
 /** 用存量水位筛掉老账，并挑出已不再被命中的豁免条目。 */
 export function waive(
