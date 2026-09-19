@@ -1,11 +1,13 @@
 // M2d 注入器（§8.1.5 定稿）：固定回注名单 + 总预算 + 双端超限治理 + 安全四件。
 // 名单（记忆部分）：项目层 ARCHITECTURE.md（>4KB 只注大纲）+ DECISIONS.md 最近 N 条（默认 20）
 // + memory/MEMORY.md 索引；全局层 memory/MEMORY.md 索引。总预算默认 6K token（可配）。
-// 超限：整行丢弃保尾部 + 截断提示（OpenHands memory.py:39-53 同款）。
-// 预算元数据 chars_current/chars_limit 渲染进块（Letta memory.py:164-165 同款）。
+// 超限：整行丢弃保尾部 + 截断提示（OpenHands memory.py:39-53 同款）。**判定以 token 计**，
+// 不再拿「字符数 ≤ 6000×4」冒充预算：中文一字≈一 token，那条线会让 6K 预算实到 14K+。
+// 预算元数据 chars_current/chars_limit 渲染进块（Letta memory.py:164-165 同款），
+// 另加 tokens_current/tokens_limit 报真正生效的那把尺。
 // 安全：块首立场声明 + 仿冒控制标签转义（§4.4.4 同款）+ @path 工作区外首次批准（拒绝即停用）。
 import { isAbsolute, relative, resolve } from "node:path";
-import { estimateTokens } from "../compaction.js";
+import { weightText } from "../text-budget.js";
 import { shapeDoc } from "../shape.js";
 import {
   loadExternalRefState,
@@ -19,7 +21,8 @@ import {
 } from "./store.js";
 
 export const MEMORY_TOKEN_BUDGET_DEFAULT = 6_000;
-export const CHARS_PER_TOKEN = 4; // 与 compaction.estimateTokens 同口径（chars/4）
+/** ASCII 口径的字符帽换算（仅用于 chars_limit 这一路**展示**；生效的闸是 token 预算本身）。 */
+export const CHARS_PER_TOKEN = 4;
 export const ARCH_OUTLINE_THRESHOLD_BYTES = 4 * 1024;
 export const DECISIONS_RECENT_DEFAULT = 20;
 
@@ -147,14 +150,15 @@ export interface MemoryInjection {
   truncated: boolean;
 }
 
-function renderBlock(source: "project" | "global", sections: Section[], charsLimit: number, blockChars: number, truncated: boolean): string {
+function renderBlock(source: "project" | "global", sections: Section[], charsLimit: number, blockChars: number, tokensCurrent: number, tokenBudget: number, truncated: boolean): string {
   const lines: string[] = ['<memory source="' + source + '">', STANCE_LINE];
   if (truncated) lines.push("[truncated: 记忆注入超预算，已整行丢弃前部内容（保尾部）]");
   for (const s of sections) {
     lines.push(s.header);
     lines.push(...s.lines);
   }
-  lines.push("chars_current=" + String(blockChars) + "/chars_limit=" + String(charsLimit));
+  lines.push("chars_current=" + String(blockChars) + "/chars_limit=" + String(charsLimit)
+    + " tokens_current=" + String(tokensCurrent) + "/tokens_limit=" + String(tokenBudget));
   lines.push("</memory>");
   return lines.join("\n");
 }
@@ -184,22 +188,27 @@ export async function buildMemoryInjection(opts: MemoryInjectionOptions): Promis
 
   // 预算治理：超限整行丢弃保尾部（投影顺序 = 项目 ARCH → DECISIONS → 项目索引 → 全局索引）。
   // P1-1（审查）：旧实现每轮只删 1 行却重建 flatten 数组 + 重算 totalChars（都是 O(总行数)）→ O(L²)。
-  // 改为一次建有序 section 列表 + 维护累计字符游标，按序从各 section **首部**整行丢弃（保尾部）。
+  // 改为一次建有序 section 列表 + 维护累计**权重**游标，按序从各 section **首部**整行丢弃（保尾部）。
   // 逐位等价：删除顺序 = flatten(projectSections) ++ flatten(globalSections)（按 section 顺序、
-  // 每 section 从首行起删）；判定 estimateTokens(c,1) > charsLimit 等价于 c > charsLimit；空 section
-  // 不参与；删空后由 keptProject/keptGlobal 过滤掉。
+  // 每 section 从首行起删）；空 section 不参与；删空后由 keptProject/keptGlobal 过滤掉。
+  // ⚠️ 游标单位是 token 而非字符（§8.1.5「总预算默认 6K token」）：旧口径 chars ≤ budget×4 在
+  // 中文段低估 3–4 倍——实测 38% CJK 语料塞到 chars_current=23990 时真实约 14k token。
+  // 纯 ASCII 下 weightText ≡ chars/4 且 tokenBudget ≡ charsLimit/4 ⇒ 两条判据同一条线（零回归）。
   let truncated = false;
   const totalChars = (): number =>
     projectSections.reduce((n, s) => n + s.header.length + s.lines.reduce((m, l) => m + l.length + 1, 0), 0) +
     globalSections.reduce((n, s) => n + s.header.length + s.lines.reduce((m, l) => m + l.length + 1, 0), 0);
-  let runningChars = totalChars();
-  if (runningChars > charsLimit) {
+  const totalWeight = (): number =>
+    [...projectSections, ...globalSections].reduce(
+      (n, s) => n + weightText(s.header) + s.lines.reduce((m, l) => m + weightText(l) + 0.25, 0), 0);
+  let runningWeight = totalWeight();
+  if (runningWeight > tokenBudget) {
     for (const sec of [...projectSections, ...globalSections]) {
-      if (runningChars <= charsLimit) break;
+      if (runningWeight <= tokenBudget) break;
       let drop = 0;
-      // 从本 section 首部累计可删行数（与 totalChars 同计法：每行 l.length + 1 换行符）
-      while (drop < sec.lines.length && runningChars > charsLimit) {
-        runningChars -= sec.lines[drop]!.length + 1;
+      // 从本 section 首部累计可删行数（与 totalWeight 同计法：每行 weightText + 换行符 0.25）
+      while (drop < sec.lines.length && runningWeight > tokenBudget) {
+        runningWeight -= weightText(sec.lines[drop]!) + 0.25;
         drop++;
       }
       if (drop > 0) {
@@ -211,12 +220,13 @@ export async function buildMemoryInjection(opts: MemoryInjectionOptions): Promis
   const keptProject = projectSections.filter((s) => s.lines.length > 0);
   const keptGlobal = globalSections.filter((s) => s.lines.length > 0);
   const charsCurrent = totalChars();
+  const tokensCurrent = Math.ceil(totalWeight());
   return {
-    project: keptProject.length > 0 ? renderBlock("project", keptProject, charsLimit, charsCurrent, truncated) : null,
-    global: keptGlobal.length > 0 ? renderBlock("global", keptGlobal, charsLimit, charsCurrent, truncated) : null,
+    project: keptProject.length > 0 ? renderBlock("project", keptProject, charsLimit, charsCurrent, tokensCurrent, tokenBudget, truncated) : null,
+    global: keptGlobal.length > 0 ? renderBlock("global", keptGlobal, charsLimit, charsCurrent, tokensCurrent, tokenBudget, truncated) : null,
     charsCurrent,
     charsLimit,
-    tokens: estimateTokens(charsCurrent),
+    tokens: tokensCurrent,
     truncated,
   };
 }

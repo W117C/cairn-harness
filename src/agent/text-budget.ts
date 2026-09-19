@@ -30,7 +30,9 @@ function charWeight(ch: string): number {
   return isWideAt(code) ? 1 : 0.25;
 }
 
-function weightOf(text: string): number {
+/** 未取整的权重累加量：给「逐行增量记账」的调用方用（记忆注入按行整块丢弃，
+ *  每删一行减一行的权重，取整后就没法加减）。与 estimateTextTokens 同一份字重表。 */
+export function weightText(text: string): number {
   let w = 0;
   for (const ch of text) w += charWeight(ch);
   return w;
@@ -38,7 +40,7 @@ function weightOf(text: string): number {
 
 /** token 估算（向上取整）。纯 ASCII 时与 compaction 的 chars/4 完全同值。 */
 export function estimateTextTokens(text: string): number {
-  return Math.ceil(weightOf(text));
+  return Math.ceil(weightText(text));
 }
 
 /** 按权重从头部取到 allowed 为止（逐字符走，遇到超权重即停；代理对整体计一次）。 */
@@ -59,7 +61,7 @@ function cutToWeight(text: string, allowed: number): string {
  *  但「按字符类别计量」与「提示行自己计入预算」是一份实现。未超限时逐字不变。 */
 export function truncateToTokenBudget(text: string, tokenBudget: number, notice: string): string {
   if (estimateTextTokens(text) <= tokenBudget) return text;
-  return cutToWeight(text, Math.max(0, tokenBudget - weightOf(notice))) + notice;
+  return cutToWeight(text, Math.max(0, tokenBudget - weightText(notice))) + notice;
 }
 
 /** 头部保留（关键约定写在前面），marker 与 suffix **一律计入预算**——

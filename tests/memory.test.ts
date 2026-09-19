@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildMemoryInjection, escapeControlTags, extractExternalRefs, isExternalRef, MEMORY_TOKEN_BUDGET_DEFAULT } from "../src/agent/memory/inject";
+import { estimateTextTokens } from "../src/agent/text-budget";
 import { checkIndexLimit, indexLine, initMemoryHome, parseTopicDoc, renderTopicDoc, topicDocRoundtrip, upsertIndexLine } from "../src/agent/memory/store";
 
 let ws: string;
@@ -161,16 +162,20 @@ describe("P1-1 记忆预算裁剪线性化（等价回归）", () => {
     return await buildMemoryInjection({ workspace: ws });
   };
 
-  it("触发截断：truncated + 预算内 + 与改造前逐字节一致（黄金哈希）", async () => {
+  it("触发截断：truncated + 预算内 + 黄金哈希锁住渲染字节", async () => {
     const r = await buildTruncCase();
     expect(r.truncated).toBe(true);
     expect(r.charsCurrent).toBeLessThanOrEqual(r.charsLimit);
+    // 独立复核（不读实现的自报数）：默认 6K token 的预算必须真的收在 6K 附近。
+    // 这条才是本用例的判据；哈希只是「同一份输入不得改动渲染字节」的回归锁。
+    expect(estimateTextTokens((r.project ?? "") + (r.global ?? ""))).toBeLessThanOrEqual(6_000 + 200);
     const canonical = JSON.stringify({
       project: r.project, global: r.global,
       charsCurrent: r.charsCurrent, charsLimit: r.charsLimit, tokens: r.tokens, truncated: r.truncated,
     });
-    // 期望哈希 = pristine HEAD 实现的同一构造输出（改造前后 diff 为空）。
-    expect(sha256(canonical)).toBe("c7581132edf3da4b8538ecd58f28dabbfb8614f163c712a33c0b5a418b27e055");
+    // 2026-09-19 起该字节面变了两处（有意）：① 预算闸从字符改按 token 计量 ⇒ 中文段丢得更多；
+    // ② 元数据行加 tokens_current/tokens_limit。此哈希自此锚的是**变更后**的现态。
+    expect(sha256(canonical)).toBe("8aac26119e3cad9845a78ff8895957eb68a00cbe5b7133ba79d1a113efc250a6");
   });
 
   it("删除顺序：先删项目侧（保尾），全局索引一行不少", async () => {
@@ -181,8 +186,8 @@ describe("P1-1 记忆预算裁剪线性化（等价回归）", () => {
     writeFileSync(join(home, "MEMORY.md"), globLines.join("\n") + "\n", "utf8");
     const probe = await buildMemoryInjection({ workspace: ws, tokenBudget: 100_000 }); // 不截断，量总长
     expect(probe.truncated).toBe(false);
-    const limit = probe.charsCurrent - 200; // 只需删 ~200 字符
-    const r = await buildMemoryInjection({ workspace: ws, tokenBudget: Math.ceil(limit / 4) });
+    const limit = probe.tokens - 200; // 预算本来就按 token 收口：只需减 200 token（约 4~5 条项目行）
+    const r = await buildMemoryInjection({ workspace: ws, tokenBudget: limit });
     expect(r.truncated).toBe(true);
     expect(r.charsCurrent).toBeLessThanOrEqual(r.charsLimit);
     // 全局侧原样保留（一行不少）——项目侧未删够前不碰全局
