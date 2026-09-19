@@ -1480,6 +1480,30 @@ const MUTATIONS = [
     apply: (s) => s.replace("还有 ${String(r.omittedHits)} 条命中未列出", "有命中未列出"),
     expectFail: "上下文预算兜住宽查询：超 8KB 即止并报出未列出条数（不静默半路断）",
   },
+  {
+    id: "verify-output-cap-removed",
+    src: "src/agent/verify.ts",
+    test: "tests/verify.test.ts",
+    desc: "验证门不接环（无上限）⇒ 一次失败的测试跑把整段日志原样灌进同轮上下文，token 账单按套件规模长",
+    apply: (s) => s.replace("const ring = createOutputRing(OUTPUT_LIMIT);", "const ring = createOutputRing(Number.MAX_SAFE_INTEGER);"),
+    expectFail: "超 32KB 的失败输出：头尾都在，尾部结论进了 failureDigest",
+  },
+  {
+    id: "ring-always-treats-as-overflow",
+    src: "src/tools/output-ring.ts",
+    test: "tests/output-ring.test.ts",
+    desc: "溢出判定形同恒真 ⇒ 每一条正常输出都被拼上截断提示（「未溢出逐字不变」这条零回归承诺被破）",
+    apply: (s) => s.replace("if (out.length > limitBytes) {", "if (out.length >= 0) {"),
+    expectFail: "未溢出：逐字全文，一行提示都不加（零回归面）",
+  },
+  {
+    id: "ring-tail-window-unbounded",
+    src: "src/tools/output-ring.ts",
+    test: "tests/output-ring.test.ts",
+    desc: "尾环不设窗口 ⇒ 长输出把预算一路撑大（超限截断等于没截），上下文被一次 shell/verify 灌满",
+    apply: (s) => s.replace("    tail += s;\n    if (tail.length > tailBytes) tail = tail.slice(tail.length - tailBytes);", "    tail += s;"),
+    expectFail: "总输出含提示行也不超上限（提示自己占位，否则「≤ 32KB」这句承诺被提示撑破）",
+  },
 ];
 
 function runTest(testRel) {
