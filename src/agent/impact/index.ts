@@ -288,7 +288,12 @@ export type ImpactHook = (
  *  上限约 IMPACT_CONTEXT_FILES * (IMPACT_CONTEXT_SYMBOLS_PER_FILE + 计数尾) 行。 */
 export function contextNoteFor(r: FileImpactReport): string {
   if (r.up.length === 0) {
-    return `[impact] ${r.file}：定义符号 ${r.symbols.length ? r.symbols.join(", ") : "（无）"}，无跨文件调用点（波及半径为 0）`;
+    // 这条是**最常见**分支（改到没有跨文件引用的文件），而 symbols 含函数内局部名（base/boosted…），
+    // 大文件能上百个 ⇒ 注入面按每文件符号帽收窄；全量仍在 impact_report 事件的 symbols 里（面板/审计不丢）。
+    const cap = IMPACT_CONTEXT_SYMBOLS_PER_FILE;
+    const listed = r.symbols.slice(0, cap).join(", ");
+    const tail = r.symbols.length > cap ? ` 等 ${String(r.symbols.length)} 个（全量在 impact_report 事件）` : "";
+    return `[impact] ${r.file}：定义符号 ${r.symbols.length ? listed + tail : "（无）"}，无跨文件调用点（波及半径为 0）`;
   }
   const byFile = new Map<string, { symbol: string; line: number }[]>();
   for (const s of r.up) {
