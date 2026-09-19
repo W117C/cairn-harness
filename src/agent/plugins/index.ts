@@ -10,9 +10,12 @@ import { HookEngine } from "./hooks";
 import { McpManager, type McpToolInfo } from "./mcp";
 import {
   buildSkillRoutingList, skillInvokeName, resolveSkillName, skillRemount, modelInvocable,
-  clampSkillBody, substituteVars, declaredArgumentNames, SKILL_REMOUNT_TOKENS_PER_SKILL,
+  clampSkillBody, substituteVars, declaredArgumentNames, expandConfigVars, SKILL_REMOUNT_TOKENS_PER_SKILL,
   type ActivatedSkill, type RoutingListResult, type RemountResult, type SubstitutionContext,
 } from "./skills";
+import {
+  registerPluginLspServers, unregisterPluginLspServers, type LspServerConfig as LspRuntimeConfig,
+} from "../../tools/lsp";
 import type { AgentEvent, ToolCallEvent, ToolResultEvent } from "../../events";
 import type {
   DiscoveredPlugin, LoadedHookDef, LooseSkill, PluginsManifest, SkillEntry, McpServerStatus,
@@ -101,7 +104,7 @@ export interface PluginPanelSnapshot {
     scope: string;
     trust: string;
     root: string;
-    counts: { skills: number; commands: number; agents: number; hooks: number; mcp: number; lsp: number };
+    counts: { skills: number; commands: number; agents: number; hooks: number; mcp: number; lsp: number; lspActive: number };
     errors: string[];
     warnings: string[];
   }[];
@@ -120,6 +123,8 @@ export class PluginRuntime {
   private opts: PluginRuntimeOptions;
   /** 本轮已注册的 MCP 工具（scoped 名 → 定义；统一注册表的插件侧贡献）。 */
   mcpTools: Map<string, McpToolInfo & { plugin: string; server: string }> = new Map();
+  /** 本轮已注册进 LSP 运行时的插件服务器 id（带插件前缀）；shutdown 按这张表摘干净。 */
+  private lspServerIds: string[] = [];
 
   private constructor(manifest: PluginsManifest, opts: PluginRuntimeOptions) {
     this.opts = opts;
@@ -183,6 +188,36 @@ export class PluginRuntime {
         }
       }
     }
+  }
+
+  /** §9.8 的第三个激活面：把受信插件的 `.lsp.json` 注册进 LSP 运行时。
+   *  此前它只被装载 + 被面板计数 ⇒ 数字在撒谎（装载即陈列）。
+   *  未信任不注册：`server.command` 是任意可执行文件，信任门与 hook / MCP 同口径（§9.5 信任边界）。
+   *  id 加插件前缀（§9.2 scoped 命名）——两个插件都写 "ts" 时不该互相顶掉，也让 broken/clients 的键可归因。 */
+  activateLsp(): void {
+    for (const p of this.manifest.plugins) {
+      if (p.trust !== "trusted") continue;
+      const servers: Record<string, LspRuntimeConfig> = {};
+      for (const [id, cfg] of Object.entries(p.lsp)) {
+        const extensions = Object.keys(cfg.extensionToLanguage ?? {});
+        if (extensions.length === 0) continue; // 没有扩展映射 = 永远不会被选中；装载期已出过声
+        const expand = (t: string): string => expandConfigVars(t, { pluginRoot: p.root, projectDir: this.opts.workspace });
+        servers[p.name + ":" + id] = {
+          command: expand(cfg.command),
+          args: (cfg.args ?? []).map(expand),
+          extensions,
+          ...(cfg.initializationOptions !== undefined ? { initializationOptions: cfg.initializationOptions } : {}),
+          ...(cfg.diagnostics?.enabled === false ? { diagnosticsEnabled: false } : {}),
+        };
+      }
+      const { accepted } = registerPluginLspServers(this.opts.workspace, servers);
+      this.lspServerIds.push(...accepted);
+    }
+  }
+
+  /** 已注册进 LSP 运行时的插件服务器 id（含插件前缀）。面板与测试都看这个数，不看声明数。 */
+  activeLspServerIds(): string[] {
+    return [...this.lspServerIds];
   }
 
   /** 受信插件的 skill 全集（渐进披露路由清单数据源）。
@@ -313,6 +348,9 @@ export class PluginRuntime {
           hooks: p.hooks.filter((h: LoadedHookDef) => h.loaded).length,
           mcp: p.mcp.length,
           lsp: Object.keys(p.lsp).length,
+          // 声明数与已注册进运行时的数分开报：只看 lsp 就是"装载即陈列"的老口径（面板撒谎的形状）。
+          // 注意这是"已注册"，不是"已起进程"——LSP 总开关（.agent/lsp.json）关着时注册了也不启动。
+          lspActive: this.lspServerIds.filter((id) => id.startsWith(p.name + ":")).length,
         },
         errors: p.errors,
         warnings: p.warnings,
@@ -331,6 +369,10 @@ export class PluginRuntime {
 
   async shutdown(): Promise<void> {
     await this.mcp.disconnectAll();
+    // LSP 注册表与会话同生命周期（TOOLS 摘除同族）：不清零的话下一个会话会继承上一个插件的服务器，
+    // 而那个插件的目录可能已经被卸载——pickServerForFile 会挑到一个不存在的 command。
+    unregisterPluginLspServers(this.opts.workspace, this.lspServerIds);
+    this.lspServerIds = [];
   }
 }
 

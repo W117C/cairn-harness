@@ -22,6 +22,7 @@ import {
   SKILL_ROUTING_CHAR_LIMIT, SKILL_REMOUNT_TOKENS_PER_SKILL, SKILL_REMOUNT_TOKENS_TOTAL,
   type PluginSecretBackend,
 } from "../src/agent/plugins";
+import { loadLspConfig, pluginLspServerIds } from "../src/tools/lsp";
 
 const ROOT = process.cwd();
 const FX = join(ROOT, "fixtures", "plugins");
@@ -232,6 +233,33 @@ async function main(): Promise<void> {
     assert(plain.text === "修个 bug" && plain.invoked === null, "C9c 非命令输入逐字不变（零行为）");
     await rtCmd.shutdown();
     await rm(wsCmd.ws, { recursive: true, force: true }).catch(() => {});
+  }
+
+  // ---- C10 插件 LSP 注册（§9.8 第三激活面：.lsp.json 要进运行时，不是只被面板计数）----
+  console.log("-- C10 插件 .lsp.json → LSP 运行时注册表 --");
+  {
+    const wsLsp = await makeWorkspace("lsp");
+    // 宿主总开关：开着，但表里没有自带服务器 ⇒ 出现的服务器只可能来自插件那条路。
+    await mkdir(join(wsLsp.ws, ".agent"), { recursive: true });
+    await writeFile(join(wsLsp.ws, ".agent", "lsp.json"), JSON.stringify({ lsp: {} }), "utf8");
+    const trustLsp = join(wsLsp.ws, "trust.json");
+    await new TrustStore(trustLsp).decide(wsLsp.pluginRoot, true, await pluginFingerprint(wsLsp.pluginRoot));
+    const rtLsp = await PluginRuntime.load({
+      projectPluginsDir: join(wsLsp.ws, ".agent", "plugins"),
+      workspace: wsLsp.ws,
+      pluginDataRoot: join(wsLsp.ws, ".plugin-data"),
+      trustFile: trustLsp,
+    });
+    rtLsp.activateLsp();
+    assert(pluginLspServerIds(wsLsp.ws).includes("echo-suite:stub-ts"), "C10a 受信插件的 .lsp.json 注册进运行时（scoped id）");
+    const argv = loadLspConfig(wsLsp.ws).servers["echo-suite:stub-ts"]?.args?.[0] ?? "";
+    assert(argv.endsWith("lsp-server/stub.mjs") && !argv.includes("${"), "C10b ${PLUGIN_ROOT} 展开成插件根下的真实路径");
+    const cLsp = rtLsp.snapshot().plugins.find((p) => p.name === "echo-suite")?.counts;
+    assert(cLsp !== undefined && cLsp.lspActive === cLsp.lsp && cLsp.lspActive >= 1,
+      "C10c 面板口径：声明数 = 已注册数（只看声明数就是「装载即陈列」的撒谎法）");
+    await rtLsp.shutdown();
+    assert(pluginLspServerIds(wsLsp.ws).length === 0, "C10d shutdown 摘干净（不留跨会话残留）");
+    await rm(wsLsp.ws, { recursive: true, force: true }).catch(() => {});
   }
 
   // ---- D 信任门（未信任不激活 → 信任后同样样本生效）----

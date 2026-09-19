@@ -134,6 +134,19 @@ export function substituteVars(template: string, ctx: SubstitutionContext = {}):
   });
 }
 
+/** 只走 `${VAR}` 那一支的展开器（**配置面**专用：LSP / 别的插件自带配置文件）。
+ *  配置里没有"这次调用的参数"这回事，把 $ARGUMENTS / $1 也换掉会凭空吃掉一段路径；
+ *  变量名表与 substituteVars 同一张（VAR_KEYS），改名只会改一处。没值的原样留着。 */
+export function expandConfigVars(
+  text: string,
+  ctx: Pick<SubstitutionContext, "skillDir" | "pluginRoot" | "pluginData" | "projectDir" | "sessionId">,
+): string {
+  return text.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (whole, name: string) => {
+    const key = VAR_KEYS[name];
+    return key === undefined ? whole : (ctx[key] ?? whole);
+  });
+}
+
 /** frontmatter `arguments` 的三种合法写法收成声明序名单（CC 用对象数组，散装 skill 常写成逗号串）。 */
 export function declaredArgumentNames(frontmatter: Record<string, unknown> | undefined): string[] {
   const raw = frontmatter?.arguments;

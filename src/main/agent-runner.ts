@@ -1104,6 +1104,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       rt = await PluginRuntime.load({ ...pluginRuntimeOpts(opts.workspace), mode: opts.mode, ...(opts.sessionId ? { sessionId: opts.sessionId } : {}) });
       setCurrentPluginRuntime(rt);
       await rt.connectMcp(); // 仅受信插件；pending/declined 不连接（§9.8 信任门）
+      rt.activateLsp();       // §9.8 第三激活面：受信插件的 .lsp.json 进 LSP 运行时（同信任门）
       injectedToolNames = installPluginTools(rt);
     } catch (err) {
       console.warn("[plugins] 运行时装载失败，零插件降级:", err instanceof Error ? err.message : String(err));

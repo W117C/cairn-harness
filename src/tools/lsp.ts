@@ -38,11 +38,62 @@ export interface LspServerConfig {
   command: string;
   args?: string[];
   extensions: string[];
+  /** CC 的 initializationOptions：原样进 InitializeParams（§9.8 的字段映射，不是收下即丢的装饰）。 */
+  initializationOptions?: Record<string, unknown>;
+  /** §9.8 `diagnostics.enabled`：显式 false ⇒ 该 server 不参与写后诊断回流（六操作照旧可用）。
+   *  缺省 undefined = 开（与 §9.8「diagnostics 默认 true」一致）。 */
+  diagnosticsEnabled?: boolean;
 }
 
 export interface LspConfig {
   enabled: boolean;
   servers: Record<string, LspServerConfig>;
+}
+
+/**
+ * 插件贡献的 LSP server（§9.8 承诺的三个激活面里此前缺的那第三条：`.lsp.json` 装载、面板计数，
+ * 但运行时从不读它 ⇒ 面板报的数字在撒谎）。作用域按 workspace 分键，与 clients/broken 同一套模块级键。
+ *
+ * 两条不越权的口径：
+ * ① **总开关仍是宿主的**——`.agent/lsp.json` 缺省或 `{"lsp": false}` 时这里登记了也不生效；
+ *    插件只能往已经打开的面上加服务器，不能替用户把 LSP 打开（server.command = 任意可执行文件）。
+ * ② **同扩展先注册者胜出**（CC first-registered-wins，防同一扩展起两个 server），
+ *    且宿主文件里的同名 id 永远压过插件的。
+ */
+const pluginServers = new Map<string, Record<string, LspServerConfig>>();
+
+const wsKey = (workspace: string): string => resolve(workspace);
+
+/** 登记插件服务器；返回被拒的 id（同扩展已被占，或 id 撞了宿主的）。 */
+export function registerPluginLspServers(workspace: string, servers: Record<string, LspServerConfig>): { accepted: string[]; refused: string[] } {
+  const key = wsKey(workspace);
+  const mine = pluginServers.get(key) ?? {};
+  const taken = new Set<string>();
+  for (const s of Object.values(mine)) for (const e of s.extensions) taken.add(e);
+  const accepted: string[] = [];
+  const refused: string[] = [];
+  for (const [id, cfg] of Object.entries(servers)) {
+    if (id in mine || cfg.extensions.some((e) => taken.has(e))) { refused.push(id); continue; }
+    mine[id] = cfg;
+    for (const e of cfg.extensions) taken.add(e);
+    accepted.push(id);
+  }
+  if (accepted.length > 0) pluginServers.set(key, mine);
+  return { accepted, refused };
+}
+
+/** 会话结束摘除（与 installPluginTools 的 injectedToolNames 同族：注册表不留跨会话残留）。 */
+export function unregisterPluginLspServers(workspace: string, ids: readonly string[]): void {
+  const key = wsKey(workspace);
+  const mine = pluginServers.get(key);
+  if (!mine) return;
+  for (const id of ids) delete mine[id];
+  if (Object.keys(mine).length === 0) pluginServers.delete(key);
+}
+
+/** 测试与面板用：当前登记的插件服务器 id 清单。 */
+export function pluginLspServerIds(workspace: string): string[] {
+  return Object.keys(pluginServers.get(wsKey(workspace)) ?? {});
 }
 
 /** 读 <workspace>/.agent/lsp.json：{"lsp": false}（或缺省无文件）= 全局关闭；
@@ -73,7 +124,18 @@ export function loadLspConfig(workspace: string): LspConfig {
     if (typeof cfg !== "object" || cfg === null || typeof cfg.command !== "string" || !Array.isArray(cfg.extensions)) {
       throw new ToolError('lsp: 服务器 "' + id + '" 配置不合法（需要 command 与 extensions）');
     }
-    servers[id] = { command: cfg.command, args: cfg.args ?? [], extensions: cfg.extensions };
+    servers[id] = {
+      command: cfg.command, args: cfg.args ?? [], extensions: cfg.extensions,
+      ...(cfg.initializationOptions !== undefined ? { initializationOptions: cfg.initializationOptions } : {}),
+      ...(cfg.diagnosticsEnabled !== undefined ? { diagnosticsEnabled: cfg.diagnosticsEnabled } : {}),
+    };
+  }
+  // 插件服务器：只在面上已开时并入（见 pluginServers 声明处口径 ①），同 id / 同扩展让位。
+  for (const [id, cfg] of Object.entries(pluginServers.get(wsKey(workspace)) ?? {})) {
+    if (id in servers) continue;
+    const taken = new Set<string>(Object.values(servers).flatMap((s) => s.extensions));
+    if (cfg.extensions.some((e) => taken.has(e))) continue;
+    servers[id] = cfg;
   }
   return { enabled: true, servers };
 }
@@ -304,6 +366,9 @@ async function startClient(root: string, server: LspServerConfig, key: string): 
         processId: process.pid,
         rootUri: pathToFileURL(root).href,
         capabilities: {},
+        // §9.8：CC 的 initializationOptions 一路带到 initialize——服务器靠它拿私有配置，
+        // 收下不传等于配置白写一次（stub server 用它回显，判据就看这条）。
+        initializationOptions: server.initializationOptions ?? {},
       });
       await conn.sendNotification(InitializedNotification.type, {});
     })(),
@@ -322,11 +387,13 @@ async function startClient(root: string, server: LspServerConfig, key: string): 
   return client;
 }
 
-/** 测试收尾：关掉全部客户端进程并清缓存（含 broken，测试自行重建场景）。 */
+/** 测试收尾：关掉全部客户端进程并清缓存（含 broken，测试自行重建场景）。
+ *  插件服务器也一并清——它按 workspace 分键且跨用例复用 tmp 目录时会串场景。 */
 export async function closeAllLspClients(): Promise<void> {
   const all = [...clients.values()];
   clients.clear();
   broken.clear();
+  pluginServers.clear();
   for (const p of all) {
     try {
       const c = await p;
@@ -354,6 +421,7 @@ export async function collectDiagnostics(root: string, absPath: string, timeoutM
     if (!cfg.enabled) return "";
     const serverId = pickServerForFile(cfg, absPath);
     if (!serverId) return "";
+    if (cfg.servers[serverId]?.diagnosticsEnabled === false) return ""; // §9.8 显式关诊断 ⇒ 不回流（六操作照旧）
     const client = await getLspClient(root, cfg, serverId);
     const uri = pathToFileURL(absPath).href;
     const text = await readFile(absPath, "utf8");

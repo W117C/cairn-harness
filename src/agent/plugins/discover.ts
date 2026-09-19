@@ -174,6 +174,14 @@ async function loadContainer(
         const KNOWN = ["command", "args", "extensionToLanguage", "initializationOptions", "startupTimeout", "restartOnCrash", "diagnostics", "transport"];
         const unknown = Object.keys(cfg).filter((k) => !KNOWN.includes(k));
         if (unknown.length > 0) warnings.push("lsp server " + id + ": 未知字段忽略（不阻断）: " + unknown.join(", "));
+        // §9.8 的字段里只有这几个是运行时真正兑现的；剩下的收下不兑现 = 本仓点名的"收下即丢"，
+        // 所以**当场说出来**：作者以为配了重启策略，实际崩了就崩了。
+        const unhonored = [
+          ...(cfg.startupTimeout !== undefined ? ["startupTimeout"] : []),
+          ...(cfg.restartOnCrash !== undefined ? ["restartOnCrash"] : []),
+          ...(cfg.diagnostics?.maxPerFile !== undefined ? ["diagnostics.maxPerFile"] : []),
+        ];
+        if (unhonored.length > 0) warnings.push("lsp server " + id + ": 这些字段本轮不生效（运行时未实现）: " + unhonored.join(", "));
         lsp[id] = cfg;
       } else {
         warnings.push("lsp server " + id + ": 缺少 command，忽略");
