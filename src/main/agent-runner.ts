@@ -24,6 +24,7 @@ import { createVerifyHook, defaultExec, type ExecFn } from "../agent/verify";
 import { createActionFusion } from "../agent/action-fusion";
 import { SolpiRuntime, privateSessionDirectory, removePrivateSessionData, observationRecallSpec, solpiEnabled, type SolpiFlags } from "../agent/solpi-runtime";
 import { affectedFilesOf, defaultImpactHook } from "../agent/impact/index.js";
+import { createImpactQueryTool, impactQuerySpec } from "../tools/impact-query";
 import { run_shell } from "../tools/run_shell";
 import type { AgentEvent, ClarifyAnswerMap, EventLog } from "../events";
 import { createEventLog, replay } from "../events";
@@ -1109,12 +1110,15 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // M7 影响面：开启时构造缺省钩子（磁盘缓存落应用数据目录，绝不写用户仓库）。
     //  钩子失败（grammar 缺失 / 大仓库超时）由 appendImpact 统一吞掉——写入结果不受影响。
     const impactHook = opts.impactAnalysis === true ? defaultImpactHook(opts.workspace) : undefined;
+    // 影响面**读端**：同一个开关下才注入（关着 = 工具面一个字节都不付）。写后回注只解决
+    // 「改完才知道波及谁」，这条让模型能在动手前问「谁在调用它」——能力 1 的事前一跳。
+    const impactTool = opts.impactAnalysis === true ? createImpactQueryTool() : undefined;
     await runLoop({
       ...(impactHook ? { impact: impactHook } : {}),
       ...(opts.autoVerify === true ? { autoVerify: true } : {}),
       provider: createProvider(opts.message, BASE_SYSTEM, {
         ...opts, emit: pipeline, solpi,
-        pluginTools: [...(recall ? [observationRecallSpec] : []), ...pluginToolSpecsFromRuntime(rt).filter(t => !recall || t.name !== "obs_recall")],
+        pluginTools: [...(recall ? [observationRecallSpec] : []), ...(impactTool ? [impactQuerySpec] : []), ...pluginToolSpecsFromRuntime(rt).filter(t => !recall || t.name !== "obs_recall")],
         ...(rt ? { plugins: {
           skillsRouting: skillsRouting ?? undefined,
           hookContext,
@@ -1122,7 +1126,9 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
         } } : {}),
       }, providerKind, settingsModel),
       events: { append: pipeline },
-      ...(recall ? { tools: { ...TOOLS, obs_recall: recall } } : {}),
+      ...(recall || impactTool
+        ? { tools: { ...TOOLS, ...(recall ? { obs_recall: recall } : {}), ...(impactTool ? { impact_query: impactTool } : {}) } }
+        : {}),
       workspace: opts.workspace,
       mode: "auto", // 冻结 loop 对 ask 一律拒绝；真实门在 gatedTool（复用 checkPermission）
       signal,
