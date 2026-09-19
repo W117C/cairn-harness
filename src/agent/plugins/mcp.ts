@@ -45,6 +45,43 @@ export function capMcpDescription(text: string, limit = MCP_DESCRIPTION_CHAR_LIM
     + " …[truncated: 描述 " + String(text.length) + " 字符超 " + String(limit) + " 上限]";
 }
 
+/** server 自带的 JSON Schema 是工具面里通常最大的一块，而 agent-runner 明写「参数直接复用
+ *  inputSchema 原文——不翻译、不裁剪」（避免两套 schema 漂移）。所以这里**只动字符串叶子与超深子树**：
+ *  键名、type、required、enum 逐项保留 ⇒ 模型照样下得出正确参数，少付的是 server 塞进
+ *  description/default 里的散文。结构与 JSON 合法性不破，是这条收窄的前提。 */
+export const MCP_SCHEMA_LEAF_CHAR_LIMIT = 600;
+export const MCP_SCHEMA_DEPTH_LIMIT = 6;
+
+function capSchemaLeaf(text: string): string {
+  if (text.length <= MCP_SCHEMA_LEAF_CHAR_LIMIT) return text;
+  const lineEnd = text.lastIndexOf("\n", MCP_SCHEMA_LEAF_CHAR_LIMIT);
+  const cut = lineEnd > Math.floor(MCP_SCHEMA_LEAF_CHAR_LIMIT * 0.5) ? lineEnd : MCP_SCHEMA_LEAF_CHAR_LIMIT;
+  return text.slice(0, cut) + " …[参数说明截断]";
+}
+
+function capSchemaNode(v: unknown, depth: number, tally: { clamped: number }): unknown {
+  if (typeof v === "string") {
+    const out = capSchemaLeaf(v);
+    if (out !== v) tally.clamped++;
+    return out;
+  }
+  if (typeof v !== "object" || v === null) return v;
+  if (depth >= MCP_SCHEMA_DEPTH_LIMIT) {
+    tally.clamped++;
+    return { type: "object", description: "[嵌套超 " + String(MCP_SCHEMA_DEPTH_LIMIT) + " 层，已省略]" };
+  }
+  if (Array.isArray(v)) return v.map((x) => capSchemaNode(x, depth + 1, tally));
+  const out: Record<string, unknown> = {};
+  for (const [k, x] of Object.entries(v as Record<string, unknown>)) out[k] = capSchemaNode(x, depth + 1, tally);
+  return out;
+}
+
+/** 返回收窄后的 schema 与被收窄的处数（>0 时要让模型知道「看到的是节选」）。 */
+export function capMcpSchema(schema: Record<string, unknown>): { schema: Record<string, unknown>; clamped: number } {
+  const tally = { clamped: 0 };
+  return { schema: capSchemaNode(schema, 0, tally) as Record<string, unknown>, clamped: tally.clamped };
+}
+
 /** MCP 工具 scoped 名（§9.3）：mcp__plugin_<plugin>_<server>__<tool>。 */
 export function scopedToolName(plugin: string, server: string, tool: string): string {
   return "mcp__plugin_" + plugin + "_" + server + "__" + tool;
@@ -164,12 +201,19 @@ export class McpManager {
       const label = `MCP server ${plugin}/${server}`;
       await withTimeout(client.connect(transport), this.connectTimeoutMs, label + " 连接");
       const listed = await withTimeout(client.listTools(), this.connectTimeoutMs, label + " tools/list");
-      const tools: McpToolInfo[] = (listed.tools ?? []).map((t) => ({
-        name: t.name,
-        description: typeof t.description === "string" ? capMcpDescription(t.description) : "",
-        inputSchema: (t.inputSchema ?? {}) as Record<string, unknown>,
-        scopedName: scopedToolName(plugin, server, t.name),
-      }));
+      const tools: McpToolInfo[] = (listed.tools ?? []).map((t) => {
+        // schema 与描述成对收窄：只压了 schema 却不告诉模型，模型会以为看到的就是全部参数说明。
+        const capped = capMcpSchema((t.inputSchema ?? {}) as Record<string, unknown>);
+        const desc = typeof t.description === "string" ? capMcpDescription(t.description) : "";
+        return {
+          name: t.name,
+          description: capped.clamped > 0
+            ? desc + "\n[参数说明已收窄 " + String(capped.clamped) + " 处，结构完整]"
+            : desc,
+          inputSchema: capped.schema,
+          scopedName: scopedToolName(plugin, server, t.name),
+        };
+      });
       const conn: Connection = { plugin, server, client, transport, tools };
       this.connections.set(k, conn);
       // E5（审查 P2）：订阅 transport onclose——server 进程崩溃后 statuses() 不再报
