@@ -1595,6 +1595,38 @@ const MUTATIONS = [
     apply: (s) => s.replace("，也未探到 go/cargo/pytest/make 测试面", ""),
     expectFail: "什么面都没有 → source none，且消息说清查过哪些工具链",
   },
+  {
+    id: "verify-timeout-not-threaded-to-exec",
+    src: "src/agent/verify.ts",
+    test: "tests/verify-probe.test.ts",
+    desc: "算出了超时却没传给执行器 ⇒ 语言探测档的 300s 只是纸面配置，冷编译照旧被 60s 掐死",
+    apply: (s) => s.replace("results.push(await exec(command, repoDir, timeoutMs));", "results.push(await exec(command, repoDir));"),
+    expectFail: "语言探测档自带 300s：冷编译 cargo/go 不该被 60s 掐死",
+  },
+  {
+    id: "verify-lang-timeout-same-as-npm",
+    src: "src/agent/verify.ts",
+    test: "tests/verify-probe.test.ts",
+    desc: "探测档沿用 npm 的 60s ⇒ 探出验证面却让它必然超时（比探不出来更坏：给出「已经验过」的错觉）",
+    apply: (s) => s.replace("timeoutMs: PROBED_LANG_TIMEOUT_MS }", "timeoutMs: DEFAULT_VERIFY_TIMEOUT_MS }"),
+    expectFail: "Cargo.toml → cargo test",
+  },
+  {
+    id: "verify-timeout-validation-removed",
+    src: "src/agent/verify.ts",
+    test: "tests/verify-probe.test.ts",
+    desc: "取消 timeoutMs 校验 ⇒ 单位写错（把秒当毫秒 / 写 0）被静默接受，配置的人以为限制生效了",
+    apply: (s) => s.replace("if (typeof t !== \"number\" || !Number.isInteger(t) || t < MIN_VERIFY_TIMEOUT_MS || t > MAX_VERIFY_TIMEOUT_MS) {", "if (false) {"),
+    expectFail: "timeoutMs 越界或类型错 → fail loud（静默忽略会让人以为配上了）",
+  },
+  {
+    id: "verify-timeout-message-hardcoded",
+    src: "src/agent/verify.ts",
+    test: "tests/verify-probe.test.ts",
+    desc: "超时消息把秒数写死成 60s ⇒ 配置成别的值时模型读到假限制，会照着「60s 都跑不完」去判断代码",
+    apply: (s) => s.replace('"\\n[error: verify 命令超时（" + String(Math.round(timeoutMs / 1000)) + "s），已强制终止', '"\\n[error: verify 命令超时（60s），已强制终止'),
+    expectFail: "defaultExec 真按传入上限掐表，消息里的秒数跟着配置走",
+  },
 ];
 
 function runTest(testRel) {
