@@ -142,7 +142,9 @@ describe("M2e skill：压缩后重挂预算（任务 3）", () => {
     // 合计帽 25000：前 5 个各花 4900，第 6 个只剩 500 预算（最近激活优先，预算从最近的开始花）
     expect(r.tokens).toBeLessThanOrEqual(SKILL_REMOUNT_TOKENS_TOTAL);
     expect(r.mounted).toHaveLength(6);
-    expect(estimateTokens(r.text!)).toBeLessThanOrEqual(SKILL_REMOUNT_TOKENS_TOTAL + 50); // 头行开销
+    // 余量 = 头行 + 每块 "[invoke 压缩后重挂]" 标记。这些几乎全是中文，按「一字一 token」
+    // 如实计（原 +50 是 chars/4 低估中文得出的估算器产物，见 src/agent/text-budget.ts）。
+    expect(estimateTokens(r.text!)).toBeLessThanOrEqual(SKILL_REMOUNT_TOKENS_TOTAL + 200);
     // 最近激活优先（seq 大的先占预算）
     expect(r.mounted[0]).toBe("/p:s5");
   });
