@@ -335,7 +335,7 @@ pnpm gates --strict-unverified      # 未证项直接判红（CI/有凭据环境
 ### 7.3 常用命令
 
 ```bash
-pnpm typecheck     # tsc --noEmit
+pnpm typecheck     # tsc --noEmit；红时另打一行「报错文件哪些在 HEAD、哪些是未跟踪草稿」
 pnpm test          # vitest run（tests/，57 文件 513 断言级用例）
 pnpm e2e           # mock 模型驱动 loop 修 fixtures/todo-app 的 bug（闭环验收）
 pnpm ipc:check     # 无 UI 直调 handleAgentRun 的 IPC 面验收

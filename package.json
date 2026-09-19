@@ -8,7 +8,7 @@
     "gates": "node --import tsx scripts/gates.ts",
     "mutate-needles-check": "node --import tsx scripts/mutate-verify.mjs --check-needles",
     "facts": "node --import tsx scripts/facts.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node --import tsx scripts/typecheck.ts",
     "test": "vitest run --config tests/vitest.config.ts",
     "e2e": "node --import tsx scripts/e2e.ts",
     "agent": "node --import tsx scripts/agent.ts",
