@@ -164,3 +164,10 @@ export async function appendImpact(ctx: ToolContext, rel: string, base: string):
 export function truncationNotice(limitKB: number): string {
   return `[truncated: 输出超过 ${limitKB}KB 上限，已截断]`;
 }
+
+/** 超上限输出「掐中间」的提示：省略了多少字节要如实报出（不是"输出被裁了"四个字）。
+ *  与 truncationNotice 分两个函数而不是加参数：两者的语义相反——一个是"只留了头部"，
+ *  一个是"头尾都留、中间丢了"，混成一个名字会让读提示的模型猜错留了哪一段。 */
+export function middleTruncationNotice(omittedBytes: number): string {
+  return `[truncated: 输出超上限已截断——省略中间 ${String(omittedBytes)} 字节，已保留开头与结尾（测试汇总与报错结论通常在尾部）]`;
+}
