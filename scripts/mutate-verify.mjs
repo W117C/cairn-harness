@@ -2148,6 +2148,39 @@ const MUTATIONS = [
     apply: (s) => s.replace("  const placeholderTokens = estimateTextTokens(PRUNED_PLACEHOLDER);", "  const placeholderTokens = PRUNED_PLACEHOLDER.length;"),
     expectFail: "纯 ASCII 逐字不变：读数仍是 ceil(chars/4) − ceil(占位/4)",
   },
+  // ---- W3 第一段调度纪律（BASE_SYSTEM 的「编排」段）：三句各一条 + 编号不侵占一条 ----
+  {
+    id: "orchestration-rule-dropped",
+    src: "src/main/agent-runner.ts",
+    test: "tests/base-system-discipline.test.ts",
+    desc: "整段编排纪律删掉 ⇒ 模型面重新没人教「何时拆 / 怎么派 / 派完收队」，而 W1a 的工具照样在线（能力已发货、指令面缺席）",
+    apply: (s) => s.replace("  \"编排（派子代理时）：能各自独立验收才拆，单一改动别拆；任务书必须自包含——目标 / 涉及文件 / 验收口径，worker 看不到本会话历史；派完先调 wait_for_agents 收队，未拿到回执不得转述 worker 的结论。\",\n", ""),
+    expectFail: "编排段在：拆的判据 / 任务书自包含 / 派完必须收队，三句各锁一句（W1a 的收队义务此前只在工具描述里）",
+  },
+  {
+    id: "orchestration-collect-duty-removed",
+    src: "src/main/agent-runner.ts",
+    test: "tests/base-system-discipline.test.ts",
+    desc: "只删收队那半句 ⇒ 派完仍会凭想象转述 worker 结论，D1 的失败模式重新敞开（工具在、没人叫它）",
+    apply: (s) => s.replace("派完先调 wait_for_agents 收队，未拿到回执不得转述 worker 的结论。", ""),
+    expectFail: "编排段在：拆的判据 / 任务书自包含 / 派完必须收队，三句各锁一句（W1a 的收队义务此前只在工具描述里）",
+  },
+  {
+    id: "orchestration-taskbook-removed",
+    src: "src/main/agent-runner.ts",
+    test: "tests/base-system-discipline.test.ts",
+    desc: "删「任务书自包含」半句 ⇒ worker 拿不到验收口径就要返工（它看不到父会话历史，这条是 worker 质量的上游）",
+    apply: (s) => s.replace("任务书必须自包含——目标 / 涉及文件 / 验收口径，worker 看不到本会话历史；", ""),
+    expectFail: "编排段在：拆的判据 / 任务书自包含 / 派完必须收队，三句各锁一句（W1a 的收队义务此前只在工具描述里）",
+  },
+  {
+    id: "orchestration-rule-renumbered",
+    src: "src/main/agent-runner.ts",
+    test: "tests/base-system-discipline.test.ts",
+    desc: "把编排段改成「7) …」⇒ 条件段混进动作序列编号，纪律 1–6 的连续性断号（模型会以为后面的约束可省）",
+    apply: (s) => s.replace("\"编排（派子代理时）：", "\"7) 编排（派子代理时）："),
+    expectFail: "六条纪律编号连续（缺号=模型读到断号，会以为后面的约束可省）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
