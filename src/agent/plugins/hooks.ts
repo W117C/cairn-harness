@@ -13,6 +13,17 @@ import type { HookEventName, LoadedHookDef } from "./types";
 
 /** 输出上限（每流，字符）。 */
 export const HOOK_OUTPUT_CAP = 10_000;
+/** 同事件多 handler 的**聚合**预算：逐个各有 10k ≠ 总量有界（数量有界与体积有界是两件事）。 */
+export const HOOK_CONTEXT_TOTAL_CHAR_LIMIT = 24_000;
+/** 阻断理由进的是 tool_result 里的一行，不是一份报告。 */
+export const HOOK_REASON_CHAR_LIMIT = 2_000;
+
+/** 理由收窄：宁可短，也不能让一条 hook 理由吃掉整轮注入面。 */
+function capHookReason(text: string): string {
+  return text.length > HOOK_REASON_CHAR_LIMIT
+    ? text.slice(0, HOOK_REASON_CHAR_LIMIT) + " …[hook 理由超 " + String(HOOK_REASON_CHAR_LIMIT) + " 字符，已截断]"
+    : text;
+}
 /** timeout 缺省（秒）。 */
 export const HOOK_TIMEOUT_DEFAULT = 600;
 export const HOOK_TIMEOUT_USER_PROMPT = 30;
@@ -38,6 +49,8 @@ export interface HookRunResult {
   errors: string[];
   /** 超 10k 的全文落盘路径。 */
   overflowFiles: string[];
+  /** 因聚合预算被**整块**省略的 handler（插件名）：不谎称看过，也不截半句冒充全文。 */
+  droppedContextHandlers: string[];
   ran: number;
   skipped: number;
 }
@@ -228,7 +241,7 @@ export class HookEngine {
 
   /** 触发一轮 hook（同事件多 handler 并行，Promise.all）。 */
   async run(event: HookEventName, payload: HookPayload): Promise<HookRunResult> {
-    const result: HookRunResult = { blocked: false, additionalContext: "", errors: [], overflowFiles: [], ran: 0, skipped: 0 };
+    const result: HookRunResult = { blocked: false, additionalContext: "", errors: [], overflowFiles: [], droppedContextHandlers: [], ran: 0, skipped: 0 };
     const handlers = this.handlersFor(event, payload);
     if (handlers.length === 0) return result; // 空注册表 = 零行为（既有门字节不变的根基）
 
@@ -277,7 +290,7 @@ export class HookEngine {
       }
       if (out.code === 2) {
         result.blocked = true;
-        const reason = (stderr.length > HOOK_OUTPUT_CAP ? stderr.slice(0, HOOK_OUTPUT_CAP) : stderr).trim();
+        const reason = capHookReason(stderr).trim();
         result.blockReason = reason !== "" ? reason : "hook exit 2（插件 " + h.plugin + "）";
         continue;
       }
@@ -288,16 +301,28 @@ export class HookEngine {
       const parsed = parseHookDecision(stdout);
       if (parsed.decision) {
         result.decision = mergeDecision(result.decision, parsed.decision);
-        if (parsed.reason && result.decision === "deny" && !result.blockReason) result.blockReason = parsed.reason;
+        if (parsed.reason && result.decision === "deny" && !result.blockReason) result.blockReason = capHookReason(parsed.reason);
         continue; // JSON 决策输出不进上下文
       }
       // 上下文事件：exit 0 的 stdout（非 JSON）回注（PostToolUseFailure 同样反馈给模型）
       if (event === "SessionStart" || event === "UserPromptSubmit" || event === "PostToolUse" || event === "PostToolUseFailure") {
         const text = stdout.length > HOOK_OUTPUT_CAP ? stdout.slice(0, HOOK_OUTPUT_CAP) : stdout;
         if (text.trim() !== "") {
+          // 聚合预算：逐个 handler 各有 10k 上限，N 个拼起来仍可达 N×10k，而这串是要进
+          // 每条 tool_result 尾部（loop）/每轮系统文本（agent-runner）的。超预算时**整块省略**
+          // 后面的 handler（不截半句冒充全文），并把省了谁如实说出去。
+          if (result.additionalContext.length + text.length > HOOK_CONTEXT_TOTAL_CHAR_LIMIT) {
+            result.droppedContextHandlers.push(h.plugin);
+            continue;
+          }
           result.additionalContext += (result.additionalContext === "" ? "" : "\n") + text.trim();
         }
       }
+    }
+    if (result.droppedContextHandlers.length > 0) {
+      result.additionalContext += "\n[hook 上下文预算 " + String(HOOK_CONTEXT_TOTAL_CHAR_LIMIT) +
+        " 字符已满，整块省略 " + String(result.droppedContextHandlers.length) +
+        " 个 handler 输出（插件 " + result.droppedContextHandlers.join("、") + "）]";
     }
     if (result.decision === "deny" && !result.blocked) {
       result.blocked = true;

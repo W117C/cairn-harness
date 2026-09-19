@@ -41,7 +41,7 @@ export {
 export { parseFrontmatter, fmString } from "./frontmatter";
 export { discoverPlugins, activeHooks, pendingPlugins } from "./discover";
 export { TrustStore, pluginFingerprint } from "./trust";
-export { HookEngine, hookEnv, parseHookDecision, mergeDecision, HOOK_OUTPUT_CAP, HOOK_TIMEOUT_DEFAULT, HOOK_TIMEOUT_USER_PROMPT, type HookEngineOptions } from "./hooks";
+export { HookEngine, hookEnv, parseHookDecision, mergeDecision, HOOK_OUTPUT_CAP, HOOK_CONTEXT_TOTAL_CHAR_LIMIT, HOOK_REASON_CHAR_LIMIT, HOOK_TIMEOUT_DEFAULT, HOOK_TIMEOUT_USER_PROMPT, type HookEngineOptions } from "./hooks";
 export { McpManager, scopedToolName, parseScopedToolName, type McpToolInfo, type McpConnectResult } from "./mcp";
 export {
   buildSkillRoutingList, skillInvokeName, resolveSkillName, skillRoutingLine, substituteArgs,
