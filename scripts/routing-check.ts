@@ -15,7 +15,7 @@ import { Orchestrator, scriptedWorkerModel } from "../src/agent/orchestrator";
 import type { RespawnArgs } from "../src/agent/recovery";
 import { DEFAULT_MODEL_TABLE } from "../src/providers/registry";
 import { createRng, newBanditState, nextRandom, selectArm, update, updatePriced } from "../src/routing/bandit";
-import { costUsd, DEFAULT_PRICE_TABLE, priceCoverage, priceOf } from "../src/routing/pricing";
+import { costUsd, DEFAULT_PRICE_TABLE, priceCoverage, priceOf, unpricedModels } from "../src/routing/pricing";
 import { routeFor } from "../src/routing/policy";
 import { runCascade } from "../src/routing/cascade";
 import { DEFAULT_SETTINGS, SettingsStore, validateSettings } from "../src/main/settings";
@@ -274,10 +274,43 @@ console.log("[routing-check] F 价格表接线（覆盖护栏 / 真钱折算 / �
 {
   // F1：价格表覆盖档位表全部 id（新增 model 忘配价 = 显式失败）
   check(priceCoverage().length === 0, "F1 价格表覆盖档位表全部 " + String(DEFAULT_MODEL_TABLE.length) + " 个 id（漂移护栏）");
-  // F2：真钱折算已知用例（输入/输出分列计价）
+  // F2：真钱折算已知用例（输入/输出分列计价；单价 = 2026-09-19 厂商官方页实测）
   const c = costUsd("anthropic-standard", { inputTokens: 1_000_000, outputTokens: 1_000_000 });
-  check(Math.abs(c - 18.0) < 1e-9, "F2 costUsd 真钱折算（1M in + 1M out @anthropic-standard = $18）", "cost=" + String(c));
-  check(priceOf("gemini-cheap").inputPerMTok === 0.1, "F2b 价格表读取");
+  check(Math.abs(c - 12.0) < 1e-9, "F2 costUsd 真钱折算（1M in + 1M out @anthropic-standard = $12，Sonnet 5 现行价 $2/$10）", "cost=" + String(c));
+  check(priceOf("gemini-cheap").inputPerMTok === 0.3, "F2b 价格表读取（2.5-Flash $0.30）");
+  // F2c：档位必须能被代价项**分辨**（同 provider 三档的 blended 成本两两不等），且 cheap 确实最便宜。
+  // 不断言「cheap < standard < strong 全序」——官方价就有倒挂（o3 $2/$8 比 gpt-4o $2/$10 的输出价更低），
+  // 那是档位语义的产品问题，不是数表错；倒挂由下面那行显式打出来，不静默。
+  // id 一律从档位表取（glm 的 cheap 档沿用历史名 glm-flash，字符串拼不出来）。
+  {
+    const blended = (id: string): number => costUsd(id, { inputTokens: 100_000, outputTokens: 20_000 });
+    const bad: string[] = [];
+    const inversions: string[] = [];
+    for (const provider of ["glm", "openai", "anthropic", "gemini"]) {
+      const rows = DEFAULT_MODEL_TABLE.filter((s) => s.provider === provider);
+      const byTier = new Map(rows.map((s) => [s.tier, blended(s.id)]));
+      const c = byTier.get("cheap");
+      const st = byTier.get("standard");
+      const g = byTier.get("strong");
+      if (c === undefined || st === undefined || g === undefined) {
+        bad.push(provider + " 三档不齐（档位表缺档）");
+        continue;
+      }
+      if (new Set([c, st, g]).size !== 3) bad.push(provider + " 三档成本无法区分 " + String(c) + "/" + String(st) + "/" + String(g));
+      if (c >= st || c >= g) bad.push(provider + " cheap 不是最便宜 " + String(c));
+      if (st > g) inversions.push(provider + "（standard $" + st.toFixed(3) + " > strong $" + g.toFixed(3) + "）");
+    }
+    check(bad.length === 0, "F2c 每家三档的 blended 成本可区分且 cheap 最低（bandit 代价项的前提）", bad.join("；"));
+    console.log("  ℹ️ 官方价倒挂（非缺陷，档位语义待裁决）：" + (inversions.length > 0 ? inversions.join("；") : "无"));
+  }
+  // F2d：标定来源可审计——未标定行必须显式列出来，而不是混在数表里当实测
+  {
+    const unpriced = unpricedModels();
+    check(unpriced.length > 0 && unpriced.length < Object.keys(DEFAULT_PRICE_TABLE).length,
+      "F2d 占位价与实测价可分辨（未标定 " + String(unpriced.length) + " 行：" + unpriced.join(",") + "）", "全占位或全实测都算漂");
+    check(priceOf("anthropic-standard").calibrated === true && priceOf("glm-flash").calibrated !== true,
+      "F2e Anthropic 行认作实测、GLM 行不认（官方页没抓到数就不打标）");
+  }
   // F3/F4：真钱代价驱动的 bandit 收敛（cheap $0.2 vs strong $8 每 MTok，每轮 500 token）
   const moneyRun = (prices: { cheap: number; strong: number }, seed = 42, envSeed = 7): { cheapPicks: number; strongPicks: number } => {
     const state = newBanditState(seed);

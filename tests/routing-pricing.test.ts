@@ -17,8 +17,15 @@ describe("M6 价格表", () => {
   });
 
   it("costUsd 输入输出分列计价", () => {
-    const c = costUsd("anthropic-standard", { inputTokens: 1_000_000, outputTokens: 1_000_000 });
-    expect(c).toBeCloseTo(3.0 + 15.0, 6);
+    // 算术用**注入价表**测：缺省表的单价是厂商目录价（会随 catalog 漂，2026-09-19 已按官方页
+    // 实测换过一轮），把它写死在这里 = 每次改价都要来动测。缺省表自身的数字对不对，由
+    // routing-check F2/F2d（标定来源）与 prompt-cache-breakpoints 的现行价用例钉。
+    const table: Record<string, ModelPrice> = { "m": { inputPerMTok: 3, outputPerMTok: 15, cacheReadPerMTok: null, cacheWritePerMTok: null } };
+    expect(costUsd("m", { inputTokens: 1_000_000, outputTokens: 1_000_000 }, table)).toBeCloseTo(3.0 + 15.0, 6);
+    expect(costUsd("m", { inputTokens: 500_000, outputTokens: 100_000 }, table)).toBeCloseTo(1.5 + 1.5, 6);
+    // 缺省表必须仍可算且与注入表同口径（同价同值 ⇒ 换的是数，不是算法）
+    const sameAs = { ...DEFAULT_PRICE_TABLE, "m": table.m };
+    expect(costUsd("m", { inputTokens: 1_000_000, outputTokens: 1_000_000 }, sameAs)).toBeCloseTo(18, 6);
   });
 
   it("价格表覆盖档位表全部 id（漂移护栏：新增 model 忘配价 = 显式失败）", () => {

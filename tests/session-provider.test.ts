@@ -104,12 +104,16 @@ describe("主会话预算随模型窗口（128k 帽不再一刀切）", () => {
   it("显式 config 只能往下调，不许越过模型真实窗口", async () => {
     const path = await setup();
     await log.append({ type: "assistant_message", content: BIG });
-    // 128k 窗口的模型上把 inputLimit 写成 900k：本地必须钳回 128k（超窗 = 远端 400，不留给远端）
+    // 128k 窗口的模型（gpt-4o-mini）上把 inputLimit 写成 900k：本地必须钳回 128k
+    // （超窗 = 远端 400，不留给远端）。原先这条用 glm-standard 当 128k 样板——
+    // 2026-09-19 按官方页把它的窗口校准成 1M 后，样板必须换成真·128k 的档位。
     await expect(drain(path, {
-      model: "glm-standard",
+      model: "gpt-4o-mini",
       compaction: { config: { inputLimit: 900_000 } },
     })).rejects.toThrow("context_budget_exceeded");
     // 同一条显式值在 256k 窗口的模型上仍被钳到 256k ⇒ 150k 历史放行
     await drain(path, { model: "glm-5.2-pro", compaction: { config: { inputLimit: 900_000 } } });
+    // 1M 窗口的 glm-standard 放行同一份历史 ⇒ 窗口校准确实落到预算面（不是只改了个数）
+    await drain(path, { model: "glm-standard", compaction: { config: { inputLimit: 900_000 } } });
   });
 });

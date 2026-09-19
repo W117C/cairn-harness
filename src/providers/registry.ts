@@ -23,24 +23,29 @@ export interface ModelSpec {
 export const PROVIDER_IDS = ["glm", "openai", "anthropic", "gemini"] as const;
 
 /** 缺省档位表（表序 = 档位默认的 provider 优先级：glm 第一——tier-default 取 direct[0]）。
- *  id 命名：glm 沿用 M5 的 flash/standard/strong；其余用 <provider>-<tier>。 */
+ *  id 命名：glm 沿用 M5 的 flash/standard/strong；其余用 <provider>-<tier>。
+ *  `model` = 厂商调用名。2026-09-19 联网实测按官方 catalog 换过一轮（旧值见各行注）：
+ *  Anthropic 现行页已不列 claude-3-5-* / claude-opus-4-*，Gemini 2.0-flash 标注已 shut down
+ *  ⇒ **照旧名发请求就是 404/400 级失败**，路由开着就会把整次任务打挂，不是「不够便宜」的小事。
+ *  仍以 `⚠️ 未证` 标出的行，是官方页没能直接确认调用名的（不猜、不改，留给带凭据的实测或裁决）。 */
 export const DEFAULT_MODEL_TABLE: readonly ModelSpec[] = [
   // GLM（M5 既有，id 不变）
-  { id: "glm-flash", provider: "glm", model: "glm-4.5-flash", tier: "cheap", ctxWindow: 128_000 },
-  { id: "glm-standard", provider: "glm", model: "glm-5.2", tier: "standard", ctxWindow: 128_000 },
-  { id: "glm-strong", provider: "glm", model: "glm-5.2-pro", tier: "strong", ctxWindow: 256_000 },
-  // OpenAI（M6 白名单）
+  { id: "glm-flash", provider: "glm", model: "glm-5.3-flash", tier: "cheap", ctxWindow: 1_000_000 }, // 旧 glm-4.5-flash；官方模型页 docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash（上下文 1M）
+  { id: "glm-standard", provider: "glm", model: "glm-5.2", tier: "standard", ctxWindow: 1_000_000 }, // 调用名官方页确认；上下文页写 1M（旧值 128k 是拍的）
+  { id: "glm-strong", provider: "glm", model: "glm-5.2-pro", tier: "strong", ctxWindow: 256_000 }, // ⚠️ 未证：官方页只确认了 glm-5.2 与 glm-5.3-flash，-pro 后缀没查到
+  // OpenAI（M6 白名单；三个调用名都出现在官方 pricing 表上）
   { id: "openai-cheap", provider: "openai", model: "gpt-4o-mini", tier: "cheap", ctxWindow: 128_000 },
   { id: "openai-standard", provider: "openai", model: "gpt-4o", tier: "standard", ctxWindow: 128_000 },
   { id: "openai-strong", provider: "openai", model: "o3", tier: "strong", ctxWindow: 200_000 },
-  // Anthropic（M6 白名单）
-  { id: "anthropic-cheap", provider: "anthropic", model: "claude-3-5-haiku-latest", tier: "cheap", ctxWindow: 200_000 },
-  { id: "anthropic-standard", provider: "anthropic", model: "claude-3-5-sonnet-latest", tier: "standard", ctxWindow: 200_000 },
-  { id: "anthropic-strong", provider: "anthropic", model: "claude-opus-4-latest", tier: "strong", ctxWindow: 200_000 },
-  // Gemini（M6 白名单）
-  { id: "gemini-cheap", provider: "gemini", model: "gemini-2.0-flash", tier: "cheap", ctxWindow: 1_000_000 },
-  { id: "gemini-standard", provider: "gemini", model: "gemini-2.5-pro", tier: "standard", ctxWindow: 1_000_000 },
-  { id: "gemini-strong", provider: "gemini", model: "gemini-2.5-pro-exp", tier: "strong", ctxWindow: 1_000_000 },
+  // Anthropic（M6 白名单；换成官方 Models overview 现行 id）
+  { id: "anthropic-cheap", provider: "anthropic", model: "claude-haiku-4-5-20251001", tier: "cheap", ctxWindow: 200_000 },
+  { id: "anthropic-standard", provider: "anthropic", model: "claude-sonnet-5", tier: "standard", ctxWindow: 200_000 },
+  { id: "anthropic-strong", provider: "anthropic", model: "claude-opus-5", tier: "strong", ctxWindow: 200_000 },
+  // Gemini（M6 白名单；2.0-flash 官方标 shut down，2.5-pro-exp 从来不是可调用名）
+  // 档位按**单价单调**排：flash 系便宜在前，pro 最贵当 strong
+  { id: "gemini-cheap", provider: "gemini", model: "gemini-2.5-flash", tier: "cheap", ctxWindow: 1_000_000 },
+  { id: "gemini-standard", provider: "gemini", model: "gemini-3.8-flash", tier: "standard", ctxWindow: 1_000_000 },
+  { id: "gemini-strong", provider: "gemini", model: "gemini-2.5-pro", tier: "strong", ctxWindow: 1_000_000 },
 ];
 
 /** 档位表查询（纯函数）。 */

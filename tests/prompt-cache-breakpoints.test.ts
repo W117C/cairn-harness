@@ -11,7 +11,7 @@ import { Orchestrator } from "../src/agent/orchestrator";
 import { toAnthropicBody, type AnthropicOptions } from "../src/providers/anthropic";
 import { DEFAULT_MODEL_TABLE, toWorkerModel } from "../src/providers/registry";
 import type { ProviderMessage, ProviderToolSpec } from "../src/providers";
-import { costUsd, DEFAULT_PRICE_TABLE, uncalibratedCachePrices, type ModelPrice } from "../src/routing/pricing";
+import { costUsd, DEFAULT_PRICE_TABLE, uncalibratedCachePrices, unpricedModels, type ModelPrice } from "../src/routing/pricing";
 
 const SPEC = (name: string): ProviderToolSpec => ({ name, description: "d", parameters: { type: "object", properties: {} } });
 const MSGS: ProviderMessage[] = [
@@ -107,14 +107,42 @@ describe("开关可达性：settings → registry 分派 → 请求体", () => {
 });
 
 describe("缓存价：待校准清单与上界口径", () => {
-  it("全部档位缓存价均为 null（未编数），清单可审计", () => {
-    expect(uncalibratedCachePrices()).toEqual(Object.keys(DEFAULT_PRICE_TABLE).sort());
+  it("已标定档位不在待校准清单、未标定的必在（清单是真话不是摆设）", () => {
+    const list = uncalibratedCachePrices();
+    for (const id of ["anthropic-cheap", "anthropic-standard", "anthropic-strong"]) {
+      expect(list, id + " 读写缓存价都已实测过，不该再出现在清单里").not.toContain(id);
+    }
+    for (const id of ["glm-flash", "glm-standard", "glm-strong"]) {
+      expect(list, id + " 仍是占位 ⇒ 必须在清单里").toContain(id);
+    }
+    // 清单与数表自洽：列出的每一条确实至少有一个 null 桶
+    for (const id of list) {
+      const p = DEFAULT_PRICE_TABLE[id]!;
+      expect(p.cacheReadPerMTok === null || p.cacheWritePerMTok === null, id).toBe(true);
+    }
   });
 
-  it("未标定 ⇒ 带缓存分块与不带的成本逐字同值（上界口径，零回归）", () => {
-    const plain = costUsd("anthropic-standard", { inputTokens: 100_000, outputTokens: 1_000 });
-    const withCache = costUsd("anthropic-standard", { inputTokens: 100_000, outputTokens: 1_000, cacheReadInputTokens: 80_000 });
+  it("输入价仍是占位的档位单独可查（GLM 官方页没抓到数 ⇒ 不许当省钱证据）", () => {
+    expect(unpricedModels()).toEqual(["glm-flash", "glm-standard", "glm-strong"]);
+  });
+
+  it("未标定档位 ⇒ 带缓存分块与不带的成本逐字同值（上界口径，零回归）", () => {
+    // 必须用**两桶都还是 null** 的档位测：Anthropic 已标定后这里会真的变便宜（见下一条）。
+    const plain = costUsd("glm-flash", { inputTokens: 100_000, outputTokens: 1_000 });
+    const withCache = costUsd("glm-flash", { inputTokens: 100_000, outputTokens: 1_000, cacheReadInputTokens: 80_000 });
     expect(withCache).toBeCloseTo(plain, 12);
+  });
+
+  it("Anthropic 现行价：缓存命中段按 ×0.1 计 ⇒ 成本随命中率真降（A1 断点的价格面）", () => {
+    // 官方价 $2/$10 每 MTok，cache read = 输入价 ×0.1 = $0.2，cache write = ×1.25 = $2.5
+    const noHit = costUsd("anthropic-standard", { inputTokens: 100_000, outputTokens: 0 });
+    const ninety = costUsd("anthropic-standard", { inputTokens: 100_000, outputTokens: 0, cacheReadInputTokens: 90_000 });
+    expect(noHit).toBeCloseTo(0.2, 10);
+    expect(ninety).toBeCloseTo(0.038, 10); // 10k×$2/1M + 90k×$0.2/1M
+    expect(ninety).toBeLessThan(noHit);
+    // 写桶不是免费的：首次建缓存那一段按 ×1.25 计
+    const wrote = costUsd("anthropic-standard", { inputTokens: 100_000, outputTokens: 0, cacheWriteInputTokens: 100_000 });
+    expect(wrote).toBeCloseTo(0.25, 10);
   });
 
   it("标定后（注入价表）⇒ 命中段按缓存价计，成本随命中率下降", () => {
