@@ -958,12 +958,14 @@ function createProvider(userMessage: string, systemPrefix?: string, sessionOptio
 }
 
 // verify 执行器：沙箱可用时命令走 Seatbelt（坑三：pnpm 映射为直连 vitest），否则直跑。
-function verifyExec(sandbox: SandboxStatus | null): ExecFn {
+// `run` 可注入：这条链上「超时传没传、命令映射对不对、事件里报的是哪条命令」三件事都只有
+// 换掉真 spawn 才测得到（沙箱不可用的宿主上分支 A 根本跑不起来）；缺省仍是 runInSandbox。
+export function verifyExec(sandbox: SandboxStatus | null, run: typeof runInSandbox = runInSandbox): ExecFn {
   if (!sandbox?.available) return defaultExec;
   return async (command, cwd, timeoutMs) => {
     const mapped = command.trim() === "pnpm test" || command.trim() === "pnpm run test" ? VITEST_DIRECT : command;
     // 超时同样要穿过去：沙箱是发货缺省路径，这里不接就等于语言探测的 300s 白给。
-    const res = await runInSandbox(mapped, { cwd, ...(timeoutMs ? { timeoutMs } : {}) });
+    const res = await run(mapped, { cwd, ...(timeoutMs ? { timeoutMs } : {}) });
     return { command, ok: res.ok, output: res.output };
   };
 }
