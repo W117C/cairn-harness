@@ -228,6 +228,21 @@ async function phaseElectron(root: string): Promise<void> {
   });
   console.log("[panels-check] B1 1 万条事件虚拟化（真实重放路径）");
   const stressId = "压测会话-万条";
+  // B6 的靶子先落盘：列表按 mtime 降序、启动即自动开**最新**那条，B1 的万条断言指着它。
+  // 靶子必须在起 Electron 之前写（列表只在启动时读一次盘），但绝不能比压测会话更新。
+  const clarifyId = "澄清靶子";
+  {
+    const log = createEventLog(pathOf(root, clarifyId));
+    await log.append({ type: "user_message", content: "把导出功能加上" });
+    await log.append({
+      type: "clarify_requested",
+      callId: "m1e-clarify-1",
+      questions: [
+        { question: "导出成哪种格式？", header: "格式", options: [{ label: "CSV" }, { label: "JSON", description: "带嵌套结构" }] },
+        { question: "要包含哪些行？", multiSelect: true, options: [{ label: "已完成" }, { label: "未完成" }] },
+      ],
+    });
+  }
   await writeFileStressSession(root, stressId, 10_000);
 
   const { proc: electron, output } = spawnElectron({
@@ -429,6 +444,39 @@ async function phaseElectron(root: string): Promise<void> {
       const left = await onDisk();
       ok(!left.includes(b5r.oldId + ".jsonl"), "B5 旧文件不残留（一个会话不该裂成两份），实测 " + left.join(","));
     }
+
+    console.log("[panels-check] B6 澄清卡（模型在等人回答，界面必须有能答的地方）");
+    // 点靶子会话那一行 = 走真 selectSession/showHistory 重放入口（不造第二条渲染路）
+    const opened = await cdp2.eval<boolean>(
+      `(() => { const r = document.querySelector('.session[data-id=' + JSON.stringify(${JSON.stringify(clarifyId)}) + ']'); if (!r) return false; r.click(); return true; })()`,
+    );
+    ok(opened, "B6 靶子会话在侧栏里可点（盘上事件进了列表）");
+    const cardSel = '.card[data-clarify-call="m1e-clarify-1"]';
+    const cardSeen = await tryWait(
+      async () => ((await cdp2.eval<boolean>("!!document.querySelector(" + JSON.stringify(cardSel) + ")")) ? true : null),
+      15_000,
+    );
+    ok(cardSeen, "B6 澄清卡在真窗口里挂起来了（不是通用记录卡上的一行「澄清提问」）");
+    const card = await cdp2.eval<{ q: number; radio: number; check: number; acts: boolean; disabled: number; label: string } | null>(
+      `(() => {
+        const c = document.querySelector(${JSON.stringify(cardSel)});
+        if (!c) return null;
+        return {
+          q: c.querySelectorAll('.plan-steps > li.todo').length,
+          radio: c.querySelectorAll('input[type=radio]').length,
+          check: c.querySelectorAll('input[type=checkbox]').length,
+          acts: !!c.querySelector('.plan-acts'),
+          disabled: c.querySelectorAll('input[disabled]').length,
+          label: (c.querySelector('.card-head') || {}).textContent || '',
+        };
+      })()`,
+    );
+    const c6 = card ?? { q: 0, radio: 0, check: 0, acts: true, disabled: 0, label: "" };
+    ok(c6.q === 2, "B6 两问原文都摊开（实测 " + String(c6.q) + " 问）");
+    ok(c6.radio === 2 && c6.check === 2, "B6 单选走 radio、multiSelect 走 checkbox（实测 radio " + String(c6.radio) + " / checkbox " + String(c6.check) + "）");
+    ok(/澄清提问/.test(c6.label) && /待回答/.test(c6.label), "B6 卡面写清这是在等人回答（实测 " + JSON.stringify(c6.label.trim().slice(0, 24)) + "）");
+    // 重放只读不变量（与 plan 卡同口径）：提交按钮摘掉、所有输入 disabled —— 历史会话不该能改判据
+    ok(!c6.acts && c6.disabled === 6, "B6 重放是只读的：提交面已摘、4 选项 + 2 补充框全部 disabled（实测 acts=" + String(c6.acts) + " disabled=" + String(c6.disabled) + "）");
     await killElectron(electron2);
   } finally {
     if (electron.exitCode === null) await killElectron(electron);

@@ -2422,6 +2422,9 @@ render();
     if (sum) sum.innerHTML = fail ? '<span class="bad">' + fail + ' 项没成功</span>' : '';
   }
   /* ---------- 事件渲染 ---------- */
+  /* 澄清卡的局部序号：只用来给单选组发唯一 name（两张卡同时在等时单选不许串门）。
+     不用 callId 拼——那是外部字符串，进 HTML 属性/选择器就多一处必须记得转义的地方。 */
+  let clarifyCardSeq = 0;
   function renderEvent(e) {
     switch (e.type) {
       case 'session_meta':
@@ -2503,6 +2506,73 @@ render();
         updateToolGroup(item.closest('.toolgroup'));
         rc.cards.delete(e.callId);
         if (!rc.replay) scrollStream();
+        break;
+      }
+      case 'clarify_requested': {
+        /* 模型被系统提示要求「有歧义先 clarify，不要猜」，而交互 run 的这道门**不限时**
+           （只随取消信号收束）。上一版这里没有卡：事件落进通用记录支、只显示「澄清提问」四个字，
+           问题原文一条都看不到、也没有能提交的地方 ⇒ 用户面对一个永远在等的 run。 */
+        finalizePending();
+        const qs = Array.isArray(e.questions) ? e.questions : [];
+        const c = document.createElement('div');
+        c.className = 'card';
+        // 卡内标识由渲染层自己发号：callId 是外部字符串，不进 HTML 属性也不进选择器（转义漏一次就是注入面）
+        const uid = 'clarify' + String(++clarifyCardSeq);
+        c.dataset.clarifyCall = e.callId || '';
+        const blocks = qs.map((q, i) => {
+          const head = '<li class="todo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg><span>' +
+            esc(q.question || '（第 ' + String(i + 1) + ' 问）') + '</span></li>';
+          const opts = (q.options || []).map(o =>
+            '<li><label><input type="' + (q.multiSelect ? 'checkbox' : 'radio') + '" name="' + uid + '-' + String(i) +
+            '" data-q="' + String(i) + '" value="' + esc(o.label) + '"><span>' +
+            esc(o.label) + (o.description ? ' — ' + esc(o.description) : '') + '</span></label></li>').join('');
+          const free = '<li><label>补充（可留空）<input type="text" class="clarify-free" data-q="' + String(i) +
+            '" aria-label="补充说明" placeholder="选完还能补一句"></label></li>';
+          return head + opts + free;
+        }).join('');
+        c.innerHTML =
+          '<button class="card-head" type="button" data-tool-toggle data-card="clarify">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .9-1 1.7"/><path d="M12 17h.01"/></svg>' +
+            '澄清提问 <span class="tag">待回答</span>' +
+            '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>' +
+          '</button>' +
+          '<div class="plan-steps">' + (blocks || '<li><span>（模型没带出问题）</span></li>') + '</div>' +
+          '<div class="plan-acts"><button class="risk-btn ghost clarify-send" type="button">提交回答</button></div>';
+        cardHost().appendChild(c);
+        if (rc.replay) {
+          // 重放只读：提交属交互动作（与 plan 卡同一不变量）。没答上的历史澄清照样把问题摊开给人看。
+          const acts = c.querySelector('.plan-acts');
+          if (acts) acts.remove();
+          c.querySelectorAll('input').forEach((el) => { el.disabled = true; });
+        } else {
+          c.querySelector('.clarify-send').addEventListener('click', () => {
+            const answers = {};
+            for (let i = 0; i < qs.length; i++) {
+              const q = qs[i];
+              const picked = Array.from(c.querySelectorAll('input[data-q="' + String(i) + '"]:checked'))
+                .filter(x => x.type !== 'text').map(x => x.value);
+              const freeEl = c.querySelector('.clarify-free[data-q="' + String(i) + '"]');
+              const free = freeEl && typeof freeEl.value === 'string' ? freeEl.value.trim() : '';
+              const chosen = picked.length === 0 ? '' : (q.multiSelect ? picked : picked[0]);
+              if (chosen !== '' && free !== '') answers[q.question] = chosen + '（补充：' + free + '）';
+              else if (chosen !== '') answers[q.question] = chosen;
+              else if (free !== '') answers[q.question] = free;
+            }
+            if (Object.keys(answers).length === 0) { toast('还没回答任何一条：选一项或写一句再提交'); return; }
+            void (async () => {
+              try {
+                const r = api.clarify ? await api.clarify(e.callId, answers) : null;
+                if (r !== true) { toast('回答未送达：这道澄清可能已被回答过或已收束'); return; }
+                const tag = c.querySelector('.tag');
+                if (tag) tag.textContent = '已回答';
+                const acts = c.querySelector('.plan-acts');
+                if (acts) acts.remove();
+                c.querySelectorAll('input').forEach((el) => { el.disabled = true; });
+              } catch (err) { toast('回答未送达：' + (err && err.message ? err.message : String(err))); }
+            })();
+          });
+          scrollStream();
+        }
         break;
       }
       case 'plan_proposed': {
@@ -2598,9 +2668,9 @@ render();
         }
         break;
       default: {
-        /* 15 类事件（agent_* / approval_* / security_report / impact_report / routing_decision /
-           automation_* / card_action / diff_comment / clarify_requested）此前 live 无痕、replay 只有
-           「事件名 + 查看记录」。单一渲染器下两路都落一张记录卡，语义卡由 R2 逐类补。 */
+        /* 通用记录支兜的是一批**没有专属卡**的事件（agent_* / approval_* / security_report /
+           impact_report / routing_decision / automation_* / card_action / diff_comment 等）。
+           逐类语义卡在 R2 里补；clarify_requested 已经补成真卡（模型在等人回答，不能只留一行名字）。 */
         finalizePending();
         appendRecordCard(cardHost(), eventLabel(e), e);
         if (!rc.replay) scrollStream();
@@ -2617,7 +2687,7 @@ render();
     agent_spawned: '派生 worker', agent_status: 'worker 状态', agent_message: 'worker 消息',
     agent_result: 'worker 结果', approval_requested: '请求审批', approval_resolved: '审批已决',
     security_report: '安全报告', impact_report: '影响面报告', routing_decision: '模型路由决策',
-    card_action: '卡片操作', diff_comment: 'diff 评论', clarify_requested: '澄清提问',
+    card_action: '卡片操作', diff_comment: 'diff 评论',
     automation_triggered: '定时任务触发', automation_skipped: '定时任务跳过', automation_completed: '定时任务完成',
     goal_set: '设定长任务目标', goal_stopped: '长任务目标已停',
   };
