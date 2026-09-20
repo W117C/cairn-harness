@@ -7,8 +7,9 @@ import { cp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentEvent } from "../../events";
 import { createEventLog, forkSession, replay } from "../../events";
-import type { ModelOutput, Provider } from "../../providers";
+import type { Provider } from "../../providers";
 import { streamGlm } from "../../providers/glm";
+import { createGlmSessionProvider, sessionToolSpecs } from "../glm-session";
 import { runLoop } from "../loop";
 import { runVerifyOutcome } from "../verify";
 import { changedFilesBetween, scoreCase } from "./score";
@@ -61,17 +62,27 @@ function createGymScriptedProvider(scriptPath: string): Provider {
   return createRoundScriptedProvider(scriptPath);
 }
 
-/** 暗卷 GLM provider（主会话同款接线；无 key 时 streamGlm 拨号失败，由调用方显式跳过）。 */
-function createRealGlmProvider(task: string): Provider {
-  let gen: AsyncIterable<ModelOutput> | null = null;
-  return {
-    stream(messages, _tools, call) {
-      if (!gen) {
-        gen = streamGlm([{ role: "user", content: task }], {}, undefined, call);
-      }
-      return gen;
-    },
-  };
+/** 暗卷 GLM provider：走**主会话同款装配**（`createGlmSessionProvider` ⇒ composeTurnMessages / 真实
+ *  工具面 / 压缩 / 预算全在链上），与探针档共用同一个会话 provider，只差 transport。
+ *  ⚠️ 旧实现名不副实（注释写着"主会话同款接线"，代码是 stub）：它丢掉调用方传来的 messages 与
+ *  tools、自己造 `streamGlm([{role:"user",content:task}])` ⇒ 模型看不到系统提示与工具表，
+ *  **物理上不可能调工具**；且生成器只造一次并缓存 ⇒ 第二轮取到已耗尽的迭代器 ⇒ `turns` 恒 0。
+ *  2026-09-20 首次真凭据跑实测抓到（`turns=0 in=113 out=768 changed=[] score=0`，
+ *  而 B3 断言只验 `typeof verifyOk === "boolean"` ⇒ 门全绿、暗卷分数 0 同时成立）。
+ *  `transport` 是注入点：单测用它验"工具表透传 + 每请求新迭代器"，不联网。 */
+function createRealSessionProvider(
+  eventsPath: string,
+  workspace: string,
+  system: string,
+  transport?: typeof streamGlm,
+): Provider {
+  const face = sessionToolSpecs({ mode: "auto" });
+  return createGlmSessionProvider(eventsPath, {
+    system,
+    workspace,
+    requestFace: () => ({ tools: face.specs, note: face.note }),
+    ...(transport ? { transport } : {}),
+  });
 }
 
 function sumUsage(log: AgentEvent[]): { inputTokens: number; outputTokens: number } {
@@ -120,6 +131,11 @@ export interface RunCaseOptions {
   model: GymModelKind;
   /** 分叉续跑剧本（模式② 换策略）；缺省沿用 case 原剧本。 */
   resumeScript?: string;
+  /** 暗卷/探针档的系统提示。缺省 = `GYM_PROBE_SYSTEM`（既有短串，逐字不变）；
+   *  要量**生产提示词**就传 app 的 `BASE_SYSTEM`（`scripts/loop-eval.ts` 走这条）。 */
+  system?: string;
+  /** 暗卷 transport 注入点（单测用；缺省 = 真出网 `streamGlm`）。 */
+  transport?: typeof streamGlm;
 }
 
 /** 模式① 从头跑：task.md → 新会话 → 跑 loop → 跑 verify。 */
@@ -137,7 +153,7 @@ export async function runCase(c: GymCase, opts: RunCaseOptions): Promise<GymCase
   const provider = probe
     ? probe.provider
     : opts.model === "real"
-      ? createRealGlmProvider(c.task)
+      ? createRealSessionProvider(eventsPath, workDir, opts.system ?? GYM_PROBE_SYSTEM, opts.transport)
       : createGymScriptedProvider(scriptPath!);
   await runLoop({
     provider,
@@ -167,7 +183,9 @@ export async function forkCase(
   await cp(join(parent.sessionDir, "work"), workDir, { recursive: true, force: true });
   const events = createEventLog(fork.eventsPath);
   const scriptPath = opts.model === "scripted" ? opts.resumeScript ?? join(c.dir, "script.jsonl") : null;
-  const provider = opts.model === "real" ? createRealGlmProvider(c.task) : createGymScriptedProvider(scriptPath!);
+  const provider = opts.model === "real"
+    ? createRealSessionProvider(fork.eventsPath, workDir, opts.system ?? GYM_PROBE_SYSTEM, opts.transport)
+    : createGymScriptedProvider(scriptPath!);
   await runLoop({
     provider,
     events,
