@@ -191,3 +191,26 @@ pnpm typecheck   # tsc 全量扫含未跟踪文件 ⇒ 写完再跑
   `plan-required`(9) + `sidechat`(15) = 54 条全绿；`mutate-needles-check` 437 条零阻断。
 - 顺带清掉两处：`handleGoalSet` 里 `sessionId !== undefined` 的恒真三元（守卫后必为字符串）；
   清除路径新建会话时的 ENOENT 不再端给用户（按"没有目标"报，其余 IO 错误照常可见）。
+
+### 执行日志续二（J3 落地时抓到一条恒真判据 + 那条欠锚补上）
+
+**J3 原写法恒真，已改成比拒因。** 按 spec 字面写"未武装真写成功 / 武装被拒"，实测第一步就红：
+`write_file` 在 `unattended + auto 档`下**本来就**被拒（autonomy ask → 无人值守 fail-closed，
+`agent-runner.ts:357` 那句原文）。⇒ "被拒"这条断言两支都绿，判它等于没判。
+改法：两支只差 `planRequired` 一个维度，断言**答话的是哪道闸**——未武装报"无人值守"且不含"方案门"，
+武装报"方案门"且盘上无文件。方案门在 ask 之前判，所以无人值守那条自动拒根本没机会说话。
+这条恒真是**先按判据字面写完再跑**才发现的；读代码想不出来（写出来看着像分辨力）。spec §5 J3 行已同步改口径。
+
+**那条欠锚补上（+2，全首跑即杀）**：
+- `plan-required-run-override-ignored`：`planRequired: over.planRequired ?? settings` 丢掉 override 半边
+  ⇒ J3 武装那支换拒因，红。
+- `plan-gate-armed-for-every-run`：`enterPlanRunScope(opts.planRequired === true)` 改成无条件 `true`
+  ⇒ 缺省零行为破了，未武装那支换拒因，红。
+两条都指 J3 那条测（它是这条线里唯一真跑 `handleAgentRun` 的判卷面）。另 3 条清除锚点见上一笔。
+针脚体检 442 条零阻断。
+
+**J6 状态（如实）**：芯片的**数据面**有锁（`tests/goal-trace.test.ts` 逐前缀等价），
+两道渲染层门不红（`renderer-arch-check` 84/84、`a11y-check` 3/3、build ✓）；
+但"live 与 replay 两条路都上屏"这半句**未证**——静态构建里 `window.agent` 不存在，
+桥接段在 `app.js:1973` 就 return，芯片代码根本不执行；要验只能给 app.js 尾段搭一套
+DOM + api 桩（十余个），那会把"验行为"降级成"验调用"，本轮不做，留 #13 同族。

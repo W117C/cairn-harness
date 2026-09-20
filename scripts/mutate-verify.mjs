@@ -3645,6 +3645,22 @@ const MUTATIONS = [
     apply: (s) => s.replace('if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return [] as AgentEvent[];', 'if ((err as NodeJS.ErrnoException)?.code === "ENOTDIR") return [] as AgentEvent[];'),
     expectFail: "清除目标 = 落一条 goal_stopped（不开新事件、不开新通道）：幂等，且此后不再自动续跑",
   },
+  {
+    id: "plan-required-run-override-ignored",
+    src: "src/main/agent-runner.ts",
+    test: "tests/goal-continue.test.ts",
+    desc: "run 入口只看 settings、丢掉 runtime override ⇒ 调用方（IPC 覆盖 / 测试 / 将来的按会话武装）说了不算",
+    apply: (s) => s.replace("planRequired: over.planRequired ?? (await store().get()).planRequiredByDefault,", "planRequired: (await store().get()).planRequiredByDefault,"),
+    expectFail: "unattended + 武装方案门 ⇒ 拒因来自方案门而不是无人值守闸，盘上不留痕（J3：不是被忽略）",
+  },
+  {
+    id: "plan-gate-armed-for-every-run",
+    src: "src/main/agent-runner.ts",
+    test: "tests/goal-continue.test.ts",
+    desc: "每次 run 无条件武装方案门 ⇒ 「缺省零行为」破了：没开 plan 模式的会话第一次写就被拒（未武装那支当场换拒因）",
+    apply: (s) => s.replace("enterPlanRunScope(opts.planRequired === true);", "enterPlanRunScope(true);"),
+    expectFail: "unattended + 武装方案门 ⇒ 拒因来自方案门而不是无人值守闸，盘上不留痕（J3：不是被忽略）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

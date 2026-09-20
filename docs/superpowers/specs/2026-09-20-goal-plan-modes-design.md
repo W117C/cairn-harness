@@ -70,7 +70,7 @@
 |---|---|---|
 | J1 | 谓词单一来源：`src/` 内除 `planGateBlocks` 外不得再出现 `proposed && !s.approved` 形状的比较式（静态扫描测，锁 P2 不再复发） | `tests/plan-required.test.ts` 内一条静态断言 |
 | J2 | 用户武装后：写向工具被拒且理由含"方案门"；`propose_plan` 仍可调用；批准后放行；拒绝后保持写禁；`required=false` 时行为与今天逐字相同（零回归） | 同上，逐条 |
-| J3 | unattended + `planRequired` ⇒ 写向被拒（**不是**被忽略） | 同上 |
+| J3 | unattended + `planRequired` ⇒ **拒因来自方案门，而不是无人值守闸**（原判据写的是"写向被拒"——两支都拒 ⇒ 恒真，落地时改成比拒因；见计划执行日志） | `tests/goal-continue.test.ts`（真跑 `handleAgentRun` + 剧本发 `write_file`，两支只差一个维度） |
 | J4 | `goalStopDecision` 五路：verified→done / 轮次上限 / 美元闸 / **价未校准时美元闸惰且明写** / stale+failed+absent 三态各一条 `continue` 文案 | `tests/goal-stop-decision.test.ts`（纯函数） |
 | J5 | 续跑端到端（注入 mock 模型剧本，不依赖真模型）：一轮收束无绿证据 ⇒ 自动续跑到 `verify_result(ok:true)` 后 done，事件流里 `goal_set` 恰一条、合成轮 `origin` 可投影；达 `maxTurns` ⇒ 停且原因上屏；`interactiveRunAbort` 中途取消 ⇒ 不再起新轮 | `tests/goal-continue.test.ts` |
 | J6 | 渲染层：live 与 replay 两条路都出 goal 芯片（`goal_set` 投影）；`panels-check`/`renderer-arch-check` 不因此红 | `tests/renderer-run-control.test.ts` + 现网探针 |
