@@ -41,6 +41,21 @@ export interface GlmOptions {
   metering?: OpenAiOptions["metering"];
 }
 
+/** GLM 工具调用流式要额外打开 `tool_stream`（官方必需），但**第三方 OpenAI 兼容中转会拒收未知字段**
+ *  （实测 `{"code":"UNKNOWN_FIELD","field":"tool_stream"}` / HTTP 400，整个 provider:check 与所有
+ *  worker spawn 第一跳即死）。因此给一个显式关闭位：缺省逐字保持现状，只认 `0|false|off`——
+ *  拼错不静默当"关"（那会让人以为开关生效、实际还在 400，比报错更难查）。
+ *  不自动按 host 猜：猜错一次要重踩一遍，且下一个严格代理还会再来一次。 */
+export function glmToolStreamFlag(
+  stream: boolean | undefined,
+  env: Record<string, string | undefined> = process.env,
+): { tool_stream: true } | undefined {
+  if (stream === false) return undefined;
+  const raw = env.M0_GLM_TOOL_STREAM;
+  const off = typeof raw === "string" && ["0", "false", "off"].includes(raw.trim().toLowerCase());
+  return off ? undefined : { tool_stream: true };
+}
+
 function toOpenAiOptions(opts: GlmOptions): OpenAiOptions {
   return {
     apiKey: opts.apiKey,
@@ -51,8 +66,8 @@ function toOpenAiOptions(opts: GlmOptions): OpenAiOptions {
     baseURL: opts.endpoint,
     baseURLEnv: "M0_ENDPOINT",
     defaultBaseURL: GLM_ENDPOINT,
-    // GLM 特有：工具调用流式要额外打开 tool_stream
-    extraBody: opts.stream === false ? undefined : { tool_stream: true },
+    // GLM 特有：工具调用流式要额外打开 tool_stream（可由 M0_GLM_TOOL_STREAM=0 关，见上）
+    extraBody: glmToolStreamFlag(opts.stream),
     stream: opts.stream,
     label: "GLM",
     fetchImpl: opts.fetchImpl,
