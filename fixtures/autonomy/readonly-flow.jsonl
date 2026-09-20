@@ -1,4 +1,4 @@
 {"type":"assistant_message","content":"只读档：先看代码。"}
-{"type":"tool_call","id":"ro-read","name":"read_file","args":{"path":"src/todo.ts"}}
+{"type":"tool_call","id":"ro-read","name":"read_file","args":{"path":"package.json"}}
 {"type":"tool_call","id":"ro-write","name":"write_file","args":{"path":"ro-should-not-exist.txt","content":"x"}}
 {"type":"assistant_message","content":"检查完毕。"}

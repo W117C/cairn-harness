@@ -10,7 +10,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runAgent } from "../src/main/agent-runner";
 import { AskGate, type AskRequest } from "../src/main/ask-gate";
@@ -208,11 +208,32 @@ function driverGate(policy: "approve-session-kind" | "deny-all", records: AskRec
   return gate;
 }
 
+/**
+ * 前置：剧本点名的**读**路径必须真实存在。
+ * 为什么单独立一条：`fixtures/todo-app/src/todo.ts` 是生成物（`e2e.ts` / `ipc-check.ts` 从
+ * `fixtures/mock/todo-bug.ts` 铺出来），本门过去直接读它 ⇒ 全新检出里 read_file 必失败，
+ * 红被报成「只读档拦住了读」，真因却是本门白蹭别的门的副作用。同一处注释已为 run_shell
+ * 的同一种病（靶子状态决定成败）改成自足命令，只修了一半。缺输入必须报成缺输入。
+ */
+async function assertScriptReadTargets(script: string): Promise<void> {
+  const text = await readFile(script, "utf8");
+  for (const line of text.split("\n")) {
+    if (line.trim() === "") continue;
+    let e: { type?: string; name?: string; args?: { path?: unknown } };
+    try { e = JSON.parse(line) as typeof e; } catch { continue; }
+    if (e.type !== "tool_call" || e.name !== "read_file") continue;
+    const p = typeof e.args?.path === "string" ? e.args.path : null;
+    if (p === null) continue;
+    assert(existsSync(join(APP, p)), `剧本 ${basename(script)} 的读目标存在：${p}`);
+  }
+}
+
 async function runScript(
   script: string,
   mode: PermissionMode,
   gate: AskGate | undefined,
 ): Promise<AgentEvent[]> {
+  await assertScriptReadTargets(script);
   const logPath = join(tmpdir(), `m1c-autonomy-${mode}-${String(Date.now())}-${String(Math.random()).slice(2, 6)}.jsonl`);
   process.env.M1C_AUTONOMY_SCRIPT = script;
   try {
