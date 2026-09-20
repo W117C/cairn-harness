@@ -1,18 +1,38 @@
 // M1e 会话列表存储单测：新建/列表/重命名/删除/行数口径/名字校验/当前会话回退数据面。
-import { mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
+// ESM 命名空间不可 spy（见 secrets.test.ts 同型注释）⇒ 用 mock 工厂把 open/readFile
+// 包一层真实现：行为走真的，调用面走 mock.calls，用来钉「列表到底读了多少文件」。
+import { appendFile, mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...actual, open: vi.fn(actual.open), readFile: vi.fn(actual.readFile) };
+});
+import { open as openFn, readFile as readFileFn } from "node:fs/promises";
+const openSpy = vi.mocked(openFn);
+const readFileSpy = vi.mocked(readFileFn);
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createSession,
+  createSidechatSession,
   deleteSession,
   isValidSessionName,
   listSessions,
+  listSidechatSessions,
   pathOf,
   readSessionEvents,
   renameSession,
+  sidechatEventsPath,
 } from "../src/main/sessions";
 import { createEventLog } from "../src/events";
+
+/** 某个文件被整份 readFile 了几次（增量计数生效后应为 0/1，而不是每次列表都 1）。 */
+function fullReads(p: string): number {
+  return readFileSpy.mock.calls.filter((c) => c[0] === p).length;
+}
+function opens(p: string): number {
+  return openSpy.mock.calls.filter((c) => c[0] === p).length;
+}
 
 let root: string;
 
@@ -125,5 +145,113 @@ describe("会话名边界与重命名守卫（补齐：路径穿越与覆盖式�
     await log.append({ type: "user_message", content: "hi" });
     const list = await listSessions(root);
     expect(list.find((x) => x.id === "交互")?.origin).toBeUndefined();
+  });
+});
+
+// 列表的读取面：旧实现每次列表都把每个会话**整份** readFile（只为数一个行数），另开一次读首行
+// ⇒ 会话列表 = O(盘上总字节)，且随列表刷新反复付。现在：首行 meta 走 O(1) 头读，行数按
+// (ino,size) 增量计数（JSONL append-only ⇒ 未变即复用，长大只读追加段）。
+describe("会话列表只读头 + 行数增量计数", () => {
+  it("未变的文件在第二次列表里不再被整份 readFile（只剩一次头读）", async () => {
+    const id = await createSession(root, "两次列表");
+    const p = pathOf(root, id);
+    const log = createEventLog(p);
+    await log.append({ type: "user_message", content: "一" });
+    await log.append({ type: "user_message", content: "二" });
+    await log.append({ type: "usage", inputTokens: 1, outputTokens: 1 });
+
+    expect((await listSessions(root)).find((s) => s.id === id)?.lines).toBe(3);
+    const reads0 = fullReads(p);
+    const opens0 = opens(p);
+    expect(reads0).toBeGreaterThan(0); // 首访确实整份扫过（增量计数需要一个基线）
+
+    const second = await listSessions(root);
+    expect(second.find((s) => s.id === id)?.lines).toBe(3); // 复用缓存，值不变
+    expect(fullReads(p) - reads0).toBe(0); // 第二次列表零整份读
+    expect(opens(p) - opens0).toBe(1); // 只有首行 meta 那一次头读
+  });
+
+  it("追加后按增量计数：含纯空白行不计、未换行尾段计 1 且补全后不双计", async () => {
+    const id = await createSession(root, "增量");
+    const p = pathOf(root, id);
+    await writeFile(p, '{"type":"user_message","content":"a"}\n', "utf8");
+    expect((await listSessions(root)).find((s) => s.id === id)?.lines).toBe(1);
+
+    await appendFile(p, "   \n", "utf8"); // 纯空白段：旧口径 split+filter 也不计
+    expect((await listSessions(root)).find((s) => s.id === id)?.lines).toBe(1);
+
+    await appendFile(p, '{"type":"usage"', "utf8"); // 崩溃半写行（无换行尾段）
+    expect((await listSessions(root)).find((s) => s.id === id)?.lines).toBe(2);
+
+    await appendFile(p, ',inputTokens:1,outputTokens:1}\n{"type":"user_message","content":"b"}\n', "utf8");
+    // 补全的是**同一条**已计过的尾段，不得双计：1 完整 + 尾段 + 新的一条 = 3
+    expect((await listSessions(root)).find((s) => s.id === id)?.lines).toBe(3);
+  });
+
+  it("超长未收尾尾段（>4KB 崩溃半写）：当场如实计 1，补全后不双计", async () => {
+    const id = await createSession(root, "长尾");
+    const p = pathOf(root, id);
+    await writeFile(p, '{"type":"user_message","content":"a"}\n', "utf8");
+    expect((await listSessions(root)).find((s) => s.id === id)?.lines).toBe(1);
+    // 尾段超过缓存上限 ⇒ 水位退回上一个换行；报出的行数仍要如实含它（旧口径整份扫也计 1）
+    await appendFile(p, '{"type":"user_message","content":"' + "x".repeat(5000), "utf8");
+    expect((await listSessions(root)).find((s) => s.id === id)?.lines).toBe(2);
+    await appendFile(p, '"}\n', "utf8"); // 补全的是同一条：不得双计
+    expect((await listSessions(root)).find((s) => s.id === id)?.lines).toBe(2);
+    await appendFile(p, '{"type":"usage","inputTokens":1,"outputTokens":1}\n', "utf8");
+    expect((await listSessions(root)).find((s) => s.id === id)?.lines).toBe(3);
+  });
+
+  it("同路径被换成同字节数的新文件（inode 变）→ 计数重算，不沿用旧值", async () => {
+    const id = await createSession(root, "换体");
+    const p = pathOf(root, id);
+    await writeFile(p, '{"a":1}\n{"b":2}\n{"c":3}\n', "utf8");
+    const before = await stat(p);
+    expect((await listSessions(root)).find((s) => s.id === id)?.lines).toBe(3);
+
+    await rm(p);
+    // 凑一个同字节数、行数不同的文件：size 守卫挡不住这种，只有 inode 守卫能重算
+    const head = '{"d":4}\n';
+    await writeFile(p, head + "\n".repeat(Math.max(0, before.size - head.length)), "utf8");
+    const st = await stat(p);
+    expect(st.size).toBe(before.size);
+    expect(st.ino).not.toBe(before.ino); // 前提：真是换了个 inode，否则这条测的是别的东西
+    expect((await listSessions(root)).find((s) => s.id === id)?.lines).toBe(1);
+  });
+
+  it("同 inode 被就地截断（size 变小）→ 计数重算", async () => {
+    const id = await createSession(root, "截断");
+    const p = pathOf(root, id);
+    const log = createEventLog(p);
+    for (const c of ["一", "二", "三", "四", "五"]) await log.append({ type: "user_message", content: c });
+    expect((await listSessions(root)).find((s) => s.id === id)?.lines).toBe(5);
+
+    await writeFile(p, '{"type":"user_message","content":"一"}\n', "utf8");
+    expect((await listSessions(root)).find((s) => s.id === id)?.lines).toBe(1);
+  });
+
+  it("sidechat 按首行 meta 过滤：不匹配父会话的那些连一次整文件重放都不做", async () => {
+    const pA = sidechatEventsPath(root, await createSidechatSession(root, "父A", "sc-a"));
+    const pB = sidechatEventsPath(root, await createSidechatSession(root, "父B", "sc-b"));
+    const logB = createEventLog(pB);
+    await logB.append({ type: "user_message", content: "别写进我的父会话" });
+    await logB.append({ type: "usage", inputTokens: 1, outputTokens: 1 });
+
+    const list = await listSidechatSessions(root, "父A");
+    expect(list.map((s) => s.id)).toEqual(["sc-a"]);
+    expect(list[0]?.parentId).toBe("父A");
+    expect(list[0]?.lines).toBe(1); // session_meta 那一行
+    expect(fullReads(pB)).toBe(0); // 被过滤掉的那条：从未被整份读过
+  });
+
+  it("sidechat 行数 = 非空 JSONL 行数（与主会话同口径），第二次列表不再整份读", async () => {
+    const id = await createSidechatSession(root, "父", "sc");
+    const p = sidechatEventsPath(root, id);
+    const log = createEventLog(p);
+    await log.append({ type: "user_message", content: "问一句" });
+    expect((await listSidechatSessions(root))[0]?.lines).toBe(2);
+    const reads0 = fullReads(p);
+    expect((await listSidechatSessions(root))[0]?.lines).toBe(2);
+    expect(fullReads(p) - reads0).toBe(0);
   });
 });
