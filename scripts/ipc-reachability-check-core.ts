@@ -43,6 +43,30 @@ export function parseRendererRefs(sources: readonly string[]): Set<string> {
   return out;
 }
 
+/** 引用面先剥注释：散文里提一句桥名不算界面调到了它。
+ *  实踩：app.js 一条块注释写着 `api.submitClarify ? …`，门 0 就此把那条**没人调**的桥记成「已可达」，
+ *  A2a 当场绿——棘轮的豁免清单可以被一句话满足，等于没有豁免清单。
+ *  只剥块注释 / 整行 `//` / HTML 注释三种：都不可能与字符串混淆（渲染层零 URL 字面量，实测）。
+ *  行尾拖注释仍算代码——那是有意留的口子：把真引用误判成没引用会造**假红**，比多算一条引用坏。 */
+export function stripCommentFaces(src: string): string {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .split("\n")
+    .filter((line) => !/^\s*\/\//.test(line))
+    .join("\n");
+}
+
+/** 渲染层用 `api` 别名调到 preload 方法表里**不存在**的名字（拼错的调用静默变 undefined）。
+ *  只认精确别名 `api.`：宽度全部来自 `agent.` / `window.agent.` 形态（那是宿主也占的名字），
+ *  收到只用 `api` 就没有误报面——实测 app.js 去重 27 个 `api.X`，非表内名字 0 个。 */
+export function findUnknownApiRefs(sources: readonly string[], apiNames: ReadonlySet<string>): string[] {
+  const bad = new Set<string>();
+  // (?<![.\w]) = 只认独立别名：`svc.api.list()` 这类成员访问不是 window.agent 的那个别名
+  for (const src of sources) for (const m of src.matchAll(/(?<![.\w])api\??\.(\w+)\b/g)) if (!apiNames.has(m[1])) bad.add(m[1]);
+  return [...bad].sort();
+}
+
 /** 渲染层直接写出的通道字面量（极少数绕方法名的用法也算引用）。 */
 export function parseRendererChannels(sources: readonly string[]): Set<string> {
   const out = new Set<string>();

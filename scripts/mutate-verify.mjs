@@ -796,6 +796,30 @@ const MUTATIONS = [
     apply: (s) => s.replace("fixed: [...b].filter((c) => !o.has(c)).sort(),", "fixed: [],"),
     expectFail: "基线里的通道已接上 UI ⇒ fixed 点名（A2b 的判据：还留着欠账记录也算红）",
   },
+  {
+    id: "ipc-a3-unknown-ref-blind",
+    src: "scripts/ipc-reachability-check-core.ts",
+    test: "tests/ipc-reachability.test.ts",
+    desc: "A3 内核恒返回空表（桥名拼错的引用不再点名 → 澄清卡那类「渲染得出、按钮按不动」的 P1 回到无人可查；正是要防的那次实踩）",
+    apply: (s) => s.replace("  return [...bad].sort();", "  return [];"),
+    expectFail: "非表内的 api.X / api?.X 点名（桥名是本仓自己拼的，拼错＝调用静默变 undefined、卡片渲染得出按钮按不动）",
+  },
+  {
+    id: "ipc-a3-alias-width-lost",
+    src: "scripts/ipc-reachability-check-core.ts",
+    test: "tests/ipc-reachability.test.ts",
+    desc: "去掉「独立别名」前置（任何对象的 .api.X 都被当成 window.agent 的调用 = 误报面回来了，A3 会被当成噪声门关掉）",
+    apply: (s) => s.replace("(?<![.\\w])api\\??\\.", "api\\??\\."),
+    expectFail: "表内名字不报；宽度只认独立别名 api（svc.api.list / window.agent.foo 都不收，同名对象不该被卷进来）",
+  },
+  {
+    id: "ipc-comment-face-counts-as-ref",
+    src: "scripts/ipc-reachability-check-core.ts",
+    test: "tests/ipc-reachability.test.ts",
+    desc: "引用面不剥注释（散文里写一句 `api.submitClarify ? …` 就把没人调的桥记成「已可达」，欠账清单可被一句话抹掉——本仓 2026-09-20 实踩）",
+    apply: (s) => s.replace("export function stripCommentFaces(src: string): string {", "export function stripCommentFaces(src: string): string {\n  return src;"),
+    expectFail: "注释里的桥名不算引用（否则一句话就能把棘轮的欠账记录抹掉）",
+  },
   // ---- worker 上下文预算认模型（1e85544）----
   {
     id: "worker-budget-window-ignored",

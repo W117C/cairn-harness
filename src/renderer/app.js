@@ -2564,7 +2564,10 @@ render();
             if (Object.keys(answers).length === 0) { toast('还没回答任何一条：选一项或写一句再提交'); return; }
             void (async () => {
               try {
-                const r = api.clarify ? await api.clarify(e.callId, answers) : null;
+                /* 不写 `api.submitClarify ? … : null` 那种存在性兜底：桥名是本仓自己拼的，
+                   拼错时兜底会把「方法根本不存在」报成「这道澄清可能已被回答过」——假解释比
+                   TypeError 坏（下面这行原先正是：卡能渲染、按钮按下去只回一句谎）。 */
+                const r = await api.submitClarify(e.callId, answers);
                 if (r !== true) { toast('回答未送达：这道澄清可能已被回答过或已收束'); return; }
                 const tag = c.querySelector('.tag');
                 if (tag) tag.textContent = '已回答';
