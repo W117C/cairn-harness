@@ -155,11 +155,16 @@ export interface GoalView {
   wrote: boolean;
   /** 已停下来的原因（`goal_stopped` 原文）；null = 还没停。 */
   stopped: string | null;
+  /** **本目标窗口内**（与证据/写盘同一段）的累计 token。美元闸必须量这个，不能量整段会话：
+   *  设 $0.5 上限之前会话已经花掉 $0.6 是常事，按全会话算会"第一轮就以已花 $0.6000 停下"，
+   *  把用户设的闸变成随机数（审查 C2：闸与其余 goal 量不同轴）。 */
+  usage: { inputTokens: number; outputTokens: number };
 }
 
 /** 会话当前目标态：一律从事件流重算，live 与 replay 同一份函数（不变量 2：不写第二份会话态）。
- *  证据与「有没有写过盘」只看**最后一条 goal_set 之后**的那段——上一段工作里的绿证据
- *  不能替新目标宣布达成。设/轮次/停止三项走 goal-trace（渲染层芯片用的是同一个函数）。 */
+ *  证据、「有没有写过盘」与「花了多少 token」只看**最后一条 goal_set 之后**的那段——上一段工作里的
+ *  绿证据不能替新目标宣布达成，上一段花的钱也不能替新目标触发美元闸。
+ *  设/轮次/停止三项走 goal-trace（渲染层芯片用的是同一个函数）。 */
 export function projectGoal(events: AgentEvent[]): GoalView | null {
   const trace = traceGoal(events);
   if (trace === null) return null;
@@ -170,12 +175,13 @@ export function projectGoal(events: AgentEvent[]): GoalView | null {
     evidence: workerVerificationEvidence(window),
     wrote: hasSessionWrites(window),
     stopped: trace.stopped,
+    usage: sumWindowUsage(window),
   };
 }
 
-/** 会话累计 token（从 `usage` 事件重算，不留第二份账）。provider 没上报 ⇒ 0/0，
+/** 窗口累计 token（从 `usage` 事件重算，不留第二份账）。provider 没上报 ⇒ 0/0，
  *  价格闸自然算不出 ⇒ 由 goalStopDecision 明写"美元闸不生效"，而不是当成没花钱。 */
-export function sumSessionUsage(events: AgentEvent[]): { inputTokens: number; outputTokens: number } {
+function sumWindowUsage(events: AgentEvent[]): { inputTokens: number; outputTokens: number } {
   let inputTokens = 0;
   let outputTokens = 0;
   for (const e of events) {

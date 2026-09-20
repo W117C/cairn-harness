@@ -27,21 +27,28 @@ beforeEach(() => {
   resetPlanState();
 });
 
-function walkTs(dir: string, out: string[] = []): string[] {
+function walkSources(dir: string, out: string[] = []): string[] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, e.name);
-    if (e.isDirectory()) walkTs(p, out);
-    else if (e.name.endsWith(".ts")) out.push(p);
+    if (e.isDirectory()) walkSources(p, out);
+    // 渲染层是 vanilla .js，不扫它就等于给"手写副本"留了一个免检面（同族：零引用扫描也吃过这一口）
+    else if (/\.(ts|js)$/.test(e.name)) out.push(p);
   }
   return out;
 }
 
 describe("J1 · 判据只有一份（P2 的复发闸）", () => {
-  it("src/ 里除唯一谓词外不得再出现 proposed && approved 的手写比较", () => {
-    const files = walkTs(join(__dirname, "..", "src", "permissions")).concat(walkTs(join(__dirname, "..", "src", "main")));
+  it("src/ 里除唯一谓词外不得再出现 proposed && approved 的手写比较（含 .js 与反写顺序）", () => {
+    // 覆盖面就是这条断言的全部意义：曾只扫 src/permissions + src/main 的 .ts，
+    // 而注释写的是「锁 src 内」——守卫覆盖面小于它的声称 = 潜伏的假绿（审查 C5）。
+    const files = walkSources(join(__dirname, "..", "src"));
     const copies = files
       .filter((f) => !f.endsWith(join("src", "permissions", "index.ts")))
-      .filter((f) => /proposed\s*&&/.test(readFileSync(f, "utf8")))
+      .filter((f) =>
+        readFileSync(f, "utf8")
+          .split("\n")
+          .some((l) => l.includes("proposed") && l.includes("approved") && l.includes("&&")),
+      )
       .map((f) => f.slice(f.indexOf("src")));
     expect(copies).toEqual([]);
   });

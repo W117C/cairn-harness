@@ -30,7 +30,7 @@ import { run_shell } from "../tools/run_shell";
 import type { AgentEvent, ClarifyAnswerMap, EventLog, GoalTurnOrigin } from "../events";
 import { createEventLog, replay } from "../events";
 // goal 模式：判据与投影全在纯函数面（src/agent/goal.ts），这里只做「读事件流 → 问它 → 落流 → 起下一轮」。
-import { GOAL_TURN_CAP_MAX, goalReminder, goalStopDecision, parseGoalSpec, projectGoal, sumSessionUsage } from "../agent/goal";
+import { GOAL_TURN_CAP_MAX, goalReminder, goalStopDecision, parseGoalSpec, projectGoal } from "../agent/goal";
 import { spentUsdFor } from "../agent/orchestrator-join";
 import { checkPermission, enterPlanRunScope, getPlanState, planGateBlocks, type PermissionMode } from "../permissions";
 import {
@@ -1504,21 +1504,37 @@ export async function handleAgentRun(
         askGate: over.unattended ? unattendedAskGate : appAskGate,
         sandbox: sandboxState,
       });
-      const next = await goalNextTurn({ logPath, aborted: () => over.signal?.aborted === true });
+      const next = await goalNextTurn({ logPath, sessionId, aborted: () => over.signal?.aborted === true });
       if (next === null) return { ok: true };
       message = next.message;
       goalTurn = next.origin;
     }
     // 只有判据投影异常才可能走到这里。报错而不是静默收场：静默 = 用户以为还在跑。
-    return { ok: false, error: "goal 续跑触到硬上限 " + String(hardCap) + " 轮（高于任何允许的目标轮次上限）⇒ 判据投影异常，已强制停" };
+    // 同时必须落 goal_stopped——硬上限这条路的「为什么不跑了」也得进事件流：只 return ok:false
+    // 的话芯片仍显示「续跑中」（投影没停），界面上查不到任何理由（审查 C4 破的是本线自己的不变量）。
+    const capReason = "goal 续跑触到硬上限 " + String(hardCap) + " 轮（高于任何允许的目标轮次上限）⇒ 判据投影异常，已强制停";
+    const capView = projectGoal(await replay(logPath));
+    if (capView !== null && capView.stopped === null) {
+      await emitGoalEvent(logPath, sessionId, { type: "goal_stopped", reason: capReason, turn: capView.turn, evidence: capView.evidence });
+    }
+    return { ok: false, error: capReason };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 
+/** goal 事件的唯一出口：落流 + 推事件（带 session_id）。
+ *  为什么必须有这个 helper：渲染层按 `e.session_id !== real.id` 把不可归因的事件丢掉，
+ *  所以少了这个标记就是「JSONL 里有、live 界面上没有」——用户看不见"为什么不跑了"，
+ *  而 replay 又看得见（两路不一致，正是本仓点名的形状）。三处 goal 写入点共用一份。 */
+async function emitGoalEvent(logPath: string, sessionId: string | undefined, ev: AgentEvent): Promise<void> {
+  await createEventLog(logPath).append(ev);
+  hooks.onEvent?.(sessionId !== undefined ? ({ ...ev, session_id: sessionId } as AgentEvent) : ev);
+}
+
 /** goal 模式：一次 run 收束后问判据「还要不要再跑一轮」。返回 null = 不再续（没设目标 / 已达成 /
  *  已停 / 被取消）。停止理由一律落 `goal_stopped` 上屏——「为什么不跑了」必须是用户看得见的事实。 */
-async function goalNextTurn(args: { logPath: string; aborted: () => boolean }): Promise<{ message: string; origin: GoalTurnOrigin } | null> {
+async function goalNextTurn(args: { logPath: string; sessionId?: string; aborted: () => boolean }): Promise<{ message: string; origin: GoalTurnOrigin } | null> {
   if (args.aborted()) return null; // 用户已经按停止：不再起新轮（取消是最高优先级，不是预算）
   const events = await replay(args.logPath);
   const view = projectGoal(events);
@@ -1526,7 +1542,8 @@ async function goalNextTurn(args: { logPath: string; aborted: () => boolean }): 
   const model = (await store().get()).model;
   // 主会话的价：拿 settings.model 查表；表里没有 / 没填 model ⇒ spentUsdFor 返回 null（不可知），
   // 美元闸随之惰掉并在提醒块里明写——**绝不**按 $0 继续烧（「把不可知记成免费」）。
-  const spend = spentUsdFor({ model, ...(model !== "" ? { priceId: model } : {}) }, sumSessionUsage(events));
+  // 计量窗口 = view.usage（本目标之后那段），与证据/写盘同轴：设 $0.5 之前会话已花多少与这个闸无关。
+  const spend = spentUsdFor({ model, ...(model !== "" ? { priceId: model } : {}) }, view.usage);
   const spentUsd = spend === null ? null : spend.usd;
   const decision = goalStopDecision({
     turn: view.turn,
@@ -1538,8 +1555,7 @@ async function goalNextTurn(args: { logPath: string; aborted: () => boolean }): 
   if (decision.kind === "done") return null;
   if (decision.kind === "stop") {
     const ev: AgentEvent = { type: "goal_stopped", reason: decision.reason, turn: view.turn, evidence: view.evidence };
-    await createEventLog(args.logPath).append(ev);
-    hooks.onEvent?.(ev);
+    await emitGoalEvent(args.logPath, args.sessionId, ev);
     return null;
   }
   const turn = view.turn + 1;
@@ -1581,8 +1597,7 @@ export async function handleGoalSet(req: {
         turn: view.turn,
         evidence: view.evidence,
       };
-      await createEventLog(logPath).append(stopped);
-      hooks.onEvent?.({ ...stopped, session_id: sessionId });
+      await emitGoalEvent(logPath, sessionId, stopped);
       return { ok: true };
     }
     const parsed = parseGoalSpec({ objective: req.objective, maxTurns: req.maxTurns, maxUsd: req.maxUsd });
@@ -1593,8 +1608,7 @@ export async function handleGoalSet(req: {
       max_turns: parsed.spec.maxTurns,
       max_usd: parsed.spec.maxUsd,
     };
-    await createEventLog(logPath).append(ev);
-    hooks.onEvent?.({ ...ev, session_id: sessionId });
+    await emitGoalEvent(logPath, sessionId, ev);
     return { ok: true, ...(parsed.clamped.length > 0 ? { clamped: parsed.clamped } : {}) };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };

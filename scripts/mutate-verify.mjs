@@ -3610,8 +3610,16 @@ const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/goal-continue.test.ts",
     desc: "run 尾不再问判据（整条续跑/停止链被旁路）⇒ goal_set 成了只写不读的陈列，理由也从不上屏",
-    apply: (s) => s.replace("const next = await goalNextTurn({ logPath, aborted: () => over.signal?.aborted === true });", "const next: { message: string; origin: GoalTurnOrigin } | null = null;"),
+    apply: (s) => s.replace("const next = await goalNextTurn({ logPath, sessionId, aborted: () => over.signal?.aborted === true });", "const next: { message: string; origin: GoalTurnOrigin } | null = null;"),
     expectFail: "设了目标但这一轮没写盘也没验证 ⇒ 立刻停，并落一条写明理由的 goal_stopped（读答型目标不烧钱）",
+  },
+  {
+    id: "goal-usd-window-axis",
+    src: "src/agent/goal.ts",
+    test: "tests/goal-continue.test.ts",
+    desc: "美元闸的计量窗口退回整段会话（证据/写盘看窗口、钱看全量）⇒ 设 $0.5 却因上一段花掉的 $0.6 第一轮就停，用户设的闸成随机数",
+    apply: (s) => s.replace("usage: sumWindowUsage(window),", "usage: sumWindowUsage(events),"),
+    expectFail: "美元闸的计量窗口 = 本目标之后：设目标之前花掉的钱不许替新目标触发这道闸",
   },
   {
     id: "goal-stopped-flag-ignored",

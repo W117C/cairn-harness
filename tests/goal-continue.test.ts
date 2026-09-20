@@ -249,6 +249,16 @@ describe("projectGoal：会话目标态只从事件流重算", () => {
     expect(after?.turn).toBe(1);
   });
 
+  it("美元闸的计量窗口 = 本目标之后：设目标之前花掉的钱不许替新目标触发这道闸", () => {
+    // 审查 C2：证据/写盘看窗口，钱却曾看整段会话 ⇒ 同一份投影三把尺。后果不是"多花一点"，
+    // 而是"设 $0.5 上限、第一轮就以『已花 $0.6』停下"——用户设的闸成了随机数。
+    const use = (inputTokens: number): AgentEvent => ({ type: "usage", inputTokens, outputTokens: 0 });
+    const stale = projectGoal([use(500_000), G("上一段活"), use(500_000), G("新目标")]);
+    expect(stale?.usage).toEqual({ inputTokens: 0, outputTokens: 0 });
+    const fresh = projectGoal([use(500_000), G("新目标"), use(1000), use(500)]);
+    expect(fresh?.usage).toEqual({ inputTokens: 1500, outputTokens: 0 });
+  });
+
   it("goal_stopped 之后 stopped 有值；再来一条 goal_set 会把它清掉（改设 = 重新起跑）", () => {
     const stopped: AgentEvent = { type: "goal_stopped", reason: "轮次上限 6 已用尽", turn: 6, evidence: "failed" };
     expect(projectGoal([G("目标"), stopped])?.stopped).toContain("轮次上限");
