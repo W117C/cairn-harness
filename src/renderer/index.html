@@ -793,15 +793,13 @@ body.resizing .stream-inner,body.resizing .composer-inner{transition:none}
 .msg{position:relative;display:flex;gap:var(--sp-6)}
 .msg.user{flex-direction:row-reverse}
 /* 消息节奏：一条用户提问 + 后续整套 AI 回复为一个「回合」。
-   回合边界 = 下一条用户消息之前：大间距（48px）+ 细分隔线；回合内消息紧凑排列 */
+   回合边界 = 下一条用户消息之前的大间距（--turn-gap）。
+   此前边界上还画过一条 1px 分隔线（`.msg.user::before`），
+   但它紧贴用户气泡、与发丝线密集的卡片区叠在一起读起来是噪音，已移除——
+   节奏交给间距单独承担（留白本来就够，那条线不增加任何信息）。 */
 .msg + .msg{margin-top:var(--sp-6)}
 .msg.user{margin-top:var(--turn-gap)}
-.msg.user::before{
-  content:"";position:absolute;top:calc(var(--turn-gap) / -2);left:0;right:0;height:1px;
-  background:color-mix(in oklch, var(--fg) 9%, transparent);
-}
 .stream-inner > .msg.user:first-child{margin-top:0}
-.stream-inner > .msg.user:first-child::before{display:none}
 /* 无对话时的空状态 */
 .chat-empty{
   display:flex;flex-direction:column;align-items:center;gap:var(--sp-3);
