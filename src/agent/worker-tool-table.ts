@@ -10,7 +10,7 @@ import { remember } from "../tools/remember";
 import { run_shell } from "../tools/run_shell";
 import { write_file } from "../tools/write_file";
 import type { Tool } from "../tools/base";
-import { evaluate, scopeKey, type AutonomySession, type EvaluateDecision } from "../permissions";
+import { evaluate, gateBase, scopeKey, type AskScope, type AutonomySession, type EvaluateDecision, type ToolResultWithAudit } from "../permissions";
 import { WORKER_IMPACT_TOOL } from "./orchestrator-config";
 import type { Orchestrator } from "./orchestrator";
 import type { WorkerHandle } from "./orchestrator-types";
@@ -99,24 +99,39 @@ function gatedWorkerTool(name: string, inner: Tool, w: WorkerHandle, orch: Orche
   return {
     name,
     async run(args, ctx) {
-      const d: EvaluateDecision = evaluate(name as never, args, opts.autonomy ?? w.autonomy);
+      const auto = opts.autonomy ?? w.autonomy;
+      const d: EvaluateDecision = evaluate(name as never, args, auto);
       if (d.verdict === "deny") {
-        return { ok: false, output: "[permission denied] " + name + "：" + d.reason };
+        return {
+          ok: false,
+          output: "[permission denied] " + name + "：" + d.reason,
+          gate: { ...gateBase(d, auto.mode), verdict: "denied" as const },
+        } as ToolResultWithAudit;
       }
+      let approvedScope: AskScope | undefined;
       if (d.verdict === "ask") {
         const r = await orch.requestWorkerApproval(w, name, args, d.risk, d.riskReasons);
         if (!r.approved) {
           return {
             ok: false,
             output: "[permission denied] " + name + " 未获批准（worker 审批协议；单次拒绝不杀 worker）" + (r.note ? "：" + r.note : ""),
-          };
+            gate: { ...gateBase(d, auto.mode), verdict: "rejected" as const },
+          } as ToolResultWithAudit;
         }
+        approvedScope = r.scope;
         if (r.scope === "session_kind") {
           ((opts.autonomy ?? w.autonomy).sessionScopes as Set<string>).add(scopeKey(name as never, args));
         }
         // scope=always 在 decideWorkerApproval 已拒绝（worker 永不写 always）；此处不会收到
       }
-      return await inner.run(args, ctx);
+      // worker 出口今天什么审计都不挂（approval_* 落了流，但结果侧读不到「谁放行的」）——补上。
+      const res = await inner.run(args, ctx);
+      return {
+        ...res,
+        gate: d.verdict === "ask"
+          ? { ...gateBase(d, auto.mode), verdict: "approved" as const, ...(approvedScope !== undefined ? { scope: approvedScope } : {}) }
+          : { ...gateBase(d, auto.mode), verdict: "auto-approved" as const },
+      } as ToolResultWithAudit;
     },
   };
 }

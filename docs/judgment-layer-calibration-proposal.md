@@ -166,14 +166,39 @@ tool_result 出口上，硬挂会造出第三种形状，留位；不新建事�
   断路器 `MAX_AUTO_APPROVALS` 继续对免批计数生效。上线前先影子模式：只记账不免批。
 - 半步旁支：把 `modelRisk` 从"证据"降为"其中一票"（§1 表第一行）。
 
-## 8. 两个待裁决点
+## 8. 裁决记录与落地状态（ask 落盘已实现，2026-09-20）
 
-1. **`src/permissions/autonomy.ts` 本轮可改吗？** `layer` 只能由 `evaluate` 产出，没有不碰它的干净解法；
-   备选是消费端反推 `reason`（不建议：正是本仓最忌的「注释自称同源、实现各抄一份」）。
-   `BLOCKED.md` 有同类先例——越界可备案并写明 revert 代价。
-   （备案用：`scripts/frozen-sha256.json` 的 43 项里**不含** `src/permissions/**` 与 `src/events/**`，
-   即本页改动不触判卷冻结面。）
-2. **`auto` 降级为派生投影（推荐）还是保留各出口自写？** 前者多改 `agent/loop.ts` 一处，换来单一 writer。
+两条裁决均已定，按推荐口径执行：
+
+1. **`src/permissions/autonomy.ts` 本轮改** —— `layer` 只能由 `evaluate` 产出，让消费端反推 `reason`
+   就是本仓最忌的「注释自称同源、实现各抄一份」。改前 `git diff HEAD` 为空（无在飞改动）；
+   不触判卷冻结面（`scripts/frozen-sha256.json` 不含 `src/permissions/**`，autonomy-check 收口的
+   sha256 双查也逐字通过）。
+2. **`auto` 降级为 `gate` 的派生投影** —— 新增 `autoOf(gate)`，由 `loop` 写事件时调用；
+   「手工批准不记 auto」从各出口自觉变成代码保证。既有四组 `auto` 断言一字未改仍绿。
+
+实现与 §5 的差异，以代码为准：
+
+- `GATE_LAYERS` 实为 **11 档**——§5.2 那份清单少了 `L3-mode`（默认档逐次审批既不是规则命中也不是风险抬升）。
+- 共享构造口 `gateBase(d, mode)` 故意**不含 `verdict`**：自动放行 / 人批 / 人拒 / 超时 / 无人值守
+  只有持有审批结果的那一侧知道，故主会话 / MCP / worker 三处出口各补自己的 verdict 与 scope。
+- `GateMeta.risk` 在 deny 分支缺席：那三条硬边界在风险层**之前**短路，当时没算过风险——
+  缺字段比编一个 `"none"` 诚实。
+- `ToolResultEvent.auto` 不再自家复制一份类型，改引权限层的 `AutoMeta`。
+- 验收等式落在 `scripts/autonomy-check.ts` 的 `assertAuditCoverage`，三条路径实测 2 / 2 / 1 条受管调用全留痕。
+
+实现过程中被等式当场抓出的两处既有问题：
+
+- **「两头断」第 10 次**：`gatedTool` 里 `run_shell` 走沙箱分支的两条 `return` 原先直接返回
+  `original.run(...)` / `runInSandbox(...)`，**连旧的 `auto` 都带不出去**——同一条命令走不走沙箱，
+  留痕不一样。已一并补上（`withGate`）。
+- **distill 沉淀轮用原 callId 补发 `tool_result`**（PROGRESS「坑五十二」同型）：等式若按
+  「受管调用数 == 留痕条数」计会被这批合法二写误伤，故量词取**「每次受管调用至少有一条带痕迹的 result」**。
+  留位未裁：`src/agent/memory/distill.ts` 的两类拒绝（非 remember 被白名单挡、合并审批未获批准）
+  同样不带 `gate`——它们是判定但不是 `evaluate` 的判定，要不要纳入同一留痕面待裁。
+
+**仍未做**（排在落盘之后）：概率来源与标注集、阈值分支、影子模式，以及 §5.3 留位的
+`obs_recall` 与 `M1E_SAFE_MODE` 两支出口。
 
 ---
 

@@ -1,6 +1,8 @@
 // 事件流：append-only JSONL，一事件一行。
 import { mkdir, open, readFile, stat, type FileHandle } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+// 权限判定留痕的类型定义在权限层（判定归判定、序列化归序列化）；`import type` 编译期擦除，不引运行时依赖。
+import type { AutoMeta, GateMeta } from "../permissions/autonomy";
 
 /** M2f：/promote 来源（sidechat 结论提升进主会话）。零新增事件类型——主流仍是 user_message，
  *  只多一个可选 origin 字段，重启后从 JSONL 重放无损（徽标由 origin 反向投影）。 */
@@ -33,9 +35,9 @@ export interface AssistantDeltaEvent { type: "assistant_delta"; callId: string; 
 /** M3a：worker 子流的工具调用（§4.4.9 落主流口径）——agent_id 在场 = 该事件属于该 worker 子流，
  *  主上下文投影（projectContext）跳过带 agent_id 的事件（父上下文唯一接收物 = agent_result，§4.4.4）。 */
 export interface ToolCallEvent { type: "tool_call"; id: string; name: string; args: Record<string, unknown>; agent_id?: string }
-/** M1c 自动放行来源审计（§11.7.5）：仅自动放行的 tool_result 携带，零新事件类型。 */
-export interface AutoApproveMeta { source: "rule" | "session_scope"; ruleId?: string }
-export interface ToolResultEvent { type: "tool_result"; callId: string; ok: boolean; output: string; auto?: AutoApproveMeta; agent_id?: string }
+/** M1c 自动放行来源审计（§11.7.5）：仅自动放行的 tool_result 携带，零新事件类型。
+ *  类型不自家再定义一份——它的真身在权限层，且由 `autoOf(gate)` 派生（两份同形定义迟早漂）。 */
+export interface ToolResultEvent { type: "tool_result"; callId: string; ok: boolean; output: string; auto?: AutoMeta; /** 权限判定留痕：谁判的（layer）、怎么判的（verdict）、当时风险与档位 */ gate?: GateMeta; agent_id?: string }
 export interface UsageEvent { type: "usage"; inputTokens: number; outputTokens: number; /** 缓存分列（可选）：**缺字段 = 该 provider 没上报，不等于 0**。约定 `inputTokens` 是含缓存的总输入，
    *  下面两个是其中的分块——不得再与 inputTokens 相加（metering 的 MeterUsage 要互斥桶，适配器换算后再交）。
    *  写侧断点（Anthropic cache_control / 稳定前缀排布）尚未接线：先把「命中没有」测出来，再谈制造命中。 */
