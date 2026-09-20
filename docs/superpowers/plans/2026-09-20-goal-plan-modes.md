@@ -157,6 +157,8 @@ pnpm typecheck   # tsc 全量扫含未跟踪文件 ⇒ 写完再跑
 
 **合回主树前的唯一硬阻断**：渲染层「设目标」那颗按钮（composer 里）没落 ⇒ `setGoal` 目前是"有桥无生产者"，
 `ipc-reachability-check` 正是为这种形状立的（#13 同族）。缺它就不许合并，已写进 #51。
+**门实测（同一命令两边各跑一次）**：分支 worktree = 2 红，其中 `A2a 无新增孤儿桥 — agent:goal-set` 是本分支新增的红（棘轮自己点的名）；
+主树 HEAD = 1 红，只剩 `A2b 基线不陈旧（provider/schedule 那 10 条）`——**A2b 在 HEAD 就红，不属本轮**，别把它算进本改动的账。
 另两处欠：spec J4 的 `priceKnown` 那半在实现里等价物是 `spentUsd === null`（单一编码，不再并列一个布尔）；
 `goalReminder` 内层目标帽那条锚点**故意不落**——摘掉内层帽后外层 `clampToTokenBudget` 仍会截断，
 "已截断"标记照样在场 ⇒ 观测不到，按规则 17 撤锚而不是硬造断言。
