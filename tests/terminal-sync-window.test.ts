@@ -3,21 +3,36 @@
 // 才挂 lastResult / 放行等待方。落在这段窗口里的读取方若只看 finished，拿到的是「done + result 空」：
 // sequencer 会把交出绿证据的那一档判成失败环（级联因此白烧一档再误报整链 failed——本文件写成测前
 // 实测复现过一次），join 会把报告记成空串冒充已知。判据改成 terminalResolved 后两头都诚实。
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createEventLog, type AgentEvent } from "../src/events";
 import { Orchestrator, scriptedWorkerModel, type SpawnArgs } from "../src/agent/orchestrator";
 import type { JoinPayloadBody } from "../src/agent/orchestrator-join";
 
+const exec = promisify(execFile);
+
 let work = "";
+let repo = "";
 let logPath = "";
 
 beforeEach(async () => {
   work = await mkdtemp(join(tmpdir(), "terminal-window-"));
   logPath = join(work, "events.jsonl");
   await writeFile(logPath, "", "utf8");
+  // write mode 要真 git 仓库（worktree / 合并出口）；只读那两条用例不碰它
+  repo = join(work, "repo");
+  await mkdir(repo, { recursive: true });
+  const g = (...a: string[]): Promise<{ stdout: string }> => exec("git", a, { cwd: repo });
+  await g("init");
+  await g("config", "user.email", "window@test.local");
+  await g("config", "user.name", "Window Test");
+  await writeFile(join(repo, "README.md"), "line1\n", "utf8");
+  await g("add", ".");
+  await g("commit", "-m", "init");
 });
 
 afterEach(async () => {
@@ -113,5 +128,45 @@ describe("终态收尾窗口：已收敛的判据是 terminalResolved", () => {
     expect((await p).ok).toBe(true);
     // 判据是「这条红在超时之前真的到了」，不是「没崩」——没崩而一直挂着正是这次修复要杀的形状。
     expect(await waitFor(() => events.some((e) => e.type === "tool_result" && (e as { output: string }).output.includes("整链 failed")))).toBe(true);
+  }, 60_000);
+
+  it("收尾窗口里叫合并 ⇒ 拒绝：窗口内 lastFindings 还空着，gate 档会被「无 findings」假通过", async () => {
+    const events: AgentEvent[] = [];
+    let workerId = "";
+    let mergeAttempt: { ok: boolean; error?: string } | null = null;
+    let holdOnce = false;
+    const orch: Orchestrator = new Orchestrator({
+      logPath,
+      workspace: repo,
+      parentMode: "default",
+      safeMode: "gate", // 合并准入的二次确认档：critical|high 未 force 必须拒
+      emit: async (e) => {
+        events.push(e);
+        if (e.type === "agent_spawned") workerId = (e as { agent_id: string }).agent_id;
+        if (e.type === "agent_result" && !holdOnce) {
+          holdOnce = true;
+          // 窗口正中叫合并。旧写法（读 finished）会一路放过：此时安全流水还没跑完，
+          // lastFindings 仍是空数组 ⇒ gate 看到的是「零条高危」= 假通过，改动被系统代为 commit 并进主树。
+          mergeAttempt = await orch.mergeWorker(workerId);
+          await sleep(120);
+        }
+        await createEventLog(logPath).append(e);
+      },
+      modelFor: () => scriptedWorkerModel([
+        { type: "tool_call", id: "w1", name: "write_file", args: { path: "x.txt", content: "改动\n" } },
+        { type: "assistant_message", content: REPORT },
+      ] as unknown as Parameters<typeof scriptedWorkerModel>[0]),
+    });
+    const p = orch.spawn({ mode: "pipeline", stages: [{ role: "implement", task: "写一个文件" }] }, { callId: "merge-win-1" });
+    expect(await waitFor(() => events.some((e) => e.type === "approval_requested"))).toBe(true);
+    const apr = events.find((e) => e.type === "approval_requested") as Extract<AgentEvent, { type: "approval_requested" }>;
+    expect(orch.decideWorkerApproval(apr.id, true, "once").ok).toBe(true);
+    expect((await p).ok).toBe(true);
+    expect(await waitFor(() => mergeAttempt !== null)).toBe(true);
+    expect(mergeAttempt!.ok).toBe(false);
+    expect(mergeAttempt!.error ?? "").toContain("尚未收敛");
+    // 窗口关上之后再叫就该被受理（拒绝只该发生在值没备好的那一段）
+    expect(await waitFor(() => events.some((e) => e.type === "tool_result" && (e as { output: string }).output.includes("整链 done")))).toBe(true);
+    await orch.waitAll(20_000);
   }, 60_000);
 });

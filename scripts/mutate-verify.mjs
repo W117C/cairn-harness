@@ -3493,6 +3493,14 @@ const MUTATIONS = [
     apply: (s) => s.replace("quotes_verified=${String(receipt.evidence.length)}", "completeness=unknown"),
     expectFail: "restores genuine receipts after two sends and full source on invalidation (observationPack=true)",
   },
+  {
+    id: "merge-admits-worker-still-in-finish-window",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/terminal-sync-window.test.ts",
+    desc: "合并准入回到只看 finished ⇒ 收尾窗口里 lastFindings 还没填，gate 档被「零条高危」假通过，未扫描的代码被系统代为 commit 并进主树",
+    apply: (s) => s.replace("if (!w.terminalResolved) return { ok: false, error: \"worker 尚未收敛（done 后才可合并）\" };", "if (false) return { ok: false, error: \"worker 尚未收敛（done 后才可合并）\" };"),
+    expectFail: "收尾窗口里叫合并 ⇒ 拒绝：窗口内 lastFindings 还空着，gate 档会被「无 findings」假通过",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
