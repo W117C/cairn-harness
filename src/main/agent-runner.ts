@@ -1532,7 +1532,7 @@ export async function handleAgentRun(
         askGate: over.unattended ? unattendedAskGate : appAskGate,
         sandbox: sandboxState,
       });
-      const next = await goalNextTurn({ logPath, sessionId, aborted: () => over.signal?.aborted === true });
+      const next = await goalNextTurn({ logPath, sessionId, unattended: over.unattended === true, aborted: () => over.signal?.aborted === true });
       if (next === null) return { ok: true };
       message = next.message;
       goalTurn = next.origin;
@@ -1560,13 +1560,35 @@ async function emitGoalEvent(logPath: string, sessionId: string | undefined, ev:
   hooks.onEvent?.(sessionId !== undefined ? ({ ...ev, session_id: sessionId } as AgentEvent) : ev);
 }
 
-/** goal 模式：一次 run 收束后问判据「还要不要再跑一轮」。返回 null = 不再续（没设目标 / 已达成 /
- *  已停 / 被取消）。停止理由一律落 `goal_stopped` 上屏——「为什么不跑了」必须是用户看得见的事实。 */
-async function goalNextTurn(args: { logPath: string; sessionId?: string; aborted: () => boolean }): Promise<{ message: string; origin: GoalTurnOrigin } | null> {
+/** goal 模式：一次 run 收束后问判据「还要不要再跑一轮」。返回 null = 不再续（没设目标 / 已停 / 被取消）。
+ *  停止理由一律落 `goal_stopped` 上屏——「为什么不跑了」必须是用户看得见的事实。 */
+async function goalNextTurn(args: {
+  logPath: string;
+  sessionId?: string;
+  /** 无人值守（定时 / schedule 触发的 run）。goal 模式在这条路上被显式拒续，理由见下面的规则。 */
+  unattended?: boolean;
+  aborted: () => boolean;
+}): Promise<{ message: string; origin: GoalTurnOrigin } | null> {
   if (args.aborted()) return null; // 用户已经按停止：不再起新轮（取消是最高优先级，不是预算）
   const events = await replay(args.logPath);
   const view = projectGoal(events);
   if (view === null || view.stopped !== null) return null; // 没设目标 / 已停 ⇒ 逐字零行为
+  // #53 的裁决：**无人值守 run 不自动续跑**。这不是保守，是这条路的产出面决定的——
+  // unattended 的审批一律 fail-closed 拒（unattendedAskGate）⇒ 写向工具全被拒、verify 必然红，
+  // 而判据里「证据 failed」是 **continue** ⇒ 定时任务会一路烧到轮次上限（≤25 轮），
+  // 且没有任何一轮可能成功。goal 是「有人在场」的能力：停在这里，并把理由落到流上（芯片与转录都看得见）。
+  if (args.unattended) {
+    const reason =
+      "无人值守 run 不自动续跑：这条路上审批一律 fail-closed 拒 ⇒ 写不了盘、验不出绿，续跑只会白烧钱；" +
+      "goal 模式请在有人盯着的会话里用（同一个目标，交互 run 会照常续）";
+    await emitGoalEvent(args.logPath, args.sessionId, {
+      type: "goal_stopped",
+      reason,
+      turn: view.turn,
+      evidence: view.evidence,
+    });
+    return null;
+  }
   const model = (await store().get()).model;
   // 主会话的价：拿 settings.model 查表；表里没有 / 没填 model ⇒ spentUsdFor 返回 null（不可知），
   // 美元闸随之惰掉并在提醒块里明写——**绝不**按 $0 继续烧（「把不可知记成免费」）。
