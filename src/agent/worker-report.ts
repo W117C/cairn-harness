@@ -93,3 +93,14 @@ export function workerVerificationEvidence(events: AgentEvent[]): WorkerEvidence
   if (!lastVerifyOk) return "failed";
   return lastWrite > lastVerify ? "stale" : "verified";
 }
+
+/** 这段流里有没有**成功落过盘**（与上面同一份 WRITE_TOOLS，绝不另立一张写向清单）。
+ *  goal 模式要用它区分「还没验」与「压根没打算产出」：后者继续自动跑就是纯烧钱。 */
+export function hasSessionWrites(events: AgentEvent[]): boolean {
+  const nameByCall = new Map<string, string>();
+  for (const e of events) {
+    if (e.type === "tool_call") nameByCall.set(e.id, e.name);
+    else if (e.type === "tool_result" && e.ok && WRITE_TOOLS.has(nameByCall.get(e.callId) ?? "")) return true;
+  }
+  return false;
+}

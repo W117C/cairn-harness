@@ -200,12 +200,14 @@ try {
     assert(promoted?.type === "user_message", "提升事件类型 = user_message（零新增事件类型）");
     const origin = promoted?.type === "user_message" ? promoted.origin : undefined;
     assert(origin !== undefined && origin.kind === "sidechat", "origin.kind = sidechat");
-    assert(origin !== undefined && origin.session_id === sid, "origin.session_id 指向 sidechat");
+    // origin 现在是判别联合（sidechat 提升 / goal 续跑），取字段必须先按 kind 收窄
+    const so = origin !== undefined && origin.kind === "sidechat" ? origin : undefined;
+    assert(so !== undefined && so.session_id === sid, "origin.session_id 指向 sidechat");
     assert(
-      origin !== undefined && JSON.stringify(origin.source_event_ids) === JSON.stringify(src),
+      so !== undefined && JSON.stringify(so.source_event_ids) === JSON.stringify(src),
       "origin.source_event_ids 与源一致",
     );
-    assert(origin !== undefined && origin.note === "旁路结论", "origin.note 在场（四字段齐全）");
+    assert(so !== undefined && so.note === "旁路结论", "origin.note 在场（四字段齐全）");
     // 反向投影徽标
     const badges = projectPromoteBadges(mainAfter);
     assert(badges.length === 1 && badges[0]?.sessionId === sid, "源消息徽标由 origin 反向投影");
@@ -216,8 +218,9 @@ try {
       "重启后 promote 历史从 JSONL 重放无损（" + String(replayed.length) + " 条）",
     );
     const replayedOrigin = replayed[replayed.length - 1];
+    const ro = replayedOrigin?.type === "user_message" && replayedOrigin.origin?.kind === "sidechat" ? replayedOrigin.origin : undefined;
     assert(
-      replayedOrigin?.type === "user_message" && replayedOrigin.origin?.source_event_ids.join(",") === src.join(","),
+      ro !== undefined && ro.source_event_ids.join(",") === src.join(","),
       "重放后 origin 四字段无损",
     );
     // 输出扫描：密钥被脱敏

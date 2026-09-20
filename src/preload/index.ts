@@ -26,6 +26,7 @@ const api: AgentApi = {
   submitClarify: (callId: string, answers: Record<string, string | string[]>) =>
     ipcRenderer.invoke("agent:clarify", callId, answers),
   decidePlan: (approved: boolean, callId?: string) => ipcRenderer.invoke("agent:plan", approved, callId),
+  setGoal: (req) => ipcRenderer.invoke("agent:goal-set", req),
   runCancel: () => ipcRenderer.invoke("agent:run-cancel"), // P3（审查）：交互 run 取消入口
   compact: () => ipcRenderer.invoke("agent:compact"),
   onEvent: (cb: (e: AgentEvent) => void) => subscribe<AgentEvent>("agent:event", cb),

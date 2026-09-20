@@ -142,3 +142,21 @@ pnpm typecheck   # tsc 全量扫含未跟踪文件 ⇒ 写完再跑
 **顺手多立的一道闸（J4 泛化）**：`SettingsStore.set()` 有一张**手写键白名单**，不在名单里的键整块 patch 被丢 ⇒ 设置项"看着能动、重启就没"。
 本轮起 `tests/plan-required.test.ts` 对 `DEFAULT_SETTINGS` 里**每一个布尔键**机械验"`set()` 翻面 + 落盘读回"，
 以后新增设置项忘了登记白名单会当场红（点名是哪个键），不必再靠人记得写单测。
+
+### goal 模式（同一分支第二笔：Task 3 + 驱动 + 机器侧入口）
+
+**已落**：`src/agent/goal.ts`（`parseGoalSpec` / `goalStopDecision` 五路 / `goalReminder` 带帽 / `projectGoal` 投影 / `sumSessionUsage`）、
+两条新事件 `goal_set` + `goal_stopped`（`KNOWN_TYPES` 增量，旧日志重放逐字不变）、`UserMessageEvent.origin` 收成判别联合
+（`PromoteOrigin | GoalTurnOrigin`，四个消费面全按 kind 分支）、`worker-report.hasSessionWrites`（与四态同一份 `WRITE_TOOLS`，不另立写向清单）、
+`handleAgentRun` 里的续跑环 + 硬上限 + `handleGoalSet`/`agent:goal-set`/preload `setGoal`。
+判卷：`tests/goal-stop-decision.test.ts` 15 条 + `tests/goal-continue.test.ts` 8 条（走真入口 `handleGoalSet` → `handleAgentRun`，不手工造 goal_set）；
+直连 tsc exit=0；`goal-continue`/`goal-stop-decision`/`sidechat`/`schedule`/`sessions`/`loop`/`plan-required` 等 7 个文件 115 条全绿；428 条既有锚点针脚零破坏。
+
+**合回主树前的唯一硬阻断**：渲染层「设目标」那颗按钮（composer 里）没落 ⇒ `setGoal` 目前是"有桥无生产者"，
+`ipc-reachability-check` 正是为这种形状立的（#13 同族）。缺它就不许合并，已写进 #51。
+另两处欠：spec J4 的 `priceKnown` 那半在实现里等价物是 `spentUsd === null`（单一编码，不再并列一个布尔）；
+`goalReminder` 内层目标帽那条锚点**故意不落**——摘掉内层帽后外层 `clampToTokenBudget` 仍会截断，
+"已截断"标记照样在场 ⇒ 观测不到，按规则 17 撤锚而不是硬造断言。
+
+**实测读数（Task 6）状态**：`goal-continue` 里那条"读答型目标一轮即停"就是"不烧钱"的确定性证据；
+但"完成率 + `$/成功任务` 的 A/B"仍欠 —— 它要真模型跑（无 `M0_API_KEY` ⇒ 如实未证，不算完成），列入 #51 之后。

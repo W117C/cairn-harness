@@ -167,7 +167,8 @@ describe("M2f /promote", () => {
     const ev = main[0];
     expect(ev.type).toBe("user_message");
     if (ev.type !== "user_message" || !ev.origin) throw new Error("origin 缺失");
-    expect(ev.origin.kind).toBe("sidechat");
+    // origin 是判别联合（sidechat 提升 / goal 续跑）：先按 kind 收窄再取 sidechat 独有字段
+    if (ev.origin.kind !== "sidechat") throw new Error('origin.kind 不是 sidechat，实得 "' + ev.origin.kind + '"');
     expect(ev.origin.session_id).toBe("旁路调查");
     expect(ev.origin.source_event_ids).toEqual([2]);
     expect(ev.origin.note).toBe("旁路结论");
@@ -202,8 +203,9 @@ describe("M2f /promote", () => {
     const promoted = mainEvents.at(-1)! as UserMessageEvent;
     expect(promoted.type).toBe("user_message");
     expect(promoted.origin?.kind).toBe("sidechat");
-    expect(promoted.origin?.session_id).toBe("s1");
-    expect(promoted.origin?.source_event_ids).toEqual([2]);
+    const po = promoted.origin?.kind === "sidechat" ? promoted.origin : undefined;
+    expect(po?.session_id).toBe("s1");
+    expect(po?.source_event_ids).toEqual([2]);
     // ② 提升正文进了主上下文（projectContext = 主 agent 下一 turn 的输入来源）
     expect(JSON.stringify(projectContext(mainEvents))).toContain(KEYWORD);
     // ③ 模型侧可见（composeTurnMessages = 主会话 provider 的模型输入组装）

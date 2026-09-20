@@ -27,8 +27,11 @@ import { affectedFilesOf, defaultImpactHook } from "../agent/impact/index.js";
 import { createImpactQueryTool, impactQuerySpec } from "../tools/impact-query";
 import { createWaitForAgentsTool } from "../tools/wait_for_agents";
 import { run_shell } from "../tools/run_shell";
-import type { AgentEvent, ClarifyAnswerMap, EventLog } from "../events";
+import type { AgentEvent, ClarifyAnswerMap, EventLog, GoalTurnOrigin } from "../events";
 import { createEventLog, replay } from "../events";
+// goal 模式：判据与投影全在纯函数面（src/agent/goal.ts），这里只做「读事件流 → 问它 → 落流 → 起下一轮」。
+import { GOAL_TURN_CAP_MAX, goalReminder, goalStopDecision, parseGoalSpec, projectGoal, sumSessionUsage } from "../agent/goal";
+import { spentUsdFor } from "../agent/orchestrator-join";
 import { checkPermission, enterPlanRunScope, getPlanState, planGateBlocks, type PermissionMode } from "../permissions";
 import {
   evaluate,
@@ -940,6 +943,9 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
   /** plan 模式（用户武装）：true ⇒ 本轮无论模型是否自愿提交方案，未获批即写禁。
    *  缺省 false = 逐字同武装前。只有用户侧（RunRequest / settings）能置位，模型无入口。 */
   planRequired?: boolean;
+  /** goal 模式的自动续跑轮：在场 = 这条 user_message 由 harness 代发，origin 落流可审计。
+   *  缺省不进 origin 字段 ⇒ 事件字节与从前逐字相同。 */
+  goalTurn?: GoalTurnOrigin;
   /** M4a 超时闸一：取消信号（loop 轮界收束，§4.4.8 AbortController 同族）。 */
   signal?: AbortSignal;
   /** C1: opt-in main-run write/edit + configured lint; never forwarded to workers. */
@@ -1254,6 +1260,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       signal,
       userMessage: promptText,
       ...(skillFace.hit ? { userMessageSkill: skillFace.hit } : {}),
+      ...(opts.goalTurn ? { userMessageOrigin: opts.goalTurn } : {}),
       // §9.3 disallowed-tools 的活闸：管本轮已经在飞的调用（下一轮的清单由 requestFace 自己收）。
       // 与规格面用的是**同一份**谓词——两处各写一个闭包等于给"两边口径不一致"留门。
       ...(initialFace.skillDenial ? { skillDenial: initialFace.skillDenial } : {}),
@@ -1461,36 +1468,111 @@ export async function handleAgentRun(
       (await store().get()).workspace,
       WORKSPACE,
     );
-    await runAgent({
-      // M2e：M0B_WORKSPACE 工作区覆盖（M2B_MAP_WORKSPACE 同族演示通道，env 门控缺省零行为）——
-      // 面板截图/演示指向带 .agent/plugins 的临时工作区，验收与生产路径不变。
-      workspace,
-      message: req.message,
-      mode: req.mode,
-      // plan 模式：settings 的默认档是唯一入口（composer 的即时开关随 goal 模式一起改，见 spec §3）。
-      planRequired: over.planRequired ?? (await store().get()).planRequiredByDefault,
-      logPath,
-      ...(sessionMode ? { sessionId } : {}),
-      ...(over.unattended ? { unattended: true as const } : {}),
-      ...(over.signal ? { signal: over.signal } : {}),
-      actionFusion: over.actionFusion ?? (await store().get()).actionFusion,
-      impactAnalysis: over.impactAnalysis ?? (await store().get()).impactAnalysis,
-      autoVerify: over.autoVerify ?? (await store().get()).autoVerify,
-      requestMetering: over.requestMetering ?? (await store().get()).requestMetering,
-      observationPack: over.observationPack ?? (await store().get()).observationPack,
-      evidenceReceipts: over.evidenceReceipts ?? (await store().get()).evidenceReceipts,
-      economicCompaction: over.economicCompaction ?? (await store().get()).economicCompaction,
-      onEvent: (e) => {
-        over.onEvent?.(e);
-        // F1（审查 P1-14）：agent:event 是全局通道——事件载荷带 session_id，renderer 按当前
-        // 会话过滤（定时/后台 run 的事件不再串进用户正看的会话）。仅标记 UI 推送面，
-        // JSONL 落盘内容不变（pipeline 已 append 原事件）；无 sessionId 的旧脚本路径不带标记。
-        hooks.onEvent?.(sessionId !== undefined ? ({ ...e, session_id: sessionId } as AgentEvent) : e);
-      },
-      askGate: over.unattended ? unattendedAskGate : appAskGate,
-      sandbox: sandboxState,
-    });
-    return { ok: true };
+    // ---- goal 模式：一次 run 结束 ≠ 目标达成。续跑走同一入口、同一装配，判据全在 goal.ts ----
+    // 轮次上限本由 spec 管（goalStopDecision）；这里的常数是"投影万一出 bug 也不会无限烧钱"的兜底闸。
+    const hardCap = GOAL_TURN_CAP_MAX + 2;
+    let message = req.message;
+    let goalTurn: GoalTurnOrigin | undefined;
+    for (let guard = 0; guard < hardCap; guard++) {
+      await runAgent({
+        // M2e：M0B_WORKSPACE 工作区覆盖（M2B_MAP_WORKSPACE 同族演示通道，env 门控缺省零行为）——
+        // 面板截图/演示指向带 .agent/plugins 的临时工作区，验收与生产路径不变。
+        workspace,
+        message,
+        mode: req.mode,
+        // plan 模式：settings 的默认档是唯一入口（composer 的即时开关随 goal 模式一起改，见 spec §3）。
+        planRequired: over.planRequired ?? (await store().get()).planRequiredByDefault,
+        ...(goalTurn ? { goalTurn } : {}),
+        logPath,
+        ...(sessionMode ? { sessionId } : {}),
+        ...(over.unattended ? { unattended: true as const } : {}),
+        ...(over.signal ? { signal: over.signal } : {}),
+        actionFusion: over.actionFusion ?? (await store().get()).actionFusion,
+        impactAnalysis: over.impactAnalysis ?? (await store().get()).impactAnalysis,
+        autoVerify: over.autoVerify ?? (await store().get()).autoVerify,
+        requestMetering: over.requestMetering ?? (await store().get()).requestMetering,
+        observationPack: over.observationPack ?? (await store().get()).observationPack,
+        evidenceReceipts: over.evidenceReceipts ?? (await store().get()).evidenceReceipts,
+        economicCompaction: over.economicCompaction ?? (await store().get()).economicCompaction,
+        onEvent: (e) => {
+          over.onEvent?.(e);
+          // F1（审查 P1-14）：agent:event 是全局通道——事件载荷带 session_id，renderer 按当前
+          // 会话过滤（定时/后台 run 的事件不再串进用户正看的会话）。仅标记 UI 推送面，
+          // JSONL 落盘内容不变（pipeline 已 append 原事件）；无 sessionId 的旧脚本路径不带标记。
+          hooks.onEvent?.(sessionId !== undefined ? ({ ...e, session_id: sessionId } as AgentEvent) : e);
+        },
+        askGate: over.unattended ? unattendedAskGate : appAskGate,
+        sandbox: sandboxState,
+      });
+      const next = await goalNextTurn({ logPath, aborted: () => over.signal?.aborted === true });
+      if (next === null) return { ok: true };
+      message = next.message;
+      goalTurn = next.origin;
+    }
+    // 只有判据投影异常才可能走到这里。报错而不是静默收场：静默 = 用户以为还在跑。
+    return { ok: false, error: "goal 续跑触到硬上限 " + String(hardCap) + " 轮（高于任何允许的目标轮次上限）⇒ 判据投影异常，已强制停" };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** goal 模式：一次 run 收束后问判据「还要不要再跑一轮」。返回 null = 不再续（没设目标 / 已达成 /
+ *  已停 / 被取消）。停止理由一律落 `goal_stopped` 上屏——「为什么不跑了」必须是用户看得见的事实。 */
+async function goalNextTurn(args: { logPath: string; aborted: () => boolean }): Promise<{ message: string; origin: GoalTurnOrigin } | null> {
+  if (args.aborted()) return null; // 用户已经按停止：不再起新轮（取消是最高优先级，不是预算）
+  const events = await replay(args.logPath);
+  const view = projectGoal(events);
+  if (view === null || view.stopped !== null) return null; // 没设目标 / 已停 ⇒ 逐字零行为
+  const model = (await store().get()).model;
+  // 主会话的价：拿 settings.model 查表；表里没有 / 没填 model ⇒ spentUsdFor 返回 null（不可知），
+  // 美元闸随之惰掉并在提醒块里明写——**绝不**按 $0 继续烧（「把不可知记成免费」）。
+  const spend = spentUsdFor({ model, ...(model !== "" ? { priceId: model } : {}) }, sumSessionUsage(events));
+  const spentUsd = spend === null ? null : spend.usd;
+  const decision = goalStopDecision({
+    turn: view.turn,
+    spec: view.spec,
+    spentUsd,
+    evidence: view.evidence,
+    wrote: view.wrote,
+  });
+  if (decision.kind === "done") return null;
+  if (decision.kind === "stop") {
+    const ev: AgentEvent = { type: "goal_stopped", reason: decision.reason, turn: view.turn, evidence: view.evidence };
+    await createEventLog(args.logPath).append(ev);
+    hooks.onEvent?.(ev);
+    return null;
+  }
+  const turn = view.turn + 1;
+  return {
+    message: goalReminder(view.spec, turn, spentUsd, view.evidence),
+    origin: { kind: "goal", turn, max_turns: view.spec.maxTurns },
+  };
+}
+
+/** IPC "agent:goal-set"：给某个会话设定/改设目标（goal 模式的唯一写入面）。
+ *  与在途 run 并发时只做一件事——追加一条 goal_set；续跑判据在 run 结束时才读它，所以中途改设
+ *  会自然从下一轮生效（不改写在飞的 run，也不锁住输入框）。 */
+export async function handleGoalSet(req: {
+  sessionId?: string;
+  objective?: unknown;
+  maxTurns?: unknown;
+  maxUsd?: unknown;
+}): Promise<{ ok: boolean; error?: string; clamped?: string[] }> {
+  try {
+    const dir = requireSessionsDir();
+    const sessionId = req.sessionId ?? (await store().get()).currentSession;
+    if (typeof sessionId !== "string" || sessionId === "") return { ok: false, error: "没有当前会话，目标无处可挂" };
+    const parsed = parseGoalSpec({ objective: req.objective, maxTurns: req.maxTurns, maxUsd: req.maxUsd });
+    if (parsed.spec === null) return { ok: false, error: parsed.errors.join("；") };
+    const ev: AgentEvent = {
+      type: "goal_set",
+      objective: parsed.spec.objective,
+      max_turns: parsed.spec.maxTurns,
+      max_usd: parsed.spec.maxUsd,
+    };
+    await createEventLog(pathOf(dir, sessionId)).append(ev);
+    hooks.onEvent?.(sessionId !== undefined ? ({ ...ev, session_id: sessionId } as AgentEvent) : ev);
+    return { ok: true, ...(parsed.clamped.length > 0 ? { clamped: parsed.clamped } : {}) };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
@@ -1904,7 +1986,8 @@ export async function handleSidechatState(parentSessionId?: string): Promise<Sid
     try {
       const mainEvents = await readSessionEvents(dir, parent);
       mainEvents.forEach((e, i) => {
-        if (e.type === "user_message" && e.origin) {
+        // 只投影 sidechat 提升记录；goal 续跑轮不是"提升"，它的面在 goal 芯片里。
+        if (e.type === "user_message" && e.origin?.kind === "sidechat") {
           promoted.push({
             eventId: i + 1,
             sessionId: e.origin.session_id,

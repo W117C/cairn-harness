@@ -129,6 +129,9 @@ export interface AgentApi {
   submitClarify(callId: string, answers: ClarifyAnswers): Promise<boolean>;
   /** 方案门：批准 / 拒绝当前 plan（card_action plan_decide）。 */
   decidePlan(approved: boolean, callId?: string): Promise<boolean>;
+  /** goal 模式：给某个会话设定/改设目标（轮次上限 + 美元上限）。不发 = 会话不自动续跑。
+   *  `clamped` 回条 = 入参被钳制过的字段点名（不静默改用户的预算）。 */
+  setGoal(req: { sessionId?: string; objective: string; maxTurns?: number; maxUsd?: number }): Promise<{ ok: boolean; error?: string; clamped?: string[] }>;
   /** P3（审查）：取消当前交互 run——信号沿 runLoop 轮界/门等待/长驻工具透传。 */
   runCancel(): Promise<{ ok: boolean; error?: string }>;
   /** M1d 手动压缩入口（M1e 起 preload 暴露：token 面板按钮）。 */

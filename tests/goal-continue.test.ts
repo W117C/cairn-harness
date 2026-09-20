@@ -1,0 +1,164 @@
+// goal 模式的端到端判卷（spec §5 J5）。走的是**生产入口**：handleGoalSet 真写 goal_set 进会话 JSONL，
+// handleAgentRun 真跑一轮再自己决定要不要续——不是"手工造一份本该由别人产出的输入"（那是本仓点名的假绿形状）。
+// 剧本走 M3A_MAIN_SCRIPT 这条显式通道（冻结的 fixtures/mock 是判卷文件，不往里加东西）。
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { replay, type AgentEvent } from "../src/events";
+import { handleAgentRun, handleGoalSet, initSessionsDir } from "../src/main/agent-runner";
+import { pathOf } from "../src/main/sessions";
+import { projectGoal } from "../src/agent/goal";
+
+let root = "";
+let workspace = "";
+let sessions = "";
+let scriptPath = "";
+let logPath = "";
+
+const TEXT_ONLY = '{"type":"assistant_message","content":"我说完了，但没有产出。"}\n';
+
+async function script(raw: string): Promise<void> {
+  await writeFile(scriptPath, raw, "utf8");
+}
+
+async function events(): Promise<AgentEvent[]> {
+  return replay(logPath);
+}
+
+const userTurns = (evts: AgentEvent[]): AgentEvent[] => evts.filter((e) => e.type === "user_message");
+
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), "goal-run-"));
+  workspace = join(root, "ws");
+  sessions = join(root, "sessions");
+  scriptPath = join(root, "script.jsonl");
+  // 会话日志一律取 handleGoalSet 会写的那个路径（同一个文件才是同一份事实源；
+  // 上一版这里另指一个 tmp 文件，goal_set 落 A、run 读 B，三条断言一起假红）
+  await mkdir(sessions, { recursive: true });
+  logPath = pathOf(sessions, "s-plain");
+  await mkdir(workspace, { recursive: true });
+  initSessionsDir(sessions);
+  await script(TEXT_ONLY);
+});
+
+afterEach(async () => {
+  delete process.env.M3A_MAIN_SCRIPT;
+  await rm(root, { recursive: true, force: true });
+});
+
+describe("goal 模式端到端（真入口，缺省零行为）", () => {
+  it("没设目标 ⇒ 一轮收束就结束，不多跑一轮、不写 goal_set/goal_stopped（逐字零行为）", async () => {
+    process.env.M3A_MAIN_SCRIPT = scriptPath;
+    const res = await handleAgentRun(
+      { message: "做点事", mode: "auto", sessionId: "s-plain" },
+      { workspace, sessionId: "s-plain", logPath, unattended: true },
+    );
+    expect(res.ok).toBe(true);
+    const evts = await events();
+    expect(userTurns(evts).length).toBe(1);
+    expect(evts.some((e) => e.type === "goal_set" || e.type === "goal_stopped")).toBe(false);
+    expect(projectGoal(evts)).toBeNull();
+  });
+
+  it("设了目标但这一轮没写盘也没验证 ⇒ 立刻停，并落一条写明理由的 goal_stopped（读答型目标不烧钱）", async () => {
+    process.env.M3A_MAIN_SCRIPT = scriptPath;
+    const set = await handleGoalSet({ sessionId: "s-plain", objective: "回答这个问题", maxTurns: 6 });
+    expect(set.ok).toBe(true);
+    const res = await handleAgentRun(
+      { message: "回答一下", mode: "auto", sessionId: "s-plain" },
+      { workspace, sessionId: "s-plain", logPath, unattended: true },
+    );
+    expect(res.ok).toBe(true);
+    const evts = await events();
+    expect(userTurns(evts).length).toBe(1); // 没有被自动续跑
+    const stops = evts.filter((e) => e.type === "goal_stopped");
+    expect(stops.length).toBe(1);
+    expect(stops[0]?.type === "goal_stopped" && stops[0].reason).toContain("没有写过任何文件");
+    const view = projectGoal(evts);
+    expect(view?.spec.objective).toBe("回答这个问题");
+    expect(view?.evidence).toBe("absent");
+    expect(view?.stopped).not.toBeNull();
+  });
+
+  it("goal_set 由 handleGoalSet 真写：非法目标被拒且不落流；越界轮次被钳并回条点名", async () => {
+    const bad = await handleGoalSet({ sessionId: "s-plain", objective: "   " });
+    expect(bad.ok).toBe(false);
+    expect(bad.error).toContain("objective");
+    // 被拒的设定连文件都不该建起来（不是"建了个空文件"，也不是落了半个 goal_set）
+    await expect(access(logPath)).rejects.toThrow();
+    const wide = await handleGoalSet({ sessionId: "s-plain", objective: "改点东西", maxTurns: 999 });
+    expect(wide.ok).toBe(true);
+    expect(wide.clamped?.join()).toContain("25");
+    const evts = await events();
+    expect(evts.filter((e) => e.type === "goal_set").length).toBe(1);
+    expect(evts[0]?.type === "goal_set" && evts[0].max_turns).toBe(25);
+  });
+
+  it("轮次上限到点必停：只跑到 maxTurns 轮，且最后一轮仍是 goal 代发的（origin 记着是谁发的）", async () => {
+    process.env.M3A_MAIN_SCRIPT = scriptPath;
+    await handleGoalSet({ sessionId: "s-plain", objective: "把测试修绿", maxTurns: 1 });
+    const res = await handleAgentRun(
+      { message: "开始", mode: "auto", sessionId: "s-plain" },
+      { workspace, sessionId: "s-plain", logPath, unattended: true },
+    );
+    expect(res.ok).toBe(true);
+    const evts = await events();
+    const turns = userTurns(evts);
+    // maxTurns=1：第 1 轮跑完就停，一条续跑轮都不许起（轮次闸在"无产出闸"之前判，理由点名轮次）
+    expect(turns.length).toBe(1);
+    const stop = evts.find((e) => e.type === "goal_stopped");
+    expect(stop?.type === "goal_stopped" && stop.reason).toContain("轮次上限");
+  });
+
+  it("旧日志没有 goal 事件时，重放照旧成功（增量类型不把旧转录判坏）", async () => {
+    await writeFile(logPath, JSON.stringify({ type: "user_message", content: "老记录" }) + "\n", "utf8");
+    const evts = await events();
+    expect(evts.length).toBe(1);
+    expect(projectGoal(evts)).toBeNull();
+  });
+});
+
+describe("projectGoal：会话目标态只从事件流重算", () => {
+  const G = (objective: string, maxTurns = 6, maxUsd = 0): AgentEvent =>
+    ({ type: "goal_set", objective, max_turns: maxTurns, max_usd: maxUsd });
+  const goalTurn = (turn: number): AgentEvent => ({
+    type: "user_message",
+    content: "续跑",
+    origin: { kind: "goal", turn, max_turns: 6 },
+  });
+
+  it("轮次 = 1 + goal 代发轮数；人手发的消息不计（那是人在接管）", () => {
+    const v = projectGoal([
+      G("目标"),
+      { type: "user_message", content: "第一条人发的" },
+      goalTurn(2),
+      { type: "user_message", content: "人又插了一句" },
+      goalTurn(3),
+    ]);
+    expect(v?.turn).toBe(3);
+    expect(v?.spec.objective).toBe("目标");
+  });
+
+  it("改设目标即重算窗口：绿证据只看最后一条 goal_set 之后（上一段的绿不能替新目标宣布达成）", () => {
+    const verifyOk: AgentEvent = {
+      type: "verify_result",
+      ok: true,
+      results: [{ command: "t", ok: true, output: "" }],
+      callId: "v1",
+      attempt: 1,
+      maxAttempts: 3,
+    };
+    const before = projectGoal([G("旧目标"), verifyOk]);
+    expect(before?.evidence).toBe("verified");
+    const after = projectGoal([G("旧目标"), verifyOk, G("新目标")]);
+    expect(after?.evidence).toBe("absent");
+    expect(after?.turn).toBe(1);
+  });
+
+  it("goal_stopped 之后 stopped 有值；再来一条 goal_set 会把它清掉（改设 = 重新起跑）", () => {
+    const stopped: AgentEvent = { type: "goal_stopped", reason: "轮次上限 6 已用尽", turn: 6, evidence: "failed" };
+    expect(projectGoal([G("目标"), stopped])?.stopped).toContain("轮次上限");
+    expect(projectGoal([G("目标"), stopped, G("再试一次")])?.stopped).toBeNull();
+  });
+});

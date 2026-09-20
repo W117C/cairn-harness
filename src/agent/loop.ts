@@ -1,4 +1,4 @@
-import type { AgentEvent, EventLog, SkillInvocationMeta } from "../events";
+import type { AgentEvent, EventLog, SkillInvocationMeta, UserMessageOrigin } from "../events";
 import { denyReason, gate, type PermissionMode, type ToolResultWithAudit } from "../permissions";
 import type { HookEngine } from "./plugins/hooks";
 import { projectContext } from "./context";
@@ -26,6 +26,9 @@ export interface LoopOptions {
   /** §9.3 用户侧 skill 触发（可选）：这条 user_message 的正文来自哪个 skill、给了什么参数。
    *  缺省 = 该字段不进事件（既有事件字节不变）。 */
   userMessageSkill?: SkillInvocationMeta;
+  /** goal 模式的自动续跑轮（可选）：这条 user_message 不是人发的，origin 记下它是谁发的。
+   *  与 skill 同一思路：零新增事件类型，缺省 = 字段不进事件 ⇒ 既有事件流逐字节不变。 */
+  userMessageOrigin?: UserMessageOrigin;
   /** 澄清门通道：接了 clarify 工具才挂得起；缺省 fail-closed。 */
   clarify?: ClarifyChannel;
   /** 方案门通道：接了 propose_plan 工具才挂得起；缺省 fail-closed。 */
@@ -89,7 +92,7 @@ function isAbortLike(err: unknown): boolean {
 }
 
 export async function runLoop(opts: LoopOptions): Promise<void> {
-  const { workspace, userMessage, userMessageSkill } = opts;
+  const { workspace, userMessage, userMessageSkill, userMessageOrigin } = opts;
   const seen: AgentEvent[] = [];
   // Persist first: failed writes must not become model-visible history.
   const events: EventLog = {
@@ -205,6 +208,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
     await events.append({
       type: "user_message", content: userMessage,
       ...(userMessageSkill ? { skill: userMessageSkill } : {}),
+      ...(userMessageOrigin ? { origin: userMessageOrigin } : {}),
     });
   }
 

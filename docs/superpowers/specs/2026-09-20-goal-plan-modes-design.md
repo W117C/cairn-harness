@@ -59,9 +59,9 @@
     ③ `priceKnown && spentUsd >= maxUsd` ⇒ 停「美元闸」；`priceKnown === false && maxUsd > 0` ⇒ 明写"美元闸无效"并**只按轮次闸**继续计数（§2 约束 3）；
     ④ 否则 `continue`，续跑文案带"证据不绿（stale/failed/absent）"的具体态与最后一次红的来源。
 - **审计谓词复用 W4b**：`workerVerificationEvidence(本会话事件)`（P6）。不新造第二份证据面；四态与 worker 回程口径同源，故主会话/worker/级联三处说的是同一件事。
-- **状态 = 事件流**：新增一个事件类型 `goal_set { objective, max_turns, max_usd, ts }`（`KNOWN_TYPES` 增量；M4a 的三条 `automation_*` 就是先例，旧日志逐字可重放）。**只有这一条新事件**：续跑轮次、停止原因都从"该事件 + 其后 run 边界"重算，不写第二份会话态文件。
-- **续跑驱动（main 侧）**：`runAgent` 收束后，若本 run 属 goal 会话 ⇒ `goalStopDecision(...)`；`continue` 则以合成 `user_message` 再入 `handleAgentRun`，直到 `done`/`stop`/取消。合成轮**不新增事件类型**：走 `UserMessageEvent.origin` 这条既有通道（M2f 的先例：「零新增事件类型——主流仍是 user_message，只多一个可选 origin 字段，重启后重放无损」），把 `PromoteOrigin.kind` 从字面量 `"sidechat"` 扩成 `"sidechat" | "goal"`（实测今天它是单一成员联合，扩成员即全量判据重算的入口）。**轮次号不进状态**：由"最后一条 `goal_set` 之后有多少条 `origin.kind==="goal"` 的 user_message"投影出来（不变量 2）。取消沿用 `interactiveRunAbort`；停止原因每轮上屏，不静默结束。
-- **入口**：输入区折叠块「目标 + 轮次上限 + 美元上限」→ `agent:goal-set` IPC → preload；`goal_mode` 开关位缺省关（花真钱）。
+- **状态 = 事件流**：**两条**新事件，不是原写的"一条"——`goal_set { objective, max_turns, max_usd, ts }`（唯一写入面 = `handleGoalSet`）与 `goal_stopped { reason, turn, evidence }`。第二条是落地时补的：没有它，"为什么不续了"只剩一句 prose 或干脆静默，而"静默停止"在本仓等同撒谎（fail-visible）。轮次、证据态、停止理由一律从这两条 + 其后的事件重算，不写第二份会话态文件。续跑轮走 `user_message.origin`（见下条），不新增第三种类型。
+- **续跑驱动（main 侧，落地形态）**：`handleAgentRun` 里一个 `for` 环（不是递归、不是新入口）：跑完一轮 → `replay(会话 JSONL)` → `projectGoal` → `goalStopDecision` → 要么 `goal_stopped` 落流收场，要么以合成 `user_message`（`origin.kind="goal"`）再入同一个 `runAgent`。环上另有一道**硬上限** `GOAL_TURN_CAP_MAX + 2`：判据投影出 bug 时也不许无限烧钱，触到就返回 `ok:false` 明写异常（静默收场 = 用户以为还在跑）。取消沿用 `interactiveRunAbort`/`over.signal`，取消优先于预算。合成轮**不新增事件类型**：走 `UserMessageEvent.origin` 既有通道（M2f 先例），`PromoteOrigin` 之外新增 `GoalTurnOrigin { kind:"goal"; turn; max_turns }`，`origin` 收成判别联合 —— 消费端（`projectPromoteBadges` / agent-runner 徽标投影 / sidechat-check / sidechat.test）全部按 kind 分支，**不许**再无条件读 `.session_id`。**轮次号只作展示记账**，判定一律走 `projectGoal` 重算。
+- **入口**：`agent:goal-set` IPC + preload `setGoal` + `handleGoalSet`（唯一写入面）。**不再另设 `goal_mode` 设置位**——"会话里有没有 `goal_set` 事件"就是开关本身，再加一个布尔就是第二事实源（且它关着时 `goal_set` 本来就没有，零行为已经成立）。⚠️ **渲染层那颗按钮（composer 的「设目标」）尚未落**：机器侧三面（IPC / preload / main handler）齐了，只差用户能点的那一下 ⇒ **这条是合回主树前的唯一硬阻断**，见计划执行日志。
 - **与 supervise 的边界**：`SupervisorContract` 的 `goal/budget/maxStages` 仍是**一条链**的审批契约，链终态即弃；会话 goal 跨链存活。两者只在"审计通过才算完成"这一条上共用谓词，不共用状态。
 
 ## 5. 判据与验收（每条都有反向对照）

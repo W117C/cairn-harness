@@ -15,7 +15,18 @@ export interface PromoteOrigin {
 /** §9.3 的用户侧 skill 触发：正文是某个 skill 渲染后的结果，`skill` 记下「是哪个、当时给了什么参数」，
  *  压缩后重挂按同一口径重放替换（与 origin 同思路：零新增事件类型，JSONL 重放无损）。 */
 export interface SkillInvocationMeta { invoke: string; args: string }
-export interface UserMessageEvent { type: "user_message"; content: string; origin?: PromoteOrigin; skill?: SkillInvocationMeta }
+/** goal 模式自动续跑的那一轮：走 `user_message` 的既有 origin 通道（M2f 先例：零新增事件类型，
+ *  重放无损），这样「哪一轮是 agent 自己接着跑的」在流里就是可查的事实，UI 与事后审计都不用猜。 */
+export interface GoalTurnOrigin {
+  kind: "goal";
+  /** 第几轮（1-based，指本轮）与上限：只作**展示**记账，续跑判定不信它（判定读 goal_set + 事件流）。 */
+  turn: number;
+  max_turns: number;
+}
+/** `user_message.origin` 的两种来源：sidechat 提升 / goal 自动续跑。消费端一律按 kind 分支，
+ *  不许再无条件读 `.session_id`——那会把另一种来源在类型上假装成不存在。 */
+export type UserMessageOrigin = PromoteOrigin | GoalTurnOrigin;
+export interface UserMessageEvent { type: "user_message"; content: string; origin?: UserMessageOrigin; skill?: SkillInvocationMeta }
 export interface AssistantMessageEvent { type: "assistant_message"; content: string }
 /** 流式增量片段：callId 标识同一轮回复，text 为逐字追加的一小段。 */
 export interface AssistantDeltaEvent { type: "assistant_delta"; callId: string; text: string }
@@ -386,6 +397,31 @@ export interface RunErrorEvent {
   ts?: number;
 }
 
+/** goal 模式（用户设定会话级目标 + 预算）的唯一落流事实：一条 `goal_set` = 一次设定/改设。
+ *  轮次、已花、停止原因一律从这条之后的事件重算，不写第二份会话态。增量类型，旧日志重放逐字不变。 */
+export interface GoalSetEvent {
+  type: "goal_set";
+  objective: string;
+  max_turns: number;
+  /** 美元上限；0 = 美元闸关（只按轮次闸停）。 */
+  max_usd: number;
+  session_id?: string;
+  ts?: number;
+}
+
+/** goal 模式停下来的事实（为什么不续了）：没有这条，UI 与用户只能看到"跑了 N 轮就没了"。 */
+export interface GoalStoppedEvent {
+  type: "goal_stopped";
+  /** 停止理由原文（来自 goalStopDecision，含证据态/预算读数）。 */
+  reason: string;
+  /** 停在哪一轮。 */
+  turn: number;
+  /** 当时的验证证据态（审计口径与 worker 四态同源）。 */
+  evidence: WorkerEvidence;
+  session_id?: string;
+  ts?: number;
+}
+
 export type AgentEvent =
   | UserMessageEvent
   | AssistantMessageEvent
@@ -413,6 +449,8 @@ export type AgentEvent =
   | AutomationTriggeredEvent
   | AutomationSkippedEvent
   | AutomationCompletedEvent
+  | GoalSetEvent
+  | GoalStoppedEvent
   | RunErrorEvent;
 
 const KNOWN_TYPES = new Set([
@@ -442,6 +480,8 @@ const KNOWN_TYPES = new Set([
   "automation_triggered",
   "automation_skipped",
   "automation_completed",
+  "goal_set",
+  "goal_stopped",
   "error",
 ]);
 

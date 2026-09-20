@@ -322,7 +322,8 @@ export interface PromoteBadge {
 export function projectPromoteBadges(events: AgentEvent[]): PromoteBadge[] {
   const out: PromoteBadge[] = [];
   events.forEach((e, i) => {
-    if (e.type === "user_message" && e.origin) {
+    // sidechat 提升徽标专用：goal 续跑轮的 origin 没有 session_id，混进来会投影出空来源。
+    if (e.type === "user_message" && e.origin?.kind === "sidechat") {
       out.push({
         eventId: i + 1,
         kind: e.origin.kind,
