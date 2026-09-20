@@ -18,7 +18,7 @@ Node 22 / TypeScript 5 / electron-vite 5 / Electron 44 / vitest 5。
 
 **渲染层是手写 vanilla，不是 React**：`src/renderer/index.html`（单文件，全部 CSS 在一个 `<style>` 里 + 静态标记）+ `src/renderer/app.js`（纯 ESM）。**没有 React、没有 Tailwind 运行时、没有 shadcn 运行时**（CSP `script-src 'self'`，`index.html` 无构建链）。
 
-React 树已全量归档（2026-09-17 删 45 个 .tsx/测试 + 移除 react 全套依赖；2026-09-18 收尾删 `theme.ts`/`store.ts` 及其单测）：`cards/`、`components/`（29 个 shadcn/ui）、`hooks/`、`lib/`、`panels/`、`conversation.tsx`、`onboarding.tsx`、`main.tsx`、`styles.css`、`error-boundary.tsx` 全删。`src/renderer/` 现存 5 个文件：`index.html`、`app.js`、`projections.ts`（纯投影，被 panels-check/agents-check/sidechat-check 与多个测试消费，**不是死代码**）、`history-window.js`、`window.d.ts`（`window.agent` 类型胶水）。
+React 树已全量归档（2026-09-17 删 45 个 .tsx/测试 + 移除 react 全套依赖；2026-09-18 收尾删 `theme.ts`/`store.ts` 及其单测）：`cards/`、`components/`（29 个 shadcn/ui）、`hooks/`、`lib/`、`panels/`、`conversation.tsx`、`onboarding.tsx`、`main.tsx`、`styles.css`、`error-boundary.tsx` 全删。`src/renderer/` 文件清单（以 `ls src/renderer` 为准，不写死总数）：`index.html`、`app.js`（唯一入口，import 其余五个 .js 模块）、`projections.ts`（纯投影，被 panels-check/agents-check/sidechat-check 与多个测试消费，**不是死代码**）、`history-window.js`（`projectUnits`/`mountHistory`）、`dom.js`（`$`/`esc`/`promptInput`/`toast` 等共享节点）、`icons.js`（`ICONS`/`runGrid`）、`message-actions.js`（消息操作行：`actionsHTML`/`copyText`/`retype`）、`diff-highlight.js`（`highlightAllDiffs`）、`window.d.ts`（`window.agent` 类型胶水）。
 
 > 历史：技术栈一行曾写「React 19 / Tailwind CSS 4 + shadcn/ui」并当作现状——那是 vanilla 迁移**之前**的描述。迁移未提交期间两份说法并存过一段时间，2026-09-17 统一为上面这段。
 
