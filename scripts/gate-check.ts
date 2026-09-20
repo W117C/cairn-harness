@@ -112,6 +112,13 @@ function makeDriver(base: ReturnType<typeof createEventLog>, clarifyGate: Clarif
 console.log("[gate-check] 前置校验：判卷文件 sha256 与冻结基线一致");
 const frozenPre = await sha256MatchesFrozen(ROOT);
 assert(frozenPre.ok, `判卷文件 sha256 = 冻结基线${frozenPre.broken ? `（被改动: ${frozenPre.broken}）` : ""}`);
+if (!frozenPre.ok) {
+  // 判卷文件被动过 ⇒ 后面每一条绿与红都只量出"改动本身"，不量产品（在改过的考卷上打分没有意义）。
+  // 更要紧的是**别让它跛着走下去**：原先继续跑会在下游取到 undefined 而抛裸 TypeError，
+  // 汇总行与未证记账一起被吞（与 panels-check 那条信息黑洞同族）。
+  console.error("[gate-check] 前置未过 ⇒ 后续判据一律不跑（判卷文件与冻结基线不一致：" + (frozenPre.broken ?? "?") + "）");
+  process.exit(1);
+}
 
 // ---- 任务 2：写禁三断言（临时工作区，不碰靶子）----
 console.log("[gate-check] 任务 2 写禁三断言（临时工作区）");
@@ -191,8 +198,8 @@ assert(baseline.failed === 1 && !baseline.ok, "靶子开工状态 = 1 failed（�
   assert(iApproved > iPlan && iApproved < iWrite, "写发生在方案批准之后（先批后写）");
   const write = toolResultFor(log, "write_file");
   assert(write !== null && write.ok, "批准后 write_file 真实执行（写禁解锁）");
-  const verifyOk = log[iVerifyOk];
-  assert(verifyOk.type === "verify_result" && verifyOk.attempt === 1, "verify 第 1 次即通过");
+  const verifyOk = iVerifyOk >= 0 ? log[iVerifyOk] : undefined;
+  assert(verifyOk !== undefined && verifyOk.type === "verify_result" && verifyOk.attempt === 1, "verify 第 1 次即通过");
   const clarified = log.find((e): e is Extract<AgentEvent, { type: "clarify_requested" }> => e.type === "clarify_requested");
   assert(clarified !== undefined && clarified.questions.length >= 1, "clarify_requested 携带问题清单");
   const answerResult = log.find(

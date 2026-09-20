@@ -149,7 +149,7 @@ console.log("[commercial-check] D 引导七组覆盖 + settings 状态机");
   }
   const reach = wizardReachability(shipped);
   if (reach.reachable) {
-    check(true, "D2e 引导向导在产品里可达（消费者：" + reach.consumers.join("、") + "）");
+    check(reach.reachable && reach.consumers.length > 0, "D2e 引导向导在产品里可达（消费者：" + reach.consumers.join("、") + "）");
   } else {
     console.log("  ⚠️  " + wizardUnverifiedNote(reach.consumers));
     unverified.push(wizardUnverifiedNote(reach.consumers));
