@@ -102,7 +102,7 @@ describe("M2f 主会话只读投影", () => {
     expect(p.text).toContain("第 11 轮"); // 窗口起点
   });
 
-  it("已压缩 → 用摘要产物（summary 分支）", () => {
+  it("已压缩 → 摘要产物 ＋ 其后追加的事件（旧实现丢尾，视图一直过期到下次压缩）", () => {
     const events: AgentEvent[] = [
       userMsg("旧任务"),
       {
@@ -116,10 +116,37 @@ describe("M2f 主会话只读投影", () => {
         tokens_after: 10,
       },
       userMsg("新任务"),
+      asstMsg("新回答"),
     ];
     const p = buildMainProjection(events);
     expect(p.kind).toBe("summary");
     expect(p.text).toContain("摘要产物");
+    expect(p.text).toContain("新任务"); // 尾部不再丢
+    expect(p.text).toContain("[主会话·助手] 新回答");
+    expect(p.text).not.toContain("旧任务"); // 摘要覆盖面不重投
+    expect(p.rounds).toBe(1);
+  });
+
+  it("worker 子流压缩不作为主会话摘要（agent_id 在场 = 归因剔除）", () => {
+    const events: AgentEvent[] = [
+      userMsg("派活"),
+      {
+        type: "compaction",
+        trigger: "auto",
+        reason: "threshold",
+        compressed_event_ids: [],
+        summary: "worker 私有摘要",
+        summary_offset: 1,
+        tokens_before: 10,
+        tokens_after: 5,
+        agent_id: "w1",
+      },
+      userMsg("后续任务"),
+    ];
+    const p = buildMainProjection(events);
+    expect(p.kind).toBe("truncated");
+    expect(p.text).not.toContain("worker 私有摘要");
+    expect(p.text).toContain("后续任务");
   });
 
   it("截断视图逐条压缩：长工具结果不整段进投影", () => {
