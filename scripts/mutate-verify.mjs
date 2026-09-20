@@ -3216,8 +3216,8 @@ const MUTATIONS = [
     src: "src/agent/glm-session.ts",
     test: "tests/session-provider.test.ts",
     desc: "摘除说明拼不进模型看到的 system 块 ⇒ 说明写好了却没人读到（收下即丢的新变体）",
-    apply: (s) => s.replace("opts.plugins.hookContext, opts.plugins.skillToolNote]", "opts.plugins.hookContext]"),
-    expectFail: "路由清单 / hook 上下文 / 摘除说明三段都到模型眼前（少一段即红）",
+    apply: (s) => s.replace("opts.plugins.hookContext, liveNote]", "opts.plugins.hookContext]"),
+    expectFail: "路由清单 / hook 上下文 / 摘除说明三段都到位，两轮都在（少一段即红）",
   },
   {
     id: "plugin-context-routing-part-dropped",
@@ -3225,7 +3225,23 @@ const MUTATIONS = [
     test: "tests/session-provider.test.ts",
     desc: "skill 路由清单不注入 ⇒ 模型再也不知道有哪些 skill 可点（M2e 的整条注入面在模型端从来没有判据看过，这条现在有了）",
     apply: (s) => s.replace("const parts = [opts.plugins.skillsRouting, opts.plugins.hookContext", "const parts = [opts.plugins.hookContext"),
-    expectFail: "路由清单 / hook 上下文 / 摘除说明三段都到模型眼前（少一段即红）",
+    expectFail: "路由清单 / hook 上下文 / 摘除说明三段都到位，两轮都在（少一段即红）",
+  },
+  {
+    id: "request-face-never-recomputed",
+    src: "src/agent/glm-session.ts",
+    test: "tests/session-provider.test.ts",
+    desc: "逐请求工具面收了却从不重算 ⇒ 回到「run 起点冻结一份」的形态：模型中途点起的 skill，下一轮清单里那把还在，只能白叫一次再被执行面拒",
+    apply: (s) => s.replace("      const face = opts.requestFace?.();", "      const face = opts.requestFace && false ? opts.requestFace() : undefined;"),
+    expectFail: "run 中途激活的 skill：下一轮清单里就没有那把、说明同刻出现（不必再靠 loop 白拒一次）",
+  },
+  {
+    id: "request-face-tools-ignored",
+    src: "src/agent/glm-session.ts",
+    test: "tests/session-provider.test.ts",
+    desc: "重算了面却仍把构造时那份 tools 发出去 ⇒ 说明与清单从此各说各话（模型被告知工具没了、请求里却还带着它）",
+    apply: (s) => s.replace("      const tools = face ? face.tools : opts.tools;", "      const tools = opts.tools;"),
+    expectFail: "run 中途激活的 skill：下一轮清单里就没有那把、说明同刻出现（不必再靠 loop 白拒一次）",
   },
 ];
 

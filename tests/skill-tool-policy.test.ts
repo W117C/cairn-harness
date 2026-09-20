@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PluginRuntime, skillToolPolicy, setCurrentPluginRuntime } from "../src/agent/plugins";
 import { runLoop, type LoopOptions } from "../src/agent/loop";
-import { runAgent, handleAgentState, runStartToolFace, withSkillAllowNote } from "../src/main/agent-runner";
+import { runAgent, handleAgentState, sessionToolFace, withSkillAllowNote } from "../src/main/agent-runner";
 import { sessionToolSpecs } from "../src/agent/glm-session";
 import { TOOL_NAMES } from "../src/tools/base";
 import type { AgentEvent } from "../src/events";
@@ -183,12 +183,12 @@ describe("PluginRuntime 的登记面（两条 face 同一个入口）", () => {
 
   it("规格面同步：激活后那把工具从模型可见清单消失，只摘申报的那把、不误伤别个", () => {
     const e = rt!;
-    const before = runStartToolFace(e, { mode: "default" });
-    expect(before.specs.some((s) => s.function.name === "grep")).toBe(true);
+    const before = sessionToolFace(e, { mode: "default" });
+    expect(before.tools.some((s) => s.function.name === "grep")).toBe(true);
     expect(before.note).toBe(""); // 没激活 ⇒ 一个字都不该变（既有会话零回归）
     e.triggerSkill("/pol:sec", "");
-    const after = runStartToolFace(e, { mode: "default" });
-    expect(specNames(after.specs)).toEqual(specNames(before.specs).filter((n) => n !== "grep"));
+    const after = sessionToolFace(e, { mode: "default" });
+    expect(specNames(after.tools)).toEqual(specNames(before.tools).filter((n) => n !== "grep"));
     expect(after.note).toContain("grep");
     expect(after.note).toContain("/pol:sec"); // 说清是谁摘的：静默少工具等于让模型自己猜
   });
@@ -196,15 +196,15 @@ describe("PluginRuntime 的登记面（两条 face 同一个入口）", () => {
   it("规格面与活闸同一份谓词（两份实现必漂）", () => {
     const e = rt!;
     e.triggerSkill("/pol:sec", "");
-    const face = runStartToolFace(e, { mode: "default" });
+    const face = sessionToolFace(e, { mode: "default" });
     expect(face.skillDenial?.("grep")).toBe("/pol:sec");
     expect(face.skillDenial?.("read_file")).toBeNull();
-    expect(face.specs.some((s) => s.function.name === "grep")).toBe(false);
+    expect(face.tools.some((s) => s.function.name === "grep")).toBe(false);
   });
 
   it("没有插件运行时 = 规格面逐字不变（不因为接线凭空摘工具或注说明）", () => {
-    const face = runStartToolFace(null, { mode: "default" });
-    expect(specNames(face.specs)).toEqual(specNames(sessionToolSpecs({ mode: "default" }).specs));
+    const face = sessionToolFace(null, { mode: "default" });
+    expect(specNames(face.tools)).toEqual(specNames(sessionToolSpecs({ mode: "default" }).specs));
     expect(face.note).toBe("");
     expect(face.skillDenial).toBeUndefined();
   });
@@ -212,9 +212,9 @@ describe("PluginRuntime 的登记面（两条 face 同一个入口）", () => {
   it("申报覆盖整个 ToolName 键域：那十把全摘；不在键域里的规格（remember 等）留着——不可申报的不假装摘得动", () => {
     const e = rt!;
     e.grantSkillScope("/pol:all", { "disallowed-tools": TOOL_NAMES.join(",") });
-    const face = runStartToolFace(e, { mode: "default" });
+    const face = sessionToolFace(e, { mode: "default" });
     // 缺省清单 = TOOL_NAMES 那十把 + 三把不可申报的 ⇒ 只剩后三把就是"十把全摘干净"
-    expect(specNames(face.specs).sort()).toEqual(["remember", "spawn_agent", "wait_for_agents"]);
+    expect(specNames(face.tools).sort()).toEqual(["remember", "spawn_agent", "wait_for_agents"]);
   });
 });
 

@@ -76,41 +76,65 @@ describe("session provider transport", () => {
   });
 });
 
-/* 插件注入面（§9.3 的 disallowed-tools 摘除说明走的就是这条通道）：此前"三段各进一条 system 块"
-   只在装载侧有判据，没有任何一条测看过模型那一端 ⇒ provider 少拼一段也不会红。 */
-describe("插件注入面进模型看到的 system 块", () => {
-  type PluginsOpt = { skillsRouting?: string; hookContext?: string; skillToolNote?: string };
+/* 注入面与逐请求工具面到模型眼前：此前"每轮组装注入了什么"只在装载侧有判据，没有任何一条测
+   看过模型那一端 ⇒ provider 少拼一段、或多留一份过期说明都不会红。 */
+describe("注入面与逐请求工具面到模型眼前", () => {
+  type Observation = { system: string; tools: string[] };
 
-  async function systemBlocks(plugins?: PluginsOpt): Promise<string[]> {
+  async function rounds(opts: Parameters<typeof createGlmSessionProvider>[1], between?: () => void): Promise<Observation[]> {
     const path = await setup();
-    const requests: GlmMessage[][] = [];
+    const seen: Observation[] = [];
     const provider = createGlmSessionProvider(path, {
-      map: false, workspace: dir,
-      ...(plugins ? { plugins } : {}),
-      transport: async function* (messages): AsyncGenerator<ModelOutput> {
-        requests.push(messages);
+      map: false, workspace: dir, ...opts,
+      transport: async function* (messages, _o, specs): AsyncGenerator<ModelOutput> {
+        seen.push({
+          system: messages.filter((m) => m.role === "system").map((m) => String(m.content)).join("\n"),
+          tools: (specs ?? []).map((s) => s.function.name),
+        });
         yield { type: "assistant_message", content: "ok" };
       },
     });
-    for await (const _ of provider.stream([])) { /* drain */ }
-    return (requests[0] ?? []).filter((m) => m.role === "system").map((m) => String(m.content));
+    for await (const _ of provider.stream([])) { /* 第一轮 */ }
+    between?.(); // 两轮之间发生的事（模型点起一条带申报的 skill 就在这个位置）
+    await log.append({ type: "assistant_message", content: "r1" });
+    for await (const _ of provider.stream([])) { /* 第二轮 */ }
+    return seen;
   }
 
-  it("路由清单 / hook 上下文 / 摘除说明三段都到模型眼前（少一段即红）", async () => {
-    const sys = await systemBlocks({
-      skillsRouting: "ROUTING-LIST",
-      hookContext: "HOOK-CONTEXT",
-      skillToolNote: "[skill 工具面] grep 已由 /pol:sec 摘除",
+  it("路由清单 / hook 上下文 / 摘除说明三段都到位，两轮都在（少一段即红）", async () => {
+    const seen = await rounds({
+      plugins: { skillsRouting: "ROUTING-LIST", hookContext: "HOOK-CONTEXT" },
+      requestFace: () => ({ tools: gateToolSpecs("default"), note: "[skill 工具面] grep 已由 /pol:sec 摘除" }),
     });
-    const joined = sys.join("\n");
-    expect(joined).toContain("ROUTING-LIST");
-    expect(joined).toContain("HOOK-CONTEXT");
-    expect(joined).toContain("/pol:sec");
+    expect(seen).toHaveLength(2);
+    for (const one of seen) {
+      expect(one.system).toContain("ROUTING-LIST");
+      expect(one.system).toContain("HOOK-CONTEXT");
+      expect(one.system).toContain("/pol:sec");
+    }
   });
 
-  it("没给 plugins ⇒ 一个 system 块都不注入（既有会话零回归）", async () => {
-    expect(await systemBlocks()).toEqual([]);
-    expect(await systemBlocks({ hookContext: "只有这一段" })).toEqual(["只有这一段"]);
+  it("run 中途激活的 skill：下一轮清单里就没有那把、说明同刻出现（不必再靠 loop 白拒一次）", async () => {
+    const denied = new Set<string>();
+    const seen = await rounds({
+      plugins: { skillsRouting: "ROUTING" },
+      requestFace: () => ({
+        tools: gateToolSpecs("default").filter((s) => !denied.has(s.function.name)),
+        ...(denied.has("grep") ? { note: "[skill 工具面] grep 已由 /pol:sec 摘除" } : {}),
+      }),
+    }, () => { denied.add("grep"); }); // 模型在第一轮里点起了那条 skill
+    expect(seen[0]?.tools).toContain("grep");
+    expect(seen[0]?.system).not.toContain("skill 工具面"); // 第一轮没人申报 ⇒ 不凭空解释
+    expect(seen[1]?.tools).not.toContain("grep");
+    expect(seen[1]?.system).toContain("/pol:sec");
+    expect(seen[1]?.tools.length).toBe((seen[0]?.tools.length ?? 0) - 1); // 只摘申报的那一把
+  });
+
+  it("没给 requestFace ⇒ 用构造时那份 tools，也不注摘除说明（既有会话零回归）", async () => {
+    const seen = await rounds({ tools: gateToolSpecs("read-only") });
+    expect(seen[0]?.tools).toEqual(gateToolSpecs("read-only").map((s) => s.function.name));
+    expect(seen[1]?.tools).toEqual(seen[0]?.tools);
+    expect(seen[1]?.system).toBe("");
   });
 });
 

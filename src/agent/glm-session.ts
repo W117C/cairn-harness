@@ -427,6 +427,10 @@ export function createGlmSessionProvider(
   opts: {
     system?: string;
     tools?: GlmToolSpec[];
+    /** 逐请求重算的工具面。给了它就以它为准：§9.3 的 skill 可能在 run 中途才被点起来，
+     *  构造时冻结的清单会把「摘掉」推迟到下一轮，而下一轮明明还能拒得更早（白叫一次 + 说明过期）。
+     *  返回值同时带摘除说明，所以规格与解释永远同源同刻。 */
+    requestFace?: () => { tools?: GlmToolSpec[]; note?: string };
     transport?: typeof streamGlm;
     /** Persist and publish system events through the owning session pipeline. */
     emit?: (event: AgentEvent) => Promise<void>;
@@ -437,13 +441,12 @@ export function createGlmSessionProvider(
     workspace?: string;
     /** M2b：地图开关（缺省开；单测/暗卷可关）。 */
     map?: boolean;
-    /** M2e：插件注入面（skill 路由清单 / SessionStart 上下文 / 压缩后重挂投影）。缺省零行为。 */
+    /** M2e：插件注入面（skill 路由清单 / SessionStart 上下文 / 压缩后重挂投影）。缺省零行为。
+     *  本 turn 的 disallowed-tools 摘除说明**不在这里**——它随工具面逐请求走 `requestFace`，
+     *  两份都给就等于给"清单与解释不同步"留门。 */
     plugins?: {
       skillsRouting?: string;
       hookContext?: string;
-      /** §9.3：本 turn 被 skill/command 的 disallowed-tools 从可见工具表摘掉了哪些（给模型一行说明，
-       *  不留"工具静默消失"的悬案）。缺省 = 没人申报过 ⇒ 零注入。 */
-      skillToolNote?: string;
       deriveRemount?: (events: AgentEvent[]) => string | null;
     };
     /** 真实通道模型名（缺省 = provider 层读 M0_MODEL env；settings.model 在场时优先）。 */
@@ -471,9 +474,9 @@ export function createGlmSessionProvider(
     : null;
   const mapBuilder = opts.map === false ? null : opts.mapBuilder ?? createMapBuilder();
   const workspace = opts.workspace ?? process.env.M2B_WORKSPACE ?? process.cwd();
-  const pluginContext = (events: AgentEvent[]): string | undefined => {
+  const pluginContext = (events: AgentEvent[], liveNote?: string): string | undefined => {
     if (!opts.plugins) return undefined;
-    const parts = [opts.plugins.skillsRouting, opts.plugins.hookContext, opts.plugins.skillToolNote].filter((part): part is string => Boolean(part));
+    const parts = [opts.plugins.skillsRouting, opts.plugins.hookContext, liveNote].filter((part): part is string => Boolean(part));
     try {
       const remount = opts.plugins.deriveRemount?.(events);
       if (remount) parts.push(remount);
@@ -540,6 +543,11 @@ export function createGlmSessionProvider(
   async function* turnGenerator(call?: ProviderCall): AsyncGenerator<ModelOutput> {
       call?.signal?.throwIfAborted();
       let { events, history } = await assemble();
+      // 逐请求工具面：给了 requestFace 就每轮现算（run 中途激活的 skill 下一轮就不再出现在清单里），
+      // 否则沿用构造时那份。整轮只用这一个 `tools`——散落着读 opts.tools 会出现同轮两种口径。
+      const face = opts.requestFace?.();
+      const tools = face ? face.tools : opts.tools;
+      const liveNote = face?.note;
       // M2d 固定回注（§8.1.5/§8.1.9）：每轮组装重读两层记忆并重注（压缩后自然重注）；异常静默跳过
       let memory: MemoryInjection = { project: null, global: null, charsCurrent: 0, charsLimit: 0, tokens: 0, truncated: false };
       try {
@@ -548,7 +556,7 @@ export function createGlmSessionProvider(
         console.debug("[memory] 注入失败，静默跳过:", err instanceof Error ? err.message : String(err));
       }
       const memoryChars = (memory.project?.length ?? 0) + (memory.global?.length ?? 0);
-      let skillsBlock = pluginContext(events);
+      let skillsBlock = pluginContext(events, liveNote);
       // M2b 符号地图：仅首轮（历史尚短）注入；异常静默跳过（§6.4 失败降级）。
       // A-4：地图文本先于压缩判定构建——它是**本请求真实要发出去的内容**，
       // 不计进 overhead 的硬预算判定会偏低（与 §7.3(a)「全量计入」同源）。
@@ -574,7 +582,7 @@ export function createGlmSessionProvider(
         const factor = calibrateFactor(events);
         const overhead: AssemblyOverhead = {
           systemChars: (opts.system?.length ?? 0) + (skillsBlock?.length ?? 0),
-          toolSchemaChars: opts.tools ? JSON.stringify(opts.tools).length : 0,
+          toolSchemaChars: tools ? JSON.stringify(tools).length : 0,
           ...opts.compaction.overhead,
           memoryChars,
           mapChars: mapText?.length ?? 0,
@@ -603,7 +611,7 @@ export function createGlmSessionProvider(
             finally { await log.close?.(); }
           }
           ({ events, history } = await assemble()); // fresh start：重组装（摘要 + tail）
-          skillsBlock = pluginContext(events);
+          skillsBlock = pluginContext(events, liveNote);
           mapText = await buildMapText(history);
         } else if (outcome && outcome.kind === "failed" && coordinator.summarizerDisabled) {
           console.warn("[compaction] 连续摘要失败已达上限，本会话停用摘要（仅 overflow 紧急截断可用）");
@@ -613,7 +621,7 @@ export function createGlmSessionProvider(
       // 最终装配硬闸：重挂/地图/JSON 包装均已确定，不能只检查压缩前的 overhead。
       // 无 tokenizer：沿用既有校准估算口径；超限 fail-closed，事件历史不删改。
       const finalConfig = budgetConfig();
-      const finalChars = JSON.stringify({ messages: msgs, tools: opts.tools ?? [] }).length;
+      const finalChars = JSON.stringify({ messages: msgs, tools: tools ?? [] }).length;
       const finalEstimate = Math.ceil(finalChars / calibrateFactor(events));
       if (!Number.isFinite(finalConfig.inputLimit) || !Number.isFinite(finalConfig.maxOutputReserve) ||
           finalEstimate > finalConfig.inputLimit - finalConfig.maxOutputReserve) {
@@ -621,7 +629,7 @@ export function createGlmSessionProvider(
       }
       call?.signal?.throwIfAborted();
       yield* (opts.transport ?? streamGlm)(msgs, { ...(opts.model ? { model: opts.model } : {}),
-        ...(opts.solpi?.meter ? { metering: { meter: opts.solpi.meter, category: "main" as const } } : {}) }, opts.tools, call);
+        ...(opts.solpi?.meter ? { metering: { meter: opts.solpi.meter, category: "main" as const } } : {}) }, tools, call);
       successfulRequests++;
       opts.solpi?.sent(msgs, events);
   }
