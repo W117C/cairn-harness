@@ -413,16 +413,47 @@ function toRel(root: string, absPath: string): string {
   return relative(resolve(root), resolve(absPath)).split(sep).join("/");
 }
 
-/** 成功写盘后收集诊断；返回附加到工具输出尾部的文本块（无诊断 = 空串，零行为变化）。
- *  尽力而为：无配置 / 无服务器 / 超时 / 进程失败一律返回空串，不阻塞工具输出。 */
+/** 证据缺席说明行（写成功之后的静态诊断没跑成时说一句话）。 */
+function lspAbsentNote(root: string, absPath: string, serverId: string, why: string): string {
+  return "\n<diagnostics-unavailable file=\"" + toRel(root, absPath) + "\">"
+    + "这一轮**没有静态诊断证据**（服务器 \"" + serverId + "\"" + (why === "" ? "" : "：" + why) + "）"
+    + "——上面没列错误 ≠ 没有错误；要静态结论请跑类型检查/lint，或重启会话让语言服务器重来一次"
+    + "。</diagnostics-unavailable>";
+}
+
+/** 为什么这次没验成：能归类的说人话，归不了类才回原文（压掉换行 + 截断）。
+ *  不把 Error.message 全量透给模型——里面是本机路径与命令细节，对修代码没用，还白烧 token。 */
+const LSP_REASON_LIMIT = 120;
+function lspFailureReason(err: unknown): string {
+  const m = (err instanceof Error ? err.message : String(err)).replace(/\s+/g, " ").trim();
+  if (m.includes("broken")) return "启动失败已标记不可用（broken），本会话不再重试";
+  if (m.includes("超时")) return "等待语言服务器 publishDiagnostics 超时";
+  if (m.includes("ENOENT") || m.includes("EACCES") || m.includes("EPERM")) return "语言服务器命令启动失败（命令不存在或不可执行）";
+  return m.slice(0, LSP_REASON_LIMIT);
+}
+
+/** 成功写盘后收集诊断；返回附加到工具输出尾部的文本块。
+ *  三种情形必须分得开（旧写法把后两种之一折成空串 = 把「没验成」当成「验了且干净」）：
+ *  ① 验了、无 error ⇒ 空串（零行为零 token，既有判卷行锁着这条）；
+ *  ② 这一路压根没配 LSP（无 config / 无匹配扩展 / §9.8 显式关诊断）⇒ 也空串：
+ *     那是本仓既有基线，每次写入注一行「没有 LSP」是纯噪声；
+ *  ③ **配了也试着验了，但没验成**（服务器已标 broken / 起不来 / 等诊断超时 / 协议错）
+ *     ⇒ 说话：明说缺席与原因短语。沉默在这里是被读成绿灯的，而写代码的人拿不到任何提示。
+ *  任何情形都不抛、不阻断写入（写已成功不得回滚）。 */
 export async function collectDiagnostics(root: string, absPath: string, timeoutMs = DIAG_TIMEOUT_MS): Promise<string> {
+  let serverId = "";
   try {
     const cfg = loadLspConfig(root);
     if (!cfg.enabled) return "";
-    const serverId = pickServerForFile(cfg, absPath);
-    if (!serverId) return "";
-    if (cfg.servers[serverId]?.diagnosticsEnabled === false) return ""; // §9.8 显式关诊断 ⇒ 不回流（六操作照旧）
-    const client = await getLspClient(root, cfg, serverId);
+    const picked = pickServerForFile(cfg, absPath);
+    if (!picked) return "";
+    serverId = picked;
+    if (cfg.servers[picked]?.diagnosticsEnabled === false) return ""; // §9.8 显式关诊断 ⇒ 不回流（六操作照旧）
+    // broken 是运行时事实（本会话内起不来/崩过）：先问它，省掉一次注定失败的 spawn 等待
+    if (isLspBroken(root, picked)) {
+      return lspAbsentNote(root, absPath, picked, "已标记不可用（broken），本会话不再重试");
+    }
+    const client = await getLspClient(root, cfg, picked);
     const uri = pathToFileURL(absPath).href;
     const text = await readFile(absPath, "utf8");
     const minRev = client.currentRev();
@@ -432,8 +463,8 @@ export async function collectDiagnostics(root: string, absPath: string, timeoutM
     if (errors.length === 0) return "";
     const lines = errors.map((d) => "ERROR [" + String(d.range.start.line + 1) + ":" + String(d.range.start.character + 1) + "] " + d.message);
     return "\n<diagnostics file=\"" + toRel(root, absPath) + "\">\n" + lines.join("\n") + "\n</diagnostics>";
-  } catch {
-    return "";
+  } catch (err) {
+    return lspAbsentNote(root, absPath, serverId === "" ? "unknown" : serverId, lspFailureReason(err));
   }
 }
 

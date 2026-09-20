@@ -2878,7 +2878,7 @@ const MUTATIONS = [
     src: "src/tools/lsp.ts",
     test: "tests/plugin-lsp-activation.test.ts",
     desc: "diagnostics.enabled=false 照样回流 ⇒ 作者关掉的噪声（或某个乱报诊断的 server）关不掉，配置只是装饰",
-    apply: (s) => s.replace("    if (cfg.servers[serverId]?.diagnosticsEnabled === false) return \"\";", "    if (false) return \"\";"),
+    apply: (s) => s.replace("    if (cfg.servers[picked]?.diagnosticsEnabled === false) return \"\";", "    if (false) return \"\";"),
     expectFail: "§9.8 的 diagnostics 开关真兑现：开 ⇒ 插件服务器推的 ERROR 回流；关 ⇒ 一个字都不回",
   },
   {
@@ -3467,6 +3467,23 @@ const MUTATIONS = [
     desc: "收尾中途抛异常时只置标志不放行等待方 ⇒ sequencer 在没有超时的等待上永挂（整链无终态、worktree 清不掉、cancel 又被 finished 拒）",
     apply: (s) => s.replace("        this.resolveTerminalWaiters(w.agentId, \"failed\", null);\n", ""),
     expectFail: "收尾中途 emit 抛 ⇒ 等待方照旧被放行（宁可这环红，不许整链永挂）",
+  },
+  // ---- 静态诊断「没验成」不得折成干净（2026-09-20 零引用扫描分诊，任务 #44 第一条落地）----
+  {
+    id: "lsp-failure-folded-into-clean",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "语言服务器起不来/超时时又回空串 ⇒ 模型把「没验成」读成「没有错误」（写后诊断回流这条能力白装）",
+    apply: (s) => s.replace("return lspAbsentNote(root, absPath, serverId === \"\" ? \"unknown\" : serverId, lspFailureReason(err));", "return \"\";"),
+    expectFail: "配了 LSP 却没验成 ⇒ 明说「没有静态诊断证据」：沉默会被读成绿灯",
+  },
+  {
+    id: "lsp-raw-spawn-error-leaks-to-model",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "缺席说明不再归类、直接把 spawn 的原始错误文本透给模型 ⇒ 带出本机路径/命令细节，且那句人话变成不可读的堆栈",
+    apply: (s) => s.replace("  if (m.includes(\"ENOENT\") || m.includes(\"EACCES\") || m.includes(\"EPERM\")) return \"语言服务器命令启动失败（命令不存在或不可执行）\";", "  if (false) return \"语言服务器命令启动失败（命令不存在或不可执行）\";"),
+    expectFail: "配了 LSP 却没验成 ⇒ 明说「没有静态诊断证据」：沉默会被读成绿灯",
   },
 ];
 

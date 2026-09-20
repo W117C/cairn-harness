@@ -129,6 +129,29 @@ describe("LSP 框架（M2a 任务 5）", () => {
     expect((err as Error).message).not.toContain("ENOENT");
   });
 
+  it("配了 LSP 却没验成 ⇒ 明说「没有静态诊断证据」：沉默会被读成绿灯", async () => {
+    await newCtx({ lsp: { bad: { command: "definitely-not-exist-cmd-m2a", extensions: [".ts"] } } });
+    const abs = await writeSample();
+    const first = await collectDiagnostics(ws, abs);
+    expect(first.startsWith("\n<diagnostics-unavailable file=\"src/sample.ts\">")).toBe(true);
+    expect(first).toContain("没有静态诊断证据");
+    expect(first).toContain("≠ 没有错误");
+    // 原始错误文本不外传（里面是 spawn 细节），用说人话的分类代替
+    expect(first).not.toContain("ENOENT");
+    expect(first.length).toBeLessThan(400); // 有界：这条每次写盘都可能注一遍
+    // 第二次走 broken 短路（不再 spawn），也必须继续说话——不能因为"已经知道了"就退回沉默
+    expect(isLspBroken(ws, "bad")).toBe(true);
+    const second = await collectDiagnostics(ws, abs);
+    expect(second).toContain("broken");
+  });
+
+  it("对照：验了且干净仍是空串（缺席与干净不得合并，反向也不许把干净说成缺席）", async () => {
+    await newCtx();
+    await mkdir(join(ws, "src"), { recursive: true });
+    await writeFile(join(ws, "src", "clean2.ts"), "const a = 1;\n", "utf8");
+    expect(await collectDiagnostics(ws, join(ws, "src", "clean2.ts"))).toBe("");
+  });
+
   it("同一 (root, serverID) 只起一个进程", async () => {
     const ctx = await newCtx();
     await writeSample();
