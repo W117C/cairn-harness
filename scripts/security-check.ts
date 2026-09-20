@@ -24,8 +24,8 @@ import {
   findHighEntropyTokens,
   redactSecrets,
   scanChangeSet,
-  securityReportCardPayload,
   validateFinding,
+  SEVERITY_ORDER,
   type ChangeSetEntry,
 } from "../src/agent/security/scan";
 
@@ -207,9 +207,22 @@ try {
   const report = reportEvents.find((e) => e.type === "security_report");
   assert(report?.type === "security_report" && report.summary.total > 0, "报告含 findings 汇总");
   if (report?.type === "security_report") {
-    const payload = securityReportCardPayload(report);
-    assert(payload.type === "report", "报告复用现有 report 卡片类型（不新增卡片类型）");
-    assert(typeof payload.body === "string" && (payload.body as string).includes("src/audit-demo.ts"), "报告正文含被审文件");
+    // 此前这里断的是 securityReportCardPayload 拼出来的卡片文案——那份文案产品在 src/ 里
+    // 零调用者（面板排版走 projections.ts 的结构化 findings），等于验一个不发货的面。
+    // 改成锁**上屏的那份数据**：面板直接取三元组排版，缺一个就渲染成空白行；
+    // 汇总数字与逐条列表不许各说各话（同一份事件的两个口径）。
+    assert(
+      report.findings.every((f) => f.path !== "" && f.title !== "" && f.description !== "" && Number.isInteger(f.line) && f.line >= 0),
+      "每条 finding 都带 path/title/description/line（面板按这些字段排版，缺一格就空一行）",
+    );
+    assert(
+      SEVERITY_ORDER.reduce((n, s) => n + (report.summary.bySeverity[s] ?? 0), 0) === report.findings.length,
+      "summary.bySeverity 分级计数与 findings 条数一致（「共 N 条」与列表同源）",
+    );
+    assert(
+      report.findings.every((f) => (report.summary.byCategory[f.category] ?? 0) > 0),
+      "每条 finding 的分类都进了 byCategory（分类汇总不漏项）",
+    );
     assert(
       !JSON.stringify(report.findings).includes("sk-abcdefghijklmnopqrstuvwxyz012345"),
       "报告进事件流前过输出扫描（findings 描述无完整密钥）",

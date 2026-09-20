@@ -423,19 +423,7 @@ export function buildSecurityReport(events: AgentEvent[], opts: ScanOptions & { 
   };
 }
 
-/** report 卡 payload（复用现有 report 卡片类型，不新增卡片类型）。 */
-export function securityReportCardPayload(e: SecurityReportEvent): Record<string, unknown> {
-  const top = [...e.findings].sort((a, b) => SEVERITY_ORDER.indexOf(b.severity) - SEVERITY_ORDER.indexOf(a.severity)).slice(0, 12);
-  const lines: string[] = [];
-  lines.push("变更集：" + e.changeSet.map((c) => c.path + "（" + c.op + "，" + String(c.lines) + " 行）").join("、"));
-  lines.push(
-    "汇总：共 " + String(e.summary.total) + " 条 · " + SEVERITY_ORDER.map((s) => s + " " + String(e.summary.bySeverity[s])).join(" / "),
-  );
-  for (const f of top) lines.push("[" + f.severity + "][" + f.category + "] " + f.path + ":" + String(f.line) + " " + f.title + " — " + f.description);
-  if (e.summary.total === 0) lines.push("未发现可疑项（静态快筛：密钥 + 危险 API 六类）。");
-  return {
-    type: "report",
-    title: "产出代码安全报告（report · 静态快筛 · 不阻断）",
-    body: lines.join("\n"),
-  };
-}
+// 安全报告怎么上屏不在这里决定：本模块只发结构化事件（findings / changeSet / summary），
+// 面板排版由 src/renderer/projections.ts 的 report 列负责。这里曾有的一份 securityReportCardPayload
+// 是 React 渲染期（src/renderer/main.tsx 的 <Card payload=…>）的卡片源，vanilla 迁移删掉消费端后
+// 它成了孤儿（2026-09-20 随之删除）。要恢复"卡片式排版"请在渲染层那一侧做，别在这里再拼一份文案。
