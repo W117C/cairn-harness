@@ -6,7 +6,7 @@ import { cp, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PluginRuntime, scopedToolName, parseScopedToolName } from "../src/agent/plugins";
-import { evaluate, newAutonomySession } from "../src/permissions";
+import { evaluate, newAutonomySession, type McpGrade } from "../src/permissions";
 import type { ToolName } from "../src/tools/base";
 import { McpManager } from "../src/agent/plugins/mcp";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -35,6 +35,9 @@ describe("M2e MCP 适配器（任务 7，真 stub server）", () => {
     expect(rt.mcpTools.has(scopedEcho)).toBe(true);
     expect(rt.mcpTools.has(scopedToolName("echo-suite", "stub", "fail"))).toBe(true);
     expect(rt.mcpTools.get(scopedEcho)!.description).toContain("回显");
+    // §11.7.2 的分级输入必须从 tools/list 一路走到注册表：echo 自标 readOnlyHint，fail 什么都不标
+    expect(rt.mcpTools.get(scopedEcho)!.grade).toEqual({ annotated: true, readOnly: true });
+    expect(rt.mcpTools.get(scopedToolName("echo-suite", "stub", "fail"))!.grade).toEqual({ annotated: false });
     // tools/call 结果回传
     const res = await rt.mcp.callTool("echo-suite", "stub", "echo", { text: "你好" });
     expect(res.ok).toBe(true);
@@ -57,13 +60,68 @@ describe("M2e MCP 适配器（任务 7，真 stub server）", () => {
       { behavior: "allow" as const, tool: scopedToolName("echo-suite", "stub", "fail"), scope: "always" as const, id: "allow-mcp#1" },
     ];
     const s = newAutonomySession("auto", { rules });
-    const denied = evaluate(asTool(scopedEcho), { text: "x" }, s);
+    const denied = evaluate(asTool(scopedEcho), { text: "x" }, s, { annotated: true, readOnly: true });
     expect(denied.verdict).toBe("deny");
-    const allowed = evaluate(asTool(scopedToolName("echo-suite", "stub", "fail")), {}, s);
-    expect(allowed.verdict).toBe("approve");
-    // 无规则时普通 MCP 工具与读类工具同管线（auto 档放行）
+    const allowed = evaluate(asTool(scopedToolName("echo-suite", "stub", "fail")), {}, s, { annotated: false });
+    expect(allowed.verdict).toBe("approve"); // allow 规则命中（L3 先于档位）
+    // 带只读注解的 MCP 工具在自主档放行（§11.7.2 自主列：写注解自动 ⇒ 只读更自动）
     const plain = newAutonomySession("auto", {});
-    expect(evaluate(asTool(scopedEcho), { text: "x" }, plain).verdict).toBe("approve");
+    expect(evaluate(asTool(scopedEcho), { text: "x" }, plain, { annotated: true, readOnly: true }).verdict).toBe("approve");
+  });
+
+  it("§11.7.2 三档矩阵：只读注解放行 / 写注解与无注解逐次 / destructive 连自主档也送审", () => {
+    const name = asTool("mcp__plugin_echo-suite_stub__t");
+    const at = (mode: "read-only" | "default" | "auto", grade: McpGrade) =>
+      evaluate(name, {}, newAutonomySession(mode, {}), grade);
+    const ro: McpGrade = { annotated: true, readOnly: true };
+    const wr: McpGrade = { annotated: true, readOnly: false };
+    const de: McpGrade = { annotated: true, readOnly: false, destructive: true };
+    const no: McpGrade = { annotated: false };
+    // 只读档 = 只读注解白名单
+    expect(at("read-only", ro).verdict).toBe("approve");
+    expect(at("read-only", wr).verdict).toBe("deny");
+    const roDeny = at("read-only", no);
+    if (roDeny.verdict !== "deny") throw new Error("无注解在只读档应被拒，实得 " + roDeny.verdict);
+    expect(roDeny.reason).toContain("只读注解白名单");
+    // 默认档：只读放行，其余逐次
+    expect(at("default", ro).verdict).toBe("approve");
+    expect(at("default", wr).verdict).toBe("ask");
+    expect(at("default", no).verdict).toBe("ask");
+    // 自主档：写注解自动；destructive 走风险通道送审；**无注解仍逐次**（豁免的是"写注解"不是沉默）
+    expect(at("auto", wr).verdict).toBe("approve");
+    const deAsk = at("auto", de);
+    if (deAsk.verdict !== "ask") throw new Error("destructive 在自主档必须送审，实得 " + deAsk.verdict);
+    expect(deAsk.risk).toBe("high");
+    const autoNo = at("auto", no);
+    if (autoNo.verdict !== "ask") throw new Error("无注解在自主档必须送审，实得 " + autoNo.verdict);
+    expect(autoNo.reason).toContain("无注解");
+    // 反面：少传注解 ≠ 不是 MCP（按无注解处理，fail-closed）
+    expect(evaluate(name, {}, newAutonomySession("auto", {})).verdict).toBe("ask");
+    // 非 MCP 的读类工具不受影响（新增谓词没把静态表拖下水）
+    expect(evaluate(asTool("read_file"), { path: "a.ts" }, newAutonomySession("read-only", {})).verdict).toBe("approve");
+    expect(evaluate(asTool("write_file"), { path: "a.ts" }, newAutonomySession("read-only", {})).verdict).toBe("deny");
+  });
+
+  it("方案门按统一写向口径判：未批 plan 时 allow 规则复活不了 MCP 写调用，只读注解仍可跑", () => {
+    const name = asTool("mcp__plugin_echo-suite_stub__t");
+    const s = newAutonomySession("auto", {
+      rules: [{ behavior: "allow", tool: name, scope: "always", id: "allow-mcp#0" }],
+    });
+    s.planBlocked = true;
+    for (const grade of [{ annotated: false }, { annotated: true, readOnly: false }] as McpGrade[]) {
+      const d = evaluate(name, {}, s, grade);
+      if (d.verdict !== "deny") throw new Error("plan 未批准时 MCP 写必须 deny，实得 " + d.verdict);
+      expect(d.reason).toContain("方案门");
+    }
+    // server 明标只读：不受写禁影响（未批 plan 期间仍能查资料——白名单的意义就在这）
+    expect(evaluate(name, {}, s, { annotated: true, readOnly: true }).verdict).toBe("approve");
+    // 门只挡未批窗口：批准后同一调用按 allow 规则放行（不是永久禁 MCP）
+    s.planBlocked = false;
+    expect(evaluate(name, {}, s, { annotated: false }).verdict).toBe("approve");
+    // 非 MCP 侧口径不变（写向静态表仍是唯一判据）
+    const s2 = newAutonomySession("auto", {});
+    s2.planBlocked = true;
+    expect(evaluate(asTool("run_shell"), { command: "ls" }, s2).verdict).toBe("deny");
   });
 
   it("scoped 名反解；bare 名永不命中（parseScopedToolName 只认 plugin_ 形态）", () => {

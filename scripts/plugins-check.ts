@@ -5,6 +5,7 @@
 //   C hook：exit 2 真的阻断该次工具调用 / JSON decision 放行 / 超时被强杀（引擎级精确计时）
 //   D 信任门：未信任时 hook 不执行、MCP 不连接（只列出）；信任后同样样本开始生效（决议持久化）
 //   E MCP：tools/list 进注册表且名字为 scoped 形态 / tools/call 结果回传 / 权限门对 MCP 工具同样生效（deny 规则）
+//          / §11.7.2 注解分级（无注解按写处理、只读档只放行带 readOnlyHint 的）
 //   F 暗卷：联网拉真实 CC 插件（anthropics/skills 或 claude-plugins-community）免改加载；拉不到打印跳过退出 0
 // 场景经 runAgent（M1C_AUTONOMY_SCRIPT 剧本通道）驱动真实 loop：hook/信任/MCP 全在事件流上实证。
 import { execFile } from "node:child_process";
@@ -23,6 +24,7 @@ import {
   type PluginSecretBackend,
 } from "../src/agent/plugins";
 import { loadLspConfig, pluginLspServerIds } from "../src/tools/lsp";
+import type { PermissionMode } from "../src/permissions";
 
 const ROOT = process.cwd();
 const FX = join(ROOT, "fixtures", "plugins");
@@ -60,7 +62,7 @@ async function makeWorkspace(tag: string): Promise<{ ws: string; pluginRoot: str
 }
 
 /** runAgent 一轮（剧本经 M1C_AUTONOMY_SCRIPT 通道注入；返回事件流）。 */
-async function run(ws: string, scenario: string, trustFile: string, tag: string): Promise<AgentEvent[]> {
+async function run(ws: string, scenario: string, trustFile: string, tag: string, mode: PermissionMode = "auto"): Promise<AgentEvent[]> {
   const logPath = join(ws, "events-" + tag + ".jsonl");
   const prev = {
     script: process.env.M1C_AUTONOMY_SCRIPT,
@@ -74,7 +76,7 @@ async function run(ws: string, scenario: string, trustFile: string, tag: string)
     return await runAgent({
       workspace: ws,
       message: "M2e 明卷场景 " + tag,
-      mode: "auto",
+      mode,
       logPath,
     });
   } finally {
@@ -327,6 +329,35 @@ async function main(): Promise<void> {
     const evE2 = await run(wsE.ws, "mcp-flow.jsonl", trustE, "mcp-deny");
     const denyCall = resultOf(evE2, "c-mcp");
     assert(denyCall !== null && !denyCall.ok && denyCall.output.includes("[permission denied]") && denyCall.output.includes("deny 规则命中"), "E4 权限门对 MCP 工具同样生效（deny 规则命中 scoped 名）");
+    // 撤掉 E4 的规则文件：E5–E6b 断的是**注解分级**，留着规则就分不清拒绝是谁给的（两种口径 = 假绿）。
+    await rm(join(wsE.ws, ".agent", "permissions.json"), { force: true });
+    // E5 §11.7.2 fail-closed：stub 的 fail 工具什么都不标 ⇒ 按写处理，自主档亦逐次；
+    //     非交互（无 askGate）时按 deny 收束，且**必须没跑到 server**（否则「免批」只是被换成「执行后再报错」）。
+    const evE3 = await run(wsE.ws, "mcp-unannotated.jsonl", trustE, "mcp-noann");
+    const noAnn = resultOf(evE3, "c-mcp-noann");
+    assert(
+      noAnn !== null && !noAnn.ok && noAnn.output.includes("[permission denied]") && noAnn.output.includes("MCP 无注解") && !noAnn.output.includes("stub failure"),
+      "E5 MCP 无注解 → 按写处理：自主档不自动执行、stub 未被调用、拒绝原因指明「MCP 无注解」（§11.7.2 fail-closed）",
+      noAnn === null ? "无 tool_result" : noAnn.output,
+    );
+    // E6 只读档 = 只读注解白名单（正向）：server 标了 readOnlyHint 的工具体仍可跑——
+    //     这条同时证明注解是从 tools/list 一路走到门的，不是 evaluate 里凭空猜的。
+    const evE4 = await run(wsE.ws, "mcp-flow.jsonl", trustE, "ro-echo", "read-only");
+    const roEcho = resultOf(evE4, "c-mcp");
+    assert(
+      roEcho !== null && roEcho.ok && roEcho.output.includes("echo: 你好"),
+      "E6 只读档放行带 readOnlyHint 注解的 MCP 工具（注解经 tools/list 抵达权限门）",
+      roEcho === null ? "无 tool_result" : roEcho.output,
+    );
+    // E6b 反向：同一档位里无注解的工具体必须被拒（只放行有注解的，不是「读档一律放行 MCP」）
+    const evE5 = await run(wsE.ws, "mcp-unannotated.jsonl", trustE, "ro-noann", "read-only");
+    const roNoAnn = resultOf(evE5, "c-mcp-noann");
+    assert(
+      roNoAnn !== null && !roNoAnn.ok && roNoAnn.output.includes("只读注解白名单") && !roNoAnn.output.includes("stub failure"),
+      "E6b 只读档拒无注解 MCP 工具并指明白名单依据（与 E6 成对，排除「读档全放行」）",
+      roNoAnn === null ? "无 tool_result" : roNoAnn.output,
+    );
+    await rm(wsE.ws, { recursive: true, force: true });
   }
 
   // ---- F 暗卷（断言型；联网不可得 → 显式标「未证」，不静默算绿）----

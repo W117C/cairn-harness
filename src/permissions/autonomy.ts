@@ -120,42 +120,91 @@ interface RiskChannels {
   reasons: string[];
 }
 
+/** §11.7.2「MCP 工具」那一行的输入：server 在 tools/list 里自带的注解。
+ *  `annotated` = server **给过** annotations 对象（哪怕只给了 title）；没给 = 无注解 ⇒ 按写处理，
+ *  而且自主档也不自动放行——表里豁免的是"写注解"，不是"什么都没标"。 */
+export interface McpGrade {
+  annotated: boolean;
+  readOnly?: boolean;
+  destructive?: boolean;
+}
+
+/** 第四风险通道：注解。destructiveHint 是 server 自己声明"会破坏远端状态" ⇒ high，
+ *  自主档也要送审（§11.7.2 自主列的"risk≥high 送审"）。 */
+export function annotationRisk(mcp?: McpGrade): RiskFinding | null {
+  return mcp?.destructive === true ? { level: "high", reason: "MCP destructiveHint=true（注解通道）" } : null;
+}
+
+/** MCP scoped 注册名（`mcp__plugin_<p>_<s>__<t>` 与 `mcp__<server>__<t>` 两种形态都算）。 */
+export function isMcpScopedName(name: string): boolean {
+  return name.startsWith("mcp__");
+}
+
+/** 这次调用算不算写向：MCP 只有 server 自己标了 readOnlyHint 才算读（fail-closed），
+ *  其余（写注解 / 无注解 / 注解里根本没有 readOnly 字段）都按写管；非 MCP 走静态写向表。
+ *  入参是 `string` 而非 `ToolName`：MCP 的 scoped 名不在那个联合里，规格面按名判时也拿的是裸名。 */
+export function isWriteCall(tool: string, mcp?: McpGrade): boolean {
+  if (mcp === undefined) return isSideEffectTool(tool);
+  return !(mcp.annotated && mcp.readOnly === true);
+}
+
 function collectRisk(
   tool: ToolName,
   args: Record<string, unknown>,
   s: AutonomySession,
+  mcp?: McpGrade,
 ): RiskChannels {
-  const findings: RiskFinding[] = [
+  const ann = annotationRisk(mcp);
+  const findings: (RiskFinding | null)[] = [
     staticRisk(tool, args),
     modelRisk(args),
+    // 沙箱通道仍按静态表判：它说的是「本仓 Seatbelt 罩不住的本地写面」，MCP 调用根本不经过那层，
+    // 无注解的 MCP 写在下面 L0/档位层按写处理（不是靠这条通道抬风险）。
     sandboxRisk(s.sandboxAvailable, tool, isSideEffectTool(tool)),
+    ann,
   ];
   let risk: RiskLevel = "none";
   const reasons: string[] = [];
   for (const f of findings) {
-    if (f.level === "none") continue;
+    if (f === null || f.level === "none") continue;
     risk = maxRisk(risk, f.level);
     reasons.push(f.reason);
   }
   return { risk, reasons };
 }
 
-/** 四层评估管线（纯函数，先命中先短路）。 */
+/** 四层评估管线（纯函数，先命中先短路）。
+ *  `mcp` = 该工具的 MCP 注解（非 MCP 调用不传）；§11.7.2 的 MCP 那一行没有别的输入源。 */
 export function evaluate(
   tool: ToolName,
   args: Record<string, unknown>,
   s: AutonomySession,
+  mcp?: McpGrade,
 ): EvaluateDecision {
   const cmd = isShellFamily(tool) && typeof args.command === "string" ? args.command : undefined;
-  const channels = collectRisk(tool, args, s);
+  // 名字带 `mcp__` 就是 MCP 调用：调用方没递注解时**按无注解处理**（写向、fail-closed）。
+  // 把"少传一个参数"读成"这不是 MCP"，等于把本次要修的洞换成另一种形状再埋一遍。
+  const grade: McpGrade | undefined = isMcpScopedName(tool) ? (mcp ?? { annotated: false }) : undefined;
+  const channels = collectRisk(tool, args, s, grade);
   const risk = channels.risk;
 
   // ---- L0 硬边界：只读档摘除（规则库不能复活被摘除的工具）+ 方案门（M1b 写禁）----
-  if (s.mode === "read-only" && isSideEffectTool(tool)) {
-    return { verdict: "deny", reason: "只读档摘除写向工具" };
+  if (s.mode === "read-only" && isWriteCall(tool, grade)) {
+    return {
+      verdict: "deny",
+      reason: grade === undefined ? "只读档摘除写向工具" : "只读档只放行带 readOnlyHint 注解的 MCP 工具（§11.7.2 只读注解白名单）",
+    };
   }
-  if (s.planBlocked && isSideEffectTool(tool)) {
-    return { verdict: "deny", reason: "存在未批准 plan（方案门：先批后写）" };
+  // 方案门同样按「写向」的统一口径判：一个 allow 规则能复活未批 plan 期间的 MCP 写调用，
+  // 却复活不了 write_file——同一轮里两种口径就是这条规则的漏洞形状。
+  if (s.planBlocked && isWriteCall(tool, grade)) {
+    return {
+      verdict: "deny",
+      reason:
+        grade === undefined
+          ? "存在未批准 plan（方案门：先批后写）"
+          : "存在未批准 plan（方案门：先批后写；MCP 未标 readOnlyHint 按写处理）",
+    };
   }
 
   // ---- L1 deny 规则：命中即拦 ----
@@ -187,7 +236,7 @@ export function evaluate(
     }
     return { verdict: "approve", risk, auto: { source: "rule", ruleId: chain.ruleId } };
   }
-  if (s.mode === "default" && isSideEffectTool(tool)) {
+  if (s.mode === "default" && isWriteCall(tool, grade)) {
     // 逐次审批；session_kind 记忆可跳过（网络类命令强制 once 除外；断路器触发后记忆失效）
     const key = scopeKey(tool, args);
     const scopeAllowed =
@@ -199,7 +248,7 @@ export function evaluate(
       verdict: "ask",
       reason: s.breakerTripped
         ? `断路器触发：连续自动放行达 ${String(MAX_AUTO_APPROVALS)}，降级为逐次审批（直至会话重开）`
-        : "默认档逐次审批",
+        : grade === undefined ? "默认档逐次审批" : "默认档逐次审批（MCP 未标 readOnlyHint）",
       risk,
       riskReasons: channels.reasons,
     };
@@ -213,6 +262,16 @@ export function evaluate(
     const network = isNetworkCommandCall(tool, args);
     if (RISK_ORDER[risk] >= RISK_ORDER.high) {
       return { verdict: "ask", reason: "风险≥high 送审（自主档）", risk, riskReasons: channels.reasons };
+    }
+    if (grade !== undefined && !grade.annotated) {
+      // 表里自主列豁免的是"写注解"（server 明说了它是写），**什么都没标**不在豁免之列：
+      // 让一个自报家门的 server 比沉默的 server 拿到更少审批，等于奖励不写注解。
+      return {
+        verdict: "ask",
+        reason: "MCP 无注解：按写处理，自主档亦逐次（§11.7.2 fail-closed）",
+        risk,
+        riskReasons: channels.reasons,
+      };
     }
     if (network && RISK_ORDER[risk] >= RISK_ORDER.medium) {
       return {

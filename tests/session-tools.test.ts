@@ -1,6 +1,6 @@
 // SoL-Pi 阶段 A 收口（P-1 步骤 2/3 + 工具面同源）：
 //   ① 模型可见工具面 ⊇ 可执行工具表（lsp 曾在可执行面而不在模型面）
-//   ② 插件/MCP 工具规格复用 server inputSchema；同名冲突 fail-visible 跳过
+//   ② 插件/MCP 工具规格复用 server inputSchema；同名冲突 fail-visible 跳过；只读档按注解白名单同步摘除
 //   ③ worker 规格不因补齐 lsp 出现重复项
 //   ④ provider=glm 且无 key 显式失败（不静默回落 mock）
 //   ⑤ provider/model 由 settings 决定，providerInfo 与 run 同源
@@ -18,7 +18,7 @@ import { PluginRuntime } from "../src/agent/plugins";
 import { skillInvokeName } from "../src/agent/plugins/skills";
 import type { McpToolInfo } from "../src/agent/plugins/mcp";
 import { closeAllEventLogs, createEventLog } from "../src/events";
-import { isSideEffectTool, toolTableFor } from "../src/permissions";
+import { isSideEffectTool, toolTableFor, type McpGrade } from "../src/permissions";
 import {
   handleAgentRun,
   handleSessionCreate,
@@ -68,6 +68,8 @@ it("MCP/插件工具规格复用 server inputSchema，同名冲突 fail-visible 
     description: "MCP 搜索",
     inputSchema,
     scopedName: "mcp__plugin_demo_srv__search",
+    // server 什么都没标 ⇒ 按写处理（§11.7.2 fail-closed）；这里只验规格透传，不验分级
+    grade: { annotated: false },
     plugin: "demo",
     server: "srv",
   };
@@ -88,6 +90,41 @@ it("MCP/插件工具规格复用 server inputSchema，同名冲突 fail-visible 
   expect(clashed.skipped).toEqual(["read_file"]);
   expect(clashed.specs.filter((s) => s.function.name === "read_file")).toHaveLength(1);
   expect(clashed.specs.find((s) => s.function.name === "read_file")?.function.description).not.toBe("冒充基础工具");
+});
+
+it("只读档规格面同步：门必拒的 MCP 工具不再挂给模型，带 readOnlyHint 的照旧在列", () => {
+  const info = (name: string, grade: McpGrade): McpToolInfo & { plugin: string; server: string } => ({
+    name,
+    description: "MCP " + name,
+    inputSchema: { type: "object", properties: {} },
+    scopedName: "mcp__plugin_demo_srv__" + name,
+    grade,
+    plugin: "demo",
+    server: "srv",
+  });
+  const rt: PluginToolSource = {
+    skills: () => [{ name: "demo-skill" }],
+    mcpTools: new Map([
+      ["mcp__plugin_demo_srv__ro", info("ro", { annotated: true, readOnly: true })],
+      ["mcp__plugin_demo_srv__wr", info("wr", { annotated: true, readOnly: false })],
+      ["mcp__plugin_demo_srv__noann", info("noann", { annotated: false })],
+    ]),
+  };
+  const pluginTools = pluginToolSpecsFromRuntime(rt);
+  // 注解必须随规格一起带出：不带 ⇒ 下游那份 mode 判定没有输入，只能凭空猜
+  expect(pluginTools.find((t) => t.name === "mcp__plugin_demo_srv__noann")?.grade).toEqual({ annotated: false });
+  const namesOf = (mode: "read-only" | "default" | "auto"): string[] =>
+    sessionToolSpecs({ mode, pluginTools }).specs.map((s) => s.function.name);
+  // 只读档只放行带 readOnlyHint 的（与权限门同一份谓词、同一份输入）
+  const ro = namesOf("read-only");
+  expect(ro).toContain("mcp__plugin_demo_srv__ro");
+  expect(ro).not.toContain("mcp__plugin_demo_srv__wr");
+  expect(ro).not.toContain("mcp__plugin_demo_srv__noann");
+  expect(ro).toContain("skill"); // 非 MCP 注入项（无 grade）不受牵连：仍按静态写向表判
+  // 另两档不摘：那里该发生的是出卡，不是工具凭空消失
+  for (const mode of ["default", "auto"] as const) {
+    for (const t of ["ro", "wr", "noann"]) expect(namesOf(mode)).toContain("mcp__plugin_demo_srv__" + t);
+  }
 });
 
 it("worker 工具规格每个可执行工具恰好一条（lsp 不再重复补齐）", () => {

@@ -2,7 +2,7 @@
 // 职责：从事件日志重建 OpenAI 兼容对话历史（含 tool_calls / tool 角色），把工具结果反馈回模型，
 // 使真实 GLM 能多轮调用 clarify / propose_plan / write_file / verify。
 import { createEventLog, replayIncremental, type AgentEvent, type CompactionUsage } from "../events";
-import { isSideEffectTool, type PermissionMode } from "../permissions";
+import { isSideEffectTool, isWriteCall, type McpGrade, type PermissionMode } from "../permissions";
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "../providers/glm";
 import { DEFAULT_MODEL_TABLE, findSpecByNameOrId } from "../providers/registry";
 import type { ModelOutput, Provider, ProviderCall } from "../providers";
@@ -304,10 +304,13 @@ export interface SessionPluginTool {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
+  /** MCP server 自带注解（§11.7.2 分级输入）。非 MCP 注入项不传 = 按静态写向表判。 */
+  grade?: McpGrade;
 }
 
 /** 主会话模型可见工具面：与可执行面同源的唯一组装入口。
- *  基础规格来自 gateToolSpecs（按 mode 摘除写向工具），再叠加运行时注入的插件/MCP 工具规格。
+ *  基础规格来自 gateToolSpecs（按 mode 摘除写向工具），再叠加运行时注入的插件/MCP 工具规格
+ *  （注入项也过同一份 mode 判定：只读档只放行带 readOnlyHint 的 MCP 工具，用的是门里那个 isWriteCall）。
  *  同名冲突 = 跳过注入项并计入 skipped（fail-visible 返回给调用方，不静默覆盖基础工具）。
  *  §9.3 的 `disallowed-tools` 走**同一份**判定来源（调用方给 loop 活闸用的那个谓词）：worker 侧是
  *  「规格面 + 实例面 + loop 硬闸」三重（filterWorkerSpecs / filterWorkerTable 同口径），主会话此前
@@ -328,6 +331,9 @@ export function sessionToolSpecs(
       skipped.push(tool.name);
       continue;
     }
+    // 只读档的写向摘除同样覆盖注入项，且用的是权限门那一份谓词（isWriteCall）：门必拒的 MCP 工具
+    // 还挂在模型清单上 = 白叫一轮再吃一句拒绝（任务 #39 同名形状）。基础工具那半在 gateToolSpecs。
+    if (opts.mode === "read-only" && isWriteCall(tool.name, tool.grade)) continue;
     seen.add(tool.name);
     specs.push({
       type: "function",

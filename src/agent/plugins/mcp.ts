@@ -7,6 +7,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { withTimeout } from "../../net";
+import type { McpGrade } from "../../permissions/autonomy";
 import { expandUserConfig } from "./skills";
 import type { McpServerConfig, McpServerStatus } from "./types";
 
@@ -109,6 +110,21 @@ export interface McpToolInfo {
   inputSchema: Record<string, unknown>;
   /** scoped 注册名。 */
   scopedName: string;
+  /** §11.7.2「MCP 工具」那一行的分级输入（server 自带注解）。不收没有消费者的字段。 */
+  grade: McpGrade;
+}
+
+/** 注解收窄：只留"有没有标"+"只读/破坏性"两个布尔，其余（title / openWorld / idempotent）
+ *  目前没有消费者 ⇒ 不收，免得又长成一个"字段收下即丢"的陈列面。
+ *  server 给的不是布尔时按"没标"处理（不拿 junk 当放行凭据）。 */
+export function mcpGradeOf(raw: unknown): McpGrade {
+  if (raw === null || typeof raw !== "object") return { annotated: false };
+  const a = raw as Record<string, unknown>;
+  return {
+    annotated: true,
+    ...(typeof a.readOnlyHint === "boolean" ? { readOnly: a.readOnlyHint } : {}),
+    ...(typeof a.destructiveHint === "boolean" ? { destructive: a.destructiveHint } : {}),
+  };
 }
 
 interface Connection {
@@ -236,6 +252,7 @@ export class McpManager {
             : desc,
           inputSchema: capped.schema,
           scopedName: scopedToolName(plugin, server, t.name),
+          grade: mcpGradeOf((t as { annotations?: unknown }).annotations),
         };
       });
       const conn: Connection = { plugin, server, client, transport, tools };

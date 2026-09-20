@@ -43,12 +43,14 @@ export {
   scopeKey,
   isNetworkCommandCall,
   isSideEffectTool,
+  isWriteCall,
   MAX_AUTO_APPROVALS,
   CRITICAL_DENIAL_LIMIT,
   type AutonomySession,
   type AutoMeta,
   type AskScope,
   type EvaluateDecision,
+  type McpGrade,
   type ToolResultWithAudit,
 } from "./autonomy";
 

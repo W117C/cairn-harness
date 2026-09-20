@@ -331,7 +331,7 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
       const d = evaluate(name, args, s.autonomy);
       if (d.verdict === "deny") return denied(name, s.autonomy.mode, d.reason);
       if (d.verdict === "ask") {
-        if (!s.askGate) return denied(name, s.autonomy.mode, "非交互模式（fail-closed）");
+        if (!s.askGate) return denied(name, s.autonomy.mode, "非交互模式（fail-closed）：" + d.reason);
         const r = await s.askGate.request(name, args, {
           reason: withSkillAllowNote(name, d.reason),
           risk: d.risk,
@@ -402,10 +402,10 @@ function gatedMcpTool(name: string, info: McpToolInfo & { plugin: string; server
       if (!s) return denied(name, "default", "工具门未接线（fail-closed）");
       const ps = getPlanState();
       s.autonomy.planBlocked = ps.proposed && !ps.approved;
-      const d = evaluate(name as ToolName, args, s.autonomy); // MCP scoped 名进同一管线（规则/风险/档位全生效）
+      const d = evaluate(name as ToolName, args, s.autonomy, info.grade); // MCP scoped 名进同一管线（规则/风险/档位全生效）
       if (d.verdict === "deny") return denied(name, s.autonomy.mode, d.reason);
       if (d.verdict === "ask") {
-        if (!s.askGate) return denied(name, s.autonomy.mode, "非交互模式（fail-closed）");
+        if (!s.askGate) return denied(name, s.autonomy.mode, "非交互模式（fail-closed）：" + d.reason);
         const r = await s.askGate.request(name, args, {
           reason: withSkillAllowNote(name, d.reason),
           risk: d.risk,
@@ -500,7 +500,9 @@ export function pluginToolSpecsFromRuntime(rt: PluginToolSource | null): Session
     });
   }
   for (const [scoped, info] of rt.mcpTools) {
-    out.push({ name: scoped, description: info.description, parameters: info.inputSchema });
+    // grade 随规格一起带出：档位对 MCP 的白名单在 sessionToolSpecs 那一处统一生效（同 isWriteCall 谓词），
+    // 这里不再按 mode 各判一份——两处各判就是「模型看到的」与「门会拒的」重新分家的地方。
+    out.push({ name: scoped, description: info.description, parameters: info.inputSchema, grade: info.grade });
   }
   return out;
 }
