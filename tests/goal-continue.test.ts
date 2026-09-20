@@ -65,9 +65,11 @@ describe("goal 模式端到端（真入口，缺省零行为）", () => {
     process.env.M3A_MAIN_SCRIPT = scriptPath;
     const set = await handleGoalSet({ sessionId: "s-plain", objective: "回答这个问题", maxTurns: 6 });
     expect(set.ok).toBe(true);
+    // 交互 run：这条测的是**判据**「没写盘也没绿证据 ⇒ 别续」。无人值守那条路在判据之前
+    // 就被 #53 的裁决拦下（见下面单独一条），拿 unattended 跑这条只会验到那道闸。
     const res = await handleAgentRun(
       { message: "回答一下", mode: "auto", sessionId: "s-plain" },
-      { workspace, sessionId: "s-plain", logPath, unattended: true },
+      { workspace, sessionId: "s-plain", logPath, unattended: false },
     );
     expect(res.ok).toBe(true);
     const evts = await events();
@@ -95,19 +97,44 @@ describe("goal 模式端到端（真入口，缺省零行为）", () => {
     expect(evts[0]?.type === "goal_set" && evts[0].max_turns).toBe(25);
   });
 
+  it("无人值守 run 到点就停且不续跑（#53）：理由点名这条路，且**排在判据之前**", async () => {
+    // 为什么这是一条真规则而不是保守：unattended 的审批一律 fail-closed 拒 ⇒ 这一轮写不了盘、
+    // verify 必红，而判据对"证据 failed"是 continue ⇒ 定时任务会一路烧到轮次上限且不可能成功。
+    process.env.M3A_MAIN_SCRIPT = scriptPath;
+    await handleGoalSet({ sessionId: "s-plain", objective: " nightly 修绿", maxTurns: 8 });
+    const res = await handleAgentRun(
+      { message: "开始", mode: "auto", sessionId: "s-plain" },
+      { workspace, sessionId: "s-plain", logPath, unattended: true },
+    );
+    expect(res.ok).toBe(true);
+    const evts = await events();
+    const stops = evts.filter((e) => e.type === "goal_stopped");
+    expect(stops.length).toBe(1);
+    const reason = stops[0]?.type === "goal_stopped" ? stops[0].reason : "";
+    expect(reason).toContain("无人值守");
+    // 顺序即优先级：这条理由**不许**被"没写过任何文件"那条判据理由顶掉——顶掉了就说明
+    // 无人值守的 run 仍在按判据决定要不要再烧一轮（正是要拦的事）。
+    expect(reason).not.toContain("没有写过任何文件");
+    expect(userTurns(evts).filter((t) => t.type === "user_message" && t.origin?.kind === "goal").length).toBe(0);
+    // 停下来的理由照样进投影：芯片/转录读得到（不是只 return 掉）
+    const view = projectGoal(evts);
+    expect(view?.stopped).toContain("无人值守");
+    expect(view?.turn).toBe(1);
+  });
+
   it("停过的目标不会因用户再发一条而自动复活：停止是终态，要再跑得改设目标", async () => {
     process.env.M3A_MAIN_SCRIPT = scriptPath;
     await handleGoalSet({ sessionId: "s-plain", objective: "回答问题", maxTurns: 6 });
     const first = await handleAgentRun(
       { message: "第一问", mode: "auto", sessionId: "s-plain" },
-      { workspace, sessionId: "s-plain", logPath, unattended: true },
+      { workspace, sessionId: "s-plain", logPath, unattended: false },
     );
     expect(first.ok).toBe(true);
     expect((await events()).filter((e) => e.type === "goal_stopped").length).toBe(1);
     // 用户接着又发一条（同一个会话、同一个 goal_set 还在流里）：这条**不该**把自动续跑唤回来
     const second = await handleAgentRun(
       { message: "第二问", mode: "auto", sessionId: "s-plain" },
-      { workspace, sessionId: "s-plain", logPath, unattended: true },
+      { workspace, sessionId: "s-plain", logPath, unattended: false },
     );
     expect(second.ok).toBe(true);
     const evts = await events();
@@ -123,7 +150,7 @@ describe("goal 模式端到端（真入口，缺省零行为）", () => {
     await handleGoalSet({ sessionId: "s-plain", objective: "把测试修绿", maxTurns: 1 });
     const res = await handleAgentRun(
       { message: "开始", mode: "auto", sessionId: "s-plain" },
-      { workspace, sessionId: "s-plain", logPath, unattended: true },
+      { workspace, sessionId: "s-plain", logPath, unattended: false },
     );
     expect(res.ok).toBe(true);
     const evts = await events();

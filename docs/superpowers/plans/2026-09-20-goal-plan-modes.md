@@ -285,3 +285,16 @@ worker 那一路的权限会话由 `orchestrator.ts` 「spawn」内 `newAutonomy
 **合并阻断更新（#51）**：主树这一轮在飞文件已含 `src/permissions/autonomy.ts` + `index.ts`
 （另一会话在加 `GATE_LAYERS`/`GateMeta` 判定留痕），与本笔**同文件** ⇒ 本笔只落分支，
 不得合回；#51 的让路面从"agent-runner 一面"变成"权限层两面 + agent-runner"。
+
+### #53 裁决：无人值守 run 不自动续跑（一条闸，不是一种风格）
+
+`goalNextTurn` 原本不看 `unattended`。把两条已存在的事实并起来看就是**必然烧钱**的一条路：
+unattended 的审批一律 fail-closed 拒（`unattendedAskGate`）⇒ 写向工具全被拒、`verify` 必红；
+而 `goalStopDecision` 对「证据 failed」是 **continue** ⇒ 定时任务会一轮一轮烧到轮次上限（≤25 轮），
+且**没有任何一轮可能成功**——因为让它成功的唯一入口（写盘）在这条路上被自己锁着。
+
+裁决：**goal 模式是"有人在场"的能力**，无人值守一律不续，并落一条点名理由的 `goal_stopped`
+（芯片/转录读得到）。同一个目标在交互 run 里照常续跑——差别只在有没有人能批。
+次序也定死：这道闸排在判据**之前**（判卷 `goal-continuation-unattended-guard-dropped` 就是钉这个次序：
+把闸摘掉 ⇒ 理由会换成"没写过任何文件" ⇒ 红）。不做的替代方案是"给无人值守配一条自动批准的写通道"，
+那是把 §11 的 fail-closed 原则翻过来，不在本笔范围。

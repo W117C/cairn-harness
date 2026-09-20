@@ -3642,8 +3642,16 @@ const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/goal-continue.test.ts",
     desc: "run 尾不再问判据（整条续跑/停止链被旁路）⇒ goal_set 成了只写不读的陈列，理由也从不上屏",
-    apply: (s) => s.replace("const next = await goalNextTurn({ logPath, sessionId, aborted: () => over.signal?.aborted === true });", "const next: { message: string; origin: GoalTurnOrigin } | null = null;"),
+    apply: (s) => s.replace("const next = await goalNextTurn({ logPath, sessionId, unattended: over.unattended === true, aborted: () => over.signal?.aborted === true });", "const next: { message: string; origin: GoalTurnOrigin } | null = null;"),
     expectFail: "设了目标但这一轮没写盘也没验证 ⇒ 立刻停，并落一条写明理由的 goal_stopped（读答型目标不烧钱）",
+  },
+  {
+    id: "goal-continuation-unattended-guard-dropped",
+    src: "src/main/agent-runner.ts",
+    test: "tests/goal-continue.test.ts",
+    desc: "摘掉「无人值守不自动续跑」这道闸 ⇒ 定时任务回到按判据决定续不续：那条路审批全被 fail-closed 拒，写不了盘、验不出绿，却能一路烧到轮次上限",
+    apply: (s) => s.replace("  if (args.unattended) {", "  if (false) {"),
+    expectFail: "无人值守 run 到点就停且不续跑（#53）：理由点名这条路，且**排在判据之前**",
   },
   {
     id: "goal-usd-window-axis",
