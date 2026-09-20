@@ -1,9 +1,9 @@
 // M1e 验收脚本（pnpm panels-check）：
 //   A. headless：settings 布局持久化（写→重载一致 / 非法回退默认）+ 会话列表 CRUD + 会话 run→重放投影逐字一致
-//   B. Electron + CDP：1 万条事件虚拟化（DOM ≤300 / 滚动一屏 ≤200ms）+ 审批徽标 ≤1s + 布局重启还原 + 截图
+//   B. Electron + CDP：1 万条事件虚拟化（DOM ≤300 / 滚动一屏 ≤200ms）+ 审批徽标 ≤1s + 布局重启还原 + 会话重命名落盘 + 截图
 // 退出码 0 = 全部断言通过；任何断言失败退出码 1。
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createEventLog } from "../src/events";
@@ -396,6 +396,39 @@ async function phaseElectron(root: string): Promise<void> {
       return open ? true : null;
     }, 25_000);
     ok(restored, "重启后 git 面板自动还原打开且激活（settings 持久化生效）");
+
+    // B5 会话重命名落到盘上。为什么值得真跑一跳：盘上「标题」就是 jsonl 文件名，
+    // 主进程改名返回的是**新 id** ⇒ 这不是一行字符串赋值；而单测只能证到桥接段那个函数，
+    // 「省略号 → 懒挂载菜单 → 输入框 → 回车」这条 DOM 链一改就断，且断了没人红（门 0 曾把这条桥记成孤儿）。
+    const B5_NEW = "B5重命名落盘";
+    const b5 = await cdp2.eval<string>(
+      `(async () => {
+        const row = document.querySelector('.session[data-id]');
+        if (!row) return JSON.stringify({ step: "no-row" });
+        const oldId = row.dataset.id;
+        const trigger = row.querySelector('.sb-trigger');
+        if (!trigger) return JSON.stringify({ step: "no-trigger", oldId });
+        trigger.click();
+        await new Promise(k => setTimeout(k, 150));
+        const btn = document.querySelector('.sb-item.act-rename');
+        if (!btn) return JSON.stringify({ step: "no-menu-btn", oldId });
+        btn.click();
+        const input = row.querySelector('.rename-input');
+        if (!input) return JSON.stringify({ step: "no-input", oldId });
+        input.value = ${JSON.stringify(B5_NEW)};
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: "Enter", bubbles: true }));
+        return JSON.stringify({ step: "submitted", oldId });
+      })()`,
+    );
+    const b5r = JSON.parse(String(b5 ?? "{}")) as { step?: string; oldId?: string };
+    ok(b5r.step === "submitted" && !!b5r.oldId, "B5 重命名入口在真 DOM 里走得通（省略号→懒挂载菜单→输入→回车），实测 " + String(b5r.step));
+    if (b5r.step === "submitted" && b5r.oldId) {
+      const onDisk = async (): Promise<string[]> => (await readdir(root)).filter((f) => f.endsWith(".jsonl"));
+      const landed = await tryWait(async () => ((await onDisk()).includes(B5_NEW + ".jsonl") ? true : null), 8_000);
+      ok(landed, "B5 改名真的落到盘上（文件名即会话 id）");
+      const left = await onDisk();
+      ok(!left.includes(b5r.oldId + ".jsonl"), "B5 旧文件不残留（一个会话不该裂成两份），实测 " + left.join(","));
+    }
     await killElectron(electron2);
   } finally {
     if (electron.exitCode === null) await killElectron(electron);
