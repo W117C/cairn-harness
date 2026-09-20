@@ -96,6 +96,9 @@ export const UNMEASURABLE: readonly string[] = [
   "skill/MCP 在场但未用：日志不记当时有哪些可用（session_meta 无此字段），只数得到调了的",
   "参数质量：不看 args 语义，重复探测只按逐字相同判",
   "单次调用耗时：主流事件类型上没有时间戳字段",
+  // 已知偏乐观项，不是"暂时测不到"：withAgentId 不给 verify_result 加归因，而 worker 的
+  // 自动验证拍（W4a）已经上线 ⇒ 子代理的验证通过在主流里**看起来就是**主会话的通过。
+  "verify 归因：worker 的 verify_result 不带 agent_id（W4a 已上线），所以「写过盘没验」在开了 worker 验证的会话上偏乐观",
 ];
 
 function isWorkerSide(e: { agent_id?: string }): boolean {
