@@ -1,15 +1,15 @@
 // W3b 投影测：每条读数各测其定义，外加「比率只在合并后算」与「未证不是 0」两条口径。
 import { describe, expect, it } from "vitest";
-import { formatToolChoice, projectSession, projectToolChoice, UNMEASURABLE, WAIT_TOOL_NAME } from "../src/agent/tool-choice";
-import { withAgentId } from "../src/agent/worker-projection";
+import { formatToolChoice, projectSession, projectToolChoice, WAIT_TOOL_NAME } from "../src/agent/tool-choice";
 import type { AgentEvent } from "../src/events";
 
 const call = (id: string, name: string, args: Record<string, unknown> = {}, agent?: string): AgentEvent =>
   ({ type: "tool_call", id, name, args, ...(agent === undefined ? {} : { agent_id: agent }) });
 const res = (callId: string, ok = true, output = "同一份结果"): AgentEvent =>
   ({ type: "tool_result", callId, ok, output });
-const vres = (ok: boolean, auto = false): AgentEvent =>
-  ({ type: "verify_result", callId: "v1", ok, attempt: 1, maxAttempts: 3, results: [], ...(auto ? { auto: true } : {}) });
+const vres = (ok: boolean, auto = false, agent?: string): AgentEvent =>
+  ({ type: "verify_result", callId: "v1", ok, attempt: 1, maxAttempts: 3, results: [],
+    ...(auto ? { auto: true } : {}), ...(agent === undefined ? {} : { agent_id: agent }) });
 const spawn = (id: string): AgentEvent =>
   ({ type: "agent_spawned", agent_id: id, parent_event_id: 1, mode: "read", task: "t", max_turns: 40, permission_mode: "auto" });
 const wresult = (id: string): AgentEvent =>
@@ -48,18 +48,13 @@ describe("tool-choice 投影", () => {
     expect(one([call("s", "spawn_agent"), spawn("w1")]).orchestration.orphans).toBe(1); // 没等到终态就结束
   });
 
-  it("写盘只算主会话侧；verify_result 不在归因面 ⇒ 该读数已知偏乐观（绊线测的是归因函数本身，不是我造的桩）", () => {
+  it("写盘与验证都只算主会话侧：worker 的 verify 通过不替父会话销账", () => {
     const workerWrite = one([call("w", "write_file", { path: "x" }, "w1"), res("w")]);
     expect(workerWrite.verification.writeSessions).toBe(0);            // worker 写盘不进主会话分母
     expect(one([call("w", "write_file", { path: "x" }), res("w"), vres(true)]).verification.writeSessionsWithoutVerifyPass).toBe(0);
     expect(one([call("w", "write_file", { path: "x" }), res("w"), vres(false)]).verification.writeSessionsWithoutVerifyPass).toBe(1);
-    // 对照：归因函数确实会加 agent_id——没有这条，下面的 not 就是恒真，等于没测。
-    expect(withAgentId({ type: "tool_result", callId: "c", ok: true, output: "o" } as AgentEvent, "w1"))
-      .toHaveProperty("agent_id", "w1");
-    // 缺口：W4a 已让 worker 跑自动验证，而 verify_result 拿不到归因 ⇒ 子代理的通过会替主会话销账。
-    // 谁把 verify_result 加进 withAgentId，这条当场红——那时必须同步删掉 UNMEASURABLE 里那条边界说明。
-    expect(withAgentId(vres(true), "w1")).not.toHaveProperty("agent_id");
-    expect(UNMEASURABLE.some((u) => u.includes("verify_result"))).toBe(true);
+    // 绊线的另一头：verify_result 现在带归因（withAgentId 已覆盖），worker 的通过不得清主会话的账。
+    expect(one([call("w", "write_file", { path: "x" }), res("w"), vres(true, false, "w1")]).verification.writeSessionsWithoutVerifyPass).toBe(1);
   });
 
   it("自动验证拍单独计数（能力 5 的补拍不等于模型自调）", () => {

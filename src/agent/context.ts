@@ -51,8 +51,9 @@ export function excludedIds(events: AgentEvent[]): Set<number> {
 }
 
 /** M3c worker 子流归因：带非空 agent_id 的事件不进主上下文（§4.4.4）。
- *  抽成一份判定是因为自动验证拍的投影也要走同一条闸——两份「谁算子流」的写法迟早漂移。 */
-function hasWorkerAttribution(e: AgentEvent): boolean {
+ *  抽成一份判定是因为自动验证拍的投影也要走同一条闸——两份「谁算子流」的写法迟早漂移。
+ *  导出给读数投影（tool-choice）等外部消费者，别再各写一份 `typeof e.agent_id === "string"`。 */
+export function hasWorkerAttribution(e: AgentEvent): boolean {
   return "agent_id" in e && typeof e.agent_id === "string" && e.agent_id !== "";
 }
 

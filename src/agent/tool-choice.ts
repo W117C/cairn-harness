@@ -6,6 +6,7 @@
 // 所以 unmeasurable 把撑不起的几条显式列出来，免得下游当分数读（真选对率要 W5a 靶场）；
 // ② 分母为 0 的比率一律 null 不是 0（未证 ≠ 通过）。
 import { stuckActionOf, stuckObservationOf } from "./stuck";
+import { hasWorkerAttribution } from "./context";
 import { parseScopedToolName } from "./plugins/mcp";
 import type { AgentEvent, ToolCallEvent } from "../events";
 
@@ -79,10 +80,9 @@ export interface ToolChoiceReadings {
     passes: number;
     failures: number;
     writeSessions: number;
-    /** 写过盘却没有任何一次 verify 通过（说了但没验），W4c 假完成率的现成分子。
-     *  ⚠️ 依赖一条事实：withAgentId 只给 tool_call / tool_result / usage 加归因，
-     *  verify_result 永不带 agent_id ⇒ 现在所有 verify_result 都是主会话侧。**W4 给 worker
-     *  接自动验证时必须先把 verify_result 纳入归因面**，否则 worker 的通过会冒充主会话的通过。 */
+    /** 写过盘却没有任何一次**主会话** verify 通过（说了但没验），W4c 假完成率的现成分子。
+     *  worker 侧的验证证据由 agent_id 摘掉（withAgentId 已覆盖 verify_result）——
+     *  归因面少这一类，这里就会假绿。 */
     writeSessionsWithoutVerifyPass: number;
   };
   plugins: { skillCalls: number; mcpCalls: number };
@@ -96,14 +96,7 @@ export const UNMEASURABLE: readonly string[] = [
   "skill/MCP 在场但未用：日志不记当时有哪些可用（session_meta 无此字段），只数得到调了的",
   "参数质量：不看 args 语义，重复探测只按逐字相同判",
   "单次调用耗时：主流事件类型上没有时间戳字段",
-  // 已知偏乐观项，不是"暂时测不到"：withAgentId 不给 verify_result 加归因，而 worker 的
-  // 自动验证拍（W4a）已经上线 ⇒ 子代理的验证通过在主流里**看起来就是**主会话的通过。
-  "verify 归因：worker 的 verify_result 不带 agent_id（W4a 已上线），所以「写过盘没验」在开了 worker 验证的会话上偏乐观",
 ];
-
-function isWorkerSide(e: { agent_id?: string }): boolean {
-  return typeof e.agent_id === "string" && e.agent_id !== "";
-}
 
 /** 一个会话 → 原始计数。纯函数、幂等、不读盘不读设置。callId→tool_call 先建索引，
  *  不在 tool_result 分支里线性 find——万条事件的会话会被这条投影自己拖死。 */
@@ -137,19 +130,18 @@ export function projectSession(events: readonly AgentEvent[]): SessionCounts {
         out.results++;
         break;
       case "verify_result":
-        // 归因面只有 tool_call / tool_result / usage（withAgentId 的实现），verify_result 不带 agent_id
-        // ⇒ 现阶段所有 verify_result 都是主会话侧，这样算是准的。W4 给 worker 接自动验证后，
-        // 必须先把 verify_result 纳入归因，否则 worker 的通过会替主会话销账（见接口上的 ⚠️）。
+        // 归因：withAgentId 已把 verify_result 纳入子流装饰面 ⇒ worker 的验证证据带 agent_id，
+        // 不替主会话销账。缺了这条，「写过盘没验」在任何开了 worker 自动验证的会话上都会假绿。
         if (e.ok) {
           out.verifyPasses++;
-          mainVerifyPass = true;
+          if (!hasWorkerAttribution(e)) mainVerifyPass = true;
         } else out.verifyFailures++;
         if (e.auto === true) out.verifyAutoBeats++;
         break;
       case "tool_call": {
         out.toolCalls++;
         callsById.set(e.id, e);
-        if (isWorkerSide(e)) out.workerCalls++;
+        if (hasWorkerAttribution(e)) out.workerCalls++;
         const stat = out.byToolName[e.name] ?? { calls: 0, failures: 0 };
         stat.calls++;
         out.byToolName[e.name] = stat;
@@ -157,7 +149,7 @@ export function projectSession(events: readonly AgentEvent[]): SessionCounts {
         if (parseScopedToolName(e.name) !== null) out.mcpCalls++;
         if (e.name === WAIT_TOOL_NAME) out.waitCalls++;
         if (e.name === "verify") out.verifySelfCalls++;
-        if ((e.name === "write_file" || e.name === "edit_file") && !isWorkerSide(e)) mainWrites++;
+        if ((e.name === "write_file" || e.name === "edit_file") && !hasWorkerAttribution(e)) mainWrites++;
         break;
       }
       case "tool_result": {

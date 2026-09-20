@@ -79,6 +79,10 @@ export interface VerifyResultEvent {
   attempt: number;
   maxAttempts: number;
   results: VerifyCommandResult[];
+  /** M3a §4.4.10 同口径：worker 子流的验证证据带此字段（withAgentId 归因）。
+   *  缺省 = 主会话侧。此前 verify_result 拿不到归因，于是「worker 验过了」在主流里
+   *  看起来就是「父会话验过了」——三处下游（上下文红回流 / 父验证计量 / 假完成率分母）都被它骗过。 */
+  agent_id?: string;
 }
 
 // ---- M1d 压缩事件（§7.2 事件契约：摘除 id 集 + offset 注入，投影语义零删改）----
