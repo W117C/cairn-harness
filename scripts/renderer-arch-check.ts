@@ -39,11 +39,84 @@ import {
   type StaticServer,
 } from "./lib/harness";
 
-/** 视口矩阵：默认窗口 1280×832 + 一档窄窗（响应式断点另一侧）。 */
+/** 视口矩阵：默认窗口 1280×832 + 三档跨断点视口。
+ *  DT-03（2026-09-19）扩表理由：原表只有 1280 与 1000。1280 **恰好落在** `max-width:1279`
+ *  的边界外侧（1279 < 1280），而 1000 落在 `max-width:1023` 内侧——两个视口都测不到
+ *  「1024–1279 这一档」的右栏浮层路径，而那道路径正是当时无人写过 `.open-m` 的地方。
+ *  1152 补上这一格；1600 覆盖 `min-width:1600` 宽屏档。 */
 const VIEWPORTS: { w: number; h: number }[] = [
+  { w: 1600, h: 900 },
   { w: 1280, h: 832 },
+  { w: 1152, h: 800 },
   { w: 1000, h: 832 },
 ];
+
+/** 面板可达性探针（DT-03）：只点开关键、只读几何，不写业务状态。
+ *  判据是**几何**而不是 DOM 归属：缺陷当初正是「DOM 父级全对、元素却在视口外」。
+ *  测量前先挂 `html.reduce-motion`（应用自带的"关闭全部动画/过渡"开关）并强制同步重排——
+ *  面板显隐走的是 transform 过渡，点完立刻量只会读到过渡的起始值（= 永远"不可见"），
+ *  那是探针自己的假阴性，不是产品缺陷。这里量的是终态，与动效无关。 */
+const PROBE = `(() => {
+  const rect = (el) => {
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: Math.round(r.x), right: Math.round(r.right), w: Math.round(r.width), h: Math.round(r.height) };
+  };
+  // 可见 = 宽高有实体且在水平方向与视口有实质交集（留 8px 容差，避免刚好贴边算可见）
+  const vis = (el) => {
+    const r = rect(el);
+    if (!r) return false;
+    if (r.w < 8 || r.h < 8) return false;
+    return r.right > 8 && r.x < window.innerWidth - 8;
+  };
+  const settle = () => {
+    document.documentElement.classList.add('reduce-motion');
+    void document.documentElement.offsetWidth;   // 强制同步重排，拿到过渡后的终态
+  };
+  const drawer = document.querySelector('aside.drawer');
+  const sidebar = document.querySelector('aside.sidebar');
+  const dt = document.querySelector('#drawerToggle');
+  const st = document.querySelector('#sidebarToggle');
+  settle();
+  const out = {
+    vw: window.innerWidth,
+    drawerRect: rect(drawer),
+    sidebarRect: rect(sidebar),
+    drawerVis: vis(drawer),
+    sidebarVis: vis(sidebar),
+    drawerToggleName: dt ? String(dt.getAttribute('aria-label') || '') : 'absent',
+    sidebarToggleName: st ? String(st.getAttribute('aria-label') || '') : 'absent',
+  };
+  // 不可见就点一次开关键；点完仍不可见 = 该面板在本视口无任何可达路径
+  if (!out.drawerVis && dt) { dt.click(); settle(); out.drawerVisAfterToggle = vis(drawer); out.drawerRect = rect(drawer); }
+  else out.drawerVisAfterToggle = out.drawerVis;
+  if (!out.sidebarVis && st) { st.click(); settle(); out.sidebarVisAfterToggle = vis(sidebar); out.sidebarRect = rect(sidebar); }
+  else out.sidebarVisAfterToggle = out.sidebarVis;
+  out.drawerPressed = dt ? String(dt.getAttribute('aria-pressed')) : 'absent';
+  out.sidebarPressed = st ? String(st.getAttribute('aria-pressed')) : 'absent';
+  const inner = document.querySelector('.stream-inner');
+  out.streamInnerW = inner ? Math.round(inner.getBoundingClientRect().width) : -1;
+  return out;
+})()`;
+
+interface ProbeResult {
+  vw: number;
+  drawerRect: { x: number; right: number; w: number; h: number } | null;
+  sidebarRect: { x: number; right: number; w: number; h: number } | null;
+  drawerVis: boolean;
+  sidebarVis: boolean;
+  drawerVisAfterToggle: boolean;
+  sidebarVisAfterToggle: boolean;
+  drawerToggleName: string;
+  sidebarToggleName: string;
+  drawerPressed: string;
+  sidebarPressed: string;
+  streamInnerW: number;
+}
+
+/** 阅读行宽上限：`--content-max` 的四档封顶中最大为 1040，留 20px 容差。
+ *  失控时（改前 ≤1279 档是 `--content-max:none`）中栏会被拉满，此断言即变红。 */
+const MEASURE_MAX_PX = 1060;
 
 /** 页面内取数脚本：只读 DOM，不改任何状态。返回结构化快照供 Node 侧判定。 */
 const SNAPSHOT = `(() => {
@@ -264,6 +337,46 @@ function assertViewport(s: Snapshot): void {
   console.log("");
 }
 
+/** 面板可达性断言（DT-03）：结构对 ≠ 用户点得到。
+ *  改前 1024–1279 右栏、≤1023 左栏因 CSS 侧 `.open-m`/`.open` 无人写入而永久停在
+ *  translateX(±100%)，DOM 父子关系却全部正确——本组断言补的就是这一格。 */
+function assertReachability(p: ProbeResult): void {
+  console.log("[renderer-arch-check] 可达性 " + String(p.vw) + "×（探针实测）");
+
+  const dRect = p.drawerRect ? p.drawerRect.x + "…" + p.drawerRect.right + " w=" + p.drawerRect.w : "absent";
+  const sRect = p.sidebarRect ? p.sidebarRect.x + "…" + p.sidebarRect.right + " w=" + p.sidebarRect.w : "absent";
+
+  reporter.ok(
+    p.drawerVisAfterToggle,
+    "右栏可达：静息" + (p.drawerVis ? "可见" : "不可见") + " → 点开关键后可见（rect " + dRect + "，视口宽 " + p.vw + "）",
+  );
+  reporter.ok(
+    p.sidebarVisAfterToggle,
+    "左栏可达：静息" + (p.sidebarVis ? "可见" : "不可见") + " → 点开关键后可见（rect " + sRect + "，视口宽 " + p.vw + "）",
+  );
+
+  // 开关键不得「谎报」：aria-pressed=true 必须对应面板真在视口内，反之亦然。
+  const drawerLie = p.drawerPressed === "true" && !p.drawerVisAfterToggle;
+  const sidebarLie = p.sidebarPressed === "true" && !p.sidebarVisAfterToggle;
+  reporter.ok(!drawerLie, "右栏开关键状态与实际可见性一致（aria-pressed=" + p.drawerPressed + "）");
+  reporter.ok(!sidebarLie, "左栏开关键状态与实际可见性一致（aria-pressed=" + p.sidebarPressed + "）");
+
+  reporter.ok(
+    p.drawerToggleName !== "absent" && p.drawerToggleName.length > 0,
+    "右栏开关键有可访问名（实际「" + p.drawerToggleName + "」）",
+  );
+  reporter.ok(
+    p.sidebarToggleName !== "absent" && p.sidebarToggleName.length > 0,
+    "左栏开关键有可访问名（实际「" + p.sidebarToggleName + "」）",
+  );
+
+  reporter.ok(
+    p.streamInnerW > 0 && p.streamInnerW <= MEASURE_MAX_PX,
+    "中栏阅读行宽受 --content-max 约束 ≤ " + String(MEASURE_MAX_PX) + "（实际 " + String(p.streamInnerW) + "）",
+  );
+  console.log("");
+}
+
 console.log("[renderer-arch-check] 渲染层结构门禁");
 printTarget(args);
 try {
@@ -285,6 +398,13 @@ try {
       await sleep(350);
       const snap = await cdp.eval<Snapshot>(SNAPSHOT);
       assertViewport(snap);
+      /* 可达性探针会点开关键改变状态，故每条视口前重载页面，保证各档互不串味。 */
+      if (staticMode && ctx.server !== null) {
+        await cdp.send("Page.navigate", { url: ctx.server.url + args.htmlPath });
+        await sleep(700);
+      }
+      const probe = await cdp.eval<ProbeResult>(PROBE);
+      assertReachability(probe);
     }
     cdp.close();
   }

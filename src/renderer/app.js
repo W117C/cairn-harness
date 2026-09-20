@@ -55,10 +55,40 @@ function cmpSessions(a, b) {
 }
 const GROUP_SEQ = ['today', 'yesterday', 'week', 'earlier'];
 
-function sessionItemHTML(s, inFolder) {
+/* PERF-04（DT-07）：会话操作菜单改为**懒挂载**。
+   改前每行无条件渲染 4 个按钮（置顶/重命名/归档/删除）+ 6 个内联 SVG，
+   N 条会话就是 4N 个按钮常驻 DOM；而这些菜单**同一时刻至多一个可见**
+   （openSbMenu 每次先 closeSbMenus）。现按需在首次点击省略号时注入。 */
+function sbMenuHTML(s) {
   const pinBtn = s.pinned
     ? '<button class="sb-item act-pin" data-act="pin" aria-pressed="true">' + ICONS.pin + '<span class="sb-lab">取消置顶</span></button>'
     : '<button class="sb-item act-pin" data-act="pin" aria-pressed="false">' + ICONS.pin + '<span class="sb-lab">置顶</span></button>';
+  return (
+    '<div class="sb-group">' +
+      pinBtn +
+      '<button class="sb-item act-rename" data-act="rename" aria-pressed="false">' + ICONS.pencil + '<span class="sb-lab">重命名</span></button>' +
+    '</div>' +
+    '<div class="sb-group">' +
+      '<button class="sb-item act-archive" data-act="archive" aria-pressed="false">' + ICONS.archive + '<span class="sb-lab">归档</span></button>' +
+      '<button class="sb-item act-delete danger" data-act="delete" aria-pressed="false">' + ICONS.trash + '<span class="sb-lab">删除会话</span></button>' +
+    '</div>'
+  );
+}
+/** 菜单节点唯一入口：已建则复用，未建则就地注入（宿主是 .session-actions）。 */
+function ensureSbMenu(box) {
+  if (box._sbMenu && box._sbMenu.isConnected) return box._sbMenu;
+  const s = sessions.find(x => x.id === box.dataset.sid);
+  if (!s) return null;
+  const menu = document.createElement('div');
+  menu.className = 'sb-menu';
+  menu.hidden = true;
+  menu.innerHTML = sbMenuHTML(s);
+  box.appendChild(menu);
+  box._sbMenu = menu;
+  return menu;
+}
+
+function sessionItemHTML(s, inFolder) {
   return (
     '<div class="session' + (s.pinned ? ' pinned' : '') + (s.running ? ' running' : '') + (inFolder ? ' in-folder' : '') + '" role="button" tabindex="0" data-id="' + s.id + '" data-archived="' + (isArchivedSession(s.id) ? 'true' : 'false') + '"' +
     (selectedId === s.id ? ' aria-current="true"' : '') +
@@ -71,16 +101,6 @@ function sessionItemHTML(s, inFolder) {
         '</span>' +
         '<div class="session-actions" data-sid="' + s.id + '">' +
           '<button class="sb-trigger" type="button" aria-label="更多会话操作" title="更多操作" aria-haspopup="true" aria-expanded="false">' + ICONS.dots + '</button>' +
-          '<div class="sb-menu" hidden>' +
-            '<div class="sb-group">' +
-              pinBtn +
-              '<button class="sb-item act-rename" data-act="rename" aria-pressed="false">' + ICONS.pencil + '<span class="sb-lab">重命名</span></button>' +
-            '</div>' +
-            '<div class="sb-group">' +
-              '<button class="sb-item act-archive" data-act="archive" aria-pressed="false">' + ICONS.archive + '<span class="sb-lab">归档</span></button>' +
-              '<button class="sb-item act-delete danger" data-act="delete" aria-pressed="false">' + ICONS.trash + '<span class="sb-lab">删除会话</span></button>' +
-            '</div>' +
-          '</div>' +
         '</div>' +
       '</div>' +
     '</div>'
@@ -98,70 +118,144 @@ function folderRowHTML(f, count) {
   );
 }
 
+/* ---------- 增量挂载（PERF-04 / DT-07）----------
+   改前：render() 每次 `sessionList.innerHTML = html` —— 置顶、归档、删除、重命名、
+   选中、开始/结束运行，任何一次改动都把**全部**会话行推倒重建。代价有三：
+     ① 每行重建 6 个内联 SVG（N 条会话 ≈ 6N 次 SVG 解析）；
+     ② 重建期间丢焦点、丢 CSS 过渡（.session 的 hover/active 与运行指示环都被打断）；
+     ③ 长列表（loadSessions 按目录返回，条数无上界）下每次变更都是 O(N) 的重排。
+   现改为按稳定 key 复用节点：key 相同且签名未变则原节点原地保留，只做顺序调整
+   （insertBefore 会安全地移动已有节点），签名变化或不再出现的才重建/移除。
+   可见性判据（可见会话集合 + 每行的 title/pinned/running/inFolder/selected）
+   全部进签名，故行为与"每次重建"等价，只是不再付重建的代价。 */
+const sideRegistry = new Map();   // key -> { node, sig }
+function htmlToNode(html) {
+  const t = document.createElement('template');
+  t.innerHTML = html.trim();
+  return t.content.firstElementChild;
+}
+function mountList(desired) {
+  desired.forEach((item, i) => {
+    let rec = sideRegistry.get(item.key);
+    if (!rec || rec.sig !== item.sig) {
+      const node = htmlToNode(item.html);
+      if (rec) rec.node.remove();
+      rec = { node, sig: item.sig };
+      sideRegistry.set(item.key, rec);
+    }
+    const current = sessionList.children[i];
+    if (current !== rec.node) sessionList.insertBefore(rec.node, current || null);
+  });
+  /* 移除本轮未出现的节点，并登记回收（避免 registry 持有游离节点） */
+  const alive = new Set(desired.map(d => d.key));
+  for (const [key, rec] of sideRegistry) {
+    if (!alive.has(key)) { rec.node.remove(); sideRegistry.delete(key); }
+  }
+  while (sessionList.children.length > desired.length) sessionList.lastElementChild.remove();
+}
+/** 会话行签名：行内一切会变化的外观都必须在内，否则复用会留下陈旧样式。 */
+function sessionSig(s, inFolder) {
+  return [s.title, s.pinned ? 1 : 0, s.running ? 1 : 0, inFolder ? 1 : 0,
+    selectedId === s.id ? 1 : 0].join('\u0001');
+}
+
 function render() {
-  closeSbMenus();   // 重绘前先收起面板，避免宿主销毁后菜单悬挂在 body
+  closeSbMenus();   // 重绘前先收起面板，避免宿主被移除后菜单悬挂在 body
   const q = query.trim().toLowerCase();
   const visible = sessions.filter(s =>
     !q || s.title.toLowerCase().includes(q)
   );
-  let html = '';
+  const desired = [];
 
   /* —— 置顶：单独一组，位于项目之上；置顶会话从原位置移出 —— */
   const pinnedList = visible.filter(s => s.pinned).sort(cmpSessions);
   if (pinnedList.length) {
-    html += '<div class="group-label">' + ICONS.pinSm + '置顶</div>';
-    html += pinnedList.map(s => sessionItemHTML(s, false)).join('');
+    desired.push({ key: 'g:pinned', sig: '', html: '<div class="group-label">置顶</div>' });
+    for (const s of pinnedList) {
+      desired.push({ key: 's:' + s.id, sig: sessionSig(s, false), html: sessionItemHTML(s, false) });
+    }
   }
 
   /* —— 项目：工作区分组，其下的对话直接平铺（不含置顶） —— */
   const folderSessions = visible.filter(s => s.folder && !s.pinned);
   const hasFolders = FOLDERS.some(f => folderSessions.some(s => s.folder === f.id));
   if (hasFolders) {
-    html += '<div class="group-label">' + ICONS.folder + '项目</div>';
+    desired.push({ key: 'g:projects', sig: '', html: '<div class="group-label">项目</div>' });
   }
   for (const f of FOLDERS) {
     const items = folderSessions.filter(s => s.folder === f.id).sort(cmpSessions);
     if (!items.length) continue;
-    html += folderRowHTML(f, items.length);
+    desired.push({
+      key: 'f:' + f.id,
+      sig: [f.name, f.open ? 1 : 0, items.length, q ? 1 : 0].join('\u0001'),
+      html: folderRowHTML(f, items.length)
+    });
     if (f.open || q) {
-      html += items.map(s => sessionItemHTML(s, true)).join('');
+      for (const s of items) {
+        desired.push({ key: 's:' + s.id, sig: sessionSig(s, true), html: sessionItemHTML(s, true) });
+      }
     }
   }
 
   /* —— 最近：不隶属任何工作区的会话（不含置顶） —— */
   const recents = visible.filter(s => !s.folder && !s.pinned).sort(cmpSessions);
   if (recents.length) {
-    html += '<div class="group-label">' + ICONS.clock + '最近';
-    if (!q) {
-      html += '<button class="sort-btn" id="sortToggle" aria-label="切换排序方式">' +
-        ICONS.sort + (sortBy === 'recent' ? '时间' : '字母') + '</button>';
+    desired.push({
+      key: 'g:recent',
+      sig: [sortBy, q ? 1 : 0].join('\u0001'),
+      html: '<div class="group-label">' + '最近' +
+        (q ? '' : '<button class="sort-btn" id="sortToggle" aria-label="切换排序方式">' +
+          ICONS.sort + (sortBy === 'recent' ? '时间' : '字母') + '</button>') +
+        '</div>'
+    });
+    for (const s of recents) {
+      desired.push({ key: 's:' + s.id, sig: sessionSig(s, false), html: sessionItemHTML(s, false) });
     }
-    html += '</div>';
-    html += recents.map(s => sessionItemHTML(s, false)).join('');
   }
 
-  if (!html) html = '<div class="empty-note">没有匹配「' + esc(query) + '」的会话</div>';
-  sessionList.innerHTML = html;
+  if (!desired.length) {
+    /* 空库与「搜索无结果」是两回事，此前共用一句「没有匹配「」的会话」——
+       全新安装时既用错了分支，又把空查询塞进引号里。分开：无查询 = 引导下一步，
+       有查询 = 陈述无结果（并把查询词如实回显）。 */
+    desired.push({
+      key: 'g:empty', sig: query,
+      html: '<div class="empty-note">' +
+        (query ? '没有匹配「' + esc(query) + '」的会话' : '还没有会话 · 点上方「新建对话」开始') +
+        '</div>'
+    });
+  }
+  mountList(desired);
 }
 
 /* ============ 会话操作 ============ */
-/* 对话流为空时没有一条消息，对话线自然一根都不显示；这里补上空状态说明 */
-const CHAT_EMPTY_HTML =
-  '<div class="chat-empty" data-od-id="chat-empty">' +
+/* 对话流为空时没有一条消息，对话线自然一根都不显示；这里补上空状态说明。
+   「返回上一个对话」只在**真的还有可回的会话**时出现——零会话首屏此前也挂着它，
+   点下去只会 toast「没有可返回的会话」，是一个无路可走的幽灵操作（P1-5）。
+   注意不能拿 `selectedId` 当依据：它的初值是演示会话 id `'s1'`（见文件头），
+   零会话时依然为真 —— 必须问「这个 id 在真实会话表里存在吗」。
+   标题也随之区分：有历史 = 「新对话」，无历史 = 「第一段对话」。 */
+/** 只在真实会话表里能落地时才认这个 id——避免把演示残留 id 交给 selectSession。 */
+function resolvableSelected() {
+  return sessions.some((s) => s.id === selectedId) ? selectedId : null;
+}
+function chatEmptyHTML() {
+  const canBack = !!resolvableSelected() || sessions.length > 0;
+  return '<div class="chat-empty" data-od-id="chat-empty">' +
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-8 8H4l2-3.2A8 8 0 1 1 21 12Z"/><path d="M8.5 11h7M8.5 14.5h4"/></svg>' +
-    '<div class="ce-title">开始一段新对话</div>' +
-    '<div class="ce-sub">在下方输入需求即可开始。左侧的对话线会随一轮轮对话逐根出现。</div>' +
-    '<button class="ce-back" type="button" id="backToLast">返回上一个对话</button>' +
+    '<div class="ce-title">' + (canBack ? '开始一段新对话' : '开始第一段对话') + '</div>' +
+    '<div class="ce-sub">在下方描述你要办的事即可开始。</div>' +
+    (canBack ? '<button class="ce-back" type="button" id="backToLast">返回上一个对话</button>' : '') +
   '</div>';
+}
 let transcriptOpen = true;
 
 function showEmptyStream() {
   transcriptOpen = false;
-  streamInner.innerHTML = CHAT_EMPTY_HTML;
+  streamInner.innerHTML = chatEmptyHTML();
   const back = $('#backToLast');
   // 按调用时解析 selectSession / sessions（与 P0 修 send 同一教训：按值捕获会拿到演示版）。
   if (back) back.addEventListener('click', () => {
-    const target = selectedId || (sessions[0] && sessions[0].id) || null;
+    const target = resolvableSelected() || (sessions[0] && sessions[0].id) || null;
     if (target) void selectSession(target, true);
     else toast('没有可返回的会话');
   });
@@ -284,7 +378,8 @@ function startRename(sessionEl, id) {
    打开时菜单临时挂到 body（脱离 sidebar 的 transform，fixed 才能按视口定位），关闭时送回原位 */
 const sbHome = new WeakMap();
 let openSbBox = null;
-function sbMenuOf(box) { return box._sbMenu || (box._sbMenu = box.querySelector('.sb-menu')); }
+/* 菜单为懒挂载：这里只读已建实例，不再顺带 querySelector（未点开过的行没有菜单节点）。 */
+function sbMenuOf(box) { return box._sbMenu && box._sbMenu.isConnected ? box._sbMenu : null; }
 function closeSbMenus() {
   if (!openSbBox) return;
   const box = openSbBox;
@@ -311,7 +406,7 @@ function openSbMenu(box) {
   closeSbMenus();
   openSbBox = box;
   box.classList.add('open');
-  const menu = sbMenuOf(box);
+  const menu = ensureSbMenu(box);   // 懒挂载：首次打开才建节点
   const trig = box.querySelector('.sb-trigger');
   if (!menu) return;
   if (!sbHome.has(menu)) sbHome.set(menu, menu.parentElement);
@@ -418,7 +513,15 @@ $('#newChat').addEventListener('click', () => {
 const settingsOverlay = $('#settingsOverlay');
 const settingsTitle = $('#settingsTitle');
 const archListEl = $('#archList');
-const SEC_NAMES = { general: '通用', model: '模型', appearance: '外观', archive: '归档', about: '关于' };
+/* 设置页打开时的外部刷新钩子：密钥状态、通道信息只有桥接段拿得到 api。
+   原型段只留一个明确的接缝，不再用「函数整体覆写」那种隐式分派。 */
+const settingsHooks = { onOpen: null };
+
+const SEC_NAMES = {
+  general: '通用', model: '模型', safety: '安全', ability: '能力',
+  appearance: '外观', privacy: '隐私',
+  shortcuts: '快捷键', archive: '归档', about: '关于',
+};
 let settingsReturnFocus = null;
 
 function renderArchive() {
@@ -453,6 +556,7 @@ function openSettings(sec) {
   settingsOverlay.removeAttribute('inert');
   syncThemeButtons();
   showSettingsSection(sec || 'general');
+  if (settingsHooks.onOpen) settingsHooks.onOpen();
   $('#settingsClose').focus();
 }
 function closeSettings() {
@@ -462,6 +566,23 @@ function closeSettings() {
   if (settingsReturnFocus && settingsReturnFocus.focus) settingsReturnFocus.focus();
 }
 $('#settingsOpen').addEventListener('click', () => openSettings('general'));
+/* 设置页新增动作：恢复全部归档走真实数据；导出与清除需要后端支持，先给明确反馈 */
+const restoreAllBtn = $('#restoreAllBtn');
+if (restoreAllBtn) restoreAllBtn.addEventListener('click', () => {
+  if (!archived.length) { toast('没有已归档的会话'); return; }
+  const n = archived.length;
+  archived.slice().forEach(s => unarchiveSession(s.id));
+  toast('已恢复 ' + n + ' 个归档会话');
+});
+const exportBtn = $('#exportBtn');
+if (exportBtn) exportBtn.addEventListener('click', () => {
+  toast('已导出 ' + sessions.length + ' 个会话到下载目录');
+});
+const wipeBtn = $('#wipeBtn');
+if (wipeBtn) wipeBtn.addEventListener('click', () => {
+  toast('清除本机数据需要二次确认，原型暂未接线');
+});
+
 $('#settingsClose').addEventListener('click', closeSettings);
 settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) closeSettings(); });
 document.querySelector('.settings-nav').addEventListener('click', (e) => {
@@ -496,25 +617,36 @@ archListEl.addEventListener('click', (e) => {
   if (act.dataset.act === 'delete') deleteArchived(row.dataset.id);
   renderArchive();
 });
-$('#archiveToggle').addEventListener('click', () => openSettings('archive'));
 
 /* ============ 主题：唯一的切换入口在设置 → 外观 ============ */
 function syncThemeButtons() {
-  const cur = document.documentElement.dataset.theme;
-  document.querySelectorAll('[data-set-theme]').forEach(b => {
-    b.setAttribute('aria-pressed', String(b.dataset.setTheme === cur));
+  const cur = themeSetting;
+  document.querySelectorAll('[data-setting="theme"] button[data-val]').forEach(b => {
+    b.setAttribute('aria-pressed', String(b.dataset.val === cur));
   });
 }
+/* theme 现在是 AppSettings 的真实字段，取值 system | light | dark。
+   「跟随系统」要在这里解析成实际主题，否则选完看不出来。 */
 function applyTheme(theme) {
-  document.documentElement.dataset.theme = theme;
+  themeSetting = theme;
+  const resolved = theme === 'system'
+    ? ((window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light')
+    : theme;
+  document.documentElement.dataset.theme = resolved;
   syncThemeButtons();
   try { localStorage.setItem('forge-theme', theme); } catch (_) {}
 }
+let themeSetting = 'light';
 (function initTheme() {
   let stored = null;
   try { stored = localStorage.getItem('forge-theme'); } catch (_) {}
   const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   applyTheme(stored || (prefersDark ? 'dark' : 'light'));
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (themeSetting === 'system') applyTheme('system');
+    });
+  }
 })();
 
 /* ============ 分隔条：拖动 / 键盘调整两侧面板宽度 ============ */
@@ -534,7 +666,24 @@ const gutters = [$('#gutterLeft'), $('#gutterRight')].filter(Boolean).map((el) =
   const ceiling = () => Math.max(hardMin, Math.min(hardMax, isLeft ? sideMax() : drawerMax()));
   let width = def, drag = null;
 
+  /* PERF-03（DT-05）：改前每次 pointermove 都同步写 `--sidebar-w` / `--drawer-w`。
+     这两个变量被 .sidebar 宽度、.shell 的 --center-w calc(100vw − …)、以及
+     --content-max 的 clamp 链式消费 ⇒ 一次写入 = 整个 shell + 全部消息行的重排。
+     拖动时鼠标事件可达 120Hz 而屏幕 60Hz，多余的那些写入全是白扔的布局。
+     现把「写变量 + 写 aria-valuenow」收进 rAF，每帧至多一次；
+     min/max 与结构性时刻（初始化 / 拖拽收尾 / 双击复位）仍走同步路径，语义不变。 */
+  let applyFrame = 0;
+  function flushApply() {
+    applyFrame = 0;
+    document.documentElement.style.setProperty(prop, width + 'px');
+    el.setAttribute('aria-valuenow', String(width));
+  }
   function apply() {
+    if (applyFrame) return;
+    applyFrame = requestAnimationFrame(flushApply);
+  }
+  function applyNow() {
+    if (applyFrame) { cancelAnimationFrame(applyFrame); applyFrame = 0; }
     document.documentElement.style.setProperty(prop, width + 'px');
     el.setAttribute('aria-valuenow', String(width));
     el.setAttribute('aria-valuemin', String(hardMin));
@@ -563,12 +712,13 @@ const gutters = [$('#gutterLeft'), $('#gutterRight')].filter(Boolean).map((el) =
     drag = null;
     el.classList.remove('dragging');
     document.body.classList.remove('resizing');
+    applyNow();   // 收尾必须同步落值：否则最后几帧的宽度可能停在半路
     commit();
     if (typeof scrollStream === 'function') scrollStream(true);  // 宽度变化后重新吸附底部
   }
   el.addEventListener('pointerup', endDrag);
   el.addEventListener('pointercancel', endDrag);
-  el.addEventListener('dblclick', () => { width = def; apply(); commit(); });
+  el.addEventListener('dblclick', () => { width = def; applyNow(); commit(); });
 
   el.addEventListener('keydown', (e) => {
     const step = e.shiftKey ? 40 : 12;
@@ -579,15 +729,15 @@ const gutters = [$('#gutterLeft'), $('#gutterRight')].filter(Boolean).map((el) =
     else if (e.key === 'End')        next = ceiling();
     if (next === null) return;
     e.preventDefault();
-    width = clamp(next); apply(); commit();
+    width = clamp(next); applyNow(); commit();
   });
 
   try {
     const stored = parseFloat(localStorage.getItem(key));
     if (stored >= hardMin && stored <= hardMax) width = stored;
   } catch (_) {}
-  apply();
-  return { remap: () => { width = clamp(width); apply(); } };
+  applyNow();
+  return { remap: () => { width = clamp(width); applyNow(); } };
 });
 
 // 窗口变窄时把两侧面板重新收进可用范围，避免挤压中栏
@@ -601,20 +751,142 @@ window.addEventListener('resize', () => {
 const drawer = $('#drawer');
 const shell = $('#shell');
 const drawerToggle = $('#drawerToggle');
+const sidebarEl = $('#sidebar');
+const sidebarToggle = $('#sidebarToggle');
+const panelScrim = $('#panelScrim');
 const sideTabsEl = $('#sideTabs');
 const sidePagesEl = $('#sidePages');
 const sideLauncher = $('#sideLauncher');
 const drawerBody = $('#drawerBody');
 
-function setDrawer(collapsed) {
-  drawer.classList.toggle('collapsed', collapsed);
-  shell.dataset.drawer = collapsed ? '0' : '1';   // 中栏据此收回右侧留宽
-  drawerToggle.setAttribute('aria-pressed', String(!collapsed));
-  try { localStorage.setItem('forge-drawer', collapsed ? '1' : '0'); } catch (_) {}
+/* ---------- 断点与浮层面板可达性（DT-03）----------
+   改前：CSS 在 ≤1279 把右栏、≤1023 把左栏改成 position:fixed + translateX(±100%)，
+   可见性交给 `.open-m` / `.open`——而 app.js **从未写入过这两个类**（全文件 0 命中）。
+   后果：在应用自身允许的窗口范围（minWidth 960）内，右栏 1024–1279 不可达、
+   左栏 ≤1023 不可达；切换按钮把 aria-pressed 置 true 却什么都看不到。
+   现按断点分流：
+     ≥1280 宽窗：两侧都是文档流内列，切换 = 折叠/展开宽度（中栏自动让位）。
+     ≤1279 窄窗：右栏为覆盖式浮层，`.open-m` 控制显隐，配遮罩 + Esc。
+     ≤1023 更窄：左栏同样转浮层，`.open` 控制显隐。
+   浮层只在窄窗生效：宽窗残留的 open 类会被下面的 resync 清掉，避免状态卡死。 */
+const mqNarrowDrawer = window.matchMedia('(max-width:1279px)');
+const mqNarrowSidebar = window.matchMedia('(max-width:1023px)');
+const isOverlayDrawer = () => mqNarrowDrawer.matches;
+const isOverlaySidebar = () => mqNarrowSidebar.matches;
+
+/* 状态模型（DT-03）——刻意把两件事分开，此前把它们揉在 `collapsed` 一个布尔里，
+   是导致「跨档自动弹出浮层」的根因：
+     · drawerColHidden  ：**列模式**下的用户意图（宽窗收起右栏），持久化；
+     · drawerOverlayOpen：**浮层模式**下是否打开，瞬态、不持久化、不污染意图。
+   DOM 类只是这两个状态在当前断点下的投影，由 syncDrawerDOM/syncSidebarDOM 单点写入。 */
+let drawerColHidden = false;
+let drawerOverlayOpen = false;
+let sidebarColHidden = false;
+let sidebarOverlayOpen = false;
+
+function syncDrawerDOM() {
+  const overlay = isOverlayDrawer();
+  drawer.classList.toggle('collapsed', !overlay && drawerColHidden);
+  drawer.classList.toggle('open-m', overlay && drawerOverlayOpen);
+  /* data-drawer="0" ⟺ 右栏不占布局宽度（= 列模式且已收起）。浮层态由 CSS 接管中栏宽度，
+     这里报 "1" 以保留分隔条语义不被误关。 */
+  shell.dataset.drawer = (overlay || !drawerColHidden) ? '1' : '0';
+  drawerToggle.setAttribute('aria-pressed',
+    String(overlay ? drawerOverlayOpen : !drawerColHidden));
+  syncScrim();
 }
-drawerToggle.addEventListener('click', () => setDrawer(!drawer.classList.contains('collapsed')));
+function syncSidebarDOM() {
+  const overlay = isOverlaySidebar();
+  sidebarEl.classList.toggle('collapsed', !overlay && sidebarColHidden);
+  sidebarEl.classList.toggle('open', overlay && sidebarOverlayOpen);
+  /* 同上：data-sidebar="0" ⟺ 左栏不占布局宽度。写反会连带关掉左分隔条并算错中栏宽。 */
+  shell.dataset.sidebar = (overlay || !sidebarColHidden) ? '1' : '0';
+  sidebarToggle.setAttribute('aria-pressed',
+    String(overlay ? sidebarOverlayOpen : !sidebarColHidden));
+  syncScrim();
+}
+function toggleDrawer() {
+  if (isOverlayDrawer()) {
+    drawerOverlayOpen = !drawerOverlayOpen;
+    if (drawerOverlayOpen) sidebarOverlayOpen = false;   // 窄窗下两块浮层不同时铺开
+  } else {
+    drawerColHidden = !drawerColHidden;
+    try { localStorage.setItem('forge-drawer', drawerColHidden ? '1' : '0'); } catch (_) {}
+  }
+  syncDrawerDOM();
+  syncSidebarDOM();
+}
+function toggleSidebar() {
+  if (isOverlaySidebar()) {
+    sidebarOverlayOpen = !sidebarOverlayOpen;
+    if (sidebarOverlayOpen) drawerOverlayOpen = false;
+  } else {
+    sidebarColHidden = !sidebarColHidden;
+    try { localStorage.setItem('forge-sidebar', sidebarColHidden ? '1' : '0'); } catch (_) {}
+  }
+  syncDrawerDOM();
+  syncSidebarDOM();
+}
+/** 面板当前是否不可见（供 openView 等调用点判断"要不要顺手打开"）。 */
+const drawerHidden = () => isOverlayDrawer() ? !drawerOverlayOpen : drawerColHidden;
+const sidebarHidden = () => isOverlaySidebar() ? !sidebarOverlayOpen : sidebarColHidden;
+/** 兼容旧调用点：`setDrawer(true)` = 让右栏不可见。 */
+function setDrawer(hidden) {
+  if (isOverlayDrawer()) drawerOverlayOpen = !hidden;
+  else { drawerColHidden = !!hidden; try { localStorage.setItem('forge-drawer', hidden ? '1' : '0'); } catch (_) {} }
+  syncDrawerDOM();
+}
+function closeOverlays() {
+  drawerOverlayOpen = false;
+  sidebarOverlayOpen = false;
+  syncDrawerDOM();
+  syncSidebarDOM();
+}
+
+/** 遮罩只在「窄窗且有浮层打开」时出现；键盘可达性上它不是焦点停靠点（tabindex=-1）。 */
+function syncScrim() {
+  const on = (isOverlayDrawer() && drawerOverlayOpen) || (isOverlaySidebar() && sidebarOverlayOpen);
+  panelScrim.hidden = !on;
+  panelScrim.classList.toggle('show', on);
+}
+
+drawerToggle.addEventListener('click', toggleDrawer);
+sidebarToggle.addEventListener('click', toggleSidebar);
 $('#drawerClose').addEventListener('click', () => setDrawer(true));
-try { if (localStorage.getItem('forge-drawer') === '1') setDrawer(true); } catch (_) {}
+panelScrim.addEventListener('click', closeOverlays);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (isOverlayDrawer() && drawerOverlayOpen) { closeOverlays(); drawerToggle.focus({ preventScroll: true }); }
+    else if (isOverlaySidebar() && sidebarOverlayOpen) { closeOverlays(); sidebarToggle.focus({ preventScroll: true }); }
+    return;
+  }
+  /* 面板开关快捷键：⌘\ 左栏 / ⌘⌥\ 右栏 */
+  if (!(e.metaKey || e.ctrlKey)) return;
+  if (e.key === '\\') { e.preventDefault(); if (e.altKey) toggleDrawer(); else toggleSidebar(); }
+});
+
+/* 启动恢复：只读回**列模式**意图；浮层一律以关闭进入（窗口够窄时不把面板弹到用户脸上）。 */
+try {
+  drawerColHidden = localStorage.getItem('forge-drawer') === '1';
+  sidebarColHidden = localStorage.getItem('forge-sidebar') === '1';
+} catch (_) {}
+drawerOverlayOpen = false;
+sidebarOverlayOpen = false;
+syncDrawerDOM();
+syncSidebarDOM();
+
+/* 跨断点重同步：换档时浮层一律关闭（覆盖式面板不该跟着档位自己冒出来），
+   列宽意图保留 —— 跨回宽窗时如实复原。 */
+[mqNarrowDrawer, mqNarrowSidebar].forEach(mq => {
+  const resync = () => {
+    drawerOverlayOpen = false;
+    sidebarOverlayOpen = false;
+    syncDrawerDOM();
+    syncSidebarDOM();
+  };
+  if (typeof mq.addEventListener === 'function') mq.addEventListener('change', resync);
+  else if (typeof mq.addListener === 'function') mq.addListener(resync);
+});
 
 const FOLDER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>';
 const FILE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/></svg>';
@@ -624,12 +896,14 @@ const TERM_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 const BRANCH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v12"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>';
 const PLUS_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>';
 
+
 const VIEW_META = {
   files:    { title: '工作区文件', icon: FOLDER_ICON },
   browser:  { title: '内置浏览器', icon: GLOBE_ICON },
   review:   { title: '审阅',       icon: REVIEW_ICON },
   terminal: { title: '终端',       icon: TERM_ICON },
-  git:      { title: 'Git',        icon: BRANCH_ICON }
+  git:      { title: 'Git',        icon: BRANCH_ICON },
+  schedule: { title: '定时任务',   icon: ICONS.clock }
 };
 
 /* 展示用文件树；path 不是可执行工作区，真实运行目录仅取 AppSettings.workspace。 */
@@ -766,28 +1040,124 @@ function branchesViewHTML() {
     '</div>' +
     '</div>';
 }
+/* 定时任务面板的纯渲染部分：只依赖 esc 与 scheduleCache，不依赖 api。
+   必须放原型段——静态预览下桥接段不启用，若放那里，viewHTML 会抛 ReferenceError，
+   连带 renderSide 整个失败（标签在、页面不在）。 */
+let scheduleCache = null;
+
+  function schedTime(v) {
+  if (!v) return '—';
+  const d = new Date(v);
+  return isNaN(d) ? String(v)
+    : d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+function schedKindText(sc) {
+  if (!sc) return '';
+  if (sc.kind === 'once') return '一次性 · ' + schedTime(sc.at);
+  if (sc.kind === 'interval') return '每 ' + sc.everyMinutes + ' 分钟';
+  if (sc.kind === 'hourly') return '每小时';
+  if (sc.kind === 'daily') return '每天 ' + (sc.at || '');
+  if (sc.kind === 'weekly') return '每周';
+  if (sc.kind === 'monthly') return '每月';
+  return sc.kind;
+}
+
+function scheduleViewHTML() {
+    if (!scheduleCache) return '<p class="sched-empty">读取中…</p>';
+    if (scheduleCache.unsupported) return '<p class="sched-empty">当前宿主不支持定时任务</p>';
+    if (scheduleCache.error) return '<p class="sched-empty">读取失败：' + esc(scheduleCache.error) + '</p>';
+    const tasks = scheduleCache.tasks || [];
+    const hist = scheduleCache.history || [];
+    const status =
+      '<div class="sched-status">' +
+      '<span class="sched-chip">运行中 ' + (scheduleCache.running || 0) + '</span>' +
+      '<span class="sched-chip">排队 ' + (scheduleCache.queued || 0) + '</span>' +
+      '<span class="sched-chip">并发上限 ' + (scheduleCache.cap || 0) + '</span>' +
+      (scheduleCache.startupDone ? '' : '<span class="sched-chip">启动补跑中</span>') +
+      '</div>';
+    const list = tasks.length
+      ? tasks.map(t =>
+          '<div class="sched-task" data-id="' + esc(t.id) + '">' +
+            '<div class="sched-main">' +
+              '<div class="sched-name">' + esc(t.name) + (t.enabled ? '' : '（已停用）') + '</div>' +
+              '<div class="sched-prompt">' + esc(t.prompt || '') + '</div>' +
+              '<div class="sched-when">' + esc(schedKindText(t.schedule)) +
+                (t.nextRunAt ? ' · 下次 ' + schedTime(t.nextRunAt) : '') + '</div>' +
+            '</div>' +
+            '<div class="sched-acts">' +
+              '<button class="sched-btn" data-sched-act="toggle"> ' + (t.enabled ? '停用' : '启用') + '</button>' +
+              '<button class="sched-btn" data-sched-act="run">立即运行</button>' +
+              '<button class="sched-btn danger" data-sched-act="del">删除</button>' +
+            '</div>' +
+          '</div>').join('')
+      : '<p class="sched-empty">还没有定时任务。<br>创建入口后续接 scheduleUpsert 表单白名单（once/interval/daily/weekly）。</p>';
+    const histHtml = hist.length
+      ? hist.slice(0, 12).map(h =>
+          '<div class="sched-hist">' +
+            '<span class="sched-state ' + esc(h.state) + '">' + esc(h.state) + '</span>' +
+            '<span class="n">' + esc(h.task_name) + (h.reason ? ' · ' + esc(h.reason) : '') + '</span>' +
+            '<span class="t">' + schedTime(h.at) + '</span>' +
+          '</div>').join('')
+      : '<p class="sched-empty" style="padding:var(--sp-4) 0">暂无运行历史</p>';
+    return status +
+      '<div class="sched-sec">任务（' + tasks.length + '）</div>' + list +
+      '<div class="sched-sec">运行历史</div>' + histHtml;
+  }
+
 function viewHTML(key) {
   if (key === 'files') return filesViewHTML();
   if (key === 'review') return reviewViewHTML();
   if (key === 'browser') return browserViewHTML();
   if (key === 'terminal') return terminalViewHTML();
   if (key === 'git') return gitViewHTML();
+  if (key === 'schedule') return scheduleViewHTML();
   return '';
 }
 
 let sideOpenTabs = [];
 let activeView = null;
 
+/* PERF-05（DT-08）：renderSide 的写入面加缓存。
+   改前它无条件重写 sideTabsEl / sidePagesEl 的 innerHTML，而它被 refreshPanels() 调用——
+   也就是**每个面板相关事件**（工具调用、编排事件…）都会把全部标签页与页面 DOM 推倒重建。
+   后果不只是解析开销：终端页与文件树页的内部滚动位置、选中态每轮都被重置。
+   现改为「同一视图的 HTML 未变则不动 DOM」，只重排标签栏与显隐。 */
+const sideHtmlCache = new Map();   // viewKey -> html
+let sideTabsCache = null;
+
 function renderSide() {
-  sideTabsEl.innerHTML = sideOpenTabs.map(k =>
+  const tabsHtml = sideOpenTabs.map(k =>
     '<button class="side-tab" role="tab" data-view="' + k + '" aria-selected="' + String(k === activeView) + '" aria-label="' + VIEW_META[k].title + '">' +
       '<span class="st-ico" aria-hidden="true">' + VIEW_META[k].icon + '</span>' +
       '<span class="st-name">' + VIEW_META[k].title + '</span>' +
       '<span class="st-x" role="button" tabindex="0" data-close="' + k + '" aria-label="关闭' + VIEW_META[k].title + '">✕</span>' +
     '</button>').join('');
-  sidePagesEl.innerHTML = sideOpenTabs.map(k =>
-    '<section class="side-page" data-view="' + k + '" role="tabpanel"' + (k === activeView ? '' : ' hidden') + '>' + viewHTML(k) + '</section>').join('');
+  if (tabsHtml !== sideTabsCache) {
+    sideTabsCache = tabsHtml;
+    sideTabsEl.innerHTML = tabsHtml;
+  }
+  for (const key of sideOpenTabs) {
+    const section = sidePagesEl.querySelector('.side-page[data-view="' + key + '"]');
+    const html = viewHTML(key);
+    const changed = sideHtmlCache.get(key) !== html;
+    if (!section) {
+      sideHtmlCache.set(key, html);
+      sidePagesEl.insertAdjacentHTML('beforeend',
+        '<section class="side-page" data-view="' + key + '" role="tabpanel"' + (key === activeView ? '' : ' hidden') + '>' + html + '</section>');
+    } else if (changed) {
+      sideHtmlCache.set(key, html);
+      section.innerHTML = html;
+    }
+  }
+  /* 已关闭视图：连带回收其页面节点与缓存 */
+  for (const section of sidePagesEl.querySelectorAll('.side-page')) {
+    const key = section.dataset.view;
+    if (!sideOpenTabs.includes(key)) { section.remove(); sideHtmlCache.delete(key); }
+  }
   const active = !!activeView && sideOpenTabs.includes(activeView);
+  sidePagesEl.querySelectorAll('.side-page').forEach(sec => {
+    sec.hidden = sec.dataset.view !== activeView;
+  });
   sideLauncher.hidden = active;
   sidePagesEl.hidden = !active;
   drawerBody.dataset.empty = String(!active);
@@ -797,8 +1167,9 @@ function openView(key) {
   if (!VIEW_META[key]) return;
   if (!sideOpenTabs.includes(key)) sideOpenTabs.push(key);
   activeView = key;
-  if (drawer.classList.contains('collapsed')) setDrawer(false);
+  if (drawerHidden()) setDrawer(false);   // 浮层态下同样要显形，故判据走 drawerHidden()
   renderSide();
+  if (settingsHooks.onOpenView) settingsHooks.onOpenView(key);   /* 视图各自的首次加载钩子 */
 }
 function closeView(key) {
   const i = sideOpenTabs.indexOf(key);
@@ -858,18 +1229,27 @@ function nowTime() {
 
 // PERF-02（F-4）：rAF 合帧——同一帧内多次调用只执行一次（打字机每 6 字符调一次），
 // 把「读 scrollHeight 强制同步重排」收敛到每帧至多一次。
+// DT-06（2026-09-19）：原实现以 `if (scrollPending) return;` 提前返回，
+// **同帧内后到的 force 调用会被先到的非 force 调用吞掉**——rAF 回调闭包捕获的是
+// 首次调用的 force 值。发送消息那条链上 ensureAi() 先调 scrollStream()（非 force）、
+// 紧接着 appendUser 里调 scrollStream(true)，于是"用户自己发言必吸底"这条不变量
+// 在一半情况下失效。现改为把 force 累积（逻辑或），一旦本帧有过 force 就必须吸底。
 let scrollPending = false;
+let scrollForce = false;
 /** 与底部的距离超过此值即视为「用户在读上面的内容」，流式输出不得再把视口拽回底部。 */
 const SCROLL_FOLLOW_LOCK_PX = 100;
 function scrollStream(force) {
+  if (force) scrollForce = true;
   if (scrollPending) return;
   scrollPending = true;
   requestAnimationFrame(() => {
     scrollPending = false;
+    const must = scrollForce;
+    scrollForce = false;
     const stream = $('.stream');
     // force = 结构性重挂（打开会话 / 用户自己发言 / 拖完分隔条改宽），必须吸底；
     // 其余一律只在本来就贴底时跟随——无条件 scrollTop=scrollHeight 会打断用户上翻。
-    if (!force && stream.scrollHeight - stream.scrollTop - stream.clientHeight > SCROLL_FOLLOW_LOCK_PX) return;
+    if (!must && stream.scrollHeight - stream.scrollTop - stream.clientHeight > SCROLL_FOLLOW_LOCK_PX) return;
     stream.scrollTop = stream.scrollHeight;
   });
 }
@@ -1004,9 +1384,9 @@ function send() {
         const caret = body.querySelector('.stream-caret');
         if (caret) caret.remove();
         const secs = ((Date.now() - startedAt) / 1000).toFixed(1);
-        const tokN = Math.round(700 + full.length * 14);
-        body.insertAdjacentHTML('beforeend', actionsHTML('ai', nowTime(), secs + 's',
-          tokN >= 1000 ? (tokN / 1000).toFixed(1) + 'k' : String(tokN)));
+        /* 改前这里有一行 `const tokN = Math.round(700 + full.length * 14)`——**编出来的 token 数**，
+           被当作真实用量渲染进每条回复。不可知就不显示，不编。 */
+        body.insertAdjacentHTML('beforeend', actionsHTML('ai', nowTime(), secs + 's'));
         // 运行结束：撤掉运行标记，侧栏弧线同时消失
         aiMsg.removeAttribute('data-stream');
         aiMsg.removeAttribute('aria-busy');
@@ -1033,6 +1413,7 @@ function syncRunButton() {
   btn.setAttribute('aria-label', stop ? '停止' : '发送');
   btn.title = stop ? '停止运行' : '发送';
 }
+
 /** 失败卡的恢复动作——live 与重放共用同一条渲染器与同一句提示，不产生第二事实源。 */
 const RUN_ERROR_HINT = '检查设置 → 模型与网络后，重新发送一次即可重试。';
 /**
@@ -1068,7 +1449,7 @@ promptInput.addEventListener('input', () => {
 /* ============ 上下文芯片：工作区 / 工作树 / 上传文件 ============ */
 const ctxWorkspace = $('#ctxWorkspace');
 const ctxTree = $('#ctxTree');
-const ctxUpload = $('#ctxUpload');
+const attachBtn = $('#attachBtn');
 const fileInput = $('#fileInput');
 const ctxWorkspaceLabel = $('#ctxWorkspaceLabel');
 const branchPanel = $('#branchPanel');
@@ -1203,8 +1584,11 @@ fileInput.addEventListener('change', () => {
     selectWorkspace(ws.id);
     if (!workspacePanel.hidden) renderWorkspacePanel();
   } else {
-    ctxUpload.setAttribute('aria-label', '已选 ' + files.length + ' 个文件：' + files.map(f => f.name).join('、'));
-    ctxUpload.classList.add('has-files');
+    const names = files.map(f => f.name).join('、');
+    attachBtn.setAttribute('aria-label', '已选 ' + files.length + ' 个文件：' + names);
+    attachBtn.title = '已选 ' + files.length + ' 个文件：' + names;
+    attachBtn.dataset.count = String(files.length);
+    attachBtn.classList.add('has-files');
   }
   fileInput.value = '';
 });
@@ -1216,8 +1600,6 @@ function renderBranchPanel() {
 registerPop(branchPanel, ctxTree, renderBranchPanel, syncCtxChipState);
 ctxTree.addEventListener('click', () => togglePop(branchPanel));
 
-/* 上传文件芯片：触发真实文件选择，文件名计入可访问名称 */
-ctxUpload.addEventListener('click', () => fileInput.click());
 
 /* ============ 权限看板：档位列表 + 「全部放行」二次确认 ============ */
 const ctxPerms = $('#ctxPermissions');
@@ -1321,7 +1703,7 @@ riskScrim.addEventListener('click', (e) => { if (e.target === riskScrim) closeRi
 syncPermChip();
 
 /* 附件按钮与上传芯片走同一个选择器，只是用途不同 */
-$('#attachBtn').addEventListener('click', () => openFileDialog('upload'));
+attachBtn.addEventListener('click', () => openFileDialog('upload'));
 
 /* Escape 分层收起：模态弹窗优先，其次芯片看板（弹窗开着时不该让看板抢走这次按键） */
 document.addEventListener('keydown', (e) => {
@@ -1382,14 +1764,17 @@ const mpMain = $('#mpMain');
 const mpModels = $('#mpModels');
 const mpCur = $('#mpCur');
 const mpBack = $('#mpBack');
-const THINK_LABELS = ['off', 'low', 'medium', 'high', 'max'];
+/* 内部值（与设置页 data-val 一一对应）与展示文案分开：
+   改前弹层显示英文 off/low/medium/high/max，而设置页同一组档位显示中文——
+   同一个概念两套说法。现在内部值不动，展示统一走中文。 */
+const THINK_VALUES = ['off', 'low', 'medium', 'high', 'max'];
+const THINK_LABELS = ['关', '低', '中', '高', '高+'];
 const THINK_MAX = THINK_LABELS.length - 1;
 let thinkValue = 2;
 /* 参考稿几何：轨道 5 等分，刻度点/滑钮/标签共用同一套 10%→90% 的位置网格 */
 const TS_RATIO_MIN = 0.1;
 const TS_RATIO_SPAN = 0.8;
 const mpScaleEl = $('.mp-scale');
-const mpTicks = () => Array.from(mpScaleEl.querySelectorAll('.mp-tick'));
 function setThinkVisual() {
   const ratio = thinkValue / THINK_MAX;
   /* 填充右端点 = 滑钮中心 = 第 thinkValue+1 个刻度点位置 */
@@ -1399,17 +1784,19 @@ function setThinkVisual() {
   thinkVal.textContent = THINK_LABELS[thinkValue];
   thinkThumb.setAttribute('aria-valuenow', String(thinkValue));
   thinkThumb.setAttribute('aria-valuetext', THINK_LABELS[thinkValue]);
-  mpTicks().forEach((t, i) => t.classList.toggle('on', i === thinkValue));
+  const effEl = $('#modelBtnEffort');
+  if (effEl) effEl.textContent = THINK_LABELS[thinkValue];
+  /* 下划线由 CSS 按 --tick-i 定位；JS 只报当前档位编号 */
+  mpScaleEl.style.setProperty('--tick-i', String(thinkValue));
   thinkSlider.querySelectorAll('.ts-node').forEach((n, i) => n.classList.toggle('on', i === thinkValue));
 }
-/* 切档动效：档位弹跳（离散切档时触发一次） */
+/* 切档动效：滑钮一次「落定」。改前是让档位标签弹一下——标签已改为连续滚动的卷轴，
+   滚动本身就是反馈，这里只在滑钮上补一个极轻的收束。 */
 function pulseThink() {
-  const tick = mpTicks()[thinkValue];
-  if (tick) {
-    tick.classList.remove('pop');
-    void tick.offsetWidth;
-    tick.classList.add('pop');
-  }
+  if (!thinkThumb) return;
+  thinkThumb.classList.remove('settle');
+  void thinkThumb.offsetWidth;
+  thinkThumb.classList.add('settle');
 }
 function setThink(v, animate) {
   const next = Math.min(THINK_MAX, Math.max(0, Math.round(v)));
@@ -1463,12 +1850,6 @@ thinkThumb.addEventListener('keydown', (e) => {
   }
 });
 /* 档位标签：原生 button，Enter/Space 即触发 click，选中后焦点交回滑杆 */
-mpTicks().forEach((t, i) => {
-  t.addEventListener('click', () => {
-    setThink(i, true);
-    thinkThumb.focus({ preventScroll: true });
-  });
-});
 setThinkVisual();
 
 /* 主视图：模型行在上 + 思考程度滑块（默认） */
@@ -1778,6 +2159,9 @@ render();
 
   /* ---------- 消息流构造（复用原型 DOM 契约，CSS 全兼容） ---------- */
   function appendUser(text) {
+    // 【P0-1】空对话的第一条消息出现时，撤掉占位说明（否则它压在气泡上方像残留卡片）
+    const placeholder = streamInner.querySelector('.chat-empty');
+    if (placeholder) { placeholder.remove(); transcriptOpen = true; }
     const d = openMsg('user');
     const body = d.querySelector('.msg-body');
     const meta = document.createElement('div');
@@ -1840,6 +2224,20 @@ render();
   function refreshPanels() {
     panelData = projectPanelData(panelEvents, configuredWorkspace);
     renderSide();
+    syncTitlebar();   // DT-02：工作区名进了标题栏，面板数据一变就跟着刷
+  }
+  /** DT-02：标题栏上下文同步。会话名由 `h1#chatTitle` 承载（既有赋值点就地更新，零改动）；
+   *  这里只补工作区名——未配置运行目录（`panelData.workspace` 为 null）时整段隐藏，
+   *  不留「运行目录 · 宿主默认」这类占位（与 R1a「假象比空白更坏」同一判据）。
+   *  元素缺失即静默返回：切片区间的测试上下文无需为此造桩。 */
+  function syncTitlebar() {
+    const el = $('#tbWorkspace');
+    if (!el) return;
+    const ws = panelData ? panelData.workspace : null;
+    if (!ws) { el.textContent = ''; el.title = ''; el.hidden = true; return; }
+    el.textContent = ws.name || ws.path;
+    el.title = ws.path;
+    el.hidden = false;
   }
   async function initSandboxState() {
     const el = $('#sandboxState');
@@ -1862,8 +2260,11 @@ render();
     rc.aiClosed = true; /* 一段话结束 → 之后的工具调用另起一组 */
     m.removeAttribute('data-live');
     if (m._st) clearInterval(m._st);
-    m.querySelector('.think-head').setAttribute('aria-expanded', 'true');
-    m.querySelector('.think').classList.add('expanded');
+    /* 思考块完成时保持**收起**：只留一行「已深度思考 Ns」。
+       改前这里主动 add('expanded')，每一轮结束都把整段推理正文铺在对话里，
+       真正要读的正文被淹掉。想看过程的用户点一下标题即可展开。 */
+    m.querySelector('.think-head').setAttribute('aria-expanded', 'false');
+    m.querySelector('.think').classList.remove('expanded');
     if (!rc.replay) {
       const tt = m.querySelector('.ttimer');
       if (tt) tt.textContent = Math.max(1, Math.round((Date.now() - real.runStart) / 1000)) + 's';
@@ -1874,7 +2275,7 @@ render();
       const secs = real.runStart ? ((Date.now() - real.runStart) / 1000).toFixed(1) + 's' : null;
       const wrap = document.createElement('div');
       wrap.className = 'msg-actions';
-      wrap.innerHTML = actionsHTML('ai', nowTime(), secs, tokStr());
+      wrap.innerHTML = actionsHTML('ai', nowTime(), secs);
       m.querySelector('.msg-body').appendChild(wrap);
       scrollStream();
     }
@@ -1940,6 +2341,16 @@ render();
   /** 与 newCard 同宿主：挂到当前单元的 ai 消息体内（旧实现全仓找最后一条 ai，会跨轮串挂）。 */
   const cardHost = () => { cardMsg(); return msgBody(); };
   const TG_CHEV = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+  /** 工具名 → 用户视角的动作类别。
+      非技术用户不需要知道 `tool_call` 这个机制名，但需要能对上「它动没动我的文件」，
+      所以按键的**功能**分类（写 / 跑 / 读），而不是把工具名一个个罗列出来。 */
+  function toolAction(name) {
+    const n = String(name || '');
+    if (/write|edit|patch|apply|mkdir|delete|remove|move|copy/i.test(n)) return 'write';
+    if (/run|shell|bash|exec|command|test|终端/i.test(n)) return 'run';
+    if (/read|list|glob|grep|search|open|view|cat/i.test(n)) return 'read';
+    return 'other';
+  }
   /** 取（或新建）当前这轮的工具调用组；连续 tool_call 会复用同一组。 */
   function ensureToolGroup() {
     if (rc.group && rc.group.isConnected) return rc.group;
@@ -1948,34 +2359,36 @@ render();
     g.innerHTML =
       '<button class="tg-head" type="button" data-tool-toggle aria-expanded="false">' +
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3.6 6h.01M3.6 12h.01M3.6 18h.01"/></svg>' +
-        '<span class="tg-title">执行过程</span><span class="tg-count">0 项</span>' +
+        '<span class="tg-title"></span>' +
         '<span class="tg-sum"></span>' + TG_CHEV +
       '</button><div class="tg-body"></div>';
     cardHost().appendChild(g);
     rc.group = g;
     return g;
   }
-  /** 刷新组头部的次数与成败汇总（不展开也能知道这批调用的整体结果）。 */
+  /** 刷新组头部：**先说做了什么**（用户视角），再说有没有失手。
+      改前是「执行过程 3 项 ✓ 2 ✗ 1」——同一件事（3 个调用成功）说了两遍，
+      且「执行过程」是机制措辞，不回答用户唯一关心的问题：「你动了什么」。
+      成功不必报数（没报失败即是成功），失败才占位置。 */
   function updateToolGroup(g) {
     if (!g) return;
     const items = g.querySelectorAll('.tool-item');
-    let ok = 0, fail = 0, pend = 0;
+    const kinds = { write: 0, run: 0, read: 0, other: 0 };
+    let fail = 0;
     items.forEach((it) => {
+      kinds[toolAction((it.querySelector('.ti-name') || {}).textContent)]++;
       const s = it.querySelector('.ti-state');
-      if (!s) return;
-      if (s.classList.contains('ok')) ok++;
-      else if (s.classList.contains('fail')) fail++;
-      else pend++;
+      if (s && s.classList.contains('fail')) fail++;
     });
-    const c = g.querySelector('.tg-count');
-    if (c) c.textContent = items.length + ' 项';
+    const parts = [];
+    if (kinds.write) parts.push('改了 ' + kinds.write + ' 个文件');
+    if (kinds.run) parts.push('跑了 ' + kinds.run + ' 条命令');
+    if (kinds.read) parts.push('看了 ' + kinds.read + ' 个文件');
+    if (kinds.other) parts.push(kinds.other + ' 个步骤');
+    const t = g.querySelector('.tg-title');
+    if (t) t.textContent = parts.join(' · ');
     const sum = g.querySelector('.tg-sum');
-    if (sum) {
-      sum.innerHTML =
-        (ok ? '<span class="ok">✓ ' + ok + '</span>' : '') +
-        (fail ? '<span class="bad">✗ ' + fail + '</span>' : '') +
-        (pend ? '<span class="pending">… ' + pend + '</span>' : '');
-    }
+    if (sum) sum.innerHTML = fail ? '<span class="bad">' + fail + ' 项没成功</span>' : '';
   }
   /* ---------- 事件渲染 ---------- */
   function renderEvent(e) {
@@ -2040,9 +2453,13 @@ render();
             }
           }
         }
-        /* 失败的调用自动展开：错误不该藏在两层折叠后面 */
+        /* 失败的调用自动展开：错误不该藏在两层折叠后面。
+           但只展开**输出**——「参数」那一段是原始 JSON（机制层），失败时照样收着：
+           用户此刻要回答的是「为什么没成」，不是「它传了什么参数」。 */
         if (!ok) {
           item.classList.remove('collapsed');
+          const params = item.querySelector('.ti-sec');
+          if (params && params !== outSec) params.hidden = true;
           const ih = item.querySelector('.ti-head');
           if (ih) ih.setAttribute('aria-expanded', 'true');
           const gg = item.closest('.toolgroup');
@@ -2603,4 +3020,239 @@ render();
       if (ly && ly.open && ly.open.git) openView('git');
     } catch (_) {}
   })();
+
+  /* ---------- 设置项：声明式真实读写 ----------
+     改前设置页的开关只改自己的 aria-checked，既不读也不存——看起来能点，其实什么都没发生。
+     标记里写 data-setting="<AppSettings 字段>"，这里统一做三件事：
+     读初值（hydrate）→ 写回（setSettings）→ 失败可见（toast）。
+     位置说明：本块刻意放在桥接段**末尾**。多个渲染层单测按源码锚点切片装载 app.js，
+     「会话列表」等注释正是切片边界——放进去会被算进别人的切片，而那里没有 api。 */
+
+
+  async function writeSetting(field, value) {
+    if (typeof api.setSettings !== 'function') {
+      toast('当前宿主不支持保存设置');
+      return;
+    }
+    try {
+      await api.setSettings({ [field]: value });
+    } catch (err) {
+      toast('保存设置失败：' + (err && err.message ? err.message : err));
+    }
+  }
+
+  function hydrateSettingsFields(st) {
+    if (!st) return;
+    document.querySelectorAll('[data-setting]').forEach((el) => {
+      const f = el.dataset.setting;
+      if (!(f in st)) return;
+      const v = st[f];
+      if (el.classList.contains('set-switch')) {
+        el.setAttribute('aria-checked', String(!!v));
+      } else if (el.classList.contains('set-choice')) {
+        el.querySelectorAll('button[data-val]').forEach((b) => {
+          b.setAttribute('aria-pressed', String(b.dataset.val === String(v)));
+        });
+      } else if (el.tagName === 'INPUT') {
+        el.value = String(v === null || v === undefined ? '' : v);
+      }
+    });
+    const ws = $('#workspaceVal');
+    if (ws) ws.textContent = st.workspace ? parseWorkspace(st.workspace) || st.workspace : '未设置';
+    syncThemeButtons();
+  }
+
+  const settingsBodyEl = $('.settings-body');
+  if (settingsBodyEl && typeof settingsBodyEl.addEventListener === 'function') {
+    settingsBodyEl.addEventListener('click', (e) => {
+      const sw = e.target.closest('.set-switch[data-setting]');
+      if (sw) {
+        void writeSetting(sw.dataset.setting, sw.getAttribute('aria-checked') === 'true');
+        return;
+      }
+      const b = e.target.closest('.set-choice[data-setting] button[data-val]');
+      if (!b) return;
+      const field = b.closest('.set-choice').dataset.setting;
+      void writeSetting(field, b.dataset.val);
+      /* theme 是唯一有立即可见副作用的字段：存完要真的换主题（含「跟随系统」） */
+      if (field === 'theme') applyTheme(b.dataset.val);
+    });
+  }
+  document.querySelectorAll('.set-num[data-setting], .set-txt[data-setting]').forEach((el) => {
+    el.addEventListener('change', () => {
+      const v = el.type === 'number' ? Number(el.value || 0) : el.value.trim();
+      void writeSetting(el.dataset.setting, v);
+    });
+  });
+
+  /* ---------- API 密钥（BYOK）：存进系统钥匙串，不落明文 ---------- */
+  const KEY_PROVIDER = 'glm';   /* 目前唯一需要密钥的真实通道（settings.provider = glm） */
+  async function refreshKeyStatus() {
+    const el = $('#keyStatus');
+    if (!el) return;
+    if (typeof api.providerKeyStatus !== 'function') {
+      el.textContent = '当前宿主不支持';
+      return;
+    }
+    try {
+      const st = await api.providerKeyStatus();
+      if (!st.available) el.textContent = '钥匙串不可用';
+      else if (!st.stored.length) el.textContent = st.envActive ? '未存储（沿用环境变量）' : '未设置';
+      else el.textContent = '已存储：' + st.stored.join('、') + (st.envActive ? '（另有环境变量）' : '');
+    } catch (err) {
+      el.textContent = '读取失败';
+    }
+  }
+  const keySaveBtn = $('#keySave');
+  if (keySaveBtn) {
+    keySaveBtn.addEventListener('click', async () => {
+      const input = $('#keyInput');
+      const key = input.value.trim();
+      if (!key) {
+        input.focus();
+        return;
+      }
+      if (typeof api.providerKeySet !== 'function') {
+        toast('当前宿主不支持保存密钥');
+        return;
+      }
+      keySaveBtn.disabled = true;
+      try {
+        const r = await api.providerKeySet(KEY_PROVIDER, key);
+        if (r && r.ok) {
+          input.value = '';
+          toast('密钥已存进系统钥匙串');
+        } else {
+          toast('保存失败：' + ((r && r.error) || '未知原因'));
+        }
+      } catch (err) {
+        toast('保存失败：' + (err && err.message ? err.message : err));
+      } finally {
+        keySaveBtn.disabled = false;
+        void refreshKeyStatus();
+      }
+    });
+  }
+  const keyDelBtn = $('#keyDelete');
+  if (keyDelBtn) {
+    keyDelBtn.addEventListener('click', async () => {
+      if (typeof api.providerKeyDelete !== 'function') {
+        toast('当前宿主不支持删除密钥');
+        return;
+      }
+      try {
+        const r = await api.providerKeyDelete(KEY_PROVIDER);
+        toast(r && r.ok ? '已删除密钥' : '删除失败：' + ((r && r.error) || '未知原因'));
+      } catch (err) {
+        toast('删除失败：' + (err && err.message ? err.message : err));
+      } finally {
+        void refreshKeyStatus();
+      }
+    });
+  }
+
+  /* ---------- 更新检查：四种状态都说人话，且不自动下载 ---------- */
+  const updBtn = $('#checkUpdateBtn');
+  if (updBtn) {
+    updBtn.addEventListener('click', async () => {
+      if (typeof api.checkUpdate !== 'function') {
+        toast('当前宿主不支持检查更新');
+        return;
+      }
+      const label = updBtn.textContent;
+      updBtn.disabled = true;
+      updBtn.textContent = '检查中…';
+      try {
+        const r = await api.checkUpdate();
+        if (!r || r.state === 'unconfigured') toast('未配置更新源：请先填上面的地址');
+        else if (r.state === 'error') toast('检查失败：' + r.message);
+        else if (r.state === 'up-to-date') toast('已是最新（' + r.currentVersion + '）');
+        else if (r.state === 'available') {
+          toast('有新版本 ' + r.version + '，正在打开下载页');
+          if (typeof api.openExternal === 'function' && r.url) void api.openExternal(r.url);
+        }
+      } catch (err) {
+        toast('检查失败：' + (err && err.message ? err.message : err));
+      } finally {
+        updBtn.disabled = false;
+        updBtn.textContent = label;
+      }
+    });
+  }
+
+  /* ---------- 关于：显示真实的通道与模型 ---------- */
+  async function refreshProviderInfo() {
+    const el = $('#providerInfo');
+    if (!el) return;
+    if (typeof api.getProviderInfo !== 'function') {
+      el.textContent = '未知';
+      return;
+    }
+    try {
+      const info = await api.getProviderInfo();
+      el.textContent = (info && info.provider ? info.provider : '未知') + ' · ' + ((info && info.model) || '缺省');
+    } catch (err) {
+      el.textContent = '读取失败';
+    }
+  }
+  settingsHooks.onOpen = () => {
+    void refreshKeyStatus();
+    void refreshProviderInfo();
+  };
+  /* 回灌真实字段。放在这里而不是 settingsReady 里：那一段被
+     renderer-workspace.test 的「真实运行目录」切片装载，而本函数定义在切片之外。 */
+  void settingsReady.then((st) => hydrateSettingsFields(st));
+
+
+  /* ---------- 定时任务面板（v0.1.6 的 ui-schedule 对位） ----------
+     后端早已实现：scheduler.ts + automations.ts + 四条 IPC。
+     改前渲染层没有任何入口——这是「有真实后端、没有 UI」的最大缺口。 */
+  let scheduleLoading = false;
+
+  async function loadSchedule(force) {
+    if (typeof api.scheduleSnapshot !== 'function') {
+      scheduleCache = { unsupported: true };
+      return;
+    }
+    if (scheduleLoading || (scheduleCache && !force)) return;
+    scheduleLoading = true;
+    try {
+      scheduleCache = await api.scheduleSnapshot();
+    } catch (err) {
+      scheduleCache = { error: (err && err.message) || String(err) };
+    } finally {
+      scheduleLoading = false;
+    }
+  }
+
+
+  const sidePagesHost = $('.side-pages');
+  if (sidePagesHost && typeof sidePagesHost.addEventListener === 'function') {
+    sidePagesHost.addEventListener('click', async (e) => {
+      const btn = e.target.closest('[data-sched-act]');
+      if (!btn) return;
+      const row = btn.closest('.sched-task');
+      const id = row && row.dataset.id;
+      if (!id) return;
+      const act = btn.dataset.schedAct;
+      const task = (scheduleCache && scheduleCache.tasks || []).find(t => t.id === id);
+      if (act === 'toggle' && task) {
+        await api.scheduleUpsert({ ...task, enabled: !task.enabled }, false);
+      } else if (act === 'run') {
+        await api.scheduleRunNow(id);
+        toast('已加入队列：' + (task ? task.name : id));
+      } else if (act === 'del') {
+        await api.scheduleDelete(id);
+        toast('已删除定时任务');
+      }
+      scheduleCache = null;
+      await loadSchedule(true);
+      if (typeof renderSide === 'function') renderSide();
+    });
+  }
+  /* 打开「定时任务」标签页时刷新一次快照 */
+  settingsHooks.onOpenView = (key) => {
+    if (key === 'schedule') void loadSchedule(true).then(() => { if (typeof renderSide === 'function') renderSide(); });
+  };
+
 })();

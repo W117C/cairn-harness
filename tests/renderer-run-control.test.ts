@@ -96,6 +96,9 @@ function boot(options: { running?: boolean } = {}) {
     esc: (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"),
     requestAnimationFrame: (fn: () => void) => fn(),
     real: { running: options.running === true },
+    // DT-02：切片区间含 syncRunButton，而它现在顺带同步标题栏上下文；
+    // syncTitlebar 读 panelData.workspace —— 声明为桩，与既有的 $ / real 同一处置。
+    panelData: { workspace: null },
     calls,
   };
   const wiring = "\nrunControl.isRunning = () => real.running === true;" +

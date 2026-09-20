@@ -42,6 +42,9 @@ function boot() {
     streamInner: element(), document: { createElement: element }, revealObserver: { unobserve: vi.fn() },
     $: vi.fn((s: string) => els[s] ?? element()), render: vi.fn(), closeSbMenus: vi.fn(), scrollStream: vi.fn(),
     syncRunButton: vi.fn(), runControl: { isRunning: () => false, cancel: null as (() => void) | null },
+    // DT-02：refreshPanels 现在顺带同步标题栏上下文（工作区名进了标题栏）。
+    // 与 renderSide 同一处置——切片外的 UI 同步函数在上下文里声明为桩。
+    syncTitlebar: vi.fn(),
     toast: vi.fn(), askCard: vi.fn(), setInterval: vi.fn(), clearInterval: vi.fn(), setTimeout: vi.fn(),
     mountHistory: vi.fn(() => ({ destroy: vi.fn() })),
     // 抽屉刷新：桥接层只负责喂数据 + 请求重绘，渲染函数留在原型段
