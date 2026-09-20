@@ -134,6 +134,38 @@ describe("goal 模式端到端（真入口，缺省零行为）", () => {
     expect(stop?.type === "goal_stopped" && stop.reason).toContain("轮次上限");
   });
 
+  it("清除目标 = 落一条 goal_stopped（不开新事件、不开新通道）：幂等，且此后不再自动续跑", async () => {
+    process.env.M3A_MAIN_SCRIPT = scriptPath;
+    // 没设过目标的会话（日志还不存在）：报"没有目标"，不是把 ENOENT 端给用户
+    const nothing = await handleGoalSet({ sessionId: "s-plain", clear: true });
+    expect(nothing.ok).toBe(false);
+    expect(nothing.error).toContain("没有设过目标");
+    expect(nothing.error ?? "").not.toContain("ENOENT");
+    await expect(access(logPath)).rejects.toThrow(); // 拒绝即不建文件：清除不许凭空造一份转录
+
+    await handleGoalSet({ sessionId: "s-plain", objective: "把测试修绿", maxTurns: 6 });
+    const cleared = await handleGoalSet({ sessionId: "s-plain", clear: true });
+    expect(cleared.ok).toBe(true);
+    const stops = (await events()).filter((e) => e.type === "goal_stopped");
+    expect(stops.length).toBe(1);
+    expect(stops[0]?.type === "goal_stopped" && stops[0].reason).toContain("用户清除目标");
+    expect(projectGoal(await events())?.stopped).not.toBeNull();
+
+    // 再点一次清除：幂等返回成功，但不许补记第二条停止（审计面上"停了几次"必须是真的）
+    expect((await handleGoalSet({ sessionId: "s-plain", clear: true })).ok).toBe(true);
+    expect((await events()).filter((e) => e.type === "goal_stopped").length).toBe(1);
+
+    // 清除后用户发一条：这一轮跑完就结束——复用「停止是终态」那条已有语义，而不是新写一份
+    const res = await handleAgentRun(
+      { message: "接着做", mode: "auto", sessionId: "s-plain" },
+      { workspace, sessionId: "s-plain", logPath, unattended: true },
+    );
+    expect(res.ok).toBe(true);
+    const evts = await events();
+    expect(userTurns(evts).length).toBe(1);
+    expect(evts.filter((e) => e.type === "goal_stopped").length).toBe(1);
+  });
+
   it("旧日志没有 goal 事件时，重放照旧成功（增量类型不把旧转录判坏）", async () => {
     await writeFile(logPath, JSON.stringify({ type: "user_message", content: "老记录" }) + "\n", "utf8");
     const evts = await events();

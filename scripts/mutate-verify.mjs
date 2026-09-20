@@ -3594,15 +3594,15 @@ const MUTATIONS = [
     src: "src/agent/goal.ts",
     test: "tests/goal-continue.test.ts",
     desc: "证据窗口从「本目标之后」放宽成「整段会话」⇒ 上一段工作的绿证据替新目标宣布达成",
-    apply: (s) => s.replace("const window = events.slice(at + 1);", "const window = events;"),
+    apply: (s) => s.replace("const window = events.slice(trace.at + 1);", "const window = events;"),
     expectFail: "改设目标即重算窗口：绿证据只看最后一条 goal_set 之后（上一段的绿不能替新目标宣布达成）",
   },
   {
     id: "goal-turn-not-counted",
-    src: "src/agent/goal.ts",
+    src: "src/agent/goal-trace.ts",
     test: "tests/goal-continue.test.ts",
     desc: "不数 goal 代发轮 ⇒ turn 恒为 1，轮次闸永不触发（且芯片显示的轮数是假的）",
-    apply: (s) => s.replace('if (e.type === "user_message" && e.origin?.kind === "goal") turn++;', "if (false) turn++;"),
+    apply: (s) => s.replace('if (e.type === "user_message" && e.origin?.kind === "goal") return { ...prev, turn: prev.turn + 1 };', "if (false) return { ...prev, turn: prev.turn + 1 };"),
     expectFail: "轮次 = 1 + goal 代发轮数；人手发的消息不计（那是人在接管）",
   },
   {

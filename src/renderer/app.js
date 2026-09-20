@@ -1,5 +1,5 @@
 import { projectUnits, mountHistory } from './history-window.js';
-import { projectPanelData } from './projections';
+import { projectPanelData, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN } from './projections';
 import { $, esc, promptInput, sessionList, streamInner, toast } from './dom.js';
 import { ICONS, RUN_GRID_HTML, runGrid } from './icons.js';
 import { highlightAllDiffs } from './diff-highlight.js';
@@ -2588,6 +2588,7 @@ render();
     security_report: '安全报告', impact_report: '影响面报告', routing_decision: '模型路由决策',
     card_action: '卡片操作', diff_comment: 'diff 评论', clarify_requested: '澄清提问',
     automation_triggered: '定时任务触发', automation_skipped: '定时任务跳过', automation_completed: '定时任务完成',
+    goal_set: '设定长任务目标', goal_stopped: '长任务目标已停',
   };
   function eventLabel(e) {
     const base = EVENT_LABELS[e.type] || String(e.type);
@@ -3254,5 +3255,133 @@ render();
   settingsHooks.onOpenView = (key) => {
     if (key === 'schedule') void loadSchedule(true).then(() => { if (typeof renderSide === 'function') renderSide(); });
   };
+
+  /* ---------- 长任务目标（goal 模式）：composer 芯片 + 设定面板 ----------
+     机器侧三面（main handler / preload / IPC）此前已落，这一段是用户能点的那一下。三条口径：
+     · 目标态一律从事件流算——traceGoal 就是主进程续跑判据用的**同一份** reduce（tests/goal-trace.test.ts
+       锁着「筛过的事件重算 == 整段重算的芯片三字段」），渲染层不自造第二份「当前目标」状态；
+     · 设 / 改设 = 追加一条 goal_set，清除 = 追加一条 goal_stopped（复用「停止是终态」那条已有
+       语义，不开新事件也不开新通道）；
+     · 回条 clamped 非空 ⇒ 原样点名（用户设的预算被钳过必须说出来，不许静默改写）。
+     放在这里（IIFE 末尾）与定时面板同因：前面的切片式渲染层测不会装载这一段。 */
+  const ctxGoal = $('#ctxGoal');
+  const goalPanel = $('#goalPanel');
+  const goalPanelBody = $('#goalPanelBody');
+  const goalChipLabel = $('#goalChipLabel');
+  /* 只留筛选过的那几个事件（goalRelevant），读数一律 traceGoal 全量重算：
+     既不写第二份「当前目标」状态，也没有"逐步累加 vs 快照重算"两条路各数一遍的双算。
+     长度天然有界：goal_set/goal_stopped 每轮至多各一条，goal 代发轮被轮次帽卡死。 */
+  let goalEvents = [];
+  let goalEventsSession = null;
+
+  function goalOfSession() {
+    return goalEventsSession === real.id && real.id ? traceGoal(goalEvents) : null;
+  }
+  function syncGoalChip() {
+    if (!ctxGoal || !goalChipLabel) return;
+    const t = goalOfSession();
+    if (!t) {
+      goalChipLabel.textContent = '设目标';
+      ctxGoal.classList.remove('warn');
+      ctxGoal.setAttribute('aria-label', '长任务目标：未设');
+      return;
+    }
+    const turnTxt = '第 ' + String(t.turn) + '/' + String(t.spec.maxTurns) + ' 轮';
+    goalChipLabel.textContent = (t.stopped ? '目标已停 ' : '目标 ') + String(t.turn) + '/' + String(t.spec.maxTurns);
+    ctxGoal.classList.toggle('warn', !t.stopped);
+    ctxGoal.setAttribute('aria-label', '长任务目标：' + (t.stopped ? '已停（' + turnTxt + '）——' + t.stopped : '自动续跑中（' + turnTxt + '）——' + t.spec.objective));
+  }
+  function goalStateHTML(t) {
+    if (!t) return '';
+    const money = t.spec.maxUsd > 0 ? ' · 美元上限 $' + t.spec.maxUsd.toFixed(2) : ' · 不设美元闸';
+    const meta = (t.stopped ? '已停：' + t.stopped : '续跑中 第 ' + String(t.turn) + '/' + String(t.spec.maxTurns) + ' 轮' + money);
+    return '<div class="goal-state' + (t.stopped ? ' stopped' : '') + '">' +
+      '<span class="gs-obj">' + esc(t.spec.objective) + '</span>' +
+      '<span class="gs-meta">' + esc(meta) + '</span></div>';
+  }
+  function renderGoalPanel() {
+    const t = goalOfSession();
+    goalPanelBody.innerHTML =
+      '<form class="goal-form">' +
+        goalStateHTML(t) +
+        '<label for="goalObjective">目标：一句话说清「做到什么程度算完」</label>' +
+        '<textarea id="goalObjective" rows="3" placeholder="例：把 tests/ 里失败的用例修到全绿，并保证 typecheck 通过" aria-describedby="goalNote"></textarea>' +
+        '<div class="goal-row">' +
+          '<div><label for="goalTurns">轮次上限</label>' +
+          '<input id="goalTurns" type="number" min="' + String(GOAL_TURN_CAP_MIN) + '" max="' + String(GOAL_TURN_CAP_MAX) + '" value="' + esc(String(t ? t.spec.maxTurns : GOAL_TURN_CAP_DEFAULT)) + '"></div>' +
+          '<div><label for="goalUsd">美元上限（留空 = 不设）</label>' +
+          '<input id="goalUsd" type="number" min="0" step="0.1" placeholder="0" value="' + esc(t && t.spec.maxUsd > 0 ? String(t.spec.maxUsd) : '') + '"></div>' +
+        '</div>' +
+        '<p class="goal-note" id="goalNote">每轮跑完只看一件事：verify 有没有留下绿证据。绿了就收束；没绿且没撞上轮次/美元闸，就自动再跑一轮。' +
+          '纯问答/查代码类目标会在第一轮停下（不白花钱）。轮次可设 ' + String(GOAL_TURN_CAP_MIN) + '–' + String(GOAL_TURN_CAP_MAX) + '，越界会被钳制并逐条点名。</p>' +
+        '<div class="goal-actions">' +
+          (t ? '<button type="button" id="goalClear">清除目标</button>' : '') +
+          '<button type="submit" class="primary">' + (t ? '改设目标' : '设定目标') + '</button>' +
+        '</div>' +
+      '</form>';
+    if (t) {
+      const box = goalPanelBody.querySelector('#goalObjective');
+      if (box) box.value = t.spec.objective;
+    }
+  }
+  registerPop(goalPanel, ctxGoal, renderGoalPanel);
+  ctxGoal.addEventListener('click', () => togglePop(goalPanel));
+  if (typeof api.setGoal !== 'function') {
+    ctxGoal.disabled = true;
+    ctxGoal.setAttribute('aria-label', '长任务目标：当前壳未提供 goal 通道');
+  }
+  function goalReqError(r) {
+    return (r && typeof r.error === 'string' && r.error) ? r.error : '未知错误';
+  }
+  goalPanel.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!real.id) { toast('先选一个会话，目标要有地方挂'); return; }
+    const objective = goalPanelBody.querySelector('#goalObjective').value.trim();
+    const turnsRaw = goalPanelBody.querySelector('#goalTurns').value.trim();
+    const usdRaw = goalPanelBody.querySelector('#goalUsd').value.trim();
+    const req = { sessionId: real.id, objective };
+    if (turnsRaw !== '') req.maxTurns = Number(turnsRaw);
+    if (usdRaw !== '') req.maxUsd = Number(usdRaw);
+    void (async () => {
+      try {
+        const r = await api.setGoal(req);
+        if (!r || r.ok !== true) { toast('目标未设：' + goalReqError(r)); return; }
+        toast(r.clamped && r.clamped.length ? '目标已设，但按边界钳制：' + r.clamped.join('；') : '目标已设定，本轮跑完按判据自动续跑');
+        closeAllPops(false);
+      } catch (err) { toast('目标未设：' + ((err && err.message) || String(err))); }
+    })();
+  });
+  goalPanel.addEventListener('click', (e) => {
+    if (!e.target.closest('#goalClear')) return;
+    void (async () => {
+      try {
+        const r = await api.setGoal({ sessionId: real.id, clear: true });
+        if (!r || r.ok !== true) { toast('未能清除：' + goalReqError(r)); return; }
+        toast('目标已清除：本轮跑完不再自动续跑');
+        closeAllPops(false);
+      } catch (err) { toast('未能清除：' + ((err && err.message) || String(err))); }
+    })();
+  });
+
+  /* 目标态镜像：showHistory 全量筛（replay 唯一入口），renderEvent 只看 live（rc.replay 为假）。
+     两支互斥：live 要么走 renderEvent(e)，要么走 showHistory(historyEvents.concat(e))——
+     后者会把整段快照重新筛一遍，所以 replay 期间绝不能再把事件追加进镜像。 */
+  const _showHistoryForGoal = showHistory;
+  showHistory = function (events) {
+    goalEvents = (Array.isArray(events) ? events : []).filter(goalRelevant);
+    goalEventsSession = real.id;
+    syncGoalChip();
+    return _showHistoryForGoal(events);
+  };
+  const _renderEventForGoal = renderEvent;
+  renderEvent = function (e) {
+    if (!rc.replay && goalRelevant(e)) {
+      goalEvents = goalEvents.concat([e]);
+      goalEventsSession = real.id;
+      syncGoalChip();
+    }
+    return _renderEventForGoal(e);
+  };
+  syncGoalChip();
 
 })();

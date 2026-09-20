@@ -165,3 +165,29 @@ pnpm typecheck   # tsc 全量扫含未跟踪文件 ⇒ 写完再跑
 
 **实测读数（Task 6）状态**：`goal-continue` 里那条"读答型目标一轮即停"就是"不烧钱"的确定性证据；
 但"完成率 + `$/成功任务` 的 A/B"仍欠 —— 它要真模型跑（无 `M0_API_KEY` ⇒ 如实未证，不算完成），列入 #51 之后。
+
+### 执行日志续（同日，渲染层入口 = 上面那条硬阻断的解除）
+
+上面「唯一硬阻断」已解除（那段文字按当日快照保留，不回改）：
+
+- **入口落法**：composer 底栏 `#ctxGoal` 芯片 + `#goalPanel` 面板，沿用权限芯片那一支的
+  `registerPop`/`togglePop`/`.c-btn`/`.ctx-pop` 现成结构（不新增视觉语言，CSS 只加面板内表单）。
+  三个动作（设定 / 改设 / 清除）全走既有那**一条** `setGoal`：清除 = `handleGoalSet` 追加一条
+  `goal_stopped`，于是「停止是终态、用户下一条不复活」那条已有锚点直接管住清除，不必新造事件、
+  新造通道（新造就是第五份停止语义）。
+- **芯片读数不留第二份状态**：渲染层只保存 `goalRelevant` 筛过的事件（长度天然有界：goal 代发轮被
+  轮次帽卡死），读数一律 `traceGoal` 全量重算——而 `traceGoal` 就是主进程 `projectGoal` 现在用的那份
+  reduce。为此把 reduce 与轮次帽单抽出 `src/agent/goal-trace.ts`（只 import 类型，能安全进 renderer 包；
+  `goal.ts` 顶层那条 worker-report→memory/security 链不能），`goal.ts` 尾部再导出保持 importer 零改动。
+  两条 `projectGoal` 系锚点的针脚随迁（`goal-window-covers-pre-goal-history` 换串、
+  `goal-turn-not-counted` 换文件）——这是记忆规则 8①「拆文件 = 判据搬家」又一次兑现（计数不写死）。
+- **等价性有锁**：`tests/goal-trace.test.ts` 5 条，核心是对每条流的**每个前缀**断言
+  「筛过重算 == 整段重算」的芯片三字段（并断言前缀循环真跑了 流长+1 格，防循环被改成只看整段）。
+  筛子漏收/多收某一类事件 ⇒ 芯片当场与判据分家，这条测就红。
+- **门读数（改后复跑）**：`build` ✓（renderer 11 modules，证明 `projections → ../agent/goal-trace` 这条
+  跨目录运行时 import 解析得开）、`renderer-arch-check` 84/84 ✓、`a11y-check` 3/3 ✓、
+  `ipc-reachability-check` 的 **A2a 转绿**（`agent:goal-set` 不再是孤儿桥），剩 A2b 那 10 条 HEAD 既有陈旧；
+  直连 `tsc --noEmit` 0 错；`goal-continue`(10) + `goal-trace`(5) + `goal-stop-decision`(15) +
+  `plan-required`(9) + `sidechat`(15) = 54 条全绿；`mutate-needles-check` 437 条零阻断。
+- 顺带清掉两处：`handleGoalSet` 里 `sessionId !== undefined` 的恒真三元（守卫后必为字符串）；
+  清除路径新建会话时的 ENOENT 不再端给用户（按"没有目标"报，其余 IO 错误照常可见）。

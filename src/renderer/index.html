@@ -1337,6 +1337,30 @@ button.tg-head{transition:color var(--t-fast)}
 .ctx-pop.below{animation:popIn .16s cubic-bezier(.2,.8,.3,1)}
 .ctx-pop[hidden]{display:none}
 .bp-view{padding:var(--sp-4)}
+/* 长任务目标面板（goal 模式）：目标 + 轮次闸 + 美元闸。描边口径同 .search input（≥3:1 边界对比）。 */
+.goal-form{display:flex;flex-direction:column;gap:var(--sp-3);padding:var(--sp-2)}
+.goal-form label{font-size:var(--fs-label);color:var(--muted)}
+.goal-form input,.goal-form textarea{
+  width:100%;border:0.5px solid var(--border-strong);border-radius:var(--r-3);
+  background:var(--surface);color:var(--fg);font:inherit;font-size:var(--fs-sub);padding:var(--sp-3) var(--sp-5);
+}
+.goal-form input{height:30px;padding:0 var(--sp-5);font-family:var(--font-mono)}
+.goal-form textarea{min-height:58px;resize:vertical;line-height:1.45}
+.goal-form input:focus,.goal-form textarea:focus{outline:none;box-shadow:0 0 0 2px var(--accent-line)}
+.goal-row{display:flex;gap:var(--sp-3)}
+.goal-row>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.goal-note{font-size:var(--fs-label);color:var(--muted);margin:0;line-height:1.45}
+.goal-actions{display:flex;justify-content:flex-end;gap:var(--sp-3)}
+.goal-actions button{
+  height:28px;padding:0 var(--sp-6);border-radius:var(--r-3);font-size:var(--fs-sub);
+  border:0.5px solid var(--border-strong);background:var(--surface-2);color:var(--fg);cursor:pointer;
+}
+.goal-actions .primary{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.goal-actions button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.goal-state{display:flex;flex-direction:column;gap:var(--sp-2);padding:var(--sp-3) var(--sp-4);background:var(--surface-2);border-radius:var(--r-3)}
+.goal-state .gs-obj{font-size:var(--fs-sub);color:var(--fg);line-height:1.45}
+.goal-state .gs-meta{font-size:var(--fs-label);color:var(--muted);font-family:var(--font-mono)}
+.goal-state.stopped .gs-meta{color:var(--warn)}
 .branches .branch-head{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-4) var(--sp-4);font-size:var(--fs-label);color:var(--muted)}
 .branches .branch-head .cnt{font-family:var(--font-mono);font-size:var(--fs-micro)}
 .branch-row{
@@ -1941,6 +1965,13 @@ html.reduce-motion .quick-card{opacity:1}
             </button>
             <div class="ctx-pop" id="permPanel" hidden>
               <div class="bp-view" id="permPanelBody"></div>
+            </div>
+            <button class="c-btn" id="ctxGoal" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="goalPanel" aria-label="长任务目标：未设" title="长任务目标：一轮跑完后自动续跑，直到验证通过或撞上预算闸">
+              <span class="c-btn-label" id="goalChipLabel">设目标</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="ctx-pop" id="goalPanel" hidden>
+              <div class="bp-view" id="goalPanelBody"></div>
             </div>
             <button class="c-btn" id="attachBtn" aria-label="添加附件">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m21 12-8.5 8.5a5 5 0 0 1-7-7L14 5a3.3 3.3 0 0 1 4.7 4.7L10.5 18a1.7 1.7 0 0 1-2.4-2.4L16 8"/></svg>

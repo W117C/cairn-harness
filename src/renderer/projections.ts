@@ -5,6 +5,17 @@
 // M2d memory = 会话内 remember 调用审计（写入即事件 §8.1.4：tool_call/tool_result 投影）。
 // electron/DOM-free，panels-check（headless）与 vitest 共用。
 import type { AgentEvent } from "../events";
+// goal 轨迹的**同一份** reduce（主进程续跑判据也用它）：芯片显示的轮次与「实际会不会再跑一轮」
+// 必须是同一个函数算出来的，否则渲染层自造一份 = 本仓点名的第二事实源。
+// goal-trace.ts 只 import 类型，所以这条运行时依赖不会把 worker-report/memory 那条链拉进 renderer 包。
+export {
+  GOAL_TURN_CAP_DEFAULT,
+  GOAL_TURN_CAP_MAX,
+  GOAL_TURN_CAP_MIN,
+  goalRelevant,
+  traceGoal,
+} from "../agent/goal-trace";
+export type { GoalSpec, GoalTrace } from "../agent/goal-trace";
 
 export interface AskLike {
   askId: string;

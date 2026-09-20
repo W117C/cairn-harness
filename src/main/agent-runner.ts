@@ -1549,19 +1549,42 @@ async function goalNextTurn(args: { logPath: string; aborted: () => boolean }): 
   };
 }
 
-/** IPC "agent:goal-set"：给某个会话设定/改设目标（goal 模式的唯一写入面）。
+/** IPC "agent:goal-set"：给某个会话设定/改设目标，或清除它（goal 模式的唯一写入面）。
  *  与在途 run 并发时只做一件事——追加一条 goal_set；续跑判据在 run 结束时才读它，所以中途改设
- *  会自然从下一轮生效（不改写在飞的 run，也不锁住输入框）。 */
+ *  会自然从下一轮生效（不改写在飞的 run，也不锁住输入框）。
+ *  `clear` 不开新事件也不开通道：停 = 追加一条带理由的 `goal_stopped`，而「停过的目标不许被
+ *  用户下一条消息复活」这条语义已经有锚点守着，清除于是天然复用终态面。 */
 export async function handleGoalSet(req: {
   sessionId?: string;
   objective?: unknown;
   maxTurns?: unknown;
   maxUsd?: unknown;
+  clear?: unknown;
 }): Promise<{ ok: boolean; error?: string; clamped?: string[] }> {
   try {
     const dir = requireSessionsDir();
     const sessionId = req.sessionId ?? (await store().get()).currentSession;
     if (typeof sessionId !== "string" || sessionId === "") return { ok: false, error: "没有当前会话，目标无处可挂" };
+    const logPath = pathOf(dir, sessionId);
+    if (req.clear === true) {
+      // 新建会话还没落过一行 ⇒ 读日志会 ENOENT。那是"没有目标"，不是文件错误；其余错误照常抛出可见。
+      const events = await replay(logPath).catch((err: unknown) => {
+        if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return [] as AgentEvent[];
+        throw err;
+      });
+      const view = projectGoal(events);
+      if (view === null) return { ok: false, error: "这个会话没有设过目标 ⇒ 无可清除（不补记空停止）" };
+      if (view.stopped !== null) return { ok: true }; // 已停：幂等返回，不再落第二条停止
+      const stopped: AgentEvent = {
+        type: "goal_stopped",
+        reason: "用户清除目标 ⇒ 不再自动续跑（还要接着跑就重新设一个目标）",
+        turn: view.turn,
+        evidence: view.evidence,
+      };
+      await createEventLog(logPath).append(stopped);
+      hooks.onEvent?.({ ...stopped, session_id: sessionId });
+      return { ok: true };
+    }
     const parsed = parseGoalSpec({ objective: req.objective, maxTurns: req.maxTurns, maxUsd: req.maxUsd });
     if (parsed.spec === null) return { ok: false, error: parsed.errors.join("；") };
     const ev: AgentEvent = {
@@ -1570,8 +1593,8 @@ export async function handleGoalSet(req: {
       max_turns: parsed.spec.maxTurns,
       max_usd: parsed.spec.maxUsd,
     };
-    await createEventLog(pathOf(dir, sessionId)).append(ev);
-    hooks.onEvent?.(sessionId !== undefined ? ({ ...ev, session_id: sessionId } as AgentEvent) : ev);
+    await createEventLog(logPath).append(ev);
+    hooks.onEvent?.({ ...ev, session_id: sessionId });
     return { ok: true, ...(parsed.clamped.length > 0 ? { clamped: parsed.clamped } : {}) };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };

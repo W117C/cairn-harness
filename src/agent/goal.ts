@@ -7,21 +7,18 @@
 import type { AgentEvent, WorkerEvidence } from "../events";
 import { clampToTokenBudget } from "./text-budget";
 import { hasSessionWrites, workerVerificationEvidence } from "./worker-report";
+import { GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, traceGoal } from "./goal-trace";
+import type { GoalSpec } from "./goal-trace";
 
-export const GOAL_TURN_CAP_DEFAULT = 8;
-const GOAL_TURN_CAP_MIN = 1;
-export const GOAL_TURN_CAP_MAX = 25;
+// GoalSpec 与轮次帽的定义挪进了 goal-trace.ts（渲染层要用同一份 reduce 与同一份数，但不能
+// import 本文件的 worker-report 链）。在这里再导出一次：既有 importer 与验收脚本零改动。
+export type { GoalSpec };
+export { GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN };
+
 /** 提醒块里目标原文的帽：目标是锚点不是正文，超了就截断（全文在 `goal_set` 事件里，不靠这块携带）。 */
 const GOAL_OBJECTIVE_TOKEN_CAP = 400;
 /** 整块帽。这块**每轮重送** ⇒ 整会话付 maxTurns 次，所以按"最坏 8 倍"估：帽值本身就是成本上限。 */
 export const GOAL_REMINDER_TOKEN_CAP = 700;
-
-export interface GoalSpec {
-  objective: string;
-  maxTurns: number;
-  /** 美元上限；0 = 闸关（不设钱闸，只按轮次闸停）。 */
-  maxUsd: number;
-}
 
 export interface GoalParseResult {
   spec: GoalSpec | null;
@@ -162,33 +159,17 @@ export interface GoalView {
 
 /** 会话当前目标态：一律从事件流重算，live 与 replay 同一份函数（不变量 2：不写第二份会话态）。
  *  证据与「有没有写过盘」只看**最后一条 goal_set 之后**的那段——上一段工作里的绿证据
- *  不能替新目标宣布达成。 */
+ *  不能替新目标宣布达成。设/轮次/停止三项走 goal-trace（渲染层芯片用的是同一个函数）。 */
 export function projectGoal(events: AgentEvent[]): GoalView | null {
-  let last: Extract<AgentEvent, { type: "goal_set" }> | null = null;
-  let at = -1;
-  let turn = 1;
-  let stopped: string | null = null;
-  events.forEach((e, i) => {
-    if (e.type === "goal_set") {
-      last = e;
-      at = i;
-      turn = 1;
-      stopped = null;
-      return;
-    }
-    if (last === null) return;
-    if (e.type === "user_message" && e.origin?.kind === "goal") turn++;
-    else if (e.type === "goal_stopped") stopped = e.reason;
-  });
-  if (last === null) return null;
-  const g = last as Extract<AgentEvent, { type: "goal_set" }>;
-  const window = events.slice(at + 1);
+  const trace = traceGoal(events);
+  if (trace === null) return null;
+  const window = events.slice(trace.at + 1);
   return {
-    spec: { objective: g.objective, maxTurns: g.max_turns, maxUsd: g.max_usd },
-    turn,
+    spec: trace.spec,
+    turn: trace.turn,
     evidence: workerVerificationEvidence(window),
     wrote: hasSessionWrites(window),
-    stopped,
+    stopped: trace.stopped,
   };
 }
 
