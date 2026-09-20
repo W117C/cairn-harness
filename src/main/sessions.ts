@@ -21,10 +21,11 @@ export interface SessionInfo {
 
 /** 首行 session_meta 的投影面（列表要的两件事都在第一行，无需碰文件体）。 */
 interface HeadMeta {
-  origin?: "scheduled";
-  automationId?: string;
-  automationName?: string;
   parentSessionId?: string | null;
+  /** 定时徽标：判定与成形**只在一处**（SessionInfo 的 origin/automation* 由它整体摊平）。
+   *  原先 listSessions 里还抄着第二份「origin === "scheduled" ⇒ 同三个字段」，两处任一改动就分叉，
+   *  而判据看不出第一份被动过——那份副本的存在正是变异锚点当场抓出来的。 */
+  badge?: { origin: "scheduled"; automationId?: string; automationName?: string };
 }
 
 /** 首行读取的探针与上限：1KB 一次读不到换行就续读，最多 64KB（超限视作无 meta）。 */
@@ -83,9 +84,11 @@ function projectHeadLine(firstLine: string): HeadMeta | null {
     parentSessionId: typeof meta.parent_session_id === "string" ? meta.parent_session_id : null,
     ...(meta.origin === "scheduled"
       ? {
-          origin: "scheduled" as const,
-          ...(typeof meta.automation_id === "string" ? { automationId: meta.automation_id } : {}),
-          ...(typeof meta.automation_name === "string" ? { automationName: meta.automation_name } : {}),
+          badge: {
+            origin: "scheduled" as const,
+            ...(typeof meta.automation_id === "string" ? { automationId: meta.automation_id } : {}),
+            ...(typeof meta.automation_name === "string" ? { automationName: meta.automation_name } : {}),
+          },
         }
       : {}),
   };
@@ -190,13 +193,7 @@ export async function listSessions(root: string): Promise<SessionInfo[]> {
         id,
         mtimeMs: st.mtimeMs,
         lines,
-        ...(meta?.origin === "scheduled"
-          ? {
-              origin: "scheduled" as const,
-              ...(meta.automationId ? { automationId: meta.automationId } : {}),
-              ...(meta.automationName ? { automationName: meta.automationName } : {}),
-            }
-          : {}),
+        ...(meta?.badge ?? {}), // 徽标整体摊平：判定与字段成形都在 projectHeadLine，这里不再重判一遍
       });
     } catch {
       // 竞态删除/不可读：跳过，不出现在列表

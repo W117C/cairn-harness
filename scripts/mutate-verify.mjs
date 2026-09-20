@@ -615,8 +615,8 @@ const MUTATIONS = [
     id: "sessions-lines-nonempty",
     src: "src/main/sessions.ts",
     test: "tests/sessions.test.ts",
-    desc: "行数口径把空行计入（投影事件数虚高 +1，验收口径破裂）",
-    apply: (s) => s.replace(".filter((l) => l.trim().length > 0)", ".filter(() => true)"),
+    desc: "行数口径把空行计入（投影事件数虚高 +1，验收口径破裂）——2026-09-20 改指 d9f4d0b 搬进 countNonEmpty 的那一处",
+    apply: (s) => s.replace("for (const s of segments) if (s.trim().length > 0) n++;", "for (const s of segments) n++;"),
     expectFail: "新建 → 出现在列表；事件追加后行数 = JSONL 行数",
   },
   {
@@ -663,8 +663,8 @@ const MUTATIONS = [
     id: "sessions-meta-head-strict",
     src: "src/main/sessions.ts",
     test: "tests/sessions.test.ts",
-    desc: "首行 session_meta 严格校验被拆（任意首行都投影 scheduled 徽标，自动化徽标错配）",
-    apply: (s) => s.replace("if (meta.type !== \"session_meta\" || meta.origin !== \"scheduled\") return null;", "if (false) return null;"),
+    desc: "scheduled 徽标的投影条件被拆（每个会话都带上自动化徽标 = 面板在撒谎）——2026-09-20 改指 d9f4d0b 搬进 projectHeadLine 的那一处；同行的 meta.type 校验是 belt-and-braces，判据看不见它（首行本来就是 session_meta），不另立锚点",
+    apply: (s) => s.replace('...(meta.origin === "scheduled"', "...(true"),
     expectFail: "交互会话不投影 scheduled 徽标（只有首行 session_meta origin=scheduled 才投影）",
   },
   {
