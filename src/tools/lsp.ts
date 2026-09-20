@@ -422,13 +422,17 @@ function lspAbsentNote(root: string, absPath: string, serverId: string, why: str
 }
 
 /** 为什么这次没验成：能归类的说人话，归不了类才回原文（压掉换行 + 截断）。
- *  不把 Error.message 全量透给模型——里面是本机路径与命令细节，对修代码没用，还白烧 token。 */
+ *  不把 Error.message 全量透给模型——那是协议内部文本，对修代码没用，还白烧 token。
+ *  分支按**实测**结果写，不照抄 errno：2026-09-20 探针测得"命令不存在"时 vscode-jsonrpc
+ *  抛的是 "Pending response rejected since connection got disposed"，字符串里根本没有 ENOENT。 */
 const LSP_REASON_LIMIT = 120;
 function lspFailureReason(err: unknown): string {
   const m = (err instanceof Error ? err.message : String(err)).replace(/\s+/g, " ").trim();
   if (m.includes("broken")) return "启动失败已标记不可用（broken），本会话不再重试";
   if (m.includes("超时")) return "等待语言服务器 publishDiagnostics 超时";
-  if (m.includes("ENOENT") || m.includes("EACCES") || m.includes("EPERM")) return "语言服务器命令启动失败（命令不存在或不可执行）";
+  if (m.includes("connection got disposed") || m.includes("Pending response")) {
+    return "语言服务器进程已退出或无响应（命令不存在、崩溃或协议不兼容）";
+  }
   return m.slice(0, LSP_REASON_LIMIT);
 }
 

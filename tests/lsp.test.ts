@@ -135,9 +135,12 @@ describe("LSP 框架（M2a 任务 5）", () => {
     const first = await collectDiagnostics(ws, abs);
     expect(first.startsWith("\n<diagnostics-unavailable file=\"src/sample.ts\">")).toBe(true);
     expect(first).toContain("没有静态诊断证据");
-    expect(first).toContain("≠ 没有错误");
-    // 原始错误文本不外传（里面是 spawn 细节），用说人话的分类代替
-    expect(first).not.toContain("ENOENT");
+    expect(first).toContain("没列错误 ≠ 没有错误");
+    // 分类要按**实测**文本走：命令不存在时 jsonrpc 抛的是 "Pending response rejected since
+    // connection got disposed"（2026-09-20 探针），所以断句是"进程已退出或无响应"；
+    // 内部协议文本不外传（它既不可读也白烧 token）——这条断言能杀"照抄 errno 分类"与"直接透传"两种写法
+    expect(first).toContain("语言服务器进程已退出或无响应");
+    expect(first).not.toContain("Pending response rejected");
     expect(first.length).toBeLessThan(400); // 有界：这条每次写盘都可能注一遍
     // 第二次走 broken 短路（不再 spawn），也必须继续说话——不能因为"已经知道了"就退回沉默
     expect(isLspBroken(ws, "bad")).toBe(true);

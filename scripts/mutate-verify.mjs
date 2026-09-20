@@ -3478,11 +3478,11 @@ const MUTATIONS = [
     expectFail: "配了 LSP 却没验成 ⇒ 明说「没有静态诊断证据」：沉默会被读成绿灯",
   },
   {
-    id: "lsp-raw-spawn-error-leaks-to-model",
+    id: "lsp-internal-protocol-text-leaks-to-model",
     src: "src/tools/lsp.ts",
     test: "tests/lsp.test.ts",
-    desc: "缺席说明不再归类、直接把 spawn 的原始错误文本透给模型 ⇒ 带出本机路径/命令细节，且那句人话变成不可读的堆栈",
-    apply: (s) => s.replace("  if (m.includes(\"ENOENT\") || m.includes(\"EACCES\") || m.includes(\"EPERM\")) return \"语言服务器命令启动失败（命令不存在或不可执行）\";", "  if (false) return \"语言服务器命令启动失败（命令不存在或不可执行）\";"),
+    desc: "缺席原因不再归类 ⇒ 把 jsonrpc 的内部文本（Pending response rejected…/connection got disposed）原样塞进每次写盘的回流，模型读不懂也改不了",
+    apply: (s) => s.replace("  if (m.includes(\"connection got disposed\") || m.includes(\"Pending response\")) {", "  if (false) {"),
     expectFail: "配了 LSP 却没验成 ⇒ 明说「没有静态诊断证据」：沉默会被读成绿灯",
   },
 ];
