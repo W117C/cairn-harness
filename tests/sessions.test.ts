@@ -139,12 +139,20 @@ describe("会话名边界与重命名守卫（补齐：路径穿越与覆盖式�
     expect(list.map((x) => x.id).sort()).toEqual(["A", "B"]);
     expect((await readSessionEvents(root, "B")).length).toBe(1);
   });
-  it("交互会话不投影 scheduled 徽标（只有首行 session_meta origin=scheduled 才投影）", async () => {
+  it("首行不是 session_meta ⇒ 不投影 scheduled 徽标（origin=scheduled 才投影，这条判到的是 type 半边）", async () => {
     const id = await createSession(root, "交互");
     const log = createEventLog(pathOf(root, id));
     await log.append({ type: "user_message", content: "hi" });
     const list = await listSessions(root);
     expect(list.find((x) => x.id === "交互")?.origin).toBeUndefined();
+  });
+  it("首行是 session_meta 但没有 origin ⇒ 同样不投影（origin 半边：上面那条判不到它，变异存活实测抓出来的缺口）", async () => {
+    const id = await createSession(root, "有 meta 无 origin");
+    await createEventLog(pathOf(root, id)).append({ type: "session_meta", branch_of: "原会话" });
+    const hit = (await listSessions(root)).find((x) => x.id === "有 meta 无 origin");
+    expect(hit?.origin).toBeUndefined();
+    expect(hit?.automationId).toBeUndefined();
+    expect(hit?.automationName).toBeUndefined();
   });
 });
 

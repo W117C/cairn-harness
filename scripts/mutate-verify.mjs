@@ -665,7 +665,7 @@ const MUTATIONS = [
     test: "tests/sessions.test.ts",
     desc: "scheduled 徽标的投影条件被拆（每个会话都带上自动化徽标 = 面板在撒谎）——2026-09-20 改指 d9f4d0b 搬进 projectHeadLine 的那一处；同行的 meta.type 校验是 belt-and-braces，判据看不见它（首行本来就是 session_meta），不另立锚点",
     apply: (s) => s.replace('...(meta.origin === "scheduled"', "...(true"),
-    expectFail: "交互会话不投影 scheduled 徽标（只有首行 session_meta origin=scheduled 才投影）",
+    expectFail: "首行是 session_meta 但没有 origin ⇒ 同样不投影（origin 半边：上面那条判不到它，变异存活实测抓出来的缺口）",
   },
   {
     id: "semantic-admission-never-reports",
