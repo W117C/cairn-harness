@@ -3621,6 +3621,30 @@ const MUTATIONS = [
     apply: (s) => s.replace("if (view === null || view.stopped !== null) return null;", "if (view === null) return null;"),
     expectFail: "停过的目标不会因用户再发一条而自动复活：停止是终态，要再跑得改设目标",
   },
+  {
+    id: "goal-clear-branch-removed",
+    src: "src/main/agent-runner.ts",
+    test: "tests/goal-continue.test.ts",
+    desc: "清除分支整个摘掉 ⇒ 点「清除」掉进设定分支，报一句 objective 缺失，用户关不掉自动续跑（只能反复按停止）",
+    apply: (s) => s.replace("if (req.clear === true) {", "if (false) {"),
+    expectFail: "清除目标 = 落一条 goal_stopped（不开新事件、不开新通道）：幂等，且此后不再自动续跑",
+  },
+  {
+    id: "goal-clear-not-idempotent",
+    src: "src/main/agent-runner.ts",
+    test: "tests/goal-continue.test.ts",
+    desc: "已停还补记第二条 goal_stopped ⇒ 审计面上「这个目标停过几次」变成假的（重复点击 = 重复落事实）",
+    apply: (s) => s.replace("if (view.stopped !== null) return { ok: true };", "if (false) return { ok: true };"),
+    expectFail: "清除目标 = 落一条 goal_stopped（不开新事件、不开新通道）：幂等，且此后不再自动续跑",
+  },
+  {
+    id: "goal-clear-enoesnt-read-as-io-error",
+    src: "src/main/agent-runner.ts",
+    test: "tests/goal-continue.test.ts",
+    desc: "新建会话（日志还不存在）的 ENOENT 不再当成「没有目标」⇒ 把文件系统噪声端给用户当结论，且拒因文案消失",
+    apply: (s) => s.replace('if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return [] as AgentEvent[];', 'if ((err as NodeJS.ErrnoException)?.code === "ENOTDIR") return [] as AgentEvent[];'),
+    expectFail: "清除目标 = 落一条 goal_stopped（不开新事件、不开新通道）：幂等，且此后不再自动续跑",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
