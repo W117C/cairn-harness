@@ -3,7 +3,7 @@
 // 门是绿的而产品里没有这个行为——本模块把「有没有消费者」变成一条能判真伪的断言。
 import { describe, expect, it } from "vitest";
 import {
-  WIZARD_DEFINERS, wizardReachability, wizardUnverifiedNote,
+  WIZARD_DEFINERS, isShippedSource, wizardReachability, wizardUnverifiedNote,
 } from "../scripts/lib/commercial-reachability";
 
 const definerGroup = { path: "src/main/onboarding-groups.ts", text: "export const ONBOARDING_GROUPS = []" };
@@ -50,5 +50,34 @@ describe("wizardUnverifiedNote", () => {
     expect(note).toContain("无消费者");
     expect(note).toContain("补向导");
     expect(note).toContain("归档");
+  });
+});
+
+describe("isShippedSource（D2e 的面定义）", () => {
+  it("发货壳三棵树内的 ts / js / html 都收进来", () => {
+    for (const p of [
+      "src/renderer/app.js", "src/renderer/index.html", "src/renderer/message-actions.js",
+      "src/main/agent-runner.ts", "src/preload/index.ts",
+    ]) expect(isShippedSource(p)).toBe(true);
+  });
+
+  it("面外一律不收：类型胶水 / 构建产物 / 依赖 / 内核 / 验收面 / 文档", () => {
+    for (const p of [
+      "src/renderer/window.d.ts", "out/renderer/index.html", "node_modules/x/index.js",
+      "src/agent/orchestrator.ts", "scripts/commercial-check.ts", "tests/x.test.ts", "AGENTS.md",
+    ]) expect(isShippedSource(p)).toBe(false);
+  });
+
+  it("Windows 分隔符归一后同样判定（别把路径写法当成「没有消费者」）", () => {
+    expect(isShippedSource("src\\renderer\\app.js")).toBe(true);
+  });
+
+  it("正向对照：后长出来的渲染层模块进面后，消费者读得到", () => {
+    // 写死清单年代的面里没有 message-actions.js ⇒ 真补了向导也会报「无消费者」，红得没有依据
+    const r = wizardReachability([
+      definerGroup, definerSettings,
+      { path: "src/renderer/message-actions.js", text: "const g = ONBOARDING_GROUPS[0]" },
+    ]);
+    expect(r.consumers).toEqual(["src/renderer/message-actions.js"]);
   });
 });

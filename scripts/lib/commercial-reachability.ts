@@ -23,6 +23,26 @@ export interface Reachability {
 /** 允许「自己定义自己」的文件：数据源与设置存取层不算消费者。 */
 export const WIZARD_DEFINERS = ["src/main/onboarding-groups.ts", "src/main/settings.ts"];
 
+/**
+ * 发货壳面 = Electron 真启动的三棵树（渲染层 / 主进程 / preload）。
+ * 只列**目录**不列文件：清单写死到文件名就会漂（原 D2e 写死 3 个渲染层路径，
+ * 渲染层已长成 9 个文件而清单停在 5 个），而"哪棵树算发货壳"是定义而非快照。
+ * 扩面要有理由：消费者谓词是宽松的符号匹配，面越宽越容易自证绿。
+ */
+export const SHIPPED_DIRS: readonly string[] = ["src/renderer", "src/main", "src/preload"];
+
+const SHIPPED_EXT = /\.(?:ts|js|html)$/;
+
+/** 该路径属不属于发货壳面（纯函数，不碰 fs——面内文件由 `git ls-files` 供）。 */
+export function isShippedSource(rel: string): boolean {
+  const p = rel.split("\\").join("/"); // Windows 分隔符归一
+  if (p.startsWith("out/") || p.includes("/node_modules/")) return false;
+  if (!SHIPPED_DIRS.some((d) => p === d || p.startsWith(d + "/"))) return false;
+  // `.d.ts` 是类型胶水，不构成运行时消费者（把它算进来等于用注释自证可达）
+  if (p.endsWith(".d.ts")) return false;
+  return SHIPPED_EXT.test(p);
+}
+
 /** 向导可达 = 有定义层之外的消费者引用 ONBOARDING_GROUPS 或 onboarded。 */
 export function wizardReachability(files: readonly SourceFile[]): Reachability {
   const consumers = files
