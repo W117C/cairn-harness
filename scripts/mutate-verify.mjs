@@ -845,6 +845,23 @@ const MUTATIONS = [
     apply: (s) => s.replace("      ...(routedSpec ? { modelCtxWindow: routedSpec.ctxWindow } : {}),\n", ""),
     expectFail: "路由选中 strong 档 ⇒ handle 带该档 ctxWindow（无需 registry 二次查名）",
   },
+  // ---- 会话成本闸（§4.4.8 BYOK 底线）的估价来源 ----
+  {
+    id: "session-budget-table-fallback-dropped",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/m3c.test.ts",
+    desc: "没填单价时不再查内置价表（用户只设 maxBudgetUsd 的常见配置 ⇒ 估价恒 0、底线静默失效，正是本次修掉的形状）",
+    apply: (s) => s.replace("    if (!this.budgetRateKnown()) return 0;\n", ""),
+    expectFail: "成本闸没填单价 ⇒ 按内置价表分列估价（用户只设 maxBudgetUsd 就该拦住，不是恒 0）",
+  },
+  {
+    id: "session-budget-inert-silent",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/m3c.test.ts",
+    desc: "「估不出价所以闸不生效」不再出声（用户设的成本底线悄悄不存在，且读日志的人也拿不到模型名）",
+    apply: (s) => s.replace("      if (!this.budgetInertWarned) {", "      if (false) {"),
+    expectFail: "单价填了仍以单价为准（旧语义逐字保留）；估不出价 ⇒ 不拦但出声一次，不拿 $0 冒充实付",
+  },
   // ---- 缓存分块进事件流（444fdcd）----
   {
     id: "anthropic-total-excludes-cache-buckets",

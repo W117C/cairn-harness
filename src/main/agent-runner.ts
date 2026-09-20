@@ -218,7 +218,9 @@ async function orchestratorExtras(sandbox: SandboxStatus | null = null): Promise
     // 闭包取 currentPluginRuntime()（本函数在装载前就被展开，装载完成后才真正被调）。
     workerHooks: (mode: "read" | "write") => currentPluginRuntime()?.hooks.forWorkerMode(mode) ?? null,
     ...(process.env.M0_API_KEY ? { workerSummarizer: createGlmSummarizer() } : {}),
-    ...(s.maxBudgetUsd > 0 ? { budget: { maxUsd: s.maxBudgetUsd, pricePerMTok: s.budgetPricePerMTok } } : {}),
+    // 会话成本底线（§4.4.8）：maxUsd = 0 ⇒ 整闸不接（缺省零行为）。单价留给价表兜底，
+    // 所以这里必须把**当前模型**一起递下去——只递 maxUsd 会让闸在最常见配置下估不出价。
+    ...(s.maxBudgetUsd > 0 ? { budget: { maxUsd: s.maxBudgetUsd, pricePerMTok: s.budgetPricePerMTok, priceModel: s.model } } : {}),
     // M7 影响面读端与主会话同一个设置位（worker 能在动手前问「谁在调用它」）。
     ...(s.impactAnalysis ? { impactAnalysis: true } : {}),
     // W4a：worker 的收束闸**复用同一个设置位**（`autoVerify`）——不新增开关、不改 UI 文案

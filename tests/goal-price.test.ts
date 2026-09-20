@@ -58,10 +58,13 @@ describe("priceForModel：两态输入都要能落到价表", () => {
 });
 
 describe("价表键只在 priceForModel 一处成形", () => {
-  it("src 里除 orchestrator-join 外不许再出现这个字段名（含注释——第二份写法就是第二份事实源）", () => {
+  it("src 里除 orchestrator-join 外不许再**造**这个字段（对象字面量形态；读它不等于造它）", () => {
+    // 判的是「第二份手搓价表键的写法」——`.priceId` 的**读取**是合法的（budgetRateKnown 就要读它），
+    // 所以扫 `priceId:`（键）而不是 `priceId`（任何出现）。上一版扫后者，被自己新写的读取判红过一次：
+    // 严到伤合法用法的面，下一步就是被人当噪声门关掉。
     const offenders = walkSources(join(__dirname, "..", "src"))
       .filter((f) => !f.endsWith(join("agent", "orchestrator-join.ts")))
-      .filter((f) => readFileSync(f, "utf8").includes("priceId"))
+      .filter((f) => readFileSync(f, "utf8").includes("priceId:"))
       .map((f) => f.slice(f.indexOf("src")));
     expect(offenders).toEqual([]);
   });

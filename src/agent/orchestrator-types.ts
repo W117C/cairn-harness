@@ -222,8 +222,12 @@ export interface OrchestratorOptions {
   workerSummarizer?: Summarizer;
   /** worker 压缩参数覆盖（缺省 WORKER_COMPACTION_CONFIG；验收注入小 inputLimit 触发）。 */
   workerCompaction?: Partial<CompactionConfig>;
-  /** 会话级成本闸（§4.4.8 maxBudgetUsd）：maxUsd/pricePerMTok 任一 ≤0 = 闸无效（缺省零行为）。 */
-  budget?: { maxUsd: number; pricePerMTok: number };
+  /** 会话级成本闸（§4.4.8 maxBudgetUsd，BYOK 成本底线）：maxUsd ≤0 = 闸关（缺省零行为）。
+   *  `pricePerMTok > 0` = 用户手填单价（输入+输出同价的粗口径，逐字保留旧语义）；
+   *  留 0 时按 `priceModel` 查**内置价表**（输入/输出分列，与 goal 美元闸同一把尺）——
+   *  原先"没填单价 ⇒ 闸恒不生效"让这条 spec 的底线在最常见配置下静默失效。
+   *  两者都给不出价 ⇒ 不拦，但出声一次（不把「估不出」当成「没花钱」）。 */
+  budget?: { maxUsd: number; pricePerMTok: number; priceModel?: string };
   /** 卡死检测阈值（缺省 ORCHESTRATOR_STUCK_CONFIG；验收注入短阈值）。 */
   stuckConfig?: Partial<StuckConfig>;
   /** P0-2（审查）：父 run 已加载的权限规则库——worker 自主会话必须同口径构造，

@@ -135,14 +135,16 @@ export class Orchestrator {
   private readonly diffVersions = new Map<string, number>();
   // ---- M3c ----
   private readonly opts: OrchestratorOptions;
-  /** 会话成本闸（§4.4.8）：maxUsd/pricePerMTok 任一 ≤0 = 闸无效。 */
-  private readonly budget: { maxUsd: number; pricePerMTok: number } | null;
+  /** 会话成本闸（§4.4.8）：maxUsd ≤0 = 关；没填单价时按内置价表估（见 OrchestratorOptions.budget）。 */
+  private readonly budget: { maxUsd: number; pricePerMTok: number; priceModel?: string } | null;
   private readonly stuckConf: StuckConfig;
   /** M5b 步骤 9：bandit 在线学习状态（懒加载；routing+banditStatePath 双开才激活）。 */
   private banditState: BanditState | null = null;
   private banditLoading: Promise<BanditState | null> | null = null;
   /** 级联前提不成立（开关开了但 routing 关着）只出声一次，不每环刷一遍。 */
   private cascadeWarned = false;
+  /** 「设了成本上限却估不出价」同样只出声一次（闸不生效是用户必须知道的事实，但不刷屏）。 */
+  private budgetInertWarned = false;
   /** 会话累计 usage（emit 包装统计全部 usage 事件 = 主 loop + Σworker，§4.4.10 口径）。 */
   readonly sessionUsage = { inputTokens: 0, outputTokens: 0 };
   /** 依赖链：延迟 spawn 登记（前环未收敛；前环 done 事件驱动触发，无轮询调度器 §4.5）。 */
@@ -171,19 +173,46 @@ export class Orchestrator {
     };
   }
 
-  // ---- M3c 成本闸（§4.4.8）：估价 = Σusage tokens × 可配单价；缺省零行为（单价/上限任一为 0 → 闸无效） ----
+  // ---- M3c 成本闸（§4.4.8 BYOK 成本底线）：maxUsd = 0 → 整闸零行为；单价缺省时走内置价表（见下） ----
 
-  /** 预算估价（纯查询）：会话累计 token × 单价。pricePerMTok = 每百万 token 单价（USD）。 */
+  /** 预算估价（纯查询）。两把尺按优先级：
+   *  ① 用户手填的 `pricePerMTok`（输入+输出同价的粗口径）——语义逐字保留，填了就以它为准；
+   *  ② 没填 ⇒ 查**内置价表**（输入/输出分列，与 goal 美元闸同一把尺）。
+   *  都拿不到 ⇒ 0，但 `budgetBlocked` 会因此出声，不把 0 当成"这会话免费"。 */
   budgetEstimateUsd(): number {
-    if (!this.budget || !(this.budget.pricePerMTok > 0)) return 0;
-    const tokens = this.sessionUsage.inputTokens + this.sessionUsage.outputTokens;
-    return (tokens / 1_000_000) * this.budget.pricePerMTok;
+    const b = this.budget;
+    if (!b) return 0;
+    const usage = { inputTokens: this.sessionUsage.inputTokens, outputTokens: this.sessionUsage.outputTokens };
+    if (b.pricePerMTok > 0) return ((usage.inputTokens + usage.outputTokens) / 1_000_000) * b.pricePerMTok;
+    if (!this.budgetRateKnown()) return 0;
+    const spend = spentUsdFor(priceForModel(b.priceModel ?? ""), usage);
+    return spend === null ? 0 : spend.usd;
   }
 
-  /** 闸判定：maxUsd 与单价均 >0 且估价 ≥ 上限 → 拒绝新 spawn。 */
+  /** 估得出价吗：手填单价 >0，或价表里查得到这个模型（价表键只由 priceForModel 一处成形）。 */
+  private budgetRateKnown(): boolean {
+    const b = this.budget;
+    if (!b) return false;
+    if (b.pricePerMTok > 0) return true;
+    return b.priceModel !== undefined && b.priceModel !== "" && priceForModel(b.priceModel).priceId !== undefined;
+  }
+
+  /** 闸判定：maxUsd >0 且估价 ≥ 上限 → 拒绝新 spawn。估不出价 ⇒ 不拦，但**出声一次**：
+   *  用户设的 BYOK 成本底线不许因为"单价没填且表里没这个模型"就静默变成不存在。 */
   budgetBlocked(): boolean {
-    if (!this.budget || !(this.budget.maxUsd > 0) || !(this.budget.pricePerMTok > 0)) return false;
-    return this.budgetEstimateUsd() >= this.budget.maxUsd;
+    const b = this.budget;
+    if (!b || !(b.maxUsd > 0)) return false;
+    if (!this.budgetRateKnown()) {
+      if (!this.budgetInertWarned) {
+        this.budgetInertWarned = true;
+        console.warn(
+          "[budget] 会话成本上限 $" + String(b.maxUsd) + " 设了，但既没填单价、价表里也查不到模型 " +
+          JSON.stringify(b.priceModel ?? "") + " ⇒ 这道闸本次不生效（不拿 $0 冒充实付）",
+        );
+      }
+      return false;
+    }
+    return this.budgetEstimateUsd() >= b.maxUsd;
   }
 
   /** 活跃 worker 数（running / waiting_approval / waiting_input 计入并发上限；

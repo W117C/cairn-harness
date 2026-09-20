@@ -8,11 +8,12 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEventLog, replay, type AgentEvent } from "../src/events";
 import { projectContext } from "../src/agent/context";
 import {
   Orchestrator,
+  type OrchestratorOptions,
   WORKER_COMPACTION_CONFIG,
   buildWorkerSystemMessages,
   filterWorkerSpecs,
@@ -66,7 +67,9 @@ function makeOrch(
     workspace?: string;
     model?: (a: SpawnArgs) => ReturnType<typeof scriptedWorkerModel>;
     approvalTimeoutMs?: number;
-    budget?: { maxUsd: number; pricePerMTok: number };
+    /** 从发货类型派生，不在测试里重抄一遍字段（重抄过一次的后果：新增 `priceModel` 时这里看不见，
+     *  闸的新语义在测试里根本没法表达）。 */
+    budget?: OrchestratorOptions["budget"];
     stuckConfig?: Partial<{ maxActionObsRepeats: number; maxActionErrorRepeats: number; silenceMs: number; windowSize: number }>;
     workerSummarizer?: (input: { system: string; conversation: string }) => Promise<{ text: string; usage?: { inputTokens: number; outputTokens: number }; model?: string }>;
     workerCompaction?: Record<string, number>;
@@ -385,6 +388,37 @@ describe("M3c 工具面裁剪与成本闸", () => {
     expect(warn?.ok).toBe(false);
     expect(warn?.output).toContain("[budget] 会话成本超限");
     expect(warn?.output).toContain("主 loop 不受闸"); // V1 口径：闸管编排扩张
+  });
+
+  it("成本闸没填单价 ⇒ 按内置价表分列估价（用户只设 maxBudgetUsd 就该拦住，不是恒 0）", async () => {
+    // claude-sonnet-5 → anthropic-standard：输入 $2/M、输出 $10/M（标定过的现行价）
+    const { orch } = makeOrch({ budget: { maxUsd: 5, pricePerMTok: 0, priceModel: "claude-sonnet-5" }, model: () => scriptedWorkerModel([]) });
+    expect(orch.budgetBlocked()).toBe(false);
+    await orch.appendProtocol({ type: "usage", inputTokens: 700_000, outputTokens: 400_000 } as AgentEvent);
+    // 700k×$2 + 400k×$10 = 1.4 + 4.0 = $5.4 ≥ $5 ⇒ 拦。
+    // 拿"输入+输出同价"的粗口径算会得到另一个数：这里要的就是**分列**那一把尺（与 goal 美元闸同源）。
+    expect(orch.budgetEstimateUsd()).toBeCloseTo(5.4, 5);
+    expect(orch.budgetBlocked()).toBe(true);
+  });
+
+  it("单价填了仍以单价为准（旧语义逐字保留）；估不出价 ⇒ 不拦但出声一次，不拿 $0 冒充实付", async () => {
+    const { orch } = makeOrch({ budget: { maxUsd: 1, pricePerMTok: 1, priceModel: "claude-sonnet-5" }, model: () => scriptedWorkerModel([]) });
+    await orch.appendProtocol({ type: "usage", inputTokens: 700_000, outputTokens: 400_000 } as AgentEvent);
+    expect(orch.budgetEstimateUsd()).toBeCloseTo(1.1, 5); // 1.1M × $1/M，而不是价表的 $5.4
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const { orch: inert } = makeOrch({ budget: { maxUsd: 1, pricePerMTok: 0, priceModel: "not-a-model-in-table" }, model: () => scriptedWorkerModel([]) });
+      await inert.appendProtocol({ type: "usage", inputTokens: 9_000_000, outputTokens: 9_000_000 } as AgentEvent);
+      expect(inert.budgetBlocked()).toBe(false); // 估不出 ⇒ 不假拦（钱是侧信道，闸缺位不得把成功变失败）
+      expect(inert.budgetBlocked()).toBe(false);
+      const msgs = warn.mock.calls.map((c) => String(c[0])).filter((m) => m.includes("[budget]"));
+      expect(msgs.length).toBe(1); // 只出声一次，不每次判闸都刷
+      expect(msgs[0]).toContain("不生效");
+      expect(msgs[0]).toContain("not-a-model-in-table");
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 
