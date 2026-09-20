@@ -17,6 +17,7 @@
 // **判卷测试文件**在飞 = 本条记「未证」跳过——否则别人的在飞编辑会伪装成「变异存活」或「基线红」。
 
 import { cpSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import ts from "typescript";
 import { execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -3029,7 +3030,7 @@ const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/skill-user-invocation.test.ts",
     desc: "派发命中了却不把归属交给 loop ⇒ 事件流里那条 user_message 看不出是谁，重挂永远看不见用户点的 skill",
-    apply: (s) => s.replace("      ...(skillFace.hit ? { userMessageSkill: skillFace.hit } : {}),", "      void skillFace;"),
+    apply: (s) => s.replace("      ...(skillFace.hit ? { userMessageSkill: skillFace.hit } : {}),", "      ...(false ? { userMessageSkill: skillFace.hit } : {}),"),
     expectFail: "/sk-demo:say 你好 → 落流的是替换过的正文，且带 skill 归属",
   },
   {
@@ -3037,7 +3038,7 @@ const MUTATIONS = [
     src: "src/agent/loop.ts",
     test: "tests/skill-user-invocation.test.ts",
     desc: "loop 收到归属却不写进事件 ⇒ 落盘/重放后这一跳的信息就没了（JSONL 是唯一事实源，内存态救不回来）",
-    apply: (s) => s.replace("      ...(userMessageSkill ? { skill: userMessageSkill } : {}),", "      void userMessageSkill;"),
+    apply: (s) => s.replace("      ...(userMessageSkill ? { skill: userMessageSkill } : {}),", "      ...(false ? { skill: userMessageSkill } : {}),"),
     expectFail: "/sk-demo:say 你好 → 落流的是替换过的正文，且带 skill 归属",
   },
   {
@@ -3127,6 +3128,21 @@ function headStateOf(rel) {
   return "clean";
 }
 
+/** 改法必须产出**语法合法**的源文件。把对象字面量里的一行 spread 顶替成 `void x;` 这类写法
+ *  会让整个文件不再是合法 TS ⇒ 测试红在 vite 装载阶段而不是红在判据上，而 runner 只会说
+ *  「没红在期望用例上——可能误伤无关用例」，把人的注意力引向「expectFail 写错了」这个假因。
+ *  本会话内实踩两次，故就地判出来。transpileModule 只报语法诊断（不做类型检查）——
+ *  突变体本来就允许类型层面的取巧（`if (false)` 之类）。 */
+function mutantSyntaxProblem(mutated) {
+  const diags = ts.transpileModule(mutated, {
+    reportDiagnostics: true,
+    compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext, allowJs: true },
+  }).diagnostics ?? [];
+  const errs = diags.filter((d) => d.category === ts.DiagnosticCategory.Error);
+  if (errs.length === 0) return null;
+  return "改法致语法错（测试会红在装载阶段，不算分辨力证据）：" + ts.flattenDiagnosticMessageText(errs[0].messageText, " ");
+}
+
 function verifyEntry(m) {
   const disp = entryDisposition({
     srcRel: m.src,
@@ -3152,6 +3168,8 @@ function verifyEntry(m) {
     // ② 注入突变
     const mutated = m.apply(original);
     if (mutated === original) return { m, ok: false, why: "突变未生效（锚点可能已失效）" };
+    const syntax = mutantSyntaxProblem(mutated);
+    if (syntax !== null) return { m, ok: false, why: syntax };
     writeFileSync(srcAbs, mutated);
 
     // ③ 突变后必须红，且红在期望的那条用例上
@@ -3186,10 +3204,34 @@ if (plan.mode === "list") {
  *  常被并发堵着：那段时间里失效的锚点在「假装守护」。 */
 if (plan.mode === "check-needles") {
   const bad = reportNeedles(MUTATIONS);
-  console.log(bad === 0
+  // 顺带核每条**改法**产出的还是不是合法源文件：整张变异表要跑几十分钟且常被并发堵着，
+  // 而这类错在变异跑里只会伪装成「误伤无关用例」。秒级能查出来的事不留到几十分钟后。
+  const syntaxBad = [];
+  for (const m of MUTATIONS) {
+    let src;
+    try {
+      src = readFileSync(join(ROOT, m.src), "utf8");
+    } catch {
+      continue; // 源文件不存在另有针脚体检报
+    }
+    let out;
+    try {
+      out = m.apply(src);
+    } catch (err) {
+      syntaxBad.push([m.id, "apply 抛错：" + (err instanceof Error ? err.message : String(err))]);
+      continue;
+    }
+    if (out === src) continue; // 未生效 = 针脚失效，上面已报
+    const p = mutantSyntaxProblem(out);
+    if (p !== null) syntaxBad.push([m.id, p]);
+  }
+  for (const [id, why] of syntaxBad) console.log(`  ❌ ${id} — ${why}`);
+  if (syntaxBad.length > 0) console.log(`改法语法体检：${String(syntaxBad.length)} 条改法把源文件改坏 ❌`);
+  else console.log(`改法语法体检：${String(MUTATIONS.length)} 条改法全部产出合法源文件 ✅`);
+  console.log(bad === 0 && syntaxBad.length === 0
     ? "[mutate-needles-check] 全部锚点针脚可判定 ✅"
-    : `[mutate-needles-check] ${String(bad)} 条锚点针脚已失效 ❌`);
-  process.exit(bad === 0 ? 0 : 1);
+    : `[mutate-needles-check] ${String(bad + syntaxBad.length)} 条锚点针脚/改法失效 ❌`);
+  process.exit(bad === 0 && syntaxBad.length === 0 ? 0 : 1);
 }
 
 const targets = plan.targets;
