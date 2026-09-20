@@ -5,7 +5,6 @@
     "agent:clarify",
     "agent:compact",
     "agent:memory-delete",
-    "agent:sessions-rename",
     "agent:sidechat-ask",
     "agent:sidechat-create",
     "agent:sidechat-promote",

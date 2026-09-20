@@ -340,6 +340,13 @@ function toggleFolder(id) {
 }
 
 /* ============ 重命名 ============ */
+/* 缺省实现（没有 IPC 通道的壳）：明说"没保存"，而不是改内存里的标题再报「已重命名」。
+   真机在桥接段整条换掉：会话 id 就是 jsonl 文件名，改名会换 id ⇒ 只能由主进程落地。 */
+function commitRename(id, title) {
+  toast('重命名未保存：当前壳未提供会话重命名通道（「' + title + '」只改了本地显示）');
+  render();
+}
+
 function startRename(sessionEl, id) {
   if (sessionEl.classList.contains('editing')) return;
   const s = sessions.find(x => x.id === id);
@@ -357,11 +364,7 @@ function startRename(sessionEl, id) {
     done = true;
     if (save) {
       const v = input.value.trim();
-      if (v && v !== s.title) {
-        s.title = v;
-        if (selectedId === id) $('#chatTitle').textContent = v;
-        toast('已重命名为「' + v + '」');
-      }
+      if (v && v !== s.title) void commitRename(id, v);
     }
     render();
   };
@@ -2156,6 +2159,34 @@ render();
       return false;
     }
   }
+
+  /* 重命名走主进程，不改本地标题：会话 id 就是 jsonl 文件名，`handleSessionRename` 返回**新 id**
+     ⇒ 选中态与 real.id 必须跟着换，否则下一条消息写回旧路径，同一会话在盘上裂成两份。
+     运行中禁止改名（闸在渲染层，因为主进程那侧的 run 早在一开始就按老路径拿着 logPath）。 */
+  commitRename = async function (id, title) {
+    if (real.running || sending) {
+      toast('agent 运行中，先停止再重命名（改名会换会话 id）');
+      render();
+      return;
+    }
+    try {
+      const r = await api.renameSession(id, title);
+      if (!r || typeof r.id !== 'string') {
+        throw new Error(r && r.error ? String(r.error) : '主进程未回新会话 id');
+      }
+      if (selectedId === id) {
+        selectedId = r.id;
+        if (real.id === id) real.id = r.id;
+      }
+      await loadSessions(); // 列表以盘面为准（新 id 在其中，title 即 id）
+      if (selectedId === r.id) $('#chatTitle').textContent = r.id;
+      render();
+      toast('已重命名为「' + r.id + '」');
+    } catch (err) {
+      render(); // 盘上没改 ⇒ 回读后的旧标题就是真相，不回滚内存（它本来就没动）
+      toast('未能重命名：' + (err && err.message ? err.message : String(err)));
+    }
+  };
 
   /* ---------- 消息流构造（复用原型 DOM 契约，CSS 全兼容） ---------- */
   function appendUser(text) {
