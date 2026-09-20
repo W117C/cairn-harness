@@ -2,10 +2,8 @@
   "note": "渲染层未引用的 IPC 通道（门 0 可达性欠账）。只能减不能增：接上 UI 就把条目删掉，新增桥必须同时接 UI。",
   "orphans": [
     "agent:card-action",
-    "agent:clarify",
     "agent:compact",
     "agent:memory-delete",
-    "agent:sessions-rename",
     "agent:sidechat-ask",
     "agent:sidechat-create",
     "agent:sidechat-promote",

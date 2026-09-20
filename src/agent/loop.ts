@@ -1,5 +1,5 @@
 import type { AgentEvent, EventLog, SkillInvocationMeta, UserMessageOrigin } from "../events";
-import { denyReason, gate, type PermissionMode, type ToolResultWithAudit } from "../permissions";
+import { autoOf, denyReason, gate, type PermissionMode, type ToolResultWithAudit } from "../permissions";
 import type { HookEngine } from "./plugins/hooks";
 import { projectContext } from "./context";
 import type { LegacyNextProvider, ModelOutput, Provider } from "../providers";
@@ -327,8 +327,10 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
           result = { ok: false, output: err instanceof Error ? err.message : String(err) };
         }
       }
-      // M1c：gatedTool 自动放行时在结果上附带审计元数据（结构扩展），透传进 tool_result 事件
-      const audit = (result as ToolResultWithAudit).auto;
+      // M1c：gatedTool 附带判定留痕（结构扩展），透传进 tool_result 事件；
+      // auto 由 gate 派生（唯一 writer），历史语义不变：只有 rule / session_scope 两种自动放行才落 auto。
+      const gateMeta = (result as ToolResultWithAudit).gate;
+      const audit = autoOf(gateMeta);
       // 换路压力记账（只读，不改事件序）：动作换了 ⇒ 上一轮的重复段结束，解除提示帽
       let repeatNote = "";
       if (opts.stuckNudge === true) {
@@ -367,6 +369,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         callId: output.id,
         ok: result.ok,
         output: result.output + postContext + repeatNote,
+        ...(gateMeta ? { gate: gateMeta } : {}),
         ...(audit ? { auto: audit } : {}),
       });
       if (result.ok && (name === "write_file" || name === "edit_file")) wroteThisRun = true;

@@ -1,8 +1,10 @@
 // M4b 第 22 道门：commercial-check（A license 验签矩阵 / B 更新检查矩阵 / C provider key 安全往返
 // 与 fail-closed / D 引导七组覆盖 + settings 状态机 / E Provider 管理设置面 schema）。
 // 全程可注入（keypair 内存生成 / fetchImpl 替身 / mock SafeStorageIo / 临时目录），零网络零文件残留。
+// D2e 的发货壳面走 `git ls-files`（唯一新增的外部依赖）：取不到面就记未证，不拿"扫了 0 个文件"冒充绿。
 // 用法：pnpm commercial-check（TERM=dumb）；失败退出码非 0。
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateKeyPairSync, sign as edSign } from "node:crypto";
@@ -22,7 +24,7 @@ import {
 } from "../src/main/provider-keys";
 import { DEFAULT_SETTINGS, SettingsStore, validateSettings } from "../src/main/settings";
 import { ONBOARDING_GROUPS } from "../src/main/onboarding-groups";
-import { wizardReachability, wizardUnverifiedNote, type SourceFile } from "./lib/commercial-reachability";
+import { isShippedSource, SHIPPED_DIRS, wizardReachability, wizardUnverifiedNote, type SourceFile } from "./lib/commercial-reachability";
 
 let pass = 0;
 let fail = 0;
@@ -140,19 +142,33 @@ console.log("[commercial-check] D 引导七组覆盖 + settings 状态机");
   check((await new SettingsStore(join(work, "settings.json")).get()).onboarded === true, "D2c true 重载还原（存储面；「不再弹」需产品消费者，见 D2e）");
   // D2e：向导是否真在产品里可达。React 树归档后 `onboarding.tsx` 被删、纯数据留在这里，
   // 若 shipped 源码无人读它，则「必弹/不再弹」两句产品话无处可验——记未证而不是绿。
+  // 面 = `git ls-files` 取的发货壳三棵树（只取被跟踪的：未跟踪草稿不得把这条刷绿）。
+  let face: string[] = [];
+  let faceErr: string | null = null;
+  try {
+    face = execFileSync("git", ["ls-files", "-z", "--", ...SHIPPED_DIRS], { encoding: "utf8" })
+      .split("\0").filter((s) => s !== "" && isShippedSource(s)).sort();
+  } catch (err) {
+    faceErr = err instanceof Error ? err.message.split("\n")[0]! : String(err);
+  }
   const shipped: SourceFile[] = [];
-  for (const rel of [
-    "src/renderer/app.js", "src/renderer/index.html", "src/renderer/projections.ts",
-    "src/main/index.ts", "src/main/agent-runner.ts", "src/preload/index.ts",
-  ]) {
+  for (const rel of face) {
     try { shipped.push({ path: rel, text: await readFile(join(process.cwd(), rel), "utf8") }); } catch { /* 读不到 = 该面少一个消费者 */ }
   }
-  const reach = wizardReachability(shipped);
-  if (reach.reachable) {
-    check(reach.reachable && reach.consumers.length > 0, "D2e 引导向导在产品里可达（消费者：" + reach.consumers.join("、") + "）");
+  if (shipped.length === 0) {
+    // 面为空 ≠ 「扫过且没有消费者」——那是没扫。红/未证必须分清，否则 git 一挂这条就静默变绿。
+    const note = "D2e 发货壳面取到 0 个文件" + (faceErr !== null ? `（git ls-files 失败：${faceErr}）` : "（树不匹配？）")
+      + "——可达性**未检**，不等于通过";
+    console.log("  ⚠️  " + note);
+    unverified.push(note);
   } else {
-    console.log("  ⚠️  " + wizardUnverifiedNote(reach.consumers));
-    unverified.push(wizardUnverifiedNote(reach.consumers));
+    const reach = wizardReachability(shipped);
+    if (reach.reachable) {
+      check(reach.reachable && reach.consumers.length > 0, `D2e 引导向导在产品里可达（面 ${String(shipped.length)} 文件，消费者：${reach.consumers.join("、")}）`);
+    } else {
+      console.log(`  ⚠️  [面 ${String(shipped.length)} 文件] ` + wizardUnverifiedNote(reach.consumers));
+      unverified.push(wizardUnverifiedNote(reach.consumers));
+    }
   }
   await writeFile(join(work, "settings.json"), JSON.stringify({ onboarded: "yes" }), "utf8");
   check((await new SettingsStore(join(work, "settings.json")).get()).onboarded === false, "D2d 非法值回退 false（防「永不再现」）");

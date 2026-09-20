@@ -45,7 +45,9 @@ import {
   noteScopeApproval,
   downgradeSuggestion,
   scopeKey,
+  gateBase,
   type AskScope,
+  type GateMeta,
   type PermissionRule,
   type ToolResultWithAudit,
 } from "../permissions";
@@ -304,8 +306,12 @@ export function setAppHooks(h: Hooks): void {
   Object.assign(hooks, h);
 }
 
-function denied(name: ToolName | string, mode: PermissionMode, why: string): ToolResult {
-  return { ok: false, output: "[permission denied] " + name + " 在 " + mode + " 档下被门拒绝（" + why + "）" };
+function denied(name: ToolName | string, mode: PermissionMode, why: string, gate?: GateMeta): ToolResult {
+  return {
+    ok: false,
+    output: "[permission denied] " + name + " 在 " + mode + " 档下被门拒绝（" + why + "）",
+    ...(gate ? { gate } : {}),
+  } as ToolResultWithAudit;
 }
 
 /** §9.3 权限联动的**解释面**：某条已激活 skill 申报过 `allowed-tools` 里的这个工具，
@@ -336,9 +342,12 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
         if (gateR.outcome !== "approved") return denied(name, s.autonomy.mode, "安全模式 gate 未批准");
       }
       const d = evaluate(name, args, s.autonomy);
-      if (d.verdict === "deny") return denied(name, s.autonomy.mode, d.reason);
+      const aMode = s.autonomy.mode;
+      if (d.verdict === "deny") return denied(name, aMode, d.reason, { ...gateBase(d, aMode), verdict: "denied" });
+      // 人工批准时人选的 scope（ask 分支才会赋值）——留痕要能回答「是谁放行的、放到哪一档」。
+      let manualScope: AskScope | undefined;
       if (d.verdict === "ask") {
-        if (!s.askGate) return denied(name, s.autonomy.mode, "非交互模式（fail-closed）：" + d.reason);
+        if (!s.askGate) return denied(name, aMode, "非交互模式（fail-closed）：" + d.reason, { ...gateBase(d, aMode), verdict: "unattended" });
         const r = await s.askGate.request(name, args, {
           reason: withSkillAllowNote(name, d.reason),
           risk: d.risk,
@@ -355,10 +364,12 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
             const tip = downgradeSuggestion(s.autonomy);
             if (tip) console.warn("[permissions] " + tip);
           }
-          return denied(name, s.autonomy.mode, r.reason === "unattended" ? "无人值守 fail-closed：审批请求自动拒绝" : "未获批准");
+          return denied(name, aMode, r.reason === "unattended" ? "无人值守 fail-closed：审批请求自动拒绝" : "未获批准",
+            { ...gateBase(d, aMode), verdict: r.reason === "unattended" ? "unattended" : r.reason === "timeout" ? "timeout" : "rejected" });
         }
         // scope 回写（§10.4）：网络类命令强制 once（出网审计，scope 不放行）
         const effScope: AskScope = isNetworkCommandCall(name, args) ? "once" : r.scope;
+        manualScope = effScope;
         if (effScope === "session_kind") {
           (s.autonomy.sessionScopes as Set<string>).add(scopeKey(name, args));
         } else if (effScope === "always") {
@@ -369,6 +380,12 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
       } else if (d.auto?.source === "session_scope") {
         noteScopeApproval(s.autonomy); // 断路器计数（连续 scope 自动放行）
       }
+      // 判定留痕：能走到这里只有两种可能——本来就不用问（auto-approved）或问过且批了（approved）。
+      // 沙箱那两条 return 原先连 auto 审计都带不出去（同一条命令走不走沙箱留痕不一样），一并补上。
+      const gateMeta: GateMeta = d.verdict === "ask"
+        ? { ...gateBase(d, aMode), verdict: "approved", ...(manualScope !== undefined ? { scope: manualScope } : {}) }
+        : { ...gateBase(d, aMode), verdict: "auto-approved" };
+      const withGate = (r: ToolResult): ToolResult => ({ ...r, gate: gateMeta } as ToolResultWithAudit);
       // Internal fusion callback, never a model argument: revalidate after approval (which may wait).
       if (beforeExecute) {
         const blocked = await beforeExecute();
@@ -385,17 +402,16 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
           if (ctx.signal?.aborted) return { ok: false, output: "cancelled before sandbox lint" };
           const quote = (s: string): string => "'" + s.replace(/'/g, "'\\''") + "'";
           const command = `TMPDIR=${quote(tmp)} exec /usr/bin/sandbox-exec -p ${quote(buildSandboxProfile(ctx.workspace))} bash -c ${quote(mapped)}`;
-          return await original.run({ command }, ctx);
+          return withGate(await original.run({ command }, ctx));
         }
-        return await runInSandbox(mapped, { cwd: ctx.workspace });
+        return withGate(await runInSandbox(mapped, { cwd: ctx.workspace }));
       }
       let result = await original.run(args, ctx);
       if (name !== "run_shell" && result.ok && s.actionFusion) {
         result = await s.actionFusion(result, args.path, ctx);
       }
-      // 自动放行审计（§11.7.5）：{source, rule_id} 进 tool_result 元数据（loop 透传，零新事件类型）
-      const audit = d.verdict === "approve" ? d.auto : undefined;
-      return (audit ? { ...result, auto: audit } : result) as ToolResultWithAudit;
+      // 判定留痕进 tool_result（loop 透传并由 autoOf 派生 auto，零新事件类型）
+      return withGate(result);
     },
   };
 }
@@ -408,9 +424,11 @@ function gatedMcpTool(name: string, info: McpToolInfo & { plugin: string; server
       const s = currentSession();
       if (!s) return denied(name, "default", "工具门未接线（fail-closed）");
       const d = evaluate(name as ToolName, args, s.autonomy, info.grade); // MCP scoped 名进同一管线（规则/风险/档位全生效）
-      if (d.verdict === "deny") return denied(name, s.autonomy.mode, d.reason);
+      const aMode = s.autonomy.mode;
+      if (d.verdict === "deny") return denied(name, aMode, d.reason, { ...gateBase(d, aMode), verdict: "denied" });
+      let manualScope: AskScope | undefined;
       if (d.verdict === "ask") {
-        if (!s.askGate) return denied(name, s.autonomy.mode, "非交互模式（fail-closed）：" + d.reason);
+        if (!s.askGate) return denied(name, aMode, "非交互模式（fail-closed）：" + d.reason, { ...gateBase(d, aMode), verdict: "unattended" });
         const r = await s.askGate.request(name, args, {
           reason: withSkillAllowNote(name, d.reason),
           risk: d.risk,
@@ -421,14 +439,21 @@ function gatedMcpTool(name: string, info: McpToolInfo & { plugin: string; server
           // gatedMcpTool 两处同形，一并接线。
           signal: ctx.signal,
         });
-        if (r.outcome !== "approved") return denied(name, s.autonomy.mode, "未获批准");
+        if (r.outcome !== "approved") return denied(name, aMode, "未获批准",
+          { ...gateBase(d, aMode), verdict: r.reason === "unattended" ? "unattended" : r.reason === "timeout" ? "timeout" : "rejected" });
+        manualScope = r.scope;
         noteManualDecision(s.autonomy);
       } else if (d.auto?.source === "session_scope") {
         noteScopeApproval(s.autonomy);
       }
       void ctx;
+      // MCP 出口原先把 d.auto 丢了：读了它做断路器计数，却不往结果上挂（§11.7.5 的审计在这条路上
+      // 一直是空的）。留痕统一走 gate，auto 由 loop 从 gate 派生。
+      const gateMeta: GateMeta = d.verdict === "ask"
+        ? { ...gateBase(d, aMode), verdict: "approved", ...(manualScope !== undefined ? { scope: manualScope } : {}) }
+        : { ...gateBase(d, aMode), verdict: "auto-approved" };
       const res = await rt.mcp.callTool(info.plugin, info.server, info.name, args);
-      return { ok: res.ok, output: res.output };
+      return { ok: res.ok, output: res.output, gate: gateMeta } as ToolResultWithAudit;
     },
   };
 }

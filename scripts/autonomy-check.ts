@@ -10,7 +10,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runAgent } from "../src/main/agent-runner";
 import { AskGate, type AskRequest } from "../src/main/ask-gate";
@@ -166,6 +166,33 @@ console.log("[autonomy-check] 任务 2 规则库六断言");
 
 interface AskRecord { tool: string; reason?: string; approved: boolean }
 
+/** 受管调用 = 进 evaluate 权限管线的那几个工具（与 gatedTool / gatedMcpTool / gatedWorkerTool 的入口面一致）。 */
+const MANAGED_TOOLS = new Set(["write_file", "edit_file", "run_shell", "shell_rw", "shell_ro"]);
+const isManagedTool = (name: string): boolean => MANAGED_TOOLS.has(name) || name.startsWith("mcp__");
+
+/**
+ * 留痕覆盖等式：**每一次受管调用，至少有一条 tool_result 带上判定痕迹**（gate，或由 gate 派生的 auto）。
+ * 这就是 ask 落盘的验收——补之前真流量是「99 次受管调用、0 条留痕」。
+ * 量词取「至少一条」而不是「数相等」：distill 沉淀轮会用**原 callId** 补发 rejected tool_result
+ * （PROGRESS 坑五十二），按行数比会把那条合法的二写当成缺痕，等式一旦误伤就没人信它。
+ */
+function assertAuditCoverage(log: readonly AgentEvent[], label: string): void {
+  const traced = new Map<string, boolean>();
+  for (const e of log) {
+    if (e.type === "tool_call" && isManagedTool(e.name)) traced.set(e.id, false);
+  }
+  for (const e of log) {
+    if (e.type !== "tool_result") continue;
+    if (traced.get(e.callId) === false && (e.gate !== undefined || e.auto !== undefined)) traced.set(e.callId, true);
+  }
+  const missing = [...traced.entries()].filter(([, ok]) => !ok).map(([id]) => id);
+  assert(
+    traced.size > 0 && missing.length === 0,
+    `${label}：${String(traced.size)} 次受管调用每一条都留下判定痕迹（gate/auto）` +
+      (missing.length > 0 ? `——缺 ${String(missing.length)} 条：${missing.join("、")}` : ""),
+  );
+}
+
 /** 驱动门：notify 即决议（模拟审批卡点击）；记录每次询问供断言。 */
 function driverGate(policy: "approve-session-kind" | "deny-all", records: AskRecord[]): AskGate {
   const gate = new AskGate({
@@ -181,11 +208,32 @@ function driverGate(policy: "approve-session-kind" | "deny-all", records: AskRec
   return gate;
 }
 
+/**
+ * 前置：剧本点名的**读**路径必须真实存在。
+ * 为什么单独立一条：`fixtures/todo-app/src/todo.ts` 是生成物（`e2e.ts` / `ipc-check.ts` 从
+ * `fixtures/mock/todo-bug.ts` 铺出来），本门过去直接读它 ⇒ 全新检出里 read_file 必失败，
+ * 红被报成「只读档拦住了读」，真因却是本门白蹭别的门的副作用。同一处注释已为 run_shell
+ * 的同一种病（靶子状态决定成败）改成自足命令，只修了一半。缺输入必须报成缺输入。
+ */
+async function assertScriptReadTargets(script: string): Promise<void> {
+  const text = await readFile(script, "utf8");
+  for (const line of text.split("\n")) {
+    if (line.trim() === "") continue;
+    let e: { type?: string; name?: string; args?: { path?: unknown } };
+    try { e = JSON.parse(line) as typeof e; } catch { continue; }
+    if (e.type !== "tool_call" || e.name !== "read_file") continue;
+    const p = typeof e.args?.path === "string" ? e.args.path : null;
+    if (p === null) continue;
+    assert(existsSync(join(APP, p)), `剧本 ${basename(script)} 的读目标存在：${p}`);
+  }
+}
+
 async function runScript(
   script: string,
   mode: PermissionMode,
   gate: AskGate | undefined,
 ): Promise<AgentEvent[]> {
+  await assertScriptReadTargets(script);
   const logPath = join(tmpdir(), `m1c-autonomy-${mode}-${String(Date.now())}-${String(Math.random()).slice(2, 6)}.jsonl`);
   process.env.M1C_AUTONOMY_SCRIPT = script;
   try {
@@ -237,6 +285,7 @@ console.log("[autonomy-check] 任务 6 明卷·默认档（fixtures/autonomy/def
     !existsSync(join(APP, ".agent", "permissions.json")),
     "默认档：session_kind 记忆不落盘（会话内存放行）",
   );
+  assertAuditCoverage(log, "默认档");
 }
 
 console.log("[autonomy-check] 任务 6 明卷·自主档（fixtures/autonomy/auto-flow.jsonl）");
@@ -256,6 +305,7 @@ console.log("[autonomy-check] 任务 6 明卷·自主档（fixtures/autonomy/aut
     rCrit !== null && !rCrit.ok && rCrit.output.includes("permission denied"),
     "自主档：『rm -rf /』被拦（critical 任何档位强制审批，自主档不是 bypass）",
   );
+  assertAuditCoverage(log, "自主档");
 }
 
 console.log("[autonomy-check] 任务 6 明卷·只读档（fixtures/autonomy/readonly-flow.jsonl）");
@@ -281,6 +331,7 @@ console.log("[autonomy-check] 任务 6 明卷·只读档（fixtures/autonomy/rea
     !existsSync(join(APP, "ro-should-not-exist.txt")),
     "只读档：写目标文件确实没有落盘",
   );
+  assertAuditCoverage(log, "只读档");
 }
 
 console.log("[autonomy-check] 拒绝不生成规则（集成面）");

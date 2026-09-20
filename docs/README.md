@@ -19,6 +19,7 @@
 | 当前设计系统 | `outputs/frontend-refactor-2026-09-17/02-design-system.md` |
 | 最新证据截图 | `outputs/frontend-refactor-2026-09-17/evidence/shots/`（`r1-*` / `s1-*`，2026-09-17） |
 | 仓库级现状 | 根目录 `AGENTS.md`「当前状态」段 |
+| 判断层校准路线（方案待裁决，含可粘贴复跑的回放命令） | `docs/judgment-layer-calibration-proposal.md` |
 | 战略基线（2026-09-18 调研轮，三份互指） | 路线与优先级：`outputs/best-agent-roadmap-2026-09-18.md`（harness-only 超越 Codex/CC；§2 门 0 可达性、§13 21 条孤儿桥裁决表、§14 自纠）· 代码能力面差距：`outputs/agent-landscape-gap-analysis-2026-09-18.md`（A1–A9）· 渲染侧矛盾台账：`outputs/design-contradictions-2026-09-18.md`（T1–T28）。<br>⚠️ **读 A 档时注意两条已收口**：A2 上下文预算认模型 = `d64084e`；A5 provider 重试 / 429 = `887ffb6`（`src/providers/retry.ts`，三家共用）。别照文档去修已完成项 |
 
 ### 重生成 `m1e-*` 两张截图

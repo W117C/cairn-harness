@@ -160,6 +160,60 @@ describe("replay 坏行容错边界（S1-4 回归）", () => {
   });
 });
 
+
+// P1-2：增量入口曾对任何位置的坏行都 `if (e) push` 静默跳过 ⇒ 同一份损坏文件在 replay 炸、
+// 在 replayIncremental 继续产出错位投影（id=1-based 行号契约只在一条入口成立）。
+// 现两入口共用同一条判据：尾坏可容、非尾坏必炸，且「当时在尾部」不是永久豁免。
+describe("replayIncremental 与 replay 同判（P1-2 契约分叉回归）", () => {
+  const um = (t: string): AgentEvent => ({ type: "user_message", content: t } as AgentEvent);
+
+  it("首访即「坏行 + 其后好行」→ 增量与全量同样显式失败，且不留半份缓存", async () => {
+    dir = await mkdtemp(join(tmpdir(), "m0-inc-mid-"));
+    const logPath = join(dir, "events.jsonl");
+    await writeFile(logPath, '{"type":"user_message","content":"m1"}\n{ 坏行\n{"type":"user_message","content":"m2"}\n', "utf8");
+    await expect(replay(logPath)).rejects.toThrow(/非尾部坏行/);
+    await expect(replayIncremental(logPath)).rejects.toThrow(/非尾部坏行/);
+    await expect(replayIncremental(logPath)).rejects.toThrow(/非尾部坏行/); // 失败态可重复，第二次退化成静默
+  });
+
+  it("尾坏当时可容、其后一旦追加新事件即转非尾部 → 两入口同判必炸", async () => {
+    dir = await mkdtemp(join(tmpdir(), "m0-inc-tail-"));
+    const logPath = join(dir, "events.jsonl");
+    const log = createEventLog(logPath);
+    for (let i = 1; i <= 3; i++) await log.append(um("m" + String(i)));
+    expect(await replayIncremental(logPath)).toHaveLength(3); // 建缓存，此后只走增量分支
+
+    // ① 崩溃留下的半行（无换行）：不得被消费，也不得推进偏移
+    await appendFile(logPath, '{"type":"user_message","conten', "utf8");
+    expect(await replayIncremental(logPath)).toHaveLength(3);
+
+    // ② 下一次 append 把它粘成一条「完整的坏行」（第 4 行）——此刻它仍在尾部：两入口都不炸
+    await appendFile(logPath, '} 不是合法 JSON\n', "utf8");
+    expect(await replayIncremental(logPath)).toHaveLength(3);
+    expect(await replay(logPath)).toHaveLength(3);
+
+    // ③ 再追加一条好行：那条坏行已离开尾部 ⇒ replay 抛，增量也必须抛（改前这里静默跳过）
+    await appendFile(logPath, '{"type":"user_message","content":"m4"}\n', "utf8");
+    await expect(replay(logPath)).rejects.toThrow(/非尾部坏行/);
+    const inc = await replayIncremental(logPath).catch((e: unknown) => e);
+    expect(inc).toBeInstanceOf(Error);
+    expect(String((inc as Error).message)).toMatch(/非尾部坏行/);
+    expect(String((inc as Error).message)).toMatch(/首在第 4 行/); // 绝对行号，不是批内下标
+  });
+
+  it("坏行始终在尾部（无后续事件）→ 两入口一致降级，不误判成损坏", async () => {
+    dir = await mkdtemp(join(tmpdir(), "m0-inc-puretail-"));
+    const logPath = join(dir, "events.jsonl");
+    const log = createEventLog(logPath);
+    for (let i = 1; i <= 2; i++) await log.append(um("m" + String(i)));
+    expect(await replayIncremental(logPath)).toHaveLength(2);
+    await appendFile(logPath, "{ 坏行不是合法 JSON\n", "utf8");
+    const inc = await replayIncremental(logPath);
+    expect(inc.map((e) => (e as { content?: string }).content)).toEqual(["m1", "m2"]);
+    expect(await replay(logPath)).toHaveLength(2); // 同一裁决
+  });
+});
+
 // A1（P0-A）：事件落盘改常驻 FileHandle——锁住四条边界：大量顺序写、rm 重建（inode 校验）、
 // 同实例并发写（无半行/无重复）、多 path 缓存淘汰后文件内容仍正确。
 describe("A1 常驻句柄（事件落盘）", () => {

@@ -1,6 +1,8 @@
 // 事件流：append-only JSONL，一事件一行。
 import { mkdir, open, readFile, stat, type FileHandle } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+// 权限判定留痕的类型定义在权限层（判定归判定、序列化归序列化）；`import type` 编译期擦除，不引运行时依赖。
+import type { AutoMeta, GateMeta } from "../permissions/autonomy";
 
 /** M2f：/promote 来源（sidechat 结论提升进主会话）。零新增事件类型——主流仍是 user_message，
  *  只多一个可选 origin 字段，重启后从 JSONL 重放无损（徽标由 origin 反向投影）。 */
@@ -33,9 +35,9 @@ export interface AssistantDeltaEvent { type: "assistant_delta"; callId: string; 
 /** M3a：worker 子流的工具调用（§4.4.9 落主流口径）——agent_id 在场 = 该事件属于该 worker 子流，
  *  主上下文投影（projectContext）跳过带 agent_id 的事件（父上下文唯一接收物 = agent_result，§4.4.4）。 */
 export interface ToolCallEvent { type: "tool_call"; id: string; name: string; args: Record<string, unknown>; agent_id?: string }
-/** M1c 自动放行来源审计（§11.7.5）：仅自动放行的 tool_result 携带，零新事件类型。 */
-export interface AutoApproveMeta { source: "rule" | "session_scope"; ruleId?: string }
-export interface ToolResultEvent { type: "tool_result"; callId: string; ok: boolean; output: string; auto?: AutoApproveMeta; agent_id?: string }
+/** M1c 自动放行来源审计（§11.7.5）：仅自动放行的 tool_result 携带，零新事件类型。
+ *  类型不自家再定义一份——它的真身在权限层，且由 `autoOf(gate)` 派生（两份同形定义迟早漂）。 */
+export interface ToolResultEvent { type: "tool_result"; callId: string; ok: boolean; output: string; auto?: AutoMeta; /** 权限判定留痕：谁判的（layer）、怎么判的（verdict）、当时风险与档位 */ gate?: GateMeta; agent_id?: string }
 export interface UsageEvent { type: "usage"; inputTokens: number; outputTokens: number; /** 缓存分列（可选）：**缺字段 = 该 provider 没上报，不等于 0**。约定 `inputTokens` 是含缓存的总输入，
    *  下面两个是其中的分块——不得再与 inputTokens 相加（metering 的 MeterUsage 要互斥桶，适配器换算后再交）。
    *  写侧断点（Anthropic cache_control / 稳定前缀排布）尚未接线：先把「命中没有」测出来，再谈制造命中。 */
@@ -618,6 +620,15 @@ export async function closeAllEventLogs(): Promise<void> {
   for (const h of handles) await h.fh.close().catch(() => undefined);
 }
 
+/** 两条入口共用的「非尾部坏行」判据与文案：replay 与 replayIncremental 必须给同一个裁决——
+ *  否则同一份损坏文件在全量入口炸、在增量入口静默产出错位投影（id=行号契约只在一条入口成立）。 */
+function midBadLineError(path: string, midBad: number[]): Error {
+  return new Error(
+    `会话日志有 ${String(midBad.length)} 条非尾部坏行（首在第 ${String(midBad[0])} 行）：跳过会使事件 id 与 1-based 行号错位，` +
+      `血缘/分支/压缩 id 全部失准，请修复该文件或从备份恢复: ${path}`,
+  );
+}
+
 /** 重放：按写入顺序读回全部事件。untilEventId 给定时只重放到该事件点（含）。
  * 事件 id = 1-based 行号（append-only 保证永不漂移），即「事件点」。
  * A1（审查）：逐行容错——崩溃/并发写把尾行写成半行不再炸掉整会话（旧实现一行坏 = 所有
@@ -651,12 +662,7 @@ export async function replay(path: string, untilEventId?: string): Promise<Agent
     events.push(parsed as AgentEvent);
   }
   const midBad = badLines.filter((l) => l < lastGoodLine);
-  if (midBad.length > 0) {
-    throw new Error(
-      `会话日志有 ${String(midBad.length)} 条非尾部坏行（首在第 ${String(midBad[0])} 行）：跳过会使事件 id 与 1-based 行号错位，` +
-        `血缘/分支/压缩 id 全部失准，请修复该文件或从备份恢复: ${path}`,
-    );
-  }
+  if (midBad.length > 0) throw midBadLineError(path, midBad);
   if (badLines.length > 0) console.warn(`[events] replay 跳过尾部 ${String(badLines.length)} 条坏行（降级容错）: ${path}`);
   if (untilEventId === undefined) return events;
   const n = Number(untilEventId);
@@ -668,9 +674,14 @@ export async function replay(path: string, untilEventId?: string): Promise<Agent
 
 // ---- A5（审查根因 5）：增量重放——glm-session/sidechat 每轮全量读盘 → 只解析追加段 ----
 // 会话 JSONL append-only：按 (ino, 完整行字节偏移) 缓存已解析事件数组，每轮只读尾部新行。
-// 语义与 replay 逐位一致：坏行/空行跳过照旧占字节；半写尾行留待下次（append 写整行，通常为空）。
+// 坏行裁决与 replay 同一条（共用 midBadLineError）：**尾坏可容、非尾坏必炸**，且「当时在尾部」
+// 不是永久豁免——崩溃留下的半行会被下一次 append 粘成一条完整的坏行，此后再追加就成了中段坏行；
+// 那时 replay 会抛，增量若继续静默跳过，缓存下标就与 1-based 行号错位（正是 S1-4 要防的）。
 // 投影本身仍是每轮全量（O(n)），增量折叠需处理 compaction 失效语义——收口留位第三批。
-const replayCache = new Map<string, { ino: number; offset: number; events: AgentEvent[] }>();
+const replayCache = new Map<string, ReplayCacheEntry>();
+/** line = 已消费的完整行数（下一批第 i 行的绝对行号 = line + i + 1）；
+ *  tailBad = 已跳过、当批仍在尾部的坏行行号（其后一旦出现新事件即转为非尾部 → 抛）。 */
+interface ReplayCacheEntry { ino: number; offset: number; events: AgentEvent[]; line: number; tailBad: number[] }
 const REPLAY_CACHE_MAX = 32;
 
 function parseReplayLine(t: string): AgentEvent | null {
@@ -713,45 +724,67 @@ async function replayIncrementalInner(path: string): Promise<AgentEvent[]> {
     // 首访 / 文件被重建（inode 变化）/ 被截断 → 全量解析并重建缓存
     const raw = await readFile(path, "utf8").catch(() => "");
     const events: AgentEvent[] = [];
+    const bad: number[] = [];
     let offset = 0;
+    let lastGood = 0;
     const allParts = raw.split("\n");
     const completeInit = raw === "" ? [] : allParts.slice(0, -1); // 最后一段是尾行（空串或半写）
-    for (const line of completeInit) {
-      offset += Buffer.byteLength(line, "utf8") + 1; // 完整行都推进偏移（含空行/坏行）
-      const t = line.trim();
+    for (let i = 0; i < completeInit.length; i++) {
+      const rawLine = completeInit[i];
+      offset += Buffer.byteLength(rawLine, "utf8") + 1; // 完整行都推进偏移（含空行/坏行）
+      const t = rawLine.trim();
       if (!t) continue;
       const e = parseReplayLine(t);
-      if (e) events.push(e);
+      if (e) { lastGood = i + 1; events.push(e); } else bad.push(i + 1);
     }
+    const midBad = bad.filter((l) => l < lastGood);
+    if (midBad.length > 0) throw midBadLineError(path, midBad); // 抛在写缓存之前：不留半份缓存
+    if (bad.length > 0) console.warn(`[events] replayIncremental 跳过尾部 ${String(bad.length)} 条坏行（降级容错）: ${path}`);
     if (replayCache.size >= REPLAY_CACHE_MAX) {
       const oldest = replayCache.keys().next().value;
       if (oldest !== undefined) replayCache.delete(oldest);
     }
-    const entry = { ino: st.ino, offset: Math.min(offset, st.size), events };
+    const entry: ReplayCacheEntry = { ino: st.ino, offset: Math.min(offset, st.size), events, line: completeInit.length, tailBad: bad };
     replayCache.set(path, entry);
     return entry.events.slice(); // 交副本：消费方排序/清空不得影响缓存
   }
   // 增量：只读上次偏移之后的完整行（半写尾行留待完整落盘——不推进偏移、不重复解析）
   const len = st.size - cached.offset;
   if (len <= 0) return cached.events.slice();
+  const fresh: AgentEvent[] = [];
+  const bad: number[] = [];
+  let lastGood = 0;
+  let consumed = 0;
+  let done = 0; // 本批消费的完整行数（含空行/坏行——它们同样占行号）
   const fh = await open(path, "r");
   try {
     const buf = Buffer.allocUnsafe(len);
     await fh.read(buf, 0, len, cached.offset);
     const text = buf.toString("utf8");
     const parts = text.split("\n");
-    let consumed = 0;
-    for (const line of parts.slice(0, -1)) { // 最后一段是尾行（空串=到 EOF；否则半写）
-      consumed += Buffer.byteLength(line, "utf8") + 1;
-      const t = line.trim();
+    const complete = parts.slice(0, -1); // 最后一段是尾行（空串=到 EOF；否则半写）
+    done = complete.length;
+    for (let i = 0; i < complete.length; i++) {
+      const rawLine = complete[i];
+      consumed += Buffer.byteLength(rawLine, "utf8") + 1;
+      const t = rawLine.trim();
       if (!t) continue;
+      const abs = cached.line + i + 1;
       const e = parseReplayLine(t);
-      if (e) cached.events.push(e);
+      if (e) { lastGood = abs; fresh.push(e); } else bad.push(abs);
     }
-    cached.offset += consumed;
   } finally {
     await fh.close();
   }
+  // 跨批裁决：上一批留下的尾坏，只要本批出现新事件就已离开尾部 ⇒ 与 replay 同判必炸。
+  // 先算后写：抛出去时不碰缓存（偏移不推进 → 下次同一批重读，仍抛，不会退化成静默错位）。
+  const midBad = [...(fresh.length > 0 ? cached.tailBad : []), ...bad.filter((l) => l < lastGood)];
+  if (midBad.length > 0) throw midBadLineError(path, midBad);
+  if (bad.length > 0) console.warn(`[events] replayIncremental 跳过尾部 ${String(bad.length)} 条坏行（降级容错）: ${path}`);
+  cached.events.push(...fresh);
+  cached.offset += consumed;
+  cached.line += done;
+  cached.tailBad = fresh.length > 0 ? [] : [...cached.tailBad, ...bad];
   return cached.events.slice();
 }
 

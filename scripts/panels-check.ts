@@ -1,9 +1,9 @@
 // M1e 验收脚本（pnpm panels-check）：
 //   A. headless：settings 布局持久化（写→重载一致 / 非法回退默认）+ 会话列表 CRUD + 会话 run→重放投影逐字一致
-//   B. Electron + CDP：1 万条事件虚拟化（DOM ≤300 / 滚动一屏 ≤200ms）+ 审批徽标 ≤1s + 布局重启还原 + 截图
+//   B. Electron + CDP：1 万条事件虚拟化（DOM ≤300 / 滚动一屏 ≤200ms）+ 审批徽标 ≤1s + 布局重启还原 + 会话重命名落盘 + 截图
 // 退出码 0 = 全部断言通过；任何断言失败退出码 1。
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createEventLog } from "../src/events";
@@ -228,6 +228,21 @@ async function phaseElectron(root: string): Promise<void> {
   });
   console.log("[panels-check] B1 1 万条事件虚拟化（真实重放路径）");
   const stressId = "压测会话-万条";
+  // B6 的靶子先落盘：列表按 mtime 降序、启动即自动开**最新**那条，B1 的万条断言指着它。
+  // 靶子必须在起 Electron 之前写（列表只在启动时读一次盘），但绝不能比压测会话更新。
+  const clarifyId = "澄清靶子";
+  {
+    const log = createEventLog(pathOf(root, clarifyId));
+    await log.append({ type: "user_message", content: "把导出功能加上" });
+    await log.append({
+      type: "clarify_requested",
+      callId: "m1e-clarify-1",
+      questions: [
+        { question: "导出成哪种格式？", header: "格式", options: [{ label: "CSV" }, { label: "JSON", description: "带嵌套结构" }] },
+        { question: "要包含哪些行？", multiSelect: true, options: [{ label: "已完成" }, { label: "未完成" }] },
+      ],
+    });
+  }
   await writeFileStressSession(root, stressId, 10_000);
 
   const { proc: electron, output } = spawnElectron({
@@ -353,6 +368,24 @@ async function phaseElectron(root: string): Promise<void> {
       return disk.layout?.open?.git === true && disk.layout?.activePanel === "git" ? true : null;
     }, 10_000);
     ok(diskOk, "UI 开关 git 面板 → settings.json 落盘 open.git=true + activePanel=git");
+
+    console.log("[panels-check] B3b 主题：设置才是事实源，localStorage 只是首帧缓存");
+    // localStorage 落在**真 userData 目录**（只有 settings/会话被 env 改指），所以先把原值存下来、
+    // 本轮末尾（B4 之后）原样还回去——验收脚本不该在用户机器上留下自己造的色。
+    const themeCacheBefore = await cdp.eval<string | null>("localStorage.getItem('forge-theme')");
+    await cdp.eval("(() => { document.querySelector('[data-setting=\"theme\"] button[data-val=\"dark\"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true; })()");
+    const themeDisk = await tryWait(async () => {
+      const disk = JSON.parse(await readFile(join(root, "settings.json"), "utf8")) as { theme?: string };
+      return disk.theme === "dark" ? true : null;
+    }, 10_000);
+    ok(themeDisk, "点「深色」→ settings.json 落盘 theme=dark");
+    const paintedNow = await cdp.eval<string>("document.documentElement.dataset.theme || ''");
+    ok(paintedNow === "dark", "点完当场就换肤（实测 data-theme=" + JSON.stringify(paintedNow) + "）");
+    // 判别性设计：把缓存**故意涂成 light**（与盘上的 dark 相反），下一相重启后屏幕必须跟着
+    // settings 走。上一版实现这里会停在 light——因为水合只刷按钮、末尾又拿缓存盖回屏幕。
+    await cdp.eval("localStorage.setItem('forge-theme','light'); 'ok'");
+    const poisoned = await cdp.eval<string | null>("localStorage.getItem('forge-theme')");
+    ok(poisoned === "light", "缓存已涂成与盘上相反的值，投毒成立（实测缓存=" + JSON.stringify(poisoned) + " 而 settings=dark）");
     // 截图是运行产物：默认不写盘（否则每次跑门禁都把工作树弄脏）。需要刷新交付截图时设 M1E_SCREENSHOT=1。
     if (process.env.M1E_SCREENSHOT) {
       const shot1 = await cdp.send("Page.captureScreenshot", { format: "png" });
@@ -396,6 +429,103 @@ async function phaseElectron(root: string): Promise<void> {
       return open ? true : null;
     }, 25_000);
     ok(restored, "重启后 git 面板自动还原打开且激活（settings 持久化生效）");
+    // B3b 的判别面。第一版判错了，记在这儿免得下一次再踩：原打算在上一相把缓存涂成 light、
+    // 指望重启后读到它——但 killElectron 用的是 SIGKILL，localStorage 是异步落盘的，
+    // 投毒值根本没跨进程活下来（实测第二相看到的缓存是 "system"，屏幕自然 dark ⇒ 断言恒真）。
+    // 现在把投毒塞进**新文档**：addScriptToEvaluateOnNewDocument 早于页面任何脚本执行，
+    // 于是首帧一定看到写着 light 的缓存，而盘上 settings 是 dark ⇒ 只有"以 settings 为准"才画得对。
+    await cdp2.send("Page.enable");
+    await cdp2.send("Page.addScriptToEvaluateOnNewDocument", {
+      source: "try{localStorage.setItem('forge-theme','light')}catch(e){}",
+    });
+    await cdp2.send("Page.reload");
+    let seen = { painted: "", cache: "" };
+    const healed = await tryWait(async () => {
+      seen = {
+        painted: await cdp2.eval<string>("document.documentElement.dataset.theme || ''"),
+        cache: String(await cdp2.eval<string | null>("localStorage.getItem('forge-theme')") ?? ""),
+      };
+      return seen.painted === "dark" && seen.cache === "dark" ? true : null;
+    }, 20_000);
+    // 等状态不等事件：水合是异步的（getState 回来才刷），所以轮询到"成对成立"为止，
+    // 失败时把最后读数打出来，不靠固定 sleep 蒙。
+    ok(healed, "B3b 重载后：投毒的缓存=light 而屏幕跟 settings 走 dark，并把缓存覆回 dark（实测 data-theme=" + JSON.stringify(seen.painted) + " 缓存=" + JSON.stringify(seen.cache) + "）");
+    const darkPressed = await cdp2.eval<string | null>(
+      "document.querySelector('[data-setting=\"theme\"] button[data-val=\"dark\"]')?.getAttribute('aria-pressed') ?? null",
+    );
+    ok(darkPressed === "true", "设置面板按下的那颗＝屏幕用的那颗（深色 aria-pressed=" + String(darkPressed) + "）");
+    await cdp2.eval(
+      // 还原的是 B3b 之前存下的**原值**（本轮自己涂的假值拿去还原等于没还原）
+      themeCacheBefore === null || themeCacheBefore === undefined
+        ? "localStorage.removeItem('forge-theme'); 'ok'"
+        : "localStorage.setItem('forge-theme', " + JSON.stringify(themeCacheBefore) + "); 'ok'",
+    );
+
+    // B5 会话重命名落到盘上。为什么值得真跑一跳：盘上「标题」就是 jsonl 文件名，
+    // 主进程改名返回的是**新 id** ⇒ 这不是一行字符串赋值；而单测只能证到桥接段那个函数，
+    // 「省略号 → 懒挂载菜单 → 输入框 → 回车」这条 DOM 链一改就断，且断了没人红（门 0 曾把这条桥记成孤儿）。
+    const B5_NEW = "B5重命名落盘";
+    const b5 = await cdp2.eval<string>(
+      `(async () => {
+        const row = document.querySelector('.session[data-id]');
+        if (!row) return JSON.stringify({ step: "no-row" });
+        const oldId = row.dataset.id;
+        const trigger = row.querySelector('.sb-trigger');
+        if (!trigger) return JSON.stringify({ step: "no-trigger", oldId });
+        trigger.click();
+        await new Promise(k => setTimeout(k, 150));
+        const btn = document.querySelector('.sb-item.act-rename');
+        if (!btn) return JSON.stringify({ step: "no-menu-btn", oldId });
+        btn.click();
+        const input = row.querySelector('.rename-input');
+        if (!input) return JSON.stringify({ step: "no-input", oldId });
+        input.value = ${JSON.stringify(B5_NEW)};
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: "Enter", bubbles: true }));
+        return JSON.stringify({ step: "submitted", oldId });
+      })()`,
+    );
+    const b5r = JSON.parse(String(b5 ?? "{}")) as { step?: string; oldId?: string };
+    ok(b5r.step === "submitted" && !!b5r.oldId, "B5 重命名入口在真 DOM 里走得通（省略号→懒挂载菜单→输入→回车），实测 " + String(b5r.step));
+    if (b5r.step === "submitted" && b5r.oldId) {
+      const onDisk = async (): Promise<string[]> => (await readdir(root)).filter((f) => f.endsWith(".jsonl"));
+      const landed = await tryWait(async () => ((await onDisk()).includes(B5_NEW + ".jsonl") ? true : null), 8_000);
+      ok(landed, "B5 改名真的落到盘上（文件名即会话 id）");
+      const left = await onDisk();
+      ok(!left.includes(b5r.oldId + ".jsonl"), "B5 旧文件不残留（一个会话不该裂成两份），实测 " + left.join(","));
+    }
+
+    console.log("[panels-check] B6 澄清卡（模型在等人回答，界面必须有能答的地方）");
+    // 点靶子会话那一行 = 走真 selectSession/showHistory 重放入口（不造第二条渲染路）
+    const opened = await cdp2.eval<boolean>(
+      `(() => { const r = document.querySelector('.session[data-id=' + JSON.stringify(${JSON.stringify(clarifyId)}) + ']'); if (!r) return false; r.click(); return true; })()`,
+    );
+    ok(opened, "B6 靶子会话在侧栏里可点（盘上事件进了列表）");
+    const cardSel = '.card[data-clarify-call="m1e-clarify-1"]';
+    const cardSeen = await tryWait(
+      async () => ((await cdp2.eval<boolean>("!!document.querySelector(" + JSON.stringify(cardSel) + ")")) ? true : null),
+      15_000,
+    );
+    ok(cardSeen, "B6 澄清卡在真窗口里挂起来了（不是通用记录卡上的一行「澄清提问」）");
+    const card = await cdp2.eval<{ q: number; radio: number; check: number; acts: boolean; disabled: number; label: string } | null>(
+      `(() => {
+        const c = document.querySelector(${JSON.stringify(cardSel)});
+        if (!c) return null;
+        return {
+          q: c.querySelectorAll('.plan-steps > li.todo').length,
+          radio: c.querySelectorAll('input[type=radio]').length,
+          check: c.querySelectorAll('input[type=checkbox]').length,
+          acts: !!c.querySelector('.plan-acts'),
+          disabled: c.querySelectorAll('input[disabled]').length,
+          label: (c.querySelector('.card-head') || {}).textContent || '',
+        };
+      })()`,
+    );
+    const c6 = card ?? { q: 0, radio: 0, check: 0, acts: true, disabled: 0, label: "" };
+    ok(c6.q === 2, "B6 两问原文都摊开（实测 " + String(c6.q) + " 问）");
+    ok(c6.radio === 2 && c6.check === 2, "B6 单选走 radio、multiSelect 走 checkbox（实测 radio " + String(c6.radio) + " / checkbox " + String(c6.check) + "）");
+    ok(/澄清提问/.test(c6.label) && /待回答/.test(c6.label), "B6 卡面写清这是在等人回答（实测 " + JSON.stringify(c6.label.trim().slice(0, 24)) + "）");
+    // 重放只读不变量（与 plan 卡同口径）：提交按钮摘掉、所有输入 disabled —— 历史会话不该能改判据
+    ok(!c6.acts && c6.disabled === 6, "B6 重放是只读的：提交面已摘、4 选项 + 2 补充框全部 disabled（实测 acts=" + String(c6.acts) + " disabled=" + String(c6.disabled) + "）");
     await killElectron(electron2);
   } finally {
     if (electron.exitCode === null) await killElectron(electron);

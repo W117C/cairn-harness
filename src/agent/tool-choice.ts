@@ -156,7 +156,9 @@ export function projectSession(events: readonly AgentEvent[]): SessionCounts {
         const call = callsById.get(e.callId);
         if (call === undefined) break; // 旁路 result（harness 自动拍等）没有配对调用：不计数
         const stat = out.byToolName[call.name];
-        if (stat !== undefined && !e.ok) stat.failures++;
+        // 带 gate 的失败 = 权限判定拦下的，不是工具跑挂了。混在一起计会让「模型选错工具」的读数
+        // 被人拒批的次数污染（历史上正是这个口径把每次拒批都算成一次工具失败）。
+        if (stat !== undefined && !e.ok && e.gate === undefined) stat.failures++;
         out.repeatOver++;
         const key = stuckActionOf(call.name, call.args) + "\n" + stuckObservationOf(e.output);
         if (seen.has(key)) out.repeats++; // 第 2 次及以后都算一次重复探测：每次都是整轮 token + 零新信息
