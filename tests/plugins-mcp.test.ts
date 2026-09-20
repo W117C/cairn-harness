@@ -107,7 +107,7 @@ describe("M2e MCP 适配器（任务 7，真 stub server）", () => {
     const s = newAutonomySession("auto", {
       rules: [{ behavior: "allow", tool: name, scope: "always", id: "allow-mcp#0" }],
     });
-    s.planBlocked = true;
+    s.planBlocked = () => true;
     for (const grade of [{ annotated: false }, { annotated: true, readOnly: false }] as McpGrade[]) {
       const d = evaluate(name, {}, s, grade);
       if (d.verdict !== "deny") throw new Error("plan 未批准时 MCP 写必须 deny，实得 " + d.verdict);
@@ -116,11 +116,11 @@ describe("M2e MCP 适配器（任务 7，真 stub server）", () => {
     // server 明标只读：不受写禁影响（未批 plan 期间仍能查资料——白名单的意义就在这）
     expect(evaluate(name, {}, s, { annotated: true, readOnly: true }).verdict).toBe("approve");
     // 门只挡未批窗口：批准后同一调用按 allow 规则放行（不是永久禁 MCP）
-    s.planBlocked = false;
+    s.planBlocked = () => false;
     expect(evaluate(name, {}, s, { annotated: false }).verdict).toBe("approve");
     // 非 MCP 侧口径不变（写向静态表仍是唯一判据）
     const s2 = newAutonomySession("auto", {});
-    s2.planBlocked = true;
+    s2.planBlocked = () => true;
     expect(evaluate(asTool("run_shell"), { command: "ls" }, s2).verdict).toBe("deny");
   });
 

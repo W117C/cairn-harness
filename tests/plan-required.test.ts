@@ -42,14 +42,17 @@ describe("J1 · 判据只有一份（P2 的复发闸）", () => {
     // 覆盖面就是这条断言的全部意义：曾只扫 src/permissions + src/main 的 .ts，
     // 而注释写的是「锁 src 内」——守卫覆盖面小于它的声称 = 潜伏的假绿（审查 C5）。
     const files = walkSources(join(__dirname, "..", "src"));
+    // 唯一实现住在 plan-state.ts；只豁免它自己——index.ts 现在只 re-export，手写副本照样会被抓到。
     const copies = files
-      .filter((f) => !f.endsWith(join("src", "permissions", "index.ts")))
+      .filter((f) => !f.endsWith(join("src", "permissions", "plan-state.ts")))
       .filter((f) =>
         readFileSync(f, "utf8")
           .split("\n")
           .some((l) => l.includes("proposed") && l.includes("approved") && l.includes("&&")),
       )
       .map((f) => f.slice(f.indexOf("src")));
+    // 被扫的面必须非空：面空＝什么都没检（判绿的目录集不能靠人记，见记忆规则 32）
+    expect(files.length).toBeGreaterThan(20);
     expect(copies).toEqual([]);
   });
 
@@ -58,6 +61,19 @@ describe("J1 · 判据只有一份（P2 的复发闸）", () => {
     expect(planGateBlocks({ required: false, proposed: true, approved: false })).toBe(true);
     expect(planGateBlocks({ required: false, proposed: false, approved: false })).toBe(false);
     expect(planGateBlocks({ required: true, proposed: true, approved: true })).toBe(false);
+  });
+
+  it("全 src 只有权限层自己提得到那份判据：任何调用点都不许再传/再刷它（#52 的复发闸）", () => {
+    // 为什么扫名字而不是扫形状：worker 绕过方案门的那一版，病不在某一行写错，而在
+    // 「镜像由调用方负责刷」这个**接口**——orchestrator 构造 worker 权限会话时没刷（它凭什么刷？），
+    // 于是永不拦。把缺省换成活委托后，唯一能重新打开这个洞的写法就是**再传一份进去**
+    // （传快照 = 立刻退回旧语义）。那条写法在 src 里出现一次就红一次，包括注释里出现——
+    // 宁可严到要求改名，也不留"看代码才知道该行算不算数"的判读空间。
+    const offenders = walkSources(join(__dirname, "..", "src"))
+      .filter((f) => !f.endsWith(join("src", "permissions", "autonomy.ts")))
+      .filter((f) => readFileSync(f, "utf8").includes("planBlocked"))
+      .map((f) => f.slice(f.indexOf("src")));
+    expect(offenders).toEqual([]);
   });
 });
 
@@ -94,10 +110,30 @@ describe("J2 · 用户武装后每一路口径一致", () => {
     }, true);
   });
 
+  it("worker 用的权限会话默认就带活判据：生产构造器不再需要调用方刷新镜像（#52 旁路的回归闸）", () => {
+    // #52 的形状：gatedWorkerTool 只调 evaluate(…, w.autonomy / w.toolAutonomy)，而 w.* 由
+    // orchestrator 里的 newAutonomySession(...) 构造——那里从来没有人刷 planBlocked。
+    // 所以「构造时挂上活委托」是唯一不依赖各方记得刷线的接法；本条钉住这个默认值。
+    const workerLike = newAutonomySession("auto", { rules: [], sandboxAvailable: true });
+    const toolAutonomy = newAutonomySession("auto", { rules: [], sandboxAvailable: true }); // write mode 的 shell/文件面
+    runWithPlanScope(() => {
+      expect(workerLike.planBlocked()).toBe(true);
+      for (const s of [workerLike, toolAutonomy]) {
+        const d = evaluate("write_file", { path: "a.ts", content: "x" }, s);
+        expect(d.verdict).toBe("deny");
+        expect(d.verdict === "deny" && d.reason).toContain("方案门");
+      }
+    }, true);
+    // 作用域外（未武装）逐字零行为：不能因为换成活委托就把没开 plan 的会话也拦了
+    expect(workerLike.planBlocked()).toBe(false);
+    expect(evaluate("write_file", { path: "a.ts", content: "x" }, workerLike).verdict).not.toBe("deny");
+  });
+
   it("权限管线（evaluate）同一口径：写向被拒，未标 readOnlyHint 的 MCP 按写处理，带注解的只读放行", () => {
     runWithPlanScope(() => {
       const s = newAutonomySession("auto");
-      s.planBlocked = planGateBlocks(getPlanState());
+      // 不手动刷任何镜像：这条测的就是「生产默认（活委托）在武装作用域里自己就拦得住」——
+      // worker 走的是同一个 newAutonomySession，所以这条同时是 #52 那道旁路的回归闸。
       const write = evaluate("write_file", { path: "a.ts", content: "x" }, s);
       expect(write.verdict).toBe("deny");
       expect(write.verdict === "deny" && write.reason).toContain("方案门"); // 拒因要点名是这道门，不是别的闸顺手拦住

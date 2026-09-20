@@ -252,3 +252,36 @@ DOM + api 桩（十余个），那会把"验行为"降级成"验调用"，本轮
 **仍欠（列入 #51 之后，不算完成）**：同一任务 关 vs 开 goal 的**完成率**与 `$/成功任务` A/B。
 它要真模型（`M0_API_KEY`），或至少一个能真跑到 `verify_result(ok:true)` 的确定性剧本；
 `goal-continue` 现有的读答型目标"一轮即停"只证明了**不烧钱**那一半，没证明**办成事**那一半。
+
+## 评审 C6 落地（#52）：派生即提权 —— 方案门的镜像换成活委托
+
+**病灶（复跑口径）**：`AutonomySession.planBlocked` 是 `boolean`，由调用方每次 `evaluate` 前刷新，
+而刷新只接在主会话三处（`agent-runner.ts` 「gatedTool」/「gatedMcpTool」/solpi recall）。
+worker 那一路的权限会话由 `orchestrator.ts` 「spawn」内 `newAutonomySession(tier, {...})` 构造，
+**从不刷** ⇒ 恒 `false`；`worker-tool-table.ts` 「gatedWorkerTool」 又是直接
+`evaluate(name, args, opts.autonomy ?? w.autonomy)`。净效果：用户在 plan 模式里说"先看方案"，
+模型只要 `spawn_agent` 一个 write worker 就能照常写盘（`spawn_agent` 本身在被拦之列，
+但**先派生、后 `propose_plan`** 这条时序完全走得通）。这是本仓点名的「两头断」的另一型：
+判据在场、消费端在场，中间那根线只在一条路上接了。
+
+**修法（架构最简）**：状态与判据从 `permissions/index.ts` 抽到 `permissions/plan-state.ts`
+（`autonomy.ts` 不能 import index——index 正 re-export 它的符号 = 循环，这正是当初抄镜像的理由），
+`planBlocked` 从布尔改成 `() => boolean`，**缺省挂 `planGateLive()`**。
+镜像、刷新点、"谁记得刷"三样一起消失：主会话与 worker 读同一份 run 级 ALS 状态，
+`enterPlanRunScope` 那唯一一处武装点成了唯一事实源。判据仍归 `evaluate` 只读（纯度测试照测）。
+
+**判卷**：`tests/plan-required.test.ts` 11 条（新增两条：worker 形状会话在武装作用域内被 `evaluate`
+当场拒写 + 全 `src` 扫描禁止任何调用点再传/再刷这份判据——传快照就是退回旧语义，
+连注释里出现该名字都红，宁严到要求改名也不留判读空间）；
+`tests/autonomy.test.ts` 纯度那条改为"两侧归一 + 委托按身份钉住"（函数不可 `structuredClone`，
+不能因为换了类型就少测一半）。直连 tsc exit=0；工作树全量
+`157 passed / 2 failed`——两条红是 `gated-tools`/`runner-gates` 的 **worktree `run_shell` 假红**
+（记忆「验证判据边界」），且同一批断言里 `write_file` 与 plan 批准后放行那两半**是绿的**，
+正是本改动触及的面。
+
+**锚点**：新落 `plan-live-delegate-default-lost`（缺省从活委托退回 `() => false`）；
+另 4 条 plan 锚点随抽文件重钉到 `plan-state.ts`。
+
+**合并阻断更新（#51）**：主树这一轮在飞文件已含 `src/permissions/autonomy.ts` + `index.ts`
+（另一会话在加 `GATE_LAYERS`/`GateMeta` 判定留痕），与本笔**同文件** ⇒ 本笔只落分支，
+不得合回；#51 的让路面从"agent-runner 一面"变成"权限层两面 + agent-runner"。

@@ -8,6 +8,8 @@
 import { FROZEN_TABLE_REL } from "../frozen";
 import type { ToolName } from "../tools/base";
 import type { PermissionMode } from "./index";
+// 方案门的活判据。直接从 plan-state 拿（不能拿 ./index——index 正 re-export 本文件的符号）。
+import { planGateLive } from "./plan-state";
 import { judgeChain, normalizeCommand, type PermissionRule } from "./rules";
 import {
   isNetworkCommand,
@@ -56,8 +58,12 @@ export interface AutonomySession {
   sessionScopes: ReadonlySet<string>;
   /** 沙箱可用性：null = 未接线（不触发装不下通道）；false = 自检过但降级。 */
   sandboxAvailable: boolean | null;
-  /** 方案门（M1b）：调用方每次 evaluate 前刷新；evaluate 只读。 */
-  planBlocked: boolean;
+  /** 方案门（M1b）：**活委托**，不是快照也不是镜像布尔。缺省挂 planGateLive() ⇒ 任何执行体
+   *  （主会话 / worker / 级联）在每次 evaluate 时读当前异步上下文的 plan 态。
+   *  上一版是 `planBlocked: boolean` 由调用方每次 evaluate 前刷新，而刷新只接在主会话三处——
+   *  worker 那条路从不刷，于是「先批后写」对 spawn 出的 worker 整条失效（评审 C6）。
+   *  判据仍归 evaluate 只读；测试可注入 `() => true/false` 保持同一输入两次调用结果一致。 */
+  planBlocked: () => boolean;
   /** 判卷面硬闸（L0）：冻结表声明的判卷文件集合（`frozenJudgePathSet(workspace)`）。
    *  空集 = 该工作区没声明判卷面 ⇒ 零行为（用户自己的仓库不被我们的判卷纪律约束）。 */
   frozenJudgePaths: ReadonlySet<string>;
@@ -73,6 +79,7 @@ export function newAutonomySession(
     rules?: PermissionRule[];
     sessionScopes?: Set<string>;
     sandboxAvailable?: boolean | null;
+    planBlocked?: () => boolean;
     frozenJudgePaths?: ReadonlySet<string>;
   } = {},
 ): AutonomySession {
@@ -81,7 +88,7 @@ export function newAutonomySession(
     rules: init.rules ?? [],
     sessionScopes: init.sessionScopes ?? new Set<string>(),
     sandboxAvailable: init.sandboxAvailable ?? null,
-    planBlocked: false,
+    planBlocked: init.planBlocked ?? planGateLive,
     frozenJudgePaths: init.frozenJudgePaths ?? NO_JUDGE_SURFACE,
     consecutiveAutoApprovals: 0,
     breakerTripped: false,
@@ -218,7 +225,7 @@ export function evaluate(
   }
   // 方案门同样按「写向」的统一口径判：一个 allow 规则能复活未批 plan 期间的 MCP 写调用，
   // 却复活不了 write_file——同一轮里两种口径就是这条规则的漏洞形状。
-  if (s.planBlocked && isWriteCall(tool, grade)) {
+  if (s.planBlocked() && isWriteCall(tool, grade)) {
     return {
       verdict: "deny",
       reason:

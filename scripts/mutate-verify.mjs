@@ -3316,7 +3316,7 @@ const MUTATIONS = [
     src: "src/permissions/autonomy.ts",
     test: "tests/plugins-mcp.test.ts",
     desc: "方案门仍只看静态写向表 ⇒ 同一轮里 MCP 写在只读档算写、在未批 plan 时算读，一条 allow 规则就能复活它",
-    apply: (s) => s.replace("  if (s.planBlocked && isWriteCall(tool, grade)) {", "  if (s.planBlocked && isSideEffectTool(tool)) {"),
+    apply: (s) => s.replace("  if (s.planBlocked() && isWriteCall(tool, grade)) {", "  if (s.planBlocked() && isSideEffectTool(tool)) {"),
     expectFail: "方案门按统一写向口径判：未批 plan 时 allow 规则复活不了 MCP 写调用，只读注解仍可跑",
   },
   {
@@ -3503,7 +3503,7 @@ const MUTATIONS = [
   },
   {
     id: "plan-gate-required-clause-dropped",
-    src: "src/permissions/index.ts",
+    src: "src/permissions/plan-state.ts",
     test: "tests/plan-required.test.ts",
     desc: "摘掉用户武装项 ⇒ 方案门退回「模型自愿交方案才生效」，设置页那个开关成为摆设",
     apply: (s) => s.replace('(state.required || state.proposed) && !state.approved', 'state.proposed && !state.approved'),
@@ -3511,7 +3511,7 @@ const MUTATIONS = [
   },
   {
     id: "plan-gate-required-anded-not-ored",
-    src: "src/permissions/index.ts",
+    src: "src/permissions/plan-state.ts",
     test: "tests/plan-required.test.ts",
     desc: "required 与 proposed 由「或」变「与」⇒ 用户武装但模型还没交方案时不拦，恰好漏掉本功能唯一要拦的那一格",
     apply: (s) => s.replace('state.required || state.proposed', 'state.required && state.proposed'),
@@ -3519,7 +3519,7 @@ const MUTATIONS = [
   },
   {
     id: "plan-run-scope-swallows-required",
-    src: "src/permissions/index.ts",
+    src: "src/permissions/plan-state.ts",
     test: "tests/plan-required.test.ts",
     desc: "run 入口吞掉 required ⇒ 生产路径的武装整条失效（runWithPlanScope 那条只有判卷在用，两条入口必须分别钉住）",
     apply: (s) => s.replace('planScopeALS.enterWith({ state: { required, proposed: false, approved: false } })', 'planScopeALS.enterWith({ state: { required: false, proposed: false, approved: false } })'),
@@ -3527,11 +3527,19 @@ const MUTATIONS = [
   },
   {
     id: "plan-propose-clears-user-arm",
-    src: "src/permissions/index.ts",
+    src: "src/permissions/plan-state.ts",
     test: "tests/plan-required.test.ts",
     desc: "模型交方案时把 required 一并抹掉 ⇒ 用户的闸能被模型的自愿动作解除",
     apply: (s) => s.replace('setPlanState({ ...currentPlanState(), proposed: true, approved: false });', 'setPlanState({ required: false, proposed: true, approved: false });'),
     expectFail: "模型自己提交方案不得顺手把用户的闸关掉（required 在 markPlanProposed 后保留）",
+  },
+  {
+    id: "plan-live-delegate-default-lost",
+    src: "src/permissions/autonomy.ts",
+    test: "tests/plan-required.test.ts",
+    desc: "构造器缺省从活委托退回常量 false ⇒ worker / 级联那份权限会话又回到「调用方不刷就永不拦」，#52 那条「派生即提权」的旁路复活",
+    apply: (s) => s.replace("planBlocked: init.planBlocked ?? planGateLive,", "planBlocked: init.planBlocked ?? (() => false),"),
+    expectFail: "worker 用的权限会话默认就带活判据：生产构造器不再需要调用方刷新镜像（#52 旁路的回归闸）",
   },
   {
     id: "plan-required-default-flipped-on",

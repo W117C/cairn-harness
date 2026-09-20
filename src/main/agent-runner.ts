@@ -326,8 +326,8 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
     async run(args, ctx) {
       const s = currentSession();
       if (!s) return denied(name, "default", "工具门未接线（fail-closed）");
-      // M1c：四层评估管线（deny 规则 → ask 规则 → 档位 → 风险）；方案门状态每次刷新进 session 入参
-      s.autonomy.planBlocked = planGateBlocks(getPlanState());
+      // 方案门不再每次刷进 session 入参：权限会话里那份是**活委托**（permissions/plan-state），
+      // worker 与主会话读同一份——上一版只在这三处主会话路径刷新镜像，worker 那条路从不刷 ⇒ 先批后写可绕。
       // M1e 设置页「产出代码安全模式」最小语义（§11.6）：gate = 写向工具在管线之前强制审批
       //（setSettings 转发 M1E_SAFE_MODE；src/permissions 冻结，最小接线在本模块）
       if (process.env.M1E_SAFE_MODE === "gate") {
@@ -407,7 +407,6 @@ function gatedMcpTool(name: string, info: McpToolInfo & { plugin: string; server
     async run(args, ctx) {
       const s = currentSession();
       if (!s) return denied(name, "default", "工具门未接线（fail-closed）");
-      s.autonomy.planBlocked = planGateBlocks(getPlanState());
       const d = evaluate(name as ToolName, args, s.autonomy, info.grade); // MCP scoped 名进同一管线（规则/风险/档位全生效）
       if (d.verdict === "deny") return denied(name, s.autonomy.mode, d.reason);
       if (d.verdict === "ask") {
@@ -1211,7 +1210,6 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // 模型在撞墙前不知道墙存在（机制成本已付、收益只兑现一半），验收暗卷脚本反而比生产多了角色说明。
     // 系统提示词已提到模块级 BASE_SYSTEM（可被单测锁住）；这里只消费。
     const recall = solpi?.recallTool(async (args, recallSignal) => {
-      sessionObj.autonomy.planBlocked = planGateBlocks(getPlanState());
       const decision = evaluate("obs_recall" as ToolName, args, sessionObj.autonomy); // 运行时注入工具（同 remember/MCP 先例：不进静态键域，走同一权限管线）
       if (decision.verdict === "deny") return false;
       if (decision.verdict === "ask") {

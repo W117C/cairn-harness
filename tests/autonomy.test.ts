@@ -20,7 +20,9 @@ function session(init: Partial<AutonomySession> = {}): AutonomySession {
     sandboxAvailable: init.sandboxAvailable ?? null,
     sessionScopes: (init.sessionScopes as Set<string>) ?? new Set<string>(),
   });
-  s.planBlocked = init.planBlocked ?? false;
+  // 测试里缺省按"没武装"走固定委托：evaluate 的纯函数口径要求同一输入两次结果一致，
+  // 而生产默认是活读 plan 作用域（那一份由 tests/plan-required.test.ts 真跑武装态覆盖）。
+  s.planBlocked = init.planBlocked ?? (() => false);
   s.consecutiveAutoApprovals = init.consecutiveAutoApprovals ?? 0;
   s.breakerTripped = init.breakerTripped ?? false;
   s.consecutiveCriticalDenials = init.consecutiveCriticalDenials ?? 0;
@@ -73,14 +75,19 @@ describe("纯函数（任务 1）", () => {
       mode: "default",
       rules: [rule({ behavior: "allow", pattern: "pnpm test" })],
       sessionScopes: new Set(["run_shell\u241Fpnpm test"]),
-      planBlocked: false,
+      planBlocked: () => false,
     });
-    const before = structuredClone(s);
+    // planBlocked 现在是委托（函数不可 structuredClone）⇒ 两侧一律归成 null 再比，
+    // 并把「委托本身有没有被换掉」单独按身份钉住：判据不变——evaluate 不许改动 session 的任何可观察状态。
+    const snap = (x: typeof s) => structuredClone({ ...x, planBlocked: null });
+    const delegateBefore = s.planBlocked;
+    const before = snap(s);
     const args = { command: "pnpm test" };
     const a = evaluate("run_shell", args, s);
     const b = evaluate("run_shell", args, s);
     assert.deepStrictEqual(a, b);
-    assert.deepStrictEqual(s, before, "evaluate 不得改动 session（零私有状态）");
+    assert.deepStrictEqual(snap(s), before, "evaluate 不得改动 session（零私有状态）");
+    assert.strictEqual(s.planBlocked, delegateBefore, "evaluate 不得换掉 plan 判据委托");
     expect(a).toMatchObject({ verdict: "approve", auto: { source: "rule" } });
   });
 });
