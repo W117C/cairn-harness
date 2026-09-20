@@ -368,6 +368,24 @@ async function phaseElectron(root: string): Promise<void> {
       return disk.layout?.open?.git === true && disk.layout?.activePanel === "git" ? true : null;
     }, 10_000);
     ok(diskOk, "UI 开关 git 面板 → settings.json 落盘 open.git=true + activePanel=git");
+
+    console.log("[panels-check] B3b 主题：设置才是事实源，localStorage 只是首帧缓存");
+    // localStorage 落在**真 userData 目录**（只有 settings/会话被 env 改指），所以先把原值存下来、
+    // 本轮末尾（B4 之后）原样还回去——验收脚本不该在用户机器上留下自己造的色。
+    const themeCacheBefore = await cdp.eval<string | null>("localStorage.getItem('forge-theme')");
+    await cdp.eval("(() => { document.querySelector('[data-setting=\"theme\"] button[data-val=\"dark\"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true; })()");
+    const themeDisk = await tryWait(async () => {
+      const disk = JSON.parse(await readFile(join(root, "settings.json"), "utf8")) as { theme?: string };
+      return disk.theme === "dark" ? true : null;
+    }, 10_000);
+    ok(themeDisk, "点「深色」→ settings.json 落盘 theme=dark");
+    const paintedNow = await cdp.eval<string>("document.documentElement.dataset.theme || ''");
+    ok(paintedNow === "dark", "点完当场就换肤（实测 data-theme=" + JSON.stringify(paintedNow) + "）");
+    // 判别性设计：把缓存**故意涂成 light**（与盘上的 dark 相反），下一相重启后屏幕必须跟着
+    // settings 走。上一版实现这里会停在 light——因为水合只刷按钮、末尾又拿缓存盖回屏幕。
+    await cdp.eval("localStorage.setItem('forge-theme','light'); 'ok'");
+    const poisoned = await cdp.eval<string | null>("localStorage.getItem('forge-theme')");
+    ok(poisoned === "light", "缓存已涂成与盘上相反的值，投毒成立（实测缓存=" + JSON.stringify(poisoned) + " 而 settings=dark）");
     // 截图是运行产物：默认不写盘（否则每次跑门禁都把工作树弄脏）。需要刷新交付截图时设 M1E_SCREENSHOT=1。
     if (process.env.M1E_SCREENSHOT) {
       const shot1 = await cdp.send("Page.captureScreenshot", { format: "png" });
@@ -411,6 +429,37 @@ async function phaseElectron(root: string): Promise<void> {
       return open ? true : null;
     }, 25_000);
     ok(restored, "重启后 git 面板自动还原打开且激活（settings 持久化生效）");
+    // B3b 的判别面。第一版判错了，记在这儿免得下一次再踩：原打算在上一相把缓存涂成 light、
+    // 指望重启后读到它——但 killElectron 用的是 SIGKILL，localStorage 是异步落盘的，
+    // 投毒值根本没跨进程活下来（实测第二相看到的缓存是 "system"，屏幕自然 dark ⇒ 断言恒真）。
+    // 现在把投毒塞进**新文档**：addScriptToEvaluateOnNewDocument 早于页面任何脚本执行，
+    // 于是首帧一定看到写着 light 的缓存，而盘上 settings 是 dark ⇒ 只有"以 settings 为准"才画得对。
+    await cdp2.send("Page.enable");
+    await cdp2.send("Page.addScriptToEvaluateOnNewDocument", {
+      source: "try{localStorage.setItem('forge-theme','light')}catch(e){}",
+    });
+    await cdp2.send("Page.reload");
+    let seen = { painted: "", cache: "" };
+    const healed = await tryWait(async () => {
+      seen = {
+        painted: await cdp2.eval<string>("document.documentElement.dataset.theme || ''"),
+        cache: String(await cdp2.eval<string | null>("localStorage.getItem('forge-theme')") ?? ""),
+      };
+      return seen.painted === "dark" && seen.cache === "dark" ? true : null;
+    }, 20_000);
+    // 等状态不等事件：水合是异步的（getState 回来才刷），所以轮询到"成对成立"为止，
+    // 失败时把最后读数打出来，不靠固定 sleep 蒙。
+    ok(healed, "B3b 重载后：投毒的缓存=light 而屏幕跟 settings 走 dark，并把缓存覆回 dark（实测 data-theme=" + JSON.stringify(seen.painted) + " 缓存=" + JSON.stringify(seen.cache) + "）");
+    const darkPressed = await cdp2.eval<string | null>(
+      "document.querySelector('[data-setting=\"theme\"] button[data-val=\"dark\"]')?.getAttribute('aria-pressed') ?? null",
+    );
+    ok(darkPressed === "true", "设置面板按下的那颗＝屏幕用的那颗（深色 aria-pressed=" + String(darkPressed) + "）");
+    await cdp2.eval(
+      // 还原的是 B3b 之前存下的**原值**（本轮自己涂的假值拿去还原等于没还原）
+      themeCacheBefore === null || themeCacheBefore === undefined
+        ? "localStorage.removeItem('forge-theme'); 'ok'"
+        : "localStorage.setItem('forge-theme', " + JSON.stringify(themeCacheBefore) + "); 'ok'",
+    );
 
     // B5 会话重命名落到盘上。为什么值得真跑一跳：盘上「标题」就是 jsonl 文件名，
     // 主进程改名返回的是**新 id** ⇒ 这不是一行字符串赋值；而单测只能证到桥接段那个函数，

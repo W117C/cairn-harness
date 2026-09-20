@@ -628,8 +628,10 @@ function syncThemeButtons() {
     b.setAttribute('aria-pressed', String(b.dataset.val === cur));
   });
 }
-/* theme 现在是 AppSettings 的真实字段，取值 system | light | dark。
-   「跟随系统」要在这里解析成实际主题，否则选完看不出来。 */
+/* theme 的事实源是 AppSettings（system | light | dark），不是 localStorage。
+   localStorage 只留一份「首帧缓存」：它在 settings 到达前抢先把界面画对（避免闪一下错色），
+   一旦设置水合回来就以 settings 为准覆盖它。曾经反过来：水合只刷按钮、末尾又按缓存盖回去，
+   于是 settings.theme 写而不读——清了站点数据 / 换台机器就静默失效（面板说的和屏幕做的两套）。 */
 function applyTheme(theme) {
   themeSetting = theme;
   const resolved = theme === 'system'
@@ -641,10 +643,11 @@ function applyTheme(theme) {
 }
 let themeSetting = 'light';
 (function initTheme() {
-  let stored = null;
-  try { stored = localStorage.getItem('forge-theme'); } catch (_) {}
+  let cached = null;
+  try { cached = localStorage.getItem('forge-theme'); } catch (_) {}
   const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  applyTheme(stored || (prefersDark ? 'dark' : 'light'));
+  // 只是首帧猜测；hydrateSettingsFields 拿到 settings.theme 后会真正确定一次
+  applyTheme(cached || (prefersDark ? 'dark' : 'light'));
   if (window.matchMedia) {
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
       if (themeSetting === 'system') applyTheme('system');
@@ -3161,7 +3164,11 @@ render();
     });
     const ws = $('#workspaceVal');
     if (ws) ws.textContent = st.workspace ? parseWorkspace(st.workspace) || st.workspace : '未设置';
-    syncThemeButtons();
+    /* theme 要在这里**真的应用**一次，而不只是刷按钮：上面那个循环刚按 settings 把
+       aria-pressed 摆好，末尾再 syncThemeButtons() 就会按本地缓存把它们盖回去，
+       于是 settings.theme 永远只有写、没有读（首帧缓存冒充了事实源）。 */
+    if (st.theme === 'system' || st.theme === 'light' || st.theme === 'dark') applyTheme(st.theme);
+    else syncThemeButtons();
   }
 
   const settingsBodyEl = $('.settings-body');
