@@ -449,7 +449,7 @@ describe("M3b write worker 闭环（临时 git 仓库端到端）", () => {
       agentId: "x", spawnCallId: "", mode: "write", task: "t", context: {}, maxTurns: 5, tier: "default",
       controller: new AbortController(), autonomy: {} as never, toolAutonomy: {} as never, resources: [],
       snapshots: new Map(), editAnchors: new Map(), lastFindings: [], events: [],
-      usage: { inputTokens: 0, outputTokens: 0 }, toolStats: {}, finished: false, closed: true,
+      usage: { inputTokens: 0, outputTokens: 0 }, toolStats: {}, finished: false, terminalResolved: false, closed: true,
       dependsOn: [], stuckActive: false, paused: false, pauseWaiters: [], stuckTurns: [],
       stuckCallActions: new Map(), stuckTimer: null, lastActivityAt: 0,
     };

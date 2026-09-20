@@ -227,6 +227,10 @@ async function orchestratorExtras(sandbox: SandboxStatus | null = null): Promise
     ...(s.routingBandit
       ? { routing: true, banditStatePath: join(ROOT, ".agent", "routing-bandit.json") }
       : {}),
+    // M5b 步骤 10（任务 #45）：级联蕴含 routing——阶梯起点取「路由当时落到哪一档」、升档靠 pin 换模型，
+    // 没有路由这两件事都不存在（单开级联就会退化成花两遍钱跑同一个模型）。与 routingBandit 蕴含
+    // routing 同形。缺省 false ⇒ 这一整段不接线，sequencer 每环照旧只跑一次。
+    ...(s.routingCascade ? { routing: true, cascadeUpgrade: true } : {}),
     // A1 写侧断点：只有路由合成真实 provider 档位时才落到 wire（当前唯一有语义的是 Anthropic）。
     // 缺省即开（用户裁决 2026-09-19），所以这里**不打 warn**——routingBandit 缺省关，
     // 一条 warn 会变成每次 run 都刷的噪声；「没路由 ⇒ 没断点」写进 settings 的字段注释里。

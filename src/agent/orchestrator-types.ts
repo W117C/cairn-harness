@@ -1,6 +1,7 @@
 import type { AgentEvent, AgentPermissionMode, SecurityFinding } from "../events";
 import type { AutonomySession, PermissionRule } from "../permissions";
 import type { ArmKey } from "../routing/bandit";
+import type { ModelTier } from "../providers/registry";
 import type { CompactionConfig, Summarizer } from "./compaction";
 import type { FrozenStage, PluginAgentRoleDef } from "./sequencer";
 import type { StuckConfig, StuckTurn } from "./stuck";
@@ -90,6 +91,11 @@ export interface WorkerHandle {
   usage: { inputTokens: number; outputTokens: number };
   toolStats: Record<string, number>;
   finished: boolean;
+  /** 终态**值**已可取（lastResult 挂上 / waiters 已解）的那一刻才置真。
+   *  与 finished 不是同义反复：finishInner 开头就置 finished=true，但 done 分支在此之前还要
+   *  await git diff + 安全流水 + 数次 emit——落在这段窗口里的读取方只看 finished 会拿到
+   *  「终态 done 但 result 为空」，sequencer 会把它当失败环、join 会把报告记成空串。 */
+  terminalResolved: boolean;
   /** M3b：终态事件（agent_result/diff/清理）全部落完才算 closed——write worker 的 finish 含
    *  git diff + 安全流水（秒级），activeCount/waitAll 必须等 closed，否则进程会在 finish 中途退出。 */
   closed: boolean;
@@ -102,6 +108,11 @@ export interface WorkerHandle {
   routeArm?: ArmKey;
   /** bandit 臂对应的模型 id（真钱代价折算用，pricing.costUsd）。 */
   routeModelId?: string;
+  /** M5b 级联：这一跑被路由到哪一档 / 选了哪个模型 id（任一路由理由都记——级联阶梯要的是
+   *  「当时选了谁」，与学习面无关，所以不复用只给 bandit 记的 routeArm；provider 也从这里读，
+   *  跨厂商升档会把一次 BYOK 会话悄悄换成别家的 key）。 */
+  routeTier?: ModelTier;
+  routePicked?: string;
   paused: boolean;
   pauseWaiters: (() => void)[];
   /** 卡死规则一/二的滑动窗口（action+observation 摘要）。 */
@@ -189,6 +200,14 @@ export interface OrchestratorOptions {
    *  无路由则无档位决策可学）。状态在 .agent/ 系统区（同 permissions.json 口径）。
    *  学习是侧信道：回灌/持久化失败只记日志，不阻断 worker 终态流。 */
   banditStatePath?: string;
+  /** M5b 级联升级（§m5-proposal 步骤 10 的**产品侧**接法）：sequencer 的环跑完若**客观判据**判它没过
+   *  （worker 事件流里 verify_result 为红、或验后又写了盘 = stale），就按档位阶梯升一级把**同一环**
+   *  重跑一遍（≤ cascadeMaxUpgrades 次）。缺省 false = 零行为：每环照旧只跑一次。
+   *  为什么默认关：一次升级 = 整份重跑，是真钱；且只在"有客观判据"时才动——worker 从没跑过 verify
+   *  （证据 absent）时既不升级也不报错，与 runCascade 的 fail-closed 一致（不拿猜测换账单）。 */
+  cascadeUpgrade?: boolean;
+  /** 升级上限（缺省 2 = 最多三档）。仅在 cascadeUpgrade=true 时有意义。 */
+  cascadeMaxUpgrades?: number;
   /** worker 审批无响应超时（缺省 120s，超时按拒绝 fail-closed）。 */
   approvalTimeoutMs?: number;
   /** M5c 竞速收敛超时（缺省 120s；测试注入短值以验「超时必收杀候选」，不放宽生产语义）。 */

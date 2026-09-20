@@ -10,8 +10,9 @@ import type { AgentEvent, SecurityFinding } from "../events";
 import { replay } from "../events";
 import type { ModelOutput, Provider } from "../providers";
 import { glmDefaultModelName, type GlmMessage, type GlmToolSpec } from "../providers/glm";
-import { DEFAULT_MODEL_TABLE, findSpecByNameOrId, resolveModel, toWorkerModel } from "../providers/registry";
+import { DEFAULT_MODEL_TABLE, findSpecByNameOrId, resolveModel, toWorkerModel, type ModelTier } from "../providers/registry";
 import { routeFor, TIER_ORDER as MODEL_TIER_ORDER } from "../routing/policy";
+import { cascadeLadder, runCascade } from "../routing/cascade";
 import { loadBanditState, saveBanditState, updatePriced, type BanditState } from "../routing/bandit";
 import { costUsd } from "../routing/pricing";
 import type { ToolResult } from "../tools/base";
@@ -139,6 +140,8 @@ export class Orchestrator {
   /** M5b 步骤 9：bandit 在线学习状态（懒加载；routing+banditStatePath 双开才激活）。 */
   private banditState: BanditState | null = null;
   private banditLoading: Promise<BanditState | null> | null = null;
+  /** 级联前提不成立（开关开了但 routing 关着）只出声一次，不每环刷一遍。 */
+  private cascadeWarned = false;
   /** 会话累计 usage（emit 包装统计全部 usage 事件 = 主 loop + Σworker，§4.4.10 口径）。 */
   readonly sessionUsage = { inputTokens: 0, outputTokens: 0 };
   /** 依赖链：延迟 spawn 登记（前环未收敛；前环 done 事件驱动触发，无轮询调度器 §4.5）。 */
@@ -268,7 +271,7 @@ export class Orchestrator {
   }
 
   /** sequencer 的逐环 spawn 入口（不经过模型 spawn 面——stage_role 由代码注入，模型不可伪造角色面）。 */
-  private async spawnStage(args: SpawnArgs, ctx: { callId?: string }, stageRole: StageRoleResolution): Promise<ToolResult> {
+  private async spawnStage(args: SpawnArgs, ctx: { callId?: string; cascadeFrom?: ModelTier }, stageRole: StageRoleResolution): Promise<ToolResult> {
     return await this.spawnInternal(args, ctx, typeof args.task === "string" ? args.task.trim() : "", stageRole);
   }
 
@@ -385,7 +388,10 @@ export class Orchestrator {
         return { ok: false, why: "前环 " + dep + " " + st + " → 后环标记 failed（reason=dependency_failed，不静默跳过 §2.1）" };
       }
     }
-    return { ok: true, waiting: dependsOn.filter((dep) => this.workers.get(dep)?.terminalStatus !== "done") };
+    // 「等不等前环」看的是**取不取到它的产出**（terminalResolved），不是它有没有被判终态：
+    // finished/terminalStatus 在收尾窗口开头就真，而窗口里前环的 report 还不存在——
+    // 据「done」立刻起后环 = 后环拿到一份空报告还以为是上游结论（同一族的第二处 reader）。
+    return { ok: true, waiting: dependsOn.filter((dep) => this.workers.get(dep)?.terminalResolved !== true) };
   }
 
   /** 成本闸拒绝（落流警告 + tool_result 拒绝，§2.4）。 */
@@ -407,7 +413,7 @@ export class Orchestrator {
   private spawnReserve = 0;
 
   /** spawn 内核入口（模型面与 sequencer 逐环共用；stageRole 只由 sequencer 代码注入）。 */
-  private async spawnInternal(args: SpawnArgs, ctx: { callId?: string }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
+  private async spawnInternal(args: SpawnArgs, ctx: { callId?: string; cascadeFrom?: ModelTier }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
     const mode = typeof args.mode === "string" ? args.mode : "";
     // H2（审查 B-3）：入口 fail-closed——主会话已取消时不再派发任何 worker
     //（addEventListener 对已 abort 的 signal 不会触发，靠入口检查补上取消窗口）。
@@ -431,7 +437,7 @@ export class Orchestrator {
   /** spawn 预留段（占位后执行）。B2（审查）：read-only 父会话不允许派 write worker——
    *  worker 有效权限 ≤ 父（§11.7.6）：write worker 文件面/shell 面恒 auto，read-only 父放行
    *  等于把只读会话变成可写（permission_mode 记 read-only 实写 auto 的记录失真一并消除）。 */
-  private async spawnReserved(args: SpawnArgs, ctx: { callId?: string }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
+  private async spawnReserved(args: SpawnArgs, ctx: { callId?: string; cascadeFrom?: ModelTier }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
     const mode = typeof args.mode === "string" ? args.mode : "";
     if (mode === "write" && this.opts.parentMode === "read-only") {
       return { ok: false, output: "spawn_agent: 父会话为 read-only 档，不允许派 write worker（worker 权限 ≤ 父会话，§11.7.6）" };
@@ -464,7 +470,7 @@ export class Orchestrator {
     // M5b 步骤 9：bandit 启用时把学习上下文喂给 routeFor（Thompson Sampling 选档，reason=bandit）。
     // 状态懒加载——首次 spawn 才读盘；加载失败返回 null = 本次会话只走静态档位表（降级链不受影响）。
     const banditState = this.banditEnabled() ? await this.bandit() : null;
-    const routeDecision = routingEnabled
+    const routeRaw = routingEnabled
       ? routeFor({
           pin:
             typeof args.model === "string" && args.model !== ""
@@ -480,6 +486,13 @@ export class Orchestrator {
             : {}),
         })
       : null;
+    // 级联升档就地改标签：pin 回答的是「谁来跑」，cascade-upgrade 回答的是「为什么再花一遍钱」——
+    // 两个都是事实，但审计面上只有后者能追溯触发者。改在唯一的路由出口，调用方不必各抄一份。
+    // 顺带一条既有语义：升级档一律显式 pin ⇒ reason 不会是 bandit ⇒ 不进学习臂记账（级联不是学习）。
+    const routeDecision =
+      ctx.cascadeFrom !== undefined && routeRaw !== null
+        ? { ...routeRaw, reason: "cascade-upgrade" as const, from: ctx.cascadeFrom }
+        : routeRaw;
     // 模型可用性 fail-closed。审查 S3-13 两处修正：
     // ① 注入模型（modelFor：checks 的脚本/mock、demo 面）优先于档位合成——旧实现路由分支
     //    直接吃 toWorkerModel(spec)，使注入的确定性模型在 routing=true 时被忽略。
@@ -592,10 +605,14 @@ export class Orchestrator {
             routeModelId: routeDecision.picked,
           }
         : {}),
+      // M5b 级联：任一路由理由都记「这一跑落在哪一档」——升级阶梯从观察到的档位往上取，
+      // 拿不到档（未路由 / 注入模型）就等于没有阶梯，而不是从角色表再猜一份。
+      ...(routeDecision ? { routeTier: routeDecision.tier, routePicked: routeDecision.picked } : {}),
       events: [],
       usage: { inputTokens: 0, outputTokens: 0 },
       toolStats: {},
       finished: false,
+      terminalResolved: false,
       closed: false,
       dependsOn,
       stuckActive: false,
@@ -921,10 +938,7 @@ export class Orchestrator {
     // 循环出口必须显式收尾（accept 合并最终环 / 其余 reject），否则 worktree 泄漏污染 workspace。
     const ringAgentIds: string[] = [];
     const rejectRings = async (ids: string[]): Promise<void> => {
-      for (const id of ids) {
-        const w = this.workers.get(id);
-        if (w && w.mode === "write" && w.worktree) await this.cleanupWrite(w, "rejected");
-      }
+      for (const id of ids) await this.cleanupSuperseded(id);
     };
     let lastAgentId = "";
     let lastFailure = "";
@@ -1113,10 +1127,14 @@ export class Orchestrator {
     return outcome.approved;
   }
 
-  /** 哑 sequencer 主循环（零 LLM）：逐环 spawn → 等终态 → 报告拼接 → verdict 标注（不重跑）→ 整链终态。 */
+  /** 哑 sequencer 主循环（sequencer 自身零 LLM）：逐环 spawn → 等终态 → 报告拼接 → verdict 标注 → 整链终态。
+   *  唯一会「同一环再跑一遍」的是 cascadeUpgrade（且只由客观 verify 证据触发，整链预算见下）；
+   *  缺省关 ⇒ 每环恰好一次 worker，与今日逐字同形。 */
   private async runChain(chain: PipelineChain): Promise<void> {
     let prevReport = "";
     let prevAgentId = "";
+    // 级联预算挂在**链**上而不是挂在环上：N 环各享 maxUpgrades 会变成「一次批准悄悄买 2N 遍」。
+    let cascadeLeft = this.opts.cascadeUpgrade === true ? (this.opts.cascadeMaxUpgrades ?? 2) : 0;
     for (let i = 0; i < chain.stages.length; i++) {
       // H2（审查 B-3）：环与环之间检查取消——否则 cancelAll 后链停在两环之间，
       // 会 spawn 出一个永不被取消的 worker 并跑完（addEventListener 不追认已 abort）。
@@ -1160,7 +1178,96 @@ export class Orchestrator {
         return;
       }
       st.agentId = agentId;
-      const term = await this.waitForAgentTerminal(agentId);
+      let term = await this.waitForAgentTerminal(agentId);
+      // M5b 级联升级（#45）：判据只用**客观**那一半——worker 事件流里的 verify_result
+      // （W4b 四态随 agent_result.artifacts.verified 带回）。只有 failed / stale 才升档：
+      // 终态 failed/cancelled 属环境类失败，换一档重跑同一环境只会再花一遍钱；
+      // absent 是没判据 ⇒ 不拿猜测换账单。模型自报的 verdict 不算判据（自己给自己打分）。
+      type StageTerm = { status: string; result: Extract<AgentEvent, { type: "agent_result" }> | null };
+      const evidenceOf = (t: StageTerm) => t.result?.artifacts.verified;
+      const objectiveFail = (t: StageTerm): boolean =>
+        evidenceOf(t) === "failed" || evidenceOf(t) === "stale";
+      // 升上来的那一档必须自己交出绿证据才算过。算上 absent 就等于花真钱买回一份
+      // 比触发时更弱的证据，还把环标成 done —— 正是本仓最忌的假绿形状。
+      const converged = (t: StageTerm): boolean =>
+        t.status === "done" && t.result !== null && evidenceOf(t) === "verified";
+      // 决策面在 runChain 之外（cascadePlanFor）：§4.4.7「哑 sequencer」判据（agents-check N6c）
+      // 要求这段源码里不出现档位表那一层——环只按客观判据决定「要不要再花一遍钱」，往哪档花是策略的事。
+      const plan = objectiveFail(term) && this.cascadeReady() ? this.cascadePlanFor(agentId, cascadeLeft) : null;
+      if (plan !== null) {
+        const ladder = plan.ladder;
+        if (ladder.length > 0) {
+          await this.opts.emit({
+            type: "agent_message", agent_id: agentId, kind: "progress",
+            text: "[cascade] stage " + String(i + 1) + "（" + stage.role + "，" + String(plan.from) + " 档）客观判据判它没过（"
+              + evidenceOf(term) + "）→ 升档重跑：" + ladder.map((r) => r.tier).join("→"),
+          } as AgentEvent);
+          let supersededId = agentId;
+          // 末次 rung 自报的失败细节：runCascade 的 decisions 只记档位不记原因，
+          // 不接住的话「升档仍未拿到绿证据」这条红连"最后一档到底说了什么"都查不到。
+          let lastRungNote = "";
+          let paidReruns = 0; // **真起来的** worker 数（spawn 失败 / 应答异常的不算已付费）
+          // 另一类失败（终态 failed / cancelled = 环境、配额、取消）之后不再往上爬：换一档重跑同一
+          // 环境只会再花一遍钱得同一结果。这条对首环成立，对升上来的每一档同样成立——旧写法只管第一手观察。
+          let stopClimb = "";
+          const escalated = await runCascade({
+            hasJudge: true, // 进到这里的前提就是拿到了 failed/stale —— 判据确实存在
+            maxRungs: cascadeLeft,
+            rungs: ladder.map((r, k) => ({
+              id: r.id,
+              tier: r.tier,
+              run: async (): Promise<{ ok: boolean; output?: string }> => {
+                if (this.root.signal.aborted) { stopClimb = "主会话已取消：不再升档重跑"; return { ok: false, output: stopClimb }; }
+                if (this.budgetBlocked()) { stopClimb = "整链成本闸已触发：不再升档重跑"; return { ok: false, output: stopClimb }; }
+                if (stopClimb !== "") return { ok: false, output: stopClimb };
+                if (cascadeLeft <= 0) return { ok: false, output: "整链升级预算用尽：不再重跑" };
+                cascadeLeft--;
+                const rr = await this.spawnStage(
+                  { ...stageArgs, model: r.id },
+                  { callId: stageCallId + "-up" + String(k + 1), cascadeFrom: k === 0 ? plan.from : ladder[k - 1]!.tier },
+                  resolved,
+                );
+                if (!rr.ok) return { ok: false, output: "升级 spawn 失败：" + rr.output };
+                let newId = "";
+                try { newId = (JSON.parse(rr.output) as { agent_id?: string }).agent_id ?? ""; } catch { newId = ""; }
+                if (newId === "") return { ok: false, output: "升级 spawn 应答异常（无 agent_id）" };
+                paidReruns++;
+                // 替代品已经在了，才回收被取代那一档的 worktree（顺序反过就会在升级失败时
+                // 把唯一一份改动连同分支一起删掉，还留下一个 diff_ref 指向已删目录的报告）
+                await this.cleanupSuperseded(supersededId);
+                supersededId = newId;
+                agentId = newId;
+                st.agentId = newId;
+                term = await this.waitForAgentTerminal(newId);
+                const ok = converged(term);
+                lastRungNote = "第 " + String(k + 1) + " 档（" + newId + "，" + r.tier + "）"
+                  + (ok ? "绿证据到手" : "终态 " + term.status + "（证据 " + (evidenceOf(term) ?? "absent") + "，result " + (term.result === null ? "无" : "有") + "）");
+                if (!ok && term.status !== "done") stopClimb = lastRungNote + " ⇒ 属另一类失败，停止升档";
+                return { ok, output: lastRungNote };
+              },
+            })),
+          });
+          if (!escalated.ok) {
+            st.status = "failed";
+            // runCascade 的 blockedNote 只说"为什么不再往上走"（预算/最高档），说的是**表**；
+            // stopClimb 才是**因**（另一类失败 / 取消 / 成本闸）——两者都得上这条红。
+            await this.failChain(chain, "stage " + String(i + 1) + "（" + stage.role + "）升档重跑 " + String(paidReruns)
+              + " 次仍未拿到绿证据（末次证据 " + (evidenceOf(term) ?? "absent") + "）"
+              + (escalated.blockedNote ? "：" + escalated.blockedNote : "")
+              + (stopClimb !== "" ? "；" + stopClimb : lastRungNote !== "" ? "；" + lastRungNote : "")
+              + " → 整链 failed（各环报告可见）");
+            return;
+          }
+        } else {
+          // 该升而升不动也要说出来（预算用尽 / 已在最高档 / 认不出这一跑选了谁）：
+          // 静默什么都不做是最难查的省钱——链照旧红着，但没人知道闸为什么没跳。
+          await this.opts.emit({
+            type: "agent_message", agent_id: agentId, kind: "progress",
+            text: "[cascade] 客观判据判 stage " + String(i + 1) + " 没过（" + evidenceOf(term) + "），但无可升档位："
+              + plan.note + " ⇒ 不升级",
+          } as AgentEvent);
+        }
+      }
       if (term.status !== "done" || term.result === null) {
         st.status = "failed";
         await this.failChain(chain, "stage " + String(i + 1) + "（" + stage.role + "，" + agentId + "）终态 " + term.status + " → 整链 failed（各环报告可见）");
@@ -1207,6 +1314,50 @@ export class Orchestrator {
       ok: false,
       output: "[harness] pipeline 整链 failed（各环报告可见）：\n" + chainTable(chain) + "\n原因：" + reason,
     } as AgentEvent);
+  }
+
+  /** 级联可用 = 开关开着 **且** routing 开着。后一条不是形式主义：
+   *  阶梯起点取的是路由当时落到的档（handle.routeTier），升档也是靠 pin 换模型——
+   *  routing 关着时这两件事都不存在，"升级"会退化成花两遍钱跑同一个模型。
+   *  条件不成立时出声一次（不刷屏），别让人以为开关拨了就生效。 */
+  private cascadeReady(): boolean {
+    if (this.opts.cascadeUpgrade !== true) return false;
+    if (this.opts.routing !== true) {
+      if (!this.cascadeWarned) {
+        this.cascadeWarned = true;
+        console.warn("[cascade] 需要 routing=true（阶梯起点与升档都走路由）；本次会话不级联");
+      }
+      return false;
+    }
+    return true;
+  }
+
+  /** 级联阶梯（**决策面**，从 runChain 里拆出来）：从「这一跑当时选了谁」往上取档，
+   *  且只在同一 provider 的档位里取——跨厂商升档会把一次 BYOK 会话悄悄换成别家的 key。
+   *  拆出去有两个理由：① §4.4.7 的「哑 sequencer」静态判据（agents-check N6c）要求 runChain
+   *  源码段不碰档位表那一层，环只回答「要不要再花一遍钱」；② 这段判断值得单测（见 cascade-wiring）。
+   *  取不到档（未路由 / pin 的 id 不在表上 / 预算用尽 / 已在最高档）⇒ 交空阶梯 + 一句可落流的说明，
+   *  不猜一档、不把「无从判断」混成「已在最高档」。 */
+  private cascadePlanFor(agentId: string, budgetLeft: number): { from: ModelTier | undefined; ladder: { id: string; tier: ModelTier }[]; note: string } {
+    const w = this.workers.get(agentId);
+    const from = w?.routeTier;
+    // 精确按 id 查（不用 findSpecByNameOrId 的 id-or-model 两义匹配）：两义匹配一旦遇到
+    // 「A 家的 model 名 == B 家的 id」就会算错家族，正好把跨厂商禁令从门缝里绕过去。
+    const picked = DEFAULT_MODEL_TABLE.find((s) => s.id === w?.routePicked);
+    if (from === undefined || picked === undefined) {
+      return { from, ladder: [], note: "认不出这一跑当时选的模型（routeTier/routePicked 缺一方）⇒ 无从判断该往哪档升" };
+    }
+    if (budgetLeft <= 0) return { from, ladder: [], note: "整链升级预算已用尽（已花 " + String(this.opts.cascadeMaxUpgrades ?? 2) + " 次额度）" };
+    const ladder = cascadeLadder(from, DEFAULT_MODEL_TABLE.filter((s) => s.provider === picked.provider), budgetLeft);
+    return { from, ladder, note: ladder.length > 0 ? "" : picked.provider + " 一家在 " + from + " 之上没有更高档" };
+  }
+
+  /** 被淘汰那一档的收尾：write 档的 worktree 必须回收——它已经是永远不会被采纳的候选，
+   *  留在合并塔里只会被误当成一份可交付。动作与 supervise 的 rejectRings 同一条
+   *  （cleanupWrite），这里不另开第二份清理路径。 */
+  private async cleanupSuperseded(agentId: string): Promise<void> {
+    const w = this.workers.get(agentId);
+    if (w && w.mode === "write" && w.worktree) await this.cleanupWrite(w, "rejected");
   }
 
   /** sequencer 状态只读呈现（tool_result；§4.4.7「pipeline worker 的 tool_result 里 sequencer 状态只读呈现」）。 */
@@ -1289,10 +1440,13 @@ export class Orchestrator {
 
   // ---- M3c：sequencer 与 worker 终态的同步点 ----
 
-  /** 等待指定 agent 终态（sequencer 逐环同步；finishInner 解析）。已终态则立即返回。 */
+  /** 等待指定 agent 终态（sequencer 逐环同步；finishInner 解析）。终态值已备好则立即返回。
+   *  判据是 terminalResolved 而非 finished：finishInner 开头就置 finished=true，但 done 分支还要
+   *  await git diff + 安全流水才挂 lastResult——落在窗口里读 finished 会返回「done + result 空」，
+   *  sequencer 据此把绿证据环判成失败环（实测：级联因此白烧一档再误报整链 failed）。 */
   private waitForAgentTerminal(agentId: string): Promise<{ status: string; result: Extract<AgentEvent, { type: "agent_result" }> | null }> {
     const w = this.workers.get(agentId);
-    if (w && w.finished) {
+    if (w && w.terminalResolved) {
       return Promise.resolve({ status: w.terminalStatus ?? "done", result: w.lastResult ?? null });
     }
     return new Promise((resolve) => {
@@ -1310,8 +1464,10 @@ export class Orchestrator {
   }
 
   /** W1a 收队：等一批 worker 到终态。**不新增事件类型**——父模型看到的就是一条普通 tool_result。
-   *  复用 sequencer 的同步点（`waitForAgentTerminal` 已终态即立即返回），因此对已收敛的 worker
+   *  复用 sequencer 的同步点（`waitForAgentTerminal` 终态值备好即立即返回），因此对已收敛的 worker
    *  重复调用等价于「读一次快照」，这是 `wait_for_agents` 的取回通道能成立的前提。
+   *  算不算「已收敛」看 terminalResolved 而非 finished：finished 在 finishInner 开头就真，
+   *  之后还要 await git diff / 安全流水才挂 lastResult——窗口里报「done + 空报告」是把不可知记成已知。
    *  边界三条都是实测教训：
    *  ① 未知 id 必须先摘——`waitForAgentTerminal` 对不存在的 id 会把 resolve 推进等待表且永不触发；
    *  ② 超时不算失败（本仓对"等人门"的统一口径）：已收敛的照给，未收敛的点名进 timedOut；
@@ -1327,7 +1483,7 @@ export class Orchestrator {
       if (!w) {
         return { agentId: id, status: "unknown" as const, task: "", report: "未派生过该 agent_id（问错了名字）", usage: { inputTokens: 0, outputTokens: 0 }, spent: null };
       }
-      const status = !w.finished
+      const status = !w.terminalResolved
         ? "running" as const
         : w.terminalStatus === "failed" ? "failed" as const
           : w.terminalStatus === "cancelled" ? "cancelled" as const
@@ -1351,7 +1507,7 @@ export class Orchestrator {
     if (timer !== undefined) clearTimeout(timer);
     if (onAbort !== undefined && signal !== undefined) signal.removeEventListener("abort", onAbort);
 
-    const settled = known.filter((id) => this.workers.get(id)?.finished === true);
+    const settled = known.filter((id) => this.workers.get(id)?.terminalResolved === true);
     const unsettled = known.filter((id) => !settled.includes(id));
     const shaped = shapeJoinRows([...snapshot(settled), ...snapshot(unsettled), ...snapshot(unknown)]);
     return {
@@ -1609,15 +1765,21 @@ export class Orchestrator {
     return this.banditLoading;
   }
 
-  /** 奖励回灌：done → reward=1；failed/cancelled → 0；代价按真钱 usage 折算（pricing.costUsd，
-   *  §m5-proposal §1.3 口径）。仅 reason=bandit 的 worker 记了臂——其余路由不污染学习面。
-   *  best-effort 纪律：任何失败只 console.warn——学习是侧信道，绝不改写 worker 终态或阻断收束。 */
+  /** 奖励回灌：done **且客观证据不红** → reward=1；failed/cancelled 或 done+verify 红/stale → 0；
+   *  代价按真钱 usage 折算（pricing.costUsd，§m5-proposal §1.3 口径）。仅 reason=bandit 的 worker
+   *  记了臂——其余路由不污染学习面。best-effort 纪律：任何失败只 console.warn——
+   *  学习是侧信道，绝不改写 worker 终态或阻断收束。 */
   private async rewardBandit(w: WorkerHandle, status: "done" | "failed" | "cancelled"): Promise<void> {
     if (w.routeArm === undefined || w.routeModelId === undefined) return;
     const st = await this.bandit();
     if (st === null) return;
     try {
-      const reward = status === "done" ? 1 : 0;
+      // 「done」不等于「做成了」：客观证据说这一跑验过但红（failed）或验完又写了盘（stale）时按 0 计。
+      // 否则级联一开，学习面恰好是在**被判失败的任务上**给便宜档加分（α 涨 β 不涨），
+      // 越学越往「便宜但红」的方向倒——与这条能力存在的目的（少花冤枉钱）正好相反。
+      // 证据 absent（这一路没跑过 verify）不改判据：没判据就不拿猜测改学习面（与级联 fail-closed 同口径）。
+      const evidence = w.lastResult?.artifacts.verified;
+      const reward = status === "done" && evidence !== "failed" && evidence !== "stale" ? 1 : 0;
       const cost = costUsd(w.routeModelId, w.usage);
       updatePriced(st.posteriors, w.routeArm, reward, cost);
       await saveBanditState(this.opts.banditStatePath as string, st);
@@ -1657,6 +1819,19 @@ export class Orchestrator {
       // 位置即「每 worker 恰好一次」：三条调用路（done/failed/cancelled）互斥，
       // 且 finishInner 有 w.finished 幂等闸兜住重入；w.closed 尚未置真，进程不会在钩子中途退出。
       await this.subagentHook(w, "SubagentStop");
+    } catch (err) {
+      // 收尾中途抛（emit 落盘失败 / 窗口已销毁 / diff 流水炸）⇒ lastResult 再也挂不上来。
+      // 必须放行等待方与后环，否则这是一次**永挂**：finished 已真 → cancelAgent 拒绝、
+      // finishInner 幂等闸短路，而 waitForAgentTerminal 没有超时。判它 failed（拿不出终态
+      // 产出就是没过），并把错误照旧上抛给 runWorker 的 catch-all——不新增吞错误的路。
+      if (!w.terminalResolved) {
+        w.terminalResolved = true;
+        this.resolveTerminalWaiters(w.agentId, "failed", null);
+        this.resolveDependents(w.agentId, "failed");
+        console.warn("[orchestrator] worker 收尾中途失败，按 failed 放行等待方：" + w.agentId + " "
+          + (err instanceof Error ? err.message : String(err)));
+      }
+      throw err;
     } finally {
       w.closed = true;
     }
@@ -1688,6 +1863,7 @@ export class Orchestrator {
         body: { agent_id: w.agentId, status: "cancelled", reason: reason ?? "用户取消" },
       });
       // M3c：sequencer 同步点 + 依赖链（cancelled 也是依赖失败——后环不静默跳过）
+      w.terminalResolved = true; // 无 result 也要放行等待方：否则 sequencer 永挂（cancel 分支本就不发 agent_result）
       this.resolveTerminalWaiters(w.agentId, "cancelled", null);
       this.resolveDependents(w.agentId, "cancelled");
       agentOwners.delete(w.agentId);
@@ -1752,6 +1928,7 @@ export class Orchestrator {
       await this.opts.emit(doneResult);
       // M3c：sequencer 同步点 + 依赖链（done 唤醒后环，事件驱动无轮询）
       w.lastResult = doneResult;
+      w.terminalResolved = true;
       this.resolveTerminalWaiters(w.agentId, "done", doneResult);
       this.resolveDependents(w.agentId, "done");
       await this.emitSyntheticResult(w, {
@@ -1795,6 +1972,7 @@ export class Orchestrator {
       await this.opts.emit(failedResult);
       // M3c：sequencer 同步点 + 依赖链（failed → 后环 dependency_failed，不静默跳过）
       w.lastResult = failedResult;
+      w.terminalResolved = true;
       this.resolveTerminalWaiters(w.agentId, "failed", failedResult);
       this.resolveDependents(w.agentId, "failed");
       await this.emitSyntheticResult(w, {
@@ -1932,7 +2110,7 @@ export class Orchestrator {
     if (!w || w.mode !== "write" || !w.worktree || !w.branch || !w.baseCommit) {
       return { ok: false, error: "未知或已收尾的 write agent: " + agentId };
     }
-    if (!w.finished) return { ok: false, error: "worker 尚未收敛（done 后才可合并）" };
+    if (!w.terminalResolved) return { ok: false, error: "worker 尚未收敛（done 后才可合并）" };
     if (this.safeMode === "gate") {
       const blocking = w.lastFindings.filter((f) => f.severity === "critical" || f.severity === "high");
       if (blocking.length > 0 && opts.force !== true) {
@@ -2016,6 +2194,9 @@ export class Orchestrator {
       }
       // 评审重启：worktree 未收尾 = 合并决策未决，唤醒 worker 修正（§4.5 评审闭环的机制承载）
       w.finished = false;
+      w.terminalResolved = false; // 旧终态不再算数：重启后等待方必须等这一轮的真 result
+      w.terminalStatus = undefined; // 一并清掉：留着会让「这一轮已 cancelled/failed」的判读拿到上一轮的终态
+      w.lastResult = undefined; // 旧报告不清 = 重启后任何 reader 读到上一版改动当成这一版的产出
       agentOwners.set(agentId, this);
       await this.opts.emit({ type: "agent_status", agent_id: agentId, status: "running" } as AgentEvent);
       void this.runWorker(w).catch(() => {});

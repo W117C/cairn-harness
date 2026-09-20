@@ -2,7 +2,7 @@
 // 本文件锁定 runCascade 的分支语义：fail-closed 不升级 / maxRungs 上限 / 无更高档 /
 // 升级决策可审计（每次执行一条 routing_decision，升级带 from）。变更语义会立刻红。
 import { describe, expect, it } from "vitest";
-import { runCascade, type CascadeRung } from "../src/routing/cascade";
+import { cascadeLadder, runCascade, type CascadeRung } from "../src/routing/cascade";
 import type { ModelTier } from "../src/providers/registry";
 
 function rung(id: string, tier: ModelTier, ok: boolean, output = ""): CascadeRung {
@@ -87,5 +87,43 @@ describe("runCascade", () => {
     expect(r.upgrades).toBe(2);
     expect(r.decisions.map((d) => d.reason)).toEqual(["tier-default", "cascade-upgrade", "cascade-upgrade"]);
     expect(r.decisions.map((d) => d.from)).toEqual([undefined, "cheap", "standard"]);
+  });
+});
+
+// cascadeLadder 是产品路径（orchestrator.runChain 环）取阶梯的唯一入口：它的返回直接等于"再花几遍钱"。
+// 所以这里锁的不是形状而是账单语义——起始档不得重跑、档数不得超预算、无档可升必须交空表。
+describe("cascadeLadder", () => {
+  const TABLE = [
+    { id: "glm-4-flash", tier: "cheap" as ModelTier },
+    { id: "glm-4.6", tier: "standard" as ModelTier },
+    { id: "glm-4-plus", tier: "strong" as ModelTier },
+  ];
+
+  it("从上一档起取，起始档自己不进来（重跑已判没过的同一档 = 再花一遍钱得同一结果）", () => {
+    expect(cascadeLadder("cheap", TABLE, 2).map((r) => r.tier)).toEqual(["standard", "strong"]);
+    expect(cascadeLadder("cheap", TABLE, 2).map((r) => r.id)).toEqual(["glm-4.6", "glm-4-plus"]);
+  });
+
+  it("maxUpgrades 是真上限：预算 1 就只给一档，不给「先答应再超支」", () => {
+    expect(cascadeLadder("cheap", TABLE, 1).map((r) => r.tier)).toEqual(["standard"]);
+  });
+
+  it("已在最高档 ⇒ 空表（调用方据此走 fail-closed，不造升级了个寂寞的空跑）", () => {
+    expect(cascadeLadder("strong", TABLE, 2)).toEqual([]);
+  });
+
+  it("档位表缺中间档时跳过它，不拿别的档凑数", () => {
+    const sparse = [{ id: "a", tier: "cheap" as ModelTier }, { id: "c", tier: "strong" as ModelTier }];
+    expect(cascadeLadder("cheap", sparse, 2)).toEqual([{ id: "c", tier: "strong" }]);
+  });
+
+  it("未知起始档 ⇒ 空表：观察不到自己落在哪一档就不假装知道该往哪升", () => {
+    expect(cascadeLadder("nonsense" as ModelTier, TABLE, 2)).toEqual([]);
+  });
+
+  it("同 provider 表喂进来即同 provider 阶梯（跨厂商升档会悄悄换掉用户的 BYOK key）", () => {
+    const mixed = [...TABLE, { id: "claude-sonnet", tier: "strong" as ModelTier }];
+    const glmOnly = mixed.filter((s) => s.id.startsWith("glm-"));
+    expect(cascadeLadder("standard", glmOnly, 2).map((r) => r.id)).toEqual(["glm-4-plus"]);
   });
 });

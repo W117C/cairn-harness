@@ -3,6 +3,25 @@
 // （不猜、不空转放行，与 verify.ts 的 fail-closed 纪律一致）。
 // 每次升级落一条 routing_decision（reason=cascade-upgrade + from）。
 import type { ModelTier } from "../providers/registry";
+import { TIER_ORDER } from "./policy";
+
+/** 升级阶梯（纯函数）：从 `startTier` **往上一档起**取 ≤ `maxUpgrades` 档，每档挑档位表里第一个 spec。
+ *  起始档自己不进来——它已经跑过并被客观判据判没过，重跑同一档只会再花一遍钱得同一结果。
+ *  返回空数组 = 上面没档了（调用方据此走 fail-closed，不造"升级了个寂寞"的空跑）。 */
+export function cascadeLadder(
+  startTier: ModelTier,
+  table: readonly { id: string; tier: ModelTier }[],
+  maxUpgrades = 2,
+): { id: string; tier: ModelTier }[] {
+  const idx = TIER_ORDER.indexOf(startTier);
+  if (idx < 0) return [];
+  const out: { id: string; tier: ModelTier }[] = [];
+  for (const t of TIER_ORDER.slice(idx + 1, idx + 1 + maxUpgrades)) {
+    const spec = table.find((s) => s.tier === t);
+    if (spec) out.push({ id: spec.id, tier: spec.tier });
+  }
+  return out;
+}
 
 export interface CascadeRung {
   id: string;

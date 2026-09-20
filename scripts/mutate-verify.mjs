@@ -3384,6 +3384,90 @@ const MUTATIONS = [
     apply: (s) => s.replace("  await ledger.deleteSession();\n  await rm(directory, { recursive: true });", "  await ledger.deleteSession();"),
     expectFail: "removePrivateSessionData 撤销的是写入侧那个账本：删除前读得到、删除后目录与对象都没了",
   },
+  // ---- M5b 级联升级接进产品路径 + 终态收尾窗口（2026-09-20 任务 #45）----
+  // 这一簇的动机本身就是「两头断」：runCascade 只有验收脚本用 stub rung 调过，产品里零调用者，
+  // 而 docs/m5-acceptance.md B5 标着「已证」。下面 7 条锁的是接上后的**判据面**——
+  // 什么算红、什么算绿、往哪些档升、升不动时怎样，以及新发现的收尾窗口竞态。
+  {
+    id: "cascade-trigger-wider-than-objective-fail",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/cascade-wiring.test.ts",
+    desc: "升级判据放宽成「不是 verified 就算红」⇒ 这一路压根没跑过 verify 的环也被拉去升档，拿猜测换账单",
+    apply: (s) => s.replace("evidenceOf(t) === \"failed\" || evidenceOf(t) === \"stale\";", "evidenceOf(t) !== \"verified\";"),
+    expectFail: "worker 没跑过 verify（证据 absent）⇒ 不升级：没有客观判据就不拿猜测换账单",
+  },
+  {
+    id: "cascade-rung-accepts-absent-evidence",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/cascade-wiring.test.ts",
+    desc: "升上来的那一档不再要求绿证据 ⇒ 花真钱买回一份比触发时更弱的证据还把环标成 done（假绿形状）",
+    apply: (s) => s.replace("t.status === \"done\" && t.result !== null && evidenceOf(t) === \"verified\";", "t.status === \"done\" && t.result !== null;"),
+    expectFail: "升上来的那一档没跑过 verify（absent）⇒ 不算收敛：不花真钱买回一份比触发时更弱的证据",
+  },
+  {
+    id: "cascade-ladder-cross-provider",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/cascade-wiring.test.ts",
+    desc: "阶梯不再限定同 provider ⇒ 一次 BYOK 会话在升档时被悄悄换成别家的 key 与模型",
+    apply: (s) => s.replace("DEFAULT_MODEL_TABLE.filter((s) => s.provider === picked.provider)", "DEFAULT_MODEL_TABLE.filter((s) => s.provider !== picked.provider)"),
+    expectFail: "verify 红 ⇒ 同 provider 升一档重跑，链的终态由最后一档负责，被淘汰那档的 worktree 回收",
+  },
+  {
+    id: "cascade-ready-ignores-routing",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/cascade-wiring.test.ts",
+    desc: "cascadeReady 丢掉 routing 前置 ⇒ 未路由时档位无从知晓，「升档」退化成花两遍钱跑同一个模型",
+    apply: (s) => s.replace("    if (this.opts.routing !== true) {\n      if (!this.cascadeWarned) {", "    if (false) {\n      if (!this.cascadeWarned) {"),
+    expectFail: "只开 cascadeUpgrade、没开 routing ⇒ 不级联：阶梯起点与升档都靠路由，缺了就等于花两遍钱跑同一模型",
+  },
+  {
+    id: "terminal-sync-reads-finished-not-resolved",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/terminal-sync-window.test.ts",
+    desc: "sequencer 同步点回到只读 finished ⇒ 落在收尾窗口（diff/安全流水/emit 未完）的调用方拿到「done + result 空」",
+    apply: (s) => s.replace("if (w && w.terminalResolved) {", "if (w && w.finished) {"),
+    expectFail: "join 落在窗口内 ⇒ 回执说 running + timedOut 点名；不说 done + 空报告",
+  },
+  {
+    id: "join-settled-reads-finished",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/terminal-sync-window.test.ts",
+    desc: "收队把「finished 已真」当已收敛 ⇒ 窗口里的 worker 不进 timedOut，报告记空串冒充已知",
+    apply: (s) => s.replace("known.filter((id) => this.workers.get(id)?.terminalResolved === true)", "known.filter((id) => this.workers.get(id)?.finished === true)"),
+    expectFail: "join 落在窗口内 ⇒ 回执说 running + timedOut 点名；不说 done + 空报告",
+  },
+  {
+    id: "cascade-ladder-includes-start-tier",
+    src: "src/routing/cascade.ts",
+    test: "tests/cascade.test.ts",
+    desc: "阶梯从起始档自己开始 ⇒ 把刚被客观判据判没过的同一档再跑一遍（白烧一次预算，永远升不动）",
+    apply: (s) => s.replace("for (const t of TIER_ORDER.slice(idx + 1, idx + 1 + maxUpgrades)) {", "for (const t of TIER_ORDER.slice(idx, idx + maxUpgrades)) {"),
+    expectFail: "从上一档起取，起始档自己不进来（重跑已判没过的同一档 = 再花一遍钱得同一结果）",
+  },
+  {
+    id: "cascade-climbs-past-other-class-failure",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/cascade-wiring.test.ts",
+    desc: "升上来的那档终态 failed/cancelled 仍继续往上爬 ⇒ 换一档重跑同一个坏环境，把预算烧在没判据说能修好的失败上",
+    apply: (s) => s.replace("if (!ok && term.status !== \"done\") stopClimb =", "if (false) stopClimb ="),
+    expectFail: "升上来的那档直接崩（终态 failed）⇒ 立刻停止爬升：同一环境换一档只会再花一遍钱",
+  },
+  {
+    id: "bandit-rewards-self-reported-done",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/cascade-wiring.test.ts",
+    desc: "奖励只看终态 done、不看客观证据 ⇒ 在恰好被判红的那一跑上给便宜档加分，级联越开越学出「便宜但红」",
+    apply: (s) => s.replace("const reward = status === \"done\" && evidence !== \"failed\" && evidence !== \"stale\" ? 1 : 0;", "const reward = status === \"done\" ? 1 : 0;"),
+    expectFail: "done 但客观证据红 ⇒ bandit 不加分：否则级联越开越学出「便宜但红」的方向",
+  },
+  {
+    id: "finish-throw-orphans-terminal-waiters",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/terminal-sync-window.test.ts",
+    desc: "收尾中途抛异常时只置标志不放行等待方 ⇒ sequencer 在没有超时的等待上永挂（整链无终态、worktree 清不掉、cancel 又被 finished 拒）",
+    apply: (s) => s.replace("        this.resolveTerminalWaiters(w.agentId, \"failed\", null);\n", ""),
+    expectFail: "收尾中途 emit 抛 ⇒ 等待方照旧被放行（宁可这环红，不许整链永挂）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

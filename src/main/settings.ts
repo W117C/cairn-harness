@@ -48,6 +48,10 @@ export interface AppSettings {
   telemetry: boolean;
   /** M5b §m5-proposal 步骤 9：bandit 在线学习开关（缺省 false = 零行为，不写 routing-bandit.json）。 */
   routingBandit: boolean;
+  /** M5b 步骤 10 的产品侧接法（任务 #45）：pipeline 环跑完若**客观判据**（worker 事件流里的
+   *  verify_result）判它没过，就升一档把同一环重跑（≤2 次）。缺省 false —— 一次升级 = 整份重跑，
+   *  是真钱；且前提要有 routing（阶梯起点与升档都走路由）。worker 从没跑过 verify 时不升级（不猜）。 */
+  routingCascade: boolean;
   /** SoL-Pi P-1 步骤 2：主对话 provider 档位（缺省 demo = 显式演示，不再是「未设 env 就静默 mock」）。 */
   provider: ProviderKind;
   /** 真实通道的模型名（缺省空 = 由 provider 层取缺省，如 glm-5.2）。 */
@@ -90,6 +94,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   updateManifestUrl: "",
   telemetry: false,
   routingBandit: false,
+  routingCascade: false,
   provider: "demo",
   model: "",
   workspace: null,
@@ -158,6 +163,7 @@ export function validateSettings(raw: unknown): AppSettings {
     updateManifestUrl: typeof r.updateManifestUrl === "string" ? r.updateManifestUrl : d.updateManifestUrl,
     telemetry: typeof r.telemetry === "boolean" ? r.telemetry : d.telemetry,
     routingBandit: typeof r.routingBandit === "boolean" ? r.routingBandit : d.routingBandit,
+    routingCascade: typeof r.routingCascade === "boolean" ? r.routingCascade : d.routingCascade,
     actionFusion: r.actionFusion === true,
     // promptCache 缺省开 ⇒ 读法回退 `d.`（同 autoMemory/telemetry），不能用 `=== true`：
     // 旧 settings JSON 里没这个键时 `undefined === true` 会把"缺省开"变成对老用户仍然是关。
@@ -205,7 +211,7 @@ export class SettingsStore {
       ...("mode" in patch || "safeMode" in patch || "theme" in patch || "currentSession" in patch ||
         "autoMemory" in patch || "maxBudgetUsd" in patch || "budgetPricePerMTok" in patch ||
         "scheduleConcurrencyCap" in patch || "onboarded" in patch || "updateManifestUrl" in patch ||
-        "telemetry" in patch || "routingBandit" in patch || "provider" in patch || "model" in patch ||
+        "telemetry" in patch || "routingBandit" in patch || "routingCascade" in patch || "provider" in patch || "model" in patch ||
         "workspace" in patch || "actionFusion" in patch || "promptCache" in patch || "requestMetering" in patch || "observationPack" in patch ||
         "evidenceReceipts" in patch || "economicCompaction" in patch || "impactAnalysis" in patch ||
         "autoVerify" in patch
