@@ -176,7 +176,8 @@ export function declaredArgumentNames(frontmatter: Record<string, unknown> | und
   return [];
 }
 
-/** 渲染 prompt command（commands/*.md → 用户消息文本）；user-invocable 语义 = /plugin:command args。
+/** 渲染一条「/调用名 args」的正文（commands/*.md 与 SKILL.md 同一条路径——两条 face 各抄一份
+ *  就是本仓点名的「同族出口副本」）。形参写命令那侧即可：SkillEntry 与之结构同形，直接可传。
  *  首尾空白剥掉：那是 markdown 文件的换行，不是提示词的一部分。 */
 export function renderPromptCommand(cmd: PromptCommandEntry, argsString: string, ctx: Omit<SubstitutionContext, "args" | "named"> = {}): string {
   return substituteVars(cmd.body, {
@@ -221,6 +222,42 @@ export function expandPromptCommand(
   const invocable = hit.frontmatter["user-invocable"];
   if (invocable === false || invocable === "false") return { text, invoked: null, refused: "/" + name };
   return { text: renderPromptCommand(hit, args, ctxFor?.(hit) ?? {}), invoked: "/" + name, refused: null };
+}
+
+export interface SkillUserExpansion {
+  /** 命中 = 渲染后的 skill 正文（进事件流当用户消息）；未命中 = 原文逐字。 */
+  text: string;
+  /** 命中信息（写进 user_message.skill，供重挂与面板/审计）；未命中 = null。 */
+  hit: { invoke: string; args: string } | null;
+}
+
+/** §9.3 的**用户侧** skill 触发：`/plugin:skill args`（散装 = `/skill args`）→ 渲染后的正文。
+ *  与模型侧的两点差别是刻意的：
+ *   1. `disable-model-invocation` 在这里**放行**——那个位说的是「模型不许自己点」，
+ *      而 DSH 此前根本没有用户触发面，于是它的实际效果变成「这个 skill 永远不可用」；
+ *   2. 名字要**逐字等于调用名**（不做 resolveSkillName 的模糊回退）：用户手打的 `/x`
+ *      与某个命令同名时，派发顺序由调用方定（命令优先），不靠猜。 */
+export function expandSkillInvocation(
+  skills: readonly SkillEntry[],
+  text: string,
+  ctxFor?: (s: SkillEntry) => Omit<SubstitutionContext, "args">,
+): SkillUserExpansion {
+  if (!text.startsWith("/")) return { text, hit: null };
+  const rest = text.slice(1);
+  const cut = rest.search(/\s/);
+  const name = cut < 0 ? rest : rest.slice(0, cut);
+  const args = cut < 0 ? "" : rest.slice(cut + 1);
+  const hit = skills.find((s) => skillInvokeName(s) === "/" + name);
+  if (!hit) return { text, hit: null };
+  // 与模型那条 face 同一个预算帽：先替后裁（clampSkillBody 按 token 记账），否则用户敲一次
+  // /skill 就能把一份 200KB 的 SKILL.md 原样买进上下文——而它整段会话都要付费。
+  return {
+    text: clampSkillBody(
+      renderPromptCommand(hit, args, ctxFor?.(hit) ?? {}),
+      SKILL_REMOUNT_TOKENS_PER_SKILL,
+      "\n[全文见 " + hit.path + "]"),
+    hit: { invoke: skillInvokeName(hit), args },
+  };
 }
 
 // ---- 压缩后重挂（§9.4）：最近激活 skill 的全文按预算重注 ----

@@ -20,7 +20,7 @@ import {
 import {
   registerPluginLspServers, unregisterPluginLspServers, type LspServerConfig as LspRuntimeConfig,
 } from "../../tools/lsp";
-import type { AgentEvent, ToolCallEvent, ToolResultEvent } from "../../events";
+import type { AgentEvent, ToolCallEvent, ToolResultEvent, UserMessageEvent } from "../../events";
 import type {
   DiscoveredPlugin, LoadedHookDef, LooseSkill, PluginsManifest, SkillEntry, McpServerStatus,
 } from "./types";
@@ -57,8 +57,8 @@ export { McpManager, expandMcpConfig, scopedToolName, parseScopedToolName, type 
 export {
   buildSkillRoutingList, skillInvokeName, resolveSkillName, skillRoutingLine, substituteVars, declaredArgumentNames,
   expandConfigVars, expandUserConfig, referencedUserConfigKeys,
-  renderPromptCommand, commandInvokeName, expandPromptCommand, skillRemount, clampSkillBody, estimateTokens,
-  type CommandExpansion, type SubstitutionContext,
+  renderPromptCommand, commandInvokeName, expandPromptCommand, expandSkillInvocation, skillRemount, clampSkillBody, estimateTokens,
+  type CommandExpansion, type SkillUserExpansion, type SubstitutionContext,
   SKILL_ROUTING_CHAR_LIMIT, SKILL_REMOUNT_TOKENS_PER_SKILL, SKILL_REMOUNT_TOKENS_TOTAL,
   type ActivatedSkill, type RoutingListResult, type RemountResult,
 } from "./skills";
@@ -78,7 +78,10 @@ export interface PluginRuntimeOptions {
   sessionId?: string;
 }
 
-/** skill 激活投影：tool_call(name="skill") → 同 callId 的 tool_result 事件 id（1-based 行号）。 */
+/** skill 激活投影：tool_call(name="skill") → 同 callId 的 tool_result 事件 id（1-based 行号）；
+ *  以及**用户侧触发**（§9.3）：带 `skill` 字段的 user_message 本身就是一次激活，
+ *  它的行号就是被压缩时该重挂的那条。两条 face 都必须进这里，否则用户点出来的 skill
+ *  在压缩后静默消失（模型点的那条却会重挂）——那是最难查的那种不一致。 */
 export function activationsFromEvents(
   events: AgentEvent[],
   /** 第二参 = 那次 tool_call 实下的 `args`（§9.3 的参数替换要在重挂时重放；无参数 = 空串）。 */
@@ -87,7 +90,10 @@ export function activationsFromEvents(
   const out: ActivatedSkill[] = [];
   const pending = new Map<string, { invoke: string; args: string; index: number }>();
   events.forEach((e, index) => {
-    if (e.type === "tool_call" && (e as ToolCallEvent).name === "skill") {
+    if (e.type === "user_message" && (e as UserMessageEvent).skill) {
+      const m = (e as UserMessageEvent).skill!;
+      out.push({ invoke: m.invoke, body: resolve(m.invoke, m.args)?.body ?? "", triggerEventId: index + 1, seq: out.length });
+    } else if (e.type === "tool_call" && (e as ToolCallEvent).name === "skill") {
       const raw = (e as ToolCallEvent).args?.name;
       if (typeof raw === "string") {
         const callArgs = (e as ToolCallEvent).args?.args;

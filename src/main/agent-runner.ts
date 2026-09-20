@@ -63,7 +63,7 @@ import { AskGate } from "./ask-gate";
 import type { LicenseState } from "./license";
 import type { AskOutcomePayload, AskPayload, RunRequest, SidechatPanelSnapshot } from "./ipc-protocol";
 import { buildSandboxProfile, checkSandbox, runInSandbox, type SandboxStatus } from "./sandbox";
-import { PluginRuntime, setCurrentPluginRuntime, currentPluginRuntime, expandPromptCommand, type PluginPanelSnapshot } from "../agent/plugins";
+import { PluginRuntime, setCurrentPluginRuntime, currentPluginRuntime, expandPromptCommand, expandSkillInvocation, type PluginPanelSnapshot } from "../agent/plugins";
 import type { HookEngine } from "../agent/plugins/hooks";
 import type { McpToolInfo } from "../agent/plugins/mcp";
 import { Scheduler, type ScheduleSnapshot, type TriggerExecutor } from "./scheduler";
@@ -1118,7 +1118,13 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       await pipeline({ type: "assistant_message", content: "[command 不可用户调用] " + expanded.refused + "（frontmatter user-invocable:false）" });
       return await replay(opts.logPath);
     }
-    const promptText = expanded.text;
+    // §9.3 用户侧 skill 触发：命令没命中才轮到 skill（命令名是显式登记的，优先）。
+    // 这一面也是 `disable-model-invocation` 的唯一入口——那个位拒的是「模型自己点」，
+    // 而此前产品里根本没有用户触发面，于是它的实际效果变成「这个 skill 永远不可用」。
+    const skillFace = expanded.invoked === null
+      ? expandSkillInvocation(rt?.skills() ?? [], expanded.text, (s) => rt?.substitutionFor(s) ?? {})
+      : { text: expanded.text, hit: null };
+    const promptText = skillFace.text;
     // M2e：SessionStart（上下文注入）→ UserPromptSubmit（阻断 / 上下文）；SubagentStart/SubagentStop
     // 事件源在 M3——引擎支持事件名但无源，静默不触发。
     let hookContext = "";
@@ -1185,6 +1191,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       mode: "auto", // 冻结 loop 对 ask 一律拒绝；真实门在 gatedTool（复用 checkPermission）
       signal,
       userMessage: promptText,
+      ...(skillFace.hit ? { userMessageSkill: skillFace.hit } : {}),
       clarify: {
         // H2（A-2）：等人门可收束——run 取消信号随门透传；无人值守 run 的 clarify/plan
         // 挂起 60s 后 fail-closed（不再悬到 runTimeoutMs 30min 才被超时闸收走）。

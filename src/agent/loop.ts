@@ -1,4 +1,4 @@
-import type { AgentEvent, EventLog } from "../events";
+import type { AgentEvent, EventLog, SkillInvocationMeta } from "../events";
 import { denyReason, gate, type PermissionMode, type ToolResultWithAudit } from "../permissions";
 import type { HookEngine } from "./plugins/hooks";
 import { projectContext } from "./context";
@@ -23,6 +23,9 @@ export interface LoopOptions {
   maxSteps?: number;
   /** 任务描述：作为首条 user_message 落入事件流。 */
   userMessage?: string;
+  /** §9.3 用户侧 skill 触发（可选）：这条 user_message 的正文来自哪个 skill、给了什么参数。
+   *  缺省 = 该字段不进事件（既有事件字节不变）。 */
+  userMessageSkill?: SkillInvocationMeta;
   /** 澄清门通道：接了 clarify 工具才挂得起；缺省 fail-closed。 */
   clarify?: ClarifyChannel;
   /** 方案门通道：接了 propose_plan 工具才挂得起；缺省 fail-closed。 */
@@ -81,7 +84,7 @@ function isAbortLike(err: unknown): boolean {
 }
 
 export async function runLoop(opts: LoopOptions): Promise<void> {
-  const { workspace, userMessage } = opts;
+  const { workspace, userMessage, userMessageSkill } = opts;
   const seen: AgentEvent[] = [];
   // Persist first: failed writes must not become model-visible history.
   const events: EventLog = {
@@ -194,8 +197,10 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
   };
 
   if (userMessage !== undefined) {
-    const event = { type: "user_message", content: userMessage } as const;
-    await events.append(event);
+    await events.append({
+      type: "user_message", content: userMessage,
+      ...(userMessageSkill ? { skill: userMessageSkill } : {}),
+    });
   }
 
   for (let step = 0; step < maxSteps; step++) {

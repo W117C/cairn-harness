@@ -12,7 +12,10 @@ export interface PromoteOrigin {
   source_event_ids: number[];
   note?: string;
 }
-export interface UserMessageEvent { type: "user_message"; content: string; origin?: PromoteOrigin }
+/** §9.3 的用户侧 skill 触发：正文是某个 skill 渲染后的结果，`skill` 记下「是哪个、当时给了什么参数」，
+ *  压缩后重挂按同一口径重放替换（与 origin 同思路：零新增事件类型，JSONL 重放无损）。 */
+export interface SkillInvocationMeta { invoke: string; args: string }
+export interface UserMessageEvent { type: "user_message"; content: string; origin?: PromoteOrigin; skill?: SkillInvocationMeta }
 export interface AssistantMessageEvent { type: "assistant_message"; content: string }
 /** 流式增量片段：callId 标识同一轮回复，text 为逐字追加的一小段。 */
 export interface AssistantDeltaEvent { type: "assistant_delta"; callId: string; text: string }
