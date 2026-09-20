@@ -374,4 +374,9 @@ export class ObservationLedger {
     this.deleted = true;
   }
 }
-export const createObservationLedger = (options: LedgerOptions): ObservationLedger => new ObservationLedger(options);
+/** 会话观察账本的唯一构造点。`sessionId` 只在这里出现一次：写入侧（SolpiRuntime）与撤销侧
+ *  （removePrivateSessionData）必须指向同一个 `ledger-<sessionId>` 目录，两处各写字面量
+ *  就是漂移的入口。*/
+export const OBSERVATION_SESSION_ID = "observations";
+export const createObservationLedger = (sessionDataDir: string): ObservationLedger =>
+  new ObservationLedger({ sessionDataDir, sessionId: OBSERVATION_SESSION_ID, enabled: true });

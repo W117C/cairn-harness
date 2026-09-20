@@ -3,7 +3,7 @@
 // 参数非法一律 **throw ToolError**（本仓约定：impact-query / propose_plan 同形，由 loop 在边界转成
 // ok:false 的 tool_result）⇒ 单测直调 tool.run 时必须用 rejects.toThrow，不能期待返回值。
 import { describe, expect, it } from "vitest";
-import { WAIT_FOR_AGENTS_TOOL, createWaitForAgentsTool, waitForAgentsSpec, type WaitForAgentsHost } from "../src/tools/wait_for_agents";
+import { WAIT_FOR_AGENTS_TOOL, createWaitForAgentsTool, type WaitForAgentsHost } from "../src/tools/wait_for_agents";
 import { gateToolSpecs } from "../src/agent/glm-session";
 
 const hostWith = (calls: unknown[]): WaitForAgentsHost & { calls: unknown[] } => ({
@@ -50,9 +50,12 @@ describe("wait_for_agents 工具", () => {
   });
 
   it("规格与实例同名同串（两头断是本仓第 5 次复发的缺陷族）", () => {
-    expect(waitForAgentsSpec.name).toBe(WAIT_FOR_AGENTS_TOOL);
-    expect(waitForAgentsSpec.description).toContain("收队");
-    expect(gateToolSpecs("auto").some((s) => s.function.name === WAIT_FOR_AGENTS_TOOL)).toBe(true);
+    // 断的是**模型可见那一份**（gateToolSpecs），不是工具模块里的副本——副本曾与它漂移过。
+    const spec = gateToolSpecs("auto").find((s) => s.function.name === WAIT_FOR_AGENTS_TOOL);
+    if (!spec) throw new Error("模型可见面里没有 wait_for_agents（实例在表里，模型却叫不到）");
+    expect(spec.function.description).toContain("收队");
+    expect(Object.keys((spec.function.parameters as { properties?: Record<string, unknown> }).properties ?? {}))
+      .toEqual(["agent_ids", "timeout_ms"]);
     expect(gateToolSpecs("read-only").some((s) => s.function.name === WAIT_FOR_AGENTS_TOOL)).toBe(false);
   });
 });

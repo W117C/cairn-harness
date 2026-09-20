@@ -13,7 +13,7 @@
 //     3.8-Flash $0.75/$3.75 cache read $0.075、2.5-Pro $1.25/$10 cache read $0.125。
 //   · 智谱 docs.bigmodel.cn 的定价页是 JS 渲染，**官方数字没抓到** ⇒ GLM 三行仍是占位（未证）。
 //     第三方报道的「GLM-5.2 输入 8 元 / 输出 28 元 每百万 tokens」按未证处理，不写进数表。
-import { DEFAULT_MODEL_TABLE, type ModelSpec } from "../providers/registry";
+import { DEFAULT_MODEL_TABLE } from "../providers/registry";
 
 export interface ModelPrice {
   /** USD / 每百万输入 token。 */
@@ -96,11 +96,6 @@ export function costUsd(
   const readRate = p.cacheReadPerMTok ?? p.inputPerMTok;
   const writeRate = p.cacheWritePerMTok ?? p.inputPerMTok;
   return (plain * p.inputPerMTok + read * readRate + write * writeRate + usage.outputTokens * p.outputPerMTok) / 1_000_000;
-}
-
-/** 档位价格面（纯查询）：某 provider 某档的单价（路由代价项的来源；缺省表）。 */
-export function priceOfSpec(spec: ModelSpec, table: Readonly<Record<string, ModelPrice>> = DEFAULT_PRICE_TABLE): ModelPrice {
-  return priceOf(spec.id, table);
 }
 
 /** 白名单覆盖检查：价格表必须覆盖档位表全部 id（漂移护栏——新增 model 忘配价 = 显式失败）。 */

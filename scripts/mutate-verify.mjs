@@ -3367,6 +3367,23 @@ const MUTATIONS = [
     apply: (s) => s.replace("    if (opts.mode === \"read-only\" && isWriteCall(tool.name, tool.grade)) continue;", "    if (opts.mode === \"read-only\" && isSideEffectTool(tool.name)) continue;"),
     expectFail: "只读档规格面同步：门必拒的 MCP 工具不再挂给模型，带 readOnlyHint 的照旧在列",
   },
+  // ---- 观察账本构造同源 + 会话数据真删盘（2026-09-20 零引用扫描分诊补）----
+  {
+    id: "observation-ledger-write-side-id-drift",
+    src: "src/agent/solpi-runtime.ts",
+    test: "tests/solpi-runtime.test.ts",
+    desc: "写入侧自己另起一个 sessionId 构造账本 ⇒ 回取侧/撤销侧按同名打开的是另一个空账本，删会话与 obs_recall 都摸不到刚归档的脱敏文本",
+    apply: (s) => s.replace("    if (flags.observationPack || flags.evidenceReceipts) this.ledger = createObservationLedger(directory);", "    if (flags.observationPack || flags.evidenceReceipts) this.ledger = new ObservationLedger({ sessionDataDir: directory, sessionId: \"obs-other\", enabled: true });"),
+    expectFail: "removePrivateSessionData 撤销的是写入侧那个账本：删除前读得到、删除后目录与对象都没了",
+  },
+  {
+    id: "private-session-data-not-unlinked",
+    src: "src/agent/solpi-runtime.ts",
+    test: "tests/solpi-runtime.test.ts",
+    desc: "撤销了清单却把目录留在盘上 ⇒ 「删会话」删的是引用不是内容，脱敏文本仍在应用数据目录里",
+    apply: (s) => s.replace("  await ledger.deleteSession();\n  await rm(directory, { recursive: true });", "  await ledger.deleteSession();"),
+    expectFail: "removePrivateSessionData 撤销的是写入侧那个账本：删除前读得到、删除后目录与对象都没了",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

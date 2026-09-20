@@ -17,7 +17,7 @@ import { ClarifyGate, PlanGate } from "../src/agent/gates";
 import { createVerifyHook } from "../src/agent/verify";
 import { buildGlmHistory, createGlmSessionProvider, gateToolSpecs } from "../src/agent/glm-session";
 import { approvePlan, markPlanProposed, resetPlanState } from "../src/permissions";
-import { sha256MatchesFrozen, frozenCoverageDrift } from "../src/frozen";
+import { sha256MatchesFrozen, sha256MatchesDemoFrozen, frozenCoverageDrift } from "../src/frozen";
 import { createMockProvider } from "../src/providers/mock";
 import { TOOLS } from "../src/tools";
 import { createEventLog, replay, type AgentEvent, type ClarifyAnswerMap } from "../src/events";
@@ -112,11 +112,15 @@ function makeDriver(base: ReturnType<typeof createEventLog>, clarifyGate: Clarif
 console.log("[gate-check] 前置校验：判卷文件 sha256 与冻结基线一致");
 const frozenPre = await sha256MatchesFrozen(ROOT);
 assert(frozenPre.ok, `判卷文件 sha256 = 冻结基线${frozenPre.broken ? `（被改动: ${frozenPre.broken}）` : ""}`);
-if (!frozenPre.ok) {
+// 演示区（fixtures/demo/**，独立冻结表）并入同一条前置：m2-acceptance 那条「演示区校验 ok」
+// 此前唯一的实现者是一个零调用者的函数——账面写了、没人跑，等于把一个判卷区放在无人看的地方。
+const demoPre = await sha256MatchesDemoFrozen(ROOT);
+assert(demoPre.ok, `演示区剧本 sha256 = 冻结基线${demoPre.broken ? `（被改动: ${demoPre.broken}）` : ""}`);
+if (!frozenPre.ok || !demoPre.ok) {
   // 判卷文件被动过 ⇒ 后面每一条绿与红都只量出"改动本身"，不量产品（在改过的考卷上打分没有意义）。
   // 更要紧的是**别让它跛着走下去**：原先继续跑会在下游取到 undefined 而抛裸 TypeError，
   // 汇总行与未证记账一起被吞（与 panels-check 那条信息黑洞同族）。
-  console.error("[gate-check] 前置未过 ⇒ 后续判据一律不跑（判卷文件与冻结基线不一致：" + (frozenPre.broken ?? "?") + "）");
+  console.error("[gate-check] 前置未过 ⇒ 后续判据一律不跑（判卷文件与冻结基线不一致：" + (frozenPre.broken ?? demoPre.broken ?? "?") + "）");
   process.exit(1);
 }
 

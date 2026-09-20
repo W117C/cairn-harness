@@ -44,17 +44,5 @@ export function createWaitForAgentsTool(host: () => WaitForAgentsHost | null): T
   };
 }
 
-/** 模型可见规格。刻意写短：工具面是按轮重送的固定成本；一句话讲清「什么时候必须用它」。 */
-export const waitForAgentsSpec = {
-  name: WAIT_FOR_AGENTS_TOOL,
-  description:
-    "收队：等本批子 agent 到终态并一次拿回它们的状态/摘要/用量。派生过 worker 后必须先调用它再下结论——" +
-    "worker 看不到本会话历史，也没人替你把它们的产出读进上下文。",
-  parameters: {
-    type: "object",
-    properties: {
-      agent_ids: { type: "array", items: { type: "string" }, description: "缺省 = 本会话全部 worker" },
-      timeout_ms: { type: "number", description: "等待上限 ms（缺省 120000，超上限会被钳制并如实报出）" },
-    },
-  },
-} as const;
+// 模型可见规格**不在这里**：常驻原语按本文件的注入纪律走静态规格表（glm-session 的 gateToolSpecs），
+// 这里再写一份就是第二个来源——两份的描述/参数会长出差异（曾漂移过），而 tests/tool-surface-parity 只比名字。

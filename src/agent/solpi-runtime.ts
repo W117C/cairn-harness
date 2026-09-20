@@ -5,7 +5,7 @@ import { dirname, join, relative, isAbsolute } from "node:path";
 import type { AgentEvent } from "../events";
 import type { Tool, ToolResult } from "../tools";
 import { captureObservation, createObservationRecallTool } from "../tools/observation-capture";
-import { ObservationLedger, LEDGER_THRESHOLD_BYTES } from "./ledger";
+import { createObservationLedger, ObservationLedger, LEDGER_THRESHOLD_BYTES } from "./ledger";
 import { buildReceipt, validateReceipt, serializeReceipt } from "./evidence";
 import { redactSecrets } from "./security/scan";
 import { RequestMeter } from "./metering";
@@ -49,7 +49,7 @@ export async function removePrivateSessionData(logPath: string): Promise<void> {
   try { directory = await privateSessionDirectory(logPath, undefined, false); }
   catch (e) { if ((e as NodeJS.ErrnoException).code === "ENOENT") return; throw e; }
   // Caller must stop/refuse live writers first. Revoke before unlinking artifacts.
-  const ledger = new ObservationLedger({ sessionDataDir: directory, sessionId: "observations", enabled: true });
+  const ledger = createObservationLedger(directory);
   await ledger.deleteSession();
   await rm(directory, { recursive: true });
 }
@@ -69,7 +69,7 @@ export class SolpiRuntime {
   readonly runId = randomUUID();
   constructor(readonly directory: string, readonly flags: SolpiFlags) {
     if (flags.requestMetering) this.meter = new RequestMeter();
-    if (flags.observationPack || flags.evidenceReceipts) this.ledger = new ObservationLedger({ sessionDataDir: directory, sessionId: "observations", enabled: true });
+    if (flags.observationPack || flags.evidenceReceipts) this.ledger = createObservationLedger(directory);
   }
   /** Main events only. Replay is safe: metadata is ephemeral; full history is never changed. */
   async project(events: AgentEvent[], replacements = new Map<number, string>()): Promise<Map<number, string>> {

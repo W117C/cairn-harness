@@ -5,7 +5,8 @@ import { mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { SolpiRuntime, privateSessionDirectory, solpiEnabled } from "../src/agent/solpi-runtime";
+import { SolpiRuntime, privateSessionDirectory, removePrivateSessionData, solpiEnabled } from "../src/agent/solpi-runtime";
+import { createObservationLedger, type AuthorizedRedactedText } from "../src/agent/ledger";
 import type { AgentEvent } from "../src/events";
 
 const dirs: string[] = [];
@@ -157,4 +158,30 @@ it("private storage reopens the same session and supports a second session", asy
   const directory = await privateSessionDirectory(first);
   expect(await privateSessionDirectory(first)).toBe(directory);
   expect(await privateSessionDirectory(second)).not.toBe(directory);
+});
+
+// 隐私删除路径此前零测：写入侧（SolpiRuntime 构造 ledger）与撤销侧（removePrivateSessionData
+// 另起一个 ledger 去 revoke）各自写着同一个 sessionId 字面量——两处各写一份就是漂移的入口，
+// 而现在没有任何一条用例能看出它们是不是同一个账本。构造已收成单一出处（createObservationLedger）。
+it("removePrivateSessionData 撤销的是写入侧那个账本：删除前读得到、删除后目录与对象都没了", async () => {
+  const root = makeRoot();
+  const logPath = join(root, "s.jsonl");
+  await writeFile(logPath, "{}\n");
+  const directory = await privateSessionDirectory(logPath);
+  const rt = new SolpiRuntime(directory, { observationPack: true });
+  const captured = await rt.ledger!.capture({
+    toolName: "grep",
+    callId: "c1",
+    source: { kind: "authorized-redacted-text", text: bigText } as AuthorizedRedactedText,
+  });
+  expect(captured.archived).toBe(true);
+  const id = captured.id ?? "";
+  expect(id).not.toBe("");
+  // 独立构造（同目录、同工厂）⇒ 删除前读得到全文：证明两侧指向同一个 ledger-<sessionId>
+  const before = await createObservationLedger(directory).recall({ id });
+  expect(before.text.length).toBeGreaterThan(0);
+  await removePrivateSessionData(logPath);
+  await expect(readdir(directory)).rejects.toThrow(/ENOENT/);
+  // 删除后同一入口重新打开：句柄失效（清单与对象都不在），不是"读到旧内容"
+  await expect(createObservationLedger(directory).recall({ id })).rejects.toThrow();
 });
