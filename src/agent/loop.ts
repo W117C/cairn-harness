@@ -49,6 +49,11 @@ export interface LoopOptions {
   /** M2f 工具表白名单（硬闸）：给出时不在表内的工具一律拒绝执行——不是提示词自觉，是工具表摘除。
    *  缺省 undefined = 全表可见（既有路径字节不变）。 */
   allowedTools?: readonly ToolName[];
+  /** §9.3 的 `disallowed-tools`（skill/command 激活期摘工具）：每次调用前现问一次
+   *  「这个工具此刻被摘了吗」，返回摘除它的调用名（null = 没被摘）。
+   *  与 allowedTools 的区别是**时机**：那张表在 run 开始前定死，而 skill 是 run 中途被模型
+   *  点起来的——静态白名单盖不住「后半程才该摘」的那一半。缺省 undefined = 零行为。 */
+  skillDenial?: (tool: string) => string | null;
   /** M3a worker 工具表覆盖（编排内核注入独立工具面，如只读 shell_ro）；缺省 undefined = 全局 TOOLS
    *  （既有路径字节不变）。先于 allowedTools 硬闸之后的执行面查表。 */
   tools?: Record<string, import("../tools").Tool>;
@@ -225,6 +230,19 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
           callId: output.id,
           ok: false,
           output: `[tool table] ${output.name} 不在本会话工具表（只读白名单摘除）`,
+        });
+        continue;
+      }
+
+      // §9.3 disallowed-tools：激活期摘工具（同一类硬闸，区别只在**时机**——run 中途才生效）。
+      // 同样排在 verify 反射循环之前：被摘掉的工具不能因为「它是系统门」就绕过白名单。
+      const sk = opts.skillDenial?.(output.name);
+      if (sk !== undefined && sk !== null) {
+        await events.append({
+          type: "tool_result",
+          callId: output.id,
+          ok: false,
+          output: `[skill] ${output.name} 已被 ${sk} 的 disallowed-tools 摘除（本 turn 内不可用）`,
         });
         continue;
       }

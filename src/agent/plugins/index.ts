@@ -11,8 +11,9 @@ import { McpManager, type McpToolInfo } from "./mcp";
 import {
   buildSkillRoutingList, skillInvokeName, resolveSkillName, skillRemount, modelInvocable,
   clampSkillBody, substituteVars, declaredArgumentNames, expandConfigVars, expandUserConfig, referencedUserConfigKeys,
+  skillToolPolicy,
   SKILL_REMOUNT_TOKENS_PER_SKILL,
-  type ActivatedSkill, type RoutingListResult, type RemountResult, type SubstitutionContext,
+  type ActivatedSkill, type RoutingListResult, type RemountResult, type SubstitutionContext, type SkillToolPolicy,
 } from "./skills";
 import {
   readPluginUserConfig, pluginUserConfigDir, type PluginUserConfigRead,
@@ -58,6 +59,7 @@ export {
   buildSkillRoutingList, skillInvokeName, resolveSkillName, skillRoutingLine, substituteVars, declaredArgumentNames,
   expandConfigVars, expandUserConfig, referencedUserConfigKeys,
   renderPromptCommand, commandInvokeName, expandPromptCommand, expandSkillInvocation, skillRemount, clampSkillBody, estimateTokens,
+  skillToolPolicy, modelInvocable, type SkillToolPolicy,
   type CommandExpansion, type SkillUserExpansion, type SubstitutionContext,
   SKILL_ROUTING_CHAR_LIMIT, SKILL_REMOUNT_TOKENS_PER_SKILL, SKILL_REMOUNT_TOKENS_TOTAL,
   type ActivatedSkill, type RoutingListResult, type RemountResult,
@@ -126,6 +128,9 @@ export interface PluginPanelSnapshot {
   /** 审查 S2-12（任务 4.6）：loose 样本同样要能被面板列出并被决议 => 带 name/trust。 */
   looseSkills: { name: string; invoke: string; description: string; trust: string }[];
   mcpServers: McpServerStatus[];
+  /** §9.3 权限联动的本 turn 账：哪些 skill/command 被激活过、各自申报了什么工具面改动。
+   *  面板与判据读同一份（审计与可解释：申报了 allowed-tools 却仍需确认时，这里看得见是谁）。 */
+  toolScopes: { invoke: string; allow: string[]; deny: string[] }[];
   errors: { plugin: string; message: string }[];
   warnings: { plugin: string; message: string }[];
 }
@@ -142,6 +147,10 @@ export class PluginRuntime {
   private lspServerIds: string[] = [];
   /** §9.5 userConfig 的读侧（一个受信插件一份）。三条激活面（hook / MCP / LSP）都从这里取值。 */
   private userConfigs: Map<string, PluginUserConfigRead> = new Map();
+  /** §9.3 权限联动的持有面：本 run 内被激活过的 skill/command 申报的工具改动。
+   *  键 = 调用名（同名重复激活不叠加）。生命周期 = 一个 PluginRuntime 实例 = 一次 run
+   *  （一条用户消息），下条消息新建实例 ⇒ 「本 turn 放行、下条用户消息清除」不需要清理代码。 */
+  private skillScopes: Map<string, SkillToolPolicy> = new Map();
 
   private constructor(manifest: PluginsManifest, opts: PluginRuntimeOptions) {
     this.opts = opts;
@@ -201,6 +210,43 @@ export class PluginRuntime {
   /** 某插件的 userConfig 取值（配置面：hook exec form / MCP / LSP）。未装载 = 空表。 */
   userConfigValuesFor(plugin: string): Record<string, string> {
     return this.userConfigs.get(plugin)?.values ?? {};
+  }
+
+  /** §9.3 权限联动：一条 skill / prompt command **被激活的那一瞬间**登记它的工具面申报。
+   *  两条触发 face（模型的 skill 工具、用户的 /命令）都走这一个入口，同源一份实现。 */
+  grantSkillScope(invoke: string, frontmatter: Record<string, unknown> | undefined): SkillToolPolicy {
+    const p = skillToolPolicy(frontmatter);
+    this.skillScopes.set(invoke, p);
+    // 认不出的名字不静默吞：与 §9.8「运行时还没兑现的字段当场说出来」同一条纪律。
+    for (const u of p.unknown) console.warn("[skill] 工具名认不出（" + invoke + " 申报 " + u + "）⇒ 本轮不生效");
+    return p;
+  }
+
+  /** §9.3 的 `disallowed-tools` 活闸：这个工具此刻被哪条已激活 skill 摘除（null = 没被摘）。
+   *  这是**收紧向**的申报，所以它进执行面；`allowed-tools` 是放宽向的，按 §9.3 的收紧点
+   *  只能登记不能扩权（见 skillAllowNote）。 */
+  skillDenial(tool: string): string | null {
+    for (const [invoke, p] of this.skillScopes) {
+      if (p.deny.some((t) => t === tool)) return invoke;
+    }
+    return null;
+  }
+
+  /** 某工具是否被某条已激活 skill 申报进 `allowed-tools`（返回申报者，null = 没申报）。
+   *  只用于**解释**：门卡在 ask 时把这条申报连同「为什么不因它放行」一起说给用户看。
+   *  它不进权限管线——一条规则库 allow 能顶掉档位的逐次审批，那是插件作者替用户扩权。 */
+  skillAllowNote(tool: string): string | null {
+    for (const [invoke, p] of this.skillScopes) {
+      if (p.allow.some((t) => t === tool)) return invoke;
+    }
+    return null;
+  }
+
+  /** 本 turn 已登记的工具面改动（面板与判据读同一份；空表 = 没激活过任何带申报的 skill）。 */
+  skillScopeSnapshot(): { invoke: string; allow: string[]; deny: string[] }[] {
+    return [...this.skillScopes.entries()].map(([invoke, p]) => ({
+      invoke, allow: [...p.allow], deny: [...p.deny],
+    }));
   }
 
   /** 信任卡决议（批准/拒绝）→ 按决议重建激活面（同一样本信任后开始生效）。
@@ -362,6 +408,8 @@ export class PluginRuntime {
     }
     // 替换在**收窄之前**：clampSkillBody 按 token 记账，先裁后替会让账面与实付的字节数不符
     //（参数把正文撑长的那部分本来就该算进预算）。
+    // 权限联动（§9.3）在成功触发的那一刻登记：拒绝路径不给任何工具面改动。
+    this.grantSkillScope(skillInvokeName(entry), entry.frontmatter);
     return {
       ok: true,
       output: clampSkillBody(
@@ -418,6 +466,7 @@ export class PluginRuntime {
         trust: l.trust,
       })),
       mcpServers: this.mcp.statuses(),
+      toolScopes: this.skillScopeSnapshot(),
       errors: this.manifest.errors,
       warnings: this.manifest.warnings,
     };

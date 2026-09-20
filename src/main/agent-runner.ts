@@ -63,7 +63,7 @@ import { AskGate } from "./ask-gate";
 import type { LicenseState } from "./license";
 import type { AskOutcomePayload, AskPayload, RunRequest, SidechatPanelSnapshot } from "./ipc-protocol";
 import { buildSandboxProfile, checkSandbox, runInSandbox, type SandboxStatus } from "./sandbox";
-import { PluginRuntime, setCurrentPluginRuntime, currentPluginRuntime, expandPromptCommand, expandSkillInvocation, type PluginPanelSnapshot } from "../agent/plugins";
+import { PluginRuntime, setCurrentPluginRuntime, currentPluginRuntime, expandPromptCommand, expandSkillInvocation, commandInvokeName, skillInvokeName, type PluginPanelSnapshot } from "../agent/plugins";
 import type { HookEngine } from "../agent/plugins/hooks";
 import type { McpToolInfo } from "../agent/plugins/mcp";
 import { Scheduler, type ScheduleSnapshot, type TriggerExecutor } from "./scheduler";
@@ -300,6 +300,18 @@ function denied(name: ToolName | string, mode: PermissionMode, why: string): Too
   return { ok: false, output: "[permission denied] " + name + " 在 " + mode + " 档下被门拒绝（" + why + "）" };
 }
 
+/** §9.3 权限联动的**解释面**：某条已激活 skill 申报过 `allowed-tools` 里的这个工具，
+ *  但按原话的收紧点（放行不得越过当前权限档位），这条申报**不给免批**。
+ *  为什么不悄悄生效算了？——那正是「装载即陈列」的反面教材：字段收下了却不兑现，
+ *  而这里连"不兑现"都要说清楚是谁申报的、为什么没放行（能力 8：可解释）。
+ *  ⚠️ 反过来把它折成规则库的一条 allow 才是错的：规则库 allow 能顶掉档位的逐次审批，
+ *  等于插件作者替用户扩权。两个门共用这一份实现。 */
+export function withSkillAllowNote(tool: string, reason: string): string {
+  const invo = currentPluginRuntime()?.skillAllowNote(tool) ?? null;
+  return invo === null ? reason
+    : reason + "（" + invo + " 的 allowed-tools 申报过 " + tool + "，但申报不放行：当前档位仍需确认）";
+}
+
 function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Tool, beforeExecute?: () => Promise<ToolResult | null>): Tool {
   return {
     name,
@@ -321,7 +333,7 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
       if (d.verdict === "ask") {
         if (!s.askGate) return denied(name, s.autonomy.mode, "非交互模式（fail-closed）");
         const r = await s.askGate.request(name, args, {
-          reason: d.reason,
+          reason: withSkillAllowNote(name, d.reason),
           risk: d.risk,
           riskReasons: d.riskReasons,
           // 审查待确认第 4 条（任务 4.3）：门侧早已支持 ctx.signal（D12），但调用侧没传 =>
@@ -395,7 +407,7 @@ function gatedMcpTool(name: string, info: McpToolInfo & { plugin: string; server
       if (d.verdict === "ask") {
         if (!s.askGate) return denied(name, s.autonomy.mode, "非交互模式（fail-closed）");
         const r = await s.askGate.request(name, args, {
-          reason: d.reason,
+          reason: withSkillAllowNote(name, d.reason),
           risk: d.risk,
           riskReasons: d.riskReasons,
           // 审查待确认第 4 条（任务 4.3）：门侧早已支持 ctx.signal（D12），但调用侧没传 =>
@@ -1125,6 +1137,16 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       ? expandSkillInvocation(rt?.skills() ?? [], expanded.text, (s) => rt?.substitutionFor(s) ?? {})
       : { text: expanded.text, hit: null };
     const promptText = skillFace.text;
+    // §9.3 权限联动（用户 face）：命令 / skill 被用户点名激活的那一刻登记它的工具面申报。
+    // 模型 face 在 skill 工具内部走同一个 grantSkillScope 入口——两条 face 一份实现，不各抄一遍。
+    const scopeHit = skillFace.hit;
+    if (expanded.invoked !== null) {
+      const cmd = (rt?.commands() ?? []).find((c) => commandInvokeName(c) === expanded.invoked);
+      if (cmd) rt?.grantSkillScope(expanded.invoked, cmd.frontmatter);
+    } else if (scopeHit !== null) {
+      const sk = (rt?.skills() ?? []).find((s) => skillInvokeName(s) === scopeHit.invoke);
+      if (sk) rt?.grantSkillScope(scopeHit.invoke, sk.frontmatter);
+    }
     // M2e：SessionStart（上下文注入）→ UserPromptSubmit（阻断 / 上下文）；SubagentStart/SubagentStop
     // 事件源在 M3——引擎支持事件名但无源，静默不触发。
     let hookContext = "";
@@ -1192,6 +1214,8 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       signal,
       userMessage: promptText,
       ...(skillFace.hit ? { userMessageSkill: skillFace.hit } : {}),
+      // §9.3 disallowed-tools 的活闸：run 中途被点起来的 skill 也摘得掉（静态 allowedTools 盖不住）
+      ...(rt ? { skillDenial: (tool: string): string | null => rt?.skillDenial(tool) ?? null } : {}),
       clarify: {
         // H2（A-2）：等人门可收束——run 取消信号随门透传；无人值守 run 的 clarify/plan
         // 挂起 60s 后 fail-closed（不再悬到 runTimeoutMs 30min 才被超时闸收走）。

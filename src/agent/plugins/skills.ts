@@ -2,6 +2,7 @@
 // 触发才全文进上下文（skill 工具 → tool_result 携带全文）；压缩后重挂最近激活 skill
 // （单 skill 前 5000 token、合计 25000）。$ARGUMENTS / $1 等参数替换 = skill 与 prompt 共用替换器。
 import type { SkillEntry, PromptCommandEntry } from "./types";
+import { resolveToolName, type ToolName } from "../../tools/base";
 import { clampToTokenBudget, estimateTextTokens } from "../text-budget";
 
 /** 路由清单字符上限（§9.4 定稿）。 */
@@ -44,6 +45,48 @@ function fmBool(frontmatter: Record<string, unknown> | undefined, key: string): 
 /** §9.3「disable-model-invocation」：该 skill 只能由用户点，不进模型可见清单。 */
 export function modelInvocable(s: RoutingSkillInput): boolean {
   return !fmBool(s.frontmatter, "disable-model-invocation");
+}
+
+/** §9.3「权限联动」的一份产物：一条 skill/command 申报的工具面改动。 */
+export interface SkillToolPolicy {
+  /** 申报要预批的工具（规范名）。 */
+  allow: ToolName[];
+  /** 申报要摘除的工具（规范名）——这条是真闸（见 PluginRuntime.skillDenial）。 */
+  deny: ToolName[];
+  /** 认不出的申报项原文（带 `allow:` / `deny:` 前缀）——点名，不静默丢。 */
+  unknown: string[];
+}
+
+/** frontmatter 里的工具清单：CC 给法是逗号/空格分隔的字符串，也接受数组。 */
+function toolListField(fm: Record<string, unknown> | undefined, key: string): string[] {
+  const v = fm?.[key];
+  const raw = Array.isArray(v) ? v.map((x) => String(x)) : typeof v === "string" ? v.split(/[\s,]+/) : [];
+  return raw.map((s) => s.trim()).filter((s) => s !== "");
+}
+
+/** §9.3 的 `allowed-tools` / `disallowed-tools` → 规范名清单（同名去重，认不出的另列）。
+ *  ⚠️ 两条申报的**效力不对等**，这是 §9.3 原话里的「收紧点」：
+ *   - `disallowed-tools` = 激活期摘工具（与 §4.4.1 同构）→ 执行面硬闸，真的摘得掉；
+ *   - `allowed-tools` = 本 turn 放行清单，但「放行不得越过当前权限档位」⇒ 它**只登记、不扩权**：
+ *     插件作者声明一个 write_file 换不来一次免批（门卡的 reason 会写明这条申报为什么没生效）。
+ *   把 allow 折成规则库条目就是扩权（规则库的 allow 在管线里能顶掉档位逐次审批），所以这里
+ *   刻意只交出名字，由持有方按上面的口径分别使用。 */
+export function skillToolPolicy(fm: Record<string, unknown> | undefined): SkillToolPolicy {
+  const out: SkillToolPolicy = { allow: [], deny: [], unknown: [] };
+  const push = (behavior: "allow" | "deny", items: string[]): void => {
+    for (const item of items) {
+      const tool = resolveToolName(item);
+      if (tool === null) {
+        out.unknown.push(behavior + ":" + item);
+        continue;
+      }
+      const into = behavior === "allow" ? out.allow : out.deny;
+      if (!into.includes(tool)) into.push(tool);
+    }
+  };
+  push("allow", toolListField(fm, "allowed-tools"));
+  push("deny", toolListField(fm, "disallowed-tools"));
+  return out;
 }
 
 /** 路由清单行（模型按名触发）："- /name — description"，有 when_to_use 就并到同一行

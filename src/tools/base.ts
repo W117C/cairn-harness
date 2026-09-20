@@ -44,17 +44,27 @@ export interface ToolResult {
   output: string;
 }
 
-export type ToolName =
-  | "read_file"
-  | "write_file"
-  | "edit_file"
-  | "run_shell"
-  | "grep"
-  | "glob"
-  | "lsp"
-  | "clarify"
-  | "propose_plan"
-  | "verify";
+/** 本仓静态工具名的唯一事实源：联合类型与名字表同源（加一个工具只改这一行）。 */
+export const TOOL_NAMES = [
+  "read_file", "write_file", "edit_file", "run_shell", "grep", "glob", "lsp",
+  "clarify", "propose_plan", "verify",
+] as const;
+
+export type ToolName = (typeof TOOL_NAMES)[number];
+
+/** CC 工具名 → 本仓工具名（§9.3/§9.5 的「CC 名作解析别名」同一条纪律）。
+ *  单表同源：hook 的 `if` 匹配与 skill/command 的 allowed-tools、disallowed-tools 共用它，
+ *  两处各抄一份就会出现「同一个别名在一处认、另一处不认」。 */
+export const CC_TOOL_ALIAS: Record<string, ToolName> = {
+  bash: "run_shell", write: "write_file", edit: "edit_file", read: "read_file",
+};
+
+/** 申报里的工具名 → 规范名；认不出 = null（调用方负责出声，不静默丢）。 */
+export function resolveToolName(raw: string): ToolName | null {
+  const t = raw.trim().toLowerCase();
+  if ((TOOL_NAMES as readonly string[]).includes(t)) return t as ToolName;
+  return CC_TOOL_ALIAS[t] ?? null;
+}
 
 export interface Tool {
   // M2d：name 是展示/查表字符串（注册表键域仍是 ToolName；remember 等运行时注入工具不进静态键域）

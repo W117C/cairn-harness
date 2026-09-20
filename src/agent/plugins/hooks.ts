@@ -10,6 +10,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isShellFamily, staticRisk } from "../../permissions/risk";
+import { CC_TOOL_ALIAS } from "../../tools/base";
 import { spawnTracked } from "../../tools/process";
 import type { HookEventName, LoadedHookDef } from "./types";
 import { expandUserConfig } from "./skills";
@@ -294,10 +295,9 @@ function defaultExec(): HookExecFn {
 /** §9.5 的 `if`：权限规则语法 best-effort 过滤（CC 原话「硬闸必须走权限系统」——本字段只决定
  *  这条钩子跑不跑，不放宽任何权限）。形态 `Tool` 或 `Tool(<前缀>)`，前缀对该工具的**主参数**做
  *  前缀比较，与 PermissionRule.pattern 的「命令段前缀」同一口径——不另立第二套匹配语言。
- *  CC 的工具名（Bash/Write/…）作解析别名，与 §9.3 的 `${CLAUDE_*}` 别名同思路。 */
-const CC_TOOL_ALIAS: Record<string, string> = {
-  bash: "run_shell", write: "write_file", edit: "edit_file", read: "read_file",
-};
+ *  CC 的工具名（Bash/Write/…）作解析别名，与 §9.3 的 `${CLAUDE_*}` 别名同思路；
+ *  别名表与 skill/command 的工具权限联动共用 src/tools/base 那一张（两处各抄一份就会
+ *  「同一个别名在一处认、另一处不认」）。 */
 
 /** 解析不了 → null（装载期出声；执行期按「跑」处理，见 hookIfMatches）。 */
 export function parseHookIf(expr: string): { tool: string; prefix: string | null } | null {
