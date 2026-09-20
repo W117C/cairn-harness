@@ -166,6 +166,44 @@ describe("goal 模式端到端（真入口，缺省零行为）", () => {
     expect(evts.filter((e) => e.type === "goal_stopped").length).toBe(1);
   });
 
+  it("unattended + 武装方案门 ⇒ 拒因来自方案门而不是无人值守闸，盘上不留痕（J3：不是被忽略）", async () => {
+    // 定时任务那条路就是 `{ unattended: true }`：写向工具本来就会被"无人值守 fail-closed"自动拒。
+    // 所以 J3 判的不是"有没有被拒"（两支都拒 ⇒ 恒真），而是**哪道闸在答话**：
+    // 武装后必须是方案门先拒（它在 ask 之前判），而不是把决定丢给无人值守自动拒。
+    // 两支只差 planRequired 一个维度、拒因却换人 ⇒ 这道闸真在管这条路径。
+    await script(
+      '{"type":"tool_call","id":"w1","name":"write_file","args":{"path":"j3-probe.ts","content":"export const x = 1;\\n"}}\n' +
+        '{"type":"assistant_message","content":"写完了。"}\n',
+    );
+    process.env.M3A_MAIN_SCRIPT = scriptPath;
+    const resultFor = async (callId: string): Promise<{ ok: boolean; output: string }> => {
+      const hit = (await events()).find((e) => e.type === "tool_result" && e.callId === callId);
+      return hit?.type === "tool_result" ? { ok: hit.ok, output: hit.output } : { ok: false, output: "<没有 tool_result>" };
+    };
+
+    logPath = pathOf(sessions, "s-unarmed");
+    const open = await handleAgentRun(
+      { message: "写个文件", mode: "auto", sessionId: "s-unarmed" },
+      { workspace, sessionId: "s-unarmed", logPath, unattended: true },
+    );
+    expect(open.ok).toBe(true);
+    const un = await resultFor("w1");
+    expect(un.ok).toBe(false);
+    expect(un.output).toContain("无人值守");
+    expect(un.output).not.toContain("方案门"); // 未武装时这道闸不许说话
+
+    logPath = pathOf(sessions, "s-armed");
+    const gated = await handleAgentRun(
+      { message: "写个文件", mode: "auto", sessionId: "s-armed" },
+      { workspace, sessionId: "s-armed", logPath, unattended: true, planRequired: true },
+    );
+    expect(gated.ok).toBe(true); // 闸住 ≠ run 失败：拒绝是正常收场，不是崩
+    const ar = await resultFor("w1");
+    expect(ar.ok).toBe(false);
+    expect(ar.output).toContain("方案门");
+    await expect(access(join(workspace, "j3-probe.ts"))).rejects.toThrow();
+  });
+
   it("旧日志没有 goal 事件时，重放照旧成功（增量类型不把旧转录判坏）", async () => {
     await writeFile(logPath, JSON.stringify({ type: "user_message", content: "老记录" }) + "\n", "utf8");
     const evts = await events();
