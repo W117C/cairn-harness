@@ -80,7 +80,7 @@ import { frozenJudgePathSet } from "../frozen";
 import { MAX_CONCURRENT_WORKERS, READ_MODE_MAX_TURNS, SPAWN_MODES, WORKER_TOOL_TABLE, WRITE_WORKER_TOOL_TABLE, workerBudgetConfig, workerToolTable } from "./orchestrator-config";
 import { shell_rw, workerToolSpecs } from "./worker-shell-tools";
 import { clampTier, clipWorkerSummary, isPermissionMode, parseSpawnedAgentId, scanWorkerOutput, workerVerificationEvidence } from "./worker-report";
-import { priceTagText, shapeJoinRows, spentUsdFor, type JoinInput, type JoinPayloadBody, type WorkerPrice } from "./orchestrator-join";
+import { priceForModel, priceTagText, shapeJoinRows, spentUsdFor, type JoinInput, type JoinPayloadBody, type WorkerPrice } from "./orchestrator-join";
 import { WorkerCancelled, defaultWorkerModel, isScriptedModel, type WorkerModel } from "./worker-model";
 import { type OrchestratorOptions, type PipelineChain, type SpawnArgs, type StageRoleResolution, type WorkerContext, type WorkerHandle } from "./orchestrator-types";
 import { chainTable, digestArgs, filterWorkerSpecs, filterWorkerTable, parseStringList, parseWorkerContext, scanStreamEvent, withAgentId } from "./worker-projection";
@@ -520,9 +520,7 @@ export class Orchestrator {
     let price: WorkerPrice | null = null;
     if (!isScriptedModel(model)) {
       const name = routedSpec?.model ?? glmDefaultModelName();
-      const id = routeDecision?.picked ?? findSpecByNameOrId(DEFAULT_MODEL_TABLE, name)?.id;
-      if (id !== undefined) price = { model: name, priceId: id };
-      else price = { model: name };
+      price = priceForModel(name, routeDecision?.picked);
     }
     const requested = isPermissionMode(args.tier) ? args.tier : this.opts.parentMode;
     const { mode: tier, clamped, warning } = clampTier(requested, this.opts.parentMode);

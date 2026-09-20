@@ -3654,6 +3654,22 @@ const MUTATIONS = [
     expectFail: "无人值守 run 到点就停且不续跑（#53）：理由点名这条路，且**排在判据之前**",
   },
   {
+    id: "goal-usd-gate-price-key-as-model-name",
+    src: "src/main/agent-runner.ts",
+    test: "tests/goal-continue.test.ts",
+    desc: "美元闸把 settings 里的**模型名**直接当价表键传（价表键是档位 id）⇒ 对产品里可选的每个模型都恒「价格不可知」，闸一次也没触发过；而判据侧单测全绿（它们直接注入 spentUsd）——#54 定名的那处实踩",
+    apply: (s) => s.replace("spentUsdFor(priceForModel(model), view.usage)", "spentUsdFor({ model, priceId: model }, view.usage)"),
+    expectFail: "设 $0.05 上限 × 一轮 200k/20k 用量 ⇒ goal_stopped 点名美元上限（不被轮次/无产出理由顶包）",
+  },
+  {
+    id: "price-for-model-lookup-dropped",
+    src: "src/agent/orchestrator-join.ts",
+    test: "tests/goal-price.test.ts",
+    desc: "反查被摘掉，只认显式传入的档位 id ⇒ 模型名那一态恒不产值表键（worker 未路由时与 goal 续跑两条路一起退回「价格不可知」）",
+    apply: (s) => s.replace("const id = pickedId ?? findSpecByNameOrId(table, model)?.id;", "const id = pickedId;"),
+    expectFail: "用户在设置里选的那个名字（provider 模型名）逐档都算得出钱",
+  },
+  {
     id: "goal-usd-window-axis",
     src: "src/agent/goal.ts",
     test: "tests/goal-continue.test.ts",

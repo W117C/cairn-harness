@@ -7,6 +7,7 @@
 import { clipWorkerSummary } from "./worker-report";
 import { estimateTextTokens } from "./text-budget";
 import { costUsd, priceOf, type ModelPrice } from "../routing/pricing";
+import { DEFAULT_MODEL_TABLE, findSpecByNameOrId, type ModelSpec } from "../providers/registry";
 
 /** 单条 worker 摘要上限（token）。`SUMMARY_TOKEN_CAP`(2000) 是给一次 spawn 回执用的，
  *  收队一次最多回 4 个 worker ⇒ 整批帽按 2400、逐行 400，量级与主会话一轮工具结果相称。 */
@@ -26,6 +27,19 @@ export type JoinStatus = "done" | "failed" | "cancelled" | "running" | "unknown"
 export interface WorkerPrice {
   model: string;
   priceId?: string;
+}
+
+/** 模型名 / 档位 id → 价表键的**唯一**反查处。
+ *  价表的键是档位 id（`glm-standard`），而 settings 里存的是 provider 模型名（`glm-5.2`）——
+ *  直接把名字当 priceId 传会 100% 查不到（实测：goal 美元闸因此对产品里可选的每个模型都算不出钱，
+ *  闸静默惰掉，而所有单测都直接注入 spentUsd ⇒ 全绿）。两条路（worker 派活 / goal 续跑）都必须走这里。 */
+export function priceForModel(
+  model: string,
+  pickedId?: string,
+  table: readonly ModelSpec[] = DEFAULT_MODEL_TABLE,
+): WorkerPrice {
+  const id = pickedId ?? findSpecByNameOrId(table, model)?.id;
+  return id === undefined ? { model } : { model, priceId: id };
 }
 /** 一笔表价花费。`calibrated=false` = 单价仍是占位数（GLM 三档），只可横向比较、不可当省钱证据。 */
 export interface WorkerSpend {

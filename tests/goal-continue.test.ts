@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { replay, type AgentEvent } from "../src/events";
-import { handleAgentRun, handleGoalSet, initSessionsDir } from "../src/main/agent-runner";
+import { handleAgentRun, handleGoalSet, initSessionsDir, initSettingsStore, setSettings } from "../src/main/agent-runner";
 import { pathOf } from "../src/main/sessions";
 import { projectGoal } from "../src/agent/goal";
 
@@ -290,5 +290,35 @@ describe("projectGoal：会话目标态只从事件流重算", () => {
     const stopped: AgentEvent = { type: "goal_stopped", reason: "轮次上限 6 已用尽", turn: 6, evidence: "failed" };
     expect(projectGoal([G("目标"), stopped])?.stopped).toContain("轮次上限");
     expect(projectGoal([G("目标"), stopped, G("再试一次")])?.stopped).toBeNull();
+  });
+});
+
+// ---- #54：美元闸的**生产输入**那一跳 ----
+// 上面所有判据测的都是「拿到 spentUsd 之后怎么判」；这一段测「spentUsd 从哪来」。
+// settings 存 provider 模型名（glm-5.2），价表的键是档位 id（glm-standard），中间靠一次反查。
+// 那一跳坏了没有任何单测会红（它们直接注入 spentUsd）——实测就是恒「价格不可知」、闸一次也没触发过，
+// tsc / vitest / 变异表全绿。所以这条必须走真入口。放在文件最后：它会把 settings 单例改指本用例的临时文件。
+describe("goal 美元闸端到端：模型名也算得出钱，并且真的拦下续跑", () => {
+  it("设 $0.05 上限 × 一轮 200k/20k 用量 ⇒ goal_stopped 点名美元上限（不被轮次/无产出理由顶包）", async () => {
+    process.env.M3A_MAIN_SCRIPT = scriptPath;
+    initSettingsStore(join(root, "settings.json")); // 缺省落在 /tmp/m1e-default-settings.json，跨用例共享 ⇒ 自己指一份
+    await setSettings({ model: "glm-5.2" });
+    await script(JSON.stringify({ type: "usage", inputTokens: 200_000, outputTokens: 20_000 }) + "\n" + TEXT_ONLY);
+    const set = await handleGoalSet({ sessionId: "s-plain", objective: "把测试修绿", maxTurns: 8, maxUsd: 0.05 });
+    expect(set.ok).toBe(true);
+    const res = await handleAgentRun(
+      { message: "开始", mode: "auto", sessionId: "s-plain" },
+      { workspace, sessionId: "s-plain", logPath, unattended: false },
+    );
+    expect(res.ok, "run 失败诊断：" + JSON.stringify(res)).toBe(true);
+    const evts = await events();
+    const stops = evts.filter((e) => e.type === "goal_stopped");
+    expect(stops.length).toBe(1);
+    const reason = stops[0]?.type === "goal_stopped" ? stops[0].reason : "";
+    expect(reason).toContain("美元上限");
+    // 闸惰掉时会退到下一条理由——这两条"不许出现"就是本用例的分辨力所在
+    expect(reason).not.toContain("轮次上限");
+    expect(reason).not.toContain("没有写过任何文件");
+    expect(userTurns(evts).filter((t) => t.type === "user_message" && t.origin?.kind === "goal").length).toBe(0);
   });
 });
