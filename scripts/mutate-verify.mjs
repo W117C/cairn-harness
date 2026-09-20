@@ -3260,6 +3260,31 @@ const MUTATIONS = [
     apply: (s) => s.replace("if (!hasWorkerAttribution(e)) mainVerifyPass = true;", "mainVerifyPass = true;"),
     expectFail: "写盘与验证都只算主会话侧：worker 的 verify 通过不替父会话销账",
   },
+  // ---- tool_stream 关闭位（第三方中转拒收未知字段）：开关有效性 / 零回归 / 拼错不当关，各一条 ----
+  {
+    id: "glm-tool-stream-switch-ignored",
+    src: "src/providers/glm.ts",
+    test: "tests/glm-tool-stream-switch.test.ts",
+    desc: "关位被无视、永远发 tool_stream ⇒ 严格代理上 provider:check 与每个 worker spawn 第一跳 400（能力有、路径堵）",
+    apply: (s) => s.replace("  return off ? undefined : { tool_stream: true };", "  return { tool_stream: true };"),
+    expectFail: "M0_GLM_TOOL_STREAM=0：body 不再带该字段，其余字段逐字不变",
+  },
+  {
+    id: "glm-tool-stream-default-flipped-off",
+    src: "src/providers/glm.ts",
+    test: "tests/glm-tool-stream-switch.test.ts",
+    desc: "缺省翻成「不发」⇒ 官方智谱的工具调用流式静默退化（该开关本意是 opt-out，不是改缺省）",
+    apply: (s) => s.replace("  return off ? undefined : { tool_stream: true };", "  return off ? { tool_stream: true } : undefined;"),
+    expectFail: "缺省：body 里带 tool_stream:true —— 关掉这断言的变异必须红",
+  },
+  {
+    id: "glm-tool-stream-garbage-turns-it-off",
+    src: "src/providers/glm.ts",
+    test: "tests/glm-tool-stream-switch.test.ts",
+    desc: "任意字符串都当「关」⇒ 把 0 打成 oh/false1 时人以为开关生效、实际还在 400，比直接报错更难查",
+    apply: (s) => s.replace("  const off = typeof raw === \"string\" && [\"0\", \"false\", \"off\"].includes(raw.trim().toLowerCase());", "  const off = typeof raw === \"string\";"),
+    expectFail: "缺省与垃圾值都照旧开（零回归：官方 GLM 要这个字段）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
