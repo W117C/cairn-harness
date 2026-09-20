@@ -101,7 +101,11 @@ export class SolpiRuntime {
       if (this.flags.evidenceReceipts && projected.archived && obs.sends >= 2) {
         const receipt = buildReceipt(obs.text);
         if (receipt && validateReceipt(receipt, obs.text).ok) {
-          const candidate = `${serializeReceipt(receipt)}\n[tool_exit_ok=${e.ok}; completeness=unknown; obs_recall id=${obs.id}]`;
+          // 这一行的旧写法把完整性写成 `completeness=unknown`——那是**把已知报成未知**：
+          // 能走到这里意味着每条引文都逐字对过了原文（validateReceipt.ok），原文的行数/字节/sha
+          // 也都在手上。模型看到 unknown 只有两种坏结局：白召回一次（花 token），
+          // 或按"可能不全"把同一条命令再跑一遍（花更多，且 worker 侧还要再付一次钱）。
+          const candidate = `${serializeReceipt(receipt)}\n[tool_exit_ok=${e.ok}; quotes_verified=${String(receipt.evidence.length)}; source_lines=${String(receipt.sourceLines)}; source_bytes=${String(receipt.sourceBytes)}; source_sha=${receipt.sourceSha256.slice(0, 12)}; 取全文 obs_recall id=${obs.id}]`;
           if (Buffer.byteLength(candidate) < Buffer.byteLength(obs.text)) text = candidate;
         } else text = obs.text; // invalid receipt fails open to full authorized source
       } else if (!this.flags.observationPack) text = obs.text;

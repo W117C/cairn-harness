@@ -54,6 +54,14 @@ describe("prune then validated evidence projection", () => {
     expect(validateReceipt(receipt, source)).toEqual({ ok: true });
     expect(receipt?.status).toBe("failure");
     expect(receiptText).toContain("obs_recall id=");
+    // 完整性必须说系统**知道**的事实：走到这张收据 = 每条引文都逐字对过原文，
+    // 行数/字节/sha 都在手上。旧写法恒写 completeness=unknown，是把已知报成未知
+    // ——模型要么白召回一次，要么按"可能不全"把同一条命令再跑一遍（真钱）。
+    expect(receiptText).not.toContain("completeness=unknown");
+    expect(receiptText).toContain(`quotes_verified=${String(receipt!.evidence.length)}`);
+    expect(receiptText).toContain(`source_lines=${String(receipt!.sourceLines)}`);
+    expect(receiptText).toContain(`source_bytes=${String(receipt!.sourceBytes)}`);
+    expect(receiptText).toMatch(/source_sha=[0-9a-f]{12}/);
     expect(Buffer.byteLength(receiptText)).toBeLessThan(Buffer.byteLength(source));
     expect(output(await assemble())).toBe(receiptText);
 

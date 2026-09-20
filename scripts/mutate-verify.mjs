@@ -3485,6 +3485,14 @@ const MUTATIONS = [
     apply: (s) => s.replace("  if (m.includes(\"connection got disposed\") || m.includes(\"Pending response\")) {", "  if (false) {"),
     expectFail: "配了 LSP 却没验成 ⇒ 明说「没有静态诊断证据」：沉默会被读成绿灯",
   },
+  {
+    id: "evidence-receipt-reports-known-completeness-as-unknown",
+    src: "src/agent/solpi-runtime.ts",
+    test: "tests/solpi-receipt-integration.test.ts",
+    desc: "收据的完整性回条写死 unknown ⇒ 系统明明把每条引文逐字对过原文却报「不知道」，模型只能白召回一次或重跑同一条命令",
+    apply: (s) => s.replace("quotes_verified=${String(receipt.evidence.length)}", "completeness=unknown"),
+    expectFail: "restores genuine receipts after two sends and full source on invalidation (observationPack=true)",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
