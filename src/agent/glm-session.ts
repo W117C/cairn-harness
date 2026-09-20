@@ -465,7 +465,11 @@ export function createGlmSessionProvider(
    *  优先级 = 模型窗口定基线 < 调用方显式 config；但**显式值也绝不超出模型窗口**——
    *  超窗 provider 必 400，把 fail-closed 让给远端不如本地钳住。
    *  触发判定、硬闸与压缩器的裁剪目标**共用这一处**（否则 200k 档上触发按 200k、裁剪仍按
-   *  128k，白丢一段冷细节）。每请求现算：opts.model 可随 settings 改。 */
+   *  128k，白丢一段冷细节）。⚠️ 但"共用"今天是**靠输入不可变**才成立的，不是靠构造顺序：
+   *  opts.model 是 run 开始时从 settings 取的一次性 primitive（全仓无写侧），所以下面构造时
+   *  那次 budgetConfig() 与每请求现算的两次必然同值 ⇒ 现在没有「两把尺」。这条等价无东西守着：
+   *  一旦 model 变成逐请求（按请求路由 / worker 热恢复），构造快照立刻成第二把尺——届时要把
+   *  现取的 config 交给 coordinator（getter 或 setConfig），别继续假设三处同源。 */
   const budgetConfig = (): CompactionConfig => {
     const window = findSpecByNameOrId(DEFAULT_MODEL_TABLE, opts.model)?.ctxWindow;
     const merged: CompactionConfig = { ...withModelBudget(DEFAULT_COMPACTION_CONFIG, window), ...opts.compaction?.config };
