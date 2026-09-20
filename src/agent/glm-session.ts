@@ -308,10 +308,18 @@ export interface SessionPluginTool {
 
 /** 主会话模型可见工具面：与可执行面同源的唯一组装入口。
  *  基础规格来自 gateToolSpecs（按 mode 摘除写向工具），再叠加运行时注入的插件/MCP 工具规格。
- *  同名冲突 = 跳过注入项并计入 skipped（fail-visible 返回给调用方，不静默覆盖基础工具）。 */
+ *  同名冲突 = 跳过注入项并计入 skipped（fail-visible 返回给调用方，不静默覆盖基础工具）。
+ *  §9.3 的 `disallowed-tools` 走**同一份**判定来源（调用方给 loop 活闸用的那个谓词）：worker 侧是
+ *  「规格面 + 实例面 + loop 硬闸」三重（filterWorkerSpecs / filterWorkerTable 同口径），主会话此前
+ *  只有后两重 ⇒ 被摘的工具仍占着模型可见清单，模型白叫一次再吃一句"不可用"。 */
 export function sessionToolSpecs(
-  opts: { mode?: PermissionMode; pluginTools?: readonly SessionPluginTool[] } = {},
-): { specs: GlmToolSpec[]; skipped: string[] } {
+  opts: {
+    mode?: PermissionMode;
+    pluginTools?: readonly SessionPluginTool[];
+    /** 返回摘除者（skill / command 的调用名）= 该工具本 turn 不可用；null / undefined = 保留。 */
+    skillDenial?: (name: string) => string | null;
+  } = {},
+): { specs: GlmToolSpec[]; skipped: string[]; removed: { name: string; by: string }[]; note: string } {
   const specs = gateToolSpecs(opts.mode);
   const seen = new Set(specs.map((s) => s.function.name));
   const skipped: string[] = [];
@@ -326,7 +334,20 @@ export function sessionToolSpecs(
       function: { name: tool.name, description: tool.description, parameters: tool.parameters },
     });
   }
-  return { specs, skipped };
+  if (!opts.skillDenial) return { specs, skipped, removed: [], note: "" };
+  const kept: GlmToolSpec[] = [];
+  const removed: { name: string; by: string }[] = [];
+  for (const s of specs) {
+    const by = opts.skillDenial(s.function.name);
+    if (by) removed.push({ name: s.function.name, by });
+    else kept.push(s);
+  }
+  // 摘除也要说得出口：可见清单静默少几把工具，等于让模型自己猜哪把没了（下一跳才吃一句"不可用"）。
+  // 清单不会被摘空：`remember` / `spawn_agent` 这类不在 ToolName 键域里的规格根本不可申报（装载即出声）。
+  const note = removed.length === 0 ? "" :
+    "[skill 工具面] 本 turn 已按 disallowed-tools 从可见工具表摘除：" +
+    removed.map((r) => r.name + "（由 " + r.by + "）").join("、");
+  return { specs: kept, skipped, removed, note };
 }
 
 /** 事件日志 → OpenAI 兼容消息序列。
@@ -420,6 +441,9 @@ export function createGlmSessionProvider(
     plugins?: {
       skillsRouting?: string;
       hookContext?: string;
+      /** §9.3：本 turn 被 skill/command 的 disallowed-tools 从可见工具表摘掉了哪些（给模型一行说明，
+       *  不留"工具静默消失"的悬案）。缺省 = 没人申报过 ⇒ 零注入。 */
+      skillToolNote?: string;
       deriveRemount?: (events: AgentEvent[]) => string | null;
     };
     /** 真实通道模型名（缺省 = provider 层读 M0_MODEL env；settings.model 在场时优先）。 */
@@ -449,7 +473,7 @@ export function createGlmSessionProvider(
   const workspace = opts.workspace ?? process.env.M2B_WORKSPACE ?? process.cwd();
   const pluginContext = (events: AgentEvent[]): string | undefined => {
     if (!opts.plugins) return undefined;
-    const parts = [opts.plugins.skillsRouting, opts.plugins.hookContext].filter((part): part is string => Boolean(part));
+    const parts = [opts.plugins.skillsRouting, opts.plugins.hookContext, opts.plugins.skillToolNote].filter((part): part is string => Boolean(part));
     try {
       const remount = opts.plugins.deriveRemount?.(events);
       if (remount) parts.push(remount);

@@ -76,6 +76,44 @@ describe("session provider transport", () => {
   });
 });
 
+/* 插件注入面（§9.3 的 disallowed-tools 摘除说明走的就是这条通道）：此前"三段各进一条 system 块"
+   只在装载侧有判据，没有任何一条测看过模型那一端 ⇒ provider 少拼一段也不会红。 */
+describe("插件注入面进模型看到的 system 块", () => {
+  type PluginsOpt = { skillsRouting?: string; hookContext?: string; skillToolNote?: string };
+
+  async function systemBlocks(plugins?: PluginsOpt): Promise<string[]> {
+    const path = await setup();
+    const requests: GlmMessage[][] = [];
+    const provider = createGlmSessionProvider(path, {
+      map: false, workspace: dir,
+      ...(plugins ? { plugins } : {}),
+      transport: async function* (messages): AsyncGenerator<ModelOutput> {
+        requests.push(messages);
+        yield { type: "assistant_message", content: "ok" };
+      },
+    });
+    for await (const _ of provider.stream([])) { /* drain */ }
+    return (requests[0] ?? []).filter((m) => m.role === "system").map((m) => String(m.content));
+  }
+
+  it("路由清单 / hook 上下文 / 摘除说明三段都到模型眼前（少一段即红）", async () => {
+    const sys = await systemBlocks({
+      skillsRouting: "ROUTING-LIST",
+      hookContext: "HOOK-CONTEXT",
+      skillToolNote: "[skill 工具面] grep 已由 /pol:sec 摘除",
+    });
+    const joined = sys.join("\n");
+    expect(joined).toContain("ROUTING-LIST");
+    expect(joined).toContain("HOOK-CONTEXT");
+    expect(joined).toContain("/pol:sec");
+  });
+
+  it("没给 plugins ⇒ 一个 system 块都不注入（既有会话零回归）", async () => {
+    expect(await systemBlocks()).toEqual([]);
+    expect(await systemBlocks({ hookContext: "只有这一段" })).toEqual(["只有这一段"]);
+  });
+});
+
 /* 上下文预算认模型（A-2）：registry.ModelSpec.ctxWindow 此前在 src/ 零消费者，主会话无论路由到
    哪个模型都吃硬编码 128_000 ⇒ 256k/200k/1M 档上提前压缩或误拒（多烧一次摘要 + 白丢冷细节）。 */
 describe("主会话预算随模型窗口（128k 帽不再一刀切）", () => {

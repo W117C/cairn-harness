@@ -50,7 +50,7 @@ import { type ProviderKind } from "./settings";
 import { getLastWorkspace, setRunWorkspace } from "./runner-workspace";
 import { createSession, pathOf, readSessionEvents, createSidechatSession, listSidechatSessions, readSidechatEvents, sidechatDir, sidechatEventsPath, type SessionInfo } from "./sessions";
 import { createMockProvider } from "../providers/mock";
-import { streamGlm } from "../providers/glm";
+import { streamGlm, type GlmToolSpec } from "../providers/glm";
 import type { ModelOutput, Provider } from "../providers";
 import { TOOLS, type Tool, type ToolResult } from "../tools";
 import { remember } from "../tools/remember";
@@ -459,6 +459,31 @@ function installPluginTools(rt: PluginRuntime): string[] {
 export interface PluginToolSource {
   skills(): readonly unknown[];
   mcpTools: Map<string, McpToolInfo & { plugin: string; server: string }>;
+}
+
+/** §9.3 的 run 起点工具面：一次算出「模型可见规格 + 摘除说明 + 活闸谓词」三件，供 provider 与 loop
+ *  共同消费。三者必须同源：规格面自己判一份、loop 再判一份，就是「模型看到的工具 ≠ 能执行的工具」
+ *  的镜像缺陷（这边是能看到却被拒）。导出是为了让这条接线有判据——provider 那条分支要真 key 才走得到，
+ *  接线本身不能因此永远没证据。 */
+export function runStartToolFace(
+  rt: { skillDenial(tool: string): string | null } | null,
+  opts: { mode: RunOptions["mode"]; pluginTools?: readonly SessionPluginTool[] },
+): { specs: GlmToolSpec[]; note: string; skillDenial: ((tool: string) => string | null) | undefined } {
+  const skillDenial = rt ? (tool: string): string | null => rt.skillDenial(tool) : undefined;
+  const face = sessionToolSpecs({
+    mode: opts.mode,
+    pluginTools: opts.pluginTools ?? [],
+    ...(skillDenial ? { skillDenial } : {}),
+  });
+  if (face.skipped.length > 0) {
+    // 同名冲突是配置问题，不静默丢：可见告警（基础工具优先，插件规格不进模型面）
+    console.warn("[tools] 插件/MCP 工具名与基础工具同名，已跳过注入:", face.skipped.join(", "));
+  }
+  if (face.removed.length > 0) {
+    // 规格面摘除：模型清单少了几把工具，操作者这边要看得见是谁摘的（同 skipped 的口径）
+    console.warn("[skill] 规格面摘除（disallowed-tools）:", face.removed.map((r) => r.name + "←" + r.by).join(", "));
+  }
+  return { specs: face.specs, note: face.note, skillDenial };
 }
 
 export function pluginToolSpecsFromRuntime(rt: PluginToolSource | null): SessionPluginTool[] {
@@ -947,11 +972,12 @@ function assertRealProviderReady(kind: ProviderKind): void {
 
 // 主 GLM 会话按日志逐轮组装；显式演示通道和 demo 档保持兼容。
 // 未传 sessionOptions 的分支仅供会话尾沉淀，消费调用方组装的消息。
-function createProvider(userMessage: string, systemPrefix?: string, sessionOptions?: Pick<RunOptions, "logPath" | "workspace" | "mode"> & {
+function createProvider(userMessage: string, systemPrefix?: string, sessionOptions?: Pick<RunOptions, "logPath" | "workspace"> & {
   emit: (event: AgentEvent) => Promise<void>;
   plugins?: NonNullable<Parameters<typeof createGlmSessionProvider>[1]>["plugins"];
-  /** 运行时注入的插件/MCP 工具规格（与可执行面同源，见 sessionToolSpecs）。 */
-  pluginTools?: readonly SessionPluginTool[];
+  /** 本请求的模型可见工具面（由调用方经 `sessionToolSpecs` 算好递进来——run 起点刚 grant 完 skill
+   *  工具面，规格面与说明串必须在同一处算，provider 不再自己重算一份）。 */
+  specs: GlmToolSpec[];
   solpi?: SolpiRuntime;
   /** §9.5 PreCompact 的自动档生产者（钩子引擎在编排侧，压缩在会话 provider 里发起）。 */
   onPreCompact?: (trigger: "manual" | "auto") => Promise<void>;
@@ -973,18 +999,10 @@ function createProvider(userMessage: string, systemPrefix?: string, sessionOptio
   if (kind !== "glm") return createMockProvider(MOCK_FIXTURE);
   assertRealProviderReady(kind);
   if (sessionOptions) {
-    const { specs, skipped } = sessionToolSpecs({
-      mode: sessionOptions.mode,
-      pluginTools: sessionOptions.pluginTools ?? [],
-    });
-    if (skipped.length > 0) {
-      // 同名冲突是配置问题，不静默丢：可见告警（基础工具优先，插件规格不进模型面）
-      console.warn("[tools] 插件/MCP 工具名与基础工具同名，已跳过注入:", skipped.join(", "));
-    }
     return createGlmSessionProvider(sessionOptions.logPath, {
       system: systemPrefix,
       workspace: sessionOptions.workspace,
-      tools: specs,
+      tools: sessionOptions.specs,
       compaction: {
         ...(sessionOptions.onPreCompact ? { onPreCompact: sessionOptions.onPreCompact } : {}),
       },
@@ -1200,18 +1218,23 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // 影响面**读端**：同一个开关下才注入（关着 = 工具面一个字节都不付）。写后回注只解决
     // 「改完才知道波及谁」，这条让模型能在动手前问「谁在调用它」——能力 1 的事前一跳。
     const impactTool = opts.impactAnalysis === true ? createImpactQueryTool() : undefined;
+    const specFace = runStartToolFace(rt, {
+      mode: opts.mode,
+      pluginTools: [...(recall ? [observationRecallSpec] : []), ...(impactTool ? [impactQuerySpec] : []), ...pluginToolSpecsFromRuntime(rt).filter(t => !recall || t.name !== "obs_recall")],
+    });
     await runLoop({
       ...(impactHook ? { impact: impactHook } : {}),
       ...(opts.autoVerify === true ? { autoVerify: true } : {}),
       stuckNudge: true, // 主会话（人直用那条）才有换路提示：worker 有看门、靶场按字节计量，见 LoopOptions
       provider: createProvider(promptText, BASE_SYSTEM, {
         ...opts, emit: pipeline, solpi,
-        pluginTools: [...(recall ? [observationRecallSpec] : []), ...(impactTool ? [impactQuerySpec] : []), ...pluginToolSpecsFromRuntime(rt).filter(t => !recall || t.name !== "obs_recall")],
+        specs: specFace.specs,
         // §9.5：自动/溢出压缩的 PreCompact 只有这一条生产者（provider 每会话一个，钩子引擎在 rt 上）
         ...(rt ? { onPreCompact: (trigger: "manual" | "auto") => firePreCompactHook(rt?.hooks, trigger) } : {}),
         ...(rt ? { plugins: {
           skillsRouting: skillsRouting ?? undefined,
           hookContext,
+          ...(specFace.note !== "" ? { skillToolNote: specFace.note } : {}),
           deriveRemount: (events: AgentEvent[]) => rt.remountFromEvents(events).text,
         } } : {}),
       }, providerKind, settingsModel),
@@ -1224,8 +1247,9 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       signal,
       userMessage: promptText,
       ...(skillFace.hit ? { userMessageSkill: skillFace.hit } : {}),
-      // §9.3 disallowed-tools 的活闸：run 中途被点起来的 skill 也摘得掉（静态 allowedTools 盖不住）
-      ...(rt ? { skillDenial: (tool: string): string | null => rt?.skillDenial(tool) ?? null } : {}),
+      // §9.3 disallowed-tools 的活闸：run 中途被点起来的 skill 也摘得掉（run 起点的规格面盖不住）。
+      // 与上面 specFace 用的是**同一份**谓词——两处各写一个闭包等于给"两边口径不一致"留门。
+      ...(specFace.skillDenial ? { skillDenial: specFace.skillDenial } : {}),
       clarify: {
         // H2（A-2）：等人门可收束——run 取消信号随门透传；无人值守 run 的 clarify/plan
         // 挂起 60s 后 fail-closed（不再悬到 runTimeoutMs 30min 才被超时闸收走）。

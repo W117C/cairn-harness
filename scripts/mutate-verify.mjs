@@ -3186,6 +3186,47 @@ const MUTATIONS = [
     apply: (s) => s.replace('    onPreCompact: (trigger) => firePreCompactHook(hooks, trigger),', '    ...(false ? { onPreCompact: (t: "manual" | "auto") => firePreCompactHook(hooks, t) } : {}),'),
     expectFail: "matcher=manual 的那条恰好跑一次，matcher=auto 的那条不跑",
   },
+  // ---- §9.3 disallowed-tools 的规格面（任务 #39/#41：模型可见清单与活闸同源）----
+  {
+    id: "spec-face-deny-not-applied",
+    src: "src/agent/glm-session.ts",
+    test: "tests/skill-tool-policy.test.ts",
+    desc: "读了 skillDenial 却不摘 ⇒ 规格面回到「看得见、叫得动、被执行面拒」的老形态（worker 侧三重闸只剩两重）",
+    apply: (s) => s.replace("    if (by) removed.push({ name: s.function.name, by });", "    if (false && by) removed.push({ name: s.function.name, by });"),
+    expectFail: "规格面同步：激活后那把工具从模型可见清单消失，只摘申报的那把、不误伤别个",
+  },
+  {
+    id: "spec-face-drop-unexplained",
+    src: "src/agent/glm-session.ts",
+    test: "tests/skill-tool-policy.test.ts",
+    desc: "摘了工具不给说明 ⇒ 模型的清单静默少几把，只能猜哪把没了（本仓规矩：不静默改语义，也不静默不兑现）",
+    apply: (s) => s.replace('    "[skill 工具面] 本 turn 已按 disallowed-tools 从可见工具表摘除：" +\n    removed.map((r) => r.name + "（由 " + r.by + "）").join("、");', '    "";'),
+    expectFail: "规格面同步：激活后那把工具从模型可见清单消失，只摘申报的那把、不误伤别个",
+  },
+  {
+    id: "spec-face-predicate-not-wired",
+    src: "src/main/agent-runner.ts",
+    test: "tests/skill-tool-policy.test.ts",
+    desc: "run 起点算面时不把活闸谓词递给规格组装 ⇒ 登记面、执行面、规格面三处只有两处对得上（同源接线断在中间那一跳）",
+    apply: (s) => s.replace("    ...(skillDenial ? { skillDenial } : {}),", "    ...(false ? { skillDenial } : {}),"),
+    expectFail: "规格面同步：激活后那把工具从模型可见清单消失，只摘申报的那把、不误伤别个",
+  },
+  {
+    id: "plugin-context-note-part-dropped",
+    src: "src/agent/glm-session.ts",
+    test: "tests/session-provider.test.ts",
+    desc: "摘除说明拼不进模型看到的 system 块 ⇒ 说明写好了却没人读到（收下即丢的新变体）",
+    apply: (s) => s.replace("opts.plugins.hookContext, opts.plugins.skillToolNote]", "opts.plugins.hookContext]"),
+    expectFail: "路由清单 / hook 上下文 / 摘除说明三段都到模型眼前（少一段即红）",
+  },
+  {
+    id: "plugin-context-routing-part-dropped",
+    src: "src/agent/glm-session.ts",
+    test: "tests/session-provider.test.ts",
+    desc: "skill 路由清单不注入 ⇒ 模型再也不知道有哪些 skill 可点（M2e 的整条注入面在模型端从来没有判据看过，这条现在有了）",
+    apply: (s) => s.replace("const parts = [opts.plugins.skillsRouting, opts.plugins.hookContext", "const parts = [opts.plugins.hookContext"),
+    expectFail: "路由清单 / hook 上下文 / 摘除说明三段都到模型眼前（少一段即红）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
