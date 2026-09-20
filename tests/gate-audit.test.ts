@@ -29,7 +29,7 @@ function session(init: Partial<AutonomySession> = {}): AutonomySession {
     sessionScopes: (init.sessionScopes as Set<string>) ?? new Set<string>(),
     frozenJudgePaths: (init.frozenJudgePaths as Set<string>) ?? new Set<string>(),
   });
-  s.planBlocked = init.planBlocked ?? false;
+  s.planBlocked = init.planBlocked ?? (() => false);
   return s;
 }
 
@@ -46,7 +46,7 @@ const JUDGE = "tests/todo.test.ts";
 /** 每个出口 → 期望的判据层。加一层不往这张表里写用例，最后那条穷尽断言就红。 */
 const LAYER_CASES: readonly { name: string; expected: GateLayer; run: () => unknown }[] = [
   { name: "只读档摘除写向工具", expected: "L0-hard", run: () => evaluate("write_file", { path: "a.ts" }, session({ mode: "read-only" })) },
-  { name: "方案门未批即写禁", expected: "L0-hard", run: () => evaluate("write_file", { path: "a.ts" }, session({ mode: "auto", planBlocked: true })) },
+  { name: "方案门未批即写禁", expected: "L0-hard", run: () => evaluate("write_file", { path: "a.ts" }, session({ mode: "auto", planBlocked: () => true })) },
   { name: "判卷文件冻结", expected: "L0-hard", run: () => evaluate("write_file", { path: JUDGE }, session({ mode: "auto", frozenJudgePaths: new Set([JUDGE]) })) },
   { name: "deny 规则命中", expected: "L1-deny", run: () => evaluate("run_shell", { command: "rm x.txt" }, session({ mode: "auto", rules: [rule({ behavior: "deny", pattern: "rm" })] })) },
   { name: "ask 规则命中", expected: "L2-ask-rule", run: () => evaluate("run_shell", { command: "git push origin" }, session({ mode: "auto", rules: [rule({ behavior: "ask", pattern: "git push" })] })) },
