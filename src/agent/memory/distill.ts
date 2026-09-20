@@ -82,10 +82,13 @@ export async function runSessionEndDistill(opts: DistillOptions): Promise<Distil
   let events: Awaited<ReturnType<typeof replay>>;
   try {
     events = await replay(opts.logPath);
-  } catch {
-    events = [];
+  } catch (err) {
+    // 「读不到自己的转录」与「本轮确实无可沉淀」是两回事：旧写法把 replay 失败折成
+    // events=[] 再落 no_content，正违反本文件头自立的那条规矩（显式分型，不静默）。
+    // 也必须在调模型之前退出——读不到历史时烧一次沉淀调用没有意义。
+    return { kind: "failed", why: "读会话日志失败: " + (err instanceof Error ? err.message : String(err)) };
   }
-  if (events.length === 0) return { kind: "no_content" };
+  if (events.length === 0) return { kind: "no_content" }; // 会话确实为空：合法终态，不是失败
   // 失败轨迹引导（能力 6/10）：把失败聚成显式证据并入指令——回放本身不含注意力引导，
   // 模型不会自动盯着失败看；无失败时 digest 为空串，指令逐字不变（零行为回归）。
   const digest = failureDigestFromEvents(events);

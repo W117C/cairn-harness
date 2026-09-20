@@ -130,3 +130,69 @@ describe("runSessionEndDistill（失败轨迹注入沉淀指令）", () => {
     expect(cap.lastUser()).toBeUndefined();
   });
 });
+
+// P1（外来评审核验后修）：「读不到自己的转录」与「本轮确实无可沉淀」必须可分。
+// 旧实现 `catch { events = [] }` 把 replay 失败折进 no_content —— 与 distill.ts 自立的
+// 「显式分型，不静默」相反，也让统计上分不清「日志坏了」与「模型说没有」。
+describe("runSessionEndDistill 读日志分型", () => {
+  async function rawLog(text: string): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), "distill-log-"));
+    const p = join(dir, "session.jsonl");
+    await writeFile(p, text, "utf8");
+    return p;
+  }
+  const rememberTool: Tool = {
+    name: "remember",
+    async run() {
+      return { ok: true, output: "（不应被调用）" };
+    },
+  };
+  // 只要被调到就记一笔：读日志失败必须在花钱之前退出
+  function countingProvider(): { provider: Provider; calls: () => number } {
+    let n = 0;
+    const provider: Provider = {
+      async *stream(): AsyncIterable<ModelOutput> {
+        n += 1;
+        yield { type: "assistant_message", content: "无" };
+      },
+    };
+    return { provider, calls: () => n };
+  }
+
+  it("会话日志不存在 → failed（不是 no_content），且零 provider 调用", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "distill-nolog-"));
+    const cap = countingProvider();
+    const out = await runSessionEndDistill({
+      enabled: true, logPath: join(dir, "nope.jsonl"), workspace: "/tmp",
+      provider: cap.provider, rememberTool, emit: async () => {},
+    });
+    expect(out.kind).toBe("failed");
+    expect(out.kind === "failed" && out.why).toContain("读会话日志失败");
+    expect(cap.calls()).toBe(0);
+  });
+
+  it("日志有中段坏行（replay 显式失败）→ failed 带原委，不折成 no_content", async () => {
+    const logPath = await rawLog(
+      JSON.stringify({ type: "user_message", content: "m1" }) + "\n{ 坏行\n" + JSON.stringify({ type: "user_message", content: "m2" }) + "\n",
+    );
+    const cap = countingProvider();
+    const out = await runSessionEndDistill({
+      enabled: true, logPath, workspace: "/tmp",
+      provider: cap.provider, rememberTool, emit: async () => {},
+    });
+    expect(out.kind).toBe("failed");
+    expect(out.kind === "failed" && out.why).toContain("非尾部坏行"); // 承 events 层那条判据
+    expect(cap.calls()).toBe(0);
+  });
+
+  it("日志存在但零事件 → 仍判 no_content（别把方向修反：空会话是合法终态）", async () => {
+    const logPath = await rawLog("");
+    const cap = countingProvider();
+    const out = await runSessionEndDistill({
+      enabled: true, logPath, workspace: "/tmp",
+      provider: cap.provider, rememberTool, emit: async () => {},
+    });
+    expect(out.kind).toBe("no_content");
+    expect(cap.calls()).toBe(0);
+  });
+});
