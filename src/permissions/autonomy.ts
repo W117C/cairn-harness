@@ -202,8 +202,8 @@ export function evaluate(
       verdict: "deny",
       reason:
         grade === undefined
-          ? "存在未批准 plan（方案门：先批后写）"
-          : "存在未批准 plan（方案门：先批后写；MCP 未标 readOnlyHint 按写处理）",
+          ? "方案门：先批后写（当前没有已批准的方案）"
+          : "方案门：先批后写（当前没有已批准的方案；MCP 未标 readOnlyHint 按写处理）",
     };
   }
 

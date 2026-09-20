@@ -52,7 +52,7 @@ beforeEach(() => {
 describe("权限层写禁（方案门）", () => {
   it("①未批准：write_file/run_shell 一律 deny（连 auto 档也拦）；只读与门工具不拦", () => {
     markPlanProposed();
-    expect(getPlanState()).toEqual({ proposed: true, approved: false });
+    expect(getPlanState()).toEqual({ required: false, proposed: true, approved: false });
     for (const mode of ["read-only", "default", "auto"] as const) {
       expect(checkPermission(mode, "write_file")).toBe("deny");
       expect(checkPermission(mode, "run_shell")).toBe("deny");
@@ -73,14 +73,14 @@ describe("权限层写禁（方案门）", () => {
   it("②批准后：同一调用放行（auto → allow；default → ask 回到档位语义）", () => {
     markPlanProposed();
     approvePlan();
-    expect(getPlanState()).toEqual({ proposed: true, approved: true });
+    expect(getPlanState()).toEqual({ required: false, proposed: true, approved: true });
     expect(checkPermission("auto", "write_file")).toBe("allow");
     expect(checkPermission("default", "write_file")).toBe("ask");
     expect(checkPermission("auto", "run_shell")).toBe("allow");
   });
 
   it("无 plan 时保持 M0 语义（回归护栏）", () => {
-    expect(getPlanState()).toEqual({ proposed: false, approved: false });
+    expect(getPlanState()).toEqual({ required: false, proposed: false, approved: false });
     expect(checkPermission("auto", "write_file")).toBe("allow");
     expect(checkPermission("read-only", "write_file")).toBe("deny");
     expect(checkPermission("default", "run_shell")).toBe("ask");
@@ -156,14 +156,14 @@ describe("方案门（loop 级）", () => {
     await Promise.resolve(); // 让 emit 的首个 await 边界走完（事件落数组）
     expect(emitted).toHaveLength(1);
     expect(emitted[0]?.type).toBe("plan_proposed");
-    expect(getPlanState()).toEqual({ proposed: true, approved: false });
+    expect(getPlanState()).toEqual({ required: false, proposed: true, approved: false });
     expect(checkPermission("auto", "write_file")).toBe("deny");
 
     // 拒绝 → 写禁保持
     expect(planGate.reject("p1")).toBe(true);
     const rejected = await pending;
     expect(rejected.ok).toBe(false);
-    expect(getPlanState()).toEqual({ proposed: true, approved: false });
+    expect(getPlanState()).toEqual({ required: false, proposed: true, approved: false });
     expect(checkPermission("auto", "write_file")).toBe("deny");
 
     // 重新提议 → 批准 → 解锁
@@ -174,7 +174,7 @@ describe("方案门（loop 级）", () => {
     expect(planGate.approve("p2")).toBe(true);
     const approved = await pending2;
     expect(approved.ok).toBe(true);
-    expect(getPlanState()).toEqual({ proposed: true, approved: true });
+    expect(getPlanState()).toEqual({ required: false, proposed: true, approved: true });
     expect(checkPermission("auto", "write_file")).toBe("allow");
 
     // 无门接线 → fail-closed
@@ -213,12 +213,12 @@ describe("方案门 run 级隔离（P1 回归）", () => {
       return outcome; // 不同步等待：批准从 run 外到达（生产语义：决议处理器不在 run 链内）
     });
     // run 外（模拟另一 run / IPC 决议处理器）：模块态未被 A 的提案污染
-    expect(getPlanState()).toEqual({ proposed: false, approved: false });
+    expect(getPlanState()).toEqual({ required: false, proposed: false, approved: false });
     expect(planGate.approve("p1")).toBe(true);
     const done = await outcome!;
     expect(done.ok).toBe(true);
     // 解锁由工具在 run 链内自落：只落 run 态，模块态不动
-    expect(getPlanState()).toEqual({ proposed: false, approved: false });
+    expect(getPlanState()).toEqual({ required: false, proposed: false, approved: false });
     // run 外模块态照常可用（脚本/测试遗留路径行为不变）
     markPlanProposed();
     expect(checkPermission("auto", "write_file")).toBe("deny");

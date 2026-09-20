@@ -74,6 +74,9 @@ export interface AppSettings {
   /** 能力 5 收束闸：写过盘但模型没自调 verify ⇒ 收束前 harness 补一拍验证（红字落事件流）。
    *  缺省关：一拍 = 真跑一遍 lint/test，成本与开闸判据见 BLOCKED「能力 5 收束闸」。 */
   autoVerify: boolean;
+  /** plan 模式默认档：新对话是否默认武装「未批准方案即写禁」（composer 里的即时开关以此为初值）。
+   *  缺省 false = 逐字同武装前（写禁只在模型自愿 propose_plan 后成立）。零 token 成本，只是谓词。 */
+  planRequiredByDefault: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -106,6 +109,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   economicCompaction: false,
   impactAnalysis: false,
   autoVerify: false,
+  planRequiredByDefault: false,
 };
 
 const PERMISSION_MODES = ["read-only", "default", "auto"] as const;
@@ -174,6 +178,7 @@ export function validateSettings(raw: unknown): AppSettings {
     economicCompaction: r.economicCompaction === true,
     impactAnalysis: r.impactAnalysis === true,
     autoVerify: r.autoVerify === true,
+    planRequiredByDefault: r.planRequiredByDefault === true,
     provider: PROVIDER_KINDS.includes(r.provider as ProviderKind) ? (r.provider as ProviderKind) : d.provider,
     model: typeof r.model === "string" ? r.model.slice(0, 200) : d.model,
     // 工作区：非空字符串取原值（越界长度回退默认，避免把畸形路径带进 run 装配）；其余回退 null
@@ -214,7 +219,7 @@ export class SettingsStore {
         "telemetry" in patch || "routingBandit" in patch || "routingCascade" in patch || "provider" in patch || "model" in patch ||
         "workspace" in patch || "actionFusion" in patch || "promptCache" in patch || "requestMetering" in patch || "observationPack" in patch ||
         "evidenceReceipts" in patch || "economicCompaction" in patch || "impactAnalysis" in patch ||
-        "autoVerify" in patch
+        "autoVerify" in patch || "planRequiredByDefault" in patch
         ? patch
         : {}),
       layout: patch.layout

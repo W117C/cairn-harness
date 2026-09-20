@@ -159,11 +159,11 @@ describe("plan 门 run 级隔离（P1 回归）", () => {
 
   it("run 外遗留路径回落模块态（脚本/测试行为不变）", () => {
     markPlanProposed();
-    expect(getPlanState()).toEqual({ proposed: true, approved: false });
+    expect(getPlanState()).toEqual({ required: false, proposed: true, approved: false });
     expect(checkPermission("auto", "write_file")).toBe("deny");
     approvePlan();
     expect(checkPermission("auto", "write_file")).toBe("allow");
     resetPlanState();
-    expect(getPlanState()).toEqual({ proposed: false, approved: false });
+    expect(getPlanState()).toEqual({ required: false, proposed: false, approved: false });
   });
 });

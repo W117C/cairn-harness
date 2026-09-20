@@ -29,7 +29,7 @@ import { createWaitForAgentsTool } from "../tools/wait_for_agents";
 import { run_shell } from "../tools/run_shell";
 import type { AgentEvent, ClarifyAnswerMap, EventLog } from "../events";
 import { createEventLog, replay } from "../events";
-import { checkPermission, enterPlanRunScope, getPlanState, type PermissionMode } from "../permissions";
+import { checkPermission, enterPlanRunScope, getPlanState, planGateBlocks, type PermissionMode } from "../permissions";
 import {
   evaluate,
   isNetworkCommandCall,
@@ -323,8 +323,7 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
       const s = currentSession();
       if (!s) return denied(name, "default", "工具门未接线（fail-closed）");
       // M1c：四层评估管线（deny 规则 → ask 规则 → 档位 → 风险）；方案门状态每次刷新进 session 入参
-      const ps = getPlanState();
-      s.autonomy.planBlocked = ps.proposed && !ps.approved;
+      s.autonomy.planBlocked = planGateBlocks(getPlanState());
       // M1e 设置页「产出代码安全模式」最小语义（§11.6）：gate = 写向工具在管线之前强制审批
       //（setSettings 转发 M1E_SAFE_MODE；src/permissions 冻结，最小接线在本模块）
       if (process.env.M1E_SAFE_MODE === "gate") {
@@ -404,8 +403,7 @@ function gatedMcpTool(name: string, info: McpToolInfo & { plugin: string; server
     async run(args, ctx) {
       const s = currentSession();
       if (!s) return denied(name, "default", "工具门未接线（fail-closed）");
-      const ps = getPlanState();
-      s.autonomy.planBlocked = ps.proposed && !ps.approved;
+      s.autonomy.planBlocked = planGateBlocks(getPlanState());
       const d = evaluate(name as ToolName, args, s.autonomy, info.grade); // MCP scoped 名进同一管线（规则/风险/档位全生效）
       if (d.verdict === "deny") return denied(name, s.autonomy.mode, d.reason);
       if (d.verdict === "ask") {
@@ -661,7 +659,7 @@ export function createGatedRemember(deps: {
   return {
     name: "remember",
     async run(args, ctx) {
-      if (deps.isPlanBlocked()) return denied("remember", deps.getMode(), "存在未批准 plan（方案门：先批后写）");
+      if (deps.isPlanBlocked()) return denied("remember", deps.getMode(), "方案门：先批后写（当前没有已批准的方案）");
       const mode = deps.getMode();
       if (mode === "read-only") return denied("remember", mode, "只读档拒写向工具");
       if (mode === "default") {
@@ -683,10 +681,7 @@ export function installAppTools(): void {
   // M2d：remember 运行时注入（静态注册表冻结为 9 工具，tools-check 判据）
   (TOOLS as unknown as Record<string, Tool>).remember = createGatedRemember({
     getMode: () => currentSession()?.autonomy.mode ?? "default",
-    isPlanBlocked: () => {
-      const ps = getPlanState();
-      return ps.proposed && !ps.approved;
-    },
+    isPlanBlocked: () => planGateBlocks(getPlanState()),
     getAsk: () => {
       const s = currentSession();
       if (!s?.askGate) return undefined;
@@ -942,6 +937,9 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
   sandbox?: SandboxStatus | null;
   /** M4a 无人值守（§12.2.4）：会话尾自动沉淀跳过（审批必被拒 = 纯噪音）；审批门由调用方给 unattended 门。 */
   unattended?: boolean;
+  /** plan 模式（用户武装）：true ⇒ 本轮无论模型是否自愿提交方案，未获批即写禁。
+   *  缺省 false = 逐字同武装前。只有用户侧（RunRequest / settings）能置位，模型无入口。 */
+  planRequired?: boolean;
   /** M4a 超时闸一：取消信号（loop 轮界收束，§4.4.8 AbortController 同族）。 */
   signal?: AbortSignal;
   /** C1: opt-in main-run write/edit + configured lint; never forwarded to workers. */
@@ -1075,7 +1073,9 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   setRunWorkspace(opts.workspace);
   const runScope: RunScope = { session: sessionObj, orchestrator: null };
   runScopeALS.enterWith(runScope); // 本 run 整条异步链（loop await / 门等待 / 工具执行）都在 scope 内
-  enterPlanRunScope(); // P1（审查）：plan 门状态随 run 隔离——并发 run 互不污染（permissions ALS）
+  // P1（审查）：plan 门状态随 run 隔离——并发 run 互不污染（permissions ALS）。
+  // planRequired = 用户武装的 plan 模式：置位者只有 RunRequest/settings，模型侧无入口（否则又退回自愿）。
+  enterPlanRunScope(opts.planRequired === true);
   // M2e：本 run 注入统一注册表的插件工具名（会话结束摘除，零残留）；声明在 try 外防 finally TDZ
   let injectedToolNames: string[] = [];
   if (liveRunPaths.has(resolve(opts.logPath)) || deletingSessionPaths.has(resolve(opts.logPath))) throw new Error("session already running or being deleted");
@@ -1200,8 +1200,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // 模型在撞墙前不知道墙存在（机制成本已付、收益只兑现一半），验收暗卷脚本反而比生产多了角色说明。
     // 系统提示词已提到模块级 BASE_SYSTEM（可被单测锁住）；这里只消费。
     const recall = solpi?.recallTool(async (args, recallSignal) => {
-      const ps = getPlanState();
-      sessionObj.autonomy.planBlocked = ps.proposed && !ps.approved;
+      sessionObj.autonomy.planBlocked = planGateBlocks(getPlanState());
       const decision = evaluate("obs_recall" as ToolName, args, sessionObj.autonomy); // 运行时注入工具（同 remember/MCP 先例：不进静态键域，走同一权限管线）
       if (decision.verdict === "deny") return false;
       if (decision.verdict === "ask") {
@@ -1410,6 +1409,8 @@ export interface RunOverrides extends SolpiFlags, ImpactOptions {
   onEvent?: (e: AgentEvent) => void;
   /** M4a 无人值守：unattended 审批门（立即拒绝 fail-closed）+ 跳过会话尾沉淀。 */
   unattended?: boolean;
+  /** plan 模式 runtime override（同 actionFusion / autoVerify 口径）：缺省取 settings.planRequiredByDefault。 */
+  planRequired?: boolean;
   /** M4a 超时闸一：取消信号（轮界收束）。 */
   signal?: AbortSignal;
   /** C1 runtime override; settings/IPC enablement is separate, default off. */
@@ -1466,6 +1467,8 @@ export async function handleAgentRun(
       workspace,
       message: req.message,
       mode: req.mode,
+      // plan 模式：settings 的默认档是唯一入口（composer 的即时开关随 goal 模式一起改，见 spec §3）。
+      planRequired: over.planRequired ?? (await store().get()).planRequiredByDefault,
       logPath,
       ...(sessionMode ? { sessionId } : {}),
       ...(over.unattended ? { unattended: true as const } : {}),

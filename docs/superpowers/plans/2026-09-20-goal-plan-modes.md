@@ -115,3 +115,24 @@ pnpm typecheck   # tsc 全量扫含未跟踪文件 ⇒ 写完再跑
 
 - 关位行为：Task 1/2/3/5 各一条"关位零行为"断言 ⇒ 全绿才允许开位实验。
 - 完成定义：J1–J7 全绿 + `pnpm gates` 逐道退出码 0（未证项如实汇总，不宣称"全部通过"）+ Task 6 读数落表。
+
+## 执行日志 2026-09-20（分支 `feat/goal-plan-mode`，worktree `.worktrees/goal-plan`，基线 `402daf9`）
+
+**已落**：Task 1 全部 + Task 2 的后端与用户入口（settings 四写：interface / DEFAULTS / parse / `set()` 白名单 + 设置行「先批后写（方案门）」+ `runAgent` 武装）。
+`enterPlanRunScope(required)` / `runWithPlanScope(fn, required)` 直接接形参，未新增 `markPlanRequired`（无生产者的导出＝新病，见 spec §3 落地口径）；`RunRequest` 保持不动。
+顺带把方案门的拒因文案改成两种武装态都成立的一句「方案门：先批后写（当前没有已批准的方案）」（原文"存在未批准 plan"在用户武装、模型尚未交过方案时是假话）——四处文案同改。
+
+**判卷现状**：`tests/plan-required.test.ts` 9 条（J1 副本扫描 + 谓词三态；J2 武装写禁/批准后放行/未武装零回归/`markPlanProposed` 不吞掉 required/`evaluate` 与 MCP 注解同一口径；J3 run 级隔离；J4 **泛化**的 settings 布尔键白名单测——见下）。
+`node node_modules/typescript/bin/tsc --noEmit` exit=0；`--check-needles` 422 条锚点 阻断 0 / 待复认 0；相邻 5 文件 60 条全绿。
+既有 `tests/plan-gate.test.ts` + `tests/permissions.test.ts` 的 **10 条 `toEqual` 形状断言**加了 `required: false`（状态形状变了，不是行为变了）——Task 1 Step 4 那句"一字不改"未按原样成立，如实记。
+
+**欠（不谎报）**：spec J3 的 unattended 那条（要 `runAgent` 级驱动）、J5/J6/J7（goal 模式全部 + 变异锚点独立一笔）、Task 6 读数、主树 `pnpm gates` 收口——全部待该原子簇与并发会话落地后合回主树再跑。
+
+**环境实测（给后续执行者，省一轮误判）**：worktree 里 **`pnpm` 全不可用**——`pnpm test` / `pnpm typecheck` 都死在 pnpm 的 deps-status check（`Command failed with exit code 1: pnpm install`）。
+且 `fixtures/todo-app/node_modules` 不随 worktree 生成（补 symlink 也不解决），⇒ 凡断言 `run_shell` / `verify_result` 的用例在**任何** worktree 必红，包括干净 HEAD 的 worktree：
+本轮 `tests/gated-tools.test.ts`「default 档 + 批准 → write_file 与 run_shell 真实执行」与 `tests/runner-gates.test.ts`「plan 批准后写放行」即此形状——
+已用 `/tmp/base-402daf9`（HEAD 同环境）对照定名：**与本改动无关**。直连写法：`node node_modules/typescript/bin/tsc --noEmit`、`node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts <文件>`。
+
+**顺手多立的一道闸（J4 泛化）**：`SettingsStore.set()` 有一张**手写键白名单**，不在名单里的键整块 patch 被丢 ⇒ 设置项"看着能动、重启就没"。
+本轮起 `tests/plan-required.test.ts` 对 `DEFAULT_SETTINGS` 里**每一个布尔键**机械验"`set()` 翻面 + 落盘读回"，
+以后新增设置项忘了登记白名单会当场红（点名是哪个键），不必再靠人记得写单测。

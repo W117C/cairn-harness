@@ -41,8 +41,9 @@
 - **数据面**：`PlanState` 加 `required: boolean`（缺省 false ⇒ 逐字等于今天的行为）。判据收成
   `planGateBlocks(s) = (s.required || s.proposed) && !s.approved`。
   只读档与三门工具不受影响（`isWriteCall`/`isSideEffectTool` 口径一字不改，MCP 未标 `readOnlyHint` 仍按写处理——那是 #43 刚立好的口径）。
-- **武装点**：`RunRequest` 加 `planRequired?: boolean`；`runAgent` 入口在 `enterPlanRunScope()` 之后落一次 `markPlanRequired(true)`（与工具侧 `markPlanProposed` 同属 run 级 ALS 作用域，并发 run 不串台，沿用 P1（审查）已建立的隔离）。缺省取 `settings.planRequiredByDefault`（false）。
-- **用户入口**：渲染层设置行「方案门：未批准即写禁」——复用 `data-setting` 的 `set-choice` 形状（与「权限默认模式」同族），写 `planRequiredByDefault`；会话内即时开关放 run-control（同一份值，不新增第二状态）。
+- **武装点**：`runAgent` 入口的 `enterPlanRunScope()` 直接接 `required` 形参（与工具侧 `markPlanProposed` 同属 run 级 ALS 作用域，并发 run 不串台，沿用 P1（审查）已建立的隔离）。值取 `RunOverrides.planRequired ?? settings.planRequiredByDefault`（缺省 false）。
+  **落地口径（实现时收敛，2026-09-20）**：`RunRequest` 上**不放**这个字段——渲染层今天没有 per-run 的方案门控件，放一个没人写的字段就是「有字段无生产者」的另一种形状。唯一入口是设置页那一行；per-run 即时开关随 goal 模式的 composer 改造一起给（那时才有第二个真生产者）。
+- **用户入口**：渲染层设置行「先批后写（方案门）」——复用 `.set-switch[data-setting]` 通用 binder（与「会话结束自动沉淀记忆」走同一支代码，零新控件种类），写 `planRequiredByDefault`。
 - **无人值守**：**照同一口径生效**（写向工具被方案门拒绝，理由逐字进 `tool_result`）。不在 unattended 分支偷偷忽略用户的设置——那正是"收下字段但不读"的反面教材；今天 unattended 的 `ask` 本来就自动拒（`unattendedAskGate`），语义一致。定时任务表单不暴露该开关，避免用户没看见就把日程变成永不写盘。
 - **成本**：关 = 零（只是谓词与一个布尔）；开 = 一次 `propose_plan` 往返——而 `BASE_SYSTEM` 纪律 2 已经每轮要求它，所以增量提示词为 0，只是从"自觉"变成"必做"。
 - **不新增工具、不新增卡片、不新增审批通道**（P3：三样都在）。
