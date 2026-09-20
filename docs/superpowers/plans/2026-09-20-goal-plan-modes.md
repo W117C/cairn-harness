@@ -123,10 +123,16 @@ pnpm typecheck   # tsc 全量扫含未跟踪文件 ⇒ 写完再跑
 顺带把方案门的拒因文案改成两种武装态都成立的一句「方案门：先批后写（当前没有已批准的方案）」（原文"存在未批准 plan"在用户武装、模型尚未交过方案时是假话）——四处文案同改。
 
 **判卷现状**：`tests/plan-required.test.ts` 9 条（J1 副本扫描 + 谓词三态；J2 武装写禁/批准后放行/未武装零回归/`markPlanProposed` 不吞掉 required/`evaluate` 与 MCP 注解同一口径；J3 run 级隔离；J4 **泛化**的 settings 布尔键白名单测——见下）。
-`node node_modules/typescript/bin/tsc --noEmit` exit=0；`--check-needles` 422 条锚点 阻断 0 / 待复认 0；相邻 5 文件 60 条全绿。
+`node node_modules/typescript/bin/tsc --noEmit` exit=0；既有 422 条锚点 `--check-needles` 阻断 0 / 待复认 0（本改动没碰坏任何针脚）；相邻 5 文件 60 条全绿。
 既有 `tests/plan-gate.test.ts` + `tests/permissions.test.ts` 的 **10 条 `toEqual` 形状断言**加了 `required: false`（状态形状变了，不是行为变了）——Task 1 Step 4 那句"一字不改"未按原样成立，如实记。
 
-**欠（不谎报）**：spec J3 的 unattended 那条（要 `runAgent` 级驱动）、J5/J6/J7（goal 模式全部 + 变异锚点独立一笔）、Task 6 读数、主树 `pnpm gates` 收口——全部待该原子簇与并发会话落地后合回主树再跑。
+**欠（不谎报）**：spec J3 的 unattended 那条（要 `runAgent` 级驱动）、J5/J6（goal 模式全部）、J7 的 goal 那半锚点、Task 6 读数、主树 `pnpm gates` 收口——全部待该原子簇与并发会话落地后合回主树再跑。plan 那半见下段。
+
+**变异锚点（plan 模式那 6 条已落，实测全杀）**：`plan-gate-required-clause-dropped` / `plan-gate-required-anded-not-ored` /
+`plan-run-scope-swallows-required` / `plan-propose-clears-user-arm` / `plan-required-default-flipped-on` /
+`settings-whitelist-drops-plan-required-key` —— 表从 422 → 428，`--check-needles` 阻断 0 / 待复认 0。
+**还欠一条**：`handleAgentRun` 里 `planRequired: over.planRequired ?? settings...` 这半跳今天没有任何测覆盖
+（要 runAgent 级驱动 ⇒ 没有可对撞的叶子断言，硬写锚点就是自造假绿），随 J3 的 unattended 那条一起补。
 
 **环境实测（给后续执行者，省一轮误判）**：worktree 里 **`pnpm` 全不可用**——`pnpm test` / `pnpm typecheck` 都死在 pnpm 的 deps-status check（`Command failed with exit code 1: pnpm install`）。
 且 `fixtures/todo-app/node_modules` 不随 worktree 生成（补 symlink 也不解决），⇒ 凡断言 `run_shell` / `verify_result` 的用例在**任何** worktree 必红，包括干净 HEAD 的 worktree：
