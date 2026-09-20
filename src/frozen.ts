@@ -1,11 +1,43 @@
 import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+
+/** 判卷表路径 = **唯一事实源**：下面的 sha 校验与权限层的「判卷面硬闸」都读这一处，
+ *  第二份字面量就是本仓点名的「同族出口策略副本」（一张表两个地址 ⇒ 改一处即静默失配）。 */
+export const FROZEN_TABLE_REL = join("scripts", "frozen-sha256.json");
+
+const judgeSetCache = new Map<string, ReadonlySet<string>>();
+
+/** 该工作区声明的判卷文件集合（= 冻结表的键集，归一成 `/` 分隔的工作区相对路径）。
+ *  · 表不存在 ⇒ **空集**：用户自己的仓库没有这张表 ⇒ 本条闸零行为，不强加我们的判卷纪律。
+ *  · 表存在但解析不出对象 / 键数为 0 ⇒ **显式抛**：静默折成「这个工作区没有判卷面」
+ *    等于把刚建起来的闸从最省事的地方拆掉（清空一张表比改一行代码安静得多）。
+ *  按 root 缓存：这张表只在收口时变，热路径（每次工具调用前评估）不该反复读盘。 */
+export function frozenJudgePathSet(root: string): ReadonlySet<string> {
+  const hit = judgeSetCache.get(root);
+  if (hit !== undefined) return hit;
+  const file = join(root, FROZEN_TABLE_REL);
+  let set: ReadonlySet<string> = new Set<string>();
+  if (existsSync(file)) {
+    const raw = JSON.parse(readFileSync(file, "utf8")) as unknown;
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+      throw new Error(`判卷表不是对象（${file}）——判卷面装载失败，拒绝按「无判卷面」继续`);
+    }
+    const keys = Object.keys(raw as Record<string, unknown>).map((k) => k.split("\\").join("/"));
+    if (keys.length === 0) {
+      throw new Error(`判卷表为空（${file}）——0 条判卷文件不是"没有判卷面"，是表被清空`);
+    }
+    set = new Set(keys);
+  }
+  judgeSetCache.set(root, set);
+  return set;
+}
 
 // 判卷文件完整性校验：对照 scripts/frozen-sha256.json 的冻结基线。
 // e2e 与真实模型运行共用；任何判卷文件被改动都会被抓住。
 export async function sha256MatchesFrozen(root: string): Promise<{ ok: boolean; broken?: string }> {
-  return await sha256MatchesFrozenFile(root, join("scripts", "frozen-sha256.json"));
+  return await sha256MatchesFrozenFile(root, FROZEN_TABLE_REL);
 }
 
 /** H7（审查 P2）：冻结覆盖漂移——冻结表是白名单枚举，**新增**判卷文件不会被发现。
