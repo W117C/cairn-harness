@@ -95,6 +95,29 @@ describe("goal 模式端到端（真入口，缺省零行为）", () => {
     expect(evts[0]?.type === "goal_set" && evts[0].max_turns).toBe(25);
   });
 
+  it("停过的目标不会因用户再发一条而自动复活：停止是终态，要再跑得改设目标", async () => {
+    process.env.M3A_MAIN_SCRIPT = scriptPath;
+    await handleGoalSet({ sessionId: "s-plain", objective: "回答问题", maxTurns: 6 });
+    const first = await handleAgentRun(
+      { message: "第一问", mode: "auto", sessionId: "s-plain" },
+      { workspace, sessionId: "s-plain", logPath, unattended: true },
+    );
+    expect(first.ok).toBe(true);
+    expect((await events()).filter((e) => e.type === "goal_stopped").length).toBe(1);
+    // 用户接着又发一条（同一个会话、同一个 goal_set 还在流里）：这条**不该**把自动续跑唤回来
+    const second = await handleAgentRun(
+      { message: "第二问", mode: "auto", sessionId: "s-plain" },
+      { workspace, sessionId: "s-plain", logPath, unattended: true },
+    );
+    expect(second.ok).toBe(true);
+    const evts = await events();
+    const turns = userTurns(evts);
+    // 两条人手消息 + 零条 goal 代发轮；goal_stopped 仍然只有一条（停止不是"暂停一下"）
+    expect(turns.filter((t) => t.type === "user_message" && t.origin?.kind === "goal").length).toBe(0);
+    expect(turns.length).toBe(2);
+    expect(evts.filter((e) => e.type === "goal_stopped").length).toBe(1);
+  });
+
   it("轮次上限到点必停：只跑到 maxTurns 轮，且最后一轮仍是 goal 代发的（origin 记着是谁发的）", async () => {
     process.env.M3A_MAIN_SCRIPT = scriptPath;
     await handleGoalSet({ sessionId: "s-plain", objective: "把测试修绿", maxTurns: 1 });

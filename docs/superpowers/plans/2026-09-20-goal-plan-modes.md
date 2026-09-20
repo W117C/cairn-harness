@@ -149,8 +149,11 @@ pnpm typecheck   # tsc 全量扫含未跟踪文件 ⇒ 写完再跑
 两条新事件 `goal_set` + `goal_stopped`（`KNOWN_TYPES` 增量，旧日志重放逐字不变）、`UserMessageEvent.origin` 收成判别联合
 （`PromoteOrigin | GoalTurnOrigin`，四个消费面全按 kind 分支）、`worker-report.hasSessionWrites`（与四态同一份 `WRITE_TOOLS`，不另立写向清单）、
 `handleAgentRun` 里的续跑环 + 硬上限 + `handleGoalSet`/`agent:goal-set`/preload `setGoal`。
-判卷：`tests/goal-stop-decision.test.ts` 15 条 + `tests/goal-continue.test.ts` 8 条（走真入口 `handleGoalSet` → `handleAgentRun`，不手工造 goal_set）；
+判卷：`tests/goal-stop-decision.test.ts` 15 条 + `tests/goal-continue.test.ts` 9 条（走真入口 `handleGoalSet` → `handleAgentRun`，不手工造 goal_set）；
 直连 tsc exit=0；`goal-continue`/`goal-stop-decision`/`sidechat`/`schedule`/`sessions`/`loop`/`plan-required` 等 7 个文件 115 条全绿；428 条既有锚点针脚零破坏。
+**锚点落表 9 条，第 9 条首跑存活**（`goal-stopped-flag-ignored`）：按规则 6② 先怀疑测——查出的结论是**该分支在既有测里根本不可观察**
+（`view.stopped` 那道闸只在「已停之后用户又发一条」时才起作用，而我没写这条），补一条真行为测（停止是终态，
+再发一条不许把自动续跑唤回来）后翻成 ✅。同族先例见记忆规则 26「新锚点存活＝免费的盲区探测器」，这里再加一次兑现（计数不写死）。
 
 **合回主树前的唯一硬阻断**：渲染层「设目标」那颗按钮（composer 里）没落 ⇒ `setGoal` 目前是"有桥无生产者"，
 `ipc-reachability-check` 正是为这种形状立的（#13 同族）。缺它就不许合并，已写进 #51。
