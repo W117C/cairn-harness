@@ -73,6 +73,7 @@ import {
   type PermissionRule,
   type RiskLevel,
 } from "../permissions";
+import { frozenJudgePathSet } from "../frozen";
 // ---- 拆分面（本文件只留 Orchestrator 类本体 + worker 会话 provider/压缩）----
 // 常量与纯函数按职责抽到同级轻模块（同 provider-key-inject 的先例：抽实现、原路径留公开面，
 // importer 与变异锚点不必跟着改）。本地引用走 import，公开面由文件尾的 re-export 维持逐字不变。
@@ -586,10 +587,17 @@ export class Orchestrator {
       controller: new AbortController(),
       // P0-2（审查）：worker 自主会话按父 run 口径构造（规则库 + 沙箱可用性）——空参构造使
       // 项目级 deny/ask 规则对 worker 全表失效、沙箱降级通道恒 NONE。
-      autonomy: newAutonomySession(tier, { rules: this.opts.rules ?? [], sandboxAvailable: this.opts.sandboxAvailable ?? null }),
+      // 判卷面硬闸按**父仓相对路径**判（worktree 与父仓同键集 ⇒ 同一批文件），worker 改判卷文件
+      // 与主会话改判卷文件是同一件事，不该因为"它在 worktree 里"就少一道闸。
+      autonomy: newAutonomySession(tier, {
+        rules: this.opts.rules ?? [],
+        sandboxAvailable: this.opts.sandboxAvailable ?? null,
+        frozenJudgePaths: frozenJudgePathSet(this.opts.workspace),
+      }),
       toolAutonomy: newAutonomySession(mode === "write" ? "auto" : tier, {
         rules: this.opts.rules ?? [],
         sandboxAvailable: this.opts.sandboxAvailable ?? null,
+        frozenJudgePaths: frozenJudgePathSet(this.opts.workspace),
       }),
       resources,
       ...(worktree ? { worktree } : {}),

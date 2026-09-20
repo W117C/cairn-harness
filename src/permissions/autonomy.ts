@@ -5,6 +5,7 @@
 //   → L4 风险层（三通道，critical 任何档强制审批——allow 规则也批不掉 critical）。
 // 零私有状态：规则库与放行集是仅有的两个输入源；断路器计数在 session 入参里，evaluate 只读不写
 // （调用方经 note* helper 更新）——同一输入两次调用结果一致。
+import { FROZEN_TABLE_REL } from "../frozen";
 import type { ToolName } from "../tools/base";
 import type { PermissionMode } from "./index";
 import { judgeChain, normalizeCommand, type PermissionRule } from "./rules";
@@ -57,6 +58,9 @@ export interface AutonomySession {
   sandboxAvailable: boolean | null;
   /** 方案门（M1b）：调用方每次 evaluate 前刷新；evaluate 只读。 */
   planBlocked: boolean;
+  /** 判卷面硬闸（L0）：冻结表声明的判卷文件集合（`frozenJudgePathSet(workspace)`）。
+   *  空集 = 该工作区没声明判卷面 ⇒ 零行为（用户自己的仓库不被我们的判卷纪律约束）。 */
+  frozenJudgePaths: ReadonlySet<string>;
   /** 断路器：会话内连续 scope 自动放行计数（调用方维护）。 */
   consecutiveAutoApprovals: number;
   breakerTripped: boolean;
@@ -69,6 +73,7 @@ export function newAutonomySession(
     rules?: PermissionRule[];
     sessionScopes?: Set<string>;
     sandboxAvailable?: boolean | null;
+    frozenJudgePaths?: ReadonlySet<string>;
   } = {},
 ): AutonomySession {
   return {
@@ -77,6 +82,7 @@ export function newAutonomySession(
     sessionScopes: init.sessionScopes ?? new Set<string>(),
     sandboxAvailable: init.sandboxAvailable ?? null,
     planBlocked: false,
+    frozenJudgePaths: init.frozenJudgePaths ?? NO_JUDGE_SURFACE,
     consecutiveAutoApprovals: 0,
     breakerTripped: false,
     consecutiveCriticalDenials: 0,
@@ -148,6 +154,21 @@ export function isWriteCall(tool: string, mcp?: McpGrade): boolean {
   return !(mcp.annotated && mcp.readOnly === true);
 }
 
+/** 空判卷面（缺省值）：共享一个实例，省掉每次 new Set 的分配。 */
+const NO_JUDGE_SURFACE: ReadonlySet<string> = new Set<string>();
+
+/** 调用参数里的目标路径 → 工作区相对的 posix 串。
+ *  返回 null = 不归本闸管：非字符串 / 空 / 绝对路径 / 带 `..`（那些落在工作区外，
+ *  冻结表的键是工作区相对路径，拿它们去查集合只会得到假阴性——不如显式不判，
+ *  越界写另有路径校验那一层管）。 */
+function judgeTargetPathOf(args: Record<string, unknown>): string | null {
+  const p = args.path;
+  if (typeof p !== "string" || p === "") return null;
+  const rel = p.split("\\").join("/").replace(/^\.\//, "");
+  if (rel.startsWith("/") || rel.split("/").includes("..")) return null;
+  return rel;
+}
+
 function collectRisk(
   tool: ToolName,
   args: Record<string, unknown>,
@@ -205,6 +226,22 @@ export function evaluate(
           ? "存在未批准 plan（方案门：先批后写）"
           : "存在未批准 plan（方案门：先批后写；MCP 未标 readOnlyHint 按写处理）",
     };
+  }
+
+  // ---- L0 判卷面：冻结表点名的文件，任何档位、任何 allow 规则都写不了 ----
+  // 放在 deny/ask/allow 之前与只读档、方案门同层，理由是同一条：**规则库不许复活被硬闸摘掉的动作**。
+  // 真模型评测实测到模型会改 `tests/todo.test.ts`（`BASE_SYSTEM` 纪律 6 明文禁止却没拦住），
+  // ⇒ 判卷面的完整性不能靠提示词自觉。
+  if (s.frozenJudgePaths.size > 0 && isWriteCall(tool, grade)) {
+    const target = judgeTargetPathOf(args);
+    if (target !== null && s.frozenJudgePaths.has(target)) {
+      return {
+        verdict: "deny",
+        reason:
+          `判卷文件冻结：${target}（sha256 基线在 ${FROZEN_TABLE_REL}）` +
+          "——判据有缺陷请写 BLOCKED.md 要求换判据，不许改代码去绕",
+      };
+    }
   }
 
   // ---- L1 deny 规则：命中即拦 ----
