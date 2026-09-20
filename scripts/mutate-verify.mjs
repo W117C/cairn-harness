@@ -3243,6 +3243,23 @@ const MUTATIONS = [
     apply: (s) => s.replace("      const tools = face ? face.tools : opts.tools;", "      const tools = opts.tools;"),
     expectFail: "run 中途激活的 skill：下一轮清单里就没有那把、说明同刻出现（不必再靠 loop 白拒一次）",
   },
+  // ---- verify_result 子流归因（2026-09-20 补）：摘掉归因 = 三处下游同时被骗，必须有锚点 ----
+  {
+    id: "verify-result-out-of-attribution",
+    src: "src/agent/worker-projection.ts",
+    test: "tests/worker-attribution.test.ts",
+    desc: "把 verify_result 摘出归因面 ⇒ worker 的验证证据回到「与父会话难分」的状态：上下文红回流、父验证计量、假完成率三处同时被骗",
+    apply: (s) => s.replace("if (e.type === \"tool_call\" || e.type === \"tool_result\" || e.type === \"usage\" || e.type === \"verify_result\") {", "if (e.type === \"tool_call\" || e.type === \"tool_result\" || e.type === \"usage\") {"),
+    expectFail: "verify_result 进归因面：worker 的验证证据必须能被认出不是父会话的",
+  },
+  {
+    id: "join-credits-worker-verify-to-parent",
+    src: "src/agent/tool-choice.ts",
+    test: "tests/tool-choice.test.ts",
+    desc: "读数侧不再按归因摘 worker 的验证 ⇒ 「写过盘没验」在开了 worker 自动验证的会话上假绿（分子被悄悄清掉）",
+    apply: (s) => s.replace("if (!hasWorkerAttribution(e)) mainVerifyPass = true;", "mainVerifyPass = true;"),
+    expectFail: "写盘与验证都只算主会话侧：worker 的 verify 通过不替父会话销账",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
