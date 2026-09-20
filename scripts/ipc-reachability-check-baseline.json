@@ -5,21 +5,11 @@
     "agent:clarify",
     "agent:compact",
     "agent:memory-delete",
-    "agent:provider-info",
-    "agent:provider-key-delete",
-    "agent:provider-key-set",
-    "agent:provider-key-status",
-    "agent:schedule-delete",
-    "agent:schedule-run-now",
-    "agent:schedule-snapshot",
-    "agent:schedule-upsert",
     "agent:sessions-rename",
     "agent:sidechat-ask",
     "agent:sidechat-create",
     "agent:sidechat-promote",
     "agent:sidechat-state",
-    "agent:update-check",
-    "agent:update-open",
     "plugin:decide"
   ]
 }
