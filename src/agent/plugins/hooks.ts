@@ -1,6 +1,7 @@
 // M2e：hook 引擎（§9.5–9.6）。**10 个事件全部有生产者**（SessionStart / UserPromptSubmit / Pre+PostToolUse
-// 与 Failure / PreCompact / Stop / SessionEnd / SubagentStart / SubagentStop）。两处口径没打满，都是有意的：
-// ① PreCompact 只有手动 /compact 有源，自动压缩档未接；② Stop 与 Subagent* 的 exit 2 语义是
+// 与 Failure / PreCompact / Stop / SessionEnd / SubagentStart / SubagentStop）。PreCompact 的发点在
+// `runCompaction` 自己身上（§9.5 表里的 manual/auto 两档、三条压缩路径的唯一必经点，不在各调用方各抄一份）。
+// 剩一处口径没打满，是有意的：Stop 与 Subagent* 的 exit 2 语义是
 // "要求再多跑一轮模型"——那要花真钱，未裁（任务 #32），所以这三条的回执只出声不拦、不改收束行为。
 // 双形态：string = shell form（经 shell 执行），string[] = exec form（直接 spawn，不经 shell）。
 // 退出码 0 成功 / 2 阻断（stderr 反馈）/ 其他非阻塞错误；stdout JSON 决策字段（CC 格式）；

@@ -487,11 +487,26 @@ export interface RunCompactionArgs {
     avgIncrementTokens: number | null;
     cacheWriteReadRatio: number | null;
   };
+  /** §9.5 的 PreCompact 钩子接缝：**每一次真正开始的压缩**都要先过这里（生产端唯一）。
+   *  形参是 §9.5 表里给 matcher 的那个枚举值：`manual` = 用户手动 /compact，
+   *  `auto` = harness 按阈值或超窗自己压（`overflow` 也归这一档——表里没有第三个词，
+   *  而它同样是"非用户点"的）。回调抛错只告警，不阻断压缩（与既有手动路径同口径）。 */
+  onPreCompact?: (trigger: "manual" | "auto") => Promise<void>;
 }
 
 /** 执行一次压缩：产出 compaction 事件（调用方 append）；不落流、不静默。 */
 export async function runCompaction(args: RunCompactionArgs): Promise<CompactionOutcome> {
   args.signal?.throwIfAborted();
+  // §9.5 PreCompact 的生产端唯一在此——手动、阈值自动、超窗三条路都经过本函数。
+  // 此前只有 agent-runner 的手动分支自己发过一次 ⇒ 按 `PreCompact(auto)` 写的钩子永不命中，
+  // 而把这条挪到各调用方又会变成「同族出口各抄一份」（SessionEnd 双生产者就是前车之鉴）。
+  if (args.onPreCompact) {
+    try {
+      await args.onPreCompact(args.trigger === "manual" ? "manual" : "auto");
+    } catch (err) {
+      console.warn("[hooks] PreCompact 失败:", err instanceof Error ? err.message : String(err));
+    }
+  }
   const config: CompactionConfig = { ...DEFAULT_COMPACTION_CONFIG, ...args.config };
   const events = args.events;
   const factor = calibrateFactor(events);
@@ -622,10 +637,17 @@ export class CompactionCoordinator {
   private consecutiveFailures = 0;
   private readonly config: CompactionConfig;
   private readonly summarizer?: Summarizer;
+  private readonly onPreCompact?: (trigger: "manual" | "auto") => Promise<void>;
 
-  constructor(opts: { config?: Partial<CompactionConfig>; summarizer?: Summarizer } = {}) {
+  constructor(opts: {
+    config?: Partial<CompactionConfig>;
+    summarizer?: Summarizer;
+    /** §9.5：自动压缩档的 PreCompact 生产者（协调器每会话一个，故挂在构造面）。 */
+    onPreCompact?: (trigger: "manual" | "auto") => Promise<void>;
+  } = {}) {
     this.config = { ...DEFAULT_COMPACTION_CONFIG, ...opts.config };
     this.summarizer = opts.summarizer;
+    this.onPreCompact = opts.onPreCompact;
   }
 
   /** 连续 2 败 → 本会话摘要停用（只等 overflow 截断）。 */
@@ -650,6 +672,7 @@ export class CompactionCoordinator {
       overhead: options.overhead,
       signal: options.signal,
       economics: options.economics,
+      ...(this.onPreCompact ? { onPreCompact: this.onPreCompact } : {}),
     });
     if (outcome.ok) this.consecutiveFailures = 0;
     else if (outcome.kind === "failed") this.consecutiveFailures++;

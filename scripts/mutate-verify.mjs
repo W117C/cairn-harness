@@ -3145,6 +3145,47 @@ const MUTATIONS = [
     apply: (s) => s.replace('    text: clampSkillBody(\n      renderPromptCommand(hit, args, ctxFor?.(hit) ?? {}),\n      SKILL_REMOUNT_TOKENS_PER_SKILL,\n      "\\n[全文见 " + hit.path + "]"),', "    text: renderPromptCommand(hit, args, ctxFor?.(hit) ?? {}),"),
     expectFail: "超预算的正文按模型侧同一顶帽裁掉，并留全文通道（用户敲一次不能买下整段会话）",
   },
+  // ---- §9.5 PreCompact 生产端（任务 #40：手动/阈值自动/超窗三条压缩路径的唯一必经点）----
+  {
+    id: "precompact-producer-abolished",
+    src: "src/agent/compaction.ts",
+    test: "tests/hook-precompact-producer.test.ts",
+    desc: "压缩不再发 PreCompact ⇒ §9.5 表里这一行整条失效，插件作者以为「压缩前备份」在跑，实际一次也没有（发点在 runCompaction 上，摘掉它三条路一起哑）",
+    apply: (s) => s.replace("  if (args.onPreCompact) {", "  if (false && args.onPreCompact) {"),
+    expectFail: "manual / auto / overflow 三条都发，且 trigger 按 §9.5 表映射（overflow 归 auto）",
+  },
+  {
+    id: "precompact-trigger-always-manual",
+    src: "src/agent/compaction.ts",
+    test: "tests/hook-precompact-producer.test.ts",
+    desc: "trigger 不区分压缩来源、一律报 manual ⇒ 按 auto 写 matcher 的钩子永不命中、按 manual 写的在自动压缩时误命中（§9.5 表把这一列定为 manual/auto 就是为了分流）",
+    apply: (s) => s.replace('      await args.onPreCompact(args.trigger === "manual" ? "manual" : "auto");', '      await args.onPreCompact("manual");'),
+    expectFail: "manual / auto / overflow 三条都发，且 trigger 按 §9.5 表映射（overflow 归 auto）",
+  },
+  {
+    id: "precompact-coordinator-forward-dropped",
+    src: "src/agent/compaction.ts",
+    test: "tests/hook-precompact-producer.test.ts",
+    desc: "协调器收了 onPreCompact 却不往 runCompaction 递 ⇒ 会话内自动/溢出压缩永不发钩子（构造面收下即丢，只有手动档看起来是好的）",
+    apply: (s) => s.replace("      ...(this.onPreCompact ? { onPreCompact: this.onPreCompact } : {}),", "      ...(false ? { onPreCompact: this.onPreCompact } : {}),"),
+    expectFail: "压缩没开始就不发：decision=null 不发；摘要停用后 auto 不发，overflow 截断照发",
+  },
+  {
+    id: "precompact-glm-session-forward-dropped",
+    src: "src/agent/glm-session.ts",
+    test: "tests/hook-precompact-producer.test.ts",
+    desc: "provider 收了 compaction.onPreCompact 却不递给协调器 ⇒ 真实会话里的自动压缩绕过了钩子（纯函数单测全绿也照样断，因为断在这一跳）",
+    apply: (s) => s.replace("        ...(opts.compaction.onPreCompact ? { onPreCompact: opts.compaction.onPreCompact } : {}),", "        ...(false ? { onPreCompact: opts.compaction.onPreCompact } : {}),"),
+    expectFail: "组装前触发的压缩发出 PreCompact(auto)，且只发一次",
+  },
+  {
+    id: "precompact-manual-producer-dropped",
+    src: "src/main/agent-runner.ts",
+    test: "tests/hook-precompact-producer.test.ts",
+    desc: "手动 /compact 不再把钩子引擎递下去 ⇒ 压缩卡照出、钩子一个不跑（回归到「只有函数有源」的老形态；本条用真实 spawn 的哨兵文件计数钉住）",
+    apply: (s) => s.replace('    onPreCompact: (trigger) => firePreCompactHook(hooks, trigger),', '    ...(false ? { onPreCompact: (t: "manual" | "auto") => firePreCompactHook(hooks, t) } : {}),'),
+    expectFail: "matcher=manual 的那条恰好跑一次，matcher=auto 的那条不跑",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

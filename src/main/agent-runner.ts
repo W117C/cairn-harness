@@ -534,6 +534,16 @@ const DEMO_SUMMARY = [
   "- fixtures/todo-app/tests/todo.test.ts（读，判卷用例）",
 ].join("\n");
 
+/** §9.5 PreCompact 的发出口径（手动压缩与会话自动/溢出压缩两条生产者共用这一处）。
+ *  无钩子引擎 = 零行为；阻断只告警——§9.5 表里 PreCompact 没有阻断语义，
+ *  把它当闸门用等于让插件悄悄关掉压缩链（那必须是一行的可见输出，不是静默）。 */
+async function firePreCompactHook(hooks: HookEngine | undefined, trigger: "manual" | "auto"): Promise<void> {
+  if (!hooks) return;
+  const r = await hooks.run("PreCompact", { event: "PreCompact", trigger });
+  for (const msg of r.errors) console.warn("[hooks] PreCompact:", msg);
+  if (r.blocked) console.warn("[hooks] PreCompact 返回阻断（该事件无阻断语义，已忽略）：" + (r.blockReason ?? ""));
+}
+
 /** 对一份会话日志执行手动压缩（trigger=manual, reason=user_request）。
  *  emit = 会话管线（落盘+推送同路，M1b 坑十八口径）；缺省直接落盘（headless/脚本）。 */
 export async function compactSessionLog(
@@ -543,16 +553,9 @@ export async function compactSessionLog(
 ): Promise<{ ok: boolean; error?: string; event?: AgentEvent; cardPayload?: Record<string, unknown> }> {
   const events = await replay(logPath);
   if (events.length === 0) return { ok: false, error: "会话为空，无可压缩" };
-  // M2e：PreCompact hook（压缩前触发；失败只告警不阻断压缩）。trigger 取 §9.5 表里的枚举值：
-  // 本函数文档自己写明是「手动压缩（trigger=manual）」，原先传 "compact" 既不在枚举里、
-  // 也让按 `manual`/`auto` 写 matcher 的钩子永不命中（§9.5：PreCompact 的 matcher 字段 = manual/auto）。
-  if (hooks) {
-    try {
-      await hooks.run("PreCompact", { event: "PreCompact", trigger: "manual" });
-    } catch (err) {
-      console.warn("[hooks] PreCompact 失败:", err instanceof Error ? err.message : String(err));
-    }
-  }
+  // §9.5 PreCompact 的生产端在 runCompaction 里（唯一）——这里只把「谁去跑钩子」递下去。
+  // 原先是本函数自己 run 一次，而自动压缩档没人发 ⇒ `PreCompact(auto)` 的 matcher 永不命中；
+  // 两处各发又会变成 SessionEnd 那种双生产者。trigger 取 §9.5 表里的枚举值 manual/auto。
   const demo = process.env.M1D_COMPACTION_DEMO === "1";
   const summarizer = process.env.M0_API_KEY
     ? createGlmSummarizer()
@@ -565,6 +568,7 @@ export async function compactSessionLog(
     trigger: "manual",
     reason: "user_request",
     summarizer,
+    onPreCompact: (trigger) => firePreCompactHook(hooks, trigger),
     ...(demo ? { config: { tailMinTokens: 150, tailMaxTokens: 300 } } : {}),
   });
   if (!outcome.ok) return { ok: false, error: outcome.why };
@@ -949,6 +953,8 @@ function createProvider(userMessage: string, systemPrefix?: string, sessionOptio
   /** 运行时注入的插件/MCP 工具规格（与可执行面同源，见 sessionToolSpecs）。 */
   pluginTools?: readonly SessionPluginTool[];
   solpi?: SolpiRuntime;
+  /** §9.5 PreCompact 的自动档生产者（钩子引擎在编排侧，压缩在会话 provider 里发起）。 */
+  onPreCompact?: (trigger: "manual" | "auto") => Promise<void>;
 }, kindOverride?: ProviderKind, modelOverride?: string): Provider {
   // M1c 明卷通道：M1C_AUTONOMY_SCRIPT 指向冻结剧本（autonomy-check 三条路径复用同一接线）。
   const autonomyScript = process.env.M1C_AUTONOMY_SCRIPT;
@@ -979,7 +985,9 @@ function createProvider(userMessage: string, systemPrefix?: string, sessionOptio
       system: systemPrefix,
       workspace: sessionOptions.workspace,
       tools: specs,
-      compaction: {},
+      compaction: {
+        ...(sessionOptions.onPreCompact ? { onPreCompact: sessionOptions.onPreCompact } : {}),
+      },
       emit: sessionOptions.emit,
       plugins: sessionOptions.plugins,
       solpi: sessionOptions.solpi,
@@ -1199,6 +1207,8 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       provider: createProvider(promptText, BASE_SYSTEM, {
         ...opts, emit: pipeline, solpi,
         pluginTools: [...(recall ? [observationRecallSpec] : []), ...(impactTool ? [impactQuerySpec] : []), ...pluginToolSpecsFromRuntime(rt).filter(t => !recall || t.name !== "obs_recall")],
+        // §9.5：自动/溢出压缩的 PreCompact 只有这一条生产者（provider 每会话一个，钩子引擎在 rt 上）
+        ...(rt ? { onPreCompact: (trigger: "manual" | "auto") => firePreCompactHook(rt?.hooks, trigger) } : {}),
         ...(rt ? { plugins: {
           skillsRouting: skillsRouting ?? undefined,
           hookContext,
@@ -1258,8 +1268,10 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     }
     // M1d 演示通道：M1D_COMPACTION_DEMO=1 时每轮跑完对手动压缩走一遍真实链路
     //（compactSessionLog 同 handleCompact 共用代码，事件经会话管线上屏压缩卡）。缺省零行为。
+    // 钩子引擎同 handleCompact 一路取 `rt.hooks`：不带 = 这条演示通道上的 PreCompact 永不触发，
+    // 而它恰是 compaction-check 走的那条（带下去才能被门看见）。
     if (process.env.M1D_COMPACTION_DEMO === "1") {
-      const res = await compactSessionLog(opts.logPath, pipeline);
+      const res = await compactSessionLog(opts.logPath, pipeline, rt?.hooks);
       if (!res.ok) console.warn("[compaction] 演示通道压缩未发生:", res.error);
     }
     // M2b 演示通道：M2B_MAP_DEMO=1 时对本次事件流跑真实 buildMap + computePrune，

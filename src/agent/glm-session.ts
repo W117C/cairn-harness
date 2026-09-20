@@ -367,6 +367,9 @@ export interface GlmSessionCompaction {
   summarizer?: Summarizer;
   /** system prompt / 工具 schema / 记忆注入开销字符数（触发估算全量计入，§7.3(a)）。 */
   overhead?: AssemblyOverhead;
+  /** §9.5：自动压缩档的 PreCompact 生产者（trigger 恒为 "auto"——手动压缩走 agent-runner 那条）。
+   *  缺省 undefined = 零行为（无插件会话与既有事件流字节不变）。 */
+  onPreCompact?: (trigger: "manual" | "auto") => Promise<void>;
 }
 
 /** 会话型 provider：每次 stream 从日志重建历史，直接转发网络增量；轮次结束由 loop 控制。
@@ -439,6 +442,7 @@ export function createGlmSessionProvider(
     ? new CompactionCoordinator({
         config: budgetConfig(),
         summarizer: opts.compaction.summarizer ?? (process.env.M0_API_KEY ? createGlmSummarizer(opts.model, opts.solpi?.meter, opts.transport) : undefined),
+        ...(opts.compaction.onPreCompact ? { onPreCompact: opts.compaction.onPreCompact } : {}),
       })
     : null;
   const mapBuilder = opts.map === false ? null : opts.mapBuilder ?? createMapBuilder();
