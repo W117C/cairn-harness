@@ -909,7 +909,8 @@ const VIEW_META = {
   review:   { title: '审阅',       icon: REVIEW_ICON },
   terminal: { title: '终端',       icon: TERM_ICON },
   git:      { title: 'Git',        icon: BRANCH_ICON },
-  schedule: { title: '定时任务',   icon: ICONS.clock }
+  schedule: { title: '定时任务',   icon: ICONS.clock },
+  memory:   { title: '记忆',       icon: ICONS.archive }
 };
 
 /* 展示用文件树；path 不是可执行工作区，真实运行目录仅取 AppSettings.workspace。 */
@@ -1050,6 +1051,7 @@ function branchesViewHTML() {
    必须放原型段——静态预览下桥接段不启用，若放那里，viewHTML 会抛 ReferenceError，
    连带 renderSide 整个失败（标签在、页面不在）。 */
 let scheduleCache = null;
+let memoryCache = null;
 
   function schedTime(v) {
   if (!v) return '—';
@@ -1110,6 +1112,31 @@ function scheduleViewHTML() {
       '<div class="sched-sec">运行历史</div>' + histHtml;
   }
 
+/* 记忆面板：两层（项目 / 全局）的 topic 清单 + 删除。数据 = getState().memory（memorySnapshot），
+   渲染层不自读盘、也不造第二份清单。删除走 agent:memory-delete——§8.1.7：删除仅用户，模型无删除权。 */
+function memLayerHTML(scope, title, layer) {
+  if (!layer) return '<p class="sched-empty">' + title + '：快照里没有这一层</p>';
+  const topics = layer.topics || [];
+  const rows = topics.length
+    ? topics.map(t =>
+        '<div class="sched-task mem-topic" data-scope="' + esc(scope) + '" data-topic="' + esc(t.topic) + '">' +
+          '<div class="sched-main">' +
+            '<div class="sched-name">' + esc(t.topic) + '</div>' +
+            '<div class="sched-when">' + esc(t.type) + ' · ' + String(t.bytes) + ' B · ' + schedTime(t.modified) + '</div>' +
+          '</div>' +
+          '<div class="sched-acts"><button class="sched-btn danger" data-mem-act="del">删除</button></div>' +
+        '</div>').join('')
+    : '<p class="sched-empty">还没有记忆条目。</p>';
+  return '<div class="sched-sec">' + title + '（' + String(topics.length) + '）· ' + esc(layer.path || '') + '</div>' + rows;
+}
+
+function memoryViewHTML() {
+  if (!memoryCache) return '<p class="sched-empty">读取中…</p>';
+  if (memoryCache.unsupported) return '<p class="sched-empty">当前壳的状态面未提供 memory 快照</p>';
+  if (memoryCache.error) return '<p class="sched-empty">读取失败：' + esc(memoryCache.error) + '</p>';
+  return memLayerHTML('project', '项目层', memoryCache.project) + memLayerHTML('global', '全局层', memoryCache.global);
+}
+
 function viewHTML(key) {
   if (key === 'files') return filesViewHTML();
   if (key === 'review') return reviewViewHTML();
@@ -1117,6 +1144,7 @@ function viewHTML(key) {
   if (key === 'terminal') return terminalViewHTML();
   if (key === 'git') return gitViewHTML();
   if (key === 'schedule') return scheduleViewHTML();
+  if (key === 'memory') return memoryViewHTML();
   return '';
 }
 
@@ -3338,9 +3366,49 @@ render();
   }
 
 
+  /* 记忆快照随 agent:state 一起出来（memorySnapshot）——不另开读通道，也不在渲染层数第二份。
+     刷新只在打开标签页与删除后：面板是展示面，不该有第三条更新路径。 */
+  let memoryLoading = false;
+
+  async function loadMemory(force) {
+    if (typeof api.getState !== 'function') { memoryCache = { unsupported: true }; return; }
+    if (memoryLoading || (memoryCache && !force)) return;
+    memoryLoading = true;
+    try {
+      const st = await api.getState();
+      memoryCache = (st && st.memory) ? st.memory : { unsupported: true };
+    } catch (err) {
+      memoryCache = { error: (err && err.message) || String(err) };
+    } finally {
+      memoryLoading = false;
+    }
+  }
+
+  /* §8.1.7：删除只此一路（用户在面板上点），模型没有删除权。删完必须回读快照——
+     面板留着那一行 = 告诉用户它还在。 */
+  async function deleteMemoryTopic(scope, topic) {
+    if (!scope || !topic) return;
+    try {
+      const r = await api.deleteMemory(scope, topic);
+      toast(r && r.ok ? '已删除记忆：' + topic : '删除失败：' + ((r && r.error) || '未知原因'));
+    } catch (err) {
+      toast('删除失败：' + ((err && err.message) || String(err)));
+    }
+    memoryCache = null;
+    await loadMemory(true);
+    if (typeof renderSide === 'function') renderSide();
+  }
+
   const sidePagesHost = $('.side-pages');
   if (sidePagesHost && typeof sidePagesHost.addEventListener === 'function') {
     sidePagesHost.addEventListener('click', async (e) => {
+      // 记忆删除与定时任务动作共用这一个委托处理器（抽屉里的行内按钮只有一个宿主，别开第二条）
+      const memBtn = e.target.closest('[data-mem-act]');
+      if (memBtn) {
+        const row = memBtn.closest('.mem-topic');
+        void deleteMemoryTopic(row && row.dataset.scope, row && row.dataset.topic);
+        return;
+      }
       const btn = e.target.closest('[data-sched-act]');
       if (!btn) return;
       const row = btn.closest('.sched-task');
@@ -3362,9 +3430,10 @@ render();
       if (typeof renderSide === 'function') renderSide();
     });
   }
-  /* 打开「定时任务」标签页时刷新一次快照 */
+  /* 打开「定时任务」/「记忆」标签页时各刷新一次快照（同一处收口，别在渲染函数里再发请求） */
   settingsHooks.onOpenView = (key) => {
     if (key === 'schedule') void loadSchedule(true).then(() => { if (typeof renderSide === 'function') renderSide(); });
+    else if (key === 'memory') void loadMemory(true).then(() => { if (typeof renderSide === 'function') renderSide(); });
   };
 
   /* ---------- 长任务目标（goal 模式）：composer 芯片 + 设定面板 ----------

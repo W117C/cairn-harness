@@ -3784,6 +3784,30 @@ const MUTATIONS = [
     apply: (s) => s.replace("if (over.sessionId !== undefined) {", "if (false) {"),
     expectFail: "压的是 sessionId 那条，不是「本进程最后跑过的」那条",
   },
+  {
+    id: "memory-panel-delete-keeps-stale-snapshot",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-memory-panel.test.ts",
+    desc: "删完不清不回读 ⇒ 面板留着那一行：告诉用户「它还在」。删除是盘上动作，界面必须以盘上为准",
+    apply: (s) => s.replace("    memoryCache = null;\n    await loadMemory(true);", "    void 0;"),
+    expectFail: "点删除：按行上的 scope + topic 调桥，成功后清空缓存回读快照并重画",
+  },
+  {
+    id: "memory-panel-rejection-shown-as-success",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-memory-panel.test.ts",
+    desc: "回条 ok:false 也报「已删除」⇒ 用户以为删掉了（记忆是长期态，假成功的代价是下次又读到它）",
+    apply: (s) => s.replace("toast(r && r.ok ? '已删除记忆：' + topic : '删除失败：'", "toast('已删除记忆：' + topic || '删除失败：'"),
+    expectFail: "主进程拒绝 ⇒ 原话上 toast，并且照样回读（列表以盘上为准）",
+  },
+  {
+    id: "memory-panel-topic-row-loses-scope",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-memory-panel.test.ts",
+    desc: "行上不写 data-scope（写死 project）⇒ 删全局层的条目会去删项目层同名 topic：跨层误删",
+    apply: (s) => s.replace("data-scope=\"' + esc(scope)", "data-scope=\"' + \"project\""),
+    expectFail: "两层各列自己的 topic：名字 / 类型 / 字节 / 层路径，删除按钮带上 scope 与 topic",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
