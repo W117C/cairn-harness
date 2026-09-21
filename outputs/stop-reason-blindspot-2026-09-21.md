@@ -390,6 +390,40 @@ final HEAD `0ec8bff` 的全量 `test`（同一台软链 worktree，按规则 52 
 184 files / 1749 tests，**182 files 绿**，唯二红项仍是 `gated-tools` / `runner-gates` 那对
 软链假红——与 `04151de` 那次（1739 tests）相比只多不减，说明本程三笔（7f23ef8 / bf25a55 / 0ec8bff）没有把别的面碰坏。
 
+## 第十二程（09-22，`b3c797e` + `e5781ce` + 两笔修正）：同一条不变量的第三、第四面
+
+第十一程补了装饰器与摘要两面，本程把剩下的面数完：**端到端观测**与 **prune 的账**。
+
+**① `agents-check` C9d/C9e/C9f（`b3c797e`）。** 单元面钉了 `withAgentId` 之后，「管线真的把装饰
+用到主流上」这件事仍没人问——正是本仓反复犯的「两头断」。C 阶段走 `handleAgentRun` 全链路、
+读的是**主 JSONL**，所以一条断言就够。三针互咬：C9d 先验存在性、C9e 判带归因、C9f 判
+父会话自己的正文**不**带（否则 C9e 可能只是「逢正文都贴」的假绿）。
+分辨力实读：HEAD 隔离 worktree 里把 `assistant_message` 从归因面摘掉 → C9d ✅ / **C9e ❌** / C9f ✅；
+改回 255 ✅ / 0 ❌。
+第一版的取料写法被自家存在性校验抓现行：拿 `summary` 的**真换行**去比 `JSON.stringify` 的串
+（串里是 `\n` 两字符）⇒ 0 命中。若当初只留 C9e，那会是一条永绿的假门。
+
+**② prune 的账只量父上下文（`e5781ce`）。** `computePrune` 拿的是**原始事件流**，而 `prune.ts`
+里 `agent_id` 零命中 ⇒ 两处同时错：
+- 子流 `tool_result` 进候选 ⇒ `savedTokens` 记一次**不存在的节省**，并把 worker 内部转录抄进
+  附件（真磁盘、真 I/O，换一条永远不会出现在任何 prompt 里的打桩行）；
+- 保护区按 token 回退时把子流体量算进预算 ⇒ 保护区提前收口，**父会话里真在上下文中的老结果**
+  被划成候选裁掉。
+`recentRoundBoundaries` 只数 `user_message`，而 worker 从不发 `user_message`（实测 runLoop 那一跳
+不带 `userMessage`）⇒ 那一处不需要改——这句是读过它的判据后写的，不是猜的。
+
+**③ 两次自纠，都得留字。** 第一版「不吃保护区预算」的断言用 `tag.repeat(50*KB)` 造块，
+每块只有 12800 token，两块也到不了 `protectTokens 40000` ⇒ **修与不修都不裁任何东西**，
+断言在两个世界里同真。锚点 `prune-protection-window-counts-child-stream` 当场判**存活**，
+这条假绿才被看见。改成每块 100KB（25600 token）并把两条断言做成对照组
+（同位置：放子流 ⇒ q 受保护 size 0；放父正文 ⇒ q 该被裁 size 1 且含 q）后，两根针全杀。
+另一次：测试改名后 `expectFail` 还指着旧标题，harness 报「红了但没红在点名那条上」——
+它要的正是「红在该红的那条」，改名必须同步。
+
+**本程读数**：`prune.test.ts` 23 条（+5）、`agents-check` 255 ✅ / 0 ❌（+3 条断言）；
+锚点 +4（含一次 expectFail 改指），全部在 clean HEAD 实跑**全杀**；`tsc` 0 错；
+`prune`/`session-prune-attachments`/`compaction`/`worker-attribution` 批 60 passed。
+
 ## 待办（按优先级）
 
 1. 沉淀面：`failureDigestFromEvents`（能力 6/10）现在只看 `verify_result(ok:false)` 与
