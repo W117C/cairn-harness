@@ -526,6 +526,73 @@ async function phaseElectron(root: string): Promise<void> {
     ok(/澄清提问/.test(c6.label) && /待回答/.test(c6.label), "B6 卡面写清这是在等人回答（实测 " + JSON.stringify(c6.label.trim().slice(0, 24)) + "）");
     // 重放只读不变量（与 plan 卡同口径）：提交按钮摘掉、所有输入 disabled —— 历史会话不该能改判据
     ok(!c6.acts && c6.disabled === 6, "B6 重放是只读的：提交面已摘、4 选项 + 2 补充框全部 disabled（实测 acts=" + String(c6.acts) + " disabled=" + String(c6.disabled) + "）");
+    console.log("[panels-check] B7 goal 芯片的 live 投递（设完目标，芯片必须在**不刷新**的情况下自己变）");
+    // 为什么只能这么测：`emitGoalEvent` 的注释写明「少了 session_id 就是 JSONL 里有、live 界面上没有」，
+    // 而重放那条路（showHistory）与 live 那条路（renderEvent 累积镜像）是两支——纯单测只测得到 reduce，
+    // 测不到「主进程推出来的这条事件到底有没有进芯片」。这里走真 UI：点开芯片 → 填表 → 提交。
+    const b7Goal = "把 tests/ 失败用例修绿";
+    await cdp2.eval(
+      `(() => {
+        const chip = document.querySelector('#goalChipLabel');
+        if (!chip) return false;
+        window.__b7 = { sent: 0, seen: 0, text: '' };
+        const obs = new MutationObserver(() => {
+          if (window.__b7.seen === 0 && /目标/.test(chip.textContent || '')) {
+            window.__b7.seen = Date.now();
+            window.__b7.text = (chip.textContent || '').trim();
+          }
+        });
+        obs.observe(chip, { childList: true, characterData: true, subtree: true });
+        document.querySelector('#ctxGoal')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        return true;
+      })()`,
+    );
+    const formReady = await tryWait(
+      async () => ((await cdp2.eval<boolean>("!!document.querySelector('#goalObjective')")) ? true : null),
+      8_000,
+    );
+    ok(formReady, "B7 点芯片开出的是 goal 面板（表单在，不是只弹一层空壳）");
+    const b7Sent = await cdp2.eval<number>(
+      `(() => {
+        const ta = document.querySelector('#goalObjective');
+        if (!ta) return -1;
+        ta.value = ${JSON.stringify(b7Goal)};
+        const turns = document.querySelector('#goalTurns');
+        if (turns) turns.value = '8';
+        window.__b7.sent = Date.now();
+        document.querySelector('#goalPanel')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        return window.__b7.sent;
+      })()`,
+    );
+    const b7Seen = { sent: 0, seen: 0, text: "" };
+    const b7Poll = await tryWait(async () => {
+      const st = await cdp2.eval<{ sent: number; seen: number; text: string } | null>("window.__b7 || null");
+      if (st === null || st.seen === 0) return null;
+      b7Seen.sent = st.sent;
+      b7Seen.seen = st.seen;
+      b7Seen.text = st.text;
+      return true;
+    }, 10_000);
+    ok(b7Poll && b7Sent > 0, "B7 提交后芯片文本真的变了（live 推送 → 渲染层镜像 → syncGoalChip 这条链有人看见）");
+    if (b7Poll && b7Sent > 0) {
+      const delay = b7Seen.seen - b7Sent;
+      ok(
+        delay >= 0 && delay <= 1000,
+        "B7 芯片首次变化距提交 " + String(delay) + "ms ≤ 1000ms（观测器先于提交装好：" + String(b7Sent > 0) + "）",
+      );
+      const label = await cdp2.eval<string>(
+        `(() => { const c = document.querySelector('#ctxGoal'); return (c && c.getAttribute('aria-label')) || ''; })()`,
+      );
+      ok(
+        label.includes(b7Goal) && /自动续跑中/.test(label) && /1\/8/.test(b7Seen.text),
+        "B7 芯片说的是这条目标本身（实测 label=" + JSON.stringify(label.slice(0, 48)) + " 文本=" + JSON.stringify(b7Seen.text) + "）",
+      );
+      const onDisk = await tryWait(async () => {
+        const raw = await readFile(join(root, clarifyId + ".jsonl"), "utf8");
+        return raw.includes('"goal_set"') ? true : null;
+      }, 8_000);
+      ok(onDisk, "B7 同一条 goal_set 也落到会话 JSONL（live 与 replay 读的是同一份事实源）");
+    }
     await killElectron(electron2);
   } finally {
     if (electron.exitCode === null) await killElectron(electron);
