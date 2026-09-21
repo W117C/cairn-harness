@@ -276,6 +276,36 @@ exit 0；clean HEAD 隔离 worktree 上 `tsc` 0 错、本通道 14 条锚点**�
 `summarizer-hides-truncation` / `compaction-accepts-truncated-summary`）在 clean HEAD
 隔离 worktree 实测**全杀**，主树零改动；针脚体检全表 0 阻断 / 0 待复认 / 0 未覆盖。
 
+## 第八程（跨日到 09-22，`6673778`）：note 的读者是模型，不是（还不存在的）UI
+
+第四程留的尾巴：`goalStopDecision` 的 continue `note` **只有测试在读**。两种收法摆着——
+挂进事件流等 UI，或者交给模型。实测后者才是唯一有读者的那条：`src/renderer/` 三个文件里
+grep `"goal"` **零命中**，goal 续跑轮连展示面都没有，再挂一个字段只是给同一个缺陷换个藏身处。
+
+但直接把 note 注入 reminder 会双份付费：note 的通用文案是「证据 X；预算 Y；第 N/M 轮」,
+而 `goalReminder` 块**本来就逐字带着这三样**（每轮重送 ⇒ 整会话付费）。于是拆成两个字段：
+
+- `note` 留作人类可读的决策解释（审计面，形状不变，一条测试都不用改）；
+- `hint` = **要替模型改掉的那一子句**。默认块教「红字逐条已在上一轮上下文里，对着它继续」,
+  而被 `max_tokens` 砍断的那一轮既没红字也没验证——那种轮次不给 hint，教的就是错的方向。
+  hint 在场是**替换**不是追加：块内同时只有一条指令，长度持平（零新增付费）。
+
+**一次读数装置自查（比结论耐久）**：为核这四笔提交的 HEAD 自洽性，在 `worktree add --detach` +
+`ln -s 主树/node_modules` 的隔离 worktree 跑全量 ⇒ `2 failed | 1728 passed`，红的正是
+`gated-tools` 与 `runner-gates`——恰好是 AGENTS.md「哪天它变红就是新的真红」点名的那两支。
+差一点就按「HEAD 有新红」立案。回到主树跑同两支 = 4 passed，再往 worktree 的 fixture 里手工
+`pnpm test`，读数自己开口了：
+`[ERR_PNPM_UNSAFE_MODULES_DIR] Refusing to remove the modules directory at "…/deepseek harness/node_modules"
+because its resolved target is not a strict subdirectory of the project root at "/private/tmp/…"`。
+⇒ 剧本里那一跳 `run_shell` 跑的是 `pnpm test`（`fixtures/mock/todo-fix.jsonl` 逐字记着），
+而软链让 pnpm 的装前自检解析出「modules 目录在项目根之外」，直接拒 ⇒ `ok:false` ⇒ 下游断言空转。
+**判 HEAD 自洽时，凡中间有一跳 `pnpm` 的判卷面不能在软链 worktree 里定名**（已记进项目记忆 规则 52）。
+
+**本程读数**：`goal-stop-decision.test.ts` 19 条（+4，含「生产入口真的把 decision.hint 传进去」
+这一条——`goalNextTurn` 未导出，只能钉那一行的形状，另配一根针）；3 根锚点 clean HEAD 全杀；
+HEAD worktree `tsc` 0 错、本通道四个测试文件 92 passed；针脚体检全表 0 阻断。
+agent-runner.ts 的并发 hunk 全在 423 行之前 ⇒ 只 `git apply --cached` 自己那一跳。
+
 ## 待办（按优先级）
 
 1. 沉淀面：`failureDigestFromEvents`（能力 6/10）现在只看 `verify_result(ok:false)` 与
