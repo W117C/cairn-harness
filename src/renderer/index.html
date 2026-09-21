@@ -1032,6 +1032,21 @@ button.tg-head{transition:color var(--t-fast)}
 .diff .tk-num{color:var(--tk-num)}
 .diff .tk-fn{color:var(--tk-fn)}
 .diff .tk-prop{color:var(--tk-prop)}
+/* 行锚点形态（git 面板的行级评审入口）：行号与「评」是 `.ln` 的兄弟节点，
+   所以 highlightAllDiffs 重写 `.ln` innerHTML 时不会把它们喂给 tokenizer 抹掉。
+   按钮常显但压到低对比——hover 才变主色：入口藏进 hover 里等于没有入口。 */
+.diff-anchored .ln-row{display:flex;align-items:flex-start;gap:var(--sp-2)}
+.diff-anchored .lno{flex:none;min-width:3.5ch;text-align:right;
+  font-family:var(--font-mono);font-size:var(--fs-micro);color:var(--label-3)}
+.diff-anchored .ln{flex:1;min-width:0}
+.diff-anchored .pf{font-family:var(--font-mono);font-size:var(--fs-micro);color:var(--label-2);
+  background:var(--surface-2);padding:var(--sp-1) var(--sp-6)}
+.ln-cmt{flex:none;align-self:center;border:0.5px solid var(--line-2);border-radius:var(--r-1);
+  background:transparent;color:var(--label-3);font-family:var(--font-mono);font-size:var(--fs-micro);
+  line-height:1.4;padding:0 var(--sp-2);cursor:pointer}
+.ln-cmt:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+.mc-hint{font-size:var(--fs-micro);color:var(--label-3)}
+.cmt-head{font-family:var(--font-mono);font-size:var(--fs-micro);color:var(--label-2)}
 .term{
   background:var(--term-bg);color:var(--term-fg);font-family:var(--font-mono);font-size:var(--fs-sub);
   line-height:var(--lh-loose);padding:var(--sp-5) var(--sp-6);overflow-x:auto;
@@ -2019,6 +2034,20 @@ html.reduce-motion .quick-card{opacity:1}
             </button>
             <div class="ctx-pop" id="schedPanel" hidden>
               <div class="bp-view" id="schedPanelBody"></div>
+            </div>
+            <div class="ctx-pop" id="cmtPop" hidden>
+              <div class="bp-view">
+                <form class="goal-form">
+                  <div class="cmt-head" id="cmtHead"></div>
+                  <label for="cmtBody">评审意见</label>
+                  <textarea id="cmtBody" rows="3" placeholder="例：这里改用参数绑定；别在循环里读配置"></textarea>
+                  <p class="goal-note">送进去 = 给这个 worker 的下一轮加一条用户消息（它会再跑一轮，花真钱）。
+                    不改代码、不合并、不删工作树。</p>
+                  <p class="goal-note" id="cmtErr" hidden></p>
+                  <div class="goal-actions"><button type="button" id="cmtCancel">取消</button>
+                    <button type="submit" class="primary">送给它</button></div>
+                </form>
+              </div>
             </div>
             <button class="c-btn" id="attachBtn" aria-label="添加附件">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m21 12-8.5 8.5a5 5 0 0 1-7-7L14 5a3.3 3.3 0 0 1 4.7 4.7L10.5 18a1.7 1.7 0 0 1-2.4-2.4L16 8"/></svg>

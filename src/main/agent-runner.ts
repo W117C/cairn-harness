@@ -1713,7 +1713,7 @@ export interface CardActionRequest {
 /** card_action 处理：落流（card_action 事件）→ 路由（worker 审批决议 / agent 取消）。
  *  审批解耦（§4.4.3）：父 turn 结束后仍可应答——落流与路由走编排器绑定管线，不依赖活动 session。
  *  §11.7.6：worker scope=always 的 card_action 拒绝落流（先于写入检查，审批保持 pending 可再决议）。 */
-export async function handleCardAction(req: CardActionRequest): Promise<{ ok: boolean; error?: string }> {
+export async function handleCardAction(req: CardActionRequest): Promise<{ ok: boolean; error?: string; injected?: boolean }> {
   // P3（审查）：边界形状校验（先于落流）——req=null/缺必备字段时旧实现直接 TypeError 或把垃圾
   // payload 写进会话 JSONL 审计面。路由级失败（未知 agent 等）仍照常落流（审计语义：动作已发生）。
   if (
@@ -1777,7 +1777,10 @@ export async function handleCardAction(req: CardActionRequest): Promise<{ ok: bo
     // diff_comment 落流（§3.4 新事件）→ 定向 user_message 注入 worker 子流（评审闭环；评论回传不挂 turn）
     await emit({ type: "diff_comment", agent_id: req.targetAgentId, path, line: line as number, body, ts: Date.now() } as AgentEvent);
     const r = await owner.injectComment(req.targetAgentId, path, line as number, body);
-    return r.ok ? { ok: true } : { ok: false, error: r.error };
+    /* injected:false 是真事实，不是失败：worker 取消中 / 已终态且 worktree 已收尾 ⇒ 评论只落流、
+       没有进它的子流。这一面曾经被吞成 {ok:true}——界面就只剩「已送进子流」可说，等于把没送达说成送达。 */
+    if (!r.ok) return { ok: false, error: r.error };
+    return { ok: true, injected: r.injected, ...(r.injected || !r.error ? {} : { error: r.error }) };
   }
   if (req.action === "clean" && req.cardType === "orphan") {
     const name = typeof req.payload?.name === "string" ? req.payload.name : "";

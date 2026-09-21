@@ -9,15 +9,19 @@ import { projectPanelData, workerEvidenceLabel, workerSpentLabel } from '../src/
 const source = readFileSync(new URL('../src/renderer/app.js', import.meta.url), 'utf8');
 
 /** 真事件流 → 真投影 → gitViewHTML（diffHtml 是 .diff 行着色器，它在 dom.js 顶层摸 DOM，
- *  故这里按契约桩替换：着色本身由 panels-check 的真窗口阶段判，本文件只判「东西放对地方没有」。 */
-function gitHTML(events: unknown[]) {
+ *  故这里按契约桩替换：着色本身由 panels-check 的真窗口阶段判，本文件只判「东西放对地方没有」。
+ *  opts 收着色器实参：写端（行级「评」按钮）只在 anchors 形态下长出，这里丢了对岸就永远看不见。 */
+function gitHTML(events: unknown[], opts: unknown[] = []) {
   const context: any = {
     panelData: projectPanelData(events as never, null),
     esc: (s: unknown) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
     BRANCH_ICON: '',
     workerEvidenceLabel,
     workerSpentLabel,
-    diffHtml: (t: unknown) => '<div class="diff">' + String(t).split('\n').map((l: string) => '<div class="ln">' + l + '</div>').join('') + '</div>',
+    diffHtml: (t: unknown, o: unknown) => {
+      opts.push(o);
+      return '<div class="diff">' + String(t).split('\n').map((l: string) => '<div class="ln">' + l + '</div>').join('') + '</div>';
+    },
   };
   const a = source.indexOf('function gitViewHTML() {');
   const b = source.indexOf('/* git 分支数据', a);
@@ -86,4 +90,11 @@ it('空态文案不再谎称「面板尚未接入」（投影一直通着，只�
   const html = gitHTML([]);
   expect(html).not.toContain('尚未接入');
   expect(html).toContain('本会话没有 write worker');
+});
+it('补丁按 anchors 形态着色：行号与「评」按钮由此长出，且 hint 说清代价与不做的事', () => {
+  const opts: unknown[] = [];
+  const html = gitHTML([spawn, patch("+const x = 1")], opts);
+  expect(opts, '不传 anchors ⇒ 写端入口整片消失，而读端看起来一切正常').toEqual([{ anchors: true }]);
+  expect(html).toContain('行尾「评」');
+  expect(html).toContain('不改代码、不重新派活');
 });

@@ -1,5 +1,5 @@
 import { projectUnits, mountHistory } from './history-window.js';
-import { projectPanelData, EMPTY_PANEL_DATA, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS } from './projections';
+import { projectPanelData, EMPTY_PANEL_DATA, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS, cardActionForComment } from './projections';
 import { $, esc, promptInput, sessionList, streamInner, toast } from './dom.js';
 import { ICONS, RUN_GRID_HTML, runGrid } from './icons.js';
 import { highlightAllDiffs, diffHtml } from './diff-highlight.js';
@@ -1039,7 +1039,10 @@ function gitViewHTML() {
       '<div class="mc-task">' + esc(c.task) + (c.branch ? ' · ' + esc(c.branch) : '') + '</div>' +
       (latest
         ? '<details class="mc-patch"><summary>补丁 v' + String(latest.version) + ' · ' +
-            esc(latest.stat || '(这份快照没带统计)') + '</summary>' + diffHtml(latest.patch || '') + '</details>'
+            esc(latest.stat || '(这份快照没带统计)') + '</summary>' +
+            diffHtml(latest.patch || '', { anchors: true }) +
+            '<div class="mc-hint">行尾「评」把意见送进这个 worker 的子流——它下一轮就读到；不改代码、不重新派活。</div>' +
+          '</details>'
         : '<div class="mc-none">这一列还没有补丁快照（worker 没产出 diff，或快照不在本会话事件流里）</div>') +
       (rep
         ? '<div class="mc-report">' +
@@ -1664,7 +1667,13 @@ function hidePop(popEl, chipEl) {
 }
 /* 三个看板互斥：同一时刻只开一个；render 在展开前刷新内容 */
 const ctxPops = [];
-function registerPop(popEl, chipEl, render) { ctxPops.push({ popEl, chipEl, render }); }
+/* 返回登记项：行级评论看板的锚点是「被点的那一行的按钮」，随行而变，需要展开时改 chipEl。
+   互斥 / Escape / 外点三条链因此仍只有 ctxPops 一个事实源，不为它另开一套收起逻辑。 */
+function registerPop(popEl, chipEl, render) {
+  const reg = { popEl, chipEl, render };
+  ctxPops.push(reg);
+  return reg;
+}
 function togglePop(popEl) {
   if (!popEl.hidden) { closeAllPops(false); return; }
   ctxPops.forEach(p => { if (p.popEl !== popEl) hidePop(p.popEl, p.chipEl); });
@@ -2165,8 +2174,9 @@ render();
   let historyEvents = null;
   /* 右栏面板的事件源：会话打开时 = 历史快照，运行中逐条追加（与流内渲染同源） */
   let panelEvents = [];
-  /** 会改变面板内容的事件类型（工具与编排）；其余事件不触发重绘，避免随 token 抖动。 */
-  const PANEL_DIRTY = { tool_call: 1, tool_result: 1, agent_spawned: 1, agent_status: 1, approval_requested: 1, approval_resolved: 1 };
+  /** 会改变面板内容的事件类型（工具与编排）；其余事件不触发重绘，避免随 token 抖动。
+   *  diff_comment 在内：它是「已送进子流的评论」唯一的可见回执，不重绘就等于用户点了没反应。 */
+  const PANEL_DIRTY = { tool_call: 1, tool_result: 1, agent_spawned: 1, agent_status: 1, approval_requested: 1, approval_resolved: 1, diff_comment: 1 };
 
   /* ---------- 真实运行目录：与 WORKSPACES 文件树演示数据严格隔离 ---------- */
   const workspaceForm = document.createElement('form');
@@ -3645,10 +3655,16 @@ render();
     }
   }
 
+  /* 「评」按钮的委托只留这一行：看板本体在文件末尾（IIFE 尾段）。切片式渲染层测以
+     const sidePagesHost 为终点，插件/记忆两块都从自己那一段切到这里，中间塞进新代码会把
+     它们的切片撑大（实测 6 红）。openCommentPop 是函数声明，会提升到此处之前。 */
+
   const sidePagesHost = $('.side-pages');
   if (sidePagesHost && typeof sidePagesHost.addEventListener === 'function') {
     sidePagesHost.addEventListener('click', async (e) => {
       // 记忆删除与定时任务动作共用这一个委托处理器（抽屉里的行内按钮只有一个宿主，别开第二条）
+      const cmtBtn = e.target.closest('[data-cmt]');
+      if (cmtBtn) { openCommentPop(cmtBtn); return; }
       const agentBtn = e.target.closest('[data-agent-act]');
       if (agentBtn) {
         const row = agentBtn.closest('.agent-row');
@@ -3961,6 +3977,71 @@ render();
         if (errBox) { errBox.hidden = false; errBox.textContent = '未创建：' + ((err && err.message) || String(err)); }
       }
     })();
+  });
+
+  /* ---------- diff 卡行级评审（card_action 的第四条动作：comment）----------
+     读端（补丁快照 / 安全发现 / 评论列表）已上屏，这一段是写端：让「评」真能把意见送进去。三条口径：
+     · 合法性只在 main 判一处（path 非空 / line>=1 / body 非空）——这里只照形状造 payload，
+       不再写一份校验（两处校验迟早给出两个答案）；
+     · 回条三面如实说：ok=false ⇒ 未送达并原文点名原因；injected=false ⇒ 评论只落了流、
+       这个 worker 已不再读它（取消中 / worktree 已收尾）。把没送达说成送达就是假回执；
+     · 看板收进 ctxPops 这一个事实源：互斥 / Escape / 外点三条收起链不另开一套。锚点是
+       「被点那一行的按钮」、随行而变，所以展开时改 reg.chipEl（registerPop 为此返回登记项）。
+     放在 IIFE 尾段与定时/goal 面板同因：切片式渲染层测不装载这一段。 */
+  const cmtPop = $('#cmtPop');
+  const cmtHead = $('#cmtHead');
+  const cmtBody = $('#cmtBody');
+  const cmtErr = $('#cmtErr');
+  const cmtReg = registerPop(cmtPop, cmtPop, null);
+  let cmtTarget = null;
+
+  function cmtFail(msg) {
+    cmtErr.hidden = false;
+    cmtErr.textContent = '未送达：' + msg;
+  }
+  function openCommentPop(btn) {
+    if (!cmtPop.hidden && cmtReg.chipEl === btn) { closeAllPops(true); return; }   // 同一个按钮再点一次 = 收起
+    const row = btn.closest('.ln-row');
+    const col = btn.closest('.merge-col');
+    const path = row && row.dataset.path ? row.dataset.path : '';
+    const line = Number(row && row.dataset.line);
+    const agent = col && col.dataset.agent ? col.dataset.agent : '';
+    if (!agent || !path || !Number.isInteger(line) || line < 1) {
+      // 坐标缺失 ⇒ 这一行本不该长出按钮（diffHtml 按新行号与路径判过）。真走到这里说明 DOM 被改坏了：
+      // 宁可不弹，也不发一条必然撞墙的请求。
+      toast('这一行没带文件路径或行号，评审框不弹');
+      return;
+    }
+    closeAllPops(false);
+    cmtReg.chipEl = btn;
+    cmtTarget = { agent, path, line };
+    cmtHead.textContent = '评 ' + path + ' 第 ' + String(line) + ' 行 → ' + agent;
+    cmtErr.hidden = true;
+    cmtErr.textContent = '';
+    cmtBody.value = '';
+    showPop(cmtPop, btn);
+    cmtBody.focus();
+  }
+  cmtPop.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!cmtTarget) { toast('评审对象已失效（这一列重画过了），请重新点一次「评」'); return; }
+    const { agent, path, line } = cmtTarget;
+    const body = cmtBody.value;   // 不 trim：空不空由 main 判，判据措辞只留一份
+    void (async () => {
+      try {
+        const r = await api.cardAction(cardActionForComment(agent, path, line, body));
+        if (!r || r.ok !== true) { cmtFail((r && r.error) || '回条没带 ok 字段'); return; }
+        closeAllPops(false);
+        toast(r.injected === false
+          ? '评论只落进了事件流，' + agent + ' 已不再读它：' + (r.error || '原因未带')
+          : '已送进 ' + agent + ' 的子流（它会再跑一轮，这一轮花真钱）');
+      } catch (err) {
+        cmtFail((err && err.message) || String(err));
+      }
+    })();
+  });
+  cmtPop.addEventListener('click', (e) => {
+    if (e.target.closest('#cmtCancel')) closeAllPops(true);
   });
 
   /* 目标态镜像：showHistory 全量筛（replay 唯一入口），renderEvent 只看 live（rc.replay 为假）。

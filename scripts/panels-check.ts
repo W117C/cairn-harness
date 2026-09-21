@@ -1073,8 +1073,9 @@ async function phaseElectron(root: string): Promise<void> {
     // 既有事件类型 + 重开读取，不调模型、不派 worker、不动 git（零钱，与 B11 同一手法）。
     console.log("[panels-check] B15 git 面板的评审读端：补丁取最新一份、发现与评论上屏（零模型调用）");
     const b15Rows: Record<string, unknown>[] = [
-      { type: "tool_result", callId: "diff-" + b11B, ok: true, output: "## stat\n src/sort.ts | 2 +-\n## patch\n+const old = 1" },
-      { type: "tool_result", callId: "diff-" + b11B, ok: true, output: "## stat\n src/sort.ts | 3 +-\n## patch\n+const newer = 2" },
+      // 带真文件头的补丁：行锚点形态（评按钮）只在 path + 新行号齐时长出，光秃秃的 + 行不该有入口
+      { type: "tool_result", callId: "diff-" + b11B, ok: true, output: "## stat\n src/sort.ts | 2 +-\n## patch\ndiff --git a/src/sort.ts b/src/sort.ts\n--- a/src/sort.ts\n+++ b/src/sort.ts\n@@ -1 +1 @@\n+const old = 1" },
+      { type: "tool_result", callId: "diff-" + b11B, ok: true, output: "## stat\n src/sort.ts | 3 +-\n## patch\ndiff --git a/src/sort.ts b/src/sort.ts\n--- a/src/sort.ts\n+++ b/src/sort.ts\n@@ -1 +1 @@\n+const newer = 2" },
       { type: "security_report", agent_id: b11B, mode: "standard", llm_reviewed: false,
         findings: [{ severity: "high", path: "src/sort.ts", line: 12, title: "拼接 SQL", description: "d", ruleId: "r1" }],
         summary: { total: 1, bySeverity: { critical: 0, high: 1 } } },
@@ -1105,6 +1106,106 @@ async function phaseElectron(root: string): Promise<void> {
     ok(
       !b15Text.includes("NaN"),
       "B15 屏面上没有 NaN（拼接式里夹一行注释会被读成一元正号 ⇒ 整段 HTML 变 NaN；本轮单测抓到过一次）",
+    );
+    // B16 评审闭环的写端：行锚点真长得出、点得动，且被 main 拒时如实说未送达。
+    // 全程零钱：这一列是重放出来的历史 worker（本窗口没有它的编排器），card_action 必然在
+    // 归属检查处被拒 ⇒ 不调模型、不落 diff_comment、不动工作树。
+    // 反向对照（做过）：删掉委托里的 [data-cmt] 分支 ⇒ ①②当场红；把 ok=false 说成送达 ⇒ ③当场红。
+    console.log("[panels-check] B16 行级评审写端：「评」点得动，被 main 拒时不谎报送达（零模型调用）");
+    const b16Rows = await cdp2.eval<string>(
+      `(() => {
+        const rows = [...document.querySelectorAll('.side-page[data-view="git"] .ln-row[data-line]')];
+        return JSON.stringify({ n: rows.length, bad: rows.filter(r => !r.querySelector('[data-cmt]') || !r.dataset.path || !(Number(r.dataset.line) >= 1)).length });
+      })()`,
+    );
+    const b16Shape = JSON.parse(b16Rows) as { n: number; bad: number };
+    ok(b16Shape.n >= 1, "B16 有行号的补丁行真长出了评论入口（实测行数 " + String(b16Shape.n) + "）");
+    ok(b16Shape.bad === 0, "B16 每个入口都带 path 与 ≥1 的行号：挂错坐标的评论比不给入口更坏（实测缺项 " + String(b16Shape.bad) + "）");
+    const b16Open = await cdp2.eval<string>(
+      `(() => {
+        const b = document.querySelector('.side-page[data-view="git"] .ln-row[data-line] [data-cmt]');
+        if (!b) return 'no-btn';
+        b.click();
+        const p = document.getElementById('cmtPop');
+        return JSON.stringify({
+          hidden: p ? p.hidden : 'absent',
+          head: p ? (document.getElementById('cmtHead').textContent || '') : '',
+          aria: b.getAttribute('aria-expanded'),
+        });
+      })()`,
+    );
+    ok(b16Open !== "no-btn", "B16 点「评」前有按钮可点（实测 " + JSON.stringify(b16Open) + "）");
+    const b16Pop = JSON.parse(b16Open) as { hidden: boolean; head: string; aria: string | null };
+    ok(b16Pop.hidden === false, "B16 点「评」真弹出了评审框（实测 hidden=" + JSON.stringify(b16Pop.hidden) + "）");
+    ok(
+      b16Pop.head.includes("src/sort.ts") && b16Pop.head.includes(b11B) && b16Pop.head.includes("第 1 行"),
+      "B16 框头点名评的是哪个文件哪一行、送给哪个 worker（实测 " + JSON.stringify(b16Pop.head) + "）",
+    );
+    ok(b16Pop.aria === "true", "B16 aria-expanded 跟着真翻了（实测 " + JSON.stringify(b16Pop.aria) + "）");
+    const b16CmtsBefore = await cdp2.eval<number>(
+      `(() => document.querySelectorAll('.side-page[data-view="git"] .mc-comments .cm').length)()`,
+    );
+    const b16ToastBefore = await cdp2.eval<string>(
+      `(() => { const t = document.getElementById('toast'); return t ? (t.textContent || '') : ''; })()`,
+    );
+    const b16Sent = await cdp2.eval<string>(
+      `(() => {
+        const f = document.querySelector('#cmtPop form');
+        const box = document.getElementById('cmtBody');
+        box.value = 'B16 验收意见：别在这里吞异常';
+        if (f.requestSubmit) f.requestSubmit(); else f.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        return 'submitted';
+      })()`,
+    );
+    ok(b16Sent === "submitted", "B16 提交动作真发出去了（实测 " + JSON.stringify(b16Sent) + "）");
+    const b16Err = await waitFor(
+      async () => {
+        const t = await cdp2.eval<string>(
+          `(() => { const e = document.getElementById('cmtErr'); return e && !e.hidden ? (e.textContent || '') : ''; })()`,
+        );
+        return t && t.includes("未送达") ? "ok" : null;
+      },
+      8_000,
+    ).catch(() => "waitFor 超时：提交后没等到「未送达」回显");
+    ok(b16Err === "ok", "B16 被 main 拒时把「未送达」写在框里，而不是静默收起（实测 " + JSON.stringify(b16Err) + "）");
+    const b16Detail = await cdp2.eval<string>(
+      `(() => { const e = document.getElementById('cmtErr'); return e ? (e.textContent || '') : 'absent'; })()`,
+    );
+    // 实测这一窗口没有活动 session（与 B12 的 card_action 同一句 fail-closed 判因），所以断言钉死那一句。
+    // 写成三条 || 的析取式会被 assertion-health-scan 判红（任一成立即通过 = 弱判据），也确实更差：
+    // 路由哪天换分支了，析取式会静默跟着过。
+    ok(
+      b16Detail.includes("无可用事件管线（fail-closed）"),
+      "B16 判因原样上屏（main 那句 fail-closed，不是「发送失败」这类含糊话；实测 " + JSON.stringify(b16Detail.slice(0, 90)) + "）",
+    );
+    const b16Toast = await cdp2.eval<string>(
+      `(() => { const t = document.getElementById('toast'); return t ? (t.textContent || '') : ''; })()`,
+    );
+    // 比「不含『已送进』」更硬：那条读的是个陈旧节点（B13 留下的文案），本动作失败时根本不写 toast，
+    // 恒绿。失败回执只有 #cmtErr 一处，所以判据是「这次动作一个字也没写成成功」。
+    ok(
+      b16Toast === b16ToastBefore,
+      "B16 被拒不写成功文案（toast 逐字未变；实测 前=" + JSON.stringify(b16ToastBefore.slice(0, 30)) +
+        " 后=" + JSON.stringify(b16Toast.slice(0, 30)) + "）",
+    );
+    const b16CmtsAfter = await cdp2.eval<number>(
+      `(() => document.querySelectorAll('.side-page[data-view="git"] .mc-comments .cm').length)()`,
+    );
+    ok(
+      b16CmtsAfter === b16CmtsBefore,
+      "B16 被拒的评论不落进事件流评论面（条数 " + String(b16CmtsBefore) + " → " + String(b16CmtsAfter) + "）",
+    );
+    const b16Esc = await cdp2.eval<string>(
+      `(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        const p = document.getElementById('cmtPop');
+        const b = document.querySelector('.side-page[data-view="git"] .ln-row[data-line] [data-cmt]');
+        return JSON.stringify({ hidden: p ? p.hidden : 'absent', aria: b ? b.getAttribute('aria-expanded') : 'gone' });
+      })()`,
+    );
+    ok(
+      b16Esc.includes('"hidden":true') && b16Esc.includes('"aria":"false"'),
+      "B16 Escape 收起走的是看板那一条链（不另开一套收起逻辑；实测 " + JSON.stringify(b16Esc) + "）",
     );
     await killElectron(electron2);
   } finally {

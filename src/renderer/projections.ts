@@ -238,6 +238,51 @@ export function parsePatchLines(patch: string): PatchLine[] {
   return out;
 }
 
+/** 多文件补丁按文件切段。为什么必须有这一步：unified diff 的行号是**每个文件各自**的，
+ *  而 `diff --git a/X b/X` 里的路径在重命名/改路径时不等于新文件侧 —— 新文件侧的权威是 `+++ b/Y`。
+ *  挂错 path 的评论会被 main 原样注入 worker（它只判 path 非空、line≥1），比不评论更坏。 */
+export interface PatchFileSegment {
+  path: string;
+  lines: PatchLine[];
+}
+
+export function parsePatchFiles(patch: string): PatchFileSegment[] {
+  const out: PatchFileSegment[] = [];
+  let cur: PatchFileSegment | null = null;
+  const open = (path: string): PatchFileSegment => {
+    const seg: PatchFileSegment = { path, lines: [] };
+    out.push(seg);
+    return seg;
+  };
+  for (const l of parsePatchLines(patch)) {
+    const git = /^diff --git a\/\S+ b\/(\S+)$/.exec(l.text);
+    const plus = /^\+\+\+ (?:b\/(.+)|\/dev\/null)$/.exec(l.text);
+    if (git) cur = open(git[1]!);
+    else if (plus) {
+      if (plus[1] && cur) cur.path = plus[1]; // 以新文件侧为准
+      else if (plus[1] && !cur) cur = open(plus[1]);
+      // +++ /dev/null ⇒ 删掉的文件：留着 diff --git 那个路径（本就没有可评的行）
+    }
+    if (cur === null) cur = open(""); // 光秃秃的 hunk（没有文件头）：path 空 ⇒ 界面不给评论
+    cur.lines.push(l);
+  }
+  return out;
+}
+
+/** 行级评审 → card_action 载荷（§4.4.5 评审闭环；main 侧要 payload{path, line≥1, body 非空}）。
+ *  这里只组形状，不判合法性——判归 main，拒因由界面回显（两份规则必然漂移）。 */
+export function cardActionForComment(agentId: string, path: string, line: number, body: string) {
+  return {
+    cardId: "diff:" + agentId,
+    sourceEventId: 0,
+    cardType: "diff",
+    action: "comment",
+    payload: { path, line, body },
+    scope: "once" as const,
+    targetAgentId: agentId,
+  };
+}
+
 /** 合并控制塔投影（纯函数）：agent_spawned(mode=write) → 列；diff tool_result（子流）→ diff 快照；
  *  security_report(agent_id) → findings；diff_comment → 评论；merge-/wt-cleanup- tool_result → 收尾态。 */
 export function projectMergeTower(events: AgentEvent[]): MergeTowerColumn[] {

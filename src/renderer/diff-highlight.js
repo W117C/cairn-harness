@@ -1,4 +1,5 @@
 import { esc } from './dom.js';
+import { parsePatchFiles } from './projections';
 
 /* ============ diff 内置轻量 tokenizer（TS 为主，无外部依赖） ============
    按优先级分组匹配：注释 > 字符串 > 关键字 > 数字 > 函数调用 > 属性访问。
@@ -33,15 +34,40 @@ function highlightDiffLine(line) {
 
 /** 文本 → `.diff` 行结构（按 +/-/@ 前缀着色）。
  *  唯一实现：消息流的工具输出与 git 面板的 worker 补丁都走这里——两处各写一份
- *  就会一处改色一处不改（本仓的「同族只硬化一支」就是这么攒出来的）。 */
-export function diffHtml(text) {
-  const lines = String(text).split('\n');
-  let h = '<div class="diff">';
-  for (let i = 0; i < lines.length; i++) {
-    const ln = lines[i];
-    const c = ln.charAt(0);
-    const cls = c === '+' ? 'add' : c === '-' ? 'del' : c === '@' ? 'hunk' : 'ctx';
-    h += '<div class="ln ' + cls + '">' + esc(ln) + '</div>';
+ *  就会一处改色一处不改（本仓的「同族只硬化一支」就是这么攒出来的）。
+ *  opts.anchors：git 面板用的行锚点形态。行号与「评」按钮放在 `.ln` **外面**——
+ *  下面的 highlightAllDiffs 会把 `.ln` 的 innerHTML 按 textContent 重写一遍，
+ *  塞在里面就等于把按钮喂给 tokenizer 抹掉。删除行/文件头没有新文件侧行号 ⇒ 不给按钮
+ *  （评论挂到一个不存在的行上，比不给入口更坏）。 */
+export function diffHtml(text, opts = {}) {
+  const src = String(text);
+  if (!opts.anchors) {
+    const lines = src.split('\n');
+    let h = '<div class="diff">';
+    for (let i = 0; i < lines.length; i++) {
+      const ln = lines[i];
+      const c = ln.charAt(0);
+      const cls = c === '+' ? 'add' : c === '-' ? 'del' : c === '@' ? 'hunk' : 'ctx';
+      h += '<div class="ln ' + cls + '">' + esc(ln) + '</div>';
+    }
+    return h + '</div>';
+  }
+  let h = '<div class="diff diff-anchored">';
+  for (const seg of parsePatchFiles(src)) {
+    h += '<div class="pf">' + (seg.path ? esc(seg.path) : '(这份补丁没带文件名)') + '</div>';
+    for (const l of seg.lines) {
+      const c = l.text.charAt(0);
+      const cls = c === '+' ? 'add' : c === '-' ? 'del' : c === '@' ? 'hunk' : 'ctx';
+      const n = l.newLine;
+      const canCmt = n !== null && seg.path !== '';
+      h += '<div class="ln-row"' + (canCmt ? ' data-line="' + String(n) + '" data-path="' + esc(seg.path) + '"' : '') + '>' +
+        '<span class="lno">' + (n === null ? '' : String(n)) + '</span>' +
+        '<div class="ln ' + cls + '">' + esc(l.text) + '</div>' +
+        (canCmt
+          ? '<button class="ln-cmt" type="button" data-cmt aria-controls="cmtPop" aria-haspopup="dialog" aria-expanded="false" title="评这一行">评</button>'
+          : '') +
+        '</div>';
+    }
   }
   return h + '</div>';
 }
