@@ -1127,7 +1127,8 @@ function memLayerHTML(scope, title, layer) {
           '<div class="sched-acts"><button class="sched-btn danger" data-mem-act="del">删除</button></div>' +
         '</div>').join('')
     : '<p class="sched-empty">还没有记忆条目。</p>';
-  return '<div class="sched-sec">' + title + '（' + String(topics.length) + '）· ' + esc(layer.path || '') + '</div>' + rows;
+  return '<div class="sched-sec">' + title + '（' + String(topics.length) + '）</div>' +
+    '<div class="sched-when mem-path">' + esc(layer.path || '') + '</div>' + rows;
 }
 
 function memoryViewHTML() {

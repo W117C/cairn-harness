@@ -3,7 +3,7 @@
 //   B. Electron + CDP：1 万条事件虚拟化（DOM ≤300 / 滚动一屏 ≤200ms）+ 审批徽标 ≤1s + 布局重启还原 + 会话重命名落盘 + 截图
 // 退出码 0 = 全部断言通过；任何断言失败退出码 1。
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createEventLog } from "../src/events";
@@ -405,7 +405,18 @@ async function phaseElectron(root: string): Promise<void> {
     await killElectron(electron);
 
     console.log("[panels-check] B4 重启还原（新进程）");
-    const { proc: electron2, output: output2 } = spawnElectron({ M1E_SESSIONS_DIR: root, M1E_SETTINGS_PATH: join(root, "settings.json") });
+    // 记忆面板要跑在**非零**数据上才有分辨力：0==0 谁都能过。全局层指到临时目录，
+    // 里面放两个 topic + 一个 MEMORY.md 索引（索引不算条目 ⇒ 顺带验排除规则）。项目层保持真实（多半为空）。
+    const memHome = join(root, "mem-home");
+    await mkdir(memHome, { recursive: true });
+    await writeFile(join(memHome, "MEMORY.md"), "# 索引\n- [中文偏好](中文偏好.md) — 测试用\n", "utf8");
+    await writeFile(join(memHome, "中文偏好.md"), "---\ntype: user\nmodified: 2026-09-21T02:00:00.000Z\n---\n用中文交流。\n", "utf8");
+    await writeFile(join(memHome, "build-gates.md"), "---\ntype: project\nmodified: 2026-09-20T02:00:00.000Z\n---\n门禁清单即事实源。\n", "utf8");
+    const { proc: electron2, output: output2 } = spawnElectron({
+      M1E_SESSIONS_DIR: root,
+      M1E_SETTINGS_PATH: join(root, "settings.json"),
+      M2D_MEMORY_HOME: memHome,
+    });
     const up2 = await tryWait(async () => {
       try {
         const r = await fetch(CDP_URL + "/json/version");
@@ -651,6 +662,64 @@ async function phaseElectron(root: string): Promise<void> {
     ok(
       b8Trip === "false:会话不存在，未压缩",
       "B8 renderer → preload → main 走通并按 sessionId 拒（零模型调用；实测回条=" + JSON.stringify(b8Trip) + "）",
+    );
+    console.log("[panels-check] B9 记忆面板：抽屉里看得见盘上真有的条目（**只读**，一下都不删）");
+    // 删那一下由 tests/renderer-memory-panel.test.ts + 三条变异锚点管；这里补只有真窗口给得起的证据：
+    // 快速卡片 → openView('memory') → 抽屉页挂载，且每层显示的条数 = 该层目录里的 .md 数
+    // （期望由本脚本 readdir 独立算，不读渲染层的变量）。
+    await cdp2.eval(`(() => { const c = document.querySelector('#qcMemory'); if (c) c.click(); return String(!!c); })()`);
+    const b9Mounted = await tryWait(
+      async () => ((await cdp2.eval<boolean>(`!!document.querySelector('.side-page[data-view="memory"]')`)) ? true : null),
+      10_000,
+    );
+    ok(b9Mounted, "B9 点「记忆」快速卡片开得出抽屉页（openView 那一条路走通）");
+    // 页面先以「读取中…」挂载，快照是异步的（getState 一个来回）⇒ 等层头出现再读数；
+    // 等不到就把首屏文字原样报出来（读到的是「读取失败」还是「未提供快照」一目了然，不静默放行）。
+    const b9Ready = await tryWait(
+      async () => ((await cdp2.eval<boolean>(`!!document.querySelector('.side-page[data-view="memory"] .mem-path')`)) ? true : null),
+      12_000,
+    );
+    const b9First = await cdp2.eval<string>(
+      `(document.querySelector('.side-page[data-view="memory"]')?.textContent || '').trim().slice(0, 72)`,
+    );
+    ok(
+      b9Ready,
+      "B9 快照落到屏上（出现层头 + 目录行；实测首屏=" + JSON.stringify(b9First) + "）",
+    );
+    const b9 = await cdp2.eval<{ layers: { label: string; dir: string }[]; rows: number; names: string[] }>(
+      `(() => {
+        const p = document.querySelector('.side-page[data-view="memory"]');
+        const layers = [];
+        if (p) for (const sec of p.querySelectorAll('.sched-sec')) {
+          const nxt = sec.nextElementSibling;
+          if (nxt && nxt.classList.contains('mem-path')) layers.push({ label: (sec.textContent || '').trim(), dir: (nxt.textContent || '').trim() });
+        }
+        return {
+          layers,
+          rows: p ? p.querySelectorAll('.mem-topic').length : -1,
+          names: p ? [...p.querySelectorAll('.mem-topic')].map((r) => r.getAttribute('data-topic') || '') : [],
+        };
+      })()`,
+    );
+    let b9Shown = 0;
+    const b9Parts: string[] = [];
+    let b9AllMatch = b9.layers.length > 0;
+    for (const l of b9.layers) {
+      const shown = Number(/（(\d+)）/.exec(l.label)?.[1] ?? -1);
+      let onDisk = 0;
+      try { onDisk = (await readdir(l.dir)).filter((f) => f.endsWith(".md") && f !== "MEMORY.md").length; } catch { onDisk = 0; }
+      b9Shown += shown;
+      b9Parts.push(l.label + " 盘上=" + String(onDisk));
+      if (shown !== onDisk) b9AllMatch = false;
+    }
+    ok(b9AllMatch, "B9 每层条数 = 该层目录里的 .md 文件数（实测 " + JSON.stringify(b9Parts) + "）");
+    ok(
+      b9.rows === b9Shown,
+      "B9 渲染出的行数 = 两层计数之和（不少渲染也不多渲染一遍；实测 rows=" + String(b9.rows) + " 期望 " + String(b9Shown) + "）",
+    );
+    ok(
+      b9Shown > 0 && b9.names.includes("中文偏好") && b9.names.includes("build-gates") && !b9.names.includes("MEMORY"),
+      "B9 全局层两个 topic 上了屏、MEMORY.md 只当索引不算条目（实测 names=" + JSON.stringify(b9.names) + " 计数 " + String(b9Shown) + "）",
     );
     await killElectron(electron2);
   } finally {
