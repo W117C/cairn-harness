@@ -772,6 +772,51 @@ Escape 不落确认位、第三次仍弹）；`renderer-arch-check` 84/84、`a11
 `inert` 只加在浮层自己身上（关着时不可交互），开着时的背景抑制这条没做也没判，记在待办 16。
 
 
+## 第二十二程（09-22，`bcf9008` + `3696dd5` + `87b34e2`）：红点自己指出了「门不是离线观测者」
+
+上一笔（`d4a91a6`）把模态收起写成 `MODAL_DISMISS` 之后，本程先补它留在 HEAD 里的红：
+`tests/renderer-workspace.test.ts` 按标记切 `app.js` 的几段喂 `runInNewContext`，
+**切面之外的模块级符号对 vm 世界根本不存在** ⇒ 干净 HEAD 上 13 条
+`ReferenceError: registerModalDismiss is not defined`。两侧读数（同 SHA 开 worktree 实跑，
+软链 `node_modules`、直连 vitest）：`d4a91a6` → `Tests 13 failed (13)`、HEAD → `13 passed (13)`。
+**根因不是代码，是我上一笔的验证集**：只跑了 panels-check 与 tsc，没跑 `test` 门
+（本晚第 3 次犯同一条——见记忆「跑过邻域那几份测不等于跑过那道门」）。
+
+**没走的路：在测试里塞一个假 `registerModalDismiss`。** 那 13 条会立刻变绿，
+同时把"生产里这张表真被用到"这条判据永久换成它自己的副本——本仓切片判据的老坑。
+正解是改形状：表存**选择器**、用时才 `document.querySelector`（`bcf9008`），
+于是这张表本身可以被切片判据整段带走，喂进去的是真实现。惰性化不是为测试让步，
+它顺带修掉了"求值时抓引用 ⇒ 元素晚于模块出现就抓不到"这一支真缺陷。
+
+**接着撞见更值钱的一条：那张表的行为在离线面零判据。**
+`3696dd5` 之前唯一的消费者只把它当模块绑料（判的是工作目录那一段），真按键押在
+panels-check B21；而变异表的锚点全部指向 vitest 文件（`grep -oE 'test: "tests/[^"]+"' scripts/mutate-verify.mjs`
+的取值面里没有一道 `scripts/*-check.ts`）⇒ **门不是离线观测者**：
+「优先级反过来」「登记变成 no-op」这类回归连锚点都挂不上。这就是本仓反复撞的
+「装载收下、执行端不读」的又一形态——登记函数收下了参数，Escape 那一支却没人验。
+补法：`tests/renderer-modal-dismiss.test.ts`（切该段进 vm，标记找不到即 throw）5 条，
+含两条负控（未登记的浮层表完全不认 / 一支都没开着 ⇒ null，Escape 才落到芯片看板那一支）；
+锚点 4 根（`87b34e2`：优先级倒序、登记 no-op、去重丢掉、查表不看 `show`），
+在 `/tmp` 同 HEAD worktree 里逐条实跑（不占主树的 `app.js`，避开并发会话的写窗）：
+`变异验证：4 条 … 全部变异被正确杀死`。
+
+**规模读数（本程实量，别照记忆）**：`grep -lE "runInNewContext" tests/*.test.ts | wc -l` = **28**
+（本程 +1）——`src/renderer/app.js` 有 28 个隐形 importer；其中共用
+`tests/renderer-vm-module.ts` 那份剥法的只有 **3** 份，其余各写各的取料标记。
+**没有任何一道门数得出这件事**，所以"模块级加了个符号"这种改动天然无人拦（待办 19）。
+
+**本程读数**：`pnpm test` 全量 = **192 files / 1869 tests，末行 `TEST_EXIT=0`**
+（上笔 191 / 1864，+1 份文件 +5 条正是 `3696dd5` 那份；计数从日志读，不心算）；
+针脚体检 `pnpm mutate-needles-check` = **611 条、阻断 0、待复认 0、未覆盖 0**（上笔 607，+4）；
+`grep -oE 'test: "[^"]+"' scripts/mutate-verify.mjs | grep -cv '^test: "tests/'` = **0**
+⇒ 611 根锚点**没有一根**能指向 `scripts/*-check.ts`，"门不算离线观测者"这句是这张表的结构性事实，不是修辞。
+`pnpm typecheck` 唯一报错在别人那份未跟踪草稿 `scripts/sidebar-probe.ts`（本程两支不碰它，
+按规则「判 HEAD 只能同 HEAD 开 worktree 跑」，不用它的归因句替 HEAD 说话）。
+**仍未判的**：Escape 按键到 `close()` 的端到端只有真窗口门在判（本程钉的是表的语义，不是监听器）；
+焦点圈那条走的是 `m.el.querySelectorAll`，vm 里没有真 DOM，切片判不了；
+浮层开着时背景对读屏器的 `inert` 抑制仍是待办 16。
+
+
 ## 待办（按优先级）
 
 1. 沉淀面：`failureDigestFromEvents`（能力 6/10）现在只看 `verify_result(ok:false)` 与
@@ -882,6 +927,20 @@ Escape 不落确认位、第三次仍弹）；`renderer-arch-check` 84/84、`a11
     带日期的事实（哪一版走通、中间断了多久），别只删——那是断代。
     同族的另一条已在 `e215fc0` 付过学费：**门的读数分「工作树」与「HEAD」两种**，
     `pnpm typecheck` 那句「HEAD 内 0 个」是在工作树上算的，判 HEAD 自洽只能同 HEAD 开 worktree 跑。
+
+19. 切片判据的**消费者面没人枚举**（第二十二程的量）：`grep -lE "runInNewContext" tests/*.test.ts | wc -l`
+    = 28 份，其中只有 3 份共用 `tests/renderer-vm-module.ts` 那份剥法，其余各写各的取料标记。
+    `d4a91a6` 加的模块级符号落在某段区间之外 ⇒ 13 条测试在 HEAD 红了一整晚，
+    而**没有任何一道门预告这件事**（tsc 看不见 vm，panels-check 不跑那份切片）。
+    便宜的先做：让某道静态门打印「每份切片测取哪个源文件、哪些区间」，再核一条
+    **「区间外的新模块级声明不得被区间内引用」**（AST 可判，`typescript` 已是依赖）。
+    ⚠️ 别做成「所有模块级声明都必须落在某段内」——那是把 28 份切片的偶然形状升级成政策，
+    方向搞反会逼着人把切面越扩越大。
+20. 本程新落的那份切片测只判**表的语义**，没判**监听器**：Escape 按下 → `openModal()` → `close()`
+    这条端到端仍只有 panels-check B21（真窗口 + trusted 按键）在判。要把这一跳也变成离线面，
+    需要能把 `document.addEventListener('keydown', …)` 整段切进 vm 的形状——
+    该段还引用 `ctxPops` / `closeAllPops`，切之前先回答「要不要为它再造一份绑料」，
+    别为了多一条测把 28 份切片的绑料面再扩大一圈（本文件待办 19 说的就是这个成本）。
 
 ## 复算命令
 
@@ -996,3 +1055,28 @@ git worktree add --detach /tmp/x HEAD && ln -s "$PWD/node_modules" /tmp/x/node_m
 4 个命中全在类型声明与注释里，读取点为 0。）
 分辨力注入法（不动主树）：`git worktree add --detach /tmp/x HEAD` + 软链 `node_modules`
 → 把 `src/` 同步进去 → `git checkout -- src/providers/{anthropic,openai,gemini}.ts` → 跑同一份测。
+
+### 第二十二程复算（09-22）
+
+```
+R="/Users/ze/Downloads/deepseek harness"        # 主树绝对路径：worktree 里软链 node_modules 用
+# ① 红点两侧对照（同一份测、两个 SHA）
+git worktree add --detach /tmp/x1 d4a91a6 && ln -s "$R/node_modules" /tmp/x1/node_modules
+cd /tmp/x1 && TERM=dumb node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/renderer-workspace.test.ts
+#   → Tests 13 failed (13)，报错 ReferenceError: registerModalDismiss is not defined
+cd "$R" && TERM=dumb node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/renderer-workspace.test.ts
+#   → Tests 13 passed (13)
+# ② 消费者面到底有多大（本程据此立待办 19）
+grep -lE "runInNewContext" tests/*.test.ts | wc -l                              # 28
+grep -l "renderer-vm-module" tests/*.test.ts | wc -l                            # 3
+grep -oE 'test: "[^"]+"' scripts/mutate-verify.mjs | grep -vc '^test: "tests/'  # 0 ⇒ 锚点不能指向门
+# ③ 四根锚点逐条实跑（同 HEAD worktree：不占主树的 app.js，避开并发会话写窗。
+#    锚点未入库的那一步还要 `cp scripts/mutate-verify.mjs /tmp/x2/scripts/`，87b34e2 之后不必）
+rm -rf /tmp/x2 && git worktree add --detach /tmp/x2 HEAD && ln -s "$R/node_modules" /tmp/x2/node_modules
+cd /tmp/x2 && "$R/node_modules/.bin/tsx" scripts/mutate-verify.mjs \
+  modal-dismiss-priority-inverted modal-dismiss-register-noop modal-dismiss-dedup-removed modal-dismiss-ignores-show-state
+#   → 变异验证：4 条 … 全部变异被正确杀死（整表 611 条不在此复算：逐条起 vitest，跑一两个小时）
+cd "$R" && pnpm run mutate-needles-check            # 针脚体检：611 条 —— 阻断 0、待复认 0、未覆盖 0
+TERM=dumb pnpm test > /tmp/t.log 2>&1; echo "TEST_EXIT=$?" >> /tmp/t.log
+grep -aE "TEST_EXIT|Test Files|^ *Tests " /tmp/t.log    # 实测 0 / 192 files / 1869 tests
+```
