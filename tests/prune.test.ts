@@ -371,16 +371,38 @@ describe("修剪量的是「将要发给模型的那一段」——worker 子流
     expect(r.savedTokens).toBeGreaterThan(0);
   });
 
-  it("多一条子流大块，父侧的替换集合与 savedTokens 逐字不变（不吃保护区预算）", () => {
-    const baseline = computePrune({ events: [
-      ...round("r1", true), ...round("r2", true), ...round("r3", true),
-    ] });
-    const withChild = computePrune({ events: [
-      ...round("r1", true), ...round("rw", false), ...round("r2", true), ...round("r3", true),
-    ] });
-    expect(baseline.replacements.size).toBe(1); // 前提：基线真会裁一条，否则「相等」是两句空话
-    expect(withChild.replacements.size).toBe(baseline.replacements.size);
-    expect(withChild.savedTokens).toBe(baseline.savedTokens);
+  /* 保护区量的是「将要发出去的那一段」。把子流的大块算进预算 ⇒ 保护区提前收口，
+     父会话里真在上下文中的老结果 q 被划成候选去裁。两条断言把「归因」与「位置」分开：
+     同一位置放子流 ⇒ q 受保护；放父会话自己的大块 ⇒ q 该被裁（prune 的本职）。
+     每块 100KB ASCII = estimateTextTokens 25600 ⇒ 两块越过 protectTokens 40000。 */
+  const budgetConfig = { protectTokens: 40000, minimumTokens: 20000, recentRounds: 1, exemptTools: [] };
+  const chunk = "z".repeat(100 * KB);
+  const block = (tag: string, parent: boolean): AgentEvent[] => [
+    { type: "tool_call", id: tag, name: "read_file", args: {} },
+    { type: "tool_result", callId: tag, ok: true, output: chunk, ...(parent ? {} : { agent_id: "w1" }) },
+  ];
+  const older = (): AgentEvent[] => [
+    { type: "user_message", content: "r1" },
+    ...block("q", true),
+    { type: "user_message", content: "r2" },
+    ...block("p", true),
+    { type: "user_message", content: "r3" },
+  ];
+  const qIdOf = (events: AgentEvent[]): number => events.findIndex((e) => e.type === "tool_result" && (e as { callId?: string }).callId === "q") + 1;
+
+  it("末尾放子流大块：不吃保护区预算，老结果 q 仍受保护", () => {
+    const events: AgentEvent[] = [...older(), ...block("w", false)];
+    const r = computePrune({ events, config: budgetConfig });
+    expect(r.replacements.has(qIdOf(events)), "q 被划成候选 = 保护区被子流的体量顶掉了").toBe(false);
+    expect(r.savedTokens).toBe(0);
+  });
+
+  it("负控：同一位置放父会话自己的大块 ⇒ q 出保护区被裁（判的是归因，不是位置）", () => {
+    const events: AgentEvent[] = [...older(), ...block("w", true)];
+    const r = computePrune({ events, config: budgetConfig });
+    expect(r.replacements.size).toBe(1);
+    expect(r.replacements.has(qIdOf(events))).toBe(true);
+    expect(r.savedTokens).toBeGreaterThan(0);
   });
 
   it("isPruneExempt 单点判据：带归因的 tool_result 一律免剪", () => {
