@@ -3880,6 +3880,38 @@ const MUTATIONS = [
     apply: (s) => s.replace("String((c.usage ? c.usage.inputTokens + c.usage.outputTokens : 0)) + ' tok · '", "'0' + ' tok · '"),
     expectFail: "状态中文化、token 合计、工具计数、任务与报告",
   },
+  {
+    id: "worker-approval-raises-card-for-dead-worker",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-worker-approval.test.ts",
+    desc: "终态 worker 的未答审批也弹卡 ⇒ 给用户一个必然失败的按钮（§4.4.9 扫成 failed 的那一列早已无处路由）",
+    apply: (s) => s.replace('c.status !== "waiting_approval" && c.status !== "waiting_input" && c.status !== "running"', '(c.status as string) === "__never__"'),
+    expectFail: "已答的、已死的、主会话的，都不许再弹卡",
+  },
+  {
+    id: "worker-approval-payload-loses-approval-id",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-worker-approval.test.ts",
+    desc: "card_action 载荷不写 approval_id ⇒ 主进程退回拿 cardId 当审批 id（「approval:apr-1」查无此审批），用户点了批准而 worker 仍在等",
+    apply: (s) => s.replace("payload: { approval_id: ask.askId },", "payload: {},"),
+    expectFail: "停在审批门上的 worker 长出一张卡，且载荷指向这条审批本身",
+  },
+  {
+    id: "worker-approval-deny-sends-approve",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-worker-approval.test.ts",
+    desc: "拒绝也发 action=approve ⇒ 用户点「拒绝」却把命令放行了（审批门反向 = 权限面上最坏的一种错）",
+    apply: (s) => s.replace('action: approved ? "approve" : "reject",', 'action: "approve",'),
+    expectFail: "停在审批门上的 worker 长出一张卡，且载荷指向这条审批本身",
+  },
+  {
+    id: "panel-dirty-never-mentions-approval-events",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-worker-approval.test.ts",
+    desc: "审批事件不进面板脏集 ⇒ 「写租约相交」那处 approval_requested 不伴随 agent_status，卡要等下一个无关事件才出现（最长等到 120s 自动拒之后）",
+    apply: (s) => s.replace("approval_requested: 1, approval_resolved: 1 };", "};"),
+    expectFail: "审批事件在面板脏集里",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
