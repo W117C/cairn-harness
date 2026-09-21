@@ -3901,10 +3901,10 @@ const MUTATIONS = [
   },
   {
     id: "panel-dirty-never-mentions-approval-events",
-    src: "src/renderer/app.js",
+    src: "src/renderer/projections.ts",
     test: "tests/renderer-worker-approval.test.ts",
     desc: "审批事件不进面板脏集 ⇒ 「写租约相交」那处 approval_requested 不伴随 agent_status，卡要等下一个无关事件才出现（最长等到 120s 自动拒之后）",
-    apply: (s) => s.replace("approval_requested: 1, approval_resolved: 1, diff_comment: 1 };", "};"),
+    apply: (s) => s.replace('  "approval_requested", "approval_resolved", "diff_comment",\n', ""),
     expectFail: "审批事件在面板脏集里",
   },
   {
@@ -4260,10 +4260,10 @@ const MUTATIONS = [
   },
   {
     id: "diff-comment-missing-from-panel-dirty-set",
-    src: "src/renderer/app.js",
+    src: "src/renderer/projections.ts",
     test: "tests/renderer-line-comment-write.test.ts",
     desc: "脏集漏掉 diff_comment ⇒ 送出去的评论要等下一个无关事件才上屏，甚至永远等不到",
-    apply: (s) => s.replace("approval_resolved: 1, diff_comment: 1 }", "approval_resolved: 1 }"),
+    apply: (s) => s.replace('"approval_resolved", "diff_comment",', '"approval_resolved",'),
     expectFail: "diff_comment 在面板脏集里",
   },
   // ---- 面板重绘的用户态保全（4dd11d6）----
@@ -4924,6 +4924,31 @@ const MUTATIONS = [
     desc: "只截非串值不截长字符串 ⇒ 一条长参数整段进那一行 DOM，「摘要」变成「全文」",
     apply: (s) => s.replace('return raw === "" ? "—" : raw.slice(0, 120);', 'return raw === "" ? "—" : raw;'),
     expectFail: "有界：三个分支各自都不超过 120 字",
+  },
+  // ---- 面板重绘触发集的双向闸（projections.PANEL_DIRTY_TYPES，2026-09-22）----
+  {
+    id: "panel-dirty-misses-review-and-progress-events",
+    src: "src/renderer/projections.ts",
+    test: "tests/panel-dirty-freshness.test.ts",
+    desc: "脏集退回「只认工具与编排」⇒ usage/进展/报告/安全发现四类改了投影却不重绘，右栏停在上一批数据上仍看着像当前结论",
+    apply: (s) => s.replace('  "usage", "agent_message", "agent_result", "security_report",\n', ""),
+    expectFail: "security_report 实测改投影",
+  },
+  {
+    id: "panel-dirty-refreshes-on-inert-events",
+    src: "src/renderer/projections.ts",
+    test: "tests/panel-dirty-freshness.test.ts",
+    desc: "把不改投影的类型也塞进脏集 ⇒ 每条事件一次 O(全量) 重投影，白刷的成本最终会反过来逼 people 把表改窄（连正确的漏判一起改掉）",
+    apply: (s) => s.replace('"agent_result", "security_report",', '"agent_result", "security_report", "error",'),
+    expectFail: "error 实测零影响",
+  },
+  {
+    id: "app-keeps-its-own-panel-dirty-copy",
+    src: "src/renderer/app.js",
+    test: "tests/panel-dirty-freshness.test.ts",
+    desc: "渲染层自己内联一份触发清单 ⇒ 与投影分家，加字段的那一侧再也不会想起这里（同族各抄一份）",
+    apply: (s) => s.replace("PANEL_DIRTY_TYPES.has(e.type)", '["tool_call", "tool_result", "agent_spawned", "agent_status", "approval_requested", "approval_resolved", "diff_comment"].includes(e.type)'),
+    expectFail: "判据只有一张表",
   },
 ];
 

@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { expect, it, vi } from 'vitest';
-import { cardActionForComment, commentReadsBack, parsePatchFiles } from '../src/renderer/projections';
+import { cardActionForComment, commentReadsBack, PANEL_DIRTY_TYPES, parsePatchFiles } from '../src/renderer/projections';
 
 const source = readFileSync(new URL('../src/renderer/app.js', import.meta.url), 'utf8');
 
@@ -110,9 +110,8 @@ it('cardActionForComment 组出 main 要的四面，且不判合法性', () => {
 });
 
 it('diff_comment 在面板脏集里（送出去的评论不当场回画 = 用户点了没反应）', () => {
-  const m = /const PANEL_DIRTY = \{([^}]*)\};/.exec(source);
-  expect(m, "PANEL_DIRTY 字面量形状变了：本判据要跟着改，不许静默通过").not.toBeNull();
-  expect(m![1], 'diff_comment 必须进脏集').toContain('diff_comment:');
+  // 脏集已从 app.js 搬进 projections（它说的是「哪些事件会改投影」，与消费者同源）。
+  expect(PANEL_DIRTY_TYPES.has('diff_comment'), 'diff_comment 必须进脏集').toBe(true);
 });
 
 /* 界面侧的「要不要给入口」——判归 mergeOwners 的注销时机：worktree 收尾后 injectComment 恒

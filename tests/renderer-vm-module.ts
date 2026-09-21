@@ -7,7 +7,7 @@
 // vm 跑的是脚本不是模块 ⇒ 那条 import 必须剥掉、绑定必须从 context 给。
 // 若每份测试各写一遍剥法，改一行 import 形制就要三处同步；漏掉的那处不会报错，
 // 只会**静默把判据换成自己的副本**——正是本仓反复栽的「一份政策两份实现」。
-import { entersMainConversation, toolArgsSummary } from "../src/renderer/projections";
+import { entersMainConversation, PANEL_DIRTY_TYPES, toolArgsSummary } from "../src/renderer/projections";
 
 /** history-window.js 里那条必须剥掉的 import（逐字）。 */
 export const CHILD_IMPORT = `import { entersMainConversation } from './projections';`;
@@ -21,4 +21,4 @@ export function groupedScript(historyWindowSource: string): string {
   return head.replaceAll("export function ", "function ").replace(CHILD_IMPORT, "");
 }
 
-export { entersMainConversation, toolArgsSummary };
+export { entersMainConversation, PANEL_DIRTY_TYPES, toolArgsSummary };

@@ -52,6 +52,22 @@ export interface TokenProjection {
   byKind: TokenKindBreakdown[];
 }
 
+/** 会改变 `projectPanelData` 输出的事件类型 = 「右栏该重绘」的唯一判据（app.js 只问这张表）。
+ *
+ * 为什么这张表住在投影这一侧：它描述的是**投影的取料面**，不是渲染的偏好。住在 app.js 里
+ * 时加一个投影字段就会漏一类触发器——实测漏了四条：`usage` / `agent_message` / `agent_result`
+ * 改 `agents` 列，`security_report` 改 `merge` 列的红标。漏掉的后果不是「不画」，
+ * 是**画着旧的**：评审面板停在上一批发现上，看着像当前结论。
+ *
+ * 刻意不进表的：`assistant_delta` / `assistant_message`（流式抖动；且不落任何投影面）、
+ * `user_message` / `session_meta` / `error` / `compaction` / `verify_result`（实测对六面零影响）。
+ * 双向判据在 `tests/panel-dirty-freshness.test.ts`：改投影的必须在表里，不改投影的不许进表。 */
+export const PANEL_DIRTY_TYPES: ReadonlySet<string> = new Set([
+  "tool_call", "tool_result", "agent_spawned", "agent_status",
+  "approval_requested", "approval_resolved", "diff_comment",
+  "usage", "agent_message", "agent_result", "security_report",
+]);
+
 /** 单源投影（向后兼容：现有调用方只有一份事件流）。 */
 export function projectTokenUsage(events: AgentEvent[]): TokenProjection {
   return projectTokenUsageByKind([{ kind: "main", events }]);

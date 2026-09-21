@@ -1,9 +1,8 @@
 // worker 审批的应答面（§4.4.3 / §10.3）：卡从事件流投影长出来，决议经 card_action 协议回到唯一入口。
 // 此前渲染层对 api.cardAction 零调用者，而 worker 审批的唯一应答路径就是它
 // （`waitForApproval` 有 approvalTimeoutMs 缺省 120s）⇒ 产品里每条 worker 审批都被自动拒掉。
-import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
-import { cardActionForApproval, cardActionForWorkerRow, projectAgentPanel, workerApprovalAsks, workerRowActions, WORKER_ROW_ACTION_NAMES, type AgentColumn } from "../src/renderer/projections";
+import { cardActionForApproval, cardActionForWorkerRow, PANEL_DIRTY_TYPES, projectAgentPanel, workerApprovalAsks, workerRowActions, WORKER_ROW_ACTION_NAMES, type AgentColumn } from "../src/renderer/projections";
 import type { AgentEvent } from "../src/events";
 
 const spawn = { type: "agent_spawned", agent_id: "wt-1", parent_event_id: 3, mode: "write", task: "修排序", max_turns: 8, permission_mode: "default" } as unknown as AgentEvent;
@@ -44,11 +43,9 @@ it("worker 档不给 always（§11.7.6），且血缘缺失时 sourceEventId 落
 // 四处 approval_requested 里，「写租约相交」那一处**不伴随** agent_status（orchestrator:804-816），
 // 所以脏集少了 approval_requested 时，那张卡要等下一个无关事件才可能出现（最长=整个 120s 超时）。
 it("审批事件在面板脏集里（不然卡会晚到，甚至永远晚到超时之后）", () => {
-  const src = readFileSync(new URL("../src/renderer/app.js", import.meta.url), "utf8");
-  const m = /const PANEL_DIRTY = \{([^}]*)\};/.exec(src);
-  expect(m, "PANEL_DIRTY 字面量形状变了：本判据要跟着改，不许静默通过").not.toBeNull();
+  // 表已从 app.js 搬进 projections（它就是「哪些事件会改投影」，与消费者同源）——读值，不再扒字面量。
   for (const t of ["approval_requested", "approval_resolved", "agent_spawned", "agent_status"]) {
-    expect(m![1], t + " 必须进脏集").toContain(t + ":");
+    expect(PANEL_DIRTY_TYPES.has(t), t + " 必须进脏集").toBe(true);
   }
 });
 

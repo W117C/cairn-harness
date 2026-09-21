@@ -1,5 +1,5 @@
 import { projectUnits, mountHistory } from './history-window.js';
-import { projectPanelData, EMPTY_PANEL_DATA, entersMainConversation, toolArgsSummary, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS, cardActionForComment, commentReadsBack } from './projections';
+import { projectPanelData, EMPTY_PANEL_DATA, entersMainConversation, toolArgsSummary, PANEL_DIRTY_TYPES, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS, cardActionForComment, commentReadsBack } from './projections';
 import { $, esc, promptInput, sessionList, streamInner, toast } from './dom.js';
 import { ICONS, RUN_GRID_HTML, runGrid } from './icons.js';
 import { highlightAllDiffs, diffHtml } from './diff-highlight.js';
@@ -2335,9 +2335,9 @@ render();
   let historyEvents = null;
   /* 右栏面板的事件源：会话打开时 = 历史快照，运行中逐条追加（与流内渲染同源） */
   let panelEvents = [];
-  /** 会改变面板内容的事件类型（工具与编排）；其余事件不触发重绘，避免随 token 抖动。
-   *  diff_comment 在内：它是「已送进子流的评论」唯一的可见回执，不重绘就等于用户点了没反应。 */
-  const PANEL_DIRTY = { tool_call: 1, tool_result: 1, agent_spawned: 1, agent_status: 1, approval_requested: 1, approval_resolved: 1, diff_comment: 1 };
+  /** 会改变面板内容的事件类型：表在 projections.ts（它描述的是投影的取料面，不是渲染偏好），
+   *  双向判据在 tests/panel-dirty-freshness.test.ts。diff_comment 在内：它是「已送进子流的评论」
+   *  唯一的可见回执，不重绘就等于用户点了没反应。 */
 
   /* ---------- 真实运行目录：与 WORKSPACES 文件树演示数据严格隔离 ---------- */
   const workspaceForm = document.createElement('form');
@@ -2604,7 +2604,8 @@ render();
     if (tt) tt.textContent = tokStr();
   }
   /** 右栏面板刷新：数据 = projectPanelData(会话事件, 运行目录)，渲染仍走原型段的 renderSide。
-   *  只在会话打开与面板相关事件到达时刷新（工具/编排事件每轮个位数，不随 token 抖动）。 */
+   *  只在会话打开与「会改投影」的事件到达时刷新（判据 = PANEL_DIRTY_TYPES，每轮个位数条；
+   *  流式 delta 不进表，所以不随 token 抖动）。 */
   function refreshPanels() {
     panelData = projectPanelData(panelEvents, configuredWorkspace);
     renderSide();
@@ -3342,7 +3343,7 @@ render();
     if (historyEvents && !real.running) showHistory(historyEvents.concat(e));
     else {
       renderEvent(e);
-      if (PANEL_DIRTY[e.type]) { panelEvents = panelEvents.concat([e]); refreshPanels(); }
+      if (PANEL_DIRTY_TYPES.has(e.type)) { panelEvents = panelEvents.concat([e]); refreshPanels(); }
     }
   });
 

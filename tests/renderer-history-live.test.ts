@@ -3,7 +3,7 @@ import { runInNewContext } from 'node:vm';
 import { expect, it, vi } from 'vitest';
 // 同一个真函数注进 vm，而不是在测试里重写一遍准入判据：两支渲染器共用一个实现是本判据的**内容**。
 // 剥法也来自同一处（三份 vm 切片共用）。
-import { entersMainConversation, groupedScript, toolArgsSummary } from './renderer-vm-module';
+import { entersMainConversation, groupedScript, PANEL_DIRTY_TYPES, toolArgsSummary } from './renderer-vm-module';
 
 // R1b B1 后：重放走「单元分组（history-window）+ 单一渲染器（app.js renderEvent）」。
 // 本文件锁的是会话切换/重放编排那一层：挂载请求、去重、快照对账、重放无副作用。
@@ -50,6 +50,7 @@ function boot() {
     streamInner: element(), document: { createElement: element }, revealObserver: { unobserve: vi.fn() },
     entersMainConversation,
     toolArgsSummary,
+    PANEL_DIRTY_TYPES,
     $: vi.fn(element), render: vi.fn(), closeSbMenus: vi.fn(), syncStatusbar: vi.fn(), scrollStream: vi.fn(),
     toast: vi.fn(), askCard: vi.fn(), setInterval: vi.fn(), clearInterval: vi.fn(), setTimeout: vi.fn(),
     // Exercise the shipped grouping and the inert mount contract; only layout is stubbed.
