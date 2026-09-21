@@ -12,6 +12,9 @@ import { createEventLog } from "../src/events";
 import { normalizeStopReason, truncationOf, turnTruncatedEvent } from "../src/providers/stop-reason";
 import { projectContext, truncationNote } from "../src/agent/context";
 import { runLoop } from "../src/agent/loop";
+import { createMockProvider } from "../src/providers/mock";
+import { createGlmSessionProvider } from "../src/agent/glm-session";
+import type { GlmMessage } from "../src/providers/glm";
 import { streamAnthropic } from "../src/providers/anthropic";
 import { streamOpenAI } from "../src/providers/openai";
 import { streamGemini } from "../src/providers/gemini";
@@ -248,5 +251,119 @@ describe("落盘与投影", () => {
       { type: "turn_truncated", callId: "w1", outcome: "output_budget", stop_reason: "max_tokens", agent_id: "worker-1" },
     ]);
     expect(msgs.filter((m) => String(m.content ?? "").includes("[harness]"))).toEqual([]);
+  });
+});
+
+// 「剧本 → runLoop → JSONL」这一跳：上面几条用的是手写 provider，而 e2e/gym/agents-check
+// 走的是 createMockProvider。它原先只收 assistant_message/tool_call/usage ⇒ 截断在**冻结剧本
+// 里根本表达不出来**，任何端到端判据都只能靠手工注入事件（那测不到生产那一跳）。
+describe("剧本入口（createMockProvider）", () => {
+  async function scriptDir(): Promise<string> {
+    return await mkdtemp(join(tmpdir(), "dsh-trunc-script-"));
+  }
+
+  it("剧本可以带 turn_truncated，并按序原样产出（不折进正文、不丢）", async () => {
+    const d = await scriptDir();
+    try {
+      const p = join(d, "s.jsonl");
+      await writeFile(p, [
+        JSON.stringify({ type: "assistant_message", content: "函数长这样：function f() {" }),
+        JSON.stringify({ type: "usage", inputTokens: 10, outputTokens: 4096 }),
+        JSON.stringify({ type: "turn_truncated", callId: "msg_1", outcome: "output_budget", stop_reason: "max_tokens", output_tokens: 4096 }),
+      ].join("\n") + "\n", "utf8");
+      const got = await collect(createMockProvider(p).stream([]));
+      expect(got.map((e) => e.type)).toEqual(["assistant_message", "usage", "turn_truncated"]);
+      expect(got[2]).toMatchObject({ outcome: "output_budget", stop_reason: "max_tokens", output_tokens: 4096 });
+    } finally {
+      await rm(d, { recursive: true, force: true });
+    }
+  });
+
+  it("负控仍在：运行时产物（tool_result）依旧拒收——放行它等于让剧本伪造工具回执", async () => {
+    const d = await scriptDir();
+    try {
+      const p = join(d, "s.jsonl");
+      await writeFile(p, JSON.stringify({ type: "tool_result", callId: "c", ok: true, output: "x" }) + "\n", "utf8");
+      await expect(collect(createMockProvider(p).stream([]))).rejects.toThrow("只允许");
+    } finally {
+      await rm(d, { recursive: true, force: true });
+    }
+  });
+
+  it("端到端：剧本驱动 runLoop，截断确实落到盘上那一行", async () => {
+    const d = await scriptDir();
+    try {
+      const logPath = join(d, "out.jsonl");
+      await writeFile(logPath, "", "utf8");
+      const scriptPath = join(d, "script.jsonl");
+      await writeFile(scriptPath, [
+        JSON.stringify({ type: "assistant_message", content: "答案的一半：" }),
+        JSON.stringify({ type: "usage", inputTokens: 8, outputTokens: 4096 }),
+        JSON.stringify({ type: "turn_truncated", callId: "msg_e2e", outcome: "output_budget", stop_reason: "max_tokens" }),
+      ].join("\n") + "\n", "utf8");
+      await runLoop({
+        workspace: "/tmp",
+        events: createEventLog(logPath),
+        userMessage: "讲一半就行",
+        provider: createMockProvider(scriptPath),
+      });
+      const events = await replay(logPath);
+      const line = events.find((e) => e.type === "turn_truncated");
+      expect(line, "截断必须进转录，否则下一轮与面板都无从得知").toMatchObject({
+        callId: "msg_e2e", outcome: "output_budget", stop_reason: "max_tokens",
+      });
+    } finally {
+      await rm(d, { recursive: true, force: true });
+    }
+  });
+});
+
+// 上面那几条只证明「projectContext 里有这一行」。生产入口是会话型 provider（它以事件日志为
+// 唯一事实源、忽略 loop 传入的 messages），跨轮那句「模型真的看得到」只能在这里判。
+describe("跨轮真请求体（会话型 provider 的 transport 抓包）", () => {
+  async function sessionWith(truncated: boolean): Promise<{ flat: string; dir: string }> {
+    const dir = await mkdtemp(join(tmpdir(), "dsh-trunc-xturn-"));
+    const path = join(dir, "events.jsonl");
+    const log = createEventLog(path);
+    await log.append({ type: "user_message", content: "把 flush 讲清楚" });
+    await log.append({ type: "assistant_message", content: "flush 的关键在于把" });
+    await log.append({ type: "usage", inputTokens: 20, outputTokens: 4096 });
+    if (truncated) {
+      await log.append({ type: "turn_truncated", callId: "msg_1", outcome: "output_budget", stop_reason: "max_tokens", output_tokens: 4096 });
+    }
+    const requests: GlmMessage[][] = [];
+    const provider = createGlmSessionProvider(path, {
+      map: false,
+      workspace: dir,
+      transport: async function* (messages): AsyncGenerator<never> {
+        requests.push(messages);
+        yield { type: "assistant_message", content: "收到" } as never;
+      },
+    });
+    for await (const _e of provider.stream([])) void _e;
+    await log.close?.();
+    return { flat: (requests[0] ?? []).map((m) => (typeof m.content === "string" ? m.content : "")).join("\n"), dir };
+  }
+
+  it("下一轮的真请求体里带着「上一条没说完」", async () => {
+    const { flat, dir } = await sessionWith(true);
+    try {
+      expect(flat).toContain("[harness] 上一条助手回复没说完就被截断");
+      expect(flat).toContain("max_tokens");
+      // 位置：紧跟在那半句正文之后（顺序错了，模型会把说明安到别的轮上）
+      expect(flat.indexOf("flush 的关键在于把")).toBeLessThan(flat.indexOf("[harness] 上一条助手回复"));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("负控：答完的一轮，请求体里一个字的说明都没有", async () => {
+    const { flat, dir } = await sessionWith(false);
+    try {
+      expect(flat).not.toContain("[harness] 上一条助手回复");
+      expect(flat).toContain("flush 的关键在于把");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

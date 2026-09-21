@@ -17,6 +17,9 @@ function sleep(ms: number): Promise<void> {
 // next() 逐条拉取的日志顺序逐字节一致），序列跑完即停（之后 stream 产出为空 = 任务结束）。
 // 为什么 `usage` 也在允许之列：它是真 provider 每轮都会发的输出（loop 直接落进事件流），
 // 剧本不许它就是让所有「花钱口径」的判据只能靠手工注入事件——而「按手注入」测不到生产那一跳。
+// `turn_truncated` 同理（§3.3）：它现在也是模型那一轮的真实收尾输出之一。不许它，
+// 就等于「截断」这条通道只能靠测试里手写 provider 来验，端到端（剧本 → runLoop → JSONL）
+// 那一跳永远没有观测者——同一个理由，同一种「两头断」。
 // 其余类型（tool_result / user_message …）仍一律拒收：那是运行时产物，不是模型输出。
 export function createMockProvider(fixturePath: string): Provider {
   let script: ModelOutput[] | null = null;
@@ -42,10 +45,10 @@ export function createMockProvider(fixturePath: string): Provider {
           out.push(e);
         }
         turn++;
-      } else if (e.type === "tool_call" || e.type === "usage") {
+      } else if (e.type === "tool_call" || e.type === "usage" || e.type === "turn_truncated") {
         out.push(e);
       } else {
-        throw new Error(`mock fixture 只允许 assistant_message/tool_call/usage，读到: ${JSON.stringify(e)}`);
+        throw new Error(`mock fixture 只允许 assistant_message/tool_call/usage/turn_truncated，读到: ${JSON.stringify(e)}`);
       }
     }
     script = out;
