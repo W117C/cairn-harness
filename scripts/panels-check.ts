@@ -908,6 +908,18 @@ async function phaseElectron(root: string): Promise<void> {
       `([...document.querySelectorAll('.side-page[data-view="agents"] .agent-row')].some((r) => (r.textContent || '').includes('待批：run_shell')))`,
     );
     ok(b12RowStill, "B12 不弹卡 ≠ 抹掉事实：那条未答审批仍如实显示在子智能体页那一行");
+    // 恢复卡文案亲口写着「可在恢复卡重派」——那一列上真得有个按钮，否则那句话是空头承诺。
+    // 只查按钮在不在，**一次都不点**：重派 = 真派一个 worker = 花真钱。
+    const b12Acts = await cdp2.eval<string>(
+      `(() => { const r = document.querySelector('.side-page[data-view="agents"] [data-agent="b11-write-2"]');` +
+        ` return r ? [...r.querySelectorAll('[data-agent-act]')].map((b) => b.getAttribute('data-agent-act')).join(',') : 'no-row'; })()`,
+    );
+    ok(b12Acts === "respawn", "B12 被崩溃恢复扫死的那一列给「重派」而不给「取消」（实测按钮=" + JSON.stringify(b12Acts) + "）");
+    const b12ActsDone = await cdp2.eval<string>(
+      `(() => { const r = document.querySelector('.side-page[data-view="agents"] [data-agent="b11-read-1"]');` +
+        ` return r ? String(r.querySelectorAll('[data-agent-act]').length) : 'no-row'; })()`,
+    );
+    ok(b12ActsDone === "0", "B12 正常跑完的那一列一个按钮都不给（实测 " + JSON.stringify(b12ActsDone) + "）");
     // 桥面：渲染层 → preload → main 的 card_action 真走得通，且 fail-closed 时一个字节都不落
     const b12Before = (await readFile(b11File, "utf8")).length;
     const b12Trip = await cdp2.eval<string>(

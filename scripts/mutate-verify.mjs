@@ -3912,6 +3912,30 @@ const MUTATIONS = [
     apply: (s) => s.replace("approval_requested: 1, approval_resolved: 1 };", "};"),
     expectFail: "审批事件在面板脏集里",
   },
+  {
+    id: "worker-row-offers-cancel-to-every-column",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-agents-view.test.ts",
+    desc: "按钮规则退化成「所有列都给取消」⇒ 跑完的、已取消的列上挂一个点了必然失败的按钮（假出口比没有出口更坏：用户以为还能管）",
+    apply: (s) => s.replace('col.status === "running" || col.status === "waiting_approval" || col.status === "waiting_input"', 'col.status !== "__never__"'),
+    expectFail: "行内按钮只给还能做动作的列",
+  },
+  {
+    id: "worker-respawn-drops-the-write-mode",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-worker-approval.test.ts",
+    desc: "重派恒按 read 档重起 ⇒ 一个写盘 worker 被重派成只读调研：跑完了什么也写不了，而看着像「按原任务重来了」",
+    apply: (s) => s.replace('mode: col.mode === "write" ? "write" : "read"', 'mode: "read" as const'),
+    expectFail: "重派把原 spawn 参数带回 payload.respawn",
+  },
+  {
+    id: "worker-cancel-sends-an-unrouted-action",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-worker-approval.test.ts",
+    desc: "取消的 action 名写错 ⇒ card_action 落流后走到 handleCardAction 末尾的 return {ok:true}：用户看到「已请求取消」而 worker 继续跑、继续花钱",
+    apply: (s) => s.replace('return { ...base, cardType: "agent_card", action: "cancel" };', 'return { ...base, cardType: "agent_card", action: "stop" };'),
+    expectFail: "重派把原 spawn 参数带回 payload.respawn",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
