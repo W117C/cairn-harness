@@ -1439,6 +1439,72 @@ async function phaseElectron(root: string): Promise<void> {
     }, 10_000);
     ok(scAsk !== null, "B19 无 key 时「问」不静默：fail-closed 的原因上屏（实测 " +
       JSON.stringify((scAsk?.text ?? "null").slice(0, 90)) + "）");
+
+    console.log("[panels-check] B20 截断卡真上屏：函数层锁住字符串不等于 JSONL→重放→HTML 这一跳接上了");
+    /* 起因：待办 2 收口时留了一句 ⚠️「未做视觉核验」——`eventLabel` 的 turn_truncated 支只在 vm 里
+       跑过那份函数。这一型同时是「子流不进父上下文」名单（CHILD_DETAIL_TYPES）的成员，于是它有两头
+       要各证一次：父那一头必须上屏（否则函数再对也是零输出），worker 那一头必须不上屏。
+       两头都拿**可区分的数字**判（4096/512/无 token/7777），不写「含不含类型名」这类能被别的卡糊过去的断言。 */
+    const b20File = pathOf(root, clarifyId);
+    const b20Evts: Record<string, unknown>[] = [
+      { type: "turn_truncated", callId: "b20-1", outcome: "output_budget", stop_reason: "max_tokens", output_tokens: 4096 },
+      { type: "turn_truncated", callId: "b20-2", outcome: "content_blocked", stop_reason: "SAFETY", output_tokens: 512 },
+      { type: "turn_truncated", callId: "b20-3", outcome: "output_budget", stop_reason: "max_tokens" },
+      { type: "turn_truncated", callId: "b20-4", agent_id: b11A, outcome: "output_budget", stop_reason: "max_tokens", output_tokens: 7777 },
+    ];
+    for (const e of b20Evts) await createEventLog(b20File).append(e as unknown as AgentEvent);
+    ok(await b8ClickSession("验收会话"), "B20 先切走（重开才走 showHistory 整段重投那一支）");
+    ok(await b8ClickSession(clarifyId), "B20 再切回靶子会话");
+    const b20Heads = await settle(async () => {
+      const h = await cdp2.eval<string[]>(
+        `[...document.querySelectorAll('.stream .card .card-head')].map((n) => (n.textContent || '').trim())`,
+      );
+      return h.filter((x) => x.includes("助手输出被截断")).length === 3 ? h : null;
+    }, 15_000);
+    const b20Cards = (b20Heads ?? []).filter((x) => x.includes("助手输出被截断"));
+    ok(b20Cards.length === 3, "B20 三张截断卡上屏（父的三型各一张；实测 " + String(b20Cards.length) + " 张：" +
+      JSON.stringify(b20Cards.map((x) => x.slice(0, 46))) + "）");
+    const b20Budget = b20Cards.find((x) => x.includes("4096")) ?? "";
+    const b20Blocked = b20Cards.find((x) => x.includes("512")) ?? "";
+    ok(
+      b20Budget.includes("没写完就被收走") && b20Budget.includes("max_tokens") && b20Budget.includes("4096"),
+      "B20 篇幅用尽那张说清「续写得下去」+ 线上原因 + 离帽多远（实测 " + JSON.stringify(b20Budget.slice(0, 70)) + "）",
+    );
+    ok(
+      b20Blocked.includes("被内容策略中止") && !b20Blocked.includes("没写完"),
+      "B20 内容策略那张不串成上一张的话（两种原因的下一步不同，并成一句＝让用户猜；实测 " + JSON.stringify(b20Blocked.slice(0, 70)) + "）",
+    );
+    ok(
+      b20Cards.filter((x) => x.includes("输出 token")).length === 2,
+      "B20 provider 没报 token 的那张不落那半句（缺席≠0；三张里含 token 数的实测 " +
+        String(b20Cards.filter((x) => x.includes("输出 token")).length) + " 张，期望 2）",
+    );
+    const b20Stream = await cdp2.eval<string>(`(document.querySelector('.stream')?.textContent || '')`);
+    ok(
+      b20Cards.length === 3 && b20Cards.every((x) => !x.includes("turn_truncated")),
+      "B20 标题里不出现原始英文类型名（EVENT_LABELS 收了这一条，真窗口这一跳也认；实测 " +
+        String(b20Cards.filter((x) => x.includes("turn_truncated")).length) + " 张标题带英文名，期望 0）",
+    );
+    /* 负控的负控：展开体本来就 dump 原始事件（appendRecordCard 无 detailText 时 JSON.stringify(e)），
+       所以「主转录全文不含类型名」是**我这条断言越界**，不是产品说谎——第一次跑就是这么红的。
+       正确的成对判法：标题说人话 + 原文仍在（把 body 一起擦掉等于删证据，同样要红）。 */
+    const b20Bodies = await cdp2.eval<string[]>(
+      `[...document.querySelectorAll('.stream .card .card-body .ti-code')].map((n) => (n.textContent || ''))`,
+    );
+    const b20RawBodies = b20Bodies.filter((x) => x.includes('"turn_truncated"'));
+    ok(
+      b20RawBodies.length === 3 && b20RawBodies.every((x) => x.includes('"outcome"')),
+      "B20 原文仍在展开体里（标题说人话 ≠ 把证据也擦掉；实测带类型的正文块 " + String(b20RawBodies.length) +
+        " 块，期望 3 且逐块含 outcome）",
+    );
+    ok(!b20Stream.includes("7777"), "B20 worker 那条截断不在主转录（它是子会话的账；实测含 7777=" +
+      String(b20Stream.includes("7777")) + "）");
+    const b20OnDisk = (await readFile(b20File, "utf8")).trim().split("\n");
+    const b20ChildLine = b20OnDisk.find((l) => l.includes("7777"));
+    ok(
+      typeof b20ChildLine === "string" && JSON.parse(b20ChildLine).agent_id === b11A,
+      "B20 另一半：那条确实写进了盘上转录且带归因（不在界面 ≠ 被丢掉；实测 " + JSON.stringify(b20ChildLine?.slice(0, 90) ?? "无此行") + "）",
+    );
     await killElectron(electron2);
   } finally {
     if (electron.exitCode === null) await killElectron(electron);
