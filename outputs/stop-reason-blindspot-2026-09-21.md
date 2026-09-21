@@ -424,6 +424,60 @@ final HEAD `0ec8bff` 的全量 `test`（同一台软链 worktree，按规则 52 
 锚点 +4（含一次 expectFail 改指），全部在 clean HEAD 实跑**全杀**；`tsc` 0 错；
 `prune`/`session-prune-attachments`/`compaction`/`worker-attribution` 批 60 passed。
 
+## 第十三程（09-22，`e853a39`）：同一条越界不变量的第五面——两条渲染器都不看归因
+
+第十一、十二程数完的是**数据侧**四面（投影 / 装饰 / 摘要输入 / 修剪的账）。本程补最后一面：
+`agent_id` 一路送到界面上，`app.js` 的 `renderEvent` 与 `history-window.js` 的 `projectUnits`
+一支完全不看它，另一支只拿它分过桶 ⇒ worker 说过的话被画进**父会话的 AI 泡**里。
+这条不是样式问题，是冒充：父从没说过那句话，界面说它说了。
+
+**① 两支必须同时改，且问同一句。** live（跑动中逐条 `renderEvent`）与 replay
+（`showHistory → projectUnits → buildUnit`）是同一个流的两次呈现；只改一支的结果比原来更坏——
+「刷新前藏在父泡里、刷新后凭空长出一排单元」。判据落成 `projections.ts` 的唯一导出
+`entersMainConversation`，两支各自只加一行守卫（`mutate-verify` 有两根针，一支摘一处，
+证明两边都真在守，而不是一支在守另一支搭车）。
+
+**② 只藏两型之外的、只留两型：`usage` 与 `verify_result`。** 前者是底栏的真钱（少报成本比
+多画几行更坏），后者是合并/丢弃决策的证据面。交叉核对写成断言：
+`编排器归因表 = 界面黑名单 ∪ 刻意保留`，且两侧互斥、黑名单不得有编排器根本没归因的类型——
+于是「新类型静默落进主流」当场红（这是任务 #4 那个「每个白名单都要过一遍注册表」形状的第 N 次）。
+
+**③ 顺带查实了一处重复上屏。** `orchestrator.ts` 的 `workerPipeline` 在落带归因子流之外，
+对非空 `assistant_message` **另发**一条 `agent_message{kind:"progress"}`（text = 同一段前 500 字）。
+所以修复前那句 worker 正文在主流上屏两次：一次冒充父发言，一次是正确形态（「worker 消息」卡 +
+`.tag` 归因）。摘掉前者，后者照在——「藏」不等于「丢信息」这条也因此有了断言。
+
+**④ 判据认的是归因，不是类型。** 每一型都配「摘掉 `agent_id` 就进」的反向对照，另有
+「判据永不藏掉不带归因的事件」「空串归因按不带处理（legacy 盘上是 `""`，漏这一位等于清空老会话）」
+两条。⚠️ 一处**已知欠账**（另立任务 #9）：worker 的 `tool_call` 摘掉后，右栏那行只写
+`🔧 工具名`（`projectAgentPanel` 的 `recent`），不含 path ⇒ 「它读过哪个文件」在界面上
+再无一处可见（盘上 JSONL 仍在）。正解是把 `toolSummary(name,args)` 那一份摘要用在 `recent` 上。
+
+**⑤ 一处自伤，靠逐行读 diff 才看见。** 第一次插 `projections.ts` 时把紧邻的
+`/** 多源投影…` 那行**连着吃掉了**，留下一个孤立的 ` *  sidechat…` 注释尾巴——
+`tsc` 不会报（注释不参与类型），界面也不会白屏。判据很简单：**纯追加的编辑，`git diff`
+里就不该出现 `-` 行**。这是本轮第三次撞同一类（前两次在 `mutate-verify.mjs` 吞掉 `expectFail`）。
+另一次由 `tsc` 抓到：测试里给 `entersMainConversation` 传了 `{type, agent_id, kind, text}`，
+多余字段触发 excess-property 检查 ⇒ 改成只喂判据真正读的那两位（多写就是假装它读了）。
+
+**⑥ 新撞到的同族：vm 切片判据。** 三个测试文件用 `runInNewContext` 跑 app.js / history-window.js
+的**源码片段**；`history-window.js` 一旦有了跨模块 import，那种「剥掉 `export function` 再 eval」
+的写法整块语法失败（`tests/history-window.test.ts` 更彻底：它的 `source.replaceAll('export function ', …)`
+连 import 都不认）。修法不是给每份测试塞一个判据桩——那正是本判据要消灭的「第二份实现」——
+而是把**剥法与真函数**收进 `tests/renderer-vm-module.ts` 一处，并把 `history-window.test.ts`
+换成真 ESM 导入（`.d.ts` 早已存在，字符串剥 export 只是它的替代品）。
+
+**本程读数**：新增 `tests/renderer-child-admission.test.ts` 20 条；`history-window.test.ts` 7→8、
+`renderer-history-live.test.ts` 9→10（多出的那条判的是 live 那一支：不落地、钱照记、父事件照画、
+`real.events` 仍是投递计数）；渲染层与投影消费方批 **35 files / 306 tests 全绿**；
+`pnpm panels-check` 连跑两次 exit 0，新增 B11c/d/e 读**主转录**（c：父那条 `src/b11-parent-only.ts`
+在，转录 1724 字；d：两条 `b11-child-only-*` 都不在；e：`.tool-item` 实测 1 = 盘上不带归因的
+`tool_call` 数 1——**修复前这个数是 4**）；锚点 +5，全部在 clean HEAD（`e853a39`）隔离 worktree
+实跑**全杀**，主树零改动；`pnpm mutate-needles-check` 591 条 0 阻断 / 0 待复认 / 0 未覆盖；
+`pnpm typecheck` HEAD 态 0 错（唯一红是另一会话的未跟踪草稿 `scripts/sidebar-probe.ts`）。
+**底栏口径未动**：`#eventCount` 读的是 `historyEvents.length` / `real.events`，与渲染无关，
+所以「少画几条」不会伪装成「少几条事件」——这句是读过 `displayedEventCount()` 后写的，不是猜的。
+
 ## 待办（按优先级）
 
 1. 沉淀面：`failureDigestFromEvents`（能力 6/10）现在只看 `verify_result(ok:false)` 与
@@ -470,10 +524,18 @@ final HEAD `0ec8bff` 的全量 `test`（同一台软链 worktree，按规则 52 
    `ErrorEvent` 待查）声明里没有 `agent_id?`，`withAgentId` 靠 `as AgentEvent` 绕开——运行时真带、
    类型说不能带，下游想读的人拿不到（判据只能改成经生产入口造样本）。补声明是正解；
    前置是 `src/events/index.ts` 的在飞 hunk（D7 snapshotId）落库，改动点与它相邻、无法只 stage 自己那一跳。
-8. live 渲染层不看归因：`app.js` 的 `case 'assistant_message'` / `'assistant_delta'` 直接画父会话的 AI 泡,
-   而 workerPipeline 同时另发一条 `agent_message{kind:progress}` ⇒ 同一句上屏两次,其中一次冒充父发言。
-   `history-window.js` 的注释（第 12 行）本来就假定「子流带 agent_id 时自成单元」,只有 live 侧没做。
-   这条会动 `#eventCount` 与泡数口径，先量 `panels-check` 与渲染层契约再动。
+8. ~~live 渲染层不看归因~~ **已落（第十三程 `e853a39`）**：判据 `entersMainConversation` 一份，
+   live（`renderEvent`）与 replay（`projectUnits`）两支各一行守卫，各配一根锚点。
+   当年这条预判「会动 `#eventCount` 与泡数口径」——**实测没动**：底栏读的是快照行数 /
+   live 投递数，与渲染无关。预判的风险要复算，不是照抄。
+9. 准入后欠的一格可见性（第十三程 ④）：`projectAgentPanel` 的 `recent` 只写 `🔧 工具名`，
+   不含 `toolSummary(name,args)` 那份摘要 ⇒ worker 读过哪个文件在界面上彻底不可见。
+   补齐是「换地方显示」，不是「把主流画回来」。
+10. 同族清账（本轮新撞）：vm 切片判据现共 3 份消费（`renderer-history-live` /
+    `renderer-panels-real-data` / `renderer-run-control`），剥法已收进 `tests/renderer-vm-module.ts`
+    一处，但**切片本身仍按标记字符串取料**——`app.js` 改名一段标记就会 throw（正确行为），
+    而 `renderer-run-control` 只喂了 `renderEvent` 一支，另一支（`boot()` 那段）碰不到准入。
+    若哪天再往 `renderEvent` 之前加第二道守卫，先问「三份 vm 各自吃得到吗」。
 
 ## 复算命令
 
@@ -484,6 +546,15 @@ TERM=dumb pnpm mutate-verify registry-drops-a-card-type card-type-without-label 
   openai-nonstream-blind gemini-blind-to-prompt-feedback summarizer-hides-truncation compaction-accepts-truncated-summary
 grep -c 'test: "tests/turn-truncated.test.ts"' scripts/mutate-verify.mjs   # 本通道锚点数（按 test 指向计）
 grep -rn "stop_reason\|finish_reason\|finishReason" src/ | wc -l   # HEAD 实测 4（全是声明/注释）→ 本轮后 23
+# 第十三程（子流准入）
+TERM=dumb node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts \
+  tests/renderer tests/history-window.test.ts tests/event-type-coverage.test.ts \
+  tests/projections.test.ts tests/panel-data.test.ts tests/m3b.test.ts tests/sidechat.test.ts tests/agents.test.ts
+TERM=dumb pnpm panels-check          # 读 B11c/B11d/B11e 三行；e 那行是「实测 = 盘上不带归因的 tool_call 数」
+cd /tmp/dsh-mv-<x> && TERM=dumb node scripts/mutate-verify.mjs \
+  renderer-live-draws-child-detail renderer-replay-draws-child-detail renderer-hides-worker-spend \
+  admission-hides-unattributed-prose admission-treats-empty-agent-id-as-child
+grep -n "entersMainConversation" src/renderer/*.js src/renderer/projections.ts   # 判据 1 份、守卫 2 处
 ```
 （`wc -l` 两边都数：单看修复后的 23 说明不了任何事，修复**前**那个 4 才是缺陷本身——
 4 个命中全在类型声明与注释里，读取点为 0。）
