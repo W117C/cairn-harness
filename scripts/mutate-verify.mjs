@@ -3602,8 +3602,11 @@ const MUTATIONS = [
     id: "settings-whitelist-drops-plan-required-key",
     src: "src/main/settings.ts",
     test: "tests/plan-required.test.ts",
-    desc: "set() 的手写键白名单漏登记新键 ⇒ 整块 patch 被丢，开关看着能动、重启就没（字段收下即丢）",
-    apply: (s) => s.replace('"autoVerify" in patch || "planRequiredByDefault" in patch', '"autoVerify" in patch'),
+    desc: "合并基漏登记一个标量键（旧写法抄名单漏一项、新写法在 rest 解构里点名剔掉一项，同一件事）⇒ 开关看着能动、重启就没",
+    apply: (s) => s.replace(
+      "const { layout: layoutPatch, ...scalars } = patch;",
+      "const { layout: layoutPatch, planRequiredByDefault: _drop, ...scalars } = patch;",
+    ),
     expectFail: "DEFAULT_SETTINGS 里每个布尔键都能经 set() 翻面并读回",
   },
   {
@@ -4353,6 +4356,59 @@ const MUTATIONS = [
     desc: "契约导出的名单少一个键 ⇒ 插件里合法配的 diagnostics 被报成未知字段（警告面替用户撒谎）",
     apply: (s) => s.replace("  diagnostics: true,\n", ""),
     expectFail: ".lsp.json 字段名向 CC 对齐",
+  },
+  // ---- 设置写并发串行化（8aa1e41，panels-check B3b 的真红）----
+  {
+    id: "settings-writes-not-serialized",
+    src: "src/main/settings.ts",
+    test: "tests/settings.test.ts",
+    desc: "撤掉写队列：两笔 set 同时跑 ⇒ 撞同一个临时文件名（pid+毫秒同值）抛 ENOENT，或后落地那笔拿旧缓存把对方字段盖回",
+    apply: (s) => s.replace("const next = this.writes.then(() => this.applyPatch(patch));", "const next = this.applyPatch(patch);"),
+    expectFail: "layout 与 theme 两笔并发",
+  },
+  {
+    id: "settings-scalar-patch-dropped",
+    src: "src/main/settings.ts",
+    test: "tests/settings.test.ts",
+    desc: "标量合并退回「手抄名单」的下场（名单漏一项 = 整笔 patch 静默丢成 {}）：theme/mode 再也落不了盘",
+    apply: (s) => s.replace(
+      "const { layout: layoutPatch, ...scalars } = patch;",
+      "const layoutPatch = patch.layout; const scalars: Record<string, unknown> = {};",
+    ),
+    expectFail: "写序守恒",
+  },
+  // ---- 残留工作树从盘上到屏上（39d76bc）----
+  {
+    id: "orphan-zero-state-drops-its-source-key",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-orphan-worktrees.test.ts",
+    desc: "「确实没有」那一支丢掉 data-wt ⇒ 屏上文案还在，但再也分不开「写没有」与「压根没读」",
+    apply: (s) => s.replace("<div class=\"wt-orphan\" data-wt=\"0\">本机没有残留工作树", "<div class=\"wt-orphan\">本机没有残留工作树"),
+    expectFail: "没数过就一句都不写",
+  },
+  {
+    id: "orphan-count-failure-silenced-as-none",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-orphan-worktrees.test.ts",
+    desc: "数不出来被并给「没数过」那一支 ⇒ 假空：扫描失败静默长成「本机没有残留工作树」",
+    apply: (s) => s.replace("  if (!orphanWorktrees) return '';", "  if (!orphanWorktrees || !orphanWorktrees.orphans) return '';"),
+    expectFail: "数不出来就说数不出来",
+  },
+  {
+    id: "orphan-block-gets-a-clean-button",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-orphan-worktrees.test.ts",
+    desc: "给未裁决的清理动作长出一个按钮（清理 = 连 agent/*- 分支一起 branch -D 且不判是否已合并）",
+    apply: (s) => s.replace("<p class=\"mc-hint\">界面上不给清理按钮", "<p class=\"mc-hint\"><button data-act=\"wt-clean\">清理</button>界面上不给清理按钮"),
+    expectFail: "且一个按钮也不给",
+  },
+  {
+    id: "orphan-block-wired-into-one-path-only",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-orphan-worktrees.test.ts",
+    desc: "只接列表态、空态漏接 ⇒ 会话没派过 write worker 时（恰恰是最需要看见残留的一刻）这一段永远不出现",
+    apply: (s) => s.replace("orphanBlockHTML() +\n", "\"\" +\n"),
+    expectFail: "gitViewHTML 的两条返回路径都带上这一段",
   },
 ];
 
