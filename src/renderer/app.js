@@ -1,5 +1,5 @@
 import { projectUnits, mountHistory } from './history-window.js';
-import { projectPanelData, workerEvidenceLabel, workerSpentLabel, agentStatusText, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN } from './projections';
+import { projectPanelData, EMPTY_PANEL_DATA, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN } from './projections';
 import { $, esc, promptInput, sessionList, streamInner, toast } from './dom.js';
 import { ICONS, RUN_GRID_HTML, runGrid } from './icons.js';
 import { highlightAllDiffs } from './diff-highlight.js';
@@ -949,7 +949,7 @@ let currentWs = WORKSPACES[0];
    缺省为空 = 面板走空态。原先这里挂着审阅与终端两组演示常量，真运行时照样渲染
    「本会话从未碰过的文件 + 假测试输出」——假象比空白更坏，故一并删除
    （projections.ts 头注「面板 100% 事件流投影，无第二事实源」）。 */
-let panelData = { workspace: null, files: [], tree: [], terminal: [], merge: [], agents: [] };
+let panelData = EMPTY_PANEL_DATA;
 
 /* 右栏"文件树高亮"目标：diff 卡展开时置为对应文档路径，收折清空 */
 let activeFileDoc = null;
@@ -1110,7 +1110,7 @@ function scheduleViewHTML() {
       ? hist.slice(0, 12).map(h =>
           '<div class="sched-hist">' +
             '<span class="sched-state ' + esc(h.state) + '">' + esc(h.state) + '</span>' +
-            '<span class="n">' + esc(h.task_name) + (h.reason ? ' · ' + esc(h.reason) : '') + '</span>' +
+            '<span class="n">' + esc(h.task_name) + (h.reason ? ' · ' + esc(skipReasonLabel(h.reason)) : '') + '</span>' +
             '<span class="t">' + schedTime(h.at) + '</span>' +
           '</div>').join('')
       : '<p class="sched-empty" style="padding:var(--sp-4) 0">暂无运行历史</p>';
@@ -2831,6 +2831,10 @@ render();
   function eventLabel(e) {
     const base = EVENT_LABELS[e.type] || String(e.type);
     // agent 归因走 .tag，状态留在标题里（failed / waiting_approval 是需要一眼看到的词）
+    if (e.type === 'automation_skipped') {
+      const name = typeof e.task_name === 'string' && e.task_name ? e.task_name + ' ' : '';
+      return base + '：' + name + skipReasonLabel(e.reason);
+    }
     return typeof e.status === 'string' && e.status ? base + ' · ' + e.status : base;
   }
   /** 通用记录卡：一行标题 + 可展开原文。动态内容一律 textContent，只有 chevron 是静态 SVG。 */

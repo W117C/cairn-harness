@@ -19,6 +19,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createEventLog, replay, type AgentEvent } from "../src/events";
 import { listSessions } from "../src/main/sessions";
+// 中文标签唯一实现在渲染层投影（无 node 依赖，check 脚本可直接 import；panels-check 同例）
+import { skipReasonLabel } from "../src/renderer/projections";
 import {
   MAX_PROMPT_CHARS,
   makeUlid,
@@ -31,7 +33,6 @@ import {
   CATCHUP_WINDOW_MS,
   DEFAULT_CONCURRENCY_CAP,
   HISTORY_STATES,
-  SKIP_REASON_LABELS,
   Scheduler,
   appendJournalEntry,
   loadAutomationsFile,
@@ -444,7 +445,12 @@ try {
       { task_id: "t", task_name: "n", occurrence_key: "k3", due_at: "", decision: "triggered", state: "failed", at: "2026-09-12T00:02:00Z" },
     ] as Parameters<typeof Scheduler.filterHistory>[0];
     assert(Scheduler.filterHistory(h, "all").length === 3 && Scheduler.filterHistory(h, "skipped").length === 1 && Scheduler.filterHistory(h, "succeeded")[0]!.occurrence_key === "k1", "I2 filterHistory 六态筛选（all/单态）");
-    assert(Object.keys(SKIP_REASON_LABELS).length === 4 && SKIP_REASON_LABELS["too-old"]!.includes("过期") && SKIP_REASON_LABELS["catch-up-skip"]!.includes("休眠") && SKIP_REASON_LABELS["overlap"]!.includes("重叠") && SKIP_REASON_LABELS["concurrency-cap"]!.includes("并发满"), "I3 skipped 四原因中文标签（过期/休眠/重叠/并发满，hover 数据源）");
+    // 中文标签的唯一实现现在在渲染层（main 只落 token，措辞属表现层）；
+    // 断言强度不变：四个原因各出一条标签、各自含那个词，且未知原因原样透出（不静默变空串）。
+    assert(skipReasonLabel("too-old").includes("过期") && skipReasonLabel("catch-up-skip").includes("休眠")
+      && skipReasonLabel("overlap").includes("重叠") && skipReasonLabel("concurrency-cap").includes("并发满")
+      && skipReasonLabel("interrupted（重启后无终态记录）").includes("中断") && skipReasonLabel("whatever") === "whatever",
+      "I3 skipped 四原因中文标签（过期/休眠/重叠/并发满，唯一实现在渲染层投影）");
     const sum = summarizeRun([
       { type: "usage", inputTokens: 3, outputTokens: 4 },
       { type: "assistant_message", content: "最终报告" },

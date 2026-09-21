@@ -91,7 +91,8 @@ export async function saveAutomationsFile(file: string, tasks: AutomationDefinit
 // ---- 双轨存储之二：调度日志（journal.jsonl，append-only）----
 
 export type ScheduleDecision = "triggered" | "skipped" | "catchup";
-/** skipped 原因（UI hover 映射见 SKIP_REASON_LABELS：too-old=过期 / catch-up-skip=休眠 / overlap=重叠 / concurrency-cap=并发满）。 */
+/** skipped 原因（中文标签唯一实现见 renderer/projections 的 skipReasonLabel：main 只落机器可读 token，
+ *  措辞是表现层的事——两份措辞必然漂移，历史上已经漂过一次）。 */
 export type SkipReason = "too-old" | "overlap" | "concurrency-cap" | "catch-up-skip";
 /** 重复触发（occurrenceKey 已在 journal）= 静默去重，不写新账（崩溃/重启双触发免疫）。 */
 export type Decision = ScheduleDecision;
@@ -420,13 +421,7 @@ export interface TickReport {
   decisions: { task_id: string; occurrence_key: string; decision: Decision; reason?: string }[];
 }
 
-/** skipped 原因 → UI hover 中文标签（休眠/重叠/并发满/过期，Claude Desktop 同款）。 */
-export const SKIP_REASON_LABELS: Record<string, string> = {
-  "too-old": "过期：错过触发超出 7 天回看窗口，仅补最近一次",
-  "catch-up-skip": "休眠错过：catchUp=skip 档不补跑，已对齐下次触发",
-  overlap: "重叠：该任务上一次运行仍在进行中",
-  "concurrency-cap": "并发满：同时运行的定时会话已达上限",
-};
+/** skipped 原因的中文标签不在这里：见 renderer/projections.skipReasonLabel（唯一实现）。 */
 
 /** 调度器：shell 生命周期 = app 生命周期（关闭 app 即停，§12.3.1）。 */
 export class Scheduler {

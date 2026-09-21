@@ -687,14 +687,6 @@ export function cardActionForWorkerRow(
 
 // ---- G10（审查 P3）：面板与卡片各写一份的公共映射，抽唯一实现防漂移 ----
 
-/** stat 文本的首个文件路径（行级评论 path 的缺省凭据）。 */
-export function firstPathOfStat(stat: string): string | null {
-  for (const line of stat.split("\n")) {
-    if (line.includes("|")) return line.trim().split(/\s+\|/)[0]?.replace(/"/g, "") ?? null;
-  }
-  return null;
-}
-
 /** worker 一列的状态说人话。waiting_* 单独成词：那两态是「在等人」，不是「在跑」——
  *  把它混进 running 就是把卡住说成进展。 */
 export function agentStatusText(status: string): string {
@@ -707,7 +699,9 @@ export function agentStatusText(status: string): string {
   return status;
 }
 
-/** skipped 原因 → UI hover 中文标签（休眠/重叠/并发满/过期，Claude Desktop 同款，§12.2.6）。 */
+/** skipped / interrupted 原因 → 中文标签（§12.2.6 的「过期/休眠/重叠/并发满」）。
+ *  这里是**唯一**一份：main 侧只落机器可读的原因 token（journal 的 interrupted 那条目前带着注记文本，
+ *  所以按前缀认，不再抄一遍那句话——抄来的字面量就是下一条漂移磁铁）。 */
 export function skipReasonLabel(reason: string | undefined): string {
   switch (reason) {
     case "too-old":
@@ -718,9 +712,10 @@ export function skipReasonLabel(reason: string | undefined): string {
       return "重叠：该任务上一次运行仍在进行中";
     case "concurrency-cap":
       return "并发满：同时运行的定时会话已达上限";
-    case "interrupted（重启后无终态记录；V1 不自动重试，可 run_now 兜底）":
-      return "中断：应用重启时该次运行无终态记录（V1 不自动重试）";
     default:
+      if (reason !== undefined && reason.startsWith("interrupted")) {
+        return "中断：应用重启时该次运行无终态记录（V1 不自动重试）";
+      }
       return reason ?? "";
   }
 }
