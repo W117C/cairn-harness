@@ -8,8 +8,8 @@
 //   - compaction.serializeConversation 不收 ⇒ 压缩把这条读数连同旧事件一起忘掉。
 // 这张闸只管三份**清单**互相对齐：注册表 ↔ 联合 ↔ 界面接料面。
 // 第一、第三面没有通用判定，别在注释里假装有门：withAgentId 有 worker-attribution.test.ts +
-// 每类型一根锚点，compaction 至今靠人记——要泛化成「新类型必须进白名单」，得先答上
-// 「worker 到底会发哪些类型」，而那个集合目前没人写过（写错即造假豁免）。
+// 每类型一根锚点，compaction 至今靠人记。「worker 到底会发哪些类型」那张集合自第十一程起
+// 落成 `WORKER_STREAM_TYPES`（本文件下方直接对它判），摘要面仍按「有没有 agent_id」自判。
 //
 // 口径故意做得很小：能判的是「卡片型事件必须有地方接住它」，
 // 而不是「每个投影面都要认得每个类型」（多数类型本就不该进摘要，逼出来的只是一堆假豁免）。
@@ -17,44 +17,14 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { projectUnits } from "../src/renderer/history-window.js";
+import { knownTypes, unionTypes } from "./event-registry";
 import { WORKER_STREAM_TYPES } from "../src/agent/worker-projection";
 import type { AgentEvent } from "../src/events";
 
 const ROOT = join(import.meta.dirname, "..");
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
 
-const EVENTS = "src/events/index.ts";
 const APP = "src/renderer/app.js";
-
-/** 事件类型注册表（append 时拒未知类型的那一份）。 */
-function knownTypes(): string[] {
-  const src = read(EVENTS);
-  const start = src.indexOf("const KNOWN_TYPES = new Set([");
-  if (start < 0) throw new Error(`${EVENTS} 里找不到 KNOWN_TYPES —— 改名了要同步这张闸`);
-  const body = src.slice(start, src.indexOf("]);", start));
-  return [...body.matchAll(/^\s*"([a-z_]+)",$/gm)].map((m) => m[1]);
-}
-
-/** 联合类型里的成员名 → 各自声明的 `type` 字面量。 */
-function unionTypes(): string[] {
-  const src = read(EVENTS);
-  const start = src.indexOf("export type AgentEvent =");
-  if (start < 0) throw new Error(`${EVENTS} 里找不到 AgentEvent 联合`);
-  const body = src.slice(start, src.indexOf(";", src.indexOf("RunErrorEvent", start)));
-  const names = [...body.matchAll(/\|\s*([A-Za-z]+Event)\b/g)].map((m) => m[1]);
-  const out: string[] = [];
-  const unresolved: string[] = [];
-  for (const n of names) {
-    const i = src.indexOf(`export interface ${n} `);
-    const lit = i < 0 ? null : src.slice(i, i + 1200).match(/\btype:\s*"([a-z_]+)"/)?.[1] ?? null;
-    if (lit === null) unresolved.push(n);
-    else out.push(lit);
-  }
-  if (unresolved.length > 0) {
-    throw new Error(`AgentEvent 成员解析不出 type 字面量（拒绝当成"没有这个类型"）：${unresolved.join(", ")}`);
-  }
-  return out;
-}
 
 /** 渲染层：卡片标题表 + 卡片 switch 里已经单独接住的类型。 */
 function rendererSurface() {

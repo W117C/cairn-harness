@@ -74,24 +74,83 @@ export function withAgentId(e: AgentEvent, agentId: string): AgentEvent {
   return e;
 }
 
+/** 落流前要脱敏的文本路径。一条路径 = 从事件出发逐层取字段；落在容器（对象/数组）上
+ *  = 扫它下面的**全部字符串叶子**。表住在这里是因为它就是「哪些事件带外部文本」的唯一答案，
+ *  由 `tests/stream-redaction.test.ts` 逐型对注册表裁决（未表态的新类型当场红）。
+ *
+ *  为什么不能只列三型（旧实现）：同一份流里最像人话的那几段没人扫——
+ *  `assistant_delta` 与最终消息同源（擦了成品、留着分片，等于没擦）、
+ *  `verify_result.results` 是测试输出（最容易把 env 整段打印出来的地方）、
+ *  `agent_message.text` / `agent_result` 是 worker 写给自己的正文、
+ *  `compaction.summary` 更前置：源事件擦过不等于摘要擦过（摘要是**新的一份副本**）。
+ *  注释写着「密钥不进主转录 JSONL」，而这句话此前只在三条路上成立。 */
+export const SCANNED_TEXT_PATHS: Partial<Record<AgentEvent["type"], readonly (readonly string[])[]>> = {
+  assistant_message: [["content"]],
+  assistant_delta: [["text"]],
+  tool_call: [["args"]],          // write_file 的 contents 等（B5 审查补的那条）
+  tool_result: [["output"]],
+  verify_result: [["results"]],   // {command, output}[]
+  error: [["message"]],
+  agent_message: [["text"]],
+  agent_result: [["summary"], ["artifacts"]],
+  agent_spawned: [["task"]],      // 任务文本来自父模型，不是来自用户
+  approval_requested: [["args_digest"]], // digest 是人读摘要（含内联命令），不是哈希
+  compaction: [["summary"]],
+  plan_proposed: [["plan"]],
+  clarify_requested: [["questions"]],
+  goal_stopped: [["reason"]],
+};
+
+/** 在**产出处**就已脱敏的事件（本表不参与扫描，判据只判「别再漏一处」）。 */
+export const SCANNED_UPSTREAM_TYPES: readonly AgentEvent["type"][] = [
+  "security_report", // 报告构建处过 redactSecrets（scan.ts 的 findings 面 + orchestrator 的 title/description/suggestion）
+];
+
+/** 用户自己写进来的文本：**刻意不擦**。用户贴一把密钥让 agent 配环境是正常意图，
+ *  把它 mask 掉等于毁掉这一轮任务；这类文本的保密责任在写盘权限与会话导出，不在投影层。
+ *  这条边界要有名字，否则下一个人会「顺手」把它也扫了。 */
+export const USER_AUTHORED_TEXT_TYPES: readonly AgentEvent["type"][] = [
+  "user_message", "goal_set", "diff_comment", "card_action",
+  "automation_triggered", "automation_skipped", "automation_completed",
+];
+
+/** 无正文的事件：字段全是枚举、id、计数或路径标识。 */
+export const PROSE_FREE_TYPES: readonly AgentEvent["type"][] = [
+  "usage", "session_meta", "plan_approved", "approval_resolved", "agent_status",
+  "routing_decision", "impact_report", "turn_truncated",
+];
+
+function scanStringLeaves(v: unknown): unknown {
+  if (typeof v === "string") return redactSecrets(v).text;
+  if (Array.isArray(v)) return v.map(scanStringLeaves);
+  if (v && typeof v === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, x] of Object.entries(v as Record<string, unknown>)) out[k] = scanStringLeaves(x);
+    return out;
+  }
+  return v;
+}
+
+function scanOnePath(holder0: Record<string, unknown>, path: readonly string[]): void {
+  let holder: Record<string, unknown> = holder0;
+  for (let i = 0; i < path.length - 1; i++) {
+    const next = holder[path[i] as string];
+    if (!next || typeof next !== "object") return;
+    holder = next as Record<string, unknown>;
+  }
+  const last = path[path.length - 1];
+  if (last === undefined || holder[last] === undefined) return; // 缺席字段不无中生有
+  holder[last] = scanStringLeaves(holder[last]);
+}
+
 /** 子流落流扫描：文本字段过 redactSecrets（密钥不进主转录 JSONL；worker 内存态保持原始事件）。
- *  B5（审查）：tool_call 的 args（write_file content 等）同样落主 JSONL——一并脱敏。 */
+ *  取料面 = `SCANNED_TEXT_PATHS`；不改原对象（浅拷贝一层，路径末端才替换）。 */
 export function scanStreamEvent(e: AgentEvent): AgentEvent {
-  if (e.type === "assistant_message") {
-    return { ...e, content: redactSecrets(e.content).text };
-  }
-  if (e.type === "tool_result") {
-    return { ...e, output: redactSecrets(e.output).text };
-  }
-  if (e.type === "tool_call") {
-    try {
-      const redacted = JSON.parse(redactSecrets(JSON.stringify(e.args)).text) as Record<string, unknown>;
-      return { ...e, args: redacted };
-    } catch {
-      return e;
-    }
-  }
-  return e;
+  const paths = SCANNED_TEXT_PATHS[e.type];
+  if (!paths) return e;
+  const copy = { ...(e as unknown as Record<string, unknown>) };
+  for (const p of paths) scanOnePath(copy, p);
+  return copy as unknown as AgentEvent;
 }
 
 export function digestArgs(args: Record<string, unknown>): string {

@@ -4950,6 +4950,39 @@ const MUTATIONS = [
     apply: (s) => s.replace("PANEL_DIRTY_TYPES.has(e.type)", '["tool_call", "tool_result", "agent_spawned", "agent_status", "approval_requested", "approval_resolved", "diff_comment"].includes(e.type)'),
     expectFail: "判据只有一张表",
   },
+  // ---- 落流脱敏的覆盖面（worker-projection 的正文表，2026-09-22）----
+  {
+    id: "redaction-drops-delta-from-body-table",
+    src: "src/agent/worker-projection.ts",
+    test: "tests/stream-redaction.test.ts",
+    desc: "把 assistant_delta 从正文表里摘掉 ⇒ 擦了最终消息、留着流式分片——同一句话的另一个出口静默失效",
+    apply: (s) => s.replace('  assistant_delta: [["text"]],\n', ""),
+    expectFail: "没有未表态的类型（新增一型不列进任何桶 = 当场红）",
+  },
+  {
+    id: "redaction-stops-recursing-into-containers",
+    src: "src/agent/worker-projection.ts",
+    test: "tests/stream-redaction.test.ts",
+    desc: "容器只原样复制不再归叶子 ⇒ verify_result.results / plan_proposed.plan / agent_result.artifacts 里的正文整段不扫（表看着列了路径，其实什么都不擦）",
+    apply: (s) => s.replace("for (const [k, x] of Object.entries(v as Record<string, unknown>)) out[k] = scanStringLeaves(x);", "for (const [k, x] of Object.entries(v as Record<string, unknown>)) out[k] = x;"),
+    expectFail: "verify_result 的声明路径种得进密钥、也擦得掉",
+  },
+  {
+    id: "redaction-scrubs-user-authored-text",
+    src: "src/agent/worker-projection.ts",
+    test: "tests/stream-redaction.test.ts",
+    desc: "把用户自己贴进来的正文也扫掉 ⇒ 用户贴密钥让 agent 配环境这条正常意图被毁；边界要有名字，不是靠「顺手一起扫」",
+    apply: (s) => s.replace('  goal_stopped: [["reason"]],', '  goal_stopped: [["reason"]],\n  diff_comment: [["body"]],'),
+    expectFail: "四个桶互斥",
+  },
+  {
+    id: "redaction-mutates-the-source-event",
+    src: "src/agent/worker-projection.ts",
+    test: "tests/stream-redaction.test.ts",
+    desc: "就地改事件本体 ⇒ worker 内存态（provider 投影与报告回读用）被脱敏文本污染，模型看到的和自己写的不是同一份",
+    apply: (s) => s.replace("const copy = { ...(e as unknown as Record<string, unknown>) };", "const copy = e as unknown as Record<string, unknown>;"),
+    expectFail: "不改动传入的原对象",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
