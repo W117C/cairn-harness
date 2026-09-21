@@ -4089,6 +4089,63 @@ const MUTATIONS = [
     apply: (s) => s.replace("if (r && r.ok === false) toast('未执行：' + (r.error || '未知原因'));", "if (false) toast('未执行：');"),
     expectFail: "立即运行/删除：ok=false 不许报成功",
   },
+  // ---- 运行历史六态筛选（§12.2.6）：筛在 main，界面只存「选了哪个状态」这一份 UI 态 ----
+  {
+    id: "sched-history-filter-is-a-dummy-control",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-schedule-history.test.ts",
+    desc: "要快照时恒传 all ⇒ 下拉能选、选完什么也不变：一个只会自我安慰的控件比没有控件更坏（用户以为已经筛过了）",
+    apply: (s) => s.replace("api.scheduleSnapshot(schedHistFilter)", "api.scheduleSnapshot('all')"),
+    expectFail: "要快照时把当前筛选值递过去",
+  },
+  {
+    id: "snapshot-ignores-the-history-filter",
+    src: "src/main/scheduler.ts",
+    test: "tests/schedule.test.ts",
+    desc: "收到筛选值却不筛、回全量 ⇒ 段头写着「只看 失败」而列表里躺着成功与跳过：标签与内容相反，用户按错的名单判断哪条任务健康",
+    apply: (s) => s.replace("history: Scheduler.filterHistory(history, historyFilter),", "history,"),
+    expectFail: "snapshot(状态) 真按状态筛",
+  },
+  {
+    id: "history-row-prints-the-raw-state-token",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-schedule-history.test.ts",
+    desc: "行上退回印 succeeded / skipped ⇒ §12.2.6 承诺的「给人读的运行历史」又回到机器 token（同一族的 skipReasonLabel 已栽过一次）",
+    apply: (s) => s.replace("esc(HISTORY_STATE_LABELS[h.state] ?? h.state)", "esc(h.state)"),
+    expectFail: "行上写中文状态、段头带筛选下拉且当前值选中",
+  },
+  {
+    id: "sched-filter-refilters-the-stale-window",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-schedule-history.test.ts",
+    desc: "换筛选不清缓存、直接在本地那份上滤 ⇒ 只有最近 12 条参与，某状态整段落在窗口外时显示「没有记录」：假空，而 main 的筛选成了摆设",
+    apply: (s) => s.replace("    scheduleCache = null;\n    await loadSchedule(true);", "    await loadSchedule(true);"),
+    expectFail: "换筛选 = 丢开缓存 + 重新要快照 + 重画",
+  },
+  {
+    id: "sched-filter-accepts-any-string",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-schedule-history.test.ts",
+    desc: "界面态收下任意字符串 ⇒ 一个认不出的值让段头写「只看 undefined」，筛选器与清单各说各话（筛选值必须落在同一份 HISTORY_STATES 里）",
+    apply: (s) => s.replace("if (typeof v !== 'string' || !HISTORY_STATES.includes(v) || v === schedHistFilter) return;", "if (typeof v !== 'string' || v === schedHistFilter) return;"),
+    expectFail: "换筛选 = 丢开缓存 + 重新要快照 + 重画",
+  },
+  {
+    id: "unknown-history-filter-becomes-a-real-state",
+    src: "src/main/scheduler.ts",
+    test: "tests/schedule.test.ts",
+    desc: "跨进程来的未知值不归一、直接当筛选值用 ⇒ 拼错或被改的输入筛出一片空记录：假空比填空更坏，用户会以为任务从没跑过",
+    apply: (s) => s.replace("(HISTORY_FILTERS as readonly string[]).includes(raw)", "true"),
+    expectFail: "snapshot(状态) 真按状态筛",
+  },
+  {
+    id: "sched-filter-lists-drift-from-main",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-schedule-history.test.ts",
+    desc: "渲染层往筛选清单里多加一项 ⇒ 下拉出现 main 不认的状态，选中它要么被静默归一要么筛出空（两份清单必然漂移，与 FORM_KINDS 同一条规矩）",
+    apply: (s) => s.replace("\"skipped\", \"cancelled\"] as const;", "\"skipped\", \"cancelled\", \"expired\"] as const;"),
+    expectFail: "筛选值清单与 main 的 HISTORY_FILTERS 逐字同集",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
