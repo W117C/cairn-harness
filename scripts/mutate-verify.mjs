@@ -4585,6 +4585,30 @@ const MUTATIONS = [
     apply: (s) => s.replace('(e.outcome === "output_budget" ? "没写完就被收走（篇幅用尽" : "被内容策略中止（")', '"没写完就被收走（篇幅用尽" + "（"'),
     expectFail: "内容策略中止与篇幅用尽各说各的（两种原因的下一步不同）",
   },
+  {
+    id: "goal-treats-truncation-as-no-output",
+    src: "src/agent/goal.ts",
+    test: "tests/turn-truncated.test.ts",
+    desc: "摘掉 continue 那一支 ⇒ 被 max_tokens 砍断的一轮被擦成「没有可验证的产出，续跑只会白花钱」并停下",
+    apply: (s) => s.replace('if (truncated) {', 'if (false) {'),
+    expectFail: "被收走的那一轮 ⇒ 继续，而不是宣布「没有可验证的产出」",
+  },
+  {
+    id: "goal-truncation-scan-blind",
+    src: "src/agent/goal.ts",
+    test: "tests/turn-truncated.test.ts",
+    desc: "从流尾回走的判据恒返回 false ⇒ 「被打断」与「说完了」在 goal 层重新变成同一个形状",
+    apply: (s) => s.replace('if (e.type === "turn_truncated") return e.agent_id === undefined;', 'if (e.type === "turn_truncated") return false;'),
+    expectFail: "读过事件流就能拿到这个判断（projectGoal 算了不许丢——「两头断」防线）",
+  },
+  {
+    id: "goal-view-drops-truncated-field",
+    src: "src/agent/goal.ts",
+    test: "tests/turn-truncated.test.ts",
+    desc: "算了 lastTurnWasTruncated 却不挂进 GoalView ⇒ 生产入口拿不到（纯函数有单测正是漏接的藏身处）",
+    apply: (s) => s.replace('    truncated: lastTurnWasTruncated(window),\n', ''),
+    expectFail: "读过事件流就能拿到这个判断（projectGoal 算了不许丢——「两头断」防线）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
