@@ -3502,6 +3502,14 @@ const MUTATIONS = [
     expectFail: "done 但客观证据红 ⇒ bandit 不加分：否则级联越开越学出「便宜但红」的方向",
   },
   {
+    id: "bandit-cost-term-zeroed",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/bandit-runtime.test.ts",
+    desc: "代价项换成常量 0（§1.3 那次「从 token 代理升级成真钱」被静默摘掉：路由只学成功率、不看钱 ⇒ 越学越往贵的档走也没人发现）。旧断言 β≥2 / β>2 对这条完全无分辨力，现由等式 + 比例性一条判住",
+    apply: (s) => s.replace("const cost = costUsd(w.routeModelId, w.usage);", "const cost = 0;"),
+    expectFail: "代价项真的按真钱进 β：同样 done、用量差 10 倍 ⇒ β 增量差 10 倍（reward 相同时只有钱能改这个数）",
+  },
+  {
     id: "finish-throw-orphans-terminal-waiters",
     src: "src/agent/orchestrator.ts",
     test: "tests/terminal-sync-window.test.ts",
