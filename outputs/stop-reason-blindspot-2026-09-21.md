@@ -223,6 +223,59 @@ exit 0；clean HEAD 隔离 worktree 上 `tsc` 0 错、本通道 14 条锚点**�
 `tsc` 本轮触及面 0 错（唯一红因是**另一会话正在写的 sandbox 三件套**，未碰）；
 针脚体检 560 条 0 阻断；本通道锚点累计 **17**。
 
+## 第六程（同日，`c549e6d`）：这条通道撞的第三面，与「静默白名单」这个通用形状
+
+同一天里 `turn_truncated` 第三次以同一方式差点溜过去：**渲染层标签表没收它 ⇒ 卡片标题会退回
+原始英文类型名**（界面上「看得见」，但说的是谎）。前两次分别是 `withAgentId` 白名单与
+`serializeConversation` 的 if-else 链。三个面同属一个形状——**按类型白名单取料的静默面**：
+少一个成员不报错、不红，只是少做一件事。
+
+对照实验值得记：`sidechat.renderProjectionLine` 是**穷尽 switch**，加联合成员时 tsc 当场开口。
+所以「要不要为这个形状建门」不是信仰问题，是**该面用哪种控制流**的问题。
+
+`tests/event-type-coverage.test.ts` 的口径刻意做小（只判能判的）：
+卡片集**按 `projectUnits` 的行为量出**（逐类型喂一条裸 `{type}`，不文本猜、不写死 fixture），
+卡片型必须有 `EVENT_LABELS` 条目或自己的 `case`；注册表 ↔ 联合差集双向判空；标签表反向判死条目。
+四道取料标记找不到即 `throw`——改名不能把这张闸抹成空集。
+
+**一次自我纠偏（建门前的实测救了一次）**：评审建议的形状是「每个 EVENT_LABELS 都要覆盖全部类型」,
+朴素探针读数 13/30 缺标签；逐条回读 `app.js` 后发现其中 **5 条有专属 `case` 分支**
+（`error`/`clarify_requested`/`plan_proposed`/`plan_approved`/`compaction`）。收紧为
+「标签 ∪ case」后缺口为 0——若照原口径建门，得到的是一个开局就要写五条假豁免的门。
+
+注释里同样**不假装有门**：`withAgentId` / `compaction` 两面要泛化成「新类型必须进白名单」，
+得先答上「worker 到底会发哪些类型」，而那个集合目前无人写过——写错即造假豁免。
+
+**本程读数**：本文件 4 条；3 根锚点（`registry-drops-a-card-type` / `card-type-without-label` /
+`label-for-a-non-card-type`）在 clean HEAD 隔离 worktree 实测**全杀**；建门前的手工注入
+（删掉 `turn_truncated` 标签）同样把它自己判红。
+
+## 第七程（同日，`ff56bb7`）：余下两支读数，与压缩的第四道质量闸
+
+补完流式路径后仍盲的两支，都靠**先问「这条通道还有谁在用」**找到：
+
+1. `stream:false` 在 `src/` 里只有一个真调用者——`glm-session.createGlmSummarizer`（压缩摘要器）。
+   而 `openai.ts` 的非流式分支从不读 `choices[0].finish_reason`。合起来正好落在第三程那句结论上：
+   **摘要是长任务上旧事件被排除后唯一的存活通道**，于是一份被 `length` 砍断的摘要会以最坏的形态
+   通过——它替掉的旧事件不会再回来，这是本通道唯一**不可逆**的一面。
+2. Gemini 被 prompt 级安全策略拦下时 **`candidates` 整个缺席**，原因只在 `promptFeedback.blockReason`；
+   只读 `candidates[0].finishReason` 的那一条道永远撞不到它 ⇒ 这一轮在账面上是「答完了但没内容」。
+   两字段互斥到值，末尾 `finishReason ?? blockReason`（候选级更具体）。
+
+消费端一起补，否则就是第 10 次「两头断」：摘要器把事件透出成 `SummarizerOutput.truncated`
+（值是线上停止原因原文），`runCompaction` 添**第四闸**——质量闸链从「空 / 超帽 / 膨胀」变成
+「空 / **没收尾** / 超帽 / 膨胀」。被收走的摘要一律拒绝落流：宁可这次不压缩（旧事件留在流里、
+一条不丢），也不让半句以完整结论的形态进记录。
+
+另记一笔覆盖事实：`createGlmSummarizer` 此前在 `tests/` **零覆盖**（grep 该符号无命中），
+本次改动正好落在它身上——纯函数有单测、装配点没人读，正是「两头断」的藏身处。
+
+**本程读数**：`turn-truncated.test.ts` 45 条、`compaction.test.ts` 24 条；四文件批（含
+`compact-wiring` / `hook-precompact-producer` / `glm` / `http-retry`）95 passed exit 0；
+`tsc` 触及面 0 错；4 根新锚点（`openai-nonstream-blind` / `gemini-blind-to-prompt-feedback` /
+`summarizer-hides-truncation` / `compaction-accepts-truncated-summary`）在 clean HEAD
+隔离 worktree 实测**全杀**，主树零改动；针脚体检全表 0 阻断 / 0 待复认 / 0 未覆盖。
+
 ## 待办（按优先级）
 
 1. 沉淀面：`failureDigestFromEvents`（能力 6/10）现在只看 `verify_result(ok:false)` 与
@@ -243,12 +296,29 @@ exit 0；clean HEAD 隔离 worktree 上 `tsc` 0 错、本通道 14 条锚点**�
    其中 `stop-reason-hides-zero-output-tokens` 是一条**通用形状**的针：
    `...(x !== null && x !== undefined ? {…} : {})` 被顺手改成 `...(x ? {…} : {})` ——
    `output_tokens = 0` 是读数，不是「没上报」。
+   **追加（同日第六、七程，不回改上面那句「累计 +14」——那是该日快照）**：再 +7 根，
+   同样逐条在 clean HEAD 隔离 worktree 实测全杀——`registry-drops-a-card-type` /
+   `card-type-without-label` / `label-for-a-non-card-type`（清单闸三条）+
+   `openai-nonstream-blind` / `gemini-blind-to-prompt-feedback` / `summarizer-hides-truncation` /
+   `compaction-accepts-truncated-summary`（两支读数与第四闸）。
+   计数口径写清楚，别拿总数当事实源：`grep -c 'test: "tests/turn-truncated.test.ts"' scripts/mutate-verify.mjs`。
 4. 动作半（截断续跑）：需真钱 A/B，先出 `$` 与准确率两个数再裁默认值。
+5. 词表余下的小口（本轮**刻意未动**，都不是静默面而是「映射该不该由我们替上游定」）：
+   Gemini `pause_turn` / `server_tool_use`（流被服务端工具暂停，语义是「稍后继续」而非截断）、
+   `OTHER` / `IMAGE_SAFETY`（`OTHER` 真意未知——把它折成任一档都是说谎，留在 `unknown` 更诚实）、
+   `promptFeedback` 的 `blockReasonMessage` 未透出（人读的诊断文案，与本事件的「只落事实」口径冲突待定）。
+   判据：`normalizeStopReason` 未命中即 `unknown` ⇒ 不落事件，所以这些是**少记账**不是记错账。
+6. 三面一致闸的第二步（等前提凑齐再做）：若哪天有人把「worker 会发哪些类型」写成显式集合，
+   `withAgentId` 与 `serializeConversation` 就能一起纳进 `event-type-coverage`；现在纳进来只能靠手列名单。
 
 ## 复算命令
 
 ```
 TERM=dumb node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/turn-truncated.test.ts
+TERM=dumb node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/event-type-coverage.test.ts tests/compaction.test.ts
+TERM=dumb pnpm mutate-verify registry-drops-a-card-type card-type-without-label label-for-a-non-card-type \
+  openai-nonstream-blind gemini-blind-to-prompt-feedback summarizer-hides-truncation compaction-accepts-truncated-summary
+grep -c 'test: "tests/turn-truncated.test.ts"' scripts/mutate-verify.mjs   # 本通道锚点数（按 test 指向计）
 grep -rn "stop_reason\|finish_reason\|finishReason" src/ | wc -l   # HEAD 实测 4（全是声明/注释）→ 本轮后 23
 ```
 （`wc -l` 两边都数：单看修复后的 23 说明不了任何事，修复**前**那个 4 才是缺陷本身——
