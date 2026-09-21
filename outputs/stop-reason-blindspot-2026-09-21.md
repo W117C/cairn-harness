@@ -541,6 +541,45 @@ terminal/merge/agents），四条改了投影却不在表里：`usage` / `agent_
 锚点 +3，连同改指的两根共 5 条在 clean HEAD（`4472807`）隔离 worktree **全杀**，主树零改动；
 `pnpm mutate-needles-check` 598 条 0 阻断 / 0 待复认 / 0 未覆盖；`pnpm typecheck` HEAD 态 0 错。
 
+## 第十六程（09-22，`6c62711`）：同一族的第三张表——落流脱敏只认三型
+
+> 本档从第十五程起范围扩到「按事件类型取料的静默白名单」全族（这条族是截断通道撞出来的，
+> 但缺陷与本通道无关）。后续再扫到新的表，另起 dated 档，别把本档写成杂物间。
+
+`scanStreamEvent` 的注释写着「密钥不进主转录 JSONL」，实现只列三型。实测 13 个带正文的候选
+**只擦了 3 个**，漏 10。最要命的三条：
+
+- `assistant_delta` —— 与最终消息同源：擦了成品、留着流式分片，等于没擦；
+- `verify_result.results` —— 测试输出是最容易把 env 整段打印出来的地方；
+- `compaction.summary` —— 摘要是源事件之外的**新副本**，源事件擦过不代表它擦过。
+
+**① 政策从 if-链改成逐型裁决表。** `SCANNED_TEXT_PATHS`（路径落在容器上 = 递归扫字符串叶子）
++ 三个互斥桶 `SCANNED_UPSTREAM_TYPES` / `USER_AUTHORED_TEXT_TYPES` / `PROSE_FREE_TYPES`，
+新闸 `tests/stream-redaction.test.ts` 21 条**逐型对注册表**判：没表态就红。
+「擦了最终消息忘了分片」这种形状编译器管不了、穷尽 switch 也管不了（这里本来就不是 switch）。
+
+**② 刻意不擦的边界要有名字。** 用户自己贴进来的文本（`user_message` / `goal_set` /
+`diff_comment` / `card_action` / 三个 automation_*）**不进扫描表**——用户贴一把密钥让 agent
+配环境是正常意图，mask 掉等于毁掉这一轮任务；这类文本的保密责任在写盘权限与会话导出，不在投影层。
+这条判断如果只写在注释里，下一个改这里的人会「顺手」把它一起扫掉，所以做成断言：
+`diff_comment` 一旦进扫描表，互斥判据当场红（有一根锚点专演这一步）。
+
+**③ 两条反直觉的实现约束也钉了针。** 缺席的可选字段不许无中生有（`artifacts` 没填就不该被写成 `{}`）；
+扫描不许改动传入的原对象——worker 内存态要留着原文给 provider 投影，就地改会让模型
+「看到的」和「自己写的」不是同一份。
+
+**④ 注册表读料口抽成 `tests/event-registry.ts`。** 两份清单闸各抄一遍 KNOWN_TYPES 正则的话，
+注册表换个写法只会有一支红、另一支静默数到 0 个类型还报「全过」——与 53/55 同一根。
+
+**没做的半边（另立下一步）**：主会话**自己**的 append 面根本没扫（`agent-runner` 的 pipeline
+全文零 redact）⇒ 那句承诺目前只在子流成立。那一步要先量 frozen 判卷文件与高熵误杀
+（`redactSecrets` 除模式外还掩高熵 token，SHA/base64 形状会被抹），所以不夹在本程里做。
+
+**本程读数**：`tests/stream-redaction.test.ts` 21 条；agent 侧批 **25 files / 263 tests 全绿**；
+`pnpm agents-check` **255 ✅ / 0 ❌**（H 暗卷 1 项按未证报出，无 `M0_API_KEY` 跳过——不等于通过）；
+锚点 +4，在 clean HEAD（`6c62711`）隔离 worktree 实跑**全杀**；
+`pnpm mutate-needles-check` 602 条 0 阻断；`pnpm typecheck` HEAD 态 0 错。
+
 ## 待办（按优先级）
 
 1. 沉淀面：`failureDigestFromEvents`（能力 6/10）现在只看 `verify_result(ok:false)` 与
@@ -599,6 +638,13 @@ terminal/merge/agents），四条改了投影却不在表里：`usage` / `agent_
     一处，但**切片本身仍按标记字符串取料**——`app.js` 改名一段标记就会 throw（正确行为），
     而 `renderer-run-control` 只喂了 `renderEvent` 一支，另一支（`boot()` 那段）碰不到准入。
     若哪天再往 `renderEvent` 之前加第二道守卫，先问「三份 vm 各自吃得到吗」。
+11. 同一张脱敏表的**另一半**（第十六程刻意拆出去的下一步）：主会话自己的 append 面没扫——
+    `agent-runner.ts` 的 pipeline（`log.append(e)` → `opts.onEvent(e)`）全文零 redact，
+    所以父会话的 `tool_result` / `assistant_delta` / `verify_result` 原样进 `sessions/*.jsonl`，
+    还会被回放进下一轮、进摘要、进沉淀。「密钥不进主转录 JSONL」这句承诺目前只在子流成立。
+    接法：一次 `scanStreamEvent`，落盘与 onEvent 共用同一份（两份文本 = §10.1 禁的第二套呈现）。
+    动手前先量两件事：frozen 判卷文件里有没有 `sk-` 形状的期望（改判据要写 BLOCKED.md，不许改代码绕）；
+    `redactSecrets` 的高熵分支会不会误抹 SHA/base64 形状的正文（新增面是 verify_result 与 compaction）。
 
 ## 复算命令
 
@@ -627,6 +673,11 @@ TERM=dumb node node_modules/vitest/vitest.mjs run --config tests/vitest.config.t
 TERM=dumb pnpm mutate-verify panel-dirty-misses-review-and-progress-events panel-dirty-refreshes-on-inert-events \
   app-keeps-its-own-panel-dirty-copy panel-dirty-never-mentions-approval-events diff-comment-missing-from-panel-dirty-set
 grep -n "PANEL_DIRTY_TYPES" src/renderer/*.js src/renderer/projections.ts   # 表 1 份、问它 1 处
+# 第十六程（落流脱敏逐型裁决表）
+TERM=dumb node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/stream-redaction.test.ts tests/event-type-coverage.test.ts
+TERM=dumb pnpm agents-check          # 读末行 255 ✅ / 0 ❌ 与 UNVERIFIED 计数
+# 「修复前 3 擦 / 10 漏」那份读数是临时探针量出来的，没留在仓里；现在由本闸逐型断言接管
+# （要看旧行为：git show 6c62711^:src/agent/worker-projection.ts 里的 if 链，三型之外原样 return e）
 ```
 （`wc -l` 两边都数：单看修复后的 23 说明不了任何事，修复**前**那个 4 才是缺陷本身——
 4 个命中全在类型声明与注释里，读取点为 0。）
