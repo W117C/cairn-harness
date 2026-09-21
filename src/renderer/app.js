@@ -1313,6 +1313,26 @@ let activeView = null;
 const sideHtmlCache = new Map();   // viewKey -> html
 let sideTabsCache = null;
 
+/* 重绘时的用户态保全。sideHtmlCache 只挡住「HTML 没变」那一半；一旦真变了（多数时候只是
+   多一条评论、多一行工具），innerHTML 整段重写会把用户正展开的那份补丁抹回折叠态。
+   面板从只读变成可写（行级评审）之后这尤其疼：送完一条意见，正在审的那屏就塌回去了。
+   键 = details 在该页内的序号：同一页的列顺序由事件流决定，一次重绘内稳定。
+   读的是 .open（实时属性）不是 hasAttribute('open')——用户点开不会改属性，读属性等于什么都没抓到。
+   两条有意不做的：
+   · 滚动位置——真正的滚动条是 .drawer-body，多张页共用一个，恢复某一张的读数会把它套到当前
+     看得见的另一张上（错的动作做得越准越糟）；
+   · 跨会话的展开态——切会话是换了一页，本就该重来；为它建一份 UI 状态仓库不值。 */
+function capturePanelState(section) {
+  const opened = [];
+  section.querySelectorAll('details').forEach((d, i) => { if (d.open) opened.push(i); });
+  return opened;
+}
+function restorePanelState(section, opened) {
+  if (!opened || !opened.length) return;
+  const list = section.querySelectorAll('details');
+  for (const i of opened) { const d = list[i]; if (d) d.open = true; }   // 重绘后变少：丢掉多余项，不抛
+}
+
 function renderSide() {
   const tabsHtml = sideOpenTabs.map(k =>
     '<button class="side-tab" role="tab" data-view="' + k + '" aria-selected="' + String(k === activeView) + '" aria-label="' + VIEW_META[k].title + '">' +
@@ -1333,8 +1353,10 @@ function renderSide() {
       sidePagesEl.insertAdjacentHTML('beforeend',
         '<section class="side-page" data-view="' + key + '" role="tabpanel"' + (key === activeView ? '' : ' hidden') + '>' + html + '</section>');
     } else if (changed) {
+      const kept = capturePanelState(section);
       sideHtmlCache.set(key, html);
       section.innerHTML = html;
+      restorePanelState(section, kept);
     }
   }
   /* 已关闭视图：连带回收其页面节点与缓存 */
