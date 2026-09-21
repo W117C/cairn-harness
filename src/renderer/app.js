@@ -912,7 +912,8 @@ const VIEW_META = {
   schedule: { title: '定时任务',   icon: ICONS.clock },
   memory:   { title: '记忆',       icon: ICONS.archive },
   plugins:  { title: '插件',       icon: ICONS.pin },
-  agents:   { title: '子智能体',   icon: ICONS.dots }
+  agents:   { title: '子智能体',   icon: ICONS.dots },
+  sidechat: { title: '辅助对话',   icon: ICONS.chat }
 };
 
 /* 展示用文件树；path 不是可执行工作区，真实运行目录仅取 AppSettings.workspace。 */
@@ -954,6 +955,14 @@ let panelData = EMPTY_PANEL_DATA;
    （ipc:check 只看通道挂没挂，看不到"挂着没人读"），于是崩溃恢复留在盘上的 worktree
    只有命令行能看见——而合并控制塔正是它的落脚点。三态：null=还没数 / {orphans}/ {error}。 */
 let orphanWorktrees = null;
+/* 辅助对话（sidechat，§10.8）：main 把快照随每次 getState 算好（旁路会话清单 + 各自最近消息 +
+   由主会话 origin 反向投影的已提升记录），四根通道在 preload 挂着、判卷面里被 sidechat-check
+   进程内调过，渲染层却零读者——又一处「零件齐了两头断」，且这次断在读端。
+   null = 还没读过（与"读过且确实没有旁路会话"分开说，同 orphanWorktrees 那三条口径）。 */
+let sidechatSnap = null;
+/* 最近一次旁路动作的回执（新建 / 问 / 提升）。失败必须上屏，不静默：
+   没配 key 时 ask 是 fail-closed 的，那句原因只有这一行能告诉用户。 */
+let sidechatNote = '';
 
 /* 右栏"文件树高亮"目标：diff 卡展开时置为对应文档路径，收折清空 */
 let activeFileDoc = null;
@@ -1322,6 +1331,102 @@ function agentsViewHTML() {
     }).join('');
 }
 
+/* 辅助对话（§10.8）：只读旁路问答，own loop / own 上下文，不占主会话；唯一回主会话的通道是
+   「提升」（main 把它渲染成一条带 origin 的 user_message，零新增事件类型）。
+   这里只组形状：谁是最新一条答案、哪些消息已提升、列表与文本的有界性。
+   判"能不能提升 / 提升哪一条"归 main，界面不另算一遍（两份规则必然漂移）。 */
+const SC_SESSION_LIMIT = 8;   // 面板列最近 8 个旁路会话，其余折成一行计数
+const SC_MSG_LIMIT = 6;       // 每个会话只列最近 6 条：这是入口，不是转录查看器
+const SC_TEXT_LIMIT = 220;    // 单条文本截断
+
+function scTrim(t) {
+  const s = String(t || '');
+  return s.length > SC_TEXT_LIMIT ? s.slice(0, SC_TEXT_LIMIT) + '…' : s;
+}
+
+/* 已提升的事件 id 集合：由主会话 user_message.origin 反向投影（sidechat 自己不记提升事件）。 */
+function scPromotedIds(snap) {
+  const ids = new Set();
+  for (const p of (snap && snap.promoted) || []) {
+    for (const ev of (p && p.sourceEventIds) || []) ids.add(Number(ev));
+  }
+  return ids;
+}
+
+/** 「提升」的默认对象 = 最近一条答案（§10.8：默认最近一条，可选多选 + 附注）。 */
+function scLatestAnswerId(msgs) {
+  const list = msgs || [];
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (list[i] && list[i].role === 'assistant') return Number(list[i].eventId);
+  }
+  return null;
+}
+
+function scMsgHTML(m, promoted) {
+  const ask = m.role !== 'assistant';
+  return '<div class="sc-msg" data-sc-ev="' + String(Number(m.eventId)) + '">' +
+    '<span class="sc-role">' + (ask ? '问' : '答') + '</span>' +
+    (promoted ? '<span class="sc-badge">已提升</span>' : '') +
+    '<span class="sc-text">' + esc(scTrim(m.text)) + '</span></div>';
+}
+
+/** 旁路会话自己的成本（§10.8：own 上下文 ⇒ own 花费；看不见就等于让人替模型盲付）。
+ *  数字由 main 从该会话自己的 JSONL 投影，这里只排版；三项全零时整段不写（不拿一串 0 冒充"量过"）。 */
+function scUsageText(u) {
+  const k = u || {};
+  const n = Number(k.usageCount) || 0;
+  const i = Number(k.inputTokens) || 0;
+  const o = Number(k.outputTokens) || 0;
+  if (n === 0 && i === 0 && o === 0) return '';
+  return ' · 用量 ' + String(n) + ' 次 · 进出 ' + String(i) + '/' + String(o) + ' tok';
+}
+
+function scSessionHTML(s, promoted) {
+  const all = s.messages || [];
+  const shown = all.slice(-SC_MSG_LIMIT);
+  const older = all.length - shown.length;
+  const lastAns = scLatestAnswerId(all);
+  const u = s.usage || {};
+  return '<div class="sched-task sc-row" data-sc="' + esc(s.id) + '">' +
+    '<div class="sched-main">' +
+      '<div class="sched-name">' + esc(s.id) +
+        '<span class="mc-hint">（' + String(s.lines || 0) + ' 行 · 旁路 own loop' + scUsageText(u) + '）</span></div>' +
+      (shown.length
+        ? shown.map(m => scMsgHTML(m, promoted.has(Number(m.eventId)))).join('')
+        : '<div class="sc-msg"><span class="sc-text">还没有问答——问一句试试（旁路只读，不写主会话）</span></div>') +
+      (older > 0 ? '<div class="sc-more">另有 ' + String(older) + ' 条未列出（快照只带最近 ' + String(SC_MSG_LIMIT) + ' 条）</div>' : '') +
+    '</div>' +
+    '<div class="sched-acts">' +
+      '<input class="sc-ask-input" type="text" aria-label="给这条旁路会话提问" placeholder="问一句…">' +
+      '<button class="sched-btn" data-sc-act="ask">问</button>' +
+      (lastAns === null
+        ? '<button class="sched-btn" data-sc-act="promote" disabled title="还没有可提升的答案">提升</button>'
+        : '<button class="sched-btn" data-sc-act="promote" data-sc-ev="' + String(lastAns) + '">提升最近一条答</button>') +
+    '</div></div>';
+}
+
+function sidechatViewHTML() {
+  if (!sidechatSnap) return '<p class="sched-empty">读取中…（打开这一页时才向 main 要快照）</p>';
+  if (sidechatSnap.error) return '<p class="sched-empty">旁路快照读取失败：' + esc(sidechatSnap.error) + '</p>';
+  const sessions = sidechatSnap.sessions || [];
+  const promoted = scPromotedIds(sidechatSnap);
+  const head = '<div class="sched-status">' +
+    '<span class="sched-chip">旁路会话 ' + String(sessions.length) + '</span>' +
+    '<span class="sched-chip">已提升消息 ' + String(promoted.size) + '</span>' +
+    '<span class="sched-chip">父会话 ' + esc(sidechatSnap.parentSessionId || '未选') + '</span>' +
+    '</div>';
+  const note = sidechatNote ? '<p class="sc-note">' + esc(sidechatNote) + '</p>' : '';
+  const list = sessions.length
+    ? sessions.slice(0, SC_SESSION_LIMIT).map(s => scSessionHTML(s, promoted)).join('') +
+      (sessions.length > SC_SESSION_LIMIT
+        ? '<div class="sc-more">另有 ' + String(sessions.length - SC_SESSION_LIMIT) + ' 个旁路会话未列出</div>'
+        : '')
+    : '<p class="sched-empty">还没有旁路会话<br><span class="dim">旁路问答只读主会话投影、不进主上下文；要结论时点「提升」。</span></p>';
+  return head +
+    '<div class="sched-acts"><button class="sched-btn" data-sc-act="new">新建旁路会话</button></div>' +
+    note + list;
+}
+
 function viewHTML(key) {
   if (key === 'files') return filesViewHTML();
   if (key === 'review') return reviewViewHTML();
@@ -1332,6 +1437,7 @@ function viewHTML(key) {
   if (key === 'memory') return memoryViewHTML();
   if (key === 'plugins') return pluginsViewHTML();
   if (key === 'agents') return agentsViewHTML();
+  if (key === 'sidechat') return sidechatViewHTML();
   return '';
 }
 
@@ -3720,6 +3826,9 @@ render();
       // 记忆删除与定时任务动作共用这一个委托处理器（抽屉里的行内按钮只有一个宿主，别开第二条）
       const cmtBtn = e.target.closest('[data-cmt]');
       if (cmtBtn) { openCommentPop(cmtBtn); return; }
+      // 辅助对话的三个动作（新建 / 问 / 提升）共用抽屉里唯一的点击宿主，不开第二个监听
+      const scBtn = e.target.closest('[data-sc-act]');
+      if (scBtn) { await runSidechatAction(scBtn); return; }
       const agentBtn = e.target.closest('[data-agent-act]');
       if (agentBtn) {
         const row = agentBtn.closest('.agent-row');
@@ -3802,7 +3911,58 @@ render();
     else if (key === 'memory') void loadMemory(true).then(redraw);
     else if (key === 'plugins') void loadPlugin(true).then(redraw);
     else if (key === 'git') void loadWorktree().then(redraw);
+    else if (key === 'sidechat') void loadSidechat().then(redraw);
   };
+
+  /* ---------- 辅助对话（sidechat，§10.8）：面板上三个动作的宿主 ----------
+     一次动作之后必回读快照：新会话与「已提升」徽标都要当场可见——否则用户只能靠猜。
+     失败一律写进 sidechatNote 上屏（ask 在无 key 时是 fail-closed 的，那句原因只有这一行能告诉人）。 */
+  async function loadSidechat() {
+    try {
+      sidechatSnap = await api.sidechatState(real.id || undefined);
+    } catch (err) {
+      sidechatSnap = { error: ((err && err.message) || String(err)) };
+    }
+  }
+  async function runSidechatAction(btn) {
+    const act = btn.dataset.scAct;
+    const row = btn.closest('.sc-row');
+    const parentId = real.id || '';
+    if (act !== 'new' && !row) return;
+    if (act === 'new' && parentId === '') {
+      sidechatNote = '还没打开主会话：旁路问答要挂在一条主会话上（先发起一次对话，再开旁路）。';
+      renderSide();
+      return;
+    }
+    let note = '';
+    if (act === 'new') {
+      const r = await api.sidechatCreate(parentId);
+      note = (r && r.id) ? '已新建旁路会话「' + r.id + '」（只读投影，不动主会话）。'
+                         : '新建旁路会话失败：' + JSON.stringify(r);
+    } else if (act === 'ask') {
+      const input = row.querySelector('.sc-ask-input');
+      const text = String((input && input.value) || '').trim();
+      if (text === '') { sidechatNote = '先写一句要问的话。'; renderSide(); return; }
+      sidechatNote = '正在问（旁路 own loop，不占主会话上下文）…';
+      renderSide();
+      const r = await api.sidechatAsk(row.dataset.sc, text, parentId);
+      note = (r && r.ok) ? '这一问已答（进的是旁路自己的会话流）。'
+                         : '问失败：' + ((r && r.error) || '未知回条');
+    } else if (act === 'promote') {
+      const ev = Number(btn.dataset.scEv);
+      if (!Number.isInteger(ev)) { sidechatNote = '这一列还没有可提升的答案。'; renderSide(); return; }
+      const r = await api.sidechatPromote({
+        sidechatId: row.dataset.sc, parentSessionId: parentId, sourceEventIds: [ev],
+      });
+      note = (r && r.ok) ? '已提升到主会话：主对话流里是一条引用卡（带来源），旁路徽标同步。'
+                         : '提升失败：' + ((r && r.error) || '未知回条');
+    } else {
+      return;
+    }
+    await loadSidechat();
+    sidechatNote = note;
+    renderSide();
+  }
 
   /* ---------- 长任务目标（goal 模式）：composer 芯片 + 设定面板 ----------
      机器侧三面（main handler / preload / IPC）此前已落，这一段是用户能点的那一下。三条口径：

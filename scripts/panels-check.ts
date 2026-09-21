@@ -188,6 +188,18 @@ async function tryWait(probe: () => Promise<unknown>, timeoutMs: number): Promis
   }
 }
 
+/** tryWait 只回答「红没红」；等的是**值**（读回一屏快照、盘上行数、追到的那一行 JSON）时用这条。
+ *  超时返回 null——调用方的断言因此能同时表达「没等到」与「等到了但不是它」。 */
+async function settle<T>(read: () => Promise<T | null>, timeoutMs = 10_000): Promise<T | null> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const v = await read();
+    if (v !== null) return v;
+    if (Date.now() > deadline) return null;
+    await new Promise((r) => setTimeout(r, 60));
+  }
+}
+
 async function killElectron(p: ChildProcess): Promise<void> {
   p.kill("SIGKILL");
   await new Promise((r) => setTimeout(r, 600));
@@ -1298,6 +1310,99 @@ async function phaseElectron(root: string): Promise<void> {
       "B18 这一段只报不删（清理会连分支一起 branch -D，未裁决 ⇒ 不许有按钮；" +
         "实测按钮数 " + String(b18Buttons) + "，期望 0）",
     );
+    /* B19 辅助对话（§10.8）：四根通道里三根真跑（create / state / promote），全程零模型调用。
+       ask 那一根在无 key 的验收环境里是 fail-closed 的 ⇒ 判它「把原因说给人看」，不判它成功。
+       盘上只写本相自己的临时 sessions 目录（sidechats/<id>/），不碰靶子仓库；
+       旁路那条「答案」是验收侧直接落到 sidechat 自己的 JSONL（等价于跑过一轮 ask 的结果），
+       为的是把提升那一跳端到端判到，而不是再造一个演示 env（M2F_SIDECHAT_DEMO 会在 run 起手
+       就播三问答 + 一次提升，污染 B1/B3 的事件计数面）。 */
+    console.log("[panels-check] B19 辅助对话：面板 → 新建 / 快照 / 提升 / fail-closed 回执（零模型调用）");
+    const scProbe = `(() => {
+      const p = document.querySelector('.side-page[data-view="sidechat"]');
+      if (!p) return JSON.stringify({ page: false, text: '', id: '', chip: '', promoteEv: '' });
+      const row = p.querySelector('.sc-row');
+      const pb = p.querySelector('[data-sc-act="promote"]');
+      return JSON.stringify({
+        page: true,
+        text: (p.textContent || '').replace(/\\s+/g, ' ').slice(0, 200),
+        id: row ? (row.dataset.sc || '') : '',
+        chip: [...p.querySelectorAll('.sched-chip')].map(e => (e.textContent || '').trim()).join(' | '),
+        promoteEv: pb ? (pb.dataset.scEv || 'none') : 'nobtn',
+      });
+    })()`;
+    type Sc = { page: boolean; text: string; id: string; chip: string; promoteEv: string };
+    const scRead = async (): Promise<Sc> => JSON.parse(await cdp2.eval<string>(scProbe)) as Sc;
+    const scClick = (sel: string): Promise<string> => cdp2.eval<string>(
+      `(() => { const b = document.querySelector('.side-page[data-view="sidechat"] ${sel}'); if (b) b.click(); return String(!!b); })()`,
+    );
+    const openSidechat = async (): Promise<void> => {
+      await cdp2.eval(`(() => { document.querySelector('#qcGit')?.click(); return true; })()`);
+      await cdp2.eval(`(() => { document.querySelector('#qcSidechat')?.click(); return true; })()`);
+    };
+    await cdp2.eval(`(() => { document.querySelector('#qcSidechat')?.click(); return true; })()`);
+    const scFirst = await settle(async () => {
+      const s = await scRead();
+      return s.page && !s.text.includes("读取中") ? s : null;
+    });
+    ok(scFirst !== null, "B19 打开辅助对话页即拿到快照，不停在「读取中…」（实测 " +
+      JSON.stringify((scFirst?.text ?? "").slice(0, 70)) + "）");
+    ok((scFirst?.chip ?? "").includes("父会话 " + String(clarifyId)),
+      "B19 面板认的父会话＝当前打开的那条（实测 " + JSON.stringify(scFirst?.chip ?? "") + "）");
+    const scNew = await scClick('[data-sc-act="new"]');
+    ok(scNew === "true", "B19 新建按钮真的在页上并被点着（实测回条 " + scNew + "）");
+    const scId = await settle(async () => {
+      const s = await scRead();
+      return s.id !== "" ? s.id : null;
+    });
+    ok(typeof scId === "string" && scId !== "", "B19 新建后面板列出这条旁路会话（实测 id " + JSON.stringify(String(scId)) + "）");
+    const scFile = join(root, "sidechats", String(scId ?? "?"), "events.jsonl");
+    const scHeadLines = await settle(async () => {
+      try { return (await readFile(scFile, "utf8")).trim().split("\n").length; } catch { return null; }
+    }, 5_000);
+    ok(scHeadLines === 1, "B19 盘上 sidechats/<id>/events.jsonl 起手只有一行 session_meta（实测行数 " + String(scHeadLines) + "）");
+    await writeFile(scFile, (await readFile(scFile, "utf8")) +
+      JSON.stringify({ type: "assistant_message", content: "旁路结论：只读投影，主会话文件一个字节没动。" }) + "\n", "utf8");
+    await openSidechat();
+    const scAns = await settle(async () => {
+      const s = await scRead();
+      return s.promoteEv === "2" && s.text.includes("旁路结论") ? s : null;
+    });
+    ok(scAns !== null, "B19 重开面板带出旁路那条答，并把「提升」锚到它（实测 promoteEv=" +
+      JSON.stringify(scAns?.promoteEv ?? "null") + " 期望 \"2\"，文本 " + JSON.stringify((scAns?.text ?? "").slice(0, 60)) + "）");
+    const mainFile = pathOf(root, String(clarifyId));
+    const mainBefore = (await readFile(mainFile, "utf8")).trim().split("\n").length;
+    ok(await scClick('[data-sc-act="promote"]') === "true", "B19 提升按钮按得下去（未被禁用）");
+    const promotedLine = await settle(async () => {
+      const raw = (await readFile(mainFile, "utf8")).trim().split("\n");
+      if (raw.length !== mainBefore + 1) return null;
+      const e = JSON.parse(raw[raw.length - 1] ?? "{}") as {
+        type?: string; content?: string; origin?: { kind?: string; session_id?: string; source_event_ids?: number[] },
+      };
+      const o = e.origin;
+      return e.type === "user_message" && o?.kind === "sidechat" && o.session_id === scId &&
+        (o.source_event_ids ?? []).join() === "2" && (e.content ?? "").includes("旁路结论") ? JSON.stringify(o) : null;
+    }, 10_000);
+    ok(promotedLine !== null, "B19 提升写进主会话的是一条带 origin 的 user_message（零新增事件类型；" +
+      "行数 " + String(mainBefore) + "→" + String(mainBefore + 1) + "，实测 origin " + JSON.stringify(promotedLine ?? "null") + "）");
+    await openSidechat();
+    const scBadge = await settle(async () => {
+      const s = await scRead();
+      return s.text.includes("已提升") && s.text.includes("已提升到主会话") ? s : null;
+    }, 10_000);
+    ok(scBadge !== null, "B19 徽标由主会话 origin 反向投影 + 回执说清去了哪（不另记事件；实测 " +
+      JSON.stringify((scBadge?.text ?? "null").slice(0, 80)) + "）");
+    await cdp2.eval(`(() => {
+      const i = document.querySelector('.side-page[data-view="sidechat"] .sc-row .sc-ask-input');
+      if (i) i.value = '再问一句';
+      return String(!!i);
+    })()`);
+    ok(await scClick('[data-sc-act="ask"]') === "true", "B19 提问按钮与输入框都在行内（不是全局选择态）");
+    const scAsk = await settle(async () => {
+      const s = await scRead();
+      return s.text.includes("无 M0_API_KEY") ? s : null;
+    }, 10_000);
+    ok(scAsk !== null, "B19 无 key 时「问」不静默：fail-closed 的原因上屏（实测 " +
+      JSON.stringify((scAsk?.text ?? "null").slice(0, 90)) + "）");
     await killElectron(electron2);
   } finally {
     if (electron.exitCode === null) await killElectron(electron);
