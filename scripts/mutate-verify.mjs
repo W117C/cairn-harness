@@ -3984,6 +3984,22 @@ const MUTATIONS = [
     apply: (s) => s.replace("(failed ? '定时任务失败：' : '定时任务完成：') + nm + why;", "(failed ? '定时任务失败：' : '定时任务完成：') + why;"),
     expectFail: "无人值守的一次运行：失败不顶着「完成」",
   },
+  {
+    id: "tz-note-emitted-for-every-task",
+    src: "src/main/scheduler.ts",
+    test: "tests/schedule-timezone-note.test.ts",
+    desc: "时区注记不再只在两值不同时给 ⇒ 每条任务都挂一句「本机/规则同一个时区」的废话，真需要提示的那条被淹掉（提示的可信度靠稀疏维持）",
+    apply: (s) => s.replace("} else if (norm !== sysTz) {", "} else {"),
+    expectFail: "只有时区与本机不同（或声明值非法）才给注记",
+  },
+  {
+    id: "tz-note-computed-but-never-rendered",
+    src: "src/renderer/app.js",
+    test: "tests/schedule-timezone-note.test.ts",
+    desc: "快照算好了注记而面板不打印 ⇒ 又一份「main 有字段、界面看不见」（timeZoneOffsetLabel 此前正是这样当了整轮孤儿）",
+    apply: (s) => s.replace("esc(scheduleCache.tzNotes[t.id])", "''"),
+    expectFail: "注记上屏：面板不会算完就丢",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
