@@ -4271,6 +4271,39 @@ const MUTATIONS = [
     apply: (s) => s.replace("approval_resolved: 1, diff_comment: 1 }", "approval_resolved: 1 }"),
     expectFail: "diff_comment 在面板脏集里",
   },
+  // ---- 面板重绘的用户态保全（4dd11d6）----
+  {
+    id: "panel-state-reads-attribute-not-live-property",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-panel-state.test.ts",
+    desc: "抓展开态去读 hasAttribute('open') ⇒ 用户手点开的从不改属性，等于什么都没抓到（静默恒空集）",
+    apply: (s) => s.replace("if (d.open) opened.push(i)", "if (d.hasAttribute('open')) opened.push(i)"),
+    expectFail: "抓到的是用户实时展开的那几项",
+  },
+  {
+    id: "panel-state-restore-crashes-on-shorter-list",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-panel-state.test.ts",
+    desc: "恢复时不判越界 ⇒ 重绘后折叠块变少（worker 列被撤）就在渲染中途抛，整块面板挂",
+    apply: (s) => s.replace("const d = list[i]; if (d) d.open = true;", "list[i].open = true;"),
+    expectFail: "重绘后折叠块变少",
+  },
+  {
+    id: "render-side-rewrites-without-restoring",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-panel-state.test.ts",
+    desc: "抓了不还原：重写照旧 innerHTML 全写，补丁照样塌回去（这一对里只剩一半 = 装饰性代码）",
+    apply: (s) => s.replace("restorePanelState(section, kept);", ";"),
+    expectFail: "renderSide 的重写分支成对使用这一对",
+  },
+  {
+    id: "render-side-captures-nothing",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-panel-state.test.ts",
+    desc: "压根没抓（快照恒 null）⇒ restore 走空返回，界面回到默认折叠——与「没做」完全等价",
+    apply: (s) => s.replace("const kept = capturePanelState(section);", "const kept = null;"),
+    expectFail: "renderSide 的重写分支成对使用这一对",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
