@@ -103,8 +103,15 @@
    沉淀器却完全看不见的一类。补进 digest。（⚠️ `src/agent/memory/distill.ts` 另有
    在飞 hunk，动前先确认对方已落库。）
 2. 面板可见：渲染层按 `outcome` 出文案（main 只落 token 的规矩，#48 同口径）。
-3. 门：给 `turn_truncated` 加一条端到端断言（真入口进、盘上字节出），并落变异锚点
-   ——本轮**未落** `scripts/mutate-verify` 表，按惯例另起一笔（对方在飞文件会让整表拒变）。
+3. ~~门/锚点~~ **已落（与变异表同一笔提交）**：变异表 +8，逐条在 HEAD 隔离 worktree 实测**全杀**
+   （`stop-reason-keeps-wire-text` / `-emits-on-benign-reason` / `-drops-case-fold` /
+   `-hides-zero-output-tokens` / `anthropic-never-reads-stop-reason` /
+   `openai-never-reads-finish-reason` / `gemini-never-reads-finish-reason` /
+   `context-never-projects-truncation`），主树一个字节未动；
+   `pnpm mutate-needles-check` 全表 551 条针脚 0 阻断 / 0 待复认 / 0 未覆盖。
+   其中 `stop-reason-hides-zero-output-tokens` 是一条**通用形状**的针：
+   `...(x !== null && x !== undefined ? {…} : {})` 被顺手改成 `...(x ? {…} : {})` ——
+   `output_tokens = 0` 是读数，不是「没上报」。
 4. 动作半（截断续跑）：需真钱 A/B，先出 `$` 与准确率两个数再裁默认值。
 
 ## 复算命令
