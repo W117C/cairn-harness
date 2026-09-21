@@ -5060,6 +5060,41 @@ const MUTATIONS = [
     apply: (s) => s.replace("    if (el && el.classList.contains('show')) return { el, close: m.close };", "    if (el) return { el, close: m.close };"),
     expectFail: "负控：一支都没开着 ⇒ null（Escape 才落到芯片看板那一支）",
   },
+  {
+    id: "rule-matcher-deny-ignores-wrappers",
+    src: "src/permissions/rules.ts",
+    test: "tests/permissions.test.ts",
+    desc: "deny/ask 退回裸文本前缀（不看有效二进制）⇒ 用户手写的 deny 被 /usr/bin/git、env、nohup、timeout、command、bash -c 六类写法静默击穿（09-21 探针 ① 段原缺陷复活）",
+    apply: (s) => s.replace(
+      "      forms ??= commandForms(segment);\n      len = forms.some((f) => f.startsWith(rule.pattern)) ? rule.pattern.length : -1;",
+      "      len = segment.startsWith(rule.pattern) ? rule.pattern.length : -1;",
+    ),
+    expectFail: "包装写法躲不过 deny",
+  },
+  {
+    id: "rule-matcher-allow-widens-to-wrappers",
+    src: "src/permissions/rules.ts",
+    test: "tests/permissions.test.ts",
+    desc: "把 allow 也接进形态面 ⇒ 用户点过一次「总是允许 echo hi」的同意被顺带扩大到 `env FOO=1 echo hi`、`nohup echo hi`、`/usr/bin/echo hi`（收紧与放宽的不对称是刻意的，丢掉它等于替他扩大同意范围）",
+    apply: (s) => s.replace('else if (rule.behavior === "allow") len = segment.startsWith(rule.pattern)', 'else if (rule.behavior === "__never__") len = segment.startsWith(rule.pattern)'),
+    expectFail: "allow 只认原形：点过一次「总是允许」不顺着包装器扩大同意范围",
+  },
+  {
+    id: "shape-leading-env-assignment-not-skipped",
+    src: "src/permissions/command-shape.ts",
+    test: "tests/command-shape.test.ts",
+    desc: "不跳前导环境赋值 ⇒ `GIT_PAGER=cat git push --force` 的有效二进制看不见（这条是 09-22 建共用件时**自己踩到并被测出来**的一支）",
+    apply: (s) => s.replace("while (i < tokens.length && ASSIGN_RE.test(tokens[i]!)) i++;", "while (false && i < tokens.length && ASSIGN_RE.test(tokens[i]!)) i++;"),
+    expectFail: "GIT_PAGER=cat git push --force",
+  },
+  {
+    id: "shape-wrapper-value-opt-not-swallowed",
+    src: "src/permissions/command-shape.ts",
+    test: "tests/command-shape.test.ts",
+    desc: "跳过包装器时不吞带值选项的值 ⇒ `sudo -u root git …` 里的 `root` 冒充二进制，真正那条形再也不出现（worker 支那道半截循环的本体就在这里）",
+    apply: (s) => s.replace('        if (!t.includes("=") && vopts.has(flag)) { i++; ateValue = true; }', "        if (false && !t.includes(\"=\") && vopts.has(flag)) { i++; ateValue = true; }"),
+    expectFail: "选项值不冒充二进制：root / 30 / -n 都不在 bin 位",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

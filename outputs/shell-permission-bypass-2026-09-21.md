@@ -150,8 +150,15 @@ pnpm exec tsx scripts/probe-shell-bypass.ts     # 当前必红（退出码 1）�
   （含带值选项 `sudo -u root` / `timeout -k 5` / `nice -n 5`，以及 `timeout 30`、`nice 5` 这类位置值）、
   路径取基名（`/usr/bin/git` → `git`）、`shell -c` 载荷按同一套规则递归（深度上限 3，越界只少跳一层不崩）。
   **权限层与 worker 两支都要改吃它**——再写第三份就是本仓第七族的老路。
-- 剩余施工顺序与判据不变：① 接 `rules.ts`（deny/ask 逐形取最长命中，allow 刻意只认原形：
-  包装器是「被禁的事」藏身的地方，而用户点「总是允许」时同意的是他看见的那条字面命令）
-  → ③ 接 `worker-shell-tools.ts`（补掉只 `has(word)` 不吞选项值的半截循环）→ ②④ 各自成笔。
+- **① 已收（同日紧接的一笔）**：`rules.ts:matchSegment` 的 deny/ask 改逐形态取最长命中，
+  allow 刻意只认原形。探针读数 **红 24 / 绿 9 → 红 15 / 绿 18**，① 段 11 条全绿；
+  离线面另加 6 条（`tests/permissions.test.ts`「规则匹配按有效二进制」一段，含
+  「反例：git 只作为参数出现时不得命中」与「allow 只认原形」两条负控）+ 4 根锚点
+  （`rule-matcher-deny-ignores-wrappers`、`rule-matcher-allow-widens-to-wrappers`、
+  `shape-leading-env-assignment-not-skipped`、`shape-wrapper-value-opt-not-swallowed`）。
+  回归面：`security-check` 43 ✅ / 0 ❌，权限邻域 4 份测 70 条全绿。
+- 剩余施工顺序与判据不变：③ 接 `worker-shell-tools.ts`（补掉只 `has(word)` 不吞选项值的半截循环）
+  → ② 那条「总是允许」存整条命令字面量的账（allow 已刻意不放宽，但 ② 的五条红是**载荷**方向：
+  `echo hi > /tmp/pwned` 之类仍被放行）→ ④ 重定向写面进静态威胁表。
   收口判据 = 探针退出码 0，**且**反向对照那一对继续成立（`git push --force` 必拦、`git status` 必放行）——
   只有前一半的话，「一律 deny」也能伪装成绿。

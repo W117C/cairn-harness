@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { writeFileAtomic } from "../atomic-write";
+import { commandForms } from "./command-shape";
 import { isShellFamily } from "./risk";
 
 export type RuleBehavior = "allow" | "ask" | "deny";
@@ -137,14 +138,27 @@ export interface RuleHit {
   prefixLen: number;
 }
 
-/** 单段匹配：所有命中里取最长前缀；同长取行为优先序 deny > ask > allow。 */
+/** 单段匹配：所有命中里取最长前缀；同长取行为优先序 deny > ask > allow。
+ *
+ *  deny/ask 按**有效形态**匹配（`commandForms`：跳过 exec 包装器与环境赋值、路径取基名、
+ *  `shell -c` 载荷递归），allow 只认原形。这条不对称是刻意的：
+ *  ⑴ 包装器恰恰是「被禁的事」藏身的地方——`/usr/bin/git push --force`、`env FOO=1 …`、
+ *    `nohup …`、`timeout 30 …`、`command …`、`bash -c '…'` 六类写法曾把用户手写的 deny
+ *    静默击穿（09-21 探针红 24 / 绿 9）；
+ *  ⑵ 而 allow 是「用户点过一次总是允许」时**看见并同意的那条字面命令**，顺着包装器放宽
+ *    等于替他扩大同意范围（本仓另有一笔 allow 过覆盖的账要还，方向是收紧不是放宽）。 */
 function matchSegment(rules: PermissionRule[], segment: string): RuleHit | null {
   let best: RuleHit | null = null;
+  let forms: string[] | null = null; // 惰性解析：只有 deny/ask 条目需要时才展开形态
   for (const rule of rules) {
     let len: number;
     if (rule.pattern === undefined) len = 0; // 裸工具名条目
-    else if (segment.startsWith(rule.pattern)) len = rule.pattern.length;
-    else continue;
+    else if (rule.behavior === "allow") len = segment.startsWith(rule.pattern) ? rule.pattern.length : -1;
+    else {
+      forms ??= commandForms(segment);
+      len = forms.some((f) => f.startsWith(rule.pattern)) ? rule.pattern.length : -1;
+    }
+    if (len < 0) continue;
     if (
       best === null ||
       len > best.prefixLen ||

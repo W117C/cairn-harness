@@ -136,6 +136,74 @@ describe("规则链 deny 短路（P0-2 回归）", () => {
   });
 });
 
+// 09-21 探针（`scripts/probe-shell-bypass.ts`，红 24 / 绿 9）的 ① 段：用户手写的
+// `deny "git push --force"` 被 `/usr/bin/git`、`env`、`nohup`、`timeout`、`command`、
+// `bash -c '…'`、前导赋值六类写法静默击穿（实测 approve@L4-pass，零提示）。
+// 修法是**全仓唯一一份**「有效二进制」解析（`src/permissions/command-shape.ts`）；
+// 这里钉的是接上之后的语义。反例与正例同批跑是绕过类判据的老规矩——只测「包装必拦」，
+// 锚点会被「一律 deny」伪造成绿。
+describe("规则匹配按有效二进制（deny/ask 收紧、allow 刻意不放宽）", () => {
+  const WRAPPED = [
+    "git push --force",
+    "sudo git push --force",
+    "sudo -u root git push --force",
+    "env FOO=1 git push --force",
+    "nohup git push --force",
+    "timeout 30 git push --force",
+    "command git push --force",
+    "command -p git push --force",
+    "/usr/bin/git push --force",
+    "GIT_PAGER=cat git push --force",
+    "bash -c 'git push --force'",
+    "sudo env -i /usr/bin/git push --force",
+  ];
+
+  it("包装写法躲不过 deny", () => {
+    const rules: PermissionRule[] = [
+      { behavior: "deny", tool: "run_shell", pattern: "git push --force", scope: "always", id: "d1" },
+    ];
+    for (const cmd of WRAPPED) expect(judgeChain(rules, "run_shell", cmd).verdict, cmd).toBe("deny");
+  });
+
+  it("同一条规则也管得住 worker 的 shell_rw（能力域互通不因新判据降级）", () => {
+    const rules: PermissionRule[] = [
+      { behavior: "deny", tool: "run_shell", pattern: "git push --force", scope: "always", id: "d1" },
+    ];
+    for (const cmd of ["sudo git push --force", "bash -c 'git push --force'"]) {
+      expect(judgeChain(rules, "shell_rw", cmd).verdict, cmd).toBe("deny");
+    }
+  });
+
+  it("ask 与 deny 同等待遇（收紧不只给最严那一档）", () => {
+    const rules: PermissionRule[] = [
+      { behavior: "ask", tool: "run_shell", pattern: "git push --force", scope: "always", id: "q1" },
+    ];
+    for (const cmd of WRAPPED) expect(judgeChain(rules, "run_shell", cmd).verdict, cmd).toBe("ask");
+  });
+
+  it("反例：git 只作为参数出现时不得命中（否则「一律 deny」也能骗绿）", () => {
+    const rules: PermissionRule[] = [
+      { behavior: "deny", tool: "run_shell", pattern: "git push --force", scope: "always", id: "d1" },
+    ];
+    for (const cmd of [
+      "git status", "git log --oneline", "echo 'git push --force'", "grep -r 'git push --force' src",
+      "vim 'git push --force'", "sudo -u root git status",
+    ]) {
+      expect(judgeChain(rules, "run_shell", cmd).verdict, cmd).not.toBe("deny");
+    }
+  });
+
+  it("allow 只认原形：点过一次「总是允许」不顺着包装器扩大同意范围", () => {
+    const rules: PermissionRule[] = [
+      { behavior: "allow", tool: "run_shell", pattern: "echo hi", scope: "always", id: "a1" },
+    ];
+    expect(judgeChain(rules, "run_shell", "echo hi").verdict).toBe("allow");
+    for (const cmd of ["env FOO=1 echo hi", "nohup echo hi", "/usr/bin/echo hi", "timeout 5 echo hi"]) {
+      expect(judgeChain(rules, "run_shell", cmd).verdict, cmd).toBe("miss");
+    }
+  });
+});
+
 // P1（审查）回归：plan 门状态 run 级隔离——并发 run（交互 vs 定时 unattended）互不污染：
 // A 会话的未批准 plan 不再拦死 B run 的写工具，A 的批准也不再解锁 B；run 外遗留路径回落模块态。
 describe("plan 门 run 级隔离（P1 回归）", () => {
