@@ -25,6 +25,7 @@ import {
   formatLocal,
   loadAutomationsFile,
   nextOccurrence,
+  normalizeHistoryFilter,
   occurrenceKeyOf,
   occurrencesBetween,
   readJournalFile,
@@ -708,6 +709,31 @@ describe("M4a 触发执行与完成回写", () => {
     const rn2 = await s2.s.runNow(b.value.id);
     expect(rn2.ok).toBe(false);
     expect(rn2.error).toContain("concurrency-cap");
+  });
+
+  it("snapshot(状态) 真按状态筛：面板的「只看失败」读的是全量里最近的失败，而不是本地 12 条再过滤", async () => {
+    const failExecutor: TriggerExecutor = async () => ({ ok: false, error: "boom" });
+    const { s } = makeScheduler({ runSession: failExecutor, now: new Date("2026-09-12T02:00:00Z").getTime() });
+    await s.start();
+    s.stop();
+    const r = await s.upsert(base({ name: "筛选靶", schedule: { kind: "interval", everyMinutes: 5 }, createdAt: "2026-09-12T01:00:00.000Z" }));
+    if (!r.ok) throw new Error("unreachable");
+    await s.runNow(r.value.id);
+    await s.whenIdle;
+    const all = await s.snapshot();
+    const failed = await s.snapshot("failed");
+    const cancelled = await s.snapshot("cancelled");
+    expect(all.history.length, "靶子该留下一条历史").toBeGreaterThan(0);
+    expect(failed.history.length, "筛 failed 不能把那条失败筛掉").toBeGreaterThan(0);
+    expect(failed.history.every((h) => h.state === "failed")).toBe(true);
+    expect(cancelled.history, "V1 没有取消入口：筛 cancelled 必须是空，而不是回全量").toEqual([]);
+    // 筛剩的只动 history：并发/排队计数与任务清单不参与筛选（否则「只看失败」会把在跑的任务藏掉）
+    expect(failed.tasks).toEqual(all.tasks);
+    expect(failed.running).toBe(all.running);
+    // 跨进程输入的归一：认不出的值按「全部」，绝不按某个具体状态筛（假空比填空更坏）
+    expect(normalizeHistoryFilter("Mars/NotAState")).toBe("all");
+    expect(normalizeHistoryFilter(undefined)).toBe("all");
+    expect(normalizeHistoryFilter("skipped")).toBe("skipped");
   });
 });
 

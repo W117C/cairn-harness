@@ -368,6 +368,17 @@ export type RunState = "queued" | "running";
 export type HistoryState = RunState | "succeeded" | "failed" | "skipped" | "cancelled";
 /** 运行历史六态（§12.1 运行历史；cancelled 为保留态：V1 无取消入口）。 */
 export const HISTORY_STATES: readonly HistoryState[] = ["queued", "running", "succeeded", "failed", "skipped", "cancelled"];
+/** 面板筛选值 = 六态 + 「全部」这一伪态（渲染层那份同名清单由 tests 逐字对表锁住）。 */
+export const HISTORY_FILTERS = ["all", ...HISTORY_STATES] as const;
+export type HistoryFilter = (typeof HISTORY_FILTERS)[number];
+
+/** 跨进程输入的筛选值归一（IPC 传什么是外部面）：认不出的值一律按「全部」，
+ *  绝不拿它去筛——未知值当某个具体状态用 = 给用户一片假空记录，假空比填空更坏。 */
+export function normalizeHistoryFilter(raw: unknown): HistoryFilter {
+  return typeof raw === "string" && (HISTORY_FILTERS as readonly string[]).includes(raw)
+    ? (raw as HistoryFilter)
+    : "all";
+}
 
 export interface HistoryEntry {
   task_id: string;
@@ -891,7 +902,7 @@ export class Scheduler {
   }
 
   /** 面板/状态快照（异步：历史终态跨重启时需读会话文件）。 */
-  async snapshot(): Promise<ScheduleSnapshot> {
+  async snapshot(historyFilter: HistoryFilter = "all"): Promise<ScheduleSnapshot> {
     const now = new Date(this.clock());
     const tasks = this.tasks.map((t) => {
       const next = nextOccurrence(t, now);
@@ -938,7 +949,17 @@ export class Scheduler {
       if (f.state === "running") running++;
       else queued++;
     }
-    return { tasks, history, running, queued, cap: this.cap, startupDone: this.firstTickDone, tzNotes: scheduleTimeZoneNotes(tasks, systemTimeZone(), now) };
+    return {
+      tasks,
+      // 排完再筛、且不在这里截条数：渲染层只画前 12 条，若先截 12 再筛，某个状态会整段落在窗口外，
+      // 用户读到的是「没有记录」而其实是「没翻到」
+      history: Scheduler.filterHistory(history, historyFilter),
+      running,
+      queued,
+      cap: this.cap,
+      startupDone: this.firstTickDone,
+      tzNotes: scheduleTimeZoneNotes(tasks, systemTimeZone(), now),
+    };
   }
 
   private findSessionIdByKey(key: string): string | undefined {

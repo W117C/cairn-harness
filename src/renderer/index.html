@@ -1732,6 +1732,14 @@ html.reduce-motion .quick-card{opacity:1}
 .sched-state.succeeded,.sched-state.running{color:var(--state-success)}
 .sched-state.failed{color:var(--state-error)}
 .sched-state.skipped,.sched-state.cancelled,.sched-state.queued{color:var(--label-3)}
+/* 运行历史的「按状态筛」下拉：放在段头右侧（§12.2.6 六态筛选）。筛完为空要说「这个状态下」，
+   否则读起来像整段没有历史——那是把筛选器自己的存在感抹掉了。 */
+.sched-hist-head{display:flex;align-items:center;gap:var(--sp-3)}
+.sched-hist-head select{
+  margin-left:auto;height:24px;max-width:46%;border:0.5px solid var(--border-strong);border-radius:var(--r-3);
+  background:var(--surface);color:var(--label-2);font:inherit;font-size:var(--fs-micro);padding:0 var(--sp-2);
+}
+.sched-hist-head select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 
 /* ============ responsive：四档断点（RESP-01，§C.2） ============

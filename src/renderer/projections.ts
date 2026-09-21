@@ -720,9 +720,22 @@ export function skipReasonLabel(reason: string | undefined): string {
   }
 }
 
-/** 运行历史六态筛选值（§12.1 运行历史；cancelled 为保留态——V1 无取消入口）。 */
+/** 运行历史筛选值（§12.1 运行历史；all 是「不看状态」这一伪态。
+ *  **必须与 main 的 HISTORY_FILTERS 同集**，由 tests 逐字对表锁住）。 */
 export const HISTORY_STATES = ["all", "queued", "running", "succeeded", "failed", "skipped", "cancelled"] as const;
 export type HistoryFilter = (typeof HISTORY_STATES)[number];
+
+/** 状态 → 界面中文。此前屏幕上的运行历史直接印 `succeeded` / `skipped` 这种机器 token：
+ *  与 skipReasonLabel 同一族（面板要给人读，token 是 journal/审计面的事）。 */
+export const HISTORY_STATE_LABELS: Record<string, string> = {
+  all: '全部状态',
+  queued: '排队中',
+  running: '运行中',
+  succeeded: '成功',
+  failed: '失败',
+  skipped: '跳过',
+  cancelled: '已取消',
+};
 
 /** 新建定时任务的表单种类。**必须与 main 的 FORM_KINDS 同集**（由 tests 逐字对表锁住：
  *  渲染层不能 import automations.ts——它带 node:crypto/sessions 依赖，进 bundle 就是把主进程拖进渲染层）。 */

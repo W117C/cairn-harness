@@ -72,7 +72,7 @@ import { buildSandboxProfile, checkSandbox, runInSandbox, type SandboxStatus } f
 import { PluginRuntime, setCurrentPluginRuntime, currentPluginRuntime, expandPromptCommand, expandSkillInvocation, commandInvokeName, skillInvokeName, type PluginPanelSnapshot } from "../agent/plugins";
 import type { HookEngine } from "../agent/plugins/hooks";
 import type { McpToolInfo } from "../agent/plugins/mcp";
-import { Scheduler, type ScheduleSnapshot, type TriggerExecutor } from "./scheduler";
+import { normalizeHistoryFilter, Scheduler, type ScheduleSnapshot, type TriggerExecutor } from "./scheduler";
 import { validateAutomation, isUnattendedTier } from "./automations";
 import {
   runSidechatTurn,
@@ -835,9 +835,10 @@ export function makeScheduledExecutor(workspace: string): TriggerExecutor {
   };
 }
 
-export async function handleScheduleSnapshot(): Promise<ScheduleSnapshot> {
+export async function handleScheduleSnapshot(rawFilter?: unknown): Promise<ScheduleSnapshot> {
+  // 筛选值来自渲染层的下拉框（跨进程输入面）；合法性与归一都在 scheduler 那一处（防第二份谓词）
   if (!scheduler) return { tasks: [], history: [], running: 0, queued: 0, cap: scheduleCapCache, startupDone: false, tzNotes: {} };
-  return await scheduler.snapshot();
+  return await scheduler.snapshot(normalizeHistoryFilter(rawFilter));
 }
 
 export async function handleScheduleUpsert(raw: unknown, form = true): Promise<{ ok: boolean; error?: string }> {

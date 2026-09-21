@@ -1,5 +1,5 @@
 import { projectUnits, mountHistory } from './history-window.js';
-import { projectPanelData, EMPTY_PANEL_DATA, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload } from './projections';
+import { projectPanelData, EMPTY_PANEL_DATA, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS } from './projections';
 import { $, esc, promptInput, sessionList, streamInner, toast } from './dom.js';
 import { ICONS, RUN_GRID_HTML, runGrid } from './icons.js';
 import { highlightAllDiffs } from './diff-highlight.js';
@@ -1057,6 +1057,9 @@ function branchesViewHTML() {
    必须放原型段——静态预览下桥接段不启用，若放那里，viewHTML 会抛 ReferenceError，
    连带 renderSide 整个失败（标签在、页面不在）。 */
 let scheduleCache = null;
+/* 运行历史的状态筛选是**界面态**（不是数据）：值只在这里存一份，改它就重新要一次快照，
+   筛选本身由 main 做（Scheduler.filterHistory 是那条逻辑的唯一主人）。 */
+let schedHistFilter = 'all';
 let memoryCache = null;
 let pluginCache = null;
 
@@ -1114,14 +1117,20 @@ function scheduleViewHTML() {
     const histHtml = hist.length
       ? hist.slice(0, 12).map(h =>
           '<div class="sched-hist">' +
-            '<span class="sched-state ' + esc(h.state) + '">' + esc(h.state) + '</span>' +
+            '<span class="sched-state ' + esc(h.state) + '">' + esc(HISTORY_STATE_LABELS[h.state] ?? h.state) + '</span>' +
             '<span class="n">' + esc(h.task_name) + (h.reason ? ' · ' + esc(skipReasonLabel(h.reason)) : '') + '</span>' +
             '<span class="t">' + schedTime(h.at) + '</span>' +
           '</div>').join('')
-      : '<p class="sched-empty" style="padding:var(--sp-4) 0">暂无运行历史</p>';
+      : '<p class="sched-empty" style="padding:var(--sp-4) 0">' + (schedHistFilter === 'all' ? '暂无运行历史' : '这个状态下暂无记录') + '</p>';
+    const filterOn = schedHistFilter !== 'all';
+    const histHead = '<div class="sched-sec sched-hist-head">运行历史' +
+      (filterOn ? ' · 只看 ' + esc(HISTORY_STATE_LABELS[schedHistFilter] ?? schedHistFilter) : '') +
+      '<select id="schedHistFilter" aria-label="按状态筛选运行历史">' + HISTORY_STATES.map((s) =>
+        '<option value="' + esc(s) + '"' + (s === schedHistFilter ? ' selected' : '') + '>' + esc(HISTORY_STATE_LABELS[s] ?? s) + '</option>').join('') +
+      '</select></div>';
     return status +
       '<div class="sched-sec">任务（' + tasks.length + '）</div>' + list +
-      '<div class="sched-sec">运行历史</div>' + histHtml;
+      histHead + histHtml;
   }
 
 /* 记忆面板：两层（项目 / 全局）的 topic 清单 + 删除。数据 = getState().memory（memorySnapshot），
@@ -3523,7 +3532,7 @@ render();
     if (scheduleLoading || (scheduleCache && !force)) return;
     scheduleLoading = true;
     try {
-      scheduleCache = await api.scheduleSnapshot();
+      scheduleCache = await api.scheduleSnapshot(schedHistFilter);
     } catch (err) {
       scheduleCache = { error: (err && err.message) || String(err) };
     } finally {
@@ -3660,6 +3669,23 @@ render();
       scheduleCache = null;
       await loadSchedule(true);
       if (typeof renderSide === 'function') renderSide();
+    });
+  }
+  /* 运行历史的状态筛选：界面只存「选了哪个状态」这一份 UI 态，筛的动作由 main 做
+     （Scheduler.filterHistory 本就是那条逻辑的主人——此前它只有验收脚本在调，面板连筛选器都没有）。
+     改筛选 = 重新要一次快照，绝不在本地把已有 12 条再过滤一遍（那样「只看失败」就永远只剩
+     最近 12 条里的失败，看着像没有记录）。 */
+  async function setSchedHistFilter(v) {
+    if (typeof v !== 'string' || !HISTORY_STATES.includes(v) || v === schedHistFilter) return;
+    schedHistFilter = v;
+    scheduleCache = null;
+    await loadSchedule(true);
+    if (typeof renderSide === 'function') renderSide();
+  }
+  if (sidePagesHost && typeof sidePagesHost.addEventListener === 'function') {
+    sidePagesHost.addEventListener('change', (e) => {
+      const sel = e.target.closest('#schedHistFilter');
+      if (sel) void setSchedHistFilter(sel.value);
     });
   }
   /* 打开标签页时刷新对应快照（同一处收口，别在渲染函数里再发请求） */

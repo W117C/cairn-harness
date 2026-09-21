@@ -253,7 +253,7 @@ ipcMain.handle("agent:sidechat-state", (_event, parentSessionId?: string) => han
 // M3a：card_action 回写协议（worker 审批应答 / agent 取消——审批与 turn 解耦的事件流入口）
 ipcMain.handle("agent:card-action", (_event, req: Parameters<typeof handleCardAction>[0]) => handleCardAction(req));
 // M4a：定时任务（schedule 面板）——快照 / 创建或更新 / 删除 / 手动立即触发（§12.2.6）
-ipcMain.handle("agent:schedule-snapshot", () => handleScheduleSnapshot());
+ipcMain.handle("agent:schedule-snapshot", (_event, filter?: unknown) => handleScheduleSnapshot(filter));
 ipcMain.handle("agent:schedule-upsert", (_event, def: unknown, form?: boolean) => handleScheduleUpsert(def, form ?? true));
 ipcMain.handle("agent:schedule-delete", (_event, id: string) => handleScheduleDelete(id));
 ipcMain.handle("agent:schedule-run-now", (_event, id: string) => handleScheduleRunNow(id));

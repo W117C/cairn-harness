@@ -195,6 +195,8 @@ function renderFace(cache: unknown) {
     esc: (s: unknown) => String(s),
     skipReasonLabel: (r: string) => r,
     WEEKDAY_CN: ['周日', '周一', '周二', '周三', '周四', '周五', '周六'],
+    HISTORY_STATES: ['all', 'queued', 'running', 'succeeded', 'failed', 'skipped', 'cancelled'],
+    HISTORY_STATE_LABELS: { all: '全部状态', queued: '排队中', running: '运行中', succeeded: '成功', failed: '失败', skipped: '跳过', cancelled: '已取消' },
   };
   // 该切片自己 `let scheduleCache`，所以喂数据要在求值之后赋值（顶层 let 会遮蔽 context 全局）
   runInNewContext(section('/* 定时任务面板的纯渲染部分', '/* 记忆面板：两层')

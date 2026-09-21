@@ -1029,6 +1029,44 @@ async function phaseElectron(root: string): Promise<void> {
       b13After === b13Before && b13Tasks === 0,
       "B13 盘上没有新建的任务（= 不会被触发 = 零钱；实测字节 " + String(b13Before.length) + " → " + String(b13After.length) + "，任务数 " + String(b13Tasks) + "）",
     );
+
+    console.log("[panels-check] B14 运行历史的状态筛选：筛选器在真窗口里长得出，值真走一个 IPC 来回（全程只读快照 = 零钱）");
+    await cdp2.eval(`(() => { const c = document.querySelector('#qcSchedule'); if (c) c.click(); return String(!!c); })()`);
+    let b14Sel = "";
+    try {
+      b14Sel = await waitFor<string>(
+        async () => (await cdp2.eval<string>(
+          `(() => { const s = document.querySelector('.side-page[data-view="schedule"] #schedHistFilter');` +
+            ` return s ? [...s.options].map((o) => o.value).join(',') + '|sel=' + s.value : null; })()`,
+        )) ?? null,
+        12_000,
+      );
+    } catch { b14Sel = "waitFor 超时：段头一直没长出筛选下拉"; }
+    ok(
+      b14Sel === "all,queued,running,succeeded,failed,skipped,cancelled|sel=all",
+      "B14 下拉恰是七项（六态 + 全部）、缺省「全部」，且段头文字给人读不印裸 token（实测=" + JSON.stringify(b14Sel) + "）",
+    );
+    await cdp2.eval(
+      `(() => { const s = document.querySelector('.side-page[data-view="schedule"] #schedHistFilter');` +
+        ` s.value = 'failed'; s.dispatchEvent(new Event('change', { bubbles: true })); return 1; })()`,
+    );
+    const b14On = await tryWait(
+      async () => ((await cdp2.eval<boolean>(
+        `(() => { const p = document.querySelector('.side-page[data-view="schedule"]'); return !!p && (p.textContent || '').includes('只看 失败'); })()`,
+      )) ? true : null),
+      10_000,
+    );
+    const b14Text = await cdp2.eval<string>(
+      `(() => { const p = document.querySelector('.side-page[data-view="schedule"]'); return p ? (p.textContent || '').replace(/\\s+/g, ' ').slice(0, 130) : 'no-page'; })()`,
+    );
+    ok(
+      b14On,
+      "B14 换筛选真的重要了一次快照并由 main 筛完回画（段头点名「只看 失败」；实测=" + JSON.stringify(b14Text) + "）",
+    );
+    ok(
+      !b14Text.includes("暂无运行历史"),
+      "B14 筛着的时候不说「暂无运行历史」——那会让用户以为任务从没跑过（假空；实测=" + JSON.stringify(b14Text) + "）",
+    );
     await killElectron(electron2);
   } finally {
     if (electron.exitCode === null) await killElectron(electron);

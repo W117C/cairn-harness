@@ -32,6 +32,9 @@ function schedRows(scheduleCache: unknown): string {
     schedKindText: (sc: { kind?: string }) => "每天 07:00",
     schedTime: (v: unknown) => "T(" + String(v) + ")",
     skipReasonLabel: (r: unknown) => String(r),
+    schedHistFilter: "all",
+    HISTORY_STATES: ["all", "queued", "running", "succeeded", "failed", "skipped", "cancelled"],
+    HISTORY_STATE_LABELS: { all: "全部状态", queued: "排队中", running: "运行中", succeeded: "成功", failed: "失败", skipped: "跳过", cancelled: "已取消" },
     __out: "",
   };
   const a = source.indexOf("function scheduleViewHTML() {");
