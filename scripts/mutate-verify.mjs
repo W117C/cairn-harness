@@ -4849,7 +4849,7 @@ const MUTATIONS = [
     test: "tests/prune.test.ts",
     desc: "保护区预算把子流体量算进去 ⇒ 父会话里真在上下文中的老结果被提前划出保护区去裁",
     apply: (s) => s.replace('    if (hasWorkerAttribution(e)) continue;\n', ""),
-    expectFail: "多一条子流大块，父侧的替换集合与 savedTokens 逐字不变（不吃保护区预算）",
+    expectFail: "末尾放子流大块：不吃保护区预算，老结果 q 仍受保护",
   },
 ];
 
