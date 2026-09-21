@@ -527,9 +527,10 @@ async function phaseElectron(root: string): Promise<void> {
     // 重放只读不变量（与 plan 卡同口径）：提交按钮摘掉、所有输入 disabled —— 历史会话不该能改判据
     ok(!c6.acts && c6.disabled === 6, "B6 重放是只读的：提交面已摘、4 选项 + 2 补充框全部 disabled（实测 acts=" + String(c6.acts) + " disabled=" + String(c6.disabled) + "）");
     console.log("[panels-check] B7 goal 芯片的 live 投递（设完目标，芯片必须在**不刷新**的情况下自己变）");
-    // 为什么只能这么测：`emitGoalEvent` 的注释写明「少了 session_id 就是 JSONL 里有、live 界面上没有」，
-    // 而重放那条路（showHistory）与 live 那条路（renderEvent 累积镜像）是两支——纯单测只测得到 reduce，
-    // 测不到「主进程推出来的这条事件到底有没有进芯片」。这里走真 UI：点开芯片 → 填表 → 提交。
+    // 这条测的是「主进程真推出来的事件到底有没有进芯片」——只有真窗口给得起这个证据。
+    // 覆盖面按负控定：空闲时提交 ⇒ onEvent 走 showHistory 整段重投那一支。删掉 renderEvent 镜像里的
+    // syncGoalChip，本门实测**全绿**（负控做过），所以续跑期那一支由 tests/renderer-goal-chip-live.test.ts
+    // 锁、并由变异锚点 goal-chip-live-tail-not-synced 反证。别把本门当成两支都过了。
     const b7Goal = "把 tests/ 失败用例修绿";
     await cdp2.eval(
       `(() => {
