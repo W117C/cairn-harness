@@ -4766,6 +4766,23 @@ const MUTATIONS = [
     apply: (s) => s.replace('        hint: "上一轮没写完就被收走（没有红字，也没有验证）⇒ 从断点接着写完它，先别开新方向",\n', ''),
     expectFail: "被收走那一支带 hint；默认那一支不带（每条续跑都多说一句 = 每轮重送的钱）",
   },
+  // ---- 截断卡的标题面（tests/renderer-truncation-label.test.ts，2026-09-21）----
+  {
+    id: "renderer-merges-truncation-causes",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-truncation-label.test.ts",
+    desc: "两种原因并成一句 ⇒ 用户看不出该续写同一句还是换个说法绕开",
+    apply: (s) => s.replace("e.outcome === 'content_blocked' ? '被内容策略中止' : '没写完就被收走'", "'没写完就被收走'"),
+    expectFail: "两种原因各说各的（下一步不同，不许并成一句）",
+  },
+  {
+    id: "renderer-hides-truncation-token-reading",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-truncation-label.test.ts",
+    desc: "不落已用输出 token ⇒ 标题只剩形容词，离帽多远这个唯一可行动的数没了",
+    apply: (s) => s.replace("'，已用 ' + String(e.output_tokens) + ' 输出 token'", "''"),
+    expectFail: "线上停止原因与已用输出 token 都上屏（离帽多远是唯一可行动的数字）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

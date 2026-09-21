@@ -3055,6 +3055,13 @@ render();
       const why = typeof e.reason === 'string' && e.reason ? skipReasonLabel(e.reason) : (failed ? '未记原因' : '已结束');
       return (failed ? '定时任务失败：' : '定时任务完成：') + nm + why;
     }
+    /* 两种原因的下一步完全不同（续写同一句 vs 换个说法绕开），只顶一个「被截断」要用户去猜；
+       已用输出 token 是这一行里唯一可行动的数字（离帽多远），其余原文在展开体里。 */
+    if (e.type === 'turn_truncated') {
+      const cause = e.outcome === 'content_blocked' ? '被内容策略中止' : '没写完就被收走';
+      const used = typeof e.output_tokens === 'number' ? '，已用 ' + String(e.output_tokens) + ' 输出 token' : '';
+      return base + '：' + cause + '（停止原因 ' + String(e.stop_reason ?? 'unknown') + used + '）';
+    }
     return typeof e.status === 'string' && e.status ? base + ' · ' + e.status : base;
   }
   /** 通用记录卡：一行标题 + 可展开原文。动态内容一律 textContent，只有 chevron 是静态 SVG。 */

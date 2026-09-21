@@ -312,7 +312,12 @@ agent-runner.ts 的并发 hunk 全在 423 行之前 ⇒ 只 `git apply --cached`
    `tool_result(ok:false)`——**截断两种都不属于**，所以它是失败轨迹里价值最高、
    沉淀器却完全看不见的一类。补进 digest。（⚠️ `src/agent/memory/distill.ts` 另有
    在飞 hunk，动前先确认对方已落库。）
-2. 面板可见：渲染层按 `outcome` 出文案（main 只落 token 的规矩，#48 同口径）。
+2. ~~面板可见~~ **已落（第九程）**：`eventLabel` 给 `turn_truncated` 开了一支——标题
+   「助手输出被截断：没写完就被收走（停止原因 max_tokens，已用 4096 输出 token）」,
+   两种原因各说各的，token 缺席时不落那半句。判据在 `tests/renderer-truncation-label.test.ts`
+   （沿用 renderer-compact-chip 的「切 app.js 一段进 vm 跑」那份判法）+ 2 根锚点。
+   ⚠️ **未做视觉核验**：这条只在函数层锁了字符串,没有真会话把这张卡跑上屏
+   （`node --check` 证的是「整个 app.js 没有语法错以致界面白屏」,不是渲染效果）。
 3. ~~门/锚点~~ **已落**：变异表本条通道累计 **+14**，逐条在 clean HEAD 隔离 worktree 实测**全杀**
    （`stop-reason-keeps-wire-text` / `-emits-on-benign-reason` / `-drops-case-fold` /
    `-hides-zero-output-tokens` / `anthropic-never-reads-stop-reason` /
