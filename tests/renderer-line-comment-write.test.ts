@@ -44,10 +44,9 @@ it('新文件侧行号逐段独立：b.ts 的 + 行是 41、42，不接在 a.ts 
   expect(segs[1].lines.filter(l => l.text.startsWith('+') && l.newLine !== null).map(l => l.newLine)).toEqual([41, 42]);
 });
 
-it('改名时 path 以 +++ 为准（diff --git 的 b/ 侧可能仍是旧路径）', () => {
+it('两份文件头不一致时以 +++ 为准（unified 规范里新文件侧的权威是 +++，diff --git 只是 git 的扩展行）', () => {
   const segs = parsePatchFiles([
-    'diff --git a/old.ts b/new.ts',
-    'similarity index 92%',
+    'diff --git a/old.ts b/old.ts',
     'rename from old.ts',
     'rename to new.ts',
     '--- a/old.ts',
@@ -58,6 +57,12 @@ it('改名时 path 以 +++ 为准（diff --git 的 b/ 侧可能仍是旧路径�
   ].join('\n'));
   expect(segs).toHaveLength(1);
   expect(segs[0].path).toBe('new.ts');
+});
+
+it('没有 +++ 头时退回 diff --git 的 b/ 侧（二进制段就是这个形状）', () => {
+  const segs = parsePatchFiles('diff --git a/img/x.png b/img/y.png\nBinary files a/img/x.png and b/img/y.png differ\n');
+  expect(segs).toHaveLength(1);
+  expect(segs[0].path).toBe('img/y.png');
 });
 
 it('删除的文件（+++ /dev/null）不丢段，也没有新文件侧行号可评', () => {
