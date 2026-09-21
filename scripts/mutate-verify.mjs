@@ -4260,7 +4260,7 @@ const MUTATIONS = [
     src: "src/renderer/app.js",
     test: "tests/renderer-merge-review.test.ts",
     desc: "补丁不再要 anchors 形态 ⇒ 行号与「评」整片消失，而读端看着一切正常（写端入口没了）",
-    apply: (s) => s.replace(", { anchors: true })", ")"),
+    apply: (s) => s.replace(", { anchors: true, comment: canReview })", ")"),
     expectFail: "补丁按 anchors 形态着色",
   },
   {
@@ -4303,6 +4303,39 @@ const MUTATIONS = [
     desc: "压根没抓（快照恒 null）⇒ restore 走空返回，界面回到默认折叠——与「没做」完全等价",
     apply: (s) => s.replace("const kept = capturePanelState(section);", "const kept = null;"),
     expectFail: "renderSide 的重写分支成对使用这一对",
+  },
+  // ---- 已收尾那一列不给评论入口（f83abe3）----
+  {
+    id: "dead-column-rule-forgets-rejected-and-cleaned",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-line-comment-write.test.ts",
+    desc: "收尾三态只认出 merged ⇒ rejected / cleaned 那一列仍长出一个必然失败的「送给它」",
+    apply: (s) => s.replace('outcome !== "merged" && outcome !== "rejected" && outcome !== "cleaned"', 'outcome !== "merged"'),
+    expectFail: "commentReadsBack：只有工作树已收尾的三态读不到",
+  },
+  {
+    id: "git-panel-ignores-dead-column-rule",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-merge-review.test.ts",
+    desc: "规则写好了但界面不查（恒给入口）⇒ 与「没做」一字不差，而投影侧的单测仍是绿的",
+    apply: (s) => s.replace("const canReview = commentReadsBack(c.outcome);", "const canReview = true;"),
+    expectFail: "合并决策已定（merged / rejected / cleaned）",
+  },
+  {
+    id: "git-panel-drops-comment-option",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-merge-review.test.ts",
+    desc: "不把 canReview 递给着色器 ⇒ 判定算了但没用上，已收尾那一列照旧长按钮",
+    apply: (s) => s.replace("{ anchors: true, comment: canReview }", "{ anchors: true }"),
+    expectFail: "合并决策已定（merged / rejected / cleaned）",
+  },
+  {
+    id: "dead-column-hint-drops-the-way-out",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-merge-review.test.ts",
+    desc: "只说「读不到」不说出路 ⇒ 用户看见一句判决却没有下一步（撤入口必须同时给路）",
+    apply: (s) => s.replace("要改就按原任务重派一列。", "。"),
+    expectFail: "合并决策已定（merged / rejected / cleaned）",
   },
 ];
 
