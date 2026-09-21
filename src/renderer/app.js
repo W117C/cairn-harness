@@ -1,5 +1,5 @@
 import { projectUnits, mountHistory } from './history-window.js';
-import { projectPanelData, workerEvidenceLabel, workerSpentLabel, agentStatusText, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN } from './projections';
+import { projectPanelData, workerEvidenceLabel, workerSpentLabel, agentStatusText, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN } from './projections';
 import { $, esc, promptInput, sessionList, streamInner, toast } from './dom.js';
 import { ICONS, RUN_GRID_HTML, runGrid } from './icons.js';
 import { highlightAllDiffs } from './diff-highlight.js';
@@ -3582,11 +3582,13 @@ render();
   /* 子智能体行内动作（取消 / 重派）：与审批同一族出口——card_action 是事件流的唯一写端。
      回条 ok=false 必须说出口：这条路上没有任何别的反馈。 */
   async function runWorkerRowAction(col, action) {
-    if (action !== 'cancel' && action !== 'respawn') return;
+    if (!WORKER_ROW_ACTION_NAMES.includes(action)) return;   // 白名单在投影里，这里不另列一份
     try {
       const r = await api.cardAction(cardActionForWorkerRow(col, action));
       if (r && r.ok === false) { toast('动作未被受理：' + (r.error || '未知')); return; }
-      toast(action === 'cancel' ? '已请求取消：' + col.agent_id : '已按原任务重派（全新 agent_id，会再花一次这一段的钱）');
+      toast(action === 'cancel' ? '已请求取消：' + col.agent_id
+        : action === 'resume' ? '已请求继续：' + col.agent_id + '（卡死态清除，它在暂停的那一点接着跑）'
+        : '已按原任务重派（全新 agent_id，会再花一次这一段的钱）');
     } catch (err) {
       toast('动作失败：' + ((err && err.message) || String(err)));
     }

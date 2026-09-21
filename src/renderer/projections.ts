@@ -629,9 +629,26 @@ export function cardActionForApproval(ask: WorkerApprovalAsk, approved: boolean)
  *  ・活着的列 → 取消；・被崩溃恢复扫成 failed(interrupted) 的列 → 重派（恢复卡文案亲自承诺的那个按钮）；
  *  ・其余（正常跑完 / 用户自己拒的 / 主动取消的）什么都不给——给一个就是假出口。
  *  合并与丢弃刻意不在这里：那是删 worktree 与分支的破坏性动作，且「淘汰档强制删未合并改动」尚未裁决。 */
-export function workerRowActions(col: AgentColumn): { action: "cancel" | "respawn"; label: string; hint: string }[] {
+export type WorkerRowAction = "cancel" | "resume" | "respawn";
+
+/** 行内动作的白名单（唯一事实源）：渲染层据此放行，别自己再列一遍清单——两份必然漂移。 */
+export const WORKER_ROW_ACTION_NAMES: readonly WorkerRowAction[] = ["cancel", "resume", "respawn"];
+
+export function workerRowActions(col: AgentColumn): { action: WorkerRowAction; label: string; hint: string }[] {
+  const cancel = {
+    action: "cancel" as const, label: "取消",
+    hint: "中断这个子智能体（它已写的改动留在 worktree 里，不自动合并）",
+  };
+  /* 卡死（§4.4.8 出口一）：`triggerStuck` 落 waiting_input + reason=stuck，`resumeAgent` 落回 running，
+     所以这一态**已经在事件流里**，只缺按钮。继续与取消并列、继续在前——换路还是收手是人的决定。 */
+  if (col.status === "waiting_input" && col.reason === "stuck") {
+    return [
+      { action: "resume", label: "继续", hint: "清除卡死态，让它在上次暂停的那一点接着跑（它此前一直在重复同一个动作）" },
+      cancel,
+    ];
+  }
   if (col.status === "running" || col.status === "waiting_approval" || col.status === "waiting_input") {
-    return [{ action: "cancel", label: "取消", hint: "中断这个子智能体（它已写的改动留在 worktree 里，不自动合并）" }];
+    return [cancel];
   }
   if (col.status === "failed" && col.reason === "interrupted") {
     return [{ action: "respawn", label: "重派", hint: "按原任务重新派一个（全新 agent_id，会再花一次这一段的钱）" }];
@@ -639,15 +656,16 @@ export function workerRowActions(col: AgentColumn): { action: "cancel" | "respaw
   return [];
 }
 
-/** 行内动作 → card_action 载荷（§10.3 唯一事件流入口；形状与 agents-check A4/J 段同源）。 */
+/** 行内动作 → card_action 载荷（§10.3 唯一事件流入口；形状与 agents-check A4/J 段同源）。
+ *  resume 与 cancel 只差 action 名——写两份同形返回就是 §同族副本 的下一个候选。 */
 export function cardActionForWorkerRow(
   col: { agent_id: string; parent_event_id: number; mode: string; task: string },
-  action: "cancel" | "respawn",
+  action: WorkerRowAction,
 ): {
   cardId: string;
   sourceEventId: number;
   cardType: string;
-  action: string;
+  action: WorkerRowAction;
   targetAgentId: string;
   payload?: { respawn: { mode: "read" | "write"; task: string } };
 } {
@@ -655,16 +673,14 @@ export function cardActionForWorkerRow(
     cardId: "agent:" + col.agent_id,
     sourceEventId: Number.isInteger(col.parent_event_id) ? col.parent_event_id : 0,
     targetAgentId: col.agent_id,
+    action,
   };
-  if (action === "respawn") {
-    return {
-      ...base,
-      cardType: "agent_result",
-      action: "respawn",
-      payload: { respawn: { mode: col.mode === "write" ? "write" : "read", task: col.task } },
-    };
-  }
-  return { ...base, cardType: "agent_card", action: "cancel" };
+  if (action !== "respawn") return { ...base, cardType: "agent_card" };
+  return {
+    ...base,
+    cardType: "agent_result",
+    payload: { respawn: { mode: col.mode === "write" ? "write" : "read", task: col.task } },
+  };
 }
 
 // ---- M4a 定时任务投影辅助（renderer 纯函数，不 import main/scheduler——避免 node:fs 进 bundle）----

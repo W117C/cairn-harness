@@ -3,7 +3,7 @@
 // （`waitForApproval` 有 approvalTimeoutMs 缺省 120s）⇒ 产品里每条 worker 审批都被自动拒掉。
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
-import { cardActionForApproval, cardActionForWorkerRow, projectAgentPanel, workerApprovalAsks } from "../src/renderer/projections";
+import { cardActionForApproval, cardActionForWorkerRow, projectAgentPanel, workerApprovalAsks, workerRowActions, WORKER_ROW_ACTION_NAMES, type AgentColumn } from "../src/renderer/projections";
 import type { AgentEvent } from "../src/events";
 
 const spawn = { type: "agent_spawned", agent_id: "wt-1", parent_event_id: 3, mode: "write", task: "修排序", max_turns: 8, permission_mode: "default" } as unknown as AgentEvent;
@@ -66,4 +66,19 @@ it("取消发 agent_card/cancel，重派把原 spawn 参数带回 payload.respaw
   // mode 只认 read|write（main 侧 zod 式校验：别的值整条拒）
   expect(cardActionForWorkerRow({ ...col, mode: "?" }, "respawn").payload?.respawn.mode).toBe("read");
   expect(cardActionForWorkerRow({ ...col, parent_event_id: 1.5 }, "cancel").sourceEventId).toBe(0);
+  // 卡死出口一：resume 与 cancel 同族（只差 action 名），走 agent_card
+  expect(cardActionForWorkerRow(col, "resume")).toEqual({
+    cardId: "agent:wt-7", sourceEventId: 12, targetAgentId: "wt-7", cardType: "agent_card", action: "resume",
+  });
+});
+
+it("按钮规则可能返回的动作，全都在渲染层放行的白名单里（两份清单必然漂移）", () => {
+  const cols: AgentColumn[] = [
+    { agent_id: "a", parent_event_id: 1, mode: "read", task: "t", permission_mode: "default", max_turns: 4, status: "waiting_input", reason: "stuck", recent: [], usage: { inputTokens: 0, outputTokens: 0 }, toolStats: {}, pendingApproval: null, durationMs: null },
+    { agent_id: "b", parent_event_id: 2, mode: "read", task: "t", permission_mode: "default", max_turns: 4, status: "running", recent: [], usage: { inputTokens: 0, outputTokens: 0 }, toolStats: {}, pendingApproval: null, durationMs: null },
+    { agent_id: "c", parent_event_id: 3, mode: "write", task: "t", permission_mode: "default", max_turns: 4, status: "failed", reason: "interrupted", recent: [], usage: { inputTokens: 0, outputTokens: 0 }, toolStats: {}, pendingApproval: null, durationMs: null },
+  ];
+  const offered = new Set(cols.flatMap((c) => workerRowActions(c).map((a) => a.action)));
+  expect([...offered].sort()).toEqual(["cancel", "respawn", "resume"]);
+  for (const a of offered) expect(WORKER_ROW_ACTION_NAMES).toContain(a);
 });

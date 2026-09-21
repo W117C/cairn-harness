@@ -74,6 +74,15 @@ it('行内按钮只给还能做动作的列：在跑的给取消，被中断的�
   }
 });
 
+it('卡死那一列给「继续」并留「取消」：出口一有按钮，但不替用户决定', () => {
+  const stuck = agentsHTML([col({ status: 'waiting_input', reason: 'stuck' })]);
+  expect(stuck).toContain('data-agent-act="resume"');
+  expect(stuck).toContain('继续');
+  expect(stuck).toContain('data-agent-act="cancel"');
+  // 普通「等人回答」不是卡死：只给取消（给了继续 = 让主进程回一句「无卡死态」）
+  expect(agentsHTML([col({ status: 'waiting_input' })])).not.toContain('data-agent-act="resume"');
+});
+
 // 接线判据：上面三条形测试各自造列，绕过了「事件流 → panelData」这一跳。
 // 本仓最常见的缺陷形态就是投影算对了但没人把它接进渲染面（agentStatusBadge 曾零调用者即是），
 // 所以这一条从真实事件跑到 HTML——projectPanelData 少返回 agents 立刻红。
