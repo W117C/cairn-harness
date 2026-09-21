@@ -1639,7 +1639,8 @@ async function goalNextTurn(args: {
   }
   const turn = view.turn + 1;
   return {
-    message: goalReminder(view.spec, turn, spentUsd, view.evidence),
+    // hint 只有「上一轮被收走」那一支会给；默认那一子句（针对红字继续）在本轮没有红字时会指错方向。
+    message: goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint),
     origin: { kind: "goal", turn, max_turns: view.spec.maxTurns },
   };
 }

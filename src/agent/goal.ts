@@ -41,9 +41,12 @@ export interface GoalDecisionInput {
   truncated: boolean;
 }
 
+/** `note` = 这一决策的人类可读解释（审计/测试面，逐轮都带）；`hint` = **要替模型改掉的那句话**：
+ *  默认续跑块教模型「针对上一轮的红字继续」，而被收走的那一轮根本没有红字——那种轮次不给 hint，
+ *  教的就是错的方向。给了 hint 是**替换**那一子句而不是追加一行：两种说法同时在场只会互相打脸。 */
 export type GoalStop =
   | { kind: "done" }
-  | { kind: "continue"; note: string }
+  | { kind: "continue"; note: string; hint?: string }
   | { kind: "stop"; reason: string };
 
 const EVIDENCE_TEXT: Record<WorkerEvidence, string> = {
@@ -126,6 +129,7 @@ export function goalStopDecision(input: GoalDecisionInput): GoalStop {
       return {
         kind: "continue",
         note: "上一轮是被收走的（输出预算/内容策略），不是模型宣布完成 ⇒ 先让它把这一轮说完",
+        hint: "上一轮没写完就被收走（没有红字，也没有验证）⇒ 从断点接着写完它，先别开新方向",
       };
     }
     return {
@@ -165,14 +169,25 @@ function budgetLine(spec: GoalSpec, spentUsd: number | null): string {
   return "已花 " + usd(spentUsd) + "，美元上限 " + usd(spec.maxUsd);
 }
 
+/** 默认那一子句假定「上一轮有红字可对着修」。被收走的那一轮没有红字，所以那句话得被换掉而不是被追加。 */
+const DEFAULT_FOLLOW = "红字逐条已在上一轮上下文里，直接针对它继续，不要重述已经完成的部分";
+
 /** 每个续跑轮起点注入的块：目标 + 第几轮 + 上一轮证据态 + 预算口径 + 收束条件。
- *  红字的**逐条输出**不重复携带——#17 的回流通道已经把它送进上下文了，这里再抄一份就是双份付费。 */
-export function goalReminder(spec: GoalSpec, turn: number, spentUsd: number | null, evidence: WorkerEvidence): string {
+ *  红字的**逐条输出**不重复携带——#17 的回流通道已经把它送进上下文了，这里再抄一份就是双份付费。
+ *  `hint` 由 goalStopDecision 给出时**替换**「针对红字继续」那一子句（不是另起一行）：
+ *  本轮没有红字、只有一段被收走的正文时，默认那句会把模型指向不存在的东西。 */
+export function goalReminder(
+  spec: GoalSpec,
+  turn: number,
+  spentUsd: number | null,
+  evidence: WorkerEvidence,
+  hint?: string,
+): string {
   const body =
     "[goal 续跑 第 " + String(turn) + "/" + String(spec.maxTurns) + " 轮] 目标：" +
     clampToTokenBudget(spec.objective, GOAL_OBJECTIVE_TOKEN_CAP, "目标") +
     "\n上一轮终态：证据 " + EVIDENCE_TEXT[evidence] +
-    "（红字逐条已在上一轮上下文里，直接针对它继续，不要重述已经完成的部分）。" +
+    "（" + (hint ?? DEFAULT_FOLLOW) + "）。" +
     "\n预算：" + budgetLine(spec, spentUsd) + "；轮次上限 " + String(spec.maxTurns) + "。" +
     "\n收束条件：只有 verify 通过且之后不再写盘才算完成；认为已达成就调用 verify 拿绿证据再收束。";
   return clampToTokenBudget(body, GOAL_REMINDER_TOKEN_CAP, "goal 提醒");

@@ -4,6 +4,8 @@
 // ② 「done」只认机器可查的证据（复用 W4b 的 workerVerificationEvidence 四态），
 //    散文自述不算数：顶尖与普通的差距就在「能证明代码真的能跑」。
 // ③ 提醒块每轮重送 ⇒ 整会话付费，帽必须锁在 token 数上（字重口径），不是字符数。
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   GOAL_REMINDER_TOKEN_CAP,
@@ -28,6 +30,11 @@ function noteOf(d: GoalStop): string {
 function reasonOf(d: GoalStop): string {
   if (d.kind !== "stop") throw new Error("期望 stop，实得 " + d.kind);
   return d.reason;
+}
+/** hint 可以合法缺席（默认那一支就不该多说一句），所以这里返回 undefined 而不是抛。 */
+function hintOf(d: GoalStop): string | undefined {
+  if (d.kind !== "continue") throw new Error("期望 continue，实得 " + d.kind);
+  return d.hint;
 }
 
 function decide(over: Partial<GoalDecisionInput> = {}) {
@@ -150,5 +157,31 @@ describe("goalReminder：每轮重送的块必须带帽且如实报预算", () =
 
   it("短目标逐字在场（帽不该动没超的东西）", () => {
     expect(goalReminder(SPEC, 1, 0, "absent")).toContain(SPEC.objective);
+  });
+});
+
+describe("hint 通道：判据算出来的那句要真送到模型面前（「两头断」第 10 次防线）", () => {
+  it("被收走那一支带 hint；默认那一支不带（每条续跑都多说一句 = 每轮重送的钱）", () => {
+    expect(hintOf(decide({ truncated: true, wrote: false }))).toContain("没写完就被收走");
+    expect(hintOf(decide({}))).toBeUndefined();
+    expect(hintOf(decide({ evidence: "failed" }))).toBeUndefined();
+  });
+
+  it("goalReminder：hint 在场时**替换**默认那一子句（一处只留一个指令，不追加也不双份付费）", () => {
+    const t = goalReminder(SPEC, 2, 0.02, "absent", hintOf(decide({ truncated: true, wrote: false })));
+    expect(t).toContain("没写完就被收走");
+    expect(t).not.toContain("红字逐条已在上一轮上下文里");
+    expect(estimateTextTokens(t)).toBeLessThanOrEqual(GOAL_REMINDER_TOKEN_CAP);
+  });
+
+  it("负控：无 hint ⇒ 默认那一子句逐字仍在（每轮重送的块不得被顺手改掉）", () => {
+    expect(goalReminder(SPEC, 2, 0.02, "absent")).toContain("红字逐条已在上一轮上下文里");
+  });
+
+  it("生产入口真的把 decision.hint 传进去（goalNextTurn 未导出 ⇒ 只能钉这一行的形状）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../src/main/agent-runner.ts", import.meta.url)), "utf8");
+    expect([...src.matchAll(/goalReminder\(/g)].length).toBe(1); // 只有一个生产调用点
+    const call = /goalReminder\([^)]*\)/.exec(src)?.[0] ?? "";
+    expect(call, "goalNextTurn 丢了这一位 ⇒ hint 算出来没人读").toContain("decision.hint");
   });
 });

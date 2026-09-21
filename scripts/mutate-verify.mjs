@@ -4741,6 +4741,31 @@ const MUTATIONS = [
     apply: (s) => s.replace('      if (out.truncated !== undefined) {', '      if (false) {'),
     expectFail: "没收尾的摘要拒绝：半句话不得替掉它替掉的旧事件",
   },
+  // ---- goal 的 hint 通道：判据算出来的那句必须真送到模型面前（2026-09-21）----
+  {
+    id: "goal-hint-lost-at-callsite",
+    src: "src/main/agent-runner.ts",
+    test: "tests/goal-stop-decision.test.ts",
+    desc: "生产入口不传 decision.hint ⇒ 被收走的那一轮仍收到「针对红字继续」（算了没人读的第 10 次）",
+    apply: (s) => s.replace("goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint)", "goalReminder(view.spec, turn, spentUsd, view.evidence)"),
+    expectFail: "生产入口真的把 decision.hint 传进去（goalNextTurn 未导出 ⇒ 只能钉这一行的形状）",
+  },
+  {
+    id: "goal-reminder-ignores-hint",
+    src: "src/agent/goal.ts",
+    test: "tests/goal-stop-decision.test.ts",
+    desc: "hint 收进参数却不用 ⇒ 块里同时留着「针对红字继续」那句错指令",
+    apply: (s) => s.replace('"（" + (hint ?? DEFAULT_FOLLOW) + "）。"', '"（" + DEFAULT_FOLLOW + "）。"'),
+    expectFail: "goalReminder：hint 在场时**替换**默认那一子句（一处只留一个指令，不追加也不双份付费）",
+  },
+  {
+    id: "goal-truncation-branch-forgets-hint",
+    src: "src/agent/goal.ts",
+    test: "tests/goal-stop-decision.test.ts",
+    desc: "continue 判对了但不给 hint ⇒ 续跑照跑，可模型收到的仍是「对着红字改」",
+    apply: (s) => s.replace('        hint: "上一轮没写完就被收走（没有红字，也没有验证）⇒ 从断点接着写完它，先别开新方向",\n', ''),
+    expectFail: "被收走那一支带 hint；默认那一支不带（每条续跑都多说一句 = 每轮重送的钱）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
