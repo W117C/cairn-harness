@@ -65,38 +65,28 @@ const MUTATIONS = [
     expectFail: "fail-closed：无后端 → 拒存 + 显式错误；safeStorage 不可用 → 不装配且拒存",
   },
   {
-    id: "secrets-atomic-rename",
-    src: "src/agent/plugins/secrets.ts",
+    // 5ed68bf 把这份实现收进 src/atomic-write.ts（原判据与三条锚点都在 secrets.ts 上，
+    // 实现搬走后针脚必然失配——规则一条没少：落定靠 rename、不许裸直写、失败清 tmp）。
+    id: "atomic-rename-dropped",
+    src: "src/atomic-write.ts",
     test: "tests/secrets.test.ts",
     desc: "去掉 rename：tmp 写完不落定（崩溃即丢密文）",
-    apply: (s) => s.replace('    await writeFile(tmp, JSON.stringify(store, null, 2) + "\\n", "utf8");\n    await rename(tmp, p);',
-                            '    await writeFile(tmp, JSON.stringify(store, null, 2) + "\\n", "utf8");'),
+    apply: (s) => s.replace(
+      '    await writeFile(tmp, text, "utf8");\n    await rename(tmp, path);',
+      '    await writeFile(tmp, text, "utf8");',
+    ),
     expectFail: "原子写：经 tmp→rename 落盘，成功后无 .tmp 残留",
   },
   {
-    id: "secrets-atomic-direct-write",
-    src: "src/agent/plugins/secrets.ts",
+    id: "atomic-direct-write-no-tmp",
+    src: "src/atomic-write.ts",
     test: "tests/secrets.test.ts",
     desc: "tmp+rename 退回裸 writeFile（写中途崩溃截断密文存储）",
     apply: (s) => s.replace(
-      '  const tmp = p + ".tmp-" + String(process.pid) + "-" + String(Date.now());\n' +
-      '  try {\n' +
-      '    await writeFile(tmp, JSON.stringify(store, null, 2) + "\\n", "utf8");\n' +
-      '    await rename(tmp, p);\n' +
-      '  } catch (err) {\n' +
-      '    await unlink(tmp).catch(() => {});\n' +
-      '    throw err;\n' +
-      '  }',
-      '  await writeFile(p, JSON.stringify(store, null, 2) + "\\n", "utf8");'),
+      '    await writeFile(tmp, text, "utf8");\n    await rename(tmp, path);',
+      '    await writeFile(path, text, "utf8");',
+    ),
     expectFail: "原子写：经 tmp→rename 落盘，成功后无 .tmp 残留",
-  },
-  {
-    id: "secrets-tmp-cleanup",
-    src: "src/agent/plugins/secrets.ts",
-    test: "tests/secrets.test.ts",
-    desc: "写失败分支不清理 tmp（残留临时文件堆积）",
-    apply: (s) => s.replace("    await unlink(tmp).catch(() => {});\n", ""),
-    expectFail: "写失败时 tmp 被清理，且不截断既有密文存储",
   },
   {
     id: "ask-gate-unattended-fail-closed",
@@ -4409,6 +4399,23 @@ const MUTATIONS = [
     desc: "只接列表态、空态漏接 ⇒ 会话没派过 write worker 时（恰恰是最需要看见残留的一刻）这一段永远不出现",
     apply: (s) => s.replace("orphanBlockHTML() +\n", "\"\" +\n"),
     expectFail: "gitViewHTML 的两条返回路径都带上这一段",
+  },
+  // ---- 原子写收口（5ed68bf）：临时名唯一性 = 同进程并发写不撞名 ----
+  {
+    id: "atomic-tmp-name-not-unique-per-process",
+    src: "src/atomic-write.ts",
+    test: "tests/bandit-runtime.test.ts",
+    desc: "退回「pid + 毫秒」：同进程同一毫秒的两笔写算出同一个临时名，先 rename 的搬走文件、后 rename 的抛 ENOENT（学习面静默丢）",
+    apply: (s) => s.replace("  seq += 1;\n", ""),
+    expectFail: "同一毫秒 24 笔 saveBanditState",
+  },
+  {
+    id: "atomic-write-leaves-tmp-on-failure",
+    src: "src/atomic-write.ts",
+    test: "tests/secrets.test.ts",
+    desc: "rename 失败不清理临时文件 ⇒ 崩溃残留堆在插件数据目录里，且下一次「写入中断自愈」清的是别人的名字",
+    apply: (s) => s.replace("    await unlink(tmp).catch(() => {});\n", ""),
+    expectFail: "写失败时 tmp 被清理，且不截断既有密文存储",
   },
 ];
 
