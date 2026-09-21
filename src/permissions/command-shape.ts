@@ -35,7 +35,7 @@ const VALUE_OPTS: Readonly<Record<string, ReadonlySet<string>>> = {
 const POSITIONAL_VALUE: ReadonlySet<string> = new Set(["nice", "timeout"]);
 const ASSIGN_RE = /^[A-Za-z_][A-Za-z0-9_]*=/;
 const DURATION_RE = /^\d+(?:\.\d+)?[smhd]?$|^\d+:\d+(?::\d+(?:[.,]\d+)?)?$/;
-const MAX_PAYLOAD_DEPTH = 3;
+const MAX_PAYLOAD_DEPTH = 3; // 载荷递归上限：越界只少跳一层（少判一次），绝不无限展开
 
 export interface Invocation {
   /** 有效二进制名（已取路径基名：`/usr/bin/git` → `git`）。 */

@@ -5066,8 +5066,8 @@ const MUTATIONS = [
     test: "tests/permissions.test.ts",
     desc: "deny/ask 退回裸文本前缀（不看有效二进制）⇒ 用户手写的 deny 被 /usr/bin/git、env、nohup、timeout、command、bash -c 六类写法静默击穿（09-21 探针 ① 段原缺陷复活）",
     apply: (s) => s.replace(
-      "      forms ??= commandForms(segment);\n      len = forms.some((f) => f.startsWith(rule.pattern)) ? rule.pattern.length : -1;",
-      "      len = segment.startsWith(rule.pattern) ? rule.pattern.length : -1;",
+      "      forms ??= commandForms(segment);\n      len = forms.some((f) => f.startsWith(pattern)) ? pattern.length : -1;",
+      "      len = segment.startsWith(pattern) ? pattern.length : -1;",
     ),
     expectFail: "包装写法躲不过 deny",
   },
@@ -5076,7 +5076,7 @@ const MUTATIONS = [
     src: "src/permissions/rules.ts",
     test: "tests/permissions.test.ts",
     desc: "把 allow 也接进形态面 ⇒ 用户点过一次「总是允许 echo hi」的同意被顺带扩大到 `env FOO=1 echo hi`、`nohup echo hi`、`/usr/bin/echo hi`（收紧与放宽的不对称是刻意的，丢掉它等于替他扩大同意范围）",
-    apply: (s) => s.replace('else if (rule.behavior === "allow") len = segment.startsWith(rule.pattern)', 'else if (rule.behavior === "__never__") len = segment.startsWith(rule.pattern)'),
+    apply: (s) => s.replace('else if (rule.behavior === "allow") len = segment.startsWith(pattern)', 'else if (rule.behavior === "__never__") len = segment.startsWith(pattern)'),
     expectFail: "allow 只认原形：点过一次「总是允许」不顺着包装器扩大同意范围",
   },
   {

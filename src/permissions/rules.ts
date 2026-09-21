@@ -151,12 +151,13 @@ function matchSegment(rules: PermissionRule[], segment: string): RuleHit | null 
   let best: RuleHit | null = null;
   let forms: string[] | null = null; // 惰性解析：只有 deny/ask 条目需要时才展开形态
   for (const rule of rules) {
+    const pattern = rule.pattern; // 取一次：形态匹配在 else 分支里，TS 的收窄跟不过 else-if 链
     let len: number;
-    if (rule.pattern === undefined) len = 0; // 裸工具名条目
-    else if (rule.behavior === "allow") len = segment.startsWith(rule.pattern) ? rule.pattern.length : -1;
+    if (pattern === undefined) len = 0; // 裸工具名条目
+    else if (rule.behavior === "allow") len = segment.startsWith(pattern) ? pattern.length : -1;
     else {
       forms ??= commandForms(segment);
-      len = forms.some((f) => f.startsWith(rule.pattern)) ? rule.pattern.length : -1;
+      len = forms.some((f) => f.startsWith(pattern)) ? pattern.length : -1;
     }
     if (len < 0) continue;
     if (

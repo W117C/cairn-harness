@@ -1,5 +1,6 @@
 import type { GlmToolSpec } from "../providers/glm";
 import type { Tool, ToolContext, ToolResult } from "../tools/base";
+import { invocations } from "../permissions/command-shape";
 import { impactQuerySpec } from "../tools/impact-query";
 import { run_shell } from "../tools/run_shell";
 import { gateToolSpecs } from "./glm-session";
@@ -103,45 +104,29 @@ export const shell_ro: Tool = {
 
 // H2（审查 B-1）：拦截按「有效二进制」判定，不再只认段首字面 `git`——
 // 绝对路径（/usr/bin/git）、exec 包装（command/env/…）、换行分隔、shell -c 内嵌都要拦。
-const EXEC_WRAPPERS: ReadonlySet<string> = new Set(["command", "env", "exec", "nice", "nohup", "sudo", "timeout"]);
-const SHELL_INVOKERS: ReadonlySet<string> = new Set(["bash", "sh", "zsh", "dash", "ksh"]);
+// 09-22 收口（探针 ③ 段六支红）：这一支**不再自带一份解析**，改吃全仓唯一一份
+// `src/permissions/command-shape.ts`（权限规则层 `matchSegment` 也是它的消费者）。
+// 旧的本地副本只 `has(word)`、不吞**带值选项的值**，于是 `sudo -u root git push --force`、
+// `timeout 30 git worktree add x`、`nice -n 5 git reset --hard`、`env -i git push --force`、
+// `command -p git push --force`、嵌套 `bash -c '…'` 六种全放行（裸 sudo/nohup 反而拦得住）——
+// 「同一条解析只硬化一支」的教科书形状。载荷那支也并进来了：不再另发一条「内嵌」文案，
+// 一种判定一份实现一条 reason。
 
-/** 一段命令文本的 git 调用判定：跳过环境赋值与 exec 包装后，有效二进制是否为 git 及其子命令。 */
-function gitInvocation(segText: string): { invoked: boolean; sub: string } {
-  const words = segText.trim().split(/\s+/).filter((w) => w !== "");
-  let i = 0;
-  while (i < words.length && (EXEC_WRAPPERS.has(words[i]!) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i]!))) i++;
-  const bin = words[i] ?? "";
-  if (!/(?:^|\/)git$/.test(bin)) return { invoked: false, sub: "" };
-  return { invoked: true, sub: words[i + 1] ?? "" };
+/** 一段命令文本里所有 git 调用的子命令：包装器与环境赋值已跳过，`shell -c` 载荷已展开。 */
+function gitSubcommands(command: string): string[] {
+  const subs: string[] = [];
+  // 换行也是命令分隔符（bash 语义）：先归一化为 `;` 再切段，否则 `echo hi\ngit push` 整段首词是 echo 而漏判。
+  for (const seg of command.replace(/\r?\n/g, ";").split(/&&|\|\||;|\|/)) {
+    for (const inv of invocations(seg)) if (inv.bin === "git") subs.push(inv.args[0] ?? "");
+  }
+  return subs;
 }
 
-/** git 破坏命令静态拦截（纯函数）：链段全查，任何一段有效二进制为 git 且子命令非只读即拒绝。 */
+/** git 破坏命令静态拦截（纯函数）：链段全查，任何一段有效二进制为 git 且子命令非只读即拒绝。
+ *  只拦「真以 git 为命令」的那几段——`echo no git here` 这类 git 作参数的命令照常放行。 */
 export function interceptDestructiveGit(command: string): { ok: boolean; why?: string } {
   if (typeof command !== "string" || command.trim() === "") return { ok: false, why: "空命令" };
-  // 换行也是命令分隔符（bash 语义）：先归一化为 `;` 再切段，否则 `echo hi\ngit push` 整段首词是 echo 而漏判。
-  const segments = command.replace(/\r?\n/g, ";").split(/&&|\|\||;|\|/);
-  for (const seg of segments) {
-    const g = gitInvocation(seg);
-    const words = seg.trim().split(/\s+/).filter((w) => w !== "");
-    // shell -c '<payload>'：payload 剥引号后按同一套分隔符切段、同一套有效二进制规则判定——
-    // 只拦「payload 里真以 git 为命令」的段；`echo no git here` 这类 git 作参数的合法命令照常放行。
-    if (!g.invoked && SHELL_INVOKERS.has(words[0] ?? "") && words.includes("-c")) {
-      const cAt = seg.indexOf("-c");
-      const payload = cAt >= 0 ? seg.slice(cAt + 2).replace(/^[\s'"]+|[\s'"]+$/g, "") : "";
-      for (const sub of payload.split(/&&|\|\||;|\|/)) {
-        const pg = gitInvocation(sub);
-        if (pg.invoked && !READONLY_GIT_SUBCOMMANDS.includes(pg.sub)) {
-          return {
-            ok: false,
-            why: `shell -c 内嵌 git ${pg.sub} 被拦截（worker 无合并/提交/分支权：合并唯一出口是 git 面板 §4.3）`,
-          };
-        }
-      }
-      continue;
-    }
-    if (!g.invoked) continue;
-    const sub = g.sub;
+  for (const sub of gitSubcommands(command)) {
     if (!READONLY_GIT_SUBCOMMANDS.includes(sub)) {
       return {
         ok: false,

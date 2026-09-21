@@ -162,3 +162,17 @@ pnpm exec tsx scripts/probe-shell-bypass.ts     # 当前必红（退出码 1）�
   `echo hi > /tmp/pwned` 之类仍被放行）→ ④ 重定向写面进静态威胁表。
   收口判据 = 探针退出码 0，**且**反向对照那一对继续成立（`git push --force` 必拦、`git status` 必放行）——
   只有前一半的话，「一律 deny」也能伪装成绿。
+
+### ③ 也已收（同日第三笔，探针红 15 → 9）
+
+`worker-shell-tools.ts` 删掉自带的 `EXEC_WRAPPERS`/`SHELL_INVOKERS`/`gitInvocation` 三份副本，
+改吃同一份解析件；`shell -c` 载荷那支也不再另发一条「内嵌」文案——**一种判定一份实现一条 reason**。
+探针 ③ 段 11 条全绿（六支半截循环：`sudo -u root`、`timeout 30`、`nice -n 5`、`env -i`、
+`command -p`、嵌套 `bash -c 'sudo -u root …'` 全部拦下），总读数 **红 9 / 绿 24**。
+离线面：`tests/hardening2.test.ts` +2 条（含反例那一条：包装后的只读 git 与 `bash -c 'echo git push --force'` 必须放行）。
+剩下的 ② 5 条与 ④ 4 条各自成笔，未动。
+
+⚠️ **本程自记一笔**：① 那笔（`5b6a7d5`）把 HEAD 弄红了一个 tsc 错——接线之后只跑了邻域测与
+`security-check`，**没重跑 tsc**（`rule.pattern` 的收窄过不了 else-if 链）。这是「跑过邻域 ≠ 跑过那道门」
+的同一条规矩在**类型门**上的复犯：改完 src 的接线，验证集里 `typecheck` 与 `test` 两门都不可缺。
+本笔随 ③ 一起修回（`const pattern = rule.pattern` 取一次），并同步改掉两根锚点的针脚原文。

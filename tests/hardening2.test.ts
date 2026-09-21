@@ -38,6 +38,30 @@ describe("interceptDestructiveGit · 有效二进制判定（B-1）", () => {
     expect(interceptDestructiveGit("ls -la && cat README.md").ok).toBe(true);
     expect(interceptDestructiveGit(`bash -c 'echo no git here'`).ok).toBe(true);
   });
+  // —— 09-22 收口（探针 ③ 段六支红）：本地那份半截循环（只 has(word)、不吞带值选项的值）
+  //     换成全仓唯一解析件 src/permissions/command-shape.ts 之后，包装写法与嵌套载荷都拦得住。
+  it("带值选项与嵌套载荷不冒充二进制", () => {
+    for (const cmd of [
+      "sudo -u root git push --force",
+      "timeout 30 git worktree add x",
+      "nice -n 5 git reset --hard",
+      "env -i git push --force",
+      "command -p git push --force",
+      "bash -c 'sudo -u root git push --force'",
+      "timeout --foreground 30 git clean -fd",
+    ]) expect(interceptDestructiveGit(cmd).ok, cmd).toBe(false);
+  });
+  it("反例：包装后的只读 git、以及把 git 当参数的命令照常放行（否则「一律 deny」也能骗绿）", () => {
+    for (const cmd of [
+      "sudo -u root git status",
+      "timeout 30 git diff HEAD",
+      "nice -n 5 git log --oneline",
+      "env -i git show HEAD",
+      "command -p git status",
+      "bash -c 'echo git push --force'",
+      "timeout 30 npm test",
+    ]) expect(interceptDestructiveGit(cmd).ok, cmd).toBe(true);
+  });
 });
 
 describe("等人门可收束（A-2）", () => {
