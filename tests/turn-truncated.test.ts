@@ -11,6 +11,7 @@ import { replay } from "../src/events";
 import { createEventLog } from "../src/events";
 import { normalizeStopReason, truncationOf, turnTruncatedEvent } from "../src/providers/stop-reason";
 import { projectContext, truncationNote } from "../src/agent/context";
+import { serializeConversation } from "../src/agent/compaction";
 import { runLoop } from "../src/agent/loop";
 import { createMockProvider } from "../src/providers/mock";
 import { createGlmSessionProvider } from "../src/agent/glm-session";
@@ -365,5 +366,66 @@ describe("跨轮真请求体（会话型 provider 的 transport 抓包）", () =
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+// 压缩会**排除**被摘要掉的旧事件，所以摘要输入是截断在长任务上唯一的存活通道。
+// 这条不接，等于「越长的任务（最容易撞 max_tokens 的那条路）越会把半句洗成完整结论」。
+describe("摘要输入（serializeConversation）", () => {
+  const events = (truncated: boolean, withTokens: boolean): AgentEvent[] => {
+    const out: AgentEvent[] = [
+      { type: "user_message", content: "把 flush 讲清楚" },
+      { type: "assistant_message", content: "flush 的关键在于把" },
+    ];
+    if (truncated) {
+      out.push({
+        type: "turn_truncated", callId: "m1", outcome: "output_budget", stop_reason: "max_tokens",
+        ...(withTokens ? { output_tokens: 4096 } : {}),
+      });
+    }
+    return out;
+  };
+
+  it("截断有自己一行，紧跟被砍断的那段正文，且带上是哪个原因", () => {
+    const s = serializeConversation(events(true, true), 2000);
+    expect(s).toContain("[Assistant 回复被截断]");
+    expect(s).toContain("max_tokens");
+    expect(s).toContain("4096");
+    expect(s.indexOf("flush 的关键在于把")).toBeLessThan(s.indexOf("[Assistant 回复被截断]"));
+    // 只落事实，不落指令：摘要器自己的规范写着「不要提及压缩过程本身」，行内也不该塞劝告
+    expect(s).not.toContain("不要把它");
+  });
+
+  it("负控：答完的一轮不因此多一行", () => {
+    const s = serializeConversation(events(false, false), 2000);
+    expect(s).not.toContain("[Assistant 回复被截断]");
+    expect(s).toContain("[Assistant] flush 的关键在于把");
+  });
+
+  it("output_tokens 缺席时不落那半句（缺 = 没上报，不等于 0）", () => {
+    const s = serializeConversation(events(true, false), 2000);
+    expect(s).toContain("[Assistant 回复被截断]");
+    expect(s).not.toContain("已用");
+    expect(s).not.toContain("0 输出 token");
+  });
+
+  it("内容策略中止与篇幅用尽各说各的（两种原因的下一步不同）", () => {
+    const s = serializeConversation([
+      { type: "assistant_message", content: "这段被" },
+      { type: "turn_truncated", callId: "m2", outcome: "content_blocked", stop_reason: "refusal" },
+    ], 2000);
+    expect(s).toContain("内容策略");
+    expect(s).toContain("refusal");
+    expect(s).not.toContain("篇幅");
+  });
+
+  it("delta 形态的正文先落位再落截断行（不吞掉半句，也不把说明插到半句前面）", () => {
+    const s = serializeConversation([
+      { type: "assistant_delta", callId: "m3", text: "半句 A" },
+      { type: "assistant_delta", callId: "m3", text: " + 半句 B" },
+      { type: "turn_truncated", callId: "m3", outcome: "output_budget", stop_reason: "max_tokens" },
+    ], 2000);
+    expect(s).toContain("[Assistant] 半句 A + 半句 B");
+    expect(s.indexOf("半句 A + 半句 B")).toBeLessThan(s.indexOf("[Assistant 回复被截断]"));
   });
 });

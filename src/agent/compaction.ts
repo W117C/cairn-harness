@@ -408,6 +408,18 @@ export function serializeConversation(
     } else if (e.type === "verify_result") {
       flushDelta();
       lines.push("[Verify] " + (e.ok ? "通过" : "失败") + "（第 " + e.attempt + "/" + e.maxAttempts + " 次）");
+    } else if (e.type === "turn_truncated") {
+      flushDelta(); // 先落那段被砍断的正文，这一行才指得清说的是哪一段
+      // 压缩会排除被摘要掉的旧事件 ⇒ 摘要输入是截断在长任务上唯一的存活通道。
+      // 少了它，半句会被摘成一条完整结论——而「最长的那条路」正是最容易撞 max_tokens 的那条。
+      // 只落事实不落劝告：摘要规范明写「不要提及压缩过程本身」，行内塞指令会与它打架。
+      lines.push(
+        "[Assistant 回复被截断] " +
+          (e.outcome === "output_budget" ? "没写完就被收走（篇幅用尽" : "被内容策略中止（") +
+          "，停止原因 " + e.stop_reason +
+          (e.output_tokens !== undefined ? "，已用 " + String(e.output_tokens) + " 输出 token" : "") +
+          "）",
+      );
     }
     // usage / session_meta / compaction：非内容事件，不进摘要输入
   }

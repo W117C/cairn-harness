@@ -132,6 +132,31 @@
   报错原文印出真实请求体 `把 flush 讲清楚\nflush 的关键在于把`（说明确实不在里面），
   而同一组的负控**照样绿** ⇒ 这条判据不是摆设，也不是恒真。
 
+## 第三程（同日，`serializeConversation` 那一支）：压缩会把它忘干净
+
+第二程之后自检「还有哪儿看不见它」，撞到一个**属于本通道自己的静默漏洞**：
+`src/agent/compaction.ts` 的摘要输入链（`assistant_delta / assistant_message / user_message /
+tool_call / tool_result / clarify / plan / verify`）**没有 `turn_truncated`**，未匹配的类型被
+if-else 链静默丢弃。后果不是"少一行"：压缩会**排除**被摘要掉的旧事件，所以摘要输入是截断
+在长任务上**唯一的存活通道**——没有它，半句话会被摘成一条完整结论，而"最长的那条路"
+恰恰是最容易撞 `max_tokens` 的那条。这与本文件开头立的是同一件事，只是这次被擦掉的
+正是新加的读数本身。
+
+修法一行分支（只落事实、不落劝告——摘要规范明写「不要提及压缩过程本身」，行内塞指令会与它打架）：
+`[Assistant 回复被截断] 没写完就被收走（篇幅用尽，停止原因 max_tokens，已用 4096 输出 token）`，
+两种原因各说各的话（下一步一个是续写、一个是改道，并成一句等于把选择权擦掉）。
+
+**RED 是先跑出来再修的**：4 条新判据首跑即红，报错原文印出实际序列化结果
+（`expected '[User] 把 flush 讲清楚\n[Assistant] flush…' to contain '[Assistant 回复被截断]'`），
+负控那条照样绿——它本来就断言"不该出现"，前后都绿是设计如此，不是恒真。
+
+顺手查过的两处**不改**（避免越界，也记下理由免得下轮又翻出来）：
+- `prune.ts` 的 token 计量表把 `turn_truncated` 记成 0：它与 `usage`/`session_meta`/`verify_result`
+  同列在"非大块内容事件"那一档，且 prune 只改写 `tool_result` 正文，碰不到这条事件。
+- 该文件的调用面只有 `compaction.ts:589`（摘要输入）与 `tests/compaction.test.ts:196`，
+  `scripts/` 里没有对 `[Assistant]`/`[Tool result` 标签的文本断言 ⇒ 新增一行不会打断任何门
+  （规则 13 那条「改文案要扫 scripts/」这里扫过，零命中）。
+
 ## 待办（按优先级）
 
 1. 沉淀面：`failureDigestFromEvents`（能力 6/10）现在只看 `verify_result(ok:false)` 与
