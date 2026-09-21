@@ -221,6 +221,44 @@ describe("质量闸与降级链", () => {
     expect(outcome).toEqual({ ok: false, kind: "rejected", why: "空摘要被拒" });
   });
 
+  it("没收尾的摘要拒绝：半句话不得替掉它替掉的旧事件", async () => {
+    const outcome = await runCompaction({
+      events: baseEvents,
+      trigger: "auto",
+      reason: "threshold",
+      summarizer: async () => ({ text: "读到排序逻辑在这里被——", truncated: "length" }),
+      config: TINY,
+    });
+    expect(outcome).toEqual({
+      ok: false,
+      kind: "rejected",
+      why: "摘要没写完就被收走（停止原因 length）",
+    });
+  });
+
+  it("负控：truncated 缺席 ⇒ 第四闸不动作（否则整条压缩链被自己闸死）", async () => {
+    // 与上一条同一份文本，唯一差别就是这个字段缺席 ⇒ 判的是字段本身，不是措辞长短。
+    const outcome = await runCompaction({
+      events: baseEvents,
+      trigger: "auto",
+      reason: "threshold",
+      summarizer: async () => ({ text: SHORT_SUMMARY }),
+      config: TINY,
+    });
+    expect(outcome.ok).toBe(true);
+  });
+
+  it("空摘要闸在前：既空又被收走时先报「空」（可行动的那条排前面）", async () => {
+    const outcome = await runCompaction({
+      events: baseEvents,
+      trigger: "auto",
+      reason: "threshold",
+      summarizer: async () => ({ text: "   ", truncated: "content_filter" }),
+      config: TINY,
+    });
+    expect(outcome).toEqual({ ok: false, kind: "rejected", why: "空摘要被拒" });
+  });
+
   it("膨胀拒绝：tokens_after ≥ tokens_before", async () => {
     const outcome = await runCompaction({
       events: baseEvents,

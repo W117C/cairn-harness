@@ -4658,6 +4658,30 @@ const MUTATIONS = [
     apply: (s) => s.replace('if (network === "allow" || !looksLikeNetworkDenial(result.output)) return result;', 'if (!looksLikeNetworkDenial(result.output)) return result;'),
     expectFail: "deny 支下补一行可行动的提示；allow 支与无提示串一律原样返回",
   },
+  {
+    id: "d7-snapshot-taken-for-new-file",
+    src: "src/tools/snapshot.ts",
+    test: "tests/snapshot-d7.test.ts",
+    desc: "去掉「不存在/非普通文件/空文件」三道不占快照的界 ⇒ 每次新建都往用户仓库塞一份原件（噪音变垃圾）",
+    apply: (s) => s.replace("if (st === null || !st.isFile() || st.size === 0) return null;", "if (false) return null;"),
+    expectFail: "新建文件不占快照",
+  },
+  {
+    id: "d7-worker-optout-ignored",
+    src: "src/tools/write_file.ts",
+    test: "tests/snapshot-d7.test.ts",
+    desc: "无视 ctx.snapshot === false ⇒ worker 写侧照落快照、worktree 脏文件面被撑大（实测连带 m3b 的 mergeWorker 判红）",
+    apply: (s) => s.replace("const snapshotId = ctx.snapshot === false ? null :", "const snapshotId = false ? null :"),
+    expectFail: "worker 写侧显式关掉（snapshot:false）",
+  },
+  {
+    id: "d7-snapshot-id-not-in-event",
+    src: "src/agent/loop.ts",
+    test: "tests/snapshot-d7.test.ts",
+    desc: "快照路径只留在 tool 正文、不进 tool_result 事件 ⇒ 事后审计与界面无从取证（§10.4 要的正事件里那一条）",
+    apply: (s) => s.replace("        ...(snapshotId !== undefined ? { snapshotId } : {}),\n", ""),
+    expectFail: "字段穿过 loop 落进事件流（tool 侧与事件侧不是两套东西）",
+  },
   // ---- 事件类型清单三面一致闸（tests/event-type-coverage.test.ts，2026-09-21）----
   // 这张闸本身也是「按类型白名单取料」的东西：没有锚点看着，它一样会静默塌成恒真。
   {
@@ -4683,6 +4707,39 @@ const MUTATIONS = [
     desc: "给一个不会成卡片的类型留标签 ⇒ 这一条永远读不到，标签表开始攒尸体（反向也判）",
     apply: (s) => s.replace("const EVENT_LABELS = {", "const EVENT_LABELS = {\n  usage: '用量',"),
     expectFail: "EVENT_LABELS 里没有死条目（不为非卡片类型留标签）",
+  },
+  // ---- 停止原因的另外两支读数：非流式分支与 prompt 级拦截（2026-09-21 第二次实测）----
+  {
+    id: "openai-nonstream-blind",
+    src: "src/providers/openai.ts",
+    test: "tests/turn-truncated.test.ts",
+    desc: "非流式分支不读 finish_reason ⇒ 压缩摘要被砍断时账面上是「写完了」",
+    apply: (s) => s.replace("turnTruncatedEvent(callId, data.choices?.[0]?.finish_reason,", "turnTruncatedEvent(callId, null,"),
+    expectFail: "openai 非流式（摘要器走的那一支）：finish_reason=length ⇒ 事件照落",
+  },
+  {
+    id: "gemini-blind-to-prompt-feedback",
+    src: "src/providers/gemini.ts",
+    test: "tests/turn-truncated.test.ts",
+    desc: "只读 candidates[0].finishReason ⇒ prompt 级拦截那一帧根本没有 candidates，SAFETY 永远看不见",
+    apply: (s) => s.replace('        if (chunk.promptFeedback?.blockReason) blockReason = chunk.promptFeedback.blockReason;\n', ''),
+    expectFail: "gemini：candidates 缺席、只有 promptFeedback.blockReason ⇒ SAFETY 看得见",
+  },
+  {
+    id: "summarizer-hides-truncation",
+    src: "src/agent/glm-session.ts",
+    test: "tests/turn-truncated.test.ts",
+    desc: "摘要器收下 turn_truncated 却不往外传 ⇒ 第四闸永远等不到它（「两头断」的原型形状）",
+    apply: (s) => s.replace('      else if (e.type === "turn_truncated") truncated = e.stop_reason;\n', ''),
+    expectFail: "穿链：非流式响应 → 摘要器 → out.truncated（收了不声张 = 没收，「两头断」第 10 次防线）",
+  },
+  {
+    id: "compaction-accepts-truncated-summary",
+    src: "src/agent/compaction.ts",
+    test: "tests/compaction.test.ts",
+    desc: "摘掉第四闸 ⇒ 半句摘要落进记录并替掉它替掉的旧事件（不可逆的那一面）",
+    apply: (s) => s.replace('      if (out.truncated !== undefined) {', '      if (false) {'),
+    expectFail: "没收尾的摘要拒绝：半句话不得替掉它替掉的旧事件",
   },
 ];
 

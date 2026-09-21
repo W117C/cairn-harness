@@ -379,12 +379,16 @@ export function createGlmSummarizer(model?: string, meter?: RequestMeter, transp
     ];
     let text = "";
     let usage: CompactionUsage | undefined;
+    let truncated: string | undefined;
     for await (const e of transport(msgs, { stream: false, model: modelName, ...(meter ? { metering: { meter, category: "summary" as const } } : {}) }, undefined, { signal: input.signal })) {
       if (e.type === "assistant_delta") text += e.text;
       else if (e.type === "usage") usage = { inputTokens: e.inputTokens, outputTokens: e.outputTokens };
+      // 非流式分支同样会报「没写完」（providers/openai.ts 读 finish_reason）。收下但不声张就等于
+      // 没收——半份摘要会被当成完整结论落进记录，而它替掉的旧事件已经不会再回来了。
+      else if (e.type === "turn_truncated") truncated = e.stop_reason;
     }
     if (!text.trim()) throw new Error("GLM 摘要器返回空摘要");
-    return { text, usage, model: modelName };
+    return { text, usage, model: modelName, ...(truncated !== undefined ? { truncated } : {}) };
   };
 }
 

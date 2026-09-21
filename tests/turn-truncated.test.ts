@@ -16,8 +16,8 @@ import { goalStopDecision, lastTurnWasTruncated, projectGoal } from "../src/agen
 import { withAgentId } from "../src/agent/worker-projection";
 import { runLoop } from "../src/agent/loop";
 import { createMockProvider } from "../src/providers/mock";
-import { createGlmSessionProvider } from "../src/agent/glm-session";
-import type { GlmMessage } from "../src/providers/glm";
+import { createGlmSessionProvider, createGlmSummarizer } from "../src/agent/glm-session";
+import { streamGlm, type GlmMessage } from "../src/providers/glm";
 import { streamAnthropic } from "../src/providers/anthropic";
 import { streamOpenAI } from "../src/providers/openai";
 import { streamGemini } from "../src/providers/gemini";
@@ -577,5 +577,80 @@ describe("评审修的五处", () => {
     ], 2000);
     expect(budget).toContain("没写完就被收走（篇幅用尽，停止原因 max_tokens，已用 4096 输出 token）");
     expect(budget.split("\n").filter((l) => l.includes("被截断")).length).toBe(1);
+  });
+});
+
+describe("非流式分支与 prompt 级拦截（第二次实测补上的两处盲区）", () => {
+  // 动手前的实测：src/ 里只有一处真用 stream:false（glm-session 的压缩摘要器），
+  // 而那一支从不读 finish_reason；Gemini 被 prompt 级安全策略拦下时 candidates 整个缺席，
+  // 只读 candidates[0].finishReason 的那一条道永远撞不到。两处都是「字段在、零读者」。
+  function stubJsonFetch(body: unknown): typeof fetch {
+    return (async () =>
+      new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } })) as unknown as typeof fetch;
+  }
+  const nonStreamBody = (finish: string | null) => ({
+    id: "chatcmpl-sum",
+    choices: [{ index: 0, message: { role: "assistant", content: "读到排序逻辑在这里被——" }, finish_reason: finish }],
+    usage: { prompt_tokens: 900, completion_tokens: 4096 },
+  });
+
+  it("openai 非流式（摘要器走的那一支）：finish_reason=length ⇒ 事件照落", async () => {
+    const out = await collect(streamOpenAI(USER, { apiKey: "test", stream: false, fetchImpl: stubJsonFetch(nonStreamBody("length")) }));
+    const t = truncatedOf(out);
+    expect(t.length).toBe(1);
+    expect(t[0]).toMatchObject({ callId: "chatcmpl-sum", outcome: "output_budget", stop_reason: "length", output_tokens: 4096 });
+  });
+
+  it("负控：非流式 stop ⇒ 不落（摘要是摘要，不是每份都被砍）", async () => {
+    const out = await collect(streamOpenAI(USER, { apiKey: "test", stream: false, fetchImpl: stubJsonFetch(nonStreamBody("stop")) }));
+    expect(truncatedOf(out)).toEqual([]);
+    // 正文与用量照旧透出：这一支没被新事件改坏
+    expect(out.filter((e) => e.type === "assistant_delta").length).toBe(1);
+  });
+
+  it("gemini：candidates 缺席、只有 promptFeedback.blockReason ⇒ SAFETY 看得见", async () => {
+    const out = await collect(streamGemini(USER, {
+      apiKey: "test", fetchImpl: stubFetch([
+        'data: {"promptFeedback":{"blockReason":"SAFETY"},"usageMetadata":{"promptTokenCount":11,"totalTokenCount":11}}',
+      ]),
+    }));
+    const t = truncatedOf(out);
+    expect(t.length).toBe(1);
+    expect(t[0]).toMatchObject({ outcome: "content_blocked", stop_reason: "SAFETY" });
+  });
+
+  it("gemini 负控：promptFeedback 里没 blockReason ⇒ 不落（缺读数 ≠ 被拦）", async () => {
+    const out = await collect(streamGemini(USER, {
+      apiKey: "test", fetchImpl: stubFetch(['data: {"promptFeedback":{},"usageMetadata":{"promptTokenCount":11}}']),
+    }));
+    expect(truncatedOf(out)).toEqual([]);
+  });
+
+  it("两个字段都在时以 candidates 的为准（更具体：它说的是这一条候选，blockReason 说的是整段输入）", async () => {
+    const out = await collect(streamGemini(USER, {
+      apiKey: "test", fetchImpl: stubFetch([
+        'data: {"candidates":[{"content":{"parts":[],"role":"model"},"finishReason":"MAX_TOKENS","index":0}],"promptFeedback":{"blockReason":"SAFETY"}}',
+      ]),
+    }));
+    const t = truncatedOf(out);
+    expect(t.length).toBe(1);
+    expect(t[0]?.stop_reason).toBe("MAX_TOKENS");
+  });
+
+  it("穿链：非流式响应 → 摘要器 → out.truncated（收了不声张 = 没收，「两头断」第 10 次防线）", async () => {
+    const transport = (async function* (msgs: GlmMessage[]) {
+      for await (const e of streamOpenAI(msgs, { apiKey: "test", stream: false, fetchImpl: stubJsonFetch(nonStreamBody("length")) })) yield e;
+    }) as unknown as typeof streamGlm;
+    const out = await createGlmSummarizer("glm-5.2", undefined, transport)({ system: "s", conversation: "旧会话" });
+    expect(out.text).toContain("读到排序逻辑在这里被——"); // 动作真发生：正文仍按原样收着
+    expect(out.truncated).toBe("length");
+  });
+
+  it("负控：答完的摘要 ⇒ truncated 字段缺席（恒 truthy 会把压缩整条闸死）", async () => {
+    const transport = (async function* (msgs: GlmMessage[]) {
+      for await (const e of streamOpenAI(msgs, { apiKey: "test", stream: false, fetchImpl: stubJsonFetch(nonStreamBody("stop")) })) yield e;
+    }) as unknown as typeof streamGlm;
+    const out = await createGlmSummarizer("glm-5.2", undefined, transport)({ system: "s", conversation: "旧会话" });
+    expect("truncated" in out).toBe(false);
   });
 });

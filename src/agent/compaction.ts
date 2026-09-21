@@ -467,6 +467,10 @@ export interface SummarizerOutput {
   text: string;
   usage?: CompactionUsage;
   model?: string;
+  /** 这一份摘要**没写完**（模型侧输出预算/内容策略收走）：值是线上停止原因原文，缺席 = 写完。
+   *  必须是独立字段而不是塞进 text：摘要器自己判断「写到一半」与「模型真就写了这么多」的界线，
+   *  只有 provider 那一侧知道（同 turn_truncated 事件的理由，见 providers/stop-reason.ts）。 */
+  truncated?: string;
 }
 export type Summarizer = (input: SummarizerInput) => Promise<SummarizerOutput>;
 
@@ -606,7 +610,7 @@ export async function runCompaction(args: RunCompactionArgs): Promise<Compaction
   );
   const prompt = BUILTIN_PROMPTS["/compact"];
 
-  // 降级链：失败退避重试 1 次；三闸逐把（空 / 超帽 / 膨胀）
+  // 降级链：失败退避重试 1 次；四闸逐把（空 / 没收尾 / 超帽 / 膨胀）
   let lastErr: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
     if (attempt > 0) await delay(config.retryBackoffMs, undefined, { signal: args.signal });
@@ -615,6 +619,11 @@ export async function runCompaction(args: RunCompactionArgs): Promise<Compaction
       const out = await summarizer({ system: prompt.system, conversation, priorSummary, ...(args.signal ? { signal: args.signal } : {}) });
       args.signal?.throwIfAborted();
       if (out.text.trim() === "") return { ok: false, kind: "rejected", why: "空摘要被拒" };
+      // 第四闸：被收走的摘要一律不进记录。宁可这次不压缩（旧事件留在流里，一条不丢），
+      // 也不能让半句话以「完整结论」的形态替掉它替掉的旧事件——那是压缩里唯一不可逆的一面。
+      if (out.truncated !== undefined) {
+        return { ok: false, kind: "rejected", why: "摘要没写完就被收走（停止原因 " + out.truncated + "）" };
+      }
       const text = applyFilesFallback(out.text.trim(), compressedEvents);
       if (estimateTokens(text.length, factor) > config.summaryCapTokens) {
         return { ok: false, kind: "rejected", why: "摘要超输出帽（> " + config.summaryCapTokens + " token）" };

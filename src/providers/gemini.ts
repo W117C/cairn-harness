@@ -36,6 +36,9 @@ interface GeminiChunk {
     finishReason?: string | null;
     index?: number;
   }[];
+  /** prompt 级拦截（安全策略在整段输入上就判了）时 **candidates 整个缺席**，原因只在这里——
+   *  只看 candidates[0].finishReason 的读法会永远撞不到这一支。 */
+  promptFeedback?: { blockReason?: string };
   usageMetadata?: {
     promptTokenCount?: number;
     candidatesTokenCount?: number;
@@ -170,6 +173,8 @@ export async function* streamGemini(
   let callSeq = 0;
   // finishReason 随候选块到达（中间 chunk 常是 null）：记最后一个非空的。
   let finishReason: string | null | undefined;
+  // prompt 级拦截的第二份量纲：这一支到用时 candidates 缺席，光看 finishReason 一条道会全盲。
+  let blockReason: string | undefined;
 
   try {
     let done = false;
@@ -209,6 +214,8 @@ export async function* streamGemini(
         }
         const cand = chunk.candidates?.[0];
         if (cand?.finishReason) finishReason = cand.finishReason;
+        // 两个字段互斥出现（被拦的那一帧没有 candidates），所以各读各的、末尾合并。
+        if (chunk.promptFeedback?.blockReason) blockReason = chunk.promptFeedback.blockReason;
         const parts = cand?.content?.parts ?? [];
         for (const part of parts) {
           if (part.text) {
@@ -229,9 +236,10 @@ export async function* streamGemini(
     if (inputTokens !== null || outputTokens !== null) {
       yield { type: "usage", inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 };
     }
-    // 流正常收尾，但 finishReason 说这一轮没说完（MAX_TOKENS＝篇幅不够 / SAFETY 家族＝被拦）。
-    // 上面 C7 那条守的是「半帧被截断」，这里守的是「帧到齐、篇幅没给够」。
-    const truncated = turnTruncatedEvent(callId, finishReason, outputTokens);
+    // 流正常收尾，但停止读数说这一轮没说完（MAX_TOKENS＝篇幅不够 / SAFETY 家族＝被拦）。
+    // candidates[0].finishReason 与 promptFeedback.blockReason 互斥到值：谁在场用谁。
+    // 上面 C7 那条守的是「半帧被截断」，这里守的是「帧到齐、篇幅没给够/被拦」。
+    const truncated = turnTruncatedEvent(callId, finishReason ?? blockReason, outputTokens);
     if (truncated) yield truncated;
   } finally {
     guard?.dispose();

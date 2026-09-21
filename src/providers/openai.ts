@@ -180,6 +180,11 @@ export async function* streamOpenAI(
         };
       }
       if (data.usage) yield toUsage(data.usage);
+      // 非流式分支同一家、同一个字段：整段回复一样会被 length 砍断。
+      // 这条尤其不能省——本分支唯一的真调用者是压缩摘要器，而摘要正是长任务上旧事件被排除后
+      // 唯一的存活通道；一份砍了一半的摘要落进记录，比不落更坏（它会以「完整结论」的形态被读到）。
+      const truncated = turnTruncatedEvent(callId, data.choices?.[0]?.finish_reason, data.usage?.completion_tokens);
+      if (truncated) yield truncated;
       meterOutcome = "ok";
     } finally {
       guard?.dispose();
