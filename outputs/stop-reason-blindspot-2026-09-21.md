@@ -386,6 +386,9 @@ worker 内部转录，在折叠一面照单全收。而摘要会替掉被排除�
 锚点 +5、改指 2（`verify-result-out-of-attribution` / `worker-truncation-reaches-parent-untagged`，
 语义逐字不变）；5 + 2 根针分别在 clean HEAD `7f23ef8` / `bf25a55` 实测**全杀**；
 `tsc` 触及面 0 错；`agents(24) + m3c(25) + tool-choice + turn-truncated(45) + sidechat + goal-continue` 全绿。
+final HEAD `0ec8bff` 的全量 `test`（同一台软链 worktree，按规则 52 只作趋势读数）：
+184 files / 1749 tests，**182 files 绿**，唯二红项仍是 `gated-tools` / `runner-gates` 那对
+软链假红——与 `04151de` 那次（1739 tests）相比只多不减，说明本程三笔（7f23ef8 / bf25a55 / 0ec8bff）没有把别的面碰坏。
 
 ## 待办（按优先级）
 
