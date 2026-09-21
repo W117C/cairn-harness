@@ -551,6 +551,37 @@ export interface AgentColumn {
   startedTs?: number;
 }
 
+/** 「这一条工具调用在忙哪个对象」——唯一实现就是这一份。两个消费者：主转录的工具条摘要
+ *  （app.js 的 tool_call 分支）与右栏 worker 行的 recent 行。顺序即优先级：文件 → 命令 → 查询 →
+ *  首个标量 → 占位。右栏那行之所以也要它：准入轮把 worker 的 tool_call 摘出主对话流之后，
+ *  这行只剩「🔧 工具名」，「它读过哪个文件」在界面上就无处可读了。 */
+export function toolArgsSummary(args: unknown): string {
+  const a = (args && typeof args === "object" ? args : {}) as Record<string, unknown>;
+  const pick = (...ks: string[]): string => {
+    for (const k of ks) {
+      const v = a[k];
+      if (typeof v === "string" && v !== "") return v;
+      if (typeof v === "number") return String(v);
+    }
+    return "";
+  };
+  const firstValue = (): string => {
+    const keys = Object.keys(a);
+    if (keys.length === 0) return "";
+    const v = a[keys[0]];
+    if (typeof v === "string") return v;
+    try { return String(JSON.stringify(v)); } catch { return ""; }
+  };
+  const raw =
+    pick("path", "file", "filePath", "target", "filename") ||
+    pick("command", "cmd", "script") ||
+    pick("pattern", "query", "glob", "q", "symbol") ||
+    firstValue();
+  // 一条界盖住所有分支：原实现只截「非串值」，于是一条长字符串参数会整段进那一行——
+  // 摘要的意义是「一行」，不是「第一个字段」。
+  return raw === "" ? "—" : raw.slice(0, 120);
+}
+
 export function projectAgentPanel(events: AgentEvent[]): AgentColumn[] {
   interface Acc {
     col: AgentColumn;
@@ -613,7 +644,7 @@ export function projectAgentPanel(events: AgentEvent[]): AgentColumn[] {
       a.col.recent = [...a.col.recent, (e.kind === "report" ? "[报告] " : "[进展] ") + e.text.slice(0, 120)].slice(-3);
     } else if (e.type === "tool_call" && typeof e.agent_id === "string" && e.agent_id !== "") {
       const a = get(e.agent_id);
-      a.col.recent = [...a.col.recent, "🔧 " + e.name].slice(-3);
+      a.col.recent = [...a.col.recent, "🔧 " + e.name + " · " + toolArgsSummary(e.args)].slice(-3);
       a.col.toolStats = { ...a.col.toolStats, [e.name]: (a.col.toolStats[e.name] ?? 0) + 1 };
     } else if (e.type === "usage" && typeof e.agent_id === "string" && e.agent_id !== "") {
       const a = get(e.agent_id);

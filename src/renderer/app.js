@@ -1,5 +1,5 @@
 import { projectUnits, mountHistory } from './history-window.js';
-import { projectPanelData, EMPTY_PANEL_DATA, entersMainConversation, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS, cardActionForComment, commentReadsBack } from './projections';
+import { projectPanelData, EMPTY_PANEL_DATA, entersMainConversation, toolArgsSummary, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS, cardActionForComment, commentReadsBack } from './projections';
 import { $, esc, promptInput, sessionList, streamInner, toast } from './dom.js';
 import { ICONS, RUN_GRID_HTML, runGrid } from './icons.js';
 import { highlightAllDiffs, diffHtml } from './diff-highlight.js';
@@ -2682,30 +2682,8 @@ render();
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + p + '</svg>';
   }
   /* ---------- 工具调用组（两级折叠） ---------- */
-  /** 一行摘要：告诉用户"这个工具干了什么"，取最能代表这次调用的那一个字段。 */
-  function toolSummary(name, args) {
-    const a = args && typeof args === 'object' ? args : {};
-    const pick = (...ks) => {
-      for (let i = 0; i < ks.length; i++) {
-        const v = a[ks[i]];
-        if (typeof v === 'string' && v) return v;
-        if (typeof v === 'number') return String(v);
-      }
-      return '';
-    };
-    const p = pick('path', 'file', 'filePath', 'target', 'filename');
-    if (p) return p;
-    const c = pick('command', 'cmd', 'script');
-    if (c) return c;
-    const q = pick('pattern', 'query', 'glob', 'q', 'symbol');
-    if (q) return q;
-    const keys = Object.keys(a);
-    if (!keys.length) return '—';
-    try {
-      const v = a[keys[0]];
-      return typeof v === 'string' ? v : String(JSON.stringify(v)).slice(0, 120);
-    } catch (_) { return '—'; }
-  }
+  /* 「一行摘要」的政策搬进 projections.toolArgsSummary：右栏 worker 行的 recent 行取同一份。
+     留在本地就会分成两份——一份记得 path，另一份忘了。 */
   function argText(args) {
     if (args === undefined || args === null) return '—';
     if (typeof args === 'string') return args;
@@ -2798,7 +2776,7 @@ render();
           '<button class="ti-head" type="button" data-tool-toggle aria-expanded="false">' +
             toolIcon(name) +
             '<span class="ti-name">' + esc(name) + '</span>' +
-            '<span class="ti-sum">' + esc(toolSummary(name, e.args)) + '</span>' +
+            '<span class="ti-sum">' + esc(toolArgsSummary(e.args)) + '</span>' +
             '<span class="ti-state pending">…</span>' + TG_CHEV +
           '</button>' +
           '<div class="ti-body">' +

@@ -802,7 +802,7 @@ async function phaseElectron(root: string): Promise<void> {
     // projectAgentPanel 曾被 agents.test 判绿多年而产品里一屏看不见（幽灵投影），所以这条接线必须由真窗口作证。
     // ⚠️ 本相只走「重放后」这一支：停在非终态的靶子会被产品的崩溃恢复扫成 failed(interrupted)，
     //    所以「等人审批」在真窗口里不出现（那需要活着的编排器 = 花真钱的一轮 run）。不假装两支都过。
-    // 路径一律带 b11-child-only / b11-parent-only 前缀：toolSummary 把 read_file 的 path 原样上屏，
+    // 路径一律带 b11-child-only / b11-parent-only 前缀：toolArgsSummary 把 read_file 的 path 原样上屏，
     // 于是「这条文字在不在主转录里」成为一个可判读的归因读数（B11c/B11d 就是读它）。
     const b11A = "b11-read-1";
     const b11B = "b11-write-2";
@@ -938,6 +938,11 @@ async function phaseElectron(root: string): Promise<void> {
       b11Items === b11ParentToolCalls,
       "B11e 主流工具条数 = 盘上不带归因的 tool_call 数（条数对得上才算「没画」而不是「画了别的」；实测 " +
         String(b11Items) + " 期望 " + String(b11ParentToolCalls) + "）",
+    );
+    // B11d 只证了「不在主流」；另一半是「在它在的地方」——否则这就是摘信息而不是搬信息。
+    ok(
+      b11RowA.includes(b11ChildA) || b11RowA.includes(b11ChildB),
+      "B11f worker 读过的文件在右栏那一行还读得到（准入是搬走不是删掉；实测 A 行 " + JSON.stringify(b11RowA.slice(0, 120)) + "）",
     );
     console.log("[panels-check] B12 worker 审批两端：已死那一列不长卡，而 card_action 桥在真窗口走得通（零模型调用）");
     // B11 留下的 b11-write-2 已被崩溃恢复扫成 failed，但它的 approval 从未被答过（行上仍写「待批」）。

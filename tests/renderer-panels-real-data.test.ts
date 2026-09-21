@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { expect, it, vi } from 'vitest';
 // vm 里跑脚本不是模块：准入判据的绑定与 import 剥法都取自共用那一处（不许各写一份）。
-import { entersMainConversation, groupedScript } from './renderer-vm-module';
+import { entersMainConversation, groupedScript, toolArgsSummary } from './renderer-vm-module';
 
 const source = readFileSync(new URL('../src/renderer/app.js', import.meta.url), 'utf8');
 const projection = readFileSync(new URL('../src/renderer/history-window.js', import.meta.url), 'utf8');

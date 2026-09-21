@@ -4892,6 +4892,39 @@ const MUTATIONS = [
     apply: (s) => s.replace('if (typeof e.agent_id !== "string" || e.agent_id === "") return true;', 'if (typeof e.agent_id !== "string") return true;'),
     expectFail: "空串归因按「不带」处理",
   },
+  // ---- 工具摘要政策的一份实现（projections.toolArgsSummary，2026-09-22）----
+  {
+    id: "panel-recent-drops-tool-target",
+    src: "src/renderer/projections.ts",
+    test: "tests/tool-args-summary.test.ts",
+    desc: "右栏 recent 退回只写工具名 ⇒ 准入轮把 worker 的 tool_call 摘出主流后，「它碰过哪个文件」无处可读",
+    apply: (s) => s.replace('"🔧 " + e.name + " · " + toolArgsSummary(e.args)', '"🔧 " + e.name'),
+    expectFail: "右栏 worker 行的 recent 带得上目标",
+  },
+  {
+    id: "app-reinlines-its-own-tool-summary",
+    src: "src/renderer/app.js",
+    test: "tests/tool-args-summary.test.ts",
+    desc: "主转录那行自己抄一份取料 ⇒ 两份政策，一份记得 path、另一份迟早忘（同族各抄一份）",
+    apply: (s) => s.replace("esc(toolArgsSummary(e.args))", "esc(String((e.args && e.args.path) || ''))"),
+    expectFail: "主转录那行取的是 projections 的同一个实现",
+  },
+  {
+    id: "tool-summary-picks-command-before-file",
+    src: "src/renderer/projections.ts",
+    test: "tests/tool-args-summary.test.ts",
+    desc: "取料顺序倒过来（命令先于文件）⇒ 写文件的一行显示的是别的字段，用户看不出这次动的是谁",
+    apply: (s) => s.replace('    pick("path", "file", "filePath", "target", "filename") ||\n    pick("command", "cmd", "script") ||', '    pick("command", "cmd", "script") ||\n    pick("path", "file", "filePath", "target", "filename") ||'),
+    expectFail: "文件位优先",
+  },
+  {
+    id: "tool-summary-unbounded-string-leaks",
+    src: "src/renderer/projections.ts",
+    test: "tests/tool-args-summary.test.ts",
+    desc: "只截非串值不截长字符串 ⇒ 一条长参数整段进那一行 DOM，「摘要」变成「全文」",
+    apply: (s) => s.replace('return raw === "" ? "—" : raw.slice(0, 120);', 'return raw === "" ? "—" : raw;'),
+    expectFail: "有界：三个分支各自都不超过 120 字",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
