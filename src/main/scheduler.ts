@@ -11,8 +11,9 @@
 //   AskGate 承担；超时双闸 = runTimeoutMs（到点 abort，轮界收束）+ settlesWithin（宿主不响应时的二道退出）。
 // - 完成回写：summarizeRun 纯投影摘要（零新 LLM 调用）→ automation_completed 事件（复用 report 卡类型）。
 // electron-free；tick/jitter/clock/executor 全部可注入，验收禁止真实 sleep 等触发。
-import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { writeFileAtomic } from "../atomic-write";
 import { Cron } from "croner";
 import type { AgentEvent } from "../events";
 import { createEventLog, hasEventLogHandle, invalidateEventLogHandle, replay, resolveHandle } from "../events";
@@ -79,14 +80,12 @@ export async function loadAutomationsFile(file: string): Promise<{ tasks: Automa
 
 /** 保存任务定义（原子写：tmp + rename，中断自愈；与 settings/permissions 同款）。 */
 export async function saveAutomationsFile(file: string, tasks: AutomationDefinition[]): Promise<void> {
-  await mkdir(dirname(file), { recursive: true });
   const payload: AutomationsFile = { version: 1, tasks };
-  const tmp = file + ".tmp";
+  const text = JSON.stringify(payload, null, 2);
   try {
-    await writeFile(tmp, JSON.stringify(payload, null, 2), "utf8");
-    await rename(tmp, file);
+    await writeFileAtomic(file, text);
   } catch (err) {
-    await writeFile(file, JSON.stringify(payload, null, 2), "utf8").catch(() => {}); // rename 失败退直写（不吞数据）
+    await writeFile(file, text, "utf8").catch(() => {}); // rename 失败退直写（不吞数据）
     throw err;
   }
 }
@@ -159,10 +158,7 @@ export async function compactJournalIfLarge(
     const { entries } = await readJournalFile(file);
     if (entries.length <= JOURNAL_MAX_ENTRIES) return entries.length;
     const keep = entries.slice(-JOURNAL_KEEP_ENTRIES);
-    const tmp = file + ".tmp-" + String(process.pid) + "-" + String(Date.now());
-    await mkdir(dirname(file), { recursive: true });
-    await writeFile(tmp, keep.map((e) => JSON.stringify(e) + "\n").join(""), "utf8");
-    await rename(tmp, file);
+    await writeFileAtomic(file, keep.map((e) => JSON.stringify(e) + "\n").join(""));
     // X2（关键）：覆盖写完成后**同链内**显式失效该 path 的常驻句柄——rename 之后缓存句柄仍指向
     // 已被覆盖掉的旧 inode，不失效则后续 appendJournalEntry 复用旧句柄，journal 写入静默丢失。
     // 与 A1 的 inode 校验同一类失效，但这里必须**显式**做（inode 校验只在 spawn 侧自然捕获）。

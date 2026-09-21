@@ -3,7 +3,7 @@
 // spawn(bandit 启用) → routing_decision{reason:"bandit"} → worker done → 后验更新且持久化。
 // 判据口径：reward 面写**等式**（β=2 / β=3，代价为 0 的两种跑各一个数），钱面单独一条比例性判据
 // ——旧写法 β≥2 / β>2 对"代价项被换成常量 0"零分辨力（2026-09-21 核出）。
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -163,4 +163,24 @@ describe("bandit 运行时接线（学习环路闭合）", () => {
     expect(big).toBeGreaterThan(small);
     expect((big - 2) / (small - 2)).toBeCloseTo(10, 1); // 用量 10 倍 ⇒ 代价项 10 倍
   }, 20_000);
+});
+
+/* 学习面的写丢在噪声里：saveBanditState 与全仓另外八处原子写各抄一份同款实现，临时名只精确到
+   「pid + 毫秒」——那次硬化（P3 / S2-11 同族）治的是跨进程固定名覆写，同进程同一毫秒的两笔算出来
+   还是同一个名字：先 rename 的把临时文件搬走，后 rename 的抛 ENOENT。而 orchestrator.rewardBandit
+   按侧信道纪律只 console.warn ⇒ 并行 worker 同毫秒收队时，这一跑的学习静默消失。
+   同形缺陷在设置面是可见的真红（panels-check B3b，8aa1e41）；这里 24 笔并发把「撞上」变成必然。 */
+describe("bandit 状态并发持久化", () => {
+  it("同一毫秒 24 笔 saveBanditState ⇒ 一笔都不许抛，盘上是完整 JSON 且不留临时文件", async () => {
+    const path = join(work, "bandit-concurrent.json");
+    const results = await Promise.allSettled(
+      Array.from({ length: 24 }, (_, i) => saveBanditState(path, newBanditState(i + 1))),
+    );
+    const thrown = results.filter((r) => r.status === "rejected");
+    expect(thrown.map((r) => String((r as PromiseRejectedResult).reason?.message ?? "")),
+      "撞名的 rename 会抛 ENOENT（学习面就此丢掉）").toEqual([]);
+    expect(Object.keys((await loadBanditState(path)).posteriors)).toEqual([]);
+    const residue = (await readdir(work)).filter((n) => n.includes(".tmp-"));
+    expect(residue, "失败的那笔必须把自己留下的临时文件清掉").toEqual([]);
+  });
 });

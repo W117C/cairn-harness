@@ -1,8 +1,9 @@
 // M1c 规则库（§11.7.3）：allow/ask/deny 三行为条目、两层存储（项目 + 全局）、
 // 命令链式拆分逐段判定（任一段 deny 全链 deny，同段最长前缀）、原子写、坏配置拒载。
 import { readFileSync } from "node:fs";
-import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readdir, rm } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
+import { writeFileAtomic } from "../atomic-write";
 import { isShellFamily } from "./risk";
 
 export type RuleBehavior = "allow" | "ask" | "deny";
@@ -94,23 +95,21 @@ export function globalPermissionsPath(appDataDir?: string): string {
   return join(base, "permissions.json");
 }
 
-const TMP_PREFIX = "permissions.json.tmp-";
-
-/** 原子写：临时文件 + rename；写前清理历史残留临时文件（写入中断自愈）。 */
+/** 原子写：临时文件 + rename；写前清理历史残留临时文件（写入中断自愈）。
+ *  临时名由目标文件名派生（见 src/atomic-write），故清理前缀同样派生——写死的名字在
+ *  传非缺省 path 时清不到自己留下的残留。 */
 export async function savePermissionRules(path: string, rules: PermissionRule[]): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
   const dir = dirname(path);
+  const prefix = basename(path) + ".tmp-";
   try {
     for (const name of await readdir(dir)) {
-      if (name.startsWith(TMP_PREFIX)) await rm(join(dir, name), { force: true });
+      if (name.startsWith(prefix)) await rm(join(dir, name), { force: true });
     }
   } catch {
     // 目录清理失败不阻塞主写入
   }
-  const tmp = join(dir, TMP_PREFIX + String(process.pid) + "-" + String(Date.now()));
   const payload: PermissionsFile = { rules };
-  await writeFile(tmp, JSON.stringify(payload, null, 2) + "\n", "utf8");
-  await rename(tmp, path); // rename 原子：目标文件要么旧内容要么新内容，永不出现半个文件
+  await writeFileAtomic(path, JSON.stringify(payload, null, 2) + "\n"); // rename 原子：目标文件要么旧内容要么新内容，永不出现半个文件
 }
 
 // ---- 命令链式拆分与最长前缀匹配（Roo 引擎语义，§11.7.3 采纳）----

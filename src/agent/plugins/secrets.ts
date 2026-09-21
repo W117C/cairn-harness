@@ -3,8 +3,9 @@
 //   绝不静默退回明文（§11.8 信任边界底线）。
 // 存储形态：加密后的字节以 base64 落在 <storePath> 的 JSON 里（密文可落盘，明文永不落盘）。
 // src/agent/** 不 import electron：Electron 侧经 installSafeStorageBackend 注入 IO（可测可换）。
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { writeFileAtomic } from "../../atomic-write";
 import type { UserConfigField } from "./manifest";
 
 /** Electron safeStorage 的最小 IO 面（注入式：headless 与测试可替换）。 */
@@ -79,17 +80,8 @@ async function readStore(p: string): Promise<Record<string, string>> {
 }
 
 async function writeStore(p: string, store: Record<string, string>): Promise<void> {
-  await mkdir(dirname(p), { recursive: true });
-  // 原子写：tmp → rename（S2-11 同族，与 provider-keys.ts / scheduler / memory store 同款）。
-  // 裸 writeFile 在写中途崩溃会截断密文存储 → 全部插件敏感值不可恢复地丢失。
-  const tmp = p + ".tmp-" + String(process.pid) + "-" + String(Date.now());
-  try {
-    await writeFile(tmp, JSON.stringify(store, null, 2) + "\n", "utf8");
-    await rename(tmp, p);
-  } catch (err) {
-    await unlink(tmp).catch(() => {});
-    throw err;
-  }
+  // 原子写：裸 writeFile 在写中途崩溃会截断密文存储 → 全部插件敏感值不可恢复地丢失。
+  await writeFileAtomic(p, JSON.stringify(store, null, 2) + "\n");
 }
 
 /** 存一个敏感值；无后端 → fail-closed 拒绝（绝不静默退回明文）。 */

@@ -1,7 +1,7 @@
 // 主进程 settings 存储（§10.7 layout.get|set + §13 设置页）：JSON 文件，原子写，加载时逐字段校验，
 // 非法值回退默认（验收：写入后重新加载得到相同布局 / 非法布局值回退默认）。electron-free，可 headless 单测。
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { readFile } from "node:fs/promises";
+import { writeFileAtomic } from "../atomic-write";
 
 // M2d：第四面板 memory（两层记忆快照 + 会话内 remember 审计投影）；M2e：第五面板 plugins（插件容器）；
 // M2f：第六面板 sidechat（辅助对话：只读旁路会话 + 提升记录投影）；
@@ -247,14 +247,6 @@ export class SettingsStore {
 
   /** 原子写（临时文件 + rename，中断自愈）。 */
   private async persist(s: AppSettings): Promise<void> {
-    await mkdir(dirname(this.filePath), { recursive: true });
-    const tmp = this.filePath + ".tmp-" + String(process.pid) + "-" + String(Date.now()); // P3（审查）：固定名 tmp 并发覆写（S2-11 同族）
-    try {
-      await writeFile(tmp, JSON.stringify(s, null, 2), "utf8");
-      await rename(tmp, this.filePath);
-    } catch (err) {
-      await unlink(tmp).catch(() => {});
-      throw err;
-    }
+    await writeFileAtomic(this.filePath, JSON.stringify(s, null, 2));
   }
 }

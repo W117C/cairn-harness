@@ -3,8 +3,8 @@
 // 复用 src/agent/plugins/secrets.ts 的 fail-closed 纪律：safeStorage 不可用 → **拒绝保存** +
 // 显式错误，绝不静默退回明文。Electron main 侧经 installProviderKeyBackend 注入 IO（headless/测试可换）。
 // 应用启动时解密注入 provider 配置（process.env.M0_API_KEY，进程内；env 已在 = 优先，零行为）。
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { readFile } from "node:fs/promises";
+import { writeFileAtomic } from "../atomic-write";
 import type { SafeStorageIo } from "../agent/plugins/secrets";
 
 export type { SafeStorageIo };
@@ -91,15 +91,7 @@ async function readStore(p: string): Promise<ProviderKeyStore> {
 }
 
 async function writeStore(p: string, store: ProviderKeyStore): Promise<void> {
-  await mkdir(dirname(p), { recursive: true });
-  const tmp = p + ".tmp-" + String(process.pid) + "-" + String(Date.now()); // P3（审查）：固定名 tmp 并发覆写（S2-11 同族，与 scheduler/memory store 同款）
-  try {
-    await writeFile(tmp, JSON.stringify(store, null, 2) + "\n", "utf8");
-    await rename(tmp, p);
-  } catch (err) {
-    await unlink(tmp).catch(() => {});
-    throw err;
-  }
+  await writeFileAtomic(p, JSON.stringify(store, null, 2) + "\n");
 }
 
 /** 严格 schema 校验（commercial-check「Provider 管理 schema」判卷面）：未知字段拒绝 / ciphertext 须 base64 /

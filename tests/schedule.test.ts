@@ -162,7 +162,9 @@ describe("M4a 双轨存储", () => {
     expect(back.tasks).toHaveLength(1);
     expect(back.tasks[0]!.name).toBe("每日报表");
     const files = await readdir(dir);
-    expect(files.some((f) => f.endsWith(".tmp"))).toBe(false);
+    // 判「任何形态的临时文件残留」而不是只判旧命名（endsWith(".tmp")）：临时名一旦换形状，
+    // 旧判据会静默变成恒真——原子写的失败分支正是靠「别把 tmp 留在盘上」露馅的。
+    expect(files.filter((f) => f.includes(".tmp"))).toEqual([]);
   });
 
   it("加载迁移容忍：坏 JSON / 坏条目跳过 + 警告", async () => {

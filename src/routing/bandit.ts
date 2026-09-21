@@ -4,8 +4,8 @@
 // 臂 = 环角色 × 档位；reward = verify 全绿 ? 1 : 0，代价按 usage 折算进 beta（用量越大越惩罚）。
 // 冷启动先验 α=β=2（不从 1/1 起步，避免前几轮方差过大的乱选）；最小探索率下限防早熟收敛。
 // 持久化 { seed, rngState, posteriors }：seed 首次生成后不变，rngState 每轮推进，重启后轨迹连续。
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { readFile } from "node:fs/promises";
+import { writeFileAtomic } from "../atomic-write";
 import type { ModelTier } from "../providers/registry";
 
 /** mulberry32 随机态（显式推进：nextRandom 原地改 a 并返回 [0,1)）。 */
@@ -158,13 +158,5 @@ export async function loadBanditState(path: string, onCorrupt?: (reason: string)
 }
 
 export async function saveBanditState(path: string, state: BanditState): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  const tmp = path + ".tmp-" + String(process.pid) + "-" + String(Date.now()); // P3（审查）：固定名 tmp 并发覆写
-  try {
-    await writeFile(tmp, JSON.stringify(state, null, 2), "utf8");
-    await rename(tmp, path);
-  } catch (err) {
-    await unlink(tmp).catch(() => {});
-    throw err;
-  }
+  await writeFileAtomic(path, JSON.stringify(state, null, 2));
 }

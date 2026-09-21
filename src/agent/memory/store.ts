@@ -5,6 +5,7 @@
 import { appendFile, mkdir, open, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { writeFileAtomic } from "../../atomic-write";
 
 // ---- 布局常量（§8.1.3 定稿文件名）----
 export const ROOT_FILES = {
@@ -173,10 +174,7 @@ export async function saveExternalRefDecision(ref: string, approved: boolean): P
       approved: approved ? [...new Set([...state.approved, ref])] : state.approved,
       declined: approved ? state.declined : [...new Set([...state.declined, ref])],
     };
-    await mkdir(globalMemoryDir(), { recursive: true });
-    const tmp = externalRefsPath() + ".tmp-" + String(process.pid) + "-" + String(Date.now());
-    await writeFile(tmp, JSON.stringify(next, null, 2), "utf8");
-    await rename(tmp, externalRefsPath());
+    await writeFileAtomic(externalRefsPath(), JSON.stringify(next, null, 2));
   });
 }
 
@@ -226,11 +224,8 @@ export async function appendRootFile(workspace: string, kind: keyof typeof ROOT_
 
 /** 整写根文件（状态型 replace：old_content 已由调用方校验精确命中）；原子写。 */
 export async function replaceRootFile(workspace: string, kind: keyof typeof ROOT_FILES, content: string): Promise<void> {
-  const path = rootFilePath(workspace, kind);
   await ensureDir(projectAgentDir(workspace));
-  const tmp = path + ".tmp";
-  await writeFile(tmp, content, "utf8");
-  await rename(tmp, path);
+  await writeFileAtomic(rootFilePath(workspace, kind), content);
 }
 
 /** DECISIONS 追加一个决策条目（追加式日志；修订 = 新条目「取代 <旧条引用>」，旧条保留）。 */
@@ -262,14 +257,8 @@ export async function writeTopic(
     checkIndexLimit(projected);
     await ensureDir(dir);
     const doc = renderTopicDoc({ type, modified: nowISO }, body);
-    const path = join(dir, topic + ".md");
-    const tmp = path + ".tmp-" + String(process.pid) + "-" + String(Date.now());
-    await writeFile(tmp, doc, "utf8");
-    await rename(tmp, path);
-    const idxPath = join(dir, MEMORY_INDEX);
-    const idxTmp = idxPath + ".tmp-" + String(process.pid) + "-" + String(Date.now());
-    await writeFile(idxTmp, projected, "utf8");
-    await rename(idxTmp, idxPath);
+    await writeFileAtomic(join(dir, topic + ".md"), doc);
+    await writeFileAtomic(join(dir, MEMORY_INDEX), projected);
     return { bytes: Buffer.byteLength(doc, "utf8") };
   });
 }
@@ -331,10 +320,7 @@ export async function deleteTopic(dir: string, topic: string): Promise<boolean> 
     }
     const cur = await readIndex(dir);
     const kept = cur.split("\n").filter((l) => l.trim().length > 0 && !l.startsWith("- " + topic + " ·"));
-    const idxPath = join(dir, MEMORY_INDEX);
-    const idxTmp = idxPath + ".tmp-" + String(process.pid) + "-" + String(Date.now());
-    await writeFile(idxTmp, kept.length > 0 ? kept.join("\n") + "\n" : "", "utf8");
-    await rename(idxTmp, idxPath);
+    await writeFileAtomic(join(dir, MEMORY_INDEX), kept.length > 0 ? kept.join("\n") + "\n" : "");
     return true;
   });
 }

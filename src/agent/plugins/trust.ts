@@ -2,8 +2,9 @@
 // hook/MCP/LSP 一律不激活；信任决议持久化（tmp+rename 原子写，仿 SettingsStore）。
 // 用户级插件免信任（用户自己装的）；散装 skill 免信任（纯 markdown，无执行面）。
 import { createHash } from "node:crypto";
-import { readFile, mkdir, rename, rm, readdir, stat, writeFile } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { readFile, rm, readdir, stat } from "node:fs/promises";
+import { basename, dirname, join, relative } from "node:path";
+import { writeFileAtomic } from "../../atomic-write";
 
 export type TrustState = "trusted" | "declined" | "pending";
 
@@ -110,18 +111,18 @@ export class TrustStore {
   }
 
   private async persist(state: TrustFile): Promise<void> {
-    await mkdir(dirname(this.file), { recursive: true });
+    // 临时名由目标文件名派生（见 src/atomic-write），清理前缀同样派生：写死的名字在
+    // trustFile 被换掉时清不到自己留下的残留。
     const dir = dirname(this.file);
+    const prefix = basename(this.file) + ".tmp-";
     try {
       for (const name of await readdir(dir)) {
-        if (name.startsWith("plugin-trust.json.tmp-")) await rm(dir + "/" + name, { force: true });
+        if (name.startsWith(prefix)) await rm(join(dir, name), { force: true });
       }
     } catch {
       /* 清理失败不阻塞主写入 */
     }
-    const tmp = dir + "/plugin-trust.json.tmp-" + String(process.pid) + "-" + String(Date.now());
-    await writeFile(tmp, JSON.stringify(state, null, 2) + "\n", "utf8");
-    await rename(tmp, this.file);
+    await writeFileAtomic(this.file, JSON.stringify(state, null, 2) + "\n");
     this.cache = state;
   }
 
