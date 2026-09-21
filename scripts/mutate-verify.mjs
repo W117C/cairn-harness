@@ -4146,6 +4146,66 @@ const MUTATIONS = [
     apply: (s) => s.replace("\"skipped\", \"cancelled\"] as const;", "\"skipped\", \"cancelled\", \"expired\"] as const;"),
     expectFail: "筛选值清单与 main 的 HISTORY_FILTERS 逐字同集",
   },
+  // ---- git 面板的评审读端（#25 补齐）：面板那一列 = 合并控制塔的列本身 ----
+  {
+    id: "merge-panel-trims-the-column-again",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-merge-review.test.ts",
+    desc: "把列重新裁成 6 字段 ⇒ 补丁 / 安全发现 / 评论又到不了界面（投影算得出来、屏幕一片空白，正是本仓最贵的那族缺陷）",
+    apply: (s) => s.replace(
+      "merge: projectMergeTower(events),",
+      "merge: projectMergeTower(events).map((c) => ({ agent_id: c.agent_id, task: c.task, status: c.status, outcome: c.outcome, verified: c.verified, spentUsd: c.spentUsd })),",
+    ),
+    expectFail: "补丁快照给的是最新那份",
+  },
+  {
+    id: "merge-panel-shows-the-overridden-patch",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-merge-review.test.ts",
+    desc: "取 diffs[0] ⇒ 评审闭环 v1→v2 里给用户看的是已被推翻的那版：审的是旧代码，改回来的却是新代码",
+    apply: (s) => s.replace("c.diffs[c.diffs.length - 1]", "c.diffs[0]"),
+    expectFail: "补丁快照给的是最新那份",
+  },
+  {
+    id: "merge-panel-lists-no-findings",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-merge-review.test.ts",
+    desc: "发现项一律截成 0 条（汇总数字还在）⇒ 用户看到「安全报告 2 项」却一条也点不到，只能自己去翻代码",
+    apply: (s) => s.replace("rep.findings.slice(0, 8).map(", "rep.findings.slice(0, 0).map("),
+    expectFail: "安全报告：汇总数、逐项 path:line 与「模型未复核」都上屏",
+  },
+  {
+    id: "merge-panel-claims-llm-reviewed",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-merge-review.test.ts",
+    desc: "复核标记不看 rep.llmReviewed 一律写「模型已复核」⇒ 把「只有规则扫过」说成「模型看过」，正是本仓最忌的把不可知记成已知",
+    apply: (s) => s.replace("(rep.llmReviewed ? '模型已复核' : '仅规则扫描（模型未复核）')", "'模型已复核'"),
+    expectFail: "安全报告：汇总数、逐项 path:line 与「模型未复核」都上屏",
+  },
+  {
+    id: "merge-panel-drops-review-comments",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-merge-review.test.ts",
+    desc: "评论不上屏 ⇒ 用户写完评审不知道有没有送达、diff_comment 事件成了只写不读的账",
+    apply: (s) => s.replace("c.comments.slice(0, 20).map(", "c.comments.slice(0, 0).map("),
+    expectFail: "行级评论投影上屏",
+  },
+  {
+    id: "merge-panel-bound-count-never-advertised",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-merge-review.test.ts",
+    desc: "截断后不说「另有 N 条」⇒ 界面把「我们只画了 8 条」演成「一共就 8 条」，有界性必须自带诚实说明",
+    apply: (s) => s.replace("String(rep.findings.length - 8)", '"0"'),
+    expectFail: "长列表有界",
+  },
+  {
+    id: "merge-empty-state-claims-panel-unwired",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-merge-review.test.ts",
+    desc: "空态退回「Git 面板尚未接入」⇒ 读端已通却告诉用户没有面板；过期留位文案是最便宜也最常见的假绿源",
+    apply: (s) => s.replace("本会话没有 write worker", "Git 面板尚未接入"),
+    expectFail: "空态文案不再谎称「面板尚未接入」",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
