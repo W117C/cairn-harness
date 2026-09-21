@@ -347,6 +347,46 @@ clean HEAD 全量 `test`（`04151de`）：**184 files / 1739 tests，182 files �
 唯二红项是 `gated-tools` / `runner-gates`，即第八程点名的**软链 worktree 假红**（规则 52），
 主树复跑同两支 4 passed。
 
+## 第十一程（09-22，`7f23ef8` + `bf25a55`）：越界这条不变量只有一面在守
+
+顺着一句话往下数——「新类型进联合后，哪些**按类型白名单取料**的面会静默少做一件事」——今天又数出两个：
+
+**① 归因面不收带正文的三型（`7f23ef8`）。** 探针实测：worker 的 `assistant_message` /
+`assistant_delta` 过了 `withAgentId` 之后 `agent_id = undefined`，于是父投影产出
+`{"role":"assistant","content":"worker 内部正文"}`——**父会话以为那句话是自己说的**；`error` 同理会以
+父会话的错误上卡。§4.4.4 明写「父上下文唯一接收物 = agent_result」，而这条不变量只在
+`projectContext` 一面实现，它的前提（子流都带归因）对正文这一族根本不成立。旧注释
+「其余事件类型本体已带」把 `agent_*` 的经验当成了整条通道的经验——这是**同一形状的第三次**
+（verify_result 漏过一次、turn_truncated 昨天漏过一次）。
+形状上没再往串条件里加三项，而是写成 `WORKER_STREAM_TYPES`：provider 那一半是
+`Record<ModelOutput["type"], true>`（给 ModelOutput 加一型而不进表 ⇒ 编译不过），
+loop 那一半是一份清单。`user_message` 刻意不进表：worker 的 `runLoop` 从不带 `userMessage` 调用。
+
+**② 摘要输入不看归因（`bf25a55`）。** `compaction.ts` 里 `agent_id` **零命中**：投影一面挡住的
+worker 内部转录，在折叠一面照单全收。而摘要会替掉被排除的旧事件并长期留存 ⇒ worker 的过程
+以「父会话做过」的形态进了父的记忆。同一根守卫顺带补了正文边界（跳过子流时先 `flushDelta`，
+否则子流两侧的两段父正文会粘成一段——父说过什么被改写）。
+
+**这两条读数都是真判据给的，不是想到的**：`tsc` 在写测试时报
+`TS2353: 'agent_id' does not exist in type 'AssistantMessageEvent'` ⇒ 归因面在**装饰一个类型声明里
+不存在的字段**（`tool_call` 有，正文型没有）。已立待办（`src/events/index.ts` 此刻在飞，改动点与
+在飞 hunk 相邻，无法只 stage 自己那一跳）。测试因此改用生产入口同一份 `withAgentId` 造样本——
+贴真相，也不靠 `as never` 把问题糊过去。
+
+**两次自伤与回读（形状值得记，不值得夸）**：
+① 一次 Edit 的 old/new 方向写反，删掉了变异表一个条目的 `expectFail` + `},` 两行——`mutate-needles-check`
+的「584 条全部产出合法源文件」这条整体校验 + 逐行读 diff 才抓出来（**表结构坏了不会只让那一条红，
+它会让后面全红或整文件语法坏**，所以体检必须跑，不能只跑新增那条）；
+② 给新断言配锚点时把前提写错了：我先声称「`Set<string>` 拼错类型名不会报错」，但那张表是
+`readonly AgentEvent["type"][]` ⇒ 拼错**会**编译错。锚点的前提不成立 ⇒ 当场撤下那根针，
+并把断言的职责改写成它真能判的两件事（不留注册表已删除的旧名 / 不许塌成空集）。
+这比留下一个"看起来有覆盖"的假锚点便宜得多——假锚点会在真缺陷来临时报告「已被守着」。
+
+**本程读数**：`worker-attribution` 8 条（+4）、`compaction` 27 条（+3）、`event-type-coverage` 6 条（+2）；
+锚点 +5、改指 2（`verify-result-out-of-attribution` / `worker-truncation-reaches-parent-untagged`，
+语义逐字不变）；5 + 2 根针分别在 clean HEAD `7f23ef8` / `bf25a55` 实测**全杀**；
+`tsc` 触及面 0 错；`agents(24) + m3c(25) + tool-choice + turn-truncated(45) + sidechat + goal-continue` 全绿。
+
 ## 待办（按优先级）
 
 1. 沉淀面：`failureDigestFromEvents`（能力 6/10）现在只看 `verify_result(ok:false)` 与
@@ -386,6 +426,17 @@ clean HEAD 全量 `test`（`04151de`）：**184 files / 1739 tests，182 files �
    判据：`normalizeStopReason` 未命中即 `unknown` ⇒ 不落事件，所以这些是**少记账**不是记错账。
 6. 三面一致闸的第二步（等前提凑齐再做）：若哪天有人把「worker 会发哪些类型」写成显式集合，
    `withAgentId` 与 `serializeConversation` 就能一起纳进 `event-type-coverage`；现在纳进来只能靠手列名单。
+   ——**第十一程已把这张显式集合落成 `WORKER_STREAM_TYPES`**，此条改成：把「loop 那一半清单」
+   也纳进编译期（例如按 `runLoop` 实际 append 的类型生成一份表），并让 `projectContext` 与摘要
+   两面都从这一张表取料，而不是各自认「有没有 agent_id」。
+7. 归因面装饰的字段**在类型上还不存在**：`AssistantMessageEvent` / `AssistantDeltaEvent`（以及
+   `ErrorEvent` 待查）声明里没有 `agent_id?`，`withAgentId` 靠 `as AgentEvent` 绕开——运行时真带、
+   类型说不能带，下游想读的人拿不到（判据只能改成经生产入口造样本）。补声明是正解；
+   前置是 `src/events/index.ts` 的在飞 hunk（D7 snapshotId）落库，改动点与它相邻、无法只 stage 自己那一跳。
+8. live 渲染层不看归因：`app.js` 的 `case 'assistant_message'` / `'assistant_delta'` 直接画父会话的 AI 泡,
+   而 workerPipeline 同时另发一条 `agent_message{kind:progress}` ⇒ 同一句上屏两次,其中一次冒充父发言。
+   `history-window.js` 的注释（第 12 行）本来就假定「子流带 agent_id 时自成单元」,只有 live 侧没做。
+   这条会动 `#eventCount` 与泡数口径，先量 `panels-check` 与渲染层契约再动。
 
 ## 复算命令
 

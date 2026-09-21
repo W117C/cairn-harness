@@ -17,6 +17,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { projectUnits } from "../src/renderer/history-window.js";
+import { WORKER_STREAM_TYPES } from "../src/agent/worker-projection";
+import type { AgentEvent } from "../src/events";
 
 const ROOT = join(import.meta.dirname, "..");
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
@@ -109,5 +111,25 @@ describe("事件类型清单三面一致", () => {
     // 吞掉 = projectUnits 一条单元都不给（只有 usage/session_meta 允许，它们显式 return）
     const dropped = known.filter((t) => projectUnits([{ type: t } as never]).length === 0);
     expect(dropped).toEqual(["usage", "session_meta"]);
+  });
+});
+
+// 归因面（WORKER_STREAM_TYPES）是 §4.4.4「子流不越界」的唯一取料表。拼错类型名这一条今天由
+// type 兜住（LOOP_ATTRIBUTION 是 readonly AgentEvent["type"][]），所以这里判的是另外两件事：
+//   ① 不许留**注册表里已不存在**的类型（改名/删型之后表里的旧名会静默失效，编译器看不出来）；
+//   ② 不许整张表塌成空集（那等于把归因面交还给手写串条件——正是今天补的那三个洞的形状）。
+describe("归因面与注册表一致", () => {
+  const known = knownTypes();
+  const attributed = [...WORKER_STREAM_TYPES];
+
+  it("归因面只列注册表里仍存在的类型，且不许塌成空集", () => {
+    expect(attributed.filter((t) => !known.includes(t))).toEqual([]);
+    expect(attributed.length).toBeGreaterThan(5); // 解析塌成空集时上一条会同时假绿
+  });
+
+  it("provider 增量五型全在归因面里（Record 穷尽性之外的 runtime 一道）", () => {
+    for (const t of ["assistant_message", "assistant_delta", "tool_call", "usage", "turn_truncated"]) {
+      expect(WORKER_STREAM_TYPES.has(t as AgentEvent["type"]), t).toBe(true);
+    }
   });
 });
