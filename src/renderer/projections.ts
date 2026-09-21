@@ -575,6 +575,55 @@ export function projectAgentPanel(events: AgentEvent[]): AgentColumn[] {
   });
 }
 
+/** worker 审批的可应答面：只有**还活着**那一列值得弹审批卡。
+ *  终态列（含 §4.4.9 崩溃恢复扫出的 failed）上的待批是历史不是动作——点了无处路由，
+ *  弹卡等于给用户一个必然失败的按钮。 */
+export interface WorkerApprovalAsk {
+  askId: string;
+  agentId: string;
+  tool: string;
+  risk: string;
+  parentEventId: number;
+}
+
+export function workerApprovalAsks(cols: AgentColumn[]): WorkerApprovalAsk[] {
+  const out: WorkerApprovalAsk[] = [];
+  for (const c of cols) {
+    if (c.pendingApproval === null) continue;
+    if (c.status !== "waiting_approval" && c.status !== "waiting_input" && c.status !== "running") continue;
+    out.push({
+      askId: c.pendingApproval.id,
+      agentId: c.agent_id,
+      tool: c.pendingApproval.tool,
+      risk: c.pendingApproval.risk,
+      parentEventId: c.parent_event_id,
+    });
+  }
+  return out;
+}
+
+/** 审批应答的 card_action 载荷（§10.3：worker 审批的唯一事件流入口；形状与 agents-check D4/D5 同源）。
+ *  scope 只从 UI 传 once——worker 档永不写 always（§11.7.6，主进程当场拒），所以审批卡对 worker 不给范围选择。 */
+export function cardActionForApproval(ask: WorkerApprovalAsk, approved: boolean): {
+  cardId: string;
+  sourceEventId: number;
+  cardType: string;
+  action: string;
+  payload: { approval_id: string };
+  scope: "once";
+  targetAgentId: string;
+} {
+  return {
+    cardId: "approval:" + ask.askId,
+    sourceEventId: Number.isInteger(ask.parentEventId) ? ask.parentEventId : 0,
+    cardType: "approval",
+    action: approved ? "approve" : "reject",
+    payload: { approval_id: ask.askId },
+    scope: "once",
+    targetAgentId: ask.agentId,
+  };
+}
+
 // ---- M4a 定时任务投影辅助（renderer 纯函数，不 import main/scheduler——避免 node:fs 进 bundle）----
 
 // ---- G10（审查 P3）：面板与卡片各写一份的公共映射，抽唯一实现防漂移 ----

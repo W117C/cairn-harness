@@ -45,6 +45,8 @@ function boot() {
     // DT-02：refreshPanels 现在顺带同步标题栏上下文（工作区名进了标题栏）。
     // 与 renderSide 同一处置——切片外的 UI 同步函数在上下文里声明为桩。
     syncTitlebar: vi.fn(),
+    // worker 审批卡同步（同一拍、另一切片）：本判据只关心面板数据，卡面由 projections 单测判。
+    syncWorkerAskCards: vi.fn(),
     toast: vi.fn(), askCard: vi.fn(), setInterval: vi.fn(), clearInterval: vi.fn(), setTimeout: vi.fn(),
     mountHistory: vi.fn(() => ({ destroy: vi.fn() })),
     // 抽屉刷新：桥接层只负责喂数据 + 请求重绘，渲染函数留在原型段

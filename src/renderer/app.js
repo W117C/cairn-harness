@@ -1,5 +1,5 @@
 import { projectUnits, mountHistory } from './history-window.js';
-import { projectPanelData, workerEvidenceLabel, workerSpentLabel, agentStatusText, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN } from './projections';
+import { projectPanelData, workerEvidenceLabel, workerSpentLabel, agentStatusText, workerApprovalAsks, cardActionForApproval, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN } from './projections';
 import { $, esc, promptInput, sessionList, streamInner, toast } from './dom.js';
 import { ICONS, RUN_GRID_HTML, runGrid } from './icons.js';
 import { highlightAllDiffs } from './diff-highlight.js';
@@ -2111,7 +2111,7 @@ render();
   /* 右栏面板的事件源：会话打开时 = 历史快照，运行中逐条追加（与流内渲染同源） */
   let panelEvents = [];
   /** 会改变面板内容的事件类型（工具与编排）；其余事件不触发重绘，避免随 token 抖动。 */
-  const PANEL_DIRTY = { tool_call: 1, tool_result: 1, agent_spawned: 1, agent_status: 1 };
+  const PANEL_DIRTY = { tool_call: 1, tool_result: 1, agent_spawned: 1, agent_status: 1, approval_requested: 1, approval_resolved: 1 };
 
   /* ---------- 真实运行目录：与 WORKSPACES 文件树演示数据严格隔离 ---------- */
   const workspaceForm = document.createElement('form');
@@ -2383,6 +2383,7 @@ render();
     panelData = projectPanelData(panelEvents, configuredWorkspace);
     renderSide();
     syncTitlebar();   // DT-02：工作区名进了标题栏，面板数据一变就跟着刷
+    syncWorkerAskCards();   // worker 审批卡与面板同一拍、同一份投影（不另起一条通知通道）
   }
   /** DT-02：标题栏上下文同步。会话名由 `h1#chatTitle` 承载（既有赋值点就地更新，零改动）；
    *  这里只补工作区名——未配置运行目录（`panelData.workspace` 为 null）时整段隐藏，
@@ -2961,9 +2962,12 @@ render();
     const argsH = askArgsHtml(p);
     pop.querySelector('#askPopArgs').hidden = !argsH;
     if (argsH) pop.querySelector('#askPopArgs').innerHTML = argsH;
+    pop.dataset.scope = 'once';   // 缺省逐字写出来，不留上一次的残留（标签写「仅本次」而发出去 always＝控件与事实两张皮）
     pop.querySelector('#askScopeLab').textContent = '仅本次';
     pop.querySelector('#askScopePop').hidden = true;
     pop.querySelector('.ask-scope-btn').setAttribute('aria-expanded', 'false');
+    /* worker 审批不给范围选择：§11.7.6「worker 永不写 always」，主进程当场拒——摆一个必然被拒的选项是假出口 */
+    pop.querySelector('.ask-scope-wrap').hidden = !!p.workerAsk;
     /* 重置入场动画：每次出新的审批都重新淡入 */
     pop.classList.remove('show');
     void pop.offsetWidth;
@@ -3002,9 +3006,50 @@ render();
     const p = askQueue.shift();
     if (!p || !pop || pop.hidden || pop.dataset.askId !== p.askId) return;
     hideAskPop();
+    if (p.workerAsk) {
+      /* worker 审批的唯一入口是 card_action 协议（§10.3）——此前渲染层零调用者，
+         于是每条 worker 审批都在 120s 超时后被 fail-closed 自动拒绝，用户全程没有应答口。
+         已决记录只在回条 ok 之后落：回条被拒却先写「已批准」＝把没做成的事记进历史。 */
+      real.askCards.delete(p.askId);
+      void api.cardAction(cardActionForApproval(p.workerAsk, approved)).then(r => {
+        if (r && r.ok === false) { toast('这条 worker 审批未被受理：' + (r.error || '未知')); return; }
+        appendAskRecord(p, approved, 'once');
+      }).catch(() => { toast('worker 审批发送失败（决议未进事件流）'); });
+      renderAskPop();
+      return;
+    }
     appendAskRecord(p, approved, pop.dataset.scope);
     void api.decide(p.askId, approved, pop.dataset.scope);
     renderAskPop();
+  }
+
+  /* worker 审批卡与子智能体页同一份事实源（panelData.agents 的 pendingApproval）：
+     不新增 IPC、不另记一套待决集合——`agent:ask` 通道按设计只服务主会话门（见 events 的 agent_id 注）。 */
+  function syncWorkerAskCards() {
+    const asks = workerApprovalAsks(panelData.agents || []);
+    const live = new Map(asks.map(a => [a.askId, a]));
+    let dropped = false;
+    for (let i = askQueue.length - 1; i >= 0; i--) {
+      const q = askQueue[i];
+      if (q.workerAsk && !live.has(q.askId)) {
+        askQueue.splice(i, 1);
+        real.askCards.delete(q.askId);
+        dropped = true;
+      }
+    }
+    for (const a of live.values()) {
+      if (real.askCards.has(a.askId)) continue;
+      askCard({
+        askId: a.askId, tool: a.tool, args: { 子智能体: a.agentId }, workerAsk: a,
+        risk: a.risk, sentAt: Date.now(),
+        reason: '子智能体 ' + a.agentId + ' 停在 ' + a.tool + ' 上等这条审批；不答会在超时后被自动拒绝（fail-closed）。',
+      });
+    }
+    const pop = document.getElementById('askPop');
+    if (dropped && pop && !pop.hidden && !askQueue.some(q => q.askId === pop.dataset.askId)) {
+      hideAskPop();
+      renderAskPop();
+    }
   }
 
   api.onAsk(p => { askCard(p); });
