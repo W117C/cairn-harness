@@ -1,7 +1,9 @@
 # 判断层校准路线：JEV 理念迁入 + ask 落盘方案
 
-状态：**方案待裁决，未开工**。第 3 节是 2026-09-20 实跑读数（当日快照，不表示当前值，复跑命令见附录）；
-第 5–7 节是本轮要做的改动与其判卷面；第 8 节是两条待用户裁决的点。
+状态：**§5 ask 落盘已实现（见 §8）；§7 四步顺序未开工**。第 3 节是 2026-09-20 实跑读数、§7 末是
+2026-09-21 的定序依据（均为当日快照，不表示当前值，复跑命令见附录）；第 5–6 节是落盘与其判卷面；
+第 7 节是落盘之后的**四步顺序**（每步带判卷读数 + 外部决策模型的接入前提）；
+第 8 节是裁决记录与落地状态。
 
 本页不受 `docs-check` 的 D-2/D-4 管（不在 `LIVE_PAGES`），但门数/测试数一律不写死——
 事实源是 `scripts/gate-manifest.ts` 与 `tests/`。
@@ -151,20 +153,92 @@ tool_result 出口上，硬挂会造出第三种形状，留位；不新建事�
    实测 `src/renderer` 无任何一处读 `auto` ⇒ 新字段应 UI 零变化，**若 UI 变了就是回归**。
 5. 新增门须登记进 `scripts/gate-manifest.ts`（清单即事实源，本页与 AGENTS.md 都不写死门数）。
 
-## 7. 落盘之后（第二阶段，另立案）
+## 7. 落盘之后：四步顺序（2026-09-21 定序）
 
-- **概率来源**：先否掉三个假选项——① `RISK_ORDER[level]/4`（手写字典换皮，真值为零，ECE 是自评）；
-  ② 模型自报 confidence（自证）；③ 线上日志频率（§3.1：正例样本结构性为 0）。
-  可行路径 = 离线人工 gold 集 + Beta-Bernoulli 分层频率后验，复用 `routing/bandit.ts` 的
-  `Posterior` / 先验 α=β=2 / 「显式 rng、逐字段可复现」纪律，父层回退做收缩。
-- **特征面**（由 §3.4 决定）：路径类（test / fixture / 源码 / 配置）、写落点在主树还是 worktree、
-  波及面（文件数·行数）、是否重写刚写过的文件、命令族首段。**不含 THREAT_TABLE 六类**（真流量 0 命中）。
-- **阈值位置**：`evaluate` 内部**一处**，入参 `harmPrior?`，缺省 `undefined` = 零行为
+原版是四条并列（概率来源 / 特征面 / 阈值位置 / 半步旁支）。并列就没有「先做哪条」的答案，
+而今天有实测能定序：**每步的判卷读数决定下一步有没有资格开工**。四步全在 harness 内，
+不含任何外部决策模型——第 4 步是「要不要引入外部提供方」的实验结论位，不是待写的代码。
+
+### 第 1 步 拆短路：让风险层真的有决策权（唯一可立即动手且能红的一步）
+
+§3.4 的头号判断：那 91 次 ask 全出自「mode 为 default 且是写向」那一条，它在 L4 风险层**之前**短路
+⇒ 今天谈「给判定配一个概率」没有落点。先把概率要作用的那一层露出来，才谈得上校准。
+
+- **动作**：只调那一支的次序（写向调用不再无条件 ask，改由 `risk` 决定走 ask 还是放行），
+  **不引入任何数值判据**——数值判据是第 3 步的事。
+- **判卷读数**：复跑附录 A，default 行的 ask 密度必须**从 92% 动起来**。仍是 92% ⇒ 这一步没生效
+  （不是「效果不好」，是压根没参与）。
+- **不许碰**（语义与原「永不豁免」清单逐字不变）：L0 三条 deny（含判卷面冻结）、L1 deny 规则、
+  L2 ask 规则、任何 critical、MCP 无注解 fail-closed。
+- **零回归面**：自主档 ask 仍 0；`auto` / `gate` 等式（`scripts/autonomy-check.ts` 的
+  `assertAuditCoverage`）一字不动；`src/renderer` 看不到任何变化（§6 第 4 条「UI 变了就是回归」继续有效）。
+- 新增分支须在 `tests/gate-audit.test.ts` 的用例表里各给一条，否则 `GATE_LAYERS` 穷尽断言红。
+
+### 第 2 步 影子攒可标语料：零新代码，只跑真会话
+
+writer 已在（§8：`gate.layer` + `verdict` 进 `tool_result`）。这一步同时读两件事——量、以及**成不成格**：
+
+- **读数 A（量）**：可标条数 = 带 `layer` 且 `verdict ∈ {approved, rejected, denied}` 的 `tool_result`
+  计数。**≥300 条才有资格进第 3 步**；正例（人拒）< 30 条 ⇒ 只报免批覆盖率、**不报 ECE**（§4 的分箱账）。
+  样本不足一律 `unmeasurable`，沿用 `tool-choice.ts` 的 `Rate{n,over,value|null}` 与
+  「分母为 0 取 null 不取 0」，不新造读数形状。
+- **读数 B（比攒够 300 条更先发生）**：先手工过 30 条正例，逐条标注它落在特征面哪一格——
+  路径类（test / fixture / 源码 / 配置）、写落点在主树还是 worktree、波及面（文件数·行数）、
+  是否重写刚写过的文件、命令族首段（由 §3.4 决定，**不含 THREAT_TABLE 六类**，真流量 0 命中）。
+  **30 条里超过 1/3 落不进任何一格 ⇒ 是特征面错**，先改特征面再谈攒量。
+
+### 第 3 步 第一个概率 = 后验频率（不花 token，也不需要任何模型）
+
+- **来源**：离线人工 gold + Beta-Bernoulli 分层频率后验，父层回退做收缩；复用 `routing/bandit.ts` 的
+  `Posterior` / 先验 α=β=2 / 「显式 rng、逐字段可复现」纪律。
+- **先否掉的三个假选项**（原文保留，别回头路）：① `RISK_ORDER[level]/4`（手写字典换皮，真值为零，
+  ECE 是自评）；② 模型自报 confidence（自证）——同型病灶已抓到一处实现在跑：
+  `security/llm-review.ts` 的 `confidence` 取被审模型自报、缺省还是硬编码值，**另案单修，不并进来**；
+  ③ 线上日志频率（§3.1：正例样本结构性为 0；第 2 步之前更是如此）。
+- **位置**：`evaluate` 内部**一处**，入参 `harmPrior?`，缺省 `undefined` = 零行为
   （与 M7 `impact` 钩子同款口径）。只在可豁免出口生效（默认档逐次、自主档 risk≥high、网络≥medium）；
-  **永不豁免**：L0 三条 deny（含判卷面冻结）、L1 deny 规则、L2 ask 规则、任何 critical、MCP 无注解 fail-closed。
   不放在调用方 ask 分支——那会把同一逻辑抄进主会话 / worker / obs_recall 三个出口（同族出口老坑）。
-  断路器 `MAX_AUTO_APPROVALS` 继续对免批计数生效。上线前先影子模式：只记账不免批。
-- 半步旁支：把 `modelRisk` 从"证据"降为"其中一票"（§1 表第一行）。
+  断路器 `MAX_AUTO_APPROVALS` 继续对免批计数生效。
+- **判卷读数**：**漏拦 = 0 的约束下取覆盖率最大的 τ** 那条曲线，外加两句可判红的边界：
+  τ=0 时免批覆盖率必须 = 0（否则阈值分支有旁路）、τ=1 时必须 = 全量可豁免出口。
+  上线前先影子模式：只记账不免批（与第 2 步同一条留痕面，不另建）。
+- 半步旁支（顺序无关，可与本步同批）：把 `modelRisk` 从「证据」降为「其中一票」（§1 表第一行）。
+
+### 第 4 步 才谈外部决策提供方（Laya 一类）：三条接入前提，任一不满足即不接
+
+① 第 2 步的 ≥300 条可标已到位；② 候选方在**第 3 步那个基线的同一面**上报影子读数并打赢它——
+读数 = 漏拦=0 约束下的免批覆盖率 + ECE，**只报 accuracy 不算**（基线本来就免费，打平即无收益）；
+③ 分发口径改判：愿意随包带推理运行时，**或**提供方在包外（远端 HTTP）——只有后者才让
+「随时接入」真的随时；torch + 421M 权重进 unsigned DMG 是分发决策，不是接口问题。
+
+**接口不预留**：第 3 步的 `harmPrior?` 就是接入点，任何提供方（后验频率 / 远端分类器 / 人工先验）
+都从这一个 number 进。`DecisionProvider` 注册表今天零使用者，为它建 = 假接缝 + 11 档
+`GATE_LAYERS` 穷尽断言重写，且会诱导给未校准的数在 `GateMeta` 开一个合法位
+（该接口今天故意不带概率：`autonomy.ts` 里 deny 分支连 `risk` 都宁可缺席，「缺字段比编一个值诚实」）。
+
+Laya 今天的分（2026-09-21 查，只作第 4 步打分时的先验，不构成永久结论）：base 检查点零样本在
+typed-decisions 上 0.362 / 0.342，**低于多数类基线 0.461**；招牌 0.766 那支是**在该 benchmark 自己的
+训练切分上微调**来的（2×T4、4–5 小时）；真语料 28/99 受管调用含非 ASCII，会路由到 multilingual 支，
+而该支**不带拟合温度**、zh-CN ECE 0.376——正是它自己警告的「高置信地错」。
+
+### 定序依据（2026-09-21 实测，当日快照；复跑见附录 A / B）
+
+- **「失败→换路」不排在前面**：285 次 `tool_call` / 16 条失败结果里，紧接着原样重调（参数一字不变）
+  **0 次**，换参数重试 7 次 ⇒ 外部提案列的头号反模式在我们真语料上发生率为 0，而 `stuck.ts` 三条阈值
+  本就是为它设的。限定：n=16 且语料是 mock 剧本驱动 ⇒ 只否「现在就造换路机器」，**不否**「真流量上再测一次」。
+  另有 17 条 `tool_call` 无配对 `tool_result`，本轮未归因（deny / 中断 / distill 二写皆可能）。
+- **多路候选 = fanout，已出数**：同一 case 三 rep，solo vs fanout 成本比 **8.3x / 13.4x / 30.0x**
+  （tokens 8.0–31x、延迟 3.3–13x），三 rep 两臂 **verify 都绿、分数都是 1**；rep3 里 fanout 的
+  worker 终态是 `failed×3`——活是主模型自己干的还照样满分。⇒ 本路线不含 candidate generator / beam search。
+- **VoI 不含**：要估 Δp=0.21（0.51→0.72，α=.05、power=.8）需双臂各 n≈80、合计 ~161 个可标任务；
+  现有可比语料 20 段会话、冻结靶面 4 个 case（`fixtures/gym/cases`）。
+- **五类 confidence 不加**（decision / state / path / execution / verification）：有 oracle 的两类
+  （`tool_result.ok`、`verify_result.ok`，退出码级真值）不需要浮点，给了是降级；
+  需要浮点的三类没有可标源——那正是第 2 步要先补的东西。
+- **外部提案里已属现状的两条**（记录以免被当新工程重做）：「Runtime 不依赖某个模型」=
+  PROVIDER_IDS 白名单 + 按 provider 路由 + bandit 从真终态回灌；「循环变状态机」=
+  `AgentStatus` 联合已是状态集（语料里出现的是 running=12 / done=9 / failed=3，`waiting_input` 的写侧在
+  orchestrator 的 stuck 支）+ 事件溯源 replay + `respawnArgsFrom` 恢复链。
 
 ## 8. 裁决记录与落地状态（ask 落盘已实现，2026-09-20）
 
@@ -197,15 +271,22 @@ tool_result 出口上，硬挂会造出第三种形状，留位；不新建事�
   留位未裁：`src/agent/memory/distill.ts` 的两类拒绝（非 remember 被白名单挡、合并审批未获批准）
   同样不带 `gate`——它们是判定但不是 `evaluate` 的判定，要不要纳入同一留痕面待裁。
 
-**仍未做**（排在落盘之后）：概率来源与标注集、阈值分支、影子模式，以及 §5.3 留位的
-`obs_recall` 与 `M1E_SAFE_MODE` 两支出口。
+**2026-09-21 追加两条裁决**（正文落在 §7 第 4 步与「定序依据」，此处只留索引，不重复内容）：
+① 外部决策模型 Laya **不接**——域外近随机、中文流量落到不带拟合温度的支、torch + 权重进包属分发决策；
+② 外部「Decision-Driven Agent Runtime」四十节**逐条对表后无新工程**——五类 confidence 与
+统一 `DecisionProvider` 接口（含"先留个接口随时接入"这一降格版）一律不做，理由与可反转条件写在 §7。
+
+**仍未做**（按 §7 的四步顺序排，不再当并列清单）：第 1 步拆短路 → 第 2 步攒可标语料 →
+第 3 步后验频率与 τ → 第 4 步才谈外部提供方。另 §5.3 留位的 `obs_recall` 与 `M1E_SAFE_MODE`
+两支出口仍未纳入留痕面。
 
 ---
 
-## 附录：复跑方法
+## 附录 A：反事实回放（§3.2 / §3.3；也是 §7 第 1 步的 ask 密度读数）
 
 回放脚本以内联 heredoc 执行，**未入库**（若要成为常态读数，需登记进 `scripts/gate-manifest.ts`）。
-下面这段可直接粘贴复跑，产出 §3.2 的两档 ask 与 §3.3 的 risk 分布：
+下面这段可直接粘贴复跑，产出 §3.2 的两档 ask 与 §3.3 的 risk 分布；
+第 1 步落地后**同一条命令**再跑一次，看 default 行是否仍 92%：
 
 ```sh
 node --import tsx -e "$(cat <<'TS'
@@ -244,5 +325,56 @@ TS
 语料清点与 `approval_requested` / `tool_result.auto` 计数（§3.1）用同样的 walk + 逐行 `JSON.parse`，
 按 `e.type` 分桶即可。
 
+## 附录 B：定序依据的读数（§7 末「2026-09-21 实测」）
+
+一条命令出全部四项（受管量、非 ASCII 占比、失败数、失败→重用的两种计数）。
+2026-09-21 实跑输出：`会话文件=20 tool_call=285 受管=99 受管含非ASCII=28` /
+`失败结果=16 无配对result=17 失败后仍调同一工具=7 其中参数一字不变=0`。
+
+```sh
+node --import tsx -e "$(cat <<'TS'
+import fs from 'node:fs';
+const files = [];
+const walk = (d, k) => { if (k > 4) return; let es;
+  try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+  for (const e of es) { const p = d + '/' + e.name;
+    if (e.isDirectory()) walk(p, k + 1); else if (e.name.endsWith('.jsonl')) files.push(p); } };
+for (const r of ['outputs', process.env.HOME + '/Library/Application Support/m0-agent-loop/sessions']) walk(r, 0);
+let calls = 0, gated = 0, fails = 0, noRes = 0, retryName = 0, retryArgs = 0, nonAscii = 0;
+const G = new Set(['write_file', 'edit_file', 'run_shell', 'shell_rw', 'shell_ro']);
+for (const f of files) {
+  const ev = [];
+  for (const l of fs.readFileSync(f, 'utf8').split('\n')) { if (!l.trim()) continue;
+    try { ev.push(JSON.parse(l)); } catch { /* 脏行跳过 */ } }
+  const ok = new Map();
+  for (const e of ev) if (e.type === 'tool_result') ok.set(e.callId, e.ok === true);
+  const tc = ev.filter(e => e.type === 'tool_call');
+  for (let i = 0; i < tc.length; i++) {
+    const c = tc[i]; calls++;
+    if (G.has(c.name) || String(c.name).startsWith('mcp__')) { gated++;
+      const s = Object.values(c.args).filter(v => typeof v === 'string').join(' ');
+      if (/[^\x00-\x7F]/.test(s)) nonAscii++; }
+    if (!ok.has(c.id)) { noRes++; continue; }
+    if (ok.get(c.id)) continue;
+    fails++;
+    const n = tc[i + 1];
+    if (n && n.name === c.name) { retryName++;
+      if (JSON.stringify(n.args) === JSON.stringify(c.args)) retryArgs++; }
+  }
+}
+console.log('会话文件=' + files.length, 'tool_call=' + calls, '受管=' + gated, '受管含非ASCII=' + nonAscii);
+console.log('失败结果=' + fails, '无配对result=' + noRes, '失败后仍调同一工具=' + retryName, '其中参数一字不变=' + retryArgs);
+TS
+)"
+```
+
+**join 键是唯一容易踩错的地方**：`tool_call` 的字段叫 `id`，`tool_result` 的字段叫 `callId`。
+fanout 三 rep 的比值不用脚本——直接读 `outputs/ga-strategy-2026-09-20{,-rep2,-rep3}/report.md`
+表里 solo 与 fanout 两行的 `$` 列相除。
+
 自纠备案：本页首版把 `tool_call` 总数人工相加误报为 306，实跑为 **285**，正文已统一；
 复跑命令输出的 `受管=99` 即该 285 的子集。
+第二条（2026-09-21，附录 B 的来历）：首次量「失败→重试」时把 `tool_call` 也按 `callId` 查，
+`Map.has(undefined)` 恒 false ⇒ 打出 **失败=0 / 原样重试=0** 的一片零**假读数**，差点据此把
+「换路机器没测量收益」写成更强的一句。按 `id ↔ callId` 修正后失败是 16。
+⇒ 读数出现整片 0 时先怀疑 join 键，再下结论（同 §3.1「ask 密度读不出来」是同一个形状）。
