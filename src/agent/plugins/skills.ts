@@ -105,12 +105,15 @@ export interface RoutingListResult {
   truncated: boolean;
 }
 
-/** 渐进披露路由清单：可模型触发的 skill 的 name + description(+when_to_use)；超 1536 字符截断。 */
-export function buildSkillRoutingList(skills: RoutingSkillInput[]): RoutingListResult {
-  const lines = skills.filter(modelInvocable).map(skillRoutingLine);
+/** 渐进披露路由清单：可模型触发的 skill 的 name + description(+when_to_use)；超 1536 字符截断。
+ *  `extraLines` = 同样「模型按名调用」但来源不是 skill 的条目（插件 agent 角色名，§4.4.7 的
+ *  `stages[].role`）。它们共用**同一份预算与同一套截断规则**：另起一段清单就是两套口径，
+ *  而「被截掉的那一条恰好是模型唯一需要知道的」正是最难查的那种静默失效。 */
+export function buildSkillRoutingList(skills: RoutingSkillInput[], extraLines: readonly string[] = []): RoutingListResult {
+  const lines = [...skills.filter(modelInvocable).map(skillRoutingLine), ...extraLines];
   const text = lines.join("\n");
   if (text.length <= SKILL_ROUTING_CHAR_LIMIT) return { text, truncated: false };
-  const marker = "\n[skill 清单超 " + String(SKILL_ROUTING_CHAR_LIMIT) + " 字符，已截断]";
+  const marker = "\n[清单超 " + String(SKILL_ROUTING_CHAR_LIMIT) + " 字符，已截断]";
   const budget = SKILL_ROUTING_CHAR_LIMIT - marker.length;
   let cut = text.slice(0, budget);
   const lastLineEnd = cut.lastIndexOf("\n");

@@ -106,6 +106,13 @@ export interface ResolvedPluginRole {
 
 /** CC 安全约束（§9.6 照抄）：插件 agent 不支持 hooks / mcpServers / permissionMode → 忽略 + 警告。 */
 const PLUGIN_UNSUPPORTED_KEYS = ["hooks", "mcpServers", "permissionMode"] as const;
+/** §9.6 里 CC 有、我们**执行端还没有面**的字段。不是安全问题，是「采纳未落地」——
+ *  同样必须警告：装载收下、执行端不读而不吭声，就是把假承诺写进用户的配置文件里。 */
+const PLUGIN_UNIMPLEMENTED_KEYS = ["effort", "skills", "memory", "background"] as const;
+/** 执行端真读的键。`name` / `description` 不在本函数里吃：前者由 discover 注册、
+ *  后者进 `routingList` 给模型看（清单是 description 唯一的读者）。 */
+export const PLUGIN_ROLE_CONSUMED_KEYS =
+  ["name", "description", "isolation", "tools", "disallowedTools", "maxTurns", "model"] as const;
 
 /** 插件角色 frontmatter → stage 运行参数（纯函数；未知字段忽略不阻断）。 */
 export function resolvePluginRole(def: PluginAgentRoleDef): ResolvedPluginRole {
@@ -114,6 +121,19 @@ export function resolvePluginRole(def: PluginAgentRoleDef): ResolvedPluginRole {
   for (const key of PLUGIN_UNSUPPORTED_KEYS) {
     if (fm[key] !== undefined) {
       warnings.push("插件 agent frontmatter." + key + " 不支持（CC 安全约束照抄 §9.6），已忽略");
+    }
+  }
+  for (const key of PLUGIN_UNIMPLEMENTED_KEYS) {
+    if (fm[key] !== undefined) {
+      warnings.push("插件 agent frontmatter." + key + " 执行端还没有读它的地方（§9.6 采纳未落地），已忽略");
+    }
+  }
+  // 未知键也吭一声：`disallowed_tools` 这种下划线笔误，若不吭声就是「申报了工具面、
+  // 实际按默认面跑」——权限面静默变宽，比少一个字段严重得多。
+  const known = new Set<string>([...PLUGIN_ROLE_CONSUMED_KEYS, ...PLUGIN_UNSUPPORTED_KEYS, ...PLUGIN_UNIMPLEMENTED_KEYS]);
+  for (const key of Object.keys(fm)) {
+    if (!known.has(key)) {
+      warnings.push("插件 agent frontmatter." + key + " 不认识，已忽略（合法键：" + PLUGIN_ROLE_CONSUMED_KEYS.join("/") + "）");
     }
   }
   const isolation = typeof fm.isolation === "string" ? fm.isolation : "";

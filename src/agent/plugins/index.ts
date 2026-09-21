@@ -374,9 +374,16 @@ export class PluginRuntime {
     return { name: hit.name, body: hit.body, frontmatter: hit.frontmatter };
   }
 
-  /** 渐进披露路由清单（1536 截断）。 */
+  /** 渐进披露路由清单（1536 截断）。
+   *  插件 agent 角色一并列进去：`pipeline.stages[].role` 认的就是这个 invoke 名，而模型此前
+   *  **没有任何地方**能读到注册了哪些角色（skill 有清单，角色没有）——于是"自定义子智能体"
+   *  只能靠猜，猜错的唯一反馈是 spawn 被拒（未知角色）。同一条清单、同一份预算。 */
   routingList(): RoutingListResult {
-    return buildSkillRoutingList(this.skills());
+    const roleLines = this.agentRoles().map((a) => {
+      const desc = a.description.replace(/\s+/g, " ").trim();
+      return "- " + a.invoke + " — " + (desc !== "" ? desc : "（该 agent 文件没写 description）") + "（可用作 pipeline stages[].role）";
+    });
+    return buildSkillRoutingList(this.skills(), roleLines);
   }
 
   /** §9.3 替换器的取值面（skill 与 prompt command 共用一份）：目录类变量按条目自己的路径与

@@ -2661,7 +2661,7 @@ const MUTATIONS = [
     src: "src/agent/plugins/skills.ts",
     test: "tests/skill-invocation-faces.test.ts",
     desc: "清单不做过滤 ⇒ 声明了「只能用户触发」的 skill 仍每轮占用模型上下文并诱导自动触发（白付 token + 违背插件作者意愿）",
-    apply: (s) => s.replace("  const lines = skills.filter(modelInvocable).map(skillRoutingLine);", "  const lines = skills.map(skillRoutingLine);"),
+    apply: (s) => s.replace("  const lines = [...skills.filter(modelInvocable).map(skillRoutingLine), ...extraLines];", "  const lines = [...skills.map(skillRoutingLine), ...extraLines];"),
     expectFail: "disable-model-invocation 的 skill 不进清单；不声明的照常进（布尔与字符串两种写法同效）",
   },
   {
@@ -4982,6 +4982,31 @@ const MUTATIONS = [
     desc: "就地改事件本体 ⇒ worker 内存态（provider 投影与报告回读用）被脱敏文本污染，模型看到的和自己写的不是同一份",
     apply: (s) => s.replace("const copy = { ...(e as unknown as Record<string, unknown>) };", "const copy = e as unknown as Record<string, unknown>;"),
     expectFail: "不改动传入的原对象",
+  },
+  // ---- 自定义子智能体的发现面与如实报错（sequencer + plugins，2026-09-22）----
+  {
+    id: "role-unimplemented-keys-silent",
+    src: "src/agent/sequencer.ts",
+    test: "tests/plugin-role-discoverability.test.ts",
+    desc: "§9.6 采纳未落地的字段（effort/skills/memory/background）不吭声 ⇒ 用户以为配上了，执行端从没读过",
+    apply: (s) => s.replace('  for (const key of PLUGIN_UNIMPLEMENTED_KEYS) {\n    if (fm[key] !== undefined) {\n      warnings.push("插件 agent frontmatter." + key + " 执行端还没有读它的地方（§9.6 采纳未落地），已忽略");\n    }\n  }\n', ""),
+    expectFail: "CC 有、执行端没有面的字段：警告说清「采纳未落地」",
+  },
+  {
+    id: "role-unknown-key-silent",
+    src: "src/agent/sequencer.ts",
+    test: "tests/plugin-role-discoverability.test.ts",
+    desc: "笔误键静默吃掉 ⇒ disallowed_tools 写成下划线就等于「申报了剔除面、实际按默认面跑」，工具面静默变宽",
+    apply: (s) => s.replace('    if (!known.has(key)) {\n      warnings.push("插件 agent frontmatter." + key + " 不认识，已忽略（合法键：" + PLUGIN_ROLE_CONSUMED_KEYS.join("/") + "）");\n    }', "    if (!known.has(key)) { /* 沉默 */ }"),
+    expectFail: "笔误键必须点名合法键集",
+  },
+  {
+    id: "routing-list-hides-plugin-roles",
+    src: "src/agent/plugins/index.ts",
+    test: "tests/plugin-role-discoverability.test.ts",
+    desc: "清单不收角色 ⇒ stages[].role 能吃的名字没有任何地方可见，「自定义子智能体」退化成猜谜，唯一反馈是 spawn 被拒",
+    apply: (s) => s.replace("return buildSkillRoutingList(this.skills(), roleLines);", "return buildSkillRoutingList(this.skills());"),
+    expectFail: "受信的 plugin:agent 进清单，且写明这是 stages[].role 能吃的名字",
   },
 ];
 
