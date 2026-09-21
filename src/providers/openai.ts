@@ -255,6 +255,14 @@ export async function* streamOpenAI(
       }
     }
 
+    // 流正常收尾，但 finish_reason 说这一轮没说完（length＝输出预算到点 / content_filter＝被拦）。
+    // 上面 C7 那条守的是「半帧被截断」，这里守的是「帧到齐、篇幅没给够」——同一句注释点名的
+    // 危害（loop 无从得知），另一支一直没管。
+    // **位置在 tool_call 冲刷之前**：被截断的 write_file 参数会让 parseArgs 抛（同文件既有口径 =
+    // 协议级异常 fail loud），排在其后这条记录就永远发不出去——而那恰好是最常见的截断形状。
+    const truncated = turnTruncatedEvent(callId, finishReason, usage?.outputTokens ?? null);
+    if (truncated) yield truncated;
+
     // 流结束：吐出累积完成的 tool_call（按 index 稳定排序），再吐 usage
     const ordered = [...pending.entries()].sort((a, b) => a[0] - b[0]);
     for (const [index, acc] of ordered) {
@@ -266,11 +274,6 @@ export async function* streamOpenAI(
       };
     }
     if (usage) yield usage;
-    // 流正常收尾，但 finish_reason 说这一轮没说完（length＝输出预算到点 / content_filter＝被拦）。
-    // 上面 C7 那条守的是「半帧被截断」，这里守的是「帧到齐、篇幅没给够」——同一句注释点名的
-    // 危害（loop 无从得知），另一支一直没管。
-    const truncated = turnTruncatedEvent(callId, finishReason, usage?.outputTokens ?? null);
-    if (truncated) yield truncated;
     meterOutcome = "ok";
   } finally {
     guard?.dispose();

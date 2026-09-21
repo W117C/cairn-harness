@@ -234,8 +234,9 @@ export async function* streamAnthropic(
         if (event.usage?.input_tokens !== undefined) inputTokens = event.usage.input_tokens;
         if (event.usage?.cache_read_input_tokens !== undefined) cacheRead = event.usage.cache_read_input_tokens;
         if (event.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.usage.cache_creation_input_tokens;
-        // stop_reason 与 usage 同帧到达：这一帧没带就不覆盖（保住先前那帧的读数）
-        if (event.delta?.stop_reason !== undefined) stopReason = event.delta.stop_reason;
+        // stop_reason 与 usage 同帧到达。只认真字符串：后续帧可能带 stop_reason:null，
+        // 用 !== undefined 会让那个 null 把已经拿到的 max_tokens 抹掉（openai/gemini 侧同用真值判断）。
+        if (typeof event.delta?.stop_reason === "string") stopReason = event.delta.stop_reason;
         return;
       }
       case "message_stop":

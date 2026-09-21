@@ -45,7 +45,10 @@ export function chainTable(chain: PipelineChain): string {
  *  verify_result 是 2026-09-20 补进来的：W4a 让 worker 也跑自动验证之后，缺了归因就等于
  *  「worker 验过」冒充「父会话验过」——上下文红回流、父验证计量、假完成率三处都按这条判子流。 */
 export function withAgentId(e: AgentEvent, agentId: string): AgentEvent {
-  if (e.type === "tool_call" || e.type === "tool_result" || e.type === "usage" || e.type === "verify_result") {
+  // turn_truncated 必须在列：provider 发这条事件时不知道自己在 worker 里，不加进来
+  // 子流的截断就会以「主会话上一轮没说完」的形态落进父转录（context/goal 都会读错主体）。
+  // 保持单行：既有锚点 verify-result-out-of-attribution 的针脚按这一行的前缀匹配，折行会把它抹掉。
+  if (e.type === "tool_call" || e.type === "tool_result" || e.type === "usage" || e.type === "verify_result" || e.type === "turn_truncated") {
     return { ...e, agent_id: agentId } as AgentEvent;
   }
   return e;

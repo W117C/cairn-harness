@@ -70,13 +70,25 @@ export function turnTruncatedEvent(
 ): TurnTruncatedEvent | null {
   const outcome = truncationOf(raw);
   if (outcome === null || typeof raw !== "string") return null;
+  // 第二支运行时是冗余的（truncationOf 已证明过），但 TS 不能穿过返回值收窄 raw，
+  // 去掉它下面 raw.trim() 就不过编译——留着，别当重复守卫删。
+  const tokens = asTokenCount(outputTokens);
   return {
     type: "turn_truncated",
     callId,
     outcome,
-    // 存归一后的 token，不存线上原文：查表只保证 trim 后的值在表内，原文本身可以带任意空白。
-    // 这条事件是**模型可见文本**（投影会读它），不剪就等于把外界文本长度交给网关心情。
+    // 存 trim 后的原文，不存未 trim 的线上值：查表只保证 trim+小写后的值在表内，
+    // 原文可以带任意空白。大小写**故意保留**——max_tokens 与 MAX_TOKENS 是两家的不同观测。
+    // 这条事件是模型可见文本（投影与摘要输入都会读它），不剪就等于把长度交给网关心情。
     stop_reason: raw.trim(),
-    ...(outputTokens !== null && outputTokens !== undefined ? { output_tokens: outputTokens } : {}),
+    ...(tokens !== null ? { output_tokens: tokens } : {}),
   };
+}
+
+/** 线上 JSON 的数字字段没有编译期保证：`?? 0` 会把字符串原样放过（gemini 那行的 `+` 于是变拼接）。
+ *  这个数会被拼进摘要输入的**散文行**（compaction.serializeConversation），非有限值等于让上游
+ *  往滚动摘要里塞任意文本 ⇒ 宁可缺字段，也不存一个不能当数用的值。 */
+function asTokenCount(v: number | null | undefined): number | null {
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 0) return null;
+  return Math.floor(v);
 }

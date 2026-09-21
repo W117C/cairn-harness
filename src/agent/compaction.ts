@@ -415,8 +415,8 @@ export function serializeConversation(
       // 只落事实不落劝告：摘要规范明写「不要提及压缩过程本身」，行内塞指令会与它打架。
       lines.push(
         "[Assistant 回复被截断] " +
-          (e.outcome === "output_budget" ? "没写完就被收走（篇幅用尽" : "被内容策略中止（") +
-          "，停止原因 " + e.stop_reason +
+          (e.outcome === "output_budget" ? "没写完就被收走（篇幅用尽，停止原因 " : "被内容策略中止（停止原因 ") +
+          e.stop_reason +
           (e.output_tokens !== undefined ? "，已用 " + String(e.output_tokens) + " 输出 token" : "") +
           "）",
       );

@@ -10,9 +10,10 @@ import { describe, expect, it } from "vitest";
 import { replay } from "../src/events";
 import { createEventLog } from "../src/events";
 import { normalizeStopReason, truncationOf, turnTruncatedEvent } from "../src/providers/stop-reason";
-import { projectContext, truncationNote } from "../src/agent/context";
+import { projectContext } from "../src/agent/context";
 import { serializeConversation } from "../src/agent/compaction";
 import { goalStopDecision, lastTurnWasTruncated, projectGoal } from "../src/agent/goal";
+import { withAgentId } from "../src/agent/worker-projection";
 import { runLoop } from "../src/agent/loop";
 import { createMockProvider } from "../src/providers/mock";
 import { createGlmSessionProvider } from "../src/agent/glm-session";
@@ -231,11 +232,10 @@ describe("落盘与投影", () => {
     ]);
     expect(msgs.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
     expect(msgs[1]?.content).toBe("flush 的关键是");
-    expect(msgs[2]?.content).toBe(truncationNote({
-      type: "turn_truncated", callId: "m1", outcome: "output_budget", stop_reason: "max_tokens", output_tokens: 4096,
-    }));
+    // 断言字面文案，不是「和 truncationNote 自己的输出比」——后者拿被断言物当数据源，永不可能红。
+    expect(String(msgs[2]?.content)).toContain("[harness] 上一条助手回复没说完就被截断");
     expect(String(msgs[2]?.content)).toContain("max_tokens");
-    expect(String(msgs[2]?.content)).toContain("[harness]");
+    expect(String(msgs[2]?.content)).toContain("那不是完整结论");
   });
 
   it("正常收尾的转录：projectContext 逐字节不变（零回归）", () => {
@@ -502,5 +502,80 @@ describe("goal 续跑判据", () => {
     // worker 子流的截断不替父目标表态（§4.4.4：父只收 agent_result）
     expect(lastTurnWasTruncated([{ ...truncAt, agent_id: "worker-1" }])).toBe(false);
     expect(lastTurnWasTruncated([])).toBe(false);
+  });
+});
+
+// 四份评审（TS/安全/简化/harness）跑出来的真缺陷，逐条落成测例。
+// 共同形状：新事件类型进了一条**类型白名单**但没人加它 —— 与本仓「装载收下、执行端不读」同族。
+describe("评审修的五处", () => {
+  it("worker 子流的截断会被装饰 agent_id（否则它以「主会话上一轮没说完」落进父转录）", () => {
+    const tagged = withAgentId(
+      { type: "turn_truncated", callId: "w1", outcome: "output_budget", stop_reason: "max_tokens" }, "worker-9",
+    );
+    expect(tagged.type).toBe("turn_truncated");
+    expect((tagged as { agent_id?: string }).agent_id).toBe("worker-9");
+    // 装饰完就必须被父上下文滤掉——两头都要有，缺一头就是「零件齐了两头断」
+    const msgs = projectContext([
+      { type: "user_message", content: "q" },
+      tagged as AgentEvent,
+    ]);
+    expect(msgs.filter((m) => String(m.content ?? "").includes("[harness]"))).toEqual([]);
+  });
+
+  it("openai：参数解析抛错之前，截断记录已经出去（最常见的截断就是砍在 write_file 参数上）", async () => {
+    const got: ModelOutput[] = [];
+    let threw = false;
+    try {
+      for await (const e of streamOpenAI(USER, {
+        apiKey: "test", fetchImpl: stubFetch([
+          'data: {"id":"c1","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call-0","function":{"name":"write_file","arguments":"{\\"path\\":\\"a.ts\\",\\"content\\":\\"不完整"}}]},"finish_reason":null}]}',
+          'data: {"id":"c1","choices":[{"index":0,"delta":{},"finish_reason":"length"}],"usage":{"prompt_tokens":9,"completion_tokens":4096}}',
+          "data: [DONE]",
+        ]),
+      })) got.push(e);
+    } catch {
+      threw = true;
+    }
+    expect(threw, "半截 JSON 参数仍须 fail loud（既有口径，不为了记账而放宽）").toBe(true);
+    expect(truncatedOf(got).length, "但抛之前这条截断记录必须已经产出").toBe(1);
+    expect(truncatedOf(got)[0]).toMatchObject({ outcome: "output_budget", stop_reason: "length" });
+  });
+
+  it("anthropic：后到的 stop_reason:null 帧不得抹掉已拿到的 max_tokens", async () => {
+    const out = await collect(streamAnthropic(USER, {
+      apiKey: "test", fetchImpl: stubFetch([
+        'data: {"type":"message_start","message":{"id":"msg_c","usage":{"input_tokens":3,"output_tokens":1}}}',
+        'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"半句"}}',
+        'data: {"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":4096}}',
+        'data: {"type":"message_delta","delta":{"stop_reason":null}}',
+        'data: {"type":"message_stop"}',
+      ]),
+    }));
+    expect(truncatedOf(out).length).toBe(1);
+    expect(truncatedOf(out)[0]).toMatchObject({ stop_reason: "max_tokens" });
+  });
+
+  it("output_tokens 只收有限非负数：字符串/NaN/Infinity 一律落缺席，不进散文行", () => {
+    const weird = ["7", Number.NaN, Number.POSITIVE_INFINITY, -5] as unknown as (number | null)[];
+    for (const v of weird) {
+      expect(turnTruncatedEvent("c", "max_tokens", v)?.output_tokens, JSON.stringify(v)).toBeUndefined();
+      expect("output_tokens" in (turnTruncatedEvent("c", "max_tokens", v) ?? {}), JSON.stringify(v)).toBe(false);
+    }
+    expect(turnTruncatedEvent("c", "max_tokens", 4096.9)?.output_tokens).toBe(4096); // 取整，不存小数
+    expect(turnTruncatedEvent("c", "max_tokens", 0)?.output_tokens).toBe(0); // 0 仍是有效读数
+  });
+
+  it("摘要行两种原因各自成句（不出现「中止（，停止原因」这种半截括号）", () => {
+    const blocked = serializeConversation([
+      { type: "assistant_message", content: "这段被" },
+      { type: "turn_truncated", callId: "m2", outcome: "content_blocked", stop_reason: "refusal" },
+    ], 2000);
+    expect(blocked).toContain("被内容策略中止（停止原因 refusal）");
+    const budget = serializeConversation([
+      { type: "assistant_message", content: "这段没" },
+      { type: "turn_truncated", callId: "m1", outcome: "output_budget", stop_reason: "max_tokens", output_tokens: 4096 },
+    ], 2000);
+    expect(budget).toContain("没写完就被收走（篇幅用尽，停止原因 max_tokens，已用 4096 输出 token）");
+    expect(budget.split("\n").filter((l) => l.includes("被截断")).length).toBe(1);
   });
 });

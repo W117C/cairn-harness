@@ -3035,6 +3035,8 @@ render();
     card_action: '卡片操作', diff_comment: 'diff 评论',
     automation_triggered: '定时任务触发', automation_skipped: '定时任务跳过', automation_completed: '定时任务完成',
     goal_set: '设定长任务目标', goal_stopped: '长任务目标已停',
+    // 不收这一条，卡片标题会退回原始类型名 turn_truncated（英文 token 上屏 = 界面在说谎）
+    turn_truncated: '助手输出被截断',
   };
   function eventLabel(e) {
     const base = EVENT_LABELS[e.type] || String(e.type);
