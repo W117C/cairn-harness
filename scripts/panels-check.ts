@@ -1516,7 +1516,7 @@ async function phaseElectron(root: string): Promise<void> {
  *  为什么判跨进程而不是页内 reload：`onboarded` 是主进程写的 settings.json，SIGKILL 也带不走它
  *  （476 行那条 localStorage 教训——跨进程判据必须落在盘上，不然测的是"没杀干净"）。 */
 async function phaseOnboarding(): Promise<void> {
-  console.log("[panels-check] B21 §13 新手引导：首启必弹 → 「稍后再说」不算确认 → 完成后重开不再弹");
+  console.log("[panels-check] B21 §13 新手引导：必弹 + 焦点圈 → 鼠标关 / 键盘关 / 点完成 / 重开不再弹（四次真启动）");
   const root = await mkdtemp(join(tmpdir(), "m1e-onboard-"));
   const sessions = join(root, "sessions");
   const settingsPath = join(root, "settings.json");
@@ -1549,6 +1549,16 @@ async function phaseOnboarding(): Promise<void> {
   const awaitHidden = (cdp: Cdp) => settle(async () => { const s = await state(cdp); return s.shown ? null : s; }, 10_000);
   const click = (cdp: Cdp, sel: string) =>
     cdp.eval<string>(`(() => { const n = document.querySelector(${JSON.stringify(sel)}); if (!n) return "no-node"; n.click(); return "clicked"; })()`);
+  /** 真按键（CDP 走浏览器输入通道，不是 new KeyboardEvent 自派发）：焦点圈与 Escape 只有 trusted 事件才判得动。 */
+  const press = async (cdp: Cdp, key: "Escape" | "Tab", shift = false): Promise<void> => {
+    const vk = key === "Escape" ? 27 : 9;
+    for (const type of ["keyDown", "keyUp"] as const) {
+      await cdp.send("Input.dispatchKeyEvent", {
+        type, key, code: key, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk,
+        ...(shift ? { modifiers: 8 } : {}),
+      });
+    }
+  };
 
   // ① 全新安装：必弹，且七组是从主进程那张表来的（界面里一个字都没写死）
   const a = await launch();
@@ -1559,6 +1569,14 @@ async function phaseOnboarding(): Promise<void> {
     ok((s1?.steps ?? []).join("|") === "第 1 步|第 2 步|第 3 步|第 4 步",
       "B21 步号由投影算出（步数与归属只有一份事实源；实测 " + JSON.stringify(s1?.steps ?? []) + "）");
     ok((s1?.first ?? "").includes("Provider"), "B21 第一组是 provider 那一条（顺序也没在界面里重排；实测 " + JSON.stringify(s1?.first ?? "") + "）");
+    /* 焦点圈：「完成引导」是最后一个可聚焦项，Tab 一次必须绕回第一个（稍后再说）。
+       背景虽被 pointer-events 挡住，键盘不会自己停——这条判的是 trusted 按键，不是自派发的 KeyboardEvent。 */
+    await press(a.cdp, "Tab");
+    const wrapped = await a.cdp.eval<string>(
+      `(() => { const o = document.querySelector('#onboardOverlay'); const n = document.activeElement;
+         return !o || !o.contains(n) ? "outside:" + String(n ? (n.id || n.className || n.tagName) : "null") : String(n.id || ""); })()`,
+    );
+    ok(wrapped === "onbLater", "B21 Tab 圈在浮层内（焦点从末位绕回首位；实测 activeElement=" + JSON.stringify(wrapped) + "）");
     // ② 「稍后再说」只关窗，不写确认位
     ok(await click(a.cdp, "#onbLater") === "clicked", "B21 「稍后再说」按得下去");
     const h1 = await awaitHidden(a.cdp);
@@ -1566,24 +1584,35 @@ async function phaseOnboarding(): Promise<void> {
     ok((await readDisk()).onboarded !== true, "B21 但盘上没写 onboarded——可中断不等于已确认（实测 " + JSON.stringify((await readDisk()).onboarded ?? "缺席") + "）");
     await killElectron(a.proc);
   }
-  // ③ 重开：上次没确认 ⇒ 照弹（这条是②的反面，缺它「稍后再说」就成了偷偷完成）
+  // ③ 重开：上次没确认 ⇒ 照弹（②的反面，缺它「稍后再说」就成了偷偷完成）；这次走键盘退路
   const b = await launch();
   if (b) {
     const s2 = await awaited(b.cdp);
     ok(s2 !== null, "B21 重开仍然弹（「稍后再说」没被说成完成；实测 shown=" + String(s2?.shown ?? false) + "）");
-    ok(await click(b.cdp, "#onbDone") === "clicked", "B21 「完成引导」按得下去");
+    await press(b.cdp, "Escape");
     const h2 = await awaitHidden(b.cdp);
-    ok(h2 !== null, "B21 点完成后向导收起");
-    const disk = await settle(async () => (((await readDisk()).onboarded === true) ? true : null), 8_000);
-    ok(disk === true, "B21 完成写进了盘上的 settings.json（不是只改内存；实测 " + JSON.stringify((await readDisk()).onboarded ?? "缺席") + "）");
+    ok(h2 !== null, "B21 Escape 同样收得起向导（键盘与鼠标共用那一张收起表；实测 shown=" + String(h2?.shown ?? true) + "）");
+    ok((await readDisk()).onboarded !== true, "B21 键盘退路也不写确认位（关窗 ≠ 确认；实测 " + JSON.stringify((await readDisk()).onboarded ?? "缺席") + "）");
     await killElectron(b.proc);
   }
-  // ④ 再重开：不再弹（commercial-check D2c 那句「完成后不再弹」真正要的东西）
+  // ④ 第三次启动：仍然弹 ⇒ 这次点「完成引导」，确认位必须落到盘上
   const c = await launch();
   if (c) {
-    const gone = await settle(async () => ((await state(c.cdp)).shown ? null : true), 6_000);
-    ok(gone === true, "B21 完成引导后重开不再弹（跨进程，判据在盘上；实测 shown=" + String((await state(c.cdp)).shown) + "）");
+    const s3 = await awaited(c.cdp);
+    ok(s3 !== null, "B21 第三次启动仍然弹（实测 shown=" + String(s3?.shown ?? false) + "）");
+    ok(await click(c.cdp, "#onbDone") === "clicked", "B21 「完成引导」按得下去");
+    const h3 = await awaitHidden(c.cdp);
+    ok(h3 !== null, "B21 点完成后向导收起");
+    const disk = await settle(async () => (((await readDisk()).onboarded === true) ? true : null), 8_000);
+    ok(disk === true, "B21 完成写进了盘上的 settings.json（不是只改内存；实测 " + JSON.stringify((await readDisk()).onboarded ?? "缺席") + "）");
     await killElectron(c.proc);
+  }
+  // ⑤ 再重开：不再弹（commercial-check D2c 那句「完成后不再弹」真正要的东西）
+  const d = await launch();
+  if (d) {
+    const gone = await settle(async () => ((await state(d.cdp)).shown ? null : true), 6_000);
+    ok(gone === true, "B21 完成引导后重开不再弹（跨进程，判据在盘上；实测 shown=" + String((await state(d.cdp)).shown) + "）");
+    await killElectron(d.proc);
   }
   await rm(root, { recursive: true, force: true }).catch(() => {});
 }

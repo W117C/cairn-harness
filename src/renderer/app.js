@@ -2060,12 +2060,41 @@ syncPermChip();
 /* 附件按钮与上传芯片走同一个选择器，只是用途不同 */
 attachBtn.addEventListener('click', () => openFileDialog('upload'));
 
-/* Escape 分层收起：模态弹窗优先，其次芯片看板（弹窗开着时不该让看板抢走这次按键） */
+/* 模态收起表：Escape 与焦点圈都只问这张表「现在开着哪一个」。
+   原先这里写死 riskScrim / settingsOverlay 两支 ⇒ 第三支（§13 引导）静默没有键盘退路，
+   而鼠标路径（外点 / 按钮）照样好使——正是"只硬化一支"的形态。谁的浮层谁自己登记。 */
+const MODAL_DISMISS = [
+  { el: riskScrim, close: () => closeRisk() },
+  { el: settingsOverlay, close: () => closeSettings() },
+];
+function registerModalDismiss(el, close) {
+  if (!MODAL_DISMISS.some((m) => m.el === el)) MODAL_DISMISS.push({ el, close });
+}
+/** 数组序即优先级（risk 在最前：安全确认不该被别的浮层抢走这次按键）。 */
+const openModal = () => MODAL_DISMISS.find((m) => m.el && m.el.classList.contains('show')) ?? null;
+
+/* Escape 分层收起：模态弹窗优先（查表），其次芯片看板（弹窗开着时不该让看板抢走这次按键） */
 document.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
-  if (riskScrim.classList.contains('show')) { e.preventDefault(); closeRisk(); return; }
-  if (settingsOverlay.classList.contains('show')) { e.preventDefault(); closeSettings(); return; }
-  if (ctxPops.some(p => !p.popEl.hidden)) { e.preventDefault(); closeAllPops(true); }
+  if (e.key === 'Escape') {
+    const m = openModal();
+    if (m) { e.preventDefault(); m.close(); return; }
+    if (ctxPops.some(p => !p.popEl.hidden)) { e.preventDefault(); closeAllPops(true); }
+    return;
+  }
+  /* Tab 圈在开着的浮层里：背景虽已 pointer-events:none，键盘仍能走进底栏与会话列表。
+     一份实现管三个浮层——每个浮层各抄一份焦点圈，就是下一个浮层被漏掉的方式。 */
+  if (e.key === 'Tab') {
+    const m = openModal();
+    if (!m || !m.el) return;
+    const items = [...m.el.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+      .filter((n) => !n.disabled && n.offsetParent !== null);
+    if (items.length === 0) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (!m.el.contains(document.activeElement)) { e.preventDefault(); first.focus(); return; }
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
 });
 
 /* 看板外点击 / Escape 收起 */
@@ -2410,6 +2439,8 @@ render();
     onboardOverlay.setAttribute('aria-hidden', 'true');
     onboardOverlay.setAttribute('inert', '');
   };
+  // 自己登记进收起表：Escape 与焦点圈从此认识这个浮层（不登记就是"没有键盘退路"）
+  registerModalDismiss(onboardOverlay, () => closeOnboard());
   const onboardBootstrap = settingsReady.then(async (settings) => {
     if (!settings || settings.onboarded !== false) return; // 读失败时不猜：不弹也不假装已完成
     try {
