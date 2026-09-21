@@ -14,6 +14,9 @@ function gitHTML(merge: unknown[]) {
     esc: (s: unknown) => String(s),
     workerEvidenceLabel,
     workerSpentLabel,
+    // 面板那一列 = 合并控制塔的列本身（457fe8d 撤了中间裁剪层），故渲染时还要读 diffHtml；
+    // 本文件只判证据态与花费账，补丁正文由 tests/renderer-merge-review.test.ts 判。
+    diffHtml: (t: unknown) => '<div class="diff">' + String(t) + '</div>',
     __out: "",
   };
   const a = source.indexOf('function gitViewHTML() {');
@@ -25,7 +28,9 @@ function gitHTML(merge: unknown[]) {
 }
 
 const col = (over: Record<string, unknown>) => ({
-  agent_id: "wt-a1", task: "修排序", status: "done", outcome: "merged", verified: null, spentUsd: null, ...over,
+  agent_id: "wt-a1", task: "修排序", status: "done", outcome: "merged", verified: null, spentUsd: null,
+  worktree: ".agents/wt-a1", base_commit: "abc", branch: "agent/*-wt-a1",
+  diffs: [], report: null, comments: [], outcomeText: "", ...over,
 });
 
 it('每一列都带证据态与花费账，且证据态有机器可查的 data-ev', () => {
@@ -46,6 +51,9 @@ it('四态各说各的话：没带标记 ≠ 没有验证拍 ≠ 已过期', () 
   expect(gitHTML([col({ verified: "verified" })])).toContain('价格未知');
 });
 
-it('没有 write worker 时保持诚实空态，不编造列', () => {
-  expect(gitHTML([])).toContain('Git 面板尚未接入');
+it('没有 write worker 时保持诚实空态，不编造列（也不谎称面板没接）', () => {
+  const html = gitHTML([]);
+  expect(html).toContain('本会话没有 write worker');
+  expect(html).not.toContain('尚未接入');
+  expect(html).not.toContain('merge-col');
 });
