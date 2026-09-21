@@ -4337,6 +4337,23 @@ const MUTATIONS = [
     apply: (s) => s.replace("要改就按原任务重派一列。", "。"),
     expectFail: "合并决策已定（merged / rejected / cleaned）",
   },
+  // ---- 已知字段名单由契约导出（606fe7f）----
+  {
+    id: "manifest-field-list-forgot-notes-again",
+    src: "src/main/updater.ts",
+    test: "tests/updater.test.ts",
+    desc: "名单与 interface 分家的标准下场：notes 没进填满式 Record ⇒ 合法 manifest 被判「未知字段」整条拒收",
+    apply: (s) => s.replace("{ version: true, url: true, notes: true };", "{ version: true, url: true };"),
+    expectFail: "checkUpdate：有新版 → available",
+  },
+  {
+    id: "lsp-known-fields-forgot-diagnostics",
+    src: "src/agent/plugins/types.ts",
+    test: "tests/plugins-discover.test.ts",
+    desc: "契约导出的名单少一个键 ⇒ 插件里合法配的 diagnostics 被报成未知字段（警告面替用户撒谎）",
+    apply: (s) => s.replace("  diagnostics: true,\n", ""),
+    expectFail: ".lsp.json 字段名向 CC 对齐",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
