@@ -133,6 +133,12 @@ describe("M2e hook 装载纪律（任务 2/5）", () => {
     expect(socketW).toBeDefined();
     const unknownW = m.warnings.find((x) => x.plugin === "echo-suite" && x.message.includes("unknownLspField"));
     expect(unknownW).toBeDefined();
+    // 已知字段一个都不许被报成未知：上面那份 cfg 把契约的 8 个键用了 6 个，
+    // 名单少一个键就多出一条这种警告——只数「有未知字段警告」判不到这件事（恒绿的那类写法）。
+    const unknownWs = m.warnings.filter((x) => x.plugin === "echo-suite" && x.message.includes("未知字段"));
+    expect(unknownWs.map((x) => x.message).join(" |")).toEqual(
+      "lsp server stub-ts: 未知字段忽略（不阻断）: unknownLspField",
+    );
   });
 });
 

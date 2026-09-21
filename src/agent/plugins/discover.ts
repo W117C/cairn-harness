@@ -10,9 +10,10 @@ import { parseFrontmatter, fmString } from "./frontmatter";
 import { pluginFingerprintEx } from "./trust";
 import { parsePluginManifest, parseHooksFile, detectJsEntry, PluginLoadError } from "./manifest";
 import { parseHookIf } from "./hooks";
+import { LSP_SERVER_FIELDS } from "./types";
 import type {
   DiscoveredPlugin, LooseSkill, PluginScope, PluginsManifest, SkillEntry, PromptCommandEntry,
-  AgentRoleEntry, LoadedHookDef, HookEventName, HookMatcherDef, LspServerConfig,
+  AgentRoleEntry, LoadedHookDef, HookEventName, HookMatcherDef, LspConfigFile, LspServerConfig,
 } from "./types";
 
 async function dirExists(p: string): Promise<boolean> {
@@ -164,15 +165,16 @@ async function loadContainer(
   const lspPath = join(root, ".lsp.json");
   try {
     const raw = await readFile(lspPath, "utf8");
-    const parsed = JSON.parse(raw) as { servers?: Record<string, LspServerConfig> };
+    const parsed = JSON.parse(raw) as LspConfigFile;
     for (const [id, cfg] of Object.entries(parsed.servers ?? {})) {
       if (cfg && typeof cfg === "object" && cfg.transport === "socket") {
         warnings.push("lsp server " + id + ": transport: socket 本轮忽略（仅 stdio）");
         continue;
       }
       if (cfg && typeof cfg === "object" && typeof cfg.command === "string") {
-        const KNOWN = ["command", "args", "extensionToLanguage", "initializationOptions", "startupTimeout", "restartOnCrash", "diagnostics", "transport"];
-        const unknown = Object.keys(cfg).filter((k) => !KNOWN.includes(k));
+        // 名单取自契约本身（types 里那份 Record<keyof LspServerConfig,true>）：
+        // 过去这里手抄 8 个字符串，加字段的人只会改 interface，于是合法配置被报成「未知字段忽略」。
+        const unknown = Object.keys(cfg).filter((k) => !LSP_SERVER_FIELDS.has(k));
         if (unknown.length > 0) warnings.push("lsp server " + id + ": 未知字段忽略（不阻断）: " + unknown.join(", "));
         // §9.8 的字段里只有这几个是运行时真正兑现的；剩下的收下不兑现 = 本仓点名的"收下即丢"，
         // 所以**当场说出来**：作者以为配了重启策略，实际崩了就崩了。

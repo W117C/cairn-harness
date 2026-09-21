@@ -71,8 +71,26 @@ export interface LspServerConfig {
   transport?: string;
 }
 
+/** .lsp.json 的已知字段名单。写成「必须填满的 Record」而不是手抄字符串数组：
+ *  少一个键或多一个键都在编译期红，于是这份名单与 LspServerConfig 不可能分家。
+ *  discover 侧的「未知字段」判据用的就是它——过去那里另抄了 8 个字符串，今天恰好等价，
+ *  明天给契约加一个字段就会把合法配置报成未知（本仓点名的第二事实源）。 */
+const LSP_SERVER_FIELD_KEYS: Record<keyof LspServerConfig, true> = {
+  command: true,
+  args: true,
+  extensionToLanguage: true,
+  initializationOptions: true,
+  startupTimeout: true,
+  restartOnCrash: true,
+  diagnostics: true,
+  transport: true,
+};
+
+export const LSP_SERVER_FIELDS: ReadonlySet<string> = new Set(Object.keys(LSP_SERVER_FIELD_KEYS));
+
 export interface LspConfigFile {
-  servers: Record<string, LspServerConfig>;
+  /** 缺省 = 一个 LSP 也没配（零配置零进程）。解析侧一直按可选读；这里曾写必填 = 两份说法。 */
+  servers?: Record<string, LspServerConfig>;
 }
 
 /** 解析后的插件（已发现未激活）。pending = 项目级插件等待信任。 */

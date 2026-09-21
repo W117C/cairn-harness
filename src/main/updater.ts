@@ -12,6 +12,13 @@ export interface UpdateManifest {
   notes?: string;
 }
 
+/** manifest 的已知字段 = UpdateManifest 的键，且只有这些键。
+ *  写成「必须填满的 Record」而不是手抄一份字符串数组：少一个键、多一个键都在编译期红。
+ *  原来那里另列了一份名单——给契约加字段的人只会改 interface，于是新字段被当场判成
+ *  「未知字段」整条拒收（名单与契约分家的标准下场）。 */
+const MANIFEST_FIELD_KEYS: Record<keyof UpdateManifest, true> = { version: true, url: true, notes: true };
+const MANIFEST_FIELDS: ReadonlySet<string> = new Set(Object.keys(MANIFEST_FIELD_KEYS));
+
 export type UpdateCheckResult =
   | { state: "unconfigured" }
   | { state: "error"; message: string }
@@ -93,7 +100,7 @@ export async function checkUpdate(opts: {
     }
     if (typeof raw !== "object" || raw === null) return { state: "error", message: "manifest 不是对象" };
     const m = raw as Record<string, unknown>;
-    const unknownKeys = Object.keys(m).filter((k) => k !== "version" && k !== "url" && k !== "notes");
+    const unknownKeys = Object.keys(m).filter((k) => !MANIFEST_FIELDS.has(k));
     if (unknownKeys.length > 0) return { state: "error", message: "manifest 未知字段：" + unknownKeys.join("、") };
     if (typeof m.version !== "string" || parseSemver(m.version) === null) {
       return { state: "error", message: "manifest.version 缺失或不是三段 semver" };
@@ -101,15 +108,21 @@ export async function checkUpdate(opts: {
     if (typeof m.url !== "string" || m.url.trim() === "") {
       return { state: "error", message: "manifest.url 缺失（下载页地址）" };
     }
-    const cmp = compareSemver(m.version, opts.currentVersion);
-    if (cmp === null) return { state: "error", message: "版本比对失败（当前版本 " + opts.currentVersion + " 非三段 semver）" };
-    if (cmp <= 0) return { state: "up-to-date", currentVersion: opts.currentVersion, manifestVersion: m.version };
-    return {
-      state: "available",
-      currentVersion: opts.currentVersion,
+    // 验过形状就落成契约类型：下游只可能拿到 UpdateManifest，不会再出现「字段名两处各写一份」
+    const manifest: UpdateManifest = {
       version: m.version,
       url: m.url,
       ...(typeof m.notes === "string" ? { notes: m.notes } : {}),
+    };
+    const cmp = compareSemver(manifest.version, opts.currentVersion);
+    if (cmp === null) return { state: "error", message: "版本比对失败（当前版本 " + opts.currentVersion + " 非三段 semver）" };
+    if (cmp <= 0) return { state: "up-to-date", currentVersion: opts.currentVersion, manifestVersion: manifest.version };
+    return {
+      state: "available",
+      currentVersion: opts.currentVersion,
+      version: manifest.version,
+      url: manifest.url,
+      ...(typeof manifest.notes === "string" ? { notes: manifest.notes } : {}),
     };
   } finally {
     guard.dispose();
