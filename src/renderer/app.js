@@ -1,5 +1,5 @@
 import { projectUnits, mountHistory } from './history-window.js';
-import { projectPanelData, workerEvidenceLabel, workerSpentLabel, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN } from './projections';
+import { projectPanelData, workerEvidenceLabel, workerSpentLabel, agentStatusText, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN } from './projections';
 import { $, esc, promptInput, sessionList, streamInner, toast } from './dom.js';
 import { ICONS, RUN_GRID_HTML, runGrid } from './icons.js';
 import { highlightAllDiffs } from './diff-highlight.js';
@@ -911,7 +911,8 @@ const VIEW_META = {
   git:      { title: 'Git',        icon: BRANCH_ICON },
   schedule: { title: '定时任务',   icon: ICONS.clock },
   memory:   { title: '记忆',       icon: ICONS.archive },
-  plugins:  { title: '插件',       icon: ICONS.pin }
+  plugins:  { title: '插件',       icon: ICONS.pin },
+  agents:   { title: '子智能体',   icon: ICONS.dots }
 };
 
 /* 展示用文件树；path 不是可执行工作区，真实运行目录仅取 AppSettings.workspace。 */
@@ -948,7 +949,7 @@ let currentWs = WORKSPACES[0];
    缺省为空 = 面板走空态。原先这里挂着审阅与终端两组演示常量，真运行时照样渲染
    「本会话从未碰过的文件 + 假测试输出」——假象比空白更坏，故一并删除
    （projections.ts 头注「面板 100% 事件流投影，无第二事实源」）。 */
-let panelData = { workspace: null, files: [], tree: [], terminal: [], merge: [] };
+let panelData = { workspace: null, files: [], tree: [], terminal: [], merge: [], agents: [] };
 
 /* 右栏"文件树高亮"目标：diff 卡展开时置为对应文档路径，收折清空 */
 let activeFileDoc = null;
@@ -1199,6 +1200,37 @@ function pluginsViewHTML() {
   return head + '<div class="sched-sec">插件（' + String(plugs.length) + '）</div>' + plugList + looseList + errList;
 }
 
+/* 子智能体（worker）一列一行：状态 / 用了多少 token / 工具计数 / 卡在哪一步 / 终态报告。
+   数据 = panelData.agents（projectAgentPanel 与右栏同源；§10.2「每 worker 一列，零事件流外私有状态」）。 */
+function agentToolsText(stats) {
+  const keys = Object.keys(stats || {});
+  if (keys.length === 0) return '尚无工具调用';
+  return keys.slice(0, 6).map(k => k + '×' + String(stats[k])).join(' · ') + (keys.length > 6 ? ' …' : '');
+}
+function agentDurText(ms) {
+  if (ms === null || ms === undefined) return '未终态';
+  return (Number(ms) / 1000).toFixed(1) + 's';
+}
+function agentsViewHTML() {
+  const cols = panelData.agents || [];
+  if (cols.length === 0) return '<p class="sched-empty">这条会话还没派过子智能体。</p>';
+  const waiting = cols.filter(c => c.status === 'waiting_approval' || c.status === 'waiting_input').length;
+  return '<div class="sched-status"><span class="sched-chip">worker ' + String(cols.length) + '</span>' +
+    (waiting > 0 ? '<span class="sched-chip">等人 ' + String(waiting) + '</span>' : '') + '</div>' +
+    cols.map(c =>
+      '<div class="sched-task agent-row" data-agent="' + esc(c.agent_id) + '">' +
+        '<div class="sched-main">' +
+          '<div class="sched-name">' + esc(c.agent_id) + '（' + esc(agentStatusText(c.status)) + ' · ' + esc(c.mode) + '）</div>' +
+          '<div class="sched-prompt">' + esc(c.task || '(无任务描述)') + '</div>' +
+          '<div class="sched-when">' + String((c.usage ? c.usage.inputTokens + c.usage.outputTokens : 0)) + ' tok · ' +
+            esc(agentToolsText(c.toolStats)) + ' · ' + esc(agentDurText(c.durationMs)) + '</div>' +
+          (c.pendingApproval ? '<div class="sched-when">待批：' + esc(c.pendingApproval.tool) + '（' + esc(c.pendingApproval.risk) + '）</div>' : '') +
+          (c.recent || []).slice(0, 3).map(r => '<div class="sched-when dim">' + esc(String(r).slice(0, 90)) + '</div>').join('') +
+          (c.report ? '<div class="sched-prompt">' + esc(String(c.report).slice(0, 160)) + '</div>' : '') +
+        '</div>' +
+      '</div>').join('');
+}
+
 function viewHTML(key) {
   if (key === 'files') return filesViewHTML();
   if (key === 'review') return reviewViewHTML();
@@ -1208,6 +1240,7 @@ function viewHTML(key) {
   if (key === 'schedule') return scheduleViewHTML();
   if (key === 'memory') return memoryViewHTML();
   if (key === 'plugins') return pluginsViewHTML();
+  if (key === 'agents') return agentsViewHTML();
   return '';
 }
 

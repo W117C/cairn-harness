@@ -587,13 +587,16 @@ export function firstPathOfStat(stat: string): string | null {
   return null;
 }
 
-/** agent 状态 → Badge variant/label（agents 面板列与指挥卡共用；两份手写映射已实际漂移）。 */
-export function agentStatusBadge(status: string): { variant: "default" | "secondary" | "destructive" | "outline"; label: string } {
-  if (status === "done") return { variant: "default", label: "done" };
-  if (status === "failed") return { variant: "destructive", label: "failed" };
-  if (status === "cancelled") return { variant: "outline", label: "cancelled" };
-  if (status === "waiting_approval" || status === "waiting_input") return { variant: "destructive", label: status };
-  return { variant: "secondary", label: status };
+/** worker 一列的状态说人话。waiting_* 单独成词：那两态是「在等人」，不是「在跑」——
+ *  把它混进 running 就是把卡住说成进展。 */
+export function agentStatusText(status: string): string {
+  if (status === "done") return "已完成";
+  if (status === "failed") return "失败";
+  if (status === "cancelled") return "已取消";
+  if (status === "waiting_approval") return "等人审批";
+  if (status === "waiting_input") return "等人回答";
+  if (status === "running") return "运行中";
+  return status;
 }
 
 /** skipped 原因 → UI hover 中文标签（休眠/重叠/并发满/过期，Claude Desktop 同款，§12.2.6）。 */
@@ -658,6 +661,8 @@ export interface PanelData {
   tree: PanelTreeGroup[];
   terminal: PanelTerminalEntry[];
   merge: PanelMergeEntry[];
+  /** M3a §10.2：每 worker 一列（状态 / usage / 工具计数 / 待批 / 报告），同一份事件流投影。 */
+  agents: AgentColumn[];
 }
 
 /** worker 验证证据四态的人话（W4b）。null 与 "absent" **必须**分开：前者是「这一拍没带标记」
@@ -678,7 +683,7 @@ export function workerSpentLabel(spentUsd: number | null): string {
 }
 
 /** 空面板数据（无事件流时的缺省：四块全空，渲染层据此走空态而非演示数据）。 */
-export const EMPTY_PANEL_DATA: PanelData = { workspace: null, files: [], tree: [], terminal: [], merge: [] };
+export const EMPTY_PANEL_DATA: PanelData = { workspace: null, files: [], tree: [], terminal: [], merge: [], agents: [] };
 
 /** 右栏面板数据：审阅/文件树共用 diff 投影（同一事实源，两处不得各算各的），
  *  终端取 run_shell 调用-结果配对，合并取 write worker 列。 */
@@ -724,5 +729,6 @@ export function projectPanelData(events: AgentEvent[], workspace: string | null)
     tree: [...groups.entries()].map(([dir, fs]) => ({ dir, files: fs })),
     terminal,
     merge: projectMergeTower(events).map((c) => ({ agent_id: c.agent_id, task: c.task, status: c.status, outcome: c.outcome, verified: c.verified, spentUsd: c.spentUsd })),
+    agents: projectAgentPanel(events),
   };
 }
