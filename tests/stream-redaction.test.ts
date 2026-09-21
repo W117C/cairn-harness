@@ -119,7 +119,7 @@ describe("声明要扫的路径，逐条真擦得掉", () => {
 
   it("缺席字段不无中生有（可选正文没填时不该被写成空串）", () => {
     const e = { type: "agent_result", agent_id: "w", status: "done", summary: "只有 summary" } as unknown as AgentEvent;
-    const out = scanStreamEvent(e) as Record<string, unknown>;
+    const out = scanStreamEvent(e) as unknown as Record<string, unknown>;
     expect("artifacts" in out).toBe(false);
   });
 });
