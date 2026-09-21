@@ -4568,6 +4568,23 @@ const MUTATIONS = [
     apply: (s) => s.replace('e.type === "tool_call" || e.type === "usage" || e.type === "turn_truncated"', 'e.type === "tool_call" || e.type === "usage"'),
     expectFail: "剧本可以带 turn_truncated，并按序原样产出（不折进正文、不丢）",
   },
+  {
+    id: "compaction-input-drops-truncation",
+    src: "src/agent/compaction.ts",
+    test: "tests/turn-truncated.test.ts",
+    desc: "摘要输入不收这一行 ⇒ 压缩把被排除旧事件里唯一的截断痕迹一起丢掉，半句被摘成完整结论",
+    // 用 && false 而不是换掉比较：换掉会让 e 不再被收窄，分支体当场类型报错、测的是编译不是行为
+    apply: (s) => s.replace('} else if (e.type === "turn_truncated") {', '} else if (e.type === "turn_truncated" && false) {'),
+    expectFail: "截断有自己一行，紧跟被砍断的那段正文，且带上是哪个原因",
+  },
+  {
+    id: "compaction-merges-truncation-causes",
+    src: "src/agent/compaction.ts",
+    test: "tests/turn-truncated.test.ts",
+    desc: "把「篇幅用尽」与「内容策略中止」并成一句 ⇒ 摘要里看不出下一步该续写还是改道",
+    apply: (s) => s.replace('(e.outcome === "output_budget" ? "没写完就被收走（篇幅用尽" : "被内容策略中止（")', '"没写完就被收走（篇幅用尽" + "（"'),
+    expectFail: "内容策略中止与篇幅用尽各说各的（两种原因的下一步不同）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
