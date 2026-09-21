@@ -701,6 +701,51 @@ max_tokens，已用 4096 输出 token）」；内容策略＝「被内容策略�
 
 
 
+## 第二十程（09-22，`dfbcebb` + `e215fc0`）：把同一个形状用到 settings 层，撞出「新手引导其实不存在」
+
+「装载收下、执行端不读」这个形状（[[dsh-plugin-compat-surface]]）不必只长在插件面上。这次机械扫
+`settings` 的 25 个键：谁写、谁读，读法包括 `.key` / 解构 / 字符串索引三种。
+
+**两个假阳性被读代码否掉**（记下来是因为它对称于「grep 命中≠缺陷」：**零命中同样≠缺陷**）：
+`telemetry` 在 src/ 里没有执行端读者，但设置页那行文案写的就是
+「默认关；V1 没有上报实现，关着就是零数据出门」——它是**如实登记的留位**，不是谎言；
+`updateManifestUrl` 也不是没人读，它经 `checkUpdate({ manifestUrl })` 这个**参数**被消费，
+我的键名正则看不见那一跳。
+
+**一个是真的**：`onboarded` 在 shipped 源码里零消费者。原因是 React 树归档时
+`src/renderer/onboarding.tsx` 被删、纯数据抽进 `src/main/onboarding-groups.ts`，
+**vanilla 渲染层从未把它接回去**。本仓其实有专门的可达性判据（`scripts/lib/commercial-reachability.ts`），
+它一直如实报 `UNVERIFIED=1`——所以这不是"没人想到"，是"想到了、判据也写了、但行为一直没人补"。
+而 AGENTS.md 的 M4b 那句「新手引导走通 §13 七组」说的是**已删的那棵 React 树**里的旧事实。
+
+**接法（三条都是刻意的）**：① 数据只有一份——七组经只读通道 `agent:onboarding` 进向导，
+界面里一个字都没写死，连步号都是投影 `groupOnboardingSteps` 算出来的；② 「弹 / 不弹」的判据落在
+**盘上的 settings.json**，不是 localStorage（panels-check 476 行那条 SIGKILL 教训：跨进程判据必须落盘）；
+③ 不用「符号可达」当证据——B21 用**三次真启动**各判一个状态：无 settings ⇒ 必弹（7 行 / 第 1–4 步 /
+第一组是 Provider）→ 点「稍后再说」只关窗、盘上仍"缺席" ⇒ **重开照弹** → 点「完成引导」写入 ⇒
+**重开不弹**。少了中间那一环，「稍后再说」就会偷偷等于"已完成"。
+
+**顺手修的两处真值**：`a11y-check` / `renderer-arch-check` 原先不传 `M1E_SETTINGS_PATH`，
+等于拿用户自己的 `userData/settings.json` 判卷（现在各自 mkdtemp 隔离并种成"返回用户"，
+种子做法放进共享 `scripts/lib/harness.ts`——两个门各抄一份正是本仓反复踩的「同族出口」）；
+`tests/projections.test.ts` 的 describe 头写着「store.ts」，那文件早随 React 归档删了。
+
+**`e215fc0`：一笔更难看的**——为了判 HEAD 自洽，同 HEAD 开 worktree 跑 tsc，直接红一处
+（`stream-redaction.test.ts:122` 的 cast）。那是**我自己在 `6c62711` 之后本地改对、却没跟任何一笔提交**的。
+而 `pnpm typecheck` 的归因句「HEAD 内 0 个 / 未跟踪草稿 1 个」是在**工作树**上算的，
+于是它连着骗了我两次——第十八、十九程的读数里都写着「`pnpm typecheck` HEAD 态 0 错」，
+那句话当时并不成立。⇒ 以后这句要么实跑 HEAD worktree tsc，要么不写。
+
+**本程读数**：panels-check **156 ✅ / 0 ❌，exit 0**（⚠️ 上一笔提交信息里写的 155 少算一条，真值 156：
+B21 是 12 条断言不是 11）；`commercial-check` **UNVERIFIED 1 → 0**，D2e 现在报得出消费者是谁
+（`src/main/index.ts`、`src/main/settings-handlers.ts`、`src/renderer/app.js`）；
+`ipc:check` ✅（新通道两侧都算数）；`renderer-arch-check` 84/84 ✅；`a11y-check` 3/3 ✅；
+`tests/projections.test.ts` 7 → **10 条**；HEAD worktree tsc 修后 **0 红**。
+**未证半边**：向导自身的 a11y 细节（焦点是否困在浮层内、Esc 行为）没判——`a11y-check` 现在被种成
+"返回用户"，正好不看它；重开向导的入口刻意没做（下次启动自然再弹）。
+
+
+
 ## 待办（按优先级）
 
 1. 沉淀面：`failureDigestFromEvents`（能力 6/10）现在只看 `verify_result(ok:false)` 与
@@ -796,6 +841,21 @@ max_tokens，已用 4096 输出 token）」；内容策略＝「被内容策略�
     `.agent/sessions/<uuid>/events.jsonl` → `.agen****.jsonl`；SRI `sha512-…` 也仍掩（与不透明串不可区分）。
     再收紧要靠「按斜杠段数否决」，而段数正是 base64 密钥开始像路径的地方（32 字符里约 10% 含两个斜杠）
     ⇒ **刻意不在安全判据里堆形状启发**。要动它，先回答「牺牲哪一类召回、拿哪一类误伤换」。
+16. 引导向导的两处刻意留位（都有归因，不是遗漏）：① `a11y-check` 现在被种成「返回用户」，
+    所以**向导自身的无障碍细节没人判**（焦点是否困在浮层内、Esc 是否等于「稍后再说」、
+    浮层出现时底栏还在不在朗读序列里）。要补就在 a11y-check 里加一条「未种 onboarded」的相，
+    别塞进 panels-check——那是判据归属搞混（无障碍是 a11y 门的地盘）。
+    ② 「稍后再说」之后没有当场重开的入口（下次启动自然再弹）。若要加「设置页 → 重新打开引导」，
+    先定一件事：那个按钮写 `onboarded:false` 还是只弹一次不落盘——两种都成立，
+    **但别两种都实现**（同一件事两份来源必然漂）。
+17. `src/main/index.ts` 里 `import { onboardingGroups } from "./settings-handlers"` 是一根临时直连：
+    装配根 `agent-runner.ts` 此刻在别人的在飞改动集里，往它的导出表加一行会把别人的原子 hunk 卷进来。
+    等它落库后把这一跳折回装配根（与 `providerInfo` 同一处），然后删掉代码里那条注释。
+18. 文档与现实的分歧（本程撞见，**AGENTS.md 在飞、动不了**）：M4b 那句「新手引导走通 §13 七组」
+    说的是已归档的 React 树；`dfbcebb` 之后 vanilla 侧才真的走通。等 AGENTS.md 空出来时把那句改成
+    带日期的事实（哪一版走通、中间断了多久），别只删——那是断代。
+    同族的另一条已在 `e215fc0` 付过学费：**门的读数分「工作树」与「HEAD」两种**，
+    `pnpm typecheck` 那句「HEAD 内 0 个」是在工作树上算的，判 HEAD 自洽只能同 HEAD 开 worktree 跑。
 
 ## 复算命令
 
@@ -886,6 +946,24 @@ D="$HOME/Library/Application Support/m0-agent-loop/sessions" node_modules/.bin/t
 TERM=dumb pnpm panels-check > /tmp/panels.log 2>&1; echo "EXIT=$?"   # 读 B20 那 10 行；不接管道——管道取的是 tail/tee 的退出码
 grep -c "B20 " /tmp/panels.log   # 实测 11＝10 条断言 + 1 行相位标题（别把 11 读成 11 条断言）：「标题不带类型名」与「原文仍在」必须同时在，缺一条＝半边覆盖
 grep -n "turn_truncated" src/renderer/app.js   # 实测 3 处＝注释 1 + 标签表 1 + eventLabel 那一支 1；展开体走 JSON.stringify(e)，不含这个字面量
+# 第二十程（新手引导可达 + settings 消费面）
+TERM=dumb pnpm commercial-check      # 读 D2e 那一行的消费者清单与末行 UNVERIFIED=0（改前是 1）
+TERM=dumb pnpm panels-check > /tmp/panels.log 2>&1; echo "EXIT=$?"; grep -c "B21 " /tmp/panels.log   # 实测 13＝12 条断言 + 1 行相位标题
+TERM=dumb pnpm renderer-arch-check && TERM=dumb pnpm a11y-check   # 两道门现在自带隔离的 settings（种成返回用户）
+node_modules/.bin/tsx -e '
+  const { readFileSync, readdirSync, statSync } = require("node:fs"); const { join } = require("node:path");
+  const files = []; const walk = (d) => { for (const n of readdirSync(d)) { const p = join(d, n);
+    if (n === "node_modules") continue; statSync(p).isDirectory() ? walk(p) : /\.(ts|js)$/.test(n) && files.push(p); } };
+  walk("src");
+  for (const k of ["onboarded", "telemetry", "updateManifestUrl"]) {
+    const re = new RegExp("(\\.\\s*" + k + "\\b|[\"\\x27]" + k + "[\"\\x27])");
+    const hits = files.filter((f) => !f.endsWith("main/settings.ts") && re.test(readFileSync(f, "utf8")));
+    console.log(k.padEnd(18), hits.length === 0 ? "★零消费者（去读文案/参数那一跳再定性）" : hits.join(", "));
+  }'   # 09-22 复跑真值：onboarded → src/main/index.ts、src/renderer/app.js（本程之前是空）；
+       # updateManifestUrl → settings-handlers.ts、updater.ts ⇒ 它是假阳性（经 opts.manifestUrl 参数消费）；
+       # telemetry 只命中数据表里那个 id 字符串 ⇒ 执行端确实没有读者，但设置页文案已如实写"没有上报实现"。
+       # ⚠️ 这条命令本身也修过一次：正则写成 "\\\\." 会匹配字面反斜杠 ⇒ 复算命令自己造假红。
+git worktree add --detach /tmp/x HEAD && ln -s "$PWD/node_modules" /tmp/x/node_modules && cd /tmp/x && ./node_modules/.bin/tsc --noEmit   # 判 HEAD 只能这样跑（`pnpm typecheck` 的归因句算的是工作树）
 ```
 （`wc -l` 两边都数：单看修复后的 23 说明不了任何事，修复**前**那个 4 才是缺陷本身——
 4 个命中全在类型声明与注释里，读取点为 0。）
