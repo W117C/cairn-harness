@@ -781,6 +781,121 @@ async function phaseElectron(root: string): Promise<void> {
       b10Name !== "" && b10File.includes(b10Name),
       "B10 决议真落盘（重启后仍生效；实测文件前 76 字=" + JSON.stringify(b10File.slice(0, 76)) + "）",
     );
+    console.log("[panels-check] B11 子智能体页：盘上的 worker 事件流在真窗口里长成一列一列（各列各自的账，不并成一条）");
+    // 分工：tests/renderer-agents-view.test.ts 判的是「给定列 → HTML 对不对」（含「等人审批」那一词，
+    // 并由变异锚点 agents-view-waiting-said-as-running 反证）；这里判的是那条单测根本碰不到的接缝——
+    // JSONL → session:open（含 §4.4.9 崩溃恢复补发）→ 重放 → panelData.agents → 抽屉页。
+    // projectAgentPanel 曾被 agents.test 判绿多年而产品里一屏看不见（幽灵投影），所以这条接线必须由真窗口作证。
+    // ⚠️ 本相只走「重放后」这一支：停在非终态的靶子会被产品的崩溃恢复扫成 failed(interrupted)，
+    //    所以「等人审批」在真窗口里不出现（那需要活着的编排器 = 花真钱的一轮 run）。不假装两支都过。
+    const b11A = "b11-read-1";
+    const b11B = "b11-write-2";
+    const b11File = pathOf(root, clarifyId);
+    const b11T0 = Date.now() - 60_000;
+    const b11Evts: Record<string, unknown>[] = [
+      { type: "agent_spawned", agent_id: b11A, parent_event_id: 1, mode: "read", task: "B11 只读调研", max_turns: 6, permission_mode: "default", ts: b11T0 },
+      { type: "tool_call", id: "b11-a-t1", name: "read_file", args: { path: "src/todo.ts" }, agent_id: b11A },
+      { type: "tool_call", id: "b11-a-t2", name: "read_file", args: { path: "src/app.ts" }, agent_id: b11A },
+      { type: "usage", id: "b11-a-u", agent_id: b11A, inputTokens: 1200, outputTokens: 300 },
+      { type: "agent_status", agent_id: b11A, status: "done", ts: b11T0 + 4_200 },
+      { type: "agent_spawned", agent_id: b11B, parent_event_id: 2, mode: "write", task: "B11 改排序", max_turns: 6, permission_mode: "default", ts: b11T0 + 1_000 },
+      { type: "tool_call", id: "b11-b-t1", name: "edit_file", args: { path: "src/todo.ts" }, agent_id: b11B },
+      { type: "approval_requested", id: "b11-b-ap", agent_id: b11B, tool: "run_shell", args_digest: "pnpm test", risk: "high" },
+    ];
+    for (const e of b11Evts) await createEventLog(b11File).append(e as unknown as AgentEvent);
+    // 重开这条会话才会重算 panelData（盘上追加不推事件，切换是唯一走 showHistory 的入口）；
+    // 而 session:open 正是崩溃恢复的入口——期望要在它跑完之后再从盘上算，不能拿追加那一刻的快照。
+    ok(await b8ClickSession("验收会话"), "B11 先切走（离开靶子会话）");
+    ok(await b8ClickSession(clarifyId), "B11 再切回靶子会话");
+    await cdp2.eval(`(() => { const c = document.querySelector('#qcAgents'); if (c) c.click(); return String(!!c); })()`);
+    const b11Wait = await tryWait(
+      async () =>
+        ((await cdp2.eval<number>(
+          `document.querySelectorAll('.side-page[data-view="agents"] .agent-row').length`,
+        )) >= 2 ? true : null),
+      15_000,
+    );
+    const b11First = await cdp2.eval<string>(
+      `(document.querySelector('.side-page[data-view="agents"]')?.textContent || '').trim().slice(0, 76)`,
+    );
+    ok(b11Wait, "B11 抽屉页里列出了 worker 行（JSONL→重放→panelData.agents→HTML 整条接缝；实测首屏=" + JSON.stringify(b11First) + "）");
+    // 期望独立从盘上重算（不读渲染层任何一个变量）：每 worker 的工具计数 / token 合计 / 末态 / 待批 / 终态报告
+    interface B11Exp { tools: Record<string, number>; tok: number; status: string; pending: string; task: string; mode: string; report: string }
+    const b11Exp = new Map<string, B11Exp>();
+    for (const line of (await readFile(b11File, "utf8")).split("\n")) {
+      if (line.trim() === "") continue;
+      let e: Record<string, unknown>;
+      try { e = JSON.parse(line) as Record<string, unknown>; } catch { continue; }
+      const t = String(e["type"] ?? "");
+      if (t === "agent_spawned") {
+        b11Exp.set(String(e["agent_id"]), {
+          tools: {}, tok: 0, status: "running", pending: "", report: "",
+          task: String(e["task"]), mode: String(e["mode"]),
+        });
+        continue;
+      }
+      const a = e["agent_id"] === undefined ? undefined : b11Exp.get(String(e["agent_id"]));
+      if (!a) continue;
+      if (t === "tool_call") a.tools[String(e["name"])] = (a.tools[String(e["name"])] ?? 0) + 1;
+      else if (t === "usage") a.tok += Number(e["inputTokens"] ?? 0) + Number(e["outputTokens"] ?? 0);
+      else if (t === "agent_status") a.status = String(e["status"]);
+      // §10.2 的语义：审批请求把这一列变成「在等人」，批了才回到在跑（不是等人也算 running）
+      else if (t === "approval_requested") { a.pending = String(e["tool"]); if (a.status === "running") a.status = "waiting_approval"; }
+      else if (t === "approval_resolved") { a.pending = ""; a.status = "running"; }
+      else if (t === "agent_result" && typeof e["summary"] === "string" && e["summary"] !== "") a.report = String(e["summary"]);
+    }
+    ok(b11Exp.size === 2, "B11 靶子会话盘上有两个 worker（期望由本脚本逐行重算；实测 " + String(b11Exp.size) + "）");
+    const b11Rows = await cdp2.eval<{ id: string; text: string }[]>(
+      `(() => [...document.querySelectorAll('.side-page[data-view="agents"] .agent-row')].map((r) => ({` +
+        ` id: r.getAttribute('data-agent') || '', text: (r.textContent || '').replace(/\\s+/g, ' ').trim() })))()`,
+    );
+    ok(
+      b11Rows.length === b11Exp.size,
+      "B11 行数 = 盘上 spawn 出的 worker 数（不少列也不多列；实测 rows=" + String(b11Rows.length) + " 期望 " + String(b11Exp.size) + "）",
+    );
+    const B11_STATUS: Record<string, string> = {
+      done: "已完成", failed: "失败", cancelled: "已取消", running: "运行中",
+      waiting_approval: "等人审批", waiting_input: "等人回答",
+    };
+    for (const [id, exp] of [...b11Exp.entries()]) {
+      const row = b11Rows.find((r) => r.id === id);
+      ok(row !== undefined, "B11 " + id + " 上了屏（按 agent_id 归位，没有并成一条）");
+      if (!row) continue;
+      const label = B11_STATUS[exp.status] ?? exp.status;
+      ok(
+        row.text.includes(exp.task) && row.text.includes("（" + label + " · " + exp.mode + "）"),
+        "B11 " + id + " 说的是这条任务与盘上那个终态（实测 " + JSON.stringify(row.text.slice(0, 88)) + " 期望态 " + label + "）",
+      );
+      const toolText = Object.entries(exp.tools).map(([k, n]) => k + "×" + String(n)).join(" · ");
+      ok(
+        row.text.includes(String(exp.tok) + " tok") && row.text.includes(toolText),
+        "B11 " + id + " 的 token 与工具计数只算归因到它自己的那笔（实测 " + JSON.stringify(row.text.slice(0, 88)) + " 期望 " + String(exp.tok) + " tok / " + toolText + "）",
+      );
+      if (exp.pending !== "") {
+        ok(row.text.includes("待批：" + exp.pending), "B11 " + id + " 把卡在哪个工具上摊开（实测 " + JSON.stringify(row.text.slice(0, 88)) + "）");
+      }
+      if (exp.report !== "") {
+        ok(
+          row.text.includes(exp.report.slice(0, 24)),
+          "B11 " + id + " 的终态报告原文上屏（崩溃恢复为何判它失败，用户读得到；实测 " + JSON.stringify(row.text.slice(60, 150)) + "）",
+        );
+      }
+    }
+    // 归因不串账：A 的 1500 不许出现在 B 那一行（写死常数最容易被总量替代）
+    const b11RowA = b11Rows.find((r) => r.id === b11A)?.text ?? "";
+    const b11RowB = b11Rows.find((r) => r.id === b11B)?.text ?? "";
+    ok(
+      b11RowA.includes("1500 tok") && !b11RowB.includes("1500"),
+      "B11 两列各记各的账（" + b11A + "=1500 未渗进 " + b11B + "；实测 B 行 " + JSON.stringify(b11RowB.slice(0, 60)) + "）",
+    );
+    const b11Waiting = [...b11Exp.values()].filter((a) => a.status === "waiting_approval" || a.status === "waiting_input").length;
+    const b11Chips = await cdp2.eval<string>(
+      `(() => [...document.querySelectorAll('.side-page[data-view="agents"] .sched-chip')].map((c) => (c.textContent || '').trim()).join('|'))()`,
+    );
+    ok(
+      b11Chips.includes("worker 2") && (b11Waiting > 0 ? b11Chips.includes("等人 " + String(b11Waiting)) : !/等人 \d/.test(b11Chips)),
+      "B11 顶部芯片按盘上事实数「共几条活」与「几条在等人」（期望等人 " + String(b11Waiting) + "；实测 " + JSON.stringify(b11Chips) + "）",
+    );
     await killElectron(electron2);
   } finally {
     if (electron.exitCode === null) await killElectron(electron);
