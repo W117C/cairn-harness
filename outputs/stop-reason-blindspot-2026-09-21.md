@@ -122,6 +122,11 @@
 新增后的读数（**clean HEAD 隔离 worktree**，非工作树态）：
 - `tsc --noEmit` **0 错**；`tests/turn-truncated.test.ts` **22 条**；
   主树全量 `test` 182 files / **1702 passed** exit 0；`mutate-needles-check` 552 条 0 问题。
+- **clean HEAD 全量**（`git worktree add --detach HEAD`，零在飞文件）：**180/182 files 绿**，
+  唯二红是 `gated-tools` 与 `runner-gates`——**已定名的 worktree 专属假红**
+  （fresh worktree 缺宿主本地安装态，`run_shell` 真实执行那类断言必红；本仓既有备案）。
+  回主树复算这三只文件：**3 files passed**。⇒ HEAD 无待收口的红测。
+  ⚠️ 这句的失效条件挂在「回主树复算即绿」这条可重跑读数上，不挂 SHA。
 - 变异表本条通道累计 **+9**，逐条实跑**全杀**。
 - 追加一次直接注入（把投影分支那句 `push` 摘掉）：跨轮那条**当场红**，
   报错原文印出真实请求体 `把 flush 讲清楚\nflush 的关键在于把`（说明确实不在里面），
