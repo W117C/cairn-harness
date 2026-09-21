@@ -3957,7 +3957,7 @@ const MUTATIONS = [
     src: "src/renderer/app.js",
     test: "tests/renderer-skip-reason.test.ts",
     desc: "跳过一行的标题退回原始 token（overlap）⇒ 无人值守任务为什么没跑，用户仍得展开卡片读 JSON（§12.2.6 承诺的中文标签又一次只落在代码里）",
-    apply: (s) => s.replace("return base + '：' + name + skipReasonLabel(e.reason);", "return base + '：' + name + String(e.reason);"),
+    apply: (s) => s.replace("return base + '：' + nm + skipReasonLabel(e.reason);", "return base + '：' + nm + String(e.reason);"),
     expectFail: "跳过一行的标题说清是哪条任务、为什么跳过",
   },
   {
@@ -3967,6 +3967,22 @@ const MUTATIONS = [
     desc: "PanelData 加了字段而 EMPTY_PANEL_DATA 没跟上 ⇒ 空态与投影形状分叉，渲染层按 undefined 索引就整块空掉（历史上加 agents 就得同时改两处）",
     apply: (s) => s.replace("terminal: [], merge: [], agents: [] };", "terminal: [], merge: [] };"),
     expectFail: "空态面板形状 = 投影形状",
+  },
+  {
+    id: "automation-failed-still-titled-completed",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-skip-reason.test.ts",
+    desc: "无人值守的一次运行不看 status 一律写「完成」⇒ 夜里跑砸了的定时任务在时间线上看着像成功（§12.2 完成回写的全部信息量被抹平）",
+    apply: (s) => s.replace("const failed = e.status === 'failed';", "const failed = false;"),
+    expectFail: "无人值守的一次运行：失败不顶着「完成」",
+  },
+  {
+    id: "automation-run-title-loses-task-name",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-skip-reason.test.ts",
+    desc: "标题不写是哪条任务 ⇒ 多条自动化并存时，用户无法判断哪条没跑、哪条砸了（事件里有 task_name 却不显示，属「只推不落」的读端版）",
+    apply: (s) => s.replace("(failed ? '定时任务失败：' : '定时任务完成：') + nm + why;", "(failed ? '定时任务失败：' : '定时任务完成：') + why;"),
+    expectFail: "无人值守的一次运行：失败不顶着「完成」",
   },
 ];
 
