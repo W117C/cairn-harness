@@ -4417,6 +4417,19 @@ const MUTATIONS = [
     apply: (s) => s.replace("    await unlink(tmp).catch(() => {});\n", ""),
     expectFail: "写失败时 tmp 被清理，且不截断既有密文存储",
   },
+  {
+    // 分辨力在 HEAD 的隔离 worktree 里实测过（另一会话占着写窗口，本轮不在主树跑本工具）：
+    // 去掉 injected 一位后回条变成 {ok:true}，新判据当场红在「未收尾的 worker：评论应真的进子流」。
+    id: "card-action-comment-drops-injected",
+    src: "src/main/agent-runner.ts",
+    test: "tests/m3b.test.ts",
+    desc: "IPC 回条把 injected 吞掉（= 曾经的样子）⇒ 界面只剩「已送进子流」可说，把没送达说成送达",
+    apply: (s) => s.replace(
+      'return { ok: true, injected: r.injected, ...(r.injected || !r.error ? {} : { error: r.error }) };',
+      'return { ok: true, ...(r.injected || !r.error ? {} : { error: r.error }) };',
+    ),
+    expectFail: "IPC 回条带得出 injected（映射行有观测者）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
