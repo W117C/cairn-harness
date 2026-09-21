@@ -3750,6 +3750,24 @@ const MUTATIONS = [
     apply: (s) => s.replace("enterPlanRunScope(opts.planRequired === true);", "enterPlanRunScope(true);"),
     expectFail: "unattended + 武装方案门 ⇒ 拒因来自方案门而不是无人值守闸，盘上不留痕（J3：不是被忽略）",
   },
+  {
+    // 这两条补的是「同一句判据的两支」里被漏掉的那一支：panels-check B7 走的是空闲提交
+    // （onEvent 在 !real.running 时整段重投，落 showHistory），删掉 live 尾巴那句 syncGoalChip 实测全绿。
+    id: "goal-chip-live-tail-not-synced",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-goal-chip-live.test.ts",
+    desc: "renderEvent 那一支只记账不刷芯片 ⇒ 续跑期（real.running 为真，事件全走这支）芯片停在旧读数：goal 模式设完目标看着像没在跑",
+    apply: (s) => s.replace("      goalEventsSession = real.id;\n      syncGoalChip();", "      goalEventsSession = real.id;"),
+    expectFail: "live 尾巴（续跑期每一轮）：芯片跟着轮次自己变，不等整段重投",
+  },
+  {
+    id: "goal-chip-mirror-counts-replay-events",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-goal-chip-live.test.ts",
+    desc: "丢掉 rc.replay 守卫 ⇒ 重放期每条 goal 事件被镜像二次累加：芯片轮数虚增，而轮数正是轮次闸的读数（显示第 4 轮、判据以为第 2 轮）",
+    apply: (s) => s.replace("if (!rc.replay && goalRelevant(e)) {", "if (goalRelevant(e)) {"),
+    expectFail: "重放期间不得二次累加镜像（showHistory 已经整段筛过）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
