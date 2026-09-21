@@ -832,21 +832,14 @@ export interface PanelTerminalEntry {
   output: string;
 }
 
-export interface PanelMergeEntry {
-  agent_id: string;
-  task: string;
-  status: string;
-  outcome: string | null;
-  verified: WorkerEvidence | null;
-  spentUsd: number | null;
-}
-
 export interface PanelData {
   workspace: { name: string; path: string } | null;
   files: PanelFileEntry[];
   tree: PanelTreeGroup[];
   terminal: PanelTerminalEntry[];
-  merge: PanelMergeEntry[];
+  /** git 面板的 worker 列 = 合并控制塔那一列本身（此前裁成 6 字段的中间形状，
+   *  于是补丁 / 安全发现 / 评审评论算出来了却到不了任何界面）。少一层就是一事实源。 */
+  merge: MergeTowerColumn[];
   /** M3a §10.2：每 worker 一列（状态 / usage / 工具计数 / 待批 / 报告），同一份事件流投影。 */
   agents: AgentColumn[];
 }
@@ -914,7 +907,7 @@ export function projectPanelData(events: AgentEvent[], workspace: string | null)
     files,
     tree: [...groups.entries()].map(([dir, fs]) => ({ dir, files: fs })),
     terminal,
-    merge: projectMergeTower(events).map((c) => ({ agent_id: c.agent_id, task: c.task, status: c.status, outcome: c.outcome, verified: c.verified, spentUsd: c.spentUsd })),
+    merge: projectMergeTower(events),
     agents: projectAgentPanel(events),
   };
 }

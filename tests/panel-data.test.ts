@@ -59,9 +59,13 @@ describe("projectPanelData（抽屉面板投影：审阅 / 文件树 / 终端 / 
       { type: "tool_result", callId: "merge-w1", ok: true, output: "[merged] abc123" },
     ];
     const merge = projectPanelData(events, null).merge;
-    // verified / spentUsd 是 b998e48 起合并行的两个新面（「验过 / 说验过」四态 + 每条 worker 的钱）：
-    // 这条靶子没有 verify_result、也没有价表可算 ⇒ 两值都如实为 null，不是缺字段。
-    expect(merge).toEqual([{ agent_id: "w1", task: "改投影", status: "done", outcome: "merged", verified: null, spentUsd: null }]);
+    // 面板那一列现在就是合并控制塔的列本身（原来有一层把它裁成 6 字段 ⇒ 补丁/安全发现/评审评论
+    // 算好了却到不了任何界面）。完整形状由 tests/renderer-merge-review.test.ts 逐面判；
+    // verified / spentUsd（b998e48 起的两个新面）在这条靶子上如实为 null：没有 verify_result、没价表。
+    expect(merge).toHaveLength(1);
+    expect(merge[0]).toMatchObject({ agent_id: "w1", task: "改投影", status: "done", outcome: "merged", verified: null, spentUsd: null });
+    expect([merge[0]?.diffs, merge[0]?.comments].every(Array.isArray), "评审面字段随列到面板（不再被中间裁剪层丢掉）").toBe(true);
+    expect(merge[0]?.report).toBeNull();
   });
 
   it("工作区：绝对路径取末段为显示名；null → 未配置", () => {

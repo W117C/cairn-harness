@@ -2,7 +2,7 @@ import { projectUnits, mountHistory } from './history-window.js';
 import { projectPanelData, EMPTY_PANEL_DATA, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS } from './projections';
 import { $, esc, promptInput, sessionList, streamInner, toast } from './dom.js';
 import { ICONS, RUN_GRID_HTML, runGrid } from './icons.js';
-import { highlightAllDiffs } from './diff-highlight.js';
+import { highlightAllDiffs, diffHtml } from './diff-highlight.js';
 import { actionsHTML, backToInput, copyText, markActDone, messageText, retype } from './message-actions.js';
 
 
@@ -1009,24 +1009,59 @@ function terminalViewHTML() {
     rows.map((s, i) => '<button class="term-subtab' + (i === 0 ? ' active' : '') + '" data-term="' + i + '">' + esc(s.command.split('\n')[0].slice(0, 24) || '(空命令)') + '</button>').join('') +
     '</div><div class="term" id="termBody">' + termBodyHTML(rows[0]) + '</div></div>';
 }
-/* git 视图（第 5 视图）：write worker 合并列由事件流投影；无 worker 时保持诚实空态，
-   版本操作由 CLI 承接；开关状态经 agent settings 持久化 */
+/* git 视图（第 5 视图）：write worker 的合并列由事件流投影（projectMergeTower 同源）；
+   开关状态经 agent settings 持久化；版本操作由 CLI 承接（合并唯一出口 = git 面板，§4.3）。
+   这里同时是**评审闭环的读端**：补丁快照、安全发现、行级评论此前都算好了却没有一屏看得见
+   ——「能力已发货、产品路径绕过它」的又一处，本轮补上（只读，零模型调用）。 */
 function gitViewHTML() {
   const cols = panelData.merge;
   if (!cols.length) {
     return '<div class="side-page-pad">' +
       '<div class="settings-empty">' + BRANCH_ICON +
-        '<p>Git 面板尚未接入<br><span class="dim">版本操作暂由命令行承接</span></p>' +
+        '<p>本会话没有 write worker<br><span class="dim">派活改代码的子任务后，这里逐列列出补丁、安全发现与评审评论；版本操作走命令行</span></p>' +
       '</div>' +
     '</div>';
   }
-  return '<div class="side-page-pad">' + cols.map(c =>
-    '<div class="file-item">' + BRANCH_ICON + '<span class="path">' + esc(c.agent_id) + '</span>' +
+  return '<div class="side-page-pad merge-list">' + cols.map((c) => {
+    /* 最新一份 = 数组末：评审闭环是 v1→v2，取第一份会把「已被推翻的那版」当现状给用户看。 */
+    const latest = c.diffs.length ? c.diffs[c.diffs.length - 1] : null;
+    const rep = c.report;
     /* 「验过」与「说验过」必须分得开：验证证据四态 + 表价花费直接挂在每一列上（W4b / W3②）。
-       花费未知时写「价格未知」，不写 $0.00——那会把不可知记成免费。 */
-    '<span class="tag" data-ev="' + esc(c.verified ?? 'none') + '">' + esc(workerEvidenceLabel(c.verified)) + '</span>' +
-    '<span class="tag">' + esc(workerSpentLabel(c.spentUsd)) + '</span>' +
-    '<span class="new">' + esc(c.outcome || c.status) + '</span></div>').join('') + '</div>';
+       花费未知时写「价格未知」，不写 $0.00——那会把不可知记成免费。
+       （注：这段说明只能放在拼接式之外——夹在两个 + 之间会被读成一元正号，
+       整条字符串变成 NaN 拼进 HTML，实测就是本轮测试抓到的那个形状。） */
+    return '<div class="merge-col" data-agent="' + esc(c.agent_id) + '">' +
+      '<div class="file-item mc-head">' + BRANCH_ICON + '<span class="path">' + esc(c.agent_id) + '</span>' +
+        '<span class="tag" data-ev="' + esc(c.verified ?? 'none') + '">' + esc(workerEvidenceLabel(c.verified)) + '</span>' +
+        '<span class="tag">' + esc(workerSpentLabel(c.spentUsd)) + '</span>' +
+        '<span class="new">' + esc(c.outcome || c.status) + '</span>' +
+      '</div>' +
+      '<div class="mc-task">' + esc(c.task) + (c.branch ? ' · ' + esc(c.branch) : '') + '</div>' +
+      (latest
+        ? '<details class="mc-patch"><summary>补丁 v' + String(latest.version) + ' · ' +
+            esc(latest.stat || '(这份快照没带统计)') + '</summary>' + diffHtml(latest.patch || '') + '</details>'
+        : '<div class="mc-none">这一列还没有补丁快照（worker 没产出 diff，或快照不在本会话事件流里）</div>') +
+      (rep
+        ? '<div class="mc-report">' +
+            '<div class="rp-sum">安全报告 ' + String(rep.summary.total) + ' 项 · critical ' + String(rep.summary.critical) +
+              ' · high ' + String(rep.summary.high) + ' · ' + (rep.llmReviewed ? '模型已复核' : '仅规则扫描（模型未复核）') + '</div>' +
+            (rep.findings.length
+              ? '<ul class="rp-list">' + rep.findings.slice(0, 8).map((f) =>
+                  '<li><span class="sev sev-' + esc(f.severity) + '">' + esc(f.severity) + '</span> ' +
+                    '<code>' + esc(f.path) + ':' + String(f.line) + '</code> ' + esc(f.title) + '</li>').join('') +
+                  (rep.findings.length > 8 ? '<li class="rp-more">另有 ' + String(rep.findings.length - 8) + ' 项未列出（全文见安全报告卡）</li>' : '') +
+                  '</ul>'
+              : '<div class="mc-none">没有发现项</div>') +
+          '</div>'
+        : '<div class="mc-none">没有安全报告（该 worker 跑在 off 档，或还没扫）</div>') +
+      (c.comments.length
+        ? '<div class="mc-comments">' + c.comments.slice(0, 20).map((m) =>
+            '<div class="cm"><code>' + esc(m.path) + ':' + String(m.line) + '</code> ' + esc(m.body) + '</div>').join('') +
+            (c.comments.length > 20 ? '<div class="rp-more">另有 ' + String(c.comments.length - 20) + ' 条评论未列出</div>' : '') +
+            '</div>'
+        : '') +
+    '</div>';
+  }).join('') + '</div>';
 }
 /* git 分支数据：当前分支 ahead/behind 计数与其他分支 */
 const BRANCHES = [
@@ -2504,18 +2539,6 @@ render();
     if (args === undefined || args === null) return '—';
     if (typeof args === 'string') return args;
     try { return JSON.stringify(args, null, 2); } catch (_) { return String(args); }
-  }
-  /** 把工具输出按 +/-/@ 前缀切成 diff 行，复用消息流里同一套 .diff 着色。 */
-  function diffHtml(text) {
-    const lines = String(text).split('\n');
-    let h = '<div class="diff">';
-    for (let i = 0; i < lines.length; i++) {
-      const ln = lines[i];
-      const c = ln.charAt(0);
-      const cls = c === '+' ? 'add' : c === '-' ? 'del' : c === '@' ? 'hunk' : 'ctx';
-      h += '<div class="ln ' + cls + '">' + esc(ln) + '</div>';
-    }
-    return h + '</div>';
   }
   /** 与 newCard 同宿主：挂到当前单元的 ai 消息体内（旧实现全仓找最后一条 ai，会跨轮串挂）。 */
   const cardHost = () => { cardMsg(); return msgBody(); };

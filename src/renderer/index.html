@@ -1532,6 +1532,24 @@ button.tg-head{transition:color var(--t-fast)}
   transition:background var(--t-fast);
 }
 .file-item:hover{background:var(--hover)}
+/* git 面板：每个 write worker 一列——补丁快照 / 安全发现 / 行级评审评论（只读，全由事件流投影） */
+.merge-list{display:flex;flex-direction:column;gap:var(--sp-4)}
+.merge-col{display:flex;flex-direction:column;gap:var(--sp-2);
+  border:0.5px solid var(--line-1);border-radius:var(--r-3);padding:var(--sp-2) var(--sp-3)}
+.merge-col .mc-head{padding:0;background:transparent}
+.mc-task{font-size:var(--fs-sub);color:var(--label-2)}
+.mc-patch summary{cursor:pointer;font-family:var(--font-mono);font-size:var(--fs-micro);color:var(--label-2)}
+.mc-patch .diff{margin-top:var(--sp-2);max-height:280px;overflow:auto}
+.mc-none,.rp-more{font-size:var(--fs-micro);color:var(--label-3)}
+.rp-sum{font-size:var(--fs-micro);color:var(--label-2)}
+.rp-list{margin:0;padding-left:var(--sp-5);display:flex;flex-direction:column;gap:2px;
+  font-size:var(--fs-micro);color:var(--label-2)}
+.rp-list code,.mc-comments code{font-family:var(--font-mono);color:var(--label-1)}
+.sev{font-family:var(--font-mono);font-size:var(--fs-micro);border-radius:var(--r-1);padding:0 4px}
+.sev-critical,.sev-high{color:var(--state-error)}
+.sev-medium{color:var(--warn)}
+.mc-comments .cm{font-size:var(--fs-micro);color:var(--label-2);
+  border-left:2px solid var(--line-2);padding-left:var(--sp-3)}
 .file-item svg{width:14px;height:14px;color:var(--muted);flex:none}
 .file-item .path{flex:1;font-family:var(--font-mono);font-size:var(--fs-sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .file-item .plus{font-family:var(--font-mono);font-size:var(--fs-label);color:var(--ok)}

@@ -31,6 +31,21 @@ function highlightDiffLine(line) {
   return html;
 }
 
+/** 文本 → `.diff` 行结构（按 +/-/@ 前缀着色）。
+ *  唯一实现：消息流的工具输出与 git 面板的 worker 补丁都走这里——两处各写一份
+ *  就会一处改色一处不改（本仓的「同族只硬化一支」就是这么攒出来的）。 */
+export function diffHtml(text) {
+  const lines = String(text).split('\n');
+  let h = '<div class="diff">';
+  for (let i = 0; i < lines.length; i++) {
+    const ln = lines[i];
+    const c = ln.charAt(0);
+    const cls = c === '+' ? 'add' : c === '-' ? 'del' : c === '@' ? 'hunk' : 'ctx';
+    h += '<div class="ln ' + cls + '">' + esc(ln) + '</div>';
+  }
+  return h + '</div>';
+}
+
 export function highlightAllDiffs(root) {
   const rows = (root || document).querySelectorAll('.diff .ln:not(.hunk)');
   rows.forEach(row => {

@@ -1069,6 +1069,43 @@ async function phaseElectron(root: string): Promise<void> {
       !b14Text.includes("暂无运行历史"),
       "B14 筛着的时候不说「暂无运行历史」——那会让用户以为任务从没跑过（假空；实测=" + JSON.stringify(b14Text) + "）",
     );
+    // B15 评审闭环的读端：git 面板逐列给补丁、安全发现与行级评论。全程只往会话 JSONL 追加
+    // 既有事件类型 + 重开读取，不调模型、不派 worker、不动 git（零钱，与 B11 同一手法）。
+    console.log("[panels-check] B15 git 面板的评审读端：补丁取最新一份、发现与评论上屏（零模型调用）");
+    const b15Rows: Record<string, unknown>[] = [
+      { type: "tool_result", callId: "diff-" + b11B, ok: true, output: "## stat\n src/sort.ts | 2 +-\n## patch\n+const old = 1" },
+      { type: "tool_result", callId: "diff-" + b11B, ok: true, output: "## stat\n src/sort.ts | 3 +-\n## patch\n+const newer = 2" },
+      { type: "security_report", agent_id: b11B, mode: "standard", llm_reviewed: false,
+        findings: [{ severity: "high", path: "src/sort.ts", line: 12, title: "拼接 SQL", description: "d", ruleId: "r1" }],
+        summary: { total: 1, bySeverity: { critical: 0, high: 1 } } },
+      { type: "diff_comment", agent_id: b11B, path: "src/sort.ts", line: 12, body: "改用参数绑定", ts: Date.now() },
+    ];
+    for (const e of b15Rows) await createEventLog(b11File).append(e as unknown as AgentEvent);
+    ok(await b8ClickSession("验收会话"), "B15 先切走（重开才走 showHistory → panelData 这条路）");
+    ok(await b8ClickSession(clarifyId), "B15 再切回靶子会话");
+    await cdp2.eval(`(() => { const c = document.querySelector('#qcGit'); if (c) c.click(); return String(!!c); })()`);
+    const b15Shown = await tryWait(
+      async () => ((await cdp2.eval<string>(
+        `(() => { const p = document.querySelector('.side-page[data-view="git"]'); const t = p ? (p.textContent || '') : ''; return t.includes('改用参数绑定') ? t : ''; })()`,
+      )) || null),
+      12_000,
+    );
+    const b15Text = await cdp2.eval<string>(
+      `(() => { const p = document.querySelector('.side-page[data-view="git"]'); return p ? (p.textContent || '').replace(/\\s+/g, ' ') : 'no-page'; })()`,
+    );
+    ok(b15Shown, "B15 评审面真上了屏（补丁 / 发现 / 评论都由事件流投影；实测=" + JSON.stringify(b15Text.slice(0, 150)) + "）");
+    ok(
+      b15Text.includes("补丁 v2") && b15Text.includes("const newer = 2") && !b15Text.includes("const old = 1"),
+      "B15 取的是最新那份补丁（v1→v2 里 v1 已被推翻，给旧版 = 让用户审错的代码；实测=" + JSON.stringify(b15Text.slice(0, 150)) + "）",
+    );
+    ok(
+      b15Text.includes("安全报告 1 项") && b15Text.includes("src/sort.ts:12") && b15Text.includes("仅规则扫描"),
+      "B15 安全发现带 path:line 且说清有没有模型复核（实测=" + JSON.stringify(b15Text.slice(0, 150)) + "）",
+    );
+    ok(
+      !b15Text.includes("NaN"),
+      "B15 屏面上没有 NaN（拼接式里夹一行注释会被读成一元正号 ⇒ 整段 HTML 变 NaN；本轮单测抓到过一次）",
+    );
     await killElectron(electron2);
   } finally {
     if (electron.exitCode === null) await killElectron(electron);
