@@ -664,6 +664,9 @@ SHA/base64」量出了一个比 append 面大得多的现行缺陷。
 脱敏邻域 4 files / **75 tests 全绿**；`pnpm security-check` **43 ✅ / 0 ❌**；
 `pnpm mutate-needles-check` **607 条 0 阻断 / 0 待复认 / 0 未覆盖**；两条新锚点在 clean HEAD `c27b6d8`
 **全杀**；`pnpm typecheck` 仅报未跟踪草稿 `scripts/sidebar-probe.ts`（别人的在飞文件），HEAD 态干净。
+去析取那一笔之后重跑全量 `pnpm test`：**191 files / 1861 tests，exit 0**
+——注意这是**在飞态**（工作树里另有 19 个已跟踪文件属于并发会话），不是 clean HEAD 的读数；
+它证的是「本程两笔没碰坏别的面」，不证 HEAD 自洽（HEAD 自洽要用 `git worktree add <tmp> HEAD` 另测）。
 
 
 
@@ -749,6 +752,11 @@ SHA/base64」量出了一个比 append 面大得多的现行缺陷。
     （转录落盘后加密，或给用户一条显式「清转录密钥」的工具，别偷偷改重放源）。
     **动手前先量真实命中**：拿本机既有转录跑 `SECRET_PATTERNS`（不含熵分支），报「几份转录 / 几条命中 /
     哪些事件类型」。零命中就撤这条——假任务比没任务更坏。
+    **已量（09-22，就此停在测量这一步）**：本机 `~/Library/Application Support/m0-agent-loop/sessions`
+    = **1 份转录 / 9 条事件行，`SECRET_PATTERNS` 命中 0 行**（逐规则、逐事件类型都空；复算命令见本文件末）。
+    ⇒ 这条**不构成开工理由**，但也不能读成「暴露面为零」——分母只有 9 条，产品在本机几乎没有真流量
+    （同一根因解释了为什么 `M0_API_KEY` 那批门一直是未证）。**重开条件写明**：任一转录里出现一条
+    `SECRET_PATTERNS` 命中，或转录量级到千条以上，再回来做；在那之前建加密/清理通道是无的放矢。
 15. 高熵规则的**命名残留**（`c27b6d8` 之后）：`.` 会截断候选，所以相对路径尾段仍被吃——
     实测 `node_modules/.pnpm/lightningcss@1.33.0/…` → `…/no****.darwin-arm64.node`、
     `.agent/sessions/<uuid>/events.jsonl` → `.agen****.jsonl`；SRI `sha512-…` 也仍掩（与不透明串不可区分）。
@@ -823,6 +831,23 @@ node_modules/.bin/tsx -e '
     for (const s of [`wrote ${dir}/out.jsonl`, "SESSION=Zx9Qm2Lp7Rk4Tv8Nw3Yb6Hc1Jd5Fs0Ga", "sk-abcdefghijklmnopqrstuvwxyz012345"])
       console.log(JSON.stringify(s), "→", JSON.stringify(m.redactSecrets(s).text));
   });'   # 修前：第一条整段成 `/var****`；修后：路径逐字不变、后两条仍掩
+# 待办 14 的那次「先量再动」：真 SECRET_PATTERNS 过本机全部转录，只报计数、不打印任何命中内容
+D="$HOME/Library/Application Support/m0-agent-loop/sessions" node_modules/.bin/tsx -e '
+  import("./src/agent/security/scan.ts").then(async (m) => {
+    const { readdirSync, readFileSync, statSync } = require("node:fs"); const { join } = require("node:path");
+    const files = []; const walk = (d) => { for (const n of readdirSync(d)) { const p = join(d, n);
+      statSync(p).isDirectory() ? walk(p) : n.endsWith(".jsonl") && files.push(p); } };
+    walk(process.env.D);
+    let lines = 0, hit = 0; const rules = new Map(), types = new Map();
+    for (const f of files) for (const l of readFileSync(f, "utf8").split("\n")) {
+      if (!l.trim()) continue; lines++;
+      const t = (() => { try { return JSON.parse(l).type ?? "?"; } catch { return "?"; } })();
+      const r = m.SECRET_PATTERNS.filter((p) => new RegExp(p.re.source, "g").test(l)).map((p) => p.ruleId);
+      if (r.length) { hit++; r.forEach((x) => rules.set(x, (rules.get(x) ?? 0) + 1)); types.set(t, (types.get(t) ?? 0) + 1); }
+    }
+    console.log(`转录 ${files.length} 份 / 事件行 ${lines} / 命中行 ${hit}`);
+    console.log("逐规则", [...rules].map(([k, v]) => k + "=" + v).join(" ") || "（零命中）", "｜逐型", [...types].map(([k, v]) => k + "=" + v).join(" ") || "（零命中）");
+  });'   # 09-22 实测：1 份 / 9 行 / 命中 0 —— 分母太小，不足以开工（重开条件写在待办 14）
 ```
 （`wc -l` 两边都数：单看修复后的 23 说明不了任何事，修复**前**那个 4 才是缺陷本身——
 4 个命中全在类型声明与注释里，读取点为 0。）
