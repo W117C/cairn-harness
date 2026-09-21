@@ -107,6 +107,26 @@
 2. **输出预留够不够**——`output_tokens` 第一次随截断一起落盘，
    「8192 的预留是否 binding」从猜测变成可数的事件。
 
+## 第二程（同日，`b1780b5` + `25ab07d`）：把「看得到」推到两端
+
+第一程的读数有一个共同短板：**全部是手写 provider**。这一程补两处真实入口。
+
+1. **剧本格式收 `turn_truncated`**（`src/providers/mock.ts`）。原先只收
+   `assistant_message/tool_call/usage` ⇒ 截断在冻结剧本里**根本写不出来**，
+   端到端那一跳没有观测者。沿用该文件自己为 `usage` 写下的理由（「不许它 = 判据只能靠手工注入，
+   而手工注入测不到生产那一跳」），并保留负控：`tool_result` 等运行时产物仍拒收
+   ——放行它等于让剧本伪造工具回执。
+2. **跨轮真请求体**：用 `createGlmSessionProvider` + transport 抓包判「模型下一轮真的看得到」
+   （`projectContext` 有这一行 ≠ 模型看得到，会话型 provider 以事件日志为唯一事实源）。
+
+新增后的读数（**clean HEAD 隔离 worktree**，非工作树态）：
+- `tsc --noEmit` **0 错**；`tests/turn-truncated.test.ts` **22 条**；
+  主树全量 `test` 182 files / **1702 passed** exit 0；`mutate-needles-check` 552 条 0 问题。
+- 变异表本条通道累计 **+9**，逐条实跑**全杀**。
+- 追加一次直接注入（把投影分支那句 `push` 摘掉）：跨轮那条**当场红**，
+  报错原文印出真实请求体 `把 flush 讲清楚\nflush 的关键在于把`（说明确实不在里面），
+  而同一组的负控**照样绿** ⇒ 这条判据不是摆设，也不是恒真。
+
 ## 待办（按优先级）
 
 1. 沉淀面：`failureDigestFromEvents`（能力 6/10）现在只看 `verify_result(ok:false)` 与
