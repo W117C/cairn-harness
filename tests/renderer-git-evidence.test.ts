@@ -14,6 +14,7 @@ function gitHTML(merge: unknown[]) {
     esc: (s: unknown) => String(s),
     workerEvidenceLabel,
     workerSpentLabel,
+    orphanWorktrees: null,   // git 页现在还会拼这一段；本文件不判它（见 renderer-orphan-worktrees）
     commentReadsBack,   // 真实现：这一列读不读得到由投影判，不在这里另给一个答案
     // 面板那一列 = 合并控制塔的列本身（457fe8d 撤了中间裁剪层），故渲染时还要读 diffHtml；
     // 本文件只判证据态与花费账，补丁正文由 tests/renderer-merge-review.test.ts 判。

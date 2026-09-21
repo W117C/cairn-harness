@@ -1243,6 +1243,61 @@ async function phaseElectron(root: string): Promise<void> {
       b17Shape.lno.length >= 1 && b17Shape.lno.every((s) => /^[0-9]+$/.test(s)),
       "B17 撤的是入口不是信息：行号照给（实测 " + JSON.stringify(b17Shape.lno) + "）",
     );
+    // B18 孤儿工作树：agent:state 的 worktree 字段此前在渲染层零读者（ipc:check 只查通道挂没挂，
+    // 查不到"挂着没人读"）。这里判的是"从 IPC 到屏上"这半段真走通了——期望由实测的盘上数算出来，
+    // 三种盘上态各有自己那句确切文案（不写成「要么显示要么不显示」的析取式，那属于任一成立即通过）。
+    console.log("[panels-check] B18 孤儿工作树：盘上数出来多少，屏上就该是什么样（只读，零模型调用）");
+    const b18State = await cdp2.eval<string>(
+      `(() => window.agent.getState().then((st) => JSON.stringify({
+        has: !!(st && st.worktree),
+        n: (st && st.worktree && Array.isArray(st.worktree.orphans)) ? st.worktree.orphans.length : -1,
+      })))()`,
+    );
+    const b18 = JSON.parse(b18State) as { has: boolean; n: number };
+    const want = !b18.has
+      ? { contains: "数不出来", wt: "error" }
+      : b18.n === 0
+        ? { contains: "本机没有残留工作树", wt: "0" }
+        : { contains: "残留工作树 " + String(b18.n) + " 个", wt: String(b18.n) };
+    // 这一段是打开 git 页时现扫盘才落地的（loadWorktree 的 await 之后才 redraw），所以先等它出现
+    // 再量：等状态不等事件，否则量到的是自己造的时序红。落不了定就是真红，红字里带实测文本。
+    const settled = await tryWait(async () => {
+      const hit = await cdp2.eval<string>(
+        `(() => { const p = document.querySelector('.side-page[data-view="git"]');
+          return (p && p.querySelector('.wt-orphan')) ? 'y' : ''; })()`,
+      );
+      return hit === "y" ? true : null;
+    }, 10_000);
+    const b18Dom = await cdp2.eval<string>(
+      `(() => {
+        const p = document.querySelector('.side-page[data-view="git"]');
+        const el = p ? p.querySelector('.wt-orphan') : null;
+        return JSON.stringify({ present: !!el, text: el ? (el.textContent || '').replace(/\\s+/g, ' ') : '', wt: el ? (el.dataset.wt || '') : '' });
+      })()`,
+    );
+    const b18Shown = JSON.parse(b18Dom) as { present: boolean; text: string; wt: string };
+    ok(
+      settled === true && b18Shown.present && b18Shown.text.includes(want.contains),
+      "B18 屏面与盘上数一致（盘：" + JSON.stringify(b18) + " 期望：" + JSON.stringify(want) +
+        " 实测：" + JSON.stringify(b18Shown.text.slice(0, 70)) + " 等落定=" + String(settled === true) + "）",
+    );
+    // data-wt 是关键：n=0 时「写没有」与「压根没读」在文本上像，但出处属性分得开
+    ok(
+      b18Shown.wt === want.wt,
+      "B18 屏上那段带得出自己的出处（盘：" + JSON.stringify(b18) + " 实测 data-wt=" +
+        JSON.stringify(b18Shown.wt) + "，期望 " + JSON.stringify(want.wt) + "）",
+    );
+    // 有这一段也只该有名字与命令：0 个可点的东西。清理那条路（cleanOrphanWorktree 连 agent/*- 分支
+    // 一起 branch -D、且不判是否已合并）在 #46 裁决前不给按钮——判据是「不许有」，不是「没有或没渲染」。
+    const b18Buttons = await cdp2.eval<number>(
+      `(() => { const p = document.querySelector('.side-page[data-view="git"]');
+        return p ? (p.querySelector('.wt-orphan') ? p.querySelectorAll('.wt-orphan button').length : -1) : -9; })()`,
+    );
+    ok(
+      b18Buttons === 0,
+      "B18 这一段只报不删（清理会连分支一起 branch -D，未裁决 ⇒ 不许有按钮；" +
+        "实测按钮数 " + String(b18Buttons) + "，期望 0）",
+    );
     await killElectron(electron2);
   } finally {
     if (electron.exitCode === null) await killElectron(electron);

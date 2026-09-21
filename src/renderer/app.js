@@ -950,6 +950,10 @@ let currentWs = WORKSPACES[0];
    「本会话从未碰过的文件 + 假测试输出」——假象比空白更坏，故一并删除
    （projections.ts 头注「面板 100% 事件流投影，无第二事实源」）。 */
 let panelData = EMPTY_PANEL_DATA;
+/* 孤儿工作树（§4.4.9）：main 每次 getState 现扫盘、只列不删。这个字段此前在渲染层零读者
+   （ipc:check 只看通道挂没挂，看不到"挂着没人读"），于是崩溃恢复留在盘上的 worktree
+   只有命令行能看见——而合并控制塔正是它的落脚点。三态：null=还没数 / {orphans}/ {error}。 */
+let orphanWorktrees = null;
 
 /* 右栏"文件树高亮"目标：diff 卡展开时置为对应文档路径，收折清空 */
 let activeFileDoc = null;
@@ -1020,6 +1024,7 @@ function gitViewHTML() {
       '<div class="settings-empty">' + BRANCH_ICON +
         '<p>本会话没有 write worker<br><span class="dim">派活改代码的子任务后，这里逐列列出补丁、安全发现与评审评论；版本操作走命令行</span></p>' +
       '</div>' +
+      orphanBlockHTML() +
     '</div>';
   }
   return '<div class="side-page-pad merge-list">' + cols.map((c) => {
@@ -1069,7 +1074,30 @@ function gitViewHTML() {
             '</div>'
         : '') +
     '</div>';
-  }).join('') + '</div>';
+  }).join('') + orphanBlockHTML() + '</div>';
+}
+
+/* 只报不删：清理走 cleanOrphanWorktree，它会连 agent/*- 分支一起 branch -D（不判是否已合并），
+   而「淘汰档强制删未合并改动」这条尚未裁决（§4.4.9 与 main 侧 scan 的注释都写着只列不删）。
+   所以这里给名字、给计数、给一条自查命令，一个按钮都不给。
+   三态各说各的话，key 在 data-wt 上（与 data-ev 同一手法：机器可查的出处）：
+   null = 还没数 ⇒ 整段不写；0 = 数过且确实没有 ⇒ 明说「没有」；数不出来 ⇒ 说出原因，不写成「没有」。 */
+function orphanBlockHTML() {
+  if (!orphanWorktrees) return '';
+  if (typeof orphanWorktrees.error === 'string') {
+    return '<div class="wt-orphan" data-wt="error">残留工作树：这一页数不出来（' + esc(orphanWorktrees.error) +
+      '）——盘上可能仍有，请在终端 <code>git worktree list</code> 自查</div>';
+  }
+  const names = orphanWorktrees.orphans || [];
+  if (!names.length) {
+    return '<div class="wt-orphan" data-wt="0">本机没有残留工作树<span class="mc-hint">（打开这一页时现扫的盘上事实）</span></div>';
+  }
+  return '<div class="wt-orphan" data-wt="' + String(names.length) + '">' +
+    '<span class="wo-n">残留工作树 ' + String(names.length) + ' 个</span>' +
+    names.slice(0, 8).map((n) => '<code>' + esc(n) + '</code>').join('') +
+    (names.length > 8 ? '<span class="rp-more">另有 ' + String(names.length - 8) + ' 个未列出</span>' : '') +
+    '<p class="mc-hint">界面上不给清理按钮：清理会连分支一起删且不判是否已合并。要清请在终端 <code>git worktree remove &lt;路径&gt;</code>。</p>' +
+  '</div>';
 }
 /* git 分支数据：当前分支 ahead/behind 计数与其他分支 */
 const BRANCHES = [
@@ -3754,12 +3782,26 @@ render();
       if (sel) void setSchedHistFilter(sel.value);
     });
   }
+  /* 孤儿工作树：main 在每次 getState 时现扫盘（§4.4.9：只列不删）。此前 agent:state 的
+     worktree 字段一路传到这里却没有读者——崩溃恢复留在盘上的 worktree 因此只有命令行能看见，
+     而合并控制塔正是它的落脚点。读失败/扫不出来都如实留一句，不写成「没有」。 */
+  async function loadWorktree() {
+    try {
+      const st = await api.getState();
+      orphanWorktrees = st && st.worktree
+        ? { orphans: Array.isArray(st.worktree.orphans) ? st.worktree.orphans : [] }
+        : { error: 'main 侧扫描未成功，且没带原因' };
+    } catch (err) {
+      orphanWorktrees = { error: ((err && err.message) || String(err)) };
+    }
+  }
   /* 打开标签页时刷新对应快照（同一处收口，别在渲染函数里再发请求） */
   settingsHooks.onOpenView = (key) => {
     const redraw = () => { if (typeof renderSide === 'function') renderSide(); };
     if (key === 'schedule') void loadSchedule(true).then(redraw);
     else if (key === 'memory') void loadMemory(true).then(redraw);
     else if (key === 'plugins') void loadPlugin(true).then(redraw);
+    else if (key === 'git') void loadWorktree().then(redraw);
   };
 
   /* ---------- 长任务目标（goal 模式）：composer 芯片 + 设定面板 ----------

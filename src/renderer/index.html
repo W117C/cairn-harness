@@ -1046,6 +1046,14 @@ button.tg-head{transition:color var(--t-fast)}
   line-height:1.4;padding:0 var(--sp-2);cursor:pointer}
 .ln-cmt:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
 .mc-hint{font-size:var(--fs-micro);color:var(--label-3)}
+/* 残留工作树（§4.4.9）：只报不删，所以这一条里没有可点的东西——只有名字、计数和一条自查命令 */
+.wt-orphan{margin-top:var(--sp-3);border-top:0.5px solid var(--line-1);padding-top:var(--sp-3);
+  display:flex;flex-wrap:wrap;gap:var(--sp-2);align-items:baseline;
+  font-size:var(--fs-sub);color:var(--label-2)}
+.wt-orphan .wo-n{color:var(--fg)}
+.wt-orphan code{font-family:var(--font-mono);font-size:var(--fs-micro);color:var(--label-1);
+  background:var(--surface-2);border-radius:var(--r-1);padding:1px var(--sp-2)}
+.wt-orphan .mc-hint{flex:1 1 100%}
 .cmt-head{font-family:var(--font-mono);font-size:var(--fs-micro);color:var(--label-2)}
 .term{
   background:var(--term-bg);color:var(--term-fg);font-family:var(--font-mono);font-size:var(--fs-sub);

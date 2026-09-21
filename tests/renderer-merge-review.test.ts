@@ -19,6 +19,7 @@ function gitHTML(events: unknown[], opts: unknown[] = []) {
     workerEvidenceLabel,
     workerSpentLabel,
     commentReadsBack,   // 用真实现：判「这一列还读得到吗」的规则本身要跟着测
+    orphanWorktrees: null,   // git 页另拼的残留工作树段（判据在 renderer-orphan-worktrees.test.ts）
     diffHtml: (t: unknown, o: unknown) => {
       opts.push(o);
       return '<div class="diff">' + String(t).split('\n').map((l: string) => '<div class="ln">' + l + '</div>').join('') + '</div>';
