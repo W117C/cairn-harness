@@ -940,9 +940,11 @@ async function phaseElectron(root: string): Promise<void> {
         String(b11Items) + " 期望 " + String(b11ParentToolCalls) + "）",
     );
     // B11d 只证了「不在主流」；另一半是「在它在的地方」——否则这就是摘信息而不是搬信息。
+    // 且必须**两个都在**：A 读过两本（child-a / child-b），写 `||` 等于「少一本也算过」，
+    // 而摘走之后静默少一本恰是这类有界列表最自然的失效形态（判卷面不许析取，见 assertion-health-scan）。
     ok(
-      b11RowA.includes(b11ChildA) || b11RowA.includes(b11ChildB),
-      "B11f worker 读过的文件在右栏那一行还读得到（准入是搬走不是删掉；实测 A 行 " + JSON.stringify(b11RowA.slice(0, 120)) + "）",
+      b11RowA.includes(b11ChildA) && b11RowA.includes(b11ChildB),
+      "B11f worker 读过的两本文件在右栏那一行都读得到（准入是搬走不是删掉；实测 A 行 " + JSON.stringify(b11RowA.slice(0, 200)) + "）",
     );
     console.log("[panels-check] B12 worker 审批两端：已死那一列不长卡，而 card_action 桥在真窗口走得通（零模型调用）");
     // B11 留下的 b11-write-2 已被崩溃恢复扫成 failed，但它的 approval 从未被答过（行上仍写「待批」）。
