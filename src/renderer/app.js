@@ -2062,16 +2062,24 @@ attachBtn.addEventListener('click', () => openFileDialog('upload'));
 
 /* 模态收起表：Escape 与焦点圈都只问这张表「现在开着哪一个」。
    原先这里写死 riskScrim / settingsOverlay 两支 ⇒ 第三支（§13 引导）静默没有键盘退路，
-   而鼠标路径（外点 / 按钮）照样好使——正是"只硬化一支"的形态。谁的浮层谁自己登记。 */
+   而鼠标路径（外点 / 按钮）照样好使——正是"只硬化一支"的形态。谁的浮层谁自己登记。
+   刻意按**选择器**惰性取元素（不在求值时碰 riskScrim / settingsOverlay）：这张表于是可以被
+   vm 切片判据整段带走复用（tests/renderer-workspace 就这么拿到真实现），而不必塞一个假函数。 */
 const MODAL_DISMISS = [
-  { el: riskScrim, close: () => closeRisk() },
-  { el: settingsOverlay, close: () => closeSettings() },
+  { sel: '#riskScrim', close: () => closeRisk() },
+  { sel: '#settingsOverlay', close: () => closeSettings() },
 ];
-function registerModalDismiss(el, close) {
-  if (!MODAL_DISMISS.some((m) => m.el === el)) MODAL_DISMISS.push({ el, close });
+function registerModalDismiss(sel, close) {
+  if (!MODAL_DISMISS.some((m) => m.sel === sel)) MODAL_DISMISS.push({ sel, close });
 }
 /** 数组序即优先级（risk 在最前：安全确认不该被别的浮层抢走这次按键）。 */
-const openModal = () => MODAL_DISMISS.find((m) => m.el && m.el.classList.contains('show')) ?? null;
+function openModal() {
+  for (const m of MODAL_DISMISS) {
+    const el = document.querySelector(m.sel);
+    if (el && el.classList.contains('show')) return { el, close: m.close };
+  }
+  return null;
+}
 
 /* Escape 分层收起：模态弹窗优先（查表），其次芯片看板（弹窗开着时不该让看板抢走这次按键） */
 document.addEventListener('keydown', (e) => {
@@ -2440,7 +2448,7 @@ render();
     onboardOverlay.setAttribute('inert', '');
   };
   // 自己登记进收起表：Escape 与焦点圈从此认识这个浮层（不登记就是"没有键盘退路"）
-  registerModalDismiss(onboardOverlay, () => closeOnboard());
+  registerModalDismiss('#onboardOverlay', () => closeOnboard());
   const onboardBootstrap = settingsReady.then(async (settings) => {
     if (!settings || settings.onboarded !== false) return; // 读失败时不猜：不弹也不假装已完成
     try {

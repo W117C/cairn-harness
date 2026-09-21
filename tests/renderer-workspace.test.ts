@@ -47,7 +47,10 @@ function boot() {
     // Deliberately present: actual sending must ignore all demo path variants.
     currentWs: { path: '~/dev/coding-suite' },
   };
-  runInNewContext(section('  /* ---------- 真实运行目录：', '  /* ---------- 运行目录接线结束') +
+  // 收起表整段带进 vm：切片里的引导接线会调 registerModalDismiss——喂真实现，不塞假函数
+  // （塞桩就等于把这条判据换成自己的副本，正是本仓切片判据的老坑）。
+  runInNewContext(section('const MODAL_DISMISS = [', '/* Escape 分层收起') +
+    section('  /* ---------- 真实运行目录：', '  /* ---------- 运行目录接线结束') +
     section('  send = async function () {', '  selectSession = async function'), context);
   const flush = () => new Promise<void>((done) => setImmediate(done));
   const edit = (value: string) => { input.value = value; input.listeners.input({}); };
