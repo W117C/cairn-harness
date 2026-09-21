@@ -326,23 +326,9 @@ export function summarizeRun(events: AgentEvent[]): RunSummary {
   return { summary, usage, toolStats };
 }
 
-/** 完成卡 payload（复用 report 卡类型，不新增卡片类型，§10.3 纪律）。 */
-export function automationCompletedCardPayload(e: Extract<AgentEvent, { type: "automation_completed" }>): Record<string, unknown> {
-  const head = e.status === "succeeded" ? "定时任务完成" : "定时任务失败" + (e.reason !== undefined ? "（" + e.reason + "）" : "");
-  return {
-    type: "report",
-    title: head + " · " + e.task_name,
-    body: [
-      "任务：" + e.task_name + "（" + e.automation_id + "）",
-      "触发时刻：" + e.occurrence_key.split(":").slice(1).join(":"),
-      "会话：" + e.session_id,
-      "usage: " + String(e.usage.inputTokens) + " in / " + String(e.usage.outputTokens) + " out",
-      "tool_stats: " + JSON.stringify(e.tool_stats),
-      "",
-      e.summary,
-    ].join("\n"),
-  };
-}
+/** 完成回写的**文字**不在 main 侧拼：产品卡片一律出自渲染层事件投影（见 renderer/app.js 的 eventLabel，
+ *  与 #48 对 securityReportCardPayload 的裁决同口径）。此处曾有一份 automationCompletedCardPayload，
+ *  全仓零调用者——留着就是「能力已发货、产品路径绕过它」的下一颗雷，故删。 */
 
 // ---- 触发执行（触发 = 全新会话；executor 注入 = 真实代码路径 handleAgentRun 系）----
 

@@ -26,8 +26,19 @@ it("跳过一行的标题说清是哪条任务、为什么跳过（不是让人�
   expect(labelOf({ type: "agent_status", status: "failed" })).toBe("worker 状态 · failed");
 });
 
-it("四个跳过原因 + 重启中断都有中文标签，未知原因原样透出不静默变空", () => {
-  expect(skipReasonLabel("too-old")).toContain("过期");
+it("无人值守的一次运行：失败不顶着「完成」，触发与完成都说是哪条任务", () => {
+  const failed = labelOf({ type: "automation_completed", task_name: "每晚备份", status: "failed", reason: "verify 未过" });
+  expect(failed).toContain("定时任务失败");
+  expect(failed).not.toContain("定时任务完成");
+  expect(failed).toContain("每晚备份");
+  expect(failed).toContain("verify 未过");   // 非 token 的原因原样透出，不静默丢
+  const ok = labelOf({ type: "automation_completed", task_name: "每晚备份", status: "succeeded" });
+  expect(ok).toContain("定时任务完成");
+  expect(ok).not.toContain("failed");
+  expect(labelOf({ type: "automation_triggered", task_name: "每晚备份" })).toContain("每晚备份");
+});
+
+it("四个跳过原因 + 重启中断都有中文标签，未知原因原样透出不静默变空", () => {  expect(skipReasonLabel("too-old")).toContain("过期");
   expect(skipReasonLabel("catch-up-skip")).toContain("休眠");
   expect(skipReasonLabel("overlap")).toContain("重叠");
   expect(skipReasonLabel("concurrency-cap")).toContain("并发满");

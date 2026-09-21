@@ -2830,10 +2830,20 @@ render();
   };
   function eventLabel(e) {
     const base = EVENT_LABELS[e.type] || String(e.type);
+    const nm = typeof e.task_name === 'string' && e.task_name ? e.task_name + ' ' : '';
     // agent 归因走 .tag，状态留在标题里（failed / waiting_approval 是需要一眼看到的词）
     if (e.type === 'automation_skipped') {
-      const name = typeof e.task_name === 'string' && e.task_name ? e.task_name + ' ' : '';
-      return base + '：' + name + skipReasonLabel(e.reason);
+      return base + '：' + nm + skipReasonLabel(e.reason);
+    }
+    if (e.type === 'automation_triggered') {
+      return base + '：' + nm + '无人值守开始运行';
+    }
+    /* 无人值守的一次运行：成败是这条记录存在的全部理由，failed 不许顶着「完成」二字
+       （原先缺省分支会拼成「定时任务完成 · failed」）。 */
+    if (e.type === 'automation_completed') {
+      const failed = e.status === 'failed';
+      const why = typeof e.reason === 'string' && e.reason ? skipReasonLabel(e.reason) : (failed ? '未记原因' : '已结束');
+      return (failed ? '定时任务失败：' : '定时任务完成：') + nm + why;
     }
     return typeof e.status === 'string' && e.status ? base + ' · ' + e.status : base;
   }
