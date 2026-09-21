@@ -169,12 +169,21 @@ function budgetLine(spec: GoalSpec, spentUsd: number | null): string {
   return "已花 " + usd(spentUsd) + "，美元上限 " + usd(spec.maxUsd);
 }
 
-/** 默认那一子句假定「上一轮有红字可对着修」。被收走的那一轮没有红字，所以那句话得被换掉而不是被追加。 */
-const DEFAULT_FOLLOW = "红字逐条已在上一轮上下文里，直接针对它继续，不要重述已经完成的部分";
+/** 块里那句「下一步该干什么」按**证据态**给，不写死一句。
+ *  原先只有一句「红字逐条已在上下文里，对着它继续」——那是 `failed` 的话：
+ *  `absent` 从没跑过验证（根本没有红字可对着），`stale` 是绿证据过期（同样没有红字），
+ *  两种情况下教模型「对着红字改」都是把它指向不存在的东西，而 goal 模式最缺的恰恰是
+ *  「去拿证据」这一步（顶尖与普通差在能证明代码真的能跑）。 */
+const FOLLOW: Record<WorkerEvidence, string> = {
+  verified: "上一轮验证已通过 ⇒ 这一轮只该收束，别再往目标里加东西",
+  stale: "验过之后又写了盘 ⇒ 那份绿证据已作废，本轮针对新改动重跑一次验证",
+  failed: "红字逐条已在上一轮上下文里，直接针对它继续，不要重述已经完成的部分",
+  absent: "这个目标至今没有任何验证记录 ⇒ 本轮先把验证跑起来拿到证据，别在没跑过测试的情况下继续加东西",
+};
 
 /** 每个续跑轮起点注入的块：目标 + 第几轮 + 上一轮证据态 + 预算口径 + 收束条件。
  *  红字的**逐条输出**不重复携带——#17 的回流通道已经把它送进上下文了，这里再抄一份就是双份付费。
- *  `hint` 由 goalStopDecision 给出时**替换**「针对红字继续」那一子句（不是另起一行）：
+ *  `hint` 由 goalStopDecision 给出时**替换**证据态那句默认指令（不是另起一行）：
  *  本轮没有红字、只有一段被收走的正文时，默认那句会把模型指向不存在的东西。 */
 export function goalReminder(
   spec: GoalSpec,
@@ -187,7 +196,7 @@ export function goalReminder(
     "[goal 续跑 第 " + String(turn) + "/" + String(spec.maxTurns) + " 轮] 目标：" +
     clampToTokenBudget(spec.objective, GOAL_OBJECTIVE_TOKEN_CAP, "目标") +
     "\n上一轮终态：证据 " + EVIDENCE_TEXT[evidence] +
-    "（" + (hint ?? DEFAULT_FOLLOW) + "）。" +
+    "（" + (hint ?? FOLLOW[evidence]) + "）。" +
     "\n预算：" + budgetLine(spec, spentUsd) + "；轮次上限 " + String(spec.maxTurns) + "。" +
     "\n收束条件：只有 verify 通过且之后不再写盘才算完成；认为已达成就调用 verify 拿绿证据再收束。";
   return clampToTokenBudget(body, GOAL_REMINDER_TOKEN_CAP, "goal 提醒");

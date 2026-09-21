@@ -4755,8 +4755,9 @@ const MUTATIONS = [
     src: "src/agent/goal.ts",
     test: "tests/goal-stop-decision.test.ts",
     desc: "hint 收进参数却不用 ⇒ 块里同时留着「针对红字继续」那句错指令",
-    apply: (s) => s.replace('"（" + (hint ?? DEFAULT_FOLLOW) + "）。"', '"（" + DEFAULT_FOLLOW + "）。"'),
-    expectFail: "goalReminder：hint 在场时**替换**默认那一子句（一处只留一个指令，不追加也不双份付费）",
+    // 针脚随「默认句改成按证据态给」而改指（2026-09-22）：语义逐字不变——仍然只摘掉 hint 那一半。
+    apply: (s) => s.replace('"（" + (hint ?? FOLLOW[evidence]) + "）。"', '"（" + FOLLOW[evidence] + "）。"'),
+    expectFail: "goalReminder：hint 在场时**替换**证据态那句默认指令（一处只留一个指令，不追加也不双份付费）",
   },
   {
     id: "goal-truncation-branch-forgets-hint",
@@ -4765,6 +4766,14 @@ const MUTATIONS = [
     desc: "continue 判对了但不给 hint ⇒ 续跑照跑，可模型收到的仍是「对着红字改」",
     apply: (s) => s.replace('        hint: "上一轮没写完就被收走（没有红字，也没有验证）⇒ 从断点接着写完它，先别开新方向",\n', ''),
     expectFail: "被收走那一支带 hint；默认那一支不带（每条续跑都多说一句 = 每轮重送的钱）",
+  },
+  {
+    id: "goal-reminder-follow-ignores-evidence",
+    src: "src/agent/goal.ts",
+    test: "tests/goal-stop-decision.test.ts",
+    desc: "下一步那一句不看证据态、恒用 failed 的话 ⇒ 「从没跑过验证」的一轮被教成「去改红字」",
+    apply: (s) => s.replace("(hint ?? FOLLOW[evidence])", "(hint ?? FOLLOW.failed)"),
+    expectFail: "「对着红字改」只在该说的证据态出现：absent 与 stale 手上根本没有红字",
   },
   // ---- 截断卡的标题面（tests/renderer-truncation-label.test.ts，2026-09-21）----
   {

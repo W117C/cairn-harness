@@ -167,15 +167,30 @@ describe("hint 通道：判据算出来的那句要真送到模型面前（「�
     expect(hintOf(decide({ evidence: "failed" }))).toBeUndefined();
   });
 
-  it("goalReminder：hint 在场时**替换**默认那一子句（一处只留一个指令，不追加也不双份付费）", () => {
-    const t = goalReminder(SPEC, 2, 0.02, "absent", hintOf(decide({ truncated: true, wrote: false })));
+  it("goalReminder：hint 在场时**替换**证据态那句默认指令（一处只留一个指令，不追加也不双份付费）", () => {
+    // 挑 failed：那一支的默认句正是「对着红字继续」，替换得掉才说明 hint 真在起作用。
+    const t = goalReminder(SPEC, 2, 0.02, "failed", hintOf(decide({ truncated: true, wrote: false })));
     expect(t).toContain("没写完就被收走");
     expect(t).not.toContain("红字逐条已在上一轮上下文里");
     expect(estimateTextTokens(t)).toBeLessThanOrEqual(GOAL_REMINDER_TOKEN_CAP);
   });
 
-  it("负控：无 hint ⇒ 默认那一子句逐字仍在（每轮重送的块不得被顺手改掉）", () => {
-    expect(goalReminder(SPEC, 2, 0.02, "absent")).toContain("红字逐条已在上一轮上下文里");
+  it("负控：无 hint ⇒ failed 那句默认指令逐字在场（每轮重送的块不得被顺手改掉）", () => {
+    expect(goalReminder(SPEC, 2, 0.02, "failed")).toContain("红字逐条已在上一轮上下文里");
+  });
+
+  it("「对着红字改」只在该说的证据态出现：absent 与 stale 手上根本没有红字", () => {
+    // 这一条是本轮的真缺陷：整块原本无论什么证据态都说同一句,
+    // 于是「从没跑过验证」的那一轮拿到的是「去改红字」——把模型指向不存在的东西。
+    const absent = goalReminder(SPEC, 2, 0.02, "absent");
+    const stale = goalReminder(SPEC, 2, 0.02, "stale");
+    expect(absent).toContain("没有任何验证记录");
+    expect(absent).toContain("把验证跑起来");
+    expect(absent).not.toContain("红字");
+    expect(stale).toContain("已作废");
+    expect(stale).toContain("重跑一次验证");
+    expect(stale).not.toContain("红字");
+    expect(absent).not.toBe(stale);
   });
 
   it("生产入口真的把 decision.hint 传进去（goalNextTurn 未导出 ⇒ 只能钉这一行的形状）", () => {
