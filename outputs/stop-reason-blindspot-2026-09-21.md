@@ -580,6 +580,37 @@ terminal/merge/agents），四条改了投影却不在表里：`usage` / `agent_
 锚点 +4，在 clean HEAD（`6c62711`）隔离 worktree 实跑**全杀**；
 `pnpm mutate-needles-check` 602 条 0 阻断；`pnpm typecheck` HEAD 态 0 错。
 
+## 第十七程（09-22，`d818c18`）：「用户自定义子智能体」只成立了一半——补发现面
+
+顺目标里点名的能力（用户自定义子智能体）扫了一遍这条面，量出的缺口不在执行端，在**发现端**：
+`pipeline.stages[].role` 认自由字符串，内置只有 implement/review/test，自定义要写成
+`plugin-name:agent-name`；执行端确实吃 frontmatter（tools/disallowedTools/maxTurns/isolation/model，
+逐个查到读取点）——**但没有任何地方告诉模型注册了哪些角色**。skill 有 `routingList`，角色没有。
+于是这个能力实际形态是「猜名字」，猜错的唯一反馈是 spawn 被拒。
+
+**① 角色进路由清单，与 skill 共用一份预算。** 没写 description 的也列（不列就永远不可能被发现），
+并如实写「该 agent 文件没写 description」；未信任插件不列（与 `findAgentRole` 同口径，不留半开的面）。
+共用截断是因为另起一段就是两套口径——而被截掉的那一条恰好可能是模型唯一需要知道的。
+
+**② 不读的字段必须吭声。** §9.6 里 CC 有、我们执行端还没有面的四个（effort/skills/memory/background）
+改为逐键警告；另外补了**未知键**警告并列出合法键集——`disallowed_tools` 这种下划线笔误此前静默吃掉，
+等于「申报了剔除面、实际按默认面跑」，工具面静默变宽比少一个字段严重得多。
+安全约束那三件（hooks/mcpServers/permissionMode）保持原有单独口径，没并进普通未知键。
+反控：只写合法键 ⇒ 零警告（否则「什么都警告」也能骗过上面那些断言）。
+
+**③ 针脚体检当场抓到一根被自己改坏的旧针。** 我把清单合成一行后，
+`skill-routing-ignores-disable-model-invocation` 的针脚不再存在 ⇒ `mutate-needles-check` 报阻断 1。
+改指新源行后复跑：四条（含这根旧的）在 clean HEAD `d818c18` **全杀**。
+——这正是"改实现的人顺手把锚点改绿"最容易滑过去的地方，靠的是体检而不是自觉。
+
+**没做的半边（记进待办 12/13）**：角色名不落 `agent_spawned` ⇒ 崩溃恢复重建时角色丢了；
+以及除插件容器外**没有非插件的自定义路径**（用户往 `~/.claude/agents/x.md` 放文件得不到任何东西，
+用户级插件目录还要 `M2E_USER_PLUGINS` 才生效）。
+
+**本程读数**：新增 `tests/plugin-role-discoverability.test.ts` 8 条；插件批 **10 files / 117 tests 全绿**；
+`pnpm agents-check` 255 ✅ / 0 ❌（暗卷 1 项无凭据按未证报出）；
+`pnpm mutate-needles-check` 605 条 0 阻断 / 0 待复认 / 0 未覆盖；`pnpm typecheck` HEAD 态 0 错。
+
 ## 待办（按优先级）
 
 1. 沉淀面：`failureDigestFromEvents`（能力 6/10）现在只看 `verify_result(ok:false)` 与
@@ -645,6 +676,12 @@ terminal/merge/agents），四条改了投影却不在表里：`usage` / `agent_
     接法：一次 `scanStreamEvent`，落盘与 onEvent 共用同一份（两份文本 = §10.1 禁的第二套呈现）。
     动手前先量两件事：frozen 判卷文件里有没有 `sk-` 形状的期望（改判据要写 BLOCKED.md，不许改代码绕）；
     `redactSecrets` 的高熵分支会不会误抹 SHA/base64 形状的正文（新增面是 verify_result 与 compaction）。
+12. 角色名不落 `agent_spawned`（§4.4.9 的事件面）⇒ 崩溃恢复重建 worker 时角色丢了，只能按默认面跑。
+    同时 `pipeline` 之外的 read/write/supervise worker **带不了 role**（`SpawnArgs` 没有这一位，
+    supervise 硬编码 implement）——「自定义子智能体」目前只覆盖 pipeline 一条路。
+13. 除插件容器外没有非插件的自定义路径：用户往 `~/.claude/agents/x.md` 放文件得不到任何东西，
+    用户级插件目录还要 `M2E_USER_PLUGINS` 环境变量才生效。要么给它一条正式路径，
+    要么在文档里把「角色 = 插件专属」写死成边界——现在是两头都不明说。
 
 ## 复算命令
 
@@ -678,6 +715,15 @@ TERM=dumb node node_modules/vitest/vitest.mjs run --config tests/vitest.config.t
 TERM=dumb pnpm agents-check          # 读末行 255 ✅ / 0 ❌ 与 UNVERIFIED 计数
 # 「修复前 3 擦 / 10 漏」那份读数是临时探针量出来的，没留在仓里；现在由本闸逐型断言接管
 # （要看旧行为：git show 6c62711^:src/agent/worker-projection.ts 里的 if 链，三型之外原样 return e）
+# 第十七程（角色发现面 + 不读字段必须吭声）
+TERM=dumb node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/plugin-role-discoverability.test.ts
+TERM=dumb pnpm agents-check          # 末行 255 ✅ / 0 ❌ + 未证计数
+TERM=dumb pnpm mutate-needles-check   # 本程就是靠它抓到一根被自己改坏的旧针（改指后 0 阻断）
+cd /tmp/dsh-mv-<x> && TERM=dumb node scripts/mutate-verify.mjs \
+  role-unimplemented-keys-silent role-unknown-key-silent routing-list-hides-plugin-roles \
+  skill-routing-ignores-disable-model-invocation
+grep -n "可用作 pipeline stages" src/agent/plugins/index.ts   # 角色行只这一处；多一处＝两份口径
+grep -c "PLUGIN_ROLE_CONSUMED_KEYS\|PLUGIN_UNIMPLEMENTED_KEYS" src/agent/sequencer.ts   # 实测 5＝两张表「定义 + 读取点」齐全
 ```
 （`wc -l` 两边都数：单看修复后的 23 说明不了任何事，修复**前**那个 4 才是缺陷本身——
 4 个命中全在类型声明与注释里，读取点为 0。）
