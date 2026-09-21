@@ -478,6 +478,38 @@ final HEAD `0ec8bff` 的全量 `test`（同一台软链 worktree，按规则 52 
 **底栏口径未动**：`#eventCount` 读的是 `historyEvents.length` / `real.events`，与渲染无关，
 所以「少画几条」不会伪装成「少几条事件」——这句是读过 `displayedEventCount()` 后写的，不是猜的。
 
+## 第十四程（09-22）：把「摘掉」补成「搬走」——一行摘要政策的一份实现
+
+第十三程 ④ 留了一格欠账：worker 的 `tool_call` 不再进主对话流之后，右栏那行只有 `🔧 read_file`，
+**它碰过哪个文件**在界面上无处可读。本程补这一格，顺手把这条政策收成一份实现。
+
+**① 政策搬进 projections，两个消费者取同一份。** `app.js` 里的 `toolSummary(name, args)`
+（只有一处调用者，且 `name` 从没被读过）删掉，改为 `projections.toolArgsSummary(args)`；
+右栏 `projectAgentPanel` 的 `recent` 行变成 `🔧 工具名 · 摘要`。留在本地就是两份——
+一份记得 path、另一份早晚会忘（本仓的「同族各抄一份」第六次以上）。反向断言写在判据里：
+`app.js` 不许再出现 `pick('path'` 或 `function toolSummary`。
+
+**② 补一个先前就存在的有界洞。** 旧实现只对**非串值**做 `slice(0,120)`，长字符串参数原样穿进
+那一行 DOM——未知工具带一条正文类参数就是无限行。现在三个分支共用一条界（`raw.slice(0, 120)`），
+判据逐分支验长度。**这不是准入引入的**（准入前那行也在主流里），是写测试时才被发现的。
+
+**③ vm 绑料加一名。** 按规则 55：`app.js` 现在多 import 一个名字，三份切片判据的 context
+都得补 `toolArgsSummary`（真实现，不是桩）——`tests/renderer-vm-module.ts` 一次 export，三处取用。
+
+**④ 判据的一半是「搬走 ≠ 删掉」。** 新增 `panels-check` B11f：worker 读过的文件必须出现在右栏那一行
+（B11d 只证了它不在主流）。两根一起才是完整证据：信息换了地方，没有消失。
+
+**本程读数**：新增 `tests/tool-args-summary.test.ts` 9 条（政策四态 + 一份实现反控 + 右栏带目标 +
+≤3 条收口 + 渲染处仍有界）；渲染层与投影消费方批 **34 files / 264 tests 全绿**；
+`pnpm panels-check` 在政策搬迁后**全绿**（B11c/d/e 读数逐字未变：转录 1724 字 / false,false / 1=1，
+说明搬动没改主转录形状），B11f 实测 A 行
+`b11-read-1（已完成 · read）…1500 tok · read_file×2 · 4.2s🔧 read_file · src/b11-child-only-a.ts…`
+——路径确实换了地方，没有消失；
+锚点 +4（`panel-recent-drops-tool-target` / `app-reinlines-its-own-tool-summary` /
+`tool-summary-picks-command-before-file` / `tool-summary-unbounded-string-leaks`），
+四条在 clean HEAD（`589fb56`）隔离 worktree 实跑**全杀**，主树一个字节未动；
+`pnpm mutate-needles-check` 595 条 0 阻断 / 0 待复认 / 0 未覆盖；`pnpm typecheck` HEAD 态 0 错。
+
 ## 待办（按优先级）
 
 1. 沉淀面：`failureDigestFromEvents`（能力 6/10）现在只看 `verify_result(ok:false)` 与
@@ -528,9 +560,9 @@ final HEAD `0ec8bff` 的全量 `test`（同一台软链 worktree，按规则 52 
    live（`renderEvent`）与 replay（`projectUnits`）两支各一行守卫，各配一根锚点。
    当年这条预判「会动 `#eventCount` 与泡数口径」——**实测没动**：底栏读的是快照行数 /
    live 投递数，与渲染无关。预判的风险要复算，不是照抄。
-9. 准入后欠的一格可见性（第十三程 ④）：`projectAgentPanel` 的 `recent` 只写 `🔧 工具名`，
-   不含 `toolSummary(name,args)` 那份摘要 ⇒ worker 读过哪个文件在界面上彻底不可见。
-   补齐是「换地方显示」，不是「把主流画回来」。
+9. ~~准入后欠的一格可见性~~ **已落（第十四程）**：`toolArgsSummary` 成为「一行摘要」的唯一实现，
+   主转录那行与右栏 worker 行的 recent 行都从它取料；顺带补了原实现的一个有界洞
+   （只截非串值 ⇒ 长字符串参数整段进那一行）。
 10. 同族清账（本轮新撞）：vm 切片判据现共 3 份消费（`renderer-history-live` /
     `renderer-panels-real-data` / `renderer-run-control`），剥法已收进 `tests/renderer-vm-module.ts`
     一处，但**切片本身仍按标记字符串取料**——`app.js` 改名一段标记就会 throw（正确行为），
@@ -555,6 +587,10 @@ cd /tmp/dsh-mv-<x> && TERM=dumb node scripts/mutate-verify.mjs \
   renderer-live-draws-child-detail renderer-replay-draws-child-detail renderer-hides-worker-spend \
   admission-hides-unattributed-prose admission-treats-empty-agent-id-as-child
 grep -n "entersMainConversation" src/renderer/*.js src/renderer/projections.ts   # 判据 1 份、守卫 2 处
+# 第十四程（一行摘要一份实现）
+TERM=dumb node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/tool-args-summary.test.ts
+TERM=dumb pnpm panels-check          # 读 B11d（不在主流）+ B11f（在右栏）这一对
+grep -rn "toolSummary" src/ tests/ scripts/   # 只剩 tests 里那条「不许再出现」的反向断言
 ```
 （`wc -l` 两边都数：单看修复后的 23 说明不了任何事，修复**前**那个 4 才是缺陷本身——
 4 个命中全在类型声明与注释里，读取点为 0。）
