@@ -309,6 +309,26 @@ try {
     check(mainCheckC.includes(CANARY), "C9a 哨兵已嵌入 worker 任务书 fixture（存在性可机械校验，防哨兵失踪后断言退化恒真）");
     check(!events.some((e) => e.type === "user_message" && (e as { content: string }).content.includes(CANARY)), "C9b 主上下文零 canary（worker 上下文隔离的另一面：worker 任务书不回流为主 user_message）");
     check(events.filter((e) => e.type === "assistant_message").every((e) => !(e as { content: string }).content.includes(CANARY)), "C9c worker 任务书不以 assistant 正文进主流（只有 agent_result/合成 tool_result 形态）");
+    /* C9d/C9e/C9f（2026-09-22）：带正文的子流事件同样必须带 agent_id。C5 只问了 tool_call,
+       而 §4.4.4 的「子流不越界」正是靠这个字段成立的——归因白名单此前不收 assistant_message /
+       assistant_delta / error,worker 说的话在主流里没有归因,父投影于是把它当成父会话自己说的。
+       取样文本复用 C7 已核对过的那份报告（不新造字面量：哨兵失踪时宁可红,也不要恒真）。
+       取料读**字段**不读 JSON.stringify 的串：串里换行是 \n 两字符，与 summary 的真换行不等值
+       （第一版就是这么写成 0 命中的——存在性校验把它报了红，否则 C9e 会静默空转）。 */
+    const reportProbe = (resultC?.summary ?? "").slice(0, 24);
+    const proseOf = (e: AgentEvent): string =>
+      e.type === "assistant_message" ? e.content
+        : e.type === "assistant_delta" ? e.text
+          : e.type === "error" ? e.message
+            : "";
+    const workerProse = events.filter((e) => proseOf(e).includes(reportProbe));
+    const parentProse = events.filter((e) => proseOf(e) !== "" && !proseOf(e).includes(reportProbe));
+    check(workerProse.length >= 1, "C9d 主流里找得到 worker 的正文型事件（存在性校验，防 C9e 空转）", "实际 " + String(workerProse.length));
+    check(workerProse.every((e) => (e as { agent_id?: string }).agent_id === spawnedC?.agent_id),
+      "C9e worker 的正文型事件在主流里带 agent_id（不带 = 它以父会话发言的形态进父投影）");
+    check(parentProse.length >= 1 && parentProse.every((e) => (e as { agent_id?: string }).agent_id === undefined),
+      "C9f 负控：父会话自己的正文不带 agent_id（否则 C9e 可能只是「逢正文都贴」的假绿）",
+      "父正文 " + String(parentProse.length) + " 条");
     delete process.env.M3A_MAIN_SCRIPT;
   }
 
