@@ -3,7 +3,7 @@
 // 事件流永不删改；调用方 append 进日志即完成一次压缩（压缩必出卡，不静默）。
 // 事件 id = 1-based 行号（M1a 定稿，append-only 永不漂移）。
 import type { AgentEvent, CompactionEvent, CompactionUsage } from "../events";
-import { eventIdAt, excludedIds, projectContext, type ContextMessage } from "./context";
+import { eventIdAt, excludedIds, hasWorkerAttribution, projectContext, type ContextMessage } from "./context";
 import { classifyResult, shapeResult, summaryTruncate } from "./shape";
 import { setTimeout as delay } from "node:timers/promises";
 import { deriveBoundaries, snapToProgressBoundary, economicGate, type EconomicState } from "./economics";
@@ -375,6 +375,13 @@ export function serializeConversation(
     deltaOpen = false;
   };
   for (const e of events) {
+    // 子流不越界（§4.4.4）在**折叠面**上同样要成立：带 agent_id 的是 worker 的内部转录,
+    // projectContext 已按同一判定把它们挡在父上下文外,但摘要走的是另一条取料路径——
+    // 一旦混进摘要,worker 的过程就以「父会话做过」的形态替掉被排除的旧事件并永久留存。
+    if (hasWorkerAttribution(e)) {
+      flushDelta(); // 主流正文的边界照旧收束,不让两段正文隔着一段子流粘成一段
+      continue;
+    }
     if (e.type === "assistant_delta") {
       deltaBuf += e.text;
       deltaOpen = true;

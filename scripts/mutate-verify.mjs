@@ -4818,6 +4818,22 @@ const MUTATIONS = [
     apply: (s) => s.replace('"tool_result", "verify_result", "error"]', '"tool_result", "verify_result"]'),
     expectFail: "正文与错误三类都进归因面（漏一型 = 它以父会话的形态落进主转录）",
   },
+  {
+    id: "compaction-summary-leaks-child-stream",
+    src: "src/agent/compaction.ts",
+    test: "tests/compaction.test.ts",
+    desc: "摘要输入不看归因 ⇒ worker 的内部转录被父会话「做过」的形态写进长期留存的摘要",
+    apply: (s) => s.replace("if (hasWorkerAttribution(e)) {", "if (false) {"),
+    expectFail: "带归因的四型一个字节都不进摘要输入",
+  },
+  {
+    id: "compaction-child-skip-merges-deltas",
+    src: "src/agent/compaction.ts",
+    test: "tests/compaction.test.ts",
+    desc: "跳过子流时不先收尾正文 ⇒ 子流两侧的两段父正文粘成一段（父说过什么被改写）",
+    apply: (s) => s.replace("      flushDelta(); // 主流正文的边界照旧收束,不让两段正文隔着一段子流粘成一段\n", ""),
+    expectFail: "两段主流正文中间夹一段子流时不粘连（子流被跳过，父的正文边界照旧收束）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

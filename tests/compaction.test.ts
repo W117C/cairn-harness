@@ -21,6 +21,7 @@ import {
   shouldCompact,
 } from "../src/agent/compaction";
 import { createGlmSessionProvider } from "../src/agent/glm-session";
+import { withAgentId } from "../src/agent/worker-projection";
 
 let dir: string | undefined;
 afterEach(async () => {
@@ -499,5 +500,59 @@ describe("withModelBudget（inputLimit 换成模型真实窗口）", () => {
     }
     expect(withModelBudget(DEFAULT_COMPACTION_CONFIG, DEFAULT_COMPACTION_CONFIG.maxOutputReserve))
       .toBe(DEFAULT_COMPACTION_CONFIG);
+  });
+});
+
+describe("摘要输入不含子流（§4.4.4 在折叠面上的那一半）", () => {
+  // 动手前的实测：compaction.ts 里 agent_id 零命中——projectContext 早就按「带 agent_id 即子流」
+  // 把 worker 事件挡在父上下文外,而摘要走另一条取料路径。摘要会替掉被排除的旧事件并长期留存,
+  // 所以 worker 的内部转录一旦混进去,就以「父会话做过这些事」的形态进了父的记忆。
+  // 子流事件一律经**生产入口同一份装饰器** withAgentId 生成：既贴真相,也绕开字面量的多余属性检查
+  // （assistant_message 的 agent_id 字段还没进类型声明——见下方那条待办）。
+  const decorate = (e: AgentEvent): AgentEvent => withAgentId(e, "w1");
+  const parent: AgentEvent[] = [
+    { type: "user_message", content: "父会话的任务" },
+    { type: "assistant_message", content: "父会话的正文" },
+  ];
+  const child: AgentEvent[] = [
+    decorate({ type: "assistant_message", content: "worker 内部正文" }),
+    decorate({ type: "tool_result", callId: "t9", ok: true, output: "worker 内部转录" }),
+    decorate({ type: "verify_result", callId: "v9", ok: false, attempt: 1, maxAttempts: 3, results: [] }),
+    decorate({ type: "turn_truncated", callId: "m9", outcome: "output_budget", stop_reason: "max_tokens" }),
+  ];
+
+  it("带归因的四型一个字节都不进摘要输入", () => {
+    const text = serializeConversation([...parent, ...child], 2000);
+    for (const secret of ["worker 内部正文", "worker 内部转录", "v9", "m9"]) {
+      expect(text).not.toContain(secret);
+    }
+    expect(text).toContain("父会话的任务"); // 负控：父侧事件照旧全量在
+    expect(text).toContain("父会话的正文");
+  });
+
+  it("无归因的同型事件照常进（判定读的是字段，不是类型清单）", () => {
+    const text = serializeConversation(
+      [
+        { type: "assistant_message", content: "worker 内部正文" },
+        { type: "tool_result", callId: "t9", ok: true, output: "worker 内部转录" },
+      ] as AgentEvent[],
+      2000,
+    );
+    expect(text).toContain("worker 内部正文");
+    expect(text).toContain("worker 内部转录");
+  });
+
+  it("两段主流正文中间夹一段子流时不粘连（子流被跳过，父的正文边界照旧收束）", () => {
+    const text = serializeConversation(
+      [
+        { type: "assistant_delta", callId: "m1", text: "前半句" },
+        ...child,
+        { type: "assistant_delta", callId: "m1", text: "后半句" },
+      ] as AgentEvent[],
+      2000,
+    );
+    const assistantLines = text.split("\n").filter((l) => l.startsWith("[Assistant]"));
+    expect(assistantLines.length).toBeGreaterThan(0);
+    expect(assistantLines.some((l) => l.includes("前半句后半句"))).toBe(false);
   });
 });
