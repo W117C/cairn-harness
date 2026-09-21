@@ -164,12 +164,14 @@ if-else 链静默丢弃。后果不是"少一行"：压缩会**排除**被摘要
    沉淀器却完全看不见的一类。补进 digest。（⚠️ `src/agent/memory/distill.ts` 另有
    在飞 hunk，动前先确认对方已落库。）
 2. 面板可见：渲染层按 `outcome` 出文案（main 只落 token 的规矩，#48 同口径）。
-3. ~~门/锚点~~ **已落**：变异表 +9，逐条在 HEAD 隔离 worktree 实测**全杀**
+3. ~~门/锚点~~ **已落**：变异表本条通道累计 **+11**，逐条在 clean HEAD 隔离 worktree 实测**全杀**
    （`stop-reason-keeps-wire-text` / `-emits-on-benign-reason` / `-drops-case-fold` /
    `-hides-zero-output-tokens` / `anthropic-never-reads-stop-reason` /
    `openai-never-reads-finish-reason` / `gemini-never-reads-finish-reason` /
-   `context-never-projects-truncation` / `mock-script-cannot-express-truncation`），主树一个字节未动；
-   `pnpm mutate-needles-check` 全表 551 条针脚 0 阻断 / 0 待复认 / 0 未覆盖。
+   `context-never-projects-truncation` / `mock-script-cannot-express-truncation` /
+   `compaction-input-drops-truncation` / `compaction-merges-truncation-causes`），主树一个字节未动；
+   `pnpm mutate-needles-check` 报全表针脚 **0 阻断 / 0 待复认 / 0 未覆盖**
+   （条数不写死——它是全仓共享的滚动数，事实源是该命令的输出，不是本行）。
    其中 `stop-reason-hides-zero-output-tokens` 是一条**通用形状**的针：
    `...(x !== null && x !== undefined ? {…} : {})` 被顺手改成 `...(x ? {…} : {})` ——
    `output_tokens = 0` 是读数，不是「没上报」。
