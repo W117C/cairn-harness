@@ -107,3 +107,45 @@ describe("promptCache 缺省开（用户裁决 2026-09-19）：只从磁盘部�
     expect(DEFAULT_SETTINGS.promptCache).toBe(true);
   });
 });
+
+/* 并发丢更新：set 是「取合并基 → 写盘 → 更新缓存」，三步之间没有串行化，于是同窗口里的两笔
+   都拿**同一份旧缓存**当基，后落地的那笔把对方刚写的字段原样盖回去。渲染层是这台并发机的燃料：
+   persistGitLayout 包在 renderSide 外层（app.js:3396），每帧重绘都发一次 layout 写，而设置页
+   点「深色」发的是 theme 写——两者同窗口落地即互吞。panels-check B3b 三条 theme 红的复现面。 */
+describe("settings 并发写不得互相吞字段", () => {
+  let dir: string;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "dsh-settings-race-"));
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  const readDisk = async (file: string) =>
+    JSON.parse(await readFile(file, "utf8")) as { theme?: string; layout?: { open?: { git?: boolean } } };
+
+  it("layout 与 theme 两笔并发 ⇒ 盘上两个字段都必须在", async () => {
+    const file = join(dir, "settings.json");
+    const s = new SettingsStore(file);
+    await Promise.all([
+      s.set({ layout: { open: { git: true }, activePanel: "git" } }),
+      s.set({ theme: "dark" }),
+    ]);
+    const disk = await readDisk(file);
+    expect(disk.theme, "theme 被另一笔并发写按旧缓存盖回").toBe("dark");
+    expect(disk.layout?.open?.git, "layout.open.git 被另一笔并发写按旧缓存盖回").toBe(true);
+  });
+
+  it("写序守恒：后发的那笔不得把前一笔已落盘的字段带回默认值", async () => {
+    const file = join(dir, "settings.json");
+    const s = new SettingsStore(file);
+    await s.set({ theme: "dark" });
+    // 前一笔已落盘；这一笔只碰 layout，合并基必须是 dark 而不是缓存里的旧值
+    await Promise.all([s.set({ layout: { width: 41 } }), s.set({ mode: "auto" })]);
+    const disk = await readDisk(file);
+    const full = await new SettingsStore(file).get();
+    expect(disk.theme).toBe("dark");
+    expect(full.mode).toBe("auto");
+    expect(full.layout.width).toBe(41);
+  });
+});

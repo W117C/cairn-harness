@@ -192,6 +192,12 @@ export function validateSettings(raw: unknown): AppSettings {
 /** settings 存储：内存缓存 + 每次写盘（原子写），多实例（重新加载 = 新实例）读到磁盘真相。 */
 export class SettingsStore {
   private cache: AppSettings | null = null;
+  /* 写队列。此前「取合并基 → 写盘 → 更新缓存」三步之间没有串行化，同窗口两笔 set 会撞两台：
+     ① 临时文件名只用 pid + 毫秒（那次硬化治的是**跨进程**固定名覆写，同进程同毫秒仍是同一个名）
+       ⇒ 先 rename 的把文件搬走，后 rename 的直接抛 ENOENT，用户看到「保存设置失败」而屏幕已经改了；
+     ② 就算错开毫秒，两笔都拿同一份**旧缓存**当合并基 ⇒ 后落地的那笔把对方刚写的字段原样盖回。
+     燃料是现成的：layout 那一笔包在 renderSide 外层（每帧重绘一笔），设置页点一下又是一笔。 */
+  private writes: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly filePath: string) {}
 
@@ -208,25 +214,28 @@ export class SettingsStore {
     return this.cache;
   }
 
-  /** 部分更新：深合并 layout，其余浅合并；原子写盘后返回新值。 */
+  /** 部分更新：深合并 layout，其余浅合并；原子写盘后返回新值。写入按发起顺序串行。 */
   async set(patch: Partial<Omit<AppSettings, "layout">> & { layout?: Partial<LayoutState> }): Promise<AppSettings> {
+    const next = this.writes.then(() => this.applyPatch(patch));
+    // 一次写失败（磁盘满 / 权限）只回给当次调用者，不得把后面排队的写全卡死。
+    this.writes = next.catch(() => undefined);
+    return next;
+  }
+
+  private async applyPatch(patch: Partial<Omit<AppSettings, "layout">> & { layout?: Partial<LayoutState> }): Promise<AppSettings> {
     const cur = await this.get();
+    /* 标量字段整体浅合并——旧写法把 26 个键名手抄成一条布尔表达式，只有列在里面的键才生效：
+       往 AppSettings 加一个字段而忘了抄进名单，set() 会把它**连同整笔 patch** 静默丢成 {}
+       （与 606fe7f 那两份名单同族）。名单由类型本身覆盖，没有可漂移的副本。 */
+    const { layout: layoutPatch, ...scalars } = patch;
     const next: AppSettings = {
       ...cur,
-      ...("mode" in patch || "safeMode" in patch || "theme" in patch || "currentSession" in patch ||
-        "autoMemory" in patch || "maxBudgetUsd" in patch || "budgetPricePerMTok" in patch ||
-        "scheduleConcurrencyCap" in patch || "onboarded" in patch || "updateManifestUrl" in patch ||
-        "telemetry" in patch || "routingBandit" in patch || "routingCascade" in patch || "provider" in patch || "model" in patch ||
-        "workspace" in patch || "actionFusion" in patch || "promptCache" in patch || "requestMetering" in patch || "observationPack" in patch ||
-        "evidenceReceipts" in patch || "economicCompaction" in patch || "impactAnalysis" in patch ||
-        "autoVerify" in patch || "planRequiredByDefault" in patch
-        ? patch
-        : {}),
-      layout: patch.layout
+      ...scalars,
+      layout: layoutPatch
         ? {
-            open: patch.layout.open ? { ...cur.layout.open, ...patch.layout.open } : cur.layout.open,
-            activePanel: patch.layout.activePanel !== undefined ? patch.layout.activePanel : cur.layout.activePanel,
-            width: patch.layout.width !== undefined ? patch.layout.width : cur.layout.width,
+            open: layoutPatch.open ? { ...cur.layout.open, ...layoutPatch.open } : cur.layout.open,
+            activePanel: layoutPatch.activePanel !== undefined ? layoutPatch.activePanel : cur.layout.activePanel,
+            width: layoutPatch.width !== undefined ? layoutPatch.width : cur.layout.width,
           }
         : cur.layout,
     };
