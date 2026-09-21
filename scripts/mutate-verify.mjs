@@ -4658,6 +4658,32 @@ const MUTATIONS = [
     apply: (s) => s.replace('if (network === "allow" || !looksLikeNetworkDenial(result.output)) return result;', 'if (!looksLikeNetworkDenial(result.output)) return result;'),
     expectFail: "deny 支下补一行可行动的提示；allow 支与无提示串一律原样返回",
   },
+  // ---- 事件类型清单三面一致闸（tests/event-type-coverage.test.ts，2026-09-21）----
+  // 这张闸本身也是「按类型白名单取料」的东西：没有锚点看着，它一样会静默塌成恒真。
+  {
+    id: "registry-drops-a-card-type",
+    src: "src/events/index.ts",
+    test: "tests/event-type-coverage.test.ts",
+    desc: "KNOWN_TYPES 少一个联合成员 ⇒ append 当场拒收这条事件（落不了盘，后面三面全看不见它）",
+    apply: (s) => s.replace('  "turn_truncated",\n', ""),
+    expectFail: "注册表与联合类型同集合（多一个少一个都算漂移）",
+  },
+  {
+    id: "card-type-without-label",
+    src: "src/renderer/app.js",
+    test: "tests/event-type-coverage.test.ts",
+    desc: "删掉一条卡片标签 ⇒ 标题退回原始英文类型名（正是 2026-09-21 turn_truncated 撞的那件事）",
+    apply: (s) => s.replace("    turn_truncated: '助手输出被截断',\n", ""),
+    expectFail: "每个卡片型事件都有地方接住它：EVENT_LABELS 或卡片 switch 的单独 case",
+  },
+  {
+    id: "label-for-a-non-card-type",
+    src: "src/renderer/app.js",
+    test: "tests/event-type-coverage.test.ts",
+    desc: "给一个不会成卡片的类型留标签 ⇒ 这一条永远读不到，标签表开始攒尸体（反向也判）",
+    apply: (s) => s.replace("const EVENT_LABELS = {", "const EVENT_LABELS = {\n  usage: '用量',"),
+    expectFail: "EVENT_LABELS 里没有死条目（不为非卡片类型留标签）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
