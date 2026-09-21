@@ -59,7 +59,9 @@ describe("projectPanelData（抽屉面板投影：审阅 / 文件树 / 终端 / 
       { type: "tool_result", callId: "merge-w1", ok: true, output: "[merged] abc123" },
     ];
     const merge = projectPanelData(events, null).merge;
-    expect(merge).toEqual([{ agent_id: "w1", task: "改投影", status: "done", outcome: "merged" }]);
+    // verified / spentUsd 是 b998e48 起合并行的两个新面（「验过 / 说验过」四态 + 每条 worker 的钱）：
+    // 这条靶子没有 verify_result、也没有价表可算 ⇒ 两值都如实为 null，不是缺字段。
+    expect(merge).toEqual([{ agent_id: "w1", task: "改投影", status: "done", outcome: "merged", verified: null, spentUsd: null }]);
   });
 
   it("工作区：绝对路径取末段为显示名；null → 未配置", () => {
@@ -70,13 +72,14 @@ describe("projectPanelData（抽屉面板投影：审阅 / 文件树 / 终端 / 
     expect(projectPanelData([], null).workspace).toBeNull();
   });
 
-  it("空事件流 → 四块面板全空（不得回落到任何演示数据）", () => {
+  it("空事件流 → 每块面板全空（不得回落到任何演示数据）", () => {
     expect(projectPanelData([], null)).toEqual({
       workspace: null,
       files: [],
       tree: [],
       terminal: [],
       merge: [],
+      agents: [],
     });
   });
 

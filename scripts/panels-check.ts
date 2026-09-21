@@ -902,10 +902,12 @@ async function phaseElectron(root: string): Promise<void> {
     // B11 留下的 b11-write-2 已被崩溃恢复扫成 failed，但它的 approval 从未被答过（行上仍写「待批」）。
     // 这正是负控靶子：给死列弹审批卡 = 摆一个必然失败的按钮。删掉 workerApprovalAsks 的终态守卫，
     // B12 首条当场红（做过反向对照）；「活着才弹」的正向半边由单测 + 锚点锁（真弹一次要跑真 worker = 花真钱）。
-    const b12Pop = await cdp2.eval<string>(
-      `(() => { const p = document.getElementById('askPop'); return p ? (p.hidden ? 'hidden' : 'shown:' + (p.dataset.askId || '')) : 'absent'; })()`,
+    const b12CardOpen = await cdp2.eval<string>(`String(!!document.querySelector('#askPop:not([hidden])'))`);
+    ok(
+      b12CardOpen === "false",
+      "B12 死列不弹审批卡（读法与 B2 同一条 #askPop:not([hidden])：屏上没有展开中的批准卡。" +
+        "去掉 workerApprovalAsks 的终态守卫就会长出一张 ⇒ 这条可伪，不是「节点没建所以恒绿」；实测=" + b12CardOpen + "）",
     );
-    ok(b12Pop === "hidden" || b12Pop === "absent", "B12 死列不弹审批卡（实测批准面板=" + JSON.stringify(b12Pop) + "）");
     const b12RowStill = await cdp2.eval<boolean>(
       `([...document.querySelectorAll('.side-page[data-view="agents"] .agent-row')].some((r) => (r.textContent || '').includes('待批：run_shell')))`,
     );
