@@ -1035,3 +1035,15 @@ export function projectPanelData(events: AgentEvent[], workspace: string | null)
     agents: projectAgentPanel(events),
   };
 }
+
+/** §13 引导七组 → 按步分组（步号升序，步内保持主进程给的顺序）。
+ *  步数与归属都不在界面里写死：加一组只改 `onboarding-groups.ts`，向导自己长出来。 */
+export function groupOnboardingSteps<T extends { step: number }>(groups: readonly T[]): { step: number; items: T[] }[] {
+  const byStep = new Map<number, T[]>();
+  for (const g of groups) {
+    const list = byStep.get(g.step);
+    if (list) list.push(g);
+    else byStep.set(g.step, [g]);
+  }
+  return [...byStep.entries()].sort((a, b) => a[0] - b[0]).map(([step, items]) => ({ step, items }));
+}

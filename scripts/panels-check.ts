@@ -1512,6 +1512,83 @@ async function phaseElectron(root: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------- main
+/** B21：§13 新手引导的「弹 / 不弹」——三次真启动，各判一个用户可见状态。
+ *  为什么判跨进程而不是页内 reload：`onboarded` 是主进程写的 settings.json，SIGKILL 也带不走它
+ *  （476 行那条 localStorage 教训——跨进程判据必须落在盘上，不然测的是"没杀干净"）。 */
+async function phaseOnboarding(): Promise<void> {
+  console.log("[panels-check] B21 §13 新手引导：首启必弹 → 「稍后再说」不算确认 → 完成后重开不再弹");
+  const root = await mkdtemp(join(tmpdir(), "m1e-onboard-"));
+  const sessions = join(root, "sessions");
+  const settingsPath = join(root, "settings.json");
+  await mkdir(sessions, { recursive: true });
+  const readDisk = async (): Promise<Record<string, unknown>> =>
+    JSON.parse((await readFile(settingsPath, "utf8").catch(() => "{}")) as string) as Record<string, unknown>;
+  const launch = async (): Promise<{ proc: ChildProcess; cdp: Cdp } | null> => {
+    const { proc, output } = spawnElectron({ M1E_SESSIONS_DIR: sessions, M1E_SETTINGS_PATH: settingsPath });
+    const up = await tryWait(async () => {
+      try { return (await fetch(CDP_URL + "/json/version")).ok ? true : null; } catch { return null; }
+    }, 25_000);
+    if (!up) {
+      ok(false, "B21 引导窗口起不来 → 未验证（输出尾 3 行：" + output().trim().split("\n").slice(-3).join(" / ").slice(0, 180) + "）");
+      await killElectron(proc);
+      return null;
+    }
+    const cdp = new Cdp();
+    await cdp.connect();
+    return { proc, cdp };
+  };
+  const state = (cdp: Cdp) => cdp.eval<{ shown: boolean; rows: number; steps: string[]; first: string }>(
+    `(() => { const o = document.querySelector('#onboardOverlay');
+       if (!o) return { shown: false, rows: 0, steps: [], first: '' };
+       const b = o.querySelector('.onb-row b');
+       return { shown: o.classList.contains('show'), rows: o.querySelectorAll('.onb-row').length,
+         steps: [...o.querySelectorAll('.onb-step .st-h')].map((n) => (n.textContent || '').trim()),
+         first: b ? (b.textContent || '').trim() : '' }; })()`,
+  );
+  const awaited = (cdp: Cdp) => settle(async () => { const s = await state(cdp); return s.shown ? s : null; }, 15_000);
+  const awaitHidden = (cdp: Cdp) => settle(async () => { const s = await state(cdp); return s.shown ? null : s; }, 10_000);
+  const click = (cdp: Cdp, sel: string) =>
+    cdp.eval<string>(`(() => { const n = document.querySelector(${JSON.stringify(sel)}); if (!n) return "no-node"; n.click(); return "clicked"; })()`);
+
+  // ① 全新安装：必弹，且七组是从主进程那张表来的（界面里一个字都没写死）
+  const a = await launch();
+  if (a) {
+    const s1 = await awaited(a.cdp);
+    ok(s1 !== null, "B21 首启必弹（settings.json 不存在 = 缺省 onboarded:false；实测 shown=" + String(s1?.shown ?? false) + "）");
+    ok((s1?.rows ?? 0) === 7, "B21 七组全在向导里（数据走 agent:onboarding，不是界面写死；实测 " + String(s1?.rows ?? 0) + " 行，期望 7）");
+    ok((s1?.steps ?? []).join("|") === "第 1 步|第 2 步|第 3 步|第 4 步",
+      "B21 步号由投影算出（步数与归属只有一份事实源；实测 " + JSON.stringify(s1?.steps ?? []) + "）");
+    ok((s1?.first ?? "").includes("Provider"), "B21 第一组是 provider 那一条（顺序也没在界面里重排；实测 " + JSON.stringify(s1?.first ?? "") + "）");
+    // ② 「稍后再说」只关窗，不写确认位
+    ok(await click(a.cdp, "#onbLater") === "clicked", "B21 「稍后再说」按得下去");
+    const h1 = await awaitHidden(a.cdp);
+    ok(h1 !== null, "B21 点「稍后再说」后向导收起（实测 shown=" + String(h1?.shown ?? true) + "）");
+    ok((await readDisk()).onboarded !== true, "B21 但盘上没写 onboarded——可中断不等于已确认（实测 " + JSON.stringify((await readDisk()).onboarded ?? "缺席") + "）");
+    await killElectron(a.proc);
+  }
+  // ③ 重开：上次没确认 ⇒ 照弹（这条是②的反面，缺它「稍后再说」就成了偷偷完成）
+  const b = await launch();
+  if (b) {
+    const s2 = await awaited(b.cdp);
+    ok(s2 !== null, "B21 重开仍然弹（「稍后再说」没被说成完成；实测 shown=" + String(s2?.shown ?? false) + "）");
+    ok(await click(b.cdp, "#onbDone") === "clicked", "B21 「完成引导」按得下去");
+    const h2 = await awaitHidden(b.cdp);
+    ok(h2 !== null, "B21 点完成后向导收起");
+    const disk = await settle(async () => (((await readDisk()).onboarded === true) ? true : null), 8_000);
+    ok(disk === true, "B21 完成写进了盘上的 settings.json（不是只改内存；实测 " + JSON.stringify((await readDisk()).onboarded ?? "缺席") + "）");
+    await killElectron(b.proc);
+  }
+  // ④ 再重开：不再弹（commercial-check D2c 那句「完成后不再弹」真正要的东西）
+  const c = await launch();
+  if (c) {
+    const gone = await settle(async () => ((await state(c.cdp)).shown ? null : true), 6_000);
+    ok(gone === true, "B21 完成引导后重开不再弹（跨进程，判据在盘上；实测 shown=" + String((await state(c.cdp)).shown) + "）");
+    await killElectron(c.proc);
+  }
+  await rm(root, { recursive: true, force: true }).catch(() => {});
+}
+
+// ---------------------------------------------------------------- main
 const argPhase = process.argv[2];
 if (argPhase === "--replay-child") {
   const root = process.argv[3];
@@ -1545,6 +1622,9 @@ try {
   if (!run.ok) throw new Error("会话 run 失败: " + String(run.error));
   const liveProj = { tokens: projectTokenUsage(liveEvents), diffs: projectDiffCards(liveEvents).map((d) => d.id), count: liveEvents.length };
   await writeFile(SNAPSHOT_LIVE, JSON.stringify(liveProj));
+  /* 全新安装会弹新手引导（§13），它盖在窗口上会挡住后面每一相的点击。B 相们判的是"老用户"的界面，
+     所以按老用户的磁盘样子预置这一位；「弹与不弹」本身由 B21 相用**没有这个文件**的临时目录判。 */
+  await writeFile(join(work, "settings.json"), JSON.stringify({ onboarded: true }), "utf8");
 
   await phaseSettings(work);
   await phaseSessions(work);
@@ -1555,6 +1635,7 @@ try {
     // fail-visible：任何未预期异常都不许静默——计失败并打印原因（M2g §1.4-1）
     ok(false, "B 相异常（未验证）：" + (err instanceof Error ? err.message : String(err)));
   }
+  await phaseOnboarding();
 } finally {
   if (!ROOT_DIR) await rm(work, { recursive: true, force: true }).catch(() => {});
 }

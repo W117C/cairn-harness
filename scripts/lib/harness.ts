@@ -15,8 +15,18 @@
 // 与应用自身的 Seatbelt 工具沙箱（src/main/sandbox.ts）是两回事。
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
+
+/** 首启会弹 §13 新手引导——不判它的门必须把自己扮成「已完成引导的返回用户」，
+ *  否则浮层盖住每一次点击。做法放在共享 lib 里，是为了不让两个门各抄一份「怎么种 settings」
+ *  （本仓反复出现的就是同族出口各抄一份，然后只改对一边）。
+ *  落点用调用方自己的 profileDir：那里本来就由门负责删。 */
+export async function seedSettingsFor(dir: string): Promise<string> {
+  const path = join(dir, "settings.json");
+  await writeFile(path, JSON.stringify({ onboarded: true }), "utf8");
+  return path;
+}
 
 // ---------------------------------------------------------------- CDP
 

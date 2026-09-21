@@ -34,6 +34,7 @@ const api: AgentApi = {
   onAskDone: (cb: (p: AskOutcomePayload) => void) => subscribe<AskOutcomePayload>("agent:ask-done", cb),
   getState: () => ipcRenderer.invoke("agent:state"),
   getProviderInfo: () => ipcRenderer.invoke("agent:provider-info"),
+  getOnboarding: () => ipcRenderer.invoke("agent:onboarding"),
   getSettings: (): Promise<AppSettings> => ipcRenderer.invoke("agent:settings-get"),
   setSettings: (patch: Partial<AppSettings>) => ipcRenderer.invoke("agent:settings-set", patch),
   listSessions: () => ipcRenderer.invoke("agent:sessions-list"),

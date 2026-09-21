@@ -1,5 +1,5 @@
 import { projectUnits, mountHistory } from './history-window.js';
-import { projectPanelData, EMPTY_PANEL_DATA, entersMainConversation, toolArgsSummary, PANEL_DIRTY_TYPES, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS, cardActionForComment, commentReadsBack } from './projections';
+import { projectPanelData, EMPTY_PANEL_DATA, entersMainConversation, toolArgsSummary, PANEL_DIRTY_TYPES, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS, cardActionForComment, commentReadsBack, groupOnboardingSteps } from './projections';
 import { $, esc, promptInput, sessionList, streamInner, toast } from './dom.js';
 import { ICONS, RUN_GRID_HTML, runGrid } from './icons.js';
 import { highlightAllDiffs, diffHtml } from './diff-highlight.js';
@@ -2397,6 +2397,50 @@ render();
       syncCtxChipState();
     }
   })();
+  /* §13 新手引导（commercial-check D2b/D2c 的两半）：首启必弹、完成后不再弹。
+     判据取盘上的 settings.onboarded 而不是 localStorage —— 「不再弹」必须跨重启成立。
+     「稍后再说」刻意不写这个位：可中断不等于已确认，下次启动照弹才是实话。 */
+  const onboardOverlay = $('#onboardOverlay');
+  const onboardBody = $('#onbBody');
+  const onboardNote = $('#onbNote');
+  const onboardDone = $('#onbDone');
+  const onboardLater = $('#onbLater');
+  const closeOnboard = () => {
+    onboardOverlay.classList.remove('show');
+    onboardOverlay.setAttribute('aria-hidden', 'true');
+    onboardOverlay.setAttribute('inert', '');
+  };
+  const onboardBootstrap = settingsReady.then(async (settings) => {
+    if (!settings || settings.onboarded !== false) return; // 读失败时不猜：不弹也不假装已完成
+    try {
+      const steps = groupOnboardingSteps(await api.getOnboarding());
+      onboardBody.innerHTML = steps.map((s) =>
+        '<div class="onb-step"><div class="st-h">第 ' + esc(String(s.step)) + ' 步</div>' +
+        s.items.map((g) => '<div class="onb-row"><b>' + esc(g.label) + '</b><span>' + esc(g.entry) + '</span></div>').join('') +
+        '</div>').join('');
+      onboardOverlay.classList.add('show');
+      onboardOverlay.setAttribute('aria-hidden', 'false');
+      onboardOverlay.removeAttribute('inert');
+      onboardDone.focus();
+    } catch (err) {
+      toast('新手引导没起来：' + String((err && err.message) || err) + '；其余功能不受影响');
+    }
+  });
+  onboardDone.addEventListener('click', async () => {
+    onboardDone.disabled = true;
+    onboardNote.textContent = '正在记录…';
+    try {
+      await api.setSettings({ onboarded: true });
+      onboardNote.textContent = '';
+      closeOnboard();
+    } catch (err) {
+      // 写失败不许顺手把浮层关掉：那等于把「没说成说过」。
+      onboardNote.textContent = '没能写入：' + String((err && err.message) || err) + '，引导仍开着，可重试';
+      onboardDone.disabled = false;
+    }
+  });
+  onboardLater.addEventListener('click', () => { onboardNote.textContent = ''; closeOnboard(); });
+  onboardOverlay.addEventListener('click', (e) => { if (e.target === onboardOverlay) closeOnboard(); });
   workspaceInput.addEventListener('input', () => {
     workspaceDirty = true;
     workspaceStatus.textContent = '目录尚未保存；保存后才能运行';

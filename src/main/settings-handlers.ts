@@ -6,6 +6,7 @@ import {
 import { verifyLicenseFile, type LicenseState } from "./license";
 import { checkUpdate, type UpdateCheckResult } from "./updater";
 import { SettingsStore, type AppSettings, type ProviderKind } from "./settings";
+import { ONBOARDING_GROUPS, type OnboardingGroup } from "./onboarding-groups";
 
 // ---- M1e：settings 存储 + 会话目录 + Provider 只读信息 ----
 // settings 文件与会话目录由 shell（index.ts）按环境初始化：M1E_SETTINGS_PATH / M1E_SESSIONS_DIR
@@ -55,6 +56,12 @@ export async function setSettings(patch: Partial<AppSettings>): Promise<AppSetti
   // M4a：定时并发上限变更 → 调度器即时生效
   if (patch.scheduleConcurrencyCap !== undefined) host.onScheduleCapChange(next.scheduleConcurrencyCap);
   return next;
+}
+
+/** §13 引导覆盖面（只读）。向导的数据源只有这一份：渲染层自存副本 = 第二套事实，
+ *  七组的增删改会只改一边（commercial-check D1 就是判这张表的）。 */
+export async function onboardingGroups(): Promise<OnboardingGroup[]> {
+  return [...ONBOARDING_GROUPS];
 }
 
 /** Provider 只读展示（设置页）：与 run 同源（settings + env 覆盖），不读 key 不落日志。

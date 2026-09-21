@@ -50,6 +50,10 @@ import {
   injectStoredProviderKey,
   handleRunCancel,
 } from "./agent-runner";
+/* 引导覆盖面直接取 settings-handlers，不走装配根 re-export：
+   `agent-runner.ts` 此刻在别的会话的在飞改动集里，往它的导出表加一行会把别人的原子 hunk 卷进来。
+   待它落库后把这一行折回装配根（与 providerInfo 同一跳）。 */
+import { onboardingGroups } from "./settings-handlers";
 import type { AppSettings, RunRequest } from "./ipc-protocol";
 import { isValidSessionName } from "./sessions";
 import { installSafeStorageBackend } from "../agent/plugins/secrets";
@@ -219,6 +223,8 @@ ipcMain.handle("agent:settings-set", (_event, patch: Partial<AppSettings>) => {
   return setSettings(patch);
 });
 ipcMain.handle("agent:provider-info", () => providerInfo());
+// §13 新手引导覆盖面（只读；「弹不弹」的判据是 settings.onboarded，见渲染层 boot 那一次读）
+ipcMain.handle("agent:onboarding", () => onboardingGroups());
 ipcMain.handle("agent:sessions-list", () => handleSessionList());
 ipcMain.handle("agent:sessions-create", (_event, name?: string) => handleSessionCreate(name));
 ipcMain.handle("agent:sessions-open", (_event, id: string) => handleSessionOpen(id));

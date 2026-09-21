@@ -688,6 +688,35 @@ body.resizing .stream-inner,body.resizing .composer-inner{transition:none}
   transition:transform var(--t-slow) cubic-bezier(.2,.8,.3,1);
 }
 .settings-overlay.show .settings-sheet{transform:none}
+/* 新手引导（§13 七组）：外壳复用 .settings-overlay 的遮罩与动效，只有内容是自己的。
+   七组的数据只有一份（主进程 onboarding-groups.ts，经 agent:onboarding 取）——这里不写死组名。 */
+.onb-sheet{
+  width:min(620px,92vw);max-height:86vh;overflow:auto;background:var(--surface);
+  border-radius:var(--r-6);box-shadow:var(--shadow-2);padding:var(--sp-7) var(--sp-8);
+  transform:translateY(10px) scale(.99);transition:transform var(--t-slow) cubic-bezier(.2,.8,.3,1);
+}
+.settings-overlay.show .onb-sheet{transform:none}
+.onb-title{font-size:var(--fs-title);font-weight:600}
+.onb-sub{color:var(--muted);font-size:var(--fs-sub);margin-top:var(--sp-2)}
+.onb-step{margin-top:var(--sp-6)}
+.onb-step .st-h{
+  font-family:var(--font-mono);font-size:var(--fs-micro);letter-spacing:var(--ls-wide);text-transform:uppercase;
+  color:var(--muted);
+}
+.onb-row{display:flex;flex-direction:column;gap:2px;padding:var(--sp-3) 0;border-top:1px solid var(--line)}
+.onb-row b{font-weight:600;font-size:var(--fs-label)}
+.onb-row span{color:var(--muted);font-size:var(--fs-sub)}
+.onb-foot{display:flex;align-items:center;justify-content:flex-end;gap:var(--sp-4);margin-top:var(--sp-7)}
+.onb-note{margin-right:auto;color:var(--muted);font-size:var(--fs-sub)}
+.onb-done{
+  height:34px;padding:0 var(--sp-5);border:0;border-radius:var(--r-3);background:var(--accent);
+  color:var(--accent-fg);font-size:var(--fs-ui);cursor:pointer;
+}
+.onb-done[disabled]{opacity:.55;cursor:not-allowed}
+.onb-ghost{
+  height:34px;padding:0 var(--sp-5);border:1px solid var(--line);border-radius:var(--r-3);
+  background:transparent;color:var(--ink);font-size:var(--fs-ui);cursor:pointer;
+}
 .settings-nav{
   width:190px;flex:none;background:var(--surface-2);
   padding:var(--sp-7) var(--sp-5);display:flex;flex-direction:column;gap:var(--sp-1);
@@ -2360,6 +2389,20 @@ html.reduce-motion .quick-card{opacity:1}
   </div>
 </div>
 
+<!-- 新手引导（§13 七组）：内容经 agent:onboarding 取，步骤分组由 groupOnboardingSteps 投影。
+     初始 inert + aria-hidden：未弹时它对整个页面不可达也不可交互（与 .settings-overlay 同一套语义）。 -->
+<div class="settings-overlay" id="onboardOverlay" role="dialog" aria-modal="true" aria-labelledby="onbTitle" aria-hidden="true" inert>
+  <div class="onb-sheet">
+    <div class="onb-title" id="onbTitle">新手引导</div>
+    <div class="onb-sub">这七项决定它怎么替你干活。现在只需看一遍；「完成引导」只写一个开关，不改任何配置。</div>
+    <div class="onb-body" id="onbBody"></div>
+    <div class="onb-foot">
+      <div class="onb-note" id="onbNote"></div>
+      <button class="onb-ghost" id="onbLater" type="button">稍后再说</button>
+      <button class="onb-done" id="onbDone" type="button">完成引导</button>
+    </div>
+  </div>
+</div>
 <div class="risk-scrim" id="riskScrim" role="dialog" aria-modal="true" aria-labelledby="riskTitle" aria-hidden="true" inert>
   <div class="risk-card" id="riskCard">
     <button class="risk-close" id="riskCancel" type="button" aria-label="关闭，保持当前权限">

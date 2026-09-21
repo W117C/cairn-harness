@@ -2,10 +2,11 @@
 // 对三个**仍在发货**的投影函数的断言（projectDiffCards 还被 panels-check 消费）。
 // React 组件注册表/SSR 冒烟部分随 panels/registry.tsx 归档不再适用，故不重建。
 import { describe, expect, it } from "vitest";
-import { pendingApprovals, projectDiffCards, projectMemoryWrites, projectMergeTower, workerEvidenceLabel, workerSpentLabel } from "../src/renderer/projections";
+import { pendingApprovals, projectDiffCards, projectMemoryWrites, projectMergeTower, workerEvidenceLabel, workerSpentLabel, groupOnboardingSteps } from "../src/renderer/projections";
+import { ONBOARDING_GROUPS } from "../src/main/onboarding-groups";
 import type { AgentEvent } from "../src/events";
 
-describe("projections 纯函数（vanilla 层仍在使用：store.ts / panels-check）", () => {
+describe("projections 纯函数（消费方：panels-check / agents-check / sidechat-check 与渲染层）", () => {
   it("memory 投影：remember tool_call/tool_result 配对（M2d）", () => {
     const events: AgentEvent[] = [
       { type: "tool_call", id: "m1", name: "remember", args: { scope: "project", kind: "memory", topic: "note" } },
@@ -81,5 +82,26 @@ describe("merge 塔的证据四态与花费账（读端）", () => {
     expect(workerSpentLabel(0)).toBe("$0.0000");
     const col = projectMergeTower([spawned, result({ verified: "verified" })])[0];
     expect(col.spentUsd).toBeNull();
+  });
+});
+
+describe("§13 引导的步数分组（向导只渲染这份投影）", () => {
+  const g = (id: string, step: number) => ({ id, step });
+
+  it("乱序进来 → 步号升序出去，步内保持给到的顺序", () => {
+    const steps = groupOnboardingSteps([g("memory", 3), g("provider", 1), g("ui", 2), g("schedule", 3), g("permission", 2)]);
+    expect(steps.map((s) => s.step)).toEqual([1, 2, 3]);
+    expect(steps[1]!.items.map((i) => i.id)).toEqual(["ui", "permission"]);
+    expect(steps[2]!.items.map((i) => i.id)).toEqual(["memory", "schedule"]);
+  });
+
+  it("真实那张表恰好四步七组（步数不在界面里写死，但也不能是空表）", () => {
+    const steps = groupOnboardingSteps(ONBOARDING_GROUPS);
+    expect(steps.map((s) => s.step)).toEqual([1, 2, 3, 4]);
+    expect(steps.reduce((n, s) => n + s.items.length, 0)).toBe(7);
+  });
+
+  it("空表 ⇒ 空向导（不造一步空壳让计数看起来对）", () => {
+    expect(groupOnboardingSteps([])).toEqual([]);
   });
 });

@@ -4,6 +4,7 @@ import type { PermissionMode } from "../permissions";
 import type { ToolName } from "../tools/base";
 import type { SandboxStatus } from "./sandbox";
 import type { AppSettings } from "./settings";
+import type { OnboardingGroup } from "./onboarding-groups";
 import type { ScheduleSnapshot } from "./scheduler";
 import type { LicenseState } from "./license";
 import type { UpdateCheckResult } from "./updater";
@@ -142,6 +143,9 @@ export interface AgentApi {
   getState(): Promise<StateResponse>;
   /** M1e：Provider 只读信息（设置页展示）。 */
   getProviderInfo(): Promise<{ provider: string; model: string }>;
+  /** §13 新手引导覆盖面（只读，唯一事实源在主进程 `onboarding-groups.ts`）。
+   *  必选而非 `?`：删掉桥接行就 typecheck 红，不用运行时 typeof 自证。 */
+  getOnboarding(): Promise<OnboardingGroup[]>;
   // ---- M1e：settings（布局 + 设置页持久化，主进程 app data）----
   getSettings(): Promise<AppSettings>;
   setSettings(patch: Partial<AppSettings>): Promise<AppSettings>;

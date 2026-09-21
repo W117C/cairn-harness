@@ -37,6 +37,7 @@ import {
   parseArgs,
   printTarget,
   serveStatic,
+  seedSettingsFor,
   sleep,
   tryWait,
   type Launched,
@@ -482,7 +483,10 @@ async function boot(): Promise<Cdp | null> {
     ctx.server = await serveStatic(args.staticDir as string, Number(process.env.PROBE_HTTP_PORT ?? args.port + 1));
     ctx.launched = launchChromeCdp({ port: args.port, profileDir: ctx.profileDir });
   } else {
-    ctx.launched = launchElectronCdp({ port: args.port });
+    // Electron 模式也要隔离 settings：原先不传 = 读用户自己的 userData/settings.json，
+    // 而 §13 首启浮层一弹就会盖住每一次点击（profileDir 由本门收尾时删）。
+    ctx.profileDir = await mkdtemp(join(tmpdir(), "a11y-settings-"));
+    ctx.launched = launchElectronCdp({ port: args.port, env: { M1E_SETTINGS_PATH: await seedSettingsFor(ctx.profileDir) } });
   }
   if (!(await cdpUp(args.port))) {
     const tail = (ctx.launched?.output() ?? "").trim().split("\n").slice(-8);
