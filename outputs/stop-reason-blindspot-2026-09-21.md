@@ -50,12 +50,30 @@
 
 ## 验证读数（工作树态，含并发会话的在飞 hunk）
 
-- `TERM=dumb node node_modules/typescript/bin/tsc --noEmit` → 本轮触及面 0 错
-  （残留两类**不属本轮**：未跟踪草稿 `scripts/sidebar-probe.ts`；`sidechat.ts` 另一处
-  在飞 hunk 的返回类型，属对方 `scanModelOutput` 簇）。
+- `TERM=dumb node node_modules/typescript/bin/tsc --noEmit` → 本轮触及面 0 错。
+  唯一残留红因是**未跟踪草稿** `scripts/sidebar-probe.ts`（不属本轮、不属任何提交）。
+  备案一条归因纪律：本轮第一次 tsc 里那条 `src/agent/sidechat.ts(110,47) TS2366` **起初被我
+  记成对方在飞 hunk 的错，实测是自己造成的**——我给 `AgentEvent` 加了成员、还没补 sidechat
+  的穷尽 switch。补上 case 后该行即消失，而对方那两个 hunk 全程无害。
+  ⇒ 见到在飞文件的红，先按「我刚刚动了什么」验一遍再指认别人（规则 5 的镜像：误派的代价是
+  让别人重做没坏的东西）。
 - 全量 `test` → **182 files / 1697 tests passed，exit 0**（新事件类型未破任何投影/门）。
 - 新增 `tests/turn-truncated.test.ts` **17 条**。
-- **分辨力实测**（HEAD 隔离 worktree 手注入，主树零改动，见下）：
+
+### 一次自我纠错（值得留，因为它暴露了主树测不出来的那类错）
+
+首笔提交 `77b18f3` **HEAD 悬空**：测试文件把 `ModelOutput` 从 `../src/events` 导入，
+而它的真身在 `../src/providers`。主树三重读数全部放行——
+① `tsc` 是在**建这个测试文件之前**跑的（顺序错了，不是判断错了）；
+② `test` 走 vitest，`import type` 编译期整体擦除，**运行时永不暴露**这类错；
+③ 全量绿 + 门绿都不能反证类型干净。
+抓到它的唯一一档证据 = **干净 HEAD 的隔离 worktree 重跑 tsc**（无未跟踪草稿、无在飞 hunk，
+且文件集就是提交里那份）。已作为第二笔修复。
+
+⇒ 教训成一条可复用的口径：**新增 `.ts` 文件后，tsc 必须在「文件已存在」的状态下重跑一次**；
+且「先跑门、后写测」的次序等于没跑门。
+
+### 分辨力实测（HEAD 隔离 worktree 手注入，主树零改动）
   | 注入 | 结果 |
   |---|---|
   | 三家 provider 的读取全摘 | **恰好 3 条红**（每家一条），6 条负控全绿 |

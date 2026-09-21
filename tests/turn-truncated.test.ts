@@ -15,7 +15,8 @@ import { runLoop } from "../src/agent/loop";
 import { streamAnthropic } from "../src/providers/anthropic";
 import { streamOpenAI } from "../src/providers/openai";
 import { streamGemini } from "../src/providers/gemini";
-import type { AgentEvent, ModelOutput } from "../src/events";
+import type { AgentEvent } from "../src/events";
+import type { ModelOutput } from "../src/providers";
 
 async function collect(iter: AsyncIterable<ModelOutput>): Promise<ModelOutput[]> {
   const out: ModelOutput[] = [];
