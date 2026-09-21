@@ -7,6 +7,7 @@
 // 不经过任何 OpenAI 中间格式。
 import { DEFAULT_STALL_MS, type StallGuard } from "../net";
 import { establishStream } from "./retry";
+import { turnTruncatedEvent } from "./stop-reason";
 import type { ModelOutput, ProviderMessage, ProviderToolSpec } from "./index";
 
 export interface AnthropicOptions {
@@ -184,6 +185,8 @@ export async function* streamAnthropic(
   // 事件口径统一成「inputTokens = 含缓存总输入」，分块另列（未上报时不落 0）。
   let cacheRead: number | null = null;
   let cacheWrite: number | null = null;
+  // 停止原因随 message_delta 到达（可能多条，取最后一条，与 usage 的累计值口径一致）。
+  let stopReason: string | null | undefined;
   // 内容块聚合：index → { id, name, json }（input_json_delta 分片跨事件拼接）
   const blocks = new Map<number, { id: string; name: string; json: string }>();
 
@@ -231,6 +234,8 @@ export async function* streamAnthropic(
         if (event.usage?.input_tokens !== undefined) inputTokens = event.usage.input_tokens;
         if (event.usage?.cache_read_input_tokens !== undefined) cacheRead = event.usage.cache_read_input_tokens;
         if (event.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.usage.cache_creation_input_tokens;
+        // stop_reason 与 usage 同帧到达：这一帧没带就不覆盖（保住先前那帧的读数）
+        if (event.delta?.stop_reason !== undefined) stopReason = event.delta.stop_reason;
         return;
       }
       case "message_stop":
@@ -284,6 +289,11 @@ export async function* streamAnthropic(
         ...(cacheWrite !== null ? { cacheWriteInputTokens: cacheWrite } : {}),
       };
     }
+    // 流正常收尾，但**原因**说这一轮没说完：正文被输出预算/内容策略收走。
+    // 上面 C7 那条守的是「半帧被截断」，这里守的是「整帧到齐、模型却没被给够篇幅」——
+    // 同一句注释里点名的危害（loop 无从得知），另一支一直没管。
+    const truncated = turnTruncatedEvent(callId, stopReason, outputTokens);
+    if (truncated) yield truncated;
   } finally {
     guard?.dispose();
     // 消费者提前 break / 出错退出时主动取消 body，否则连接与对端资源一直挂着。

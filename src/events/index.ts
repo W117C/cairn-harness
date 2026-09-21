@@ -3,6 +3,8 @@ import { mkdir, open, readFile, stat, type FileHandle } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 // 权限判定留痕的类型定义在权限层（判定归判定、序列化归序列化）；`import type` 编译期擦除，不引运行时依赖。
 import type { AutoMeta, GateMeta } from "../permissions/autonomy";
+// 「被收走的原因」的取值集合真身在 provider 协议层（三家词表在那儿解码），不在事件层自家再定义一份。
+import type { TurnTruncation } from "../providers/stop-reason";
 
 /** M2f：/promote 来源（sidechat 结论提升进主会话）。零新增事件类型——主流仍是 user_message，
  *  只多一个可选 origin 字段，重启后从 JSONL 重放无损（徽标由 origin 反向投影）。 */
@@ -424,6 +426,23 @@ export interface GoalStoppedEvent {
   ts?: number;
 }
 
+/** 一轮模型输出**没说完就被收走**的证据（§3.3）：只在非正常收尾时落——答完的轮零新事件，
+ *  既有转录与冻结判卷逐字不变。缺了这条，被 max_tokens 砍断的一轮与答完的一轮在流里长得
+ *  一模一样，而 loop 判结束只看「有没有 tool_call」，于是截断被记账成成功（返工的源头）。
+ *  只落机器可读 token，界面文案由渲染层投影（与 #48 同口径）。 */
+export interface TurnTruncatedEvent {
+  type: "turn_truncated";
+  /** 哪一轮（与 assistant_delta 的 callId 同源，可指回被砍断的那段正文）。 */
+  callId: string;
+  outcome: TurnTruncation;
+  /** provider 原生停止原因原文（end_turn/max_tokens/length/MAX_TOKENS/refusal/…）。 */
+  stop_reason: string;
+  /** 当时已用掉多少输出 token：判断「8192 的输出预留够不够」的唯一读数来源。缺 = provider 没上报。 */
+  output_tokens?: number;
+  /** M3a §4.4.10：worker 子流的轮归因（主 loop 无此字段）。 */
+  agent_id?: string;
+}
+
 export type AgentEvent =
   | UserMessageEvent
   | AssistantMessageEvent
@@ -453,6 +472,7 @@ export type AgentEvent =
   | AutomationCompletedEvent
   | GoalSetEvent
   | GoalStoppedEvent
+  | TurnTruncatedEvent
   | RunErrorEvent;
 
 const KNOWN_TYPES = new Set([
@@ -484,6 +504,7 @@ const KNOWN_TYPES = new Set([
   "automation_completed",
   "goal_set",
   "goal_stopped",
+  "turn_truncated",
   "error",
 ]);
 

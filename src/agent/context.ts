@@ -3,7 +3,7 @@
 // compaction 事件只是投影指令：跳过 compressed_event_ids（并集），在最新一份
 // 摘要的 summary_offset 前注入 user 角色摘要消息（fresh start：旧摘要由新摘要
 // 滚动整合，投影只出现最新一份，不与全历史混合）。
-import type { AgentEvent, CompactionEvent, VerifyCommandResult } from "../events";
+import type { AgentEvent, CompactionEvent, TurnTruncatedEvent, VerifyCommandResult } from "../events";
 import { failureDigest } from "./verify";
 import { clampTailToTokenBudget } from "./text-budget";
 
@@ -97,6 +97,20 @@ function autoVerifyNote(results: VerifyCommandResult[], earlierCount: number): s
   );
 }
 
+/** 被收走的那一轮 → 一行模型可见说明（§3.3 停止原因投影）。
+ *  为什么必须进上下文：砍断的半句原本以「助手已答完」的形态留在转录里，下一轮模型踩着
+ *  半句话继续盖楼——这正是本仓点名的「说了＝做完了」那一族返工的源头。
+ *  不做「只投最新一份」（与 autoVerifyNote 不同）：截断是发生在特定位置的既成事实，
+ *  位置本身就是信息，摘掉旧的等于假装那半句完整过。
+ *  stop_reason 长度由 providers/stop-reason 的查表结构性封顶（表内最长 18 字符），不再叠帽。 */
+export function truncationNote(e: TurnTruncatedEvent): string {
+  return e.outcome === "output_budget"
+    ? "[harness] 上一条助手回复没说完就被截断（provider 停止原因：" + e.stop_reason + "，输出预算用尽）" +
+      " ⇒ 那不是完整结论，别当成已答完；这件事还要做就从被截断处接着做，或把下一步收窄到写得完的范围。"
+    : "[harness] 上一条助手回复被内容策略中止（provider 停止原因：" + e.stop_reason + "）" +
+      " ⇒ 那不是完整结论；能换个说法继续就换，不能就明说卡在哪，别把半句当结论交出去。";
+}
+
 /** 组装投影：events（内存态或 replay 产物）→ 消息序列。
  *  M2b：replacements（事件 id → 替换文本）= prune 类型化裁剪投影（§7.4）——
  *  只动 tool_result 的 content，不动消息结构；缺省空 = 零行为（既有路径字节不变）。 */
@@ -180,6 +194,9 @@ export function projectContext(
       // 只有「系统补拍且红」这一种 verify_result 进上下文（见 autoVerifyNote 的理由）；
       // 手动拍的红早已由配对的 tool_result 带进来了，这里再注一次就是同一拍的两份事实。
       if (i === lastAutoIdx) msgs.push({ role: "user", content: autoVerifyNote(e.results, autoIdx.length - 1) });
+    } else if (e.type === "turn_truncated") {
+      flushDeltas(); // 先把那段被砍断的正文落位，「上一条」才指得清是哪条
+      msgs.push({ role: "user", content: truncationNote(e) });
     }
     // clarify_requested / plan_proposed / plan_approved / usage / session_meta：
     // 语义已在 tool_result / 卡片侧，模型上下文不需要（与既有 buildGlmHistory 口径一致）

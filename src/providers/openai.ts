@@ -4,6 +4,7 @@
 //（id 首块、name 非空即记、arguments 拼接）；末 chunk 带 usage（后到覆盖）；data: [DONE] 结束。
 import { DEFAULT_STALL_MS, type StallGuard } from "../net";
 import { establishStream } from "./retry";
+import { turnTruncatedEvent } from "./stop-reason";
 import type { ModelOutput, ProviderMessage, ProviderToolSpec } from "./index";
 import type { RequestMeter, RequestCategory, MeterUsage, RequestOutcome } from "../agent/metering";
 
@@ -198,6 +199,8 @@ export async function* streamOpenAI(
   // 跨块累积的工具调用：index → { id, name, arguments }
   const pending = new Map<number, { id?: string; name: string; args: string }>();
   let usage: (ModelOutput & { type: "usage" }) | null = null;
+  // finish_reason 只在末 chunk 带（非末 chunk 是 null）：记最后一个非空的，别让 null 覆盖掉读数。
+  let finishReason: string | null | undefined;
 
   try {
     while (!finished) {
@@ -234,6 +237,8 @@ export async function* streamOpenAI(
         }
         if (chunk.id) callId = chunk.id;
         if (chunk.usage) { usage = toUsage(chunk.usage); observeUsage(chunk.usage); }
+        const fr = chunk.choices?.[0]?.finish_reason;
+        if (fr) finishReason = fr;
         const delta = chunk.choices?.[0]?.delta;
         if (delta?.content) {
           yield { type: "assistant_delta", callId, text: delta.content };
@@ -261,6 +266,11 @@ export async function* streamOpenAI(
       };
     }
     if (usage) yield usage;
+    // 流正常收尾，但 finish_reason 说这一轮没说完（length＝输出预算到点 / content_filter＝被拦）。
+    // 上面 C7 那条守的是「半帧被截断」，这里守的是「帧到齐、篇幅没给够」——同一句注释点名的
+    // 危害（loop 无从得知），另一支一直没管。
+    const truncated = turnTruncatedEvent(callId, finishReason, usage?.outputTokens ?? null);
+    if (truncated) yield truncated;
     meterOutcome = "ok";
   } finally {
     guard?.dispose();

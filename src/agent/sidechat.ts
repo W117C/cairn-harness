@@ -150,6 +150,9 @@ function renderProjectionLine(e: AgentEvent): string | null {
     case "goal_set": // goal 是宿主会话的锚点与预算，sidechat 是只读问答面：不进投影（面归 goal 芯片/审计）
     case "goal_stopped":
       return null;
+    case "turn_truncated":
+      // 与 error 同一档：主会话那句回答不完整，是用户接着提问的前提事实。
+      return "[主会话·助手输出被截断] " + e.stop_reason;
     case "error":
       // 失败是用户后续提问的前提事实，进只读投影（不同于调度/路由这类纯审计面事件）。
       return "[主会话·运行失败] " + e.message;

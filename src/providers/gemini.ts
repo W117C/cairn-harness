@@ -6,6 +6,7 @@
 //（chunk 间累计，末 chunk 为准——直接覆盖不累加）。解析直接消费 Gemini 原生字段，不经 OpenAI 中间格式。
 import { DEFAULT_STALL_MS, type StallGuard } from "../net";
 import { establishStream } from "./retry";
+import { turnTruncatedEvent } from "./stop-reason";
 import type { ModelOutput, ProviderMessage, ProviderToolSpec } from "./index";
 
 export interface GeminiOptions {
@@ -167,6 +168,8 @@ export async function* streamGemini(
   let inputTokens: number | null = null;
   let outputTokens: number | null = null;
   let callSeq = 0;
+  // finishReason 随候选块到达（中间 chunk 常是 null）：记最后一个非空的。
+  let finishReason: string | null | undefined;
 
   try {
     let done = false;
@@ -204,7 +207,9 @@ export async function* streamGemini(
           inputTokens = u.promptTokenCount ?? inputTokens;
           outputTokens = (u.candidatesTokenCount ?? 0) + (u.thoughtsTokenCount ?? 0) || outputTokens;
         }
-        const parts = chunk.candidates?.[0]?.content?.parts ?? [];
+        const cand = chunk.candidates?.[0];
+        if (cand?.finishReason) finishReason = cand.finishReason;
+        const parts = cand?.content?.parts ?? [];
         for (const part of parts) {
           if (part.text) {
             yield { type: "assistant_delta", callId, text: part.text };
@@ -224,6 +229,10 @@ export async function* streamGemini(
     if (inputTokens !== null || outputTokens !== null) {
       yield { type: "usage", inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 };
     }
+    // 流正常收尾，但 finishReason 说这一轮没说完（MAX_TOKENS＝篇幅不够 / SAFETY 家族＝被拦）。
+    // 上面 C7 那条守的是「半帧被截断」，这里守的是「帧到齐、篇幅没给够」。
+    const truncated = turnTruncatedEvent(callId, finishReason, outputTokens);
+    if (truncated) yield truncated;
   } finally {
     guard?.dispose();
     // 消费者提前 break / 出错退出时主动取消 body，否则连接与对端资源一直挂着。
