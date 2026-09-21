@@ -5025,6 +5025,41 @@ const MUTATIONS = [
     apply: (s) => s.replace("    if (looksLikePath(token)) continue;\n", ""),
     expectFail: "绝对路径形状否决：真实 mkdtemp 目录与其下的文件逐字不变",
   },
+  {
+    id: "modal-dismiss-priority-inverted",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-modal-dismiss.test.ts",
+    desc: "把 settingsOverlay 排到 riskScrim 前面 ⇒ 数组序即优先级这张表反过来：安全确认的浮层被设置页抢走这一次 Escape",
+    apply: (s) => s.replace(
+      "  { sel: '#riskScrim', close: () => closeRisk() },\n  { sel: '#settingsOverlay', close: () => closeSettings() },\n",
+      "  { sel: '#settingsOverlay', close: () => closeSettings() },\n  { sel: '#riskScrim', close: () => closeRisk() },\n",
+    ),
+    expectFail: "数组序即优先级：两支同时开着 ⇒ 交出去的是安全确认那一支",
+  },
+  {
+    id: "modal-dismiss-register-noop",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-modal-dismiss.test.ts",
+    desc: "登记函数收下参数却不写进表（装载收下、执行端不读的同族形态）⇒ 新浮层静默没有键盘退路，正是 d4a91a6 之前第四支的遭遇",
+    apply: (s) => s.replace("  if (!MODAL_DISMISS.some((m) => m.sel === sel)) MODAL_DISMISS.push({ sel, close });\n", ""),
+    expectFail: "自己登记的浮层才有键盘退路；登记前表完全不认它（第四支被漏掉的那件事）",
+  },
+  {
+    id: "modal-dismiss-dedup-removed",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-modal-dismiss.test.ts",
+    desc: "去掉「同一选择器只登记一次」的守卫 ⇒ 重复登记加长表并把 close 换成后到的那一份（优先级与回调归属都变了）",
+    apply: (s) => s.replace("  if (!MODAL_DISMISS.some((m) => m.sel === sel)) MODAL_DISMISS.push({ sel, close });", "  MODAL_DISMISS.push({ sel, close });"),
+    expectFail: "同一选择器重复登记不加长表，也不夺走已有那一行的 close",
+  },
+  {
+    id: "modal-dismiss-ignores-show-state",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-modal-dismiss.test.ts",
+    desc: "查表时不看 `show` ⇒ 只要登记过就永远有「开着的浮层」，Escape 被浮层独占、芯片看板那一支再也拿不到按键",
+    apply: (s) => s.replace("    if (el && el.classList.contains('show')) return { el, close: m.close };", "    if (el) return { el, close: m.close };"),
+    expectFail: "负控：一支都没开着 ⇒ null（Escape 才落到芯片看板那一支）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
