@@ -1,5 +1,5 @@
 import { projectUnits, mountHistory } from './history-window.js';
-import { projectPanelData, EMPTY_PANEL_DATA, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS, cardActionForComment } from './projections';
+import { projectPanelData, EMPTY_PANEL_DATA, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS, cardActionForComment, commentReadsBack } from './projections';
 import { $, esc, promptInput, sessionList, streamInner, toast } from './dom.js';
 import { ICONS, RUN_GRID_HTML, runGrid } from './icons.js';
 import { highlightAllDiffs, diffHtml } from './diff-highlight.js';
@@ -1026,6 +1026,9 @@ function gitViewHTML() {
     /* 最新一份 = 数组末：评审闭环是 v1→v2，取第一份会把「已被推翻的那版」当现状给用户看。 */
     const latest = c.diffs.length ? c.diffs[c.diffs.length - 1] : null;
     const rep = c.report;
+    // 合并决策已定（merged/rejected/cleaned）⇒ 工作树已收尾，评论它再也读不到：
+    // 行号照给（还是要看代码），但「送给它」这个必然失败的按钮不给（与 B12「已死那列不长卡」同一条规矩）。
+    const canReview = commentReadsBack(c.outcome);
     /* 「验过」与「说验过」必须分得开：验证证据四态 + 表价花费直接挂在每一列上（W4b / W3②）。
        花费未知时写「价格未知」，不写 $0.00——那会把不可知记成免费。
        （注：这段说明只能放在拼接式之外——夹在两个 + 之间会被读成一元正号，
@@ -1040,8 +1043,10 @@ function gitViewHTML() {
       (latest
         ? '<details class="mc-patch"><summary>补丁 v' + String(latest.version) + ' · ' +
             esc(latest.stat || '(这份快照没带统计)') + '</summary>' +
-            diffHtml(latest.patch || '', { anchors: true }) +
-            '<div class="mc-hint">行尾「评」把意见送进这个 worker 的子流——它下一轮就读到；不改代码、不重新派活。</div>' +
+            diffHtml(latest.patch || '', { anchors: true, comment: canReview }) +
+            (canReview
+              ? '<div class="mc-hint">行尾「评」把意见送进这个 worker 的子流——它下一轮就读到；不改代码、不重新派活。</div>'
+              : '<div class="mc-hint">这一列的合并决策已定（工作树已收尾）⇒ 评论只会落进事件流，它读不到了；要改就按原任务重派一列。</div>') +
           '</details>'
         : '<div class="mc-none">这一列还没有补丁快照（worker 没产出 diff，或快照不在本会话事件流里）</div>') +
       (rep

@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { expect, it } from 'vitest';
-import { workerEvidenceLabel, workerSpentLabel } from '../src/renderer/projections';
+import { workerEvidenceLabel, workerSpentLabel, commentReadsBack } from '../src/renderer/projections';
 
 const source = readFileSync(new URL('../src/renderer/app.js', import.meta.url), 'utf8');
 
@@ -14,6 +14,7 @@ function gitHTML(merge: unknown[]) {
     esc: (s: unknown) => String(s),
     workerEvidenceLabel,
     workerSpentLabel,
+    commentReadsBack,   // 真实现：这一列读不读得到由投影判，不在这里另给一个答案
     // 面板那一列 = 合并控制塔的列本身（457fe8d 撤了中间裁剪层），故渲染时还要读 diffHtml；
     // 本文件只判证据态与花费账，补丁正文由 tests/renderer-merge-review.test.ts 判。
     diffHtml: (t: unknown) => '<div class="diff">' + String(t) + '</div>',

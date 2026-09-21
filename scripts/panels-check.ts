@@ -1207,6 +1207,42 @@ async function phaseElectron(root: string): Promise<void> {
       b16Esc.includes('"hidden":true') && b16Esc.includes('"aria":"false"'),
       "B16 Escape 收起走的是看板那一条链（不另开一套收起逻辑；实测 " + JSON.stringify(b16Esc) + "）",
     );
+    // B17 收尾那一列不给必然失败的入口（与 B12「已死那列不长审批卡」同一条规矩）：
+    // 合并决策一定，mergeOwners 就注销 ⇒ injectComment 恒 injected:false ⇒ 「送给它」是个必败按钮。
+    // 撤的是入口，不是信息：行号照给，且要说明为什么不能评、想改该走哪条路。
+    console.log("[panels-check] B17 合并决策已定的那一列：评论入口撤掉且说明原因（零模型调用）");
+    await createEventLog(b11File).append({
+      type: "tool_result", callId: "merge-" + b11B, ok: true, output: "[merged] 9f2c1ab",
+    } as unknown as AgentEvent);
+    ok(await b8ClickSession("验收会话"), "B17 先切走");
+    ok(await b8ClickSession(clarifyId), "B17 再切回（重绘才走到 comment 判定）");
+    const b17Probe =
+      `(() => {
+        const p = document.querySelector('.side-page[data-view="git"]');
+        if (!p) return 'no-page';
+        const t = (p.textContent || '').replace(/\\s+/g, ' ');
+        return JSON.stringify({
+          btns: p.querySelectorAll('[data-cmt]').length,
+          rows: p.querySelectorAll('.ln-row').length,
+          lno: [...p.querySelectorAll('.diff-anchored .lno')].map(e => (e.textContent || '').trim()).filter(Boolean).slice(0, 3),
+          why: t.includes('它读不到了') && t.includes('按原任务重派'),
+        });
+      })()`;
+    // selectSession 是异步的（读盘 → showHistory），当场读会拿到切换前那一屏（B15 同因）——
+    // 等落定的判据是「入口撤了且原因上屏」，等不到就把最后一次实测数字带出来红，不静默过。
+    const b17Settled = await tryWait(async () => {
+      const s = await cdp2.eval<string>(b17Probe);
+      return s.includes('"btns":0') && s.includes('"why":true');
+    }, 12_000);
+    const b17 = await cdp2.eval<string>(b17Probe);
+    const b17Shape = JSON.parse(b17) as { btns: number; rows: number; lno: string[]; why: boolean };
+    ok(b17Shape.rows >= 1, "B17 重绘真发生了（补丁行还在屏上；实测行数 " + String(b17Shape.rows) + "）");
+    ok(b17Shape.btns === 0, "B17 已收尾的那一列不再长评论入口（实测按钮数 " + String(b17Shape.btns) + "）");
+    ok(b17Shape.why, "B17 撤入口同时说清原因与出路（不是静默少一个按钮；等落定=" + String(b17Settled) + "）");
+    ok(
+      b17Shape.lno.length >= 1 && b17Shape.lno.every((s) => /^[0-9]+$/.test(s)),
+      "B17 撤的是入口不是信息：行号照给（实测 " + JSON.stringify(b17Shape.lno) + "）",
+    );
     await killElectron(electron2);
   } finally {
     if (electron.exitCode === null) await killElectron(electron);

@@ -283,6 +283,16 @@ export function cardActionForComment(agentId: string, path: string, line: number
   };
 }
 
+/** 这一列的评审意见，worker 还读得到吗？
+ *  判据来自控制塔的注销时机：mergeOwners 在 spawn(write) 注册、**worktree 收尾时注销**，
+ *  注销后 injectComment 一律 injected:false（评论只落流，没人再读）。所以 merged / rejected /
+ *  cleaned 三态下「送给它」是一个必然失败的按钮——B12 已经定过一次：已死那一列不长卡。
+ *  conflict 与 gate-confirm 的改动还在工作树里等用户处理 ⇒ 评审重启成立，入口必须留着。
+ *  这只是界面侧的「要不要给入口」，合法性与终态仍由 main 判一处（它才是 mergeOwners 的主人）。 */
+export function commentReadsBack(outcome: MergeTowerColumn["outcome"]): boolean {
+  return outcome !== "merged" && outcome !== "rejected" && outcome !== "cleaned";
+}
+
 /** 合并控制塔投影（纯函数）：agent_spawned(mode=write) → 列；diff tool_result（子流）→ diff 快照；
  *  security_report(agent_id) → findings；diff_comment → 评论；merge-/wt-cleanup- tool_result → 收尾态。 */
 export function projectMergeTower(events: AgentEvent[]): MergeTowerColumn[] {

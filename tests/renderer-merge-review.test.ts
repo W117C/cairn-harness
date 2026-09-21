@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { expect, it } from 'vitest';
-import { projectPanelData, workerEvidenceLabel, workerSpentLabel } from '../src/renderer/projections';
+import { projectPanelData, workerEvidenceLabel, workerSpentLabel, commentReadsBack } from '../src/renderer/projections';
 
 const source = readFileSync(new URL('../src/renderer/app.js', import.meta.url), 'utf8');
 
@@ -18,6 +18,7 @@ function gitHTML(events: unknown[], opts: unknown[] = []) {
     BRANCH_ICON: '',
     workerEvidenceLabel,
     workerSpentLabel,
+    commentReadsBack,   // 用真实现：判「这一列还读得到吗」的规则本身要跟着测
     diffHtml: (t: unknown, o: unknown) => {
       opts.push(o);
       return '<div class="diff">' + String(t).split('\n').map((l: string) => '<div class="ln">' + l + '</div>').join('') + '</div>';
@@ -94,7 +95,25 @@ it('空态文案不再谎称「面板尚未接入」（投影一直通着，只�
 it('补丁按 anchors 形态着色：行号与「评」按钮由此长出，且 hint 说清代价与不做的事', () => {
   const opts: unknown[] = [];
   const html = gitHTML([spawn, patch("+const x = 1")], opts);
-  expect(opts, '不传 anchors ⇒ 写端入口整片消失，而读端看起来一切正常').toEqual([{ anchors: true }]);
+  expect(opts, '不传 anchors ⇒ 写端入口整片消失，而读端看起来一切正常').toEqual([{ anchors: true, comment: true }]);
   expect(html).toContain('行尾「评」');
   expect(html).toContain('不改代码、不重新派活');
+});
+it('合并决策已定（merged / rejected / cleaned）⇒ 不给必然失败的评论入口，但说明为什么', () => {
+  for (const out of ["[merged] abc123", "[rejected] 用户拒", "[worktree] removed"]) {
+    const callId = out.startsWith("[worktree]") ? "wt-cleanup-wt-7" : "merge-wt-7";
+    const opts: unknown[] = [];
+    const html = gitHTML([spawn, patch("+const x = 1"), { type: "tool_result", callId, ok: true, output: out }], opts);
+    expect(opts, '工作树已收尾：injectComment 必然 injected:false').toEqual([{ anchors: true, comment: false }]);
+    expect(html, '不给入口 ≠ 什么都不说：要讲清评论会落到哪儿、想改该走哪条路').toContain('它读不到了');
+    expect(html).toContain('按原任务重派一列');
+    expect(html, '已收尾的列不该再长出「送给它」的暗示').not.toContain('行尾「评」');
+  }
+});
+it('conflict / gate-confirm 的改动还在工作树里 ⇒ 评论入口必须留着', () => {
+  for (const out of ["[conflict] 主分支前进", "[gate] 安全 gate 要求确认"]) {
+    const opts: unknown[] = [];
+    gitHTML([spawn, patch("+const x = 1"), { type: "tool_result", callId: "merge-wt-7", ok: true, output: out }], opts);
+    expect(opts).toEqual([{ anchors: true, comment: true }]);
+  }
 });

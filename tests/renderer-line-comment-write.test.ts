@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { expect, it, vi } from 'vitest';
-import { cardActionForComment, parsePatchFiles } from '../src/renderer/projections';
+import { cardActionForComment, commentReadsBack, parsePatchFiles } from '../src/renderer/projections';
 
 const source = readFileSync(new URL('../src/renderer/app.js', import.meta.url), 'utf8');
 
@@ -113,6 +113,17 @@ it('diff_comment 在面板脏集里（送出去的评论不当场回画 = 用户
   const m = /const PANEL_DIRTY = \{([^}]*)\};/.exec(source);
   expect(m, "PANEL_DIRTY 字面量形状变了：本判据要跟着改，不许静默通过").not.toBeNull();
   expect(m![1], 'diff_comment 必须进脏集').toContain('diff_comment:');
+});
+
+/* 界面侧的「要不要给入口」——判归 mergeOwners 的注销时机：worktree 收尾后 injectComment 恒
+   injected:false（评论只落流）。conflict / gate-confirm 的改动还在树里等处理 ⇒ 入口留着。 */
+it('commentReadsBack：只有工作树已收尾的三态读不到，其余都读得到', () => {
+  expect(commentReadsBack(null)).toBe(true);
+  expect(commentReadsBack('conflict')).toBe(true);
+  expect(commentReadsBack('gate-confirm')).toBe(true);
+  expect(commentReadsBack('merged')).toBe(false);
+  expect(commentReadsBack('rejected')).toBe(false);
+  expect(commentReadsBack('cleaned')).toBe(false);
 });
 
 /* ---------- ③ 桥：三面回条 ---------- */

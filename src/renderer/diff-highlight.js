@@ -38,7 +38,8 @@ function highlightDiffLine(line) {
  *  opts.anchors：git 面板用的行锚点形态。行号与「评」按钮放在 `.ln` **外面**——
  *  下面的 highlightAllDiffs 会把 `.ln` 的 innerHTML 按 textContent 重写一遍，
  *  塞在里面就等于把按钮喂给 tokenizer 抹掉。删除行/文件头没有新文件侧行号 ⇒ 不给按钮
- *  （评论挂到一个不存在的行上，比不给入口更坏）。 */
+ *  （评论挂到一个不存在的行上，比不给入口更坏）。
+ *  opts.comment === false：只给行号、不给入口——这一列的 worker 已收尾，评论它再也读不到。 */
 export function diffHtml(text, opts = {}) {
   const src = String(text);
   if (!opts.anchors) {
@@ -59,7 +60,8 @@ export function diffHtml(text, opts = {}) {
       const c = l.text.charAt(0);
       const cls = c === '+' ? 'add' : c === '-' ? 'del' : c === '@' ? 'hunk' : 'ctx';
       const n = l.newLine;
-      const canCmt = n !== null && seg.path !== '';
+      // opts.comment=false ⇒ 这一列已收尾（worker 读不到了）：给行号，但不给必然失败的入口
+      const canCmt = n !== null && seg.path !== '' && opts.comment !== false;
       h += '<div class="ln-row"' + (canCmt ? ' data-line="' + String(n) + '" data-path="' + esc(seg.path) + '"' : '') + '>' +
         '<span class="lno">' + (n === null ? '' : String(n)) + '</span>' +
         '<div class="ln ' + cls + '">' + esc(l.text) + '</div>' +
