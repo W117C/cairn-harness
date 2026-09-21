@@ -594,6 +594,64 @@ async function phaseElectron(root: string): Promise<void> {
       }, 8_000);
       ok(onDisk, "B7 同一条 goal_set 也落到会话 JSONL（live 与 replay 读的是同一份事实源）");
     }
+    console.log("[panels-check] B8 压缩芯片：面板开得起、IPC 桥真走得通（**一次真钱都不花**）");
+    // 分工：渲染层单测（tests/renderer-compact-chip.test.ts）证的是「按 submit → 传屏幕上这条 id」；
+    // 这里补它证不到的两段——preload 真把 compact 挂上了 window.agent，且主进程按 sessionId 走到存在性守卫。
+    // 绝不点真会话的「立即压缩」：那要发一次摘要调用（花真钱），且成败取决于宿主有没有 M0_API_KEY。
+    // 「面板取自真实用量」必须有条 nonzero 的期望值才算分辨力：靶子会话盘上原本没有 usage，
+    // 0 + 0 那种读数换成谁都能过 ⇒ 先往盘上追一条 usage，再走真 selectSession 重开，
+    // 期望由本脚本自己逐行算（不读渲染层的变量）。
+    const b8File = pathOf(root, clarifyId);
+    await createEventLog(b8File).append({ type: "usage", inputTokens: 4211, outputTokens: 733 } as unknown as AgentEvent);
+    let b8ExpIn = 0;
+    let b8ExpOut = 0;
+    for (const line of (await readFile(b8File, "utf8")).split("\n")) {
+      if (line.trim() === "") continue;
+      try {
+        const e = JSON.parse(line) as { type?: string; inputTokens?: number; outputTokens?: number };
+        if (e.type === "usage") { b8ExpIn += e.inputTokens ?? 0; b8ExpOut += e.outputTokens ?? 0; }
+      } catch { /* 非 JSON 行不参与期望 */ }
+    }
+    const b8ClickSession = (id: string) =>
+      cdp2.eval<boolean>(
+        `(() => { const r = document.querySelector('.session[data-id=' + JSON.stringify(${JSON.stringify(id)}) + ']');` +
+          ` if (!r) return false; r.click(); return true; })()`,
+      );
+    ok(await b8ClickSession("验收会话"), "B8 先切到另一条会话（重开才走得到 showHistory 的用量重算）");
+    ok(await b8ClickSession(clarifyId), "B8 再切回靶子会话");
+    // 等重放真落定再读面板：selectSession 是异步的（读盘 → showHistory），当场点芯片会读到切换前的 0
+    const b8Replayed = await tryWait(
+      async () =>
+        (await cdp2.eval<boolean>(`!!document.querySelector('.card[data-clarify-call="m1e-clarify-1"]')`)) ? true : null,
+      15_000,
+    );
+    ok(b8Replayed, "B8 切回后转录已重放（澄清卡在流里 ⇒ showHistory 已经跑过，用量读的是盘上这份）");
+    await cdp2.eval(
+      `(() => { const c = document.querySelector('#ctxCompact'); if (!c) return false;` +
+        `  c.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true; })()`,
+    );
+    const b8Opened = await tryWait(
+      async () =>
+        (await cdp2.eval<boolean>(`/立即压缩本会话/.test(document.querySelector('#compactPanelBody')?.innerHTML || '')`))
+          ? true
+          : null,
+      8_000,
+    );
+    ok(b8Opened, "B8 点芯片开的是压缩面板（提交面在，不是只弹一层空壳）");
+    const b8Body = await cdp2.eval<string>(`document.querySelector('#compactPanelBody')?.innerHTML || ''`);
+    const b8Nums = /已累计 <b>(\d+) \+ (\d+)<\/b> token/.exec(b8Body);
+    ok(
+      b8Nums !== null && Number(b8Nums?.[1]) === b8ExpIn && Number(b8Nums?.[2]) === b8ExpOut,
+      "B8 面板读数 = 该会话 JSONL 里 usage 之和（期望 " + String(b8ExpIn) + " + " + String(b8ExpOut) +
+        "，实测 " + JSON.stringify(b8Nums ? b8Nums[1] + " + " + b8Nums[2] : b8Body.slice(0, 40)) + "）",
+    );
+    const b8Trip = await cdp2.eval<string>(
+      `window.agent.compact("不存在的会话靶子").then((r) => String(r.ok) + ":" + String((r && r.error) || ""))`,
+    );
+    ok(
+      b8Trip === "false:会话不存在，未压缩",
+      "B8 renderer → preload → main 走通并按 sessionId 拒（零模型调用；实测回条=" + JSON.stringify(b8Trip) + "）",
+    );
     await killElectron(electron2);
   } finally {
     if (electron.exitCode === null) await killElectron(electron);
