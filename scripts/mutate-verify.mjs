@@ -4938,7 +4938,7 @@ const MUTATIONS = [
     id: "panel-dirty-refreshes-on-inert-events",
     src: "src/renderer/projections.ts",
     test: "tests/panel-dirty-freshness.test.ts",
-    desc: "把不改投影的类型也塞进脏集 ⇒ 每条事件一次 O(全量) 重投影，白刷的成本最终会反过来逼 people 把表改窄（连正确的漏判一起改掉）",
+    desc: "把不改投影的类型也塞进脏集 ⇒ 每条事件一次 O(全量) 重投影；白刷的成本最终会逼后人把表整个改窄（连正确的漏判一起改掉）",
     apply: (s) => s.replace('"agent_result", "security_report",', '"agent_result", "security_report", "error",'),
     expectFail: "error 实测零影响",
   },

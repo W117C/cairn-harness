@@ -510,6 +510,37 @@ final HEAD `0ec8bff` 的全量 `test`（同一台软链 worktree，按规则 52 
 四条在 clean HEAD（`589fb56`）隔离 worktree 实跑**全杀**，主树一个字节未动；
 `pnpm mutate-needles-check` 595 条 0 阻断 / 0 待复认 / 0 未覆盖；`pnpm typecheck` HEAD 态 0 错。
 
+## 第十五程（09-22，`4472807`）：面板重绘触发集——一张没人判过的手写表
+
+顺带把「手写类型表有没有闸」这个形状又扫了一遍，撞上 `PANEL_DIRTY`：app.js 里一份
+`{tool_call:1, tool_result:1, ...}` 字面量，决定「哪些事件到达时右栏重算」，**零判卷覆盖**
+（只有两条既有判据碰巧各认其中一个字段，且是用正则扒字面量）。
+
+**① 漏判是量出来的，不是猜的。** 逐键比对 `projectPanelData` 的六个面（workspace/files/tree/
+terminal/merge/agents），四条改了投影却不在表里：`usage` / `agent_message` / `agent_result`
+改 `agents`，`security_report` 改 `merge`。后果不是「不画」而是**画着旧的**——评审面板停在
+上一批安全发现上，看着像当前结论。第十三程把 worker 正文改成只以 `agent_message` 上屏之后，
+「进展行滞后」从瑕疵升级成主症状，这条才排得上队。
+
+**② 双向判，单向一定自欺。** 新闸 `tests/panel-dirty-freshness.test.ts` 同时判两面：
+改了投影 ⇒ 必须在表里（否则右栏过期）；没改投影 ⇒ 不许进表（`refreshPanels` 是对全部事件的
+重投影，白刷是纯成本——能力 9 的钱面，流式 delta 正因这条刻意排除）。
+只写正向的闸会把表撑成「每事件都刷」，只写反向的闸会合理化最初那四条漏判。
+
+**③ 两处测量陷阱（都写进判据注释）。** 成对事件单独喂会测出**假「零变化」**：
+`tool_result` 脱离它的 `tool_call` 时六个面全不动，带上 prefix 才显形；同型不同形状也要分开采，
+普通 shell 回包零变化、`merge-*` 回包改 merge 面。第一版我按「一型一样本」写，`approval_resolved`
+与 `tool_result` 双双报零变化——差点据此把这俩从表里删掉，那是把真判据改成假判据。
+
+**④ 判据跟着事实源搬家。** 两处既有判据从「正则扒 app.js 字面量」改成 import 读值
+（判的还是同一件事，只是坐标随表搬到 projections）；对应的两根锚点同步改指新的针脚位置，
+并复跑确认仍然杀得死。
+
+**本程读数**：`tests/panel-dirty-freshness.test.ts` 21 条；渲染层与投影消费方批
+**34 files / 261 tests 全绿**；`pnpm panels-check` 135 ✅ exit 0（脏集变宽之后一遍）；
+锚点 +3，连同改指的两根共 5 条在 clean HEAD（`4472807`）隔离 worktree **全杀**，主树零改动；
+`pnpm mutate-needles-check` 598 条 0 阻断 / 0 待复认 / 0 未覆盖；`pnpm typecheck` HEAD 态 0 错。
+
 ## 待办（按优先级）
 
 1. 沉淀面：`failureDigestFromEvents`（能力 6/10）现在只看 `verify_result(ok:false)` 与
@@ -591,6 +622,11 @@ grep -n "entersMainConversation" src/renderer/*.js src/renderer/projections.ts  
 TERM=dumb node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/tool-args-summary.test.ts
 TERM=dumb pnpm panels-check          # 读 B11d（不在主流）+ B11f（在右栏）这一对
 grep -rn "toolSummary" src/ tests/ scripts/   # 只剩 tests 里那条「不许再出现」的反向断言
+# 第十五程（面板重绘触发集）
+TERM=dumb node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/panel-dirty-freshness.test.ts
+TERM=dumb pnpm mutate-verify panel-dirty-misses-review-and-progress-events panel-dirty-refreshes-on-inert-events \
+  app-keeps-its-own-panel-dirty-copy panel-dirty-never-mentions-approval-events diff-comment-missing-from-panel-dirty-set
+grep -n "PANEL_DIRTY_TYPES" src/renderer/*.js src/renderer/projections.ts   # 表 1 份、问它 1 处
 ```
 （`wc -l` 两边都数：单看修复后的 23 说明不了任何事，修复**前**那个 4 才是缺陷本身——
 4 个命中全在类型声明与注释里，读取点为 0。）
