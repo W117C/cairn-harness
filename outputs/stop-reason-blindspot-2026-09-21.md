@@ -41,6 +41,16 @@
   位置本身就是信息，摘掉旧的等于假装那半句完整过）。
 - `src/agent/sidechat.ts`：主会话只读投影加一个 case（与 `error` 同档——那句回答不完整，
   是用户接着提问的前提事实）。
+- `src/providers/mock.ts`：剧本允许带 `turn_truncated`。它原先只收
+  `assistant_message/tool_call/usage` ⇒ 截断**在冻结剧本格式里根本表达不出来**，
+  端到端那一跳（剧本 → `runLoop` → JSONL）没有观测者，只能靠测试里手写 provider 造——
+  正是本仓点名的「只测被调的纯函数 = 把没接线洗成绿色」。理由与该文件第 18-20 行为 `usage`
+  写下的那句一模一样，沿用而非另立。
+- **跨轮真请求体证明**（`tests/turn-truncated.test.ts` 末段）：上一段只证明
+  「`projectContext` 里有这一行」，而生产入口是**会话型 provider**（它以事件日志为唯一事实源、
+  忽略 loop 传入的 messages）⇒ 「模型下一轮真的看得到」只能用
+  `createGlmSessionProvider` + transport 抓包判。现在抓到了：说明紧跟在那半句正文之后，
+  且**答完的一轮请求体里一个字都不多**（负控）。
 
 ### 顺手被结构性检查抓到的一件事
 
@@ -58,7 +68,8 @@
   ⇒ 见到在飞文件的红，先按「我刚刚动了什么」验一遍再指认别人（规则 5 的镜像：误派的代价是
   让别人重做没坏的东西）。
 - 全量 `test` → **182 files / 1697 tests passed，exit 0**（新事件类型未破任何投影/门）。
-- 新增 `tests/turn-truncated.test.ts` **17 条**。
+- 新增 `tests/turn-truncated.test.ts` **22 条**（解码器 6 / 三家适配器 6 / 落盘与投影 5 /
+  剧本入口 3 / 跨轮真请求体 2）。
 
 ### 一次自我纠错（值得留，因为它暴露了主树测不出来的那类错）
 
@@ -103,11 +114,11 @@
    沉淀器却完全看不见的一类。补进 digest。（⚠️ `src/agent/memory/distill.ts` 另有
    在飞 hunk，动前先确认对方已落库。）
 2. 面板可见：渲染层按 `outcome` 出文案（main 只落 token 的规矩，#48 同口径）。
-3. ~~门/锚点~~ **已落（与变异表同一笔提交）**：变异表 +8，逐条在 HEAD 隔离 worktree 实测**全杀**
+3. ~~门/锚点~~ **已落**：变异表 +9，逐条在 HEAD 隔离 worktree 实测**全杀**
    （`stop-reason-keeps-wire-text` / `-emits-on-benign-reason` / `-drops-case-fold` /
    `-hides-zero-output-tokens` / `anthropic-never-reads-stop-reason` /
    `openai-never-reads-finish-reason` / `gemini-never-reads-finish-reason` /
-   `context-never-projects-truncation`），主树一个字节未动；
+   `context-never-projects-truncation` / `mock-script-cannot-express-truncation`），主树一个字节未动；
    `pnpm mutate-needles-check` 全表 551 条针脚 0 阻断 / 0 待复认 / 0 未覆盖。
    其中 `stop-reason-hides-zero-output-tokens` 是一条**通用形状**的针：
    `...(x !== null && x !== undefined ? {…} : {})` 被顺手改成 `...(x ? {…} : {})` ——

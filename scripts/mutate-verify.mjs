@@ -4560,6 +4560,14 @@ const MUTATIONS = [
     apply: (s) => s.replace('      msgs.push({ role: "user", content: truncationNote(e) });\n', ''),
     expectFail: "projectContext：说明紧跟在被砍断的那段正文之后（位置本身就是信息）",
   },
+  {
+    id: "mock-script-cannot-express-truncation",
+    src: "src/providers/mock.ts",
+    test: "tests/turn-truncated.test.ts",
+    desc: "剧本拒收 turn_truncated ⇒ 截断只能在测试里手写 provider 造，端到端那一跳没有观测者",
+    apply: (s) => s.replace('e.type === "tool_call" || e.type === "usage" || e.type === "turn_truncated"', 'e.type === "tool_call" || e.type === "usage"'),
+    expectFail: "剧本可以带 turn_truncated，并按序原样产出（不折进正文、不丢）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
