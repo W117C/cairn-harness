@@ -54,7 +54,7 @@ import {
 import { globalPermissionsPath, savePermissionRules } from "../permissions/rules";
 import { type ProviderKind } from "./settings";
 import { getLastWorkspace, setRunWorkspace } from "./runner-workspace";
-import { createSession, pathOf, readSessionEvents, createSidechatSession, listSidechatSessions, readSidechatEvents, sidechatDir, sidechatEventsPath, type SessionInfo } from "./sessions";
+import { createSession, pathOf, readSessionEvents, sessionExists, createSidechatSession, listSidechatSessions, readSidechatEvents, sidechatDir, sidechatEventsPath, type SessionInfo } from "./sessions";
 import { createMockProvider } from "../providers/mock";
 import { streamGlm, type GlmToolSpec } from "../providers/glm";
 import type { ModelOutput, Provider } from "../providers";
@@ -667,13 +667,31 @@ export async function resolveSafeMode(): Promise<"off" | "report" | "gate"> {
   return safeMode === "off" || safeMode === "gate" ? safeMode : "report";
 }
 
-/** IPC "agent:compact" 的处理函数：手动 /compact 入口（preload 暴露待追认，见 BLOCKED.md）。 */
+/** IPC "agent:compact"：手动 /compact 入口。
+ *  ① 目标 = **用户当前打开的那条会话**：缺省落到 lastLogPath 会压到「本进程最后一次 run 的会话」，
+ *     而那条可能早就切走了——压缩错对象，比不压缩更坏（用户以为省了，实际什么都没动）。
+ *  ② emit = 落盘 + 推送同路（与 run 内那条演示通道 `pipeline` 一字同口径）。少了落盘：
+ *     压缩卡当场看得见，下次 run 重放又是全文 ⇒ 花了一次摘要的钱换个零效果。
+ *     compaction-check 走的是演示那条支，所以这条产品支红过也没人看见。 */
 export async function handleCompact(
-  over: { logPath?: string } = {},
+  over: { sessionId?: string } = {},
 ): Promise<{ ok: boolean; error?: string; cardPayload?: Record<string, unknown> }> {
-  const logPath = over.logPath ?? lastLogPath;
+  let logPath: string | null;
+  if (over.sessionId !== undefined) {
+    const dir = requireSessionsDir();
+    if (!(await sessionExists(dir, over.sessionId))) return { ok: false, error: "会话不存在，未压缩" };
+    logPath = pathOf(dir, over.sessionId);
+  } else {
+    logPath = lastLogPath;
+  }
   if (!logPath) return { ok: false, error: "无会话日志（先跑一轮会话再 /compact）" };
-  const res = await compactSessionLog(logPath, async (e) => Promise.resolve(hooks.onEvent?.(e)), currentPluginRuntime()?.hooks);
+  if (isSessionLogBusy(logPath)) return { ok: false, error: "该会话正在运行，先停止再压缩" };
+  const log = createEventLog(logPath);
+  const res = await compactSessionLog(
+    logPath,
+    async (e) => { await log.append(e); hooks.onEvent?.(e); },
+    currentPluginRuntime()?.hooks,
+  );
   return { ok: res.ok, error: res.error, cardPayload: res.cardPayload };
 }
 
@@ -1071,6 +1089,10 @@ export function verifyExec(sandbox: SandboxStatus | null, run: typeof runInSandb
 const liveRunPaths = new Set<string>();
 const sessionOrchestrators = new Map<string, Orchestrator>();
 const deletingSessionPaths = new Set<string>();
+/** 「这条会话日志正被占用」的唯一判据：run 起时的互斥、手动压缩时的让路，两处读同一个式子。 */
+export function isSessionLogBusy(logPath: string): boolean {
+  return liveRunPaths.has(resolve(logPath)) || deletingSessionPaths.has(resolve(logPath));
+}
 export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   installAppTools();
   // H2（A-2）：无人值守 run 的等人门上限——定时触发的 clarify/plan 挂起 60s 后 fail-closed。
@@ -1115,7 +1137,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   enterPlanRunScope(opts.planRequired === true);
   // M2e：本 run 注入统一注册表的插件工具名（会话结束摘除，零残留）；声明在 try 外防 finally TDZ
   let injectedToolNames: string[] = [];
-  if (liveRunPaths.has(resolve(opts.logPath)) || deletingSessionPaths.has(resolve(opts.logPath))) throw new Error("session already running or being deleted");
+  if (isSessionLogBusy(opts.logPath)) throw new Error("session already running or being deleted");
   liveRunPaths.add(resolve(opts.logPath));
   let log: EventLog | undefined;
   let solpi: SolpiRuntime | undefined;
@@ -1125,7 +1147,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // M1e 会话模式：sessionId 在场 = 会话列表里的既有会话，append（JSONL 即会话，重放无损）；
     // 无 sessionId = 旧行为（每轮新日志，e2e/ipc-check 等脚本路径字节不变）。
     if (!opts.sessionId) await rm(opts.logPath, { force: true });
-    lastLogPath = opts.logPath; // /compact（handleCompact）缺省压缩对象
+    lastLogPath = opts.logPath; // 无 sessionId 的调用（headless / 旧通道）才用它兜底压缩对象
     log = createEventLog(opts.logPath);
     if (solpiEnabled({ requestMetering: opts.requestMetering, observationPack: opts.observationPack,
       evidenceReceipts: opts.evidenceReceipts, economicCompaction: opts.economicCompaction })) {

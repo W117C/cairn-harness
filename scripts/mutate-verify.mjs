@@ -3768,6 +3768,22 @@ const MUTATIONS = [
     apply: (s) => s.replace("if (!rc.replay && goalRelevant(e)) {", "if (goalRelevant(e)) {"),
     expectFail: "重放期间不得二次累加镜像（showHistory 已经整段筛过）",
   },
+  {
+    id: "manual-compact-push-only-never-persisted",
+    src: "src/main/agent-runner.ts",
+    test: "tests/compact-wiring.test.ts",
+    desc: "手动压缩只推不落盘（历史原样）⇒ 压缩卡当场看得见、下一次 run 重放又是全文：花一次摘要的钱换个零效果。演示那条支用会话管线，所以它红着门也绿",
+    apply: (s) => s.replace("async (e) => { await log.append(e); hooks.onEvent?.(e); },", "async (e) => { hooks.onEvent?.(e); },"),
+    expectFail: "压缩事件既上屏**也**落盘：只推不写就是花一次摘要钱换个零效果",
+  },
+  {
+    id: "manual-compacts-last-run-instead-of-open-session",
+    src: "src/main/agent-runner.ts",
+    test: "tests/compact-wiring.test.ts",
+    desc: "丢掉 sessionId ⇒ 压到 lastLogPath（本进程最后一次 run 的会话）。用户点的是屏幕上这条，压错的后果是「按了没效果 + 另一条被偷偷改写」",
+    apply: (s) => s.replace("if (over.sessionId !== undefined) {", "if (false) {"),
+    expectFail: "压的是 sessionId 那条，不是「本进程最后跑过的」那条",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

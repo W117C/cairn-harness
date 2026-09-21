@@ -1971,6 +1971,13 @@ html.reduce-motion .quick-card{opacity:1}
             <div class="ctx-pop" id="goalPanel" hidden>
               <div class="bp-view" id="goalPanelBody"></div>
             </div>
+            <button class="c-btn" id="ctxCompact" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="compactPanel" aria-label="压缩上下文" title="把这段会话的历史摘要成一条，下一次运行不再重放全文（要发一次模型调用，花真钱）">
+              <span class="c-btn-label">压缩上下文</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="ctx-pop" id="compactPanel" hidden>
+              <div class="bp-view" id="compactPanelBody"></div>
+            </div>
             <button class="c-btn" id="attachBtn" aria-label="添加附件">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m21 12-8.5 8.5a5 5 0 0 1-7-7L14 5a3.3 3.3 0 0 1 4.7 4.7L10.5 18a1.7 1.7 0 0 1-2.4-2.4L16 8"/></svg>
             </button>

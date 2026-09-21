@@ -3474,6 +3474,50 @@ render();
     })();
   });
 
+  /* ---------- 手动压缩上下文（agent:compact）----------
+     读数全部取自事实源：用量是本会话已累计的 usage 事件之和，压缩收益取主进程回条里的
+     tokens_before/after（实测，不是估算）。花钱的动作得当场说清花在哪、省在哪一次。 */
+  const ctxCompact = $('#ctxCompact');
+  const compactPanel = $('#compactPanel');
+  const compactPanelBody = $('#compactPanelBody');
+
+  function renderCompactPanel() {
+    const busy = real.running === true;
+    compactPanelBody.innerHTML =
+      '<form class="compact-form">' +
+        '<p class="goal-note">本会话已累计 <b>' + String(real.usageIn) + ' + ' + String(real.usageOut) + '</b> token（输入 + 输出）。' +
+          '压缩 = 把这段历史摘要成一条事件，<b>下一次运行</b>不再重放全文。</p>' +
+        '<p class="goal-note">摘要本身要发一次模型调用（花真钱）。已经花掉的不退，省的是下一次的输入。</p>' +
+        '<div class="goal-actions"><button type="submit" class="primary">立即压缩本会话</button></div>' +
+        (busy
+          ? '<p class="goal-note">会话正在运行——先停止再压缩（不给跑动中的历史动刀，主进程同口径拒）</p>'
+          : '') +
+      '</form>';
+  }
+  registerPop(compactPanel, ctxCompact, renderCompactPanel);
+  ctxCompact.addEventListener('click', () => togglePop(compactPanel));
+  if (typeof api.compact !== 'function') {
+    ctxCompact.disabled = true;
+    ctxCompact.setAttribute('aria-label', '压缩上下文：当前壳未提供 compact 通道');
+  }
+  compactPanel.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!real.id) { toast('先选一个会话，压缩要有对象'); return; }
+    const sid = real.id; // 压缩对象 = 屏幕上这条，不是「本进程最后跑过的那条」
+    void (async () => {
+      try {
+        const r = await api.compact(sid);
+        if (!r || r.ok !== true) { toast('压缩未发生：' + ((r && r.error) || '未知原因')); return; }
+        const p = r.cardPayload || {};
+        const before = Number(p.tokensBefore) || 0;
+        const after = Number(p.tokensAfter) || 0;
+        closeAllPops(false);
+        toast('已压缩 ' + String(Number(p.compressedCount) || 0) + ' 条事件：' +
+          String(before) + ' → ' + String(after) + ' token（省 ' + String(Math.max(0, before - after)) + '）');
+      } catch (err) { toast('压缩失败：' + ((err && err.message) || String(err))); }
+    })();
+  });
+
   /* 目标态镜像：showHistory 全量筛（replay 唯一入口），renderEvent 只看 live（rc.replay 为假）。
      两支互斥：live 要么走 renderEvent(e)，要么走 showHistory(historyEvents.concat(e))——
      后者会把整段快照重新筛一遍，所以 replay 期间绝不能再把事件追加进镜像。 */

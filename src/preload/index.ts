@@ -28,7 +28,7 @@ const api: AgentApi = {
   decidePlan: (approved: boolean, callId?: string) => ipcRenderer.invoke("agent:plan", approved, callId),
   setGoal: (req) => ipcRenderer.invoke("agent:goal-set", req),
   runCancel: () => ipcRenderer.invoke("agent:run-cancel"), // P3（审查）：交互 run 取消入口
-  compact: () => ipcRenderer.invoke("agent:compact"),
+  compact: (sessionId?: string) => ipcRenderer.invoke("agent:compact", sessionId),
   onEvent: (cb: (e: AgentEvent) => void) => subscribe<AgentEvent>("agent:event", cb),
   onAsk: (cb: (p: AskPayload) => void) => subscribe<AskPayload>("agent:ask", cb),
   onAskDone: (cb: (p: AskOutcomePayload) => void) => subscribe<AskOutcomePayload>("agent:ask-done", cb),

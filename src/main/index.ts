@@ -204,7 +204,7 @@ ipcMain.handle("agent:clarify", (_event, callId: string, answers: Record<string,
 ipcMain.handle("agent:plan", (_event, approved: boolean, callId?: string) => handlePlanDecide(approved, callId));
 // goal 模式：设定/改设会话目标（不发这条 = 会话永不自动续跑，零行为）
 ipcMain.handle("agent:goal-set", (_event, req: Parameters<typeof handleGoalSet>[0]) => handleGoalSet(req));
-ipcMain.handle("agent:compact", (_event) => handleCompact());
+ipcMain.handle("agent:compact", (_event, sessionId?: string) => handleCompact(sessionId !== undefined ? { sessionId } : {}));
 ipcMain.handle("agent:state", () => handleAgentState());
 // P3（审查）：交互 run 取消入口——信号沿 runLoop 轮界/门等待/长驻工具透传（loop.ts）
 ipcMain.handle("agent:run-cancel", () => handleRunCancel());
