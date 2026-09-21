@@ -93,7 +93,18 @@ export interface EntropyOptions {
 }
 export const DEFAULT_ENTROPY: EntropyOptions = { enabled: true, minLength: 24, threshold: 4.0 };
 
-const ENTROPY_TOKEN_RE = /[A-Za-z0-9+/=_-]{16,}/g;
+/** 候选字符集刻意不含 `=`：那是赋值语法、不是值的一部分。旧写法把 `KEY=<高熵>` 整串当候选，
+ *  而 mask() 只留前 4 字符 ⇒ 连键名一起吃掉（实测 `scratch=/var/folders/…` 落成 `scra****`）。
+ *  base64 尾部 padding 单独放行（`=` 不会出现在串中间）。 */
+const ENTROPY_TOKEN_RE = /[A-Za-z0-9+/_-]{16,}={0,2}/g;
+
+/** 路径否决：字符集含 `/`，一条绝对路径会整段成为候选（实测 macOS tmpdir → `/var****`、
+ *  session uuid 目录 → `/Users/ze/.agen****.jsonl`）。以 `/` 开头的候选按路径放过。
+ *  代价写明：以 `/` 开头的 base64 串（首字符命中率 ≈1/64）不再由熵分支覆盖；
+ *  已知模式分支（私钥块 / sk- / AIza / AKIA / ghp_ / xox / 赋值式）与「串中含 `/`」的候选均不受影响。 */
+function looksLikePath(token: string): boolean {
+  return token.startsWith("/");
+}
 
 /** 高熵串探测：长度 ≥ minLength、熵 ≥ threshold、至少含一个字母与一个数字（降噪）。 */
 export function findHighEntropyTokens(line: string, opts: EntropyOptions = DEFAULT_ENTROPY): { token: string; entropy: number }[] {
@@ -101,6 +112,7 @@ export function findHighEntropyTokens(line: string, opts: EntropyOptions = DEFAU
   const out: { token: string; entropy: number }[] = [];
   for (const m of line.matchAll(ENTROPY_TOKEN_RE)) {
     const token = m[0];
+    if (looksLikePath(token)) continue;
     if (token.length < opts.minLength) continue;
     if (!/[A-Za-z]/.test(token) || !/[0-9]/.test(token)) continue;
     if (/^[A-Z][A-Z0-9_]*$/.test(token)) continue; // SCREAMING_SNAKE 常量（配置名等）不算密钥

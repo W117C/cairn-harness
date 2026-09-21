@@ -5008,6 +5008,23 @@ const MUTATIONS = [
     apply: (s) => s.replace("return buildSkillRoutingList(this.skills(), roleLines);", "return buildSkillRoutingList(this.skills());"),
     expectFail: "受信的 plugin:agent 进清单，且写明这是 stages[].role 能吃的名字",
   },
+  // ---- 高熵候选的边界（security/scan.ts，2026-09-22）----
+  {
+    id: "entropy-candidate-eats-assignment-label",
+    src: "src/agent/security/scan.ts",
+    test: "tests/redact.test.ts",
+    desc: "候选字符集含 `=` ⇒ `SESSION=<高熵>` 整串成为候选，mask() 只留前 4 字符，键名连同值一起吃掉（掩码产物读起来像原文被改坏了）",
+    apply: (s) => s.replace("/[A-Za-z0-9+/_-]{16,}={0,2}/g", "/[A-Za-z0-9+/=_-]{16,}/g"),
+    expectFail: "赋值式：值掩掉、键名逐字留着",
+  },
+  {
+    id: "entropy-path-veto-removed",
+    src: "src/agent/security/scan.ts",
+    test: "tests/redact.test.ts",
+    desc: "去掉绝对路径否决 ⇒ 字符集含 `/`，一条 tmpdir 整段成为候选（实测 `/var/folders/…` 落成 `/var****`），落流与归档两面的路径全毁",
+    apply: (s) => s.replace("    if (looksLikePath(token)) continue;\n", ""),
+    expectFail: "绝对路径形状否决：真实 mkdtemp 目录与其下的文件逐字不变",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
