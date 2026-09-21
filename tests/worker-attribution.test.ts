@@ -5,7 +5,7 @@
 //   ③ tool-choice 的假完成率分母。
 // 三处都只能等归因补上才成立，所以归因本身必须有测，而不是等下一个读数出错再回头找。
 import { describe, expect, it } from "vitest";
-import { withAgentId } from "../src/agent/worker-projection";
+import { WORKER_STREAM_TYPES, withAgentId } from "../src/agent/worker-projection";
 import { hasWorkerAttribution, projectContext } from "../src/agent/context";
 import type { AgentEvent, VerifyResultEvent } from "../src/events";
 
@@ -41,5 +41,55 @@ describe("子流归因面", () => {
     const worker = projectContext([...base, withAgentId(vres({ auto: true }), "w1")]);
     expect(JSON.stringify(worker)).not.toContain("[harness 自动验证]");
     expect(JSON.stringify(worker)).toContain("继续");               // 只是不注入那条红，不是把整个上下文弄坏
+  });
+});
+
+describe("子流归因面必须覆盖 worker 能发的每一型（2026-09-22 实测补的三类）", () => {
+  // 动手前的探针读数：withAgentId 只认 5 型 ⇒ worker 的 assistant_message/assistant_delta
+  // 落进主转录时 agent_id 是 undefined，父投影于是产出
+  //   {"role":"assistant","content":"worker 内部正文"}
+  // ——父会话以为那句话是它自己说的；worker 的 error 同理会以父会话的错误上卡。
+  // 旧注释「其余事件类型本体已带」是 agent_* 的经验，被当成了整条通道的经验。
+  const prose: AgentEvent[] = [
+    { type: "assistant_message", content: "worker 内部正文" },
+    { type: "assistant_delta", callId: "m1", text: "半句正文" },
+    { type: "error", message: "worker 自己炸了", step: 1 },
+  ];
+
+  it("正文与错误三类都进归因面（漏一型 = 它以父会话的形态落进主转录）", () => {
+    for (const e of prose) {
+      expect(withAgentId(e, "w1"), e.type).toHaveProperty("agent_id", "w1");
+      expect(hasWorkerAttribution(withAgentId(e, "w1")), e.type).toBe(true);
+    }
+  });
+
+  it("父投影不再把 worker 的正文当成父会话自己说的（探针的那份读数，反过来钉住）", () => {
+    const msgs = projectContext([
+      { type: "user_message", content: "主会话任务" } as AgentEvent,
+      ...prose.map((e) => withAgentId(e, "w1") as AgentEvent),
+    ]);
+    const joined = JSON.stringify(msgs);
+    expect(joined).not.toContain("worker 内部正文");
+    expect(joined).not.toContain("半句正文");
+    expect(joined).not.toContain("worker 自己炸了");
+    expect(joined).toContain("主会话任务"); // 主流那一头照旧在（不是一律清空）
+  });
+
+  it("归因面 ⊇ provider 增量全集（ModelOutput 五型；编译期由 Record 穷尽代劳，这里 runtime 再钉一次）", () => {
+    for (const t of ["assistant_message", "assistant_delta", "tool_call", "usage", "turn_truncated"] as const) {
+      expect(WORKER_STREAM_TYPES.has(t), t).toBe(true);
+    }
+    // loop 合成件
+    for (const t of ["tool_result", "verify_result", "error"] as const) {
+      expect(WORKER_STREAM_TYPES.has(t), t).toBe(true);
+    }
+  });
+
+  it("负控：父会话自己的正文不被装饰，非子流类型也不进这张表", () => {
+    // withAgentId 只在 worker 管线上调用；主会话侧的 assistant_message 永远不带 agent_id。
+    expect(withAgentId({ type: "user_message", content: "用户说的" } as AgentEvent, "w1")).not.toHaveProperty("agent_id");
+    expect(WORKER_STREAM_TYPES.has("user_message" as AgentEvent["type"])).toBe(false);
+    expect(WORKER_STREAM_TYPES.has("session_meta" as AgentEvent["type"])).toBe(false);
+    expect(WORKER_STREAM_TYPES.has("compaction" as AgentEvent["type"])).toBe(false);
   });
 });

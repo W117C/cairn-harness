@@ -3280,8 +3280,9 @@ const MUTATIONS = [
     src: "src/agent/worker-projection.ts",
     test: "tests/worker-attribution.test.ts",
     desc: "把 verify_result 摘出归因面 ⇒ worker 的验证证据回到「与父会话难分」的状态：上下文红回流、父验证计量、假完成率三处同时被骗",
-    // 针脚随 turn_truncated 进白名单而改指（2026-09-21）：语义逐字不变——仍然只摘 verify_result。
-    apply: (s) => s.replace("if (e.type === \"tool_call\" || e.type === \"tool_result\" || e.type === \"usage\" || e.type === \"verify_result\" || e.type === \"turn_truncated\") {", "if (e.type === \"tool_call\" || e.type === \"tool_result\" || e.type === \"usage\" || e.type === \"turn_truncated\") {"),
+    // 针脚随 turn_truncated 进白名单而改指（2026-09-21）；再随「串条件换成 WORKER_STREAM_TYPES 表」
+    // 改指一次（2026-09-22）：语义逐字不变——仍然只摘 verify_result。
+    apply: (s) => s.replace('["tool_result", "verify_result", "error"]', '["tool_result", "error"]'),
     expectFail: "verify_result 进归因面：worker 的验证证据必须能被认出不是父会话的",
   },
   {
@@ -4615,7 +4616,8 @@ const MUTATIONS = [
     src: "src/agent/worker-projection.ts",
     test: "tests/turn-truncated.test.ts",
     desc: "withAgentId 的类型白名单不收 turn_truncated ⇒ 子流截断以「主会话上一轮没说完」落进父转录与父目标判据",
-    apply: (s) => s.replace('e.type === "verify_result" || e.type === "turn_truncated"', 'e.type === "verify_result"'),
+    // 2026-09-22 改指：串条件换成了 WORKER_STREAM_TYPES 表（provider 那一半进 Record），语义不变——仍然只摘 turn_truncated。
+    apply: (s) => s.replace('  turn_truncated: true,\n', ''),
     expectFail: "worker 子流的截断会被装饰 agent_id（否则它以「主会话上一轮没说完」落进父转录）",
   },
   {
@@ -4791,6 +4793,30 @@ const MUTATIONS = [
     desc: "不落已用输出 token ⇒ 标题只剩形容词，离帽多远这个唯一可行动的数没了",
     apply: (s) => s.replace("'，已用 ' + String(e.output_tokens) + ' 输出 token'", "''"),
     expectFail: "线上停止原因与已用输出 token 都上屏（离帽多远是唯一可行动的数字）",
+  },
+  {
+    id: "worker-prose-unattributed",
+    src: "src/agent/worker-projection.ts",
+    test: "tests/worker-attribution.test.ts",
+    desc: "归因面不收 assistant_message ⇒ worker 的正文以父会话「自己说过」的形态进父投影",
+    apply: (s) => s.replace('  assistant_message: true,\n', ''),
+    expectFail: "正文与错误三类都进归因面（漏一型 = 它以父会话的形态落进主转录）",
+  },
+  {
+    id: "worker-delta-unattributed",
+    src: "src/agent/worker-projection.ts",
+    test: "tests/worker-attribution.test.ts",
+    desc: "不收 assistant_delta：流式那半句同样越界（正文不是只从 assistant_message 来的）",
+    apply: (s) => s.replace('  assistant_delta: true,\n', ''),
+    expectFail: "正文与错误三类都进归因面（漏一型 = 它以父会话的形态落进主转录）",
+  },
+  {
+    id: "worker-error-unattributed",
+    src: "src/agent/worker-projection.ts",
+    test: "tests/worker-attribution.test.ts",
+    desc: "不收 error ⇒ worker 炸了在主转录里显示成父会话的错误（并会进父的失败沉淀）",
+    apply: (s) => s.replace('"tool_result", "verify_result", "error"]', '"tool_result", "verify_result"]'),
+    expectFail: "正文与错误三类都进归因面（漏一型 = 它以父会话的形态落进主转录）",
   },
 ];
 

@@ -1,4 +1,5 @@
 import type { AgentEvent } from "../events";
+import type { ModelOutput } from "../providers";
 import type { GlmToolSpec } from "../providers/glm";
 import type { Tool } from "../tools/base";
 import type { PipelineChain, WorkerContext, WorkerHandle } from "./orchestrator-types";
@@ -41,16 +42,35 @@ export function chainTable(chain: PipelineChain): string {
     .join("\n");
 }
 
-/** 子流装饰：worker 的 tool_call/tool_result/usage/verify_result 带 agent_id（其余事件类型本体已带）。
+/** 子流归因面 = **worker 的 loop 能发出的全部事件类型**。
+ *  写成这张表而不是手写 `e.type === ...` 的串，是因为漏一型太便宜而代价太贵：漏了的类型
+ *  会以父会话事件的形态落进主转录（§4.4.4 说父上下文唯一接收物是 agent_result）。
+ *  实测漏过的三类正是**带正文的那些**——assistant_message / assistant_delta 会以
+ *  `{"role":"assistant","content":"worker 内部正文"}` 进父投影（父会话以为那句话是自己说的），
+ *  error 会以父会话的错误上卡。provider 侧那一半由 Record 的穷尽性代劳：
+ *  给 ModelOutput 加一型而不进这张表 ⇒ 编译不过（同一形状已在 sidechat 的 switch 上验过一次）。 */
+const MODEL_OUTPUT_ATTRIBUTION: Record<ModelOutput["type"], true> = {
+  assistant_message: true,
+  assistant_delta: true,
+  tool_call: true,
+  usage: true,
+  turn_truncated: true,
+};
+/** loop 自己合成的那一半（不是 provider 发的）。`user_message` 不在列：worker 的 runLoop
+ *  从不带 userMessage 调用（任务文本走 worker-prompt 注入），所以它不是子流会发的东西。 */
+const LOOP_ATTRIBUTION: readonly AgentEvent["type"][] = ["tool_result", "verify_result", "error"];
+
+/** 需要（且应当）带 agent_id 的类型全集。导出让判据与实现读同一份，别再抄第二张表。 */
+export const WORKER_STREAM_TYPES: ReadonlySet<AgentEvent["type"]> = new Set<AgentEvent["type"]>([
+  ...(Object.keys(MODEL_OUTPUT_ATTRIBUTION) as AgentEvent["type"][]),
+  ...LOOP_ATTRIBUTION,
+]);
+
+/** 子流装饰：worker 发的事件一律挂 agent_id（`agent_*` 那些由编排器自己发，本来就带）。
  *  verify_result 是 2026-09-20 补进来的：W4a 让 worker 也跑自动验证之后，缺了归因就等于
  *  「worker 验过」冒充「父会话验过」——上下文红回流、父验证计量、假完成率三处都按这条判子流。 */
 export function withAgentId(e: AgentEvent, agentId: string): AgentEvent {
-  // turn_truncated 必须在列：provider 发这条事件时不知道自己在 worker 里，不加进来
-  // 子流的截断就会以「主会话上一轮没说完」的形态落进父转录（context/goal 都会读错主体）。
-  // 保持单行：既有锚点 verify-result-out-of-attribution 的针脚按这一行的前缀匹配，折行会把它抹掉。
-  if (e.type === "tool_call" || e.type === "tool_result" || e.type === "usage" || e.type === "verify_result" || e.type === "turn_truncated") {
-    return { ...e, agent_id: agentId } as AgentEvent;
-  }
+  if (WORKER_STREAM_TYPES.has(e.type)) return { ...e, agent_id: agentId } as AgentEvent; // 单行：锚点按这一行匹配
   return e;
 }
 
