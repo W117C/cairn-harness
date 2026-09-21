@@ -4834,6 +4834,23 @@ const MUTATIONS = [
     apply: (s) => s.replace("      flushDelta(); // 主流正文的边界照旧收束,不让两段正文隔着一段子流粘成一段\n", ""),
     expectFail: "两段主流正文中间夹一段子流时不粘连（子流被跳过，父的正文边界照旧收束）",
   },
+  // ---- 修剪的账只量父上下文（prune.ts，2026-09-22 第三面）----
+  {
+    id: "prune-candidates-include-child-stream",
+    src: "src/agent/prune.ts",
+    test: "tests/prune.test.ts",
+    desc: "候选面不再排除子流 ⇒ worker 的 tool_result 被裁：记一次不存在的节省 + 把内部转录抄进附件",
+    apply: (s) => s.replace('  if (hasWorkerAttribution(e)) return true;\n', ""),
+    expectFail: "子流大块既不进替换表，也不记进 savedTokens",
+  },
+  {
+    id: "prune-protection-window-counts-child-stream",
+    src: "src/agent/prune.ts",
+    test: "tests/prune.test.ts",
+    desc: "保护区预算把子流体量算进去 ⇒ 父会话里真在上下文中的老结果被提前划出保护区去裁",
+    apply: (s) => s.replace('    if (hasWorkerAttribution(e)) continue;\n', ""),
+    expectFail: "多一条子流大块，父侧的替换集合与 savedTokens 逐字不变（不吃保护区预算）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

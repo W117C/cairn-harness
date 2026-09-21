@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { access, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentEvent } from "../events";
+import { hasWorkerAttribution } from "./context";
 import { estimateTextTokens } from "./text-budget";
 
 export const PRUNE_PROTECT_TOKENS = 40_000;
@@ -108,6 +109,10 @@ export function isPruneExempt(
 ): boolean {
   const e = events[index];
   if (e.type !== "tool_result") return true; // 只动 tool_result
+  /* worker 子流的 tool_result 不在父上下文里（projectContext 按同一判定排除）：给它打桩
+     记的是一次**不存在的节省**，还会把 worker 内部转录抄进附件。修剪量的是「这一轮将要
+     发给模型的东西」,子流本来就不在其中。 */
+  if (hasWorkerAttribution(e)) return true;
   if (isCardProjection(e) || isFixedReinjection(e)) return true;
   const idx = precomputed ?? buildPruneIndex(events, config);
   // 免剪名单：同 callId 的 tool_call 名字在名单里 = skill 内容注入
@@ -155,6 +160,9 @@ export function computePrune(input: PruneInput): PruneOutcome {
   let protectStart = events.length; // [protectStart, end) = 保护区
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i];
+    // 保护区量的是「将要发给模型的那一段」：worker 子流从来不进父上下文，把它算进来
+    // 会让保护区提前收口（父会话里真在上下文中的老结果被划成候选去裁）。
+    if (hasWorkerAttribution(e)) continue;
     // token 计量按字符类别登记（text-budget 一份字重表）：中文一字≈一 token，旧的 chars/4
     // 把这条累计低估 4 倍 ⇒ 保护区一口吞掉 4 倍量的事件、候选恒空、修剪在中文会话里根本不触发。
     // 纯 ASCII 下 estimateTextTokens ≡ ceil(chars/4)，逐字同值（零回归）。

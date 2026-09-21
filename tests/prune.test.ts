@@ -335,3 +335,68 @@ describe("prune 附件回取接进生产", () => {
     expect((await stat(file)).mtimeMs).toBe(mtimeBefore);
   });
 });
+
+describe("修剪量的是「将要发给模型的那一段」——worker 子流不在其中（2026-09-22）", () => {
+  // 动手前的实测：prune.ts 里 agent_id 零命中。projectContext 早已把带归因的事件挡在父上下文外,
+  // 但 prune 拿的是**原始事件流**，于是两件事同时错：
+  //   ① 子流的 tool_result 被当候选去裁 ⇒ savedTokens 记一次不存在的节省（还会把 worker 内部
+  //      转录抄进附件文件——真磁盘、真 I/O，换一条永远不会出现在任何 prompt 里的打桩行）；
+  //   ② 保护区按 token 回退时把子流的体量算进预算 ⇒ 父会话里真在上下文中的老结果被提前划出
+  //      保护区去裁。（同一形状的第三面：见 outputs/stop-reason-blindspot 第十一程、记忆规则 53。）
+  const big = (n: number) => String.fromCharCode(65 + n).repeat(100 * KB); // ≈25k token（ASCII：chars/4）
+  const round = (tag: string, parent: boolean): AgentEvent[] => [
+    { type: "user_message", content: tag },
+    { type: "tool_call", id: tag, name: "read_file", args: {} },
+    { type: "tool_result", callId: tag, ok: true, output: big(tag.charCodeAt(1) - 97), ...(parent ? {} : { agent_id: "w1" }) },
+  ];
+
+  it("子流大块既不进替换表，也不记进 savedTokens", () => {
+    const withChild: AgentEvent[] = [
+      ...round("r1", true), ...round("rw", false), ...round("r2", true), ...round("r3", true),
+    ];
+    const r = computePrune({ events: withChild });
+    const childIdx = withChild.findIndex((e) => e.type === "tool_result" && "agent_id" in e);
+    // replacements 的键是 1-based 事件 id（行号），不是数组下标
+    expect(r.replacements.has(childIdx + 1)).toBe(false);
+    expect(r.attachments).toEqual([]);
+  });
+
+  it("负控：把 agent_id 去掉，同一条事件确实会被裁（否则上一条可能只是恒绿）", () => {
+    const demoted: AgentEvent[] = [
+      ...round("r1", true), ...round("rw", true), ...round("r2", true), ...round("r3", true),
+    ];
+    const r = computePrune({ events: demoted });
+    const idx = demoted.findIndex((e) => e.type === "tool_result" && e.callId === "rw");
+    expect(r.replacements.has(idx + 1)).toBe(true);
+    expect(r.savedTokens).toBeGreaterThan(0);
+  });
+
+  it("多一条子流大块，父侧的替换集合与 savedTokens 逐字不变（不吃保护区预算）", () => {
+    const baseline = computePrune({ events: [
+      ...round("r1", true), ...round("r2", true), ...round("r3", true),
+    ] });
+    const withChild = computePrune({ events: [
+      ...round("r1", true), ...round("rw", false), ...round("r2", true), ...round("r3", true),
+    ] });
+    expect(baseline.replacements.size).toBe(1); // 前提：基线真会裁一条，否则「相等」是两句空话
+    expect(withChild.replacements.size).toBe(baseline.replacements.size);
+    expect(withChild.savedTokens).toBe(baseline.savedTokens);
+  });
+
+  it("isPruneExempt 单点判据：带归因的 tool_result 一律免剪", () => {
+    // 三条 user_message：否则 boundary=0，「最近 N 轮免剪」会先于本判据把候选全免掉（假绿）。
+    const events: AgentEvent[] = [
+      { type: "user_message", content: "r1" },
+      { type: "tool_call", id: "x", name: "read_file", args: {} },
+      { type: "tool_result", callId: "x", ok: true, output: "x".repeat(200 * KB), agent_id: "w1" },
+      { type: "user_message", content: "r2" },
+      { type: "user_message", content: "r3" },
+    ];
+    const config = { ...DEFAULT_PRUNE_CONFIG };
+    const idx = buildPruneIndex(events, config);
+    expect(isPruneExempt(events, 2, config, idx)).toBe(true);
+    // 同一条去掉归因 ⇒ 不再免剪（判的是字段，不是类型）
+    const parentOnly = events.map((e, i) => (i === 2 ? ({ ...e, agent_id: undefined } as AgentEvent) : e));
+    expect(isPruneExempt(parentOnly, 2, config, buildPruneIndex(parentOnly, config))).toBe(false);
+  });
+});
