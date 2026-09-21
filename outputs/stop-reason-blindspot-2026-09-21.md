@@ -611,6 +611,62 @@ terminal/merge/agents），四条改了投影却不在表里：`usage` / `agent_
 `pnpm agents-check` 255 ✅ / 0 ❌（暗卷 1 项无凭据按未证报出）；
 `pnpm mutate-needles-check` 605 条 0 阻断 / 0 待复认 / 0 未覆盖；`pnpm typecheck` HEAD 态 0 错。
 
+## 第十八程（09-22，`c27b6d8`）：量测先把待办 11 的方向否掉，顺手挖出脱敏器自己在毁路径
+
+按待办 11 写下的前置量测先跑两件事，结论是**这条不该照原样接**，而前置里那句「高熵会不会误抹
+SHA/base64」量出了一个比 append 面大得多的现行缺陷。
+
+**量测①（frozen 判卷面）**：把真 `scanStreamEvent`（不是重写判据）过一遍仓内 30 份 JSONL / 127 条事件
+⇒ **只改写 2 条**，且两条都是刻意种的密钥夹具（`fixtures/agents/secret-worker.jsonl` 的 `sk-…`、
+`write-demo.jsonl` 的 `ghp_…`）。冻结区（`fixtures/mock/todo-fix.jsonl` 那份剧本）**零改写** ⇒
+接 append 面不会撞 frozen 判据，也就不必写 BLOCKED.md 换判据。
+
+**量测②（代价，反转了方向）**：主会话的密钥**本来就要发给模型**——provider 请求体那条路
+（`serializeConversation`）一个字都没脱敏，脱敏只在 worker→父的那一跳（§4.4.4 唯一接收物）。
+所以 append 面脱敏能防的只有「明文留在磁盘转录里」，而这份转录是**上下文的重放源**：
+落流即改写 ⇒ resume / 摘要 / 沉淀吃到的就是改写后的文本。防的是一个静态面，付的是动态面。
+
+**真正挖出来的缺陷**：高熵候选字符集是 `[A-Za-z0-9+/=_-]{16,}`——它含 `=` 也含 `/`，
+所以一条候选不是「一个密钥」而是「整段赋值 + 整条绝对路径」，而 `mask()` 只留前 4 字符。实测：
+
+| 输入（真实形状） | 修前 | 修后 |
+| --- | --- | --- |
+| `scratch=/var/folders/pc/fqvmb…gn/T` | `scra****`（键名连同路径一起没） | 原样 |
+| `created /var/folders/24/3lpyo…gp/T/dsh-abc` | `created /var****` | 原样 |
+| `/Users/ze/Library/Caches/electron/<40hex>/…zip` | `/Use****.zip` | 原样 |
+| `SESSION=<高熵>` | `SESS****` | `SESSION=Zx9Q****` |
+| `blob=<base64 含 / 与 +>` | `blob****` | `blob=qkvH****`（仍掩） |
+| `sk-…` / `AKIA…` / 私钥块 / JWT | 已掩 | 已掩（逐条正控复测） |
+
+即：**这条路一直在把 macOS tmpdir、mkdtemp 结果、缓存目录整段吃掉**，而它正是子流落流与 solpi
+归档两条面的必经函数——`fixtures` 里没这种形状、门里没有一条断言看过它，所以无人知晓
+（日期是可查的：字符集自 `16df38c`（09-11）就在，经落流这一跳自 `118e4c8`（09-19）起，
+到本程分别 11 天与 3 天。又一个「两头断」：实现在、承诺在、观测者不在）。
+修法在**候选边界**而不是某个面：去掉字符集里的 `=`
+（赋值语法不是值的一部分；base64 尾部 padding 单独放行），并否决以 `/` 开头的候选。
+刻意接受的代价钉成测试并在代码里写明：**以 `/` 开头的 base64 串（首字符命中率 ≈1/64）不再由熵分支覆盖**。
+
+**残留（命名，不再往上叠形状启发）**：`.` 会截断候选，所以**相对**路径尾段仍被吃——
+实测 `node_modules/.pnpm/lightningcss@1.33.0/…` → `…/no****.darwin-arm64.node`、
+`.agent/sessions/<uuid>/events.jsonl` → `.agen****.jsonl`；SRI `sha512-…` 也仍掩（与不透明串无法区分）。
+再收紧需要「按斜杠段数否决」之类规则，而段数恰好是 base64 与路径开始相似的地方——
+**不在安全判据里堆形状启发**，留作命名残留。
+
+**另一笔：全量门抓出我自己几天前留在 HEAD 里的析取断言。** 这次把 `pnpm test` 整道门跑了一遍
+（此前只跑改动邻域的文件），立刻红在 `assertion-health-scan`：B11f 我写的是
+`rowA.includes(childA) || rowA.includes(childB)`——任一成立即通过，而「少一本」正是这类有界列表
+最自然的失效形态。真窗口实测两本都在（`read_file · src/b11-child-only-a.ts` + `…-b.ts`）
+⇒ 改成 `&&` 是**免费收紧**、不是拿豁免换绿（`20803e6`）。
+**教训的形状**：本仓早就有一道机器闸禁止判卷面析取，可它的存在不等于我那天跑过它——
+「跑过邻域那几份测」被当成「跑过那道门」用了好几天。
+
+**本程读数**：`tests/redact.test.ts` 3 → **9 条**（成对钉：该掩的仍掩 / 不该掩的别碰）；
+脱敏邻域 4 files / **75 tests 全绿**；`pnpm security-check` **43 ✅ / 0 ❌**；
+`pnpm mutate-needles-check` **607 条 0 阻断 / 0 待复认 / 0 未覆盖**；两条新锚点在 clean HEAD `c27b6d8`
+**全杀**；`pnpm typecheck` 仅报未跟踪草稿 `scripts/sidebar-probe.ts`（别人的在飞文件），HEAD 态干净。
+
+
+
 ## 待办（按优先级）
 
 1. 沉淀面：`failureDigestFromEvents`（能力 6/10）现在只看 `verify_result(ok:false)` 与
@@ -676,12 +732,28 @@ terminal/merge/agents），四条改了投影却不在表里：`usage` / `agent_
     接法：一次 `scanStreamEvent`，落盘与 onEvent 共用同一份（两份文本 = §10.1 禁的第二套呈现）。
     动手前先量两件事：frozen 判卷文件里有没有 `sk-` 形状的期望（改判据要写 BLOCKED.md，不许改代码绕）；
     `redactSecrets` 的高熵分支会不会误抹 SHA/base64 形状的正文（新增面是 verify_result 与 compaction）。
+    **裁于第十八程：两项都量完了，结论是不照原样接。** ① frozen 面安全——真 `scanStreamEvent` 过仓内
+    30 份 JSONL / 127 条事件只改写 2 条，两条都是刻意种密钥的夹具，`fixtures/mock/todo-fix.jsonl` 零改写。
+    ② 但代价落在**重放侧**：主会话的密钥本来就要发给模型（`serializeConversation` 一个字都没脱敏），
+    append 面脱敏只能防「明文留在磁盘转录」，而那份转录正是上下文的重放源 ⇒ resume / 摘要 / 沉淀
+    会吃到改写后的文本。防一个静态面、付一个动态面——不是免费的一致性，故另立待办 14。
+    副产品才是本程真正落的那一笔：量测②顺带挖出高熵候选字符集自己在吃绝对路径（`c27b6d8`）。
 12. 角色名不落 `agent_spawned`（§4.4.9 的事件面）⇒ 崩溃恢复重建 worker 时角色丢了，只能按默认面跑。
     同时 `pipeline` 之外的 read/write/supervise worker **带不了 role**（`SpawnArgs` 没有这一位，
     supervise 硬编码 implement）——「自定义子智能体」目前只覆盖 pipeline 一条路。
 13. 除插件容器外没有非插件的自定义路径：用户往 `~/.claude/agents/x.md` 放文件得不到任何东西，
     用户级插件目录还要 `M2E_USER_PLUGINS` 环境变量才生效。要么给它一条正式路径，
     要么在文档里把「角色 = 插件专属」写死成边界——现在是两头都不明说。
+14. 转录的**静态**密钥暴露（第十八程裁掉 append 面之后剩下的真问题）：`sessions/*.jsonl` 权限 0600，
+    但明文密钥躺在里面，而落流脱敏会把改写后的路径经重放喂回模型 ⇒ 要换一条不落在这交换上的路
+    （转录落盘后加密，或给用户一条显式「清转录密钥」的工具，别偷偷改重放源）。
+    **动手前先量真实命中**：拿本机既有转录跑 `SECRET_PATTERNS`（不含熵分支），报「几份转录 / 几条命中 /
+    哪些事件类型」。零命中就撤这条——假任务比没任务更坏。
+15. 高熵规则的**命名残留**（`c27b6d8` 之后）：`.` 会截断候选，所以相对路径尾段仍被吃——
+    实测 `node_modules/.pnpm/lightningcss@1.33.0/…` → `…/no****.darwin-arm64.node`、
+    `.agent/sessions/<uuid>/events.jsonl` → `.agen****.jsonl`；SRI `sha512-…` 也仍掩（与不透明串不可区分）。
+    再收紧要靠「按斜杠段数否决」，而段数正是 base64 密钥开始像路径的地方（32 字符里约 10% 含两个斜杠）
+    ⇒ **刻意不在安全判据里堆形状启发**。要动它，先回答「牺牲哪一类召回、拿哪一类误伤换」。
 
 ## 复算命令
 
@@ -724,6 +796,33 @@ cd /tmp/dsh-mv-<x> && TERM=dumb node scripts/mutate-verify.mjs \
   skill-routing-ignores-disable-model-invocation
 grep -n "可用作 pipeline stages" src/agent/plugins/index.ts   # 角色行只这一处；多一处＝两份口径
 grep -c "PLUGIN_ROLE_CONSUMED_KEYS\|PLUGIN_UNIMPLEMENTED_KEYS" src/agent/sequencer.ts   # 实测 5＝两张表「定义 + 读取点」齐全
+# 第十八程（高熵候选的边界 + append 面裁决）
+TERM=dumb node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/redact.test.ts tests/stream-redaction.test.ts
+TERM=dumb pnpm security-check        # 43 ✅ / 0 ❌（这条门直接断言 findHighEntropyTokens，改字符集必看它）
+cd /tmp/dsh-mv-<x> && TERM=dumb node scripts/mutate-verify.mjs \
+  entropy-candidate-eats-assignment-label entropy-path-veto-removed
+# 量测①（判卷面撞不撞）：把真 scanStreamEvent 过仓内全部 JSONL，数被改写的事件
+node_modules/.bin/tsx -e '
+  import("./src/agent/worker-projection.ts").then(async (m) => {
+    const { readdirSync, readFileSync, statSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const walk = (d, out) => { for (const n of readdirSync(d)) { const p = join(d, n); if (p.includes("node_modules")) continue;
+      statSync(p).isDirectory() ? walk(p, out) : n.endsWith(".jsonl") && out.push(p); } return out; };
+    const fs = walk("fixtures", []); let ev = 0, ch = 0;
+    for (const f of fs) for (const l of readFileSync(f, "utf8").split("\n").filter(Boolean)) {
+      const e = JSON.parse(l); if (!e.type) continue; ev++;
+      if (JSON.stringify(m.scanStreamEvent(e)) !== JSON.stringify(e)) { ch++; console.log("改写:", f, e.type); }
+    }
+    console.log(`文件 ${fs.length} / 事件 ${ev} / 被改写 ${ch}`);
+  });'   # 实测 30 / 127 / 2（两条都是种了密钥的夹具；frozen 剧本零改写）
+# 量测②（代价）：修前修后各跑一次「该掩的 + 不该掩的」成对基线，看表格那六行读数
+node_modules/.bin/tsx -e '
+  import("./src/agent/security/scan.ts").then((m) => {
+    const { mkdtempSync } = require("node:fs"); const { tmpdir } = require("node:os");
+    const dir = mkdtempSync(tmpdir() + "/dsh-entropy-");
+    for (const s of [`wrote ${dir}/out.jsonl`, "SESSION=Zx9Qm2Lp7Rk4Tv8Nw3Yb6Hc1Jd5Fs0Ga", "sk-abcdefghijklmnopqrstuvwxyz012345"])
+      console.log(JSON.stringify(s), "→", JSON.stringify(m.redactSecrets(s).text));
+  });'   # 修前：第一条整段成 `/var****`；修后：路径逐字不变、后两条仍掩
 ```
 （`wc -l` 两边都数：单看修复后的 23 说明不了任何事，修复**前**那个 4 才是缺陷本身——
 4 个命中全在类型声明与注释里，读取点为 0。）
