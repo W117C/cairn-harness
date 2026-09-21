@@ -1,5 +1,5 @@
 import { projectUnits, mountHistory } from './history-window.js';
-import { projectPanelData, EMPTY_PANEL_DATA, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN } from './projections';
+import { projectPanelData, EMPTY_PANEL_DATA, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload } from './projections';
 import { $, esc, promptInput, sessionList, streamInner, toast } from './dom.js';
 import { ICONS, RUN_GRID_HTML, runGrid } from './icons.js';
 import { highlightAllDiffs } from './diff-highlight.js';
@@ -1068,12 +1068,14 @@ let pluginCache = null;
 }
 function schedKindText(sc) {
   if (!sc) return '';
+  const hhmm = (v) => (typeof v === 'string' ? v : '');
   if (sc.kind === 'once') return '一次性 · ' + schedTime(sc.at);
   if (sc.kind === 'interval') return '每 ' + sc.everyMinutes + ' 分钟';
-  if (sc.kind === 'hourly') return '每小时';
-  if (sc.kind === 'daily') return '每天 ' + (sc.at || '');
-  if (sc.kind === 'weekly') return '每周';
-  if (sc.kind === 'monthly') return '每月';
+  if (sc.kind === 'hourly') return '每小时 第 ' + sc.minute + ' 分';
+  if (sc.kind === 'daily') return '每天 ' + hhmm(sc.time);
+  if (sc.kind === 'weekly') return '每周 ' + (sc.weekdays || []).map(d => WEEKDAY_CN[d] ?? '?').join('、') + ' ' + hhmm(sc.time);
+  if (sc.kind === 'monthly') return '每月 ' + sc.monthDay + ' 日 ' + hhmm(sc.time);
+  if (sc.kind === 'custom') return '每 ' + sc.everyDays + ' 天 ' + hhmm(sc.time);
   return sc.kind;
 }
 
@@ -1108,7 +1110,7 @@ function scheduleViewHTML() {
               '<button class="sched-btn danger" data-sched-act="del">删除</button>' +
             '</div>' +
           '</div>').join('')
-      : '<p class="sched-empty">还没有定时任务。<br>创建入口后续接 scheduleUpsert 表单白名单（once/interval/daily/weekly）。</p>';
+      : '<p class="sched-empty">还没有定时任务。<br>用输入框下方的「定时任务」芯片新建——到点自己开一个全新会话跑这段提示词，每次触发都花真钱。</p>';
     const histHtml = hist.length
       ? hist.slice(0, 12).map(h =>
           '<div class="sched-hist">' +
@@ -3643,15 +3645,18 @@ render();
       if (!id) return;
       const act = btn.dataset.schedAct;
       const task = (scheduleCache && scheduleCache.tasks || []).find(t => t.id === id);
+      let r = null;
       if (act === 'toggle' && task) {
-        await api.scheduleUpsert({ ...task, enabled: !task.enabled }, false);
+        // form=false：改启用开关不该被「种类白名单」再判一道（已存在的任务可能不在四 kind 内）
+        r = await api.scheduleUpsert({ ...task, enabled: !task.enabled }, false);
       } else if (act === 'run') {
-        await api.scheduleRunNow(id);
-        toast('已加入队列：' + (task ? task.name : id));
+        r = await api.scheduleRunNow(id);
+        if (r && r.ok !== false) toast('已加入队列：' + (task ? task.name : id));
       } else if (act === 'del') {
-        await api.scheduleDelete(id);
-        toast('已删除定时任务');
+        r = await api.scheduleDelete(id);
+        if (r && r.ok !== false) toast('已删除定时任务');
       }
+      if (r && r.ok === false) toast('未执行：' + (r.error || '未知原因'));
       scheduleCache = null;
       await loadSchedule(true);
       if (typeof renderSide === 'function') renderSide();
@@ -3813,6 +3818,99 @@ render();
         toast('已压缩 ' + String(Number(p.compressedCount) || 0) + ' 条事件：' +
           String(before) + ' → ' + String(after) + ' token（省 ' + String(Math.max(0, before - after)) + '）');
       } catch (err) { toast('压缩失败：' + ((err && err.message) || String(err))); }
+    })();
+  });
+
+  /* ---------- 新建定时任务（agent:schedule-upsert 的表单面）----------
+     后端早就齐了（scheduler + automations + 四条 IPC + 面板列表），但界面上没有创建入口——
+     用户看得见列表却设不了任务，面板原话写着「后续接」＝留位待办。三条口径：
+     · 校验只在 main：这里不收字段、不 clamp、不判长度（schedFormPayload 只搬形状），
+       渲染层再判一遍就是第二份规则，两份必然漂移；
+     · 表单只开四 kind（main 的 FORM_KINDS 白名单），hourly/monthly/custom 数据模型里有、
+       表单面今天仍不给——由 tests 逐字对表锁住，不靠注释；
+     · 缺省种类 = once：跑一次就结束。间隔档一旦误设成 5 分钟就是一天 288 次真钱调用，
+       所以最便宜的形状当默认，不是把最常用的当默认。 */
+  const ctxSched = $('#ctxSched');
+  const schedPanel = $('#schedPanel');
+  const schedPanelBody = $('#schedPanelBody');
+  const SCHED_TIER_DEFAULT = 'read-only';
+
+  function schedSelectHTML(id, labels, dflt) {
+    return '<select id="' + id + '">' + Object.keys(labels).map((k) =>
+      '<option value="' + esc(k) + '"' + (k === dflt ? ' selected' : '') + '>' + esc(labels[k]) + '</option>').join('') + '</select>';
+  }
+  function renderSchedPanel() {
+    const kinds = {};
+    for (const k of SCHED_FORM_KINDS) kinds[k] = SCHED_KIND_LABELS[k] || k;
+    schedPanelBody.innerHTML =
+      '<form class="goal-form sched-form" data-kind="' + esc(SCHED_FORM_KINDS[0]) + '">' +
+        '<div class="f"><label for="schedName">名称</label>' +
+          '<input id="schedName" type="text" placeholder="例：每晨跑一遍失败用例"></div>' +
+        '<div class="f"><label for="schedKind">种类</label>' + schedSelectHTML('schedKind', kinds, SCHED_FORM_KINDS[0]) + '</div>' +
+        '<div class="f f-once"><label for="schedAt">触发时刻</label>' +
+          '<input id="schedAt" type="datetime-local"></div>' +
+        '<div class="f f-interval"><label for="schedEvery">间隔（分钟）</label>' +
+          '<input id="schedEvery" type="number" step="1" placeholder="下限由主进程判，越界点名"></div>' +
+        '<div class="f f-daily"><label for="schedTime">时刻（HH:mm，按本机时区）</label>' +
+          '<input id="schedTime" type="time"></div>' +
+        '<div class="f f-weekly"><label for="schedWeekdays">每周哪几天</label>' +
+          '<input id="schedWeekdays" type="text" placeholder="1,3,5（0=周日）"></div>' +
+        '<div class="f"><label for="schedPrompt">提示词：触发时原样成为那条新会话的首句</label>' +
+          '<textarea id="schedPrompt" rows="4" placeholder="自包含的任务说明——到时候没有人在场追问，写清目标与验收口径"></textarea></div>' +
+        '<div class="f"><label for="schedTier">权限档位</label>' + schedSelectHTML('schedTier', SCHED_TIER_LABELS, SCHED_TIER_DEFAULT) + '</div>' +
+        '<div class="f"><label for="schedCatchUp">休眠错过时</label>' +
+          '<select id="schedCatchUp"><option value="latest">补跑最近一次</option><option value="skip">跳过，对齐下次</option></select></div>' +
+        '<div class="goal-row">' +
+          '<div><label for="schedTimeZone">时区（留空＝本机）</label>' +
+            '<input id="schedTimeZone" type="text" placeholder="Asia/Shanghai"></div>' +
+          '<div><label for="schedModel">模型（留空＝全局默认）</label>' +
+            '<input id="schedModel" type="text" placeholder="provider/model"></div>' +
+        '</div>' +
+        '<p class="goal-note">每次触发 = 开一个<b>全新会话</b>跑这段提示词（不带来自这里的上下文），花真钱；新建即启用。' +
+          '名称/长度/时区/分钟下限等规则由主进程逐条判，拒因原样回显在下面。' +
+          '换了时区，保存后这一行会带上主进程算出的偏移注记（这里不预先估一遍，估就是第二份算法）。</p>' +
+        '<p class="goal-note" id="schedErr" hidden></p>' +
+        '<div class="goal-actions"><button type="submit" class="primary">创建任务</button></div>' +
+      '</form>';
+  }
+  registerPop(schedPanel, ctxSched, renderSchedPanel);
+  ctxSched.addEventListener('click', () => togglePop(schedPanel));
+  if (typeof api.scheduleUpsert !== 'function') {
+    ctxSched.disabled = true;
+    ctxSched.setAttribute('aria-label', '新建定时任务：当前壳未提供 schedule-upsert 通道');
+  }
+  schedPanel.addEventListener('change', (e) => {
+    if (e.target.id !== 'schedKind') return;
+    const form = schedPanelBody.querySelector('.sched-form');
+    if (form) form.dataset.kind = e.target.value; // 只切显示，不重渲染（重渲染会抹掉已填的值）
+  });
+  schedPanel.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = (id) => { const el = schedPanelBody.querySelector('#' + id); return el ? el.value : ''; };
+    const fields = {
+      name: v('schedName'), kind: v('schedKind'), at: v('schedAt'), everyMinutes: v('schedEvery'),
+      time: v('schedTime'), weekdays: v('schedWeekdays'), prompt: v('schedPrompt'),
+      permissionTier: v('schedTier') || SCHED_TIER_DEFAULT, catchUp: v('schedCatchUp') || 'latest',
+      timeZone: v('schedTimeZone'), model: v('schedModel'),
+    };
+    const errBox = schedPanelBody.querySelector('#schedErr');
+    void (async () => {
+      try {
+        const r = await api.scheduleUpsert(schedFormPayload(fields), true);
+        if (!r || r.ok !== true) {
+          const msg = (r && r.error) || '未知原因';
+          if (errBox) { errBox.hidden = false; errBox.textContent = '未创建：' + msg; }
+          toast('任务未创建');
+          return;
+        }
+        closeAllPops(false);
+        toast('已创建定时任务：' + fields.name.trim());
+        scheduleCache = null; // 列表一律回读快照，不在本地插一行（插了就两份事实源）
+        await loadSchedule(true);
+        if (typeof renderSide === 'function') renderSide();
+      } catch (err) {
+        if (errBox) { errBox.hidden = false; errBox.textContent = '未创建：' + ((err && err.message) || String(err)); }
+      }
     })();
   });
 

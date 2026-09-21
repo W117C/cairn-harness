@@ -1338,15 +1338,24 @@ button.tg-head{transition:color var(--t-fast)}
 /* 长任务目标面板（goal 模式）：目标 + 轮次闸 + 美元闸。描边口径同 .search input（≥3:1 边界对比）。 */
 .goal-form{display:flex;flex-direction:column;gap:var(--sp-3);padding:var(--sp-2)}
 .goal-form label{font-size:var(--fs-label);color:var(--muted)}
-.goal-form input,.goal-form textarea{
+.goal-form input,.goal-form textarea,.goal-form select{
   width:100%;border:0.5px solid var(--border-strong);border-radius:var(--r-3);
   background:var(--surface);color:var(--fg);font:inherit;font-size:var(--fs-sub);padding:var(--sp-3) var(--sp-5);
 }
-.goal-form input{height:30px;padding:0 var(--sp-5);font-family:var(--font-mono)}
+.goal-form input,.goal-form select{height:30px;padding:0 var(--sp-5);font-family:var(--font-mono)}
 .goal-form textarea{min-height:58px;resize:vertical;line-height:1.45}
-.goal-form input:focus,.goal-form textarea:focus{outline:none;box-shadow:0 0 0 2px var(--accent-line)}
+.goal-form input:focus,.goal-form textarea:focus,.goal-form select:focus{outline:none;box-shadow:0 0 0 2px var(--accent-line)}
 .goal-row{display:flex;gap:var(--sp-3)}
 .goal-row>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+/* 新建定时任务：种类决定露出哪一项。切换只改 data-kind、不重渲染——重渲染会连用户
+   刚打的提示词一起抹掉（表单草稿没有第二份状态可回读，DOM 本身就是那一份）。 */
+.sched-form .f{display:flex;flex-direction:column;gap:3px}
+.sched-form .f-once,.sched-form .f-interval,.sched-form .f-daily,.sched-form .f-weekly{display:none}
+.sched-form[data-kind="once"] .f-once,
+.sched-form[data-kind="interval"] .f-interval,
+.sched-form[data-kind="daily"] .f-daily,
+.sched-form[data-kind="weekly"] .f-daily,
+.sched-form[data-kind="weekly"] .f-weekly{display:flex}
 .goal-note{font-size:var(--fs-label);color:var(--muted);margin:0;line-height:1.45}
 .goal-actions{display:flex;justify-content:flex-end;gap:var(--sp-3)}
 .goal-actions button{
@@ -1977,6 +1986,13 @@ html.reduce-motion .quick-card{opacity:1}
             </button>
             <div class="ctx-pop" id="compactPanel" hidden>
               <div class="bp-view" id="compactPanelBody"></div>
+            </div>
+            <button class="c-btn" id="ctxSched" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="schedPanel" aria-label="新建定时任务" title="新建定时任务：到点自己开一个全新会话跑这段提示词，没有人在场，每次触发都花真钱">
+              <span class="c-btn-label">定时任务</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="ctx-pop" id="schedPanel" hidden>
+              <div class="bp-view" id="schedPanelBody"></div>
             </div>
             <button class="c-btn" id="attachBtn" aria-label="添加附件">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m21 12-8.5 8.5a5 5 0 0 1-7-7L14 5a3.3 3.3 0 0 1 4.7 4.7L10.5 18a1.7 1.7 0 0 1-2.4-2.4L16 8"/></svg>

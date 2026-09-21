@@ -724,6 +724,76 @@ export function skipReasonLabel(reason: string | undefined): string {
 export const HISTORY_STATES = ["all", "queued", "running", "succeeded", "failed", "skipped", "cancelled"] as const;
 export type HistoryFilter = (typeof HISTORY_STATES)[number];
 
+/** 新建定时任务的表单种类。**必须与 main 的 FORM_KINDS 同集**（由 tests 逐字对表锁住：
+ *  渲染层不能 import automations.ts——它带 node:crypto/sessions 依赖，进 bundle 就是把主进程拖进渲染层）。 */
+export const SCHED_FORM_KINDS = ["once", "interval", "daily", "weekly"] as const;
+
+export interface SchedFormFields {
+  name: string;
+  kind: string;
+  at: string;
+  everyMinutes: string;
+  time: string;
+  weekdays: string;
+  prompt: string;
+  permissionTier: string;
+  catchUp: string;
+  /** 留空 = 主进程按系统时区补（缺省值归 main 判，渲染层不预先填死一份） */
+  timeZone: string;
+  /** 留空 = 全局默认档位 */
+  model: string;
+}
+
+/** 表单种类 → 界面标签（顺序即下拉顺序，值必须与 SCHED_FORM_KINDS 同集）。 */
+export const SCHED_KIND_LABELS: Record<string, string> = {
+  once: '一次性（到点跑一次）',
+  interval: '每隔几分钟',
+  daily: '每天同一时刻',
+  weekly: '每周指定几天',
+};
+
+/** weekdays 的 0=周日 口径来自主进程（validateAutomation 的报错原文就这么写）。 */
+export const WEEKDAY_CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+/** 权限档位 → 界面标签。这里只是文案：档位能不能无人值守跑、映射到哪个审批档，
+ *  判定全在 main（tierToMode / isUnattendedTier），渲染层不重算，只把后果说给用户听。 */
+export const SCHED_TIER_LABELS: Record<string, string> = {
+  'read-only': '只读（不改文件、不跑写命令）',
+  'workspace-write': '可改工作区（触发时没人在场 = 无人值守执行）',
+  'danger-full-access': '完全访问（无人值守 + 不再逐次审批）',
+};
+
+/** 表单 → scheduleUpsert 载荷：**只做形状映射，不重复实现校验规则**。
+ *  规则的唯一事实源是 main 的 validateAutomation（那里拒什么、界面就显示什么）；
+ *  在渲染层再判一遍就是第二份规则，两份必然漂移——本仓反复付过的学费。
+ *  因此这里刻意不做的事：不 clamp 数字、不判 prompt 长度、不洗 name。
+ *  唯一防的坑是 "空串 Number() === 0"：留空必须留成缺字段让 main 拒，不能悄悄变成周日 0 点。 */
+export function schedFormPayload(f: SchedFormFields): Record<string, unknown> {
+  const schedule: Record<string, unknown> = { kind: f.kind };
+  if (f.kind === "once") {
+    schedule.at = f.at.trim();
+  } else if (f.kind === "interval") {
+    schedule.everyMinutes = f.everyMinutes.trim() === "" ? undefined : Number(f.everyMinutes);
+  } else if (f.kind === "weekly") {
+    schedule.time = f.time.trim();
+    schedule.weekdays = f.weekdays.trim() === ""
+      ? []
+      : f.weekdays.split(",").map((d) => Number(d.trim()));
+  } else {
+    schedule.time = f.time.trim();
+  }
+  return {
+    name: f.name.trim(),
+    prompt: f.prompt,
+    schedule,
+    permissionTier: f.permissionTier,
+    catchUp: f.catchUp,
+    // 缺省项一律「不带上场」：留空就交给 main 补系统时区 / 全局默认档，渲染层不自己填一份缺省值
+    ...(f.timeZone.trim() === "" ? {} : { timeZone: f.timeZone.trim() }),
+    ...(f.model.trim() === "" ? {} : { model: f.model.trim() }),
+  };
+}
+
 // ---- R1a 抽屉面板投影（右栏五面板的唯一数据源；渲染层不再持有任何演示数据）----
 
 export interface PanelFileEntry {

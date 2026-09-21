@@ -435,6 +435,8 @@ async function phaseElectron(root: string): Promise<void> {
       M2E_LOOSE_SKILLS: join(process.cwd(), "fixtures", "plugins", "loose"),
       M2E_TRUST_FILE: join(root, "plugin-trust.json"),
       M2E_PLUGIN_DATA: join(root, "plugin-data"),
+      // B13 要碰 schedule-upsert：数据目录另指临时根，验收窗口既不读也不写用户自己的 automations.json
+      M4A_DATA_DIR: join(root, "automations"),
     });
     const up2 = await tryWait(async () => {
       try {
@@ -935,6 +937,98 @@ async function phaseElectron(root: string): Promise<void> {
     );
     const b12After = (await readFile(b11File, "utf8")).length;
     ok(b12After === b12Before, "B12 拒绝不落半条事件（审计面零新增；实测 " + String(b12Before) + " → " + String(b12After) + " 字节）");
+
+    console.log("[panels-check] B13 新建定时任务：表单开得出、送得进主进程、被拒原样点名（一次都不真建 = 零钱）");
+    // 只走**拒绝路径**：真建一条 = 调度器到点真会开真会话 = 真花模型钱。所以这里递一份必然越界的
+    // 提示词（>4k），判的是「渲染层 → preload → main 的 validateAutomation 那条路真通、拒因真回显」，
+    // 而不是主进程的校验规则本身（那由 tests/schedule.test.ts 与上面的单测锁）。
+    const b13File = join(root, "automations", "automations.json");
+    const b13Before = await readFile(b13File, "utf8").catch(() => "");
+    const b13Chip = await cdp2.eval<string>(
+      `(() => { const b = document.getElementById('ctxSched'); return b ? (b.disabled ? 'disabled' : 'live') : 'absent'; })()`,
+    );
+    ok(b13Chip === "live", "B13 「定时任务」芯片在 composer 上且没被禁用（实测=" + JSON.stringify(b13Chip) + "）");
+    await cdp2.eval(`document.getElementById('ctxSched').click()`);
+    const b13Form = await cdp2.eval<string>(
+      `(() => {
+        const f = document.querySelector('#schedPanelBody .sched-form');
+        if (!f) return 'no-form';
+        const vals = (id) => [...f.querySelectorAll('#' + id + ' option')].map((o) => o.getAttribute('value')).join(',');
+        return f.getAttribute('data-kind') + '|kinds=' + vals('schedKind') + '|tiers=' + vals('schedTier');
+      })()`,
+    );
+    ok(
+      b13Form === "once|kinds=once,interval,daily,weekly|tiers=read-only,workspace-write,danger-full-access",
+      "B13 打开即见表单：种类只有 main 白名单那四种、缺省是最便宜的 once、档位从只读起（实测=" + JSON.stringify(b13Form) + "）",
+    );
+    await cdp2.eval(
+      `(() => { const s = document.getElementById('schedKind'); s.value = 'daily'; s.dispatchEvent(new Event('change', { bubbles: true })); return 1; })()`,
+    );
+    const b13Kind = await cdp2.eval<string>(
+      `(() => { const f = document.querySelector('#schedPanelBody .sched-form'); return f ? String(f.getAttribute('data-kind')) : 'gone'; })()`,
+    );
+    ok(b13Kind === "daily", "B13 换种类就换露哪一项（切换不重渲染，已填的值才留得住；实测 data-kind=" + JSON.stringify(b13Kind) + "）");
+    await cdp2.eval(
+      `(() => {
+        document.getElementById('schedName').value = 'B13 验收任务';
+        document.getElementById('schedTime').value = '07:30';
+        document.getElementById('schedPrompt').value = 'x'.repeat(5001);
+        document.querySelector('#schedPanelBody form').requestSubmit();
+        return 1;
+      })()`,
+    );
+    const b13Shown = await tryWait(
+      async () => (await cdp2.eval<string>(
+        `(() => { const p = document.getElementById('schedErr'); return p && !p.hidden ? (p.textContent || '') : ''; })()`,
+      )) || null,
+      8_000,
+    );
+    const b13Err = await cdp2.eval<string>(
+      `(() => { const p = document.getElementById('schedErr'); return p ? (p.textContent || '') : 'no-node'; })()`,
+    );
+    ok(b13Shown, "B13 提交真走到了主进程并被拒（回条回显在表单里；实测=" + JSON.stringify(b13Err.slice(0, 90)) + "）");
+    ok(
+      b13Err.includes("4000 字符上限"),
+      "B13 拒因原样上屏，不是「保存失败」这类含糊话（实测=" + JSON.stringify(b13Err.slice(0, 90)) + "）",
+    );
+    const b13Toast = await cdp2.eval<string>(
+      `(() => { const t = document.getElementById('toast'); return t ? (t.textContent || '') : ''; })()`,
+    );
+    ok(
+      b13Toast.includes("未创建") && !b13Toast.includes("已创建"),
+      "B13 被拒不报成功（实测 toast=" + JSON.stringify(b13Toast) + "）",
+    );
+    // 第二刀：§12.2.6 要求表单带时区，而 IANA 规范化只在 main —— 非法值必须从表单这条路拒回来
+    await cdp2.eval(
+      `(() => {
+        document.getElementById('schedPrompt').value = '验收用的一句话';
+        document.getElementById('schedTimeZone').value = 'Mars/Olympus';
+        document.querySelector('#schedPanelBody form').requestSubmit();
+        return 1;
+      })()`,
+    );
+    const b13TzShown = await tryWait(
+      async () => (await cdp2.eval<string>(
+        `(() => { const p = document.getElementById('schedErr'); const t = p && !p.hidden ? (p.textContent || '') : ''; return t.includes('timeZone') ? t : ''; })()`,
+      )) || null,
+      8_000,
+    );
+    const b13TzErr = await cdp2.eval<string>(
+      `(() => { const p = document.getElementById('schedErr'); return p ? (p.textContent || '') : 'no-node'; })()`,
+    );
+    ok(
+      b13TzShown && b13TzErr.includes("timeZone 非法"),
+      "B13 非法 IANA 时区由 main 拒并原样回显（渲染层不自己判，也没静默收下；实测=" + JSON.stringify(b13TzErr.slice(0, 90)) + "）",
+    );
+    const b13After = await readFile(b13File, "utf8").catch(() => "");
+    let b13Tasks = 0;
+    try {
+      b13Tasks = b13After === "" ? 0 : ((JSON.parse(b13After) as { tasks?: unknown[] }).tasks ?? []).length;
+    } catch { b13Tasks = -1; }
+    ok(
+      b13After === b13Before && b13Tasks === 0,
+      "B13 盘上没有新建的任务（= 不会被触发 = 零钱；实测字节 " + String(b13Before.length) + " → " + String(b13After.length) + "，任务数 " + String(b13Tasks) + "）",
+    );
     await killElectron(electron2);
   } finally {
     if (electron.exitCode === null) await killElectron(electron);
