@@ -3856,6 +3856,30 @@ const MUTATIONS = [
     apply: (s) => s.replace('return spentUsd === null ? "价格未知" : "$" + spentUsd.toFixed(4);', 'return "$" + (spentUsd ?? 0).toFixed(4);'),
     expectFail: "价格不可知说「价格未知」，真话 $0 才写 $0.0000（不可知≠免费）",
   },
+  {
+    id: "panel-data-drops-agents",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-agents-view.test.ts",
+    desc: "projectPanelData 不再返回 agents ⇒ 子智能体页恒空态：投影仍被 agents.test 判绿，产品里却一屏看不见 worker（「能力已发货、产品路径绕过它」的渲染层版本）",
+    apply: (s) => s.replace("    agents: projectAgentPanel(events),", "    agents: [],"),
+    expectFail: "真实事件流经 projectPanelData 也能长出这一行",
+  },
+  {
+    id: "agents-view-waiting-said-as-running",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-agents-view.test.ts",
+    desc: "waiting_approval 投影成「运行中」⇒ 把卡住说成进展：worker 停在审批门等人，用户以为它在干活（长任务的可观测性正损在这一个词上）",
+    apply: (s) => s.replace('  if (status === "waiting_approval") return "等人审批";', '  if (status === "waiting_approval") return "运行中";'),
+    expectFail: "不与「运行中」混为一谈；未终态时长不写 0.0s",
+  },
+  {
+    id: "agents-view-token-cost-hard-zero",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-agents-view.test.ts",
+    desc: "每 worker 的 token 合计写死成 0 ⇒ 派活的成本在界面上永远是零（能力 9：并行/路由要能在效果和开销之间权衡，前提是每个 worker 的开销可见）",
+    apply: (s) => s.replace("String((c.usage ? c.usage.inputTokens + c.usage.outputTokens : 0)) + ' tok · '", "'0' + ' tok · '"),
+    expectFail: "状态中文化、token 合计、工具计数、任务与报告",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
