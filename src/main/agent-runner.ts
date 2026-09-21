@@ -836,7 +836,7 @@ export function makeScheduledExecutor(workspace: string): TriggerExecutor {
 }
 
 export async function handleScheduleSnapshot(): Promise<ScheduleSnapshot> {
-  if (!scheduler) return { tasks: [], history: [], running: 0, queued: 0, cap: scheduleCapCache, startupDone: false };
+  if (!scheduler) return { tasks: [], history: [], running: 0, queued: 0, cap: scheduleCapCache, startupDone: false, tzNotes: {} };
   return await scheduler.snapshot();
 }
 

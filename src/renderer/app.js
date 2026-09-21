@@ -1097,7 +1097,10 @@ function scheduleViewHTML() {
               '<div class="sched-name">' + esc(t.name) + (t.enabled ? '' : '（已停用）') + '</div>' +
               '<div class="sched-prompt">' + esc(t.prompt || '') + '</div>' +
               '<div class="sched-when">' + esc(schedKindText(t.schedule)) +
-                (t.nextRunAt ? ' · 下次 ' + schedTime(t.nextRunAt) : '') + '</div>' +
+                (t.nextRunAt ? ' · 下次 ' + schedTime(t.nextRunAt) : '') +
+                /* 任务按自己的时区算触发，面板按本机时区显示时刻：两者不同时必须说一句，
+                   否则「每天 07:00」与「下次 06:00」看着像算错了（注记由 main 算，渲染层不推时区） */
+                ((scheduleCache.tzNotes && scheduleCache.tzNotes[t.id]) ? ' · ' + esc(scheduleCache.tzNotes[t.id]) : '') + '</div>' +
             '</div>' +
             '<div class="sched-acts">' +
               '<button class="sched-btn" data-sched-act="toggle"> ' + (t.enabled ? '停用' : '启用') + '</button>' +

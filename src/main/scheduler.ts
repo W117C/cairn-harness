@@ -18,6 +18,9 @@ import type { AgentEvent } from "../events";
 import { createEventLog, hasEventLogHandle, invalidateEventLogHandle, replay, resolveHandle } from "../events";
 import { createSession, isValidSessionName, pathOf } from "./sessions";
 import {
+  normalizeTimeZone,
+  systemTimeZone,
+  timeZoneOffsetLabel,
   validateAutomation,
   tierToMode,
   type AutomationCatchUp,
@@ -386,6 +389,30 @@ export interface ScheduleSnapshot {
   cap: number;
   /** 启动补跑判定是否已执行（抖动期内 false）。 */
   startupDone: boolean;
+  /** task_id → 时区注记：只有该任务的时区与本机不同（或声明值非法）时才有键。
+   *  单独一张表而不是塞进 task：定义对象要能原样回传给严格校验（未知字段会被整条拒）。 */
+  tzNotes: Record<string, string>;
+}
+
+/** 时区注记（纯函数，唯一实现；措辞与偏移都取自 automations 的那份 helper，不另写一遍）。 */
+export function scheduleTimeZoneNotes(
+  tasks: readonly { id: string; timeZone?: string }[],
+  sysTz: string,
+  now: Date,
+): Record<string, string> {
+  const notes: Record<string, string> = {};
+  for (const t of tasks) {
+    const tz = typeof t.timeZone === "string" ? t.timeZone.trim() : "";
+    if (tz === "") continue;
+    let norm = "";
+    try { norm = normalizeTimeZone(tz); } catch { norm = ""; }
+    if (norm === "") {
+      notes[t.id] = "声明的时区「" + tz + "」本机不认，按 " + sysTz + " 计时";
+    } else if (norm !== sysTz) {
+      notes[t.id] = "规则按 " + tz + "（" + timeZoneOffsetLabel(tz, now) + "）计时，本机 " + sysTz;
+    }
+  }
+  return notes;
 }
 
 interface Inflight {
@@ -911,7 +938,7 @@ export class Scheduler {
       if (f.state === "running") running++;
       else queued++;
     }
-    return { tasks, history, running, queued, cap: this.cap, startupDone: this.firstTickDone };
+    return { tasks, history, running, queued, cap: this.cap, startupDone: this.firstTickDone, tzNotes: scheduleTimeZoneNotes(tasks, systemTimeZone(), now) };
   }
 
   private findSessionIdByKey(key: string): string | undefined {
