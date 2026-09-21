@@ -670,6 +670,37 @@ SHA/base64」量出了一个比 append 面大得多的现行缺陷。
 
 
 
+## 第十九程（09-22，`58fe1b6`）：把截断卡跑上真窗口，补待办 2 那句「未做视觉核验」
+
+待办 2 收口时留了一句 ⚠️：`eventLabel` 的 `turn_truncated` 支只在 vm 里跑过那份**函数**，
+从没把这张卡跑上屏。本程把它接进 `panels-check`（B20）——真 Electron + CDP，走
+JSONL → `selectSession` → `showHistory` → DOM 这一条，不造第二条渲染路。
+
+**为什么值得单开一相**：这一型同时是「子流不进父上下文」名单（`CHILD_DETAIL_TYPES`）的成员，
+于是它有两头各要证一次——父那一头必须上屏（函数层再对，这一跳没接上就是零输出：本仓最典型的
+「两头断」），worker 那一头必须不上屏。两头都用**可区分的数字**判（4096 / 512 / 无 token / 7777），
+不写「含不含某个词」这类能被别的卡糊过去的断言。
+
+**十条读数**（逐条打印实测值，不是布尔）：三张卡各一张；篇幅用尽＝「没写完就被收走（停止原因
+max_tokens，已用 4096 输出 token）」；内容策略＝「被内容策略中止（… SAFETY，已用 512 …）」且
+**不含**上一张那句话；三张里带 token 数的恰好 **2** 张（provider 没报 token 的那张不落半句）；
+标题面 0 张带英文类型名；展开体 3 块带原始事件且逐块含 `outcome`；带归因那条不在 `.stream`，
+但同一程反读盘上 JSONL 证它确实写进去了、`agent_id` 是 `b11-read-1`（**不在界面 ≠ 被丢掉**）。
+
+**本程自己越界一次（教训比断言耐久）**：第一版写了 `!streamText.includes("turn_truncated")`，
+第一次跑就红。回去读被它指控的那段实现才看清——`appendRecordCard` 在没有 `detailText` 时
+按设计 `JSON.stringify(e, null, 2)` dump 原始事件，**类型名出现在展开体里是正确的**。
+两种处置里删断言是错的（等于放弃这一面），正解是把判定面收窄到 `.card-head`，
+**并同时反向补一条「原文仍在」**：收窄不许顺手把证据面一起擦掉，否则下一个人把 body 清空也会绿。
+
+**本程读数**：`pnpm panels-check` **144 ✅ / 0 ❌，exit 0**（B20 之前是 134 条，本相 +10）；
+`pnpm typecheck` 仍只报那份未跟踪草稿 `scripts/sidebar-probe.ts`，HEAD 态干净。
+⚠️ 覆盖写清楚：B20 走的是**重放**那一支（切会话才走 `showHistory`）；live 那一支
+（`renderEvent`）仍只有函数层锚点 `renderer-live-draws-child-detail` 看着，
+截断事件在真 run 里 live 上屏要有模型 key，本机没有 ⇒ 未证，不是通过。
+
+
+
 ## 待办（按优先级）
 
 1. 沉淀面：`failureDigestFromEvents`（能力 6/10）现在只看 `verify_result(ok:false)` 与
@@ -682,6 +713,9 @@ SHA/base64」量出了一个比 append 面大得多的现行缺陷。
    （沿用 renderer-compact-chip 的「切 app.js 一段进 vm 跑」那份判法）+ 2 根锚点。
    ⚠️ **未做视觉核验**：这条只在函数层锁了字符串,没有真会话把这张卡跑上屏
    （`node --check` 证的是「整个 app.js 没有语法错以致界面白屏」,不是渲染效果）。
+   **追注（09-22，第十九程 `58fe1b6`）：这句 ⚠️ 现在有 DOM 读数了**——panels-check 新增 B20 相，
+   把三型截断卡（含 provider 没报 token 那张）与一条带归因的一起跑进真窗口重放，逐条打印实测标题。
+   live 那一支仍只有函数层锚点（真 run 要模型 key，本机没有）⇒ 那一半照旧是未证，不是通过。
 3. ~~门/锚点~~ **已落**：变异表本条通道累计 **+14**，逐条在 clean HEAD 隔离 worktree 实测**全杀**
    （`stop-reason-keeps-wire-text` / `-emits-on-benign-reason` / `-drops-case-fold` /
    `-hides-zero-output-tokens` / `anthropic-never-reads-stop-reason` /
@@ -848,6 +882,10 @@ D="$HOME/Library/Application Support/m0-agent-loop/sessions" node_modules/.bin/t
     console.log(`转录 ${files.length} 份 / 事件行 ${lines} / 命中行 ${hit}`);
     console.log("逐规则", [...rules].map(([k, v]) => k + "=" + v).join(" ") || "（零命中）", "｜逐型", [...types].map(([k, v]) => k + "=" + v).join(" ") || "（零命中）");
   });'   # 09-22 实测：1 份 / 9 行 / 命中 0 —— 分母太小，不足以开工（重开条件写在待办 14）
+# 第十九程（截断卡上屏）
+TERM=dumb pnpm panels-check > /tmp/panels.log 2>&1; echo "EXIT=$?"   # 读 B20 那 10 行；不接管道——管道取的是 tail/tee 的退出码
+grep -c "B20 " /tmp/panels.log   # 实测 11＝10 条断言 + 1 行相位标题（别把 11 读成 11 条断言）：「标题不带类型名」与「原文仍在」必须同时在，缺一条＝半边覆盖
+grep -n "turn_truncated" src/renderer/app.js   # 实测 3 处＝注释 1 + 标签表 1 + eventLabel 那一支 1；展开体走 JSON.stringify(e)，不含这个字面量
 ```
 （`wc -l` 两边都数：单看修复后的 23 说明不了任何事，修复**前**那个 4 才是缺陷本身——
 4 个命中全在类型声明与注释里，读取点为 0。）
