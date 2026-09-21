@@ -746,6 +746,32 @@ B21 是 12 条断言不是 11）；`commercial-check` **UNVERIFIED 1 → 0**，D
 
 
 
+## 第二十一程（09-22，`d4a91a6`）：上一笔自己留下的第四支——浮层的键盘退路
+
+第二十程刚把引导浮层发出去，本程就撞上它自己的缺口：`app.js` 的 **Escape 分层收起写死两支**
+（`riskScrim` / `settingsOverlay`），新浮层只有鼠标路径能关（外点、按钮），按 Escape 什么都没发生。
+点击式验收永远发现不了这件事——B21 当时正绿着。这是「同族只硬化一支」的又一形态：
+同一条"收起"有鼠标支和键盘支，而键盘支是一张按元素写死的清单，于是**第四个浮层默认没有键盘退路**。
+
+**改法不是再加一个 if**：收成一张 `MODAL_DISMISS` 表，谁的浮层谁登记（`registerModalDismiss`），
+数组序即优先级（risk 在最前——安全确认不该被别的浮层抢走这次按键），Escape 与 Tab 焦点圈都只问这张表。
+顺带补上三个浮层共用的**焦点圈**：背景虽然被 `pointer-events` 挡住，键盘照样能 Tab 进底栏与会话列表——
+一份实现管三个，各抄三份就是下一个浮层被漏掉的方式。
+
+**判据也跟着升级（B21 三次 → 四次真启动，12 → 16 条断言）**：键盘与鼠标两条退路**各自成对**判
+「关窗」+「不落确认位」。Tab 那条走 CDP `Input.dispatchKeyEvent`（trusted 按键），不是自己
+`new KeyboardEvent` 派发——后者只能证明监听器接了事件，证不了浏览器真的把焦点交给了谁。
+实测 `activeElement="onbLater"`：焦点从末位（完成引导）绕回首位（稍后再说），没走进背景。
+⚠️ 本程正文与 `d4a91a6` 的提交信息里先写成了「15 条」——那是**心算**（12+3）而不是回读日志；
+真值 16（`grep -cE '^  ✅ B21 '`）。计数一律从日志取，别从记忆取。
+
+**本程读数**：panels-check **160 ✅ / 0 ❌，exit 0**（上笔 156，本相 +4：Tab 圈、Escape 收起、
+Escape 不落确认位、第三次仍弹）；`renderer-arch-check` 84/84、`a11y-check` 3/3 复跑仍绿；
+`node --check` 过，`pnpm typecheck` 只剩别人那份未跟踪草稿。
+**仍然没判的**：浮层打开时背景内容对读屏器是否可见（`aria-modal` 说了，但底栏没有真的 `inert`）——
+`inert` 只加在浮层自己身上（关着时不可交互），开着时的背景抑制这条没做也没判，记在待办 16。
+
+
 ## 待办（按优先级）
 
 1. 沉淀面：`failureDigestFromEvents`（能力 6/10）现在只看 `verify_result(ok:false)` 与
@@ -948,7 +974,8 @@ grep -c "B20 " /tmp/panels.log   # 实测 11＝10 条断言 + 1 行相位标题�
 grep -n "turn_truncated" src/renderer/app.js   # 实测 3 处＝注释 1 + 标签表 1 + eventLabel 那一支 1；展开体走 JSON.stringify(e)，不含这个字面量
 # 第二十程（新手引导可达 + settings 消费面）
 TERM=dumb pnpm commercial-check      # 读 D2e 那一行的消费者清单与末行 UNVERIFIED=0（改前是 1）
-TERM=dumb pnpm panels-check > /tmp/panels.log 2>&1; echo "EXIT=$?"; grep -c "B21 " /tmp/panels.log   # 实测 13＝12 条断言 + 1 行相位标题
+TERM=dumb pnpm panels-check > /tmp/panels.log 2>&1; echo "EXIT=$?"; grep -c "B21 " /tmp/panels.log        # 实测 17＝16 条断言 + 1 行相位标题（第二十程那版是 13＝12+1）
+grep -cE '^  ✅ B21 ' /tmp/panels.log   # 16；逐条标题用 `grep -oE '^  ✅ B21 [^（]*' /tmp/panels.log` 打，别照记忆列
 TERM=dumb pnpm renderer-arch-check && TERM=dumb pnpm a11y-check   # 两道门现在自带隔离的 settings（种成返回用户）
 node_modules/.bin/tsx -e '
   const { readFileSync, readdirSync, statSync } = require("node:fs"); const { join } = require("node:path");
