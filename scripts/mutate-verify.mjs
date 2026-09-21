@@ -3808,6 +3808,30 @@ const MUTATIONS = [
     apply: (s) => s.replace("data-scope=\"' + esc(scope)", "data-scope=\"' + \"project\""),
     expectFail: "两层各列自己的 topic：名字 / 类型 / 字节 / 层路径，删除按钮带上 scope 与 topic",
   },
+  {
+    id: "plugin-panel-cannot-revoke-trust",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-plugin-panel.test.ts",
+    desc: "已信任的插件不再显示「拒绝」⇒ 授权变成一次性门票，用户无法撤回（安全边界上的动作必须可回滚）",
+    apply: (s) => s.replace("(trust === 'declined' ? '' : '<button class=\"sched-btn danger\" data-plug-act=\"decline\">拒绝</button>')", "''"),
+    expectFail: "授权按钮必须可回滚：待决给两颗，已信任只剩「拒绝」，已拒绝只剩「信任」",
+  },
+  {
+    id: "plugin-panel-decline-reported-as-trust",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-plugin-panel.test.ts",
+    desc: "无论决议结果都报「已信任」⇒ 用户以为拒绝掉的插件没在跑，而它确实不该激活（反向亦然）",
+    apply: (s) => s.replace("(trusted ? '已信任：' + name + '（其 skill / 命令 / hook 从此激活）' : '已拒绝：' + name + '（保持不激活）')", "'已信任：' + name + '（其 skill / 命令 / hook 从此激活）'"),
+    expectFail: "点「拒绝」不报「已信任」；回条 ok=false 也不报成功，且一律回读",
+  },
+  {
+    id: "plugin-panel-hides-load-errors",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-plugin-panel.test.ts",
+    desc: "不渲染 errors 段 ⇒ 插件装载失败时用户没有任何线索（快照里明明有，界面选择不说）",
+    apply: (s) => s.replace("const errs = pluginCache.errors || [];", "const errs = [];"),
+    expectFail: "加载错误必须上屏（插件没跑起来时，这是用户唯一的线索）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

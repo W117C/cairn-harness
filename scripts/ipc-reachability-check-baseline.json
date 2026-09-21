@@ -5,7 +5,6 @@
     "agent:sidechat-ask",
     "agent:sidechat-create",
     "agent:sidechat-promote",
-    "agent:sidechat-state",
-    "plugin:decide"
+    "agent:sidechat-state"
   ]
 }

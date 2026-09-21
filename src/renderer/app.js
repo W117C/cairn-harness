@@ -910,7 +910,8 @@ const VIEW_META = {
   terminal: { title: '终端',       icon: TERM_ICON },
   git:      { title: 'Git',        icon: BRANCH_ICON },
   schedule: { title: '定时任务',   icon: ICONS.clock },
-  memory:   { title: '记忆',       icon: ICONS.archive }
+  memory:   { title: '记忆',       icon: ICONS.archive },
+  plugins:  { title: '插件',       icon: ICONS.pin }
 };
 
 /* 展示用文件树；path 不是可执行工作区，真实运行目录仅取 AppSettings.workspace。 */
@@ -1052,6 +1053,7 @@ function branchesViewHTML() {
    连带 renderSide 整个失败（标签在、页面不在）。 */
 let scheduleCache = null;
 let memoryCache = null;
+let pluginCache = null;
 
   function schedTime(v) {
   if (!v) return '—';
@@ -1138,6 +1140,61 @@ function memoryViewHTML() {
   return memLayerHTML('project', '项目层', memoryCache.project) + memLayerHTML('global', '全局层', memoryCache.global);
 }
 
+/* 插件面板：装了什么 / 信任状态 / 加载错在哪 + 用户唯一的授权口（§9.8：未信任不激活，
+   不在这里列出来，用户只会看到「装了没反应」）。数据 = getState().plugins（PluginRuntime.snapshot()）。 */
+function plugTrustText(t) {
+  if (t === 'trusted') return '已信任';
+  if (t === 'declined') return '已拒绝';
+  return '待决';
+}
+function cnt(v) { const n = Number(v) || 0; return String(n); }
+function plugCountsText(c) {
+  const k = c || {};
+  return 'skill ' + cnt(k.skills) + ' · 命令 ' + cnt(k.commands) + ' · 子智能体 ' + cnt(k.agents) +
+    ' · hook ' + cnt(k.hooks) + ' · MCP ' + cnt(k.mcp) + ' · LSP ' + cnt(k.lspActive) + '/' + cnt(k.lsp);
+}
+/* 决议按钮一律给出（已信任的也能改回拒绝）：授权必须可回滚，不是一次性的。 */
+function plugActsHTML(trust) {
+  return '<div class="sched-acts">' +
+    (trust === 'trusted' ? '' : '<button class="sched-btn" data-plug-act="trust">信任</button>') +
+    (trust === 'declined' ? '' : '<button class="sched-btn danger" data-plug-act="decline">拒绝</button>') +
+    '</div>';
+}
+function plugRowHTML(name, trust, meta) {
+  return '<div class="sched-task plug-row" data-plugin="' + esc(name) + '">' +
+    '<div class="sched-main">' +
+      '<div class="sched-name">' + esc(name) + '（' + plugTrustText(trust) + '）</div>' +
+      '<div class="sched-prompt">' + esc(meta) + '</div>' +
+    '</div>' + plugActsHTML(trust) + '</div>';
+}
+function pluginsViewHTML() {
+  if (!pluginCache) return '<p class="sched-empty">读取中…</p>';
+  if (pluginCache.unsupported) return '<p class="sched-empty">当前壳的状态面未提供 plugins 快照</p>';
+  if (pluginCache.error) return '<p class="sched-empty">读取失败：' + esc(pluginCache.error) + '</p>';
+  const plugs = pluginCache.plugins || [];
+  const loose = pluginCache.looseSkills || [];
+  const errs = pluginCache.errors || [];
+  const pending = plugs.filter(p => p.trust === 'pending').length + loose.filter(l => l.trust === 'pending').length;
+  const head = '<div class="sched-status">' +
+    '<span class="sched-chip">插件 ' + String(plugs.length) + '</span>' +
+    '<span class="sched-chip">散装 skill ' + String(loose.length) + '</span>' +
+    '<span class="sched-chip">待决授权 ' + String(pending) + '</span>' +
+    '<span class="sched-chip">MCP 服务 ' + String((pluginCache.mcpServers || []).length) + '</span>' +
+    '</div>';
+  const plugList = plugs.length
+    ? plugs.map(p => plugRowHTML(p.name, p.trust, p.scope + ' · ' + plugCountsText(p.counts))).join('')
+    : '<p class="sched-empty">没有装载任何插件。</p>';
+  const looseList = loose.length
+    ? '<div class="sched-sec">散装 skill（' + String(loose.length) + '）</div>' +
+      loose.map(l => plugRowHTML(l.name, l.trust, '/' + l.invoke + ' · ' + (l.description || ''))).join('')
+    : '';
+  const errList = errs.length
+    ? '<div class="sched-sec">加载错误（' + String(errs.length) + '）</div>' +
+      errs.map(e => '<div class="sched-hist"><span class="n">' + esc(e.plugin) + ' · ' + esc(e.message) + '</span></div>').join('')
+    : '';
+  return head + '<div class="sched-sec">插件（' + String(plugs.length) + '）</div>' + plugList + looseList + errList;
+}
+
 function viewHTML(key) {
   if (key === 'files') return filesViewHTML();
   if (key === 'review') return reviewViewHTML();
@@ -1146,6 +1203,7 @@ function viewHTML(key) {
   if (key === 'git') return gitViewHTML();
   if (key === 'schedule') return scheduleViewHTML();
   if (key === 'memory') return memoryViewHTML();
+  if (key === 'plugins') return pluginsViewHTML();
   return '';
 }
 
@@ -3400,10 +3458,49 @@ render();
     if (typeof renderSide === 'function') renderSide();
   }
 
+  /* 插件快照与信任决议（§9.8）：未信任 = 不激活，所以「列出 + 授权」是这条能力唯一的可见面。
+     决议一律回读快照重画：点完状态没变，就得让用户看得见「没变」而不是以为成功。 */
+  let pluginLoading = false;
+
+  async function loadPlugin(force) {
+    if (typeof api.getState !== 'function') { pluginCache = { unsupported: true }; return; }
+    if (pluginLoading || (pluginCache && !force)) return;
+    pluginLoading = true;
+    try {
+      const st = await api.getState();
+      pluginCache = (st && st.plugins) ? st.plugins : { unsupported: true };
+    } catch (err) {
+      pluginCache = { error: (err && err.message) || String(err) };
+    } finally {
+      pluginLoading = false;
+    }
+  }
+
+  async function decidePlugin(name, trusted) {
+    if (!name) return;
+    try {
+      const r = await api.pluginDecide(name, trusted);
+      toast(r && r.ok
+        ? (trusted ? '已信任：' + name + '（其 skill / 命令 / hook 从此激活）' : '已拒绝：' + name + '（保持不激活）')
+        : '决议未生效：' + name + '（回条 ok=false，状态按盘上重读）');
+    } catch (err) {
+      toast('决议失败：' + ((err && err.message) || String(err)));
+    }
+    pluginCache = null;
+    await loadPlugin(true);
+    if (typeof renderSide === 'function') renderSide();
+  }
+
   const sidePagesHost = $('.side-pages');
   if (sidePagesHost && typeof sidePagesHost.addEventListener === 'function') {
     sidePagesHost.addEventListener('click', async (e) => {
       // 记忆删除与定时任务动作共用这一个委托处理器（抽屉里的行内按钮只有一个宿主，别开第二条）
+      const plugBtn = e.target.closest('[data-plug-act]');
+      if (plugBtn) {
+        const row = plugBtn.closest('.plug-row');
+        void decidePlugin(row && row.dataset.plugin, plugBtn.dataset.plugAct === 'trust');
+        return;
+      }
       const memBtn = e.target.closest('[data-mem-act]');
       if (memBtn) {
         const row = memBtn.closest('.mem-topic');
@@ -3431,10 +3528,12 @@ render();
       if (typeof renderSide === 'function') renderSide();
     });
   }
-  /* 打开「定时任务」/「记忆」标签页时各刷新一次快照（同一处收口，别在渲染函数里再发请求） */
+  /* 打开标签页时刷新对应快照（同一处收口，别在渲染函数里再发请求） */
   settingsHooks.onOpenView = (key) => {
-    if (key === 'schedule') void loadSchedule(true).then(() => { if (typeof renderSide === 'function') renderSide(); });
-    else if (key === 'memory') void loadMemory(true).then(() => { if (typeof renderSide === 'function') renderSide(); });
+    const redraw = () => { if (typeof renderSide === 'function') renderSide(); };
+    if (key === 'schedule') void loadSchedule(true).then(redraw);
+    else if (key === 'memory') void loadMemory(true).then(redraw);
+    else if (key === 'plugins') void loadPlugin(true).then(redraw);
   };
 
   /* ---------- 长任务目标（goal 模式）：composer 芯片 + 设定面板 ----------
