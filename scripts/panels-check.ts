@@ -802,18 +802,25 @@ async function phaseElectron(root: string): Promise<void> {
     // projectAgentPanel 曾被 agents.test 判绿多年而产品里一屏看不见（幽灵投影），所以这条接线必须由真窗口作证。
     // ⚠️ 本相只走「重放后」这一支：停在非终态的靶子会被产品的崩溃恢复扫成 failed(interrupted)，
     //    所以「等人审批」在真窗口里不出现（那需要活着的编排器 = 花真钱的一轮 run）。不假装两支都过。
+    // 路径一律带 b11-child-only / b11-parent-only 前缀：toolSummary 把 read_file 的 path 原样上屏，
+    // 于是「这条文字在不在主转录里」成为一个可判读的归因读数（B11c/B11d 就是读它）。
     const b11A = "b11-read-1";
     const b11B = "b11-write-2";
     const b11File = pathOf(root, clarifyId);
     const b11T0 = Date.now() - 60_000;
+    const b11ChildA = "src/b11-child-only-a.ts";
+    const b11ChildB = "src/b11-child-only-b.ts";
+    const b11Parent = "src/b11-parent-only.ts";
     const b11Evts: Record<string, unknown>[] = [
+      // 父自己的一条工具调用：准入判据不许顺手把主流掐了（B11c 的正控）
+      { type: "tool_call", id: "b11-p-t1", name: "read_file", args: { path: b11Parent } },
       { type: "agent_spawned", agent_id: b11A, parent_event_id: 1, mode: "read", task: "B11 只读调研", max_turns: 6, permission_mode: "default", ts: b11T0 },
-      { type: "tool_call", id: "b11-a-t1", name: "read_file", args: { path: "src/todo.ts" }, agent_id: b11A },
-      { type: "tool_call", id: "b11-a-t2", name: "read_file", args: { path: "src/app.ts" }, agent_id: b11A },
+      { type: "tool_call", id: "b11-a-t1", name: "read_file", args: { path: b11ChildA }, agent_id: b11A },
+      { type: "tool_call", id: "b11-a-t2", name: "read_file", args: { path: b11ChildB }, agent_id: b11A },
       { type: "usage", id: "b11-a-u", agent_id: b11A, inputTokens: 1200, outputTokens: 300 },
       { type: "agent_status", agent_id: b11A, status: "done", ts: b11T0 + 4_200 },
       { type: "agent_spawned", agent_id: b11B, parent_event_id: 2, mode: "write", task: "B11 改排序", max_turns: 6, permission_mode: "default", ts: b11T0 + 1_000 },
-      { type: "tool_call", id: "b11-b-t1", name: "edit_file", args: { path: "src/todo.ts" }, agent_id: b11B },
+      { type: "tool_call", id: "b11-b-t1", name: "edit_file", args: { path: b11ChildA }, agent_id: b11B },
       { type: "approval_requested", id: "b11-b-ap", agent_id: b11B, tool: "run_shell", args_digest: "pnpm test", risk: "high" },
     ];
     for (const e of b11Evts) await createEventLog(b11File).append(e as unknown as AgentEvent);
@@ -836,11 +843,13 @@ async function phaseElectron(root: string): Promise<void> {
     // 期望独立从盘上重算（不读渲染层任何一个变量）：每 worker 的工具计数 / token 合计 / 末态 / 待批 / 终态报告
     interface B11Exp { tools: Record<string, number>; tok: number; status: string; pending: string; task: string; mode: string; report: string }
     const b11Exp = new Map<string, B11Exp>();
+    let b11ParentToolCalls = 0; // 盘上**不带归因**的 tool_call 数 = 主转录里该有的工具条数
     for (const line of (await readFile(b11File, "utf8")).split("\n")) {
       if (line.trim() === "") continue;
       let e: Record<string, unknown>;
       try { e = JSON.parse(line) as Record<string, unknown>; } catch { continue; }
       const t = String(e["type"] ?? "");
+      if (t === "tool_call" && e["agent_id"] === undefined) b11ParentToolCalls += 1;
       if (t === "agent_spawned") {
         b11Exp.set(String(e["agent_id"]), {
           tools: {}, tok: 0, status: "running", pending: "", report: "",
@@ -909,6 +918,26 @@ async function phaseElectron(root: string): Promise<void> {
     ok(
       b11Chips.includes("worker 2") && (b11Waiting > 0 ? b11Chips.includes("等人 " + String(b11Waiting)) : !/等人 \d/.test(b11Chips)),
       "B11 顶部芯片按盘上事实数「共几条活」与「几条在等人」（期望等人 " + String(b11Waiting) + "；实测 " + JSON.stringify(b11Chips) + "）",
+    );
+    console.log("[panels-check] B11 子流准入：worker 的工具调用不在父的转录里（§4.4.4 的界面那一半，真窗口）");
+    // 上面每一断言读的都是右栏；这一组读**主转录**——旧实现里带归因的 tool_call 一路走到
+    // renderEvent/projectUnits，两支都没看 agent_id，于是子模型的动作挂在父的工具组里。
+    // 正控先读（父的那条在不在）：虚拟化把窗口整块挪走时，它会先红，而不是让负控空过。
+    const b11StreamText = await cdp2.eval<string>(`(document.querySelector('.stream')?.textContent || '')`);
+    ok(
+      b11StreamText.includes(b11Parent),
+      "B11c 父自己的工具调用在主流（准入判据没顺手把主流掐了；实测转录 " + String(b11StreamText.length) + " 字，期望含 " + b11Parent + "）",
+    );
+    ok(
+      !b11StreamText.includes(b11ChildA) && !b11StreamText.includes(b11ChildB),
+      "B11d worker 的工具调用不在主流（它是子会话的账，右栏按 read_file×2 记；实测含 a=" +
+        String(b11StreamText.includes(b11ChildA)) + " 含 b=" + String(b11StreamText.includes(b11ChildB)) + "）",
+    );
+    const b11Items = await cdp2.eval<number>(`document.querySelectorAll('.stream .tool-item').length`);
+    ok(
+      b11Items === b11ParentToolCalls,
+      "B11e 主流工具条数 = 盘上不带归因的 tool_call 数（条数对得上才算「没画」而不是「画了别的」；实测 " +
+        String(b11Items) + " 期望 " + String(b11ParentToolCalls) + "）",
     );
     console.log("[panels-check] B12 worker 审批两端：已死那一列不长卡，而 card_action 桥在真窗口走得通（零模型调用）");
     // B11 留下的 b11-write-2 已被崩溃恢复扫成 failed，但它的 approval 从未被答过（行上仍写「待批」）。

@@ -4851,6 +4851,47 @@ const MUTATIONS = [
     apply: (s) => s.replace('    if (hasWorkerAttribution(e)) continue;\n', ""),
     expectFail: "末尾放子流大块：不吃保护区预算，老结果 q 仍受保护",
   },
+  // ---- 子流准入的界面那一半（projections + 两条渲染器，2026-09-22）----
+  {
+    id: "renderer-live-draws-child-detail",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-history-live.test.ts",
+    desc: "live 那支不看归因 ⇒ 跑动中 worker 的正文与工具直接落进父的消息泡（刷新前看得见的那半边）",
+    apply: (s) => s.replace("    if (!entersMainConversation(e)) return;\n", ""),
+    expectFail: "live：worker 的执行细节不落地",
+  },
+  {
+    id: "renderer-replay-draws-child-detail",
+    src: "src/renderer/history-window.js",
+    test: "tests/history-window.test.ts",
+    desc: "重放那支不看归因 ⇒ 同一份流刷新后凭空长出一排 worker 单元（与上一条正是「两支各漏一边」的形状）",
+    apply: (s) => s.replace("    if (!entersMainConversation(e)) return;\n", ""),
+    expectFail: "worker 子流的执行细节（正文/工具/错误/截断）根本不进单元集",
+  },
+  {
+    id: "renderer-hides-worker-spend",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-child-admission.test.ts",
+    desc: "把 usage 一并藏进子流 ⇒ 底栏少报 worker 花的真钱（隐藏执行细节不许顺手隐藏它的成本）",
+    apply: (s) => s.replace('"tool_result", "error", "turn_truncated"]);', '"tool_result", "error", "turn_truncated", "usage"]);'),
+    expectFail: "usage 带归因仍进主流",
+  },
+  {
+    id: "admission-hides-unattributed-prose",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-child-admission.test.ts",
+    desc: "判据反转成「不带归因就不进主流」⇒ 把父会话自己的正文整块藏掉，主流只剩卡片",
+    apply: (s) => s.replace('if (typeof e.agent_id !== "string" || e.agent_id === "") return true;', 'if (typeof e.agent_id !== "string" || e.agent_id === "") return false;'),
+    expectFail: "判据永不藏掉不带归因的事件",
+  },
+  {
+    id: "admission-treats-empty-agent-id-as-child",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-child-admission.test.ts",
+    desc: "漏掉空串归因 ⇒ legacy 流（agent_id 曾可选、历史盘上是空串）被整段当成子流藏掉",
+    apply: (s) => s.replace('if (typeof e.agent_id !== "string" || e.agent_id === "") return true;', 'if (typeof e.agent_id !== "string") return true;'),
+    expectFail: "空串归因按「不带」处理",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

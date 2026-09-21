@@ -1,11 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { expect, it, vi } from 'vitest';
+// 同一个真函数注进 vm，而不是在测试里重写一遍准入判据：两支渲染器共用一个实现是本判据的**内容**。
+// 剥法也来自同一处（三份 vm 切片共用）。
+import { entersMainConversation, groupedScript } from './renderer-vm-module';
 
 // R1b B1 后：重放走「单元分组（history-window）+ 单一渲染器（app.js renderEvent）」。
 // 本文件锁的是会话切换/重放编排那一层：挂载请求、去重、快照对账、重放无副作用。
 const source = readFileSync(new URL('../src/renderer/app.js', import.meta.url), 'utf8');
 const projection = readFileSync(new URL('../src/renderer/history-window.js', import.meta.url), 'utf8');
+const grouped = groupedScript(projection);
 function section(start: string, end: string) {
   const a = source.indexOf(start), b = source.indexOf(end, a);
   expect(a).toBeGreaterThanOrEqual(0);
@@ -44,6 +48,7 @@ function boot() {
     real: { id: null as string | null, running: false, events: 0, usageIn: 0, usageOut: 0, historyPending: false, askCards: new Map(), runStart: 0 },
     selectedId: null, sessions: [], sending: false,
     streamInner: element(), document: { createElement: element }, revealObserver: { unobserve: vi.fn() },
+    entersMainConversation,
     $: vi.fn(element), render: vi.fn(), closeSbMenus: vi.fn(), syncStatusbar: vi.fn(), scrollStream: vi.fn(),
     toast: vi.fn(), askCard: vi.fn(), setInterval: vi.fn(), clearInterval: vi.fn(), setTimeout: vi.fn(),
     // Exercise the shipped grouping and the inert mount contract; only layout is stubbed.
@@ -62,7 +67,7 @@ function boot() {
     setRunning: vi.fn(), PERM_MAP: { standard: 'default' }, permMode: { id: 'standard' }, loadSessions: vi.fn(),
   };
   runInNewContext(
-    projection.slice(0, projection.indexOf('export function windowRange')).replaceAll('export function ', 'function ') + '\n' +
+    grouped + '\n' +
     section('  let historyWindow = null;', '  /* ---------- 真实运行目录：') +
     section('  function clearTranscript()', '  /* ---------- 会话列表 ---------- */') +
     section('  function renderEvent(e)', '  /* ---------- 审批（') +
@@ -197,4 +202,36 @@ it('late old-session history cannot replace an already mounted newer session or 
   await first;
   expect(b.context.real).toMatchObject({ id: 'b', usageIn: 7, usageOut: 3, events: 1, historyPending: false });
   expect(b.context.toast).not.toHaveBeenCalled();
+});
+
+/* ---------- 子流准入（§4.4.4 的界面那一半，live 那一支） ----------
+ * 上面「重放」那几段走的是 showHistory → projectUnits；跑动中（real.running 为真）走的是
+ * 逐条 renderEvent。两条渲染路必须问同一句，否则同一份流刷新前藏在父泡里、刷新后凭空长出单元。
+ * 判据本身（哪些类型算子流细节）在 tests/renderer-child-admission.test.ts；这里只证接线。 */
+it('live：worker 的执行细节不落地，但它的钱照记、父自己的事件照画', async () => {
+  const b = boot(), opened = b.context.selectSession('a');
+  b.requests[0].resolve({ events: [] });
+  await opened;
+  b.context.real.running = true; // 跑动中 ⇒ onEvent 走逐条 renderEvent 那一支（不是整段重投）
+  for (const e of [
+    { type: 'assistant_message', content: '子模型说的', agent_id: 'w-a' },
+    { type: 'tool_call', id: 'w1', name: 'grep', args: {}, agent_id: 'w-a' },
+    { type: 'tool_result', callId: 'w1', ok: true, output: 'worker', agent_id: 'w-a' },
+    { type: 'error', message: 'worker 炸了', agent_id: 'w-a' },
+    { type: 'turn_truncated', callId: 'w1', stop_reason: 'max_tokens', agent_id: 'w-a' },
+  ]) b.emit(live(e));
+  expect(b.context.ensureAi).not.toHaveBeenCalled();
+  expect(b.context.appendUser).not.toHaveBeenCalled();
+  expect(b.context.finalizePending).not.toHaveBeenCalled();
+
+  // 钱不跟着藏：worker 的 usage 带归因，底栏仍必须记——少报成本比多画几行更坏
+  b.emit(live({ type: 'usage', agent_id: 'w-a', inputTokens: 5, outputTokens: 2 }));
+  expect(b.context.real).toMatchObject({ usageIn: 5, usageOut: 2 });
+
+  // 反向对照：不带归因的同一类型照常上屏（判据认 agent_id，不是把整类事件掐死）
+  b.emit(live({ type: 'user_message', content: '父的用户消息' }));
+  expect(b.context.appendUser).toHaveBeenCalled();
+
+  // 隐藏渲染 ≠ 假装没收到：real.events 的语义仍是「live 投递计数」
+  expect(b.context.real.events).toBe(7);
 });

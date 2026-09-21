@@ -57,6 +57,28 @@ export function projectTokenUsage(events: AgentEvent[]): TokenProjection {
   return projectTokenUsageByKind([{ kind: "main", events }]);
 }
 
+/* ---- 子流事件的准入（§4.4.4 的界面那一半；live 与 replay 共用同一个判据） ----
+ * worker 的执行细节带 agent_id，家在哪由编排器决定：右栏 agent 面板已经在列
+ * （projectPanelData 给每列 surface [进展]/[报告] 文本、🔧 工具名与 toolStats、按 agent 的 token 分解），
+ * 所以主对话流再画一遍既重复、又是**冒充**——父会话从没说过那句话，界面却把它摆在父的 AI 泡里。
+ * 两条渲染器（app.js 的 renderEvent 与 history-window 的 projectUnits）必须问同一句，
+ * 否则同一份流在刷新前后长成两样（§10.1「同一事件流不得有第二套呈现」）。
+ *
+ * 刻意留在主流的带归因事件（理由写进 tests/renderer-child-admission.test.ts 的交叉核对）：
+ *   usage —— 底栏「这一会话花了多少」必须含 worker 的真钱，漏它就是少报成本；
+ *   verify_result —— 写档 worker 的验证证据要沿主线（合并/丢弃决策的输入）看得见，摘了等于失明。
+ * 这两型的正确解是**带 .tag 归因**地显示，不是藏，也不是顶替父会话——那是另一件事。 */
+const CHILD_DETAIL_TYPES = new Set(["assistant_message", "assistant_delta", "tool_call", "tool_result", "error", "turn_truncated"]);
+
+/** 这条事件该不该进主对话流。非带归因事件一律进（主流自己的正文、审批、agent_* 叙事都不受影响）。 */
+export function entersMainConversation(e: { type?: unknown; agent_id?: unknown }): boolean {
+  if (typeof e.agent_id !== "string" || e.agent_id === "") return true;
+  return !CHILD_DETAIL_TYPES.has(typeof e.type === "string" ? e.type : "");
+}
+
+/** 供判据交叉核对：编排器要归因的那张表与界面要藏的那张子集，必须同源说清楚差在哪。 */
+export const RENDERER_CHILD_DETAIL_TYPES: ReadonlySet<string> = CHILD_DETAIL_TYPES;
+
 /** 多源投影（M2g §10.8.4 序 4）：按会话 kind 归因，总量 = 各分解之和。
  *  sidechat 的 usage 只进自己的分解项，**不计入 main 分解**（会话文件归属即归因依据）。 */
 export function projectTokenUsageByKind(sources: { kind: SessionKind; events: AgentEvent[] }[]): TokenProjection {

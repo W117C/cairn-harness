@@ -9,9 +9,12 @@
  * 与 live 的「工具组嵌进当前 ai 消息」同构）/ card（其余单事件，各自一条）。
  * 合并条件：流序上紧邻 + 同 agent 桶 + 同类；且 turn 内的第二条模型消息另起单元
  * （live 里 assistant_message 会收束正文壳，见 app.js 的 aiTextMsg/finalizeAi）。
- * worker 子流事件带 agent_id，插在主流事件之间时自成单元，
- * 不会把主 loop 的工具组从中间劈开。
+ * worker 子流的执行细节**不进主对话流**（§4.4.4）：与 live 的 renderEvent 问同一句
+ * （entersMainConversation，projections.ts），否则同一份流刷新前藏在父泡里、刷新后
+ * 凭空长出一排单元——两支必须同源，不然「第二套呈现」以时序差的形式回来。
  */
+import { entersMainConversation } from './projections';
+
 const AI_TEXT_TYPES = new Set(["assistant_message", "assistant_delta"]);
 const TOOL_TYPES = new Set(["tool_call", "tool_result", "verify_result"]);
 
@@ -19,6 +22,7 @@ export function projectUnits(events) {
   const units = [];
   events.forEach((e, i) => {
     if (e.type === "usage" || e.type === "session_meta") return;
+    if (!entersMainConversation(e)) return;
     const agent = typeof e.agent_id === "string" && e.agent_id !== "" ? e.agent_id : "main";
     const prev = units[units.length - 1];
     if (e.type === "user_message") {

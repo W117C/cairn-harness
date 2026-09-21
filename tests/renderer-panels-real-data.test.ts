@@ -4,9 +4,12 @@
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { expect, it, vi } from 'vitest';
+// vm 里跑脚本不是模块：准入判据的绑定与 import 剥法都取自共用那一处（不许各写一份）。
+import { entersMainConversation, groupedScript } from './renderer-vm-module';
 
 const source = readFileSync(new URL('../src/renderer/app.js', import.meta.url), 'utf8');
 const projection = readFileSync(new URL('../src/renderer/history-window.js', import.meta.url), 'utf8');
+const grouped = groupedScript(projection);
 
 function section(start: string, end: string) {
   const a = source.indexOf(start), b = source.indexOf(end, a);
@@ -40,6 +43,7 @@ function boot() {
     real: { id: null as string | null, running: false, events: 0, usageIn: 0, usageOut: 0, historyPending: false, cards: new Map(), toolGroup: null },
     selectedId: null, sessions: [], sending: false,
     streamInner: element(), document: { createElement: element }, revealObserver: { unobserve: vi.fn() },
+    entersMainConversation,
     $: vi.fn((s: string) => els[s] ?? element()), render: vi.fn(), closeSbMenus: vi.fn(), scrollStream: vi.fn(),
     syncRunButton: vi.fn(), runControl: { isRunning: () => false, cancel: null as (() => void) | null },
     // DT-02：refreshPanels 现在顺带同步标题栏上下文（工作区名进了标题栏）。
@@ -59,7 +63,7 @@ function boot() {
     setRunning: vi.fn(), PERM_MAP: { standard: 'default' }, permMode: { id: 'standard' }, loadSessions: vi.fn(),
   };
   runInNewContext(
-    projection.slice(0, projection.indexOf('export function windowRange')).replaceAll('export function ', 'function ') + '\n' +
+    grouped + '\n' +
     section('  let historyWindow = null;', '  /* ---------- 真实运行目录：') +
     section('  function clearTranscript()', '  /* ---------- 会话列表 ---------- */') +
     section('  function tokStr()', '  async function initSandboxState()') +

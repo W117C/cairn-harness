@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
+// renderEvent 第一句问的是这条判据（projections 导出的同一个实现，测试不另写一份）。
+import { entersMainConversation } from "../src/renderer/projections";
 
 const source = readFileSync(new URL("../src/renderer/app.js", import.meta.url), "utf8");
 const historySource = readFileSync(new URL("../src/renderer/history-window.js", import.meta.url), "utf8");
@@ -141,6 +143,7 @@ function bootRenderer(events: Record<string, unknown>[]) {
     syncStatusbar: () => {},
     highlightAllDiffs: () => {},
     finalizePending: () => {},
+    entersMainConversation,
     // 切片里含顶层的 #sendBtn 绑定语句，需要一个可绑定的壳
     $: (sel: string) => (sel === "#sendBtn"
       ? { addEventListener() {}, setAttribute() {}, title: "", classList: { toggle() {} } }

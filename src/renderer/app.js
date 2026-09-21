@@ -1,5 +1,5 @@
 import { projectUnits, mountHistory } from './history-window.js';
-import { projectPanelData, EMPTY_PANEL_DATA, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS, cardActionForComment, commentReadsBack } from './projections';
+import { projectPanelData, EMPTY_PANEL_DATA, entersMainConversation, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS, cardActionForComment, commentReadsBack } from './projections';
 import { $, esc, promptInput, sessionList, streamInner, toast } from './dom.js';
 import { ICONS, RUN_GRID_HTML, runGrid } from './icons.js';
 import { highlightAllDiffs, diffHtml } from './diff-highlight.js';
@@ -2768,6 +2768,9 @@ render();
      不用 callId 拼——那是外部字符串，进 HTML 属性/选择器就多一处必须记得转义的地方。 */
   let clarifyCardSeq = 0;
   function renderEvent(e) {
+    // §4.4.4 的界面那一半：worker 执行细节带 agent_id，家在哪由编排器决定（右栏 agent 面板在列）。
+    // 主流再画一遍＝把子模型说过的话摆进父的 AI 泡——父会话从没说过它。判据与 projectUnits 同源。
+    if (!entersMainConversation(e)) return;
     switch (e.type) {
       case 'session_meta':
         break;
