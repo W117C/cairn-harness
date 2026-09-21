@@ -896,6 +896,33 @@ async function phaseElectron(root: string): Promise<void> {
       b11Chips.includes("worker 2") && (b11Waiting > 0 ? b11Chips.includes("等人 " + String(b11Waiting)) : !/等人 \d/.test(b11Chips)),
       "B11 顶部芯片按盘上事实数「共几条活」与「几条在等人」（期望等人 " + String(b11Waiting) + "；实测 " + JSON.stringify(b11Chips) + "）",
     );
+    console.log("[panels-check] B12 worker 审批两端：已死那一列不长卡，而 card_action 桥在真窗口走得通（零模型调用）");
+    // B11 留下的 b11-write-2 已被崩溃恢复扫成 failed，但它的 approval 从未被答过（行上仍写「待批」）。
+    // 这正是负控靶子：给死列弹审批卡 = 摆一个必然失败的按钮。删掉 workerApprovalAsks 的终态守卫，
+    // B12 首条当场红（做过反向对照）；「活着才弹」的正向半边由单测 + 锚点锁（真弹一次要跑真 worker = 花真钱）。
+    const b12Pop = await cdp2.eval<string>(
+      `(() => { const p = document.getElementById('askPop'); return p ? (p.hidden ? 'hidden' : 'shown:' + (p.dataset.askId || '')) : 'absent'; })()`,
+    );
+    ok(b12Pop === "hidden" || b12Pop === "absent", "B12 死列不弹审批卡（实测批准面板=" + JSON.stringify(b12Pop) + "）");
+    const b12RowStill = await cdp2.eval<boolean>(
+      `([...document.querySelectorAll('.side-page[data-view="agents"] .agent-row')].some((r) => (r.textContent || '').includes('待批：run_shell')))`,
+    );
+    ok(b12RowStill, "B12 不弹卡 ≠ 抹掉事实：那条未答审批仍如实显示在子智能体页那一行");
+    // 桥面：渲染层 → preload → main 的 card_action 真走得通，且 fail-closed 时一个字节都不落
+    const b12Before = (await readFile(b11File, "utf8")).length;
+    const b12Trip = await cdp2.eval<string>(
+      `(window.agent && window.agent.cardAction) ? window.agent.cardAction({` +
+        ` cardId: 'approval:b12-nope', sourceEventId: 1, cardType: 'approval', action: 'approve',` +
+        ` payload: { approval_id: 'b12-nope' }, scope: 'once', targetAgentId: 'b12-no-agent'` +
+        `}).then((r) => String(r.ok) + ':' + (r.error || '')) : 'no-bridge'`,
+    );
+    ok(b12Trip !== "no-bridge", "B12 preload 真把 cardAction 挂上了 window.agent（gate 0 的 A3 只查拼写，这里查挂没挂）");
+    ok(
+      b12Trip.startsWith("false:") && b12Trip.includes("fail-closed"),
+      "B12 没跑过一轮时 card_action 当场拒（不静默半提交；实测回条=" + JSON.stringify(b12Trip) + "）",
+    );
+    const b12After = (await readFile(b11File, "utf8")).length;
+    ok(b12After === b12Before, "B12 拒绝不落半条事件（审计面零新增；实测 " + String(b12Before) + " → " + String(b12After) + " 字节）");
     await killElectron(electron2);
   } finally {
     if (electron.exitCode === null) await killElectron(electron);
