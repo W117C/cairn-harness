@@ -306,6 +306,47 @@ because its resolved target is not a strict subdirectory of the project root at 
 HEAD worktree `tsc` 0 错、本通道四个测试文件 92 passed；针脚体检全表 0 阻断。
 agent-runner.ts 的并发 hunk 全在 423 行之前 ⇒ 只 `git apply --cached` 自己那一跳。
 
+## 第九程（同日，`04151de`）：截断卡学会说人话
+
+第五程只补了 `EVENT_LABELS` 那一条（不收 ⇒ 标题退回英文类型名）。收了之后这张卡说的还是
+「助手输出被截断」——可**两种原因的下一步完全不同**：篇幅用尽该把同一句续写下去，
+内容策略中止得换个说法绕开。只看标题等于把判断推回给用户，而答案三个字段全在事件里
+（`outcome` / `stop_reason` / `output_tokens`），只是没人拿它们做标题。
+
+判法沿用 `renderer-compact-chip` 那份：把 app.js 的 `EVENT_LABELS` + `eventLabel` 切一段进 `vm` 跑,
+两个取料标记找不到即 throw。另跑 `node --check src/renderer/app.js` 全文件——vm 只吃了切出来那段，
+而 app.js 的语法错会让整个界面白屏。
+⚠️ **未做视觉核验**：锁的是函数返回的字符串，没有真会话把这张卡跑上屏。
+
+## 第十程（跨日到 09-22，`0105f26`）：同一句误导的更普遍形态
+
+上一程给「被收走」那一支补了 hint 之后，把整个 reminder 重读了一遍,才发现更普遍的那一半：
+默认句**「红字逐条已在上一轮上下文里，对着它继续」是 `failed` 专用的话**，而能走到 continue 的
+证据态有三种——
+
+| 证据态 | 手上有什么 | 默认句说的是什么 |
+| --- | --- | --- |
+| `failed` | 真 has 红字 | 对着红字改 ✅ |
+| `stale` | 一份作废的绿证据，**没有红字** | 对着红字改 ❌ |
+| `absent` | **从头到尾没跑过验证** | 对着红字改 ❌ |
+
+也就是说最该被推去「跑一次验证」的那两轮，收到的指令是「去改一个不存在的东西」。
+这正是目标里第 5 条（顶尖 Agent 能证明代码真的能跑）的反面，而且是**每轮重送**的反面。
+
+改法：`FOLLOW: Record<WorkerEvidence, string>` 按证据态给,`hint` 仍覆盖它（`Record` 全键 ⇒
+以后加证据态会被编译器问一句）。块长基本持平——三种说法各换各的，没有多加一行。
+grep 证明这条文案在 `tests/` 与 `scripts/` 里没有别的读者，改它不牵动别处。
+
+**一次自伤与回读**：本笔中途误删了变异表里一个条目的 `{ id:` 两行（一次 Edit 的 old/new 写反了方向）。
+`git diff` 逐行读回时抓出来照原件修好——**表在 HEAD 上有原件可比，改完再对一次 diff 才算数**。
+
+**第九、十程读数**：新增 `tests/renderer-truncation-label.test.ts` 5 条 + `goal-stop-decision` +1 条
+（20 条）；锚点 +3（并一根改指：默认句换成按证据态给之后，`goal-reminder-ignores-hint` 的针脚搬了家）;
+四根 goal 锚点在 clean HEAD `0105f26` 实测**全杀**，`tsc` 0 错；
+clean HEAD 全量 `test`（`04151de`）：**184 files / 1739 tests，182 files 绿**——
+唯二红项是 `gated-tools` / `runner-gates`，即第八程点名的**软链 worktree 假红**（规则 52），
+主树复跑同两支 4 passed。
+
 ## 待办（按优先级）
 
 1. 沉淀面：`failureDigestFromEvents`（能力 6/10）现在只看 `verify_result(ok:false)` 与
