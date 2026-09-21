@@ -40,6 +40,8 @@ import {
 } from "../src/agent/worktree";
 import { filterFalsePositives, mapFindingsToAbsolute, scanChangeSet, type ChangeSetEntry } from "../src/agent/security/scan";
 import { extractJsonArray, parseLlmFindings } from "../src/agent/security/llm-review";
+// card_action 协议入口（评论注入在产品里走的正是这一条，不是 orch.injectComment 直调）
+import { handleCardAction } from "../src/main/agent-runner";
 
 const exec = promisify(execFile);
 
@@ -507,6 +509,41 @@ describe("M3b write worker 闭环（临时 git 仓库端到端）", () => {
     expect(after.ok).toBe(true);
     expect(after.injected).toBe(false);
   }, 20_000);
+
+  /* 中间那一行有没有观测者（任务 #64）：上面那条直接调 orch.injectComment，绕过了产品真正走的
+     card_action 协议。handleCardAction 一度把 injected 吞成 {ok:true} —— 界面就只剩「已送进子流」
+     一句可说，等于把没送达说成送达。这条钉那条映射：回条必须带得出 injected 原值。 */
+  it("评审评论走 card_action 协议：IPC 回条带得出 injected（映射行有观测者）", async () => {
+    const script = [
+      { type: "tool_call", id: "rv-1", name: "write_file", args: { path: "rv.txt", content: "v1\n" } },
+      { type: "assistant_message", content: "v1 完成。" },
+      { type: "tool_call", id: "rv-2", name: "write_file", args: { path: "rv.txt", content: "v1\nv2-修正\n" } },
+      { type: "assistant_message", content: "按评审意见补了 v2。" },
+    ] as unknown as Parameters<typeof scriptedWorkerModel>[0];
+    const { orch, events } = makeOrch({ model: () => scriptedWorkerModel(script) });
+    const r = await orch.spawn({ mode: "write", task: "评审演练" }, { callId: "s1" });
+    const agentId = (JSON.parse(r.output) as { agent_id: string }).agent_id;
+    expect(await waitFor(() => events.some((e) => e.type === "agent_result"))).toBe(true);
+    const req = (line: number, body: string): Parameters<typeof handleCardAction>[0] => ({
+      cardId: "diff:" + agentId,
+      sourceEventId: 1,
+      cardType: "diff",
+      action: "comment",
+      targetAgentId: agentId,
+      payload: { path: "rv.txt", line, body },
+    });
+    const live = await handleCardAction(req(1, "请补第二行"));
+    // 这一条就是那行映射的观测者：回条若把 injected 吞成 {ok:true}（曾经的样子），这里即红。
+    expect(live, "未收尾的 worker：评论应真的进子流").toEqual({ ok: true, injected: true });
+    // 评审重启的第二拍先落 diff 再落 agent_result（finishInner 的有意顺序），故直接等两拍终态
+    expect(await waitFor(() => events.filter((e) => e.type === "agent_result").length === 2)).toBe(true);
+    // worktree 一收尾，编排器归属随之注销 ⇒ 协议层根本进不到 injectComment（injected 无从谈起）。
+    // 产品里这一列的「评」早被 commentReadsBack 撤掉；这里把实测回条记下来，免得下次以为
+    // injected:false 会从这条路径回来——它唯一的产品路径是「取消中」那个 abort 窗口（异步，不在这钉）。
+    expect((await orch.rejectWorker(agentId)).ok).toBe(true);
+    expect(await handleCardAction(req(2, "晚了"))).toEqual({ ok: false, error: "无可用事件管线（fail-closed）" });
+    expect(events.filter((e) => e.type === "diff_comment")).toHaveLength(1);
+  }, 30_000);
 
   it("冲突卡：主分支前进后合并 → conflict 收尾态 + 主 checkout 干净（不自动解）", async () => {
     const { orch, events } = makeOrch({ model: () => scriptedWorkerModel(writeScript("README.md", "line1\nworker 改\nline3\n")) });
