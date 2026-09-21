@@ -850,8 +850,8 @@ const MUTATIONS = [
     id: "session-budget-table-fallback-dropped",
     src: "src/agent/orchestrator.ts",
     test: "tests/m3c.test.ts",
-    desc: "没填单价时不再查内置价表（用户只设 maxBudgetUsd 的常见配置 ⇒ 估价恒 0、底线静默失效，正是本次修掉的形状）",
-    apply: (s) => s.replace("    if (!this.budgetRateKnown()) return 0;\n", ""),
+    desc: "单价缺省时不再查内置价表（估价恒 0 ⇒ 用户只设 maxBudgetUsd 的常见配置下，spec 的 BYOK 底线静默失效）。针脚必须指**给钱的那一行**：上一版指相邻的 budgetRateKnown 早退，那行删掉行为不变（spentUsdFor 自己就 null→0），变异当场存活",
+    apply: (s) => s.replace('const spend = spentUsdFor(priceForModel(b.priceModel ?? ""), usage);', "const spend = null;"),
     expectFail: "成本闸没填单价 ⇒ 按内置价表分列估价（用户只设 maxBudgetUsd 就该拦住，不是恒 0）",
   },
   {

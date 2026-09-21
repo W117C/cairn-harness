@@ -184,7 +184,6 @@ export class Orchestrator {
     if (!b) return 0;
     const usage = { inputTokens: this.sessionUsage.inputTokens, outputTokens: this.sessionUsage.outputTokens };
     if (b.pricePerMTok > 0) return ((usage.inputTokens + usage.outputTokens) / 1_000_000) * b.pricePerMTok;
-    if (!this.budgetRateKnown()) return 0;
     const spend = spentUsdFor(priceForModel(b.priceModel ?? ""), usage);
     return spend === null ? 0 : spend.usd;
   }
