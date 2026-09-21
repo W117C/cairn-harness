@@ -3,7 +3,7 @@
 //   B. Electron + CDP：1 万条事件虚拟化（DOM ≤300 / 滚动一屏 ≤200ms）+ 审批徽标 ≤1s + 布局重启还原 + 会话重命名落盘 + 截图
 // 退出码 0 = 全部断言通过；任何断言失败退出码 1。
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createEventLog } from "../src/events";
@@ -412,10 +412,29 @@ async function phaseElectron(root: string): Promise<void> {
     await writeFile(join(memHome, "MEMORY.md"), "# 索引\n- [中文偏好](中文偏好.md) — 测试用\n", "utf8");
     await writeFile(join(memHome, "中文偏好.md"), "---\ntype: user\nmodified: 2026-09-21T02:00:00.000Z\n---\n用中文交流。\n", "utf8");
     await writeFile(join(memHome, "build-gates.md"), "---\ntype: project\nmodified: 2026-09-20T02:00:00.000Z\n---\n门禁清单即事实源。\n", "utf8");
+    // B10 要判「装了插件但一轮都没跑过」时的授权闭环。两类样本：用户级（按作用域恒已信任）与
+    // **项目级**（唯一会 pending 的作用域）。项目级要从 `<工作区>/.agent/plugins` 发现，而工作区
+    // 一轮没跑时取自 settings.workspace ⇒ 造一个临时工作区 + 把 settings 指过去（settings 是
+    // 增量打补丁，不覆盖：B4 的 git/theme 还原判据还靠它）。
+    const projWs = join(root, "proj-ws");
+    await mkdir(join(projWs, ".agent", "plugins"), { recursive: true });
+    await cp(
+      join(process.cwd(), "fixtures", "plugins", "project", "pipeline-crew"),
+      join(projWs, ".agent", "plugins", "pipeline-crew"),
+      { recursive: true },
+    );
+    const settingsPath = join(root, "settings.json");
+    const settingsNow = JSON.parse((await readFile(settingsPath, "utf8").catch(() => "{}")) as string) as Record<string, unknown>;
+    settingsNow.workspace = projWs;
+    await writeFile(settingsPath, JSON.stringify(settingsNow), "utf8");
     const { proc: electron2, output: output2 } = spawnElectron({
       M1E_SESSIONS_DIR: root,
-      M1E_SETTINGS_PATH: join(root, "settings.json"),
+      M1E_SETTINGS_PATH: settingsPath,
       M2D_MEMORY_HOME: memHome,
+      M2E_USER_PLUGINS: join(process.cwd(), "fixtures", "plugins", "user"),
+      M2E_LOOSE_SKILLS: join(process.cwd(), "fixtures", "plugins", "loose"),
+      M2E_TRUST_FILE: join(root, "plugin-trust.json"),
+      M2E_PLUGIN_DATA: join(root, "plugin-data"),
     });
     const up2 = await tryWait(async () => {
       try {
@@ -720,6 +739,47 @@ async function phaseElectron(root: string): Promise<void> {
     ok(
       b9Shown > 0 && b9.names.includes("中文偏好") && b9.names.includes("build-gates") && !b9.names.includes("MEMORY"),
       "B9 全局层两个 topic 上了屏、MEMORY.md 只当索引不算条目（实测 names=" + JSON.stringify(b9.names) + " 计数 " + String(b9Shown) + "）",
+    );
+    const b10Sel = ".side-page[data-view=\"plugins\"] [data-plugin=\"hello-plugin\"]";    console.log("[panels-check] B10 插件授权闭环：一轮都没跑过也列得出「待决」，点信任后当场改口并落盘");
+    // 判的是此前根本不存在的产品路径：§9.8「未信任不激活」，而 state 里的插件快照原先只有跑过
+    // 一轮才有 ⇒ 用户永远看不到「待决」，也就永远没机会授权（先有鸡还是有蛋）。
+    await cdp2.eval(
+      `(() => { const c = document.querySelector('#qcPlugins'); if (c) c.click(); return String(!!c); })()`,
+    );
+    const b10Listed = await tryWait(
+      async () => ((await cdp2.eval<boolean>(`!!document.querySelector(${JSON.stringify(b10Sel)})`)) ? true : null),
+      12_000,
+    );
+    const b10First = await cdp2.eval<string>(
+      `(document.querySelector('.side-page[data-view="plugins"]')?.textContent || '').trim().slice(0, 76)`,
+    );
+    ok(b10Listed, "B10 没跑过任何一轮也列出了靶子插件（冷快照走通；实测首屏=" + JSON.stringify(b10First) + "）");
+    // 用户级样本按作用域直接算已信任，「待决」的样本是散装 skill：不写死名字（名字取自 frontmatter），
+    // 而是找第一行待决的样本点它的「信任」——判的是「有待决就有可点的授权口」。
+    const b10Name = await cdp2.eval<string>(
+      `(() => {
+        const rows = [...document.querySelectorAll('.side-page[data-view="plugins"] .plug-row')];
+        const r = rows.find((x) => (x.textContent || '').includes('待决'));
+        if (!r) return '';
+        const b = r.querySelector('[data-plug-act="trust"]');
+        if (!b) return '';
+        b.click();
+        return r.getAttribute('data-plugin') || '';
+      })()`,
+    );
+    ok(b10Name !== "", "B10 有待决样本、其「信任」按钮在行里且点得动（实测样本=" + JSON.stringify(b10Name) + "）");
+    const b10RowSel = ".side-page[data-view=\"plugins\"] [data-plugin=\"" + b10Name + "\"]";
+    const b10Trusted = await tryWait(
+      async () => ((await cdp2.eval<boolean>(
+        `(document.querySelector(${JSON.stringify(b10RowSel)})?.textContent || '').includes('已信任')`,
+      )) ? true : null),
+      12_000,
+    );
+    ok(b10Trusted, "B10 点完当场改口为「已信任」（回读快照重画，不是本地改一行状态）");
+    const b10File = await readFile(join(root, "plugin-trust.json"), "utf8").catch(() => "");
+    ok(
+      b10Name !== "" && b10File.includes(b10Name),
+      "B10 决议真落盘（重启后仍生效；实测文件前 76 字=" + JSON.stringify(b10File.slice(0, 76)) + "）",
     );
     await killElectron(electron2);
   } finally {

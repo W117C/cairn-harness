@@ -255,7 +255,7 @@ async function ensureSessionOrchestrator(): Promise<Orchestrator | null> {
   const log = createEventLog(logPath);
   const orch = new Orchestrator({
     logPath,
-    workspace: getLastWorkspace() ?? WORKSPACE,
+    workspace: await currentWorkspace(),
     parentMode: (await store().get()).mode,
     emit: async (e: AgentEvent) => {
       await log.append(e);
@@ -1781,7 +1781,7 @@ export async function handleCardAction(req: CardActionRequest): Promise<{ ok: bo
   if (req.action === "clean" && req.cardType === "orphan") {
     const name = typeof req.payload?.name === "string" ? req.payload.name : "";
     if (name === "" || !/^[A-Za-z0-9_-]+$/.test(name)) return { ok: false, error: "orphan clean 需要 payload{name（wt- 后的 agent_id）}" };
-    const ws = getLastWorkspace() ?? WORKSPACE;
+    const ws = await currentWorkspace();
     const r: WorktreeCleanupResult = await cleanOrphanWorktree(ws, name);
     return r.removed ? { ok: true } : { ok: false, error: "孤儿 worktree 清理失败：" + (r.error ?? "未知") };
   }
@@ -1858,7 +1858,7 @@ export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memo
   let plugins: PluginPanelSnapshot | undefined;
   try {
     const rt = currentPluginRuntime();
-    plugins = rt ? rt.snapshot() : (lastPluginSnapshot ?? undefined);
+    plugins = rt ? rt.snapshot() : (lastPluginSnapshot ?? await pluginSnapshotLite());
   } catch {
     plugins = undefined;
   }
@@ -1901,7 +1901,7 @@ export async function handleAgentState(): Promise<{ sandbox: SandboxStatus; memo
 
 /** M3b 孤儿 worktree 扫描（纯投影面）：.agents/wt-* 目录 − 事件流有终态/收尾记录的 agent。 */
 export async function scanOrphanWorktrees(workspace?: string): Promise<string[]> {
-  const ws = workspace ?? getLastWorkspace() ?? WORKSPACE;
+  const ws = workspace ?? (await currentWorkspace());
   const dirs = await listWorktreeDirs(ws);
   if (dirs.length === 0) return [];
   const events = lastLogPath ? await replay(lastLogPath).catch(() => []) : [];
@@ -1909,6 +1909,23 @@ export async function scanOrphanWorktrees(workspace?: string): Promise<string[]>
     dirs,
     events.map((e) => e as { type: string; agent_id?: string; status?: string; callId?: string }),
   );
+}
+
+/** 「此刻这个会话的工作区」的唯一答案：跑过就用最近一次 run 的，没跑过用**用户配置的**
+ *  （settings.workspace），两者都没有才落到缺省靶子。
+ *  此前有六处各写一份 `getLastWorkspace() ?? WORKSPACE`：一轮都没跑时，插件面板 / 信任决议 /
+ *  孤儿 worktree 扫描 / sidechat 全都在扫 fixtures/todo-app，而不是用户真正打开的项目——
+ *  面板上列出来的「已信任」可能根本是另一个仓的插件。 */
+export async function currentWorkspace(): Promise<string> {
+  const last = getLastWorkspace();
+  if (last) return last;
+  let conf: string | null = null;
+  try {
+    conf = (await store().get()).workspace;
+  } catch {
+    conf = null; // headless 脚本未装配 settings ⇒ 与旧行为一致（缺省工作区）
+  }
+  return conf ?? WORKSPACE;
 }
 
 /** M2e run 装配与 M2g 运行间隙决议共用的插件运行时配置（信任文件路径的单一事实源在 PluginRuntime.load）。 */
@@ -1923,6 +1940,20 @@ function pluginRuntimeOpts(workspace: string): Omit<Parameters<typeof PluginRunt
   };
 }
 
+/** 运行间隙的冷快照：还没有 runtime（本进程一轮都没跑过）时也照样发现一次并留档。
+ *  少了这一条，插件面板对「装了但从未跑过」的会话永远是空的——而那恰恰是唯一需要看到
+ *  「待信任」并授权的时刻（§9.8 未信任不激活：没有列表就没有授权口）。
+ *  与 handlePluginDecide 的 lite 分支同款配置、同样是只读发现（不 connectMcp、不跑钩子之外的动作）。 */
+async function pluginSnapshotLite(): Promise<PluginPanelSnapshot> {
+  const lite = await PluginRuntime.load(pluginRuntimeOpts(await currentWorkspace()));
+  try {
+    lastPluginSnapshot = lite.snapshot();
+    return lastPluginSnapshot;
+  } finally {
+    await lite.shutdown().catch(() => {});
+  }
+}
+
 /** IPC "agent:plugin-decide"：信任卡决议（批准/拒绝）→ 决议持久化 + 同样本重新激活（M2e §9.8）。
  *  M2g 收口修复：运行间隙（runtime 已回收）点击不再静默 ok:false——按 run 同款配置做一次轻量
  *  发现 + 决议落信任文件（下次 load 生效），留档快照同步改写（面板徽标即时反映）。 */
@@ -1934,7 +1965,7 @@ export async function handlePluginDecide(pluginName: string, trusted: boolean): 
     await rt.connectMcp(); // 信任后同样本开始生效（MCP 补连；hook 引擎已在重建后的 runtime 内）
     return { ok: true, snapshot: rt.snapshot() };
   }
-  const lite = await PluginRuntime.load(pluginRuntimeOpts(getLastWorkspace() ?? WORKSPACE));
+  const lite = await PluginRuntime.load(pluginRuntimeOpts(await currentWorkspace()));
   let decided = false;
   try {
     decided = await lite.trustDecide(pluginName, trusted);
@@ -2027,7 +2058,7 @@ export async function handleSidechatAsk(
     const events = await runSidechatTurn({
       sidechatDir: sidechatDir(dir, sidechatId),
       mainLogPath,
-      workspace: getLastWorkspace() ?? WORKSPACE,
+      workspace: await currentWorkspace(),
       message,
       ...(picked.model ? { model: picked.model } : {}),
       ...(over.summarizer ? { summarizer: over.summarizer } : { summarizer: resolveSidechatSummarizer() }),
