@@ -1,5 +1,5 @@
 import { projectUnits, mountHistory } from './history-window.js';
-import { projectPanelData, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN } from './projections';
+import { projectPanelData, workerEvidenceLabel, workerSpentLabel, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN } from './projections';
 import { $, esc, promptInput, sessionList, streamInner, toast } from './dom.js';
 import { ICONS, RUN_GRID_HTML, runGrid } from './icons.js';
 import { highlightAllDiffs } from './diff-highlight.js';
@@ -1021,6 +1021,10 @@ function gitViewHTML() {
   }
   return '<div class="side-page-pad">' + cols.map(c =>
     '<div class="file-item">' + BRANCH_ICON + '<span class="path">' + esc(c.agent_id) + '</span>' +
+    /* 「验过」与「说验过」必须分得开：验证证据四态 + 表价花费直接挂在每一列上（W4b / W3②）。
+       花费未知时写「价格未知」，不写 $0.00——那会把不可知记成免费。 */
+    '<span class="tag" data-ev="' + esc(c.verified ?? 'none') + '">' + esc(workerEvidenceLabel(c.verified)) + '</span>' +
+    '<span class="tag">' + esc(workerSpentLabel(c.spentUsd)) + '</span>' +
     '<span class="new">' + esc(c.outcome || c.status) + '</span></div>').join('') + '</div>';
 }
 /* git 分支数据：当前分支 ahead/behind 计数与其他分支 */

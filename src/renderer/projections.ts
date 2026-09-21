@@ -4,7 +4,7 @@
 // git = diff 卡列表（write 工具动作聚合，M1 不做 git 控制塔）。
 // M2d memory = 会话内 remember 调用审计（写入即事件 §8.1.4：tool_call/tool_result 投影）。
 // electron/DOM-free，panels-check（headless）与 vitest 共用。
-import type { AgentEvent } from "../events";
+import type { AgentEvent, WorkerEvidence } from "../events";
 // goal 轨迹的**同一份** reduce（主进程续跑判据也用它）：芯片显示的轮次与「实际会不会再跑一轮」
 // 必须是同一个函数算出来的，否则渲染层自造一份 = 本仓点名的第二事实源。
 // goal-trace.ts 只 import 类型，所以这条运行时依赖不会把 worker-report/memory 那条链拉进 renderer 包。
@@ -177,6 +177,12 @@ export interface MergeTowerColumn {
   branch: string;
   /** worker 当前状态（agent_status 最新一拍）。 */
   status: string;
+  /** W4b 回程的验证证据四态（取 agent_result.artifacts.verified）。
+   *  null = 这一拍没有该字段（旧会话，或本 worker 没真改过文件）——**不得**当成「验过了」，
+   *  也不得当成 absent：absent 是「全程没有任何验证拍」，是机器判出来的事实。 */
+  verified: WorkerEvidence | null;
+  /** W3② 本 worker 的表价花费（USD）。null = 价格不可知（不当 0）。 */
+  spentUsd: number | null;
   /** diff 快照（按序累积；最新 = 最后一份——评审闭环 v1→v2）。 */
   diffs: { version: number; stat: string; patch: string }[];
   /** 最新安全报告（agent_id 归因的最新一份 security_report；off 模式缺省 null）。 */
@@ -245,6 +251,8 @@ export function projectMergeTower(events: AgentEvent[]): MergeTowerColumn[] {
         base_commit: e.base_commit ?? "",
         branch: "agent/*-" + e.agent_id,
         status: "running",
+        verified: null,
+        spentUsd: null,
         diffs: [],
         report: null,
         comments: [],
@@ -254,6 +262,14 @@ export function projectMergeTower(events: AgentEvent[]): MergeTowerColumn[] {
     }
   }
   for (const e of events) {
+    // 回程那一刻才有证据四态与花费账；父会话与合并控制塔读的是同一份投影（不各算一遍）。
+    if (e.type === "agent_result" && e.agent_id !== undefined) {
+      const col = cols.get(e.agent_id);
+      if (col) {
+        col.verified = e.artifacts?.verified ?? null;
+        col.spentUsd = typeof e.artifacts?.spent_usd === "number" ? e.artifacts.spent_usd : null;
+      }
+    }
     if (e.type === "tool_result" && typeof e.callId === "string" && e.callId.startsWith("diff-")) {
       const agentId = e.callId.slice("diff-".length);
       const col = cols.get(agentId);
@@ -632,6 +648,8 @@ export interface PanelMergeEntry {
   task: string;
   status: string;
   outcome: string | null;
+  verified: WorkerEvidence | null;
+  spentUsd: number | null;
 }
 
 export interface PanelData {
@@ -640,6 +658,23 @@ export interface PanelData {
   tree: PanelTreeGroup[];
   terminal: PanelTerminalEntry[];
   merge: PanelMergeEntry[];
+}
+
+/** worker 验证证据四态的人话（W4b）。null 与 "absent" **必须**分开：前者是「这一拍没带标记」
+ *  （旧会话回程 / 本 worker 没真改过文件），后者是机器判出来的「全程没有任何验证拍」。
+ *  合并成一句等于把不可知说成一个已知事实。 */
+export function workerEvidenceLabel(verified: WorkerEvidence | null): string {
+  if (verified === "verified") return "已验证";
+  if (verified === "failed") return "验证未过";
+  if (verified === "stale") return "证据已过期";
+  if (verified === "absent") return "无验证拍";
+  return "无回程标记";
+}
+
+/** 每个 worker 的表价花费（W3②）。null = 价格不可知 ⇒ 明说未知，绝不写成 $0.00（那正是
+ *  「这轮没花钱」的假证据）。 */
+export function workerSpentLabel(spentUsd: number | null): string {
+  return spentUsd === null ? "价格未知" : "$" + spentUsd.toFixed(4);
 }
 
 /** 空面板数据（无事件流时的缺省：四块全空，渲染层据此走空态而非演示数据）。 */
@@ -688,6 +723,6 @@ export function projectPanelData(events: AgentEvent[], workspace: string | null)
     files,
     tree: [...groups.entries()].map(([dir, fs]) => ({ dir, files: fs })),
     terminal,
-    merge: projectMergeTower(events).map((c) => ({ agent_id: c.agent_id, task: c.task, status: c.status, outcome: c.outcome })),
+    merge: projectMergeTower(events).map((c) => ({ agent_id: c.agent_id, task: c.task, status: c.status, outcome: c.outcome, verified: c.verified, spentUsd: c.spentUsd })),
   };
 }

@@ -3832,6 +3832,30 @@ const MUTATIONS = [
     apply: (s) => s.replace("const errs = pluginCache.errors || [];", "const errs = [];"),
     expectFail: "加载错误必须上屏（插件没跑起来时，这是用户唯一的线索）",
   },
+  {
+    id: "merge-tower-hides-verification-evidence",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-git-evidence.test.ts",
+    desc: "合并控制塔不渲染证据徽标 ⇒ W4b 的四态只活在事件流里，用户看一列 merged 就以为交付验过了（「说验过」与「验过」再一次不分）",
+    apply: (s) => s.replace("'<span class=\"tag\" data-ev=\"' + esc(c.verified ?? 'none') + '\">' + esc(workerEvidenceLabel(c.verified)) + '</span>' +", "'' +"),
+    expectFail: "每一列都带证据态与花费账，且证据态有机器可查的 data-ev",
+  },
+  {
+    id: "worker-evidence-unknown-said-as-absent",
+    src: "src/renderer/projections.ts",
+    test: "tests/projections.test.ts",
+    desc: "「这一拍没带标记」折成「无验证拍」⇒ 旧会话与机器判出的零验证被说成同一件事（把不可知记成一个已知事实）",
+    apply: (s) => s.replace('  return "无回程标记";', '  return "无验证拍";'),
+    expectFail: "「没带标记」与「机器判出没有验证拍」是两句话，不许合并",
+  },
+  {
+    id: "worker-price-unknown-rendered-as-zero",
+    src: "src/renderer/projections.ts",
+    test: "tests/projections.test.ts",
+    desc: "价格不可知渲染成 $0.0000 ⇒ 面板上这条 worker 看着没花钱（§4.4.8 的 BYOK 底线：不可知不得记成免费）",
+    apply: (s) => s.replace('return spentUsd === null ? "价格未知" : "$" + spentUsd.toFixed(4);', 'return "$" + (spentUsd ?? 0).toFixed(4);'),
+    expectFail: "价格不可知说「价格未知」，真话 $0 才写 $0.0000（不可知≠免费）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
