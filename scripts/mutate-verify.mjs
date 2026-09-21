@@ -3952,6 +3952,22 @@ const MUTATIONS = [
     apply: (s) => s.replace("    targetAgentId: col.agent_id,\n    action,\n  };", "    targetAgentId: col.agent_id,\n    action: action === \"resume\" ? (\"continue\" as typeof action) : action,\n  };"),
     expectFail: "重派把原 spawn 参数带回 payload.respawn",
   },
+  {
+    id: "skip-reason-shown-as-raw-token",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-skip-reason.test.ts",
+    desc: "跳过一行的标题退回原始 token（overlap）⇒ 无人值守任务为什么没跑，用户仍得展开卡片读 JSON（§12.2.6 承诺的中文标签又一次只落在代码里）",
+    apply: (s) => s.replace("return base + '：' + name + skipReasonLabel(e.reason);", "return base + '：' + name + String(e.reason);"),
+    expectFail: "跳过一行的标题说清是哪条任务、为什么跳过",
+  },
+  {
+    id: "empty-panel-shape-missing-a-field",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-skip-reason.test.ts",
+    desc: "PanelData 加了字段而 EMPTY_PANEL_DATA 没跟上 ⇒ 空态与投影形状分叉，渲染层按 undefined 索引就整块空掉（历史上加 agents 就得同时改两处）",
+    apply: (s) => s.replace("terminal: [], merge: [], agents: [] };", "terminal: [], merge: [] };"),
+    expectFail: "空态面板形状 = 投影形状",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
