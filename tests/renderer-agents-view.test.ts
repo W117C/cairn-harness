@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { expect, it } from 'vitest';
-import { agentStatusText } from '../src/renderer/projections';
+import { agentStatusText, workerRowActions } from '../src/renderer/projections';
 
 const source = readFileSync(new URL('../src/renderer/app.js', import.meta.url), 'utf8');
 
@@ -13,6 +13,7 @@ function agentsHTML(agents: unknown[]) {
     panelData: { workspace: null, files: [], tree: [], terminal: [], merge: [], agents },
     esc: (s: unknown) => String(s),
     agentStatusText,
+    workerRowActions,
     __out: "",
   };
   const a = source.indexOf('/* 子智能体（worker）一列一行');
@@ -56,6 +57,21 @@ it('「等人」不与「运行中」混为一谈；未终态时长不写 0.0s',
 
 it('没派过子智能体时说没有，不编一列', () => {
   expect(agentsHTML([])).toContain('这条会话还没派过子智能体');
+});
+
+it('行内按钮只给还能做动作的列：在跑的给取消，被中断的给重派，跑完的什么都不给', () => {
+  const run = agentsHTML([col({ status: 'running' })]);
+  expect(run).toContain('data-agent-act="cancel"');
+  expect(run).toContain('取消');
+  expect(run).not.toContain('data-agent-act="respawn"');
+  const interrupted = agentsHTML([col({ status: 'failed', reason: 'interrupted' })]);
+  expect(interrupted).toContain('data-agent-act="respawn"');
+  expect(interrupted).toContain('重派');
+  expect(interrupted).not.toContain('data-agent-act="cancel"');
+  // 跑完 / 自己拒的 / 到轮次上限失败的：一个按钮都不给（给了就是假出口）
+  for (const done of [col({ status: 'done' }), col({ status: 'cancelled' }), col({ status: 'failed', reason: 'max_turns' })]) {
+    expect(agentsHTML([done])).not.toContain('data-agent-act');
+  }
 });
 
 // 接线判据：上面三条形测试各自造列，绕过了「事件流 → panelData」这一跳。

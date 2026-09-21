@@ -624,6 +624,49 @@ export function cardActionForApproval(ask: WorkerApprovalAsk, approved: boolean)
   };
 }
 
+/** 这一列现在**值得**让用户做的动作（§4.4.8 可中断 / §4.4.9 崩溃恢复出口）。
+ *  规则集中在这一处，渲染层只按返回数组出按钮：
+ *  ・活着的列 → 取消；・被崩溃恢复扫成 failed(interrupted) 的列 → 重派（恢复卡文案亲自承诺的那个按钮）；
+ *  ・其余（正常跑完 / 用户自己拒的 / 主动取消的）什么都不给——给一个就是假出口。
+ *  合并与丢弃刻意不在这里：那是删 worktree 与分支的破坏性动作，且「淘汰档强制删未合并改动」尚未裁决。 */
+export function workerRowActions(col: AgentColumn): { action: "cancel" | "respawn"; label: string; hint: string }[] {
+  if (col.status === "running" || col.status === "waiting_approval" || col.status === "waiting_input") {
+    return [{ action: "cancel", label: "取消", hint: "中断这个子智能体（它已写的改动留在 worktree 里，不自动合并）" }];
+  }
+  if (col.status === "failed" && col.reason === "interrupted") {
+    return [{ action: "respawn", label: "重派", hint: "按原任务重新派一个（全新 agent_id，会再花一次这一段的钱）" }];
+  }
+  return [];
+}
+
+/** 行内动作 → card_action 载荷（§10.3 唯一事件流入口；形状与 agents-check A4/J 段同源）。 */
+export function cardActionForWorkerRow(
+  col: { agent_id: string; parent_event_id: number; mode: string; task: string },
+  action: "cancel" | "respawn",
+): {
+  cardId: string;
+  sourceEventId: number;
+  cardType: string;
+  action: string;
+  targetAgentId: string;
+  payload?: { respawn: { mode: "read" | "write"; task: string } };
+} {
+  const base = {
+    cardId: "agent:" + col.agent_id,
+    sourceEventId: Number.isInteger(col.parent_event_id) ? col.parent_event_id : 0,
+    targetAgentId: col.agent_id,
+  };
+  if (action === "respawn") {
+    return {
+      ...base,
+      cardType: "agent_result",
+      action: "respawn",
+      payload: { respawn: { mode: col.mode === "write" ? "write" : "read", task: col.task } },
+    };
+  }
+  return { ...base, cardType: "agent_card", action: "cancel" };
+}
+
 // ---- M4a 定时任务投影辅助（renderer 纯函数，不 import main/scheduler——避免 node:fs 进 bundle）----
 
 // ---- G10（审查 P3）：面板与卡片各写一份的公共映射，抽唯一实现防漂移 ----

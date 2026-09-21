@@ -1,5 +1,5 @@
 import { projectUnits, mountHistory } from './history-window.js';
-import { projectPanelData, workerEvidenceLabel, workerSpentLabel, agentStatusText, workerApprovalAsks, cardActionForApproval, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN } from './projections';
+import { projectPanelData, workerEvidenceLabel, workerSpentLabel, agentStatusText, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN } from './projections';
 import { $, esc, promptInput, sessionList, streamInner, toast } from './dom.js';
 import { ICONS, RUN_GRID_HTML, runGrid } from './icons.js';
 import { highlightAllDiffs } from './diff-highlight.js';
@@ -1217,8 +1217,9 @@ function agentsViewHTML() {
   const waiting = cols.filter(c => c.status === 'waiting_approval' || c.status === 'waiting_input').length;
   return '<div class="sched-status"><span class="sched-chip">worker ' + String(cols.length) + '</span>' +
     (waiting > 0 ? '<span class="sched-chip">等人 ' + String(waiting) + '</span>' : '') + '</div>' +
-    cols.map(c =>
-      '<div class="sched-task agent-row" data-agent="' + esc(c.agent_id) + '">' +
+    cols.map((c) => {
+      const acts = workerRowActions(c);
+      return '<div class="sched-task agent-row" data-agent="' + esc(c.agent_id) + '">' +
         '<div class="sched-main">' +
           '<div class="sched-name">' + esc(c.agent_id) + '（' + esc(agentStatusText(c.status)) + ' · ' + esc(c.mode) + '）</div>' +
           '<div class="sched-prompt">' + esc(c.task || '(无任务描述)') + '</div>' +
@@ -1227,8 +1228,13 @@ function agentsViewHTML() {
           (c.pendingApproval ? '<div class="sched-when">待批：' + esc(c.pendingApproval.tool) + '（' + esc(c.pendingApproval.risk) + '）</div>' : '') +
           (c.recent || []).slice(0, 3).map(r => '<div class="sched-when dim">' + esc(String(r).slice(0, 90)) + '</div>').join('') +
           (c.report ? '<div class="sched-prompt">' + esc(String(c.report).slice(0, 160)) + '</div>' : '') +
+          /* 按钮面完全由 workerRowActions 决定（规则在投影里，渲染层不加判断） */
+          (acts.length > 0 ? '<div class="sched-acts">' + acts.map(a =>
+            '<button class="sched-btn' + (a.action === 'cancel' ? ' danger' : '') + '" data-agent-act="' + a.action +
+            '" title="' + esc(a.hint) + '">' + esc(a.label) + '</button>').join('') + '</div>' : '') +
         '</div>' +
-      '</div>').join('');
+      '</div>';
+    }).join('');
 }
 
 function viewHTML(key) {
@@ -3573,10 +3579,32 @@ render();
     if (typeof renderSide === 'function') renderSide();
   }
 
+  /* 子智能体行内动作（取消 / 重派）：与审批同一族出口——card_action 是事件流的唯一写端。
+     回条 ok=false 必须说出口：这条路上没有任何别的反馈。 */
+  async function runWorkerRowAction(col, action) {
+    if (action !== 'cancel' && action !== 'respawn') return;
+    try {
+      const r = await api.cardAction(cardActionForWorkerRow(col, action));
+      if (r && r.ok === false) { toast('动作未被受理：' + (r.error || '未知')); return; }
+      toast(action === 'cancel' ? '已请求取消：' + col.agent_id : '已按原任务重派（全新 agent_id，会再花一次这一段的钱）');
+    } catch (err) {
+      toast('动作失败：' + ((err && err.message) || String(err)));
+    }
+  }
+
   const sidePagesHost = $('.side-pages');
   if (sidePagesHost && typeof sidePagesHost.addEventListener === 'function') {
     sidePagesHost.addEventListener('click', async (e) => {
       // 记忆删除与定时任务动作共用这一个委托处理器（抽屉里的行内按钮只有一个宿主，别开第二条）
+      const agentBtn = e.target.closest('[data-agent-act]');
+      if (agentBtn) {
+        const row = agentBtn.closest('.agent-row');
+        const id = row && row.dataset.agent;
+        const col = id ? (panelData.agents || []).find(c => c.agent_id === id) : null;
+        if (!col) { toast('这一列已不在事件流里（刷新后再试）'); return; }
+        await runWorkerRowAction(col, agentBtn.dataset.agentAct);
+        return;
+      }
       const plugBtn = e.target.closest('[data-plug-act]');
       if (plugBtn) {
         const row = plugBtn.closest('.plug-row');

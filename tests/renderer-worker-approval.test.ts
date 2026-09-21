@@ -3,7 +3,7 @@
 // （`waitForApproval` 有 approvalTimeoutMs 缺省 120s）⇒ 产品里每条 worker 审批都被自动拒掉。
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
-import { cardActionForApproval, projectAgentPanel, workerApprovalAsks } from "../src/renderer/projections";
+import { cardActionForApproval, cardActionForWorkerRow, projectAgentPanel, workerApprovalAsks } from "../src/renderer/projections";
 import type { AgentEvent } from "../src/events";
 
 const spawn = { type: "agent_spawned", agent_id: "wt-1", parent_event_id: 3, mode: "write", task: "修排序", max_turns: 8, permission_mode: "default" } as unknown as AgentEvent;
@@ -50,4 +50,20 @@ it("审批事件在面板脏集里（不然卡会晚到，甚至永远晚到超�
   for (const t of ["approval_requested", "approval_resolved", "agent_spawned", "agent_status"]) {
     expect(m![1], t + " 必须进脏集").toContain(t + ":");
   }
+});
+
+// 取消与重派：同一族写端（card_action），此前产品里连这两个出口都没有——
+// 「可中断/可接管」对 worker 不成立，崩溃恢复卡文案写着「可在恢复卡重派」而那张卡没有按钮。
+it("取消发 agent_card/cancel，重派把原 spawn 参数带回 payload.respawn", () => {
+  const col = { agent_id: "wt-7", parent_event_id: 12, mode: "write", task: "修分页" };
+  expect(cardActionForWorkerRow(col, "cancel")).toEqual({
+    cardId: "agent:wt-7", sourceEventId: 12, targetAgentId: "wt-7", cardType: "agent_card", action: "cancel",
+  });
+  expect(cardActionForWorkerRow(col, "respawn")).toEqual({
+    cardId: "agent:wt-7", sourceEventId: 12, targetAgentId: "wt-7", cardType: "agent_result", action: "respawn",
+    payload: { respawn: { mode: "write", task: "修分页" } },
+  });
+  // mode 只认 read|write（main 侧 zod 式校验：别的值整条拒）
+  expect(cardActionForWorkerRow({ ...col, mode: "?" }, "respawn").payload?.respawn.mode).toBe("read");
+  expect(cardActionForWorkerRow({ ...col, parent_event_id: 1.5 }, "cancel").sourceEventId).toBe(0);
 });
