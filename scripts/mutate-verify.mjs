@@ -3280,7 +3280,8 @@ const MUTATIONS = [
     src: "src/agent/worker-projection.ts",
     test: "tests/worker-attribution.test.ts",
     desc: "把 verify_result 摘出归因面 ⇒ worker 的验证证据回到「与父会话难分」的状态：上下文红回流、父验证计量、假完成率三处同时被骗",
-    apply: (s) => s.replace("if (e.type === \"tool_call\" || e.type === \"tool_result\" || e.type === \"usage\" || e.type === \"verify_result\") {", "if (e.type === \"tool_call\" || e.type === \"tool_result\" || e.type === \"usage\") {"),
+    // 针脚随 turn_truncated 进白名单而改指（2026-09-21）：语义逐字不变——仍然只摘 verify_result。
+    apply: (s) => s.replace("if (e.type === \"tool_call\" || e.type === \"tool_result\" || e.type === \"usage\" || e.type === \"verify_result\" || e.type === \"turn_truncated\") {", "if (e.type === \"tool_call\" || e.type === \"tool_result\" || e.type === \"usage\" || e.type === \"turn_truncated\") {"),
     expectFail: "verify_result 进归因面：worker 的验证证据必须能被认出不是父会话的",
   },
   {
@@ -4525,7 +4526,7 @@ const MUTATIONS = [
     src: "src/providers/stop-reason.ts",
     test: "tests/turn-truncated.test.ts",
     desc: "真值判断代替 != null ⇒ output_tokens=0 被折成「provider 没上报」（0 也是读数）",
-    apply: (s) => s.replace('...(outputTokens !== null && outputTokens !== undefined ? { output_tokens: outputTokens } : {}),', '...(outputTokens ? { output_tokens: outputTokens } : {}),'),
+    apply: (s) => s.replace('...(tokens !== null ? { output_tokens: tokens } : {}),', '...(tokens ? { output_tokens: tokens } : {}),'),
     expectFail: "output_tokens：0 要如实留（0 也是读数），null/undefined 才不落字段",
   },
   {
@@ -4533,7 +4534,7 @@ const MUTATIONS = [
     src: "src/providers/anthropic.ts",
     test: "tests/turn-truncated.test.ts",
     desc: "摘掉 message_delta 里那句读取 ⇒ 退回本轮动手前的原状（字段在、零读者）",
-    apply: (s) => s.replace('        if (event.delta?.stop_reason !== undefined) stopReason = event.delta.stop_reason;\n', ''),
+    apply: (s) => s.replace('if (typeof event.delta?.stop_reason === "string") stopReason = event.delta.stop_reason;\n', ''),
     expectFail: "anthropic：message_delta 带 max_tokens ⇒ 流尾多出一条 turn_truncated",
   },
   {
@@ -4582,7 +4583,7 @@ const MUTATIONS = [
     src: "src/agent/compaction.ts",
     test: "tests/turn-truncated.test.ts",
     desc: "把「篇幅用尽」与「内容策略中止」并成一句 ⇒ 摘要里看不出下一步该续写还是改道",
-    apply: (s) => s.replace('(e.outcome === "output_budget" ? "没写完就被收走（篇幅用尽" : "被内容策略中止（")', '"没写完就被收走（篇幅用尽" + "（"'),
+    apply: (s) => s.replace('(e.outcome === "output_budget" ? "没写完就被收走（篇幅用尽，停止原因 " : "被内容策略中止（停止原因 ")', '"没写完就被收走（篇幅用尽，停止原因 " +'),
     expectFail: "内容策略中止与篇幅用尽各说各的（两种原因的下一步不同）",
   },
   {
@@ -4608,6 +4609,54 @@ const MUTATIONS = [
     desc: "算了 lastTurnWasTruncated 却不挂进 GoalView ⇒ 生产入口拿不到（纯函数有单测正是漏接的藏身处）",
     apply: (s) => s.replace('    truncated: lastTurnWasTruncated(window),\n', ''),
     expectFail: "读过事件流就能拿到这个判断（projectGoal 算了不许丢——「两头断」防线）",
+  },
+  {
+    id: "worker-truncation-reaches-parent-untagged",
+    src: "src/agent/worker-projection.ts",
+    test: "tests/turn-truncated.test.ts",
+    desc: "withAgentId 的类型白名单不收 turn_truncated ⇒ 子流截断以「主会话上一轮没说完」落进父转录与父目标判据",
+    apply: (s) => s.replace('e.type === "verify_result" || e.type === "turn_truncated"', 'e.type === "verify_result"'),
+    expectFail: "worker 子流的截断会被装饰 agent_id（否则它以「主会话上一轮没说完」落进父转录）",
+  },
+  {
+    id: "anthropic-null-frame-clobbers-stop-reason",
+    src: "src/providers/anthropic.ts",
+    test: "tests/turn-truncated.test.ts",
+    desc: "无条件赋值（只看 !== undefined 或干脆不判）⇒ 后到的 stop_reason:null 帧抹掉已拿到的 max_tokens",
+    apply: (s) => s.replace('if (typeof event.delta?.stop_reason === "string") stopReason = event.delta.stop_reason;', 'stopReason = event.delta?.stop_reason;'),
+    expectFail: "anthropic：后到的 stop_reason:null 帧不得抹掉已拿到的 max_tokens",
+  },
+  {
+    id: "token-count-coercion-lost",
+    src: "src/providers/stop-reason.ts",
+    test: "tests/turn-truncated.test.ts",
+    desc: "去掉 Number.isFinite 这道界 ⇒ NaN/Infinity 当作读数存进来，而它会被拼进滚动摘要的散文行",
+    apply: (s) => s.replace('if (typeof v !== "number" || !Number.isFinite(v) || v < 0) return null;', 'if (typeof v !== "number" || v < 0) return null;'),
+    expectFail: "output_tokens 只收有限非负数：字符串/NaN/Infinity 一律落缺席，不进散文行",
+  },
+  {
+    id: "sbx-network-branch-dropped",
+    src: "src/main/sandbox.ts",
+    test: "tests/sandbox.test.ts",
+    desc: "allow 支不再写 network 规则 ⇒ §11.4「批准 → Enabled」回到空头：审批存在但网络永远拿不到（sandbox:check ④b 同红）",
+    apply: (s) => s.replace('if (opts.network === "allow") {', 'if (false) {'),
+    expectFail: "allow 支只加两条 network 放行，写收敛与拒读一字不动",
+  },
+  {
+    id: "sbx-network-escort-ors-conditions",
+    src: "src/main/sandbox.ts",
+    test: "tests/sandbox.test.ts",
+    desc: "三条取用条件由 && 退化成 || ⇒ auto 档没问过人工也拿到网络（§11.4 红线「网络全开不是免批条件」被构造性违反）",
+    apply: (s) => s.replace('return input.wantsNetwork && input.asked && input.approved ? "allow" : "deny";', 'return input.wantsNetwork || input.asked || input.approved ? "allow" : "deny";'),
+    expectFail: "真值表：三条条件缺一即 deny，全齐才 allow",
+  },
+  {
+    id: "sbx-note-gate-dropped",
+    src: "src/main/sandbox.ts",
+    test: "tests/sandbox.test.ts",
+    desc: "断网提示不再看 network 支 ⇒ 已放行的命令也被贴「被默认沙箱断网」，模型照提示重发＝白烧一轮",
+    apply: (s) => s.replace('if (network === "allow" || !looksLikeNetworkDenial(result.output)) return result;', 'if (!looksLikeNetworkDenial(result.output)) return result;'),
+    expectFail: "deny 支下补一行可行动的提示；allow 支与无提示串一律原样返回",
   },
 ];
 
