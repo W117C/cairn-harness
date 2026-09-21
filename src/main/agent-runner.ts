@@ -1629,6 +1629,7 @@ async function goalNextTurn(args: {
     spentUsd,
     evidence: view.evidence,
     wrote: view.wrote,
+    truncated: view.truncated,
   });
   if (decision.kind === "done") return null;
   if (decision.kind === "stop") {

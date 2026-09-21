@@ -36,6 +36,9 @@ export interface GoalDecisionInput {
   evidence: WorkerEvidence;
   /** 本会话写过盘吗（write_file/edit_file 成功过）。 */
   wrote: boolean;
+  /** **收尾那一轮**是被收走的（输出预算/内容策略），还是模型自己说完了。
+   *  缺了它，「被 max_tokens 砍断」与「模型宣称done」在判据里是同一个形状。 */
+  truncated: boolean;
 }
 
 export type GoalStop =
@@ -94,7 +97,7 @@ export function parseGoalSpec(raw: unknown): GoalParseResult {
 /** 续跑判据。次序即优先级：先认「已达成」，再认「轮次用尽」，再认「钱花到」，最后才问要不要再来一轮。
  *  done 只由绿证据成立——散文自述不算数（顶尖与普通差在「能证明代码真的能跑」）。 */
 export function goalStopDecision(input: GoalDecisionInput): GoalStop {
-  const { turn, spec, spentUsd, evidence, wrote } = input;
+  const { turn, spec, spentUsd, evidence, wrote, truncated } = input;
 
   if (evidence === "verified") return { kind: "done" };
 
@@ -115,6 +118,16 @@ export function goalStopDecision(input: GoalDecisionInput): GoalStop {
   }
 
   if (evidence === "absent" && !wrote) {
+    // 「没写盘也没证据」有两种完全不同的成因，而旧判据只看形状不看原因：
+    // 模型自己说完了 → 续跑确实白花钱；**上一轮被输出预算砍断** → 它根本没说完了，
+    // 此时停是把「被打断」擦成「没产出」。轮次闸与美元闸都在本分支之前判过，
+    // 所以这一支 continue 不可能造成无界花费。
+    if (truncated) {
+      return {
+        kind: "continue",
+        note: "上一轮是被收走的（输出预算/内容策略），不是模型宣布完成 ⇒ 先让它把这一轮说完",
+      };
+    }
     return {
       kind: "stop",
       reason:
@@ -123,6 +136,25 @@ export function goalStopDecision(input: GoalDecisionInput): GoalStop {
   }
 
   return { kind: "continue", note: "证据 " + EVIDENCE_TEXT[evidence] + "；" + budgetLine(spec, spentUsd) + "；第 " + String(turn) + "/" + String(spec.maxTurns) + " 轮" };
+}
+
+/** 收尾那一轮是不是「没说完就被收走」。
+ *  从流尾往回走，第一个**内容事件**决定答案：截断事件本身 → 是；模型正文/工具调用/新一轮提问 → 否。
+ *  只认主 loop 的截断（`agent_id` 在场的是 worker 子流，父目标不替 worker 的轮次表态，§4.4.4）。
+ *  usage / session_meta / verify_result 等纯计量与纯证据事件继续往回找——自动验证拍就落在截断之后，
+ *  把它当「新内容」会让这条判据在最该 continue 的那一格失灵。 */
+export function lastTurnWasTruncated(events: AgentEvent[]): boolean {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    if (e.type === "turn_truncated") return e.agent_id === undefined;
+    if (
+      e.type === "assistant_message" || e.type === "assistant_delta" ||
+      e.type === "tool_call" || e.type === "user_message"
+    ) {
+      return false;
+    }
+  }
+  return false;
 }
 
 /** 钱的一句话：没设闸 / 价格不可知 / 正常读数，三种分开说。**不可知那一支必须自己出现**，
@@ -153,6 +185,8 @@ export interface GoalView {
   turn: number;
   evidence: WorkerEvidence;
   wrote: boolean;
+  /** 收尾那一轮是被收走的还是说完了（与 goalStopDecision 的 truncated 同源，同一个函数算）。 */
+  truncated: boolean;
   /** 已停下来的原因（`goal_stopped` 原文）；null = 还没停。 */
   stopped: string | null;
   /** **本目标窗口内**（与证据/写盘同一段）的累计 token。美元闸必须量这个，不能量整段会话：
@@ -174,6 +208,7 @@ export function projectGoal(events: AgentEvent[]): GoalView | null {
     turn: trace.turn,
     evidence: workerVerificationEvidence(window),
     wrote: hasSessionWrites(window),
+    truncated: lastTurnWasTruncated(window),
     stopped: trace.stopped,
     usage: sumWindowUsage(window),
   };

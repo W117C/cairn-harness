@@ -37,6 +37,7 @@ function decide(over: Partial<GoalDecisionInput> = {}) {
     spentUsd: 0.02,
     evidence: "absent",
     wrote: true,
+    truncated: false,
     ...over,
   });
 }

@@ -12,6 +12,7 @@ import { createEventLog } from "../src/events";
 import { normalizeStopReason, truncationOf, turnTruncatedEvent } from "../src/providers/stop-reason";
 import { projectContext, truncationNote } from "../src/agent/context";
 import { serializeConversation } from "../src/agent/compaction";
+import { goalStopDecision, lastTurnWasTruncated, projectGoal } from "../src/agent/goal";
 import { runLoop } from "../src/agent/loop";
 import { createMockProvider } from "../src/providers/mock";
 import { createGlmSessionProvider } from "../src/agent/glm-session";
@@ -427,5 +428,79 @@ describe("摘要输入（serializeConversation）", () => {
     ], 2000);
     expect(s).toContain("[Assistant] 半句 A + 半句 B");
     expect(s.indexOf("半句 A + 半句 B")).toBeLessThan(s.indexOf("[Assistant 回复被截断]"));
+  });
+});
+
+// goal 模式：被砍断的一轮原本与「模型宣布完成」同一个形状，于是最要命的地方在于——
+// 它会**停下来**并对用户说「这个目标没有可验证的产出，自动续跑只会白花钱」。
+// 把「被打断」擦成「没产出」，正是目标所要求的「遇到失败能重试、换路径，而不是卡死」的反面。
+describe("goal 续跑判据", () => {
+  const trunc = { type: "turn_truncated", callId: "m1", outcome: "output_budget", stop_reason: "max_tokens" } as const;
+  const SPEC = { objective: "讲清楚 flush", maxTurns: 8, maxUsd: 0 };
+
+  it("被收走的那一轮 ⇒ 继续，而不是宣布「没有可验证的产出」", () => {
+    const d = goalStopDecision({ turn: 1, spec: SPEC, spentUsd: null, evidence: "absent", wrote: false, truncated: true });
+    expect(d.kind).toBe("continue");
+    if (d.kind !== "continue") throw new Error("不该停");
+    expect(d.note).toContain("不是模型宣布完成");
+  });
+
+  it("负控（回归锁）：模型自己说完且没产出 ⇒ 仍然停，理由逐字不变", () => {
+    const d = goalStopDecision({ turn: 1, spec: SPEC, spentUsd: null, evidence: "absent", wrote: false, truncated: false });
+    expect(d.kind).toBe("stop");
+    if (d.kind !== "stop") throw new Error("该停");
+    expect(d.reason).toBe(
+      "没有写过任何文件、也没有任何验证证据 ⇒ 这个目标没有可验证的产出，自动续跑只会白花钱；纯问答/查代码类目标请关掉 goal 模式",
+    );
+  });
+
+  // 这两条是本改动的安全边界：continue 只可能在轮次闸与美元闸**之后**才走到，
+  // 所以「被截断」不可能换来无界花费。摘掉这个次序（把 truncated 提到最前面判）必红其中之一。
+  it("轮次上限已用尽 + 被截断 ⇒ 仍然停（截断不给额外的轮）", () => {
+    const d = goalStopDecision({ turn: 8, spec: SPEC, spentUsd: null, evidence: "absent", wrote: false, truncated: true });
+    expect(d.kind).toBe("stop");
+    if (d.kind !== "stop") throw new Error("该停");
+    expect(d.reason).toContain("轮次上限");
+  });
+
+  it("美元上限已花到 + 被截断 ⇒ 仍然停（截断不给额外的钱）", () => {
+    const d = goalStopDecision({
+      turn: 1, spec: { ...SPEC, maxUsd: 0.5 }, spentUsd: 0.5, evidence: "absent", wrote: false, truncated: true,
+    });
+    expect(d.kind).toBe("stop");
+    if (d.kind !== "stop") throw new Error("该停");
+    expect(d.reason).toContain("美元上限");
+  });
+
+  it("读过事件流就能拿到这个判断（projectGoal 算了不许丢——「两头断」防线）", () => {
+    const view = projectGoal([
+      { type: "goal_set", objective: "讲清楚 flush", max_turns: 8, max_usd: 0 },
+      { type: "user_message", content: "讲清楚 flush" },
+      { type: "assistant_delta", callId: "m1", text: "关键在于" },
+      { type: "usage", inputTokens: 20, outputTokens: 4096 },
+      trunc,
+    ]);
+    expect(view?.truncated).toBe(true);
+    expect(view?.wrote).toBe(false);
+    // 用 view 直接喂决策：证明字段不是算完就丢
+    expect(goalStopDecision({
+      turn: view!.turn, spec: view!.spec, spentUsd: null, evidence: view!.evidence,
+      wrote: view!.wrote, truncated: view!.truncated,
+    }).kind).toBe("continue");
+  });
+
+  it("新提示已经进来 ⇒ 打断不再是当前态（旧截断不该替这一轮说话）", () => {
+    const truncAt = { ...trunc };
+    expect(lastTurnWasTruncated([truncAt])).toBe(true);
+    // 纯计量与纯证据事件不算「新内容」：自动验证拍就落在截断之后
+    expect(lastTurnWasTruncated([
+      truncAt, { type: "usage", inputTokens: 1, outputTokens: 1 },
+      { type: "verify_result", callId: "harness-auto-verify", ok: false, attempt: 1, maxAttempts: 3, results: [], auto: true },
+    ])).toBe(true);
+    expect(lastTurnWasTruncated([truncAt, { type: "user_message", content: "接着说" }])).toBe(false);
+    expect(lastTurnWasTruncated([{ type: "assistant_message", content: "说完了" }])).toBe(false);
+    // worker 子流的截断不替父目标表态（§4.4.4：父只收 agent_result）
+    expect(lastTurnWasTruncated([{ ...truncAt, agent_id: "worker-1" }])).toBe(false);
+    expect(lastTurnWasTruncated([])).toBe(false);
   });
 });

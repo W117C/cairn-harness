@@ -157,6 +157,36 @@ if-else 链静默丢弃。后果不是"少一行"：压缩会**排除**被摘要
   `scripts/` 里没有对 `[Assistant]`/`[Tool result` 标签的文本断言 ⇒ 新增一行不会打断任何门
   （规则 13 那条「改文案要扫 scripts/」这里扫过，零命中）。
 
+## 第四程（同日）：goal 模式原本把「被打断」擦成「没产出」
+
+按规则 50 自己去查剩下的折叠面，撞到**本通道最要紧的一处**：
+`goal.ts` 的 `goalStopDecision` 在 `evidence === "absent" && !wrote` 时**停下来**，理由是
+「这个目标没有可验证的产出，自动续跑只会白花钱」。而被 `max_tokens` 砍断的一轮
+（没写盘、没验证、没 tool_call）恰好落进这一支 ⇒ **harness 把「被打断」擦成「没产出」并收摊**，
+还反过来建议用户「纯问答类目标请关掉 goal 模式」。这与目标里
+「遇到失败能重试、换路径，而不是卡死」「长任务能力」正相反，而且发生在**最不需要人盯着**的那条路上。
+
+改法（`GoalDecisionInput.truncated` + `lastTurnWasTruncated`）：这一支先看原因再决定——
+被收走的 continue，自己说完的才停。**安全性由判据次序免费得到**：轮次闸与美元闸都在这一支
+**之前**判过，所以 continue 不可能换来无界花费；这一点不是口头承诺，有两条测例正面钉住
+（轮次上限已用尽 + 被截断 ⇒ 仍 stop；美元上限已花到 + 被截断 ⇒ 仍 stop）。
+
+`lastTurnWasTruncated` 的三条口径都各有测例，因为它们各自对应一种会静默失灵：
+- 从流尾往回走，**第一个内容事件**才作数：usage / verify_result 是纯计量与纯证据事件，
+  继续往回找——自动验证拍就落在截断之后，把它当"新内容"会让这条判据在最该 continue 的那一格失灵；
+- 后面已经来了新 `user_message` ⇒ 打断不再是当前态（旧截断不该替这一轮说话）；
+- `agent_id` 在场的（worker 子流）不算（§4.4.4：父目标只收 `agent_result`）。
+
+**没有**把这件事同时写进 `goalReminder`：`decision.note` 在生产里**没有读者**（agent-runner 只用
+`goalReminder`，note 被丢弃——又一处「算完就丢」，另案），而模型本来就能从 `truncationNote`
+那条投影看到这个事实，再抄一份就是同一拍两份事实。
+
+RED 的性质这一程要说清楚：新判据没法在 HEAD 上跑红，因为 HEAD 的 `goalStopDecision`
+**连 `truncated` 这个参数都不存在**——不是"判错"，是"无从判"。所以本程用的是**结构论证**
+（读 HEAD 第 117-123 行：那一支不看原因）+ 逐字回归锁（模型自己说完那一支的 stop 理由
+原文一字未改）。把行为级 RED 补上的办法是变异：三条新锚点已覆盖（摘掉 continue 支 /
+判据恒 false / 算了不挂进 view）。
+
 ## 待办（按优先级）
 
 1. 沉淀面：`failureDigestFromEvents`（能力 6/10）现在只看 `verify_result(ok:false)` 与

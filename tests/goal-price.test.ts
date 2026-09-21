@@ -52,6 +52,7 @@ describe("priceForModel：两态输入都要能落到价表", () => {
       spentUsd: spend === null ? null : spend.usd,
       evidence: "absent",
       wrote: true,
+      truncated: false,
     });
     expect(d.kind).toBe("stop");
   });
