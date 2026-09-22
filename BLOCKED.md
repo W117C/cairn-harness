@@ -895,3 +895,39 @@ prompt 缓存命中（A1）、压缩触发与裁剪（A2/预算认模型）、pe
 缺位的 `$9` 落成空串、`${SKILL_DIR}`/`${PLUGIN_ROOT}`/`${PROJECT_DIR}` 展开成真实目录。
 不动夹具、不动冻结判卷区（`fixtures/plugins/**` 不在 `src/frozen.ts` 的 areas 列表内，本轮也不改它）。
 
+## 裁决 5（请求改判据）：D7 快照目录名带墙钟 ⇒ `gym-check` B1「两次跑逐字段一致」在快照功能落库后恒红
+
+**事实（当场读数，非推断）**：`pnpm gym-check` 四条 case 的 B1 全红，红的那一维只有 `changedFiles`：
+
+```
+B1 todo-completed-count 不等：changedFiles:
+  [".agent/snapshots/1790113554154--c2/src/todo.js","src/todo.js"]
+≠ [".agent/snapshots/1790113554215--c2/src/todo.js","src/todo.js"]
+B1 order-pricing-triple-fix 不等：一次跑落了三个快照目录（…536--r6 / …536--r7 / …538--r9）
+```
+
+差值只有那 3 位毫秒数。`src/tools/snapshot.ts` 目前是**未跟踪**文件（`git status` → `?? src/tools/snapshot.ts`），
+⇒ HEAD 上**没有快照写入方**（`write_file.ts` 对它的 import 也未提交），因此 B1 在 HEAD 应当是绿的
+——这句是**推断，未实测**（实测要在第三个 worktree 里跑整条 verify 链，软链 node_modules 会把那条链做成假红，
+记忆第 52 条）。但**快照功能一旦落库，这条必红**，而红的原因是对的。
+
+**为什么这算判据缺陷而不是「把红修没」**：`changedFilesBetween`（`src/agent/gym/score.ts`）
+按「两棵树逐文件内容对比」收集**全部**差异，没有任何口径边界；而 D7 快照的目录名
+`= <Date.now()>--<callId>`，**按设计**每次覆写都不同（它要靠这个保证多次改同一文件不撞名，
+见 AGENTS 记的第七族「临时名只到毫秒」同一族谱）。两者一撞：`B1` 问的「同输入同输出」
+与快照的「每次都要一个新名字」在 `changedFiles` 这一维上不可能同时成立 ——
+**这条断言一旦快照落库就永远为假，而假的原因是对的**。
+
+**请求三选一（我不自行改判据）**：
+① 快照不落进工作区：改落会话目录 sidecar（`<sessionDir>/snapshots/…`），靶子树里干净 ⇒ B1 自然成立，
+   且 `promote-output-scan` 那类「产物里不该有 harness 记账」的判据一起受益（**我的推荐**）；
+② 给 `changedFilesBetween` 一条**具名**排除（`.agent/snapshots/**`），并在门的输出里打印「已按口径排除 X」，
+   让读门的人知道有一维被划出去了，而不是静默少看见；
+③ 快照目录名去掉墙钟（改用内容哈希或单调计数）——但这会动 D7 的撤销语义，属该功能所有者裁。
+
+**明确不许的解法**：把 `changedFiles` 整个从 B1 的六维里摘掉。那等于把「落盘集合的确定性」这一维
+静默丢掉（本仓最忌的假绿形状：门绿着，但它已经不看东西了）。我这一轮**只**改了红字的**措辞**
+——旧文案只报一个布尔，读不出是哪一维不稳；新文案点名不等的那几维并给出两边的值，
+判据的布尔、阈值、比较维度一字未动。
+
+

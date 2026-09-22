@@ -92,13 +92,21 @@ for (const c of loaded) {
   const r2 = await runCase(c, { model: "scripted" });
   try {
     turnCounts.push(r1.turns);
-    const same =
-      r1.score === r2.score &&
-      r1.verifyOk === r2.verifyOk &&
-      r1.inputTokens === r2.inputTokens &&
-      r1.outputTokens === r2.outputTokens &&
-      r1.turns === r2.turns &&
-      JSON.stringify(r1.changedFiles) === JSON.stringify(r2.changedFiles);
+    // 六个字段各自比，并把**不等的那几个连同两边的值**打出来。旧写法只打一个布尔
+    // ⇒「明卷两次跑逐字段一致」报红时读不出是哪一维不稳（score？usage？changedFiles？），
+    // 而这三种红的归因面完全不同（判卷器 / 用量折算 / 落盘集合）。
+    const fields: [string, (r: typeof r1) => unknown][] = [
+      ["score", (r) => r.score],
+      ["verifyOk", (r) => r.verifyOk],
+      ["inputTokens", (r) => r.inputTokens],
+      ["outputTokens", (r) => r.outputTokens],
+      ["turns", (r) => r.turns],
+      ["changedFiles", (r) => JSON.stringify(r.changedFiles)],
+    ];
+    const diffs = fields
+      .map(([name, get]) => [name, String(get(r1)), String(get(r2))] as const)
+      .filter(([, a, b]) => a !== b);
+    const same = diffs.length === 0;
     // 审查 S3-6（任务 3.6）：上面只比「两次跑是否一致」，不断言「跑对」。判卷面整体静默失灵时
     // （靶子路径挪了 / npm 跑不起来 => verify 恒 false），三次 score 全 0 也照样逐字段一致地绿，
     // 而 A 组反向用例（期望失败）同样不会红 = 整套尺子读不出正确解却报通过。明卷是照着解写的
@@ -109,7 +117,8 @@ for (const c of loaded) {
     );
     check(
       same,
-      `B1 ${c.id}: 明卷两次跑逐字段一致（score=${String(r1.score)} in=${String(r1.inputTokens)} out=${String(r1.outputTokens)} turns=${String(r1.turns)}）`,
+      `B1 ${c.id}: 明卷两次跑逐字段一致（score=${String(r1.score)} in=${String(r1.inputTokens)} out=${String(r1.outputTokens)} turns=${String(r1.turns)}）` +
+        (same ? "" : " —— 不等：" + diffs.map(([n, a, b]) => `${n}: ${a} ≠ ${b}`).join("；")),
     );
     // B1c：expect.maxTurns 此前**零消费者**（只在 loadCase 里校验类型）——一条写着却没人 enforce
     // 的预算就是假刻度。现在它真的会被强制。（四 case 的冻结数据都显式给了该字段，故这里
