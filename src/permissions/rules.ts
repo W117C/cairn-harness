@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { writeFileAtomic } from "../atomic-write";
-import { commandForms } from "./command-shape";
+import { commandForms, invocations, tokenize, tokenSubsequenceStart } from "./command-shape";
 import { ALLOW_PAYLOAD, isShellFamily } from "./risk";
 
 export type RuleBehavior = "allow" | "ask" | "deny";
@@ -138,6 +138,11 @@ export interface RuleHit {
   prefixLen: number;
   /** allow 命中但前缀之后还剩载荷：这条命中的**同意范围**不覆盖当前命令，已就地降为 ask。 */
   consentGap?: boolean;
+  /** ⑩：deny/ask 的词只在**某个不认识的头部 token 之后**按序出现（`setsid git push --force`）。
+   *  头部那个词是包装器还是"被 echo 出去的文本"判不准 ⇒ 不静默拒绝也不静默放行，降为 ask。
+   *  `headBeyondKnownToken` 是那一支的首词，只给卡面看。 */
+  headBeyondKnown?: boolean;
+  headBeyondKnownToken?: string;
 }
 
 /** **token 边界**前缀命中（09-22 已裁）：整串 `startsWith` 一头宽一头窄——
@@ -169,6 +174,7 @@ function matchSegment(rules: PermissionRule[], segment: string): RuleHit | null 
     const pattern = rule.pattern; // 取一次：形态匹配在 else 分支里，TS 的收窄跟不过 else-if 链
     let len: number;
     let gap = false;
+    let beyond = false;
     if (pattern === undefined) len = 0; // 裸工具名条目
     else if (rule.behavior === "allow") {
       len = prefixLenAtBoundary(segment, pattern);
@@ -177,24 +183,54 @@ function matchSegment(rules: PermissionRule[], segment: string): RuleHit | null 
       if (len >= 0) gap = ALLOW_PAYLOAD.test(segment.slice(len));
     } else {
       forms ??= commandForms(segment);
-      len = forms.some((f) => prefixLenAtBoundary(f, pattern) >= 0) ? pattern.length : -1;
+      if (forms.some((f) => prefixLenAtBoundary(f, pattern) >= 0)) len = pattern.length;
+      else {
+        // ⑩（09-22 已裁）的按序面：词的顺序对得上、中间插了别的词也算命中。
+        // 候选是**token 序列**（段本身 + 每个调用点的 `bin + args`），不是 `commandForms` 那些
+        // 重新 join 出来的字符串——引号在 join 时已经丢了，按字符串扫会把
+        // `echo 'git push --force'`（一个 token 的文本）当成三个词命中。
+        // 最早命中下标 > 0 ⇒ 规则的内容躲在一个不认识的头部 token 后面（setsid / pkexec /
+        // script …）：那可能是包装器也可能是被 echo 出去的文本，判不准就不静默拒绝、
+        // 也不静默放行 ⇒ 就地降为 ask，把决定权交回用户。
+        const starts = [tokenize(segment), ...invocations(segment).map((i) => [i.bin, ...i.args])]
+          .map((t) => tokenSubsequenceStart(t, pattern))
+          .filter((i) => i >= 0);
+        len = starts.length === 0 ? -1 : pattern.length;
+        beyond = starts.length > 0 && Math.min(...starts) > 0;
+      }
     }
     if (len < 0) continue;
-    const effective: PermissionRule = gap ? { ...rule, behavior: "ask" } : rule;
+    const headUnknown = beyond && rule.behavior === "deny";
+    const effective: PermissionRule = gap || headUnknown ? { ...rule, behavior: "ask" } : rule;
     if (
       best === null ||
       len > best.prefixLen ||
       (len === best.prefixLen && BEHAVIOR_RANK[effective.behavior] < BEHAVIOR_RANK[best.rule.behavior])
     ) {
-      best = { rule: effective, prefixLen: len, consentGap: gap };
+      best = {
+        rule: effective,
+        prefixLen: len,
+        consentGap: gap,
+        ...(headUnknown
+          ? { headBeyondKnown: true, headBeyondKnownToken: tokenize(segment)[0] ?? "" }
+          : {}),
+      };
     }
   }
   return best;
 }
 
 export type ChainVerdict =
-  /** `pattern` = 命中那条规则禁/放的字面（卡面要说得出「禁的是哪一段」，只有 ruleId 时用户得自己拆）。 */
-  | { verdict: "allow" | "ask" | "deny"; ruleId: string; pattern?: string; consentGap?: boolean }
+  /** `pattern` = 命中那条规则禁/放的字面（卡面要说得出「禁的是哪一段」，只有 ruleId 时用户得自己拆）。
+   *  `headBeyondKnown` / `headToken` = ⑩ 的降级凭据：规则的内容躲在这个首词后面，而首词我们认不出来。 */
+  | {
+      verdict: "allow" | "ask" | "deny";
+      ruleId: string;
+      pattern?: string;
+      consentGap?: boolean;
+      headBeyondKnown?: boolean;
+      headToken?: string;
+    }
   | { verdict: "miss" };
 
 /** 规则适用工具判定：shell 能力域内互通（run_shell ↔ shell_rw ↔ shell_ro）。
@@ -241,5 +277,8 @@ export function judgeChain(rules: PermissionRule[], tool: string, command?: stri
     ruleId: worst.rule.id ?? "",
     ...(worst.rule.pattern !== undefined ? { pattern: worst.rule.pattern } : {}),
     ...(worst.consentGap === true ? { consentGap: true } : {}),
+    ...(worst.headBeyondKnown === true
+      ? { headBeyondKnown: true, headToken: worst.headBeyondKnownToken ?? "" }
+      : {}),
   };
 }

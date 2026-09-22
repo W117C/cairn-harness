@@ -6,7 +6,7 @@
 //
 // 形状取自 scripts/probe-shell-bypass.ts（09-21 实测红 24 / 绿 9）的 ① 与 ③ 两段。
 import { describe, expect, it } from "vitest";
-import { commandForms, invocations, tokenize } from "../src/permissions/command-shape";
+import { commandForms, invocations, tokenize, tokenSubsequenceStart } from "../src/permissions/command-shape";
 
 const forms = (seg: string) => commandForms(seg.replace(/\s+/g, " ").trim());
 
@@ -127,5 +127,32 @@ describe("下游选项：二进制与子命令之间的全局选项不得把 den
     expect(f).not.toContain("sudo git status");
     expect(f).not.toContain("sudo root git status");
     expect(f).toContain("git status");
+  });
+});
+
+/* ---------------- ⑩ 的按序面（09-22 裁决后新增） ----------------
+   规则词按序出现即可命中，返回最早下标；下标正是「这条命令自己」与「躲在不认识的头部词后面」的分界。
+   入参是 **token 序列**不是字符串：join 会把引号吃掉，把 `echo '...'` 那种「一个 token 的文本」
+   看成三个词——首版按字符串扫就在这支上判错（`echo 'git push --force'` 被降成 ask），
+   所以这条负控和正例同批钉住。 */
+describe("⑩ tokenSubsequenceStart：按序命中 + 最早下标", () => {
+  const P = "git push --force";
+  const start = (text: string) => tokenSubsequenceStart(tokenize(text), P);
+
+  it("开头命中记 0（规则照原样生效），中间插词也算", () => {
+    expect(start("git push origin --force")).toBe(0);
+    expect(start("git push --no-verify --force")).toBe(0);
+    expect(start("git status")).toBe(-1);
+  });
+
+  it("躲在未知首词之后记下标 > 0（调用方据此降为必问）", () => {
+    expect(start("setsid git push --force")).toBe(1);
+    expect(start("prlimit --nofile=1024 git push --force")).toBe(2);
+    expect(start("script -q /dev/null git push --force")).toBe(3);
+  });
+
+  it("负控：引号里的整串文本是一个 token，看不见 pattern 的词；不带引号才是三个词", () => {
+    expect(start("echo 'git push --force'")).toBe(-1);
+    expect(start("printf git push --force")).toBe(1);
   });
 });

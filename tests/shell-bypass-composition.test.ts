@@ -301,40 +301,75 @@ describe("⑥ 前缀词：eval / xargs / time 后面才是真命令", () => {
   });
 });
 
-/* ---------------- 已知边界：未知前缀词（未裁） ----------------
-   第二轮按位置扫写法扫出 15 个仍漏的前缀词（setsid / ionice / stdbuf / chrt / pkexec / doas /
-   unshare / flock / taskset / prlimit / strace / watch / script / busybox / sudoedit）。
-   **按名字往白名单里加词不是收口**：这族是无穷的（每层容器与调度器再加几个）。
-   下面钉的是现状——谁改成结构性判据（⑦ 文档里量过的候选 A「任意位置起后缀」/
-   候选 B「词按序出现即可」），这两条必须一起翻，改动就会逼出那次裁决而不是悄悄发生。 */
-describe("已知边界：未知前缀词仍漏（枚举不完，未裁）", () => {
-  it("15 支今天全 miss（逐个加进 EXEC_WRAPPERS 不算收口）", () => {
+/* ---------------- ⑦ 的历史块已并入 ⑩（09-22 裁决后翻成期望） ---------------- */
+
+/* ---------------- ⑩ ⑦/⑧ 落地（09-22 已裁：按序子序列 + 未知首词降 ask） ----------------
+   裁决取的是「B（pattern 的词按序出现即可命中）+ 后果分级」：
+   ⑴ 命中处**开头就是那条命令自己**（`git push origin --force` 一族的 ⑧）⇒ 规则照原样生效，deny 仍绝对；
+   ⑵ 命中的词**躲在一个不认识的头部 token 后面**（setsid / ionice / pkexec / script …）⇒ 不静默拒绝、
+      也不静默放行，而是**出卡**。理由：区分「这些词是命令」与「这些词是被 echo 出去的文本」的唯一事实
+      是首词会不会被执行，而那仍需一张表（结构性判据只是把表从「包装器名」挪到「可执行名」）——
+      既然判不准，就把决定权交回用户，代价写进卡面。
+   allow 侧一条字未动：只吃原形，按序形态一律不吃（不对称的是形态面）。 */
+describe("⑩ 未知前缀词降为必问、中间插参数照原样 deny", () => {
+  it("⑦ 那 15 支：不再静默放行，改由 L2 出卡（deny 命中但首词不认识）", () => {
     expect(UNBOUNDED_PREFIX_WORDS.length).toBe(15);
     for (const cmd of UNBOUNDED_PREFIX_WORDS) {
-      expect(judgeChain(RULES, "run_shell", cmd).verdict, cmd).toBe("miss");
+      expect(at(evaluate("run_shell", { command: cmd }, session())), cmd).toBe("ask@L2-ask-rule");
     }
   });
 
-  it("对照：结构性面（载荷递归 / 链式段）不按词登记也能命中——这才是要往哪走的方向", () => {
-    for (const cmd of STRUCTURE_ALREADY_COVERS) {
-      expect(judgeChain(RULES, "run_shell", cmd).verdict, cmd).toBe("deny");
-    }
+  it("卡面说得出为什么不是 deny：首词不在已知包装器表里", () => {
+    const d = evaluate("run_shell", { command: "setsid git push --force" }, session());
+    const reason = d.verdict === "ask" ? d.reason : "没出卡（" + d.verdict + "）";
+    expect(reason).toContain("setsid");
+    expect(reason, "降级的根据必须写在卡上，否则用户以为自己写了 deny 就被禁了").toContain("首词");
   });
-});
 
-/* ---------------- 已知边界 ⑧：中间插参数（量 ⑦ 候选时顺出的新账，未裁） ----------------
-   ⑤ 的 `suffixForms` 只把**全局选项**从前缀位置挪走，命中仍是整条 pattern 前缀匹配，
-   所以「子命令与危险选项中间插了参数」照样漏——而 `git push origin --force` 是货真价实的强推。
-   修它 = 把匹配从「前缀」换成「按序子序列」（候选 B），与 ⑦ 是同一次语义裁决，所以不单向改实现。
-   worker 那一支按 args[0] 取子命令、push 非只读 ⇒ fail-closed 一直拦得住（同 ⑤ 的格局）。 */
-describe("已知边界：中间插参数（git push origin --force）仍漏（未裁）", () => {
-  it("三支真强推今天不进 L1-deny", () => {
+  it("⑧ 那三支真强推：首词就是 git ⇒ 按序命中也照原样 deny，不降级", () => {
     for (const cmd of INSERTED_ARG_UNDERHIT) {
+      expect(at(evaluate("run_shell", { command: cmd }, session())), cmd).toBe("deny@L1-deny");
+    }
+  });
+
+  it("代价要看得见：`echo xargs git push --force` 这类文本参数被牵连，但牵连成 ask 不是 deny", () => {
+    for (const cmd of ["echo xargs git push --force", "echo git push --force"]) {
+      expect(at(evaluate("run_shell", { command: cmd }, session())), cmd).toBe("ask@L2-ask-rule");
+    }
+    // 带引号的载荷是一个 token，按序匹配吃不到它（牵连面到此为止）
+    for (const cmd of ["echo 'git push --force'", "git commit -m 'git push --force 已禁用'"]) {
       expect(judgeChain(RULES, "run_shell", cmd).verdict, cmd).toBe("miss");
     }
   });
 
-  it("worker 侧照旧拦得住（fail-closed，不是因为它更聪明）", () => {
-    for (const cmd of INSERTED_ARG_UNDERHIT) expect(interceptDestructiveGit(cmd).ok, cmd).toBe(false);
+  it("allow 侧不吃按序形态：「allow git push origin」不放行 `git push --force origin`", () => {
+    const rules = parsePermissionsFile(
+      JSON.stringify({ rules: [{ behavior: "allow", tool: "run_shell", pattern: "git push origin", scope: "always" }] }),
+      "test",
+    );
+    expect(judgeChain(rules, "run_shell", "git push origin").verdict).toBe("allow");
+    expect(judgeChain(rules, "run_shell", "git push --force origin").verdict).toBe("miss");
+  });
+
+  it("worker 那一支不受降级影响：push 非只读 ⇒ fail-closed 一直拦得住", () => {
+    for (const cmd of [...INSERTED_ARG_UNDERHIT, ...UNBOUNDED_PREFIX_WORDS]) {
+      expect(interceptDestructiveGit(cmd).ok, cmd).toBe(false);
+    }
+  });
+
+  it("worker 侧这次收口的代价与那条界都钉住：文本里的 git 现在也拦，带引号的才安全", () => {
+    // 代价：worker 没有出卡通道，认不准就多给一句 reason，模型可换写法重试——
+    // 比「未知前缀词后面的强推静默放行」便宜，且这条取舍随 ⑦ 的裁决一起生效。
+    expect(interceptDestructiveGit("echo no git here").ok).toBe(false);
+    expect(interceptDestructiveGit("git status; echo -m git").ok).toBe(false);
+    // 那条界：引号内是一个 token，切不出独立的 `git` ⇒ 不牵连（写文档/写提示词不受影响）
+    expect(interceptDestructiveGit("echo 'git push --force'").ok).toBe(true);
+    expect(interceptDestructiveGit("git status").ok).toBe(true);
+  });
+
+  it("既有绝对面不退让：已知包装器 / 结构性面（载荷递归、链式段）仍由 L1-deny 决定", () => {
+    for (const cmd of [...DENY_VARIANTS, ...GLOBAL_OPT_VARIANTS, ...STRUCTURE_ALREADY_COVERS]) {
+      expect(at(evaluate("run_shell", { command: cmd }, session())), cmd).toBe("deny@L1-deny");
+    }
   });
 });

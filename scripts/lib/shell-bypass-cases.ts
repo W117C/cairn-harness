@@ -120,13 +120,14 @@ export const PREFIX_WORD_VARIANTS: string[] = [
   "nohup time git push --force",
 ];
 
-/** ⑦ **枚举不完的**前缀词（09-22 第二轮扫写法扫出来的 14 支，全部今天仍漏）。
+/** ⑦ **枚举不完的**前缀词（09-22 第二轮扫写法扫出来的 15 支，扫出当天全漏）。
  *  列在这里不是为了逐个加进 `EXEC_WRAPPERS`——那条路是无穷的：
  *  `setsid` / `ionice` / `stdbuf` / `chrt` / `unshare` / `flock` / `taskset` / `prlimit` / `strace`
- *  / `pkexec` / `doas` / `watch` / `script` / `busybox`，外加每一层容器与调度器
- *  （`nsenter`、`systemd-run`、`docker exec`、`envdir`、`at`…）。
- *  每个新发行版都会再补几个 ⇒ 按名字白名单**不可能穷尽**，
- *  要收它得换结构性判据（见 outputs/deny-downstream-option-bypass-2026-09-22.md ⑦ 段的三条候选）。 */
+ *  / `pkexec` / `doas` / `watch` / `script` / `busybox` / `sudoedit`，外加每一层容器与调度器
+ *  （`nsenter`、`systemd-run`、`docker exec`、`envdir`、`at`…）。每个新发行版都会再补几个。
+ *  09-22 裁决后的处置（见 outputs 同页 ⑩ 段）：**不再按名字加词**，改成
+ *  「规则词按序出现即可命中 + 命中躲在不认识的首词后面 ⇒ 降为必问」⇒ 这 15 支全部从
+ *  `approve@L4-pass` 变 `ask@L2-ask-rule`，以后新出现的同类词不用登记。 */
 export const UNBOUNDED_PREFIX_WORDS: string[] = [
   "setsid git push --force",
   "ionice -c3 git push --force",

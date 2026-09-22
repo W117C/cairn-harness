@@ -5193,11 +5193,52 @@ const MUTATIONS = [
     src: "src/permissions/rules.ts",
     test: "tests/permissions.test.ts",
     desc: "deny/ask 退回裸文本前缀（不看有效二进制）⇒ 用户手写的 deny 被 /usr/bin/git、env、nohup、timeout、command、bash -c 六类写法静默击穿（09-21 探针 ① 段原缺陷复活）",
-    apply: (s) => s.replace(
-      "      forms ??= commandForms(segment);\n      len = forms.some((f) => prefixLenAtBoundary(f, pattern) >= 0) ? pattern.length : -1;",
-      "      len = segment.startsWith(pattern) ? pattern.length : -1;",
-    ),
+    apply: (s) => s.replace("forms ??= commandForms(segment);", "forms ??= [segment];"),
     expectFail: "包装写法躲不过 deny",
+  },
+  {
+    id: "rule-matcher-unknown-head-stays-silent",
+    src: "src/permissions/rules.ts",
+    test: "tests/shell-bypass-composition.test.ts",
+    desc: "⑦ 的降级判据拿掉（按序命中但首词不认识也不再出卡）⇒ setsid / ionice / pkexec 那一族 15 支回到静默放行，用户手写的 deny 白写",
+    apply: (s) => s.replace(
+      "        beyond = starts.length > 0 && Math.min(...starts) > 0;",
+      "        beyond = false;",
+    ),
+    expectFail: "⑦ 那 15 支：不再静默放行，改由 L2 出卡（deny 命中但首词不认识）",
+  },
+  {
+    id: "rule-matcher-downgrades-known-head-too",
+    src: "src/permissions/rules.ts",
+    test: "tests/shell-bypass-composition.test.ts",
+    desc: "降级不看下标（凡是按序命中一律降 ask）⇒ `git push origin --force` 这类首词就是 git 的真强推被降成「问一句」，用户手写的 deny 不再绝对",
+    apply: (s) => s.replace(
+      "        beyond = starts.length > 0 && Math.min(...starts) > 0;",
+      "        beyond = starts.length > 0;",
+    ),
+    expectFail: "⑧ 那三支真强推：首词就是 git ⇒ 按序命中也照原样 deny，不降级",
+  },
+  {
+    id: "shape-token-subseq-becomes-contiguous",
+    src: "src/permissions/command-shape.ts",
+    test: "tests/command-shape.test.ts",
+    desc: "按序面退成「必须紧邻」⇒ 中间插了参数的写法（`git push origin --force`）看不见；本仓唯一一份解析，规则层与 worker 闸一起瞎",
+    apply: (s) => s.replace(
+      "      k = tokens.indexOf(w, k);\n      if (k < 0) break;",
+      "      if (tokens[k] !== w) { k = -1; break; }\n      if (k < 0) break;",
+    ),
+    expectFail: "开头命中记 0（规则照原样生效），中间插词也算",
+  },
+  {
+    id: "worker-gitguard-ignores-git-behind-unknown-head",
+    src: "src/agent/worker-shell-tools.ts",
+    test: "tests/shell-bypass-composition.test.ts",
+    desc: "worker 闸退回只认「有效二进制是 git」的那些 ⇒ 未知首词把 git 藏在参数里（setsid / flock / prlimit …）就整段不算 git 调用，强推在 worker 侧静默放行（09-22 实测的第二支面）",
+    apply: (s) => s.replace(
+      '    for (let i = tokens.indexOf("git"); i >= 0; i = tokens.indexOf("git", i + 1)) subs.push(tokens[i + 1] ?? "");',
+      "    void tokens;",
+    ),
+    expectFail: "worker 那一支不受降级影响：push 非只读 ⇒ fail-closed 一直拦得住",
   },
   {
     id: "rule-matcher-token-boundary-dropped",

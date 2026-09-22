@@ -1,6 +1,6 @@
 import type { GlmToolSpec } from "../providers/glm";
 import type { Tool, ToolContext, ToolResult } from "../tools/base";
-import { invocations } from "../permissions/command-shape";
+import { invocations, tokenize } from "../permissions/command-shape";
 import { impactQuerySpec } from "../tools/impact-query";
 import { run_shell } from "../tools/run_shell";
 import { gateToolSpecs } from "./glm-session";
@@ -112,18 +112,38 @@ export const shell_ro: Tool = {
 // 「同一条解析只硬化一支」的教科书形状。载荷那支也并进来了：不再另发一条「内嵌」文案，
 // 一种判定一份实现一条 reason。
 
-/** 一段命令文本里所有 git 调用的子命令：包装器与环境赋值已跳过，`shell -c` 载荷已展开。 */
+/** 一段命令文本里所有 git 调用的子命令：包装器与环境赋值已跳过，`shell -c` 载荷已展开。
+ *
+ *  ⑩（09-22）补掉的那一半：`git` 出现在**不认识的首词之后**（`setsid git push --force`、
+ *  `flock /tmp/l git push --force`）也算一次 git 调用。旧实现只认 `inv.bin === "git"`，
+ *  于是 worker 这一支对整族未知前缀词**静默放行**——它并不是 fail-closed，只是恰好
+ *  `args[0]` 落在只读白名单外时才拦（`git -C /tmp push` 那一族就是这么侥幸拦住的）。
+ *  代价按方向说清：`echo no git here` 这类「git 只是文本」现在也会被认成 git 调用，
+ *  子命令取 "here" ⇒ 非只读 ⇒ 拦。worker 没有出卡这条通道（拦截就是给模型一句 reason，
+ *  它可以换写法重试），所以这里取「宁可多拦一句」而不是「静默放过强推」。 */
 function gitSubcommands(command: string): string[] {
   const subs: string[] = [];
   // 换行也是命令分隔符（bash 语义）：先归一化为 `;` 再切段，否则 `echo hi\ngit push` 整段首词是 echo 而漏判。
   for (const seg of command.replace(/\r?\n/g, ";").split(/&&|\|\||;|\|/)) {
     for (const inv of invocations(seg)) if (inv.bin === "git") subs.push(inv.args[0] ?? "");
+    // ⑩ 补的另一半：`invocations` 只把「有效二进制是 git」的那些交出来，未知首词
+    // （setsid / ionice -c3 / flock /tmp/l …）会把 git 藏在参数里，整段就不算 git 调用了。
+    // 所以再扫一遍**本段自己的 token**：出现独立的 `git` 词就按一次调用记账，子命令取它后面那个词。
+    // 引号在这里救场：`bash -c 'echo git push --force'` 的载荷是**一个** token，切不出独立的 git
+    // ⇒ 照旧放行（hardening2 那两条「把 git 当参数的命令不许拦」的负控就是钉这个）。
+    // 代价：不带引号的 `echo no git here` 现在会被认成一次 git 调用并被拦——带 reason，可换写法。
+    const tokens = tokenize(seg);
+    for (let i = tokens.indexOf("git"); i >= 0; i = tokens.indexOf("git", i + 1)) subs.push(tokens[i + 1] ?? "");
   }
   return subs;
 }
 
-/** git 破坏命令静态拦截（纯函数）：链段全查，任何一段有效二进制为 git 且子命令非只读即拒绝。
- *  只拦「真以 git 为命令」的那几段——`echo no git here` 这类 git 作参数的命令照常放行。 */
+/** git 破坏命令静态拦截（纯函数）：链段全查，任何一段里出现的 git 调用（含躲在未知首词后面的那种）
+ *  子命令非只读即拒绝。**09-22 起不再只看 `inv.bin === "git"`**——旧口径把整族未知前缀词
+ *  （setsid / unshare / flock …）静默放行，那是"只拦字面段首"的另一半漏洞。
+ *  代价：`echo no git here` 这类「git 只是文本」的命令现在也认成 git 调用并被拦
+ *  （带 reason，worker 可换写法重试）；带引号的 `echo 'git push --force'` 不受影响，
+ *  因为引号内是一个 token，本来就切不出独立的 `git`。 */
 export function interceptDestructiveGit(command: string): { ok: boolean; why?: string } {
   if (typeof command !== "string" || command.trim() === "") return { ok: false, why: "空命令" };
   for (const sub of gitSubcommands(command)) {

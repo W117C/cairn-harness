@@ -331,7 +331,9 @@ export function evaluate(
       reason:
         chain.consentGap === true
           ? `「总是允许」不覆盖这条命令的载荷（原规则 ${chain.ruleId}）`
-          : ruleHitReason("ask 规则命中", chain),
+          : chain.headBeyondKnown === true
+            ? ruleHitReason("deny 命中但降为必问", chain, `命令首词「${chain.headToken ?? ""}」不在已知包装器表里，判不准它是包装器还是被输出的文本`)
+            : ruleHitReason("ask 规则命中", chain),
       risk,
       riskReasons: channels.reasons,
     };

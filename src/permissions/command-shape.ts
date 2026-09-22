@@ -215,6 +215,31 @@ function suffixForms(inv: Invocation): string[] {
   return out;
 }
 
+/** pattern 的**词**在给定 token 序列里按序出现即可命中（中间允许插别的词）。
+ *  返回最早命中的下标，没命中返回 −1。入参是 token 数组而不是字符串：形态一旦 `join(" ")`
+ *  就把引号丢了，`echo 'git push --force'` 会变成四个词而被误命中（09-22 首版就踩在这上面）。
+ *
+ *  ⑩（09-22）用它收两类前缀匹配看不见的写法：子命令与危险选项中间插了参数
+ *  （`git push origin --force`），以及命中的词躲在一个不认识的头部 token 后面
+ *  （`setsid git push --force`）。下标正是这两类的分界：0 = 命中开头就是这条命令自己，
+ *  规则照原样生效；> 0 = 头部那个词是谁我们判不准（可能是包装器，也可能是 echo 出去的
+ *  文本），所以调用方按「不静默拒绝、也不静默放行」处理。 */
+export function tokenSubsequenceStart(tokens: string[], pattern: string): number {
+  const p = tokenize(pattern);
+  if (p.length === 0) return 0;
+  for (let start = 0; start < tokens.length; start++) {
+    if (tokens[start] !== p[0]) continue;
+    let k = start;
+    for (const w of p) {
+      k = tokens.indexOf(w, k);
+      if (k < 0) break;
+      k++;
+    }
+    if (k >= 0) return start;
+  }
+  return -1;
+}
+
 /** 规则匹配用的形态集：原形（逐字，调用方已归一空白）+ 每个调用点的 `bin args…`。
  *  deny/ask 逐形取最长命中；allow 只吃原形——包装器恰恰是「被禁的事」藏身的地方，
  *  而「用户点过一次总是允许」那次的同意不该顺着 `env`/`timeout` 一起放宽。 */

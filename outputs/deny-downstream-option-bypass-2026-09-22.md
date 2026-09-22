@@ -273,3 +273,60 @@ pattern 去掉尾部空白后必须命中，且命中处的**右邻只能是行�
 - 锚点：既有 `rule-matcher-deny-ignores-wrappers` 的针脚随实现改写；
   新增 `rule-matcher-token-boundary-dropped`（退回整串前缀 ⇒ 过覆盖用例必红）、
   `rule-matcher-allow-ignores-token-boundary`（只给 deny 侧讲边界 ⇒ allow 边界用例必红）。针脚体检 638 条阻断 0
+
+## ⑩ 落地（同日，裁决后施工）：按序子序列命中 + 未知首词降为必问
+
+用户裁第 1 项：**B（词按序出现即可命中）+ 后果分级**。上面 ⑦ 那句「要收它得换结构性判据」到此兑现，
+且**没有再往 `EXEC_WRAPPERS` 加任何一个词**——以后再冒出 `nsenter` / `systemd-run` 也不用加。
+
+**改了三层**
+1. `src/permissions/command-shape.ts` 新增 `tokenSubsequenceStart(tokens, pattern)`：返回最早的按序命中下标。
+   入参是 **token 数组**（不是字符串）——这点是被判据逼出来的，见下。
+2. `src/permissions/rules.ts`：`matchSegment` 的 deny/ask 支在原「边界前缀」面之后加一条**按序面**。
+   命中下标 `0` ⇒ 规则照原样生效（deny 仍绝对）；`> 0` ⇒ 内容躲在不认识的头部 token 后面 ⇒ **就地降为 ask**
+   （与 `consentGap` 同一处降级形状），并把 `headBeyondKnown` + 首词带上 `ChainVerdict`。
+   allow 支一字未动（只吃原形那条不对称还在，且按序面根本不进 allow）。
+3. `src/agent/worker-shell-tools.ts`：worker 的 git 闸原来只认 `inv.bin === "git"`，
+   **未知首词把 git 藏进参数里，整段就不算 git 调用 ⇒ 静默放行**。这不是 fail-closed，是另一半天窗。
+   现在额外扫「本段自己的 token 里出现独立的 `git`」。
+
+| 面 | 修前 | 修后 |
+|---|---|---|
+| `setsid git push --force` 等 ⑦ 的 15 支（规则层） | `approve@L4-pass` | `ask@L2-ask-rule` |
+| 同 15 支（worker 闸） | **放行** | 拦（带 reason） |
+| `git push origin --force` 等 ⑧ 的 3 支 | `approve@L4-pass` | `deny@L1-deny`（首词是 git 自己 ⇒ 不降级） |
+| `sudo git push --force`、`bash -c 'git push --force'`、链式段 | deny | **仍 deny**（绝对面没动） |
+| `echo 'git push --force'`、`git commit -m '…'` | 不牵连 | **仍不牵连**（引号内是一个 token） |
+
+**施工中被判据按住的两次（这才是本段的价值）**
+1. **首版按 `commandForms` 的字符串形态扫 ⇒ `echo 'git push --force'` 被降成 ask。**
+   形态是 `bin + args.join(" ")` 重新拼出来的，**引号在 join 时已经丢了**，一个 token 的文本
+   被展平成三个词。是 ⑩ 自己新加的那条负控当场判红的；修法不是改判据，是换成 token 数组入参。
+   ⇒ 「按形态字符串扫」这条路对边界前缀面安全（只看前缀），对按序面不安全——同一份形态集不能复用。
+2. **想给 worker 侧加"上一个 token 是吃值选项就不算调用"的启发式 ⇒ `unshare -n git push --force` 回到放行。**
+   `-n`（布尔开关）后面是位置参数，`-m`（吃值）后面是值——分这两件事**需要一张按二进制的选项表**，
+   与 ⑥ 那条 `-p` 误登记成带值是同一类账。猜错的暴露方向是"更漏"（静默放行强推），不是"多拦"，
+   所以删掉启发式：worker 侧凡是独立的 `git` 词一律认调用。
+3. **`bash -c 'echo no git here'` / `bash -c 'echo git push --force'` 两支被新规则牵连**，
+   撞上 `tests/hardening2.test.ts` 里那两条「否则一律 deny 也能骗绿」的既有负控。
+   按判卷纪律这是不许改代码去绕的红——但这两支和 `setsid git push --force` 的差别是**引号**：
+   `invocations` 会把载荷递归成子调用（那正确，`bash -c 'git push --force'` 真会执行），
+   而按序面只需要看**本段自己的 token**。把新扫描限定在本段 token 上，两支既有负控原样通过，
+   `setsid` 那族照样拦得住。⇒ 红的那两条不是判据过严，是我的取料面选错了一层。
+
+**代价（写在卡上，不是藏在代码里）**
+- 用户手写的 deny 在「未知首词」那一族上**不再绝对**：变成必问。这是拿确定性换召回，本次裁决明确要的。
+- 主会话侧 `echo git push --force`（不带引号）会出一张卡；worker 侧同一支会被直接拦并给 reason。
+  带引号的一律不受影响。词距**没有**设上限（⑦ 文档里量过：词距界挡不住 `grep -e git -e push … --force`
+  那类假阳，只会少收 3 支真漏），所以假阳的界只剩"引号"这一条。
+- 未收：`-f` 短标志（要按二进制的标志别名表，另账）；`git push -f` 在主会话仍 `approve@L4-pass`，
+  但 worker 侧 `push` 非只读 ⇒ 一直拦得住。
+
+**观测者与锚点**
+- 探针 ⑦/⑧ 从「只印不计红绿」升为真断言：15 支 ask + 4 支对照 deny + 3 支×两面 ⇒ 合计 红 0 / **绿 97**（原 72）
+- 组合测 37 条（本块 +4）、`command-shape` 36 条（按序面 +3，含那条引号负控）
+- 锚点 +5：`rule-matcher-unknown-head-stays-silent`（降级拿掉）、`rule-matcher-downgrades-known-head-too`
+  （不看下标、一律降级）、`shape-token-subseq-becomes-contiguous`（按序退成紧邻）、
+  `worker-gitguard-ignores-git-behind-unknown-head`（worker 退回只认段首 git）、
+  另把 `rule-matcher-deny-ignores-wrappers` 的针脚改成 `forms ??= [segment]` 形态（结构变了，针脚跟着搬）
+  ⇒ 针脚体检 642 条阻断 0，改法语法体检全过
