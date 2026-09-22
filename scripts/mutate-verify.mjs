@@ -3882,9 +3882,13 @@ const MUTATIONS = [
     id: "impact-panel-join-key-not-normalised",
     src: "src/renderer/projections.ts",
     test: "tests/panel-data.test.ts",
-    desc: "join 键不归一（拿原始 args 路径去查）⇒ `./src/x.ts` 写的文件永远挂不上读数，面板看起来像「从没算过」而事实是键没对上",
-    apply: (s) => s.replace("...(impacts.has(normRel(d.path)) ? { impact: impacts.get(normRel(d.path)) } : {}),",
-      "...(impacts.has(d.path) ? { impact: impacts.get(d.path) } : {}),"),
+    desc: "join 键不归一（三个取料面各留各的原始路径）⇒ `./src/x.ts` 写的文件永远挂不上读数，面板看起来像「从没算过」而事实是键没对上。" +
+      "三支一起改：只改一支时另一支仍把数据喂成对得上（第一版就这么存活过——两侧数据同值的经典陷阱）",
+    apply: (s) => s
+      .replace("...(impacts.has(normRel(d.path)) ? { impact: impacts.get(normRel(d.path)) } : {}),",
+        "...(impacts.has(d.path) ? { impact: impacts.get(d.path) } : {}),")
+      .replace("files.add(normRel(s.file));", "files.add(s.file);")
+      .replace("out.set(normRel(e.file), { sites:", "out.set(e.file, { sites:"),
     expectFail: "join 键归一",
   },
   {

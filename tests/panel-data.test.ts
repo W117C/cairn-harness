@@ -130,6 +130,10 @@ describe("影响面投影（projectImpactByFile / impactLabel）", () => {
     expect(m.get("src/todo.ts")?.sites).toBe(1);
     const f = projectPanelData([...write("w1", "src/todo.ts", "a"), impact("./src/todo.ts", sites("src/app.ts", 1))], null).files[0];
     expect(f.impact?.sites).toBe(1);
+    // 反向一半：脏写法在**另一侧**（模型把 args.path 写成 `./x.ts`，影响面报的是干净路径）。
+    // 只测上面那一半时，「两边各归一」退化成「只归一一边」也判绿——两侧都得各来一条。
+    const g = projectPanelData([...write("w2", "./src/sort.ts", "a"), impact("src/sort.ts", sites("src/app.ts", 2))], null).files[0];
+    expect(g.impact).toEqual({ sites: 2, files: 1, truncated: false });
   });
 
   it("同一文件两条报告取最后一条（后一次写覆盖前一次的读数，累加会把同一批调用点数两遍）", () => {
