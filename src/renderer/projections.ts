@@ -940,6 +940,43 @@ export interface PanelFileEntry {
   removed: number;
   created: boolean;
   ok: boolean | null;
+  /** M7 影响面（能力 1「这个改动会影响哪里」的可见面）：该文件最近一次 impact_report 的汇聚。
+   *  **缺席 ≠ 波及 0**：缺席是「没有影响面报告」（设置关着 / 文件不在图内 / 非源码），
+   *  波及 0 是「报告过了，半径为 0」。两者在界面上必须是两句话（同 verifiedLabel 的 null/absent 口径）。 */
+  impact?: PanelImpact;
+}
+
+/** 一条 impact_report 汇聚成面板读数：调用点数、波及文件数、是否撞了限量帽。 */
+export interface PanelImpact {
+  sites: number;
+  files: number;
+  truncated: boolean;
+}
+
+/** 路径归一：impact 侧给的是 workspace 相对正斜杠路径，diff 侧来自模型写的 args（可能带 `./` 或反斜杠）。
+ *  不归一就 join ⇒ 两边各有读数、面板永远显示「无影响面报告」（本仓老账：读数一片空先怀疑 join 键）。 */
+function normRel(p: string): string {
+  const s = p.replace(/\\/g, "/");
+  return s.startsWith("./") ? s.slice(2) : s;
+}
+
+/** 按被改文件汇聚影响面：同一个文件多条报告取**最后一条**（后一次写覆盖前一次的读数，
+ *  与"这一处现在波及谁"的问题口径一致；累加会把同一批调用点数两遍）。 */
+export function projectImpactByFile(events: AgentEvent[]): Map<string, PanelImpact> {
+  const out = new Map<string, PanelImpact>();
+  for (const e of events) {
+    if (e.type !== "impact_report") continue;
+    const files = new Set<string>();
+    for (const s of e.up) files.add(normRel(s.file));
+    out.set(normRel(e.file), { sites: e.up.length, files: files.size, truncated: e.truncated === true });
+  }
+  return out;
+}
+
+/** 面板上那一句人话。帽外（truncated）说成 `N+` 而不是 `N`——写死的默认文案不能只对一种输入成立。 */
+export function impactLabel(i: PanelImpact): string {
+  const sites = i.sites + (i.truncated ? "+" : "");
+  return i.sites === 0 ? "无跨文件调用点" : `波及 ${sites} 处 · ${i.files} 个文件`;
 }
 
 export interface PanelTreeGroup {
@@ -989,14 +1026,16 @@ export function workerSpentLabel(spentUsd: number | null): string {
 export const EMPTY_PANEL_DATA: PanelData = { workspace: null, files: [], tree: [], terminal: [], merge: [], agents: [] };
 
 /** 右栏面板数据：审阅/文件树共用 diff 投影（同一事实源，两处不得各算各的），
- *  终端取 run_shell 调用-结果配对，合并取 write worker 列。 */
+ *  终端取 run_shell 调用-结果配对，合并取 write worker 列，文件行另挂影响面汇聚。 */
 export function projectPanelData(events: AgentEvent[], workspace: string | null): PanelData {
+  const impacts = projectImpactByFile(events);
   const files: PanelFileEntry[] = projectDiffCards(events).map((d) => ({
     path: d.path,
     added: d.content === "" ? 0 : d.content.split("\n").length,
     removed: 0,
     created: true,
     ok: d.ok,
+    ...(impacts.has(normRel(d.path)) ? { impact: impacts.get(normRel(d.path)) } : {}),
   }));
   const groups = new Map<string, PanelFileEntry[]>();
   for (const f of files) {

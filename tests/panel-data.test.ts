@@ -2,7 +2,7 @@
 // 面板内容 100% 事件流投影（projections.ts:1 既定原则）：无写入/无命令时必须空，
 // 而不是回落到任何演示数据。
 import { describe, expect, it } from "vitest";
-import { projectDiffCards, projectPanelData } from "../src/renderer/projections";
+import { impactLabel, projectDiffCards, projectImpactByFile, projectPanelData } from "../src/renderer/projections";
 import type { AgentEvent } from "../src/events";
 
 const write = (id: string, path: string, content: string): AgentEvent[] => [
@@ -95,5 +95,49 @@ describe("projectPanelData（抽屉面板投影：审阅 / 文件树 / 终端 / 
     const panel = projectPanelData(events, null);
     expect(panel.files).toEqual([]);
     expect(panel.tree).toEqual([]);
+  });
+});
+
+/* ---------------- M7 影响面挂到文件行（能力 1 的可见面） ----------------
+   审计发现的缺口：`impact_report` 早就落流了，但 `projectPanelData` 四个投影都不读它
+   ⇒ 波及面只在会话流的通用记录卡里能以 JSON 见到，右栏读数不随它变（outputs/impact-third-ring-audit-2026-09-22.md）。
+   这里钉的是三件容易各写一遍就漂的事：缺席 ≠ 波及 0、join 键要归一、同文件多条取最后一条。 */
+const impact = (file: string, up: { symbol: string; file: string; line: number }[], truncated = false): AgentEvent => ({
+  type: "impact_report", file, symbols: ["addTodo"], up, truncated,
+});
+
+describe("影响面投影（projectImpactByFile / impactLabel）", () => {
+  const sites = (f: string, n: number) => Array.from({ length: n }, (_, i) => ({ symbol: "s" + String(i), file: f, line: i }));
+
+  it("报告汇聚到被改文件：调用点数 + 波及文件数 + 帽标记", () => {
+    const events = [...write("w1", "src/todo.ts", "a"), impact("src/todo.ts", [...sites("src/app.ts", 2), ...sites("tests/t.test.ts", 1)])];
+    const f = projectPanelData(events, null).files[0];
+    expect(f.impact).toEqual({ sites: 3, files: 2, truncated: false });
+    expect(impactLabel(f.impact!)).toBe("波及 3 处 · 2 个文件");
+  });
+
+  it("缺席 ≠ 波及 0：没有 impact_report 时字段必须缺席（设置关着不能显示成「测过、半径 0」）", () => {
+    const noReport = projectPanelData([...write("w1", "src/todo.ts", "a")], null).files[0];
+    expect("impact" in noReport).toBe(false);
+    // 报告发了、确实没人用 ⇒ 才是「无跨文件调用点」这一句
+    const reported = projectPanelData([...write("w1", "src/todo.ts", "a"), impact("src/todo.ts", [])], null).files[0];
+    expect(reported.impact).toEqual({ sites: 0, files: 0, truncated: false });
+    expect(impactLabel(reported.impact!)).toBe("无跨文件调用点");
+  });
+
+  it("join 键归一：impact 侧与 diff 侧写法不同（`./`、反斜杠）也必须挂得上——挂不上表现为面板永远空白", () => {
+    const m = projectImpactByFile([impact("./src\\todo.ts", sites("src/app.ts", 1))]);
+    expect(m.get("src/todo.ts")?.sites).toBe(1);
+    const f = projectPanelData([...write("w1", "src/todo.ts", "a"), impact("./src/todo.ts", sites("src/app.ts", 1))], null).files[0];
+    expect(f.impact?.sites).toBe(1);
+  });
+
+  it("同一文件两条报告取最后一条（后一次写覆盖前一次的读数，累加会把同一批调用点数两遍）", () => {
+    const m = projectImpactByFile([impact("src/todo.ts", sites("src/app.ts", 5)), impact("src/todo.ts", sites("src/other.ts", 1))]);
+    expect(m.get("src/todo.ts")).toEqual({ sites: 1, files: 1, truncated: false });
+  });
+
+  it("撞限量帽要说成 N+，不能报成精确数", () => {
+    expect(impactLabel({ sites: 200, files: 9, truncated: true })).toBe("波及 200+ 处 · 9 个文件");
   });
 });

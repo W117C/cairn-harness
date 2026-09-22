@@ -49,6 +49,9 @@ buildImpact(fixtures/todo-app).files = ["tests/todo.test.ts"]     ← 没有 src
 
 ## 仍未接的两环（明确记账，不偷偷做）
 
+> 本节的第 1 条已在同日接上（见下「面板这一环已接」），第 2 条仍是留位。原文一字不改留着，
+> 因为「当时不可写」这件事本身是这条链路的取证。
+
 1. **右栏面板不读 `impact_report`**：`projectPanelData`（`src/renderer/projections.ts` L993-L1037）
    四个投影里没有 impact 分支 ⇒ 波及面只能在会话流的通用记录卡里看，面板读数不随它变。
    影响：「开设置跑一轮 ⇒ 面板读数变化」这条端到端断言现在**不可写**，panels-check 对 impact 零断言。
@@ -57,10 +60,60 @@ buildImpact(fixtures/todo-app).files = ["tests/todo.test.ts"]     ← 没有 src
    缓存按绝对路径键 ⇒ 每个 worker 冷启动重建整图，代价随 worker 数线性放大；波及真正有意义在合并回主树那一刻）。
    worker 拿到的是读端 `impact_query`。若日后要求 worker 也写后回注，需先解掉"每 worker 重建整图"的代价。
 
+## 面板这一环已接（同日第二次更新，#29）
+
+`projectPanelData` 现在按被改文件汇聚 `impact_report` 并挂到审阅页那一行：
+
+- 投影（`src/renderer/projections.ts`）：`projectImpactByFile`（同文件多条报告**取最后一条**，不累加）、
+  `impactLabel`（`波及 N 处 · M 个文件`，撞帽写 `N+`，`sites===0` 单独一句「无跨文件调用点」），
+  `PanelFileEntry.impact?`——**没有报告 ⇒ 字段缺席**，不写 0（设置关着时界面不能说「测过、半径 0」）。
+- join 键两侧归一（`normRel`）：diff 侧的路径来自模型写的 `args.path`（可能带 `./` 或反斜杠），
+  impact 侧是 workspace 相对正斜杠——不归一就是「面板永远空白」那种静默错。
+- 渲染层（`src/renderer/app.js` `reviewViewHTML`）：一行 `<span class="dim" data-impact="2/2">`，
+  `data-impact` 是给门禁的不依赖中文文案的读点。
+- 观察者三层：单测 `tests/panel-data.test.ts`（5 条：汇聚 / 缺席≠0 / join 键 / 取最后一条 / 帽标记）、
+  切片影子 `tests/renderer-panels-real-data.test.ts`（行渲染 + 无报告那行不写读数）、
+  真窗口 `panels-check` **B23**（9 条断言，含「只有带报告的那一行挂读数」的对照侧）。
+- 锚点：7 条（`impact-panel-never-attached` / `-absent-as-zero` / `-join-key-not-normalised` /
+  `impact-projection-first-report-wins` / `-truncated-plus-dropped` / `-sites-counted-as-files` /
+  `review-row-drops-impact-span`）。
+
+## B23 挤到 B20 前面：量出来的虚拟化缺陷（另立任务 #31）
+
+B23 最初放在 B15 与 B16 之间，结果**同码同机连红三轮**的是后面那相 B20（三张截断卡上屏）。
+用「同 HEAD 开 worktree 对照」把归属钉死（规则 46/61）：
+
+| 跑的代码 | B20 结果 |
+| --- | --- |
+| 干净 HEAD（无 B23） | ✅ 绿（全部门禁 exit 0） |
+| HEAD + 本次三支改动 | ❌ 红 6 条，`实测 0 张：[]` |
+
+红了以后先别猜，给 B20 加只读读数一层层切（这是本轮最值钱的产出，已留在门里）：
+`距底 px` / `挂载子节点数 + 两个占位高` / `#eventCount` / `盘上行数与尾部类型` / `审阅页文件行数`。
+读到的态是：**盘上 30 行、`#eventCount` 30、审阅页读得到那 2 条写入（面板不虚拟化），
+而转录 `scrollTop 250 / scrollHeight 890 / clientHeight 640`（已贴底）却只有 8 张卡、
+未挂载区占位 190.273px** ⇒ 末单元停在未挂载区。
+
+三条被排除的归因（都实测过，别写回来）：
+①「B23 把抽屉留着打开污染下游」——收尾加 `#drawerClose` 仍红；
+②「窗口停在顶上没吸底」——实测距底 0px；
+③「等一帧就好」——给 settle 每拍 `scrollTop = 0 → scrollHeight` 打一拍**也没修好**。
+新写的假 DOM 观察者 `tests/renderer-history-mount.test.ts`（双向：贴底要全挂 / 会话一长必须真有界）
+在现实现下**两条都绿** ⇒ 我的假 DOM 少算了真实盒模型里的东西（`.stream` 的 CSS `gap`/flex 与
+`mountHistory` 只按 `height + 12` 记账是两套口径）。这正是 #31 要建模并修的那件事。
+
+相位处理：把 B23 移到 B20 之后（各自钉自己的前提，红了才分得清是谁弄的），**断言阈值一字未改**；
+修好 #31 后应把 B23 挪回 B20 之前跑一次，让「追加事件把单元数推过估算窗」成为 B20 的正向回归。
+
 ## 验证
 
 - 新测：2 passed（1.3s，全量里最便宜的端到端一环）
-- 全量 `pnpm test`：**196 files / 1970 tests 全绿**
+- 全量 `pnpm test`：**196 files / 1970 tests 全绿**（本轮 #29 之后待复跑，见下）
 - `pnpm typecheck`：HEAD 内 0 错（唯一红是别人在飞的 `scripts/sidebar-probe.ts`）
 - `mutate-needles-check`：645 条针脚阻断 0，改法语法体检全过
 - 两支新锚点的真杀死验证在同 HEAD 的 worktree 里补跑（`agent-runner.ts` 正被别的会话改着，变异器拒变在飞文件）
+
+本轮（#29）补记：`panels-check` exit 0（含 B23 九条）；`tests/panel-data` + `tests/renderer-panels-real-data`
++ `tests/renderer-history-mount` = 19 passed；针脚 652 条阻断 0。
+全量 test / 其余门与锚点真杀在提交后按同 HEAD worktree 复跑。
+

@@ -1,5 +1,5 @@
 import { projectUnits, mountHistory } from './history-window.js';
-import { projectPanelData, EMPTY_PANEL_DATA, entersMainConversation, toolArgsSummary, PANEL_DIRTY_TYPES, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS, cardActionForComment, commentReadsBack, groupOnboardingSteps } from './projections';
+import { projectPanelData, EMPTY_PANEL_DATA, entersMainConversation, toolArgsSummary, PANEL_DIRTY_TYPES, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS, cardActionForComment, commentReadsBack, groupOnboardingSteps, impactLabel } from './projections';
 import { $, esc, promptInput, sessionList, streamInner, toast } from './dom.js';
 import { ICONS, RUN_GRID_HTML, runGrid } from './icons.js';
 import { highlightAllDiffs, diffHtml } from './diff-highlight.js';
@@ -1001,6 +1001,9 @@ function reviewViewHTML() {
     (f.removed ? '<span class="minus">−' + f.removed + '</span>' : '') +
     (f.created ? '<span class="new">新增</span>' : '') +
     (f.ok === false ? '<span class="new">未落盘</span>' : '') +
+    /* M7 影响面：能力 1 的可见面。没有报告就不写这一格（"没测过" ≠ "波及 0"，两者必须能分开），
+       data-impact 给门禁一个不依赖中文文案的读点。 */
+    (f.impact ? '<span class="dim" data-impact="' + esc(f.impact.sites + "/" + f.impact.files + (f.impact.truncated ? "+" : "")) + '">' + esc(impactLabel(f.impact)) + '</span>' : '') +
     '</div>').join('') + '</div>';
 }
 function browserViewHTML() {

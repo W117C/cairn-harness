@@ -6,6 +6,7 @@ import { runInNewContext } from 'node:vm';
 import { expect, it, vi } from 'vitest';
 // vm 里跑脚本不是模块：准入判据的绑定与 import 剥法都取自共用那一处（不许各写一份）。
 import { entersMainConversation, groupedScript, PANEL_DIRTY_TYPES, toolArgsSummary } from './renderer-vm-module';
+import { impactLabel } from '../src/renderer/projections';
 
 const source = readFileSync(new URL('../src/renderer/app.js', import.meta.url), 'utf8');
 const projection = readFileSync(new URL('../src/renderer/history-window.js', import.meta.url), 'utf8');
@@ -110,4 +111,30 @@ it('原型演示常量不得回流渲染层（审阅 / 终端假数据源已删�
   for (const dead of ['const REVIEW =', 'TERMINAL_SEEDS', 'src/auth/session.ts']) {
     expect(source, '渲染层仍引用了 ' + dead).not.toContain(dead);
   }
+});
+
+it('审阅页那一行真把影响面挂上文件行（没有报告的那行不写读数）', () => {
+  // 这一条是 panels-check B23 的离线影子：B23 证「JSONL→投影→DOM 这一跳接上了」，这里证
+  // 行渲染本身——两层分开，红时才知道是投影没算还是渲染没挂。切片要用的绑定一个都不许漏：
+  // 漏一个就是 vm 里 ReferenceError 被当成「测过了」。
+  const html = runInNewContext(
+    section('function reviewViewHTML()', 'function browserViewHTML()') + '\nreviewViewHTML()',
+    {
+      panelData: {
+        files: [
+          { path: 'src/sort.ts', added: 1, removed: 0, created: true, ok: true, impact: { sites: 2, files: 2, truncated: false } },
+          { path: 'src/plain.ts', added: 1, removed: 0, created: true, ok: true },
+        ],
+      },
+      panelEmptyHTML: (t: string) => '<div class="empty">' + t + '</div>',
+      esc: (v: unknown) => String(v),
+      FILE_ICON: '<svg></svg>',
+      impactLabel,
+    },
+  ) as string;
+  expect(html).toContain('data-impact="2/2"');
+  expect(html).toContain('波及 2 处 · 2 个文件');
+  const bare = html.slice(html.indexOf('src/plain.ts'));
+  expect(bare).not.toContain('data-impact');
+  expect(bare, '缺席写成「波及 0」＝假证据').not.toContain('波及');
 });

@@ -1155,6 +1155,10 @@ async function phaseElectron(root: string): Promise<void> {
       !b15Text.includes("NaN"),
       "B15 屏面上没有 NaN（拼接式里夹一行注释会被读成一元正号 ⇒ 整段 HTML 变 NaN；本轮单测抓到过一次）",
     );
+    /* B23（影响面挂到审阅页文件行）挪到 B20 之后。原因不是这一相错了，而是它往主会话追加的
+       事件把转录的展示单元数推过了虚拟化那一窗，露出了 mountHistory 的末单元不收敛缺陷
+       （量测与备案见 outputs/impact-third-ring-audit-2026-09-22.md「B23 挤到 B20 前面」一节）。
+       面板不虚拟化，所以 B23 自己的判据不受该窗影响；两相各管各的前提，红了才分得清是谁弄的。 */
     // B16 评审闭环的写端：行锚点真长得出、点得动，且被 main 拒时如实说未送达。
     // 全程零钱：这一列是重放出来的历史 worker（本窗口没有它的编排器），card_action 必然在
     // 归属检查处被拒 ⇒ 不调模型、不落 diff_comment、不动工作树。
@@ -1455,15 +1459,58 @@ async function phaseElectron(root: string): Promise<void> {
     for (const e of b20Evts) await createEventLog(b20File).append(e as unknown as AgentEvent);
     ok(await b8ClickSession("验收会话"), "B20 先切走（重开才走 showHistory 整段重投那一支）");
     ok(await b8ClickSession(clarifyId), "B20 再切回靶子会话");
+    /* 失败也要带读数：原先 settle 一超时就把观察丢掉，打印成「实测 0 张：[]」——那既可能是 DOM
+       真没渲染（本门已知的虚拟化/CDP 时序 flake），也可能是渲染了 4 张/1 张，两种红指向完全不同的
+       下一步。留一份最后一次读到的卡片头，红时按「卡片头总数 / 其中截断卡数」分开报。 */
+    let b20Peek: string[] = [];
     const b20Heads = await settle(async () => {
       const h = await cdp2.eval<string[]>(
         `[...document.querySelectorAll('.stream .card .card-head')].map((n) => (n.textContent || '').trim())`,
       );
+      b20Peek = h;
       return h.filter((x) => x.includes("助手输出被截断")).length === 3 ? h : null;
     }, 15_000);
     const b20Cards = (b20Heads ?? []).filter((x) => x.includes("助手输出被截断"));
+    /* 红时点名是哪一层丢的，四件都只读数、不改判定：① 转录滚到哪（距底 px）② 挂载了几个子节点
+       与未挂载区的占位高 ③ 同一份事件流投影出的审阅页有几行（面板不虚拟化，用来切「main 交上来的
+       这份就短」与「渲染器没挂上」）④ 盘上这份多少行、尾部是什么类型。
+       ⚠️ 我第一版把这条归因成「没吸底 ⇒ 窗口停在顶上」——实测距底 0px 且已贴底，末单元仍停在
+       未挂载区（占位 190.273px），所以归因是错的；那才是本门记这条读数的理由。 */
+    const b20Geom = await cdp2.eval<{ dist: number; top: number; sh: number; ch: number }>(
+      `(() => { const s = document.querySelector('.stream'); if (!s) return { dist: -999, top: -999, sh: -999, ch: -999 };` +
+      `  return { dist: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight), top: Math.round(s.scrollTop),` +
+      `    sh: Math.round(s.scrollHeight), ch: Math.round(s.clientHeight) }; })()`,
+    );
+    /* 盘上这份 vs 屏上那一窗：只有 8 张卡时，「DOM 没渲染」和「盘上就没这几条」是两回事。
+       读一次文件尾（只读，不改判定），红时直接点名是哪一层丢的。 */
+    const b20DiskTail = (await readFile(b20File, "utf8")).trim().split("\n")
+      .map((l) => { try { return String((JSON.parse(l) as { type?: unknown }).type ?? "?"); } catch { return "坏行"; } });
+    // #eventCount 的口径＝当前展示中会话的事件数（有快照取快照行数）⇒ 它替我分清
+    // 「main 交上来的这份就短」与「投影/挂载把它吞了」两层，不必猜。
+    const b20ShownEvents = await cdp2.eval<string>(`document.querySelector('#eventCount')?.textContent || "无节点"`);
+    /* 同一次 showHistory 既喂面板也喂转录（panelEvents / projectUnits 同一个数组）。
+       所以「审阅页还有没有我那两条写入」就把断层切在 main↔渲染器 与 渲染器↔DOM 之间。 */
+    const b20Shape = await cdp2.eval<{ kids: number; spacers: string[]; fileRows: number; empty: boolean }>(
+      `(() => { const inner = document.querySelector('.stream')?.firstElementChild;` +
+      `  const kids = inner ? inner.children.length : -1;` +
+      `  const spacers = inner ? [...inner.children].filter((d) => d.getAttribute('aria-hidden') === 'true')` +
+      `    .map((d) => d.style.height || '0') : [];` +
+      `  const pg = document.querySelector('#sidePages');` +
+      `  const review = pg ? pg.querySelector('.side-page[data-view="review"]') : null;` +
+      `  return { kids, spacers,` +
+      `    fileRows: review ? review.querySelectorAll('.file-item').length : -1,` +
+      `    empty: review ? /尚无写入文件/.test(review.textContent || '') : false }; })()`,
+    );
     ok(b20Cards.length === 3, "B20 三张截断卡上屏（父的三型各一张；实测 " + String(b20Cards.length) + " 张：" +
-      JSON.stringify(b20Cards.map((x) => x.slice(0, 46))) + "）");
+      JSON.stringify((b20Heads !== null ? b20Cards : b20Peek).map((x) => x.slice(0, 46))) +
+      "；最后一次读到卡片头 " + String(b20Peek.length) + " 个" +
+      (b20Heads === null ? "（未落定，上面是全部卡片头，不是只截断卡）" : "") +
+      "；距底 " + String(b20Geom.dist) + "px（scrollTop " + String(b20Geom.top) +
+      " / scrollHeight " + String(b20Geom.sh) + " / clientHeight " + String(b20Geom.ch) + "）" +
+      "；盘上 " + String(b20DiskTail.length) + " 行，尾部类型 " + JSON.stringify(b20DiskTail.slice(-9)) +
+      "；屏面事件数 #eventCount=" + b20ShownEvents +
+      "；转录挂载子节点 " + String(b20Shape.kids) + " 个、占位高 " + JSON.stringify(b20Shape.spacers) +
+      "；审阅页文件行 " + String(b20Shape.fileRows) + " 条（空态=" + String(b20Shape.empty) + "）" + "）");
     const b20Budget = b20Cards.find((x) => x.includes("4096")) ?? "";
     const b20Blocked = b20Cards.find((x) => x.includes("512")) ?? "";
     ok(
@@ -1505,6 +1552,64 @@ async function phaseElectron(root: string): Promise<void> {
       typeof b20ChildLine === "string" && JSON.parse(b20ChildLine).agent_id === b11A,
       "B20 另一半：那条确实写进了盘上转录且带归因（不在界面 ≠ 被丢掉；实测 " + JSON.stringify(b20ChildLine?.slice(0, 90) ?? "无此行") + "）",
     );
+    /* B23 影响面挂到审阅页文件行（能力 1「这个改动会影响哪里」的可见面）。
+       审计发现：`impact_report` 早就落流，但 `projectPanelData` 四个投影都不读它 ⇒
+       「开设置跑一轮 ⇒ 面板读数变化」这条端到端断言以前根本写不出来。手法同 B15：
+       只往会话 JSONL 追加既有事件 + 切走再切回（重开才会重算 panelData），零模型调用。
+       位置放在 B20 之后：这一相要追加写入事件，而转录虚拟化的末单元收敛缺陷（已单列任务）
+       会被多出来的展示单元触发 ⇒ 先让 B20 在它自己的单元数上判完，再动这份流。 */
+    console.log("[panels-check] B23 审阅页读得出影响面（缺席 ≠ 波及 0，两者必须是两句话）");
+    /* 先钉住这一相的前提：`panelData.files` 只由 write_file 投影出来（projectDiffCards），靶子会话
+       原先**一条写入也没有** ⇒ 审阅页是空态，文件行根本不存在，我第一版拿 `.file-item` 找读数 = 找
+       一个不该存在的东西（红得没有信息量）。补两条真实写入：第一条配影响面，第二条不配——它是
+       「缺席 ≠ 波及 0」那一侧的对照，没有它整相只证成「有节点」。 */
+    const b23Writes = [
+      { type: "tool_call", id: "b23-w1", name: "write_file", args: { path: "src/sort.ts", content: "export function sortItems(xs: number[]) { return xs; }" } },
+      { type: "tool_result", callId: "b23-w1", ok: true, output: "written" },
+      { type: "tool_call", id: "b23-w2", name: "write_file", args: { path: "src/plain.ts", content: "export const plain = 1;" } },
+      { type: "tool_result", callId: "b23-w2", ok: true, output: "written" },
+    ];
+    for (const e of b23Writes) await createEventLog(b11File).append(e as unknown as AgentEvent);
+    await createEventLog(b11File).append({
+      type: "impact_report", file: "src/sort.ts", symbols: ["sortItems"],
+      up: [{ symbol: "a", file: "src/list.ts", line: 3 }, { symbol: "b", file: "tests/list.test.ts", line: 9 }],
+      truncated: false,
+    } as unknown as AgentEvent);
+    ok(await b8ClickSession("验收会话"), "B23 先切走");
+    ok(await b8ClickSession(clarifyId), "B23 再切回靶子会话（重开才走 showHistory → panelData）");
+    const b23Tab = await cdp2.eval<string>(
+      `(() => { const t = document.querySelector('#qcReview'); if (!t) return "no-tab"; t.click(); return "clicked"; })()`,
+    );
+    ok(b23Tab === "clicked", "B23 审阅页切得过去（实测 " + JSON.stringify(b23Tab) + "）");
+    const b23 = await settle(async () => {
+      const r = await cdp2.eval<{ row: string; impact: string } | null>(
+        `(() => { const p = document.querySelector('.side-page[data-view="review"]'); if (!p) return null;` +
+        `  const s = p.querySelector('.file-item [data-impact]'); if (!s) return null;` +
+        `  const it = s.closest('.file-item');` +
+        `  return { row: (it ? it.textContent : '').replace(/\\s+/g, " ").trim(), impact: s.getAttribute("data-impact") || "" }; })()`,
+      );
+      return r !== null && r.impact !== "" ? r : null;
+    }, 12_000);
+    ok(b23 !== null, "B23 文件行真读出影响面（不再是只有一张 JSON 记录卡；实测 " + JSON.stringify(b23?.row ?? "没等到") + "）");
+    ok(b23?.impact === "2/2", "B23 data-impact = 调用点数/波及文件数，与投影同源不各算一遍（实测 " + JSON.stringify(b23?.impact ?? "") + "）");
+    ok(
+      (b23?.row ?? "").includes("波及 2 处 · 2 个文件"),
+      "B23 那句人话出自 impactLabel（改文案要连着这条一起改；实测 " + JSON.stringify(b23?.row ?? "") + "）",
+    );
+    /* 对照侧：第二行没有 impact_report ⇒ 屏幕上什么都不能出现。「波及 0 处」和「这条没算过」是两句
+       话，投影里用「不设 impact 字段」区分，渲染层若把 undefined 当 0 就会显示成假证据。 */
+    const b23Bare = await cdp2.eval<{ rows: number; withImpact: number; bareText: string }>(
+      `(() => { const p = document.querySelector('.side-page[data-view="review"]');` +
+      `  if (!p) return { rows: -1, withImpact: -1, bareText: "no-page" };` +
+      `  const rows = [...p.querySelectorAll('.file-item')];` +
+      `  const bare = rows.filter((r) => !r.querySelector('[data-impact]'));` +
+      `  return { rows: rows.length, withImpact: rows.length - bare.length,` +
+      `    bareText: bare.map((r) => (r.textContent || '').replace(/\\s+/g, ' ').trim()).join(' | ') }; })()`,
+    );
+    ok(b23Bare.rows >= 2 && b23Bare.withImpact === 1,
+      "B23 只有带报告的那一行挂读数（行数 " + String(b23Bare.rows) + "、挂数 " + String(b23Bare.withImpact) + "，期望 ≥2 / 1）");
+    ok(b23Bare.bareText.includes("src/plain.ts") && !b23Bare.bareText.includes("波及"),
+      "B23 无报告的文件行不写成「波及 0」（缺席就是缺席；实测 " + JSON.stringify(b23Bare.bareText.slice(0, 80)) + "）");
     await killElectron(electron2);
   } finally {
     if (electron.exitCode === null) await killElectron(electron);
