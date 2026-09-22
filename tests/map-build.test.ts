@@ -2,10 +2,11 @@
 // ①未改文件 → 命中缓存且结果逐字相同 ②改一个文件 → 重算且结果变化 ③用户仓库里没有 tags 缓存文件
 // ④坏 grammar 路径 → 不抛异常、返回空地图（降级）
 import { describe, expect, it, beforeEach } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile, utimes, readdir } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile, utimes, readdir, access } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createMapBuilder, defaultTagsCacheDir } from "../src/agent/map/build.js";
+import { createMapBuilder, defaultTagsCacheDir, scanSourceFiles } from "../src/agent/map/build.js";
 import { __resetLangCache, __resetQueryCache } from "../src/agent/map/parse.js";
 
 let ws = "";
@@ -112,4 +113,48 @@ describe("map build（任务 4+5）", () => {
     expect(again.parsed).toBe(0);
   });
 
+});
+
+/* ---------------- 候选集的两道静默排除（影响面「波及未知」的成因） ----------------
+   动因（2026-09-23 实测本仓）：`write_file`/`edit_file` 之后的影响面回注走 `fileImpact`，
+   而它第一句就是「这文件在图里吗」，不在 → 返回 null → **不发事件、也不写一行说明**。
+   「不在图里」有两种成因，都不是罕见角落：
+     ① `scanSourceFiles` 按 mtime 取最新 maxFiles 个（缺省 400）——本仓 436 个候选源码里
+        有 36 个被挤在图外，其中包含 `src/renderer/app.js` 这种最热被改的文件；
+     ② 枚举用 `rg --files`，它默认尊重 `.gitignore`——被忽略的源码永不进图。
+   这一组测的是**成因本身**（钉住"今天它什么都没说"），不是修法。修法（让缺席说出原因，
+   且不给面板发「波及 0」那种假读数）要改 `src/tools/base.ts` 的钩子形状或 `src/events` 的
+   事件字段，两处都在别人的在飞改动集里 ⇒ 已立待办 #36，这里先把探针与数字留在地上。 */
+describe("候选集的两道静默排除（待办 #36 的成因探针）", () => {
+  it("帽外不吭声：maxFiles 截断不留任何痕迹，被挤掉的文件与「本来就不支持的后缀」在结果里同形", async () => {
+    // 5 个受支持后缀的文件，mtime 依次排到 alpha/beta 之后（帽按 mtime 取最新，别赌时钟精度）
+    for (let i = 1; i <= 5; i++) {
+      const p = join(ws, "src", `m${i}.ts`);
+      await writeFile(p, `export function f${i}(): number { return ${i}; }\n`, "utf8");
+      const t = new Date(Date.now() + i * 1000);
+      await utimes(p, t, t);
+    }
+    const three = await scanSourceFiles(ws, 3);
+    expect(three.map((f) => f.rel)).toEqual(["src/m5.ts", "src/m4.ts", "src/m3.ts"]);
+    // m1/m2 在盘上、后缀支持、内容合法，却因为帽而不在图里——而返回值里没有任何"少算了"的记号
+    await expect(access(join(ws, "src", "m1.ts"))).resolves.toBeUndefined();
+    expect(three.length).toBe(3);
+    const shaped = three as unknown as { truncated?: unknown; candidates?: unknown };
+    expect(shaped.truncated, "今天没有截断标记：帽外是静默的（#36 要把它说出来）").toBeUndefined();
+    expect(shaped.candidates).toBeUndefined();
+  });
+
+  it(".gitignore 掉的源码永远不进图：文件在盘上、后缀受支持、就是不出现", async () => {
+    // rg 只在 git 仓库内应用 .gitignore（ignore crate 的 require_git 缺省为真）⇒ 先把靶子变成仓库
+    execFileSync("git", ["init", "-q", ws]);
+    await writeFile(join(ws, ".gitignore"), "gen/*.ts\n", "utf8");
+    await mkdir(join(ws, "gen"), { recursive: true });
+    await writeFile(join(ws, "gen", "hidden.ts"), "export function hidden(): number { return 1; }\n", "utf8");
+    await writeFile(join(ws, "src", "kept.ts"), "export function kept(): number { return 2; }\n", "utf8");
+    const rels = (await scanSourceFiles(ws)).map((f) => f.rel);
+    // 成对判（排除类断言的老规矩）：被排除的那条确实在盘上，对照组确实进来了
+    await expect(access(join(ws, "gen", "hidden.ts"))).resolves.toBeUndefined();
+    expect(rels).toContain("src/kept.ts");
+    expect(rels).not.toContain("gen/hidden.ts");
+  });
 });
