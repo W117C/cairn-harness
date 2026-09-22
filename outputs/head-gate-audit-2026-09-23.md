@@ -256,3 +256,42 @@ subdirectory of the project root at "/private/tmp/dsh-anchor-776".
    真跑到主树验过两条路径：混合 3 条 ⇒ 跳过 1、判 2、`UNVERIFIED=1`、**退出码 1**；全安全 1 条 ⇒ 杀、**退出码 0**。
    新增判卷 4 条 + 锚点 2 条（一边守「别停摆整张表」，一边守「不安全的一条都不许跑」——
    后者防的是我为了绿把安全性改回去）。
+
+## 追加六（同日更晚，HEAD `f6eb35a`）：整张表第一次真跑完 —— 690 杀 / 8 未判，其中 2 条是假覆盖
+
+逐条跳过生效后，那张几十分钟的表**第一次在没有在飞文件挡道的情况下跑完了全部 698 条**
+（真装 worktree `/Users/ze/Downloads/dsh-gates-f81`，日志 `/tmp/mut-all-f6eb.log`，实测约 22 分钟：起 21:28:29、止 ≤21:50:40）：
+**✅ 690 · ❌ 5 · ⏭️ 2 · ⚠️ 1**（`UNVERIFIED=3`）。8 条未判的分诊，全部读的是它们各自的第二行，不是标签：
+
+1. **3 条 sandbox ❌**（`sbx-network-branch-dropped` / `sbx-network-escort-ors-conditions` / `sbx-note-gate-dropped`）
+   原因一律是「**突变未生效（锚点可能已失效）**」⇒ 针脚匹配的是**主树里在飞的 `src/main/sandbox.ts`**，
+   不是 HEAD。与 `--check-needles` 在主树报 0 阻断并不矛盾：那把尺量的是工作树（记忆第 61 条同族）。
+   这就是待办 #37 那一簇，等那个原子簇入库。
+2. **3 条 D7 ⏭️/⚠️**：`src/tools/snapshot.ts` 与 `tests/snapshot-d7.test.ts` 都未跟踪 ⇒ 源侧拒跑、判卷侧不可判。同一簇。
+3. **2 条真缺陷（本轮已修）**：`worker-git-newline-not-a-separator` 与 `shape-downstream-option-forms-lost`
+   都报「变异存活：测试全绿」——**这两条锚点在假装自己是覆盖**。
+
+### 3-①：换行归一化那条，被 ⑩ 的按序面替掉了一半职责
+
+`echo hi\ngit push --force` 在突变（去掉 `command.replace(/\r?\n/g, ";")`）后仍然被拦：
+`push` 在破坏动词表内，⑩ 那段「扫本段独立 `git` 词 + 表内动词」不看切段也能命中 ⇒ 我原来的用例**恰好落在两支同答的那一格**
+（记忆第 78 条：用例必须挑新旧规则答案分歧那一格）。分歧格是**表外但非只读**的动词：
+`echo hi\ngit fsck` —— `fsck` 不在 `DESTRUCTIVE_GIT_SUBCOMMANDS`、切段后 `inv.bin === "git"` 成立且不在只读白名单 ⇒
+只有归一化这一支撑得住。用例补了它，并配一条成对的放行侧 `echo hi git fsck`（无换行 ⇒ 两支都不认，
+防「为绿而全拦」）。锚点文案未改，改的是判卷面 ⇒ 现在这条锚点真的会红。
+
+### 3-②：下游选项族如今由两支共同成立 ⇒ 端到端那条必须一次废两支
+
+`shape-downstream-option-forms-lost` 的存活是**结构性的**：⑩ 的按序面（`rules.ts:195` 的 token 候选）
+对 `git -C /tmp push --force` 也能命中，且命中下标为 0 ⇒ 依旧是 deny。单废形态面，端到端结论一字不变。
+拆成两条（表 704 → 705）：
+- 原 id 改挂**这一支自己的观测者** `tests/command-shape.test.ts:104`「五类写法都产得出「git push --force」那一形」
+  ——生产者侧有没有产假形，本来就该由生产者侧的尺量；
+- 新增 `shape-downstream-option-both-faces-lost`（src=`rules.ts`），在同一个消费点上把 `commandForms` 与
+  `invocations` 候选**一起**摘掉 ⇒ 剩下裸前缀匹配 ⇒ 「五支写法在自主档全由 L1-deny 拦下」必红。
+  这条与既有的 `rule-matcher-deny-ignores-wrappers` 是同一对改法、不同判卷清单。
+
+**这条给"同族"记法补的一面**：一支面被后来的面**接管**职责之后，旧锚点若仍挂在端到端结论上，
+它就从"守门"悄悄变成"永远活着的假警报"——全表跑是唯一能看见这件事的手段（`--check-needles` 只看针脚还插不插得进去，
+插得进去但踩的是别人的地板，它看不见）。
+

@@ -113,6 +113,14 @@ describe("③ worker 的 git 静态闸（此前全仓零锚点的一支）", () 
   it("换行是命令分隔符：`echo hi\\ngit push --force` 不得因为整段首词是 echo 而漏判", () => {
     expect(interceptDestructiveGit("echo hi\ngit push --force").ok).toBe(false);
     expect(interceptDestructiveGit("echo hi").ok).toBe(true); // 无 git 段照常放行
+    // 上面那条**拦不住**「去掉换行归一化」这个突变（09-22 全表跑实测存活）：`git push` 里的
+    // `push` 在破坏动词表内，⑩ 的按序面（扫本段独立 `git` 词）不改归一化也照样拦。
+    // 真正只由「先归一化再切段」这一支撑住的是**表外但非只读**的动词：切出 `git fsck` 段后
+    // `inv.bin === "git"` 成立、`fsck` 不在只读白名单 ⇒ 拒。少这一条，那条锚点就是假覆盖。
+    expect(interceptDestructiveGit("echo hi\ngit fsck").ok).toBe(false);
+    // 成对的放行侧（同一段落里的表外动词，未知首词 + 无换行 ⇒ ⑩ 与切段都不认它）：
+    // 这条突变前后都是 true，它钉的是「别用全拦来把上面那条做绿」。
+    expect(interceptDestructiveGit("echo hi git fsck").ok).toBe(true);
   });
 
   it("拦下来要说得出为什么、放行什么（worker 无合并权，reason 是用户唯一的解释面）", () => {

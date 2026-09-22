@@ -5346,9 +5346,24 @@ const MUTATIONS = [
   {
     id: "shape-downstream-option-forms-lost",
     src: "src/permissions/command-shape.ts",
-    test: "tests/shell-bypass-composition.test.ts",
-    desc: "不再产出「剥掉下游全局选项」的后缀形 ⇒ `git -C /tmp push --force`、`git --no-pager push --force` 等五支把用户手写的 deny 静默绕过（09-22 探针 ⑤ 段实测全漏，修前红 5）",
+    test: "tests/command-shape.test.ts",
+    desc: "不再产出「剥掉下游全局选项」的后缀形 ⇒ `git -C /tmp push --force` 那一族在前缀匹配里整个看不见（09-22 探针 ⑤ 段实测五支全漏，修前红 5）。" +
+      "**这条原先挂在端到端那条 deny 判据上，09-23 全表跑实测存活**：⑩（同日补的按序面）把同一件事也守住了 ⇒ 单废这一支结论仍对，锚点白挂。" +
+      "现改挂在**这一支自己的观测者**上（形态面产不产那一形），端到端那半交给下面那条配对锚点",
     apply: (s) => s.replace("for (const form of [[inv.bin, ...inv.args].join(\" \"), ...suffixForms(inv)]) {", "for (const form of [[inv.bin, ...inv.args].join(\" \")]) {"),
+    expectFail: "五类写法都产得出「git push --force」那一形",
+  },
+  {
+    id: "shape-downstream-option-both-faces-lost",
+    src: "src/permissions/rules.ts",
+    test: "tests/shell-bypass-composition.test.ts",
+    desc: "上面那条的端到端半边：⑤ 的下游选项族如今由**两支**共同守住（形态面 `commandForms` 的后缀形 + ⑩ 的 `invocations` token 候选）。" +
+      "只废一支必然存活（记忆第 72 条：不变量由 N 支取料面共同成立 ⇒ 变异要一次废 N 支），所以这条在同一个消费点上把两道面一起摘掉，" +
+      "剩下裸前缀匹配 ⇒ 五支写法回到 approve@L4-pass，那才是「用户手写的 deny 白写」的形状",
+    apply: (s) => s.replace("forms ??= commandForms(segment);", "forms ??= [segment];").replace(
+      "[tokenize(segment), ...invocations(segment).map((i) => [i.bin, ...i.args])]",
+      "[tokenize(segment)]",
+    ),
     expectFail: "五支写法在自主档全由 L1-deny 拦下",
   },
   {
