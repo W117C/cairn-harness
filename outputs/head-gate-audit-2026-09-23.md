@@ -295,3 +295,69 @@ subdirectory of the project root at "/private/tmp/dsh-anchor-776".
 它就从"守门"悄悄变成"永远活着的假警报"——全表跑是唯一能看见这件事的手段（`--check-needles` 只看针脚还插不插得进去，
 插得进去但踩的是别人的地板，它看不见）。
 
+## 追加七（同日更晚，HEAD `daf8167`）：把「门被超时掐死」从一次性事故改成可自愈的状态
+
+**触发**：追加六那次整跑是被外层掐死的（`pnpm gates` 对单道门约 1200s，实测 `exit=124`，用时 1200003ms；
+这张表按当时条数要 20+ 分钟）。被掐死的位置若正好在「源文件已经是突变体、还没轮到还原」那一拍，
+盘上就留下一对东西：未还原的突变体 + 它的 `.mutbak`。下一道门读到的是污染内容——
+`--check-needles` 因此报出一条**假陈旧针脚**（当时是 `gemini.ts`），读的人去改一条本来好好的锚点。
+
+### 现场是怎么造出来的（读数，不是推演）
+
+用真信号做，不构造假状态：`node scripts/mutate-verify.mjs gym-draft-worker-writes-as-parent` 起在后台，
+外部以 50ms 轮询 `git diff`，一命中突变窗口就 `kill -STOP` 冻住再 `kill -9`。
+第一次尝试没冻住、只轮询——**整整 60 秒没看见窗口**：单条锚点实测 0.9s 跑完（三次 vitest 调用都在里面），
+窗口是几百毫秒级 ⇒ 慢轮询永远量不到，这也是「被掐死」在真实链路里为什么难复现的原因。
+落地污染：`src/agent/gym/draft.ts.mutbak` + 该文件 1 行 diff（正是那条锚点的改法）。
+
+### 三条读数，改前 / 改后
+
+| 读数 | 命令 | 结果 |
+| --- | --- | --- |
+| A（改前） | `mutate-verify gym-draft-worker-writes-as-parent` | 只报「预检拒 1 条 ⇒ 一条都不安全，判红退出」，**盘上残留一根手指都没碰** |
+| B（改后） | `mutate-verify --check-needles` | `exit=1`（真退出码，不带管道），点名「残留 `…draft.ts.mutbak` ⇒ 同名源文件可能是未还原的突变体，下面的针脚不可信」 |
+| C（改后） | 与 A 同一条命令 | 「⚠️ 自愈：还原 src/agent/gym/draft.ts」→ ✅ 该锚点判为被杀死 → `exit=0`，`md5` 与开跑前的纯净快照逐字相同，全仓 `.mutbak` 残留 0 |
+
+**A 这一条是本轮真正的发现**：处置块原先排在预检分流**之后**，而「重跑被打污文件自己那条锚点」恰恰是
+被污染那一轮**最容易想到**的动作——它会在 `entries.length === 0` 处提前退出。也就是说：唯一必然知道
+「该文件被我们污染过」的那个人，被安排在一个看不见残留的出口后面。
+判据只要 HEAD/备份/当前三份内容，与「本次跑哪几条」无关 ⇒ 提到分流之前调用（顺带：`stateOf` 的缓存
+此刻还空着，自愈后那些锚点本轮就能照判，不必等下一轮）。
+
+### 自愈的边界：不能越权
+
+`leftoverActionOf(head, backup, current, isOurMutant)` 只有三条出路：
+`restore` 要求 **备份 == HEAD 且当前 != HEAD 且当前这份正好等于本表某条锚点作用在备份上产出的突变体**；
+`drop-backup` 只删过期备份；**其余一律 manual** 并打印两步人工判读（先 `git diff HEAD -- <src>` 看清两边）。
+`isOurMutant` 这一支不能省：省了之后「备份落盘后别人自己改了同一个文件」与「我们上次没还原」
+在那三份内容上**完全同形**，一次自愈就把别人的在飞改动抹掉——那是本仓最忌的不可逆越权。
+
+信号处理器（SIGINT/SIGTERM/SIGHUP → `restoreInFlight`）留着，但注释写清它**不是**超时保险：
+`runTest` 走 `execFileSync` 同步阻塞事件循环，实测 SIGTERM 打到 node 后 1.5s 内什么都没发生。
+可靠的口子是下一次开跑按证据自愈，因为只有那一刻三份内容同时都在盘上。
+
+### 判卷
+
+新增 4 条锚点（`leftover-heal-ignores-is-our-mutant`、`leftover-heal-trusts-non-head-backup`、
+`budget-missing-value-silent`、`budget-value-slot-treated-as-anchor-id`）+ 2 条因 `classifyArgs`
+加值位分流而整行失效的旧锚点改指（`classify-unknown-flag-ignored`、`classify-flags-counted-as-ids`）
+⇒ 这六条一次性跑完、变异全部被正确杀死（4.8s，`exit=0`）。
+`--check-needles` 现 714 条：阻断 0、待复认 0、未覆盖 0；**改法语法体检当场逮到我写的一条把源文件改坏的
+变异**（把 `consumed.add(i + 1);` 整句替换成注释，留下空 `if` 体）——这正是这一相存在的理由：
+秒级能查出来的事，不留到几十分钟后伪装成「误伤无关用例」。
+
+预算这条路（`--budget-ms` / `DSH_MUTATE_BUDGET_MS`）现在会**自己**在条目边界收尾，
+未证从一类分成三类点名：源文件在飞没跑 / 判卷文件在飞量不出 / 预算用尽没轮到，
+并新增本次耗时与「跑了几条 / 共几条」的读数——这张表到底要跑多久，此前没人打印过。
+
+### 没做完的（一条，且被别人的在飞集挡着）
+
+那道**约 1200s 的每道门超时本身**在 `scripts/gate-manifest.ts`，而该文件此刻在另一会话的在飞改动集里
+（`git status` 显示 ` M scripts/gate-manifest.ts`）⇒ 按「只追加不改写别人的原子单元」的规矩没动它。
+等它落地后要接的一行：给这一道门传 `--budget-ms`（或设 `DSH_MUTATE_BUDGET_MS`）**低于**外层超时。
+在那之前 `pnpm gates` 仍会掐断整表——区别是：掐完留下的污染现在会被下一次开跑按证据自愈并出声，
+而不是变成一条指向无辜锚点的假陈旧针脚。
+「被掐死」这一相仍**没有**常驻判卷：它是脚本接线（调用顺序），没有任何测试观察得到；
+本轮以读数 A→C 为证，留在本文里而不是伪装成一条锚点。
+
+
