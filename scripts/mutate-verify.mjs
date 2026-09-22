@@ -3870,6 +3870,25 @@ const MUTATIONS = [
     expectFail: "报告汇聚到被改文件：调用点数 + 波及文件数 + 帽标记",
   },
   {
+    id: "mount-no-followup-frame",
+    src: "src/renderer/history-window.js",
+    test: "tests/renderer-history-mount.test.ts",
+    desc: "本拍挂了新节点却不续下一拍 ⇒ 新挂的格永远没被测高（测高循环读的是上一拍的节点），changed 恒假、" +
+      "窗口停在估算窗。真窗口里表现为偶发「卡片头 8 / 盘上 25 行 / 距底 0px」且不抛异常——" +
+      "收敛被押在一个可能不会来的 scroll 事件上（首拍已把 scrollTop 钉到底，app 那句吸底换不来事件）",
+    apply: (s) => s.replace("if (changed || mountedNew) schedule();", "if (changed) schedule();"),
+    expectFail: "换不来一次 scroll 也必须收敛：挂载自己得续拍（真窗口那条偶发红的机制）",
+  },
+  {
+    id: "null-shell-silent-skip",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-history-live.test.ts",
+    desc: "buildUnit 交不出 .msg 壳时不再 console.error ⇒ 虚拟化只会按 0 高静默跳过那一格，" +
+      "事实丢失重新变得无人知晓（崩溃撤掉了，观测者也一起撤了就是另一种回归）",
+    apply: (s) => s.replace("console.error('转录单元渲染不出 .msg 壳：'", "void ('转录单元渲染不出 .msg 壳：'"),
+    expectFail: "单元渲染不出壳时必须出声：跳过是虚拟化的权利，静默不是",
+  },
+  {
     id: "null-unit-eats-whole-window",
     src: "src/renderer/history-window.js",
     test: "tests/renderer-history-mount.test.ts",

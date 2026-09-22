@@ -2569,6 +2569,13 @@ render();
       rc = prev;
     }
     const first = frag.querySelector('.msg');
+    if (!first) {
+      /* 虚拟化现在会跳过渲染不出壳的单元（一格不再拖死整窗）——但「跳过」本身是新的高度静默：
+         事实照样看不见，只是不再抛异常。所以这里必须出声：panels-check 的 B25 收 console.error，
+         漏一格就红，且这条串直接点名是哪几号事件（不用再靠六轮外推）。 */
+      console.error('转录单元渲染不出 .msg 壳：' + (unit && unit.kind ? unit.kind : '?') +
+        ' 事件 ' + (unit && unit.ids ? unit.ids.map(i => String((historyEvents[i] || {}).type)).join('+') : '?'));
+    }
     return first;
   }
 

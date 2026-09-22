@@ -35,7 +35,7 @@ type FakeEl = Record<string, unknown> & {
   index: number;
 };
 
-function makeDom(unitCount: number, nullAt = -1) {
+function makeDom(unitCount: number, nullAt = -1, quietScroll = false) {
   const listeners = new Map<string, Array<() => void>>();
   const frames: Array<() => void> = [];
   let scrollTop = 0;
@@ -100,6 +100,9 @@ function makeDom(unitCount: number, nullAt = -1) {
       const next = Math.max(0, Math.min(v, heightOf(inner) - VIEW));
       if (next === scrollTop) return;
       scrollTop = next;
+      // quietScroll 模拟真窗口的另一种落法：吸底赋值没换来 scroll 事件（值本来就到底 /
+      // 事件被合成掉），此时收敛只能靠 mount 自己续拍——把这条建模出来，判据才不靠运气。
+      if (quietScroll) return;
       for (const fn of listeners.get("scroll") ?? []) fn();
     },
   });
@@ -173,6 +176,23 @@ describe("mountHistory 的挂载收敛（虚拟化最后一拍）", () => {
     expect(threw).toBe("");                                        // 挂载不许把异常抛给调用它的那一拍
     expect(mounted).toEqual([0, 1, 2, 3, 4, 6, 7, 8, 9, 10]);       // 缺的只有第 5 格，邻居一个不陪
     expect(spacers[spacers.length - 1] ?? -1).toBe(0);             // 那一格按 0 高记账，不留 120px 幻影
+  });
+
+  it("换不来一次 scroll 也必须收敛：挂载自己得续拍（真窗口那条偶发红的机制）", () => {
+    /* 真窗口对照（同日）：同一份码连跑，一次「卡片头 18 / 尾单元已挂」全绿，一次停在
+       「卡片头 8、盘上 25 行、距底 0px」——而且 B25 报 0 条未捕获异常、0 条 console.error，
+       说明这一次不是崩溃，而是**根本没续拍**。机制：首拍挂载时容器还是空的 ⇒ 距底判定为真 ⇒
+       拍尾把 scrollTop 钉到底；新节点是这一拍才挂的，测高循环扑空 ⇒ changed 为假 ⇒ 不排下一拍；
+       而 app 自己那句吸底赋值往往换不来 scroll 事件（值本来就已到底）⇒ 窗口永远停在估算窗。
+       quietScroll 就是把「换不来事件」这一支建模出来：收敛不许依赖外面再推一把。 */
+    const dom = makeDom(11, -1, true);
+    const handle = mountInVm(dom);
+    dom.runFrames();
+    const mounted = dom.mountedIndexes();
+    const spacers = dom.spacerHeights();
+    handle.destroy();
+    expect(mounted).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(spacers[spacers.length - 1] ?? -1).toBe(0);
   });
 
   it("反向对照：会话一长就必须真的虚拟化（不许为了上一条把 400 个单元全挂上）", () => {

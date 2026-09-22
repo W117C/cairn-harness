@@ -94,17 +94,19 @@ export function mountHistory({ container, scroller, units, renderUnit }) {
     }
     let next = after;
     let nullUnit = false;
+    let mountedNew = false;
     for (let i = range.end - 1; i >= range.start; i--) {
       let node = mounted.get(i);
       if (!node) {
         node = renderUnit(units[i], i);
         // 渲染器交不出壳（那一格里没有任何可显示的东西）时按 0 高记账并跳过：一格的损失只能是自己，
         // 不能让整窗跟着死——旧写法在 node.style 上抛 TypeError，异常出在 rAF 回调里无人观测，
-        // 循环从这里往前的全部单元都不再挂载（现象：贴底却只剩半截转录）。
+        // 循环从这里往前的全部单元都不再挂载（app.js 的 buildUnit 会 console.error 点名是哪几号事件）。
         if (!node) { heights[i] = 0; nullUnit = true; continue; }
         node.style.margin = '0 0 12px';
         node.style.flexShrink = '0';
         mounted.set(i, node);
+        mountedNew = true;
         observer?.observe(node);
       }
       if (node.nextSibling !== next) container.insertBefore(node, next);
@@ -115,7 +117,12 @@ export function mountHistory({ container, scroller, units, renderUnit }) {
     before.style.height = offsets[range.start] + 'px';
     after.style.height = (offsets[units.length] - offsets[range.end]) + 'px';
     scroller.scrollTop = wasAtBottom ? scroller.scrollHeight : correctedTop;
-    if (changed) schedule();
+    /* 挂了新节点就必续一拍：测高循环读的是**上一拍**挂上的节点，本拍挂的格这一拍还没高度可读，
+       changed 因此为假。只靠 ResizeObserver / 后续 scroll 事件续拍是不行的——真窗口里首拍就把
+       scrollTop 钉到了底，app 那句吸底赋值常常换不来 scroll 事件（值本来就到底），RO 也可能在
+       同一次渲染里被合成掉 ⇒ 窗口永远停在估算窗（偶发「卡片头 8 / 盘上 25 行 / 距底 0px」，
+       且不抛异常、不出 console.error）。判据见 tests/renderer-history-mount.test.ts 的 quietScroll 那条。 */
+    if (changed || mountedNew) schedule();
   }
   scroller.addEventListener('scroll', schedule, { passive: true });
   observer?.observe(scroller);

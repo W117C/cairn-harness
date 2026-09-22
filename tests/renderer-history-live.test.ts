@@ -215,6 +215,21 @@ it('孤儿 tool_result 的分支不许静默 break：事实要落成卡，那一
   expect(title).toContain('未能并入调用');
 });
 
+it('单元渲染不出壳时必须出声：跳过是虚拟化的权利，静默不是', () => {
+  /* 配套的另一半：mountHistory 现在遇到 null 只按 0 高跳过（一格不再拖死整窗）——崩溃没了，
+     但「事实看不见」这件事也同时变得无声。所以 buildUnit 交出 null 前必须 console.error，
+     且要点名是哪几号事件（panels-check 的 B25 收 console.error，漏一格就红）。
+     这条钉的是出声那一支还在、且带得出事件类型；行为侧（真收到）由 B25 的通道自检验证。 */
+  const a = source.indexOf('  function buildUnit(unit) {');
+  const b = source.indexOf('  /* ---------- 会话列表', a);
+  expect(a).toBeGreaterThanOrEqual(0);
+  expect(b).toBeGreaterThan(a);
+  const branch = /if\s*\(\s*!first\s*\)\s*\{([\s\S]*?)\n\s*\}/.exec(source.slice(a, b));
+  expect(branch, "!first 那一支必须还在（撤了它＝又回到静默丢事实）").not.toBeNull();
+  expect(branch?.[1]).toContain('console.error(');
+  expect(branch?.[1], '出声要带事件类型，否则红了也查不到是哪一型').toContain('historyEvents');
+});
+
 it('late old-session history cannot replace an already mounted newer session or its usage', async () => {
   const b = boot();
   const first = b.context.selectSession('a');
