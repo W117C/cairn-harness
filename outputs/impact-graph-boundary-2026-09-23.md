@@ -133,3 +133,14 @@ tags 缓存命中率下降（缓存按 `{mtime,size}` 键控，被换入换出�
 "表上守护、实则空转"的窗口——区别只是这次空转的方向反过来（针脚摸不到码，而不是码没了针）。
 处置：不代改（`src/main/sandbox.ts` 在别人手里），已立待办 #37 记名给那笔提交；同时这轮把我自己
 撞断的旧针脚 `impact-query-deps-ghost-file-silent` 改指到新行（那条是我的责任面，见 `d0282af`）。
+
+## 本轮读数（同 HEAD `f79bcbb` 的干净 worktree，软链 node_modules + 直连 vitest `--config`）
+
+- `typecheck` exit **0**。
+- 全量 `test`：**195 files / 1967 绿 + 2 红**，红的是 `gated-tools`、`runner-gates` 那两条老面孔（待办 #33，
+  根因在别人未提交的 `agent-runner.ts` + `base.ts`），**本轮五笔提交没有新增任何红**。
+- 针脚体检：**HEAD 3 条阻断**（上一条那节；主树只报 1）；本会话新增的两条锚点与被我改指的那条旧锚点
+  在 `d0282af` 的干净 worktree 里**三条全部真杀死**。
+- 一次读数事故的自白：第一次派这个后台任务时 `git worktree add` 因路径冲突失败了，而脚本以
+  `cd <不存在的目录> && …` 开头 ⇒ 它退到默认目录跑，交出「2 files / 58 tests」这种无法解释的数。
+  那份读数已弃用、不参与任何结论；教训是**长任务 launch 前先确认目标目录真存在**。
