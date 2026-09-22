@@ -13,10 +13,15 @@
 // 分工：链式分隔（`&&`、`||`、`;`、`|`、`&`、换行）由调用方先切段，本模块按段工作；
 // 唯一的例外是 `shell -c '<载荷>'`——载荷在自己内部再按同一套分隔符切，然后递归下来。
 
-/** exec 提升 / 包装类：跳过它们才看得见真正跑的东西。 */
+/** exec 提升 / 包装类：跳过它们才看得见真正跑的东西。
+ *  `time` 只加测量不改执行、`xargs` 把余下 token 当命令跑（stdin 是它的参数）——
+ *  09-22 按位置扫写法时两支都漏（`time git push --force`、`xargs git push --force`）。 */
 export const EXEC_WRAPPERS: ReadonlySet<string> = new Set([
-  "command", "env", "exec", "nice", "nohup", "sudo", "timeout",
+  "command", "env", "exec", "nice", "nohup", "sudo", "timeout", "time", "xargs",
 ]);
+/** 把**余下全部参数**当脚本文本执行的壳（与 `bash -c` 的区别是没有 `-c`，载荷就是剩下的 token）。
+ *  不滤掉以 `-` 开头的 token：`eval git push --force` 的 `--force` 是载荷的一部分，滤了就自己把判据削短。 */
+const SCRIPT_WRAPPERS: ReadonlySet<string> = new Set(["eval"]);
 /** 吃 `-c` 载荷的 shell：载荷要按同一套规则再判一遍（递归有界）。 */
 export const SHELL_INVOKERS: ReadonlySet<string> = new Set(["bash", "sh", "zsh", "dash", "ksh"]);
 
@@ -30,6 +35,10 @@ const VALUE_OPTS: Readonly<Record<string, ReadonlySet<string>>> = {
   nice: new Set(["-n", "--adjustment"]),
   sudo: new Set(["-u", "-g", "-h", "-p", "-r", "-t", "-C", "-D", "-T"]),
   timeout: new Set(["-k", "--kill-after", "-s", "--signal", "-p", "--preserve-status", "-v", "--verbose"]),
+  // `-p` 在 bash/GNU time 里都是**布尔**开关（POSIX 格式），不是带值选项：
+  // 误登记成带值会把后面的二进制当值吞掉（`time -p git push --force` 实测连 worker 闸一起放行）。
+  time: new Set(["-o", "--output", "-f", "--format", "--append", "-v", "--verbose"]),
+  xargs: new Set(["-I", "-n", "-P", "-s", "-E", "-e", "-d", "-L", "--max-lines", "--max-args", "--open-tty", "--delimiter", "--replace"]),
 };
 /** 这些包装器在选项之外还吃一个位置值（`timeout 30 git …` 的时长、`nice 5 git …` 的偏移）。 */
 const POSITIONAL_VALUE: ReadonlySet<string> = new Set(["nice", "timeout"]);
@@ -151,6 +160,7 @@ function startOffsets(tokens: string[]): number[] {
 /** `bash -c '<载荷>'` / `sh -lc '<载荷>'` 的载荷取料（取 `-c` 之后的那个 token；
  *  合并写法 `-lc` 也算，此时后一个 token 就是载荷——`sh -lc 'cmd' name` 的 `name` 是 argv[0]）。 */
 function payloadOf(bin: string, args: string[]): string | null {
+  if (SCRIPT_WRAPPERS.has(bin)) return args.join(" "); // `eval git push --force`：余下的就是脚本
   if (!SHELL_INVOKERS.has(bin)) return null;
   for (let k = 0; k < args.length; k++) {
     const a = args[k]!;

@@ -9,6 +9,7 @@
 // 本测把四段的期望变成能进 `pnpm test`、能被锚点钉住的判据。两边都直调真实函数，不复制实现。
 import { describe, expect, it } from "vitest";
 import { interceptDestructiveGit, isReadOnlyShellCommand } from "../src/agent/worker-shell-tools";
+import { commandForms, invocations } from "../src/permissions/command-shape";
 import { evaluate, newAutonomySession } from "../src/permissions/autonomy";
 import { judgeChain, parsePermissionsFile } from "../src/permissions/rules";
 import type { ToolName } from "../src/tools/base";
@@ -22,6 +23,8 @@ import {
   GLOBAL_OPT_MUST_STAY_CLEAN,
   GLOBAL_OPT_VARIANTS,
   PIPE_INTO_SHELL,
+  PREFIX_WORD_MUST_STAY_CLEAN,
+  PREFIX_WORD_VARIANTS,
   PROBE_RULES_JSON,
   REDIRECT_CASES,
   WORKER_CASES,
@@ -243,5 +246,29 @@ describe("已知边界：deny 的选项两侧（未裁）", () => {
     for (const cmd of [...FLAG_UNDERHIT, ...FLAG_BOUNDARY_OVERHIT]) {
       expect(interceptDestructiveGit(cmd).ok, cmd).toBe(false);
     }
+  });
+});
+
+/* ---------------- ⑥ 前缀词族（09-22 按位置扫写法扫出来） ----------------
+   `eval` / `xargs` / `time` 自己不动执行，但**余下的 token 才是真命令**。修前两支面全漏
+   （规则层 approve@L4-pass、worker 闸也放行）——同一份解析的两个消费者一起漏，
+   正是把解析收成一份之后才看得见的形状。 */
+describe("⑥ 前缀词：eval / xargs / time 后面才是真命令", () => {
+  it("九支写法两支面都拦（含叠套 `sudo time xargs git …` 与引号载荷）", () => {
+    for (const cmd of PREFIX_WORD_VARIANTS) {
+      expect(at(evaluate("run_shell", { command: cmd }, session())), cmd).toBe("deny@L1-deny");
+      expect(interceptDestructiveGit(cmd).ok, cmd).toBe(false);
+    }
+  });
+
+  it("负控：这些词当**参数**、或命令本身跑不成时，不许被 deny 牵连", () => {
+    for (const cmd of PREFIX_WORD_MUST_STAY_CLEAN) {
+      expect(judgeChain(RULES, "run_shell", cmd).verdict, cmd).not.toBe("deny");
+    }
+  });
+
+  it("`time -p` 的 `-p` 是布尔开关：登记成带值就会把 git 当值吞掉（实测两支一起放行）", () => {
+    expect(commandForms("time -p git push --force")).toContain("git push --force");
+    expect(invocations("time -p git push --force").map((i) => i.bin)).toContain("git");
   });
 });

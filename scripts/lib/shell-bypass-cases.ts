@@ -95,6 +95,30 @@ export const FLAG_BOUNDARY_OVERHIT: string[] = [
   "git push --force-with-lease origin main",
 ];
 
+/** ⑥ 前缀词族（09-22 按位置扫写法扫出来的）：这些词自己不动执行，但**余下的 token 才是真命令**。
+ *  修前实测 `eval …` / `xargs …` / `time …`（连 `time -p`）三支全漏，且 worker 闸与规则层一起漏
+ *  （同一份解析的两个消费者 ⇒ 一处误登记两处放行）。 */
+export const PREFIX_WORD_VARIANTS: string[] = [
+  "eval git push --force",
+  "eval \"git push --force\"",
+  "eval \"git push --force; echo done\"",
+  "xargs git push --force",
+  "xargs -n1 git push --force",
+  "time git push --force",
+  "time -p git push --force",
+  "sudo time xargs git push --force",
+  "nohup time git push --force",
+];
+
+/** ⑥′ 负控：这些**不该**被 deny 牵连。
+ *  `cat time xargs` / `echo xargs …` 里那几个词是**参数**不是前缀词；
+ *  `--fo=rcx` 看着像缩写漏判，但 git 自己会报「选项不认/歧义」，命令根本执行不了强推。 */
+export const PREFIX_WORD_MUST_STAY_CLEAN: string[] = [
+  "git status",
+  "cat time xargs",
+  "echo xargs git push --force",
+  "git push --fo=rcx",
+];
 /** ⑤ 的负控：剥下游选项**不得**把只读命令也变成命中 deny 的样子。 */
 export const GLOBAL_OPT_MUST_STAY_CLEAN: string[] = [
   "git status",

@@ -14,6 +14,8 @@ import {
   GLOBAL_OPT_MUST_STAY_CLEAN,
   GLOBAL_OPT_VARIANTS,
   PIPE_INTO_SHELL,
+  PREFIX_WORD_MUST_STAY_CLEAN,
+  PREFIX_WORD_VARIANTS,
   PROBE_RULES_JSON,
   REDIRECT_CASES,
   WORKER_CASES,
@@ -120,6 +122,20 @@ for (const c of [...FLAG_UNDERHIT, ...FLAG_BOUNDARY_OVERHIT]) {
 }
 console.log("     ↑ 漏判（`-f` 与 `--f` 是同一个破坏性操作）与过覆盖（`--force-with-lease` 是**更安全**的那个）同根：");
 console.log("       规则匹配是整串前缀。收紧一头必然放宽另一头 ⇒ 需要一次语义裁决，不单向改。");
+
+/* ---------------- ⑥ 前缀词族（eval / xargs / time） ---------------- */
+
+console.log("\n【⑥】前缀词后面才是真命令——规则层与 worker 闸两支都要拦");
+for (const cmd of PREFIX_WORD_VARIANTS) {
+  const d = evaluate("run_shell", { command: cmd }, session("auto"));
+  check("规则层拦", cmd, "deny@L1-deny", `${d.verdict}@${d.layer}`);
+  check("worker 闸同判", cmd, "ok:false", `ok:${String(interceptDestructiveGit(cmd).ok)}`);
+}
+console.log("\n【⑥′】负控：这些词当参数、或命令本身跑不成时不许被牵连");
+for (const cmd of PREFIX_WORD_MUST_STAY_CLEAN) {
+  const d = evaluate("run_shell", { command: cmd }, session("auto"));
+  check("不牵连", cmd, "非 deny", d.verdict === "deny" ? "deny" : "非 deny");
+}
 
 console.log(`\n合计：红 ${String(red)} / 绿 ${String(green)}`);
 if (red > 0) {

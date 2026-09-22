@@ -132,3 +132,35 @@ TERM=dumb node --import tsx scripts/mutate-verify.mjs \
 组合测加「已知边界（未裁）」3 条现状断言之后复跑：
 `test` exit 0，**195 files / 1951 tests**（较上表 +3）；`typecheck` 归因 `HEAD 内 0 个`；
 `mutate-needles-check` 仍 633 条阻断 0。实现一字未动 —— 这两侧的修法在等一次语义裁决。
+
+## 再追加（同日）：⑥ 前缀词族 —— 同一把尺子量出来的三个新漏
+
+把 ⑤ 的做法推广成**按位置枚举写法**的一次系统扫（26 种），结果 22 拦 4 漏，
+其中 3 个是真缺词、1 个是伪漏判：
+
+| 写法 | 修前 | 定性 |
+|---|---|---|
+| `eval git push --force`、`eval "git push --force; echo done"` | 两支面全漏 | **真漏**：`eval` 余下参数就是脚本 |
+| `xargs git push --force`、`xargs -n1 …` | 两支面全漏 | **真漏**：余下 token 是被执行的命令 |
+| `time git push --force`、`time -p …` | 两支面全漏 | **真漏**：`time` 只加测量 |
+| `git push --fo=rcx` | 未拦 | **伪漏判**：git 自己会报「选项歧义/不认」，命令根本执行不了强推 |
+
+修在同一个共用件里：`eval` 进 `SCRIPT_WRAPPERS`（载荷 = 余下参数原样 join，
+**不滤** 以 `-` 开头的 token，否则 `--force` 会被自己削掉），`time` / `xargs` 进 `EXEC_WRAPPERS`
+并各配 `VALUE_OPTS`。
+
+### 施工时自己踩的第二个坑（已钉成锚点）
+
+给 `time` 登记 `VALUE_OPTS` 时把布尔开关 `-p` 当成带值选项 ⇒ 解析器把后面的 `git` 当值吞掉，
+`time -p git push --force` 依旧两支全漏。**这是"宁窄勿宽"那条规矩的反面教材**：
+误登记一个带值选项的代价不是"少跳一步"，而是**把二进制本身吃掉**。
+已收：`-p` 从表里去掉，并加一条锚点 `shape-time-p-misregistered-as-value-opt`
+专门把「把 `-p` 登记成带值」这个错钉住（改回去必红）。
+
+### 观测者与锚点
+
+- 共用清单：`PREFIX_WORD_VARIANTS`（9）+ `PREFIX_WORD_MUST_STAY_CLEAN`（4 条负控）
+- 探针 ⑥ / ⑥′：每支**两支面各一条**（规则层 + worker 闸），合计 红 0 / **绿 64**（原 42 + 22）
+- 组合测 ⑥：3 条（两支面同拦、负控不牵连、`time -p` 的取料形状）
+- 锚点 +3：`shape-eval-script-payload-lost`、`shape-exec-wrappers-drop-time-xargs`、
+  `shape-time-p-misregistered-as-value-opt`
