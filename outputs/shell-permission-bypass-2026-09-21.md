@@ -243,3 +243,58 @@ pnpm exec tsx scripts/probe-shell-bypass.ts     # 当前必红（退出码 1）�
   本簇已把它改写成现在时的事实（绕过四条已收口 + 指针），`docs-check` 复跑全绿。
   ⇒ **dated 档案可逐日追注，现行层（LIVE_PAGES）只能陈述现态**；结论搬过去时要换形状，
   不是抄原句再加一句"那是旧的"。
+
+### 留位第一条已收：四道面的「组合」现在有离线观测者（09-22 追注，`cdcec0a`）
+
+上面「四段全绿之后的留位」写着：四道面**合起来**的端到端判定没人钉——单面锚点各钉一支，
+而唯一同时看四段的 `scripts/probe-shell-bypass.ts` 既不是门禁、也不是变异锚点的消费者
+（`mutate-verify` 只吃 vitest 文件）。更要紧的是四段里第 ③ 段（worker 的 git 静态闸
+`interceptDestructiveGit`）**在全表零锚点**。
+
+收法：
+
+1. **清单收成一份事实源** `scripts/lib/shell-bypass-cases.ts`（规则库 JSON + ① 11 支 + ② 6 支 +
+   ③ 11 支 + ④ 4 支 + 管道对照），探针与测都从它 import——两份清单分叉时，绿的那份会替红的那份背书。
+2. **组合测** `tests/shell-bypass-composition.test.ts`（13 条）把四段期望搬进 `pnpm test`，
+   并钉住只有组合才能看到的东西：`verdict@layer` 两列一起看（只看 verdict 会把「风险层抢在规则层前面」读成绿）。
+3. **补 ③ 的三条锚点**（干净 HEAD `cdcec0a` 上逐条实跑杀死）：
+   `worker-git-newline-not-a-separator`（换行不是分隔符 ⇒ `echo hi\ngit push --force` 漏判）、
+   `worker-git-uses-raw-first-token`（有效二进制退回段首字面词 ⇒ 七类包装各漏一支）、
+   `shape-payload-recursion-disabled`（`shell -c` 载荷不再递归 ⇒ ③ 与 ① 同时瞎）。
+
+### 组合读数里新出来的一条事实（此前没人判过两层相对序）
+
+② 的 5 条带载荷命令**不是同一条通道**拦下的：
+
+| 命令 | 实测 | 原因文案 |
+|---|---|---|
+| `echo hi > /tmp/pwned` 等 4 条 | `ask@L2-ask-rule` | 「总是允许」不覆盖这条命令的载荷（原规则 …） |
+| `echo hi \| sh` | `ask@L4-risk` | 风险≥high 送审（自主档） |
+
+即：**同意缺口自己成卡时走 L2；当风险层判得更高时由 L4 抢先出卡**。用户两下都被问，
+但只有前四条知道"为什么又问了"。测里钉的是这个相对序 + 「缺口通道仍在产出原因（>0）」，
+不是逐条硬编码层级。
+
+* 一次判据越界自记：第一版断言「带载荷一律点名载荷」，红在 `echo hi | sh` 上——
+  实测才发现是被风险层抢先，**产品没说谎，是断言越界**。收窄成上面那条形状，
+  并反向补了一条 opposite-side：走 L4 的那条必须给得出非空 `riskReasons`（说不出「载荷」就别谎称说了）。
+* ⚠️ 锚点写法卫生：`apply` 的**替换串里出现 `.split(`** 会被 `isLineWiseApply` 认成「逐行式改法」
+  而免掉针脚体检（它按整个 apply 源码文本判）。本簇两条因此一度进 9 条逐行式，改写后回到 7（原有 7 条才是真逐行式）。
+  静态免核不代表没风险——真正兜底是「锚点在干净 HEAD 必须真杀死」这一步，别拿针脚体检当全绿。
+
+### 复算
+
+```sh
+pnpm exec tsx scripts/probe-shell-bypass.ts                     # 人读对照表：仍应 红 0 / 绿 33
+TERM=dumb node node_modules/vitest/vitest.mjs run \
+  --config tests/vitest.config.ts tests/shell-bypass-composition.test.ts
+TERM=dumb node --import tsx scripts/mutate-verify.mjs \
+  worker-git-newline-not-a-separator worker-git-uses-raw-first-token shape-payload-recursion-disabled
+```
+
+### 仍留位
+
+* 探针本身仍未进 `scripts/gate-manifest.ts`（该文件此刻在别人在飞的改动集里）。
+  组合语义已由 `test` 门观测之后，探针剩下的独有价值是「期望 vs 实测」的人读对照表——
+  这条不必再靠门禁背书。
+* ② 的同意缺口只管 allow（deny/ask 的形态面与它正交，两根锚点各钉一支）。
