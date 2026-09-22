@@ -51,6 +51,9 @@ export const THREAT_TABLE: ThreatEntry[] = [
   // C11（审查 P2）：带路径前缀的 shell（/bin/sh、/usr/bin/zsh）——旧正则只认裸 sh 系名。
   { re: /\b(?:curl|wget)\b[^;|&]*\|\s*(?:sudo\s+)?(?:[\w./-]*\/)?(?:ba|z|da|fi)?sh\b/, level: "critical", category: "远程代码执行", note: "下载内容直接管道进 shell（含绝对路径 shell）" },
   { re: /\bawk\b[^;|&]*system\s*\(/, level: "critical", category: "远程代码执行", note: "awk system() 调用（执行面）" },
+  // 09-22（探针 ② 段最后一支）：`echo hi | sh` 这类"管道进 shell"此前只有 curl/wget 那条 critical
+  // 覆盖，其它来源一律无条目 ⇒ 自主档 approve@L4-pass。执行面与来源无关，按 high 记。
+  { re: /\|\s*(?:sudo\s+)?(?:[\w./-]*\/)?(?:ba|z|da|fi)?sh\b/, level: "high", category: "远程代码执行", note: "管道进 shell（把上游当脚本执行）" },
   { re: /\b(?:perl|python3?)\b[^;|&]*(?:os\.system|subprocess|exec\s*\()/, level: "critical", category: "远程代码执行", note: "脚本语言内嵌进程执行" },
   // ---- 数据外送 ----
   { re: /\b(?:curl|wget|scp|rsync|nc|netcat|ftp|telnet|ssh)\b/, level: "medium", category: "数据外送", note: "外联命令（出网通道）" },
@@ -99,6 +102,11 @@ export const SHELL_FAMILY: ReadonlySet<string> = new Set(["run_shell", "shell_rw
 export function isShellFamily(tool: string): boolean {
   return SHELL_FAMILY.has(tool);
 }
+
+/** 改变「这条命令到底是什么」的 shell 载荷：重定向、命令替换、变量展开、管道。
+ *  「总是允许」的同意范围**不覆盖**它们（09-21 探针 ② 段：`echo hi` 的一次点击曾覆盖
+ *  `echo hi > /tmp/pwned`、`echo hi $(rm -rf …)`、`echo hi | sh`）。判定面在 rules.ts 的 allow 支。 */
+export const ALLOW_PAYLOAD = /[<>]|\$\(|`|\$\{|\|/;
 
 /** 静态威胁表的适用范围 = shell 家族 − shell_ro。
  *  shell_ro 自带 fail-closed 的只读静态白名单硬闸（对危险命令强于威胁表）：若让它的命令

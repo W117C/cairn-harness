@@ -5,7 +5,7 @@ import { readdir, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { writeFileAtomic } from "../atomic-write";
 import { commandForms } from "./command-shape";
-import { isShellFamily } from "./risk";
+import { ALLOW_PAYLOAD, isShellFamily } from "./risk";
 
 export type RuleBehavior = "allow" | "ask" | "deny";
 
@@ -136,6 +136,8 @@ const BEHAVIOR_RANK: Record<RuleBehavior, number> = { deny: 0, ask: 1, allow: 2 
 export interface RuleHit {
   rule: PermissionRule;
   prefixLen: number;
+  /** allow 命中但前缀之后还剩载荷：这条命中的**同意范围**不覆盖当前命令，已就地降为 ask。 */
+  consentGap?: boolean;
 }
 
 /** 单段匹配：所有命中里取最长前缀；同长取行为优先序 deny > ask > allow。
@@ -153,26 +155,32 @@ function matchSegment(rules: PermissionRule[], segment: string): RuleHit | null 
   for (const rule of rules) {
     const pattern = rule.pattern; // 取一次：形态匹配在 else 分支里，TS 的收窄跟不过 else-if 链
     let len: number;
+    let gap = false;
     if (pattern === undefined) len = 0; // 裸工具名条目
-    else if (rule.behavior === "allow") len = segment.startsWith(pattern) ? pattern.length : -1;
-    else {
+    else if (rule.behavior === "allow") {
+      len = segment.startsWith(pattern) ? pattern.length : -1;
+      // 前缀命中之后还剩载荷 ⇒ 用户点「总是允许」时看见的不是这条命令。按 ask 处理：
+      // 同意范围不往外扩（09-21 探针 ② 段，`echo hi` 的同意曾覆盖 `echo hi > /tmp/pwned`）。
+      if (len >= 0) gap = ALLOW_PAYLOAD.test(segment.slice(len));
+    } else {
       forms ??= commandForms(segment);
       len = forms.some((f) => f.startsWith(pattern)) ? pattern.length : -1;
     }
     if (len < 0) continue;
+    const effective: PermissionRule = gap ? { ...rule, behavior: "ask" } : rule;
     if (
       best === null ||
       len > best.prefixLen ||
-      (len === best.prefixLen && BEHAVIOR_RANK[rule.behavior] < BEHAVIOR_RANK[best.rule.behavior])
+      (len === best.prefixLen && BEHAVIOR_RANK[effective.behavior] < BEHAVIOR_RANK[best.rule.behavior])
     ) {
-      best = { rule, prefixLen: len };
+      best = { rule: effective, prefixLen: len, consentGap: gap };
     }
   }
   return best;
 }
 
 export type ChainVerdict =
-  | { verdict: "allow" | "ask" | "deny"; ruleId: string }
+  | { verdict: "allow" | "ask" | "deny"; ruleId: string; consentGap?: boolean }
   | { verdict: "miss" };
 
 /** 规则适用工具判定：shell 能力域内互通（run_shell ↔ shell_rw ↔ shell_ro）。
@@ -210,5 +218,9 @@ export function judgeChain(rules: PermissionRule[], tool: string, command?: stri
     }
   }
   if (!allHit || worst === null) return { verdict: "miss" };
-  return { verdict: worst.rule.behavior, ruleId: worst.rule.id ?? "" };
+  return {
+    verdict: worst.rule.behavior,
+    ruleId: worst.rule.id ?? "",
+    ...(worst.consentGap === true ? { consentGap: true } : {}),
+  };
 }

@@ -204,6 +204,73 @@ describe("规则匹配按有效二进制（deny/ask 收紧、allow 刻意不放�
   });
 });
 
+// 09-21 探针 ② 段（五支红，同日最后收的一条）：`allow` 存的是**整条命令字面量**，而判定用
+// `startsWith` ⇒ 用户点过一次「总是允许 echo hi」，就顺带同意了 `echo hi > /tmp/pwned`、
+// `echo hi $(rm -rf /tmp/x)`、`echo hi | sh`。修法不是取消 allow，而是把「同意范围」写进判据：
+// 前缀命中之后还剩载荷（重定向 / 命令替换 / 变量展开 / 管道）⇒ 这一条按 ask 走，理由点名原因。
+describe("「总是允许」的同意范围不覆盖载荷", () => {
+  const allowRules: PermissionRule[] = [
+    { behavior: "allow", tool: "run_shell", pattern: "echo hi", scope: "always", id: "a1" },
+    { behavior: "allow", tool: "run_shell", pattern: "git push origin", scope: "always", id: "a2" },
+  ];
+
+  it("命中前缀后还剩载荷 ⇒ 降为问一次（consentGap 留痕可审计）", () => {
+    for (const cmd of [
+      "echo hi > /tmp/pwned",
+      "echo hi >> ~/.zshrc",
+      "echo hi $(rm -rf /tmp/x)",
+      "echo hi `rm -rf /tmp/y`",
+    ]) {
+      const v = judgeChain(allowRules, "run_shell", cmd);
+      expect(v.verdict, cmd).toBe("ask");
+      expect((v as { consentGap?: boolean }).consentGap, cmd).toBe(true);
+    }
+  });
+
+  it("反例：同意范围内的正常参数照旧放行（否则 allow 形同虚设）", () => {
+    expect(judgeChain(allowRules, "run_shell", "echo hi").verdict).toBe("allow");
+    expect(judgeChain(allowRules, "run_shell", "echo hi --version").verdict).toBe("allow");
+    expect(judgeChain(allowRules, "run_shell", "git push origin main").verdict).toBe("allow");
+    expect((judgeChain(allowRules, "run_shell", "echo hi") as { consentGap?: boolean }).consentGap).toBeUndefined();
+  });
+
+  it("自主档真出卡，且理由说的是「同意范围」不是「ask 规则命中」", () => {
+    const s = newAutonomySession("auto", {
+      rules: allowRules,
+      sandboxAvailable: true,
+      planBlocked: () => false,
+    });
+    const d = evaluate("run_shell", { command: "echo hi > /tmp/pwned" }, s);
+    expect(d.verdict).toBe("ask");
+    if (d.verdict !== "ask") return; // reason 只在 ask/deny 两支上（联合类型要显式收窄）
+    expect(d.layer).toBe("L2-ask-rule");
+    expect(d.reason).toContain("「总是允许」不覆盖");
+  });
+
+  it("代价写明：引号里的重定向字符也会多问一次（选安全侧的过问，不选漏问）", () => {
+    // `|` 不是这里的代价而是另一件事：链切分先于同意范围检查，`a|b` 会被切成两段，
+    // 于是这段压根没有"命中前缀后还剩载荷"——引号不保护切分（既有行为，见 rules.ts 的 CHAIN_SPLIT）。
+    const v = judgeChain(allowRules, "run_shell", 'echo hi "a > b"');
+    expect(v.verdict).toBe("ask");
+    expect((v as { consentGap?: boolean }).consentGap).toBe(true);
+  });
+
+  it("`echo hi | sh` 走的是另一条判据：链上一段无规则 ⇒ 威胁表兜住管道进 shell", () => {
+    // 同意范围这条管不到它（"echo hi" 段自己没剩载荷，"sh" 段压根没规则），
+    // 所以 ② 段第五支的修法必须是威胁表条目，而不是把 allow 判据再拧一圈。
+    const s = newAutonomySession("auto", {
+      rules: allowRules,
+      sandboxAvailable: true,
+      planBlocked: () => false,
+    });
+    const d = evaluate("run_shell", { command: "echo hi | sh" }, s);
+    expect(d.verdict).toBe("ask");
+    if (d.verdict !== "ask") return; // riskReasons 只挂在 ask 支上
+    expect(d.layer).toBe("L4-risk");
+    expect(d.riskReasons.join(" ")).toContain("管道进 shell");
+  });
+});
+
 // P1（审查）回归：plan 门状态 run 级隔离——并发 run（交互 vs 定时 unattended）互不污染：
 // A 会话的未批准 plan 不再拦死 B run 的写工具，A 的批准也不再解锁 B；run 外遗留路径回落模块态。
 describe("plan 门 run 级隔离（P1 回归）", () => {

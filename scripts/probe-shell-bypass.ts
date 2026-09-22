@@ -39,6 +39,22 @@ function check(title: string, cmd: string, want: string, got: string): void {
   );
 }
 
+/** 「不得是 X」必须由代码表达"非"。09-21 版把 `非 approve` 当期望字面量交给 `check` 比字符串
+ *  ⇒ 该断言**恒不成立**：产品修好了它也永远红，红到没人再分辨它红的是缺陷还是判据自己写坏。
+ *  门禁体检查恒真式与析取式，查不出这种恒假式——只有"修好后必须能绿"这条能试出来。 */
+function checkNot(title: string, cmd: string, forbid: string, got: string): void {
+  const ok = !got.startsWith(forbid);
+  if (ok) green += 1;
+  else red += 1;
+  console.log(
+    (ok ? "  绿 " : "  红 ") +
+      title.padEnd(28) +
+      JSON.stringify(cmd).padEnd(44) +
+      "期望 非 " + forbid.padEnd(20) +
+      "实测 " + got,
+  );
+}
+
 /* ---------------- ① 用户手写的 deny 规则能否被绕过 ---------------- */
 
 console.log("\n【①】deny 规则「git push --force」——自主档完整 evaluate，看由哪层决定");
@@ -80,7 +96,8 @@ const ALLOW_CASES: Array<[string, boolean]> = [
 for (const [cmd, bare] of ALLOW_CASES) {
   const d = evaluate("run_shell", { command: cmd }, session("auto"));
   const got = d.verdict === "approve" ? `approve@${d.layer}` : `${d.verdict}@${d.layer}`;
-  check(bare ? "裸命令应放行" : "带载荷不得放行", cmd, bare ? "approve@L3-rule" : "非 approve", got);
+  if (bare) check("裸命令应放行", cmd, "approve@L3-rule", got);
+  else checkNot("带载荷不得放行", cmd, "approve", got);
 }
 
 /* ---------------- ③ worker 的 git 破坏命令静态闸 ---------------- */

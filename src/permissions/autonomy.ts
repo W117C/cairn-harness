@@ -309,11 +309,16 @@ export function evaluate(
   }
 
   // ---- L2 ask 规则：命中即强制审批，任何档位含自主档都绕不过 ----
+  // 「总是允许」的前缀命中后还剩载荷（consentGap）也走这一层：决策根据同样是"规则层要问人"，
+  // 只是命中的是 allow 条目的**同意范围**而不是某条 ask 规则，所以 reason 分开写。
   if (chain.verdict === "ask") {
     return {
       verdict: "ask",
       layer: "L2-ask-rule",
-      reason: `ask 规则命中（${chain.ruleId}）`,
+      reason:
+        chain.consentGap === true
+          ? `「总是允许」不覆盖这条命令的载荷（原规则 ${chain.ruleId}）`
+          : `ask 规则命中（${chain.ruleId}）`,
       risk,
       riskReasons: channels.reasons,
     };

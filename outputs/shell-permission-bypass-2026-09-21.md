@@ -189,3 +189,32 @@ pnpm exec tsx scripts/probe-shell-bypass.ts     # 当前必红（退出码 1）�
 `security-check`，**没重跑 tsc**（`rule.pattern` 的收窄过不了 else-if 链）。这是「跑过邻域 ≠ 跑过那道门」
 的同一条规矩在**类型门**上的复犯：改完 src 的接线，验证集里 `typecheck` 与 `test` 两门都不可缺。
 本笔随 ③ 一起修回（`const pattern = rule.pattern` 取一次），并同步改掉两根锚点的针脚原文。
+（09-22 复记：同一条又犯了一次——② 那笔的新测试里三处属性访问没过 tsc，靠"改完必重跑 typecheck"当场抓住。）
+
+### ② 也已收（同日第五笔，探针红 5 → 0，四段全绿）
+
+`allow` 的前缀命中之后如果还剩载荷（`>`、`>>`、`$(`、反引号、`${`、`|`），这一条**按 ask 走**：
+用户点「总是允许 echo hi」时看见的不是 `echo hi > /tmp/pwned`。实现是 `rules.ts` 给命中打一个
+`consentGap` 标（这条命中的行为就地从 allow 写成 ask，`ruleId` 仍是原 allow 条目 ⇒ 审计认得出是谁），
+`autonomy.ts` 的 L2 支据此换一句理由：「『总是允许』不覆盖这条命令的载荷」而不是「ask 规则命中」。
+第五支 `echo hi | sh` **不走这条**——它的 "echo hi" 段没剩载荷、"sh" 段压根没规则，
+所以修法只能是威胁表补一条「管道进 shell」high（把 `ALLOW_PAYLOAD` 再拧一圈也管不到它）。
+成对反例同批钉住：`echo hi`、`echo hi --version`、`git push origin main` 必须照旧 allow，
+否则 allow 形同虚设；代价也写明——引号里的 `>` 会多问一次（选过问，不选漏问）。
+读数：`tests/permissions.test.ts` 31 条绿、tsc 我的文件 0 错、针脚体检 620 条 / 阻断 0（锚点 +2、1 根针脚改原文）。
+
+### 复现器自己有一条恒不成立的断言（同日发现并修）
+
+② 段原先写的是 `check(…, "非 approve", got)` —— 拿字面量 `"非 approve"` 与实测串相等。
+而实测串永远是 `ask@…` / `approve@…` 这种形状 ⇒ **这个期望不可能被满足**，产品修好了它也永远红。
+门禁体检查恒真式与析取式，查不出这种恒假式；能试出来的只有"修好之后它必须能绿"这一步。
+已改为 `checkNot(…, "approve", got)`（判 `!got.startsWith("approve")`），并且**先只改判据、不动产品**
+复跑一次：仍红 5 / 绿 28、逐条与改前同形 ⇒ 这次改判据没有把红偷偷改成绿。
+
+### 四段全绿之后的留位
+
+* 探针仍是「非门禁」（`scripts/gate-manifest.ts` 未收它）。要收的是它独有的那件事：四道面
+  （规则层 + 风险层 + 档位 + worker 静态闸）**合起来**的端到端判定——离线锚点各钉一支，没有一条钉住组合。
+  收它要改 gate-manifest，而该文件此刻在别人的在飞改动集里。
+* `consentGap` 只作用于 allow；deny/ask 的形态面与它正交（两根锚点各自钉住，不会互相掩盖）。
+* 高熵规则的命名残留另有账（见 `stop-reason-blindspot-2026-09-21.md` 待办 15），本文不动。
