@@ -192,3 +192,12 @@ subdirectory of the project root at "/private/tmp/dsh-anchor-776".
 `new_string` 只写新块 ⇒ 静默删掉一条锚点，**两次**（第一次靠 `grep` 那条 id 命中 0 发现，
 第二次靠元素计数：改前 671，加 3 条应到 674，实测 673）。`git diff --numstat` 两次都照不到。
 ⇒ 收口办法写进用户档记忆：**列表追加前后各数一次元素，要求 `after = before + 新增条数`**。
+
+## 追加三（同日）：⑵ 之后把 ⑴ 的绿侧也补了
+
+`8746aae`：绿门现在在汇总里带出自己那句结论（`└ typecheck: tsc --noEmit 通过（0 条报错）✅`）。
+取行规则是**从后往前找结论记号**而不是取最后一行——vitest 的收尾是 `Duration`/`Start at`，计数在它前面；
+剥色吃 `lib/vitest-summary.ts` 那份共用件（同一族在那边已修过一次）。两条锚点分别钉"取哪一行"与"剥不剥色"，
+在真装 worktree（HEAD=`8746aae`）逐笔跑，两条都被正确杀死。
+至此 ⑴ 与 ⑵ 两件小事都落地；本文件里那句「`pnpm gates` 只回显退出码、把 stdout 吞掉」对**绿门**已过期
+（红门早就带尾 12 行；绿门现在带一句结论 + 帽 160 字）。
