@@ -5192,8 +5192,11 @@ const MUTATIONS = [
     id: "rule-matcher-deny-ignores-wrappers",
     src: "src/permissions/rules.ts",
     test: "tests/permissions.test.ts",
-    desc: "deny/ask 退回裸文本前缀（不看有效二进制）⇒ 用户手写的 deny 被 /usr/bin/git、env、nohup、timeout、command、bash -c 六类写法静默击穿（09-21 探针 ① 段原缺陷复活）",
-    apply: (s) => s.replace("forms ??= commandForms(segment);", "forms ??= [segment];"),
+    desc: "deny/ask 退回裸文本前缀（不看有效二进制）⇒ 用户手写的 deny 被 /usr/bin/git、env、nohup、timeout、command、bash -c 六类写法静默击穿。**09-22 起要同时废掉两条面**：形态面（`commandForms`）与 ⑩ 按序面里的 `invocations` 候选——⑩ 之后两条都守得住这件事，只改一条会变异存活（这就是「冗余守护」的代价：锚点得指全）",
+    apply: (s) => s.replace("forms ??= commandForms(segment);", "forms ??= [segment];").replace(
+      "[tokenize(segment), ...invocations(segment).map((i) => [i.bin, ...i.args])]",
+      "[tokenize(segment)]",
+    ),
     expectFail: "包装写法躲不过 deny",
   },
   {
