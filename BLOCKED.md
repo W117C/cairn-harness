@@ -931,4 +931,44 @@ B1 order-pricing-triple-fix 不等：一次跑落了三个快照目录（…536-
 ——旧文案只报一个布尔，读不出是哪一维不稳；新文案点名不等的那几维并给出两边的值，
 判据的布尔、阈值、比较维度一字未动。
 
+## 裁决 6（请求改默认）：`agent-plan.md` §483 写「桌面产品两者默认开」，代码里这两拍都是 `false`
+
+**冲突的两侧，都能逐字复跑：**
+
+- 方案（唯一权威，只读）：`agent-plan.md:483` ——「每轮写动作后跑 lint（快、失败即反射）；声明完成前强制跑 test——
+  **完成声明不得先于新鲜证据**……aider 默认 `auto_lint=true / auto_test=false`（终端交互权衡），**桌面产品两者默认开（C）**」。
+  注意它已经把"aider 的关"当作**终端交互的权衡**讨论过并否掉了，所以"默认关"不是方案留给实现 discretion 的地方。
+- 代码：`src/main/settings.ts` 的 `DEFAULTS` 里 `autoVerify: false`（第 111 行附近）、`actionFusion: false`。
+- 真机：`~/Library/Application Support/m0-agent-loop/settings.json`（**mtime 2026-09-22 22:33**，是活的那份）
+  实测 `autoVerify=false`、`actionFusion=false`、`impactAnalysis=false`、`evidenceReceipts=false`、
+  `observationPack=false`、`requestMetering=false`、`economicCompaction=false`、`routingBandit=false`、
+  `routingCascade=false`、`maxBudgetUsd=0`；布尔项里只有 `autoMemory`、`promptCache` 为 true。
+  即 `docs/superpowers/specs/2026-09-19-orchestration-design.md` 的 **D7**（"调度智能的燃料默认不在线"）
+  到今天**一字未动**——那条记录写于 09-19，一周后的真机读数与它逐字相同。
+
+**为什么这不属于"等数据再拍"的那一段**：同一份设计稿 §103 把"由数据裁决"明确限定在
+W1b / W4 / W3 三个**编排**默认值上（G-A 已出数：fanout 逐笔 8.3/13.4/30.0x ⇒ 默认开派活被否）。
+lint/test 两拍不在那份清单里——它们是 §483 已经拍板的东西，只是实现选了默认关。
+
+**代价边界（读代码得到的上界，不是估的）**：`src/agent/loop.ts` 的自动那一拍写死了三条——
+① 每 run 至多一拍；② 模型自己调过 `verify` 即让位（`verifyAttempts > 0` 就不补）；
+③ 仓库既无 config 的 verify 字段、`package.json` 也无 lint/test ⇒ **整段跳过，零行为零额外调用**。
+所以"开了会不会每条会话都贵一倍"这个担心在这条上有一个明确的上界：它最多多跑一遍项目自己的 lint/test，
+且只在纯文本轮收束前发生一次。`actionFusion` 那半同样只在 write/edit 之后跑**已配置的** lint。
+
+**请裁的三选一**（我不擅自翻：改默认真的会改变每条用户会话的延迟与花费，那是产品决定）：
+
+1. **按 §483 把两个 DEFAULT 翻成 `true`**（设置页开关与 `RunOverrides` runtime override 全部保留，
+   想关的用户照样关）；配套我要补的是：门的输出与设置页要能一眼看出这两拍此刻是开是关；
+2. **维持默认关，但改 `agent-plan.md`**：那需要一句"为什么桌面形态也走 aider 的终端权衡"，
+   并把 §483 那句改成现态——否则文档与代码长期互斥，下一个读者会再问一遍（本轮就是那个读者）；
+3. **分批**：只把 `autoVerify`（完成声明的证据，能力 5 的定义项）翻 true，`actionFusion` 留关，
+   并说明"为什么 lint 这一拍可以不等证据"。
+
+**不裁的代价，本轮已经量到一半**：这三条支撑面（自动验证、影响面、证据回执）在默认关的状态下
+**永远拿不到真流量**，于是它们的收益只能停在合成夹具上——本仓一直记的那句"未证 ≠ 通过"，
+在默认关面前会变成"永远未证"。本轮另一条实测正好作注：全机只有 **1 条**持久化真会话
+（`m0-agent-loop/sessions/` 下 09-10 那条，9 个事件），靶场漏斗 `cases=4 · drafts=0`。
+燃料不在线时，"从失败轨迹中学习"这一条没有输入。
+
 
