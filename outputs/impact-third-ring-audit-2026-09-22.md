@@ -206,4 +206,33 @@ B20 的转录（同一相自己撞上）。读到的东西一次把六种外推�
 ③ 三层观测者：假 DOM 那条测「null 单元不许吞掉邻居」、vm 切片那条测「孤儿 tool_result 仍产出一个 .msg」、
 真窗口把 B23 挪回 B20 之前（这条正是本门现成的复现器——它当时红了，只是没人能解释为什么）。
 
+## 收口（同日第四次更新，#31 结案）
+
+修法两处各一半，阈值一字未放宽：
+① `renderEvent` 的 `case 'tool_result'` 找不到可并入项时落成一张记录卡（标题走中文，
+带结果原文，`out || '（无输出）'` 保住「空输出」与「没这条」两句话）；
+② `mountHistory` 拿到 null 按 0 高记账并跳过，两个占位高的赋值移到挂载循环之后
+（否则那一格留 120px 幻影），一格渲染失败只损失它自己。
+
+观测者三层 + 两条锚点，全部实跑：
+
+| 判据 | 位置 | 当场读数 |
+| --- | --- | --- |
+| 假 DOM：null 单元不许吞邻居（含不留幻影高） | `tests/renderer-history-mount.test.ts` | 3 passed（143ms） |
+| vm：not-found 一支必须流向 `appendRecordCard`、标题不许是原始类型名 | `tests/renderer-history-live.test.ts` | 14 passed |
+| 真窗口 B24：孤儿卡上屏 + 结果原文 + **它后面那条单元**仍挂载 + 两侧计数 | `scripts/panels-check.ts` | exit 0，`卡片头 18 / 孤儿卡 4 = 盘上 3 + 追加 1`，`4 < 结果总数 5 + 1` |
+| 锚点 | `null-unit-eats-whole-window`、`orphan-tool-result-silent-drop` | 同 HEAD worktree 内**两条都被真杀死**；针脚 654 条阻断 0 |
+| 造红复验（新判据必须当场红） | worktree 里按锚点形状回退 ①（`if (!item) { break; }`，② 保留） | B24 三条全红（`3 项失败`，其余全绿）。读数本身把两半分开钉死：**卡片头 18→14**（四张孤儿卡没了＝事实丢失那半）、**尾单元仍 = true**（② 保住那半：四格渲染不出壳也没拖死整窗） |
+
+门禁：`test` 197 files / 1980 tests 全绿；`typecheck` HEAD 内 0 错（唯一红是别人在飞的未跟踪
+`scripts/sidebar-probe.ts`）；`panels-check` exit 0；`renderer-arch-check` 84/84；`a11y-check` 4/4；
+`gate-check` / `docs-check` 通过；`ipc:check`（分支 A 靶子修复）/ `sandbox:check`（分支 A 沙箱生效）/
+`e2e` 全部断言通过。构建由 panels-check 的 B0 相同源码跑通。
+
+**另记一条未追的缝（不在本次修法内，已单列待办）**：同一实验里还见过一次
+`NotFoundError: Failed to execute 'insertBefore' on 'Node'`——抛在 `draw()` 的挂载循环里，
+条件是 `next` 不再是 container 的子节点。最像的成因是 `app.js` 的 `clearTranscript`
+（`streamInner.innerHTML = ''`）在某个 mountHistory 实例还活着时把它的 `after` 占位一起抹了。
+本次没测到它复现，所以只记形状不写结论。
+
 
