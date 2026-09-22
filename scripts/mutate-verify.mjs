@@ -5800,7 +5800,7 @@ const MUTATIONS = [
     test: "tests/map-parse.test.ts",
     desc: "字段比对退回**节点对象身份**：tree-sitter 每次取节点都新建外壳，`childForFieldName(...) === c.node` 恒 false" +
       " ⇒ 闸静默地永不放行，读数只少 16 个定义（本次真踩过，是复测边数 96,990 不等于预期 49,049 才暴露的）",
-    apply: (s) => s.replace("if (!nm || nm.startIndex !== nameNode.startIndex || nm.endIndex !== nameNode.endIndex) return false;", "if (!nm) return false;"),
+    apply: (s) => s.replace("if (!nm || nm.startIndex !== nameNode.startIndex || nm.endIndex !== nameNode.endIndex) return false;", "if (nm !== nameNode) return false;"),
     expectFail: "函数体里的变量声明不算定义，模块作用域的同名变量照算",
   },
   {
