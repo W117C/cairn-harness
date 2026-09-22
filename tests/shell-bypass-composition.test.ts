@@ -11,6 +11,9 @@ import { describe, expect, it } from "vitest";
 import { interceptDestructiveGit, isReadOnlyShellCommand } from "../src/agent/worker-shell-tools";
 import { evaluate, newAutonomySession } from "../src/permissions/autonomy";
 import { judgeChain, parsePermissionsFile } from "../src/permissions/rules";
+import type { ToolName } from "../src/tools/base";
+// worker 工具名按设计不在主会话键域 ToolName 内（与 tests/permissions.test.ts 的 asTool 同惯例）。
+const asTool = (s: string): ToolName => s as ToolName;
 import {
   ALLOW_CASES,
   DENY_VARIANTS,
@@ -147,7 +150,7 @@ describe("组合不变量（本测独有：单面锚点钉不住）", () => {
   /** 实测（09-22）逐条相同 ⇒ 互通成立；本条钉的是"哪天只硬化一支"（第六族同根形状）。 */
   it("worker 的 shell_rw 与主会话 run_shell 在四道面上逐条同判（SHELL_FAMILY 互通）", () => {
     for (const cmd of [...DENY_VARIANTS, ...REDIRECT_CASES, PIPE_INTO_SHELL]) {
-      expect(at(evaluate("shell_rw", { command: cmd }, session())), cmd)
+      expect(at(evaluate(asTool("shell_rw"), { command: cmd }, session())), cmd)
         .toBe(at(evaluate("run_shell", { command: cmd }, session())));
     }
   });
@@ -171,7 +174,7 @@ describe("⑤ shell_ro：静态只读闸与权限层的合取", () => {
   it("每一条都必须被某一道防住（两道各自以为对方在管 = 谁都没管）", () => {
     for (const cmd of RO_MUST_STOP) {
       const gate = isReadOnlyShellCommand(cmd);
-      const d = evaluate("shell_ro", { command: cmd }, session([]));
+      const d = evaluate(asTool("shell_ro"), { command: cmd }, session([]));
       expect(gate.ok === false || d.verdict !== "approve", cmd).toBe(true);
     }
   });
