@@ -1,9 +1,11 @@
-// 转录虚拟化的「挂载收敛」判据：打开会话时滚到底，测高之后的那一拍必须把末尾单元也挂上。
+// 转录虚拟化的「挂载收敛」判据：打开会话滚到底时，末尾单元必须挂上，且**任何一格都不得决定整窗**。
 //
 // 为什么在 vm 里跑源码而不是只靠真窗口：panels-check 的 B20 相实测过「盘上 30 条、#eventCount 30、
-// 审阅页读得到、转录只有 8 张卡、未挂载区占位 190.273px」——mount 自己停在半挂载态。真窗口里这条
-// 受宿主 rAF/遮挡影响会漂（AGENTS.md 记的假红主因），而这段是纯 DOM 算术：给它一个可控假 DOM
-// 就能确定性复现，不必每次改渲染都花一轮真启动。假 DOM 只实现 mountHistory 真用到的那几件事。
+// 审阅页读得到、转录只有 8 张卡、未挂载区占位 190.273px」。根因（同日第七读数，见
+// outputs/impact-third-ring-audit-2026-09-22.md）不是窗口算术，而是某一格 renderUnit 返回 null ⇒
+// mount 在 rAF 回调里抛 TypeError ⇒ 循环从那一格往前的单元全部没挂上。这类「半挂载且不再续拍」的态
+// 在真窗口里受宿主 rAF/遮挡影响会漂（AGENTS.md 记的假红主因），而这段是纯 DOM 算术：给它一个可控
+// 假 DOM 就能确定性复现，不必每次改渲染都花一轮真启动。假 DOM 只实现 mountHistory 真用到的那几件事。
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
@@ -33,7 +35,7 @@ type FakeEl = Record<string, unknown> & {
   index: number;
 };
 
-function makeDom(unitCount: number) {
+function makeDom(unitCount: number, nullAt = -1) {
   const listeners = new Map<string, Array<() => void>>();
   const frames: Array<() => void> = [];
   let scrollTop = 0;
@@ -104,6 +106,8 @@ function makeDom(unitCount: number) {
 
   const units = Array.from({ length: unitCount }, (_, i) => ({ key: "u" + String(i), kind: "card", ids: [i] }));
   const renderUnit = (_unit: unknown, index: number) => {
+    // nullAt 模拟「这一格渲染不出任何东西」的真返回值（app.js buildUnit 找不到 .msg 壳时给的就是 null）。
+    if (index === nullAt) return null as unknown as FakeEl;
     const el = makeNode("unit");
     el.index = index;
     el.realHeight = realHeightOf(index, unitCount);
@@ -151,6 +155,24 @@ describe("mountHistory 的挂载收敛（虚拟化最后一拍）", () => {
     const spacers = dom.spacerHeights();
     handle.destroy();
     expect({ missing, tailSpacer: spacers[spacers.length - 1] ?? 0 }).toEqual({ missing: [], tailSpacer: 0 });
+  });
+
+  it("某一格渲染不出壳 ⇒ 只许它自己缺席，不许把整窗拖死", () => {
+    /* 这一条钉的是 #31 的根因面：app.js 的 buildUnit 在「单元里没有一个 .msg」时返回 null，
+       旧 mount 无条件 node.style.margin=… ⇒ TypeError 出在 rAF 回调里（无人观测），循环从那一格
+       往前的单元全部没挂上。真窗口读到的形状是「贴底、卡片数远小于单元数、占位高 nonzero」。 */
+    const dom = makeDom(11, 5);
+    const handle = mountInVm(dom);
+    dom.runFrames();
+    dom.setScrollTop(999_999);
+    let threw = "";
+    try { dom.runFrames(); } catch (e) { threw = String(e); }
+    const mounted = dom.mountedIndexes();
+    const spacers = dom.spacerHeights();
+    handle.destroy();
+    expect(threw).toBe("");                                        // 挂载不许把异常抛给调用它的那一拍
+    expect(mounted).toEqual([0, 1, 2, 3, 4, 6, 7, 8, 9, 10]);       // 缺的只有第 5 格，邻居一个不陪
+    expect(spacers[spacers.length - 1] ?? -1).toBe(0);             // 那一格按 0 高记账，不留 120px 幻影
   });
 
   it("反向对照：会话一长就必须真的虚拟化（不许为了上一条把 400 个单元全挂上）", () => {

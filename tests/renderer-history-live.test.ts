@@ -193,6 +193,28 @@ it('failed history reads retain received live events and release the send barrie
   expect(b.context.toast).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('read failed'));
 });
 
+it('孤儿 tool_result 的分支不许静默 break：事实要落成卡，那一格要有壳（#31 根因之一半）', () => {
+  /* 为什么这条写在源码形状上而不是 vm 里跑：appendRecordCard 要真 DOM（insertAdjacentHTML）且依赖
+     切片外的 RECORD_CHEV，vm 那支跑不起来；真行为由 panels-check 的 B24 相在真窗口里判。
+     这一条只钉一件事：找不到可并入调用时，控制流**必须**流向一张记录卡，而不是 `break` 掉。
+     旧写法 `if (!item) break;` 让那条结果从转录里无声消失，还连带 buildUnit 返回 null ⇒
+     mountHistory 在 rAF 里抛 TypeError ⇒ 同窗后面的单元全不挂载（量测见
+     outputs/impact-third-ring-audit-2026-09-22.md「第七读数」）。 */
+  const a = source.indexOf("      case 'tool_result': {");
+  const b = source.indexOf("      case 'clarify_requested'", a);
+  expect(a).toBeGreaterThanOrEqual(0);
+  expect(b).toBeGreaterThan(a);
+  const body = source.slice(a, b);
+  expect(body).not.toMatch(/if\s*\(\s*!item\s*\)\s*\{?\s*break/);      // 无声消失那一支已撤（写成 `{ break; }` 也算破）
+  const orphan = /if\s*\(\s*!item\s*\)\s*\{([\s\S]*?)\n\s*\}/.exec(body);
+  expect(orphan, "not-found 那一支必须还在（撤了它＝把结果当成不该显示）").not.toBeNull();
+  expect(orphan?.[1]).toContain('appendRecordCard(');                // 且落成一格有壳的卡
+  expect(orphan?.[1]).toMatch(/out\s*\|\|/);                          // 卡里要带结果原文（缺席≠空输出，是两句话）
+  const title = /appendRecordCard\([\s\S]*?'([^']*)'/.exec(orphan?.[1] ?? '')?.[1] ?? '';
+  expect(title).not.toContain('tool_result');   // 原始英文类型名不许上屏
+  expect(title).toContain('未能并入调用');
+});
+
 it('late old-session history cannot replace an already mounted newer session or its usage', async () => {
   const b = boot();
   const first = b.context.selectSession('a');

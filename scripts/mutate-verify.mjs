@@ -3870,6 +3870,25 @@ const MUTATIONS = [
     expectFail: "报告汇聚到被改文件：调用点数 + 波及文件数 + 帽标记",
   },
   {
+    id: "null-unit-eats-whole-window",
+    src: "src/renderer/history-window.js",
+    test: "tests/renderer-history-mount.test.ts",
+    desc: "某一格 renderUnit 返回 null 时不再跳过而是照旧 node.style.margin ⇒ TypeError 出在 rAF 回调里，" +
+      "挂载循环从那一格往前的单元全部不挂（#31 的真根因：贴底却只剩半截转录，且没有一道门报红）",
+    apply: (s) => s.replace("        if (!node) { heights[i] = 0; nullUnit = true; continue; }\n", ""),
+    expectFail: "某一格渲染不出壳 ⇒ 只许它自己缺席，不许把整窗拖死",
+  },
+  {
+    id: "orphan-tool-result-silent-drop",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-history-live.test.ts",
+    desc: "找不到可并入调用的 tool_result 退回直接 break ⇒ 那条结果从转录里无声消失（重复投递/归因不一致/崩溃少行三种可达），" +
+      "并连带让那一格产不出 .msg 壳",
+    apply: (s) => s.replace("if (!item) {\n          finalizePending();\n          appendRecordCard(cardHost(), ok ?",
+      "if (!item) { break; }\n        if (false) {\n          finalizePending();\n          appendRecordCard(cardHost(), ok ?"),
+    expectFail: "孤儿 tool_result 的分支不许静默 break：事实要落成卡，那一格要有壳",
+  },
+  {
     id: "impact-panel-absent-as-zero",
     src: "src/renderer/projections.ts",
     test: "tests/panel-data.test.ts",

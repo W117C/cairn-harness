@@ -92,13 +92,16 @@ export function mountHistory({ container, scroller, units, renderUnit }) {
     for (const [i, node] of mounted) {
       if (i < range.start || i >= range.end) { observer?.unobserve(node); node.remove(); mounted.delete(i); }
     }
-    before.style.height = offsets[range.start] + 'px';
-    after.style.height = (offsets[units.length] - offsets[range.end]) + 'px';
     let next = after;
+    let nullUnit = false;
     for (let i = range.end - 1; i >= range.start; i--) {
       let node = mounted.get(i);
       if (!node) {
         node = renderUnit(units[i], i);
+        // 渲染器交不出壳（那一格里没有任何可显示的东西）时按 0 高记账并跳过：一格的损失只能是自己，
+        // 不能让整窗跟着死——旧写法在 node.style 上抛 TypeError，异常出在 rAF 回调里无人观测，
+        // 循环从这里往前的全部单元都不再挂载（现象：贴底却只剩半截转录）。
+        if (!node) { heights[i] = 0; nullUnit = true; continue; }
         node.style.margin = '0 0 12px';
         node.style.flexShrink = '0';
         mounted.set(i, node);
@@ -107,6 +110,10 @@ export function mountHistory({ container, scroller, units, renderUnit }) {
       if (node.nextSibling !== next) container.insertBefore(node, next);
       next = node;
     }
+    // 占位高在挂载循环之后才算：循环里可能刚把某一格改判成 0 高。
+    if (nullUnit) rebuild();
+    before.style.height = offsets[range.start] + 'px';
+    after.style.height = (offsets[units.length] - offsets[range.end]) + 'px';
     scroller.scrollTop = wasAtBottom ? scroller.scrollHeight : correctedTop;
     if (changed) schedule();
   }

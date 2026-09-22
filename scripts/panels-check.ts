@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { createEventLog } from "../src/events";
 import { pathOf } from "../src/main/sessions";
 import { SettingsStore, DEFAULT_SETTINGS } from "../src/main/settings";
-import { projectDiffCards, projectTokenUsage } from "../src/renderer/projections";
+import { projectDiffCards, projectTokenUsage, entersMainConversation } from "../src/renderer/projections";
 import type { AgentEvent } from "../src/events";
 
 let failures = 0;
@@ -1158,7 +1158,10 @@ async function phaseElectron(root: string): Promise<void> {
     /* B23（影响面挂到审阅页文件行）挪到 B20 之后。原因不是这一相错了，而是它往主会话追加的
        事件把转录的展示单元数推过了虚拟化那一窗，露出了 mountHistory 的末单元不收敛缺陷
        （量测与备案见 outputs/impact-third-ring-audit-2026-09-22.md「B23 挤到 B20 前面」一节）。
-       面板不虚拟化，所以 B23 自己的判据不受该窗影响；两相各管各的前提，红了才分得清是谁弄的。 */
+       面板不虚拟化，所以 B23 自己的判据不受该窗影响；两相各管各的前提，红了才分得清是谁弄的。
+       同日追注：那条缺陷的根因已锁定（某格 renderUnit 返回 null ⇒ mount 在 rAF 里抛异常，
+       见 outputs/impact-third-ring-audit-2026-09-22.md「第七读数」），正面复现改由 **B24** 承担；
+       B23 的位置不再动——为挪相位再花一轮真启动换不到额外判据。 */
     // B16 评审闭环的写端：行锚点真长得出、点得动，且被 main 拒时如实说未送达。
     // 全程零钱：这一列是重放出来的历史 worker（本窗口没有它的编排器），card_action 必然在
     // 归属检查处被拒 ⇒ 不调模型、不落 diff_comment、不动工作树。
@@ -1556,8 +1559,8 @@ async function phaseElectron(root: string): Promise<void> {
        审计发现：`impact_report` 早就落流，但 `projectPanelData` 四个投影都不读它 ⇒
        「开设置跑一轮 ⇒ 面板读数变化」这条端到端断言以前根本写不出来。手法同 B15：
        只往会话 JSONL 追加既有事件 + 切走再切回（重开才会重算 panelData），零模型调用。
-       位置放在 B20 之后：这一相要追加写入事件，而转录虚拟化的末单元收敛缺陷（已单列任务）
-       会被多出来的展示单元触发 ⇒ 先让 B20 在它自己的单元数上判完，再动这份流。 */
+       位置放在 B20 之后：这一相要追加写入事件，而转录虚拟化的末单元收敛缺陷（同日已由 B24 正面
+       复现并修掉）曾被多出来的展示单元触发 ⇒ 先让 B20 在它自己的单元数上判完，再动这份流。 */
     console.log("[panels-check] B23 审阅页读得出影响面（缺席 ≠ 波及 0，两者必须是两句话）");
     /* 先钉住这一相的前提：`panelData.files` 只由 write_file 投影出来（projectDiffCards），靶子会话
        原先**一条写入也没有** ⇒ 审阅页是空态，文件行根本不存在，我第一版拿 `.file-item` 找读数 = 找
@@ -1610,6 +1613,48 @@ async function phaseElectron(root: string): Promise<void> {
       "B23 只有带报告的那一行挂读数（行数 " + String(b23Bare.rows) + "、挂数 " + String(b23Bare.withImpact) + "，期望 ≥2 / 1）");
     ok(b23Bare.bareText.includes("src/plain.ts") && !b23Bare.bareText.includes("波及"),
       "B23 无报告的文件行不写成「波及 0」（缺席就是缺席；实测 " + JSON.stringify(b23Bare.bareText.slice(0, 80)) + "）");
+    /* B24 转录虚拟化的「某一格渲染不出壳」（#31 根因，真窗口）。
+       起因（同日第七读数）：一条找不到可并入调用的 tool_result 让 buildUnit 返回 null ⇒
+       mountHistory 在 rAF 回调里抛 TypeError ⇒ 挂载循环从那一格往前的单元全部没挂上。
+       现象是「贴底、卡片数远小于单元数、未挂载区占位 nonzero」，而**没有任何一道门报红**——
+       因为它死在浏览器回调里。所以这一相一次判三件事：
+       ① 孤儿结果那张卡上屏且带着原文（事实不许无声消失）；
+       ② 追加在它**后面**的单元也挂了（一格的损失只能是自己，不许拖整窗）；
+       ③ 卡数与盘上「有结果、无对应调用」的行数同阶，且明显小于全部结果数
+         （既不许漏判，也不许把成对的结果一律降格成孤儿卡）。 */
+    console.log("[panels-check] B24 某一格渲染不出壳不许拖死整窗（孤儿 tool_result 上屏 + 它后面的单元仍挂载）");
+    const b24Events = (await readFile(b11File, "utf8")).trim().split("\n")
+      .map((l) => { try { return JSON.parse(l) as Record<string, unknown>; } catch { return {} as Record<string, unknown>; } })
+      .filter((e) => entersMainConversation(e as { type?: unknown; agent_id?: unknown }));
+    const b24Called = new Set(b24Events.filter((e) => e.type === "tool_call").map((e) => String(e.id)));
+    const b24Results = b24Events.filter((e) => e.type === "tool_result");
+    const b24OrphanOnDisk = b24Results.filter((e) => !b24Called.has(String(e.callId))).length;
+    const b24Log = createEventLog(b11File);
+    await b24Log.append({ type: "tool_result", callId: "b24-orphan", ok: false, output: "boom-b24" } as unknown as AgentEvent);
+    await b24Log.append({ type: "user_message", content: "b24-tail-marker" } as unknown as AgentEvent);
+    ok(await b8ClickSession("验收会话"), "B24 先切走");
+    ok(await b8ClickSession(clarifyId), "B24 再切回靶子会话（重开才走 showHistory → mountHistory 那一窗）");
+    const b24 = await settle(async () => {
+      const r = await cdp2.eval<{ orphans: number; hasBoom: boolean; tail: boolean; heads: number }>(
+        `(() => { const stream = document.querySelector('.stream'); if (!stream) return { orphans: -1, hasBoom: false, tail: false, heads: -1 };` +
+        `  const heads = [...stream.querySelectorAll('.card-head')].map((n) => (n.textContent || '').trim());` +
+        `  const codes = [...stream.querySelectorAll('.ti-code')].map((n) => n.textContent || '');` +
+        `  return { orphans: heads.filter((h) => h.includes('未能并入调用')).length,` +
+        `    hasBoom: codes.some((c) => c.includes('boom-b24')),` +
+        `    tail: (stream.textContent || '').includes('b24-tail-marker'), heads: heads.length }; })()`,
+      );
+      return r.orphans >= 0 && r.hasBoom && r.tail ? r : null;
+    }, 15_000);
+    ok(b24 !== null,
+      "B24 孤儿卡 + 结果原文 + **它后面那条单元**三者同时上屏（少任一个都是半挂载：卡片头 " +
+      String(b24?.heads ?? -1) + " 个、孤儿卡 " + String(b24?.orphans ?? -1) + " 张、" +
+      "原文上屏=" + String(b24?.hasBoom ?? false) + "、尾单元=" + String(b24?.tail ?? false) + "）");
+    ok((b24?.orphans ?? -1) >= b24OrphanOnDisk + 1,
+      "B24 每张孤儿卡都对应盘上一条「有结果无调用」的行（实测 " + String(b24?.orphans ?? -1) +
+      " / 盘上 " + String(b24OrphanOnDisk) + " + 本相追加 1）");
+    ok((b24?.orphans ?? -1) < b24Results.length + 1,
+      "B24 成对的结果仍并进工具项，没被一律降格成孤儿卡（实测 " + String(b24?.orphans ?? -1) +
+      " / 盘上结果总数 " + String(b24Results.length) + " + 本相追加 1）");
     await killElectron(electron2);
   } finally {
     if (electron.exitCode === null) await killElectron(electron);

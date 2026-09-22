@@ -2878,9 +2878,19 @@ render();
       }
       case 'tool_result': {
         const item = rc.cards.get(e.callId);
-        if (!item) break;
         const out = String(e.output || '').slice(0, 4000);
         const ok = !!e.ok;
+        /* 找不到可并入的工具项 ≠ 这条结果没发生过。重复投递（同一 callId 第二条）、调用行与结果行的
+           agent_id 归因不一致、崩溃后 JSONL 少一行——三种都会走到这里。旧写法直接 break：事实从转录里
+           无声消失，且那一格连一个 .msg 壳都不产 ⇒ buildUnit 返回 null ⇒ mountHistory 在 rAF 回调里抛
+           TypeError，同一窗里后面的单元全部没挂上（量测见 outputs/impact-third-ring-audit-2026-09-22.md
+           「第七读数」）。落成记录卡：事实看得见，「一个单元恰好一个 .msg」那条不变量也不再破。 */
+        if (!item) {
+          finalizePending();
+          appendRecordCard(cardHost(), ok ? '工具结果（未能并入调用）' : '工具结果失败（未能并入调用）', e, out || '（无输出）');
+          if (!rc.replay) scrollStream();
+          break;
+        }
         const name = (item.querySelector('.ti-name') || {}).textContent || '';
         const st = item.querySelector('.ti-state');
         if (st) { st.className = 'ti-state ' + (ok ? 'ok' : 'fail'); st.textContent = ok ? '✓' : '✗'; }

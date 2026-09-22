@@ -163,4 +163,47 @@ HEAD 停在「B23 在 B20 之后 + 全门绿」的态。**这条判据（假 DOM
 `container.dataset.probeSeq` 并读出序列 —— 振荡还是丢节点一眼可分；在那之前不再提修法。
 （探针手法可复用：值写进 dataset，panels-check 一行 eval 读回，成本 = 一次跑。）
 
+## 第七读数：#31 根因锁定（同日第三次更新，逐拍序列读出来了）
+
+按上一条做了逐拍探针（throwaway worktree `/tmp/dsh-virt`，跑完即删）：`mountHistory` 每拍把
+`{n,start,end,holes,outside,kids,hasAfter,st0,cTop,st,sh,total,offEnd,tail,changed,atBottom,hts}`
+写进 `globalThis.__dshVirtSeq`，另在 `draw()` 入口计数 `__dshDrawEntered`、在挂载循环外加 try/catch
+把异常原文写进 `__dshInsertErr`（**记录后原样 rethrow**，不改行为）。触发条件照 B23 那份事件补进
+B20 的转录（同一相自己撞上）。读到的东西一次把六种外推全推翻：
+
+| 拍 | 读数 | 说明 |
+| --- | --- | --- |
+| inst 5（n=10，健康） | 3 拍：`total 1200→710`、`tail 0px` | 测高回修正常收敛 |
+| inst 8 第 1 拍（n=20） | `st0=0`、`cTop=0`、`start=0,end=10`、`hts` 全是 120、`tail 1200px`、`changed=false` | 首拍在 app.js 吸底**之前**跑的 ⇒ 窗算在顶上；且首拍没有可测高的节点（节点是这一拍才挂的），`changed` 必假 ⇒ 不续拍 |
+| inst 8 第 2 拍 | **`__dshDrawEntered=25` 而 seq 只有 25 条记录里的最后一拍到 f=1** ⇒ 第 2 拍没留下记录 | 它抛异常了：`insertErr = "f=1 i=13 TypeError: Cannot read properties of null (reading 'style')"` |
+
+那条 TypeError 就是根因，且**不是虚拟化的错**：
+
+- 挂载循环从 `range.end-1` **倒着**插，插到 `i=13` 时 `renderUnit(units[13])` 返回了 **null**，
+  `node.style.margin = ...` 当场抛 ⇒ 这一拍死在 rAF 回调里（**无人观测：不报红、不进 console 断言**），
+  `13..10` 那几格永远没挂上，而 `19..14` 已经挂上了。
+- 为什么返回 null：`app.js` 的 `buildUnit` 末尾 `return frag.querySelector('.msg')`，
+  而 `renderEvent` 的 `case 'tool_result'` 第一行就是 `const item = rc.cards.get(e.callId); if (!item) break;`
+  —— **一条找不到对应工具组的 tool_result 什么也不渲染**，那一格连一个 `.msg` 壳都没有。
+  app.js:2534 写着不变量「一个展示单元恰好产出一个 .msg」，**但全仓库没有一处实现或检验它**（第十一族：注释不是实现）。
+- 当场点名的破损单元（`__dshNullUnits`，整轮 7 条）：`turn|tool_result`、`turn|tool_result,tool_result`——
+  全是「只有结果、没有调用」的 turn。生产可达路径不止一条：同一 `callId` 的**重复投递**
+  （`rc.cards.delete(callId)` 让第二条结果无处安放）、调用行与结果行的 `agent_id` 归因不一致、
+  以及崩溃/截断后 JSONL 少一行。**判卷 fixture 里本来就写满了这种行**
+  （panels-check:1125/1126/1267 三条 tool_result 从来没有对应的 tool_call），
+  所以这条不是「构造出来的边角」，是天天在门里走的那条。
+- 于是前面六条排除全部成立却都问错了问题：帧在走（rAF 正常）、事件事后确实到齐（`#eventCount` 与盘上一致）、
+  可见性正常、贴底正常——**缺的不是「再排一拍」，是那一拍本身死在半路**。而「窗短一截」是它的下游现象。
+
+三条要各自收口的缺陷（同一根因，不同面）：
+① 事实丢失：孤儿/重复的 `tool_result` 在转录里无声消失（能力 5 的反面——用户看不到那次调用的结果）；
+② 一个渲染不出来的单元拖死整窗：`mountHistory` 无条件信任 `renderUnit` 非 null；
+③ **零观测者**：异常死在 rAF 回调里，六轮外推没有任何一层能看见它——这是本轮最贵的教训：
+   **读数读不到时，先问「有没有异常没被打印」**，`__dshDrawEntered` 与 seq 记录数的差就是那把尺。
+
+修法（按①②②的顺序，阈值不放宽）：① `case 'tool_result'` 找不到工具组时落成一张记录卡（事实要看得见，
+且保证那一格有一个 `.msg`）；② `mountHistory` 拿到 null 时按 0 高记账并跳过，绝不让一格决定整窗；
+③ 三层观测者：假 DOM 那条测「null 单元不许吞掉邻居」、vm 切片那条测「孤儿 tool_result 仍产出一个 .msg」、
+真窗口把 B23 挪回 B20 之前（这条正是本门现成的复现器——它当时红了，只是没人能解释为什么）。
+
 
