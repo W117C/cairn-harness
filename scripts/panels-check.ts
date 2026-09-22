@@ -104,7 +104,8 @@ interface CdpMessage {
 async function okNoExceptions(cdp: Cdp): Promise<void> {
   cdp.judged = true;
   const pre = cdp.takeExceptions();
-  ok(pre.length === 0, cdp.tag + " 全程没有未捕获异常（回调里抛出＝那一拍半路死掉而断言看不见；实测 " +
+  ok(pre.length === 0, cdp.tag + " 全程没有未捕获异常、也没有 console.error" +
+    "（回调里抛出＝那一拍半路死掉而断言看不见；实测 " +
     String(pre.length) + " 条：" + JSON.stringify(pre.slice(0, 4)).slice(0, 420) + "）");
 }
 
@@ -117,13 +118,21 @@ async function selfTestExceptionChannel(cdp: Cdp): Promise<void> {
   cdp.takeExceptions();
   /* 两个来源各投一条：rAF 是这次缺陷真正抛出的位置（要证的就是那一类），timer 是兜底——
      宿主节流/遮挡时 rAF 可能整段不拍（本仓已知假红族），只挂 rAF 的自检会在那种时刻误判「通道死了」。
-     判据只要「至少收回一条」：两条走的是同一条 Runtime.exceptionThrown 通道，收回任一条即证通道在收。 */
+     console.error 那条证的是另一条道：产品里「单元渲染不出壳」现在只能靠 console.error 出声，
+     这条道没人收的话，B25 的「0 条」就只覆盖了异常，却把新造的静默面当成已经看住了。 */
   await cdp.eval(`setTimeout(() => { throw new Error("${cdp.tag} 自检异常-timer"); }, 0);` +
-    ` requestAnimationFrame(() => { throw new Error("${cdp.tag} 自检异常-raf"); }), "armed"`);
-  const got = await settle(async () => (cdp.exceptions.length > 0 ? cdp.takeExceptions() : null), 3_000);
+    ` requestAnimationFrame(() => { throw new Error("${cdp.tag} 自检异常-raf"); });` +
+    ` console.error("${cdp.tag} 自检 console"); "armed"`);
+  const got = await settle(async () => (
+    cdp.exceptions.some((e) => e.includes("自检异常")) && cdp.exceptions.some((e) => e.includes("自检 console"))
+      ? cdp.takeExceptions() : null), 3_000);
+  const seen = JSON.stringify(got ?? cdp.takeExceptions()).slice(0, 260);
   ok(got !== null && got.some((e) => e.includes("自检异常")),
-    cdp.tag + " 通道自检：投两条未捕获异常（rAF + timer）必须当场至少收回一条" +
-    "（一条都收不回＝上面那条「0 条」是瞎的，不算判据；实测 " + JSON.stringify(got ?? []).slice(0, 220) + "）");
+    cdp.tag + " 通道自检（异常道）：投两条未捕获异常（rAF + timer）必须当场收回" +
+    "（收不回＝「0 条」是瞎的，不算判据；实测 " + seen + "）");
+  ok(got !== null && got.some((e) => e.includes("自检 console")),
+    cdp.tag + " 通道自检（console.error 道）：投一条 console.error 必须当场收回" +
+    "（产品里「单元渲染不出壳」只经这一道出声，收不到就等于没在看；实测 " + seen + "）");
 }
 
 /** 连上过 CDP 的每一扇窗都在此登记（connect 里推入）；收尾时没人判过的都会被扫一遍。 */
@@ -133,7 +142,7 @@ class Cdp {
   private ws: WebSocket | null = null;
   private seq = 0;
   private pending = new Map<number, (v: Record<string, unknown>) => void>();
-  /** 页面里抛出的未捕获异常（含 rAF / observer 回调里的），按连接期累积。 */
+  /** 页面里的「出事」信号：未捕获异常（含 rAF / observer 回调里的）+ console.error。按连接期累积。 */
   readonly exceptions: string[] = [];
   /** okNoExceptions 判过即置真；收尾扫描只补没人判过的窗（同一扇窗不许判两次）。 */
   judged = false;
@@ -158,6 +167,12 @@ class Cdp {
             ?.exceptionDetails;
           const desc = String(d?.exception?.description ?? d?.text ?? "未知异常");
           this.exceptions.push(desc.split("\n").slice(0, 3).join(" ← ").slice(0, 260));
+        } else if (msg.method === "Runtime.consoleAPICalled") {
+          const p = msg.params as { type?: string; args?: Array<{ value?: unknown; description?: string }> };
+          if (p?.type === "error") {
+            const txt = (p.args ?? []).map((a) => String(a?.value ?? a?.description ?? "")).join(" ");
+            this.exceptions.push("console." + String(p.type) + ": " + txt.slice(0, 240));
+          }
         }
       };
     });
