@@ -228,6 +228,9 @@ B20 的转录（同一相自己撞上）。读到的东西一次把六种外推�
 `scripts/sidebar-probe.ts`）；`panels-check` exit 0；`renderer-arch-check` 84/84；`a11y-check` 4/4；
 `gate-check` / `docs-check` 通过；`ipc:check`（分支 A 靶子修复）/ `sandbox:check`（分支 A 沙箱生效）/
 `e2e` 全部断言通过。构建由 panels-check 的 B0 相同源码跑通。
+另按「谁读渲染层谁就得跑」实测取料面（`grep -l src/renderer scripts/*`）补齐四道：
+`arch-boundary-check`、`sidechat-check`（33 ✅）、`agents-check`（255 ✅）、`schedule-check`（67 ✅）——
+读渲染层的门至此全绿（`renderer-arch-check`/`a11y-check` 走构建产物 `out/renderer`，同一份源码）。
 
 **另记一条未追的缝（不在本次修法内，已单列待办）**：同一实验里还见过一次
 `NotFoundError: Failed to execute 'insertBefore' on 'Node'`——抛在 `draw()` 的挂载循环里，
