@@ -3942,10 +3942,21 @@ const MUTATIONS = [
     id: "impact-cause-rescan-failure-claims-permanent",
     src: "src/tools/impact-query.ts",
     test: "tests/impact-query.test.ts",
-    desc: "候选集重扫失败时把异常吞成 -1 ⇒ 「分辨不出」当场升级成一句自信的「被 .gitignore 永久排除」，" +
-      "而 rg 坏掉与被忽略在证据上完全不是一回事（fail-closed 的另一半：不确定要说不确定）",
-    apply: (s) => s.replace("    .catch(() => null);", "    .catch(() => -1);"),
+    desc: "丢掉「分辨不出」那一支 ⇒ 重扫失败也去走「永久排除」/「快照滞后」的具名结论。" +
+      "注意这一支的判据在**纯函数**上（把 rg 弄失败又能让文件在盘上的代价不划算）：" +
+      "存活的第一版锚点钉的是 .catch 那格，而 .catch 没有任何观测者——换钉法，不撤判据",
+    apply: (s) => s.replace("  if (pos === null) {", "  if (false) {"),
     expectFail: "候选集重扫失败 ⇒ 如实说分辨不出，不许假装有结论",
+  },
+  {
+    id: "impact-cause-rescan-failure-claims-permanent",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "把「扫不动」交回的值从 null 改成 -1 ⇒ 「不确定」在证据上被冒充成「被 .gitignore 永久排除」，" +
+      "模型就此放弃等建图、直接换查法。第一版锚点钉在旧的内联 .catch 上当场存活（那格没有观测者），" +
+      "所以先把 seam 拆成 graphCandidatePosition 并补正反用例，再回来钉这一格",
+    apply: (s) => s.replace("    return null; // 不假装有结论", "    return -1; // 不假装有结论"),
+    expectFail: "graphCandidatePosition：扫不动交回 null、扫得到交出候选集下标（正反两面各一次）",
   },
   {
     id: "grep-negative-note-loses-escape-hatch",

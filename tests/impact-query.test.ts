@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { createImpactQueryTool, graphAbsenceNote, impactQuerySpec } from "../src/tools/impact-query";
+import { createImpactQueryTool, graphAbsenceNote, graphCandidatePosition, impactQuerySpec } from "../src/tools/impact-query";
 import { MAX_FILES_DEFAULT } from "../src/agent/map/build";
 import { TOOLS } from "../src/tools";
 import type { ToolContext } from "../src/tools/base";
@@ -132,6 +132,16 @@ describe("impact_query：改之前问波及谁", () => {
     expect(n).toContain("候选集重扫失败");
     expect(n).toContain("说不出是哪一种成因");
     expect(n).toContain("不等于 0");
+  });
+
+  // 上面那条只判了「拿到 null 之后怎么说」。null 从哪来也必须有人判，否则 catch 里改成
+  // 什么都行得通（第一版锚点就钉在 catch 上，结果当场存活——那格没有观测者）。
+  // 这里不 mock：把工作区指到一个真不存在的路径，rg 自己失败。
+  it("graphCandidatePosition：扫不动交回 null、扫得到交出候选集下标（正反两面各一次）", async () => {
+    const bogus = join(tmpdir(), "dsh-no-such-workspace-" + String(Date.now()));
+    expect(await graphCandidatePosition(bogus, "math.js"), "工作区不存在 ⇒ 必须交 null，不许退成 -1（那是「永久排除」）").toBeNull();
+    const pos = await graphCandidatePosition(MINI_REPO, "math.js");
+    expect(pos, "靶子仓库里 math.js 是受支持后缀且在盘上 ⇒ 必在候选集内").toBeGreaterThanOrEqual(0);
   });
 
   it("三条具名成因互不同形（同形就等于没分诊）", () => {

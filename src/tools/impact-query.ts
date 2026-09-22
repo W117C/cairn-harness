@@ -62,11 +62,20 @@ async function notInGraphNote(workspace: string, rel: string, abs: string): Prom
   }
   const onDisk = await access(abs).then(() => true, () => false);
   if (!onDisk) return `impact_query: 该相对路径下没有文件 ⇒ 先 glob 确认（${rel}）`;
-  const cap = MAX_FILES_DEFAULT;
-  const pos = await scanSourceFilesAll(workspace)
-    .then((all) => all.findIndex((f) => f.rel === rel))
-    .catch(() => null); // 重扫失败（rg 坏了等）：如实说"分辨不出"，不假装有结论
-  return graphAbsenceNote(rel, cap, pos);
+  return graphAbsenceNote(rel, MAX_FILES_DEFAULT, await graphCandidatePosition(workspace, rel));
+}
+
+/** 该文件在**全量候选**（rg + 后缀过滤 + mtime 排序）里的位置：`-1` = 压根没进候选集，
+ *  `null` = 扫不动（rg 不可用 / 工作区路径不能扫）。单独成一个导出函数，是为了让
+ *  "扫不动"这一格有真观测者：测试把 workspace 指到一个不存在的路径，`rg` 以退出码 2 真失败
+ *  ⇒ 走到 catch。这不是 mock，而是把同一句政策放到够得着的坐标上判。 */
+export async function graphCandidatePosition(workspace: string, rel: string): Promise<number | null> {
+  try {
+    const all = await scanSourceFilesAll(workspace);
+    return all.findIndex((f) => f.rel === rel);
+  } catch {
+    return null; // 不假装有结论：交回 null，由 graphAbsenceNote 如实说"分辨不出"
+  }
 }
 
 /** 调用点按文件汇聚的紧凑清单（与 contextNoteFor 同一套帽：宁少不炸上下文）。 */
