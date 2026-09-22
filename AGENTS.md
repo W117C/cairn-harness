@@ -28,7 +28,7 @@ React 树已全量归档（2026-09-17 删 45 个 .tsx/测试 + 移除 react 全�
 - `src/main/`、`src/preload/`、`src/renderer/` —— M0b Electron 壳（IPC 接线 / 审批门 / Seatbelt 沙箱）
 - `fixtures/todo-app/` —— 验收靶子；`fixtures/mock/` —— 冻结的模型剧本
 - `fixtures/todo-app/tests/**` 与 `fixtures/mock/**` 是**判卷文件**：sha256 冻结在 `scripts/frozen-sha256.json`，改它们等于作弊
-- `agent-plan.md` 只读——那是方案，不是代码
+- `agent-plan.md` 原则上只读——那是方案，不是代码；如确需修改，必须遵循 `outputs/desktop-design-2026-09-22/总册.md` §3.7 的最小 diff 流程（agent 出 diff → 用户 Review → 批准 → 才落盘），并完成相应验证
 
 ## 环境注意
 
