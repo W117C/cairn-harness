@@ -208,14 +208,14 @@ function isLocalVariableBinding(nameNode: import("web-tree-sitter").Node): boole
   return !declaredAtModuleScope(nameNode);
 }
 
-/** 名字落在 ERROR / MISSING 子树里 ⇒ 它是 grammar 错误恢复**猜**出来的，不是代码里真存在的声明。
- *  部分回收（见 `fileTags` 的 `recovering` 一支）只信错误节点之外的兄弟子树。 */
-function underError(node: import("web-tree-sitter").Node): boolean {
-  for (let p: import("web-tree-sitter").Node | null = node.parent; p !== null; p = p.parent) {
-    if (p.type === "ERROR" || p.isMissing) return true;
-  }
-  return false;
-}
+/** 回收口径为什么只是一句「hasError 不再一票否决」，而没有再加一道「丢掉 ERROR 子树里的 capture」：
+ *  实测那一道在现有图案下**什么都不挡**——四个真触发文件（见 `probe-map-recall.ts` 首跑读数）与
+ *  另造的七种坏法（空初值 `const a = ;`、未闭合类、断在半表达式、`if (true {`、坏参数表、
+ *  空类型标注、`import type { A from "b"`）逐一对比，过滤前后的 def 集合完全相同
+ *  ⇒ tree-sitter 的错误恢复不会在 ERROR 子树里交出可被 pattern 命中的具名节点。
+ *  留一条测不到的守卫就是本仓最忌的「模块齐、测试绿、最后一跳没接」，故撤。
+ *  重开条件：哪天 pattern 扩到能吃下属性式/解构式定义（§三 主动收掉的那两类），
+ *  就得回头测这批新图案在 ERROR 子树里会不会产假名——那条锚点届时才有对象。 */
 
 /** 抛错版单文件 tags：语法错误文件不抛；见下方 `recovering` 一支的口径。 */
 export async function fileTags(src: string, ext: string): Promise<SymbolTag[]> {
@@ -234,19 +234,18 @@ export async function fileTags(src: string, ext: string): Promise<SymbolTag[]> {
     return []; // parse 抛错 = 语法错误文件：空 tags，不抛
   }
   // 语法错误文件：以前整文件一票否决（`hasError ⇒ []`）。实测代价：本仓 4 个**合法** TS 文件
-  // 因此在图里完全不存在（`new Map<string, () => Promise<void>>()`、`import("x").T`、含 `//` 的正则
-  // 字面量都会让 typescript grammar 报 ERROR），而 `impact_query` 只会回「这张图里没有这个符号」——
-  // 「没有」与「漏了」在读端同形。现在改成**部分回收**：错误节点之外的兄弟子树照常抽，
-  // 落在 ERROR/MISSING 里的名字丢掉（那是猜的）。整文件都是错的（`function {{{ nope`）仍然得到空集。
+  // 因此在图里完全不存在（类型位置里的 `import("pkg").T`、`vi.mock` 的
+  // `importOriginal<typeof import("node:fs/promises")>()`，以及一条含双斜杠的正则字面量），
+  // 而 `impact_query` 只会回「这张图里没有这个符号」——「没有」与「漏了」在读端同形。
+  // 现在直接跑 query：错误恢复留下的正常子树照常出 tags；整文件都是错的（`function {{{ nope`）
+  // 本来就抽不出具名节点 ⇒ 老契约用例仍绿（为何不再加一道 ERROR 子树过滤，见上方那段测量记录）。
   try {
-    const recovering = tree.rootNode.hasError;
     const query = await queryFor(lang, loaded);
     if (!query) return [];
     const tags: SymbolTag[] = [];
     for (const m of query.matches(tree.rootNode)) {
       for (const c of m.captures) {
         if (c.name !== "def" && c.name !== "ref") continue;
-        if (recovering && underError(c.node)) continue;
         const name = c.node.text;
         if (!name) continue;
         if (c.name === "def" && isLocalVariableBinding(c.node)) continue; // 函数体里的变量不是跨文件符号

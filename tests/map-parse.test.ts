@@ -65,7 +65,8 @@ describe("map parse（任务 1）", () => {
     const defs = tags.filter((t) => t.kind === "def").map((t) => t.name);
     expect(defs, "错误节点之后的正常函数必须还在图里").toContain("recoveredAfterNoise");
     expect(defs).toContain("reg");
-    // 回收不等于照单全收：类型实参里的词不该成为跨文件符号（那是猜出来的碎片）
+    // 这条是**界**不是过滤器：图案本来就不吃类型实参（我一度加过一道「丢掉 ERROR 子树里的 capture」，
+    // 实测 4 个真触发文件 + 7 种造出来的坏法都挡不到任何东西，已撤，理由记在 parse.ts 那段注释里）。
     expect(defs, "泛型实参不该被当成定义").not.toContain("void");
   });
 

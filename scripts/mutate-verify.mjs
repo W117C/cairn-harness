@@ -5963,18 +5963,8 @@ const MUTATIONS = [
       "`import(\"pkg\").T`、`vi.mock` 里 `importOriginal<typeof import(...)>()`、含双斜杠的正则字面量）" +
       "就在符号图里**完全不存在**：实测本仓 4 个合法文件如此（含 parse.ts 自己），召回从 0.9991 掉回 0.9863，" +
       "而读端只会说「这张图里没有这个符号」",
-    apply: (s) => s.replace("    const recovering = tree.rootNode.hasError;", "    const recovering = tree.rootNode.hasError;\n    if (recovering) return [];"),
+    apply: (s) => s.replace("    const query = await queryFor(lang, loaded);", "    if (tree.rootNode.hasError) return [];\n    const query = await queryFor(lang, loaded);"),
     expectFail: "真仓库里那四个曾被一票否决的文件，如今每个都有定义入图（回归现场比合成夹具更硬）",
-  },
-  {
-    id: "map-error-subtree-names-not-filtered",
-    src: "src/agent/map/parse.ts",
-    test: "tests/map-parse.test.ts",
-    desc: "反向半边：回收时不过滤 ERROR/MISSING 子树 ⇒ 把 grammar 猜出来的碎片当成本仓的跨文件符号" +
-      "（假边比漏更坏：漏只少一条边，垃圾边会让 impact 报出根本不存在的波及面）。" +
-      "钉住它的正是那条老契约用例「整文件都坏 ⇒ 空 tags」——回收不是照单全收",
-    apply: (s) => s.replace("        if (recovering && underError(c.node)) continue;", "        if (false) continue;"),
-    expectFail: "语法错误文件不抛、返回空 tags；坏扩展名不抛；grammar 加载失败向上抛（build 层降级）",
   },
 ];
 
