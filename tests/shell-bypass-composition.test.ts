@@ -357,14 +357,15 @@ describe("⑩ 未知前缀词降为必问、中间插参数照原样 deny", () =
     }
   });
 
-  it("worker 侧这次收口的代价与那条界都钉住：文本里的 git 现在也拦，带引号的才安全", () => {
-    // 代价：worker 没有出卡通道，认不准就多给一句 reason，模型可换写法重试——
-    // 比「未知前缀词后面的强推静默放行」便宜，且这条取舍随 ⑦ 的裁决一起生效。
-    expect(interceptDestructiveGit("echo no git here").ok).toBe(false);
-    expect(interceptDestructiveGit("git status; echo -m git").ok).toBe(false);
-    // 那条界：引号内是一个 token，切不出独立的 `git` ⇒ 不牵连（写文档/写提示词不受影响）
-    expect(interceptDestructiveGit("echo 'git push --force'").ok).toBe(true);
-    expect(interceptDestructiveGit("git status").ok).toBe(true);
+  it("worker 侧那条界要钉住：只按破坏动词表拦藏在未知首词后面的调用，「git 只是个词」的写法留得住", () => {
+    // 第一版按「非只读即拦」把下面三支惯用写法一起打死了（`grep -rn git src` 是最常见的那种），
+    // 报代价时报小了；收窄成破坏动词表后：表外维持与修前相同的放行，表内的从静默放行变拦得住。
+    for (const cmd of ["echo no git here", "grep -rn git src", "git status; echo -m git", "echo 'git push --force'"]) {
+      expect(interceptDestructiveGit(cmd).ok, cmd).toBe(true);
+    }
+    for (const cmd of ["setsid git push --force", "unshare -n git push --force", "flock /tmp/l git reset --hard"]) {
+      expect(interceptDestructiveGit(cmd).ok, cmd).toBe(false);
+    }
   });
 
   it("既有绝对面不退让：已知包装器 / 结构性面（载荷递归、链式段）仍由 L1-deny 决定", () => {

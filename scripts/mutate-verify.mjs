@@ -5238,10 +5238,21 @@ const MUTATIONS = [
     test: "tests/shell-bypass-composition.test.ts",
     desc: "worker 闸退回只认「有效二进制是 git」的那些 ⇒ 未知首词把 git 藏在参数里（setsid / flock / prlimit …）就整段不算 git 调用，强推在 worker 侧静默放行（09-22 实测的第二支面）",
     apply: (s) => s.replace(
-      '    for (let i = tokens.indexOf("git"); i >= 0; i = tokens.indexOf("git", i + 1)) subs.push(tokens[i + 1] ?? "");',
-      "    void tokens;",
+      "      if (sub !== undefined && DESTRUCTIVE_GIT_SUBCOMMANDS.includes(sub)) subs.push(sub);",
+      "      if (false && sub !== undefined) subs.push(sub);",
     ),
     expectFail: "worker 那一支不受降级影响：push 非只读 ⇒ fail-closed 一直拦得住",
+  },
+  {
+    id: "worker-gitguard-hidden-git-not-bound-to-verb-table",
+    src: "src/agent/worker-shell-tools.ts",
+    test: "tests/shell-bypass-composition.test.ts",
+    desc: "藏在未知首词后面的那一刀退回「只要不是只读动词就拦」⇒ `grep -rn git src`、`echo no git here` 这类惯用写法被 worker 打死（⑩ 第一版的真实代价，收窄靠的就是这张动词表）",
+    apply: (s) => s.replace(
+      "      if (sub !== undefined && DESTRUCTIVE_GIT_SUBCOMMANDS.includes(sub)) subs.push(sub);",
+      "      if (sub !== undefined) subs.push(sub);",
+    ),
+    expectFail: "worker 侧那条界要钉住：只按破坏动词表拦藏在未知首词后面的调用，「git 只是个词」的写法留得住",
   },
   {
     id: "rule-matcher-token-boundary-dropped",

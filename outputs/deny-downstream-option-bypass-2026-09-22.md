@@ -342,3 +342,20 @@ pattern 去掉尾部空白后必须命中，且命中处的**右邻只能是行�
 修法不是撤锚点，是**让改法同时废掉两条面**（`forms ??= [segment]` + 把按序面的候选收回到只剩段自身），
 改完复跑：✅ 被杀死。⇒ 立一条规矩：**新面接手旧面的职责时，旧面的锚点必须扩到能同时废两边**，
 否则它从"守护"悄悄变成"装饰"，而针脚体检（只核针脚在不在）看不见这件事。
+
+### ⑩ 的第二次收口：worker 那一刀报小的代价，实测太贵
+
+上一条「代价」段写的是「worker 侧 `echo git push --force` 会被拦并给 reason，可换写法重试」。
+落地后回看：**这张代价单把最常见的写法漏了**——`grep -rn git src`（不带引号的惯用搜索）也会被拦。
+我自己量 ⑦ 候选时还拿 `grep -e git -e push src --force` 当假阳例子，写到 worker 这一刀时却没用同一把尺子。
+
+收窄：藏在未知首词后面的那一刀**只按破坏动词表拦**（`DESTRUCTIVE_GIT_SUBCOMMANDS`，22 个动词）。
+- 表内 ⇒ 拦：`setsid git push --force`、`unshare -n git push --force`、`flock /tmp/l git reset --hard`；
+- 表外 ⇒ 与**修前**相同放行（不是新增的漏）：`grep -rn git src`、`echo no git here`、`git status; echo -m git`；
+- 带引号一律不牵连（引号内是一个 token，切不出独立的 `git`）。
+只读面（`inv.bin === "git"` → 只读白名单）一字未动，所以"git 真是命令"时仍是"非只读即拦"的严口径。
+
+锚点 +1（`worker-gitguard-hidden-git-not-bound-to-verb-table`：退回"非只读即拦" ⇒ `grep` 那支必红）、
+另把 `worker-gitguard-ignores-git-behind-unknown-head` 的针脚搬到新形状（我改结构把它弄失效了，
+针脚体检当场报**阻断 1**——这正是秒级体检存在的理由）。针脚体检 643 条阻断 0、
+test 195 files / 1968 tests 全绿、typecheck HEAD 内 0 错。
