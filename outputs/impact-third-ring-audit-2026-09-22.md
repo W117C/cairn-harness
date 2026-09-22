@@ -107,6 +107,20 @@ B23 最初放在 B15 与 B16 之间，结果**同码同机连红三轮**的是�
 在现实现下**两条都绿** ⇒ 我的假 DOM 少算了真实盒模型里的东西（`.stream` 的 CSS `gap`/flex 与
 `mountHistory` 只按 `height + 12` 记账是两套口径）。这正是 #31 要建模并修的那件事。
 
+补两条后来的排除（同一实验台上跑的，`/tmp/dsh-raf`）：
+- **不是 rAF 停摆**：`document.visibilityState = "visible"`、`document.hidden = false`；且给 Electron
+  加 `--disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-background-timer-throttling`
+  之后**数字逐字不变**（仍是占位 190.273px、卡片头 8 个）⇒ 这条与 AGENTS.md 记的那批
+  「Electron/CDP 挂载时序 flake」**不同族**，它是确定性的真缺陷。
+- **不是我的追加被丢**：`#eventCount` 与盘上行数同为 30、审阅页也读得到（面板不虚拟化）
+  ⇒ 断层只剩「投影出单元 → 挂进 DOM 那一窗」这一段。
+
+现在最像的两处账目差（#31 按这个顺序做：先让假 DOM 红起来，再动实现）：
+① `.stream{padding:var(--sp-10) 0}` 使 `origin()` 的 `base` 非 0，而 `draw()` 先
+   `top = scrollTop - base`、又 `windowRange(offsets, correctedTop - base, …)` ⇒ 同一份 padding 扣两遍；
+② 没测过的单元保留 120 估高 ⇒ `offsets[n]` 高估 ⇒「真实空间已贴底」在 offset 空间里不算贴底，
+   末单元被折进 after-spacer，形成**自洽的错定态**（这解释了为什么再滚一次也不收敛）。
+
 相位处理：把 B23 移到 B20 之后（各自钉自己的前提，红了才分得清是谁弄的），**断言阈值一字未改**；
 修好 #31 后应把 B23 挪回 B20 之前跑一次，让「追加事件把单元数推过估算窗」成为 B20 的正向回归。
 
