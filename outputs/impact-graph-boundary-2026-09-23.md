@@ -113,3 +113,23 @@ tags 缓存命中率下降（缓存按 `{mtime,size}` 键控，被换入换出�
 那笔，见 AGENTS.md「提交前相交检查」与待办 #33）。同一表面两个 writer 是本仓明令避免的事故形态，
 所以这一轮只落探针、数字与这份草案，不动产品码。已立待办 #36；待办 #30（"被 .gitignore 忽略的源码
 是否值得点出来"）由本轮实测**升格并入 #36**——真正的支配性成因是 400 帽，不是忽略规则。
+
+## 顺手量出来的现红：`mutate-needles-check` 这道门在 HEAD 上是红的（本会话无关，记名移交）
+
+在 `d0282af` 的**干净 worktree** 里跑针脚体检，报 **阻断 3**；而主树工作树里同一道门只报 1（另一条是
+`request-face-tools-ignored`，别人在飞的 `glm-session` 改动把 `face.tools` 改成了 `surface.specs`）。
+三条失效的针脚都在 `src/main/sandbox.ts`：
+
+- `sbx-network-branch-dropped` → `if (opts.network === "allow") {`
+- `sbx-network-escort-ors-conditions` → `return input.wantsNetwork && input.asked && input.approved ?`
+- `sbx-note-gate-dropped` → `network === "allow" || !looksLikeNetworkDenial`
+
+成因不是"实现搬走了忘了改指"，而是**锚点先落地、被测码从未入库**：
+`git log -S'if (opts.network === "allow") {' -- src/main/sandbox.ts` **零命中**——这三条串在该文件的
+已提交历史里从来没存在过；锚点是 `bdaa6f4`（2026-09-21）提交的，配套沙箱码至今留在工作树。
+⇒ 门从 09-21 起就在 HEAD 上红，而任何人主树里跑 `pnpm gates` 都看不见（在飞的 sandbox.ts 把串补回来了）。
+
+这正是 AGENTS.md「HEAD 自洽性」那条的同族：**锚点与它的被测码是一个原子簇**，分在两个表面提交就会留下
+"表上守护、实则空转"的窗口——区别只是这次空转的方向反过来（针脚摸不到码，而不是码没了针）。
+处置：不代改（`src/main/sandbox.ts` 在别人手里），已立待办 #37 记名给那笔提交；同时这轮把我自己
+撞断的旧针脚 `impact-query-deps-ghost-file-silent` 改指到新行（那条是我的责任面，见 `d0282af`）。
