@@ -172,6 +172,19 @@ pnpm exec tsx scripts/probe-shell-bypass.ts     # 当前必红（退出码 1）�
 离线面：`tests/hardening2.test.ts` +2 条（含反例那一条：包装后的只读 git 与 `bash -c 'echo git push --force'` 必须放行）。
 剩下的 ② 5 条与 ④ 4 条各自成笔，未动。
 
+### ④ 也已收（同日第四笔，探针红 9 → 5）
+
+`risk.ts` 的静态威胁表补进**重定向写面**四条（`redirectOnto()` 一处组式，四条共用）：
+家目录 / 系统路径 / 执行与凭证面（`.git/hooks`、`.ssh`、`authorized_keys`、shell 启动文件、`crontab`）
+各 **high**，工作区普通落盘 **medium**。刻意不做"一律 high"：`build > out.log` 这类天天发生，
+全抬成 ask 只会让人闭眼点同意，那是比漏判更坏的风险稀释。
+`>&1` 与 `>/dev/null` 由负向前瞻排除（不写进任何文件的复制/丢弃不算写面）——
+这条反例本身也钉了锚点（`threat-redirect-devnull-exclusion-lost`），盯的是**判据自己变宽**。
+探针 ④ 段 4 条 + 对照 1 条全绿，总读数 **红 5 / 绿 28**；离线面 `tests/permissions.test.ts`
+「重定向写面进威胁表」一段 5 条（含链上取最高、`shell_ro` 仍不吃威胁表两条），锚点 +3，针脚体检 618 条 / 阻断 0。
+**只剩 ②**（「总是允许」整条命令字面量被前缀命中，`echo hi > /tmp/pwned` 仍放行）——
+它是 allow 语义的账，方向与前面几笔相反（要收紧同意范围，不是扩大检测面），单独一笔做。
+
 ⚠️ **本程自记一笔**：① 那笔（`5b6a7d5`）把 HEAD 弄红了一个 tsc 错——接线之后只跑了邻域测与
 `security-check`，**没重跑 tsc**（`rule.pattern` 的收窄过不了 else-if 链）。这是「跑过邻域 ≠ 跑过那道门」
 的同一条规矩在**类型门**上的复犯：改完 src 的接线，验证集里 `typecheck` 与 `test` 两门都不可缺。

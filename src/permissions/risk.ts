@@ -26,6 +26,18 @@ interface ThreatEntry {
   note: string;
 }
 
+// ---- 重定向写面（09-22 补，探针 ④ 段四支红）----
+// 这一族此前在威胁表里**零条目**：`echo x > /etc/hosts`、`cat > .git/hooks/pre-commit`、
+// `echo hi >> ~/.zshrc` 全按 risk=none 直通（自主档 approve，连一张卡都不出）。
+// 同一条「写面元字符」判据，worker 的只读那一支早就一票否决（`worker-shell-tools.ts` 的
+// `SHELL_WRITE_META`），主会话写面却没有对应条目——「同一判据只硬化一支」的又一实例。
+/** 组一条「`>` / `>>` 后面跟这个目标」的正则：允许 fd 数字前缀（`2>>err`），可选引号，
+ *  描述符复制（`>&1`）与丢弃到 `/dev/null` 由调用方的负向前瞻排除——那两种不落进任何文件。 */
+function redirectOnto(target: string): RegExp {
+  return new RegExp(`(?:^|[^\\w>])\\d*>>?\\s*["'\`]?${target}`);
+}
+const REDIRECT_TAIL = "[^\\s\"'`;|&)]*"; // 目标路径的其余部分（到空白 / 引号 / 链分隔符为止）
+
 /** 静态威胁表（六类四级；首批条目收编 Goose patterns + Roo 元字符展开表，§11.7.4）。 */
 export const THREAT_TABLE: ThreatEntry[] = [
   // ---- 文件破坏 ----
@@ -53,6 +65,13 @@ export const THREAT_TABLE: ThreatEntry[] = [
   { re: /\bdd\b[^;|&]*\bof=/, level: "high", category: "文件破坏", note: "dd 任意路径覆写" },
   { re: /\b(?:crontab|launchctl|systemctl|defaults\s+write)\b/, level: "high", category: "系统修改", note: "系统配置写入" },
   { re: /\b(?:chown|chgrp)\b/, level: "medium", category: "系统修改", note: "改变属主" },
+  // 重定向写面（见上方 redirectOnto 段注释）：敏感目标 high（自主档出卡），任意目标 medium
+  // ——刻意不是"一律 high"：`build > out.log` 这类工作区落盘天天发生，全抬成 ask 只会让人
+  // 闭眼点同意，那才是真正的风险稀释。
+  { re: redirectOnto(`(?:~|\\$HOME)\\)?${REDIRECT_TAIL}/`), level: "high", category: "系统修改", note: "重定向写入家目录（含 shell 启动文件、凭证配置）" },
+  { re: redirectOnto(`/(?:etc|usr|bin|sbin|var|Library|System|private|Applications)${REDIRECT_TAIL}/`), level: "high", category: "系统修改", note: "重定向写入系统路径" },
+  { re: redirectOnto(`\\S*(?:\\.git/hooks|\\.ssh|authorized_keys|known_hosts|\\.zshrc|\\.bashrc|\\.bash_profile|\\.zprofile|\\.profile|\\.gitconfig|\\.npmrc|\\.netrc|crontab)`), level: "high", category: "系统修改", note: "重定向写入执行/凭证面（git 钩子、ssh、shell 启动文件、调度表）" },
+  { re: redirectOnto(`(?!&|/dev/null)\\S`), level: "medium", category: "系统修改", note: "重定向写文件" },
   // ---- 权限提升 ----
   { re: /\bsudo\b/, level: "high", category: "权限提升", note: "sudo 提权" },
   { re: /\bsu\s+[a-zA-Z]/, level: "high", category: "权限提升", note: "切换身份" },
@@ -88,7 +107,6 @@ export function isShellFamily(tool: string): boolean {
 export function hasThreatTableSurface(tool: string): boolean {
   return isShellFamily(tool) && tool !== "shell_ro";
 }
-
 /** 静态通道：扫描命令（含链）命中威胁表取最高级。 */
 export function staticRisk(tool: ToolName, args: Record<string, unknown>): RiskFinding {
   // edit_file：就地改文件（文件破坏面 ≤ write_file 的覆盖写，但仍是写向操作）

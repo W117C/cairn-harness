@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { approvePlan, checkPermission, gate, getPlanState, markPlanProposed, resetPlanState, runWithPlanScope } from "../src/permissions";
 import { evaluate, isSideEffectTool, newAutonomySession } from "../src/permissions/autonomy";
 import { judgeChain, type PermissionRule } from "../src/permissions/rules";
-import { hasThreatTableSurface, staticRisk } from "../src/permissions/risk";
+import { hasThreatTableSurface, RISK_ORDER, staticRisk } from "../src/permissions/risk";
 import type { ToolName } from "../src/tools/base";
 
 // worker 工具名（shell_rw / shell_ro）按设计不在主会话静态键域 ToolName 内
@@ -233,5 +233,47 @@ describe("plan 门 run 级隔离（P1 回归）", () => {
     expect(checkPermission("auto", "write_file")).toBe("allow");
     resetPlanState();
     expect(getPlanState()).toEqual({ required: false, proposed: false, approved: false });
+  });
+});
+
+// 09-21 探针 ④ 段（四支红）：重定向写面在静态威胁表里**零条目** ⇒ `echo x > /etc/hosts`、
+// `cat > .git/hooks/pre-commit`、`echo hi >> ~/.zshrc` 全按 risk=none 直通，自主档连一张卡都不出。
+// 同一条写面判据在 worker 只读那一支早就一票否决（`SHELL_WRITE_META`）——只硬化了一支。
+// 补条目时刻意**分级**：敏感目标 high（出卡），工作区普通落盘 medium（自主档放行）——
+// 全抬成 high 只会让人闭眼点同意，那才是风险稀释。反例钉住 `>&1` / `>/dev/null` 不算写入。
+describe("重定向写面进威胁表（09-22 补 ④ 段）", () => {
+  const risk = (cmd: string) => staticRisk("run_shell", { command: cmd });
+
+  it("写进 shell 启动文件 / 系统路径 / git 钩子 = high（自主档必出卡）", () => {
+    for (const cmd of [
+      "echo hi >> ~/.zshrc",
+      "echo alias\\ ll=rm > ~/.bashrc",
+      "cat > .git/hooks/pre-commit",
+      "echo x > /etc/hosts",
+      "echo x > ~/.ssh/authorized_keys",
+    ]) {
+      expect(risk(cmd).level, cmd).toBe("high");
+      expect(risk(cmd).reason, cmd).toContain("静态威胁表");
+    }
+  });
+
+  it("反例：描述符复制与丢弃到 /dev/null 不是写入", () => {
+    for (const cmd of ["echo hi > /dev/null", "echo hi 2>&1", "git status > /dev/null 2>&1", "cat x | wc -l"]) {
+      expect(risk(cmd).level, cmd).toBe("none");
+    }
+  });
+
+  it("工作区普通落盘只到 medium（分级不是一律 high）", () => {
+    expect(risk("echo hi > out.log").level).toBe("medium");
+    expect(risk("build 2>>err.log").level).toBe("medium");
+    expect(RISK_ORDER[risk("echo hi > out.log").level]).toBeLessThan(RISK_ORDER.high);
+  });
+
+  it("链上任一段命中即整条命令按最高级（前缀是 ls 也拦不住后面的写）", () => {
+    expect(risk("ls && echo x > /etc/hosts").level).toBe("high");
+  });
+
+  it("shell_ro 仍不吃威胁表（静态白名单硬闸优先，防 deny→ask 降级不回归）", () => {
+    expect(staticRisk(asTool("shell_ro"), { command: "echo x > /etc/hosts" }).level).toBe("none");
   });
 });

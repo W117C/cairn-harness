@@ -5095,6 +5095,30 @@ const MUTATIONS = [
     apply: (s) => s.replace('        if (!t.includes("=") && vopts.has(flag)) { i++; ateValue = true; }', "        if (false && !t.includes(\"=\") && vopts.has(flag)) { i++; ateValue = true; }"),
     expectFail: "选项值不冒充二进制：root / 30 / -n 都不在 bin 位",
   },
+  {
+    id: "threat-redirect-system-path-downgraded",
+    src: "src/permissions/risk.ts",
+    test: "tests/permissions.test.ts",
+    desc: "「重定向写入系统路径」从 high 降成 medium ⇒ 自主档 `echo x > /etc/hosts` 不再出卡（④ 段原缺陷以另一种方式复活：条目在，分级不在）",
+    apply: (s) => s.replace('level: "high", category: "系统修改", note: "重定向写入系统路径"', 'level: "medium", category: "系统修改", note: "重定向写入系统路径"'),
+    expectFail: "写进 shell 启动文件 / 系统路径 / git 钩子 = high（自主档必出卡）",
+  },
+  {
+    id: "threat-redirect-devnull-exclusion-lost",
+    src: "src/permissions/risk.ts",
+    test: "tests/permissions.test.ts",
+    desc: "丢掉 `>&1` 与 `/dev/null` 的负向前瞻 ⇒ 丢弃输出也被当成「往文件里写」，反例那条必须红（这条锚点盯的是判据自己变宽）",
+    apply: (s) => s.replace("(?!&|/dev/null)\\\\S", "\\\\S"),
+    expectFail: "反例：描述符复制与丢弃到 /dev/null 不是写入",
+  },
+  {
+    id: "threat-redirect-fd-prefix-missed",
+    src: "src/permissions/risk.ts",
+    test: "tests/permissions.test.ts",
+    desc: "重定向正则不吃 fd 数字前缀 ⇒ `build 2>>err.log` 这类真实写面看不见（`2>` 前一个是词字符，前缀类挡住）",
+    apply: (s) => s.replace("[^\\\\w>])\\\\d*>>", "[^\\\\w>])>>"),
+    expectFail: "工作区普通落盘只到 medium（分级不是一律 high）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
