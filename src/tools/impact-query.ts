@@ -9,6 +9,8 @@
 // 注入纪律（同 obs_recall）：只由 agent-runner 在 impactAnalysis 开启时**同时**注入实例与规格，
 // 不进静态工具表 ⇒ 关着的时候一次请求都不为该工具付字节。
 import { defaultImpactCacheDir, downward, fileImpact, upward, buildImpact, IMPACT_CONTEXT_FILES, IMPACT_CONTEXT_SYMBOLS_PER_FILE, type ImpactSite } from "../agent/impact/index.js";
+import { access } from "node:fs/promises";
+import { SUPPORTED_EXTS } from "../agent/map/parse.js";
 import { assertNotAgentArea, assertRealContainment, resolveInWorkspace, ToolError, type Tool, type ToolResult } from "./base.js";
 
 const FILES_CAP = IMPACT_CONTEXT_FILES;
@@ -19,7 +21,25 @@ const SYMS_CAP = IMPACT_CONTEXT_SYMBOLS_PER_FILE;
 interface SiteNoun { item: string; group: string; none: string }
 const UP_NOUN: SiteNoun = { item: "跨文件调用点", group: "波及", none: "：无跨文件调用点（波及半径为 0）" };
 const DEP_NOUN: SiteNoun = { item: "引用的外部定义", group: "分布在", none: "：不引用任何定义在别处的符号（依赖面为 0）" };
-const NOT_IN_GRAPH = "impact_query: 该文件不在影响图内（后缀不支持 / 未扫到 / 路径写错），先 glob 确认相对路径";
+
+/** 「不在图内」的四种成因分开说（2026-09-23 实测：本仓 436 个候选源码里 36 个在图外，
+ *  支配性成因是**帽**而不是路径写错——旧文案把「未扫到」与「路径写错」混在一句里，
+ *  模型照着去 glob 是白跑一轮。这里只多一次 access 系统调用，且只在缺席这条分支上付字。
+ *  「未知 ≠ 0」必须明写：面板侧早已钉死「缺席 ≠ 波及 0」，读端不该说反话。
+ *  abs 由调用方解析好传进来（那边已经 resolveInWorkspace + 越界断言过，不重复解析也不重复设防）。 */
+async function notInGraphNote(rel: string, abs: string): Promise<string> {
+  const ext = rel.includes(".") ? rel.slice(rel.lastIndexOf(".") + 1).toLowerCase() : "";
+  if (!SUPPORTED_EXTS.includes(ext)) {
+    return `impact_query: ${rel} 的后缀 .${ext} 不在符号图支持集内 ⇒ 波及半径未知（不等于 0）`;
+  }
+  const onDisk = await access(abs).then(() => true, () => false);
+  if (!onDisk) return `impact_query: 该相对路径下没有文件 ⇒ 先 glob 确认（${rel}）`;
+  return (
+    `impact_query: ${rel} 存在且后缀受支持，但落在本次符号图外 ⇒ 波及半径未知（**不等于 0**）。` +
+    "图按最近改动取有限个文件（久未改动的实现常被 tests/ 与产物挤在外），或被 .gitignore 排除；" +
+    "要看全量请直读该文件与其引用方（grep/lsp）"
+  );
+}
 
 /** 调用点按文件汇聚的紧凑清单（与 contextNoteFor 同一套帽：宁少不炸上下文）。 */
 function sitesNote(head: string, sites: ImpactSite[], noun: SiteNoun = UP_NOUN): string {
@@ -65,11 +85,11 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
           // （只有"谁在用我"，没有"我在用谁"）。图只建一次，不复用 fileImpact（它会再建一遍）。
           const graph = await buildImpact({ workspace: ctx.workspace, cacheDir: dir });
           const rel = fileArg.replace(/\\/g, "/");
-          if (!graph.files.includes(rel)) return { ok: false, output: NOT_IN_GRAPH };
+          if (!graph.files.includes(rel)) return { ok: false, output: await notInGraphNote(rel, abs) };
           return { ok: true, output: sitesNote("[impact] " + rel + " 引用的外部定义（我在调用谁）", downward(graph, rel), DEP_NOUN) };
         }
         const r = await fileImpact(ctx.workspace, fileArg, dir);
-        if (r === null) return { ok: false, output: NOT_IN_GRAPH };
+        if (r === null) return { ok: false, output: await notInGraphNote(fileArg.replace(/\\/g, "/"), abs) };
         // 只列**真的被外面引用到**的符号：fileImpact 的 symbols 含函数内局部名（base/boosted…），
         // 照抄会让一屏摘要塞满无关名字——多花 token 还不给可执行信息。
         const refSyms = [...new Set(r.up.map((s) => s.symbol))].sort();

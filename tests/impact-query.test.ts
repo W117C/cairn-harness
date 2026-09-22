@@ -1,6 +1,6 @@
 // 影响面**读端**工具（能力 1 的事前一跳）：查询正确性 + 参数白名单 + 越权路径 + 可达性/成本不变量。
 // 靶子 = fixtures/impact/mini-repo（冻结判卷面，只读不改；已知调用图见 expect-edges.json）。
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -59,10 +59,38 @@ describe("impact_query：改之前问波及谁", () => {
     expect(r.output).toContain("图里没有符号");
   });
 
-  it("不在图内的文件（路径写错 / 后缀不支持）给出下一步动作", async () => {
-    const r = await tool().run({ file: "notes.txt" }, ctx());
-    expect(r.ok).toBe(false);
-    expect(r.output).toContain("不在影响图内");
+  it("「不在图内」要说清是哪一种：后缀不支持 / 路径没有这个文件，是两条不同的下一步", async () => {
+    // 旧文案把三种成因挤在一句里（"后缀不支持 / 未扫到 / 路径写错"），模型照着末尾那句去 glob 是白跑一轮
+    const ext = await tool().run({ file: "notes.txt" }, ctx());
+    expect(ext.ok).toBe(false);
+    expect(ext.output).toContain("后缀 .txt 不在符号图支持集内");
+    expect(ext.output).toContain("不等于 0");
+    const missing = await tool().run({ file: "no-such-file.ts" }, ctx());
+    expect(missing.ok).toBe(false);
+    expect(missing.output).toContain("该相对路径下没有文件");
+    expect(missing.output).toContain("glob");
+    // 两条不许同形：同形就等于没分诊
+    expect(missing.output).not.toBe(ext.output);
+  });
+
+  it("文件在盘上、后缀支持、却在图外（噪声目录/帽/忽略规则）⇒ 明说「波及半径未知」而不是「没有调用点」", async () => {
+    // node_modules 是 NOISE_GLOBS 排掉的目录：文件存在、后缀受支持，却永远不进图——
+    // 这正是 2026-09-23 实测支配本仓 36 个图外源码文件的那一类缺席（见 outputs/impact-graph-boundary-2026-09-23.md）
+    const ws = await mkdtemp(join(tmpdir(), "impact-outside-"));
+    try {
+      await mkdir(join(ws, "src"), { recursive: true });
+      await mkdir(join(ws, "node_modules", "pkg"), { recursive: true });
+      await writeFile(join(ws, "src", "real.ts"), "export function real(): number { return 1; }\n", "utf8");
+      await writeFile(join(ws, "node_modules", "pkg", "ghost.ts"), "export function ghost(): number { return 2; }\n", "utf8");
+      const r = await createImpactQueryTool(cacheDir).run({ file: "node_modules/pkg/ghost.ts" }, { workspace: ws, emit: async () => {} });
+      expect(r.ok).toBe(false);
+      expect(r.output).toContain("存在且后缀受支持，但落在本次符号图外");
+      expect(r.output).toContain("波及半径未知");
+      // 反向不许说反话：面板侧钉的是「缺席 ≠ 波及 0」，读端也不能把未知写成 0
+      expect(r.output).not.toContain("波及半径为 0");
+    } finally {
+      await rm(ws, { recursive: true, force: true });
+    }
   });
 
   it("参数必须恰好一个：两个都给 / 都不给 / 类型不对都显式报错", async () => {
@@ -131,10 +159,10 @@ describe("可达性与成本不变量（「发货了没人接」的那类缺陷�
     await expect(tool().run({ deps: true }, ctx())).rejects.toThrow(/参数恰好给一个/);
   });
 
-  it("deps 模式下不在图内的文件仍然 fail-visible", async () => {
+  it("deps 模式下不在图内的文件仍然 fail-visible（与 up 同一套分诊文案）", async () => {
     const r = await tool().run({ file: "ghost.js", deps: true }, ctx());
     expect(r.ok).toBe(false);
-    expect(r.output).toContain("不在影响图内");
+    expect(r.output).toContain("该相对路径下没有文件");
   });
 
   it("规格体积有上限（工具面是按轮重送的固定成本，膨胀要当场红）", () => {

@@ -1445,7 +1445,7 @@ const MUTATIONS = [
     src: "src/tools/impact-query.ts",
     test: "tests/impact-query.test.ts",
     desc: "deps 分支不查图内成员（路径写错/后缀不支持时报「依赖面为 0」）⇒ 模型把「没扫到」读成「这个文件不依赖任何东西」",
-    apply: (s) => s.replace("          if (!graph.files.includes(rel)) return { ok: false, output: NOT_IN_GRAPH };\n", ""),
+    apply: (s) => s.replace("          if (!graph.files.includes(rel)) return { ok: false, output: await notInGraphNote(rel, abs) };\n", ""),
     expectFail: "deps 模式下不在图内的文件仍然 fail-visible",
   },
   {
@@ -3907,6 +3907,25 @@ const MUTATIONS = [
     apply: (s) => s.replace("appendRecordCard(cardHost(), ok ?",
       "appendRecordCard(openMsg('ai').querySelector('.msg-body'), ok ?"),
     expectFail: "孤儿 tool_result 与重复投递：两份都要有壳，且原文在卡里",
+  },
+  {
+    id: "impact-cause-existence-collapsed",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "「不在图内」的成因分诊退回一句话：不再分辨「路径下根本没有这个文件」⇒ 模型对一条写错的路径" +
+      "收到的是「图外、未知 ≠ 0」，于是它去换查法而不是去 glob，白跑一轮（旧文案就是这个形状）",
+    apply: (s) => s.replace("const onDisk = await access(abs).then(() => true, () => false);", "const onDisk = true;"),
+    expectFail: "「不在图内」要说清是哪一种：后缀不支持 / 路径没有这个文件，是两条不同的下一步",
+  },
+  {
+    id: "impact-cause-outside-graph-collapsed",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "第三种成因（文件在盘上、后缀支持、却在图外——实测支配本仓 36 个图外源码文件的那一类）被并回" +
+      "「没有文件」那句 ⇒ 真缺席重新变回一句假指引，「未知 ≠ 0」这句也不再出现在模型面前",
+    apply: (s) => s.replace("`impact_query: ${rel} 存在且后缀受支持，但落在本次符号图外 ⇒ 波及半径未知（**不等于 0**）。` +",
+      "`impact_query: 该相对路径下没有文件 ⇒ 先 glob 确认（${rel}）` +"),
+    expectFail: "文件在盘上、后缀支持、却在图外（噪声目录/帽/忽略规则）⇒ 明说「波及半径未知」而不是「没有调用点」",
   },
   {
     id: "null-unit-eats-whole-window",
