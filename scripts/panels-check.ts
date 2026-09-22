@@ -90,12 +90,46 @@ async function phaseReplay(root: string, sid: string): Promise<void> {
 const PORT = 9222 + (process.pid % 500);
 const CDP_URL = "http://127.0.0.1:" + String(PORT);
 
-interface CdpMessage { id?: number; result?: Record<string, unknown>; error?: { message: string } }
+interface CdpMessage {
+  id?: number; result?: Record<string, unknown>; error?: { message: string }
+  method?: string; params?: Record<string, unknown>
+}
+
+/** B25：未捕获异常判据，**自带「观察者可证」这一半**。
+ *  为什么自带自检：拿缺陷必现的那份码（ff2a699，null 单元拖死挂载循环）跑第一次写出来的这条，
+ *  读到的是「0 条」——一条永远读到 0 的判据比没有判据更坏（它把「没观测到」说成「没有」）。
+ *  所以每跑一次都当场投一条 rAF 未捕获异常，要求同一条通道把它收回来。
+ *  回调里抛出的异常为什么值得单独立一道：#31 那条「贴底却只剩半截转录」就是这么藏了六轮
+ *  （量测见 outputs/impact-third-ring-audit-2026-09-22.md「第七读数」）。 */
+async function okNoExceptions(cdp: Cdp, tag: string): Promise<void> {
+  const pre = cdp.takeExceptions();
+  ok(pre.length === 0, tag + " 全程没有未捕获异常（回调里抛出＝那一拍半路死掉而断言看不见；实测 " +
+    String(pre.length) + " 条：" + JSON.stringify(pre.slice(0, 4)).slice(0, 420) + "）");
+}
+
+/** 通道自检：投一条 rAF 未捕获异常，要求同一条通道当场把它收回来。
+ *  只对**还活着**的那扇窗做——第一窗在 B4 之后就被换掉（旧进程 killElectron ⇒ 连接已关），
+ *  往已关闭的连接发 Runtime.evaluate 只会 30s 超时（本轮实测踩过，会把整相带崩）。
+ *  两扇窗共用同一个 Cdp 实现，所以通道可证一次即覆盖两支的收集逻辑。 */
+async function selfTestExceptionChannel(cdp: Cdp, tag: string): Promise<void> {
+  cdp.takeExceptions();
+  /* 两个来源各投一条：rAF 是这次缺陷真正抛出的位置（要证的就是那一类），timer 是兜底——
+     宿主节流/遮挡时 rAF 可能整段不拍（本仓已知假红族），只挂 rAF 的自检会在那种时刻误判「通道死了」。
+     判据只要「至少收回一条」：两条走的是同一条 Runtime.exceptionThrown 通道，收回任一条即证通道在收。 */
+  await cdp.eval(`setTimeout(() => { throw new Error("${tag} 自检异常-timer"); }, 0);` +
+    ` requestAnimationFrame(() => { throw new Error("${tag} 自检异常-raf"); }), "armed"`);
+  const got = await settle(async () => (cdp.exceptions.length > 0 ? cdp.takeExceptions() : null), 3_000);
+  ok(got !== null && got.some((e) => e.includes("自检异常")),
+    tag + " 通道自检：投两条未捕获异常（rAF + timer）必须当场至少收回一条" +
+    "（一条都收不回＝上面那条「0 条」是瞎的，不算判据；实测 " + JSON.stringify(got ?? []).slice(0, 220) + "）");
+}
 
 class Cdp {
   private ws: WebSocket | null = null;
   private seq = 0;
   private pending = new Map<number, (v: Record<string, unknown>) => void>();
+  /** 页面里抛出的未捕获异常（含 rAF / observer 回调里的），按连接期累积。 */
+  readonly exceptions: string[] = [];
 
   async connect(): Promise<void> {
     const page = await waitFor(async () => {
@@ -111,9 +145,25 @@ class Cdp {
         if (msg.id && this.pending.has(msg.id)) {
           this.pending.get(msg.id)!(msg.result ?? {});
           this.pending.delete(msg.id);
+        } else if (msg.method === "Runtime.exceptionThrown") {
+          const d = (msg.params as { exceptionDetails?: { exception?: { description?: string }; text?: string } } | undefined)
+            ?.exceptionDetails;
+          const desc = String(d?.exception?.description ?? d?.text ?? "未知异常");
+          this.exceptions.push(desc.split("\n").slice(0, 3).join(" ← ").slice(0, 260));
         }
       };
     });
+  }
+
+  /** 取走并清空累积的未捕获异常（让「注入前那段干不干净」与「自检有没有收到」分开判）。 */
+  takeExceptions(): string[] {
+    const out = this.exceptions.splice(0, this.exceptions.length);
+    return out;
+  }
+
+  /** 打开异常上报通道（不打开就永远看不见回调里抛出的那类缺陷）。 */
+  async watchExceptions(): Promise<void> {
+    await this.send("Runtime.enable");
   }
 
   send(method: string, params: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
@@ -279,6 +329,7 @@ async function phaseElectron(root: string): Promise<void> {
     }
     const cdp = new Cdp();
     await cdp.connect();
+    await cdp.watchExceptions();
 
     // 等重放落定 + 会话级真实统计（MAINT-06 第二批判据修正，BLOCKED.md 已裁决授权 2026-09-17）：
     // ① 废除「#eventCount 重放至 10000」断言——#eventCount 是 api.onEvent 实时运行计数器，
@@ -465,6 +516,7 @@ async function phaseElectron(root: string): Promise<void> {
     }
     const cdp2 = new Cdp();
     await cdp2.connect();
+    await cdp2.watchExceptions();
     // 改指（MAINT-06）：`[data-panel-id=git]`（React 面板容器，vanilla 0 命中）
     // → `.side-page[data-view="git"]` 且**非 hidden**（＝重启后 git 面板不仅「开着」而且「处于激活态」，
     //    因为 B3 已把 activePanel 落盘为 "git"）。断言强于「元素存在」。
@@ -1658,6 +1710,10 @@ async function phaseElectron(root: string): Promise<void> {
     ok(b24 !== null && b24.orphans < b24Results.length + 1,
       "B24 成对的结果仍并进工具项，没被一律降格成孤儿卡（实测 " + String(b24Seen.orphans) +
       " / 盘上结果总数 " + String(b24Results.length) + " + 本相追加 1；读不到数时这一条不算过）");
+    // 最后收一次「静默半执行」：两扇窗各自累积的未捕获异常都必须为空。
+    await okNoExceptions(cdp, "B25 第一窗（B1 万条重放那一组）");
+    await okNoExceptions(cdp2, "B25 第二窗（B8 起重开转录那一组）");
+    await selfTestExceptionChannel(cdp2, "B25");
     await killElectron(electron2);
   } finally {
     if (electron.exitCode === null) await killElectron(electron);
