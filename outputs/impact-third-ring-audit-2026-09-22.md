@@ -143,3 +143,24 @@ B23 最初放在 B15 与 B16 之间，结果**同码同机连红三轮**的是�
 + `tests/renderer-history-mount` = 19 passed；针脚 652 条阻断 0。
 全量 test / 其余门与锚点真杀在提交后按同 HEAD worktree 复跑。
 
+## 追加：第一个候选修法已被实验证伪（别重复做）
+
+按「`draw()` 挂了新节点却不续拍」这条做了修法（`if (changed) schedule()` → `if (changed || mountedNew) schedule()`），
+并给假 DOM 加了「新挂载节点首帧量得 0、下一帧才落定」这层建模 —— 假 DOM 那条判据当场从绿转红
+（`missing:[10], tailSpacer:120`，与真窗口同形状），加修法后相关 6 个文件 37/37 全绿。
+**但真窗口一字未变**：`grep mountedNew out/renderer/assets/*.js` 命中（确认改动进了构建产物），
+B20 仍是「卡片头 8 / 挂载子节点 11 / 占位 190.273px / 距底 0px」。
+⇒ 那个模型测到的是**另一件事**，不是本缺陷的复现；三处改动已全部 `git checkout` 回退，
+HEAD 停在「B23 在 B20 之后 + 全门绿」的态。**这条判据（假 DOM 那条）别当成 #31 的复现器。**
+
+当场读数（临时探针写在 `container.dataset.probe`，throwaway worktree，跑完即删）：
+`{n:20, start:0, end:16, offLen:21, total:1620, atEnd:1430, st:250, sh:890, ch:640, base:24, mounted:9, changed:false}`
+最有信息量的是这一对矛盾：**最后一次 draw 算出 `range.end = 16`，而 DOM 里只有 9 个节点**
+（探针写在挂载循环之前 ⇒ 那一拍本应把缺的 7 个补上）。两种解释还没被区分：
+① 之后另有一拍把窗缩回 9（`end` 在 9↔16 之间**振荡**，采样多半落在 9 那侧）；
+② 节点插了却被后续 `node.remove()` / `insertBefore` 的顺序问题吃掉。
+**#31 的下一步只做这一件事**：把每拍的 `{end, mounted.size, scrollTop, offsets[n]}` 逐拍写进
+`container.dataset.probeSeq` 并读出序列 —— 振荡还是丢节点一眼可分；在那之前不再提修法。
+（探针手法可复用：值写进 dataset，panels-check 一行 eval 读回，成本 = 一次跑。）
+
+
