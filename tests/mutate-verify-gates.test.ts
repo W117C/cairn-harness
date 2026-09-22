@@ -2,7 +2,38 @@
 // 动因（2026-09-19 实跑）：另一会话正在改判卷测试文件时，本门把两条正常条目报成
 // 「基线就不是全绿」+「变异存活」——真回归信号被并发噪声伪装掉了。
 import { describe, expect, it } from "vitest";
-import { entryDisposition, leftoverBackupPaths, preflightRefusals, splitRunnable, type HeadState } from "../scripts/lib/mutate-gates";
+import { budgetMsOf, classifyArgs, entryDisposition, leftoverActionOf, leftoverBackupPaths, preflightRefusals, splitRunnable, type HeadState } from "../scripts/lib/mutate-gates";
+
+describe("budgetMsOf + classifyArgs 的值位（自我预算这条手段本身要有判卷）", () => {
+  it("flag 优先于 env；两者都缺 ⇒ 不限且不吭声", () => {
+    expect(budgetMsOf(["--budget-ms", "600000"], "30000")).toEqual({ ms: 600000, warning: null });
+    expect(budgetMsOf([], "30000")).toEqual({ ms: 30000, warning: null });
+    expect(budgetMsOf([], undefined)).toEqual({ ms: 0, warning: null });
+  });
+
+  it("非法预算不许静默退化成「没设」（写的人以为给了预算）", () => {
+    const bad = budgetMsOf(["--budget-ms", "ten minutes"], undefined);
+    expect(bad.ms).toBe(0);
+    expect(bad.warning).toContain("--budget-ms");
+    const empty = budgetMsOf(["--budget-ms"], undefined);
+    expect(empty.warning).toContain("没有值");
+    // `--budget-ms --list`：值位是另一个 flag ⇒ 不吞它，让 --list 照旧生效
+    const clash = classifyArgs(["--budget-ms", "--list"]);
+    expect(clash.unknown).toEqual([]);
+    expect(clash.mode).toBe("list");
+  });
+
+  it("`--budget-ms 600000` 的值不是锚点 id（旧分流会报「未知 id 600000」，等于没人能设预算）", () => {
+    const p = classifyArgs(["--budget-ms", "600000", "some-anchor-id"]);
+    expect(p.targets).toEqual(["some-anchor-id"]);
+    expect(p.unknown).toEqual([]);
+    expect(p.mode).toBe("run");
+  });
+
+  it("未知 flag 照旧当场拒（新认的两个 flag 不放宽这条）", () => {
+    expect(classifyArgs(["--budgett-ms", "600000"]).unknown).toEqual(["--budgett-ms"]);
+  });
+});
 
 const clean: HeadState = "clean";
 const dirty: HeadState = "dirty";
@@ -130,3 +161,37 @@ describe("残留备份 leftoverBackupPaths", () => {
     expect(leftoverBackupPaths(["src/a.ts", "src/a.ts"], () => false)).toEqual([]);
   });
 });
+
+// 自愈要覆盖源文件，而覆盖是**不可逆**的 ⇒ 判据的每一支都得有反面对手（不能只测"该盖时盖了"）。
+// 动因（2026-09-23）：整跑被外层超时掐死在"源文件是突变体"那一拍，下一道门读到污染并制造假陈旧针脚。
+describe("残留处置决策 leftoverActionOf", () => {
+  const HEAD = "orig\n";
+  const MUT = "mutated\n";      // 本表某条锚点作用在 HEAD 上产出的内容
+  const OTHER = "someone-else\n"; // 第三方改动：对不上任何锚点的改法
+
+  it("备份 == HEAD、盘上是本表锚点留下的突变体 ⇒ restore", () => {
+    expect(leftoverActionOf(HEAD, HEAD, MUT, true)).toBe("restore");
+  });
+
+  it("反面对手：同样三份内容，但当前那份对不上任何锚点 ⇒ 绝不自动盖（可能是别人的在飞改动）", () => {
+    expect(leftoverActionOf(HEAD, HEAD, OTHER, false)).toBe("manual");
+    // 这一条是 `isOurMutant` 非恒真的唯一证据：把它从判据里删掉，上面两条都会返回 restore
+  });
+
+  it("备份 == HEAD、源文件已经 == HEAD ⇒ 只删过期备份，不动源文件", () => {
+    expect(leftoverActionOf(HEAD, HEAD, HEAD, false)).toBe("drop-backup");
+    expect(leftoverActionOf(HEAD, HEAD, HEAD, true)).toBe("drop-backup");
+  });
+
+  it("备份 != HEAD ⇒ manual（备份里可能是别人未提交的原件，即便当前内容对得上锚点也不许盖）", () => {
+    expect(leftoverActionOf(HEAD, OTHER, MUT, true)).toBe("manual");
+    expect(leftoverActionOf(HEAD, OTHER, HEAD, false)).toBe("manual"); // 连"只删备份"都不许：那份备份不是我们的
+  });
+
+  it("没有可比基线一律 manual：文件不在 HEAD 里 / 备份读不到 / 源文件不见了", () => {
+    expect(leftoverActionOf(null, HEAD, MUT, true)).toBe("manual");
+    expect(leftoverActionOf(HEAD, null, MUT, true)).toBe("manual");
+    expect(leftoverActionOf(HEAD, HEAD, null, false)).toBe("manual");
+  });
+});
+

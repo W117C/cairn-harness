@@ -102,6 +102,45 @@ export function leftoverBackupPaths(srcRels: readonly string[], exists: (rel: st
   return [...new Set(srcRels.map(backupPathOf))].filter((p) => exists(p));
 }
 
+/** 残留 `.mutbak` 该怎么处置。**三条内容都在盘上 ⇒ 可以按证据判**，这是它比信号处理器可靠的原因
+ *  （实测 09-23：SIGTERM 打到 node 后 1.5s 内什么都没跑——`runTest` 的 `execFileSync` 阻塞事件循环，
+ *  JS 处理器要等子进程结束；等不到就要等 SIGKILL，那时谁都没机会还原）。
+ *  - `restore`：备份 == HEAD、当前 != HEAD，**且**当前这份正好等于本表某条锚点作用在备份上产出的突变体
+ *    ⇒ 是我们上次没还原的那份。`isOurMutant` 这一步不能省：少了它，「备份之后别人自己改了同一个文件」
+ *    会被我一笔盖掉——那正是本仓最忌的越权；
+ *  - `drop-backup`：备份 == HEAD 且当前 == HEAD ⇒ 源文件已经是对的，只剩一个过期备份，删掉即可；
+ *  - `manual`：其余一切（备份 != HEAD、文件不在 HEAD 里、当前内容对不上任何锚点、源文件不见了）。 */
+export type LeftoverAction = "restore" | "drop-backup" | "manual";
+
+/** 纯判据：只说「该自愈」还是「交给人」，盘上的覆盖动作全在调用方（判据要能离线断言）。 */
+export function leftoverActionOf(
+  head: string | null, backup: string | null, current: string | null, isOurMutant: boolean,
+): LeftoverAction {
+  if (head === null || backup === null) return "manual"; // 没有 HEAD 基线可比 ⇒ 谁都不许盖
+  if (backup !== head) return "manual"; // 备份不是 HEAD 态：里面可能是别人未提交的原件
+  if (current === head) return "drop-backup";
+  if (current === null || !isOurMutant) return "manual";
+  return "restore";
+}
+
+/** 自我预算（毫秒）：`--budget-ms <n>` 优先于 env `DSH_MUTATE_BUDGET_MS`；0/缺省 = 不限。
+ *  非法值**不静默当「没设」**（`classify-unknown-flag` 同族）：写的人以为自己给了预算，
+ *  实际却在跑全表 ⇒ 被外层超时杀在突变那一拍。所以非法值要出声，由调用方打印。 */
+export function budgetMsOf(
+  args: readonly string[], envValue: string | undefined,
+): { ms: number; warning: string | null } {
+  const parse = (raw: string | undefined, label: string): { ms: number; warning: string | null } | null => {
+    if (raw === undefined || raw === "") return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n <= 0) return { ms: 0, warning: `${label}=${JSON.stringify(raw)} 不是正整数 ⇒ 按「不限」跑` };
+    return { ms: Math.round(n), warning: null };
+  };
+  const i = args.indexOf("--budget-ms");
+  const flag = i >= 0 ? args[i + 1] : undefined;
+  if (i >= 0 && flag === undefined) return { ms: 0, warning: "--budget-ms 后面没有值 ⇒ 按「不限」跑" };
+  return parse(flag, "--budget-ms") ?? parse(envValue, "DSH_MUTATE_BUDGET_MS") ?? { ms: 0, warning: null };
+}
+
 // ---- 针脚静态预检：不跑测试就知道某条锚点还摸不摸得到代码 ----
 // 动因（2026-09-19 实跑，220 条里揪出 2 条）：把被锚定的实现搬进共用原语（text-budget）后
 // 忘了改指锚点 ⇒ needle 不再出现，那条变异变成**空操作**。跑它会得到「突变未生效」的红，
@@ -182,7 +221,11 @@ export function duplicateIds(ids: readonly string[]): DuplicateId[] {
 // 动因（2026-09-19 实踩）：一条还没合进 HEAD 的 `--check-needles` 在主树里被当成「无参数」，
 // 而该脚本的缺省语义是**跑全表**——它会就地改源文件、跑几十分钟。拼错一个 flag 就等于
 // 在别人的写作窗里放火，所以「看不懂」不能退化成「按缺省办」。
-export const MUTATE_FLAGS = ["--list", "--check-needles"] as const;
+export const MUTATE_FLAGS = ["--list", "--check-needles", "--budget-ms"] as const;
+/** 带值的 flag：它**下一个** token 是值，不是锚点 id。漏了这条，`--budget-ms 600000` 会把
+ *  `600000` 当成一个不存在的锚点 id 报「未知 id」——于是没人能给它设预算（而预算正是
+ *  别被外层超时杀在突变那一拍的手段）。 */
+export const MUTATE_VALUE_FLAGS = ["--budget-ms"] as const;
 
 export interface ArgPlan {
   mode: "list" | "check-needles" | "run";
@@ -193,8 +236,16 @@ export interface ArgPlan {
 }
 
 export function classifyArgs(args: readonly string[]): ArgPlan {
-  const unknown = args.filter((a) => a.startsWith("--") && !(MUTATE_FLAGS as readonly string[]).includes(a));
-  const targets = args.filter((a) => !a.startsWith("--"));
+  // 先标出「flag + 它的值」这两个下标，后面两个过滤器都不再看它们。
+  // 值位又是一个 flag（`--budget-ms --list`）时不吞：让 budgetMsOf 去报「没给值」，--list 照旧生效。
+  const consumed = new Set<number>();
+  args.forEach((a, i) => {
+    if (!(MUTATE_VALUE_FLAGS as readonly string[]).includes(a)) return;
+    consumed.add(i);
+    if (args[i + 1] !== undefined && !args[i + 1].startsWith("--")) consumed.add(i + 1);
+  });
+  const unknown = args.filter((a, i) => !consumed.has(i) && a.startsWith("--") && !(MUTATE_FLAGS as readonly string[]).includes(a));
+  const targets = args.filter((a, i) => !consumed.has(i) && !a.startsWith("--"));
   const mode = args.includes("--list") ? "list" : args.includes("--check-needles") ? "check-needles" : "run";
   return { mode, unknown, targets };
 }

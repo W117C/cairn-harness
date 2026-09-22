@@ -22,7 +22,7 @@ import { execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, splitRunnable, needleProblemLine, needleSeverity, classifyArgs, isLineWiseApply } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, classifyArgs, isLineWiseApply, budgetMsOf } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -1951,16 +1951,18 @@ const MUTATIONS = [
     id: "classify-unknown-flag-ignored",
     src: "scripts/lib/mutate-gates.ts",
     test: "tests/mutate-needles-check.test.ts",
-    desc: "未知 flag 不再收集 ⇒ 拼错/未合并的 `--check-needles` 被当成无参数，脚本直接开跑全表：在别人的写作窗里就地改源文件几十分钟",
-    apply: (s) => s.replace("const unknown = args.filter((a) => a.startsWith(\"--\") && !(MUTATE_FLAGS as readonly string[]).includes(a));", "const unknown: string[] = [];"),
+    desc: "未知 flag 不再收集 ⇒ 拼错/未合并的 `--check-needles` 被当成无参数，脚本直接开跑全表：在别人的写作窗里就地改源文件几十分钟" +
+      "（2026-09-23 改指：`classifyArgs` 为 `--budget-ms <值>` 加了 consumed 分流，旧针脚整行失效）",
+    apply: (s) => s.replace(`const unknown = args.filter((a, i) => !consumed.has(i) && a.startsWith("--") && !(MUTATE_FLAGS as readonly string[]).includes(a));`, "const unknown: string[] = [];"),
     expectFail: "拼错/未实现的 flag 落进 unknown，且不混进 targets",
   },
   {
     id: "classify-flags-counted-as-ids",
     src: "scripts/lib/mutate-gates.ts",
     test: "tests/mutate-needles-check.test.ts",
-    desc: "flag 混进位置参数 ⇒ `--check-needles` 被当成一个条目 id，报「未知 id」而不是执行针脚体检（门从此静默不跑）",
-    apply: (s) => s.replace("const targets = args.filter((a) => !a.startsWith(\"--\"));", "const targets = [...args];"),
+    desc: "flag 混进位置参数 ⇒ `--check-needles` 被当成一个条目 id，报「未知 id」而不是执行针脚体检（门从此静默不跑）" +
+      "（2026-09-23 改指：同上，分流现在还要跳过被 consumed 吞掉的值位）",
+    apply: (s) => s.replace(`const targets = args.filter((a, i) => !consumed.has(i) && !a.startsWith("--"));`, "const targets = [...args];"),
     expectFail: "已知 flag 各归其 mode，位置参数进 targets",
   },
   {
@@ -5966,6 +5968,44 @@ const MUTATIONS = [
     apply: (s) => s.replace("    const query = await queryFor(lang, loaded);", "    if (tree.rootNode.hasError) return [];\n    const query = await queryFor(lang, loaded);"),
     expectFail: "真仓库里那四个曾被一票否决的文件，如今每个都有定义入图（回归现场比合成夹具更硬）",
   },
+  // ---- 自愈这条手段自己的判卷（2026-09-23）：`leftoverActionOf` / `budgetMsOf` 决定的是
+  // 「要不要拿备份盖掉盘上的源文件」，判错一分支就是**不可逆地覆盖别人的改动** ⇒ 每支都要有反面对手。
+  {
+    id: "leftover-heal-ignores-is-our-mutant",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "去掉 `isOurMutant` 这道闸 ⇒ 只要「备份 == HEAD 且当前 != HEAD」就自动覆盖，" +
+      "而这两条对「备份落盘后别人自己改了同一个文件」同样成立：一次自愈就能把别人的在飞改动抹掉",
+    apply: (s) => s.replace("if (current === null || !isOurMutant)", "if (current === null)"),
+    expectFail: "反面对手：同样三份内容，但当前那份对不上任何锚点 ⇒ 绝不自动盖（可能是别人的在飞改动）",
+  },
+  {
+    id: "leftover-heal-trusts-non-head-backup",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "去掉「备份必须 == HEAD」这道闸 ⇒ 拿一份对不上 HEAD 的备份去盖源文件。" +
+      "备份内容不等于 HEAD 时它可能是别人未提交的原件，这时候连「只删备份」都不该自动做",
+    apply: (s) => s.replace("if (backup !== head) return", "if (false && backup !== head) return"),
+    expectFail: "备份 != HEAD ⇒ manual（备份里可能是别人未提交的原件，即便当前内容对得上锚点也不许盖）",
+  },
+  {
+    id: "budget-missing-value-silent",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "`--budget-ms` 后面没给值时退化成「不限」且不出声 ⇒ 写的人以为自己给了预算，" +
+      "实际在跑全表，正是被外层超时杀在突变那一拍的形状（未知 flag 同族：看不懂不能当缺省）",
+    apply: (s) => s.replace("if (i >= 0 && flag === undefined) return { ms: 0,", "if (false && flag === undefined) return { ms: 0,"),
+    expectFail: "非法预算不许静默退化成「没设」（写的人以为给了预算）",
+  },
+  {
+    id: "budget-value-slot-treated-as-anchor-id",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "分流不吞带值 flag 的下一个 token ⇒ `--budget-ms 600000` 里的 600000 被当成锚点 id 报「未知 id」，" +
+      "于是没人能给这张表设预算（而预算正是别被掐死在突变那一拍的手段）",
+    apply: (s) => s.replace("consumed.add(i + 1);", "consumed.add(-1); // 值位没被吞"),
+    expectFail: "`--budget-ms 600000` 的值不是锚点 id（旧分流会报「未知 id 600000」，等于没人能设预算）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
@@ -6048,6 +6088,32 @@ function mutantSyntaxProblem(mutated) {
   return "改法致语法错（测试会红在装载阶段，不算分辨力证据）：" + ts.flattenDiagnosticMessageText(errs[0].messageText, " ");
 }
 
+/** 在飞突变：这一刻盘上的源文件是**改过**的内容。
+ *  ⚠️ 实测边界（09-23）：这条**不是**超时保险。`runTest` 走 `execFileSync`，同步阻塞整个事件循环，
+ *  JS 层的信号处理器要等子进程结束才可能跑；而外层超时（`pnpm gates` 对本门约 20 分钟）在 SIGTERM
+ *  之后不会等这么久——实测 SIGTERM 打到 node 后 1.5s 内什么都没发生，盘上仍是突变体 + `.mutbak`。
+ *  真正可靠的口子是**下一次开跑时按证据自愈**（见下面 `leftoverActionOf` 那段）：那时三份内容都在盘上。
+ *  这个处理器只兜住「子进程刚好结束、回到 JS 的那一刻被杀」这种次要窗口，成本 3 行，留着。 */
+let inFlight = null; // { srcAbs, original, backup, mutated } | null
+function restoreInFlight() {
+  const f = inFlight;
+  if (f === null) return "无在飞条目";
+  inFlight = null;
+  try {
+    // `.mutbak` 从 `cpSync` 那一刻就存在（比突变早一拍：基线跑期间被杀时源文件还是干净的，
+    // 但备份已经落了盘）。只还原内容不删备份，会让下次开跑被残留备份的 fail-closed 预检挡住。
+    if (f.mutated) writeFileSync(f.srcAbs, f.original);
+    rmSync(f.backup, { force: true });
+    return `${f.mutated ? "已还原源文件" : "源文件未被改过"}，已清掉 ${f.backup}`;
+  } catch { return "还原时抛错（收尾校验会抓到残留）"; }
+}
+for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+  process.on(sig, () => {
+    console.error(`[mutate-verify] 收到 ${sig}：${restoreInFlight()}，剩下的条目按未证记账并判红（不拿「没跑完」当「都杀了」）`);
+    process.exit(1);
+  });
+}
+
 function verifyEntry(m) {
   const disp = entryDisposition({
     srcRel: m.src,
@@ -6064,6 +6130,7 @@ function verifyEntry(m) {
   const backup = `${srcAbs}.mutbak`;
   const original = readFileSync(srcAbs, "utf8");
   cpSync(srcAbs, backup);
+  inFlight = { srcAbs, original, backup, mutated: false }; // 备份一落盘就要能被收尾
   let restored = false;
   try {
     // ① 基线：突变前该测试必须绿
@@ -6075,11 +6142,13 @@ function verifyEntry(m) {
     if (mutated === original) return { m, ok: false, why: "突变未生效（锚点可能已失效）" };
     const syntax = mutantSyntaxProblem(mutated);
     if (syntax !== null) return { m, ok: false, why: syntax };
+    inFlight.mutated = true; // 从这一行起，盘上的源文件是**改过**的内容
     writeFileSync(srcAbs, mutated);
 
     // ③ 突变后必须红，且红在期望的那条用例上
     const hit = runTest(m.test);
     writeFileSync(srcAbs, original); // 尽早还原
+    inFlight = null;
     restored = true;
     if (hit.code === 0) return { m, ok: false, why: "变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）" };
     if (!hit.out.includes(m.expectFail)) {
@@ -6090,6 +6159,7 @@ function verifyEntry(m) {
     if (back.code !== 0) return { m, ok: false, why: `还原后未恢复全绿:\n${back.out.slice(-800)}` };
     return { m, ok: true };
   } finally {
+    inFlight = null; // 早退路径（基线不绿 / 突变未生效 / 语法错）也要清，别留一个指向已还原文件的空档
     if (!restored) writeFileSync(srcAbs, original);
     rmSync(backup, { force: true });
   }
@@ -6108,6 +6178,15 @@ if (plan.mode === "list") {
 /** 只核针脚、不跑测试（秒级）——因此它能进 pnpm gates，而整张变异表要跑几十分钟、
  *  常被并发堵着：那段时间里失效的锚点在「假装守护」。 */
 if (plan.mode === "check-needles") {
+  /** 盘上有 `.mutbak` ⇒ 同名源文件可能是上次没还原的**突变体**，而针脚正是从这份内容算的。
+   *  不这么报的后果实测过（2026-09-23）：一条 gemini.ts 的尸体让 needles-check 报出「针脚失效」，
+   *  读的人去改一条本来好好的锚点。这一支**只读**（体检不许改盘），所以只点名、不自愈，并判红。 */
+  const corpses = leftoverBackupPaths([...new Set(MUTATIONS.map((m) => m.src))], (rel) => existsSync(join(ROOT, rel)));
+  if (corpses.length > 0) {
+    for (const p of corpses) console.log(`  ❌ 残留 ${p} —— 同名的源文件可能是未还原的突变体，下面的针脚是从它算的，不可信`);
+    console.log("[mutate-needles-check] 先跑一次 mutate-verify（开跑前会按证据自愈），再核针脚");
+    process.exit(1);
+  }
   const bad = reportNeedles(MUTATIONS);
   // 顺带核每条**改法**产出的还是不是合法源文件：整张变异表要跑几十分钟且常被并发堵着，
   // 而这类错在变异跑里只会伪装成「误伤无关用例」。秒级能查出来的事不留到几十分钟后。
@@ -6155,6 +6234,13 @@ const stateOf = (rel) => {
   if (v === undefined) { v = headStateOf(rel); headStateCache.set(rel, v); }
   return v;
 };
+/** 先自愈、再分流（2026-09-23 实测的次序缺陷）。处置块原先写在分流**之后**，于是「重跑被打污文件自己那条锚点」
+ *  这条最自然的恢复动作会在 `entries.length === 0` 处提前退出，污染永远自愈不了。当场读数：
+ *  `node scripts/mutate-verify.mjs gym-draft-worker-writes-as-parent` 只报「预检拒 1 条 ⇒ 判红退出」，
+ *  盘上 `src/agent/gym/draft.ts.mutbak` 与原样留着的突变体一根手指都没碰——而它下一道门会把图读歪。
+ *  判据只要 HEAD/备份/当前三份内容，与「本次跑哪几条」无关 ⇒ 提到分流前。
+ *  顺带收益：`stateOf` 的缓存此刻还是空的，自愈之后分流读到的是还原后的干净态，那些锚点本轮就能照判。 */
+healLeftoverBackups();
 /** 预检**逐条**跳过不安全的那些，其余照跑（2026-09-23 改，此前是「有条目被拒 ⇒ 一条都不跑」）。
  *  旧写法的后果实测过：别人一个未跟踪的 `src/tools/snapshot.ts` 让 696 条锚点全部停摆，
  *  而红门只报「拒绝 1 条」——其余 695 条本可以判的文件没人判，读的人还以为保护在。
@@ -6175,21 +6261,75 @@ if (refusedCount > 0) {
     process.exit(1);
   }
 }
-// 上一次没收尾干净就别开跑：`.mutbak` 会在本次被 cpSync 覆盖，而它是"崩溃前原始内容"的唯一凭证。
-const allSrcs = [...new Set(entries.map((m) => m.src))];
-const leftovers = leftoverBackupPaths(allSrcs, (rel) => existsSync(join(ROOT, rel)));
-if (leftovers.length > 0) {
-  for (const p of leftovers) console.error(`❌ 残留备份：${p} —— 上一次跑没干净收尾（被 kill / 崩溃）`);
-  console.error("[mutate-verify] 先人工确认这些源文件与 HEAD 一致、再删掉 .mutbak 重跑。");
-  process.exit(1);
+// 上一次没收尾干净就别硬跑：`.mutbak` 会在本次被 cpSync 覆盖，而它是"崩溃前原始内容"的唯一凭证。
+// 但"别硬跑"不等于"一律交给人"——三份内容同一时刻都在盘上，能按证据自愈（判据在 `leftoverActionOf`）：
+// 处置本体：备份 == HEAD、当前 != HEAD、且当前这份正好等于本表某条锚点
+// 作用在备份上产出的突变体 ⇒ 是我们自己的残留，用备份盖回去无损；`isOurMutant` 不能省——
+// 省了就会把「备份之后别人改了同一文件」一笔盖掉。**调用点在分流之前**，理由见那里的注释。
+function healLeftoverBackups() {
+  const allSrcs = [...new Set(MUTATIONS.map((m) => m.src))];
+  const leftovers = leftoverBackupPaths(allSrcs, (rel) => existsSync(join(ROOT, rel)));
+  if (leftovers.length === 0) return;
+  const gitHeadText = (rel) => {
+    try { return execFileSync("git", ["show", "HEAD:" + rel], { cwd: ROOT, encoding: "utf8" }); } catch { return null; }
+  };
+  const readOr = (abs) => { try { return readFileSync(abs, "utf8"); } catch { return null; } };
+  const healed = [];
+  const manual = [];
+  for (const p of leftovers) {
+    const srcRel = p.replace(/\.mutbak$/, "");
+    const srcAbs = join(ROOT, srcRel);
+    const bakText = readOr(join(ROOT, p));
+    const curText = existsSync(srcAbs) ? readOr(srcAbs) : null;
+    const isOurMutant = curText !== null && bakText !== null && MUTATIONS.some((m) => {
+      if (m.src !== srcRel) return false;
+      try { return m.apply(bakText) === curText; } catch { return false; }
+    });
+    const act = leftoverActionOf(gitHeadText(srcRel), bakText, curText, isOurMutant);
+    if (act === "restore") {
+      writeFileSync(join(ROOT, srcRel), bakText);
+      rmSync(join(ROOT, p), { force: true });
+      healed.push(`还原 ${srcRel}（备份 == HEAD，盘上那份是本表某条锚点留下的突变体）`);
+    } else if (act === "drop-backup") {
+      rmSync(join(ROOT, p), { force: true });
+      healed.push(`删掉过期备份 ${p}（源文件已与 HEAD 一致）`);
+    } else {
+      manual.push(p);
+    }
+  }
+  for (const h of healed) console.error("⚠️ 自愈：" + h);
+  if (manual.length > 0) {
+    for (const p of manual) console.error(`❌ 残留备份：${p} —— 备份与 HEAD 不一致，或当前内容对不上任何锚点的改法，不敢自动覆盖`);
+    console.error("[mutate-verify] 这类残留说明中间还夹着别人的在飞改动，按两步人工处理：");
+    for (const p of manual) console.error(`  1) git diff HEAD -- "${p.replace(/\.mutbak$/, "")}"   # 看清两边各是什么`);
+    console.error("  2) 确认无误后删掉这些 .mutbak 再重跑");
+    process.exit(1);
+  }
+  if (healed.length > 0) console.error("[mutate-verify] 自愈完成，继续本次判定（这些还原本身仍会过一遍收尾校验）");
 }
-const results = entries.map((m) => {
+// 自我预算：外层（`pnpm gates`）对本门有每道约 20 分钟的硬超时，而整张表实测要 20+ 分钟——
+// 被掐死的位置若正好在「源文件是突变体」那一拍，就会留下污染（见 `restoreInFlight` 上面那段）。
+// 给了预算就**自己**在条目边界收尾：还原完全、报「未判 N 条」、判红退出，绝不把「没跑完」读成「都杀了」。
+const budget = budgetMsOf(process.argv.slice(2), process.env.DSH_MUTATE_BUDGET_MS);
+if (budget.warning !== null) console.error(`⚠️ ${budget.warning}`);
+const startedAt = Date.now();
+let stoppedEarly = 0;
+const results = [];
+for (let i = 0; i < entries.length; i++) {
+  const m = entries[i];
+  if (budget.ms > 0 && Date.now() - startedAt >= budget.ms) {
+    stoppedEarly = entries.length - i;
+    for (const rest of entries.slice(i)) results.push({ m: rest, ok: null, why: "预算用尽，没跑到（不等于已杀死）" });
+    console.error(`[mutate-verify] ⏳ 预算 ${String(budget.ms)}ms 用尽：已跑 ${String(i)}/${String(entries.length)}，未判 ${String(stoppedEarly)} 条。` +
+      "在条目边界主动收尾（源文件已全部还原），剩下的按未证记账并判红。");
+    break;
+  }
   const r = verifyEntry(m);
   const mark = r.ok === null ? "⏭️" : r.ok ? "✅" : "❌";
   console.log(`${mark} ${m.id} — ${m.desc}`);
   if (r.ok !== true) console.log(`   ${r.why}`);
-  return r;
-});
+  results.push(r);
+}
 
 // 强制收尾校验：所有被测源文件必须零 diff（还原失败 = 判红）
 const srcs = [...new Set(entries.map((m) => m.src))];
@@ -6204,12 +6344,15 @@ if (statusOut) {
 }
 const failed = results.filter((r) => r.ok === false);
 const unverified = results.filter((r) => r.ok === null);
-// 未证有两类，分开数但同一处出口：① 判卷文件在飞（跑到了但量不出东西）② 预检跳过（根本没跑）
+// 未证有三类，分开数但同一处出口——每类的下一步动作不同，混成一句就会把人指错方向：
+// ① 预检跳过（源文件在飞/未跟踪，根本没跑）② 判卷文件在飞（跑到了但量不出分辨力）③ 预算用尽（还没轮到）
 const unverifiedTotal = unverified.length + refusedCount;
 if (unverifiedTotal > 0) {
-  console.log(`  ⚠️  未证 ${String(unverifiedTotal)} 条` +
-    (refusedCount > 0 ? `（其中 ${String(refusedCount)} 条源文件在飞/未跟踪 ⇒ 根本没跑，${String(unverified.length)} 条判卷文件在飞）` :
-      "（判卷文件在飞 ⇒ 该条根本没跑到——不等于已杀死）"));
+  const parts = [];
+  if (refusedCount > 0) parts.push(`${String(refusedCount)} 条源文件在飞/未跟踪 ⇒ 根本没跑`);
+  if (unverified.length - stoppedEarly > 0) parts.push(`${String(unverified.length - stoppedEarly)} 条判卷文件在飞 ⇒ 量不出分辨力`);
+  if (stoppedEarly > 0) parts.push(`${String(stoppedEarly)} 条预算用尽没跑到`);
+  console.log(`  ⚠️  未证 ${String(unverifiedTotal)} 条（${parts.join("；")}）——都不等于已杀死`);
   console.log("UNVERIFIED=" + String(unverifiedTotal));
 }
 const killed = results.length - failed.length - unverified.length;
@@ -6218,5 +6361,11 @@ console.log(`\n${failed.length === 0
       ? "全部变异被正确杀死（断言非恒真）"
       : `${String(killed)} 条被正确杀死，另 ${String(unverifiedTotal)} 条未证`)
   : `${String(failed.length)} 条变异存活或误伤`}`);
+// 耗时与「跑了几条」要自己报出来：外层对本门的超时是猜的（实测 1200s 掐死于表中途），
+// 而这张表到底要跑多久此前没人打印过——没有读数，下一个人只能继续猜。
+const secs = (Date.now() - startedAt) / 1000;
+console.log(`[mutate-verify] 本次耗时 ${secs.toFixed(1)}s · 跑了 ${String(results.length - stoppedEarly)}/${String(entries.length)} 条` +
+  (budget.ms > 0 ? ` · 预算 ${String(Math.round(budget.ms / 1000))}s` : " · 未设预算（外层超时会在中途杀我，见 --budget-ms）"));
 // 有未证就红：这张表没判完不等于判完了（AGENTS：「主动拒变在飞文件」属正确红，不是回归）。
-process.exit(failed.length === 0 && refusedCount === 0 ? 0 : 1);
+// 预算中途停下同样红：`stoppedEarly > 0` 时 failed 可以全空，但那只是「还没轮到」。
+process.exit(failed.length === 0 && refusedCount === 0 && stoppedEarly === 0 ? 0 : 1);
