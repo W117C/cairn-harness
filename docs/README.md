@@ -6,7 +6,8 @@
 > - **全库文档导航** [`DOCS-MAP.md`](./DOCS-MAP.md) —— 按「你现在想干什么」指路，含 outputs/ 调研档案索引与效力分层。
 > - **项目综合报告** [`PROJECT-REPORT-2026-09-22.md`](./PROJECT-REPORT-2026-09-22.md) —— 全景、优缺点、优化清单、发展路径。
 >
-> **状态更正（安全债）**：`outputs/shell-permission-bypass-2026-09-21.md` 写的「未施工」已过期；其后提交已收口四条包装绕过，`scripts/probe-shell-bypass.ts` 于 2026-09-22 复跑 **红 0 / 绿 33**。
+> **安全债现状（2026-09-22）**：包装器绕过四条已收口——`scripts/probe-shell-bypass.ts` 复跑 **红 0 / 绿 33**，
+> 判据与修法见 [`outputs/shell-permission-bypass-2026-09-21.md`](../outputs/shell-permission-bypass-2026-09-21.md)。
 
 ## 一、`*.png` 记录的是「vanilla 迁移之前」的 React 版 UI
 
