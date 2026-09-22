@@ -8,7 +8,7 @@
 // 所以：清单收在 `scripts/lib/shell-bypass-cases.ts`（探针与本测共用，不各起一份），
 // 本测把四段的期望变成能进 `pnpm test`、能被锚点钉住的判据。两边都直调真实函数，不复制实现。
 import { describe, expect, it } from "vitest";
-import { interceptDestructiveGit } from "../src/agent/worker-shell-tools";
+import { interceptDestructiveGit, isReadOnlyShellCommand } from "../src/agent/worker-shell-tools";
 import { evaluate, newAutonomySession } from "../src/permissions/autonomy";
 import { judgeChain, parsePermissionsFile } from "../src/permissions/rules";
 import {
@@ -142,5 +142,45 @@ describe("组合不变量（本测独有：单面锚点钉不住）", () => {
     expect(interceptDestructiveGit(cmd).ok).toBe(true);
     expect(evaluate("run_shell", { command: cmd }, session([])).verdict).toBe("approve");
     expect(judgeChain(RULES, "run_shell", cmd).verdict).toBe("miss");
+  });
+
+  /** 实测（09-22）逐条相同 ⇒ 互通成立；本条钉的是"哪天只硬化一支"（第六族同根形状）。 */
+  it("worker 的 shell_rw 与主会话 run_shell 在四道面上逐条同判（SHELL_FAMILY 互通）", () => {
+    for (const cmd of [...DENY_VARIANTS, ...REDIRECT_CASES, PIPE_INTO_SHELL]) {
+      expect(at(evaluate("shell_rw", { command: cmd }, session())), cmd)
+        .toBe(at(evaluate("run_shell", { command: cmd }, session())));
+    }
+  });
+});
+
+/* ---------------- ⑤ 两道防的合取（09-22 加，shell_ro 的安全前提是量出来的） ----------------
+   `shell_ro` 刻意不进静态威胁表（`risk.ts` 的 `isWriteCapableTool` 排除它），而且它的 run()
+   「直连 run_shell 原始实现（不过主会话工具门）」——即**唯一**那道防是 `isReadOnlyShellCommand`。
+   这个取舍只有在该函数真能挡住一切写面时才成立；两侧各自单测都看不到"中间漏过去"的那种命令，
+   所以这里判合取：列出的每一条，静态闸必须拒，**否则**权限层得为 shell_ro 出卡。 */
+const RO_MUST_STOP = [
+  ...REDIRECT_CASES,
+  PIPE_INTO_SHELL,
+  "rm -rf /",
+  "sudo git push --force",
+  "cat x\ngit push --force",
+  ...ALLOW_CASES.filter(([, bare]) => !bare).map(([c]) => c),
+];
+
+describe("⑤ shell_ro：静态只读闸与权限层的合取", () => {
+  it("每一条都必须被某一道防住（两道各自以为对方在管 = 谁都没管）", () => {
+    for (const cmd of RO_MUST_STOP) {
+      const gate = isReadOnlyShellCommand(cmd);
+      const d = evaluate("shell_ro", { command: cmd }, session([]));
+      expect(gate.ok === false || d.verdict !== "approve", cmd).toBe(true);
+    }
+  });
+
+  it("写面元字符一票否决仍在（对 shell_ro 而言它是 `> /etc/hosts` 唯一那道防）", () => {
+    expect(isReadOnlyShellCommand("echo x > /etc/hosts").ok).toBe(false);
+    expect(isReadOnlyShellCommand("rm -rf /").ok).toBe(false); // 白名单外
+    expect(isReadOnlyShellCommand("sudo git push --force").ok).toBe(false); // 包装器也不给进
+    expect(isReadOnlyShellCommand("cat x\ngit push --force").ok).toBe(false); // 换行分隔
+    expect(isReadOnlyShellCommand("cat x | wc -l").ok).toBe(true); // 正常只读管道不受牵连
   });
 });
