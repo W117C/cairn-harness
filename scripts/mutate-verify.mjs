@@ -5522,12 +5522,23 @@ const MUTATIONS = [
     expectFail: "core 永不被自动砍：帽紧到装不下时报 unresolvable 交人裁决",
   },
   {
-    id: "ms-zero-regression-branch-dropped",
+    // 本条曾是「去掉未超预算原样返回支」——实测**变异存活**，因为那一支是快路径而非语义分支：
+    // 梯级对未超帽输入本来就是 no-op（丢不动、压不着、note 为空）。留着它图的是每轮少两次全量序列化，
+    // 别为它再造针脚。这里换成真正有分辨力的两条：梯级次序、以及基础提示是否计进账。
+    id: "ms-ladder-order-inverted",
     src: "src/agent/model-surface.ts",
     test: "tests/model-surface.test.ts",
-    desc: "去掉「未超预算原样返回」支 ⇒ 每轮装配都被降配逻辑过一遍，能力自己成了前缀抖动源",
-    apply: (s) => s.replace("if (account.totalChars <= limitChars) {", "if (false) {"),
-    expectFail: "未超预算时逐字不改（帽没碰到就不该动装配一个字节）",
+    desc: "梯级 A 整个跳过（不压描述）⇒ 明明「压一压就装得下」的场景被白丢几把工具（降配序是本模块的主张，不是实现细节）",
+    apply: (s) => s.replace("  const tightened = input.specs.map((s) => {\n    const name = s.function.name;\n    if (surfaceTierOf(name, input.coreNames) === \"core\") return s as T;", "  const tightened = input.specs.map((s) => {\n    const name = s.function.name;\n    if (true) return s as T;"),
+    expectFail: "梯级 A（压描述）在 B（丢工具）之前：刚好超一点时一把都不丢",
+  },
+  {
+    id: "ms-fixed-face-forgets-system",
+    src: "src/agent/model-surface.ts",
+    test: "tests/model-surface.test.ts",
+    desc: "固定面只算工具规格、漏掉基础提示 ⇒ 账与逐件排行对不上，帽按虚低的面判",
+    apply: (s) => s.replace("  const fixedChars = input.systemChars + toolSpecChars;", "  const fixedChars = toolSpecChars;"),
+    expectFail: "逐件排行相加恰等于总账（对不上账的排行表不能拿去决定砍谁）",
   },
   {
     id: "ms-surface-note-not-emitted",

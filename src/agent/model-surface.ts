@@ -153,6 +153,8 @@ export function planSurfaceBudget<T extends GlmToolSpec = GlmToolSpec>(
     input.systemChars + surfaceSpecChars(specs) + volatileChars <= limitChars;
 
   const originalSerialized = JSON.stringify(input.specs);
+  // 这一支是**快路径**而非语义分支：梯级对未超帽输入本来就是 no-op（丢不动、压不着、note 为空）。
+  // 留着它只为每轮少两次全量序列化——别为它造变异针脚（实测那条会存活，见 mutate-verify 的 ms-* 注记）。
   if (account.totalChars <= limitChars) {
     return {
       specs: [...input.specs] as T[],
