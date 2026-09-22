@@ -77,6 +77,11 @@ buildImpact(fixtures/todo-app).files = ["tests/todo.test.ts"]     ← 没有 src
 - 锚点：7 条（`impact-panel-never-attached` / `-absent-as-zero` / `-join-key-not-normalised` /
   `impact-projection-first-report-wins` / `-truncated-plus-dropped` / `-sites-counted-as-files` /
   `review-row-drops-impact-span`）。
+- ⚠️ 第一条**变异存活**过，原因不是锚点写错而是靶子两侧同值：join 那一支原先只把 diff 侧的
+  `normRel(d.path)` 改回原值，而测试数据里脏写法全在 impact 侧 ⇒ 另一支仍把键对上。
+  归一这件事有**三个取料面**（`out.set(normRel(e.file))` / `files.add(normRel(s.file))` / `impacts.has(get(d.path))`），
+  改法现在三支一起改，测试也补了「脏写法在 diff 侧」那半边（`./src/sort.ts` 写入 + 干净路径的报告）。
+  教训通用：**一条不变量由几支面共同成立，变异就要一次废掉几支**，只废一支的存活是必然。
 
 ## B23 挤到 B20 前面：量出来的虚拟化缺陷（另立任务 #31）
 
