@@ -342,13 +342,34 @@ subdirectory of the project root at "/private/tmp/dsh-anchor-776".
 `budget-missing-value-silent`、`budget-value-slot-treated-as-anchor-id`）+ 2 条因 `classifyArgs`
 加值位分流而整行失效的旧锚点改指（`classify-unknown-flag-ignored`、`classify-flags-counted-as-ids`）
 ⇒ 这六条一次性跑完、变异全部被正确杀死（4.8s，`exit=0`）。
-`--check-needles` 现 714 条：阻断 0、待复认 0、未覆盖 0；**改法语法体检当场逮到我写的一条把源文件改坏的
+`--check-needles` 现 714 条改法全部产出合法源文件；**工作树**里针脚阻断 0，但**同 HEAD 的干净 worktree 里是 6 条**
+（3 条 `sbx-*` + 3 条 `d7-*`，含未跟踪的 `src/tools/snapshot.ts`）——那 6 条的针脚踩的是别人在飞集里的代码，
+是既有任务 #37，不是本轮引入的回归（主树读到 0 只因那几份在飞改动此刻就在树上；规则 61 同族：**归因句算的是工作树**）。
+待复认 0、未覆盖 0。**改法语法体检当场逮到我写的一条把源文件改坏的
 变异**（把 `consumed.add(i + 1);` 整句替换成注释，留下空 `if` 体）——这正是这一相存在的理由：
 秒级能查出来的事，不留到几十分钟后伪装成「误伤无关用例」。
 
 预算这条路（`--budget-ms` / `DSH_MUTATE_BUDGET_MS`）现在会**自己**在条目边界收尾，
 未证从一类分成三类点名：源文件在飞没跑 / 判卷文件在飞量不出 / 预算用尽没轮到，
 并新增本次耗时与「跑了几条 / 共几条」的读数——这张表到底要跑多久，此前没人打印过。
+
+### 隔离验：那份**真的**尸体自己送上门
+
+本轮最后回到 `/Users/ze/Downloads/dsh-gates-f81`（追加六那次整跑用的真装 worktree，节点依赖不是软链）
+`--detach daf8167` 复验，才发现**它还留着那次被掐死的现场**：`src/providers/gemini.ts` 相对 HEAD
+`0 增 1 删` + 同名 `.mutbak` 未跟踪——一份不用我构造的天然样本（造它的是真超时，不是我的脚本）。三条读数按序：
+
+1. `--check-needles` → `exit=1`，点名「残留 `src/providers/gemini.ts.mutbak` ⇒ 下面的针脚不可信」，
+   跑完后脏文件**原样不动**（只读模式不自愈，符合设计）；
+2. `mutate-verify gemini-never-reads-finish-reason` → 「⚠️ 自愈：还原 src/providers/gemini.ts」→
+   该锚点照判为被杀死 → `exit=0`，`git status` 该文件干净、`.mutbak` 已消失；
+3. 同 worktree 跑 `tests/mutate-verify-gates.test.ts` + `mutate-needles-check.test.ts` + `gym-draft.test.ts`
+   → 55 条全绿（`--config tests/vitest.config.ts`，`TERM=dumb`）。
+
+顺带把 #37 的现态钉准：**干净 HEAD worktree 里针脚阻断是 6 条**（`sbx-network-branch-dropped`、
+`sbx-network-escort-ors-conditions`、`sbx-note-gate-dropped`、`d7-snapshot-taken-for-new-file`、
+`d7-worker-optout-ignored`、`d7-snapshot-id-not-in-event`），全部踩在别人在飞集里的 `sandbox.ts` /
+`snapshot.ts` / `write_file.ts` / `loop.ts` 上，没有一条落在我这轮的三个文件里。
 
 ### 没做完的（一条，且被别人的在飞集挡着）
 
