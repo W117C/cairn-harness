@@ -83,9 +83,17 @@ export const GLOBAL_OPT_VARIANTS: string[] = [
   "git -C/x push --force",
 ];
 
-/** ⑤ 的对照组（本轮刻意不修，另记一账）：标志别名 `-f` ↦ `--force`。
- *  这一族需要按二进制的别名表，不是包装器/位置归一能覆盖的形状。 */
-export const FLAG_ALIAS_CASE = "git push -f";
+/** ⑤″ **未裁的两侧**（只记录、不计红绿，见 outputs/deny-downstream-option-bypass-2026-09-22.md）：
+ *  规则匹配是「整串前缀」，于是一件事同时产生两个方向相反的错——
+ *  漏判：`-f` 是 `--force` 的短标志（同一个破坏性操作）；
+ *  过覆盖：`--force-with-lease` 是**更安全**的操作，却被「deny git push --force」顺带禁掉。
+ *  收紧一头必放宽另一头 ⇒ 需要先定语义（这条 deny 到底禁的是"某个标志"还是"强推这一族"），
+ *  不该由实现单方面改。两侧读数以 `tests/shell-bypass-composition.test.ts` 的「已知边界」钉住。 */
+export const FLAG_UNDERHIT: string[] = ["git push -f", "git push --f"];
+export const FLAG_BOUNDARY_OVERHIT: string[] = [
+  "git push --force-with-lease",
+  "git push --force-with-lease origin main",
+];
 
 /** ⑤ 的负控：剥下游选项**不得**把只读命令也变成命中 deny 的样子。 */
 export const GLOBAL_OPT_MUST_STAY_CLEAN: string[] = [

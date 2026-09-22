@@ -17,6 +17,8 @@ const asTool = (s: string): ToolName => s as ToolName;
 import {
   ALLOW_CASES,
   DENY_VARIANTS,
+  FLAG_BOUNDARY_OVERHIT,
+  FLAG_UNDERHIT,
   GLOBAL_OPT_MUST_STAY_CLEAN,
   GLOBAL_OPT_VARIANTS,
   PIPE_INTO_SHELL,
@@ -204,7 +206,8 @@ describe("⑤ 下游选项：git -C /tmp push --force 一类", () => {
   });
 });
 
-describe("shell_ro：静态只读闸与权限层的合取", () => {  it("每一条都必须被某一道防住（两道各自以为对方在管 = 谁都没管）", () => {
+describe("shell_ro：静态只读闸与权限层的合取", () => {
+  it("每一条都必须被某一道防住（两道各自以为对方在管 = 谁都没管）", () => {
     for (const cmd of RO_MUST_STOP) {
       const gate = isReadOnlyShellCommand(cmd);
       const d = evaluate(asTool("shell_ro"), { command: cmd }, session([]));
@@ -218,5 +221,27 @@ describe("shell_ro：静态只读闸与权限层的合取", () => {  it("每一�
     expect(isReadOnlyShellCommand("sudo git push --force").ok).toBe(false); // 包装器也不给进
     expect(isReadOnlyShellCommand("cat x\ngit push --force").ok).toBe(false); // 换行分隔
     expect(isReadOnlyShellCommand("cat x | wc -l").ok).toBe(true); // 正常只读管道不受牵连
+  });
+});
+
+/* ---------------- 已知边界（未裁，钉住「今天是什么样」） ----------------
+   规则匹配是**整串前缀**，于是 `deny "git push --force"` 同时有两个方向相反的错：
+   漏判 `-f` / `--f`（同一个破坏性操作静默放行），过覆盖 `--force-with-lease`
+   （用户没禁的、**更安全**的那个反被禁掉）。收紧一头必放宽另一头 ⇒ 这是语义裁决不是 bug 修复，
+   未裁之前不许单向改实现。下面这几条断言的是**现状**：将来谁动这块，它们会红，
+   红了就说明必须连带的裁决一起做，而不是顺手把匹配写宽/写窄。 */
+describe("已知边界：deny 的选项两侧（未裁）", () => {
+  it("漏判侧：`git push -f` / `--f` 今天不进 L1-deny（同义操作静默放行）", () => {
+    for (const cmd of FLAG_UNDERHIT) expect(judgeChain(RULES, "run_shell", cmd).verdict, cmd).toBe("miss");
+  });
+
+  it("过覆盖侧：`git push --force-with-lease` 今天被同一条 deny 命中（更安全的那个）", () => {
+    for (const cmd of FLAG_BOUNDARY_OVERHIT) expect(judgeChain(RULES, "run_shell", cmd).verdict, cmd).toBe("deny");
+  });
+
+  it("worker 侧不受此裁影响：push 根本不是只读子命令，两侧都拦", () => {
+    for (const cmd of [...FLAG_UNDERHIT, ...FLAG_BOUNDARY_OVERHIT]) {
+      expect(interceptDestructiveGit(cmd).ok, cmd).toBe(false);
+    }
   });
 });

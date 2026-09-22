@@ -53,11 +53,36 @@ function suffixForms(inv: Invocation): string[] {
    这条只读命令会被拦。取舍：**多一张卡 < deny 白写**；本族无按二进制区分的选项表，
    要消掉它就得给每个二进制建选项规范（成本另账）。
 
-## 本轮刻意不修的一支（另记一账）
+## 刻意没修的一支：选项边界的**两面**（需要一次语义裁决，不是 bug 修复）
 
-`git push -f` 同样 `approve` —— 这不是「形态」问题而是**标志别名**问题（`-f` ≡ `--force`），
-需要按二进制的别名表，不属于包装器/位置归一能覆盖的形状。
-探针 ⑤″ 段把它打印出来但不计入红绿（避免一条永远红、无人分辨的断言——本仓 09-21 栽过一次）。
+顺着同一批变体往外推，`deny "git push --force"` 在**两个相反方向上都不对**，
+而这两个错同根：规则匹配是**整串前缀**（`form.startsWith(pattern)`）。实测：
+
+| 命令 | 今天 | 应然 | 错在 |
+|---|---|---|---|
+| `git push -f` | `approve@L4-pass` | deny | **漏判**：短标志与 `--force` 是同一个破坏性操作 |
+| `git push --f` | `approve@L4-pass` | deny | 漏判：git 允许唯一前缀缩写 |
+| `git push --force-with-lease` | **`deny@L1-deny`** | 不该 deny | **过覆盖**：用户没禁的那个、而且**更安全** |
+| `git push --force-with-lease origin main` | `deny@L1-deny` | 不该 deny | 同上 |
+
+⇒ 这不是「写宽一点」能收的：加宽会加剧过覆盖，收窄会把漏判留住甚至扩大。
+**尤其要说的是那处反向激励**：现在的实现把推荐做法（`--force-with-lease`）拦下，
+却让裸强推的短标志（`-f`）静默通过。
+
+三条候选与代价，留给裁决时选（本轮不动实现）：
+
+1. **只裁过覆盖**（选项整词匹配 + 缩写规则 `--fo` ↦ 以它开头的唯一长选项）：
+   纯机械、不需要按二进制的表；但会把 `--force-with-lease` 从 deny 变成放行 ——
+   即"收紧一头必放宽另一头"里的那一头，得先认这条取舍。
+2. **再裁漏判**（短标志 ↔ 长标志别名表）：必须**按二进制且按子命令**建表
+   （`tar -f` 是文件、`git push -f` 才是强推），`-F`/`--forest` 一类歧义还得逐个定。
+   表一旦建起来就是新的维护面（本仓对「写死的默认」类账很敏感）。
+3. **不改匹配，改审批卡文案**：把「规则命中」与「选项不同但子命令相同」分开呈现，
+   让用户在卡上看见差异 —— 代价最低，但漏判仍在。
+
+**重开条件**：任何一条被采纳时，`tests/shell-bypass-composition.test.ts` 的
+「已知边界：deny 的选项两侧（未裁）」三条**必须一起翻**（它们钉的是现状，不是期望）。
+`scripts/probe-shell-bypass.ts` 的 ⑤″ 段只打印不计红绿，正是为了让这两面一直可见。
 
 ## 锚点与复算
 
@@ -75,11 +100,12 @@ TERM=dumb node --import tsx scripts/mutate-verify.mjs \
 
 ## 本轮改动清单
 
-- `scripts/lib/shell-bypass-cases.ts`：`GLOBAL_OPT_VARIANTS`（5）+ `GLOBAL_OPT_MUST_STAY_CLEAN`（4）+ `FLAG_ALIAS_CASE`
-- `scripts/probe-shell-bypass.ts`：新增 ⑤ / ⑤′ 负控 / ⑤″ 只记录段
+- `scripts/lib/shell-bypass-cases.ts`：`GLOBAL_OPT_VARIANTS`（5）+ `GLOBAL_OPT_MUST_STAY_CLEAN`（4）
+  + 未裁两侧的 `FLAG_UNDERHIT`（2）/ `FLAG_BOUNDARY_OVERHIT`（2）
+- `scripts/probe-shell-bypass.ts`：新增 ⑤ / ⑤′ 负控 / ⑤″ 两侧只记录段（不计红绿，但要一直看得见）
 - `src/permissions/command-shape.ts`：`suffixForms` + `commandForms` 接上
 - `tests/command-shape.test.ts`：+4 条（29 → 33）
-- `tests/shell-bypass-composition.test.ts`：+⑤ 族 4 条（16 → 20）
+- `tests/shell-bypass-composition.test.ts`：+⑤ 族 4 条 + 已知边界 3 条（16 → 23）
 - `scripts/mutate-verify.mjs`：+2 锚点（针脚 633 条，阻断 0）
 
 ## 读数（提交前跑齐，非提交后补票）
@@ -99,3 +125,10 @@ TERM=dumb node --import tsx scripts/mutate-verify.mjs \
 把「规则匹配用的形态集」那段说明挤成了 `suffixForms` 的头注释——复核 diff 时调回顺序。
 另一处：首版给包装器那一支也产后缀形，被既有负控「只读 git 只产它自己那一形」当场判红，
 遂加 `EXEC_WRAPPERS` 豁免（这条负控比新断言更早存在，正是它的价值）。
+
+### 追加（同日，未裁两侧入库）
+
+`FLAG_UNDERHIT` / `FLAG_BOUNDARY_OVERHIT` 进共用清单、探针 ⑤″ 只打印不计红绿、
+组合测加「已知边界（未裁）」3 条现状断言之后复跑：
+`test` exit 0，**195 files / 1951 tests**（较上表 +3）；`typecheck` 归因 `HEAD 内 0 个`；
+`mutate-needles-check` 仍 633 条阻断 0。实现一字未动 —— 这两侧的修法在等一次语义裁决。

@@ -9,7 +9,8 @@ import type { PermissionMode } from "../src/permissions";
 import {
   ALLOW_CASES,
   DENY_VARIANTS,
-  FLAG_ALIAS_CASE,
+  FLAG_BOUNDARY_OVERHIT,
+  FLAG_UNDERHIT,
   GLOBAL_OPT_MUST_STAY_CLEAN,
   GLOBAL_OPT_VARIANTS,
   PIPE_INTO_SHELL,
@@ -112,8 +113,13 @@ for (const cmd of GLOBAL_OPT_MUST_STAY_CLEAN) {
   const d = evaluate("run_shell", { command: cmd }, session("auto"));
   check("只读不受牵连", cmd, "非 deny", d.verdict === "deny" ? "deny" : "非 deny");
 }
-console.log("\n【⑤″】本轮不修的账（只记录，不计入红绿）：标志别名");
-console.log("     " + JSON.stringify(FLAG_ALIAS_CASE).padEnd(44) + evaluate("run_shell", { command: FLAG_ALIAS_CASE }, session("auto")).verdict + "（-f ↦ --force 需按二进制别名表，另账）");
+console.log("\n【⑤″】本轮不修的账（只记录，不计入红绿）：选项边界的两面");
+for (const c of [...FLAG_UNDERHIT, ...FLAG_BOUNDARY_OVERHIT]) {
+  const v = evaluate("run_shell", { command: c }, session("auto"));
+  console.log("     " + JSON.stringify(c).padEnd(44) + v.verdict + "@" + v.layer);
+}
+console.log("     ↑ 漏判（`-f` 与 `--f` 是同一个破坏性操作）与过覆盖（`--force-with-lease` 是**更安全**的那个）同根：");
+console.log("       规则匹配是整串前缀。收紧一头必然放宽另一头 ⇒ 需要一次语义裁决，不单向改。");
 
 console.log(`\n合计：红 ${String(red)} / 绿 ${String(green)}`);
 if (red > 0) {
