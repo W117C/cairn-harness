@@ -321,3 +321,67 @@ B20 的转录（同一相自己撞上）。读到的东西一次把六种外推�
 正是本页上面刚记的那族「工作树读数冒充 HEAD 读数」）。补交 `f970bf8`，并在 `f970bf8` 的**干净 worktree** 复跑：
 28 条渲染器测全绿、`panels-check` exit 0（186 ✅，含异常道与 console 道两条通道自检）。
 教训已进记忆（原子簇按「判据的两半」算；提交后按自己列的改动清单复核残留，而非看全仓 `git status`）。
+
+## 第十：把「那一格」的判据升成「整族」——逐型通判 `projectUnits → buildUnit`
+
+（读数时间 2026-09-23 01:0x，HEAD = `a68caa7`；本节的每条数字都在**同 HEAD 的干净 worktree** 复算过，工作树读数另列）
+
+### 为什么第九节还不算收口
+
+第九节撤掉了「一格产不出壳 → 整窗不挂」这个爆炸半径，代价是**跳过变成新的静默**：
+`buildUnit` 出声（`console.error`）之后，只有真窗口的 B25 收得到那句——离线一侧只剩
+`tests/renderer-history-live.test.ts` 里两条**源码形状**断言（孤儿那一支要落成卡、`!first` 分支要出声）。
+形状断言看不见的是「别的型也画不出壳」。`projectUnits` 会为一整排类型各成一格（`cardTypes` 30 型里 28 型），
+其中任何一型画不出壳，事实就照样丢，而且**从此不再崩溃**，只留一行没人读的 console.error。
+
+### 设计取舍：为什么判「对」而不是判「边」
+
+先写的版本是正则扫 `renderEvent` 的 case 体，找 `if (x) break;` 且体内不含产出壳的调用。当场发现两种写法
+**文本同、语义反**：
+
+| 现状实例 | 形状 | 语义 |
+|---|---|---|
+| `case 'plan_approved'`: `if (tag) { tag.textContent = …; break; }` | 提前退出、体内无建壳调用 | **正当**——它把决议写进前一格已有的卡里 |
+| 修复前的孤儿 `tool_result`: `if (!item) break;` | 同上 | **缺陷**——那一格既没卡也没壳 |
+
+任何「case 体必须含产出壳的调用」还会误伤 `tool_result` / `assistant_delta`（它们本就该续写别人的壳）。
+⇒ 判据改成跑 **shipped 的那一对**：注册表 30 型各喂一条样例事件，`projectUnits` 成几格就要求几格都产出 `.msg`，
+并把 `buildUnit` 的 `console.error` 声道接进 vm context（没有 `console` 的 vm 里那句会抛 ReferenceError，
+判据就从「出声」变成「崩掉」——这正好是规则 73 的反面，探针不许自己抛）。
+顺带把「静默跳过」也钉住：允许成不了单元的类型**恰等于** `usage` / `session_meta` 两型，多一型即红
+（那一型落了盘、进了上下文，界面却永远看不见它）。
+
+### 实现位置与 fake DOM 的边界
+
+`tests/renderer-run-control.test.ts`（它已有 `bootRenderer`，切片绑定只此一份，见该文件头注）：
+切片从三段加到四段（新增「消息流构造 + 底栏同步」——`appendUser`/`ensureAi`/`finalizeAi`/`finalizePending` 住在那儿，
+判 `user_message` 与 `assistant_*` 绕不开）；共享绑定 `tests/renderer-vm-module.ts` 补 `skipReasonLabel`
+（`EVENT_LABELS` 支给 `automation_skipped` 时调它，绑定只准给真实现，不许塞桩）。
+fake DOM 为跑通那三支补了 `classList` / `closest` / `remove`，并让 `innerHTML=` 按串里出现过的 class 名造占位子节点。
+**这不叫解析 HTML**：层级与文本一律不仿——那部分是 panels-check 真窗口的判面，在 fake 里造出来只会把
+「只有真窗才有的差别」照成绿。
+
+### 读数
+
+- 同 HEAD（`a68caa7`）干净 worktree：`typecheck` exit **0**；`test` **195 files / 1964 绿 + 2 红**
+  （`gated-tools`、`runner-gates`，即待办 #33——别人在飞的 `agent-runner.ts` + `tools/base.ts`，本笔之前就在红）。
+- 工作树（含别人在飞改动）：`test` **197 files / 1986 测全绿** exit 0，`typecheck` exit 0。两个读数不是同一件事。
+- 新锚点 `per-type-shell-blindspot`（把通用记录支的某一型提前 `break` 在卡外）在 `a68caa7` 的干净 worktree 里
+  **真杀死**：基线绿 → 突变红在期望用例（`AssertionError: goal_set 成了单元却渲染不出 .msg 壳`）→ 还原绿。
+- 判据自己造过红：临时删掉样例表里 `goal_stopped` 一行 → 该文件当场 **2 条红**（覆盖断言 + 逐型主判据），
+  逐字还原后 15 条全绿。⇒ 「加新事件型要顺手补样例」这条规矩不是写在注释里的期望，是有门的。
+- 针脚体检 **657 条，阻断 0**、改法语法全过。
+
+### 两处自己踩的坑（都已进记忆，写在这里是为了读数能对上）
+
+1. 锚点第一次跑报「1 条变异存活或误伤」，而输出里明写着突变体被抓住了。原因是 `expectFail` 是
+   `hit.out.includes(...)` 的**子串比对判据**，我把它写成了对判据的散文 ⇒ 永远对不上 ⇒ 好锚点长得跟坏锚点一样
+   （`a68caa7` 修的是标签，产品与测试一字未改）。已升为项目记忆规则 77。
+2. `pnpm typecheck | tail -15` 的退出码是 `tail` 的：它报 "exit code 0" 时日志里明写着 TS2345 与
+   `[ELIFECYCLE] Command failed`。差点把一次真红报成绿。已补进「报数前先重测」。
+
+### 仍留的洞（有名有姓，不当已完成）
+
+`buildUnit` 交回的是 `frag.querySelector('.msg')`——**「恰好一个」只判住了「零个」，没判住「多个」**：
+一个单元真产出两个壳时，这条通判与 B25 都是绿的（多余那个只是把布局撑高）。要钉住它，得让产品侧
+对 `>1` 也出声（一行 + 一条断言 + 锚点扩到同时废「零壳」与「多壳」两支，规则 69 的形状）。已立待办 #35。
