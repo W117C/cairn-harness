@@ -5646,6 +5646,24 @@ const MUTATIONS = [
     apply: (s) => s.replace("return files.length === 0 ? null : files;", "return files;"),
     expectFail: "已跟踪清单为空 ⇒ 返回 null（调用方退回磁盘遍历，不静默少判）",
   },
+  {
+    id: "verdict-takes-last-line-not-conclusion",
+    src: "scripts/lib/gate-verdict.ts",
+    test: "tests/gates-scan.test.ts",
+    desc: "结论行退回「就取最后一行」⇒ vitest 的收尾是 Duration / Start at，计数在它前面，" +
+      "汇总页于是显示一句没用的话——取错一行比不取更坏，因为它看起来像结论",
+    apply: (s) => s.replace("    if (VERDICT_MARK.test(l)) return clip(l);", "    if (false) return clip(l);"),
+    expectFail: "vitest 形态取计数那一行，而不是收尾的 Duration",
+  },
+  {
+    id: "verdict-not-stripping-ansi",
+    src: "scripts/lib/gate-verdict.ts",
+    test: "tests/gates-scan.test.ts",
+    desc: "剥色没吃共用件（各门自己判一次）⇒ 调用者 TERM 带色时结论行里嵌着 \\x1b，" +
+      "汇总页打出一串脏码——同一族在 vitest-summary 里已修过一次，这里不能重抄一份漏掉",
+    apply: (s) => s.replace("  const lines = stripAnsi(output).split(\"\\n\")", "  const lines = output.split(\"\\n\")"),
+    expectFail: "带 ANSI 颜色的输出仍取到干净的结论行（剥色吃共用件）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

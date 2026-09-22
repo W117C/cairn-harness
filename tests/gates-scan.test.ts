@@ -2,6 +2,7 @@
 // 这些用例守的是「体检本身」：体检若漏判，其余 22 道门的可信度都无从谈起。
 import { describe, expect, it } from "vitest";
 import { countUnverified, gateUnverified, scanDisjunctions, silentGreenGate } from "../scripts/assertion-health";
+import { VERDICT_MAX_CHARS, verdictLine } from "../scripts/lib/gate-verdict";
 
 describe("析取式弱断言扫描 scanDisjunctions（H-1）", () => {
   it("检出根级 || 断言（任一析取项成立即通过）", () => {
@@ -142,5 +143,51 @@ describe("未证总数 gateUnverified（上报 + 静默两格合一）", () => {
 
   it("多行未证标记照常累加，且不因“有输出”多扣一分", () => {
     expect(gateUnverified(0, "UNVERIFIED=2\nUNVERIFIED=5\n")).toBe(7);
+  });
+});
+
+// 第 40 项：绿门过去只回退出码，"这道门跑了多少东西"要单独复跑才看得见。
+// 这里钉的是「取哪一行」——取错一行等于给人一句没用的话，比不取更坏。
+describe("门禁结论行 verdictLine", () => {
+  const VITEST_OUT = [
+    " RUN  v5.0.0 /repo",
+    "",
+    " ✓ tests/a.test.ts (3 tests) 5ms",
+    "",
+    " Test Files  3 passed (3)",
+    "      Tests  58 passed (58)",
+    "   Start at  03:20:54",
+    "   Duration  952ms",
+    "",
+  ].join("\n");
+
+  it("vitest 形态取计数那一行，而不是收尾的 Duration", () => {
+    expect(verdictLine(VITEST_OUT)).toBe("Tests  58 passed (58)");
+  });
+
+  it("check 门形态取它自己的 verdict", () => {
+    expect(verdictLine("== plugins-check ==\n跑完一堆\nplugins-check: 12 ✅ / 0 ❌ / 3 未证\n")).toBe("plugins-check: 12 ✅ / 0 ❌ / 3 未证");
+  });
+
+  // 判卷不许依赖调用者 TERM（同 lib/vitest-summary.ts 立的那条）：颜色码就嵌在结论行里，
+  // 不剥色时取回来的串带着 \x1b ⇒ 断言必红（把码放在另一行是照不出这一点的）。
+  it("带 ANSI 颜色的输出仍取到干净的结论行（剥色吃共用件）", () => {
+    expect(verdictLine("  ✓ tests/a.test.ts\n\x1b[32mplugins-check: 12 ✅\x1b[39m / 0 ❌\n")).toBe("plugins-check: 12 ✅ / 0 ❌");
+  });
+
+  it("没有结论标记 ⇒ 退回最后一行非空输出（说不清结论也要看得见，不许当没跑）", () => {
+    expect(verdictLine("第一行\n最后一行没有记号\n")).toBe("最后一行没有记号");
+  });
+
+  it("超长行截到帽内并带省略号", () => {
+    const long = "gate-check: " + "x".repeat(400) + " ✅";
+    const v = verdictLine(long);
+    expect(v.length).toBeLessThanOrEqual(VERDICT_MAX_CHARS);
+    expect(v.endsWith("…")).toBe(true);
+  });
+
+  it("一个字没吐 ⇒ 空串（那一格由 silentGreenGate 负责，不重复出声）", () => {
+    expect(verdictLine("")).toBe("");
+    expect(verdictLine("\n   \n")).toBe("");
   });
 });

@@ -15,6 +15,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { countUnverified, gateUnverified, scanAssertionHealth, scanDisjunctions, silentGreenGate, type ScanHit } from "./assertion-health";
 import { SCAN_EXT, trackedScriptFiles } from "./lib/scan-scope";
+import { verdictLine } from "./lib/gate-verdict";
 import { checkGateManifest, EXEMPT_SCRIPTS, GATES, gateCommand } from "./gate-manifest";
 // 耗时账本（同族：判据在 ./facts.ts，那边可单测；本文件只负责「跑完顺手记一笔」）。
 import { appendRun, currentHost, type GateRun } from "./facts";
@@ -196,6 +197,10 @@ async function main(): Promise<void> {
       const tail = r.output.trim().split("\n").slice(-12).join("\n");
       console.log("      ── 失败输出尾 12 行 ──");
       console.log(tail.split("\n").map((l) => "      " + l).join("\n"));
+    } else {
+      // 绿门也把它自己的结论带出来：过去整表跑完看不出这道门跑了多少东西，要数就得单独复跑。
+      const verdict = verdictLine(r.output);
+      if (verdict !== "") console.log("      └ " + verdict);
     }
   }
 
