@@ -6,17 +6,17 @@ import { judgeChain, parsePermissionsFile } from "../src/permissions/rules";
 import { evaluate, newAutonomySession } from "../src/permissions/autonomy";
 import { interceptDestructiveGit } from "../src/agent/worker-shell-tools";
 import type { PermissionMode } from "../src/permissions";
+import {
+  ALLOW_CASES,
+  DENY_VARIANTS,
+  PIPE_INTO_SHELL,
+  PROBE_RULES_JSON,
+  REDIRECT_CASES,
+  WORKER_CASES,
+} from "./lib/shell-bypass-cases";
 
-/** 固定规则库：一条用户手写的 deny，加一条「用户点过一次总是允许 echo hi」。 */
-const RULES = parsePermissionsFile(
-  JSON.stringify({
-    rules: [
-      { behavior: "deny", tool: "run_shell", pattern: "git push --force", scope: "always" },
-      { behavior: "allow", tool: "run_shell", pattern: "echo hi", scope: "always" },
-    ],
-  }),
-  "probe",
-);
+/** 固定规则库（定义在 `scripts/lib/shell-bypass-cases.ts`，与 vitest 侧共用一份清单）。 */
+const RULES = parsePermissionsFile(PROBE_RULES_JSON, "probe");
 
 function session(mode: PermissionMode, rules = RULES) {
   return newAutonomySession(mode, { rules, sandboxAvailable: true, planBlocked: () => false });
@@ -58,19 +58,6 @@ function checkNot(title: string, cmd: string, forbid: string, got: string): void
 /* ---------------- ① 用户手写的 deny 规则能否被绕过 ---------------- */
 
 console.log("\n【①】deny 规则「git push --force」——自主档完整 evaluate，看由哪层决定");
-const DENY_VARIANTS = [
-  "git push --force",
-  "git  push  --force",
-  "sudo git push --force",
-  "sudo -u root git push --force",
-  "env FOO=1 git push --force",
-  "nohup git push --force",
-  "timeout 30 git push --force",
-  "command git push --force",
-  "/usr/bin/git push --force",
-  "bash -c 'git push --force'",
-  "GIT_PAGER=cat git push --force",
-];
 for (const cmd of DENY_VARIANTS) {
   const d = evaluate("run_shell", { command: cmd }, session("auto"));
   // 期望 = 用户的 deny 意图被执行（L1-deny 拦截）；别的层「顺便问一句」不算命中
@@ -85,14 +72,6 @@ for (const cmd of ["git push --force", "sudo git push --force", "/usr/bin/git pu
 /* ---------------- ② 「总是允许」携带载荷 ---------------- */
 
 console.log("\n【②】点过「总是允许 echo hi」之后——自主档");
-const ALLOW_CASES: Array<[string, boolean]> = [
-  ["echo hi", true],
-  ["echo hi > /tmp/pwned", false],
-  ["echo hi >> ~/.zshrc", false],
-  ["echo hi $(rm -rf /tmp/x)", false],
-  ["echo hi `rm -rf /tmp/y`", false],
-  ["echo hi | sh", false],
-];
 for (const [cmd, bare] of ALLOW_CASES) {
   const d = evaluate("run_shell", { command: cmd }, session("auto"));
   const got = d.verdict === "approve" ? `approve@${d.layer}` : `${d.verdict}@${d.layer}`;
@@ -103,19 +82,6 @@ for (const [cmd, bare] of ALLOW_CASES) {
 /* ---------------- ③ worker 的 git 破坏命令静态闸 ---------------- */
 
 console.log("\n【③】worker shell_rw 的 git 静态拦截（纯函数直调；ok:true = 放行）");
-const WORKER_CASES: Array<[string, boolean]> = [
-  ["git push --force", false],
-  ["git worktree add x", false],
-  ["git reset --hard", false],
-  ["nohup git commit -m x", false],
-  ["git status", true],
-  ["sudo -u root git push --force", false],
-  ["timeout 30 git worktree add x", false],
-  ["nice -n 5 git reset --hard", false],
-  ["env -i git push --force", false],
-  ["command -p git push --force", false],
-  ["bash -c 'sudo -u root git push --force'", false],
-];
 for (const [cmd, readOnly] of WORKER_CASES) {
   const r = interceptDestructiveGit(cmd);
   check("非只读 git 必拦", cmd, readOnly ? "ok:true" : "ok:false", `ok:${String(r.ok)}`);
@@ -124,18 +90,12 @@ for (const [cmd, readOnly] of WORKER_CASES) {
 /* ---------------- ④ 重定向写面的分类归属 ---------------- */
 
 console.log("\n【④】空规则库、自主档：重定向写向是否被静态威胁表归类");
-const REDIRECT_CASES = [
-  "echo hi >> ~/.zshrc",
-  "echo alias\\ ll=rm > ~/.bashrc",
-  "cat > .git/hooks/pre-commit",
-  "echo x > /etc/hosts",
-];
 for (const cmd of REDIRECT_CASES) {
   const d = evaluate("run_shell", { command: cmd }, session("auto", []));
   check("写向须出卡", cmd, "ask", d.verdict);
 }
-const PIPE = evaluate("run_shell", { command: "echo 'rm -rf /tmp/z' | sh" }, session("auto", []));
-check("管道内嵌删除（对照）", "echo 'rm -rf /tmp/z' | sh", "ask", PIPE.verdict);
+const PIPE = evaluate("run_shell", { command: PIPE_INTO_SHELL }, session("auto", []));
+check("管道内嵌删除（对照）", PIPE_INTO_SHELL, "ask", PIPE.verdict);
 
 console.log(`\n合计：红 ${String(red)} / 绿 ${String(green)}`);
 if (red > 0) {
