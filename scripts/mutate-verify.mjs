@@ -3889,6 +3889,16 @@ const MUTATIONS = [
     expectFail: "单元渲染不出壳时必须出声：跳过是虚拟化的权利，静默不是",
   },
   {
+    id: "per-type-shell-blindspot",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-run-control.test.ts",
+    desc: "通用记录支把某一型提前 break 在卡外 ⇒ 那一型照样落盘、照样成单元，只是永远画不出壳。" +
+      "#31 那一族的通用形状（孤儿 tool_result 只是一个实例），逐型样例表是一次覆盖全部注册类型的观测者",
+    apply: (s) => s.replace("        finalizePending();\n        appendRecordCard(cardHost(), eventLabel(e), e);",
+      "        if (e.type === 'goal_set') break;\n        finalizePending();\n        appendRecordCard(cardHost(), eventLabel(e), e);"),
+    expectFail: "每种进主流的事件型都必须产出一个 .msg 壳（goal_set 被漏在卡外）",
+  },
+  {
     id: "null-unit-eats-whole-window",
     src: "src/renderer/history-window.js",
     test: "tests/renderer-history-mount.test.ts",
