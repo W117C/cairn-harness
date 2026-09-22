@@ -63,6 +63,23 @@ export function preflightRefusals(entries: readonly PreflightEntry[]): Array<{ i
     .map((x) => ({ id: x.id, why: x.d.why ?? "" }));
 }
 
+/** 一条锚点的备份文件名（与调用方 `cpSync(src, `${src}.mutbak`)` 同一个拼法，只此一处）。 */
+export function backupPathOf(srcRel: string): string {
+  return srcRel + ".mutbak";
+}
+
+/**
+ * 上一次跑没干净收尾留下的备份。
+ * 动因（2026-09-23 实测）：我把一条整跑 `kill` 在中途，工作树里留下 `src/agent/plugins/skills.ts.mutbak`
+ * ——源文件被 finally 还原了，但收尾校验查的是 `git status --porcelain -- <精确 src 路径>`，
+ * 同名 `.mutbak` 根本不在匹配范围内 ⇒ **残留无人报**。而它下一次会被 `cpSync` 直接覆盖，
+ * 那份"崩溃前的原始内容"是唯一能证明还原正确的东西。
+ * `exists` 注入而不直接读盘：判卷面（哪些算残留）与 I/O 分开，两支才各自可测。
+ */
+export function leftoverBackupPaths(srcRels: readonly string[], exists: (rel: string) => boolean): string[] {
+  return [...new Set(srcRels.map(backupPathOf))].filter((p) => exists(p));
+}
+
 // ---- 针脚静态预检：不跑测试就知道某条锚点还摸不摸得到代码 ----
 // 动因（2026-09-19 实跑，220 条里揪出 2 条）：把被锚定的实现搬进共用原语（text-budget）后
 // 忘了改指锚点 ⇒ needle 不再出现，那条变异变成**空操作**。跑它会得到「突变未生效」的红，

@@ -16,13 +16,13 @@
 // 可判性三分（entryDisposition）：源文件在飞/未跟踪 = 拒绝并抛死（无回滚兜底）；
 // **判卷测试文件**在飞 = 本条记「未证」跳过——否则别人的在飞编辑会伪装成「变异存活」或「基线红」。
 
-import { cpSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import ts from "typescript";
 import { execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, duplicateIds, preflightRefusals, needleProblemLine, needleSeverity, classifyArgs, isLineWiseApply } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, preflightRefusals, needleProblemLine, needleSeverity, classifyArgs, isLineWiseApply } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -3978,6 +3978,15 @@ const MUTATIONS = [
     expectFail: "未跟踪与在飞的源文件都进名单，并带上是哪一条与为什么",
   },
   {
+    id: "mutate-leftover-backup-blind",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "残留备份检查变成恒空 ⇒ 上一次被 kill 的整跑留下的 `.mutbak` 无人报，" +
+      "下一次开跑时被 cpSync 直接覆盖——那份「崩溃前的原始内容」是还原正确的唯一凭证",
+    apply: (s) => s.replace(".filter((p) => exists(p));", ".filter(() => false);"),
+    expectFail: "路径 = 源文件 + .mutbak，且只报盘上真在的那几个",
+  },
+  {
     id: "grep-negative-note-loses-escape-hatch",
     src: "src/tools/grep.ts",
     test: "tests/grep-glob-edit.test.ts",
@@ -5910,6 +5919,14 @@ if (refusedUpfront.length > 0) {
     "（判卷文件在飞只让那一条不可判，不在拒绝之列——否则别人一个未提交测试就能把变异门整体停摆）");
   process.exit(1);
 }
+// 上一次没收尾干净就别开跑：`.mutbak` 会在本次被 cpSync 覆盖，而它是"崩溃前原始内容"的唯一凭证。
+const allSrcs = [...new Set(entries.map((m) => m.src))];
+const leftovers = leftoverBackupPaths(allSrcs, (rel) => existsSync(join(ROOT, rel)));
+if (leftovers.length > 0) {
+  for (const p of leftovers) console.error(`❌ 残留备份：${p} —— 上一次跑没干净收尾（被 kill / 崩溃）`);
+  console.error("[mutate-verify] 先人工确认这些源文件与 HEAD 一致、再删掉 .mutbak 重跑。");
+  process.exit(1);
+}
 const results = entries.map((m) => {
   const r = verifyEntry(m);
   const mark = r.ok === null ? "⏭️" : r.ok ? "✅" : "❌";
@@ -5922,7 +5939,7 @@ const results = entries.map((m) => {
 const srcs = [...new Set(entries.map((m) => m.src))];
 // 收尾校验：git diff HEAD 看不见未跟踪文件，必须用 git status --porcelain 才能抓住
 // 「未跟踪文件被改动」和「已跟踪文件相对 HEAD 漂移」两种残留。
-const statusOut = execFileSync("git", ["status", "--porcelain", "--", ...srcs], {
+const statusOut = execFileSync("git", ["status", "--porcelain", "--", ...srcs, ...srcs.map(backupPathOf)], {
   cwd: ROOT, encoding: "utf8",
 }).trim();
 if (statusOut) {

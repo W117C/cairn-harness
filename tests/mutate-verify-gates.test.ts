@@ -2,7 +2,7 @@
 // 动因（2026-09-19 实跑）：另一会话正在改判卷测试文件时，本门把两条正常条目报成
 // 「基线就不是全绿」+「变异存活」——真回归信号被并发噪声伪装掉了。
 import { describe, expect, it } from "vitest";
-import { entryDisposition, preflightRefusals, type HeadState } from "../scripts/lib/mutate-gates";
+import { entryDisposition, leftoverBackupPaths, preflightRefusals, type HeadState } from "../scripts/lib/mutate-gates";
 
 const clean: HeadState = "clean";
 const dirty: HeadState = "dirty";
@@ -75,5 +75,19 @@ describe("整跑前预检 preflightRefusals", () => {
   // 并发窗口里别人一个未提交的测试文件就能让整道门永远跑不起来。
   it("判卷文件在飞/未跟踪 ⇒ 不进拒绝名单（那是 unverified，不是崩溃风险）", () => {
     expect(preflightRefusals([ent("a", clean, dirty), ent("b", clean, untracked)])).toEqual([]);
+  });
+});
+
+// 上一次跑被 kill/崩溃会留下 `<src>.mutbak`；收尾校验原先按精确源路径查 git status，看不见它。
+describe("残留备份 leftoverBackupPaths", () => {
+  it("路径 = 源文件 + .mutbak，且只报盘上真在的那几个", () => {
+    const have = new Set(["src/a.ts.mutbak"]);
+    expect(leftoverBackupPaths(["src/a.ts", "src/b.ts"], (p) => have.has(p))).toEqual(["src/a.ts.mutbak"]);
+  });
+
+  it("多条锚点共用一个源文件 ⇒ 只报一次；全无残留 ⇒ 空（不许把「没查到」报成一堆）", () => {
+    const have = new Set(["src/a.ts.mutbak"]);
+    expect(leftoverBackupPaths(["src/a.ts", "src/a.ts", "src/c.ts"], (p) => have.has(p))).toEqual(["src/a.ts.mutbak"]);
+    expect(leftoverBackupPaths(["src/a.ts", "src/a.ts"], () => false)).toEqual([]);
   });
 });
