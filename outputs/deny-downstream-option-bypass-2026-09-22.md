@@ -164,3 +164,75 @@ TERM=dumb node --import tsx scripts/mutate-verify.mjs \
 - 组合测 ⑥：3 条（两支面同拦、负控不牵连、`time -p` 的取料形状）
 - 锚点 +3：`shape-eval-script-payload-lost`、`shape-exec-wrappers-drop-time-xargs`、
   `shape-time-p-misregistered-as-value-opt`
+
+## 再再追加（同日）：⑦ 前缀词**枚举不完** —— 三条结构性候选的代价已量，等一次裁决
+
+第二轮按位置扫写法又扫出 **15 个仍漏的前缀词**（setsid / ionice / stdbuf / chrt / watch / pkexec /
+doas / sudoedit / script / unshare / flock / taskset / prlimit / strace / busybox），主会话自主档实测
+`approve@L4-pass`（探针 ⑦ 段逐支印出）。**每层容器、调度器、追踪器都会再贡献几个词**——
+按名字往 `EXEC_WRAPPERS` 里加是无穷追赶，所以这一轮**不加词**，改为把「往哪走」量成可裁的数字。
+
+读数脚本：`outputs/measure-prefix-word-candidates-2026-09-22.mts`
+（跑法 `node --import tsx outputs/measure-prefix-word-candidates-2026-09-22.mts`；一次性观测，不进门禁）。
+匹配口径与 `rules.ts:matchSegment` 一致（deny 侧对形态做 pattern 前缀匹配）。
+
+| 候选 | 15 支缺口 | 已收口 25 支 | 本仓真命令语料 41 支被牵连 | 手写负控 13 支被牵连 |
+| --- | --- | --- | --- | --- |
+| 今天（按名字白名单） | 0 | 25 | 0 | 0 |
+| **A** = 今天 + 任意位置起后缀（首词不必登记） | **15** | 25 | 0 | **1**（`echo xargs git push --force`） |
+| **B** = 今天 + pattern 的词按序出现即可（中间可插词） | **15** | 25 | 0 | 1（同左）＋`grep -e git -e push src --force` |
+| B′ = 同 B 但限词距 ≤2 / ≤3 | 12 / **15** | 25 | 0 | 1（**词距界挡不住那支 grep**，见下） |
+| **C** = 首词不在表里就升 ask（不看 pattern） | — | — | **41 / 41 出卡（100%）** | — |
+
+三条读数里最值钱的三条：
+
+1. **A/B 只能叠加、不能替换。** 把形态集整个换成 A 会倒退 9 支已收口的写法
+   （`/usr/bin/git push --force` 的取基名、`bash -c` / `eval` 的载荷递归、`git -C /tmp push …` 的
+   下游选项后缀全住在今天那一支里）。表里的 25/25 是「今天 ∪ 新增」才算得出的。
+2. **C 作为字面政策当场死。** 仓里没有「已知可执行二进制」这张表，所以「首词未知」对
+   `node --import tsx scripts/gates.ts` 这类日常命令恒成立——`pnpm test` 自己都要出卡。
+   C 唯一可用的形态是「A/B 命中 **且** 首词未知 ⇒ 升 ask 而非 deny」，那是 A/B 的后果分级，不是第三条路线。
+3. **量 ⑦ 的尺子顺手量出 ⑧ 一族**：`git push origin --force`、`git push --no-verify --force`、
+   `git push origin HEAD --force` 三支**货真价实的强推**今天全漏——⑤ 的 `suffixForms` 只把全局选项从
+   前缀位置挪走，pattern 仍是整条前缀匹配，「子命令与危险选项中间插了参数」它照样看不见。
+   只有 B 收得住（A 不收）。worker 那一支照旧拦得住（`push` 非只读 ⇒ fail-closed，探针 ⑧ 逐支标了）。
+4. **词距界不是那条闸**（我原本的猜想，实测推翻）：限「词距 ≤2」会漏 3 支——`chrt -f 10 git…`、
+   `script -q /dev/null git…`、`taskset -c 0 git…`（前缀词自带**两个** token），而放到 ≤3 就与无界的 B
+   召回相同（15/15）。更要紧的是那支假阳 `grep -e git -e push src --force` 的词距只有 1，
+   **任何界都挡不住它**。⇒ 区分「这些词是命令」与「这些词是被 grep 的关键字」的事实，
+   只有「首词是不是会被执行的 binary」这一条，而那又要一张表——**结构性判据并不能把名字表赶尽**，
+   它只是把表从「包装器名」挪到「可执行名」。
+
+### 牵连面这两列别读过头（诚实记账）
+
+真命令语料 = `package.json` 的 40 条 scripts + `fixtures/mock/todo-fix.jsonl` 里那条 `run_shell`，
+去重 41 支。它对 A/B 的「牵连 0」**近乎空读**——那 41 支里根本没有 pattern 字样，这一列只量得出 C 的
+ask 率。A/B 的牵连证据是：负控 1 支（`echo xargs git push --force`，已在 `PREFIX_WORD_MUST_STAY_CLEAN`
+里钉着，实现 A 的那一刻它必红）＋形似非恶意六支（`echo git push --force` / `printf git push --force`
+被 A、B 牵连；带引号的 `echo 'git push --force'`、`grep -rn "git push --force" src`、
+`git commit -m 'git push --force 已禁用'` 不牵连，因为分词把载荷收成了单个 token）。
+⇒ A/B 的真实代价是**「把 echo/printf 的参数当命令」这一类**，不是「审批卡普遍变多」。
+
+### 建议与重开条件
+
+裁决点其实只有一句：**认不认「未知首词命中 deny ⇒ 不静默拒绝，而是出卡」**。
+
+- 建议：**B（无界按序子序列，等价于 ≤3）+ 后果分级**——pattern 命中且**首词不在已知表**时降为 ask，
+  首词已知（`git` / `env` / `sudo` / `bash -c` …）仍按 deny。一次改动同时收 ⑦ 的 15 支与 ⑧ 的 3 支，
+  而把「误伤 `echo git push --force` / 那支 grep」从**命令被拒**降级为**多一张卡**。
+  代价要说清楚：用户手写的 deny 在未知前缀词那一族上**不再绝对**（变成必问），这是拿确定性换召回。
+- 备选（更保守）：纯 A + 分级。少收 ⑧ 的 3 支真强推，其余与上面同。
+- 不采纳：继续按词加 `EXEC_WRAPPERS`（⑦ 的存在理由）；C 的字面版「首词未知就 ask」（41/41 出卡）。
+- 反向证据要求：落地时必须同批钉一条「allow 侧不吃这些形态」（沿用 ⑤ 那条不对称断言的形状），
+  否则就是把用户点过的「总是允许」顺着匹配器放宽。
+- 重开条件：`tests/shell-bypass-composition.test.ts` 里 ⑦ / ⑧ 两个「已知边界」块**变红**
+  （有人动了匹配语义却没说），或 `pnpm exec tsx scripts/probe-shell-bypass.ts` 的 ⑦/⑧ 段读数转 deny。
+
+### ⑦ / ⑧ 的观测者与判据
+
+- 共用清单 +2：`UNBOUNDED_PREFIX_WORDS`（15）、`INSERTED_ARG_UNDERHIT`（3）＋对照面 `STRUCTURE_ALREADY_COVERS`（4）
+- 探针 ⑦ / ⑧：**只印不判**（不计红绿，合计仍是 红 0 / 绿 64）——这两族是"已知仍漏"，计红会把
+  一次待裁的语义分歧混进"缺陷未修"的账里
+- 组合测 +4（现 30 条）：15 支全 miss、结构性对照面全 deny、⑧ 三支全 miss、⑧ 三支 worker 侧全拦
+- 本轮**零实现改动**（`src/` 未动），所以上表对 HEAD 与在飞态同值
+

@@ -110,6 +110,39 @@ export const PREFIX_WORD_VARIANTS: string[] = [
   "nohup time git push --force",
 ];
 
+/** ⑦ **枚举不完的**前缀词（09-22 第二轮扫写法扫出来的 14 支，全部今天仍漏）。
+ *  列在这里不是为了逐个加进 `EXEC_WRAPPERS`——那条路是无穷的：
+ *  `setsid` / `ionice` / `stdbuf` / `chrt` / `unshare` / `flock` / `taskset` / `prlimit` / `strace`
+ *  / `pkexec` / `doas` / `watch` / `script` / `busybox`，外加每一层容器与调度器
+ *  （`nsenter`、`systemd-run`、`docker exec`、`envdir`、`at`…）。
+ *  每个新发行版都会再补几个 ⇒ 按名字白名单**不可能穷尽**，
+ *  要收它得换结构性判据（见 outputs/deny-downstream-option-bypass-2026-09-22.md ⑦ 段的三条候选）。 */
+export const UNBOUNDED_PREFIX_WORDS: string[] = [
+  "setsid git push --force",
+  "ionice -c3 git push --force",
+  "stdbuf -oL git push --force",
+  "chrt -f 10 git push --force",
+  "watch -n1 git push --force",
+  "pkexec git push --force",
+  "doas git push --force",
+  "sudoedit git push --force",
+  "script -q /dev/null git push --force",
+  "unshare -n git push --force",
+  "flock /tmp/l git push --force",
+  "taskset -c 0 git push --force",
+  "prlimit --nofile=1024 git push --force",
+  "strace git push --force",
+  "busybox git push --force",
+];
+
+/** ⑦′ 已成立的结构性面（对照用）：载荷递归与链式段本来就能命中，不需要按词登记。 */
+export const STRUCTURE_ALREADY_COVERS: string[] = [
+  "sh -c 'exec git push --force'",
+  "env bash -c 'git push --force'",
+  "cd /x && git push --force",
+  "true && sudo git push --force",
+];
+
 /** ⑥′ 负控：这些**不该**被 deny 牵连。
  *  `cat time xargs` / `echo xargs …` 里那几个词是**参数**不是前缀词；
  *  `--fo=rcx` 看着像缩写漏判，但 git 自己会报「选项不认/歧义」，命令根本执行不了强推。 */
@@ -125,4 +158,14 @@ export const GLOBAL_OPT_MUST_STAY_CLEAN: string[] = [
   "git -C /tmp status",
   "git log --oneline -20",
   "git -c core.pager=cat diff",
+];
+
+/** ⑧ 子命令与危险选项**中间插了参数**：`suffixForms`（⑤）只把选项从前缀位置挪走，
+ *  pattern 仍是整条前缀匹配，所以 `git push origin --force` 这一支照样漏——
+ *  而它是货真价实的强推。09-22 量 ⑦ 三条候选时顺出这笔新账（`git push --no-verify --force` 同形）。
+ *  未修：修它=把匹配从「前缀」换成「按序子序列」，那正是 ⑦ 候选 B 的语义裁决面。 */
+export const INSERTED_ARG_UNDERHIT: string[] = [
+  "git push origin --force",
+  "git push --no-verify --force",
+  "git push origin HEAD --force",
 ];

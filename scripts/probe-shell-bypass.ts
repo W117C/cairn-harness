@@ -13,11 +13,14 @@ import {
   FLAG_UNDERHIT,
   GLOBAL_OPT_MUST_STAY_CLEAN,
   GLOBAL_OPT_VARIANTS,
+  INSERTED_ARG_UNDERHIT,
   PIPE_INTO_SHELL,
   PREFIX_WORD_MUST_STAY_CLEAN,
   PREFIX_WORD_VARIANTS,
   PROBE_RULES_JSON,
   REDIRECT_CASES,
+  STRUCTURE_ALREADY_COVERS,
+  UNBOUNDED_PREFIX_WORDS,
   WORKER_CASES,
 } from "./lib/shell-bypass-cases";
 
@@ -136,6 +139,33 @@ for (const cmd of PREFIX_WORD_MUST_STAY_CLEAN) {
   const d = evaluate("run_shell", { command: cmd }, session("auto"));
   check("不牵连", cmd, "非 deny", d.verdict === "deny" ? "deny" : "非 deny");
 }
+
+/* ---------------- ⑦ 枚举不完的前缀词（只记录，不计红绿） ---------------- */
+
+console.log("\n【⑦】未知前缀词——今天仍漏（按名字加包装器不算收口，见 dated 文档 ⑦ 段）");
+let stillLeak = 0;
+for (const cmd of UNBOUNDED_PREFIX_WORDS) {
+  const v = evaluate("run_shell", { command: cmd }, session("auto"));
+  if (v.verdict !== "deny") stillLeak += 1;
+  console.log("     " + JSON.stringify(cmd).padEnd(46) + v.verdict + "@" + v.layer);
+}
+console.log("     ↑ 对照：结构性面已覆盖的（载荷递归 / 链式段），不按词登记也能命中——");
+for (const cmd of STRUCTURE_ALREADY_COVERS) {
+  const v = evaluate("run_shell", { command: cmd }, session("auto"));
+  console.log("     " + JSON.stringify(cmd).padEnd(46) + v.verdict + "@" + v.layer);
+}
+console.log("     ⇒ " + String(stillLeak) + " / " + String(UNBOUNDED_PREFIX_WORDS.length)
+  + " 仍漏。要收它得换**结构性**判据（任意位置起后缀 / 词按序出现即可），不是继续加词。");
+console.log("       三条候选的召回与牵连代价量在 outputs/measure-prefix-word-candidates-2026-09-22.mts。");
+
+/* ---------------- ⑧ 中间插参数（量 ⑦ 候选时顺出的新账，只记录不计红绿） ---------------- */
+console.log("\n【⑧】子命令与危险选项**中间**插了参数——⑤ 的后缀形态照样看不见");
+for (const cmd of INSERTED_ARG_UNDERHIT) {
+  const v = evaluate("run_shell", { command: cmd }, session("auto"));
+  console.log("     " + JSON.stringify(cmd).padEnd(46) + v.verdict + "@" + v.layer
+    + "｜worker 闸=" + (interceptDestructiveGit(cmd).ok ? "放行" : "拦"));
+}
+console.log("     ⇒ 这三支是真强推。收它要把匹配从「前缀」换成「按序子序列」＝候选 B，与 ⑦ 同一次裁决。");
 
 console.log(`\n合计：红 ${String(red)} / 绿 ${String(green)}`);
 if (red > 0) {

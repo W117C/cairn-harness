@@ -22,11 +22,14 @@ import {
   FLAG_UNDERHIT,
   GLOBAL_OPT_MUST_STAY_CLEAN,
   GLOBAL_OPT_VARIANTS,
+  INSERTED_ARG_UNDERHIT,
   PIPE_INTO_SHELL,
   PREFIX_WORD_MUST_STAY_CLEAN,
   PREFIX_WORD_VARIANTS,
   PROBE_RULES_JSON,
   REDIRECT_CASES,
+  STRUCTURE_ALREADY_COVERS,
+  UNBOUNDED_PREFIX_WORDS,
   WORKER_CASES,
 } from "../scripts/lib/shell-bypass-cases";
 
@@ -270,5 +273,43 @@ describe("⑥ 前缀词：eval / xargs / time 后面才是真命令", () => {
   it("`time -p` 的 `-p` 是布尔开关：登记成带值就会把 git 当值吞掉（实测两支一起放行）", () => {
     expect(commandForms("time -p git push --force")).toContain("git push --force");
     expect(invocations("time -p git push --force").map((i) => i.bin)).toContain("git");
+  });
+});
+
+/* ---------------- 已知边界：未知前缀词（未裁） ----------------
+   第二轮按位置扫写法扫出 15 个仍漏的前缀词（setsid / ionice / stdbuf / chrt / pkexec / doas /
+   unshare / flock / taskset / prlimit / strace / watch / script / busybox / sudoedit）。
+   **按名字往白名单里加词不是收口**：这族是无穷的（每层容器与调度器再加几个）。
+   下面钉的是现状——谁改成结构性判据（⑦ 文档里量过的候选 A「任意位置起后缀」/
+   候选 B「词按序出现即可」），这两条必须一起翻，改动就会逼出那次裁决而不是悄悄发生。 */
+describe("已知边界：未知前缀词仍漏（枚举不完，未裁）", () => {
+  it("15 支今天全 miss（逐个加进 EXEC_WRAPPERS 不算收口）", () => {
+    expect(UNBOUNDED_PREFIX_WORDS.length).toBe(15);
+    for (const cmd of UNBOUNDED_PREFIX_WORDS) {
+      expect(judgeChain(RULES, "run_shell", cmd).verdict, cmd).toBe("miss");
+    }
+  });
+
+  it("对照：结构性面（载荷递归 / 链式段）不按词登记也能命中——这才是要往哪走的方向", () => {
+    for (const cmd of STRUCTURE_ALREADY_COVERS) {
+      expect(judgeChain(RULES, "run_shell", cmd).verdict, cmd).toBe("deny");
+    }
+  });
+});
+
+/* ---------------- 已知边界 ⑧：中间插参数（量 ⑦ 候选时顺出的新账，未裁） ----------------
+   ⑤ 的 `suffixForms` 只把**全局选项**从前缀位置挪走，命中仍是整条 pattern 前缀匹配，
+   所以「子命令与危险选项中间插了参数」照样漏——而 `git push origin --force` 是货真价实的强推。
+   修它 = 把匹配从「前缀」换成「按序子序列」（候选 B），与 ⑦ 是同一次语义裁决，所以不单向改实现。
+   worker 那一支按 args[0] 取子命令、push 非只读 ⇒ fail-closed 一直拦得住（同 ⑤ 的格局）。 */
+describe("已知边界：中间插参数（git push origin --force）仍漏（未裁）", () => {
+  it("三支真强推今天不进 L1-deny", () => {
+    for (const cmd of INSERTED_ARG_UNDERHIT) {
+      expect(judgeChain(RULES, "run_shell", cmd).verdict, cmd).toBe("miss");
+    }
+  });
+
+  it("worker 侧照旧拦得住（fail-closed，不是因为它更聪明）", () => {
+    for (const cmd of INSERTED_ARG_UNDERHIT) expect(interceptDestructiveGit(cmd).ok, cmd).toBe(false);
   });
 });
