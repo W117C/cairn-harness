@@ -10,7 +10,7 @@ import type { ToolName } from "../tools/base";
 import type { PermissionMode } from "./index";
 // 方案门的活判据。直接从 plan-state 拿（不能拿 ./index——index 正 re-export 本文件的符号）。
 import { planGateLive } from "./plan-state";
-import { judgeChain, normalizeCommand, type PermissionRule } from "./rules";
+import { judgeChain, normalizeCommand, type ChainVerdict, type PermissionRule } from "./rules";
 import {
   isNetworkCommand,
   isShellFamily,
@@ -62,6 +62,19 @@ export function autoOf(gate: GateMeta | undefined): AutoMeta | undefined {
   if (gate.layer === "L3-rule") return { source: "rule", ...(gate.ruleId !== undefined ? { ruleId: gate.ruleId } : {}) };
   if (gate.layer === "L3-scope") return { source: "session_scope", ...(gate.ruleId !== undefined ? { ruleId: gate.ruleId } : {}) };
   return undefined;
+}
+
+/** 规则层拒绝 / 出卡那一句理由（L1-deny 与 L2-ask 共用一个构造口，免得两处的边界说明各写各的又漂）。
+ *  卡面必须说得出**禁的是哪一段**与**按什么匹配**：09-22 那条过覆盖裁决的教训是
+ *  `deny "git push --force"` 顺带禁掉 `--force-with-lease` 时，卡上只有一个 ruleId，
+ *  用户既看不懂为什么被拦、也不知道该改哪条规则。 */
+function ruleHitReason(
+  kind: string,
+  chain: Extract<ChainVerdict, { ruleId: string }>,
+  note?: string,
+): string {
+  const boundary = chain.pattern !== undefined ? "——匹配按完整 token 为界" : "";
+  return `${kind}（${chain.ruleId}）${boundary}${note !== undefined ? "；" + note : ""}`;
 }
 
 /** 判定留痕的公共部分（layer / risk / mode / ruleId）。**故意不含 verdict**——
@@ -305,7 +318,7 @@ export function evaluate(
   // ---- L1 deny 规则：命中即拦 ----
   const chain = judgeChain(s.rules, tool, cmd);
   if (chain.verdict === "deny") {
-    return { verdict: "deny", layer: "L1-deny", reason: `deny 规则命中（${chain.ruleId}）` };
+    return { verdict: "deny", layer: "L1-deny", reason: ruleHitReason("deny 规则命中", chain) };
   }
 
   // ---- L2 ask 规则：命中即强制审批，任何档位含自主档都绕不过 ----
@@ -318,7 +331,7 @@ export function evaluate(
       reason:
         chain.consentGap === true
           ? `「总是允许」不覆盖这条命令的载荷（原规则 ${chain.ruleId}）`
-          : `ask 规则命中（${chain.ruleId}）`,
+          : ruleHitReason("ask 规则命中", chain),
       risk,
       riskReasons: channels.reasons,
     };

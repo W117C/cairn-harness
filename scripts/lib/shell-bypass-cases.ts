@@ -95,6 +95,16 @@ export const FLAG_BOUNDARY_OVERHIT: string[] = [
   "git push --force-with-lease origin main",
 ];
 
+/** ⑨ 边界修法**不许**顺手放进来的（09-22 已裁）：命中的右邻是行尾或空白都算命中，
+ *  所以这些仍必须 deny。收紧过覆盖时把这一支一起放宽 = 用户手写的 deny 又被绕过一种写法。 */
+export const BOUNDARY_MUST_STAY_DENY: string[] = [
+  "git push --force",
+  "git push --force --no-verify",
+  "git push --force origin main",
+  "sudo git push --force",
+  "git -C /tmp push --force",
+];
+
 /** ⑥ 前缀词族（09-22 按位置扫写法扫出来的）：这些词自己不动执行，但**余下的 token 才是真命令**。
  *  修前实测 `eval …` / `xargs …` / `time …`（连 `time -p`）三支全漏，且 worker 闸与规则层一起漏
  *  （同一份解析的两个消费者 ⇒ 一处误登记两处放行）。 */

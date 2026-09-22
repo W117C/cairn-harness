@@ -140,6 +140,17 @@ export interface RuleHit {
   consentGap?: boolean;
 }
 
+/** **token 边界**前缀命中（09-22 已裁）：整串 `startsWith` 一头宽一头窄——
+ *  `deny "git push --force"` 会把 `--force-with-lease`（比裸强推更安全的那个）一起拦掉。
+ *  命中处的右邻必须是空白或行尾才算命中；pattern 自身尾部的空白不参与比较。
+ *  返回用于「最长前缀」比较的长度（未命中 −1）。空 pattern 语义原样保留（命中整段）。 */
+function prefixLenAtBoundary(text: string, pattern: string): number {
+  const pat = pattern.replace(/\s+$/, "");
+  if (pat === "") return 0;
+  if (!text.startsWith(pat)) return -1;
+  return text.length === pat.length || /\s/.test(text.charAt(pat.length)) ? pat.length : -1;
+}
+
 /** 单段匹配：所有命中里取最长前缀；同长取行为优先序 deny > ask > allow。
  *
  *  deny/ask 按**有效形态**匹配（`commandForms`：跳过 exec 包装器与环境赋值、路径取基名、
@@ -148,7 +159,9 @@ export interface RuleHit {
  *    `nohup …`、`timeout 30 …`、`command …`、`bash -c '…'` 六类写法曾把用户手写的 deny
  *    静默击穿（09-21 探针红 24 / 绿 9）；
  *  ⑵ 而 allow 是「用户点过一次总是允许」时**看见并同意的那条字面命令**，顺着包装器放宽
- *    等于替他扩大同意范围（本仓另有一笔 allow 过覆盖的账要还，方向是收紧不是放宽）。 */
+ *    等于替他扩大同意范围（本仓另有一笔 allow 过覆盖的账要还，方向是收紧不是放宽）。
+ *  两侧都走 `prefixLenAtBoundary`：边界收紧对 allow 同样成立（`allow git status` 不该
+ *  覆盖 `git status-bar`），但它仍只吃原形——不对称的是形态面，不是边界。 */
 function matchSegment(rules: PermissionRule[], segment: string): RuleHit | null {
   let best: RuleHit | null = null;
   let forms: string[] | null = null; // 惰性解析：只有 deny/ask 条目需要时才展开形态
@@ -158,13 +171,13 @@ function matchSegment(rules: PermissionRule[], segment: string): RuleHit | null 
     let gap = false;
     if (pattern === undefined) len = 0; // 裸工具名条目
     else if (rule.behavior === "allow") {
-      len = segment.startsWith(pattern) ? pattern.length : -1;
+      len = prefixLenAtBoundary(segment, pattern);
       // 前缀命中之后还剩载荷 ⇒ 用户点「总是允许」时看见的不是这条命令。按 ask 处理：
       // 同意范围不往外扩（09-21 探针 ② 段，`echo hi` 的同意曾覆盖 `echo hi > /tmp/pwned`）。
       if (len >= 0) gap = ALLOW_PAYLOAD.test(segment.slice(len));
     } else {
       forms ??= commandForms(segment);
-      len = forms.some((f) => f.startsWith(pattern)) ? pattern.length : -1;
+      len = forms.some((f) => prefixLenAtBoundary(f, pattern) >= 0) ? pattern.length : -1;
     }
     if (len < 0) continue;
     const effective: PermissionRule = gap ? { ...rule, behavior: "ask" } : rule;
@@ -180,7 +193,8 @@ function matchSegment(rules: PermissionRule[], segment: string): RuleHit | null 
 }
 
 export type ChainVerdict =
-  | { verdict: "allow" | "ask" | "deny"; ruleId: string; consentGap?: boolean }
+  /** `pattern` = 命中那条规则禁/放的字面（卡面要说得出「禁的是哪一段」，只有 ruleId 时用户得自己拆）。 */
+  | { verdict: "allow" | "ask" | "deny"; ruleId: string; pattern?: string; consentGap?: boolean }
   | { verdict: "miss" };
 
 /** 规则适用工具判定：shell 能力域内互通（run_shell ↔ shell_rw ↔ shell_ro）。
@@ -209,7 +223,11 @@ export function judgeChain(rules: PermissionRule[], tool: string, command?: stri
       continue;
     }
     if (hit.rule.behavior === "deny") {
-      return { verdict: "deny", ruleId: hit.rule.id ?? "" }; // 任一段 deny 全链 deny
+      return {
+        verdict: "deny",
+        ruleId: hit.rule.id ?? "",
+        ...(hit.rule.pattern !== undefined ? { pattern: hit.rule.pattern } : {}),
+      }; // 任一段 deny 全链 deny
     }
     // 审查 S1-1：跨段必须取最严（rank 小者优先，deny<ask<allow）。旧实现用 > 取的是
     // rank 最高=最宽，于是一条 allow 前缀就把同链任意 ask 段击穿（与上方注释相反）。
@@ -221,6 +239,7 @@ export function judgeChain(rules: PermissionRule[], tool: string, command?: stri
   return {
     verdict: worst.rule.behavior,
     ruleId: worst.rule.id ?? "",
+    ...(worst.rule.pattern !== undefined ? { pattern: worst.rule.pattern } : {}),
     ...(worst.consentGap === true ? { consentGap: true } : {}),
   };
 }

@@ -5194,10 +5194,32 @@ const MUTATIONS = [
     test: "tests/permissions.test.ts",
     desc: "deny/ask 退回裸文本前缀（不看有效二进制）⇒ 用户手写的 deny 被 /usr/bin/git、env、nohup、timeout、command、bash -c 六类写法静默击穿（09-21 探针 ① 段原缺陷复活）",
     apply: (s) => s.replace(
-      "      forms ??= commandForms(segment);\n      len = forms.some((f) => f.startsWith(pattern)) ? pattern.length : -1;",
+      "      forms ??= commandForms(segment);\n      len = forms.some((f) => prefixLenAtBoundary(f, pattern) >= 0) ? pattern.length : -1;",
       "      len = segment.startsWith(pattern) ? pattern.length : -1;",
     ),
     expectFail: "包装写法躲不过 deny",
+  },
+  {
+    id: "rule-matcher-token-boundary-dropped",
+    src: "src/permissions/rules.ts",
+    test: "tests/shell-bypass-composition.test.ts",
+    desc: "把 token 边界判据退回整串前缀 ⇒ `deny git push --force` 又顺带禁掉**更安全**的 `--force-with-lease`（09-22 已裁掉的那侧过覆盖复活）",
+    apply: (s) => s.replace(
+      "  return text.length === pat.length || /\\s/.test(text.charAt(pat.length)) ? pat.length : -1;",
+      "  return pat.length;",
+    ),
+    expectFail: "过覆盖侧已修：`git push --force-with-lease` 不再被这条 deny 命中",
+  },
+  {
+    id: "rule-matcher-allow-ignores-token-boundary",
+    src: "src/permissions/rules.ts",
+    test: "tests/shell-bypass-composition.test.ts",
+    desc: "只给 deny 侧讲边界、allow 侧退回整串前缀 ⇒ 用户点过的「总是允许 git status」覆盖到 `git status-bar`（不对称的是**形态面**，不是边界）",
+    apply: (s) => s.replace(
+      "      len = prefixLenAtBoundary(segment, pattern);",
+      "      len = segment.startsWith(pattern) ? pattern.length : -1;",
+    ),
+    expectFail: "allow 侧同样讲边界（不对称的是形态面，不是边界）：「allow git status」不覆盖 `git status-bar`",
   },
   {
     id: "rule-matcher-allow-widens-to-wrappers",

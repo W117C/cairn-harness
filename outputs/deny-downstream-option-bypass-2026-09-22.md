@@ -239,3 +239,37 @@ ask 率。A/B 的牵连证据是：负控 1 支（`echo xargs git push --force`�
   `command-shape` 33 条全绿、探针仍 红 0 / 绿 64、候选表逐行同值。只有语料**分母**随 `package.json` 的 scripts
   条数漂移，表内取 HEAD 态 40 支（上一笔提交说明里写的 41 是在飞态那份 package.json 算出来的，以本表为准）
 
+
+## 再追加（同日，裁决后施工）：⑨ 选项边界选了「整词匹配」——过覆盖那一侧修掉了
+
+上面「刻意没修」那节列的三条候选，用户裁 **① + ③**（先修过覆盖 + 卡片文案），漏判那一侧（`-f` / `--f`）
+继续留账。所以那节的原文保留不动（它是该日的现状快照），本节记落地。
+
+**改了什么**（`src/permissions/rules.ts`）：新增 `prefixLenAtBoundary(text, pattern)` ——
+pattern 去掉尾部空白后必须命中，且命中处的**右邻只能是行尾或空白**。
+`matchSegment` 的 **deny/ask 与 allow 两支一起换**：不对称的仍是「allow 只吃原形、deny/ask 吃形态面」，
+边界两侧同规（`allow git status` 覆盖 `git status-bar` 同样是不该发生的）。
+
+| 命令 | 修前 | 修后 |
+|---|---|---|
+| `git push --force-with-lease` | `deny@L1-deny`（反向激励） | 不命中这条 deny |
+| `git push --force-with-lease origin main` | `deny@L1-deny` | 不命中 |
+| `git push --force` / `--force --no-verify` / `--force origin main` | deny | **仍 deny**（边界在空白处） |
+| `sudo git push --force`、`git -C /tmp push --force` | deny | **仍 deny**（形态面未动） |
+| `git push -f` / `--f` | `approve@L4-pass` | 未变（要收它得建按二进制的标志别名表，另账） |
+
+**卡片文案**（`src/permissions/autonomy.ts`）：L1-deny 与 L2-ask 的理由改走同一个构造口
+`ruleHitReason()`，除 ruleId 外补一句「匹配按完整 token 为界」。
+旧文案只有 `deny 规则命中（deny:run_shell:git push --force#0）`——被过覆盖误伤的人既看不懂为什么被拦、
+也不知道该改哪条规则。`ChainVerdict` 为此带上命中规则的 `pattern`。
+（`plugins-check` E4 断言的 `deny 规则命中` 前缀逐字保留，不受影响。）
+
+**观测者与锚点**
+- 共用清单 +1：`BOUNDARY_MUST_STAY_DENY`（5）——「边界收紧不许顺手放宽」这一侧的证据面
+- 探针 ⑤″ 从「只印不计红绿」升为 ⑨ 的**真断言**：过覆盖侧 2 条 + 仍须 deny 侧 5 条 + 卡面文案 1 条，
+  合计 红 0 / **绿 72**（原 64）；漏判侧那 2 条继续只印
+- 组合测 +3（现 33 条，本块由 3 条改 6 条）：过覆盖侧已修、五支仍 deny、allow 侧同讲边界、卡面说得出规则与匹配口径，
+  另把原「worker 侧」与「漏判侧」两条留在同一块里（漏判那条红就说明有人偷偷建了别名表）
+- 锚点：既有 `rule-matcher-deny-ignores-wrappers` 的针脚随实现改写；
+  新增 `rule-matcher-token-boundary-dropped`（退回整串前缀 ⇒ 过覆盖用例必红）、
+  `rule-matcher-allow-ignores-token-boundary`（只给 deny 侧讲边界 ⇒ allow 边界用例必红）。针脚体检 638 条阻断 0

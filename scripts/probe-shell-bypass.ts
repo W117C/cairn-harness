@@ -8,6 +8,7 @@ import { interceptDestructiveGit } from "../src/agent/worker-shell-tools";
 import type { PermissionMode } from "../src/permissions";
 import {
   ALLOW_CASES,
+  BOUNDARY_MUST_STAY_DENY,
   DENY_VARIANTS,
   FLAG_BOUNDARY_OVERHIT,
   FLAG_UNDERHIT,
@@ -118,13 +119,25 @@ for (const cmd of GLOBAL_OPT_MUST_STAY_CLEAN) {
   const d = evaluate("run_shell", { command: cmd }, session("auto"));
   check("只读不受牵连", cmd, "非 deny", d.verdict === "deny" ? "deny" : "非 deny");
 }
-console.log("\n【⑤″】本轮不修的账（只记录，不计入红绿）：选项边界的两面");
-for (const c of [...FLAG_UNDERHIT, ...FLAG_BOUNDARY_OVERHIT]) {
+console.log("\n【⑨】选项的 token 边界（09-22 已裁：过覆盖那一侧修掉，漏判那一侧仍记着）");
+for (const cmd of FLAG_BOUNDARY_OVERHIT) {
+  const d = evaluate("run_shell", { command: cmd }, session("auto"));
+  check("更安全的那个不被牵连", cmd, "非 deny", d.verdict === "deny" ? "deny" : "非 deny");
+}
+for (const cmd of BOUNDARY_MUST_STAY_DENY) {
+  const d = evaluate("run_shell", { command: cmd }, session("auto"));
+  check("边界收紧不许顺手放宽", cmd, "deny@L1-deny", `${d.verdict}@${d.layer}`);
+}
+const card = evaluate("run_shell", { command: "sudo git push --force" }, session("auto"));
+const cardReason = card.verdict === "deny" ? card.reason : "verdict:" + card.verdict;
+check("卡面说得出禁的是哪一段、按什么匹配", "reason", "含 ruleId + 边界说明",
+  cardReason.includes("deny:run_shell:git push --force") && cardReason.includes("匹配按完整 token 为界")
+    ? "含 ruleId + 边界说明" : JSON.stringify(cardReason));
+console.log("     仍漏判的那一侧（要收它得建按二进制的标志别名表，另账）：");
+for (const c of FLAG_UNDERHIT) {
   const v = evaluate("run_shell", { command: c }, session("auto"));
   console.log("     " + JSON.stringify(c).padEnd(44) + v.verdict + "@" + v.layer);
 }
-console.log("     ↑ 漏判（`-f` 与 `--f` 是同一个破坏性操作）与过覆盖（`--force-with-lease` 是**更安全**的那个）同根：");
-console.log("       规则匹配是整串前缀。收紧一头必然放宽另一头 ⇒ 需要一次语义裁决，不单向改。");
 
 /* ---------------- ⑥ 前缀词族（eval / xargs / time） ---------------- */
 

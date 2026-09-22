@@ -17,6 +17,7 @@ import type { ToolName } from "../src/tools/base";
 const asTool = (s: string): ToolName => s as ToolName;
 import {
   ALLOW_CASES,
+  BOUNDARY_MUST_STAY_DENY,
   DENY_VARIANTS,
   FLAG_BOUNDARY_OVERHIT,
   FLAG_UNDERHIT,
@@ -230,23 +231,47 @@ describe("shell_ro：静态只读闸与权限层的合取", () => {
   });
 });
 
-/* ---------------- 已知边界（未裁，钉住「今天是什么样」） ----------------
-   规则匹配是**整串前缀**，于是 `deny "git push --force"` 同时有两个方向相反的错：
-   漏判 `-f` / `--f`（同一个破坏性操作静默放行），过覆盖 `--force-with-lease`
-   （用户没禁的、**更安全**的那个反被禁掉）。收紧一头必放宽另一头 ⇒ 这是语义裁决不是 bug 修复，
-   未裁之前不许单向改实现。下面这几条断言的是**现状**：将来谁动这块，它们会红，
-   红了就说明必须连带的裁决一起做，而不是顺手把匹配写宽/写窄。 */
-describe("已知边界：deny 的选项两侧（未裁）", () => {
-  it("漏判侧：`git push -f` / `--f` 今天不进 L1-deny（同义操作静默放行）", () => {
+/* ---------------- ⑨ 选项的 token 边界（09-22 已裁：修过覆盖那一侧） ----------------
+   根因同 ⑤：规则匹配是**整串前缀**（`form.startsWith(pattern)`），于是一头宽一头窄——
+   `-f` / `--f`（同一件被禁的事）漏判，而 `--force-with-lease`（**更安全**的那个）被过覆盖。
+   裁决取「先修过覆盖 + 卡面点名规则」：命中处右邻必须是行尾或空白，纯机械、不建按二进制的别名表；
+   `-f` 那一侧继续留作已知边界（要它得建别名表，另账）。worker 侧不受影响（push 本就非只读）。 */
+describe("⑨ deny 的 token 边界：过覆盖那一侧已修，漏判那一侧另账", () => {
+  it("过覆盖侧已修：`git push --force-with-lease` 不再被这条 deny 命中", () => {
+    for (const cmd of FLAG_BOUNDARY_OVERHIT) {
+      expect(judgeChain(RULES, "run_shell", cmd).verdict, cmd).not.toBe("deny");
+    }
+  });
+
+  it("边界收紧不许顺手放宽：命中处右邻是行尾或空白都算命中", () => {
+    for (const cmd of BOUNDARY_MUST_STAY_DENY) {
+      expect(judgeChain(RULES, "run_shell", cmd).verdict, cmd).toBe("deny");
+      expect(at(evaluate("run_shell", { command: cmd }, session())), cmd).toBe("deny@L1-deny");
+    }
+  });
+
+  it("卡面说得出是哪条规则、按什么匹配（用户据此才改得动自己的规则）", () => {
+    const d = evaluate("run_shell", { command: "sudo git push --force" }, session());
+    const reason = d.verdict === "deny" ? d.reason : "根本没被 deny（" + d.verdict + "）";
+    expect(reason).toContain("deny:run_shell:git push --force");
+    expect(reason, "只给 ruleId 时没人看得懂为什么被拦").toContain("匹配按完整 token 为界");
+  });
+
+  it("allow 侧同样讲边界（不对称的是形态面，不是边界）：「allow git status」不覆盖 `git status-bar`", () => {
+    const rules = parsePermissionsFile(
+      JSON.stringify({ rules: [{ behavior: "allow", tool: "run_shell", pattern: "git status", scope: "always" }] }),
+      "test",
+    );
+    expect(judgeChain(rules, "run_shell", "git status").verdict).toBe("allow");
+    expect(judgeChain(rules, "run_shell", "git status-bar").verdict).toBe("miss");
+  });
+
+  it("漏判侧仍留账：`git push -f` / `--f` 今天不进 L1-deny（要收它得建别名表，另裁）", () => {
     for (const cmd of FLAG_UNDERHIT) expect(judgeChain(RULES, "run_shell", cmd).verdict, cmd).toBe("miss");
   });
 
-  it("过覆盖侧：`git push --force-with-lease` 今天被同一条 deny 命中（更安全的那个）", () => {
-    for (const cmd of FLAG_BOUNDARY_OVERHIT) expect(judgeChain(RULES, "run_shell", cmd).verdict, cmd).toBe("deny");
-  });
-
-  it("worker 侧不受此裁影响：push 根本不是只读子命令，两侧都拦", () => {
-    for (const cmd of [...FLAG_UNDERHIT, ...FLAG_BOUNDARY_OVERHIT]) {
+  it("worker 侧不受本裁影响：push 根本不是只读子命令，两侧都拦", () => {
+    for (const cmd of [...FLAG_UNDERHIT, ...FLAG_BOUNDARY_OVERHIT, ...BOUNDARY_MUST_STAY_DENY]) {
       expect(interceptDestructiveGit(cmd).ok, cmd).toBe(false);
     }
   });
