@@ -5730,6 +5730,42 @@ const MUTATIONS = [
     apply: (s) => s.replace("  const lines = stripAnsi(output).split(\"\\n\")", "  const lines = output.split(\"\\n\")"),
     expectFail: "带 ANSI 颜色的输出仍取到干净的结论行（剥色吃共用件）",
   },
+  {
+    id: "tags-version-map-face-dead",
+    src: "src/agent/map/build.ts",
+    test: "tests/tags-extract-version.test.ts",
+    desc: "map 侧不再比对抽取版本 ⇒ 改了 .scm pattern 后，未变更的文件仍从盘上读回旧判据抽出的 tags，" +
+      "新判据看起来「改了没反应」——这个假象会把一次正确的修法骗人回滚掉",
+    apply: (s) => s.replace("if (e.v !== TAGS_EXTRACT_VERSION) return null; // 抽取判据换过", "if (false) return null; // 抽取判据换过"),
+    expectFail: "map 侧：版本不符 ⇒ 该文件重解析（同一条缓存改回正确版本又能命中）",
+  },
+  {
+    id: "tags-version-impact-face-dead",
+    src: "src/agent/impact/index.ts",
+    test: "tests/tags-extract-version.test.ts",
+    desc: "impact 这张图独立于 map 抄了一份缓存读取面 ⇒ 只修 map 那一支时，影响面照旧吃旧 tags。" +
+      "两支同值才成立的不变量，变异必须各自废一次（上一支锚点测不到这一支）",
+    apply: (s) => s.replace("if (e.v !== TAGS_EXTRACT_VERSION) return null; // 判据换过", "if (false) return null; // 判据换过"),
+    expectFail: "impact 侧：版本不符 ⇒ 重解析并计数（两份缓存不共用读取代码，各判一次）",
+  },
+  {
+    id: "tags-version-ignores-patterns",
+    src: "src/agent/map/parse.ts",
+    test: "tests/tags-extract-version.test.ts",
+    desc: "版本号不再把 pattern 文本算进去（只留手写 REV）⇒ 改判据而版本不动，" +
+      "缓存作废链整条失效，且没有任何一处会红——手写常量当版本就是下一处漂移磁铁",
+    apply: (s) => s.replace("return createHash(\"sha1\").update(EXTRACT_LOGIC_REV + \"\\n\" + patterns.join(\"\\n\"))", "return createHash(\"sha1\").update(String(EXTRACT_LOGIC_REV))"),
+    expectFail: "改一条 pattern ⇒ 版本必须变；同一组 pattern ⇒ 版本稳定",
+  },
+  {
+    id: "tags-version-hardcoded-literal",
+    src: "src/agent/map/parse.ts",
+    test: "tests/tags-extract-version.test.ts",
+    desc: "导出的版本被写成字面量 ⇒ 派生函数还在、测试①还绿，但真机上那张图用的已不是它算出来的值。" +
+      "这一格只有「常量 === 按现网 pattern 算出来的值」这条断言能看见",
+    apply: (s) => s.replace("export const TAGS_EXTRACT_VERSION = tagsExtractVersion(PATTERNS);", "export const TAGS_EXTRACT_VERSION = \"000000000000\";"),
+    expectFail: "导出的常量确实等于按现网 pattern 算出来的值（不是抄下的字面量）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

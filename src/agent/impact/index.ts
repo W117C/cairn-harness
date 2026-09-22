@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { fileTags, TreeSitterUnavailableError, type SymbolTag } from "../map/parse.js";
+import { fileTags, TAGS_EXTRACT_VERSION, TreeSitterUnavailableError, type SymbolTag } from "../map/parse.js";
 import { MAX_FILES_DEFAULT, scanSourceFiles, type ScannedFile } from "../map/build.js";
 
 /** grammar 环境级失败（坏/缺失 wasm）：影响面是护栏能力，必须 fail-loud。
@@ -68,6 +68,9 @@ function cacheFileFor(dir: string, abs: string): string {
 }
 
 interface ImpactTagsCacheEntry {
+  /** 抽取判据版本：与 map 侧同一把（`TAGS_EXTRACT_VERSION`），两份缓存各判各的但版本源只有一个。
+   *  缺它 ⇒ 改 pattern 后这张图仍从盘上读回旧判据的 tags，新判据对未变更文件不生效。 */
+  v: string;
   mtimeMs: number;
   size: number;
   tags: SymbolTag[];
@@ -77,6 +80,7 @@ async function readTagsCache(dir: string, f: ScannedFile): Promise<SymbolTag[] |
   try {
     const raw = await readFile(cacheFileFor(dir, f.abs), "utf8");
     const e = JSON.parse(raw) as ImpactTagsCacheEntry;
+    if (e.v !== TAGS_EXTRACT_VERSION) return null; // 判据换过（含旧条目无 v 字段）→ 作废
     if (e.mtimeMs === f.mtimeMs && e.size === f.size && Array.isArray(e.tags)) return e.tags;
     return null; // 指纹变化 → miss（文件被改过）
   } catch {
@@ -87,7 +91,7 @@ async function readTagsCache(dir: string, f: ScannedFile): Promise<SymbolTag[] |
 async function writeTagsCache(dir: string, f: ScannedFile, tags: SymbolTag[]): Promise<void> {
   try {
     await mkdir(dir, { recursive: true });
-    const entry: ImpactTagsCacheEntry = { mtimeMs: f.mtimeMs, size: f.size, tags };
+    const entry: ImpactTagsCacheEntry = { v: TAGS_EXTRACT_VERSION, mtimeMs: f.mtimeMs, size: f.size, tags };
     await writeFile(cacheFileFor(dir, f.abs), JSON.stringify(entry), "utf8");
   } catch (err) {
     // 缓存写失败不影响本次建图（下次全量重解析），与 map 同口径

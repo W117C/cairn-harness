@@ -2,6 +2,7 @@
 // def/ref captures，产出单文件 tags（名字/种类/行号，1-based）。任何异常由调用方降级
 // （buildMap 静默跳过），本模块只负责单文件 tags 的确定性产出：语法错误文件不抛、返回空 tags。
 import { createRequire } from "node:module";
+import { createHash } from "node:crypto";
 
 // web-tree-sitter 会被 electron-vite 打进 main bundle：wasm/grammar 路径必须运行时从真实
 // node_modules 解析（坑二十四同款，不能让打包器静态分析 require.resolve）。
@@ -101,6 +102,27 @@ const PATTERNS = [
   "(call function: (attribute attribute: (identifier) @ref))",
   "(assignment left: (identifier) right: (identifier) @ref)",
 ];
+
+/** 抽取**逻辑本体**的版本（谁算一个符号、谁算一次引用的那段代码）。pattern 文本已自动进哈希，
+ *  这一条只兜住「文本一字没动而判断变了」——改 `atModuleScope`/属性式取舍时手工 +1。
+ *  ⚠️ 必须先于 `TAGS_EXTRACT_VERSION` 声明：后者在模块求值期就要读它（放后面是 TDZ 崩）。 */
+const EXTRACT_LOGIC_REV = 1;
+/** 版本号的算法单独成一个纯函数：判卷可以直接拿「改一行 pattern ⇒ 版本必须变」这条不变量打它。 */
+export function tagsExtractVersion(patterns: readonly string[]): string {
+  return createHash("sha1").update(EXTRACT_LOGIC_REV + "\n" + patterns.join("\n")).digest("hex").slice(0, 12);
+}
+/** 抽取判据的版本号（sha1 前 12 位，由上面这些输入派生，**不是手写的常量**）。
+ *
+ *  为什么非要有：map 与 impact 两份 tags 磁盘缓存的命中判据只有 `{mtimeMs,size}`。
+ *  改了抽取判据而未改动的那些文件，下次建图仍会从盘上读回**旧判据**抽出的 tags ⇒
+ *  新判据对它们根本不生效，而现象是「改了没反应」——极易被误读成修法无效，
+ *  于是把正确的改动回滚掉（2026-09-23 立此条；动因与读数量见
+ *  `outputs/impact-precision-2026-09-23.md`：不先有版本号，那次「把局部变量与属性名踢出符号表」
+ *  对 397/400 个文件都不会生效）。
+ *  旧条目没有 `v` 字段 ⇒ 与任何版本号都不相等 ⇒ 自然按 miss 处理（一次全量重解析，之后稳定）。 */
+/** 只读导出：让判卷能验「版本 = 按这组 pattern 算出来的」这条派生关系，而不是信注释。 */
+export const TAGS_PATTERNS: readonly string[] = PATTERNS;
+export const TAGS_EXTRACT_VERSION = tagsExtractVersion(PATTERNS);
 
 /** 每语言缓存一把编译好的 Query（有效模式并集）；编译失败的模式静默跳过。 */
 const queryCache = new Map<string, import("web-tree-sitter").Query | null>();

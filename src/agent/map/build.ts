@@ -9,7 +9,7 @@ import { join, relative, resolve, sep } from "node:path";
 import { spawn } from "node:child_process";
 import { rgBinary } from "../../tools/ripgrep.js";
 import { sanitizedEnv } from "../../tools/process.js";
-import { fileTags, SUPPORTED_EXTS, TreeSitterUnavailableError, type SymbolTag } from "./parse.js";
+import { fileTags, SUPPORTED_EXTS, TAGS_EXTRACT_VERSION, TreeSitterUnavailableError, type SymbolTag } from "./parse.js";
 import { buildGraph, personalizedPageRank, type FileTagsInput } from "./rank.js";
 import { clampBudget, renderMapBudget } from "./render.js";
 
@@ -19,6 +19,9 @@ export const MAX_FILES_DEFAULT = 400;
 const RECOMPUTE_EVERY_DEFAULT = 10;
 
 export interface TagsCacheEntry {
+  /** 抽取判据版本（`parse.ts` 从 PATTERNS 派生）。指纹相同但版本不同 ⇒ 按 miss 重解析：
+   *  没有这一条，改 pattern 对**未变更的文件**永远不生效，现象是「改了没反应」。 */
+  v: string;
   mtimeMs: number;
   size: number;
   tags: SymbolTag[];
@@ -101,6 +104,7 @@ async function readTagsCache(dir: string, f: ScannedFile): Promise<SymbolTag[] |
   try {
     const raw = await readFile(cacheFileFor(dir, f.abs), "utf8");
     const e = JSON.parse(raw) as TagsCacheEntry;
+    if (e.v !== TAGS_EXTRACT_VERSION) return null; // 抽取判据换过 → 旧 tags 一律作废（缺 v 字段同此支）
     if (e.mtimeMs === f.mtimeMs && e.size === f.size && Array.isArray(e.tags)) return e.tags;
     return null; // {mtime,size} 指纹变化 → miss
   } catch {
@@ -111,7 +115,7 @@ async function readTagsCache(dir: string, f: ScannedFile): Promise<SymbolTag[] |
 async function writeTagsCache(dir: string, f: ScannedFile, tags: SymbolTag[]): Promise<void> {
   try {
     await mkdir(dir, { recursive: true });
-    const entry: TagsCacheEntry = { mtimeMs: f.mtimeMs, size: f.size, tags };
+    const entry: TagsCacheEntry = { v: TAGS_EXTRACT_VERSION, mtimeMs: f.mtimeMs, size: f.size, tags };
     await writeFile(cacheFileFor(dir, f.abs), JSON.stringify(entry), "utf8");
   } catch (err) {
     console.debug("[map] tags 缓存写失败（忽略）:", err instanceof Error ? err.message : String(err));
