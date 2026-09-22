@@ -58,3 +58,36 @@ cd /tmp/dsh-gates && TERM=dumb node --import tsx scripts/gates.ts --direct
 （壳不变量的逐型通判、「恰好一个壳」的另一半、影响面读端三分诊、grep/glob 阴性说明、三份记录）**没有把
 任何一道门从绿推成红**；HEAD 上确证的缺口只有「锚点先落地、被测码没跟上」这一族。
 （这里刻意不写「N 笔提交」——数字一漂就成了下一颗过期字，本仓对门数/测试数早立过同一条规矩。）
+
+## 换装置重跑（真装 worktree）：上一条读数里有一处假红，另一处红变得更严重
+
+`git worktree add` + `pnpm install --prefer-offline` 在暖 store 上是 **3.4 秒 / 288MB**——我原先假设它"慢"，
+为了省这 3 秒一直用软链，而软链正是规则 52 里"测不到 pnpm 那一跳"的装置。换上真装后（HEAD `4bc60d5`）：
+
+| 门 | 软链 worktree | **真装 worktree** |
+|---|---|---|
+| `test` | 2 failed（`gated-tools`、`runner-gates`） | **exit 0，196 files / 1982 tests 全绿**（65.5s） |
+| `e2e` | ❌ 装置红 | **exit 0**（3.3s） |
+| `ipc:check` | ❌ 装置红 | **exit 0**（2.0s） |
+| `gate-check` | ❌ 装置红 | **exit 0**（2.1s） |
+| `mutate-needles-check` | 阻断 4 | **阻断 6** |
+
+### 由此撤掉一条待办的立论
+
+**#33「HEAD 上有 2 条红测」是从一开始就是假的。** 那两条正是经 `run_shell`→`pnpm` 的判卷面，
+在软链 worktree 里必红（规则 52 早就这么写，我自己 09-22 还引用过它，却还是把红登记成了 HEAD 事实）。
+真装装置下它们 4 条全绿。⇒ 待办已结案为"假红·装置成因"，AGENTS.md 的「HEAD 现态」段也该按这个口径改（待办 #6 第 ⑶ 条）。
+**立"HEAD 有红"这类待办之前，先用真装 worktree 复现一次——它只要 3 秒。**
+
+### 反而更严重的：HEAD 上断针从 4 条变 6 条
+
+新增两条与沙箱那族同形状（锚点先提交、被测码还在别人工作树里）：
+`d7-worker-optout-ignored`（`src/tools/write_file.ts`）、`d7-snapshot-id-not-in-event`（`src/agent/loop.ts`）。
+`d7-snapshot-taken-for-new-file` 的 `src/tools/snapshot.ts` 在 HEAD 里仍不存在。⇒ 已并入待办 #37（现记 6 条）。
+
+### 顺手量到门表自身的一处 fail-open（另立待办）
+
+`scripts/gates.ts` 只回显每道门的 **exit code**，把门自己的 stdout 吞掉（`▶ test … ✅ test exit=0 66906ms`，
+没有任何 "Test Files / Tests" 行）。而 `vitest run` 在**收集到 0 个测试文件**时退出码也是 0。
+⇒ 「✅ test 门绿」这句话目前不能证明它跑了 1982 条测试。修法很小：runner 为每道门留一行
+关键计数（或至少在 `test` 门里没出现 `Test Files` 汇总行时判红），让"零观测"不叫绿。
