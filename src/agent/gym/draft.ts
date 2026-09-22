@@ -30,6 +30,10 @@ export interface GymDraft {
   verifyOk: boolean | null;
   verifyAttempts: number;
   toolCalls: number;
+  /** **父流**里没有结果的工具调用笔数：会话中途被切断 / 结果没落盘都长这样。
+   *  2026-09-23 在唯一一条真·持久化会话上量到的：3 个 tool_call、2 个 tool_result，
+   *  末笔是 `run_shell`（`pnpm test`）且无结果——当时的清单对这一格一字未提。 */
+  unansweredCalls: number;
   hadError: boolean;
   /** 一份 case 还差什么才算齐——逐条说清是"人必须给"还是"这条会话本身不适合"。 */
   missing: string[];
@@ -38,6 +42,10 @@ export interface GymDraft {
 export function draftFromEvents(events: readonly AgentEvent[]): GymDraft {
   const userTexts: string[] = [];
   const callPath = new Map<string, string>(); // tool_call.id → 该次写盘的目标路径（主流程）
+  // 半截轨迹的账：父流里每笔工具调用先 +1，配到结果再 -1。
+  // **两侧都必须先看 agent_id**——各家缺省 callId 是流内序号，parent 与 worker 可以都有 `call-0`；
+  // 只按 id 配对 = worker 的结果把 parent 的调用**假答**掉，这条「轨迹是半截的」便永远不报。
+  const pending = new Map<string, number>();
   const written = new Set<string>();
   let failedWrites = 0, workerWrites = 0, toolCalls = 0, verifyAttempts = 0, hadError = false;
   let verifyOk: boolean | null = null;
@@ -48,6 +56,8 @@ export function draftFromEvents(events: readonly AgentEvent[]): GymDraft {
         break;
       case "tool_call": {
         toolCalls++;
+        // 记账在两个 break **之前**：半截与否与「是不是写盘工具」无关，一条只跑测试的会话同样会断在半路。
+        if (e.agent_id === undefined) pending.set(e.id, (pending.get(e.id) ?? 0) + 1);
         if (!DRAFT_WRITE_TOOLS.has(e.name)) break;
         if (e.agent_id !== undefined) { workerWrites++; break; } // 子流的写不算 parent 的改动
         const p = typeof e.args.path === "string" ? e.args.path : "";
@@ -59,6 +69,9 @@ export function draftFromEvents(events: readonly AgentEvent[]): GymDraft {
         // **流内序号**（openai `call-${index}`、gemini `gemini-call-${seq}`）⇒ parent 与 worker
         // 完全可以都有 `call-0`。只在 tool_call 面归因 = 只挡了一半取料面（AGENTS 记的同族缺陷）。
         if (e.agent_id !== undefined) break;
+        const left = (pending.get(e.callId) ?? 0) - 1; // 父流的结果才销得到账
+        if (left > 0) pending.set(e.callId, left);
+        else pending.delete(e.callId); // 对不上任何调用的结果（日志只截到后半段）不留下负数
         const p = callPath.get(e.callId);
         if (p === undefined) break;
         if (e.ok) written.add(p);
@@ -80,6 +93,8 @@ export function draftFromEvents(events: readonly AgentEvent[]): GymDraft {
     }
   }
   const task = userTexts.length > 0 ? userTexts[0] : "";
+  let unansweredCalls = 0;
+  for (const n of pending.values()) unansweredCalls += n;
   const missing: string[] = [
     "repo/：pristine 靶子不在事件流里（会话跑在真工作区上；D7 快照只覆盖非空覆写那一格）⇒ 必须人给一份最小仓库",
     "negative.json：已知错误解要人写（自动生成＝编一个反例来证明尺子有效）",
@@ -90,6 +105,8 @@ export function draftFromEvents(events: readonly AgentEvent[]): GymDraft {
   if (verifyOk === null) missing.push("没有 verify_result ⇒ mustPassVerify 无从判，本模块因此**不产 expect.json**（不拿 false 冒充判据）");
   if (written.size === 0) missing.push("主流程一次成功的写盘都没有 ⇒ 这不是一条改动类任务，不适合直接进靶场");
   if (failedWrites > 0) missing.push(`写盘失败 ${String(failedWrites)} 次 ⇒ 先确认这条轨迹值得当尺子，而不是把一次半途而废固化下来`);
+  if (unansweredCalls > 0) missing.push(`有 ${String(unansweredCalls)} 次工具调用在流里没有结果 ⇒ 这条轨迹是**半截的**` +
+    "（会话中途被切断，或结果压根没落盘——两种都不是可冻结的 case，先弄清是哪一种）");
   if (hadError) missing.push("会话里出现过 error 事件 ⇒ 先排除它是环境失败伪装的（那种该修环境，不该进 case）");
   if (workerWrites > 0) missing.push(`worker 子流另有 ${String(workerWrites)} 次写盘：已排除在候选集外（parent 的 case 不含 worker 的改动）`);
   return {
@@ -101,6 +118,7 @@ export function draftFromEvents(events: readonly AgentEvent[]): GymDraft {
     verifyOk,
     verifyAttempts,
     toolCalls,
+    unansweredCalls,
     hadError,
     missing,
   };
@@ -122,7 +140,8 @@ export function renderDraft(d: GymDraft, caseId: string): Record<string, string>
       "",
       "统计：tool_call " + String(d.toolCalls) + " 次 · verify " + String(d.verifyAttempts) +
         " 次（最后一次 " + (d.verifyOk === null ? "无" : d.verifyOk ? "绿" : "红") + "）· " +
-        "写失败 " + String(d.failedWrites) + " · worker 写 " + String(d.workerWrites),
+        "写失败 " + String(d.failedWrites) + " · worker 写 " + String(d.workerWrites) +
+        " · 无结果的工具调用 " + String(d.unansweredCalls),
       "",
     ].join("\n"),
   };

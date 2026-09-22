@@ -5900,8 +5900,9 @@ const MUTATIONS = [
     desc: "同一条不变量的**第三面**：agent_id 只在 tool_call 与 verify_result 上挡，tool_result 不挡。" +
       "provider 缺省 callId 是**流内序号**（openai 两处 `c.id ?? \`call-${index}\``、gemini `gemini-call-${seq++}`）⇒ " +
       "BYOK 的端点不给 id 时，parent 与每个 worker 都从 call-0 开始，worker 的失败结果会命中 parent 的 callPath，" +
-      "凭空给这条轨迹加上「写盘失败 ⇒ 不值得固化」（真流量样本 0 撞号：那条 GLM 自带 id，所以这是取料面补全，不是现状修复）",
-    apply: (s) => s.replace("        if (e.agent_id !== undefined) break;\n        const p = callPath.get(e.callId);", "        const p = callPath.get(e.callId);"),
+      "凭空给这条轨迹加上「写盘失败 ⇒ 不值得固化」（真流量样本 0 撞号：那条 GLM 自带 id，所以这是取料面补全，不是现状修复）。" +
+      "2026-09-23 改指：半截轨迹那三行插在了闸与 `callPath` 之间，旧的两行针脚不再相邻",
+    apply: (s) => s.replace("        if (e.agent_id !== undefined) break;\n        const left = (pending.get(e.callId) ?? 0) - 1;", "        const left = (pending.get(e.callId) ?? 0) - 1;"),
     expectFail: "callId 撞名（provider 缺省 id 是流内序号）：worker 的失败结果不算 parent 写坏，parent 自己的仍算",
   },
   {
@@ -6005,6 +6006,37 @@ const MUTATIONS = [
       "于是没人能给这张表设预算（而预算正是别被掐死在突变那一拍的手段）",
     apply: (s) => s.replace("consumed.add(i + 1);", "consumed.add(-1); // 值位没被吞"),
     expectFail: "`--budget-ms 600000` 的值不是锚点 id（旧分流会报「未知 id 600000」，等于没人能设预算）",
+  },
+  // ---- 半截轨迹（2026-09-23，在唯一一条真·持久化会话上量到：`run_shell` 那一笔没有结果，
+  //      而草稿当时的清单对这一格一字未提）。同一条 agent_id 闸现在**同时**守着两支消费：
+  //      callPath 归因与 pending 配对 ⇒ 按规则 69，改这一行必须两条锚点各点一个名，
+  //      否则将来谁删了其中一支用例，另一支会静默失去守门人。
+  {
+    id: "gym-draft-half-open-pairing-ignores-agent-id",
+    src: "src/agent/gym/draft.ts",
+    test: "tests/gym-draft.test.ts",
+    desc: "结果侧那道 agent_id 闸被摘 ⇒ worker 的结果去销 parent 的账。缺省 callId 是流内序号，" +
+      "两边都有 `call-0`：一条被切断的 parent 轨迹会被子流「答」成完整，那条「半截」永远不报",
+    apply: (s) => s.replace("        if (e.agent_id !== undefined) break;\n        const left = (pending.get(e.callId) ?? 0) - 1;", "        const left = (pending.get(e.callId) ?? 0) - 1;"),
+    expectFail: "撞号时 worker 的结果不许把 parent 的调用**假答**掉（配对面的 agent_id 闸）",
+  },
+  {
+    id: "gym-draft-half-open-counts-worker-calls",
+    src: "src/agent/gym/draft.ts",
+    test: "tests/gym-draft.test.ts",
+    desc: "调用侧不再区分父子流 ⇒ worker 没结果的那几笔被算成 parent 的半截。" +
+      "后果是把「worker 还在跑」读成「这条轨迹断在半路」，而 parent 其实一行不差地走完了",
+    apply: (s) => s.replace("        if (e.agent_id === undefined) pending.set(e.id, (pending.get(e.id) ?? 0) + 1);", "        pending.set(e.id, (pending.get(e.id) ?? 0) + 1);"),
+    expectFail: "worker 子流自成一对 ⇒ 不算 parent 的半截（同一支闸的另一侧）",
+  },
+  {
+    id: "gym-draft-half-open-blocker-dropped",
+    src: "src/agent/gym/draft.ts",
+    test: "tests/gym-draft.test.ts",
+    desc: "「有 N 次工具调用没有结果」这条不出现在「还缺」清单里 ⇒ 半截轨迹与完整轨迹在草稿面上同形，" +
+      "而被冻结成 case 之后每次回放都在学一个不存在的终局",
+    apply: (s) => s.replace("if (unansweredCalls > 0) missing.push(", "if (false) missing.push("),
+    expectFail: "末笔调用没有结果 ⇒ 点名「半截」并带笔数（真实形状：run_shell 无结果）",
   },
 ];
 

@@ -146,3 +146,49 @@ describe("casePathProblem（草稿不许混进冻结面）", () => {
     expect((await loadGymIndex(dir)).cases.length).toBe(1);
   });
 });
+
+// 半截轨迹（2026-09-23 在唯一一条真·持久化会话上量到）：那个文件以
+// `{type:"tool_call",id:"c3",name:"run_shell",args:{command:"pnpm test"}}` 收尾，后面什么都没有——
+// 会话切在工具调用中途，而草稿当时的「还缺」清单对这一格一字未提。
+// 动因同 #47 那条纪律：一条没跑完的轨迹一旦被冻结成 case，之后每次回放都在学一个不存在的终局。
+describe("半截轨迹：没有结果的工具调用必须出声", () => {
+  const shellCall = (id: string, agentId?: string): AgentEvent =>
+    ({ type: "tool_call", id, name: "run_shell", args: { command: "pnpm test" }, ...(agentId ? { agent_id: agentId } : {}) });
+  const blocker = (d: { missing: string[] }): boolean => d.missing.some((m) => m.includes("半截"));
+
+  it("末笔调用没有结果 ⇒ 点名「半截」并带笔数（真实形状：run_shell 无结果）", () => {
+    const d = draftFromEvents([user("t"), call("c1", "src/a.ts"), result("c1", true), shellCall("c2")]);
+    expect(d.unansweredCalls).toBe(1);
+    expect(blocker(d)).toBe(true);
+    expect(d.missing.some((m) => m.includes("1 次工具调用在流里没有结果"))).toBe(true);
+  });
+
+  it("反面对手：每笔调用都配到结果 ⇒ 不出声（这条判据不许变成常驻噪声）", () => {
+    const d = draftFromEvents([user("t"), call("c1", "src/a.ts"), result("c1", true), shellCall("c2"), result("c2", true), verify(true)]);
+    expect(d.unansweredCalls).toBe(0);
+    expect(blocker(d)).toBe(false);
+  });
+
+  it("撞号时 worker 的结果不许把 parent 的调用**假答**掉（配对面的 agent_id 闸）", () => {
+    // parent 与 worker 的缺省 callId 都是流内序号：两边都有 `call-0`，只有 worker 拿到了结果
+    const d = draftFromEvents([
+      user("t"), call("call-0", "src/a.ts"), shellCall("call-0", "w1"), result("call-0", true, "w1"),
+    ]);
+    expect(d.unansweredCalls).toBe(1);
+    expect(blocker(d)).toBe(true);
+  });
+
+  it("worker 子流自成一对 ⇒ 不算 parent 的半截（同一支闸的另一侧）", () => {
+    const d = draftFromEvents([user("t"), call("c1", "src/a.ts"), result("c1", true), shellCall("c9", "w1")]);
+    expect(d.unansweredCalls).toBe(0);
+    expect(blocker(d)).toBe(false);
+  });
+
+  it("日志只剩后半段（结果对不上任何调用）不留负数，且 DRAFT.md 的统计行带出笔数", () => {
+    const d = draftFromEvents([user("t"), result("zz", true)]);
+    expect(d.unansweredCalls).toBe(0);
+    const files = renderDraft({ ...d, unansweredCalls: 2 }, "x1");
+    expect(files["DRAFT.md"]).toContain("无结果的工具调用 2");
+  });
+});
+
