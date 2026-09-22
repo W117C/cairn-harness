@@ -9,10 +9,12 @@
 //       pnpm gates --no-scan   （跳过恒真式体检）
 //       pnpm gates --direct    （绕开 pnpm 的 deps 检查：主树被别的会话占着时，去隔离 worktree 跑整表）
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { countUnverified, gateUnverified, scanAssertionHealth, scanDisjunctions, silentGreenGate, type ScanHit } from "./assertion-health";
+import { SCAN_EXT, trackedScriptFiles } from "./lib/scan-scope";
 import { checkGateManifest, EXEMPT_SCRIPTS, GATES, gateCommand } from "./gate-manifest";
 // 耗时账本（同族：判据在 ./facts.ts，那边可单测；本文件只负责「跑完顺手记一笔」）。
 import { appendRun, currentHost, type GateRun } from "./facts";
@@ -39,22 +41,36 @@ interface GateResult {
 async function scanAll(): Promise<ScanHit[]> {
   const dir = join(ROOT, "scripts");
   const hits: ScanHit[] = [];
-  const SCAN_EXT = /\.(?:ts|tsx|mjs|cjs|js)$/;
-  const walk = async (d: string): Promise<void> => {
+  const walk = async (d: string): Promise<string[]> => {
+    const out: string[] = [];
     for (const ent of await readdir(d, { withFileTypes: true })) {
       const p = join(d, ent.name);
       if (ent.isDirectory()) {
-        if (ent.name === "node_modules") continue;
-        await walk(p);
+        if (ent.name !== "node_modules") out.push(...await walk(p));
         continue;
       }
-      if (!SCAN_EXT.test(ent.name)) continue;
-      const src = await readFile(p, "utf8");
-      hits.push(...scanAssertionHealth(ent.name, src));
-      hits.push(...scanDisjunctions(ent.name, src)); // H-1：AST 级析取式弱断言
+      if (SCAN_EXT.test(ent.name)) out.push(relative(ROOT, p));
     }
+    return out;
   };
-  await walk(dir);
+  // 扫描面 = 已跟踪脚本（口径见 ./lib/scan-scope.ts）。git 清单取不到时退回磁盘遍历并出声：
+  // 宁可把在飞草稿多判几条，也不许"取不到清单"变成"没有要扫的东西"。
+  const tracked = trackedScriptFiles(ROOT);
+  const files = tracked ?? await walk(dir);
+  if (tracked === null) console.log("  ⚠️ 取不到 git 清单，体检退回磁盘遍历（会把未跟踪的在飞草稿一起判）");
+  else console.log("  扫描面：" + String(files.length) + " 个已跟踪脚本（未跟踪草稿不判，口径同 tests/assertion-health-scan.test.ts）");
+  const gone: string[] = [];
+  for (const rel of files) {
+    const abs = join(ROOT, rel);
+    if (!existsSync(abs)) {
+      gone.push(rel); // 别人未提交的删除：跳过但不静默
+      continue;
+    }
+    const src = await readFile(abs, "utf8");
+    hits.push(...scanAssertionHealth(rel, src));
+    hits.push(...scanDisjunctions(rel, src)); // H-1：AST 级析取式弱断言
+  }
+  if (gone.length > 0) console.log("  ⚠️ 清单里有 " + String(gone.length) + " 个文件盘上不存在，已跳过：" + gone.join("、"));
   return hits;
 }
 

@@ -5602,6 +5602,41 @@ const MUTATIONS = [
     apply: (s) => s.replace("  return code === 0 && output.trim() === \"\";", "  return code === 0;"),
     expectFail: "红 + 空输出 ⇒ 不判为静默（红门已经判红，不再重复计未证）",
   },
+  {
+    id: "empty-assert-arity-guard-dropped",
+    src: "scripts/assertion-health.ts",
+    test: "tests/assertion-health-scan.test.ts",
+    desc: "空断言丢掉「恰好两参」这一眼 ⇒ 三参等值签名 check(name, actual, expected) 那族真断言又被整批判成空断言，" +
+      "而体检命中是判红的：判据越界会把「解释怎么写」变成「门表怎么红」",
+    apply: (s) => s.replace("|| (args.length === 2 && isTrueLit(args[1]!));", "|| (args.length >= 2 && isTrueLit(args[1]!));"),
+    expectFail: "三参等值签名 check(name, actual, true) ⇒ 不报（旧正则把这一族整批判成空断言）",
+  },
+  {
+    id: "empty-assert-label-first-lost",
+    src: "scripts/assertion-health.ts",
+    test: "tests/assertion-health-scan.test.ts",
+    desc: "收窄判定面时把该留的那一半也收掉了 ⇒ label-first 的 check(\"x\", true) 不再报，空断言重新无声通过",
+    apply: (s) => s.replace("|| (args.length === 2 && isTrueLit(args[1]!));", "|| false;"),
+    expectFail: "label-first 两参 check(label, true) ⇒ 报（收窄判定面后必须留着的那一半）",
+  },
+  {
+    id: "tautology-left-branch-lost",
+    src: "scripts/assertion-health.ts",
+    test: "tests/assertion-health-scan.test.ts",
+    desc: "恒真式只认右支字面 true（旧正则的形状）⇒ `true || x` 这一支回到网外。加宽判定面必须有用例钉住新那一支，" +
+      "否则加宽是无声的",
+    apply: (s) => s.replace("&& (b.left.kind === ts.SyntaxKind.TrueKeyword || b.right.kind === ts.SyntaxKind.TrueKeyword);",
+      "&& b.right.kind === ts.SyntaxKind.TrueKeyword;"),
+    expectFail: "代码里的恒真式仍报：右支字面 true 与新加的左支字面 true",
+  },
+  {
+    id: "scan-scope-empty-list-silent",
+    src: "scripts/lib/scan-scope.ts",
+    test: "tests/assertion-health-scan.test.ts",
+    desc: "「没拿到清单」与「没有要扫的东西」同形 ⇒ 体检在 git 异常/空清单时静默扫 0 个文件并报零命中（假绿）",
+    apply: (s) => s.replace("return files.length === 0 ? null : files;", "return files;"),
+    expectFail: "已跟踪清单为空 ⇒ 返回 null（调用方退回磁盘遍历，不静默少判）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

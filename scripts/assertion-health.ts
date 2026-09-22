@@ -2,14 +2,74 @@
 // 判据面：空断言 / 恒真式 / 暗卷段零断言 / **析取式弱断言（H-1，AST 级）** / 未证计数（H-2）。
 import ts from "typescript";
 
-/** 空断言：check/assert/ok 的第一或第二实参字面量 true。 */
-const EMPTY_ASSERT = /(?:check|assert|ok)\s*\(\s*(?:[^()]*,\s*true\s*\)|true\s*,)/;
-/** 恒真式：`X || true` / `X === null || true`。 */
-const TAUTOLOGY = /\|\|\s*true\b/;
 const HAS_ASSERTION = /(?:check|assert|ok)\s*\(/;
 
-/** 断言函数名（与 HAS_ASSERTION / EMPTY_ASSERT 同一套口径）。 */
+/** 断言函数名（与 HAS_ASSERTION / scanEmptyAsserts 同一套口径）。 */
 const ASSERT_NAMES: ReadonlySet<string> = new Set(["check", "assert", "ok", "assertEqual", "expectEqual"]);
+
+/** 恒真式（AST 级）：`X || true` / `true || X` —— 一支是字面量 true，整条条件恒成立。 */
+function isOrWithLiteralTrue(b: ts.BinaryExpression): boolean {
+  return b.operatorToken.kind === ts.SyntaxKind.BarBarToken
+    && (b.left.kind === ts.SyntaxKind.TrueKeyword || b.right.kind === ts.SyntaxKind.TrueKeyword);
+}
+
+export function scanTautologies(file: string, src: string): ScanHit[] {
+  const hits: ScanHit[] = [];
+  const sf = ts.createSourceFile(file, src, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+  const lines = src.split("\n");
+  const visit = (node: ts.Node): void => {
+    if (ts.isBinaryExpression(node) && isOrWithLiteralTrue(node)) {
+      const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
+      hits.push({ file, line, kind: "tautology", text: (lines[line - 1] ?? node.getText(sf)).trim() });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return hits;
+}
+
+/**
+ * 空断言（AST 级，取代旧的字面正则 `EMPTY_ASSERT`）。两种形态：
+ *  ① 第一实参是字面量 `true` ⇒ `check(true, "永远绿")`、`assert(true)`；
+ *  ② **恰好两个实参**、第二是字面量 `true` ⇒ label-first 签名下的 `check("x", true)`。
+ *
+ * ②为什么要数实参个数而不是"最后一个实参是不是 true"：本仓断言签名至少三套
+ *（cond-first、label-first、**三参等值** `check(name, actual, expected)`）。等值签名里
+ * `check("折叠项目组后行数减少", collapsed < 8, true)` 的 `true` 是**期望值**，是一条真断言。
+ * 旧正则把这一族整批误判成空断言（实测：`scripts/sidebar-probe.ts` 三条里中两条、漏一条——
+ * 第三条只因参数里带括号才侥幸没报）。
+ *
+ * 两支都从"按行正则"改成 AST 的另一半原因：**注释里的示例会被当成代码**。旧写法只 strip
+ * 行内块注释与行注释，块注释的续行（` * …`）不在它眼里 ⇒ 在本文件的文档注释里举一个
+ * `check("x", true)` 的例子，就能把整张门表判红（写这段时当场踩到，实测 3 条自命中）。
+ * "体检命中"是判红的，判据越界与漏判一样贵——它教人来忽略红的含义。
+ */
+export function scanEmptyAsserts(file: string, src: string): ScanHit[] {
+  const hits: ScanHit[] = [];
+  const sf = ts.createSourceFile(file, src, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+  const lines = src.split("\n");
+  const isTrueLit = (n: ts.Node): boolean => n.kind === ts.SyntaxKind.TrueKeyword;
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      const name = ts.isIdentifier(callee)
+        ? callee.text
+        : ts.isPropertyAccessExpression(callee) ? callee.name.text : "";
+      const args = node.arguments;
+      if (ASSERT_NAMES.has(name)) {
+        const hollow = (args.length > 0 && isTrueLit(args[0]!))
+          || (args.length === 2 && isTrueLit(args[1]!));
+        if (hollow) {
+          const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
+          hits.push({ file, line, kind: "empty-assert", text: (lines[line - 1] ?? node.getText(sf)).trim() });
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return hits;
+}
 
 /**
  * 显式豁免注释：`// gates:disjunction-ok <理由>`。
@@ -26,13 +86,8 @@ export interface ScanHit {
 
 /** 扫描一个脚本源码：空断言 / 恒真式 / 无断言段（纯函数，可单测）。 */
 export function scanAssertionHealth(file: string, src: string): ScanHit[] {
-  const hits: ScanHit[] = [];
+  const hits: ScanHit[] = [...scanEmptyAsserts(file, src), ...scanTautologies(file, src)];
   const lines = src.split("\n");
-  lines.forEach((raw, i) => {
-    const line = raw.replace(/\/\*.*?\*\//g, "").replace(/\/\/.*$/, ""); // 去注释（行内块注释 + 行注释），避免注释/文档串里的示例误伤
-    if (EMPTY_ASSERT.test(line)) hits.push({ file, line: i + 1, kind: "empty-assert", text: raw.trim() });
-    else if (TAUTOLOGY.test(line)) hits.push({ file, line: i + 1, kind: "tautology", text: raw.trim() });
-  });
   // 暗卷段零断言：以顶层 async function 为粒度，段内无 check/assert/ok 即报警
   const fnRe = /^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/gm;
   const marks: { name: string; start: number; headerLine: number }[] = [];
