@@ -14,7 +14,8 @@ import { buildGraph, personalizedPageRank, type FileTagsInput } from "./rank.js"
 import { clampBudget, renderMapBudget } from "./render.js";
 
 const NOISE_GLOBS = ["**/.git/**", "**/node_modules/**", "**/dist/**", "**/out/**"];
-const MAX_FILES_DEFAULT = 400;
+/** 文件数帽的**唯一事实源**（impact 侧以前各写一个 400 字面量 ⇒ 一处调、另一处静默不跟）。 */
+export const MAX_FILES_DEFAULT = 400;
 const RECOMPUTE_EVERY_DEFAULT = 10;
 
 export interface TagsCacheEntry {
@@ -31,8 +32,10 @@ export interface ScannedFile {
   size: number;
 }
 
-/** 工作区扫描：rg --files（尊重 .gitignore + 噪音排除）→ 源码后缀过滤 → mtime 降序 → 文件数帽。 */
-export async function scanSourceFiles(workspace: string, maxFiles = MAX_FILES_DEFAULT): Promise<ScannedFile[]> {
+/** 工作区扫描（不截断）：按 mtime 降序的**全量候选**。
+ *  与 `scanSourceFiles` 分开是有意的——被帽挤掉的那些文件也得数得出来（第几位、一共几个候选），
+ *  否则「图里没有它」永远只能猜成因。帽的切片只在 `applyFileCap` 一处发生。 */
+export async function scanSourceFilesAll(workspace: string): Promise<ScannedFile[]> {
   const args = [
     "--files",
     "--hidden",
@@ -71,7 +74,17 @@ export async function scanSourceFiles(workspace: string, maxFiles = MAX_FILES_DE
     }
   }
   out.sort((a, b) => b.mtimeMs - a.mtimeMs); // 优先最近改动的文件
-  return out.slice(0, maxFiles);
+  return out;
+}
+
+/** 帽只在这一处发生（"取最近 N 个"这条政策不许有第二份实现）。 */
+export function applyFileCap(files: ScannedFile[], maxFiles: number): ScannedFile[] {
+  return files.slice(0, maxFiles);
+}
+
+/** 工作区扫描：全量候选（`scanSourceFilesAll`）→ 文件数帽（`applyFileCap`）。 */
+export async function scanSourceFiles(workspace: string, maxFiles = MAX_FILES_DEFAULT): Promise<ScannedFile[]> {
+  return applyFileCap(await scanSourceFilesAll(workspace), maxFiles);
 }
 
 // ---- tags 磁盘缓存（应用数据目录）----

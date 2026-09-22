@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { createImpactQueryTool, impactQuerySpec } from "../src/tools/impact-query";
+import { createImpactQueryTool, graphAbsenceNote, impactQuerySpec } from "../src/tools/impact-query";
+import { MAX_FILES_DEFAULT } from "../src/agent/map/build";
 import { TOOLS } from "../src/tools";
 import type { ToolContext } from "../src/tools/base";
 import { checkPermission, isSideEffectTool } from "../src/permissions";
@@ -84,13 +85,62 @@ describe("impact_query：改之前问波及谁", () => {
       await writeFile(join(ws, "node_modules", "pkg", "ghost.ts"), "export function ghost(): number { return 2; }\n", "utf8");
       const r = await createImpactQueryTool(cacheDir).run({ file: "node_modules/pkg/ghost.ts" }, { workspace: ws, emit: async () => {} });
       expect(r.ok).toBe(false);
-      expect(r.output).toContain("存在且后缀受支持，但落在本次符号图外");
+      // 这一支现在说得出**是哪一种**：连候选集都没进 ⇒ 重跑建图也等不到它
+      expect(r.output).toContain("却连候选集都没进");
+      expect(r.output).toContain("重新建图也不会收它");
       expect(r.output).toContain("波及半径未知");
+      expect(r.output).toContain("不等于 0");
       // 反向不许说反话：面板侧钉的是「缺席 ≠ 波及 0」，读端也不能把未知写成 0
       expect(r.output).not.toContain("波及半径为 0");
     } finally {
       await rm(ws, { recursive: true, force: true });
     }
+  });
+
+  // 「在图外」的四种成因（纯函数那半，可精确造位置）：上一版只到"帽 或 忽略规则"的 either/or，
+  // 而两种成因的下一步不同（等下次建图 / 直接换 grep），说成 either/or 等于让模型自己猜。
+  const CAP = MAX_FILES_DEFAULT;
+
+  it("帽外：报出它在候选集里的位置与本次收录数，并给出两条出路", () => {
+    const n = graphAbsenceNote("src/old.ts", CAP, CAP + 11);
+    expect(n).toContain("第 " + String(CAP + 12) + " 位");
+    expect(n).toContain("本次图只收录 " + String(CAP) + " 个");
+    expect(n).toContain("被文件数帽挤掉");
+    expect(n).toContain("不等于 0");
+    expect(n).not.toContain("重新建图也不会收它"); // 帽外≠永久排除，两句不许同形
+  });
+
+  it("没进候选集：说明是忽略规则/噪声目录，并明说重建图也等不到", () => {
+    const n = graphAbsenceNote("gen/client.ts", CAP, -1);
+    expect(n).toContain("却连候选集都没进");
+    expect(n).toContain(".gitignore");
+    expect(n).toContain("重新建图也不会收它");
+    expect(n).toContain("不等于 0");
+    expect(n).not.toContain("本次图只收录"); // 没挤帽就别报帽
+  });
+
+  it("帽内却没进图（快照滞后/解析失败）：给出「再问一次」这条出路，而不是帽或忽略", () => {
+    const n = graphAbsenceNote("src/just-created.ts", CAP, 3);
+    expect(n).toContain("第 4 位");
+    expect(n).toContain("再问一次即可让它进图");
+    expect(n).not.toContain("被文件数帽挤掉");
+    expect(n).not.toContain("却连候选集都没进");
+  });
+
+  it("候选集重扫失败 ⇒ 如实说分辨不出，不许假装有结论", () => {
+    const n = graphAbsenceNote("src/x.ts", CAP, null);
+    expect(n).toContain("候选集重扫失败");
+    expect(n).toContain("说不出是哪一种成因");
+    expect(n).toContain("不等于 0");
+  });
+
+  it("三条具名成因互不同形（同形就等于没分诊）", () => {
+    const set = new Set([
+      graphAbsenceNote("f", CAP, CAP + 1),
+      graphAbsenceNote("f", CAP, -1),
+      graphAbsenceNote("f", CAP, 0),
+    ]);
+    expect(set.size).toBe(3);
   });
 
   it("参数必须恰好一个：两个都给 / 都不给 / 类型不对都显式报错", async () => {

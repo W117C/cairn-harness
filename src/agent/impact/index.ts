@@ -9,7 +9,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileTags, TreeSitterUnavailableError, type SymbolTag } from "../map/parse.js";
-import { scanSourceFiles, type ScannedFile } from "../map/build.js";
+import { MAX_FILES_DEFAULT, scanSourceFiles, type ScannedFile } from "../map/build.js";
 
 /** grammar 环境级失败（坏/缺失 wasm）：影响面是护栏能力，必须 fail-loud。
  *  文案固定含 "unavailable"（判卷锚点）。 */
@@ -107,7 +107,9 @@ function addSites(map: Map<string, ImpactSite[]>, sym: string, site: ImpactSite)
  *  错误契约：grammar 环境级失败（坏/缺失 wasm）抛 ImpactUnavailableError（fail-loud，
  *  文案含 unavailable）；单文件读/解析失败静默跳过（同 map）。 */
 export async function buildImpact(opts: BuildImpactOptions): Promise<ImpactGraph> {
-  const files = await scanSourceFiles(opts.workspace, opts.maxFiles ?? 400);
+  // 帽走 build.ts 那一个常量：读端（impact_query 的分诊）报「第几位 / 收录几个」用的是同一个数，
+  // 两边各写一个 400 就会一处调、另一处静默说错话。
+  const files = await scanSourceFiles(opts.workspace, opts.maxFiles ?? MAX_FILES_DEFAULT);
   const dir = opts.cacheDir ?? defaultImpactCacheDir();
   const defs = new Map<string, ImpactSite[]>();
   const refs = new Map<string, ImpactSite[]>();

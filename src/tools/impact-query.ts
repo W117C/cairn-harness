@@ -10,6 +10,7 @@
 // 不进静态工具表 ⇒ 关着的时候一次请求都不为该工具付字节。
 import { defaultImpactCacheDir, downward, fileImpact, upward, buildImpact, IMPACT_CONTEXT_FILES, IMPACT_CONTEXT_SYMBOLS_PER_FILE, type ImpactSite } from "../agent/impact/index.js";
 import { access } from "node:fs/promises";
+import { MAX_FILES_DEFAULT, scanSourceFilesAll } from "../agent/map/build.js";
 import { SUPPORTED_EXTS } from "../agent/map/parse.js";
 import { assertNotAgentArea, assertRealContainment, resolveInWorkspace, ToolError, type Tool, type ToolResult } from "./base.js";
 
@@ -22,23 +23,50 @@ interface SiteNoun { item: string; group: string; none: string }
 const UP_NOUN: SiteNoun = { item: "跨文件调用点", group: "波及", none: "：无跨文件调用点（波及半径为 0）" };
 const DEP_NOUN: SiteNoun = { item: "引用的外部定义", group: "分布在", none: "：不引用任何定义在别处的符号（依赖面为 0）" };
 
-/** 「不在图内」的四种成因分开说（2026-09-23 实测：本仓 436 个候选源码里 36 个在图外，
- *  支配性成因是**帽**而不是路径写错——旧文案把「未扫到」与「路径写错」混在一句里，
- *  模型照着去 glob 是白跑一轮。这里只多一次 access 系统调用，且只在缺席这条分支上付字。
+/** 「在图外」的四种成因分开说（纯函数，可单测）。
+ *  上一步只分出了「后缀不支持 / 盘上没有」两支，剩下那支原先是一句 either/or
+ *  （"图按最近改动取有限个文件，或被 .gitignore 排除"）——可这两种成因的**下一步不同**：
+ *  帽外是"下次改动就可能进图，现在直读"，被忽略是"图等不到它，直接换 grep/lsp"。
+ *  说成 either/or 等于让模型自己猜该等还是该换。`pos` = 该文件在全量候选里按 mtime 排的位置，
+ *  -1 = 压根没进候选集，null = 候选集重扫失败（不许假装有结论）。 */
+export function graphAbsenceNote(rel: string, cap: number, pos: number | null): string {
+  if (pos === null) {
+    return `impact_query: ${rel} 存在且后缀受支持，但落在本次符号图外 ⇒ 波及半径未知（**不等于 0**）。` +
+      "候选集重扫失败，说不出是哪一种成因；要看全量请直读该文件与其引用方（grep/lsp）";
+  }
+  if (pos < 0) {
+    return `impact_query: ${rel} 在盘上、后缀受支持，却连候选集都没进 ⇒ 被 .gitignore 规则或噪声目录` +
+      "（.git/node_modules/dist/out）永久排除，**重新建图也不会收它**；波及半径未知（**不等于 0**），" +
+      "要查请直接用 grep/lsp 读它的引用方";
+  }
+  if (pos >= cap) {
+    return `impact_query: ${rel} 在候选集第 ${String(pos + 1)} 位，而本次图只收录 ${String(cap)} 个` +
+      `（帽按最近改动取）⇒ 被文件数帽挤掉，波及半径未知（**不等于 0**）；` +
+      "要么直读该文件与其引用方（grep/lsp），要么调大 maxFiles 后重问";
+  }
+  return `impact_query: ${rel} 排在候选集第 ${String(pos + 1)} 位（帽内），却没进这张图 ⇒ 图是刚才那次构建的快照` +
+    "（新建/刚改名，或该文件解析失败被跳过）；再问一次即可让它进图";
+}
+
+/** 「不在图内」的四种成因分开说：后缀不支持 / 路径没有这个文件 / 帽外 / 被忽略规则排除。
+ *  （2026-09-23 实测：本仓 436 个候选源码里 36 个在图外，支配性成因是**帽**而不是路径写错——
+ *  旧文案把「未扫到」与「路径写错」混在一句里，模型照着去 glob 是白跑一轮。）
+ *  这里只多一次 access + 一次候选集重扫，且只在缺席这条分支上付；帽用与建图同一个常量
+ *  （`MAX_FILES_DEFAULT`），两边各写一个数字就会一处调、另一处静默说错话。
  *  「未知 ≠ 0」必须明写：面板侧早已钉死「缺席 ≠ 波及 0」，读端不该说反话。
  *  abs 由调用方解析好传进来（那边已经 resolveInWorkspace + 越界断言过，不重复解析也不重复设防）。 */
-async function notInGraphNote(rel: string, abs: string): Promise<string> {
+async function notInGraphNote(workspace: string, rel: string, abs: string): Promise<string> {
   const ext = rel.includes(".") ? rel.slice(rel.lastIndexOf(".") + 1).toLowerCase() : "";
   if (!SUPPORTED_EXTS.includes(ext)) {
     return `impact_query: ${rel} 的后缀 .${ext} 不在符号图支持集内 ⇒ 波及半径未知（不等于 0）`;
   }
   const onDisk = await access(abs).then(() => true, () => false);
   if (!onDisk) return `impact_query: 该相对路径下没有文件 ⇒ 先 glob 确认（${rel}）`;
-  return (
-    `impact_query: ${rel} 存在且后缀受支持，但落在本次符号图外 ⇒ 波及半径未知（**不等于 0**）。` +
-    "图按最近改动取有限个文件（久未改动的实现常被 tests/ 与产物挤在外），或被 .gitignore 排除；" +
-    "要看全量请直读该文件与其引用方（grep/lsp）"
-  );
+  const cap = MAX_FILES_DEFAULT;
+  const pos = await scanSourceFilesAll(workspace)
+    .then((all) => all.findIndex((f) => f.rel === rel))
+    .catch(() => null); // 重扫失败（rg 坏了等）：如实说"分辨不出"，不假装有结论
+  return graphAbsenceNote(rel, cap, pos);
 }
 
 /** 调用点按文件汇聚的紧凑清单（与 contextNoteFor 同一套帽：宁少不炸上下文）。 */
@@ -85,11 +113,11 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
           // （只有"谁在用我"，没有"我在用谁"）。图只建一次，不复用 fileImpact（它会再建一遍）。
           const graph = await buildImpact({ workspace: ctx.workspace, cacheDir: dir });
           const rel = fileArg.replace(/\\/g, "/");
-          if (!graph.files.includes(rel)) return { ok: false, output: await notInGraphNote(rel, abs) };
+          if (!graph.files.includes(rel)) return { ok: false, output: await notInGraphNote(ctx.workspace, rel, abs) };
           return { ok: true, output: sitesNote("[impact] " + rel + " 引用的外部定义（我在调用谁）", downward(graph, rel), DEP_NOUN) };
         }
         const r = await fileImpact(ctx.workspace, fileArg, dir);
-        if (r === null) return { ok: false, output: await notInGraphNote(fileArg.replace(/\\/g, "/"), abs) };
+        if (r === null) return { ok: false, output: await notInGraphNote(ctx.workspace, fileArg.replace(/\\/g, "/"), abs) };
         // 只列**真的被外面引用到**的符号：fileImpact 的 symbols 含函数内局部名（base/boosted…），
         // 照抄会让一屏摘要塞满无关名字——多花 token 还不给可执行信息。
         const refSyms = [...new Set(r.up.map((s) => s.symbol))].sort();

@@ -6,7 +6,7 @@ import { mkdtemp, rm, mkdir, writeFile, utimes, readdir, access } from "node:fs/
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createMapBuilder, defaultTagsCacheDir, scanSourceFiles } from "../src/agent/map/build.js";
+import { applyFileCap, createMapBuilder, defaultTagsCacheDir, scanSourceFiles, scanSourceFilesAll } from "../src/agent/map/build.js";
 import { __resetLangCache, __resetQueryCache } from "../src/agent/map/parse.js";
 
 let ws = "";
@@ -124,7 +124,11 @@ describe("map build（任务 4+5）", () => {
      ② 枚举用 `rg --files`，它默认尊重 `.gitignore`——被忽略的源码永不进图。
    这一组测的是**成因本身**（钉住"今天它什么都没说"），不是修法。修法（让缺席说出原因，
    且不给面板发「波及 0」那种假读数）要改 `src/tools/base.ts` 的钩子形状或 `src/events` 的
-   事件字段，两处都在别人的在飞改动集里 ⇒ 已立待办 #36，这里先把探针与数字留在地上。 */
+   事件字段，两处都在别人的在飞改动集里 ⇒ 已立待办 #36，这里先把探针与数字留在地上。
+   **09-23 追注（不回改上面那句——那是该日快照）**：读侧的成因已能说出（#41）——
+   `scanSourceFilesAll` 交出全量候选并按 mtime 排好，`applyFileCap` 是唯一的切片处，
+   `impact_query` 的缺席分诊据此区分「帽外第 k 位」与「压根没进候选集」。
+   **写侧（编辑后回注里带一行说明）仍待 #36。** */
 describe("候选集的两道静默排除（待办 #36 的成因探针）", () => {
   it("帽外不吭声：maxFiles 截断不留任何痕迹，被挤掉的文件与「本来就不支持的后缀」在结果里同形", async () => {
     // 5 个受支持后缀的文件，mtime 依次排到 alpha/beta 之后（帽按 mtime 取最新，别赌时钟精度）
@@ -140,8 +144,15 @@ describe("候选集的两道静默排除（待办 #36 的成因探针）", () =>
     await expect(access(join(ws, "src", "m1.ts"))).resolves.toBeUndefined();
     expect(three.length).toBe(3);
     const shaped = three as unknown as { truncated?: unknown; candidates?: unknown };
-    expect(shaped.truncated, "今天没有截断标记：帽外是静默的（#36 要把它说出来）").toBeUndefined();
+    expect(shaped.truncated, "截断标记不在切片结果上：要说「少算了」得去问全量候选（下面那条）").toBeUndefined();
     expect(shaped.candidates).toBeUndefined();
+    // 成对的另一半（#41 落地的 seam）：同一个工作区，全量候选数得出来，切片只是它的前 3 个。
+    // 没有这一条，"帽外"就只有读端猜的份；有了它，impact_query 才敢说"第 k 位 / 收录 N 个"。
+    const all = await scanSourceFilesAll(ws);
+    expect(all.length, "全量候选 = 帽前 + 帽外，必须比切片多").toBeGreaterThan(three.length);
+    expect(all.map((f) => f.rel).slice(0, 3), "候选顺序 = 切片顺序（帽只截不断序）").toEqual(three.map((f) => f.rel));
+    expect(all.some((f) => f.rel === "src/m1.ts"), "被帽挤掉的那个必须还在候选集里（第 k 位才算得出来）").toBe(true);
+    expect(applyFileCap(all, 3).map((f) => f.rel)).toEqual(three.map((f) => f.rel));
   });
 
   it(".gitignore 掉的源码永远不进图：文件在盘上、后缀受支持、就是不出现", async () => {

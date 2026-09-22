@@ -1445,7 +1445,7 @@ const MUTATIONS = [
     src: "src/tools/impact-query.ts",
     test: "tests/impact-query.test.ts",
     desc: "deps 分支不查图内成员（路径写错/后缀不支持时报「依赖面为 0」）⇒ 模型把「没扫到」读成「这个文件不依赖任何东西」",
-    apply: (s) => s.replace("          if (!graph.files.includes(rel)) return { ok: false, output: await notInGraphNote(rel, abs) };\n", ""),
+    apply: (s) => s.replace("          if (!graph.files.includes(rel)) return { ok: false, output: await notInGraphNote(ctx.workspace, rel, abs) };\n", ""),
     expectFail: "deps 模式下不在图内的文件仍然 fail-visible",
   },
   {
@@ -3925,9 +3925,27 @@ const MUTATIONS = [
     test: "tests/impact-query.test.ts",
     desc: "第三种成因（文件在盘上、后缀支持、却在图外——实测支配本仓 36 个图外源码文件的那一类）被并回" +
       "「没有文件」那句 ⇒ 真缺席重新变回一句假指引，「未知 ≠ 0」这句也不再出现在模型面前",
-    apply: (s) => s.replace("`impact_query: ${rel} 存在且后缀受支持，但落在本次符号图外 ⇒ 波及半径未知（**不等于 0**）。` +",
+    apply: (s) => s.replace("`impact_query: ${rel} 在盘上、后缀受支持，却连候选集都没进 ⇒ 被 .gitignore 规则或噪声目录` +",
       "`impact_query: 该相对路径下没有文件 ⇒ 先 glob 确认（${rel}）` +"),
     expectFail: "文件在盘上、后缀支持、却在图外（噪声目录/帽/忽略规则）⇒ 明说「波及半径未知」而不是「没有调用点」",
+  },
+  {
+    id: "impact-cause-cap-position-collapsed",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "帽外那一支被并回「快照滞后」那句 ⇒ 模型收到「再问一次即可进图」，而事实是再问一万次它也在帽外" +
+      "（本仓实测 36 个文件就是这么消失的）——指错下一步比不说更费轮次",
+    apply: (s) => s.replace("  if (pos >= cap) {", "  if (false) {"),
+    expectFail: "帽外：报出它在候选集里的位置与本次收录数，并给出两条出路",
+  },
+  {
+    id: "impact-cause-rescan-failure-claims-permanent",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "候选集重扫失败时把异常吞成 -1 ⇒ 「分辨不出」当场升级成一句自信的「被 .gitignore 永久排除」，" +
+      "而 rg 坏掉与被忽略在证据上完全不是一回事（fail-closed 的另一半：不确定要说不确定）",
+    apply: (s) => s.replace("    .catch(() => null);", "    .catch(() => -1);"),
+    expectFail: "候选集重扫失败 ⇒ 如实说分辨不出，不许假装有结论",
   },
   {
     id: "grep-negative-note-loses-escape-hatch",
