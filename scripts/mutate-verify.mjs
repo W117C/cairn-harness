@@ -3896,7 +3896,7 @@ const MUTATIONS = [
       "#31 那一族的通用形状（孤儿 tool_result 只是一个实例），逐型样例表是一次覆盖全部注册类型的观测者",
     apply: (s) => s.replace("        finalizePending();\n        appendRecordCard(cardHost(), eventLabel(e), e);",
       "        if (e.type === 'goal_set') break;\n        finalizePending();\n        appendRecordCard(cardHost(), eventLabel(e), e);"),
-    expectFail: "每种进主流的事件型都必须产出一个 .msg 壳（goal_set 被漏在卡外）",
+    expectFail: "每种型单独进流：成了单元就必须有壳，没成单元只许那两型",
   },
   {
     id: "null-unit-eats-whole-window",
