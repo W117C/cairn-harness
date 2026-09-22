@@ -907,9 +907,10 @@ B1 order-pricing-triple-fix 不等：一次跑落了三个快照目录（…536-
 ```
 
 差值只有那 3 位毫秒数。`src/tools/snapshot.ts` 目前是**未跟踪**文件（`git status` → `?? src/tools/snapshot.ts`），
-⇒ HEAD 上**没有快照写入方**（`write_file.ts` 对它的 import 也未提交），因此 B1 在 HEAD 应当是绿的
-——这句是**推断，未实测**（实测要在第三个 worktree 里跑整条 verify 链，软链 node_modules 会把那条链做成假红，
-记忆第 52 条）。但**快照功能一旦落库，这条必红**，而红的原因是对的。
+⇒ **HEAD 实测绿**：同 HEAD（`4e54137`）开真装 worktree 跑 `node --import tsx scripts/gym-check.ts`
+→ `33 ✅ / 0 ❌`、退出码 0，四条 case 的 B1 全绿（`in=264/173/169/671`，与主树那次的读数一字不差，
+只差没有快照目录）。⇒ 主树那次红**完全**由未跟踪的 `src/tools/snapshot.ts` 引起，
+属「在飞功能 × 既有判据」相撞，不是谁改坏了门。
 
 **为什么这算判据缺陷而不是「把红修没」**：`changedFilesBetween`（`src/agent/gym/score.ts`）
 按「两棵树逐文件内容对比」收集**全部**差异，没有任何口径边界；而 D7 快照的目录名
