@@ -135,6 +135,14 @@ function textOf(nodes: FakeNode[]): string {
   return nodes.map((n) => n.textContent).filter(Boolean).join("\n");
 }
 
+/** 数「一格产出了几个 .msg 壳」——不变量原文是**恰好一个**，零个丢事实、多个撑高布局。 */
+function shellCount(shell: FakeNode | null): number {
+  if (!shell) return 0;
+  const root = shell.parentNode;
+  const walk = root ? flatten(root) : [shell];
+  return walk.filter((n) => n !== root && hasClass(n, "msg")).length;
+}
+
 /**
  * 抽出运行控制段 + 重放行渲染器，并追加真实块（window.agent 在场）里那两行接线的**等价复刻**。
  * 真实块是否真的这么接，由「真实块接线」那条源码断言负责——两层合起来才完整。
@@ -430,6 +438,7 @@ describe("单元成对不变量（projectUnits ↔ buildUnit）", () => {
         // 空壳 = 虚拟化静默跳过这一格（B25 在真窗口收得到，这里是不等窗口的另一道）。
         expect(shell, `${t} 成了单元却渲染不出 .msg 壳`).not.toBeNull();
         expect((shell?.className || "").split(/\s+/)).toContain("msg");
+        expect(shellCount(shell), `${t} 这一格应「恰好一个 .msg 壳」`).toBe(1);
         built++;
       }
       expect(b.consoleErrors, `${t} 渲染时出过声（buildUnit 只在产不出壳时出声）`).toEqual([]);
@@ -454,6 +463,7 @@ describe("单元成对不变量（projectUnits ↔ buildUnit）", () => {
       const shell = b.buildUnit(u);
       // 断言在前、会先抛；下面的 if 只是给 TS 收窄，不是「没壳也放过」。
       expect(shell, "重复投递的第二条结果不许把整格产不出壳").not.toBeNull();
+      expect(shellCount(shell), "孤儿那一支要嵌进本格已有的壳，不许另开一格").toBe(1);
       if (shell) texts.push(textOf(flatten(shell)));
     }
     expect(texts.join("\n")).toContain("second delivery");
@@ -471,8 +481,13 @@ describe("单元成对不变量（projectUnits ↔ buildUnit）", () => {
     expect(units.length).toBeGreaterThan(4); // 折叠塌成一格时下面这条判据会 vacuously true
     const b = bootRenderer(events);
     let shells = 0;
-    for (const u of units) if (b.buildUnit(u)) shells++;
+    for (const u of units) {
+      const s = b.buildUnit(u);
+      expect(s, `${String(u.kind)} 那一格产不出壳`).not.toBeNull();
+      shells += shellCount(s);
+    }
     expect(b.consoleErrors).toEqual([]);
+    // 逐格数壳、再对总数：只有「每格恰好一个」才等得起来（单边数会放过「一格两壳 + 一格无壳」）。
     expect(shells).toBe(units.length);
   });
 });

@@ -3899,6 +3899,16 @@ const MUTATIONS = [
     expectFail: "每种型单独进流：成了单元就必须有壳，没成单元只许那两型",
   },
   {
+    id: "per-type-double-shell",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-run-control.test.ts",
+    desc: "不变量的另一半：孤儿结果那支改成另开一个壳（`openMsg` 顶掉 `cardHost`）⇒ 同一格里长出两个 .msg，" +
+      "事实没丢、只是布局被撑高一格——正因它不崩也不少东西，比「零壳」更容易长期无人发现，所以逐格数壳要单独钉",
+    apply: (s) => s.replace("appendRecordCard(cardHost(), ok ?",
+      "appendRecordCard(openMsg('ai').querySelector('.msg-body'), ok ?"),
+    expectFail: "孤儿 tool_result 与重复投递：两份都要有壳，且原文在卡里",
+  },
+  {
     id: "null-unit-eats-whole-window",
     src: "src/renderer/history-window.js",
     test: "tests/renderer-history-mount.test.ts",

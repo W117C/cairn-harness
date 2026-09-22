@@ -2568,12 +2568,20 @@ render();
     } finally {
       rc = prev;
     }
-    const first = frag.querySelector('.msg');
+    const shells = frag.querySelectorAll('.msg');
+    const first = shells[0] || null;
     if (!first) {
       /* 虚拟化现在会跳过渲染不出壳的单元（一格不再拖死整窗）——但「跳过」本身是新的高度静默：
          事实照样看不见，只是不再抛异常。所以这里必须出声：panels-check 的 B25 收 console.error，
          漏一格就红，且这条串直接点名是哪几号事件（不用再靠六轮外推）。 */
       console.error('转录单元渲染不出 .msg 壳：' + (unit && unit.kind ? unit.kind : '?') +
+        ' 事件 ' + (unit && unit.ids ? unit.ids.map(i => String((historyEvents[i] || {}).type)).join('+') : '?'));
+    } else if (shells.length > 1) {
+      /* 不变量的另一半：「一个单元恰好一个 .msg」。多产的那格不丢事实，只把布局撑高一格——
+         正因如此它比零壳更容易长期无人发现（不崩、不少东西），所以同样只能靠出声。
+         离线一侧的对应判据数的是壳个数（tests/renderer-run-control.test.ts 的逐型通判）。 */
+      console.error('转录单元产出不止一个 .msg 壳（' + String(shells.length) + ' 个）：' +
+        (unit && unit.kind ? unit.kind : '?') +
         ' 事件 ' + (unit && unit.ids ? unit.ids.map(i => String((historyEvents[i] || {}).type)).join('+') : '?'));
     }
     return first;
