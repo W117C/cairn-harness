@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { relative, resolve, sep } from "node:path";
 import { resolveInWorkspace, truncationNotice, type Tool, type ToolResult } from "./base.js";
 import { sanitizedEnv } from "./process.js";
-import { rgBinary } from "./ripgrep.js";
+import { rgBinary, rgNegativeNote } from "./ripgrep.js";
 
 const MAX_FILES = 100;
 const NOISE_DIRS = ["**/.git/**", "**/node_modules/**", "**/dist/**"];
@@ -61,7 +61,10 @@ export const glob: Tool = {
         resolvePromise(files);
       });
     });
-    if (files.length === 0) return { ok: true, output: "无匹配文件" };
+    // 同上：glob 带 --hidden 但仍尊重 .gitignore，且显式排掉了这三类目录——阴性结果要说清扫描面。
+    if (files.length === 0) {
+      return { ok: true, output: "无匹配文件\n" + rgNegativeNote("跳过了 .gitignore 里的条目与 .git/node_modules/dist") };
+    }
     const limited = files.length > MAX_FILES;
     const shown = limited ? files.slice(0, MAX_FILES) : files;
     let out = shown.join("\n");

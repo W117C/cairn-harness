@@ -1,5 +1,5 @@
 import { resolveInWorkspace, truncationNotice, type Tool, type ToolResult } from "./base.js";
-import { runRgJson, type RawMatch } from "./ripgrep.js";
+import { rgNegativeNote, runRgJson, type RawMatch } from "./ripgrep.js";
 
 // 命中上限与单行截断：输出准确 > 省 token > 功能多。
 const MAX_MATCHES = 100;
@@ -99,7 +99,10 @@ export const grep: Tool = {
       ...(context > 0 ? ["-C", String(context)] : []),
       "-e", pattern, abs,
     ]);
-    if (entries.length === 0) return { ok: true, output: "无命中" };
+    // 零命中不许只回三个字：那句会被读成「仓库里没有」，而这条查询面根本没扫 .gitignore 里的东西。
+    if (entries.length === 0) {
+      return { ok: true, output: `无命中（搜索面 ${rel.slice(0, 120)}）\n` + rgNegativeNote("跳过了 .gitignore 里的条目与隐藏文件") };
+    }
     const r = renderMatches(entries, context > 0 ? CONTEXT_BUDGET_CHARS : null);
     return { ok: true, output: r.text + (r.omittedHits > 0 ? "\n" + truncateNote(r) : "") };
   },

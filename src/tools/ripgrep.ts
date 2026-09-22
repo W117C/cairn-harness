@@ -18,6 +18,25 @@ export function rgBinary(): string {
   return cachedRgPath;
 }
 
+/**
+ * 阴性结果的说明（grep 与 glob 共用一份政策句，各自填自己**真跳过**了什么）。
+ *
+ * 为什么要有这句：两个工具的零命中原本只回「无命中」/「无匹配文件」三个字加 `ok:true`，
+ * 而 rg 的默认扫描面**不包括** `.gitignore` 忽略的条目（grep 还跳过隐藏文件；glob 带
+ * `--hidden` 但额外排掉 `.git`/`node_modules`/`dist`）。模型把这种阴性读成「仓库里没有
+ * 这个东西」，于是改完一处不去改调用方——这是"返工"的正面来源。
+ * 括号里那句逃生口是**实测**的：显式给出的路径不受忽略规则挡
+ * （`rg PATTERN .` 看不见 `gen/x.ts`，`rg PATTERN gen` 与 `rg PATTERN .env` 都看得见），
+ * 所以不需要新增工具参数，也不需要 `--no-ignore`（那会把 node_modules 一并拽进扫描面）。
+ * 参数化的只有「这个工具跳过了什么」那半句——写错一次就等于让说明本身变成谎。
+ */
+export function rgNegativeNote(skipped: string): string {
+  return (
+    `这不是「仓库里没有」——本次扫描${skipped}。` +
+    "怀疑目标在其中时，把 path 显式指到那个目录/文件再搜一次（显式路径不受忽略规则挡）。"
+  );
+}
+
 export interface RawMatch {
   /** workspace 相对路径（统一输出口径）。 */
   path: string;

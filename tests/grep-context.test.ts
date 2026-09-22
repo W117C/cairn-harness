@@ -98,10 +98,10 @@ describe("grep context / fixed_strings（查改一体：一次调用拿到改点
     expect(shown + Number(m![1])).toBe(40);
   });
 
-  it("无命中仍是「无命中」一行（加了邻行收集也不把别文件的上下文当成命中）", async () => {
+  it("无命中首行仍是「无命中」（加了邻行收集也不把别文件的上下文当成命中）", async () => {
     const ctx = await newCtx();
     await write("src/a.ts", "one\ntwo\n");
     const r = await grep.run({ pattern: "nothing-here", context: 3 }, ctx);
-    expect(r.output).toBe("无命中");
+    expect(r.output.startsWith("无命中")).toBe(true);
   });
 });

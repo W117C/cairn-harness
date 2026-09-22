@@ -3930,6 +3930,24 @@ const MUTATIONS = [
     expectFail: "文件在盘上、后缀支持、却在图外（噪声目录/帽/忽略规则）⇒ 明说「波及半径未知」而不是「没有调用点」",
   },
   {
+    id: "grep-negative-note-loses-escape-hatch",
+    src: "src/tools/grep.ts",
+    test: "tests/grep-glob-edit.test.ts",
+    desc: "零命中的说明退回一句「本次只扫了未被忽略的文件」——不点名逃生口（显式路径不受忽略规则挡）⇒ " +
+      "模型知道扫描面不全，却仍然猜不到下一步该怎么查，只能换 grep 全仓或干脆判定「没有调用方」",
+    apply: (s) => s.replace("rgNegativeNote(\"跳过了 .gitignore 里的条目与隐藏文件\")", "\"（本次只扫了未被忽略的文件）\""),
+    expectFail: "零命中不许只回三个字：补「这不是仓库里没有」+ 逃生口，且字数有帽",
+  },
+  {
+    id: "glob-negative-note-loses-escape-hatch",
+    src: "src/tools/glob.ts",
+    test: "tests/grep-glob-edit.test.ts",
+    desc: "同一句政策在 glob 那支单独失效（它带 --hidden、另排 .git/node_modules/dist）⇒ 两支共用一个政策句" +
+      "不等于两支都在说，只有各钉一条才知道另一支有没有掉队",
+    apply: (s) => s.replace("rgNegativeNote(\"跳过了 .gitignore 里的条目与 .git/node_modules/dist\")", "\"（本次跳过 .gitignore 与噪声目录）\""),
+    expectFail: "零命中不许只回三个字：补「这不是仓库里没有」+ 逃生口，且字数有帽",
+  },
+  {
     id: "null-unit-eats-whole-window",
     src: "src/renderer/history-window.js",
     test: "tests/renderer-history-mount.test.ts",

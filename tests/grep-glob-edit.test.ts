@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -51,13 +52,55 @@ describe("grep（M2a 任务 1）", () => {
     expect(res.output).toContain("截断");
   });
 
-  it("无命中：ok 输出「无命中」；坏 pattern 报错", async () => {
+  it("无命中：首行仍是「无命中」，但必须补一句扫描面；坏 pattern 报错", async () => {
     const ctx = await newCtx();
     await writeFile(join(ws, "a.txt"), "hello", "utf8");
     const res = await grep.run({ pattern: "zzz-not-there" }, ctx);
     expect(res.ok).toBe(true);
-    expect(res.output).toBe("无命中");
+    expect(res.output.startsWith("无命中")).toBe(true);
     await expect(grep.run({ pattern: "" }, ctx)).rejects.toThrow(/pattern/);
+  });
+});
+
+describe("零命中的扫描面说明（grep 与 glob 共用一句政策）", () => {
+  it("零命中不许只回三个字：补「这不是仓库里没有」+ 逃生口，且字数有帽", async () => {
+    const ctx = await newCtx();
+    await writeFile(join(ws, "a.txt"), "hello", "utf8");
+    const g = await grep.run({ pattern: "zzz-not-there" }, ctx);
+    const l = await glob.run({ pattern: "*.zzz" }, ctx);
+    for (const r of [g, l]) {
+      expect(r.output).toContain("这不是「仓库里没有」");
+      // 逃生口要点名：只说"扫不到"不给下一步，等于让模型自己猜要不要换查法
+      expect(r.output).toContain("显式路径不受忽略规则挡");
+    }
+    // 各自说清自己跳过了什么（glob 带 --hidden，不能照抄 grep 那句"隐藏文件"）
+    expect(g.output).toContain("隐藏文件");
+    expect(l.output).toContain("node_modules");
+    expect(l.output).not.toContain("隐藏文件");
+    // 说明是固定成本，只能长在阴性结果上：整条输出限长，别让它长成一段教程
+    expect(g.output.length).toBeLessThan(300);
+    expect(l.output.length).toBeLessThan(300);
+  });
+
+  it("说明里那句逃生口是真的：被 .gitignore 挡住的目录，显式给 path 就能搜到", async () => {
+    const ctx = await newCtx();
+    execFileSync("git", ["init", "-q", ws]); // rg 只在 git 仓库内应用 .gitignore
+    await writeFile(join(ws, ".gitignore"), "gen/\n", "utf8");
+    await mkdir(join(ws, "gen"), { recursive: true });
+    await writeFile(join(ws, "gen", "hay.ts"), "NEEDLE_IN_IGNORED\n", "utf8");
+    await writeFile(join(ws, "keep.ts"), "other\n", "utf8");
+    // 默认扫描面：看不见（这正是旧文案会被读成"仓库里没有"的那个事实）
+    const wide = await grep.run({ pattern: "NEEDLE_IN_IGNORED" }, ctx);
+    expect(wide.output.startsWith("无命中")).toBe(true);
+    // 显式指进被忽略的目录：同一把工具、同一个 pattern，立刻看得见
+    const deep = await grep.run({ pattern: "NEEDLE_IN_IGNORED", path: "gen" }, ctx);
+    expect(deep.output).toContain("gen/hay.ts:");
+    expect(deep.output).toContain("NEEDLE_IN_IGNORED");
+    // glob 同一条路（文件名面也认这个逃生口）
+    const files = await glob.run({ pattern: "*.ts", path: "gen" }, ctx);
+    expect(files.output).toContain("gen/hay.ts");
+    const filesWide = await glob.run({ pattern: "*.ts" }, ctx);
+    expect(filesWide.output).not.toContain("hay.ts");
   });
 });
 
@@ -97,11 +140,11 @@ describe("glob（M2a 任务 2）", () => {
     expect(res2.output).not.toContain("ignored.txt");
   });
 
-  it("pattern 不匹配时输出「无匹配文件」", async () => {
+  it("pattern 不匹配时首行仍是「无匹配文件」", async () => {
     const ctx = await newCtx();
     const res = await glob.run({ pattern: "*.zzz" }, ctx);
     expect(res.ok).toBe(true);
-    expect(res.output).toBe("无匹配文件");
+    expect(res.output.startsWith("无匹配文件")).toBe(true);
   });
 });
 
