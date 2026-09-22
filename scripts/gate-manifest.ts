@@ -42,6 +42,9 @@ export const GATES: readonly string[] = [
   "routing-check",
   "supervisor-check",
   "renderer-arch-check",
+  // 模型面总预算门：每请求固定成本（基础提示 + 工具规格）此前逐件有帽、总和无人记账——
+  // MCP 工具在 sessionToolSpecs 里是裸 push，装三个话痨 server 就能把固定面抬一个数量级而不惊动任何门。
+  "model-surface-check",
   "a11y-check",
   // 变异验证：证明单元断言非恒真（注入行为突变必须被测试杀死）。
   // 与 gate-check 的静态恒真式体检互补——静态查不出「非空但没对准逻辑」的断言。

@@ -3271,7 +3271,9 @@ const MUTATIONS = [
     src: "src/agent/glm-session.ts",
     test: "tests/session-provider.test.ts",
     desc: "重算了面却仍把构造时那份 tools 发出去 ⇒ 说明与清单从此各说各话（模型被告知工具没了、请求里却还带着它）",
-    apply: (s) => s.replace("      const tools = face ? face.tools : opts.tools;", "      const tools = opts.tools;"),
+    // 2026-09-23 改指：模型面预算接进同一行时把它改成了 `declaredTools`（下游还要过一次降配），
+    // 针脚跟着搬——语义一字未动：重算了面却仍发构造时那份。
+    apply: (s) => s.replace("      const declaredTools = face ? face.tools : opts.tools;", "      const declaredTools = opts.tools;"),
     expectFail: "run 中途激活的 skill：下一轮清单里就没有那把、说明同刻出现（不必再靠 loop 白拒一次）",
   },
   // ---- verify_result 子流归因（2026-09-20 补）：摘掉归因 = 三处下游同时被骗，必须有锚点 ----
@@ -5502,6 +5504,46 @@ const MUTATIONS = [
     desc: "重定向正则不吃 fd 数字前缀 ⇒ `build 2>>err.log` 这类真实写面看不见（`2>` 前一个是词字符，前缀类挡住）",
     apply: (s) => s.replace("[^\\\\w>])\\\\d*>>", "[^\\\\w>])>>"),
     expectFail: "工作区普通落盘只到 medium（分级不是一律 high）",
+  },
+  {
+    id: "ms-tail-drop-became-middle-splice",
+    src: "src/agent/model-surface.ts",
+    test: "tests/model-surface.test.ts",
+    desc: "丢工具时从前往后找 ⇒ 变成「中间摘」：可缓存前缀被切断，且丢的次序不再等于数组尾序",
+    apply: (s) => s.replace("for (let i = working.length - 1; i >= 0; i--) {", "for (let i = 0; i < working.length; i++) {"),
+    expectFail: "尾丢 ⇒ 保留表是原表的位置前缀（中间摘会把可缓存前缀切断）",
+  },
+  {
+    id: "ms-core-tier-ignored",
+    src: "src/agent/model-surface.ts",
+    test: "tests/model-surface.test.ts",
+    desc: "core 身份判定失效 ⇒ 降配梯开始砍基础工具（便宜的废会话），帽越紧越危险",
+    apply: (s) => s.replace("if (coreNames.has(name)) return \"core\";", "if (false) return \"core\";"),
+    expectFail: "core 永不被自动砍：帽紧到装不下时报 unresolvable 交人裁决",
+  },
+  {
+    id: "ms-zero-regression-branch-dropped",
+    src: "src/agent/model-surface.ts",
+    test: "tests/model-surface.test.ts",
+    desc: "去掉「未超预算原样返回」支 ⇒ 每轮装配都被降配逻辑过一遍，能力自己成了前缀抖动源",
+    apply: (s) => s.replace("if (account.totalChars <= limitChars) {", "if (false) {"),
+    expectFail: "未超预算时逐字不改（帽没碰到就不该动装配一个字节）",
+  },
+  {
+    id: "ms-surface-note-not-emitted",
+    src: "src/agent/glm-session.ts",
+    test: "tests/model-surface.test.ts",
+    desc: "降配说明生产者有、消费者没接（composeTurnMessages 收了字段却不落块）⇒ 模型看到的是一份静默变小的工具表",
+    apply: (s) => s.replace("if (opts.surfaceNote) msgs.push({ role: \"system\", content: opts.surfaceNote });", "if (false) msgs.push({ role: \"system\", content: opts.surfaceNote ?? \"\" });"),
+    expectFail: "provider 发出去的那份工具表已被降配，且 note 真的进了某个 system 消息",
+  },
+  {
+    id: "ms-enforcement-wiring-bypassed",
+    src: "src/agent/glm-session.ts",
+    test: "tests/model-surface.test.ts",
+    desc: "装配链算了账却没采用降配结果（`tools` 仍指向未降配那份）⇒ 门绿而线上不生效",
+    apply: (s) => s.replace("const tools = surface ? surface.specs : declaredTools;", "const tools = declaredTools;"),
+    expectFail: "provider 发出去的那份工具表已被降配，且 note 真的进了某个 system 消息",
   },
 ];
 

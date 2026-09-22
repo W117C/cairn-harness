@@ -28,8 +28,14 @@ import {
 import type { SolpiRuntime } from "./solpi-runtime";
 import type { RequestMeter } from "./metering";
 import { deriveProgressBoundaries } from "./economics";
+import { planSurfaceBudget } from "./model-surface";
 
 type RawMessage = Record<string, unknown>;
+
+/** 模型面降配梯的 core 身份：从 `gateToolSpecs()` **派生**，不另抄一份工具名清单
+ *  （抄了就又是一处「规格与实现两处手写」）。 */
+const CORE_SURFACE_TOOL_NAMES: ReadonlySet<string> = new Set(gateToolSpecs().map((s) => s.function.name));
+
 
 /** 三门 + 基础工具的 OpenAI function 规格（暗卷把工具面暴露给真实模型）。
  * M1c：mode=read-only 时写向工具从工具表摘除（§11.7.2，与 toolTableFor 同源）。 */
@@ -416,6 +422,10 @@ export function composeTurnMessages(opts: {
   history: ContextMessage[];
   /** M2e：插件注入面（skill 路由清单 + SessionStart/重挂上下文），缺省零行为。 */
   skills?: string;
+  /** 模型面预算降配的如实说明（`model-surface` 出品）。缺省零行为。
+   *  刻意排在最后一个 system 块：这一句本来就只在「池子满了」那几轮出现，放前头会把
+   *  可缓存前缀自己抖掉——而它要省的就是这份缓存。 */
+  surfaceNote?: string;
 }): GlmMessage[] {
   const msgs: GlmMessage[] = [];
   if (opts.system) msgs.push({ role: "system", content: opts.system });
@@ -428,6 +438,7 @@ export function composeTurnMessages(opts: {
       content: "[符号地图] 仓库符号索引（def/ref 排名，预算内渲染；用于先看仓库结构再探索）：\n" + opts.mapText,
     });
   }
+  if (opts.surfaceNote) msgs.push({ role: "system", content: opts.surfaceNote });
   for (const m of opts.history) msgs.push(m);
   return msgs;
 }
@@ -560,8 +571,24 @@ export function createGlmSessionProvider(
       // 逐请求工具面：给了 requestFace 就每轮现算（run 中途激活的 skill 下一轮就不再出现在清单里），
       // 否则沿用构造时那份。整轮只用这一个 `tools`——散落着读 opts.tools 会出现同轮两种口径。
       const face = opts.requestFace?.();
-      const tools = face ? face.tools : opts.tools;
+      const declaredTools = face ? face.tools : opts.tools;
+      // 模型面总预算（每请求固定成本）。落这一层而不是工具表面那一层，理由有二：
+      // ① 这里同时握有 system 文本与**最终**工具表——预算要按真实要发出去的字节判；
+      // ② 每一条装配路径都过这里（主会话 / worker / 靶场 / 探针 / 暗卷都从本 provider 走），
+      //   接在 `sessionToolSpecs` 上则会漏掉直接传 `tools:` 的调用方。
+      const surface = declaredTools && declaredTools.length > 0
+        ? planSurfaceBudget({
+            specs: declaredTools,
+            systemChars: opts.system?.length ?? 0,
+            coreNames: CORE_SURFACE_TOOL_NAMES,
+          })
+        : null;
+      const tools = surface ? surface.specs : declaredTools;
       const liveNote = face?.note;
+      // 降配说明单独成块，不搭 `liveNote` 那条便车：`liveNote` 经 `pluginContext` 进 skills 块，
+      // 而没有插件/技能的会话根本没有那一块——接在那儿就是「生产者在、消费者不在」。
+      const surfaceNoteText = surface?.note ?? "";
+
       // M2d 固定回注（§8.1.5/§8.1.9）：每轮组装重读两层记忆并重注（压缩后自然重注）；异常静默跳过
       let memory: MemoryInjection = { project: null, global: null, charsCurrent: 0, charsLimit: 0, tokens: 0, truncated: false };
       try {
@@ -631,7 +658,14 @@ export function createGlmSessionProvider(
           console.warn("[compaction] 连续摘要失败已达上限，本会话停用摘要（仅 overflow 紧急截断可用）");
         }
       }
-      const msgs = composeTurnMessages({ system: opts.system, mapText, memory, history, ...(skillsBlock ? { skills: skillsBlock } : {}) });
+      const msgs = composeTurnMessages({
+        system: opts.system,
+        mapText,
+        memory,
+        history,
+        ...(skillsBlock ? { skills: skillsBlock } : {}),
+        ...(surfaceNoteText ? { surfaceNote: surfaceNoteText } : {}),
+      });
       // 最终装配硬闸：重挂/地图/JSON 包装均已确定，不能只检查压缩前的 overhead。
       // 无 tokenizer：沿用既有校准估算口径；超限 fail-closed，事件历史不删改。
       const finalConfig = budgetConfig();
