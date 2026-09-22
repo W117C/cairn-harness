@@ -1634,6 +1634,7 @@ async function phaseElectron(root: string): Promise<void> {
     await b24Log.append({ type: "user_message", content: "b24-tail-marker" } as unknown as AgentEvent);
     ok(await b8ClickSession("验收会话"), "B24 先切走");
     ok(await b8ClickSession(clarifyId), "B24 再切回靶子会话（重开才走 showHistory → mountHistory 那一窗）");
+    let b24Peek: { orphans: number; hasBoom: boolean; tail: boolean; heads: number } | null = null;
     const b24 = await settle(async () => {
       const r = await cdp2.eval<{ orphans: number; hasBoom: boolean; tail: boolean; heads: number }>(
         `(() => { const stream = document.querySelector('.stream'); if (!stream) return { orphans: -1, hasBoom: false, tail: false, heads: -1 };` +
@@ -1643,18 +1644,20 @@ async function phaseElectron(root: string): Promise<void> {
         `    hasBoom: codes.some((c) => c.includes('boom-b24')),` +
         `    tail: (stream.textContent || '').includes('b24-tail-marker'), heads: heads.length }; })()`,
       );
+      b24Peek = r;   // 超时不许把观察丢掉（B20 那条「实测 0 张」就是在这里撒的谎）
       return r.orphans >= 0 && r.hasBoom && r.tail ? r : null;
     }, 15_000);
+    const b24Seen = b24 ?? b24Peek ?? { orphans: -9, hasBoom: false, tail: false, heads: -9 };
     ok(b24 !== null,
-      "B24 孤儿卡 + 结果原文 + **它后面那条单元**三者同时上屏（少任一个都是半挂载：卡片头 " +
-      String(b24?.heads ?? -1) + " 个、孤儿卡 " + String(b24?.orphans ?? -1) + " 张、" +
-      "原文上屏=" + String(b24?.hasBoom ?? false) + "、尾单元=" + String(b24?.tail ?? false) + "）");
-    ok((b24?.orphans ?? -1) >= b24OrphanOnDisk + 1,
-      "B24 每张孤儿卡都对应盘上一条「有结果无调用」的行（实测 " + String(b24?.orphans ?? -1) +
+      "B24 孤儿卡 + 结果原文 + **它后面那条单元**三者同时上屏（少任一个都是半挂载；最后一次读到：卡片头 " +
+      String(b24Seen.heads) + " 个、孤儿卡 " + String(b24Seen.orphans) + " 张、" +
+      "原文上屏=" + String(b24Seen.hasBoom) + "、尾单元=" + String(b24Seen.tail) + "）");
+    ok(b24 !== null && b24.orphans >= b24OrphanOnDisk + 1,
+      "B24 每张孤儿卡都对应盘上一条「有结果无调用」的行（实测 " + String(b24Seen.orphans) +
       " / 盘上 " + String(b24OrphanOnDisk) + " + 本相追加 1）");
-    ok((b24?.orphans ?? -1) < b24Results.length + 1,
-      "B24 成对的结果仍并进工具项，没被一律降格成孤儿卡（实测 " + String(b24?.orphans ?? -1) +
-      " / 盘上结果总数 " + String(b24Results.length) + " + 本相追加 1）");
+    ok(b24 !== null && b24.orphans < b24Results.length + 1,
+      "B24 成对的结果仍并进工具项，没被一律降格成孤儿卡（实测 " + String(b24Seen.orphans) +
+      " / 盘上结果总数 " + String(b24Results.length) + " + 本相追加 1；读不到数时这一条不算过）");
     await killElectron(electron2);
   } finally {
     if (electron.exitCode === null) await killElectron(electron);
