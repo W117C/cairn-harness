@@ -85,9 +85,23 @@ cd /tmp/dsh-gates && TERM=dumb node --import tsx scripts/gates.ts --direct
 `d7-worker-optout-ignored`（`src/tools/write_file.ts`）、`d7-snapshot-id-not-in-event`（`src/agent/loop.ts`）。
 `d7-snapshot-taken-for-new-file` 的 `src/tools/snapshot.ts` 在 HEAD 里仍不存在。⇒ 已并入待办 #37（现记 6 条）。
 
-### 顺手量到门表自身的一处 fail-open（另立待办）
+### 顺手量到的一处可诊断性缺口（以及我在这段里写错的一句话）
 
 `scripts/gates.ts` 只回显每道门的 **exit code**，把门自己的 stdout 吞掉（`▶ test … ✅ test exit=0 66906ms`，
-没有任何 "Test Files / Tests" 行）。而 `vitest run` 在**收集到 0 个测试文件**时退出码也是 0。
-⇒ 「✅ test 门绿」这句话目前不能证明它跑了 1982 条测试。修法很小：runner 为每道门留一行
-关键计数（或至少在 `test` 门里没出现 `Test Files` 汇总行时判红），让"零观测"不叫绿。
+没有任何 `Test Files / Tests` 行）。⇒ 整表跑完看不出"这道门到底跑了多少东西"，要数就得单独复跑那道门。
+
+**但这一段最初给出的理由是错的，按实测改在这里**：原文写「`vitest run` 在收集到 0 个测试文件时退出码也是 0」，
+并据此把它说成 fail-open（"零观测也算绿"）。真装 worktree 里跑一次便知：
+
+```
+$ node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/no-such-file-xyz.test.ts
+exit=1
+No test files found, exiting with code 1
+```
+
+⇒ 空集**是**判红的，退出码这条链没漏；缺口只到"看不见跑了多少 / 红的时候看不到输出"这一级。
+（规则 75 的同一条：结论连着证据走，证据一翻就先撤结论再改口径，别把错话留在往下引的位置上。）
+
+真正值得补的两件小事（干净表面，已立待办 #39）：⑴ 门红时把该门自己的输出尾几行带出来——现在只有一句
+`exit=1`，本次审计 5 条红里有 3 条我是靠单独复跑才看清"红的是装置"；⑵ **绿而一个字都没吐**的门，
+应进现成的「未证项汇总」（`DSH_STRICT_UNVERIFIED` 那条链已在），而不是当通过。
