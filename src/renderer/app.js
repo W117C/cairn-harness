@@ -4369,3 +4369,33 @@ render();
   syncGoalChip();
 
 })();
+
+/* 浮层开着时把背景整块 inert 掉。09-22 由 a11y-check 新相实测出来：设置浮层打开的那一刻，
+   背景仍有 **56 个可聚焦元素**——`aria-modal="true"` 只是告诉 AT「这是模态」，并不把其余内容
+   移出可交互树，于是读屏器与键盘 Tab 会走进底栏与会话列表（用户以为在对话框里，焦点在别处）。
+   「现在开着哪一个」直接问 DOM，不问 `MODAL_DISMISS`：那张表记的是**怎么关**（Escape 要 close 函数），
+   而 inert 只需要知道**有没有模态开着**。用登记表判会把未登记的浮层漏在锁外——静态预览里新手引导
+   就是未登记的（登记那行在 `window.agent` 桥接段内，浏览器打开时整段提前 return），
+   a11y-check 的「引导浮层打开态」因此红 56。选择器与门里 5b 同形，5c/5d 两条成对反例盯着漂移。
+   ⚠️ 观测必须带 `subtree: true`：`subtree:false` 只盯 body **自己**的属性，
+   子元素改 class 一次也不会回调（这一支 09-22 实踩过：装完观测器 inert 一直是 false）。
+   放在文件尾：本文件任何一段都可能被 tests/ 的 vm 切片整段带走跑，写在中间等于给切片添绑料。 */
+function syncModalBackdrop() {
+  const app = document.querySelector('body > .app');
+  if (!app) return;
+  if (document.querySelector('[role="dialog"][aria-modal="true"].show') !== null) {
+    app.setAttribute('inert', '');
+    app.setAttribute('aria-hidden', 'true');
+  } else {
+    app.removeAttribute('inert');
+    app.removeAttribute('aria-hidden');
+  }
+}
+new MutationObserver((records) => {
+  const touchedDialog = records.some((r) => {
+    const t = r.target;
+    return t instanceof Element && (t.matches('[role="dialog"][aria-modal="true"]') || t === document.body);
+  });
+  if (touchedDialog) syncModalBackdrop();
+}).observe(document.body, { attributes: true, attributeFilter: ['class'], subtree: true });
+syncModalBackdrop();

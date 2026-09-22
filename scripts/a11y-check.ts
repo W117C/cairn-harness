@@ -291,6 +291,53 @@ const SCAN = String.raw`(() => {
     });
   });
 
+  /* ---------- 规则 5b/5c：模态的"背景"必须真的不可达（09-22 补，§13 引导浮层撞出来的） ----------
+     aria-modal="true" 只是**告诉** AT「这是模态」，规范并不因此免除把其余内容移出可交互树。
+     少这一步的后果：读屏器与键盘 Tab 会走进底栏、会话列表——用户以为自己在对话框里，焦点在别处。
+     5c 是成对的反例：没有浮层开着时背景不该被 inert——否则"永远锁死背景"这一种做法也能把 5b 判绿。
+     四条（5b/5c/5d/5e）都当场造红验过非空转：5b=56（产品未 inert 背景的实测）、5c=1、5d=1、5e=2，
+     造红法与读数以「临时加两相反」跑本门得出，步骤见 outputs/a11y-modal-inert-2026-09-22.md。 */
+  /* 开着的浮层用复数遍历：单数取「第一个」会在两个浮层同时 .show 时只查其中一个，
+     另一个里面的可聚焦项既不算背景也不算对话框（09-22 证伪相当场撞出这种并存）。 */
+  const openDialogs = [...document.querySelectorAll('[role="dialog"][aria-modal="true"].show')];
+  if (openDialogs.length > 0) {
+    for (const openDialog of openDialogs) {
+      // 5d：对话框自己也不可达 = "把整页锁死"也能把 5b 判绿，所以成对钉住"该可达的仍可达"
+      if (openDialog.closest('[inert]') || openDialog.closest('[aria-hidden="true"]')) {
+        push('modal-self-inerted', 'serious', label(openDialog) + ' 自己就在 inert/aria-hidden 子树里（浮层不可用）');
+      }
+      document.querySelectorAll(FOCUSABLE).forEach((f) => {
+        if (openDialogs.some((d) => d.contains(f))) return;
+        if (f.closest('[inert]')) return;
+        if (f.closest('[aria-hidden="true"]') && !f.closest('[aria-hidden="false"]')) return;
+        if (f.getAttribute('tabindex') === '-1' || f.disabled) return;
+        if (f.tagName === 'INPUT' && f.getAttribute('type') === 'hidden') return;
+        if (f.getClientRects().length === 0) return;
+        push('modal-background-focusable', 'serious', label(openDialog) + ' 开着，背景仍可聚焦：' + label(f));
+      });
+    }
+  } else {
+    document.querySelectorAll('body > [inert], body > [aria-hidden="true"]').forEach((el) => {
+      if (el.matches('[role="dialog"]')) return; // 关着的浮层自带 inert + aria-hidden 是正确修法
+      push('background-inert-no-modal', 'serious', label(el) + ' 没有任何浮层开着却被 inert/aria-hidden');
+    });
+  }
+  /* 5e：关着的浮层必须自己 inert/aria-hidden。这类浮层靠「opacity:0」隐藏——按规范它**仍在**
+     可交互树里（axe 亦按"可聚焦即违规"处理，不看 opacity），所以只靠 class 收起等于把一整个
+     面板留在 Tab 路径上。09-22 实测：本相第一次把门的 prep「用 class 关设置面板」照了出来（56 个
+     可聚焦项来自一个"看起来关了"的面板），而产品自己的 closeSettings 是带 inert 的。 */
+  document.querySelectorAll('[role="dialog"][aria-modal="true"]').forEach((d) => {
+    if (d.classList.contains('show')) return;
+    if (d.hasAttribute('inert') || d.getAttribute('aria-hidden') === 'true') return;
+    let n = 0;
+    d.querySelectorAll(FOCUSABLE).forEach((f) => {
+      if (f.getAttribute('tabindex') === '-1' || f.disabled) return;
+      if (f.getClientRects().length === 0) return;
+      n += 1;
+    });
+    if (n > 0) push('closed-dialog-focusable', 'serious', label(d) + ' 已收起却仍暴露 ' + String(n) + ' 个可聚焦元素（缺 inert/aria-hidden）');
+  });
+
   /* ---------- 规则 6：aria 状态值必须是 "true"/"false" ---------- */
   document.querySelectorAll('[aria-pressed], [aria-expanded]').forEach((el) => {
     ['aria-pressed', 'aria-expanded'].forEach((attr) => {
@@ -442,6 +489,17 @@ const STATES: StateDef[] = [
     prep: "(() => { const b = document.querySelector('#settingsOpen'); if (b) b.click(); return true; })()",
     verify: "(() => { const o = document.querySelector('#settingsOverlay'); return !!o && o.classList.contains('show'); })()",
   },
+  {
+    // 本相判的是「浮层开着时的背景可达性 + 对话框的可访问名」这一族**机制**，走的是 class 直开：
+    // 「向导真的会弹」由 panels-check B21 的四次真启动判（那才是入口判据），两门不互相顶。
+    // settings 在本门被种成返回用户 ⇒ 向导不会自己弹，只能这样把它摆出来。
+    name: "引导浮层打开态",
+    // 收设置走**产品自己的关闭路径**（#settingsClose → closeSettings 会补 inert/aria-hidden）；
+    // 用 class 直接摘 .show 会留下一个"看着关了、其实整块面板还在 Tab 路径上"的假状态——
+    // 本门的 closed-dialog-focusable 正是为了把这种状态照出来，prep 自己不能造它。
+    prep: "(() => { const c = document.querySelector('#settingsClose'); if (c) c.click(); const o = document.querySelector('#onboardOverlay'); if (!o) return false; o.removeAttribute('inert'); o.removeAttribute('aria-hidden'); o.classList.add('show'); return true; })()",
+    verify: "(() => { const o = document.querySelector('#onboardOverlay'); return !!o && o.classList.contains('show') && document.querySelector('#settingsOverlay.show') === null; })()",
+  },
 ];
 
 /** 规则展示顺序（未命中的规则也打印 0，便于「全绿」时有据可查）。 */
@@ -452,6 +510,10 @@ const RULE_ORDER: { name: string; level: string; note: string }[] = [
   { name: "tab-aria-selected", level: "serious", note: "role=tab 的 aria-selected" },
   { name: "tabpanel-orphan", level: "serious", note: "tab ↔ tabpanel 对应" },
   { name: "aria-hidden-focus", level: "serious", note: "aria-hidden 子树内可聚焦" },
+  { name: "modal-background-focusable", level: "serious", note: "模态开着时背景仍可聚焦（缺 inert）" },
+  { name: "background-inert-no-modal", level: "serious", note: "反例：无模态时背景被 inert（锁死背景也能骗绿）" },
+  { name: "modal-self-inerted", level: "serious", note: "反例：开着的对话框自己不可达（整页锁死也能骗绿）" },
+  { name: "closed-dialog-focusable", level: "serious", note: "收起的浮层没 inert/aria-hidden（opacity:0 挡不住焦点）" },
   { name: "aria-state-value", level: "serious", note: "aria-pressed/expanded 取值" },
   { name: "html-lang", level: "serious", note: "<html lang>" },
   { name: "heading-h1-count", level: "serious", note: "恰好一个 h1" },
@@ -517,6 +579,15 @@ function reportState(state: StateDef, scan: ScanResult): void {
   console.log("[a11y-check] 状态：" + state.name);
   let serious = 0;
   let moderate = 0;
+  // 扫描器推出一条 RULE_ORDER 里没登记的名字 ⇒ 它的违规数会被下面的循环静默丢掉。
+  // 这是"判据自己撒谎"的一条通道（本门唯一能发现它的地方就是这里），所以显式计成 serious 并打印。
+  const known = new Set(RULE_ORDER.map((r) => r.name));
+  for (const key of Object.keys(scan.rules)) {
+    if (known.has(key)) continue;
+    const count = scan.rules[key]!.count;
+    serious += count;
+    console.log("  ❌ " + key.padEnd(20) + " unknown  " + String(count).padStart(3) + "  规则名不在 RULE_ORDER：违规会被静默丢掉");
+  }
   for (const rule of RULE_ORDER) {
     const hit = scan.rules[rule.name];
     const count = hit ? hit.count : 0;
