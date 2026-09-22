@@ -5255,6 +5255,28 @@ const MUTATIONS = [
     expectFail: "worker 侧那条界要钉住：只按破坏动词表拦藏在未知首词后面的调用，「git 只是个词」的写法留得住",
   },
   {
+    id: "runner-impact-hook-never-constructed",
+    src: "src/main/agent-runner.ts",
+    test: "tests/impact-runner-wiring.test.ts",
+    desc: "构造点永不出钩子 ⇒ 影响面「两头断」复活：模块、事件、消费端、单测全在，只有 runLoop 那一环没人接（`tests/impact-wiring.test.ts` 手搭 ctx，看不见这一环）",
+    apply: (s) => s.replace(
+      "const impactHook = opts.impactAnalysis === true ? defaultImpactHook(opts.workspace) : undefined;",
+      "const impactHook = false ? defaultImpactHook(opts.workspace) : undefined;",
+    ),
+    expectFail: "开：写盘后事件流里真有 impact_report，且摘要回进了 tool_result",
+  },
+  {
+    id: "runner-impact-hook-always-constructed",
+    src: "src/main/agent-runner.ts",
+    test: "tests/impact-runner-wiring.test.ts",
+    desc: "构造点不看设置位、永远注入钩子 ⇒ 关着的用户每次写盘都白付一次全仓建图（成本与「缺省零行为」两条纪律一起破）",
+    apply: (s) => s.replace(
+      "const impactHook = opts.impactAnalysis === true ? defaultImpactHook(opts.workspace) : undefined;",
+      "const impactHook = true ? defaultImpactHook(opts.workspace) : undefined;",
+    ),
+    expectFail: "关（缺省）：一条 impact_report 都不许出现，但同一条写盘仍成功",
+  },
+  {
     id: "rule-matcher-token-boundary-dropped",
     src: "src/permissions/rules.ts",
     test: "tests/shell-bypass-composition.test.ts",
