@@ -201,3 +201,32 @@ subdirectory of the project root at "/private/tmp/dsh-anchor-776".
 在真装 worktree（HEAD=`8746aae`）逐笔跑，两条都被正确杀死。
 至此 ⑴ 与 ⑵ 两件小事都落地；本文件里那句「`pnpm gates` 只回显退出码、把 stdout 吞掉」对**绿门**已过期
 （红门早就带尾 12 行；绿门现在带一句结论 + 帽 160 字）。
+
+## 追加四（同日更晚）：第一次在真装 worktree 里跑完整张表（HEAD=`e65d9a8`）
+
+装置：`git worktree add --detach` + root `pnpm install --prefer-offline --ignore-scripts`（1.2s）
+⇒ `TERM=dumb node --import tsx scripts/gates.ts --direct`。**这一条是本轮全部结论里唯一"跑齐全表"的读数。**
+
+| 读数 | 值 | 定性 |
+| --- | --- | --- |
+| 逐道退出码 | 绿 30 / 33，红 3 | 三门红全部可归因，见下 |
+| `panels-check` 红 | `spawn …/node_modules/electron/dist/Electron.app/…ENOENT` | **装置缺件**：`--ignore-scripts` 跳过 electron 的 postinstall ⇒ 该 worktree 里根本没有 Electron 二进制。不是代码红，也不是那条时序 flake |
+| `mutate-needles-check` 红 | 阻断 6（3 沙箱 + 3 d7；`src/tools/snapshot.ts` 整文件不在 HEAD） | 别人未提交的原子簇 ⇒ #37 |
+| `mutate-verify` 红 | 跑 1167s 后抛死：`src/tools/snapshot.ts 未跟踪…拒绝` | 同 #37 的**另一面**：同一份信息在逐条循环里判，等于烧掉 19 分钟且账本无痕 ⇒ 本轮已修（预检 3s 退出） |
+| 未证 | 12 项 | 各门自报 `UNVERIFIED=` 之和；与"绿而零输出"合并计数后**本轮一门都不静默**（汇总里没有那行 ⚠️） |
+| 体检 | 扫描面 50 个已跟踪脚本，零命中 | 未跟踪探针不参与判卷（本轮改的口径） |
+| 门清单条数 | 33（主树在飞那份是 34） | 不写进任何文档——AGENTS 的"别写死门数"规矩；这里只作该日快照 |
+
+### 修掉的那一件：预检（`d48e12d`）
+
+`mutate-verify` 现在开跑前一次性算出全部 `refused` 并直接退出：**同一条件下 19 分钟 → 3 秒**（实测），
+理由与名字都打出来。判卷文件在飞仍然只让那一条 `unverified`，不进拒绝名单——
+否则并发窗口里别人一个未提交的测试文件就能把整道变异门停摆（这条正反两面都有用例）。
+顺带一处新缺口（已立待办）：被 `kill` 的整跑会留下 `src/.../*.mutbak`，
+而收尾校验 `git status --porcelain -- <srcs>` 按**精确文件路径**查，看不见同名 `.mutbak` 残留。
+
+### 装置结论（进规则 52 的那族）
+
+真装 worktree 也要看装法：`--ignore-scripts` 省时间，但 electron 的 dist 是 postinstall 拉的 ⇒
+**凡跑 Electron/CDP 的门（panels-check 及一切真窗口判据）在这种装置里必假红**。
+要么整装（不帶 `--ignore-scripts`），要么把 Electron 类门的读数标成"未证"而不是红。
