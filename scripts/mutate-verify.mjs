@@ -5603,20 +5603,29 @@ const MUTATIONS = [
     expectFail: "红 + 空输出 ⇒ 不判为静默（红门已经判红，不再重复计未证）",
   },
   {
-    id: "empty-assert-arity-guard-dropped",
+    id: "empty-assert-tail-arg-treated-as-condition",
     src: "scripts/assertion-health.ts",
     test: "tests/assertion-health-scan.test.ts",
-    desc: "空断言丢掉「恰好两参」这一眼 ⇒ 三参等值签名 check(name, actual, expected) 那族真断言又被整批判成空断言，" +
-      "而体检命中是判红的：判据越界会把「解释怎么写」变成「门表怎么红」",
-    apply: (s) => s.replace("|| (args.length === 2 && isTrueLit(args[1]!));", "|| (args.length >= 2 && isTrueLit(args[1]!));"),
+    desc: "把条件位判回「最后一个实参是不是 true」（旧正则的形状）⇒ 三参等值签名 check(name, actual, expected) " +
+      "那族真断言又被整批判成空断言，而体检命中是判红的：判据越界会把「解释怎么写」变成「门表怎么红」",
+    apply: (s) => s.replace("|| (args.length >= 2 && isTrueLit(args[1]!));", "|| isTrueLit(args[args.length - 1]!);"),
     expectFail: "三参等值签名 check(name, actual, true) ⇒ 不报（旧正则把这一族整批判成空断言）",
+  },
+  {
+    id: "empty-assert-detail-form-lost",
+    src: "scripts/assertion-health.ts",
+    test: "tests/assertion-health-scan.test.ts",
+    desc: "条件位收成「只有两参时才算」⇒ label-first 带 detail 的 `check(标签, true, detail)` 回到网外。" +
+      "上一版锚点存活就是因为用例挑了三参等值那侧：两条规则只在「true 第二位 + 还有后续实参」这一格分歧",
+    apply: (s) => s.replace("|| (args.length >= 2 && isTrueLit(args[1]!));", "|| (args.length === 2 && isTrueLit(args[1]!));"),
+    expectFail: "label-first 带 detail 的 check(label, true, detail) ⇒ 报（旧正则要求 true 在尾部，这支原本在网外）",
   },
   {
     id: "empty-assert-label-first-lost",
     src: "scripts/assertion-health.ts",
     test: "tests/assertion-health-scan.test.ts",
     desc: "收窄判定面时把该留的那一半也收掉了 ⇒ label-first 的 check(\"x\", true) 不再报，空断言重新无声通过",
-    apply: (s) => s.replace("|| (args.length === 2 && isTrueLit(args[1]!));", "|| false;"),
+    apply: (s) => s.replace("|| (args.length >= 2 && isTrueLit(args[1]!));", "|| false;"),
     expectFail: "label-first 两参 check(label, true) ⇒ 报（收窄判定面后必须留着的那一半）",
   },
   {

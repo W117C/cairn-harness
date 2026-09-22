@@ -98,6 +98,12 @@ describe("空断言 / 恒真式判据的边界（AST 化以后两头都不许失
     expect(kindsOf('check("x", true);\n')).toContain("empty-assert");
   });
 
+  // 判据按**位置**而不是按尾部：旧正则要求 `true` 出现在最后一个实参，于是 label-first
+  // 带 detail 的真空断言一直没人报；等值签名的第三位却是期望值。两条必须同时成立。
+  it("label-first 带 detail 的 check(label, true, detail) ⇒ 报（旧正则要求 true 在尾部，这支原本在网外）", () => {
+    expect(kindsOf('check("开关已生效", true, "gate=auto");\n')).toContain("empty-assert");
+  });
+
   it("cond-first check(true, label) 与裸 assert(true) ⇒ 报", () => {
     expect(kindsOf('check(true, "永远绿");\n')).toContain("empty-assert");
     expect(kindsOf("assert(true);\n")).toContain("empty-assert");

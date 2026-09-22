@@ -29,15 +29,15 @@ export function scanTautologies(file: string, src: string): ScanHit[] {
 }
 
 /**
- * 空断言（AST 级，取代旧的字面正则 `EMPTY_ASSERT`）。两种形态：
- *  ① 第一实参是字面量 `true` ⇒ `check(true, "永远绿")`、`assert(true)`；
- *  ② **恰好两个实参**、第二是字面量 `true` ⇒ label-first 签名下的 `check("x", true)`。
+ * 空断言（AST 级，取代旧的字面正则 `EMPTY_ASSERT`）。条件位只有前两个实参：
+ *  ① `args[0]` 是字面量 `true` ⇒ cond-first 签名（`check(true, "永远绿")`、`assert(true)`）；
+ *  ② `args[1]` 是字面量 `true` ⇒ label-first 签名（`check("x", true)`，也含带 detail 的
+ *     `check("x", true, "…")` —— 旧正则要求 true 出现在**尾部**，这一支本来就在网外）。
  *
- * ②为什么要数实参个数而不是"最后一个实参是不是 true"：本仓断言签名至少三套
- *（cond-first、label-first、**三参等值** `check(name, actual, expected)`）。等值签名里
- * `check("折叠项目组后行数减少", collapsed < 8, true)` 的 `true` 是**期望值**，是一条真断言。
- * 旧正则把这一族整批误判成空断言（实测：`scripts/sidebar-probe.ts` 三条里中两条、漏一条——
- * 第三条只因参数里带括号才侥幸没报）。
+ * 判据是**按位置**而不是按实参个数：本仓断言签名至少三套（cond-first、label-first、
+ * 三参等值 `check(name, actual, expected)`），等值签名里第三位是**期望值**、第二位是 actual。
+ * 旧正则"最后一个实参是不是 true"把等值那一族整批判成空断言（实测 `scripts/sidebar-probe.ts`
+ * 三条里中两条、漏一条——漏的那条只因参数里带括号才侥幸），同时又会放过 label-first 带 detail 的真空断言。
  *
  * 两支都从"按行正则"改成 AST 的另一半原因：**注释里的示例会被当成代码**。旧写法只 strip
  * 行内块注释与行注释，块注释的续行（` * …`）不在它眼里 ⇒ 在本文件的文档注释里举一个
@@ -58,7 +58,7 @@ export function scanEmptyAsserts(file: string, src: string): ScanHit[] {
       const args = node.arguments;
       if (ASSERT_NAMES.has(name)) {
         const hollow = (args.length > 0 && isTrueLit(args[0]!))
-          || (args.length === 2 && isTrueLit(args[1]!));
+          || (args.length >= 2 && isTrueLit(args[1]!));
         if (hollow) {
           const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
           hits.push({ file, line, kind: "empty-assert", text: (lines[line - 1] ?? node.getText(sf)).trim() });
