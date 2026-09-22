@@ -36,6 +36,33 @@ export function entryDisposition(info: EntryInfo): Disposition {
   return { kind: "run" };
 }
 
+/**
+ * 整跑前的预检：把全部 `refused` 一次列出来，**一条都不跑**就退出。
+ *
+ * 动因（2026-09-23 真装 worktree 的 HEAD 整跑实测）：判定原先只在逐条循环里做，于是
+ * 跑到第 k 条才撞上「`src/tools/snapshot.ts` 未跟踪」——前面 19 分钟全烧掉，抛死后
+ * 账本里连一条读数都不留（`pnpm facts` 看不见这次跑过）。同一份信息在开跑前是免费的。
+ * 注意只 `refused` 参与预检：判卷文件在飞（`unverified`）**不该**拦住整跑，
+ * 那会让别人的一个未提交测试文件把变异门整体停摆。
+ */
+export interface PreflightEntry {
+  id: string;
+  srcRel: string;
+  srcState: HeadState;
+  testRel: string;
+  testState: HeadState;
+}
+
+export function preflightRefusals(entries: readonly PreflightEntry[]): Array<{ id: string; why: string }> {
+  return entries
+    .map((e) => ({
+      id: e.id,
+      d: entryDisposition({ srcRel: e.srcRel, srcState: e.srcState, testRel: e.testRel, testState: e.testState }),
+    }))
+    .filter((x) => x.d.kind === "refused")
+    .map((x) => ({ id: x.id, why: x.d.why ?? "" }));
+}
+
 // ---- 针脚静态预检：不跑测试就知道某条锚点还摸不摸得到代码 ----
 // 动因（2026-09-19 实跑，220 条里揪出 2 条）：把被锚定的实现搬进共用原语（text-budget）后
 // 忘了改指锚点 ⇒ needle 不再出现，那条变异变成**空操作**。跑它会得到「突变未生效」的红，

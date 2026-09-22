@@ -22,7 +22,7 @@ import { execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, duplicateIds, needleProblemLine, needleSeverity, classifyArgs, isLineWiseApply } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, duplicateIds, preflightRefusals, needleProblemLine, needleSeverity, classifyArgs, isLineWiseApply } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -3969,6 +3969,15 @@ const MUTATIONS = [
     expectFail: "无重复 ⇒ 空数组；成对与三连都各报一次，count 如实",
   },
   {
+    id: "mutate-preflight-refusals-dropped",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "整跑前的拒绝名单收成恒空 ⇒ 门又回到「跑到第 k 条才撞上未跟踪源文件」：实测烧掉 19 分钟，" +
+      "抛死后账本里连一条读数都不留（pnpm facts 看不见这次跑过）",
+    apply: (s) => s.replace('.filter((x) => x.d.kind === "refused")', '.filter((x) => x.d.kind === "never-refused")'),
+    expectFail: "未跟踪与在飞的源文件都进名单，并带上是哪一条与为什么",
+  },
+  {
     id: "grep-negative-note-loses-escape-hatch",
     src: "src/tools/grep.ts",
     test: "tests/grep-glob-edit.test.ts",
@@ -5884,6 +5893,23 @@ if (targets.length && entries.length !== targets.length) {
 }
 
 console.log(`变异验证：${entries.length} 条`);
+// 预检（动因：HEAD 整跑实测烧掉 19 分钟才在第 k 条撞上"源文件未跟踪"，抛死后账本无痕）。
+// 状态按路径缓存——678 条只对应几十个不同文件，逐条 git 会白跑上千次子进程。
+const headStateCache = new Map();
+const stateOf = (rel) => {
+  let v = headStateCache.get(rel);
+  if (v === undefined) { v = headStateOf(rel); headStateCache.set(rel, v); }
+  return v;
+};
+const refusedUpfront = preflightRefusals(entries.map((m) => ({
+  id: m.id, srcRel: m.src, srcState: stateOf(m.src), testRel: m.test, testState: stateOf(m.test),
+})));
+if (refusedUpfront.length > 0) {
+  for (const r of refusedUpfront) console.error(`❌ ${r.id} — ${r.why}`);
+  console.error(`[mutate-verify] 预检拒绝 ${String(refusedUpfront.length)} 条 ⇒ 一条都不跑。` +
+    "（判卷文件在飞只让那一条不可判，不在拒绝之列——否则别人一个未提交测试就能把变异门整体停摆）");
+  process.exit(1);
+}
 const results = entries.map((m) => {
   const r = verifyEntry(m);
   const mark = r.ok === null ? "⏭️" : r.ok ? "✅" : "❌";
