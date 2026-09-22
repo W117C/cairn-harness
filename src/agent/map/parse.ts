@@ -109,8 +109,9 @@ const PATTERNS = [
 /** 抽取**逻辑本体**的版本（谁算一个符号、谁算一次引用的那段代码）。pattern 文本已自动进哈希，
  *  这一条只兜住「文本一字没动而判断变了」——改 `isLocalVariableBinding`/`NESTED_SCOPES`/属性式取舍时手工 +1。
  *  ⚠️ 必须先于 `TAGS_EXTRACT_VERSION` 声明：后者在模块求值期就要读它（放后面是 TDZ 崩）。
- *  rev 2（2026-09-23）：变量声明名要在模块作用域才计入（`isLocalVariableBinding`）。 */
-const EXTRACT_LOGIC_REV = 2;
+ *  rev 2（2026-09-23）：变量声明名要在模块作用域才计入（`isLocalVariableBinding`）。
+ *  rev 3（2026-09-23）：语法错误文件从「整文件一票否决」改成「ERROR 子树之外部分回收」。 */
+const EXTRACT_LOGIC_REV = 3;
 /** 版本号的算法单独成一个纯函数：判卷可以直接拿「改一行 pattern ⇒ 版本必须变」这条不变量打它。 */
 export function tagsExtractVersion(patterns: readonly string[]): string {
   return createHash("sha1").update(EXTRACT_LOGIC_REV + "\n" + patterns.join("\n")).digest("hex").slice(0, 12);
@@ -207,7 +208,16 @@ function isLocalVariableBinding(nameNode: import("web-tree-sitter").Node): boole
   return !declaredAtModuleScope(nameNode);
 }
 
-/** 抛错版单文件 tags：语法错误/空文件返回空 tags；grammar 加载失败向上抛（调用方降级）。 */
+/** 名字落在 ERROR / MISSING 子树里 ⇒ 它是 grammar 错误恢复**猜**出来的，不是代码里真存在的声明。
+ *  部分回收（见 `fileTags` 的 `recovering` 一支）只信错误节点之外的兄弟子树。 */
+function underError(node: import("web-tree-sitter").Node): boolean {
+  for (let p: import("web-tree-sitter").Node | null = node.parent; p !== null; p = p.parent) {
+    if (p.type === "ERROR" || p.isMissing) return true;
+  }
+  return false;
+}
+
+/** 抛错版单文件 tags：语法错误文件不抛；见下方 `recovering` 一支的口径。 */
 export async function fileTags(src: string, ext: string): Promise<SymbolTag[]> {
   const lang = LANG_BY_EXT[ext];
   if (!lang) return []; // 不认识的后缀：空 tags（不抛）
@@ -223,16 +233,20 @@ export async function fileTags(src: string, ext: string): Promise<SymbolTag[]> {
   } catch {
     return []; // parse 抛错 = 语法错误文件：空 tags，不抛
   }
-  // 语法错误文件：hasError 时仍尝试 query（错误恢复节点常能给出部分 tags），
-  // 但根节点缺父结构时 query 可能抛 —— 任何一步异常都返回空 tags（本模块契约）。
+  // 语法错误文件：以前整文件一票否决（`hasError ⇒ []`）。实测代价：本仓 4 个**合法** TS 文件
+  // 因此在图里完全不存在（`new Map<string, () => Promise<void>>()`、`import("x").T`、含 `//` 的正则
+  // 字面量都会让 typescript grammar 报 ERROR），而 `impact_query` 只会回「这张图里没有这个符号」——
+  // 「没有」与「漏了」在读端同形。现在改成**部分回收**：错误节点之外的兄弟子树照常抽，
+  // 落在 ERROR/MISSING 里的名字丢掉（那是猜的）。整文件都是错的（`function {{{ nope`）仍然得到空集。
   try {
-    if (tree.rootNode.hasError) return [];
+    const recovering = tree.rootNode.hasError;
     const query = await queryFor(lang, loaded);
     if (!query) return [];
     const tags: SymbolTag[] = [];
     for (const m of query.matches(tree.rootNode)) {
       for (const c of m.captures) {
         if (c.name !== "def" && c.name !== "ref") continue;
+        if (recovering && underError(c.node)) continue;
         const name = c.node.text;
         if (!name) continue;
         if (c.name === "def" && isLocalVariableBinding(c.node)) continue; // 函数体里的变量不是跨文件符号

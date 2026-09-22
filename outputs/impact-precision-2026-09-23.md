@@ -253,3 +253,71 @@ map/impact/tags 全套 12 文件 115 条测试通过，7 条新锚点逐笔真�
 是不是唯一名**（把不确定性交给人，而不是拿 10% 的漏报去换整洁），而卡的形状要经
 `semanticLease` 钩子签名 ⇒ 该面在别人的在飞改动集里（`src/main/agent-runner.ts`、`src/agent/orchestrator.ts` 均为 `M`）。
 **因此本轮只落读数与判据口径，不改实现**；已立待办 #46，落地入口写在那里。
+
+## 九、precision 之外还欠一把尺：召回（同日，`scripts/probe-map-recall.ts`）
+
+前面八节全在量「图里多出来的边对不对」，但**漏抽从来没量过**——而漏抽在读端是不可见的：
+`impact_query` 对没抽到的符号回「这张图里没有这个符号」，**「没有」与「图漏了」同形**。
+新尺子必须独立于被测面：抽取走 tree-sitter `.scm`，地面真值改走 TypeScript 自己的 AST
+（`ts.createSourceFile`，devDep 已有），只数**模块作用域的具名声明**（function/class/interface/type/enum/带初值的 const|let），
+口径与 §三 一致（局部量与属性引用是主动收掉的假边来源，不算召回）。
+
+首跑读数（真仓库 405 个 `.ts`）：
+
+| | 声明 | 图里有定义 | 召回 | 整文件零抽取 |
+| --- | --- | --- | --- | --- |
+| 修前 | 3,287 | 3,241 | **0.9863** | **4 个** |
+| 修后 | 3,282 | 3,279 | **0.9991** | **0 个** |
+
+两行是**同一把尺的两次跑**，但中间我改过仓库（探针自己重写了一版，模块级声明总数差 5 个）——
+所以别拿 3,287 与 3,282 相减当收益。收益看的是绝对量：**那 4 个文件共 42 个声明从隐身回到图里**，
+剩余漏抽 3 个（下一小节）。
+
+### 那 4 个文件是这一节真正的发现
+
+`src/agent/map/parse.ts`（27 个模块级声明全丢）、`scripts/ipc-reachability-check-core.ts`（7）、
+`tests/secrets.test.ts`（4）、`tests/sessions.test.ts`（4）——**四个都是合法 TS**（`pnpm typecheck` 全过），
+但 tree-sitter 的 typescript grammar 在其中报了 ERROR/MISSING，而旧 `fileTags` 对 `hasError` 是**整文件一票否决**：
+
+```
+scripts/ipc-reachability-check-core.ts:54   含双斜杠的正则字面量（HTML 注释那条，逐字见该文件第 54 行）
+src/agent/map/parse.ts:45                  type Lang = import("web-tree-sitter").Language;
+tests/secrets.test.ts:6                    importOriginal<typeof import("node:fs/promises")>()
+tests/sessions.test.ts:6                   同上
+```
+
+四个里有**三个**共用同一个形状：**类型位置里的 `import(...)`**（包括把它塞进泛型实参），第四个是含双斜杠的正则字面量。
+`import("pkg").T` 是 TS 写 ambient/跨包类型的常规手段，`vi.mock` 的 `importOriginal<typeof import(...)>()` 更是 vitest 的标准写法
+——也就是说，**任何这样写 mock 的测试文件此前都不在符号图里**。
+后果不是"少一条边"而是**整个文件对符号图不存在**：谁改了 `parse.ts`，impact 只会说「这张图里没有 `fileTags`」。
+（讽刺面：出问题的那个文件，就是负责抽取的那个文件。）
+
+更值得记的是这条缺陷**为什么一直没被发现**：`tests/map-parse.test.ts` 早有一条用例写着
+「语法错误文件不抛、返回空 tags」——它测的是夹具（`function {{{ nope`，整文件确实都是错的，
+改成部分回收后仍然返回空集），而注释里写着另一套意图（「hasError 时仍尝试 query，错误恢复节点常能给出部分 tags」）。
+**注释与代码相反、测试只覆盖到两者都同意的那一格** ⇒ 这条一票否决在测试上是"有覆盖"的，实际是一次没被读过的取舍。
+
+### 落地
+
+1. `fileTags`：`hasError` 不再整文件否决，改为**部分回收**——只丢掉落在 `ERROR`/`MISSING` 子树里的 capture
+   （`underError`：那是 grammar 猜的碎片）。老契约「整文件都坏 ⇒ 空 tags」一字未改，它现在同时是这条过滤的观测者。
+2. `EXTRACT_LOGIC_REV` 2 → 3：判据变了，磁盘 tags 缓存必须作废（#44 那套版本闸正是为这一刻建的）。
+3. `map-check` 新增 **⑦ 真仓库召回：零抽取文件数 = 0**（实测 `files=405 decls=3282 召回率=0.9991 漏抽=3`）。
+   **守机制不守阈值**：召回率会随新语法浮动，而「TS 认得过、图里却一个定义都没有」不会。grammar 装不上时打「未证」行，
+   不冒充绿也不判红。
+4. 探针本体 `scripts/probe-map-recall.ts`：每次跑都注入**自检**（拿一个必然存在的定义问抽取面认不认）——
+   第一次落地时它读了个「召回 0.0000」，原因是我把 `fileTags(src, ".ts")` 的后缀写错了（该函数按**不带点**的键查表，
+   不认识的静默给空集）。四种完全不同的成因共用同一行 0，没有自检就会有一条永远绿的瞎门。
+
+判卷：`tests/map-parse.test.ts` 8 → 10 条（合成夹具那条钉「回收不只照单全收」，泛型实参里的 `void` 不许成为 def；
+真文件那条钉四个回归现场），锚点 2 条（709 → 711）：`map-haserror-drops-whole-file`（退回一票否决 ⇒ 真文件用例红）、
+`map-error-subtree-names-not-filtered`（撤掉 ERROR 子树过滤 ⇒ 老契约用例红）。
+
+### 剩下 3 个为什么不追
+
+`projectUnits` / `windowRange` / `mountHistory` 都在 `src/renderer/history-window.d.ts`：
+ambient 声明文件里的**只有签名没有函数体**的 `export function`。要抽它们得给 `.d.ts` 开一条 pattern，
+而 `.d.ts` 的引用是**类型边不是运行边**——§三 刚花一整轮把「同名不同实体」的假边清出去，
+现在再塞一类"看着像依赖"的边是反方向。留读数（⑦b 的 `漏抽=3` 会一直挂在门输出里），
+要追就得连「类型边与运行边分开算」一起做，已立待办 #50。
+

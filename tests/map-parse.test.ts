@@ -51,6 +51,35 @@ describe("map parse（任务 1）", () => {
     __resetQueryCache();
   });
 
+  it("grammar 误报的合法 TS 不再整文件消失：ERROR 之外的定义照常回收", async () => {
+    // 实测触发面（本仓 4 个合法文件因此此前在图里完全不存在）：类型位置里的 `import("pkg").T`
+    // （`src/agent/map/parse.ts` 与两个 test 文件里的 `importOriginal<typeof import(...)>()`）、
+    // 含双斜杠的正则字面量（`ipc-reachability-check-core.ts`）。旧口径「一票否决整文件」
+    // 把错误节点**之外**的正常定义也一起丢了，而读端只会说「这张图里没有这个符号」。
+    const src = [
+      'type Alias = import("node:fs/promises").FsPromisesStatics;',
+      "const reg = new Map<string, () => Promise<void>>();",
+      "export function recoveredAfterNoise(): number { return reg.size; }",
+    ].join("\n");
+    const tags = await fileTags(src, "ts");
+    const defs = tags.filter((t) => t.kind === "def").map((t) => t.name);
+    expect(defs, "错误节点之后的正常函数必须还在图里").toContain("recoveredAfterNoise");
+    expect(defs).toContain("reg");
+    // 回收不等于照单全收：类型实参里的词不该成为跨文件符号（那是猜出来的碎片）
+    expect(defs, "泛型实参不该被当成定义").not.toContain("void");
+  });
+
+  it("真仓库里那四个曾被一票否决的文件，如今每个都有定义入图（回归现场比合成夹具更硬）", async () => {
+    const { readFile } = await import("node:fs/promises");
+    // 这四个是 `probe-map-recall.ts` 首跑实测出来的：TS 认得过、tree-sitter 报 ERROR ⇒ 旧口径整文件丢弃。
+    // 钉真文件而不是只钉夹具：夹具会随 grammar 升级失真，这四个是这条缺陷在本仓的存在证明。
+    for (const rel of ["src/agent/map/parse.ts", "scripts/ipc-reachability-check-core.ts", "tests/secrets.test.ts", "tests/sessions.test.ts"]) {
+      const src = await readFile(new URL("../" + rel, import.meta.url), "utf8");
+      const defs = (await fileTags(src, "ts")).filter((t) => t.kind === "def");
+      expect(defs.length, rel + " 不许整文件零抽取").toBeGreaterThan(0);
+    }
+  });
+
   it("行号指向声明/引用所在行（1-based）", async () => {
     const src = [
       "a = 1",

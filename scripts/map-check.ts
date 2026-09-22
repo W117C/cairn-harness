@@ -6,7 +6,8 @@
 import { cp, mkdtemp, readdir, stat, utimes, writeFile } from "node:fs/promises";
 import { lstatSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { measureMapRecall } from "./probe-map-recall.js";
 import { createMapBuilder, scanSourceFiles } from "../src/agent/map/build.js";
 import { buildGraph, personalizedPageRank } from "../src/agent/map/rank.js";
 import { clampBudget, renderMapBudget } from "../src/agent/map/render.js";
@@ -100,6 +101,19 @@ async function main(): Promise<void> {
   check("⑥用户仓库内无 tags 缓存文件", leaked.length === 0, leaked.slice(0, 3).join(","));
   const cacheEntries = await readdir(tagsDir);
   check("⑥b 应用数据目录（tmp）缓存存在", cacheEntries.length > 0, `entries=${cacheEntries.length}`);
+
+  // ⑦ 召回不变量（在**真仓库**上量，不是那份 tmp 拷贝）：合法文件不许整文件从图里消失。
+  // 只守机制不守阈值——召回率会随新语法自然浮动，而「TS 自己认得过、图里却一个定义都没有」不会。
+  // 立这条的实测：首跑 4 个合法文件因 grammar 误报被一票否决（含 `src/agent/map/parse.ts` 自己，
+  // 27 个模块级声明全丢），改成 ERROR 子树之外的部分回收后归零（召回 0.9863 → 0.9991）。
+  try {
+    const rep = await measureMapRecall(resolve(import.meta.dirname, ".."));
+    const rate = rep.decls === 0 ? 0 : rep.caught / rep.decls;
+    check("⑦真仓库召回：零抽取文件数 = 0", rep.zeroDefFiles.length === 0,
+      `files=${String(rep.tsFiles)} decls=${String(rep.decls)} 召回率=${rate.toFixed(4)}（读数）漏抽=${String(rep.misses.size)} 零抽取=${rep.zeroDefFiles.slice(0, 3).map(([f]) => f).join(",")}`);
+  } catch (err) {
+    console.log(`  ⚠️ ⑦未证：召回测量跑不动（${err instanceof Error ? err.message : String(err)}）——不拿「量不了」当「通过」，也不当红`);
+  }
 
   console.log("[map-check] 符号地图验收");
   for (const r of results) console.log(r);
