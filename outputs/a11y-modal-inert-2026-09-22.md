@@ -4,8 +4,9 @@
 > 实测设置浮层打开的那一刻，背景有 **56 个可聚焦元素**（底栏按钮、会话列表、搜索框……）。
 > 这不是判据缺陷，是产品缺陷：`aria-modal` 只**告诉** AT「这是模态」，规范不因此免除 inert。
 > 修法落在 `src/renderer/app.js` 尾部一处（`syncModalBackdrop` + 一个 `MutationObserver`），
-> 判据落在 `scripts/a11y-check.ts`（新增 4 条规则 + 第 4 个相 + 一条「未知规则不得静默丢掉」的守卫）。
-> 基线 HEAD `ee7db2d`。
+> 判据落在 `scripts/a11y-check.ts`（新增 4 条规则 + 第 4 个相 + 一条「未知规则不得静默丢掉」的守卫），
+> 离线观测者落在 `tests/renderer-modal-backdrop.test.ts`（9 条）+ 4 条变异锚点。
+> 基线 HEAD `ee7db2d`，落地 commit `a9c4151`。
 
 ## 复算
 
@@ -53,8 +54,8 @@ TERM=dumb pnpm test                        # 193 文件 / 1915 条（含 42 个�
 ### 2. inert 的判据不取 `MODAL_DISMISS`，取 DOM
 
 首版写成「`openModal() !== null` 就锁」。跑门立刻红 56——但**这次是判据越界**：
-`#onboardOverlay` 的登记（`registerModalDismiss`，`app.js:2451`）在 `window.agent` 桥接段内部，
-而该段开头 `if (!api || typeof api.listSessions !== 'function') return;`（`app.js:2365`）
+`#onboardOverlay` 的登记（`registerModalDismiss('#onboardOverlay', …)`）在 `window.agent` 桥接段内部，
+而该段开头 `if (!api || typeof api.listSessions !== 'function') return;`
 在 `--static` 预览下整段提前返回 ⇒ 收起表里根本没有这个浮层 ⇒ `openModal()` 判「没开着」⇒ 背景不锁。
 
 区分清楚了才动手：**登记表记的是「怎么关」**（Escape 需要一个 close 函数），
@@ -106,22 +107,57 @@ TERM=dumb pnpm test                        # 193 文件 / 1915 条（含 42 个�
 证伪相当场出现两个 `.show` 并存（一个 inert、一个没 inert），单数写法只会查第一个，
 第二个里的可聚焦项既不算背景也不算对话框——一条被静默跳过的判据。
 
-## 读数（本轮实跑，`ee7db2d` + 在飞改动）
+## 离线观测者与四条锚点
+
+慢门不是观测者：`mutate-verify` 只消费 vitest 文件，所以这条产品判据若只有 a11y 门看着，
+「inert 判据退回取 `MODAL_DISMISS`」「观测器漏掉 `subtree:true`」两类回归连锚点都挂不上——
+而这两件事本轮各实踩过一次。补了 `tests/renderer-modal-backdrop.test.ts`（9 条，切 `app.js` 尾段进 vm 跑）：
+
+| 判什么 | 怎么判 |
+|---|---|
+| 开着 ⇒ `body > .app` 挂 `inert` + `aria-hidden` | 直接读 fake 元素的属性表 |
+| 一支都没开着 ⇒ 不锁 | 成对负控（只测「锁上了」会放过「永远锁死背景」） |
+| 开↔关来回都重刷 | 翻状态后手调 `syncModalBackdrop()`，两侧都断言 |
+| inert 只落在背景，不碰对话框 | 断言对话框的属性表为空（写它就等于把浮层锁死） |
+| **判据不取收起表** | 断言整段只查 `[APP_SEL, DIALOG_SEL]` 两个选择器，一次都不按 `#id` 找浮层 |
+| 观测带 `subtree:true` 且盯 body | 断言 `observe` 的 target 与 options |
+| 只有对话框/body 的 class 改动触发重刷 | 用捕获到的观测器回调喂三类 record，数取料次数 |
+
+对应四条变异锚点（`backdrop-inert-decided-by-dismiss-registry`、`backdrop-observer-loses-subtree`、
+`backdrop-never-uninerts-on-close`、`backdrop-resyncs-on-any-class-change`），
+在干净 HEAD `a9c4151` 上逐条实跑**全部被杀死**：
+
+```sh
+TERM=dumb node --import tsx scripts/mutate-verify.mjs \
+  backdrop-inert-decided-by-dismiss-registry backdrop-observer-loses-subtree \
+  backdrop-never-uninerts-on-close backdrop-resyncs-on-any-class-change
+```
+
+## 读数（本轮实跑）
 
 - `a11y-check`：四相全绿，逐规则 0，`4/4 项通过 ✅`（含四条新规则各 0）。
 - `renderer-arch-check`：`84/84 通过 ✅`。
 - `panels-check`：exit 0，`✅` 161 条——inert 没有挡住任何背景点击流（审批卡 / 侧栏 / 定时任务面板都在 `.app` 内，
   只有浮层开着时才会被锁，而那正是应有的行为）。
-- `typecheck`：exit 2，归因行报 `HEAD 内 0 个 / 未跟踪草稿 1 个`（`scripts/sidebar-probe.ts`，
-  另一会话的在飞文件，不属本轮改动）。
+  **其中 B21 十七行是「向导真开着」时跑的**（首启必弹 + 焦点圈 + 三种关法 + 重开不再弹，四次真启动）：
+  **其中一条直接回答了「锁背景会不会把对话框一起锁死」**：
+  `✅ B21 Tab 圈在浮层内（焦点从末位绕回首位；实测 activeElement="onbLater"）`——
+  同一份产物里背景已挂 inert，向导内的按钮仍拿得到焦点（拿不到就不会是 `onbLater`）。
+- `commercial-check`：`46 ✅ / 0 ❌`（D2b/D2c 只判存储面，「首启必弹」在 panels-check B21，两门不互相顶）。
+- `docs-check`：exit 0，并显式打印「STATE.md 不存在 ⇒ D-1/D-2/D-4/D-5 未受检，不等于通过」。
 - `test`：exit 0，`Test Files 193 passed (193)` / `Tests 1915 passed (1915)`，74.99s。
   其中 28 个文件用 vm 跑源码片段（`app.js` 的区间切片在内），新增的模块级函数 `syncModalBackdrop`
   落在文件尾、且不被任何区间内引用 ⇒ 切片界外一条未破（界内引用会直接 `ReferenceError`）。
+- `mutate-needles-check`：针脚 624 条（+4），阻断 0 / 待复认 0 / 未覆盖 0，改法语法全合法。
+- **干净 HEAD 单验**（`git worktree add --detach /tmp/dsh-wt-a9c4151 a9c4151` + 软链 node_modules）：
+  `tsc --noEmit` exit 0（0 行输出）；两个模态测试文件 14 条全过。
+  主树 `pnpm typecheck` 的 exit 2 全部归因到另一会话的未跟踪草稿 `scripts/sidebar-probe.ts`——
+  这句只在**同 HEAD 开 worktree 实跑**后才敢写（工作树口径的归因句不算证据）。
 
 ## 未证 / 留位
 
-- **真窗口下「向导开着时 Tab 走不到背景」没有直接量过**：a11y 门扫的是静态构建产物，
-  panels-check 的 B21 只判「向导真的弹」。要量这条得在真 Electron 里做键盘 Tab 圈，本轮未做。
+- **真窗口下没量过正面那半**：B21 判的是「焦点绕回浮层内」，不是「按 Tab 走不到背景」——
+  后者由 a11y 门的 5b 在构建产物上判（改前红 56、改后 0），没在真 Electron 里按键复验过。
 - **`inert` 对 `pointer-events` 的连带影响未逐项验证**：门与 panels-check 全绿是间接证据，
   不是「鼠标行为逐条对过」。
 - `#riskScrim`（安全确认）本轮没单独造相——它和设置/向导共用同一份 inert 同步与同一条规则，
