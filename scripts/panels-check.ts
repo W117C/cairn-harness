@@ -1560,6 +1560,24 @@ async function phaseOnboarding(): Promise<void> {
     }
   };
 
+  /** 背景可达性的当场读数：先把当前焦点 blur 掉（否则「上一次调用留下的焦点」会参与比较——
+   *  证伪时实测到这条顺序依赖：inert 关掉后 `moved` 反因焦点已在背景上而报 false），
+   *  再对背景按钮 `.focus()`，直接问**它自己有没有拿到焦点**：inert 挂着时是 no-op ⇒ `got:false`。
+   *  `inert` + `got` 这一对，就是「锁背景」与「锁整页」的分界。 */
+  const backdrop = (cdp: Cdp) => cdp.eval<{ inert: boolean; got: boolean; to: string }>(
+    `(() => {
+       const app = document.querySelector('body > .app');
+       const bg = document.querySelector('#sidebarToggle');
+       const has = !!(app && app.hasAttribute('inert'));
+       if (!bg) return { inert: has, got: false, to: 'no-bg-node' };
+       const cur = document.activeElement;
+       if (cur && cur !== document.body && typeof cur.blur === 'function') cur.blur();
+       bg.focus();
+       const now = document.activeElement;
+       return { inert: has, got: now === bg, to: now ? String(now.id || now.tagName) : 'null' };
+     })()`,
+  );
+
   // ① 全新安装：必弹，且七组是从主进程那张表来的（界面里一个字都没写死）
   const a = await launch();
   if (a) {
@@ -1577,10 +1595,20 @@ async function phaseOnboarding(): Promise<void> {
          return !o || !o.contains(n) ? "outside:" + String(n ? (n.id || n.className || n.tagName) : "null") : String(n.id || ""); })()`,
     );
     ok(wrapped === "onbLater", "B21 Tab 圈在浮层内（焦点从末位绕回首位；实测 activeElement=" + JSON.stringify(wrapped) + "）");
+    /* B22：背景在**真窗口**里到底走不走得到。a11y 门扫的是构建产物里的 DOM 可达性，
+       这里判的是真 Electron + `.focus()` 的实际结果——inert 挂着时背景抢不走焦点，
+       关掉之后必须抢得走（只测前一半，「整页锁死」也能骗绿）。 */
+    console.log("[panels-check] B22 模态背景的可达性（真窗口 .focus()，不是静态扫描）");
+    const openBg = await backdrop(a.cdp);
+    ok(openBg.inert === true, "B22 向导开着时背景整块 inert（实测 body > .app inert=" + String(openBg.inert) + "）");
+    ok(openBg.got === false, "B22 背景真的抢不到焦点（.focus() 后 activeElement 不是它；实测 " + JSON.stringify(openBg.to) + "）");
     // ② 「稍后再说」只关窗，不写确认位
     ok(await click(a.cdp, "#onbLater") === "clicked", "B21 「稍后再说」按得下去");
     const h1 = await awaitHidden(a.cdp);
     ok(h1 !== null, "B21 点「稍后再说」后向导收起（实测 shown=" + String(h1?.shown ?? true) + "）");
+    const closedBg = await backdrop(a.cdp);
+    ok(closedBg.inert === false, "B22 关掉后背景解锁（不成对测这条，「永远锁死背景」也判绿；实测 inert=" + String(closedBg.inert) + "）");
+    ok(closedBg.got === true, "B22 关掉后焦点进得去背景（实测 activeElement=" + JSON.stringify(closedBg.to) + "）");
     ok((await readDisk()).onboarded !== true, "B21 但盘上没写 onboarded——可中断不等于已确认（实测 " + JSON.stringify((await readDisk()).onboarded ?? "缺席") + "）");
     await killElectron(a.proc);
   }

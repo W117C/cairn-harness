@@ -162,3 +162,34 @@ TERM=dumb node --import tsx scripts/mutate-verify.mjs \
   不是「鼠标行为逐条对过」。
 - `#riskScrim`（安全确认）本轮没单独造相——它和设置/向导共用同一份 inert 同步与同一条规则，
   三条成对反例对它同样生效。
+
+## 追注（同日）：未证第 1 条已收 —— 真窗口的 `.focus()` 实测（panels-check B22）
+
+上面「真窗口下没量过正面那半」由 `scripts/panels-check.ts` 的 B22 四条收掉，跑在真 Electron +
+B21 那同一次向导开启上：
+
+```
+✅ B22 向导开着时背景整块 inert（实测 body > .app inert=true）
+✅ B22 背景真的抢不到焦点（.focus() 后 activeElement 不是它；实测 "BODY"）
+✅ B22 关掉后背景解锁（不成对测这条，「永远锁死背景」也判绿；实测 inert=false）
+✅ B22 关掉后焦点进得去背景（实测 activeElement="sidebarToggle"）
+```
+
+复算：`pnpm panels-check`（该门自带构建，改完 `src/renderer/` 不必手动 `pnpm build`）。
+
+### 证伪过程抓出的是**断言自己**的缺陷（第一版是假红）
+
+把产品那行 inert 同步临时改成 `if (false)`、复跑本门：
+
+| 断言 | 第一版（比较 activeElement 是否**变了**） | 第二版（先 blur，再问背景**有没有拿到**焦点） |
+|---|---|---|
+| 开着 ⇒ 抢不到 | ❌ 红（对） | ❌ 红（对） |
+| 开着 ⇒ inert 挂着 | ❌ 红（对） | ❌ 红（对） |
+| 关掉 ⇒ 焦点进得去 | ❌ **也红了（错）** | ✅ 绿（对） |
+
+第一版红得不该红：`moved = now !== before` 把**上一次调用留下的焦点**当基线——
+证伪那一跑里焦点已经在背景按钮上，于是「变了」为假。⇒ 该断言实际在测**调用顺序**，不是测焦点。
+改成先把当前焦点 `blur()` 再判 `activeElement === bg`，与顺序无关。
+**教训**：证伪不只是「让它红一次」，还要核**红的是不是该红的那一半**——
+只测「能否红」会放过这种顺序依赖型假红，而假红会把人推回去改产品，方向正好相反。
+（还原核对：`git diff --stat HEAD -- src/renderer/app.js` 输出为空 ⇒ 与 HEAD 逐字一致。）
