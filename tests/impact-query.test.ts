@@ -28,6 +28,21 @@ afterAll(async () => {
 });
 
 describe("impact_query：改之前问波及谁", () => {
+  it("图里没有它的定义 ⇒ 不许报「波及 N 个文件」，要明说这一问不适用（外部/全局符号）", async () => {
+    const ws = await mkdtemp(join(tmpdir(), "impact-query-nodef-"));
+    await writeFile(join(ws, "a.js"), "export function f() { return globalHelper(1); }\n", "utf8");
+    await writeFile(join(ws, "b.js"), "export function g() { return globalHelper(2); }\n", "utf8");
+    const r = await createImpactQueryTool(cacheDir).run({ symbol: "globalHelper" }, { workspace: ws, emit: async () => {} });
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("没有任何文件");
+    expect(r.output).toContain("图内没有 ≠ 仓库里没有"); // 被帽/忽略规则挡在图外也是一种成因
+    expect(r.output).not.toMatch(/波及 \d+ 个文件/);
+    // 反面对照（收窄判定面必须补这条）：定义在图内时，同一句照旧给出文件数
+    const inGraph = await tool().run({ symbol: "compute" }, ctx());
+    expect(inGraph.output).toContain("波及 2 个文件");
+    await rm(ws, { recursive: true, force: true });
+  });
+
   it("symbol 模式给出跨文件调用点（含定义文件自身要排除）", async () => {
     const r = await tool().run({ symbol: "compute" }, ctx());
     expect(r.ok).toBe(true);

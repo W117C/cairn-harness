@@ -1085,7 +1085,7 @@ const MUTATIONS = [
     src: "src/tools/impact-query.ts",
     test: "tests/impact-query.test.ts",
     desc: "图里没有的符号不再说明原因（改名后的符号会被报成「波及半径为 0」——模型据此判定没人用，直接删掉它）",
-    apply: (s) => s.replace("      if (defined.length === 0 && (graph.refs.get(symbol) ?? []).length === 0) {\n", "      if (false) {\n"),
+    apply: (s) => s.replace("      if (defined.length === 0 && refSites.length === 0) {\n", "      if (false) {\n"),
     expectFail: "图里没有的符号：fail-visible 说明原因，不静默返回空",
   },
   {
@@ -5765,6 +5765,71 @@ const MUTATIONS = [
       "这一格只有「常量 === 按现网 pattern 算出来的值」这条断言能看见",
     apply: (s) => s.replace("export const TAGS_EXTRACT_VERSION = tagsExtractVersion(PATTERNS);", "export const TAGS_EXTRACT_VERSION = \"000000000000\";"),
     expectFail: "导出的常量确实等于按现网 pattern 算出来的值（不是抄下的字面量）",
+  },
+  {
+    id: "impact-local-var-gate-dropped",
+    src: "src/agent/map/parse.ts",
+    test: "tests/map-parse.test.ts",
+    desc: "局部变量又算跨文件符号 ⇒ 函数体里的 `const target = …` 会与另一个文件里同名变量的调用连一条边" +
+      "（实测 14,312 个定义里 10,184 个是这种；`i` 有 187 个「定义」、`p` 有 119 个），" +
+      "于是「改它会波及谁」的回答里掺进一堆凭名字撞上的假边",
+    apply: (s) => s.replace("if (c.name === \"def\" && isLocalVariableBinding(c.node)) continue;", "if (false && c.name === \"def\") continue;"),
+    expectFail: "函数体里的变量声明不算定义，模块作用域的同名变量照算",
+  },
+  {
+    id: "impact-local-var-gate-dropped-graph-face",
+    src: "src/agent/map/parse.ts",
+    test: "tests/impact.test.ts",
+    desc: "同一条判据的**消费面**：抽取漏了闸，最终坏在「两个同名局部变量的文件之间出现一条边」这件事上。" +
+      "一支锚点只认一支判卷 ⇒ 图侧那组断言若哪天只看图不看 tags，就得有这条替它盯着",
+    apply: (s) => s.replace("if (c.name === \"def\" && isLocalVariableBinding(c.node)) continue;", "if (false && c.name === \"def\") continue;"),
+    expectFail: "两个文件各有一个同名局部变量 ⇒ 零条边（旧判据会连一条出去，因为局部变量也进了符号表）",
+  },
+  {
+    id: "impact-module-scope-climb-accepts-nested",
+    src: "src/agent/map/parse.ts",
+    test: "tests/map-parse.test.ts",
+    desc: "作用域上溯不再认「嵌套执行作用域的容器」⇒ 每个节点都能走到 program，" +
+      "于是所有声明都被判成模块级，那道闸变成空操作（第一次量这个数时就是这样：1,666/1,666 全判模块级）",
+    apply: (s) => s.replace("if (NESTED_SCOPES.has(n.type)) return false;", "if (false) return false;"),
+    expectFail: "函数体里的变量声明不算定义，模块作用域的同名变量照算",
+  },
+  {
+    id: "impact-node-identity-compare-in-gate",
+    src: "src/agent/map/parse.ts",
+    test: "tests/map-parse.test.ts",
+    desc: "字段比对退回**节点对象身份**：tree-sitter 每次取节点都新建外壳，`childForFieldName(...) === c.node` 恒 false" +
+      " ⇒ 闸静默地永不放行，读数只少 16 个定义（本次真踩过，是复测边数 96,990 不等于预期 49,049 才暴露的）",
+    apply: (s) => s.replace("if (!nm || nm.startIndex !== nameNode.startIndex || nm.endIndex !== nameNode.endIndex) return false;", "if (!nm) return false;"),
+    expectFail: "函数体里的变量声明不算定义，模块作用域的同名变量照算",
+  },
+  {
+    id: "impact-local-gate-over-applied",
+    src: "src/agent/map/parse.ts",
+    test: "tests/map-parse.test.ts",
+    desc: "闸从「只管 variable_declarator」扩到所有定义 ⇒ 类里的方法、嵌套的函数声明一起被抹掉。" +
+      "本仓的取证只支持前者（87% 的变量定义是局部的），超出证据的收窄会把还有价值的那半边一起赔进去",
+    apply: (s) => s.replace("if (!p || p.type !== \"variable_declarator\") return false;", "if (!p) return false;"),
+    expectFail: "已知代价钉住：方法定义照进表，但 obj.m() 不产生引用 ⇒ 方法调用连不上定义文件",
+  },
+  {
+    id: "impact-property-ref-patterns-restored",
+    src: "src/agent/map/parse.ts",
+    test: "tests/map-parse.test.ts",
+    desc: "三条属性式 ref pattern 被「顺手补回来」（它们看起来像漏抽）⇒ `console.log` 又与某个文件的 " +
+      "`const log = …` 相连，单个 `log` 就产 45,160 条假边。删它们是有读数的取舍，不是遗漏",
+    apply: (s) => s.replace("  \"(call_expression function: (identifier) @ref)\",", "  \"(call_expression function: (identifier) @ref)\",\n  \"(call_expression function: (member_expression property: (property_identifier) @ref))\","),
+    expectFail: "属性式调用不抽引用：console.log / obj.m() / new NS.Ctor() 都不算引用",
+  },
+  {
+    id: "impact-query-defless-claims-impact",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "「图里没有它的定义」这一格被删 ⇒ `upward` 把全部同名引用点原样吐出，于是外部/全局符号" +
+      "（`describe`、`expect`）得到「波及 179 个文件」——把「谁提到这个名字」冒充「改它会波及谁」，" +
+      "比回答不了更坏",
+    apply: (s) => s.replace("      if (defined.length === 0) {", "      if (false) {"),
+    expectFail: "图里没有它的定义 ⇒ 不许报「波及 N 个文件」，要明说这一问不适用（外部/全局符号）",
   },
 ];
 

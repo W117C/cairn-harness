@@ -139,8 +139,23 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
       }
       const graph = await buildImpact({ workspace: ctx.workspace, cacheDir: dir });
       const defined = graph.defs.get(symbol) ?? [];
-      if (defined.length === 0 && (graph.refs.get(symbol) ?? []).length === 0) {
+      const refSites = graph.refs.get(symbol) ?? [];
+      if (defined.length === 0 && refSites.length === 0) {
         return { ok: false, output: `impact_query: 图里没有符号 ${JSON.stringify(symbol)}（改名、未被引用、或不在已扫描的后缀内）` };
+      }
+      if (defined.length === 0) {
+        // 「谁调用它」要有个前提：**它得定义在这张图里**。没有定义时 `upward` 会把全部同名
+        // 引用点原样吐出来（它就是这么定义的），于是 `describe` 这类外部/全局符号会得到
+        // 「波及 179 个文件」——那是把「谁提到这个名字」冒充「改它会波及谁」，
+        // 比回答不了更坏。缺席 ≠ 波及 0，同理「图内没有定义」也 ≠ 有一张影响面。
+        const files = new Set(refSites.map((r) => r.file));
+        return {
+          ok: true,
+          output: `[impact] ${symbol}：这张图里没有任何文件**定义**它 ⇒ 它是外部或全局符号` +
+            `（定义在 node_modules、由环境注入，或定义它的那个文件被 ${String(MAX_FILES_DEFAULT)} 帽/忽略规则挡在图外——` +
+            `图内没有 ≠ 仓库里没有）。引用它的文件 ${String(files.size)} 个，但「改它会波及谁」这一问在此不适用；` +
+            `要动它的行为请改调用处或直读它的来源`,
+        };
       }
       return { ok: true, output: sitesNote(`[impact] ${symbol} 的定义在 ${String(new Set(defined.map((d) => d.file)).size)} 个文件`, upward(graph, symbol)) };
     },

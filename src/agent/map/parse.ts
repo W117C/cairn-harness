@@ -78,6 +78,12 @@ export function __resetLangCache(): void {
 
 // ---- .scm query 模式（def/ref captures；模式池按语言取交集编译）----
 // 单模式编译失败（某语言无该节点类型）就跳过该模式，不让一处不兼容炸掉整语言。
+// 抽取判据不抽「属性名」。三条曾在此的 pattern（`obj.prop()` / `new obj.prop()` / py `obj.attr()`）
+// 实测贡献了 47,303 个引用捕获里的 20,533 个（43%），而它们连的是 `console.log` 与某个文件里
+// 自己那个 `const log = …`——名字图无法判断属性访问的对象是哪个模块，故这类边一律是假边
+// （单个 `log` 在一仓之内产出 45,160 条）。读数量与消融见 outputs/impact-precision-2026-09-23.md。
+// 已知代价（**命名缺口，不是遗漏**）：`obj.method()` 形式的方法调用因此不进图。要拿回它，
+// 得先解析 `object` 标识符的绑定（它是不是本文件的模块级绑定或 import），那是另一笔工程。
 const PATTERNS = [
   "(function_declaration name: (identifier) @def)",
   "(function_declaration name: (nested_identifier) @def)",
@@ -93,20 +99,18 @@ const PATTERNS = [
   "(function_definition name: (identifier) @def)",
   "(class_definition name: (identifier) @def)",
   "(call_expression function: (identifier) @ref)",
-  "(call_expression function: (member_expression property: (property_identifier) @ref))",
   "(new_expression constructor: (identifier) @ref)",
-  "(new_expression constructor: (member_expression property: (property_identifier) @ref))",
   "(variable_declarator value: (identifier) @ref)",
   "(assignment_expression left: (identifier) right: (identifier) @ref)",
   "(call function: (identifier) @ref)",
-  "(call function: (attribute attribute: (identifier) @ref))",
   "(assignment left: (identifier) right: (identifier) @ref)",
 ];
 
 /** 抽取**逻辑本体**的版本（谁算一个符号、谁算一次引用的那段代码）。pattern 文本已自动进哈希，
- *  这一条只兜住「文本一字没动而判断变了」——改 `atModuleScope`/属性式取舍时手工 +1。
- *  ⚠️ 必须先于 `TAGS_EXTRACT_VERSION` 声明：后者在模块求值期就要读它（放后面是 TDZ 崩）。 */
-const EXTRACT_LOGIC_REV = 1;
+ *  这一条只兜住「文本一字没动而判断变了」——改 `isLocalVariableBinding`/`NESTED_SCOPES`/属性式取舍时手工 +1。
+ *  ⚠️ 必须先于 `TAGS_EXTRACT_VERSION` 声明：后者在模块求值期就要读它（放后面是 TDZ 崩）。
+ *  rev 2（2026-09-23）：变量声明名要在模块作用域才计入（`isLocalVariableBinding`）。 */
+const EXTRACT_LOGIC_REV = 2;
 /** 版本号的算法单独成一个纯函数：判卷可以直接拿「改一行 pattern ⇒ 版本必须变」这条不变量打它。 */
 export function tagsExtractVersion(patterns: readonly string[]): string {
   return createHash("sha1").update(EXTRACT_LOGIC_REV + "\n" + patterns.join("\n")).digest("hex").slice(0, 12);
@@ -166,6 +170,43 @@ export interface SymbolTag {
   line: number;
 }
 
+/** 嵌套执行作用域的容器节点：从捕获节点向上到 `program` 的路上遇到任意一个，就说明这个声明
+ *  写在函数体/方法体/类体/分支/循环里。判「能否走到 program」是不够的——每个节点都能走到根，
+ *  那样所有定义都会被当成模块级（第一次量这个数时就这样错过一次，读数 1,666/1,666 全是局部）。 */
+const NESTED_SCOPES = new Set([
+  "statement_block", "class_body", "function_body", "switch_body", "switch_statement", "block",
+  "compound_statement", "arrow_function", "function", "generator_function", "for_statement",
+  "for_in_statement", "for_of_statement", "do_statement", "while_statement", "if_statement",
+  "try_statement", "catch_clause", "finally_clause", "else_clause", "with_statement",
+]);
+
+/** 变量声明的名字是否在模块作用域（`export const x = …` 与 `const x = …` 都算；函数体里不算）。 */
+function declaredAtModuleScope(nameNode: import("web-tree-sitter").Node): boolean {
+  let n: import("web-tree-sitter").Node | null = nameNode.parent;
+  let guard = 0;
+  while (n && guard++ < 500) {
+    if (n.type === "program" || n.type === "module") return true;
+    if (NESTED_SCOPES.has(n.type)) return false;
+    n = n.parent;
+  }
+  return false; // 走不到根（异常树形）：不收录，宁缺不假
+}
+
+/** 这次捕获是不是「函数体里的一个变量声明名」。
+ *  只闸这一种，不是偏心：实测 11,701 个 `variable_declarator` 定义里 10,184 个是局部变量，
+ *  它们是同名假边的第一来源（`i` 有 187 个「定义」、`p` 有 119 个），而局部变量**根本不可能**
+ *  被另一个文件 import——把它当跨文件符号等于凭空造依赖。其余 def pattern 抽的是
+ *  函数/类/接口/类型这类命名声明，嵌套出现也仍是有名字的实体，闸它们没有这份证据支撑。 */
+function isLocalVariableBinding(nameNode: import("web-tree-sitter").Node): boolean {
+  const p = nameNode.parent;
+  if (!p || p.type !== "variable_declarator") return false;
+  // 按位置比，不按对象比：tree-sitter 每次取节点都新建外壳，`childForFieldName(...) === c.node`
+  // 恒为 false ⇒ 这道闸会静默地永远不放行（第一次落地就是这样，读数只少了 16 个定义才暴露它）。
+  const nm = p.childForFieldName("name");
+  if (!nm || nm.startIndex !== nameNode.startIndex || nm.endIndex !== nameNode.endIndex) return false;
+  return !declaredAtModuleScope(nameNode);
+}
+
 /** 抛错版单文件 tags：语法错误/空文件返回空 tags；grammar 加载失败向上抛（调用方降级）。 */
 export async function fileTags(src: string, ext: string): Promise<SymbolTag[]> {
   const lang = LANG_BY_EXT[ext];
@@ -194,6 +235,7 @@ export async function fileTags(src: string, ext: string): Promise<SymbolTag[]> {
         if (c.name !== "def" && c.name !== "ref") continue;
         const name = c.node.text;
         if (!name) continue;
+        if (c.name === "def" && isLocalVariableBinding(c.node)) continue; // 函数体里的变量不是跨文件符号
         tags.push({ name, kind: c.name as "def" | "ref", line: c.node.startPosition.row + 1 });
       }
     }

@@ -269,3 +269,49 @@ describe("影响面·边界", () => {
     expect(g.parsed).toBe(0);
   });
 });
+
+// ---- 跨文件边的精度（2026-09-23，待办 #43）----
+// 判卷在 map-parse 那边测的是「抽不抽得到」，这一组测的是**模型实际读到的那一行**：
+// 「改 a.ts 里的 X 会波及 n.ts」这件事到底成不成立。读数量见 outputs/impact-precision-2026-09-23.md
+// （修前：本仓站点级边 194,292，只有 20% 由 import 支撑）。
+describe("影响面·假边不再出现", () => {
+  async function repo(files: Record<string, string>): Promise<ImpactGraph> {
+    const ws = await mkdtemp(join(tmpdir(), "impact-precision-"));
+    for (const [rel, src] of Object.entries(files)) {
+      await mkdir(join(ws, rel.split("/").slice(0, -1).join("/") || ws), { recursive: true });
+      await writeFile(join(ws, rel), src, "utf8");
+    }
+    return buildImpact({ workspace: ws, cacheDir: await mkdtemp(join(tmpdir(), "impact-precision-cache-")) });
+  }
+
+  it("两个文件各有一个同名局部变量 ⇒ 零条边（旧判据会连一条出去，因为局部变量也进了符号表）", async () => {
+    const g = await repo({
+      "m.ts": "export function host() { const target = () => 1; return target(); }\n",
+      "n.ts": "export function other() { return target(); }\n",
+    });
+    expect(g.defs.has("target"), "函数体里的 const 不是跨文件符号").toBe(false);
+    expect(g.edges.filter((e) => e.symbol === "target")).toEqual([]);
+    // 成对的另一半：引用点照旧存在（说明不是「没抽到」而是「不相连」）。
+    // 注意 `upward` 在「有引用、无定义」时返回的是全部引用点——那不是影响面，
+    // 读端怎么处置这一格由 impact_query 的分诊负责（见 tests/impact-query.test.ts）。
+    expect((g.refs.get("target") ?? []).map((r) => r.file).sort()).toEqual(["m.ts", "n.ts"]);
+  });
+
+  it("属性名不算引用：`console.log()` 连不上另一个文件里模块级的 `const log`", async () => {
+    const g = await repo({
+      "r.ts": "export const log = (m: string) => m;\n",
+      "s.ts": "export function f() { console.log(\"hi\"); }\n",
+    });
+    expect(g.defs.has("log"), "模块级定义本身照进表（不是被删）").toBe(true);
+    expect(g.edges.filter((e) => e.symbol === "log")).toEqual([]);
+  });
+
+  it("真依赖照旧连得上：模块级定义 + 别文件的裸调用", async () => {
+    const g = await repo({
+      "p.ts": "export const shared = () => 1;\n",
+      "q.ts": "export function use() { return shared(); }\n",
+    });
+    const e = g.edges.filter((x) => x.symbol === "shared");
+    expect(e.map((x) => `${x.from}→${x.to}`)).toEqual(["q.ts→p.ts"]);
+  });
+});
