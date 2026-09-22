@@ -22,7 +22,7 @@ import { execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, preflightRefusals, needleProblemLine, needleSeverity, classifyArgs, isLineWiseApply } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, splitRunnable, needleProblemLine, needleSeverity, classifyArgs, isLineWiseApply } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -5831,6 +5831,24 @@ const MUTATIONS = [
     apply: (s) => s.replace("      if (defined.length === 0) {", "      if (false) {"),
     expectFail: "图里没有它的定义 ⇒ 不许报「波及 N 个文件」，要明说这一问不适用（外部/全局符号）",
   },
+  {
+    id: "mutate-preflight-refusal-empties-runnable",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "预检退回「有条目被拒 ⇒ 一条都不跑」⇒ 别人一个未跟踪的源文件让整张变异表停摆，" +
+      "而红门只报一句『拒绝 1 条』：其余 695 条与在飞改动毫无关系的锚点没人判，读起来像保护还在",
+    apply: (s) => s.replace("    runnable: entries.filter((e) => !refusedIds.has(e.id)).map((e) => e.id),", "    runnable: refusedIds.size > 0 ? [] : entries.map((e) => e.id),"),
+    expectFail: "一条在飞 ⇒ 只它被跳过，**其余条目必须在 runnable 里**（旧写法这里给空表）",
+  },
+  {
+    id: "mutate-preflight-safety-dropped",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "反过来：为了让表「跑满」而不安全照跑 ⇒ 源文件不在 HEAD 里时崩溃没有回滚兜底，" +
+      "别人的在飞改动会被变异中途的写盘永久盖掉。停摆是损失，越权是损坏",
+    apply: (s) => s.replace("    runnable: entries.filter((e) => !refusedIds.has(e.id)).map((e) => e.id),", "    runnable: entries.map((e) => e.id),"),
+    expectFail: "不安全的一条都不许进 runnable（跳过要真跳过，别只看名单照样跑）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
@@ -6005,29 +6023,40 @@ if (plan.mode === "check-needles") {
 }
 
 const targets = plan.targets;
-const entries = targets.length ? MUTATIONS.filter((m) => targets.includes(m.id)) : MUTATIONS;
-if (targets.length && entries.length !== targets.length) {
+const requested = targets.length ? MUTATIONS.filter((m) => targets.includes(m.id)) : MUTATIONS;
+if (targets.length && requested.length !== targets.length) {
   console.error(`未知 id: ${targets.filter((t) => !MUTATIONS.some((m) => m.id === t)).join(", ")}`);
   process.exit(2);
 }
 
-console.log(`变异验证：${entries.length} 条`);
+console.log(`变异验证：${requested.length} 条`);
 // 预检（动因：HEAD 整跑实测烧掉 19 分钟才在第 k 条撞上"源文件未跟踪"，抛死后账本无痕）。
-// 状态按路径缓存——678 条只对应几十个不同文件，逐条 git 会白跑上千次子进程。
+// 状态按路径缓存——696 条只对应几十个不同文件，逐条 git 会白跑上千次子进程。
 const headStateCache = new Map();
 const stateOf = (rel) => {
   let v = headStateCache.get(rel);
   if (v === undefined) { v = headStateOf(rel); headStateCache.set(rel, v); }
   return v;
 };
-const refusedUpfront = preflightRefusals(entries.map((m) => ({
+/** 预检**逐条**跳过不安全的那些，其余照跑（2026-09-23 改，此前是「有条目被拒 ⇒ 一条都不跑」）。
+ *  旧写法的后果实测过：别人一个未跟踪的 `src/tools/snapshot.ts` 让 696 条锚点全部停摆，
+ *  而红门只报「拒绝 1 条」——其余 695 条本可以判的文件没人判，读的人还以为保护在。
+ *  让掉的只有安全性本身：被跳过的正是「崩溃后无 HEAD 可回滚」的 src，一条也不会被写；
+ *  退出码照旧红（AGENTS 记的「主动拒变在飞文件＝属正确红」不变），只是这一回先把能跑的跑完。 */
+const split = splitRunnable(requested.map((m) => ({
   id: m.id, srcRel: m.src, srcState: stateOf(m.src), testRel: m.test, testState: stateOf(m.test),
 })));
-if (refusedUpfront.length > 0) {
-  for (const r of refusedUpfront) console.error(`❌ ${r.id} — ${r.why}`);
-  console.error(`[mutate-verify] 预检拒绝 ${String(refusedUpfront.length)} 条 ⇒ 一条都不跑。` +
-    "（判卷文件在飞只让那一条不可判，不在拒绝之列——否则别人一个未提交测试就能把变异门整体停摆）");
-  process.exit(1);
+const refusedIds = new Set(split.refused.map((r) => r.id));
+const entries = requested.filter((m) => !refusedIds.has(m.id));
+const refusedCount = split.refused.length;
+if (refusedCount > 0) {
+  for (const r of split.refused) console.error(`⚠️ 跳过 ${r.id} — ${r.why}`);
+  console.error(`[mutate-verify] 预检拒 ${String(refusedCount)} 条（不安全，按未证记账），其余 ${String(entries.length)} 条照跑。` +
+    "判卷文件在飞只让那一条不可判，源文件在飞只让那几条不跑——都不该停摆整张表。");
+  if (entries.length === 0) {
+    console.error("[mutate-verify] 一条都不安全 ⇒ 判红退出（这张表今天什么都没判，别让『没跑』读成『都杀了』）");
+    process.exit(1);
+  }
 }
 // 上一次没收尾干净就别开跑：`.mutbak` 会在本次被 cpSync 覆盖，而它是"崩溃前原始内容"的唯一凭证。
 const allSrcs = [...new Set(entries.map((m) => m.src))];
@@ -6058,14 +6087,19 @@ if (statusOut) {
 }
 const failed = results.filter((r) => r.ok === false);
 const unverified = results.filter((r) => r.ok === null);
-if (unverified.length > 0) {
-  console.log(`  ⚠️  未证 ${String(unverified.length)} 条（判卷文件在飞 ⇒ 该条根本没跑到——不等于已杀死）`);
-  console.log("UNVERIFIED=" + String(unverified.length));
+// 未证有两类，分开数但同一处出口：① 判卷文件在飞（跑到了但量不出东西）② 预检跳过（根本没跑）
+const unverifiedTotal = unverified.length + refusedCount;
+if (unverifiedTotal > 0) {
+  console.log(`  ⚠️  未证 ${String(unverifiedTotal)} 条` +
+    (refusedCount > 0 ? `（其中 ${String(refusedCount)} 条源文件在飞/未跟踪 ⇒ 根本没跑，${String(unverified.length)} 条判卷文件在飞）` :
+      "（判卷文件在飞 ⇒ 该条根本没跑到——不等于已杀死）"));
+  console.log("UNVERIFIED=" + String(unverifiedTotal));
 }
 const killed = results.length - failed.length - unverified.length;
 console.log(`\n${failed.length === 0
-  ? (unverified.length === 0
+  ? (unverifiedTotal === 0
       ? "全部变异被正确杀死（断言非恒真）"
-      : `${String(killed)} 条被正确杀死，另 ${String(unverified.length)} 条未证`)
+      : `${String(killed)} 条被正确杀死，另 ${String(unverifiedTotal)} 条未证`)
   : `${String(failed.length)} 条变异存活或误伤`}`);
-process.exit(failed.length === 0 ? 0 : 1);
+// 有未证就红：这张表没判完不等于判完了（AGENTS：「主动拒变在飞文件」属正确红，不是回归）。
+process.exit(failed.length === 0 && refusedCount === 0 ? 0 : 1);

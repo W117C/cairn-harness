@@ -63,6 +63,28 @@ export function preflightRefusals(entries: readonly PreflightEntry[]): Array<{ i
     .map((x) => ({ id: x.id, why: x.d.why ?? "" }));
 }
 
+/** 预检之后**还能跑哪些**与**哪些被跳过**。
+ *
+ *  为什么要有这个函数（2026-09-23 HEAD 整跑实测）：预检最初被写成「有条目被拒 ⇒ 一条都不跑」，
+ *  动机是不烧 19 分钟撞在第 k 条上。但后果是 **别人一个未跟踪的 `src/tools/snapshot.ts`
+ *  就把 696 条锚点全部停摆**——那些锚点protecting的是别的、与在飞改动毫无关系的文件。
+ *  于是「判据在飞」这段时间里整张变异表在假装守护，而红门只报一句「拒绝 1 条」，
+ *  读的人以为保护还在。
+ *  正确的形状是**逐条**：不安全的那几条按「未证」记账（与判卷文件在飞同一条通道），
+ *  其余照跑；表仍然非零退出/仍然在汇总里出声，未证 ≠ 通过。
+ *  安全性一点没让：被跳过的正是「崩溃后无 HEAD 可回滚」的那些 src，一条都不会被写。 */
+export function splitRunnable(entries: readonly PreflightEntry[]): {
+  runnable: string[];
+  refused: Array<{ id: string; why: string }>;
+} {
+  const refused = preflightRefusals(entries);
+  const refusedIds = new Set(refused.map((r) => r.id));
+  return {
+    runnable: entries.filter((e) => !refusedIds.has(e.id)).map((e) => e.id),
+    refused,
+  };
+}
+
 /** 一条锚点的备份文件名（与调用方 `cpSync(src, `${src}.mutbak`)` 同一个拼法，只此一处）。 */
 export function backupPathOf(srcRel: string): string {
   return srcRel + ".mutbak";

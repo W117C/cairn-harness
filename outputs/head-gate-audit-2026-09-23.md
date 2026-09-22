@@ -230,3 +230,29 @@ subdirectory of the project root at "/private/tmp/dsh-anchor-776".
 真装 worktree 也要看装法：`--ignore-scripts` 省时间，但 electron 的 dist 是 postinstall 拉的 ⇒
 **凡跑 Electron/CDP 的门（panels-check 及一切真窗口判据）在这种装置里必假红**。
 要么整装（不帶 `--ignore-scripts`），要么把 Electron 类门的读数标成"未证"而不是红。
+
+## 追加五（同日第二次整跑，HEAD `f81f71c`）：30/33 —— 三条红全部归因，其中一条是「门自己把表停了」
+
+隔离 worktree 真装依赖跑整表（`pnpm gates`，执行器 pnpm run）。汇总行：
+`绿 30 / 33，红 3（panels-check、mutate-verify、mutate-needles-check）`，另有 `未证 12 项`。
+逐道退出码里 `typecheck=0 test=0 e2e=0 … gym-check=0 routing-check=0 a11y-check=0`，
+**test 门 `Tests 2036 passed (2036)` exit=0**。三条红的归因：
+
+1. **`panels-check` 第一次红＝设备，不是代码**：`spawn …/node_modules/electron/dist/Electron.app/… ENOENT`。
+   原因是**新装 worktree 根本没有 Electron 二进制**——`pnpm install --prefer-offline`（不带 `--ignore-scripts`）
+   也不会跑 electron 的 postinstall 下载：`node_modules/electron/` 里只有 `index.js`/`.d.ts`，没有 `dist/`。
+   ⇒ 补一条设备事实：**光「真装 worktree」不足以判 Electron/CDP 门**，还要
+   `node node_modules/electron/install.js`（或直接在主树跑那一道）。
+   补上之后同 HEAD 两次单跑：第一次 `滚动一屏 max 401.9ms ≤ 200ms` 红；**第二次同一断言 16.6ms 绿，
+   整道门 `全部断言通过 ✅`（真退出码 0）**。24 倍的抖动幅度 + 只有这一条红＝AGENTS 记的那族挂载/宿主负载抖动，
+   不是回归（这条判据是计时断言，与它相邻的 scrollTop 落位、DOM ≤300 两条都绿）。
+2. **`mutate-needles-check` 红 6 条**＝待办 #37 那一簇（3 条 sandbox + 3 条 d7，`src/tools/snapshot.ts` 至今未跟踪）。
+   锚点先落地、被测码从未入库，别人的原子簇，不在本轮改。
+3. **`mutate-verify` 红＝门的形状有缺陷，本轮已修**：预检写的是「有条目不安全 ⇒ **一条都不跑**」。
+   于是第 2 条那一个未跟踪文件，让 698 条锚点里与在飞改动毫无关系的 695 条**今天全部没判**，
+   而红门只报一句「拒绝 1 条」——读起来像保护还在。改成**逐条跳过 + 其余照跑 + 仍判红**：
+   不安全的那几条一个字节都不会被写（安全性没让），退出码照旧 1（AGENTS 说的「主动拒变在飞文件＝属正确红」不变），
+   只是先把能跑的跑完，并把两类未证分开数（`未证 N 条（其中 R 条源文件在飞/未跟踪 ⇒ 根本没跑，U 条判卷文件在飞）`）。
+   真跑到主树验过两条路径：混合 3 条 ⇒ 跳过 1、判 2、`UNVERIFIED=1`、**退出码 1**；全安全 1 条 ⇒ 杀、**退出码 0**。
+   新增判卷 4 条 + 锚点 2 条（一边守「别停摆整张表」，一边守「不安全的一条都不许跑」——
+   后者防的是我为了绿把安全性改回去）。
