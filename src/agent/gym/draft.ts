@@ -138,3 +138,22 @@ export function renderDraft(d: GymDraft, caseId: string): Record<string, string>
 export function draftDirFor(casesParent: string, caseId: string): string {
   return casesParent + "/drafts/" + caseId;
 }
+
+/** 人补件核对（待办 #47 的消费端）：草稿生成之后，「齐不齐」这件事此前只有 DRAFT.md 里那段人读的清单，
+ *  没有任何机检面能回答「这条现在能不能 promote」——producer 有判卷、consumer 零观测，正是本仓反复踩的「两头断」。
+ *  纯函数：入参是目录里**已有的相对路径清单**（IO 交给调用方），因此"空 repo/ 目录"这种形状能被单测钉住。
+ *  注意它不判"对不对"：`expect.json` 与候选集是否被人核过、negative 是不是真反例，都在人的格子里。 */
+export function promoteBlockers(relPaths: readonly string[]): string[] {
+  const set = new Set(relPaths);
+  const out: string[] = [];
+  // 「有 repo/ 这个目录」不等于「有靶子」：清单里只会有文件，所以按前缀数文件。
+  if (!relPaths.some((p) => p.startsWith("repo/"))) out.push("repo/：一条文件都没有 ⇒ pristine 靶子还没给");
+  if (!set.has("task.md")) out.push("task.md：缺题面");
+  if (!set.has("negative.json")) out.push("negative.json：A2 反例控制缺位 ⇒ 这条尺子没法证明它能判失败");
+  if (!set.has("expect.json")) {
+    out.push(set.has("expect.candidate.json")
+      ? "expect.json：只有自动出的候选集，还没人把它核成判据"
+      : "expect.json：既没有判据也没有候选集");
+  }
+  return out;
+}

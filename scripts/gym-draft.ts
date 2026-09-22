@@ -1,11 +1,14 @@
 // 靶场草稿生成器（待办 #47）：把一条真会话的 events.jsonl 转成 `fixtures/gym/drafts/<id>/`。
 // 缺省只打印计划（dry run），`--apply` 才落盘；**永远不落进 cases/**，也永远不碰
 // `scripts/frozen-sha256.json`——冻结判据是本仓第一纪律里唯一必须由人做的那一步。
-// 用法：node --import tsx scripts/gym-draft.ts <events.jsonl> [--id 名] [--out 目录] [--apply]
+// 用法：
+//   node --import tsx scripts/gym-draft.ts <events.jsonl> [--id 名] [--out 目录] [--apply]
+//   node --import tsx scripts/gym-draft.ts --check <草稿目录>        # 人补件核对（不齐 ⇒ 退出码 1）
 import { replay } from "../src/events";
-import { draftFromEvents, renderDraft, draftDirFor } from "../src/agent/gym/draft";
+import { draftFromEvents, renderDraft, draftDirFor, promoteBlockers } from "../src/agent/gym/draft";
+import { collectRelFiles } from "../src/agent/gym/score";
 import { basename, extname, join, resolve, sep } from "node:path";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, stat, writeFile } from "node:fs/promises";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const CASES_ROOT = join(ROOT, "fixtures", "gym", "cases");
@@ -19,8 +22,36 @@ const opt = (name: string): string | undefined => {
 };
 
 const eventsPath = positional[0] ?? "";
+
+// 认不出的 flag 一律拒跑：本脚本缺省语义是「读一条会话并可能写盘」，把拼错的 `--chek` 当成
+// 「不是核对模式」走下去，等于用户以为自己核过了、其实生成了一遍草稿。
+const unknownFlags = args.filter((a) => a.startsWith("--") && !["--apply", "--check"].includes(a) && !a.startsWith("--id") && !a.startsWith("--out"));
+if (unknownFlags.length > 0) {
+  console.error(`[gym-draft] 未知参数：${unknownFlags.join(" ")} —— 不把拼错的 flag 静默当成缺省模式`);
+  process.exit(2);
+}
+
+// 核对模式：不读会话，只看一条草稿目录离 promote 还差什么（不齐 ⇒ 退出码 1，能进脚本链）。
+if (flags.has("--check")) {
+  const abs = resolve(eventsPath);
+  const st = await stat(abs).catch(() => null);
+  if (st === null || !st.isDirectory()) {
+    console.error(`[gym-draft --check] 目录不存在或不是目录：${abs}`);
+    process.exit(2);
+  }
+  const names = [...(await collectRelFiles(abs))].sort();
+  const blockers = promoteBlockers(names);
+  console.log(`[gym-draft --check] ${abs}（盘上 ${String(names.length)} 个文件）`);
+  for (const b of blockers) console.log("  ⛔ " + b);
+  if (blockers.length === 0) {
+    console.log("  ✅ 四件齐（task.md / repo/ / negative.json / expect.json）⇒ 可 promote：");
+    console.log("     移进 fixtures/gym/cases/ + 在 index.json 追加一条 + 把新文件登记进 scripts/frozen-sha256.json（这三步永远是人的动作）");
+  }
+  process.exit(blockers.length === 0 ? 0 : 1);
+}
+
 if (eventsPath === "") {
-  console.error('用法：node --import tsx scripts/gym-draft.ts <events.jsonl> [--id 名] [--out 目录] [--apply]');
+  console.error('用法：node --import tsx scripts/gym-draft.ts (<events.jsonl> [--id 名] [--out 目录] [--apply] | --check <草稿目录>)');
   process.exit(2);
 }
 const log = await replay(eventsPath);

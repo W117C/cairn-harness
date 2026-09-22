@@ -5920,6 +5920,41 @@ const MUTATIONS = [
     apply: (s) => s.replace("    if (bad !== null) throw new Error(", "    if (false) throw new Error("),
     expectFail: "loadGymIndex 遇到逃逸条目直接抛（fail-loud，不静默跳过）",
   },
+  {
+    id: "gym-draft-repo-prefix-by-substring",
+    src: "src/agent/gym/draft.ts",
+    test: "tests/gym-draft.test.ts",
+    desc: "「有靶子」按子串配而不是按路径段配 ⇒ 一份叫 `repo-notes.md` 的散文件就把整条核对判成齐件，" +
+      "人照着提示去 promote 一条没有靶子的 case（消费端最容易犯的错：把「看着像」读成「是」）",
+    apply: (s) => s.replace('if (!relPaths.some((p) => p.startsWith("repo/")))', 'if (!relPaths.some((p) => p.startsWith("repo")))'),
+    expectFail: "`repo-notes.md` 不算靶子：前缀按路径段配，不按子串（漏了斜杠会把同名散文件读成已齐件）",
+  },
+  {
+    id: "gym-draft-candidate-wording-collapsed",
+    src: "src/agent/gym/draft.ts",
+    test: "tests/gym-draft.test.ts",
+    desc: "「只有自动候选、还没人核」与「连候选都没有」共用一句 ⇒ 人分不清这条是**等我核**还是**上游没跑过**，" +
+      "两种下一步动作完全相反（前者去比对 expect.candidate.json，后者回去生成草稿）",
+    apply: (s) => s.replace('      ? "expect.json：只有自动出的候选集，还没人把它核成判据"', '      ? "expect.json：既没有判据也没有候选集"'),
+    expectFail: "只有自动候选时点名「还没人把它核成判据」，而不是与「什么都没有」共用一句",
+  },
+  {
+    id: "gym-draft-negative-exempt",
+    src: "src/agent/gym/draft.ts",
+    test: "tests/gym-draft.test.ts",
+    desc: "A2 反例控制从核对表里免检 ⇒ 「尺子能判失败」这件事重新变回没人查；一条只有正例的 case 可以一路 promote 进冻结面",
+    apply: (s) => s.replace('  if (!set.has("negative.json")) out.push(', '  if (false) out.push('),
+    expectFail: "negative.json 缺席必须点名——没有反例的尺子证不了自己能量到失败",
+  },
+  {
+    id: "gym-draft-ready-ignores-expect",
+    src: "src/agent/gym/draft.ts",
+    test: "tests/gym-draft.test.ts",
+    desc: "expect 面整个不查 ⇒ 只有 task.md + repo/ 的目录被判成「可 promote」，而判卷文件还在候选状态" +
+      "（放行侧那条「四件齐 ⇒ 零 blocker」的用例保证这里不是靠「凡目录都报缺」蒙绿）",
+    apply: (s) => s.replace('  if (!set.has("expect.json")) {', '  if (false) {'),
+    expectFail: "只有自动候选时点名「还没人把它核成判据」，而不是与「什么都没有」共用一句",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

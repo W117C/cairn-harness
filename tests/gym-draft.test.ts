@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import type { AgentEvent } from "../src/events";
 import { draftFromEvents, renderDraft, draftDirFor } from "../src/agent/gym/draft";
 import { casePathProblem, loadGymIndex } from "../src/agent/gym/case";
+import { promoteBlockers } from "../src/agent/gym/draft";
 
 const user = (content: string): AgentEvent => ({ type: "user_message", content });
 const call = (id: string, path: string, agentId?: string): AgentEvent =>
@@ -93,6 +94,37 @@ describe("renderDraft / draftDirFor（草稿的形状）", () => {
 
   it("默认落点是 drafts/，不是 cases/", () => {
     expect(draftDirFor("/repo/fixtures/gym", "abc")).toBe("/repo/fixtures/gym/drafts/abc");
+  });
+});
+
+describe("promoteBlockers（草稿离可 promote 还差什么——消费端，防「两头断」）", () => {
+  const READY = ["task.md", "negative.json", "expect.json", "repo/src/math.js", "repo/tests/run.mjs"];
+
+  it("四件齐 ⇒ 零 blocker（放行侧必须有，否则「凡目录都报缺」也能过）", () => {
+    expect(promoteBlockers(READY)).toEqual([]);
+  });
+
+  it("只有自动候选时点名「还没人把它核成判据」，而不是与「什么都没有」共用一句", () => {
+    const b = promoteBlockers(["task.md", "DRAFT.md", "expect.candidate.json"]);
+    expect(b.some((x) => x.includes("只有自动出的候选集"))).toBe(true);
+    expect(b.some((x) => x.includes("既没有判据也没有候选集"))).toBe(false);
+    expect(b.some((x) => x.startsWith("repo/"))).toBe(true);
+    expect(b.some((x) => x.includes("negative.json"))).toBe(true);
+  });
+
+  it("三件都没有 expect 面时读作「既没有判据也没有候选集」", () => {
+    const b = promoteBlockers(["task.md", "negative.json", "repo/a.js"]);
+    expect(b).toEqual(["expect.json：既没有判据也没有候选集"]);
+  });
+
+  it("`repo-notes.md` 不算靶子：前缀按路径段配，不按子串（漏了斜杠会把同名散文件读成已齐件）", () => {
+    const b = promoteBlockers(["task.md", "negative.json", "expect.json", "repo-notes.md"]);
+    expect(b.some((x) => x.startsWith("repo/"))).toBe(true);
+  });
+
+  it("negative.json 缺席必须点名——没有反例的尺子证不了自己能量到失败", () => {
+    const b = promoteBlockers(["task.md", "expect.json", "repo/a.js"]);
+    expect(b).toEqual(["negative.json：A2 反例控制缺位 ⇒ 这条尺子没法证明它能判失败"]);
   });
 });
 

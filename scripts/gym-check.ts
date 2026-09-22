@@ -1,14 +1,15 @@
 // M5a 靶场验收脚本（pnpm gym-check，第 24 道门；仿 agents-check 体例）。
 // 段：
 //   A 靶场骨架（步骤 2）：A1 清单加载三件套 / A2 反例控制（negative 必须判失败——尺子有刻度）/
-//     A3 冻结 sha256 逐字一致（fixtures/gym/cases/** + index.json）
+//     A3 冻结 sha256 逐字一致（fixtures/gym/cases/** + index.json）/ A4 尺子漏斗（草稿面读数，不判红）
 //   B 回放跑器（步骤 3 追加）：B1 明卷确定性 / B2 分叉重放 / B3 暗卷缺席显式跳过
 // 纪律：断言可复跑、逐条配反向验证（§m5-proposal 6.3）；临时目录 mkdtemp 后必须 realpath。
 import { createHash } from "node:crypto";
 import { readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { copyRepoAndApply, gymTempDir, loadCase, loadGymIndex } from "../src/agent/gym/case";
-import { changedFilesBetween, scoreCase } from "../src/agent/gym/score";
+import { changedFilesBetween, collectRelFiles, scoreCase } from "../src/agent/gym/score";
+import { promoteBlockers } from "../src/agent/gym/draft";
 import { cleanupRun, runCase } from "../src/agent/gym/runner";
 import { forkSession, replay } from "../src/events";
 import { runVerifyOutcome } from "../src/agent/verify";
@@ -80,6 +81,26 @@ for (const c of loaded) {
     }
   }
   check(frozenMiss === 0, "A3 gym 判卷面（" + String(gymFiles.length) + " 文件）sha256 与冻结表逐字一致");
+}
+
+// A4 尺子漏斗（**只报数、不判红**）：靶面早已饱和（8/8 绿），真正的墙是「分母会不会长」。
+// 草稿面（`gym-draft`）是那条增长路径的入口，所以这里给它一个每次验收都看得见的读数：
+// 有多少条草稿、其中几条已齐件可 promote。阈值不判——齐件数=0 时红只会逼人凑一条假草稿。
+{
+  const draftRoot = join(ROOT, "fixtures", "gym", "drafts");
+  const entries = await readdir(draftRoot, { withFileTypes: true }).catch(() => []);
+  const dirs = entries.filter((e) => e.isDirectory());
+  let ready = 0;
+  const lines: string[] = [];
+  for (const d of dirs) {
+    const names = [...(await collectRelFiles(join(draftRoot, d.name)))];
+    const blockers = promoteBlockers(names);
+    if (blockers.length === 0) ready++;
+    else lines.push("      · " + d.name + " 还差：" + blockers.map((b) => b.split("：")[0]).join("、"));
+  }
+  console.log(`[gym-check] A4 尺子漏斗：cases=${String(loaded.length)}（已冻结）· drafts=${String(dirs.length)} · 齐件可 promote=${String(ready)}`);
+  for (const l of lines) console.log(l);
+  if (dirs.length === 0) console.log("      · 没有草稿 ⇒ 这一跳今天没被用过（不是红，是零观测面的另一种说法）");
 }
 
 // ============================== B 回放跑器（步骤 3） ==============================
