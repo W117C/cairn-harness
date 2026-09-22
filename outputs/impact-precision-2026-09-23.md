@@ -190,3 +190,13 @@ tree-sitter 每次取节点都新建外壳，这个比较恒为 true ⇒ 闸静�
    `const expect = (…)=>{}` 与 184 个测试文件里 vitest 的 `expect(` 相撞（最热 5,755 条）。
    这条的伤害已从「常发生」降到「偶发且成因单一」，但仍是「谁活下来与被改符号无关」。
    **重开条件**：出现触帽文件里的真调用方被截掉——那时应改成 import 支撑的先留。
+
+### 另一支消费方（仓库地图）的现场读数
+
+`fileTags` 是 map 与 impact 共用的取料面，所以改完必须量另一支：
+`map-check`（真退出码 0，11 条断言全绿）——地图仍构建成功、预算内 `tokens=897`、
+tags 缓存 400/400 命中、改一个文件 `parsed=1`、用户仓库内零缓存文件。
+另外 `docs-check` / `gate-check` / `arch-boundary-check` 真退出码同为 0
+（docs-check 自报 `UNVERIFIED=3`——未证不等于通过，那 3 项本轮没有新证据）。
+同 HEAD（`3168764`）在隔离 worktree 真装依赖下：`tsc --noEmit` 0 报错，
+map/impact/tags 全套 12 文件 115 条测试通过，7 条新锚点逐笔真跑全部被杀死。
