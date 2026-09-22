@@ -289,8 +289,32 @@ pnpm exec tsx scripts/probe-shell-bypass.ts                     # 人读对照�
 TERM=dumb node node_modules/vitest/vitest.mjs run \
   --config tests/vitest.config.ts tests/shell-bypass-composition.test.ts
 TERM=dumb node --import tsx scripts/mutate-verify.mjs \
-  worker-git-newline-not-a-separator worker-git-uses-raw-first-token shape-payload-recursion-disabled
+  worker-git-newline-not-a-separator worker-git-uses-raw-first-token shape-payload-recursion-disabled \
+  risk-shell-family-drops-shell-rw readonly-gate-metachar-veto-lost \
+  readonly-gate-whitelist-lost readonly-gate-newline-joined-not-split
 ```
+
+### 顺手量出来的第五道面：`shell_ro` 的两道防必须合起来无隙（`c1f7322`）
+
+组合测写的时候撞出一个此前没人摊开的前提：`shell_ro` **刻意不进静态威胁表**
+（`risk.ts` 的 `isWriteCapableTool` 排除它，理由是不把 deny 降成 ask），而它的 `run()`
+「静态过滤 → 直连 run_shell 原始实现（**不过主会话工具门**）」。两句合起来 =
+**唯一那道防是 `isReadOnlyShellCommand`**。实测它确实吃得住：
+
+| 命令 | run_shell | shell_ro | shell_ro 静态闸 |
+|---|---|---|---|
+| `echo x > /etc/hosts` | `ask@L4-risk` | `approve@L4-pass` | 拒（写面元字符一票否决） |
+| `rm -rf /` | `ask@L4-critical` | `approve@L4-pass` | 拒（不在只读白名单） |
+| `sudo git push --force` | `deny@L1-deny` | `deny@L1-deny` | 拒（sudo 不在白名单） |
+| `cat x\ngit push --force` | — | — | 拒（换行也是分隔符） |
+| `cat x \| wc -l` | approve | approve | **放行**（正常只读管道不受牵连） |
+
+⇒ 落了一条**合取断言**（不是各测一道）：列出的每一条，静态闸必须拒，否则权限层得为 shell_ro 出卡——
+两道防各自以为对方在管，正是本仓反复记过的「两头断」形状（不在此处计次，计数只留在那条账里）。
+另补 `run_shell ↔ shell_rw` 逐条同判那条，钉住 `SHELL_FAMILY` 互通表。
+
+锚点 +4（合计本簇 +7），在干净 HEAD `c1f7322` 上逐条实跑**全杀**：
+互通表去掉 `shell_rw` / 元字符一票否决去掉 / 只读白名单去掉 / 换行归一改成连接符。
 
 ### 仍留位
 
