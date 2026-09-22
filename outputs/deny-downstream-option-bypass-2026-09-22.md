@@ -176,13 +176,13 @@ doas / sudoedit / script / unshare / flock / taskset / prlimit / strace / busybo
 （跑法 `node --import tsx outputs/measure-prefix-word-candidates-2026-09-22.mts`；一次性观测，不进门禁）。
 匹配口径与 `rules.ts:matchSegment` 一致（deny 侧对形态做 pattern 前缀匹配）。
 
-| 候选 | 15 支缺口 | 已收口 25 支 | 本仓真命令语料 41 支被牵连 | 手写负控 13 支被牵连 |
+| 候选 | 15 支缺口 | 已收口 25 支 | 本仓真命令语料 40 支被牵连 | 手写负控 13 支被牵连 |
 | --- | --- | --- | --- | --- |
 | 今天（按名字白名单） | 0 | 25 | 0 | 0 |
 | **A** = 今天 + 任意位置起后缀（首词不必登记） | **15** | 25 | 0 | **1**（`echo xargs git push --force`） |
 | **B** = 今天 + pattern 的词按序出现即可（中间可插词） | **15** | 25 | 0 | 1（同左）＋`grep -e git -e push src --force` |
 | B′ = 同 B 但限词距 ≤2 / ≤3 | 12 / **15** | 25 | 0 | 1（**词距界挡不住那支 grep**，见下） |
-| **C** = 首词不在表里就升 ask（不看 pattern） | — | — | **41 / 41 出卡（100%）** | — |
+| **C** = 首词不在表里就升 ask（不看 pattern） | — | — | **40 / 40 出卡（100%）** | — |
 
 三条读数里最值钱的三条：
 
@@ -205,8 +205,9 @@ doas / sudoedit / script / unshare / flock / taskset / prlimit / strace / busybo
 
 ### 牵连面这两列别读过头（诚实记账）
 
-真命令语料 = `package.json` 的 40 条 scripts + `fixtures/mock/todo-fix.jsonl` 里那条 `run_shell`，
-去重 41 支。它对 A/B 的「牵连 0」**近乎空读**——那 41 支里根本没有 pattern 字样，这一列只量得出 C 的
+真命令语料 = `package.json` 的 39 条 scripts + `fixtures/mock/todo-fix.jsonl` 里那条 `run_shell`，
+去重 40 支（HEAD 态实跑；**分母随 `package.json` 漂移**——在飞那份多一条 scripts 时是 41，所以它是读数不是判据）。
+它对 A/B 的「牵连 0」**近乎空读**——这 40 支里根本没有 pattern 字样，这一列只量得出 C 的
 ask 率。A/B 的牵连证据是：负控 1 支（`echo xargs git push --force`，已在 `PREFIX_WORD_MUST_STAY_CLEAN`
 里钉着，实现 A 的那一刻它必红）＋形似非恶意六支（`echo git push --force` / `printf git push --force`
 被 A、B 牵连；带引号的 `echo 'git push --force'`、`grep -rn "git push --force" src`、
@@ -222,7 +223,7 @@ ask 率。A/B 的牵连证据是：负控 1 支（`echo xargs git push --force`�
   而把「误伤 `echo git push --force` / 那支 grep」从**命令被拒**降级为**多一张卡**。
   代价要说清楚：用户手写的 deny 在未知前缀词那一族上**不再绝对**（变成必问），这是拿确定性换召回。
 - 备选（更保守）：纯 A + 分级。少收 ⑧ 的 3 支真强推，其余与上面同。
-- 不采纳：继续按词加 `EXEC_WRAPPERS`（⑦ 的存在理由）；C 的字面版「首词未知就 ask」（41/41 出卡）。
+- 不采纳：继续按词加 `EXEC_WRAPPERS`（⑦ 的存在理由）；C 的字面版「首词未知就 ask」（40/40 出卡）。
 - 反向证据要求：落地时必须同批钉一条「allow 侧不吃这些形态」（沿用 ⑤ 那条不对称断言的形状），
   否则就是把用户点过的「总是允许」顺着匹配器放宽。
 - 重开条件：`tests/shell-bypass-composition.test.ts` 里 ⑦ / ⑧ 两个「已知边界」块**变红**
@@ -234,5 +235,7 @@ ask 率。A/B 的牵连证据是：负控 1 支（`echo xargs git push --force`�
 - 探针 ⑦ / ⑧：**只印不判**（不计红绿，合计仍是 红 0 / 绿 64）——这两族是"已知仍漏"，计红会把
   一次待裁的语义分歧混进"缺陷未修"的账里
 - 组合测 +4（现 30 条）：15 支全 miss、结构性对照面全 deny、⑧ 三支全 miss、⑧ 三支 worker 侧全拦
-- 本轮**零实现改动**（`src/` 未动），所以上表对 HEAD 与在飞态同值
+- 本轮**零实现改动**（`src/` 未动）。上表的**判定**对 HEAD 与在飞态同值——同 HEAD 开 worktree 复跑实证：组合测 30 条 +
+  `command-shape` 33 条全绿、探针仍 红 0 / 绿 64、候选表逐行同值。只有语料**分母**随 `package.json` 的 scripts
+  条数漂移，表内取 HEAD 态 40 支（上一笔提交说明里写的 41 是在飞态那份 package.json 算出来的，以本表为准）
 
