@@ -218,3 +218,22 @@ pnpm exec tsx scripts/probe-shell-bypass.ts     # 当前必红（退出码 1）�
   收它要改 gate-manifest，而该文件此刻在别人的在飞改动集里。
 * `consentGap` 只作用于 allow；deny/ask 的形态面与它正交（两根锚点各自钉住，不会互相掩盖）。
 * 高熵规则的命名残留另有账（见 `stop-reason-blindspot-2026-09-21.md` 待办 15），本文不动。
+
+### 收尾读数（`17deac2`，三态对照逐条归因）
+
+* 工作树整表 `pnpm gates`：**绿 30 / 33，红 3**（门数从 31 涨到 33——并发会话新挂了
+  `arch-boundary-check` 与 `mutate-needles-check`；**门数一律以 `pnpm gates` 的输出为准，本文不写死**）。
+* 三道红逐条归因，**都不是本簇的回归**：
+  ① `typecheck=2`：唯一报错在别人的未跟踪草稿 `scripts/sidebar-probe.ts`（断言体检同一笔也点了它的
+  两处空断言）——同一 HEAD 开 worktree 跑 tsc = **0 错**，所以 HEAD 干净这句只在 worktree 读数下成立。
+  ② `mutate-verify=1`：`src/main/sandbox.ts 相对 HEAD 有改动——属在飞改动集，拒绝变异`，
+  这是**正确的红**（无回滚兜底时拒变，不是变异存活）。本簇 9 根新锚点单独在 /tmp 同 HEAD worktree
+  逐条实跑，全部杀死。
+  ③ `gym-check=1`（4 项失败）：**在飞集经重放路径带出来的**——同一份 `scripts/gym-check.ts`
+  在干净 HEAD 的 worktree 里跑 = **33 ✅ / 0 ❌、exit 0**。⇒ 红的是别人在飞的 orchestrator/loop 改动，
+  不是权限这一簇；等对方落库后复跑即可。
+* 本簇自跑且与权限面直接相关的五道：`test` / `e2e` / `security-check` / `ipc:check` / `sandbox:check`
+  全 **exit 0**（`e2e` 尤其要紧：它跑真 loop + 真闸门，而 frozen 判卷文件 sha256 逐字未变）。
+* ⚠️ 两条自记：这五道里我先用 `pnpm run ipc-check` / `pnpm run sandbox-check` 跑，两条 exit 1 ——
+  读执行器自己的报错行才看清是**脚本名写错**（真名带冒号 `ipc:check` / `sandbox:check`），
+  换正确名字后两绿。退出码异常先怀疑命令写法，别急着记成被测代码的回归。
