@@ -2,6 +2,12 @@
 
 本目录混放**里程碑验收证据**与**现行文档**。多数截图已过时，读之前先看这一页。
 
+> **2026-09-22 起新增两份入口**（只加指针，不改写下方历史正文）：
+> - **全库文档导航** [`DOCS-MAP.md`](./DOCS-MAP.md) —— 按「你现在想干什么」指路，含 outputs/ 调研档案索引与效力分层。
+> - **项目综合报告** [`PROJECT-REPORT-2026-09-22.md`](./PROJECT-REPORT-2026-09-22.md) —— 全景、优缺点、优化清单、发展路径。
+>
+> **状态更正（安全债）**：`outputs/shell-permission-bypass-2026-09-21.md` 写的「未施工」已过期；其后提交已收口四条包装绕过，`scripts/probe-shell-bypass.ts` 于 2026-09-22 复跑 **红 0 / 绿 33**。
+
 ## 一、`*.png` 记录的是「vanilla 迁移之前」的 React 版 UI
 
 25 张验收截图（`m0b-ui.png` … `m4b-onboard.png`，含 `m1e-panels.png` / `m1e-settings.png`）拍摄于
@@ -21,6 +27,7 @@
 | 仓库级现状 | 根目录 `AGENTS.md`「当前状态」段 |
 | 判断层校准路线（方案待裁决，含可粘贴复跑的回放命令） | `docs/judgment-layer-calibration-proposal.md` |
 | 战略基线（2026-09-18 调研轮，三份互指） | 路线与优先级：`outputs/best-agent-roadmap-2026-09-18.md`（harness-only 超越 Codex/CC；§2 门 0 可达性、§13 21 条孤儿桥裁决表、§14 自纠）· 代码能力面差距：`outputs/agent-landscape-gap-analysis-2026-09-18.md`（A1–A9）· 渲染侧矛盾台账：`outputs/design-contradictions-2026-09-18.md`（T1–T28）。<br>⚠️ **读 A 档时注意两条已收口**：A2 上下文预算认模型 = `d64084e`；A5 provider 重试 / 429 = `887ffb6`（`src/providers/retry.ts`，三家共用）。别照文档去修已完成项 |
+| 判断层新增行动空间「思考档位（effort）」的前置量测（2026-09-21 两份配套，**均未接线**） | 参数面——为什么这一格今天只是装饰：`Provider` 契约没有 per-turn 通道、渲染层那个五档滑块零出口、Anthropic 的输出上限无人覆盖：`outputs/effort-param-surface-2026-09-21.md` · 计费量测——4096 在 54 轮真钱语料上从没咬过顶，开最低 thinking 档＝输出账面 **×5.4**，真前置是三家的**停止原因全是零读者**：`outputs/anthropic-thinking-cost-2026-09-21.md`。<br>⚠️ 引用倍率前先复跑两页附录命令：分母来自 GLM 那两臂评测语料，换 provider 会平移；两页都是**评估读物，不构成实现依据** |
 
 ### 重生成 `m1e-*` 两张截图
 
@@ -30,9 +37,13 @@
 M1E_SCREENSHOT=1 pnpm panels-check
 ```
 
-⚠️ 当前 `panels-check` 因 7 个 CDP 探针指向已死的 React DOM 而**红**（症状与退出码见 `AGENTS.md`「当前状态」段；
-立案见 `BLOCKED.md`「panels-check 7 个 CDP 探针指向已死 React DOM」，改指任务 = MAINT-06）。
-**门未绿前这条命令跑不到截图那一步**，别用它刷新交付截图。
+那 7 个 CDP 探针当年按 React 渲染层写、vanilla 迁移后 0 命中（立案见 `BLOCKED.md`
+「panels-check 7 个 CDP 探针指向已死 React DOM」，改指任务 = MAINT-06，逐条标在
+`scripts/panels-check.ts` 的 `改指（MAINT-06）` 注释里）。**门现在是绿的**：2026-09-21 单跑
+`pnpm panels-check` → 末行「全部断言通过 ✅」、exit 0 ⇒ 上面这条命令跑得通。
+⚠️ 但**别顺手跑它**：这两张 PNG 属于第一节说的那批**里程碑存档证据**（2026-09-09 ~ 09-15 的 React 态），
+一设 `M1E_SCREENSHOT=1` 就就地覆盖 `docs/m1e-panels.png` 与 `docs/m1e-settings.png`——覆盖掉的是证据本身。
+本轮**只核到命令可跑，没有真去刷新**；要用它刷新交付截图前先确认这正是你要的，且只动这两张。
 
 ## 三、本目录里哪些已过时
 
