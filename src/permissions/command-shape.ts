@@ -186,6 +186,25 @@ export function invocations(text: string, depth = 0): Invocation[] {
   return out;
 }
 
+/** 下游选项归一（09-22）：`git -C /tmp push --force`、`git --no-pager push --force` 这类
+ *  **二进制与子命令之间**插了全局选项的写法，会把前缀匹配整个瞎掉——① 那族包装器在上游，
+ *  `invocations` 会剥；这一族在下游，得从每个非选项参数位置各起一支后缀形态。
+ *  只加在 deny/ask 侧（allow 只吃原形），所以放宽的方向只有一个：更容易命中「被禁的事」。
+ *  代价按方向说清：可能过覆盖（`git log --format=%h push` 会出一支 `git push`），
+ *  过覆盖的代价是多一张卡，静默漏过的代价是用户手写的 deny 白写。 */
+function suffixForms(inv: Invocation): string[] {
+  const out: string[] = [];
+  // 只对「真命令」那一支生成：包装器自己那支的参数是「被剥掉的前缀 + 真命令」，
+  // 从它起后缀会产出 `sudo root git status` / `sudo git status` 这类假形——
+  // 多余候选的代价是审批卡变多（tests/command-shape.test.ts 里那支负控钉着）。
+  if (EXEC_WRAPPERS.has(inv.bin)) return out;
+  for (let i = 1; i < inv.args.length; i++) {
+    if (inv.args[i]!.startsWith("-")) continue; // 选项本身不能当子命令起点
+    out.push([inv.bin, ...inv.args.slice(i)].join(" ").replace(/\s+/g, " ").trim());
+  }
+  return out;
+}
+
 /** 规则匹配用的形态集：原形（逐字，调用方已归一空白）+ 每个调用点的 `bin args…`。
  *  deny/ask 逐形取最长命中；allow 只吃原形——包装器恰恰是「被禁的事」藏身的地方，
  *  而「用户点过一次总是允许」那次的同意不该顺着 `env`/`timeout` 一起放宽。 */
@@ -193,10 +212,12 @@ export function commandForms(normalizedSegment: string): string[] {
   const out: string[] = [normalizedSegment];
   const seen = new Set<string>([normalizedSegment]);
   for (const inv of invocations(normalizedSegment)) {
-    const form = [inv.bin, ...inv.args].join(" ").replace(/\s+/g, " ").trim();
-    if (form === "" || seen.has(form)) continue;
-    seen.add(form);
-    out.push(form);
+    for (const form of [[inv.bin, ...inv.args].join(" "), ...suffixForms(inv)]) {
+      const flat = form.replace(/\s+/g, " ").trim();
+      if (flat === "" || seen.has(flat)) continue;
+      seen.add(flat);
+      out.push(flat);
+    }
   }
   return out;
 }

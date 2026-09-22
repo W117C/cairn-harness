@@ -5117,6 +5117,22 @@ const MUTATIONS = [
     expectFail: "非只读一律拦：包装、链段、值选项、`shell -c` 载荷、`command -p` 都不给缝",
   },
   {
+    id: "shape-downstream-option-forms-lost",
+    src: "src/permissions/command-shape.ts",
+    test: "tests/shell-bypass-composition.test.ts",
+    desc: "不再产出「剥掉下游全局选项」的后缀形 ⇒ `git -C /tmp push --force`、`git --no-pager push --force` 等五支把用户手写的 deny 静默绕过（09-22 探针 ⑤ 段实测全漏，修前红 5）",
+    apply: (s) => s.replace("for (const form of [[inv.bin, ...inv.args].join(\" \"), ...suffixForms(inv)]) {", "for (const form of [[inv.bin, ...inv.args].join(\" \")]) {"),
+    expectFail: "五支写法在自主档全由 L1-deny 拦下",
+  },
+  {
+    id: "shape-suffix-forms-also-for-wrappers",
+    src: "src/permissions/command-shape.ts",
+    test: "tests/command-shape.test.ts",
+    desc: "后缀形也对包装器那一支生成 ⇒ 产出 `sudo git status` / `sudo root git status` 这类假候选，deny/ask 过覆盖、审批卡变多（与漏判方向相反的那条界）",
+    apply: (s) => s.replace("if (EXEC_WRAPPERS.has(inv.bin)) return out;", "if (false) return out;"),
+    expectFail: "负控：包装器那一支不产假形（多余候选 = 审批卡变多，方向与「静默漏过」相反也要守住）",
+  },
+  {
     id: "risk-shell-family-drops-shell-rw",
     src: "src/permissions/risk.ts",
     test: "tests/shell-bypass-composition.test.ts",

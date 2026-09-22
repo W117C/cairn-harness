@@ -70,3 +70,27 @@ export const REDIRECT_CASES: string[] = [
 
 /** ④ 的对照组：管道进 shell（把上游当脚本执行）。 */
 export const PIPE_INTO_SHELL = "echo 'rm -rf /tmp/z' | sh";
+
+/** ⑤ 全局选项插在「二进制与子命令之间」：09-22 量出五支全漏（`judgeChain` = miss ⇒ 自主档 approve）。
+ *  根因与 ① 不同：① 是二进制**上游**的包装器，`commandForms` 会剥；这一族的选项在二进制**下游**，
+ *  前缀匹配看不见子命令。worker 静态闸因「args[0] 不在只读白名单」fail-closed 而侥幸拦得住，
+ *  主会话这条路径没有任何一道兜它。 */
+export const GLOBAL_OPT_VARIANTS: string[] = [
+  "git -C /tmp push --force",
+  "git --no-pager push --force",
+  "git -c advice.pushUpdateRejected=false push --force",
+  "git --git-dir=/x push --force",
+  "git -C/x push --force",
+];
+
+/** ⑤ 的对照组（本轮刻意不修，另记一账）：标志别名 `-f` ↦ `--force`。
+ *  这一族需要按二进制的别名表，不是包装器/位置归一能覆盖的形状。 */
+export const FLAG_ALIAS_CASE = "git push -f";
+
+/** ⑤ 的负控：剥下游选项**不得**把只读命令也变成命中 deny 的样子。 */
+export const GLOBAL_OPT_MUST_STAY_CLEAN: string[] = [
+  "git status",
+  "git -C /tmp status",
+  "git log --oneline -20",
+  "git -c core.pager=cat diff",
+];

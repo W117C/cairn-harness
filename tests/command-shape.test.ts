@@ -96,3 +96,36 @@ describe("分词：引号与转义按 shell 语义", () => {
     expect(forms("git push")).not.toContain("push --force");
   });
 });
+
+/* ---------------- 下游选项族（09-22 补） ----------------
+   ① 那族包装器在二进制**上游**，`invocations` 会剥；这一族的全局选项在二进制与子命令**之间**，
+   前缀匹配看不见子命令。探针 ⑤ 段实测五支全漏（`git -C /tmp push --force` ⇒ approve@L4-pass）。 */
+describe("下游选项：二进制与子命令之间的全局选项不得把 deny 瞎掉", () => {
+  it("五类写法都产得出「git push --force」那一形", () => {
+    for (const seg of [
+      "git -C /tmp push --force",
+      "git --no-pager push --force",
+      "git -c advice.pushUpdateRejected=false push --force",
+      "git --git-dir=/x push --force",
+      "git -C/x push --force",
+    ]) {
+      expect(forms(seg), seg).toContain("git push --force");
+    }
+  });
+
+  it("包装器 + 下游选项同时出现也要命中（两族叠加）", () => {
+    expect(forms("sudo -u root git -C /tmp push --force")).toContain("git push --force");
+  });
+
+  it("负控：后缀只从**非选项**参数起，选项本身不冒充子命令", () => {
+    expect(forms("git -C /tmp push --force")).not.toContain("git --force");
+    expect(forms("git --no-pager push --force")).not.toContain("git push"); // 截半截不算一条形
+  });
+
+  it("负控：包装器那一支不产假形（多余候选 = 审批卡变多，方向与「静默漏过」相反也要守住）", () => {
+    const f = forms("sudo -u root git status");
+    expect(f).not.toContain("sudo git status");
+    expect(f).not.toContain("sudo root git status");
+    expect(f).toContain("git status");
+  });
+});

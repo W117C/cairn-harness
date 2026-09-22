@@ -17,6 +17,8 @@ const asTool = (s: string): ToolName => s as ToolName;
 import {
   ALLOW_CASES,
   DENY_VARIANTS,
+  GLOBAL_OPT_MUST_STAY_CLEAN,
+  GLOBAL_OPT_VARIANTS,
   PIPE_INTO_SHELL,
   PROBE_RULES_JSON,
   REDIRECT_CASES,
@@ -156,7 +158,7 @@ describe("组合不变量（本测独有：单面锚点钉不住）", () => {
   });
 });
 
-/* ---------------- ⑤ 两道防的合取（09-22 加，shell_ro 的安全前提是量出来的） ----------------
+/* ---------------- 两道防的合取（09-22 加，shell_ro 的安全前提是量出来的） ----------------
    `shell_ro` 刻意不进静态威胁表（`risk.ts` 的 `isWriteCapableTool` 排除它），而且它的 run()
    「直连 run_shell 原始实现（不过主会话工具门）」——即**唯一**那道防是 `isReadOnlyShellCommand`。
    这个取舍只有在该函数真能挡住一切写面时才成立；两侧各自单测都看不到"中间漏过去"的那种命令，
@@ -170,8 +172,39 @@ const RO_MUST_STOP = [
   ...ALLOW_CASES.filter(([, bare]) => !bare).map(([c]) => c),
 ];
 
-describe("⑤ shell_ro：静态只读闸与权限层的合取", () => {
-  it("每一条都必须被某一道防住（两道各自以为对方在管 = 谁都没管）", () => {
+/* ---------------- ⑤ 下游选项族（探针 ⑤ 段的离线观测者，09-22） ----------------
+   根因与 ① 不同：① 的包装器在二进制上游，`invocations` 会剥；这一族的全局选项插在
+   二进制与子命令**之间**，前缀匹配看不见子命令。修前实测五支全漏（approve@L4-pass）。 */
+describe("⑤ 下游选项：git -C /tmp push --force 一类", () => {
+  it("五支写法在自主档全由 L1-deny 拦下", () => {
+    for (const cmd of GLOBAL_OPT_VARIANTS) {
+      expect(at(evaluate("run_shell", { command: cmd }, session())), cmd).toBe("deny@L1-deny");
+    }
+  });
+
+  it("负控：只读命令带选项不得被 deny 命中（过覆盖也要有界）", () => {
+    for (const cmd of GLOBAL_OPT_MUST_STAY_CLEAN) {
+      expect(evaluate("run_shell", { command: cmd }, session()).verdict, cmd).not.toBe("deny");
+    }
+  });
+
+  it("不对称仍成立：allow 只认原形，`git -C /tmp status` 不被「allow git status」静默放行", () => {
+    // 用户点「总是允许」时看见的是那条字面命令；顺着下游选项放宽 = 替他扩大同意面。
+    const rules = parsePermissionsFile(
+      JSON.stringify({ rules: [{ behavior: "allow", tool: "run_shell", pattern: "git status", scope: "always" }] }),
+      "test",
+    );
+    const s = newAutonomySession("auto", { rules, sandboxAvailable: true, planBlocked: () => false });
+    expect(at(evaluate("run_shell", { command: "git status" }, s))).toBe("approve@L3-rule");
+    expect(judgeChain(rules, "run_shell", "git -C /tmp status").verdict).toBe("miss");
+  });
+
+  it("worker 侧不受本族影响：fail-closed 让它一直拦得住（但 reason 会说不出子命令名）", () => {
+    for (const cmd of GLOBAL_OPT_VARIANTS) expect(interceptDestructiveGit(cmd).ok, cmd).toBe(false);
+  });
+});
+
+describe("shell_ro：静态只读闸与权限层的合取", () => {  it("每一条都必须被某一道防住（两道各自以为对方在管 = 谁都没管）", () => {
     for (const cmd of RO_MUST_STOP) {
       const gate = isReadOnlyShellCommand(cmd);
       const d = evaluate(asTool("shell_ro"), { command: cmd }, session([]));

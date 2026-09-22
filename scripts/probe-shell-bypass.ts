@@ -9,6 +9,9 @@ import type { PermissionMode } from "../src/permissions";
 import {
   ALLOW_CASES,
   DENY_VARIANTS,
+  FLAG_ALIAS_CASE,
+  GLOBAL_OPT_MUST_STAY_CLEAN,
+  GLOBAL_OPT_VARIANTS,
   PIPE_INTO_SHELL,
   PROBE_RULES_JSON,
   REDIRECT_CASES,
@@ -96,6 +99,21 @@ for (const cmd of REDIRECT_CASES) {
 }
 const PIPE = evaluate("run_shell", { command: PIPE_INTO_SHELL }, session("auto", []));
 check("管道内嵌删除（对照）", PIPE_INTO_SHELL, "ask", PIPE.verdict);
+
+/* ---------------- ⑤ 全局选项插在二进制与子命令之间 ---------------- */
+
+console.log("\n【⑤】deny「git push --force」——选项插在二进制与子命令之间（`git -C /tmp push --force` 一类）");
+for (const cmd of GLOBAL_OPT_VARIANTS) {
+  const d = evaluate("run_shell", { command: cmd }, session("auto"));
+  check("deny 意图生效", cmd, "deny@L1-deny", `${d.verdict}@${d.layer}`);
+}
+console.log("\n【⑤′】负控：只读命令不得因为剥下游选项而被 deny 命中");
+for (const cmd of GLOBAL_OPT_MUST_STAY_CLEAN) {
+  const d = evaluate("run_shell", { command: cmd }, session("auto"));
+  check("只读不受牵连", cmd, "非 deny", d.verdict === "deny" ? "deny" : "非 deny");
+}
+console.log("\n【⑤″】本轮不修的账（只记录，不计入红绿）：标志别名");
+console.log("     " + JSON.stringify(FLAG_ALIAS_CASE).padEnd(44) + evaluate("run_shell", { command: FLAG_ALIAS_CASE }, session("auto")).verdict + "（-f ↦ --force 需按二进制别名表，另账）");
 
 console.log(`\n合计：红 ${String(red)} / 绿 ${String(green)}`);
 if (red > 0) {
