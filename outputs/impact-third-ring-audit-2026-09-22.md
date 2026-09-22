@@ -398,5 +398,7 @@ fake DOM 为跑通那三支补了 `classList` / `closest` / `remove`，并让 `i
   `per-type-shell-blindspot`（零壳那一半）、`per-type-double-shell`（多壳那一半：孤儿支改用 `openMsg` 另开一格）、
   `orphan-tool-result-silent-drop`。
 - 读数：`typecheck` exit **0**；全量 `test`（工作树，含别人在飞的 `agent-runner.ts`/`tools/base.ts`）
-  **197 files / 1986 测全绿** exit 0；`panels-check` exit **0**（186 ✅，B25 四扇窗 × 两条通道自检全绿，
-  滚动 17ms 未放宽阈值）。针脚 **658 条、阻断 0**、改法语法全过。
+  **197 files / 1986 测全绿** exit 0；`panels-check` exit **0**（186 ✅）。B25 那一族的原文读数：**6 扇窗**各判一条
+  「零未捕获异常、零 console.error」，**通道自检 2 条**（异常道 + console 道）落在还活着的那扇窗上——
+  自检不许对已关的窗投（历史上那样会 30s 超时整相中止）。滚动那条的实测原文是
+  「滚动一屏（含净位移断言）耗时 max 16.6ms ≤ 200ms」，阈值一字未放宽。针脚 **658 条、阻断 0**、改法语法全过。
