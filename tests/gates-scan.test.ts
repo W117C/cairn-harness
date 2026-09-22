@@ -1,7 +1,7 @@
 // 门禁自检判据的回归测试（H-1 / H-2）。
 // 这些用例守的是「体检本身」：体检若漏判，其余 22 道门的可信度都无从谈起。
 import { describe, expect, it } from "vitest";
-import { countUnverified, scanDisjunctions } from "../scripts/assertion-health";
+import { countUnverified, gateUnverified, scanDisjunctions, silentGreenGate } from "../scripts/assertion-health";
 
 describe("析取式弱断言扫描 scanDisjunctions（H-1）", () => {
   it("检出根级 || 断言（任一析取项成立即通过）", () => {
@@ -100,5 +100,47 @@ describe("未证计数 countUnverified（H-2）", () => {
 
   it("只认行首标记，不误伤行内出现的数字", () => {
     expect(countUnverified("see UNVERIFIED=3 inline\nUNVERIFIED=4\n")).toBe(4);
+  });
+});
+
+// 第 39 项：一道门绿而一个字没吐，"查了没发现"与"压根没查"同形。判据只认退出码，
+// 于是这类门永远算通过。四条用例按正/反两面成对写（收窄判定面时必须补反向断言，
+// 否则"什么都不算"与"什么都不算错"都能让用例空转报绿）。
+describe("绿而零输出的门 silentGreenGate（未证的一格）", () => {
+  it("绿 + 空输出 ⇒ 判为静默（正例）", () => {
+    expect(silentGreenGate(0, "")).toBe(true);
+  });
+
+  it("绿 + 只有换行/空白 ⇒ 仍判为静默（一个字没吐不靠 length 判定）", () => {
+    expect(silentGreenGate(0, "\n   \t \n")).toBe(true);
+  });
+
+  it("绿 + 有输出 ⇒ 不判为静默（不误伤正常汇报的门）", () => {
+    expect(silentGreenGate(0, "plugins-check: 12 ✅ / 0 ❌\n")).toBe(false);
+  });
+
+  it("红 + 空输出 ⇒ 不判为静默（红门已经判红，不再重复计未证）", () => {
+    expect(silentGreenGate(1, "")).toBe(false);
+    expect(silentGreenGate(2, "  \n")).toBe(false);
+  });
+});
+
+// 组合面：上报数 + 静默一格。单独测两支函数留不住这条——调用方要的只是这一个数，
+// 把它拆成两处相加，就会出现「汇总说有、账本说没有」的两条记账面。
+describe("未证总数 gateUnverified（上报 + 静默两格合一）", () => {
+  it("只有自报未证 ⇒ 原样带上（静默格不重复计：有输出就不算静默）", () => {
+    expect(gateUnverified(0, "UNVERIFIED=3\nplugins-check: 12 ✅ / 0 ❌ / 3 未证\n")).toBe(3);
+  });
+
+  it("绿而零输出 ⇒ 计 1（自报数为 0，只有静默格贡献）", () => {
+    expect(gateUnverified(0, "")).toBe(1);
+  });
+
+  it("红而零输出 ⇒ 计 0（红门由退出码判红，不混进未证）", () => {
+    expect(gateUnverified(1, "")).toBe(0);
+  });
+
+  it("多行未证标记照常累加，且不因“有输出”多扣一分", () => {
+    expect(gateUnverified(0, "UNVERIFIED=2\nUNVERIFIED=5\n")).toBe(7);
   });
 });

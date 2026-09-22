@@ -12,7 +12,7 @@ import { spawn } from "node:child_process";
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { countUnverified, scanAssertionHealth, scanDisjunctions, type ScanHit } from "./assertion-health";
+import { countUnverified, gateUnverified, scanAssertionHealth, scanDisjunctions, silentGreenGate, type ScanHit } from "./assertion-health";
 import { checkGateManifest, EXEMPT_SCRIPTS, GATES, gateCommand } from "./gate-manifest";
 // 耗时账本（同族：判据在 ./facts.ts，那边可单测；本文件只负责「跑完顺手记一笔」）。
 import { appendRun, currentHost, type GateRun } from "./facts";
@@ -165,12 +165,15 @@ async function main(): Promise<void> {
   const results: GateResult[] = [];
   const gateRuns: GateRun[] = [];
   let unverified = 0;
+  const silent: string[] = [];
   for (const g of gates) {
     process.stdout.write("  ▶ " + g + " …");
     const r = await runGate(g, { direct, scripts: pkg.scripts ?? {} });
     results.push(r);
-    const uv = countUnverified(r.output); // H-2：未证数上浮到门禁汇总
+    // H-2：未证数上浮到门禁汇总。含「绿而零输出」一格（gateUnverified 里合并，汇总与账本同口径）。
+    const uv = gateUnverified(r.code, r.output);
     unverified += uv;
+    if (silentGreenGate(r.code, r.output)) silent.push(g);
     gateRuns.push({ gate: g, exit: r.code, ms: r.ms, unverified: uv });
     process.stdout.write("\r  " + (r.code === 0 ? "✅" : "❌") + " " + g.padEnd(18) + " exit=" + String(r.code) + "  " + String(r.ms) + "ms\n");
     if (r.code !== 0) {
@@ -203,8 +206,11 @@ async function main(): Promise<void> {
   console.log("  绿 " + String(results.length - failed.length) + " / " + String(results.length) + "，红 " + String(failed.length) + (failed.length > 0 ? "（" + failed.map((f) => f.name).join("、") + "）" : ""));
   console.log("  逐道退出码：" + results.map((r) => r.name + "=" + String(r.code)).join(" "));
   if (scanHits.length > 0) console.log("  体检命中 " + String(scanHits.length) + " 条（见上）");
+  if (silent.length > 0) {
+    console.log("  ⚠️  绿而零输出的门（查了没发现 与 没查 同形，已按未证计入）：" + silent.join("、"));
+  }
   if (unverified > 0) {
-    console.log("  ⚠️  未证 " + String(unverified) + " 项（连网/凭据限制未跑到的断言——**不等于通过**）");
+    console.log("  ⚠️  未证 " + String(unverified) + " 项（连网/凭据限制未跑到的断言，或绿而零输出的门——**不等于通过**）");
     console.log("     严格模式：DSH_STRICT_UNVERIFIED=1 或 --strict-unverified 可让未证直接判红");
   }
 

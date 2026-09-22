@@ -119,3 +119,28 @@ export function countUnverified(output: string): number {
   for (const m of output.matchAll(new RegExp(UNVERIFIED_MARK.source, "gm"))) n += Number(m[1] ?? 0);
   return n;
 }
+
+/**
+ * 绿而零输出的门：跑完了，但我们一个字都没看见。
+ *
+ * "它检查了、什么都没发现" 与 "它根本没检查" 在这道门的对外表现上同形——退出码都是 0。
+ * 本仓对"未证 ≠ 通过"已经立了规矩（`UNVERIFIED=<n>` 那条链），沉默是同一族里更宽的一格，
+ * 所以按未证计（`DSH_STRICT_UNVERIFIED=1` 下直接判红），不新造一档。
+ *
+ * 不建豁免名单：登记表会让未登记的那一个静默漏在机制外。外部工具本就"干净即沉默"的（tsc），
+ * 由那道门自己补一行结论 —— 汇总每次跑都点名，所以漏网的是响的，不是暗的。
+ */
+export function silentGreenGate(code: number, output: string): boolean {
+  return code === 0 && output.trim() === "";
+}
+
+/**
+ * 一道门的未证总数 = 自己上报的（`UNVERIFIED=<n>`）+ 绿而零输出补的一格。
+ *
+ * 刻意做成一个函数而不是在调用方两处相加：汇总行与耗时账本（`pnpm facts` 读的 `unverified`）
+ * 必须同口径。分两处算过一次，账本里那一格漏掉静默项，`pnpm facts` 于是显示"零未证"，
+ * 而屏幕上写着未证 1——本仓管这叫两条记账面（真钱面与审计面各说各话）。
+ */
+export function gateUnverified(code: number, output: string): number {
+  return countUnverified(output) + (silentGreenGate(code, output) ? 1 : 0);
+}

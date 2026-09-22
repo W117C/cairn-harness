@@ -5574,6 +5574,34 @@ const MUTATIONS = [
     apply: (s) => s.replace("const tools = surface ? surface.specs : declaredTools;", "const tools = declaredTools;"),
     expectFail: "provider 发出去的那份工具表已被降配，且 note 真的进了某个 system 消息",
   },
+  {
+    id: "silent-green-not-charged",
+    src: "scripts/assertion-health.ts",
+    test: "tests/gates-scan.test.ts",
+    desc: "判据在、组合面没接：一门绿而零输出被算成「没有未证」⇒ 汇总与账本重新对上「全绿」，" +
+      "沉默那格退回无人观测（本仓第 10 次「两头断」的形状：机器齐全、调用方断）",
+    apply: (s) => s.replace("  return countUnverified(output) + (silentGreenGate(code, output) ? 1 : 0);",
+      "  return countUnverified(output);"),
+    expectFail: "绿而零输出 ⇒ 计 1（自报数为 0，只有静默格贡献）",
+  },
+  {
+    id: "silent-green-predicate-dead",
+    src: "scripts/assertion-health.ts",
+    test: "tests/gates-scan.test.ts",
+    desc: "恒假判据：机制被换成一句永远说「不静默」的常量 ⇒ 三条正例全绿而真实表现回到旧行为" +
+      "（恒假判据永远红，这里是恒假的那一面对红着的用例负责）",
+    apply: (s) => s.replace("  return code === 0 && output.trim() === \"\";", "  return false;"),
+    expectFail: "绿 + 空输出 ⇒ 判为静默（正例）",
+  },
+  {
+    id: "silent-green-overreach-onto-red",
+    src: "scripts/assertion-health.ts",
+    test: "tests/gates-scan.test.ts",
+    desc: "判据丢掉输出面只看退出码 ⇒ 红门也被计一次未证，「未证」总数被红门污染，" +
+      "严格模式下同一件事既算红又算未证（两个口径互相吞）",
+    apply: (s) => s.replace("  return code === 0 && output.trim() === \"\";", "  return code === 0;"),
+    expectFail: "红 + 空输出 ⇒ 不判为静默（红门已经判红，不再重复计未证）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

@@ -24,5 +24,9 @@ if (out !== "") process.stdout.write(out.endsWith("\n") ? out : out + "\n");
 const code = run.status ?? 1;
 if (code !== 0) {
   for (const line of triageVerdict(triageTypecheck(out, untrackedSet(process.cwd())))) console.log(line);
+} else {
+  // tsc 干净时一个字不吐（它的契约），而门禁现在把「绿而零输出」当成"查了没发现 与 没查 同形"按未证计。
+  // 不豁免、不改判据 —— 让这道门自己把结论说出来：本仓的规矩是门说的话等于门测的事。
+  console.log("typecheck: tsc --noEmit 通过（0 条报错）✅");
 }
 process.exit(code);
