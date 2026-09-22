@@ -5849,6 +5849,62 @@ const MUTATIONS = [
     apply: (s) => s.replace("    runnable: entries.filter((e) => !refusedIds.has(e.id)).map((e) => e.id),", "    runnable: entries.map((e) => e.id),"),
     expectFail: "不安全的一条都不许进 runnable（跳过要真跳过，别只看名单照样跑）",
   },
+  {
+    id: "gym-draft-failed-write-counted-as-change",
+    src: "src/agent/gym/draft.ts",
+    test: "tests/gym-draft.test.ts",
+    desc: "写失败的笔次也算进「候选必改集」⇒ 一条半途而废的会话会被固化成『这些文件必须改』，" +
+      "而那份尺子的判据来自一次没做完的尝试（草稿面最容易犯的错：把「发生过」读成「应该发生」）",
+    apply: (s) => s.replace("        if (e.ok) written.add(p);\n        else failedWrites++;", "        written.add(p);"),
+    expectFail: "写失败的那笔不进候选集，且点名「先确认这条轨迹值不值得固化」",
+  },
+  {
+    id: "gym-draft-worker-writes-as-parent",
+    src: "src/agent/gym/draft.ts",
+    test: "tests/gym-draft.test.ts",
+    desc: "worker 子流的写盘算进 parent 的候选集 ⇒ case 的「必改文件」里出现一批 parent 从没碰过的路径" +
+      "（#8 那族归因缺陷的第四面：事件带 agent_id 却不看它的消费方）",
+    apply: (s) => s.replace("if (e.agent_id !== undefined) { workerWrites++; break; }", "if (false) { workerWrites++; break; }"),
+    expectFail: "worker 子流的写盘与验证都不算 parent 的（agent_id 在场即排除，并出声）",
+  },
+  {
+    id: "gym-draft-worker-verify-as-parent",
+    src: "src/agent/gym/draft.ts",
+    test: "tests/gym-draft.test.ts",
+    desc: "同上一条的另一格：**验证**证据的归因。worker 验绿会被写成 parent 的 mustPassVerify=true ⇒ " +
+      "一条 parent 从未验证过的轨迹拿到一份「必须验绿」的判据",
+    apply: (s) => s.replace("        if (e.agent_id !== undefined) break;\n        verifyAttempts++;", "        verifyAttempts++;"),
+    expectFail: "worker 子流的写盘与验证都不算 parent 的（agent_id 在场即排除，并出声）",
+  },
+  {
+    id: "gym-draft-worker-result-as-parent-failure",
+    src: "src/agent/gym/draft.ts",
+    test: "tests/gym-draft.test.ts",
+    desc: "同一条不变量的**第三面**：agent_id 只在 tool_call 与 verify_result 上挡，tool_result 不挡。" +
+      "provider 缺省 callId 是**流内序号**（openai 两处 `c.id ?? \`call-${index}\``、gemini `gemini-call-${seq++}`）⇒ " +
+      "BYOK 的端点不给 id 时，parent 与每个 worker 都从 call-0 开始，worker 的失败结果会命中 parent 的 callPath，" +
+      "凭空给这条轨迹加上「写盘失败 ⇒ 不值得固化」（真流量样本 0 撞号：那条 GLM 自带 id，所以这是取料面补全，不是现状修复）",
+    apply: (s) => s.replace("        if (e.agent_id !== undefined) break;\n        const p = callPath.get(e.callId);", "        const p = callPath.get(e.callId);"),
+    expectFail: "callId 撞名（provider 缺省 id 是流内序号）：worker 的失败结果不算 parent 写坏，parent 自己的仍算",
+  },
+  {
+    id: "gym-draft-emits-expect-despite-unknown-verify",
+    src: "src/agent/gym/draft.ts",
+    test: "tests/gym-draft.test.ts",
+    desc: "会话没验过时也产 expect ⇒ mustPassVerify 落成一个猜的值（null/false）。" +
+      "「不知道」写成「不通过」与写成「通过」同样是伪造判据，差别只在方向",
+    apply: (s) => s.replace("  if (d.verifyOk !== null) {", "  if (true) {"),
+    expectFail: "verify 未知 ⇒ 不产 expect.candidate.json；验过 ⇒ 产，且文件名带 candidate",
+  },
+  {
+    id: "gym-case-path-guard-dropped",
+    src: "src/agent/gym/case.ts",
+    test: "tests/gym-draft.test.ts",
+    desc: "索引条目「必须落在 cases/ 内」这道守卫被删 ⇒ 一条指向 ../drafts/x 的条目会以判据身份被跑，" +
+      "而 A3 的 sha256 冻结只 walk cases ⇒ 改它没人发现（未跟踪的草稿伪装成已冻结的尺子）",
+    apply: (s) => s.replace("    if (bad !== null) throw new Error(", "    if (false) throw new Error("),
+    expectFail: "loadGymIndex 遇到逃逸条目直接抛（fail-loud，不静默跳过）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
