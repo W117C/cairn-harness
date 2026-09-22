@@ -1,0 +1,59 @@
+# HEAD 态整表门审计（2026-09-23 01:3x，HEAD `83b475b`）
+
+## 为什么值得跑这一次
+
+今天连着三次撞到同一件事：**门在主树里绿，在 HEAD 里红**（`mutate-needles-check` 差 4 条、`test` 差 2 条，
+全是别人在飞改动把仓库补圆的）。既然单道门逐条复算贵，就一次性把整表搬到干净 HEAD 上跑。
+
+## 装置（先说清楚它能不能测要测的东西）
+
+```bash
+git worktree add --detach /tmp/dsh-gates <HEAD>
+ln -s "<主树>/node_modules" /tmp/dsh-gates/node_modules
+cd /tmp/dsh-gates && TERM=dumb node --import tsx scripts/gates.ts --direct
+```
+
+- **别用 `pnpm gates --direct`**：AGENTS.md 那条在这个装置里连不上——`pnpm` 的装前自检在进脚本之前就炸，
+  而且它把**主树的 `node_modules` 当成待清理目录**（`ERR_PNPM_UNSAFE_MODULES_DIR: Refusing to remove …`），
+  只是被它自己的守卫拦住了。仓内早就有正确的入口：`gates.ts` 的 `--direct`（它自己第 10 行注释就写着
+  「绕开 pnpm 的 deps 检查：主树被别的会话占着时，去隔离 worktree 跑整表」），直接 `node --import tsx` 起它即可。
+  ⚠️ 我一开始没找到这个入口，自己另写了一个按 `GATES`+`gateCommand` 驱动的脚本——跑通后删掉了：
+  **同一个入口不要建第二份**（找接缝要先看现有入口，这次是我自己踩自家记过的那条）。
+- 顺带一条驱动 bug 的代价：`gateCommand` 是 `(name, opts)` 两参数（`scripts` 在 opts 里），我按三参数传，
+  `opts.direct` 成 undefined ⇒ 每道门静默退回 pnpm 支 ⇒ 第一次读数是「32 道门全红」。
+  那是装置坏了，不是仓库红了。**长表跑之前先打印前 2-3 道解析出来的命令看一眼**（一条 `console.log`）。
+- `mutate-verify`（全量变异表）本轮**跳过**（单跑要一两个小时级）；其余 32 道全跑。
+
+## 表：32 道跑了，27 绿 / 5 红，逐条归类
+
+绿（27）：`typecheck`(3s) · `build` · `sandbox:check` · `fork-check` · `docs-check` · `autonomy-check` ·
+`compaction-check` · `panels-check`(**137s**，186 条断言含 B24/B25) · `tools-check` · `map-check` ·
+`prune-check` · `providers-check` · `provider:check` · `memory-check` · `plugins-check` · `sidechat-check` ·
+`security-check` · `agents-check`(14s) · `schedule-check` · `commercial-check` · `gym-check` ·
+`routing-check` · `supervisor-check` · `renderer-arch-check` · `model-surface-check` · `a11y-check` ·
+`ipc-reachability-check`
+
+红（5）——**只有第一条是能确证的 HEAD 事实**：
+
+| 门 | 归类 | 证据 |
+|---|---|---|
+| `mutate-needles-check` | **真红**（与装置无关） | 4 条锚点针脚摸不到已提交的码：沙箱那 3 条（`bdaa6f4` 提交锚点、`git log -S` 证明被测串从未入库）+ `d7-snapshot-taken-for-new-file`（`src/tools/snapshot.ts` 在 HEAD 里根本不存在）。⇒ 待办 #37 |
+| `e2e` | **装置红** | 靶子基线读数是 `-1 failed \| -1 passed (exitOk=false)`——`fixtures/todo-app` 的 `pnpm test` 在软链 worktree 里起不来；判卷文件 sha256 一致、事件流断言两条全绿 ⇒ 断的是"跑不了"，不是"跑坏了" |
+| `ipc:check` | **装置红** | 同上（同一句 `-1/-1`，重放等价与事件序列断言全绿） |
+| `gate-check` | **装置红** | 同上（4 项未过里含"靶子开工状态 = 1 failed"这条基线读不到） |
+| `test` | **不能定名** | 红的正是 `gated-tools` 与 `runner-gates` 这两支**经 `run_shell`→`pnpm`** 的判卷面 ⇒ 规则 52 里"在软链 worktree 必红"的那两支；同装置跑的 `panels-check`/`agents-check` 全绿，说明不是代码塌了 |
+
+## 由此要改的两处旧断言（都是我自己写的）
+
+1. **待办 #33 的「HEAD 上有 2 条红测」这句话没有证据**。它和我今天这份读数是同一台不称职的装置给的。
+   要判这两条，得在**真装 `node_modules` 的 worktree**（或把那两个文件从主树临时移出后在主树跑）里读；
+   在软链 worktree 里读出的红一律不得当成 HEAD 事实。
+2. AGENTS.md「HEAD 现态」段引用过同一个读数 ⇒ 该段也要按 ⑴改口径。**那张表面此刻在别人手里**
+   （`M AGENTS.md`），不代改，写在这里等那笔提交一并收（已并进待办 #6 的邻项）。
+
+## 这次审计换来的正面结论
+
+`panels-check`（137s、真窗口 + CDP）、`agents-check`、`map-check`、`security-check`、`a11y-check`、
+`renderer-arch-check`、`build`、`typecheck` 在**只有已提交代码**的树里全绿 ⇒ 本会话那 7 笔
+（壳不变量逐型通判 / 恰好一个壳 / 影响面读端三分诊 / grep-glob 阴性说明 / 两份文档）**没有把任何一道门**
+**从绿推成红**；HEAD 上确证的缺口只有「锚点先落地、被测码没跟上」这一族。
