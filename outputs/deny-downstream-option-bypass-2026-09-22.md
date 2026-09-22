@@ -90,9 +90,10 @@ TERM=dumb node --import tsx scripts/mutate-verify.mjs \
 | `test` | exit 0，`195 files / 1948 tests`（+8：4 条形态单测 + 4 条组合） |
 | `e2e` | exit 0，闭环成立 + **判卷文件 sha256 与冻结逐字一致** |
 | `security-check` | `43 ✅ / 0 ❌` |
-| `typecheck` | exit 2，归因 `HEAD 内 0 个 / 未跟踪草稿 1 个`（他人 `scripts/sidebar-probe.ts`） |
+| `typecheck` | exit 2，归因 `HEAD 内 0 个 / 未跟踪草稿 1 个`（他人 `scripts/sidebar-probe.ts`）；**HEAD 干净另在同 HEAD 开 worktree 实测**：`git worktree add --detach /tmp/dsh-wt-88e2316 HEAD` + `tsc --noEmit` ⇒ exit 0、零行输出 |
 | `mutate-needles-check` | 633 条，阻断 0 / 待复认 0 / 未覆盖 0 |
-| 两条新锚点 | 干净 HEAD 实跑全杀 |
+| 两条新锚点 | 干净 HEAD `88e2316` 实跑全杀 |
+| 同 HEAD worktree 复跑 | 三个权限测试文件 **84 条全过** |
 
 一处自纠（同轮内）：`suffixForms` 的注释最初插在 `commandForms` 的文档块与函数之间，
 把「规则匹配用的形态集」那段说明挤成了 `suffixForms` 的头注释——复核 diff 时调回顺序。
