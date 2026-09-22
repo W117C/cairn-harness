@@ -200,3 +200,56 @@ tags 缓存 400/400 命中、改一个文件 `parsed=1`、用户仓库内零缓�
 （docs-check 自报 `UNVERIFIED=3`——未证不等于通过，那 3 项本轮没有新证据）。
 同 HEAD（`3168764`）在隔离 worktree 真装依赖下：`tsc --noEmit` 0 报错，
 map/impact/tags 全套 12 文件 115 条测试通过，7 条新锚点逐笔真跑全部被杀死。
+
+## 八、把同一把尺放到「spawn 准入」那一头量（`affectedFilesOf`）
+
+§四 缺口 ① 写的重开条件之一是「面板/准入把波及数当判据用」——**这一条今天核出来已经成立**：
+`src/main/agent-runner.ts:1198` 把 `affectedFilesOf` 接成 `semanticLease`，
+`orchestrator.ts:569` 只在 glob 租约**不相交**时问它，相交就出审批卡，
+用户不强行批准 ⇒ `spawn_agent` 直接返回「未获批准」。
+也就是说：一条假波及 = 一次白出的审批卡，最坏 = 一次被拒的并行。
+
+量法（`.tmp/p5.ts`，未跟踪）：对每个真实会用的 glob，取产品闭包
+（`affectedFilesOf`），逐边核「X 因符号 S 入闭包，而 X 是否真的 import/require 了 S」——
+**按文件判**：只要该文件有一条 import 支撑的边，就算它真该在闭包里（re-export、多跳链因此不误伤，
+比 hop 计数公平）。
+
+| glob（真实会申报的写法） | 闭包文件 | 有 import 支撑 | **一条支撑都没有** | 撞名的符号（例） |
+| --- | --- | --- | --- | --- |
+| `src/agent/loop.ts` | 19 | 18 | **0** | — |
+| `src/agent/memory/*.ts` | 19 | 16 | **0** | （有假边但同文件另有真边） |
+| `src/agent/orchestrat*.ts` | 45 | 34 | 7 | `stream` / `finish` |
+| `src/agent/worker-*.ts` | 42 | 33 | 3 | `run` |
+| `src/tools/*.ts` | 47 | 27 | 3 | `run` |
+| `src/renderer/*.js` | 17 | 6 | 5 | `syncRunButton` / `$` / `esc` / `deleteSession` |
+| `scripts/*.ts` | 97 | 6 | **41** | `n` / `after` / `click` / `settle` / `exec` |
+
+读法：**精度修完之后，最干净的模块（loop）闭包已经与 import 链完全一致（19=19，零无支撑文件）**；
+剩下的假边集中在**短名/通用名的模块级同名**（`run`、`n`、`after`、`finish`、`stream`）与
+**非产品源**（`outputs/**/prototype/app.js`、`proto/*.mjs` 都是 .js/.mjs，被扫进图）。
+一对实测：`src/agent/loop.ts` 与 `src/agent/memory/*.ts`（glob 不相交）语义闭包交集 2 个文件
+（`src/agent/sidechat.ts`、`src/main/agent-runner.ts`），这两个都有 import 支撑 ⇒ **本次抽样里
+没有造出假审批卡**；但 `scripts/*.ts` 那种 41/97 的闭包一旦与别的 worker 相遇，假交集是必然的。
+
+### 试过的候选修法与它的代价（先量再改，别直接接）
+
+「准入只信**全仓唯一名**的边」（symbol 只在 ≤1 个文件里有定义；不需要新抽取，纯图内判据）：
+
+| glob | 去掉的无支撑文件 | 赔掉的有支撑文件 |
+| --- | --- | --- |
+| `src/agent/loop.ts` | 0 | 0 |
+| `src/agent/memory/*.ts` | 0 | 0 |
+| `src/agent/worker-*.ts` | 3 | 0 |
+| `src/tools/*.ts` | 3 | 0 |
+| `scripts/*.ts` | 31 | 0 |
+| `src/agent/orchestrat*.ts` | 7 | **13**（34→21） |
+| `src/renderer/*.js` | 1 | 1（6→5） |
+
+⇒ 合计去掉 **45 / 59** 的无支撑文件（−76%），代价是赔掉 **14 / 140** 条有支撑的边（−10%），且
+**分布极不均**：5 个 glob 零代价，编排层一条就吃掉几乎全部损失。
+所以这不是一句「加个过滤」，而是**按面取值**：`scripts/**`、`tests/**` 这类短名密集的申报适用，
+`src/agent/orchestrat*.ts` 这类真被广泛 import 的核心模块不适用。
+按「漏报一次语义冲突 = 事后合并冲突」的代价排序，本仓更值的做法是**让卡说清是哪条符号、
+是不是唯一名**（把不确定性交给人，而不是拿 10% 的漏报去换整洁），而卡的形状要经
+`semanticLease` 钩子签名 ⇒ 该面在别人的在飞改动集里（`src/main/agent-runner.ts`、`src/agent/orchestrator.ts` 均为 `M`）。
+**因此本轮只落读数与判据口径，不改实现**；已立待办 #46，落地入口写在那里。
