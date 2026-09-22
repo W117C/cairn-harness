@@ -96,6 +96,22 @@ export function needleProblemLine(p: NeedleProblem): string {
   return `${p.id} — ${p.srcRel} — ${why}：${JSON.stringify(p.needle.slice(0, 60))}`;
 }
 
+// ---- 锚点 id 唯一性 ----
+// 动因（2026-09-23 我自己刚造成一例）：往表尾插一条新锚点时，`expectFail` 行匹配点落在了
+// 上一条锚点的收尾上，于是两条锚点共用一个 id。表照样跑得动，但 `mutate-verify <id>` 会同时跑两条、
+// 报告里两行同 id 不同改法——**读的人分不清哪条活着**，而"某条锚点存活"是这条门唯一的产出。
+export interface DuplicateId {
+  id: string;
+  count: number;
+}
+
+/** 出现两次以上的 id（按首次出现顺序）。空数组 = 表没有歧义。 */
+export function duplicateIds(ids: readonly string[]): DuplicateId[] {
+  const seen = new Map<string, number>();
+  for (const id of ids) seen.set(id, (seen.get(id) ?? 0) + 1);
+  return [...seen].filter(([, n]) => n > 1).map(([id, n]) => ({ id, count: n }));
+}
+
 // ---- 参数分流：未知 flag 必须当场拒 ----
 // 动因（2026-09-19 实踩）：一条还没合进 HEAD 的 `--check-needles` 在主树里被当成「无参数」，
 // 而该脚本的缺省语义是**跑全表**——它会就地改源文件、跑几十分钟。拼错一个 flag 就等于

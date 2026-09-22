@@ -3,7 +3,7 @@
 // 而要等整张表跑完才会红——整跑常被并发堵几天。这条秒级门把「重构后改指」变成机械要求。
 import { describe, expect, it } from "vitest";
 import {
-  auditNeedles, classifyArgs, isLineWiseApply, needleHits, needleProblemLine, needleSeverity,
+  auditNeedles, classifyArgs, duplicateIds, isLineWiseApply, needleHits, needleProblemLine, needleSeverity,
 } from "../scripts/lib/mutate-gates";
 
 const SRC = "const a = 1;\nconst b = a + 1;\nconst a2 = 1;\n";
@@ -97,5 +97,24 @@ describe("isLineWiseApply（逐行式 apply 的多处命中即设计）", () => 
   it("认得 split/map 式写法，普通单点 replace 不误判", () => {
     expect(isLineWiseApply('(s) => s.split("\\n").map((l) => (l.includes("e.output") ? l : l)).join("\\n")')).toBe(true);
     expect(isLineWiseApply('(s) => s.replace("if (a) {", "if (false) {")')).toBe(false);
+  });
+});
+
+// 锚点 id 必须唯一：重复时 `mutate-verify <id>` 会同时跑两条，报告里两行同 id 不同改法，
+// 读的人分不清哪条活着——而"某条锚点存活"是这张表唯一的产出。
+// （2026-09-23 我自己往表尾插锚点时造成一例，`--check-needles` 当时照样报"全部可判定"。）
+describe("锚点 id 唯一性 duplicateIds", () => {
+  it("无重复 ⇒ 空数组；成对与三连都各报一次，count 如实", () => {
+    expect(duplicateIds(["a", "b", "c"])).toEqual([]);
+    expect(duplicateIds(["a", "b", "a"])).toEqual([{ id: "a", count: 2 }]);
+    expect(duplicateIds(["x", "y", "x", "z", "y", "x"])).toEqual([
+      { id: "x", count: 3 },
+      { id: "y", count: 2 },
+    ]);
+  });
+
+  it("空表与单条表不误报（判据不许把「没东西」读成「有重复」）", () => {
+    expect(duplicateIds([])).toEqual([]);
+    expect(duplicateIds(["only"])).toEqual([]);
   });
 });

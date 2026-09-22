@@ -22,7 +22,7 @@ import { execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, needleProblemLine, needleSeverity, classifyArgs, isLineWiseApply } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, duplicateIds, needleProblemLine, needleSeverity, classifyArgs, isLineWiseApply } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -3939,7 +3939,7 @@ const MUTATIONS = [
     expectFail: "帽外：报出它在候选集里的位置与本次收录数，并给出两条出路",
   },
   {
-    id: "impact-cause-rescan-failure-claims-permanent",
+    id: "impact-cause-unknown-note-lost",
     src: "src/tools/impact-query.ts",
     test: "tests/impact-query.test.ts",
     desc: "丢掉「分辨不出」那一支 ⇒ 重扫失败也去走「永久排除」/「快照滞后」的具名结论。" +
@@ -3957,6 +3957,16 @@ const MUTATIONS = [
       "所以先把 seam 拆成 graphCandidatePosition 并补正反用例，再回来钉这一格",
     apply: (s) => s.replace("    return null; // 不假装有结论", "    return -1; // 不假装有结论"),
     expectFail: "graphCandidatePosition：扫不动交回 null、扫得到交出候选集下标（正反两面各一次）",
+  },
+  {
+    id: "anchor-duplicate-id-check-lost",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-needles-check.test.ts",
+    desc: "锚点 id 唯一性检查被收成恒不命中 ⇒ 表里两条锚点共用一个 id 时门照样报「全部可判定」，" +
+      "而 `mutate-verify <id>` 会同时跑两条、报告两行同 id 不同改法（读不出哪条活着）。" +
+      "2026-09-23 我往表尾插锚点时真造成过一次，当时秒级门完全没声音",
+    apply: (s) => s.replace("return [...seen].filter(([, n]) => n > 1)", "return [...seen].filter(([, n]) => n > 999)"),
+    expectFail: "无重复 ⇒ 空数组；成对与三连都各报一次，count 如实",
   },
   {
     id: "grep-negative-note-loses-escape-hatch",
@@ -5729,8 +5739,12 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
   if (showUnparsed && lineWise.length > 0) {
     console.log(`ℹ️ 逐行式 apply ${String(lineWise.length)} 条（多处命中即设计，不核针脚）：${lineWise.join("、")}`);
   }
-  console.log(`针脚体检：${String(entries.length)} 条 —— 阻断 ${String(blocking.length)}，待复认 ${String(warn.length)}，未覆盖 ${String(unparsed.length)}，逐行式 ${String(lineWise.length)}`);
-  return blocking.length;
+  const dup = duplicateIds(entries.map((e) => e.id));
+  for (const d of dup) {
+    console.log("❌ 锚点 id 重复：" + d.id + " ×" + String(d.count) + "（`mutate-verify <id>` 会同时跑两条，报告里两行同 id 不同改法＝读不出哪条活着）");
+  }
+  console.log(`针脚体检：${String(entries.length)} 条 —— 阻断 ${String(blocking.length + dup.length)}，待复认 ${String(warn.length)}，未覆盖 ${String(unparsed.length)}，逐行式 ${String(lineWise.length)}`);
+  return blocking.length + dup.length;
 }
 
 function runTest(testRel) {
