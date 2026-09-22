@@ -54,6 +54,7 @@ cd /tmp/dsh-gates && TERM=dumb node --import tsx scripts/gates.ts --direct
 ## 这次审计换来的正面结论
 
 `panels-check`（137s、真窗口 + CDP）、`agents-check`、`map-check`、`security-check`、`a11y-check`、
-`renderer-arch-check`、`build`、`typecheck` 在**只有已提交代码**的树里全绿 ⇒ 本会话那 7 笔
-（壳不变量逐型通判 / 恰好一个壳 / 影响面读端三分诊 / grep-glob 阴性说明 / 两份文档）**没有把任何一道门**
-**从绿推成红**；HEAD 上确证的缺口只有「锚点先落地、被测码没跟上」这一族。
+`renderer-arch-check`、`build`、`typecheck` 在**只有已提交代码**的树里全绿 ⇒ 本会话这几笔交付
+（壳不变量的逐型通判、「恰好一个壳」的另一半、影响面读端三分诊、grep/glob 阴性说明、三份记录）**没有把
+任何一道门从绿推成红**；HEAD 上确证的缺口只有「锚点先落地、被测码没跟上」这一族。
+（这里刻意不写「N 笔提交」——数字一漂就成了下一颗过期字，本仓对门数/测试数早立过同一条规矩。）
