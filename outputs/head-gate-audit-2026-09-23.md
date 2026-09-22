@@ -105,3 +105,51 @@ No test files found, exiting with code 1
 真正值得补的两件小事（干净表面，已立待办 #39）：⑴ 门红时把该门自己的输出尾几行带出来——现在只有一句
 `exit=1`，本次审计 5 条红里有 3 条我是靠单独复跑才看清"红的是装置"；⑵ **绿而一个字都没吐**的门，
 应进现成的「未证项汇总」（`DSH_STRICT_UNVERIFIED` 那条链已在），而不是当通过。
+
+## 追加（同日夜间，HEAD=776eb14）：把"装置成因"这句补成机制，并记下我试错的那一次
+
+上面已定名"假红·装置成因"，但**没写下机制**——只写结论的话，下次换一个人还是会踩。现在补上，并顺手在
+我自己的新提交（`776eb14`，门禁「绿而零输出」那笔）之后重算了一次，读数照旧：
+
+| 装置 | 命令 | 读数 |
+| --- | --- | --- |
+| 软链 worktree（root node_modules 是指向主树的 symlink） | `node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/agents.test.ts tests/gated-tools.test.ts tests/runner-gates.test.ts` | **2 failed / 26 passed**（红在 `gated-tools:62` 的 `run_shell` 结果 `ok=false`、`runner-gates:77` 的 `verify_result` 缺 `ok=true`） |
+| 同一 worktree + 把 `fixtures/todo-app/node_modules` 也软链过去 | 同上 | **一字未变**（2 failed / 26 passed） |
+| 真装 worktree（root 跑 `pnpm install --prefer-offline`，1s） | 同上 | **3 files / 28 tests passed，exit 0** |
+| 主树（HEAD 码 + 别人的在飞 hunk） | 同上 | 28 passed（不能拿来定名 HEAD，只是说明在飞态没坏） |
+
+### 机制（这次是量出来的，不是猜的）
+
+`fixtures/mock/todo-fix.jsonl` 第 6 行是冻结剧本：`{"name": "run_shell", "args": {"command": "pnpm test"}}`。
+⇒ 这两条用例的**被测路径内部还有一跳 `pnpm`**（不是 vitest 直接跑断言）。在软链装置里那一步当场报：
+
+```
+[ERR_PNPM_UNSAFE_MODULES_DIR] Refusing to remove the modules directory at
+"/Users/ze/Downloads/deepseek harness/node_modules" because its resolved target is not a strict
+subdirectory of the project root at "/private/tmp/dsh-anchor-776".
+```
+
+（这条不是我复述规则 52——是我在同一个装置的 `fixtures/todo-app/` 里真跑 `pnpm install` 时它自己吐出来的。
+红在工具结果里，所以断言面只看得见 `ok=false`，看不见这句话。）
+
+**我试错的那一次**：先假设"红是因为靶子缺依赖"，把 `fixtures/todo-app/node_modules` 软链进 worktree ——
+读数一字未变。原因随后查明：`fixtures/todo-app/package.json` **一个 dependencies 都没有**，
+`vitest run` 靠向上走到仓库根的 node_modules 解析；靶子目录本身不是缺失项，缺的是**那一次 `pnpm` 调用的
+目录安全检查**。⇒ 记法：**先量"红在哪一跳"，再挑补哪个目录**；补错了地方而读数不动，本身就是排除证据。
+
+### 于是规则 52 的边界清楚了一格
+
+不是"worktree 里跑了 pnpm 就不可信"，而是：**判卷路径上任何一跳 `pnpm`（含被测 agent 自己执行的
+`run_shell` 命令、verify 门、e2e 剧本）在软链装置下必红**，红形是"工具结果 `ok=false` / `verify_result` 缺
+`ok=true`"这种**没有差异可看的断言**，而不是数值对不上。看到这两形状先换真装装置，别去改代码或改判据。
+真装装置代价：root 一次 `pnpm install --prefer-offline` = 1s（靶子目录不用装）。
+
+顺带重算：`node scripts/mutate-verify.mjs --check-needles` 在 HEAD=776eb14 上仍是 **阻断 6**（3 沙箱 + 3 d7，
+`src/tools/snapshot.ts` 整文件不在 HEAD）。⇒ 待办 #37 记数不变；那 6 条属于别人未提交的原子簇，不该由我改指。
+新增的 3 条锚点（`silent-green-not-charged` / `-predicate-dead` / `-overreach-onto-red`）在同装置下逐笔验过，
+全部"被正确杀死"。
+
+**编号校正**（往上读第二段「已立待办 #39」时会被带错）：那件「绿而零输出按未证计」已落地 = `776eb14`。
+⑴ 那件的**红侧**半边实测早就有（`── 失败输出尾 12 行 ──`），不必再立；**绿侧**没做——门绿的时候 stdout
+整段丢掉，所以"这道门到底跑了多少东西"仍要单独复跑才看得见。
+`#39` 这个号现在指本轮新量的两处体检判据缺陷（扫描面混入未跟踪草稿 + 空断言误判三参等值签名）。
