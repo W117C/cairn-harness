@@ -3987,6 +3987,15 @@ const MUTATIONS = [
     expectFail: "路径 = 源文件 + .mutbak，且只报盘上真在的那几个",
   },
   {
+    id: "facts-run-scope-guessed-as-full",
+    src: "scripts/facts.ts",
+    test: "tests/facts.test.ts",
+    desc: "「旧账本没记范围」被读成整跑 ⇒ 缺字段这种「信息根本没有」的状态冒充出一个结论；" +
+      "`--only=` 的调试跑同样会在页头自称整跑（本轮我就是这样把 1 道门读成整跑 0.0 分钟）",
+    apply: (s) => s.replace('  if (!s) return "范围未记（旧账本没这个字段）";', '  if (!s) return "整跑 0 道门";'),
+    expectFail: "旧账本没有这个字段 ⇒ 如实说没记，不许猜成整跑",
+  },
+  {
     id: "grep-negative-note-loses-escape-hatch",
     src: "src/tools/grep.ts",
     test: "tests/grep-glob-edit.test.ts",

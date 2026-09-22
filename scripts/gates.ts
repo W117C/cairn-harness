@@ -207,7 +207,14 @@ async function main(): Promise<void> {
   // 耗时账本：每道门的 ms 本来就在这儿，落一份生成物就不必再往文档里手抄（`pnpm facts` 读它）。
   // 侧信道语义——写失败只 warn，绝不改变任何一道门的结论或退出码。
   try {
-    appendRun({ ts: new Date().toISOString(), host: currentHost(), gates: gateRuns });
+    appendRun({
+      ts: new Date().toISOString(),
+      host: currentHost(),
+      gates: gateRuns,
+      // 范围必须跟着写：`--only=` 也走这条路径，缺了这个字段，一次 1 道门的调试
+      // 在 `pnpm facts` 里与整跑长得一模一样（页头原先一律写「本次整跑」）。
+      scope: { ran: results.length, total: GATES.length },
+    });
   } catch (e) {
     console.warn("  ⚠️ 耗时账本写入失败（不影响门禁结论）：" + String(e));
   }

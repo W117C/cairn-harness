@@ -413,3 +413,20 @@ grep -rn "renderer/projections" → 命中 tests/*(4)、scripts/*-check.ts(4)、
 | 第 4 批（M–L，结构性） | P1-2（orchestrator 拆分 7 步）、P2-1（JSONL 解析收敛） | 动结构，必须逐块跑门禁；建议排在功能里程碑间隙 |
 
 **约束提醒（来自 `AGENTS.md`）**：`fixtures/todo-app/tests/**`、`fixtures/mock/**` 是 sha256 冻结判卷文件，本次清单**未涉及**；修复后验收一律 `TERM=dumb pnpm gates`；沙箱内跑测试用 `node node_modules/vitest/vitest.mjs run --pool=threads`。
+
+## 追注（2026-09-23）：P1-6 的「手法①」被实测否掉，别照着做
+
+上表 P1-6 的手法① 建议把 `scanSourceFiles` 的串行 `await stat` 改成 `Promise.all`。
+同一条路径今天量了一次（本仓 441 个候选，同一进程内连跑）：
+
+| 段 | 实测 |
+| --- | --- |
+| `scanSourceFilesAll` 全量 | **50ms** |
+| 其中 rg 子进程（`--files --hidden` + 4 条噪声取反） | 8ms 输出 967 条 |
+| 其中 N 次 stat，串行 | **4ms** |
+| 同样的 stat，`Promise.all` | 1ms |
+
+⇒ stat 只占整段的 8%，并行化最多省 3ms，而整段是**每次建图**的成本、且真正的大头在别处
+（parse/边构建与「每次编辑全量建图」）。所以手法① 收益≈0，不该做；
+手法②③（缓存判定提到扫描之前 / `buildImpact` 加进程内图缓存）仍然有效——
+它们省的是整段而不是零头。原文不回改，判据挂在这里：**要动这条线，先复跑上面那四个数**。

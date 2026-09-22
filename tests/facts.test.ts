@@ -4,7 +4,7 @@
 // 动因是散文里那句"~800s 的 test 门"：gates.ts 当场就算得出每道门的 ms，抄进文档就成了一颗
 // 会漂 15 倍的假常量。这里把它落成生成物 + 一条读表命令，文档只写指针。
 import { describe, expect, it } from "vitest";
-import { formatFacts, formatRuns, pushRun, summarize, FACTS_RUN_CAP, type FactsLedger, type RunEntry } from "../scripts/facts";
+import { formatFacts, formatRuns, pushRun, runScopeLabel, summarize, FACTS_RUN_CAP, type FactsLedger, type RunEntry } from "../scripts/facts";
 
 const run = (ts: string, gate: string, ms: number, exit = 0, unverified = 0): RunEntry => ({
   ts, host: "testhost", gates: [{ gate, exit, ms, unverified }],
@@ -83,10 +83,45 @@ describe("formatFacts（那条读表命令的输出）", () => {
     expect(formatFacts(ledger(run("t", "test", 1)))).toContain("docs/facts/gates.json");
   });
 
-  it("--all 展开环形全量：每次整跑一行，含该次门数", () => {
+  it("--all 展开环形全量：每次跑一行，范围走同一个标签", () => {
     const out = formatRuns(ledger(run("t1", "test", 100), run("t2", "test", 40)));
     expect(out).toContain("t1");
     expect(out).toContain("t2");
     expect(out.match(/testhost/g)).toHaveLength(2);
+  });
+});
+
+// 账本里"这次到底跑了多少门"必须是字段，不能靠数 gates 猜：`pnpm gates --only=typecheck`
+// 也走同一条 appendRun 路径，而页头原先一律写「本次整跑」——2026-09-23 我就是这样把
+// 一次 1 道门的调试读成"整跑 0.0 分钟"，差点当成耗时证据写进文档。
+describe("runScopeLabel（整跑 / 子集 / 旧账本没记，三态都要说得出）", () => {
+  const scoped = (ran: number, total: number): RunEntry => ({ ...run("t", "test", ran), scope: { ran, total } });
+
+  it("ran === total ⇒ 整跑，并带出门数", () => {
+    expect(runScopeLabel(scoped(33, 33))).toBe("整跑 33 道门");
+  });
+
+  it("ran < total ⇒ 明说是子集并自我否定「不是整跑」", () => {
+    const l = runScopeLabel(scoped(1, 33));
+    expect(l).toContain("子集 1/33");
+    expect(l).toContain("不是整跑");
+  });
+
+  it("旧账本没有这个字段 ⇒ 如实说没记，不许猜成整跑", () => {
+    const l = runScopeLabel(run("t", "test", 1));
+    expect(l).toContain("范围未记");
+    expect(l).not.toContain("整跑");
+  });
+
+  it("页头吃这个标签：一次只跑 1 道门时不再出现「本次整跑」", () => {
+    const out = formatFacts(ledger(scoped(1, 33)));
+    expect(out).toContain("子集 1/33");
+    expect(out).not.toContain("本次整跑");
+  });
+
+  it("scope 随环形账本存活（落盘再读回来不许丢字段）", () => {
+    const l = pushRun(ledger(scoped(1, 33)), scoped(33, 33));
+    expect(l.runs[0]!.scope).toEqual({ ran: 1, total: 33 });
+    expect(l.runs[1]!.scope).toEqual({ ran: 33, total: 33 });
   });
 });

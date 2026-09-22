@@ -22,6 +22,12 @@ export interface RunEntry {
   ts: string;
   host: string;
   gates: GateRun[];
+  /**
+   * 本次跑了多少道门 / 清单一共多少道。缺省 = 旧账本没记（不许把它读成"整跑"）。
+   * 动因：`pnpm gates --only=typecheck` 也写一条 entry，而页头原先一律写「本次整跑」——
+   * 2026-09-23 我据此把一次 1 道门的调试读成了"整跑 0.0 分钟"，差点拿去当耗时证据。
+   */
+  scope?: { ran: number; total: number };
 }
 
 export interface FactsLedger {
@@ -69,6 +75,17 @@ export function summarize(ledger: FactsLedger): FactRow[] {
 
 const secs = (ms: number): string => (ms / 1000).toFixed(1) + "s";
 
+/**
+ * 一条 run 的范围标签。三种状态都要说得出口：整跑、子集（`--only=`）、
+ * 以及**旧账本没记范围**——最后这一种不许读成"整跑"，也不许读成"子集"，只能如实说没记。
+ */
+export function runScopeLabel(run: RunEntry): string {
+  const s = run.scope;
+  if (!s) return "范围未记（旧账本没这个字段）";
+  if (s.ran >= s.total) return "整跑 " + String(s.total) + " 道门";
+  return "子集 " + String(s.ran) + "/" + String(s.total) + " 道门——不是整跑";
+}
+
 export function formatFacts(ledger: FactsLedger | null): string {
   if (!ledger || ledger.runs.length === 0) {
     return [
@@ -86,7 +103,7 @@ export function formatFacts(ledger: FactsLedger | null): string {
       "  历史最贵 " + secs(r.maxMs).padStart(9) + "  n=" + String(r.samples) + uv;
   });
   return [
-    "门禁实测（宿主 " + last.host + "，本次整跑 " + last.ts + "）",
+    "门禁实测（宿主 " + last.host + "，" + runScopeLabel(last) + "，" + last.ts + "）",
     ...lines,
     "账本：" + FACTS_PATH + "（生成物，环形保留最近 " + String(FACTS_RUN_CAP) + " 次；文档不得抄上面的值，写「见 pnpm facts」）",
   ].join("\n");
@@ -96,7 +113,7 @@ export function formatFacts(ledger: FactsLedger | null): string {
 export function formatRuns(ledger: FactsLedger | null): string {
   if (!ledger || ledger.runs.length === 0) return "facts: 还没有账本——跑一次 `pnpm gates` 即生成。";
   return ledger.runs
-    .map((r) => "  " + r.ts.padEnd(26) + r.host.padEnd(18) + String(r.gates.length) + " 道门  合计 " + secs(r.gates.reduce((a, g) => a + g.ms, 0)))
+    .map((r) => "  " + r.ts.padEnd(26) + r.host.padEnd(18) + runScopeLabel(r) + "  合计 " + secs(r.gates.reduce((a, g) => a + g.ms, 0)))
     .join("\n");
 }
 
