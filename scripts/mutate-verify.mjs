@@ -22,7 +22,7 @@ import { execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -6353,9 +6353,10 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
      一次 `git ls-tree HEAD` 拿全量，判据本体在 lib 里（可单测）。
      git 不可用时报「未查」，不静默当已查——未证 ≠ 通过。 */
   const untracked = [];
+  let inHead = null;
   let headUnchecked = 0;
   try {
-    const inHead = new Set(execFileSync("git", ["ls-tree", "-r", "--name-only", "HEAD"],
+    inHead = new Set(execFileSync("git", ["ls-tree", "-r", "--name-only", "HEAD"],
       { cwd: ROOT, encoding: "utf8", maxBuffer: 128 * 1024 * 1024 }).split("\n").filter(Boolean));
     const faces = [];
     for (const e of entries) {
@@ -6368,8 +6369,34 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
     console.log("⚠️ 锚点文件面的 HEAD 归属未查（git ls-tree 失败：" + (err instanceof Error ? err.message : String(err)) + "）");
   }
   for (const g of untracked) console.log("❌ " + untrackedAnchorLine(g));
-  console.log(`针脚体检：${String(entries.length)} 条 —— 阻断 ${String(blocking.length + dup.length + untracked.length)}，待复认 ${String(warn.length)}，未覆盖 ${String(unparsed.length)}，逐行式 ${String(lineWise.length)}，未入库面 ${String(untracked.length)}（被测面 + 判卷两面）${headUnchecked === 0 ? "" : "（HEAD 归属未查）"}`);
-  return blocking.length + dup.length + untracked.length;
+  /* 上一条只答得出「文件在不在 HEAD」，答不出「被锚定的那段文字在不在 HEAD」。这里把同一份 `auditNeedles`
+     再喂一遍 HEAD 那份内容取差集 ⇒ 锚点钉在**在飞文本**上（锚点行已入库、实现改动还没）从此在主树也出声。
+     blob 按不同 src 缓存（一个文件一次 `git show`），门保持秒级。 */
+  const drift = [];
+  if (inHead !== null) {
+    try {
+      const blobs = new Map();
+      const readHeadBlob = (rel) => {
+        if (!blobs.has(rel)) {
+          try {
+            blobs.set(rel, execFileSync("git", ["show", "HEAD:" + rel],
+              { cwd: ROOT, encoding: "utf8", maxBuffer: 128 * 1024 * 1024 }));
+          } catch { blobs.set(rel, null); }
+        }
+        return blobs.get(rel);
+      };
+      const missingSrc = new Set(untracked.filter((u) => u.what === "被测面").map((u) => u.path));
+      drift.push(...headOnlyNeedleProblems(problems, auditNeedles(checkable, readHeadBlob), missingSrc));
+    } catch (err) {
+      headUnchecked = 1;
+      console.log("⚠️ 针脚的 HEAD 侧比对未查（git show 失败：" + (err instanceof Error ? err.message : String(err)) + "）");
+    }
+  } else {
+    headUnchecked = 1;
+  }
+  for (const d of drift) console.log("❌ " + headOnlyNeedleLine(d));
+  console.log(`针脚体检：${String(entries.length)} 条 —— 阻断 ${String(blocking.length + dup.length + untracked.length + drift.length)}，待复认 ${String(warn.length)}，未覆盖 ${String(unparsed.length)}，逐行式 ${String(lineWise.length)}，未入库面 ${String(untracked.length)}（被测面 + 判卷两面），钉在飞文本 ${String(drift.length)}${headUnchecked === 0 ? "" : "（HEAD 归属未查）"}`);
+  return blocking.length + dup.length + untracked.length + drift.length;
 }
 
 function runTest(testRel) {

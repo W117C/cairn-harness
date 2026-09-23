@@ -2,7 +2,7 @@
 // 动因（2026-09-19 实跑）：另一会话正在改判卷测试文件时，本门把两条正常条目报成
 // 「基线就不是全绿」+「变异存活」——真回归信号被并发噪声伪装掉了。
 import { describe, expect, it } from "vitest";
-import { budgetMsOf, classifyArgs, entryDisposition, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
+import { budgetMsOf, classifyArgs, entryDisposition, headOnlyNeedleLine, headOnlyNeedleProblems, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
 
 describe("budgetMsOf + classifyArgs 的值位（自我预算这条手段本身要有判卷）", () => {
   it("flag 优先于 env；两者都缺 ⇒ 不限且不吭声", () => {
@@ -239,6 +239,44 @@ describe("untrackedAnchorPaths：锚点入库、被测码/判卷从未入库必�
     expect(never).toContain("不是改针脚");
     expect(never).not.toContain("针脚已不在源文件里");
     expect(moved).toContain("针脚已不在源文件里");
+    expect(moved).not.toContain("不在 HEAD 的树里");
+  });
+});
+
+/* 同一批针脚跑两遍：盘上那份（现有 `auditNeedles`）+ HEAD 那份。
+   只有「盘上判得通过、HEAD 那份判不过」才是这一类——它意味着锚点行已入库、被锚定的实现改动还没入库，
+   于是这道门在主树绿、在干净 HEAD 红（2026-09-23 两树并排实测：主树阻断 7 / 隔离树阻断 10）。 */
+describe("headOnlyNeedleProblems：锚点钉在在飞文本上必须点名（否则主树绿洗 HEAD）", () => {
+  const p = (id: string, srcRel: string, hits: number): { id: string; srcRel: string; hits: number; needle: string } =>
+    ({ id, srcRel, hits, needle: "foo(" });
+
+  it("盘上没问题、HEAD 里 0 处 ⇒ 报这一类", () => {
+    const bad = headOnlyNeedleProblems([], [p("a1", "src/x.ts", 0)], new Set());
+    expect(bad.map((b) => b.id)).toEqual(["a1"]);
+    const line = headOnlyNeedleLine(bad[0]!);
+    expect(line).toContain("在飞文本");
+    expect(line).toContain("src/x.ts");
+  });
+
+  it("盘上已经报过的同一条不重复报（一行红只有一个成因，读的人不必对两行）", () => {
+    expect(headOnlyNeedleProblems([p("a1", "src/x.ts", 0)], [p("a1", "src/x.ts", 0)], new Set())).toEqual([]);
+  });
+
+  it("HEAD 里读不到、且该路径已由「未入库」判据报过 ⇒ 不重复报（同一件事两栏都记 = 数被抬高）", () => {
+    expect(headOnlyNeedleProblems([], [p("a1", "src/ghost.ts", -1)], new Set(["src/ghost.ts"]))).toEqual([]);
+  });
+
+  it("反面对手：盘上与 HEAD 两份都判得通过 ⇒ 一条都不报", () => {
+    expect(headOnlyNeedleProblems([], [], new Set(["src/ghost.ts"]))).toEqual([]);
+  });
+
+  it("三种红的文案互不串（修法各不相同：等实现入库 / 提交那文件 / 改指针脚）", () => {
+    const drift = headOnlyNeedleLine(p("a1", "src/x.ts", 0));
+    const never = untrackedAnchorLine({ id: "a1", path: "src/ghost.ts", what: "被测面" });
+    const moved = needleProblemLine(p("a1", "src/x.ts", 0));
+    expect(drift).not.toContain("不在 HEAD 的树里");
+    expect(never).not.toContain("在飞文本");
+    expect(moved).not.toContain("在飞文本");
     expect(moved).not.toContain("不在 HEAD 的树里");
   });
 });

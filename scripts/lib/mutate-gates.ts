@@ -233,6 +233,35 @@ export function untrackedAnchorLine(p: UntrackedAnchorPath): string {
     `修法是**把那份${target}提交**（或撤这条锚点），不是改针脚。`;
 }
 
+// ---- 盘上判得通过、HEAD 那份判不过：锚点钉在**在飞文本**上 ----
+// 上一条判据只答得出「文件在不在 HEAD」，答不出「被锚定的那段文字在不在 HEAD」。实跑的差集（2026-09-23，
+// 同一天两棵树并排）：主树阻断 7 / 同 HEAD 隔离 worktree 阻断 10，其中 5 条只在隔离树红——锚点行已入库、
+// 被锚定的实现改动还在别人工作树里（`src/main/sandbox.ts` 等三个 M 文件）。⇒ 这道门**在主树绿、在干净
+// HEAD 红**，而 `pnpm gates` 只在主树跑。修法是同一份 `auditNeedles` 喂两份内容各跑一遍，取差集。
+export function headOnlyNeedleProblems(
+  disk: readonly NeedleProblem[],
+  head: readonly NeedleProblem[],
+  pathsNotInHead: ReadonlySet<string>,
+): NeedleProblem[] {
+  const reported = new Set(disk.map((p) => p.id));
+  // 读不到 + 路径未入库的已由上一条报过：一条红只算一处成因，否则汇总数被同一件事抬高两次。
+  return head.filter((p) => !reported.has(p.id) && !pathsNotInHead.has(p.srcRel));
+}
+
+/** 判读行。**不许**把修法写成「改指针脚」：针脚钉的就是那次在飞改动，改成 HEAD 里的旧写法等于废掉这条锚点。 */
+export function headOnlyNeedleLine(p: NeedleProblem): string {
+  const why = p.hits === -1
+    ? "读不到那份 HEAD 里的文件"
+    : p.hits === -2
+      ? "是空针脚"
+      : p.hits === 0
+        ? "针脚 0 处"
+        : `针脚命中 ${String(p.hits)} 处`;
+  return `${p.id} — ${p.srcRel} — 盘上判得通过，而 HEAD 那份里${why} ⇒ 这条锚点钉的是**在飞文本**` +
+    "（锚点行已入库、被锚定的实现改动还没）⇒ 干净 HEAD 上它等价于空操作。修法：等那次实现入库（或撤这条锚点），" +
+    "**不要**把针脚改成 HEAD 里的旧写法——那等于把这条锚点要守护的东西废掉。";
+}
+
 // ---- 锚点 id 唯一性 ----
 // 动因（2026-09-23 我自己刚造成一例）：往表尾插一条新锚点时，`expectFail` 行匹配点落在了
 // 上一条锚点的收尾上，于是两条锚点共用一个 id。表照样跑得动，但 `mutate-verify <id>` 会同时跑两条、
