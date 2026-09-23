@@ -2324,6 +2324,17 @@ const MUTATIONS = [
     expectFail: "真实现场形状（末笔调用没有结果）⇒ 投影里不许留下未答的 tool_calls",
   },
   {
+    // 钉我自己上一笔的回归（4c18fb7）：缺位原先按"assistant 之后紧邻的 tool 段"算，
+    // 而工具执行中途 ctx.emit 一条正文 ⇒ 结果排在 assistant 之后 ⇒ 被判缺位、凭空补一句假事实。
+    id: "dangling-answered-set-ignored",
+    src: "src/agent/context.ts",
+    test: "tests/context-dangling-tool-call.test.ts",
+    desc: "补位不看「这条 id 在全列表里有没有人答过」⇒ 已答的调用也被写上「没有收到结果」，" +
+      "同一笔两份互相矛盾的事实（真实现场：工具中途 emit 正文把结果推到 assistant 之后）",
+    apply: (s) => s.replace("      if (answered.has(tc.id) || injected.has(tc.id)) continue;", "      if (injected.has(tc.id)) continue;"),
+    expectFail: "工具执行中途 emit 正文（结果在 assistant 之后才回）⇒ 绝不许说「没有收到结果」",
+  },
+  {
     id: "tail-clamp-keeps-head",
     src: "src/agent/text-budget.ts",
     test: "tests/text-budget-cjk.test.ts",
