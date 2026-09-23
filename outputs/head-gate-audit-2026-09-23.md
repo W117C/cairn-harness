@@ -433,3 +433,59 @@ subdirectory of the project root at "/private/tmp/dsh-anchor-776".
 **同时新浮出的别人的红（顺带点名，不改他人原子单元）**：`prune-saved-tokens-by-chars`、
 `prune-placeholder-tokens-by-chars`、`prune-saved-tokens-ignores-stub-text` 三条针脚在
 `src/agent/prune.ts` 里已不存在，而该文件主树是 M（在飞）⇒ 持有者需要改指（规则 91）。
+
+## 追加十（同日更晚，HEAD `bcc5f4e`）：判卷文件同族 + 两棵树并排读数 ⇒ 剩一格「针脚钉在在飞文本上」
+
+**先把上一格扩到两面。** `test` 与 `src` 同族且更阴：判卷文件未入库时，干净 HEAD 上那条锚点连基线都跑不出来
+（实测 vitest 对不存在的文件 exit 1「No test files found」），报告却落在 `基线就不是全绿（不应发生）` 那一句
+⇒ **「从未入库」被伪装成「测试挂了」**。判据因此从 `untrackedAnchorSrcs(entries)` 改成
+`untrackedAnchorPaths(items, isTracked)`，每项带 `what ∈ 被测面 / 判卷`，判读行按 `what` 分支
+（两面修法指不同文件），并各配一条断言互不串文案。
+
+**两棵树并排读数**（同一份表、同一次改判据，只差盘上有没有在飞改动）：
+
+| 树 | 阻断 | 拆开 |
+| --- | --- | --- |
+| 主树（含在飞） | **7** | 3 条 prune-* 针脚盘上 0 处 + 4 条未入库面 |
+| 同 HEAD 隔离 worktree | **10** | 5 条针脚在 HEAD 里 0 处 + 1 条源文件读不到 + 4 条未入库面 |
+
+差集是双向的，而且各指一件事：
+- **只在主树红**：`prune-saved-tokens-by-chars`、`prune-placeholder-tokens-by-chars`、
+  `prune-saved-tokens-ignores-stub-text` ⇒ 在飞改动把针脚踩掉了，HEAD 那份还是好的。是持有者的在飞信号，**不是 HEAD 缺陷**。
+- **只在隔离树红**：`sbx-network-branch-dropped`、`sbx-network-escort-ors-conditions`、`sbx-note-gate-dropped`、
+  `d7-worker-optout-ignored`、`d7-snapshot-id-not-in-event` ⇒ 这 5 条锚点钉的是**在飞文本**
+  （`src/main/sandbox.ts`、`src/tools/write_file.ts`、`src/agent/loop.ts` 全是 M），锚点行已入库、被锚定的实现还没。
+  **这才是 HEAD 侧的假绿**：主树这道门今天报 7，而 HEAD 实际带着 10 条失效。
+
+**未入库面 4 = 1 + 3**：`src/tools/snapshot.ts`（1 条锚点）+ `tests/snapshot-d7.test.ts`（被 3 条 d7 锚点共用）。
+独立口径（不走门代码：自己 `ls-tree` + 正则取表内两面）算出 99 个不同 src / 不在 HEAD 1 个、
+153 个不同 test / 不在 HEAD 1 个、按面计问题 4 ⇒ 与门的汇总逐字一致。
+
+**还剩的那一格，门自己判不了**：`ls-tree` 只答得出「文件在不在 HEAD」，答不出「被锚定的那段文字在不在 HEAD」。
+上面 5 条正好落在这一格 ⇒ 下一跳是把 `auditNeedles` 跑**两遍**（第二遍喂 `git show HEAD:<path>` 的内容），
+把「钉在在飞文本」做成门里的一个有名分的类别，而不是靠开 worktree 才知道。
+
+## 追加十一（同日更晚，HEAD `362eed5`）：把「钉在在飞文本」也做进门里 ⇒ 两树在同一批缺陷上对齐
+
+追加十留的那一格已落地（`headOnlyNeedleProblems` 在 lib，调用方按不同 src 缓存 `git show HEAD:<path>` 取内容，
+同一份 `auditNeedles` 跑两遍取差集）。差集只留「盘上判得通过、HEAD 那份判不过」，并显式撤掉两类重复成因：
+盘上已经报过的同一条、路径未入库由上一条管的——**一条红只算一处成因**，否则汇总数被同一件事抬高两次。
+判读行与另两类互不串文案，并明写「**不要**把针脚改成 HEAD 里的旧写法」：针脚钉的就是那次在飞改动，
+照 HEAD 改回去等于把这条锚点要守护的东西废掉（这一句是第三种修法，前两条各指提交文件 / 改指针脚）。
+
+改完的并排读数（同一时刻两棵树，各自跑 `--check-needles`）：
+
+| 树 | 阻断 | 拆栏 | 钉在飞文本 |
+| --- | --- | --- | --- |
+| 主树（含在飞） | **12** | 3 prune-*（盘上针脚失效）+ 4 未入库面 + 5 在飞文本 | **5** |
+| 同 HEAD 隔离 worktree | **10** | 6 盘上针脚失效 + 4 未入库面 | **0**（盘 == HEAD，无差集可言） |
+
+那 5 条与隔离树独占的 5 条**逐 id 相同**（`sbx-network-branch-dropped`、`sbx-network-escort-ors-conditions`、
+`sbx-note-gate-dropped`、`d7-worker-optout-ignored`、`d7-snapshot-id-not-in-event`），隔离树多出的第 6 条
+`d7-snapshot-taken-for-new-file` 在主树由「未入库面」那一栏点名 ⇒ **同一批缺陷从任一棵树都数得全**，
+这就是追加九那句「门读盘 ⇒ HEAD 缺口对它零信号」的正解。
+
+新增代价实测：99 个不同 src 各跑一次 `git show` 合计 **0.76s**，整道门 **8.60s**（此前无该判据时的对照没测，
+所以只报绝对数，不报"快了多少"）。判卷 `tests/mutate-verify-gates.test.ts` **34 passed**（先写 5 条、
+跑出 5 failed 再实现），`pnpm typecheck` 唯一报错在别人未跟踪的 `tests/prune-batching.test.ts`
+（门自己的归因句：HEAD 内 0 个 / 未跟踪草稿 1 个 ⇒ HEAD 态类型干净）。
