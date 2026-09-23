@@ -688,7 +688,13 @@ export class CompactionCoordinator {
   }
 
   /** 触发判定命中后的入口；decision=null 直接跳过。停用时摘要路径跳过（overflow 截断照走）。 */
-  async maybeCompact(events: AgentEvent[], decision: CompactDecision | null, options: Pick<RunCompactionArgs, "overhead" | "signal" | "economics"> = {}): Promise<CompactionOutcome | null> {
+  /** `options.config` = 逐次覆盖（如压缩重写代价摊销，见 `compaction-cost.ts`）。
+   *  缺省 undefined ⇒ 仍用构造时那份，**逐字节零回归**。 */
+  async maybeCompact(
+    events: AgentEvent[],
+    decision: CompactDecision | null,
+    options: Pick<RunCompactionArgs, "overhead" | "signal" | "economics"> & { config?: Partial<CompactionConfig> } = {},
+  ): Promise<CompactionOutcome | null> {
     if (!decision) return null;
     if (decision.trigger !== "overflow" && this.summarizerDisabled) return null;
     const outcome = await runCompaction({
@@ -696,7 +702,7 @@ export class CompactionCoordinator {
       trigger: decision.trigger,
       reason: decision.reason,
       summarizer: decision.trigger === "overflow" ? undefined : this.summarizer,
-      config: this.config,
+      config: options.config ? { ...this.config, ...options.config } : this.config,
       overhead: options.overhead,
       signal: options.signal,
       economics: options.economics,

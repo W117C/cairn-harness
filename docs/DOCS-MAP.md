@@ -22,6 +22,7 @@
 | 查架构对照六仓的真缺口 | `outputs/architecture-uplift-2026-09-21.md` |
 | 查「每请求固定成本 / 工具面膨胀」的调研与已落地能力 | `outputs/model-surface-budget-2026-09-23/`（四册：调研综述 / 装配账读数 / 设计与判据 / 施工回执）|
 | 查「缓存前缀抖动 / 为什么不能拿命中率当判据」 | `outputs/prefix-churn-2026-09-23/`（实测发现 + 设计与判据 + 施工回执；门 `prefix-churn-check`）|
+| 查「压缩一次值多少缓存钱 / 摊销策略」 | `outputs/compaction-amortization-2026-09-23/`（主张与依据 + 施工回执；判据 PC7 与 `cc-*` 针脚）|
 | 查安全绕过复现与修法 | `outputs/shell-permission-bypass-2026-09-21.md` + `scripts/probe-shell-bypass.ts` |
 | 查判断层校准路线 | `docs/judgment-layer-calibration-proposal.md` |
 | 看验收截图（**历史 UI**） | `docs/*.png`（vanilla 迁移前，勿当现状） |

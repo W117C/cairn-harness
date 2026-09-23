@@ -2304,6 +2304,25 @@ const MUTATIONS = [
     apply: (s) => s.replace("    if (excluded.has(eventIdAt(i)) || hasWorkerAttribution(e)) return;", "    if (hasWorkerAttribution(e)) return;"),
     expectFail: "⑥ 被压缩摘除的自动拍不再注入，且它不得顶掉仍然存活的那拍",
   },
+  // ---- 半截会话的孤儿 tool_call：续跑时投影必须仍可发送（tests/context-dangling-tool-call.test.ts）----
+  {
+    id: "dangling-exit-not-wired",
+    src: "src/agent/context.ts",
+    test: "tests/context-dangling-tool-call.test.ts",
+    desc: "合上孤儿那行没接在投影出口 ⇒ 函数在、判卷在、真路径照旧吃 400：本仓第 9 次「两头断」的形状，" +
+      "所以判卷必须走 projectContext 而不是只测那个纯函数",
+    apply: (s) => s.replace("  return closeDanglingToolCalls(msgs);", "  return msgs;"),
+    expectFail: "真实现场形状（末笔调用没有结果）⇒ 投影里不许留下未答的 tool_calls",
+  },
+  {
+    id: "dangling-note-claims-success",
+    src: "src/agent/context.ts",
+    test: "tests/context-dangling-tool-call.test.ts",
+    desc: "补位文案改成「已经收到结果了」⇒ 结构合法性还在（400 消失），但模型被喂了一句假事实，" +
+      "会当成那笔写盘真发生过（比红更坏的静默幻觉）。钉住这条判据不能只看有没有 tool 消息",
+    apply: (s) => s.replace("没有收到结果：上一次运行在这次调用中途结束", "已经收到结果了：那次调用"),
+    expectFail: "真实现场形状（末笔调用没有结果）⇒ 投影里不许留下未答的 tool_calls",
+  },
   {
     id: "tail-clamp-keeps-head",
     src: "src/agent/text-budget.ts",
@@ -6122,6 +6141,54 @@ const MUTATIONS = [
     desc: "要求抖的那一支只看「抖没抖」不看证据 ⇒ PC5/PC6 退化成一条存在性断言",
     apply: (s) => s.replace("  const ok = expectRewrite ? rewrote.length > 0 && silent.length === 0 : rewrote.length === 0;", "  const ok = expectRewrite ? rewrote.length > 0 : rewrote.length === 0;"),
     expectFail: "churnIsAttributed 四个象限：要求抖/不抖 × 有证据/无证据",
+  },
+  {
+    id: "cc-off-path-still-amortizes",
+    src: "src/agent/compaction-cost.ts",
+    test: "tests/compaction-cost.test.ts",
+    desc: "去掉「未启用即原样」支 ⇒ 一条没被打开的策略开始改生产装配（缺省零行为是这类能力的底线）",
+    apply: (s) => s.replace("  if (!opts.enabled) return undefined;", "  if (false) return undefined;"),
+    expectFail: "缺省关 ⇒ 返回 undefined（调用方原样用旧配置，逐字节零回归）",
+  },
+  {
+    id: "cc-overflow-guard-dropped",
+    src: "src/agent/compaction-cost.ts",
+    test: "tests/compaction-cost.test.ts",
+    desc: "overflow 也摊销 ⇒ 已经装不下时少压一点，下一轮立刻再撞硬闸（fail-safe 被反向拆掉）",
+    apply: (s) => s.replace("  if (opts.trigger === \"overflow\") return undefined;", "  if (false) return undefined;"),
+    expectFail: "overflow 不摊销：已经装不下了，少压只会立刻再撞一次硬闸",
+  },
+  {
+    id: "cc-only-one-tail-knob-tightened",
+    src: "src/agent/compaction-cost.ts",
+    test: "tests/compaction-cost.test.ts",
+    desc: "只收 tailRatio 不收 tailMaxTokens ⇒ clamp 把它顶回原值，策略看着在跑其实什么都没做",
+    apply: (s) => s.replace("    tailMaxTokens: next,", "    tailMaxTokens: c.tailMaxTokens,"),
+    expectFail: "tail 两个旋钮必须一起收（只收 tailRatio 会被 tailMaxTokens 顶回去 = 等于没收）",
+  },
+  {
+    id: "cc-floor-lets-working-set-shrink",
+    src: "src/agent/compaction-cost.ts",
+    test: "tests/compaction-cost.test.ts",
+    desc: "去掉工作集下限 ⇒ 小 tail 预算被继续砍，策略从「省缓存」变成「忘事」",
+    apply: (s) => s.replace("  return Math.max(Math.min(scaled, tailBudget), Math.min(floor, tailBudget));", "  return Math.min(scaled, tailBudget);"),
+    expectFail: "已在下限就不动——不返回「等效但不同」的配置（守住逐字零回归的语义）",
+  },
+  {
+    id: "cc-head-survival-never-recorded",
+    src: "src/agent/glm-session.ts",
+    test: "tests/compaction-cost.test.ts",
+    desc: "每轮把上一轮装配清空 ⇒ 头部存活比永远量不出来，策略只在关那一支生效（A/B 读成「策略无效」）",
+    apply: (s) => s.replace("        prevRequestLayer = requestLayer;", "        prevRequestLayer = \"\";"),
+    expectFail: "开着 ⇒ 同一会话里压缩次数不更多、累计重写字符严格更少",
+  },
+  {
+    id: "cc-coordinator-ignores-config-override",
+    src: "src/agent/compaction.ts",
+    test: "tests/compaction-cost.test.ts",
+    desc: "逐次 config 覆盖被忽略 ⇒ 上游算了摊销也用不上（本仓点名的「两头断」形状）",
+    apply: (s) => s.replace("      config: options.config ? { ...this.config, ...options.config } : this.config,", "      config: this.config,"),
+    expectFail: "开着 ⇒ 同一会话里压缩次数不更多、累计重写字符严格更少",
   },
 ];
 

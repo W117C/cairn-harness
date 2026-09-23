@@ -61,32 +61,37 @@ async function drive(opts: {
   try {
     await log.append({ type: "user_message", content: "TASK-0" });
     const { createGlmSessionProvider } = await import("../src/agent/glm-session");
+    // provider **只建一次**：一个 run = 一个 provider 实例，跨请求的状态（压缩重写代价的头部存活比、
+    // 已压次数）本来就挂在 provider 级。每轮新建会把状态洗掉——第一版就是这么把 PC7 量成
+    // 「开与关逐字同值」的（读起来像策略坏，其实是驱动器不像生产）。
+    let roundIndex = 0;
+    let faceNote = "";
+    const provider = createGlmSessionProvider(path, {
+      map: false,
+      workspace: dir,
+      system: SYSTEM_TEXT,
+      ...(opts.volatileEachRound ? { plugins: { deriveRemount: () => "REMOUNT-" + String(roundIndex) } } : {}),
+      requestFace: () => {
+        const r = roundIndex;
+        const base = sessionToolSpecs({
+          mode: "default",
+          ...(opts.pluginTools ? { pluginTools: opts.pluginTools } : {}),
+        });
+        if (opts.faceChangeAt !== undefined && r >= opts.faceChangeAt) {
+          const dropped = base.specs[base.specs.length - 1];
+          faceNote = "[skill 工具面] 本 turn 已按 disallowed-tools 从可见工具表摘除：" + String(dropped?.function.name ?? "?");
+          return { tools: base.specs.slice(0, -1), note: faceNote };
+        }
+        faceNote = "";
+        return { tools: base.specs, note: "" };
+      },
+      transport: async function* (messages: GlmMessage[], _o: unknown, specs?: GlmToolSpec[]) {
+        seen.push({ messages: [...messages], tools: specs ? [...specs] : undefined, faceNote });
+        yield { type: "assistant_message" as const, content: "r" + String(roundIndex) };
+      },
+    });
     for (let r = 1; r <= opts.rounds; r++) {
-      // requestFace 与 transport 是同轮的两个回调：note 走这只局部变量搭桥
-      // （模块级会跨轮串台，实测造成过一次 PC3 假绿）
-      let faceNote = "";
-      const provider = createGlmSessionProvider(path, {
-        map: false,
-        workspace: dir,
-        system: SYSTEM_TEXT,
-        ...(opts.volatileEachRound ? { plugins: { deriveRemount: () => "REMOUNT-" + String(r) } } : {}),
-        requestFace: () => {
-          const base = sessionToolSpecs({
-            mode: "default",
-            ...(opts.pluginTools ? { pluginTools: opts.pluginTools } : {}),
-          });
-          if (opts.faceChangeAt !== undefined && r >= opts.faceChangeAt) {
-            const dropped = base.specs[base.specs.length - 1];
-            faceNote = "[skill 工具面] 本 turn 已按 disallowed-tools 从可见工具表摘除：" + String(dropped?.function.name ?? "?");
-            return { tools: base.specs.slice(0, -1), note: faceNote };
-          }
-          return { tools: base.specs, note: "" };
-        },
-        transport: async function* (messages: GlmMessage[], _o: unknown, specs?: GlmToolSpec[]) {
-          seen.push({ messages: [...messages], tools: specs ? [...specs] : undefined, faceNote });
-          yield { type: "assistant_message" as const, content: "r" + String(r) };
-        },
-      });
+      roundIndex = r;
       for await (const _ of provider.stream([])) void _;
       // 轮间只用已确证形状的事件类型：历史照样逐轮变长，前缀判据不受影响
       await log.append({ type: "assistant_message", content: "r" + String(r) });
@@ -114,15 +119,18 @@ async function drive(opts: {
  *    配方由 `outputs/prefix-churn-2026-09-23/probe-prune-recipe.mts` 实跑定出：
  *    每轮 `user_message + tool_call + 20k 字结果 + assistant_message`、**种子只给 2 轮**
  *    （`RECENT_ROUNDS_EXEMPT = 2`）⇒ 替换集从第 3 轮起每轮恰好多一个键（3 → 3,7 → 3,7,11 …）。 */
-async function driveMutating(opts: { kind: "compaction" | "prune" }): Promise<{
+async function driveMutating(opts: { kind: "compaction" | "prune"; rounds?: number; amortize?: boolean }): Promise<{
   obs: AssemblyObservation[];
   firedPerPair: ChurnMutator[][];
+  /** 每次压缩的触发种类（`threshold` / `overflow`）——摊销只管 threshold，读数必须分开算。 */
+  triggers: string[];
 }> {
   const dir = mkdtempSync(join(tmpdir(), "prefix-churn-mut-"));
   const path = join(dir, "events.jsonl");
   const attachments = join(dir, "prune-attachments");
   const obs: AssemblyObservation[] = [];
   const firedPerPair: ChurnMutator[][] = [];
+  const triggers: string[] = [];
   const log = createEventLog(path);
   const roundEvents = (i: number) => [
     { type: "user_message", content: "Q" + String(i) },
@@ -134,43 +142,41 @@ async function driveMutating(opts: { kind: "compaction" | "prune" }): Promise<{
     if (opts.kind === "prune") {
       for (let i = 0; i < 2; i++) for (const e of roundEvents(i)) await log.append(e as never);
     } else {
-      await log.append({ type: "assistant_message", content: cjk(2_600) });
+      await log.append({ type: "assistant_message", content: cjk(4_000) });
       await log.append({ type: "user_message", content: "q0" });
     }
     await log.close?.();
     const { createGlmSessionProvider } = await import("../src/agent/glm-session");
     let beforeCompact = countCompactionEvents(path);
     let beforeAttachments = countAttachments(attachments);
-    for (let r = 0; r < 4; r++) {
-      let faceNote = "";
-      const provider = createGlmSessionProvider(path, {
-        map: false,
-        workspace: dir,
-        system: SYSTEM_TEXT,
-        ...(opts.kind === "compaction"
-          ? {
-              compaction: {
-                // ratio 特意取 0.55 而不是更低：阈值必须**在驱动中途**才够得到——
-                // 首轮就压的话没有「上一轮」可比，抖重量不出来（实测过一次：事件确实落了流，PC5 仍报没分辨力）。
-                // available 仍远大于估算 ⇒ 不撞最终硬闸。
-                config: {
-                  inputLimit: 6_000,
-                  maxOutputReserve: 400,
-                  ratio: 0.55,
-                  tailMinTokens: 300,
-                  tailMaxTokens: 900,
-                  retryBackoffMs: 1,
-                },
-                summarizer: createMockSummarizer("SUMMARY：前文已压缩为一段，结论与未收口项都在里面。".repeat(12)),
-              },
-            }
-          : {}),
-        requestFace: () => ({ tools: sessionToolSpecs({ mode: "default" }).specs, note: faceNote }),
-        transport: async function* (messages: GlmMessage[], _o: unknown, specs?: GlmToolSpec[]) {
-          obs.push({ messages: [...messages], tools: specs ? [...specs] : undefined, faceNote });
-          yield { type: "assistant_message" as const, content: "round-" + String(r) };
-        },
-      });
+    // 与驱动器 A 同理：**一个 run 一个 provider**，跨请求的状态才量得到（PC7 的摊销判定读的就是它）。
+    let roundIndex = 0;
+    let faceNote = "";
+    const provider = createGlmSessionProvider(path, {
+      map: false,
+      workspace: dir,
+      system: SYSTEM_TEXT,
+      ...(opts.kind === "compaction"
+        ? {
+            compaction: {
+              // ratio 取 0.35：阈值必须**在驱动中途**才够得到（首轮就压没有上一轮可比），
+              // 且窗口要大于估算，让触发停在 **threshold**（overflow 那一支按设计不摊销）。
+              // tail 三个旋钮刻意不覆盖：拿生产缺省（tailMin 2,000 / tailMax 15,000 / ratio 0.25），
+              // 否则 tail 预算落到工作集下限之下，摊销按设计拒绝动作（第一版就踩在这)。
+              config: { inputLimit: 12_000, maxOutputReserve: 400, ratio: 0.35, retryBackoffMs: 1 },
+              summarizer: createMockSummarizer("SUMMARY：前文已压缩为一段，结论与未收口项都在里面。".repeat(12)),
+              amortizeRewriteCost: opts.amortize === true,
+            },
+          }
+        : {}),
+      requestFace: () => ({ tools: sessionToolSpecs({ mode: "default" }).specs, note: faceNote }),
+      transport: async function* (messages: GlmMessage[], _o: unknown, specs?: GlmToolSpec[]) {
+        obs.push({ messages: [...messages], tools: specs ? [...specs] : undefined, faceNote });
+        yield { type: "assistant_message" as const, content: "round-" + String(roundIndex) };
+      },
+    });
+    for (let r = 0; r < (opts.rounds ?? 4); r++) {
+      roundIndex = r;
       for await (const _ of provider.stream([])) void _;
       const fired: ChurnMutator[] = [];
       const afterCompact = countCompactionEvents(path);
@@ -180,19 +186,38 @@ async function driveMutating(opts: { kind: "compaction" | "prune" }): Promise<{
       if (afterAttachments > beforeAttachments) fired.push("prune");
       beforeAttachments = afterAttachments;
       if (r > 0) firedPerPair.push(fired);
-      // 轮间追加：裁剪样本整轮追加（含 user_message ⇒ 免剪边界前移），压缩样本只加短文本
+      // 轮间追加：裁剪样本整轮追加（含 user_message ⇒ 免剪边界前移），压缩样本每轮长一块
       if (opts.kind === "prune") {
         for (const e of roundEvents(100 + r)) await log.append(e as never);
       } else {
-        // 每轮再长一块，把估算推过阈值 ⇒ 压缩发生在**有上一轮可比**的那些轮上
-        await log.append({ type: "assistant_message", content: cjk(2_600) });
+        await log.append({ type: "assistant_message", content: cjk(4_000) });
         await log.append({ type: "user_message", content: "after-" + String(r) });
       }
     }
+    // 触发种类必须在 rmSync 之前读——文件已删就什么都读不到（这个坑踩过一次，表现是「种类=[无]」）
+    triggers.push(...readCompactionTriggers(path));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-  return { obs, firedPerPair };
+    return { obs, firedPerPair, triggers };
+}
+
+/** 从事件流里读每次压缩的触发种类（真实痕迹，不是推断）。 */
+function readCompactionTriggers(path: string): string[] {
+  try {
+    return readFileSync(path, "utf8")
+      .split("\n")
+      .filter((l) => l.includes('"type":"compaction"'))
+      .map((l) => {
+        try {
+          return String((JSON.parse(l) as { trigger?: string }).trigger ?? "?");
+        } catch {
+          return "?";
+        }
+      });
+  } catch {
+    return [];
+  }
 }
 
 function countCompactionEvents(path: string): number {
@@ -277,6 +302,33 @@ export const CHURN_RULES: readonly ChurnRule[] = [
       };
     },
   },
+  {
+    id: "PC7-摊销确实少付账（A/B 同一条会话）",
+    why: "断点位置 = 第一个被摘除的消息，与这次摘掉多少**无关** ⇒ 既然横竖要断一次，就该这一次多压一点。这条判据要的是同一会话上的对照读数，不是「逻辑上应该会少」",
+    run: async () => {
+      const rounds = 8;
+      const off = await driveMutating({ kind: "compaction", rounds });
+      const on = await driveMutating({ kind: "compaction", rounds, amortize: true });
+      const tally = (r: typeof off) => {
+        const attrs = r.obs.slice(1).map((cur, i) => attributeChurn(r.obs[i]!, cur, r.firedPerPair[i] ?? []));
+        return {
+          compactions: attrs.filter((a) => a.fired.includes("compaction")).length,
+          rewrote: attrs.reduce((n, a) => n + a.rewroteChars, 0),
+          threshold: r.triggers.filter((t) => t === "auto" || t === "threshold").length,
+          overflow: r.triggers.filter((t) => t === "overflow").length,
+          kinds: r.triggers.join(",") || "无",
+        };
+      };
+      const a = tally(off), b = tally(on);
+      return {
+        ok: a.compactions >= 2 && b.compactions < a.compactions && b.rewrote < a.rewrote,
+        detail: `同一条会话 8 轮：关 ⇒ 压缩 ${String(a.compactions)} 次、重写 ${String(a.rewrote)} 字符；` +
+          `开 ⇒ 压缩 ${String(b.compactions)} 次、重写 ${String(b.rewrote)} 字符` +
+          `｜触发种类 关=[${a.kinds}] 开=[${b.kinds}]` +
+          (a.compactions < 2 ? "（关那一支都没连压两次 ⇒ 样本无分辨力，门自身红）" : ""),
+      };
+    },
+  },
 ];
 
 /** 反向对照：每只判据喂一件故意做错的工件，要求它判假。造不出红的规则等于摆设。 */
@@ -323,6 +375,16 @@ export function runChurnSelfTest(): { caught: string[]; missed: string[] } {
     {
       id: "PC6-裁剪抖了要认账",
       predicateSaysRed: () => !churnIsAttributed([attributeChurn(clean[0]!, clean[1]!, ["prune"])], false).ok,
+    },
+    {
+      // PC7 的分辨力：拿「开的那支反而更多」的对照喂进去必须红（否则 A/B 是装饰）
+      id: "PC7-摊销确实少付账（A/B 同一条会话）",
+      predicateSaysRed: () => {
+        const a = { compactions: 2, rewrote: 5_000 };
+        const b = { compactions: 3, rewrote: 6_000 };
+        const holds = a.compactions >= 2 && b.compactions < a.compactions && b.rewrote < a.rewrote;
+        return !holds;
+      },
     },
     {
       // 「无分辨力」本身必须红：易变块一整轮都不变时，PC2 不得报通过
