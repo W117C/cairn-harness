@@ -45,7 +45,7 @@ import {
   type ResolvedPluginRole,
 } from "./sequencer";
 import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckConfig, type StuckTurn } from "./stuck";
-import { decideSupervisor, superviseApprovalDigest, type SupervisorAction } from "./supervisor";
+import { decideSupervisor, ringVerdict, superviseApprovalDigest, type SupervisorAction } from "./supervisor";
 import type { RespawnArgs } from "./recovery";
 import {
   collectChangeSet,
@@ -1090,9 +1090,15 @@ export class Orchestrator {
       const effectiveReport = (violated.length > 0
         ? "verdict: fail\nforbidden 违反：" + violated.join("、") + "（禁改面被触碰，报告 verdict 不采信）\n" + report
         : report) + diffNote;
-      // verdict 映射：pass / fail / unspecified（畸形 → null → escalate）
-      const v = parseVerdict(effectiveReport);
-      const verdict = v === "pass" ? "pass" : v === "fail" ? "fail" : null;
+      // 判据来源（`ringVerdict`）：有机器凭据 `artifacts.verified` 就只认凭据；凭据缺席才回落到
+      // 报告里的 verdict 契约行（无 verify 面的仓库里散文是唯一读物——未闭的一半已立案）。
+      // 旧实现只读散文 ⇒ supervise 恒 escalate（implement 任务书里没有 verdict 行可解析），
+      // 反方向还留着一道洞：报告里自写一行 `verdict: pass` 就能换取自动合并。
+      const verdict = ringVerdict({
+        evidence: term.result.artifacts.verified,
+        prose: parseVerdict(effectiveReport),
+        forbiddenViolated: violated.length > 0,
+      });
       const action: SupervisorAction = decideSupervisor({
         verdict,
         stageCount,
@@ -1114,7 +1120,7 @@ export class Orchestrator {
         type: "agent_message",
         agent_id: agentId,
         kind: "progress",
-        text: "[supervisor] 环 " + String(stageCount) + "/" + String(maxStages) + "（" + term.status + "，verdict=" + (verdict ?? "unspecified") + "）→ " + decisionText,
+        text: "[supervisor] 环 " + String(stageCount) + "/" + String(maxStages) + "（" + term.status + "，判据=" + (verdict ?? "无判据") + "，凭据=" + (term.result.artifacts.verified ?? "无写盘") + "）→ " + decisionText,
       } as AgentEvent).catch(() => {});
       if (action.kind === "accept") {
         // 收尾：最终环有真实写改动（以 finishInner 的 worktreeDiff files_changed 为准——工具调用
@@ -1141,13 +1147,19 @@ export class Orchestrator {
           output: JSON.stringify({ supervise: true, chain_id: callId, stages: stageCount, status: "accepted", final_agent: agentId, merged }),
         };
       }
+      // escalate / abort = 「交给人判」这两条出口：证据必须活着到人手边。旧实现在这里先 rejectRings
+      // （含最终环）删掉 worktree 与分支，再回去问人——真语料里三份**改对了**的收队回执就是这样
+      // 在升级前被销毁的（ga-strategy-2026-09-20 三次复跑，逐笔读到 `已清理（rejected）` 早于 escalate）。
+      // 与既有的「合并失败保留最终环 worktree」同形：只 reject 前序环，最终环留着，
+      // 现场由 `scanOrphanWorktrees` 在面板点名（泄漏有界且可见，不换取据销毁）。
+      // 取消 / 成本闸两条出口仍全量 reject：那是用户与钱的显式信号，不是「请人来判这份交付」。
       if (action.kind === "escalate") {
-        await rejectRings(ringAgentIds);
-        return { ok: false, output: "spawn_agent(supervise): 已升级人工裁决：" + action.why };
+        await rejectRings(ringAgentIds.filter((id) => id !== agentId));
+        return { ok: false, output: "spawn_agent(supervise): 已升级人工裁决：" + action.why + this.ringScene(agentId) };
       }
       if (action.kind === "abort") {
-        await rejectRings(ringAgentIds);
-        return { ok: false, output: "spawn_agent(supervise): " + action.why };
+        await rejectRings(ringAgentIds.filter((id) => id !== agentId));
+        return { ok: false, output: "spawn_agent(supervise): " + action.why + this.ringScene(agentId) };
       }
       // retry / spawn → 续环：更新前环上下文（错误永不冒充结果；forbidden 注入的 fail 理由随行）
       lastAgentId = agentId;
@@ -1439,6 +1451,15 @@ export class Orchestrator {
   private async cleanupSuperseded(agentId: string): Promise<void> {
     const w = this.workers.get(agentId);
     if (w && w.mode === "write" && w.worktree) await this.cleanupWrite(w, "rejected");
+  }
+
+  /** 「交给人判」那两条出口（escalate / abort）的现场说明：最终环的 worktree 与分支此刻被**刻意保留**，
+   *  回执必须点名它落在哪儿——否则「保留了」这句话对模型和用户都不可执行（读到一个动词却没有地址）。 */
+  private ringScene(agentId: string): string {
+    const w = this.workers.get(agentId);
+    if (w === undefined || w.worktree === undefined) return "";
+    const branch = w.branch;
+    return "（现场已保留：worktree=" + w.worktree + "，分支=" + (branch === undefined ? "未建" : branch) + "，可在 git 面板人工合并或丢弃）";
   }
 
   /** sequencer 状态只读呈现（tool_result；§4.4.7「pipeline worker 的 tool_result 里 sequencer 状态只读呈现」）。 */
