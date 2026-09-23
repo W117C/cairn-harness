@@ -7099,6 +7099,43 @@ const MUTATIONS = [
     expectFail: "骨架格子数 = 层数 × 结果数（任一侧加值，格数自动跟上，不靠人记得补）",
   },
 
+  // ── 复跑面 join-lapse（这条读数给 W1b 定默认值：读数偏 0 = 安静地决定不花钱，所以四格各钉一条）
+  {
+    id: "join-lapse-denominator-diluted",
+    src: "scripts/replay/join-lapse.ts",
+    test: "tests/replay-join-lapse.test.ts",
+    desc: "分母把无 worker 的普通会话也算进去 ⇒ 占比被大量不相关 run 稀释成好看的 0，W1b 就此「有据」不做",
+    apply: (s) => s.replace("  const worker = rows.filter((r) => r.spawns > 0);", "  const worker = rows;"),
+    expectFail: "分母只数真派过活的 run：掺进无 worker 的会话不会把占比稀释成 0",
+  },
+  {
+    id: "join-lapse-terminal-list-recopied",
+    src: "scripts/replay/join-lapse.ts",
+    test: "tests/replay-join-lapse.test.ts",
+    desc: "「在途」另抄一份判定而不复用 interruptedWorkers ⇒ 恢复面加一种终态时这里读成在途，两处分叉（第六族）",
+    apply: (s) => s.replace(
+      "    inFlight: interruptedWorkers(raws as readonly AgentEvent[]).length,",
+      "    inFlight: raws.filter((r) => (r as { type?: string }).type === \"agent_spawned\").length,",
+    ),
+    expectFail: "failed / cancelled 同样算收队——终态名单挂产品的 `interruptedWorkers`，不在此另抄一份",
+  },
+  {
+    id: "join-lapse-unmeasurable-as-zero",
+    src: "scripts/replay/join-lapse.ts",
+    test: "tests/replay-join-lapse.test.ts",
+    desc: "零 worker 时不走「不可测」分支 ⇒ 0/0 与「占比是 0」长成同一句话，读的人据此判定不用建闸（未证读成通过）",
+    apply: (s) => s.replace("  if (s.totalSpawns === 0) {", "  if (false) {"),
+    expectFail: "零 worker 语料 ⇒ 红着退出并说「不可测」，不许报 0/0 让人读成「占比是 0」",
+  },
+  {
+    id: "join-lapse-families-counted-all-runs",
+    src: "scripts/replay/join-lapse.ts",
+    test: "tests/replay-join-lapse.test.ts",
+    desc: "样本宽度按全语料数目录 ⇒ 无 worker 的文件把「样本只来自一次实验」这句警告自己稀释掉（本面施工时真踩过）",
+    apply: (s) => s.replace("families: new Set(worker.map(", "families: new Set(rows.map("),
+    expectFail: "样本宽度只数派过活的 run：掺进来的无 worker 目录不许把「样本很窄」这句稀释掉",
+  },
+
   // ── 复跑面 corpus-inventory（这张表的最后一行是「要不要给主循环加换路压力」的决策依据，
   //    偏小 = 安静地不下判断，所以五格各自钉一条：窗口、规范化、断链、决策线两半）
   {
