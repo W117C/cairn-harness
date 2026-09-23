@@ -1895,6 +1895,50 @@ async function phaseElectron(root: string): Promise<void> {
       ok(b28 !== null && b28.fake === false,
         "B28 反面对手：演示分支名在屏上任何角落都不该出现（实测 fake=" + String(b28?.fake ?? null) + "）");
     }
+    /* B29 工作区看板：真运行时只许列真的那一个（分支那半见 B28，同一族）。
+       量过的现场：`workspaceViewHTML` 在 `window.agent` 存在时仍渲染 `WORKSPACES` 三条假文件夹，
+       点一行只 toast「已切换工作区「coding-suite」」，而 `configuredWorkspace` / `panelData.tree` 一字未动
+       ⇒ 那句话可证伪。芯片文字由桥接段覆写（`baseSyncCtxChipState()` 之后再写真值），
+       所以这里**以芯片为准做两侧对照**：配了目录 ⇒ 面板恰好列它；没配 ⇒ 面板一行都不列。 */
+    console.log("[panels-check] B29 工作区看板只列真配置的那一个（演示文件夹不许出现在发货路径）");
+    {
+      const b29Open = await cdp2.eval<string>(
+        `(() => { const c = document.querySelector('#ctxWorkspace'); if (!c) return "no-chip"; c.click(); return "clicked"; })()`,
+      );
+      ok(b29Open === "clicked", "B29 工作区芯片点得开（实测 " + JSON.stringify(b29Open) + "）");
+      const b29Read = (): Promise<{ rows: number; names: string[]; add: boolean; chip: string; body: string } | null> =>
+        cdp2.eval<{ rows: number; names: string[]; add: boolean; chip: string; body: string } | null>(
+          `(() => { const p = document.querySelector('#workspacePanelBody'); if (!p) return null;` +
+          `  const rows = [...p.querySelectorAll('.ws-row[data-ws]')].filter((r) => r.dataset.ws !== "add");` +
+          `  const t = (document.querySelector('#ctxWorkspaceLabel')||{}).textContent || "";` +
+          `  return { rows: rows.length,` +
+          `    names: rows.map((r) => ((r.querySelector('.w-name')||{}).textContent || "")),` +
+          `    add: !!p.querySelector('#wsAdd'), chip: t,` +
+          `    body: (p.textContent || "").replace(/\\s+/g," ").slice(0, 200) }; })()`,
+        );
+      const b29 = await settle(async () => {
+        const r = await b29Read();
+        return r !== null && r.chip !== "" ? r : null;
+      }, 12_000);
+      ok(b29 !== null && !/coding-suite|docs-site|edge-gateway/.test(b29.body),
+        "B29 面板里不许出现演示文件夹（发货路径没有事实源；实测 " + JSON.stringify(b29?.body ?? "没等到") + "）");
+      ok(b29 !== null && b29.add === false,
+        "B29 不许有「打开其他文件夹当工作区」那条假流程（文件输入拿不到能当运行目录的路径；实测 " +
+          String(b29?.add ?? null) + "）");
+      /* 两侧对照：芯片是桥接段写进去的真值，面板必须与它同数同值。 */
+      const chip = b29?.chip ?? "";
+      const unconfigured = /宿主默认$/.test(chip);
+      ok(b29 !== null && (unconfigured ? b29.rows === 0 : b29.rows === 1),
+        "B29 面板行数与芯片读到的真配置同数（芯片=" + JSON.stringify(chip) +
+          " 判为" + (unconfigured ? "未配置" : "已配置") + "，实测 rows=" + String(b29?.rows ?? -1) + "）");
+      /* 名字侧也走同一支两侧判据：未配置那支必须断「一个名字都没有」，
+         写成 `unconfigured || …` 会让它在未配置时恒真——那等于这一半从没被读过。 */
+      ok(b29 !== null && (unconfigured ? b29.names.length === 0
+        : b29.names.length === 1 && chip.endsWith("· " + b29.names[0])),
+        "B29 已配置时那一行必须就是芯片上那个目录名，未配置时不许列任何名字（两侧同值，防" +
+          "「列了别的」被读成一致；实测 names=" + JSON.stringify(b29?.names ?? []) +
+          " chip=" + JSON.stringify(chip) + "）");
+    }
     // 最后收一次「静默半执行」：两扇窗各自累积的未捕获异常都必须为空。
     await okNoExceptions(cdp);
     await okNoExceptions(cdp2);

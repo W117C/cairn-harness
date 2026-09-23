@@ -71,3 +71,68 @@
 本轮**不做**批量迁移：把标记换成函数名要逐个核对切片区间是否等价，而"切片悄悄变小"是**静默通过**的那种错
 （测得更少而门仍绿），比现在这种"一删注释就 18 条红"更坏。现状的代价是税，不是缺陷：**改注释 = 改判卷依赖面**，
 这条已写进记忆（规则 55 的补充实例）。
+
+---
+
+## 七、工作区这半（第五节 ⑴ 的那条独立任务，同族第二格）
+
+### 现场（B29 第一次跑出来的红，逐字）
+
+```
+❌ B29 面板里不许出现演示文件夹（发货路径没有事实源；实测 "…coding-suite~/dev/coding-suitedocs-site~/dev/docs-siteedge-gateway~/work/edge-gateway打开其他文件夹…"）
+❌ B29 不许有「打开其他文件夹当工作区」那条假流程（…；实测 true）
+❌ B29 面板行数与芯片读到的真配置同数（芯片="运行目录 · proj-ws" 判为已配置，实测 rows=3）
+❌ B29 已配置时那一行必须就是芯片上那个目录名…（实测 names=["coding-suite","docs-site","edge-gateway"]）
+```
+
+比分支那半更糟：屏上列的三个目录用户**一个都没有**，而他真配的那个（`proj-ws`）**不列**——
+芯片和面板同时说话，且互相矛盾。`#wsAdd` 那句「已切换工作区…」也是可证伪的：
+`<input type=file webkitdirectory>` 只给目录名，给不出能当运行目录的绝对路径，
+`selectWorkspace()` 换的是数组里的 `current` 指针，`configuredWorkspace` / `panelData.tree` 一字不动。
+
+### 改法（`src/renderer/app.js`）
+
+- 真运行时那一支的唯一来源改成桥接段注入的 `realWorkspaceRows()`：`configuredWorkspace === null ? [] : [那一条]`。
+  没配 ⇒ 一行都不列，并明写「未指定运行目录：使用宿主环境 / 默认目录」（`data-ws-state="unconfigured"`）。
+- 演示数组 **不删**：`WORKSPACES` 是浏览器直接打开这份文件时（`window.agent` 缺失）的正当用途，
+  注释改成「**仅原型态**」。撤的是它进入发货路径的那条路，不是它本身。
+- 真那一行用 `div` + `aria-current`，不再做 `role="radio"`——没有能生效的切换，就不该长得像能切。
+- `#wsAdd` 与 `selectWorkspace` 那条假流程在真运行时一并撤。
+
+### 判卷（三处，快 → 慢）
+
+1. 静态（`tests/renderer-no-demo-data.test.ts`）：`demoTokens` **不收**工作区名——收了等于逼自己删掉正当用途；
+   那一半改由 ⑵ 的"跑 shipped 代码"守着。注释里写明了这个分工。
+2. 离线切片（同文件新增 4 条）：vm 真跑 `workspaceViewHTML`，两支都对——
+   agent 态注入 `[{proj-ws}]` ⇒ 只列它、`<div class="ws-row is-current"`、无 `role="radio"`、
+   无三个演示名、无 `wsAdd`；`rows=[]` ⇒ 出「未指定运行目录」；
+   **反面对手**：同一个函数在原型态**确实**画那三条 ⇒ 上面那条绿不是靠"整块删掉渲染"变绿的。
+3. 真窗口（`panels-check` B29 五条）：**以芯片为准做两侧对照**（芯片文字由桥接段覆写，是可证伪的真值）：
+   配了 ⇒ 恰好 1 行且那行名字 = 芯片后缀；没配 ⇒ 0 行且 0 个名字。
+
+### 我自己写坏的那半，被全量门抓住
+
+B29 第一次落笔是 `unconfigured || (names.length === 1 && …)`。
+`tests/assertion-health-scan.test.ts` 报：
+`disjunction scripts/panels-check.ts:1933 → 断言含 ||（任一析取项成立即通过）`。
+这不是误报也不是格式洁癖——未配置那一支会让后半句**恒真**，
+即"名字对得上芯片"这半句在真窗口里从未被读过过。改成两侧各断一件事（未配置那支断 `names.length === 0`）。
+**同一族第二次**：规则 58 记的就是「跑改动邻域 ≠ 跑那道门，全量门抓出我自己留在 HEAD 的析取断言」。
+这一次门在**在飞阶段**就抓住了，没进 HEAD——同一条规矩的价值。
+
+### 复跑读数
+
+- `panels-check`（改判据后重跑，不沿用改前那次绿）：B29 五条全 ✅，
+  `names=["proj-ws"] chip="运行目录 · proj-ws"`、`add` 实测 `false`、`rows=1` ⇒ 「全部断言通过 ✅」exit=0。
+- `pnpm typecheck` → `tsc --noEmit 通过（0 条报错）✅`。
+- 切片判卷 8 条全绿（含改边界那次）。
+
+### 这一笔**没有**提交的：锚点
+
+新锚点 `workspace-panel-unwraps-agent-branch`（关掉 `if (window.agent)` 那支 ⇒ 产品态退回演示列表）
+留在工作树里没入库，原因是 `scripts/mutate-verify.mjs` 同一时刻被**别人的原子簇**占着：
+`no-progress` 那 6 条锚点（`np-*`）在文件里，而 `src/agent/no-progress.ts`、`tests/no-progress.test.ts`、
+`scripts/no-progress-check.ts` **三个都不在 HEAD**（`git cat-file -e` 实测均报缺）。
+整文件一并提交 = 亲手造出 6 条指向不存在文件的悬空锚点，正是 #37 / #57 / #59 / #61 一路在收的那个坑。
+⇒ 只提交自己的三面（`app.js` + `panels-check.ts` + 切片判卷），锚点另立任务等那一簇落地。
+另外：锚点要跑起来本来也得先提交——`preflightRefusals` 拒 src/test 相对 HEAD 有脏的锚点。

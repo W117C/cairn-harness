@@ -915,7 +915,9 @@ const VIEW_META = {
   sidechat: { title: '辅助对话',   icon: ICONS.chat }
 };
 
-/* 展示用文件树；path 不是可执行工作区，真实运行目录仅取 AppSettings.workspace。 */
+/* **仅原型态**用的演示工作区（浏览器直接打开这份文件时 `window.agent` 缺失，可独立预览）。
+   真运行时不读它——那一支的唯一来源是桥接段注入的 `realWorkspaceRows()`（见 `workspaceViewHTML` 上方注释）。
+   path 不是可执行工作区，真实运行目录仅取 AppSettings.workspace。 */
 const WORKSPACES = [
   { id: 'ws1', name: 'coding-suite', path: '~/dev/coding-suite', current: true, tree: [
     { dir: 'src/auth', files: [
@@ -1868,17 +1870,35 @@ closeView = function (key) { _closeView(key); syncCtxChipState(); };
 syncCtxChipState();
 
 /* 工作区看板：列出可选文件夹，点选即切换工作区 */
+/* 工作区列表有两个来源（2026-09-23，判卷 panels-check B29）：
+   - 真运行时（`window.agent` 在）：**只有一个**可能为真——设置里那个运行目录，由桥接段注入 `realWorkspaceRows()`。
+     原先这一支无条件渲染 `WORKSPACES` 三条演示文件夹 ⇒ 实测（改前）屏上列着用户没有的三个目录，
+     却不列他真配的那个：names=["coding-suite","docs-site","edge-gateway"]，而芯片写着 "运行目录 · proj-ws"。
+   - 浏览器原型态：没有桥接段可注入，演示数据是这份原型的正当用途（文件头写的「可独立预览」）。
+   `wsAdd`（打开其他文件夹当工作区）在真运行时一并撤：`<input type=file webkitdirectory>` 只拿得到目录名，
+   拿不到能当运行目录的绝对路径 ⇒ `selectWorkspace` 那句「已切换工作区…」可证伪。上传附件那条用途不受影响。 */
+let realWorkspaceRows = () => [];
+const WS_FOLDER_SVG = '<svg class="w-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>';
+const WS_CHECK_SVG = '<svg class="w-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 13 4 4L19 7"/></svg>';
+/** 真运行时那一行只是**读出来**的当前目录，没有可点的切换语义 ⇒ 用 div，不做 radio 按钮。 */
+function wsRowHTML(w, isCurrent, interactive) {
+  const tag = interactive ? 'button' : 'div';
+  return '<' + tag + ' class="ws-row' + (isCurrent ? ' is-current' : '') + '" data-ws="' + esc(w.id) + '"' +
+    (interactive ? ' type="button" role="radio" aria-checked="' + String(isCurrent) + '"' : ' aria-current="true"') + '>' +
+    WS_FOLDER_SVG +
+    '<span class="w-text"><span class="w-name">' + esc(w.name) + '</span>' +
+    '<span class="w-path" title="' + esc(w.path) + '">' + esc(w.path) + '</span></span>' +
+    (isCurrent ? WS_CHECK_SVG : '') + '</' + tag + '>';
+}
 function workspaceViewHTML() {
-  return (window.agent
-    ? '<button class="ws-row" type="button" id="workspaceConfigure"><span class="w-text"><span class="w-name">设置真实运行目录…</span><span class="w-path">设置 → 通用；下方仅为文件树预览，不影响运行目录</span></span></button>'
-    : '<div class="ws-head">选择工作区文件夹</div>') +
-    WORKSPACES.map(w =>
-      '<button class="ws-row' + (w === currentWs ? ' is-current' : '') + '" type="button" data-ws="' + esc(w.id) + '" role="radio" aria-checked="' + String(w === currentWs) + '">' +
-        '<svg class="w-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>' +
-        '<span class="w-text"><span class="w-name">' + esc(w.name) + '</span>' +
-        '<span class="w-path" title="' + esc(w.path) + '">' + esc(w.path) + '</span></span>' +
-        (w === currentWs ? '<svg class="w-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 13 4 4L19 7"/></svg>' : '') +
-      '</button>').join('') +
+  if (window.agent) {
+    const rows = realWorkspaceRows();
+    return '<button class="ws-row" type="button" id="workspaceConfigure"><span class="w-text"><span class="w-name">设置真实运行目录…</span><span class="w-path">设置 → 通用；运行目录只由设置决定</span></span></button>' +
+      rows.map(w => wsRowHTML(w, true, false)).join('') +
+      (rows.length ? '' : '<p class="ws-none" data-ws-state="unconfigured">未指定运行目录：使用宿主环境 / 默认目录</p>');
+  }
+  return '<div class="ws-head">选择工作区文件夹</div>' +
+    WORKSPACES.map(w => wsRowHTML(w, w === currentWs, true)).join('') +
     '<button class="ws-row ws-add" type="button" id="wsAdd" data-ws="add">' +
       '<svg class="w-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>' +
       '<span class="w-text"><span class="w-name">打开其他文件夹…</span></span>' +
@@ -2383,6 +2403,11 @@ render();
     ctxWorkspaceLabel.textContent = configuredWorkspace ? '运行目录 · ' + (configuredWorkspace.split('/').filter(Boolean).pop() || '/') : '运行目录 · 宿主默认';
     ctxWorkspace.title = workspaceError || configuredWorkspace || '使用宿主环境 / 默认目录；点击可设置';
   };
+  /* 工作区面板的唯一数据源：设置里那一条真目录（原型段那条分支读这个钩子）。
+     每次展开面板都重新取 ⇒ 保存新目录后不必额外接线，也不会再列演示文件夹（判卷：panels-check B29）。 */
+  realWorkspaceRows = () => (configuredWorkspace === null ? [] : [{
+    id: 'real', name: configuredWorkspace.split('/').filter(Boolean).pop() || '/', path: configuredWorkspace,
+  }]);
   function workspaceFailure(message) {
     workspaceError = message;
     workspaceStatus.textContent = message;
