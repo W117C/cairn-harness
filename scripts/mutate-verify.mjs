@@ -6266,6 +6266,41 @@ const MUTATIONS = [
     apply: (s) => s.replace("autoVerify: over.autoVerify ?? (await store().get()).autoVerify,", "autoVerify: (await store().get()).autoVerify,"),
     expectFail: "②c settings 侧为真、overrides 显式 false ⇒ 那一拍不补（override 那一半的观察着）",
   },
+  // 同一族：`agent-runner.ts` 里 8 行 `over.X ?? (await store().get()).Y`。下面这些是**逐行实测**后
+  // 留下的（能杀死才算锚点，杀不死的另立新格用例，不放恒真针）。override 那一半只有 autoVerify 有观察着，
+  // 其余行的 override 半边走 IPC（src/main/index.ts:198）但判卷从不传 ⇒ 已署名留位，见 PROGRESS 能力 34。
+  {
+    id: "impact-analysis-settings-fallback-dropped",
+    src: "src/main/agent-runner.ts",
+    test: "tests/impact-runner-wiring.test.ts",
+    desc: "生产入口不读盘上的 impactAnalysis ⇒ 设置界面那个开关是空的（第三环两格直接把值交给 runAgent，照绿）",
+    apply: (s) => s.replace("impactAnalysis: over.impactAnalysis ?? (await store().get()).impactAnalysis,", "impactAnalysis: over.impactAnalysis ?? false,"),
+    expectFail: "开（只写进 settings.json）：生产入口仍真构造钩子并出 impact_report",
+  },
+  {
+    id: "request-metering-settings-fallback-dropped",
+    src: "src/main/agent-runner.ts",
+    test: "tests/session-tools.test.ts",
+    desc: "盘上的 requestMetering 到不了主会话 ⇒ 计量报告只剩 worker 有，主会话的钱看不见",
+    apply: (s) => s.replace("requestMetering: over.requestMetering ?? (await store().get()).requestMetering,", "requestMetering: over.requestMetering ?? false,"),
+    expectFail: "production settings forward C2/D flags and reopen private reports across two IPC runs",
+  },
+  {
+    id: "evidence-receipts-settings-fallback-dropped",
+    src: "src/main/agent-runner.ts",
+    test: "tests/session-tools.test.ts",
+    desc: "盘上的 evidenceReceipts 到不了主会话 ⇒ 私密报告不落盘，「可审计」那一面在主会话静默没有",
+    apply: (s) => s.replace("evidenceReceipts: over.evidenceReceipts ?? (await store().get()).evidenceReceipts,", "evidenceReceipts: over.evidenceReceipts ?? false,"),
+    expectFail: "production settings forward C2/D flags and reopen private reports across two IPC runs",
+  },
+  {
+    id: "economic-compaction-settings-fallback-dropped",
+    src: "src/main/agent-runner.ts",
+    test: "tests/session-tools.test.ts",
+    desc: "盘上的 economicCompaction 到不了主会话 ⇒ 经济报告恒 null，压缩债务没人记账",
+    apply: (s) => s.replace("economicCompaction: over.economicCompaction ?? (await store().get()).economicCompaction,", "economicCompaction: over.economicCompaction ?? false,"),
+    expectFail: "production settings forward C2/D flags and reopen private reports across two IPC runs",
+  },
   {
     id: "pc-serialize-layer-keeps-closing-bracket",
     src: "src/agent/prefix-churn.ts",
