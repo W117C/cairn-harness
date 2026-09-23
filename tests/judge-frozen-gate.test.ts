@@ -7,14 +7,21 @@
 // 事实源只有一处：工作区自己声明的 `scripts/frozen-sha256.json`（键 = 判卷文件相对路径）。
 // 表不存在 ⇒ 空集 ⇒ 零行为（用户自己的仓库不受本条约束）；表存在但解析不了 ⇒ 显式抛，
 // 绝不静默折成"这个工作区没有判卷面"（那正是把闸拆掉的最省事写法）。
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { evaluate, newAutonomySession, type PermissionRule } from "../src/permissions";
 import type { ToolName } from "../src/tools/base";
 import { frozenJudgePathSet } from "../src/frozen";
 import { runAgent } from "../src/main/agent-runner";
+import { createEventLog, type AgentEvent } from "../src/events";
+import { Orchestrator, scriptedWorkerModel } from "../src/agent/orchestrator";
+import { worktreePathFor } from "../src/agent/worktree";
+
+const exec = promisify(execFile);
 
 const ROOT = process.cwd();
 const JUDGE = "fixtures/mock/todo-bug.ts";
@@ -143,5 +150,70 @@ describe("判卷面硬闸端到端（runAgent → gatedTool → evaluate → 不
     expect(await readFile(join(ws, "out", "judge.txt"), "utf8")).toBe("原样未动");
     expect(allowed?.ok).toBe(true); // 同 run 非判卷路径 ⇒ 零行为，不能连坐
     expect(await readFile(join(ws, "src", "ok.txt"), "utf8").catch(() => null)).toBe("放行");
+  }, 120_000);
+});
+
+/* worker 面：上面那条端到端只走主会话，而 orchestrator 给 write worker 装的两处
+   `frozenJudgePaths`（autonomy / toolAutonomy）此前**零观测者**——write worker 的工具档硬编码 "auto"，
+   正是②「自主档不能复活被冻住的写」在并行路径上的同一件事（`agent-plan` §4.4.5：worker 在 worktree 里
+   改判卷文件，与主会话改是同一件事，不该因为它在 worktree 里就少一道闸）。
+   缺这一格时，摘掉那两行装配不会有任何用例红。 */
+describe("判卷面硬闸在 worker 面（并行写路径不得少一道闸）", () => {
+  it("write worker（工具档恒 auto）写判卷路径 ⇒ tool_result 仍是冻结拒绝且 worktree 里逐字未变；同 run 写普通文件照常放行", async () => {
+    const root = await mkdtemp(join(tmpdir(), "judge-worker-"));
+    try {
+      const repo = join(root, "repo");
+      await mkdir(join(repo, "scripts"), { recursive: true });
+      await mkdir(join(repo, "fixtures"), { recursive: true });
+      const g = (...args: string[]): Promise<{ stdout: string }> => exec("git", args, { cwd: repo });
+      await writeFile(join(repo, "README.md"), "line1\n", "utf8");
+      await writeFile(join(repo, "fixtures", "judge.txt"), "原样未动", "utf8");
+      await writeFile(join(repo, "scripts", "frozen-sha256.json"), JSON.stringify({ "fixtures/judge.txt": "0".repeat(64) }), "utf8");
+      await g("init");
+      await g("config", "user.email", "judge@test.local");
+      await g("config", "user.name", "Judge Test");
+      await g("add", ".");
+      await g("commit", "-m", "init");
+
+      const logPath = join(root, "events.jsonl");
+      await writeFile(logPath, "", "utf8");
+      const events: AgentEvent[] = [];
+      const script = [
+        { type: "tool_call", id: "wj-1", name: "write_file", args: { path: "fixtures/judge.txt", content: "被改写" } },
+        { type: "tool_call", id: "wj-2", name: "write_file", args: { path: "fixtures/plain.txt", content: "放行" } },
+        { type: "assistant_message", content: "改了什么：两处写入。为什么：任务要求。验证方式：无。风险：低。" },
+      ] as unknown as Parameters<typeof scriptedWorkerModel>[0];
+      const orch = new Orchestrator({
+        logPath,
+        workspace: repo,
+        parentMode: "default",
+        modelFor: () => scriptedWorkerModel(script),
+        emit: async (e) => {
+          events.push(e);
+          await createEventLog(logPath).append(e);
+        },
+      });
+      const spawned = await orch.spawn({ mode: "write", task: "改判卷文件" }, { callId: "jw-1" });
+      expect(spawned.ok, spawned.output).toBe(true);
+      const agentId = (JSON.parse(spawned.output) as { agent_id: string }).agent_id;
+      await orch.waitAll(60_000);
+
+      const resultFor = (id: string): { ok: boolean; output: string } | undefined =>
+        events.find((e) => e.type === "tool_result" && (e as { callId?: string }).callId === id) as
+          { ok: boolean; output: string } | undefined;
+      const denied = resultFor("wj-1");
+      expect(denied, "判卷那次调用必须有回执（没回执＝它根本没跑到闸前，下面断言全是空的）").toBeTruthy();
+      expect(denied!.ok).toBe(false);
+      expect(denied!.output).toContain("判卷文件冻结");
+      const allowed = resultFor("wj-2");
+      // 配对那一半：同 run 的普通写必须**真发生并被放行**，否则「被拒」可能只是整条 worker 路径没跑起来
+      expect(allowed?.ok, "同 run 的普通写必须放行").toBe(true);
+
+      const wt = worktreePathFor(repo, agentId);
+      expect(await readFile(join(wt, "fixtures", "judge.txt"), "utf8")).toBe("原样未动");
+      expect(await readFile(join(wt, "fixtures", "plain.txt"), "utf8").catch(() => null)).toBe("放行");
+    } finally {
+      await rm(root, { recursive: true, force: true }).catch(() => {});
+    }
   }, 120_000);
 });
