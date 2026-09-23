@@ -147,6 +147,88 @@ export function oversizedFaceIsDeterministic(reducer: (round: number) => readonl
   };
 }
 
+/* ============================ 变异源归因（PC5 / PC6） ============================ */
+
+/** 会让前缀合法重写的**变异源**。判据不禁它们——禁的是「抖了却没人说自己抖过」。 */
+export type ChurnMutator =
+  /** 阈值摘要替换历史（`compaction` 事件落流为证）。 */
+  | "compaction"
+  /** 类型化裁剪改写旧工具结果（`prune-attachments/` 落盘为证）。 */
+  | "prune"
+  /** 工具面自己变了（run 中途 skill 摘除 / MCP 装载变化）。 */
+  | "tool-face"
+  /** 模型面降配梯生效（note 为证）。 */
+  | "surface-ladder"
+  /** 易变 system 块变了（记忆/skills 每轮重读）——它**不该**牵连可缓存前缀。 */
+  | "volatile-block";
+
+export interface ChurnAttribution extends ChurnReading {
+  /** 本轮真实发生的变异源（由 harness 留下的痕迹推得，不是猜的）。 */
+  fired: readonly ChurnMutator[];
+  /** true ⇒ 重写了前缀却一个声明源都没有 —— 这才是要拦的形状。 */
+  silentRewrite: boolean;
+  /** 重写从第几条消息起（-1 = 没重写）。比报字符数更可诊断。 */
+  firstRewriteIndex: number;
+}
+
+/** 每条消息在 `serializeLayer(messages)` 里的起始字符偏移（用于把抖动点换算成「第几条」）。
+ *  与 `rankToolSpecs` 同一诉求：**位置**要能对上账，报出来的行号才可信。 */
+export function messageStartOffsets(messages: readonly unknown[]): number[] {
+  const out: number[] = [];
+  let acc = 1; // 前导 "["
+  messages.forEach((m, i) => {
+    out.push(acc);
+    acc += JSON.stringify(m).length + (i < messages.length - 1 ? 1 : 0); // "," 或尾 "]"（尾已被 serializeLayer 去掉）
+  });
+  return out;
+}
+
+function indexOfOffset(offsets: readonly number[], stableChars: number): number {
+  let idx = 0;
+  for (let i = 0; i < offsets.length; i++) if (offsets[i]! <= stableChars) idx = i;
+  return idx;
+}
+
+/** 归因：相邻两轮的抖动 + 造成它的变异源。 */
+export function attributeChurn(
+  prev: AssemblyObservation,
+  cur: AssemblyObservation,
+  fired: readonly ChurnMutator[],
+): ChurnAttribution {
+  const prevLayer = serializeLayer(prev.messages);
+  const reading = prefixChurn(prevLayer, serializeLayer(cur.messages));
+  const offsets = messageStartOffsets(prev.messages);
+  return {
+    ...reading,
+    fired,
+    silentRewrite: !reading.pureAppend && fired.length === 0,
+    firstRewriteIndex: reading.pureAppend ? -1 : indexOfOffset(offsets, reading.stableChars),
+  };
+}
+
+/** PC5 / PC6 的判据本体：**要么不抖，要么抖得有证据**。
+ *  两条反向的红：抖了没证据（静默中段重写）；要求它抖却整轮没抖（样本无分辨力）。 */
+export function churnIsAttributed(
+  attrs: readonly ChurnAttribution[],
+  expectRewrite: boolean,
+): ChurnVerdict {
+  const rewrote = attrs.filter((a) => !a.pureAppend);
+  const silent = rewrote.filter((a) => a.silentRewrite);
+  const ok = expectRewrite ? rewrote.length > 0 && silent.length === 0 : rewrote.length === 0;
+  return {
+    ok,
+    detail: `相邻 ${String(attrs.length)} 对里重写 ${String(rewrote.length)} 次、其中无证据 ${String(silent.length)} 次` +
+      (rewrote.length > 0
+        ? `｜首次重写在第 ${String(rewrote[0]!.firstRewriteIndex)} 条消息、作废 ${String(rewrote[0]!.rewroteChars)} 字符`
+        : expectRewrite ? "（要求重写却一次没发生——样本无分辨力，门自身红）" : ""),
+  };
+}
+
+/** 抖动代价的口径：这轮之后还剩多少字符可以走缓存命中。 */
+export function cacheSurvivalAfterRewrite(attr: ChurnAttribution): string {
+  return `${String(attr.stableChars)} / ${String(attr.prevChars)} 字符仍可缓存`;
+}
+
 /** 门的反向对照用料：把易变文本折进**首条** system —— 这正是 PC2 要拦的那一类改法
  *  （「可变内容后置」一旦被破，记忆每轮重读就会牵连整段可缓存前缀）。 */
 export function breakByFoldingVolatileIntoHead(messages: readonly GlmMessage[]): GlmMessage[] {

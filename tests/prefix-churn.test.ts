@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 import { gateToolSpecs } from "../src/agent/glm-session";
 import type { GlmMessage } from "../src/providers/glm";
 import {
+  attributeChurn,
   breakByFoldingVolatileIntoHead,
   breakByMiddleSplice,
   cacheableFace,
   cacheableSurvivesVolatileChange,
+  cacheSurvivalAfterRewrite,
+  churnIsAttributed,
+  messageStartOffsets,
   historyPurelyAppends,
   lcpChars,
   oversizedFaceIsDeterministic,
@@ -15,7 +19,7 @@ import {
   volatileSystemLayer,
   type AssemblyObservation,
 } from "../src/agent/prefix-churn";
-import { runChurnSelfTest } from "../scripts/prefix-churn-check";
+import { CHURN_RULES, runChurnSelfTest } from "../scripts/prefix-churn-check";
 
 const BASE = "固定基础提示";
 const obs = (opts: {
@@ -105,10 +109,50 @@ describe("前缀抖动：四条判据各自可红", () => {
   });
 });
 
+describe("前缀抖动：变异源归因", () => {
+  it("messageStartOffsets 相加恰等于该层的序列化长度（报「第几条被改」之前先保证位置对得上账）", () => {
+    const msgs = obs({ history: 4, volatile: "V" }).messages;
+    const offsets = messageStartOffsets(msgs);
+    const total = serializeLayer(msgs).length;
+    const last = offsets[offsets.length - 1]!;
+    expect(last + JSON.stringify(msgs[msgs.length - 1]!).length).toBe(total);
+    expect(offsets[0]).toBe(1); // 前导 "["
+  });
+
+  it("attributeChurn：纯追加时不报重写点；中段改写时指到**被改的那一条**", () => {
+    const prev = obs({ history: 2, volatile: "V-1" });
+    const grew = obs({ history: 3, volatile: "V-1" });
+    const pure = attributeChurn(prev, grew, []);
+    expect(pure.pureAppend).toBe(true);
+    expect(pure.firstRewriteIndex).toBe(-1);
+    expect(pure.silentRewrite).toBe(false); // 没抖，就谈不上「无证据的抖」
+
+    const broken = { ...grew, messages: grew.messages.map((m) => (m === grew.messages[1] ? { ...m, content: "V-2" } : m)) };
+    const churned = attributeChurn(prev, broken, []);
+    expect(churned.pureAppend).toBe(false);
+    expect(churned.silentRewrite).toBe(true);
+    expect(churned.firstRewriteIndex).toBe(1); // 易变块是第 1 条（0 是基础提示）
+  });
+
+  it("churnIsAttributed 四个象限：要求抖/不抖 × 有证据/无证据", () => {
+    const prev = obs({ history: 2, volatile: "V-1" });
+    const quiet = obs({ history: 3, volatile: "V-1" });
+    const loud = { ...prev, messages: prev.messages.map((m) => (m === prev.messages[1] ? { ...m, content: "CHANGED" } : m)) };
+    expect(churnIsAttributed([attributeChurn(prev, quiet, [])], false).ok).toBe(true); // 不抖 + 不要求 = 过
+    expect(churnIsAttributed([attributeChurn(prev, loud, ["compaction"])], true).ok).toBe(true); // 抖 + 有证据 = 过
+    expect(churnIsAttributed([attributeChurn(prev, loud, [])], true).ok).toBe(false); // 抖 + 无证据 = 红
+    expect(churnIsAttributed([attributeChurn(prev, loud, ["prune"])], false).ok).toBe(false); // 要求不抖却抖了 = 红
+    expect(churnIsAttributed([attributeChurn(prev, quiet, [])], true).ok).toBe(false); // 要求抖却一次没发生 = 红（无分辨力）
+    expect(cacheSurvivalAfterRewrite(attributeChurn(prev, loud, ["prune"]))).toContain("仍可缓存");
+  });
+});
+
 describe("前缀抖动：门的反向对照", () => {
-  it("--self-test 五条全部造得红（有一条造不红就说明那条判据是摆设）", () => {
+  it("--self-test 全造得红，且**每条规则都有自己的反向对照**（加规则不加对照即红）", () => {
     const r = runChurnSelfTest();
     expect(r.missed).toEqual([]);
-    expect(r.caught.length).toBe(5);
+    for (const rule of CHURN_RULES) expect(r.caught).toContain(rule.id);
+    // 另有一条元对照：判据「无分辨力」本身必须红
+    expect(r.caught.length).toBe(CHURN_RULES.length + 1);
   });
 });

@@ -4,33 +4,36 @@
  * 为什么判「我们这一侧」而不判命中率：真实录制显示命中/未命中是**全有或全无**（命中平均 86.6%、
  * 未命中 0%、41.5% 的暖轮整段归零），而归零发生在**上游** ⇒ 拿命中率当判据 = 一扇随机红的门。
  * 读数与判读：`outputs/prefix-churn-2026-09-23/00-实测发现.md`。
- * 本门钉的是那条**确定性**纪律：**没有声明的变异源时，装配必须逐字纯追加；易变块变了不得牵连
- * 可缓存前缀；工具面自己变了必须出声**。
+ * 本门钉的是那条**确定性**纪律：没有声明的变异源时装配必须逐字纯追加；易变块变了不得牵连
+ * 可缓存前缀；工具面自己变了必须出声；降配必须确定；压缩/裁剪造成的抖动必须留下证据。
  *
  * 口径：
  * - 判据全部住在 `src/agent/prefix-churn.ts`（纯函数），门与 `--self-test` 共用同一只。
  * - 观测来自**真 provider 真正发出去的那一对**（`transport(messages, _o, tools)`），不是源码形状断言。
- * - 分层按装配探针的词汇：可缓存面 = 首条 system + 工具面；易变面 = 其余 system 块。
  * - fail-visible：判据无分辨力（该变的没变）时**门自身红**，不报「通过」。
  *
  * 用法：`pnpm prefix-churn-check`｜反向对照 `pnpm prefix-churn-check -- --self-test`
  */
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { createEventLog } from "../src/events";
+import { createMockSummarizer } from "../src/agent/compaction";
 import { gateToolSpecs, sessionToolSpecs } from "../src/agent/glm-session";
 import type { GlmMessage, GlmToolSpec } from "../src/providers/glm";
 import {
+  attributeChurn,
   breakByFoldingVolatileIntoHead,
   breakByMiddleSplice,
   cacheableSurvivesVolatileChange,
+  cacheSurvivalAfterRewrite,
+  churnIsAttributed,
   historyPurelyAppends,
   oversizedFaceIsDeterministic,
   toolFaceChangeIsNamed,
   type AssemblyObservation,
+  type ChurnMutator,
   type ChurnVerdict,
 } from "../src/agent/prefix-churn";
 import { planSurfaceBudget } from "../src/agent/model-surface";
@@ -38,10 +41,13 @@ import { pluginFixture } from "./model-surface-check";
 
 const SYSTEM_TEXT = "你是前缀抖动门的固定基础提示。".repeat(8);
 const CORE_NAMES: ReadonlySet<string> = new Set(gateToolSpecs().map((s) => s.function.name));
+const cjk = (n: number) => "的".repeat(n);
 
-/** 驱动真 provider 走若干轮，收回每一轮真正发出去的 (messages, tools, note)。
+/* ============================ 驱动器 A：无变异源 ============================ */
+
+/** 驱动真 provider 走若干轮，收每一轮真正发出去的 (messages, tools, note)。
  *  `volatileEachRound` ⇒ 易变块每轮不同（模拟记忆/skills 逐轮重读）；
- *  `faceChangeAt` ⇒ 第 n 轮起工具面少一把且带说明（模拟 run 中途 skill 摘除）。 */
+ *  `faceChangeAt` ⇒ 从第 n 轮起工具面少一把且带说明（模拟 run 中途 skill 摘除）。 */
 async function drive(opts: {
   rounds: number;
   volatileEachRound: boolean;
@@ -56,7 +62,8 @@ async function drive(opts: {
     await log.append({ type: "user_message", content: "TASK-0" });
     const { createGlmSessionProvider } = await import("../src/agent/glm-session");
     for (let r = 1; r <= opts.rounds; r++) {
-      // requestFace 与 transport 是同轮的两个回调：note 走这只局部变量搭桥（不是模块级，避免轮间串台）
+      // requestFace 与 transport 是同轮的两个回调：note 走这只局部变量搭桥
+      // （模块级会跨轮串台，实测造成过一次 PC3 假绿）
       let faceNote = "";
       const provider = createGlmSessionProvider(path, {
         map: false,
@@ -81,7 +88,7 @@ async function drive(opts: {
         },
       });
       for await (const _ of provider.stream([])) void _;
-      // 轮间发生的事：模型答一句、用户再问一句 ⇒ 历史确实逐轮变长（只用已确证形状的事件类型）
+      // 轮间只用已确证形状的事件类型：历史照样逐轮变长，前缀判据不受影响
       await log.append({ type: "assistant_message", content: "r" + String(r) });
       await log.append({ type: "user_message", content: "Q-" + String(r) });
     }
@@ -91,6 +98,119 @@ async function drive(opts: {
   }
   return seen;
 }
+
+/* ============================ 驱动器 B：真触发变异源 ============================ */
+
+/** 驱动一条**真会触发某个变异源**的会话。
+ *  证据不是猜的：压缩 = 事件流里多了 `type:"compaction"`；裁剪 = `prune-attachments/` 多了文件。
+ *  两个痕迹都是 harness 自己落的，所以「认账」不依赖「看到抖了就当它声明过」。
+ *
+ *  两个样本的尺寸都是被实测逼出来的（第一次双双失败，原因各不同）：
+ *  · 压缩样本**不能**用大工具结果撑上下文——prune 会先把上下文裁小，压缩阈值反而永远够不到；
+ *    于是增长全走 user/assistant 文本，并把 tail 预算调小（否则整段会话都在 tail 里，
+ *    压缩会以「无可压缩事件（会话在 tail 预算内）」正当拒绝）。
+ *  · 裁剪样本要的不是「总量够大」而是**保护区边界在驱动期间越过某条老结果**：
+ *    每轮都裁同一批旧结果时，已发出的历史仍逐字纯追加，量不到抖动。
+ *    配方由 `outputs/prefix-churn-2026-09-23/probe-prune-recipe.mts` 实跑定出：
+ *    每轮 `user_message + tool_call + 20k 字结果 + assistant_message`、**种子只给 2 轮**
+ *    （`RECENT_ROUNDS_EXEMPT = 2`）⇒ 替换集从第 3 轮起每轮恰好多一个键（3 → 3,7 → 3,7,11 …）。 */
+async function driveMutating(opts: { kind: "compaction" | "prune" }): Promise<{
+  obs: AssemblyObservation[];
+  firedPerPair: ChurnMutator[][];
+}> {
+  const dir = mkdtempSync(join(tmpdir(), "prefix-churn-mut-"));
+  const path = join(dir, "events.jsonl");
+  const attachments = join(dir, "prune-attachments");
+  const obs: AssemblyObservation[] = [];
+  const firedPerPair: ChurnMutator[][] = [];
+  const log = createEventLog(path);
+  const roundEvents = (i: number) => [
+    { type: "user_message", content: "Q" + String(i) },
+    { type: "tool_call", id: "c" + String(i), name: "read_file", args: { path: "f" + String(i) } },
+    { type: "tool_result", callId: "c" + String(i), ok: true, output: cjk(20_000) },
+    { type: "assistant_message", content: "A" + String(i) },
+  ];
+  try {
+    if (opts.kind === "prune") {
+      for (let i = 0; i < 2; i++) for (const e of roundEvents(i)) await log.append(e as never);
+    } else {
+      await log.append({ type: "assistant_message", content: cjk(2_600) });
+      await log.append({ type: "user_message", content: "q0" });
+    }
+    await log.close?.();
+    const { createGlmSessionProvider } = await import("../src/agent/glm-session");
+    let beforeCompact = countCompactionEvents(path);
+    let beforeAttachments = countAttachments(attachments);
+    for (let r = 0; r < 4; r++) {
+      let faceNote = "";
+      const provider = createGlmSessionProvider(path, {
+        map: false,
+        workspace: dir,
+        system: SYSTEM_TEXT,
+        ...(opts.kind === "compaction"
+          ? {
+              compaction: {
+                // ratio 特意取 0.55 而不是更低：阈值必须**在驱动中途**才够得到——
+                // 首轮就压的话没有「上一轮」可比，抖重量不出来（实测过一次：事件确实落了流，PC5 仍报没分辨力）。
+                // available 仍远大于估算 ⇒ 不撞最终硬闸。
+                config: {
+                  inputLimit: 6_000,
+                  maxOutputReserve: 400,
+                  ratio: 0.55,
+                  tailMinTokens: 300,
+                  tailMaxTokens: 900,
+                  retryBackoffMs: 1,
+                },
+                summarizer: createMockSummarizer("SUMMARY：前文已压缩为一段，结论与未收口项都在里面。".repeat(12)),
+              },
+            }
+          : {}),
+        requestFace: () => ({ tools: sessionToolSpecs({ mode: "default" }).specs, note: faceNote }),
+        transport: async function* (messages: GlmMessage[], _o: unknown, specs?: GlmToolSpec[]) {
+          obs.push({ messages: [...messages], tools: specs ? [...specs] : undefined, faceNote });
+          yield { type: "assistant_message" as const, content: "round-" + String(r) };
+        },
+      });
+      for await (const _ of provider.stream([])) void _;
+      const fired: ChurnMutator[] = [];
+      const afterCompact = countCompactionEvents(path);
+      if (afterCompact > beforeCompact) fired.push("compaction");
+      beforeCompact = afterCompact;
+      const afterAttachments = countAttachments(attachments);
+      if (afterAttachments > beforeAttachments) fired.push("prune");
+      beforeAttachments = afterAttachments;
+      if (r > 0) firedPerPair.push(fired);
+      // 轮间追加：裁剪样本整轮追加（含 user_message ⇒ 免剪边界前移），压缩样本只加短文本
+      if (opts.kind === "prune") {
+        for (const e of roundEvents(100 + r)) await log.append(e as never);
+      } else {
+        // 每轮再长一块，把估算推过阈值 ⇒ 压缩发生在**有上一轮可比**的那些轮上
+        await log.append({ type: "assistant_message", content: cjk(2_600) });
+        await log.append({ type: "user_message", content: "after-" + String(r) });
+      }
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  return { obs, firedPerPair };
+}
+
+function countCompactionEvents(path: string): number {
+  try {
+    return (readFileSync(path, "utf8").match(/"type":"compaction"/g) ?? []).length;
+  } catch {
+    return 0;
+  }
+}
+function countAttachments(dir: string): number {
+  try {
+    return readdirSync(dir).length;
+  } catch {
+    return 0; // 目录不存在 = 还没裁过
+  }
+}
+
+/* ============================ 规则表 ============================ */
 
 export interface ChurnRule {
   id: string;
@@ -119,19 +239,51 @@ export const CHURN_RULES: readonly ChurnRule[] = [
     why: "同一份超限面重复装配必须逐字同一。降配若带抖动（或依赖遍历顺序），等于每轮再花一次缓存重写，把省下的字节还回去",
     run: () => {
       const specs = sessionToolSpecs({ mode: "default", pluginTools: pluginFixture(60, 1_200) }).specs;
-      return oversizedFaceIsDeterministic(() => {
-        const plan = planSurfaceBudget({ specs, systemChars: SYSTEM_TEXT.length, coreNames: CORE_NAMES });
-        return plan.specs;
-      }, 4);
+      return oversizedFaceIsDeterministic(
+        () => planSurfaceBudget({ specs, systemChars: SYSTEM_TEXT.length, coreNames: CORE_NAMES }).specs,
+        4,
+      );
+    },
+  },
+  {
+    id: "PC5-压缩抖了要认账",
+    why: "阈值摘要替换历史 = 前缀中段必然重写，这本身是合法代价；不可接受的是它发生时没留下证据——那样每一次压缩都在悄悄付缓存重写的钱",
+    run: async () => {
+      const { obs, firedPerPair } = await driveMutating({ kind: "compaction" });
+      const attrs = obs.slice(1).map((cur, i) => attributeChurn(obs[i]!, cur, firedPerPair[i] ?? []));
+      const verdict = churnIsAttributed(attrs, true);
+      const saw = attrs.some((a) => a.fired.includes("compaction"));
+      const rewrote = attrs.find((a) => !a.pureAppend);
+      return {
+        ok: verdict.ok && saw,
+        detail: verdict.detail + "｜认账来源=" + (attrs.find((a) => a.fired.length > 0)?.fired.join("+") ?? "无") +
+          (rewrote ? "｜" + cacheSurvivalAfterRewrite(rewrote) : ""),
+      };
+    },
+  },
+  {
+    id: "PC6-裁剪抖了要认账",
+    why: "类型化裁剪改写的是**历史中段**的旧工具结果 ⇒ 那之后的前缀作废。上日 §2.3 的假设（「prune 每触发一次打掉其后缓存命中」）至今没人量过，这条就是量它的",
+    run: async () => {
+      const { obs, firedPerPair } = await driveMutating({ kind: "prune" });
+      const attrs = obs.slice(1).map((cur, i) => attributeChurn(obs[i]!, cur, firedPerPair[i] ?? []));
+      const verdict = churnIsAttributed(attrs, true); // 转轮上老结果被换 = 历史中段重写 ⇒ 期望「抖了且有证据」
+      const saw = attrs.some((a) => a.fired.includes("prune"));
+      const worst = attrs.reduce((m, a) => (a.rewroteChars > m.rewroteChars ? a : m), attrs[0]!);
+      return {
+        ok: verdict.ok && saw,
+        detail: verdict.detail + "｜认账来源=" + (attrs.find((a) => a.fired.length > 0)?.fired.join("+") ?? "无") +
+          (worst ? "｜最大抖动 " + String(worst.rewroteChars) + " 字符 @第 " + String(worst.firstRewriteIndex) + " 条" : ""),
+      };
     },
   },
 ];
 
-/** 反向对照：每只判据喂一件故意做错的工件，要求它判假。 */
+/** 反向对照：每只判据喂一件故意做错的工件，要求它判假。造不出红的规则等于摆设。 */
 export function runChurnSelfTest(): { caught: string[]; missed: string[] } {
   const caught: string[] = [];
   const missed: string[] = [];
-  const clean: AssemblyObservation[] = [1, 2, 3].map((n) => ({
+  const clean = [1, 2, 3].map((n) => ({
     messages: [
       { role: "system", content: SYSTEM_TEXT },
       { role: "system", content: "VOL-" + String(n) },
@@ -144,10 +296,7 @@ export function runChurnSelfTest(): { caught: string[]; missed: string[] } {
     {
       id: "PC1-历史逐轮纯追加",
       predicateSaysRed: () =>
-        !historyPurelyAppends([
-          ...clean.slice(0, 2),
-          { ...clean[2]!, messages: breakByMiddleSplice(clean[1]!.messages) },
-        ]).ok,
+        !historyPurelyAppends([...clean.slice(0, 2), { ...clean[2]!, messages: breakByMiddleSplice(clean[1]!.messages) }]).ok,
     },
     {
       id: "PC2-易变块变了不牵连可缓存前缀",
@@ -163,10 +312,17 @@ export function runChurnSelfTest(): { caught: string[]; missed: string[] } {
       id: "PC4-超限工具面降配是确定的",
       predicateSaysRed: () =>
         !oversizedFaceIsDeterministic((round) => {
-          const specs = sessionToolSpecs({ mode: "default", pluginTools: pluginFixture(60, 1_200) }).specs;
-          const rotated = [...specs.slice(round), ...specs.slice(0, round)]; // 顺序抖动 = 降配集合跟着抖
-          return planSurfaceBudget({ specs: rotated, systemChars: SYSTEM_TEXT.length, coreNames: CORE_NAMES }).specs;
+          const specs = gateToolSpecs();
+          return [...specs.slice(round), ...specs.slice(0, round)]; // 顺序抖动 ⇒ 降配集合跟着抖
         }, 3).ok,
+    },
+    {
+      id: "PC5-压缩抖了要认账",
+      predicateSaysRed: () => !churnIsAttributed([attributeChurn(clean[0]!, clean[1]!, [])], true).ok,
+    },
+    {
+      id: "PC6-裁剪抖了要认账",
+      predicateSaysRed: () => !churnIsAttributed([attributeChurn(clean[0]!, clean[1]!, ["prune"])], false).ok,
     },
     {
       // 「无分辨力」本身必须红：易变块一整轮都不变时，PC2 不得报通过
@@ -214,6 +370,7 @@ async function main(): Promise<void> {
   process.exit(failed === 0 ? 0 : 1);
 }
 
+// 入口判定：单测 import 本模块不得把门跑起来（照 scripts/arch-boundary-check.ts 的写法）。
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   void main();
 }

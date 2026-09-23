@@ -6099,6 +6099,30 @@ const MUTATIONS = [
     apply: (s) => s.replace("  const distinct = new Set(faces).size;", "  const distinct = 1;"),
     expectFail: "PC4 同一份超限面装配多次必须逐字同一；遍历顺序一抖就红",
   },
+  {
+    id: "pc-attribution-ignores-evidence",
+    src: "src/agent/prefix-churn.ts",
+    test: "tests/prefix-churn.test.ts",
+    desc: "「抖了但没有认账来源」不再算静默重写 ⇒ 压缩/裁剪只要发生就一律放过，证据链失去意义",
+    apply: (s) => s.replace("    silentRewrite: !reading.pureAppend && fired.length === 0,", "    silentRewrite: false,"),
+    expectFail: "churnIsAttributed 四个象限：要求抖/不抖 × 有证据/无证据",
+  },
+  {
+    id: "pc-first-rewrite-index-flattened",
+    src: "src/agent/prefix-churn.ts",
+    test: "tests/prefix-churn.test.ts",
+    desc: "重写点一律报第 0 条 ⇒ 读数再也指不出「是哪一条被改」，而这条判据的全部价值就是定位",
+    apply: (s) => s.replace("    firstRewriteIndex: reading.pureAppend ? -1 : indexOfOffset(offsets, reading.stableChars),", "    firstRewriteIndex: reading.pureAppend ? -1 : 0,"),
+    expectFail: "attributeChurn：纯追加时不报重写点；中段改写时指到**被改的那一条**",
+  },
+  {
+    id: "pc-silent-check-dropped-from-expect-rewrite",
+    src: "src/agent/prefix-churn.ts",
+    test: "tests/prefix-churn.test.ts",
+    desc: "要求抖的那一支只看「抖没抖」不看证据 ⇒ PC5/PC6 退化成一条存在性断言",
+    apply: (s) => s.replace("  const ok = expectRewrite ? rewrote.length > 0 && silent.length === 0 : rewrote.length === 0;", "  const ok = expectRewrite ? rewrote.length > 0 : rewrote.length === 0;"),
+    expectFail: "churnIsAttributed 四个象限：要求抖/不抖 × 有证据/无证据",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
