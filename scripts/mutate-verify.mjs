@@ -6310,6 +6310,14 @@ const MUTATIONS = [
     expectFail: "settings 里的 actionFusion 走得到生产入口（不给 override）",
   },
   {
+    id: "plan-required-settings-fallback-dropped",
+    src: "src/main/agent-runner.ts",
+    test: "tests/goal-continue.test.ts",
+    desc: "盘上的 planRequiredByDefault 到不了主会话 ⇒ 设置里那句「每轮先出计划」是装饰（J3 那格给的是 override，照绿）",
+    apply: (s) => s.replace("planRequired: over.planRequired ?? (await store().get()).planRequiredByDefault,", "planRequired: over.planRequired ?? false,"),
+    expectFail: "settings.planRequiredByDefault=true ⇒ 生产入口自己就该拒写，且拒因来自方案门",
+  },
+  {
     id: "pc-serialize-layer-keeps-closing-bracket",
     src: "src/agent/prefix-churn.ts",
     test: "tests/prefix-churn.test.ts",
