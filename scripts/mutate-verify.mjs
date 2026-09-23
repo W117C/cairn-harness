@@ -19,7 +19,7 @@
 import { cpSync, existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import ts from "typescript";
 import { execFileSync } from "node:child_process";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
 import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf } from "./lib/mutate-gates.ts";
@@ -6812,6 +6812,32 @@ const MUTATIONS = [
     expectFail: "设置认不出 / 与当前行相同 ⇒ 不动（认不出时不降级到默认档，保持现场）",
   },
   {
+    id: "cdp-port-timeout-reads-free",
+    src: "scripts/lib/cdp-port.ts",
+    test: "tests/scripts-cdp-port.test.ts",
+    desc: "等端口超时 ⇒ 报「空」（把「没等到」读成「没问题」：起窗照旧、连上的是旧浏览器，产出的是假读数）",
+    apply: (s) => s.replace("    if (now() - start >= opts.budgetMs) return { free: false, probes, waitedMs: now() - start };", "    if (now() - start >= opts.budgetMs) return { free: true, probes, waitedMs: now() - start };"),
+    expectFail: "预算用尽仍有人听 ⇒ free=false（把「等不到」读成「空」就等于放行旧窗）",
+  },
+  {
+    id: "cdp-port-probe-error-reads-free",
+    src: "scripts/lib/cdp-port.ts",
+    test: "tests/scripts-cdp-port.test.ts",
+    desc: "探针自己抛 ⇒ 当成「空」放行（坏仪器冒充读数）；顺带丢掉 error，等不到与探不到就再也分不开",
+    apply: (s) => s.replace("      return { free: false, probes, waitedMs: now() - start, error: err instanceof Error ? err.message : String(err) };", "      return { free: true, probes, waitedMs: now() - start };"),
+    expectFail: "探针抛错 ⇒ 按「没空出来」处理并停止（坏仪器不许冒充读数）",
+  },
+  {
+    id: "cdp-port-spawn-guard-fakes-the-wait",
+    src: "scripts/panels-check.ts",
+    test: "tests/scripts-cdp-port.test.ts",
+    // 三态判卷全绿也允许某一相「假装等过了」：这里把真探测换成一个写死的 free:true，
+    // 于是旧窗又被当成本轮现场。锚点钉在**接线**那一行，不是钉在纯函数上。
+    desc: "起窗前的等待被换成写死的「已空」⇒ 旧窗照样能连，而门报出来的是绿",
+    apply: (s) => s.replace("  const wait = await waitForPortFree(PORT, { budgetMs: 12_000 });", "  const wait: PortWait = { free: true, probes: 1, waitedMs: 0 };"),
+    expectFail: "spawnElectron 内先等端口、等不到就中止（不 spawn 进旧窗）",
+  },
+  {
     id: "remember-gate-if-chain-back",
     src: "src/main/agent-runner.ts",
     test: "tests/remember.test.ts",
@@ -7051,6 +7077,13 @@ function verifyEntry(m) {
 }
 
 const plan = classifyArgs(process.argv.slice(2));
+/* 本文件在**顶层**跑表，所以 `import("scripts/mutate-verify.mjs")` 就等于发起一次整表变异
+ * （实测：一次"只想数一下条目数"的 `node -e` 探针就在主树跑了起来，SIGKILL 后留下一枚 mutant，
+ *  靠 `.mutbak` + 三条证据前提还原）。条目数请走 `--list`；被 import 时一个字节都不许动。 */
+if (process.argv[1] === undefined || resolve(process.argv[1]) !== fileURLToPath(import.meta.url)) {
+  console.error("mutate-verify 会就地改源文件：只能经命令行执行（数条目用 `--list`），被 import 时拒绝运行。");
+  process.exit(2);
+}
 // 认不出的 flag 一律拒跑：本脚本「无参数」的缺省语义是跑全表，那会就地改源文件几十分钟。
 if (plan.unknown.length > 0) {
   console.error(`未知参数：${plan.unknown.join(" ")} —— 无参数即「跑全表」（就地改源文件），不把拼错的 flag 静默当缺省`);

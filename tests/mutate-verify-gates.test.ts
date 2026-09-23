@@ -2,6 +2,8 @@
 // 动因（2026-09-19 实跑）：另一会话正在改判卷测试文件时，本门把两条正常条目报成
 // 「基线就不是全绿」+「变异存活」——真回归信号被并发噪声伪装掉了。
 import { describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { anchorFaces, blockingTotalOf, budgetMsOf, classifyArgs, entryDisposition, headOnlyNeedleLine, headOnlyNeedleProblems, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
 
 describe("budgetMsOf + classifyArgs 的值位（自我预算这条手段本身要有判卷）", () => {
@@ -312,5 +314,28 @@ describe("anchorFaces + blockingTotalOf：接线缺件必须当场崩，不许�
   it("非有限数（NaN / Infinity）也算缺项： typeof 是 number，但读数本身不可信", () => {
     expect(() => blockingTotalOf({ needle: NaN, duplicateIds: 0, untracked: 0, drift: 0 })).toThrow(/needle/);
     expect(() => blockingTotalOf({ needle: 1, duplicateIds: 0, untracked: 0, drift: Infinity })).toThrow(/drift/);
+  });
+});
+
+/* 入口这条闸（2026-09-23 实踩）：这张表跑在**顶层**，于是 `import("scripts/mutate-verify.mjs")`
+   等于发起一次整表变异。我为了"数一下条目数"跑了一条 `node -e "await import(...)"`，主树当场跑起来，
+   被我 SIGKILL 后留下一枚 mutant（`src/tools/remember.ts` 的 `if (!isMemoryType(type))` 成了 `if (false)`），
+   靠 `.mutbak` + 三条证据前提（备份==HEAD ∧ 当前!=HEAD ∧ 当前==apply(备份)）才敢还原。
+   判据写成对两侧：被 import 拒跑 / 正当入口照跑——只钉一侧的话，把闸写成"永远退 2"也能绿。 */
+describe("被 import 时必须拒绝运行（它会就地改源文件）", () => {
+  const script = fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url));
+
+  it("import 进来 ⇒ 退出码 2、点名拒绝，且一条变异都没跑", () => {
+    const r = spawnSync(process.execPath, ["--import", "tsx", "-e", `await import(${JSON.stringify(script)})`], { encoding: "utf8" });
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("拒绝运行");
+    expect(r.stdout).not.toContain("变异验证：");
+  });
+
+  it("反向一侧：正当入口没被这道闸误伤（--list 仍 exit 0 且列得出条目）", () => {
+    const r = spawnSync(process.execPath, ["--import", "tsx", script, "--list"], { encoding: "utf8" });
+    expect(r.status).toBe(0);
+    // 只给下限不给等式：条目数会随锚点增减（事实源是那张表本身），这里判的是"入口还活着"。
+    expect(r.stdout.split("\n").filter((l) => l.includes("\t")).length).toBeGreaterThan(500);
   });
 });

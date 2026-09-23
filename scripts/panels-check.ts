@@ -10,6 +10,7 @@ import { createEventLog } from "../src/events";
 import { pathOf } from "../src/main/sessions";
 import { SettingsStore, DEFAULT_SETTINGS } from "../src/main/settings";
 import { projectDiffCards, projectTokenUsage, entersMainConversation } from "../src/renderer/projections";
+import { waitForPortFree, type PortWait } from "./lib/cdp-port";
 import type { AgentEvent } from "../src/events";
 
 let failures = 0;
@@ -222,7 +223,23 @@ async function waitFor<T>(probe: () => Promise<T | null>, timeoutMs: number, eve
   }
 }
 
-function spawnElectron(env: NodeJS.ProcessEnv): { proc: ChildProcess; output: () => string } {
+/** 起窗前置的等待读数（"这条防今天到底挡过什么"必须可判读，否则它只是一句注释）。 */
+const portWaits: PortWait[] = [];
+
+/** 端口没空出来 = 上一扇窗还活着。此时**不能**起窗，也不能继续跑：
+ *  产品开着 `requestSingleInstanceLock`（`src/main/index.ts`），新进程会自己退出，
+ *  而固定端口上的 `/json/version` 由旧浏览器应答 ⇒ 后面每一相读到的都是上一相的现场。
+ *  这条中止是"全局中止"，但理由是规则 86 允许的那一种：**继续跑产出的是假读数，不是少几条读数**。 */
+function abortPortHeld(wait: PortWait): never {
+  console.log("  ❌ CDP 端口 " + String(PORT) + " 未被让出（等 " + String(wait.waitedMs) + "ms / 探 " + String(wait.probes) + " 次"
+    + (wait.error ? " · 探针异常：" + wait.error : "") + "）→ 整表中止");
+  console.log("    原因：上一扇 Electron 还占着端口。此时起窗会撞上单实例锁，而 CDP 连上的是**旧窗**，");
+  console.log("    继续跑的读数会把旧窗当本轮结论（2026-09-23 实测把「设置没生效」就这么误记过一次）。");
+  console.log("    已判失败 " + String(failures) + " 条；先查有没有残留进程：pgrep -f 'remote-debugging-port=" + String(PORT) + "'");
+  process.exit(1);
+}
+
+async function spawnElectron(env: NodeJS.ProcessEnv): Promise<{ proc: ChildProcess; output: () => string }> {
   // H12（审查 P3）：Electron 二进制路径按平台分支（旧实现硬编码 macOS .app 布局，非 darwin 不可用）。
   const rel =
     process.platform === "darwin"
@@ -242,6 +259,11 @@ function spawnElectron(env: NodeJS.ProcessEnv): { proc: ChildProcess; output: ()
   if (!chromiumSandbox) {
     console.log("  ℹ️  宿主拒载 Chromium 沙箱 → Electron 以 --no-sandbox 启动（产品 Seatbelt 工具沙箱不受影响）");
   }
+  /* 起窗先等端口空出来（三态与"等不到就说等不到"由 `lib/cdp-port.ts` + 其判卷锁住）。
+   * 这一条原先只住在 B30 那一相里，而四个起窗点暴露的是同一个坑 ⇒ 收在唯一的出口上。 */
+  const wait = await waitForPortFree(PORT, { budgetMs: 12_000 });
+  portWaits.push(wait);
+  if (!wait.free) abortPortHeld(wait);
   const proc = spawn(bin, [".", ...extraArgs, "--remote-debugging-port=" + String(PORT)], {
     env: { ...process.env, ...env },
     stdio: ["ignore", "pipe", "pipe"],
@@ -329,7 +351,7 @@ async function phaseElectron(root: string): Promise<void> {
   }
   await writeFileStressSession(root, stressId, 10_000);
 
-  const { proc: electron, output } = spawnElectron({
+  const { proc: electron, output } = await spawnElectron({
     M1E_SESSIONS_DIR: root,
     M1E_SETTINGS_PATH: join(root, "settings.json"),
     M1E_INJECT_ASK: "1",
@@ -511,7 +533,7 @@ async function phaseElectron(root: string): Promise<void> {
     const settingsNow = JSON.parse((await readFile(settingsPath, "utf8").catch(() => "{}")) as string) as Record<string, unknown>;
     settingsNow.workspace = projWs;
     await writeFile(settingsPath, JSON.stringify(settingsNow), "utf8");
-    const { proc: electron2, output: output2 } = spawnElectron({
+    const { proc: electron2, output: output2 } = await spawnElectron({
       M1E_SESSIONS_DIR: root,
       M1E_SETTINGS_PATH: settingsPath,
       M2D_MEMORY_HOME: memHome,
@@ -1962,7 +1984,7 @@ async function phaseOnboarding(): Promise<void> {
   const readDisk = async (): Promise<Record<string, unknown>> =>
     JSON.parse((await readFile(settingsPath, "utf8").catch(() => "{}")) as string) as Record<string, unknown>;
   const launch = async (): Promise<{ proc: ChildProcess; cdp: Cdp } | null> => {
-    const { proc, output } = spawnElectron({ M1E_SESSIONS_DIR: sessions, M1E_SETTINGS_PATH: settingsPath });
+    const { proc, output } = await spawnElectron({ M1E_SESSIONS_DIR: sessions, M1E_SETTINGS_PATH: settingsPath });
     const up = await tryWait(async () => {
       try { return (await fetch(CDP_URL + "/json/version")).ok ? true : null; } catch { return null; }
     }, 25_000);
@@ -2097,18 +2119,10 @@ async function phasePermDefaultMode(): Promise<void> {
   await mkdir(sessions, { recursive: true });
   const chipOf = async (settings: Record<string, unknown>, tag: string): Promise<{ label: string; aria: string } | null> => {
     await writeFile(settingsPath, JSON.stringify(settings), "utf8");
-    /* 上一扇窗没退干净时**不能**启动：产品开着 requestSingleInstanceLock（`index.ts:288`），
-     * 新进程会自己退出，而固定端口上的 /json/version 由**旧浏览器**继续应答——那一读看着像
-     * "这一档没生效"，其实读的是上一相的窗。所以这里等到端口真空出来；等不到就报"未验证"，
-     * 绝不把旧窗的读数当本轮结论（实测：三臂里只有第一臂撞上残留，报成 read-only 不生效）。 */
-    const freed = await tryWait(async () => {
-      try { return (await fetch(CDP_URL + "/json/version")).ok ? null : true; } catch { return true; }
-    }, 12_000);
-    if (!freed) {
-      ok(false, tag + " 端口仍被上一扇窗占着 → 未验证（不读旧窗的界面）");
-      return null;
-    }
-    const { proc, output } = spawnElectron({ M1E_SESSIONS_DIR: sessions, M1E_SETTINGS_PATH: settingsPath });
+    /* 上一扇窗没退干净时不能启动（单实例锁 + 旧浏览器继续应答固定端口 ⇒ 读到的是上一相的现场）。
+     * 这条等待现在住在唯一的起窗出口 `spawnElectron` 里，四个起窗点共用一份实现
+     * （原先它只在本相，另三处同样暴露）。等不到 → 整表中止并点名残留，不再产假读数。 */
+    const { proc, output } = await spawnElectron({ M1E_SESSIONS_DIR: sessions, M1E_SETTINGS_PATH: settingsPath });
     const up = await tryWait(async () => {
       try { return (await fetch(CDP_URL + "/json/version")).ok ? true : null; } catch { return null; }
     }, 25_000);
@@ -2207,6 +2221,15 @@ try {
 } finally {
   if (!ROOT_DIR) await rm(work, { recursive: true, force: true }).catch(() => {});
 }
+
+/* 起窗前置的规模读数：这条防平时读到「零等待」是**常态**，所以每次跑都印一遍
+ * 「起了几扇窗 / 累计等了多久 / 其中几扇不是立刻空的」——真挡到残留窗时它不静默（规则 83：
+ * 只有"没破坏东西"的读数不证明它在起作用）。`probes > 1` 就是"第一次探测时端口还被占着"。 */
+const heldWindows = portWaits.filter((w) => w.probes > 1).length;
+const waitedTotal = portWaits.reduce((s, w) => s + w.waitedMs, 0);
+console.log("[panels-check] 起窗 " + String(portWaits.length) + " 次 · 等端口累计 " + String(waitedTotal)
+  + "ms · 其中 " + String(heldWindows) + " 次不是立刻空的"
+  + (heldWindows > 0 ? "（上一扇窗没退干净，已被等待挡下，未读旧窗）" : ""));
 
 console.log("[panels-check] " + (failures === 0 ? "全部断言通过 ✅" : String(failures) + " 项失败 ❌"));
 process.exit(failures === 0 ? 0 : 1);
