@@ -1449,6 +1449,30 @@ tsc 看不见 ⇒ 判卷读数静默死亡，而 §7 第 1 步的判卷读数就
   （行尾加一句注释），`mutate-verify` 必须报「变异存活 = 恒真等价」并退出 1——实测如此，才说明前两条 ✅
   来自真分辨力而不是"跑得快就算过"。探针跑完即撤销，未进任何提交。
 
+**能力 23：verify 归因（gap-fix P1-3；判据与三处出口见 `outputs/verify-cause-denominator-2026-09-23.md`）**。
+先量分母再动产品：新登记读数 `replay:verify-cause-mix` 在本机语料里读到 **verify 红 3 条，3/3 全是
+`[ERR_PNPM_UNSAFE_MODULES_DIR]`**（pnpm 拒动 modules 目录，测试脚本根本没跑到）。这当场反转了
+judgment-layer §9.1 的一条省略——"包管理器错误码先不加，因为该态已被 9.2 消除"两处前提都不成立
+（评测侧前缀治的是 deps-before-run/lockfile 那一类；9.2 生产侧那半至今没落：`verifyExec` 在沙箱不可用时
+整段退回 `defaultExec`）。⇒ 用户裁决加第 6 值 `pkg-manager`，两处口径偏离都写进 §9.1 追加段。
+- 第一笔（`9499a9f`）＝ schema + 生产者：`VerifyCause` 六值 + **唯一谓词** `isEnvVerifyCause`（三处出口共用，
+  不各写一份表）；两条 exec 出口都归因，为此把 `runInSandbox` 在算却在 settle 处丢掉的 `exitCode`/`timedOut`
+  补回 `ToolResult`。行为一笔未动。
+- 第二笔（`ca2e6b0`）＝**三处出口一起落**（合取拆开就是漏口）：① 环境拍不占 `maxVerify` 修复额度、走自己的
+  上限并在正文说清停因；② worker 证据退回 `absent` 而非 `failed`（级联升档与 bandit 读同一格 ⇒ 一只缝；
+  "证明力为零"与既有第四态同义 ⇒ 不加第 5 态）；③ 沉淀把环境拍摘出模型失败清单，另记 harness 侧一笔。
+  ② 有**两个取料面**（`verify_result` + 同拍注入的 `tool_result`），只挡前者仍会留下「verify×N（工具失败）」
+  ⇒ 按 callId 连坐。
+- 具名不动两处（「刻意不做」要有名字）：`no-progress` 仍把重复环境红当停滞（给的是一句换路提示，不是记账，
+  且"确实没进展"为真）；`cost-per-progress` 仍按 `ok` 定结局（"没被证明做成"在 $/成功任务格里就是未成功）。
+- 判卷：`tests/verify-attribution-exits.test.ts` 9 条（合取 1 + **同形对照** 1〔cause 换成 `code` ⇒ 三处全都记账，
+  防恒真〕+ 混排 1 + 逐出口 3 + 证据位次序 3）；锚点 788→790→**793**。
+- **两处自我纠正**：① 全量 `test` 门抓到我这一笔真实行为变更没跟上的判卷——`edge-cases` 那条钩子异常用例
+  断言「已达上限，停止」，而 `hook-error` 现归环境类；按"产品语义变了 ⇒ 判卷跟着改但实质不许松"处理
+  （三条实质断言全留 + 补两条新停因），并把 loop 里那句现在会说假话的「记为一次验证失败」改掉。
+  ② tsc 又抓到测试里的类型错（对 `AgentEvent` 联合读 `.output`）而 **vitest 全绿照不出** ⇒
+  「写完测试不跑 tsc 等于没跑判卷」（规则 48 第 N 次命中，这次是第 3 次同型）。
+
 
 
 
