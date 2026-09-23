@@ -2,7 +2,7 @@
 // 动因（2026-09-19 实跑）：另一会话正在改判卷测试文件时，本门把两条正常条目报成
 // 「基线就不是全绿」+「变异存活」——真回归信号被并发噪声伪装掉了。
 import { describe, expect, it } from "vitest";
-import { budgetMsOf, classifyArgs, entryDisposition, headOnlyNeedleLine, headOnlyNeedleProblems, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
+import { anchorFaces, blockingTotalOf, budgetMsOf, classifyArgs, entryDisposition, headOnlyNeedleLine, headOnlyNeedleProblems, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
 
 describe("budgetMsOf + classifyArgs 的值位（自我预算这条手段本身要有判卷）", () => {
   it("flag 优先于 env；两者都缺 ⇒ 不限且不吭声", () => {
@@ -278,5 +278,38 @@ describe("headOnlyNeedleProblems：锚点钉在在飞文本上必须点名（否
     expect(never).not.toContain("在飞文本");
     expect(moved).not.toContain("在飞文本");
     expect(moved).not.toContain("不在 HEAD 的树里");
+  });
+});
+
+/* 接线（`reportNeedles`）里没有编译期保护：tsconfig 的 include 覆盖 scripts/，但没开 allowJs ⇒
+   `.mjs` 不过 tsc（实测：把 lib 导出改个名，typecheck 仍然 0 错）。所以"少喂一支面 / 少算一支数"
+   这种接线错只有在 lib 里立运行时判据才会出声。以下两支就是为那个目的存在。 */
+describe("anchorFaces + blockingTotalOf：接线缺件必须当场崩，不许静默少看一维", () => {
+  it("每条锚点产出两支面（被测面 + 判卷），且两面各一次（少喂一支 = 那一面静默失效）", () => {
+    const faces = anchorFaces([
+      { id: "a1", src: "src/a.ts", test: "tests/a.test.ts" },
+      { id: "a2", src: "src/b.ts", test: "tests/b.test.ts" },
+    ]);
+    expect(faces.map((f) => `${f.id}/${f.what}`)).toEqual([
+      "a1/被测面", "a1/判卷", "a2/被测面", "a2/判卷",
+    ]);
+  });
+
+  it("反面对手：空表 ⇒ 空数组（这条判据不许凭空造出锚点面）", () => {
+    expect(anchorFaces([])).toEqual([]);
+  });
+
+  it("四支数都给 ⇒ 求和（0 也算数，不许被当成缺项丢掉）", () => {
+    expect(blockingTotalOf({ needle: 3, duplicateIds: 0, untracked: 4, drift: 5 })).toEqual(12);
+  });
+
+  it("缺一支 ⇒ 抛并点名缺哪支（门报红却少算一维 = 这条门唯一的产出被废）", () => {
+    const partial = { needle: 3, duplicateIds: 0, untracked: 4 } as unknown as Parameters<typeof blockingTotalOf>[0];
+    expect(() => blockingTotalOf(partial)).toThrow(/drift/);
+  });
+
+  it("非有限数（NaN / Infinity）也算缺项： typeof 是 number，但读数本身不可信", () => {
+    expect(() => blockingTotalOf({ needle: NaN, duplicateIds: 0, untracked: 0, drift: 0 })).toThrow(/needle/);
+    expect(() => blockingTotalOf({ needle: 1, duplicateIds: 0, untracked: 0, drift: Infinity })).toThrow(/drift/);
   });
 });

@@ -22,7 +22,7 @@ import { execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -6075,9 +6075,12 @@ const MUTATIONS = [
     apply: (s) => s.replace("consumed.add(i + 1);", "consumed.add(-1); // 值位没被吞"),
     expectFail: "`--budget-ms 600000` 的值不是锚点 id（旧分流会报「未知 id 600000」，等于没人能设预算）",
   },
-  // ---- HEAD 归属两面判据（2026-09-23，追加九–十一）：判据自己也得有分辨力。
-  //      已知未覆盖的一格：`reportNeedles` 里「faces 同时喂被测面 + 判卷」与「untracked/drift 计入 exit」
-  //      属接线、`.mjs` 未被任何测试 import ⇒ 没有观测者可钉（不拿"源码形状断言"充数，见仓规：跑 shipped 实现）。
+  // ---- HEAD 归属两面判据（2026-09-23，追加九–十二）：判据自己也得有分辨力。
+  //      接线那两格怎么钉：`.mjs` 不过 tsc（tsconfig 的 include 有 scripts/ 但没开 allowJs），
+  //      少喂一支面、少算一支数都不会有编译期信号 ⇒ 把两件事搬进 lib 并让求和处**当场崩**
+  //      （`anchorFaces` / `blockingTotalOf`，下面三根针钉它们的失效方式）。
+  //      仍然没钉、也不假装已覆盖的一格：接线**不去调用**这两个函数（改回内联手搓）——那要 vm-slice 真跑
+  //      `reportNeedles` 才量得到，本仓不用"源码形状断言"充数 ⇒ 留名在任务 #63。
   {
     id: "untracked-face-filter-always-empty",
     src: "scripts/lib/mutate-gates.ts",
@@ -6124,6 +6127,34 @@ const MUTATIONS = [
     apply: (s) => s.replace("return head.filter((p) => !reported.has(p.id) && !pathsNotInHead.has(p.srcRel));",
       "return head.filter((p) => !reported.has(p.id));"),
     expectFail: "HEAD 里读不到、且该路径已由「未入库」判据报过 ⇒ 不重复报（同一件事两栏都记 = 数被抬高）",
+  },
+  {
+    id: "anchor-faces-drops-judge-face",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "取料入口少 push 判卷那一支 ⇒ 接线只剩一面在查，未入库的判卷文件从此无人点名" +
+      "（干净 HEAD 上那些锚点仍会伪装成「基线不是全绿」，而 lib 单测看不见——它拿到的是手搓 items）",
+    apply: (s) => s.replace('    out.push({ id: e.id, path: e.test, what: "判卷" });', "    // 判卷那一支没喂"),
+    expectFail: "每条锚点产出两支面（被测面 + 判卷），且两面各一次（少喂一支 = 那一面静默失效）",
+  },
+  {
+    id: "blocking-total-drops-drift-from-sum",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "求和写死成漏掉 drift ⇒ 「钉在飞文本」照旧印在汇总里、却不再决定 exit：" +
+      "门报红而全量门禁照样绿（有读数、无后果，正是本仓最忌的形状）",
+    apply: (s) => s.replace("return BLOCKING_KEYS.reduce((n, k) => n + parts[k], 0);",
+      "return parts.needle + parts.duplicateIds + parts.untracked;"),
+    expectFail: "四支数都给 ⇒ 求和（0 也算数，不许被当成缺项丢掉）",
+  },
+  {
+    id: "blocking-total-swallows-missing-part",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "去掉「缺一支就当场崩」这道闸 ⇒ 接线漏计一支时照样吐出一个数（NaN 也会被 `+` 吞成读数），" +
+      "而 `.mjs` 不经 tsc，没有任何东西会替这道门发现它少看了一维",
+    apply: (s) => s.replace("if (missing.length > 0) {", "if (false && missing.length > 0) {"),
+    expectFail: "缺一支 ⇒ 抛并点名缺哪支（门报红却少算一维 = 这条门唯一的产出被废）",
   },
   // ---- 半截轨迹（2026-09-23，在唯一一条真·持久化会话上量到：`run_shell` 那一笔没有结果，
   //      而草稿当时的清单对这一格一字未提）。同一条 agent_id 闸现在**同时**守着两支消费：
@@ -6448,12 +6479,7 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
   try {
     inHead = new Set(execFileSync("git", ["ls-tree", "-r", "--name-only", "HEAD"],
       { cwd: ROOT, encoding: "utf8", maxBuffer: 128 * 1024 * 1024 }).split("\n").filter(Boolean));
-    const faces = [];
-    for (const e of entries) {
-      faces.push({ id: e.id, path: e.src, what: "被测面" });
-      faces.push({ id: e.id, path: e.test, what: "判卷" });
-    }
-    untracked.push(...untrackedAnchorPaths(faces, (rel) => inHead.has(rel)));
+    untracked.push(...untrackedAnchorPaths(anchorFaces(entries), (rel) => inHead.has(rel)));
   } catch (err) {
     headUnchecked = 1;
     console.log("⚠️ 锚点文件面的 HEAD 归属未查（git ls-tree 失败：" + (err instanceof Error ? err.message : String(err)) + "）");
@@ -6485,8 +6511,12 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
     headUnchecked = 1;
   }
   for (const d of drift) console.log("❌ " + headOnlyNeedleLine(d));
-  console.log(`针脚体检：${String(entries.length)} 条 —— 阻断 ${String(blocking.length + dup.length + untracked.length + drift.length)}，待复认 ${String(warn.length)}，未覆盖 ${String(unparsed.length)}，逐行式 ${String(lineWise.length)}，未入库面 ${String(untracked.length)}（被测面 + 判卷两面），钉在飞文本 ${String(drift.length)}${headUnchecked === 0 ? "" : "（HEAD 归属未查）"}`);
-  return blocking.length + dup.length + untracked.length + drift.length;
+  // 一次求和、两处使用（汇总里印出来的数与 exit 码用的是同一个值；分开算就可能各说各话）。
+  const blockingTotal = blockingTotalOf({
+    needle: blocking.length, duplicateIds: dup.length, untracked: untracked.length, drift: drift.length,
+  });
+  console.log(`针脚体检：${String(entries.length)} 条 —— 阻断 ${String(blockingTotal)}，待复认 ${String(warn.length)}，未覆盖 ${String(unparsed.length)}，逐行式 ${String(lineWise.length)}，未入库面 ${String(untracked.length)}（被测面 + 判卷两面），钉在飞文本 ${String(drift.length)}${headUnchecked === 0 ? "" : "（HEAD 归属未查）"}`);
+  return blockingTotal;
 }
 
 function runTest(testRel) {

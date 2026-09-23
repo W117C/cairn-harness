@@ -262,6 +262,38 @@ export function headOnlyNeedleLine(p: NeedleProblem): string {
     "**不要**把针脚改成 HEAD 里的旧写法——那等于把这条锚点要守护的东西废掉。";
 }
 
+// ---- 接线的两处缺件保护 ----
+// `.mjs` 不过 tsc：`tsconfig.json` 的 include 覆盖 scripts/，但没开 `allowJs` ⇒ 接线里的错（少喂一支面、
+// 少算一支数、import 改名）既没有编译期信号也没有测试覆盖。所以把这两件事做成 lib 里的纯函数，
+// 并在求和处**当场崩**——"门报红却少算一维"等于这条门唯一的产出被废，静默比崩更坏。
+/** 锚点的两个文件面。接线唯一允许的取料入口：少 push 一支 ⇒ 那一面的判据静默失效，而 lib 单测看不见。 */
+export function anchorFaces(entries: readonly { id: string; src: string; test: string }[]): UntrackedAnchorPath[] {
+  const out: UntrackedAnchorPath[] = [];
+  for (const e of entries) {
+    out.push({ id: e.id, path: e.src, what: "被测面" });
+    out.push({ id: e.id, path: e.test, what: "判卷" });
+  }
+  return out;
+}
+
+export interface BlockingParts {
+  needle: number;
+  duplicateIds: number;
+  untracked: number;
+  drift: number;
+}
+
+const BLOCKING_KEYS: (keyof BlockingParts)[] = ["needle", "duplicateIds", "untracked", "drift"];
+
+/** 阻断总数。缺一支或非有限数 ⇒ 抛并点名（`0` 是合法读数，不许当缺项丢掉）。 */
+export function blockingTotalOf(parts: BlockingParts): number {
+  const missing = BLOCKING_KEYS.filter((k) => !Number.isFinite(parts[k]));
+  if (missing.length > 0) {
+    throw new Error(`阻断数缺项：${missing.join("、")} ⇒ 门会报红却少算那一维，宁可当场崩（接线漏计没有编译期信号）`);
+  }
+  return BLOCKING_KEYS.reduce((n, k) => n + parts[k], 0);
+}
+
 // ---- 锚点 id 唯一性 ----
 // 动因（2026-09-23 我自己刚造成一例）：往表尾插一条新锚点时，`expectFail` 行匹配点落在了
 // 上一条锚点的收尾上，于是两条锚点共用一个 id。表照样跑得动，但 `mutate-verify <id>` 会同时跑两条、
