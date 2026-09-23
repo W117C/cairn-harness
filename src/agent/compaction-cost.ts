@@ -74,8 +74,9 @@ export function amortizedCompactionConfig(opts: {
   const current = Math.min(Math.max(available * c.tailRatio, c.tailMinTokens), c.tailMaxTokens);
   const next = amortizedTailBudget(current, opts.factor, opts.floorTokens);
   if (next >= current) return undefined; // 已在底 ⇒ 不动（保持逐字零回归的语义，不返回「等效但不同」的对象）
-  return {
-    tailRatio: next / available,
-    tailMaxTokens: next,
-  };
+  // 把 tail 的**上下限同时钉到 next**，不动 tailRatio：
+  // `clamp(v, lo, hi)` 的两种可能求值顺序（min(hi,max(lo,v)) 与 max(lo,min(v,hi))）都得到同一个 next。
+  // 第一版只收 tailMaxTokens 并留 tailRatio 一起改，实测一条针脚（不改 tailMax）存活——
+  // 那说明真正的承载量是「上下限一致」，而改 ratio 只是在赌求值顺序。
+  return { tailMinTokens: next, tailMaxTokens: next };
 }

@@ -37,13 +37,26 @@ describe("压缩重写代价摊销：纯策略", () => {
     expect(isExpensiveRewrite({ share: COMPACT_COST_HEAD_SURVIVAL_HIGH + 0.01, stableChars: 1, prevChars: 7 })).toBe(false);
   });
 
-  it("tail 两个旋钮必须一起收（只收 tailRatio 会被 tailMaxTokens 顶回去 = 等于没收）", () => {
+  it("tail 上下限被钉到同一个值 ⇒ clamp 两种求值顺序都得 next（不靠求值顺序赌）", () => {
     const patch = amortizedCompactionConfig({ enabled: true, headSurvival: expensive, config: CONFIG });
     expect(patch).toBeDefined();
     const available = CONFIG.inputLimit - CONFIG.maxOutputReserve;
-    const clamped = Math.min(Math.max(available * (patch!.tailRatio ?? 0), CONFIG.tailMinTokens), patch!.tailMaxTokens ?? 0);
-    expect(clamped).toBeLessThan(Math.min(Math.max(available * CONFIG.tailRatio, CONFIG.tailMinTokens), CONFIG.tailMaxTokens));
-    expect(clamped).toBeGreaterThanOrEqual(COMPACT_TAIL_FLOOR_TOKENS);
+    const v = available * CONFIG.tailRatio; // ratio 故意不动 ⇒ v 仍是原值（2,900）
+    const lo = patch!.tailMinTokens ?? CONFIG.tailMinTokens;
+    const hi = patch!.tailMaxTokens ?? CONFIG.tailMaxTokens;
+    const orderA = Math.min(hi, Math.max(lo, v)); // compaction.ts 今天这一只
+    const orderB = Math.max(lo, Math.min(v, hi)); // 若有人改写成另一只
+    const baseline = Math.min(CONFIG.tailMaxTokens, Math.max(CONFIG.tailMinTokens, v));
+    const next = orderA; // 满钉时的有效预算（下面反向锁要拿它比）
+    expect(orderA).toBe(orderB);
+    expect(orderA).toBeLessThan(baseline);
+    expect(orderA).toBeGreaterThanOrEqual(COMPACT_TAIL_FLOOR_TOKENS);
+    // 反向锁：只钉一个边界时，两种求值顺序**给出的不是同一个值** ⇒ 结果取决于 clamp 怎么写。
+    // （今天这只 clamp 是 min(hi, max(lo, v))，只钉 hi 恰好还能落到 next；换成另一只就回到 2,000。）
+    const halfA = Math.min(hi, Math.max(CONFIG.tailMinTokens, v));
+    const halfB = Math.max(CONFIG.tailMinTokens, Math.min(v, hi));
+    expect(halfA).not.toBe(halfB);
+    expect(halfB).toBeGreaterThan(next);
   });
 
   it("overflow 不摊销：已经装不下了，少压只会立刻再撞一次硬闸", () => {

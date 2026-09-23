@@ -2309,7 +2309,7 @@ const MUTATIONS = [
     id: "dangling-exit-not-wired",
     src: "src/agent/context.ts",
     test: "tests/context-dangling-tool-call.test.ts",
-    desc: "合上孤儿那行没接在投影出口 ⇒ 函数在、判卷在、真路径照旧吃 400：本仓第 9 次「两头断」的形状，" +
+    desc: "合上孤儿那行没接在投影出口 ⇒ 函数在、判卷在、真路径照旧吃 400：「两头断」那一族的又一格（不写第几次，计数会漂），" +
       "所以判卷必须走 projectContext 而不是只测那个纯函数",
     apply: (s) => s.replace("  return closeDanglingToolCalls(msgs);", "  return msgs;"),
     expectFail: "真实现场形状（末笔调用没有结果）⇒ 投影里不许留下未答的 tool_calls",
@@ -6162,8 +6162,8 @@ const MUTATIONS = [
     id: "cc-only-one-tail-knob-tightened",
     src: "src/agent/compaction-cost.ts",
     test: "tests/compaction-cost.test.ts",
-    desc: "只收 tailRatio 不收 tailMaxTokens ⇒ clamp 把它顶回原值，策略看着在跑其实什么都没做",
-    apply: (s) => s.replace("    tailMaxTokens: next,", "    tailMaxTokens: c.tailMaxTokens,"),
+    desc: "只钉一个边界 ⇒ clamp 的另一只求值顺序会把它顶回原值（策略看着在跑其实什么都没做）",
+    apply: (s) => s.replace("  return { tailMinTokens: next, tailMaxTokens: next };", "  return { tailMinTokens: next };"),
     expectFail: "tail 两个旋钮必须一起收（只收 tailRatio 会被 tailMaxTokens 顶回去 = 等于没收）",
   },
   {
