@@ -6923,6 +6923,52 @@ const MUTATIONS = [
     apply: (s) => s.replace("  for (const l of GATE_LAYERS) for (const v of GATE_VERDICTS) m.set(l + CELL_SEP + v, 0);", "  for (const l of GATE_LAYERS) m.set(l + CELL_SEP + String(GATE_VERDICTS[0]), 0);"),
     expectFail: "骨架格子数 = 层数 × 结果数（任一侧加值，格数自动跟上，不靠人记得补）",
   },
+
+  // ── 复跑面 corpus-inventory（这张表的最后一行是「要不要给主循环加换路压力」的决策依据，
+  //    偏小 = 安静地不下判断，所以五格各自钉一条：窗口、规范化、断链、决策线两半）
+  {
+    id: "corpus-inventory-retry-window-adjacent-only",
+    src: "scripts/replay/corpus-inventory.ts",
+    test: "tests/replay-corpus-inventory.test.ts",
+    // 向后看到序列尾 ⇒ 退回旧写法只看紧邻一格。这一格偏小不会报错，只会让人读成「没重复」。
+    desc: "重试只认紧邻的下一个 tool_call ⇒ 中间隔一次别的调用就漏计，「无卡死证据」是数出来的假读数",
+    apply: (s) => s.replace("      for (let j = i + 1; j < tc.length; j++) {", "      for (let j = i + 1; j < i + 2; j++) {"),
+    expectFail: "中间隔了一次别的调用 ⇒ 仍算原样重试（旧写法只看紧邻，这里会读成 0）",
+  },
+  {
+    id: "corpus-inventory-canonical-args-dropped",
+    src: "scripts/replay/corpus-inventory.ts",
+    test: "tests/replay-corpus-inventory.test.ts",
+    desc: "参数退回原始 JSON.stringify 比对 ⇒ 同一调用换个键序就被读成「改过参数」，「一字不变」偏低",
+    apply: (s) => s.replace("    const args = canonicalArgs(c.args);", "    const args = JSON.stringify(c.args);"),
+    expectFail: "参数键序不同、内容相同 ⇒ 仍算「一字不变」（旧写法用原始 JSON.stringify，这里会读成 0）",
+  },
+  {
+    id: "corpus-inventory-result-joinkey-guard-off",
+    src: "scripts/replay/corpus-inventory.ts",
+    test: "tests/replay-corpus-inventory.test.ts",
+    // 09-21 实踩：按 callId 查 tool_call 得到 has(undefined) 恒 false ⇒ 一片零假读数。
+    // 现在断链是崩而不是数 0，这一格守的就是"崩"这半边。
+    desc: "tool_result 缺 callId 不再抛而被静默跳过 ⇒ 「失败=0」这类零读数重新可能（join 键断链要当场崩）",
+    apply: (s) => s.replace('    if (typeof key !== "string") {', "    if (false) {"),
+    expectFail: "join 键断链必须抛，而不是把「失败」读成 0（09-21 实踩过的形状）",
+  },
+  {
+    id: "corpus-inventory-repeat-verdict-always-act",
+    src: "scripts/replay/corpus-inventory.ts",
+    test: "tests/replay-corpus-inventory.test.ts",
+    desc: "换路压力裁决恒「该动」⇒ 印出来的那行不再是读数，而是口号（决策线两半都得有反例）",
+    apply: (s) => s.replace("  if (deepRun && hasExactRepeat) {", "  if (true) {"),
+    expectFail: "零原样重试 ⇒ 不给主 loop 加压（今天的真语料形状）",
+  },
+  {
+    id: "corpus-inventory-run-threshold-loosened",
+    src: "scripts/replay/corpus-inventory.ts",
+    test: "tests/replay-corpus-inventory.test.ts",
+    desc: "run 深度阈值 3 放宽到 2 ⇒ 一次普通重试即被判成卡死（偏大的代价是白加主 loop 闸门）",
+    apply: (s) => s.replace("  const deepRun = t.maxSameFailedRun >= 3;", "  const deepRun = t.maxSameFailedRun >= 2;"),
+    expectFail: "只有原样重试、run 未到 3 ⇒ 仍不动（阈值这一半的分歧格）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
