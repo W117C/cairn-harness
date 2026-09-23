@@ -226,6 +226,35 @@ describe("C1 actual main runner integration (local scripts, no model calls)", ()
       expect(toolResults(events)[0]?.output).toContain("[fused_lint:succeeded]");
     } finally { setAppHooks({ onAsk: undefined }); }
   });
+  // 上一格给的是 **override**；`agent-runner.ts` 那行 `over.actionFusion ?? (await store().get()).actionFusion`
+  // 的右半边此前零观察着（整行换成 `?? false` 全表照绿）。用户在设置界面点的是盘上那个键。
+  it("settings 里的 actionFusion 走得到生产入口（不给 override）", async () => {
+    await config(["printf LINT"]);
+    await script([writeCall()]);
+    await setSettings({ provider: "demo", safeMode: "off", autoMemory: false, actionFusion: true });
+    const events: AgentEvent[] = [];
+    const { setAppHooks, handleAgentDecide } = await import("../src/main/agent-runner");
+    setAppHooks({ onAsk: req => { handleAgentDecide(req.askId, true); } });
+    try {
+      const response = await handleAgentRun({ message: "write", mode: "auto" }, { workspace: dir, logPath: join(dir, "handle-settings.jsonl"), onEvent: e => events.push(e) });
+      expect(response.ok).toBe(true);
+      expect(toolResults(events)[0]?.output, "设置里的 true 没穿过 `over ?? settings` ⇒ 界面开关是空的").toContain("[fused_lint:succeeded]");
+    } finally { setAppHooks({ onAsk: undefined }); }
+  });
+  it("反向一侧：盘上没这个键 ⇒ 生产入口不融合，但同一次写盘仍成功", async () => {
+    await config(["printf LINT"]);
+    await script([writeCall()]);
+    const events: AgentEvent[] = [];
+    const { setAppHooks, handleAgentDecide } = await import("../src/main/agent-runner");
+    setAppHooks({ onAsk: req => { handleAgentDecide(req.askId, true); } });
+    try {
+      const response = await handleAgentRun({ message: "write", mode: "auto" }, { workspace: dir, logPath: join(dir, "handle-absent.jsonl"), onEvent: e => events.push(e) });
+      expect(response.ok).toBe(true);
+      const first = toolResults(events)[0];
+      expect(first?.ok, "写盘都没成功 ⇒ 「没融合」可以被门拒满足，等于没测").toBe(true);
+      expect(first?.output).not.toContain("[fused_lint");
+    } finally { setAppHooks({ onAsk: undefined }); }
+  });
   it("an approved plan.verify cannot supply the fused lint command", async () => {
     await config(["printf CONFIG > config-ran"]);
     const { handlePlanDecide } = await import("../src/main/agent-runner");
