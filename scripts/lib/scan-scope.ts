@@ -19,9 +19,13 @@ export function scriptFilesFromLsFiles(out: string): string[] {
 /**
  * 已跟踪脚本清单（相对仓库根）。返回 `null` = 拿不到（git 不可用，或清单空到可疑）——
  * 调用方必须退回磁盘遍历并出声，**不许**把"取不到清单"当成"没有要扫的东西"静默少判。
+ *
+ * `prefix` 是给"判卷面不止 scripts/"留的口子（切片边界那道判据算的是 tests/）。
+ * 刻意加参数而不是在调用方另写一遍 `git ls-files`：口径只有一句，多写一份就是本仓最忌的
+ * "同一条判据各抄一份"——硬化了一支、另一支照旧把在飞草稿算成红。
  */
-export function trackedScriptFiles(cwd: string): string[] | null {
-  const r = spawnSync("git", ["ls-files", "--", "scripts"], { cwd, encoding: "utf8" });
+export function trackedScriptFiles(cwd: string, prefix = "scripts"): string[] | null {
+  const r = spawnSync("git", ["ls-files", "--", prefix], { cwd, encoding: "utf8" });
   if (r.status !== 0) return null;
   const files = scriptFilesFromLsFiles(r.stdout ?? "");
   return files.length === 0 ? null : files;

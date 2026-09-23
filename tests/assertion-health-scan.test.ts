@@ -11,10 +11,46 @@ import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { scanAssertionHealth, scanDisjunctions } from "../scripts/assertion-health";
+import { scanAssertionHealth, scanCommentBoundaries, scanDisjunctions } from "../scripts/assertion-health";
 import { scriptFilesFromLsFiles, trackedScriptFiles } from "../scripts/lib/scan-scope";
 
 const ROOT = process.cwd();
+
+/* 遗留债清单（棘轮的"已让"那一半）：这些标记把注释文字当切片边界，改一句注释就会挪走它们。
+   迁移 = 从这里删一条 + 把那条测试的边界换成代码标识。**只减不增**——新增由上一条判据拦。
+   清单在 2026-09-23 建成，实测覆盖 29 个唯一标记 / 47 处 / 21 个文件。
+   为什么按标记而不是按文件记账：文件级豁免会让"已经豁免的那个文件再加一条"静默通过。 */
+const LEGACY_COMMENT_BOUNDARIES: readonly string[] = [
+  "\n/* 会话操作菜单",
+  "  /* ---------- 工具 / 卡片 ---------- */",
+  "  /* ---------- 会话列表",
+  "  /* ---------- 会话列表 ---------- */",
+  "  /* ---------- 启动 ---------- */",
+  "  /* ---------- 审批（",
+  "  /* ---------- 事件订阅 ---------- */",
+  "  /* ---------- 消息流构造",
+  "  /* ---------- 运行目录接线结束",
+  "  /* ---------- 真实运行目录：",
+  "  /* ---------- diff 卡行级评审",
+  "  /* §8.1.7：删除只此一路",
+  "  /* 插件快照与信任决议（§9.8）",
+  "  /* 打开标签页时刷新对应快照",
+  "  /* 记忆快照随 agent:state",
+  "  /* 目标态镜像：showHistory 全量筛",
+  "  /* 运行历史的状态筛选：界面只存",
+  "/* ============ 消息滚动入场动效",
+  "/* 插件面板：装了什么",
+  "/* 定时任务面板的纯渲染部分",
+  "/* 记忆面板：",
+  "/* 记忆面板：两层",
+  "/* 折叠的唯一实现",
+  "/* 重绘时的用户态保全。",
+  "/* 子智能体（worker）一列一行",
+  "/* Escape 分层收起",
+  "/** 事件类型 → 一行中文标签",
+  "/** 通用记录卡",
+  "/** 一条 shell 调用 → 终端行",
+];
 
 async function hitsOf(files: string[]): Promise<string[]> {
   const perFile = await Promise.all(files.map(async (rel) => {
@@ -127,5 +163,60 @@ describe("空断言 / 恒真式判据的边界（AST 化以后两头都不许失
   it("代码里的恒真式仍报：右支字面 true 与新加的左支字面 true", () => {
     expect(kindsOf("if (a || true) f();\n")).toContain("tautology");
     expect(kindsOf("if (true || a) f();\n")).toContain("tautology");
+  });
+});
+
+/** 全仓（已跟踪的 tests/）当前在用的注释边界标记，去重。 */
+async function markersInUse(): Promise<string[]> {
+  const files = trackedScriptFiles(ROOT, "tests") ?? [];
+  // 扫描面为空 = 判据真空通过，所以先量面；tests/ 远多于这个数，掉到这里说明 git 取清单失败。
+  expect(files.length, "切片边界的扫描面不能空（拿不到已跟踪清单就不许判绿）").toBeGreaterThan(50);
+  const found = new Set<string>();
+  for (const rel of files) {
+    const src = await readFile(join(ROOT, rel), "utf8");
+    for (const h of scanCommentBoundaries(rel, src)) found.add(h.marker);
+  }
+  return [...found].sort((a, b) => a.localeCompare(b, "zh"));
+}
+
+describe("切片判卷的边界标记棘轮（改注释 = 改判卷取料面，这条要闸住）", () => {
+  it("已跟踪的 tests/ 里不许新增注释文字当边界（边界一律用代码标识）", async () => {
+    const fresh = (await markersInUse()).filter((m) => !LEGACY_COMMENT_BOUNDARIES.includes(m));
+    expect(fresh, "新写的注释边界，改成 function 名 / const 名：" + JSON.stringify(fresh)).toEqual([]);
+  });
+
+  // 成对的另一半：清单是"已让的债"，债还掉了条目必须跟着删。
+  // 只留上一条时，这份名单会在几次迁移后变成一堆读不出真值的装饰——比没有更坏（它假装在记账）。
+  it("反面对手：清单里已不再命中的条目必须删掉（豁免名单不许自己烂着）", async () => {
+    const inUse = await markersInUse();
+    const stale = LEGACY_COMMENT_BOUNDARIES.filter((m) => !inUse.includes(m));
+    expect(stale, "这些标记已经迁完或随被测码删掉了，从清单里一并撤：" + JSON.stringify(stale)).toEqual([]);
+  });
+});
+
+describe("注释边界的识别（AST 级，两头都不许失准）", () => {
+  const markersOf = (src: string): string[] => scanCommentBoundaries("t.ts", src).map((h) => h.marker);
+
+  it("indexOf 的标记是注释文字 ⇒ 报（本闸要抓的那一格）", () => {
+    expect(markersOf('const a = src.indexOf("/* 段头：这一块干什么");\n')).toEqual(["/* 段头：这一块干什么"]);
+  });
+
+  it("标记是代码标识 ⇒ 不报（迁移后的形状，判据不许把正当写法一起打死）", () => {
+    expect(markersOf('const a = src.indexOf("function renderWorkspacePanel");\n')).toEqual([]);
+  });
+
+  // 64 条以注释标点开头的字面量里，只有喂给切片调用的那 47 处算病；剩下的是被测码的输入。
+  // 这一条钉的就是那条分界：筛靠 callee 名，不靠豁免名单。
+  it("喂给被测码的 fixture 文本不算边界（docs-check/prune 那一族正当用途）", () => {
+    expect(markersOf('const sample = "// 已归档于 archive/blocked.md\\n";\nexpect(parse(sample)).toBeTruthy();\n')).toEqual([]);
+  });
+
+  it("自定义切片助手（section(…)）同样在网内 —— 不然新写一个包装器就绕过了", () => {
+    expect(markersOf('const b = section("  /* ---------- 会话列表 ---------- */");\n'))
+      .toEqual(["  /* ---------- 会话列表 ---------- */"]);
+  });
+
+  it("注释里举的反例不算代码（旧的正则写法会在这里自命中）", () => {
+    expect(markersOf('// 反例：src.indexOf("/* 段头 */") 这种写法不要用\nexport const ok = 1;\n')).toEqual([]);
   });
 });

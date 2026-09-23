@@ -161,6 +161,58 @@ export function scanDisjunctions(file: string, src: string): ScanHit[] {
   return hits;
 }
 
+/**
+ * 切片判卷的「边界标记」：字符串字面量以注释标点开头的取值/切片调用。
+ *
+ * 为什么要闸：这类测试读 `src/renderer/app.js` 的**源码文本**，用 `indexOf(标记)` 切一段进 vm 跑。
+ * 标记若是一句注释，则"改一句注释"等于"改判卷的取料面"——实测代价：本仓一次删注释改动
+ * 让 3 个文件 18 条测试红（`expected -1 to be greater than 43470`），而那 18 条与产品行为一字无关。
+ * 更坏的一格是**静默**的：标记还在但位置挪了 ⇒ 切片悄悄变小，测得更少而门仍绿。
+ * 规矩：边界一律用代码标识（`function xxx`、`const NAME =`）。
+ *
+ * 只认「喂给切片调用」的那些字面量：tests/ 里以注释标点开头的字面量共 64 条，其中 17 条是
+ * 喂给被测码的 fixture 文本（docs-check 举的病样、prune 的 `// `、edit-file-hint 的规则片段），
+ * 那是正当用途，不该报——按 callee 名筛掉它们，而不是靠豁免名单放行。
+ */
+const SLICE_CALLEES: ReadonlySet<string> = new Set([
+  "indexOf", "lastIndexOf", "slice", "substring", "substr", "search", "section",
+]);
+const COMMENT_OPEN = /^\s*(?:\/\/|\/\*)/;
+
+export interface BoundaryHit {
+  file: string;
+  line: number;
+  /** 切片调用读到的那句标记原文（棘轮清单按它记账，不按文件——文件级豁免会让同一个文件再加一条）。 */
+  marker: string;
+}
+
+export function scanCommentBoundaries(file: string, src: string): BoundaryHit[] {
+  const hits: BoundaryHit[] = [];
+  const sf = ts.createSourceFile(file, src, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+  const visit = (n: ts.Node): void => {
+    if (ts.isCallExpression(n)) {
+      const callee = n.expression;
+      const name = ts.isIdentifier(callee)
+        ? callee.text
+        : ts.isPropertyAccessExpression(callee) ? callee.name.text : "";
+      if (SLICE_CALLEES.has(name)) {
+        for (const a of n.arguments) {
+          if ((ts.isStringLiteral(a) || ts.isNoSubstitutionTemplateLiteral(a)) && COMMENT_OPEN.test(a.text)) {
+            hits.push({
+              file,
+              line: sf.getLineAndCharacterOfPosition(a.getStart(sf)).line + 1,
+              marker: a.text,
+            });
+          }
+        }
+      }
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return hits;
+}
+
 // 注意：下面这个「暗盒/暗卷段」识别正则**刻意放在文件末尾**——它的注释里含有段名关键字，
 // 若放在函数声明上方，会被 scanAssertionHealth 的「段头注释命中段名」逻辑误报为
 // 「该段内无断言」（自伤式误报）。
