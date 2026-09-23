@@ -7136,6 +7136,60 @@ const MUTATIONS = [
     expectFail: "样本宽度只数派过活的 run：掺进来的无 worker 目录不许把「样本很窄」这句稀释掉",
   },
 
+  // ── 落盘时钟戳 + 复跑面 latency（延迟第一次可测；两半各自的失效方式不同）
+  {
+    id: "event-stamp-dropped",
+    src: "src/events/index.ts",
+    test: "tests/events.test.ts",
+    desc: "append 不再盖 ts ⇒ 每条事件的 `ts` 又变成「生产者记得才有」，工具耗时整个面消失（而测试面之外无人知）",
+    apply: (s) => s.replace(
+      "      const stamped = { ...event, ts: (event as { ts?: number }).ts ?? Date.now() };",
+      "      const stamped = { ...event };",
+    ),
+    expectFail: "producer 没写 ts 也要有：每条落盘事件都带数字 ts",
+  },
+  {
+    id: "event-stamp-overwrites-producer-ts",
+    src: "src/events/index.ts",
+    test: "tests/events.test.ts",
+    desc: "无条件盖 now() ⇒ 把 automation 那批自己定的时间洗成本机时间（它们语义是「计划/发生时刻」，不是「落盘时刻」）",
+    apply: (s) => s.replace(
+      "ts: (event as { ts?: number }).ts ?? Date.now()",
+      "ts: Date.now()",
+    ),
+    expectFail: "producer 自带的 ts 不被改写（automation 那批本来就自己盖，覆盖会把它们的语义洗掉）",
+  },
+  {
+    id: "latency-d8-rule-all-or-nothing",
+    src: "scripts/replay/latency.ts",
+    test: "tests/replay-latency.test.ts",
+    desc: "可并发判据退回「整轮全是只读工具」⇒ 真语料那个 25 调用的轮（23 读 + 2 别的）被整轮判 0，读数与结论一起翻向",
+    apply: (s) => s.replace(
+      "      const safe = turnNames.reduce((n, x) => n + (D8_SAFE_TOOLS.has(x) ? 1 : 0), 0);",
+      "      const safe = turnNames.every((x) => D8_SAFE_TOOLS.has(x)) ? turnNames.length : 0;",
+    ),
+    expectFail: "D8 可折次数按「该轮只读调用数 − 1」算，不按「整轮是否全只读」（真语料有个 25 调用的轮，23 个是 read_file）",
+  },
+  {
+    id: "latency-streams-flattened",
+    src: "scripts/replay/latency.ts",
+    test: "tests/replay-latency.test.ts",
+    desc: "把多个会话拼成一条数组再 tally ⇒ 一条流末尾未闭合的调用吞掉下一条流的「轮」（实测 189 轮读成 19 轮）",
+    apply: (s) => s.replace(
+      "  return foldLatency(streams.map((raws) => tallyLatency(raws)));",
+      "  return foldLatency([tallyLatency(streams.flat())]);",
+    ),
+    expectFail: "一条流末尾未闭合的调用会把下一条流的「轮」吞掉 ⇒ 必须逐条成流再合并",
+  },
+  {
+    id: "latency-unmeasurable-as-zero",
+    src: "scripts/replay/latency.ts",
+    test: "tests/replay-latency.test.ts",
+    desc: "无戳不再单独判「不可测」⇒ 旧语料上印出「工具耗时 0ms / 占比 0%」，D8 就据此被判定不值得做",
+    apply: (s) => s.replace("  if (!t.hasTimestamps) {", "  if (false) {"),
+    expectFail: "有调用但全无戳 ⇒ 触发面照常报，时间面单独说「旧语料无戳」并红着退出",
+  },
+
   // ── 复跑面 corpus-inventory（这张表的最后一行是「要不要给主循环加换路压力」的决策依据，
   //    偏小 = 安静地不下判断，所以五格各自钉一条：窗口、规范化、断链、决策线两半）
   {
