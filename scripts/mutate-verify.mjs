@@ -2388,7 +2388,7 @@ const MUTATIONS = [
     test: "tests/context-dangling-tool-call.test.ts",
     desc: "合上孤儿那行没接在投影出口 ⇒ 函数在、判卷在、真路径照旧吃 400：「两头断」那一族的又一格（不写第几次，计数会漂），" +
       "所以判卷必须走 projectContext 而不是只测那个纯函数",
-    apply: (s) => s.replace("  return closeDanglingToolCalls(msgs);", "  return msgs;"),
+    apply: (s) => s.replace("  return closeDanglingToolCalls(mergeToolResultsById(msgs));", "  return mergeToolResultsById(msgs);"),
     expectFail: "真实现场形状（末笔调用没有结果）⇒ 投影里不许留下未答的 tool_calls",
   },
   {
@@ -7207,7 +7207,7 @@ const MUTATIONS = [
     src: "src/agent/context.ts",
     test: "tests/worker-result-wire.test.ts",
     desc: "合并时只留第一条 ⇒ 形状合法了，但 worker 的正文被丢掉：注入通道还在而报告不再进上下文（修形状修出静默丢数据）",
-    apply: (s) => s.replace(/ {4}out\[at\] = \{ \.\.\.prev[^\n]*\n/, "    out[at] = prev; // 变异：只留第一条\n"),
+    apply: (s) => s.replace("    out[at] = { ...prev, content: `${String(prev.content ?? \"\")}\\n\\n${String(m.content ?? \"\")}` };", "    out[at] = prev; // 变异：只留第一条"),
     expectFail: "spawn 的回执与 worker 回传合成一条：id 只出现一次，两份正文都在（不丢信息）",
   },
   {
