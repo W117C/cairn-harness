@@ -7423,6 +7423,49 @@ const MUTATIONS = [
     apply: (s) => s.replace("  if (ctx.forbiddenViolated) return \"fail\";", "  if (false) return \"fail\";"),
     expectFail: "禁改面被触碰：即使凭据是 verified 也判 fail（forbidden 硬闸不被凭据顶掉）",
   },
+  // ---- 09-24 写向判据收成一份（`src/agent/write-face.ts`）：四处清单漂移里最贵的两格 ----
+  // shell 命令形状这一支决定「经 shell 落盘算不算写过盘」；两个显式名单各是一个**刻意不做的动作**，
+  // 按 rule 57 它们必须有名字与锚点，否则下一轮重构会把它们当冗余守卫删掉。
+  {
+    id: "writeface-shell-blind-as-before",
+    src: "src/agent/write-face.ts",
+    test: "tests/write-face.test.ts",
+    desc: "shell 一律算写向（不收窄命令形状）⇒ 任何 `ls` 都要补一拍目标仓全量测试，收束闸变成免费的性能税",
+    apply: (s) => s.replace("    return !isReadOnlyShellCommand(command).ok;", "    return true;"),
+    expectFail: "反向一侧（不这么钉，看一次目录就要跑一遍全量测试）：`run_shell` 跑 `ls -la` 与 `git status` ⇒ false",
+  },
+  {
+    id: "writeface-shell-never-writes",
+    src: "src/agent/write-face.ts",
+    test: "tests/write-face.test.ts",
+    desc: "shell 一律不算写向（回到旧的两名字清单）⇒ 经 shell 落盘既不触发收束闸、也不使绿拍过期（假绿复活）",
+    apply: (s) => s.replace("    return !isReadOnlyShellCommand(command).ok;", "    return false;"),
+    expectFail: "shell 落盘算改盘：`shell_rw` 跑 `printf … >> note.txt` ⇒ true（旧的两名字清单在这一格判 false ⇒ 收束闸与 stale 双双漏）",
+  },
+  {
+    id: "writeface-spawn-agent-counted-as-disk-write",
+    src: "src/agent/write-face.ts",
+    test: "tests/write-face.test.ts",
+    desc: "把 spawn_agent 也当成本工作区的写盘 ⇒ 派一次活就补一拍主仓验证（它写的是自己那块 worktree，改动另走合并控制塔）",
+    apply: (s) => s.replace('const NOT_THIS_WORKSPACE: ReadonlySet<string> = new Set(["spawn_agent"]);', "const NOT_THIS_WORKSPACE: ReadonlySet<string> = new Set<string>();"),
+    expectFail: "派生 worker 本身不改盘（它写的是自己那块 worktree）⇒ false",
+  },
+  {
+    id: "writeface-shellro-reads-command-shape",
+    src: "src/agent/write-face.ts",
+    test: "tests/write-face.test.ts",
+    desc: "去掉 shell_ro 的静态只读豁免 ⇒ 它的白名单命令也被判成写向，而它按契约永远写不了盘",
+    apply: (s) => s.replace("    if (STATICALLY_READONLY_SHELL.has(tool)) return false;", "    if (false) return false;"),
+    expectFail: "`shell_ro` 恒 false，且这不是命名照顾而是执行面事实：写到一半的命令会被同一份静态过滤拒掉（ok:false ⇒ 根本没执行）",
+  },
+  {
+    id: "writeface-everything-is-write",
+    src: "src/agent/write-face.ts",
+    test: "tests/write-face.test.ts",
+    desc: "非 shell 一律算写向（绕开门的写向集）⇒ 「只读名单」与真实判据分叉，覆盖性棘轮的反向一侧必须抓到现场",
+    apply: (s) => s.replace("  return isWriteCall(tool) && !NOT_THIS_WORKSPACE.has(tool);", "  return !NOT_THIS_WORKSPACE.has(tool);"),
+    expectFail: "覆盖性棘轮：工具表里每个名字都必须被显式归类（算改盘 或 在只读名单里）⇒ 新增工具没登记就红",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
