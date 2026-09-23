@@ -2334,6 +2334,25 @@ const MUTATIONS = [
     apply: (s) => s.replace("      if (answered.has(tc.id) || injected.has(tc.id)) continue;", "      if (injected.has(tc.id)) continue;"),
     expectFail: "工具执行中途 emit 正文（结果在 assistant 之后才回）⇒ 绝不许说「没有收到结果」",
   },
+  // ---- 终端面板两格（#58）：缺席≠运行中、子流≠父会话跑过（tests/renderer-terminal-liveness.test.ts）----
+  {
+    id: "term-null-always-claims-running",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-terminal-liveness.test.ts",
+    desc: "null 分支不看 liveness ⇒ 重放一条早死掉的会话永远显示「执行中」：把结果缺席当运行中，" +
+      "是「代理信号当事实」那一族的界面版（真窗口侧由 panels-check B26 同向钉住）",
+    apply: (s) => s.replace("    return live\n", "    return true\n"),
+    expectFail: "panelLive=false 且无结果 ⇒ 渲染 lost，不渲染「执行中…」",
+  },
+  {
+    id: "term-terminal-no-attribution-filter",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-terminal-liveness.test.ts",
+    desc: "terminal 段不过归因 ⇒ worker 执行的命令出现在父会话「本会话命令」里（对话面两处都过了" +
+      " entersMainConversation，面板面漏了＝同一份解析只硬化一支）",
+    apply: (s) => s.replace("    if (!entersMainConversation(e)) continue;", "    if (false) continue;"),
+    expectFail: "父 + worker 混排 ⇒ 只剩父那一行（同一份流既要过对话面也要过面板面）",
+  },
   {
     id: "tail-clamp-keeps-head",
     src: "src/agent/text-budget.ts",
@@ -6202,6 +6221,38 @@ const MUTATIONS = [
     desc: "逐次 config 覆盖被忽略 ⇒ 上游算了摊销也用不上（本仓点名的「两头断」形状）",
     apply: (s) => s.replace("      config: options.config ? { ...this.config, ...options.config } : this.config,", "      config: this.config,"),
     expectFail: "开着 ⇒ 同一会话里压缩次数不更多、累计重写字符严格更少",
+  },
+  {
+    id: "lr-growth-invented-not-from-script",
+    src: "src/agent/gym/probe.ts",
+    test: "tests/gym-long-replay.test.ts",
+    desc: "增长内容退回我编的字数 ⇒ 所有 case 量出同一张表，读数却写着 case 名（第一版真的这样跑通过）",
+    apply: (s) => s.replace("  const growth = await scriptGrowthText(opts.scriptPath);", "  const growth = \"的\".repeat(2048);"),
+    expectFail: "仪器读的是 case，不是我塞的字数：两条 case 的账单必须不同",
+  },
+  {
+    id: "lr-empty-script-silently-accepted",
+    src: "src/agent/gym/probe.ts",
+    test: "tests/gym-long-replay.test.ts",
+    desc: "剧本没正文时静默拼空串 ⇒ 长时程读数变成「只长了我塞的分隔符」",
+    apply: (s) => s.replace("  if (joined === \"\") {", "  if (false) {"),
+    expectFail: "剧本里没有可用正文时**拒绝跑**（宁可不量，也不拿编造内容当某条 case 的读数）",
+  },
+  {
+    id: "lr-head-survival-claims-perfect-append",
+    src: "src/agent/gym/probe.ts",
+    test: "tests/gym-long-replay.test.ts",
+    desc: "头部存活比恒报 1 ⇒ 「一次压缩作废 42 万字符」这类读数从此消失，摊销也就无从判有无效果",
+    apply: (s) => s.replace("      headSurvival: reading ? reading.share : null,", "      headSurvival: reading ? 1 : null,"),
+    expectFail: "续长的会话真的会被反复装配：requests = longTurns、历史在涨、且至少压一次（否则样本无分辨力）",
+  },
+  {
+    id: "lr-compaction-count-ignores-evidence",
+    src: "src/agent/gym/probe.ts",
+    test: "tests/gym-long-replay.test.ts",
+    desc: "压缩次数拿「抖了几次」冒充而不是数事件流 ⇒ 与 PC5/PC6 的认账口径分家，两个数从此互相矛盾",
+    apply: (s) => s.replace("    compactions: compactionEvents,", "    compactions: 0,"),
+    expectFail: "续长的会话真的会被反复装配：requests = longTurns、历史在涨、且至少压一次（否则样本无分辨力）",
   },
 ];
 
