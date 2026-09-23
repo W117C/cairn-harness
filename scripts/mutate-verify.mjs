@@ -7190,6 +7190,38 @@ const MUTATIONS = [
     expectFail: "有调用但全无戳 ⇒ 触发面照常报，时间面单独说「旧语料无戳」并红着退出",
   },
 
+  // ── 同一 callId 的 tool_result 合并（spawn 回执 + worker 回传是两个生产者）
+  {
+    id: "tool-result-merge-skipped",
+    src: "src/agent/context.ts",
+    test: "tests/worker-result-wire.test.ts",
+    desc: "投影出口不再合并 ⇒ 一个 tool_call_id 发出两条 tool 消息（Anthropic 线格式里就是两个 tool_result 块同一个 tool_use_id）",
+    apply: (s) => s.replace(
+      "  return closeDanglingToolCalls(mergeToolResultsById(msgs));",
+      "  return closeDanglingToolCalls(msgs);",
+    ),
+    expectFail: "spawn 的回执与 worker 回传合成一条：id 只出现一次，两份正文都在（不丢信息）",
+  },
+  {
+    id: "tool-result-merge-drops-later-content",
+    src: "src/agent/context.ts",
+    test: "tests/worker-result-wire.test.ts",
+    desc: "合并时只留第一条 ⇒ 形状合法了，但 worker 的正文被丢掉：注入通道还在而报告不再进上下文（修形状修出静默丢数据）",
+    apply: (s) => s.replace(/ {4}out\[at\] = \{ \.\.\.prev[^\n]*\n/, "    out[at] = prev; // 变异：只留第一条\n"),
+    expectFail: "spawn 的回执与 worker 回传合成一条：id 只出现一次，两份正文都在（不丢信息）",
+  },
+  {
+    id: "tool-result-merge-ignores-id",
+    src: "src/agent/context.ts",
+    test: "tests/worker-result-wire.test.ts",
+    desc: "合并键写成固定串 ⇒ 全历史所有工具结果并成一条：位次与逐调用归因一起没了（反面对手那格就是量这个的）",
+    apply: (s) => s.replace(
+      "    const id = m.role === \"tool\" ? m.tool_call_id : undefined;",
+      "    const id = m.role === \"tool\" ? \"any\" : undefined;",
+    ),
+    expectFail: "反面对手：不同 callId 的两条 result 绝不合并（各自一条，位次不变）",
+  },
+
   // ── 复跑面 corpus-inventory（这张表的最后一行是「要不要给主循环加换路压力」的决策依据，
   //    偏小 = 安静地不下判断，所以五格各自钉一条：窗口、规范化、断链、决策线两半）
   {
