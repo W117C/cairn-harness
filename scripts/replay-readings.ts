@@ -34,6 +34,11 @@ export const REPLAY_READINGS: readonly ReplayReading[] = [
     script: "scripts/replay/verify-cause-mix.ts",
     answers: "judgment-layer §9 第 0 步的分母：verify 红里有几条今天能被机器归因（P1-3 的 before/after 尺）",
   },
+  {
+    id: "gate-outcomes",
+    script: "scripts/replay/gate-outcomes.ts",
+    answers: "judgment-layer §7 第 2 步的分子：真语料里 gate 留痕的 layer × verdict 分布（有多少「人被问过、且答了」）",
+  },
 ];
 
 export interface ReplayFacts {

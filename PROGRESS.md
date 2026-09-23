@@ -1533,6 +1533,22 @@ judgment-layer §9.1 的一条省略——"包管理器错误码先不加，因�
 - 待批未动：`agent-plan.md:1442`「不做六档…我们三档已覆盖同语义面」与 §11.7.2 三档矩阵。建议 diff 已写在
   `outputs/permission-guided-mode-2026-09-23.md` §七，按 §3.7 走批准流程，**本笔未落盘**。
 
+**能力 27：§7 第 2 步第一次有了自己的读数面，而它量到的第一件事是"没有分子"**（新复跑面 `replay:gate-outcomes`）。
+`gate.layer/verdict` 自 §5 落进 `tool_result` 后，**从没人把它当读数面统计过**——第 3 步要的
+"人被问过且答了"的分子因此一直悬着。新面 `scripts/replay/gate-outcomes.ts`（纯函数
+`tallyGateEvents` + 三态守卫，走 `corpus.ts` 那一份取料面）按 `GATE_LAYERS × GATE_VERDICTS` 铺**全矩阵**，
+另记 `labelable`（§7 读数 A 口径 approved+rejected+denied）与 `humanAnswered`（问过人的）两个口径、
+`unmatched`（join 不上 `tool_call` 的结果，不静默丢）、表外 layer/verdict（不混进矩阵也不丢），
+并**自己判那条 300 条资格线**（不靠人记得住文档）。
+- **首次实跑读数**：19 files / 97 条受管 ⇒ `带 gate 留痕 = 0`，脚本红着退出说"不可测"。
+  同轮定位这个 0 的成因：那 19 个 `.jsonl` 的 mtime **全部早于**留痕落库那一刻（09-20 23:04）
+  ⇒ 是**语料旧**，不是生产者没接上（生产者侧另有 `autonomy-check`/`gate-audit` 判着）。
+  结论直接影响定序：**第 3 步（τ）在攒到新会话之前没有资格开工**，而攒料要真会话（花真钱），不是再写代码。
+- 配套卫生：`GATE_VERDICTS` 收成运行时枚举（`GateMeta.verdict` 由它派生），否则新面在新增一种结果时会**静默少一列**。
+- 判卷：新 `tests/replay-gate-outcomes.test.ts` 5 条 + 锚点 +3（`gate-outcomes-*`：吞掉 unmatched / 丢表外值 /
+  骨架只按单层铺）。D-8 的配对两侧**当场各造红一次**：把文档标记改一个字符 ⇒ 同时报
+  「引用无源」+「登记无人引用」两条红，还原后 exit 0（不是"看着绿就当通过"）。
+
 
 
 

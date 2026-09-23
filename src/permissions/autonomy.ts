@@ -34,13 +34,20 @@ export const GATE_LAYERS = [
 
 export type GateLayer = (typeof GATE_LAYERS)[number];
 
+/** 人工/自动结果的枚举（唯一事实源；`GateMeta.verdict` 由它派生）。
+ *  复跑面 `scripts/replay/gate-outcomes.ts` 要按 `layer × verdict` 铺全矩阵——
+ *  没有这只运行时数组，它就会在新增一种结果时**静默少一列**（读数看着完整，其实漏计）。 */
+export const GATE_VERDICTS = ["auto-approved", "approved", "rejected", "timeout", "unattended", "denied"] as const;
+export type GateVerdict = (typeof GATE_VERDICTS)[number];
+
 /** 一次权限判定的完整留痕（进 tool_result.gate）。有了它，「当时判了什么、人怎么答的」
- *  才能从事件流回放——校准阈值要的正例（人拒了几次）今天一条都取不到，就缺这个字段。 */
+ *  才能从事件流回放——这条留痕就是为了第 3 步要的正例（人拒了几次）；
+ *  读数面：`scripts/replay/gate-outcomes.ts`。 */
 export interface GateMeta {
   layer: GateLayer;
   /** auto-approved = 没问人；approved = 问过且人批了；rejected / timeout / unattended = 问过没成；
    *  denied = 门直接拦（未执行）。 */
-  verdict: "auto-approved" | "approved" | "rejected" | "timeout" | "unattended" | "denied";
+  verdict: GateVerdict;
   /** deny 分支缺席：那三条硬边界在风险层**之前**短路，当时并没有算过风险。缺字段比编一个值诚实。 */
   risk?: RiskLevel;
   mode: PermissionMode;

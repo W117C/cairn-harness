@@ -6791,6 +6791,32 @@ const MUTATIONS = [
     apply: (s) => s.replace('const decision = sideEffectDecisionTable()[mode] ?? "ask";', 'const decision = mode === "read-only" ? "deny" : mode === "default" ? "ask" : "allow";'),
     expectFail: "表外档位不落盘：走 ask，无审批口即 fail-closed（旧 if 链在这里静默放行）",
   },
+
+  // ── 复跑面 gate-outcomes（读数面自己的三态纪律：漏计比红更坏）
+  {
+    id: "gate-outcomes-unmatched-swallowed",
+    src: "scripts/replay/gate-outcomes.ts",
+    test: "tests/replay-gate-outcomes.test.ts",
+    desc: "join 不上 tool_call 的受管结果被静默跳过 ⇒ 分母少一块而读数看起来完整（「读数取不到」老族：差值就是尺，别把差值丢掉）",
+    apply: (s) => s.replace("    if (tool === undefined) {", "    if (false && tool === undefined) {"),
+    expectFail: "只有受管工具进分母；join 不上 tool_call 的记 unmatched，不当没有",
+  },
+  {
+    id: "gate-outcomes-unknown-dropped",
+    src: "scripts/replay/gate-outcomes.ts",
+    test: "tests/replay-gate-outcomes.test.ts",
+    desc: "表外 layer/verdict 不记账 ⇒ 新加一层/一种结果时它整列消失，而不是矩阵多出一格空行",
+    apply: (s) => s.replace("    if (!layerOk) bump(t.unknownLayer, g.layer);", "    if (false) bump(t.unknownLayer, g.layer);"),
+    expectFail: "表外 layer / verdict 单独记账：既不混进矩阵，也不静默丢掉",
+  },
+  {
+    id: "gate-outcomes-skeleton-per-side-only",
+    src: "scripts/replay/gate-outcomes.ts",
+    test: "tests/replay-gate-outcomes.test.ts",
+    desc: "骨架只按层铺、不按结果铺 ⇒ 少一列没人知道（格数必须等于两层数之积，这条断言就是它的守门人）",
+    apply: (s) => s.replace("  for (const l of GATE_LAYERS) for (const v of GATE_VERDICTS) m.set(l + CELL_SEP + v, 0);", "  for (const l of GATE_LAYERS) m.set(l + CELL_SEP + String(GATE_VERDICTS[0]), 0);"),
+    expectFail: "骨架格子数 = 层数 × 结果数（任一侧加值，格数自动跟上，不靠人记得补）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
