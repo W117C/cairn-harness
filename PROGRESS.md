@@ -1692,14 +1692,45 @@ judgment-layer §9.1 的一条省略——"包管理器错误码先不加，因�
   补 ②c 之前，把那一行整段改成"只读 settings"没有任何用例会红。
 - 锚点 +2（`autoverify-ipc-settings-fallback-dropped` 砍掉 settings 回退 / `autoverify-ipc-override-ignored`
   砍掉 override 尊重），提交后逐条 ✅ 杀掉（5.8s）。两半各一条是刻意的：只钉一支，另一支写坏不会红。
-- **顺带量到一片同族缺口（未动，立了任务）**：`agent-runner.ts:1563-1575` 一共 8 行
-  `over.X ?? (await store().get()).Y` 形状，测试里只有 `actionFusion` / `planRequired` / `autoVerify`
-  三行被**显式 override** 触达过，另 5 行（`impactAnalysis` / `requestMetering` / `observationPack` /
-  `evidenceReceipts` / `economicCompaction`）在判卷里连调用者都没有 ⇒ 那 5 行的两半有没有观察着，
-  今天**未测**（grep 命中字段名只证明"提过"，不证明"改这行会红"）。下一步要么逐行补分歧格 + 锚点，
-  要么把"这一行的两半各须有一条用例能红"做成机制判据（不挂手抄清单，同规则 64）。
+- **顺带量到一片同族缺口（实测见能力 34，勿按本段行动）**：`agent-runner.ts:1563-1575` 一共 8 行
+  `over.X ?? (await store().get()).Y` 形状。**本段初稿曾写成"另 5 行两半未测"——那是没测就下的结论，
+  实测后一半是错的**（其中 3 行的 settings 半边早有观察着，只是没人把它们跟锚点连起来）。
+  留这句是为了记形状：`grep "handleAgentRun"` 只证明"有没有人显式传 override"，
+  **不证明 settings 那半边的观察着在不在**——后者要靠突变实测（能力 34 那张表）。
+
 - 读数：全量 `test` **220 files / 2366 tests 全绿**（exit 0）、`pnpm typecheck` 0 错、
   针脚体检 825 条**阻断 0 属本簇**（整表仍是那 1 条别人的 `np-write-suppression-ignored`）、本簇 2 条锚点 ✅。
+
+**能力 34：影响面的「设置面板 ⇒ 生产入口」补成第四环，并把 8 行同族接线逐行量成一张表**。
+`tests/impact-runner-wiring.test.ts` 的头两格把开关**直接交给 `runAgent`**，于是
+`agent-runner.ts:1570` 那行 `impactAnalysis: over.impactAnalysis ?? (await store().get()).impactAnalysis`
+的右半边从未被走过——用户在设置界面点的是盘上那个键，不是 overrides；把整行换成 `?? false` 两格照样绿。
+- 补两格（走生产入口 `handleAgentRun`，**overrides 一个都不给**）：盘上写 `impactAnalysis:true` ⇒
+  必须出 `impact_report` 且符号表里有 `addTodo`；盘上没这个键 ⇒ 零 `impact_report` **但写盘仍成功**
+  （不钉后一半，「零事件」会被"门拒写"满足＝假绿）。批条要先给（`allow write_file`），成因同 ② 那格。
+- **逐行实测的矩阵**（同一支突变：把 `?? (await store().get()).Y` 换成 `?? false`，跑该字段最可能观察着它的那张表）：
+
+  | 行（1563-1575） | settings 半边 | overrides 半边 |
+  |---|---|---|
+  | `planRequired` | ❌ 存活（未观察） | ✅ `goal-continue` J3 那格 |
+  | `actionFusion` | ❌ 存活 | ✅ "handleAgentRun forwards the explicit override" |
+  | `impactAnalysis` | ✅ 本次补用例后杀掉 | ❌ 判卷从不传（只 IPC 透传） |
+  | `autoVerify` | ✅ ②b | ✅ ②c（能力 33） |
+  | `requestMetering` | ✅ `session-tools` C2/D 那格 | ❌ |
+  | `observationPack` | ❌ 存活 | ❌ |
+  | `evidenceReceipts` | ✅ 同上 | ❌ |
+  | `economicCompaction` | ✅ 同上 | ❌ |
+
+  ⇒ 锚点只留**杀得死的 4 条**（`impact-analysis` / `request-metering` / `evidence-receipts` /
+  `economic-compaction` `-settings-fallback-dropped`）；三条活着的（observationPack / planRequired / actionFusion）
+  **当场撤针不留**（规则 54：假锚点比没锚点更坏），缺口署名为任务 #14。
+  左半边另有 5 格从不被传——判卷要传就得先答"这条 IPC 通道今天有没有真实调用者"，
+  所以那一侧暂按**刻意的留位**记账（`RunOverrides` 由 `src/main/index.ts:198` 原样透传，非死码）。
+- 读到的更大一条：一个字段有 `DEFAULT_SETTINGS` 里的键、有设置界面的开关、有产品侧消费者，
+  仍可能在**生产入口那一行**断掉——因为判卷往往测的是"值交给内核之后"，而不是"值怎么到内核"。
+  这与「两头断」同族，但签名更具体：**测的是 opt 之后的行为 ≠ 测了 opt 的来源**。
+- 读数：全量 `test` **220 files / 2368 tests 全绿**（exit 0）、tsc 0 错、针脚体检 829 条
+  **阻断 0 属本簇**（整表仍只有别人那 1 条）、本簇 4 条锚点逐条 ✅（17.5s），3 条撤下的存活变异已署名为 #14。
 
 
 
