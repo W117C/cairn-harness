@@ -9,7 +9,7 @@
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { REPLAY_READINGS } from "../scripts/replay-readings";
-import { latencyVerdict, tallyLatency, tallyStreams } from "../scripts/replay/latency";
+import { latencyVerdict, pickSources, tallyLatency, tallyStreams } from "../scripts/replay/latency";
 
 const call = (id: string, name: string, ts?: number) => ({ type: "tool_call", id, name, args: {}, ...(ts === undefined ? {} : { ts }) });
 const result = (id: string, ts?: number, ok = true) =>
@@ -115,6 +115,36 @@ describe("latency 的三态结论", () => {
     ]));
     expect(v.exitCode).toBe(0);
     expect(v.lines.join("\n")).toContain("工具占总耗时");
+  });
+});
+
+describe("latency 的取料面（`-- <路径>` 支持）", () => {
+  const tree: Record<string, string[]> = {
+    "runs/a": ["runs/a/one.jsonl", "runs/a/two.jsonl"],
+    "runs/a/one.jsonl": ["runs/a/one.jsonl"],
+    "runs/empty": [],
+  };
+  const list = (p: string): string[] => tree[p] ?? [];
+  const corpus = ["outputs/x.jsonl"];
+
+  it("不给参数 ⇒ 用登记表语料（口径不变）", () => {
+    expect(pickSources([], corpus, list)).toEqual({ files: corpus, problem: null });
+  });
+
+  it("给了路径就只用那些路径，不掺登记表语料（否则「这一批的数」会混进别的批）", () => {
+    expect(pickSources(["runs/a"], corpus, list)).toEqual({ files: ["runs/a/one.jsonl", "runs/a/two.jsonl"], problem: null });
+  });
+
+  it("路径下一条 .jsonl 也没有 ⇒ 红着点名该路径，绝不退回全语料", () => {
+    const v = pickSources(["runs/empty"], corpus, list);
+    expect(v.files).toEqual([]);
+    expect(v.problem).toContain("runs/empty");
+  });
+
+  it("多个路径里只要有一个读不到，整条读数就不成立（不报「其余那半的数」当整批）", () => {
+    const v = pickSources(["runs/a", "runs/empty"], corpus, list);
+    expect(v.problem).toContain("runs/empty");
+    expect(v.files).toEqual([]);
   });
 });
 

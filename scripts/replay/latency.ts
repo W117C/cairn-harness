@@ -14,6 +14,7 @@
 //  ⑵ **两半可测时点不同**：触发面（一轮几个调用）不需要戳；时间面需要。没戳 ⇒ 红着退出说
 //     「不可测」，绝不报「工具耗时 0ms」——「读到 0」与「没有尺」必须长成两个样子。
 //  ⑶ 孤儿 result / 有调用无结果，各自记账，不混进时长也不静默丢。
+import { statSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readJsonl, scanCorpus, zeroCorpusProblem } from "./corpus";
@@ -188,6 +189,39 @@ export function tallyStreams(streams: readonly (readonly unknown[])[]): LatencyT
   return foldLatency(streams.map((raws) => tallyLatency(raws)));
 }
 
+export interface SourcePick {
+  files: string[];
+  /** 非 null = 取料本身不成立，调用方必须红着退出。 */
+  problem: string | null;
+}
+
+/** 取料：不给参数用登记表语料；给了路径就**只用**那些路径。
+ *  任一路径下一条 `.jsonl` 也没有 ⇒ 整条读数不作（清空 files 并点名该路径）。
+ *  "退回全语料"是这里最省事的写法，也正是最坏的：打错一个目录名会读出一批
+ *  看起来像本次的数（本仓「假读数长得像真读数」那一族的入口）。 */
+export function pickSources(
+  args: readonly string[],
+  corpus: readonly string[],
+  listJsonl: (p: string) => string[],
+): SourcePick {
+  if (args.length === 0) return { files: [...corpus], problem: null };
+  const files: string[] = [];
+  const empty: string[] = [];
+  for (const a of args) {
+    const found = listJsonl(a);
+    if (found.length === 0) empty.push(a);
+    else files.push(...found);
+  }
+  if (empty.length > 0) {
+    return {
+      files: [],
+      problem: "指定路径里没有 .jsonl：" + empty.join(", ") +
+        " ⇒ 整条读数不作（不退回收全语料——那会把打错路径读成「本次有数据」）",
+    };
+  }
+  return { files: [...new Set(files)], problem: null };
+}
+
 /** 纯函数版结论：时间面能不能读、触发面有没有面，各自说清。 */
 export function latencyVerdict(t: LatencyTally): { exitCode: 0 | 1; lines: string[] } {
   const lines = [
@@ -228,16 +262,32 @@ export function latencyVerdict(t: LatencyTally): { exitCode: 0 | 1; lines: strin
 
 function main(): void {
   const scan = scanCorpus();
-  const empty = zeroCorpusProblem(scan);
+  // 允许 `node --import tsx scripts/replay/latency.ts <路径>…`：路径可以是会话目录，也可以是单个 .jsonl。
+  // 时间面要有戳才能读，所以这条用于刚跑完的 `.tmp/e2e-log.jsonl` 与新会话目录。
+  const pick = pickSources(process.argv.slice(2), scan.files, (p) => {
+    try {
+      const st = statSync(p);
+      if (st.isDirectory()) return scanCorpus([p], 4).files;
+      return p.endsWith(".jsonl") ? [p] : [];
+    } catch {
+      return [];
+    }
+  });
+  if (pick.problem !== null) {
+    console.error("⚠️ latency 取料失败：" + pick.problem);
+    process.exitCode = 1;
+    return;
+  }
+  const empty = zeroCorpusProblem({ files: pick.files, missingRoots: scan.missingRoots });
   if (empty !== null) {
     console.error("⚠️ latency 读数无意义：" + empty);
     process.exitCode = 1;
     return;
   }
-  // 逐文件成流，再合并（见 `tallyStreams` 那条纪律：跨流配对会撞 id，"轮"也会串味）
-  const v = latencyVerdict(tallyStreams(scan.files.map((f) => readJsonl(f))));
+  const v = latencyVerdict(tallyStreams(pick.files.map((f) => readJsonl(f))));
   for (const l of v.lines) console.log(l);
-  console.log("（语料：" + String(scan.files.length) + " 个 .jsonl，逐条成流后合并）");
+  console.log("（语料：" + String(pick.files.length) + " 个 .jsonl，逐条成流后合并" +
+    (process.argv.slice(2).length > 0 ? "，取料 = 命令行指定路径" : "") + "）");
   process.exitCode = v.exitCode;
 }
 
