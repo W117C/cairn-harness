@@ -1063,6 +1063,9 @@ export function projectPanelData(events: AgentEvent[], workspace: string | null)
   const terminal: PanelTerminalEntry[] = [];
   const seen = new Map<string, PanelTerminalEntry>();
   for (const e of events) {
+    /* 两侧都挡子流：`seen` 用的是 provider 给的 callId，而各家缺省 id 是流内序号 ⇒ parent 与 worker
+       完全可以都有 `call-0`。只挡 tool_call 面 = 只归因了一半（草稿面 #53 同一格踩过的教训）。 */
+    if (!entersMainConversation(e)) continue;
     if (e.type === "tool_call" && e.name === "run_shell") {
       const row: PanelTerminalEntry = {
         callId: e.id,

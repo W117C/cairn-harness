@@ -43,6 +43,30 @@ describe("终端行的四态：null 只说「没结果」，不说「在执行�
   });
 });
 
+describe("归因：worker 子流的 shell 不进父会话的终端面板", () => {
+  it("只有 worker 的调用 ⇒ 父面板一行都不该有（此前零过滤，子流的命令被算成父会话跑的）", () => {
+    const rows = projectPanelData(
+      [{ ...callEvent("w1", "pnpm build"), agent_id: "agent-1" }, { ...resultEvent("w1"), agent_id: "agent-1" }] as unknown as AgentEvent[],
+      "/tmp/ws",
+    ).terminal;
+    expect(rows.length).toBe(0);
+  });
+
+  it("父 + worker 混排 ⇒ 只剩父那一行（同一份流既要过对话面也要过面板面）", () => {
+    const rows = projectPanelData(
+      [callEvent("p1", "pnpm test"), { ...callEvent("w1", "pnpm build"), agent_id: "agent-1" }, resultEvent("p1")] as unknown as AgentEvent[],
+      "/tmp/ws",
+    ).terminal;
+    expect(rows.map((r) => r.callId)).toEqual(["p1"]);
+  });
+
+  it("反面对手：不带归因的普通调用照旧进面板（过滤不是把 shell 全藏起来）", () => {
+    const rows = projectPanelData([callEvent("p1", "pnpm test"), resultEvent("p1")], "/tmp/ws").terminal;
+    expect(rows.length).toBe(1);
+    expect(rows[0]?.ok).toBe(true);
+  });
+});
+
 /** 把 app.js 里终端渲染那一段真跑一遍（不复制实现）：`panelLive` 是它读的模块级旗标。 */
 function termBody(entry: unknown, panelLive: boolean): string {
   const a = source.indexOf("/** 一条 shell 调用 → 终端行");
