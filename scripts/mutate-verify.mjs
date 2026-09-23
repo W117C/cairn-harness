@@ -6265,12 +6265,15 @@ const MUTATIONS = [
     expectFail: "续长的会话真的会被反复装配：requests = longTurns、历史在涨、且至少压一次（否则样本无分辨力）",
   },
   {
-    id: "rp-absorb-anything-not-just-ms",
+    // 本条原盯 `differsOnlyByWallClock` 的开头那句提前返回——实测**变异存活**，因为那句是**冗余**：
+    // 去掉后靠「替换毫秒后比对字符串」仍给出同值。那是快路径不是语义分支（与 ms-zero-regression 同族），
+    // 别为它造针脚。这里改盯真正会被做错的判定：「条目没被用到」永远报成没问题 ⇒ 白名单只增不减。
+    id: "rp-stale-debt-check-always-silent",
     src: "src/agent/reproducibility.ts",
     test: "tests/reproducibility.test.ts",
-    desc: "去掉「只差毫秒」这一条件 ⇒ 任何差异只要落在登记前缀里都能被白名单吞掉（红名单变成消音器）",
-    apply: (s) => s.replace("  if (!MS_EPOCH.test(left) || !MS_EPOCH.test(right)) return false;", "  if (false) return false;"),
-    expectFail: "只差毫秒才算同形差异；差别的任何别的东西都算泄漏",
+    desc: "登记债永远不算过期 ⇒ 白名单只增不减，清偿了也没人来删，下一条泄漏会顺手继承一个能吸收它的条目",
+    apply: (s) => s.replace("    staleDebts: debts.filter((x) => !hitDebts.has(x.id)).map((x) => x.id),", "    staleDebts: [],"),
+    expectFail: "requireDebtHit 只对「复查登记表」那条开——干净状态不该因为没踩到债而红",
   },
   {
     id: "rp-strip-observation-keeps-ts",
@@ -6293,7 +6296,7 @@ const MUTATIONS = [
     src: "src/agent/reproducibility.ts",
     test: "tests/reproducibility.test.ts",
     desc: "「条目没被用到」的复查对所有判据开 ⇒ 干净的 HEAD（没有快照代码）被读成红——会冤枉好状态的判据比没有更糟",
-    apply: (s) => s.replace("  if (opts.requireDebtHit && finding.staleDebts.length > 0) {", "  if (finding.staleDebts.length > 0) {"),
+    apply: (s) => s.replace("  const staleProblem = opts.requireDebtHit === true && finding.staleDebts.length > 0;", "  const staleProblem = finding.staleDebts.length > 0;"),
     expectFail: "requireDebtHit 只对「复查登记表」那条开——干净状态不该因为没踩到债而红",
   },
 ];

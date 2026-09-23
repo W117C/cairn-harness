@@ -124,30 +124,29 @@ export function classifyDivergence(diffs: readonly FieldDiff[], debts: readonly 
   }
   return {
     absorbed: [...new Set(absorbed)],
-    staleDebts: debts.filter((x) => !hitDebts.has(x.id) && x.pathPrefix !== "<prose>").map((x) => x.id),
+    staleDebts: debts.filter((x) => !hitDebts.has(x.id)).map((x) => x.id),
     leaks,
   };
 }
-
-/** 散文里混进毫秒也算泄漏（判卷日志/期望文件被人当字符串比对的那一类）。 */
-export const PROSE_DEBT_MARKER = "<prose>";
 
 /** 一份读数是否可复现。
  *  `requireDebtHit` 只对「专门复查登记表」的那条判据开：一次普通的两次跑比对**不该**因为
  *  「这次没踩到那条债」而红——第一版我把这条全局打开，于是干净的 HEAD（根本没有快照代码）
  *  被读成红。一条会冤枉好状态的判据，比没有判据更糟。 */
 export function reproducibleVerdict(finding: DebtFinding, opts: { requireDebtHit?: boolean } = {}): { ok: boolean; detail: string } {
+  // 单一判定源：**说出来的一句话与放行/判红必须是同一个式子**。
+  // 分成两处写时，「把复查对所有判据打开」这个变异只改到文案、改不到 ok ⇒ 针脚存活、门也骗过了测例。
+  const staleProblem = opts.requireDebtHit === true && finding.staleDebts.length > 0;
+  const ok = finding.leaks.length === 0 && !staleProblem;
   const bits: string[] = [];
   if (finding.leaks.length > 0) {
     bits.push("新泄漏 " + String(finding.leaks.length) + " 处：" +
       finding.leaks.slice(0, 3).map((l) => l.path + " " + l.left + " ≠ " + l.right).join("；"));
   }
-  if (opts.requireDebtHit && finding.staleDebts.length > 0) {
-    bits.push("登记的身份债没命中（该删条目了）：" + finding.staleDebts.join("、"));
-  }
+  if (staleProblem) bits.push("登记的身份债没命中（该删条目了）：" + finding.staleDebts.join("、"));
   if (bits.length === 0) {
     bits.push("两次跑逐字段等值（吸收登记债 " + String(finding.absorbed.length) + " 处" +
-      (opts.requireDebtHit ? "，命中 " + String(finding.absorbed.length) + " 条债" : "") + "）");
+      (opts.requireDebtHit === true ? "，命中 " + String(finding.absorbed.length) + " 条债" : "") + "）");
   }
-  return { ok: finding.leaks.length === 0 && !(opts.requireDebtHit && finding.staleDebts.length > 0), detail: bits.join("｜") };
+  return { ok, detail: bits.join("｜") };
 }
