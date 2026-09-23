@@ -1074,3 +1074,35 @@ result.output      …（同一句提示拼进 ToolResult.output，模型每轮�
 它现在有了第一条真轨迹（`tests/auto-verify-repair.test.ts` 7 条，含缺省关的零回归格）。
 未闭的一格：`settings.json 上的这个键 → handleAgentRun → runLoop` 那条腿**还没有端到端观测者**
 （loop 层两侧都钉了，runner 层没钉），已立案补，形状照 `tests/impact-runner-wiring.test.ts` 第四环。
+
+## 裁决 7（请求改判据）：`pnpm e2e` 那句「闭环成立」跑在**一次请求**的剧本能力 5 的主证从未真的多过一轮
+
+**证据（三条，都可复跑）**
+1. `fixtures/mock/todo-fix.jsonl` 的序列是 `MSG CALL MSG CALL MSG CALL MSG`，**零条轮界哨兵**：
+   `python3 -c` 数一遍即得（本轮实测：`round_end 条数: 0`）。
+2. 产品入口的剧本通道语义（`src/providers/mock.ts`）：**不写哨兵 ⇒ 一次 `stream()` 把剩余剧本全吐完**。
+   这条不是推断，已由判卷钉住——`tests/mock-provider-rounds.test.ts` 第一格断言
+   「无哨兵 ⇒ perCall = `[7, 0, 0]`」（7 条一次给完，之后恒空）。
+3. ⇒ `scripts/e2e.ts` 那场 run 的模型请求数是 **2**：第 1 次拿到全部三个 tool_call 并把它们执行完，
+   第 2 次拿到空流即收束。**模型没有在任何一次「看见自己上一轮的结果」之后重新决策过**——
+   那三次调用是预录的，顺序与 `tool_result` 的内容无关。
+
+**为什么这算判据缺陷而不是"跑得通就行"**
+`AGENTS.md` 把 `pnpm e2e` 写成"mock 模型驱动 loop 修 fixtures/todo-app 的 bug"，脚本自己打印
+「全部断言通过，**闭环成立**」。而能力 5（执行-验证-修正）要的恰恰是"读错误→改→再验"这条**跨请求**的边：
+它在 e2e 里一次都没走。同族的另一件事已在 **裁决 3** 立过案（靶场三条 case 的装配账 requests 全是 1，
+BLOCKED 里那条的结论是"长链机制在靶场内量不到"）——**靶场那一支修好了，e2e 这一支是同一种瞎**。
+
+**请求（要用户拍，因为动的是判卷面）**
+授权把 `fixtures/mock/todo-fix.jsonl` 改成带轮界的同一条轨迹，并重新冻结 sha256：
+- 内容/顺序**逐字不变**，只插 2 条 `{"type":"round_end"}`（位置：第一个 CALL 之后、第二个 CALL 之后），
+  于是请求数从 2 变 4，第 2、3 轮各拿到一个 `tool_call`，前一轮的 `tool_result` 已在其上下文里；
+- 同时给 `scripts/e2e.ts` 加一条**请求数断言**：外面包一层计数器 provider（不改产品码），断言
+  `stream()` 被调 **≥ 3 次**；再把「第二次写发生在第一条 tool_result 之后」这种"真跨轮"的断言补上。
+  ⇒ 判据只变**严**，不变宽。
+
+**为什么不自己动手**：`fixtures/mock/**` 是 sha256 冻结的判卷文件，改它等于换判据（`AGENTS.md` 判卷纪律：
+发现判据有缺陷 → 写 BLOCKED.md 要求换判据，不许改代码去绕）。
+
+**反转条件**：若加上轮界后 `pnpm e2e` 的修复效果（3 passed）或判卷文件 sha256 有任何变化，本请求作废并回滚——
+那说明剧本的轮界会改事件顺序，需要换一种表达法而不是插哨兵。
