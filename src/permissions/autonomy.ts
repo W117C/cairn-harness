@@ -30,6 +30,10 @@ export const GATE_LAYERS = [
   "L0-hard", "L1-deny", "L2-ask-rule",
   "L3-rule", "L3-scope", "L3-mode",
   "L4-critical", "L4-risk", "L4-mcp-unannotated", "L4-network", "L4-pass",
+  // `X-` = 判定发生在 `evaluate` **之外**的那一面（今天只有会话末沉淀轮：工具白名单 + 合并审批）。
+  // 单列一层而不是借 `L3-mode` / `L2-ask-rule` 的名字：借名会把"一次问答覆盖整轮"的量混进逐次审批的
+  // 分母里，而 §7 第 2 步的免批率与 ECE 恰好是按 `layer × verdict` 逐格算的。
+  "X-distill",
 ] as const;
 
 export type GateLayer = (typeof GATE_LAYERS)[number];
@@ -50,7 +54,9 @@ export interface GateMeta {
   verdict: GateVerdict;
   /** deny 分支缺席：那三条硬边界在风险层**之前**短路，当时并没有算过风险。缺字段比编一个值诚实。 */
   risk?: RiskLevel;
-  mode: PermissionMode;
+  /** 当时生效的档位。`evaluate` 一侧**必带**（构造口 `gateBase` 要求入参，判卷另钉一条"gateBase 的产物必带 mode"）；
+   *  档位机之外的判定（`X-distill`）没有档位可言 ⇒ **宁缺不编**：编一个就等于把不受档位管的量算进该档的免批率。 */
+  mode?: PermissionMode;
   /** 人工批准时人选的 scope（§10.4）；自动放行与被拦缺席。 */
   scope?: AskScope;
   /** 命中的规则 id 或 scopeKey（只有 L3-rule / L3-scope 有）。 */

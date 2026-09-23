@@ -6838,6 +6838,32 @@ const MUTATIONS = [
     expectFail: "spawnElectron 内先等端口、等不到就中止（不 spawn 进旧窗）",
   },
   {
+    id: "distill-gate-whitelist-unlabeled",
+    src: "src/agent/memory/distill.ts",
+    test: "tests/distill.test.ts",
+    desc: "沉淀轮的白名单拒绝不带留痕 ⇒ §7 的可标分母少一格（受管调用发生了、判定也发生了，只是没人记）",
+    apply: (s) => s.replace(', gate: DISTILL_GATE.whitelist }', ' }'),
+    expectFail: "白名单挡下非 remember 工具 ⇒ gate = X-distill / denied（没问过人，不是人的答复）",
+  },
+  {
+    id: "distill-gate-merged-verdict-collapse",
+    src: "src/agent/memory/distill.ts",
+    test: "tests/distill.test.ts",
+    desc: "把「人说不」记成「门拦的」（rejected → denied）⇒ 最稀缺的正例静默消失，而读数看起来总条数没变",
+    apply: (s) => s.replace('unapproved: { layer: "X-distill", verdict: "rejected" },', 'unapproved: { layer: "X-distill", verdict: "denied" },'),
+    expectFail: "合并审批被拒 ⇒ gate = X-distill / rejected（问过人才算正例，不许记成门自己拦的）",
+  },
+  {
+    id: "gatebase-mode-dropped",
+    src: "src/permissions/autonomy.ts",
+    test: "tests/gate-audit.test.ts",
+    // `mode` 为容纳 `X-distill` 从必填放宽成可选 ⇒ 编译期不再拦"evaluate 侧漏填档位"，
+    // 这一格换由判卷守着：构造口少 mode = 全部出口的档位一起没了，按档算的免批率/ECE 会静默失真。
+    desc: "gateBase 少写 mode ⇒ 放宽成可选之后没人知道档位丢了（按档算的读数会整体失真而不报错）",
+    apply: (s) => s.replace("    layer: d.layer,\n    mode,", "    layer: d.layer,"),
+    expectFail: "gateBase 的产物必带 mode（`X-` 面才允许缺）",
+  },
+  {
     id: "remember-gate-if-chain-back",
     src: "src/main/agent-runner.ts",
     test: "tests/remember.test.ts",

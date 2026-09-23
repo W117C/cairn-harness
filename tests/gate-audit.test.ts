@@ -17,6 +17,7 @@ import {
   type PermissionRule,
 } from "../src/permissions";
 import { runLoop } from "../src/agent/loop";
+import { DISTILL_GATE } from "../src/agent/memory/distill";
 import { projectSession } from "../src/agent/tool-choice";
 import type { AgentEvent, ToolResultEvent } from "../src/events";
 import type { ModelOutput, Provider } from "../src/providers";
@@ -60,6 +61,9 @@ const LAYER_CASES: readonly { name: string; expected: GateLayer; run: () => unkn
   { name: "MCP 无注解按写 fail-closed", expected: "L4-mcp-unannotated", run: () => evaluate("mcp__srv__do" as never, {}, session({ mode: "auto" })) },
   { name: "自主档网络类 risk≥medium 送审", expected: "L4-network", run: () => evaluate("run_shell", { command: "curl http://api.example.com" }, session({ mode: "auto" })) },
   { name: "自主档末行放行（今天零痕迹的那条）", expected: "L4-pass", run: () => evaluate("run_shell", { command: "echo hi" }, session({ mode: "auto" })) },
+  // `X-distill`：沉淀轮那三类判定不在 `evaluate` 里发生，因此这里钉的是**它的登记形状**（层名单列、
+  // 三型不塌成一格）；真发出去的那份留痕由 `tests/distill.test.ts` 从真入口判。
+  { name: "沉淀轮结局（判定在 evaluate 之外）", expected: "X-distill", run: () => DISTILL_GATE.unapproved },
 ];
 
 describe("evaluate 的每个出口自报判据层", () => {
@@ -72,6 +76,17 @@ describe("evaluate 的每个出口自报判据层", () => {
   it("穷尽：GATE_LAYERS 里每层都有用例（新增层不许没有判据）", () => {
     const covered = new Set(LAYER_CASES.map((c) => c.expected));
     expect(GATE_LAYERS.filter((l) => !covered.has(l))).toEqual([]);
+  });
+
+  it("gateBase 的产物必带 mode（`X-` 面才允许缺）", () => {
+    // `mode` 从必填放宽成可选是为了 `X-distill`（那一轮不受档位机管辖）。放宽的代价是
+    // "evaluate 侧漏填 mode" 不再有编译期信号 ⇒ 这条把它换回运行时判据：构造口是唯一 writer，
+    // 它的产物少 mode = 全部出口的档位一起消失，按档算的免批率/ECE 会静默失真。
+    const base = gateBase({ verdict: "approve", layer: "L4-pass", risk: "none" }, "guided");
+    expect(base.mode).toBe("guided");
+    expect(base.layer).toBe("L4-pass");
+    // 反向一侧：`X-` 面**就是**不带档位——带上就把不受档位管的量算进那一档的分母了
+    expect(DISTILL_GATE.unapproved).not.toHaveProperty("mode");
   });
 
   it("deny 出口也带 layer（被拦的调用同样要能回放是谁拦的）", () => {

@@ -7,6 +7,7 @@ import { isEnvVerifyCause, replay, type AgentEvent } from "../../events";
 import { projectContext } from "../context";
 import type { Provider, ProviderMessage } from "../../providers";
 import type { Tool, ToolContext } from "../../tools/base";
+import type { GateMeta } from "../../permissions/autonomy";
 
 /** 沉淀指令（§6.5 雏形：四类型检查 + skip 纪律 + 唯一写入口）。 */
 export const DISTILL_INSTRUCTION = [
@@ -17,6 +18,18 @@ export const DISTILL_INSTRUCTION = [
   "4. 禁止把密钥/API key/凭据写入记忆。",
   "5. 没有值得沉淀的内容就只回答「无」三个字，不要调用工具。",
 ].join("\n");
+
+/** 沉淀轮三类结局的判定留痕（层名单列 `X-distill`：这些判定不在 `evaluate` 里发生）。
+ *  缺 `mode` 是刻意的（见 `GateMeta.mode` 注释）：这一轮不受档位机管辖，编一个档位会把它的量
+ *  算进那一档的免批率。**三类不塌成一格**是这条表存在的全部理由——
+ *  `denied` = 白名单挡下（没问过人），`rejected` = 问过人且人说不，`approved` = 问过人且人说行。
+ *  前两者在 §7 的可标语料里是不同侧：借成一格就把最稀缺的正例读没了。 */
+export type DistillGateKind = "whitelist" | "unapproved" | "approved";
+export const DISTILL_GATE: Record<DistillGateKind, Pick<GateMeta, "layer" | "verdict">> = {
+  whitelist: { layer: "X-distill", verdict: "denied" },
+  unapproved: { layer: "X-distill", verdict: "rejected" },
+  approved: { layer: "X-distill", verdict: "approved" },
+};
 
 export type DistillOutcome =
   | { kind: "disabled" } // 开关关闭：完全不触发（无 provider 调用、无审批、无写入）
@@ -130,7 +143,7 @@ export async function runSessionEndDistill(opts: DistillOptions): Promise<Distil
       }
       if (out.type !== "tool_call") continue;
       if (out.name !== "remember") {
-        await opts.emit({ type: "tool_result", callId: out.id, ok: false, output: "[distill] 沉淀轮只允许 remember 工具，" + out.name + " 已拒绝" });
+        await opts.emit({ type: "tool_result", callId: out.id, ok: false, output: "[distill] 沉淀轮只允许 remember 工具，" + out.name + " 已拒绝", gate: DISTILL_GATE.whitelist });
         continue;
       }
       sawRemember = true;
@@ -141,15 +154,15 @@ export async function runSessionEndDistill(opts: DistillOptions): Promise<Distil
       }
       opts.signal?.throwIfAborted();
       if (!approval) {
-        await opts.emit({ type: "tool_result", callId: out.id, ok: false, output: "[permission denied] remember 会话结束自动沉淀未获批准（合并审批一次，本轮全部拒绝）" });
+        await opts.emit({ type: "tool_result", callId: out.id, ok: false, output: "[permission denied] remember 会话结束自动沉淀未获批准（合并审批一次，本轮全部拒绝）", gate: DISTILL_GATE.unapproved });
         continue;
       }
       try {
         const r = await opts.rememberTool.run(out.args, ctx);
         if (r.ok) writes += 1;
-        await opts.emit({ type: "tool_result", callId: out.id, ok: r.ok, output: r.output });
+        await opts.emit({ type: "tool_result", callId: out.id, ok: r.ok, output: r.output, gate: DISTILL_GATE.approved });
       } catch (err) {
-        await opts.emit({ type: "tool_result", callId: out.id, ok: false, output: err instanceof Error ? err.message : String(err) });
+        await opts.emit({ type: "tool_result", callId: out.id, ok: false, output: err instanceof Error ? err.message : String(err), gate: DISTILL_GATE.approved });
       }
     }
   } catch (err) {

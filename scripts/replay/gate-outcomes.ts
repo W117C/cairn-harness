@@ -45,6 +45,10 @@ const HUMAN_ANSWERED: readonly GateVerdict[] = ["approved", "rejected", "timeout
 /** §7 读数 A 的可标集（含门直接拦的 denied：它同样是该格该不该免批的证据）。 */
 const LABELABLE: readonly GateVerdict[] = ["approved", "rejected", "denied"];
 
+/* `X-distill` 那一行读时要另带一条口径：沉淀轮是**合并审批**（一次问答覆盖整轮），
+ * 所以它的 approved/rejected 按"受管调用"计而不是按"人的答复"计。格子按层分开正是为了这件事——
+ * 逐次审批那些行的分母不受它影响；整表读数若要报"人回答了几次"，得把这一行单独折回成轮数。 */
+
 /** 全矩阵骨架：新加一层或一种结果时，格子自动多一格（用例钉住"格子数 = 两层数之积"）。 */
 export function emptyCells(): Map<string, number> {
   const m = new Map<string, number>();
