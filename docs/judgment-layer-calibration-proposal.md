@@ -309,6 +309,26 @@ typed-decisions 上 0.362 / 0.342，**低于多数类基线 0.461**；招牌 0.7
 外加 `exitCode?: number`。**包管理器错误码白名单（`^\[ERR_PNPM_…`）这一条先不加**——它要治的态
 已被 9.2 消除，为已消失的样本建分类器是反向的"为假想需求设计"；9.2 之后仍复发再单加。
 
+**分母的复跑（P1-3 的 before/after 尺）**：<!-- replay:verify-cause-mix -->
+
+```sh
+node --import tsx scripts/replay/verify-cause-mix.ts
+```
+
+它只回答一个问题：**这些 verify 红里，有几条今天光靠字段就能判出"不是代码错"**。
+结构栏（产品将来能用的机制）与文案栏（人眼线索，只作证据不作判据）分两栏打，就是为了不被
+"人看一眼就知道是环境问题"骗成"机器也能判"——上面 (B) 方案被否掉的正是这个混淆。
+语料里没有 verify 拍时它标「不可测」并以 exit 1 退出（G7 口径：不报 0）。
+
+**追加（2026-09-23 实测，反转上面那条"先不加"的省略）**：`verify-cause-mix` 在本机语料里读到
+**红命令 3 条，3/3 全是 `[ERR_PNPM_UNSAFE_MODULES_DIR]`**（pnpm 拒动 modules 目录，模型代码根本没跑到）。
+所以"它要治的态已被 9.2 消除"这句不成立，两处都不成立：9.2 的评测侧前缀治的是
+deps-before-run / lockfile 预检那一类，碰不到 `UNSAFE_MODULES_DIR`；而 9.2 生产侧那半**至今没落**
+（`agent-runner.ts` 的 `verifyExec` 在沙箱不可用时整段退回 `defaultExec`）。
+⇒ 这一类不是"已消失的样本"，是**目前唯一被观测到的环境红样本**。是否补第 6 个 `cause` 值（还是先把 9.2
+落到生产路径再判）是裁决点，代价与两条路的对照写在 `outputs/verify-cause-denominator-2026-09-23.md` §三。
+上面那句原文不回改——它是 09-21 的裁决快照，以本段为准。
+
 ### 9.2 先落 mitigation：那个 pnpm 环境态评测侧已消除、生产侧还活着
 
 评测侧 `EVAL_EXEC`（`scripts/loop-eval.ts:87`）带 `pnpm_config_verify_deps_before_run=false` 前缀，

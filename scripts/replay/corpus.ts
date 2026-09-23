@@ -82,17 +82,24 @@ export function readJsonl(file: string): unknown[] {
   return out;
 }
 
+/** 第一格：一个 `.jsonl` 也没扫到。单独可调用——有的读数只关心"有没有料"，不关心料里认不认得事件。 */
+export function zeroCorpusProblem(scan: CorpusScan): string | null {
+  if (scan.files.length === 0) {
+    const miss = scan.missingRoots.length > 0 ? `（其中不存在：${scan.missingRoots.join(", ")}）` : "";
+    return `零语料：扫了 ${corpusRoots().join(", ")}${miss}，一个 .jsonl 也没有。`
+      + " 会话流不在 git 里 ⇒ 这是「没有尺」，不是「读数为 0」——换到有历史会话的树上再跑。";
+  }
+  return null;
+}
+
 /**
  * 零语料体检：返回 null = 这次读数有料；返回一句话 = 这次读数**没有意义**，调用方必须红着退出。
  * 两格分开判，因为它们的成因不同：① 一个文件都没扫到 = 取料面空（换机器/干净 checkout）；
  * ② 有文件却一条 `tool_call` 都没有 = 读得到、认不出（字段名/形状漂移，正是 09-21 那片零假读数的形状）。
  */
 export function corpusProblem(scan: CorpusScan, toolCalls: number): string | null {
-  if (scan.files.length === 0) {
-    const miss = scan.missingRoots.length > 0 ? `（其中不存在：${scan.missingRoots.join(", ")}）` : "";
-    return `零语料：扫了 ${corpusRoots().join(", ")}${miss}，一个 .jsonl 也没有。`
-      + " 会话流不在 git 里 ⇒ 这是「没有尺」，不是「读数为 0」——换到有历史会话的树上再跑。";
-  }
+  const empty = zeroCorpusProblem(scan);
+  if (empty !== null) return empty;
   if (toolCalls === 0) {
     return `扫到 ${String(scan.files.length)} 个 .jsonl 却一条 tool_call 也没有：`
       + "事件名或形状漂了（认不出不等于没有），先核对取料面再读任何数。";

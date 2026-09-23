@@ -29,6 +29,11 @@ export const REPLAY_READINGS: readonly ReplayReading[] = [
     script: "scripts/replay/corpus-inventory.ts",
     answers: "judgment-layer 附录 B 定序读数（受管量 / 非 ASCII 占比 / 失败→重用的两种计数）",
   },
+  {
+    id: "verify-cause-mix",
+    script: "scripts/replay/verify-cause-mix.ts",
+    answers: "judgment-layer §9 第 0 步的分母：verify 红里有几条今天能被机器归因（P1-3 的 before/after 尺）",
+  },
 ];
 
 export interface ReplayFacts {
