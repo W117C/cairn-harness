@@ -6804,7 +6804,11 @@ const MUTATIONS = [
     src: "src/renderer/projections.ts",
     test: "tests/renderer-perm-default-mode.test.ts",
     desc: "认不出的档位回落到默认行 ⇒ 「不猜」这条没了：陌生设置值会把用户的现场换掉。判据必须带一格「当前不是默认行」，否则这条突变全绿（用例里那两行 yolo/strict 现值就是为此而在）",
-    apply: (s) => s.replace("  return typeof row === 'string' ? row : null;", "  return typeof row === 'string' ? row : PERM_DEFAULT_ROW;"),
+    // 第一版钉的是 `permRowIdForMode` 尾部那句 `typeof row === 'string' ? row : null`——**实测变异存活**：
+    // 上一行已经过了 hasOwnProperty 闸，表又由 tsc 保证每档都是字符串，那条回落分支根本到不了
+    // ⇒ 形似的改法 = 自己写了条恒真锚点（抓到的不是"不猜"这条丢了，而是靶子选错）。
+    // 真正的失效面在取到 row 之后：`?? PERM_DEFAULT_ROW` 才是"认不出就换档"的写法。
+    apply: (s) => s.replace("  const row = permRowIdForMode(opts.storedMode);", "  const row = permRowIdForMode(opts.storedMode) ?? PERM_DEFAULT_ROW;"),
     expectFail: "设置认不出 / 与当前行相同 ⇒ 不动（认不出时不降级到默认档，保持现场）",
   },
   {
