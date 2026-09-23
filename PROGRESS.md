@@ -1742,6 +1742,26 @@ judgment-layer §9.1 的一条省略——"包管理器错误码先不加，因�
   针脚体检 831 条 **阻断 0 属本簇**（整表仍只有别人那 1 条 `np-write-suppression-ignored`）、
   本簇 6 条锚点逐条 ✅（17.5s / 2.7s / 2.4s）；#14 只剩 `observationPack` 一格未测（原因见上）。
 
+**能力 35：#14 收完——`observationPack` 找到独有出口，8 行接线的「盘上半边」从此全有针**。
+上一条写下的"它没有便宜的可观察面"今天兑现了：`evidenceReceipts` 走回执那一支，`observationPack` 独有的
+只有一处——`solpi-runtime.ts:111` 的「关 ⇒ 恒发全文」⇒ 判据必须是**发给模型的正文形状**：
+第 1、2 次发送全文，第 3 次起投影成 `head + [observation …; obs_recall available]`。
+- 新格在 `tests/session-tools.test.ts`：一次 `handleAgentRun`（provider=glm + `fetch` 桩，把每个请求体都记下来），
+  脚本前三次各读一个文件、第四次收口 ⇒ 第 2、3 封 ~20.7 KB 含尾哨兵，第 4 封 6.4 KB **不含**哨兵且含投影标记；
+  同一格配反向一侧（盘上关掉 ⇒ 第 4 封仍含尾哨兵）。锚点 `observation-pack-settings-fallback-dropped` ✅ 3.2s。
+- **两个当场踩到的界**（都写进测试注释，因为它们下次还会咬）：
+  ① `SolpiRuntime` 是**每轮 run 一个实例**，`sends` 不跨 run 累积 ⇒ 首版把三次发送摊到三个 run，
+     第 4 封仍全文，看着像"那个键没穿过去"，实际是我构造错了（**计数器的归属面要先读构造点**）；
+  ② 观测要过 `LEDGER_THRESHOLD_BYTES`（10 KiB）才进 ledger，而 `read_file` 自带 `DEFAULT_MAX_LINES=2000` 行 /
+     每行 `MAX_LINE_CHARS=2000` 字符的界 ⇒ 首版用「一行 12k 个 x」造大输出，被**上游工具自己**剪成 ~2 KB，
+     观测从未被捕获，测试以"第 3 封仍全文"的姿态**假红**。改成 1899 行短行（≈14 KB、哨兵在最后一行）才成立。
+- 收口状态：`agent-runner.ts:1563-1575` 那 8 行的**盘上半边**（用户在设置界面能改的那一半）每行都有锚点了；
+  **override 半边**仍只有 `actionFusion` / `planRequired` / `autoVerify` 三行有观察着，另 5 行按刻意留位记在能力 34
+  （`RunOverrides` 由 IPC 原样透传，非死码，只是判卷从不传）。
+- 读数：全量 `test` **220 files / 2372 tests 全绿**（exit 0）、`pnpm typecheck` 0 错、
+  针脚体检 832 条 **阻断 0 属本簇**（整表仍只有别人那 1 条 `np-write-suppression-ignored`）、本簇锚点 ✅ 3.2s。
+
+
 
 
 
