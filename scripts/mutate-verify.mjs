@@ -6501,13 +6501,14 @@ const MUTATIONS = [
     apply: (s) => s.replace('          typeof opts.pruneBatching === "object" && opts.pruneBatching !== null ? opts.pruneBatching : {};', "          false ? opts.pruneBatching : {};"),
     expectFail: "PC9 那条集合相等判据真能跑通",
   },
+  /* ---------- 能力 14：无进展检测（stagnation）的判据锚点 ---------- */
   /* ---------- 能力 15：成本 ÷ 前进（cost-per-progress）---------- */
   {
     id: "cpp-worker-into-numerator",
     src: "src/agent/cost-per-progress.ts",
     test: "tests/cost-per-progress.test.ts",
     desc: "归属拆分把 worker 的 usage 也算进主面 ⇒ 分母（只算主面的前进边界）不变、分子变大，fanout 那种形状上比值直接翻 4 倍（本轮实测就是这么抓出来的）",
-    apply: (s) => s.replace("    if (agent === undefined) mainTokens += t;", "    mainTokens += t;"),
+    apply: (s) => s.replace("      workerTokens += t;", "      mainTokens += t;"),
     expectFail: "worker 的 usage 一律落在 workerTokens/byAgent，绝不进 mainTokens",
   },
   {
@@ -6542,7 +6543,6 @@ const MUTATIONS = [
     apply: (s) => s.replace("  const ok = green.length >= 2 && withBoundary.length >= 1 && redWithout.length >= 1;", "  const ok = green.length >= 2;"),
     expectFail: "分母体检要有分辨力：成功跑全取不到边界、或没有零前进的失败样本，都判红",
   },
-  /* ---------- 能力 14：无进展检测（stagnation）的判据锚点 ---------- */
   {
     id: "np-green-verify-filtered-away",
     src: "src/agent/no-progress.ts",
