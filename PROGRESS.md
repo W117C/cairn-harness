@@ -1761,6 +1761,24 @@ judgment-layer §9.1 的一条省略——"包管理器错误码先不加，因�
 - 读数：全量 `test` **220 files / 2372 tests 全绿**（exit 0）、`pnpm typecheck` 0 错、
   针脚体检 832 条 **阻断 0 属本簇**（整表仍只有别人那 1 条 `np-write-suppression-ignored`）、本簇锚点 ✅ 3.2s。
 
+**能力 36：五个"永远不会被赋值"的 override 槽删掉（而不是豁免），并把"每行两半都得有人守"做成 AST 棘轮**。
+量完矩阵之后自然会问"那 5 格左半边要不要补用例"——先查了**有没有人能传它**：
+`handleAgentRun` 只有两个产品调用者，IPC `agent:run`（`src/main/index.ts:198`）只转发 `sessionId`/`workspace`，
+定时执行器（`agent-runner.ts:852`）只转发 `unattended`/`signal` ⇒ `over.observationPack` 那类左半边
+**在生产里永不为真**。给它们写用例=测一条产品不走的缝；留成豁免=留一块没人守的格子。
+正解是**把缝删掉**：五行改成只读盘，`RunOverrides` 用 `Omit<...>` 撤槽（要再加槽必须显式改这里 ⇒ 撞上判据）。
+- 棘轮：`scripts/lib/wiring-coverage.ts`（纯函数、零 IO）AST 扫 `agent-runner.ts` 里的
+  `key: over.x ?? (await store().get()).y`，再 AST 解析变异表的 `apply` 取针脚/改法，判"每行两半各有一条锚点或署名"。
+  判据方向是**源码 → 要求**（规则 64），所以第 9 个开关进来时缺的是它自己那一格，不会有人悄悄没测。
+  两侧都走 AST 的理由是规则 79：注释里写一行 `// planRequired: over... ?? ...` 会被按行的正则当成代码——
+  这条负控在用例里钉住了。另外：带插值的针脚**如实不解析**（宁漏不编），署名表里指到不存在的键要报陈旧（豁免自己也会腐）。
+- 自证不空转：真实现状那条除了"零问题"，还断言**扫得到至少一行**——形状整体消失时报红逼人改判据，
+  而不是留一条恒真的绿（规则 74 那一族）。现存 3 行（planRequired / actionFusion / autoVerify）两半 6 格全有锚点。
+- 锚点：5 支针脚随源码改指、新增 `plan-required-override-ignored` 与 `action-fusion-override-ignored`，
+  提交后 7 条逐条 ✅（26.8s）；针脚体检 834 条阻断 0 属本簇。
+- 读数：全量 `test` **221 files / 2384 tests 全绿**（exit 0）、tsc 0 错、docs-check 绿。
+
+
 
 
 
