@@ -88,3 +88,14 @@ TypeError: s.planBlocked is not a function
 **更正 §三 的一条归因**：该节写「`outputs/**` 与 app 会话目录被别的轮次改过」——会话目录那半不成立：
 `~/Library/Application Support/m0-agent-loop/sessions` 在本机**不存在**（worktree 的 missingRoots 当场报出来），
 20→19 的文件数变化全部来自 `outputs/**`。留在原文不回改，按本节为准。
+
+## 六、终局 HEAD-only 读数（commit `057afbd`，同一只真依赖 worktree）
+
+`tsc --noEmit` **0 错**；`tests/replay-corpus.test.ts` + `tests/docs-check.test.ts` **49/49**；
+四条锚点（D-8 两格 + 零语料两格）**全部 ✅ 杀掉**；`--check-needles` 报 **790 条 —— 阻断 0、未入库面 0**。
+"读到 0 即绿"那一格在 HEAD 上复验：干净树跑 `ask-density` ⇒ **exit 1** 并打印缺哪个根。
+
+⚠️ 别把"阻断 0"读成"整张表干净"：同一次读数里另有 **待复认 2**
+（`probe-delta-sign-reversed`、`cpp-zero-boundary-ratio-zero`——针脚在各自被测面命中 2 处，
+`replace` 只改第一处，需人工确认改到的是哪一处）。这两条**不是本轮引入**（本轮之前已在表里），
+也不属 D-8/零语料面，留待各自 owner。
