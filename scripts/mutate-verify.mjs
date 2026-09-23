@@ -7491,6 +7491,33 @@ const MUTATIONS = [
     apply: (s) => s.replace("  const judgedRows = closedLoop.filter((r) => r.decisive !== \"none\");", "  const judgedRows = closedLoop;"),
     expectFail: "汇总给分档计数，no-write 单独列出（不进分母也不被丢弃）",
   },
+  // ---- 09-24 能力 5 返修那一环（`autoVerifyRepair`）：三针各钉一个上界 ----
+  // 钉的不是"有没有返修"，是它的三条界：不开即零行为、环境红不重算、没改盘就不重验。
+  // 少任何一条，这一环就从"补闭环"变成"多烧钱"或"把机器的账记回模型"。
+  {
+    id: "repair-branch-never-fires",
+    src: "src/agent/loop.ts",
+    test: "tests/auto-verify-repair.test.ts",
+    desc: "红拍后那一支永不触发 ⇒ 开关形同虚设，「执行-验证-修正」仍停在验证",
+    apply: (s) => s.replace("          if (beat === \"auto-red\" && opts.autoVerifyRepair === true && autoBeats < 2) {", "          if (false) {"),
+    expectFail: "开：红拍之后恰好多要一轮模型，且那一轮的上下文里真有那条红字（返修不是靠提示词自觉）",
+  },
+  {
+    id: "repair-driven-by-env-red",
+    src: "src/agent/loop.ts",
+    test: "tests/auto-verify-repair.test.ts",
+    desc: "自动拍的返回值不再区分环境红 ⇒ 装不上工具链的机器多要一轮去重跑同一件必失败的事，P1-3 归因白做",
+    apply: (s) => s.replace("    if (auto) return outcome.ok || envBeat ? \"stop\" : \"auto-red\";", "    if (auto) return outcome.ok ? \"stop\" : \"auto-red\";"),
+    expectFail: "环境红不驱动返修：装不上工具链的机器上重跑一遍还是 127，那等于把 P1-3 的归因白做",
+  },
+  {
+    id: "repair-reverifies-unchanged-code",
+    src: "src/agent/loop.ts",
+    test: "tests/auto-verify-repair.test.ts",
+    desc: "第二拍不再要求「这一轮真的又改过盘」⇒ 模型只回一句「知道了」也把同一份代码再验一遍（纯烧一遍全量测试）",
+    apply: (s) => s.replace("      const repairBeat = repairPending && wroteSinceAutoBeat && autoBeats < 2;", "      const repairBeat = repairPending && autoBeats < 2;"),
+    expectFail: "开了返修但模型第二轮不再改（只回一句「知道了」）⇒ 不再补第三拍，请求数停在 3",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
