@@ -80,3 +80,25 @@ verify_result 事件=19 红事件=3 红命令=3
 judgment-layer §9.1 后补该读数的复跑块；`scripts/replay/corpus.ts` 把第一格抽成可调用的
 `zeroCorpusProblem`（本读数只关心"有没有料"，"语料里没有 verify 拍"按 G7 口径标**不可测**并 exit 1，
 不许报 0）。tsc 0 错、`docs-check` 全绿。
+
+## 五、裁决与第一笔落库（同轮稍后）
+
+**用户裁决：加第 6 值 `pkg-manager`**（选项里另两条是"严格按五值先落"与"先落 9.2 生产侧缓解"）。
+两处口径偏离都写进 judgment-layer §9.1 的追加段，不留只在代码注释里：行首锚定 + 命名空间码；
+`toolchain-missing` 从"退出码 127"加宽到"127 或连 shell 都没起来"。
+
+**第一笔＝schema + 生产者**，不含三处出口的行为改动（环境红今天仍按 `ok` 涨 attempt / 喂升档 / 进沉淀）：
+
+- `src/events/index.ts`：`VerifyCause` 六值 + **唯一谓词** `isEnvVerifyCause`（三处出口共用一只，
+  不许各写一份 `=== "timeout" || …`）；`VerifyCommandResult` 加 `cause` / `exitCode`，
+  `verify_result` 事件加 `cause`。缺省（字段缺席）= 按 `code` 算 ⇒ 老会话流零行为。
+- 生产者**两支都接**（只接一支＝"环境红只在降级时才不冤枉模型"）：非沙箱 `defaultExec` 与发货缺省的
+  沙箱路 `verifyExec`。为此把 `runInSandbox` 已经在算、却在 settle 处丢掉的 `exitCode`/`timedOut`
+  补回 `ToolResult`——同一个"零件在算、收束处丢掉"的形状（「两头断」）。
+- `withVerifyCauseNote` 一处定义、两支共用：环境类失败必须在正文里点名「这不是代码失败，别照它改代码」，
+  否则模型照着 pnpm 的拒信去改本来正确的代码。
+- 判卷：`tests/verify-cause.test.ts` 15 条（每格一条 + **反向一侧**：同样文字出现在行中间不算 +
+  真跑进程三条 + 事件穿流一条）。邻域回归 9 文件 **110/110**，`tsc` 0 错。
+- 针脚门当场抓到我一次：改 `verifyExec` 的 return 形状把既有锚点
+  `verify-exec-reports-internal-command` 的针脚顶掉（阻断 1）⇒ 按提示改指新形状，
+  **没有**把针脚退回旧写法（那等于废掉这条锚点）。提交前它报 `钉在飞文本 1` 是正确行为，落库后应回 0。

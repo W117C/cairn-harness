@@ -4,7 +4,7 @@ import type { HookEngine } from "./plugins/hooks";
 import { projectContext } from "./context";
 import type { LegacyNextProvider, ModelOutput, Provider } from "../providers";
 import { streamFromNextSource } from "../providers";
-import { failureDigest, repeatDigestNote, type VerifyHook, type VerifyOutcome } from "./verify";
+import { failureDigest, repeatDigestNote, verifyOutcomeCause, type VerifyHook, type VerifyOutcome } from "./verify";
 import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckTurn } from "./stuck";
 import { TOOLS, type ClarifyChannel, type PlanChannel, type ToolContext, type ToolName } from "../tools";
 
@@ -138,6 +138,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       hookError = err instanceof Error ? err.message : String(err);
       outcome = { ok: false, results: [] };
     }
+    const cause = verifyOutcomeCause(outcome, hookError);
     await events.append({
       type: "verify_result",
       callId,
@@ -145,6 +146,8 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       attempt,
       maxAttempts: maxVerify,
       results: outcome.results,
+      // 落盘归因本身**不改变任何一处行为**（额度/升档/沉淀仍按 ok 判）——这是三处出口的共用前置。
+      ...(cause === undefined ? {} : { cause }),
       ...(auto ? { auto: true } : {}),
     });
     if (outcome.ok) return "stop"; // 验证通过 → 立即停止，不再调用模型

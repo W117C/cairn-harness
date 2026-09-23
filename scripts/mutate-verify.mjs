@@ -1704,7 +1704,7 @@ const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/verify-exec-sandbox.test.ts",
     desc: "结果里回报内部映射串 ⇒ 事件流与面板显示的是我们拼出来的绝对路径命令，人看不到模型实际下的那条（可审计性受损）",
-    apply: (s) => s.replace("return { command, ok: res.ok, output: res.output };", "return { command: mapped, ok: res.ok, output: res.output };"),
+    apply: (s) => s.replace("      command,\n      ok: res.ok,", "      command: mapped,\n      ok: res.ok,"),
     expectFail: "结果里的 command 用模型下的原命令（事件流给人看的不是内部映射串）",
   },
   {

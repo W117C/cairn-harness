@@ -84,7 +84,42 @@ export interface PlanProposedEvent { type: "plan_proposed"; callId: string; plan
 /** 方案决议（批准 / 拒绝），落日志供 plan 卡显示状态。 */
 export interface PlanApprovedEvent { type: "plan_approved"; callId: string; approved: boolean }
 
-export interface VerifyCommandResult { command: string; ok: boolean; output: string }
+/**
+ * verify 红的**归因**（judgment-layer §9.1 定案五值 + 2026-09-23 实测补的 `pkg-manager`）。
+ * 缺省（字段缺席）= `"code"` ⇒ 老会话流与本仓所有未改动的调用点行为逐字不变。
+ *
+ * 每格都挂在一个**已有判定**上，不引入文案匹配器：
+ * `timeout`=`timedOut` 布尔、`toolchain-missing`=退出码 127 或 shell 自身起不来、
+ * `no-surface`=`(none)` 哨兵命令、`hook-error`=钩子抛错那条 catch、`pkg-manager`=包管理器
+ * 在自己那行打出的命名空间错误码（唯一被观测到的环境红类，见 outputs/verify-cause-denominator-2026-09-23.md）。
+ */
+export type VerifyCause =
+  | "code"
+  | "timeout"
+  | "toolchain-missing"
+  | "no-surface"
+  | "hook-error"
+  | "pkg-manager";
+
+/** 环境成因集：这几类红**不是模型的代码错了**，不得记在模型账上（不烧修复额度 / 不喂升档与 bandit / 不进沉淀）。 */
+const ENV_VERIFY_CAUSE_SET: ReadonlySet<VerifyCause> = new Set<VerifyCause>([
+  "timeout", "toolchain-missing", "no-surface", "hook-error", "pkg-manager",
+]);
+
+/** 唯一谓词（三个出口共用一只，别各写一份 `=== "timeout" || …` 的表）：缺席 = 未归因 = 按 code 算。 */
+export function isEnvVerifyCause(cause: VerifyCause | undefined): boolean {
+  return cause !== undefined && ENV_VERIFY_CAUSE_SET.has(cause);
+}
+
+export interface VerifyCommandResult {
+  command: string;
+  ok: boolean;
+  output: string;
+  /** 缺省 = `"code"`（零行为）。仅在 `ok:false` 时有意义。 */
+  cause?: VerifyCause;
+  /** 进程退出码；被超时强杀或根本没起来时为 null。落盘是为了让"127"这类判定不再只活在文案里。 */
+  exitCode?: number | null;
+}
 /** 验证门：一次 lint/test 执行结果。attempt 从 1 起；失败时错误输出经 tool_result 注入同轮继续修。 */
 export interface VerifyResultEvent {
   type: "verify_result";
@@ -96,6 +131,9 @@ export interface VerifyResultEvent {
   attempt: number;
   maxAttempts: number;
   results: VerifyCommandResult[];
+  /** 这一拍的归因（取首个失败命令的 cause；钩子抛错时 = `hook-error`）。
+   *  三处出口（attempt 计数 / 级联升档与 bandit / 沉淀）据此决定"这次红算谁的"。 */
+  cause?: VerifyCause;
   /** M3a §4.4.10 同口径：worker 子流的验证证据带此字段（withAgentId 归因）。
    *  缺省 = 主会话侧。此前 verify_result 拿不到归因，于是「worker 验过了」在主流里
    *  看起来就是「父会话验过了」——三处下游（上下文红回流 / 父验证计量 / 假完成率分母）都被它骗过。 */

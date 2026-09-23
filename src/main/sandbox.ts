@@ -134,7 +134,7 @@ export async function runInSandbox(command: string, opts: SandboxRunOptions): Pr
       // 断网提示只在本轮走默认（deny）支时贴：allow 支下网络已放行，再贴就是假信号。
       // 与退出码无关——`curl …; echo rc=$?` 这类写法让退出码归 0，而模型看到的是解析失败。
       if (opts.network !== "allow" && looksLikeNetworkDenial(output)) output += "\n" + NETWORK_DENIED_NOTE;
-      settle({ ok: code === 0 && !timedOut, output: output.replace(/\n+$/, "") });
+      settle({ ok: code === 0 && !timedOut, output: output.replace(/\n+$/, ""), exitCode: code, timedOut });
     };
     const handle = spawnTracked("sandbox-exec", ["-p", profile, "bash", "-c", command], {
       cwd: opts.cwd,
@@ -151,7 +151,8 @@ export async function runInSandbox(command: string, opts: SandboxRunOptions): Pr
       if (settled) return;
       settled = true;
       handle.dispose();
-      settle({ ok: false, output: "sandbox-exec: " + err.message });
+      // 起不来 = 没有退出码、也没超时：与 finish() 那条出口同一套字段口径（别让读者去猜缺席含义）。
+      settle({ ok: false, output: "sandbox-exec: " + err.message, exitCode: null, timedOut: false });
     });
     handle.child.on("close", (code) => finish(code));
   });

@@ -5,7 +5,29 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createOutputRing } from "../tools/output-ring";
 import { sanitizedEnv, spawnTracked } from "../tools/process";
-import type { VerifyCommandResult } from "../events";
+import type { VerifyCause, VerifyCommandResult } from "../events";
+
+/** 包管理器**自己那一行**的命名空间错误码（pnpm 打成 `[ERR_PNPM_XXX] msg`）。
+ *  锚在行首：这串必须由 pnpm 自己打印才算环境判定——被被测脚本*引用*在正文里的同样文字不算。
+ *  这条是 judgment-layer §9.1「零文案匹配」口径的唯一加宽，理由与边界见
+ *  `outputs/verify-cause-denominator-2026-09-23.md`（语料里 3/3 环境红都是这一类，且它不是任意输出串）。 */
+const PKG_MANAGER_OWN_ERROR_LINE = /^[ \t]*[│┆└├]?[ \t]*\[?ERR_PNPM_[A-Z0-9_]+\]?/m;
+
+/** 环境类失败必须在**正文里点名**（模型只看 output）：红字不说"这不是代码失败"，它就会去改本来正确的代码。
+ *  两条 exec 出口（非沙箱 defaultExec / 沙箱 verifyExec）共用这一只，别各写一份文案。 */
+export function withVerifyCauseNote(output: string, cause: VerifyCause): string {
+  const note = "[verify: 包管理器自身报错（安装目录/依赖状态），测试脚本未被执行——这不是代码失败，别照它改代码]";
+  if (cause !== "pkg-manager" || output.includes(note)) return output;
+  return output + "\n" + note;
+}
+
+/** 一次失败命令的归因：**全部来自已有判定**（超时布尔 / 退出码 / pnpm 自有错误码行），缺省 `code`。 */
+export function classifyVerifyFailure(f: { timedOut: boolean; exitCode: number | null; output: string }): VerifyCause {
+  if (f.timedOut) return "timeout";
+  if (f.exitCode === 127) return "toolchain-missing";
+  if (PKG_MANAGER_OWN_ERROR_LINE.test(f.output)) return "pkg-manager";
+  return "code";
+}
 
 export interface VerifyConfig {
   lint?: string[];
@@ -55,7 +77,11 @@ export const defaultExec: ExecFn = (command, cwd, timeoutMs = DEFAULT_VERIFY_TIM
         // 不点名就会让模型照着它改本来正确的代码，还把 3 次 verify 额度烧光。
         if (code === 127) output += "\n[verify: 退出码 127 = 命令不存在（工具链缺失）——这不是代码失败，别照它改代码；换可用的 runner 或先装工具链]";
       }
-      settle({ command, ok: code === 0 && !timedOut, output: output.replace(/\n+$/, "") });
+      const ok = code === 0 && !timedOut;
+      const cause = classifyVerifyFailure({ timedOut, exitCode: code, output });
+      if (!ok) output = withVerifyCauseNote(output, cause);
+      // 绿结果不带 cause：这字段是"这次红算谁的"，给成功结果挂一个 code 会让人误读成结局字段。
+      settle({ command, ok, output: output.replace(/\n+$/, ""), ...(ok ? {} : { cause }), exitCode: code });
     };
     const handle = spawnTracked("bash", ["-c", command], {
       cwd,
@@ -72,7 +98,9 @@ export const defaultExec: ExecFn = (command, cwd, timeoutMs = DEFAULT_VERIFY_TIM
       if (settled) return;
       settled = true;
       handle.dispose();
-      settle({ command, ok: false, output: "verify exec: " + err.message });
+      // 连 shell 都没起来：这台机器上没有能跑这条命令的东西。归 `toolchain-missing`
+      // （该值的口径因此从"退出码 127"加宽到"127 或根本起不来"，已按裁决记进 judgment-layer §9.1）。
+      settle({ command, ok: false, output: "verify exec: " + err.message, cause: "toolchain-missing", exitCode: null });
     });
     handle.child.on("close", (code) => finish(code));
   });
@@ -176,6 +204,8 @@ export async function runVerifyOutcome(repoDir: string, exec: ExecFn = defaultEx
         {
           command: "(none)",
           ok: false,
+          cause: "no-surface",
+          exitCode: null,
           output:
             source === "config"
               ? "verify 配置为空（.agent/config.json 的 verify 字段没有任何命令）"
@@ -211,6 +241,14 @@ export function createVerifyHook(repoDir: string, opts: { maxAttempts?: number; 
     },
     run: () => runVerifyOutcome(repoDir, opts.exec),
   };
+}
+
+/** 一拍 verify 的归因：钩子抛错优先（那条路 results 为空），否则取首个失败命令的 cause。
+ *  `ok` ⇒ undefined；cause 缺席 ⇒ 下游按 `"code"` 算（零行为，老会话流照旧）。 */
+export function verifyOutcomeCause(outcome: VerifyOutcome, hookError: string | null): VerifyCause | undefined {
+  if (outcome.ok) return undefined;
+  if (hookError !== null) return "hook-error";
+  return outcome.results.find((r) => !r.ok)?.cause;
 }
 
 /** 失败摘要：注入同轮给模型继续修的错误输出。 */

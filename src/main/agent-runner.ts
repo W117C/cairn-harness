@@ -20,7 +20,7 @@ import {
   type SessionPluginTool,
 } from "../agent/glm-session";
 import { ClarifyGate, PlanGate } from "../agent/gates";
-import { createVerifyHook, defaultExec, type ExecFn } from "../agent/verify";
+import { classifyVerifyFailure, createVerifyHook, defaultExec, withVerifyCauseNote, type ExecFn } from "../agent/verify";
 import { createActionFusion } from "../agent/action-fusion";
 import { SolpiRuntime, privateSessionDirectory, removePrivateSessionData, observationRecallSpec, solpiEnabled, type SolpiFlags } from "../agent/solpi-runtime";
 import { affectedFilesOf, defaultImpactHook } from "../agent/impact/index.js";
@@ -1095,7 +1095,15 @@ export function verifyExec(sandbox: SandboxStatus | null, run: typeof runInSandb
     const mapped = command.trim() === "pnpm test" || command.trim() === "pnpm run test" ? VITEST_DIRECT : command;
     // 超时同样要穿过去：沙箱是发货缺省路径，这里不接就等于语言探测的 300s 白给。
     const res = await run(mapped, { cwd, ...(timeoutMs ? { timeoutMs } : {}) });
-    return { command, ok: res.ok, output: res.output };
+    // 归因不能只长在非沙箱那一支：沙箱是发货缺省路径，少这一半就等于"环境红只在降级时才不冤枉模型"。
+    const cause = classifyVerifyFailure({ timedOut: res.timedOut === true, exitCode: res.exitCode ?? null, output: res.output });
+    return {
+      command,
+      ok: res.ok,
+      output: res.ok ? res.output : withVerifyCauseNote(res.output, cause),
+      ...(res.ok ? {} : { cause }),
+      exitCode: res.exitCode ?? null,
+    };
   };
 }
 

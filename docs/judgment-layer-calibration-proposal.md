@@ -329,6 +329,19 @@ deps-before-run / lockfile 预检那一类，碰不到 `UNSAFE_MODULES_DIR`；�
 落到生产路径再判）是裁决点，代价与两条路的对照写在 `outputs/verify-cause-denominator-2026-09-23.md` §三。
 上面那句原文不回改——它是 09-21 的裁决快照，以本段为准。
 
+**口径变更（2026-09-23，用户裁决"加第 6 值"）**：`cause` 集由五值变六值，两处偏离原定案都在这儿写明，不留在代码注释里——
+- **加第 6 值 `pkg-manager`**：包管理器**在自己那一行**打出的命名空间错误码（`ERR_PNPM_*`）。这是 §9.1
+  「零文案匹配」的唯一一处加宽，边界是**行首锚定 + 命名空间码**：被测脚本把同样文字引用在行中间不算
+  （`classifyVerifyFailure` 有反向用例钉住）。它不属于被否掉的 (B) 方案——(B) 治的是跨域串
+  （`Cannot find module` 两边都出现），而 `ERR_PNPM_*` 只有 pnpm 自己会打。
+- **`toolchain-missing` 口径加宽**：从"退出码 127"扩到"127 **或连 shell 都没起来**"（`child.on("error")`
+  那条路今天就存在、今天也置 `ok:false`，只是没名字）。
+- 本笔（第一笔）只落 **schema + 生产者**（两条 exec 出口都归因：非沙箱 `defaultExec` 与发货缺省的沙箱
+  `verifyExec`，只落一支就是"环境红只在降级时才不冤枉模型"）。**三处出口的行为仍按 `ok` 判**，
+  即环境红今天照样涨 attempt / 喂升档 / 进沉淀——那是第二、三、四笔，逐笔带合取判据。
+  复跑尺：`replay:verify-cause-mix` 的 `带 cause 字段的红命令` 从 0 起才算落盘（旧会话流永远读 0，
+  那条读数只在**新跑出来的**语料上有意义）。
+
 ### 9.2 先落 mitigation：那个 pnpm 环境态评测侧已消除、生产侧还活着
 
 评测侧 `EVAL_EXEC`（`scripts/loop-eval.ts:87`）带 `pnpm_config_verify_deps_before_run=false` 前缀，
