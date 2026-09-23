@@ -1,9 +1,9 @@
 # 判断层校准路线：JEV 理念迁入 + ask 落盘方案
 
-状态：**§5 ask 落盘已实现（见 §8）；§7 四步顺序未开工**。第 3 节是 2026-09-20 实跑读数、§7 末是
-2026-09-21 的定序依据（均为当日快照，不表示当前值，复跑命令见附录）；第 5–6 节是落盘与其判卷面；
-第 7 节是落盘之后的**四步顺序**（每步带判卷读数 + 外部决策模型的接入前提）；
-第 8 节是裁决记录与落地状态。
+状态：**§5 ask 落盘已实现（见 §8）；§9 第 0 步与 §7 四步顺序未开工**。第 3 节是 2026-09-20 实跑读数、
+§7 末与 §9.1 是 2026-09-21 的定序依据（均为当日快照，不表示当前值，复跑命令见附录）；
+第 5–6 节是落盘与其判卷面；第 7 节是落盘之后的**四步顺序**（每步带判卷读数 + 外部决策模型的接入前提）；
+第 8 节是裁决记录与落地状态；第 9 节是排在四步之前的**第 0 步：verify 归因**（含 (A)/(B) 口径裁决）。
 
 本页不受 `docs-check` 的 D-2/D-4 管（不在 `LIVE_PAGES`），但门数/测试数一律不写死——
 事实源是 `scripts/gate-manifest.ts` 与 `tests/`。
@@ -158,6 +158,7 @@ tool_result 出口上，硬挂会造出第三种形状，留位；不新建事�
 原版是四条并列（概率来源 / 特征面 / 阈值位置 / 半步旁支）。并列就没有「先做哪条」的答案，
 而今天有实测能定序：**每步的判卷读数决定下一步有没有资格开工**。四步全在 harness 内，
 不含任何外部决策模型——第 4 步是「要不要引入外部提供方」的实验结论位，不是待写的代码。
+（四步之前还有一步：**§9 verify 归因**，它决定第 2 步攒到的正例干不干净。）
 
 ### 第 1 步 拆短路：让风险层真的有决策权（唯一可立即动手且能红的一步）
 
@@ -182,6 +183,7 @@ writer 已在（§8：`gate.layer` + `verdict` 进 `tool_result`）。这一步�
   计数。**≥300 条才有资格进第 3 步**；正例（人拒）< 30 条 ⇒ 只报免批覆盖率、**不报 ECE**（§4 的分箱账）。
   样本不足一律 `unmeasurable`，沿用 `tool-choice.ts` 的 `Rate{n,over,value|null}` 与
   「分母为 0 取 null 不取 0」，不新造读数形状。
+  ⚠️ 环境态红须先按 §9 归因排除——否则第 3 步的「漏拦绝对条数」会混进假正例，而那是唯一决定 τ 的量。
 - **读数 B（比攒够 300 条更先发生）**：先手工过 30 条正例，逐条标注它落在特征面哪一格——
   路径类（test / fixture / 源码 / 配置）、写落点在主树还是 worktree、波及面（文件数·行数）、
   是否重写刚写过的文件、命令族首段（由 §3.4 决定，**不含 THREAT_TABLE 六类**，真流量 0 命中）。
@@ -276,9 +278,77 @@ typed-decisions 上 0.362 / 0.342，**低于多数类基线 0.461**；招牌 0.7
 ② 外部「Decision-Driven Agent Runtime」四十节**逐条对表后无新工程**——五类 confidence 与
 统一 `DecisionProvider` 接口（含"先留个接口随时接入"这一降格版）一律不做，理由与可反转条件写在 §7。
 
-**仍未做**（按 §7 的四步顺序排，不再当并列清单）：第 1 步拆短路 → 第 2 步攒可标语料 →
+**仍未做**（按 §7 的四步顺序排，不再当并列清单）：**§9 第 0 步（verify 归因 + 生产侧 mitigation）**
+→ 第 1 步拆短路 → 第 2 步攒可标语料 →
 第 3 步后验频率与 τ → 第 4 步才谈外部提供方。另 §5.3 留位的 `obs_recall` 与 `M1E_SAFE_MODE`
 两支出口仍未纳入留痕面。
+
+## 9. 第 0 步（排在 §7 四步之前）：verify 归因
+
+**为什么排最前**：§7 第 2 步要攒的正例里，环境态的红会伪装成"该拦"；而今天一次环境红同时做三件错事——
+计一次 `verifyAttempts`（`loop.ts:128` 无条件 `++`）、触发 supervisor 升档换更贵的档
+（`orchestrator.ts:1217-1237` 的 `evidenceOf === "failed"`）、被 `failureDigestFromEvents`
+计成「N 次验证失败」写进沉淀（`distill.ts:56-58`）。**误归因不只是分母错，它会被学进去。**
+
+### 9.1 口径：只认代码里已有的判定，零文案匹配（2026-09-21 定）
+
+原本在 (A) 纯结构 与 (B) 加一张输出特征表 之间犹豫。实测把 (B) 否了：
+
+- 合成对照两例——真代码错（vitest 报 `Cannot find module ./bar`）与模块自身缺失（`node ./nope.js`）：
+  **同一条串两边都出现、退出码都是 1、且都不在首行** ⇒ 「Cannot find module」这类跨域串不可分类。
+- 真语料 305 段 output / 3 581 行：错误码形态首行命中 4、**非首行命中 2** ⇒ 首行锚定既盖不住
+  要治的类（`node ./nope.js` 的首行是 `node:internal/modules/cjs/loader:1433`，不是错误码），
+  又会误伤真代码错。
+- (A) 的缺口只有半步：**`timedOut` 布尔（`verify.ts:43,65`）与退出码（`finish(code)`，`:46`）今天都在算，
+  只是在 `:58` 的 settle 处被丢掉**；`(none)` 命令哨兵（`:172-186`）与 `hookError`（`loop.ts:138`）同理。
+  ⇒ 这不是新抽象，是把已有零件接到 schema 上（「两头断」第 11 次）。
+
+**定案的 `cause` 集**（全部来自已有判定，缺省 `"code"` = 零行为）：
+`"code"` ∪ `"timeout"`（`timedOut`）∪ `"toolchain-missing"`（退出码 127，`verify.ts:52-57` 已在点名它）
+∪ `"no-surface"`（`source==="none"`）∪ `"hook-error"`（`hookError`）。
+外加 `exitCode?: number`。**包管理器错误码白名单（`^\[ERR_PNPM_…`）这一条先不加**——它要治的态
+已被 9.2 消除，为已消失的样本建分类器是反向的"为假想需求设计"；9.2 之后仍复发再单加。
+
+### 9.2 先落 mitigation：那个 pnpm 环境态评测侧已消除、生产侧还活着
+
+评测侧 `EVAL_EXEC`（`scripts/loop-eval.ts:87`）带 `pnpm_config_verify_deps_before_run=false` 前缀，
+它就是为了绕开 pnpm 的 deps-before-run 预检；**生产侧没有**——`verifyExec`（`agent-runner.ts:1078`）在
+沙箱不可用时整段退回 `defaultExec`，既无前缀也无 `pnpm run test → VITEST_DIRECT` 映射，
+而 `VITEST_DIRECT` 本身指向**本 app 自己的** `node_modules/vitest`（`:151-152`），对用户仓并不适用。
+⇒ 用户仓里 `node_modules` 由别的 pnpm/lockfile 装过时，`ERR_PNPM_UNSAFE_MODULES_DIR` 会原样复发，
+并被记在模型头上。
+
+**第 0a 条**：把这条已验证有效的 mitigation 搬进生产路径（`defaultExec` 侧，或其上游一处）。
+判卷：造一个 `node_modules` 为符号链接的临时仓，加前缀前红且输出含 `ERR_PNPM_`、加后不再出现该态。
+
+### 9.3 三条不变式（分类存在的唯一理由，每条都能红）
+
+1. `cause !== "code"` 的红**不得**增加 `verifyAttempts` ⇒ 写法：连续两拍 timeout 时 `attempt` 序列
+   必须是 `1,1` 而非 `1,2`，且第三拍仍能跑（今天会被 `maxVerify=3` 掐死）。
+2. 非 `code` 红**不得**喂 supervisor 的升档判据，也**不得**进 `failureDigestFromEvents` 的失败计数。
+3. 证据不隐藏：事件照落、UI 照显，但文案改"验证未运行 / 工具链缺失 / 超时"而非"验证失败"；
+   非 `code` 红**不许改判成绿**，只许"不计入模型的账"。读数缺信息时写 `null`
+   （沿用 `tool-choice.ts` 的「分母为 0 取 null 不取 0」），**`unmeasurable ≠ pass`**。
+
+### 9.4 判卷面与接线清单
+
+- 新 `tests/verify-attribution.test.ts`：注入假 `ExecFn`，五态各一条 `cause` 正确；
+  普通非零退出码且无特征 ⇒ `"code"`；**反例必测**：vitest 报告里含 `Cannot find module` 时仍须判 `"code"`
+  （钉住 9.1 的否掉理由，别让人日后"顺手加个串匹配"）。
+- `loop.test.ts` 补 9.3 三条；`supervisor-check` 补一条 env 拍不升档；沉淀侧补一条计数为 0。
+- 接线（同批，拆开即 HEAD 悬空）：`events/index.ts`（`VerifyCommandResult.cause?` / `exitCode?`）
+  → `agent/verify.ts`（`finish()` 带出 code/timedOut、`(none)` 结构化、9.2 的 mitigation）
+  → `agent/loop.ts`（`verifyBeat` 按 cause 决定 attempt 与外注）→ `agent/orchestrator.ts`（`evidenceOf`）
+  → `agent/memory/distill.ts`（计数排除非 code）→ `renderer/app.js` + `history-window.js`（文案三态）
+  → `projections.ts`（若面板投 cause）。`src/tools/` 不动。估 120–180 行含测试。
+  ⚠️ `app.js` / `panels-check.ts` 若在别人的在飞改动集里，先做相交检查或等窗口（AGENTS.md 那条规矩）。
+
+### 9.5 顺带撤下一条上一轮的说法
+
+「唯一那次失败的根因 100% 是 harness」成立，但**"成功率被系统性低估"要撤**：那个 pnpm 态在
+`loop-eval` v1 之后已被 `EVAL_EXEC` 的前缀消除，v2 的 I2 两臂都是**种子红 → 末绿**。
+⇒ 当前评测路径上对成功率的观测压制 = **0 次**；风险只在 9.2 那条生产侧未防护的分支上。
+本仓纪律：读数口径变了要回改结论，但**不回改当时那句原文**——所以这条以追加形式留在这里。
 
 ---
 
