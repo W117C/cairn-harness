@@ -47,8 +47,9 @@ export interface WorkerSpend {
   calibrated: boolean;
 }
 
-/** USD 读数：6 位小数（$0.000001 以下仍非零——把 0.0000004 显示成 0 就是"这轮免费"的假象）。 */
-function roundUsd(n: number): number {
+/** USD 读数：6 位小数（$0.000001 以下仍非零——把 0.0000004 显示成 0 就是"这轮免费"的假象）。
+ *  导出是为了"只有一把四舍五入的尺"：任何把几段花费相加的地方都调它，不再各写一份 `*1e6/1e6`。 */
+export function roundUsd(n: number): number {
   return Math.round(n * 1e6) / 1e6;
 }
 

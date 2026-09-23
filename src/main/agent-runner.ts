@@ -31,8 +31,7 @@ import type { AgentEvent, ClarifyAnswerMap, EventLog, GoalTurnOrigin } from "../
 import { frozenJudgePathSet } from "../frozen";
 import { createEventLog, replay } from "../events";
 // goal 模式：判据与投影全在纯函数面（src/agent/goal.ts），这里只做「读事件流 → 问它 → 落流 → 起下一轮」。
-import { GOAL_TURN_CAP_MAX, goalReminder, goalStopDecision, parseGoalSpec, projectGoal } from "../agent/goal";
-import { priceForModel, spentUsdFor } from "../agent/orchestrator-join";
+import { GOAL_TURN_CAP_MAX, goalReminder, goalStopDecision, goalWindowSpend, parseGoalSpec, projectGoal } from "../agent/goal";
 import { checkPermission, enterPlanRunScope, getPlanState, planGateBlocks, sideEffectDecisionTable, type PermissionMode } from "../permissions";
 import {
   evaluate,
@@ -1646,14 +1645,14 @@ async function goalNextTurn(args: {
     return null;
   }
   const model = (await store().get()).model;
-  // 主会话的价：settings.model 存的是 **provider 模型名**（glm-5.2），价表的键是**档位 id**
-  // （glm-standard）——必须经 priceForModel 反查（与 worker 派活同一条路）。表里没有 / 没填 model
-  // ⇒ spentUsdFor 返回 null（不可知），美元闸随之惰掉并在提醒块里明写——**绝不**按 $0 继续烧
-  // （「把不可知记成免费」）。此前这里把模型名直接当价表键传 ⇒ 对产品里可选的每个模型都恒 null，
-  // 美元闸一次也没触发过，而单测全绿（它们直接注入 spentUsd）。
-  // 计量窗口 = view.usage（本目标之后那段），与证据/写盘同轴：设 $0.5 之前会话已花多少与这个闸无关。
-  const spend = spentUsdFor(priceForModel(model), view.usage);
-  const spentUsd = spend === null ? null : spend.usd;
+  // 花费读数交给纯函数（`goalWindowSpend`）：settings.model 是 provider 模型名（glm-5.2）而价表的键是
+  // 档位 id（glm-standard），反查只许有一处（orchestrator-join 的 priceForModel）——那一跳以前躺在这行，
+  // 写错就恒 null、闸恒惰，而单测全绿（它们直接注入 spentUsd）。表里没有 / 没填 model ⇒ 不可知，
+  // 美元闸惰掉并在提醒块里明写，**绝不**按 $0 继续烧（「把不可知记成免费」）。
+  // 计量窗口 = view.window（本目标之后那段），与证据/写盘同轴：设 $0.5 之前会话已花多少与这个闸无关。
+  // **worker 那一段用回执里已入账的表价**，不再按会话那一档估：会话档与 worker 档在本仓价表里
+  // 差到 40 倍，一乘就把闸与同一屏的回执弄成两个数（能力 39 修的是成本闸，这一支是同一族的第二支）。
+  const { spentUsd, unbookedWorkers } = goalWindowSpend(view.window, model);
   const decision = goalStopDecision({
     turn: view.turn,
     spec: view.spec,
@@ -1671,7 +1670,7 @@ async function goalNextTurn(args: {
   const turn = view.turn + 1;
   return {
     // hint 只有「上一轮被收走」那一支会给；默认那一子句（针对红字继续）在本轮没有红字时会指错方向。
-    message: goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint),
+    message: goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint, unbookedWorkers),
     origin: { kind: "goal", turn, max_turns: view.spec.maxTurns },
   };
 }

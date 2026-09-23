@@ -8,6 +8,7 @@ import type { AgentEvent, WorkerEvidence } from "../events";
 import { clampToTokenBudget } from "./text-budget";
 import { hasSessionWrites, workerVerificationEvidence } from "./worker-report";
 import { GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, traceGoal } from "./goal-trace";
+import { bucketsSpendUsd, priceForModel, roundUsd } from "./orchestrator-join";
 import type { GoalSpec } from "./goal-trace";
 
 // GoalSpec 与轮次帽的定义挪进了 goal-trace.ts（渲染层要用同一份 reduce 与同一份数，但不能
@@ -191,13 +192,19 @@ export function goalReminder(
   spentUsd: number | null,
   evidence: WorkerEvidence,
   hint?: string,
+  /** 窗口里还没到终态的 worker 数：它们的钱要等回执才入账 ⇒ 本拍这个数**偏小**。
+   *  不写出来的话，下一轮数字突然跳升会被模型（和人）读成"上一轮什么都没花"。0 = 不提。 */
+  pendingWorkerSpend = 0,
 ): string {
+  const lag = pendingWorkerSpend > 0
+    ? "（另有 " + String(pendingWorkerSpend) + " 个 worker 的花费要等终态回执才入账，本拍未计）"
+    : "";
   const body =
     "[goal 续跑 第 " + String(turn) + "/" + String(spec.maxTurns) + " 轮] 目标：" +
     clampToTokenBudget(spec.objective, GOAL_OBJECTIVE_TOKEN_CAP, "目标") +
     "\n上一轮终态：证据 " + EVIDENCE_TEXT[evidence] +
     "（" + (hint ?? FOLLOW[evidence]) + "）。" +
-    "\n预算：" + budgetLine(spec, spentUsd) + "；轮次上限 " + String(spec.maxTurns) + "。" +
+    "\n预算：" + budgetLine(spec, spentUsd) + lag + "；轮次上限 " + String(spec.maxTurns) + "。" +
     "\n收束条件：只有 verify 通过且之后不再写盘才算完成；认为已达成就调用 verify 拿绿证据再收束。";
   return clampToTokenBudget(body, GOAL_REMINDER_TOKEN_CAP, "goal 提醒");
 }
@@ -217,6 +224,10 @@ export interface GoalView {
    *  设 $0.5 上限之前会话已经花掉 $0.6 是常事，按全会话算会"第一轮就以已花 $0.6000 停下"，
    *  把用户设的闸变成随机数（审查 C2：闸与其余 goal 量不同轴）。 */
   usage: { inputTokens: number; outputTokens: number };
+  /** 上面那个 `usage` 的**取材窗口**（同一刀 slice，不留第二份切法）。
+   *  美元闸要按桶分别计价（主会话一档、每个 worker 一档），只给累计 token 就只能把两半混着乘，
+   *  那正是 2026-09-23 修掉的"闸与回执分叉"。 */
+  window: readonly AgentEvent[];
 }
 
 /** 会话当前目标态：一律从事件流重算，live 与 replay 同一份函数（不变量 2：不写第二份会话态）。
@@ -235,7 +246,49 @@ export function projectGoal(events: AgentEvent[]): GoalView | null {
     truncated: lastTurnWasTruncated(window),
     stopped: trace.stopped,
     usage: sumWindowUsage(window),
+    window,
   };
+}
+
+/** 目标窗口的花费读数（美元闸的输入）。
+ *  主会话那一段按**会话那一档**折；worker 那一段**只用它终态回执里已入账的表价**
+ *  （`agent_result.artifacts.spent_usd`），绝不再按会话档位估 —— worker 可以跑在别的档上
+ *  （本仓价表 flash/standard/strong 对同一份用量差 40 倍），一乘就和同一屏上那条
+ *  「这份交付花了多少钱」的回执分叉。2026-09-23 实测：会话成本闸正是这样比实付晚几十倍才触发的。
+ *  代价写清楚：worker 的钱在**终态**才落账 ⇒ 在途那一段本拍不计（`unbookedWorkers` 报出来，
+ *  由提醒块说"可能晚一步"），这是有界滞后，不是失真；回放/未注册档的 worker 永远不入账——那本来就不是真钱。
+ *  `spentUsd === null` 只留给「主会话价不可知 且 一笔 worker 钱都没入账」：不可知不当免费，也不当 0。 */
+export function goalWindowSpend(
+  window: readonly AgentEvent[],
+  sessionPriceModel: string,
+): { spentUsd: number | null; unbookedWorkers: number } {
+  let mainIn = 0;
+  let mainOut = 0;
+  let booked = 0;
+  const spawnedIds: string[] = [];
+  const settledIds = new Set<string>();
+  for (const e of window) {
+    if (e.type === "usage") {
+      if (e.agent_id === undefined) {
+        mainIn += e.inputTokens;
+        mainOut += e.outputTokens;
+      }
+    } else if (e.type === "agent_spawned") {
+      spawnedIds.push(e.agent_id);
+    } else if (e.type === "agent_result") {
+      settledIds.add(e.agent_id);
+      const s = e.artifacts?.spent_usd;
+      if (typeof s === "number" && Number.isFinite(s) && s > 0) booked += s;
+    }
+  }
+  let mainUsd: number | null = 0;
+  if (mainIn + mainOut > 0) {
+    const r = bucketsSpendUsd([{ usage: { inputTokens: mainIn, outputTokens: mainOut }, price: priceForModel(sessionPriceModel) }]);
+    mainUsd = r === null ? null : r.usd;
+  }
+  const unbookedWorkers = spawnedIds.filter((id) => !settledIds.has(id)).length;
+  if (mainUsd === null && booked === 0) return { spentUsd: null, unbookedWorkers };
+  return { spentUsd: roundUsd((mainUsd ?? 0) + booked), unbookedWorkers };
 }
 
 /** 窗口累计 token（从 `usage` 事件重算，不留第二份账）。provider 没上报 ⇒ 0/0，
