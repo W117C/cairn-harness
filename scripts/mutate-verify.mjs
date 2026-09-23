@@ -7545,7 +7545,7 @@ const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/recovery-parent-mode.test.ts",
     desc: "重派那支不再兜底建编排器 ⇒ 恢复卡的「重派」在唯一要用它的场景里点不动（报「无可用事件管线」），而所有直接调 orch.respawn 的用例照绿",
-    apply: (s) => s.replace("    (req.action === \"respawn\" && req.cardType === \"agent_result\" ? await ensureSessionOrchestrator() : null);\n", "    null);\n"),
+    apply: (s) => s.replace("    (req.action === \"respawn\" && req.cardType === \"agent_result\" ? await ensureSessionOrchestrator() : null);\n", "    (false ? await ensureSessionOrchestrator() : null);\n"),
     expectFail: "会话历史是 read-only + 设置盘默认 auto ⇒ 重派 write worker 必须被拒（拒因点名 read-only）",
   },
   {

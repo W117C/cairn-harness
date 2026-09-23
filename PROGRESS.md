@@ -2146,3 +2146,6 @@ $0.2020（standard）/ **$0.8080**（strong）——价表跨度 40 倍。旧算
   把读盘嵌进调用参数（现在这行的形状）就不被棘轮枚举了 ⇒ 该格的观察着改由上面 7 条 + 两针负责，
   要真收口得让第二条形状按 initializer 子树找读盘（独立改造，没顺手做）。
 - 门禁读数（提交前复跑）：tsc 0 错；全量 test **234 files / 2519 tests 全绿**；`pnpm e2e` 全断言通过。
+  锚点表 885 → 887，两条落库后逐条 ✅ 杀掉（`recovery-orchestrator-unreachable-after-restart`、
+  `recovery-parent-mode-from-settings`）。第一条第一次跑是**误伤**（改法把 `?? ... : null` 那行砍成语法错，
+  门当场拒绝把它当分辨力证据）⇒ 换成语法成立的 `false ? ... : null` 才拿到真读数。
