@@ -1,5 +1,5 @@
 import { projectUnits, mountHistory } from './history-window.js';
-import { projectPanelData, EMPTY_PANEL_DATA, entersMainConversation, toolArgsSummary, PANEL_DIRTY_TYPES, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS, cardActionForComment, commentReadsBack, groupOnboardingSteps, impactLabel } from './projections';
+import { projectPanelData, EMPTY_PANEL_DATA, entersMainConversation, toolArgsSummary, PANEL_DIRTY_TYPES, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, terminalRowState, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS, cardActionForComment, commentReadsBack, groupOnboardingSteps, impactLabel } from './projections';
 import { $, esc, promptInput, sessionList, streamInner, toast } from './dom.js';
 import { ICONS, RUN_GRID_HTML, runGrid } from './icons.js';
 import { highlightAllDiffs, diffHtml } from './diff-highlight.js';
@@ -951,6 +951,10 @@ let currentWs = WORKSPACES[0];
    「本会话从未碰过的文件 + 假测试输出」——假象比空白更坏，故一并删除
    （projections.ts 头注「面板 100% 事件流投影，无第二事实源」）。 */
 let panelData = EMPTY_PANEL_DATA;
+/* 这一屏是不是「真在跑」：终端面板用它区分「结果还没回」与「结果永不会回」——
+   重放一条被切断的旧会话时 ok===null 不是运行中（原先就是那句「执行中…」把死说成活）。
+   由 refreshPanels 写（那里才看得见 historyEvents / real.running）。 */
+let panelLive = false;
 /* 孤儿工作树（§4.4.9）：main 每次 getState 现扫盘、只列不删。这个字段此前在渲染层零读者
    （ipc:check 只看通道挂没挂，看不到"挂着没人读"），于是崩溃恢复留在盘上的 worktree
    只有命令行能看见——而合并控制塔正是它的落脚点。三态：null=还没数 / {orphans}/ {error}。 */
@@ -1013,8 +1017,9 @@ function browserViewHTML() {
 function termBodyHTML(entry) {
   if (!entry) return '';
   const lines = ['<div><span class="p">$</span> ' + esc(entry.command) + '</div>'];
-  if (entry.ok === null) lines.push('<div class="dim">执行中…</div>');
-  else lines.push('<div class="' + (entry.ok ? 'ok' : 'dim') + '">' + (entry.ok ? '✓ 执行完成' : '✗ 执行失败') + '</div>');
+  /* 状态格走 terminalRowState 四态：data-term-state 是给门禁的读点（不依赖中文文案）。 */
+  const st = terminalRowState(entry.ok, panelLive);
+  lines.push('<div class="' + st.cls + '" data-term-state="' + st.kind + '">' + esc(st.text) + '</div>');
   for (const ln of String(entry.output || '').split('\n')) lines.push('<div>' + esc(ln) + '</div>');
   return lines.join('');
 }
@@ -2708,6 +2713,9 @@ render();
    *  只在会话打开与「会改投影」的事件到达时刷新（判据 = PANEL_DIRTY_TYPES，每轮个位数条；
    *  流式 delta 不进表，所以不随 token 抖动）。 */
   function refreshPanels() {
+    /* liveness 与投影同拍更新：重放（historyEvents 非空）或没有真在跑的 run ⇒ 这一屏的
+       null 行都是"结果永不会回"，不是"执行中"。 */
+    panelLive = !historyEvents && !!real.running;
     panelData = projectPanelData(panelEvents, configuredWorkspace);
     renderSide();
     syncTitlebar();   // DT-02：工作区名进了标题栏，面板数据一变就跟着刷

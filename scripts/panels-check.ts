@@ -1730,6 +1730,55 @@ async function phaseElectron(root: string): Promise<void> {
     ok(b24 !== null && b24.orphans < b24Results.length + 1,
       "B24 成对的结果仍并进工具项，没被一律降格成孤儿卡（实测 " + String(b24Seen.orphans) +
       " / 盘上结果总数 " + String(b24Results.length) + " + 本相追加 1；读不到数时这一条不算过）");
+    /* B26 终端面板：「结果缺席」不等于「执行中」（#58 第一格，真窗口）。
+       现场：唯一一条落盘真会话以 run_shell 的 tool_call 收尾、盘上没有它的 tool_result ⇒
+       projectPanelData 给出一行 ok===null，而渲染层原先见 null 就写「执行中…」⇒ 重开一条
+       早死掉的会话会永远挂着"执行中"（把死说过成活）。手法同 B23：往靶子会话追加既有事件 +
+       切走再切回（重开才重算 panelData），零模型调用。放在 B24 之后、异常收尾之前，
+       这样这一相自己要是抛了，下面那条 okNoExceptions 会一起看到。
+       对照侧一起钉：有结果的那行仍须「执行完成」——这条改的不许把正常历史一并说成死的。 */
+    console.log("[panels-check] B26 终端面板把「没结果」说成没结果（重放会话不许显示执行中，有结果的行不受影响）");
+    {
+      const b26Log = createEventLog(b11File);
+      await b26Log.append({ type: "tool_call", id: "b26-paired", name: "run_shell", args: { command: "echo b26-paired-check" } } as unknown as AgentEvent);
+      await b26Log.append({ type: "tool_result", callId: "b26-paired", ok: true, output: "b26-paired-out" } as unknown as AgentEvent);
+      await b26Log.append({ type: "tool_call", id: "b26-cut", name: "run_shell", args: { command: "echo b26-cut-check" } } as unknown as AgentEvent);
+      ok(await b8ClickSession("验收会话"), "B26 先切走");
+      ok(await b8ClickSession(clarifyId), "B26 再切回靶子会话（重开才重算 panelData）");
+      const b26Tab = await cdp2.eval<string>(
+        `(() => { const t = document.querySelector('#qcTerminal'); if (!t) return "no-tab"; t.click(); return "clicked"; })()`,
+      );
+      ok(b26Tab === "clicked", "B26 终端页切得过去（实测 " + JSON.stringify(b26Tab) + "）");
+      const b26Pick = (): Promise<{ state: string; text: string } | null> => cdp2.eval<{ state: string; text: string } | null>(
+        `(() => { const p = document.querySelector('.side-page[data-view="terminal"]'); if (!p) return null;` +
+        `  const rows = [...p.querySelectorAll('.term-subtab')];` +
+        `  const t = rows.find((x) => (x.textContent || "").includes("b26-cut-check"));` +
+        `  if (!t) return { state: "no-row", text: "", rows: 0 };` +
+        `  t.click();` +
+        `  const st = p.querySelector('#termBody [data-term-state]');` +
+        `  return { state: st ? (st.getAttribute("data-term-state") || "") : "no-node",` +
+        `    text: st ? (st.textContent || "").trim() : "", rows: rows.length }; })()`,
+      );
+      const b26Cut = await settle(async () => {
+        const r = await b26Pick();
+        return r !== null && r.state !== "no-row" && r.state !== "no-node" ? r : null;
+      }, 12_000);
+      ok(b26Cut?.state === "lost",
+        "B26 没有结果的那行说「无结果」而不是「执行中」（实测 state=" + JSON.stringify(b26Cut?.state ?? "没等到") +
+          " 文案=" + JSON.stringify(b26Cut?.text ?? "") + "）");
+      const b26Paired = await cdp2.eval<{ state: string; text: string } | null>(
+        `(() => { const p = document.querySelector('.side-page[data-view="terminal"]'); if (!p) return null;` +
+        `  const t = [...p.querySelectorAll('.term-subtab')].find((x) => (x.textContent || "").includes("b26-paired-check"));` +
+        `  if (!t) return { state: "no-row", text: "" };` +
+        `  t.click();` +
+        `  const st = p.querySelector('#termBody [data-term-state]');` +
+        `  return { state: st ? (st.getAttribute("data-term-state") || "") : "no-node",` +
+        `    text: st ? (st.textContent || "").trim() : "" }; })()`,
+      );
+      ok(b26Paired?.state === "ok" && (b26Paired?.text ?? "").includes("执行完成"),
+        "B26 反面对手：有结果的行照旧「执行完成」（实测 state=" + JSON.stringify(b26Paired?.state ?? "") +
+          " 文案=" + JSON.stringify(b26Paired?.text ?? "") + "）");
+    }
     // 最后收一次「静默半执行」：两扇窗各自累积的未捕获异常都必须为空。
     await okNoExceptions(cdp);
     await okNoExceptions(cdp2);

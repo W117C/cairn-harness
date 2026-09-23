@@ -979,6 +979,21 @@ export function impactLabel(i: PanelImpact): string {
   return i.sites === 0 ? "无跨文件调用点" : `波及 ${sites} 处 · ${i.files} 个文件`;
 }
 
+/** 终端行的状态格。**`ok===null` 不等于「还在跑」**——它只是「这条流里没有它的结果」：
+ *  重放一条被切断的旧会话时，那一拍永远不会有结果（真实现场：末事件是 `run_shell pnpm test`
+ *  的 tool_call，盘上无配对 tool_result）。把缺席当运行中就是把死说过成活着，所以这里要外部
+ *  的 liveness，而不是自己猜。`kind` 是给门禁的读点（不依赖中文文案）。 */
+export function terminalRowState(ok: boolean | null, live: boolean): { kind: "running" | "lost" | "ok" | "failed"; text: string; cls: string } {
+  if (ok === null) {
+    return live
+      ? { kind: "running", text: "执行中…", cls: "dim" }
+      : { kind: "lost", text: "无结果（上次运行在这次调用中途结束）", cls: "dim" };
+  }
+  return ok
+    ? { kind: "ok", text: "✓ 执行完成", cls: "ok" }
+    : { kind: "failed", text: "✗ 执行失败", cls: "dim" };
+}
+
 export interface PanelTreeGroup {
   /** 目录（workspace 相对）；根目录文件为空串。 */
   dir: string;
