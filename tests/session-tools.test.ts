@@ -375,6 +375,76 @@ it("production settings forward C2/D flags and reopen private reports across two
   }
 });
 
+/**
+ * 第 3 次发送起 `observationPack` **独有**的效果：大输出被投影成 head + `[observation …; obs_recall available]`。
+ * 为什么必须量这一格：上面 C2/D 那句读的是 `obs_recall`，而 `solpi-runtime.ts:72` 是
+ * `observationPack || evidenceReceipts` 任一为真即建 ledger ⇒ 那个标记对两个开关零分辨力
+ * （把 `?? (await store().get()).observationPack` 换成 `?? false`，2371 条用例零红）。
+ * 所以这里**刻意不开 evidenceReceipts**：那条走的是另一支（`source_sha=` 回执），开着就分不出谁在做事。
+ */
+async function packSends(observationPack: boolean): Promise<string[]> {
+  const root = await mkdtemp(join(tmpdir(), "obs-pack-"));
+  const sessionsRoot = join(root, "sessions");
+  const ws = join(root, "ws");
+  await mkdir(sessionsRoot);
+  await mkdir(ws);
+  // 大输出要**过 `LEDGER_THRESHOLD_BYTES`（10 KiB）才会进 ledger**，而 read_file 有自己的界：
+  // `DEFAULT_MAX_LINES=2000` 行、每行 `MAX_LINE_CHARS=2000` 字符。首版把 12k 个 x 写成**一行**，
+  // 被 read_file 自己剪成 2 KB ⇒ 观测从未被捕获，测试以"第 3 封仍全文"的姿态红（假红，不是缺陷）。
+  // 所以这里用 1900 行短行（≈14 KB），并把哨兵钉在最后一行——它既过阈值，又在 2000 行界内。
+  await writeFile(
+    join(ws, "big.txt"),
+    Array.from({ length: 1899 }, (_, i) => "row" + String(i)).join("\n") + "\nTAIL_SENTINEL\n",
+  );
+  initSettingsStore(join(root, "settings.json"));
+  initSessionsDir(sessionsRoot);
+  await setSettings({ provider: "glm", autoMemory: false, observationPack });
+  vi.stubEnv("M0A_PROVIDER", ""); // 让 settings 说话（env 覆盖会绕开被测的那一行）
+  vi.stubEnv("M0_API_KEY", "offline-test-key");
+  await writeFile(join(ws, "small.txt"), "SMALL\n");
+  const bodies: string[] = [];
+  // SolpiRuntime 是**每轮 run 一个实例**（`sends` 不跨 run 累积——实测：把三次发送摊到三个 run 里，
+  // 第 4 封仍发全文）。所以"第 3 次发送"必须在一个 run 内跑出来：前三次各读一个文件，第四次收口。
+  // 只有 big.txt 那次过 `LEDGER_THRESHOLD_BYTES`，small.txt 不进 ledger、不干扰计数。
+  const reads = ["big.txt", "small.txt", "small.txt"];
+  vi.stubGlobal("fetch", vi.fn(async (_url: unknown, init: RequestInit) => {
+    const body = String(init.body);
+    bodies.push(body);
+    const step = bodies.length - 1;
+    const calling = step < reads.length;
+    const delta = calling
+      ? { tool_calls: [{ index: 0, id: "call-" + String(step), type: "function", function: { name: "read_file", arguments: JSON.stringify({ path: reads[step] }) } }] }
+      : { content: "ok" };
+    return new Response(
+      "data: " + JSON.stringify({ choices: [{ delta, finish_reason: calling ? "tool_calls" : "stop" }] }) + "\n\ndata: [DONE]\n\n",
+      { headers: { "content-type": "text/event-stream" } },
+    );
+  }));
+  const r = await handleAgentRun(
+    { message: "读 big.txt", workspace: ws, mode: "read-only" },
+    { logPath: join(root, "events.jsonl") },
+  );
+  expect(r.ok, JSON.stringify(r)).toBe(true);
+  await closeAllEventLogs();
+  await rm(root, { recursive: true, force: true });
+  return bodies;
+}
+
+it("observationPack 由盘上的键决定第 3 次发送的形状（前两封全文、第三封起投影；关掉则恒全文）", async () => {
+  const on = await packSends(true);
+  // 4 封：第 1 封还没有工具结果；第 2、3 封是观测的第 1、2 次发送（全量前置）；第 4 封是第 3 次发送。
+  expect(on).toHaveLength(4);
+  expect(on[1], "第 1、2 次发送必须发全文（全量前置是回执合同的一半）").toContain("TAIL_SENTINEL");
+  expect(on[2]).toContain("TAIL_SENTINEL");
+  expect(on[3], "第 3 次起仍发全文 ⇒ 盘上那个键没穿过 `over ?? settings`").not.toContain("TAIL_SENTINEL");
+  expect(on[3]).toContain("obs_recall available]");
+
+  const off = await packSends(false);
+  expect(off).toHaveLength(4);
+  expect(off[3], "没开却仍被投影 ⇒ 开关是反的或恒开").toContain("TAIL_SENTINEL");
+  expect(off[3]).not.toContain("obs_recall available]");
+});
+
 /* ---- 能力 4（长程规划）：主会话模型可见面必须含编排原语 ----
    spawn_agent 曾在执行面（TOOLS 运行时注入）而不在模型面 ⇒ 主会话永远无法分解任务/派 worker，
    与 lsp 的「可执行但不可见」同类缺陷。派生 worker 花真钱且 write 档写盘，故一并计入写向工具：
