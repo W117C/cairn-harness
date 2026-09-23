@@ -93,9 +93,6 @@ const landed = (repo: string): Promise<boolean> =>
   readFile(join(repo, "note.txt"), "utf8").then(() => true, () => false);
 
 describe("supervise 判据取料面：caller 真读 artifacts.verified，升级时现场还在", () => {
-  beforeAll(async () => {
-    await mkdir(join(tmpdir()), "supervise-anchor-keep", { recursive: true }).catch(() => {});
-  });
   afterAll(async () => {
     for (const d of dirs) await rm(d, { recursive: true, force: true }).catch(() => {});
   });
