@@ -17,7 +17,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { runAgent } from "../src/main/agent-runner";
+import { runAgent, handleAgentRun, initSettingsStore } from "../src/main/agent-runner";
 import type { AgentEvent } from "../src/events";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -102,6 +102,61 @@ describe("影响面第三环：settings ⇒ 构造点 ⇒ 事件流（走真实 
       expect(writeResult(events)?.ok, "写盘都没成功，这条就成了假绿（零事件可以是没写）").toBe(true);
       expect(events.filter((e) => e.type === "impact_report").length).toBe(0);
       expect(writeResult(events)?.output ?? "").not.toContain("[impact]");
+    },
+  );
+});
+
+/**
+ * 第四环：上面两格把开关**直接交给 runAgent**，所以 `agent-runner.ts` 里那行
+ * `impactAnalysis: over.impactAnalysis ?? (await store().get()).impactAnalysis` 的**右半边**从未被走过
+ * （把整行换成 `?? false`，两格照样绿）。用户在设置界面点的是盘上那个键，不是 overrides——
+ * 所以这一支走生产入口 `handleAgentRun`，overrides 一个都不给。
+ */
+async function runOnceViaProduction(ws: string, settingsRaw: Record<string, unknown>): Promise<AgentEvent[]> {
+  const home = await mkdtemp(join(tmpdir(), "impact-runner-prod-"));
+  dirs.push(home);
+  process.env.M7_IMPACT_TAGS_DIR = home; // 缓存不许落进真实应用数据目录，更不许落进仓库
+  initSettingsStore(join(home, "settings.json"));
+  await writeFile(join(home, "settings.json"), JSON.stringify(settingsRaw), "utf8");
+  await mkdir(join(ws, ".agent"), { recursive: true });
+  // 批条必须在场：auto + 无人值守 + 无批条 ⇒ 权限门先拒写，那一环**正确地**不发生，
+  // 于是"零事件"可以被没写盘满足（同 auto-verify-wiring ② 的教训）。
+  await writeFile(
+    join(ws, ".agent/permissions.json"),
+    JSON.stringify({ rules: [{ behavior: "allow", tool: "write_file", scope: "always" }] }),
+    "utf8",
+  );
+  const seen: AgentEvent[] = [];
+  const res = await handleAgentRun(
+    { message: "给待办应用加个开关", mode: "auto" },
+    { workspace: ws, logPath: join(home, "events.jsonl"), unattended: true, onEvent: (e) => { seen.push(e); } },
+  );
+  expect(res.ok, JSON.stringify(res)).toBe(true);
+  return seen;
+}
+
+describe("影响面第四环：设置盘上的键 ⇒ 生产入口真读它（overrides 一律不给）", () => {
+  it(
+    "开（只写进 settings.json）：生产入口仍真构造钩子并出 impact_report",
+    { timeout: 180_000 },
+    async () => {
+      const events = await runOnceViaProduction(await freshWs(), { impactAnalysis: true });
+      expect(writeResult(events)?.ok, "写工具没成功 ⇒ 这条测不到设置读那一行").toBe(true);
+      const reports = events.filter(
+        (e): e is Extract<AgentEvent, { type: "impact_report" }> => e.type === "impact_report",
+      );
+      expect(reports.length, "设置里的 true 没穿过 `over ?? settings` ⇒ 界面开关是空的").toBeGreaterThan(0);
+      expect(reports[0].symbols).toContain("addTodo");
+    },
+  );
+
+  it(
+    "反向一侧：盘上没这个键（缺省关）⇒ 生产入口零 impact_report，但写盘仍成功",
+    { timeout: 180_000 },
+    async () => {
+      const events = await runOnceViaProduction(await freshWs(), {});
+      expect(writeResult(events)?.ok, "写盘都没成功 ⇒ 「零事件」可以被没写满足，等于没测").toBe(true);
+      expect(events.filter((e) => e.type === "impact_report").length).toBe(0);
     },
   );
 });
