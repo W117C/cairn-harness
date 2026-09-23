@@ -1681,8 +1681,25 @@ judgment-layer §9.1 的一条省略——"包管理器错误码先不加，因�
 - 两处**偏大**如实备案：①「一字不变」数的是"失败后又发了一次同参数调用"，不看那一次成功与否；
   ②连败只在失败序列上数，所以"失败—成功—失败"会读成 run=2。两者都被那条合取（run≥3 **且** 原样重试>0）压住，
   且偏大的代价是白加一道闸门、偏小的代价是安静地不下判断——这次只修了偏小那一侧。
-- 读数：本簇 `test` 全绿（见下）、tsc 0 错、针脚体检**阻断 0 属本簇**（整表另有 1 条 `np-write-suppression-ignored`，
+- 读数：本簇 `test` **220 files / 2365 tests 全绿**（exit 0）、tsc 0 错、针脚体检**阻断 0 属本簇**（整表另有 1 条 `np-write-suppression-ignored`，
   是另一会话在飞的 `src/agent/no-progress.ts` 顶开了它的针脚，属对方的信号，不动他人表面）。
+
+**能力 33：「两头断」第 12 次闭上最后半边——`over.autoVerify ?? settings` 那一行现在两半各有一条锚点**。
+欠的那半边一直写着"等 `agent-runner.ts` 不在飞再补"（`tests/auto-verify-wiring.test.ts` 头部与
+`dsh-loop-repeat-blindspot` 都是这么记的）。本轮该文件对 HEAD 零 diff，先补观察着再钉锚点：
+- 新格 ②c：settings 侧为真（无键 ⇒ 缺省开）+ overrides 显式 `autoVerify:false` ⇒ 那一拍不补。
+  它与 ②b **只差一个显式 false**——这正是"新旧规则答案分歧那一格"（规则 78）：
+  补 ②c 之前，把那一行整段改成"只读 settings"没有任何用例会红。
+- 锚点 +2（`autoverify-ipc-settings-fallback-dropped` 砍掉 settings 回退 / `autoverify-ipc-override-ignored`
+  砍掉 override 尊重），提交后逐条 ✅ 杀掉（5.8s）。两半各一条是刻意的：只钉一支，另一支写坏不会红。
+- **顺带量到一片同族缺口（未动，立了任务）**：`agent-runner.ts:1563-1575` 一共 8 行
+  `over.X ?? (await store().get()).Y` 形状，测试里只有 `actionFusion` / `planRequired` / `autoVerify`
+  三行被**显式 override** 触达过，另 5 行（`impactAnalysis` / `requestMetering` / `observationPack` /
+  `evidenceReceipts` / `economicCompaction`）在判卷里连调用者都没有 ⇒ 那 5 行的两半有没有观察着，
+  今天**未测**（grep 命中字段名只证明"提过"，不证明"改这行会红"）。下一步要么逐行补分歧格 + 锚点，
+  要么把"这一行的两半各须有一条用例能红"做成机制判据（不挂手抄清单，同规则 64）。
+- 读数：全量 `test` **220 files / 2366 tests 全绿**（exit 0）、`pnpm typecheck` 0 错、
+  针脚体检 825 条**阻断 0 属本簇**（整表仍是那 1 条别人的 `np-write-suppression-ignored`）、本簇 2 条锚点 ✅。
 
 
 
