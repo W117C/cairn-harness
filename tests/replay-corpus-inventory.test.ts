@@ -84,6 +84,13 @@ describe("决策线与规范化", () => {
     expect(v.why).toContain("4");
   });
 
+  // 决策线有两半，各自要有分歧格：上一格只钉了「run 到了」，把阈值从 3 放宽到 2 它照样绿。
+  it("只有原样重试、run 未到 3 ⇒ 仍不动（阈值这一半的分歧格）", () => {
+    const v = repeatOfFailed({ maxSameFailedRun: 2, retryIdenticalArgs: 5, failedCalls: 20, retrySameName: 10 });
+    expect(v.shouldAct).toBe(false);
+    expect(v.why).toContain("最深连败 run=2");
+  });
+
   it("canonicalArgs：键序无关、嵌套与数组内递归都规范化；循环引用不抛", () => {
     expect(canonicalArgs({ b: 1, a: { d: [2, 1], c: "s" } })).toBe(canonicalArgs({ a: { c: "s", d: [2, 1] }, b: 1 }));
     expect(canonicalArgs(undefined)).toBe("null");
