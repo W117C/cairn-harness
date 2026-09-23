@@ -2154,3 +2154,7 @@ $0.2020（standard）/ **$0.8080**（strong）——价表跨度 40 倍。旧算
   锚点表 885 → 887，两条落库后逐条 ✅ 杀掉（`recovery-orchestrator-unreachable-after-restart`、
   `recovery-parent-mode-from-settings`）。第一条第一次跑是**误伤**（改法把 `?? ... : null` 那行砍成语法错，
   门当场拒绝把它当分辨力证据）⇒ 换成语法成立的 `false ? ... : null` 才拿到真读数。
+- 补完另一半后追加：`recovery-log-path-only-from-memory` 也 ✅（表 888）。
+  同轮 `--check-needles`：888 条**改法全部产出合法源**、钉在飞文本 0、未覆盖 0，
+  唯一那条阻断 `np-write-suppression-ignored` 的针脚在 **HEAD 里仍在**（`git show HEAD:src/agent/no-progress.ts` 命中 1），
+  是别的会话对 `no-progress.ts` 的**在飞改动**动了被锚定的那行 ⇒ **不归本笔**，由那一条改动簇改指它。
