@@ -198,5 +198,8 @@ describe("hint 通道：判据算出来的那句要真送到模型面前（「�
     expect([...src.matchAll(/goalReminder\(/g)].length).toBe(1); // 只有一个生产调用点
     const call = /goalReminder\([^)]*\)/.exec(src)?.[0] ?? "";
     expect(call, "goalNextTurn 丢了这一位 ⇒ hint 算出来没人读").toContain("decision.hint");
+    // 同一个形状闸顺带管住在途 worker 那一位：goalReminder 的默认值是 0，"省略"与"传 0"行为逐字相同
+    // ⇒ 变异测不出来（实测存活过），能守住它的只有"这一位必须出现在调用点"。
+    expect(call, "丢了 unbookedWorkers ⇒ 提醒块永远不提本拍少算的 worker 钱").toContain("unbookedWorkers");
   });
 });

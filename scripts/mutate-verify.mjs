@@ -877,6 +877,50 @@ const MUTATIONS = [
     apply: (s) => s.replace("      unpricedTokens += tokens;", "      unpricedTokens += 0;"),
     expectFail: "真实但价不可知的一桶：不折成 $0，token 计入 unpricedTokens，已知的部分照算",
   },
+  // ---- goal 美元闸（同一把尺的第二支，`1a36de2`）----
+  {
+    id: "goal-window-booked-sum-dropped",
+    src: "src/agent/goal.ts",
+    test: "tests/goal-price.test.ts",
+    desc: "worker 回执里已入账的表价不再累加 ⇒ 闸只看主会话那一段，派多少活都不涨钱（上限形同虚设）",
+    apply: (s) => s.replace("      if (typeof s === \"number\" && Number.isFinite(s) && s > 0) booked += s;", "      if (typeof s === \"number\" && Number.isFinite(s) && s > 0) booked += 0;"),
+    expectFail: "正向那一格：worker 跑贵档并已入账 ⇒ 闸按入账的钱停，不按会话的便宜档低估",
+  },
+  {
+    id: "goal-window-prices-worker-at-session-tier",
+    src: "src/agent/goal.ts",
+    test: "tests/goal-price.test.ts",
+    desc: "把 worker 的 token 也并进主会话桶 ⇒ 回到「全部 token × 会话档」，与同一屏的回执分叉（40 倍）",
+    apply: (s) => s.replace("      if (e.agent_id === undefined) {", "      if (true) {"),
+    expectFail: "反向那一格：会话档很贵而 worker 跑便宜档 ⇒ 闸只看回执里那 $0.0202，不乘成 $0.808",
+  },
+  {
+    id: "goal-gate-call-site-bypassed",
+    src: "src/main/agent-runner.ts",
+    test: "tests/goal-continue.test.ts",
+    desc: "调用点递空窗口（函数没错、闸拿不到数）⇒ 美元闸惰掉，理由退到轮次上限，用户设的钱闸变随机数",
+    apply: (s) => s.replace("goalWindowSpend(view.window, model)", "goalWindowSpend([], model)"),
+    expectFail: "设 $0.05 上限 × 一轮 200k/20k 用量 ⇒ goal_stopped 点名美元上限（不被轮次/无产出理由顶包）",
+  },
+  {
+    id: "goal-lag-note-never-shown",
+    src: "src/agent/goal.ts",
+    test: "tests/goal-price.test.ts",
+    desc: "在途 worker 的滞后不再说出口 ⇒ 下一轮数字突然跳升，会被模型和人读成「上一轮什么都没花」",
+    apply: (s) => s.replace("  const lag = pendingWorkerSpend > 0", "  const lag = pendingWorkerSpend < 0"),
+    expectFail: "在途 worker 的那一段写进提醒块；没有在途时逐字不提（每轮重送，少一行是一行的 token）",
+  },
+  {
+    id: "goal-lag-count-not-passed-at-call-site",
+    src: "src/main/agent-runner.ts",
+    test: "tests/goal-stop-decision.test.ts",
+    // 第一版写这条时**变异存活**：goalReminder 的默认值是 0 ⇒ "省略这一位"与"传 0"行为逐字相同，
+    // 而可选参数后面加不了必填，编译器也接不了这格。改由那条生产入口形状断言守住
+    // （与 `decision.hint` 同一处、同一手法），这条才有了可杀的靶子。
+    desc: "调用点不递第 6 个实参 ⇒ 提醒块永远不提「本拍的美元里还没有在途 worker 那一段」",
+    apply: (s) => s.replace("goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint, unbookedWorkers)", "goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint)"),
+    expectFail: "生产入口真的把 decision.hint 传进去（goalNextTurn 未导出 ⇒ 只能钉这一行的形状）",
+  },
   {
     id: "session-budget-inert-silent",
     src: "src/agent/orchestrator.ts",
@@ -3820,10 +3864,10 @@ const MUTATIONS = [
   },
   {
     id: "goal-usd-gate-price-key-as-model-name",
-    src: "src/main/agent-runner.ts",
+    src: "src/agent/goal.ts",
     test: "tests/goal-continue.test.ts",
-    desc: "美元闸把 settings 里的**模型名**直接当价表键传（价表键是档位 id）⇒ 对产品里可选的每个模型都恒「价格不可知」，闸一次也没触发过；而判据侧单测全绿（它们直接注入 spentUsd）——#54 定名的那处实踩",
-    apply: (s) => s.replace("spentUsdFor(priceForModel(model), view.usage)", "spentUsdFor({ model, priceId: model }, view.usage)"),
+    desc: "美元闸把 settings 里的**模型名**直接当价表键传（价表键是档位 id）⇒ 对产品里可选的每个模型都恒「价格不可知」，闸一次也没触发过；而判据侧单测全绿（它们直接注入 spentUsd）——#54 定名的那处实踩。09-24 反查随美元闸一起从 agent-runner 搬进 goalWindowSpend，针脚跟过去",
+    apply: (s) => s.replace("price: priceForModel(sessionPriceModel)", "price: { model: sessionPriceModel }"),
     expectFail: "设 $0.05 上限 × 一轮 200k/20k 用量 ⇒ goal_stopped 点名美元上限（不被轮次/无产出理由顶包）",
   },
   {
@@ -5121,7 +5165,7 @@ const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/goal-stop-decision.test.ts",
     desc: "生产入口不传 decision.hint ⇒ 被收走的那一轮仍收到「针对红字继续」（算了没人读的第 10 次）",
-    apply: (s) => s.replace("goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint)", "goalReminder(view.spec, turn, spentUsd, view.evidence)"),
+    apply: (s) => s.replace("goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint, unbookedWorkers)", "goalReminder(view.spec, turn, spentUsd, view.evidence, undefined, unbookedWorkers)"),
     expectFail: "生产入口真的把 decision.hint 传进去（goalNextTurn 未导出 ⇒ 只能钉这一行的形状）",
   },
   {
