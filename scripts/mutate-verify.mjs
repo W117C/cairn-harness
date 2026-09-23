@@ -6318,6 +6318,14 @@ const MUTATIONS = [
     expectFail: "settings.planRequiredByDefault=true ⇒ 生产入口自己就该拒写，且拒因来自方案门",
   },
   {
+    id: "observation-pack-settings-fallback-dropped",
+    src: "src/main/agent-runner.ts",
+    test: "tests/session-tools.test.ts",
+    desc: "盘上的 observationPack 到不了主会话 ⇒ 第 3 次发送仍全文（那条 `obs_recall` 标记不算数：`observationPack || evidenceReceipts` 任一为真都有它）",
+    apply: (s) => s.replace("observationPack: over.observationPack ?? (await store().get()).observationPack,", "observationPack: over.observationPack ?? false,"),
+    expectFail: "observationPack 由盘上的键决定第 3 次发送的形状（前两封全文、第三封起投影；关掉则恒全文）",
+  },
+  {
     id: "pc-serialize-layer-keeps-closing-bracket",
     src: "src/agent/prefix-churn.ts",
     test: "tests/prefix-churn.test.ts",
