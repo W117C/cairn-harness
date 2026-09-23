@@ -9,7 +9,7 @@
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { REPLAY_READINGS } from "../scripts/replay-readings";
-import { foldLatency, latencyVerdict, tallyLatency } from "../scripts/replay/latency";
+import { latencyVerdict, tallyLatency, tallyStreams } from "../scripts/replay/latency";
 
 const call = (id: string, name: string, ts?: number) => ({ type: "tool_call", id, name, args: {}, ...(ts === undefined ? {} : { ts }) });
 const result = (id: string, ts?: number, ok = true) =>
@@ -87,7 +87,7 @@ describe("latency 的触发面（D8 那一格）", () => {
   it("一条流末尾未闭合的调用会把下一条流的「轮」吞掉 ⇒ 必须逐条成流再合并", () => {
     const a = [call("a1", "read_file"), result("a1"), call("dangling", "read_file")];
     const b = [call("b1", "grep"), result("b1")];
-    expect(foldLatency([tallyLatency(a), tallyLatency(b)]).turnsWithCalls).toBe(2);
+    expect(tallyStreams([a, b]).turnsWithCalls).toBe(2);
     // 反面（本面第一版踩过）：拼成一条数组时 b 那一轮 pending 永不归零 ⇒ 少计一轮
     expect(tallyLatency([...a, ...b]).turnsWithCalls).toBe(1);
   });

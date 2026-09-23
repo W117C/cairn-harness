@@ -10,7 +10,7 @@
 // 三条口径纪律：
 //  ⑴ **一个文件 = 一条流，逐条算完再合并**。把多个会话拼成一条数组会撞 `tool_call.id`
 //     （不同会话里 `c1` 遍地都是），配对与"轮"都会错位——本面第一版就因此报出过一个假的
-//     「19 轮 / 最多 25 个调用」。合并只走 `foldLatency`，那里头没有任何跨流的轮概念。
+//     「19 轮 / 最多 25 个调用」。合并只走 `tallyStreams`，那里头没有任何跨流的轮概念。
 //  ⑵ **两半可测时点不同**：触发面（一轮几个调用）不需要戳；时间面需要。没戳 ⇒ 红着退出说
 //     「不可测」，绝不报「工具耗时 0ms」——「读到 0」与「没有尺」必须长成两个样子。
 //  ⑶ 孤儿 result / 有调用无结果，各自记账，不混进时长也不静默丢。
@@ -156,7 +156,7 @@ export function tallyLatency(raws: readonly unknown[]): LatencyTally {
 
 /** 多流合并：计数相加，百分位**从样本重算**（两个 p50 平均出来的不是 p50）。
  *  `spanMs` 取各流之和而不是首末差——跨会话拼出来的"总时长"没有意义。 */
-export function foldLatency(parts: readonly LatencyTally[]): LatencyTally {
+function foldLatency(parts: readonly LatencyTally[]): LatencyTally {
   const t = emptyTally();
   for (const p of parts) {
     t.paird += p.paird;
@@ -178,6 +178,14 @@ export function foldLatency(parts: readonly LatencyTally[]): LatencyTally {
   }
   t.byTool = toolStats(t.samplesMs);
   return t;
+}
+
+/** 一个文件 = 一条流：逐条 `tallyLatency` 后再合并。
+ *  这条形状是**判据对象**而不是实现细节：把多条流拼成一条数组去 tally，会让一条流末尾未闭合的调用
+ *  把下一条流的"轮"吞掉（pending 永不归零），实测把 189 轮读成 19 轮。`tallyStreams` 与
+ *  `tallyLatency(拼起来的一串)` 的差就是这条纪律，两侧都有用例钉。 */
+export function tallyStreams(streams: readonly (readonly unknown[])[]): LatencyTally {
+  return foldLatency(streams.map((raws) => tallyLatency(raws)));
 }
 
 /** 纯函数版结论：时间面能不能读、触发面有没有面，各自说清。 */
@@ -226,8 +234,8 @@ function main(): void {
     process.exitCode = 1;
     return;
   }
-  // 逐文件成流，再合并（见顶部纪律 ⑴：跨流配对会撞 id，"轮"也会串味）
-  const v = latencyVerdict(foldLatency(scan.files.map((f) => tallyLatency(readJsonl(f)))));
+  // 逐文件成流，再合并（见 `tallyStreams` 那条纪律：跨流配对会撞 id，"轮"也会串味）
+  const v = latencyVerdict(tallyStreams(scan.files.map((f) => readJsonl(f))));
   for (const l of v.lines) console.log(l);
   console.log("（语料：" + String(scan.files.length) + " 个 .jsonl，逐条成流后合并）");
   process.exitCode = v.exitCode;
