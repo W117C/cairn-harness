@@ -2,6 +2,7 @@
 // hook 引擎 / MCP 连接 / skill 注册表。skill 激活不设私有状态——从事件流投影
 // （tool_call(name=skill) → 同 callId 的 tool_result 事件 id），与「上下文是投影」同构。
 import { dirname, join } from "node:path";
+import type { PermissionMode } from "../../permissions/modes";
 import {
   discoverPlugins, activeHooks, pendingPlugins,
 } from "./discover";
@@ -74,8 +75,8 @@ export interface PluginRuntimeOptions {
   pluginDataRoot: string;
   /** 信任决议存储路径（项目级插件；缺省不持久 = 全部 pending）。 */
   trustFile?: string;
-  /** hook 权限档。 */
-  mode?: "read-only" | "default" | "auto";
+  /** hook 权限档（类型取自 `permissions/modes`，不再自己抄一份 union）。 */
+  mode?: PermissionMode;
   /** 会话标识：透传给 hook 引擎进 stdin JSON（§9.5）。缺省 = 该字段不进 JSON，不伪造。 */
   sessionId?: string;
 }

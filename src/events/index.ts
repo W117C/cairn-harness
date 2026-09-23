@@ -238,7 +238,7 @@ export type AgentStatus = "running" | "waiting_approval" | "waiting_input" | "do
 /** 权限档（与 src/permissions 的 PermissionMode 同字面量；events 层零依赖不自引）。
  *  导出**运行时元组**是为了让"两份抄本必须同集"这件事可判卷
  *  （见 `tests/permission-mode-single-source.test.ts`；抄本不可见 = 加一档时只有一份会改）。 */
-export const AGENT_PERMISSION_MODES = ["read-only", "default", "auto"] as const;
+export const AGENT_PERMISSION_MODES = ["read-only", "default", "guided", "auto"] as const;
 export type AgentPermissionMode = (typeof AGENT_PERMISSION_MODES)[number];
 
 export interface AgentSpawnedEvent {

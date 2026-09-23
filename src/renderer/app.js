@@ -1980,11 +1980,15 @@ const ctxPerms = $('#ctxPermissions');
 const permLabel = ctxPerms.querySelector('.c-btn-label');
 const permPanel = $('#permPanel');
 const permPanelBody = $('#permPanelBody');
-/* 三档由松到紧：needs 为该档仍需逐项确认的动作面，danger 档走弹窗确认 */
+/* 四档由紧到松（列表顺序 = 面板顺序）：文案必须说得出**这一档实际会拦什么**（判据在
+ * permissions/autonomy 的 MODE_POLICY，这里只是把它讲给人听）。旧文案里「标准权限 = 工作区内改动
+ * 直接执行」是错的：默认档每一笔写向都出卡，真按风险放行的那一档是下面新加的 guided——
+ * 两行文案撞车会让人选错档。 */
 const PERM_MODES = [
-  { id: 'strict', name: '严格审批', desc: '每次写入、命令与网络请求都先问我', needs: ['修改文件', '终端命令', '联网请求'] },
-  { id: 'standard', name: '标准权限', desc: '工作区内改动直接执行，命令与联网需确认', needs: ['终端命令', '联网请求'] },
-  { id: 'yolo', name: '全部放行', desc: '不再逐次询问，直接执行下面的操作', needs: [], danger: true }
+  { id: 'strict', name: '严格审批', desc: '只读：写向工具直接摘除，不改文件也不跑写命令', needs: ['修改文件', '终端命令', '联网请求'] },
+  { id: 'standard', name: '标准权限', desc: '每一次写入与命令都先问我（本会话允许这类可跳过）', needs: ['修改文件', '终端命令', '联网请求'] },
+  { id: 'guided', name: '风险确认', desc: '低风险直接执行；中风险以上（编辑、装包、联网）先问我', needs: ['终端命令', '联网请求'] },
+  { id: 'yolo', name: '全部放行', desc: '只拦高风险与 critical，其余不再逐次询问', needs: [], danger: true }
 ];
 let permMode = PERM_MODES[1];
 function permModeIcon(mode) {
@@ -2358,7 +2362,7 @@ render();
   const api = window.agent;
   if (!api || typeof api.listSessions !== 'function') return;
 
-  const PERM_MAP = { strict: 'read-only', standard: 'default', yolo: 'auto' };
+  const PERM_MAP = { strict: 'read-only', standard: 'default', guided: 'guided', yolo: 'auto' };
   const real = { id: null, title: '新会话', running: false, askCards: new Map(), usageIn: 0, usageOut: 0, events: 0, runStart: 0 };
   let historyWindow = null;
   let openGeneration = 0;

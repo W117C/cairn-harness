@@ -9,11 +9,14 @@ export { PERMISSION_MODES, isPermissionMode, permissionModeRank, type Permission
 import { type PermissionMode } from "./modes";
 export type Decision = "allow" | "ask" | "deny";
 
-/** 副作用工具在每一档的裁决表。`Record<PermissionMode, Decision>` ⇒ **少一档就编译不过**，
+/** 副作用工具在每一档的**粗档**裁决表（细档政策在 autonomy 的 `MODE_POLICY`，两层各有判卷）。
+ *  `Record<PermissionMode, Decision>` ⇒ **少一档就编译不过**，
  *  不再靠"掉到最后一行 return"的运气（那是 §11.7 语义被静默改写的入口）。 */
 const SIDE_EFFECT_DECISION: Record<PermissionMode, Decision> = {
   "read-only": "deny",
   default: "ask",
+  // guided 在粗档不逐笔问：它拆的正是这一条，「问不问」改由风险线判（autonomy 细档）。
+  guided: "allow",
   auto: "allow",
 };
 
@@ -57,6 +60,7 @@ export {
   autoOf,
   gateBase,
   GATE_LAYERS,
+  modePolicyTable,
   MAX_AUTO_APPROVALS,
   CRITICAL_DENIAL_LIMIT,
   type AutonomySession,
@@ -66,6 +70,7 @@ export {
   type GateLayer,
   type GateMeta,
   type McpGrade,
+  type ModePolicy,
   type ToolResultWithAudit,
 } from "./autonomy";
 
@@ -89,12 +94,12 @@ function planBlocks(): boolean {
 }
 
 // 原始判定：read_file 与三门工具（clarify/propose_plan/verify）不产生用户数据副作用，任何档都放行；
-//   write_file / run_shell 有副作用：
+//   write_file / run_shell 有副作用（逐档裁决见上面的 `SIDE_EFFECT_DECISION`，一行一档）：
 //     方案门：存在未批准 plan → 一律 deny（唯一有强制力的门，先批后写）
 //     read-only：副作用工具一律 deny
 //     default  ：副作用工具 ask（交互模式下问人）
+//     guided   ：粗档不拦——它拆掉的正是"每写必问"，问不问由风险线判（autonomy 的 MODE_POLICY）
 //     auto     ：全放行
-//   裁决本身在 `SIDE_EFFECT_DECISION` 表里（加一档必须补一行，否则编译不过）。
 export function checkPermission(mode: PermissionMode, tool: ToolName): Decision {
   if (!isSideEffectTool(tool)) return "allow";
   if (planBlocks()) return "deny";

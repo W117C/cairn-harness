@@ -1,4 +1,5 @@
 import { isEnvVerifyCause } from "../events";
+import { permissionModeRank } from "../permissions/modes";
 import type { AgentEvent, AgentPermissionMode, SecurityFinding, WorkerEvidence } from "../events";
 import { escapeControlTags } from "./memory/inject";
 import { SUMMARY_TOKEN_CAP } from "./orchestrator-config";
@@ -16,19 +17,20 @@ export function parseSpawnedAgentId(output: string): string | undefined {
   }
 }
 
-const TIER_ORDER: Record<AgentPermissionMode, number> = { "read-only": 0, default: 1, auto: 2 };
-
 /** 档位判别从 `permissions/modes` 那只走（此前这里是第四份 `||` 链抄本；
  *  抄本漂了的后果不报错：`orchestrator` 用 `isPermissionMode(args.tier) ? … : parentMode` ——
  *  少认一档就静默把子跑降成父档，正好与"越界要出声"相反）。 */
 export { isPermissionMode } from "../permissions/modes";
 
-/** 越界裁剪（纯函数）：requested > parent → 裁到 parent + 警告文案；否则原样。 */
+/** 越界裁剪（纯函数）：requested > parent → 裁到 parent + 警告文案；否则原样。
+ *  名次从 `permissions/modes` 的那一份序里读：旧写法在这里另抄一张
+ *  `{ "read-only": 0, default: 1, auto: 2 }` 数字表——加一档时编译器只报 `Record` 少键，
+ *  报不了「键在、名次错」，于是新档可以插在中间而继承序仍按旧表算。 */
 export function clampTier(
   requested: AgentPermissionMode,
   parent: AgentPermissionMode,
 ): { mode: AgentPermissionMode; clamped: boolean; warning?: string } {
-  if (TIER_ORDER[requested] <= TIER_ORDER[parent]) return { mode: requested, clamped: false };
+  if (permissionModeRank(requested) <= permissionModeRank(parent)) return { mode: requested, clamped: false };
   return {
     mode: parent,
     clamped: true,

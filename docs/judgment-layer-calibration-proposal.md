@@ -179,8 +179,19 @@ tool_result 出口上，硬挂会造出第三种形状，留位；不新建事�
 - **不许碰**（语义与原「永不豁免」清单逐字不变）：L0 三条 deny（含判卷面冻结）、L1 deny 规则、
   L2 ask 规则、任何 critical、MCP 无注解 fail-closed。
 - **零回归面**：自主档 ask 仍 0；`auto` / `gate` 等式（`scripts/autonomy-check.ts` 的
-  `assertAuditCoverage`）一字不动；`src/renderer` 看不到任何变化（§6 第 4 条「UI 变了就是回归」继续有效）。
+  `assertAuditCoverage`）一字不动。
+  ⚠️ 本条原有一句「`src/renderer` 看不到任何变化」——**2026-09-23 落地时作废**（不是回归，是形态变了）：
+  用户裁决走「造中间档、`default` 不动」，于是这一层露出来靠的是新档 `guided`，而新档必须可选，
+  渲染层因此加了一格看板 + 一个设置按钮。§6 第 4 条那句「UI 变了就是回归」的适用面是
+  **纯后端字段的改动**（那次 renderer 确实零引用），不能外推成"任何权限改动都不许碰 UI"。
+  三档既有语义仍逐字不变，且这条是被数的：`default ask=89 / L3-mode:89`、`auto ask=1`、
+  `auto+沙箱不可用 ask=89` 三臂复跑与上面基线完全一致（判卷与读数见 `outputs/permission-guided-mode-2026-09-23.md`）。
 - 新增分支须在 `tests/gate-audit.test.ts` 的用例表里各给一条，否则 `GATE_LAYERS` 穷尽断言红。
+
+**落地形态（2026-09-23，第 1 步收口）**：位置判据成立——`guided` 行 `ask=58 askByLayer=L4-risk:58`，
+`L3-mode` 归零、`L4-*` 非 0 ⇒ 第 3 步的概率有了可作用的层。
+残余的 58 次里 57 次是 `edit_file`：静态威胁表给"编辑文件（写向操作）"底线 medium，恰是这档的线。
+**要把 edit_file 也降下来得改风险模型（按路径/内容判写向），那是第 1.5 步，不在本笔偷做**。
 
 ### 第 2 步 影子攒可标语料：零新代码，只跑真会话
 

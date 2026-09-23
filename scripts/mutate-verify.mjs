@@ -6719,8 +6719,77 @@ const MUTATIONS = [
     src: "src/events/index.ts",
     test: "tests/permission-mode-single-source.test.ts",
     desc: "events 那份抄本少一档 ⇒ 对账判卷若测不出来，「唯一事实源」就是假的：permissions 加了档、events/IPC/worker 侧仍按旧集走，且没人报错",
-    apply: (s) => s.replace('export const AGENT_PERMISSION_MODES = ["read-only", "default", "auto"] as const;', 'export const AGENT_PERMISSION_MODES = ["read-only", "default"] as const;'),
+    apply: (s) => s.replace('export const AGENT_PERMISSION_MODES = ["read-only", "default", "guided", "auto"] as const;', 'export const AGENT_PERMISSION_MODES = ["read-only", "default", "auto"] as const;'),
     expectFail: "events 的抄本与 permissions 的事实源逐位相同（顺序=松紧序，clampTier 依赖它）",
+  },
+
+  // ── 第 4 档 guided（judgment-layer §7 第 1 步）：政策表的每一格都要有「废掉它必须有名字红」的锚
+  {
+    id: "guided-risk-line-collapsed-to-auto",
+    src: "src/permissions/autonomy.ts",
+    test: "tests/permission-mode-guided.test.ts",
+    desc: "把 guided 的风险线抬回 high ⇒ 它与 auto 成为同一档（中间档名存实亡：默认档 89 次出卡只降了 0 次，读数上谁也发现不了）",
+    apply: (s) => s.replace('guided: { writeAsk: false, scopeMemory: true, riskAskAt: "medium"', 'guided: { writeAsk: false, scopeMemory: true, riskAskAt: "high"'),
+    expectFail: "medium 风险写向（edit_file）：auto 放行，guided 出卡 L4-risk，default 出卡 L3-mode",
+  },
+  {
+    id: "guided-scope-memory-dropped",
+    src: "src/permissions/autonomy.ts",
+    test: "tests/permission-mode-guided.test.ts",
+    desc: "guided 不吃「本会话允许这类」⇒ 审批卡在新档成了一次静默无效的点击（点完仍每笔照问，用户无从察觉）",
+    apply: (s) => s.replace('guided: { writeAsk: false, scopeMemory: true, riskAskAt: "medium"', 'guided: { writeAsk: false, scopeMemory: false, riskAskAt: "medium"'),
+    expectFail: "本会话已记此类 ⇒ guided 放行 L3-scope；网络类命令不吃这条快捷",
+  },
+  {
+    id: "default-write-ask-flag-flipped",
+    src: "src/permissions/autonomy.ts",
+    test: "tests/permission-mode-guided.test.ts",
+    desc: "默认档的 writeAsk 翻成 false ⇒ 「本笔不动 default 语义」这句承诺失去观测者（低危写向从此静默放行，读数只在 ask-density 里看得见）",
+    apply: (s) => s.replace('default: { writeAsk: true, scopeMemory: true', 'default: { writeAsk: false, scopeMemory: true'),
+    expectFail: "低风险写向：default 出卡 L3-mode，guided 放行 L4-pass，auto 亦放行",
+  },
+  {
+    id: "mode-policy-unknown-fallback-loosest",
+    src: "src/permissions/autonomy.ts",
+    test: "tests/permission-mode-guided.test.ts",
+    desc: "表外档位的兜底从「按默认档」改成「按自主档」⇒ 未升级的持久化值静默拿到最松一档（本仓修过一次的那族，换个字段复现）",
+    apply: (s) => s.replace("return MODE_POLICY[mode] ?? MODE_POLICY.default;", "return MODE_POLICY[mode] ?? MODE_POLICY.auto;"),
+    expectFail: "未知 mode 走默认档政策：写向逐次审批，不是静默放行",
+  },
+  {
+    id: "tier-order-second-copy-back",
+    src: "src/agent/worker-report.ts",
+    test: "tests/permission-mode-guided.test.ts",
+    desc: "clampTier 回到本地数字表 ⇒ 新档插在中间时名次仍按旧表算（「子档不宽于父档」这条单调序的第二份事实源）",
+    apply: (s) => s.replace("if (permissionModeRank(requested) <= permissionModeRank(parent)) return { mode: requested, clamped: false };", "if (true) return { mode: requested, clamped: false };"),
+    expectFail: "父档 default 拒住 guided 子档；父档 guided 拒住 auto 子档",
+  },
+  {
+    id: "ask-density-arm-missing",
+    src: "scripts/replay/ask-density.ts",
+    test: "tests/permission-mode-guided.test.ts",
+    desc: "复跑面少一臂 ⇒ 那一档的出卡密度没人量（尺不会报错，只会读成没有这一行）",
+    apply: (s) => s.replace('  { mode: "guided", sandbox: null },\n', ""),
+    expectFail: "ask-density 的臂覆盖每一档",
+  },
+  {
+    id: "renderer-perm-map-copy-missing-mode",
+    src: "src/renderer/app.js",
+    test: "tests/permission-mode-guided.test.ts",
+    // 为什么不钉 index.html 那个按钮：改法语法探针用 `ts.transpileModule`，整份 HTML 在它眼里就是语法错
+    // ⇒ 任何 html 面上的锚点都必然被判「改法致语法错」（实测首次尝试即此）。看板/设置页两面里挑可解析的那面钉，
+    // 另一面仍由同一条对账用例判红。
+    desc: "看板别名表少一挡 ⇒ 选了新档也发不出去（PERM_MAP 未命中 = mode undefined 进 IPC，产品面静默失配）",
+    apply: (s) => s.replace("const PERM_MAP = { strict: 'read-only', standard: 'default', guided: 'guided', yolo: 'auto' };", "const PERM_MAP = { strict: 'read-only', standard: 'default', yolo: 'auto' };"),
+    expectFail: "渲染层两处档位入口（权限看板 + 设置页）与档位集合同集合",
+  },
+  {
+    id: "remember-gate-if-chain-back",
+    src: "src/main/agent-runner.ts",
+    test: "tests/remember.test.ts",
+    desc: "remember 门退回按档位字面量的 if 链 ⇒ 表外档位一路掉到底、直接落盘（粗档表在这条路上没人读）",
+    apply: (s) => s.replace('const decision = sideEffectDecisionTable()[mode] ?? "ask";', 'const decision = mode === "read-only" ? "deny" : mode === "default" ? "ask" : "allow";'),
+    expectFail: "表外档位不落盘：走 ask，无审批口即 fail-closed（旧 if 链在这里静默放行）",
   },
 ];
 

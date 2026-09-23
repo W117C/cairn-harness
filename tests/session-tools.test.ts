@@ -18,7 +18,7 @@ import { PluginRuntime } from "../src/agent/plugins";
 import { skillInvokeName } from "../src/agent/plugins/skills";
 import type { McpToolInfo } from "../src/agent/plugins/mcp";
 import { closeAllEventLogs, createEventLog } from "../src/events";
-import { isSideEffectTool, toolTableFor, type McpGrade } from "../src/permissions";
+import { isSideEffectTool, PERMISSION_MODES, toolTableFor, type McpGrade, type PermissionMode } from "../src/permissions";
 import {
   handleAgentRun,
   handleSessionCreate,
@@ -43,7 +43,8 @@ afterEach(async () => {
   dir = "";
 });
 
-it.each(["read-only", "default", "auto"] as const)(
+// 档位列表从事实源取（旧写法手抄三档字面量：加一档不会有人想起来补这里 = 新档零观测者）
+it.each([...PERMISSION_MODES])(
   "%s：模型可见工具面覆盖可执行工具表（含 lsp）",
   (mode) => {
     const names = sessionToolSpecs({ mode }).specs.map((s) => s.function.name);
@@ -113,7 +114,7 @@ it("只读档规格面同步：门必拒的 MCP 工具不再挂给模型，带 r
   const pluginTools = pluginToolSpecsFromRuntime(rt);
   // 注解必须随规格一起带出：不带 ⇒ 下游那份 mode 判定没有输入，只能凭空猜
   expect(pluginTools.find((t) => t.name === "mcp__plugin_demo_srv__noann")?.grade).toEqual({ annotated: false });
-  const namesOf = (mode: "read-only" | "default" | "auto"): string[] =>
+  const namesOf = (mode: PermissionMode): string[] =>
     sessionToolSpecs({ mode, pluginTools }).specs.map((s) => s.function.name);
   // 只读档只放行带 readOnlyHint 的（与权限门同一份谓词、同一份输入）
   const ro = namesOf("read-only");
@@ -121,8 +122,8 @@ it("只读档规格面同步：门必拒的 MCP 工具不再挂给模型，带 r
   expect(ro).not.toContain("mcp__plugin_demo_srv__wr");
   expect(ro).not.toContain("mcp__plugin_demo_srv__noann");
   expect(ro).toContain("skill"); // 非 MCP 注入项（无 grade）不受牵连：仍按静态写向表判
-  // 另两档不摘：那里该发生的是出卡，不是工具凭空消失
-  for (const mode of ["default", "auto"] as const) {
+  // 其余各档不摘：那里该发生的是出卡，不是工具凭空消失
+  for (const mode of PERMISSION_MODES.filter((m) => m !== "read-only")) {
     for (const t of ["ro", "wr", "noann"]) expect(namesOf(mode)).toContain("mcp__plugin_demo_srv__" + t);
   }
 });

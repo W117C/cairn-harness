@@ -33,7 +33,7 @@ import { createEventLog, replay } from "../events";
 // goal 模式：判据与投影全在纯函数面（src/agent/goal.ts），这里只做「读事件流 → 问它 → 落流 → 起下一轮」。
 import { GOAL_TURN_CAP_MAX, goalReminder, goalStopDecision, parseGoalSpec, projectGoal } from "../agent/goal";
 import { priceForModel, spentUsdFor } from "../agent/orchestrator-join";
-import { checkPermission, enterPlanRunScope, getPlanState, planGateBlocks, type PermissionMode } from "../permissions";
+import { checkPermission, enterPlanRunScope, getPlanState, planGateBlocks, sideEffectDecisionTable, type PermissionMode } from "../permissions";
 import {
   evaluate,
   isNetworkCommandCall,
@@ -710,12 +710,15 @@ export async function handleCompact(
 }
 
 let installed = false;
-/** M2d：remember 门语义（可测工厂）：方案门写禁 / read-only 拒 / default 逐次审批 / auto 放行。
- *  §8.1.4「remember 属写动作走权限门」；无权限 → ok:false 且不落盘。 */
+/** M2d：remember 门语义（可测工厂）：方案门写禁 / 档位表判 deny·ask·allow。
+ *  §8.1.4「remember 属写动作走权限门」；无权限 → ok:false 且不落盘。
+ *  裁决读 `SIDE_EFFECT_DECISION` 那一列（`sideEffectDecisionTable()`）——旧写法是
+ *  `if (mode === "read-only") … if (mode === "default") …`，**表外档位一路掉到底、直接落盘**，
+ *  和 `checkPermission` 修掉的那个 fail-open 尾巴是同一族。 */
 export function createGatedRemember(deps: {
   getMode(): PermissionMode;
   isPlanBlocked(): boolean;
-  /** default 档的审批口；缺省 = 非交互 fail-closed 拒绝。 */
+  /** ask 裁决时的审批口；缺省 = 非交互 fail-closed 拒绝。 */
   getAsk(): ((args: Record<string, unknown>) => Promise<boolean>) | undefined;
 }): Tool {
   return {
@@ -723,8 +726,9 @@ export function createGatedRemember(deps: {
     async run(args, ctx) {
       if (deps.isPlanBlocked()) return denied("remember", deps.getMode(), "方案门：先批后写（当前没有已批准的方案）");
       const mode = deps.getMode();
-      if (mode === "read-only") return denied("remember", mode, "只读档拒写向工具");
-      if (mode === "default") {
+      const decision = sideEffectDecisionTable()[mode] ?? "ask";
+      if (decision === "deny") return denied("remember", mode, "只读档拒写向工具");
+      if (decision === "ask") {
         const ask = deps.getAsk();
         if (!ask) return denied("remember", mode, "非交互模式（fail-closed）");
         if (!(await ask(args))) return denied("remember", mode, "未获批准");

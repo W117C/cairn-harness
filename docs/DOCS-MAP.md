@@ -27,6 +27,7 @@
 | 查「重跑为什么不一样 / wall-clock 漏进身份字段」 | `outputs/reproducibility-2026-09-23/`（主张与判据 + 实测与回执；门 `replay-determinism-check`，登记债在 `IDENTITY_DEBTS`）|
 | 查「裁剪为什么每轮都作废前缀 / 攒够再剪」 | `outputs/prune-batching-2026-09-23/`（主张与判据 + 施工回执；判据 PC8 与 `pb-*` 针脚）|
 | 查「已经断过一次头，为什么还要再断第二次」 | `outputs/prune-free-ride-2026-09-23/`（免费车：压缩那轮顺手剪；判据 PC9 的集合相等 + 对照臂，针脚 `pb-free-ride-*`）|
+| 查「权限第四档 guided 是怎么来的 / 为什么 edit_file 还出卡」 | `outputs/permission-guided-mode-2026-09-23.md`（`MODE_POLICY` 逐型裁决表 + 三臂复跑读数；锚点 `guided-*`/`tier-order-*`）|
 | 查安全绕过复现与修法 | `outputs/shell-permission-bypass-2026-09-21.md` + `scripts/probe-shell-bypass.ts` |
 | 查判断层校准路线 | `docs/judgment-layer-calibration-proposal.md` |
 | 看验收截图（**历史 UI**） | `docs/*.png`（vanilla 迁移前，勿当现状） |
@@ -95,10 +96,13 @@ deepseek harness/
 - `reproducibility-2026-09-23/` — 可复现性：同一输入两次跑逐字段等值；把 #56 从个案抽成纪律（含被门撑大的范围）
 - `prune-batching-2026-09-23/` — 分批裁剪：少断几次可缓存前缀（实测 5→2 次 / 作废 -39%）
 - `prune-free-ride-2026-09-23/` — 免费车：压缩已打断前缀的那一轮顺手剪（PC9 判集合相等 + 对照臂证旋钮接得上）
-- `stagnation-detection-2026-09-23/` — 无进展检测：外部只公布阈值不公布 precision ⇒ 本仓给自己配一份带标签语料（4 条真实录制 + 3 条对照）与误报判据（门 `no-progress-check`）
-- `cost-per-progress-2026-09-23/` — 成本 ÷ 前进：分子分母同面（worker 开销不得并进主面比值）、零前进是「不可测」；死跑成本第一次有读数（68,535 tok / 零边界）
 - `design-contradictions-2026-09-18.md` — 渲染侧矛盾台账
 - `zcode-study-2026-09-21.md` · `laya-evaluation-2026-09-21.md` · `aseos-vision-evaluation-2026-09-21.md`
+- `brain-cognition-mapping-evaluation-2026-09-23.md` — 外部「人脑功能 → Agent」13 条映射：11 条已是现状、
+  1 条缺承载面（`AgentEvent` 无「执行前预期」成员）、1 条与自家实测反向（风险层真流量区分度 1/99，
+  默认档 91 次出卡全在 `L3-mode`）。**含一处腐判**：judgment-layer 附录 A 的可粘贴命令在 HEAD 已 TypeError
+- `gap-fix-proposal-2026-09-23.md` — 上页实测差距的**修复提案**（七项 P0-1…G7，每项带判卷读数/成本/反转条件与
+  原子簇切法）；两条本轮自校：`turn_truncated` 真语料 0 次 ⇒ P0-2 从"白拿"降级；13/30 类事件在可比语料无观测者
 
 ### 3.2 安全 / 权限
 - `shell-permission-bypass-2026-09-21.md` — deny 包装绕过复现与修法

@@ -11,6 +11,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isShellFamily, staticRisk } from "../../permissions/risk";
+import type { PermissionMode } from "../../permissions/modes";
 import { CC_TOOL_ALIAS } from "../../tools/base";
 import { spawnTracked } from "../../tools/process";
 import type { HookEventName, LoadedHookDef } from "./types";
@@ -137,8 +138,9 @@ export interface HookEngineOptions {
   pluginDataRoot: string;
   /** 超限输出落盘根（缺省 pluginDataRoot/overflow）。 */
   overflowDir?: string;
-  /** 权限档（hook 命令过权限门：read-only 档拒绝有副作用的 hook 命令）。 */
-  mode?: "read-only" | "default" | "auto";
+  /** 权限档（hook 命令过权限门：read-only 档拒绝有副作用的 hook 命令）。
+   *  类型取自 `permissions/modes`——这里曾自己抄一份三值 union，加一档时 tsc 才叫得醒。 */
+  mode?: PermissionMode;
   /** 会话标识，进 stdin JSON 的 session_id（§9.5）。缺席时整字段不进 JSON——不伪造。 */
   sessionId?: string;
   exec?: HookExecFn;

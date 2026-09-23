@@ -111,6 +111,42 @@ export const MAX_AUTO_APPROVALS = 50;
 /** critical 连续被拒 N 次 → 提示降档回默认。 */
 export const CRITICAL_DENIAL_LIMIT = 3;
 
+/** 一档的细档政策（§11.7.2 矩阵的行；粗档表在 permissions/index.ts）。
+ *  三个字段各有一个「只有这一档在此格上给出不同答案」的判卷用例，见
+ *  `tests/permission-mode-guided.test.ts`。
+ *  为什么是表不是 if 链：旧写法是 `if (s.mode === "default") … if (s.mode === "auto") …`，
+ *  **表外值既不报错也不出卡**——它一路掉到风险层，静默拿到 auto 的行为
+ *  （2026-09-23 实测：造一个不存在的档位名，write_file 直接 L4-pass 放行）。
+ *  `Record<PermissionMode, …>` 让"少一档"变成编译错误，运行时兜底再取默认档（fail-closed）。 */
+export interface ModePolicy {
+  /** 写向是否逐笔审批（default/read-only 是；guided/auto 否）。 */
+  readonly writeAsk: boolean;
+  /** 是否吃「本会话允许这类」的记忆快捷（auto 不吃：它本来就没有逐笔卡可跳，断路器因此零计数）。 */
+  readonly scopeMemory: boolean;
+  /** 风险层送审线。 */
+  readonly riskAskAt: RiskLevel;
+  /** 卡面文案里的档位名。 */
+  readonly label: string;
+}
+
+const MODE_POLICY: Record<PermissionMode, ModePolicy> = {
+  // 只读档的写向在 L0 就被摘除，这一行只兜住"写向漏到 L3"的路径（同默认档口径，不静默放行）。
+  "read-only": { writeAsk: true, scopeMemory: true, riskAskAt: "high", label: "只读档" },
+  default: { writeAsk: true, scopeMemory: true, riskAskAt: "high", label: "默认档" },
+  guided: { writeAsk: false, scopeMemory: true, riskAskAt: "medium", label: "引导档" },
+  auto: { writeAsk: false, scopeMemory: false, riskAskAt: "high", label: "自主档" },
+};
+
+/** 导出给对账判卷：表必须**恰好**覆盖 `PERMISSION_MODES`（少一档 = 编译不过 + 判卷红）。 */
+export function modePolicyTable(): Record<PermissionMode, ModePolicy> {
+  return { ...MODE_POLICY };
+}
+
+function policyOf(mode: PermissionMode): ModePolicy {
+  // 类型内四档都已列表；走到兜底只可能是未升级的持久化值或外部构造者 ⇒ 按默认档，不按最松档。
+  return MODE_POLICY[mode] ?? MODE_POLICY.default;
+}
+
 export interface AutonomySession {
   mode: PermissionMode;
   /** 两层规则库加载结果（deny/ask/allow 并集）。 */
@@ -353,45 +389,64 @@ export function evaluate(
     }
     return { verdict: "approve", layer: "L3-rule", risk, auto: { source: "rule", ruleId: chain.ruleId } };
   }
-  if (s.mode === "default" && isWriteCall(tool, grade)) {
-    // 逐次审批；session_kind 记忆可跳过（网络类命令强制 once 除外；断路器触发后记忆失效）
+  const policy = policyOf(s.mode);
+  // 断路器：凡吃 scope 记忆的档位，触发后一律退回逐次审批（§11.7.6「直至会话重开」）。
+  // auto 不吃记忆 ⇒ 那条计数在 auto 永远不涨，本式对 auto 恒等于 policy.writeAsk。
+  const askEachWrite = policy.writeAsk || (policy.scopeMemory && s.breakerTripped);
+  if (isWriteCall(tool, grade)) {
+    // 「本会话允许这类」在两档生效（默认档 / 引导档）：引导档的风险线以下本就直接放行，
+    // 这条快捷存在的意义就是让**中风险**的那批（编辑、装包）也只问一次。
     const key = scopeKey(tool, args);
-    const scopeAllowed =
-      !s.breakerTripped && !isNetworkCommandCall(tool, args) && s.sessionScopes.has(key);
+    // 单行不折：`autonomy-network-once` 锚点的针脚是这条表达式的一部分（拆行会把它顶成空操作）。
+    const scopeAllowed = policy.scopeMemory && !s.breakerTripped && !isNetworkCommandCall(tool, args) && s.sessionScopes.has(key);
     if (scopeAllowed) {
       return { verdict: "approve", layer: "L3-scope", risk, auto: { source: "session_scope", ruleId: key } };
     }
-    return {
-      verdict: "ask",
-      layer: "L3-mode",
-      reason: s.breakerTripped
-        ? `断路器触发：连续自动放行达 ${String(MAX_AUTO_APPROVALS)}，降级为逐次审批（直至会话重开）`
-        : grade === undefined ? "默认档逐次审批" : "默认档逐次审批（MCP 未标 readOnlyHint）",
-      risk,
-      riskReasons: channels.reasons,
-    };
+    if (askEachWrite) {
+      return {
+        verdict: "ask",
+        layer: "L3-mode",
+        reason: s.breakerTripped
+          ? `断路器触发：连续自动放行达 ${String(MAX_AUTO_APPROVALS)}，降级为逐次审批（直至会话重开）`
+          : grade === undefined ? `${policy.label}逐次审批` : `${policy.label}逐次审批（MCP 未标 readOnlyHint）`,
+        risk,
+        riskReasons: channels.reasons,
+      };
+    }
   }
 
   // ---- L4 风险层：三通道任一命中即产生审批；critical 任何档位强制审批（自主档不是 bypass）----
   if (risk === "critical") {
     return { verdict: "ask", layer: "L4-critical", reason: "critical 任何档位强制审批", risk, riskReasons: channels.reasons };
   }
-  if (s.mode === "auto") {
+  // 出口顺序 = 今天的顺序（风险线在前、注解与网络在后），改顺序会让同一调用换一层，
+  // askByLayer 读数与既有判据都会跟着动——本笔只换「哪条线」，不换「谁先答」。
+  if (RISK_ORDER[risk] >= RISK_ORDER[policy.riskAskAt]) {
+    return {
+      verdict: "ask",
+      layer: "L4-risk",
+      reason: policy.writeAsk
+        ? `风险≥${policy.riskAskAt} 送审`
+        : `风险≥${policy.riskAskAt} 送审（${policy.label}）`,
+      risk,
+      riskReasons: channels.reasons,
+    };
+  }
+  if (!policy.writeAsk) {
     const network = isNetworkCommandCall(tool, args);
-    if (RISK_ORDER[risk] >= RISK_ORDER.high) {
-      return { verdict: "ask", layer: "L4-risk", reason: "风险≥high 送审（自主档）", risk, riskReasons: channels.reasons };
-    }
     if (grade !== undefined && !grade.annotated) {
-      // 表里自主列豁免的是"写注解"（server 明说了它是写），**什么都没标**不在豁免之列：
+      // 表里自主/引导两列豁免的是"写注解"（server 明说了它是写），**什么都没标**不在豁免之列：
       // 让一个自报家门的 server 比沉默的 server 拿到更少审批，等于奖励不写注解。
       return {
         verdict: "ask",
         layer: "L4-mcp-unannotated",
-        reason: "MCP 无注解：按写处理，自主档亦逐次（§11.7.2 fail-closed）",
+        reason: `MCP 无注解：按写处理，${policy.label}亦逐次（§11.7.2 fail-closed）`,
         risk,
         riskReasons: channels.reasons,
       };
     }
+    // 引导档的风险线已在 medium，网络命令在那之前就被上一条拦下了 ⇒ 这条出口服务的是自主档
+    // （它的线是 high，出网审计要比一般动作严一级）。
     if (network && RISK_ORDER[risk] >= RISK_ORDER.medium) {
       return {
         verdict: "ask",
@@ -401,14 +456,10 @@ export function evaluate(
         riskReasons: channels.reasons,
       };
     }
-  } else if (RISK_ORDER[risk] >= RISK_ORDER.high) {
-    // 只读/默认档的读类工具：风险通道仍生效（三通道任一命中即审批）
-    return { verdict: "ask", layer: "L4-risk", reason: "风险≥high 送审", risk, riskReasons: channels.reasons };
   }
 
   return { verdict: "approve", layer: "L4-pass", risk };
 }
-
 // ---- 断路器 helper（调用方维护计数，evaluate 保持纯函数）----
 
 /** scope 自动放行生效一次：计数 +1；达到上限即触发断路器（此后逐次审批，直至会话重开）。 */

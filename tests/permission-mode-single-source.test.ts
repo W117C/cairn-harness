@@ -24,15 +24,15 @@ describe("档位集合只有一个事实源", () => {
     expect(workerIsPermissionMode).toBe(isPermissionMode);
   });
 
-  it("名次：read-only < default < auto，且每档的名次都非负（-1 会被 clampTier 当成最松侧）", () => {
-    expect(PERMISSION_MODES.map(permissionModeRank)).toEqual([0, 1, 2]);
+  it("名次：read-only < default < guided < auto，且每档的名次都非负（-1 会被 clampTier 当成最松侧）", () => {
+    expect(PERMISSION_MODES.map(permissionModeRank)).toEqual([0, 1, 2, 3]);
   });
 });
 
 describe("档位→裁决表：少一行就编译不过，表外值不许拿到 allow", () => {
-  it("表恰好覆盖每一档，且逐档等于 §11.7.2 的三档语义（只读拒 / 默认问 / 自主放）", () => {
+  it("表恰好覆盖每一档，且逐档等于 §11.7.2 的档位语义（只读拒 / 默认问 / 引导按风险 / 自主放）", () => {
     expect(Object.keys(sideEffectDecisionTable()).sort()).toEqual([...PERMISSION_MODES].sort());
-    expect(sideEffectDecisionTable()).toEqual({ "read-only": "deny", default: "ask", auto: "allow" });
+    expect(sideEffectDecisionTable()).toEqual({ "read-only": "deny", default: "ask", guided: "allow", auto: "allow" });
     for (const m of PERMISSION_MODES) {
       expect(checkPermission(m, "write_file")).toBe(sideEffectDecisionTable()[m]);
       expect(checkPermission(m, "run_shell")).toBe(sideEffectDecisionTable()[m]);

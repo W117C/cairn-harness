@@ -1,10 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { remember, REMEMBER_DESCRIPTION } from "../src/tools/remember";
 import { MemoryError, initMemoryHome, projectMemoryDir, globalMemoryDir, rootFilePath, ROOT_FILES } from "../src/agent/memory/store";
 import { createGatedRemember } from "../src/main/agent-runner";
+import type { PermissionMode } from "../src/permissions";
 import type { ToolContext } from "../src/tools";
 
 let ws: string;
@@ -76,6 +77,22 @@ describe("remember：权限门（任务2 无权限不落盘）", () => {
     const r = await gated.run({ scope: "project", kind: "memory", type: "user", topic: "plan-blocked", content: "x" }, ctx());
     expect(r.ok).toBe(false);
     expect(r.output).toContain("方案门");
+  });
+  it("guided 档放行记忆写入（粗档表里它与 auto 同列）", async () => {
+    const gated = createGatedRemember({ getMode: () => "guided", isPlanBlocked: () => false, getAsk: () => undefined });
+    const r = await gated.run({ scope: "project", kind: "memory", type: "user", topic: "guided-ok", content: "x" }, ctx());
+    expect(r.ok).toBe(true);
+  });
+  it("表外档位不落盘：走 ask，无审批口即 fail-closed（旧 if 链在这里静默放行）", async () => {
+    const ask = vi.fn(async () => false);
+    const noAsk = createGatedRemember({ getMode: () => "yolo-ish" as PermissionMode, isPlanBlocked: () => false, getAsk: () => undefined });
+    const r1 = await noAsk.run({ scope: "project", kind: "memory", type: "user", topic: "ghost-noask", content: "x" }, ctx());
+    expect(r1.ok).toBe(false);
+    const withAsk = createGatedRemember({ getMode: () => "yolo-ish" as PermissionMode, isPlanBlocked: () => false, getAsk: () => ask });
+    const r2 = await withAsk.run({ scope: "project", kind: "memory", type: "user", topic: "ghost-ask", content: "x" }, ctx());
+    expect(ask).toHaveBeenCalledTimes(1);
+    expect(r2.ok).toBe(false);
+    expect(existsSync(join(ws, ".agent", "memory", "ghost-ask.md"))).toBe(false);
   });
 });
 

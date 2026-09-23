@@ -1511,6 +1511,27 @@ judgment-layer §9.1 的一条省略——"包管理器错误码先不加，因�
   （现在任何非 default/auto 值会**静默**落到风险层——这条要改成显式表，缺档编译不过）③ `checkPermission` 表加一行
   ④ `agent-runner` 里 `remember` 那份第三副本 ⑤ 渲染层 `PERM_MODES` + `index.html` 设置页第四按钮
   ⑥ `ask-density` 第四臂（否则新档没人量）⑦ `gate-audit` 穷尽断言的新格。
+  → **本清单一笔收口于能力 26**（七面全接，另接齐清单外三面：`clampTier` 本地数字表、插件 hook 两份 union、工具面 `it.each`）。
+
+**能力 26：第 4 档 `guided` 落地——§7 第 1 步的位置判据当场成立**（判卷与读数见 `outputs/permission-guided-mode-2026-09-23.md`）。
+一句话语义：**只拆「每一笔写向都要问」，风险线反而比自主档严一级**（`default` 逐笔问 / `guided` ≥medium 问 / `auto` ≥high 问）。
+- 真身是把档位分支从 if 链换成 `MODE_POLICY: Record<PermissionMode, ModePolicy>`（三字段：`writeAsk`/`scopeMemory`/`riskAskAt`，
+  每字段各有一格"只有这一档在此格给出不同答案"的用例）。**RED 阶段量到旧写法的行为**：一个不存在的档位名直接拿 `L4-pass`
+  放行，且那条用例在实现前**就是绿的**——"缺档静默拿到最松一档"不是推测，是当场读数。运行时兜底取默认档，不取最松档。
+- 三臂复跑与能力 24 基线**逐字一致**（`default ask=89 / L3-mode:89`、`auto ask=1`、`auto+沙箱不可用 ask=89`）⇒
+  「默认档/自主档不动」是被数的，不是被声称的；新臂 `guided ask=58 / L4-risk:58` ⇒ `L3-mode` 归零、`L4-*` 非 0，
+  **位置判据成立**，第 3 步的概率第一次有了落点。
+- 不自夸：减下来的 31 次全在 `risk=none` 那一格；**`edit_file` 每次仍出卡**（威胁表给"编辑文件（写向操作）"底线 medium，
+  恰是这档的线）。要把 edit_file 降下来得改**风险模型**（按路径/内容判写向），另开一步，不在本笔偷做。
+- 两处「刻意不做」有名字：断路器在 `auto` 零计数（`noteScopeApproval` 只在 `L3-scope` 涨，而 auto 不吃 scope）；
+  `L4-network` 在 `guided` 不可达（medium 线先拦）——用例只钉可达侧。
+- 判卷：新 `tests/permission-mode-guided.test.ts` 19 条 + `remember` 5→7 条 + 单源对账两处期望随集合更新；锚点 795→**803**（+8）。
+  新踩一条：**html 面不能做锚点**（`mutantSyntaxProblem` 用 `ts.transpileModule`，整份 HTML 就是语法错 ⇒
+  任何 `src:"*.html"` 的锚点必然被判「改法致语法错」），改钉 `PERM_MAP` 那一侧，设置页按钮仍由对账用例覆盖。
+- 文案纠一处旧谎：`标准权限 = 工作区内改动直接执行` 与默认的"每写必问"相反，而这句话现在正是 `guided` 的语义——
+  两行撞车会让人选错档，四行文案按 `MODE_POLICY` 重写。
+- 待批未动：`agent-plan.md:1442`「不做六档…我们三档已覆盖同语义面」与 §11.7.2 三档矩阵。建议 diff 已写在
+  `outputs/permission-guided-mode-2026-09-23.md` §七，按 §3.7 走批准流程，**本笔未落盘**。
 
 
 
