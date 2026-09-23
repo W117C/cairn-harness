@@ -1367,3 +1367,25 @@ Anthropic worker 现在默认带 cache_control 断点。这一格属产品决策
 
 本轮验证（HEAD 态 `0a445b3` 之后）：typecheck 0 错；全量 `test` 96 files/**919 passed** exit 0；
 全表 `mutate-verify` **110/110 全杀** exit 0。
+
+**provider BYOK 可达性做成一条会红的门（`749d819` + `c15e3d7` + `58e3101`）**。缺口不是"没接跨家"，是
+**门 0 可达性同族**：M6 把路由白名单开到四家、档位表 12 行，而 key 存储白名单只有 glm、启动注入硬编码
+`getProviderKey("glm")`、设置面两枚按钮。实测（撤 env 后走 worker 真路径 `toWorkerModel`、`for await` 消费首事件）：
+三家各抛 `ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY 未设置`，而 `spawn_agent` 的 `args.model` 由
+**模型自己填** ⇒ 不是留位，是可达的死路；且那次配置失败会被记在模型账上（涨 attempt / 喂 bandit β / 进沉淀）。
+- 修法沿 `gap-fix-proposal` P2-6：**不擅自开跨家闸**（§三 的反转条件不变），只把边界做成机器可判——
+  env 名收成一份事实源（`src/providers/env-keys.ts`；原先适配器 / 注入面 / 判卷面各抄一份）、注入面改为遍历白名单
+  （缺映射即崩，不静默跳家）、`providers-check` 新增 ⑦（四格合取 +「可路由但存不进 key」逐字等于登记水位、只降不升）
+  与 ⑧（映射对账适配器**实际取料面**）。**零产品行为**：白名单今天只有 glm ⇒ 与旧实现逐字同果。门读数 19 ✅ → 30 ✅。
+- 三次当场造红 + 4 条锚点：注入面退回硬编码 glm（同一次里"可存 key ⇒ 被注入"那格仍绿 ⇒ 门必须按 env 表全量对账
+  才抓得住旧实现）、路由加 `mistral` 不给映射、存储白名单加 `openai` 忘了撤水位（水位两侧各造一次）。
+- 两条自纠：① `await fn(...)` 打出的 `NO THROW` 是假读数（async generator 不消费就不执行函数体）；
+  ② **全量门抓出我自己新写的断言**——6 条标签用了 `join("/") || "无"`，被 `assertion-health` 的 AST 析取扫描判红；
+  选去掉 `||` 而不是开 `gates:disjunction-ok` 豁免（豁免留给真要合取的判据）。"跑改动邻域 ≠ 跑那道门"再次应验。
+- HEAD-only 三态对照（同 HEAD 开 worktree 实跑，不是工作树）：`test` 209 files / **2226 passed / 2 failed**、
+  `providers-check` 30 ✅ exit 0、4 锚点全杀。那 2 条（`gated-tools` / `runner-gates`）与 `tsc` 的 2 错
+  （`replay-determinism-check.ts` 读 `ToolResult.snapshotId`，而该字段压在**未提交**的 `src/tools/base.ts` +
+  `src/events/index.ts` 里）**在 `0af5458` 就已存在** ⇒ D7 覆盖前快照簇把判卷面与它依赖的字段分成了两半，
+  须整簇落库（owner 未定，本轮不代提交）。
+- 留位：跨家 BYOK 开闸；§9 的 `verify_result.cause`（配置类失败不再记在模型账上——那是这条死路的后半截）。
+
