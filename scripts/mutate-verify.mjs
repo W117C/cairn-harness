@@ -6248,6 +6248,24 @@ const MUTATIONS = [
     apply: (s) => s.replace("  autoVerify: true,", "  autoVerify: false,"),
     expectFail: "DEFAULT_SETTINGS 与读盘回退同向（翻一处忘另一处 = 老用户永远拿不到新默认）",
   },
+  // 中间那一棒（`over.autoVerify ?? settings`）此前零观察着 = 「两头断」第 12 次。
+  // 两半各钉一条：只钉一支，另一支写坏都不会红（②b 与 ②c 只差一个显式 false）。
+  {
+    id: "autoverify-ipc-settings-fallback-dropped",
+    src: "src/main/agent-runner.ts",
+    test: "tests/auto-verify-wiring.test.ts",
+    desc: "生产入口不再回退到 settings 的值 ⇒ 设置页那半边白做：用户在界面里打开的开关到不了 loop（真流量恒关）",
+    apply: (s) => s.replace("autoVerify: over.autoVerify ?? (await store().get()).autoVerify,", "autoVerify: over.autoVerify ?? false,"),
+    expectFail: "②b 走 handleAgentRun + allow 批条 ⇒ 写成功，那一拍真补上（正向观察）",
+  },
+  {
+    id: "autoverify-ipc-override-ignored",
+    src: "src/main/agent-runner.ts",
+    test: "tests/auto-verify-wiring.test.ts",
+    desc: "那一行改成「只读 settings」⇒ 调用方显式传的 false 被吞掉（要临时关一次的人只能去改设置文件），且没有任何用例会红",
+    apply: (s) => s.replace("autoVerify: over.autoVerify ?? (await store().get()).autoVerify,", "autoVerify: (await store().get()).autoVerify,"),
+    expectFail: "②c settings 侧为真、overrides 显式 false ⇒ 那一拍不补（override 那一半的观察着）",
+  },
   {
     id: "pc-serialize-layer-keeps-closing-bracket",
     src: "src/agent/prefix-churn.ts",
