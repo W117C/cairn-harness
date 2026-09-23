@@ -282,7 +282,8 @@ describe("headOnlyNeedleProblems：锚点钉在在飞文本上必须点名（否
 });
 
 /* 接线（`reportNeedles`）里没有编译期保护：tsconfig 的 include 覆盖 scripts/，但没开 allowJs ⇒
-   `.mjs` 不过 tsc（实测：把 lib 导出改个名，typecheck 仍然 0 错）。所以"少喂一支面 / 少算一支数"
+   `.mjs` 不过 tsc（实测：`pnpm exec tsc --noEmit --listFiles` 列出 829 个文件，其中 `.mjs` **0 个**；
+   对照 `scripts/lib/mutate-gates.ts` 在列）。所以"少喂一支面 / 少算一支数"
    这种接线错只有在 lib 里立运行时判据才会出声。以下两支就是为那个目的存在。 */
 describe("anchorFaces + blockingTotalOf：接线缺件必须当场崩，不许静默少看一维", () => {
   it("每条锚点产出两支面（被测面 + 判卷），且两面各一次（少喂一支 = 那一面静默失效）", () => {
