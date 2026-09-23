@@ -349,11 +349,13 @@ export const CHURN_RULES: readonly ChurnRule[] = [
       };
       const a = tally(off), b = tally(on);
       return {
-        ok: a.rewrites >= 2 && b.rewrites < a.rewrites && b.prunes >= 1 && b.rewrote > 0,
+        // 「至少省一半」而不是「少一次就算数」：只要求 `b < a` 的话，把策略喂累计值
+        // （第一轮照样推迟、之后每轮照剪）也能过——实测就是这么让一条针脚存活的。
+        ok: a.rewrites >= 4 && b.rewrites * 2 <= a.rewrites && b.prunes >= 1 && b.rewrote > 0 && b.rewrote < a.rewrote,
         detail: `同一条链 ${String(rounds)} 轮：不分批 ⇒ 断 ${String(a.rewrites)} 次 / 作废 ${String(a.rewrote)} 字符；` +
           `分批 ⇒ 断 ${String(b.rewrites)} 次 / 作废 ${String(b.rewrote)} 字符（单次最大 ${String(b.maxRewrite)}）` +
           `｜分批那支真裁过 ${String(b.prunes)} 次` +
-          (a.rewrites < 2 ? "（不分批都只断一次 ⇒ 样本无分辨力，门自身红）" : ""),
+          (a.rewrites < 4 ? "（不分批只断 <4 次 ⇒ 样本短到量不出『省一半』，门自身红）" : ""),
       };
     },
   },
@@ -418,8 +420,11 @@ export function runChurnSelfTest(): { caught: string[]; missed: string[] } {
       // PC8 的分辨力：把「分批反而更多」的对照喂进去必须红（否则 A/B 是装饰）
       id: "PC8-分批裁剪确实少断前缀（A/B 同一条链）",
       predicateSaysRed: () => {
-        const a = { rewrites: 2, prunes: 2 }, b = { rewrites: 3, prunes: 1 };
-        return !(a.rewrites >= 2 && b.rewrites < a.rewrites && b.prunes >= 1);
+        // 与 PC8 的判据同式（否则自检证明的是另一件事）：这里造「分批只省了一次」的样本，
+        // 它过得了旧条、过不了「至少省一半」——正是让那条针脚存活的形态。
+        const a = { rewrites: 5, rewrote: 200_000, prunes: 5 }, b = { rewrites: 3, rewrote: 150_000, prunes: 3 };
+        const holds = a.rewrites >= 4 && b.rewrites * 2 <= a.rewrites && b.prunes >= 1 && b.rewrote > 0 && b.rewrote < a.rewrote;
+        return !holds;
       },
     },
     {
