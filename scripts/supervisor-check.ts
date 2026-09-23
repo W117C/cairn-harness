@@ -13,6 +13,7 @@ import type { AgentEvent } from "../src/events";
 import type { ModelOutput } from "../src/providers";
 import type { GlmMessage } from "../src/providers/glm";
 import { Orchestrator, scriptedWorkerModel, type WorkerModel } from "../src/agent/orchestrator";
+import type { VerifyHook } from "../src/agent/verify";
 import { decideSupervisor, isSupervisorAction, superviseApprovalDigest, type SupervisorAction, type SupervisorContext } from "../src/agent/supervisor";
 import { createEventLog } from "../src/events";
 
@@ -201,12 +202,16 @@ function newOrchSup(logPath: string, script: ModelOutput[]): { orch: Orchestrato
 }
 
 /** E6/E7 专用：可指定 workspace（一次性临时 git repo——合并场景不污染 fixtures/todo-app 靶子）
- *  与 capture（抓 worker 每轮真实上下文，提示词层断言用）。 */
+ *  与 capture（抓 worker 每轮真实上下文，提示词层断言用）。
+ *  E8/E9 另传 `verify`：worker 的收束闸钩子（`OrchestratorOptions.workerVerify`）。不传 = 今天的形状
+ *  （worker 根本没有验证面 ⇒ `artifacts.verified` 恒缺席 ⇒ 判据只能回落散文）。要观察「凭据优先于
+ *  散文」这一格，必须能把钩子的红绿捏在手里，所以这里是注入点而不是第二份实现。 */
 function newOrchSupWs(
   logPath: string,
   script: ModelOutput[],
   workspace: string,
   capture?: GlmMessage[][],
+  verify?: VerifyHook,
 ): { orch: Orchestrator; events: AgentEvent[] } {
   const events: AgentEvent[] = [];
   const orch = new Orchestrator({
@@ -218,6 +223,7 @@ function newOrchSupWs(
       await createEventLog(logPath).append(e);
     },
     modelFor: () => scriptedWorkerModel(script, capture),
+    ...(verify === undefined ? {} : { workerVerify: () => verify }),
   });
   return { orch, events };
 }
@@ -359,6 +365,112 @@ async function waitFor(pred: () => boolean, timeoutMs = 10_000): Promise<boolean
   check(!events.some((e) => e.type === "tool_result" && typeof e.output === "string" && e.output.startsWith("[merged]")), "E7c 零合并（禁改面改动不落盘）");
   check(events.some((e) => e.type === "agent_message" && e.kind === "progress" && (e as { text: string }).text.includes("forbidden 违反")), "E7d [supervisor] 违反决策落流");
   check(captured.some((msgs) => msgs.some((m) => typeof m.content === "string" && m.content.includes("supervise-forbidden"))), "E7e 提示词层：constraints 含 supervise-forbidden（禁改面）");
+}
+
+{
+  // E8（判据来源·正向）：绿凭据 + 报告里**没有** verdict 行 → 必须 accept 并合并落盘。
+  // 这一格旧实现恒 escalate：`verdict:` 行只写进 review/test 两个角色的任务书，而 supervise 的
+  // nextRole 恒为 implement，所以 parseVerdict 在这条路上永远解析不出来（真语料三次复跑全死于此，
+  // 三次的 agent_result 都是 status=done 且改动正确）。E5/E6 都自带 `verdict: pass`，
+  // 因此把 evidence 那半边整条删掉也不会红——本段就是来补那个观测者的。
+  const repoE8 = await makeTempRepo(work);
+  const p8 = join(work, "e8.jsonl");
+  const greenHook: VerifyHook = {
+    async run() {
+      return { ok: true, results: [{ command: "check-e8", ok: true, output: "all green" }] };
+    },
+  };
+  const { orch, events } = newOrchSupWs(p8, [
+    { type: "tool_call", id: "c1", name: "write_file", args: { path: "note.txt", content: "changed via tool, no verdict line\n" } },
+    { type: "assistant_message", content: "已按要求改完 note.txt（本环不写结论行）。" },
+  ], repoE8, undefined, greenHook);
+  const spawnP = orch.spawn({ mode: "supervise", task: "把 note.txt 换成一句话", supervise: { maxStages: 3 } }, { callId: "sup-e8" });
+  check(await waitFor(() => events.some((e) => e.type === "approval_requested")), "E8a 审批落流");
+  const apr8 = events.find((e) => e.type === "approval_requested") as Extract<AgentEvent, { type: "approval_requested" }> | undefined;
+  check(apr8 !== undefined && orch.decideWorkerApproval(apr8.id, true, "once").ok, "E8b 决议受理");
+  const r8 = await spawnP;
+  await orch.waitAll(15_000);
+  // 先钉「动作真发生」：自动拍必须真的落过流，否则"零事件"可以是根本没验（同 auto-verify-wiring ② 的教训）
+  check(events.some((e) => e.type === "verify_result" && e.ok === true && e.auto === true), "E8c 收束闸绿拍真落流（凭据不是读成了 undefined）");
+  check(
+    events.some((e) => e.type === "agent_message" && e.kind === "progress" && (e as { text: string }).text.includes("判据=pass，凭据=verified")),
+    "E8 绿凭据 + 无 verdict 行 → 判据=pass（凭据优先于散文）",
+    events.filter((e) => e.type === "agent_message").map((e) => (e as { text: string }).text).join(" | ").slice(0, 160),
+  );
+  check(r8.ok && (r8.output ?? "").includes('"merged":true'), "E8d accept 后合并落盘（旧实现在这一格恒 escalate，成果被删）", (r8.output ?? "").slice(0, 90));
+  check(
+    await import("node:fs/promises").then((m) => m.readFile(join(repoE8, "note.txt"), "utf8").then(() => true).catch(() => false)),
+    "E8e 主 checkout 真出现 note.txt",
+  );
+}
+
+{
+  // E9（判据来源·反向）：红凭据 + 报告自报 `verdict: pass` → **不得** accept，且现场必须留着问人。
+  // 与 E8 成对：只测正向会放过"散文永远优先"这一支（那种实现下 E8 也绿，因为它根本没有凭据）。
+  // 旧实现这里 accept → 把没过验证的代码合并进用户真实工作区；而 escalate 分支又先把 worktree
+  // 和分支删掉再回去问人（真语料里 `已清理（rejected）` 早于 escalate，逐笔读到）。
+  const repoE9 = await makeTempRepo(work);
+  const p9 = join(work, "e9.jsonl");
+  const redHook: VerifyHook = {
+    async run() {
+      return { ok: false, results: [{ command: "check-e9", ok: false, output: "1 failed" }] };
+    },
+  };
+  const { orch, events } = newOrchSupWs(p9, [
+    { type: "tool_call", id: "c1", name: "write_file", args: { path: "note.txt", content: "broken on purpose\n" } },
+    { type: "assistant_message", content: "改完了。\nverdict: pass" },
+  ], repoE9, undefined, redHook);
+  const spawnP = orch.spawn({ mode: "supervise", task: "改 note.txt（但本环的改动没通过验证）", supervise: { maxStages: 2 } }, { callId: "sup-e9" });
+  check(await waitFor(() => events.some((e) => e.type === "approval_requested")), "E9a 审批落流");
+  const apr9 = events.find((e) => e.type === "approval_requested") as Extract<AgentEvent, { type: "approval_requested" }> | undefined;
+  check(apr9 !== undefined && orch.decideWorkerApproval(apr9.id, true, "once").ok, "E9b 决议受理");
+  const r9 = await spawnP;
+  await orch.waitAll(15_000);
+  check(
+    events.some((e) => e.type === "verify_result" && e.ok === false),
+    "E9c 红拍真落流（凭据=failed 确实存在，不是没验）",
+  );
+  check(!events.some((e) => e.type === "tool_result" && typeof e.output === "string" && e.output.startsWith("[merged]")), "E9 红凭据 + 自报 pass ⇒ 零合并（散文不得顶机器）");
+  check(!r9.ok && (r9.output ?? "").includes("现场已保留"), "E9d 交人判的出口点名了保留的现场（worktree/分支地址在回执里）", (r9.output ?? "").slice(0, 120));
+  const sceneKept = await import("node:fs/promises")
+    .then((m) => m.readdir(join(repoE9, ".agents")))
+    .then((d) => d.length > 0)
+    .catch(() => false);
+  check(sceneKept, "E9e 裁决发生时证据还在盘上（旧实现先删 worktree 再问人）");
+  check(
+    await import("node:fs/promises").then((m) => m.readFile(join(repoE9, "note.txt"), "utf8").then(() => true).catch(() => false)) === false,
+    "E9f 主 checkout 零污染",
+  );
+}
+
+{
+  // E10（escalate 出口·真复现）：改了盘 + 没有凭据（不接 workerVerify，等价于仓库无可验面）
+  // + 报告没有 verdict 行 ⇒ 只能 escalate——这正是真语料三次复跑的形态（status=done、改动正确、
+  // 判据无从取得）。E9 走的是 abort，所以把 escalate 分支的「保留现场」改回全量 reject 时
+  // 整道门 73/0 全绿（实测）：这条就是来补那半个没有观测者的出口的。
+  const repoE10 = await makeTempRepo(work);
+  const p10 = join(work, "e10.jsonl");
+  const { orch, events } = newOrchSupWs(p10, [
+    { type: "tool_call", id: "c1", name: "write_file", args: { path: "note.txt", content: "real change, no evidence obtainable\n" } },
+    { type: "assistant_message", content: "已按要求改完 note.txt（本环不写结论行）。" },
+  ], repoE10);
+  const spawnP = orch.spawn({ mode: "supervise", task: "把 note.txt 换成一句话", supervise: { maxStages: 3 } }, { callId: "sup-e10" });
+  check(await waitFor(() => events.some((e) => e.type === "approval_requested")), "E10a 审批落流");
+  const apr10 = events.find((e) => e.type === "approval_requested") as Extract<AgentEvent, { type: "approval_requested" }> | undefined;
+  check(apr10 !== undefined && orch.decideWorkerApproval(apr10.id, true, "once").ok, "E10b 决议受理");
+  const r10 = await spawnP;
+  await orch.waitAll(15_000);
+  check(!r10.ok && (r10.output ?? "").includes("已升级人工裁决"), "E10 无凭据且无契约行 ⇒ escalate（不静默 accept）", (r10.output ?? "").slice(0, 120));
+  check((r10.output ?? "").includes("现场已保留"), "E10c escalate 的回执点名了保留的现场");
+  check(!events.some((e) => e.type === "tool_result" && typeof e.output === "string" && e.output.startsWith("[merged]")), "E10d 零合并");
+  check(
+    await import("node:fs/promises").then((m) => m.readdir(join(repoE10, ".agents")).then((d) => d.length > 0).catch(() => false)),
+    "E10e 升级到人时 worktree 还在（旧实现先删证据再问人）",
+  );
+  check(
+    await import("node:fs/promises").then((m) => m.readFile(join(repoE10, "note.txt"), "utf8").then(() => true).catch(() => false)) === false,
+    "E10f 主 checkout 零污染",
+  );
 }
 
 await rm(work, { recursive: true, force: true }).catch(() => {});
