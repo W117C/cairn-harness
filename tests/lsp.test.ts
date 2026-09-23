@@ -204,6 +204,7 @@ describe("诊断回流（M2a 任务 6）", () => {
     await writeFile(join(ws, "a.ts"), "hello world\n", "utf8");
     const res = await edit_file.run({ path: "a.ts", old_string: "hello", new_string: "bonjour" }, { workspace: ws });
     expect(res.ok).toBe(true);
-    expect(res.output).toBe("已替换 a.ts（1 处，+1 −1 行）"); // 无 <diagnostics> 后缀
+    // 断言面 = 「不追加 <diagnostics> 后缀」。D7 覆盖前快照那句尾巴是另一件事，允许出现但不许在这里当诊断混进来。
+    expect(res.output.replace(/｜覆盖前原件已存 \.agent\/snapshots\/[^\s]+$/, "")).toBe("已替换 a.ts（1 处，+1 −1 行）");
   });
 });

@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { appendImpact, assertNotAgentArea, assertNotAgentAreaReal, assertRealContainment, resolveInWorkspace, ToolError, type Tool, type ToolResult } from "./base.js";
 import { collectDiagnostics } from "./lsp.js";
+import { snapshotBeforeOverwrite, snapshotNote } from "./snapshot.js";
 import { lineDelta } from "./line-delta.js";
 
 /** 0 匹配时的「最像的位置」提示——把「读错误→重读整个文件→再改」的三轮压成一轮。
@@ -76,6 +77,8 @@ export const edit_file: Tool = {
     // 若直接写 content.replace(old, new)，new_string 里的 $& / $1 / $` / $' 会被当成
     // 替换模式解释（把匹配到的原文插回去），静默写出错误内容——两个分支必须同口径。
     const updated = replaceAll ? content.split(oldString).join(newString) : content.replace(oldString, () => newString);
+    // D7 覆盖前快照：排在「0 处/多处匹配」两道拒绝**之后**——被拒的编辑不该留下快照（那会是脏文件）。
+    const snapshotId = ctx.snapshot === false ? null : await snapshotBeforeOverwrite(ctx.workspace, abs, rel, ctx.callId);
     await writeFile(abs, updated, "utf8");
     const replacements = replaceAll ? count : 1;
     // 行增减是「改动范围最小」的可核对面：处数只说改了几块，不说动了多少行内容。
@@ -83,7 +86,12 @@ export const edit_file: Tool = {
     // M2a 诊断回流：成功写盘后等诊断（LSP 未配置 = 空串，输出不变）
     const diag = await collectDiagnostics(ctx.workspace, abs);
     // M7 影响面：替换成功后回注跨文件波及（best-effort，见 appendImpact）。
-    const output = await appendImpact(ctx, rel, "已替换 " + rel + "（" + replacements + " 处，+" + String(d.added) + " −" + String(d.removed) + " 行）" + diag);
-    return { ok: true, output };
+    const output = await appendImpact(
+      ctx,
+      rel,
+      "已替换 " + rel + "（" + replacements + " 处，+" + String(d.added) + " −" + String(d.removed) + " 行）" +
+        (snapshotId !== null ? snapshotNote(snapshotId) : "") + diag,
+    );
+    return { ok: true, output, ...(snapshotId !== null ? { snapshotId } : {}) };
   },
 };

@@ -331,6 +331,9 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       // auto 由 gate 派生（唯一 writer），历史语义不变：只有 rule / session_scope 两种自动放行才落 auto。
       const gateMeta = (result as ToolResultWithAudit).gate;
       const audit = autoOf(gateMeta);
+      // D7 覆盖前快照：正文里那句给模型看（它得知道去哪儿找回原件），这个字段给界面与审计看。
+      // 同一个事实只有一个 writer（写工具），这里只搬运不改写。
+      const snapshotId = (result as { snapshotId?: string }).snapshotId;
       // 换路压力记账（只读，不改事件序）：动作换了 ⇒ 上一轮的重复段结束，解除提示帽
       let repeatNote = "";
       if (opts.stuckNudge === true) {
@@ -371,6 +374,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         output: result.output + postContext + repeatNote,
         ...(gateMeta ? { gate: gateMeta } : {}),
         ...(audit ? { auto: audit } : {}),
+        ...(snapshotId !== undefined ? { snapshotId } : {}),
       });
       if (result.ok && (name === "write_file" || name === "edit_file")) wroteThisRun = true;
     }

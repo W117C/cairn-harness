@@ -1,6 +1,7 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { appendImpact, assertNotAgentArea, assertNotAgentAreaReal, assertRealContainment, resolveInWorkspace, type Tool, type ToolResult } from "./base.js";
+import { snapshotBeforeOverwrite, snapshotNote } from "./snapshot.js";
 import { collectDiagnostics } from "./lsp.js";
 import { contentLines, isNearCopyRewrite, lineDelta } from "./line-delta.js";
 
@@ -37,6 +38,8 @@ export const write_file: Tool = {
       oldText = "";
     }
     await mkdir(dirname(abs), { recursive: true });
+    // D7：覆盖已有文件前先把原件抄进 .agent/snapshots/（新建文件不占快照；失败不改写盘结果）。
+    const snapshotId = ctx.snapshot === false ? null : await snapshotBeforeOverwrite(ctx.workspace, abs, rel, ctx.callId);
     await writeFile(abs, content, "utf8");
     let summary = `已写入 ${rel}（${bytes} 字节）`;
     if (oldText !== null) {
@@ -49,10 +52,11 @@ export const write_file: Tool = {
             ? `｜提示：这是对已有 ${oldCount} 行文件的整份重写，实际只动 ${d.added + d.removed} 行——同类改动用 edit_file 更省 output，也不会漏抄未改的行。`
             : "");
     }
+    if (snapshotId !== null) summary += snapshotNote(snapshotId);
     // M2a 诊断回流：成功写盘后等诊断（LSP 未配置 = 空串，输出不变）
     const diag = await collectDiagnostics(ctx.workspace, abs);
     // M7 影响面：写盘成功后回注跨文件波及（best-effort，见 appendImpact）。
     const output = await appendImpact(ctx, rel, summary + diag);
-    return { ok: true, output };
+    return { ok: true, output, ...(snapshotId !== null ? { snapshotId } : {}) };
   },
 };

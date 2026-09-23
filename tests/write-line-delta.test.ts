@@ -61,7 +61,10 @@ describe("写盘摘要报行增减", () => {
     const before = await import("node:fs/promises").then((m) => m.stat(join(dir, "huge.ts")));
     expect(before.size).toBeGreaterThan(256 * 1024);
     const out = await run(write_file, { path: "huge.ts", content: "tiny\n" });
-    expect(out).toBe(`已写入 huge.ts（${String(Buffer.byteLength("tiny\n", "utf8"))} 字节）`);
+    // 这条量的是「大文件不统计行增减时不许冒充新建」——D7 的快照尾巴与它无关，先剥掉再比。
+    expect(out.replace(/｜覆盖前原件已存 \.agent\/snapshots\/[^\s]+$/, ""))
+      .toBe(`已写入 huge.ts（${String(Buffer.byteLength("tiny\n", "utf8"))} 字节）`);
+    expect(out).not.toContain("新建");
   });
 
   it("edit_file 的成功输出带行增减（处数说不了动了多少行）", async () => {

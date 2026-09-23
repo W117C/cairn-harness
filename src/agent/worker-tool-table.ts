@@ -53,7 +53,9 @@ export function buildWorkerToolTable(
             pre = null; // 读不到 = 首次编辑前文件不存在；锚点缺失 → findings 降级为相对行号（fail-visible 于行号语义）
           }
         }
-        const r = await edit_file.run(args, ctx);
+        // worker 写侧不落 D7 快照：worktree 本身就是可回滚副本（§10.10），再抄一份原件会把
+        // 合并那一刻的脏文件面撑大（实测：漏掉 snapshot:false 时 mergeWorker 直接判红）。
+        const r = await edit_file.run(args, { ...ctx, snapshot: false });
         if (r.ok && pre !== null) {
           const idx = pre.indexOf(oldString);
           if (idx >= 0) {
@@ -69,7 +71,7 @@ export function buildWorkerToolTable(
     const clearAnchorsWrite: Tool = {
       name: "write_file",
       async run(args, ctx) {
-        const r = await write_file.run(args, ctx);
+        const r = await write_file.run(args, { ...ctx, snapshot: false }); // 同上：worker 不落 D7 快照
         if (r.ok && typeof args.path === "string") {
           w.editAnchors.delete(args.path); // 整文件重写：旧锚点失效（write op 行号 = 文件行号，无需锚点）
           w.snapshots.set(args.path, typeof args.content === "string" ? args.content : "");

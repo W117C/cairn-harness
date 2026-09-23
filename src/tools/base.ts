@@ -37,11 +37,18 @@ export interface ToolContext {
   /** M7 影响面：write_file/edit_file 成功落盘后计算跨文件波及。缺省 undefined = 零行为
    *  （门禁/单测路径不注入）。best-effort：钩子自身失败不得影响已成功的写入。 */
   impact?: ImpactHook;
+  /** D7 覆盖前快照：**缺省开**（主会话直写用户真实工作区，覆盖必须留得回原件，§10.4）。
+   *  worker 写侧显式传 false —— 它的 worktree 天然可回滚（§10.10），再抄一份原件只会把
+   *  合并那一刻的脏文件面撑大（实测：不给 false 时 write worker 的 mergeWorker 直接判红）。 */
+  snapshot?: boolean;
 }
 
 export interface ToolResult {
   ok: boolean;
   output: string;
+  /** D7 覆盖前快照落成的路径（workspace 相对）。缺席 = 没落快照（新建 / 空文件 / 快照自身失败）。
+   *  同一个事实有两个读者：正文里那句给模型看（它得知道去哪儿找回原件），这个字段给事件流与界面看。 */
+  snapshotId?: string;
 }
 
 /** 本仓静态工具名的唯一事实源：联合类型与名字表同源（加一个工具只改这一行）。 */
