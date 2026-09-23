@@ -201,6 +201,30 @@ export function needleProblemLine(p: NeedleProblem): string {
   return `${p.id} — ${p.srcRel} — ${why}：${JSON.stringify(p.needle.slice(0, 60))}`;
 }
 
+// ---- 锚点的被测面在不在版本控制里 ----
+// 动因（2026-09-23，#37 的根因）：锚点的 `src` 指向**未跟踪**文件时，主树跑 `--check-needles` 读的是
+// 盘上那份 ⇒ 报「全部锚点针脚可判定 ✅」；而同 HEAD 的隔离 worktree 里那个文件根本不存在 ⇒ 同一道门
+// 报「源文件读不到」红。⇒ **主树永远看不见这一类缺陷**，而「锚点先落地、被测码从未入库」正是本仓
+// 点名过的一种假守护。判据因此挂在 git 的事实上（调用方一次 `git ls-files`），不挂在盘上。
+export interface AnchorSrcProblem {
+  id: string;
+  srcRel: string;
+}
+
+/** `src` 未被 git 跟踪的锚点（按表内顺序）。判据保持纯函数（可单测）；`isTracked` 由调用方喂真 git 结果。 */
+export function untrackedAnchorSrcs(
+  entries: readonly { id: string; srcRel: string }[],
+  isTracked: (rel: string) => boolean,
+): AnchorSrcProblem[] {
+  return entries.filter((e) => !isTracked(e.srcRel)).map((e) => ({ id: e.id, srcRel: e.srcRel }));
+}
+
+/** 一行判读结论：点名"从未入库"，与"实现搬走了"分开——两种红的修法相反（前者提交那份源文件，后者改指针脚）。 */
+export function untrackedAnchorLine(p: AnchorSrcProblem): string {
+  return `${p.id} — ${p.srcRel} — 被测面不在 HEAD 的树里（盘上有；未跟踪或只 staged 未提交）⇒ 干净 HEAD 上这条锚点必然「源文件读不到」：` +
+    "它守护的代码从未入库。修法是**把那份源文件提交**（或撤这条锚点），不是改针脚。";
+}
+
 // ---- 锚点 id 唯一性 ----
 // 动因（2026-09-23 我自己刚造成一例）：往表尾插一条新锚点时，`expectFail` 行匹配点落在了
 // 上一条锚点的收尾上，于是两条锚点共用一个 id。表照样跑得动，但 `mutate-verify <id>` 会同时跑两条、

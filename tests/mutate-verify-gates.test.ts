@@ -2,7 +2,7 @@
 // 动因（2026-09-19 实跑）：另一会话正在改判卷测试文件时，本门把两条正常条目报成
 // 「基线就不是全绿」+「变异存活」——真回归信号被并发噪声伪装掉了。
 import { describe, expect, it } from "vitest";
-import { budgetMsOf, classifyArgs, entryDisposition, leftoverActionOf, leftoverBackupPaths, preflightRefusals, splitRunnable, type HeadState } from "../scripts/lib/mutate-gates";
+import { budgetMsOf, classifyArgs, entryDisposition, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorSrcs, type HeadState } from "../scripts/lib/mutate-gates";
 
 describe("budgetMsOf + classifyArgs 的值位（自我预算这条手段本身要有判卷）", () => {
   it("flag 优先于 env；两者都缺 ⇒ 不限且不吭声", () => {
@@ -195,3 +195,39 @@ describe("残留处置决策 leftoverActionOf", () => {
   });
 });
 
+
+/* 锚点的被测面在不在版本控制里（#37 的根因：主树读盘 ⇒ 这类缺陷在主树永远不报）。
+   判据是纯函数，`isTracked` 由调用方喂真 git 结果；这里喂集合是**判据的两个分支**，不是桩产品代码。 */
+describe("untrackedAnchorSrcs：锚点入库、被测码从未入库必须当场红", () => {
+  const tracked = new Set(["src/a.ts", "src/b.ts"]);
+  const isTracked = (rel: string) => tracked.has(rel);
+
+  it("盘上有、HEAD 里没有 ⇒ 点出来（含 id 与 src，能直接照着补提交）", () => {
+    const bad = untrackedAnchorSrcs([{ id: "x1", srcRel: "src/ghost.ts" }], isTracked);
+    expect(bad).toEqual([{ id: "x1", srcRel: "src/ghost.ts" }]);
+    expect(untrackedAnchorLine(bad[0]!)).toContain("不在 HEAD 的树里");
+  });
+
+  it("反面对手：全部跟踪的表 ⇒ 一条都不报（这条判据不许把正常锚点报成红）", () => {
+    expect(untrackedAnchorSrcs([{ id: "x1", srcRel: "src/a.ts" }, { id: "x2", srcRel: "src/b.ts" }], isTracked)).toEqual([]);
+  });
+
+  it("混合表只报未跟踪的那几条，且按表内顺序（743 条表要能一眼定位）", () => {
+    const bad = untrackedAnchorSrcs([
+      { id: "ok1", srcRel: "src/a.ts" },
+      { id: "bad1", srcRel: "src/ghost1.ts" },
+      { id: "bad2", srcRel: "src/ghost2.ts" },
+      { id: "ok2", srcRel: "src/b.ts" },
+    ], isTracked);
+    expect(bad.map((b) => b.id)).toEqual(["bad1", "bad2"]);
+  });
+
+  it("两种红的文案不混：「从未入库」不写「改指针脚」，反之亦然（修法相反，混了就误导）", () => {
+    const never = untrackedAnchorLine({ id: "x", srcRel: "src/ghost.ts" });
+    const moved = needleProblemLine({ id: "x", srcRel: "src/a.ts", hits: 0, needle: "foo(" });
+    expect(never).toContain("不是改针脚");
+    expect(never).not.toContain("针脚已不在源文件里");
+    expect(moved).toContain("针脚已不在源文件里");
+    expect(moved).not.toContain("不在 HEAD 的树里");
+  });
+});
