@@ -336,11 +336,18 @@ deps-before-run / lockfile 预检那一类，碰不到 `UNSAFE_MODULES_DIR`；�
   （`Cannot find module` 两边都出现），而 `ERR_PNPM_*` 只有 pnpm 自己会打。
 - **`toolchain-missing` 口径加宽**：从"退出码 127"扩到"127 **或连 shell 都没起来**"（`child.on("error")`
   那条路今天就存在、今天也置 `ok:false`，只是没名字）。
-- 本笔（第一笔）只落 **schema + 生产者**（两条 exec 出口都归因：非沙箱 `defaultExec` 与发货缺省的沙箱
-  `verifyExec`，只落一支就是"环境红只在降级时才不冤枉模型"）。**三处出口的行为仍按 `ok` 判**，
-  即环境红今天照样涨 attempt / 喂升档 / 进沉淀——那是第二、三、四笔，逐笔带合取判据。
-  复跑尺：`replay:verify-cause-mix` 的 `带 cause 字段的红命令` 从 0 起才算落盘（旧会话流永远读 0，
-  那条读数只在**新跑出来的**语料上有意义）。
+- 第一笔＝**schema + 生产者**（两条 exec 出口都归因：非沙箱 `defaultExec` 与发货缺省的沙箱
+  `verifyExec`，只落一支就是"环境红只在降级时才不冤枉模型"）。
+- 第二笔＝**三处出口一起落**（合取判据不允许拆开）：① 环境拍不占 `maxVerify` 修复额度，走自己的上限
+  （2 拍）并在正文说明停因；② worker 证据退回 `absent` 而非 `failed`——级联升档与 bandit 奖励读的是
+  **同一格**，且"证明力为零"与既有第四态同义 ⇒ 不加第 5 态；③ 沉淀把环境拍摘出模型失败清单，
+  另记一笔「N 拍因 harness 侧原因没跑成」并明写不许记成模型经验。
+  **同一拍有两个取料面**：`verify_result` 与 loop 注入的那条 `tool_result(ok:false)`——只挡前者，
+  沉淀里仍会留「verify×N（工具失败）」，等于换个名字记账。
+- 具名不动的两处：`no-progress` 仍视重复环境红为停滞（它给的是一句"换条路"提示，不是记账）；
+  `cost-per-progress` 仍按最后一条 verify 的 `ok` 定结局（"没被证明做成"在 $/成功任务格里就是未成功）。
+  复跑尺：`replay:verify-cause-mix` 的 `带 cause 字段的红命令`（旧会话流永远读 0，该读数只对
+  **新跑出来的**语料有意义）。判卷与代价见 `outputs/verify-cause-denominator-2026-09-23.md` §六。
 
 ### 9.2 先落 mitigation：那个 pnpm 环境态评测侧已消除、生产侧还活着
 

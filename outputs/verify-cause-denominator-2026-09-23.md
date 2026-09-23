@@ -102,3 +102,29 @@ judgment-layer §9.1 后补该读数的复跑块；`scripts/replay/corpus.ts` �
 - 针脚门当场抓到我一次：改 `verifyExec` 的 return 形状把既有锚点
   `verify-exec-reports-internal-command` 的针脚顶掉（阻断 1）⇒ 按提示改指新形状，
   **没有**把针脚退回旧写法（那等于废掉这条锚点）。提交前它报 `钉在飞文本 1` 是正确行为，落库后应回 0。
+
+## 六、第二笔：三处出口一起落（合取才成立，拆开就是漏口）
+
+gap-fix P1-3 原话是「同一条环境红在三处出口都不涨 attempt / 不喂升档 / 不进沉淀」，
+且**必须写成合取**——三道各测各的，看不见中间漏过去的那条。所以这一笔不再拆小：
+产品三处 + 判卷一条合取 + 三条单出口用例（各配一条变异锚点）同提交。
+
+| 出口 | 位置 | 落法 | 为什么这样落 |
+|---|---|---|---|
+| ① 涨 attempt | `src/agent/loop.ts` `verifyBeat` | 环境拍走**自己的上限**（`MAX_ENV_VERIFY_BEATS = 2`），不消耗 `maxVerify` 修复额度；注入正文先说「cause=X，不是代码失败，额度未消耗」 | 停闸仍要存在：不占额度≠无限重试。停因文案与"你没修好"那句**分开**，且保留 `已达上限` 字样给既有判卷（两条既有断言只读这一句） |
+| ② 喂升档 | `src/agent/worker-report.ts` `workerVerificationEvidence` | 环境拍**不进证据序列**：既不改写"最后一次验证"的位置，也不判 `failed` | 级联升档与 bandit 奖励读的是**同一格**（`orchestrator` 两处都取 `artifacts.verified`），一只缝就够；且"环境拍的证明力为零"与既有第四态 `absent` 语义相同 ⇒ **不加第 5 态**，免得把四态消费面（合并塔 / UI / economics / 测试）全扯动 |
+| ③ 进沉淀 | `src/agent/memory/distill.ts` `failureDigestFromEvents` | 环境拍从模型失败清单里摘出，另记一笔「N 拍验证因 harness 侧原因没跑成（cause 分布）」并明写「不要写成该模型会失败」 | 不静默丢弃：可复用的经验是「这套环境缺什么 runner」，那是**前置条件**类记忆，不是能力类 |
+
+**⑵ 的两个取料面**（规则 53）：同一拍除了 `verify_result`，loop 还会注入一条 `tool_result(ok:false)`。
+只挡前者，沉淀里仍会留下「verify×1（工具失败）」——换个名字把 harness 的问题记到模型账上。
+⇒ 按 `callId` 连坐挡住，用例两侧都断。
+
+**刻意不动的两处，具名备案**（不是漏）：
+`no-progress` 仍把重复的环境红看成停滞 —— 它的输出是一句"换条路"的提示，不是记账，且"确实没进展"为真；
+`cost-per-progress` 仍按最后一条 `verify_result` 的 `ok` 定结局 —— 「没被证明做成」在 $/成功任务这一格里
+就是未成功，把它改绿是造假完成率。**这两条若有反例，判据位在此页。**
+
+判卷读数：`tests/verify-attribution-exits.test.ts` **9 条**（合取 1 + 同形对照 1 + 混排 1 + 逐出口 3 + 证据位次序 3）；
+合取那条的**同形对照**（`cause` 换成 `code` ⇒ 三处全都记账）是防恒真的那一半。
+锚点 790 → **793**（三条各钉一格）。tsc **0 错**——顺带又被抓一次：测试里对 `AgentEvent` 联合读 `.output`
+编译不过，而 vitest 不做类型检查 ⇒ 「写完测试不跑 tsc 等于没跑判卷」（规则 48 第 N 次命中）。

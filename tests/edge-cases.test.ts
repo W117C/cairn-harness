@@ -105,7 +105,7 @@ describe("prune：附件名清洗与索引等价", () => {
   });
 });
 
-describe("verify 钩子异常：记为一次验证失败，不炸整轮任务", () => {
+describe("verify 钩子异常：记为一次环境失败（不占修复额度），不炸整轮任务", () => {
   function scriptedProvider(script: ModelOutput[]): {
     provider: { next(): Promise<ModelOutput | null> };
     calls: () => number;
@@ -125,7 +125,7 @@ describe("verify 钩子异常：记为一次验证失败，不炸整轮任务", 
     };
   }
 
-  it("钩子抛错 → verify_result(ok:false) + tool_result 带真实原因；达上限后停止", async () => {
+  it("钩子抛错 → verify_result(ok:false) + tool_result 带真实原因；达环境上限后停止", async () => {
     const logPath = join(tmpdir(), `edge-verify-${String(Date.now())}-${String(Math.random()).slice(2, 8)}.jsonl`);
     const events = createEventLog(logPath);
     const { provider, calls } = scriptedProvider([
@@ -147,8 +147,12 @@ describe("verify 钩子异常：记为一次验证失败，不炸整轮任务", 
     // 首次失败：异常原因进 tool_result（fail-visible，不是「无详细输出」）
     expect(toolResults[0]?.output).toContain("钩子异常");
     expect(toolResults[0]?.output).toContain(".agent/config.json 损坏");
-    // 末次失败：走原有「已达上限」收口文案（tool_call 不悬空）
-    expect(toolResults[toolResults.length - 1]?.output).toContain("已达上限，停止");
+    // 末次失败：走「harness 侧原因」收口文案（tool_call 不悬空）。
+    // 2026-09-23 起钩子异常归 `hook-error`（环境类），所以它**不**再消耗 maxVerify 修复额度、
+    // 也不再用「已达上限」那句判模型——但"有界停止 + 原因可见"这两条不变，下面逐条钉住。
+    expect(toolResults[toolResults.length - 1]?.output).toContain("因 harness 侧原因未能执行验证");
+    expect(toolResults[toolResults.length - 1]?.output).toContain("cause=hook-error");
+    expect(toolResults[toolResults.length - 1]?.output).toContain("不是代码失败");
     // 达上限即停：收尾消息从未被消费
     expect(log.some((e) => e.type === "assistant_message")).toBe(false);
     expect(calls()).toBe(2);

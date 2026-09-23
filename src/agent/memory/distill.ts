@@ -3,7 +3,7 @@
 // 沉淀指令只在 provider 调用时以 user 角色出现，不落 user_message 事件（不污染固定回注名单）。
 // 合并审批：整个沉淀轮只发一次审批请求——批准 = 本轮全部 remember 写入放行，拒绝 = 全部不写
 //（防审批疲劳，§10.4 scope 机制复用）。「调用失败」与「无内容可沉淀」显式分型（mem0 main.py:963-969）。
-import { replay, type AgentEvent } from "../../events";
+import { isEnvVerifyCause, replay, type AgentEvent } from "../../events";
 import { projectContext } from "../context";
 import type { Provider, ProviderMessage } from "../../providers";
 import type { Tool, ToolContext } from "../../tools/base";
@@ -47,13 +47,26 @@ export function failureDigestFromEvents(events: AgentEvent[]): string {
   const toolFails = new Map<string, number>();
   let verifyFails = 0;
   let verifyExhausted = 0;
+  /** Env-caused beats: their callIds and cause mix. TWO surfaces must be blocked, not one:
+   *  the `verify_result` itself AND the `tool_result(ok:false)` that loop injects for the same beat.
+   *  Blocking only the first still leaves "verify x N (tool failure)" in the digest -- same debt,
+   *  renamed. (An invariant held by N readers has to be enforced at all of them.) */
+  const envVerifyCallIds = new Set<string>();
+  const envCauses = new Map<string, number>();
   for (const e of events) {
     if (e.type === "tool_call") {
       callName.set(e.id, e.name);
     } else if (e.type === "tool_result" && !e.ok) {
+      if (envVerifyCallIds.has(e.callId)) continue;
       const name = callName.get(e.callId) ?? "unknown";
       toolFails.set(name, (toolFails.get(name) ?? 0) + 1);
     } else if (e.type === "verify_result" && !e.ok) {
+      if (isEnvVerifyCause(e.cause)) {
+        const k = String(e.cause);
+        envVerifyCallIds.add(e.callId);
+        envCauses.set(k, (envCauses.get(k) ?? 0) + 1);
+        continue;
+      }
       verifyFails += 1;
       if (e.attempt >= e.maxAttempts) verifyExhausted += 1;
     }
@@ -62,6 +75,14 @@ export function failureDigestFromEvents(events: AgentEvent[]): string {
   const tf = [...toolFails.entries()];
   if (tf.length > 0) {
     parts.push(tf.map(([n, c]) => n + "\u00d7" + String(c)).join(", ") + "\uff08\u5de5\u5177\u5931\u8d25\uff09");
+  }
+  if (envCauses.size > 0) {
+    const mix = [...envCauses.entries()].sort((a, b) => b[1] - a[1]).map(([k, c]) => k + "\u00d7" + String(c)).join(", ");
+    parts.push(
+      "\u53e6\u6709 " + String(envVerifyCallIds.size) + " \u62cd\u9a8c\u8bc1\u56e0 harness \u4fa7\u539f\u56e0\u6ca1\u8dd1\u6210\uff08" + mix
+        + "\uff09\u2014\u2014\u8fd9**\u4e0d\u662f\u6a21\u578b\u7684\u5931\u8d25**\uff0c\u4e0d\u8981\u5199\u8fdb\u300c\u8be5\u6a21\u578b\u4f1a\u5728\u6b64\u5904\u5931\u8d25\u300d\u7684\u7ecf\u9a8c\uff1b"
+        + "\u503c\u5f97\u6c89\u6dc0\u7684\u662f\u300c\u8fd9\u5957\u73af\u5883\u7f3a\u4ec0\u4e48 runner / \u914d\u7f6e\u300d\u8fd9\u7c7b\u53ef\u590d\u7528\u7684\u524d\u7f6e\u6761\u4ef6",
+    );
   }
   if (verifyFails > 0) {
     parts.push(

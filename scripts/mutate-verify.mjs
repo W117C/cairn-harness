@@ -6678,6 +6678,32 @@ const MUTATIONS = [
     apply: (s) => s.replace("  if (toolCalls === 0) {", "  if (false) { // BLINDED"),
     expectFail: "扫到了文件却一条 tool_call 也没有 ⇒ 报（认不出不等于没有，正是 09-21 那片零的形状）",
   },
+
+  // ── verify 归因的三处出口（每处一条，各指自己的用例；合取由"缺一即红"保证）
+  {
+    id: "verify-exit-attempt-env-blind",
+    src: "src/agent/loop.ts",
+    test: "tests/verify-attribution-exits.test.ts",
+    desc: "loop「这一拍是环境拍」那格恒假 ⇒ 工具链没装/超时/pnpm 拒执行照样吃掉 maxVerify 一格，模型收到的是「连续失败已达上限」：harness 的问题花用户的钱，还教它去改本来正确的代码",
+    apply: (s) => s.replace("const envBeat = isEnvVerifyCause(cause);", "const envBeat = false;"),
+    expectFail: "出口①：环境拍不占 maxVerify 修复额度，走自己的上限并说明停因",
+  },
+  {
+    id: "verify-exit-evidence-env-blind",
+    src: "src/agent/worker-report.ts",
+    test: "tests/verify-attribution-exits.test.ts",
+    desc: "worker 证据那格恒假 ⇒ 环境红落成 failed；级联升档与 bandit 奖励都只读这一格（一只缝不是两只），于是「换个更贵的模型重跑一个装不上工具链的错」成为默认行为",
+    apply: (s) => s.replace("      if (!e.ok && isEnvVerifyCause(e.cause)) return;", "      if (false) return;"),
+    expectFail: "出口②：环境拍不把 worker 证据判成 failed（级联升档与 bandit 只由这一格驱动）",
+  },
+  {
+    id: "verify-exit-distill-env-blind",
+    src: "src/agent/memory/distill.ts",
+    test: "tests/verify-attribution-exits.test.ts",
+    desc: "沉淀那格恒假 ⇒ 环境红进「N 次验证失败」（并顺带被同拍的 tool_result 记成工具失败），下一次会话的模型会读到「我在这个靶子上会失败」这种假经验",
+    apply: (s) => s.replace("      if (isEnvVerifyCause(e.cause)) {", "      if (false) {"),
+    expectFail: "出口③：环境拍不进失败轨迹，改成 harness 侧的一笔（两个取料面都挡）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

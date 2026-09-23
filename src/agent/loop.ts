@@ -1,3 +1,4 @@
+import { isEnvVerifyCause } from "../events";
 import type { AgentEvent, EventLog, SkillInvocationMeta, UserMessageOrigin } from "../events";
 import { autoOf, denyReason, gate, type PermissionMode, type ToolResultWithAudit } from "../permissions";
 import type { HookEngine } from "./plugins/hooks";
@@ -106,6 +107,13 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
   const maxSteps = opts.maxSteps ?? 50;
   const maxVerify = opts.verify?.maxAttempts ?? 3;
   let verifyAttempts = 0;
+  /** 记在模型账上的拍数——**只有它受 `maxVerify` 约束**。环境拍（工具链没装 / 超时 /
+   *  没有可验面 / 包管理器自己拒了 / 钩子抛错）对代码的证明力是零，拿它去消耗模型的修复额度，
+   *  等于让 harness 侧的问题花用户的钱：红字还在教模型改本来正确的代码。 */
+  let codeVerifyBeats = 0;
+  /** 环境拍的独立上限：不占修复额度≠无限重试。耗尽即停，但停因说清楚是 harness 侧。 */
+  let envVerifyBeats = 0;
+  const MAX_ENV_VERIFY_BEATS = 2;
   // 上一拍注入给模型的失败摘要：逐字相同即「这一拍没带来新信息」，改注一行提示而非重发整段。
   let lastVerifyDigest: string | null = null;
   // 能力 5：本 run 是否真的落过盘（决定要不要补自动验证），以及自动拍是否已用过。
@@ -146,35 +154,55 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       attempt,
       maxAttempts: maxVerify,
       results: outcome.results,
-      // 落盘归因本身**不改变任何一处行为**（额度/升档/沉淀仍按 ok 判）——这是三处出口的共用前置。
+      // 归因落进事件流（审计面）；下面三处出口据此决定"这一拍算谁的账"。
       ...(cause === undefined ? {} : { cause }),
       ...(auto ? { auto: true } : {}),
     });
     if (outcome.ok) return "stop"; // 验证通过 → 立即停止，不再调用模型
+    const envBeat = isEnvVerifyCause(cause);
+    if (envBeat) envVerifyBeats++;
+    else codeVerifyBeats++;
     // 自动拍：**同轮**不外注（没有合法通道），但红不是到此为止——下一轮的投影会把它
     // 回流成一条 user 消息（context.ts 的 autoVerifyNote），所以不必为此多要一轮模型。
     if (auto) return "stop";
-    if (attempt >= maxVerify) {
+    if (envBeat && envVerifyBeats >= MAX_ENV_VERIFY_BEATS) {
+      // 环境类连拍到独立上限：停，但停因不是"你没修好"，是这台机器跑不了验证。
+      await events.append({
+        type: "tool_result",
+        callId,
+        ok: false,
+        output: "[verify] 连续 " + String(envVerifyBeats) + " 拍因 harness 侧原因未能执行验证（cause="
+          + String(cause) + "），停止。这**不是代码失败**：修复额度一次未耗，"
+          + "换 runner / 装工具链或修 verify 配置后再验，别按这条红改代码。",
+      });
+      return "stop";
+    }
+    if (!envBeat && codeVerifyBeats >= maxVerify) {
       // 上限耗尽 → verify_result(failed) 已落，停止且不再调用模型
       await events.append({
         type: "tool_result",
         callId,
         ok: false,
-        output: `[verify] 连续失败 ${String(attempt)}/${String(maxVerify)} 次，已达上限，停止`,
+        output: `[verify] 连续失败 ${String(codeVerifyBeats)}/${String(maxVerify)} 次，已达上限，停止`,
       });
       return "stop";
     }
     // 失败 → 错误输出注入同轮继续修（自动拍加 [harness] 前缀：这条不是模型自己调的）
     const digest = hookError !== null
-      ? "[verify] 钩子异常（记为一次验证失败）：" + hookError
+      ? "[verify] 钩子异常（harness 侧原因，不占修复额度）：" + hookError
       : (auto ? "[harness 自动验证] " : "") + failureDigest(outcome);
+    // 环境拍先说清"这不占你的额度"：否则模型读到一条红就去改本来正确的代码（语料里 3/3 是这一类）。
+    const envPreface = envBeat
+      ? "[verify] 这一拍因 harness 侧原因没跑成（cause=" + String(cause) + "）——不是代码失败，"
+        + "修复额度未消耗。下面原文供参考：\n"
+      : "";
     const repeat = digest === lastVerifyDigest;
     lastVerifyDigest = digest;
     await events.append({
       type: "tool_result",
       callId,
       ok: false,
-      output: repeat ? repeatDigestNote(outcome, attempt) : digest,
+      output: envPreface + (repeat ? repeatDigestNote(outcome, attempt) : digest),
     });
     return "continue";
   };

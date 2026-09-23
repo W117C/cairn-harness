@@ -1,3 +1,4 @@
+import { isEnvVerifyCause } from "../events";
 import type { AgentEvent, AgentPermissionMode, SecurityFinding, WorkerEvidence } from "../events";
 import { escapeControlTags } from "./memory/inject";
 import { SUMMARY_TOKEN_CAP } from "./orchestrator-config";
@@ -93,6 +94,10 @@ export function workerVerificationEvidence(events: AgentEvent[]): WorkerEvidence
       return;
     }
     if (e.type === "verify_result") {
+      // 环境拍的证明力是零：它没跑到代码。既不许记成 `failed`（那是模型的账——升档与 bandit
+      // 都由这一格驱动，等于用更贵的模型去重跑一个装不上工具链的错），也不许占用"最后一次验证"
+      // 的位置（否则一条 `exit 127` 会把先前那拍绿证据顶成 absent/stale）。
+      if (!e.ok && isEnvVerifyCause(e.cause)) return;
       lastVerify = i;
       lastVerifyOk = e.ok;
     }
