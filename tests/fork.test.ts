@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { withoutTs } from "./helpers/stream-equals";
 import { afterEach, describe, expect, it } from "vitest";
 import { createEventLog, forkSession, replay } from "../src/events";
 
@@ -32,7 +33,7 @@ describe("forkSession", () => {
     expect(forked).toHaveLength(4);
     const original = await replay(s.path);
     expect(forked.slice(0, 3)).toEqual(original.slice(0, 3));
-    expect(forked[3]).toEqual({ type: "session_meta", branch_of: s.path });
+    expect(withoutTs(forked[3]!)).toEqual({ type: "session_meta", branch_of: s.path });
   });
 
   it("原会话文件 sha256 与分支前逐字一致", async () => {

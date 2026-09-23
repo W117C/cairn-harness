@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { stripTs, withoutTs } from "./helpers/stream-equals";
 import { afterEach, expect, it, vi } from "vitest";
 import { handleRunCancel, initSettingsStore, runAgent } from "../src/main/agent-runner";
 import { createEventLog, replay, type AgentEvent } from "../src/events";
@@ -109,8 +110,8 @@ it("production GLM run restores history and sends tool feedback in a fresh reque
   expect(requests[0]?.tools?.map((tool) => tool.function.name)).toContain("read_file");
   expect(requests[0]?.tools?.map((tool) => tool.function.name)).not.toContain("write_file");
   expect(requests[1]?.messages).toContainEqual(expect.objectContaining({ role: "tool", tool_call_id: "read-one", content: expect.stringContaining("WORKSPACE_FEEDBACK") }));
-  expect(result[0]).toEqual({ type: "user_message", content: "PRIOR_HISTORY" });
-  expect(live).toEqual(result.slice(2));
+  expect(withoutTs(result[0]!)).toEqual({ type: "user_message", content: "PRIOR_HISTORY" });
+  expect(live).toEqual(stripTs(result.slice(2)));
   const resumed = await runAgent({
     workspace: dir, message: "FOLLOW_UP", mode: "read-only", sessionId: "session", logPath,
   });
@@ -193,6 +194,6 @@ it.each([false, true])("production GLM compaction publishes only completed summa
   expect(remount).toHaveBeenCalledTimes(2);
   const compact = live.find((e) => e.type === "compaction");
   expect(compact).toMatchObject({ trigger: "auto", reason: "threshold" });
-  expect(result.slice(61)).toEqual(live);
+  expect(stripTs(result.slice(61))).toEqual(live);
   if (compact?.type === "compaction") expect(compact.tokens_after).toBeLessThan(compact.tokens_before);
 });

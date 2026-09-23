@@ -654,7 +654,12 @@ export function createEventLog(path: string): EventLog {
       // 校验全部通过后才解析句柄并 write（校验必须在 write 之前）。
       const cached = logHandles.get(path);
       if (cur === null || cached === undefined || cached.fh !== cur) cur = await resolveHandle(path);
-      await cur.write(JSON.stringify(event) + "\n");
+      // 时钟戳盖在**落盘这一处**，不让每个生产者自己记得：`ts?: number` 曾声明在十个事件类型上，
+      // 而真语料里 282 条 tool_call 一条都没带 ⇒ 工具耗时、轮耗时、「模型时间 vs 工具时间」占比
+      // 在盘上全都不可测（可选字段当默认行为，等于没有行为）。producer 自带的值原样保留
+      // （automation 那批本来就自己盖，覆盖会把它们的语义洗掉）；不改动调用方手里的那个对象。
+      const stamped = { ...event, ts: (event as { ts?: number }).ts ?? Date.now() };
+      await cur.write(JSON.stringify(stamped) + "\n");
     },
     async close() {
       // 关闭本实例对应 path 的缓存句柄（仅当缓存中仍是本实例解析的那个）。不在 append 后自动关闭。

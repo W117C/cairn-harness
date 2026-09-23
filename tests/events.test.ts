@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createEventLog, mergeAssistantDeltas, replay, replayIncremental, type AgentEvent, type AssistantDeltaEvent } from "../src/events";
+import { stripTs, withoutTs } from "./helpers/stream-equals";
 
 let dir: string;
 afterEach(async () => { if (dir) await rm(dir, { recursive: true, force: true }); });
@@ -20,7 +21,8 @@ describe("事件流", () => {
     for (const e of written) await log.append(e);
     const events = await replay(logPath);
     expect(events).toHaveLength(3);
-    expect(events).toEqual([...written]);
+    // 除落盘时钟戳外逐字相等；戳本身的存在性/单调由下面「落盘时钟戳」那组用例钉。
+    expect(stripTs(events)).toEqual([...written]);
     // 顺序一致性：逐条比对类型与关键字段
     expect(events.map((e) => e.type)).toEqual(["user_message", "tool_call", "tool_result"]);
   });
@@ -34,7 +36,7 @@ describe("事件流", () => {
     await log.append({ type: "assistant_message", content: "b" });
     const events = await replay(logPath);
     expect(events).toHaveLength(2);
-    expect(events[0]).toEqual({ type: "user_message", content: "a" });
+    expect(withoutTs(events[0]!)).toEqual({ type: "user_message", content: "a" });
   });
 
   it("未知事件类型被拒绝（防坏日志）", async () => {
@@ -57,7 +59,7 @@ describe("事件流", () => {
     for (const e of written) await log.append(e);
     const events = await replay(logPath);
     expect(events).toHaveLength(5);
-    expect(events).toEqual([...written]);
+    expect(stripTs(events)).toEqual([...written]);
     expect(events.map((e) => e.type)).toEqual([
       "user_message", "assistant_delta", "assistant_delta", "tool_call", "usage",
     ]);
@@ -77,7 +79,7 @@ describe("事件流", () => {
     for (const e of written) await log.append(e);
     const three = await replay(logPath, "3");
     expect(three).toHaveLength(3);
-    expect(three).toEqual([...written].slice(0, 3));
+    expect(stripTs(three)).toEqual([...written].slice(0, 3));
     expect(await replay(logPath, "1")).toHaveLength(1);
     expect(await replay(logPath, "5")).toHaveLength(5);
     // 非法 id 一律报错（fail loud），不静默截断
@@ -231,7 +233,7 @@ describe("A1 常驻句柄（事件落盘）", () => {
     }
     const events = await replay(logPath);
     expect(events).toHaveLength(200);
-    expect(events).toEqual(written);
+    expect(stripTs(events)).toEqual(written);
   });
 
   it("(b) rm 后重建：新句柄写到新 inode（不写进已 unlink 的旧 inode）", async () => {
@@ -291,4 +293,55 @@ describe("A1 常驻句柄（事件落盘）", () => {
     }
   });
 });
+
+// 落盘时钟戳：**延迟唯一可测的面**。真语料里 282 条 tool_call 一条 ts 都没有 ⇒
+// 工具耗时、轮耗时、「模型时间 vs 工具时间」占比在盘上全都读不出来，
+// 于是 D8 的触发面、看门狗 flake 的归因、评测的成本轴只能靠外部脚本掐表（每次重新造一遍仪器）。
+// 戳盖在 append 这一处，而不是让每个生产者自己记得——`ts?:` 早就声明在十个事件类型上，
+// 只有 automation 那批真的写了，其余全是 undefined：**可选字段当默认行为，就等于没有行为**。
+describe("落盘时钟戳", () => {
+  it("producer 没写 ts 也要有：每条落盘事件都带数字 ts", async () => {
+    dir = await mkdtemp(join(tmpdir(), "m0-ts-"));
+    const logPath = join(dir, "events.jsonl");
+    const log = createEventLog(logPath);
+    const before = Date.now();
+    await log.append({ type: "user_message", content: "a" });
+    await log.append({ type: "tool_call", id: "c1", name: "read_file", args: {} });
+    await log.append({ type: "tool_result", callId: "c1", ok: true, output: "x" });
+    const events = await replay(logPath);
+    expect(events).toHaveLength(3);
+    for (const e of events) {
+      const ts = (e as { ts?: unknown }).ts;
+      expect(typeof ts, e.type + " 没有 ts ⇒ 这一拍的时间不可测").toBe("number");
+      expect(ts).toBeGreaterThanOrEqual(before);
+      expect(ts as number).toBeLessThanOrEqual(Date.now());
+    }
+  });
+
+  it("producer 自带的 ts 不被改写（automation 那批本来就自己盖，覆盖会把它们的语义洗掉）", async () => {
+    dir = await mkdtemp(join(tmpdir(), "m0-ts-"));
+    const logPath = join(dir, "events.jsonl");
+    await createEventLog(logPath).append({ type: "error", message: "boom", ts: 1_700_000_000_000 });
+    const e = (await replay(logPath))[0] as { ts?: number };
+    expect(e.ts).toBe(1_700_000_000_000);
+  });
+
+  it("ts 单调不减（同毫秒允许相等，不允许倒退——倒退会让一次工具执行算出负耗时）", async () => {
+    dir = await mkdtemp(join(tmpdir(), "m0-ts-"));
+    const logPath = join(dir, "events.jsonl");
+    const log = createEventLog(logPath);
+    for (let i = 0; i < 20; i++) await log.append({ type: "user_message", content: "m" + String(i) });
+    const ts = (await replay(logPath)).map((e) => (e as { ts: number }).ts);
+    expect(ts).toHaveLength(20);
+    for (let i = 1; i < ts.length; i++) expect(ts[i]!).toBeGreaterThanOrEqual(ts[i - 1]!);
+  });
+
+  it("不改写调用方手里的对象：live 那份仍不带 ts（盖戳是落盘这一跳的事）", async () => {
+    dir = await mkdtemp(join(tmpdir(), "m0-ts-"));
+    const e = { type: "user_message", content: "a" } as const;
+    await createEventLog(join(dir, "events.jsonl")).append(e);
+    expect(Object.prototype.hasOwnProperty.call(e, "ts")).toBe(false);
+  });
+});
+
 

@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { stripTs } from "./helpers/stream-equals";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createActionFusion } from "../src/agent/action-fusion";
 import { handleAgentRun, initSettingsStore, runAgent, setSettings, type RunOptions } from "../src/main/agent-runner";
@@ -58,7 +59,7 @@ describe("C1 actual main runner integration (local scripts, no model calls)", ()
     // 第二次覆盖自己刚写的 target.txt 天然就是 +0 −0，那是信息不是漂移。
     await rm(join(dir, "target.txt"), { force: true });
     const disabled = await run(undefined, { actionFusion: false });
-    expect(JSON.stringify(disabled)).toBe(JSON.stringify(baseline));
+    expect(JSON.stringify(stripTs(disabled))).toBe(JSON.stringify(stripTs(baseline)));
     expect(toolResults(baseline)[0]?.output).toBe("已写入 target.txt（3 字节，新建 +1 行）");
     expect(JSON.stringify(baseline)).not.toContain("fused_lint");
   });
@@ -67,7 +68,7 @@ describe("C1 actual main runner integration (local scripts, no model calls)", ()
     await config(["printf LINT"]);
     const calls = [writeCall(), { type: "tool_call", id: "edit", name: "edit_file", args: { path: "target.txt", old_string: "new", new_string: "edited", then_run: "printf MODEL > model-ran" } }];
     const events = await run(calls);
-    expect(events.filter(e => e.type === "tool_call")).toEqual(calls);
+    expect(stripTs(events.filter(e => e.type === "tool_call"))).toEqual(calls);
     const results = toolResults(events);
     expect(results).toHaveLength(2);
     for (const result of results) {
