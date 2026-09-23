@@ -119,7 +119,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
 const PERMISSION_MODES = ["read-only", "default", "auto"] as const;
 const SAFE_MODES = ["off", "report", "gate"] as const;
 const THEMES = ["system", "light", "dark"] as const;
-const PROVIDER_KINDS = ["demo", "glm"] as const;
+/** 设置面「模型通道」的可持久化取值。导出给 `providers-check` ⑦ 对账：显示面（index.html）与
+ *  能力面（key 存储白名单）任一支跑在它前面，都是「点了存不下」或「存得进没人显示」。 */
+export const PROVIDER_KINDS = ["demo", "glm"] as const;
 
 function isPanelId(v: unknown): v is PanelId {
   return typeof v === "string" && (PANEL_IDS as readonly string[]).includes(v);

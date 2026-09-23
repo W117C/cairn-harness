@@ -6610,6 +6610,39 @@ const MUTATIONS = [
     apply: (s) => s.replace("    ok: stray >= 1,", "    ok: true,"),
     expectFail: "对照臂判据：门槛旋钮接得上",
   },
+  // ── BYOK 可达性（providers-check ⑦⑧；判据的两半：注入面按清单跑 + 缺口按各自对照面算）
+  {
+    id: "byok-injector-glm-only",
+    src: "src/main/provider-key-inject.ts",
+    test: "tests/provider-keys.test.ts",
+    desc: "注入面退回硬编码 glm（本轮之前的真实形态）⇒ 白名单扩家那天，key 存得进、没人读，M6 的多 provider 路由仍然只有 glm 能用",
+    apply: (s) => s.replace("  for (const provider of providers) {", '  for (const provider of providers.filter((p) => p === "glm")) {'),
+    expectFail: "注入面按清单逐家注入各自的 env 名",
+  },
+  {
+    id: "byok-injector-missing-envmap-falls-back",
+    src: "src/main/provider-key-inject.ts",
+    test: "tests/provider-keys.test.ts",
+    desc: "未登记 env 名的 provider 不崩、静默借用 glm 的变量名 ⇒ 白名单加一家而忘了登记映射时，用户以为「存了 key 就生效」，实际拿 M0_API_KEY 去拨别家",
+    apply: (s) => s.replace("    const envName = envKeyOf(provider);", '    const envName = envKeyOf(provider) ?? "M0_API_KEY";'),
+    expectFail: "未登记 env 名的 provider：崩，不静默跳过那一家",
+  },
+  {
+    id: "byok-offered-checked-against-wrong-face",
+    src: "src/providers/byok.ts",
+    test: "tests/providers.test.ts",
+    desc: "设置面越界那格拿 env 表当对照面（env 表四家全含）⇒「UI 给了个存不进 key 的选项」这条永不成立，正是本仓点名的「只在一面对账」",
+    apply: (s) => s.replace("offeredNotStorable: setDiff(f.offered.filter((p) => p !== DEMO_PROVIDER), f.storable),", "offeredNotStorable: setDiff(f.offered.filter((p) => p !== DEMO_PROVIDER), f.envKeyed),"),
+    expectFail: "UI 给了 openai 但存储白名单不收",
+  },
+  {
+    id: "byok-storable-injection-checked-against-table",
+    src: "src/providers/byok.ts",
+    test: "tests/providers.test.ts",
+    desc: "「可存 key ⇒ 被注入」那格改成查 env 表而不是看注入面的实际结果 ⇒ 判据退化成自己跟自己比（表里有就算覆盖），跑真函数那一半失去观测者",
+    apply: (s) => s.replace("storableNotInjected: setDiff(f.storable, f.injected),", "storableNotInjected: setDiff(f.storable, f.envKeyed),"),
+    expectFail: "存进 key 了，注入面漏它",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

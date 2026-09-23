@@ -5,6 +5,9 @@
 // ②三家适配器互不 import（grep src/providers/{openai,anthropic,gemini}.ts 不出现彼此文件名）。
 // ③暗卷（有 key 才跑）：OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY 检测到哪家跑哪家，
 //   断言真实流式返回 ≥2 个 delta；一家都没有 → 打印「暗卷跳过」退出 0。
+// ⑦BYOK 可达性（合取 + 只降不升水位）：设置面选项 ⊆ 可存 key 的 provider；可路由的每家必须有 env 名
+//   映射；注入面**跑真函数**逐家验到（不是查表）；「可路由但存不进 key」的集合须逐字等于登记水位。
+// ⑧映射与适配器实际取料面对账：走 toWorkerModel（worker 真路径）撤 key 撤 env，抛错消息须点名表里那个变量。
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -18,6 +21,12 @@ import type { ProviderMessage, ProviderToolSpec } from "../src/providers";
 import { streamOpenAI } from "../src/providers/openai";
 import { streamAnthropic } from "../src/providers/anthropic";
 import { streamGemini } from "../src/providers/gemini";
+import { ENV_KEYED_PROVIDERS, PROVIDER_ENV_KEYS, envKeyOf } from "../src/providers/env-keys";
+import { byokGapsOf, sameSet, setDiff, type ByokFacts } from "../src/providers/byok";
+import { DEFAULT_MODEL_TABLE, PROVIDER_IDS as ROUTABLE_PROVIDER_IDS, toWorkerModel } from "../src/providers/registry";
+import { PROVIDER_IDS as STORABLE_PROVIDER_IDS, setProviderKeyBackend, type ProviderKeyBackend } from "../src/main/provider-keys";
+import { injectStoredProviderKey } from "../src/main/provider-key-inject";
+import { PROVIDER_KINDS } from "../src/main/settings";
 
 let failures = 0;
 function assert(cond: boolean, label: string): void {
@@ -238,9 +247,9 @@ console.log("[providers-check] ⑤ 三家适配器互不 import（AST import 说
 console.log("[providers-check] ⑥ 暗卷（真实 key，哪家有跑哪家）");
 {
   const DARKS = [
-    { env: "OPENAI_API_KEY", model: "gpt-4o-mini", run: (k: string) => streamOpenAI(USER, { apiKey: k, model: "gpt-4o-mini" }) },
-    { env: "ANTHROPIC_API_KEY", model: "claude-sonnet-4-5", run: (k: string) => streamAnthropic(USER, { apiKey: k, model: "claude-sonnet-4-5", maxTokens: 256 }) },
-    { env: "GEMINI_API_KEY", model: "gemini-2.5-flash", run: (k: string) => streamGemini(USER, { apiKey: k, model: "gemini-2.5-flash" }) },
+    { env: PROVIDER_ENV_KEYS.openai, model: "gpt-4o-mini", run: (k: string) => streamOpenAI(USER, { apiKey: k, model: "gpt-4o-mini" }) },
+    { env: PROVIDER_ENV_KEYS.anthropic, model: "claude-sonnet-4-5", run: (k: string) => streamAnthropic(USER, { apiKey: k, model: "claude-sonnet-4-5", maxTokens: 256 }) },
+    { env: PROVIDER_ENV_KEYS.gemini, model: "gemini-2.5-flash", run: (k: string) => streamGemini(USER, { apiKey: k, model: "gemini-2.5-flash" }) },
   ];
   const present = DARKS.filter((d) => process.env[d.env]);
   if (present.length === 0) {
@@ -257,6 +266,124 @@ console.log("[providers-check] ⑥ 暗卷（真实 key，哪家有跑哪家）")
         failures++;
         console.error(`  ❌ ${d.env}（${d.model}）暗卷失败：${err instanceof Error ? err.message : String(err)}`);
       }
+    }
+  }
+}
+
+// ---- ⑦ BYOK 可达性（合取 + 只降不升水位）----
+// 「能力发货、入口没通」的机器化：路由能选到一家 provider，与用户能为它配上一把 key，
+// 是两件事。本段一次读四支取料面（UI 的按钮 / 设置可持久化面 / key 存储白名单 / 启动注入面），
+// 把它们对成一份缺口清单。水位 = **已知的 V1 边界**，只许缩小不许扩大（两侧各一条断言，
+// 单边判据会被下一次改动从另一侧绕过去）。
+const BYOK_NO_KEY_WAIVER: readonly string[] = ["openai", "anthropic", "gemini"];
+console.log("[providers-check] ⑦ BYOK 可达性（设置面 ⊆ 可存 key；可路由每家须有 env 名与注入覆盖；边界水位只降不升）");
+{
+  const html = await readFile(join(ROOT, "src", "renderer", "index.html"), "utf8");
+  const offeredMatch = html.match(/data-setting="provider"[^>]*>([\s\S]*?)<\/div>/);
+  const offeredUi = offeredMatch ? [...offeredMatch[1].matchAll(/data-val="([^"]+)"/g)].map((m) => m[1]) : [];
+  // 解析失效必须可见：offeredUi=[] 会让下面每条合取 vacuously 成立（本仓点名的「读到 0 即绿」形态）。
+  assert(offeredUi.length > 0, `设置面 provider 选项解析到 ${String(offeredUi.length)} 枚（0 = 解析失效，不许 vacuous 绿）`);
+  assert(
+    setDiff(offeredUi, [...PROVIDER_KINDS]).length === 0,
+    `UI 按钮 ⊆ 设置可持久化面（UI: ${offeredUi.join("/")} · 可持久化: ${PROVIDER_KINDS.join("/")}）`,
+  );
+
+  // 注入面跑**真函数**：内存后端替 env 表里每家备一把哨兵 key，看各自 env 名有没有被写上。
+  // 今天存储白名单只有 glm，但这一跑先把「白名单扩到四家」的那天验到位——硬编码 "glm" 的旧实现当场红。
+  const sentinel = new Map<string, string>();
+  for (const p of ENV_KEYED_PROVIDERS) sentinel.set(p, `byok-probe-${p}-0123456789`);
+  const memBackend: ProviderKeyBackend = {
+    name: "in-memory-probe",
+    isAvailable: () => true,
+    async set(p, v) { sentinel.set(p, v); },
+    async get(p) { return sentinel.get(p) ?? null; },
+    async delete(p) { return sentinel.delete(p); },
+    async storedProviders() { return [...sentinel.keys()]; },
+  };
+  const savedEnv = new Map<string, string | undefined>();
+  for (const p of ENV_KEYED_PROVIDERS) {
+    const n = envKeyOf(p) as string;
+    savedEnv.set(n, process.env[n]);
+    delete process.env[n];
+  }
+  let injected: string[] = [];
+  setProviderKeyBackend(memBackend);
+  try {
+    await injectStoredProviderKey(ENV_KEYED_PROVIDERS);
+    injected = ENV_KEYED_PROVIDERS.filter((p) => process.env[envKeyOf(p) as string] === sentinel.get(p));
+  } finally {
+    setProviderKeyBackend(null);
+    for (const [n, v] of savedEnv) {
+      if (v === undefined) delete process.env[n];
+      else process.env[n] = v;
+    }
+  }
+
+  const routable = [...new Set([...ROUTABLE_PROVIDER_IDS, ...DEFAULT_MODEL_TABLE.map((s) => s.provider)])];
+  const gaps = byokGapsOf({
+    routable,
+    storable: STORABLE_PROVIDER_IDS,
+    envKeyed: ENV_KEYED_PROVIDERS,
+    injected,
+    offered: [...new Set([...offeredUi, ...PROVIDER_KINDS])],
+  } satisfies ByokFacts);
+  assert(
+    gaps.routableWithoutEnvKey.length === 0,
+    `可路由的每家都有 env 名映射（缺: ${gaps.routableWithoutEnvKey.join("/") || "无"}）`,
+  );
+  assert(
+    setDiff(ENV_KEYED_PROVIDERS, injected).length === 0,
+    `启动注入面对 env 表每家真注入到各自 env 名（已注入: ${injected.join("/") || "无"}）`,
+  );
+  assert(
+    gaps.storableNotInjected.length === 0,
+    `可存 key 的每家都被注入面覆盖（缺: ${gaps.storableNotInjected.join("/") || "无"}）`,
+  );
+  assert(
+    gaps.offeredNotStorable.length === 0,
+    `设置面选项 ⊆ 可存 key 的 provider ∪ {demo}（越界: ${gaps.offeredNotStorable.join("/") || "无"}）`,
+  );
+  assert(
+    sameSet(gaps.routableNotStorable, BYOK_NO_KEY_WAIVER),
+    `「可路由但存不进 key」逐字等于登记水位（实测 ${gaps.routableNotStorable.join("/") || "无"} · ` +
+      `水位 ${BYOK_NO_KEY_WAIVER.join("/") || "无"}；扩一家不给 key 通道 ⇒ 前者多出该项，开了白名单忘了撤水位 ⇒ 后者多出该项）`,
+  );
+}
+
+// ---- ⑧ env 名映射 == 适配器实际取料面 ----
+// 表写对了但适配器其实读另一个变量，⑦ 四条全绿也看不见——这段走 **toWorkerModel**（worker 真路径），
+// 撤掉 env、不传 key，断言抛错消息点名表里那个变量名。顺序放在 ⑥ 暗卷之后：这段会临时删 env。
+console.log("[providers-check] ⑧ env 名映射与适配器实际取料面对账（撤 key 撤 env，走 toWorkerModel 真抛错）");
+{
+  const savedEnv = new Map<string, string | undefined>();
+  for (const p of ENV_KEYED_PROVIDERS) {
+    const n = envKeyOf(p) as string;
+    savedEnv.set(n, process.env[n]);
+    delete process.env[n];
+  }
+  try {
+    for (const p of ENV_KEYED_PROVIDERS) {
+      const envName = envKeyOf(p) as string;
+      const spec = DEFAULT_MODEL_TABLE.find((s) => s.provider === p);
+      if (!spec) {
+        assert(false, `档位表里找不到 provider=${p} 的任何一档 ⇒ 对账无从起跑（映射表与档位表已失配）`);
+        continue;
+      }
+      let message = "";
+      try {
+        for await (const ev of toWorkerModel(spec)(USER as never, [] as never)) {
+          void ev;
+          break;
+        }
+      } catch (err) {
+        message = err instanceof Error ? err.message : String(err);
+      }
+      assert(message.includes(envName), `${p}：无 key 无 env 时抛错点名 ${envName}（实际「${message.slice(0, 64) || "未抛错"}」）`);
+    }
+  } finally {
+    for (const [n, v] of savedEnv) {
+      if (v === undefined) delete process.env[n];
+      else process.env[n] = v;
     }
   }
 }

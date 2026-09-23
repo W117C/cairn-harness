@@ -14,6 +14,7 @@ import {
   providerKeyStatus,
   validateProviderKeyStore,
   setProviderKeyBackend,
+  type ProviderKeyBackend,
   type SafeStorageIo,
 } from "../src/main/provider-keys";
 
@@ -155,5 +156,51 @@ describe("provider key（safeStorage，明文零落盘）", () => {
     await putProviderKey("glm", FAKE_KEY);
     expect(await getProviderKey("glm")).toBe(FAKE_KEY);
     expect((await readFile(storePath, "utf8")).includes(FAKE_KEY)).toBe(false);
+  });
+
+  it("注入面按**清单**逐家注入各自的 env 名（旧实现硬编码 glm ⇒ 白名单扩家那天存进去没人读）", async () => {
+    const { injectStoredProviderKey } = await import("../src/main/provider-key-inject");
+    const mem = new Map<string, string>([
+      ["glm", "byok-probe-glm-0123456789"],
+      ["anthropic", "byok-probe-anthropic-0123456789"],
+    ]);
+    const backend: ProviderKeyBackend = {
+      name: "in-memory",
+      isAvailable: () => true,
+      async set(p, v) { mem.set(p, v); },
+      async get(p) { return mem.get(p) ?? null; },
+      async delete(p) { return mem.delete(p); },
+      async storedProviders() { return [...mem.keys()]; },
+    };
+    const savedGlm = process.env.M0_API_KEY;
+    const savedAnthropic = process.env.ANTHROPIC_API_KEY;
+    setProviderKeyBackend(backend);
+    try {
+      delete process.env.M0_API_KEY;
+      delete process.env.ANTHROPIC_API_KEY;
+      // 缺省 = 存储白名单（今天只有 glm）⇒ 存了 anthropic 也不会被凭空激活
+      expect(await injectStoredProviderKey()).toBe(true);
+      expect(process.env.M0_API_KEY).toBe("byok-probe-glm-0123456789");
+      expect(process.env.ANTHROPIC_API_KEY).toBeUndefined();
+      // 按清单调用：每家写到自己那个 env 名（envKeyOf 决定，不是 M0_API_KEY 一把筐）
+      delete process.env.M0_API_KEY;
+      expect(await injectStoredProviderKey(["glm", "anthropic"])).toBe(true);
+      expect(process.env.M0_API_KEY).toBe("byok-probe-glm-0123456789");
+      expect(process.env.ANTHROPIC_API_KEY).toBe("byok-probe-anthropic-0123456789");
+      // env 优先是**逐家**判断：glm 已在不覆盖，anthropic 撤掉后仍会注入
+      process.env.M0_API_KEY = "env-path-key";
+      delete process.env.ANTHROPIC_API_KEY;
+      expect(await injectStoredProviderKey(["glm", "anthropic"])).toBe(true);
+      expect(process.env.M0_API_KEY).toBe("env-path-key");
+      expect(process.env.ANTHROPIC_API_KEY).toBe("byok-probe-anthropic-0123456789");
+      // 未登记 env 名的 provider：崩，不静默跳过那一家（跳过的话用户以为「存了 key 就生效」）
+      await expect(injectStoredProviderKey(["no-such-provider"])).rejects.toThrow(/没有 env 名映射/);
+    } finally {
+      setProviderKeyBackend(null);
+      if (savedGlm === undefined) delete process.env.M0_API_KEY;
+      else process.env.M0_API_KEY = savedGlm;
+      if (savedAnthropic === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = savedAnthropic;
+    }
   });
 });
