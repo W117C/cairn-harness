@@ -2095,3 +2095,28 @@ $0.2020（standard）/ **$0.8080**（strong）——价表跨度 40 倍。旧算
   「只回一句知道了」不重验）；tsc 0 错；邻域 wiring-coverage/settings/auto-verify-wiring/loop 59 条全绿。
 - **未闭**：`settings.json 上这个键 → handleAgentRun → runLoop` 那条腿还没有端到端观测者（loop 层两侧都钉了，
   runner 层没钉）——已立案，形状照 `tests/impact-runner-wiring.test.ts` 第四环；渲染层那一行等 `app.js` 窗口。
+
+**能力 48（2026-09-24）：那条腿钉上了——顺带发现「产品入口的剧本会话从来只有一次请求」。**
+- 上条的「未闭」已闭：`tests/auto-verify-repair-runner.test.ts` 两条走 `handleAgentRun`（overrides 一个都不给，
+  只在盘上写 `autoVerifyRepair`），开=**2 拍 + 2 次成功写盘**，关=**1 拍 + 1 次写盘**（绝对量，不是"和刚才不一样"）。
+  锚点 `auto-verify-repair-settings-fallback-dropped`：把 `agent-runner.ts` 那句读盘换成 `false` ⇒ 用例红。
+  这是「两头断」第 **14** 次，也是第一处**先被判定"没法测"、后来发现是通道缺表达法**的：不是没观测者，
+  是产品入口那条剧本通道结构上到不了第二拍。
+- **本轮真正的发现（比锚点值钱）**：`createMockProvider` 的语义是「一次 `stream()` 把剩余剧本全吐完」
+  ⇒ 经产品入口跑的每一场会话**只有一次模型请求**。靶场早就为同一件事立过切轮口径（`gym/script.ts` 头注：
+  「不是跑得慢，而是量不到」，BLOCKED 裁决 3 实测三条 case 的 requests 全是 1），但 e2e / 各 `-check`
+  走的这一支漏在机制外。收束闸的返修那一拍、逐轮上下文增长、压缩、跨轮保持目标——这一整类面
+  在**最接近生产的那条通道**上一直没有样本。
+- **修法上踩到一条新教训（同族副本的反方向）**：我先把靶场那条口径（一轮 = 文本 + 它那一个 tool_call）
+  搬过来，全量门当场炸两处——`tests/memory-runner.test.ts` 的 writes 从 3 掉到 1（一轮里 N 条 `remember`
+  被劈成 N 轮 ⇒ 合并审批变成 N 次审批），`tests/mock.test.ts` 三条旧契约红。⇒ **把一份现成口径搬到第二支
+  之前，先问第一支的纪律是它自己的记账约定还是格式的属性**（这里是前者：真 provider 一轮可以发多个 tool_call）。
+  最终形状：只按显式哨兵 `round_end` 切轮 ⇒ 不写哨兵的既有剧本逐字保持旧语义（e2e 复跑 3 passed 实证）。
+- 判卷两条都留在仓里，方向相反所以缺一不可：没写哨兵 = 一次吐完整条（守旧面）；写了 = 真多出一轮（守新面）。
+  锚点 `mock-round-marker-dropped`（丢掉哨兵 ⇒ 新面红、旧面全绿 ⇒ 退化不会伪装成"没事"）。
+- 顺带把 `wiring-coverage` 的机制判据从 `over.x ?? 读盘` 扩到 **settings-only** 那一族：只认一种写法
+  = 换个写法就绕过机制。**它当场抓出第二格没人守**：`parentMode`（崩溃恢复「重派」的父档位取自全局默认档，
+  砍掉读盘没有任何用例会红）⇒ 立案 #29，署名在 `KNOWN_GAPS`（锚点补上后那条会转陈旧，署名不许烂在表里）。
+- 门禁读数（提交前复跑，非引用旧数）：tsc 0 错；全量 test **233 files / 2512 tests 全绿**（exit 0）；
+  `pnpm e2e` 全断言通过（3 passed）。两条新锚点逐条 ✅ 杀掉（`auto-verify-repair-settings-fallback-dropped`、
+  `mock-round-marker-dropped`），锚点表 883 → 885。

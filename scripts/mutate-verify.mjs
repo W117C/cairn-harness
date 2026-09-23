@@ -7527,6 +7527,16 @@ const MUTATIONS = [
     apply: (s) => s.replace("autoVerifyRepair: (await store().get()).autoVerifyRepair,", "autoVerifyRepair: false,"),
     expectFail: "开（只写进 settings.json，overrides 一律不给）：红拍之后真多要一轮并再验一拍",
   },
+  // 上一条锚点的前提：剧本能说出「第 2 轮」。丢掉哨兵 ⇒ 产品入口退回一次请求吐完整条，
+  // 而**旧剧本（不写哨兵的）逐字照绿**——退化只会在这条上露头，所以它得单独钉。
+  {
+    id: "mock-round-marker-dropped",
+    src: "src/providers/mock.ts",
+    test: "tests/mock-provider-rounds.test.ts",
+    desc: "装载器丢掉 round_end ⇒ 哨兵形同虚设：返修那一拍再次结构不可达，而 e2e/gate-check 那些不写哨兵的剧本全绿，看不出这是一次退化",
+    apply: (s) => s.replace("        out.push({ type: ROUND_END }); // 只用来收轮，切轮时吃掉（见 ROUND_END 的注释）\n", ""),
+    expectFail: "哨兵把中间那个「没调工具的一轮」表达出来",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
