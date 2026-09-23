@@ -354,43 +354,21 @@ typed-decisions 上 0.362 / 0.342，**低于多数类基线 0.461**；招牌 0.7
 
 ## 附录 A：反事实回放（§3.2 / §3.3；也是 §7 第 1 步的 ask 密度读数）
 
-回放脚本以内联 heredoc 执行，**未入库**（若要成为常态读数，需登记进 `scripts/gate-manifest.ts`）。
-下面这段可直接粘贴复跑，产出 §3.2 的两档 ask 与 §3.3 的 risk 分布；
-第 1 步落地后**同一条命令**再跑一次，看 default 行是否仍 92%：
+复跑入口已入库：<!-- replay:ask-density -->
 
 ```sh
-node --import tsx -e "$(cat <<'TS'
-import fs from "node:fs";
-const { evaluate, isNetworkCommandCall } = await import("./src/permissions/autonomy.ts");
-const { staticRisk, modelRisk } = await import("./src/permissions/risk.ts");
-const files: string[] = [];
-const walk = (d: string, k: number): void => { if (k > 4) return; let es: fs.Dirent[];
-  try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
-  for (const e of es) { const p = d + "/" + e.name;
-    if (e.isDirectory()) walk(p, k + 1); else if (e.name.endsWith(".jsonl")) files.push(p); } };
-for (const r of ["outputs", process.env.HOME + "/Library/Application Support/m0-agent-loop/sessions"]) walk(r, 0);
-const calls: { tool: string; args: Record<string, unknown> }[] = [];
-for (const f of files) for (const l of fs.readFileSync(f, "utf8").split("\n")) { if (!l.trim()) continue;
-  let e: any; try { e = JSON.parse(l); } catch { continue; }
-  if (e.type === "tool_call") calls.push({ tool: String(e.name), args: (e.args ?? {}) as Record<string, unknown> }); }
-const G = new Set(["write_file", "edit_file", "run_shell", "shell_rw", "shell_ro"]);
-const mg = calls.filter(c => G.has(c.tool) || c.tool.startsWith("mcp__"));
-const mk = (mode: string, sandbox: boolean | null) => ({ mode, rules: [], sessionScopes: new Set<string>(),
-  sandboxAvailable: sandbox, planBlocked: false, frozenJudgePaths: new Set<string>(),
-  consecutiveAutoApprovals: 0, breakerTripped: false, consecutiveCriticalDenials: 0 } as any);
-for (const [mode, sandbox] of [["default", null], ["auto", null], ["auto", false]] as [string, boolean | null][]) {
-  let ask = 0; const risk = new Map<string, number>();
-  for (const c of mg) { const d: any = evaluate(c.tool as any, c.args, mk(mode, sandbox));
-    if (d.verdict === "ask") ask++;
-    const r = String(d.risk ?? "deny"); risk.set(r, (risk.get(r) ?? 0) + 1); }
-  console.log(mode, "sandbox=" + sandbox, "受管=" + mg.length, "ask=" + ask,
-    "risk=" + [...risk.entries()].map(([k, v]) => k + ":" + v).join(" ")); }
-console.log("staticRisk 非 none:", mg.filter(c => staticRisk(c.tool as any, c.args).level !== "none").length,
-  "网络命令:", mg.filter(c => isNetworkCommandCall(c.tool as any, c.args)).length,
-  "modelRisk 标记:", mg.filter(c => modelRisk(c.args).level !== "none").length);
-TS
-)"
+node --import tsx scripts/replay/ask-density.ts
 ```
+
+（登记表 `scripts/replay-readings.ts`，判据 `docs-check` D-8：引用无源 / 登记无人引用 / 脚本不在盘上 /
+仍有内联 heredoc 复跑块，四条各能红。）
+
+**这段原来是一段内联 heredoc，2026-09-23 实跑已 `TypeError: s.planBlocked is not a function`。**
+根因不是有人改坏了脚本，而是它在文档里**永不过编译**：`planBlocked` 从 `boolean` 变成 `() => boolean`
+（评审 C6：快照布尔只有主会话三处刷新，worker 那条路从不刷）之后，文档里手搭的 fixture 与产品形状脱钩，
+而"可直接粘贴复跑"这句话没有任何门在守。搬进脚本后它进 tsc 覆盖面，且 fixture 走
+`newAutonomySession`——会话形状由构造器持有，再加字段/改形状会在编译期崩，而不是落在下一个复跑的人身上。
+第 1 步落地后**同一条命令**再跑一次，看 default 行是否仍 92%。
 
 语料清点与 `approval_requested` / `tool_result.auto` 计数（§3.1）用同样的 walk + 逐行 `JSON.parse`，
 按 `e.type` 分桶即可。
@@ -402,41 +380,12 @@ TS
 `失败结果=16 无配对result=17 失败后仍调同一工具=7 其中参数一字不变=0`。
 
 ```sh
-node --import tsx -e "$(cat <<'TS'
-import fs from 'node:fs';
-const files = [];
-const walk = (d, k) => { if (k > 4) return; let es;
-  try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
-  for (const e of es) { const p = d + '/' + e.name;
-    if (e.isDirectory()) walk(p, k + 1); else if (e.name.endsWith('.jsonl')) files.push(p); } };
-for (const r of ['outputs', process.env.HOME + '/Library/Application Support/m0-agent-loop/sessions']) walk(r, 0);
-let calls = 0, gated = 0, fails = 0, noRes = 0, retryName = 0, retryArgs = 0, nonAscii = 0;
-const G = new Set(['write_file', 'edit_file', 'run_shell', 'shell_rw', 'shell_ro']);
-for (const f of files) {
-  const ev = [];
-  for (const l of fs.readFileSync(f, 'utf8').split('\n')) { if (!l.trim()) continue;
-    try { ev.push(JSON.parse(l)); } catch { /* 脏行跳过 */ } }
-  const ok = new Map();
-  for (const e of ev) if (e.type === 'tool_result') ok.set(e.callId, e.ok === true);
-  const tc = ev.filter(e => e.type === 'tool_call');
-  for (let i = 0; i < tc.length; i++) {
-    const c = tc[i]; calls++;
-    if (G.has(c.name) || String(c.name).startsWith('mcp__')) { gated++;
-      const s = Object.values(c.args).filter(v => typeof v === 'string').join(' ');
-      if (/[^\x00-\x7F]/.test(s)) nonAscii++; }
-    if (!ok.has(c.id)) { noRes++; continue; }
-    if (ok.get(c.id)) continue;
-    fails++;
-    const n = tc[i + 1];
-    if (n && n.name === c.name) { retryName++;
-      if (JSON.stringify(n.args) === JSON.stringify(c.args)) retryArgs++; }
-  }
-}
-console.log('会话文件=' + files.length, 'tool_call=' + calls, '受管=' + gated, '受管含非ASCII=' + nonAscii);
-console.log('失败结果=' + fails, '无配对result=' + noRes, '失败后仍调同一工具=' + retryName, '其中参数一字不变=' + retryArgs);
-TS
-)"
+node --import tsx scripts/replay/corpus-inventory.ts
 ```
+
+<!-- replay:corpus-inventory --> 同上登记（`scripts/replay-readings.ts`），且 join 键写成具名常量：
+`tool_call` 侧 `id`、`tool_result` 侧 `callId`，任一缺失即**抛错**而不是静默跳过——
+按错键查会得到 `Map.has(undefined)` 恒 false，把「失败」读成 0（本页自纠第二条踩过）。
 
 **join 键是唯一容易踩错的地方**：`tool_call` 的字段叫 `id`，`tool_result` 的字段叫 `callId`。
 fanout 三 rep 的比值不用脚本——直接读 `outputs/ga-strategy-2026-09-20{,-rep2,-rep3}/report.md`

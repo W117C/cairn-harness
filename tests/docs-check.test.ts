@@ -5,12 +5,16 @@
 // 这样每条 D 都能双向断言（红相命中 + 反相不误伤），且不依赖工作树状态。
 // 真实文件读取只发生在该模块的 main()，由 `pnpm docs-check` 承担。
 import { describe, expect, it } from "vitest";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { REPLAY_READINGS, type ReplayReading } from "../scripts/replay-readings";
 import {
   checkAppendOnlyCorrections,
   checkBudget,
   checkDocBinaries,
   checkLineCitations,
   checkObservedValues,
+  checkReplay,
   checkStateRev,
   DOC_BUDGETS,
   LEGACY_WAIVERS,
@@ -259,3 +263,58 @@ describe("D-7 docs/ 不留二进制", () => {
     expect(checkDocBinaries([])).toHaveLength(0);
   });
 });
+
+/* D-8 复跑面可信赖。四条判据各测正反两相：本判据的存在理由是「文档说有、盘上其实没有」，
+   而这类腐在"全绿"里最难看见——所以每一条都要能红，也要能在正常形状上不误伤。 */
+describe("D-8 复跑面登记表与引用对账", () => {
+  const reg: readonly ReplayReading[] = [{ id: "ask-density", script: "scripts/replay/ask-density.ts", answers: "ask 密度" }];
+  const hasFile = (rel: string): boolean => rel === "scripts/replay/ask-density.ts";
+
+  it("引用了未登记的 id ⇒ 红，且 detail 点名那个 id", () => {
+    const f = checkReplay([{ path: "docs/x.md", text: "跑 <!-- replay:no-such --> 这条" }], hasFile, reg);
+    // 两条都是真红：① 那句引用无源；② 顺带暴露 ask-density 这次没人引用（陈旧登记）。
+    // 只期望一条会把"同一页同时犯两种错"的形状吞掉——那是本判据最该看见的复合情形。
+    expect(f).toHaveLength(2);
+    const ref = f.find((x) => x.file === "docs/x.md");
+    expect(ref?.detail).toContain("no-such");
+    expect(ref?.rule).toBe("D-8");
+    expect(f.find((x) => x.file === "scripts/replay/ask-density.ts")?.detail).toContain("没有任何文档引用");
+  });
+
+  it("登记的 id 被某页真引用 ⇒ 不报（反向：判据不能只认红）", () => {
+    const f = checkReplay([{ path: "docs/x.md", text: "node --import tsx scripts/replay/ask-density.ts <!-- replay:ask-density -->" }], hasFile, reg);
+    expect(f).toHaveLength(0);
+  });
+
+  it("登记了却没人引用 ⇒ 红（陈旧登记，与上一条反向）", () => {
+    const f = checkReplay([{ path: "docs/x.md", text: "一句普通话，没引用也没 heredoc" }], hasFile, reg);
+    expect(f.map((x) => x.file)).toEqual(["scripts/replay/ask-density.ts"]);
+  });
+
+  it("登记项指向的脚本不在盘上 ⇒ 红（改名/删文件忘撤表）", () => {
+    const f = checkReplay([{ path: "docs/x.md", text: "<!-- replay:ask-density -->" }], () => false, reg);
+    expect(f.some((x) => x.detail.includes("不在盘上"))).toBe(true);
+  });
+
+  it("内联 heredoc 复跑块按文件出一条（不过编译 ⇒ 形状一 drift 就静默失效）", () => {
+    const f = checkReplay([{ path: "docs/y.md", text: 'a\nnode --import tsx -e "$(cat <<TS\nx\nTS\n)"\nnode --import tsx -e 又一条' }], hasFile, []);
+    expect(f).toHaveLength(1);
+    expect(f[0]!.detail).toContain("2");
+    expect(f[0]!.file).toBe("docs/y.md");
+  });
+
+  it("真登记表里每条脚本都真在盘上（防「表写了、文件没了」这一格没人看）", () => {
+    const root = join(import.meta.dirname, "..");
+    for (const r of REPLAY_READINGS) expect(existsSync(join(root, r.script)), r.script).toBe(true);
+  });
+
+  it("存量内联块走 LEGACY_WAIVERS：水位内豁免，多一条即红", () => {
+    const src = [{ path: "docs/PROJECT-REPORT-2026-09-22.md", text: "node --import tsx -e x" }];
+    const findings = checkReplay(src, () => false, []);
+    expect(waive(findings).kept).toHaveLength(0);
+    const two = checkReplay([...src, { path: "docs/new.md", text: "node --import tsx -e x" }], () => false, []);
+    expect(two).toHaveLength(2);
+    expect(waive(two).kept.map((f) => f.file)).toEqual(["docs/new.md"]);
+  });
+});
+

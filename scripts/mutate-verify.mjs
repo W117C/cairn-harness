@@ -6643,6 +6643,23 @@ const MUTATIONS = [
     apply: (s) => s.replace("storableNotInjected: setDiff(f.storable, f.injected),", "storableNotInjected: setDiff(f.storable, f.envKeyed),"),
     expectFail: "逐格破坏：每支取料面失效只点亮它自己那一格",
   },
+  // ── D-8 复跑面登记表（两张格各钉一半：引用无源 / 陈旧登记——缺任一侧，登记表就会静默烂掉）
+  {
+    id: "replay-unregistered-refs-blinded",
+    src: "scripts/replay-readings.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "「引用无源」那格恒空 ⇒ 文档写 replay:<id> 而登记表没这项时门全绿——而这正是本判据要拦的第一种腐（那句话本来就是死的）",
+    apply: (s) => s.replace("unregisteredRefs: [...new Set(referenced.filter((id) => !ids.has(id)))],", "unregisteredRefs: [],"),
+    expectFail: "引用了未登记的 id ⇒ 红，且 detail 点名那个 id",
+  },
+  {
+    id: "replay-unreferenced-ids-blinded",
+    src: "scripts/replay-readings.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "反向一侧恒空 ⇒ 登记表只进不出：脚本改名/删掉后表项烂在那儿，等下一个人引用它才发现（清单缺反向就等于装饰）",
+    apply: (s) => s.replace("unreferencedIds: [...ids].filter((id) => !referencedSet.has(id)),", "unreferencedIds: [],"),
+    expectFail: "登记了却没人引用 ⇒ 红（陈旧登记，与上一条反向）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

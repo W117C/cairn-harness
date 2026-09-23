@@ -8,7 +8,7 @@
 // 水位**只准调低**，不再被命中的条目会报成 stale 红，故豁免不会静默烂在这儿）。
 
 export interface Finding {
-  rule: "D-1" | "D-2" | "D-3" | "D-4" | "D-5" | "D-7" | "W";
+  rule: "D-1" | "D-2" | "D-3" | "D-4" | "D-5" | "D-7" | "D-8" | "W";
   file: string;
   detail: string;
   /** 该判据的实测量纲值（D-1 = 字节，D-7 = 文件数）。有值时水位按"量"豁免；无值时按"条数"豁免。 */
@@ -186,6 +186,48 @@ export function checkDocBinaries(files: readonly string[]): Finding[] {
   }];
 }
 
+/* ------------------------------------------------------------------ D-8 复跑面可信赖 */
+
+/** D-8 的扫描面 = 这些页里的 `.md` 正文。**面之外的复跑命令不受本判据管**（说清范围，别让读者以为全仓都守）。 */
+export const REPLAY_DOC_FILES: readonly string[] = ["AGENTS.md", "PROGRESS.md", "STATE.md"];
+
+/**
+ * D-8：自称「可直接粘贴复跑」的东西必须有源、必须真在盘上。
+ * 病灶实测（2026-09-23）：文档里的 heredoc `node --import tsx -e` 永不过编译，产品侧一次形状变更
+ * （`planBlocked: boolean` → `() => boolean`）就让那句复跑变成 TypeError，且没有门知道。
+ * 四条判据各挑一格：① 引用了没登记的 `replay:<id>`（无源）；② 登记了没文档引用（陈旧登记）；
+ * ③ 登记项指向的脚本不在盘上（改名/删文件忘撤表）；④ 仍有内联 heredoc 复跑块（须搬成脚本或立案豁免）。
+ * 取料一律从**真实文档文本**扫（不读登记表自陈），否则未登记项会静默漏在机制外。
+ */
+export function checkReplay(
+  docs: readonly SourceFile[],
+  scriptExists: (rel: string) => boolean,
+  registered: readonly ReplayReading[] = REPLAY_READINGS,
+): Finding[] {
+  const refs = docs.map((d) => ({ file: d.path, ids: [...d.text.matchAll(REPLAY_REF)].map((m) => m[1]!) }));
+  const inline = docs.map((d) => ({ file: d.path, count: [...d.text.matchAll(INLINE_REPLAY)].length }));
+  const gaps = replayGapsOf({ registered, missingScripts: registered.filter((r) => !scriptExists(r.script)).map((r) => r.script), refs, inline });
+  const out: Finding[] = [];
+  for (const r of refs) {
+    for (const id of r.ids) {
+      if (gaps.unregisteredRefs.includes(id)) {
+        out.push({ rule: "D-8", file: r.file, detail: `引用 replay:${id} 但登记表里没有这一项——先把复跑脚本建出来并登记进 scripts/replay-readings.ts` });
+      }
+    }
+  }
+  for (const id of gaps.unreferencedIds) {
+    out.push({ rule: "D-8", file: registered.find((r) => r.id === id)?.script ?? id, detail: `登记项 replay:${id} 没有任何文档引用——要么写进那页，要么删表项（登记表不许烂在这儿）` });
+  }
+  for (const s of gaps.missingScripts) {
+    out.push({ rule: "D-8", file: s, detail: `登记项指向的复跑脚本不在盘上——文档里那句「可粘贴复跑」此刻是死的` });
+  }
+  for (const file of gaps.inlineBlocks) {
+    const count = inline.find((i) => i.file === file)?.count ?? 0;
+    out.push({ rule: "D-8", file, detail: `内联 heredoc 复跑块 ${String(count)} 处：它不过编译，形状一 drift 就静默失效 ⇒ 搬进 scripts/replay/*.ts 并登记，或在 LEGACY_WAIVERS 立案写明理由` });
+  }
+  return out;
+}
+
 /* ------------------------------------------------------------------ 存量豁免棘轮 */
 
 export interface Waiver {
@@ -223,6 +265,10 @@ export const LEGACY_WAIVERS: Readonly<Record<string, Waiver>> = {
   [waiverKey("D-4", "AGENTS.md")]: { upTo: 2, reason: "存量就地追注 2 处，§8 拆层后删除" },
   [waiverKey("D-4", "docs/README.md")]: { upTo: 2, reason: "「过时登记表」本身在用散文登记散文的漂移，§8 删表后本条删除" },
   [waiverKey("D-7", "docs")]: { upTo: 25, reason: "React 时代验收截图 25 张（docs/README.md 已声明全部过时），§8 git mv 走" },
+  [waiverKey("D-8", "docs/PROJECT-REPORT-2026-09-22.md")]: {
+    upTo: 1,
+    reason: "dated 交付报告＝当日证据快照，其内联复跑命令随当日口径冻结；不迁成常态读数（迁了反而会被人当现态读）",
+  },
 };
 
 /** 用存量水位筛掉老账，并挑出已不再被命中的豁免条目。 */
@@ -272,6 +318,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { INLINE_REPLAY, REPLAY_READINGS, REPLAY_REF, replayGapsOf, type ReplayReading } from "./replay-readings";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -326,6 +373,29 @@ export function listImagesUnder(root: string, sub: string): string[] {
   return out.sort();
 }
 
+/** D-8 的取料：`docs/` 下递归所有 `.md` + REPLAY_DOC_FILES 里真实存在的根页。跳过软链，防 socket 之类把门炸掉。 */
+export function listMarkdownDocs(root: string): string[] {
+  const out: string[] = [];
+  const walk = (dir: string, rel: string) => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.isSymbolicLink()) continue;
+      const a = join(dir, e.name);
+      const r = rel === "" ? e.name : rel + "/" + e.name;
+      if (e.isDirectory()) walk(a, r);
+      else if (e.isFile() && /\.md$/i.test(e.name)) out.push(r);
+    }
+  };
+  walk(join(root, "docs"), "docs");
+  for (const f of REPLAY_DOC_FILES) if (existsSync(join(root, f))) out.push(f);
+  return out.sort();
+}
+
 function shaExistsViaGit(sha: string): boolean {
   try {
     execFileSync("git", ["rev-parse", "--verify", "--quiet", sha + "^{commit}"], { cwd: ROOT, stdio: "pipe" });
@@ -366,6 +436,11 @@ export function runDocsCheck(): { findings: Finding[]; skipped: string[]; waived
   findings.push(...checkObservedValues(livePages));
   findings.push(...checkAppendOnlyCorrections(livePages));
   findings.push(...checkDocBinaries(listImagesUnder(ROOT, "docs")));
+
+  // D-8：复跑面可信赖。扫描面为空 ⇒ 记未检，不记通过（"读到 0 即绿"是这类门的通病）。
+  const replayDocs: SourceFile[] = listMarkdownDocs(ROOT).map((rel) => ({ path: rel, text: readFileSync(join(ROOT, rel), "utf8") }));
+  if (replayDocs.length === 0) skipped.push("D-8 扫描面为空（docs/ 与根页里没找到 .md）——复跑面未受检，不等于通过");
+  else findings.push(...checkReplay(replayDocs, (rel) => existsSync(join(ROOT, rel))));
 
   const { kept, stale } = waive(findings);
   return {
