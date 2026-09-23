@@ -2,7 +2,7 @@
 // 工具门：冻结的 runLoop 对 ask 一律拒绝（gate 非 allow 即 deny），因此 loop 固定走 auto 档，
 // 真实门在本模块的工具包装里 —— 复用 src/permissions 的 checkPermission，语义与 M0 一致：
 // read-only 拒副作用 / default 询问（UI 批准才执行）/ auto 放行；沙箱不可用时写工具强制逐条审批。
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { rm, readdir, mkdir, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -90,7 +90,7 @@ import {
   type SpawnArgs,
   type WorkerModel,
 } from "../agent/orchestrator";
-import { type RespawnArgs } from "../agent/recovery";
+import { recoveryParentMode, type RespawnArgs } from "../agent/recovery";
 import { buildSecurityReport } from "../agent/security/scan";
 import {
   listWorktreeDirs,
@@ -245,17 +245,24 @@ async function orchestratorExtras(sandbox: SandboxStatus | null = null): Promise
   };
 }
 
-/** M3c 会话编排器兜底（崩溃恢复「重派」路径）：run 间隙无 activeOrchestrator 时按会话现状建一个
- *  （同 logPath/workspace/档位；emit = 落盘 + UI 推送同路），保证恢复卡按钮真实可达。 */
+/** M3c 会话编排器兜底（崩溃恢复「重派」路径）：无 activeOrchestrator 时按**这条会话的现场**建一个，
+ *  保证恢复卡的按钮真实可达。两处此前只在内存里，于是这个分支谁都到不了（实测读数见
+ *  `tests/recovery-parent-mode.test.ts` 最后一格：重启后点重派得到「无可用事件管线」）：
+ *  ① 日志出处原先只读 `lastLogPath`（只有 run 会写）⇒ 现在优先用设置盘里**已持久化**的
+ *     `currentSession`（`handleSessionOpen` 落它就是为了重启还原），拿不到才退回 lastLogPath；
+ *  ② 父档位原先读设置盘的 `mode`——那个键的语义是「**新对话**开始时使用的权限档」，拿它当一条
+ *     已存在会话的父档，等于把一条 read-only 会话重派成 auto 帽子下的可写会话（§11.7.6 单调继承
+ *     的三道闸一起被换松一档）⇒ 改由 `recoveryParentMode` 从事件流的权限留痕里读回来。 */
 async function ensureSessionOrchestrator(): Promise<Orchestrator | null> {
   if (activeOrchestrator) return activeOrchestrator;
-  const logPath = lastLogPath;
-  if (!logPath) return null;
+  const sessionId = (await store().get()).currentSession;
+  const logPath = sessionId ? pathOf(requireSessionsDir(), sessionId) : lastLogPath;
+  if (!logPath || !existsSync(logPath)) return null; // 宁可不建，也不给不存在的会话凭空开一条流
   const log = createEventLog(logPath);
   const orch = new Orchestrator({
     logPath,
     workspace: await currentWorkspace(),
-    parentMode: (await store().get()).mode,
+    parentMode: recoveryParentMode(await replay(logPath).catch(() => []), (await store().get()).mode),
     emit: async (e: AgentEvent) => {
       await log.append(e);
       hooks.onEvent?.(e);
@@ -1781,7 +1788,12 @@ export async function handleCardAction(req: CardActionRequest): Promise<{ ok: bo
     (req.targetAgentId ? orchestratorForAgent(req.targetAgentId) : null) ??
     (req.targetAgentId ? orchestratorForMerge(req.targetAgentId) : null) ?? // M3b：write worker 终态后 emit 仍须经控制塔路由（合并/评论发生在 done 之后）
     (approvalId ? orchestratorForApproval(approvalId) : null) ??
-    activeOrchestrator;
+    activeOrchestrator ??
+    // 崩溃恢复重派**只在这一支**允许兜底建编排器：重启后内存里的 session/activeOrchestrator 都归零，
+    // 少了这一跳，下面那句 emit 守卫会先一步把「重派」挡在「无可用事件管线」上——恢复卡的按钮
+    // 恰好在它唯一要用的场景里点不动。其余动作（审批/取消/合并）仍照旧：路由不到就是路由不到，
+    // 不替一个已经不在的 worker 现场凭空建一个编排器。
+    (req.action === "respawn" && req.cardType === "agent_result" ? await ensureSessionOrchestrator() : null);
   const emit = session?.emit ?? (orch ? (e: AgentEvent) => orch.appendProtocol(e) : null);
   if (!emit) return { ok: false, error: "无可用事件管线（fail-closed）" };
   const event: AgentEvent = {

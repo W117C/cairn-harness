@@ -7537,6 +7537,25 @@ const MUTATIONS = [
     apply: (s) => s.replace("        out.push({ type: ROUND_END }); // 只用来收轮，切轮时吃掉（见 ROUND_END 的注释）\n", ""),
     expectFail: "哨兵把中间那个「没调工具的一轮」表达出来",
   },
+  // 崩溃恢复「重派」的两跳（2026-09-24 实测：这两跳此前**全都不可达**——重启后 `session`/
+  // `activeOrchestrator`/`lastLogPath` 三个内存态一起归零，卡片按钮先撞在 emit 守卫上）。
+  // 观察着 = `tests/recovery-parent-mode.test.ts` 最后一格（走真 `handleCardAction`）。
+  {
+    id: "recovery-orchestrator-unreachable-after-restart",
+    src: "src/main/agent-runner.ts",
+    test: "tests/recovery-parent-mode.test.ts",
+    desc: "重派那支不再兜底建编排器 ⇒ 恢复卡的「重派」在唯一要用它的场景里点不动（报「无可用事件管线」），而所有直接调 orch.respawn 的用例照绿",
+    apply: (s) => s.replace("    (req.action === \"respawn\" && req.cardType === \"agent_result\" ? await ensureSessionOrchestrator() : null);\n", "    null);\n"),
+    expectFail: "会话历史是 read-only + 设置盘默认 auto ⇒ 重派 write worker 必须被拒（拒因点名 read-only）",
+  },
+  {
+    id: "recovery-parent-mode-from-settings",
+    src: "src/main/agent-runner.ts",
+    test: "tests/recovery-parent-mode.test.ts",
+    desc: "重派回来的会话又顶著「新对话默认档」当父档 ⇒ 全局 auto 的用户一重启，read-only 会话就变成可派 write worker 的会话（§11.7.6 单调继承被换松一档）",
+    apply: (s) => s.replace("    parentMode: recoveryParentMode(await replay(logPath).catch(() => []), (await store().get()).mode),\n", "    parentMode: (await store().get()).mode,\n"),
+    expectFail: "会话历史是 read-only + 设置盘默认 auto ⇒ 重派 write worker 必须被拒（拒因点名 read-only）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

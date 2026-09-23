@@ -2120,3 +2120,29 @@ $0.2020（standard）/ **$0.8080**（strong）——价表跨度 40 倍。旧算
 - 门禁读数（提交前复跑，非引用旧数）：tsc 0 错；全量 test **233 files / 2512 tests 全绿**（exit 0）；
   `pnpm e2e` 全断言通过（3 passed）。两条新锚点逐条 ✅ 杀掉（`auto-verify-repair-settings-fallback-dropped`、
   `mock-round-marker-dropped`），锚点表 883 → 885。
+
+**能力 49（2026-09-24）：崩溃恢复「重派」在真场景里点不动——写测试时才发现，两跳都不通。**
+- 起因是上一条判据抓出的那格（`parentMode` 读的是设置盘）。动手前我先按规矩找观察着，结果找不到：
+  于是去读可达性，量到的是**这个兜底构造器谁都到不了**——重启后 `session`（run 结束即置 null）、
+  `activeOrchestrator`、`lastLogPath` 三个内存态一起归零，于是恢复卡上的「重派」按钮
+  在它唯一要用的场景里先撞在 `handleCardAction` 的 emit 守卫上，报「无可用事件管线（fail-closed）」；
+  即便越过那一行，`ensureSessionOrchestrator` 又因为只认 `lastLogPath` 而回 null。
+  既有测试全部**直接** `orch.respawn(...)`（`tests/m3c.test.ts`），绕过了整条 IPC 跳 ⇒ "恢复能用"这件事
+  此前只有注释在承诺。**这是「两头断」第 17 次，且形状新**：原语在、消费端在，中间那一跳被**前置守卫**挡住。
+- 两处改法（都不新增事件类型、不碰 IPC 契约）：
+  ① `handleCardAction` 的编排器解析链**只对 respawn 那一支**兜底建一个（审批/取消/合并照旧路由不到就失败——
+    不替一个已经不在的 worker 现场凭空建编排器）；
+  ② 日志出处优先用设置盘里**已持久化**的 `currentSession`（`handleSessionOpen` 落它就是为了重启还原），
+    拿不到才退回 `lastLogPath`；文件不存在 ⇒ 宁可不建，也不给不存在的会话凭空开一条流。
+- 顺带把该读的档位读对：`parentMode` 改由纯函数 `recoveryParentMode(events, 设置盘值)` 从
+  **事件流里已有的权限留痕**（`tool_result.gate.mode`，evaluate 一侧必带）取回；留痕没有再退到
+  最近一次 `agent_spawned.permission_mode`（那是裁过之后的子档，恒 ≤ 父 ⇒ 宁可更严不会更宽）。
+  原来直接用设置盘那个键——它的语义是「**新对话**开始时使用的权限档」⇒ 全局默认 auto 的用户一重启，
+  一条 read-only 会话就顶着 auto 的帽子派 write worker，§11.7.6 的单调继承被换松一档（方向单向变宽）。
+- 判卷：`tests/recovery-parent-mode.test.ts` 7 条 = 6 条取档（含「worker 子流留痕按 `agent_id` 排除」
+  「gate.mode 宁缺不编不许当档位」）+ 1 条走真 `handleCardAction`（前置自检先钉"留痕真落盘了"，
+  否则"被拒"可以是"什么都没读到"）。锚点 +2：摘掉兜底那一跳 / 把父档改回读设置盘，逐条 ✅。
+- `KNOWN_GAPS` 里 `parentMode` 那条署名按设计变陈旧后撤掉；同时在那张表旁**留了逃逸口的名字**：
+  把读盘嵌进调用参数（现在这行的形状）就不被棘轮枚举了 ⇒ 该格的观察着改由上面 7 条 + 两针负责，
+  要真收口得让第二条形状按 initializer 子树找读盘（独立改造，没顺手做）。
+- 门禁读数（提交前复跑）：tsc 0 错；全量 test **234 files / 2519 tests 全绿**；`pnpm e2e` 全断言通过。

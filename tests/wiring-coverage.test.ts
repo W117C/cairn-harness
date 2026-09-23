@@ -176,11 +176,16 @@ describe("真实现状：agent-runner 的每行接线都有锚点（棘轮本体
   const table = readFileSync(join(ROOT, "scripts/mutate-verify.mjs"), "utf8");
   const found = extractToggleWiring(runner);
   const needles = extractAnchorNeedles(table);
-  /** 读盘半边确实还没人守、已署名并挂任务的格（每条都得能在任务表里查到同号条目）。 */
-  const KNOWN_GAPS: Record<string, string> = {
-    parentMode: "任务 #29：崩溃恢复「重派」路径的父档位，目前没有用例能驱动 ensureSessionOrchestrator，"
-      + "所以砍掉这行读盘的锚点还不存在（2026-09-24 由本判据扩到 settings-only 那一族时当场抓出）",
-  };
+  /** 读盘半边确实还没人守、已署名并挂任务的格（每条都得能在任务表里查到同号条目）。
+   *  生命周期：补上锚点 ⇒ 这条变 `staleGaps` 红，逼人删（2026-09-24 实测：`parentMode` 改由
+   *  `recoveryParentMode` 从事件流留痕取档、设置盘只剩兜底 ⇒ 它不再是本判据认识的"接线行"，署名随之撤）。
+   *  ⚠️ **已知逃逸口**（规则 122 的同一形状）：把读盘**嵌进调用参数**
+   *  （`parentMode: recoveryParentMode(events, (await store().get()).mode)`）就不被枚举了。
+   *  本表因此不许当"全覆盖"引用；那一格现在的观察着是
+   *  `tests/recovery-parent-mode.test.ts`（6 条取档 + 1 条生产入口）与锚点
+   *  `recovery-parent-mode-from-settings`。要收掉这个口子，就得让第二条形状按 initializer **子树**找读盘，
+   *  并处理与第一条形状的重叠——那是一次独立的判据改造，别顺手做。 */
+  const KNOWN_GAPS: Record<string, string> = {};
 
   // 尺本身可测（上一条 describe 已证），这里为 0 ⇒ 形状整体消失了：那也必须有人来改这条判据，
   // 不许它静默变成"恒真所以恒绿"（规则 74：读到 0 即绿的观测道要每次自证）。
