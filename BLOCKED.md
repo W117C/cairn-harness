@@ -997,3 +997,38 @@ lint/test 两拍不在那份清单里——它们是 §483 已经拍板的东西
 ⇒ `wroteThisRun` 为假 ⇒ 那一拍**正确地**不补。也就是说"0 次"有两种良性解释（门拒写 / 剧本自己调了 verify 而让位），
 都不构成"链没接上"的证据。仍成立的只剩：**带批条的 IPC 路径上没有正向观察着**（#55 的剩余半边）。
 教训形状与规则 60/67 同族：**"读数为 0"在被测量本身没跑通时也会是 0**——先证明那一轮真写了盘，再谈那一拍。
+
+---
+
+## 待办 #56（移交，2026-09-23）：D7 快照 × `gym-check` B1 的确定性——不是新回归，是**两格相碰**
+
+**症状**（本轮做能力 11 时撞见，不是我这一格的改动引起）：
+```
+TERM=dumb node --import tsx scripts/gym-check.ts     →  29 ✅ / 4 ❌
+❌ B1 <case>: 明卷两次跑逐字段一致 —— changedFiles:
+   [".agent/snapshots/1790134752319--c2/src/todo.js", "src/todo.js"]
+ ≠ [".agent/snapshots/1790134752389--c2/src/todo.js", "src/todo.js"]
+```
+四条 case 全中，差异只在路径里那串**毫秒**。
+
+**归因（两步实测，不靠猜）**：
+1. `git worktree add tmp/wt-head2 HEAD` + 同一道门 → **HEAD 33 ✅ / 0 ❌**（绿）。
+2. `git diff HEAD -- src/tools/write_file.ts …` → D7 那几行（`snapshotBeforeOverwrite(...)`、
+   `ToolContext.snapshot?`、`ToolResult.snapshotId`、worker 侧 `snapshot:false`）**还在工作树差量里**，
+   即 D7 尚未入库。⇒ 红来自「D7 在飞改动 × gym-check B1」的相碰，不来自任何已提交的一格。
+   `snapshotIdOf(rel, callId, at = Date.now())`（`src/tools/snapshot.ts`）是毫秒的来源。
+
+**为什么这是真问题而不是噪音**：快照目录被算进 `changedFiles` ⇒
+① 「明卷两次跑逐字段一致」这条**判卷确定性**从此必红（wall-clock 进了判卷字段）；
+② 更要紧的是语义：「这次会话改了哪些文件」把 harness 的**记账文件**当成了交付成果——
+面板/靶子/合并判定任何拿 `changedFiles` 的地方都会跟着错。
+
+**两条合法修法（等 D7 那一格收口时由 owner 选；我按纪律不动他人原子单元、也不改判卷代码去绕）**：
+- **A｜改口径**：`changedFiles` 排除 `.agent/snapshots/**`（harness 记账不算变更面）。
+  这是**判卷标准变更**，按本文件开头的纪律需要裁决；顺带还得回答「还原到覆盖前」出口是否要单独列进面板。
+- **B｜改命名**：`snapshotIdOf` 不含 wall-clock（改 `callId` + 内容哈希/会话内单调序号）。
+  单独 B **不够**——路径仍会进 `changedFiles`，只是变得可复现；①好了②还在。
+  ⇒ 我倾向 A 为主、B 为辅（B 顺带解决同一毫秒在事件流里造成不可重放差异的问题），但这是移交不是替决。
+
+**取证用的复跑**：`node --import tsx scripts/gym-check.ts`（工作树红 / HEAD 绿即证）。
+本轮（能力 11）未触碰 `src/tools/*`、`src/agent/loop.ts`、`src/events/index.ts`、`src/main/agent-runner.ts`。
