@@ -7065,6 +7065,57 @@ const MUTATIONS = [
     apply: (s) => s.replace("  const deepRun = t.maxSameFailedRun >= 3;", "  const deepRun = t.maxSameFailedRun >= 2;"),
     expectFail: "只有原样重试、run 未到 3 ⇒ 仍不动（阈值这一半的分歧格）",
   },
+  // ---- 「自定义子智能体」簇：角色落流 / 点名解析 / 重派整包转发 / 面板载荷 ----
+  // 共同形状：一条参数从事件流走到重新 spawn，中间每一跳都可能静默掉一位；掉的那一位没人报错，
+  // 只会让「按原参数重派」这句话变成假的。
+  {
+    id: "agent-spawned-role-not-emitted",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/worker-role.test.ts",
+    desc: "agent_spawned 不再带 role ⇒ 角色只活在内存（handle.agentType），崩溃恢复与审计面都读不到",
+    apply: (s) => s.replace("      ...(stageRole?.role !== undefined ? { role: stageRole.role } : {}),\n", ""),
+    expectFail: "点名的角色随 agent_spawned 落流，且**不改** args 里的 mode（角色不给写权限）",
+  },
+  {
+    id: "spawn-role-resolution-short-circuited",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/worker-role.test.ts",
+    desc: "模型点名的 role 被当成空 ⇒ 未注册角色静默按默认面跑（申报的角色面被吞掉）",
+    apply: (s) => s.replace('    const roleArg = typeof args.role === "string" ? args.role.trim() : "";', '    const roleArg = "";'),
+    expectFail: "未注册的角色出声拒：不落 agent_spawned、不建 worker，并指回缺省行为",
+  },
+  {
+    id: "respawn-args-drops-role",
+    src: "src/agent/recovery.ts",
+    test: "tests/worker-role.test.ts",
+    desc: "respawnArgsFrom 不映射 role ⇒ 恢复卡的 artifacts.respawn 少一位（重派换了一张角色面）",
+    apply: (s) => s.replace("    ...(spawned.role !== undefined ? { role: spawned.role } : {}),\n", ""),
+    expectFail: "respawnArgsFrom 把 role 映射进重派参数；源事件没 role ⇒ 键缺席（不替它编一个默认角色）",
+  },
+  {
+    id: "respawn-forward-back-to-field-list",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/worker-role.test.ts",
+    desc: "重派改回逐字段列写（漏掉 role 等四位）⇒ 映射端补了、转发端没跟上，这一跳静默丢参数",
+    apply: (s) => s.replace("    return await this.spawn({ ...args }, ctx);", "    return await this.spawn({ task: args.task, mode: args.mode }, ctx);"),
+    expectFail: "真链：落流的角色 → respawnArgsFrom → respawn() 的新 agent_spawned 仍带同一角色（全新 agent_id）",
+  },
+  {
+    id: "panel-respawn-payload-lossy",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-worker-approval.test.ts",
+    desc: "面板「重派」载荷回到自造 {mode, task} ⇒ 用户点的那一跳与恢复卡两份参数（max_turns/档位/模型/角色全丢）",
+    apply: (s) => s.replace("        respawn: respawnArgsFrom(e),", "        respawn: { mode: e.mode, task: e.task },"),
+    expectFail: "取消发 agent_card/cancel，重派把原 spawn 参数带回 payload.respawn",
+  },
+  {
+    id: "panel-invents-respawn-payload-for-orphan",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-worker-approval.test.ts",
+    desc: "没有 spawn 参数也照发载荷 ⇒ 给一个从未见过的 worker 编一份重派参数（main 侧的出声拒永远走不到）",
+    apply: (s) => s.replace("    ...(col.respawn ? { payload: { respawn: col.respawn } } : {}),", '    payload: { respawn: col.respawn ?? { mode: "read", task: "" } },'),
+    expectFail: "取消发 agent_card/cancel，重派把原 spawn 参数带回 payload.respawn",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

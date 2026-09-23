@@ -52,16 +52,24 @@ it("审批事件在面板脏集里（不然卡会晚到，甚至永远晚到超�
 // 取消与重派：同一族写端（card_action），此前产品里连这两个出口都没有——
 // 「可中断/可接管」对 worker 不成立，崩溃恢复卡文案写着「可在恢复卡重派」而那张卡没有按钮。
 it("取消发 agent_card/cancel，重派把原 spawn 参数带回 payload.respawn", () => {
-  const col = { agent_id: "wt-7", parent_event_id: 12, mode: "write", task: "修分页" };
+  const spawnedFull = {
+    type: "agent_spawned", agent_id: "wt-7", parent_event_id: 12, mode: "write", task: "修分页",
+    max_turns: 9, permission_mode: "default", resources: ["src/a.ts"], model: "glm-4.6", role: "review", ts: 5,
+  } as unknown as AgentEvent;
+  const col = projectAgentPanel([spawnedFull])[0]!;
   expect(cardActionForWorkerRow(col, "cancel")).toEqual({
     cardId: "agent:wt-7", sourceEventId: 12, targetAgentId: "wt-7", cardType: "agent_card", action: "cancel",
   });
+  // 逐字段写死的完整载荷：按钮那句「按原任务重派」要求 mode/task 之外的四样也在里面。
+  // 旧断言只有 {mode, task} ⇒ max_turns/档位/模型/角色在点击那一跳全丢，重派其实换了一张面。
   expect(cardActionForWorkerRow(col, "respawn")).toEqual({
     cardId: "agent:wt-7", sourceEventId: 12, targetAgentId: "wt-7", cardType: "agent_result", action: "respawn",
-    payload: { respawn: { mode: "write", task: "修分页" } },
+    payload: { respawn: { mode: "write", task: "修分页", resources: ["src/a.ts"], max_turns: 9, tier: "default", model: "glm-4.6", role: "review" } },
   });
-  // mode 只认 read|write（main 侧 zod 式校验：别的值整条拒）
-  expect(cardActionForWorkerRow({ ...col, mode: "?" }, "respawn").payload?.respawn.mode).toBe("read");
+  // 容错列（没见到 agent_spawned）没有可重派的参数：不替它编一份载荷，交给 main 侧出声拒。
+  // 旧写法在这里把 mode "?" 归一成 "read" 后照发——那是给一个从未见过的 worker 造参数。
+  expect(projectAgentPanel([status("failed")])[0]?.respawn).toBeUndefined();
+  expect(cardActionForWorkerRow({ ...col, respawn: undefined }, "respawn").payload).toBeUndefined();
   expect(cardActionForWorkerRow({ ...col, parent_event_id: 1.5 }, "cancel").sourceEventId).toBe(0);
   // 卡死出口一：resume 与 cancel 同族（只差 action 名），走 agent_card
   expect(cardActionForWorkerRow(col, "resume")).toEqual({

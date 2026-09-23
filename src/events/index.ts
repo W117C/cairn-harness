@@ -5,6 +5,8 @@ import { basename, dirname, join } from "node:path";
 import type { AutoMeta, GateMeta } from "../permissions/autonomy";
 // 「被收走的原因」的取值集合真身在 provider 协议层（三家词表在那儿解码），不在事件层自家再定义一份。
 import type { TurnTruncation } from "../providers/stop-reason";
+// 恢复卡载荷的真身 = 那份唯一映射的产出类型（同上：`import type` 编译期擦除，无反向运行时依赖）。
+import type { RespawnArgs } from "../agent/recovery";
 
 /** M2f：/promote 来源（sidechat 结论提升进主会话）。零新增事件类型——主流仍是 user_message，
  *  只多一个可选 origin 字段，重启后从 JSONL 重放无损（徽标由 origin 反向投影）。 */
@@ -250,6 +252,13 @@ export interface AgentSpawnedEvent {
   parent_event_id: number;
   mode: AgentMode;
   task: string;
+  /**
+   * 已解析的角色名（sequencer 逐环注入，或模型在 `spawn_agent` 上点名）。
+   * **缺席 = 没带角色面**，不是"默认角色"——恢复重建时不许替它编一个（`handle.agentType` 同源）。
+   * 落这条之前，角色只活在内存里的 `handle.agentType`：崩溃恢复从事件流重建 ⇒ 角色丢，
+   * 面板/审计也读不到"这个 worker 当时是按哪张角色面跑的"。
+   */
+  role?: string;
   /** 写租约声明（M3a 仅解析存档，租约求交与警告 M3b 落地）。 */
   resources?: string[];
   /** 依赖链（M3a 仅解析存档，事件驱动链接 M3c）。 */
@@ -304,8 +313,10 @@ export interface AgentResultEvent {
     files_changed?: string[];
     /** M3b write mode：diff 出处引用（worktree 路径@base_commit）；diff 本体只进 git 面板（§4.4.4）。 */
     diff_ref?: string;
-    /** M3c 崩溃恢复（§4.4.9）：reason=interrupted 时携带原 spawn 参数（恢复卡「重派」的数据源）。 */
-    respawn?: { mode: string; task: string; resources?: string[]; max_turns?: number; tier?: string; model?: string };
+    /** M3c 崩溃恢复（§4.4.9）：reason=interrupted 时携带原 spawn 参数（恢复卡「重派」的数据源）。
+     *  类型即那份唯一映射的产出：这里曾另写一份内联字面量，于是面板载荷与它各长各的（`role` 落地时
+     *  内联那份不会红，只会静默少一位）。 */
+    respawn?: RespawnArgs;
     /** W4b：worker「代码能跑」这句话有没有机器凭据（只在本次真改过文件时出现）。
      *  纯投影自 worker 自己的子流（`workerVerificationEvidence`），不是第二份状态：
      *  verified = 最后一次成功写盘之后有绿的 verify 拍；failed = 最后拍是红的；

@@ -296,6 +296,16 @@ export class Orchestrator {
     if (mode === "supervise") {
       return await this.spawnSupervise(args, ctx);
     }
+    // 模型点名的角色：走与 sequencer **同一份**解析（不另起一条"读角色"的路径 ⇒ 两处口径会漂）。
+    // 未注册就出声拒并说明缺省行为，而不是静默按默认面跑（那等于把申报的角色面吞掉）。
+    const roleArg = typeof args.role === "string" ? args.role.trim() : "";
+    if (roleArg !== "") {
+      const resolved = this.resolveStageRole(roleArg);
+      if ("error" in resolved) {
+        return { ok: false, output: "spawn_agent: 角色不可用：" + resolved.error + "（不传 role 即默认实现面）" };
+      }
+      return await this.spawnInternal(args, ctx, task, { ...resolved, role: roleArg });
+    }
     return await this.spawnInternal(args, ctx, task);
   }
 
@@ -304,19 +314,12 @@ export class Orchestrator {
     return await this.spawnInternal(args, ctx, typeof args.task === "string" ? args.task.trim() : "", stageRole);
   }
 
-  /** M3c 崩溃恢复「重派」（§4.4.9）：全新 agent_id 按原 spawn 参数重新 spawn（V1 无 transcript resume）。 */
+  /** M3c 崩溃恢复「重派」（§4.4.9）：全新 agent_id 按原 spawn 参数重新 spawn（V1 无 transcript resume）。
+   *  整包转发展开，不逐字段列写：那份清单本身就是缺陷形状——`role` 落地时若只补映射端、
+   *  这里漏转一手，重派会**静默换一张角色面**（工具剔除面与提示词都变了），而卡上写的还是「按原参数」。
+   *  `RespawnArgs` 里没有 `depends_on`（依赖链已断），所以展开不会把不该带上的参数带进来。 */
   async respawn(args: RespawnArgs, ctx: { callId?: string } = {}): Promise<ToolResult> {
-    return await this.spawn(
-      {
-        task: args.task,
-        mode: args.mode,
-        ...(args.resources !== undefined ? { resources: args.resources } : {}),
-        ...(args.max_turns !== undefined ? { max_turns: args.max_turns } : {}),
-        ...(args.tier !== undefined ? { tier: args.tier } : {}),
-        ...(args.model !== undefined ? { model: args.model } : {}),
-      },
-      ctx,
-    );
+    return await this.spawn({ ...args }, ctx);
   }
 
   /** M5c Best-of-N 竞争编排（§m5-proposal 步骤 12）：N 个候选并行，judge 命中即早停取消其余。
@@ -678,6 +681,9 @@ export class Orchestrator {
       parent_event_id: parentEventId,
       mode: mode as "read" | "write",
       task,
+      // 角色随事件落流：内存里的 `handle.agentType` 撑不过崩溃恢复（恢复只读得到流），
+      // 而"这个 worker 当时按哪张角色面跑"是审计面该留的一条。缺席=没带角色，不替它编一个。
+      ...(stageRole?.role !== undefined ? { role: stageRole.role } : {}),
       ...(resources.length > 0 ? { resources } : {}),
       ...(parseStringList(args.depends_on).length > 0 ? { depends_on: parseStringList(args.depends_on) } : {}),
       ...(worktree ? { worktree } : {}),

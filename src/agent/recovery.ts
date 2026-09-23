@@ -11,6 +11,9 @@ export interface RespawnArgs {
   max_turns?: number;
   tier?: AgentSpawnedEvent["permission_mode"];
   model?: string;
+  /** 原角色名（缺席 = 当初没带角色面）。重派必须带它：角色决定工具剔除面与提示词面，
+   *  丢了就等于**换了一张角色面重跑**，而用户看到的只是「按原参数重派」。 */
+  role?: string;
 }
 
 export interface InterruptedWorker {
@@ -46,5 +49,6 @@ export function respawnArgsFrom(spawned: AgentSpawnedEvent): RespawnArgs {
     ...(spawned.max_turns !== undefined ? { max_turns: spawned.max_turns } : {}),
     ...(spawned.permission_mode !== undefined ? { tier: spawned.permission_mode } : {}),
     ...(spawned.model !== undefined ? { model: spawned.model } : {}),
+    ...(spawned.role !== undefined ? { role: spawned.role } : {}),
   };
 }

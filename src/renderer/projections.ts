@@ -5,6 +5,10 @@
 // M2d memory = 会话内 remember 调用审计（写入即事件 §8.1.4：tool_call/tool_result 投影）。
 // electron/DOM-free，panels-check（headless）与 vitest 共用。
 import type { AgentEvent, AgentPermissionMode, WorkerEvidence } from "../events";
+// 重派参数的**同一份**映射（恢复卡的 artifacts.respawn 与面板按钮的 payload.respawn 必须是它算出来的）：
+// 渲染层另列一份字段清单，就是「按原 spawn 参数重派」这句话在点击那一跳不成立的地方。
+// recovery.ts 只 import 类型，所以这条运行时依赖不会把 node:fs 那条链拉进 renderer 包（同 goal-trace）。
+import { respawnArgsFrom, type RespawnArgs } from "../agent/recovery";
 // goal 轨迹的**同一份** reduce（主进程续跑判据也用它）：芯片显示的轮次与「实际会不会再跑一轮」
 // 必须是同一个函数算出来的，否则渲染层自造一份 = 本仓点名的第二事实源。
 // goal-trace.ts 只 import 类型，所以这条运行时依赖不会把 worker-report/memory 那条链拉进 renderer 包。
@@ -544,6 +548,9 @@ export interface AgentColumn {
   agent_id: string;
   mode: string;
   task: string;
+  /** 重派载荷：唯一映射自 `agent_spawned`（`respawnArgsFrom`，与恢复卡的 artifacts.respawn 同一份实现）。
+   *  容错列（没见到 spawn 事件）没有这一位——不替没见过的 worker 编一份参数，按钮交回 main 侧出声拒。 */
+  respawn?: RespawnArgs;
   /** 血缘：spawn tool_call 的主流事件 id（分组树键）。 */
   parent_event_id: number;
   permission_mode: string;
@@ -644,6 +651,7 @@ export function projectAgentPanel(events: AgentEvent[]): AgentColumn[] {
         ...(e.tier_warning ? { tier_warning: e.tier_warning } : {}),
         max_turns: e.max_turns,
         startedTs: e.ts,
+        respawn: respawnArgsFrom(e),
       };
     } else if (e.type === "agent_status") {
       const a = get(e.agent_id);
@@ -783,7 +791,7 @@ export function workerRowActions(col: AgentColumn): { action: WorkerRowAction; l
 /** 行内动作 → card_action 载荷（§10.3 唯一事件流入口；形状与 agents-check A4/J 段同源）。
  *  resume 与 cancel 只差 action 名——写两份同形返回就是 §同族副本 的下一个候选。 */
 export function cardActionForWorkerRow(
-  col: { agent_id: string; parent_event_id: number; mode: string; task: string },
+  col: { agent_id: string; parent_event_id: number; respawn?: RespawnArgs },
   action: WorkerRowAction,
 ): {
   cardId: string;
@@ -791,7 +799,7 @@ export function cardActionForWorkerRow(
   cardType: string;
   action: WorkerRowAction;
   targetAgentId: string;
-  payload?: { respawn: { mode: "read" | "write"; task: string } };
+  payload?: { respawn: RespawnArgs };
 } {
   const base = {
     cardId: "agent:" + col.agent_id,
@@ -800,10 +808,12 @@ export function cardActionForWorkerRow(
     action,
   };
   if (action !== "respawn") return { ...base, cardType: "agent_card" };
+  // 没有 spawn 参数就没有这一位：交回 main 侧出声拒（旧写法在这里现场造一份 {mode, task}，
+  // 那份就是「按原参数重派」与实际重派之间的差）。
   return {
     ...base,
     cardType: "agent_result",
-    payload: { respawn: { mode: col.mode === "write" ? "write" : "read", task: col.task } },
+    ...(col.respawn ? { payload: { respawn: col.respawn } } : {}),
   };
 }
 

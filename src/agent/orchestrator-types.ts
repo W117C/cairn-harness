@@ -22,6 +22,12 @@ export interface SpawnArgs {
   tier?: unknown;
   /** M5c supervise：{ maxStages?, forbidden? }（受限循环参数；goal=task，budget=会话成本闸）。 */
   supervise?: unknown;
+  /**
+   * 模型侧点名的**已注册角色**（内置 implement|review|test 或 `plugin:agent-name`）。
+   * 缺席 = 不带角色面（与 `agent_spawned.role` 同一口径：没申报就不编一个"默认角色"出来）。
+   * 此前角色只能由 sequencer 逐环注入 ⇒ 「自定义子智能体」只覆盖 pipeline 一条路。
+   */
+  role?: unknown;
 }
 
 /** pipeline stage 的原始形态（M3c；sequencer 解析冻结）。 */
