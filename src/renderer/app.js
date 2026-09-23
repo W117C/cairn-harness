@@ -1,5 +1,5 @@
 import { projectUnits, mountHistory } from './history-window.js';
-import { projectPanelData, EMPTY_PANEL_DATA, entersMainConversation, toolArgsSummary, PANEL_DIRTY_TYPES, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, terminalRowState, unansweredToolCalls, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS, cardActionForComment, commentReadsBack, groupOnboardingSteps, impactLabel } from './projections';
+import { projectPanelData, EMPTY_PANEL_DATA, entersMainConversation, toolArgsSummary, PANEL_DIRTY_TYPES, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, terminalRowState, unansweredToolCalls, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS, cardActionForComment, commentReadsBack, groupOnboardingSteps, impactLabel, PERM_DEFAULT_ROW, permModeMapByRow, seedPermRowId } from './projections';
 import { $, esc, promptInput, sessionList, streamInner, toast } from './dom.js';
 import { ICONS, RUN_GRID_HTML, runGrid } from './icons.js';
 import { highlightAllDiffs, diffHtml } from './diff-highlight.js';
@@ -1990,7 +1990,11 @@ const PERM_MODES = [
   { id: 'guided', name: '风险确认', desc: '低风险直接执行；中风险以上（编辑、装包、联网）先问我', needs: ['终端命令', '联网请求'] },
   { id: 'yolo', name: '全部放行', desc: '只拦高风险与 critical，其余不再逐次询问', needs: [], danger: true }
 ];
-let permMode = PERM_MODES[1];
+function permRowById(id) { return PERM_MODES.find(m => m.id === id) || PERM_MODES.find(m => m.id === PERM_DEFAULT_ROW); }
+/* 初值按 id 查，不按数组下标（`PERM_MODES[1]` 那种写法：插一档就把默认档挪了位）。
+ * permTouched = 用户在本窗口里手动选过档 ⇒ 之后到达的 settings 不再覆写它。 */
+let permTouched = false;
+let permMode = permRowById(PERM_DEFAULT_ROW);
 function permModeIcon(mode) {
   return mode.danger
     ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4.5 2.8 20h18.4L12 4.5Z"/><path d="M12 10v4.2M12 17.2v.2"/></svg>'
@@ -2030,11 +2034,14 @@ permPanel.addEventListener('click', (e) => {
   closeAllPops(false);
   ctxPerms.focus({ preventScroll: true });
 });
-function applyPermMode(mode) {
+function applyPermMode(mode, opts) {
   permMode = mode;
+  // 只有"人点的"才算手动选过：启动回灌（silent）不得把 permTouched 立起来，
+  // 否则第二次以后的设置变更就再也进不来。
+  if (!(opts && opts.silent)) permTouched = true;
   syncPermChip();
   if (!permPanel.hidden) renderPermPanel();
-  toast('权限模式已切换为「' + mode.name + '」');
+  if (!(opts && opts.silent)) toast('权限模式已切换为「' + mode.name + '」');
 }
 
 /* 二次确认：进弹窗前记下来源焦点，勾选未打时「同意」保持禁用 */
@@ -2362,7 +2369,9 @@ render();
   const api = window.agent;
   if (!api || typeof api.listSessions !== 'function') return;
 
-  const PERM_MAP = { strict: 'read-only', standard: 'default', guided: 'guided', yolo: 'auto' };
+  /* 看板行 id → 档位：别名表只在 `projections.PERM_ROW_BY_MODE` 那一份里（加一档时 tsc 叫得醒，
+   *  判卷 `tests/renderer-perm-default-mode.test.ts` 也钉得住）。这里派生，不再抄第二遍字面量。 */
+  const PERM_MAP = permModeMapByRow();
   const real = { id: null, title: '新会话', running: false, askCards: new Map(), usageIn: 0, usageOut: 0, events: 0, runStart: 0 };
   let historyWindow = null;
   let openGeneration = 0;
@@ -3826,7 +3835,17 @@ render();
   };
   /* 回灌真实字段。放在这里而不是 settingsReady 里：那一段被
      renderer-workspace.test 的「真实运行目录」切片装载，而本函数定义在切片之外。 */
-  void settingsReady.then((st) => hydrateSettingsFields(st));
+  void settingsReady.then((st) => {
+    hydrateSettingsFields(st);
+    /* 设置页那格「新对话开始时使用的权限档」到这里才有消费者：此前 settings.mode 只被用来点亮
+     * 按钮的 aria-pressed，而看板初值写死在数组下标上 ⇒ 设成「只读」重启后每笔 run 仍按 default 发出
+     * （能力 7/8 的假控件：用户以为定了更严的默认档）。
+     * 回灌时机全在 `projections.seedPermRowId`（用户刚点过 / 认不出 / 与当前相同 ⇒ 不动）；
+     * 这里是静默回灌：不弹 toast，也不把 permTouched 立起来（否则第二次起的设置变更就再也进不来）。 */
+    const seed = seedPermRowId({ storedMode: st && st.mode, currentRowId: permMode.id, userChose: permTouched });
+    const row = seed === null ? null : permRowById(seed);
+    if (row) applyPermMode(row, { silent: true });
+  });
 
 
   /* ---------- 定时任务面板（v0.1.6 的 ui-schedule 对位） ----------

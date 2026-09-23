@@ -2083,6 +2083,75 @@ async function phaseOnboarding(): Promise<void> {
   await rm(root, { recursive: true, force: true }).catch(() => {});
 }
 
+/** B30 设置页那格「权限默认模式」到底有没有消费者（真窗口、跨进程）。
+ *  病灶（2026-09-23 实测）：这一格此前只被用来点亮设置页按钮的 `aria-pressed`，而权限看板初值写死在
+ *  数组下标 `PERM_MODES[1]` 上 ⇒ 设成「只读」重启后每一笔 run 仍按 default 发出——权限面上的假控件。
+ *  判据挂两侧：认得出的档 ⇒ 芯片跟着换；**缺席** ⇒ 留在默认档（证明上一条是数据驱动，不是写死成严格）。
+ *  芯片的静态标记本来就写「标准权限」，所以第二条单独看是空转的——它的意义只在与第一条成对时才成立。
+ *  两次真启动而不是页内 reload：初值只在装载时算一次，reload 测不到那条路径。 */
+async function phasePermDefaultMode(): Promise<void> {
+  console.log("[panels-check] B30 设置页档位 → 权限看板芯片（两次真启动：认得出才换、缺席留默认）");
+  const root = await mkdtemp(join(tmpdir(), "m1e-permmode-"));
+  const sessions = join(root, "sessions");
+  const settingsPath = join(root, "settings.json");
+  await mkdir(sessions, { recursive: true });
+  const chipOf = async (settings: Record<string, unknown>, tag: string): Promise<{ label: string; aria: string } | null> => {
+    await writeFile(settingsPath, JSON.stringify(settings), "utf8");
+    /* 上一扇窗没退干净时**不能**启动：产品开着 requestSingleInstanceLock（`index.ts:288`），
+     * 新进程会自己退出，而固定端口上的 /json/version 由**旧浏览器**继续应答——那一读看着像
+     * "这一档没生效"，其实读的是上一相的窗。所以这里等到端口真空出来；等不到就报"未验证"，
+     * 绝不把旧窗的读数当本轮结论（实测：三臂里只有第一臂撞上残留，报成 read-only 不生效）。 */
+    const freed = await tryWait(async () => {
+      try { return (await fetch(CDP_URL + "/json/version")).ok ? null : true; } catch { return true; }
+    }, 12_000);
+    if (!freed) {
+      ok(false, tag + " 端口仍被上一扇窗占着 → 未验证（不读旧窗的界面）");
+      return null;
+    }
+    const { proc, output } = spawnElectron({ M1E_SESSIONS_DIR: sessions, M1E_SETTINGS_PATH: settingsPath });
+    const up = await tryWait(async () => {
+      try { return (await fetch(CDP_URL + "/json/version")).ok ? true : null; } catch { return null; }
+    }, 25_000);
+    if (!up) {
+      ok(false, tag + " 起不来 → 未验证（输出尾 3 行：" + output().trim().split("\n").slice(-3).join(" / ").slice(0, 180) + "）");
+      await killElectron(proc);
+      return null;
+    }
+    const cdp = new Cdp(tag);
+    await cdp.connect();
+    try {
+      /* 等状态不等事件。芯片 = `#ctxPermissions .c-btn-label`（app.js 里的 `permLabel` 只是句柄，
+       * 页面上没有 #permLabel 这个 id——第一版按句柄名写选择器，三红读的其实是探针自己）。
+       * 更要紧的是：静态标记本来就写着「标准权限 / 权限模式」，只看「标签非空」会把**没跑过 app.js 的半载页**
+       * 当成一次真读数。前缀「权限模式：」只有 syncPermChip() 会加 ⇒ 它才是"这一档已经被算过"的证据。 */
+      return await settle(async () => {
+        const r = await cdp.eval<{ label: string; aria: string }>(
+          `(() => { const c = document.querySelector('#ctxPermissions');
+             const l = c ? c.querySelector('.c-btn-label') : null;
+             return { label: l ? (l.textContent || '').trim() : '', aria: c ? String(c.getAttribute('aria-label') || '') : '' }; })()`,
+        );
+        return r && r.aria.startsWith("权限模式：") ? r : null;
+      }, 20_000);
+    } finally {
+      await killElectron(proc);
+      // 真等进程退出（SIGKILL 之后 600ms 只是惯例延时）：下一臂启动前要先确认端口空出来
+      await settle(async () => (proc.exitCode !== null || proc.killed ? true : null), 5_000).catch(() => null);
+    }
+  };
+  const readOnly = await chipOf({ onboarded: true, mode: "read-only" }, "B30 只读档窗");
+  ok(readOnly !== null && readOnly.label === "严格审批",
+    "B30 设置 mode=read-only ⇒ 芯片显示「严格审批」（真跨进程回灌；实测 " + JSON.stringify(readOnly?.label ?? null) + "）");
+  ok(!!readOnly && readOnly.aria === "权限模式：严格审批",
+    "B30 aria-label 同步换档（读屏看到的与眼睛看到的必须同一档；实测 " + JSON.stringify(readOnly?.aria ?? null) + "）");
+  const absent = await chipOf({ onboarded: true }, "B30 缺省档窗");
+  ok(absent !== null && absent.label === "标准权限",
+    "B30 设置里没有 mode ⇒ 留默认「标准权限」（反向一侧：上一条不是把芯片写死成严格；实测 " + JSON.stringify(absent?.label ?? null) + "）");
+  const seeded = await chipOf({ onboarded: true, mode: "guided" }, "B30 引导档窗");
+  ok(seeded !== null && seeded.label === "风险确认",
+    "B30 新档 guided 在产品面真选得出来（别名表少一行时这一格就是 null；实测 " + JSON.stringify(seeded?.label ?? null) + "）");
+  await rm(root, { recursive: true, force: true }).catch(() => {});
+}
+
 // ---------------------------------------------------------------- main
 const argPhase = process.argv[2];
 if (argPhase === "--replay-child") {
@@ -2131,6 +2200,7 @@ try {
     ok(false, "B 相异常（未验证）：" + (err instanceof Error ? err.message : String(err)));
   }
   await phaseOnboarding();
+  await phasePermDefaultMode();
   /* 收尾扫描：凡连过 CDP 又没被人判过的窗（B21/B22 那几次自开的引导窗，以及以后新增的相）都按同一条
      判据过一遍——判据挂在「连上过」这个现状上，不挂在「某一相记得调用它」的登记表上（规则 64）。 */
   for (const w of exceptionWatched) if (!w.judged) await okNoExceptions(w);

@@ -6773,15 +6773,39 @@ const MUTATIONS = [
     expectFail: "ask-density 的臂覆盖每一档",
   },
   {
-    id: "renderer-perm-map-copy-missing-mode",
+    id: "renderer-perm-alias-copy-missing-mode",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-perm-default-mode.test.ts",
+    // 别名表搬到 projections 之后才有这一格：它一旦留在 app.js 的字面量里，加一档只有 tsc 那侧叫得醒，
+    // 而"设置里存得下这一档、产品面上却选不出来"在运行时是全绿的。
+    // （不钉 index.html 那个按钮：改法语法探针用 `ts.transpileModule`，整份 HTML 在它眼里就是语法错。）
+    desc: "档位↔看板行 id 的别名表少一档 ⇒ 反向派生表缺一行：设置能存、界面选不出",
+    apply: (s) => s.replace("  guided: 'guided',\n", ""),
+    expectFail: "反向表与正向表互逆，且值集合 = 档位集合（新档在产品面可达的判据）",
+  },
+  {
+    id: "renderer-perm-map-second-copy-back",
     src: "src/renderer/app.js",
-    test: "tests/permission-mode-guided.test.ts",
-    // 为什么不钉 index.html 那个按钮：改法语法探针用 `ts.transpileModule`，整份 HTML 在它眼里就是语法错
-    // ⇒ 任何 html 面上的锚点都必然被判「改法致语法错」（实测首次尝试即此）。看板/设置页两面里挑可解析的那面钉，
-    // 另一面仍由同一条对账用例判红。
-    desc: "看板别名表少一挡 ⇒ 选了新档也发不出去（PERM_MAP 未命中 = mode undefined 进 IPC，产品面静默失配）",
-    apply: (s) => s.replace("const PERM_MAP = { strict: 'read-only', standard: 'default', guided: 'guided', yolo: 'auto' };", "const PERM_MAP = { strict: 'read-only', standard: 'default', yolo: 'auto' };"),
-    expectFail: "渲染层两处档位入口（权限看板 + 设置页）与档位集合同集合",
+    test: "tests/renderer-perm-default-mode.test.ts",
+    desc: "PERM_MAP 退回在渲染层再抄一份字面量 ⇒ 别名表变成两处（去名字化是幻觉，表只是挪位置；挪回去就得有人判）",
+    apply: (s) => s.replace("const PERM_MAP = permModeMapByRow();", "const PERM_MAP = { strict: 'read-only', standard: 'default', yolo: 'auto' };"),
+    expectFail: "app.js 的 PERM_MAP 由这只表派生，不再自己写一遍档名字面量",
+  },
+  {
+    id: "perm-seed-clobbers-user-choice",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-perm-default-mode.test.ts",
+    desc: "回灌不看「用户刚点过」⇒ 异步到达的设置盖掉人手选的档（点一下被撤销，且界面不会说）",
+    apply: (s) => s.replace("  if (opts.userChose) return null;", "  if (false) return null;"),
+    expectFail: "用户已经手动选过 ⇒ 不动（异步加载的设置不得盖掉刚点的那一下）",
+  },
+  {
+    id: "perm-seed-guesses-default-row",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-perm-default-mode.test.ts",
+    desc: "认不出的档位回落到默认行 ⇒ 「不猜」这条没了：陌生设置值会把用户的现场换掉。判据必须带一格「当前不是默认行」，否则这条突变全绿（用例里那两行 yolo/strict 现值就是为此而在）",
+    apply: (s) => s.replace("  return typeof row === 'string' ? row : null;", "  return typeof row === 'string' ? row : PERM_DEFAULT_ROW;"),
+    expectFail: "设置认不出 / 与当前行相同 ⇒ 不动（认不出时不降级到默认档，保持现场）",
   },
   {
     id: "remember-gate-if-chain-back",

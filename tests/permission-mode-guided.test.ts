@@ -22,6 +22,7 @@ import {
   type PermissionRule,
 } from "../src/permissions";
 import { PERMISSION_MODES, permissionModeRank } from "../src/permissions/modes";
+import { PERM_ROW_BY_MODE } from "../src/renderer/projections";
 import { clampTier } from "../src/agent/worker-report";
 import { createGatedRemember } from "../src/main/agent-runner";
 import { ARMS } from "../scripts/replay/ask-density";
@@ -191,15 +192,15 @@ describe("复跑面与设置面对账（新档没人量、没人选 = 造了个�
   });
 
   it("渲染层两处档位入口（权限看板 + 设置页）与档位集合同集合", () => {
-    const appSrc = readFileSync(new URL("../src/renderer/app.js", import.meta.url), "utf8");
     const htmlSrc = readFileSync(new URL("../src/renderer/index.html", import.meta.url), "utf8");
-
-    const mapStart = appSrc.indexOf("const PERM_MAP = {");
-    expect(mapStart).toBeGreaterThanOrEqual(0);
-    const mapBody = appSrc.slice(mapStart, appSrc.indexOf("};", mapStart));
-    const mapped = [...mapBody.matchAll(/:\s*'([^']+)'/g)].map((m) => m[1]).sort();
-    expect(mapped).toEqual([...PERMISSION_MODES].sort());
-
+    // 看板侧：行 id 集必须正好是别名表的键集（别名表在 projections，判卷见 renderer-perm-default-mode）
+    const appSrc = readFileSync(new URL("../src/renderer/app.js", import.meta.url), "utf8");
+    const start = appSrc.indexOf("const PERM_MODES = [");
+    expect(start).toBeGreaterThanOrEqual(0);
+    const block = appSrc.slice(start, appSrc.indexOf("];", start));
+    const rowIds = [...block.matchAll(/id: '([^']+)'/g)].map((m) => m[1]).sort();
+    expect(rowIds).toEqual([...new Set(Object.values(PERM_ROW_BY_MODE))].sort());
+    // 设置页侧：直接列档位（无别名），少一个按钮 = 新档在产品面不可选
     const rowStart = htmlSrc.indexOf('<div class="set-choice" data-setting="mode">');
     expect(rowStart).toBeGreaterThanOrEqual(0);
     const row = htmlSrc.slice(rowStart, htmlSrc.indexOf("</div></div>", rowStart));

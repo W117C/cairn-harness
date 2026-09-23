@@ -4,7 +4,7 @@
 // git = diff 卡列表（write 工具动作聚合，M1 不做 git 控制塔）。
 // M2d memory = 会话内 remember 调用审计（写入即事件 §8.1.4：tool_call/tool_result 投影）。
 // electron/DOM-free，panels-check（headless）与 vitest 共用。
-import type { AgentEvent, WorkerEvidence } from "../events";
+import type { AgentEvent, AgentPermissionMode, WorkerEvidence } from "../events";
 // goal 轨迹的**同一份** reduce（主进程续跑判据也用它）：芯片显示的轮次与「实际会不会再跑一轮」
 // 必须是同一个函数算出来的，否则渲染层自造一份 = 本仓点名的第二事实源。
 // goal-trace.ts 只 import 类型，所以这条运行时依赖不会把 worker-report/memory 那条链拉进 renderer 包。
@@ -1136,4 +1136,50 @@ export function groupOnboardingSteps<T extends { step: number }>(groups: readonl
     else byStep.set(g.step, [g]);
   }
   return [...byStep.entries()].sort((a, b) => a[0] - b[0]).map(([step, items]) => ({ step, items }));
+}
+
+// ---- 权限档位 ↔ 权限看板行 id（§11.7.2 的界面侧；别名表只此一份）----
+// 为什么从 app.js 搬进这只**被判卷的**纯函数模块：产品档位是枚举（今天四值），看板行有它自己的
+// 历史别名（strict / standard / yolo）。这份对应关系原先只活在渲染层字面量里，
+// 于是加一档时只有 tsc 那侧会被叫住——而"设置里的档在产品面不可选"这件事没人判。
+// 判卷：`tests/renderer-perm-default-mode.test.ts`（正反向互逆 + 看板行 id 集同源 + 回灌时机）。
+
+/** 档位 → 看板行 id。`Record<AgentPermissionMode, string>` ⇒ 少一档编译不过。 */
+export const PERM_ROW_BY_MODE: Record<AgentPermissionMode, string> = {
+  'read-only': 'strict',
+  default: 'standard',
+  guided: 'guided',
+  auto: 'yolo',
+};
+
+/** 看板初值按 **id** 取，不按数组下标：`guided` 正是插在 `default` 与 `auto` 之间那一档——
+ *  旧写法 `PERM_MODES[1]` 今天仍对，但它对的原因是"下标 1 恰好还是标准"，不是"取的是标准"。 */
+export const PERM_DEFAULT_ROW = 'standard';
+
+/** 认不出的档位给 **null**：既不猜一个行，也不降级到默认档（保持现场比假装成功诚实）。 */
+export function permRowIdForMode(mode: unknown): string | null {
+  if (typeof mode !== 'string') return null;
+  if (!Object.prototype.hasOwnProperty.call(PERM_ROW_BY_MODE, mode)) return null;
+  const row = (PERM_ROW_BY_MODE as Record<string, string>)[mode];
+  return typeof row === 'string' ? row : null;
+}
+
+/** 看板行 id → 档位（run IPC 发出去的那个值）。由正向表派生，不再有第二份字面量。 */
+export function permModeMapByRow(): Record<string, AgentPermissionMode> {
+  const out: Record<string, AgentPermissionMode> = {};
+  for (const mode of Object.keys(PERM_ROW_BY_MODE) as AgentPermissionMode[]) {
+    out[PERM_ROW_BY_MODE[mode]] = mode;
+  }
+  return out;
+}
+
+/** 启动回灌的时机判据（`settings.mode` → 看板）。返回 null = 这一拍什么都不做：
+ *  ⑴ 用户已经手动选过 ⇒ 异步到达的设置不得盖掉刚点的那一下；
+ *  ⑵ 设置认不出 ⇒ 不动（不降级到默认档）；
+ *  ⑶ 与当前行相同 ⇒ 不重复渲染、不弹「已切换」toast。 */
+export function seedPermRowId(opts: { storedMode: unknown; currentRowId: string; userChose: boolean }): string | null {
+  if (opts.userChose) return null;
+  const row = permRowIdForMode(opts.storedMode);
+  if (row === null || row === opts.currentRowId) return null;
+  return row;
 }
