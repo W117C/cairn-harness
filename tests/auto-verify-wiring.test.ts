@@ -113,6 +113,25 @@ describe("能力 5 收束闸的装配链（runAgent 直调 vs 生产入口）", 
     expect(autoBeats(events).length).toBe(0);
   });
 
+  // #55 的正向半边：**批条在场**（allow 规则）时，生产入口那一拍必须发生。
+  // 上一格证伪了"入口那条路从不触发"，这一格才是它该钉的断言——两头都钉住，中间那一棒才算有观察着。
+  it("②b 走 handleAgentRun + allow 批条 ⇒ 写成功，那一拍真补上（正向观察）", async () => {
+    await writeFile(
+      join(dir, ".agent/permissions.json"),
+      JSON.stringify({ rules: [{ behavior: "allow", tool: "write_file", scope: "always" }] }),
+      "utf8",
+    );
+    await settings({ provider: "demo", safeMode: "off" }); // 无 autoVerify 键 ⇒ 吃到缺省开（裁决 6）
+    const events = await runViaIpc();
+    const results = events.filter((e) => e.type === "tool_result");
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every((e) => e.ok === true), JSON.stringify(results)).toBe(true);
+    expect(await readFile(join(dir, "target.txt"), "utf8")).toBe("changed\n");
+    const beats = autoBeats(events);
+    expect(beats.length).toBe(1);
+    expect(beats[0]).toMatchObject({ callId: "harness-auto-verify", auto: true });
+  });
+
   it("③a 代价上界：仓库没有可验面时零行为（这条不许被翻默认顺带打开）", async () => {
     await rm(join(dir, ".agent/config.json"), { force: true });
     vi.stubEnv("M3A_MAIN_SCRIPT", scriptPath);
