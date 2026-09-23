@@ -1778,6 +1778,36 @@ judgment-layer §9.1 的一条省略——"包管理器错误码先不加，因�
   提交后 7 条逐条 ✅（26.8s）；针脚体检 834 条阻断 0 属本簇。
 - 读数：全量 `test` **221 files / 2384 tests 全绿**（exit 0）、tsc 0 错、docs-check 绿。
 
+**能力 37：「用户自定义子智能体」从只有 pipeline 一条路，补成模型可点名 + 角色穿过程序崩溃**。
+承记忆页 `dsh-plugin-compat-surface` 的子智能体开口①。三条缺口是同一条链的三段（角色只活在内存 ⇒
+恢复读不到；只有 sequencer 能注角色 ⇒ 模型有注册好的角色却调不动；**用户真点的那一跳是另一份更缺的映射**）：
+- `agent_spawned.role` 落流（缺席 = 没带角色面，恢复时不许替它编一个）。三条 spawn 路径同时受益：
+  sequencer 早已把角色名冻结进 `StageRoleResolution.role`，supervise 硬编码 `implement`——**缺的只是没人把它写进事件**，
+  所以这一位补上后三条路一起有审计面（规则 53：靠字段成立的不变量要数清所有取料面）。
+- `spawn_agent` 新增 `role` 参数，走与 sequencer **同一份** `resolveStageRole`（不另起一条「读角色」的路径 ⇒ 两处口径必漂）；
+  未注册即出声拒并指回缺省行为。角色只收紧工具面，**不参与 mode 判定**（一次点名不得把只读 worker 升成写盘——用例断这一点）。
+- 重派那两半：`respawnArgsFrom` 映射 role；`Orchestrator.respawn` 从**逐字段列写**改成整包转发展开——
+  那份清单本身就是缺陷形状（映射端补了、转发端没跟上，这一跳静默丢参数且无人报错）。
+  恢复时角色已不可注册 ⇒ 重派拒，而不是静默换一张角色面重跑（用户看到的仍是「按原参数重派」）。
+- **实测到的新缺陷形状**：面板「重派」按钮自己造 `{mode, task}`（`projections.ts`），而那份完整映射只进
+  `artifacts.respawn`（审计面，没人点）⇒ 纯函数说「按原 spawn 参数」，用户点的那一跳只带两样，
+  max_turns / 档位 / 模型 / 角色**全丢**（档位与模型丢掉 = 重派的花钱面与批准时不同）。修法不是补四个字段，
+  而是让两个生产者共用 `respawnArgsFrom`（投影时挂 `col.respawn`）；没有 spawn 事件就没有载荷，交回 main 侧出声拒。
+  `artifacts.respawn` 的内联类型副本一并收成真身（那份副本正是「`role` 落地时它不会红，只会静默少一位」的地方）。
+- **旧断言把缺陷冻成期望值**：`renderer-worker-approval` 原先 `toEqual({respawn:{mode,task}})`——换判据为逐字段写死
+  完整载荷（与插件面 B2 那条同族：判据等于「没替换」时，实现后必红）。
+- 判据：`tests/worker-role.test.ts` 8 条（含 `respawnArgsFrom`→`respawn` 真链、缺席不编、未注册拒、空白 ≡ 不传）；
+  锚点 +6，**提交后**逐条 ✅（6 条 10.9s）。`--check-needles` 当场抓到我自己改坏的旧针
+  `worker-respawn-drops-the-write-mode`（针脚随重构消失）⇒ 改指 `recovery.ts` 那份 mode 归一，复跑 ✅（1.1s）——
+  **抓的是体检不是自觉**（同 `d818c18` 那一族）。
+- 读数（本轮全部重跑）：tsc **0 错**；全量 `test` **222 files / 2392 tests 全绿**（exit 0）；
+  针脚体检 840 条，**本簇阻断 0**（剩 1 条属他人在飞的 `src/agent/no-progress.ts`，未动）；
+  `agents-check` **255 ✅ / 0 ❌**（H 段真实 GLM 暗卷因无 `M0_API_KEY` 跳过并打 `UNVERIFIED=1`——未证 ≠ 通过）；
+  `routing-check` 39 ✅；`panels-check` 全绿（起窗 9 次、六扇窗 0 条 console error）。
+- 仍欠（记账不做假）：① 角色在**面板上看不到**（`app.js`/`index.html` 是并发会话表面，与 #13/#38 同批）；
+  ② 除插件容器外**没有非插件的自定义路径**（用户往 `~/.claude/agents/x.md` 放文件得不到任何东西）——
+  要么给正式路径，要么把「角色 = 插件专属」写成明说边界，现在两头都不吭声。
+
 
 
 
