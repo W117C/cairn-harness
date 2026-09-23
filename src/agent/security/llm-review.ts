@@ -15,7 +15,7 @@ const REVIEW_INPUT_CAP = 60_000;
 /** H2（审查 E-7）：文件局部上下文总预算——contexts 无上限时，大 diff 的审查请求可被撑爆。 */
 const CONTEXT_BUDGET = 24_000;
 
-/** 输出扫描（orchestrator.scanWorkerOutput 同构，独立实现避免环）：仿冒标签中和 + 密钥脱敏。 */
+/** 输出扫描（worker-report.scanModelOutput 同构，独立实现避免 security→agent 反向依赖）：仿冒标签中和 + 密钥脱敏。 */
 function scanReviewText(text: string): string {
   return redactSecrets(escapeControlTags(text)).text;
 }

@@ -79,7 +79,7 @@ import { frozenJudgePathSet } from "../frozen";
 // importer 与变异锚点不必跟着改）。本地引用走 import，公开面由文件尾的 re-export 维持逐字不变。
 import { MAX_CONCURRENT_WORKERS, READ_MODE_MAX_TURNS, SPAWN_MODES, WORKER_TOOL_TABLE, WRITE_WORKER_TOOL_TABLE, workerBudgetConfig, workerToolTable } from "./orchestrator-config";
 import { shell_rw, workerToolSpecs } from "./worker-shell-tools";
-import { clampTier, clipWorkerSummary, isPermissionMode, parseSpawnedAgentId, scanWorkerOutput, workerVerificationEvidence } from "./worker-report";
+import { clampTier, clipWorkerSummary, isPermissionMode, parseSpawnedAgentId, scanModelOutput, workerVerificationEvidence } from "./worker-report";
 import { priceForModel, priceTagText, shapeJoinRows, spentUsdFor, type JoinInput, type JoinPayloadBody, type WorkerPrice } from "./orchestrator-join";
 import { WorkerCancelled, defaultWorkerModel, isScriptedModel, type WorkerModel } from "./worker-model";
 import { type OrchestratorOptions, type PipelineChain, type SpawnArgs, type StageRoleResolution, type WorkerContext, type WorkerHandle } from "./orchestrator-types";
@@ -1905,7 +1905,7 @@ export class Orchestrator {
       return;
     }
     const report = lastAssistantText(w.events) ?? "";
-    const scanned = scanWorkerOutput(report);
+    const scanned = scanModelOutput(report).text;
     const clipped = clipWorkerSummary(scanned);
     if (status === "done") {
       // ---- M3b write mode：done → diff 快照 + 安全 gate 流水（先于 agent_result，面板先有 diff）----
@@ -2392,7 +2392,7 @@ export {
   READONLY_GIT_SUBCOMMANDS, READONLY_SHELL_COMMANDS, interceptDestructiveGit, isReadOnlyShellCommand,
   shell_ro, shell_rw, workerToolSpecs,
 } from "./worker-shell-tools";
-export { clampTier, clipWorkerSummary, isPermissionMode, parseSpawnedAgentId, scanWorkerOutput } from "./worker-report";
+export { clampTier, clipWorkerSummary, isPermissionMode, parseSpawnedAgentId, scanModelOutput } from "./worker-report";
 export type { ClippedSummary } from "./worker-report";
 export { WorkerCancelled, defaultWorkerModel, loadWorkerScript, scriptedWorkerModel } from "./worker-model";
 export type { WorkerModel } from "./worker-model";

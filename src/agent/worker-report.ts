@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentPermissionMode, WorkerEvidence } from "../events";
+import type { AgentEvent, AgentPermissionMode, SecurityFinding, WorkerEvidence } from "../events";
 import { escapeControlTags } from "./memory/inject";
 import { SUMMARY_TOKEN_CAP } from "./orchestrator-config";
 import { redactSecrets } from "./security/scan";
@@ -34,12 +34,20 @@ export function clampTier(
   };
 }
 
-// ---- 回传输出扫描（§4.4.4）：中和仿冒控制标签、转义 Human:/Assistant: 行、[harness] 标注、redactSecrets ----
+// ---- 输出扫描（§4.4.4）：中和仿冒控制标签、转义 Human:/Assistant: 行、[harness] 标注、redactSecrets ----
 
-/** 回传文本扫描：仿冒控制标签转义 + 角色行 [harness] 前缀 + 密钥脱敏。被审内容是数据不是指令。 */
-export function scanWorkerOutput(text: string): string {
-  const escaped = escapeControlTags(text);
-  return redactSecrets(escaped).text;
+export interface ModelOutputScan {
+  text: string;
+  blocked: boolean;
+  findings: SecurityFinding[];
+}
+
+/** 模型产出的文本进**别处**上下文前的那一遍扫描（§4.4.4，本仓唯一实现）。
+ *  两支共用：worker 回传（orchestrator）与 sidechat 提升（promoteToMain）——§10.8.2 明写两者同级风险，
+ *  政策一旦有两份实现，其中一支就会像历史上那样悄悄少做几件事。 */
+export function scanModelOutput(text: string): ModelOutputScan {
+  const r = redactSecrets(escapeControlTags(text));
+  return { text: r.text, blocked: r.blocked, findings: r.findings };
 }
 
 export interface ClippedSummary {

@@ -23,7 +23,7 @@ import {
 } from "./compaction";
 import { gateToolSpecs } from "./glm-session";
 import { buildMemoryInjection } from "./memory/inject";
-import { redactSecrets } from "./security/scan";
+import { scanModelOutput } from "./worker-report";
 
 /** sidechat 只读白名单：工具表里只有这四个。 */
 export const SIDECHAT_TOOL_WHITELIST: readonly ToolName[] = ["read_file", "grep", "glob", "lsp"];
@@ -465,8 +465,9 @@ export async function promoteToMain(opts: PromoteOptions): Promise<PromoteResult
     if (derived === null) return { ok: false, error: "promote: 源事件里没有可提升的正文" };
     content = derived;
   }
-  // 输出扫描：进主上下文前脱敏（密钥不外泄进主转录）
-  const scanned = redactSecrets(content);
+  // §4.4.4 输出扫描（与 worker 回传同一份实现）：中和仿冒控制标签 + 角色行加 [harness] + 密钥脱敏。
+  // 少做任何一件，旁路模型产出就会以「用户亲口说的话」的形态落进主转录（§10.8.2 明写两支同级风险）。
+  const scanned = scanModelOutput(content);
   if (scanned.blocked) {
     return { ok: false, error: "promote 被输出扫描拒绝：" + scanned.findings.map((f) => f.ruleId).join("、") };
   }
