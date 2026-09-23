@@ -2383,6 +2383,17 @@ const MUTATIONS = [
     expectFail: "工作树那一格必须自己说未接入（撤假数据不等于留白）",
   },
   {
+    id: "workspace-panel-unwraps-agent-branch",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-no-demo-data.test.ts",
+    desc: "关掉 `workspaceViewHTML` 里真运行时那一条分支 ⇒ 产品态退回原型态的演示列表：" +
+      "屏上又列出用户没有的三个文件夹，那句「已切换工作区…」照旧可证伪" +
+      "（B29 改前实测 names=[coding-suite, docs-site, edge-gateway]，而芯片写着 运行目录 · proj-ws）",
+    apply: (s) => s.replace("  if (window.agent) {\n    const rows = realWorkspaceRows();",
+      "  if (false) {\n    const rows = realWorkspaceRows();"),
+    expectFail: "agent 态：演示文件夹名与「打开其他文件夹…」都不许出现（那句「已切换」可证伪）",
+  },
+  {
     id: "tail-clamp-keeps-head",
     src: "src/agent/text-budget.ts",
     test: "tests/text-budget-cjk.test.ts",
