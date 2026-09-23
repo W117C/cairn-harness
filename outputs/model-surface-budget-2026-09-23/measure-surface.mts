@@ -3,8 +3,8 @@
  * 跑法：TERM=dumb node --import tsx tmp/measure-model-surface.mts
  */
 import { readFileSync } from "node:fs";
-import { sessionToolSpecs } from "../src/agent/glm-session";
-import { rankToolSpecs } from "../src/agent/gym/probe";
+import { sessionToolSpecs } from "../../src/agent/glm-session";
+import { rankToolSpecs } from "../../src/agent/gym/probe";
 
 const utf8 = (s: string) => Buffer.byteLength(s, "utf8");
 
