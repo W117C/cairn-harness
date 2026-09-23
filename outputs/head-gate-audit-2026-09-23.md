@@ -411,3 +411,25 @@ subdirectory of the project root at "/private/tmp/dsh-anchor-776".
 隔离复验（HEAD `f3c2256`，同 worktree）：`--check-needles` 717 条阻断 **6**（= #37 那 6 条，未增加）、
 改法语法体检全绿；`gym-draft` 四条锚点（3 新 + 1 改指）一次全部杀死（3.3s）；
 `tests/gym-draft.test.ts` 21 条全绿。主树全量测试另跑一遍：**200 文件 / 2092 条全绿**。
+
+## 追加九（同日更晚，HEAD `df8a571`）：把「被测码从未入库」从"要开 worktree 才看得见"改成门里的判据
+
+**现象**：#37 那类缺陷（锚点入库、它守护的源文件从未入库）此前**对门永久隐形**——`--check-needles` 读的是
+盘，主树里那份未跟踪文件明明在，针脚命中 1 处 ⇒ 报 ✅；只有同 HEAD 开隔离 worktree 才看见
+「源文件读不到」。本轮实测两个数并排放着：主树 **阻断 0**，HEAD worktree **阻断 6**。
+
+**改法**：判据放 lib（可单测）：`untrackedAnchorSrcs(entries, isTracked)`；调用方喂**一次**
+`git ls-tree -r --name-only HEAD`（不在每条锚点上起 git 进程，门保持秒级）。汇总多一栏
+「被测面未入库 N」，N 计入阻断；git 不可用 ⇒ 打「HEAD 归属未查」并进汇总，**不静默当已查**。
+文案与「针脚已不在源文件里」严格分开（两种红的修法相反：提交源文件 vs 改指针脚），判卷有成对断言钉住不混。
+
+**当场读数**（改完立刻跑，不是构造）：门报 `d7-snapshot-taken-for-new-file` 的 src
+`src/tools/snapshot.ts` 不在 HEAD 树里；我用一条**不走门代码**的对照（自己 `ls-tree` + 正则取表内 src）
+算出表内 99 个不同 src、不在 HEAD 的 **1 个**，正是同一个文件 ⇒ 门的数与独立口径一致。
+判卷 `tests/mutate-verify-gates.test.ts` 28 条（新增 4 条含反面对手）exit 0；`pnpm typecheck` 0 错。
+接线（`scripts/mutate-verify.mjs`）因该文件被别人 staged 暂留主树工作区，见任务 #61；接线未入库期间，
+主树这道门已在报真红，而 HEAD 版还没有这条判据——这是它该报的东西，不是新引入的噪声。
+
+**同时新浮出的别人的红（顺带点名，不改他人原子单元）**：`prune-saved-tokens-by-chars`、
+`prune-placeholder-tokens-by-chars`、`prune-saved-tokens-ignores-stub-text` 三条针脚在
+`src/agent/prune.ts` 里已不存在，而该文件主树是 M（在飞）⇒ 持有者需要改指（规则 91）。
