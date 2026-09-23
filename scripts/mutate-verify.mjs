@@ -2393,6 +2393,25 @@ const MUTATIONS = [
       "  if (false) {\n    const rows = realWorkspaceRows();"),
     expectFail: "agent 态：演示文件夹名与「打开其他文件夹…」都不许出现（那句「已切换」可证伪）",
   },
+  /* 切片边界棘轮的两半各钉一条（同一判据由两支共同成立，一条变异只该废掉它负责的那半边）。 */
+  {
+    id: "slice-boundary-scanner-blind",
+    src: "scripts/assertion-health.ts",
+    test: "tests/assertion-health-scan.test.ts",
+    desc: "尺子变瞎：切片调用里的注释标记不再被认出来 ⇒ 整条棘轮失去分辨力（清单还在，但没人读盘）。" +
+      "钉的是「识别」这一半，不是「清单」那一半",
+    apply: (s) => s.replace("      if (SLICE_CALLEES.has(name)) {", "      if (false) {"),
+    expectFail: "indexOf 的标记是注释文字 ⇒ 报（本闸要抓的那一格）",
+  },
+  {
+    id: "slice-boundary-every-string-is-a-marker",
+    src: "scripts/assertion-health.ts",
+    test: "tests/assertion-health-scan.test.ts",
+    desc: "撤掉「以注释标点开头的才算边界」这道筛 ⇒ 切片调用里的每个字符串（含喂给被测码的 fixture 文本）" +
+      "都成标记 ⇒ 快路必然红、且正当用途被逼去写豁免。钉的是「别误伤」那一半",
+    apply: (s) => s.replace("&& COMMENT_OPEN.test(a.text)) {", ") {"),
+    expectFail: "已跟踪的 tests/ 里不许新增注释文字当边界（边界一律用代码标识）",
+  },
   {
     id: "tail-clamp-keeps-head",
     src: "src/agent/text-budget.ts",
