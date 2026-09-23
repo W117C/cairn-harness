@@ -6864,6 +6864,32 @@ const MUTATIONS = [
     expectFail: "gateBase 的产物必带 mode（`X-` 面才允许缺）",
   },
   {
+    id: "llm-confidence-fabricated-default",
+    src: "src/agent/security/llm-review.ts",
+    test: "tests/m3b.test.ts",
+    desc: "模型没自报把握度就编一个 medium ⇒ 审计面上「模型没说」被说成「模型说了个中等把握」",
+    apply: (s) => s.replace("      ...(isSecurityConfidence(r.confidence) ? { confidence: r.confidence } : {}),", "      confidence: r.confidence ?? \"medium\","),
+    expectFail: "自报 confidence 既不编造，也不决定一条发现是否成立",
+  },
+  {
+    id: "llm-confidence-gates-finding",
+    src: "src/agent/security/scan.ts",
+    test: "tests/m3b.test.ts",
+    // 这一根守的是**漏报**：自报值一旦回到结构校验里，模型把 confidence 拼错 = 一条真安全发现静默消失。
+    // 与上一根同族但不同面：上一根管"别说假话"，这一根管"别因为别人说错话而漏报"。
+    desc: "confidence 回到 validateFinding 的门槛位 ⇒ 模型拼错自报值，那条发现整条被丢（安全审查漏报）",
+    apply: (s) => s.replace("    (r.confidence === undefined || isSecurityConfidence(r.confidence))", "    isSecurityConfidence(r.confidence)"),
+    expectFail: "自报 confidence 既不编造，也不决定一条发现是否成立",
+  },
+  {
+    id: "security-confidence-guard-always-true",
+    src: "src/agent/security/scan.ts",
+    test: "tests/m3b.test.ts",
+    desc: "isSecurityConfidence 恒真 ⇒ 非法/缺席的自报值被原样塞进 finding，「字段缺席 = 没自报」这条口径作废",
+    apply: (s) => s.replace("  return typeof value === \"string\" && CONFIDENCES.includes(value);", "  return true;"),
+    expectFail: "自报 confidence 既不编造，也不决定一条发现是否成立",
+  },
+  {
     id: "remember-gate-if-chain-back",
     src: "src/main/agent-runner.ts",
     test: "tests/remember.test.ts",

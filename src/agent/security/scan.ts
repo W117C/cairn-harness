@@ -207,6 +207,11 @@ export const DANGER_RULES: readonly {
 
 const SEVERITIES: readonly string[] = ["low", "medium", "high", "critical"];
 const CONFIDENCES: readonly string[] = ["low", "medium", "high"];
+
+/** 把握度是不是那三个合法值之一。**给 LLM 段用**：自报值合法才留，否则字段缺席（不编一个 medium）。 */
+export function isSecurityConfidence(value: unknown): value is SecurityConfidence {
+  return typeof value === "string" && CONFIDENCES.includes(value);
+}
 const CATEGORIES: readonly string[] = ["secret", ...DANGER_CATEGORIES, "llm_review"];
 
 /** 严格 schema 校验：字段齐全、类型正确、枚举合法、行号 ≥1。 */
@@ -228,8 +233,10 @@ export function validateFinding(f: unknown): f is SecurityFinding {
     typeof r.title === "string" &&
     r.title.length > 0 &&
     typeof r.description === "string" &&
-    typeof r.confidence === "string" &&
-    CONFIDENCES.includes(r.confidence)
+    /* `confidence` **不进**"这条发现成不成立"的门槛。它在静态段是作者标注、在 LLM 段是**被审模型的自报值**；
+       旧写法把"自报值缺失/拼错"算成结构错 ⇒ 模型一个 typo 就让一条真发现静默消失（安全审查里漏报比误报贵）。
+       `severity` 仍必合法——没有等级就没法排序与展示，那是结构性的，不是自报的。 */
+    (r.confidence === undefined || isSecurityConfidence(r.confidence))
   );
 }
 

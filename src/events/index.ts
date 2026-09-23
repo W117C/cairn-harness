@@ -188,7 +188,9 @@ export interface SecurityFinding {
   line: number;
   title: string;
   description: string;
-  confidence: SecurityConfidence;
+  /** 把握度。**静态快筛必带**（那是规则作者写的标注）；LLM 段只带模型真自报的合法值 ⇒
+   *  **缺席 = 没自报**，不等于"medium"（旧代码会把缺席编成 medium，见 `llm-review.ts`）。 */
+  confidence?: SecurityConfidence;
   /** M3b：修复建议（LLM 两段流水产出；静态快筛缺省）。 */
   suggestion?: string;
 }

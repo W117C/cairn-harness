@@ -665,6 +665,33 @@ describe("M3b 安全 gate 流水（§11.6 三档）", () => {
     expect(findings[1]!.title).toContain("sk-a****");
     expect(extractJsonArray("no json here")).toEqual([]);
   });
+
+  /* 自报 confidence 的两处旧行为都是错的（判断层文档把它列为「自证」型假选项，本仓另案单修）：
+     ① 模型没给 ⇒ 代码编一个 `"medium"`：报告里出现一个看起来像度量的值，而它是造的；
+     ② `validateFinding` 把 confidence 当结构门槛 ⇒ 模型把它拼错，**一条真发现静默消失**。
+     第二处比第一处更坏：安全审查漏报。合法值仍原样保留（来源可由 `category==="llm_review"` 推出，不新增字段）。 */
+  it("自报 confidence 既不编造，也不决定一条发现是否成立", () => {
+    const raw = JSON.stringify([
+      { severity: "high", path: "a.ts", line: 1, title: "命令注入", description: "d", confidence: "high" },
+      { severity: "high", path: "b.ts", line: 2, title: "未给 confidence", description: "d" },
+      { severity: "high", path: "c.ts", line: 3, title: "拼错 confidence", description: "d", confidence: "vauge" },
+    ]);
+    const findings = parseLlmFindings(raw);
+    expect(findings.map((f) => f.path)).toEqual(["a.ts", "b.ts", "c.ts"]);
+    expect(findings[0]!.confidence).toBe("high");
+    expect(findings[1]!).not.toHaveProperty("confidence");
+    expect(findings[2]!).not.toHaveProperty("confidence");
+  });
+
+  it("反向一侧：静态快筛的 confidence 是作者标注的，一条都不许少", () => {
+    const entries: ChangeSetEntry[] = [
+      // 这两行只是**被扫描的文本**（危险规则与密钥模式的靶子串），不会被执行。
+      { path: "src/x.ts", op: "write", lines: ['const k = "sk-aaaaaaaaaaaaaaaaaaaaaaaa";', "eval(code)", ""] },
+    ];
+    const findings = scanChangeSet(entries);
+    expect(findings.length).toBeGreaterThan(1);
+    for (const f of findings) expect(["low", "medium", "high"]).toContain(f.confidence);
+  });
 });
 
 describe("M3b 合并控制塔投影（纯函数）", () => {

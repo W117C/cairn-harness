@@ -8,7 +8,7 @@
 import type { SecurityFinding } from "../../events";
 import { streamGlm, type GlmMessage } from "../../providers/glm";
 import { escapeControlTags } from "../memory/inject";
-import { validateFinding, filterFalsePositives, redactSecrets } from "./scan";
+import { validateFinding, filterFalsePositives, redactSecrets, isSecurityConfidence } from "./scan";
 
 /** LLM 审查上下文上限（diff + 上下文合计；超出截断——审查不是全量转载）。 */
 const REVIEW_INPUT_CAP = 60_000;
@@ -96,7 +96,10 @@ export function parseLlmFindings(rawText: string, seqStart = 0): SecurityFinding
       line: r.line,
       title: r.title,
       description: r.description,
-      confidence: r.confidence ?? "medium",
+      // 自报的把握度：**合法才留，缺席/非法就整条字段消失**。旧写法 `?? "medium"` 把"模型没说"说成
+      // "模型说了一个中等把握"——审计面上是一句谎，而且它当时还是 validateFinding 的必备项，
+      // 于是模型把 confidence 拼错会让一条真发现被当结构错丢掉（漏报）。来源可由 category 推出，不另加字段。
+      ...(isSecurityConfidence(r.confidence) ? { confidence: r.confidence } : {}),
       ...(typeof r.suggestion === "string" ? { suggestion: r.suggestion } : {}),
     };
     if (validateFinding(candidate)) {
