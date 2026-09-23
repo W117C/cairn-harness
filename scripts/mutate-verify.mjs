@@ -6302,6 +6302,14 @@ const MUTATIONS = [
     expectFail: "production settings forward C2/D flags and reopen private reports across two IPC runs",
   },
   {
+    id: "action-fusion-settings-fallback-dropped",
+    src: "src/main/agent-runner.ts",
+    test: "tests/action-fusion.test.ts",
+    desc: "盘上的 actionFusion 到不了主会话 ⇒ 设置里那个开关换不来一次省掉的往返（override 那一格照绿）",
+    apply: (s) => s.replace("actionFusion: over.actionFusion ?? (await store().get()).actionFusion,", "actionFusion: over.actionFusion ?? false,"),
+    expectFail: "settings 里的 actionFusion 走得到生产入口（不给 override）",
+  },
+  {
     id: "pc-serialize-layer-keeps-closing-bracket",
     src: "src/agent/prefix-churn.ts",
     test: "tests/prefix-churn.test.ts",
