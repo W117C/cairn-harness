@@ -116,6 +116,14 @@ auto:        { writeAsk: false, scopeMemory: false, riskAskAt: "high",   label: 
   那是正确行为，不是命令坏了（换到有历史会话的树上再跑）。
 - 邻域先跑：`permission-mode-guided` 19/19、`permission-mode-single-source` 8/8、`remember` 25/25、
   `gate-audit` 31/31（`GATE_LAYERS` 穷尽断言未动）。
+- 门另跑：`autonomy-check` ✅（UNVERIFIED=1 暗卷无 key）、`ipc:check` ✅（分支 A 靶子修复）。
+- ⚠️ **一条红，测过、不归我**：主树首跑 `panels-check` 报 1 项失败（日志被 tail 截掉没留下断言名），
+  第二跑报 **B21 两条**（「键盘退路也不写确认位」实测 `onboarded=true` + 连带「第三次启动仍然弹」红）——
+  这是**因果对**（Escape 把确认位写了盘 ⇒ 第三次当然不弹），形态不像时序抖动。
+  但同码第三跑**全绿**，且为定性做了对照：干净 worktree（真 `node_modules`）里
+  `8b48ee2`（无 guided）两跑全绿、`bbac176`（有 guided）两跑全绿 ⇒ **本笔被排除**；
+  红只出现在被他会话在飞文件污染的主树（`package.json` / `scripts/gate-check.ts` / `src/frozen.ts` 等）。
+  根因**未定位**，B21 的 Escape 落点是否会把焦点上的「完成引导」当成点击，留给下一次动引导向导的人查。
 
 ## 七、待用户批准（本笔未动）
 
