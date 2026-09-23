@@ -2013,3 +2013,41 @@ $0.2020（standard）/ **$0.8080**（strong）——价表跨度 40 倍。旧算
 
 
 
+
+**能力 45（2026-09-24）：supervise 的判据从"模型自述"换成"机器凭据"，并把裁决现场留到人面前。**
+- 起点是上一轮那只戳（`replay:join-lapse`）交出的数：三次复跑 3/3 落在 `neverWaitedRuns`。
+  逐笔读 `outputs/ga-strategy-2026-09-20{,-rep2,-rep3}/supervise.events.jsonl`：
+  每次都是 `[supervisor] 环 1/6（done，verdict=unspecified）→ escalate：report 畸形（verdict 不可解析）`，
+  而同一行的 `agent_result` 是 `status=done` + `files_changed=[cart.js, shipping.js, totals.js]`
+  ——**三处计价 bug 都真改对了**；紧接一句 `已清理（rejected）` 把 worktree 和分支删掉，然后才回去问人。
+- 根因不是模型不听话（这是关键判断）：`verdict:` 行只写进 **review/test** 两个角色的任务书
+  （`src/agent/sequencer.ts` 内置角色面），而 supervise 的 `nextRole` 恒为 `"implement"`，
+  implement 的任务书只要求「改了什么 / 为什么 / 验证方式 / 风险」⇒ 这条路**根本没有 verdict 行可解析**，
+  escalate 分支 100% 触发。修法不能靠改提示词碰运气，得换判据来源。
+- 两处各修一半：
+  ① `ringVerdict`（`src/agent/supervisor.ts`）：有机器凭据 `artifacts.verified`（W4b 四态，
+     纯投影自 worker 自己的子流）就只认凭据，凭据缺席才回落散文契约行；禁改面触碰先于一切判 fail。
+     这同时关掉一道反向的洞——旧路径下报告里自写一行 `verdict: pass` 就能换取**自动合并进用户真实工作区**，
+     而本仓 sequencer 段自己写着「模型自报的 verdict 不算判据（自己给自己打分）」，
+     supervise 审批卡的风险理由里也写的是「实现→**客观判据**→失败重试/升级/中止」。
+  ② escalate / abort 不再销毁现场（与既有「合并失败保留最终环」同形，回执点名 worktree 与分支地址）；
+     取消 / 成本闸两条出口仍全量 reject——那是用户与钱的显式信号，不是「请人来判这份交付」。
+- **未闭的一半立案而不是藏起来**：`absent` 有两种成因本机分不开——仓库没有可验面（散文是唯一读物，
+  回落合理），以及改动经 `run_shell` 落盘而写向判定只看 `write_file`/`edit_file`（该跑没跑）。
+  后者是新发现的第 12 处同族副本：`loop.ts` 内联两支、`worker-report.ts` 两支、`no-progress.ts` **五支**、
+  `gym/draft.ts` 两支，四份清单已各自漂移；且绿拍之后再经 shell 改盘不会使证据过期（`stale` 永不触发）。
+  ⇒ 任务 #23（收一份 `mayHaveWrittenDisk`）、#24（无可验面时采不采信散文，待裁）、#25（两份同名
+  `StageVerdict` 枚举漂移，其中 `"error"` 一支全仓无生产者）。
+- 分辨力是自己证出来的，不是声称的（这一条比修法更耐久）：
+  ① 只补 `supervisor-check` 时，把 caller 的 `evidence:` 换成 `undefined` —— **60/0 全绿**，
+     因为 E5/E6 自带 `verdict: pass`、而装配函数 `newOrchSupWs` 从来没传过 `workerVerify`
+     ⇒ 整条凭据半边没有任何观测者。补了 E8（绿凭据 + 无 verdict 行 ⇒ accept）、
+     E9（红凭据 + 自报 pass ⇒ 零合并）、E10（无凭据 + 无契约行 ⇒ escalate 且现场还在）才 80/0。
+  ② 再注一次：`evidence → undefined` 红 7 项，其中「主 checkout 零污染」变红的含义是
+     **那份实现会把没过验证的代码直接合并进用户工作区**；escalate 分支改回全量 reject 只红现场两条
+     （"零合并"仍绿 ⇒ 归因干净）。而在补 E10 之前，同样的变异是 0 红。
+  ③ 变异表只吃 vitest ⇒ 又落一份 `tests/supervise-evidence.test.ts`（414ms）当底料，挂 5 条锚点，
+     逐条实跑确认能杀（9.2s，5/5），总数 867→872，`--check-needles` 未覆盖 0。
+- 验证：新增 `tests/supervise-ring-verdict.test.ts` 8 条（先红后绿，含 stale/absent 两侧与
+  forbidden 覆盖凭据那格）；`supervisor-check` 80/0（原 60 条一字未改）；tsc 0 错；
+  docs-check 绿（UNVERIFIED=3 为 STATE.md 缺席的既有项）；邻域 7 文件 120 条全绿。
