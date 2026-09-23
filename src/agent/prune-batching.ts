@@ -39,6 +39,11 @@ export function shouldApplyPrune(opts: {
   estimatedTokens: number;
   /** 可用输入预算 = inputLimit − maxOutputReserve。 */
   availableTokens: number;
+  /** 本轮前缀**已被压缩打断**（`glm-session.ts` 在压缩成功后的那次重组装前置位，取用即清零）。
+   *  头既然已经断了，这一刀就是免费的——攒批省的是"断前缀的次数"，已经在断的那一轮没有可省的。
+   *  不许退化成"每轮都剪"：`computePrune` 自己的 `minimumTokens`（20,000）仍然挡着，
+   *  顺手剪的仍是"够一刀"的量；而"取用即清零"由 PC9 那条集合相等判据钉住（见 `freeRideCoincidence`）。 */
+  freeRide?: boolean;
   minSavedTokens?: number;
   pressureRatio?: number;
 }): PruneBatchDecision {
@@ -61,6 +66,15 @@ export function shouldApplyPrune(opts: {
       threshold: minSaved,
     };
   }
+  // 免费车优先于攒批：压缩已经把头打断，再攒就是白多断一次。
+  if (opts.freeRide === true) {
+    return {
+      apply: true,
+      why: "前缀本轮已被压缩打断 ⇒ 顺手剪（可省 " + String(opts.savedTokens) + "，不再攒到 " + String(minSaved) + "）",
+      savedTokens: opts.savedTokens,
+      threshold: minSaved,
+    };
+  }
   if (opts.savedTokens >= minSaved) {
     return {
       apply: true,
@@ -75,6 +89,58 @@ export function shouldApplyPrune(opts: {
       "，且头寸不紧：估算 " + String(opts.estimatedTokens) + " / 可用 " + String(available) + "）",
     savedTokens: opts.savedTokens,
     threshold: minSaved,
+  };
+}
+
+/** 一次驱动里某一轮的可判读痕迹（门把真 provider 跑出来的三个计数器交回来）。 */
+export interface FreeRideRound {
+  /** 决策时刻有多少条已经越出保护区可剪（**剪完仍是空的** ⇒ 这条判据无分辨力，门自身红）。 */
+  prunableAtDecision: number;
+  /** 本轮事件流里多出的 `compaction` 事件数（harness 自己留的痕迹，不是从措辞推的）。 */
+  compactions: number;
+  /** 本轮落进 `prune-attachments/` 的文件数 = 裁剪真被采纳的证据。 */
+  attachments: number;
+}
+
+/** 免费车的判据：**把攒批门槛抬到不可能达到的量之后，裁剪只该发生在压缩打断过前缀的那些轮上**。
+ *  两侧都要判，缺一侧就是摆设——
+ *  · 只判「压了就有剪」：针脚可以「无条件每轮都剪」，量出来的落盘轮数照样等于压缩轮数；
+ *  · 只判「没压就别剪」：针脚把压缩后的那刀删掉，剩下全推迟，照样过。
+ *  ⇒ 判的是**两个集合相等**：落盘轮集合 == 压缩轮集合，且推迟轮确实有可剪的量（不是无事可做）。
+ *  为什么这么判而不是 A/B 差值：这条支路的收益只有在压缩与裁剪同场时才存在，而生产缺省窗口下
+ *  两者根本不共存（实测 12k 窗口配 20k 结果 ⇒ 每轮 overflow 压、裁剪永远攒不到）——
+ *  换句话说 PC8 那条链上根本没有免费车，得另配一条链才量得到，量出来的是 coincidence 而不是次数差。 */
+export function freeRideCoincidence(rounds: readonly FreeRideRound[]): { ok: boolean; detail: string } {
+  // 轮次下标必须从**原数组**取：先 filter 再 map 会把下标重编号成 0,1,2…，两个集合就永远"相等"了
+  // （判据自己变成恒真式——本仓体检抓过的那一族）。
+  const indices = (keep: (r: FreeRideRound) => boolean) =>
+    rounds.map((r, i) => [r, i] as const).filter(([r]) => keep(r)).map(([, i]) => i);
+  const landed = indices((r) => r.attachments > 0);
+  const compacted = indices((r) => r.compactions > 0);
+  // 「有可剪的量却没剪」= 推迟真的发生过（而不是那条链本来就没活干）。
+  const deferredWithWork = rounds.filter((r) => r.attachments === 0 && r.prunableAtDecision > 0).length;
+  const same = landed.length === compacted.length && landed.every((i, n) => i === compacted[n]);
+  const ok = compacted.length >= 1 && deferredWithWork >= 1 && same;
+  return {
+    ok,
+    detail: `落盘轮=[${landed.join(",")}] 压缩轮=[${compacted.join(",")}] 有量却推迟的轮=${String(deferredWithWork)}` +
+      (same ? "" : " ⇒ 两个集合不等：要么白断了一次头，要么有一个没人批的放行口") +
+      (compacted.length === 0 ? "（这条链根本没压缩 ⇒ 量不到免费车，门自身红）" : "") +
+      (deferredWithWork === 0 ? "（没有任何一轮「本可剪而没剪」⇒ 这条判据无分辨力）" : ""),
+  };
+}
+
+/** 对照臂的判据：把门槛压到 1（"有活就剪"）之后，必须能看到**没压缩的那一轮也落盘**。
+ *  为什么要它：主判据量的是「只有压缩轮落盘」，而这个读数可能只是因为别的轮根本没活可干——
+ *  那样就不是策略在挑时机，而是链条自己空。判"策略有效"之前先证明"旋钮接得上"，
+ *  顺带把 `minSavedTokens` 这个覆盖参数的接线也纳入观测（它只被这条对照臂用到）。 */
+export function thresholdKnobIsWired(rounds: readonly FreeRideRound[]): { ok: boolean; detail: string } {
+  const stray = rounds.filter((r) => r.attachments > 0 && r.compactions === 0).length;
+  const withWork = rounds.filter((r) => r.prunableAtDecision > 0).length;
+  return {
+    ok: stray >= 1,
+    detail: `门槛=1 时：没压缩却落盘的轮 ${String(stray)}、有可剪量的轮 ${String(withWork)}` +
+      (stray === 0 ? "（门槛拨到多低都不会多出落盘 ⇒ 主判据的对照是空的）" : ""),
   };
 }
 

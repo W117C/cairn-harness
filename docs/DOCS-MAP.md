@@ -26,6 +26,7 @@
 | 查「长时程装配读数（第 N 轮作废多少前缀）/ 靶场只能跑一轮怎么办」 | `outputs/long-horizon-probe-2026-09-23/`（为什么缺这张表 + 实测与回执；CLI `pnpm gym-long`）|
 | 查「重跑为什么不一样 / wall-clock 漏进身份字段」 | `outputs/reproducibility-2026-09-23/`（主张与判据 + 实测与回执；门 `replay-determinism-check`，登记债在 `IDENTITY_DEBTS`）|
 | 查「裁剪为什么每轮都作废前缀 / 攒够再剪」 | `outputs/prune-batching-2026-09-23/`（主张与判据 + 施工回执；判据 PC8 与 `pb-*` 针脚）|
+| 查「已经断过一次头，为什么还要再断第二次」 | `outputs/prune-free-ride-2026-09-23/`（免费车：压缩那轮顺手剪；判据 PC9 的集合相等 + 对照臂，针脚 `pb-free-ride-*`）|
 | 查安全绕过复现与修法 | `outputs/shell-permission-bypass-2026-09-21.md` + `scripts/probe-shell-bypass.ts` |
 | 查判断层校准路线 | `docs/judgment-layer-calibration-proposal.md` |
 | 看验收截图（**历史 UI**） | `docs/*.png`（vanilla 迁移前，勿当现状） |
@@ -93,6 +94,7 @@ deepseek harness/
 - `long-horizon-probe-2026-09-23/` — 长时程回放（不动判卷区的放大重放）+ 两尺度实测
 - `reproducibility-2026-09-23/` — 可复现性：同一输入两次跑逐字段等值；把 #56 从个案抽成纪律（含被门撑大的范围）
 - `prune-batching-2026-09-23/` — 分批裁剪：少断几次可缓存前缀（实测 5→2 次 / 作废 -39%）
+- `prune-free-ride-2026-09-23/` — 免费车：压缩已打断前缀的那一轮顺手剪（PC9 判集合相等 + 对照臂证旋钮接得上）
 - `design-contradictions-2026-09-18.md` — 渲染侧矛盾台账
 - `zcode-study-2026-09-21.md` · `laya-evaluation-2026-09-21.md` · `aseos-vision-evaluation-2026-09-21.md`
 

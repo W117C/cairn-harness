@@ -18,8 +18,10 @@ import { mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { createEventLog } from "../src/events";
+import { createEventLog, replay } from "../src/events";
 import { createMockSummarizer } from "../src/agent/compaction";
+import { computePrune } from "../src/agent/prune";
+import { freeRideCoincidence, thresholdKnobIsWired } from "../src/agent/prune-batching";
 import { gateToolSpecs, sessionToolSpecs } from "../src/agent/glm-session";
 import type { GlmMessage, GlmToolSpec } from "../src/providers/glm";
 import {
@@ -119,11 +121,19 @@ async function drive(opts: {
  *    配方由 `outputs/prefix-churn-2026-09-23/probe-prune-recipe.mts` 实跑定出：
  *    每轮 `user_message + tool_call + 20k 字结果 + assistant_message`、**种子只给 2 轮**
  *    （`RECENT_ROUNDS_EXEMPT = 2`）⇒ 替换集从第 3 轮起每轮恰好多一个键（3 → 3,7 → 3,7,11 …）。 */
-async function driveMutating(opts: { kind: "compaction" | "prune"; rounds?: number; amortize?: boolean; batching?: boolean }): Promise<{
+async function driveMutating(opts: {
+  kind: "compaction" | "prune" | "both";
+  rounds?: number;
+  amortize?: boolean;
+  batching?: boolean | { minSavedTokens?: number };
+}): Promise<{
   obs: AssemblyObservation[];
   firedPerPair: ChurnMutator[][];
   /** 每次压缩的触发种类（`threshold` / `overflow`）——摊销只管 threshold，读数必须分开算。 */
   triggers: string[];
+  /** 逐轮三读数：决策时刻有多少可剪的量 / 本轮压了几次 / 本轮落了几份附件。
+   *  PC9 判的就是这三者之间的** coincidence**，光看"抖没抖"判不出来。 */
+  perRound: { prunableAtDecision: number; compactions: number; attachments: number }[];
 }> {
   const dir = mkdtempSync(join(tmpdir(), "prefix-churn-mut-"));
   const path = join(dir, "events.jsonl");
@@ -131,7 +141,11 @@ async function driveMutating(opts: { kind: "compaction" | "prune"; rounds?: numb
   const obs: AssemblyObservation[] = [];
   const firedPerPair: ChurnMutator[][] = [];
   const triggers: string[] = [];
+  const perRound: { prunableAtDecision: number; compactions: number; attachments: number }[] = [];
   const log = createEventLog(path);
+  // "both" = 既给大结果（让 prune 真有活干）又给小窗口（让压缩真会打断头）——PC9 要的就是这两件事同场。
+  const bigResults = opts.kind !== "compaction";
+  const mayCompact = opts.kind !== "prune";
   const roundEvents = (i: number) => [
     { type: "user_message", content: "Q" + String(i) },
     { type: "tool_call", id: "c" + String(i), name: "read_file", args: { path: "f" + String(i) } },
@@ -139,7 +153,7 @@ async function driveMutating(opts: { kind: "compaction" | "prune"; rounds?: numb
     { type: "assistant_message", content: "A" + String(i) },
   ];
   try {
-    if (opts.kind === "prune") {
+    if (bigResults) {
       for (let i = 0; i < 2; i++) for (const e of roundEvents(i)) await log.append(e as never);
     } else {
       await log.append({ type: "assistant_message", content: cjk(4_000) });
@@ -158,14 +172,16 @@ async function driveMutating(opts: { kind: "compaction" | "prune"; rounds?: numb
       system: SYSTEM_TEXT,
       // 分批裁剪的 A/B 开关（PC8）。不传 = 逐字旧行为。
       ...(opts.batching === undefined ? {} : { pruneBatching: opts.batching }),
-      ...(opts.kind === "compaction"
+      ...(mayCompact
         ? {
             compaction: {
               // ratio 取 0.35：阈值必须**在驱动中途**才够得到（首轮就压没有上一轮可比），
               // 且窗口要大于估算，让触发停在 **threshold**（overflow 那一支按设计不摊销）。
               // tail 三个旋钮刻意不覆盖：拿生产缺省（tailMin 2,000 / tailMax 15,000 / ratio 0.25），
               // 否则 tail 预算落到工作集下限之下，摊销按设计拒绝动作（第一版就踩在这)。
-              config: { inputLimit: 12_000, maxOutputReserve: 400, ratio: 0.35, retryBackoffMs: 1 },
+              // inputLimit 在 PC7/PC9 各取一份：PC9 要「大结果 + 压缩」同场，窗口必须容得下 40k 结果
+              // 又能在几轮后够到阈值（实测 60,000 ⇒ 8 轮压 3 次，逐轮交替）。
+              config: { inputLimit: opts.kind === "both" ? 60_000 : 12_000, maxOutputReserve: 400, ratio: 0.35, retryBackoffMs: 1 },
               summarizer: createMockSummarizer("SUMMARY：前文已压缩为一段，结论与未收口项都在里面。".repeat(12)),
               amortizeRewriteCost: opts.amortize === true,
             },
@@ -179,17 +195,28 @@ async function driveMutating(opts: { kind: "compaction" | "prune"; rounds?: numb
     });
     for (let r = 0; r < (opts.rounds ?? 4); r++) {
       roundIndex = r;
+      // 决策时刻的"有多少可剪的量"：直接问那只纯函数（它不落盘、无副作用），读的是这一轮
+      // assemble() 看得见的同一份事件。没有这个正读数，"推迟了"就只能靠没落盘反推——那是沉默，不是证据。
+      const prunableAtDecision = bigResults
+        ? (computePrune({ events: await replay(path) }).replacements.size)
+        : 0;
       for await (const _ of provider.stream([])) void _;
       const fired: ChurnMutator[] = [];
       const afterCompact = countCompactionEvents(path);
       if (afterCompact > beforeCompact) fired.push("compaction");
+      perRound.push({
+        prunableAtDecision,
+        compactions: afterCompact - beforeCompact,
+        attachments: 0,
+      });
       beforeCompact = afterCompact;
       const afterAttachments = countAttachments(attachments);
       if (afterAttachments > beforeAttachments) fired.push("prune");
+      perRound[perRound.length - 1]!.attachments = afterAttachments - beforeAttachments;
       beforeAttachments = afterAttachments;
       if (r > 0) firedPerPair.push(fired);
       // 轮间追加：裁剪样本整轮追加（含 user_message ⇒ 免剪边界前移），压缩样本每轮长一块
-      if (opts.kind === "prune") {
+      if (bigResults) {
         for (const e of roundEvents(100 + r)) await log.append(e as never);
       } else {
         await log.append({ type: "assistant_message", content: cjk(4_000) });
@@ -201,7 +228,7 @@ async function driveMutating(opts: { kind: "compaction" | "prune"; rounds?: numb
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-    return { obs, firedPerPair, triggers };
+    return { obs, firedPerPair, triggers, perRound };
 }
 
 /** 从事件流里读每次压缩的触发种类（真实痕迹，不是推断）。 */
@@ -359,6 +386,24 @@ export const CHURN_RULES: readonly ChurnRule[] = [
       };
     },
   },
+  {
+    id: "PC9-免费车只在断过头的那一轮放行",
+    why: "既然前缀本轮已被压缩打断，攒批就没有可省的东西——顺手剪是免费的（省掉将来那一次断）。但这条支路写错方向（无条件放行 / 旗标忘清零变成每轮放行）省的就不是缓存而是失控。判法：把攒批门槛抬到不可能达到，此后**落盘的轮次集合必须恰好等于压缩的轮次集合**——两侧都判，只判一侧两种错法各能过一种",
+    run: async () => {
+      // 窗口取 60k/结果 20k：这是实测唯一让压缩与裁剪**同场**的配方（12k 窗口配 20k 结果是每轮
+      // overflow 压、裁剪攒不到 ⇒ 那条链上根本没有免费车，PC8 用的就是它）。
+      const { perRound } = await driveMutating({ kind: "both", rounds: 8, batching: { minSavedTokens: 1_000_000_000 } });
+      const v = freeRideCoincidence(perRound);
+      // 对照臂：门槛压到 1（等于"有活就剪"），必须看到**没压缩的那一轮也落盘**。
+      // 没有这条，主判据的"只有压缩轮落盘"可能只是因为别的轮本来没活——那它就不是免费车在挑时机。
+      const ctrl = await driveMutating({ kind: "both", rounds: 8, batching: { minSavedTokens: 1 } });
+      const wired = thresholdKnobIsWired(ctrl.perRound);
+      return {
+        ok: v.ok && wired.ok,
+        detail: `门槛不可达（10^9）下 8 轮：${v.detail}｜对照臂 ${wired.detail}`,
+      };
+    },
+  },
 ];
 
 /** 反向对照：每只判据喂一件故意做错的工件，要求它判假。造不出红的规则等于摆设。 */
@@ -435,6 +480,44 @@ export function runChurnSelfTest(): { caught: string[]; missed: string[] } {
           ...o,
           messages: o.messages.filter((m) => !(m.role === "system" && String(m.content).startsWith("VOL-"))),
         }))).ok,
+    },
+    {
+      // PC9 的三种错法各能吃掉一条判据，所以三种样本都得红（只测一种 ⇒ 另一种针脚存活）：
+      // ① 旗标忘清零 / 无条件放行 ⇒ 落盘轮比压缩轮多；
+      // ② 整支删掉 ⇒ 落盘轮为空，而压缩确实断过三次头（白断不顺手剪）；
+      // ③ 那条链本来没活干 ⇒ 「推迟」是沉默而不是策略，判据无分辨力。
+      // 正样本先要绿，否则这三条红是"永远红"的假严格。
+      id: "PC9-免费车只在断过头的那一轮放行",
+      predicateSaysRed: () => {
+        const good = [
+          { prunableAtDecision: 2, compactions: 0, attachments: 0 },
+          { prunableAtDecision: 3, compactions: 1, attachments: 2 },
+          { prunableAtDecision: 3, compactions: 0, attachments: 0 },
+          { prunableAtDecision: 4, compactions: 1, attachments: 2 },
+        ];
+        const sticky = good.map((r) => ({ ...r, attachments: 2 }));
+        const removed = good.map((r) => ({ ...r, attachments: 0 }));
+        const idle = good.map((r) => ({ ...r, prunableAtDecision: 0 }));
+        // 对照臂自己的红绿：门槛拨到 1 时**每轮都该落盘**（含没压缩的轮）；
+        // 若那条读数仍是"只在压缩轮落盘"，主判据的 coincidence 就毫无意义。
+        const knobGreen = [
+          { prunableAtDecision: 2, compactions: 0, attachments: 2 },
+          { prunableAtDecision: 3, compactions: 1, attachments: 2 },
+          { prunableAtDecision: 3, compactions: 0, attachments: 2 },
+        ];
+        const knobRed = [
+          { prunableAtDecision: 2, compactions: 1, attachments: 2 },
+          { prunableAtDecision: 3, compactions: 0, attachments: 0 },
+        ];
+        return (
+          freeRideCoincidence(good).ok &&
+          !freeRideCoincidence(sticky).ok &&
+          !freeRideCoincidence(removed).ok &&
+          !freeRideCoincidence(idle).ok &&
+          thresholdKnobIsWired(knobGreen).ok &&
+          !thresholdKnobIsWired(knobRed).ok
+        );
+      },
     },
   ];
   for (const p of probes) {

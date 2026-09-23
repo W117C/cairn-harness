@@ -470,7 +470,9 @@ export function createGlmSessionProvider(
     /** M2b：地图开关（缺省开；单测/暗卷可关）。 */
     map?: boolean;
     // 分批裁剪：攒够再剪，少断几次可缓存前缀（`prune-batching.ts`）。缺省关 ⇒ 逐字旧行为。
-    pruneBatching?: boolean;
+    /** 分批裁剪（`prune-batching.ts`）：缺省 undefined/false = 逐字旧行为。
+     *  给对象形式可覆盖门槛——门里 PC9 把门槛抬到不可能达到的量，好**只**验免费车那条支路。 */
+    pruneBatching?: boolean | { minSavedTokens?: number };
     /** M2e：插件注入面（skill 路由清单 / SessionStart 上下文 / 压缩后重挂投影）。缺省零行为。
      *  本 turn 的 disallowed-tools 摘除说明**不在这里**——它随工具面逐请求走 `requestFace`，
      *  两份都给就等于给"清单与解释不同步"留门。 */
@@ -529,6 +531,9 @@ export function createGlmSessionProvider(
   const pruneSessionId = basename(logPath).replace(/\.jsonl$/u, "");
   // 已经「反映在发出去的请求里」的被裁事件 id。分批判增量要用它：不记就是每轮都以为第一次剪。
   const prunedIdsSent = new Set<number>();
+  // 本轮前缀是否已被压缩打断（见 `prune-batching.ts` 的 freeRide 注释）：
+  // 在压缩后的那次 fresh-start 重组装**之前**置位，由 assemble() 取用并清零。
+  let pruneFreeRide = false;
   const assemble = async (): Promise<{ events: AgentEvent[]; history: ReturnType<typeof projectContext> }> => {
     // A5（审查根因 5）：增量重放——每轮只解析追加段（旧实现全量读盘+全量投影，整会话 O(n²)）
     const events = await replayIncremental(logPath);
@@ -538,17 +543,23 @@ export function createGlmSessionProvider(
       // §7.4「存盘回取」的生产入口：附件目录放在事件日志旁边（同生命周期、同一清理面），
       // sessionId 用日志文件名（同一目录里每个会话一份命名空间）。缺了这一步，打桩里那行
       // 「原文已存附件 …」就是指向空气的路径 —— 本仓点名的「两头断」。
+      const freeRideNow = pruneFreeRide;
+      pruneFreeRide = false;
       const outcome = computePrune({ events, attachmentsDir: pruneAttachmentsDir, sessionId: pruneSessionId });
       if (outcome.why === "saved" && outcome.replacements.size > 0) {
         // 分批（`prune-batching.ts`）：一次多攒一点再剪，少断几次前缀。缺省关 ⇒ 逐字走旧路径；
         // 关时**连估算都不算**，别为一条没开的策略每轮多投一次影。
         // 判增量（`freshSavings`：只算「本轮新越界、且还没反映在已发出的请求里」那几条）。
-        const batch = opts.pruneBatching === true
+        const pbOpts: { minSavedTokens?: number } =
+          typeof opts.pruneBatching === "object" && opts.pruneBatching !== null ? opts.pruneBatching : {};
+        const batch = opts.pruneBatching !== undefined && opts.pruneBatching !== false
           ? shouldApplyPrune({
               enabled: true,
+              ...(pbOpts.minSavedTokens === undefined ? {} : { minSavedTokens: pbOpts.minSavedTokens }),
               savedTokens: freshSavings(outcome.savedByIdTokens, prunedIdsSent),
               estimatedTokens: estimateContextTokens(projectContext(events), {}, calibrateFactor(events)),
               availableTokens: budgetConfig().inputLimit - budgetConfig().maxOutputReserve,
+              freeRide: freeRideNow,
             })
           : null;
         if (batch === null || batch.apply) {
@@ -694,6 +705,7 @@ export function createGlmSessionProvider(
             finally { await log.close?.(); }
           }
           compactedThisRound = true;
+          pruneFreeRide = true; // 头已经断了：紧接着的那次重组装顺手把该剪的一刀剪掉
           ({ events, history } = await assemble()); // fresh start：重组装（摘要 + tail）
           skillsBlock = pluginContext(events, liveNote);
           mapText = await buildMapText(history);

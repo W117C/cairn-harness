@@ -6429,6 +6429,46 @@ const MUTATIONS = [
     apply: (s) => s.replace("              savedTokens: freshSavings(outcome.savedByIdTokens, prunedIdsSent),", "              savedTokens: outcome.savedTokens,"),
     expectFail: "PC8 那条 A/B 判据真能跑通（= pruneBatching 这个选项确实接到了装配链上）",
   },
+  {
+    id: "pb-free-ride-branch-removed",
+    src: "src/agent/prune-batching.ts",
+    test: "tests/prune-batching.test.ts",
+    desc: "删掉「本轮已断过头就别攒」那条支路 ⇒ 压缩刚重写完整前缀，下一轮又为省未来的断再断一次（付两次钱只省了零次）",
+    apply: (s) => s.replace("  if (opts.freeRide === true) {", "  if (false) {"),
+    expectFail: "同一份输入：旗标 true 就剪、缺省就推迟（差别只允许出在旗标上）",
+  },
+  {
+    id: "pb-free-ride-flag-sticky",
+    src: "src/agent/glm-session.ts",
+    test: "tests/prune-batching.test.ts",
+    desc: "旗标取用后不清零 ⇒ 蹭的那一次断变成之后每轮都免检：分批策略整条失效（PC9 判的是集合相等，正是为这一形而生的）",
+    apply: (s) => s.replace("      const freeRideNow = pruneFreeRide;\n      pruneFreeRide = false;", "      const freeRideNow = pruneFreeRide;"),
+    expectFail: "PC9 那条集合相等判据真能跑通",
+  },
+  {
+    id: "pb-free-ride-flag-never-set",
+    src: "src/agent/glm-session.ts",
+    test: "tests/prune-batching.test.ts",
+    desc: "压缩成功后不置旗标 ⇒ 白断一次头却仍然攒着，下一轮再断一次（同一原理的另一头断）",
+    apply: (s) => s.replace("          pruneFreeRide = true; //", "          pruneFreeRide = false; //"),
+    expectFail: "PC9 那条集合相等判据真能跑通",
+  },
+  {
+    id: "pb-object-threshold-ignored",
+    src: "src/agent/glm-session.ts",
+    test: "tests/prune-batching.test.ts",
+    desc: "只认 `pruneBatching: true`、把对象形式丢掉 ⇒ 门的对照臂（门槛=1）实际跑的是生产 40k 门槛，于是「只有压缩轮落盘」可能只是别的轮没活——主判据的对照变空",
+    apply: (s) => s.replace('          typeof opts.pruneBatching === "object" && opts.pruneBatching !== null ? opts.pruneBatching : {};', "          false ? opts.pruneBatching : {};"),
+    expectFail: "PC9 那条集合相等判据真能跑通",
+  },
+  {
+    id: "pb-control-arm-always-wired",
+    src: "src/agent/prune-batching.ts",
+    test: "tests/prune-batching.test.ts",
+    desc: "对照臂恒判「旋钮接得上」⇒ PC9 那半边成了装饰，主判据退化成「反正没别的能放行」的恒真式",
+    apply: (s) => s.replace("    ok: stray >= 1,", "    ok: true,"),
+    expectFail: "对照臂判据：门槛旋钮接得上",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
