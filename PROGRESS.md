@@ -1712,8 +1712,8 @@ judgment-layer §9.1 的一条省略——"包管理器错误码先不加，因�
 
   | 行（1563-1575） | settings 半边 | overrides 半边 |
   |---|---|---|
-  | `planRequired` | ❌ 存活（未观察） | ✅ `goal-continue` J3 那格 |
-  | `actionFusion` | ❌ 存活 | ✅ "handleAgentRun forwards the explicit override" |
+  | `planRequired` | ✅ 后补一格即杀掉（见下方"次日追补"） | ✅ `goal-continue` J3 那格 |
+  | `actionFusion` | ✅ 后补两格即杀掉（见下方"次日追补"） | ✅ "handleAgentRun forwards the explicit override" |
   | `impactAnalysis` | ✅ 本次补用例后杀掉 | ❌ 判卷从不传（只 IPC 透传） |
   | `autoVerify` | ✅ ②b | ✅ ②c（能力 33） |
   | `requestMetering` | ✅ `session-tools` C2/D 那格 | ❌ |
@@ -1726,11 +1726,21 @@ judgment-layer §9.1 的一条省略——"包管理器错误码先不加，因�
   **当场撤针不留**（规则 54：假锚点比没锚点更坏），缺口署名为任务 #14。
   左半边另有 5 格从不被传——判卷要传就得先答"这条 IPC 通道今天有没有真实调用者"，
   所以那一侧暂按**刻意的留位**记账（`RunOverrides` 由 `src/main/index.ts:198` 原样透传，非死码）。
+- **同日追补（#14 关掉其中两格）**：`actionFusion` 补两格（盘上开 ⇒ 生产入口真融合；盘上无键 ⇒ 不融合但**写盘仍成功**），
+  `planRequired` 补一格（盘上打开即武装，且**拒因必须点名方案门**，否则是别的闸在答话）；
+  两格各自绿了之后重新钉锚点，提交后跑 ✅（2.7s / 2.4s）⇒ 这一族现有 **6 条**活锚点。
+- **`observationPack` 仍**未**测，而这次量清了它为什么便宜不了**：C2/D 那格断言的 `obs_recall` 只证明"solpi 启用了"，
+  而 `src/agent/solpi-runtime.ts:72` 是 `observationPack || evidenceReceipts` **任一为真即建 ledger**
+  ⇒ 那个标记对这两个开关**零分辨力**（这正是 `?? false` 存活的机理，不是"运气不好没测到"）。
+  它独有的效果只有一条：**同一条大输出从第 3 次发送起被投影成存档回执**（`:83` 阈值、`:108` 投影文案、
+  `:111` 「关 ⇒ 恒发全文」），要看见它必须在**一个 run 里跑满 ≥3 次请求**并读**发给模型的正文**——事件流里没有这一面。
+  ⇒ 留在 #14；不许拿"标记出现了"冒充它的观察着。
 - 读到的更大一条：一个字段有 `DEFAULT_SETTINGS` 里的键、有设置界面的开关、有产品侧消费者，
   仍可能在**生产入口那一行**断掉——因为判卷往往测的是"值交给内核之后"，而不是"值怎么到内核"。
   这与「两头断」同族，但签名更具体：**测的是 opt 之后的行为 ≠ 测了 opt 的来源**。
-- 读数：全量 `test` **220 files / 2368 tests 全绿**（exit 0）、tsc 0 错、针脚体检 829 条
-  **阻断 0 属本簇**（整表仍只有别人那 1 条）、本簇 4 条锚点逐条 ✅（17.5s），3 条撤下的存活变异已署名为 #14。
+- 读数（**含同日追补后复测**）：全量 `test` **220 files / 2371 tests 全绿**（exit 0）、`pnpm typecheck` 0 错、
+  针脚体检 831 条 **阻断 0 属本簇**（整表仍只有别人那 1 条 `np-write-suppression-ignored`）、
+  本簇 6 条锚点逐条 ✅（17.5s / 2.7s / 2.4s）；#14 只剩 `observationPack` 一格未测（原因见上）。
 
 
 
