@@ -7379,6 +7379,50 @@ const MUTATIONS = [
     apply: (s) => s.replace("      toolAutonomy: newAutonomySession(mode === \"write\" ? \"auto\" : tier, {\n        rules: this.opts.rules ?? [],\n        sandboxAvailable: this.opts.sandboxAvailable ?? null,\n        frozenJudgePaths: frozenJudgePathSet(this.opts.workspace),\n      }),", "      toolAutonomy: newAutonomySession(mode === \"write\" ? \"auto\" : tier, {\n        rules: this.opts.rules ?? [],\n        sandboxAvailable: this.opts.sandboxAvailable ?? null,\n      }),"),
     expectFail: "write worker（工具档恒 auto）写判卷路径 ⇒ tool_result 仍是冻结拒绝且 worktree 里逐字未变；同 run 写普通文件照常放行",
   },
+  // ---- 09-24 supervise 判据取料面（真语料三次复跑全死于 escalate，逐笔读到）----
+  // 五格各钉一针：caller 读不读凭据、escalate 删不删现场、机器凭据/过期证据/禁改面三条优先级。
+  // 前两条今天只有 supervisor-check 的门在守（手工注入过：换掉 evidence 红 7 项、改回全量 reject
+  // 只红现场两条），但变异表只跑 vitest ⇒ 门侧的分辨力无常驻判据，故另落 tests/supervise-evidence.test.ts。
+  {
+    id: "supervise-caller-ignores-credential",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/supervise-evidence.test.ts",
+    desc: "caller 不读 `artifacts.verified`（判据退回纯散文）⇒ implement 角色永远取不到判据，supervise 恒 escalate 并删掉改对的成果",
+    apply: (s) => s.replace("        evidence: term.result.artifacts.verified,", "        evidence: undefined,"),
+    expectFail: "绿凭据 + 报告没有 verdict 行 ⇒ accept 并合并落盘（判据来自 caller 读到的凭据，不是散文）",
+  },
+  {
+    id: "supervise-escalate-destroys-scene",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/supervise-evidence.test.ts",
+    desc: "escalate 出口把最终环一起 reject ⇒ 先删 worktree 再回去问人，裁决发生时证据已不在",
+    apply: (s) => s.replace("        await rejectRings(ringAgentIds.filter((id) => id !== agentId));\n        return { ok: false, output: \"spawn_agent(supervise): 已升级人工裁决：", "        await rejectRings(ringAgentIds);\n        return { ok: false, output: \"spawn_agent(supervise): 已升级人工裁决："),
+    expectFail: "改了盘但取不到凭据、报告也无契约行 ⇒ escalate，且回执点名保留的 worktree 仍在盘上",
+  },
+  {
+    id: "supervise-ring-credential-dropped",
+    src: "src/agent/supervisor.ts",
+    test: "tests/supervise-ring-verdict.test.ts",
+    desc: "决策输入里去掉绿凭据那一支 ⇒ 无 verdict 行的环仍被判无判据（散文优先复活）",
+    apply: (s) => s.replace("  if (ctx.evidence === \"verified\") return \"pass\";", "  if (false) return \"pass\";"),
+    expectFail: "写过盘且凭据绿（verified）⇒ pass，报告里没有 verdict 行也成立——今日实现在这一格必然 escalate",
+  },
+  {
+    id: "supervise-ring-stale-trusted",
+    src: "src/agent/supervisor.ts",
+    test: "tests/supervise-ring-verdict.test.ts",
+    desc: "过期证据不再短路 ⇒ 绿拍之后又写了盘，那份绿被当成有效凭据（或直接回落到散文自述）",
+    apply: (s) => s.replace("  if (ctx.evidence === \"stale\") return null;", "  if (false) return null;"),
+    expectFail: "凭据过期（stale）⇒ null：绿拍之后又写了盘，那份证据已失效，不静默猜",
+  },
+  {
+    id: "supervise-ring-forbidden-overridden",
+    src: "src/agent/supervisor.ts",
+    test: "tests/supervise-ring-verdict.test.ts",
+    desc: "禁改面违反不再先于凭据 ⇒ 触碰 forbidden 的环只要verify绿就被 accept（契约让位于测试颜色）",
+    apply: (s) => s.replace("  if (ctx.forbiddenViolated) return \"fail\";", "  if (false) return \"fail\";"),
+    expectFail: "禁改面被触碰：即使凭据是 verified 也判 fail（forbidden 硬闸不被凭据顶掉）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
