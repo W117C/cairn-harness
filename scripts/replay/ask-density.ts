@@ -50,9 +50,16 @@ function main(): void {
     const session = newAutonomySession(a.mode, { sandboxAvailable: a.sandbox, planBlocked: () => false });
     let ask = 0;
     const risk = new Map<string, number>();
+    /** 出卡**落在哪一层**（`d.layer`）。这条是 §7 第 1 步的位置判据：
+     *  「default 行 ask 密度必须动起来」是数量判据，会被别的原因推动；
+     *  位置判据只认一格——`L3-mode` 必须掉、`L4-*` 必须非 0（拆短路真生效的直接证据）。 */
+    const byLayer = new Map<string, number>();
     for (const c of gated) {
       const d = evaluate(c.tool as ToolName, c.args, session);
-      if (d.verdict === "ask") ask++;
+      if (d.verdict === "ask") {
+        ask++;
+        byLayer.set(d.layer, (byLayer.get(d.layer) ?? 0) + 1);
+      }
       // deny 支上没有 risk（EvaluateDecision 是判别联合）——旧 heredoc 靠 `as any` 混过去，
       // 于是"deny 也算一档 risk"这件事从没被类型检查看过。这里按分支读，语义与 `d.risk ?? "deny"` 同。
       const r = d.verdict === "deny" ? "deny" : String(d.risk);
@@ -63,6 +70,7 @@ function main(): void {
       "sandbox=" + String(a.sandbox),
       "受管=" + String(gated.length),
       "ask=" + String(ask),
+      "askByLayer=" + [...byLayer.entries()].sort((x, y) => y[1] - x[1]).map(([k, v]) => k + ":" + String(v)).join(" "),
       "risk=" + [...risk.entries()].map(([k, v]) => k + ":" + String(v)).join(" "),
     );
   }

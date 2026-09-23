@@ -167,8 +167,15 @@ tool_result 出口上，硬挂会造出第三种形状，留位；不新建事�
 
 - **动作**：只调那一支的次序（写向调用不再无条件 ask，改由 `risk` 决定走 ask 还是放行），
   **不引入任何数值判据**——数值判据是第 3 步的事。
-- **判卷读数**：复跑附录 A，default 行的 ask 密度必须**从 92% 动起来**。仍是 92% ⇒ 这一步没生效
-  （不是「效果不好」，是压根没参与）。
+- **判卷读数（2026-09-23 从「数量」升级成「位置」）**：复跑附录 A，读 `askByLayer` 那一格——
+  **`L3-mode` 必须掉、`L4-*` 必须非 0**。原口径「default 行 ask 密度必须从 92% 动起来」是**数量**判据，
+  会被别的原因推动（改阈值、动 `sandboxRisk`、语料换血都能让它掉下来而短路仍在）。
+  数量掉 ≠ 位置挪；只有出卡从"档位规定要问人"挪到"风险层判要问人"，才算把概率将来要作用的那一层露出来。
+  **基线（`ca2e6b0` 之后的尺，19 files / 97 条受管）**：`default sandbox=null ask=89 askByLayer=L3-mode:89`
+  （**89/89 全在 L3-mode**，与 §3.2 那行的 91/91 同形）；`auto sandbox=null ask=1 askByLayer=L4-risk:1`；
+  `auto sandbox=false ask=89 askByLayer=L4-risk:89`（`sandboxRisk` 对所有写向给 high ⇒ 自主档在沙箱确认不可用
+  时退化成逐条问人，密度与默认档同级——这一格是第 1 步之外另开的账）。
+
 - **不许碰**（语义与原「永不豁免」清单逐字不变）：L0 三条 deny（含判卷面冻结）、L1 deny 规则、
   L2 ask 规则、任何 critical、MCP 无注解 fail-closed。
 - **零回归面**：自主档 ask 仍 0；`auto` / `gate` 等式（`scripts/autonomy-check.ts` 的
@@ -392,7 +399,7 @@ deps-before-run / lockfile 预检那一类，碰不到 `UNSAFE_MODULES_DIR`；�
 
 ---
 
-## 附录 A：反事实回放（§3.2 / §3.3；也是 §7 第 1 步的 ask 密度读数）
+## 附录 A：反事实回放（§3.2 / §3.3；也是 §7 第 1 步的位置判据 `askByLayer`）
 
 复跑入口已入库：<!-- replay:ask-density -->
 
