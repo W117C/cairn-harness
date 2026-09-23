@@ -1861,6 +1861,40 @@ async function phaseElectron(root: string): Promise<void> {
         "B27b 反面对手：树里落成的行不冒 chip，且那一面真画出了行（rows=" +
           String(b27b?.rows ?? -1) + "，防「整页没渲染」被读成「没 chip」）");
     }
+    /* B28 工作树看板不许演 git。动因（2026-09-23 量）：`BRANCHES` 是写死的四条假分支，
+       点一行只翻数组里的 `current` 并 toast「已切换到分支…」，"新建分支"也只 unshift 进数组——
+       而 `src/preload` 暴露的桥面里**没有任何 git/branch 通道**（`tsc --listFiles` 之外再数一遍导出键：无）。
+       ⇒ 屏上那句「已切换」是纯假象，且它谎报的正是一个编程 agent 最要命的状态（HEAD 在哪）。
+       判据：面板里零分支行、没有创建件、明说未接入；芯片不许印分支名；假分支名不许出现在屏上任何地方。 */
+    console.log("[panels-check] B28 工作树看板不演 git（无 IPC 就不许说「已切换」）");
+    {
+      const b28Open = await cdp2.eval<string>(
+        `(() => { const c = document.querySelector('#ctxTree'); if (!c) return "no-chip"; c.click(); return "clicked"; })()`,
+      );
+      ok(b28Open === "clicked", "B28 工作树芯片点得开（实测 " + JSON.stringify(b28Open) + "）");
+      const b28Read = (): Promise<{ rows: number; create: boolean; body: string; chip: string; fake: boolean } | null> =>
+        cdp2.eval<{ rows: number; create: boolean; body: string; chip: string; fake: boolean } | null>(
+          `(() => { const p = document.querySelector('#branchPanelBody'); if (!p) return null;` +
+          `  const t = (document.querySelector('#ctxTreeLabel')||{}).textContent || "";` +
+          `  return { rows: p.querySelectorAll('.branch-row').length, create: !!p.querySelector('#newBranchBtn'),` +
+          `    body: (p.textContent || "").replace(/\\s+/g," ").slice(0, 140), chip: t,` +
+          `    fake: ["ttl-rotation","grace-window","chore/deps"].some((n) => (document.body.innerText || "").includes(n)) }; })()`,
+        );
+      const b28 = await settle(async () => {
+        const r = await b28Read();
+        return r !== null && r.rows >= 0 ? r : null;
+      }, 12_000);
+      ok(b28 !== null && b28.rows === 0,
+        "B28 屏上不画任何分支行（没有 IPC 就没有事实源；实测 rows=" + String(b28?.rows ?? -1) + "）");
+      ok(b28 !== null && b28.create === false,
+        "B28 没有「新建分支」这个只会长出一条 toast 的入口（实测 " + String(b28?.create ?? null) + "）");
+      ok(b28 !== null && b28.body.includes("未接入"),
+        "B28 那一格自己说未接入（空态必须有原因，不能只留白；实测 " + JSON.stringify(b28?.body ?? "没等到") + "）");
+      ok(b28 !== null && /^工作树( · 未接入)?$/.test(b28.chip),
+        "B28 芯片不许印分支名（无通道时任何名字都是编的；实测 " + JSON.stringify(b28?.chip ?? "") + "）");
+      ok(b28 !== null && b28.fake === false,
+        "B28 反面对手：演示分支名在屏上任何角落都不该出现（实测 fake=" + String(b28?.fake ?? null) + "）");
+    }
     // 最后收一次「静默半执行」：两扇窗各自累积的未捕获异常都必须为空。
     await okNoExceptions(cdp);
     await okNoExceptions(cdp2);

@@ -2373,6 +2373,16 @@ const MUTATIONS = [
     expectFail: "ok===null ⇒ kind=unconfirmed 且有文案（缺席必须占位，否则读起来像已落盘）",
   },
   {
+    id: "branch-panel-restores-demo-rows",
+    src: "src/renderer/app.js",
+    test: "tests/renderer-no-demo-data.test.ts",
+    desc: "工作树看板退回演示分支行（撤掉空态、重新画 .branch-row）⇒ 屏上又开始谎报 HEAD 在哪，" +
+      "而桥接层至今没有任何 git 通道（`grep -ci \"git\\|branch\" src/preload/index.ts` → 0）",
+    apply: (s) => s.replace("panelEmptyHTML('分支未接入：这一格要读仓库的 git 状态，而桥接层还没有该通道')",
+      "'<button class=\"branch-row\">main</button>'"),
+    expectFail: "工作树那一格必须自己说未接入（撤假数据不等于留白）",
+  },
+  {
     id: "tail-clamp-keeps-head",
     src: "src/agent/text-budget.ts",
     test: "tests/text-budget-cjk.test.ts",

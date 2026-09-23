@@ -900,7 +900,6 @@ const GLOBE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 const REVIEW_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg>';
 const TERM_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 9 3 3-3 3M12.5 15H17"/></svg>';
 const BRANCH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v12"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>';
-const PLUS_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>';
 
 
 const VIEW_META = {
@@ -1124,29 +1123,15 @@ function orphanBlockHTML() {
     '<p class="mc-hint">界面上不给清理按钮：清理会连分支一起删且不判是否已合并。要清请在终端 <code>git worktree remove &lt;路径&gt;</code>。</p>' +
   '</div>';
 }
-/* git 分支数据：当前分支 ahead/behind 计数与其他分支 */
-const BRANCHES = [
-  { name: 'main',       current: true,  ahead: 2, behind: 0 },
-  { name: 'feat/ttl-rotation', current: false, ahead: 0, behind: 0, merged: false },
-  { name: 'fix/grace-window',  current: false, ahead: 0, behind: 0 },
-  { name: 'chore/deps',        current: false, ahead: 0, behind: 0, merged: true }
-];
+/* git 分支：桥接层（src/preload）到今天**没有**任何 git/branch 通道 ⇒ 这里没有事实源。
+   原先挂着一份写死的 BRANCHES（main / feat/ttl-rotation / fix/grace-window / chore/deps），
+   点一行只翻数组里的 current 再 toast「已切换到分支…」——一个编程 agent 谎报 HEAD 在哪，
+   比不报更坏（能力 7「可审计」与 8「可接管」都建立在屏上说的就是真的）。
+   判卷：panels-check B28（真窗口：零分支行、无创建件、自己说未接入、芯片不印分支名、假名不出现）。
+   真化需要主进程 IPC（R2 范围）；接上之前这一格只说未接入。 */
 function branchesViewHTML() {
-  return '<div class="side-page-pad branches">' +
-    '<div class="branch-head">分支 <span class="cnt">' + BRANCHES.length + '</span></div>' +
-    BRANCHES.map(b =>
-      '<button class="branch-row' + (b.current ? ' is-current' : '') + '" type="button" role="radio" aria-checked="' + String(b.current) + '" data-branch="' + esc(b.name) + '">' +
-        '<svg class="b-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v12"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>' +
-        '<span class="b-name">' + esc(b.name) + '</span>' +
-        (b.current ? '<svg class="b-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 13 4 4L19 7"/></svg>' : '') +
-        (!b.current && b.ahead ? '<span class="b-ahead">↑' + b.ahead + '</span>' : '') +
-        (!b.current && b.behind ? '<span class="b-behind">↓' + b.behind + '</span>' : '') +
-        (b.merged ? '<span class="b-tag">已合并</span>' : '') +
-      '</button>').join('') +
-    '<div class="branch-new">' +
-      '<input type="text" id="newBranchInput" placeholder="新建分支名，如 feat/…" aria-label="新分支名称">' +
-      '<button class="branch-create" id="newBranchBtn" type="button" aria-label="创建分支">' + PLUS_ICON + '</button>' +
-    '</div>' +
+  return '<div class="side-page-pad branches" data-branch-state="unwired">' +
+    panelEmptyHTML('分支未接入：这一格要读仓库的 git 状态，而桥接层还没有该通道') +
     '</div>';
 }
 /* 定时任务面板的纯渲染部分：只依赖 esc 与 scheduleCache，不依赖 api。
@@ -1873,10 +1858,8 @@ function closeAllPops(refocus) {
 /* 芯片文字：工作区名 / 当前分支，只在对应看板展开时附加 */
 function syncCtxChipState() {
   ctxWorkspaceLabel.textContent = workspacePanel.hidden ? '工作区' : '工作区 · ' + currentWs.name;
-  const cur = BRANCHES.find(b => b.current);
-  $('#ctxTreeLabel').textContent = branchPanel.hidden
-    ? '工作树'
-    : '工作树 · ' + (cur ? cur.name : '分支');
+  /* 芯片不印分支名：桥接层没有 git 通道，印什么名字都是编的（原先印的是演示数据里那条 main）。 */
+  $('#ctxTreeLabel').textContent = '工作树' + (branchPanel.hidden ? '' : ' · 未接入');
 }
 const _openView = openView;
 openView = function (key) { _openView(key); syncCtxChipState(); };
@@ -2128,36 +2111,11 @@ document.addEventListener('click', (e) => {
   closeAllPops(false);
 });
 
-/* ============ 工作树看板：分支选择与新建（事件委托） ============ */
-branchPanel.addEventListener('click', (e) => {
-  const branchBtn = e.target.closest('.branch-row');
-  if (branchBtn) {
-    const name = branchBtn.dataset.branch;
-    const target = BRANCHES.find(b => b.name === name);
-    if (!target || target.current) return;
-    BRANCHES.forEach(b => { b.current = b === target; });
-    renderBranchPanel();
-    syncCtxChipState();
-    toast('已切换到分支「' + name + '」');
-    return;
-  }
-  if (e.target.closest('#newBranchBtn')) createBranch();
-});
-branchPanel.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && e.target.id === 'newBranchInput') { e.preventDefault(); createBranch(); }
-});
-function createBranch() {
-  const input = $('#newBranchInput');
-  if (!input) return;
-  const name = input.value.trim();
-  if (!name) { input.focus(); toast('请输入分支名'); return; }
-  if (BRANCHES.some(b => b.name === name)) { toast('分支「' + name + '」已存在'); return; }
-  BRANCHES.forEach(b => { b.current = false; });
-  BRANCHES.unshift({ name, current: true, ahead: 0, behind: 0 });
-  renderBranchPanel();
-  syncCtxChipState();
-  toast('已创建并切换到「' + name + '」');
-}
+/* ============ 工作树看板 ============ */
+/* 原先这里有「点一行改 current + toast『已切换到分支…』」与「新建分支 unshift 进数组 + toast
+   『已创建并切换到…』」两套处理，操作的对象是写死的演示数组 ⇒ 用户看到的"切了分支"在 git 里不存在。
+   桥接层没有任何 git 通道（src/preload 的导出键里没有 branch/git/worktree 类），故整段删除；
+   接上 IPC 时连同 branchesViewHTML 的数据源一起做（判卷：panels-check B28）。 */
 
 /* ============ 模型选择面板 ============ */
 const modelPicker = $('#modelPicker');

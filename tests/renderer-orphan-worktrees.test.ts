@@ -15,7 +15,7 @@ function block(orphanWorktrees: unknown) {
     __out: '',
   };
   const a = source.indexOf('function orphanBlockHTML() {');
-  const b = source.indexOf('/* git 分支数据', a);
+  const b = source.indexOf('function branchesViewHTML', a);
   expect(a).toBeGreaterThanOrEqual(0);
   expect(b).toBeGreaterThan(a);
   runInNewContext(source.slice(a, b) + "\n__out = orphanBlockHTML();", ctx);

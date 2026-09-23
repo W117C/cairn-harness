@@ -22,7 +22,7 @@ function gitHTML(merge: unknown[]) {
     __out: "",
   };
   const a = source.indexOf('function gitViewHTML() {');
-  const b = source.indexOf('/* git 分支数据', a);
+  const b = source.indexOf('function branchesViewHTML', a);
   expect(a).toBeGreaterThanOrEqual(0);
   expect(b).toBeGreaterThan(a);
   runInNewContext(source.slice(a, b) + "\n__out = gitViewHTML();", context);
