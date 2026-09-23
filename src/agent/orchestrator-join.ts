@@ -84,6 +84,42 @@ export function spentUsdFor(
   return { usd: roundUsd(usd), calibrated: row.calibrated === true };
 }
 
+/** 会话真钱尺的输入：一段用量 + **产生它的那一档**价。 */
+export interface SpendBucket {
+  usage: { inputTokens: number; outputTokens: number };
+  /** `priceForModel` 的产物；`priceId` 缺省 = 真实但价不可知（要出声，不当免费）。 */
+  price: WorkerPrice | null | undefined;
+  /** false = 这一桶不产生真钱（冻结剧本回放）⇒ 既不计价、也不算"算不出"（不因此告警）。缺省 true。 */
+  realMoney?: boolean;
+}
+
+/** 会话真钱尺（唯一实现）：**每个桶按自己那一档的表价**折，再相加。
+ *  为什么需要它（2026-09-23 实测）：两把美元闸原先都按「全部 token × 会话那一档单价」算花费，
+ *  而 worker 可以跑在别的档位上（路由选档 / cascade 升档 / 显式 args.model）。本仓价表里同一份
+ *  100k in + 1k out 是 flash $0.0202 / standard $0.2020 / strong $0.8080 ⇒ 会话档选 flash、
+ *  钱实际花在 strong 时，闸读到的是实付的 **1/40**：「上限 $1」最坏要实际花到几十美元才拦，
+ *  而同一屏的 worker 回执报的却是真价——**限制类判据与它要限制的那个读数分叉**。
+ *  姿态沿用既有那条：真实但算不出的部分**不折成 $0** ⇒ 计入 `unpricedTokens` 由调用方出声；
+ *  一桶都算不出 ⇒ 返回 null（= 「这道闸本次不生效」，不拿 $0 冒充实付）。 */
+export function bucketsSpendUsd(buckets: readonly SpendBucket[]): { usd: number; unpricedTokens: number } | null {
+  let usd = 0;
+  let unpricedTokens = 0;
+  let realButUnknown = false;
+  for (const b of buckets) {
+    if (b.realMoney === false) continue;
+    const tokens = Math.max(0, b.usage.inputTokens) + Math.max(0, b.usage.outputTokens);
+    const s = spentUsdFor(b.price, b.usage);
+    if (s === null) {
+      realButUnknown = true;
+      unpricedTokens += tokens;
+      continue;
+    }
+    usd += s.usd;
+  }
+  if (realButUnknown && usd === 0) return null;
+  return { usd: roundUsd(usd), unpricedTokens };
+}
+
 /** 三种「算不出钱」共用一句话：脚本回放 / 档位没注册 / 两张表漂移。 */
 const PRICE_UNKNOWN = "价格未知（脚本回放、未注册档位或价表漂移；不记为免费）";
 

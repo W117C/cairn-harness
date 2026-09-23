@@ -80,7 +80,7 @@ import { frozenJudgePathSet } from "../frozen";
 import { MAX_CONCURRENT_WORKERS, READ_MODE_MAX_TURNS, SPAWN_MODES, WORKER_TOOL_TABLE, WRITE_WORKER_TOOL_TABLE, workerBudgetConfig, workerToolTable } from "./orchestrator-config";
 import { shell_rw, workerToolSpecs } from "./worker-shell-tools";
 import { clampTier, clipWorkerSummary, isPermissionMode, parseSpawnedAgentId, scanModelOutput, workerVerificationEvidence } from "./worker-report";
-import { priceForModel, priceTagText, shapeJoinRows, spentUsdFor, type JoinInput, type JoinPayloadBody, type WorkerPrice } from "./orchestrator-join";
+import { priceForModel, priceTagText, shapeJoinRows, spentUsdFor, bucketsSpendUsd, type JoinInput, type JoinPayloadBody, type SpendBucket, type WorkerPrice } from "./orchestrator-join";
 import { WorkerCancelled, defaultWorkerModel, isScriptedModel, type WorkerModel } from "./worker-model";
 import { type OrchestratorOptions, type PipelineChain, type SpawnArgs, type StageRoleResolution, type WorkerContext, type WorkerHandle } from "./orchestrator-types";
 import { chainTable, digestArgs, filterWorkerSpecs, filterWorkerTable, parseStringList, parseWorkerContext, scanStreamEvent, withAgentId } from "./worker-projection";
@@ -147,6 +147,12 @@ export class Orchestrator {
   private budgetInertWarned = false;
   /** 会话累计 usage（emit 包装统计全部 usage 事件 = 主 loop + Σworker，§4.4.10 口径）。 */
   readonly sessionUsage = { inputTokens: 0, outputTokens: 0 };
+  /** **只**统计无 `agent_id` 的 usage 事件（= 主会话自己那一跳）。
+   *  成本闸要按桶分别计价：`sessionUsage` 里 worker 的 token 已经混在一起，按会话档一乘就错
+   *  （见 `bucketsSpendUsd` 的实测理由）——所以另记一份"主会话那一段"，两边相加而不是各算各的总量。 */
+  private readonly mainUsage = { inputTokens: 0, outputTokens: 0 };
+  /** 「上限设了却有一部分算不出价」只出声一次（闸晚触发的程度用户必须知道，但不刷屏）。 */
+  private budgetPartialWarned = false;
   /** 依赖链：延迟 spawn 登记（前环未收敛；前环 done 事件驱动触发，无轮询调度器 §4.5）。 */
   private readonly deferredSpawns = new Map<string, { callId: string; args: SpawnArgs; dependsOn: string[] }>();
   /** pipeline 链（callId → 链状态；stages 批准后冻结，重复请求 = 变更请求被拒）。 */
@@ -167,6 +173,11 @@ export class Orchestrator {
         if (e.type === "usage") {
           this.sessionUsage.inputTokens += e.inputTokens;
           this.sessionUsage.outputTokens += e.outputTokens;
+          // 带 agent_id 的是 worker 子流（各自有档位，按 handle 上的真价单独成桶）
+          if (e.agent_id === undefined) {
+            this.mainUsage.inputTokens += e.inputTokens;
+            this.mainUsage.outputTokens += e.outputTokens;
+          }
         }
         await rawEmit(e);
       },
@@ -177,31 +188,54 @@ export class Orchestrator {
 
   /** 预算估价（纯查询）。两把尺按优先级：
    *  ① 用户手填的 `pricePerMTok`（输入+输出同价的粗口径）——语义逐字保留，填了就以它为准；
-   *  ② 没填 ⇒ 查**内置价表**（输入/输出分列，与 goal 美元闸同一把尺）。
+   *  ② 没填 ⇒ **分桶各按各档折**（主会话一桶按会话档、每个 worker 一桶按它自己那一档）。
+   *  旧写法是「全部 token × 会话那一档」，而 worker 可以跑在别的档上（价表里 flash 与 strong 差 40 倍）
+   *  ⇒ 上限会晚几十倍才触发，而同一屏的 worker 回执报的是真价：限制类判据与它要限制的那个读数分叉。
    *  都拿不到 ⇒ 0，但 `budgetBlocked` 会因此出声，不把 0 当成"这会话免费"。 */
   budgetEstimateUsd(): number {
-    const b = this.budget;
-    if (!b) return 0;
-    const usage = { inputTokens: this.sessionUsage.inputTokens, outputTokens: this.sessionUsage.outputTokens };
-    if (b.pricePerMTok > 0) return ((usage.inputTokens + usage.outputTokens) / 1_000_000) * b.pricePerMTok;
-    const spend = spentUsdFor(priceForModel(b.priceModel ?? ""), usage);
+    const spend = this.budgetSpendReading();
     return spend === null ? 0 : spend.usd;
   }
 
-  /** 估得出价吗：手填单价 >0，或价表里查得到这个模型（价表键只由 priceForModel 一处成形）。 */
-  private budgetRateKnown(): boolean {
+  /** 花费读数：`null` = 一桶都算不出（⇒ 闸惰掉但必须出声）；否则给出算得出的美元与**算不出的 token 数**
+   *  （后者不折成 $0，也不静默吞：见 `bucketsSpendUsd` 的口径）。 */
+  private budgetSpendReading(): { usd: number; unpricedTokens: number } | null {
     const b = this.budget;
-    if (!b) return false;
-    if (b.pricePerMTok > 0) return true;
-    return b.priceModel !== undefined && b.priceModel !== "" && priceForModel(b.priceModel).priceId !== undefined;
+    if (!b) return null;
+    if (b.pricePerMTok > 0) {
+      // ① 手填单价：粗口径「一份单价 × 全部 token」，填这个数的人声明的就是"我这儿每百万 token 值这么多钱"
+      const usage = { inputTokens: this.sessionUsage.inputTokens, outputTokens: this.sessionUsage.outputTokens };
+      return { usd: ((usage.inputTokens + usage.outputTokens) / 1_000_000) * b.pricePerMTok, unpricedTokens: 0 };
+    }
+    // ② 唯一给钱的那一行
+    return bucketsSpendUsd(this.budgetBuckets());
+  }
+
+  /** 成本闸的计价桶：主会话一桶按会话档，**每个 worker 一桶按它自己那一档**
+   *  （回放桶 `realMoney: false` ⇒ 不产生真钱，也不算"算不出"，因此不触发告警）。 */
+  private budgetBuckets(): SpendBucket[] {
+    const b = this.budget;
+    return [
+      {
+        usage: { inputTokens: this.mainUsage.inputTokens, outputTokens: this.mainUsage.outputTokens },
+        price: priceForModel(b?.priceModel ?? ""),
+      },
+      ...[...this.workers.values()].map((w) => ({
+        usage: { inputTokens: w.usage.inputTokens, outputTokens: w.usage.outputTokens },
+        price: w.price ?? null,
+        realMoney: w.price !== null,
+      })),
+    ];
   }
 
   /** 闸判定：maxUsd >0 且估价 ≥ 上限 → 拒绝新 spawn。估不出价 ⇒ 不拦，但**出声一次**：
-   *  用户设的 BYOK 成本底线不许因为"单价没填且表里没这个模型"就静默变成不存在。 */
+   *  用户设的 BYOK 成本底线不许因为"单价没填且表里没这个模型"就静默变成不存在。
+   *  只有一部分算得出时**照触**（已知的钱是真的），另外出声说这道闸可能晚于实际上限。 */
   budgetBlocked(): boolean {
     const b = this.budget;
     if (!b || !(b.maxUsd > 0)) return false;
-    if (!this.budgetRateKnown()) {
+    const spend = this.budgetSpendReading();
+    if (spend === null) {
       if (!this.budgetInertWarned) {
         this.budgetInertWarned = true;
         console.warn(
@@ -211,7 +245,14 @@ export class Orchestrator {
       }
       return false;
     }
-    return this.budgetEstimateUsd() >= b.maxUsd;
+    if (spend.unpricedTokens > 0 && !this.budgetPartialWarned) {
+      this.budgetPartialWarned = true;
+      console.warn(
+        "[budget] 会话成本上限 $" + String(b.maxUsd) + "：另有 " + String(spend.unpricedTokens) +
+        " 个 token 价不可知未计入 ⇒ 这道闸只按算得出的那部分拦，可能**晚于**实际上限",
+      );
+    }
+    return spend.usd >= b.maxUsd;
   }
 
   /** 活跃 worker 数（running / waiting_approval / waiting_input 计入并发上限；
