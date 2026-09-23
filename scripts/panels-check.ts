@@ -1778,6 +1778,25 @@ async function phaseElectron(root: string): Promise<void> {
       ok(b26Paired?.state === "ok" && (b26Paired?.text ?? "").includes("执行完成"),
         "B26 反面对手：有结果的行照旧「执行完成」（实测 state=" + JSON.stringify(b26Paired?.state ?? "") +
           " 文案=" + JSON.stringify(b26Paired?.text ?? "") + "）");
+      /* 同一件事实的第三格：转录里的工具项。原先每笔调用先画「…」（pending）、有结果才改口
+         ⇒ 被切断的会话重开后，末笔永远挂着省略号。现在由 unansweredToolCalls 一次算好，
+         重放路径说「无结果」。读点 data-tool-state 不依赖中文文案。 */
+      const b26T = await settle(async () => {
+        const r = await cdp2.eval<{ cut: string; paired: string } | null>(
+          `(() => { const items = [...document.querySelectorAll('.tool-item')];` +
+          `  const of = (needle) => items.find((it) => (it.textContent || "").includes(needle));` +
+          `  const cut = of("b26-cut-check"), paired = of("b26-paired-check");` +
+          `  if (!cut || !paired) return null;` +
+          `  const st = (it) => { const s = it.querySelector('.ti-state'); return s ? (s.getAttribute("data-tool-state") || "no-attr") : "no-node"; };` +
+          `  return { cut: st(cut), paired: st(paired) }; })()`,
+        );
+        return r !== null && r.cut !== "no-node" && r.cut !== "no-attr" ? r : null;
+      }, 12_000);
+      ok(b26T?.cut === "lost",
+        "B26 转录侧：没有结果的那笔说「无结果」，不再挂着永远转不完的省略号（实测 " + JSON.stringify(b26T ?? "没等到") + "）");
+      ok(b26T?.paired === "ok",
+        "B26 转录侧反面对手：有结果的那笔必须翻成 ok（读点与 class 同步改口，不许停在 pending；实测 paired=" +
+          JSON.stringify(b26T?.paired ?? "") + "）");
     }
     // 最后收一次「静默半执行」：两扇窗各自累积的未捕获异常都必须为空。
     await okNoExceptions(cdp);

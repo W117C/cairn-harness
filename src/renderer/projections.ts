@@ -979,6 +979,25 @@ export function impactLabel(i: PanelImpact): string {
   return i.sites === 0 ? "无跨文件调用点" : `波及 ${sites} 处 · ${i.files} 个文件`;
 }
 
+/** 这条流里**没有结果**的主会话调用 id（worker 子流不算：父转录不背子流的账）。
+ *  同一件事实现在有两个取料面读它：转录面用它把"永远等不到结果"的那格从 `…` 改成「无结果」，
+ *  投影出口（`context.ts` 的 `closeDanglingToolCalls`）用它决定要不要补一条合约束的 tool 消息。
+ *  判据只写一份：两个面各写各的 ⇒ 修一个忘一个（本仓第 6 族的形状）。 */
+export function unansweredToolCalls(events: AgentEvent[]): Set<string> {
+  const opened = new Set<string>();
+  for (const e of events) {
+    if (e.type !== "tool_call") continue;
+    if (typeof e.agent_id === "string" && e.agent_id !== "") continue;
+    opened.add(e.id);
+  }
+  for (const e of events) {
+    if (e.type !== "tool_result") continue;
+    if (typeof e.agent_id === "string" && e.agent_id !== "") continue;
+    opened.delete(e.callId);
+  }
+  return opened;
+}
+
 /** 终端行的状态格。**`ok===null` 不等于「还在跑」**——它只是「这条流里没有它的结果」：
  *  重放一条被切断的旧会话时，那一拍永远不会有结果（真实现场：末事件是 `run_shell pnpm test`
  *  的 tool_call，盘上无配对 tool_result）。把缺席当运行中就是把死说过成活着，所以这里要外部

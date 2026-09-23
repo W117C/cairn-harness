@@ -1,5 +1,5 @@
 import { projectUnits, mountHistory } from './history-window.js';
-import { projectPanelData, EMPTY_PANEL_DATA, entersMainConversation, toolArgsSummary, PANEL_DIRTY_TYPES, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, terminalRowState, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS, cardActionForComment, commentReadsBack, groupOnboardingSteps, impactLabel } from './projections';
+import { projectPanelData, EMPTY_PANEL_DATA, entersMainConversation, toolArgsSummary, PANEL_DIRTY_TYPES, workerEvidenceLabel, workerSpentLabel, agentStatusText, skipReasonLabel, terminalRowState, unansweredToolCalls, workerApprovalAsks, cardActionForApproval, workerRowActions, cardActionForWorkerRow, WORKER_ROW_ACTION_NAMES, goalRelevant, traceGoal, GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, SCHED_FORM_KINDS, SCHED_KIND_LABELS, SCHED_TIER_LABELS, WEEKDAY_CN, schedFormPayload, HISTORY_STATES, HISTORY_STATE_LABELS, cardActionForComment, commentReadsBack, groupOnboardingSteps, impactLabel } from './projections';
 import { $, esc, promptInput, sessionList, streamInner, toast } from './dom.js';
 import { ICONS, RUN_GRID_HTML, runGrid } from './icons.js';
 import { highlightAllDiffs, diffHtml } from './diff-highlight.js';
@@ -955,6 +955,11 @@ let panelData = EMPTY_PANEL_DATA;
    重放一条被切断的旧会话时 ok===null 不是运行中（原先就是那句「执行中…」把死说成活）。
    由 refreshPanels 写（那里才看得见 historyEvents / real.running）。 */
 let panelLive = false;
+/* 重放时「这条流里没有结果」的那批调用 id（由 projections.unansweredToolCalls 一次算出）。
+   转录原先给每笔调用先画 `…`（pending），有结果才改口 ⇒ 被切断的会话重开后，最后一笔永远挂着
+   「…」：和终端面板那句「执行中」是同一个代理信号的另一格。渲染按单元逐格进行、结果可能在后面的
+   单元里，所以只能由整条流先算好，不能就地猜。live 侧不用它（新调用真在等结果）。 */
+let historyUnanswered = new Set();
 /* 孤儿工作树（§4.4.9）：main 每次 getState 现扫盘、只列不删。这个字段此前在渲染层零读者
    （ipc:check 只看通道挂没挂，看不到"挂着没人读"），于是崩溃恢复留在盘上的 worktree
    只有命令行能看见——而合并控制塔正是它的落脚点。三态：null=还没数 / {orphans}/ {error}。 */
@@ -2880,6 +2885,9 @@ render();
         const name = String(e.name || 'tool');
         const id = e.callId || e.id || name + Math.random().toString(36).slice(2, 7);
         const g = ensureToolGroup();
+        /* 重放里"整条流都没有这一笔的结果" ⇒ 说「无结果」而不是永远挂着「…」；
+           data-tool-state 是给门禁的读点（同终端面板的 data-term-state）。 */
+        const lost = !!rc.replay && historyUnanswered.has(id);
         const item = document.createElement('div');
         item.className = 'tool-item collapsed';
         item.innerHTML =
@@ -2887,7 +2895,7 @@ render();
             toolIcon(name) +
             '<span class="ti-name">' + esc(name) + '</span>' +
             '<span class="ti-sum">' + esc(toolArgsSummary(e.args)) + '</span>' +
-            '<span class="ti-state pending">…</span>' + TG_CHEV +
+            '<span class="ti-state ' + (lost ? 'lost' : 'pending') + '" data-tool-state="' + (lost ? 'lost' : 'pending') + '">' + (lost ? '无结果' : '…') + '</span>' + TG_CHEV +
           '</button>' +
           '<div class="ti-body">' +
             '<div class="ti-sec"><div class="ti-label">参数</div><pre class="ti-code">' + esc(argText(e.args)) + '</pre></div>' +
@@ -2916,7 +2924,14 @@ render();
         }
         const name = (item.querySelector('.ti-name') || {}).textContent || '';
         const st = item.querySelector('.ti-state');
-        if (st) { st.className = 'ti-state ' + (ok ? 'ok' : 'fail'); st.textContent = ok ? '✓' : '✗'; }
+        if (st) {
+          const cls = ok ? 'ok' : 'fail';
+          st.className = 'ti-state ' + cls;
+          st.textContent = ok ? '✓' : '✗';
+          /* 读点要与 class 同步改口：只改 class 会让 data-tool-state 永远停在 pending，
+             门禁读到的是"这一笔还没结果"——一个自己造的假读数。 */
+          st.setAttribute('data-tool-state', cls);
+        }
         const outSec = item.querySelector('.ti-out');
         if (outSec) {
           outSec.hidden = false;
@@ -3083,7 +3098,7 @@ render();
             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m5 7 4 4-4 4M12 17h7"/></svg>' +
             '<span class="ti-name">终端' + (e.attempt ? ' #' + e.attempt : '') + '</span>' +
             '<span class="ti-sum">验证结果</span>' +
-            '<span class="ti-state ' + (e.ok ? 'ok' : 'fail') + '">' + (e.ok ? '✓' : '✗') + '</span>' + TG_CHEV +
+            '<span class="ti-state ' + (e.ok ? 'ok' : 'fail') + '" data-tool-state="' + (e.ok ? 'ok' : 'fail') + '">' + (e.ok ? '✓' : '✗') + '</span>' + TG_CHEV +
           '</button>' +
           '<div class="ti-body"><div class="term">' + (vrows || '<div class="dim">（无输出）</div>') + '</div></div>';
         g.querySelector('.tg-body').appendChild(item);
@@ -3447,6 +3462,7 @@ render();
       if (e.type === 'usage') { real.usageIn += e.inputTokens || 0; real.usageOut += e.outputTokens || 0; }
     }
     syncStatusbar();
+    historyUnanswered = unansweredToolCalls(events);
     refreshPanels();
     historyWindow = mountHistory({ container: streamInner, scroller: $('.stream'), units: projectUnits(events), renderUnit: buildUnit });
     scrollStream(true);  // 打开/切换会话：落在末尾，不受上翻锁定影响

@@ -1028,6 +1028,8 @@ button.tg-head{transition:color var(--t-fast)}
 .ti-state.ok{color:var(--ok)}
 .ti-state.fail{color:var(--danger)}
 .ti-state.pending{color:var(--muted)}
+/* 重放里"整条流都没有结果"的那一笔：不闪、不报失败，只标「无结果」（虚线=没有下文，不是进行中）。 */
+.ti-state.lost{color:var(--muted);text-decoration:underline dotted}
 .tool-item.collapsed > .ti-body{display:none}
 .tool-item.collapsed > .ti-head .chev{transform:rotate(-90deg)}
 .ti-body{padding:var(--sp-1) var(--sp-6) var(--sp-4)}

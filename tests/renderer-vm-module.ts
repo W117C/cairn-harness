@@ -7,7 +7,7 @@
 // vm 跑的是脚本不是模块 ⇒ 那条 import 必须剥掉、绑定必须从 context 给。
 // 若每份测试各写一遍剥法，改一行 import 形制就要三处同步；漏掉的那处不会报错，
 // 只会**静默把判据换成自己的副本**——正是本仓反复栽的「一份政策两份实现」。
-import { entersMainConversation, PANEL_DIRTY_TYPES, skipReasonLabel, toolArgsSummary } from "../src/renderer/projections";
+import { entersMainConversation, PANEL_DIRTY_TYPES, skipReasonLabel, terminalRowState, toolArgsSummary, unansweredToolCalls } from "../src/renderer/projections";
 
 /** history-window.js 里那条必须剥掉的 import（逐字）。 */
 export const CHILD_IMPORT = `import { entersMainConversation } from './projections';`;
@@ -23,4 +23,6 @@ export function groupedScript(historyWindowSource: string): string {
 
 // skipReasonLabel：app.js 的 EVENT_LABELS 支给 automation_skipped 时调它（projections 里那份是实现）。
 // 切片跑的是脚本不是模块，那条 import 不在片内 ⇒ 绑定必须从 context 给，且只准给真实现（塞桩等于把判据换成副本）。
-export { entersMainConversation, PANEL_DIRTY_TYPES, skipReasonLabel, toolArgsSummary };
+// unansweredToolCalls / terminalRowState：app.js 的 showHistory 与 termBodyHTML 各调一个（切片里没有
+// 那条 import ⇒ 不给绑定就是 ReferenceError，红得响亮；给了副本才是本仓最怕的静默换判据）。
+export { entersMainConversation, PANEL_DIRTY_TYPES, skipReasonLabel, terminalRowState, toolArgsSummary, unansweredToolCalls };

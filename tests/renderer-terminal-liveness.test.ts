@@ -8,11 +8,13 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 import type { AgentEvent } from "../src/events";
-import { projectPanelData, terminalRowState } from "../src/renderer/projections";
+import { projectPanelData, terminalRowState, unansweredToolCalls } from "../src/renderer/projections";
 
 const source = readFileSync(new URL("../src/renderer/app.js", import.meta.url), "utf8");
 
-const callEvent = (id: string, command: string): AgentEvent =>
+const user = (content: string): AgentEvent => ({ type: "user_message", content });
+
+const callEvent = (id: string, command = "pnpm test"): AgentEvent =>
   ({ type: "tool_call", id, name: "run_shell", args: { command } });
 const resultEvent = (callId: string): AgentEvent =>
   ({ type: "tool_result", callId, ok: true, output: "1 passed" });
@@ -64,6 +66,32 @@ describe("归因：worker 子流的 shell 不进父会话的终端面板", () =>
     const rows = projectPanelData([callEvent("p1", "pnpm test"), resultEvent("p1")], "/tmp/ws").terminal;
     expect(rows.length).toBe(1);
     expect(rows[0]?.ok).toBe(true);
+  });
+});
+
+describe("共用件：哪几笔调用没有结果（转录面与投影出口读同一份）", () => {
+  it("真实现场形状：末笔调用无结果 ⇒ 只有它进集合", () => {
+    const s = unansweredToolCalls([user("t"), callEvent("c1", "read_file"), resultEvent("c1"), callEvent("c3")]);
+    expect([...s]).toEqual(["c3"]);
+  });
+
+  it("成对齐全 ⇒ 空集合（反面对手：不许把有结果的也算成断的）", () => {
+    expect(unansweredToolCalls([callEvent("c1"), resultEvent("c1")]).size).toBe(0);
+  });
+
+  it("worker 子流不算父会话的账", () => {
+    const s = unansweredToolCalls([{ ...callEvent("w1", "pnpm build"), agent_id: "agent-1" } as unknown as AgentEvent]);
+    expect(s.size).toBe(0);
+  });
+
+  it("两侧都按归因走：parent 与 worker 都有 call-0 时，只报 parent 那笔未答", () => {
+    // 缺省 callId 是流内序号 ⇒ 两边同 id 是常态；只挡 tool_call 面 = 只归因一半（#53 同格）
+    const s = unansweredToolCalls([
+      callEvent("call-0", "pnpm test"),
+      { ...callEvent("call-0", "pnpm build"), agent_id: "agent-1" } as unknown as AgentEvent,
+      { ...resultEvent("call-0"), agent_id: "agent-1" } as unknown as AgentEvent,
+    ]);
+    expect([...s]).toEqual(["call-0"]);
   });
 });
 

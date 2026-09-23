@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 // renderEvent 第一句问的是这条判据（projections 导出的同一个实现，测试不另写一份）；
 // 工具行摘要政策与「定时跳过原因」的文案表也从同一处取绑——app.js 里那些本地副本已搬进 projections
 // （两份早晚会分叉，切片跑的是脚本不是模块，绑定只能从 context 给）。
-import { entersMainConversation, skipReasonLabel, toolArgsSummary } from "./renderer-vm-module";
+import { entersMainConversation, skipReasonLabel, terminalRowState, toolArgsSummary, unansweredToolCalls } from "./renderer-vm-module";
 // 单元成对不变量要用** shipped 的**分组器（不是复刻），注册表类型名从 event-registry 读（不抄清单）。
 import { projectUnits } from "../src/renderer/history-window.js";
 import { knownTypes } from "./event-registry";
@@ -221,6 +221,8 @@ function bootRenderer(events: Record<string, unknown>[]) {
     highlightAllDiffs: () => {},
     finalizePending: () => {},
     entersMainConversation,
+    // showHistory 写、tool_call 分支读；termBodyHTML 读 panelLive（缺席 ≠ 运行中）
+    unansweredToolCalls, historyUnanswered: new Set(), terminalRowState, panelLive: false,
     toolArgsSummary,
     skipReasonLabel,
     // 切片里含顶层的 #sendBtn 绑定语句，需要一个可绑定的壳
