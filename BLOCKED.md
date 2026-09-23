@@ -1032,3 +1032,20 @@ TERM=dumb node --import tsx scripts/gym-check.ts     →  29 ✅ / 4 ❌
 
 **取证用的复跑**：`node --import tsx scripts/gym-check.ts`（工作树红 / HEAD 绿即证）。
 本轮（能力 11）未触碰 `src/tools/*`、`src/agent/loop.ts`、`src/events/index.ts`、`src/main/agent-runner.ts`。
+
+**#56 的范围被门撑大了（2026-09-23 补，本人移交后不到一小时）**：新门 `replay-determinism-check`
+RD1 拿真 `write_file` 同输入跑两遍，读出**两处**泄漏，比我上面写的更宽：
+
+```
+result.snapshotId  .agent/snapshots/<ms>--call-x/src/mod.js      ← 上面已记的那处
+result.output      …（同一句提示拼进 ToolResult.output，模型每轮可见）  ← 新
+```
+
+⇒ **修法优先级变了**：只做修法 A（`changedFiles` 排除快照目录）**不够**——
+毫秒还留在模型可见文本里。按本日 `prefix-churn` 那一格的口径，
+「每次覆盖都让已发出的历史多断一段前缀」是真金白银的重写代价，不只是判卷比对难看。
+建议 D7 owner 一并处理：提示里给**会话内稳定**的可复取路径（`callId` + 相对路径，不含 `Date.now()`），
+或修法 B 把 `snapshotIdOf` 的默认参数从 `Date.now()` 换成会话内单调序号/内容哈希。
+
+（登记为债而非判红：`src/agent/reproducibility.ts` 的 `IDENTITY_DEBTS` 两条，
+修好后门会因「吸收不到东西」提醒删条目。范围教训写进 `outputs/reproducibility-2026-09-23/01` §3–4。）

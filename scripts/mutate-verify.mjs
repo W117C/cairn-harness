@@ -2354,6 +2354,16 @@ const MUTATIONS = [
     expectFail: "父 + worker 混排 ⇒ 只剩父那一行（同一份流既要过对话面也要过面板面）",
   },
   {
+    // 共用件 unansweredToolCalls（转录面 + 投影出口都读它）：归因那一半。
+    id: "term-unanswered-set-counts-worker-calls",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-terminal-liveness.test.ts",
+    desc: "算「哪几笔没结果」时不看归因 ⇒ worker 的调用被算成父会话断掉的那笔，" +
+      "转录里子流的任务会在父转录上挂出「无结果」",
+    apply: (s) => s.replace("    if (typeof e.agent_id === \"string\" && e.agent_id !== \"\") continue;\n    opened.add(e.id);", "    if (false) continue;\n    opened.add(e.id);"),
+    expectFail: "worker 子流不算父会话的账",
+  },
+  {
     id: "tail-clamp-keeps-head",
     src: "src/agent/text-budget.ts",
     test: "tests/text-budget-cjk.test.ts",
@@ -6253,6 +6263,38 @@ const MUTATIONS = [
     desc: "压缩次数拿「抖了几次」冒充而不是数事件流 ⇒ 与 PC5/PC6 的认账口径分家，两个数从此互相矛盾",
     apply: (s) => s.replace("    compactions: compactionEvents,", "    compactions: 0,"),
     expectFail: "续长的会话真的会被反复装配：requests = longTurns、历史在涨、且至少压一次（否则样本无分辨力）",
+  },
+  {
+    id: "rp-absorb-anything-not-just-ms",
+    src: "src/agent/reproducibility.ts",
+    test: "tests/reproducibility.test.ts",
+    desc: "去掉「只差毫秒」这一条件 ⇒ 任何差异只要落在登记前缀里都能被白名单吞掉（红名单变成消音器）",
+    apply: (s) => s.replace("  if (!MS_EPOCH.test(left) || !MS_EPOCH.test(right)) return false;", "  if (false) return false;"),
+    expectFail: "只差毫秒才算同形差异；差别的任何别的东西都算泄漏",
+  },
+  {
+    id: "rp-strip-observation-keeps-ts",
+    src: "src/agent/reproducibility.ts",
+    test: "tests/reproducibility.test.ts",
+    desc: "观测字段没被剥掉 ⇒ 两次跑必然因 ts 不同而判红，门自己变成假红源",
+    apply: (s) => s.replace("  return rest as T;", "  return event as T;"),
+    expectFail: "stripObservation 只剥观测字段，判卷字段一个不动",
+  },
+  {
+    id: "rp-debt-prefix-not-checked",
+    src: "src/agent/reproducibility.ts",
+    test: "tests/reproducibility.test.ts",
+    desc: "债条目不看路径前缀 ⇒ 任何字段上的毫秒都被某条登记债吸收，「白名单只管登记过的位置」失效",
+    apply: (s) => s.replace("    const debt = debts.find((x) => d.path.startsWith(x.pathPrefix) && differsOnlyByWallClock(d.left, d.right));", "    const debt = debts.find(() => differsOnlyByWallClock(d.left, d.right));"),
+    expectFail: "白名单只管登记过的前缀；别处的毫秒一律算泄漏",
+  },
+  {
+    id: "rp-clean-state-reads-red",
+    src: "src/agent/reproducibility.ts",
+    test: "tests/reproducibility.test.ts",
+    desc: "「条目没被用到」的复查对所有判据开 ⇒ 干净的 HEAD（没有快照代码）被读成红——会冤枉好状态的判据比没有更糟",
+    apply: (s) => s.replace("  if (opts.requireDebtHit && finding.staleDebts.length > 0) {", "  if (finding.staleDebts.length > 0) {"),
+    expectFail: "requireDebtHit 只对「复查登记表」那条开——干净状态不该因为没踩到债而红",
   },
 ];
 
