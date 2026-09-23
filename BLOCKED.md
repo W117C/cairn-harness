@@ -972,3 +972,20 @@ lint/test 两拍不在那份清单里——它们是 §483 已经拍板的东西
 燃料不在线时，"从失败轨迹中学习"这一条没有输入。
 
 
+### 裁决 6 的结果（2026-09-23 用户拍）：三选一里的第 3 项——**只翻 autoVerify**，actionFusion 留关等对照数
+
+落地在 `bc52ab3`：`DEFAULTS.autoVerify` false→true，**读法同时改**（`r.autoVerify === true` → `typeof … ? … : d.autoVerify`）——
+只改缺省不改读法的话，盘上 JSON 没有这个键的老机器仍会静默拿到 false（`promptCache` 那条注释写的同族坑，这是第二实例）。
+配套：`tests/settings.test.ts` 新增四条（含反面对手：`actionFusion`/`impactAnalysis`/`evidenceReceipts` 不许被顺手改成开）
++ 两条锚点（把缺省改回关 / 把读法退回 `=== true`），两条都被正确杀死。
+本轮跑过的判卷：84 条相关测试全绿、`pnpm e2e` 全断言通过、`typecheck` 0 错、`--check-needles` 719 条阻断 0。
+
+**三条必须留档的边界**（否则这条裁决会被读成"已经生效了"）：
+
+1. **对已有安装不自动生效**：本机真机 `settings.json` 是在旧默认下写出来的，盘里已经有一行显式 `autoVerify: false`
+   ⇒ 新默认对它无效。要真吃到，得在设置页「收束闸自动验证」点一下，或删掉那一行。（不替用户静默改盘上的显式值。）
+2. **中间那一棒还没有观察着**：`settings.autoVerify` → `RunOptions.autoVerify`（`src/main/agent-runner.ts:1559`）→ runLoop 补的那一拍，
+   e2e 日志里 0 次出现（搜「自动验证」/`auto":true`/`harness-auto-verify` 均为 0），单测只钉住了"读回来是 true"这一头。
+    ⇒ 另立任务 **#55**；在那之前这句"能力 5 默认开"只算**装配完成**，不算**端到端有观测**。
+3. **两处注释仍写着旧口径**（`src/agent/loop.ts:40`「缺省 false」、`src/main/agent-runner.ts:987`「缺省关闭」），
+   这两个文件此刻在另一会话的在飞改动集里 ⇒ 本轮没碰，一并挂在 #55。
