@@ -6059,6 +6059,46 @@ const MUTATIONS = [
     apply: (s) => s.replace("  autoVerify: true,", "  autoVerify: false,"),
     expectFail: "DEFAULT_SETTINGS 与读盘回退同向（翻一处忘另一处 = 老用户永远拿不到新默认）",
   },
+  {
+    id: "pc-serialize-layer-keeps-closing-bracket",
+    src: "src/agent/prefix-churn.ts",
+    test: "tests/prefix-churn.test.ts",
+    desc: "序列化留着数组尾那个右方括号 ⇒ 纯追加永远差一个括号，PC1 整条判据失灵",
+    apply: (s) => s.replace("  return JSON.stringify(items).slice(0, -1);", "  return JSON.stringify(items);"),
+    expectFail: "serializeLayer 去掉数组尾 ⇒ 纯追加时上一轮整串就是本轮的前缀",
+  },
+  {
+    id: "pc-pure-append-always-true",
+    src: "src/agent/prefix-churn.ts",
+    test: "tests/prefix-churn.test.ts",
+    desc: "纯追加判定恒真 ⇒ 中段重写（prune 改写历史中段那一族）再也判不出红",
+    apply: (s) => s.replace("    pureAppend: stableChars === prevLayer.length,", "    pureAppend: stableChars >= 0,"),
+    expectFail: "PC1 纯追加真、中间摘假、无相邻对时判红（无分辨力不许当通过）",
+  },
+  {
+    id: "pc-volatile-changed-conjunct-dropped",
+    src: "src/agent/prefix-churn.ts",
+    test: "tests/prefix-churn.test.ts",
+    desc: "只看「可缓存面没变」不看「易变块真的变了」⇒ 什么都不动的样本也能报通过（本仓最忌的真空通过）",
+    apply: (s) => s.replace("    ok: faces.size === 1 && volatileChanged,", "    ok: faces.size === 1,"),
+    expectFail: "PC2 的「无分辨力」本身判红：易变块整轮不变时不许报通过",
+  },
+  {
+    id: "pc-face-change-named-shortcut",
+    src: "src/agent/prefix-churn.ts",
+    test: "tests/prefix-churn.test.ts",
+    desc: "「有没有出声」直接当真 ⇒ 工具面静默变化这一族从判据里消失",
+    apply: (s) => s.replace("    const named = (now.faceNote ?? \"\").length > 0 || (before.faceNote ?? \"\").length > 0;", "    const named = true;"),
+    expectFail: "PC3 变了且点名 = 过；变了不点名 = 红；一次都没变 = 红（无分辨力）",
+  },
+  {
+    id: "pc-determinism-count-hardcoded",
+    src: "src/agent/prefix-churn.ts",
+    test: "tests/prefix-churn.test.ts",
+    desc: "降配抖动计数写死成 1 ⇒ 每轮重写一遍前缀的代价再也量不出来",
+    apply: (s) => s.replace("  const distinct = new Set(faces).size;", "  const distinct = 1;"),
+    expectFail: "PC4 同一份超限面装配多次必须逐字同一；遍历顺序一抖就红",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

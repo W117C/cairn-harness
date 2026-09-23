@@ -43,6 +43,7 @@
     "supervisor-check": "node --import tsx scripts/supervisor-check.ts",
     "renderer-arch-check": "node --import tsx scripts/renderer-arch-check.ts --static out/renderer",
     "model-surface-check": "node --import tsx scripts/model-surface-check.ts",
+    "prefix-churn-check": "node --import tsx scripts/prefix-churn-check.ts",
     "a11y-check": "node --import tsx scripts/a11y-check.ts --static out/renderer",
     "mutate-verify": "node --import tsx scripts/mutate-verify.mjs"
   },
