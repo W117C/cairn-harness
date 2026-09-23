@@ -154,6 +154,35 @@ export function closeDanglingToolCalls(msgs: ContextMessage[]): ContextMessage[]
   return out;
 }
 
+/** 同一 `tool_call_id` 的多条 tool 消息并成一条（正文按事件先后拼接，一条不丢）。
+ *  真实现场：`spawn_agent` 的每个调用都有**两个结果生产者**——loop 落的执行回执
+ *  （`{"agent_id":"worker-1",...}`）与 `Orchestrator.emitSyntheticResult`（§4.4.4：worker 终态时
+ *  把报告挂回同一个 callId）。原样投影就是两条 `role:"tool"` 盖同一个 id：Anthropic 要求每个
+ *  `tool_use` **恰好一条** `tool_result`，OpenAI 兼容端要求 assistant.tool_calls 与 tool 消息一一对应
+ *  （见 `closeDanglingToolCalls` 的注释——同一条硬要求的另一侧）。
+ *  **合并而不是丢弃**：位次与两份正文都是事实，谁先说的不能反过来。
+ *  只有一条 result 时结构逐字不变（零回归，有测钉）。 */
+export function mergeToolResultsById(msgs: ContextMessage[]): ContextMessage[] {
+  const out: ContextMessage[] = [];
+  const atById = new Map<string, number>();
+  for (const m of msgs) {
+    const id = m.role === "tool" ? m.tool_call_id : undefined;
+    if (id === undefined) {
+      out.push(m);
+      continue;
+    }
+    const at = atById.get(id);
+    if (at === undefined) {
+      atById.set(id, out.length);
+      out.push({ ...m });
+      continue;
+    }
+    const prev = out[at] as ContextMessage;
+    out[at] = { ...prev, content: `${String(prev.content ?? "")}\n\n${String(m.content ?? "")}` };
+  }
+  return out;
+}
+
 /** 组装投影：events（内存态或 replay 产物）→ 消息序列。
  *  M2b：replacements（事件 id → 替换文本）= prune 类型化裁剪投影（§7.4）——
  *  只动 tool_result 的 content，不动消息结构；缺省空 = 零行为（既有路径字节不变）。
@@ -248,5 +277,5 @@ export function projectContext(
   });
   flushDeltas();
   injectOnce(); // offset 越过全部事件（tail 为空）时补注
-  return closeDanglingToolCalls(msgs);
+  return closeDanglingToolCalls(mergeToolResultsById(msgs));
 }
