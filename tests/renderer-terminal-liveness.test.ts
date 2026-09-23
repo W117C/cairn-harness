@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 import type { AgentEvent } from "../src/events";
-import { projectPanelData, terminalRowState, unansweredToolCalls } from "../src/renderer/projections";
+import { projectPanelData, terminalRowState, unansweredToolCalls, fileWriteState } from "../src/renderer/projections";
 
 const source = readFileSync(new URL("../src/renderer/app.js", import.meta.url), "utf8");
 
@@ -92,6 +92,36 @@ describe("共用件：哪几笔调用没有结果（转录面与投影出口读�
       { ...resultEvent("call-0"), agent_id: "agent-1" } as unknown as AgentEvent,
     ]);
     expect([...s]).toEqual(["call-0"]);
+  });
+});
+
+describe("写入行的三态：未确认的写不许和落盘的写长成同一句话", () => {
+  it("量到的现场：一条没有结果的 write_file 在投影里是 ok===null（不是 true）", () => {
+    const wr = (id: string, path: string): AgentEvent =>
+      ({ type: "tool_call", id, name: "write_file", args: { path, content: "export const x = 1;\n" } });
+    const rows = projectPanelData(
+      [wr("w1", "src/landed.ts"), { type: "tool_result", callId: "w1", ok: true, output: "written" } as AgentEvent, wr("w2", "src/cut.ts")],
+      "/tmp/ws",
+    ).files;
+    expect(rows.map((r) => r.ok)).toEqual([true, null]);
+  });
+
+  it("ok===null ⇒ kind=unconfirmed 且有文案（缺席必须占位，否则读起来像已落盘）", () => {
+    const st = fileWriteState(null);
+    expect(st.kind).toBe("unconfirmed");
+    expect(st.label).not.toBe("");
+    expect(st.label).toContain("未确认");
+  });
+
+  it("ok===false ⇒ kind=rejected、文案仍是「未落盘」（既有那句不改指）", () => {
+    expect(fileWriteState(false).kind).toBe("rejected");
+    expect(fileWriteState(false).label).toBe("未落盘");
+  });
+
+  it("反面对手：ok===true 不给 chip（本仓政策「成功不必报数」，别为这条制造噪音）", () => {
+    const st = fileWriteState(true);
+    expect(st.kind).toBe("written");
+    expect(st.label).toBe("");
   });
 });
 

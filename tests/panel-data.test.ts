@@ -2,7 +2,7 @@
 // 面板内容 100% 事件流投影（projections.ts:1 既定原则）：无写入/无命令时必须空，
 // 而不是回落到任何演示数据。
 import { describe, expect, it } from "vitest";
-import { impactLabel, projectDiffCards, projectImpactByFile, projectPanelData } from "../src/renderer/projections";
+import { fileWriteState, impactLabel, projectDiffCards, projectImpactByFile, projectPanelData } from "../src/renderer/projections";
 import type { AgentEvent } from "../src/events";
 
 const write = (id: string, path: string, content: string): AgentEvent[] => [
@@ -18,9 +18,11 @@ describe("projectPanelData（抽屉面板投影：审阅 / 文件树 / 终端 / 
     ];
     const panel = projectPanelData(events, null);
     expect(panel.files.map((f) => f.path)).toEqual(projectDiffCards(events).map((d) => d.path));
+    // write 字段是投影期由 fileWriteState(ok) 派生的落盘三态（渲染层读它，不再各自判 null）——
+    // 期望里也走同一个真实现，不在这抄一份政策。
     expect(panel.files).toEqual([
-      { path: "src/agent/impact/index.ts", added: 3, removed: 0, created: true, ok: true },
-      { path: "tests/impact.test.ts", added: 2, removed: 0, created: true, ok: true },
+      { path: "src/agent/impact/index.ts", added: 3, removed: 0, created: true, ok: true, write: fileWriteState(true) },
+      { path: "tests/impact.test.ts", added: 2, removed: 0, created: true, ok: true, write: fileWriteState(true) },
     ]);
   });
 

@@ -940,6 +940,9 @@ export interface PanelFileEntry {
   removed: number;
   created: boolean;
   ok: boolean | null;
+  /** 由 `fileWriteState(ok)` 在投影期算好挂上来（渲染层读数据，不再各自判 null）：
+   *  审阅页与文件树共用这一份，两处不可能各说一套。 */
+  write: { kind: "written" | "rejected" | "unconfirmed"; label: string };
   /** M7 影响面（能力 1「这个改动会影响哪里」的可见面）：该文件最近一次 impact_report 的汇聚。
    *  **缺席 ≠ 波及 0**：缺席是「没有影响面报告」（设置关着 / 文件不在图内 / 非源码），
    *  波及 0 是「报告过了，半径为 0」。两者在界面上必须是两句话（同 verifiedLabel 的 null/absent 口径）。 */
@@ -996,6 +999,16 @@ export function unansweredToolCalls(events: AgentEvent[]): Set<string> {
     opened.delete(e.callId);
   }
   return opened;
+}
+
+/** 文件行的落盘三态。`ok === null` 是「这条流里没有这笔写入的结果」（进程切在中途），
+ *  既不是成功也不是失败——原先渲染层只在 `ok === false` 时挂「未落盘」，null 什么都不写，
+ *  于是未确认的写入与已落盘的写入在界面上长得一模一样（能力 7「可审计」的正面对面）。
+ *  `written` 故意不给文案：本仓政策是「成功不必报数」（见 app.js 工具组摘要那段）。 */
+export function fileWriteState(ok: boolean | null): { kind: "written" | "rejected" | "unconfirmed"; label: string } {
+  if (ok === null) return { kind: "unconfirmed", label: "未确认（没有结果）" };
+  if (ok === false) return { kind: "rejected", label: "未落盘" };
+  return { kind: "written", label: "" };
 }
 
 /** 终端行的状态格。**`ok===null` 不等于「还在跑」**——它只是「这条流里没有它的结果」：
@@ -1069,6 +1082,7 @@ export function projectPanelData(events: AgentEvent[], workspace: string | null)
     removed: 0,
     created: true,
     ok: d.ok,
+    write: fileWriteState(d.ok),
     ...(impacts.has(normRel(d.path)) ? { impact: impacts.get(normRel(d.path)) } : {}),
   }));
   const groups = new Map<string, PanelFileEntry[]>();

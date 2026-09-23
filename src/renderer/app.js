@@ -996,6 +996,9 @@ function filesViewHTML() {
             (f.added ? '<span class="plus">+' + f.added + '</span>' : '') +
             (f.removed ? '<span class="minus">−' + f.removed + '</span>' : '') +
             (f.created ? '<span class="new">新增</span>' : '') +
+            /* 落盘三态在文件树里也不能沉默（原先只有审阅页写「未落盘」，树上一个都不写）：
+               未确认的写入在这里读起来像已落盘。读点与审阅页同一个 data-write-state。 */
+            (f.write.label ? '<span class="' + (f.write.kind === "rejected" ? "new" : "dim") + '" data-write-state="' + esc(f.write.kind) + '">' + esc(f.write.label) + '</span>' : '') +
             '</div>';
         }).join('') +
       '</div>').join('')
@@ -1009,7 +1012,7 @@ function reviewViewHTML() {
     (f.added ? '<span class="plus">+' + f.added + '</span>' : '') +
     (f.removed ? '<span class="minus">−' + f.removed + '</span>' : '') +
     (f.created ? '<span class="new">新增</span>' : '') +
-    (f.ok === false ? '<span class="new">未落盘</span>' : '') +
+    (f.write.label ? '<span class="' + (f.write.kind === "rejected" ? "new" : "dim") + '" data-write-state="' + esc(f.write.kind) + '">' + esc(f.write.label) + '</span>' : '') +
     /* M7 影响面：能力 1 的可见面。没有报告就不写这一格（"没测过" ≠ "波及 0"，两者必须能分开），
        data-impact 给门禁一个不依赖中文文案的读点。 */
     (f.impact ? '<span class="dim" data-impact="' + esc(f.impact.sites + "/" + f.impact.files + (f.impact.truncated ? "+" : "")) + '">' + esc(impactLabel(f.impact)) + '</span>' : '') +

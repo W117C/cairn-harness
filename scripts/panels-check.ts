@@ -1798,6 +1798,42 @@ async function phaseElectron(root: string): Promise<void> {
         "B26 转录侧反面对手：有结果的那笔必须翻成 ok（读点与 class 同步改口，不许停在 pending；实测 paired=" +
           JSON.stringify(b26T?.paired ?? "") + "）");
     }
+    /* B27 文件行的落盘三态（同一条「缺席被折叠成成功」的第四格，量在审阅页/文件树）。
+       现场（离线过投影）：无结果的 write_file 投出 ok===null + created:true，而渲染层只在
+       ok===false 时写「未落盘」⇒ 未确认的写入与已落盘的写入在界面上长得一模一样。
+       三格一起钉：未确认 / 未落盘（既有那句不改指）/ 已落盘（成功不报数，不该冒出 chip）。 */
+    console.log("[panels-check] B27 未确认的写入不说成已落盘（ok===null 必须有自己的一句话）");
+    {
+      const b27Log = createEventLog(b11File);
+      await b27Log.append({ type: "tool_call", id: "b27-cut", name: "write_file", args: { path: "src/b27-cut.ts", content: "export const cut = 1;" } } as unknown as AgentEvent);
+      await b27Log.append({ type: "tool_call", id: "b27-no", name: "write_file", args: { path: "src/b27-no.ts", content: "export const no = 1;" } } as unknown as AgentEvent);
+      await b27Log.append({ type: "tool_result", callId: "b27-no", ok: false, output: "denied" } as unknown as AgentEvent);
+      ok(await b8ClickSession("验收会话"), "B27 先切走");
+      ok(await b8ClickSession(clarifyId), "B27 再切回靶子会话（重开才重算 panelData）");
+      const b27Tab = await cdp2.eval<string>(
+        `(() => { const t = document.querySelector('#qcReview'); if (!t) return "no-tab"; t.click(); return "clicked"; })()`,
+      );
+      ok(b27Tab === "clicked", "B27 审阅页切得过去（实测 " + JSON.stringify(b27Tab) + "）");
+      const b27Read = (): Promise<{ cut: string; rejected: string; landed: string[] } | null> =>
+        cdp2.eval<{ cut: string; rejected: string; landed: string[] } | null>(
+          `(() => { const p = document.querySelector('.side-page[data-view="review"]'); if (!p) return null;` +
+          `  const row = (needle) => [...p.querySelectorAll('.file-item')].find((r) => ((r.querySelector('.path')||{}).textContent||"").includes(needle));` +
+          `  const stateOf = (r) => { if (!r) return "no-row"; const s = r.querySelector('[data-write-state]'); return s ? (s.getAttribute("data-write-state") || "") : "no-chip"; };` +
+          `  const land = row("src/plain.ts");` +
+          `  return { cut: stateOf(row("b27-cut.ts")), rejected: stateOf(row("b27-no.ts")),` +
+          `    landed: [stateOf(land), String((land ? land.textContent : "").includes("未确认"))] }; })()`,
+        );
+      const b27 = await settle(async () => {
+        const r = await b27Read();
+        return r !== null && r.cut !== "no-row" && r.rejected !== "no-row" ? r : null;
+      }, 12_000);
+      ok(b27?.cut === "unconfirmed",
+        "B27 没有结果的写入读作「未确认」而不是已落盘（实测 " + JSON.stringify(b27?.cut ?? "没等到") + "）");
+      ok(b27?.rejected === "rejected",
+        "B27 被拒的写入仍说「未落盘」（既有那句不改指；实测 " + JSON.stringify(b27?.rejected ?? "") + "）");
+      ok(b27 !== null && b27.landed[0] === "no-chip" && b27.landed[1] === "false",
+        "B27 反面对手：落成的文件行不冒出任何状态 chip（成功不必报数；实测 " + JSON.stringify(b27?.landed ?? []) + "）");
+    }
     // 最后收一次「静默半执行」：两扇窗各自累积的未捕获异常都必须为空。
     await okNoExceptions(cdp);
     await okNoExceptions(cdp2);

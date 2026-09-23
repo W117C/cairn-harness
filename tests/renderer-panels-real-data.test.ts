@@ -6,7 +6,7 @@ import { runInNewContext } from 'node:vm';
 import { expect, it, vi } from 'vitest';
 // vm 里跑脚本不是模块：准入判据的绑定与 import 剥法都取自共用那一处（不许各写一份）。
 import { entersMainConversation, groupedScript, PANEL_DIRTY_TYPES, terminalRowState, toolArgsSummary, unansweredToolCalls } from './renderer-vm-module';
-import { impactLabel } from '../src/renderer/projections';
+import { fileWriteState, impactLabel } from '../src/renderer/projections';
 
 const source = readFileSync(new URL('../src/renderer/app.js', import.meta.url), 'utf8');
 const projection = readFileSync(new URL('../src/renderer/history-window.js', import.meta.url), 'utf8');
@@ -124,8 +124,8 @@ it('审阅页那一行真把影响面挂上文件行（没有报告的那行不�
     {
       panelData: {
         files: [
-          { path: 'src/sort.ts', added: 1, removed: 0, created: true, ok: true, impact: { sites: 2, files: 2, truncated: false } },
-          { path: 'src/plain.ts', added: 1, removed: 0, created: true, ok: true },
+          { path: 'src/sort.ts', added: 1, removed: 0, created: true, ok: true, write: fileWriteState(true), impact: { sites: 2, files: 2, truncated: false } },
+          { path: 'src/plain.ts', added: 1, removed: 0, created: true, ok: true, write: fileWriteState(true) },
         ],
       },
       panelEmptyHTML: (t: string) => '<div class="empty">' + t + '</div>',
