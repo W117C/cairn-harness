@@ -39,6 +39,11 @@ export const REPLAY_READINGS: readonly ReplayReading[] = [
     script: "scripts/replay/gate-outcomes.ts",
     answers: "judgment-layer §7 第 2 步的分子：真语料里 gate 留痕的 layer × verdict 分布（有多少「人被问过、且答了」）",
   },
+  {
+    id: "join-lapse",
+    script: "scripts/replay/join-lapse.ts",
+    answers: "orchestration-design §3 W1b 的前置占比：真语料里「回合末还有在途 worker」的 run 数（那道闸会不会触发）",
+  },
 ];
 
 export interface ReplayFacts {
