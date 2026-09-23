@@ -112,7 +112,22 @@ TERM=dumb node --import tsx -e '… for (const id of ["anthropic-standard","open
   （D7 覆盖前快照簇，自 09-21 挂在树上）。⇒ 与本仓记过的形态同名：**判卷文件与它依赖的字段分家提交，
   单独 checkout HEAD 必坏**。修法不是改判卷面，是把那一簇整簇落库（该簇 owner 未定，本轮不代提交）。
 
+**追加更正（同轮稍后）**：上面「`gated-tools` / `runner-gates` 在 `0af5458` 已红」是**软链 `node_modules`
+的 worktree 假红**（规则 52），不是 HEAD 缺陷。换真依赖 worktree（`cp -al node_modules`）同环境对跑：
+两测在 `0af5458` 与 `9564ba5` **都 4/4 绿**；`tsc` 才是真的（`0af5458` 2 错 → 落 D7 簇后 0 错）。
+⇒ 本页三态对照的**环境一致性**没守住：同句 before/after 的两个数取了不同环境，等于没比（规则 85 的环境版）。
+详见 `PROGRESS.md` 同名追加更正段。
+
+**另两条随同一轮失效（同以追加留档，不回改原文）**：
+① 上面「该簇 owner 未定，本轮不代提交」——用户随后裁决「我整簇落库」，D7 簇已分四笔入库
+（`3391a65` 快照 / `213f79e` 输出扫描收成一份 / `095f753` 沙箱网络一次性放行 / `9564ba5` judgment-layer §9 文档），
+`tsc` 同环境复测 2 错 → **0 错**。
+② 下面「其接线面 `loop.ts`、`events/index.ts`、`distill.ts` 全是别人的在飞原子单元，本轮不碰」——
+这三面现已在 HEAD，§9 的 `verify_result.cause`（P1-3）**不再被在飞面挡住**；只剩 `orchestrator.ts`
+（今天的在飞会话碰过，但那一处改动已提交，现亦干净）。⇒ 下一页该做 P1-3。
+
 **留位（未做，不偷做）**：
+
 - 跨家 BYOK 的开闸（把 openai/anthropic/gemini 放进 `provider-keys.PROVIDER_IDS` + UI 选项）沿
   `gap-fix-proposal` §三的裁决**不动**，反转条件不变。本笔只把那条边界变成机器可判的。
 - **误归因那一半仍未闭合**：模型经 `spawn_agent(args.model)` 选到跨家档 ⇒ 现仍在 worker 终态上记一次失败

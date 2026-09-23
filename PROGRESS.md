@@ -1389,3 +1389,27 @@ Anthropic worker 现在默认带 cache_control 断点。这一格属产品决策
   须整簇落库（owner 未定，本轮不代提交）。
 - 留位：跨家 BYOK 开闸；§9 的 `verify_result.cause`（配置类失败不再记在模型账上——那是这条死路的后半截）。
 
+**追加更正（同轮稍后，落 D7 簇时实踩）：上一条里「`gated-tools` / `runner-gates` 在 `0af5458` 就已红」这句撤回**。
+那是**软链 `node_modules` 的 worktree 假红**，不是 HEAD 缺陷：用 `cp -al node_modules` 造一份真依赖 worktree
+后同环境对跑（`--config` 一字未改，同两条测）——`0af5458` **4/4 绿**、`9564ba5`（并入本簇后）**4/4 绿**。
+而 `tsc` 那一半是**真**的：同环境对跑 `0af5458` 2 错（`replay-determinism-check.ts:65` 读未提交的
+`ToolResult.snapshotId`）→ 本簇落库后 **0 错**。
+**Why:** 假红不只会挡实测，它还会**产出一句读起来像已入库缺陷的话**，并已被我写进提交信息与本文件——
+同一句 before/after 的两个数必须同一环境（规则 85 的环境版），跨环境比数等于没比。
+**How to apply:** 归因"HEAD 本来就红"之前先确认取料环境与对照环境一致；worktree 验跑用真依赖
+（`cp -al` 秒级、不占额外磁盘），别拿软链树的红写结论；已进文档的错句按本仓规矩**不回改、以追加更正留档**。
+
+**D7 覆盖前快照整簇落库（用户裁决「我整簇落库」，`3391a65` / `213f79e` / `095f753` / `9564ba5`）**。
+09-21 起挂在树上的改动按依赖分四笔入库，逐笔显式文件列表 + 提交后按自列清单复核残留（残留为空）：
+① D7 快照（`.gitignore` + `tools/{base,snapshot,write_file,edit_file}` + `events` + `loop` +
+`worker-tool-table` + `tests/snapshot-d7`（7 条，含「字段穿过 loop 落进事件流」）+ `lsp`/`write-line-delta` 断言面）；
+② 输出扫描收成一份实现 `scanWorkerOutput → scanModelOutput`（sidechat 提升此前只跑 `redactSecrets`，
+少了控制标签中和与 `[harness]` 前缀 ⇒ 旁路产出会以「用户亲口说的话」落进主转录）；
+③ 沙箱网络一次性放行（`wantsNetwork ∧ 出过卡 ∧ 人已批` 三条合取，§11.4「网络全开永不免批」；
+断网三种真实形状收成 `annotateNetworkDenial`，两条出口共用一只函数）；④ judgment-layer §9 文档。
+**其中一笔没落**：`memory/distill.ts` 的在飞改动是「`events.length===0` 早退」的**重复行**——HEAD 里那个早退
+已在（且在算 digest 之前），树上那份是死代码 ⇒ 丢弃并留档。自查手法：把那一句摘掉跑 `tests/distill.test.ts`
+→ 「日志存在但零事件 → 仍判 no_content」当场红，证明 HEAD 那一行有观测者、树上那一行没有。
+（一句 python `str.replace` 全量替换**把同形两行一起删了**才发现此节——脚本切片改代码的老账。）
+
+
