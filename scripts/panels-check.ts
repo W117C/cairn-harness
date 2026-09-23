@@ -1833,6 +1833,33 @@ async function phaseElectron(root: string): Promise<void> {
         "B27 被拒的写入仍说「未落盘」（既有那句不改指；实测 " + JSON.stringify(b27?.rejected ?? "") + "）");
       ok(b27 !== null && b27.landed[0] === "no-chip" && b27.landed[1] === "false",
         "B27 反面对手：落成的文件行不冒出任何状态 chip（成功不必报数；实测 " + JSON.stringify(b27?.landed ?? []) + "）");
+      /* B27b 同一份数据在**文件树**那一面（原先只有审阅页被真窗口钉住，树侧靠「两边读同一份 f.write」推定）。
+         推定不算证据：规则 53——靠字段成立的不变量要逐面实测，否则另一面静默失效而门全绿。 */
+      const b27bTab = await cdp2.eval<string>(
+        `(() => { const t = document.querySelector('#qcFiles'); if (!t) return "no-tab"; t.click(); return "clicked"; })()`,
+      );
+      ok(b27bTab === "clicked", "B27b 文件树切得过去（实测 " + JSON.stringify(b27bTab) + "）");
+      const b27bRead = (): Promise<{ cut: string; rejected: string; landed: string; rows: number } | null> =>
+        cdp2.eval<{ cut: string; rejected: string; landed: string; rows: number } | null>(
+          `(() => { const p = document.querySelector('.side-page[data-view="files"]'); if (!p) return null;` +
+          `  const row = (needle) => [...p.querySelectorAll('.tree-file')].find((r) => ((r.querySelector('.nm')||{}).textContent||"") === needle);` +
+          `  const stateOf = (r) => { if (!r) return "no-row"; const s = r.querySelector('[data-write-state]'); return s ? (s.getAttribute("data-write-state") || "") : "no-chip"; };` +
+          `  const land = row("plain.ts");` +
+          `  return { cut: stateOf(row("b27-cut.ts")), rejected: stateOf(row("b27-no.ts")),` +
+          `    landed: stateOf(land), rows: p.querySelectorAll('.tree-file').length }; })()`,
+        );
+      const b27b = await settle(async () => {
+        const r = await b27bRead();
+        return r !== null && r.cut !== "no-row" && r.rejected !== "no-row" ? r : null;
+      }, 12_000);
+      ok(b27b?.cut === "unconfirmed",
+        "B27b 文件树里没结果的写入也说「未确认」（同一份 f.write，两面都得实测；实测 " +
+          JSON.stringify(b27b?.cut ?? "没等到") + "）");
+      ok(b27b?.rejected === "rejected",
+        "B27b 文件树里被拒的写入仍说「未落盘」（实测 " + JSON.stringify(b27b?.rejected ?? "") + "）");
+      ok(b27b !== null && b27b.landed === "no-chip" && b27b.rows > 0,
+        "B27b 反面对手：树里落成的行不冒 chip，且那一面真画出了行（rows=" +
+          String(b27b?.rows ?? -1) + "，防「整页没渲染」被读成「没 chip」）");
     }
     // 最后收一次「静默半执行」：两扇窗各自累积的未捕获异常都必须为空。
     await okNoExceptions(cdp);
