@@ -7150,6 +7150,8 @@ const MUTATIONS = [
   // 消费面是这样的：`worker-tool-table.ts` 三个写向工具显式传 `{ autonomy: w.toolAutonomy }`，
   // 回落到 `w.autonomy` 的只有 `remember`（非写向 ⇒ L0 那段永不命中）。装配那行**保留**
   // （将来任何走回落的写向工具都要它），但它今天是一格无人观测的防御，不是被守着的不变量。
+  // 还欠一条：`judge-set-swallowed-empty`（把 `src/frozen.ts` 的"解析失败/空表 ⇒ 显式抛"折成空集，
+  // 判卷用例 ⑧ 应红）——该文件自 09-23 起在别人手里，**在飞时补会被拒绝变异**，故留名待落地后补。
   {
     id: "judge-worker-toolface-wiring-dropped",
     src: "src/agent/orchestrator.ts",

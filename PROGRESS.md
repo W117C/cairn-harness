@@ -1807,6 +1807,33 @@ judgment-layer §9.1 的一条省略——"包管理器错误码先不加，因�
 - 仍欠（记账不做假）：① 角色在**面板上看不到**（`app.js`/`index.html` 是并发会话表面，与 #13/#38 同批）；
   ② 除插件容器外**没有非插件的自定义路径**（用户往 `~/.claude/agents/x.md` 放文件得不到任何东西）——
   要么给正式路径，要么把「角色 = 插件专属」写成明说边界，现在两头都不吭声。
+  ⚠️ 关于 ②：`agent-plan.md` §9.6 与采纳表（`agents/*.md` = 插件内容类型、"插件 agent frontmatter 字段集"）
+  把角色**定义成插件专属**，所以这不是实现漏了半格，而是**用户目标里那句「用户自定义子智能体」在文档里
+  只覆盖到"写个插件"**这一现实。动它需要改文档（须走 §3.7 diff→用户批准），已提到待裁面，不自作主张。
+
+**能力 38：判卷面硬闸补上 worker 面的观测，并把立闸那天留下的「锚点候选」四字变成四条实测锚点**。
+`dsh-orchestration-roadmap` 记着一条硬发现：真模型评测 8 格里 3 格把 `tests/todo.test.ts` **改写**了，
+而 `BASE_SYSTEM` 纪律 6 明文禁止却没拦住 ⇒ 保护落成权限层 L0（`frozenJudgePaths`）。但立闸那笔只在
+`agent-runner.ts` 留了一句注释「变异锚点候选 judge-frozen-wiring-dropped」——**四天没人补**，
+这就是本仓最常见的欠账形状：判据写完了，"证明判据不恒真"那一步被留成一句话。本轮清账：
+- 先量分布再补锚点：那条闸有**四个装配/消费面**（L0 判定本体 / 会话工厂收实参 / 主会话装配 / worker 装配）。
+  端到端 ⑨ 只走主会话 ⇒ **worker 那两行 `frozenJudgePaths` 零观测者**（「两头断」第 13 次：consumer 有判据、
+  producer 的一面没人看）。补的那条走真 worker：临时 git 仓库 + 真 worktree + `scriptedWorkerModel` 两次
+  `write_file`，断三样——判卷那次 `ok:false` + 出「判卷文件冻结」、**同 run 普通写必须真放行**
+  （否则"被拒"可能只是整条路径没跑，规则 60 的反向那一半）、盘上读数落在 worktree 里。HEAD 行为本来就对，
+  缺的一直是观测（这条测的是 shipped 实现，不是源码形状——规则 76）。
+- 锚点 +4，**逐条提交后复跑 ✅**（规则 108）：`judge-deny-bypassed`、`judge-factory-ignores-injected-set`、
+  `judge-frozen-wiring-dropped`、`judge-worker-toolface-wiring-dropped`。中途两次按规矩让步：
+  ① 第 4 条第一次跑被拒（我同一批改的注释让 `agent-runner.ts` 进了在飞集）⇒ 提交后复跑才算数；
+  ② 第 5 条 `judge-worker-autonomy-wiring-dropped` **存活**⇒ 撤针并署名（规则 54：恒绿针比没针更坏）。
+  存活的原因值得留：worker 三个写向工具都显式传 `toolAutonomy`，回落到 `w.autonomy` 的只有 `remember`
+  （非写向 ⇒ L0 那段永不命中）⇒ **那行装配是一格无人观测的防御，不是被守着的不变量**。
+  "为什么钉不住"写进表里，比留一条假锚点有用：下一个人读到就知道该改的是消费面，不是判据。
+- 还欠一条并留名：`judge-set-swallowed-empty`（把"表解析失败/空表 ⇒ 显式抛"折成空集，⑧ 应红）——
+  靶文件 `src/frozen.ts` 自 09-23 起在别人手里，在飞时补会被拒绝变异，故记在锚点表的署名段里而非工作笔记里。
+- 读数：tsc **0 错**；`judge-frozen-gate` **10 条全绿**（原 9 + 本条）；全量 `test` **222 files / 2393 tests 全绿**
+  （exit 0）；锚点 4 条逐条 ✅（8.7s + 复跑 3.0s）；针脚体检 **844 条：本簇阻断 0**（唯一那条属他人在飞的
+  `src/agent/no-progress.ts`）、未覆盖 0、改法语法体检全过。
 
 
 
