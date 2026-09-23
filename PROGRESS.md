@@ -1835,6 +1835,33 @@ judgment-layer §9.1 的一条省略——"包管理器错误码先不加，因�
   （exit 0）；锚点 4 条逐条 ✅（8.7s + 复跑 3.0s）；针脚体检 **844 条：本簇阻断 0**（唯一那条属他人在飞的
   `src/agent/no-progress.ts`）、未覆盖 0、改法语法体检全过。
 
+**能力 39：会话美元闸换成「每桶按自己那一档」——上限曾比实付晚 40 倍才触发**。
+探针实测（同一份 100k in + 1k out，会话档=flash）：闸估价 **$0.0202**，而 worker 那一档真价
+$0.2020（standard）/ **$0.8080**（strong）——价表跨度 40 倍。旧算法是「全部 token × 会话那一档单价」，
+而 worker 可以跑在别的档上（路由选档 / cascade 升档 / 显式 `args.model`）
+⇒ **「设了 $1 成本底线」的会话最坏要实际花到几十美元才拦**。这一族的要害不在"算错"，而在
+**限制类判据与它要限制的那个读数分叉**：worker 回执（W3② 的钱标签）一直按每个 worker 的真实档位算，
+是对的，闸是错的，而两者印在同一屏上——账算对了那一面并不会带出算错了那一面，因为没人拿闸去对回执。
+- 唯一实现：`orchestrator-join:bucketsSpendUsd(buckets)`（纯函数）——每桶按自己那一档折；
+  算不出的 token 计入 `unpricedTokens`（调用方**出声**说"闸可能晚于实际上限"，不折 $0）；
+  一桶都不知 ⇒ `null`（= 闸惰掉，既有语义逐字保留）；回放桶 `realMoney:false` ⇒ 既不产生钱也不算"算不出"
+  （旧算法把冻结回放的 token 按会话价收钱，那是另一个方向的失真）。
+- `Orchestrator`：usage 事件按 `agent_id` 拆出「主会话那一段」（`mainUsage`），worker 桶直接取 handle 的
+  `usage + price`——`w.price === null` 这个既有约定恰好就是"回放"，**不需要新增标记位**；
+  在途 worker 的钱也算（已经花出去了，不能等终态）。① 手填 `pricePerMTok` 的粗口径**故意不分档**，逐字保留。
+- 顺手删掉 `budgetRateKnown`：它的判断被"有没有任何一桶算得出"取代，留着就是第二份口径。
+- 判据 9 条（`tests/session-spend-ruler.test.ts`）+ 锚点 4 条（另把旧针 `session-budget-table-fallback-dropped`
+  随重构改指新的"给钱那一行"，否则它是一条恒不生效的假锚）。**反向那一格必须单独写**：
+  只测"worker 贵档 ⇒ 该拦"会被"干脆不算 worker 钱"的修法蒙对；配上"worker 便宜档 ⇒ 不该白拦"
+  才逼住"按各自档"这一条（四针分别对：跳过 worker 桶 / worker 按会话档 / 漏主会话桶 / 吞掉 unpriced 计数）。
+- 读数：tsc **0 错**；全量 `test` **223 files / 2402 tests 全绿**（exit 0）；
+  锚点 5 条提交后逐条 ✅（64.1s）；针脚体检 848 条：本簇阻断 0、未覆盖 0（唯一那条仍属他人在飞）。
+- **仍欠、已立案（#18）**：同一把尺的**第二个消费者没接**——`agent-runner` 的 goal 美元闸仍写
+  `spentUsdFor(priceForModel(settings.model), view.usage)`，而 `sumWindowUsage` 不排除带 `agent_id` 的事件
+  ⇒ 目标窗口里 worker 的钱照旧按会话档折。这就是「同一条解析只硬化一支」的第二支，
+  本轮刻意没顺手改：接它要先定"路由关闭时 worker 真实模型名要不要写进 `agent_spawned`"，
+  那是事件契约的一维（不写就只能如实记不可知，**不许**退回按会话档估）。
+
 
 
 
