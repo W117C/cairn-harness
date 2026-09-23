@@ -4254,11 +4254,13 @@ const MUTATIONS = [
   },
   {
     id: "worker-respawn-drops-the-write-mode",
-    src: "src/renderer/projections.ts",
+    src: "src/agent/recovery.ts",
     test: "tests/renderer-worker-approval.test.ts",
+    // 09-24：mode 归一随重派载荷一起从渲染层搬进唯一映射（projections 不再自己造载荷）——
+    // 针脚跟着职责搬，不留在原处当恒绿假锚（原针脚 `col.mode === "write"` 已随重构消失）。
     desc: "重派恒按 read 档重起 ⇒ 一个写盘 worker 被重派成只读调研：跑完了什么也写不了，而看着像「按原任务重来了」",
-    apply: (s) => s.replace('mode: col.mode === "write" ? "write" : "read"', 'mode: "read" as const'),
-    expectFail: "重派把原 spawn 参数带回 payload.respawn",
+    apply: (s) => s.replace('mode: spawned.mode === "write" ? "write" : "read",', 'mode: "read" as const,'),
+    expectFail: "取消发 agent_card/cancel，重派把原 spawn 参数带回 payload.respawn",
   },
   {
     id: "worker-cancel-sends-an-unrouted-action",
