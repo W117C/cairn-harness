@@ -6164,7 +6164,9 @@ const MUTATIONS = [
     test: "tests/compaction-cost.test.ts",
     desc: "只钉一个边界 ⇒ clamp 的另一只求值顺序会把它顶回原值（策略看着在跑其实什么都没做）",
     apply: (s) => s.replace("  return { tailMinTokens: next, tailMaxTokens: next };", "  return { tailMinTokens: next };"),
-    expectFail: "tail 两个旋钮必须一起收（只收 tailRatio 会被 tailMaxTokens 顶回去 = 等于没收）",
+    // 2026-09-23 改指：测例改名成「上下限钉到同一个值」后，expectFail 还写着旧标题 ⇒ 表现为「变异存活」
+    // （runner 判的是「红在期望那条用例上」，按子串比对）。语义未变，只是名字要跟住。
+    expectFail: "tail 上下限被钉到同一个值 ⇒ clamp 两种求值顺序都得 next（不靠求值顺序赌）",
   },
   {
     id: "cc-floor-lets-working-set-shrink",
