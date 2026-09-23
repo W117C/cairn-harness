@@ -121,7 +121,10 @@ export function danglingToolCallNote(id: string): string {
  *  真实现场：一条被切断的会话以 `{id:"c3",name:"run_shell"}` 收尾且永远没有 tool_result，
  *  而逐事件投影会原样留下一条"要结果但等不到"的 assistant.tool_calls。OpenAI 兼容端的硬要求是
  *  「带 tool_calls 的 assistant 之后必须紧跟覆盖这些 id 的 tool 消息」⇒ 不满足就是 400 请求体错误，
- *  于是**这条历史续不下去**（中段缺结果的同一格，被压缩摘掉 tool_result 时也会踩到）。
+ *  于是**这条历史续不下去**。现场成因＝进程切在调用中途（唯一一条落盘真会话就是这么断的）；
+ *  压缩面不产这种形状——`atomicUnits` 把 tool_call↔tool_result 并成一个原子单元、切点不拆对（纪律 1），
+ *  所以这里不是补压缩的漏，而是给「任何一条投影出口都不留未答调用」兜底：将来若有面单独摘掉结果，
+ *  这条守卫仍然成立（判卷里那条反面对手保证它不给完整历史添东西）。
  *  只补"紧邻缺位"的那些：已经配对的 id 一律不动 ⇒ 完整历史的投影逐字不变（判卷里钉了这条反面对手）。
  *  solpi 的 `sent()` 按 tool_result **事件**配对计数，这里补出来的消息没有对应事件 ⇒ 不会被误记成一次可见发送。 */
 export function closeDanglingToolCalls(msgs: ContextMessage[]): ContextMessage[] {
