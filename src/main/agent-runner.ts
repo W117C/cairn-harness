@@ -990,6 +990,10 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
    *  缺省关闭（与 actionFusion / impactAnalysis 同族口径）；一拍 = 真跑一遍 lint/test，
    *  开闸的代价与判据见 BLOCKED「能力 5 收束闸」立案。 */
   autoVerify?: boolean;
+  /** 能力 5 的返修那一环（拍红 → 再要一轮去修 → 重验一次，上限一次）。
+   *  **只从 settings 取，不留 override 槽**：`handleAgentRun` 的两个产品调用者从不传它，
+   *  留 `over.X ??` 就是给一条永远走不到的左半边钉锚点（同 `impactAnalysis` 那一族的做法）。 */
+  autoVerifyRepair?: boolean;
   workspace: string;
   message: string;
   mode: PermissionMode;
@@ -1316,6 +1320,9 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     await runLoop({
       ...(impactHook ? { impact: impactHook } : {}),
       ...(opts.autoVerify === true ? { autoVerify: true } : {}),
+      // 返修那一环只在收束闸开着时才有意义（它接的是拍红之后的一步），所以不单独成一支形状：
+      // 两个都开才传，避免"闸关着却许诺返修"这种读起来矛盾的配置。
+      ...(opts.autoVerify === true && opts.autoVerifyRepair === true ? { autoVerifyRepair: true } : {}),
       stuckNudge: true, // 主会话（人直用那条）才有换路提示：worker 有看门、靶场按字节计量，见 LoopOptions
       provider: createProvider(promptText, BASE_SYSTEM, {
         ...opts, emit: pipeline, solpi,
@@ -1568,15 +1575,17 @@ export async function handleAgentRun(
         ...(over.signal ? { signal: over.signal } : {}),
         actionFusion: over.actionFusion ?? (await store().get()).actionFusion,
         autoVerify: over.autoVerify ?? (await store().get()).autoVerify,
-        // 这五个只从 settings 取，**不留 runtime override 槽**：`handleAgentRun` 的两个产品调用者
+        // 这几个键只从 settings 取，**不留 runtime override 槽**：`handleAgentRun` 的两个产品调用者
         // （IPC `agent:run` 只转发 sessionId/workspace；定时执行器只转发 unattended/signal）从不传它们，
         // 界面走的是盘上的持久开关。留着 `over.X ??` 只是看着对称——它给的是**永远不会被走到的左半边**，
         // 而这条缝的分辨力要靠 `scripts/lib/wiring-coverage.ts` 那条判据守（新增开关时必须同时有锚点）。
+        // 键的**数目**故意不写在这段注释里：它每加一个开关就会失真一次。
         impactAnalysis: (await store().get()).impactAnalysis,
         requestMetering: (await store().get()).requestMetering,
         observationPack: (await store().get()).observationPack,
         evidenceReceipts: (await store().get()).evidenceReceipts,
         economicCompaction: (await store().get()).economicCompaction,
+        autoVerifyRepair: (await store().get()).autoVerifyRepair,
         onEvent: (e) => {
           over.onEvent?.(e);
           // F1（审查 P1-14）：agent:event 是全局通道——事件载荷带 session_id，renderer 按当前

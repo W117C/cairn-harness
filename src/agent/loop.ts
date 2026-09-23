@@ -46,6 +46,15 @@ export interface LoopOptions {
    *  ② 准确率 vs `$/成功任务` 的实测口径仍未裁（见 BLOCKED「能力 5 收束闸」立案）。
    *  硬上限（开启时）：每 run 至多一拍、模型自调过即让位、无可验面或探测炸则整段跳过。 */
   autoVerify?: boolean;
+  /** 能力 5 的最后一环：收束闸拍出**代码红**时，不直接收束，而是再要一轮模型去修，修完重验一次。
+   *  注入通道早就在跑：`context.ts` 的 autoVerifyNote 把这条红投成下一轮可见的 user 消息
+   *  （BLOCKED「能力 5 收束闸」裁决 1 的前提「模型看不到」已过期，本轮实测改判据钉住）。
+   *  缺省 undefined/false = 零行为（今日逐字同形：拍完即 return）。开则上限是硬编码的：
+   *  至多一次返修、至多两拍，且**第二拍只在模型真的又改过盘时**才跑——
+   *  没改动就重验等于把同一份代码再跑一遍全量测试；改完不重验则是拿一个新的假绿换掉旧的。
+   *  环境红（`isEnvVerifyCause`）不驱动返修：装不上工具链的机器上重跑一遍还是 127，
+   *  那是把 P1-3 的归因白做。多一轮 = 花真钱 ⇒ 默认关，开与不开由实测读数裁。 */
+  autoVerifyRepair?: boolean;
   /** M7 影响面钩子：注入后 write_file/edit_file 成功落盘会回注跨文件波及。
    *  缺省 undefined = 零行为（与 ToolContext.impact 同源，透传不加工）。 */
   impact?: ToolContext["impact"];
@@ -119,6 +128,11 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
   let lastVerifyDigest: string | null = null;
   // 能力 5：本 run 是否真的落过盘（决定要不要补自动验证），以及自动拍是否已用过。
   let wroteThisRun = false;
+  // 返修那一支的三个计数：自动拍已跑几拍、上一拍之后是否真的又改过盘、是否已批准再要一轮。
+  // 上限写死在这里（1 次返修 / 2 拍），不开 autoVerifyRepair 时这三个变量一个都不参与判断。
+  let autoBeats = 0;
+  let wroteSinceAutoBeat = false;
+  let repairPending = false;
   // 换路压力（能力 4/9）：同一调用连败/连抄同一结果时，在那条 tool_result 尾部追加一行提示。
   // 复用 worker 看门那颗纯函数（stuck.ts）与它的阈值，不另造检测器。差别在动作：编排器命中
   // 是把 worker 挂成 waiting_input 等人，交互主循环里暂停会把「一次重复」的代价抬成「整轮等人」，
@@ -133,7 +147,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
    *    又违反 action-fusion 明写的「no extra tool calls」不变量）⇒ 只落 verify_result 证据，
    *    红在时间线上可见，不冒充模型行为、也不偷偷多要一轮。返回恒为 "stop"。
    *    跨轮通道在投影侧：context.ts 的 autoVerifyNote 把这条红投成下一轮可见的 user 消息。 */
-  const verifyBeat = async (callId: string, auto: boolean): Promise<"stop" | "continue"> => {
+  const verifyBeat = async (callId: string, auto: boolean): Promise<"stop" | "continue" | "auto-red"> => {
     verifyAttempts++;
     // verify 是系统门：钩子自身抛错（.agent/config.json 损坏、沙箱 exec 异常）应当记为
     // 「一次验证失败」，而不是把整轮任务炸掉。工具执行早有同族 try/catch，这里补齐同一口径；
@@ -168,8 +182,9 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
     });
     if (outcome.ok) return "stop"; // 验证通过 → 立即停止，不再调用模型
     // 自动拍：**同轮**不外注（没有合法通道），但红不是到此为止——下一轮的投影会把它
-    // 回流成一条 user 消息（context.ts 的 autoVerifyNote），所以不必为此多要一轮模型。
-    if (auto) return "stop";
+    // 回流成一条 user 消息（context.ts 的 autoVerifyNote）。缺省仍不收第二意见：直接收束。
+    // 开了 autoVerifyRepair 时，调用方据 "auto-red" 再要一轮模型去修（环境红不算——那是机器的账）。
+    if (auto) return outcome.ok || envBeat ? "stop" : "auto-red";
     if (envBeat && envVerifyBeats >= MAX_ENV_VERIFY_BEATS) {
       // 环境类连拍到独立上限：停，但停因不是"你没修好"，是这台机器跑不了验证。
       await events.append({
@@ -412,7 +427,10 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         ...(audit ? { auto: audit } : {}),
         ...(snapshotId !== undefined ? { snapshotId } : {}),
       });
-      if (result.ok && mayHaveWrittenDisk(name, output.args ?? {})) wroteThisRun = true;
+      if (result.ok && mayHaveWrittenDisk(name, output.args ?? {})) {
+        wroteThisRun = true;
+        wroteSinceAutoBeat = true; // 返修是否算「真去修了」只看这一位；没改盘就不配再验一遍
+      }
     }
     if (!sawToolCall) {
       // ---- 能力 5 收束闸：写过盘却从未自调 verify ⇒ harness 补一拍验证，别把「说了」当「验了」----
@@ -422,7 +440,11 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       // （无 config verify 字段且 package.json 无 lint/test）⇒ 整段跳过，零行为零额外调用；
       // ③ 探测本身失败（config 存在但 JSON 坏）⇒ 同样跳过并告警——**绝不让探针炸掉 run**
       // （verify 门自身的异常早有同族 try/catch，这里同口径）；④ 缺省不开（autoVerify !== true 零行为）。
-      if (opts.verify && opts.autoVerify === true && wroteThisRun && verifyAttempts === 0) {
+      // ⑤ 开了 autoVerifyRepair 才允许第二拍：条件是「第一拍是代码红」且「这一轮模型真的又改过盘」，
+      //    且 autoBeats 上限 2 ——一次返修、一次重验，红就收束。不开时下面整个判断与今日逐字同形。
+      const firstBeat = verifyAttempts === 0;
+      const repairBeat = repairPending && wroteSinceAutoBeat && autoBeats < 2;
+      if (opts.verify && opts.autoVerify === true && wroteThisRun && (firstBeat || repairBeat)) {
         let hasSurface = true;
         try {
           hasSurface = (await opts.verify.surface?.()) !== false;
@@ -430,7 +452,16 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
           hasSurface = false;
           console.warn("[verify] 可验面探测失败，跳过自动验证拍:", err instanceof Error ? err.message : String(err));
         }
-        if (hasSurface) await verifyBeat("harness-auto-verify", true);
+        if (hasSurface) {
+          const beat = await verifyBeat("harness-auto-verify", true);
+          autoBeats++;
+          repairPending = false;
+          wroteSinceAutoBeat = false;
+          if (beat === "auto-red" && opts.autoVerifyRepair === true && autoBeats < 2) {
+            repairPending = true;
+            continue; // 再要一轮：红字由 context.ts 的 autoVerifyNote 投成 user 消息，模型看得见
+          }
+        }
       }
       return; // 模型认为任务结束（纯文本轮 / 事件源耗尽）
     }

@@ -1049,3 +1049,28 @@ result.output      …（同一句提示拼进 ToolResult.output，模型每轮�
 
 （登记为债而非判红：`src/agent/reproducibility.ts` 的 `IDENTITY_DEBTS` 两条，
 修好后门会因「吸收不到东西」提醒删条目。范围教训写进 `outputs/reproducibility-2026-09-23/01` §3–4。）
+
+---
+
+### 复跑更正（2026-09-24）：上面「裁决 1」的前提已过期——注入通道早就在跑，缺的只是那一轮请求
+
+裁决 1 原文写：「自动拍目前是证据 only——红字上时间线，但**模型看不到**，所以不会自动返修」，
+并把"要不要多要一轮"留给一条待裁的注入通道。本轮读代码 + 实跑，两句都不成立：
+
+1. **通道已存在且被八条用例守着**：`src/agent/context.ts` 在 `verify_result` 分支里，把最后一条
+   **自动且红**的拍投影成 `{role:"user", content: autoVerifyNote(...)}`（`tests/context-auto-verify-note.test.ts`
+   ①–⑦）。这正是裁决里列的第三种形状（"把失败作为显式 harness 轮"），既不是裸 `tool_result`、
+   也不合成 `tool_call`，所以当初担心的两条违例都不涉及。
+2. **缺的只是"再发一次请求"**：`src/agent/loop.ts` 收束闸跑完直接 `return`，
+   而 `tests/loop.test.ts` 里那句 `expect(requests).toHaveLength(2)` 注释「证据拍不偷要一轮模型」
+   ——即当年是**主动决定不花那一轮**，不是没有通道。语料侧独立对上了：
+   `replay:run-scorecard` 全语料 `green-after-rework = 0`（红之后再无改动）。
+
+⇒ 已实现那一轮，但**缺省关**（`settings.autoVerifyRepair=false`）：多一轮 = 花真钱，
+按裁决 3「花真钱的默认关 + 同批给实测读数」处理。实测边际成本（真语料 166 条 usage 事件）：
+**一次返修 ≈ 3.3k 中位 input tokens（p90 6.2k）+ 一遍目标仓 verify 命令**；上限硬编码为一次返修、两拍，
+且第二拍只在模型真的又改过盘时才跑（没改动就重验 = 把同一份代码再跑一遍全量测试）。
+**待裁**：这个默认要不要翻。翻与不翻都请连 `replay:run-scorecard` 的返工读数一起看——
+它现在有了第一条真轨迹（`tests/auto-verify-repair.test.ts` 7 条，含缺省关的零回归格）。
+未闭的一格：`settings.json 上的这个键 → handleAgentRun → runLoop` 那条腿**还没有端到端观测者**
+（loop 层两侧都钉了，runner 层没钉），已立案补，形状照 `tests/impact-runner-wiring.test.ts` 第四环。

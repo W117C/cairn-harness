@@ -76,6 +76,10 @@ export interface AppSettings {
   /** 能力 5 收束闸：写过盘但模型没自调 verify ⇒ 收束前 harness 补一拍验证（红字落事件流）。
    *  缺省关：一拍 = 真跑一遍 lint/test，成本与开闸判据见 BLOCKED「能力 5 收束闸」。 */
   autoVerify: boolean;
+  /** 能力 5 的返修那一环：收束闸拍出**代码红**时再要一轮模型去修、修完重验一次（上限一次）。
+   *  缺省关 = 与今日同形（红上时间线即收束）。开=每次红多付一轮模型请求 ⇒ 默认关，
+   *  裁与不裁看 `replay:run-scorecard` 的返工读数与这一轮的实测价。 */
+  autoVerifyRepair: boolean;
   /** plan 模式默认档：新对话是否默认武装「未批准方案即写禁」（composer 里的即时开关以此为初值）。
    *  缺省 false = 逐字同武装前（写禁只在模型自愿 propose_plan 后成立）。零 token 成本，只是谓词。 */
   planRequiredByDefault: boolean;
@@ -115,6 +119,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // `actionFusion` 仍留关，等准确率与 `$/成功任务` 的对照数出来再裁。
   // 硬上界（开闸时）：每 run 至多一拍、模型自调过 verify 即让位、仓库没有可验面则整段跳过。
   autoVerify: true,
+  autoVerifyRepair: false,
   planRequiredByDefault: false,
 };
 
@@ -187,6 +192,8 @@ export function validateSettings(raw: unknown): AppSettings {
     // 缺省开的键一律走 `d.` 回退（上一条 `promptCache` 同族）：写成 `=== true` 会让「缺省开」
     // 对每一台已写过 settings 文件的机器静默变成「关」——而 §483 要的正是默认开。
     autoVerify: typeof r.autoVerify === "boolean" ? r.autoVerify : d.autoVerify,
+    // 缺省关的键才用 `=== true`（上面那条规矩的反面：默认关时严格真值才不会把 false 读成缺省）
+    autoVerifyRepair: r.autoVerifyRepair === true,
     planRequiredByDefault: r.planRequiredByDefault === true,
     provider: PROVIDER_KINDS.includes(r.provider as ProviderKind) ? (r.provider as ProviderKind) : d.provider,
     model: typeof r.model === "string" ? r.model.slice(0, 200) : d.model,

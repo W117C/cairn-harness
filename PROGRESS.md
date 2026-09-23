@@ -2074,3 +2074,24 @@ $0.2020（standard）/ **$0.8080**（strong）——价表跨度 40 倍。旧算
 - 分辨力：新增 `tests/replay-run-scorecard.test.ts` 17 条，含三条反直觉的钉法——
   只读 shell 命令不算写盘（否则分母骗人）、未归因的红按 code 记账（缺席不等于免单）、
   环境拍既不判红也不占成功率分母；外加"零语料/全 no-write/有写无拍"三种**不可测**状态各自红着退出。
+
+**能力 47（2026-09-24）：执行-验证-修正闭环的最后一环补上——收束闸拍红之后，现在可以真的去修。**
+- 起点是 `replay:run-scorecard` 那条读数：全语料 `green-after-rework = 0`，两条红终局之后都没有再改动。
+  读代码才发现原因不是模型不修，是**代码里根本没有这一支**：`loop.ts` 收束闸拍完红直接 `return`。
+- 顺带纠正一条我自己信了很久的说法：`BLOCKED.md` 裁决 1 写着「自动拍是证据 only，模型看不到红」，
+  并因此把"自动返修"挂成待裁的**注入通道**问题。实测两条都不成立——
+  `context.ts` 早就把最后一条自动红拍投影成 `{role:"user", content: autoVerifyNote(...)}`
+  （正是裁决列的第三种形状，`tests/context-auto-verify-note.test.ts` 八条在守），
+  而 `tests/loop.test.ts` 的 `toHaveLength(2)` 配注释「证据拍不偷要一轮模型」说明当年是**主动不花那一轮**。
+  ⇒ 已把这段更正追加进 BLOCKED（不覆写原文——那是该日快照）。
+- 形状：`settings.autoVerifyRepair`（**缺省关**，因为多一轮 = 花真钱）→ `handleAgentRun` → `runLoop`。
+  只在 `autoVerify` 也开着时才传（不制造"闸关着却许诺返修"这种读起来矛盾的配置）。
+  硬上限写死在 loop 里：**至多一次返修、至多两拍**，且第二拍只在模型真的又改过盘时才跑
+  （没改动就重验 = 把同一份代码再跑一遍全量测试；改完不重验 = 拿一个新的假绿换旧的）。
+  **环境红不驱动返修**——装不上工具链的机器上重跑一遍还是 127，那等于把 P1-3 的归因白做。
+- 实测成本（真语料 166 条 usage 事件）：一次返修 ≈ **3.3k 中位 input tokens**（p90 6.2k）+ 一遍目标仓 verify 命令。
+  待裁的就是"这个默认要不要翻"，翻与不翻请连 y 轴读数一起看。
+- 验证：`tests/auto-verify-repair.test.ts` 7 条先红后绿（开的两侧、缺省关的零回归、上界、环境红、绿拍、
+  「只回一句知道了」不重验）；tsc 0 错；邻域 wiring-coverage/settings/auto-verify-wiring/loop 59 条全绿。
+- **未闭**：`settings.json 上这个键 → handleAgentRun → runLoop` 那条腿还没有端到端观测者（loop 层两侧都钉了，
+  runner 层没钉）——已立案，形状照 `tests/impact-runner-wiring.test.ts` 第四环；渲染层那一行等 `app.js` 窗口。
