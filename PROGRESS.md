@@ -1412,4 +1412,10 @@ Anthropic worker 现在默认带 cache_control 断点。这一格属产品决策
 → 「日志存在但零事件 → 仍判 no_content」当场红，证明 HEAD 那一行有观测者、树上那一行没有。
 （一句 python `str.replace` 全量替换**把同形两行一起删了**才发现此节——脚本切片改代码的老账。）
 
+**落库后的 HEAD-only 终局读数（真依赖 worktree，`9564ba5`，与上面同环境）**：
+`tsc --noEmit` **0 错**；全量 `test` **210 files / 2243 tests 全绿，exit 0**；
+锚点针脚静态体检 **786 条：阻断 0 / 未覆盖 0 / 待复认 2**（那 2 条是 `gym/probe.ts`、`cost-per-progress.ts`
+上「针脚命中 2 处」的既有提示，与本轮无关）。⇒ 分支现在是自洽的：单独 checkout HEAD 既过类型也过全量测。
+
+
 
