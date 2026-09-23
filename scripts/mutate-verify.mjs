@@ -6625,7 +6625,7 @@ const MUTATIONS = [
     test: "tests/provider-keys.test.ts",
     desc: "未登记 env 名的 provider 不崩、静默借用 glm 的变量名 ⇒ 白名单加一家而忘了登记映射时，用户以为「存了 key 就生效」，实际拿 M0_API_KEY 去拨别家",
     apply: (s) => s.replace("    const envName = envKeyOf(provider);", '    const envName = envKeyOf(provider) ?? "M0_API_KEY";'),
-    expectFail: "未登记 env 名的 provider：崩，不静默跳过那一家",
+    expectFail: "未登记 env 名映射的 provider：崩，不许静默跳过那一家",
   },
   {
     id: "byok-offered-checked-against-wrong-face",
@@ -6633,7 +6633,7 @@ const MUTATIONS = [
     test: "tests/providers.test.ts",
     desc: "设置面越界那格拿 env 表当对照面（env 表四家全含）⇒「UI 给了个存不进 key 的选项」这条永不成立，正是本仓点名的「只在一面对账」",
     apply: (s) => s.replace("offeredNotStorable: setDiff(f.offered.filter((p) => p !== DEMO_PROVIDER), f.storable),", "offeredNotStorable: setDiff(f.offered.filter((p) => p !== DEMO_PROVIDER), f.envKeyed),"),
-    expectFail: "UI 给了 openai 但存储白名单不收",
+    expectFail: "逐格破坏：每支取料面失效只点亮它自己那一格",
   },
   {
     id: "byok-storable-injection-checked-against-table",
@@ -6641,7 +6641,7 @@ const MUTATIONS = [
     test: "tests/providers.test.ts",
     desc: "「可存 key ⇒ 被注入」那格改成查 env 表而不是看注入面的实际结果 ⇒ 判据退化成自己跟自己比（表里有就算覆盖），跑真函数那一半失去观测者",
     apply: (s) => s.replace("storableNotInjected: setDiff(f.storable, f.injected),", "storableNotInjected: setDiff(f.storable, f.envKeyed),"),
-    expectFail: "存进 key 了，注入面漏它",
+    expectFail: "逐格破坏：每支取料面失效只点亮它自己那一格",
   },
 ];
 

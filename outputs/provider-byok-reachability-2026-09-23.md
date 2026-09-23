@@ -67,7 +67,7 @@ TERM=dumb node --import tsx -e '… for (const id of ["anthropic-standard","open
 **改动清单（一笔原子单元：纯函数 + 用例 + 门断言 + 锚点，拆开即 HEAD 悬空）**
 `src/providers/env-keys.ts`（新，事实源）· `src/providers/byok.ts`（新，缺口对账纯函数）·
 `src/main/provider-key-inject.ts`（遍历白名单 + 缺映射即崩）· `src/main/settings.ts`（导出 `PROVIDER_KINDS` 供对账）·
-`scripts/providers-check.ts`（新增 ⑦⑧）· `tests/providers.test.ts`（+3 用例）· `tests/provider-keys.test.ts`（+1 用例）·
+`scripts/providers-check.ts`（新增 ⑦⑧）· `tests/providers.test.ts`（+3 用例）· `tests/provider-keys.test.ts`（+2 用例）·
 `scripts/mutate-verify.mjs`（+4 锚点）。**零产品行为变更**：今日白名单只有 glm ⇒ 注入面与旧实现逐字同果。
 
 **同口径读数（同一道门、同一条命令 `TERM=dumb pnpm run providers-check`）**：
@@ -88,6 +88,12 @@ TERM=dumb node --import tsx -e '… for (const id of ["anthropic-standard","open
 
 **探针取料的一处坑**：`RegistryWorkerModel` 返回 async generator，`await fn(msgs, tools)` 零副作用
 ⇒ 第一次实测的 `NO THROW` 是**假读数**；必须 `for await` 消费首事件才算跑过。
+
+**锚点首轮跑出的一条自我纠正（`expectFail` 必须逐字抄用例标题）**：第一版四条锚点里有一条报
+`❌ 测试红了但没红在期望用例「…」上——可能误伤无关用例`——红是红了，但 needle 我写成了散文，
+而标题里有 `**清单**` 两个星号 ⇒ 匹配不上。修法两条一起做：① 标题去掉 markdown 星号、needle 逐字抄标题；
+② 把"未登记 env 名即崩"那条断言从合并用例里**拆成独立用例**，让每条锚点各有自己的靶子
+（否则两条锚点共指一条用例，红了也分不清是哪半失效）。锚点表 782 → 786 不变。
 
 **留位（未做，不偷做）**：
 - 跨家 BYOK 的开闸（把 openai/anthropic/gemini 放进 `provider-keys.PROVIDER_IDS` + UI 选项）沿

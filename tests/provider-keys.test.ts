@@ -158,7 +158,7 @@ describe("provider key（safeStorage，明文零落盘）", () => {
     expect((await readFile(storePath, "utf8")).includes(FAKE_KEY)).toBe(false);
   });
 
-  it("注入面按**清单**逐家注入各自的 env 名（旧实现硬编码 glm ⇒ 白名单扩家那天存进去没人读）", async () => {
+  it("注入面按清单逐家注入各自的 env 名（白名单扩家那天存进去有人读）", async () => {
     const { injectStoredProviderKey } = await import("../src/main/provider-key-inject");
     const mem = new Map<string, string>([
       ["glm", "byok-probe-glm-0123456789"],
@@ -193,14 +193,32 @@ describe("provider key（safeStorage，明文零落盘）", () => {
       expect(await injectStoredProviderKey(["glm", "anthropic"])).toBe(true);
       expect(process.env.M0_API_KEY).toBe("env-path-key");
       expect(process.env.ANTHROPIC_API_KEY).toBe("byok-probe-anthropic-0123456789");
-      // 未登记 env 名的 provider：崩，不静默跳过那一家（跳过的话用户以为「存了 key 就生效」）
-      await expect(injectStoredProviderKey(["no-such-provider"])).rejects.toThrow(/没有 env 名映射/);
     } finally {
       setProviderKeyBackend(null);
       if (savedGlm === undefined) delete process.env.M0_API_KEY;
       else process.env.M0_API_KEY = savedGlm;
       if (savedAnthropic === undefined) delete process.env.ANTHROPIC_API_KEY;
       else process.env.ANTHROPIC_API_KEY = savedAnthropic;
+    }
+  });
+
+  it("未登记 env 名映射的 provider：崩，不许静默跳过那一家", async () => {
+    // 静默跳过的后果：用户以为「存了 key 就生效」，而该 provider 层其实读的是别家的变量
+    const { injectStoredProviderKey } = await import("../src/main/provider-key-inject");
+    const empty = new Map<string, string>();
+    const backend: ProviderKeyBackend = {
+      name: "in-memory-empty",
+      isAvailable: () => true,
+      async set(p, v) { empty.set(p, v); },
+      async get(p) { return empty.get(p) ?? null; },
+      async delete(p) { return empty.delete(p); },
+      async storedProviders() { return [...empty.keys()]; },
+    };
+    setProviderKeyBackend(backend);
+    try {
+      await expect(injectStoredProviderKey(["no-such-provider"])).rejects.toThrow(/没有 env 名映射/);
+    } finally {
+      setProviderKeyBackend(null);
     }
   });
 });
