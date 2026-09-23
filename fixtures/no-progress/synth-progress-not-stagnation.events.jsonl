@@ -1,0 +1,7 @@
+{"type":"user_message","content":"一个测试一个测试地修过去"}
+{"type":"tool_call","id":"v1","name":"verify","args":{"command":"pnpm test"}}
+{"type":"verify_result","callId":"v1","ok":false,"attempt":1,"maxAttempts":3,"results":[{"command":"pnpm test","ok":false,"output":"FAIL tests/a.test.ts\nerror: expected 1 to be 2\n"}]}
+{"type":"tool_result","callId":"v1","ok":false,"output":"FAIL tests/a.test.ts\nerror: expected 1 to be 2\n"}
+{"type":"tool_call","id":"v2","name":"verify","args":{"command":"pnpm test"}}
+{"type":"verify_result","callId":"v2","ok":false,"attempt":2,"maxAttempts":3,"results":[{"command":"pnpm test","ok":false,"output":"FAIL tests/b.test.ts\nerror: expected 1 to be 2\n"}]}
+{"type":"tool_result","callId":"v2","ok":false,"output":"FAIL tests/b.test.ts\nerror: expected 1 to be 2\n"}

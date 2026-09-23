@@ -41,5 +41,12 @@
   "fixtures/gym/cases/order-pricing-triple-fix/repo/src/totals.js": "b2a0fb531e262bcf033173057efea819a08fd08e4dc6d09a2fa8a6a762c1fc68",
   "fixtures/gym/cases/order-pricing-triple-fix/repo/tests/run.mjs": "c14335f19039366cbcaec2ef9ba676063f44b537ff6dd41d89b11fbe6099dfe4",
   "fixtures/gym/cases/order-pricing-triple-fix/script.jsonl": "69f4dadea43513a26a717c2abd93e15a66016dc37869e56c2de0e6fae50458df",
-  "fixtures/gym/cases/order-pricing-triple-fix/task.md": "2be76ccbb997b57cff3d5666a6a8df87b74d88fea6f4237a3e9784be8eb0b107"
+  "fixtures/gym/cases/order-pricing-triple-fix/task.md": "2be76ccbb997b57cff3d5666a6a8df87b74d88fea6f4237a3e9784be8eb0b107",
+  "fixtures/no-progress/real-green-long-explore.events.jsonl": "47d64304508cc22f27200bb1642e81dd48112aa0895154ea564b4487427209d7",
+  "fixtures/no-progress/real-green-read-edit-verify.events.jsonl": "dd7b29455842a64aae87e6b9241e01b18154118980a8642b9cbfeed7a5cdb12c",
+  "fixtures/no-progress/real-green-short-run.events.jsonl": "aa97f6d4f4cf6e51ce7770fb95e1bc72ddb7c2b55f1d548999591dfe9d6848cf",
+  "fixtures/no-progress/real-red-verify-stagnation.events.jsonl": "02ac64fca2ac4c3825c6ec17eab7175affe1bffc5a97cbe6980446471248c994",
+  "fixtures/no-progress/synth-alternating-thrash.events.jsonl": "1158d70503c10c392ebbd1304a83c421d114fdebdad917f5a81d04ba101ef5e2",
+  "fixtures/no-progress/synth-progress-not-stagnation.events.jsonl": "689ab97a20453979cbc6f15ea2a93ea16fea229ba172ecd60b374093da618bc2",
+  "fixtures/no-progress/synth-stagnation-suppressed-by-write.events.jsonl": "e195d41f4c38e653e3597df8a004baaa9d9ea3fc969b17b0695dd4e5a6b78d77"
 }
