@@ -165,3 +165,27 @@ parent 与 worker 可以都有 `call-0`）。
 `--check-needles` 这一轮报 742 条里有一条 ⚠️ 待复认：`probe-delta-sign-reversed` 的针脚在
 `src/agent/gym/probe.ts` 的**在飞版本**里命中 2 处，而 `replace` 只改第一处 ⇒ 那条锚点现在打在哪个符号上
 需要持有该簇的会话复认（阻断仍是 0，不是红）。
+
+## 十二、第三格：转录面（`d73077f`），以及我这一跳自撞的两处
+
+`app.js` 的 `tool_call` 分支一律先画 `<span class="ti-state pending">…</span>`、等 `tool_result` 来改口
+⇒ 被切断的会话重开后，末笔**永远挂着省略号**（同一件事实的第三个取料面）。判据只留一份：
+`projections.unansweredToolCalls(events)`（子流两侧都挡），`showHistory` 一次算好，渲染按 id 读，
+读点 `data-tool-state`。
+
+两处我自己造的错（都由**验证**抓到，不是推出来的）：
+
+1. **新读点在状态翻转时不跟着改口** —— B26 第一次真跑就报 `paired="pending"`：有结果的那笔被门禁读成
+   "还没结果"。而我当时那条反面对手写的是 `!== "lost"`（弱断言），**恰好放过了自己的假读数**。
+   已补 `setAttribute`、把断言收成 `=== "ok"`、给 `verify_result` 那张卡补同一读点；
+   现测 `{cut:"lost", paired:"ok"}`。⇒ 立一条新规矩：给门禁加的读点，凡是"另有可变状态"的，
+   改口处必须同步，且反面对手要断"正确的值"，不是断"不等于坏值"。
+2. **新全局打断三套跑 app.js 切片的判卷**（15 条红：`renderer-history-live` 10 / `renderer-run-control` 3 /
+   `renderer-panels-real-data` 2，全在 `showHistory` 里 `ReferenceError: unansweredToolCalls is not defined`）。
+   走共用绑料 `tests/renderer-vm-module.ts` 补真实现（不塞桩）。⇒ 规则 55 的又一格：**给 app.js 加一个
+   模块级绑定 = 给所有切片判卷加一笔债**；这笔债是 ReferenceError（响亮），不是静默换判据，所以可接受，
+   但下次加之前先数有几家在跑切片。
+
+读数：全量 **206 files / 2148 tests / 0 failed exit 0**（中途那次 15 红就是第 2 条，已修）、
+`pnpm typecheck` 0 错、`node --check src/renderer/app.js` 0、`pnpm run panels-check` exit 0；
+锚点 `term-*` 三条真跑 **3 ✅**（2.8s）——仍在工作树里等窗口（任务 #59，含这第三条）。
