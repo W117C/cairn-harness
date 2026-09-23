@@ -2178,3 +2178,10 @@ $0.2020（standard）/ **$0.8080**（strong）——价表跨度 40 倍。旧算
   端到端那条 ⑨ 自己 `new Orchestrator({...})` 传 rules（绕开构造口），所以把工厂里这行换成 `rules: []`
   大概率无用例可红。⇒ 没钉锚点、也不谎称"已被 60 条用例覆盖"；补法写在任务里（走 `M3A_AGENTS_DEMO`
   的脚本化 worker 模型，让 worker 经产品入口吃到项目 deny 规则）。
+- **#32 当轮已闭**（不留下"待补"）：补了 `tests/worker-project-rules.test.ts` —— 走真 `handleAgentRun` 派一个
+  write worker（worker 模型用仓里既有的演示通道 `M3A_AGENTS_DEMO=1` + `fixtures/agents/write-demo.jsonl`，不花钱），
+  两格只差 `.agent/permissions.json` 那一条的 `behavior`：deny ⇒ 拒且拒因点名 `deny:write_file`；allow ⇒ 真写成功。
+  **反向那格是必需的**：没有规则库时 worker 的写会走审批协议，无人值守下 60s 超时也是 `ok:false`——
+  只钉"被拒"一格的话，`rules: []` 的突变照样"红得对"（这就是规则 60 说的 opposite-side）。
+  锚点 `orchestrator-project-rules-not-passed`（表 888 → 889）。顺带量到：worker 子流是异步落主流的，
+  主 run 返回时那一笔写可能还没出现 ⇒ 用例改成「等到出现那一笔为止」（等不到带现场红，30s 上限）。

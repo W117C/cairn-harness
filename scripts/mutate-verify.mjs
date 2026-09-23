@@ -7564,6 +7564,18 @@ const MUTATIONS = [
     apply: (s) => s.replace("  const logPath = sessionId ? pathOf(requireSessionsDir(), sessionId) : lastLogPath;\n", "  const logPath = lastLogPath;\n"),
     expectFail: "会话留痕是 read-only + 设置盘默认 auto ⇒ 重派 write worker 被拒（拒因点名 read-only）",
   },
+  // 构造口把**项目规则库**递给编排器。这一格此前整个 suite 一条都不红：2026-09-24 实测把
+  // `rules: a.rules,` 换成 `rules: []`，全量 236 files / 2523 tests 全绿。原因不是规则逻辑坏了，
+  // 而是端到端那条 worker 判卷自己 `new Orchestrator({...})` 传 rules，**绕开了产品入口的构造口**
+  // （`tests/worker-project-rules.test.ts` 的注释里有这条来历）。
+  {
+    id: "orchestrator-project-rules-not-passed",
+    src: "src/main/agent-runner.ts",
+    test: "tests/worker-project-rules.test.ts",
+    desc: "构造口不递项目规则库 ⇒ worker 侧的 deny 全线失效（P0-2 那句「否则规则对 worker 全表失效」重新成立），而所有直接 new Orchestrator 的用例照绿",
+    apply: (s) => s.replace("    rules: a.rules,\n", "    rules: [],\n"),
+    expectFail: "有 deny write_file 的项目规则 ⇒ worker 那笔写被拒，且拒因点名这条规则",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
