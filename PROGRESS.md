@@ -1417,5 +1417,38 @@ Anthropic worker 现在默认带 cache_control 断点。这一格属产品决策
 锚点针脚静态体检 **786 条：阻断 0 / 未覆盖 0 / 待复认 2**（那 2 条是 `gym/probe.ts`、`cost-per-progress.ts`
 上「针脚命中 2 处」的既有提示，与本轮无关）。⇒ 分支现在是自洽的：单独 checkout HEAD 既过类型也过全量测。
 
+**能力 22：D-8 复跑面可信赖（gap-fix P0-1；判据与读数见 `outputs/replay-face-gate-2026-09-23.md`）**。
+该提案把它排在全提案最前，理由是「判卷跑不起的项排在前面试图施工 = 在没有尺的情况下量东西」——实测坐实：
+`docs/judgment-layer-calibration-proposal.md` 附录 A 那句「可直接粘贴复跑」原样抽出照跑就是
+`TypeError: s.planBlocked is not a function`。根因不是有人改坏脚本：`planBlocked` 从 `boolean` 变成
+`() => boolean`（评审 C6）后，文档里手搭的 fixture 与产品形状**没有编译期关系**——heredoc 住在 `.md` 里，
+tsc 看不见 ⇒ 判卷读数静默死亡，而 §7 第 1 步的判卷读数就是这条命令。
+- 搬进 `scripts/replay/{ask-density,corpus-inventory}.ts`（进 tsc 覆盖面）+ fixture 改走 `newAutonomySession`
+  （形状归构造器持有，加字段不再落到复跑的人身上）。**搬的过程里类型系统当场教了两件事**，都是原先 `as any` 掩掉的：
+  `EvaluateDecision` 的 deny 支上没有 `risk`（改按分支读，语义逐字不变）；`PermissionMode`/`ToolName` 的真实出处
+  （我按语义猜了个不存在的 `src/permissions/types` ⇒ TS2307 抓住——写 import 前先查，别猜路径）。
+- 新判据 `docs-check` **D-8**，四格各能红：① 引用无源 ② 登记无人引用（陈旧登记）③ 脚本不在盘上 ④ 仍有内联
+  heredoc 块（存量按文件走 `LEGACY_WAIVERS` 只降不升，不再命中即 stale 红）。取料从**真实 `.md` 文本**扫，
+  不读登记表自陈；扫描面为 0 ⇒ 记「未检」不记通过。
+- 搬回来的第一条读数立刻有用：`default 档 ask = 89/97 = 91.8%`，与该页 2026-09-20 写的 92% 对得上
+  ⇒ 第 1 步（拆短路）的尺重新可用。语料 20→19 文件（`tool_call` 285→282、失败 16→15）是这两天
+  `outputs/**` 变了，**不是口径变了** ⇒ 只报新数，不假装旧数还能复现（旧数留该页原文，当日快照）。
+- 门读数：`docs-check` 全绿、存量豁免 18→19；`tests/docs-check.test.ts` 42 条全绿（D-8 新增 7 条，正反两相）；
+  锚点 786→**788**（各钉一格）。两次当场造红后撤销（挪走脚本 ⇒ `❌ D-8`；新建含 heredoc 的一页 ⇒ `❌ D-8`）。
+  提交前针脚体检如实报 **未入库面 2**（新锚点的被测面 `scripts/replay-readings.ts` 还没进 git）——
+  那是门自己的正确行为，不是回归（规则 97）。
+- 落库（`13ac3d5`）后同轮又抓到这面门的第二格，而且是它自己的读数：在隔离 worktree 里跑迁移后的脚本，
+  打出 `语料=0 · tool_call=0 · 受管=0` 而**退出码 0**——会话流 `.jsonl` 从不在 git 里
+  （`git ls-files outputs` 里 jsonl 计数 = 0），于是"可粘贴复跑"在干净树上是**没有尺冒充有尺**。
+  ⇒ 取料面收成一份 `scripts/replay/corpus.ts`（两个脚本原先各抄一份 roots/walk/受管集 = 本仓点名的
+  同族出口副本），`corpusProblem` 两格命中即 exit 1：一个 `.jsonl` 也没扫到 / 扫到却零 `tool_call`
+  （后者正是 09-21 join 键事故的形状），反向"有料 ⇒ 不报"同时钉住。受管集改**派生自产品的 `SHELL_FAMILY`**
+  （挂现状不挂手抄表），口径逐字未变（`19/282/97`、`default ask=89`）。锚点 788→**790**（两格各一条）。
+  新判据的第一条红不是造出来的：**干净 worktree 实跑就是 exit 1**。
+- 一条方法学补充：**锚点报 ✅ 本身也要有负控**。在 worktree 里把一条锚点的 `apply` 换成行为中性的改动
+  （行尾加一句注释），`mutate-verify` 必须报「变异存活 = 恒真等价」并退出 1——实测如此，才说明前两条 ✅
+  来自真分辨力而不是"跑得快就算过"。探针跑完即撤销，未进任何提交。
+
+
 
 

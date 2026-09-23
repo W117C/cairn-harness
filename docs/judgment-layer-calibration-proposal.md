@@ -387,6 +387,11 @@ node --import tsx scripts/replay/corpus-inventory.ts
 `tool_call` 侧 `id`、`tool_result` 侧 `callId`，任一缺失即**抛错**而不是静默跳过——
 按错键查会得到 `Map.has(undefined)` 恒 false，把「失败」读成 0（本页自纠第二条踩过）。
 
+**复跑的前置不是"有仓库"，是"有语料"**：两条命令的取料面（扫描根 / walk / 受管集 / 逐行读盘）收在
+`scripts/replay/corpus.ts` 一份里（受管集派生自产品的 `SHELL_FAMILY`，不另抄字面名），而会话流 `.jsonl`
+**不在 git 里**——所以干净 checkout 上它们**退出 1 并说明缺哪个根**，而不是打一片 `0` 被人当读数念
+（2026-09-23 在隔离 worktree 实踩过一次，修法与判据见 `outputs/replay-face-gate-2026-09-23.md` §五）。
+
 **join 键是唯一容易踩错的地方**：`tool_call` 的字段叫 `id`，`tool_result` 的字段叫 `callId`。
 fanout 三 rep 的比值不用脚本——直接读 `outputs/ga-strategy-2026-09-20{,-rep2,-rep3}/report.md`
 表里 solo 与 fanout 两行的 `$` 列相除。

@@ -6,47 +6,21 @@
 // 没有任何门知道。搬进来之后它进 tsc 覆盖面，且 fixture 走 `newAutonomySession`：
 // 会话形状由构造器持有，再加字段/改形状会在编译期崩，而不是落在下一个想复跑的人身上。
 //
-// 口径与 2026-09-21 那次一致（同 walk、同受管集、同三臂），否则新旧读数不可比：
-// 语料 = `outputs/**` + 本 app 的会话目录；受管 = 五个副作用工具名 ∪ `mcp__*`；三臂 = default / auto×2。
-import fs from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+// 口径与 2026-09-21 那次一致（同 walk、同受管集、同三臂），否则新旧读数不可比。
+// 取料面（roots / walk / 受管集 / 零语料体检）不在这儿写第二份，统一走 ./corpus。
 import { evaluate, isNetworkCommandCall, newAutonomySession } from "../../src/permissions/autonomy";
 import { modelRisk, staticRisk } from "../../src/permissions/risk";
 import type { PermissionMode } from "../../src/permissions";
 import type { ToolName } from "../../src/tools/base";
-
-const GATED = new Set<string>(["write_file", "edit_file", "run_shell", "shell_rw", "shell_ro"]);
-
-function jsonlUnder(dir: string, depth: number, out: string[]): void {
-  if (depth > 4) return;
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return; // 目录不存在（换机器 / 没跑过 app）= 该支零语料，不是错误
-  }
-  for (const e of entries) {
-    const p = join(dir, e.name);
-    if (e.isDirectory()) jsonlUnder(p, depth + 1, out);
-    else if (e.name.endsWith(".jsonl")) out.push(p);
-  }
-}
+import { corpusProblem, isGatedTool, readJsonl, scanCorpus } from "./corpus";
 
 interface Call { tool: string; args: Record<string, unknown> }
 
 function collectCalls(files: readonly string[]): Call[] {
   const calls: Call[] = [];
   for (const f of files) {
-    for (const line of fs.readFileSync(f, "utf8").split("\n")) {
-      if (line.trim() === "") continue;
-      let e: unknown;
-      try {
-        e = JSON.parse(line);
-      } catch {
-        continue; // 脏行跳过（与 09-21 那次同口径）
-      }
-      const ev = e as { type?: string; name?: string; args?: Record<string, unknown> };
+    for (const raw of readJsonl(f)) {
+      const ev = raw as { type?: string; name?: string; args?: Record<string, unknown> };
       if (ev.type === "tool_call") calls.push({ tool: String(ev.name ?? ""), args: ev.args ?? {} });
     }
   }
@@ -54,11 +28,16 @@ function collectCalls(files: readonly string[]): Call[] {
 }
 
 function main(): void {
-  const roots = ["outputs", join(homedir(), "Library", "Application", "Support", "m0-agent-loop", "sessions")];
-  const files: string[] = [];
-  for (const r of roots) jsonlUnder(r, 0, files);
-  const gated = collectCalls(files).filter((c) => GATED.has(c.tool) || c.tool.startsWith("mcp__"));
-  console.log(`语料=${String(files.length)} 个 jsonl · tool_call=${String(collectCalls(files).length)} · 受管=${String(gated.length)}`);
+  const scan = scanCorpus();
+  const calls = collectCalls(scan.files);
+  const problem = corpusProblem(scan, calls.length);
+  if (problem !== null) {
+    console.error("⚠️ ask-density 读数无意义：" + problem);
+    process.exitCode = 1;
+    return;
+  }
+  const gated = calls.filter((c) => isGatedTool(c.tool));
+  console.log(`语料=${String(scan.files.length)} 个 jsonl · tool_call=${String(calls.length)} · 受管=${String(gated.length)}`);
 
   // 三臂：default（出卡基线）/ auto + 沙箱未接线 / auto + 沙箱不可用。sandboxAvailable 必须是 null 或 false，
   // 写 true 会把「沙箱真生效」当成前提——本机宿主常拒 apply，那条臂就成了假读数。

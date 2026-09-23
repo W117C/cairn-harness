@@ -6660,6 +6660,24 @@ const MUTATIONS = [
     apply: (s) => s.replace("unreferencedIds: [...ids].filter((id) => !referencedSet.has(id)),", "unreferencedIds: [],"),
     expectFail: "登记了却没人引用 ⇒ 红（陈旧登记，与上一条反向）",
   },
+
+  // ── D-8 复跑面的零语料体检（两格各钉一半：没扫到 / 扫到却认不出）
+  {
+    id: "replay-corpus-empty-blinded",
+    src: "scripts/replay/corpus.ts",
+    test: "tests/replay-corpus.test.ts",
+    desc: "「一个文件都没扫到」这格恒假 ⇒ 干净 checkout（会话流不在 git 里）上复跑命令照样退出 0，「没有尺」之身冒充真读数；另一格的文案不算覆盖，因为那句说的是「形状漂了」而真相是根本没料",
+    apply: (s) => s.replace("  if (scan.files.length === 0) {", "  if (false) { // BLINDED"),
+    expectFail: "一个 .jsonl 也没扫到 ⇒ 报，且那句话点名扫描根与不存在的那一支",
+  },
+  {
+    id: "replay-corpus-nocalls-blinded",
+    src: "scripts/replay/corpus.ts",
+    test: "tests/replay-corpus.test.ts",
+    desc: "「有文件却零 tool_call」这格恒假 ⇒ 事件名/字段一漂，那片零（受管=0 ask=0）照样被当成读数念出去（2026-09-21 的 join 键事故就是这个形状）",
+    apply: (s) => s.replace("  if (toolCalls === 0) {", "  if (false) { // BLINDED"),
+    expectFail: "扫到了文件却一条 tool_call 也没有 ⇒ 报（认不出不等于没有，正是 09-21 那片零的形状）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
