@@ -7466,6 +7466,31 @@ const MUTATIONS = [
     apply: (s) => s.replace("  return isWriteCall(tool) && !NOT_THIS_WORKSPACE.has(tool);", "  return !NOT_THIS_WORKSPACE.has(tool);"),
     expectFail: "覆盖性棘轮：工具表里每个名字都必须被显式归类（算改盘 或 在只读名单里）⇒ 新增工具没登记就红",
   },
+  // ---- 09-24 run-scorecard：y 轴读数的三条口径纪律各钉一针（面自己承诺过的，就得有人抓着）----
+  {
+    id: "scorecard-env-beats-billed-to-model",
+    src: "scripts/replay/run-scorecard.ts",
+    test: "tests/replay-run-scorecard.test.ts",
+    desc: "不再识别环境拍 ⇒ 装不上工具链的机器把 run 判成「模型没修好」，成功率与返工数一起说谎（P1-3 归因白做）",
+    apply: (s) => s.replace("      const env = !e.ok && isEnvVerifyCause(e.cause);", "      const env = false;"),
+    expectFail: "环境红不记在模型账上：只有一拍环境红 ⇒ env-blocked，既不 ended-red 也不算返工",
+  },
+  {
+    id: "scorecard-private-write-list",
+    src: "scripts/replay/run-scorecard.ts",
+    test: "tests/replay-run-scorecard.test.ts",
+    desc: "面里另抄一份两名字写向清单（不用 mayHaveWrittenDisk）⇒ shell 改盘的 run 被判 no-write，分母反过来骗人",
+    apply: (s) => s.replace("      if (e.ok && c !== undefined && mayHaveWrittenDisk(c.name, c.args)) writeAt.push(i);", "      if (e.ok && c !== undefined && (c.name === \"write_file\" || c.name === \"edit_file\")) writeAt.push(i);"),
+    expectFail: "只经 shell 改盘也算写过盘（复用 mayHaveWrittenDisk；旧的两名字清单会把这一格判成 no-write，分母就此骗人）",
+  },
+  {
+    id: "scorecard-denominator-includes-unproven",
+    src: "scripts/replay/run-scorecard.ts",
+    test: "tests/replay-run-scorecard.test.ts",
+    desc: "成功率分母把「证据缺席」的流也算进去 ⇒ 一个没人验过的 run 直接压低分数，读数不再可比",
+    apply: (s) => s.replace("  const judgedRows = closedLoop.filter((r) => r.decisive !== \"none\");", "  const judgedRows = closedLoop;"),
+    expectFail: "汇总给分档计数，no-write 单独列出（不进分母也不被丢弃）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
