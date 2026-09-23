@@ -2158,3 +2158,23 @@ $0.2020（standard）/ **$0.8080**（strong）——价表跨度 40 倍。旧算
   同轮 `--check-needles`：888 条**改法全部产出合法源**、钉在飞文本 0、未覆盖 0，
   唯一那条阻断 `np-write-suppression-ignored` 的针脚在 **HEAD 里仍在**（`git show HEAD:src/agent/no-progress.ts` 命中 1），
   是别的会话对 `no-progress.ts` 的**在飞改动**动了被锚定的那行 ⇒ **不归本笔**，由那一条改动簇改指它。
+
+**能力 50（2026-09-24）：编排器收成唯一构造口——刚修可达的那条路，比现场少带三道闸。**
+- 紧接能力 49：把「重派」修到可达之后，两处的**参数差异**立刻从死代码差异变成活的产品行为——
+  兜底那处不传 `rules`（项目级 deny/ask 规则库）、`sandboxAvailable`、`semanticLease`，
+  而 P0-2 当年补这三件时那句注释写的就是「否则项目级 deny/ask 规则对 worker 全表失效」。
+  这条**不是推测**：写「唯一构造口」判据时 AST 数出来构造点是 2 个，不是我以为的 1 个
+  （判据第一次跑就红在 `2 ≠ 1`，等于它自己把第二处指给我看）。
+- 改法：`buildSessionOrchestrator({logPath, workspace, parentMode, emit, sandbox, rules, modelFor?})`
+  成为唯一 `new Orchestrator(` 处；runAgent 与崩溃恢复各自只递"自己那件不同的事"，
+  其余（规则库 / 沙箱可用性 / 产出安全模式 / 语义租约 / `orchestratorExtras` 全批）在同一处展开 ⇒ 结构上没法再各写一份。
+  顺带把 `semanticLease` 的判据源从 `opts.impactAnalysis` 换成设置盘同一位（两者同源，settings-only 接线）⇒
+  恢复路径以前**完全没有**语义租约，现在有。
+- 判卷：`tests/orchestrator-construction-sites.test.ts`（AST，不是按行数）三条 = 构造口 1 / 被调 2 /
+  **这条判据自己可证伪**（往内存里那份源码追加一处构造，判据必须报 >1）——第三格是防"恒真判据"（规则 63/74）。
+  回归面：`tests/judge-frozen-gate.test.ts`、`agents`、`m3c`、两份 recovery 用例全绿。
+- 门禁读数（本笔提交前复跑）：tsc 0 错；全量 test **236 files / 2523 tests 全绿**；`pnpm e2e` 全断言通过。
+- **仍开着一格（立案 #32，不假装收口）**：构造口里 `rules` 那一半**没有行为观测者**——
+  端到端那条 ⑨ 自己 `new Orchestrator({...})` 传 rules（绕开构造口），所以把工厂里这行换成 `rules: []`
+  大概率无用例可红。⇒ 没钉锚点、也不谎称"已被 60 条用例覆盖"；补法写在任务里（走 `M3A_AGENTS_DEMO`
+  的脚本化 worker 模型，让 worker 经产品入口吃到项目 deny 规则）。

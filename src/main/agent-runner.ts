@@ -245,6 +245,41 @@ async function orchestratorExtras(sandbox: SandboxStatus | null = null): Promise
   };
 }
 
+/** **唯一的编排器构造口**：两处调用者（runAgent 现场 / 崩溃恢复兜底）只递各自不同的那几件
+ *  （logPath / workspace / 父档位 / emit / 沙箱 / 已加载的规则库 + 可选注入模型），
+ *  其余口径全在这里，结构上没法再各写一份。
+ *
+ *  为什么收成一处（2026-09-24 实测）：P0-2 当年给 runAgent 那处补上 `rules` / `sandboxAvailable`
+ *  （注释原话：「否则项目级 deny/ask 规则对 worker 全表失效」），兜底那处**没跟着改**；
+ *  而它当时谁都到不了，所以缺件不可见。本会话把崩溃恢复修到可达之后，那处差异立刻变成
+ *  「重派出来的 worker 不带项目规则、也不知道沙箱可用性」跑。⇒ 同族出口副本：两处构造迟早漂。
+ *  判据：`tests/orchestrator-construction-sites.test.ts`（AST 数构造点 = 1 且本口被调 2 次）。 */
+async function buildSessionOrchestrator(a: {
+  logPath: string;
+  workspace: string;
+  parentMode: OrchestratorOptions["parentMode"];
+  emit: OrchestratorOptions["emit"];
+  sandbox: SandboxStatus | null;
+  rules: ReturnType<typeof loadPermissionRules>;
+  modelFor?: OrchestratorOptions["modelFor"];
+}): Promise<Orchestrator> {
+  const s = await store().get();
+  return new Orchestrator({
+    logPath: a.logPath,
+    workspace: a.workspace,
+    parentMode: a.parentMode,
+    emit: a.emit,
+    rules: a.rules,
+    sandboxAvailable: a.sandbox ? a.sandbox.available : null,
+    safeMode: await resolveSafeMode(), // M3b §11.6：off 不跑 / report 只标 / gate 红标 + 二次确认
+    // B1 语义合并闸：影响面开启时，spawn 的写租约判定多问一层「波及集相交」——
+    // 两个 worker 各改各的文件（glob 不相交）但改动波及同一批调用点，合并时同样会打架。
+    ...(s.impactAnalysis ? { semanticLease: (globs: string[]) => affectedFilesOf(a.workspace, globs) } : {}),
+    ...(await orchestratorExtras(a.sandbox)), // M3c：插件角色 / worker 压缩摘要器 / 成本闸 / W4a worker 收束闸
+    ...(a.modelFor ? { modelFor: a.modelFor } : {}),
+  });
+}
+
 /** M3c 会话编排器兜底（崩溃恢复「重派」路径）：无 activeOrchestrator 时按**这条会话的现场**建一个，
  *  保证恢复卡的按钮真实可达。两处此前只在内存里，于是这个分支谁都到不了（实测读数见
  *  `tests/recovery-parent-mode.test.ts` 最后一格：重启后点重派得到「无可用事件管线」）：
@@ -259,16 +294,17 @@ async function ensureSessionOrchestrator(): Promise<Orchestrator | null> {
   const logPath = sessionId ? pathOf(requireSessionsDir(), sessionId) : lastLogPath;
   if (!logPath || !existsSync(logPath)) return null; // 宁可不建，也不给不存在的会话凭空开一条流
   const log = createEventLog(logPath);
-  const orch = new Orchestrator({
+  const workspace = await currentWorkspace();
+  const orch = await buildSessionOrchestrator({
     logPath,
-    workspace: await currentWorkspace(),
+    workspace,
     parentMode: recoveryParentMode(await replay(logPath).catch(() => []), (await store().get()).mode),
     emit: async (e: AgentEvent) => {
       await log.append(e);
       hooks.onEvent?.(e);
     },
-    safeMode: await resolveSafeMode(),
-    ...(await orchestratorExtras(sandboxState)),
+    sandbox: sandboxState,
+    rules: loadPermissionRules(join(workspace, ".agent", "permissions.json"), globalPermissionsPath()),
   });
   activeOrchestrator = orch;
   return orch;
@@ -1209,20 +1245,13 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // M3a：会话级编排器（worker 子流落主流 JSONL；父 turn 收束后编排器存活，审批/取消路由不断）
     let demoModelFor: ((args: SpawnArgs) => WorkerModel | undefined) | undefined;
     if (process.env.M3A_AGENTS_DEMO === "1") demoModelFor = await loadDemoWorkerModels();
-    const orchestrator = new Orchestrator({
+    const orchestrator = await buildSessionOrchestrator({
       logPath: opts.logPath,
       workspace: opts.workspace,
       parentMode: opts.mode,
       emit: pipeline,
-      // B1 语义合并闸：影响面开启时，spawn 的写租约判定多问一层「波及集相交」——
-      // 两个 worker 各改各的文件（glob 不相交）但改动波及同一批调用点，合并时同样会打架。
-      ...(opts.impactAnalysis === true ? { semanticLease: (globs: string[]) => affectedFilesOf(opts.workspace, globs) } : {}),
-      // P0-2（审查）：父 run 的规则库与沙箱可用性必须传给编排器——worker 自主会话按父 run
-      // 口径构造，否则项目级 deny/ask 规则对 worker 全表失效。
+      sandbox: opts.sandbox ?? null,
       rules,
-      sandboxAvailable: opts.sandbox ? opts.sandbox.available : null,
-      safeMode: await resolveSafeMode(), // M3b §11.6：off 不跑 / report 只标 / gate 红标 + 二次确认
-      ...(await orchestratorExtras(opts.sandbox ?? null)), // M3c：插件角色 / worker 压缩摘要器 / 成本闸 / W4a worker 收束闸
       ...(demoModelFor ? { modelFor: demoModelFor } : {}),
     });
     runScope.orchestrator = orchestrator;
