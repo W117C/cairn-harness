@@ -6704,6 +6704,24 @@ const MUTATIONS = [
     apply: (s) => s.replace("      if (isEnvVerifyCause(e.cause)) {", "      if (false) {"),
     expectFail: "出口③：环境拍不进失败轨迹，改成 harness 侧的一笔（两个取料面都挡）",
   },
+
+  // ── 权限档位唯一事实源（两格：表外值不许拿宽权限 / 抄本漂移必须被对账抓住）
+  {
+    id: "permission-mode-unknown-fallthrough-blind",
+    src: "src/permissions/index.ts",
+    test: "tests/permission-mode-single-source.test.ts",
+    desc: "去掉表外档位的 ask 兜底 ⇒ 未知 mode 拿到 undefined/宽松路径（旧写法是以 return allow 收尾：加一档或持久化冒出陌生值时静默全放行，正是本仓最忌的「少一档没人被编译器叫住」）",
+    apply: (s) => s.replace('SIDE_EFFECT_DECISION[mode] ?? "ask"', "(SIDE_EFFECT_DECISION[mode] as Decision)"),
+    expectFail: "表外档位 ⇒ ask（不是 allow）；非交互时 gate() 再把它收成 deny（fail-closed）",
+  },
+  {
+    id: "permission-mode-events-copy-drift-blind",
+    src: "src/events/index.ts",
+    test: "tests/permission-mode-single-source.test.ts",
+    desc: "events 那份抄本少一档 ⇒ 对账判卷若测不出来，「唯一事实源」就是假的：permissions 加了档、events/IPC/worker 侧仍按旧集走，且没人报错",
+    apply: (s) => s.replace('export const AGENT_PERMISSION_MODES = ["read-only", "default", "auto"] as const;', 'export const AGENT_PERMISSION_MODES = ["read-only", "default"] as const;'),
+    expectFail: "events 的抄本与 permissions 的事实源逐位相同（顺序=松紧序，clampTier 依赖它）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

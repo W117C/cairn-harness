@@ -4,8 +4,18 @@ import type { ToolName } from "../tools";
 import { isSideEffectTool } from "./autonomy";
 import { planGateBlocks, currentPlanState } from "./plan-state";
 
-export type PermissionMode = "read-only" | "default" | "auto";
+/** 档位的集合与类型都在 ./modes（唯一事实源）；这里 re-export 保持既有 import 路径不变。 */
+export { PERMISSION_MODES, isPermissionMode, permissionModeRank, type PermissionMode } from "./modes";
+import { type PermissionMode } from "./modes";
 export type Decision = "allow" | "ask" | "deny";
+
+/** 副作用工具在每一档的裁决表。`Record<PermissionMode, Decision>` ⇒ **少一档就编译不过**，
+ *  不再靠"掉到最后一行 return"的运气（那是 §11.7 语义被静默改写的入口）。 */
+const SIDE_EFFECT_DECISION: Record<PermissionMode, Decision> = {
+  "read-only": "deny",
+  default: "ask",
+  auto: "allow",
+};
 
 // ---- M1c 自治等级：规则库 / 风险三通道 / 评估管线 / scope / 断路器（§11.7）----
 export {
@@ -84,12 +94,18 @@ function planBlocks(): boolean {
 //     read-only：副作用工具一律 deny
 //     default  ：副作用工具 ask（交互模式下问人）
 //     auto     ：全放行
+//   裁决本身在 `SIDE_EFFECT_DECISION` 表里（加一档必须补一行，否则编译不过）。
 export function checkPermission(mode: PermissionMode, tool: ToolName): Decision {
   if (!isSideEffectTool(tool)) return "allow";
   if (planBlocks()) return "deny";
-  if (mode === "read-only") return "deny";
-  if (mode === "default") return "ask";
-  return "allow";
+  // 未列出的档位值只可能来自未升级的持久化/外部构造者（类型内三档都已列表）。
+  // 缺省取 **ask**：非交互时 `gate()` 会把它降成 deny（fail-closed），交互时至少还有人能看见。
+  return SIDE_EFFECT_DECISION[mode] ?? "ask";
+}
+
+/** 导出给对账判卷：表必须**恰好**覆盖 `PERMISSION_MODES`（少一行 = 有一档没人判过）。 */
+export function sideEffectDecisionTable(): Record<PermissionMode, Decision> {
+  return { ...SIDE_EFFECT_DECISION };
 }
 
 // 实际执行前的门：非交互模式下 ask 一律按 deny（fail-closed）。

@@ -55,6 +55,7 @@ import {
    待它落库后把这一行折回装配根（与 providerInfo 同一跳）。 */
 import { onboardingGroups } from "./settings-handlers";
 import type { AppSettings, RunRequest } from "./ipc-protocol";
+import { PERMISSION_MODES } from "../permissions/modes";
 import { isValidSessionName } from "./sessions";
 import { installSafeStorageBackend } from "../agent/plugins/secrets";
 import { installProviderKeyBackend } from "./provider-keys";
@@ -175,7 +176,7 @@ hooksProxy.onAsk = (p) => push("agent:ask", p);
 // tmp 日志、会话 JSONL 恒空、重放/提升归因全断。现按 RunOverrides 转交（与 preload 类型一致）。
 // H2（审查 D-5）：IPC 边界枚举白名单——renderer 不可信，未知 mode 不许落入比声明更宽的执行路径。
 // D4（审查 P2）：最小运行时校验——req=null 时旧实现 `req.sessionId` 直接抛 TypeError（handler 崩）。
-const RUN_MODES: ReadonlySet<string> = new Set(["read-only", "default", "auto"]);
+const RUN_MODES: ReadonlySet<string> = new Set(PERMISSION_MODES);
 ipcMain.handle("agent:run", (_event, req: RunRequest) => {
   if (req === null || typeof req !== "object" || typeof req.message !== "string" || req.message.trim() === "" || req.message.length > 100_000) {
     return Promise.resolve({ ok: false, error: "agent:run: message 必须是非空字符串（≤100KB）" } satisfies { ok: boolean; error: string });
@@ -183,7 +184,7 @@ ipcMain.handle("agent:run", (_event, req: RunRequest) => {
   if (req.mode !== undefined && !RUN_MODES.has(req.mode)) {
     return Promise.resolve({
       ok: false,
-      error: "agent:run: 未知 mode " + JSON.stringify(req.mode) + "（允许 read-only | default | auto）",
+      error: "agent:run: 未知 mode " + JSON.stringify(req.mode) + "（允许 " + PERMISSION_MODES.join(" | ") + "）",
     } satisfies { ok: boolean; error: string });
   }
   if (req.sessionId !== undefined && (typeof req.sessionId !== "string" || !isValidSessionName(req.sessionId))) {

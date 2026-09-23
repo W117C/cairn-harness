@@ -19,7 +19,9 @@ export interface LayoutState {
   width: number;
 }
 
-export type PermissionMode = "read-only" | "default" | "auto";
+/** 档位集合与类型都在 `../permissions/modes`（唯一事实源）；这里只 re-export，不再抄一份字面量。 */
+export { PERMISSION_MODES, type PermissionMode } from "../permissions/modes";
+import { PERMISSION_MODES, type PermissionMode } from "../permissions/modes";
 export type SafeMode = "off" | "report" | "gate";
 export type ThemeSetting = "system" | "light" | "dark";
 /** 主对话模型通道：demo = 冻结剧本（无 key 也能跑通的显式演示档）；glm = 真实 OpenAI 兼容通道。 */
@@ -116,7 +118,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   planRequiredByDefault: false,
 };
 
-const PERMISSION_MODES = ["read-only", "default", "auto"] as const;
 const SAFE_MODES = ["off", "report", "gate"] as const;
 const THEMES = ["system", "light", "dark"] as const;
 /** 设置面「模型通道」的可持久化取值。导出给 `providers-check` ⑦ 对账：显示面（index.html）与

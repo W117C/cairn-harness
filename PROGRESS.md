@@ -1490,6 +1490,28 @@ judgment-layer §9.1 的一条省略——"包管理器错误码先不加，因�
 - 验证：邻域 9 文件 118/118；**HEAD-only 全量 `test` 213 files / 2281 tests 全绿、tsc 0 错**；
   针脚体检 793 条阻断 0（改 `verifyBeat` 函数体前先跑了秒级针脚门，规则 91）。
 
+**能力 25：中间档裁决已定（用户拍「造中间档，默认档不动」）；先把档位集合收成唯一事实源 + 表外值 fail-closed**。
+第 1 步的正式施工要先有这一步：调查发现档位字面量**抄了五份**（`permissions`、`events` 的
+`AgentPermissionMode`、`settings` 的同名 union、`scheduler.TriggerMode`、`automations.tierToMode` 返回类型）
+外加三份运行时枚举（`PERMISSION_MODES`、IPC 的 `RUN_MODES`、`worker-report.isPermissionMode`）。
+最坏的一处是 `checkPermission` 以 `return "allow"` 收尾 ⇒ **加一档（或持久化里冒出陌生值）不会报错，
+只会静默拿到"全放行"**。所以本笔不动语义，只把"少一份没跟上"变成会红：
+- 新 `src/permissions/modes.ts`（dep-free）= 集合 + 类型 + `isPermissionMode` + `permissionModeRank`；
+  其余六处全部改为导入/re-export（`settings.PERMISSION_MODES` 现在与事实源**同一引用**，判卷按 `toBe` 钉）。
+- 档位→裁决换成 `Record<PermissionMode, Decision>` 表：**少一行编译不过**；表外值落 `ask`
+  （交互时问人、非交互由 `gate()` 收成 deny），不再落 allow。
+- 对账判卷 `tests/permission-mode-single-source.test.ts` 8 条（抄本逐位相同 / 同一引用 / 名次 /
+  表覆盖 + §11.7.2 三档语义逐档 / 只读动作不进表 / 表外值 fail-closed / `isPermissionMode` 边界含原型键）。
+  当场造红一次：把兜底改回旧写法 ⇒ 1 红，撤销后 8/8（规则 65）。锚点 793→**795**（两格各一条）。
+- ⚠️ 备案一处张力：`agent-plan.md:1442` 写「**不做六档**：Claude 六模式是 CLI 演化堆叠…我们三档已覆盖同语义面」。
+  中间档不是把那一页的六档搬回来，而是补 §3.4 实测出来的空格（default=每写必问、auto=每写必放、中间无）；
+  它是**新增第 4 值**，与该行的"三档"表述冲突，故在此留痕：改的是 `agent-plan` 的原则区，
+  按 §3.7 流程需出 diff→用户批准，不擅自改。
+- 下一步（第 1 步本体）：新档（暂名 `guided`）要一次接齐 ① `TIER_ORDER` 名次 ② `autonomy.evaluate` 的显式档位分支
+  （现在任何非 default/auto 值会**静默**落到风险层——这条要改成显式表，缺档编译不过）③ `checkPermission` 表加一行
+  ④ `agent-runner` 里 `remember` 那份第三副本 ⑤ 渲染层 `PERM_MODES` + `index.html` 设置页第四按钮
+  ⑥ `ask-density` 第四臂（否则新档没人量）⑦ `gate-audit` 穷尽断言的新格。
+
 
 
 

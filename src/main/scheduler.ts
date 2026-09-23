@@ -14,6 +14,7 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { writeFileAtomic } from "../atomic-write";
+import type { PermissionMode } from "../permissions/modes";
 import { Cron } from "croner";
 import type { AgentEvent } from "../events";
 import { createEventLog, hasEventLogHandle, invalidateEventLogHandle, replay, resolveHandle } from "../events";
@@ -331,7 +332,8 @@ export function summarizeRun(events: AgentEvent[]): RunSummary {
 
 // ---- 触发执行（触发 = 全新会话；executor 注入 = 真实代码路径 handleAgentRun 系）----
 
-export type TriggerMode = "read-only" | "default" | "auto";
+/** 档位别名从唯一事实源来（此处曾是一份手抄字面 union：加一档时没人被编译器叫住）。 */
+export type TriggerMode = PermissionMode;
 export interface TriggerExecutorArgs {
   sessionId: string;
   message: string;

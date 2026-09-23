@@ -235,8 +235,11 @@ export interface ImpactReportEvent {
 export type AgentMode = "read" | "write" | "pipeline" | "supervise";
 /** worker 状态机五态 + cancelled（§4.4.8）。 */
 export type AgentStatus = "running" | "waiting_approval" | "waiting_input" | "done" | "failed" | "cancelled";
-/** 权限档（与 src/permissions 的 PermissionMode 同字面量；events 层零依赖不自引）。 */
-export type AgentPermissionMode = "read-only" | "default" | "auto";
+/** 权限档（与 src/permissions 的 PermissionMode 同字面量；events 层零依赖不自引）。
+ *  导出**运行时元组**是为了让"两份抄本必须同集"这件事可判卷
+ *  （见 `tests/permission-mode-single-source.test.ts`；抄本不可见 = 加一档时只有一份会改）。 */
+export const AGENT_PERMISSION_MODES = ["read-only", "default", "auto"] as const;
+export type AgentPermissionMode = (typeof AGENT_PERMISSION_MODES)[number];
 
 export interface AgentSpawnedEvent {
   type: "agent_spawned";

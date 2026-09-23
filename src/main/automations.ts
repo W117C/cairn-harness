@@ -6,6 +6,7 @@
 // electron-free（纯数据 + 纯函数），可 headless 单测。
 import { randomBytes } from "node:crypto";
 import { isValidSessionName } from "./sessions";
+import type { PermissionMode } from "../permissions/modes";
 
 // ---- 七 kind 数据模型（表单与验收只暴露 once/interval/daily/weekly，§12.2.1 V1 收敛）----
 
@@ -310,7 +311,7 @@ export function validateAutomation(raw: unknown, opts: ValidateOptions = {}): Va
 }
 
 /** 档位 → 审批档（PermissionMode，§11.7.2 对表）：只读→read-only；workspace-write→default（逐次审批）；danger-full-access→auto。 */
-export function tierToMode(tier: AutomationTier): "read-only" | "default" | "auto" {
+export function tierToMode(tier: AutomationTier): PermissionMode {
   if (tier === "read-only") return "read-only";
   if (tier === "danger-full-access") return "auto";
   return "default";

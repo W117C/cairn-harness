@@ -18,9 +18,10 @@ export function parseSpawnedAgentId(output: string): string | undefined {
 
 const TIER_ORDER: Record<AgentPermissionMode, number> = { "read-only": 0, default: 1, auto: 2 };
 
-export function isPermissionMode(v: unknown): v is AgentPermissionMode {
-  return v === "read-only" || v === "default" || v === "auto";
-}
+/** 档位判别从 `permissions/modes` 那只走（此前这里是第四份 `||` 链抄本；
+ *  抄本漂了的后果不报错：`orchestrator` 用 `isPermissionMode(args.tier) ? … : parentMode` ——
+ *  少认一档就静默把子跑降成父档，正好与"越界要出声"相反）。 */
+export { isPermissionMode } from "../permissions/modes";
 
 /** 越界裁剪（纯函数）：requested > parent → 裁到 parent + 警告文案；否则原样。 */
 export function clampTier(
