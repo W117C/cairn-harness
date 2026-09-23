@@ -2543,7 +2543,7 @@ const MUTATIONS = [
     src: "src/agent/worker-report.ts",
     test: "tests/worker-evidence.test.ts",
     desc: "被权限门拒掉的写也算「改过盘」⇒ 一次没落盘的 tool_call 就把绿证据打成 stale（读数反过来不诚实）",
-    apply: (s) => s.replace("      if (e.ok && WRITE_TOOLS.has(nameByCall.get(e.callId) ?? \"\")) lastWrite = i;", "      if (WRITE_TOOLS.has(nameByCall.get(e.callId) ?? \"\")) lastWrite = i;"),
+    apply: (s) => s.replace("      if (e.ok && c !== undefined && mayHaveWrittenDisk(c.name, c.args)) lastWrite = i;", "      if (c !== undefined && mayHaveWrittenDisk(c.name, c.args)) lastWrite = i;"),
     expectFail: "被拒的写（ok:false）不构成过期证据",
   },
   {

@@ -5,6 +5,7 @@ import { escapeControlTags } from "./memory/inject";
 import { SUMMARY_TOKEN_CAP } from "./orchestrator-config";
 import { redactSecrets } from "./security/scan";
 import { truncateToTokenBudget } from "./text-budget";
+import { mayHaveWrittenDisk } from "./write-face";
 
 // ---- 档位单调继承（§11.7.6）：worker ≤ 父，越界裁到父档 + 审批卡警告 ----
 /** spawn 成功回执 → agent_id（拿不到即 undefined：不猜、不回落到日志反查）。审查 S2-8 配套。 */
@@ -70,8 +71,9 @@ export function clipWorkerSummary(text: string, capTokens: number = SUMMARY_TOKE
 
 // ---- W4b：worker「代码能跑」这句话的机器凭据（事件流纯投影，不新增事件、不造第二份状态）----
 
-/** 只有这两个工具会改盘（与 spec §4.4.5 的写向清单同源）；`shell_rw` 里的 git 子命令另有拦截层。 */
-const WRITE_TOOLS: ReadonlySet<string> = new Set(["write_file", "edit_file"]);
+/** 写向判据只有一份：`./write-face` 的 `mayHaveWrittenDisk`（权限门的写向集 ∩ 本工作区 + shell 命令形状）。
+ *  这里曾另立一张两名字清单 ⇒ shell 落盘看不见：绿拍之后用 shell 改盘仍报 `verified`，
+ *  那份绿描述的不是即将合并的代码（能力 5 最忌的假绿）。 */
 
 /** 从 worker 自己的子流里读出证据四态。
  *  为什么必须有这条：在此之前 `agent_result.artifacts` 只有 `report`——模型的一句散文自述就是全部记录，
@@ -86,14 +88,15 @@ export function workerVerificationEvidence(events: AgentEvent[]): WorkerEvidence
   let lastVerify = -1;
   let lastVerifyOk = false;
   let lastWrite = -1;
-  const nameByCall = new Map<string, string>();
+  const callById = new Map<string, { name: string; args: Record<string, unknown> }>();
   events.forEach((e, i) => {
     if (e.type === "tool_call") {
-      nameByCall.set(e.id, e.name);
+      callById.set(e.id, { name: e.name, args: e.args });
       return;
     }
     if (e.type === "tool_result") {
-      if (e.ok && WRITE_TOOLS.has(nameByCall.get(e.callId) ?? "")) lastWrite = i;
+      const c = callById.get(e.callId);
+      if (e.ok && c !== undefined && mayHaveWrittenDisk(c.name, c.args)) lastWrite = i;
       return;
     }
     if (e.type === "verify_result") {
@@ -110,13 +113,16 @@ export function workerVerificationEvidence(events: AgentEvent[]): WorkerEvidence
   return lastWrite > lastVerify ? "stale" : "verified";
 }
 
-/** 这段流里有没有**成功落过盘**（与上面同一份 WRITE_TOOLS，绝不另立一张写向清单）。
+/** 这段流里有没有**成功落过盘**（判据同 `mayHaveWrittenDisk`，绝不另立一张写向清单）。
  *  goal 模式要用它区分「还没验」与「压根没打算产出」：后者继续自动跑就是纯烧钱。 */
 export function hasSessionWrites(events: AgentEvent[]): boolean {
-  const nameByCall = new Map<string, string>();
+  const callById = new Map<string, { name: string; args: Record<string, unknown> }>();
   for (const e of events) {
-    if (e.type === "tool_call") nameByCall.set(e.id, e.name);
-    else if (e.type === "tool_result" && e.ok && WRITE_TOOLS.has(nameByCall.get(e.callId) ?? "")) return true;
+    if (e.type === "tool_call") callById.set(e.id, { name: e.name, args: e.args });
+    else if (e.type === "tool_result") {
+      const c = callById.get(e.callId);
+      if (e.ok && c !== undefined && mayHaveWrittenDisk(c.name, c.args)) return true;
+    }
   }
   return false;
 }

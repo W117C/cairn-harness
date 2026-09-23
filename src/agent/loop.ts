@@ -7,6 +7,7 @@ import type { LegacyNextProvider, ModelOutput, Provider } from "../providers";
 import { streamFromNextSource } from "../providers";
 import { failureDigest, repeatDigestNote, verifyOutcomeCause, type VerifyHook, type VerifyOutcome } from "./verify";
 import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckTurn } from "./stuck";
+import { mayHaveWrittenDisk } from "./write-face";
 import { TOOLS, type ClarifyChannel, type PlanChannel, type ToolContext, type ToolName } from "../tools";
 
 export interface LoopOptions {
@@ -411,7 +412,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         ...(audit ? { auto: audit } : {}),
         ...(snapshotId !== undefined ? { snapshotId } : {}),
       });
-      if (result.ok && (name === "write_file" || name === "edit_file")) wroteThisRun = true;
+      if (result.ok && mayHaveWrittenDisk(name, output.args ?? {})) wroteThisRun = true;
     }
     if (!sawToolCall) {
       // ---- 能力 5 收束闸：写过盘却从未自调 verify ⇒ harness 补一拍验证，别把「说了」当「验了」----
