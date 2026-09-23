@@ -2,7 +2,7 @@
 // 动因（2026-09-19 实跑）：另一会话正在改判卷测试文件时，本门把两条正常条目报成
 // 「基线就不是全绿」+「变异存活」——真回归信号被并发噪声伪装掉了。
 import { describe, expect, it } from "vitest";
-import { budgetMsOf, classifyArgs, entryDisposition, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorSrcs, type HeadState } from "../scripts/lib/mutate-gates";
+import { budgetMsOf, classifyArgs, entryDisposition, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
 
 describe("budgetMsOf + classifyArgs 的值位（自我预算这条手段本身要有判卷）", () => {
   it("flag 优先于 env；两者都缺 ⇒ 不限且不吭声", () => {
@@ -196,34 +196,45 @@ describe("残留处置决策 leftoverActionOf", () => {
 });
 
 
-/* 锚点的被测面在不在版本控制里（#37 的根因：主树读盘 ⇒ 这类缺陷在主树永远不报）。
+/* 锚点的两个文件面（被测源码 + 判卷测试）在不在版本控制里（#37 的根因：主树读盘 ⇒ 这类缺陷在主树永远不报）。
    判据是纯函数，`isTracked` 由调用方喂真 git 结果；这里喂集合是**判据的两个分支**，不是桩产品代码。 */
-describe("untrackedAnchorSrcs：锚点入库、被测码从未入库必须当场红", () => {
-  const tracked = new Set(["src/a.ts", "src/b.ts"]);
+describe("untrackedAnchorPaths：锚点入库、被测码/判卷从未入库必须当场红", () => {
+  const tracked = new Set(["src/a.ts", "tests/a.test.ts"]);
   const isTracked = (rel: string) => tracked.has(rel);
 
-  it("盘上有、HEAD 里没有 ⇒ 点出来（含 id 与 src，能直接照着补提交）", () => {
-    const bad = untrackedAnchorSrcs([{ id: "x1", srcRel: "src/ghost.ts" }], isTracked);
-    expect(bad).toEqual([{ id: "x1", srcRel: "src/ghost.ts" }]);
+  it("盘上有、HEAD 里没有 ⇒ 点出来（含 id、路径与是哪一面，能直接照着补提交）", () => {
+    const bad = untrackedAnchorPaths([{ id: "x1", path: "src/ghost.ts", what: "被测面" }], isTracked);
+    expect(bad).toEqual([{ id: "x1", path: "src/ghost.ts", what: "被测面" }]);
     expect(untrackedAnchorLine(bad[0]!)).toContain("不在 HEAD 的树里");
   });
 
-  it("反面对手：全部跟踪的表 ⇒ 一条都不报（这条判据不许把正常锚点报成红）", () => {
-    expect(untrackedAnchorSrcs([{ id: "x1", srcRel: "src/a.ts" }, { id: "x2", srcRel: "src/b.ts" }], isTracked)).toEqual([]);
+  it("反面对手：两面都已入库的表 ⇒ 一条都不报（这条判据不许把正常锚点报成红）", () => {
+    expect(untrackedAnchorPaths([
+      { id: "x1", path: "src/a.ts", what: "被测面" },
+      { id: "x1", path: "tests/a.test.ts", what: "判卷" },
+    ], isTracked)).toEqual([]);
   });
 
-  it("混合表只报未跟踪的那几条，且按表内顺序（743 条表要能一眼定位）", () => {
-    const bad = untrackedAnchorSrcs([
-      { id: "ok1", srcRel: "src/a.ts" },
-      { id: "bad1", srcRel: "src/ghost1.ts" },
-      { id: "bad2", srcRel: "src/ghost2.ts" },
-      { id: "ok2", srcRel: "src/b.ts" },
+  it("混合表只报未入库的那几条，且按喂入顺序（整张表 ×2 面要能一眼定位）", () => {
+    const bad = untrackedAnchorPaths([
+      { id: "ok1", path: "src/a.ts", what: "被测面" },
+      { id: "bad1", path: "src/ghost1.ts", what: "被测面" },
+      { id: "bad2", path: "tests/ghost2.test.ts", what: "判卷" },
+      { id: "ok2", path: "tests/a.test.ts", what: "判卷" },
     ], isTracked);
     expect(bad.map((b) => b.id)).toEqual(["bad1", "bad2"]);
   });
 
+  it("判卷面缺文件说「连基线都跑不出来」并指向判卷文件，不写「源文件读不到」（两面修法指不同文件）", () => {
+    const line = untrackedAnchorLine({ id: "x", path: "tests/ghost.test.ts", what: "判卷" });
+    expect(line).toContain("判卷 tests/ghost.test.ts");
+    expect(line).toContain("连基线都跑不出来");
+    expect(line).toContain("把那份判卷文件提交");
+    expect(line).not.toContain("它守护的代码从未入库");
+  });
+
   it("两种红的文案不混：「从未入库」不写「改指针脚」，反之亦然（修法相反，混了就误导）", () => {
-    const never = untrackedAnchorLine({ id: "x", srcRel: "src/ghost.ts" });
+    const never = untrackedAnchorLine({ id: "x", path: "src/ghost.ts", what: "被测面" });
     const moved = needleProblemLine({ id: "x", srcRel: "src/a.ts", hits: 0, needle: "foo(" });
     expect(never).toContain("不是改针脚");
     expect(never).not.toContain("针脚已不在源文件里");

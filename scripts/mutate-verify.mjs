@@ -22,7 +22,7 @@ import { execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, classifyArgs, isLineWiseApply, budgetMsOf } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -2362,6 +2362,15 @@ const MUTATIONS = [
       "转录里子流的任务会在父转录上挂出「无结果」",
     apply: (s) => s.replace("    if (typeof e.agent_id === \"string\" && e.agent_id !== \"\") continue;\n    opened.add(e.id);", "    if (false) continue;\n    opened.add(e.id);"),
     expectFail: "worker 子流不算父会话的账",
+  },
+  {
+    id: "term-write-null-collapses-to-written",
+    src: "src/renderer/projections.ts",
+    test: "tests/renderer-terminal-liveness.test.ts",
+    desc: "未确认的写回退成「已落盘」（label 空 ⇒ 界面什么都不写）⇒ 审阅页与文件树把没结果的写入" +
+      "读成成功，能力 7 的可审计面被折叠掉（真窗口侧由 panels-check B27 同向钉住）",
+    apply: (s) => s.replace("  if (ok === null) return { kind: \"unconfirmed\", label: \"未确认（没有结果）\" };", "  if (ok === null) return { kind: \"written\", label: \"\" };"),
+    expectFail: "ok===null ⇒ kind=unconfirmed 且有文案（缺席必须占位，否则读起来像已落盘）",
   },
   {
     id: "tail-clamp-keeps-head",
@@ -6339,8 +6348,28 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
   for (const d of dup) {
     console.log("❌ 锚点 id 重复：" + d.id + " ×" + String(d.count) + "（`mutate-verify <id>` 会同时跑两条，报告里两行同 id 不同改法＝读不出哪条活着）");
   }
-  console.log(`针脚体检：${String(entries.length)} 条 —— 阻断 ${String(blocking.length + dup.length)}，待复认 ${String(warn.length)}，未覆盖 ${String(unparsed.length)}，逐行式 ${String(lineWise.length)}`);
-  return blocking.length + dup.length;
+  /* 锚点的两个文件面（被测源码 + 判卷测试）不在 HEAD 的树里 ⇒ 这类缺陷**主树永远看不见**（本门读的是盘），
+     而干净 HEAD 的隔离树里前者必然「源文件读不到」、后者连基线都跑不出来（被写成「基线不是全绿」）。
+     一次 `git ls-tree HEAD` 拿全量，判据本体在 lib 里（可单测）。
+     git 不可用时报「未查」，不静默当已查——未证 ≠ 通过。 */
+  const untracked = [];
+  let headUnchecked = 0;
+  try {
+    const inHead = new Set(execFileSync("git", ["ls-tree", "-r", "--name-only", "HEAD"],
+      { cwd: ROOT, encoding: "utf8", maxBuffer: 128 * 1024 * 1024 }).split("\n").filter(Boolean));
+    const faces = [];
+    for (const e of entries) {
+      faces.push({ id: e.id, path: e.src, what: "被测面" });
+      faces.push({ id: e.id, path: e.test, what: "判卷" });
+    }
+    untracked.push(...untrackedAnchorPaths(faces, (rel) => inHead.has(rel)));
+  } catch (err) {
+    headUnchecked = 1;
+    console.log("⚠️ 锚点文件面的 HEAD 归属未查（git ls-tree 失败：" + (err instanceof Error ? err.message : String(err)) + "）");
+  }
+  for (const g of untracked) console.log("❌ " + untrackedAnchorLine(g));
+  console.log(`针脚体检：${String(entries.length)} 条 —— 阻断 ${String(blocking.length + dup.length + untracked.length)}，待复认 ${String(warn.length)}，未覆盖 ${String(unparsed.length)}，逐行式 ${String(lineWise.length)}，未入库面 ${String(untracked.length)}（被测面 + 判卷两面）${headUnchecked === 0 ? "" : "（HEAD 归属未查）"}`);
+  return blocking.length + dup.length + untracked.length;
 }
 
 function runTest(testRel) {
