@@ -322,3 +322,29 @@ describe("goal 美元闸端到端：模型名也算得出钱，并且真的拦�
     expect(userTurns(evts).filter((t) => t.type === "user_message" && t.origin?.kind === "goal").length).toBe(0);
   });
 });
+
+// ---- 盘上的方案门（任务 #14）：`over.planRequired ?? settings.planRequiredByDefault` 的**右半边** ----
+// J3 那格给的是 override（`planRequired: true`），所以整行换成 `?? false` 全表照绿——而用户在设置界面
+// 点的正是盘上那个键。放在文件最后：它会把 settings 单例改指本用例的临时文件（同上面美元闸的规矩）。
+describe("方案门的 settings 半边：盘上打开即武装（不给 override）", () => {
+  it("settings.planRequiredByDefault=true ⇒ 生产入口自己就该拒写，且拒因来自方案门", async () => {
+    await script(
+      '{"type":"tool_call","id":"w1","name":"write_file","args":{"path":"j4-probe.ts","content":"export const x = 1;\\n"}}\n' +
+        TEXT_ONLY,
+    );
+    process.env.M3A_MAIN_SCRIPT = scriptPath;
+    initSettingsStore(join(root, "settings-plan-required.json"));
+    await setSettings({ planRequiredByDefault: true });
+    logPath = pathOf(sessions, "s-plan-from-settings");
+    const res = await handleAgentRun(
+      { message: "写个文件", mode: "auto", sessionId: "s-plan-from-settings" },
+      { workspace, sessionId: "s-plan-from-settings", logPath, unattended: true }, // 一个 planRequired 都不传
+    );
+    expect(res.ok).toBe(true);
+    const hit = (await events()).find((e) => e.type === "tool_result" && e.callId === "w1");
+    const wrote = hit?.type === "tool_result" ? hit.ok : true;
+    expect(wrote, "盘上的 true 没穿过 `over ?? settings` ⇒ 设置里「每轮先出计划」是空的（写照样放行）").toBe(false);
+    expect(hit?.type === "tool_result" ? hit.output : "", "拒了但不点名方案门 = 是别的闸在答话").toContain("方案门");
+    await expect(access(join(workspace, "j4-probe.ts"))).rejects.toThrow();
+  });
+});
