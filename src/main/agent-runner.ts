@@ -1147,8 +1147,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       rules,
       sandboxAvailable: opts.sandbox ? opts.sandbox.available : null,
       // 判卷面硬闸：工作区自己声明的冻结表（没有这张表 ⇒ 空集 ⇒ 零行为）。
-      // 变异锚点候选 judge-frozen-wiring-dropped：摘掉本行 ⇒ tests/judge-frozen-gate.test.ts ⑨ 实测必红
-      // （反向验证做过一次：j1 从 deny 翻成 ok=true、判卷文件真被改写）。
+      // 锚点 `judge-frozen-wiring-dropped` 钉本行（摘掉 ⇒ tests/judge-frozen-gate.test.ts ⑨ 红，实测已杀）。
       frozenJudgePaths: frozenJudgePathSet(opts.workspace),
     }),
   };

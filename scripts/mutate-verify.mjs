@@ -7118,6 +7118,46 @@ const MUTATIONS = [
     apply: (s) => s.replace("    ...(col.respawn ? { payload: { respawn: col.respawn } } : {}),", '    payload: { respawn: col.respawn ?? { mode: "read", task: "" } },'),
     expectFail: "取消发 agent_card/cancel，重派把原 spawn 参数带回 payload.respawn",
   },
+  // ---- 判卷面硬闸（L0）：一条闸有四格装配，每格都得有人守 ----
+  // 立闸时只留了一句「变异锚点候选 judge-frozen-wiring-dropped」在注释里（`agent-runner.ts:1150`），
+  // 四天没人补 ⇒ 本轮补五条：判定本体 / 会话工厂 / 主会话装配 / worker 两面装配。
+  {
+    id: "judge-deny-bypassed",
+    src: "src/permissions/autonomy.ts",
+    test: "tests/judge-frozen-gate.test.ts",
+    desc: "摘掉 L0 那段 ⇒ 判卷文件回到「靠提示词自觉」（真模型评测实测 8 格里 3 格改写了 tests/todo.test.ts）",
+    apply: (s) => s.replace("  if (s.frozenJudgePaths.size > 0 && isWriteCall(tool, grade)) {", "  if (false) {"),
+    expectFail: "① 写向工具命中冻结表 ⇒ deny，理由指明「写 BLOCKED.md 换判据」而不是改文件",
+  },
+  {
+    id: "judge-factory-ignores-injected-set",
+    src: "src/permissions/autonomy.ts",
+    test: "tests/judge-frozen-gate.test.ts",
+    desc: "会话工厂恒用空集（收了实参不用）⇒ 所有装配点看起来都「传了」，实际整套 L0 判据只在单测里活过",
+    apply: (s) => s.replace("    frozenJudgePaths: init.frozenJudgePaths ?? NO_JUDGE_SURFACE,", "    frozenJudgePaths: NO_JUDGE_SURFACE,"),
+    expectFail: "② 闸在 L0：一条 allow 规则 / 自主档都不能复活被冻住的写",
+  },
+  {
+    id: "judge-frozen-wiring-dropped",
+    src: "src/main/agent-runner.ts",
+    test: "tests/judge-frozen-gate.test.ts",
+    desc: "主会话不装冻结集 ⇒ 端到端那条 ⑨ 立刻空转：写判卷文件被放行、文件真被改写",
+    apply: (s) => s.replace("      frozenJudgePaths: frozenJudgePathSet(opts.workspace),\n", ""),
+    expectFail: "⑨ 写判卷路径 ⇒ tool_result 出「判卷文件冻结」且文件逐字未变；同一 run 里写非判卷路径照常放行",
+  },
+  // 署名（规则 57：没有锚点的那一格要有名字与理由）：worker 侧**非工具档**那行 `frozenJudgePaths`
+  // 钉不住——实测摘掉它，worker 判卷用例照样绿（第一版就写了这条锚点，存活后撤掉，不留恒绿针）。
+  // 消费面是这样的：`worker-tool-table.ts` 三个写向工具显式传 `{ autonomy: w.toolAutonomy }`，
+  // 回落到 `w.autonomy` 的只有 `remember`（非写向 ⇒ L0 那段永不命中）。装配那行**保留**
+  // （将来任何走回落的写向工具都要它），但它今天是一格无人观测的防御，不是被守着的不变量。
+  {
+    id: "judge-worker-toolface-wiring-dropped",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/judge-frozen-gate.test.ts",
+    desc: "worker 的**工具执行档**（toolAutonomy，write worker 恒 auto）不装冻结集 ⇒ 正是「自主档不许复活」那一格在并行路径上失守",
+    apply: (s) => s.replace("      toolAutonomy: newAutonomySession(mode === \"write\" ? \"auto\" : tier, {\n        rules: this.opts.rules ?? [],\n        sandboxAvailable: this.opts.sandboxAvailable ?? null,\n        frozenJudgePaths: frozenJudgePathSet(this.opts.workspace),\n      }),", "      toolAutonomy: newAutonomySession(mode === \"write\" ? \"auto\" : tier, {\n        rules: this.opts.rules ?? [],\n        sandboxAvailable: this.opts.sandboxAvailable ?? null,\n      }),"),
+    expectFail: "write worker（工具档恒 auto）写判卷路径 ⇒ tool_result 仍是冻结拒绝且 worktree 里逐字未变；同 run 写普通文件照常放行",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
