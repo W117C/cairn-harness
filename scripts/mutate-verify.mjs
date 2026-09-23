@@ -7189,6 +7189,25 @@ const MUTATIONS = [
     apply: (s) => s.replace("  if (!t.hasTimestamps) {", "  if (false) {"),
     expectFail: "有调用但全无戳 ⇒ 触发面照常报，时间面单独说「旧语料无戳」并红着退出",
   },
+  {
+    id: "latency-picker-swallows-empty-path",
+    src: "scripts/replay/latency.ts",
+    test: "tests/replay-latency.test.ts",
+    desc: "指到的路径里没有 .jsonl 却不被记下 ⇒ 读数为空却像「本次跑过了」，与全语料那批混成一谈",
+    apply: (s) => s.replace("    if (found.length === 0) empty.push(a);", "    if (false) empty.push(a);"),
+    expectFail: "路径下一条 .jsonl 也没有 ⇒ 红着点名该路径，绝不退回全语料",
+  },
+  {
+    id: "latency-picker-always-uses-corpus",
+    src: "scripts/replay/latency.ts",
+    test: "tests/replay-latency.test.ts",
+    desc: "无视命令行路径、永远扫登记表语料 ⇒ 「这一批的数」里混进别处的会话（e2e 读数就此失去归因）",
+    apply: (s) => s.replace(
+      "  if (args.length === 0) return { files: [...corpus], problem: null };",
+      "  return { files: [...corpus], problem: null };",
+    ),
+    expectFail: "给了路径就只用那些路径，不掺登记表语料（否则「这一批的数」会混进别的批）",
+  },
 
   // ── 同一 callId 的 tool_result 合并（spawn 回执 + worker 回传是两个生产者）
   {
