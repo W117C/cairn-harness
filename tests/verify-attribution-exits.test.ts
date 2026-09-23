@@ -10,7 +10,7 @@ import { runLoop } from "../src/agent/loop";
 import { workerVerificationEvidence } from "../src/agent/worker-report";
 import { failureDigestFromEvents } from "../src/agent/memory/distill";
 import type { VerifyOutcome } from "../src/agent/verify";
-import type { AgentEvent, ToolResultEvent } from "../src/events";
+import type { AgentEvent, ToolResultEvent, VerifyResultEvent } from "../src/events";
 
 const ENV_OUTCOME: VerifyOutcome = {
   ok: false,
@@ -40,7 +40,8 @@ async function runBeats(outcomeAt: (call: number) => VerifyOutcome): Promise<Age
   return log;
 }
 
-const verifyBeats = (log: AgentEvent[]) => log.filter((e) => e.type === "verify_result");
+const verifyBeats = (log: AgentEvent[]): VerifyResultEvent[] =>
+  log.filter((e): e is VerifyResultEvent => e.type === "verify_result");
 /** 收窄成 ToolResultEvent[]：`AgentEvent` 联合上读 `.output` 编译不过（vitest 不做类型检查，
  *  所以这类错只能由 tsc 抓——写完测试不跑 tsc 就等于没跑判卷）。 */
 const injected = (log: AgentEvent[]): ToolResultEvent[] =>
@@ -83,6 +84,8 @@ describe("逐出口单钉（三条变异锚点各有一条自己的用例可指�
   it("出口①：环境拍不占 maxVerify 修复额度，走自己的上限并说明停因", async () => {
     const log = await runBeats(() => ENV_OUTCOME);
     expect(verifyBeats(log)).toHaveLength(2);
+    // judgment-layer §9.3 不变式 1 的原文写法：连续两拍环境红 ⇒ attempt 序列 `1,1`（不是 `1,2`）
+    expect(verifyBeats(log).map((e) => e.attempt)).toEqual([1, 1]);
     expect(injected(log).some((e) => e.output.includes("已达上限"))).toBe(false);
     expect(injected(log)[injected(log).length - 1]?.output).toContain("cause=pkg-manager");
   });

@@ -107,10 +107,10 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
   const maxSteps = opts.maxSteps ?? 50;
   const maxVerify = opts.verify?.maxAttempts ?? 3;
   let verifyAttempts = 0;
-  /** 记在模型账上的拍数——**只有它受 `maxVerify` 约束**。环境拍（工具链没装 / 超时 /
-   *  没有可验面 / 包管理器自己拒了 / 钩子抛错）对代码的证明力是零，拿它去消耗模型的修复额度，
-   *  等于让 harness 侧的问题花用户的钱：红字还在教模型改本来正确的代码。 */
-  let codeVerifyBeats = 0;
+  /** 记在模型账上的拍数（也是 `verify_result.attempt` 的取值）——**只有它受 `maxVerify` 约束**。
+   *  环境拍（工具链没装 / 超时 / 没有可验面 / 包管理器自己拒了 / 钩子抛错）对代码的证明力是零，
+   *  拿它去消耗模型的修复额度，等于让 harness 侧的问题花用户的钱：红字还在教模型改本来正确的代码。 */
+  let chargedAttempts = 0;
   /** 环境拍的独立上限：不占修复额度≠无限重试。耗尽即停，但停因说清楚是 harness 侧。 */
   let envVerifyBeats = 0;
   const MAX_ENV_VERIFY_BEATS = 2;
@@ -134,7 +134,6 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
    *    跨轮通道在投影侧：context.ts 的 autoVerifyNote 把这条红投成下一轮可见的 user 消息。 */
   const verifyBeat = async (callId: string, auto: boolean): Promise<"stop" | "continue"> => {
     verifyAttempts++;
-    const attempt = verifyAttempts;
     // verify 是系统门：钩子自身抛错（.agent/config.json 损坏、沙箱 exec 异常）应当记为
     // 「一次验证失败」，而不是把整轮任务炸掉。工具执行早有同族 try/catch，这里补齐同一口径；
     // 异常原因进 tool_result（fail-visible），不让模型只看到「无详细输出」。
@@ -147,6 +146,14 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       outcome = { ok: false, results: [] };
     }
     const cause = verifyOutcomeCause(outcome, hookError);
+    const envBeat = isEnvVerifyCause(cause);
+    /** `attempt` 读的是**记在模型账上的第几次**（judgment-layer §9.3 不变式 1 的原文判卷写法：
+     *  连续两拍 timeout ⇒ 序列必须 `1,1` 而非 `1,2`，第三拍照样能跑）。绿拍与环境拍都不推进它，
+     *  只报"你现在处在第几次"；纯代码红才 +1。`verifyAttempts` 另一本账，收束闸靠它判
+     *  「本 run 跑过任意一拍没有」，与归因无关。 */
+    if (!outcome.ok && !envBeat) chargedAttempts += 1;
+    const attempt = outcome.ok || envBeat ? chargedAttempts + 1 : chargedAttempts;
+    if (envBeat) envVerifyBeats++;
     await events.append({
       type: "verify_result",
       callId,
@@ -159,9 +166,6 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       ...(auto ? { auto: true } : {}),
     });
     if (outcome.ok) return "stop"; // 验证通过 → 立即停止，不再调用模型
-    const envBeat = isEnvVerifyCause(cause);
-    if (envBeat) envVerifyBeats++;
-    else codeVerifyBeats++;
     // 自动拍：**同轮**不外注（没有合法通道），但红不是到此为止——下一轮的投影会把它
     // 回流成一条 user 消息（context.ts 的 autoVerifyNote），所以不必为此多要一轮模型。
     if (auto) return "stop";
@@ -177,13 +181,13 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       });
       return "stop";
     }
-    if (!envBeat && codeVerifyBeats >= maxVerify) {
+    if (!envBeat && chargedAttempts >= maxVerify) {
       // 上限耗尽 → verify_result(failed) 已落，停止且不再调用模型
       await events.append({
         type: "tool_result",
         callId,
         ok: false,
-        output: `[verify] 连续失败 ${String(codeVerifyBeats)}/${String(maxVerify)} 次，已达上限，停止`,
+        output: `[verify] 连续失败 ${String(chargedAttempts)}/${String(maxVerify)} 次，已达上限，停止`,
       });
       return "stop";
     }
