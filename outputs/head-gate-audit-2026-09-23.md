@@ -489,3 +489,30 @@ subdirectory of the project root at "/private/tmp/dsh-anchor-776".
 所以只报绝对数，不报"快了多少"）。判卷 `tests/mutate-verify-gates.test.ts` **34 passed**（先写 5 条、
 跑出 5 failed 再实现），`pnpm typecheck` 唯一报错在别人未跟踪的 `tests/prune-batching.test.ts`
 （门自己的归因句：HEAD 内 0 个 / 未跟踪草稿 1 个 ⇒ HEAD 态类型干净）。
+
+## 追加十二（同日更晚，HEAD `f694874`）：新判据自己也上锚点，并给「接线没有观测者」立一个名字
+
+`mutate-gates.ts` 里每支纯判据都有锚点是这张表既有的做法（`audit-reports-clean-needles`、
+`needle-severity-flattens-warn` 那一族）。新加的三支照同样形状补 5 根，每根钉的是**失效方式**而不是"函数没了"：
+
+| 锚点 | 失效方式 | 被哪条用例杀死 |
+| --- | --- | --- |
+| `untracked-face-filter-always-empty` | 过滤器恒空 ⇒ 整条 HEAD 归属判据退化成装饰 | 盘上有、HEAD 里没有 ⇒ 点出来 |
+| `untracked-line-judge-face-uses-src-wording` | 判卷面套用被测面文案 ⇒ 真因被说成"源文件读不到" | 判卷面缺文件说「连基线都跑不出来」… |
+| `untracked-line-judge-fix-points-at-src-file` | 修法写死指向源文件 ⇒ 照着提交了一份本来就有的文件 | 同上那条的另一半断言 |
+| `drift-double-reports-disk-problems` | 去掉盘上侧去重 ⇒ 一条红进两栏、汇总数抬高两次 | 盘上已经报过的同一条不重复报 |
+| `drift-double-counts-untracked-path` | 去掉未入库侧去重 ⇒ 同一件事两种成因两种修法 | HEAD 里读不到、且该路径已由「未入库」判据报过 |
+
+读数：单跑 5 条 **5 ✅**（4.2s，报告原文「全部变异被正确杀死」）；`--check-needles` 758 条、
+这 5 根针脚全部命中 1 处（未进阻断/待复认）、改法语法体检全绿。
+
+**同时记一笔未覆盖的格子（有名字，不装作已钉）**：`reportNeedles` 的**接线**没有观测者——
+① `faces` 必须同时喂两支（少喂判卷那一支，lib 单测仍全绿，因为它拿到的是手搓 items）；
+② `untracked` / `drift` 必须计入 exit（不计 ⇒ 门报红却永不阻断）。
+那个 `.mjs` 不被任何测试 import，而用"源码形状断言"（正则找 `faces.push`）充数正是仓规禁掉的那条
+（跑 shipped 实现）。三条候选修法（搬进 lib 让接线退化成一行的调用 / vm-slice 真跑那一段 / 临时 worktree 端到端量 exit）
+与选择理由记在任务 #63，未量之前不动实现。
+
+同日 #37 的读数被这次改动自己刷新了一次（**这正是"欠入库声明必须带复算命令"要防的**）：
+HEAD 从 `aedf208` 走到 `f694874`，期间别人落地了 `prune.ts` 那一簇 ⇒ 主树阻断 12 → **9**
+（4 未入库面 + 5 钉在飞文本），3 条 `prune-*` 自然消失。复算 = `node scripts/mutate-verify.mjs --check-needles`。
