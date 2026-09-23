@@ -105,8 +105,15 @@ auto:        { writeAsk: false, scopeMemory: false, riskAskAt: "high",   label: 
 
 - `pnpm typecheck`：0 错。新增值后 tsc **主动叫醒三处**（`clampTier` 的 `Record<AgentPermissionMode, number>`、
   两份插件 hook union）——这就是"表外即编译错"想要的形状。
-- 全量 `test`（主树，含他人在飞文件）：**216 files / 2316 tests 全绿**，exit 0。
-- HEAD-only 复跑（干净树 + `cp -al node_modules` 真依赖）：提交后补，含 `--check-needles` 阻断归零。
+- 全量 `test`（主树，含他人在飞文件）：216 files / 2316 tests 全绿，exit 0。
+- **HEAD-only 复跑（同提交 `bbac176`，干净树 + `cp -al node_modules` 真依赖）**：
+  tsc 0 错 · 全量 `test` **215 files / 2311 tests 全绿**（与主树差的 1 file / 5 tests 是别人未跟踪的
+  `tests/arch-boundary.test.ts`，不在 HEAD）· 针脚体检 **803 条、阻断 0、钉在飞文本 0、未入库面 0**、
+  改法语法体检全 ✅。提交前同一道门报的是「阻断 16 = 钉在飞文本 9 + 未入库面 7」，
+  提交后归零——这条正是"锚点门读盘 ⇒ 对在飞态诚实、对 HEAD 归属也诚实"的两侧读数，留作该族判据的样本。
+- ⚠️ §三的读数**只能在主树复跑**：`scripts/replay/ask-density.ts` 的语料含 `~/Library/Application Support/m0-agent-loop/sessions`
+  （会话流不进 git）。在干净 worktree 里它按 P0-1 的三态守卫**红着退出 1** 并说清扫了哪些根——
+  那是正确行为，不是命令坏了（换到有历史会话的树上再跑）。
 - 邻域先跑：`permission-mode-guided` 19/19、`permission-mode-single-source` 8/8、`remember` 25/25、
   `gate-audit` 31/31（`GATE_LAYERS` 穷尽断言未动）。
 
