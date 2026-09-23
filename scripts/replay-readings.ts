@@ -44,6 +44,11 @@ export const REPLAY_READINGS: readonly ReplayReading[] = [
     script: "scripts/replay/join-lapse.ts",
     answers: "orchestration-design §3 W1b 的前置占比：真语料里「回合末还有在途 worker」的 run 数（那道闸会不会触发）",
   },
+  {
+    id: "latency",
+    script: "scripts/replay/latency.ts",
+    answers: "工具耗时分布 + 「一轮发几个调用」（§5 D8 并发只读工具的触发面；时间面要靠 append 盖的时钟戳）",
+  },
 ];
 
 export interface ReplayFacts {
