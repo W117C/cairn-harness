@@ -72,8 +72,8 @@ describe("settings 存储（M1e 布局持久化）", () => {
 });
 
 // 「缺省开」的断言必须走**读盘路径**：只测 DEFAULT_SETTINGS 对象等于测自己刚改的那一行字，
-// 测不到老用户实际拿到什么（磁盘上的 JSON 没有这个键）。全仓只有 autoMemory 与 promptCache
-// 两项缺省开，它们的读法必须是 `typeof … === "boolean" ? … : d.<键>`；写成 `=== true` 就会
+// 测不到老用户实际拿到什么（磁盘上的 JSON 没有这个键）。缺省开的项（autoMemory / promptCache /
+// autoVerify）读法必须是 `typeof … === "boolean" ? … : d.<键>`；写成 `=== true` 就会
 // 让「缺省开」对每一台已写过 settings 文件的机器静默变成「关」——最难发现的那类不一致。
 describe("promptCache 缺省开（用户裁决 2026-09-19）：只从磁盘部分键路径验", () => {
   let dir: string;
@@ -105,6 +105,50 @@ describe("promptCache 缺省开（用户裁决 2026-09-19）：只从磁盘部�
 
   it("缺省值本身也是开（两处必须同向：DEFAULT_SETTINGS 与读盘回退）", () => {
     expect(DEFAULT_SETTINGS.promptCache).toBe(true);
+  });
+});
+
+/* 能力 5 收束闸（用户裁决 2026-09-23）：`agent-plan.md` §483 写的是「桌面产品 lint/test 两者默认开」，
+   而这两拍长期 false（09-19 设计稿 D7 记为"调度智能的燃料默认不在线"）。裁的是**只翻 autoVerify**，
+   actionFusion 留关等对照数。同一族读盘回退的规则（上一条 describe）在这里同样适用——
+   真机 settings.json 是在旧默认下写出来的，键缺失必须读到 true。 */
+describe("autoVerify 缺省开：走读盘路径，不走 DEFAULT_SETTINGS 自证", () => {
+  let dir: string;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "dsh-settings-av-"));
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  const readBack = async (raw: Record<string, unknown> | null) => {
+    const file = join(dir, "settings.json");
+    await writeFile(file, raw === null ? "{ 不是 JSON" : JSON.stringify(raw), "utf8");
+    return new SettingsStore(file).get();
+  };
+
+  it("旧机器（JSON 里压根没这个键）读回来必须是 true", async () => {
+    const s = await readBack({ mode: "default", theme: "dark", promptCache: false });
+    expect(s.autoVerify).toBe(true);
+    expect(s.promptCache, "显式关掉的另一项不受影响").toBe(false);
+  });
+
+  it("显式 false 必须仍是 false，空对象与坏 JSON 回缺省", async () => {
+    expect((await readBack({ autoVerify: false })).autoVerify).toBe(false);
+    expect((await readBack({ autoVerify: true })).autoVerify).toBe(true);
+    expect((await readBack({})).autoVerify).toBe(true);
+    expect((await readBack(null)).autoVerify, "JSON 损坏回退整份缺省").toBe(true);
+  });
+
+  it("DEFAULT_SETTINGS 与读盘回退同向（翻一处忘另一处 = 老用户永远拿不到新默认）", () => {
+    expect(DEFAULT_SETTINGS.autoVerify).toBe(true);
+  });
+
+  it("反面对手：同族里仍缺省关的那几项不许被顺手改成开", async () => {
+    const s = await readBack({});
+    expect(s.actionFusion).toBe(false);
+    expect(s.impactAnalysis).toBe(false);
+    expect(s.evidenceReceipts).toBe(false);
   });
 });
 

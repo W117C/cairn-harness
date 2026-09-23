@@ -108,7 +108,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   evidenceReceipts: false,
   economicCompaction: false,
   impactAnalysis: false,
-  autoVerify: false,
+  // 能力 5 的收束闸：`agent-plan.md` §483 写的是「桌面产品 lint/test 两者默认开」，而这里曾长期 false
+  // （09-19 设计稿 D7 记的"燃料默认不在线"）。用户裁决 2026-09-23：**只翻这一项**，
+  // `actionFusion` 仍留关，等准确率与 `$/成功任务` 的对照数出来再裁。
+  // 硬上界（开闸时）：每 run 至多一拍、模型自调过 verify 即让位、仓库没有可验面则整段跳过。
+  autoVerify: true,
   planRequiredByDefault: false,
 };
 
@@ -177,7 +181,9 @@ export function validateSettings(raw: unknown): AppSettings {
     evidenceReceipts: r.evidenceReceipts === true,
     economicCompaction: r.economicCompaction === true,
     impactAnalysis: r.impactAnalysis === true,
-    autoVerify: r.autoVerify === true,
+    // 缺省开的键一律走 `d.` 回退（上一条 `promptCache` 同族）：写成 `=== true` 会让「缺省开」
+    // 对每一台已写过 settings 文件的机器静默变成「关」——而 §483 要的正是默认开。
+    autoVerify: typeof r.autoVerify === "boolean" ? r.autoVerify : d.autoVerify,
     planRequiredByDefault: r.planRequiredByDefault === true,
     provider: PROVIDER_KINDS.includes(r.provider as ProviderKind) ? (r.provider as ProviderKind) : d.provider,
     model: typeof r.model === "string" ? r.model.slice(0, 200) : d.model,

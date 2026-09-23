@@ -6038,6 +6038,27 @@ const MUTATIONS = [
     apply: (s) => s.replace("if (unansweredCalls > 0) missing.push(", "if (false) missing.push("),
     expectFail: "末笔调用没有结果 ⇒ 点名「半截」并带笔数（真实形状：run_shell 无结果）",
   },
+  // ---- 能力 5 收束闸的默认（用户裁决 2026-09-23：§483「桌面产品 lint/test 两者默认开」→ 只翻 autoVerify）。
+  //      两支都要钉：光钉 DEFAULTS 那一行会漏掉「老机器读不到缺省开」这一整类（本仓 09-19 就为 promptCache 踩过）。
+  {
+    id: "settings-default-on-key-read-by-strict-true",
+    src: "src/main/settings.ts",
+    test: "tests/settings.test.ts",
+    desc: "缺省开的键改用 `=== true` 读 ⇒ 盘上 JSON 没有这个键的老机器静默拿到 false：" +
+      "DEFAULT_SETTINGS 那行改得再对也到不了用户手上，而单测只测对象的话全绿" +
+      "（这正是 promptCache 当年写那条注释的原因，同族第二实例）",
+    apply: (s) => s.replace(`typeof r.autoVerify === "boolean" ? r.autoVerify : d.autoVerify`, "r.autoVerify === true"),
+    expectFail: "旧机器（JSON 里压根没这个键）读回来必须是 true",
+  },
+  {
+    id: "settings-auto-verify-default-reverted",
+    src: "src/main/settings.ts",
+    test: "tests/settings.test.ts",
+    desc: "缺省被悄悄改回关 ⇒ §483 的「桌面产品默认开」失效，能力 5 的收束闸退回零真流量" +
+      "（09-19 设计稿 D7 记的就是这串默认关造成的『永远未证』）",
+    apply: (s) => s.replace("  autoVerify: true,", "  autoVerify: false,"),
+    expectFail: "DEFAULT_SETTINGS 与读盘回退同向（翻一处忘另一处 = 老用户永远拿不到新默认）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
