@@ -84,6 +84,11 @@ export function __resetLangCache(): void {
 // （单个 `log` 在一仓之内产出 45,160 条）。读数量与消融见 outputs/impact-precision-2026-09-23.md。
 // 已知代价（**命名缺口，不是遗漏**）：`obj.method()` 形式的方法调用因此不进图。要拿回它，
 // 得先解析 `object` 标识符的绑定（它是不是本文件的模块级绑定或 import），那是另一笔工程。
+/** 刻意不收的一条：`.d.ts` 里"只有签名没有函数体"的 `export function`（ambient 声明）。
+ *  实测本仓召回还差 3 个符号，全在这一格里（`history-window.d.ts` 的 `projectUnits`/`windowRange`/`mountHistory`）。
+ *  用户裁决 2026-09-23：**不收**——那是类型边不是运行边，而这张图的口径是「改这里会被谁调用」。
+ *  重开条件：先给边分两类（类型边 / 运行边）并在读端分开呈现；在那之前把签名塞进调用点，
+ *  等于把 §三 刚清出去的"同名不同实体假边"再请回来一遍。留读数：`map-check` ⑦ 的 `漏抽=N` 会一直挂着。 */
 const PATTERNS = [
   "(function_declaration name: (identifier) @def)",
   "(function_declaration name: (nested_identifier) @def)",
