@@ -6345,12 +6345,10 @@ const MUTATIONS = [
     apply: (s) => s.replace("autoVerify: over.autoVerify ?? (await store().get()).autoVerify,", "autoVerify: (await store().get()).autoVerify,"),
     expectFail: "②c settings 侧为真、overrides 显式 false ⇒ 那一拍不补（override 那一半的观察着）",
   },
-  // 同一族：`agent-runner.ts` 里那批「设置/调用方两半接线」。**现状**是 5 行只读盘（impactAnalysis /
-  // requestMetering / observationPack / evidenceReceipts / economicCompaction —— 它们的 override 半边
-  // 在产品里永不被赋值，已连同 RunOverrides 里的槽一起删掉，见 PROGRESS 能力 36），
-  // 3 行仍留两半（planRequired / actionFusion / autoVerify）⇒ 下面要求这 3 行**每行两半各一条**。
-  // "新增第 9 个开关却没人守"由 `scripts/lib/wiring-coverage.ts` + `tests/wiring-coverage.test.ts` 拦，
-  // 不靠这张表有人记得补。
+  // 同一族：`agent-runner.ts` 里那批「把设置里的开关接进内核」的写法。数目**不写在这里**——
+  // 哪些行只读盘、哪些行还留两半（`over.x ?? 读盘`），事实源是 AST 从源码扫出来的那份，
+  // 由 `scripts/lib/wiring-coverage.ts` + `tests/wiring-coverage.test.ts` 逐行要求"每半各一条锚点"。
+  // 这张表只负责提供锚点；漏一行是判据红，不是这里有人记得补。
   {
     id: "impact-analysis-settings-fallback-dropped",
     src: "src/main/agent-runner.ts",
@@ -7517,6 +7515,17 @@ const MUTATIONS = [
     desc: "第二拍不再要求「这一轮真的又改过盘」⇒ 模型只回一句「知道了」也把同一份代码再验一遍（纯烧一遍全量测试）",
     apply: (s) => s.replace("      const repairBeat = repairPending && wroteSinceAutoBeat && autoBeats < 2;", "      const repairBeat = repairPending && autoBeats < 2;"),
     expectFail: "开了返修但模型第二轮不再改（只回一句「知道了」）⇒ 不再补第三拍，请求数停在 3",
+  },
+  // 返修开关的 **runner 那一腿**：上面三条全部从 `runLoop` 直接进（测试自己传 opts），所以
+  // `agent-runner.ts` 里那句「从设置盘取」整行换成 false，一条都不会红——第 14 次「两头断」。
+  // 补法：走 `handleAgentRun` + 只写 settings.json + 剧本按 `round_end` 切出中间轮（见 mock.ts）。
+  {
+    id: "auto-verify-repair-settings-fallback-dropped",
+    src: "src/main/agent-runner.ts",
+    test: "tests/auto-verify-repair-runner.test.ts",
+    desc: "生产入口不读盘上的 autoVerifyRepair ⇒ 设置界面那个「拍红后再要一轮去修」的开关是空的（内核那 7 条用例照绿）",
+    apply: (s) => s.replace("autoVerifyRepair: (await store().get()).autoVerifyRepair,", "autoVerifyRepair: false,"),
+    expectFail: "开（只写进 settings.json，overrides 一律不给）：红拍之后真多要一轮并再验一拍",
   },
 ];
 
