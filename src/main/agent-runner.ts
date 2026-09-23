@@ -1487,7 +1487,11 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   return await replay(opts.logPath);
 }
 
-export interface RunOverrides extends SolpiFlags, ImpactOptions {
+// 五个"只从 settings 取"的开关刻意**不在 overrides 里**（见 `runAgent` 调用处那条注释）：
+// 用 Omit 而不是留着不用，是为了让"新增一个 override 槽"必须显式写在这里——那时它就得上判据。
+export interface RunOverrides
+  extends Omit<SolpiFlags, "requestMetering" | "observationPack" | "evidenceReceipts" | "economicCompaction">,
+    Omit<ImpactOptions, "impactAnalysis"> {
   workspace?: string;
   logPath?: string;
   /** M1e：会话模式 —— run 追加到该会话（不 rm 日志），消息落该会话 JSONL。 */
@@ -1501,9 +1505,7 @@ export interface RunOverrides extends SolpiFlags, ImpactOptions {
   signal?: AbortSignal;
   /** C1 runtime override; settings/IPC enablement is separate, default off. */
   actionFusion?: boolean;
-  /** M7 影响面 runtime override（同 actionFusion 口径）。 */
-  impactAnalysis?: boolean;
-  /** 能力 5 收束闸 runtime override（同 actionFusion / impactAnalysis 口径：settings 与 IPC 开闸另议）。 */
+  /** 能力 5 收束闸 runtime override（同 actionFusion 口径：settings 与 IPC 开闸另议）。 */
   autoVerify?: boolean;
 }
 
@@ -1567,12 +1569,16 @@ export async function handleAgentRun(
         ...(over.unattended ? { unattended: true as const } : {}),
         ...(over.signal ? { signal: over.signal } : {}),
         actionFusion: over.actionFusion ?? (await store().get()).actionFusion,
-        impactAnalysis: over.impactAnalysis ?? (await store().get()).impactAnalysis,
         autoVerify: over.autoVerify ?? (await store().get()).autoVerify,
-        requestMetering: over.requestMetering ?? (await store().get()).requestMetering,
-        observationPack: over.observationPack ?? (await store().get()).observationPack,
-        evidenceReceipts: over.evidenceReceipts ?? (await store().get()).evidenceReceipts,
-        economicCompaction: over.economicCompaction ?? (await store().get()).economicCompaction,
+        // 这五个只从 settings 取，**不留 runtime override 槽**：`handleAgentRun` 的两个产品调用者
+        // （IPC `agent:run` 只转发 sessionId/workspace；定时执行器只转发 unattended/signal）从不传它们，
+        // 界面走的是盘上的持久开关。留着 `over.X ??` 只是看着对称——它给的是**永远不会被走到的左半边**，
+        // 而这条缝的分辨力要靠 `scripts/lib/wiring-coverage.ts` 那条判据守（新增开关时必须同时有锚点）。
+        impactAnalysis: (await store().get()).impactAnalysis,
+        requestMetering: (await store().get()).requestMetering,
+        observationPack: (await store().get()).observationPack,
+        evidenceReceipts: (await store().get()).evidenceReceipts,
+        economicCompaction: (await store().get()).economicCompaction,
         onEvent: (e) => {
           over.onEvent?.(e);
           // F1（审查 P1-14）：agent:event 是全局通道——事件载荷带 session_id，renderer 按当前

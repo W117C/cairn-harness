@@ -6266,15 +6266,18 @@ const MUTATIONS = [
     apply: (s) => s.replace("autoVerify: over.autoVerify ?? (await store().get()).autoVerify,", "autoVerify: (await store().get()).autoVerify,"),
     expectFail: "②c settings 侧为真、overrides 显式 false ⇒ 那一拍不补（override 那一半的观察着）",
   },
-  // 同一族：`agent-runner.ts` 里 8 行 `over.X ?? (await store().get()).Y`。下面这些是**逐行实测**后
-  // 留下的（能杀死才算锚点，杀不死的另立新格用例，不放恒真针）。override 那一半只有 autoVerify 有观察着，
-  // 其余行的 override 半边走 IPC（src/main/index.ts:198）但判卷从不传 ⇒ 已署名留位，见 PROGRESS 能力 34。
+  // 同一族：`agent-runner.ts` 里那批「设置/调用方两半接线」。**现状**是 5 行只读盘（impactAnalysis /
+  // requestMetering / observationPack / evidenceReceipts / economicCompaction —— 它们的 override 半边
+  // 在产品里永不被赋值，已连同 RunOverrides 里的槽一起删掉，见 PROGRESS 能力 36），
+  // 3 行仍留两半（planRequired / actionFusion / autoVerify）⇒ 下面要求这 3 行**每行两半各一条**。
+  // "新增第 9 个开关却没人守"由 `scripts/lib/wiring-coverage.ts` + `tests/wiring-coverage.test.ts` 拦，
+  // 不靠这张表有人记得补。
   {
     id: "impact-analysis-settings-fallback-dropped",
     src: "src/main/agent-runner.ts",
     test: "tests/impact-runner-wiring.test.ts",
     desc: "生产入口不读盘上的 impactAnalysis ⇒ 设置界面那个开关是空的（第三环两格直接把值交给 runAgent，照绿）",
-    apply: (s) => s.replace("impactAnalysis: over.impactAnalysis ?? (await store().get()).impactAnalysis,", "impactAnalysis: over.impactAnalysis ?? false,"),
+    apply: (s) => s.replace("impactAnalysis: (await store().get()).impactAnalysis,", "impactAnalysis: false,"),
     expectFail: "开（只写进 settings.json）：生产入口仍真构造钩子并出 impact_report",
   },
   {
@@ -6282,7 +6285,7 @@ const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/session-tools.test.ts",
     desc: "盘上的 requestMetering 到不了主会话 ⇒ 计量报告只剩 worker 有，主会话的钱看不见",
-    apply: (s) => s.replace("requestMetering: over.requestMetering ?? (await store().get()).requestMetering,", "requestMetering: over.requestMetering ?? false,"),
+    apply: (s) => s.replace("requestMetering: (await store().get()).requestMetering,", "requestMetering: false,"),
     expectFail: "production settings forward C2/D flags and reopen private reports across two IPC runs",
   },
   {
@@ -6290,7 +6293,7 @@ const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/session-tools.test.ts",
     desc: "盘上的 evidenceReceipts 到不了主会话 ⇒ 私密报告不落盘，「可审计」那一面在主会话静默没有",
-    apply: (s) => s.replace("evidenceReceipts: over.evidenceReceipts ?? (await store().get()).evidenceReceipts,", "evidenceReceipts: over.evidenceReceipts ?? false,"),
+    apply: (s) => s.replace("evidenceReceipts: (await store().get()).evidenceReceipts,", "evidenceReceipts: false,"),
     expectFail: "production settings forward C2/D flags and reopen private reports across two IPC runs",
   },
   {
@@ -6298,7 +6301,7 @@ const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/session-tools.test.ts",
     desc: "盘上的 economicCompaction 到不了主会话 ⇒ 经济报告恒 null，压缩债务没人记账",
-    apply: (s) => s.replace("economicCompaction: over.economicCompaction ?? (await store().get()).economicCompaction,", "economicCompaction: over.economicCompaction ?? false,"),
+    apply: (s) => s.replace("economicCompaction: (await store().get()).economicCompaction,", "economicCompaction: false,"),
     expectFail: "production settings forward C2/D flags and reopen private reports across two IPC runs",
   },
   {
@@ -6318,11 +6321,27 @@ const MUTATIONS = [
     expectFail: "settings.planRequiredByDefault=true ⇒ 生产入口自己就该拒写，且拒因来自方案门",
   },
   {
+    id: "plan-required-override-ignored",
+    src: "src/main/agent-runner.ts",
+    test: "tests/goal-continue.test.ts",
+    desc: "那一行改成「只读 settings」⇒ 调用方显式传的 planRequired 被吞（J3 那格的武装态从此失效，闸不再说话）",
+    apply: (s) => s.replace("planRequired: over.planRequired ?? (await store().get()).planRequiredByDefault,", "planRequired: (await store().get()).planRequiredByDefault,"),
+    expectFail: "unattended + 武装方案门 ⇒ 拒因来自方案门而不是无人值守闸，盘上不留痕（J3：不是被忽略）",
+  },
+  {
+    id: "action-fusion-override-ignored",
+    src: "src/main/agent-runner.ts",
+    test: "tests/action-fusion.test.ts",
+    desc: "那一行改成「只读 settings」⇒ 调用方显式传的 actionFusion 被吞（C1 的 runtime 通道整条失效）",
+    apply: (s) => s.replace("actionFusion: over.actionFusion ?? (await store().get()).actionFusion,", "actionFusion: (await store().get()).actionFusion,"),
+    expectFail: "handleAgentRun forwards the explicit override",
+  },
+  {
     id: "observation-pack-settings-fallback-dropped",
     src: "src/main/agent-runner.ts",
     test: "tests/session-tools.test.ts",
     desc: "盘上的 observationPack 到不了主会话 ⇒ 第 3 次发送仍全文（那条 `obs_recall` 标记不算数：`observationPack || evidenceReceipts` 任一为真都有它）",
-    apply: (s) => s.replace("observationPack: over.observationPack ?? (await store().get()).observationPack,", "observationPack: over.observationPack ?? false,"),
+    apply: (s) => s.replace("observationPack: (await store().get()).observationPack,", "observationPack: false,"),
     expectFail: "observationPack 由盘上的键决定第 3 次发送的形状（前两封全文、第三封起投影；关掉则恒全文）",
   },
   {
