@@ -166,7 +166,33 @@ parent 与 worker 可以都有 `call-0`）。
 `src/agent/gym/probe.ts` 的**在飞版本**里命中 2 处，而 `replace` 只改第一处 ⇒ 那条锚点现在打在哪个符号上
 需要持有该簇的会话复认（阻断仍是 0，不是红）。
 
-## 十二、第三格：转录面（`d73077f`），以及我这一跳自撞的两处
+## 十二、第四格：未确认的写入曾读起来像已落盘（`2993e0f`，任务 #60）
+
+同一条流继续往下找面，第四格在**写入行**：无结果的 `write_file` 投出 `ok: null, created: true`
+（离线过投影的实测读数），而渲染层只在 `ok === false` 时挂「未落盘」chip，null 什么都不写
+⇒ 审阅页把"这笔写入没有结果"显示成一条正常新增；**文件树更彻底——它连「未落盘」都没写过**
+（同一个字段的两处渲染各自判据，其中一处判据干脆缺席）。能力 7「操作可审计」被折叠成"成功"。
+
+修法换了个位置：**三态在投影期派生、挂到行上**（`projectPanelData.files[].write = fileWriteState(ok)`，
+`kind ∈ written / rejected / unconfirmed`），两处渲染读同一份数据 ⇒ 以后再加面也不会"各写各的判据、
+漏一处"。读点 `data-write-state`。成功仍不报数（本仓政策），未确认必须占位。
+
+| 层 | 读数 |
+| --- | --- |
+| 单元（先写后跑） | 新 4 条里 3 条改前红 ⇒ 改后本文件 **18 passed** |
+| 真窗口 `panels-check` B27 | **exit 0**，六条：未确认行 `data-write-state="unconfirmed"`、被拒行 `"rejected"`（既有那句不改指）、落成的行 `["no-chip","false"]`（反面对手） |
+| 锚点 | `term-write-null-collapses-to-written` ✅ 1.2s（第 4 条，仍在工作树等窗口，见 #59） |
+| 全量 | **207 files / 2162 tests / 0 failed exit 0**；`pnpm typecheck` 0 错；`node --check src/renderer/app.js` 0 |
+
+随字段补的两处既有判卷：`tests/panel-data.test.ts` 的整行 `toEqual`、`tests/renderer-panels-real-data.test.ts`
+的构造行——都用 `fileWriteState(...)` 真实现派生，**不在测试里抄一份政策**。
+
+未证半边：文件树那一格靠"同一份 `f.write` 数据"推定，**树视图本身没有独立的真窗口断言**（B27 读的是审阅页那一行）。
+
+## 十三、第三格：转录面（`d73077f`），以及我这一跳自撞的两处
+
+（编号按"物理阅读顺序"排：本节写在前一次提交里、标题曾为 §十二，`59fa7bb` 的提交信息即指本节。
+先有转录格、后有上面那格写入行，两节的**内容**都没改过。）
 
 `app.js` 的 `tool_call` 分支一律先画 `<span class="ti-state pending">…</span>`、等 `tool_result` 来改口
 ⇒ 被切断的会话重开后，末笔**永远挂着省略号**（同一件事实的第三个取料面）。判据只留一份：
