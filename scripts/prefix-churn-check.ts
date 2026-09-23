@@ -119,7 +119,7 @@ async function drive(opts: {
  *    配方由 `outputs/prefix-churn-2026-09-23/probe-prune-recipe.mts` 实跑定出：
  *    每轮 `user_message + tool_call + 20k 字结果 + assistant_message`、**种子只给 2 轮**
  *    （`RECENT_ROUNDS_EXEMPT = 2`）⇒ 替换集从第 3 轮起每轮恰好多一个键（3 → 3,7 → 3,7,11 …）。 */
-async function driveMutating(opts: { kind: "compaction" | "prune"; rounds?: number; amortize?: boolean }): Promise<{
+async function driveMutating(opts: { kind: "compaction" | "prune"; rounds?: number; amortize?: boolean; batching?: boolean }): Promise<{
   obs: AssemblyObservation[];
   firedPerPair: ChurnMutator[][];
   /** 每次压缩的触发种类（`threshold` / `overflow`）——摊销只管 threshold，读数必须分开算。 */
@@ -156,6 +156,8 @@ async function driveMutating(opts: { kind: "compaction" | "prune"; rounds?: numb
       map: false,
       workspace: dir,
       system: SYSTEM_TEXT,
+      // 分批裁剪的 A/B 开关（PC8）。不传 = 逐字旧行为。
+      ...(opts.batching === undefined ? {} : { pruneBatching: opts.batching }),
       ...(opts.kind === "compaction"
         ? {
             compaction: {
@@ -329,6 +331,32 @@ export const CHURN_RULES: readonly ChurnRule[] = [
       };
     },
   },
+  {
+    id: "PC8-分批裁剪确实少断前缀（A/B 同一条链）",
+    why: "裁剪的隐藏成本不是省得少，是**每次越界都整段作废已发前缀**（PC6 量到一次 ~40,299 字符）。攒够再剪就是把这个次数压下来——前提：证据链仍然齐全（真落盘过附件）",
+    run: async () => {
+      const rounds = 6;
+      const off = await driveMutating({ kind: "prune", rounds });
+      const on = await driveMutating({ kind: "prune", rounds, batching: true });
+      const tally = (r: typeof off) => {
+        const attrs = r.obs.slice(1).map((cur, i) => attributeChurn(r.obs[i]!, cur, r.firedPerPair[i] ?? []));
+        return {
+          rewrites: attrs.filter((a) => !a.pureAppend).length,
+          rewrote: attrs.reduce((n, a) => n + a.rewroteChars, 0),
+          prunes: attrs.reduce((n, a) => n + a.fired.filter((f) => f === "prune").length, 0),
+          maxRewrite: attrs.reduce((m, a) => Math.max(m, a.rewroteChars), 0),
+        };
+      };
+      const a = tally(off), b = tally(on);
+      return {
+        ok: a.rewrites >= 2 && b.rewrites < a.rewrites && b.prunes >= 1 && b.rewrote > 0,
+        detail: `同一条链 ${String(rounds)} 轮：不分批 ⇒ 断 ${String(a.rewrites)} 次 / 作废 ${String(a.rewrote)} 字符；` +
+          `分批 ⇒ 断 ${String(b.rewrites)} 次 / 作废 ${String(b.rewrote)} 字符（单次最大 ${String(b.maxRewrite)}）` +
+          `｜分批那支真裁过 ${String(b.prunes)} 次` +
+          (a.rewrites < 2 ? "（不分批都只断一次 ⇒ 样本无分辨力，门自身红）" : ""),
+      };
+    },
+  },
 ];
 
 /** 反向对照：每只判据喂一件故意做错的工件，要求它判假。造不出红的规则等于摆设。 */
@@ -384,6 +412,14 @@ export function runChurnSelfTest(): { caught: string[]; missed: string[] } {
         const b = { compactions: 3, rewrote: 6_000 };
         const holds = a.compactions >= 2 && b.compactions < a.compactions && b.rewrote < a.rewrote;
         return !holds;
+      },
+    },
+    {
+      // PC8 的分辨力：把「分批反而更多」的对照喂进去必须红（否则 A/B 是装饰）
+      id: "PC8-分批裁剪确实少断前缀（A/B 同一条链）",
+      predicateSaysRed: () => {
+        const a = { rewrites: 2, prunes: 2 }, b = { rewrites: 3, prunes: 1 };
+        return !(a.rewrites >= 2 && b.rewrites < a.rewrites && b.prunes >= 1);
       },
     },
     {

@@ -31,6 +31,7 @@ import { deriveProgressBoundaries } from "./economics";
 import { planSurfaceBudget } from "./model-surface";
 import { serializeLayer } from "./prefix-churn";
 import { amortizedCompactionConfig, measureHeadSurvival, type HeadSurvivalReading } from "./compaction-cost";
+import { freshSavings, shouldApplyPrune } from "./prune-batching";
 
 type RawMessage = Record<string, unknown>;
 
@@ -468,6 +469,8 @@ export function createGlmSessionProvider(
     workspace?: string;
     /** M2b：地图开关（缺省开；单测/暗卷可关）。 */
     map?: boolean;
+    // 分批裁剪：攒够再剪，少断几次可缓存前缀（`prune-batching.ts`）。缺省关 ⇒ 逐字旧行为。
+    pruneBatching?: boolean;
     /** M2e：插件注入面（skill 路由清单 / SessionStart 上下文 / 压缩后重挂投影）。缺省零行为。
      *  本 turn 的 disallowed-tools 摘除说明**不在这里**——它随工具面逐请求走 `requestFace`，
      *  两份都给就等于给"清单与解释不同步"留门。 */
@@ -524,6 +527,8 @@ export function createGlmSessionProvider(
   // sessionId 取日志文件名，同一目录里并存的多个会话各有各的附件命名空间。
   const pruneAttachmentsDir = join(dirname(logPath), "prune-attachments");
   const pruneSessionId = basename(logPath).replace(/\.jsonl$/u, "");
+  // 已经「反映在发出去的请求里」的被裁事件 id。分批判增量要用它：不记就是每轮都以为第一次剪。
+  const prunedIdsSent = new Set<number>();
   const assemble = async (): Promise<{ events: AgentEvent[]; history: ReturnType<typeof projectContext> }> => {
     // A5（审查根因 5）：增量重放——每轮只解析追加段（旧实现全量读盘+全量投影，整会话 O(n²)）
     const events = await replayIncremental(logPath);
@@ -535,8 +540,26 @@ export function createGlmSessionProvider(
       // 「原文已存附件 …」就是指向空气的路径 —— 本仓点名的「两头断」。
       const outcome = computePrune({ events, attachmentsDir: pruneAttachmentsDir, sessionId: pruneSessionId });
       if (outcome.why === "saved" && outcome.replacements.size > 0) {
-        replacements = outcome.replacements;
-        await writePruneAttachments(events, outcome, pruneAttachmentsDir, pruneSessionId);
+        // 分批（`prune-batching.ts`）：一次多攒一点再剪，少断几次前缀。缺省关 ⇒ 逐字走旧路径；
+        // 关时**连估算都不算**，别为一条没开的策略每轮多投一次影。
+        // 判增量（`freshSavings`：只算「本轮新越界、且还没反映在已发出的请求里」那几条）。
+        const batch = opts.pruneBatching === true
+          ? shouldApplyPrune({
+              enabled: true,
+              savedTokens: freshSavings(outcome.savedByIdTokens, prunedIdsSent),
+              estimatedTokens: estimateContextTokens(projectContext(events), {}, calibrateFactor(events)),
+              availableTokens: budgetConfig().inputLimit - budgetConfig().maxOutputReserve,
+            })
+          : null;
+        if (batch === null || batch.apply) {
+          replacements = outcome.replacements;
+          for (const id of outcome.savedByIdTokens.keys()) prunedIdsSent.add(id);
+          await writePruneAttachments(events, outcome, pruneAttachmentsDir, pruneSessionId);
+        } else {
+          // 推迟不是静默：这行 debug 是给读代码的人的，重写次数本身由 `prefix-churn-check` PC8 量
+          //（events 在另一会话的在飞集合里，今天加不了「已推迟」事件字段——登记为留尾）。
+          console.debug("[prune] 分批推迟:", batch.why);
+        }
       }
     } catch (err) {
       console.debug("[prune] 计算失败，本轮跳过裁剪:", err instanceof Error ? err.message : String(err));

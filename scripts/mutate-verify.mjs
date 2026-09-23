@@ -2171,7 +2171,7 @@ const MUTATIONS = [
     src: "src/agent/prune.ts",
     test: "tests/prune-token-weight.test.ts",
     desc: "savedTokens 是给人看的成本读数：按 chars/4 报 ⇒ 中文会话里「省了多少」虚报四倍（判定与读数两副口径）",
-    apply: (s) => s.replace("    out.savedTokens += estimateTextTokens(e.output) - estimateTextTokens(stub);", "    out.savedTokens += Math.ceil(e.output.length / 4) - estimateTextTokens(stub);"),
+    apply: (s) => s.replace("    const savedThisOne = estimateTextTokens(e.output) - estimateTextTokens(stub);", "    const savedThisOne = Math.ceil(e.output.length / 4) - estimateTextTokens(stub);"),
     expectFail: "中文结果剪得动，且 savedTokens 落在字重口径（旧口径下保护区吞掉全部 ⇒ 候选空 ⇒ 永不修剪）",
   },
   {
@@ -2179,7 +2179,7 @@ const MUTATIONS = [
     src: "src/agent/prune.ts",
     test: "tests/prune.test.ts",
     desc: "替换文本按裸占位扣（附件路径行不算）⇒「省了多少」被白记一程；改指现实现：savedTokens 只认 PRUNED_PLACEHOLDER，不看 stub",
-    apply: (s) => s.replace("    out.savedTokens += estimateTextTokens(e.output) - estimateTextTokens(stub);", "    out.savedTokens += estimateTextTokens(e.output) - estimateTextTokens(PRUNED_PLACEHOLDER);"),
+    apply: (s) => s.replace("    const savedThisOne = estimateTextTokens(e.output) - estimateTextTokens(stub);", "    const savedThisOne = estimateTextTokens(e.output) - estimateTextTokens(PRUNED_PLACEHOLDER);"),
     expectFail: "③savedTokens 按**实际替换文本**计量：路径行不得虚报节省",
   },
   // ---- W3 第一段调度纪律（BASE_SYSTEM 的「编排」段）：三句各一条 + 编号不侵占一条 ----
@@ -2595,7 +2595,7 @@ const MUTATIONS = [
     src: "src/agent/prune.ts",
     test: "tests/prune.test.ts",
     desc: "节省量按 0 扣 ⇒ 面板上的「省了多少」把新增的打桩文本（含路径行）整个算成白赚",
-    apply: (s) => s.replace("    out.savedTokens += estimateTextTokens(e.output) - estimateTextTokens(stub);", "    out.savedTokens += estimateTextTokens(e.output);"),
+    apply: (s) => s.replace("    const savedThisOne = estimateTextTokens(e.output) - estimateTextTokens(stub);", "    const savedThisOne = estimateTextTokens(e.output);"),
     expectFail: "③savedTokens 按**实际替换文本**计量：路径行不得虚报节省",
   },
   {
@@ -6307,6 +6307,46 @@ const MUTATIONS = [
     desc: "「条目没被用到」的复查对所有判据开 ⇒ 干净的 HEAD（没有快照代码）被读成红——会冤枉好状态的判据比没有更糟",
     apply: (s) => s.replace("  const staleProblem = opts.requireDebtHit === true && finding.staleDebts.length > 0;", "  const staleProblem = finding.staleDebts.length > 0;"),
     expectFail: "requireDebtHit 只对「复查登记表」那条开——干净状态不该因为没踩到债而红",
+  },
+  {
+    id: "pb-pressure-escape-removed",
+    src: "src/agent/prune-batching.ts",
+    test: "tests/prune-batching.test.ts",
+    desc: "去掉「头寸紧就照剪」的逃生舱 ⇒ 为了少断前缀而把会话推到撞最终硬闸（fail-closed 变成会话失败）",
+    apply: (s) => s.replace("  if (opts.estimatedTokens >= available * pressure) {", "  if (false) {"),
+    expectFail: "头寸紧就必须照剪 —— 绝不因为攒批去撞最终硬闸",
+  },
+  {
+    id: "pb-threshold-always-apply",
+    src: "src/agent/prune-batching.ts",
+    test: "tests/prune-batching.test.ts",
+    desc: "门槛判定恒真 ⇒ 分批退化成旧行为，而门里 PC8 的对照还在报「策略有效」",
+    apply: (s) => s.replace("  if (opts.savedTokens >= minSaved) {", "  if (true) {"),
+    expectFail: "没攒够且头寸不紧 ⇒ 推迟（不断前缀）",
+  },
+  {
+    id: "pb-disabled-path-still-defers",
+    src: "src/agent/prune-batching.ts",
+    test: "tests/prune-batching.test.ts",
+    desc: "去掉「未启用即照旧」支 ⇒ 一条没人打开的策略改了生产装配（缺省零行为是底线）",
+    apply: (s) => s.replace("  if (!opts.enabled) {", "  if (false) {"),
+    expectFail: "未启用 ⇒ 恒照旧（零回归支），且理由写清",
+  },
+  {
+    id: "pb-fresh-savings-counts-everything",
+    src: "src/agent/prune-batching.ts",
+    test: "tests/prune-batching.test.ts",
+    desc: "增量把已发出去的几条也算进来 ⇒ 「永远已经攒够」，分批静默退化成逐轮剪（PC8 会红，但要先知道是这里）",
+    apply: (s) => s.replace("  for (const [id, v] of savedByIdTokens) if (!alreadySent.has(id)) n += v;", "  for (const [, v] of savedByIdTokens) n += v;"),
+    expectFail: "增量口径：已发出去的那几条不再算「攒到的量」（否则分批永远以为已经攒够）",
+  },
+  {
+    id: "pb-wiring-passes-cumulative-not-fresh",
+    src: "src/agent/glm-session.ts",
+    test: "tests/prune-batching.test.ts",
+    desc: "装配链把累计值递给策略（而不是增量）⇒ 策略算对了、判据照样无效果：本仓点名的「两头断」形状",
+    apply: (s) => s.replace("              savedTokens: freshSavings(outcome.savedByIdTokens, prunedIdsSent),", "              savedTokens: outcome.savedTokens,"),
+    expectFail: "PC8 那条 A/B 判据真能跑通（= pruneBatching 这个选项确实接到了装配链上）",
   },
 ];
 

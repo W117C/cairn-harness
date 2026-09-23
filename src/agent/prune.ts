@@ -75,6 +75,9 @@ export interface PruneOutcome {
   replacements: Map<number, string>;
   /** 预计节省 token（chars/4）。 */
   savedTokens: number;
+  /** 逐条节省（事件 id → token）。分批策略要的是**自上次已发出去的那份以来的增量**，
+   *  总量在这里会骗人：候选集每轮都含上一轮那几条，于是攒批永远"已经攒够"。 */
+  savedByIdTokens: Map<number, number>;
   /** 未裁原因（none/too-small/below-protect/exempt-all）。 */
   why: "none" | "too-small" | "saved";
   /** 被裁原文的附件路径（有 attachmentsDir 时）。 */
@@ -147,7 +150,7 @@ function attachmentName(sessionId: string, callId: string): string {
 export function computePrune(input: PruneInput): PruneOutcome {
   const config: PruneConfig = { ...DEFAULT_PRUNE_CONFIG, ...input.config };
   const { events } = input;
-  const out: PruneOutcome = { replacements: new Map(), savedTokens: 0, why: "none", attachments: [] };
+  const out: PruneOutcome = { replacements: new Map(), savedTokens: 0, savedByIdTokens: new Map(), why: "none", attachments: [] };
   if (events.length === 0) return out;
 
   // 索引只建一次：boundary 与 callId→工具名 都是全量不变量，循环内复用。
@@ -211,7 +214,9 @@ export function computePrune(input: PruneInput): PruneOutcome {
     out.replacements.set(i + 1, stub); // 事件 id = 1-based 行号
     // savedTokens 是报给人看的成本读数：按**实际替换文本**计（跟着同一把字重尺），
     // 既不能在中文会话里虚报 4 倍，也不能把新增的那行路径白记成节省。
-    out.savedTokens += estimateTextTokens(e.output) - estimateTextTokens(stub);
+    const savedThisOne = estimateTextTokens(e.output) - estimateTextTokens(stub);
+    out.savedTokens += savedThisOne;
+    out.savedByIdTokens.set(i + 1, savedThisOne);
     if (file !== null) out.attachments.push(file);
   }
   out.why = "saved";
