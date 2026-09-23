@@ -95,6 +95,23 @@ TERM=dumb node --import tsx -e '… for (const id of ["anthropic-standard","open
 ② 把"未登记 env 名即崩"那条断言从合并用例里**拆成独立用例**，让每条锚点各有自己的靶子
 （否则两条锚点共指一条用例，红了也分不清是哪半失效）。锚点表 782 → 786 不变。
 
+**全量门抓出我自己写的新断言里的析取式（`assertion-health-scan` 17/17 → 一条红）**：六条标签用了
+`xs.join("/") || "无"`。`scripts/assertion-health.ts` 的 AST 扫描看的是**整棵断言调用树**，
+不看这个 `||` 在条件位还是标签位 ⇒ 一律记「断言含 ||」。两条出路里选了**去掉 `||`**（加一个 `orNone()`），
+而不是给标签开 `gates:disjunction-ok` 豁免——豁免是给"确实需要合取"的判据留的逃生舱，
+拿它去消一条可读化写法，等于把这条闸的语义弄脏（本仓的反面样例就是"为了让门绿而改判据"）。
+教训本身仍是老的那条：**跑改动邻域 ≠ 跑那道门**（只跑 providers-check 与两份 provider 测，全绿；
+全量 `test` 才抓到）。
+
+**HEAD-only 三态对照（同 HEAD 开 worktree 实跑，不是工作树）**：
+- `c15e3d7` 全量 `test`：**209 files / 2228 tests，2225 passed / 3 failed**，`tsc --noEmit` **2 错**。
+- 逐条归因（同法跑 `0af5458`，即我落库之前）：`gated-tools`、`runner-gates` 两条**在 0af5458 已红**
+  ⇒ 不是我引入的；`assertion-health-scan` 在 0af5458 绿 ⇒ 是我的，已按上条修掉。
+- **tsc 那 2 错同样是 HEAD 级既有断裂**：`scripts/replay-determinism-check.ts:65` 读 `result.snapshotId`，
+  而 `ToolResult.snapshotId` 的定义还压在**未提交**的 `src/tools/base.ts` + `src/events/index.ts` 里
+  （D7 覆盖前快照簇，自 09-21 挂在树上）。⇒ 与本仓记过的形态同名：**判卷文件与它依赖的字段分家提交，
+  单独 checkout HEAD 必坏**。修法不是改判卷面，是把那一簇整簇落库（该簇 owner 未定，本轮不代提交）。
+
 **留位（未做，不偷做）**：
 - 跨家 BYOK 的开闸（把 openai/anthropic/gemini 放进 `provider-keys.PROVIDER_IDS` + UI 选项）沿
   `gap-fix-proposal` §三的裁决**不动**，反转条件不变。本笔只把那条边界变成机器可判的。

@@ -270,6 +270,11 @@ console.log("[providers-check] ⑥ 暗卷（真实 key，哪家有跑哪家）")
   }
 }
 
+/** 缺口清单进断言标签时的可读化。不用 `xs.join("/") || "无"`：`||` 会被 `assertion-health` 的
+ *  析取式扫描按「断言含 ||」记账（它看整棵 AST，不看这个 `||` 在条件位还是标签位），
+ *  而给标签开 `disjunction-ok` 豁免等于把这条闸的语义弄脏——空数组本来就是"无"，直接写。 */
+const orNone = (xs: readonly string[]): string => (xs.length === 0 ? "无" : xs.join("/"));
+
 // ---- ⑦ BYOK 可达性（合取 + 只降不升水位）----
 // 「能力发货、入口没通」的机器化：路由能选到一家 provider，与用户能为它配上一把 key，
 // 是两件事。本段一次读四支取料面（UI 的按钮 / 设置可持久化面 / key 存储白名单 / 启动注入面），
@@ -329,24 +334,24 @@ console.log("[providers-check] ⑦ BYOK 可达性（设置面 ⊆ 可存 key；�
   } satisfies ByokFacts);
   assert(
     gaps.routableWithoutEnvKey.length === 0,
-    `可路由的每家都有 env 名映射（缺: ${gaps.routableWithoutEnvKey.join("/") || "无"}）`,
+    `可路由的每家都有 env 名映射（缺: ${orNone(gaps.routableWithoutEnvKey)}）`,
   );
   assert(
     setDiff(ENV_KEYED_PROVIDERS, injected).length === 0,
-    `启动注入面对 env 表每家真注入到各自 env 名（已注入: ${injected.join("/") || "无"}）`,
+    `启动注入面对 env 表每家真注入到各自 env 名（已注入: ${orNone(injected)}）`,
   );
   assert(
     gaps.storableNotInjected.length === 0,
-    `可存 key 的每家都被注入面覆盖（缺: ${gaps.storableNotInjected.join("/") || "无"}）`,
+    `可存 key 的每家都被注入面覆盖（缺: ${orNone(gaps.storableNotInjected)}）`,
   );
   assert(
     gaps.offeredNotStorable.length === 0,
-    `设置面选项 ⊆ 可存 key 的 provider ∪ {demo}（越界: ${gaps.offeredNotStorable.join("/") || "无"}）`,
+    `设置面选项 ⊆ 可存 key 的 provider ∪ {demo}（越界: ${orNone(gaps.offeredNotStorable)}）`,
   );
   assert(
     sameSet(gaps.routableNotStorable, BYOK_NO_KEY_WAIVER),
-    `「可路由但存不进 key」逐字等于登记水位（实测 ${gaps.routableNotStorable.join("/") || "无"} · ` +
-      `水位 ${BYOK_NO_KEY_WAIVER.join("/") || "无"}；扩一家不给 key 通道 ⇒ 前者多出该项，开了白名单忘了撤水位 ⇒ 后者多出该项）`,
+    `「可路由但存不进 key」逐字等于登记水位（实测 ${orNone(gaps.routableNotStorable)} · ` +
+      `水位 ${orNone(BYOK_NO_KEY_WAIVER)}；扩一家不给 key 通道 ⇒ 前者多出该项，开了白名单忘了撤水位 ⇒ 后者多出该项）`,
   );
 }
 
@@ -378,7 +383,7 @@ console.log("[providers-check] ⑧ env 名映射与适配器实际取料面对�
       } catch (err) {
         message = err instanceof Error ? err.message : String(err);
       }
-      assert(message.includes(envName), `${p}：无 key 无 env 时抛错点名 ${envName}（实际「${message.slice(0, 64) || "未抛错"}」）`);
+      assert(message.includes(envName), `${p}：无 key 无 env 时抛错点名 ${envName}（实际「${message === "" ? "未抛错" : message.slice(0, 64)}」）`);
     }
   } finally {
     for (const [n, v] of savedEnv) {
