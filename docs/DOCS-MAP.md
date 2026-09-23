@@ -96,6 +96,7 @@ deepseek harness/
 - `prune-batching-2026-09-23/` — 分批裁剪：少断几次可缓存前缀（实测 5→2 次 / 作废 -39%）
 - `prune-free-ride-2026-09-23/` — 免费车：压缩已打断前缀的那一轮顺手剪（PC9 判集合相等 + 对照臂证旋钮接得上）
 - `stagnation-detection-2026-09-23/` — 无进展检测：外部只公布阈值不公布 precision ⇒ 本仓给自己配一份带标签语料（4 条真实录制 + 3 条对照）与误报判据（门 `no-progress-check`）
+- `cost-per-progress-2026-09-23/` — 成本 ÷ 前进：分子分母同面（worker 开销不得并进主面比值）、零前进是「不可测」；死跑成本第一次有读数（68,535 tok / 零边界）
 - `design-contradictions-2026-09-18.md` — 渲染侧矛盾台账
 - `zcode-study-2026-09-21.md` · `laya-evaluation-2026-09-21.md` · `aseos-vision-evaluation-2026-09-21.md`
 

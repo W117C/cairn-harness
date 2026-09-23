@@ -55,6 +55,9 @@ export const GATES: readonly string[] = [
   // 无进展检测门：判的是**误报**（外部两家 shipped 检测器都只公布阈值、不公布 precision）。
   // 语料 4 条真实录制 + 3 条对照；该报的必须指名，不该报的一条都不许报。
   "no-progress-check",
+  // 成本 ÷ 前进门：分子分母必须同面（前进边界按定义只算主面），零前进是「不可测」不是 0/Infinity。
+  // 起因是第一次把 deriveProgressBoundaries 与 usage 放到同一个读数上就抓到单位混算（差 4.9 倍）。
+  "cost-per-progress-check",
   "a11y-check",
   // 变异验证：证明单元断言非恒真（注入行为突变必须被测试杀死）。
   // 与 gate-check 的静态恒真式体检互补——静态查不出「非空但没对准逻辑」的断言。

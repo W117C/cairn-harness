@@ -6501,6 +6501,48 @@ const MUTATIONS = [
     apply: (s) => s.replace('          typeof opts.pruneBatching === "object" && opts.pruneBatching !== null ? opts.pruneBatching : {};', "          false ? opts.pruneBatching : {};"),
     expectFail: "PC9 那条集合相等判据真能跑通",
   },
+  /* ---------- 能力 15：成本 ÷ 前进（cost-per-progress）---------- */
+  {
+    id: "cpp-worker-into-numerator",
+    src: "src/agent/cost-per-progress.ts",
+    test: "tests/cost-per-progress.test.ts",
+    desc: "归属拆分把 worker 的 usage 也算进主面 ⇒ 分母（只算主面的前进边界）不变、分子变大，fanout 那种形状上比值直接翻 4 倍（本轮实测就是这么抓出来的）",
+    apply: (s) => s.replace("    if (agent === undefined) mainTokens += t;", "    mainTokens += t;"),
+    expectFail: "worker 的 usage 一律落在 workerTokens/byAgent，绝不进 mainTokens",
+  },
+  {
+    id: "cpp-zero-boundary-ratio-zero",
+    src: "src/agent/cost-per-progress.ts",
+    test: "tests/cost-per-progress.test.ts",
+    desc: "零前进被写成「每边界 0 token」⇒ 读起来像「没花钱」，而真实红跑花了 68,535",
+    apply: (s) => s.replace("      excludedWorkerTokens: split.workerTokens, tokensPerBoundary: null,", "      excludedWorkerTokens: split.workerTokens, tokensPerBoundary: 0,"),
+    expectFail: "真实红跑：零 verified ⇒ 不可测（不是 0 也不是 Infinity），整笔主面就是死跑成本",
+  },
+  {
+    id: "cpp-dead-spend-hidden",
+    src: "src/agent/cost-per-progress.ts",
+    test: "tests/cost-per-progress.test.ts",
+    desc: "零前进时死跑成本归 0 ⇒ stop-policy 最想切的那一段（最后一次前进之后还在花）恰恰读不到",
+    apply: (s) => s.replace("      spendAfterLastBoundary: split.mainTokens, lastBoundaryEventId: null,", "      spendAfterLastBoundary: 0, lastBoundaryEventId: null,"),
+    expectFail: "真实红跑：零 verified ⇒ 不可测（不是 0 也不是 Infinity），整笔主面就是死跑成本",
+  },
+  {
+    id: "cpp-skipped-not-named",
+    src: "src/agent/cost-per-progress.ts",
+    test: "tests/cost-per-progress.test.ts",
+    desc: "均值把不可测样本静默丢掉而不点名 ⇒ 「每前进一份花多少」成了编的（读者无从知道分母是谁）",
+    apply: (s) => s.replace("  const skipped = rows.filter((r) => !r.cost.measurable).map((r) => r.id + \":\" + String(r.cost.reason));", "  const skipped: string[] = [];"),
+    expectFail: "跳过项点名且 used 只数可测的",
+  },
+  {
+    id: "cpp-coverage-toothless",
+    src: "src/agent/cost-per-progress.ts",
+    test: "tests/cost-per-progress.test.ts",
+    desc: "分母体检只看「有没有成功跑」，不看「取不取得到边界」⇒ 全空的分面会被读成健康",
+    apply: (s) => s.replace("  const ok = green.length >= 2 && withBoundary.length >= 1 && redWithout.length >= 1;", "  const ok = green.length >= 2;"),
+    expectFail: "分母体检要有分辨力：成功跑全取不到边界、或没有零前进的失败样本，都判红",
+  },
+  /* ---------- 能力 14：无进展检测（stagnation）的判据锚点 ---------- */
   {
     id: "np-green-verify-filtered-away",
     src: "src/agent/no-progress.ts",
