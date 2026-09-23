@@ -68,7 +68,7 @@ import type { MemorySnapshot } from "./ipc-protocol";
 import { AskGate } from "./ask-gate";
 import type { LicenseState } from "./license";
 import type { AskOutcomePayload, AskPayload, RunRequest, SidechatPanelSnapshot } from "./ipc-protocol";
-import { buildSandboxProfile, checkSandbox, runInSandbox, type SandboxStatus } from "./sandbox";
+import { annotateNetworkDenial, buildSandboxProfile, checkSandbox, networkProfileFor, runInSandbox, type SandboxStatus } from "./sandbox";
 import { PluginRuntime, setCurrentPluginRuntime, currentPluginRuntime, expandPromptCommand, expandSkillInvocation, commandInvokeName, skillInvokeName, type PluginPanelSnapshot } from "../agent/plugins";
 import type { HookEngine } from "../agent/plugins/hooks";
 import type { McpToolInfo } from "../agent/plugins/mcp";
@@ -348,10 +348,17 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
       if (d.verdict === "deny") return denied(name, aMode, d.reason, { ...gateBase(d, aMode), verdict: "denied" });
       // 人工批准时人选的 scope（ask 分支才会赋值）——留痕要能回答「是谁放行的、放到哪一档」。
       let manualScope: AskScope | undefined;
+      // 网络放行的取用面：只有「问过且批了」的网络命令才走 allow 支。
+      // §11.4 红线：任何档位下「网络全开」都不是免批条件 ⇒ auto 档的 L4-pass 与无人值守都拿不到，
+      // 判据挂在 verdict === "ask" → approved 这一条真实发生过的人工决议上，不挂在分类器上。
+      const wantsNetwork = isNetworkCommandCall(name, args);
+      let humanApproved = false;
       if (d.verdict === "ask") {
         if (!s.askGate) return denied(name, aMode, "非交互模式（fail-closed）：" + d.reason, { ...gateBase(d, aMode), verdict: "unattended" });
         const r = await s.askGate.request(name, args, {
-          reason: withSkillAllowNote(name, d.reason),
+          // 网络命令的批准现在真的放行出网（此前批了也没用——OS 层从没写过 network 规则），
+          // 所以把这层后果写进卡片理由：批准必须是知情的。
+          reason: withSkillAllowNote(name, d.reason) + (wantsNetwork ? "｜批准 = 本次命令放行网络出网（一次性，不记忆）" : ""),
           risk: d.risk,
           riskReasons: d.riskReasons,
           // 审查待确认第 4 条（任务 4.3）：门侧早已支持 ctx.signal（D12），但调用侧没传 =>
@@ -370,8 +377,11 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
             { ...gateBase(d, aMode), verdict: r.reason === "unattended" ? "unattended" : r.reason === "timeout" ? "timeout" : "rejected" });
         }
         // scope 回写（§10.4）：网络类命令强制 once（出网审计，scope 不放行）
-        const effScope: AskScope = isNetworkCommandCall(name, args) ? "once" : r.scope;
+        const effScope: AskScope = wantsNetwork ? "once" : r.scope;
         manualScope = effScope;
+        // 人工批准已成立 ⇒ 这一条命令这一次执行可以走网络放行支（一次性，不写规则库、不入 scope）。
+        // 「asked」由 d.verdict 现算，不另存状态——网络 profile 的三条条件里只有这一条是事件性的。
+        humanApproved = true;
         if (effScope === "session_kind") {
           (s.autonomy.sessionScopes as Set<string>).add(scopeKey(name, args));
         } else if (effScope === "always") {
@@ -396,6 +406,9 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
       if (name === "run_shell" && s.sandbox !== null && s.sandbox.available) {
         const command = typeof args.command === "string" ? args.command : "";
         const mapped = command.trim() === "pnpm test" ? VITEST_DIRECT : command;
+        // 缺省 deny：profile 里不写任何 network 规则 ⇒ 闭箱即全断网（sandbox:check ④ 钉着）。
+        // allow 支的取用条件全部住在 networkProfileFor（网络放行永不免批）。
+        const network = networkProfileFor({ wantsNetwork, asked: d.verdict === "ask", approved: humanApproved });
         if (beforeExecute) {
           // runInSandbox has no cancellation input. Reuse its profile, but launch via the existing
           // run_shell process-group/cancellation path; approval above evaluated the original lint.
@@ -403,10 +416,11 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
           await mkdir(tmp, { recursive: true });
           if (ctx.signal?.aborted) return { ok: false, output: "cancelled before sandbox lint" };
           const quote = (s: string): string => "'" + s.replace(/'/g, "'\\''") + "'";
-          const command = `TMPDIR=${quote(tmp)} exec /usr/bin/sandbox-exec -p ${quote(buildSandboxProfile(ctx.workspace))} bash -c ${quote(mapped)}`;
-          return withGate(await original.run({ command }, ctx));
+          const command = `TMPDIR=${quote(tmp)} exec /usr/bin/sandbox-exec -p ${quote(buildSandboxProfile(ctx.workspace, { network }))} bash -c ${quote(mapped)}`;
+          // 这条出口经 run_shell 工具而非 runInSandbox，故同一判据的提示在这里补（两处共用一只函数）。
+          return withGate(annotateNetworkDenial(await original.run({ command }, ctx), network));
         }
-        return withGate(await runInSandbox(mapped, { cwd: ctx.workspace }));
+        return withGate(await runInSandbox(mapped, { cwd: ctx.workspace, network }));
       }
       let result = await original.run(args, ctx);
       if (name !== "run_shell" && result.ok && s.actionFusion) {

@@ -1,7 +1,9 @@
 // sandbox:check —— 沙箱生效性验收（四项断言）+ **沙箱不可用时的降级链断言**（M2g §2.1 红线）。
 //
 // 两条分支（分支选择在输出里显式打印，fail-visible——修掉「真空通过」）：
-//   A. 沙箱可用：走原断言 ①工作区内写成功 ②工作区外写被拒 ③敏感目录读取被拒 ④断网；
+//   A. 沙箱可用：走原断言 ①工作区内写成功 ②工作区外写被拒 ③敏感目录读取被拒 ④断网
+//      ④b 网络审批通道（缺省支连不上 / **批准后 allow 支连得上**，靶子是本进程回环端口，不出网）
+//      ④c 断网提示只贴在缺省支 ⑤超限输出留尾部；
 //      **不得放宽**；且 ②③④ 必须能区分「沙箱拒绝」与「沙箱压根没 apply」——后者标「未验证」并计失败
 //      （M2g §1.4-1：旧版把 exit 71「sandbox_apply: Operation not permitted」当绿，绿 ≠ 测到了）。
 //   B. 沙箱不可用：断言的是**降级链正确**而非沙箱生效：
@@ -12,6 +14,8 @@
 //       pnpm sandbox:check -- --bogus-root        反向验证：可写根换成不存在路径（分支 A，断言①必须红）
 import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { createServer } from "node:http";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkSandbox, runInSandbox } from "../src/main/sandbox";
@@ -41,6 +45,21 @@ function assert(cond: boolean, label: string, detail = ""): void {
 /** 「沙箱没 apply」的指纹：sandbox-exec 起不来（宿主策略拒载），不是沙箱规则在生效。 */
 const APPLY_FAILED = /sandbox_apply:|exit code: 71/;
 const applied = (r: { ok: boolean; output: string }): boolean => !APPLY_FAILED.test(r.output);
+
+/** ④b 的网络靶子：本进程在回环端口上监听，收到请求就回一个一次性哨兵串。
+ *  **刻意不出网**——「放行面到底放没放行」必须可在无网络/无外网凭据的宿主上判定，
+ *  否则这条断言会在离线时被读成「沙箱有问题」假红，或在有网时被外部可用性污染。 */
+async function startLoopbackProbe(): Promise<{ port: number; token: string; close: () => void }> {
+  const token = "SBX-LOOPBACK-" + randomBytes(8).toString("hex");
+  const server = createServer((_req, res) => {
+    res.end(token);
+  });
+  await new Promise<void>((settle) => server.listen(0, "127.0.0.1", settle));
+  const addr = server.address();
+  const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+  if (port === 0) throw new Error("回环探针起不来（port=0）——④b 无从判定，宁可炸也不假绿");
+  return { port, token, close: () => server.close() };
+}
 
 const status = await checkSandbox();
 const degraded = !forceAvailable && !status.available;
@@ -96,6 +115,34 @@ if (!degraded) {
   assert(applied(n1), "④ 沙箱确实 apply（断网）", APPLY_FAILED.test(n1.output) ? "未验证：sandbox_apply 被拒" : "已 apply");
   // gates:disjunction-ok 合法析取：同上——断网可表现为非零退出，或 stderr 报 operation not permitted 而退出码为 0。
   assert(!n1.ok || /operation not permitted/i.test(n1.output), "④ 沙箱内无法建立 TCP 连接");
+
+  console.log("[sandbox:check] ④b 网络审批通道：allow 支连得上本进程回环端口，deny 支连不上（不出网）");
+  const probe = await startLoopbackProbe();
+  try {
+    const getCmd = "node -e \"require('http').get({host:'127.0.0.1',port:" + String(probe.port) +
+      "},r=>{let s='';r.on('data',d=>s+=d);r.on('end',()=>console.log('BODY:'+s))}).on('error',e=>console.log('ERR:'+e.code))\"";
+    const nDeny = await runInSandbox(getCmd, { cwd: ws, writableRoot, timeoutMs: 15000 });
+    const nAllow = await runInSandbox(getCmd, { cwd: ws, writableRoot, timeoutMs: 15000, network: "allow" });
+    console.log("    deny  → " + nDeny.output.split("\n").join(" | "));
+    console.log("    allow → " + nAllow.output.split("\n").join(" | "));
+    assert(applied(nDeny) && applied(nAllow), "④b 沙箱确实 apply（回环连接）",
+      APPLY_FAILED.test(nDeny.output + nAllow.output) ? "未验证：sandbox_apply 被拒" : "已 apply");
+    // gates:disjunction-ok 合法析取：deny 支下取不到正文有两种合理表现——连接被拒（ERR:EPERM），
+    // 或整个请求以非零退出收场；两者任一即证明「没放行」。与 ②④ 同一条口径。
+    assert(!nDeny.output.includes(probe.token), "④b 缺省（deny）支拿不到网络", nDeny.output.slice(0, 80));
+    assert(nAllow.output.includes(probe.token), "④b **批准后（allow）支确实拿得到**（§11.4 那一行的唯一证据）", nAllow.output.slice(0, 80));
+  } finally {
+    probe.close();
+  }
+
+  console.log("④c 断网提示只贴在缺省支（同一条命令、同一份 OS 原文，两支必须一贴一不贴）");
+  // 输入是被拦命令的真实输出原文（本机 sandbox-exec 实测串），不依赖此刻是否真被拦——
+  // 这样这条断言量的是**提示合成逻辑**，而不是宿主的网络状态；两支同靶才证明它挂在 network 上。
+  const epermShape = "echo \"connect EPERM 1.1.1.1:80 - Local (0.0.0.0:0)\"";
+  const noteDeny = await runInSandbox(epermShape, { cwd: ws, writableRoot, timeoutMs: 15000 });
+  const noteAllow = await runInSandbox(epermShape, { cwd: ws, writableRoot, timeoutMs: 15000, network: "allow" });
+  assert(noteDeny.output.includes("[sandbox]"), "④c 缺省支贴出可行动提示", noteDeny.output.split("\n").pop() ?? "");
+  assert(!noteAllow.output.includes("[sandbox]"), "④c 放行支不得再贴「被断网」提示（那是假信号）", noteAllow.output.slice(0, 80));
 
   // ⑤ 输出截断口径（2026-09-19）：run_shell 与 verify 在**沙箱开着时**都从这里出口，
   // 它若只留头部，「哪条测试失败」那行就到不了模型——这条断言把三处对齐钉在同一个门面上。

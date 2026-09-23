@@ -30,8 +30,18 @@ function real(p: string): string {
   }
 }
 
-/** 生成 SBPL profile：写收敛到 writableRoot（realpath），敏感目录拒读，无任何 network 放行。 */
-export function buildSandboxProfile(writableRoot: string): string {
+/** 网络面（§11.4 的「Restricted → Enabled」那一行在 OS 侧的落点）。
+ *  - `deny`（缺省）：profile 里一条 network 规则都不写，`(deny default)` 闭箱即全断网。
+ *  - `allow`：**只供人工批准过的网络命令一次性使用**——§11.4 红线「任何档位下网络全开都不是
+ *    免批条件」，所以调用方必须只在 `verdict === "ask"` 且已 approved 的分支上取这一支。
+ *  SBPL 没有 host 级匹配（要做逐域名放行得起一个代理，而 §11.9 定稿不做 MITM/代理），
+ *  故粒度 = 单次命令；这也是本仓与方案书表述的唯一偏差，已在 outputs/architecture-uplift 记档。 */
+export interface SandboxProfileOptions {
+  network?: "deny" | "allow";
+}
+
+/** 生成 SBPL profile：写收敛到 writableRoot（realpath），敏感目录拒读，network 按 opts 决定。 */
+export function buildSandboxProfile(writableRoot: string, opts: SandboxProfileOptions = {}): string {
   const root = real(writableRoot);
   const home = real(homedir());
   const lines = [
@@ -42,12 +52,47 @@ export function buildSandboxProfile(writableRoot: string): string {
     "(allow sysctl-read)",
     "(allow file-read*)",
   ];
+  if (opts.network === "allow") {
+    lines.push("(allow network-outbound)", "(allow network-inbound)");
+  }
   for (const rel of SENSITIVE) {
     lines.push('(deny file-read* (subpath "' + join(home, rel) + '"))');
   }
   lines.push('(allow file-write* (subpath "' + root + '"))');
   lines.push('(allow file-write* (subpath "/dev/null"))');
   return lines.join("\n");
+}
+
+/** Seatbelt 断网在命令侧的真实形状（三种实测串见 tests/sandbox.test.ts 的锚点）。
+ *  两条刻意排除：
+ *  - 「Failed to connect / Couldn't connect」——目标端口本来没人监听时它也出现，那是真失败不是被拦；
+ *  - 裸「operation not permitted」/「EPERM」——工作区外**写**被拒时打印的就是它，会把写拒绝说成断网。
+ *    所以只认 `connect EPERM` 这一条带连接语义的形状。 */
+const NETWORK_DENIAL_RE = /connect EPERM|could not resolve host|name or service not known|temporary failure in name resolution|network is unreachable|ENETUNREACH|EADDRNOTAVAIL/i;
+
+/** 输出是否像「被默认 profile 断网拦下」（供 run_shell 与 verify 两条出口共用，不各抄一份）。 */
+export function looksLikeNetworkDenial(output: string): boolean {
+  return NETWORK_DENIAL_RE.test(output);
+}
+
+/** 断网时贴给模型的一行说明：裸 OS 串只会让它原样重试（白烧一轮），这里直接给下一步。 */
+export const NETWORK_DENIED_NOTE =
+  "[sandbox] 上述失败形如「被默认沙箱断网」而非命令写错：默认 profile 不放行任何网络。" +
+  "确需出网就重发同一条命令——权限层认网络类命令并只给一次性批准（网络放行永不免批）。";
+
+/** 网络放行的**唯一**取用判据（§11.4 红线「任何档位下网络全开都不是免批条件」的实现点）。
+ *  三条同时成立才给 allow：命令被认成网络类、这一条确实问过人工、人点了批准。
+ *  抽成纯函数的理由：auto 档的 L4-pass 与无人值守 fail-closed 都必须落在这张真值表里，
+ *  而不是散在调用方的 if 里——散着写就会出现「分类器命中即放行」那种旁路。 */
+export function networkProfileFor(input: { wantsNetwork: boolean; asked: boolean; approved: boolean }): "allow" | "deny" {
+  return input.wantsNetwork && input.asked && input.approved ? "allow" : "deny";
+}
+
+/** 给已定形的结果补断网提示：`run_shell` 直连路径（融合分支）用；
+ *  `runInSandbox` 内部走同一只判据与同一句文案，两处不各抄一份。 */
+export function annotateNetworkDenial(result: ToolResult, network: "deny" | "allow" = "deny"): ToolResult {
+  if (network === "allow" || !looksLikeNetworkDenial(result.output)) return result;
+  return { ...result, output: result.output + "\n" + NETWORK_DENIED_NOTE };
 }
 
 /** 沙箱子进程环境：白名单 + 秘密剥除 + TMPDIR 指向工作区内 .tmp（写收敛）。
@@ -61,13 +106,15 @@ export interface SandboxRunOptions {
   /** 默认 = cwd（工具语义：沙箱根与工具工作区一致）。 */
   writableRoot?: string;
   timeoutMs?: number;
+  /** 网络面，缺省 deny。allow 的取用条件见 `SandboxProfileOptions.network`（永不免批）。 */
+  network?: "deny" | "allow";
 }
 
 /** 在 sandbox-exec 内执行 bash -c；结果形态与 src/tools/run_shell 对齐（截断/超时/退出码）。
  *  「对齐」靠的是同一只 `createOutputRing`：这条路径是**沙箱开着时** verify 与 run_shell 的实际出口
  *  （`verifyExec` / agent-runner 的无融合分支都走这里），它若只留头部，验证门的尾部结论就到不了模型。 */
 export async function runInSandbox(command: string, opts: SandboxRunOptions): Promise<ToolResult> {
-  const profile = buildSandboxProfile(opts.writableRoot ?? opts.cwd);
+  const profile = buildSandboxProfile(opts.writableRoot ?? opts.cwd, { network: opts.network });
   const tmp = join(real(opts.cwd), ".tmp");
   await mkdir(tmp, { recursive: true });
   return await new Promise<ToolResult>((settle) => {
@@ -84,6 +131,9 @@ export async function runInSandbox(command: string, opts: SandboxRunOptions): Pr
       let output = ring.read();
       if (timedOut) output += "\n[error: 沙箱命令超时（" + String(Math.round(timeout / 1000)) + "s），已强制终止]";
       if (code !== 0 && !timedOut) output += "\n[exit code: " + String(code) + "]";
+      // 断网提示只在本轮走默认（deny）支时贴：allow 支下网络已放行，再贴就是假信号。
+      // 与退出码无关——`curl …; echo rc=$?` 这类写法让退出码归 0，而模型看到的是解析失败。
+      if (opts.network !== "allow" && looksLikeNetworkDenial(output)) output += "\n" + NETWORK_DENIED_NOTE;
       settle({ ok: code === 0 && !timedOut, output: output.replace(/\n+$/, "") });
     };
     const handle = spawnTracked("sandbox-exec", ["-p", profile, "bash", "-c", command], {
