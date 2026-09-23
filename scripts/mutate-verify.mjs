@@ -6075,6 +6075,56 @@ const MUTATIONS = [
     apply: (s) => s.replace("consumed.add(i + 1);", "consumed.add(-1); // 值位没被吞"),
     expectFail: "`--budget-ms 600000` 的值不是锚点 id（旧分流会报「未知 id 600000」，等于没人能设预算）",
   },
+  // ---- HEAD 归属两面判据（2026-09-23，追加九–十一）：判据自己也得有分辨力。
+  //      已知未覆盖的一格：`reportNeedles` 里「faces 同时喂被测面 + 判卷」与「untracked/drift 计入 exit」
+  //      属接线、`.mjs` 未被任何测试 import ⇒ 没有观测者可钉（不拿"源码形状断言"充数，见仓规：跑 shipped 实现）。
+  {
+    id: "untracked-face-filter-always-empty",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "把「未被 git 跟踪的锚点面」判成恒空 ⇒ 整条 HEAD 归属判据退化成装饰：主树照旧全绿，" +
+      "而锚点守护的代码从未入库（追加九实测：主树阻断 0 / 同 HEAD 隔离树阻断 6）",
+    apply: (s) => s.replace("return items.filter((p) => !isTracked(p.path));", "return [];"),
+    expectFail: "盘上有、HEAD 里没有 ⇒ 点出来（含 id、路径与是哪一面，能直接照着补提交）",
+  },
+  {
+    id: "untracked-line-judge-face-uses-src-wording",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "判卷面套用被测面的文案 ⇒ 报告说「源文件读不到」，而真因是判卷文件从未入库（干净 HEAD 上连基线都跑不出来，" +
+      "却被伪装成「基线不是全绿」）；两面的修法指不同文件，串了就误导",
+    apply: (s) => s.replace('const symptom = p.what === "判卷"', 'const symptom = false && p.what === "判卷"'),
+    expectFail: "判卷面缺文件说「连基线都跑不出来」并指向判卷文件，不写「源文件读不到」（两面修法指不同文件）",
+  },
+  {
+    id: "untracked-line-judge-fix-points-at-src-file",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "判卷面的修法一句写死成「把那份源文件提交」⇒ 照着做会去提交一份本来就入库了的源文件，" +
+      "而缺的那份判卷文件仍然没有进 HEAD（门继续红，且没人知道要提交什么）",
+    apply: (s) => s.replace('const target = p.what === "判卷" ? "判卷文件" : "源文件";', 'const target = "源文件";'),
+    expectFail: "判卷面缺文件说「连基线都跑不出来」并指向判卷文件，不写「源文件读不到」（两面修法指不同文件）",
+  },
+  {
+    id: "drift-double-reports-disk-problems",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "去掉「盘上已报过就不重复报」⇒ 同一条锚点同时进「针脚失效」与「钉在飞文本」两栏，" +
+      "汇总的阻断数被同一件事抬高两次（读的人按数去找缺陷，会多算一半）",
+    apply: (s) => s.replace("return head.filter((p) => !reported.has(p.id) && !pathsNotInHead.has(p.srcRel));",
+      "return head.filter((p) => !pathsNotInHead.has(p.srcRel));"),
+    expectFail: "盘上已经报过的同一条不重复报（一行红只有一个成因，读的人不必对两行）",
+  },
+  {
+    id: "drift-double-counts-untracked-path",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "去掉「路径未入库的归上一条管」⇒ 一个从未入库的文件既进「未入库面」又进「钉在飞文本」，" +
+      "两栏各说一种成因、指向两种修法，而它只有一个",
+    apply: (s) => s.replace("return head.filter((p) => !reported.has(p.id) && !pathsNotInHead.has(p.srcRel));",
+      "return head.filter((p) => !reported.has(p.id));"),
+    expectFail: "HEAD 里读不到、且该路径已由「未入库」判据报过 ⇒ 不重复报（同一件事两栏都记 = 数被抬高）",
+  },
   // ---- 半截轨迹（2026-09-23，在唯一一条真·持久化会话上量到：`run_shell` 那一笔没有结果，
   //      而草稿当时的清单对这一格一字未提）。同一条 agent_id 闸现在**同时**守着两支消费：
   //      callPath 归因与 pending 配对 ⇒ 按规则 69，改这一行必须两条锚点各点一个名，
