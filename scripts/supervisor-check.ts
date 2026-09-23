@@ -6,7 +6,7 @@
 //   D 早停省钱（步骤 12）：非选中候选终态 cancelled，且 accountable usage 严格小于跑满（全收敛对照）
 // 双轨备案（§5.1）：supervisor 审批契约与 pipeline stages 全表分开（supervise 模式接线留 M6，不动旧门）。
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent } from "../src/events";
@@ -472,6 +472,27 @@ async function waitFor(pred: () => boolean, timeoutMs = 10_000): Promise<boolean
     "E10f 主 checkout 零污染",
   );
 }
+
+// ---- 门自己的收尾：E1–E5 的 workspace 写死成**冻结靶子**，而 escalate/abort 现在刻意保留最终环 ----
+// 生产语义是对的（裁决必须发生在证据还在的时候），两条叠起来却会喂坏别的门：每跑一次本门，
+// 就往 `fixtures/todo-app/.agents/` 留一个整仓 worktree，而 `.agents/` 被 gitignore ⇒ git status 零信号。
+// 实测后果（2026-09-24）：`pnpm e2e` 的**开工基线**变成「76 failed | 2367 passed」——靶子那句
+// `vitest run` 顺着这个 worktree 把整仓测试收了进来，e2e 两道断言一起假红（我先误当自己改坏了）。
+// ⇒ 门必须自己收尾，且收尾之后断言零残留：不这么钉，下一次再叠上什么照样没人知道。
+const FIXTURE_AGENTS = join(ROOT, "fixtures", "todo-app", ".agents");
+const leaked = await readdir(FIXTURE_AGENTS).catch(() => [] as string[]);
+for (const name of leaked) {
+  const abs = join(FIXTURE_AGENTS, name);
+  await new Promise<void>((resolve) => {
+    execFile("git", ["worktree", "remove", "--force", abs], { cwd: ROOT }, () => resolve());
+  });
+  await rm(abs, { recursive: true, force: true }).catch(() => {});
+}
+await rm(FIXTURE_AGENTS, { recursive: true, force: true }).catch(() => {});
+check(
+  (await readdir(FIXTURE_AGENTS).catch(() => [] as string[])).length === 0,
+  "E-F 门跑完靶子零残留（冻结目录里不许留 worktree——它会被靶子自己的 vitest 收成整仓测试）",
+);
 
 await rm(work, { recursive: true, force: true }).catch(() => {});
 
