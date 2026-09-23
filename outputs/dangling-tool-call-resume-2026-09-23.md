@@ -117,13 +117,51 @@ context-auto-verify-note（4 文件 50 测试全绿）——**我新写的那份
 新增第 6 条判卷钉住这个形状；锚点 `dangling-answered-set-ignored` 的改法**即复现该失效方式**
 （把 `answered.has(tc.id)` 那一半去掉）。读数：5 文件 72 测试 exit 0、typecheck 0 错、三条锚点 3 ✅。
 
-## 九、同一现场的下一格（已开任务 #58，未动代码）
+## 九、面板面的先量后改（原开成任务 #58）
 
-`projectPanelData` 的 terminal 段（`src/renderer/projections.ts`）把 `ok: null` 注成
-「null = 结果未回（**运行中**）」，`app.js` 据此渲染「执行中…」。⇒ 重开这条断会话，右栏终端面板会
-**永远**挂着 `pnpm test 执行中…`，而那进程早死了。这是同一条不变量在**面板面**的缺失，
-且顺带露出第二格：那个循环**没有过 `entersMainConversation`**，而对话面两处都过了
-（`app.js` 的投递循环、`history-window.js` 的 `projectUnits`；行号不写死，那两个文件是并发热点）
-⇒ worker 子流的 `run_shell` 会被算进父会话的终端面板（同一份解析只硬化一支，第六族）。
-两条都还没实测真伪（本 § 只陈述代码读到的判据形状），开工先做：**用这条真会话文件离线跑一次投影，
-量出 terminal 行数与 `ok===null` 的条数**，再决定是"取运行态"还是"取事件流末态"。
+把这条真会话离线过一次投影（脚本跑完即删，不落仓）：
+
+```
+文件= 会话 2026-09-10 03:13.jsonl   事件数= 9
+projectPanelData(...).terminal 行数= 1
+ok===null 的行= ["c3:pnpm test"]        ← 「执行中…」那一格，当场量到
+带 agent_id 的 tool_call 事件数= 0        ← 归因那一格在这条素材上分母为 0
+tool_result 事件数= 2
+```
+
+⇒ 第一格（缺席当运行中）是**真实现场**，不是代码读出来的可能性；第二格（子流混进父面板）在这条素材上
+量不到 ⇒ 只能靠构造用例，且据此说明"为什么它的判卷只有单元层、没有真窗口层"。修法与读数见 §十。
+
+## 十、面板面那两格也收了（`5432cad` + `eeb8731`）
+
+同一条断会话往下一格：`projectPanelData` 把无结果的 `run_shell` 投成 `ok === null`，字段注释写着
+「null = 结果未回（运行中）」，`app.js` 据此渲染「执行中…」⇒ **重开这条早死掉的会话，右栏终端面板
+永远挂着 "pnpm test 执行中…"**。这是"结果缺席"被当"仍在运行"的代理信号（与 §八 那笔同类：都在猜，没看事实）。
+
+修法两层：状态判据收成一份纯投影 `terminalRowState(ok, live)` 四态（running / lost / ok / failed），
+liveness 由渲染层给 —— `panelLive = !historyEvents && !!real.running`，写在 `refreshPanels` 里与投影同拍；
+`data-term-state` 是给门禁的读点（不依赖中文文案，走 `data-impact` 那条既有规矩）。
+
+同一段循环还漏了第二格：**它没过 `entersMainConversation`**，而对话面两处都过了 ⇒ worker 子流执行的命令
+出现在父会话的「本会话命令」里。按 #53 的教训两侧都挡（`seen` 用 provider 的 callId，缺省是流内序号 ⇒
+parent 与 worker 可以都有 `call-0`）。
+
+读数（判卷两层 + 门一层）：
+
+| 面 | 读数 |
+| --- | --- |
+| 单元（`tests/renderer-terminal-liveness.test.ts`，先写后跑） | 接线 3 条改前全红 ⇒ 改后 **10 passed**；归因 2 条改前红（第 3 条反面对手本来就绿） |
+| 真窗口（`pnpm panels-check` 新增 B26 五条断言） | **exit 0**；实测无结果那行 `state="lost"` 文案「无结果（上次运行在这次调用中途结束）」，配对行 `state="ok"`「✓ 执行完成」（手法同 B23：追加既有事件 + 切走再切回，零模型调用） |
+| 邻域 | projections / panel-data / panel-dirty-freshness / renderer-agents-view / history-window 全绿 |
+| 锚点 | `term-null-always-claims-running` ✅、`term-terminal-no-attribution-filter` ✅（2.3s）——**同样只在树里**，`scripts/mutate-verify.mjs` 此刻又被别人的 `lr-*` 一批占着，复算：`git show HEAD:scripts/mutate-verify.mjs \| grep -c term-null-always-claims-running` |
+| 全量 | 面板簇入库后复跑：`TERM=dumb node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts` ⇒ **206 files / 2144 tests / 0 failed，exit 0**（同轮 `pnpm typecheck` 0 错、`node --check src/renderer/app.js` 0、`pnpm run panels-check` exit 0） |
+
+未证/口径：**归因那一格只有单元判卷，没有真窗口侧**（check 窗口里没有带 worker 的会话素材）；
+`panelLive` 取的是「不是重放 ∧ 有 run 在飞」，跨会话同时跑的窗口未验证（同一时刻只有一个 `real`，
+开着别的会话必然带 `historyEvents` ⇒ 推理上够，但那是推理，不是读数）。
+
+## 十一、旁注（别人的在飞面，不归我修，留个指针）
+
+`--check-needles` 这一轮报 742 条里有一条 ⚠️ 待复认：`probe-delta-sign-reversed` 的针脚在
+`src/agent/gym/probe.ts` 的**在飞版本**里命中 2 处，而 `replace` 只改第一处 ⇒ 那条锚点现在打在哪个符号上
+需要持有该簇的会话复认（阻断仍是 0，不是红）。
