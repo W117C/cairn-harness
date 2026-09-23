@@ -7556,6 +7556,14 @@ const MUTATIONS = [
     apply: (s) => s.replace("    parentMode: recoveryParentMode(await replay(logPath).catch(() => []), (await store().get()).mode),\n", "    parentMode: (await store().get()).mode,\n"),
     expectFail: "会话历史是 read-only + 设置盘默认 auto ⇒ 重派 write worker 必须被拒（拒因点名 read-only）",
   },
+  {
+    id: "recovery-log-path-only-from-memory",
+    src: "src/main/agent-runner.ts",
+    test: "tests/recovery-restart-current-session.test.ts",
+    desc: "恢复兜底只认内存里的 lastLogPath ⇒ 真重启后（三个内存态全归零）恢复卡的「重派」依旧点不动，只换了句错误文案",
+    apply: (s) => s.replace("  const logPath = sessionId ? pathOf(requireSessionsDir(), sessionId) : lastLogPath;\n", "  const logPath = lastLogPath;\n"),
+    expectFail: "会话留痕是 read-only + 设置盘默认 auto ⇒ 重派 write worker 被拒（拒因点名 read-only）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

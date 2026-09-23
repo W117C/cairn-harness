@@ -2141,7 +2141,12 @@ $0.2020（standard）/ **$0.8080**（strong）——价表跨度 40 倍。旧算
   一条 read-only 会话就顶着 auto 的帽子派 write worker，§11.7.6 的单调继承被换松一档（方向单向变宽）。
 - 判卷：`tests/recovery-parent-mode.test.ts` 7 条 = 6 条取档（含「worker 子流留痕按 `agent_id` 排除」
   「gate.mode 宁缺不编不许当档位」）+ 1 条走真 `handleCardAction`（前置自检先钉"留痕真落盘了"，
-  否则"被拒"可以是"什么都没读到"）。锚点 +2：摘掉兜底那一跳 / 把父档改回读设置盘，逐条 ✅。
+  否则"被拒"可以是"什么都没读到"）。锚点 +3：摘掉兜底那一跳 / 把父档改回读设置盘 / 只认内存 `lastLogPath`。
+- **自己这处修复的另一半差点没观测者**：上面那条 run 走的是 `lastLogPath` 兜底支，
+  真重启靠的是 `currentSession` 那一支。并排写进同一文件是**测不出来的**——vitest 按文件隔离模块状态，
+  同文件里先跑过 run，`lastLogPath` 就非空，就算完全不读 `currentSession` 也能蒙对。
+  ⇒ 单独一份 `tests/recovery-restart-current-session.test.ts`（整份文件不调 `handleAgentRun`
+  ⇒ `lastLogPath` 必为 null），并补第三针 `recovery-log-path-only-from-memory`。
 - `KNOWN_GAPS` 里 `parentMode` 那条署名按设计变陈旧后撤掉；同时在那张表旁**留了逃逸口的名字**：
   把读盘嵌进调用参数（现在这行的形状）就不被棘轮枚举了 ⇒ 该格的观察着改由上面 7 条 + 两针负责，
   要真收口得让第二条形状按 initializer 子树找读盘（独立改造，没顺手做）。
