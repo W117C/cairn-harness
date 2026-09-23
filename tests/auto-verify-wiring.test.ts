@@ -132,6 +132,21 @@ describe("能力 5 收束闸的装配链（runAgent 直调 vs 生产入口）", 
     expect(beats[0]).toMatchObject({ callId: "harness-auto-verify", auto: true });
   });
 
+  // 那一行是 `over.autoVerify ?? settings 的值`：右半边有 ②b 观察着，**左半边此前一格都没有**
+  // （没有任何用例在 settings 为真时显式传 false）⇒ 把整行写成"只读 settings"今天没有任何用例会红。
+  it("②c settings 侧为真、overrides 显式 false ⇒ 那一拍不补（override 那一半的观察着）", async () => {
+    await writeFile(
+      join(dir, ".agent/permissions.json"),
+      JSON.stringify({ rules: [{ behavior: "allow", tool: "write_file", scope: "always" }] }),
+      "utf8",
+    );
+    await settings({ provider: "demo", safeMode: "off" }); // 无键 ⇒ 缺省开，故只有 override 能关掉它
+    const events = await runViaIpc({ autoVerify: false });
+    const results = events.filter((e) => e.type === "tool_result");
+    expect(results.every((e) => e.ok === true), JSON.stringify(results)).toBe(true); // 写成功，排除"门拒了所以没拍"
+    expect(autoBeats(events).length).toBe(0);
+  });
+
   it("③a 代价上界：仓库没有可验面时零行为（这条不许被翻默认顺带打开）", async () => {
     await rm(join(dir, ".agent/config.json"), { force: true });
     vi.stubEnv("M3A_MAIN_SCRIPT", scriptPath);
