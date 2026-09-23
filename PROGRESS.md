@@ -1555,6 +1555,37 @@ judgment-layer §9.1 的一条省略——"包管理器错误码先不加，因�
   全量 `test` **216 files / 2316 tests 全绿**（比上一笔 +1 file / +5 tests，正好是新判卷文件本身——
   加值/加文件的读数增量自己可核，不用信"我加了"这句话）。
 
+**能力 28：设置页那格「权限默认模式」被查出根本没有消费者，现已接通并两头有判卷**（细节 `outputs/permission-guided-mode-2026-09-23.md` §八）。
+补 `guided` 按钮时顺带发现一条**能力 7/8 的假控件**：设置副标题写「新对话开始时使用的权限档」，
+但 `settings.mode` 在渲染层只用来点亮按钮的 `aria-pressed`，看板初值写死 `PERM_MODES[1]`（按**下标**），
+`run` IPC 真发出的档位另有第二份 `PERM_MAP` 字面量 ⇒ **设成「严格审批」重启后每笔 run 仍按 `default` 送出**。
+- 修法只两处：别名表搬进 `projections.PERM_ROW_BY_MODE`（`Record<档位, 行 id>` ⇒ 少一档编译不过），
+  反向表由 `permModeMapByRow()` 派生；回灌时机收成 `seedPermRowId({storedMode,currentRowId,userChose})`
+  ——用户刚点过 / 认不出 / 与当前相同 ⇒ 一律不动，且**认不出不降级到默认档**（保持现场）。初值改按 id 查。
+- 两头判卷：`tests/renderer-perm-default-mode.test.ts` 9 条（正反互逆、行 id 集同源、时机四格，
+  其中"不许猜默认"那格故意用 `yolo`/`strict` 当现值——全用默认行写就永远绿）；
+  真窗口 `panels-check` **B30** 四格逐格打印实测文本（读档回灌「严格审批」/ aria-label 同步 /
+  无 mode 留「标准权限」/ `guided` 在产品面真选得出来），首版假绿过一次：静态标记就能满足"标签非空"，
+  现用 `aria-label` 前缀 `权限模式：` 当"app.js 真跑过"的证据。
+- **锚点自己抓出的一条恒真针**：`perm-seed-guesses-default-row` 首版扎在 `permRowIdForMode` 尾部回落支上，
+  而上面已有 `hasOwnProperty` 闸 + `Record` 保证 ⇒ 那条分支在测试可达输入里**根本进不去** ⇒ 变异存活。
+  改扎调用方那句 `?? PERM_DEFAULT_ROW` 后 ✅ 杀掉。同格另记一条**刻意不钉针**的署名裁决：
+  「陌生档位不许被猜成默认」由两支互为冗余的闸共同成立，撤任一支行为不变 ⇒ 单行锚点在这里必然存活。
+- 门的面板：**条数以 `pnpm mutate-needles-check` 输出为准**（跨会话滚动数，不写死在这里），
+  本轮两侧读数：主树与同 HEAD worktree **都报阻断 0 / 钉在飞文本 0 / 未入库面 0**；
+  新四条按顺序（提交→逐条跑）验：3 条当场 ✅，1 条存活→换靶→✅。
+- HEAD-only 终局读数（同提交 `dd29561`，干净 worktree + `cp -al` 真依赖）：tsc 0 错、
+  全量 `test` **217 files / 2325 tests 全绿**；主树同一时刻是 218 / 2330，差的 1 file / 5 tests
+  仍是别人未跟踪那份（与上一笔的差值一字不差）。⇒ 相对上一笔 HEAD（216 / 2316）**恰好 +1 file / +9 tests**，
+  就是本笔新判卷文件自己——增量的可核性同能力 27 那条。
+- 真窗口门：`pnpm panels-check` 主树 **exit 0、0 ❌**，含 B30 四格（各带实测文本，见 §八）。
+- 顺手量到两条耐久事实：⑴ `panels-check` 的「只测新相、旧相全红」形态真因是**陈旧 Electron 占着按 pid 算的
+  CDP 端口** + `requestSingleInstanceLock` 让新进程直接退出 ⇒ `Cdp.connect()` 读到**上一个窗口**。
+  修法按「等状态不等事件」写成起窗前等端口空出来（12s 不空即 fail-visible），不再拿起窗次数当判据；
+  ⑵ B23 标签已被"审阅页"那相占过 ⇒ 编号冲突是可复发的，新相先 `grep` 再定号（本相编到 B30）。
+- 未做（不偷做）：把等端口这条**推广到 `spawnElectron` 全相**仍是假设（只在 B30 四跑上验证过），
+  留作下一条；`agent-plan.md` 的三档矩阵仍待批准（§七）。
+
 
 
 

@@ -139,3 +139,75 @@ auto:        { writeAsk: false, scopeMemory: false, riskAskAt: "high",   label: 
 ```
 以及 `:1442` 那行「我们三档已覆盖同语义面」→ 改为「三档曾覆盖 §3.4 实测的全部语义面；
 guided 补的是实测出来的中间空格（默认档 89/89 出卡在 L3-mode），不是 CLI 模式堆叠」。
+
+## 八、加档顺带照出来的第二件事：设置页那格「权限默认模式」根本没有消费者
+
+给设置页补 `guided` 按钮时才发现：**那格控件在 2026-09-23 之前从未影响过一次执行**。
+
+### 8.1 实测的假控件形状
+
+三条独立事实叠成一个谎：
+
+1. 设置页那格副标题写「新对话开始时使用的权限档」，`settings.mode` 在渲染层的**唯一**读取点是点亮
+   按钮的 `aria-pressed`；
+2. 权限看板的初值是 `let permMode = PERM_MODES[1]` —— 按**数组下标**取，不认设置；
+3. `run` IPC 真发出去的档位来自 `app.js` 里另一份 `PERM_MAP` 字面量（行 id → 档位）。
+
+⇒ 用户把它设成「严格审批」并重启，看板显示「标准」，而每一笔 run 仍按 `default` 送出。
+这不是读代码读出来的，是给这一跳**建真窗口判据（panels-check B30）时**第一次有人观察
+「盘上的 mode → 芯片上的字」而看到的：没有这条判据，这条通道可以一直绿着骗下去
+（同 §四 那处文案谎一个根：**界面能选，不代表执行端在听**）。
+
+### 8.2 修法：一只表 + 一处时机，两端都不再抄字面量
+
+- 档位 ↔ 看板行 id 的别名表搬进 `projections.PERM_ROW_BY_MODE`，类型是
+  `Record<AgentPermissionMode, string>` ⇒ **少一档编译不过**；反向表 `permModeMapByRow()` 由它派生，
+  `app.js` 的 `PERM_MAP` 改成调用它（消掉第二份字面量）。
+- 回灌时机收成 `seedPermRowId({ storedMode, currentRowId, userChose })`，三种情形都返回 `null`：
+  ⑴ 用户刚手动点过 ⇒ 异步到达的设置不得撤销那一下；⑵ 设置认不出 ⇒ **不降级到默认档**（保持现场）；
+  ⑶ 与当前行相同 ⇒ 不重复渲染、不弹「已切换」toast。
+- 看板初值改按 id 查（`permRowById(PERM_DEFAULT_ROW)`）。旧写法 `PERM_MODES[1]` 今天仍对，
+  但它对的原因是"下标 1 恰好还是标准"，不是"取的是标准"——`guided` 正是插在中间那一档。
+- `permTouched` 只在人点的路径上立起来；启动回灌走 `{ silent: true }`，既不弹 toast 也不立旗
+  （否则第二次及以后的设置变更再也进不来——这是"两边都别管"那种修法，被反向用例钉住）。
+
+### 8.3 判卷：单测判形状，真窗口判那一跳
+
+- `tests/renderer-perm-default-mode.test.ts` 9 条：正反两向互逆、看板行 id 集与别名表键集同源、
+  认不出的五种输入（含原型键 `constructor`）都返回 `null`、回灌时机四格。
+  其中"认不出不得回落到默认行"那格**故意**用 `currentRowId: "yolo" / "strict"` 写——
+  全部拿 `PERM_DEFAULT_ROW` 当现值，这条判据就永远绿。
+- 真窗口观察者 = `panels-check` **B30** 四格（四次启动，逐格打印实测文本）：
+  设置 mode=read-only ⇒ 芯片「严格审批」；aria-label 同步换档（读屏看到的与眼睛看到的同一档）；
+  设置里没有 mode ⇒ 留默认「标准权限」（反向一侧：证明上一条不是把芯片写死）；
+  新档 `guided` 在产品面真选得出来 ⇒ 别名表少一行时这一格就是 `null`。
+  "app.js 真的跑过"的证据用 `aria-label` 前缀 `权限模式：` 卡住——静态标记本身就能满足"标签非空"，
+  只断非空等于没断（首版即为此假绿过一次）。
+
+### 8.4 锚点：一条活着的锚点是怎么被自己抓出来的
+
+新钉四条（旧的 `renderer-perm-map-copy-missing-mode` 随 `PERM_MAP` 搬走一并替换）：
+别名表少一档、字面量抄回渲染层、回灌覆写用户选择、认不出时猜默认行。
+
+按「提交 → 逐条跑新锚点」的顺序复跑时，第四条报 **变异存活**。原因不在判卷：针脚扎的是
+`permRowIdForMode` 尾部 `return typeof row === 'string' ? row : null` 那条回落支，
+而它上面已经有一道 `hasOwnProperty` 闸、表又由 `Record` 保证每档都是字符串 ⇒
+**那条回落在所有测试可达的输入里根本进不去**，`?? PERM_DEFAULT_ROW` 与它语义等价。
+改扎调用方 `const row = permRowIdForMode(opts.storedMode)` 后当场 ✅ 杀掉。
+
+同格还留一条**刻意不钉针**的裁决（署名而非沉默）：「陌生档位不许被猜成默认」其实由两支**互为冗余**的闸
+共同成立，单独撤掉任何一支行为一字不变 ⇒ 单行锚点在这里必然存活，写它等于写一条恒真锚点。
+教训已收成记忆规则 109：**锚点存活先做可达性预检（什么输入能执行到这一行），冗余双闸不钉单行针。**
+
+### 8.5 顺手量到的两条判卷面事实
+
+- 改 `const PERM_MAP` 那一行**没有**惊动四支按标记切 `app.js` 的渲染层切片测
+  （`renderer-session` / `renderer-workspace` / `renderer-history-live` / `renderer-panels-real-data`）——
+  它们的切片区间不含该行。这是运气不是设计，所以记下来：下次把符号搬进 `projections` 之前，
+  仍要先确认切片区间（规则 41/44/62 同族）。
+- `panels-check` 首跑出现「只测新相、旧相全红」的形态（B20/B24/B26 + B30 一起红），
+  而干净 worktree 同码全绿 ⇒ 真因是**陈旧的 Electron 仍占着按 pid 算出的 CDP 端口**，
+  而 `requestSingleInstanceLock` 让新起的进程直接退出，于是 `Cdp.connect()` 读到的是**上一个窗口**。
+  修法按「等状态不等事件」写成前置闸：起窗口的**次数**不再当判据，改成等端口空出来（12s 内不空即
+  fail-visible 红并打印占着它的读数）。B23 这个标签已被"审阅页"那相占过 ⇒ 新相编到 B30。
+
