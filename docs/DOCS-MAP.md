@@ -21,6 +21,7 @@
 | 查上一轮全面评审 | `outputs/project-review-2026-09-21.md` |
 | 查架构对照六仓的真缺口 | `outputs/architecture-uplift-2026-09-21.md` |
 | 查「每请求固定成本 / 工具面膨胀」的调研与已落地能力 | `outputs/model-surface-budget-2026-09-23/`（四册：调研综述 / 装配账读数 / 设计与判据 / 施工回执）|
+| 查「缓存前缀抖动 / 为什么不能拿命中率当判据」 | `outputs/prefix-churn-2026-09-23/`（实测发现 + 设计与判据 + 施工回执；门 `prefix-churn-check`）|
 | 查安全绕过复现与修法 | `outputs/shell-permission-bypass-2026-09-21.md` + `scripts/probe-shell-bypass.ts` |
 | 查判断层校准路线 | `docs/judgment-layer-calibration-proposal.md` |
 | 看验收截图（**历史 UI**） | `docs/*.png`（vanilla 迁移前，勿当现状） |
@@ -84,6 +85,7 @@ deepseek harness/
 - `architecture-uplift-2026-09-21.md` — 六仓对照真缺口 + 执行面契约
 - `harness-deep-analysis-2026-09-21/` — 六仓深挖原始册
 - `model-surface-budget-2026-09-23/` — 模型面总预算（工具面膨胀）：外部读数 + 降配梯 + `model-surface-check` 门
+- `prefix-churn-2026-09-23/` — 前缀抖动：真实录制的 cache 读数 + 排序纪律进 `prefix-churn-check` 门
 - `design-contradictions-2026-09-18.md` — 渲染侧矛盾台账
 - `zcode-study-2026-09-21.md` · `laya-evaluation-2026-09-21.md` · `aseos-vision-evaluation-2026-09-21.md`
 
