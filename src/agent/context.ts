@@ -111,9 +111,44 @@ export function truncationNote(e: TurnTruncatedEvent): string {
       " ⇒ 那不是完整结论；能换个说法继续就换，不能就明说卡在哪，别把半句当结论交出去。";
 }
 
+/** 补位消息的正文：说的是"这次没结果"这句实话，不是编一个结果。 */
+export function danglingToolCallNote(id: string): string {
+  return `[harness] 工具调用 ${id} 没有收到结果：上一次运行在这次调用中途结束（进程退出 / 崩溃 / 被中断）。` +
+    "不要假设它已生效——需要就重新发起，或先确认盘上现状。";
+}
+
+/** 合上孤儿 tool_call（**投影面**的合法性，不改事件流一个字节）。
+ *  真实现场：一条被切断的会话以 `{id:"c3",name:"run_shell"}` 收尾且永远没有 tool_result，
+ *  而逐事件投影会原样留下一条"要结果但等不到"的 assistant.tool_calls。OpenAI 兼容端的硬要求是
+ *  「带 tool_calls 的 assistant 之后必须紧跟覆盖这些 id 的 tool 消息」⇒ 不满足就是 400 请求体错误，
+ *  于是**这条历史续不下去**（中段缺结果的同一格，被压缩摘掉 tool_result 时也会踩到）。
+ *  只补"紧邻缺位"的那些：已经配对的 id 一律不动 ⇒ 完整历史的投影逐字不变（判卷里钉了这条反面对手）。
+ *  solpi 的 `sent()` 按 tool_result **事件**配对计数，这里补出来的消息没有对应事件 ⇒ 不会被误记成一次可见发送。 */
+export function closeDanglingToolCalls(msgs: ContextMessage[]): ContextMessage[] {
+  const out: ContextMessage[] = [];
+  let i = 0;
+  while (i < msgs.length) {
+    const m = msgs[i] as ContextMessage;
+    out.push(m);
+    i++;
+    if (m.role !== "assistant" || m.tool_calls === undefined || m.tool_calls.length === 0) continue;
+    const need = new Set(m.tool_calls.map((c) => c.id));
+    while (i < msgs.length && (msgs[i] as ContextMessage).role === "tool") {
+      const id = (msgs[i] as ContextMessage).tool_call_id;
+      if (id !== undefined) need.delete(id);
+      out.push(msgs[i] as ContextMessage);
+      i++;
+    }
+    for (const id of need) out.push({ role: "tool", tool_call_id: id, content: danglingToolCallNote(id) });
+  }
+  return out;
+}
+
 /** 组装投影：events（内存态或 replay 产物）→ 消息序列。
  *  M2b：replacements（事件 id → 替换文本）= prune 类型化裁剪投影（§7.4）——
- *  只动 tool_result 的 content，不动消息结构；缺省空 = 零行为（既有路径字节不变）。 */
+ *  只动 tool_result 的 content，不动消息结构；缺省空 = 零行为（既有路径字节不变）。
+ *  出口处过 closeDanglingToolCalls：被切断的会话可能留下没有结果的 tool_calls，那在 OpenAI 兼容端
+ *  是 400 而不是"历史少一句"，续跑会直接失败（见该函数注释）。 */
 export function projectContext(
   events: AgentEvent[],
   replacements?: Map<number, string>,
@@ -203,5 +238,5 @@ export function projectContext(
   });
   flushDeltas();
   injectOnce(); // offset 越过全部事件（tail 为空）时补注
-  return msgs;
+  return closeDanglingToolCalls(msgs);
 }
