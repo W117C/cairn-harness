@@ -70,6 +70,18 @@ describe("半截会话的投影必须仍可发送（孤儿 tool_call 要合上�
     }
   });
 
+  it("工具执行中途 emit 正文（结果在 assistant 之后才回）⇒ 绝不许说「没有收到结果」", () => {
+    // 真实现场：`ctx.emit({type:"assistant_message"})` 会把一条 assistant 插在 tool_call 与它的
+    // tool_result **之间**（persisted order 如此，`tests/loop.test.ts` 的 "includes tool-emitted
+    // events in persisted order" 就是这条）。只按「紧邻」判缺位 ⇒ 这里凭空补一条假事实，
+    // 而真结果就在下一格——同一个 id 同时有「没结果」和结果两份说法。
+    const msgs = projectContext([user("t"), call("c1", "read_file"), assistant("EMITTED"), result("c1")]);
+    expect(msgs.some((m) => (m.content ?? "").includes("没有收到结果")), JSON.stringify(msgs)).toBe(false);
+    const answered = msgs.filter((m) => m.role === "tool" && m.tool_call_id === "c1");
+    expect(answered.length).toBe(1);
+    expect(answered[0]?.content).toBe("done");
+  });
+
   it("worker 子流的调用不进主流上下文 ⇒ 补位也不许为它造 tool 消息", () => {
     const withWorker = [user("t"), { ...call("w1"), agent_id: "agent-1" }];
     const msgs = projectContext(withWorker as AgentEvent[]);

@@ -125,9 +125,15 @@ export function danglingToolCallNote(id: string): string {
  *  压缩面不产这种形状——`atomicUnits` 把 tool_call↔tool_result 并成一个原子单元、切点不拆对（纪律 1），
  *  所以这里不是补压缩的漏，而是给「任何一条投影出口都不留未答调用」兜底：将来若有面单独摘掉结果，
  *  这条守卫仍然成立（判卷里那条反面对手保证它不给完整历史添东西）。
- *  只补"紧邻缺位"的那些：已经配对的 id 一律不动 ⇒ 完整历史的投影逐字不变（判卷里钉了这条反面对手）。
+ *  ⚠️ 「有没有结果」按 id 在**整张列表**里查，不按紧邻查：工具执行中途 `ctx.emit` 会把一条
+ *  assistant 正文插在 tool_call 与它自己的 tool_result 之间（真实现场，`tests/loop.test.ts`
+ *  "includes tool-emitted events in persisted order" 钉着）⇒ 按紧邻判缺位会当场凭空补一条
+ *  「没有收到结果」，而真结果就在下一格：同一笔调用两份互相矛盾的事实，比 400 更坏。
  *  solpi 的 `sent()` 按 tool_result **事件**配对计数，这里补出来的消息没有对应事件 ⇒ 不会被误记成一次可见发送。 */
 export function closeDanglingToolCalls(msgs: ContextMessage[]): ContextMessage[] {
+  const answered = new Set<string>();
+  for (const m of msgs) if (m.role === "tool" && m.tool_call_id !== undefined) answered.add(m.tool_call_id);
+  const injected = new Set<string>();
   const out: ContextMessage[] = [];
   let i = 0;
   while (i < msgs.length) {
@@ -135,14 +141,15 @@ export function closeDanglingToolCalls(msgs: ContextMessage[]): ContextMessage[]
     out.push(m);
     i++;
     if (m.role !== "assistant" || m.tool_calls === undefined || m.tool_calls.length === 0) continue;
-    const need = new Set(m.tool_calls.map((c) => c.id));
     while (i < msgs.length && (msgs[i] as ContextMessage).role === "tool") {
-      const id = (msgs[i] as ContextMessage).tool_call_id;
-      if (id !== undefined) need.delete(id);
       out.push(msgs[i] as ContextMessage);
       i++;
     }
-    for (const id of need) out.push({ role: "tool", tool_call_id: id, content: danglingToolCallNote(id) });
+    for (const tc of m.tool_calls) {
+      if (answered.has(tc.id) || injected.has(tc.id)) continue;
+      injected.add(tc.id);
+      out.push({ role: "tool", tool_call_id: tc.id, content: danglingToolCallNote(tc.id) });
+    }
   }
   return out;
 }
