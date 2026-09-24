@@ -1530,7 +1530,7 @@ const MUTATIONS = [
     src: "src/tools/output-ring.ts",
     test: "tests/shell-tail.test.ts",
     desc: "溢出发生在单个 chunk 内部时不喂尾环（子进程一次吐完 60KB 是常态）⇒ 「保留了结尾」变成假话，尾部结论仍被丢",
-    apply: (s) => s.replace("        tail = out.slice(headBytes);\n", "        tail = \"\";\n"),
+    apply: (s) => s.replace("        tail = tailWithin(out.slice(head.length), tailBudget);\n", "        tail = \"\";\n"),
     expectFail: "超上限时头部与**结尾**都在（旧实现于源头丢掉了 32KB 之后的一切）",
   },
   {
@@ -1538,7 +1538,7 @@ const MUTATIONS = [
     src: "src/tools/output-ring.ts",
     test: "tests/shell-tail.test.ts",
     desc: "尾环算好了却在拼装时没接上（模型看到的仍是纯头部）",
-    apply: (s) => s.replace("    ? head + \"\\n\" + middleTruncationNotice(seen - headBytes - tail.length) + \"\\n\" + tail\n", "    ? head + \"\\n\" + middleTruncationNotice(seen - headBytes - tail.length)\n"),
+    apply: (s) => s.replace("    ? head + \"\\n\" + middleTruncationNotice(seen - bytesOf(head) - bytesOf(tail)) + \"\\n\" + tail\n", "    ? head + \"\\n\" + middleTruncationNotice(seen - bytesOf(head) - bytesOf(tail))\n"),
     expectFail: "超上限时头部与**结尾**都在（旧实现于源头丢掉了 32KB 之后的一切）",
   },
   {
@@ -1546,7 +1546,7 @@ const MUTATIONS = [
     src: "src/tools/output-ring.ts",
     test: "tests/shell-tail.test.ts",
     desc: "省略字节数写死 0（提示说「什么都没省」）⇒ 模型据此认为看到的就是全部输出",
-    apply: (s) => s.replace("middleTruncationNotice(seen - headBytes - tail.length)", "middleTruncationNotice(0)"),
+    apply: (s) => s.replace("middleTruncationNotice(seen - bytesOf(head) - bytesOf(tail))", "middleTruncationNotice(0)"),
     expectFail: "省略字节数如实报出：省略量 + 保留量 = 实际总输出",
   },
   {
@@ -1618,15 +1618,18 @@ const MUTATIONS = [
     src: "src/tools/output-ring.ts",
     test: "tests/output-ring.test.ts",
     desc: "溢出判定形同恒真 ⇒ 每一条正常输出都被拼上截断提示（「未溢出逐字不变」这条零回归承诺被破）",
-    apply: (s) => s.replace("if (out.length > limitBytes) {", "if (out.length >= 0) {"),
+    apply: (s) => s.replace("if (outBytes > limitBytes) {", "if (outBytes >= 0) {"),
     expectFail: "未溢出：逐字全文，一行提示都不加（零回归面）",
   },
   {
     id: "ring-tail-window-unbounded",
     src: "src/tools/output-ring.ts",
     test: "tests/output-ring.test.ts",
-    desc: "尾环不设窗口 ⇒ 长输出把预算一路撑大（超限截断等于没截），上下文被一次 shell/verify 灌满",
-    apply: (s) => s.replace("    tail += s;\n    if (tail.length > tailBytes) tail = tail.slice(tail.length - tailBytes);", "    tail += s;"),
+    desc: "尾环不设窗口 ⇒ 长输出把预算一路撑大（超限截断等于没截），上下文被一次 shell/verify 灌满。" +
+      "窗口现在住在**两处**（单次大块写入的缝合处 + 稳态每块），只废一支另一支仍在 ⇒ 一次废两支",
+    apply: (s) => s
+      .replace("        tail = tailWithin(out.slice(head.length), tailBudget);", "        tail = out.slice(head.length);")
+      .replace("    tail = tailWithin(tail + s, tailBudget);", "    tail = tail + s;"),
     expectFail: "总输出含提示行也不超上限（提示自己占位，否则「≤ 32KB」这句承诺被提示撑破）",
   },
   {
@@ -2388,7 +2391,7 @@ const MUTATIONS = [
     test: "tests/context-dangling-tool-call.test.ts",
     desc: "合上孤儿那行没接在投影出口 ⇒ 函数在、判卷在、真路径照旧吃 400：「两头断」那一族的又一格（不写第几次，计数会漂），" +
       "所以判卷必须走 projectContext 而不是只测那个纯函数",
-    apply: (s) => s.replace("  return closeDanglingToolCalls(mergeToolResultsById(msgs));", "  return mergeToolResultsById(msgs);"),
+    apply: (s) => s.replace("  return closeDanglingToolCalls(demoteOrphanToolResults(mergeToolResultsById(msgs)));", "  return demoteOrphanToolResults(mergeToolResultsById(msgs));"),
     expectFail: "真实现场形状（末笔调用没有结果）⇒ 投影里不许留下未答的 tool_calls",
   },
   {
@@ -7214,10 +7217,23 @@ const MUTATIONS = [
     test: "tests/worker-result-wire.test.ts",
     desc: "投影出口不再合并 ⇒ 一个 tool_call_id 发出两条 tool 消息（Anthropic 线格式里就是两个 tool_result 块同一个 tool_use_id）",
     apply: (s) => s.replace(
-      "  return closeDanglingToolCalls(mergeToolResultsById(msgs));",
-      "  return closeDanglingToolCalls(msgs);",
+      "  return closeDanglingToolCalls(demoteOrphanToolResults(mergeToolResultsById(msgs)));",
+      "  return closeDanglingToolCalls(demoteOrphanToolResults(msgs));",
     ),
     expectFail: "spawn 的回执与 worker 回传合成一条：id 只出现一次，两份正文都在（不丢信息）",
+  },
+  {
+    // 88565f3 把这道闸接进出口时把上面两条锚点的针脚顶失效了，而它自己没有锚点——
+    // 出口的三道收束必须一道道各有尺，否则下一笔重构会把它当冗余删掉。
+    id: "projection-exit-demote-orphan-unwired",
+    src: "src/agent/context.ts",
+    test: "tests/projection-invariant.test.ts",
+    desc: "投影出口不再降级无前驱的回执 ⇒ 孤儿 tool 消息重新进上下文（三家 provider 各一种后果：两种 400 + 一种静默改名）",
+    apply: (s) => s.replace(
+      "  return closeDanglingToolCalls(demoteOrphanToolResults(mergeToolResultsById(msgs)));",
+      "  return closeDanglingToolCalls(mergeToolResultsById(msgs));",
+    ),
+    expectFail: "supervise 派生 id 的现场形状 ⇒ 投影里既没有孤儿 tool 消息，报告正文也还在",
   },
   {
     id: "tool-result-merge-drops-later-content",
