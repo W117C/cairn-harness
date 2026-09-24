@@ -382,6 +382,10 @@ const CLAIMS_24: Claim[] = [
     claim: "泛转义那一侧仍无锚点：表里没有任何以 `const CONTROL_TAG` 为针脚的改法",
     holds: () => !has("scripts/mutate-verify.mjs", /const CONTROL_TAG/u),
     how: "真读 scripts/mutate-verify.mjs 文本断言 0 命中；补上锚点后本条转假 → 去该页 §四 划掉那一格" },
+  { page: "38", id: "C1",
+    claim: "外部基准今天量不了：仓库里没有 eval-snapshots/，缺的是快照与真钱，不是分数",
+    holds: () => !existsSync(join(ROOT, "eval-snapshots")),
+    how: "真读盘（目录不存在 ⇒ 条目成立）；有人 fetch 进快照后本条转假 → 去该页 §四 划掉第 2 步" },
 ];
 
 const ALL_CLAIMS = [...CLAIMS, ...CLAIMS_24];

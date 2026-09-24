@@ -1,0 +1,2 @@
+{"instance_id": "sympy__sympy-20322", "repo": "sympy/sympy", "base_commit": "a1b2c3d4", "problem_statement": "Element.__pow__ returns wrong result for negative integer powers", "FAIL_TO_PASS": ["sympy/core/tests/test_expr.py::test_pow_negative"], "PASS_TO_PASS": ["sympy/core/tests/test_expr.py::test_add"]}
+{"instance_id": "broken-line-no-judge", "repo": "x/y", "base_commit": "ffff1111", "problem_statement": "缺判卷的一条"}
