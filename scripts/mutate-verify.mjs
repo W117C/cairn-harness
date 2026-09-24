@@ -290,6 +290,32 @@ const MUTATIONS = [
     apply: (s) => s.replace("    if (relBack.length > 0 && (relBack.startsWith(\"..\") || isAbsolute(relBack))) {", "    if (false) {"),
     expectFail: "skills 指向 ../ 时拒载（旧实现会挂载扫描插件根外目录）",
   },
+  // ---- 能力 10 的评测数据层（src/agent/eval/task-set）：外部基准条目的"不许静默丢" ----
+  // 这一族唯一的失败方式就是**分母悄悄地少了**：跑出来的成功率照样是个数，没人能看出它量的是半份数据集。
+  {
+    id: "taskset-unknown-field-ignored",
+    src: "src/agent/eval/task-set.ts",
+    test: "tests/eval-task-set.test.ts",
+    desc: "认不出的字段被静默忽略 ⇒ 数据集作者写了 verifier 却拼成 verifior，任务照常收进分母但没有判卷",
+    apply: (s) => s.replace("    if (!TASK_FIELDS.has(k)) errors.push(", "    if (false) errors.push("),
+    expectFail: "认不出的字段名（如把 verifier 拼成 verifior）必须报错，不许静默忽略",
+  },
+  {
+    id: "taskset-dup-id-silently-kept",
+    src: "src/agent/eval/task-set.ts",
+    test: "tests/eval-task-set.test.ts",
+    desc: "重复 id 不再报也不丢 ⇒ 同一实例被数两次，分母与成功率同时失真",
+    apply: (s) => s.replace("    if (n > 1) {", "    if (false) {"),
+    expectFail: "重复 id 必须点名（静默去重会让分母骗人）",
+  },
+  {
+    id: "swebench-empty-judge-accepted",
+    src: "src/agent/eval/task-set.ts",
+    test: "tests/eval-task-set.test.ts",
+    desc: "只看 FAIL_TO_PASS 存不存在、不看它是不是空数组 ⇒ 空判卷的实例进来，跑完变成\"没坏就算过\"",
+    apply: (s) => s.replace("if (failToPass === null || failToPass.length === 0) {", "if (failToPass === null) {"),
+    expectFail: "FAIL_TO_PASS 是空数组也算没有判卷（只查 PASS_TO_PASS 会静默变成'没坏就算过'）",
+  },
   {
     id: "autonomy-allow-critical",
     src: "src/permissions/autonomy.ts",

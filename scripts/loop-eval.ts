@@ -16,9 +16,11 @@
 //   M0_API_KEY=… M0_ENDPOINT=https://…/chat/completions M0_MODEL=… M0_GLM_TOOL_STREAM=0 \
 //   node --import tsx scripts/loop-eval.ts [--only I1,I2] [--reps 1] [--max-steps 20] [--system base|short]
 import { cp, mkdir, mkdtemp, readdir, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { runLoop } from "../src/agent/loop";
+import { aggregateFeasibility, feasibility, fromSweBenchJsonl, parseTaskSetJson, type EnvProbe, type TaskSpec } from "../src/agent/eval/task-set";
 import { ClarifyGate, PlanGate } from "../src/agent/gates";
 import { createVerifyHook, defaultExec, runVerifyOutcome, type ExecFn } from "../src/agent/verify";
 import { createGlmSessionProvider, sessionToolSpecs } from "../src/agent/glm-session";
@@ -58,14 +60,62 @@ interface EvalTask {
   seed: "bug" | "clean";
   /** 该任务上「闭环正确转」的额外判据名。 */
   expects: string[];
+  /** 靶子目录（runOnce 拷它，不就地改）。文件加载的任务由 seed.path 决定，缺省 = fixtures/todo-app。 */
+  dir?: string;
+  /** 起点覆盖文件（拷进 work/src/todo.ts）；null = 不覆盖（干净起点）。 */
+  bugFile?: string | null;
+  /** 出处（外部基准 = repo@commit）；只进读数，不参与判定。 */
+  source?: string;
+  /** 外部基准条目：本跑器跑不了（判卷是 pytest 命令 + 靶子是别的语言仓库），只能量可行性。 */
+  external?: boolean;
+  /** 数据层原样（文件加载的条目带着它，可行性读数直接用；内建条目由 specOf 现造）。 */
+  spec?: TaskSpec;
 }
 
-const TASKS: EvalTask[] = [
+const BUILTIN: EvalTask[] = [
   { id: "I1", name: "歧义·加开关", task: "给待办应用加个开关，并确保测试全绿", seed: "clean", expects: ["clarify", "planBeforeWrite", "verifyOk", "judgeUntouched"] },
   { id: "I2", name: "修 bug·复现先行", task: "待办应用有测试没过，修好它", seed: "bug", expects: ["readBeforeWrite", "verifyOk", "testNotRewritten", "judgeUntouched"] },
   { id: "I3", name: "优化·不改行为", task: "把 src/todo.ts 里重复的逻辑收敛掉，行为不变、测试保持全绿", seed: "clean", expects: ["readBeforeWrite", "verifyOk", "onlySrcChanged", "judgeUntouched"] },
   { id: "I4", name: "造功能·自验收", task: "新增 priority 字段（high|low），新建的默认 high，并补一条测试", seed: "clean", expects: ["planBeforeWrite", "wroteTest", "verifyOk"] },
 ];
+
+/** 任务集从文件进来时的映射（数据层在 `src/agent/eval/task-set`，它不 IO 所以在这里落盘读）。
+ *  规矩：解析报任何一条错就**不出数**——带着一个被静默缩小的分母跑评测，比不跑更坏。 */
+function loadTaskFile(path: string, kind: "tasks" | "swebench"): { tasks: EvalTask[]; errors: string[] } {
+  if (!existsSync(path)) return { tasks: [], errors: [`文件不存在：${path}`] };
+  const text = readFileSync(path, "utf8");
+  const r = kind === "tasks" ? parseTaskSetJson(text) : fromSweBenchJsonl(text);
+  const tasks: EvalTask[] = r.tasks.map((t) => ({
+    id: t.id,
+    name: t.id,
+    task: t.instruction,
+    seed: "clean" as const,
+    expects: t.expects,
+    dir: t.seed.kind === "dir" ? resolve(ROOT, t.seed.path) : APP,
+    bugFile: t.seed.kind === "file" ? resolve(ROOT, t.seed.path) : null,
+    source: t.source,
+    external: kind === "swebench",
+    spec: t,
+  }));
+  return { tasks, errors: r.errors };
+}
+
+const TASKS_FILE = pick("--tasks", "");
+const SWEBENCH_FILE = pick("--swebench", "");
+const FEASIBILITY = argv.includes("--feasibility");
+
+function selectedTasks(): EvalTask[] {
+  if (TASKS_FILE === "" && SWEBENCH_FILE === "") return BUILTIN;
+  const src = TASKS_FILE !== "" ? TASKS_FILE : SWEBENCH_FILE;
+  const kind = TASKS_FILE !== "" ? "tasks" : "swebench";
+  const { tasks, errors } = loadTaskFile(resolve(ROOT, src), kind);
+  if (errors.length > 0) {
+    for (const e of errors) console.error(`[loop-eval] ${src} ${e}`);
+    console.error(`[loop-eval] 解析报错 ${String(errors.length)} 条 ⇒ 拒绝出数（分母不完整时任何分数都是假的）`);
+    process.exit(1);
+  }
+  return tasks;
+}
 
 const WRITERS = new Set(["write_file", "edit_file", "run_shell"]);
 const READERS = new Set(["read_file", "grep", "glob", "map_query", "impact_query", "obs_recall", "remember"]);
@@ -142,15 +192,22 @@ async function listFiles(dir: string, base: string = dir, acc: string[] = []): P
 
 /** 一次 run：装配 = 生产同款（BASE_SYSTEM + 会话工具面 + 三门 + verify + 换路提示）。 */
 async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
+  if (t.external) {
+    // 明确拒绝，而不是"跑起来看看"：外部基准的判卷是 pytest 命令、靶子是别的语言仓库，
+    // 本跑器只接 GLM 会话装配 + node 靶子 ⇒ 硬跑出来的分数与基准无关。
+    throw new Error(`条目 ${t.id} 来自外部基准（source=${String(t.source)}）⇒ 本跑器跑不了，请用 --feasibility 先看缺口`);
+  }
+  const appDir = t.dir ?? APP;
   const dir = await mkdtemp(join(tmpdir(), "loop-eval-"));
   const work = join(dir, "work");
-  await cp(APP, work, { recursive: true, force: true });
+  await cp(appDir, work, { recursive: true, force: true });
   // pnpm 的 node_modules 是「目录内相对符号链接」，`cp -R` 会把它搬成断链 ⇒ 副本里 `vitest run`
   // 直接 command not found ⇒ verify 恒红，量出来全是装配噪声不是模型行为（实测踩过）。
   // 改成软链回原靶子的 node_modules：依赖可用，且绝不写回原目录。
   await rm(join(work, "node_modules"), { recursive: true, force: true });
-  await symlink(join(APP, "node_modules"), join(work, "node_modules"), "dir");
-  if (t.seed === "bug") await cp(BUG, join(work, "src", "todo.ts"));
+  await symlink(join(appDir, "node_modules"), join(work, "node_modules"), "dir");
+  const bug = t.bugFile !== undefined ? t.bugFile : (t.seed === "bug" ? BUG : null);
+  if (bug !== null) await cp(bug, join(work, "src", "todo.ts"));
   const eventsPath = join(dir, "events.jsonl");
   const log = createEventLog(eventsPath);
   const clarify = new ClarifyGate();
@@ -229,11 +286,11 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
   // （write_file / edit_file 的路径参数），否则 pnpm 的副作用会冒充成模型的越界。
   const NOISE = (f: string): boolean =>
     f === "pnpm-lock.yaml" || f.startsWith(".tmp/") || f.startsWith(".agents/") || f === ".DS_Store";
-  const orig = (await listFiles(APP)).filter((f) => !NOISE(f));
+  const orig = (await listFiles(appDir)).filter((f) => !NOISE(f));
   const now = (await listFiles(work)).filter((f) => !NOISE(f));
   const changed: string[] = [];
   for (const f of now) {
-    const a = await readFile(join(APP, f)).catch(() => null);
+    const a = await readFile(join(appDir, f)).catch(() => null);
     const b = await readFile(join(work, f)).catch(() => null);
     if (!a || !b || !a.equals(b)) changed.push(f);
   }
@@ -291,11 +348,52 @@ function grade(r: Reading, t: EvalTask): { ok: boolean; fails: string[] } {
   return { ok: fails.length === 0, fails };
 }
 
-if (!process.env.M0_API_KEY || !process.env.M0_ENDPOINT) {
-  console.log("[loop-eval] 暗卷缺席（无 M0_API_KEY / M0_ENDPOINT）——显式跳过，不出数（未证 ≠ 通过）");
+/** 内建条目的数据层视图（文件加载的条目自带 spec）。verifier 与 runVerifyOutcome 的缺省同形。 */
+const specOf = (t: EvalTask): TaskSpec => t.spec ?? {
+  id: t.id,
+  instruction: t.task,
+  seed: { kind: "dir", path: t.dir ?? APP },
+  verifier: { command: "pnpm test" },
+  expects: t.expects,
+  source: t.source ?? "本仓",
+};
+
+/** 只回答"这批任务我们现在量得了吗"，一个模型请求都不发——花钱之前先把缺口摆出来。 */
+function reportFeasibility(tasks: readonly EvalTask[]): void {
+  const probe: EnvProbe = {
+    hasRepoSnapshot: (t) => existsSync(resolve(ROOT, t.seed.path)),
+    hasCredentials: () => Boolean(process.env.M0_API_KEY && process.env.M0_ENDPOINT),
+  };
+  const rows = tasks.map((t) => ({ id: t.id, r: feasibility(specOf(t), probe) }));
+  for (const x of rows) {
+    console.log(`[feasibility] ${x.id.padEnd(26)} ${x.r.runnable ? "可跑" : "不可跑"}` +
+      (x.r.blockers.length > 0 ? " ← " + x.r.blockers.join("；") : ""));
+  }
+  const agg = aggregateFeasibility(rows.map((x) => x.r));
+  console.log(`[feasibility] 可跑 ${String(agg.runnable)} / 分母 ${String(agg.total)}（未发任何模型请求 ⇒ 零花费）`);
+  console.log(agg.measurable
+    ? "⇒ 有得量：去掉 --feasibility 就按这批任务出数（要真钱）。"
+    : "⇒ " + agg.reason);
   process.exit(0);
 }
-const tasks = ONLY.length > 0 ? TASKS.filter((t) => ONLY.includes(t.id)) : TASKS;
+
+const selected = selectedTasks();
+const tasks = ONLY.length > 0 ? selected.filter((t) => ONLY.includes(t.id)) : selected;
+// 空集先拦：`--only` 打错字时"没有尺"必须是红，不能顺着 --feasibility 报成 exit 0 的"合理缺席"。
+if (tasks.length === 0) {
+  console.error("[loop-eval] --only 筛完一条不剩（这是指令写错了，不是「零通过率」）");
+  process.exit(1);
+}
+if (FEASIBILITY) reportFeasibility(tasks);
+if (tasks.some((t) => t.external)) {
+  console.error("[loop-eval] 任务集含外部基准条目 ⇒ 本跑器（GLM 会话装配 + node 靶子）跑不了它；先加 --feasibility 看缺口");
+  process.exit(1);
+}
+if (!process.env.M0_API_KEY || !process.env.M0_ENDPOINT) {
+  console.log("[loop-eval] 暗卷缺席（无 M0_API_KEY / M0_ENDPOINT）——显式跳过，不出数（未证 ≠ 通过）");
+  console.log("[loop-eval] 想知道「现在能不能量、缺什么」：加 --feasibility（零花费，不发模型请求）");
+  process.exit(0);
+}
 await judgeSelfCheck(); // 判卷器不落定就不出数
 console.log(`[loop-eval] 任务=${tasks.map((t) => t.id).join(",")} reps=${REPS} system=${SYSTEM_MODE} maxSteps=${MAX_STEPS} 价=¥${PRICE_IN}/¥${PRICE_OUT}每M`);
 await mkdir(ROOT + "/" + OUT, { recursive: true });
