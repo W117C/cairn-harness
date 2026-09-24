@@ -121,7 +121,9 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 }
 
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
-const KNOWN_TOP_FIELDS = new Set([
+/** 校验器认的全部顶层字段。导出是给判卷层对账用的：模型面上出现的字段名必须在这里，
+ *  否则模型照规格写出来的定义会被 `${k} 是未知字段` 拒掉（规格与实现各写一份时的必然下场）。 */
+export const KNOWN_TOP_FIELDS = new Set([
   "id", "name", "prompt", "schedule", "timeZone", "permissionTier", "model", "catchUp", "enabled", "createdAt", "updatedAt", "nextRunAt",
 ]);
 

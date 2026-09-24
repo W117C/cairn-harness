@@ -21,6 +21,13 @@ const RUNNER = readFileSync(join(ROOT, "src/main/agent-runner.ts"), "utf8");
 function globalInjected(): string[] {
   return [...RUNNER.matchAll(/TOOLS as unknown as Record<string, Tool>\)\.([a-z_][a-z0-9_]*)\s*=/g)].map((m) => m[1]!);
 }
+/** 第二种注入形状：`const table = TOOLS as …; table["automation_create"] = {...}`。
+ *  老只认上面那一形 ⇒ M4a 的定时五件（就是这一形）从头到尾没进过对账分母，
+ *  而分母漏的那支恰是"实现装了、模型面上没有"那一支。
+ *  只认字符串字面量下标：`table[scoped] = gatedMcpTool(...)` 是 MCP 动态名，由 plugins-check 判。 */
+function tableInjectedNames(): string[] {
+  return [...RUNNER.matchAll(/^\s*table\["([a-z_][a-z0-9_]*)"\]\s*=/gm)].map((m) => m[1]!);
+}
 /** 运行期注入：runLoop 的 `tools: { ...TOOLS, x: inst }` 覆盖对象里的键。
  *  只取**那一行**并在行内找键——按字符数切一段会把后续行的 `workspace:` / `mode:` 当成注入面，
  *  判据里混进噪声键，读者就得先怀疑这条门是不是在测别的东西。 */
@@ -30,7 +37,11 @@ function runLoopInjected(): string[] {
   return [...line.matchAll(/([a-z_][a-z0-9_]*)\s*:\s/g)].map((m) => m[1]!).filter((k) => k !== "TOOLS" && k !== "tools");
 }
 function instanceNames(): Set<string> {
-  return new Set([...globalInjected(), ...runLoopInjected()]);
+  return new Set([...globalInjected(), ...tableInjectedNames(), ...runLoopInjected()]);
+}
+/** 分母本身也要有读数：解析器扩了一支却静默 0 命中，比不扩更坏（看起来在管，其实在扫空气）。 */
+function allInjectedNames(): string[] {
+  return [...new Set([...globalInjected(), ...tableInjectedNames(), ...runLoopInjected()])];
 }
 
 /** 两面返回形状不同（主会话与 worker 都是 {function:{name}}，声明侧按名字收）。 */
@@ -82,8 +93,17 @@ describe("G-B 注入工具三面对账", () => {
 
   it("声明表本身不可漏项：源文本里出现的注入名必须登记（不登记 = 新工具绕过这道门）", () => {
     const declared = new Set(INJECTED_TOOLS.map((s) => s.name));
-    const injected = [...new Set([...globalInjected(), ...runLoopInjected()])];
+    const injected = allInjectedNames();
     expect(injected.filter((n) => !declared.has(n))).toEqual([]);
+  });
+
+  it("扩形后的分母自证：table[\"name\"] = 那一形确实被算进来了（解析器静默 0 命中比不扩更坏）", () => {
+    const tableForm = tableInjectedNames();
+    for (const n of ["automation_create", "automation_update", "automation_delete", "automation_run_now", "automation_list", "skill"]) {
+      expect(tableForm, n + " 走的是 table[\"…\"] = 这一形，解析器退回旧形状就会漏它").toContain(n);
+    }
+    // MCP 的动态下标不许被当成名字收进分母（收了就是把 `scoped` 当工具名，判据里混进噪声键）
+    expect(tableForm, "table[scoped] 不是字符串字面量，不该匹配").not.toContain("scoped");
   });
 
   it("对账本身有分辨力（反向对照：没这条的静态门等于没立）", () => {

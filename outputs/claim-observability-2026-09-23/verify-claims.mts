@@ -19,6 +19,7 @@ import { buildSandboxProfile } from "../../src/main/sandbox";
 import { redactSecrets } from "../../src/agent/security/scan";
 import { evaluate, newAutonomySession } from "../../src/permissions/autonomy";
 import { unconsumedSpawnArgs } from "../../src/agent/spawn-surface";
+import { gateToolSpecs as gateToolSpecs42 } from "../../src/agent/glm-session";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const read = (rel: string): string => {
@@ -93,6 +94,20 @@ const CLAIMS: Claim[] = [
   { page: "41", id: "C2", claim: "规格那句不再向模型承诺「相交即拒」（实现是出卡点名 + 可强行批准）",
     holds: () => !has("src/agent/glm-session.ts", /相交即拒/) && has("src/agent/glm-session.ts", /写租约；与活跃写 worker 相交 ⇒ 审批卡点名/),
     how: "读该行的描述文本，负控匹配旧承诺" },
+  { page: "42", id: "C1", claim: "G-B 的实例面解析器覆盖 table[\"x\"] = 那一形，且有分母自证用例",
+    holds: () => {
+      const t = read("tests/tool-surface-parity.test.ts");
+      return /table\\\["/.test(t) && t.includes("扩形后的分母自证") && /function tableInjectedNames/.test(t);
+    },
+    how: "读判卷文件：解析器形状 + 自证用例名（解析器退回旧形 ⇒ 本条红）" },
+  { page: "42", id: "C2", claim: "定时五件在 auto 模型面上、整族不在只读档（昨天两面都是 0 个）",
+    holds: () => {
+      const names = ["automation_create", "automation_update", "automation_delete", "automation_run_now", "automation_list"];
+      const auto = new Set(gateToolSpecs42("auto").map((s) => s.function.name));
+      const ro = new Set(gateToolSpecs42("read-only").map((s) => s.function.name));
+      return names.every((n) => auto.has(n)) && names.every((n) => !ro.has(n));
+    },
+    how: "真调 gateToolSpecs 两面数成员" },
 ];
 
 /** 三条要跑真东西才有读数：语料孤儿数、用户仓库判卷集大小、R1 对插话的反应。 */

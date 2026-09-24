@@ -29,6 +29,15 @@ export const INJECTED_TOOLS: readonly InjectedToolSurface[] = [
   { name: "impact_query", specFace: "runtime", workerReachable: "both", reachableWhenReadOnly: true, mainSessionSideEffect: false },
   // 与 impact_query 同族：运行期按开关（solpiEnabled）注入，worker 面不开放
   { name: "obs_recall", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  // 插件 skill：实例面在 agent-runner 里 `table["skill"] =`，规格走运行期（插件装载了才有）
+  { name: "skill", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  // 定时任务五件（§12.2.5）：实现一直有，规格第 42 页才补上 ⇒ 登记进表，让 G-B 从此盯着这一族。
+  // worker 面不给（它们已在 WORKER_FORBIDDEN_TOOLS 里）；只读档也不给（只读会话不该排下一次无人值守的写）。
+  { name: "automation_create", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  { name: "automation_update", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  { name: "automation_delete", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  { name: "automation_run_now", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  { name: "automation_list", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
 ];
 
 /** 「缺谁」的单一实现——反向对照也走它，保证判据本身被测过而不是被调绿。 */

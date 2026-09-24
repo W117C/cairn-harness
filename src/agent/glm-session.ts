@@ -13,6 +13,7 @@ import { REMEMBER_DESCRIPTION } from "../tools/remember";
 import { computePrune, writePruneAttachments } from "./prune";
 import { basename, dirname, join } from "node:path";
 import { createMapBuilder, type MapBuilder } from "./map/build";
+import { AUTOMATION_TOOL_NAMES, automationToolSpecs } from "./automation-surface";
 import {
   DEFAULT_COMPACTION_CONFIG,
   CompactionCoordinator,
@@ -37,8 +38,17 @@ import { freshSavings, shouldApplyPrune } from "./prune-batching";
 type RawMessage = Record<string, unknown>;
 
 /** 模型面降配梯的 core 身份：从 `gateToolSpecs()` **派生**，不另抄一份工具名清单
- *  （抄了就又是一处「规格与实现两处手写」）。 */
-const CORE_SURFACE_TOOL_NAMES: ReadonlySet<string> = new Set(gateToolSpecs().map((s) => s.function.name));
+ *  （抄了就又是一处「规格与实现两处手写」）。
+ *  唯一的减项是**低频能力族**：定时任务五件。固定面是每次请求都付的字节，而"排一次定时任务"
+ *  不是每轮都用得上；降配梯砍掉它们时 MS5 会把"砍了谁"点名给模型看，比让它常驻便宜。 */
+const OPTIONAL_SURFACE_TOOL_NAMES: readonly string[] = AUTOMATION_TOOL_NAMES;
+const CORE_SURFACE_TOOL_NAMES: ReadonlySet<string> = new Set(
+  gateToolSpecs().map((s) => s.function.name).filter((n) => !OPTIONAL_SURFACE_TOOL_NAMES.includes(n)),
+);
+/** 判卷用：这个名字算不算 core（core = 降配时不许砍）。 */
+export function isCoreSurfaceTool(name: string): boolean {
+  return CORE_SURFACE_TOOL_NAMES.has(name);
+}
 
 
 /** 三门 + 基础工具的 OpenAI function 规格（暗卷把工具面暴露给真实模型）。
@@ -345,12 +355,17 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
       },
     },
   ];
+  // 定时任务五件的规格与实现同在（实现在 agent-runner 的 installAutomationTools，
+  // 调度器没起来时它们自己 fail-closed）——以前只有实现，模型面上一个都没有 ⇒ 发不出去。
+  specs.push(...automationToolSpecs());
   if (mode === "read-only") {
     // 只读档连同编排原语一并摘除：spawn_agent 靠 SIDE_EFFECT_TOOLS，wait_for_agents / cancel_agents
     // 不是写向工具（不该被方案门挡），所以只能显式点名——漏摘就是「模型看得见、执行面白名单挡着」那类两头断。
+    // 定时五件同因：只读会话不该能排下一次会写盘的无人值守跑。
     return specs.filter((s) =>
       !isSideEffectTool(s.function.name) && s.function.name !== "remember" &&
-      s.function.name !== "wait_for_agents" && s.function.name !== "cancel_agents",
+      s.function.name !== "wait_for_agents" && s.function.name !== "cancel_agents" &&
+      !AUTOMATION_TOOL_NAMES.includes(s.function.name),
     );
   }
   return specs;
