@@ -22,6 +22,7 @@ import { evaluate, newAutonomySession } from "../../src/permissions/autonomy";
 import { unconsumedSpawnArgs } from "../../src/agent/spawn-surface";
 import { gateToolSpecs as gateToolSpecs42 } from "../../src/agent/glm-session";
 import ts from "typescript";
+import { selfCheck as stagnationSelfCheck } from "../../scripts/replay/stagnation-burn";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 /** 本条谓词这次取料时**盘上没有**的文件。读空串与读不到文件是两件事：
@@ -496,6 +497,10 @@ const CLAIMS_24: Claim[] = [
     },
     how: "数出现次数 + 判它接在 agentRoleFor 上；改成第二个口径（另写一条读角色的路）时次数≠1 ⇒ 本条转假 " +
       "→ 回该页 §二 复核「一条查找面」是否还成立" },
+  { page: "43", id: "C1",
+    claim: "把「未归因红拍」并进代码类，stagnation-burn 的自检第 ⑦⑧⑧b 条立刻红（尺会对着老语料印出「该接」）",
+    holds: () => stagnationSelfCheck().length === 0,
+    how: "直接 import 那把尺导出的 selfCheck()：八条合成对照必须全过（三态分栏 + 裁决两条反向分支）" },
 ];
 
 const ALL_CLAIMS = [...CLAIMS, ...CLAIMS_24];

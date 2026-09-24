@@ -54,6 +54,11 @@ export const REPLAY_READINGS: readonly ReplayReading[] = [
     script: "scripts/replay/run-scorecard.ts",
     answers: "能力 10 的 y 轴基线：每个 run 一行终态（一次绿 / 返工后绿 / 终局红 / 证据缺席 / 没改盘）+ 返工轮数",
   },
+  {
+    id: "stagnation-burn",
+    script: "scripts/replay/stagnation-burn.ts",
+    answers: "该不该把无进展阶梯（R1）接进主 loop 的分母：真语料里停滞出现几条流、落在代码红还是环境红上、与修复额度打满同不同流",
+  },
 ];
 
 export interface ReplayFacts {
