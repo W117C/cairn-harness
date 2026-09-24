@@ -47,6 +47,7 @@ import {
 import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckConfig, type StuckTurn } from "./stuck";
 import { decideSupervisor, ringVerdict, superviseApprovalDigest, type SupervisorAction } from "./supervisor";
 import { parseSuperviseContract } from "./supervise-contract";
+import { unconsumedSpawnArgs } from "./spawn-surface";
 import type { RespawnArgs } from "./recovery";
 import {
   collectChangeSet,
@@ -298,8 +299,15 @@ export class Orchestrator {
   async spawn(args: SpawnArgs, ctx: { callId?: string }): Promise<ToolResult> {
     const mode = typeof args.mode === "string" ? args.mode : "";
     if (!SPAWN_MODES.includes(mode)) {
-      return { ok: false, output: "spawn_agent: mode 必须是 read|write|pipeline" };
+      // 取值清单取自事实源：写死 "read|write|pipeline" 时 supervise 早已在册，
+      // 打错档名的模型会被告知「supervise 不是档位」——一道纠错消息自己制造第二次错。
+      return { ok: false, output: "spawn_agent: mode 必须是 " + SPAWN_MODES.join("|") };
     }
+    // 逐型参数面（第 40 页）：这一档不读、或压根不存在的键**不许静默丢**——
+    // 真轨迹里模型带 stages 申报了一条三阶段门控计划，计划整支蒸发而回执无一句话。
+    // 拒在审批与派活之前：不花钱、不打扰人、不留下"我申报了但没人知道"的第三条事实源。
+    const surfaceError = unconsumedSpawnArgs(mode, args).message();
+    if (surfaceError !== null) return { ok: false, output: surfaceError };
     const task = typeof args.task === "string" ? args.task.trim() : "";
     if (mode !== "pipeline" && task === "") {
       return { ok: false, output: "spawn_agent: task 参数必填（worker 上下文唯一来源，自包含任务书）" };

@@ -18,6 +18,7 @@ import { createOutputRing } from "../../src/tools/output-ring";
 import { buildSandboxProfile } from "../../src/main/sandbox";
 import { redactSecrets } from "../../src/agent/security/scan";
 import { evaluate, newAutonomySession } from "../../src/permissions/autonomy";
+import { unconsumedSpawnArgs } from "../../src/agent/spawn-surface";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const read = (rel: string): string => {
@@ -68,6 +69,18 @@ const CLAIMS: Claim[] = [
   { page: "24", id: "G3", claim: "supervise / pipeline 仍用未声明的派生 callId",
     holds: () => has("src/agent/orchestrator.ts", /callId \+ "-sup"/) && has("src/agent/orchestrator.ts", /chain\.callId \+ "-s"/),
     how: "两处拼接各一条" },
+  { page: "40", id: "C1", claim: "supervise 顶层申报 stages 今天必红（被拒），且拒绝发生在审批之前",
+    holds: () => {
+      const dropped = unconsumedSpawnArgs("supervise", { mode: "supervise", task: "t", stages: [{ task: "x" }] }).dropped;
+      const src = read("src/agent/orchestrator.ts");
+      const guard = src.indexOf("unconsumedSpawnArgs(mode, args)");
+      const approval = src.indexOf("this.requestSuperviseApproval(callId");
+      return dropped.includes("stages") && guard !== -1 && approval !== -1 && guard < approval;
+    },
+    how: "生产表算 dropped + 两处调用的先后次序（把检查挪到审批后就红）" },
+  { page: "40", id: "C2", claim: "mode 报错文案取自 SPAWN_MODES，不再写死档名",
+    holds: () => has("src/agent/orchestrator.ts", /mode 必须是 " \+ SPAWN_MODES\.join/) && !has("src/agent/orchestrator.ts", /mode 必须是 read\|write/),
+    how: "同一行匹配拼接、负控匹配旧字面量" },
 ];
 
 /** 三条要跑真东西才有读数：语料孤儿数、用户仓库判卷集大小、R1 对插话的反应。 */
