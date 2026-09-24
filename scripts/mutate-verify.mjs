@@ -6973,7 +6973,7 @@ const MUTATIONS = [
     test: "tests/compaction-cost.test.ts",
     desc: "每轮把上一轮装配清空 ⇒ 头部存活比永远量不出来，策略只在关那一支生效（A/B 读成「策略无效」）",
     apply: (s) => s.replace("        prevRequestLayer = requestLayer;", "        prevRequestLayer = \"\";"),
-    expectFail: "开着 ⇒ 同一会话里压缩次数不更多、累计重写字符严格更少",
+    expectFail: "开着 ⇒ 同一会话里压缩次数严格更少、累计重写字符严格更少",
   },
   {
     id: "cc-coordinator-ignores-config-override",
@@ -6981,7 +6981,7 @@ const MUTATIONS = [
     test: "tests/compaction-cost.test.ts",
     desc: "逐次 config 覆盖被忽略 ⇒ 上游算了摊销也用不上（本仓点名的「两头断」形状）",
     apply: (s) => s.replace("      config: options.config ? { ...this.config, ...options.config } : this.config,", "      config: this.config,"),
-    expectFail: "开着 ⇒ 同一会话里压缩次数不更多、累计重写字符严格更少",
+    expectFail: "开着 ⇒ 同一会话里压缩次数严格更少、累计重写字符严格更少",
   },
   {
     id: "lr-growth-invented-not-from-script",
