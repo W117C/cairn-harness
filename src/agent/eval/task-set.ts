@@ -171,12 +171,34 @@ export interface EnvProbe {
   /** 快照是否已在本地（本模块不联网、不 clone——那是外部的钱与时间）。 */
   hasRepoSnapshot(task: TaskSpec): boolean;
   hasCredentials(): boolean;
+  /** 判卷命令在这台机器上跑得起吗（调用方去 spawn；本模块不 IO、不 spawn）。 */
+  canRunVerifier(task: TaskSpec): boolean;
 }
 
 export interface Feasibility {
   runnable: boolean;
   /** 不可跑的原因，逐条指名（缺哪个快照/哪份凭据）。 */
   blockers: string[];
+}
+
+/** 从判卷命令推一条**自检命令**：只回答"工具链在不在"，不去跑真判卷。
+ *  为什么不是"看首个词在不在 PATH"：SWE-bench 形态判卷是 `python -m pytest`，
+ *  本机实测 `python3` 在而 **pytest 没装** ⇒ 只看可执行文件会假绿，把"没有尺"送进分母当 0 分。
+ *  认不出的形状（相对路径脚本、复合命令、`-m` 后没有模块名）**一律 null**，由调用方按未证处理——
+ *  宁缺不编：编一条跑不通的自检等于再造一种假绿。 */
+export function deriveVerifierProbe(command: string): string | null {
+  const raw = command.trim();
+  if (raw === "" || /[|&;]/u.test(raw) || raw.includes("$(")) return null;
+  const toks = raw.split(/\s+/u);
+  const bin = toks[0] ?? "";
+  if (!/^[A-Za-z0-9._-]+$/u.test(bin)) return null; // 带路径或带怪字符：不是 PATH 上的裸命令名
+  const mIdx = toks.indexOf("-m");
+  if (mIdx >= 0) {
+    const mod = toks[mIdx + 1];
+    if (mod === undefined || !/^[A-Za-z_][A-Za-z0-9_.]*$/u.test(mod)) return null;
+    return `${bin} -c "import ${mod}"`; // `-m` 缺的是模块，不是解释器：两个不同的缺口
+  }
+  return `${bin} --version`;
 }
 
 /** 一条任务现在能不能真跑。 */
@@ -187,6 +209,9 @@ export function feasibility(task: TaskSpec, probe: EnvProbe): Feasibility {
   }
   if (task.verifier === undefined) {
     blockers.push(`没有判卷命令 ⇒ 只能当演示，不许进分母`);
+  } else if (!probe.canRunVerifier(task)) {
+    // 与"跑出来是红的"分开：缺工具链是**没有尺**，计成 0 分就是把环境问题写成模型能力。
+    blockers.push(`判卷命令在本机跑不起来（工具链缺失：${task.verifier.command}）⇒ 属未证，不许计成 0 分`);
   }
   if (!probe.hasCredentials()) {
     blockers.push("缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过");

@@ -19,8 +19,9 @@ import { cp, mkdir, mkdtemp, readdir, readFile, rm, symlink, unlink, writeFile }
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
 import { runLoop } from "../src/agent/loop";
-import { aggregateFeasibility, feasibility, fromSweBenchJsonl, parseTaskSetJson, type EnvProbe, type TaskSpec } from "../src/agent/eval/task-set";
+import { aggregateFeasibility, deriveVerifierProbe, feasibility, fromSweBenchJsonl, parseTaskSetJson, type EnvProbe, type TaskSpec } from "../src/agent/eval/task-set";
 import { ClarifyGate, PlanGate } from "../src/agent/gates";
 import { createVerifyHook, defaultExec, runVerifyOutcome, type ExecFn } from "../src/agent/verify";
 import { createGlmSessionProvider, sessionToolSpecs } from "../src/agent/glm-session";
@@ -360,14 +361,34 @@ const specOf = (t: EvalTask): TaskSpec => t.spec ?? {
 
 /** 只回答"这批任务我们现在量得了吗"，一个模型请求都不发——花钱之前先把缺口摆出来。 */
 function reportFeasibility(tasks: readonly EvalTask[]): void {
+  // 工具链自检：同一条命令只跑一次（一批任务常共用 `python -m pytest`）。
+  // 认不出自检形状的判卷命令按**不可跑**处理——宁可少跑一批，也不能让"没尺"混进分母当 0 分。
+  const checked = new Map<string, boolean>();
+  const canRunVerifier = (command: string): boolean => {
+    const probeCmd = deriveVerifierProbe(command);
+    if (probeCmd === null) return false;
+    const hit = checked.get(probeCmd);
+    if (hit !== undefined) return hit;
+    const r = spawnSync(probeCmd, { shell: true, encoding: "utf8", timeout: 15_000 });
+    const ok = r.error === undefined && r.status === 0;
+    checked.set(probeCmd, ok);
+    return ok;
+  };
   const probe: EnvProbe = {
     hasRepoSnapshot: (t) => existsSync(resolve(ROOT, t.seed.path)),
     hasCredentials: () => Boolean(process.env.M0_API_KEY && process.env.M0_ENDPOINT),
+    canRunVerifier: (t) => t.verifier === undefined || canRunVerifier(t.verifier.command),
   };
   const rows = tasks.map((t) => ({ id: t.id, r: feasibility(specOf(t), probe) }));
   for (const x of rows) {
     console.log(`[feasibility] ${x.id.padEnd(26)} ${x.r.runnable ? "可跑" : "不可跑"}` +
       (x.r.blockers.length > 0 ? " ← " + x.r.blockers.join("；") : ""));
+  }
+  for (const [cmd, ok] of checked) {
+    console.log(`[feasibility] 工具链自检 ${ok ? "✅" : "❌"} ${cmd}`);
+  }
+  if (checked.size === 0) {
+    console.log("[feasibility] 工具链自检：这批任务没有一条判卷命令可推出自检形状 ⇒ 全部按未证处理");
   }
   const agg = aggregateFeasibility(rows.map((x) => x.r));
   console.log(`[feasibility] 可跑 ${String(agg.runnable)} / 分母 ${String(agg.total)}（未发任何模型请求 ⇒ 零花费）`);

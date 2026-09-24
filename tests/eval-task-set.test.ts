@@ -3,7 +3,7 @@
 // 解析必须**不静默丢**（少一条任务就少一分母，而没人会去数），可行性必须说清**缺什么**
 // （缺快照/缺凭据是"没有尺"，不许读成"成功率 0"）。
 import { describe, expect, it } from "vitest";
-import { aggregateFeasibility, feasibility, fromSweBenchJsonl, parseTaskSetJson, type EnvProbe } from "../src/agent/eval/task-set";
+import { aggregateFeasibility, deriveVerifierProbe, feasibility, fromSweBenchJsonl, parseTaskSetJson, type EnvProbe } from "../src/agent/eval/task-set";
 
 const goodTask = {
   id: "I9",
@@ -100,11 +100,30 @@ describe("feasibility：能不能跑，缺什么要说名字", () => {
   })).tasks[0]!;
 
   const probe = (over: Partial<EnvProbe>): EnvProbe => ({
-    hasRepoSnapshot: () => true, hasCredentials: () => true, ...over,
+    hasRepoSnapshot: () => true, hasCredentials: () => true, canRunVerifier: () => true, ...over,
   });
 
   it("快照 + 凭据都在 ⇒ runnable", () => {
     expect(feasibility(task, probe({})).runnable).toBe(true);
+  });
+
+  // 2026-09-25 实机踩到的一格：SWE-bench 形态的判卷命令写死 `python -m pytest`，
+  // 而这台机器**没有装 pytest**（python3 在 ⇒ 只看可执行文件会假绿）。
+  // 缺工具链是"没有尺"，不是"模型 0 分"——与本模块开头那条警告同源，但当时只数了快照与凭据两支。
+  it("判卷命令跑不起来 ⇒ 不可跑，blocker 点名工具链（不许被读成模型 0 分）", () => {
+    const f = feasibility(task, probe({ canRunVerifier: () => false }));
+    expect(f.runnable).toBe(false);
+    expect(f.blockers.join(" ")).toMatch(/工具链|判卷命令/u);
+  });
+
+  it("反向：自检通过时这一格**不许新增 blocker**（否则这条检查是恒红，量不到任何东西）", () => {
+    expect(feasibility(task, probe({ canRunVerifier: () => true })).blockers).toHaveLength(0);
+  });
+
+  it("整批因工具链缺席而不可跑 ⇒ measurable=false，与「跑出来是红的」是两种读数", () => {
+    const agg = aggregateFeasibility([feasibility(task, probe({ canRunVerifier: () => false }))]);
+    expect(agg.measurable).toBe(false);
+    expect(agg.reason).toContain("不可跑");
   });
 
   it("没预先 fetch 仓库快照 ⇒ 不可跑，且 blocker 指名是哪个 commit（这是'没有尺'，不是失败）", () => {
@@ -135,5 +154,27 @@ describe("feasibility：能不能跑，缺什么要说名字", () => {
     expect(agg.measurable).toBe(true);
     expect(agg.runnable).toBe(1);
     expect(agg.total).toBe(2);
+  });
+});
+
+describe("deriveVerifierProbe：从判卷命令推一条自检命令（认不出就给 null，宁缺不编）", () => {
+  it("python -m pytest ⇒ 探的是**模块**在不在；只看 python 在不在就会假绿（本机正是这一格）", () => {
+    expect(deriveVerifierProbe("python -m pytest -rA t.py::u p.py::v")).toBe('python -c "import pytest"');
+  });
+
+  it("常规 runner ⇒ <bin> --version", () => {
+    expect(deriveVerifierProbe("pnpm test")).toBe("pnpm --version");
+    expect(deriveVerifierProbe("go test ./...")).toBe("go --version");
+    expect(deriveVerifierProbe("cargo test --locked")).toBe("cargo --version");
+  });
+
+  it("认不出的形状给 null：相对路径脚本、带管道的复合命令、空串", () => {
+    expect(deriveVerifierProbe("./run_tests.sh")).toBeNull();
+    expect(deriveVerifierProbe("pnpm test | tee out.txt")).toBeNull();
+    expect(deriveVerifierProbe("   ")).toBeNull();
+  });
+
+  it("-m 后面没有模块名（python -m）⇒ 也算认不出，不许编一条自检", () => {
+    expect(deriveVerifierProbe("python -m")).toBeNull();
   });
 });
