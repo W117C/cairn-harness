@@ -294,6 +294,23 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         ),
       },
     },
+    // 长任务的锚点此前只有人能写：模型每轮读回的还是三小时前那句人话，而它此刻已知道自己要交付什么。
+    // 这一条只给「改措辞」，不给「改预算」——轮次帽与美元闸归人（工具拒 + 投影层兜底，两处都写死）。
+    {
+      type: "function",
+      function: {
+        name: "refine_goal",
+        description:
+          "把当前长任务目标的措辞改成你现在真正要交付的那件事（只改说法，不改轮次帽/美元闸——那两条归人）。" +
+          "仅在目标已武装且未停止时可用；认为原目标描述已偏离实际工作时调用。",
+        parameters: obj(
+          {
+            objective: { type: "string", description: "一句话目标：做什么 + 怎么算完成（会替换提醒块里的目标行，下一轮起生效）" },
+          },
+          ["objective"],
+        ),
+      },
+    },
     // M2d：记忆写入唯一入口（§8.1.4）；只读档随写向工具一并摘除
     {
       type: "function",

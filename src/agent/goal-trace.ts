@@ -41,6 +41,16 @@ export function goalRelevant(e: AgentEvent): boolean {
 
 function step(prev: GoalTrace | null, e: AgentEvent, index: number): GoalTrace | null {
   if (e.type === "goal_set") {
+    // 模型自设的那一条只改措辞：**不重置轮次、不移动窗口锚点、不清停止状态、不改两条闸**。
+    // 这句为什么必须写在这里而不是只写在工具里：工具是唯一入口 = 权限只写在调用方，
+    // 绕过工具直接造事件就能把轮次帽归零（本仓对这类"闸只在一层"的一贯判死）。
+    if (e.set_by === "model") {
+      if (prev === null) return null; // 没有已武装的目标 ⇒ 模型自设不构成武装（连 spec 都不给）
+      return {
+        ...prev,
+        spec: { objective: e.objective, maxTurns: prev.spec.maxTurns, maxUsd: prev.spec.maxUsd },
+      };
+    }
     return {
       spec: { objective: e.objective, maxTurns: e.max_turns, maxUsd: e.max_usd },
       turn: 1,

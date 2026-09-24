@@ -465,6 +465,9 @@ export interface GoalSetEvent {
   max_turns: number;
   /** 美元上限；0 = 美元闸关（只按轮次闸停）。 */
   max_usd: number;
+  /** 这条是**模型自己**改设的措辞。缺席 = 人设（含全部旧日志，重放逐字不变）⇒ 整键缺席，不写空串顶位。
+   *  投影层据此拒绝把窗口锚点挪到它上面：改措辞不等于加额度，也不等于把上一段的绿证据作废。 */
+  set_by?: "model";
   session_id?: string;
   ts?: number;
 }

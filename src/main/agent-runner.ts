@@ -27,6 +27,7 @@ import { affectedFilesOf, defaultImpactHook } from "../agent/impact/index.js";
 import { createImpactQueryTool, impactQuerySpec } from "../tools/impact-query";
 import { createWaitForAgentsTool } from "../tools/wait_for_agents";
 import { createCancelAgentsTool } from "../tools/cancel_agents";
+import { createRefineGoalTool } from "../tools/refine_goal";
 import { run_shell } from "../tools/run_shell";
 import type { AgentEvent, ClarifyAnswerMap, EventLog, GoalTurnOrigin } from "../events";
 import { frozenJudgePathSet } from "../frozen";
@@ -820,6 +821,19 @@ export function installAppTools(): void {
   // 动态调整的另一半：模型自己撤自己派出的 worker（同一注入面、同一 fail-closed 口径）。
   // 缺它时 join 文案里那句"可再取消"就是一扇不存在的门，而"派错了只能干等它跑完"是能力 4 的反面。
   (TOOLS as unknown as Record<string, Tool>).cancel_agents = createCancelAgentsTool(() => currentOrchestrator());
+  // 长任务锚点的模型侧「改措辞」：落的是与人同一条 goal_set（一份事实源），但带 set_by:"model"，
+  // 而投影层不因此挪动窗口锚点/轮次帽 ⇒ 模型能把自己的目标写进每轮提醒，拿不到续跑额度（那两条归人）。
+  (TOOLS as unknown as Record<string, Tool>).refine_goal = createRefineGoalTool(async () => {
+    const s = currentSession();
+    if (!s?.sessionId) return null;
+    const events = await replay(pathOf(requireSessionsDir(), s.sessionId)).catch(() => [] as AgentEvent[]);
+    const view = projectGoal(events);
+    if (!view) return null;
+    return {
+      objective: view.spec.objective, maxTurns: view.spec.maxTurns, maxUsd: view.spec.maxUsd,
+      turn: view.turn, stopped: view.stopped,
+    };
+  });
   // M4a：agent 工具五件（§12.2.5）——automation_create/update/delete/run_now/list。
   // 一切变更走审批卡（§10.4）；prompt 是持久化攻击面：4k 上限（校验拒）+ 审批卡全文展示（args 原样进审批卡）；
   // workspace-write 及以上档位 → 审批卡红字「将无人值守执行」（§12.2.5）；调度器未初始化 = fail-closed。
