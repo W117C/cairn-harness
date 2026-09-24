@@ -150,4 +150,12 @@ describe("spawn_agent 在派活前拒掉这一档不读的键", () => {
     expect(r.output).not.toContain("agent_type");
     await orch.cancelAll();
   });
+
+  it("打错档名的纠错消息列出全部档位（写死清单会把真存在的档说成不存在）", async () => {
+    const { orch } = makeOrch();
+    const r = await orch.spawn({ mode: "supervis", task: "t" } as SpawnArgs, { callId: "c6" });
+    expect(r.ok).toBe(false);
+    for (const m of SPAWN_MODES) expect(r.output, "纠错消息漏了档位 " + m).toContain(m);
+    await orch.cancelAll();
+  });
 });
