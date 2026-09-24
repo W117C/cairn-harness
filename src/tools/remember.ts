@@ -23,6 +23,7 @@ import {
   writeTopic,
   type MemoryType,
 } from "../agent/memory/store.js";
+import { redactSecrets } from "../agent/security/scan.js";
 
 export type RememberKind = "architecture" | "decision" | "preference" | "memory";
 export type RememberOp = "append" | "replace";
@@ -44,6 +45,24 @@ function isMemoryType(v: unknown): v is MemoryType {
 /** kind → 默认操作（§8.1.4：追加走 append（日志型），改写走 replace（状态型））。 */
 function defaultOp(kind: RememberKind): RememberOp {
   return kind === "architecture" || kind === "preference" ? "replace" : "append";
+}
+
+/** §8.1.8 记忆安全第 6 条的后半（agent-plan.md:860）：「§11.1 脱敏 pass 覆盖记忆写入路径」。
+ *  落在这里而不是 main 层的 gated 包装：会话结束沉淀轮走的是**未加门的工具本体**
+ *  （agent-runner 把 `rememberTool: remember` 直接交给 runSessionEndDistill），闸放包装层就绕过了它。
+ *  命中即掩码写入；blocked（私钥块）沿用 scan.ts 既有契约——调用方拒绝而非仅脱敏。
+ *  拒因只给规则名与处数，绝不回显凭据本体（回执要进事件流）。 */
+function sanitizeForMemory(content: string): { text: string; masked: number } {
+  const r = redactSecrets(content);
+  if (r.blocked) {
+    throw new MemoryError(
+      "call_failed",
+      "remember: 内容含高危凭据（" +
+        (r.findings.some((f) => f.ruleId === "secret.private_key") ? "私钥块" : "命中拒绝档") +
+        "，§11.1 脱敏 pass 的 blocked 档），一律不落盘；请去掉凭据、只写位置指针后重试",
+    );
+  }
+  return { text: r.text, masked: r.findings.length };
 }
 
 export const remember: Tool = {
@@ -87,6 +106,10 @@ export const remember: Tool = {
       throw new MemoryError("empty_change", "remember: 无内容可沉淀（content 为空白，空变更显式报错）");
     }
     const nowISO = new Date().toISOString();
+    // 闸后文本一次算好，四个写原语（writeTopic 的 append/replace、appendDecisionEntry、
+    // appendRootFile、replaceRootFile）共用同一份——分头过闸必然漏一支。
+    const safe = sanitizeForMemory(content);
+    const note = safe.masked > 0 ? "（§11.1 脱敏 pass：已掩码 " + safe.masked + " 处凭据；凭据本体不入记忆，只写位置指针）" : "";
     if (k === "memory") {
       const type = rawArgs.type;
       if (!isMemoryType(type)) {
@@ -109,23 +132,23 @@ export const remember: Tool = {
         if (oldContent !== oldBody) {
           throw new MemoryError("old_content_mismatch", "remember: old_content 与 " + topic + " 正文不精确匹配（replace 报错重试语义）");
         }
-        if (oldContent === content) {
-          throw new MemoryError("empty_change", "remember: 空变更（old_content === content），无内容可沉淀");
+        if (oldContent === safe.text) {
+          throw new MemoryError("empty_change", "remember: 空变更（old_content === 闸后 content），无内容可沉淀");
         }
-        const res = await writeTopic(dir, topic, type, content, nowISO);
-        return { ok: true, output: "已写入 " + (scope === "project" ? ".agent/" : "全局层 ") + "memory/" + topic + ".md（replace，type=" + type + "，" + res.bytes + " 字节，modified 已落账）" };
+        const res = await writeTopic(dir, topic, type, safe.text, nowISO);
+        return { ok: true, output: "已写入 " + (scope === "project" ? ".agent/" : "全局层 ") + "memory/" + topic + ".md（replace，type=" + type + "，" + res.bytes + " 字节，modified 已落账）" + note };
       }
       const prev = await readTopicBody(dir, topic);
-      const body = prev === null ? content : prev.replace(/\n+$/, "") + "\n\n" + content;
+      const body = prev === null ? safe.text : prev.replace(/\n+$/, "") + "\n\n" + safe.text;
       const res = await writeTopic(dir, topic, type, body, nowISO);
-      return { ok: true, output: "已写入 " + (scope === "project" ? ".agent/" : "全局层 ") + "memory/" + topic + ".md（append，type=" + type + "，" + res.bytes + " 字节，modified 已落账）" };
+      return { ok: true, output: "已写入 " + (scope === "project" ? ".agent/" : "全局层 ") + "memory/" + topic + ".md（append，type=" + type + "，" + res.bytes + " 字节，modified 已落账）" + note };
     }
     // ---- 根三文件（仅项目层）----
     const path = rootFilePath(ctx.workspace, k);
     if (op === "append") {
-      if (k === "decision") await appendDecisionEntry(ctx.workspace, content, nowISO);
-      else await appendRootFile(ctx.workspace, k, content);
-      return { ok: true, output: "已写入 .agent/" + ROOT_FILES[k] + "（append）" };
+      if (k === "decision") await appendDecisionEntry(ctx.workspace, safe.text, nowISO);
+      else await appendRootFile(ctx.workspace, k, safe.text);
+      return { ok: true, output: "已写入 .agent/" + ROOT_FILES[k] + "（append）" + note };
     }
     const oldContent = rawArgs.old_content;
     if (typeof oldContent !== "string") {
@@ -138,10 +161,10 @@ export const remember: Tool = {
         "remember: old_content 与 .agent/" + ROOT_FILES[k] + " 当前内容不精确匹配（replace 报错重试语义）",
       );
     }
-    if (oldContent === content) {
-      throw new MemoryError("empty_change", "remember: 空变更（old_content === content），无内容可沉淀");
+    if (oldContent === safe.text) {
+      throw new MemoryError("empty_change", "remember: 空变更（old_content === 闸后 content），无内容可沉淀");
     }
-    await replaceRootFile(ctx.workspace, k, content);
-    return { ok: true, output: "已写入 .agent/" + ROOT_FILES[k] + "（replace，全量改写）" };
+    await replaceRootFile(ctx.workspace, k, safe.text);
+    return { ok: true, output: "已写入 .agent/" + ROOT_FILES[k] + "（replace，全量改写）" + note };
   },
 };
