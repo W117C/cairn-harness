@@ -254,6 +254,42 @@ const MUTATIONS = [
     apply: (s) => s.replace("  for (const [k, v] of Object.entries(sanitizedEnv())) {", "  for (const [k, v] of Object.entries(process.env)) {"),
     expectFail: "两侧都必须挡住密钥类变量（这一半今天已绿，属反向钉）",
   },
+  // ---- 能力 7 的路径边界三面（H2 加固轮①：C-2/C-3 归属、C-11 系统区、E-12 插件覆盖路径）----
+  // 判卷 tests/path-boundary.test.ts 从写下那天起零锚点（第 37 页的对账机读出来的）。
+  // 三面各一条：词法 resolve/relative、realpath 归属、落点复查是**三道独立的闸**，
+  // 少任何一道都有各自能穿透的形态（绝对路径 / 区内软链 / `link -> .agent`），不是冗余副本。
+  {
+    id: "containment-realpath-dropped",
+    src: "src/tools/base.ts",
+    test: "tests/path-boundary.test.ts",
+    desc: "词法 resolve/relative 过关后再不做 realpath 归属复查 ⇒ 工作区内一条软链就把读写送出边界（旧实现正是这一形态）",
+    apply: (s) => s.replace("  if (relBack !== \"\" && (relBack.startsWith(\"..\") || isAbsolute(relBack))) {", "  if (false) {"),
+    expectFail: "工作区内软链指向外部：write_file 拒绝（旧实现会穿透写入外部文件）",
+  },
+  {
+    id: "agent-area-lexical-dropped",
+    src: "src/tools/base.ts",
+    test: "tests/path-boundary.test.ts",
+    desc: ".agent/ 系统区的词法拒写被拆 ⇒ 模型可直接改 permissions.json（跨会话提权）",
+    apply: (s) => s.replace("  if (typeof rel === \"string\" && rel.split(/[\\\\/]/).includes(\".agent\")) {", "  if (false) {"),
+    expectFail: "write_file 写 .agent/permissions.json 被拒（跨会话提权面）",
+  },
+  {
+    id: "agent-area-real-recheck-dropped",
+    src: "src/tools/base.ts",
+    test: "tests/path-boundary.test.ts",
+    desc: "落点复查被拆 ⇒ 一条指向 .agent 的软链，rel 里没有 \".agent\" 字样，词法闸与 containment 都放行，写入落到 lsp.json（任意 command RCE 面复活）",
+    apply: (s) => s.replace("  if (relReal.split(/[\\\\/]/).includes(\".agent\")) {", "  if (false) {"),
+    expectFail: "词法闸看不见的软链落点：`link -> .agent` 时写与改都被拒（C3 复查闸，摘掉它 = RCE 面复活）",
+  },
+  {
+    id: "manifest-cover-escape-accepted",
+    src: "src/agent/plugins/manifest.ts",
+    test: "tests/path-boundary.test.ts",
+    desc: "插件 manifest 的覆盖路径不再校验包含性 ⇒ 不可信清单把插件根外目录挂进来扫描/加载",
+    apply: (s) => s.replace("    if (relBack.length > 0 && (relBack.startsWith(\"..\") || isAbsolute(relBack))) {", "    if (false) {"),
+    expectFail: "skills 指向 ../ 时拒载（旧实现会挂载扫描插件根外目录）",
+  },
   {
     id: "autonomy-allow-critical",
     src: "src/permissions/autonomy.ts",

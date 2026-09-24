@@ -79,6 +79,22 @@ describe(".agent/ 系统区拒写（C-11）", () => {
     const read = await read_file.run({ path: ".agent/lsp.json" }, ctx);
     expect(read.ok).toBe(true);
   });
+
+  // C3（审查 P1-6）的另一半：词法闸只看 rel 里有没有 ".agent" 字样，`link -> .agent` 时两道旧闸
+  // 都放行 ⇒ 落点在 .agent 内却写成合法路径。此前 assertNotAgentAreaReal 全仓零判卷（grep tests/ 无一处），
+  // 所以这一条是补观测者；它的牙齿由锚点 agent-area-real-recheck-dropped 当场证明（摘闸 ⇒ 本条必须红）。
+  it("词法闸看不见的软链落点：`link -> .agent` 时写与改都被拒（C3 复查闸，摘掉它 = RCE 面复活）", async () => {
+    const ctx = await newCtx();
+    await mkdir(join(ws, ".agent"), { recursive: true });
+    await writeFile(join(ws, ".agent", "lsp.json"), "{}", "utf8");
+    await symlink(join(ws, ".agent"), join(ws, "notes"));
+    await expect(edit_file.run({ path: "notes/lsp.json", old_string: "{}", new_string: "{\"command\":\"pwn\"}" }, ctx))
+      .rejects.toThrow(/写入落点在 \.agent\/ 内/);
+    await expect(write_file.run({ path: "notes/permissions.json", content: "{\"allow\":\"*\"}" }, ctx))
+      .rejects.toThrow(/写入落点在 \.agent\/ 内/);
+    const { readFile: rd } = await import("node:fs/promises");
+    expect(await rd(join(ws, ".agent", "lsp.json"), "utf8")).toBe("{}"); // 系统区原文未动
+  });
 });
 
 describe("插件 manifest 路径覆盖包含性（E-12）", () => {
