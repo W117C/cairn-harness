@@ -295,7 +295,7 @@ function maybeAddSpec(specs: GlmToolSpec[], at: "tail" | "front" | undefined): G
  *  「当前面上，开臂压缩次数不再更少」，答不出这是**刀界**（尺寸挪一点就翻回来）还是**趋势**（面越大越亏）——
  *  两种读法对产品是相反的决定（改尺 vs 改策略），所以先把矩阵打出来。本模式**一条断言都不下**。 */
 async function runFaceSweep(): Promise<void> {
-  const rounds = 8;
+  let driveRounds = 8;
   console.log("[prefix-churn] --sweep 诊断模式：**不判绿**，exit 0 不代表门过（断言在 PC7 本体，本模式一条不下）");
   const tally = (r: Awaited<ReturnType<typeof driveMutating>>) => {
     const attrs = r.obs.slice(1).map((cur, i) => attributeChurn(r.obs[i]!, cur, r.firedPerPair[i] ?? []));
@@ -311,8 +311,8 @@ async function runFaceSweep(): Promise<void> {
   const sentChars = (r: Awaited<ReturnType<typeof driveMutating>>) => JSON.stringify(r.obs[r.obs.length - 1]?.tools ?? []).length;
   const row = async (label: string, pad: number, at: "tail" | "front" | undefined) => {
     const want = JSON.stringify(maybeAddSpec(padFace(sessionToolSpecs({ mode: "default" }).specs, pad), at)).length;
-    const offRun = await driveMutating({ kind: "compaction", rounds, facePadChars: pad, ...(at ? { faceAddSpec: at } : {}) });
-    const onRun = await driveMutating({ kind: "compaction", rounds, amortize: true, facePadChars: pad, ...(at ? { faceAddSpec: at } : {}) });
+    const offRun = await driveMutating({ kind: "compaction", rounds: driveRounds, facePadChars: pad, ...(at ? { faceAddSpec: at } : {}) });
+    const onRun = await driveMutating({ kind: "compaction", rounds: driveRounds, amortize: true, facePadChars: pad, ...(at ? { faceAddSpec: at } : {}) });
     const a = tally(offRun), b = tally(onRun);
     console.log("  " + label + " 面(我要的)=" + String(want) + " 面(实发 关/开)=" +
       String(sentChars(offRun)) + "/" + String(sentChars(onRun)) +
@@ -320,11 +320,22 @@ async function runFaceSweep(): Promise<void> {
       " ｜开 压 " + String(b.compactions) + " 次 / 重写 " + String(b.rewrote) +
       " ⇒ 次数 " + (b.compactions < a.compactions ? "更少" : b.compactions === a.compactions ? "同" : "更多(红形)") +
       "、字节 " + (b.rewrote < a.rewrote ? "更省" : "更多(红形)"));
+    // 次数相同不代表「同一份时刻表」：把逐轮触发序列一起打出来，才能分辨
+    // 「估算随面变但没跨过任何一次触发（离散化）」与「估算根本不随面变（线断了）」——这两种处置相反。
+    const sched = (r: typeof offRun) => r.perRound.map((x) => String(x.compactions)).join("");
+    console.log("      时刻表 关=" + sched(offRun) + " 开=" + sched(onRun));
   };
   for (const pad of [0, 1_500, 3_000, 6_000]) await row("尺寸 pad=" + String(pad) + "        ", pad, undefined);
   await row("结构 面尾 +1 把      ", 0, "tail");
   await row("结构 面首 +1 把      ", 0, "front");
   await row("结构 面首 +1 把 + p1500", 1_500, "front");
+  // 第二轮：把驱动拉长，看关那一支会不会**出现空档**。两臂都几乎每轮触发 = 台架饱和，
+  // 那时"摊销把接下来几次省掉"这件事根本没有可观察的空间（时刻表只能差最后一轮）。
+  console.log("  —— 加长驱动，找'关臂有空档'的那一段（饱和时 PC7 的对照问不出问题）——");
+  driveRounds = 12;
+  await row("轮=12 pad=0", 0, undefined);
+  driveRounds = 16;
+  await row("轮=16 pad=0", 0, undefined);
 }
 
 if (process.argv.includes("--sweep")) {
