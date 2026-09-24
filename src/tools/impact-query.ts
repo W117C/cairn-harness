@@ -95,6 +95,22 @@ export async function graphCandidatePosition(workspace: string, rel: string): Pr
   }
 }
 
+/** 覆盖面自述（纯函数）：图被文件数帽挤过时，**成功**答案也要说清自己量了多大一块。
+ *
+ *  为什么阳性一侧也要说：本工具的**阴性**结论早就各自带分诊（"无跨文件调用点"、"图里没有这个符号"
+ *  都会说"不等于 0"），但一个**成立**的答复原先只报结果不报覆盖面 ⇒ 模型看到"波及 1 个文件"就以为
+ *  问全了，而这张图可能只收了仓库的一小截（2026-09-25 本仓实测：451 个候选只收 400）。
+ *  这与 grep/glob 那条"阴性要说清扫描面"是同一条政策的后半句。
+ *
+ *  判据是**精确**的而非保守的：`applyFileCap` 只做 `slice(0, maxFiles)` ⇒ 「收录数 < 帽」⟺ 这一刀
+ *  没切到东西（真全量，一字不许多，零回归）；只有「收录数 ≥ 帽」才可能有文件被挤在图外。
+ *  措辞说"非全量"而不是"漏了 N 个"：挤掉多少个要重扫全量候选才知道，而这一格不值一次 rg。 */
+export function coverageNote(files: number, cap: number): string {
+  if (files < cap) return "";
+  return `（覆盖度：本图收录 ${String(files)} 个文件＝帽 ${String(cap)} ⇒ 图非全量，` +
+    "图里没有 ≠ 仓库里没有；要更全调大 maxFiles 后重问）";
+}
+
 /** 调用点按文件汇聚的紧凑清单（与 contextNoteFor 同一套帽：宁少不炸上下文）。 */
 function sitesNote(head: string, sites: ImpactSite[], noun: SiteNoun = UP_NOUN): string {
   if (sites.length === 0) return head + noun.none;
@@ -143,7 +159,8 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
           const graph = await buildImpact({ workspace: ctx.workspace, cacheDir: dir, maxFiles });
           const rel = fileArg.replace(/\\/g, "/");
           if (!graph.files.includes(rel)) return { ok: false, output: await notInGraphNote(ctx.workspace, rel, abs, maxFiles) };
-          return { ok: true, output: sitesNote("[impact] " + rel + " 引用的外部定义（我在调用谁）", downward(graph, rel), DEP_NOUN) };
+          const depHead = "[impact] " + rel + " 引用的外部定义（我在调用谁）" + coverageNote(graph.files.length, maxFiles);
+          return { ok: true, output: sitesNote(depHead, downward(graph, rel), DEP_NOUN) };
         }
         const r = await fileImpact(ctx.workspace, fileArg, dir, maxFiles);
         if (r === null) return { ok: false, output: await notInGraphNote(ctx.workspace, fileArg.replace(/\\/g, "/"), abs, maxFiles) };
@@ -153,7 +170,7 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
         const head = "[impact] " + r.file + (refSyms.length > 0
           ? "（被跨文件引用的符号 " + String(refSyms.length) + " 个：" + refSyms.slice(0, SYMS_CAP).join(", ")
             + (refSyms.length > SYMS_CAP ? " 等" : "") + "）"
-          : "");
+          : "") + coverageNote(r.graphFiles, maxFiles);
         return { ok: true, output: sitesNote(head, r.up) };
       }
       const graph = await buildImpact({ workspace: ctx.workspace, cacheDir: dir, maxFiles });
@@ -176,7 +193,9 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
             `要动它的行为请改调用处或直读它的来源`,
         };
       }
-      return { ok: true, output: sitesNote(`[impact] ${symbol} 的定义在 ${String(new Set(defined.map((d) => d.file)).size)} 个文件`, upward(graph, symbol)) };
+      const symHead = `[impact] ${symbol} 的定义在 ${String(new Set(defined.map((d) => d.file)).size)} 个文件` +
+        coverageNote(graph.files.length, maxFiles);
+      return { ok: true, output: sitesNote(symHead, upward(graph, symbol)) };
     },
   };
 }

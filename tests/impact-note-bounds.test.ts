@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 import { contextNoteFor, IMPACT_CONTEXT_SYMBOLS_PER_FILE, type FileImpactReport } from "../src/agent/impact";
 
 function report(symbols: string[], up: FileImpactReport["up"] = []): FileImpactReport {
-  return { file: "src/a.ts", symbols, up, truncated: false };
+  // graphFiles 只服务查询端的覆盖面自述，注入摘要（contextNoteFor）不读它 ⇒ 这里给个真值即可。
+  return { file: "src/a.ts", symbols, up, truncated: false, graphFiles: 1 };
 }
 
 describe("无跨文件调用点分支的符号清单有界", () => {

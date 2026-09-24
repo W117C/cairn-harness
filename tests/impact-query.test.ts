@@ -342,3 +342,61 @@ async function fetchDirListing(): Promise<string[]> {
   await walk("");
   return out;
 }
+
+describe("覆盖度自述：图被帽截断时，成功答案也要说「这图不全」", () => {
+  // 为什么要这一格：impact_query 的**阴性**结论（"无跨文件调用点"、"图里没有这个符号"）today 已经会
+  // 说"不等于 0 / 图内没有 ≠ 仓库里没有"，但**阳性**答案完全不自述覆盖面 ⇒ 模型看到"波及 1 个文件"
+  // 就以为问全了，而这张图可能只收了仓库的一小截。这与 grep/glob 那条"阴性要说清扫描面"是同一条政策，
+  // 缺的是它的前半句：**阳性也要说清自己量了多大一块**。
+  let ws = "";
+  // a.ts 定义 target、b.ts 调用它，且这两个是**最新**的两个文件；pad 文件 mtime 更旧。
+  // ⇒ maxFiles=2 时两张都还在图内（成功路径成立），而收录数正好等于帽 ⇒ 自述必须出现。
+  async function mk(): Promise<ToolContext> {
+    ws = await mkdtemp(join(tmpdir(), "impact-cov-"));
+    const { utimes } = await import("node:fs/promises");
+    const put = async (name: string, text: string, year: number): Promise<void> => {
+      await writeFile(join(ws, name), text, "utf8");
+      const t = new Date(Date.UTC(year, 0, 1));
+      await utimes(join(ws, name), t, t);
+    };
+    await put("pad1.ts", "export const pad1 = 1;\n", 2019);
+    await put("pad2.ts", "export const pad2 = 2;\n", 2019);
+    await put("a.ts", "export function target(x) { return x + 1; }\n", 2022);
+    await put("b.ts", "import { target } from \"./a\";\nexport function use(y) { return target(y); }\n", 2023);
+    return { workspace: ws, emit: async () => {} };
+  }
+  afterAll(async () => { if (ws !== "") await rm(ws, { recursive: true, force: true }); });
+
+  it("symbol 支命中帽 ⇒ 成功输出带覆盖度自述（阳性答案也要说清量了多大一块）", async () => {
+    const c = await mk();
+    const r = await createImpactQueryTool(cacheDir).run({ symbol: "target", maxFiles: 2 }, c);
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("跨文件调用点 1 处");
+    expect(r.output, "必须报出「收录几个 / 帽是几」，否则模型无从判断这是全量还是一截").toMatch(/收录 2 个文件.*帽/u);
+    expect(r.output).toMatch(/图里没有 ≠ 仓库里没有/u);
+    expect(r.output).toContain("maxFiles");
+  });
+
+  it("file 支同一格（fileImpact 不把收录数带出来，这支就永远不自述）", async () => {
+    const c = await mk();
+    const r = await createImpactQueryTool(cacheDir).run({ file: "a.ts", maxFiles: 2 }, c);
+    expect(r.ok).toBe(true);
+    expect(r.output).toMatch(/帽/u);
+  });
+
+  it("deps 支同一格（同一句覆盖面由三支各自组装 ⇒ 少守一支就是那支静默不自述）", async () => {
+    const c = await mk();
+    const r = await createImpactQueryTool(cacheDir).run({ file: "b.ts", deps: true, maxFiles: 2 }, c);
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("我在调用谁"); // 前提：这一支真的走的是 deps 方向，不是波及方向
+    expect(r.output).toMatch(/帽/u);
+  });
+
+  it("反向：没到帽时**一个字都不许多**（缺省路径逐字不变，这条是新文案的零回归哨兵）", async () => {
+    const c = await mk();
+    const r = await createImpactQueryTool(cacheDir).run({ symbol: "target" }, c);
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("跨文件调用点 1 处");
+    expect(r.output).not.toMatch(/帽/u);
+  });
+});
