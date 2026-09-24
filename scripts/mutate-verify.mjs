@@ -8083,6 +8083,55 @@ const MUTATIONS = [
     apply: (s) => s.replace("    rules: a.rules,\n", "    rules: [],\n"),
     expectFail: "有 deny write_file 的项目规则 ⇒ worker 那笔写被拒，且拒因点名这条规则",
   },
+  // ---- 第 40 页 · spawn_agent 逐型参数面：这一档不读的键必须**在派活前**点名拒绝并指路 ----
+  {
+    id: "spawn-supervise-drops-stages-silently",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/spawn-arg-surface.test.ts",
+    desc: "摘掉早期拒绝那一行 ⇒ 申报了不读的键重新静默蒸发（真轨迹那次：三阶段计划整支丢掉、回执无一句话）",
+    apply: (s) => s.replace("    if (surfaceError !== null) return { ok: false, output: surfaceError };\n", "\n"),
+    expectFail: "supervise + stages ⇒ 拒绝、点名 stages 与 pipeline，且零 worker 零审批（不花真钱、不打扰人）",
+  },
+  {
+    id: "spawn-surface-check-uses-wrong-mode",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/spawn-arg-surface.test.ts",
+    desc: "检查拿错档位（写死 read）⇒ 合法 pipeline 申报 stages 被凭空拒一次，比漏拒更早咬到真调用",
+    apply: (s) => s.replace("unconsumedSpawnArgs(mode, args).message()", 'unconsumedSpawnArgs("read", args).message()'),
+    expectFail: "pipeline 带 stages + resources ⇒ 不被参数面拒（resources 是它读的那一档）",
+  },
+  {
+    id: "spawn-mode-error-hides-supervise",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/spawn-arg-surface.test.ts",
+    desc: "纠错文案退回写死档名 ⇒ 打错 supervise 的模型被告知「supervise 不是档位」，一条纠错消息自己制造第二次错",
+    apply: (s) => s.replace('output: "spawn_agent: mode 必须是 " + SPAWN_MODES.join("|")', 'output: "spawn_agent: mode 必须是 read|write|pipeline"'),
+    expectFail: "打错档名的纠错消息列出全部档位（写死清单会把真存在的档说成不存在）",
+  },
+  {
+    id: "spawn-surface-refusal-loses-direction",
+    src: "src/agent/spawn-surface.ts",
+    test: "tests/spawn-arg-surface.test.ts",
+    desc: "拒绝语只说不读、不指路 ⇒ 模型知道失败却不知道 stages 该走 pipeline（本笔的价值一半在指路）",
+    apply: (s) => s.replace('return who.length === 1 ? k + "（改用它：mode=" + who[0] + "）"', "return who.length === 1 ? k"),
+    expectFail: "supervise + stages ⇒ 拒绝、点名 stages 与 pipeline，且零 worker 零审批（不花真钱、不打扰人）",
+  },
+  {
+    id: "spawn-arg-table-loses-a-reader",
+    src: "src/agent/spawn-surface.ts",
+    test: "tests/spawn-arg-surface.test.ts",
+    desc: "表里删掉某档的一个读键而代码仍在读 ⇒ 该键变成「谁都不读」，合法调用被凭空拒（过报侧唯一的机器哨兵）",
+    apply: (s) => s.replace('"depends_on", "resources", "stages"]),', '"depends_on", "resources"]),'),
+    expectFail: "表里每个键至少被一档读（新增一个谁都不读的参数 ⇒ 本条立刻红）",
+  },
+  {
+    id: "spawn-arg-unknown-keys-silently-ignored",
+    src: "src/agent/spawn-surface.ts",
+    test: "tests/spawn-arg-surface.test.ts",
+    desc: "未知键不再上报 ⇒ agent_type 这类笔误静默按默认面跑（与已修的 supervise 内层契约同一半没守住）",
+    apply: (s) => s.replace("const unknown = declared.filter((k) => !known.has(k)).sort();", "const unknown: string[] = [];"),
+    expectFail: "模型发明或笔误的顶层键（agent_type）算 unknown，并列出合法键对照",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
