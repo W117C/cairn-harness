@@ -6,6 +6,7 @@
  *  跑法：TERM=dumb node --import tsx outputs/claim-observability-2026-09-23/verify-claims.mts */
 import { readdirSync, readFileSync, existsSync, mkdirSync, writeFileSync, mkdtempSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { projectContext } from "../../src/agent/context";
@@ -37,6 +38,22 @@ const read = (rel: string): string => {
   return readFileSync(p, "utf8");
 };
 const has = (rel: string, re: RegExp): boolean => re.test(read(rel));
+/** 文本类断言一律钉 **HEAD**：那些页说的是已发货的仓库，不是别人的写作窗。
+ *  同一天在同一支机器上踩到两次的镜像：盘上读成「没尺」（renderer 被并发会话删在飞）与
+ *  读成「已修」（`provider-keys.ts` 被并发会话改在飞 ⇒ 26:C1 翻假，而 HEAD 里仍是 `["glm"]`）。
+ *  ⇒ 形状类判据不看盘；盘上≠HEAD 的文件单独列出来，让读的人知道谁的窗里在飞。 */
+const headCache = new Map<string, string>();
+const flyingFiles = new Set<string>();
+function readH(rel: string): string {
+  if (!headCache.has(rel)) {
+    let txt = "";
+    try { txt = execFileSync("git", ["show", "HEAD:" + rel], { encoding: "utf8", maxBuffer: 1 << 28 }); } catch { txt = ""; }
+    headCache.set(rel, txt);
+    if (txt !== read(rel)) flyingFiles.add(rel);
+  }
+  return headCache.get(rel) ?? "";
+}
+const hasH = (rel: string, re: RegExp): boolean => re.test(readH(rel));
 
 interface Claim { page: string; id: string; claim: string; holds: () => boolean; how: string }
 
@@ -57,17 +74,19 @@ const CLAIMS: Claim[] = [
     holds: () => has("src/agent/evidence.ts", /\\bfail\\b/),
     how: "evidence.ts 的 FAIL_RE" },
   { page: "22", id: "G1", claim: "运行中发送仍被 toast 直接挡回（输入丢弃）",
-    holds: () => has("src/renderer/app.js", /正在运行，请先等待完成/),
-    how: "app.js 守卫文案" },
+    holds: () => hasH("src/renderer/app.js", /正在运行，请先等待完成/),
+    how: "app.js 守卫文案（HEAD 面）" },
   { page: "25", id: "C1", claim: "半修状态：verify 判卷路已设 pipefail，run_shell 仍未设（下一步修它时这条会再次转红）",
+    // 这条刻意**按盘上**判：它说的不是"已发货的世界"，而是"这一步做到哪儿了"——
+    // 换成 HEAD 会读成「两处都没设」⇒ 假"已失效"（实测：verify 侧的 pipefail 正落在别人的写作窗里）。
     holds: () => /pipefail/.test(read("src/agent/verify.ts")) && !/pipefail/.test(read("src/tools/run_shell.ts")),
-    how: "两文件分别扫 pipefail" },
+    how: "两文件分别扫 pipefail（**盘上进度**，非 HEAD）" },
   { page: "26", id: "C1", claim: "PROVIDER_IDS 仍同名两份不同值",
     holds: () => {
-      const a = /PROVIDER_IDS\s*=\s*\[([^\]]*)\]/.exec(read("src/providers/registry.ts"))?.[1] ?? "";
-      const b = /PROVIDER_IDS\s*=\s*\[([^\]]*)\]/.exec(read("src/main/provider-keys.ts"))?.[1] ?? "";
+      const a = /PROVIDER_IDS\s*=\s*\[([^\]]*)\]/.exec(readH("src/providers/registry.ts"))?.[1] ?? "";
+      const b = /PROVIDER_IDS\s*=\s*\[([^\]]*)\]/.exec(readH("src/main/provider-keys.ts"))?.[1] ?? "";
       return a !== "" && b !== "" && a !== b;
-    }, how: "两处成员串比较" },
+    }, how: "两处成员串比较（HEAD 面；盘上有人改了这份，见页尾在飞清单）" },
   { page: "26", id: "C2", claim: "注册表检查仍排在权限判定之后",
     holds: () => {
       const b = read("src/agent/loop.ts");
@@ -372,7 +391,7 @@ function countRememberCallsInCorpus(): { files: number; calls: number; remember:
  *  （实测 2026-09-24：唯一翻假的就是它，而它做的是变异注入，根本不是参数对账）。
  *  走 AST 后只认代码里的成员访问：字符串字面量与注释都不算。 */
 function reconcilesParams(rel: string): boolean {
-  const src = ts.createSourceFile(rel, read(rel), ts.ScriptTarget.ESNext, true,
+  const src = ts.createSourceFile(rel, readH(rel), ts.ScriptTarget.ESNext, true,
     rel.endsWith(".ts") ? ts.ScriptKind.TS : ts.ScriptKind.JS);
   let seesSchema = false;
   let seesArgs = false;
@@ -421,7 +440,7 @@ const CLAIMS_24: Claim[] = [
   { page: "35", id: "C3",
     claim: "沙箱态/事件数/token 三个读数住在设置遮罩里，主屏看不到（常驻那一半未接）",
     holds: () => {
-      const html = read("src/renderer/index.html");
+      const html = readH("src/renderer/index.html");
       const inside = (id: string): boolean => {
         const at = html.indexOf(`id="${id}"`);
         return at >= 0 && html.lastIndexOf('<div class="settings-overlay"', at) >= 0;
@@ -433,7 +452,7 @@ const CLAIMS_24: Claim[] = [
   { page: "35", id: "C2",
     claim: "§11.2「档位锁为只读」字面未实现（四处装配点扫不到该形状）",
     holds: () => ["src/main/agent-runner.ts", "src/agent/orchestrator.ts", "src/permissions/autonomy.ts", "src/permissions/risk.ts"]
-      .every((f) => !/sandbox[A-Za-z]*\s*===?\s*false[\s\S]{0,200}["']read-only["']/.test(read(f))),
+      .every((f) => !/sandbox[A-Za-z]*\s*===?\s*false[\s\S]{0,200}["']read-only["']/.test(readH(f))),
     how: "扫四处装配点找「沙箱不可用 ⇒ 切 read-only」的形状；注意本页 §二的结论是**不要再补**，本条转假时要先问为什么补了" },
   { page: "36", id: "C4",
     claim: "无模式名的独立 hex 凭据不掩（为 git 对象 id 让路的那次取舍，仍是有意的漏检侧）",
@@ -502,4 +521,8 @@ console.log(falseNow === 0 && blindNow === 0
   ? "⇒ 各页的判卷先红断言都还可复核；将来任何一条悄悄变假（被修掉或当初写错），本脚本 exit 1。"
   : "⇒ 有断言已变假：若缺陷被修，就去该页追加二次复核块把判据转正；若当初是假读数，更要当场记一笔。\n" +
     "⇒ 有断言「没尺」：被读的源文件不在盘上（多为并发会话删在飞）——它既不是通过也不是失效，等文件回来再判。");
+if (flyingFiles.size > 0) {
+  console.log(`\nℹ️ 形状类判据本次按 **HEAD** 判（上面标「HEAD 面」的那几条）。这些文件盘上≠HEAD，即别人的在飞改动` +
+    `——**别把"盘上看不到那个形状"读成"已修"**：${[...flyingFiles].sort().join("、")}`);
+}
 process.exit(falseNow === 0 && blindNow === 0 ? 0 : 1);
