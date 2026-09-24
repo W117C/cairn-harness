@@ -117,3 +117,41 @@ describe("路由清单把插件 agent 角色一起列给模型（发现面）", 
     expect(r.text).toContain("[清单超 ");
   });
 });
+
+// 截断要说清「掉了几个」：只写"已截断"时，模型无法区分"少 1 条"与"少 40 条"，
+// 也就无法决定要不要换个更窄的问法；而"几个"必须是**字段**，不能让下游自己数行数
+// （行数与条目数在换行/空描述时会分开算——本仓已因此错过一次）。
+describe("路由清单截断：dropped 是字段，文案要带同一个数", () => {
+  const many = (n: number, pad: number) => Array.from({ length: n }, (_, i) => ({
+    name: "s" + String(i), invoke: "/s" + String(i), description: "x".repeat(pad),
+    frontmatter: {}, body: "", plugin: "p", path: "/p", triggerEventId: 0, seq: i,
+  }));
+
+  it("没超限 ⇒ dropped=0 且文案里不出现「未列出」", () => {
+    const r = buildSkillRoutingList(many(3, 10) as never, ["- crew:scout — 只读调研"]);
+    expect(r.truncated).toBe(false);
+    expect(r.dropped).toBe(0);
+    expect(r.text).not.toContain("未列出");
+  });
+
+  it("超限 ⇒ dropped 恰等于没列出的条目数（两处取法互查），且标记里的数字与它一致", () => {
+    const total = 30;
+    const r = buildSkillRoutingList(many(total, 120) as never, []);
+    expect(r.truncated).toBe(true);
+    // 第二取法：列出的行数 = text 去掉标记行后按 \n 数（与 dropped 相加须等于输入条数）
+    const listed = r.text.split("\n").filter((l) => l.startsWith("- ")).length;
+    expect(r.dropped + listed).toBe(total);
+    expect(r.dropped).toBeGreaterThan(0);
+    expect(r.text).toContain("另有 " + String(r.dropped) + " 条未列出");
+    expect(r.text.length).toBeLessThanOrEqual(SKILL_ROUTING_CHAR_LIMIT);
+  });
+
+  it("合并预算下角色行被挤掉时，dropped 把它算进去（不是只数 skill）", () => {
+    const role = "- crew:scout — 只读调研（可用作 pipeline stages[].role）";
+    const r = buildSkillRoutingList(many(30, 120) as never, [role]);
+    expect(r.truncated).toBe(true);
+    expect(r.text).not.toContain("crew:scout");
+    const listed = r.text.split("\n").filter((l) => l.startsWith("- ")).length;
+    expect(r.dropped + listed).toBe(31); // 30 条 skill + 1 条角色行，同一份预算同一个数
+  });
+});

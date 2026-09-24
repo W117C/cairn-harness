@@ -539,6 +539,23 @@ const MUTATIONS = [
     apply: (s) => s.replace("      if (usedIds.has(e.id)) { malformed = true; continue; }", "      if (false) { malformed = true; continue; }"),
     expectFail: "supports verify evidence after result but rejects duplicate IDs and stale reused proof",
   },
+  // ---- 路由清单截断：掉了几个必须是字段 + 文案要带同一个数 ----
+  {
+    id: "routing-truncation-marker-hides-count",
+    src: "src/agent/plugins/skills.ts",
+    test: "tests/plugin-role-discoverability.test.ts",
+    desc: "标记只说「已截断」不说少几条 ⇒ 模型分不清少 1 条还是少 40 条，也就不会改用更窄的问法",
+    apply: (s) => s.replace(" 字符，已截断：另有 \" + String(dropped) + \" 条未列出]", " 字符，已截断]"),
+    expectFail: "超限 ⇒ dropped 恰等于没列出的条目数（两处取法互查），且标记里的数字与它一致",
+  },
+  {
+    id: "routing-dropped-counts-listed-not-missing",
+    src: "src/agent/plugins/skills.ts",
+    test: "tests/plugin-role-discoverability.test.ts",
+    desc: "dropped 误算成「列出的条数」⇒ 字段与文案各说一套，面板与模型拿到的都是反数",
+    apply: (s) => s.replace("  const dropped = lines.length - kept;", "  const dropped = kept;"),
+    expectFail: "超限 ⇒ dropped 恰等于没列出的条目数（两处取法互查），且标记里的数字与它一致",
+  },
   {
     id: "autonomy-allow-critical",
     src: "src/permissions/autonomy.ts",

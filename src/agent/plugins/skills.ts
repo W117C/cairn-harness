@@ -103,7 +103,14 @@ export interface RoutingListResult {
   text: string;
   /** true = 超 1536 字符被截断（截在完整行尾 + 标记行）。 */
   truncated: boolean;
+  /** 因超预算而**没列出来**的条目数（skill 行与角色行合并在同一份预算里数）。
+   *  0 = 全列出了。这个数字同时进标记行给模型看：只说"已截断"，模型分不清少 1 条还是少 40 条。 */
+  dropped: number;
 }
+
+/** 截断标记：条目数写在里面（与 `RoutingListResult.dropped` 同一个数）。 */
+const routingTruncationMarker = (dropped: number): string =>
+  "\n[清单超 " + String(SKILL_ROUTING_CHAR_LIMIT) + " 字符，已截断：另有 " + String(dropped) + " 条未列出]";
 
 /** 渐进披露路由清单：可模型触发的 skill 的 name + description(+when_to_use)；超 1536 字符截断。
  *  `extraLines` = 同样「模型按名调用」但来源不是 skill 的条目（插件 agent 角色名，§4.4.7 的
@@ -112,13 +119,16 @@ export interface RoutingListResult {
 export function buildSkillRoutingList(skills: RoutingSkillInput[], extraLines: readonly string[] = []): RoutingListResult {
   const lines = [...skills.filter(modelInvocable).map(skillRoutingLine), ...extraLines];
   const text = lines.join("\n");
-  if (text.length <= SKILL_ROUTING_CHAR_LIMIT) return { text, truncated: false };
-  const marker = "\n[清单超 " + String(SKILL_ROUTING_CHAR_LIMIT) + " 字符，已截断]";
-  const budget = SKILL_ROUTING_CHAR_LIMIT - marker.length;
-  let cut = text.slice(0, budget);
+  if (text.length <= SKILL_ROUTING_CHAR_LIMIT) return { text, truncated: false, dropped: 0 };
+  // 标记自己占的位数随数字变，所以先按上界（全都剩不下）预留，再用真实数字拼：
+  // 真实 dropped ≤ 条目总数 ⇒ 位数不超过预留值，`text.length <= 上限` 这条断言才恒成立。
+  const budget = SKILL_ROUTING_CHAR_LIMIT - routingTruncationMarker(lines.length).length;
+  let cut = text.slice(0, Math.max(0, budget));
   const lastLineEnd = cut.lastIndexOf("\n");
   if (lastLineEnd > 0) cut = cut.slice(0, lastLineEnd); // 截在完整行尾，不出半个条目
-  return { text: cut + marker, truncated: true };
+  const kept = cut === "" ? 0 : cut.split("\n").length;
+  const dropped = lines.length - kept;
+  return { text: cut + routingTruncationMarker(dropped), truncated: true, dropped };
 }
 
 /**
