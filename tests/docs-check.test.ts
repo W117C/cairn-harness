@@ -308,13 +308,14 @@ describe("D-8 复跑面登记表与引用对账", () => {
     for (const r of REPLAY_READINGS) expect(existsSync(join(root, r.script)), r.script).toBe(true);
   });
 
-  it("存量内联块走 LEGACY_WAIVERS：水位内豁免，多一条即红", () => {
-    const src = [{ path: "docs/PROJECT-REPORT-2026-09-22.md", text: "node --import tsx -e x" }];
-    const findings = checkReplay(src, () => false, []);
-    expect(waive(findings).kept).toHaveLength(0);
-    const two = checkReplay([...src, { path: "docs/new.md", text: "node --import tsx -e x" }], () => false, []);
-    expect(two).toHaveLength(2);
-    expect(waive(two).kept.map((f) => f.file)).toEqual(["docs/new.md"]);
+  it("迁移后无存量豁免：内联复跑块直接判红", () => {
+    expect(Object.keys(LEGACY_WAIVERS)).toHaveLength(0);
+    const findings = checkReplay(
+      [{ path: "docs/new.md", text: "node --import tsx -e x" }],
+      () => false,
+      [],
+    );
+    expect(waive(findings).kept.map((f) => f.file)).toEqual(["docs/new.md"]);
   });
 });
 

@@ -209,12 +209,24 @@ describe("PluginRuntime 的登记面（两条 face 同一个入口）", () => {
     expect(face.skillDenial).toBeUndefined();
   });
 
-  it("申报覆盖整个 ToolName 键域：那十把全摘；不在键域里的规格（remember 等）留着——不可申报的不假装摘得动", () => {
+  it("申报覆盖整个 ToolName 键域：静态十把全摘；运行时注入工具仍留着——不可申报的不假装摘得动", () => {
     const e = rt!;
     e.grantSkillScope("/pol:all", { "disallowed-tools": TOOL_NAMES.join(",") });
     const face = sessionToolFace(e, { mode: "default" });
-    // 缺省清单 = TOOL_NAMES 那十把 + 三把不可申报的 ⇒ 只剩后三把就是"十把全摘干净"
-    expect(specNames(face.tools).sort()).toEqual(["remember", "spawn_agent", "wait_for_agents"]);
+    // 运行期注入面不属于 ToolName 键域，disallowed-tools 不能越过它；这里把当前实际注入的
+    // 十把工具逐项钉住，新增运行时工具时测试会提醒同步契约，而不是静默改变权限语义。
+    expect(specNames(face.tools).sort()).toEqual([
+      "automation_create",
+      "automation_delete",
+      "automation_list",
+      "automation_run_now",
+      "automation_update",
+      "cancel_agents",
+      "refine_goal",
+      "remember",
+      "spawn_agent",
+      "wait_for_agents",
+    ]);
   });
 });
 
