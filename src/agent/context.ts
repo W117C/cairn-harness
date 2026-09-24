@@ -190,11 +190,44 @@ export function mergeToolResultsById(msgs: ContextMessage[]): ContextMessage[] {
   return out;
 }
 
+/** 无主回执降级后的正文：说清"这不是你对某次调用的返回"，否则模型会把它复述成自己发起的调用结果。
+ *  `body` 到这里已经过投影出口的中和（`role:"tool"` 构造那一处），所以这里**不再**转义一遍——
+ *  突变实测证明第二次调用是死代码（摘掉它读数不变），留着就会让人误以为降级这条岔路没被 L0 盖住。 */
+export function orphanResultNote(id: string, body: string): string {
+  return "[harness] 以下回执没有配对的调用声明（callId " + id + "）：它是系统补发或派生的，" +
+    "不是你对某一次调用的返回 ⇒ 别按 tool_result 的语义复述它；要接着做就把它当一条新到的信息读。\n" + body;
+}
+
+/** 合上孤儿 tool **结果**（与 `closeDanglingToolCalls` 同一条协议的另一半，也是投影面的合法性，
+ *  不改事件流一个字节）。
+ *  为什么必须有这道闸而不是去修那两个生产者：真语料实测 `orchestrator.ts` 的 supervise 多阶段把回执挂在
+ *  派生 id（`callId + "-sup" + n` / `chain.callId + "-s" + n`）上，而主流里从来没有这样一条 `tool_call`
+ *  ⇒ 45 个语料文件投影出 3 条孤儿；三家 provider 各一种后果（两种 400 + 一种静默改名）。
+ *  能改变"哪些事件进上下文"的路径实测有 8 个文件，而 `atomicUnits` 那条纪律只有 compaction 内部 2 个调用点
+ *  在守 ⇒ 给每个生产者立一份规矩就是 N 份迟早漂移，出口只有一份。
+ *  **降级成 user 而不是丢弃**：假象比空白更坏，丢了也就没有"这事发生过几次"的读数。 */
+export function demoteOrphanToolResults(msgs: ContextMessage[]): ContextMessage[] {
+  const declared = new Set<string>();
+  const out: ContextMessage[] = [];
+  for (const m of msgs) {
+    for (const c of m.tool_calls ?? []) declared.add(c.id);
+    const id = m.role === "tool" ? m.tool_call_id : undefined;
+    if (id !== undefined && !declared.has(id)) {
+      out.push({ role: "user", content: orphanResultNote(id, String(m.content ?? "")) });
+      continue;
+    }
+    out.push(m);
+  }
+  return out;
+}
+
 /** 组装投影：events（内存态或 replay 产物）→ 消息序列。
  *  M2b：replacements（事件 id → 替换文本）= prune 类型化裁剪投影（§7.4）——
  *  只动 tool_result 的 content，不动消息结构；缺省空 = 零行为（既有路径字节不变）。
- *  出口处过 closeDanglingToolCalls：被切断的会话可能留下没有结果的 tool_calls，那在 OpenAI 兼容端
- *  是 400 而不是"历史少一句"，续跑会直接失败（见该函数注释）。 */
+ *  出口处过三道合法性收束（都只动投影、不动事件流）：`mergeToolResultsById` 并同 id 多份回执、
+ *  `demoteOrphanToolResults` 降级无前驱的回执、`closeDanglingToolCalls` 补没有被回答的调用。
+ *  后两者是同一条协议的两半：OpenAI 兼容端要求「带 tool_calls 的 assistant 之后必须紧跟覆盖这些 id 的
+ *  tool 消息」，Anthropic 要求每个 tool_use 恰好一条 tool_result——哪一半不满足都是 400 而不是"历史少一句"。 */
 export function projectContext(
   events: AgentEvent[],
   replacements?: Map<number, string>,
@@ -284,5 +317,5 @@ export function projectContext(
   });
   flushDeltas();
   injectOnce(); // offset 越过全部事件（tail 为空）时补注
-  return closeDanglingToolCalls(mergeToolResultsById(msgs));
+  return closeDanglingToolCalls(demoteOrphanToolResults(mergeToolResultsById(msgs)));
 }

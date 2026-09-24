@@ -154,6 +154,12 @@ docs/                m{2,3,4}-acceptance.md（三态验收表）+ audit + UI 截
   2026-09-24 从 `memory/inject.ts` 搬过来——投影层不该依赖记忆子系统）。唯一逐字保留的是
   `user_message` / `assistant_message` 里**用户与助手自己说的话**。中和只改投影，绝不写回事件流。
   判卷：`tests/instruction-provenance.test.ts`。
+- **出口还有三道协议合法性收束**（能力 20 L0；都只动投影、不动事件流）：
+  `mergeToolResultsById` 并同 id 的多份回执 → `demoteOrphanToolResults` 把**无前驱 `tool_calls`** 的
+  `role:"tool"` 降级成带归属行的 `user`（不删不藏：假象比空白更坏，丢了也没读数）→
+  `closeDanglingToolCalls` 给没被回答的调用补一条合约束的说明。
+  中间那道是这轮新增的：`orchestrator` 的 supervise 派生 id（`-sup`/`-s`）曾在真语料投影出 3 条孤儿，
+  三家 provider 各一种后果。判卷：`tests/projection-invariant.test.ts`。
 
 ---
 
