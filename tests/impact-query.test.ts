@@ -288,12 +288,14 @@ describe("maxFiles：说明里那句出路必须真够得着（三个建图出�
     expect(r.output).toContain("本次图只收录 " + String(CAPPED) + " 个");
   });
 
-  it("symbol 出口：那句「被 N 帽挡在图外」里的 N 也必须是实发的帽（此处原先写死 MAX_FILES_DEFAULT）", async () => {
+  it("symbol 出口：那句「被帽挡在图外」里的 N 也必须是实发的帽（此处原先写死 MAX_FILES_DEFAULT）", async () => {
     const c = await mk();
     // legacyHelper 定义在 old.js（帽外）、被 new.js（帽内）引用 ⇒ 走「图里没有定义」那一支
     const r = await createImpactQueryTool(cacheDir).run({ symbol: "legacyHelper", maxFiles: CAPPED }, c);
     expect(r.ok).toBe(true);
-    expect(r.output).toContain("被 " + String(CAPPED) + " 帽");
+    // 断言的是**不变量**（报实发的帽）而不是整句措辞：第 55 页把这句改成条件真后，
+    // 形状从「被 N 帽/忽略规则挡在图外」换成「＝帽 N（非全量）⇒ 可能被这一刀切在图外」。
+    expect(r.output).toContain("帽 " + String(CAPPED));
     expect(r.output, "写死缺省值＝调了帽还在报 400，模型照那句去理解图就错").not.toContain(String(MAX_FILES_DEFAULT));
   });
 
@@ -398,5 +400,79 @@ describe("覆盖度自述：图被帽截断时，成功答案也要说「这图�
     expect(r.ok).toBe(true);
     expect(r.output).toContain("跨文件调用点 1 处");
     expect(r.output).not.toMatch(/帽/u);
+  });
+});
+
+describe("「图里没有」的成因收敛：没到帽时不许把帽列成可能成因", () => {
+  // 为什么：两条阴性出口（符号彻底查不到 / 只有引用没有定义）原先**无条件**写着
+  // 「定义它的那个文件被 ${maxFiles} 帽挡在图外」。而 applyFileCap 只在候选数 > 帽时才切那一刀
+  // ⇒ 小仓库上这是一句**不可能成立**的成因，模型照着去调大 maxFiles 就是白跑一轮
+  // （第 51 页「死参数式文案」的同族：文案指向一个在此输入下不存在的开关）。
+  // 反向两格同样必要：真到帽时这一类必须留着，否则又回到「把未知说成没有」。
+  const dirs: string[] = [];
+  async function mkRepo(spec: readonly [string, string, number][]): Promise<ToolContext> {
+    const ws = await mkdtemp(join(tmpdir(), "impact-cause-"));
+    dirs.push(ws);
+    const { utimes } = await import("node:fs/promises");
+    for (const [name, text, year] of spec) {
+      await writeFile(join(ws, name), text, "utf8");
+      const t = new Date(Date.UTC(year, 0, 1));
+      await utimes(join(ws, name), t, t);
+    }
+    return { workspace: ws, emit: async () => {} };
+  }
+  afterAll(async () => { for (const d of dirs) await rm(d, { recursive: true, force: true }); });
+
+  it("符号查不到 + 未到帽 ⇒ 明说「与帽无关」，并把帽从成因里删掉", async () => {
+    const c = await mkRepo([
+      ["a.ts", "export function target(x) { return x + 1; }\n", 2022],
+      ["b.ts", "import { target } from \"./a\";\nexport function use(y) { return target(y); }\n", 2023],
+    ]);
+    const r = await createImpactQueryTool(cacheDir).run({ symbol: "noSuchSymbol" }, c);
+    expect(r.ok).toBe(false);
+    expect(r.output).toMatch(/与帽无关/u);
+    expect(r.output).not.toMatch(/被 \d+ 帽|可能被帽|被这一刀/u);
+    // 死参数式文案：这一格调大 maxFiles 改变不了任何事 ⇒ 不许把它列成出路（第 51 页同族）
+    expect(r.output).not.toContain("maxFiles");
+  });
+
+  it("符号查不到 + 到帽 ⇒ 帽这一类留着，并点名实发的帽与排除动作", async () => {
+    const c = await mkRepo([
+      ["old.ts", "export function farOnly() { return 1; }\n", 2018], // 定义被这一刀切掉，图内也没有它的引用
+      ["pad.ts", "export const pad = 1;\n", 2019],
+      ["a.ts", "export function target(x) { return x + 1; }\n", 2022],
+      ["b.ts", "import { target } from \"./a\";\nexport function use(y) { return target(y); }\n", 2023],
+    ]);
+    const r = await createImpactQueryTool(cacheDir).run({ symbol: "farOnly", maxFiles: 2 }, c);
+    expect(r.ok).toBe(false);
+    expect(r.output).toMatch(/帽 2/u);
+    expect(r.output).toContain("maxFiles"); // 到帽时这一位是**真出路**
+  });
+
+  it("只有引用没有定义 + 未到帽 ⇒ 那句「被 400 帽挡在图外」换成排除句", async () => {
+    const c = await mkRepo([
+      ["a.js", "export function f() { return globalHelper(1); }\n", 2022],
+      ["b.js", "export function g() { return globalHelper(2); }\n", 2023],
+    ]);
+    const r = await createImpactQueryTool(cacheDir).run({ symbol: "globalHelper" }, c);
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("图内没有 ≠ 仓库里没有"); // 既有那条用例的断言不许被这次改动带走
+    expect(r.output).toMatch(/与帽无关/u);
+    expect(r.output).not.toMatch(/被 \d+ 帽|可能被帽|被这一刀/u);
+    expect(r.output).not.toContain("maxFiles");
+  });
+
+  it("只有引用没有定义 + 到帽 ⇒ 保留「可能被帽挡」这一成因并点名实发的帽", async () => {
+    const c = await mkRepo([
+      ["def.ts", "export function globalHelper(n) { return n; }\n", 2018], // 图外：定义被切掉，引用在图内
+      ["pad.ts", "export const pad = 1;\n", 2019],
+      ["a.ts", "export function f() { return globalHelper(1); }\n", 2022],
+      ["b.ts", "export function g() { return globalHelper(2); }\n", 2023],
+    ]);
+    const r = await createImpactQueryTool(cacheDir).run({ symbol: "globalHelper", maxFiles: 2 }, c);
+    expect(r.ok).toBe(true);
+    expect(r.output).toMatch(/帽 2/u);
+    expect(r.output).toMatch(/非全量/u);
+    expect(r.output).toContain("maxFiles");
   });
 });

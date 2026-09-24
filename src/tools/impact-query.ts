@@ -111,6 +111,21 @@ export function coverageNote(files: number, cap: number): string {
     "图里没有 ≠ 仓库里没有；要更全调大 maxFiles 后重问）";
 }
 
+/** 「图里没有它」的成因收敛（纯函数）：把「可能被帽挡在图外」从**恒真**改成**条件真**。
+ *
+ *  两条阴性出口（符号彻底查不到 / 只有引用没有定义）原先都无条件列着这一成因。
+ *  而 `applyFileCap` 只在候选数 > 帽时才切那一刀 ⇒ 在小仓库上"被帽挡"是一句**不可能成立**的假设，
+ *  模型照着去调大 `maxFiles` 就是白跑一轮（与第 51 页那条「死参数式文案」同族：文案指向此输入下
+ *  不存在的开关）。反过来真到帽时这一类必须留着——否则又回到"把未知说成没有"。
+ *  与 `coverageNote` 共用同一判据（`files >= cap`），两处不会自相矛盾。 */
+export function capCauseNote(files: number, cap: number): string {
+  return files >= cap
+    ? `本图收录 ${String(files)} 个文件＝帽 ${String(cap)}（非全量）⇒ 这一刀可能把它切在图外，` +
+      "调大 maxFiles 后重问可排除这一成因"
+    : `与帽无关：本图收录 ${String(files)} 个文件，未到帽 ${String(cap)} ⇒ 没有文件是被帽切掉的` +
+      "（被忽略规则/噪声目录排除、后缀不支持仍然成立）";
+}
+
 /** 调用点按文件汇聚的紧凑清单（与 contextNoteFor 同一套帽：宁少不炸上下文）。 */
 function sitesNote(head: string, sites: ImpactSite[], noun: SiteNoun = UP_NOUN): string {
   if (sites.length === 0) return head + noun.none;
@@ -177,7 +192,11 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
       const defined = graph.defs.get(symbol) ?? [];
       const refSites = graph.refs.get(symbol) ?? [];
       if (defined.length === 0 && refSites.length === 0) {
-        return { ok: false, output: `impact_query: 图里没有符号 ${JSON.stringify(symbol)}（改名、未被引用、或不在已扫描的后缀内）` };
+        return {
+          ok: false,
+          output: `impact_query: 图里没有符号 ${JSON.stringify(symbol)}` +
+            `（改名、未被引用、或不在已扫描的后缀内）。${capCauseNote(graph.files.length, maxFiles)}`,
+        };
       }
       if (defined.length === 0) {
         // 「谁调用它」要有个前提：**它得定义在这张图里**。没有定义时 `upward` 会把全部同名
@@ -188,8 +207,9 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
         return {
           ok: true,
           output: `[impact] ${symbol}：这张图里没有任何文件**定义**它 ⇒ 它是外部或全局符号` +
-            `（定义在 node_modules、由环境注入，或定义它的那个文件被 ${String(maxFiles)} 帽/忽略规则挡在图外——` +
-            `图内没有 ≠ 仓库里没有）。引用它的文件 ${String(files.size)} 个，但「改它会波及谁」这一问在此不适用；` +
+            `（定义在 node_modules、由环境注入，或定义它的那个文件压根没进这张图：` +
+            `${capCauseNote(graph.files.length, maxFiles)}。图内没有 ≠ 仓库里没有）` +
+            `。引用它的文件 ${String(files.size)} 个，但「改它会波及谁」这一问在此不适用；` +
             `要动它的行为请改调用处或直读它的来源`,
         };
       }
