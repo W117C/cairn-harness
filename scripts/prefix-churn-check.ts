@@ -126,6 +126,13 @@ async function driveMutating(opts: {
   rounds?: number;
   amortize?: boolean;
   batching?: boolean | { minSavedTokens?: number };
+  /** 把整张工具面按字符放大（只动 description）——`--sweep` 用，问「这条策略在别的面尺寸上还成不成立」。
+   *  不传 = 逐字旧行为；PC7 本体不传，所以这条不影响任何断言。 */
+  facePadChars?: number;
+  /** 结构对照旋钮：多给一把合成工具，放**面尾**或**面首**（字节量级与 pad 相当，但面多一条）。
+   *  为什么要分位置：`aa30513` 是在 `spawn_agent.properties` **中间**插了一整个对象。
+   *  若机制是「插入点之后的字节从此不再共享前缀」，那面尾该不动读数、面首该动——这就是本格的判据。 */
+  faceAddSpec?: "tail" | "front";
 }): Promise<{
   obs: AssemblyObservation[];
   firedPerPair: ChurnMutator[][];
@@ -187,7 +194,7 @@ async function driveMutating(opts: {
             },
           }
         : {}),
-      requestFace: () => ({ tools: sessionToolSpecs({ mode: "default" }).specs, note: faceNote }),
+      requestFace: () => ({ tools: maybeAddSpec(padFace(sessionToolSpecs({ mode: "default" }).specs, opts.facePadChars), opts.faceAddSpec), note: faceNote }),
       transport: async function* (messages: GlmMessage[], _o: unknown, specs?: GlmToolSpec[]) {
         obs.push({ messages: [...messages], tools: specs ? [...specs] : undefined, faceNote });
         yield { type: "assistant_message" as const, content: "round-" + String(roundIndex) };
@@ -262,6 +269,67 @@ function countAttachments(dir: string): number {
   } catch {
     return 0; // 目录不存在 = 还没裁过
   }
+}
+
+/* ============================ 诊断模式：--sweep（不判绿） ============================ */
+
+/** 把整张工具面按字符放大（只动 description）：名字 / 参数 / 条数都不动 ⇒ 改的是**尺寸**，不是形状。
+ *  单位与 `AssemblyOverhead.toolSchemaChars`（= `JSON.stringify(tools).length`）同一把尺。 */
+function padFace(specs: GlmToolSpec[], pad: number | undefined): GlmToolSpec[] {
+  if (pad === undefined || pad <= 0 || specs.length === 0) return specs;
+  const filler = "面".repeat(Math.ceil(pad / specs.length));
+  return specs.map((s) => ({ ...s, function: { ...s.function, description: s.function.description + filler } }));
+}
+
+/** 结构对照：多一把合成工具（名字唯一 + 一段与 `aa30513` 同量级的 description）。
+ *  与 `padFace` 的差别就是这一格要问的：**条数/键变了** vs **只有字节变了**。 */
+function maybeAddSpec(specs: GlmToolSpec[], at: "tail" | "front" | undefined): GlmToolSpec[] {
+  if (at === undefined || specs.length === 0) return specs;
+  const twin = specs[0]!;
+  const probe: GlmToolSpec = { ...twin, function: { ...twin.function, name: "sweep_probe_tool", description: "结构对照用合成工具。".repeat(60) } };
+  return at === "front" ? [probe, ...specs] : [...specs, probe];
+}
+
+/** PC7 那对 A/B 在**四个面尺寸**上各跑一遍，再跑一组**结构**对照。
+ *  为什么要有：PC7 的红（第 44 页 §十三）只说
+ *  「当前面上，开臂压缩次数不再更少」，答不出这是**刀界**（尺寸挪一点就翻回来）还是**趋势**（面越大越亏）——
+ *  两种读法对产品是相反的决定（改尺 vs 改策略），所以先把矩阵打出来。本模式**一条断言都不下**。 */
+async function runFaceSweep(): Promise<void> {
+  const rounds = 8;
+  console.log("[prefix-churn] --sweep 诊断模式：**不判绿**，exit 0 不代表门过（断言在 PC7 本体，本模式一条不下）");
+  const tally = (r: Awaited<ReturnType<typeof driveMutating>>) => {
+    const attrs = r.obs.slice(1).map((cur, i) => attributeChurn(r.obs[i]!, cur, r.firedPerPair[i] ?? []));
+    return {
+      compactions: attrs.filter((a) => a.fired.includes("compaction")).length,
+      rewrote: attrs.reduce((n, a) => n + a.rewroteChars, 0),
+    };
+  };
+  // 上限刻意留在 6,000：实测 pad=40,000 会让 `glm-session` 抛 `[context_budget_exceeded]`
+  // （final estimated input 11606 > available 11600，请求根本不发）——这既是 fail-visible 的好行为，
+  // 也说明**面字节确实进了估算**，所以下面「加 60% 尺寸读数一动不动」不是接线断，是真的不敏感。
+  // **真发出去的那份**才作数：「我要的」是我自己重算的，与实发不等就说明旋钮没穿到装配面（那是没尺，不是读数）。
+  const sentChars = (r: Awaited<ReturnType<typeof driveMutating>>) => JSON.stringify(r.obs[r.obs.length - 1]?.tools ?? []).length;
+  const row = async (label: string, pad: number, at: "tail" | "front" | undefined) => {
+    const want = JSON.stringify(maybeAddSpec(padFace(sessionToolSpecs({ mode: "default" }).specs, pad), at)).length;
+    const offRun = await driveMutating({ kind: "compaction", rounds, facePadChars: pad, ...(at ? { faceAddSpec: at } : {}) });
+    const onRun = await driveMutating({ kind: "compaction", rounds, amortize: true, facePadChars: pad, ...(at ? { faceAddSpec: at } : {}) });
+    const a = tally(offRun), b = tally(onRun);
+    console.log("  " + label + " 面(我要的)=" + String(want) + " 面(实发 关/开)=" +
+      String(sentChars(offRun)) + "/" + String(sentChars(onRun)) +
+      " ⇒ 关 压 " + String(a.compactions) + " 次 / 重写 " + String(a.rewrote) +
+      " ｜开 压 " + String(b.compactions) + " 次 / 重写 " + String(b.rewrote) +
+      " ⇒ 次数 " + (b.compactions < a.compactions ? "更少" : b.compactions === a.compactions ? "同" : "更多(红形)") +
+      "、字节 " + (b.rewrote < a.rewrote ? "更省" : "更多(红形)"));
+  };
+  for (const pad of [0, 1_500, 3_000, 6_000]) await row("尺寸 pad=" + String(pad) + "        ", pad, undefined);
+  await row("结构 面尾 +1 把      ", 0, "tail");
+  await row("结构 面首 +1 把      ", 0, "front");
+  await row("结构 面首 +1 把 + p1500", 1_500, "front");
+}
+
+if (process.argv.includes("--sweep")) {
+  await runFaceSweep();
+  process.exit(0);
 }
 
 /* ============================ 规则表 ============================ */
