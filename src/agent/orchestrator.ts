@@ -1006,6 +1006,8 @@ export class Orchestrator {
       stages,
       resolutions,
       state: stages.map((s, i) => ({ index: i, role: s.role, task: s.task, agentId: null, status: "pending" as const })),
+      // 写面随链冻结（与 stages 同刻）：逐环登记才谈得上约束，只印在卡上是警示不是租约。
+      ...(chainResources.length > 0 ? { resources: [...chainResources] } : {}),
       status: "running",
     };
     this.chains.set(callId, chain);
@@ -1035,6 +1037,9 @@ export class Orchestrator {
       return { ok: false, output: "spawn_agent(supervise): " + (sup.error ?? "契约解析失败") };
     }
     const { maxStages, forbidden } = sup.contract;
+    // 模型申报的写面（规格：resources）——真轨迹那次它写了 resources 而循环整支丢掉它。
+    // 现在逐环登记：环活着的时候这条链占住声明的面，别的派活与它相交会在自己的审批卡上撞见点名。
+    const ringResources = parseStringList(args.resources);
     const budget = this.opts.budget?.maxUsd ?? 0;
     // 审批双轨：批准 {goal, budget, forbidden, maxStages}（§5.1：与 pipeline stages 全表分开）
     const approved = await this.requestSuperviseApproval(callId, { goal, budget, forbidden, maxStages });
@@ -1081,6 +1086,7 @@ export class Orchestrator {
         {
           task: stageTask,
           mode: stageRole.mode,
+          ...(ringResources.length > 0 && stageRole.mode === "write" ? { resources: ringResources } : {}), // 见上：申报过就真占（只读环不挂空租约）
           // P1（审查）：forbidden 进 WorkerContext.constraints（提示词层，buildWorkerSystemMessages 渲染
           // context.constraints）——旧实现塞字符串被 parseWorkerContext 丢弃，契约提示全程零落地。
           ...(forbidden.length > 0
@@ -1260,6 +1266,8 @@ export class Orchestrator {
     let prevAgentId = "";
     // 级联预算挂在**链**上而不是挂在环上：N 环各享 maxUpgrades 会变成「一次批准悄悄买 2N 遍」。
     let cascadeLeft = this.opts.cascadeUpgrade === true ? (this.opts.cascadeMaxUpgrades ?? 2) : 0;
+    // 批准时随链冻结的写面：每一环起手都带上它（否则登记表里链是空的，见 spawnPipeline）
+    const ringResources = chain.resources ?? [];
     for (let i = 0; i < chain.stages.length; i++) {
       // H2（审查 B-3）：环与环之间检查取消——否则 cancelAll 后链停在两环之间，
       // 会 spawn 出一个永不被取消的 worker 并跑完（addEventListener 不追认已 abort）。
@@ -1283,6 +1291,11 @@ export class Orchestrator {
       const stageArgs: SpawnArgs = {
         task: stageTask,
         mode: resolved.mode,
+        // 链级写租约逐环持有（任务 #16）：整链审批卡上那句「链内写租约相交」此前只是**印出来**，
+        // 环登记的却是空租约 ⇒ `leaseConflicts()` 看不见正在写盘的链，后来者静默并发。
+        // 只给真会写盘的环带：`leaseConflicts` 按 mode==="write" 取料，给只读环挂一份租约等于
+        // 在事件里写一个不会生效的面——那正是本笔要修的"印了不占"的缩小版。
+        ...(ringResources.length > 0 && resolved.mode === "write" ? { resources: ringResources } : {}),
         ...(i > 0 ? { depends_on: [prevAgentId] } : {}), // depends_on sugar：后环 depends_on 前环（§4.5 预置链）
         ...(resolved.maxTurns !== undefined ? { max_turns: resolved.maxTurns } : {}),
         ...(resolved.model !== undefined ? { model: resolved.model } : {}),

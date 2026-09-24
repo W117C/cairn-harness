@@ -29,13 +29,13 @@ const specKeys = (): string[] => {
 };
 
 describe("unconsumedSpawnArgs（纯函数：这一档到底读哪些键）", () => {
-  it("supervise 带 stages + resources ⇒ 两个都算未读，并各自点名读它的那一档", () => {
+  it("supervise 带 stages ⇒ 算未读并点名读它的那一档；resources 现在真的读（不再算未读）", () => {
     const r = unconsumedSpawnArgs("supervise", {
       mode: "supervise", task: "t", resources: ["src/a.ts"], stages: [{ role: "implement", task: "x" }],
     });
-    expect(r.dropped).toEqual(["resources", "stages"]);
+    expect(r.dropped, "resources 已逐环登记成租约（任务 #16），只有 stages 仍属 pipeline").toEqual(["stages"]);
     expect(r.readers("stages")).toEqual(["pipeline"]);
-    expect(r.readers("resources")).toContain("write");
+    expect(r.readers("resources")).toContain("supervise");
   });
 
   it("read / write 只把 stages、supervise 当未读（各自那档的键一律不误伤）", () => {

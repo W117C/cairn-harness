@@ -24,7 +24,7 @@ export type SpawnMode = "read" | "write" | "pipeline" | "supervise";
  *  每一格的可核读点（别照抄本注释，改动后回代码核对）：
  *   · read/write → `Orchestrator.spawn`（role）+ `spawnInternal`（resources/context/model/max_turns/tier）
  *   · pipeline   → `spawnPipeline`（stages；resources 只进审批卡的租约相交警告）
- *   · supervise  → `spawnSupervise`（supervise 契约；goal 取 task）
+ *   · supervise  → `spawnSupervise`（supervise 契约；goal 取 task；resources 逐环登记成租约）
  *   · 四档共有   → `spawn` 在 mode 校验后统一读的 task / depends_on
  *  ⚠️ 本表**过报**（说某档读、其实代码已不读）比漏报更危险：那样会把该拒的调用放过去。
  *  那一格由「自有键一律不误伤」+ 各档既有判卷共同兜，改读集时两侧都要动。 */
@@ -32,7 +32,7 @@ export const SPAWN_MODE_ARG_READS: Readonly<Record<SpawnMode, readonly SpawnArgK
   read: Object.freeze<readonly SpawnArgKey[]>(["mode", "task", "depends_on", "resources", "context", "model", "max_turns", "tier", "role"]),
   write: Object.freeze<readonly SpawnArgKey[]>(["mode", "task", "depends_on", "resources", "context", "model", "max_turns", "tier", "role"]),
   pipeline: Object.freeze<readonly SpawnArgKey[]>(["mode", "task", "depends_on", "resources", "stages"]),
-  supervise: Object.freeze<readonly SpawnArgKey[]>(["mode", "task", "depends_on", "supervise"]),
+  supervise: Object.freeze<readonly SpawnArgKey[]>(["mode", "task", "depends_on", "resources", "supervise"]),
 });
 
 /** 按 `SPAWN_MODES` 的字面顺序排（不是字母序）：拒绝语里点名的档序要跟模型在规格里看到的序一致。 */

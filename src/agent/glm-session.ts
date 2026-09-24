@@ -244,7 +244,7 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
           {
             task: { type: "string", description: "自包含任务书：目标 / 涉及文件 / 验收口径（mode=pipeline 时可空，由 stages 承载）" },
             mode: { type: "string", enum: ["read", "write", "pipeline", "supervise"], description: "worker 档位" },
-            resources: { type: "array", items: { type: "string" }, description: "mode=write 的写租约 glob（与活跃写 worker 相交即拒）" },
+            resources: { type: "array", items: { type: "string" }, description: "要写的文件面 glob（write 与链/循环的环都登记为写租约；与活跃写 worker 相交 ⇒ 审批卡点名，可强行批准）" },
             stages: {
               type: "array",
               items: obj({ role: { type: "string" }, task: { type: "string" }, gate: { type: "boolean" } }, ["role"]),

@@ -81,6 +81,18 @@ const CLAIMS: Claim[] = [
   { page: "40", id: "C2", claim: "mode 报错文案取自 SPAWN_MODES，不再写死档名",
     holds: () => has("src/agent/orchestrator.ts", /mode 必须是 " \+ SPAWN_MODES\.join/) && !has("src/agent/orchestrator.ts", /mode 必须是 read\|write/),
     how: "同一行匹配拼接、负控匹配旧字面量" },
+  { page: "41", id: "C1", claim: "链的环带上随链冻结的写面（不登记本条立刻红）；supervise 那档也真读 resources",
+    holds: () => {
+      const src = read("src/agent/orchestrator.ts");
+      const at = src.indexOf("const stageArgs: SpawnArgs");
+      const body = at === -1 ? "" : src.slice(at, at + 900);
+      return /resources: ringResources/.test(body) &&
+        /supervise: Object\.freeze<readonly SpawnArgKey\[\]>\(\[[^\]]*"resources"/.test(read("src/agent/spawn-surface.ts"));
+    },
+    how: "runChain 环参数那一支 + 表里 supervise 的读集（两处任一处退回即红）" },
+  { page: "41", id: "C2", claim: "规格那句不再向模型承诺「相交即拒」（实现是出卡点名 + 可强行批准）",
+    holds: () => !has("src/agent/glm-session.ts", /相交即拒/) && has("src/agent/glm-session.ts", /写租约；与活跃写 worker 相交 ⇒ 审批卡点名/),
+    how: "读该行的描述文本，负控匹配旧承诺" },
 ];
 
 /** 三条要跑真东西才有读数：语料孤儿数、用户仓库判卷集大小、R1 对插话的反应。 */

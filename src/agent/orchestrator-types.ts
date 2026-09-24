@@ -171,6 +171,9 @@ export interface PipelineChain {
    *  后环 spawn 仍按批准时的角色面运行——插件角色/工具面/模型不随运行时生命周期漂移）。 */
   resolutions: readonly StageRoleResolution[];
   state: PipelineChainStageState[];
+  /** 批准时随链冻结的写面（`resources` glob）。逐环登记 ⇒ 环活着的时候别的派活看得见这条链在写哪
+   *  （缺这一手之前它只是审批卡上的一行警告，登记表里是空的）。 */
+  resources?: string[];
   status: "running" | "done" | "failed";
   reason?: string;
 }
