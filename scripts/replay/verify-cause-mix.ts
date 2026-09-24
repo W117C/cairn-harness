@@ -11,11 +11,51 @@
 //   文案栏 = 人眼现在能从 output 里读出来的线索（`[exit code: 127]`、超时那句、`(none)`、"钩子异常"）——
 //            它是**证据**不是**判据**：跨域串（如 "Cannot find module"）已实测不可分类，见 §9.1。
 import { readJsonl, scanCorpus, zeroCorpusProblem } from "./corpus";
+import { execFileSync } from "node:child_process";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+/** 「带 cause 的红命令 = 0」有两种**相反**的解释：语料比归因落盘还老（数据年龄），
+ *  或归因路径根本没落地（缺陷）。旧读数只印一个 0，读者会挑一个信（本仓规则 119：全称否定
+ *  要连着前提一起记）。⇒ 把前提本身量出来：语料里最新一条事件的时间 vs `cause` 落盘的提交日期。 */
+export function causeShipDate(root: string): { sha: string; ms: number } {
+  try {
+    const out = execFileSync("git",
+      ["log", "-1", "--format=%h%x09%ct", "-S", "cause === undefined ? {} : { cause }", "--", "src/agent/loop.ts"],
+      { cwd: root, encoding: "utf8" }).trim();
+    const [sha, ct] = out.split("\t");
+    if (!sha || !ct) return { sha: "", ms: 0 };
+    return { sha, ms: Number(ct) * 1000 };
+  } catch {
+    return { sha: "", ms: 0 }; // 读不到 ⇒ 下面按"没尺"报，绝不静默当成"年龄解释成立"
+  }
+}
+
+export type DatingState = "attributed" | "older-than-ship" | "newer-but-unattributed" | "unmeasurable";
+
+export function datingVerdict(
+  withCauseField: number, maxEventMs: number, ship: { sha: string; ms: number }, redResults: number,
+): { state: DatingState; reason: string } {
+  if (withCauseField > 0) return { state: "attributed", reason: "归因已被观测到（带 cause 的红命令 > 0）" };
+  if (redResults === 0) return { state: "unmeasurable", reason: "语料里没有红样本 ⇒ 这一面无从判定，不报 0 也不报失效" };
+  if (ship.ms === 0) return { state: "unmeasurable", reason: "查不到 cause 落盘的提交（git 读失败）⇒ 年龄这一前提没被量过，不许拿它解释 0" };
+  if (maxEventMs < ship.ms) {
+    return {
+      state: "older-than-ship",
+      reason: `语料最新事件早于 cause 落盘（${ship.sha}）⇒ 这个 0 是**数据年龄**，不是归因失效`,
+    };
+  }
+  return {
+    state: "newer-but-unattributed",
+    reason: `有比 ${ship.sha} 更新的流，却仍没有一条红带 cause ⇒ **归因路径没落地**，这才是要修的那格`,
+  };
+}
 
 interface VerifyResultEvent {
   type: string;
   ok?: boolean;
   auto?: boolean;
+  ts?: number;
   results?: { command: string; ok: boolean; output?: string; exitCode?: number; cause?: string }[];
 }
 
@@ -42,6 +82,7 @@ const show = (m: Map<string, number>): string =>
 function main(): void {
   const scan = scanCorpus();
   let events = 0, redEvents = 0, redResults = 0, hookErrorBeats = 0, autoBeats = 0;
+  let maxTs = 0;
   const struct = new Map<string, number>();
   const text = new Map<string, number>();
   let withCauseField = 0;
@@ -49,6 +90,7 @@ function main(): void {
   for (const f of scan.files) {
     for (const raw of readJsonl(f)) {
       const e = raw as VerifyResultEvent;
+      if (typeof e.ts === "number" && e.ts > maxTs) maxTs = e.ts; // 语料年龄要跨全部事件取，不能只看红拍
       if (e.type !== "verify_result") continue;
       events++;
       if (e.ok !== false) continue;
@@ -88,6 +130,19 @@ function main(): void {
     "今天可机器归因占比=",
     redResults === 0 ? "无红样本" : (attributable / redResults).toFixed(2) + " (" + String(attributable) + "/" + String(redResults) + ")",
   );
+
+  // 那个「0」到底是什么性质，由这一行说，而不是留给读者猜。
+  const ship = causeShipDate(resolve(import.meta.dirname, "../.."));
+  const d = datingVerdict(withCauseField, maxTs, ship, redResults);
+  console.log(
+    "语料年龄=", maxTs === 0 ? "没读到事件 ts（=没尺）" : new Date(maxTs).toISOString().slice(0, 10),
+    "· cause 落盘=", ship.sha === "" ? "查不到提交（=没尺）" : ship.sha + " / " + new Date(ship.ms).toISOString().slice(0, 10),
+    "⇒", d.reason,
+  );
+  if (d.state === "newer-but-unattributed") process.exitCode = 1;
 }
 
-main();
+// 被 import 时只导出纯函数，绝不扫语料、绝不设 exitCode（规则 110：判卷脚本的顶层副作用会伪装成测试结果）。
+// 两侧都必须**解码**再比：仓库路径里有空格，`pathToFileURL(...).href` 会把它编码成 `%20`，
+// 与 `resolve(process.argv[1])` 永不相等 ⇒ 门变成"exit 0 且什么都不印"（本轮实踩，靠"读数为空"才发现）。
+if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

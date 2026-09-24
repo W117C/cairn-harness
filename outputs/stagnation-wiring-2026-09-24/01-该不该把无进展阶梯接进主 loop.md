@@ -84,6 +84,24 @@ classifyVerifyFailure({…, output:"FAIL src/a.test.ts\n expected 1 to be 2"}) �
 4. **本笔未做**：未动 `src/`（未接线、未加抑制）、未立门；`src/agent/no-progress.ts` 当天在别人的写作窗里
    （它正被加 `userSpokeSinceLast` 那一道抑制），本笔刻意只读不写它。
 
+## 七、同一格的前提被做成判据：「语料年龄」（同轮追补）
+
+「量不到」这个结论本身依赖一个前提：**语料比归因落盘还老**。前提不该只写在页里——
+`replay:verify-cause-mix` 现在自己把它量出来并印在输出末尾：
+
+```
+语料年龄= 2026-09-20 · cause 落盘= 9499a9f / 2026-09-23 ⇒ 语料最新事件早于 cause 落盘（9499a9f）⇒ 这个 0 是**数据年龄**，不是归因失效
+```
+
+四态各一格（`tests/replay-verify-cause-dating.test.ts` 6 条）：已归因 / 数据年龄 / **有更新的流却仍无 cause ⇒ 归因没落地**（红，`exit 1`）/ 不可测
+（无红样本、或 git 查不到那个提交 ⇒ **不许拿"年龄"替 0 开脱**）。红那一格当场造过：把喂进去的时间戳推后 30 天 ⇒
+`exit 1` 且理由换成「归因路径没落地」，随后复原。
+
+顺带一条自己造的坑，值得留在页里：守卫先写成 `resolve(argv[1]) === pathToFileURL(import.meta.filename).href` ⇒
+**仓库路径里有空格**，右边把空格编码成 `%20`，两边永不相等 ⇒ 脚本"exit 0 且什么都不印"。
+现改成两侧都解码后比（`fileURLToPath`），注释里写明别再写反。全仓另有三处同类守卫用的是
+`import.meta.url === pathToFileURL(realpathSync(argv[1])).href`（同向，无此问题）。
+
 ## 判据表（供 claim-coverage.mts 机器抽取；页号见同目录 page.txt）
 
 | 判据 | 断言的是今天的世界，须有可跑谓词 | 复跑面 |
