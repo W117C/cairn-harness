@@ -7271,6 +7271,52 @@ const MUTATIONS = [
     ),
     expectFail: "supervise 派生 id 的现场形状 ⇒ 投影里既没有孤儿 tool 消息，报告正文也还在",
   },
+  // ---- 能力 19 L0（仿冒控制标签在投影出口统一中和）的锚点：判卷 2026-09-23 就写了，锚点今天才补 ----
+  // 一处出口 = 一条锚点（不是一行一个）：入口① 与入口② 由同一行的同一个调用共同守，
+  // 拆成两条就是给同一格造两份会各自漂移的尺。
+  // 刻意**不钉** truncationNote 那一处——判卷文件自己按名撤了针（它的可变部分只有 stop_reason，
+  // 值由 providers/stop-reason 查表结构性封顶 ⇒ 载荷进不去；没有可达形状的锚点比没锚点更坏）。
+  {
+    id: "provenance-exit-tool-result-unescaped",
+    src: "src/agent/context.ts",
+    test: "tests/instruction-provenance.test.ts",
+    desc: "工具正文（含 prune 的第二份替换文本）不再过中和 ⇒ 仓库里写一行 <system-reminder> 就是模型面前的控制标签",
+    apply: (s) => s.replace("content: escapeControlTags(pruned ?? e.output)", "content: pruned ?? e.output"),
+    expectFail: "入口① 工具输出（prune 之前的原文）",
+  },
+  {
+    id: "provenance-summary-envelope-unescaped",
+    src: "src/agent/context.ts",
+    test: "tests/instruction-provenance.test.ts",
+    desc: "压缩摘要信封不过中和 ⇒ 摘要正文由模型从外部内容写出，回读时控制标签原样进上下文",
+    apply: (s) => s.replace("    escapeControlTags(summary)", "    summary"),
+    expectFail: "入口③ 压缩摘要信封（摘要正文由模型从外部内容写出来）",
+  },
+  {
+    id: "provenance-auto-verify-note-unescaped",
+    src: "src/agent/context.ts",
+    test: "tests/instruction-provenance.test.ts",
+    desc: "自动验证拍不过中和 ⇒ 目标仓库里的命令名与失败输出（外界文本）带着标签/harness 前缀回流",
+    apply: (s) => s.replace("  return escapeControlTags(\n    head +", "  return (\n    head +"),
+    expectFail: "入口④ 自动验证拍（命令名与失败输出都来自目标仓库）",
+  },
+  {
+    id: "provenance-dangling-note-unescaped",
+    src: "src/agent/context.ts",
+    test: "tests/instruction-provenance.test.ts",
+    desc: "悬空调用补位不过中和 ⇒ provider 原样带回来的 callId 被拼进 harness 署名的那句说明里",
+    apply: (s) => s.replace("  return escapeControlTags(\n    `[harness] 工具调用", "  return (\n    `[harness] 工具调用"),
+    expectFail: "入口⑤ 悬空调用补位（provider 原样带回来的 callId 被拼进这句说明里）",
+  },
+  {
+    id: "control-tags-arm-dropped",
+    src: "src/agent/control-tags.ts",
+    test: "tests/instruction-provenance.test.ts",
+    desc: "共用实现里只留角色行那一臂、摘掉控制标签臂 ⇒ 四处出口同时失去中和而「函数还在」：" +
+      "钉在唯一取料点上，不给四臂各造一条会各自漂移的尺",
+    apply: (s) => s.replace("    .replace(CONTROL_TAG, (m) => m.replace(/</g, \"&lt;\").replace(/>/g, \"&gt;\"))\n", ""),
+    expectFail: "入口① 工具输出（prune 之前的原文）",
+  },
   {
     id: "tool-result-merge-drops-later-content",
     src: "src/agent/context.ts",
