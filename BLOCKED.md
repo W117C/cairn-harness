@@ -1106,3 +1106,51 @@ BLOCKED 里那条的结论是"长链机制在靶场内量不到"）——**靶�
 
 **反转条件**：若加上轮界后 `pnpm e2e` 的修复效果（3 passed）或判卷文件 sha256 有任何变化，本请求作废并回滚——
 那说明剧本的轮界会改事件顺序，需要换一种表达法而不是插哨兵。
+
+## 裁决 8（请求裁默认策略）：§11.2 承诺的默认 denyRead 集，四条里两条不存在；补齐会打断用户主路径
+
+**证据（四条读数，全部可复跑）**
+`TERM=dumb node --import tsx outputs/deny-read-face-2026-09-24/measure-deny-read.mts`
+（探针先跑正控：冻结判卷文件在 `default` 档被判 `deny/L0-hard` ⇒ 会话构造没造假）
+
+1. `buildSandboxProfile` 的真实产出是 **全局 `(allow file-read*)` + 仅 4 条 `deny file-read*`**
+   （`~/.ssh`、`~/.aws`、`~/.config/gcloud`、`~/Library/Keychains`）。
+   ⇒ 对照 `agent-plan.md:1281` 承诺的四条：**`~/.ssh/**` 有｜`~/**/.env` 无｜BYOK/appData 目录 无｜safeStorage 后端 有**。
+2. 权限层对读凭据路径**没有概念**：`evaluate("read_file", {path})` 对 `.env`、`config/prod.env`、
+   工作区内 `.ssh/id_rsa`、绝对路径 `~/.ssh/id_rsa`，在 default/guided/auto/read-only 四档**全是 `approve/L4-pass`**。
+3. 真跑 `read_file.run`（临时工作区 + 现场生成的假 `sk-` 值）：`ok:true`，**明文原样回到工具输出**。
+4. 真语料基础率：19 份 `*.events.jsonl` 的 282 次 `tool_call` 里，参数点名凭据路径 **0 次**
+   ⇒ 这是**潜伏缺口，不是已观测事故**；不据此夸大定级，也不据此当作不存在。
+
+**读准两层的合取（别夸大成"什么都能读"）**：`read_file` 自己有 `resolveInWorkspace` + `assertRealContainment`
+（realpath 防 symlink 逃逸），所以**工作区外**被工具层兜住；**漏的是工作区内**——
+而项目根的 `.env` 正是真实项目最常见的凭据载体，且 `cat .env` 走 run_shell 时
+工作区既是可写根、profile 又全局允许读 ⇒ 直读。
+
+**为什么不自行动手（两条候选改法的代价我都量/推导过，都改到用户依赖的行为）**
+- **补 profile 的 `.env` deny**：① Seatbelt 的 `subpath` 表达不了"任意层级文件名"，要落 `regex`；
+  而**本仓宿主实测会拒 apply 含 deny 的 profile**（AGENTS.md「环境注意」那条降级分支 B）
+  ⇒ 在我这台机器上**证不了它真拦得住**；② dotenv / vite / 用户自己的启动脚本**在同一 profile 下 spawn，
+  读的就是工作区里的 `.env`** ⇒ 加死deny 会把"跑起用户的应用/测试"打断。
+  ⚠️ ②是**机理推导、未在本仓实测**（本仓与 fixtures 无 dotenv 读取点）。
+- **在权限层加 L0-hard 读拒**：权限层只看得见参数路径，而「为什么启动报缺 KEY」这类合法任务要求读 `.env`；
+  按承诺做成"用户不可减"的硬拒 = 把这类任务一并堵死。
+
+**请求（要用户拍，三选一）**
+- **A｜按承诺做硬 deny**（denyRead 集补齐 `.env` 与 appData，不可减）：接受"agent 不能读项目 `.env`"
+  与其对 dotenv 类流程的连带影响，我补 profile 的正则表达 + 一条**只能在允许 apply 的宿主上证真**的判据。
+- **B｜改成"读得到但要出声"**：不 deny，而是当读取目标命中凭据路径清单时**出审批卡**（复用现成 ask 层），
+  并把该次读取记进事件流成为可审计事实。代价：多一次打断，收益：既不断 dotenv 流程也不再静默外泄。
+  （B 与本仓已有语义最贴：默认档本来就逐次审批。）
+- **C｜只承认现状**：把 §11.2 那句承诺改准（删掉 `~/**/.env` 与 appData 两条，或改成"仅工作区外"），
+  并给承诺与实现的对账补一条门。
+
+**我的倾向：B**（A 的连带代价未证且很可能打断主路径；C 是改承诺来迁就实现，正是本仓反对的方向）。
+
+**顺带一格不需要裁决的缺口（本条任一选项都不覆盖它）**：承诺把该集「列为安全资产（附录 C 纪律 5）」，
+但**没有任何门把"承诺的四条"与"profile 实际的四条"对账**——`sandbox-check` ③ 段只断言已存在的 Keychains，
+`mutate-verify` 的「敏感目录拒读规则被移除」锚点也只能杀已写进数组的项
+⇒ **缺的那两条永远不会被任何门抓到**（合册 §四 D 类：能力齐、观测者缺位）。
+
+**反转条件**：若在本仓/靶子里能实测到"profile 的 `.env` deny 不影响任何现有门与应用启动路径"，
+选项 A 的连带代价不成立 ⇒ 直接按承诺做 A，本请求作废。
