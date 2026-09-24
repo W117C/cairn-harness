@@ -13,6 +13,7 @@ import { promoteBlockers } from "../src/agent/gym/draft";
 import { cleanupRun, runCase } from "../src/agent/gym/runner";
 import { forkSession, replay } from "../src/events";
 import { runVerifyOutcome } from "../src/agent/verify";
+import { classifyDivergence, diffJsonPaths, reproducibleVerdict } from "../src/agent/reproducibility";
 
 let pass = 0;
 let fail = 0;
@@ -122,11 +123,22 @@ for (const c of loaded) {
       ["inputTokens", (r) => r.inputTokens],
       ["outputTokens", (r) => r.outputTokens],
       ["turns", (r) => r.turns],
-      ["changedFiles", (r) => JSON.stringify(r.changedFiles)],
+      // 原样交数组、不字符串化：登记身份债的 `pathPrefix` 是 `changedFiles[`，
+      // 字符串化会把整只数组压成一个根路径 ⇒ 那条债永远命中不上（反向用例见下面 same 那格）。
+      ["changedFiles", (r) => r.changedFiles],
     ];
-    const diffs = fields
-      .map(([name, get]) => [name, String(get(r1)), String(get(r2))] as const)
-      .filter(([, a, b]) => a !== b);
+    // 差异交给 `src/agent/reproducibility.ts` 那只**唯一**判据：登记在案的身份债吸收得掉的才算一致，
+    // 吸收不掉的算泄漏。此前 B1 自己比布尔 ⇒ 同一条 D7 毫秒债在两道门里读出两个结论
+    // （HEAD-only 整表实测：`replay-determinism-check` 全绿、B1 红 4 条，2026-09-24 第 44 页 §十三）。
+    const diffs: [string, string, string][] = [];
+    let absorbed = 0;
+    for (const [name, get] of fields) {
+      const finding = classifyDivergence(diffJsonPaths(get(r1), get(r2), name));
+      absorbed += finding.absorbed.length;
+      if (!reproducibleVerdict(finding).ok) {
+        diffs.push([name, JSON.stringify(get(r1)), JSON.stringify(get(r2))]);
+      }
+    }
     const same = diffs.length === 0;
     // 审查 S3-6（任务 3.6）：上面只比「两次跑是否一致」，不断言「跑对」。判卷面整体静默失灵时
     // （靶子路径挪了 / npm 跑不起来 => verify 恒 false），三次 score 全 0 也照样逐字段一致地绿，
@@ -136,9 +148,11 @@ for (const c of loaded) {
       r1.verifyOk === true && r1.score === 1,
       `B1b ${c.id}: 明卷正向通过（verifyOk && score=1，防判卷器静默失灵）`,
     );
+    // 债必须出声：吸收了几处写进读数里，否则下一次「B1 绿」会被读成「没有债」。
+    const absorbedNote = absorbed > 0 ? "，按登记身份债吸收 " + String(absorbed) + " 处" : "";
     check(
       same,
-      `B1 ${c.id}: 明卷两次跑逐字段一致（score=${String(r1.score)} in=${String(r1.inputTokens)} out=${String(r1.outputTokens)} turns=${String(r1.turns)}）` +
+      `B1 ${c.id}: 明卷两次跑逐字段一致（score=${String(r1.score)} in=${String(r1.inputTokens)} out=${String(r1.outputTokens)} turns=${String(r1.turns)}${absorbedNote}）` +
         (same ? "" : " —— 不等：" + diffs.map(([n, a, b]) => `${n}: ${a} ≠ ${b}`).join("；")),
     );
     // B1c：expect.maxTurns 此前**零消费者**（只在 loadCase 里校验类型）——一条写着却没人 enforce

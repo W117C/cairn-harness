@@ -205,3 +205,131 @@ typecheck 0 错、针脚体检阻断仍是原有 5 条（没顶掉任何锚点�
 ② `autonomy.ts` 若改从 `glm-session` 取面 ⇒ **成环**（`glm-session` 已 import `permissions/autonomy`）。
 所以"表该不该等于模型面"与 §四/§五 的申报域是**同一个问题的两面**，一并交 #19 裁，
 不在这里私自扩面（那会让 #19 的 A/B 之差被一次无关重构悄悄改掉）。
+
+## 十三、HEAD-only 整表（37 道）第一次有数，并且它当场翻出一个今天早上的漏改
+
+跑法（隔离树 = `6a06249`，`cp -al node_modules` + 硬链 `electron/dist`，实测 `require('electron')` 指向真二进制）：
+
+```
+cd .worktrees/head-audit-0924 && TERM=dumb CODEBUDDY_SAFE_DELETE_BULK_STATE_DIR= \
+  node --import tsx scripts/gates.ts --direct
+```
+
+读数：**绿 27 / 红 10｜未证 12 项**（`--direct`，逐道退出码在 `/tmp/head-gates.log`）。
+本页 §一 之前只有 vitest 面的读数（1 红），**整表从没在干净 HEAD 上跑过** ⇒ 这正是规矩 58「跑改动邻域 ≠ 跑那道门」的又一次实证：整表多抓出来的东西里，有一条是我自己今早的。
+
+### 逐道归因（10 道红，五种性质）
+
+| 门 | 退出 | 红在哪 | 归因 |
+|---|---|---|---|
+| `gate-check` | 1 | H7 冻结表与判卷区双向一致：`inTableNotOnDisk=[fixtures/no-progress/*.jsonl ×4…]`，`onDiskNotInTable=[]` | **环境**：`.jsonl` 语料从不在 git 里，新 worktree 天生没有（规矩 104 那一格的镜像：这次是"表上有、盘上没有"）。不是逃逸，也不是回归 |
+| `panels-check` | 1 | 整表里耗时 148,728ms，`[panels-check] 1 项失败 ❌`（失败名被"尾 12 行"窗口截掉） | **抖动，已用单跑复验定名**：同一棵树单跑 `node --import tsx scripts/panels-check.ts` ⇒ **全部断言通过 ✅**，且自带计时读数「起窗 9 次 · 等端口累计 6ms · 其中 0 次不是立刻空的」。这就是 HEAD 自己那条「panels-check 有实测时序 flake」与规矩 111（真窗口门与整表并发 ⇒ 假红）说的那一格 |
+| `mutate-verify` | **124** | 无末行输出，gates 打「超时（1200s）… 整组 SIGKILL（子进程未自还原）」，耗时 1,215s | **预算**：这道门在 1200s 内跑不完冷树 ⇒ 认证面上它**没有读数**，不许记成"红"也不许记成"过" |
+| `mutate-needles-check` | 1 | 唯一一条红字：「残留 `src/main/agent-runner.ts.mutbak`——针脚是从它算的，不可信」 | **上一条的下游后果**，不是独立缺陷：SIGKILL 正好落在突变窗口。复跑同一棵树 ⇒ **exit 0**，`963 条：阻断 0 / 待复认 3 / 未覆盖 0 / 逐行式 11 / 钉在飞文本 0`。⇒ 顺带得到一条新事实：**HEAD 的针脚阻断是 0**，§一 里主树那"原有 5 条"全属在飞文件 |
+| `test` | 1 | 见下「`test` 这一格我抄错了，重测后是两条不同的事」 | **上一条推论不成立**：§一 的"唯一红＝`skill-tool-policy`"是**整表跑之前**的读数，且我没复核名字 |
+| `gym-check` | 1 | 4 条：两条 B1「明卷两次跑逐字段一致」+ 另两条 | **判卷面含不可复现量**：`changedFiles` 里混进了 `.agent/snapshots/<毫秒>–<case>/src/…` ⇒ 两次跑的毫秒目录名必然不等 ⇒ 这条"自一致性"判据在任何一次跑上都恒假（靶场自己的尺，不是产品） |
+| `prefix-churn-check` | 1 | PC7-摊销确实少付账（A/B 同一条会话）：关 ⇒ 压缩 5 次 / 重写 42,588 字符；开 ⇒ 压缩 6 次 / 重写 34,925 字符 | **今天第二个"我修了两支、漏了第三支"**：`501880b` 把压缩 A/B 的分母钉成常数时，只钉了 `tests/compaction-cost.test.ts` 与 `tests/gym-long-replay.test.ts`；PC7 是**同一件事的第三面**（它经 `createGlmSessionProvider` 吃**活工具面**），所以我改完它仍红 ⇒ 见下面「待办」 |
+| `agents-check` / `schedule-check` / `ipc:check` | 各 1 | A1 / J1+J2 / 重放等价，三条都是 `JSON.stringify` 逐字比 | **一个今天早上的 shipped 决定的漏改**——详见下节，已复现、已给验证过的补丁 |
+
+### `test` 这一格：我把 §一 的归因直接抄了过来，重测后它是**两条不同的事**
+
+第一次写本节时我在表里填了"与 §一/§九 同一条：`skill-tool-policy`（#19 待裁），无新增"——那是**从退出码相等推出来的**，没有名字级证据。补测后：
+
+1. **整跑（隔离树，`--config`，85.4s）**：`Test Files 2 failed | 251 passed (253)`、`Tests 1 failed | 2668 passed (2669)`。
+   ⇒ **两行必须都读**：只看 `Tests 1 failed` 会漏掉那个**文件级**红（`Failed Suites 1`：`Cannot find module …/tests/chain-lease-held.test.ts`），而它一个用例都没跑就不算进 `Tests`。这是"汇总行也是判据"的又一格。
+2. `tests/skill-tool-policy.test.ts:217` 那条（申报域应等于 `TOOL_NAMES` 十把）——**单跑 18/18 全绿，整跑才红**，红的形状正是 #19 那道叉：
+   `expected ['automation_create', …(9)] to deeply equal ['remember','spawn_agent',…]` ⇒ 整跑时注入面那 7 把**没有被摘掉**，说明有另一个文件把工具注册表改在共享态里且没清（跨文件污染）。
+   ⇒ 直接后果：**#19 的证据面本身是 order-dependent 的**——"A 案牵连为零"这类读数必须由该文件单跑给出，不能引用整跑的绿/红。
+3. `tests/chain-lease-held.test.ts` **单跑 8/8 绿**，且该文件在隔离树里的 mtime 落在整跑窗口内（22:30，跑批起于 22:29:18、历时 85s）⇒ 那次 `Cannot find module` 是**跑到一半文件被重写**造成的。
+   机制未定名（两个候选：① 有测试把 `mutate-verify` 当子进程跑，而表里确有 1 条锚点的 `src` 指向 `tests/**`；② 外部进程动过这棵树）。**不猜因果**：留成本节最后一条待查，并把"HEAD-only 全量 vitest 的数还不可复现"这句话写在这里，免得下一轮把 2669 当基线。
+
+### 三条门红的同一条根因：`8361657` 改了 4 个判卷面，另有 3 个没改
+
+`8361657`（**今天 04:06**，"事件流落盘处统一盖时钟戳"）把 `ts` 改成在 `append` 这一处盖（`src/events/index.ts:664` `stamped = { ...event, ts: event.ts ?? Date.now() }`），
+commit message 自己写明：「四条「replay == 写入 / 两次 run 逐字节不变」判据随之改成只剥 ts 一个键再比（强度不降）」——它改的是 `tests/` 那 4 面（附 `tests/helpers/stream-equals.ts`）。
+**同一句承诺在门面上还有 3 个副本没改**：`scripts/agents-check.ts:204`（A1）、`scripts/schedule-check.ts:475,476`（J1/J2）、`scripts/ipc-check.ts:79-82`（重放等价，拿"内存态"比"盘上态"）。
+⇒ `pnpm gates` 从 04:06 起就是红的，而 **vitest 全绿**——所以这条只能被整表抓到。这就是同族副本那一族（`dsh-sibling-exec-policies` 第十三族）第一次踩在**判卷面自己**身上。
+
+复现（一次性，写在隔离树里 `repro-roundtrip.mts`，跑完即随树删）：
+
+```
+#0 不一致
+   append 前: {"type":"user_message","content":"hi"}
+   replay 后: {"type":"user_message","content":"hi","ts":1790259570673}
+```
+
+**验证过的补丁（17 行，三面各引现成的 `stripTs`，不新造第四份口径）**，形状一律是"剥 `ts` 一个键后逐字比 **+ 每条必须带数字 `ts`**"——
+第二半是**加强**：旧写法根本无法表达"戳真的盖上了"，剥键之后如果不补这半句，就是把判据改松（规矩 130 要求的"实现前后都跑"两侧都在这里）。
+J2 改成 `raw.endsWith(JSON.stringify(back[3]))`：它要钉的是"行字节 = 该事件自己的序列化、没有被重排/美化"，用**落盘后**的那个对象当期望，承诺不变而戳在场。
+
+```diff
+-    check(JSON.stringify(legacyReplayed) === JSON.stringify(legacy), "A1 旧形态日志重放逐字无损");
++    check(
++      JSON.stringify(stripTs(legacyReplayed)) === JSON.stringify(legacy) &&
++        legacyReplayed.every((e) => typeof (e as { ts?: unknown }).ts === "number"),
++      "A1 旧形态日志重放逐字无损（剥落盘时钟戳 `ts` 一个键，且每条都必须带数字 ts）",
++    );
+```
+（另两面同形状；`ipc-check` 是 `stripTs(fromDisk)` vs `stripTs(collected)`，`schedule-check` 是 J1 同形 + J2 换期望对象。）
+
+隔离树实测：`schedule-check` **67 ✅ / 0 ❌ exit 0**（原 65/2）、`agents-check` **259 ✅ / 0 ❌ exit 0**（原 258/1）、
+`ipc:check` **exit 0（分支 A 靶子修复）**；改完复跑 `--check-needles` ⇒ **阻断 0**（没顶掉任何针脚）、`typecheck` ⇒ **0 错**。
+
+**为什么没有落进主树**：这三个文件正是桌面层那笔在飞改动里被删的一个子集——
+`comm -23` 实测 HEAD 37 道 → 盘上 26 道，被删的 11 道里就含 `agents-check / ipc:check / schedule-check`。
+主树里它们对 HEAD 是 `D`，我去改盘等于把别人原子单元里删掉的东西**悄悄复活**（AGENTS.md「提交前相交检查」+ 规矩：preserve unrelated dirty changes）。
+⇒ 补丁以本节为载体，交 #20 落地时一起走；**若 core-only 方向成立，这 3 个守门人会消失，"重放逐字无损"只剩 `tests/` 那 4 面**——那 4 面也有一部分在渲染层树里，届时须重读一遍还剩几面。
+
+### 待办（由本次读数直接产生）
+
+1. **PC7 是今天第三个"活工具面"分母**：把 `501880b` 的冻结面搬进 `scripts/prefix-churn-check.ts` 之前，先按规矩 121 问一句"那支的限制是谁要的"——PC7 明确写了「tail 三个旋钮刻意不覆盖：拿生产缺省」，
+   说明它**故意**贴近生产装配面；那么钉工具面就与它的原意冲突。两条出路：① 给它一条与 A/B 同向的**绝对量**判据（少付字节数 + 压缩次数不增，分母用当场读到的面尺寸归一）；② 承认它量的是"生产缺省下是否仍成立"，那它红 = **真红**，须改产品摊销而不是改尺。
+   ⇒ 本轮不擅自动它（两种读法结论相反，而 ② 会牵动摊销策略本体）。
+2. **gym-check 的 B1 自一致性判据要剔掉时刻量**：`.agent/snapshots/<毫秒>--<case>` 不该出现在"两次 run 逐字段一致"的比较字段里（要么归一化掉快照前缀，要么把 `changedFiles` 收成仓内相对路径集）。这条与产品无关，是靶场的尺。
+3. `mutate-verify` 需要一个能跑完的预算（冷树 >1200s），否则"HEAD-only 认证"永远缺一道门；先量一遍它单跑要多久再决定（不凭感觉调大）。
+
+## 十三、整表跑完的二次复核：十道红逐道定名（同一棵隔离树，detached `6a06249`）
+
+第一节那张表只跑到一半（当时 8 道红）。整表落定后是 **绿 27 / 37，红 10**：
+`test=1 ipc:check=1 gate-check=1 panels-check=1 agents-check=1 schedule-check=1 gym-check=1 prefix-churn-check=1 mutate-verify=124 mutate-needles-check=1`
+（余下全 0，含 `typecheck=0`、`e2e=0`、`build=0`、`plugins-check=0`、`supervisor-check=0`、`a11y-check=0`。）
+
+| 红门 | 一根原因（实测，非推断） | culprit | 归谁 |
+| --- | --- | --- | --- |
+| `test` | 唯一一条是 §9.3 待裁那条（申报域 A/B），2672/2673 | — | 待用户裁（#19） |
+| `ipc:check` `agents-check` `schedule-check` | 三道同一根：`append` 处新盖的 `ts` 没穿到门这面，"replay == 写入"恒不等 | `8361657` | 我；补丁在 §十二，未落盘（文件在别人的原子单元里是 `D`） |
+| `gate-check` H7 | **新发现、独立一根**：HEAD 的 `frozenCoverageDrift` 只扫四个判卷区，`fixtures/no-progress` 进了冻结表却没进扫描区 ⇒ 表里有、"盘上没有"恒红 | `90b0533` 加表，扫描区没跟着加 | 别人的在飞改动已在修（`src/frozen.ts`/`scripts/gate-check.ts` 都是 `M`） |
+| `gym-check` B1 ×4 | 差异只在快照目录名的毫秒 ⇒ 与已登记的 `IDENTITY_DEBTS[0] D7-snapshot-path-ms` 是同一条债；**RD 那面用了分类器，B1 这面没用** | `3391a65`（实测父提交全绿、该提交 4 红） | 我；等 BLOCKED 待办 #56 的 A/B 裁决 |
+| `prefix-churn-check` PC7 | "开"臂压缩反而多一次：又是拿活工具面当 A/B 分母 | `aa30513`（`a0db9ea` 17:20 仍 9/9，17:30 起红） | 我；§十二 待办 1 的两种读法未裁 |
+| `mutate-verify` | 冷树 >1200s，被 gates 的预算整组 SIGKILL | 表规模 vs 预算 | 待测（下面） |
+| `mutate-needles-check` | **派生红**：上一道被杀留下 `agent-runner.ts.mutbak`，该门明写"残留 ⇒ 针脚不可信"。实测残留与 HEAD 逐字节相同（没有未还原的突变体），已移出 | — | 随上一道一起消 |
+| `panels-check` | 尚未归因：148s 的红要按 AGENTS.md 判读法单跑复验，但整表在跑时并发会造计时假红（规矩 111），故排到最后 | — | 待单跑 |
+
+### 一条方法论更正（本轮自己踩的，必须留在原处）
+
+第一次逐笔 bisect 的读数是**被污染的**，而它看起来完全像证据。两件事实叠在一起：
+
+1. `git checkout --detach <sha>` **会把未提交的改动一路带着走**——只要该文件在两个提交之间逐字节相同，git 就不报冲突。我 §十二 那份三文件补丁因此跟着穿过了整段历史；
+2. 走到 `8361657^` 时，它 `import` 的 `tests/helpers/stream-equals.ts`（`8361657` 才新建）在盘上被 checkout 删掉了 ⇒ 三道门以 `ERR_MODULE_NOT_FOUND` **崩**，退出码 1 而 ❌ 计数 0。
+
+于是我第一次写下"这三道门在五个提交上都红"——那是"崩了"不是"红"。同一段里我还把 `git ls-files`（读索引）当成了 HEAD（第 92 条规矩的原样复发）。
+⇒ 立两条：**bisect 前先 `git status` 确认被测文件干净**；**「exit≠0 且 ❌=0」= 崩，不作红读**（红必须有具名断言行）。
+第二次的父子对照（`3391a65^`/`aa30513` 两侧）是在干净树上重跑的，那两条 culprit 才算数。
+
+### §十三 补：gym-check B1 已落（同一天，读数在下面）
+
+`scripts/gym-check.ts` 的 B1 改为把差异交给 **`src/agent/reproducibility.ts` 那只唯一判据**
+（`diffJsonPaths` → `classifyDivergence` → `reproducibleVerdict`，`requireDebtHit` 按该模块自己的口径保持关闭）。
+配套：`changedFiles` 那一路**原样传数组**——登记债的 `pathPrefix` 是 `changedFiles[`，字符串化会把整只数组压成一个根路径，于是那条债永远命中不上。
+
+两侧各跑一次（不是只跑绿的那次）：
+
+- 改完：`33 ✅ / 0 ❌ exit 0`，四条 B1 的读数各自带 **"按登记身份债吸收 1 处"** ⇒ 债出声，绿不被读成"没有债"。
+- 反向（临时给 `r2.changedFiles` 塞一个非毫秒假文件 `decoy-not-wallclock.ts`，跑完即删）：
+  **`exit 1`、`4 项失败`**，读数同时打出被吸收的那处与真泄漏的那处 ⇒ 尺的分辨力没被换掉。
+- `typecheck` 0 错；`--check-needles` 报告里 `gym-check` **零命中**（阻断 5 条全是 #11 那批在飞文件：`np-write-suppression-ignored`、`event-stamp-dropped`、`event-stamp-overwrites-producer-ts`、`sessions-delete-force-false`、`supervise-retired-error-verdict-revived`）。
+
+**这不等于 #56 偿清**：快照目录名仍含 `Date.now()`，`D7-snapshot-note-ms`（毫秒混进模型可见文本那半）仍在账上，
+`IDENTITY_DEBTS` 两条一条没删。改的只是"同一承诺在两道门里读出两个结论"这一格。
+**这条判据的分辨力挂在"债还活着"这一事实上**：#56 一旦按 A 或 B 偿清，B1 与旧写法等价——届时无需撤针，因为它不再守任何东西，而 RD 那条 `requireDebtHit` 复查会先一步把过期条目念出来。
+
