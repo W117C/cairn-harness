@@ -128,6 +128,29 @@ function controls(): { over: string[]; caught: string[] } {
   return { over, caught };
 }
 const ctl = controls();
+
+/** 赋值式规则的两侧（漏检 / 误检）按 **ruleId** 判，不按文本变化——
+ *  文本变不变还掺着熵分支的行为，混在一起就读不出是谁动的。 */
+function assignmentCheck(): { missed: string[]; falsePositives: string[] } {
+  const rulesOf = (l: string): string[] => redactSecrets(l).findings.map((f) => f.ruleId);
+  const mustCatch = [
+    "api_key=bf9ccaa2dab744fa83c232deef772ad0",
+    "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
+    'token: "ghtok_abcdefghijklmnop1234"',
+  ];
+  const mustNotCatch = [
+    "token_count: 12",
+    "DB_TOKEN=${VAULT_TOKEN}",
+    "password=",
+    "api_keys_file: /etc/keys.json",
+    "secret_key_rotation_policy=annual",
+  ];
+  return {
+    missed: mustCatch.filter((l) => !rulesOf(l).includes("secret.assigned")),
+    falsePositives: mustNotCatch.filter((l) => rulesOf(l).includes("secret.assigned")),
+  };
+}
+const asg = assignmentCheck();
 const r = measure(toolOutputs());
 console.log("真输出条数=" + String(r.lines) + "（取料目录：" + DIRS.join(" ") + "）");
 console.log("被改写条数=" + String(r.changedOutputs) + " 被掩 token 数=" + String(r.masked));
@@ -140,4 +163,6 @@ for (const c of ctl.over) console.log("  过掩：" + c.slice(0, 64));
 console.log("对照（真密钥形状，应当**掩掉**）：" + (ctl.caught.length ? "已掩 ✅" : "没掩 ❌（这条判据在说谎）"));
 if (ctl.over.some((c) => c.startsWith("【漏掩】"))) console.log("❌ 路径里的真高熵串没被擦 ⇒ 否决放得太宽");
 // 读数必须三条腿：语料规模、语料里的过掩、对照里的过掩。少一条都会把"没看着"读成"没问题"。
-process.exit(r.lines < 50 || ctl.caught.length === 0 || ctl.over.length > 0 || ctl.over.some((c) => c.startsWith("【漏掩】")) ? 1 : 0);
+console.log("赋值式：该抓没抓 " + String(asg.missed.length) + " 条 · 不该抓却抓了 " + String(asg.falsePositives.length) + " 条");
+for (const m of [...asg.missed.map((x) => "漏检 " + x), ...asg.falsePositives.map((x) => "误检 " + x)]) console.log("  ❌ " + m.slice(0, 70));
+process.exit(r.lines < 50 || ctl.caught.length === 0 || ctl.over.length > 0 || asg.missed.length > 0 || asg.falsePositives.length > 0 ? 1 : 0);

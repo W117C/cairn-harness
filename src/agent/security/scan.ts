@@ -66,7 +66,12 @@ export const SECRET_PATTERNS: readonly {
   { ruleId: "secret.slack", re: /\bxox[baprs]-[A-Za-z0-9-]{10,}/, severity: "high", confidence: "high", title: "Slack Token" },
   {
     ruleId: "secret.assigned",
-    re: /(?:api[_-]?key|secret|token|password|passwd|access[_-]?key)\s*[:=]\s*["'`][^"'`\s]{12,}["'`]/i,
+    // 引号可有可无：`.env`、`docker run -e`、shell 与 YAML 里最常见的凭据写法是**无引号**的，
+    // 旧写法强制引号 ⇒ 等于宣布 `API_KEY=bf9ccaa2…` 不是凭据（实测漏检）。
+    // 捕获组 1 = 真正要掩的值（掩值不吃键名）。值里排除 `$ { } ( ) < > , ;` 与引号空白 ⇒
+    // 变量引用（DB_TOKEN=${VAULT_TOKEN}）、空值、短值都不算；`token_count:` 这类"键不是整词"
+    // 也进不来（token 后面还有 _count，[:=] 接不上）。
+    re: /(?:api[_-]?key|secret|token|password|passwd|access[_-]?key)\s*[:=]\s*["'`]?([^\s"'`,;{}()<>$]{12,})["'`]?/i,
     severity: "high",
     confidence: "medium",
     title: "赋值式凭据",
@@ -286,7 +291,8 @@ function lineFindings(path: string, line: string, lineNo: number, entropy: Entro
         path,
         line: lineNo,
         title: p.title,
-        description: "第 " + String(lineNo) + " 行命中已知密钥模式（" + mask(m[0]) + "）。",
+        // 表里带捕获组的规则 = 「组 1 是值」⇒ 只掩值；无组的规则整段就是密钥本身。
+        description: "第 " + String(lineNo) + " 行命中已知密钥模式（" + mask(m[1] ?? m[0]) + "）。",
         confidence: p.confidence,
       });
     }
@@ -426,7 +432,7 @@ export function redactSecrets(text: string, opts: ScanOptions = {}): RedactResul
       for (const p of SECRET_PATTERNS) {
         const re = new RegExp(p.re.source, p.re.flags.includes("g") ? p.re.flags : p.re.flags + "g");
         for (const m of line.matchAll(re)) {
-          const secret = m[0];
+          const secret = m[1] ?? m[0]; // 有捕获组的规则只掩值，键名与引号逐字留下
           if (secret === "") continue; // 空匹配会让 split("") 把整串拆散
           out = out.split(secret).join(mask(secret));
         }

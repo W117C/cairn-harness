@@ -110,3 +110,47 @@ describe("高熵候选边界：掩值，不吃键名与路径", () => {
     expect(redactSecrets("cp /home/deploy/AKIAIOSFODNN7EXAMPLE /tmp/x").text).toContain("AKIA****");
   });
 });
+
+/** 赋值式凭据的**漏检一侧**（任务 #5）。旧规则的强制引号等于宣布：
+ *  `.env` / `docker run -e` / shell 里最常见的写法（`API_KEY=xxxx`）不是凭据。
+ *  这里同时钉住"只掩值、键名逐字留"（否则修漏检会新造一条把键名一起吃掉的过掩）。 */
+describe("赋值式凭据：无引号写法（.env / -e / YAML）", () => {
+  const rules = (line: string): string[] => redactSecrets(line).findings.map((f) => f.ruleId);
+
+  it("无引号 api_key=<32 位 hex>：命中赋值式，且键名留着、值擦掉", () => {
+    const r = redactSecrets("api_key=bf9ccaa2dab744fa83c232deef772ad0");
+    expect(rules("api_key=bf9ccaa2dab744fa83c232deef772ad0")).toContain("secret.assigned");
+    expect(r.text).toContain("api_key=");
+    expect(r.text).not.toContain("bf9ccaa2dab744fa83c232deef772ad0");
+  });
+
+  it("大写键 + base64 值（中段含 / 与 +）：整值擦，等号左侧不动", () => {
+    const val = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY";
+    const r = redactSecrets(`AWS_SECRET_ACCESS_KEY=${val}`);
+    expect(rules(`AWS_SECRET_ACCESS_KEY=${val}`)).toContain("secret.assigned");
+    expect(r.text).toContain("AWS_SECRET_ACCESS_KEY=");
+    expect(r.text).not.toContain(val);
+  });
+
+  it("带引号的旧形状行为一字不变（双引号 / 单引号两种都仍算）", () => {
+    for (const line of [`token: "ghtok_abcdefghijklmnop1234"`, "password: 'hunter2hunter2hunter2'"]) {
+      expect(rules(line), line).toContain("secret.assigned");
+      expect(redactSecrets(line).text, line).not.toContain("abcdefghijklmnop1234".slice(0, 12));
+      expect(redactSecrets(line).text, line).not.toContain("hunter2hunter2hunter2");
+    }
+  });
+
+  it("负控：非凭据键名、变量引用、短值、空值不算赋值式凭据", () => {
+    const lines = [
+      "token_count: 12",                       // 键不是整词（token 后面还跟着 _count）
+      "DB_TOKEN=${VAULT_TOKEN}",               // 变量引用，不是凭据本身
+      "password=",                             // 空值（模板 / 未配置）
+      "token=short12",                         // 值不足 12
+      "secret_key_rotation_policy=annual",     // 键名里含 secret，但值不是凭据
+      "api_keys_file: /etc/keys.json",
+    ];
+    for (const line of lines) {
+      expect(rules(line), "不该命中赋值式：" + line).not.toContain("secret.assigned");
+    }
+  });
+});
