@@ -410,8 +410,21 @@ async function phaseElectron(root: string): Promise<void> {
     const sessSel = '.session[data-id="' + stressId + '"]';
     const sessInList = await cdp.eval<boolean>(`!!document.querySelector(${JSON.stringify(sessSel)})`);
     ok(sessInList === true, "侧栏真实 DOM 出现压测会话节点（.session[data-id] 渲染链路）");
-    const eventCountEl = await cdp.eval<string | null>(`document.querySelector('#eventCount')?.textContent ?? null`);
-    ok(eventCountEl !== null && /^\d+$/.test(eventCountEl), "#eventCount 实时计数节点存在且为非负整数（实测 " + String(eventCountEl) + "，不与历史重放值挂钩）");
+    // 「节点有文字」≠「用户看得见」：#eventCount 今天长在**设置页·运行状态卡**里，而该遮罩未打开时
+    // 是 `opacity:0; pointer-events:none`——querySelector 照样命中、textContent 照样能读，
+    // 但主屏上一个字都不显示。所以这条判据把可见性一起取回来并印进结论，
+    // 免得下一轮有人拿这条绿线当「成本可观测已被验收」（同 outputs/sandbox-degrade-face-2026-09-24 那条读数）。
+    const eventCountEl = await cdp.eval<{ text: string | null; onMainScreen: boolean } | null>(
+      `(() => { const el = document.querySelector('#eventCount');` +
+      `  if (!el) return null;` +
+      `  const vis = typeof el.checkVisibility === 'function'` +
+      `    ? el.checkVisibility({ opacityProperty: true, visibilityProperty: true }) : null;` +
+      `  return { text: el.textContent, onMainScreen: vis === null ? true : !!vis }; })()`,
+    );
+    ok(eventCountEl !== null && /^\d+$/.test(eventCountEl.text ?? ""),
+      "#eventCount 实时计数节点存在且为非负整数（实测 " + String(eventCountEl?.text) +
+      "，不与历史重放值挂钩；主屏可见性=" + String(eventCountEl?.onMainScreen) +
+      " ——" + (eventCountEl?.onMainScreen ? "在底栏/主屏上" : "在设置页内，未打开设置时主屏看不到") + "）");
 
     // 滚动耗时口径升级：先跳到中段，再向下连续 3 次整屏；**每次必须 scrollTop 位移 > 0**，
     // 消除「从底部 scrollBy 不动也计时」的恒真口径。阈值保持原 200ms 不变。
@@ -1605,7 +1618,7 @@ async function phaseElectron(root: string): Promise<void> {
       "；距底 " + String(b20Geom.dist) + "px（scrollTop " + String(b20Geom.top) +
       " / scrollHeight " + String(b20Geom.sh) + " / clientHeight " + String(b20Geom.ch) + "）" +
       "；盘上 " + String(b20DiskTail.length) + " 行，尾部类型 " + JSON.stringify(b20DiskTail.slice(-9)) +
-      "；屏面事件数 #eventCount=" + b20ShownEvents +
+      "；运行状态卡事件数 #eventCount=" + b20ShownEvents + "（该节点在设置页内，未打开设置时主屏不可见）" +
       "；转录挂载子节点 " + String(b20Shape.kids) + " 个、占位高 " + JSON.stringify(b20Shape.spacers) +
       "；审阅页文件行 " + String(b20Shape.fileRows) + " 条（空态=" + String(b20Shape.empty) + "）" + "）");
     const b20Budget = b20Cards.find((x) => x.includes("4096")) ?? "";
