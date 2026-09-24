@@ -362,9 +362,13 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
     // 只读档连同编排原语一并摘除：spawn_agent 靠 SIDE_EFFECT_TOOLS，wait_for_agents / cancel_agents
     // 不是写向工具（不该被方案门挡），所以只能显式点名——漏摘就是「模型看得见、执行面白名单挡着」那类两头断。
     // 定时五件同因：只读会话不该能排下一次会写盘的无人值守跑。
+    // 每个摘除项各占一行：往这条链上追加一族工具是常规动作（定时五件即是），写成一行会把
+    // 守护前两件的变异针脚整条顶掉（2026-09-24 实踩——bd2cf3e 加第三项即致两条锚点失效）。
     return specs.filter((s) =>
-      !isSideEffectTool(s.function.name) && s.function.name !== "remember" &&
-      s.function.name !== "wait_for_agents" && s.function.name !== "cancel_agents" &&
+      !isSideEffectTool(s.function.name) &&
+      s.function.name !== "remember" &&
+      s.function.name !== "wait_for_agents" &&
+      s.function.name !== "cancel_agents" &&
       !AUTOMATION_TOOL_NAMES.includes(s.function.name),
     );
   }

@@ -562,7 +562,7 @@ const MUTATIONS = [
     src: "src/agent/glm-session.ts",
     test: "tests/cancel-agents-tool.test.ts",
     desc: "只读档不再摘掉 cancel_agents ⇒ 模型看得见、白名单挡着，白叫一次再吃一句不可用（两头断的规格半边）",
-    apply: (s) => s.replace("      s.function.name !== \"wait_for_agents\" && s.function.name !== \"cancel_agents\",", "      s.function.name !== \"wait_for_agents\","),
+    apply: (s) => s.replace("      s.function.name !== \"cancel_agents\" &&\n", ""),
     expectFail: "规格与实例同名同串；只读档摘掉；worker 两面都够不着（深度恒 1）",
   },
   {
@@ -2600,7 +2600,7 @@ const MUTATIONS = [
     src: "src/agent/glm-session.ts",
     test: "tests/tool-surface-parity.test.ts",
     desc: "只读档不再显式摘除 wait_for_agents ⇒ 模型面看得见、执行面白名单挡着（本仓第 6 次的那类两头断）",
-    apply: (s) => s.replace("s.function.name !== \"wait_for_agents\" && s.function.name !== \"cancel_agents\",", "s.function.name !== \"cancel_agents\","),
+    apply: (s) => s.replace("      s.function.name !== \"wait_for_agents\" &&\n", ""),
     expectFail: "只读档的摘除面与声明一致（只查静态表：运行期注入项由各自的开关管）",
   },
   {
@@ -8164,6 +8164,47 @@ const MUTATIONS = [
     desc: "规格退回承诺硬闸「相交即拒」⇒ 模型以为报了 resources 就有闸，从而不看真保护它的那一层（worktree）",
     apply: (s) => s.replace("与活跃写 worker 相交 ⇒ 审批卡点名，可强行批准", "与活跃写 worker 相交即拒"),
     expectFail: "不再写「相交即拒」，改说审批卡点名（与可强行批准）",
+  },
+  // ---- 第 42 页 · 定时五件的模型面 / 注入面解析器的形状 / core 与低频族的分界 ----
+  {
+    id: "automation-face-dropped",
+    src: "src/agent/glm-session.ts",
+    test: "tests/automation-tool-surface.test.ts",
+    desc: "不拼那五份规格 ⇒ 模型面上又是零个（实现照装、能力照发不出去，且没人报错）",
+    apply: (s) => s.replace("  specs.push(...automationToolSpecs());\n", ""),
+    expectFail: "五个名字全部出现在 auto 档（以前是 0 个 = 能力发了但模型发不出去）",
+  },
+  {
+    id: "automation-face-in-read-only",
+    src: "src/agent/glm-session.ts",
+    test: "tests/automation-tool-surface.test.ts",
+    desc: "只读档漏摘 ⇒ 只读会话能排下一次无人值守的写盘（与 wait/cancel 同族的漏摘形状）",
+    apply: (s) => s.replace(" &&\n      !AUTOMATION_TOOL_NAMES.includes(s.function.name),", ","),
+    expectFail: "只读档整族摘除（只读会话不该能排一次无人值守的写盘）",
+  },
+  {
+    id: "automation-specs-become-core",
+    src: "src/agent/glm-session.ts",
+    test: "tests/automation-tool-surface.test.ts",
+    desc: "core 集合不减低频族 ⇒ 五件每次请求都进固定面、降配梯再也砍不掉它们",
+    apply: (s) => s.replace(".filter((n) => !OPTIONAL_SURFACE_TOOL_NAMES.includes(n))", ".filter(() => true)"),
+    expectFail: "五件不算 core 面（固定面每次请求都付字节，低频族要能被降配梯砍掉）",
+  },
+  {
+    id: "automation-spec-invents-a-field",
+    src: "src/agent/automation-surface.ts",
+    test: "tests/automation-tool-surface.test.ts",
+    desc: "规格发明一个校验器不认的字段 ⇒ 模型照规格写必被拒成「未知字段」（规格与校验器两处手写的必然下场）",
+    apply: (s) => s.replace('name: "automation_create", fields: [...AUTOMATION_MODEL_FIELDS],', 'name: "automation_create", fields: [...AUTOMATION_MODEL_FIELDS, "owner"],'),
+    expectFail: "每个工具申报的字段都在 KNOWN_TOP_FIELDS 里",
+  },
+  {
+    id: "g-b-injection-face-ignores-table-form",
+    src: "tests/tool-surface-parity.test.ts",
+    test: "tests/tool-surface-parity.test.ts",
+    desc: "实例面解析器退回只认一形 ⇒ 走 table 下标注入的工具整个从分母消失，而这道门照常绿（本轮抓到的就是这个）",
+    apply: (s) => s.replace('/^\\s*table\\["([a-z_][a-z0-9_]*)\"\\]\\s*=/gm', '/^\\s*NEVER\\["([a-z_][a-z0-9_]*)\"\\]\\s*=/gm'),
+    expectFail: "扩形后的分母自证：table[\"name\"] = 那一形确实被算进来了（解析器静默 0 命中比不扩更坏）",
   },
 ];
 
