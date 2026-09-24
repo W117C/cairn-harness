@@ -16,36 +16,72 @@ const NOTICE_RESERVE_BYTES = 256;
 /** 超限后的头尾分配：头部多留一点（进程刚起的报错、命令行回显在前段），总预算一字不加。 */
 const HEAD_RATIO = 0.55;
 
+/** 一个码位占几个 UTF-8 字节（1/2/3/4）。 */
+const utf8Bytes = (cp: number): number => (cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4);
+const bytesOf = (s: string): number => Buffer.byteLength(s, "utf8");
+
+/** 不越过 max 字节的**最长前缀**；按码位走，所以缝合处永远是一个完整字符。 */
+function headWithin(s: string, max: number): string {
+  let used = 0;
+  let cut = 0;
+  for (const ch of s) {
+    const b = utf8Bytes(ch.codePointAt(0) ?? 0);
+    if (used + b > max) break;
+    used += b;
+    cut += ch.length;
+  }
+  return s.slice(0, cut);
+}
+
+/** 不越过 max 字节的**最长后缀**；同样按码位回退（代理对成对退，不许留半个）。 */
+function tailWithin(s: string, max: number): string {
+  const cps = Array.from(s);
+  let used = 0;
+  let k = cps.length;
+  while (k > 0) {
+    const b = utf8Bytes(cps[k - 1]?.codePointAt(0) ?? 0);
+    if (used + b > max) break;
+    used += b;
+    k--;
+  }
+  return cps.slice(k).join("");
+}
+
+/** 头尾环的帽一律按 **UTF-8 字节** 计：参数名就叫 `limitBytes`，而实现曾按 UTF-16 字符数执行，
+ *  于是同一参数下中文产出实测撑破 2.9×、提示里的省略量少报 3.0×（ASCII 路径两者同值，
+ *  所以这条错在只喂英文的测试里恒绿——`tests/output-ring.test.ts` ⑥ 就是那把尺）。
+ *  按字节切会带来新风险：缝合处可能把多字节字符切成半个 ⇒ `headWithin`/`tailWithin` 按码位走。 */
 export function createOutputRing(limitBytes: number): OutputRing {
   const keepBytes = limitBytes - NOTICE_RESERVE_BYTES;
-  const headBytes = Math.floor(keepBytes * HEAD_RATIO);
-  const tailBytes = keepBytes - headBytes;
+  const headBudget = Math.floor(keepBytes * HEAD_RATIO);
+  const tailBudget = keepBytes - headBudget;
   let out = "";
+  let outBytes = 0;
   let head = "";
   let tail = "";
   let overflowing = false;
   let seen = 0;
   const push = (chunk: Buffer | string): void => {
     const s = typeof chunk === "string" ? chunk : chunk.toString("utf8");
-    seen += s.length;
+    const n = bytesOf(s);
+    seen += n;
     if (!overflowing) {
       out += s;
-      if (out.length > limitBytes) {
+      outBytes += n;
+      if (outBytes > limitBytes) {
         overflowing = true;
-        head = out.slice(0, headBytes);
+        head = headWithin(out, headBudget);
         // 溢出发生在**当前这一次** push 内部时（子进程一次性吐完 60KB 很常见），超出头部的
         // remainder 必须进尾环——直接丢弃会让"保留了结尾"变成一句假话（实测：单次大块写入时尾部为空）。
-        tail = out.slice(headBytes);
-        if (tail.length > tailBytes) tail = tail.slice(tail.length - tailBytes);
+        tail = tailWithin(out.slice(head.length), tailBudget);
         out = ""; // 中间段不留（内存帽与旧实现同级：≤上限 + 一个尾环）
       }
       return;
     }
-    tail += s;
-    if (tail.length > tailBytes) tail = tail.slice(tail.length - tailBytes);
+    tail = tailWithin(tail + s, tailBudget);
   };
   const read = (): string => overflowing
-    ? head + "\n" + middleTruncationNotice(seen - headBytes - tail.length) + "\n" + tail
+    ? head + "\n" + middleTruncationNotice(seen - bytesOf(head) - bytesOf(tail)) + "\n" + tail
     : out;
   return { push, read };
 }
