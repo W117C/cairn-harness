@@ -47,7 +47,7 @@ function defaultOp(kind: RememberKind): RememberOp {
   return kind === "architecture" || kind === "preference" ? "replace" : "append";
 }
 
-/** §8.1.8 记忆安全第 6 条的后半（agent-plan.md:860）：「§11.1 脱敏 pass 覆盖记忆写入路径」。
+/** §8.1.8 记忆安全第 6 条的后半（指针：agent-plan.md §8.1.8）：「§11.1 脱敏 pass 覆盖记忆写入路径」。
  *  落在这里而不是 main 层的 gated 包装：会话结束沉淀轮走的是**未加门的工具本体**
  *  （agent-runner 把 `rememberTool: remember` 直接交给 runSessionEndDistill），闸放包装层就绕过了它。
  *  命中即掩码写入；blocked（私钥块）沿用 scan.ts 既有契约——调用方拒绝而非仅脱敏。

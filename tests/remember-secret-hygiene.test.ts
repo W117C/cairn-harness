@@ -1,4 +1,4 @@
-// §8.1.8 记忆安全第 6 条（agent-plan.md:860）承诺：「remember 工具描述明文禁止密钥/凭据入库
+// §8.1.8 记忆安全第 6 条（指针：agent-plan.md §8.1.8）承诺：「remember 工具描述明文禁止密钥/凭据入库
 //   **+ §11.1 脱敏 pass 覆盖记忆写入路径**」。前半是提示词里的一句话，后半——把 redactSecrets 接到
 // 记忆写入这条路上——从未实现：redactSecrets 的调用方只有 orchestrator / llm-review / solpi-runtime /
 // worker-projection / worker-report 五面，`src/tools/remember.ts` 与 `src/agent/memory/*` 零命中。
