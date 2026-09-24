@@ -20,6 +20,8 @@ export interface InjectedToolSurface {
 export const INJECTED_TOOLS: readonly InjectedToolSurface[] = [
   { name: "spawn_agent", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: true },
   { name: "wait_for_agents", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  // 撤自己派出的活（能力 4 动态调整）。worker 两面都不给：让 worker 撤兄弟 = 深度恒 1 的反面。
+  { name: "cancel_agents", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
   { name: "remember", specFace: "static", workerReachable: "write", reachableWhenReadOnly: false, mainSessionSideEffect: false },
   // impact_query 的 worker 三处同源另有 3 条变异锚点守着，登记进表 = 再多一道静态兜底
   { name: "impact_query", specFace: "runtime", workerReachable: "both", reachableWhenReadOnly: true, mainSessionSideEffect: false },

@@ -277,6 +277,23 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         ),
       },
     },
+    // 动态调整的另一半：派得出去也要撤得回来（只 abort 点名的那几个，绝不"顺手全停"）。
+    // 不写这个规格时，join 文案里那句"可再取消"就是一扇不存在的门。
+    {
+      type: "function",
+      function: {
+        name: "cancel_agents",
+        description:
+          "撤掉自己派出的子 agent（方向变了 / 派重了 / 它已不必要）：只停点名那几个，其余继续跑。" +
+          "回执带在途 id 与 worker_cap，据此决定还要不要再拆。",
+        parameters: obj(
+          {
+            agent_ids: { type: "array", items: { type: "string" }, description: "要撤的 agent_id（必须点名，没有「全停」的隐含语义）" },
+          },
+          ["agent_ids"],
+        ),
+      },
+    },
     // M2d：记忆写入唯一入口（§8.1.4）；只读档随写向工具一并摘除
     {
       type: "function",
@@ -299,10 +316,11 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
     },
   ];
   if (mode === "read-only") {
-    // 只读档连同编排原语一并摘除：spawn_agent 靠 SIDE_EFFECT_TOOLS，wait_for_agents 不是写向工具
-    // （不该被方案门挡），所以只能显式点名——漏摘就是「模型看得见、执行面白名单挡着」那类两头断。
+    // 只读档连同编排原语一并摘除：spawn_agent 靠 SIDE_EFFECT_TOOLS，wait_for_agents / cancel_agents
+    // 不是写向工具（不该被方案门挡），所以只能显式点名——漏摘就是「模型看得见、执行面白名单挡着」那类两头断。
     return specs.filter((s) =>
-      !isSideEffectTool(s.function.name) && s.function.name !== "remember" && s.function.name !== "wait_for_agents",
+      !isSideEffectTool(s.function.name) && s.function.name !== "remember" &&
+      s.function.name !== "wait_for_agents" && s.function.name !== "cancel_agents",
     );
   }
   return specs;

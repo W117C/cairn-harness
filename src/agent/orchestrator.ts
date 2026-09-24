@@ -787,6 +787,9 @@ export class Orchestrator {
         max_turns: maxTurns,
         // W3②：派工时就把价格摆在模型面前（不报价 ⇒ 「要不要再拆一个 worker」只能凭感觉）
         price: priceTagText(price, this.workerSpentSoFarUsd()),
+        // 「自己安排」要有分母：在途几个 / 上限几个。不报这两个数，模型只能撞到拒绝才知道有闸。
+        in_flight: this.inFlightAgents().length,
+        worker_cap: MAX_CONCURRENT_WORKERS,
         ...(worktree ? { worktree, base_commit: baseCommit } : {}),
       }),
     };
@@ -887,6 +890,29 @@ export class Orchestrator {
     }
     w.controller.abort();
     return true;
+  }
+
+  /** 仍在途（未终态）的 agent_id 清单。给模型面用：回执报"手上还有几个"，拒绝语报"哪些才是真的"。 */
+  inFlightAgents(): string[] {
+    const out: string[] = [];
+    for (const w of this.workers.values()) if (!w.finished) out.push(w.agentId);
+    return out;
+  }
+
+  /** 模型侧按 id 撤自己派出去的活（能力 4 的动态调整；与面板/IPC 的取消走**同一个** cancelAgent，
+   *  另起一条"取消"的路 = 两处口径必漂）。分类三分支都报：把"已结束"混进"撤掉了"会让模型以为省下了额度。 */
+  cancelAgents(ids: readonly string[]): { cancelled: string[]; terminal: string[]; unknown: string[] } {
+    const cancelled: string[] = [];
+    const terminal: string[] = [];
+    const unknown: string[] = [];
+    for (const id of ids) {
+      const w = this.workers.get(id);
+      if (!w) { unknown.push(id); continue; }
+      if (w.finished) { terminal.push(id); continue; }
+      if (this.cancelAgent(id)) cancelled.push(id);
+      else terminal.push(id); // 竞争窗口：刚被查过又落定了，不谎报成"撤掉了"
+    }
+    return { cancelled, terminal, unknown };
   }
 
   /** 取消全树（主会话取消沿树全 abort，§4.4.2）。返回实际取消的 agent_id 清单。

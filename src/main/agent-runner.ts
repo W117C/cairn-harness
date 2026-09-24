@@ -26,6 +26,7 @@ import { SolpiRuntime, privateSessionDirectory, removePrivateSessionData, observ
 import { affectedFilesOf, defaultImpactHook } from "../agent/impact/index.js";
 import { createImpactQueryTool, impactQuerySpec } from "../tools/impact-query";
 import { createWaitForAgentsTool } from "../tools/wait_for_agents";
+import { createCancelAgentsTool } from "../tools/cancel_agents";
 import { run_shell } from "../tools/run_shell";
 import type { AgentEvent, ClarifyAnswerMap, EventLog, GoalTurnOrigin } from "../events";
 import { frozenJudgePathSet } from "../frozen";
@@ -816,6 +817,9 @@ export function installAppTools(): void {
   // 走 currentOrchestrator() 而不是直接读 activeOrchestrator：H3-P3 的 RunScope 并发隔离靠它，
   // 绕过去会让并发的 unattended run 抢到交互面的编排器（那是 D-2 立项专门修掉的洞）。
   (TOOLS as unknown as Record<string, Tool>).wait_for_agents = createWaitForAgentsTool(() => currentOrchestrator());
+  // 动态调整的另一半：模型自己撤自己派出的 worker（同一注入面、同一 fail-closed 口径）。
+  // 缺它时 join 文案里那句"可再取消"就是一扇不存在的门，而"派错了只能干等它跑完"是能力 4 的反面。
+  (TOOLS as unknown as Record<string, Tool>).cancel_agents = createCancelAgentsTool(() => currentOrchestrator());
   // M4a：agent 工具五件（§12.2.5）——automation_create/update/delete/run_now/list。
   // 一切变更走审批卡（§10.4）；prompt 是持久化攻击面：4k 上限（校验拒）+ 审批卡全文展示（args 原样进审批卡）；
   // workspace-write 及以上档位 → 审批卡红字「将无人值守执行」（§12.2.5）；调度器未初始化 = fail-closed。

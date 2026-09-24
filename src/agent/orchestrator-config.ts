@@ -16,6 +16,8 @@ export const WORKER_TOOL_TABLE: readonly string[] = ["read_file", "grep", "glob"
 /** worker 工具表禁入名单（验收断言面：深度闸 + 写闸 + M4a automation_*——定时任务里再嵌套定时 = 配置面失控，§12.2.5）。 */
 export const WORKER_FORBIDDEN_TOOLS: readonly string[] = [
   "spawn_agent", "write_file", "edit_file", "run_shell", "clarify", "propose_plan", "verify", "remember",
+  // 编排面恒留主会话：worker 能撤兄弟 = 深度恒 1 从后门破（名单驱动，而非"碰巧不在 allow 表"）
+  "cancel_agents",
   // P0-1 同源补漏：read 面的实际排除靠 workerToolSpecs 的 allow 列表（本就不含 shell_rw），
   // 但本常量是「验收断言面」——漏了 shell_rw，J7c 就退化成「碰巧为真」而非名单驱动。
   "shell_rw",

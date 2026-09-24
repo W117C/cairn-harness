@@ -208,7 +208,7 @@ export interface JoinPayloadBody {
 export function renderJoinPayload(body: JoinPayloadBody): string {
   const notes: string[] = [];
   if (body.cancelled) notes.push("主会话已取消：未收敛的 worker 已停止派发后续轮");
-  if (body.timedOut.length > 0) notes.push("超时未收敛：" + body.timedOut.join("、") + "（状态仍为 running，可再 wait 或 cancelAgent）");
+  if (body.timedOut.length > 0) notes.push("超时未收敛：" + body.timedOut.join("、") + "（状态仍为 running，可再 wait_for_agents 或 cancel_agents）");
   if (body.degraded.length > 0) notes.push(
     "摘要因整批帽省略：" + body.degraded.join("、") + " —— 对其中单个 agent_id 再调一次 wait_for_agents 即可取回其摘要",
   );
