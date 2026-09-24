@@ -386,6 +386,28 @@ const CLAIMS_24: Claim[] = [
     claim: "外部基准今天量不了：仓库里没有 eval-snapshots/，缺的是快照与真钱，不是分数",
     holds: () => !existsSync(join(ROOT, "eval-snapshots")),
     how: "真读盘（目录不存在 ⇒ 条目成立）；有人 fetch 进快照后本条转假 → 去该页 §四 划掉第 2 步" },
+  { page: "39", id: "C1",
+    claim: "用户级角色来源只有两个：USER_AGENT_SOURCES 含 .dsh/agents 与 .claude/agents，且该数组里没有项目级 .agent",
+    holds: () => {
+      const src = read("src/agent/roles/user-agents.ts");
+      const at = src.indexOf("export const USER_AGENT_SOURCES");
+      const end = src.indexOf("];", at);
+      if (at < 0 || end < 0) return false; // 清单搬走了 ⇒ 本条转假，不是"看不见就算成立"
+      const slice = src.slice(at, end);
+      return slice.includes('join(".dsh", "agents")') && slice.includes('join(".claude", "agents")') &&
+        !/["']\.agent["']/.test(slice);
+    },
+    how: "只切数组字面量再判（模块头散文里也写 `.agent/agents/`，整文件扫会把「刻意不开」读成已开）；" +
+      "两侧成对：两个用户级来源必须在、项目级必须不在 ⇒ 文件缺失/改名只能落 false" },
+  { page: "39", id: "C2",
+    claim: "产品侧不需要新接缝：agent-runner 的 agentRoleFor 只有一个出口 findAgentRole（两条来源一条查找面）",
+    holds: () => {
+      const t = read("src/main/agent-runner.ts");
+      const seams = (t.match(/findAgentRole/g) ?? []).length;
+      return seams === 1 && /agentRoleFor:[^\n]*findAgentRole/.test(t);
+    },
+    how: "数出现次数 + 判它接在 agentRoleFor 上；改成第二个口径（另写一条读角色的路）时次数≠1 ⇒ 本条转假 " +
+      "→ 回该页 §二 复核「一条查找面」是否还成立" },
 ];
 
 const ALL_CLAIMS = [...CLAIMS, ...CLAIMS_24];
