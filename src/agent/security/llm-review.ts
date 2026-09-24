@@ -7,7 +7,7 @@
 // BYOK 计费：M0_API_KEY 在场才跑；缺席显式 skipped（不静默）。
 import type { SecurityFinding } from "../../events";
 import { streamGlm, type GlmMessage } from "../../providers/glm";
-import { escapeControlTags } from "../memory/inject";
+import { escapeControlTags } from "../control-tags";
 import { validateFinding, filterFalsePositives, redactSecrets, isSecurityConfidence } from "./scan";
 
 /** LLM 审查上下文上限（diff + 上下文合计；超出截断——审查不是全量转载）。 */

@@ -3,7 +3,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "nod
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildMemoryInjection, escapeControlTags, extractExternalRefs, isExternalRef, MEMORY_TOKEN_BUDGET_DEFAULT } from "../src/agent/memory/inject";
+import { buildMemoryInjection, extractExternalRefs, isExternalRef, MEMORY_TOKEN_BUDGET_DEFAULT } from "../src/agent/memory/inject";
+import { escapeControlTags } from "../src/agent/control-tags";
 import { estimateTextTokens } from "../src/agent/text-budget";
 import { checkIndexLimit, indexLine, initMemoryHome, parseTopicDoc, renderTopicDoc, topicDocRoundtrip, upsertIndexLine } from "../src/agent/memory/store";
 

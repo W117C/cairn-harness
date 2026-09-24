@@ -1,7 +1,7 @@
 import { isEnvVerifyCause } from "../events";
 import { permissionModeRank } from "../permissions/modes";
 import type { AgentEvent, AgentPermissionMode, SecurityFinding, WorkerEvidence } from "../events";
-import { escapeControlTags } from "./memory/inject";
+import { escapeControlTags } from "./control-tags";
 import { SUMMARY_TOKEN_CAP } from "./orchestrator-config";
 import { redactSecrets } from "./security/scan";
 import { truncateToTokenBudget } from "./text-budget";
