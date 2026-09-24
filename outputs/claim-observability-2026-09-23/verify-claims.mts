@@ -20,6 +20,8 @@ import { buildSandboxProfile } from "../../src/main/sandbox";
 import { redactSecrets } from "../../src/agent/security/scan";
 import { evaluate, newAutonomySession } from "../../src/permissions/autonomy";
 import { unconsumedSpawnArgs } from "../../src/agent/spawn-surface";
+import { resolveToolName, TOOL_NAMES } from "../../src/tools/base";
+import { INJECTED_TOOLS } from "../../src/agent/tool-surface";
 import { gateToolSpecs as gateToolSpecs42 } from "../../src/agent/glm-session";
 import ts from "typescript";
 import { selfCheck as stagnationSelfCheck } from "../../scripts/replay/stagnation-burn";
@@ -501,6 +503,17 @@ const CLAIMS_24: Claim[] = [
     claim: "把「未归因红拍」并进代码类，stagnation-burn 的自检第 ⑦⑧⑧b 条立刻红（尺会对着老语料印出「该接」）",
     holds: () => stagnationSelfCheck().length === 0,
     how: "直接 import 那把尺导出的 selfCheck()：八条合成对照必须全过（三态分栏 + 裁决两条反向分支）" },
+  { page: "44", id: "C1",
+    claim: "一条 skill 在 `disallowed-tools` 里写 `automation_create`，今天会被当成不存在的名字丢掉（deny 收不到它）",
+    // 跑 shipped 实现而不是读源码文本：这条一旦被修（申报域扩到整张模型面），谓词转假 ⇒ 本机器红并点名。
+    holds: () => resolveToolName("automation_create") === null,
+    how: "resolveToolName(「automation_create」) 仍返回 null ⇒ §9.3 的申报面够不到注入工具；" +
+      "改成认得它（返回该名字）时本条转假 → 回第 44 页 §四 复核「七把免疫」是否还在" },
+  { page: "44", id: "C2",
+    claim: "注入面里有名字的工具体在 `TOOL_NAMES` 之外 ⇒ 申报域与模型面不同源（今天是 14 条全在外）",
+    holds: () => INJECTED_TOOLS.some((t) => !(TOOL_NAMES as readonly string[]).includes(t.name)),
+    how: "数 INJECTED_TOOLS 里不在 TOOL_NAMES 的行数（分母由两张现成表相减，不手抄）；" +
+      "若将来把注入工具并进 TOOL_NAMES 或改走「申报域=整张面」，本条转假 ⇒ 正是第 44 页 §五 那两个候选改法之一的落地信号" },
 ];
 
 const ALL_CLAIMS = [...CLAIMS, ...CLAIMS_24];
