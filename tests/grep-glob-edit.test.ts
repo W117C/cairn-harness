@@ -102,6 +102,33 @@ describe("零命中的扫描面说明（grep 与 glob 共用一句政策）", ()
     const filesWide = await glob.run({ pattern: "*.ts" }, ctx);
     expect(filesWide.output).not.toContain("hay.ts");
   });
+
+  it("逃生口对 glob **自己排的**噪声目录也成立：显式 path 指进 node_modules 必须列得出文件", async () => {
+    const ctx = await newCtx();
+    await mkdir(join(ws, "node_modules", "pkg"), { recursive: true });
+    await writeFile(join(ws, "node_modules", "pkg", "index.js"), "{}", "utf8");
+    await writeFile(join(ws, "src.ts"), "x", "utf8");
+    // 默认扫描面确实排掉它——这正是那条说明让模型「把 path 显式指进去」的前提
+    const wide = await glob.run({ pattern: "**/*.js" }, ctx);
+    expect(wide.output).not.toContain("index.js");
+    // 模型照做了：同一把工具、同一个 pattern。看得见才是逃生口，看不见就是说明在教一条走不通的路。
+    const deep = await glob.run({ pattern: "**/*.js", path: "node_modules" }, ctx);
+    expect(deep.output).toContain("node_modules/pkg/index.js");
+    // 指到子目录同一条（说明那句是「那个目录/文件」，不是只指顶层）
+    const deeper = await glob.run({ pattern: "**/*.js", path: "./node_modules/pkg" }, ctx);
+    expect(deeper.output).toContain("pkg/index.js");
+  });
+
+  it("反向：显式 path 在别处时，噪声排除一字不减（撤排除只服务于「点名要进那个目录」）", async () => {
+    const ctx = await newCtx();
+    await mkdir(join(ws, "src", "node_modules", "vendored"), { recursive: true });
+    await mkdir(join(ws, "src", "keep"), { recursive: true });
+    await writeFile(join(ws, "src", "node_modules", "vendored", "noise.js"), "{}", "utf8");
+    await writeFile(join(ws, "src", "keep", "real.ts"), "x", "utf8");
+    const res = await glob.run({ pattern: "**/*", path: "src" }, ctx);
+    expect(res.output).toContain("src/keep/real.ts");
+    expect(res.output).not.toContain("noise.js");
+  });
 });
 
 describe("glob（M2a 任务 2）", () => {

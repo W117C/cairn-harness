@@ -5,7 +5,7 @@ import { sanitizedEnv } from "./process.js";
 import { rgBinary, rgNegativeNote } from "./ripgrep.js";
 
 const MAX_FILES = 100;
-const NOISE_DIRS = ["**/.git/**", "**/node_modules/**", "**/dist/**"];
+const NOISE_DIRS = [".git", "node_modules", "dist"];
 
 export const glob: Tool = {
   name: "glob",
@@ -15,7 +15,12 @@ export const glob: Tool = {
     const abs = rel === "." ? ctx.workspace : resolveInWorkspace(ctx.workspace, rel, "glob");
     // rg --files 天然尊重 .gitignore；噪音目录显式排除。注意 rg 多个 --glob 按「后写优先」裁决，
     // 排除规则必须排在用户 pattern 之后，否则会被 pattern 覆盖（实测坑）。
-    const rgArgs = ["--files", "--hidden", "--glob", pattern, ...NOISE_DIRS.flatMap((g) => ["--glob", "!" + g]), abs];
+    // 但 --glob 的排除**不像 .gitignore 那样让位于显式路径**（实测：`--files node_modules`
+    // 在同一份命令形状下返回空、退出码 0）⇒ 模型点名要进某个噪声目录时必须撤掉那一条，
+    // 否则阴性说明里那句「把 path 显式指到那个目录」对这三类目录是一条走不通的路。
+    const pointed = relative(resolve(ctx.workspace), resolve(abs)).split(sep).join("/");
+    const noise = NOISE_DIRS.filter((d) => pointed !== d && !pointed.startsWith(d + "/"));
+    const rgArgs = ["--files", "--hidden", "--glob", pattern, ...noise.flatMap((d) => ["--glob", "!**/" + d + "/**"]), abs];
     const files: string[] = await new Promise((resolvePromise, rejectPromise) => {
       const child = spawn(rgBinary(), rgArgs, { cwd: ctx.workspace, env: sanitizedEnv() }); // D1：env 消毒
       let stdout = "";

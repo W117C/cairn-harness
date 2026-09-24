@@ -28,6 +28,10 @@ export function rgBinary(): string {
  * 括号里那句逃生口是**实测**的：显式给出的路径不受忽略规则挡
  * （`rg PATTERN .` 看不见 `gen/x.ts`，`rg PATTERN gen` 与 `rg PATTERN .env` 都看得见），
  * 所以不需要新增工具参数，也不需要 `--no-ignore`（那会把 node_modules 一并拽进扫描面）。
+ * ⚠️ 但它**只挡 `.gitignore` 那一类**：本仓自己用 `--glob` 排掉的那三类目录（glob 工具排的
+ * `.git`/`node_modules`/`dist`）**不让位**（2026-09-24 实测：把 `node_modules` 显式作为搜索根
+ * 传进那条命令，返回空且退出码 0）。所以调用方若有自建排除，必须在被点名时自己撤掉那一条
+ * （glob 现在就是这么做的），否则这句会把模型指去一条走不通的路——而它恰恰是为不再走冤枉路才写的。
  * 参数化的只有「这个工具跳过了什么」那半句——写错一次就等于让说明本身变成谎。
  */
 export function rgNegativeNote(skipped: string): string {
