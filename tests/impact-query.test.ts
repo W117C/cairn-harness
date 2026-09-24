@@ -246,6 +246,89 @@ describe("可达性与成本不变量（「发货了没人接」的那类缺陷�
   });
 });
 
+// 「帽外」那条说明写着「调大 maxFiles 后重问」。2026-09-24 核出来这句**当时根本够不着**：
+// 规格里没有这个参数，工具也不读它，而建图侧 `BuildImpactOptions.maxFiles` 早就存在
+// ⇒ 引擎能做、说明在教、参数面没接线。模型照做就是白跑一轮（本轮缺陷与第 49 页同一族）。
+// 判卷按**三个建图出口各一格**：少一格就是「同族只硬化一支」（本仓第六/十二族反复踩的那条）。
+describe("maxFiles：说明里那句出路必须真够得着（三个建图出口 + 反向缺省 + 非法值）", () => {
+  // 靶子自造而非用 mini-repo：候选序由 **mtime 新→旧** 决定（scanSourceFilesAll 的排序），
+  // 把三个文件的 mtime 钉死后"谁在帽外"就是确定的，不依赖 fixture 的 checkout 时间。
+  let ws = "";
+  const CAPPED = 1; // 只收最新那一个 ⇒ new.js 在图内，mid.js / old.js 在帽外
+
+  async function mk(): Promise<ToolContext> {
+    ws = await mkdtemp(join(tmpdir(), "impact-query-cap-"));
+    await writeFile(join(ws, "old.js"), "export function legacyHelper(x) { return x + 1; }\n", "utf8");
+    await writeFile(join(ws, "mid.js"), "import { legacyHelper } from \"./old.js\";\nexport function midUse(y) { return legacyHelper(y); }\n", "utf8");
+    await writeFile(join(ws, "new.js"), "import { legacyHelper } from \"./old.js\";\nexport function newUse(z) { return legacyHelper(z); }\n", "utf8");
+    const stamp = async (name: string, ms: number): Promise<void> => {
+      const { utimes } = await import("node:fs/promises");
+      await utimes(join(ws, name), new Date(ms), new Date(ms));
+    };
+    await stamp("old.js", Date.UTC(2020, 0, 1));
+    await stamp("mid.js", Date.UTC(2021, 0, 1));
+    await stamp("new.js", Date.UTC(2022, 0, 1));
+    return { workspace: ws, emit: async () => {} };
+  }
+
+  it("file 出口：maxFiles 同时到得了建图与那句说明（报的是**实发**的帽，不是缺省 400）", async () => {
+    const c = await mk();
+    const r = await createImpactQueryTool(cacheDir).run({ file: "old.js", maxFiles: CAPPED }, c);
+    expect(r.ok).toBe(false);
+    expect(r.output).toContain("本次图只收录 " + String(CAPPED) + " 个"); // ← 建图与文案都吃到才算接上
+    expect(r.output).toContain("被文件数帽挤掉");
+    expect(r.output).toContain("调大 maxFiles");
+    expect(r.output).not.toContain("本次图只收录 " + String(MAX_FILES_DEFAULT) + " 个");
+  });
+
+  it("deps 出口：同一格（反向一跳走的是另一处建图调用，漏接就静默按 400 建图）", async () => {
+    const c = await mk();
+    const r = await createImpactQueryTool(cacheDir).run({ file: "old.js", deps: true, maxFiles: CAPPED }, c);
+    expect(r.ok).toBe(false);
+    expect(r.output).toContain("本次图只收录 " + String(CAPPED) + " 个");
+  });
+
+  it("symbol 出口：那句「被 N 帽挡在图外」里的 N 也必须是实发的帽（此处原先写死 MAX_FILES_DEFAULT）", async () => {
+    const c = await mk();
+    // legacyHelper 定义在 old.js（帽外）、被 new.js（帽内）引用 ⇒ 走「图里没有定义」那一支
+    const r = await createImpactQueryTool(cacheDir).run({ symbol: "legacyHelper", maxFiles: CAPPED }, c);
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("被 " + String(CAPPED) + " 帽");
+    expect(r.output, "写死缺省值＝调了帽还在报 400，模型照那句去理解图就错").not.toContain(String(MAX_FILES_DEFAULT));
+  });
+
+  it("反向缺省：不传 maxFiles 时行为逐字不变（目标在图内，且帽按缺省说）", async () => {
+    const c = await mk();
+    const r = await createImpactQueryTool(cacheDir).run({ file: "old.js" }, c);
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("跨文件调用点");
+    expect(r.output).not.toContain("maxFiles");
+  });
+
+  it("非法 maxFiles 点名拒绝（0/负/小数/字符串/超上限），不静默回落成缺省", async () => {
+    const c = await mk();
+    const t = createImpactQueryTool(cacheDir);
+    for (const bad of [0, -3, 2.5, "5", 1e9, Number.NaN]) {
+      await expect(t.run({ file: "old.js", maxFiles: bad }, c), "给了 " + String(bad) + " 必须报错而不是照旧建图")
+        .rejects.toThrow(/maxFiles/u);
+    }
+  });
+
+  // 参数面对账机（`measure-param-drift.mts`）比的是**规格 ↔ 代码里的 args.读取**，
+  //  structural 上看不见"输出文案里点名的那个参数存不存在"——本轮那条缺陷正好躲在这台机器的
+  // 面之外（声明与自读两边都是三个键，完全自洽，而文案在教第四个）。所以这里补一道
+  // **文案 ↔ 规格** 的握手：说明里写「调大 X」，X 就必须真的在规格上。
+  it("文案里点名的参数必须真的在规格上（说「调大 X」而 X 不存在＝教模型走一条走不通的路）", () => {
+    const declared = new Set(Object.keys(impactQuerySpec.parameters.properties));
+    for (const c of [1, MAX_FILES_DEFAULT + 5]) {
+      const note = graphAbsenceNote("src/x.ts", c, c + 3); // 帽外那一支
+      const named = [...note.matchAll(/调大 ([A-Za-z_][A-Za-z0-9_]*)/gu)].map((m) => m[1]);
+      expect(named.length, "帽外这一支必须仍给出「调帽」这条出路").toBeGreaterThan(0);
+      for (const key of named) expect(declared.has(key), `文案点名 ${String(key)}，规格里却没有它`).toBe(true);
+    }
+  });
+});
+
 async function fetchDirListing(): Promise<string[]> {
   const { readdir } = await import("node:fs/promises");
   const out: string[] = [];

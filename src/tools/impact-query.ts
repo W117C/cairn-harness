@@ -8,7 +8,7 @@
 //
 // 注入纪律（同 obs_recall）：只由 agent-runner 在 impactAnalysis 开启时**同时**注入实例与规格，
 // 不进静态工具表 ⇒ 关着的时候一次请求都不为该工具付字节。
-import { defaultImpactCacheDir, downward, fileImpact, upward, buildImpact, IMPACT_CONTEXT_FILES, IMPACT_CONTEXT_SYMBOLS_PER_FILE, type ImpactSite } from "../agent/impact/index.js";
+import { defaultImpactCacheDir, downward, fileImpact, upward, buildImpact, IMPACT_CONTEXT_FILES, IMPACT_CONTEXT_SYMBOLS_PER_FILE, IMPACT_MAX_FILES_CEILING, type ImpactSite } from "../agent/impact/index.js";
 import { access } from "node:fs/promises";
 import { MAX_FILES_DEFAULT, scanSourceFilesAll } from "../agent/map/build.js";
 import { SUPPORTED_EXTS } from "../agent/map/parse.js";
@@ -56,14 +56,30 @@ export function graphAbsenceNote(rel: string, cap: number, pos: number | null): 
  *  （`MAX_FILES_DEFAULT`），两边各写一个数字就会一处调、另一处静默说错话。
  *  「未知 ≠ 0」必须明写：面板侧早已钉死「缺席 ≠ 波及 0」，读端不该说反话。
  *  abs 由调用方解析好传进来（那边已经 resolveInWorkspace + 越界断言过，不重复解析也不重复设防）。 */
-async function notInGraphNote(workspace: string, rel: string, abs: string): Promise<string> {
+async function notInGraphNote(workspace: string, rel: string, abs: string, cap: number): Promise<string> {
   const ext = rel.includes(".") ? rel.slice(rel.lastIndexOf(".") + 1).toLowerCase() : "";
   if (!SUPPORTED_EXTS.includes(ext)) {
     return `impact_query: ${rel} 的后缀 .${ext} 不在符号图支持集内 ⇒ 波及半径未知（不等于 0）`;
   }
   const onDisk = await access(abs).then(() => true, () => false);
   if (!onDisk) return `impact_query: 该相对路径下没有文件 ⇒ 先 glob 确认（${rel}）`;
-  return graphAbsenceNote(rel, MAX_FILES_DEFAULT, await graphCandidatePosition(workspace, rel));
+  return graphAbsenceNote(rel, cap, await graphCandidatePosition(workspace, rel));
+}
+
+/** `maxFiles` 的取值口径（纯函数）。非法值一律**点名拒绝**，不静默回落成缺省：
+ *  「帽外」那条说明正教模型去调大它，若 0 / 小数 / 超上限被悄悄换成 400，
+ *  模型会以为自己的取值生效了——与本工具其他参数同一不妥协口径。
+ *  上界不是装饰：这一位现在由模型传，而建图是每文件一次 tree-sitter 解析（依据见
+ *  `IMPACT_MAX_FILES_CEILING` 的实测注释）。 */
+export function resolveMaxFiles(raw: unknown): number {
+  if (raw === undefined) return MAX_FILES_DEFAULT;
+  if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 1 || raw > IMPACT_MAX_FILES_CEILING) {
+    throw new ToolError(
+      `impact_query: maxFiles 必须是 1..${String(IMPACT_MAX_FILES_CEILING)} 的整数` +
+        `（收到 ${typeof raw} ${String(raw)}）——缺省是 ${String(MAX_FILES_DEFAULT)}，要更全的图就报一个上限内的数`,
+    );
+  }
+  return raw;
 }
 
 /** 该文件在**全量候选**（rg + 后缀过滤 + mtime 排序）里的位置：`-1` = 压根没进候选集，
@@ -114,6 +130,9 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
       if (wantDeps && fileArg === "") {
         throw new ToolError('impact_query: deps 只配合 file 使用——{"file":"src/x.js","deps":true} 列本文件引用的外部定义');
       }
+      // 帽在这一处解析一次，之后**三个建图出口共用同一个值**（symbol 支 / file 支 / deps 支）。
+      // 少接一支就是同族只硬化一支：那支会静默按缺省建图，而说明里的数字随之变成假话。
+      const maxFiles = resolveMaxFiles(args.maxFiles);
       if (fileArg !== "") {
         const abs = resolveInWorkspace(ctx.workspace, fileArg, "impact_query");
         assertNotAgentArea(fileArg, "impact_query");
@@ -121,13 +140,13 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
         if (wantDeps) {
           // 反向一跳：downward 早就有实现与单测，但模型面够不着 ⇒ 「跨模块理解依赖」只兑现了一半
           // （只有"谁在用我"，没有"我在用谁"）。图只建一次，不复用 fileImpact（它会再建一遍）。
-          const graph = await buildImpact({ workspace: ctx.workspace, cacheDir: dir });
+          const graph = await buildImpact({ workspace: ctx.workspace, cacheDir: dir, maxFiles });
           const rel = fileArg.replace(/\\/g, "/");
-          if (!graph.files.includes(rel)) return { ok: false, output: await notInGraphNote(ctx.workspace, rel, abs) };
+          if (!graph.files.includes(rel)) return { ok: false, output: await notInGraphNote(ctx.workspace, rel, abs, maxFiles) };
           return { ok: true, output: sitesNote("[impact] " + rel + " 引用的外部定义（我在调用谁）", downward(graph, rel), DEP_NOUN) };
         }
-        const r = await fileImpact(ctx.workspace, fileArg, dir);
-        if (r === null) return { ok: false, output: await notInGraphNote(ctx.workspace, fileArg.replace(/\\/g, "/"), abs) };
+        const r = await fileImpact(ctx.workspace, fileArg, dir, maxFiles);
+        if (r === null) return { ok: false, output: await notInGraphNote(ctx.workspace, fileArg.replace(/\\/g, "/"), abs, maxFiles) };
         // 只列**真的被外面引用到**的符号：fileImpact 的 symbols 含函数内局部名（base/boosted…），
         // 照抄会让一屏摘要塞满无关名字——多花 token 还不给可执行信息。
         const refSyms = [...new Set(r.up.map((s) => s.symbol))].sort();
@@ -137,7 +156,7 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
           : "");
         return { ok: true, output: sitesNote(head, r.up) };
       }
-      const graph = await buildImpact({ workspace: ctx.workspace, cacheDir: dir });
+      const graph = await buildImpact({ workspace: ctx.workspace, cacheDir: dir, maxFiles });
       const defined = graph.defs.get(symbol) ?? [];
       const refSites = graph.refs.get(symbol) ?? [];
       if (defined.length === 0 && refSites.length === 0) {
@@ -152,7 +171,7 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
         return {
           ok: true,
           output: `[impact] ${symbol}：这张图里没有任何文件**定义**它 ⇒ 它是外部或全局符号` +
-            `（定义在 node_modules、由环境注入，或定义它的那个文件被 ${String(MAX_FILES_DEFAULT)} 帽/忽略规则挡在图外——` +
+            `（定义在 node_modules、由环境注入，或定义它的那个文件被 ${String(maxFiles)} 帽/忽略规则挡在图外——` +
             `图内没有 ≠ 仓库里没有）。引用它的文件 ${String(files.size)} 个，但「改它会波及谁」这一问在此不适用；` +
             `要动它的行为请改调用处或直读它的来源`,
         };
@@ -173,6 +192,9 @@ export const impactQuerySpec = {
       symbol: { type: "string", description: "要查调用点的符号名" },
       file: { type: "string", description: "要查波及面的文件（workspace 相对路径）" },
       deps: { type: "boolean", description: "配合 file：改列本文件引用的外部定义（我在调用谁）" },
+      // 刻意只写这一句：规格是**每轮重送**的固定成本（帽 <600B 有测钉着），长解释留在
+      // 真用到它的那条报错文案里（graphAbsenceNote 会报出实发的帽与出路）。
+      maxFiles: { type: "number", description: `帽外时调大（缺省 ${String(MAX_FILES_DEFAULT)}）` },
     },
   },
 } as const;

@@ -56,6 +56,13 @@ export interface BuildImpactOptions {
   maxFiles?: number;
 }
 
+/** 帽的上限。为什么要有这一位：`maxFiles` 现在由**模型**传（`impact_query` 的读端说明让它调），
+ *  没有上界就等于给它一个"解析任意多个文件"的开关——建图是每文件一次 tree-sitter 解析。
+ *  取 5000 的依据是本机实测（2026-09-24，本仓 448 个候选源码冷建）：**每文件 ≈1.9ms**，
+ *  cap=400 → 827ms、全量 448 → 836ms ⇒ 5000 个 ≈10s，与一次模型往返（8.7–42s）同量级，
+ *  且 tags 缓存按文件 `{mtime,size}` 记账，第二次只解析新增那批。 */
+export const IMPACT_MAX_FILES_CEILING = 5000;
+
 // ---- tags 磁盘缓存（同 map/build.ts 模式：{mtimeMs,size} 指纹；缓存只在 cacheDir 内）----
 
 export function defaultImpactCacheDir(): string {
@@ -258,13 +265,16 @@ export interface FileImpactReport {
 }
 
 /** 计算单个被编辑文件的影响面。文件不在图内（未扫描/不支持后缀/不存在）→ null（不发事件）。
- *  grammar 环境级失败 → 抛 ImpactUnavailableError（调用方按 fail-loud 处理）。 */
+ *  grammar 环境级失败 → 抛 ImpactUnavailableError（调用方按 fail-loud 处理）。
+ *  `maxFiles` 是给**读端**留的透传位：`impact_query` 的三个建图出口必须吃同一个帽，
+ *  少接一支就等于那支静默按缺省建图，而同一句说明会对不同输入报出不同的数。 */
 export async function fileImpact(
   workspace: string,
   fileRel: string,
   cacheDir?: string,
+  maxFiles?: number,
 ): Promise<FileImpactReport | null> {
-  const graph = await buildImpact({ workspace, cacheDir });
+  const graph = await buildImpact({ workspace, cacheDir, maxFiles });
   const normalized = fileRel.replace(/\\/g, "/");
   if (!graph.files.includes(normalized)) return null;
   const symbols = [...graph.defs.keys()]
