@@ -12,13 +12,13 @@
  */
 import { describe, expect, it } from "vitest";
 import { mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises";
-import { readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent } from "../src/events";
 import { projectContext, type ContextMessage } from "../src/agent/context";
 import { read_file } from "../src/tools/read_file";
 import type { ToolContext } from "../src/tools/base";
+import { corpusSize, corpusToolResults } from "./helpers/real-corpus";
 
 /** 论文里 84% 那条通道的形状（载荷进外部文件）：控制标签 + 角色行 + 一句要执行的指令。 */
 const PAYLOAD = [
@@ -120,36 +120,12 @@ describe("L0 长在出口：五个入口各钉一条（补在工具里就会漏�
 });
 
 describe("L0 的代价：免费车这句挂在一把尺上", () => {
-  /** 取料面 = fixtures/no-progress 下的真轨迹（真工具输出，含 shell/测试文本）。
-   *  分母自己也要出声：读到 0 条 = 没有尺，不得当成「零膨胀通过」。 */
-  function corpusToolResults(): string[] {
-    const out: string[] = [];
-    const walk = (d: string): void => {
-      let names: string[];
-      try { names = readdirSync(d); } catch { return; }
-      for (const n of names) {
-        const p = join(d, n);
-        let isDir = false;
-        try { isDir = readdirSync(p).length >= 0; } catch { isDir = false; }
-        if (isDir) walk(p);
-        else if (n.endsWith(".jsonl")) {
-          for (const line of readFileSync(p, "utf8").split("\n")) {
-            if (!line.trim()) continue;
-            let e: Record<string, unknown>;
-            try { e = JSON.parse(line) as Record<string, unknown>; } catch { continue; }
-            if (e["type"] === "tool_result") out.push(String(e["output"] ?? ""));
-          }
-        }
-      }
-    };
-    walk("fixtures/no-progress");
-    return out;
-  }
-
+  // 取料面（真语料目录、逐条 tool_result）与合取门共读一份：tests/helpers/real-corpus.ts
+  // （原先这里自己抄了一只 walk —— 同一条不变量的两处实现，正是本仓判死过的形状）
   it("真语料逐条过投影：字节数一条不变（膨胀即红，防「全文 HTML 转义」那种假防护）", () => {
     const outputs = corpusToolResults();
     expect(outputs.length, "取料面读到 0 条 ⇒ 没有尺，不是通过").toBeGreaterThanOrEqual(50);
-    const rawBytes = outputs.reduce((a, b) => a + Buffer.byteLength(b, "utf8"), 0);
+    const rawBytes = corpusSize(outputs).bytes;
     expect(rawBytes, "取料面字节数为 0 ⇒ 没有尺").toBeGreaterThanOrEqual(16000);
 
     const events: AgentEvent[] = [user("t")];
