@@ -374,6 +374,14 @@ const CLAIMS_24: Claim[] = [
       return !r.text.includes("****") && r.text.includes(hex);
     },
     how: "真 redactSecrets：裸 hex 原样保留（若日后加规则覆盖它，本条转假 → 去该页 §六 记一次取舍反转）" },
+  { page: "37", id: "C1",
+    claim: "投影出口中和的四处出口今天各有锚点（≥4 条锚点以 instruction-provenance 判卷）",
+    holds: () => read("scripts/mutate-verify.mjs").split('test: "tests/instruction-provenance.test.ts"').length - 1 >= 4,
+    how: "数变异表里的 test: 字段出现次数（删/改名任一锚点 ⇒ 本条转假）" },
+  { page: "37", id: "C2",
+    claim: "泛转义那一侧仍无锚点：表里没有任何以 `const CONTROL_TAG` 为针脚的改法",
+    holds: () => !has("scripts/mutate-verify.mjs", /const CONTROL_TAG/u),
+    how: "真读 scripts/mutate-verify.mjs 文本断言 0 命中；补上锚点后本条转假 → 去该页 §四 划掉那一格" },
 ];
 
 const ALL_CLAIMS = [...CLAIMS, ...CLAIMS_24];
