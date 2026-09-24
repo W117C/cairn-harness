@@ -2526,7 +2526,7 @@ const MUTATIONS = [
     src: "src/agent/glm-session.ts",
     test: "tests/tool-surface-parity.test.ts",
     desc: "只读档不再显式摘除 wait_for_agents ⇒ 模型面看得见、执行面白名单挡着（本仓第 6 次的那类两头断）",
-    apply: (s) => s.replace("!isSideEffectTool(s.function.name) && s.function.name !== \"remember\" && s.function.name !== \"wait_for_agents\",", "!isSideEffectTool(s.function.name) && s.function.name !== \"remember\","),
+    apply: (s) => s.replace("s.function.name !== \"wait_for_agents\" && s.function.name !== \"cancel_agents\",", "s.function.name !== \"cancel_agents\","),
     expectFail: "只读档的摘除面与声明一致（只查静态表：运行期注入项由各自的开关管）",
   },
   {
