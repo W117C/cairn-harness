@@ -15,6 +15,8 @@ import { fileURLToPath } from "node:url";
 import { countUnverified, gateUnverified, scanAssertionHealth, scanDisjunctions, silentGreenGate, type ScanHit } from "./assertion-health";
 import { SCAN_EXT, trackedScriptFiles } from "./lib/scan-scope";
 import { verdictLine } from "./lib/gate-verdict";
+// 认证面自述（同族：判据在 ./lib/certified-face.ts，那边可单测；本文件只取料 + 打印）。
+import { certifiedFace, porcelainStatus } from "./lib/certified-face";
 // 跑一条命令 + 超时终止阶梯（同族：判据在 ./lib/gate-runner.ts 与 ./lib/gate-kill.ts，那边可单测；
 // 本文件只组命令）。旧实现把 spawn 与「超时直接整组 SIGKILL」写在这里，测不到也换不掉。
 import { runCommand, type GateResult } from "./lib/gate-runner";
@@ -179,6 +181,12 @@ async function main(): Promise<void> {
   console.log("== 汇总 ==");
   console.log("  绿 " + String(results.length - failed.length) + " / " + String(results.length) + "，红 " + String(failed.length) + (failed.length > 0 ? "（" + failed.map((f) => f.name).join("、") + "）" : ""));
   console.log("  逐道退出码：" + results.map((r) => r.name + "=" + String(r.code)).join(" "));
+  // 逐道退出码只说明「各道门怎么退的」，不说**取料的是哪棵树**。多会话并发是这里的常态，
+  // 少了这一行，「整表全 0」就会被读成「HEAD 全 0」（2026-09-24 实测为此花掉一天，第 44 页 §十三）。
+  const facePorcelain = porcelainStatus(ROOT);
+  console.log(facePorcelain === null
+    ? "  认证面：**没尺**（`git status --porcelain` 取不到）⇒ 不许把本表读成 HEAD 认证"
+    : certifiedFace(facePorcelain).line);
   if (scanHits.length > 0) console.log("  体检命中 " + String(scanHits.length) + " 条（见上）");
   if (silent.length > 0) {
     console.log("  ⚠️  绿而零输出的门（查了没发现 与 没查 同形，已按未证计入）：" + silent.join("、"));

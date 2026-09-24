@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { countUnverified, gateUnverified, scanDisjunctions, silentGreenGate } from "../scripts/assertion-health";
 import { VERDICT_MAX_CHARS, verdictLine } from "../scripts/lib/gate-verdict";
+import { certifiedFace } from "../scripts/lib/certified-face";
 
 describe("析取式弱断言扫描 scanDisjunctions（H-1）", () => {
   it("检出根级 || 断言（任一析取项成立即通过）", () => {
@@ -189,5 +190,37 @@ describe("门禁结论行 verdictLine", () => {
   it("一个字没吐 ⇒ 空串（那一格由 silentGreenGate 负责，不重复出声）", () => {
     expect(verdictLine("")).toBe("");
     expect(verdictLine("\n   \n")).toBe("");
+  });
+});
+
+describe("认证面声明 certifiedFace（整表绿的是哪一棵树，必须自己说）", () => {
+  // 为什么要有这一格（2026-09-24 第 44 页 §十三）：主树同一时刻有 313 项相对 HEAD 在飞，
+  // 其中 11 道门脚本被并发会话**删在盘上**（门读盘 ⇒ 对它们零信号）。整表打印逐道退出码却不说
+  // 认证的是工作树，于是「pnpm gates 全 0」被读成「HEAD 全 0」——今天为此花掉一整天做归因。
+  it("判卷四面（src/scripts/tests/fixtures）计入在飞，outputs/docs 不计", () => {
+    const r = certifiedFace(" M src/a.ts\n M scripts/g.ts\n?? tests/x.test.ts\n D fixtures/mock/m.jsonl\n M outputs/p.md\n M docs/d.md\n");
+    expect(r.total).toBe(6);
+    expect(r.judged).toBe(4);
+    expect(r.judgedDeleted).toBe(1);
+  });
+
+  it("有在飞判卷面 ⇒ 那句话必须说「不是 HEAD」并给出 HEAD 认证的出路", () => {
+    const r = certifiedFace(" M src/a.ts\n");
+    expect(r.line).toContain("工作树");
+    expect(r.line).toContain("不等于 HEAD");
+    expect(r.line).toContain("--direct");
+  });
+
+  it("判卷四面干净 ⇒ 明说本表即 HEAD 认证（不许被读成「没测」）", () => {
+    const r = certifiedFace(" M outputs/p.md\n?? notes.txt\n");
+    expect(r.judged).toBe(0);
+    expect(r.line).toContain("即 HEAD 认证");
+  });
+
+  it("带引号的非 ASCII 路径与 rename 行都要解析出首段（漏算会让那句话撒谎）", () => {
+    const quoted = ' M "outputs/head-audit-2026-09-24/01-\\344\\275\\223\\346\\243\\200.md"\n D "src/main/\\344\\270\\255\\346\\226\\207.ts"\n';
+    expect(certifiedFace(quoted).judged).toBe(1);
+    expect(certifiedFace(quoted).judgedDeleted).toBe(1);
+    expect(certifiedFace("R  src/old.ts -> src/new.ts\n").judged).toBe(1);
   });
 });
