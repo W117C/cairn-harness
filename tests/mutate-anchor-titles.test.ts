@@ -65,6 +65,25 @@ describe("checkAnchorTitles：漂移与误报的分界", () => {
     expect(checkAnchorTitles(rows, [src(["security_report 实测改投影：脏集要含它"])], {})).toEqual([]);
   });
 
+  it("柯里形式的 it.each([...])(\"标题\") 也要抽到（真表里 4 条就栽在这一格）", () => {
+    const rows = parseAnchors('{ id: "m5", test: "tests/x.test.ts", expectFail: "read 档：规格与实例同名同时出现", }');
+    const curried: TableSource = {
+      path: "tests/x.test.ts",
+      text: 'it.each(["read", "write"] as const)("%s 档：规格与实例同名同时出现", (mode) => {});',
+    };
+    expect(checkAnchorTitles(rows, [curried], {})).toEqual([]);
+  });
+
+  it("vitest 的 $插值标题（`$label`）按通配处理", () => {
+    const rows = parseAnchors('{ id: "m6", test: "tests/x.test.ts", expectFail: "零行为回退：缺省不开闸（未给 autoVerify） → 无 verify_result、请求数与旧行为同形", }');
+    const interpolated: TableSource = {
+      path: "tests/x.test.ts",
+      // 真实形状（tests/loop.test.ts:205）：it.each 的**表**里给 label，标题在第二个括号里用 $label 插值
+      text: '  it.each([\n    { label: "缺省不开闸（未给 autoVerify）", call: "write_file" },\n  ])("零行为回退：$label → 无 verify_result、请求数与旧行为同形", async () => {});',
+    };
+    expect(checkAnchorTitles(rows, [interpolated], {})).toEqual([]);
+  });
+
   it("非 vitest 面的锚点单列 unverified，不算漂移也不静默消失", () => {
     const rows = parseAnchors('{ id: "m4", test: "scripts/foo-check.ts", expectFail: "随便", }');
     const f = checkAnchorTitles(rows, [], {});
@@ -78,7 +97,7 @@ describe("真表：新漂移必须红，存量必须逐条点名", () => {
     expect(tableText).not.toBeNull();
   });
 
-  it("漂移集合 ⊆ 已登记存量；名单外多一条即红", () => {
+  it("真表：漂移必须为 0，且存量名单一旦不再命中就该被点名（不许静默豁免）", () => {
     if (tableText === null) return; // 上一条用例已经红了
     const rows = parseAnchors(tableText).filter((r) => r.test !== null && r.expectFail !== null);
     const sources: TableSource[] = [];
@@ -87,19 +106,25 @@ describe("真表：新漂移必须红，存量必须逐条点名", () => {
       if (text !== null) sources.push({ path: rel, text });
     }
     const findings = checkAnchorTitles(rows, sources, KNOWN_DRIFT);
-    expect(findings.filter((f) => f.kind === "drift").map((f) => f.id)).toEqual([]);
+    // 两条一起断言：漂移=有锚点指不到标题；stale=名单里躺着已经不再命中的豁免。
+    // 只断言前一条，就等于允许"把已知红登记成存量后 forever 不回看"。
+    expect(findings.filter((f) => f.kind === "drift" || f.kind === "stale-waiver").map((f) => f.kind + ":" + f.id)).toEqual([]);
   });
 
-  it("存量名单不许静默烂在这儿：登记了却不再命中 ⇒ stale 红", () => {
-    if (tableText === null) return;
-    const rows = parseAnchors(tableText);
-    const findings = checkAnchorTitles(rows, [], KNOWN_DRIFT);
-    const stale = findings.filter((f) => f.kind === "stale-waiver").map((f) => f.id);
-    // 空表取料时每条存量都会被判 stale，所以只要求"真表 + 空 sources"这一格里 stale 被点名出来
-    expect(stale.length).toBeGreaterThan(0);
+  it("豁免机制自己是活的：同一行标题，登记则免、不登记则红（两侧都要有）", () => {
+    const rows = parseAnchors('{ id: "m7", test: "tests/x.test.ts", expectFail: "已经不存在的标题", }');
+    const src: TableSource = { path: "tests/x.test.ts", text: 'it("现存标题", () => {});' };
+    expect(checkAnchorTitles(rows, [src], {}).map((f) => f.kind + ":" + f.id)).toEqual(["drift:m7"]);
+    expect(checkAnchorTitles(rows, [src], { "m7": "示例理由" })).toEqual([]);
+    // 反过来：登记了但不再命中 ⇒ stale 点名（这就是"豁免不许静默烂在这儿"）。
+    // 注意用一条**不漂移**的锚点来验：同一格里 drift 与 stale 会一起报，混着用就读不出谁在响。
+    const alive = parseAnchors('{ id: "m7", test: "tests/x.test.ts", expectFail: "现存标题", }');
+    expect(checkAnchorTitles(alive, [src], { "m8": "示例理由" }).map((f) => f.kind + ":" + f.id)).toEqual(["stale-waiver:m8"]);
   });
 
-  it("存量条数不写死在注释里，由本文件自己数（写死即漂移磁铁）", () => {
-    expect(Object.keys(KNOWN_DRIFT).length).toBeGreaterThan(0);
+  it("存量名单若有条目，每条必须带理由（空理由＝无声放行，本仓不接受）", () => {
+    for (const [id, reason] of Object.entries(KNOWN_DRIFT)) {
+      expect(reason.trim(), `KNOWN_DRIFT[${id}] 缺理由`).not.toBe("");
+    }
   });
 });

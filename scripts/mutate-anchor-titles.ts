@@ -55,16 +55,30 @@ export function parseAnchors(tableText: string): AnchorRow[] {
   return out;
 }
 
-const PLACEHOLDER = /(\$\{[\s\S]*?\}|%[sdijfovc#])/;
+const PLACEHOLDER = /(\$\{[\s\S]*?\}|\$[A-Za-z_]\w*|%[sdijfovc#])/;
 const WILDCARD = "@@wildcard@@";
 
-/** vitest 渲染出的标题：`it.each` / `%s` / `${…}` 会被填上实参 ⇒ 静态比必须把占位符换成通配。 */
-function titlePatterns(sourceText: string): RegExp[] {
-  const lits = [
-    ...[...sourceText.matchAll(/\b(?:it|test)(?:\.each|\.skip|\.todo|\.only|\.fails)?\s*\(\s*"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]!),
-    ...[...sourceText.matchAll(/\b(?:it|test)(?:\.each|\.skip|\.todo|\.only|\.fails)?\s*\(\s*`((?:[^`\\]|\\.)*)`/g)].map((m) => m[1]!),
+/** 抽源码里的用例标题。四支缺一不可：
+ *  直接 `it("…")` / 模板字面量 / **柯里 `it.each([...])("…")`** / 后两者的模板形式。
+ *  柯里那一支是第一版漏掉的：真表里 4 条被误判成漂移，全是 `it.each` 的标题（标题在第二个括号里）。 */
+function extractTitles(sourceText: string): string[] {
+  const MOD = String.raw`(?:\.each|\.skip|\.todo|\.only|\.fails|\.concurrent|\.sequential)?`;
+  const SQ = String.raw`"((?:[^"\\]|\\.)*)"`;
+  const BQ = "`((?:[^`\\\\]|\\\\.)*)`";
+  const EACH_TAIL = String.raw`\((?:[^()]|\([^()]*\))*\)\s*\(\s*`;
+  const pats = [
+    new RegExp(String.raw`\b(?:it|test)` + MOD + String.raw`\s*\(\s*` + SQ, "g"),
+    new RegExp(String.raw`\b(?:it|test)\.each\s*` + EACH_TAIL + SQ, "g"),
+    new RegExp(String.raw`\b(?:it|test)` + MOD + String.raw`\s*\(\s*` + BQ, "g"),
+    new RegExp(String.raw`\b(?:it|test)\.each\s*` + EACH_TAIL + BQ, "g"),
   ];
-  return lits.map((lit) => {
+  const out: string[] = [];
+  for (const re of pats) for (const m of sourceText.matchAll(re)) out.push(m[1]!);
+  return out;
+}
+
+function titlePatterns(sourceText: string): RegExp[] {
+  return extractTitles(sourceText).map((lit) => {
     const un = lit.replace(/\\(.)/g, "$1");
     // 顺序要紧：先按占位符切开、只转义字面段、再把通配拼回去。
     // 若先整体转义，`${…}` 会变成 `\$\{…\}`，之后就再也认不出它是占位符（第一版栽在这）。
@@ -83,18 +97,17 @@ function titlePresent(expectFail: string, sourceText: string): boolean {
   return titlePatterns(sourceText).some((re) => re.test(expectFail));
 }
 
-/** 存量：2026-09-25 静态读数登记，**逐条待判定**——本表只负责"别再多一条"和"少一条要出声"，
- *  不声称这 8 条的成因相同。成因要一条条读那个 test 文件才能定（规矩 93：注释里"另一个面也会踩到"是待证断言）。 */
-export const KNOWN_DRIFT: Readonly<Record<string, string>> = {
-  "auto-verify-default-on": "tests/loop.test.ts 里那句标题不在源码文本中 ⇒ 待判定（expectFail 含『→』，疑似散文式描述而非真标题）",
-  "worker-impact-spec-not-appended": "与下一条共用同一串 expectFail，至多一条能对上 ⇒ 待判定（同族：一份文案两处靶）",
-  "worker-impact-whitelist-not-appended": "见上一条",
-  "evidence-receipt-reports-known-completeness-as-unknown": "标题带 (observationPack=true/false)，已允许 %s/`${}` 通配仍不命中 ⇒ 待判定（疑似标题由 helper 拼接）",
-  "renderer-hides-worker-spend": "tests/renderer-child-admission.test.ts 无此串 ⇒ 待判定",
-  "panel-dirty-misses-review-and-progress-events": "expectFail 短到像片段（『security_report 实测改投影』）⇒ 待判定",
-  "panel-dirty-refreshes-on-inert-events": "同上（『error 实测零影响』）⇒ 待判定",
-  "redaction-stops-recursing-into-containers": "tests/stream-redaction.test.ts 无此串 ⇒ 待判定",
-};
+/** 存量名单：**当前为空**——这一栏本来记过 8 条"待判定"的漂移（`auto-verify-default-on`、
+ *  `worker-impact-spec-not-appended`、`renderer-hides-worker-spend`、`panel-dirty-*`、`redaction-stops-recursing-into-containers` 等）。
+ *  它们**全部是本闸自己的误判**，不是标题漂移：真标题写成柯里的 `it.each([...])("…%s…")` / `("…$label…")`，
+ *  第一版抽取只认 `it("…")`，标题落在第二个括号里就抽不到 ⇒ 一律判成"找不到对应标题"。
+ *  补上"柯里"与 `$插值` 两支后，**当前工作树那张 804 条的表**漂移归零。
+ *  另两面分开记（本闸读的是工作树，不是 HEAD）：
+ *    · HEAD（detached `6a06249`，963 条）仍报 **2 条真漂移**：`renderer-hides-worker-spend`、
+ *      `panel-dirty-misses-review-and-progress-events` —— 同属渲染层/面板族，正随 core-only 那笔在飞删除一起消失，
+ *      在那棵树里改无处可改（对方副本已删），所以**不修只记**；若桌面层方向回退，这两条要重判。
+ *  留这段话是给下一个人：**先问抽取面缺不缺形状，再考虑登记成存量**。 */
+export const KNOWN_DRIFT: Readonly<Record<string, string>> = {};
 
 export function checkAnchorTitles(
   rows: readonly AnchorRow[],
