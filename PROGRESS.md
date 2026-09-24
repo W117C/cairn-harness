@@ -2201,3 +2201,14 @@ $0.2020（standard）/ **$0.8080**（strong）——价表跨度 40 倍。旧算
   `verify-claims` 43:C1 同时转「已失效」（两道都会红，不是注释里的自律）。
 - **不动内核**：空载的接线只会造出新假绿。便宜的下一步是零钱的：让 `pnpm e2e`（mock）产出**带 cause 的**
   语料再重跑本面——三条分支（该接 / 仍未归因 / 全环境）已写死在尺里。见 `outputs/stagnation-wiring-2026-09-24/`。
+- 新增复跑面 **`replay:cascade-traffic`**（`scripts/replay/cascade-traffic.ts`）：它要回答的是 verify 归因
+  「三件错事」里唯一还没接的那一件——**环境红触发级联升档（换更贵的档重跑同一环）**。另两件已接并有账：
+  `loop.ts` 的 `if (!envBeat && chargedAttempts >= maxVerify)`（环境拍不占修复额度）、
+  `memory/distill.ts` 的 `isEnvVerifyCause`（环境拍不进沉淀）。
+  首份读数（20 个 jsonl）：**`routing_decision`=0 · `[cascade]` 播报=0 · 红拍 3 条里带 `cause` 字段 0 条**
+  ⇒ 裁决行「**不可测（路径零流量）**」，不是「环境红没白花钱」。
+  ⇒ **由读数裁否：不为它改 `orchestrator.ts` 的升档调用点**（那是本树最热的在飞文件之一，
+  且零流量上改出来的行为无法证伪）。**反转条件**：语料里出现 ≥1 次升档 ⇒ 本面自动翻成「该量」并印出
+  环境因占比，那时再给 `runCascade` 的 rung 加 `cause` 表达法。观察着：`tests/replay-cascade-traffic.test.ts` 6 条
+  （自检全过 / 零流量必判不可测 / 有流量必给占比 / 结构栏吃 shipped 唯一谓词 + 未归因反向格 / 播报面独立成立）。
+  同轮三次自踩都记在 `outputs/head-audit-2026-09-24/` §十一（手抄环境集合、isMain 守卫百分号、自检期望值写错被尺自己拦下）。

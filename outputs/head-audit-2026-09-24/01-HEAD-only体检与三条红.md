@@ -146,3 +146,33 @@ No desktop blocker is tracked in this **core-only checkout**」，且该改动**
 **认证读数（HEAD + 只我这三个文件，隔离树全量）**：`2673` 条里 **1 failed / 2672 passed**，
 exit **1**；剩那一条正是 §四 的 `tests/skill-tool-policy.test.ts`（**待 #19 裁决**，不是新缺陷）。
 主树侧：typecheck 0 错，`--check-needles` 阻断仍是原有那 5 条（我的 `probe.ts` 改动**没顶掉任何针脚**）。
+
+## 十一、"三件错事"的第三件由读数裁成暂不建（`replay:cascade-traffic`）
+
+verify 归因（judgment-layer §9 第 0 步）说环境红同时做三件错事：烧模型额度、触发升档换更贵的档、
+被跨会话沉淀计成失败。今天实测：**第 1、3 件已经接好了**——`src/agent/loop.ts` 的
+`if (!envBeat && chargedAttempts >= maxVerify)`（环境拍不占额度）与
+`src/agent/memory/distill.ts` 的 `isEnvVerifyCause`（注释明写"两面都要挡"）。
+**只有第 2 件没接**：`src/routing/cascade.ts` 里 `cause` 零命中，rung 的 `run()` 只交
+`{ok, output?}` ⇒ 级联升档不看红的原因。
+
+动它要改 `src/agent/orchestrator.ts` 的升档调用点（**本树最热的在飞文件之一**），所以先量分母：
+新增复跑面 `scripts/replay/cascade-traffic.ts`。今天读数：
+
+```
+取料 = 20 个 jsonl · 红拍=3 其中带 cause 字段=0 环境因（结构∪文案）=0
+不可测（路径零流量）：20 条流里 routing_decision=0 · [cascade] 播报=0
+```
+
+⇒ **裁：不在零流量的路上建机制**（与 pipeline 加环那一裁同形）。这里分子恒 0 只兼容
+"机制没被触发"，**不**兼容"环境红没白花钱"；现在动 `orchestrator.ts` 拿不到任何可证的效果，
+只会新增一格"装配存在但没人观测"。**反转条件（写死，别靠记忆）**：语料里出现 **≥1 次**升档
+（`routing_decision.reason` 含 `cascade`，或有 `[cascade]` 播报）⇒ 本面会从「不可测」翻成
+「该量」并直接印出环境因占比，那时再决定给 `runCascade` 的 rung 加 cause。
+
+同轮三条自造的坑（全是本仓老规则又响了一次）：① 第一版把环境因集合**手抄**进读数面，
+还漏了 `no-surface`/`hook-error`、多写了不存在的 `no-deps` ⇒ 改回复用仓内唯一谓词
+`isEnvVerifyCause`（规则 64/146）；② isMain 守卫第一版写 `import.meta.url === "file://" + argv[1]`，
+本仓路径含空格被百分号编码 ⇒ 脚本会"exit 0 且什么都不印"；③ 自检第一版期望值写错
+（合成流里只有 1 条 `routing_decision`，我写 2）⇒ **尺把自己拦在 exit 1**，
+这正是"每次跑都注入自检"要买的东西（规则 74）。

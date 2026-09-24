@@ -59,6 +59,11 @@ export const REPLAY_READINGS: readonly ReplayReading[] = [
     script: "scripts/replay/stagnation-burn.ts",
     answers: "该不该把无进展阶梯（R1）接进主 loop 的分母：真语料里停滞出现几条流、落在代码红还是环境红上、与修复额度打满同不同流",
   },
+  {
+    id: "cascade-traffic",
+    script: "scripts/replay/cascade-traffic.ts",
+    answers: "该不该给级联升档（runCascade / orchestrator 的升档调用点）加 verify cause 的分母：语料里升档出现几次、红拍里环境因占比多少；零流量时判「不可测」而非「没花钱」",
+  },
 ];
 
 export interface ReplayFacts {
