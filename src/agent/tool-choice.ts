@@ -6,6 +6,7 @@
 // 所以 unmeasurable 把撑不起的几条显式列出来，免得下游当分数读（真选对率要 W5a 靶场）；
 // ② 分母为 0 的比率一律 null 不是 0（未证 ≠ 通过）。
 import { stuckActionOf, stuckObservationOf } from "./stuck";
+import { mayHaveWrittenDisk } from "./write-face";
 import { hasWorkerAttribution } from "./context";
 import { parseScopedToolName } from "./plugins/mcp";
 import type { AgentEvent, ToolCallEvent } from "../events";
@@ -149,7 +150,6 @@ export function projectSession(events: readonly AgentEvent[]): SessionCounts {
         if (parseScopedToolName(e.name) !== null) out.mcpCalls++;
         if (e.name === WAIT_TOOL_NAME) out.waitCalls++;
         if (e.name === "verify") out.verifySelfCalls++;
-        if ((e.name === "write_file" || e.name === "edit_file") && !hasWorkerAttribution(e)) mainWrites++;
         break;
       }
       case "tool_result": {
@@ -159,6 +159,11 @@ export function projectSession(events: readonly AgentEvent[]): SessionCounts {
         // 带 gate 的失败 = 权限判定拦下的，不是工具跑挂了。混在一起计会让「模型选错工具」的读数
         // 被人拒批的次数污染（历史上正是这个口径把每次拒批都算成一次工具失败）。
         if (stat !== undefined && !e.ok && e.gate === undefined) stat.failures++;
+        // 「写过盘」= 这一笔**成功**、且统一写向判据说它会改本工作区的盘（`./write-face`，
+        // 与 loop 的收束闸、worker-report 的 lastWrite 同一只谓词）。
+        // 旧形状是在 tool_call 分支内联比 write_file/edit_file，两处都偏：
+        // 少认 shell ⇒「假完成率」分子恒 0；多认失败的 write_file ⇒ 没落盘也算写过。
+        if (e.ok && !hasWorkerAttribution(call) && mayHaveWrittenDisk(call.name, call.args ?? {})) mainWrites++;
         out.repeatOver++;
         const key = stuckActionOf(call.name, call.args) + "\n" + stuckObservationOf(e.output);
         if (seen.has(key)) out.repeats++; // 第 2 次及以后都算一次重复探测：每次都是整轮 token + 零新信息

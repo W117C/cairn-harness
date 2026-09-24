@@ -57,8 +57,28 @@ describe("tool-choice 投影", () => {
     expect(one([call("w", "write_file", { path: "x" }), res("w"), vres(true, false, "w1")]).verification.writeSessionsWithoutVerifyPass).toBe(1);
   });
 
-  it("自动验证拍单独计数（能力 5 的补拍不等于模型自调）", () => {
-    const r = one([call("v", "verify"), vres(true, true)]);
+  it("写盘判据与 `mayHaveWrittenDisk` 同一份：经 shell 落盘也算写过（否则「假完成率」分子漏掉一整条路）", () => {
+    // 正例：只经 shell 改盘、之后没有任何通过的 verify ⇒ 必须记成「写而不验」。
+    // 今天的形状是这里内联写死 write_file/edit_file（= 建 write-face 时点名的第②③份副本的第五份），
+    // 所以「模型用 sed/pnpm init 落盘然后收工」这类轨迹在这条读数里恒为 0。
+    const shellWrite = one([call("s", "run_shell", { command: "sed -i s/a/b/ src/a.ts" }), res("s")]);
+    expect(shellWrite.verification.writeSessions, "shell 写盘被漏认 ⇒ 分母恒 0，假完成率被系统性低估").toBe(1);
+    expect(shellWrite.verification.writeSessionsWithoutVerifyPass).toBe(1);
+    // 反例（另一侧必须钉住，否则"统一判据"会被读成"什么都算写"）：只读命令不得算写盘。
+    const shellRead = one([call("s", "run_shell", { command: "ls -la src" }), res("s")]);
+    expect(shellRead.verification.writeSessions, "只读命令不得算写盘").toBe(0);
+    // worker 侧的 shell 写不进主会话分母——与 write_file 那条同一口径（归因面不能被换掉）。
+    const workerShell = one([call("s", "run_shell", { command: "sed -i s/a/b/ x" }, "w1"), res("s")]);
+    expect(workerShell.verification.writeSessions).toBe(0);
+    // 第四格（这次一起改的语义，必须声明而不是悄悄改）：**失败/被拒的调用不算写过盘**。
+    // 旧形状在 tool_call 分支计数，所以一次被权限门拦掉的 write_file 也进了分母。
+    expect(one([call("w", "write_file", { path: "x" }), res("w", false)]).verification.writeSessions)
+      .toBe(0);
+    expect(one([call("s", "run_shell", { command: "rm -rf /tmp/a" }), res("s", false)]).verification.writeSessions)
+      .toBe(0);
+  });
+
+  it("自动验证拍单独计数（能力 5 的补拍不等于模型自调）", () => {    const r = one([call("v", "verify"), vres(true, true)]);
     expect(r.verification).toMatchObject({ selfCalls: 1, autoBeats: 1, passes: 1 });
   });
 
