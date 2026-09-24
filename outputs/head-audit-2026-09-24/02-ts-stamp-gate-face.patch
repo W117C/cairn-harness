@@ -1,0 +1,76 @@
+diff --git a/scripts/agents-check.ts b/scripts/agents-check.ts
+index eff74a6..b89e438 100644
+--- a/scripts/agents-check.ts
++++ b/scripts/agents-check.ts
+@@ -22,6 +22,7 @@ import { tmpdir } from "node:os";
+ import { join } from "node:path";
+ import { promisify } from "node:util";
+ import { createEventLog, replay, type AgentEvent } from "../src/events";
++import { stripTs } from "../tests/helpers/stream-equals";
+ import { projectContext } from "../src/agent/context";
+ import { projectTokenUsageByAgent, projectMergeTower } from "../src/renderer/projections";
+ import {
+@@ -201,7 +202,11 @@ try {
+     for (const e of legacy) await log.append(e);
+     const legacyRaw = await readFile(legacyPath, "utf8");
+     const legacyReplayed = await replay(legacyPath);
+-    check(JSON.stringify(legacyReplayed) === JSON.stringify(legacy), "A1 旧形态日志重放逐字无损");
++    check(
++      JSON.stringify(stripTs(legacyReplayed)) === JSON.stringify(legacy) &&
++        legacyReplayed.every((e) => typeof (e as { ts?: unknown }).ts === "number"),
++      "A1 旧形态日志重放逐字无损（剥落盘时钟戳 `ts` 一个键，且每条都必须带数字 ts）",
++    );
+     // 旧日志新代码重放投影 = 旧语义（M0–M2 零破坏）：agent_id 字段缺席 → 全部事件照旧进投影
+     const ctxLegacy = JSON.stringify(projectContext(legacyReplayed));
+     check(ctxLegacy.includes("修复 todo-app 测试") && ctxLegacy.includes("…源码…"), "A2 旧日志投影不变（user/tool 全在）");
+diff --git a/scripts/ipc-check.ts b/scripts/ipc-check.ts
+index 8827b76..d551c8d 100644
+--- a/scripts/ipc-check.ts
++++ b/scripts/ipc-check.ts
+@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
+ import { handleAgentRun, initSandbox } from "../src/main/agent-runner";
+ import { sha256MatchesFrozen } from "../src/frozen";
+ import { replay, type AgentEvent } from "../src/events";
++import { stripTs } from "../tests/helpers/stream-equals";
+ import { run_shell } from "../src/tools/run_shell";
+ 
+ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+@@ -78,8 +79,9 @@ console.log("[ipc:check] 丢弃内存态 → 从 JSONL 重放比对（" + logPat
+ const fromDisk = await replay(logPath);
+ assert(
+   fromDisk.length === collected.length &&
+-    JSON.stringify(fromDisk) === JSON.stringify(collected),
+-  "重放等价：事件数与内容与跑前一致（" + String(fromDisk.length) + " 条）",
++    JSON.stringify(stripTs(fromDisk)) === JSON.stringify(stripTs(collected)) &&
++    fromDisk.every((e) => typeof (e as { ts?: unknown }).ts === "number"),
++  "重放等价：事件数与内容与跑前一致（" + String(fromDisk.length) + " 条，剥 `ts` 一个键后逐字相同，且落盘每条都带数字 ts）",
+ );
+ 
+ const writeCall = collected.find((e) => e.type === "tool_call" && e.name === "write_file");
+diff --git a/scripts/schedule-check.ts b/scripts/schedule-check.ts
+index d3729c7..6d54282 100644
+--- a/scripts/schedule-check.ts
++++ b/scripts/schedule-check.ts
+@@ -18,6 +18,7 @@ import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promise
+ import { tmpdir } from "node:os";
+ import { join } from "node:path";
+ import { createEventLog, replay, type AgentEvent } from "../src/events";
++import { stripTs } from "../tests/helpers/stream-equals";
+ import { listSessions } from "../src/main/sessions";
+ // 中文标签唯一实现在渲染层投影（无 node 依赖，check 脚本可直接 import；panels-check 同例）
+ import { skipReasonLabel } from "../src/renderer/projections";
+@@ -472,8 +473,12 @@ try {
+     for (const e of evs) await l.append(e);
+     const raw = await readFile(p, "utf8");
+     const back = await replay(p);
+-    assert(JSON.stringify(back) === JSON.stringify(evs), "J1 三事件 append→replay 逐字无损（结构全字段保真）");
+-    assert(raw.trimEnd().endsWith(JSON.stringify(evs[3])), "J2 JSONL 行字节 = 事件原样序列化");
++    assert(
++      JSON.stringify(stripTs(back)) === JSON.stringify(evs) &&
++        back.every((e) => typeof (e as { ts?: unknown }).ts === "number"),
++      "J1 三事件 append→replay 逐字无损（剥 `ts` 一个键后结构全字段保真，且每条都带数字 ts）",
++    );
++    assert(raw.trimEnd().endsWith(JSON.stringify(back[3])), "J2 JSONL 行字节 = 事件原样序列化（含落盘戳，逐字节等于该事件自己的序列化）");
+   }
+ 
+   // ---- K 旧日志零破坏 ----

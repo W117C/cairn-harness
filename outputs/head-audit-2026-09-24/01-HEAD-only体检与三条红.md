@@ -299,7 +299,8 @@ J2 改成 `raw.endsWith(JSON.stringify(back[3]))`：它要钉的是"行字节 = 
 +      "A1 旧形态日志重放逐字无损（剥落盘时钟戳 `ts` 一个键，且每条都必须带数字 ts）",
 +    );
 ```
-（另两面同形状；`ipc-check` 是 `stripTs(fromDisk)` vs `stripTs(collected)`，`schedule-check` 是 J1 同形 + J2 换期望对象。）
+（另两面同形状；**完整三面补丁以文件形态存在：`outputs/head-audit-2026-09-24/02-ts-stamp-gate-face.patch`（76 行，`agents-check` + `ipc-check` + `schedule-check`），
+2026-09-24 实测 `git apply --check` 在干净 HEAD 的隔离树上可套用 ⇒ 一份没人能套的补丁只是传闻，所以先验再留。**）
 
 隔离树实测：`schedule-check` **67 ✅ / 0 ❌ exit 0**（原 65/2）、`agents-check` **259 ✅ / 0 ❌ exit 0**（原 258/1）、
 `ipc:check` **exit 0（分支 A 靶子修复）**；改完复跑 `--check-needles` ⇒ **阻断 0**（没顶掉任何针脚）、`typecheck` ⇒ **0 错**。
