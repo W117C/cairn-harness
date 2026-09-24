@@ -509,8 +509,8 @@ const MUTATIONS = [
     id: "remember-empty-change-same",
     src: "src/tools/remember.ts",
     test: "tests/remember.test.ts",
-    desc: "old_content===content 的空变更闸被拆（无写值改写落盘，modified 白滚）",
-    apply: (s) => s.replace("        if (oldContent === content) {", "        if (false) {"),
+    desc: "old_content===闸后 content 的空变更闸被拆（无写值改写落盘，modified 白滚）（2026-09-24 改指：79f6f66 起比较的是脱敏后的 safe.text）",
+    apply: (s) => s.replace("        if (oldContent === safe.text) {", "        if (false) {"),
     expectFail: "空变更：空白 content 与 old_content===content 都报 empty_change（无内容可沉淀）",
   },
   {
@@ -518,7 +518,7 @@ const MUTATIONS = [
     src: "src/tools/remember.ts",
     test: "tests/remember.test.ts",
     desc: "根文件分支的空变更闸被拆 ⇒ 把 MEMORY.md 原样再写一遍也算「有变更」并落盘；topic 分支与这根是两条独立闸，只拆一条另一条仍在（故须各一条锚点）",
-    apply: (s) => s.replace("    if (oldContent === content) {\n      throw new MemoryError(\"empty_change\"", "    if (false) {\n      throw new MemoryError(\"empty_change\""),
+    apply: (s) => s.replace("    if (oldContent === safe.text) {\n      throw new MemoryError(\"empty_change\"", "    if (false) {\n      throw new MemoryError(\"empty_change\""),
     expectFail: "根三文件 replace 的空变更同样报 empty_change（与 topic 分支是两道独立闸）",
   },
   {
