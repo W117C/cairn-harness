@@ -46,6 +46,7 @@ import {
 } from "./sequencer";
 import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckConfig, type StuckTurn } from "./stuck";
 import { decideSupervisor, ringVerdict, superviseApprovalDigest, type SupervisorAction } from "./supervisor";
+import { parseSuperviseContract } from "./supervise-contract";
 import type { RespawnArgs } from "./recovery";
 import {
   collectChangeSet,
@@ -1020,15 +1021,12 @@ export class Orchestrator {
     if (goal === "") {
       return { ok: false, output: "spawn_agent(supervise): task（goal）必填" };
     }
-    // 受限循环参数解析（fail-visible：非法参数拒绝，不静默回落）
-    const sup = (typeof args.supervise === "object" && args.supervise !== null ? args.supervise : {}) as Record<string, unknown>;
-    const mRaw = sup.maxStages;
-    const maxStages =
-      mRaw === undefined ? 6 : typeof mRaw === "number" && Number.isInteger(mRaw) && mRaw >= 1 && mRaw <= 20 ? mRaw : null;
-    if (maxStages === null) {
-      return { ok: false, output: "spawn_agent(supervise): supervise.maxStages 须为 1–20 整数（fail-visible 拒绝）" };
+    // 受限循环参数解析（契约面与规格面同源；fail-visible：非法/不可申报的键一律拒，不静默回落）
+    const sup = parseSuperviseContract(args.supervise);
+    if (sup.contract === null) {
+      return { ok: false, output: "spawn_agent(supervise): " + (sup.error ?? "契约解析失败") };
     }
-    const forbidden = parseStringList(sup.forbidden);
+    const { maxStages, forbidden } = sup.contract;
     const budget = this.opts.budget?.maxUsd ?? 0;
     // 审批双轨：批准 {goal, budget, forbidden, maxStages}（§5.1：与 pipeline stages 全表分开）
     const approved = await this.requestSuperviseApproval(callId, { goal, budget, forbidden, maxStages });

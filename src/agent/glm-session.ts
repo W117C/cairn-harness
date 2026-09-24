@@ -1,9 +1,10 @@
-// 暗卷用会话型 provider：src/providers 只读（M1a 定稿），本文件只调用 streamGlm 不改它。
-// 职责：从事件日志重建 OpenAI 兼容对话历史（含 tool_calls / tool 角色），把工具结果反馈回模型，
+// 会话型 provider：保持既有日志重组/compaction 逻辑，transport 可由统一 registry 路由到 GLM/OpenAI/Anthropic/Gemini。
+// 职责：从事件日志重建中立对话历史（含 tool_calls / tool 角色），把工具结果反馈回模型，
 // 使真实 GLM 能多轮调用 clarify / propose_plan / write_file / verify。
 import { createEventLog, replayIncremental, type AgentEvent, type CompactionUsage } from "../events";
 import { isSideEffectTool, isWriteCall, type McpGrade, type PermissionMode } from "../permissions";
-import { streamGlm, type GlmMessage, type GlmToolSpec } from "../providers/glm";
+import { streamGlm, type GlmMessage, type GlmOptions, type GlmToolSpec } from "../providers/glm";
+import { SUPERVISE_MODEL_FIELDS } from "./supervise-contract";
 import { DEFAULT_MODEL_TABLE, findSpecByNameOrId } from "../providers/registry";
 import type { ModelOutput, Provider, ProviderCall } from "../providers";
 import { projectContext, type ContextMessage } from "./context";
@@ -251,6 +252,18 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
             },
             depends_on: { type: "array", items: { type: "string" }, description: "依赖的 agent_id（上游终态后才放行）" },
             role: { type: "string", description: "按已注册角色跑这张 worker（内置 implement|review|test，或路由清单里列出的 plugin:agent-name / user:agent-name；未注册即拒绝）。不传=默认实现面。" },
+            // 受限循环契约的 properties 由契约模块生成：规格面与解析面同源。以前是"执行端读、
+            // 规格里没有"⇒ 模型只能猜嵌套（而策略文案已经在教它写 maxStages）。
+            supervise: {
+              type: "object",
+              description: "mode=supervise 的受限循环契约（goal 取 task；预算取会话成本闸，不在此申报）",
+              properties: Object.fromEntries(SUPERVISE_MODEL_FIELDS.map((f) => [
+                f.name,
+                f.type === "array"
+                  ? { type: "array", items: { type: "string" }, description: f.description }
+                  : { type: f.type, description: f.description },
+              ])),
+            },
             tier: { type: "string", description: "模型档位名（缺省走档位表路由；非法值 fail-visible 拒绝/钳制）" },
             max_turns: { type: "integer", description: "worker 轮次上限" },
           },
