@@ -11,10 +11,24 @@ import {
   measureHeadSurvival,
 } from "../src/agent/compaction-cost";
 import { DEFAULT_COMPACTION_CONFIG } from "../src/agent/compaction";
-import { createGlmSessionProvider, sessionToolSpecs } from "../src/agent/glm-session";
+import { createGlmSessionProvider } from "../src/agent/glm-session";
 import { createMockSummarizer } from "../src/agent/compaction";
 import { createEventLog } from "../src/events";
 import type { GlmMessage, GlmToolSpec } from "../src/providers/glm";
+
+/** **冻结每请求的固定开销**：这条 A/B 量的是压缩策略，不是"今天模型面有几把工具"。
+ *  原先取 `sessionToolSpecs()` 的活面 ⇒ 任何一次往模型面加工具的无关改动都会给两支同时加上
+ *  一个常数，而本样本 `inputLimit=12_000`，那个常数直接搬动触发点。
+ *  2026-09-24 实踩：模型面涨到 20 把 / 10,024 B 之后，`bd2cf3e` 把这条从绿掀成
+ *  「OFF 5 次 vs ON 6 次」（同一次实测里 ON 的累计字节是 **−35%**：68,960 → 44,756）；
+ *  把面去掉复跑，同一支策略又回到「OFF 3 vs ON 2」。
+ *  字节才是这条策略的钱轴，次数是护栏；护栏不许建在别人的分母上，所以面在这里必须是死的。 */
+const FROZEN_FACE: GlmToolSpec[] = [
+  {
+    type: "function",
+    function: { name: "read_file", description: "冻结面：尺寸恒定，内容与压缩无关", parameters: { type: "object", properties: { path: { type: "string" } } } },
+  },
+];
 
 const CONFIG = { ...DEFAULT_COMPACTION_CONFIG, inputLimit: 12_000, maxOutputReserve: 400, ratio: 0.35, retryBackoffMs: 1 };
 const expensive = { share: 0.029, stableChars: 161, prevChars: 5486 };
@@ -110,7 +124,7 @@ async function runSession(amortize: boolean | undefined, rounds = 8): Promise<{ 
         summarizer: createMockSummarizer("SUMMARY：前文已压缩为一段。".repeat(12)),
         ...(amortize === undefined ? {} : { amortizeRewriteCost: amortize }),
       },
-      requestFace: () => ({ tools: sessionToolSpecs({ mode: "default" }).specs, note: "" }),
+      requestFace: () => ({ tools: FROZEN_FACE, note: "" }),
       transport: async function* (messages: GlmMessage[], _o: unknown, _specs?: GlmToolSpec[]) {
         chars += JSON.stringify(messages).length;
         yield { type: "assistant_message" as const, content: "r" + String(roundIndex) };
@@ -141,11 +155,12 @@ describe("压缩重写代价摊销：接上真装配", () => {
     expect(off).toEqual(absent);
   }, 60_000);
 
-  it("开着 ⇒ 同一会话里压缩次数不更多、累计重写字符严格更少", async () => {
+  it("开着 ⇒ 同一会话里压缩次数严格更少、累计重写字符严格更少", async () => {
     const off = await runSession(false);
     const on = await runSession(true);
     expect(off.compactions).toBeGreaterThanOrEqual(2); // 样本必须真能连压两次，否则这条没分辨力
-    expect(on.compactions).toBeLessThanOrEqual(off.compactions);
+    // 严格少，不是「不更多」：护栏若只写 ≤，把摊销整条摘掉也照样绿（两支同面 ⇒ 同次数）。
+    expect(on.compactions).toBeLessThan(off.compactions);
     expect(on.chars).toBeLessThan(off.chars);
   }, 120_000);
 });

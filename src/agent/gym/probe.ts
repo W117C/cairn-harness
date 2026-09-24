@@ -160,6 +160,12 @@ export async function probeAssembly(opts: {
   mode?: PermissionMode;
   map?: boolean;
   extraTools?: GlmToolSpec[];
+  /** **整张工具面换成给定的一份**（缺省 undefined = 今天的活面，逐字节零回归）。
+   *  存在的理由：A/B 类读数（压缩次数、作废前缀）把「每请求固定开销」算进分母，而活面会随
+   *  无关工作增长——2026-09-24 实测 `a0db9ea` 只因为模型面多了一把 `refine_goal`，
+   *  就把 `gym-long-replay` 的「摊销开着压缩次数不更多」从绿掀成 5 vs 4。
+   *  护栏不许建在别人的分母上：这类 A/B 必须能把面钉死。 */
+  toolsOverride?: GlmToolSpec[];
   emit?: (e: AgentEvent) => Promise<void>;
   /** 压缩相关透传：长时程回放要能在不同压缩配置/摊销开关下量同一条链（`replayLongAssembly` 用）。 */
   compaction?: { config?: Partial<CompactionConfig>; summarizer?: unknown; amortizeRewriteCost?: boolean };
@@ -167,7 +173,7 @@ export async function probeAssembly(opts: {
 }): Promise<{ provider: Provider; report: () => AssemblyReport }> {
   const turns: AssemblyTurn[] = [];
   const { specs } = sessionToolSpecs({ mode: opts.mode ?? "default" });
-  const tools = opts.extraTools ? [...specs, ...opts.extraTools] : specs;
+  const tools = opts.toolsOverride ?? (opts.extraTools ? [...specs, ...opts.extraTools] : specs);
   const provider = createGlmSessionProvider(opts.eventsPath, {
     system: opts.system,
     workspace: opts.workspace,
@@ -242,6 +248,8 @@ export async function replayLongAssembly(opts: {
   compactionConfig?: Partial<CompactionConfig>;
   summarizer?: unknown;
   extraTools?: GlmToolSpec[];
+  /** 见 `probeAssembly` 的同名项：把每请求固定开销钉死，A/B 才只量压缩策略。 */
+  toolsOverride?: GlmToolSpec[];
 }): Promise<LongReplayReport> {
   const longTurns = opts.longTurns ?? 12;
   const growthChars = opts.growthChars ?? 8_000;
@@ -255,6 +263,7 @@ export async function replayLongAssembly(opts: {
     mode: opts.mode ?? "default",
     map: opts.map,
     extraTools: opts.extraTools,
+    toolsOverride: opts.toolsOverride,
     onLayer: (turn, layer) => { layers[turn - 1] = layer; },
     ...(opts.compactionConfig || opts.amortize !== undefined || opts.summarizer
       ? { compaction: {

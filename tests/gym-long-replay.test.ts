@@ -7,6 +7,30 @@ import { afterAll, describe, expect, it } from "vitest";
 import { replayLongAssembly, diffLongReplay } from "../src/agent/gym/probe";
 import { createMockSummarizer } from "../src/agent/compaction";
 import { GYM_PROBE_SYSTEM } from "../src/agent/gym/runner";
+import type { GlmToolSpec } from "../src/providers/glm";
+
+/** 冻结每请求的固定开销（`tests/compaction-cost.test.ts` 里那条的同款理由）：下面这条 A/B 拿
+ *  「压缩次数」「作废前缀字节」当判据，而两者都由「阈值 − 每请求常数」决定。取活面时，任何一次
+ *  往模型面加工具的无关改动都会搬动那个常数。2026-09-24 实测这条链的**有效窗口只有 ~640 B**：
+ *  · 活面 13 把 / 6,544 B（`dee8139`）⇒ 三条断言全绿；
+ *  · 活面 15 把 / 7,180 B（`a0db9ea`，多一把 `refine_goal`）⇒ 红成「OFF 4 vs ON 5」；
+ *  · 活面 20 把 / 10,024 B（HEAD，定时五件入库后）⇒ 同样红。
+ *  ⇒ 把它钉成**当初那档字节数**（13 把 × 描述重复 122 次 ⇒ 6,543 B）：判据一字未改，
+ *    只是不再被别人的工具面牵着走。窗口这么窄本身是这条读数的已知弱点（已记进第 44 页）。 */
+const FROZEN_FACE: GlmToolSpec[] = (() => {
+  const out: GlmToolSpec[] = [];
+  for (let i = 0; i < 13; i++) {
+    out.push({
+      type: "function",
+      function: {
+        name: "frozen_tool_" + String(i),
+        description: "冻结面".repeat(122), // 尺寸即判据的一部分：改这个数 = 改分母，须连读数一起复跑
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+      },
+    });
+  }
+  return out;
+})();
 
 /** 长时程回放（能力 11）：靶场原有 case 全是 `requests=1`，只在多轮生效的机制一次都触发不到
  *  （BLOCKED 裁决 3 的原话）。这里走的是该裁决留下的**方案②**——不动冻结判卷文件，只在临时目录里
@@ -54,6 +78,7 @@ async function runFor(id: string, amortize: boolean) {
     longTurns: 8,
     growthChars: 4_000,
     amortize,
+    toolsOverride: FROZEN_FACE,
     compactionConfig: COMPACT,
     summarizer: createMockSummarizer(SUMMARY),
   });
