@@ -88,9 +88,12 @@ for (const p of pages) {
 /** 已登记的 `{page, id}`：从 verify-claims.mts 里机器抽。 */
 const reg = read(join(OUT, "claim-observability-2026-09-23/verify-claims.mts"));
 const registered = new Set<string>();
+/** 谓词登记表里出现过的页号：用来反查「这页有没有一行能被本机器抽到」（见文末 orphanRegistry）。 */
+const registeredPages = new Set<string>();
 for (const m of reg.matchAll(/page:\s*"(\d+)[^"]*",\s*id:\s*"([^"]+)"/g)) {
   registered.add(`${m[1]}:${m[2].split("/")[0]}`);
   registered.add(`${m[1]}:${m[2]}`);
+  registeredPages.add(m[1]!);
 }
 
 /** 未登记项的显式理由表（缺理由 = 红）。分类三档：
@@ -144,4 +147,14 @@ if (unmappedQuiet.length > 0) {
   console.log(`   ℹ️  另有 ${unmappedQuiet.length} 个 dated 页目录没有页号，但没抽到判据行（没写 §四/判据表，或措辞不含「必红」）：` +
     `${unmappedQuiet.join(", ")} —— 只报不拦；它们哪天写了判据表就会转成红。`);
 }
-process.exit(missing === 0 && unmappedFatal.length === 0 ? 0 : 1);
+/** 两台机器必须互相看得见，否则「抽 0 行」与「没有欠账」在输出里长得一模一样。
+ *  反查方向：某页在 `verify-claims.mts` 里有可跑谓词，但本页的判据行**一条都没被抽到**
+ *  ⇒ 上面那个对齐循环根本没机会处理它（谓词永远不进 `missing`/`covered`，登记形同没登记）。
+ *  2026-09-24 实踩：第 44 页第一版把两条断言写成项目符号（不在 §四／`## 判据表` 段、不带「必红」），
+ *  于是本机器对它抽 0 行并 exit 0 —— 写页的人以为已登记，实际两侧从没握过手。 */
+const orphanRegistry = [...registeredPages].filter((p) => !byPage.has(p)).sort((a, b) => Number(a) - Number(b));
+console.log(orphanRegistry.length === 0
+  ? `   两侧握手：verify-claims 里出现过的 ${registeredPages.size} 个页号，全部能在对应页里抽到至少一条判据行。`
+  : `   ⚠️ **这些页在 verify-claims 里登记了可跑谓词，但本机器从页里抽不到任何判据行**：${orphanRegistry.join(", ")} ⇒ ` +
+    "登记与抽料两侧没握手，上面那行「无登记也无理由 0 条」对它们是**假的**（措辞/段落形状不合抽取器）。退出码已判红。");
+process.exit(missing === 0 && unmappedFatal.length === 0 && orphanRegistry.length === 0 ? 0 : 1);
