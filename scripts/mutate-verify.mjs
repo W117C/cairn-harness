@@ -237,6 +237,24 @@ const MUTATIONS = [
     expectFail: "超时后整棵进程树被杀（孙进程不留孤儿、不泄漏）",
   },
   {
+    // 第十二族「入口的两半」：同一条 env 消毒，process.ts 的缺省与 hooks.ts 的基础各是一支。
+    // 两支各自有判卷（tests/subprocess-env-face.test.ts 逐键相等 + 真子进程自印 env），故各钉一条。
+    id: "subprocess-env-default-inherits-host",
+    src: "src/tools/process.ts",
+    test: "tests/subprocess-env-face.test.ts",
+    desc: "省略 env 时的缺省从消毒白名单退回继承主进程 ⇒ BYOK 明文键交给每一个可 spawn 的子进程（fail-open）",
+    apply: (s) => s.replace("  const env = opts.env ?? sanitizedEnv();", "  const env = opts.env ?? process.env;"),
+    expectFail: "省略 env 时，子进程看不到主进程里的 BYOK 明文键",
+  },
+  {
+    id: "hook-env-base-inherits-host",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/subprocess-env-face.test.ts",
+    desc: "钩子基础 env 从 sanitizedEnv() 退回 process.env ⇒ 宿主密钥全量进插件子进程，且与另一支重新分家",
+    apply: (s) => s.replace("  for (const [k, v] of Object.entries(sanitizedEnv())) {", "  for (const [k, v] of Object.entries(process.env)) {"),
+    expectFail: "两侧都必须挡住密钥类变量（这一半今天已绿，属反向钉）",
+  },
+  {
     id: "autonomy-allow-critical",
     src: "src/permissions/autonomy.ts",
     test: "tests/autonomy.test.ts",
@@ -576,6 +594,24 @@ const MUTATIONS = [
     desc: "kind 默认操作映射反转（decision 默认 replace → 追加式日志被改写拒）",
     apply: (s) => s.replace("kind === \"architecture\" || kind === \"preference\" ? \"replace\" : \"append\"", "kind === \"architecture\" || kind === \"preference\" ? \"append\" : \"replace\""),
     expectFail: "architecture/decision/preference 映射 .agent/ 根三文件",
+  },
+  {
+    // §8.1.8 第 6 条承诺的落点（79f6f66）。取料点是**唯一的闸调用处**：四个写原语共用一份闸后文本，
+    // 所以摘掉这一行 = 四支一起漏（不必各钉一条，也不许只钉其中一支——rule 72 的反面）。
+    id: "remember-redact-gate-bypassed",
+    src: "src/tools/remember.ts",
+    test: "tests/remember-secret-hygiene.test.ts",
+    desc: "记忆写入不再过脱敏 pass ⇒ 凭据明文进 .agent/ 与全局层（跨会话、跨项目共享，且会沉淀进索引）",
+    apply: (s) => s.replace("    const safe = sanitizeForMemory(content);", "    const safe = { text: content, masked: 0 };"),
+    expectFail: "已知模式名密钥：落盘不得含明文，回执要点名脱敏",
+  },
+  {
+    id: "remember-blocked-not-rejected",
+    src: "src/tools/remember.ts",
+    test: "tests/remember-secret-hygiene.test.ts",
+    desc: "blocked 档从「拒绝」降级成「照常写」⇒ 私钥块被掩码后落盘，违背 scan.ts 既有契约（调用方应拒绝而非仅脱敏）",
+    apply: (s) => s.replace("  if (r.blocked) {", "  if (false) {"),
+    expectFail: "私钥块 = blocked：拒绝写入且盘上无痕（沿用 scan.ts 既有契约「调用方应拒绝而非仅脱敏」）",
   },
   {
     id: "sessions-delete-force-false",
