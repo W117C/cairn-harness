@@ -78,6 +78,9 @@ React 树已全量归档（2026-09-17 删 45 个 .tsx/测试 + 移除 react 全�
   实证：`grep -c '\binert\b' src/renderer/index.html` → **0**，而 `grep -cw "inert" …` → **2**。
   ⇒ 规则：**门禁判据一律写在 JS 侧**（可测、可断言）；命令行排查一律 `grep -E` + `[[:space:]]`、词边界用 `-w`。
   **永远不要信 shell grep 的 0 命中**——先怀疑模式写法，再去改代码。
+- **改过被变异锚点钉住的实现，提交前跑秒级只读的 `pnpm mutate-needles-check` 并归零**：`apply:` 的针脚是从源文件
+  逐字抄的，实现一改即 0 命中，而 0 命中的读法是「突变未生效」⇒ 整表照常绿、那几条已在假装守护。改指后逐条
+  `node scripts/mutate-verify.mjs <id>…` 验变异真被杀死；不变量由 N 处写法共同成立时，变异要一次废 N 支。
 
 ## 当前状态
 
