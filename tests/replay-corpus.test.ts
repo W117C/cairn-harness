@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { corpusProblem, GATED_TOOLS, isGatedTool, readJsonl, scanCorpus } from "../scripts/replay/corpus";
+import { corpusProblem, corpusRoots, GATED_TOOLS, isGatedTool, readJsonl, scanCorpus } from "../scripts/replay/corpus";
 
 describe("零语料体检：读到 0 不是读数，是没尺", () => {
   it("一个 .jsonl 也没扫到 ⇒ 报，且那句话点名扫描根与不存在的那一支", () => {
@@ -70,6 +70,32 @@ describe("扫描与逐行读盘（临时目录，不碰真语料）", () => {
       expect(readJsonl(file)).toEqual([{ a: 1 }, { b: 2 }]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("真会话根的字面形状：`Application Support` 是一个目录名，不是两级", () => {
+  // 2026-09-24 实踩：`corpusRoots()` 写成 join(homedir(),"Library","Application","Support",…)
+  // ⇒ 拼出 `…/Application/Support/m0-agent-loop/sessions`，这个目录**永远不存在**，
+  // 于是所有 replay 读数的"真会话"那支恒为 missingRoots、语料只剩合成件（本机真会话 1 份，被漏掉）。
+  // 缺根这件事被如实打印过，但没人去问"为什么缺"——所以这里钉的是字面形状，不是"扫到了几份"。
+  it("根里的 `Application Support` 必须是一个路径段", () => {
+    const root = corpusRoots()[1] ?? "";
+    expect(root.split("/")).toContain("Application Support");
+    expect(root.includes("Application/Support")).toBe(false);
+  });
+
+  it("反向：扫描器本身处理带空格的目录名没问题（所以 bug 只在根的字面量上）", () => {
+    const home = mkdtempSync(join(tmpdir(), "corpus-root-"));
+    try {
+      const dir = join(home, "Library", "Application Support", "m0-agent-loop", "sessions");
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "会话 x.jsonl"), '{"type":"user_message","content":"hi"}\n', "utf8");
+      const scan = scanCorpus([dir]);
+      expect(scan.files).toHaveLength(1);
+      expect(scan.missingRoots).toEqual([]);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
     }
   });
 });
