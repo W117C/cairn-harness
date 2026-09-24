@@ -8132,6 +8132,39 @@ const MUTATIONS = [
     apply: (s) => s.replace("const unknown = declared.filter((k) => !known.has(k)).sort();", "const unknown: string[] = [];"),
     expectFail: "模型发明或笔误的顶层键（agent_type）算 unknown，并列出合法键对照",
   },
+  // ---- 第 41 页 · 链申报的写租约逐环真持有（不是只在审批卡上印一行） ----
+  {
+    id: "chain-ring-does-not-hold-lease",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/chain-lease-held.test.ts",
+    desc: "环不带链冻结的写面 ⇒ 登记表回到空租约，后来者看不见这条链正在写盘（合并阶段才炸）",
+    apply: (s) => s.replace('        ...(ringResources.length > 0 && resolved.mode === "write" ? { resources: ringResources } : {}),\n', ""),
+    expectFail: "pipeline：整链申报 resources ⇒ 环的 agent_spawned 带它，且环活着时 leaseConflicts 认得它",
+  },
+  {
+    id: "chain-supervise-ring-drops-lease",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/chain-lease-held.test.ts",
+    desc: "只修 pipeline 那一支（本仓点名的「同一条解析只硬化一支」）⇒ supervise 那条真轨迹路径照旧丢租约",
+    apply: (s) => s.replace('          ...(ringResources.length > 0 && stageRole.mode === "write" ? { resources: ringResources } : {}), // 见上：申报过就真占（只读环不挂空租约）\n', ""),
+    expectFail: "supervise：受限循环的环同样持有（真轨迹那次就是这么申报的）",
+  },
+  {
+    id: "chain-read-ring-holds-phantom-lease",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/chain-lease-held.test.ts",
+    desc: "去掉 write 守卫 ⇒ 只读环也在事件里挂一份永不生效的租约（「印了不占」的缩小版重演）",
+    apply: (s) => s.replace('ringResources.length > 0 && resolved.mode === "write"', "ringResources.length > 0"),
+    expectFail: "只读环不挂空租约：链声明了 resources 而环是 review ⇒ 环上没有它，也不占面",
+  },
+  {
+    id: "chain-lease-promise-says-reject",
+    src: "src/agent/glm-session.ts",
+    test: "tests/chain-lease-held.test.ts",
+    desc: "规格退回承诺硬闸「相交即拒」⇒ 模型以为报了 resources 就有闸，从而不看真保护它的那一层（worktree）",
+    apply: (s) => s.replace("与活跃写 worker 相交 ⇒ 审批卡点名，可强行批准", "与活跃写 worker 相交即拒"),
+    expectFail: "不再写「相交即拒」，改说审批卡点名（与可强行批准）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
