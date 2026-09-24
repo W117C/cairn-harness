@@ -1492,7 +1492,7 @@ export class Orchestrator {
         warnings: mapped.warnings,
       };
     }
-    return { error: "未知角色: " + role + "（内置 implement|review|test 或 plugin-name:agent-name 形态）" };
+    return { error: "未知角色: " + role + "（内置 implement|review|test，或 plugin-name:agent-name / user:agent-name 形态）" };
   }
 
   // ---- M3c：depends_on 事件驱动触发（§4.5：前环 done 自动触发后环 spawn，无轮询调度器）----

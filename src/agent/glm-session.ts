@@ -250,7 +250,7 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
               description: "mode=pipeline 的阶段序列（批准后冻结，变更请求被拒）",
             },
             depends_on: { type: "array", items: { type: "string" }, description: "依赖的 agent_id（上游终态后才放行）" },
-            role: { type: "string", description: "按已注册角色跑这张 worker（内置 implement|review|test，或路由清单里列出的 plugin:agent-name；未注册即拒绝）。不传=默认实现面。" },
+            role: { type: "string", description: "按已注册角色跑这张 worker（内置 implement|review|test，或路由清单里列出的 plugin:agent-name / user:agent-name；未注册即拒绝）。不传=默认实现面。" },
             tier: { type: "string", description: "模型档位名（缺省走档位表路由；非法值 fail-visible 拒绝/钳制）" },
             max_turns: { type: "integer", description: "worker 轮次上限" },
           },

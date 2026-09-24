@@ -81,6 +81,8 @@ describe("spawn_agent 的 role 参数", () => {
     expect(r.ok).toBe(false);
     expect(r.output).toContain("角色不可用");
     expect(r.output).toContain("不传 role");
+    // 报错要把**全部**合法形态说全：只提 plugin-name:agent-name ⇒ 用户级角色看起来不存在
+    expect(r.output, "未知角色的提示要给出对照的合法形态 user:").toContain("user:");
     expect(spawnedOf(events)).toHaveLength(0);
     // 「没建 worker」看得见的形状：既不落 agent_status，也不落 agent_result
     expect(events.filter((e) => e.type === "agent_status" || e.type === "agent_result")).toHaveLength(0);

@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadUserAgentRoles, USER_AGENT_SOURCES } from "../src/agent/roles/user-agents";
 import { PluginRuntime } from "../src/agent/plugins";
+import { gateToolSpecs } from "../src/agent/glm-session";
 
 let root = "";
 afterEach(async () => { if (root) await rm(root, { recursive: true, force: true }).catch(() => {}); root = ""; });
@@ -137,5 +138,20 @@ describe("PluginRuntime：用户级角色与插件角色同一条查找面、同
     });
     expect(again.snapshot().warnings.filter((w) => w.message.includes("empty.md")).map((w) => w.plugin))
       .toEqual(["user-agents"]);
+  });
+});
+
+// 模型手里那份**说明文字**也要认得 `user:`：清单列得出名字，而工具参数的描述只说 plugin: 形态，
+// 等于告诉模型「这个参数不接受用户级角色」——同一件事两处口径必漂（本次落地实测抓到的半边）。
+describe("模型可见的角色口径（spawn_agent 参数描述）", () => {
+  it("role 描述同时点名两种形态，且未注册即拒这句还在", () => {
+    const spec = gateToolSpecs().find((s) => s.function.name === "spawn_agent");
+    expect(spec, "spawn_agent 规格得在模型面上").toBeTruthy();
+    const props = (spec!.function.parameters as { properties?: Record<string, { description?: string }> }).properties;
+    expect(props?.role, "role 参数得在规格里").toBeTruthy();
+    const desc = String(props!.role.description);
+    expect(desc).toContain("plugin:");
+    expect(desc, "只说 plugin: ⇒ 用户级角色对模型不可用（清单有、说明没有）").toContain("user:");
+    expect(desc).toContain("未注册");
   });
 });

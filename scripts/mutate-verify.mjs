@@ -341,6 +341,23 @@ const MUTATIONS = [
     apply: (s) => s.replace("      if (hit !== undefined) {", "      if (false) {"),
     expectFail: "同名冲突：DSH 自己的目录赢，并点名被盖住的那条路径（静默覆盖=改了没生效）",
   },
+  // 模型**手里**的口径：清单列得出名字，工具参数说明与报错只认 plugin: 形态 ⇒ 同一件事两处口径
+  {
+    id: "role-spec-desc-hides-user-form",
+    src: "src/agent/glm-session.ts",
+    test: "tests/user-agent-roles.test.ts",
+    desc: "spawn_agent 的 role 说明退回只写 plugin: 形态 ⇒ 模型被自己的工具说明书劝退，用户级角色永不被动用",
+    apply: (s) => s.replace("plugin:agent-name / user:agent-name；未注册即拒绝", "plugin:agent-name；未注册即拒绝"),
+    expectFail: "role 描述同时点名两种形态，且未注册即拒这句还在",
+  },
+  {
+    id: "unknown-role-error-hides-user-form",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/worker-role.test.ts",
+    desc: "未知角色的报错少列一种合法形态 ⇒ 猜错名字的模型被告知「这条路不存在」，而它本来写得对",
+    apply: (s) => s.replace("plugin-name:agent-name / user:agent-name 形态", "plugin-name:agent-name 形态"),
+    expectFail: "未注册的角色出声拒：不落 agent_spawned、不建 worker，并指回缺省行为",
+  },
   {
     id: "autonomy-allow-critical",
     src: "src/permissions/autonomy.ts",
