@@ -99,7 +99,10 @@ describe("一次性请求超时 withTimeout（根因 4）", () => {
   });
 
   it("ms <= 0 → 关闭超时（直通）", async () => {
-    await expect(withTimeout(Promise.resolve("ok"), 0, "x")).resolves.toBe("ok");
+    // 必须用「稍后才 settle」的输入：已 resolved 的 promise 在任何定时器之前赢，
+    // 那条断言就只是在测「竞速谁先到」，而不是「守卫真的关掉了」（变异实测存活过）。
+    const later = new Promise<string>((resolve) => setTimeout(() => resolve("ok"), 20));
+    await expect(withTimeout(later, 0, "x")).resolves.toBe("ok");
   });
 });
 
