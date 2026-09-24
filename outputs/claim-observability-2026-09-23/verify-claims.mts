@@ -20,11 +20,21 @@ import { redactSecrets } from "../../src/agent/security/scan";
 import { evaluate, newAutonomySession } from "../../src/permissions/autonomy";
 import { unconsumedSpawnArgs } from "../../src/agent/spawn-surface";
 import { gateToolSpecs as gateToolSpecs42 } from "../../src/agent/glm-session";
+import ts from "typescript";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+/** 本条谓词这次取料时**盘上没有**的文件。读空串与读不到文件是两件事：
+ *  旧写法把两者混成一个 ""，于是并发会话把 `src/renderer/app.js` 从盘上删掉（HEAD 里还在）时，
+ *  三条"缺陷仍在"的断言一起翻成「已失效」= **凭空宣布缺陷被修**（2026-09-24 实测：22:G1 / 35:C3 两假阴性）。
+ *  规则 104 的三态：有料 / 没尺 / 读到空，必须分开，后两态红着退出。 */
+let missSeen: string[] = [];
 const read = (rel: string): string => {
   const p = join(ROOT, rel);
-  return existsSync(p) ? readFileSync(p, "utf8") : "";
+  if (!existsSync(p)) {
+    if (!missSeen.includes(rel)) missSeen.push(rel);
+    return "";
+  }
+  return readFileSync(p, "utf8");
 };
 const has = (rel: string, re: RegExp): boolean => re.test(read(rel));
 
@@ -356,12 +366,31 @@ function countRememberCallsInCorpus(): { files: number; calls: number; remember:
   return out;
 }
 
+/** 32:C1 的取料面走 AST（规则 79：按行/按文件的正则会把文本当代码）。
+ *  旧写法是「文件里同时出现 `properties` 与 `args.X`」——那是**文件级**判据，于是
+ *  `scripts/mutate-verify.mjs` 仅凭**变异针脚字符串**里写着这两个词就让这条全称否定翻假
+ *  （实测 2026-09-24：唯一翻假的就是它，而它做的是变异注入，根本不是参数对账）。
+ *  走 AST 后只认代码里的成员访问：字符串字面量与注释都不算。 */
+function reconcilesParams(rel: string): boolean {
+  const src = ts.createSourceFile(rel, read(rel), ts.ScriptTarget.ESNext, true,
+    rel.endsWith(".ts") ? ts.ScriptKind.TS : ts.ScriptKind.JS);
+  let seesSchema = false;
+  let seesArgs = false;
+  const go = (n: ts.Node): void => {
+    if (ts.isPropertyAccessExpression(n) && n.name.text === "properties") seesSchema = true;
+    if (ts.isPropertyAccessExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === "args") seesArgs = true;
+    ts.forEachChild(n, go);
+  };
+  go(src);
+  return seesSchema && seesArgs;
+}
+
 const CLAIMS_24: Claim[] = [
   { page: "32", id: "C1",
     claim: "没有任何门对账「schema 声明的参数」↔「实现真读的 args.X」",
     holds: () => readdirSync(join(ROOT, "scripts")).filter((n) => /\.(ts|mjs|cjs)$/.test(n))
-      .every((n) => !/properties/.test(read("scripts/" + n)) || !/\bargs\.[A-Za-z_]/.test(read("scripts/" + n))),
-    how: "逐个扫 scripts/ 下的门：没有一只同时读 properties（声明面）与 args.X（实现面）" },
+      .every((n) => !reconcilesParams("scripts/" + n)),
+    how: "逐个把 scripts/ 下的门解析成 AST：没有一只**在代码里**同时取 properties（声明面）与 args.X（实现面）" },
   { page: "33", id: "C1",
     claim: "真语料里 remember 调用为 0 ⇒「接上闸少泄露几次」本地没有分母",
     holds: () => { const c = countRememberCallsInCorpus(); return c.files >= 10 && c.calls > 0 && c.remember === 0; },
@@ -452,16 +481,25 @@ const CLAIMS_24: Claim[] = [
 
 const ALL_CLAIMS = [...CLAIMS, ...CLAIMS_24];
 let falseNow = 0;
+let blindNow = 0;
 console.log("页 / 判据 / 该页声称「今天必红」的断言 —— 今天是否仍成立");
 for (const c of ALL_CLAIMS) {
   let holds = false;
   let how = c.how;
+  missSeen = [];
   try { holds = c.holds(); } catch (e) { holds = false; how = "谓词抛错：" + (e instanceof Error ? e.message : String(e)); }
-  if (!holds) falseNow++;
-  console.log(`${holds ? "  ok  " : "!! 已失效"}  ${c.page.padEnd(4)} ${c.id.padEnd(7)} ${c.claim.padEnd(52)} (${holds ? how : "该页这句现在不再成立 → 要么已修、要么当初是假读数"})`);
+  // 判假 + 这次取料摸到了盘上不存在的文件 ⇒ 分不清"缺陷被修"还是"没有尺"，**不许**记成已失效。
+  const blind = !holds && missSeen.length > 0;
+  if (blind) blindNow++;
+  else if (!holds) falseNow++;
+  console.log(`${holds ? "  ok  " : blind ? "?? 没尺 " : "!! 已失效"}  ${c.page.padEnd(4)} ${c.id.padEnd(7)} ${c.claim.padEnd(52)} (${holds ? how : blind
+    ? "取料时盘上没有：" + missSeen.join("、") + " ⇒ 量不出真假（HEAD 里可能还在，别读成「已修」）"
+    : "该页这句现在不再成立 → 要么已修、要么当初是假读数"})`);
 }
-console.log(`\n合计 ${ALL_CLAIMS.length} 条「今天必红」断言：仍成立 ${ALL_CLAIMS.length - falseNow} 条，已失效 ${falseNow} 条。`);
-console.log(falseNow === 0
+console.log(`\n合计 ${ALL_CLAIMS.length} 条「今天必红」断言：仍成立 ${ALL_CLAIMS.length - falseNow - blindNow} 条，` +
+  `已失效 ${falseNow} 条，没尺 ${blindNow} 条。`);
+console.log(falseNow === 0 && blindNow === 0
   ? "⇒ 各页的判卷先红断言都还可复核；将来任何一条悄悄变假（被修掉或当初写错），本脚本 exit 1。"
-  : "⇒ 有断言已变假：若缺陷被修，就去该页追加二次复核块把判据转正；若当初是假读数，更要当场记一笔。");
-process.exit(falseNow === 0 ? 0 : 1);
+  : "⇒ 有断言已变假：若缺陷被修，就去该页追加二次复核块把判据转正；若当初是假读数，更要当场记一笔。\n" +
+    "⇒ 有断言「没尺」：被读的源文件不在盘上（多为并发会话删在飞）——它既不是通过也不是失效，等文件回来再判。");
+process.exit(falseNow === 0 && blindNow === 0 ? 0 : 1);
