@@ -154,3 +154,50 @@ describe("赋值式凭据：无引号写法（.env / -e / YAML）", () => {
     }
   });
 });
+
+/** 纯 hex 长串不该由**熵分支**判定（任务 #6 的读数定的方向）。
+ *
+ *  实测规模（同一支探针 measure-naked-hex.mts，本仓一次 `git ls-tree -r` + `rev-list`）：
+ *  3727 条 naked 长 hex 里 **0 条是凭据形状**，而 63 行今天就已被熵分支改写过——
+ *  因为 40 位 hex 的香农熵上界就是 log2(16)=4.0，随机 SHA 一半会**撞过**阈值。
+ *  掩掉 commit/blob id = 模型没法 `git show`、核对或回滚（能力 3/5 的直接损伤）。
+ *  反向那一半由赋值式规则兜：`api_key=<32hex>` 靠**键名上下文**命中（3502d7c），不靠猜熵。 */
+describe("纯 hex：熵分支不判，凭据交给上下文规则", () => {
+  const rules = (line: string): string[] => redactSecrets(line).findings.map((f) => f.ruleId);
+
+  it("git 输出形状（ls-tree / rev-list / log --format=%H）逐字不变", () => {
+    // 前两条取自本仓一次真实 `git ls-tree -r HEAD` 的输出（当时实测就被改写），
+    // 不是手造的"看起来高熵"样本——样本造错就会把判据钉在一个不存在的形状上。
+    const lines = [
+      "209fbeed34dfee992102d511233f0bf41fea3127 blob docs/superpowers/specs/2026-09-18-r1b-renderer-subtraction-design.md",
+      "9451ee71c3a7875072d451cfc910ebf226975c53 blob docs/superpowers/specs/2026-09-19-doc-layer-budget-design.md",
+      "commit 0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c",
+    ];
+    for (const line of lines) {
+      expect(redactSecrets(line).text, "git 对象 id 被吃了：" + line).toBe(line);
+      expect(rules(line), line).not.toContain("secret.high_entropy");
+    }
+  });
+
+  it("md5 / sha256 校验和行（lockfile 风格）不被当密钥", () => {
+    const line = "resolution: {integrity: sha512-9f2b1c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff}";
+    expect(redactSecrets(line).text).toBe(line);
+  });
+
+  it("混合大小写的随机串仍然算密钥（否决只收**小写纯 hex**，不许把检测面一起关掉）", () => {
+    const line = "blob: xK9fQz2Lp7Vm4Rt6Bn8HdJ3sFk5Wg1Yc";
+    expect(rules(line)).toContain("secret.high_entropy");
+    expect(redactSecrets(line).text).not.toContain("xK9fQz2Lp7Vm4Rt6Bn8HdJ3sFk5Wg1Yc");
+  });
+
+  it("hex 值放在赋值式里仍然必须被抓（两半合起来才不漏：熵让路，上下文接手）", () => {
+    for (const line of [
+      "api_key=bf9ccaa2dab744fa83c232deef772ad0",
+      "SECRET=0123456789abcdef0123456789abcdef0123",
+    ]) {
+      expect(rules(line), line).toContain("secret.assigned");
+      const hex = line.split("=")[1]!;
+      expect(redactSecrets(line).text, line).not.toContain(hex);
+    }
+  });
+});

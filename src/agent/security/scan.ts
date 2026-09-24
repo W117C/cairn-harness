@@ -109,6 +109,8 @@ const ENTROPY_TOKEN_RE = /[A-Za-z0-9+/_-]{16,}={0,2}/g;
  *  session uuid 目录 → `/Users/ze/.agen****.jsonl`）。以 `/` 开头的候选按路径放过。
  *  代价写明：以 `/` 开头的 base64 串（首字符命中率 ≈1/64）不再由熵分支覆盖；
  *  已知模式分支（私钥块 / sk- / AIza / AKIA / ghp_ / xox / 赋值式）与「串中含 `/`」的候选均不受影响。 */
+const HEX_ONLY = /^[0-9a-f]{24,}$/;
+
 function looksLikePath(token: string): boolean {
   return token.startsWith("/");
 }
@@ -133,19 +135,30 @@ export function findHighEntropyTokens(
   for (const m of line.matchAll(ENTROPY_TOKEN_RE)) {
     const token = m[0];
     if (looksLikePath(token)) continue;
+    // 小写纯 hex 一律不由熵分支判（实测取料：本仓一次 `git ls-tree -r HEAD` 809 行里 3 行的
+    // blob id 今天就被改写过，全量 git 样本 3727 条 naked 长 hex 中**凭据形状 0 条**）。
+    // 机制：40 位 hex 的香农熵上界是 log2(16)=4.0 ⇒ 随机 SHA 一半会**撞过** threshold。
+    // 凭据那一半不让它漏：hex 值靠**键名上下文**命中（secret.assigned，含无引号式）；
+    // 混合/大写 hex 形状不在本否决内，仍走熵分支。
+    if (HEX_ONLY.test(token)) continue;
     if (token.length < opts.minLength) continue;
     if (!/[A-Za-z]/.test(token) || !/[0-9]/.test(token)) continue;
     if (/^[A-Z][A-Z0-9_]*$/.test(token)) continue; // SCREAMING_SNAKE 常量（配置名等）不算密钥
-    if (token.includes("/")) {
+    // 带分隔符（`/` 或 `-`）的候选**按段判**：路径、带日期的文件名、`sha512-<digest>` 这类
+    // "多段可读标识符拼起来"的东西，聚合熵轻松过 4.0（实测：`2026-09-18-r1b-renderer-subtraction-design`
+    // 4.062、`sha512-9f2b…` 4.129 ⇒ 一个文件名、一条校验和当密钥被吃掉）。
+    // 只有某段自身够格才算密钥，且 secret 就是那一段 ⇒ 掩它、其余逐字留下。
+    if (token.includes("/") || token.includes("-")) {
       let hot: { secret: string; entropy: number } | null = null;
-      for (const seg of token.split("/")) {
+      for (const seg of token.split(/[/-]/)) {
         if (seg.length < opts.minSegmentLength) continue;
+        if (HEX_ONLY.test(seg)) continue; // 校验和/对象 id 段：基数太大，不作凭据证据
         if (!/[A-Za-z]/.test(seg) || !/[0-9]/.test(seg)) continue;
         if (/^[A-Z][A-Z0-9_]*$/.test(seg)) continue;
         const e = shannonEntropy(seg);
         if (e >= opts.threshold && (hot === null || e > hot.entropy)) hot = { secret: seg, entropy: e };
       }
-      if (hot === null) continue; // 只是几段可读名字拼起来的路径
+      if (hot === null) continue; // 只是几段可读名字拼起来的路径 / 文件名 / 带算法前缀的校验和
       out.push({ token, secret: hot.secret, entropy: hot.entropy });
       continue;
     }
