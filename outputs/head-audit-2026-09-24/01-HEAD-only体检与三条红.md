@@ -222,7 +222,7 @@ cd .worktrees/head-audit-0924 && TERM=dumb CODEBUDDY_SAFE_DELETE_BULK_STATE_DIR=
 
 | 门 | 退出 | 红在哪 | 归因 |
 |---|---|---|---|
-| `gate-check` | 1 | H7 冻结表与判卷区双向一致：`inTableNotOnDisk=[fixtures/no-progress/*.jsonl ×4…]`，`onDiskNotInTable=[]` | **环境**：`.jsonl` 语料从不在 git 里，新 worktree 天生没有（规矩 104 那一格的镜像：这次是"表上有、盘上没有"）。不是逃逸，也不是回归 |
+| `gate-check` | 1 | H7 冻结表与判卷区双向一致：`inTableNotOnDisk=[fixtures/no-progress/*.jsonl ×7]`，`onDiskNotInTable=[]` | **我第一版把它记成"环境（.jsonl 不在 git，新 worktree 天生没有）"——那条归因是错的，已在下方撤回。** 真因：HEAD 的 `src/frozen.ts:49` 只把 4 个目录当判卷区，而 `fixtures/no-progress` 在**冻结表里**却不在扫描区里 |
 | `panels-check` | 1 | 整表里耗时 148,728ms，`[panels-check] 1 项失败 ❌`（失败名被"尾 12 行"窗口截掉） | **抖动，已用单跑复验定名**：同一棵树单跑 `node --import tsx scripts/panels-check.ts` ⇒ **全部断言通过 ✅**，且自带计时读数「起窗 9 次 · 等端口累计 6ms · 其中 0 次不是立刻空的」。这就是 HEAD 自己那条「panels-check 有实测时序 flake」与规矩 111（真窗口门与整表并发 ⇒ 假红）说的那一格 |
 | `mutate-verify` | **124** | 无末行输出，gates 打「超时（1200s）… 整组 SIGKILL（子进程未自还原）」，耗时 1,215s | **预算**：这道门在 1200s 内跑不完冷树 ⇒ 认证面上它**没有读数**，不许记成"红"也不许记成"过" |
 | `mutate-needles-check` | 1 | 唯一一条红字：「残留 `src/main/agent-runner.ts.mutbak`——针脚是从它算的，不可信」 | **上一条的下游后果**，不是独立缺陷：SIGKILL 正好落在突变窗口。复跑同一棵树 ⇒ **exit 0**，`963 条：阻断 0 / 待复认 3 / 未覆盖 0 / 逐行式 11 / 钉在飞文本 0`。⇒ 顺带得到一条新事实：**HEAD 的针脚阻断是 0**，§一 里主树那"原有 5 条"全属在飞文件 |
@@ -242,6 +242,35 @@ cd .worktrees/head-audit-0924 && TERM=dumb CODEBUDDY_SAFE_DELETE_BULK_STATE_DIR=
    ⇒ 直接后果：**#19 的证据面本身是 order-dependent 的**——"A 案牵连为零"这类读数必须由该文件单跑给出，不能引用整跑的绿/红。
 3. `tests/chain-lease-held.test.ts` **单跑 8/8 绿**，且该文件在隔离树里的 mtime 落在整跑窗口内（22:30，跑批起于 22:29:18、历时 85s）⇒ 那次 `Cannot find module` 是**跑到一半文件被重写**造成的。
    机制未定名（两个候选：① 有测试把 `mutate-verify` 当子进程跑，而表里确有 1 条锚点的 `src` 指向 `tests/**`；② 外部进程动过这棵树）。**不猜因果**：留成本节最后一条待查，并把"HEAD-only 全量 vitest 的数还不可复现"这句话写在这里，免得下一轮把 2669 当基线。
+
+### 撤回一条我写错的归因：H7 不是"环境"，是**恒真红**（分辨只用了三步）
+
+第一版表里我把 `gate-check` 的 H7 记成"`.jsonl` 语料从不在 git 里，新 worktree 天生没有 ⇒ 环境"。
+这条听起来自洽（104 那一格确实说过"干净树上读到 0＝没有尺"），但它**没被证伪过**。补测：
+
+1. `frozenCoverageDrift(隔离树)` 用隔离树自己的 `src/frozen.ts` ⇒ `inTableNotOnDisk=7`（与门上红字逐字同形）；
+2. **反向那一侧**（缺这条就可能永远选错）：`frozenCoverageDrift(主树)` 用 **HEAD 那份实现**、而主树 7 份语料**确实在盘上**（`ls fixtures/no-progress/*.jsonl` = 7）⇒ 仍然 `inTableNotOnDisk=7`；
+3. `src/frozen.ts:49` 取料：`areas` 只有 `fixtures/mock`、`fixtures/todo-app/tests`、`fixtures/gym/cases`、`fixtures/impact` 四项——**判卷表里有 `fixtures/no-progress`，扫描区里没有** ⇒ 表侧有、盘侧永远没有 ⇒ 无论文件在不在都红。
+
+⇒ 定性：**判据缺陷（恒真红）**，不是环境、不是回归。我的"环境"说法把一次集合漏项说成了别人的语料没入库——那正是规矩 141 点名的"归因句一闭，下一步就没了"。
+另一路读数（见下节的同页第二作者）与我独立撞到同一根因，且比我先给出 culprit（`90b0533` 加表、扫描区没跟着加）；
+主树在飞的 `src/frozen.ts` 已把 `areas` 改成多项列表，实测同一函数返回 **0/0** ⇒ 这一根**别人已在修**，我不重复动。
+方法论留一句：**两个相反归因都能自圆其说时，分辨动作是"把实现搬到另一棵树/另一个输入上再跑一次"**，不是再写一段理由。
+
+### 本页现在有**两个** `## 十三、`：同一表面两个 writer（本仓明令避免的形态，记下来别再犯）
+
+本节（`## 十三、HEAD-only 整表（37 道）第一次有数…`）与后一节
+（`## 十三、整表跑完的二次复核：十道红逐道定名（同一棵隔离树，detached 6a06249）`）是同一天、同一棵我建的隔离树上
+**两条独立跑的整表读数**——后者不是我写的（我编辑本节时系统两次提示"文件自上次读取后已被修改"）。
+两半**不冲突且互补**，但重复编号会让下一次引用指错地方，所以在这里点名而不是改写别人的段落：
+
+- 后一节做了我没做的**逐笔 bisect**，给出 culprit：`8361657`（ts）、`90b0533`（H7 表/区不一致）、`3391a65`（gym B1）、`aa30513`/`a0db9ea`（PC7 的时间界），
+  并留了两条更值钱的方法论：① **`git checkout --detach <sha>` 会把未提交改动一路带走** ⇒ 第一次 bisect 的"五笔都红"是被污染的读数；② **「`exit≠0` 且 ❌ 计数 0」＝崩，不作红读**。
+- 后一节把 `gym-check` B1 认成**已登记的债** `IDENTITY_DEBTS[0] D7-snapshot-path-ms`（"RD 那面用了分类器，B1 这面没用"）
+  ⇒ 我据此**撤回**本轮新开的"这是新发现的尺缺陷"说法（那条与已登记的是一条，不是第二条）。
+- 本节有后一节没有的三样：`panels-check` 的**单跑复验已定名**（同树单跑 ⇒ `全部断言通过 ✅`，起窗 9 次·等端口累计 6ms·0 次非立刻空 ⇒ 就是 HEAD 自陈的那条时序 flake 与规矩 111）；
+  `test` 一格的**名字级证据**（`skill-tool-policy` 单跑 18/18 绿、整跑红 ⇒ 跨文件污染，且 `Test Files` 那行另有一道文件级红）；
+  以及三面补丁的**门后复跑读数**（67✅/259✅/exit 0 + 针脚阻断 0 + typecheck 0）。
 
 ### 三条门红的同一条根因：`8361657` 改了 4 个判卷面，另有 3 个没改
 
@@ -332,4 +361,20 @@ J2 改成 `raw.endsWith(JSON.stringify(back[3]))`：它要钉的是"行字节 = 
 **这不等于 #56 偿清**：快照目录名仍含 `Date.now()`，`D7-snapshot-note-ms`（毫秒混进模型可见文本那半）仍在账上，
 `IDENTITY_DEBTS` 两条一条没删。改的只是"同一承诺在两道门里读出两个结论"这一格。
 **这条判据的分辨力挂在"债还活着"这一事实上**：#56 一旦按 A 或 B 偿清，B1 与旧写法等价——届时无需撤针，因为它不再守任何东西，而 RD 那条 `requireDebtHit` 复查会先一步把过期条目念出来。
+
+### §十三 补二：PC7 的两读法已被两个事实拆开（一条 grep、一行代码）
+
+上面 待办 1 说"两种读法结论相反，本轮不擅自动它"。本轮把那两个前提各自量了一遍：
+
+1. **次数是**有价的：`src/agent/compaction.ts:45` 明写一次多余的摘要替换「多烧一次摘要调用 + 白丢冷细节」
+   ⇒ PC7 的 `b.compactions < a.compactions` 那一半**不是代理指标**，它对应一次真模型请求。字符那一半（−18%）不能替它抵账。
+   ⇒ 读法 ① 「把它换成绝对字节量」当场作废：换了就等于把一次摘要调用的成本从尺上抹掉。
+2. **但这条策略生产里根本没接线**：`amortizeRewriteCost` 在 `src/` 只有一个**读侧**
+   （`glm-session.ts:770` `enabled: opts.compaction.amortizeRewriteCost === true`），
+   **全仓零写侧**——三个设值点全在判卷面上（`scripts/prefix-churn-check.ts:186`、`src/agent/gym/probe.ts`、`tests/compaction-cost.test.ts:125`）。
+   ⇒ 红的是**一只只有台架会打开的开关**：今天不花用户的钱，代价是"这条策略在新装配面尺寸下不再省次数"⇒ **它因此不该被接上**（方向是 fail-safe 的）。
+
+⇒ 结论：**PC7 的红既不是产品事故也不是尺坏了**，是"一条未接线策略的适用边界被后来的加面挪走了"。
+按规矩 57 给它挂名字而不是拆判据：要接这条策略，先让它在**当前面尺寸**下重新同时满足两只读数（改 `COMPACT_TAIL_AMORTIZE_FACTOR` / `floorTokens`，或在 `amortizedCompactionConfig` 里按面尺寸定 floor），
+而不是把次数那一半删掉。本轮不动判据、不动策略（两侧都还欠一个"在新尺寸下重测"的动作，且改的是同一只纯函数）。
 
