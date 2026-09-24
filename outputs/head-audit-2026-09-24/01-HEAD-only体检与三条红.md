@@ -379,3 +379,19 @@ J2 改成 `raw.endsWith(JSON.stringify(back[3]))`：它要钉的是"行字节 = 
 按规矩 57 给它挂名字而不是拆判据：要接这条策略，先让它在**当前面尺寸**下重新同时满足两只读数（改 `COMPACT_TAIL_AMORTIZE_FACTOR` / `floorTokens`，或在 `amortizedCompactionConfig` 里按面尺寸定 floor），
 而不是把次数那一半删掉。本轮不动判据、不动策略（两侧都还欠一个"在新尺寸下重测"的动作，且改的是同一只纯函数）。
 
+## 十三·补三：`mutate-verify` 在 HEAD 上跑完了（待办 3 要的那个数字，以及 17 条未杀的三类）
+
+同一棵隔离树（detached `6a06249`，无外层预算）单跑整表：**`963/963` 条，耗时 2217.9s（36.9 分钟），exit 1，杀到 946 条、未杀 17 条**。
+
+- **预算这条现在有数了**：gates 给这道门的超时是 1200s ⇒ 全表需要的是它的 **1.85 倍**。上一版整表里那道 `exit=124` 因此既不是代码红也不是"过"，是**认证面缺一道门**（规矩 149）。三个选项已挂 #26（提预算 / 拆两半 / 从整表摘出单跑），不凭感觉调大。
+- **17 条未杀分三类，且只有一类是我的**：
+  1. **14 条 = 「基线就不是全绿」**——全部是 §9.3 那一族（`skill-policy-not-granted-*` ×3、`spec-face-*` ×3、`loop-skill-denial-*` ×2、`skill-allow-note-silent`、`skill-denial-does-not-name-source`、`skill-scope-not-on-panel`、`skill-policy-cc-alias-lost`、`unknown-tool-silently-dropped`）+ `cancel-agents-spec-visible-in-read-only`。
+     这条给 #19 加了一个此前没人记账的代价：**待裁那条红不是"少一个结论"，它同时让 14 条变异锚点永不可验收**——基线红时这道门按设计拒绝判活。⇒ 已写进第 47 页格 2。
+  2. **2 条 = 我自己的 `expectFail` 漂移**（`cc-head-survival-never-recorded`、`cc-coordinator-ignores-config-override`）：
+     两条钉的期望标题是「开着 ⇒ 同一会话里压缩次数**不更多**、累计重写字符严格更少」，而 HEAD 里的真标题是「…**严格更少**…」——
+     **是 `501880b` 我把断言从 ≤ 收成 < 时改了标题、没同步这两条 `expectFail`**（规矩 77/139 的原样复发：改标题=改判卷取料面）。
+     突变本身仍然让测试红（分辨力没丢），丢的是"红在哪一条"的可归因性。修法是一行两条字符串换回逐字标题，但 `scripts/mutate-verify.mjs` 此刻在别人在飞改动集里（`M`）⇒ 挂 #28，随那张表落地一起改，不抢。
+  3. **1 条 = 「还原后未恢复全绿」**（`chain-read-ring-holds-phantom-lease`）：该树 `git status` 事后干净、无 `.mutbak` 残留，
+     且 `tests/chain-lease-held.test.ts` **单跑 8/8 绿**——红只出现在 963 条整跑之后 ⇒ 这是**跑批内的顺序/状态依赖**，机制未定名（同规矩 148「单跑绿/整跑红＝共享态」与规矩 120「门往冻结靶子留残留」两族相邻，但都没证到）。挂 #29，先要一个"哪一条前序锚点让它变红"的复现，再谈因果。
+- 顺带一条工具行为（好的那种）：给 `mutate-verify` 传它不认的 `--only=…` 时它**拒绝并退出**（「不把拼错的 flag 静默当缺省」），所以我不小心写错的单跑命令没有变成"静默跑全表"。
+
