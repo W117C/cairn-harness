@@ -6,7 +6,7 @@
 // 零私有状态：规则库与放行集是仅有的两个输入源；断路器计数在 session 入参里，evaluate 只读不写
 // （调用方经 note* helper 更新）——同一输入两次调用结果一致。
 import { FROZEN_TABLE_REL } from "../frozen";
-import type { ToolName } from "../tools/base";
+import { TOOL_NAMES, type ToolName } from "../tools/base";
 import type { PermissionMode } from "./index";
 // 方案门的活判据。直接从 plan-state 拿（不能拿 ./index——index 正 re-export 本文件的符号）。
 import { planGateLive } from "./plan-state";
@@ -501,12 +501,13 @@ export function downgradeSuggestion(s: AutonomySession): string | null {
 }
 
 /** 模型可见工具表：只读档把写向工具摘除（§11.7.2，Claude bare-name deny 同构）。
- * 与 gateToolSpecs 的工具集同源（含 verify 系统门）。 */
+ *  ⚠️ 覆盖范围**只有静态注册表那一组**（名单读 `TOOL_NAMES`，不再手抄第二份）；
+ *  注入工具（`spawn_agent` / `remember` / 定时五件 / `cancel_agents` …）不在这里，
+ *  它们的只读可达性由 `src/agent/tool-surface.ts` 声明、`tool-surface-parity` 拿真发货的
+ *  `gateToolSpecs("read-only")` 逐行对账。原先这句写「与 gateToolSpecs 同源」是假的
+ *  （实测面 20 把 / 表 10 把），而 `autonomy-check` 的只读断言读的是这张表 ⇒ 它证明的是静态子集。 */
 export function toolTableFor(mode: PermissionMode): ToolName[] {
-  const all: ToolName[] = [
-    "read_file", "write_file", "edit_file", "run_shell", "grep", "glob", "lsp",
-    "clarify", "propose_plan", "verify",
-  ];
+  const all: ToolName[] = [...TOOL_NAMES];
   if (mode === "read-only") {
     return all.filter((t) => !isSideEffectTool(t));
   }

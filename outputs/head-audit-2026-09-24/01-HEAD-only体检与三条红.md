@@ -176,3 +176,32 @@ verify 归因（judgment-layer §9 第 0 步）说环境红同时做三件错事
 本仓路径含空格被百分号编码 ⇒ 脚本会"exit 0 且什么都不印"；③ 自检第一版期望值写错
 （合成流里只有 1 条 `routing_decision`，我写 2）⇒ **尺把自己拦在 exit 1**，
 这正是"每次跑都注入自检"要买的东西（规则 74）。
+
+## 十二、`toolTableFor`：注释自称"与 gateToolSpecs 同源"，实测是第四份手抄表
+
+顺着 §十一 找"还有没有别的消费面没接 cause"时撞到的。`src/permissions/autonomy.ts` 里
+`toolTableFor(mode)` 注释写「与 `gateToolSpecs` 的工具集同源」，实测（shipped 实现、HEAD 与盘上同数）：
+
+| 面 | 表 `toolTableFor` | 真发货 `sessionToolSpecs` | 差 |
+| --- | --- | --- | --- |
+| default | 10 把 | **20 把** | 表少 10 把（定时五件、`cancel_agents`、`refine_goal`、`remember`、`spawn_agent`、`wait_for_agents`） |
+| read-only | 7 把 | 8 把 | 表少 `refine_goal` |
+| "写向"集合 | 3 把（`edit_file`/`run_shell`/`write_file`） | **12 把** | 差 9 把（含 `spawn_agent`、五个 `automation_*`） |
+
+⇒ 后果不是产品行为错（只读档真把注入面摘了，`tool-surface.ts` + G-B 那条逐行对账守着），
+而是 **`scripts/autonomy-check.ts` 那句「只读档：写向工具从工具表摘除（模型上下文不可见）」
+证明的范围只有它字面的一半**——它读的是这张 10 把的表。这属本仓点名的"同一谓词多份副本、
+宽度各不相同"（第十三族）与"注释自称同款接线、代码是另一回事"（第八次复发）的合流。
+
+**已做（刻意选最小、且不动行为）**：那张手抄名单改成读 `TOOL_NAMES`（实测两边**逐字同集**），
+注释改成写清"只覆盖静态注册表这一组，注入面归 tool-surface + G-B"。
+等价性不是嘴说的：改前/改后对四个档（`read-only`/`default`/`guided`/`auto`）各跑一次
+`toolTableFor` 并 `diff` ⇒ **逐字相同**；`autonomy-check` 门 exit 0、
+`tests/autonomy` + `tests/session-tools` + `tests/tool-surface-parity` 共 40 条全绿、
+typecheck 0 错、针脚体检阻断仍是原有 5 条（没顶掉任何锚点）。
+
+**没做（并说明为什么不划算）**：把 `toolTableFor` 扩成整张模型面会撞两个既有边界——
+① 返回类型 `ToolName[]` 放宽 ⇒ 热文件 `tests/session-tools.test.ts`（别人在飞）会跟着编译红；
+② `autonomy.ts` 若改从 `glm-session` 取面 ⇒ **成环**（`glm-session` 已 import `permissions/autonomy`）。
+所以"表该不该等于模型面"与 §四/§五 的申报域是**同一个问题的两面**，一并交 #19 裁，
+不在这里私自扩面（那会让 #19 的 A/B 之差被一次无关重构悄悄改掉）。
