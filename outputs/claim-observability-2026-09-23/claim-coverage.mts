@@ -15,12 +15,25 @@ const read = (abs: string): string => (existsSync(abs) ? readFileSync(abs, "utf8
 
 /** 各页 §四：抽「今天必红」的判卷行。 */
 interface DocClaim { page: string; id: string; claim: string; file: string; kind: "today" | "future" }
-const pages = readdirSync(OUT)
-  .filter((n) => /-2026-09-23$/.test(n))
-  .map((n) => join(OUT, n, "00-主张与判据.md"))
-  .filter((p) => existsSync(p));
+const FACE_FROM = "2026-09-23";
+/** 页目录的面：日期派生 + 目录内所有 `0*.md`（旧写法把面写死成"09-23 的目录里的一个文件名"，
+ *  于是 09-24 起的整批页静默不在覆盖表里——正是本门反对的"面写死到名字上必漂"）。 */
+const pages: string[] = [];
+for (const n of readdirSync(OUT)) {
+  const m = /^(.+)-(\d{4}-\d{2}-\d{2})$/.exec(n);
+  if (!m || m[2] < FACE_FROM) continue;
+  let names: string[] = [];
+  try { names = readdirSync(join(OUT, n)); } catch { continue; }
+  for (const f of names.sort()) if (/^0.*\.md$/.test(f)) pages.push(join(OUT, n, f));
+}
+pages.sort();
 
 const shortPage = (dir: string): string => {
+  // 页号优先读**页目录自带的 page.txt**（一行数字）——集中一张手抄 MAP 就是本文件注释自己点名的
+  // "漏一行 ⇒ 整页判据静默不查"。09-23 的 16 页没有 page.txt，仍走下面的 MAP（ grandfathered，
+  // 迁移到 page.txt 时这张表整条删掉，别留两份）。
+  const own = read(join(OUT, dir, "page.txt")).trim();
+  if (/^\d+$/.test(own)) return own;
   // 目录名里没有页号，必须显式映射（第一版用正则去抠，全抠成 "approved-s" 这种截断名 ⇒ 对齐失效）
   const MAP: Record<string, string> = {
     "stale-view-guard": "16", "side-effect-outcome": "17", "grading-surface-guard": "18",
@@ -29,9 +42,9 @@ const shortPage = (dir: string): string => {
     "verify-alignment": "25", "declared-surface-alignment": "26", "approved-scope-drift": "27",
     "claim-observability": "28", "self-contamination": "29", "anchor-resolvability": "30", "truncation-account": "31", "capability-program": "合册",
   };
-  const key = dir.split("-2026-09-23")[0];
+  const key = dir.replace(/-\d{4}-\d{2}-\d{2}$/, "");
   const mapped = MAP[key];
-  if (mapped === undefined) UNMAPPED.push(key); // 本表自己就是一张"声明↔可达"面：漏一行 = 新页的判据静默不查
+  if (mapped === undefined) UNMAPPED.push(dir); // 本表自己就是一张"声明↔可达"面：漏一行 = 新页的判据静默不查
   return mapped ?? key;
 };
 const UNMAPPED: string[] = [];
@@ -43,11 +56,18 @@ const UNMAPPED: string[] = [];
 const TODAY = /现在就必红|现在必红|今天必红|开门即红|开门之日|现在就红|现在就是红的|这条现在就必红/;
 
 const docClaims: DocClaim[] = [];
+const seenRow = new Set<string>();
+/** 页目录的面：按**日期**派生（≥ 2026-09-23 的全部 dated 目录），页文件收目录内所有 `0*.md`。
+ *  原先是 `/-2026-09-23$/` + 只读 `00-主张与判据.md` 一个文件名 ⇒ 09-24 起的整批页静默不在面上
+ *  （本门自己的判据反对的正是这种"面写死到名字上"）。抽取语义（只认 §四 / `## 判据表` 段里的表行）不变。 */
 for (const p of pages) {
   const dirName = p.split("/").slice(-2)[0];
   const body = read(p);
-  const sec = body.split(/^## /m).find((s) => /^四[、\s]/.test(s));
-  if (sec === undefined) continue;
+  // 全部匹配段都要扫：`find` 只取第一个 §四 ⇒ 同页后面另立「判据表」的写法会被静默忽略
+  // （本轮加 09-24 页的判据表时就是这么踩到的：抽出来 0 行却 exit 0，一次假绿）。
+  const secs = body.split(/^## /m).filter((s) => /^四[、\s]/.test(s) || /^判据表/.test(s));
+  if (secs.length === 0) continue;
+  for (const sec of secs) {
   for (const line of sec.split("\n")) {
     if (!line.startsWith("|")) continue;
     const cells = line.split("|").map((c) => c.trim()).filter((c) => c !== "");
@@ -56,7 +76,12 @@ for (const p of pages) {
     if (!/^C\d+|^D\d|^\d/.test(id) && !/^C/.test(id)) continue;
     const row = line.replace(/\*\*/g, "");
     if (!/必红|即红|当场红|立刻红|必须红/.test(row)) continue;
-    docClaims.push({ page: shortPage(dirName), id, claim: (cells[1] ?? "").slice(0, 40), file: dirName, kind: TODAY.test(row) ? "today" : "future" });
+    const pg = shortPage(dirName); // 只调一次：调两次会往 UNMAPPED 里重复塞同一个目录（红字里名字打两遍，读数就不干净了）
+    const pushed = `${pg}:${id}`;
+    if (seenRow.has(pushed)) continue; // 同页两段（§四 与「判据表」）重复列同一条不重复计数
+    seenRow.add(pushed);
+    docClaims.push({ page: pg, id, claim: (cells[1] ?? "").slice(0, 40), file: dirName, kind: TODAY.test(row) ? "today" : "future" });
+  }
   }
 }
 
@@ -106,7 +131,17 @@ console.log(missing === 0
   : "⇒ 缺口真实存在：那些行只是写在文档里，没有任何东西知道它们还成不成立。");
 console.log("   ⚠️ 抽取边界（本门自己的盲区，未做语义解析）：靠行内「必红/即红/当场红」等措辞识别，");
 console.log("      换措辞（只写『会红』『应红』）就漏抽；today/future 的分法同理，是措辞层的近似。");
-console.log(UNMAPPED.length === 0
-  ? `   页号映射表：${pages.length} 个目录全部在册（漏一行就会有整页判据静默不查）。`
-  : `   ⚠️ **页号映射表漏项 ${UNMAPPED.length} 个**：${UNMAPPED.join(", ")} ⇒ 这些页的判据没进本门，退出码已判红。`);
-process.exit(missing === 0 && UNMAPPED.length === 0 ? 0 : 1);
+/** 未映射页要分两类，否则"扩面"会变成把门跑红在别人没写判据表的目录上：
+ *  · 该目录**确实抽到了判据行**却没页号 ⇒ 真红（判据会静默不查）；
+ *  · 只是没有 §四/判据表 的页目录（含别人今天的页） ⇒ 只报不拦。 */
+const claimDirs = new Set(docClaims.map((c) => c.file));
+const unmappedFatal = UNMAPPED.filter((d) => claimDirs.has(d));
+const unmappedQuiet = UNMAPPED.filter((d) => !claimDirs.has(d));
+console.log(unmappedFatal.length === 0
+  ? `   页号来源：page.txt 优先、09-23 的 16 页走 MAP；带判据行的目录全部有页号（漏一个就 exit 1）。`
+  : `   ⚠️ **这些目录抽到了判据行却没有页号**（既无 page.txt 也不在 MAP 里）：${unmappedFatal.join(", ")} ⇒ 它们的判据进不了对齐，退出码已判红。`);
+if (unmappedQuiet.length > 0) {
+  console.log(`   ℹ️  另有 ${unmappedQuiet.length} 个 dated 页目录没有页号，但没抽到判据行（没写 §四/判据表，或措辞不含「必红」）：` +
+    `${unmappedQuiet.join(", ")} —— 只报不拦；它们哪天写了判据表就会转成红。`);
+}
+process.exit(missing === 0 && unmappedFatal.length === 0 ? 0 : 1);
