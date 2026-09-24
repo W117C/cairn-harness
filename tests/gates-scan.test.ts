@@ -204,11 +204,15 @@ describe("认证面声明 certifiedFace（整表绿的是哪一棵树，必须�
     expect(r.judgedDeleted).toBe(1);
   });
 
-  it("有在飞判卷面 ⇒ 那句话必须说「不是 HEAD」并给出 HEAD 认证的出路", () => {
+  it("有在飞判卷面 ⇒ 那句话必须说「不是 HEAD」并给出**真能落地**的 HEAD 认证出路", () => {
     const r = certifiedFace(" M src/a.ts\n");
     expect(r.line).toContain("工作树");
     expect(r.line).toContain("不等于 HEAD");
-    expect(r.line).toContain("--direct");
+    // 第一版这里印的是「跑 pnpm gates --direct」——**错的**：`gateCommand` 里 --direct 只把
+    // `pnpm run X` 换成 `/bin/sh -c <script body>`（换执行器），取料树一点没变。
+    // 出路必须是那棵隔离树本身，否则这句话会把人引向一次"看似 HEAD 认证、实则同树"的跑。
+    expect(r.line).toContain("worktree");
+    expect(r.line.includes("请跑 pnpm gates --direct")).toBe(false);
   });
 
   it("判卷四面干净 ⇒ 明说本表即 HEAD 认证（不许被读成「没测」）", () => {

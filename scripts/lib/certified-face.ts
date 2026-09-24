@@ -58,7 +58,9 @@ export function certifiedFace(porcelain: string): CertifiedFace {
   const line = judged > 0
     ? "  认证面 = **工作树，不是 HEAD**：判卷四面（src/scripts/tests/fixtures）在飞 " + String(judged) + " 项" +
       (judgedDeleted > 0 ? "（含删除 " + String(judgedDeleted) + " 项——门读盘，对被删文件零信号）" : "") +
-      "｜全仓在飞 " + String(total) + " 项 ⇒ 本表全 0 **不等于 HEAD 全 0**；HEAD 认证请跑 pnpm gates --direct"
+      "｜全仓在飞 " + String(total) + " 项 ⇒ 本表全 0 **不等于 HEAD 全 0**；" +
+      "要 HEAD 认证请在 HEAD 的隔离 worktree 里跑整表（`git worktree add --detach <tmp> HEAD`；" +
+      "注意 `pnpm gates --direct` 只换执行器〔`pnpm run X` → `/bin/sh -c <script>`〕，**不改取料树**）"
     : "  认证面：判卷四面与 HEAD 逐字一致" + (total === 0 ? "（工作树 = HEAD）" : "（在飞 " + String(total) + " 项全在四面之外）") +
       " ⇒ 本表即 HEAD 认证";
   return { total, judged, judgedDeleted, line };
