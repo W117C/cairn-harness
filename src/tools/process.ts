@@ -77,10 +77,13 @@ export function killAllTrackedChildren(): void {
 
 /** 启动子进程并纳入「进程组 + 超时强杀 + 超时强制 settle」管理。 */
 export function spawnTracked(file: string, args: readonly string[], opts: TrackedSpawnOptions): TrackedChild {
+  // fail-closed：省略 `env` 不等于"继承主进程"——主进程里正躺着解密后的 BYOK key（P1-1 同一格）。
+  // 旧实现把消毒责任交给每个调用点"记得传"，而类型是可选参数 ⇒ 第 5 个调用点一忘就静默漏。
+  const env = opts.env ?? sanitizedEnv();
   const child =
     opts.shell === true
-      ? spawn(file, { cwd: opts.cwd, env: opts.env, detached: true, shell: true })
-      : spawn(file, [...args], { cwd: opts.cwd, env: opts.env, detached: true });
+      ? spawn(file, { cwd: opts.cwd, env, detached: true, shell: true })
+      : spawn(file, [...args], { cwd: opts.cwd, env, detached: true });
   const timer = setTimeout(() => {
     opts.onTimeout();
     killGroup(child);

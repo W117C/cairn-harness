@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { isShellFamily, staticRisk } from "../../permissions/risk";
 import type { PermissionMode } from "../../permissions/modes";
 import { CC_TOOL_ALIAS } from "../../tools/base";
-import { spawnTracked } from "../../tools/process";
+import { sanitizedEnv, spawnTracked } from "../../tools/process";
 import type { HookEventName, LoadedHookDef } from "./types";
 import { expandUserConfig } from "./skills";
 
@@ -153,8 +153,9 @@ interface SanitizedEnv {
   base: Record<string, string>;
 }
 
-const ENV_ALLOW = ["PATH", "HOME", "LANG", "TMPDIR", "SHELL", "USER"];
-// E11（审查 P3）：ENV_SECRET_RE 已随死循环一并删除——剥离纪律 = ENV_ALLOW 白名单本身。
+// 宿主 env 白名单**只在 `tools/process.ts` 有一份**：这里原先自己抄了第二个 ENV_ALLOW，
+// 且已经漂了——那份少 `TERM`（§11.2 点名的名单里有它），于是 hook 子进程里的颜色/tput 行为
+// 与 run_shell 不一致。E11（审查 P3）另记：此处的剥离纪律 = 白名单本身，不再重复一遍密钥名正则。
 
 /** §9.5 的取值通道：userConfig 键 → `PLUGIN_OPTION_<KEY>`（非字母数字下划线归一为 `_`、转大写）。
  *  敏感值只走这条路进子进程，不进任何模型可见文本。 */
@@ -174,13 +175,12 @@ export function hookEnv(opts: {
   extra?: Record<string, string>;
 }): Record<string, string> {
   const base: Record<string, string> = {};
-  for (const k of ENV_ALLOW) {
-    const v = process.env[k];
+  for (const [k, v] of Object.entries(sanitizedEnv())) {
     if (v !== undefined) base[k] = v;
   }
   // E11（审查 P3）：旧实现此处有段"纵深防御剥离密钥变量"的循环，但循环体是 `void v`，
-  // 零副作用（out 只 spread base）——死代码已删。真实的剥离纪律 = ENV_ALLOW 白名单本身
-  //（不在名单的一律不进 hook 子进程）。
+  // 零副作用（out 只 spread base）——死代码已删。真实的剥离纪律 = 白名单本身
+  //（不在名单的一律不进 hook 子进程），而白名单的唯一事实源在 `tools/process.ts`。
   const out: SanitizedEnv["base"] = {
     ...base,
     PLUGIN_ROOT: opts.pluginRoot,
