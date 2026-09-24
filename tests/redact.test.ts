@@ -75,6 +75,34 @@ describe("高熵候选边界：掩值，不吃键名与路径", () => {
     expect(scanned.output).not.toContain("sk-abcdefghijklmnopqrstuvwxyz012345");
   });
 
+  it("相对路径也要整段可读（agent 最高频的 token 就是工作区相对路径）", () => {
+    // 上一笔只否决了「以 / 开头」的候选，而这批形状都不以 / 开头：dated 目录、worktree 名、
+    // session 文件名。它们被吃掉后模型拿不到路径 ⇒ 只能重跑命令或猜文件名（返工 + 白花 token）。
+    // 断言写成「整条逐字不变」而不是「不含 ****」：前半句才判得出段首被截的失真。
+    const lines = [
+      "read outputs/ga-strategy-2026-09-23/measure-overmask.mts ok",
+      "opened fixtures/no-progress/session-2026-09-20T04-11-52.jsonl",
+      "worktree .agents/worktrees/dsh-anchor-3f/src/main.ts dirty",
+      "plan docs/superpowers/plans/2026-09-20-goal-plan-modes.md done",
+    ];
+    for (const line of lines) {
+      const r = redactSecrets(line);
+      expect(r.text, "相对路径被脱敏吃掉：" + line).toBe(line);
+      expect(r.findings, "路径不该产出 secret finding：" + line).toHaveLength(0);
+    }
+  });
+
+  it("反向那一半：相对路径里真藏高熵串时仍然要擦（否决不许把密钥一起放过）", () => {
+    // 这一条与上一条同分母（都含 `/`），差别只在**某一段**自身是高熵随机串。
+    // 只测「路径放过」而不测这条，等于允许用「一律放过含 / 的候选」蒙过上一格。
+    const secret = "xk39Fd8Qz2Lp7Vm4Rt6Bn";
+    const line = `write src/config/${secret} ok`;
+    const r = redactSecrets(line);
+    expect(r.text).not.toContain(secret);
+    expect(r.text).toContain("src/config/"); // 键名与目录仍在（只掩值，不吃上下文）
+    expect(r.findings.length).toBeGreaterThan(0);
+  });
+
   it("刻意接受的口子（钉住，不是遗漏）：以 / 开头的 base64 串不再由熵分支覆盖", () => {
     // 命中概率 ≈1/64（首字符恰为 `/`）。换来的是绝对路径整段可读。
     // 有名字的密钥形状不受影响——私钥块 / sk- / AIza / AKIA / ghp_ / xox / 赋值式各自独立成规则。

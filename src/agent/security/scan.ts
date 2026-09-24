@@ -90,8 +90,10 @@ export interface EntropyOptions {
   enabled: boolean;
   minLength: number;
   threshold: number;
+  /** 路径形状候选里，**单段**要多长才算"这可能是个随机值"（见下面分段判据）。 */
+  minSegmentLength: number;
 }
-export const DEFAULT_ENTROPY: EntropyOptions = { enabled: true, minLength: 24, threshold: 4.0 };
+export const DEFAULT_ENTROPY: EntropyOptions = { enabled: true, minLength: 24, threshold: 4.0, minSegmentLength: 12 };
 
 /** 候选字符集刻意不含 `=`：那是赋值语法、不是值的一部分。旧写法把 `KEY=<高熵>` 整串当候选，
  *  而 mask() 只留前 4 字符 ⇒ 连键名一起吃掉（实测 `scratch=/var/folders/…` 落成 `scra****`）。
@@ -106,18 +108,44 @@ function looksLikePath(token: string): boolean {
   return token.startsWith("/");
 }
 
-/** 高熵串探测：长度 ≥ minLength、熵 ≥ threshold、至少含一个字母与一个数字（降噪）。 */
-export function findHighEntropyTokens(line: string, opts: EntropyOptions = DEFAULT_ENTROPY): { token: string; entropy: number }[] {
+/** 高熵串探测：长度 ≥ minLength、熵 ≥ threshold、至少含一个字母与一个数字（降噪）。
+ *
+ *  含 `/` 的候选**按段判**，整串熵不作数。理由（实测，不是审美）：
+ *  工作区相对路径是这个 agent 输出里最高频的 token，而 `dated 目录 / 随机段 / 文件名`
+ *  拼起来之后整串熵轻松过 4.0 ⇒ 旧写法把 `outputs/ga-strategy-2026-09-23/measure`
+ *  掩成 `outp****`、把 `src/config/<随机>` 连目录一起吃掉。模型拿不到路径 = 只能重跑命令或猜文件名
+ *  （返工 + 白花 token），而这正是一条**安全判据在静默制造不可用**。
+ *  代价写明（两侧都有钉住的用例）：
+ *  - 收紧：整串高熵但每一段都不够格的候选不再算密钥（如 `abcd1234/efgh5678/ijkl9012`）；
+ *  - 保留：任意一段自身是高熵随机串 ⇒ 只掩那一段，路径其余部分逐字可读。
+ *  绝对路径另有 `looksLikePath` 那道否决（首字符是 `/` 的 base64 因此不由本分支覆盖，已钉为口子）。 */
+export function findHighEntropyTokens(
+  line: string,
+  opts: EntropyOptions = DEFAULT_ENTROPY,
+): { token: string; secret: string; entropy: number }[] {
   if (!opts.enabled) return [];
-  const out: { token: string; entropy: number }[] = [];
+  const out: { token: string; secret: string; entropy: number }[] = [];
   for (const m of line.matchAll(ENTROPY_TOKEN_RE)) {
     const token = m[0];
     if (looksLikePath(token)) continue;
     if (token.length < opts.minLength) continue;
     if (!/[A-Za-z]/.test(token) || !/[0-9]/.test(token)) continue;
     if (/^[A-Z][A-Z0-9_]*$/.test(token)) continue; // SCREAMING_SNAKE 常量（配置名等）不算密钥
+    if (token.includes("/")) {
+      let hot: { secret: string; entropy: number } | null = null;
+      for (const seg of token.split("/")) {
+        if (seg.length < opts.minSegmentLength) continue;
+        if (!/[A-Za-z]/.test(seg) || !/[0-9]/.test(seg)) continue;
+        if (/^[A-Z][A-Z0-9_]*$/.test(seg)) continue;
+        const e = shannonEntropy(seg);
+        if (e >= opts.threshold && (hot === null || e > hot.entropy)) hot = { secret: seg, entropy: e };
+      }
+      if (hot === null) continue; // 只是几段可读名字拼起来的路径
+      out.push({ token, secret: hot.secret, entropy: hot.entropy });
+      continue;
+    }
     const entropy = shannonEntropy(token);
-    if (entropy >= opts.threshold) out.push({ token, entropy });
+    if (entropy >= opts.threshold) out.push({ token, secret: token, entropy });
   }
   return out;
 }
@@ -271,7 +299,7 @@ function lineFindings(path: string, line: string, lineNo: number, entropy: Entro
       path,
       line: lineNo,
       title: "高熵密钥串",
-      description: "第 " + String(lineNo) + " 行出现高熵串（熵 " + t.entropy.toFixed(2) + " bits/char，长度 " + String(t.token.length) + "），疑似硬编码密钥（" + mask(t.token) + "）。",
+      description: "第 " + String(lineNo) + " 行出现高熵串（熵 " + t.entropy.toFixed(2) + " bits/char，长度 " + String(t.secret.length) + "），疑似硬编码密钥（" + mask(t.secret) + "）。",
       confidence: "medium",
     });
   }
@@ -404,7 +432,8 @@ export function redactSecrets(text: string, opts: ScanOptions = {}): RedactResul
         }
       }
       for (const t of findHighEntropyTokens(line, entropy)) {
-        out = out.split(t.token).join(mask(t.token));
+        // 掩 secret（含 `/` 的候选里那一段真高熵的），不掩整个 token ⇒ 目录与文件名逐字留着
+        out = out.split(t.secret).join(mask(t.secret));
       }
     }
   });
