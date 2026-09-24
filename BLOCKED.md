@@ -1152,5 +1152,36 @@ BLOCKED 里那条的结论是"长链机制在靶场内量不到"）——**靶�
 `mutate-verify` 的「敏感目录拒读规则被移除」锚点也只能杀已写进数组的项
 ⇒ **缺的那两条永远不会被任何门抓到**（合册 §四 D 类：能力齐、观测者缺位）。
 
-**反转条件**：若在本仓/靶子里能实测到"profile 的 `.env` deny 不影响任何现有门与应用启动路径"，
+**反转条件**：若在本仓/靶子里能实测到“profile 的 `.env` deny 不影响任何现有门与应用启动路径”，
 选项 A 的连带代价不成立 ⇒ 直接按承诺做 A，本请求作废。
+
+## 裁决 9（请求改判据）：豁免针脚校验的分类器只看 `.split(`，被豁免的 10 条里 6 条其实不是行式 apply
+
+**现象（读数均可复跑）**：`pnpm mutate-needles-check` 印「逐行式 10 条（多处命中即设计，不核针脚）」，
+把这 10 条从“针脚在源文件里命中几处”的静态校验里豁免掉。逐条读它们的 `apply:` 原文（按 id 切块），
+判据是「是否对换行符做 split」——只有那种才是有意改所有匹配行：
+
+- 真行式 4 条：`prune-verify-card-exempt`、`prune-attachment-safesegment`、`sessions-name-charset`、`sessions-rename-clash`；
+- **非行式 6 条**：`verify-repeat-compares-first-line-only`、`line-wise-apply-never-recognized`、
+  `line-wise-apply-always-true`、`verdict-not-stripping-ansi`，加今天新写的 `agent-area-lexical-dropped`、
+  `agent-area-real-recheck-dropped`。后两条的 apply 里出现 `.split(` 纯粹因为**针脚文本**照抄了
+  `base.ts` 那一行的 `rel.split(/[\\/]/)`，与“要改所有匹配行”无关。
+
+**为什么这算判据缺陷、我不改代码去绕**：豁免就是关掉那一格的静态校验。被误豁免的锚点，针脚抄错在这里不会报——
+今天实测：`agent-area-lexical-dropped` 一度把源码的 2 空格缩进抄成 4 空格（0 命中），`agent-area-real-recheck-dropped`
+干脆漏写了整条 `apply:`。后者被「未覆盖 / apply is not a function」抓到，前者**只有真跑变异时**才会以
+「突变未生效」红——而整表要跑几十分钟、常被并发堵着，这正是 `mutate-needles-check` 存在的理由
+（`scripts/gate-manifest.ts` 里那条注释自己写着：那段时间里失效的锚点在假装守护）。
+附带一条同构的讽刺：`line-wise-apply-never-recognized`、`line-wise-apply-always-true` 钉的就是这个分类器本身，
+而它俩也被这个分类器豁免掉了——即“守这条例的尺”恰好不受该尺的检查。
+
+**请求换判据**（三选一，均不必改被测码）：① 把 `isLineWiseApply`（`scripts/lib/mutate-gates.ts`）
+从“含 `.split(`”收窄到“split 的实参是换行符”——那才是“逐行式”的事实；② 或让豁免必须像
+`LEGACY_WAIVERS` 那样显式登记带理由，逐行式名单由登记表而不是字符串特征决定；③ 或维持实现，
+但门输出必须同时印「豁免 N 条 / 其中非行式 M 条」，M>0 即红，好让下一个人知道自己这一格没被保护。
+我这一轮不动它：它是判卷面，且被上面那两条锚点钉着，收窄会连带改那两条锚点的期望——那属于换判据本身。
+
+**已做的自证**：两条新锚点的命中数手工数过（各 1 处，`indexOf` 环数法），并在同 HEAD（`b4099a7`）
+隔离 worktree + 真依赖逐条跑 → 4/4 被正确杀死。**反转条件**：若上面 6 条非行式里有哪一条确实需要豁免
+（我扫的结论是不需要），则维持现状并放弃 ①②，但仍要 ③。
+
