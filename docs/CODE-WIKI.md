@@ -391,7 +391,8 @@ pnpm agent         # headless 直跑 agent
           schedule-check · commercial-check
 ```
 
-- `gates.ts` 逐门 spawn（TERM=dumb + NO_COLOR，20min 超时判红），打印逐道退出码 + 汇总。
+- `gates.ts` 只组命令，跑与超时在 `scripts/lib/gate-runner.ts`（TERM=dumb + NO_COLOR，20min 超时判红），打印逐道退出码 + 汇总。
+- **超时终止阶梯**（`scripts/lib/gate-kill.ts`）：整组 SIGTERM → 宽限 15s → 仍未退才整组 SIGKILL，且结论锁 124 不被子进程自己的退出码翻绿。为什么不是直接强杀：`mutate-verify` 的收尾处理器挂在 SIGTERM 上，直接 SIGKILL 让它一次机会都没有。⚠️ 这条**不**保突变体还原——`runTest` 的 `execFileSync` 同步阻塞事件循环，阻塞期间的 TERM 会被吞（实测 2026-09-24），那条路靠 `lib/mutate-gates.ts` 的 `leftoverActionOf` 下次开跑按证据自愈。
 - **断言体检**：静态扫描所有 `scripts/*.{ts,mjs,cjs}`，抓空断言、`|| true` 恒真式、暗卷段零断言、AST 级析取式弱断言——「门说的话 = 门测的事」。
 - **清单漂移护栏**：`checkGateManifest` 校验 GATES ↔ package.json scripts ↔ EXEMPT_SCRIPTS 三者一致，防止验收脚本被静默冷落（provider:check 历史实例）。
 - **未证 ≠ 通过**：连网/凭据限制跑不到的断言（testdino 远程 MCP、provider:check）如实标注，严格模式下判红。

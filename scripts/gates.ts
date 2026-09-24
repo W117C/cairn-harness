@@ -8,7 +8,6 @@
 //       pnpm gates --only=test,tools-check   （只跑指定门，调试用）
 //       pnpm gates --no-scan   （跳过恒真式体检）
 //       pnpm gates --direct    （绕开 pnpm 的 deps 检查：主树被别的会话占着时，去隔离 worktree 跑整表）
-import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
@@ -16,6 +15,9 @@ import { fileURLToPath } from "node:url";
 import { countUnverified, gateUnverified, scanAssertionHealth, scanDisjunctions, silentGreenGate, type ScanHit } from "./assertion-health";
 import { SCAN_EXT, trackedScriptFiles } from "./lib/scan-scope";
 import { verdictLine } from "./lib/gate-verdict";
+// 跑一条命令 + 超时终止阶梯（同族：判据在 ./lib/gate-runner.ts 与 ./lib/gate-kill.ts，那边可单测；
+// 本文件只组命令）。旧实现把 spawn 与「超时直接整组 SIGKILL」写在这里，测不到也换不掉。
+import { runCommand, type GateResult } from "./lib/gate-runner";
 import { checkGateManifest, EXEMPT_SCRIPTS, GATES, gateCommand } from "./gate-manifest";
 // 耗时账本（同族：判据在 ./facts.ts，那边可单测；本文件只负责「跑完顺手记一笔」）。
 import { appendRun, currentHost, type GateRun } from "./facts";
@@ -28,13 +30,6 @@ export type { ScanHit };
 export { GATES, checkGateManifest, EXEMPT_SCRIPTS };
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-
-interface GateResult {
-  name: string;
-  code: number;
-  ms: number;
-  output: string;
-}
 
 /** 全量体检：空断言 / 恒真式 / 无断言段 + H-1 的 AST 级析取式弱断言。
  *  H5（审查 P2）：不再只扫 *.ts——.mjs/.cjs 验收脚本同样纳入（否则换扩展名即整门逃逸）；
@@ -75,73 +70,24 @@ async function scanAll(): Promise<ScanHit[]> {
   return hits;
 }
 
-/** H11（审查 P3）：单门超时——旧实现 spawn 无超时，任一门挂起即无限阻塞整套门禁。
- *  20 分钟 = 当前最慢门（test ~110s）的 10 倍以上余量；超时判红（exit 124）。 */
-const GATE_TIMEOUT_MS = 20 * 60_000;
-
+/** 本文件只组命令；跑与超时终止在 ./lib/gate-runner（那边可单测，判卷共用一份阶梯）。 */
 function runGate(name: string, opts: { direct: boolean; scripts: Record<string, string> }): Promise<GateResult> {
-  return new Promise((settle) => {
-    const t0 = Date.now();
-    let done = false;
-    let timer: NodeJS.Timeout | null = null;
-    const finish = (code: number, output: string): void => {
-      if (done) return;
-      done = true;
-      if (timer !== null) clearTimeout(timer);
-      settle({ name, code, ms: Date.now() - t0, output });
-    };
-    // 执行器选择在 gate-manifest.gateCommand（可单测）：缺省 `pnpm run <门名>`，
-    // 直跑模式 `/bin/sh -c <package.json 脚本正文>` + PATH 前置 node_modules/.bin。
-    // 为什么要直跑：pnpm 11 跑任何脚本前都做 deps 状态检查，而它拒绝「node_modules 解析目标不在项目根内」
-    // 的目录（隔离 worktree + symlink node_modules 正是这个形状，报 ERR_PNPM_UNSAFE_MODULES_DIR 并试图就地
-    // pnpm install）⇒ `pnpm gates` 只能在主树跑，而主树可能正被另一个会话写入，整表验证被无限期挂起。
-    // 门清单与命令事实源都不变（gate-manifest + package.json），只换执行器。
-    const plan = gateCommand(name, { direct: opts.direct, scripts: opts.scripts, root: ROOT });
-    if (plan.missingScript === true) {
-      // 脚本查不到必须判红：当成"没有要跑的东西"静默跳过 = 一道从不运行的门（provider:check 的历史形状）
-      finish(1, "[gates] 直跑模式：package.json scripts 里没有 " + JSON.stringify(name) + "（不静默跳门）");
-      return;
-    }
-    let env: NodeJS.ProcessEnv = { ...process.env, TERM: "dumb", NO_COLOR: "1" };
-    if (plan.pathPrepend !== undefined) {
-      env = { ...env, PATH: plan.pathPrepend + ":" + (process.env.PATH ?? "") };
-    }
-    // detached：让子进程及其孙进程同属一个新进程组——超时只能整组杀，否则 SIGKILL 打在
-    // 包装器上，真正的 check 脚本（固定 CDP 端口、固定 tmpdir 快照名、共享 fixtures
-    // 靶子）活下来与后续门并发互踩，造成连锁假红/假绿（审查 H-4/agents 分片）。
-    const child = spawn(plan.cmd, plan.args, {
-      cwd: ROOT,
-      env,
-      stdio: ["ignore", "pipe", "pipe"],
-      detached: true,
-    });
-    const killTree = (): void => {
-      try {
-        if (typeof child.pid === "number") process.kill(-child.pid, "SIGKILL");
-        else child.kill("SIGKILL");
-      } catch {
-        try {
-          child.kill("SIGKILL");
-        } catch {
-          /* 已退出 */
-        }
-      }
-    };
-    let out = "";
-    child.stdout?.on("data", (d: Buffer) => {
-      out += String(d);
-    });
-    child.stderr?.on("data", (d: Buffer) => {
-      out += String(d);
-    });
-    child.on("error", (err) => finish(127, String(err)));
-    child.on("close", (code) => finish(code ?? 1, out));
-    timer = setTimeout(() => {
-      killTree();
-      finish(124, out + "\n[gates] 超时（" + String(GATE_TIMEOUT_MS / 60_000) + " 分钟），已强制终止判红");
-    }, GATE_TIMEOUT_MS);
-    timer.unref?.();
-  });
+  // 执行器选择在 gate-manifest.gateCommand（可单测）：缺省 `pnpm run <门名>`，
+  // 直跑模式 `/bin/sh -c <package.json 脚本正文>` + PATH 前置 node_modules/.bin。
+  // 为什么要直跑：pnpm 11 跑任何脚本前都做 deps 状态检查，而它拒绝「node_modules 解析目标不在项目根内」
+  // 的目录（隔离 worktree + symlink node_modules 正是这个形状，报 ERR_PNPM_UNSAFE_MODULES_DIR 并试图就地
+  // pnpm install）⇒ `pnpm gates` 只能在主树跑，而主树可能正被另一个会话写入，整表验证被无限期挂起。
+  // 门清单与命令事实源都不变（gate-manifest + package.json），只换执行器。
+  const plan = gateCommand(name, { direct: opts.direct, scripts: opts.scripts, root: ROOT });
+  if (plan.missingScript === true) {
+    // 脚本查不到必须判红：当成"没有要跑的东西"静默跳过 = 一道从不运行的门（provider:check 的历史形状）
+    return Promise.resolve({ name, code: 1, ms: 0, output: "[gates] 直跑模式：package.json scripts 里没有 " + JSON.stringify(name) + "（不静默跳门）" });
+  }
+  let env: NodeJS.ProcessEnv = { ...process.env, TERM: "dumb", NO_COLOR: "1" };
+  if (plan.pathPrepend !== undefined) {
+    env = { ...env, PATH: plan.pathPrepend + ":" + (process.env.PATH ?? "") };
+  }
+  return runCommand(name, { cmd: plan.cmd, args: plan.args, cwd: ROOT, env });
 }
 
 async function main(): Promise<void> {
