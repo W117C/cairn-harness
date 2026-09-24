@@ -316,6 +316,31 @@ const MUTATIONS = [
     apply: (s) => s.replace("if (failToPass === null || failToPass.length === 0) {", "if (failToPass === null) {"),
     expectFail: "FAIL_TO_PASS 是空数组也算没有判卷（只查 PASS_TO_PASS 会静默变成'没坏就算过'）",
   },
+  // ---- 用户级自定义子智能体（`~/.dsh/agents`、`~/.claude/agents`）：装载、查找、发现三面各一条 ----
+  {
+    id: "user-agent-role-not-lookupable",
+    src: "src/agent/plugins/index.ts",
+    test: "tests/user-agent-roles.test.ts",
+    desc: "查找口只看插件角色 ⇒ 用户放好的文件既在清单里又调不动（装载即陈列的老形状）",
+    apply: (s) => s.replace(" ?? this.userAgentRoles().find((a) => a.invoke === invoke)", ""),
+    expectFail: "findAgentRole 两条来源都能命中，且形态与插件一致（编排器共用同一份映射，不另起一路）",
+  },
+  {
+    id: "user-agent-role-hidden-from-routing",
+    src: "src/agent/plugins/index.ts",
+    test: "tests/user-agent-roles.test.ts",
+    desc: "路由清单不再列用户级角色 ⇒ 模型没有任何地方能读到它，只能猜名字、猜错才被拒",
+    apply: (s) => s.replace("    const roleLines = [...this.agentRoles(), ...this.userAgentRoles()].map((a) => {", "    const roleLines = this.agentRoles().map((a) => {"),
+    expectFail: "发现面：两条来源都出现在同一份路由清单里，并写明能用作 stages[].role",
+  },
+  {
+    id: "user-agent-duplicate-name-silent-override",
+    src: "src/agent/roles/user-agents.ts",
+    test: "tests/user-agent-roles.test.ts",
+    desc: "两个来源同名时静默覆盖 ⇒ 用户改了文件却没生效，而且没人吭声（清单与查找还各自剩一条）",
+    apply: (s) => s.replace("      if (hit !== undefined) {", "      if (false) {"),
+    expectFail: "同名冲突：DSH 自己的目录赢，并点名被盖住的那条路径（静默覆盖=改了没生效）",
+  },
   {
     id: "autonomy-allow-critical",
     src: "src/permissions/autonomy.ts",

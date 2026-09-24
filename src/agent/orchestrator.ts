@@ -1480,7 +1480,7 @@ export class Orchestrator {
     }
     if (role.includes(":")) {
       const def = this.opts.agentRoleFor ? this.opts.agentRoleFor(role) : null;
-      if (!def) return { error: "插件 agent 角色未注册: " + role + "（agentRoleFor 未命中）" };
+      if (!def) return { error: "agent 角色未注册: " + role + "（plugin-name:agent-name 或 user:agent-name；agentRoleFor 未命中）" };
       const mapped = resolvePluginRole(def);
       return {
         mode: mapped.mode,

@@ -19,6 +19,7 @@ import {
 import {
   readPluginUserConfig, pluginUserConfigDir, type PluginUserConfigRead,
 } from "./secrets";
+import { loadUserAgentRoles, userAgentInvoke, type UserAgentRole } from "../roles/user-agents";
 import {
   registerPluginLspServers, unregisterPluginLspServers, type LspServerConfig as LspRuntimeConfig,
 } from "../../tools/lsp";
@@ -79,6 +80,9 @@ export interface PluginRuntimeOptions {
   mode?: PermissionMode;
   /** 会话标识：透传给 hook 引擎进 stdin JSON（§9.5）。缺省 = 该字段不进 JSON，不伪造。 */
   sessionId?: string;
+  /** 用户级自定义角色（`~/.dsh/agents`、`~/.claude/agents`）的 home；缺省 = `homedir()`。
+   *  可注入是为了判卷——不能读真 home 的测试环境里，这条路径也要被验到。 */
+  home?: string;
 }
 
 /** skill 激活投影：tool_call(name="skill") → 同 callId 的 tool_result 事件 id（1-based 行号）；
@@ -152,6 +156,9 @@ export class PluginRuntime {
    *  键 = 调用名（同名重复激活不叠加）。生命周期 = 一个 PluginRuntime 实例 = 一次 run
    *  （一条用户消息），下条消息新建实例 ⇒ 「本 turn 放行、下条用户消息清除」不需要清理代码。 */
   private skillScopes: Map<string, SkillToolPolicy> = new Map();
+  /** 用户级自定义角色（`~/.dsh/agents`、`~/.claude/agents`）。装载期读一次；
+   *  与插件角色共用查找口与路由清单，于是消费端只有一路（两处口径必漂的老毛病从这里挡掉）。 */
+  private userAgents: UserAgentRole[] = [];
 
   private constructor(manifest: PluginsManifest, opts: PluginRuntimeOptions) {
     this.opts = opts;
@@ -181,6 +188,10 @@ export class PluginRuntime {
     });
     const rt = new PluginRuntime(manifest, opts);
     await rt.resolveUserConfigs(); // 装载即解析：缺项要在激活前就出现在警告里
+    // 用户级自定义角色：装载期读一次，问题进同一份警告面（面板与判据都看得见，不是只进内存）。
+    const ua = await loadUserAgentRoles(opts.home === undefined ? {} : { home: opts.home });
+    rt.userAgents = ua.roles;
+    for (const message of ua.warnings) manifest.warnings.push({ plugin: "user-agents", message });
     return rt;
   }
 
@@ -367,10 +378,19 @@ export class PluginRuntime {
     return out;
   }
 
-  /** 按 invoke（plugin-name:agent-name）取插件 agent 角色定义（编排器 stages[].role 解析口；§9.6）。
-   *  未信任插件的角色不可见（信任门一致）；未命中 = null（编排器 fail-visible 拒绝该环）。 */
+  /** 用户级自定义角色（`user:<name>`），与 `agentRoles()` 同形状 —— 查找口与路由清单共用一条。 */
+  userAgentRoles(): { invoke: string; description: string; plugin: string; name: string; path: string; frontmatter: Record<string, unknown>; body: string }[] {
+    return this.userAgents.map((a) => ({
+      invoke: userAgentInvoke(a.name), description: a.description, plugin: "user",
+      name: a.name, path: a.path, frontmatter: a.frontmatter, body: a.body,
+    }));
+  }
+
+  /** 按 invoke 取 agent 角色定义（编排器 stages[].role 解析口；§9.6）。两条来源一条查找面：
+   *  `plugin-name:agent-name` 走插件（未信任不可见，信任门一致），`user:agent-name` 走用户级目录。
+   *  未命中 = null（编排器 fail-visible 拒绝该环）。 */
   findAgentRole(invoke: string): { name: string; body: string; frontmatter: Record<string, unknown> } | null {
-    const hit = this.agentRoles().find((a) => a.invoke === invoke);
+    const hit = this.agentRoles().find((a) => a.invoke === invoke) ?? this.userAgentRoles().find((a) => a.invoke === invoke);
     if (!hit) return null;
     return { name: hit.name, body: hit.body, frontmatter: hit.frontmatter };
   }
@@ -380,7 +400,7 @@ export class PluginRuntime {
    *  **没有任何地方**能读到注册了哪些角色（skill 有清单，角色没有）——于是"自定义子智能体"
    *  只能靠猜，猜错的唯一反馈是 spawn 被拒（未知角色）。同一条清单、同一份预算。 */
   routingList(): RoutingListResult {
-    const roleLines = this.agentRoles().map((a) => {
+    const roleLines = [...this.agentRoles(), ...this.userAgentRoles()].map((a) => {
       const desc = a.description.replace(/\s+/g, " ").trim();
       return "- " + a.invoke + " — " + (desc !== "" ? desc : "（该 agent 文件没写 description）") + "（可用作 pipeline stages[].role）";
     });
