@@ -12,10 +12,21 @@ export interface OutputRing {
 }
 
 /** 提示行自己也算输出：不给它留位就会把「输出 ≤ 上限」这句承诺撑破（中文提示一行就 ~150B，
- *  既有 UTF-8 字节判据实测红过一次）。 */
-const NOTICE_RESERVE_BYTES = 256;
-/** 超限后的头尾分配：头部多留一点（进程刚起的报错、命令行回显在前段），总预算一字不加。 */
+ *  既有 UTF-8 字节判据实测红过一次）。溢出时交出去的是**两行**提示（省略量 + 下一步），
+ *  所以留位按两行的和算——判据在 `tests/shell-tail.test.ts` 的预算那条。 */
+const NOTICE_RESERVE_BYTES = 512;
+/** 头尾环的分配：头部多留一点（进程刚起的报错、命令行回显在前段），总预算一字不加。 */
 const HEAD_RATIO = 0.55;
+
+/**
+ * 溢出时必须跟着的那句下一步。住在环里而不是各面抄一份：三个消费者（`run_shell`、`verify`、
+ * 沙箱那条出口）交付的是同一个形状——"一条 shell 命令的 stdout"，所以同一句下一步对三面都成立。
+ * 判据不是措辞而是真做过一遍（`tests/shell-tail.test.ts`：按这句加筛重跑，中间那段进得来且不溢出）。
+ * 里面不许出现工作区外的绝对路径——`read_file` 只收工作区相对路径（#33 同一族，反向哨兵同文件）。
+ */
+export const MIDDLE_TRUNCATION_HINT =
+  "[下一步：原样重跑同一条命令只会再超一次。重跑时先筛小——管道接 `grep -n 关键词`、按行号取中段 `sed -n '200,400p'`、" +
+  "或只看结论 `tail -n 50`；要留整段就 `> out.log 2>&1` 落进工作区，再用 grep 或 read_file 读 out.log]";
 
 /** 一个码位占几个 UTF-8 字节（1/2/3/4）。 */
 const utf8Bytes = (cp: number): number => (cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4);
@@ -116,7 +127,7 @@ export function createOutputRing(limitBytes: number): OutputRing {
     tail = tailWithin(tail + s, tailBudget);
   };
   const read = (): string => overflowing
-    ? head + "\n" + middleTruncationNotice(seen - bytesOf(head) - bytesOf(tail)) + "\n" + tail
+    ? head + "\n" + middleTruncationNotice(seen - bytesOf(head) - bytesOf(tail)) + "\n" + MIDDLE_TRUNCATION_HINT + "\n" + tail
     : out;
   return { push, read };
 }

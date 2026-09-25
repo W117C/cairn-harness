@@ -4,12 +4,13 @@
 //    ⑥ 就是那一条：中文 3 字节/字、emoji 4 字节/码位，帽与省略数都必须按**字节**成立，
 //    且按字节切的两处缝合不许把多字节字符切成半个（U+FFFD）。
 import { describe, expect, it } from "vitest";
-import { createOutputRing } from "../src/tools/output-ring";
+import { createOutputRing, MIDDLE_TRUNCATION_HINT } from "../src/tools/output-ring";
 
 const LIMIT = 4096;
-// 头 2112 + 尾 1728（(LIMIT - 256) × 0.55 取整）——两条锚点盯着这两个分配数与预留位。
-const HEAD = 2112;
-const TAIL = 1728;
+// 预留位 512：溢出时交出去的是**两行**提示（省略量 144B + 下一步 278B + 三个换行 = 425B）。
+// 头 1971 + 尾 1613（(LIMIT - 512) × 0.55 取整）——两条锚点盯着这两个分配数与预留位。
+const HEAD = 1971;
+const TAIL = 1613;
 /** 长度恰为 n 的块：两头都是 tag，中间填 '.'——断言「头部来自第一块、尾部来自最后一块」才不含糊。 */
 const block = (n: number, tag: string): string => tag + ".".repeat(n - tag.length * 2) + tag;
 const omittedOf = (text: string): number => {
@@ -18,6 +19,8 @@ const omittedOf = (text: string): number => {
 };
 /** 从渲染结果里把提示行剥出来，好算「真正留下的字节数」。载荷里没有换行，所以按行认是可靠的。 */
 const noticeOf = (text: string): string => /\[truncated:[^\n]*\]/u.exec(text)?.[0] ?? "";
+/** 溢出时交付的两行提示整体（省略量 + 下一步）：所有「剥掉提示再算载荷」的断言都走这一支，别各写一份。 */
+const noticeBlock = (text: string): string => "\n" + noticeOf(text) + "\n" + MIDDLE_TRUNCATION_HINT + "\n";
 
 describe("createOutputRing（超限留头也留尾）", () => {
   it("未溢出：逐字全文，一行提示都不加（零回归面）", () => {
@@ -84,7 +87,7 @@ describe("createOutputRing（超限留头也留尾）", () => {
     const out = ring.read();
     const notice = noticeOf(out);
     expect(notice).not.toBe("");
-    const keptBytes = Buffer.byteLength(out, "utf8") - Buffer.byteLength("\n" + notice + "\n", "utf8");
+    const keptBytes = Buffer.byteLength(out, "utf8") - Buffer.byteLength(noticeBlock(out), "utf8");
     const fedBytes = fed.reduce((a, s) => a + Buffer.byteLength(s, "utf8"), 0);
     expect(omittedOf(out)).toBe(fedBytes - keptBytes);
   });
@@ -95,7 +98,7 @@ describe("createOutputRing（超限留头也留尾）", () => {
     const out = ring.read();
     expect(out).not.toContain("\uFFFD");
     // 剥掉提示行后，剩下的必须全是喂进去的那些字符——出现别的字符就是切坏了一个码位
-    expect(out.replace("\n" + noticeOf(out) + "\n", "")).toMatch(/^[字hij0-9.]*$/u);
+    expect(out.replace(noticeBlock(out), "")).toMatch(/^[字hij0-9.]*$/u);
   });
 
   it("emoji（代理对，4 字节/码位）同样守帽、同样不切半", () => {
@@ -106,14 +109,18 @@ describe("createOutputRing（超限留头也留尾）", () => {
     expect(Buffer.byteLength(out, "utf8")).toBeLessThanOrEqual(LIMIT);
     expect(out).not.toContain("\uFFFD");
     // 剥掉提示行后只剩整枚 emoji：半个代理对都会让这条正则不匹配
-    expect(out.replace("\n" + noticeOf(out) + "\n", "")).toMatch(/^(?:\u{1F680})*$/u);
+    expect(out.replace(noticeBlock(out), "")).toMatch(/^(?:\u{1F680})*$/u);
   });
 
   it("ASCII 路径逐字不变（这次修的单位不许动既有消费者的字节）", () => {
     const ring = createOutputRing(LIMIT);
     for (let i = 0; i < 3; i++) ring.push(block(2000, "k" + String(i)));
     const out = ring.read();
-    expect(out.slice(0, HEAD)).toBe(block(2000, "k0") + block(2000, "k1").slice(0, HEAD - 2000));
+    // 头部必须逐字等于喂入序列的前 HEAD 字节（旧写法按「跨到第二块」拼期望，那只是当时
+    // 预留位 256 让 HEAD=2112 > 2000 的巧合；预留位升到 512 后 HEAD 落回第一块内，
+    // 断言改成与块边界无关的同一件事：前 HEAD 字节逐字不变）。
+    const fed = [0, 1, 2].map((i) => block(2000, "k" + String(i)));
+    expect(out.slice(0, HEAD)).toBe(fed.join("").slice(0, HEAD));
     expect(omittedOf(out)).toBe(6000 - HEAD - TAIL);
     expect(out.length).toBeLessThanOrEqual(LIMIT);
   });
