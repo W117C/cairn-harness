@@ -2325,7 +2325,10 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
   （`impact-query-deps-ghost-file-silent`，HEAD 本来就红），主树 804 条/阻断 **8** = 那 1 条 + **我的 2 条** +
   别人在飞造成的 5 条。我那 2 条的针脚与 `expectFail` 逐字写进 #50，前置＝`mutate-verify.mjs` 不在飞
   （它正被并发会话做 −1370/+44 行的整表重写，而非交互 `git add -p` 不可用 ⇒ 拿不到"只提交我的 hunk"这条路）。
-  `mutate-anchor-titles` 那 1 条 drift 走它自带的 `KNOWN_DRIFT` 登记（带理由、注明 #50 落笔后必须撤，stale 机制自己催）。
+  `mutate-anchor-titles` 的 1 条 drift 走它自带 `KNOWN_DRIFT` 登记（带理由、注明 #50 落笔后必须撤，stale 机制自己催）。
+  **登记后分两棵树说**（规则 61）：主树该闸绿；同 HEAD 并排两笔（`6139575` 与 `9620e91`）都报同 2 条 drift
+  （`renderer-hides-worker-spend`、`panel-dirty-misses-review-and-progress-events`）＝**HEAD 固有红、与本轮无关**，
+  而我那条在两笔里都不再出现 ⇒ 豁免真生效，不是把闸关小了。
 - 探针读数：承诺面 **8→7**（`context.ts` 那句是**消失**不是被豁免），红 **5→2**，剩两条都要热文件才能落地
   （#33 需 `glm-session` 那一跳、#49 那句在 `agent-runner.ts`）；自证 / 反向 / 陈旧归属三格全 ✅。
 - 门禁：全量 core test **217 files / 2345 tests 全绿**（第 63 页 216/2334 ⇒ 净 +1 文件 +11 条）；`pnpm e2e` 断言全过；
