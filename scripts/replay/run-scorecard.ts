@@ -19,7 +19,7 @@ import { isEnvVerifyCause } from "../../src/events";
 import { mayHaveWrittenDisk } from "../../src/agent/write-face";
 import { bucketsSpendUsd, priceForModel, type SpendBucket } from "../../src/agent/orchestrator-join";
 import { readJsonl, scanCorpus, zeroCorpusProblem } from "./corpus";
-import { armOfPath, groupPairs, parseArm, taskKey, type ArmOf } from "../lib/eval-arms";
+import { armOfPath, groupPairs, magnitudeOfAb, parseArm, taskKey, abRowLine, repRowLine, signTestToken, type ArmOf } from "../lib/eval-arms";
 
 export type RunOutcome =
   | "green-first-try"
@@ -407,13 +407,31 @@ function main(): void {
   const pairs = groupPairs(cells);
   const abPairs = pairs.filter((g) => g.hasAb);
   const repPairs = pairs.filter((g) => !g.hasAb);
+  const labelsOf = (g: (typeof pairs)[number]) => g.cells.map((c) =>
+    (c.arm.variant ?? "rep" + String(c.arm.rep)) + "=" +
+    (c.judged === 0 ? "不可判" : c.green > 0 ? "绿" : "红") + "/" + String(c.tokens) + "tk");
   console.log("  —— 配对的格子：A/B " + String(abPairs.length) + " 格 ｜ 同配置重复 " + String(repPairs.length) + " 格");
-  for (const g of [...abPairs, ...repPairs]) {
-    const parts = g.cells.map((c) =>
-      (c.arm.variant ?? "rep" + String(c.arm.rep)) + "=" +
-      (c.judged === 0 ? "不可判" : c.green > 0 ? "绿" : "红") + "/" + String(c.tokens) + "tk");
-    console.log("    [" + (g.hasAb ? "A/B" : "重复") + "] " + g.family + "/" + g.task + " ⇒ " + parts.join(" ｜ "));
-  }
+  const abMags = abPairs.map((g) => {
+    const m = magnitudeOfAb(g);
+    console.log(abRowLine(m, labelsOf(g)));
+    return m;
+  });
+  for (const g of repPairs) console.log(repRowLine(magnitudeOfAb(g), labelsOf(g)));
+  // 引用资格汇总：数字留在上面，但"能不能当结论用"由这一行说。
+  const citable = abMags.filter((m) => m.verdict === "citable").length;
+  const st = signTestToken(abMags);
+  console.log(
+    "  —— 幅度引用资格：可引用 " + String(citable) + "/" + String(abMags.length) + " 格" +
+      "（底只认**本格同变体的重复**；借他格/他族的抖动不算 ⇒ 补底要花真钱，见 #18）",
+  );
+  console.log(
+    "     token 轴符号：" + (st.tokenDirection === null
+      ? "无从统计（可比格 " + String(st.pairs) + " · 同值 " + String(st.ties) + " · 证据缺席 " + String(st.skipped) + " ⇒ 0 分母不读成 0%）"
+      : "「" + st.tokenDirection.sign + "」（以排序靠前的变体为参照）" +
+        String(st.tokenDirection.agree) + "/" + String(st.pairs) + " 格同向" +
+        " · 反向 " + String(st.tokenDirection.against) + " · 同值 " + String(st.ties) +
+        " · 证据缺席 " + String(st.skipped) + " ⇒ 方向可报，倍率仍按上行判"),
+  );
   if (abPairs.length === 0) {
     console.log("    （没有可配对的 A/B 格 ⇒ 策略差要等各臂把任务补齐；不许拿两条不同任务的臂算差值）");
   }
