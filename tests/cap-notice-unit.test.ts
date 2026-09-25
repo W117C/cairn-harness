@@ -69,6 +69,34 @@ describe("反向一侧：真按字节截断的那两支，量纲必须还是 KB"
     const capped = capLspOutput("x".repeat(40 * 1024));
     expect(capped).toMatch(/32\s*KB/);
   });
+
+  // ↓ #52：同一句提示承诺的是**字节**上限，而旧实现量的是 `text.length`（字符）。
+  // 中文场景下两者差 3 倍 ⇒ 后果不是措辞，是"上限根本没生效"。
+  it("lsp 中文主导的输出也必须真的被封顶在 32KB（旧实现：9 万字节原样通过，还自称 32KB 上限）", () => {
+    const cjk = "中".repeat(30 * 1024); // 30720 字符 ⇒ 旧实现判为"未超限"，但它是 92160 字节
+    expect(Buffer.byteLength(cjk, "utf8")).toBeGreaterThan(32 * 1024);
+    const capped = capLspOutput(cjk);
+    expect(capped).toContain("[truncated:");
+    // 提示之后剩下的正文必须真的在 32KB 内（半字符不算越界：整个输出只允许提示那一行进账）
+    const body = capped.slice(0, capped.indexOf("\n[truncated:"));
+    expect(Buffer.byteLength(body, "utf8")).toBeLessThanOrEqual(32 * 1024);
+  });
+
+  it("反向一侧：ASCII 输出的截断位逐字不变（改量纲不许顺手挪动本来就对的那一支）", () => {
+    const ascii = "x".repeat(40 * 1024);
+    const capped = capLspOutput(ascii);
+    expect(capped.startsWith("x".repeat(32 * 1024))).toBe(true);
+    expect(capped.slice(0, 32 * 1024 + 1)).toBe("x".repeat(32 * 1024) + "\n");
+    expect(Buffer.byteLength(capped.slice(0, 32 * 1024), "utf8")).toBe(32 * 1024);
+  });
+
+  it("截断不许留半个 UTF-8 序列（半个字符进 provider 变问号）", () => {
+    const capped = capLspOutput("中".repeat(40 * 1024));
+    const body = capped.slice(0, capped.indexOf("\n[truncated:"));
+    expect(body).not.toContain("\uFFFD");
+    // 每个"中"占 3 字节：32768 不是 3 的倍数 ⇒ 真按字节切就必须回退到字符边界
+    expect(Buffer.byteLength(body, "utf8") % 3).toBe(0);
+  });
 });
 
 describe("同一句里两种量纲不许并存（改一半留一半的形状）", () => {

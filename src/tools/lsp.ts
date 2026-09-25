@@ -573,11 +573,21 @@ function requirePos(v: unknown, label: string, fallback: number): number {
 }
 
 /** M2g：lsp 输出上限（§14 M2「每个工具具备输出上限/截断提示/相对路径三项」）。
- *  与 run_shell 同口径 32KB；超限截断并附统一截断提示（truncationNotice）。 */
-export const LSP_OUTPUT_LIMIT = 32 * 1024;
+ *  **按字节量**（#52）：提示那句承诺的是 32KB，而原先量 `text.length`（字符），两者在中文结果集上分开：
+ *  tools-check 的中文符号名样本实测旧实现交 53998 字节却自称 32KB 上限；纯中文正文更可达 ~9 万字节
+ *  （30720 字符 < 32768 ⇒ 连截断都不触发）。ASCII 场景 1 字符 = 1 字节，截断位逐字不变。 */
+export const LSP_OUTPUT_LIMIT_BYTES = 32 * 1024;
 export function capLspOutput(text: string): string {
-  if (text.length <= LSP_OUTPUT_LIMIT) return text;
-  return text.slice(0, LSP_OUTPUT_LIMIT) + "\n" + truncationNotice(32);
+  if (Buffer.byteLength(text, "utf8") <= LSP_OUTPUT_LIMIT_BYTES) return text;
+  const buf = Buffer.from(text, "utf8").subarray(0, LSP_OUTPUT_LIMIT_BYTES);
+  // 按字节切会留下半个多字节序列（那是非法 UTF-8，进 provider 变问号）⇒ 回退到完整字符边界。
+  let end = buf.length;
+  let cut = buf.subarray(0, end).toString("utf8");
+  while (cut.endsWith("\uFFFD") && end > 0) {
+    end--;
+    cut = buf.subarray(0, end).toString("utf8");
+  }
+  return cut + "\n" + truncationNotice(32);
 }
 
 export const lsp: Tool = {

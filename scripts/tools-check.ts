@@ -212,13 +212,35 @@ console.log("\n== lsp（三项补齐：输出上限 / 截断提示 / 相对路�
   syms.push("ERROR_HERE");
   await writeFile(join(ws, "src", "big.ts"), syms.join("\n") + "\n", "utf8");
   const big = await lsp.run({ operation: "documentSymbol", path: "src/big.ts" }, ctx);
-  check("① 输出上限：1500 个符号的 documentSymbol 被截到 32KB 内", big.ok && big.output.length <= 32 * 1024 + 80, "实际 " + String(big.output.length) + " 字节");
+  // #52：输出帽那句提示承诺的是 32KB（字节），而 capLspOutput 原先量 text.length（字符）。
+  // 同一 stub、同样 1500 个符号，在两棵树上实测（HEAD 旧实现 / 在飞新实现）：
+  //   符号名 ASCII ⇒ 32798 字符 / 32818 字节（ratio 1.00）：这一格新旧口径同答，看不出问题；
+  //   符号名中文 ⇒ 32798 字符 / 53998 字节（ratio 1.65）：旧门按字符量照样绿，
+  //                而模型拿到的正文比承诺的 32KB 多出 21230 字节，那句截断提示是假的。
+  // 所以 ① 把量纲改成字节（读数两个都给），并补下面 ④ —— 新旧口径答案分歧的那一格。
+  check("① 输出上限：1500 个符号的 documentSymbol 被截到 32KB 内", big.ok && Buffer.byteLength(big.output, "utf8") <= 32 * 1024 + 80,
+    "实际 " + String(Buffer.byteLength(big.output, "utf8")) + " 字节 / " + String(big.output.length) + " 字符");
   check("② 截断提示：[truncated: 输出超过 32KB", big.output.includes("32KB 上限，已截断"));
   check(
     "③ 相对路径：符号位置输出无绝对路径（documentSymbol 为单文档，位置形态 :line:col）",
     assertNoAbsPath(big.output, ws),
     "首行：" + big.output.split("\n")[0],
   );
+  // ④ = ①的量纲分辨力：中文符号名（真实仓库里常见：中文标识符、中文诊断文案）让字符与字节分开。
+  // 两棵树实测：HEAD 旧实现在这一格交 53998 字节（旧门按字符读 32798 ⇒ 绿），在飞新实现交 32817 字节。
+  // ④ 反向那条是给新实现自己用的：按字节切会留下半个多字节序列，旧实现按字符切反而不会。
+  const cjkSyms: string[] = [];
+  for (let i = 1; i <= 1500; i++) cjkSyms.push("SYM(符号编号" + String(i).padStart(4, "0") + "的中文标识符) 撑大输出");
+  await writeFile(join(ws, "src", "cjk.ts"), cjkSyms.join("\n") + "\n", "utf8");
+  const cjkBig = await lsp.run({ operation: "documentSymbol", path: "src/cjk.ts" }, ctx);
+  const cjkBytes = Buffer.byteLength(cjkBig.output, "utf8");
+  check("④ 中文输出：承诺 32KB 时截断必须按字节生效（旧实现在这一格按字符放行）",
+    cjkBig.ok && cjkBytes <= 32 * 1024 + 80 && cjkBig.output.includes("32KB 上限，已截断"),
+    "实际 " + String(cjkBytes) + " 字节 / " + String(cjkBig.output.length) + " 字符");
+  const replacementChar = String.fromCharCode(0xfffd); // 半个 UTF-8 序列解码后就长这样，源码里不留这个字符本身
+  check("④ 反向：截断处不许留半个 UTF-8 序列（半个字符进 provider 变问号）",
+    !cjkBig.output.includes(replacementChar),
+    "正文尾 40 字符：" + JSON.stringify(cjkBig.output.slice(-40)));
   // 定义/引用走真实位置输出，复核相对路径
   await writeFile(join(ws, "src", "sample.ts"), ["function alpha() {}", "DEF(alpha) here", "REF(alpha) one", ""].join("\n"), "utf8");
   const def = await lsp.run({ operation: "definition", path: "src/sample.ts", line: 2, column: 5 }, ctx);
