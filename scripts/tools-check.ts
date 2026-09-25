@@ -218,8 +218,17 @@ console.log("\n== lsp（三项补齐：输出上限 / 截断提示 / 相对路�
   //   符号名中文 ⇒ 32798 字符 / 53998 字节（ratio 1.65）：旧门按字符量照样绿，
   //                而模型拿到的正文比承诺的 32KB 多出 21230 字节，那句截断提示是假的。
   // 所以 ① 把量纲改成字节（读数两个都给），并补下面 ④ —— 新旧口径答案分歧的那一格。
-  check("① 输出上限：1500 个符号的 documentSymbol 被截到 32KB 内", big.ok && Buffer.byteLength(big.output, "utf8") <= 32 * 1024 + 80,
-    "实际 " + String(Buffer.byteLength(big.output, "utf8")) + " 字节 / " + String(big.output.length) + " 字符");
+  // 帽管的是**正文**，提示行在帽之外——这条口径从 #57 起写成两截量，不再用 "+80" 这种魔数容差：
+  // 提示一旦报出省略量与续读位置就会变长，魔数会先于真实缺陷红（或先于真实越界绿）。
+  const splitNotice = (s: string): { bodyBytes: number; noticeBytes: number } => {
+    const i = s.indexOf("\n[truncated:");
+    const body = i < 0 ? s : s.slice(0, i);
+    return { bodyBytes: Buffer.byteLength(body, "utf8"), noticeBytes: Buffer.byteLength(s, "utf8") - Buffer.byteLength(body, "utf8") };
+  };
+  const bigSplit = splitNotice(big.output);
+  check("① 输出上限：1500 个符号的 documentSymbol 正文被截到 32KB 内（提示行另计且有界）",
+    big.ok && bigSplit.bodyBytes <= 32 * 1024 && bigSplit.noticeBytes <= 400,
+    "正文 " + String(bigSplit.bodyBytes) + " 字节 / 提示 " + String(bigSplit.noticeBytes) + " 字节 / " + String(big.output.length) + " 字符");
   check("② 截断提示：[truncated: 输出超过 32KB", big.output.includes("32KB 上限，已截断"));
   check(
     "③ 相对路径：符号位置输出无绝对路径（documentSymbol 为单文档，位置形态 :line:col）",
@@ -233,14 +242,21 @@ console.log("\n== lsp（三项补齐：输出上限 / 截断提示 / 相对路�
   for (let i = 1; i <= 1500; i++) cjkSyms.push("SYM(符号编号" + String(i).padStart(4, "0") + "的中文标识符) 撑大输出");
   await writeFile(join(ws, "src", "cjk.ts"), cjkSyms.join("\n") + "\n", "utf8");
   const cjkBig = await lsp.run({ operation: "documentSymbol", path: "src/cjk.ts" }, ctx);
-  const cjkBytes = Buffer.byteLength(cjkBig.output, "utf8");
-  check("④ 中文输出：承诺 32KB 时截断必须按字节生效（旧实现在这一格按字符放行）",
-    cjkBig.ok && cjkBytes <= 32 * 1024 + 80 && cjkBig.output.includes("32KB 上限，已截断"),
-    "实际 " + String(cjkBytes) + " 字节 / " + String(cjkBig.output.length) + " 字符");
+  const cjkSplit = splitNotice(cjkBig.output);
+  check("④ 中文输出：承诺 32KB 时截断必须按字节生效（旧实现在这一格按字符放行 53998 字节）",
+    cjkBig.ok && cjkSplit.bodyBytes <= 32 * 1024 && cjkBig.output.includes("32KB 上限，已截断"),
+    "正文 " + String(cjkSplit.bodyBytes) + " 字节 / 提示 " + String(cjkSplit.noticeBytes) + " 字节 / " + String(cjkBig.output.length) + " 字符");
+  // ⑤ 提示要报得出省略量（#57：只说"已截断"的模型不知道自己是看全了还是漏了一大段）。
+  // 这里只判"报了个正数、且不是把帽值或正文长度抄过来充数"——**逐字节对等**那一条在
+  // `tests/cap-notice-unit.test.ts`（它拿独立构造的请求体自己算省略量），门不重复造那把尺。
+  const omitted = Number((cjkBig.output.match(/还有 (\d+) 字节未显示/) ?? [])[1]);
+  check("⑤ 截断提示报得出省略字节数（不是 0、也不是拿帽值/正文长度充数）",
+    Number.isInteger(omitted) && omitted > 0 && omitted !== 32 * 1024 && omitted !== cjkSplit.bodyBytes,
+    "省略 " + String(omitted) + " 字节（正文 " + String(cjkSplit.bodyBytes) + " 字节）");
   const replacementChar = String.fromCharCode(0xfffd); // 半个 UTF-8 序列解码后就长这样，源码里不留这个字符本身
   check("④ 反向：截断处不许留半个 UTF-8 序列（半个字符进 provider 变问号）",
     !cjkBig.output.includes(replacementChar),
-    "正文尾 40 字符：" + JSON.stringify(cjkBig.output.slice(-40)));
+    "输出尾 40 字符：" + JSON.stringify(cjkBig.output.slice(-40)));
   // 定义/引用走真实位置输出，复核相对路径
   await writeFile(join(ws, "src", "sample.ts"), ["function alpha() {}", "DEF(alpha) here", "REF(alpha) one", ""].join("\n"), "utf8");
   const def = await lsp.run({ operation: "definition", path: "src/sample.ts", line: 2, column: 5 }, ctx);

@@ -1,6 +1,7 @@
 import { open, readFile, readdir, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { assertRealContainment, resolveInWorkspace, truncationNotice, ToolError, type Tool, type ToolResult } from "./base.js";
+import { assertRealContainment, resolveInWorkspace, ToolError, type Tool, type ToolResult } from "./base.js";
+import { byteCapNotice } from "./cap-notice.js";
 import { headWithinBytes } from "./output-ring.js";
 import { prefetchLsp } from "./lsp.js";
 
@@ -116,19 +117,34 @@ export const read_file: Tool = {
     let out = selected.map((l) => (l.length > MAX_LINE_CHARS ? clipLine(l) + " …[行截断]" : l)).join("\n");
     const byteLen = Buffer.byteLength(out, "utf8");
     let byteTruncated = false;
+    // 帽之后真正交付了几行必须重算（#57）：旧写法照旧报 `selected.length`，实测 500 行文件按 limit=400 读时
+    // 提示写「仅显示 400 行」而真交付只有 205 行 ⇒ 模型按 401 起写下一跳就静默跳过 195 行。
+    let shownLines = selected.length;
+    let halfLineRemains = false;
     if (byteLen > READ_LIMIT_BYTES) {
       // #54：原先按字节裸切（`Buffer...subarray(0, 50K).toString("utf8")`）会把跨界的汉字切成半个——
       // 实测 400 行纯中文文件：输出尾部留了一个 U+FFFD 进模型。改吃同一份按码位回退的原语。
       out = headWithinBytes(out, READ_LIMIT_BYTES);
       byteTruncated = true;
+      const segs = out.split("\n");
+      shownLines = segs.length - 1; // 完整交付的行数
+      halfLineRemains = (segs[segs.length - 1] ?? "").length > 0; // 末尾是一段残行
     }
     const notices: string[] = [];
     if (oversized) {
       notices.push("[truncated: 文件超过 " + String(LARGE_FILE_PREFIX_BYTES / (1024 * 1024)) + " MB，仅读取前 " + String(LARGE_FILE_PREFIX_BYTES / (1024 * 1024)) + " MB 参与解析；建议用 grep 定位后再按 offset 读]");
     }
-    if (byteTruncated) notices.push(truncationNotice(50));
-    if (truncatedLines) notices.push("[truncated: 从第 " + offset + " 行起共 " + lines.length + " 行，仅显示 " + selected.length + " 行；可用 offset/limit 继续读]");
-    if (offset > 1 && !truncatedLines) notices.push("[offset: 从第 " + offset + " 行起读，文件共 " + lines.length + " 行]");
+    // 字节帽生效时行数的口径要跟着改：说"仅显示 400 行"而真交付 205 行，等于教模型跳读漏内容（#57）。
+    if (byteTruncated) {
+      const omitted = byteLen - Buffer.byteLength(out, "utf8");
+      notices.push(byteCapNotice(50, omitted, "接着读用 offset=" + String(offset + shownLines) + (halfLineRemains ? "（该行只读到一半，重读它才完整）" : "")));
+      if (truncatedLines) {
+        notices.push("[truncated: 从第 " + String(offset) + " 行起共 " + String(lines.length) + " 行，本次完整交付 " + String(shownLines) + " 行，剩下的既没显示也没丢在盘外——按上面的 offset 继续读]");
+      }
+    } else if (truncatedLines) {
+      notices.push("[truncated: 从第 " + offset + " 行起共 " + lines.length + " 行，仅显示 " + selected.length + " 行；可用 offset/limit 继续读]");
+    }
+    if (offset > 1 && !truncatedLines && !byteTruncated) notices.push("[offset: 从第 " + offset + " 行起读，文件共 " + lines.length + " 行]");
     if (notices.length) out += "\n" + notices.join("\n");
     return { ok: true, output: out };
   },

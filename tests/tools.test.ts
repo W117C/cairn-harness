@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { read_file } from "../src/tools/read_file";
+import { edit_file } from "../src/tools/edit_file";
 import { run_shell } from "../src/tools/run_shell";
 import { write_file } from "../src/tools/write_file";
 import type { ToolContext } from "../src/tools";
@@ -40,7 +41,11 @@ describe("read_file", () => {
     expect(res.ok).toBe(true);
     expect(res.output).toContain("已截断");
     expect(res.output.startsWith("z")).toBe(true);
-    expect(Buffer.byteLength(res.output, "utf8")).toBeLessThanOrEqual(50 * 1024 + 100);
+    // 帽管的是**正文**，提示行在帽之外（这一口径不是新规矩，#57 只是把开销如实写出来）：
+    // 旧提示一句 ~50 字节、新提示带省略量与续读 offset ~160 字节 ⇒ 断言分两截写，余量按实测给，不放大魔数蒙。
+    const body = res.output.slice(0, res.output.indexOf("\n[truncated:"));
+    expect(Buffer.byteLength(body, "utf8")).toBeLessThanOrEqual(50 * 1024);
+    expect(Buffer.byteLength(res.output, "utf8") - Buffer.byteLength(body, "utf8")).toBeLessThanOrEqual(400);
   });
 
   it("错误路径：不存在 / 绝对路径都被拒", async () => {
@@ -57,6 +62,16 @@ describe("write_file", () => {
     expect(res.ok).toBe(true);
     expect(res.output).toContain("src/nested/b.txt");
     expect(await readFile(join(ws, "src/nested/b.txt"), "utf8")).toBe("data-1");
+  });
+
+  it("结构化标记新建与覆盖，edit_file 标记 modified", async () => {
+    const ctx = await newCtx();
+    const created = await write_file.run({ path: "new.txt", content: "one" }, ctx);
+    expect(created.change).toBe("created");
+    const overwritten = await write_file.run({ path: "new.txt", content: "two" }, ctx);
+    expect(overwritten.change).toBe("modified");
+    const edited = await edit_file.run({ path: "new.txt", old_string: "two", new_string: "three" }, ctx);
+    expect(edited.change).toBe("modified");
   });
 
   it("超限：内容超过 50KB 拒绝写入（截断写入会损坏数据）", async () => {

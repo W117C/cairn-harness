@@ -111,3 +111,61 @@ describe("同一句里两种量纲不许并存（改一半留一半的形状）"
     }
   });
 });
+
+// ↓ #57：字节帽的提示要说清"少了多少"，而 `read_file` 更狠的一格是**行数口径**——
+// 旧写法同时命中行帽与字节帽时报的是"请求的行数"（实测说 400 行、真交付 205 行），
+// 模型照着提示写 offset=401 就静默跳过 195 行。这一族的判据写法是"照着那句话真做一遍"。
+describe("字节帽的省略量与下一跳（#57）", () => {
+  const manyLines = "src/many.md";
+  const lineAt = (i: number): string => "L" + String(i) + " " + "中文正文示例，用来把这一行撑到五百字节以上。".repeat(4);
+  const TOTAL_LINES = 500;
+
+  beforeAll(async () => {
+    await writeFile(join(ws, manyLines), Array.from({ length: TOTAL_LINES }, (_, i) => lineAt(i + 1)).join("\n") + "\n", "utf8");
+  });
+
+  const bodyOf = (out: string): string => out.slice(0, out.indexOf("\n[truncated:"));
+
+  it("read_file 的行数提示必须等于真交付的行数，且旧口径的谎报串不许回来", async () => {
+    const r = await read_file.run({ path: manyLines, offset: 1, limit: 400 }, ctx());
+    const deliveredComplete = bodyOf(r.output).split("\n").length - 1;
+    const claimed = Number((r.output.match(/本次完整交付 (\d+) 行/) ?? [])[1]);
+    expect(claimed, r.output.slice(-400)).toBe(deliveredComplete);
+    // 反向哨兵：旧写法那句"仅显示 400 行"（= 请求数，不是交付数）正是漏读的源头
+    expect(r.output).not.toMatch(/仅显示 \d+ 行/);
+    expect(deliveredComplete).toBeLessThan(400); // 前提：字节帽真的切在行中间
+  });
+
+  it("最后一跳真跑：按提示给的 offset 再读一次，第二跳的第一行正是被切半的那一行", async () => {
+    const first = await read_file.run({ path: manyLines, offset: 1, limit: 400 }, ctx());
+    const nextOffset = Number((first.output.match(/接着读用 offset=(\d+)/) ?? [])[1]);
+    expect(Number.isInteger(nextOffset)).toBe(true);
+    const deliveredComplete = bodyOf(first.output).split("\n").length - 1;
+    expect(nextOffset).toBe(1 + deliveredComplete); // 半行的那一行必须重读，不算"已交付"
+    const second = await read_file.run({ path: manyLines, offset: nextOffset, limit: 400 }, ctx());
+    const secondBody = bodyOf(second.output);
+    expect(secondBody.split("\n")[0]).toBe(lineAt(nextOffset));
+    // 合起来不许漏行：第一跳的最后完整行 → 第二跳的第一行必须紧邻
+    expect(bodyOf(first.output).split("\n")[deliveredComplete - 1]).toBe(lineAt(deliveredComplete));
+  });
+
+  it("read_file 的字节帽提示要报出省略的字节数（只说『已截断』＝模型以为看全）", async () => {
+    const r = await read_file.run({ path: manyLines, offset: 1, limit: 400 }, ctx());
+    const omitted = Number((r.output.match(/还有 (\d+) 字节未显示/) ?? [])[1]);
+    expect(omitted).toBeGreaterThan(0);
+    // 报的数要真对得上：请求体（400 行）的实际字节数 - 交付正文 = 省略量
+    const requestedBytes = Buffer.byteLength(
+      Array.from({ length: 400 }, (_, i) => lineAt(i + 1)).join("\n"), "utf8");
+    expect(omitted).toBe(requestedBytes - Buffer.byteLength(bodyOf(r.output), "utf8"));
+  });
+
+  it("lsp 的 32KB 提示同样报省略量；ASCII 那一支的截断位仍是逐字不变的那一格", () => {
+    const cjk = "中".repeat(40 * 1024); // 122880 字节
+    const capped = capLspOutput(cjk);
+    const body = capped.slice(0, capped.indexOf("\n[truncated:"));
+    const omitted = Number((capped.match(/还有 (\d+) 字节未显示/) ?? [])[1]);
+    expect(omitted).toBe(122880 - Buffer.byteLength(body, "utf8"));
+    // 反向：不超帽的输出一个字都不许多说
+    expect(capLspOutput("short")).toBe("short");
+  });
+});

@@ -18,3 +18,18 @@
 export function countCapNotice(noun: string, limit: number, omitted: number): string {
   return `[truncated: 上限是 ${String(limit)} ${noun}（条数帽，不是字节数），还有 ${String(omitted)} ${noun} 未列出——收窄 pattern/path 再查]`;
 }
+
+/**
+ * 字节型上限（`read_file` 50KB / `lsp` 32KB）的截断提示。
+ *
+ * 与 `base.ts::truncationNotice` 的差别只有一件事，但那件事是给模型做决策用的：
+ * 那句原文只说"超上限、已截断"，**不说少了多少**⇒ 模型无从判断自己是看全了还是漏了一大段，
+ * 常见后果是原样重跑同一条宽查询（第 66 页 `countCapNotice` 立的就是同一条纪律）。
+ *
+ * `nextStep` 由调用方给，不在这里写死：同一句"下一步"在不同消费者身上成立与否不一样
+ * （`read_file` 能 `offset/limit` 分批读，`lsp` 没有分页——第 66 页那句 glob 的"把 path 显式指进去"
+ * 对它自制的 `--glob` 就是一次假承诺）。
+ */
+export function byteCapNotice(limitKB: number, omittedBytes: number, nextStep: string): string {
+  return `[truncated: 输出超过 ${String(limitKB)}KB 上限，已截断（还有 ${String(omittedBytes)} 字节未显示；${nextStep}）]`;
+}

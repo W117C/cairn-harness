@@ -32,7 +32,8 @@ import {
   type Location,
   type SymbolInformation,
 } from "vscode-languageserver-protocol/node";
-import { resolveInWorkspace, truncationNotice, ToolError, type Tool, type ToolContext, type ToolResult } from "./base.js";
+import { resolveInWorkspace, ToolError, type Tool, type ToolContext, type ToolResult } from "./base.js";
+import { byteCapNotice } from "./cap-notice.js";
 import { headWithinBytes } from "./output-ring.js";
 
 export interface LspServerConfig {
@@ -579,9 +580,14 @@ function requirePos(v: unknown, label: string, fallback: number): number {
  *  （30720 字符 < 32768 ⇒ 连截断都不触发）。ASCII 场景 1 字符 = 1 字节，截断位逐字不变。 */
 export const LSP_OUTPUT_LIMIT_BYTES = 32 * 1024;
 export function capLspOutput(text: string): string {
-  if (Buffer.byteLength(text, "utf8") <= LSP_OUTPUT_LIMIT_BYTES) return text;
+  const bytes = Buffer.byteLength(text, "utf8");
+  if (bytes <= LSP_OUTPUT_LIMIT_BYTES) return text;
   // 缝合处按码位回退交给 `headWithinBytes`：按字节裸切会留下半个多字节序列（→ 第 68 页 #54）。
-  return headWithinBytes(text, LSP_OUTPUT_LIMIT_BYTES) + "\n" + truncationNotice(32);
+  const cut = headWithinBytes(text, LSP_OUTPUT_LIMIT_BYTES);
+  // 省略量必须报出来（#57，与第 66 页 `countCapNotice` 同一条纪律）：只说"超上限已截断"的模型
+  // 无从判断自己是看全了还是漏了一大段，最常见的反应是原样重跑同一条宽查询。
+  // 下一步给的是 lsp 自己够得着的动作（它没有 offset/limit 分页），不是别支的命令形状。
+  return cut + "\n" + byteCapNotice(32, bytes - Buffer.byteLength(cut, "utf8"), "用 grep 定位符号名，或 read_file 分批读那份文件");
 }
 
 export const lsp: Tool = {
