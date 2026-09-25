@@ -9,6 +9,7 @@
 import { describe, expect, it } from "vitest";
 import { pathToFileURL } from "node:url";
 import { join, resolve } from "node:path";
+import { readFileSync } from "node:fs";
 
 import { analyze } from "../scripts/lib/reach-graph";
 
@@ -19,6 +20,19 @@ const reach = analyze(ROOT);
  *  豁免不靠"看着像类型文件"这种写法判断（换写法即绕过，规则 122），靠**真去 import 它**：
  *  下面第三条用例要求运行时导出为 0——哪天有人往里加一个 `export const`，豁免立刻失效并点名。 */
 const TYPE_ONLY_SURFACE: readonly string[] = ["src/main/ipc-protocol.ts"];
+
+/** 桌面层入口：headless vitest **结构上**不可能有它的判卷面（`import` 它就是启动 Electron），
+ *  所以零执行路径是这一族的固有属性，不是"谁忘了写测试"。
+ *  为什么写成路径集合而不是"盘上有没有 src/preload/"：前者是待证的事实，后者是此刻的工作树状态。 */
+const ELECTRON_ENTRIES: readonly string[] = ["src/main/index.ts", "src/preload/index.ts"];
+
+/** 真去读它、确认它确实引 Electron——豁免同样必须可反证：哪天那层剥干净了（改成注入式启动），
+ *  这条成因就失效，那两个入口必须补判卷面或从名单删名。 */
+function importsElectron(rel: string): boolean {
+  let text = "";
+  try { text = readFileSync(join(ROOT, rel), "utf8"); } catch { return false; }
+  return /from\s+["']electron["']|require\(\s*["']electron["']\s*\)/.test(text);
+}
 
 describe("src/ 的每个模块都要有从测试出发的执行路径", () => {
   it("取料面自己非空（扫到 0 个文件＝没尺，不许把空清单当通过）", () => {
@@ -32,9 +46,24 @@ describe("src/ 的每个模块都要有从测试出发的执行路径", () => {
     }
   });
 
-  it("缺口清单必须与例外表逐字相等（新增未测模块即红；例外表里已不再缺路径的也要删名）", () => {
+  // 以前这里写成「缺口 = 那张手抄清单」。它读的是**工作树**：桌面层那笔删除未入库时缺口只有 1 个，
+  // 入库前在 HEAD 上跑就是红（我自己造的第 83 页那簇 ❌ 里的一条）。判据要的是成因，不是此刻的名单。
+  it("缺口必须逐个命中可机检的成因（纯类型面 / Electron 入口），否则就是真没尺", () => {
     const gaps = reach.src.filter((f) => !reach.live.has(f)).sort();
-    expect(gaps).toEqual([...TYPE_ONLY_SURFACE].sort());
+    const unexplained: string[] = [];
+    for (const gap of gaps) {
+      if (TYPE_ONLY_SURFACE.includes(gap)) continue; // 运行时零导出 ⇒ 没有可执行的东西（下一条用例逐条证明）
+      if (ELECTRON_ENTRIES.includes(gap) && importsElectron(gap)) continue; // headless 判卷面结构上引不了它
+      unexplained.push(gap);
+    }
+    expect(unexplained, `这些 src 模块没有任何从测试出发的执行路径，且不属于两类已知成因 ⇒ 给它们写测试，或（带理由）加进例外表`).toEqual([]);
+  });
+
+  // 反向一侧（规则 60/78）：只断"缺口都能解释"会放过"名单里躺着已经不需要豁免的文件"——
+  // 那种文件此刻有执行路径，豁免就成了永不生效的装饰。
+  it("例外名单不得含此刻已有执行路径的文件（僵尸豁免要红）", () => {
+    const zombie = [...TYPE_ONLY_SURFACE, ...ELECTRON_ENTRIES].filter((f) => reach.src.includes(f) && reach.live.has(f));
+    expect(zombie, "这些文件已在例外名单里，但其实有测试执行它 ⇒ 从名单删名").toEqual([]);
   });
 
   it("每条例外都要证明它运行时真的什么都没有（不许用注释自称类型面来换豁免）", async () => {

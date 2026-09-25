@@ -4,7 +4,8 @@
  *  才发现，而且发现的人还得靠人眼归类。今天我自己就是那两条（a966cd9）。
  *  判据形状照 docs-check 的 waive()：存量逐条带理由入表，**名单外的新漂移即红**；名单里某条不再命中 ⇒ stale 也红。 */
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { KNOWN_DRIFT, checkAnchorTitles, parseAnchors, type Finding, type TableSource } from "../scripts/mutate-anchor-titles";
 
@@ -13,20 +14,25 @@ const read = (rel: string): string | null => {
   try { return readFileSync(join(ROOT, rel), "utf8"); } catch { return null; }
 };
 
-/** 判卷文件读不到的锚点（＝这条锚点此刻在盘上**没有任何观测者**）登记表：每条带理由 + 撤登记条件。
- *  为什么要有这张表：`checkAnchorTitles` 早就在发 `unverified-file`，而本闸以前只看 `drift`/`stale-waiver`
- *  ⇒ 那 6 条被算出来又扔掉，"没尺"和"干净"读起来一模一样（闸注释写的是"也不静默消失"，实际消失了）。
- *  同一批成因：桌面层那笔删除把 `tests/updater.test.ts` 摘了（盘上 `D`、HEAD 还在），而实现
- *  `src/main/updater.ts` 仍留在树上 ⇒ 变异照样施加、没有测试会红 ⇒ 整表真跑时报成"变异存活"。
- *  撤登记：那笔删除入库时把下面 6 条锚点一起摘掉（或给 updater 补一份核心层判卷面），然后从此表删名；
- *  留在表上会被"登记集合与实测集合相等"那条判成红（不许留僵尸登记）。 */
-const NO_RULER: Readonly<Record<string, string>> = {
-  "updater-manifest-https-only": "tests/updater.test.ts 在桌面层那笔删除里已不在盘上（HEAD 仍在）；随该笔入库时摘掉锚点或补核心层判卷面，然后从此表删名",
-  "updater-semver-direction": "同上：判卷文件 tests/updater.test.ts 盘上不在，随那笔删除一起摘锚点后撤登记",
-  "updater-semver-strict": "同上：判卷文件 tests/updater.test.ts 盘上不在，随那笔删除一起摘锚点后撤登记",
-  "updater-manifest-unknown-fields": "同上：判卷文件 tests/updater.test.ts 盘上不在，随那笔删除一起摘锚点后撤登记",
-  "updater-safe-external-url": "同上：判卷文件 tests/updater.test.ts 盘上不在，随那笔删除一起摘锚点后撤登记",
-  "manifest-field-list-forgot-notes-again": "同上：判卷文件 tests/updater.test.ts 盘上不在，随那笔删除一起摘锚点后撤登记",
+/** 这个路径在 **HEAD** 里存在吗。三态：true / false / null（取不到读数＝git 不可用）。
+ *  为什么必须问 HEAD 而不是只问盘（规则 92）：`existsSync` 只看盘，会把「别人的删除还没入库」
+ *  读成「这份判卷面永久没了」——前者是在途状态、后者才是缺陷。 */
+function inHead(rel: string): boolean | null {
+  const r = spawnSync("git", ["cat-file", "-e", "HEAD:" + rel], { cwd: ROOT, encoding: "utf8" });
+  if (r.error !== undefined || r.status === null) return null;
+  return r.status === 0;
+}
+
+/** 在途删除登记表：**按判卷文件**（不是按锚点 id）登记。
+ *  为什么改成按文件：以前这里手抄了 6 个锚点 id，而 id 集合取决于对方那笔删除删掉了哪份测试文件
+ *  ⇒ 同一条等号在 HEAD（文件在、6 条全不命中）和本树（文件不在、6 条全命中）里必然一边红。
+ *  现在改成判「成因」：`unverified-file` 的每一个来源都必须满足「HEAD 里有、盘上没有」＝别人的删除还没入库。
+ *  撤登记条件写在下述理由里，并由「登记的的文件必须仍在 HEAD 里」那条用例强制回看。 */
+const DELETED_IN_FLIGHT: Readonly<Record<string, string>> = {
+  "tests/updater.test.ts":
+    "桌面层那笔删除摘掉了这份判卷面（盘上无、HEAD 仍在），实现 src/main/updater.ts 还留在树上 ⇒ 指向它的锚点此刻没有观测者，整表真跑会报成「变异存活」。" +
+    "核心层已补 tests/updater-safety-core.test.ts（https-only / 协议白名单 / semver 数值比较 / 响应帽）。" +
+    "撤登记：那笔删除入库后从本表删名——届时仍指向 tests/updater.test.ts 的锚点会被「HEAD 里也没有」那条判成红，那就是提醒去摘锚点或补齐判卷面。",
 };
 
 describe("parseAnchors：取料面自己要先可信", () => {
@@ -135,18 +141,35 @@ describe("真表：新漂移必须红，存量必须逐条点名", () => {
 
   // 「没尺」这一态以前**只被算出来、没被看过**：`checkAnchorTitles` 会发 `unverified-file`，
   // 而上面那条只筛 drift/stale-waiver ⇒ 判卷文件消失时锚点静默失去观测者（本闸注释自己写着"也不静默消失"）。
-  // 实测现态 6 条全指向 `tests/updater.test.ts`（盘上 `D`、HEAD 里还在，实现 `src/main/updater.ts` 仍在）
-  // ⇒ 整张变异表真跑时这 6 条会**存活**，并把结论伪装成"updater 没人守"。
-  // 等号是双向的：新缺尺必须登记；登记过的不再缺尺 ⇒ 红（僵尸登记）。
-  it("真表：判卷文件读不到的锚点必须逐条登记，且登记集合与实测集合相等", () => {
-    const missing = realFindings().filter((f) => f.kind === "unverified-file").map((f) => f.id).sort();
-    expect(missing).toEqual(Object.keys(NO_RULER).sort());
+  // 判据写成**成因**，不写成手抄 id 清单（第 83 页我自己那条红就是这个形状：清单算的是工作树，
+  // 同一棵树在 HEAD 上跑必然反着红）：每个读不到的判卷文件都必须满足「HEAD 里有、盘上没有」＝在途删除。
+  // 剩下那种「HEAD 里也从来没有」才是真缺陷——表写错了路径，或文件永久消失而锚点没人摘。
+  it("真表：「判卷文件读不到」必须逐个命中在途删除（HEAD 里有、盘上没有）", () => {
+    const byFile = new Map<string, string[]>();
+    for (const f of realFindings().filter((x) => x.kind === "unverified-file")) {
+      const file = f.source ?? "(无来源)";
+      byFile.set(file, [...(byFile.get(file) ?? []), f.id]);
+    }
+    const gitBlind: string[] = [];
+    const unexplained: string[] = [];
+    for (const [file, ids] of byFile) {
+      const head = inHead(file);
+      if (head === null) { gitBlind.push(file); continue; }
+      if (head === true && !existsSync(join(ROOT, file)) && DELETED_IN_FLIGHT[file] !== undefined) continue;
+      unexplained.push(`${file}（${ids.length} 条锚点：${ids.join("、")}）`);
+    }
+    expect(gitBlind, "git 取不到 HEAD ⇒ 这条判据没尺，不许把「读不到」当通过").toEqual([]);
+    expect(unexplained, "锚点指向的判卷文件在 HEAD 里也不存在（或没登记成因）⇒ 改 test 路径、补判卷面，或带理由登记").toEqual([]);
   });
 
-  it("「没尺」登记表每条必须带理由，且理由里要写怎么撤（空理由＝无声放行）", () => {
-    for (const [id, reason] of Object.entries(NO_RULER)) {
-      expect(reason.trim(), `NO_RULER[${id}] 缺理由`).not.toBe("");
-      expect(reason, `NO_RULER[${id}] 理由里没写怎么撤`).toMatch(/撤|摘掉|补齐/);
+  it("「在途删除」登记表：文件必须仍在 HEAD（那笔删除一入库就得删名），理由必须写怎么撤", () => {
+    const entries = Object.entries(DELETED_IN_FLIGHT);
+    const probe = entries.map(([file]) => ({ file, head: inHead(file) }));
+    expect(probe.filter((p) => p.head === null).map((p) => p.file), "git 取不到 HEAD ⇒ 本判据没尺").toEqual([]);
+    expect(probe.filter((p) => p.head === false).map((p) => p.file), "这些判卷文件已从 HEAD 消失＝删除已入库，本表条目成了僵尸登记 ⇒ 删名（未被解释的锚点会由上一条点名）").toEqual([]);
+    for (const [file, reason] of entries) {
+      expect(reason.trim(), `DELETED_IN_FLIGHT[${file}] 缺理由`).not.toBe("");
+      expect(reason, `DELETED_IN_FLIGHT[${file}] 理由里没写怎么撤`).toMatch(/撤|摘掉|补齐|删名/);
     }
   });
 

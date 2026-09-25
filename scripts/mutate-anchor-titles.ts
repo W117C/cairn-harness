@@ -26,6 +26,9 @@ export interface Finding {
   kind: FindingKind;
   id: string;
   detail: string;
+  /** 这条 finding 是从哪个取料文件发出来的。以前只有 `detail` 里那句中文带着路径 ⇒
+   *  消费方要按文案反解路径，改一句话就把判据拆掉（规则：判据要钉在结构上，不钉在措辞上）。 */
+  source: string | null;
 }
 
 /** 表里那条字符串字面量是 JS 转义态（`\"`、`\\`），运行时比的是解出来的真字符。
@@ -137,23 +140,23 @@ export function checkAnchorTitles(
     if (r.test === null) continue; // 没有 test 字段的锚点由 mutate-verify 自己管，不在这儿造第二把尺
     if (r.expectFail === null) continue;
     if (!r.test.endsWith(".test.ts")) {
-      out.push({ kind: "unverified-face", id: r.id, detail: `test 指向非 vitest 面（${r.test}）⇒ 本闸不判` });
+      out.push({ kind: "unverified-face", id: r.id, source: r.test, detail: `test 指向非 vitest 面（${r.test}）⇒ 本闸不判` });
       continue;
     }
     const text = byPath.get(r.test);
     if (text === undefined) {
-      out.push({ kind: "unverified-file", id: r.id, detail: `读不到 ${r.test} ⇒ 没尺，不判` });
+      out.push({ kind: "unverified-file", id: r.id, source: r.test, detail: `读不到 ${r.test} ⇒ 没尺，不判` });
       continue;
     }
     if (!titlePresent(r.expectFail, text)) {
       drifting.add(r.id);
       if (waivers[r.id] === undefined) {
-        out.push({ kind: "drift", id: r.id, detail: `expectFail 在该 test 文件里找不到对应标题（${r.test}）；旧标题「${r.expectFail}」⇒ 同步 expectFail 或改回标题` });
+        out.push({ kind: "drift", id: r.id, source: r.test, detail: `expectFail 在该 test 文件里找不到对应标题（${r.test}）；旧标题「${r.expectFail}」⇒ 同步 expectFail 或改回标题` });
       }
     }
   }
   for (const id of Object.keys(waivers)) {
-    if (!drifting.has(id)) out.push({ kind: "stale-waiver", id, detail: `存量豁免已不再命中：从 KNOWN_DRIFT 删掉它（${waivers[id]}）` });
+    if (!drifting.has(id)) out.push({ kind: "stale-waiver", id, source: null, detail: `存量豁免已不再命中：从 KNOWN_DRIFT 删掉它（${waivers[id]}）` });
   }
   return out;
 }

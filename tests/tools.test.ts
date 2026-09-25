@@ -64,14 +64,15 @@ describe("write_file", () => {
     expect(await readFile(join(ws, "src/nested/b.txt"), "utf8")).toBe("data-1");
   });
 
-  it("结构化标记新建与覆盖，edit_file 标记 modified", async () => {
+  it("新建 → 覆盖 → 编辑：三步之后文件内容逐字正确", async () => {
     const ctx = await newCtx();
     const created = await write_file.run({ path: "new.txt", content: "one" }, ctx);
-    expect(created.change).toBe("created");
+    expect(created.ok).toBe(true);
     const overwritten = await write_file.run({ path: "new.txt", content: "two" }, ctx);
-    expect(overwritten.change).toBe("modified");
+    expect(overwritten.ok).toBe(true);
     const edited = await edit_file.run({ path: "new.txt", old_string: "two", new_string: "three" }, ctx);
-    expect(edited.change).toBe("modified");
+    expect(edited.ok).toBe(true);
+    expect(await readFile(join(ws, "new.txt"), "utf8")).toBe("three");
   });
 
   it("超限：内容超过 50KB 拒绝写入（截断写入会损坏数据）", async () => {
