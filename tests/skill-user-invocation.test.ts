@@ -46,11 +46,15 @@ describe("expandSkillInvocation（§9.3 用户侧派发）", () => {
     expect(r.hit?.invoke).toBe("/sk-demo:hidden");
   });
 
-  it("超预算的正文按模型侧同一顶帽裁掉，并留全文通道（用户敲一次不能买下整段会话）", () => {
+  it("超预算的正文按模型侧同一顶帽裁掉；取回那句按落位给，没登记工作区就不递地址（#47）", () => {
     const big = "x".repeat(40_000); // ≈10000 token > SKILL_REMOUNT_TOKENS_PER_SKILL
     const r = expandSkillInvocation([sk("big", big)], "/sk-demo:big");
     expect(r.text.length).toBeLessThan(big.length);
-    expect(r.text).toContain("[全文见 ");
+    // 旧断言是 `toContain("[全文见 ")`——那把「递一个模型读不到的绝对路径」冻成了期望值。
+    // /dev/null 在这里只是占位：没传 workspace ⇒ 不许承诺取回（两案与真 read_file 见 tests/skill-recall-address.test.ts）。
+    expect(r.text).toContain("读不到");
+    expect(r.text).not.toMatch(/全文见\s+\//);
+    expect(r.text).not.toContain("/dev/null");
   });
 
   it("不以 / 开头、名字没登记 ⇒ 逐字原样且不带 hit（既有路径字节不变）", () => {

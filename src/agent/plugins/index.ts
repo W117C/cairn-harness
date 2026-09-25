@@ -11,7 +11,7 @@ import { HookEngine } from "./hooks";
 import { McpManager, type McpToolInfo } from "./mcp";
 import {
   buildSkillRoutingList, skillInvokeName, resolveSkillName, skillRemount, modelInvocable,
-  clampSkillBody, substituteVars, declaredArgumentNames, expandConfigVars, expandUserConfig, referencedUserConfigKeys,
+  clampSkillBody, skillRecallSuffix, substituteVars, declaredArgumentNames, expandConfigVars, expandUserConfig, referencedUserConfigKeys,
   skillToolPolicy,
   SKILL_REMOUNT_TOKENS_PER_SKILL,
   type ActivatedSkill, type RoutingListResult, type RemountResult, type SubstitutionContext, type SkillToolPolicy,
@@ -60,7 +60,7 @@ export { McpManager, expandMcpConfig, scopedToolName, parseScopedToolName, type 
 export {
   buildSkillRoutingList, skillInvokeName, resolveSkillName, skillRoutingLine, substituteVars, declaredArgumentNames,
   expandConfigVars, expandUserConfig, referencedUserConfigKeys,
-  renderPromptCommand, commandInvokeName, expandPromptCommand, expandSkillInvocation, skillRemount, clampSkillBody, estimateTokens,
+  renderPromptCommand, commandInvokeName, expandPromptCommand, expandSkillInvocation, skillRemount, clampSkillBody, estimateTokens, skillRecallSuffix,
   skillToolPolicy, modelInvocable, type SkillToolPolicy,
   type CommandExpansion, type SkillUserExpansion, type SubstitutionContext,
   SKILL_ROUTING_CHAR_LIMIT, SKILL_REMOUNT_TOKENS_PER_SKILL, SKILL_REMOUNT_TOKENS_TOTAL,
@@ -443,7 +443,7 @@ export class PluginRuntime {
       output: clampSkillBody(
         substituteVars(entry.body, { ...this.substitutionFor(entry), args: argsString }),
         SKILL_REMOUNT_TOKENS_PER_SKILL,
-        "\n[全文见 " + entry.path + "]"),
+        skillRecallSuffix(entry.path, this.opts.workspace)),
     };
   }
 

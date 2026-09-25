@@ -201,3 +201,31 @@ describe("自动验证拍的红进下一轮上下文", () => {
     expect(flat).toContain("Tests 1 failed");
   });
 });
+
+describe("⑨ 计数那句不许指向模型读不到的地方（#48，第 63 页）", () => {
+  // 旧写法说「全文见事件流」，而模型侧没有任何一把工具能读会话事件流（七把碰文件的工具全走
+  // resolveInWorkspace，日志又在应用数据目录里）⇒ 那是一次也执行不了的承诺（探针当时红在这一格）。
+  it("两次自动补拍：旧拍只留计数，不递地址，只指做得到的动作", () => {
+    const events = [
+      { type: "user_message", content: "第一轮" } as AgentEvent,
+      autoFail("pnpm test", "boom one"),
+      autoFail("pnpm test", "boom two"),
+    ];
+    const note = projectContext(events).find((m) => typeof m.content === "string" && m.content.includes("[harness 自动验证]"));
+    const text = typeof note?.content === "string" ? note.content : "";
+    expect(text, "第二拍必须带着计数出现").toContain("此前另有 1 次"); // 计数如实保留，不假装只红过一次
+    expect(text).not.toMatch(/全文见|取回/); // 不递模型够不着的地址
+    expect(text).toContain("显式跑一次 verify"); // 只指做得到的动作
+  });
+
+  it("第一次红（earlierCount=0）时那句计数整段不出现（零回归）", () => {
+    const events = [
+      { type: "user_message", content: "第一轮" } as AgentEvent,
+      autoFail("pnpm test", "boom only"),
+    ];
+    const text = String(projectContext(events).find((m) =>
+      typeof m.content === "string" && m.content.includes("[harness 自动验证]"))?.content ?? "");
+    expect(text).not.toContain("此前另有");
+    expect(text).not.toMatch(/全文见|取回/);
+  });
+});

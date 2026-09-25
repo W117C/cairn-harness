@@ -107,7 +107,15 @@ function titlePresent(expectFail: string, sourceText: string): boolean {
  *      `panel-dirty-misses-review-and-progress-events` —— 同属渲染层/面板族，正随 core-only 那笔在飞删除一起消失，
  *      在那棵树里改无处可改（对方副本已删），所以**不修只记**；若桌面层方向回退，这两条要重判。
  *  留这段话是给下一个人：**先问抽取面缺不缺形状，再考虑登记成存量**。 */
-export const KNOWN_DRIFT: Readonly<Record<string, string>> = {};
+/**
+ * 存量豁免（只准带理由登记；#50 落笔后这条必须撤，届时 stale 机制会自己点名）。
+ * `user-skill-face-budget-abolished`：第 64 页 #47 把三处「全文见」副本收成一支 `skillRecallSuffix`
+ * 并按落位分两案 ⇒ 那条用例的标题换成"取回那句按落位给，没登记工作区就不递地址"。
+ * 锚点行本身在 `scripts/mutate-verify.mjs`（别人的在飞文件），针脚与 expectFail 由 #50 一起改指。
+ */
+export const KNOWN_DRIFT: Readonly<Record<string, string>> = {
+  "user-skill-face-budget-abolished": "第 64 页 #47 改了那句尾注的措辞与用例标题；待 #50 把针脚与 expectFail 改指新写法后撤本条",
+};
 
 export function checkAnchorTitles(
   rows: readonly AnchorRow[],

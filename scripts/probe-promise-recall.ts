@@ -20,7 +20,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join, relative, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
@@ -28,7 +28,6 @@ import { trackedScriptFiles } from "./lib/scan-scope.js";
 import { discoverPlugins } from "../src/agent/plugins/discover.js";
 import { expandSkillInvocation, skillInvokeName } from "../src/agent/plugins/skills.js";
 import { computePrune } from "../src/agent/prune.js";
-import { projectContext } from "../src/agent/context.js";
 import { renderJoinPayload, shapeJoinRows } from "../src/agent/orchestrator-join.js";
 import { INJECTED_TOOLS } from "../src/agent/tool-surface.js";
 import { read_file } from "../src/tools/read_file.js";
@@ -201,59 +200,37 @@ async function hopSkill(workspace: string): Promise<Verdict> {
       return { ok: false, how: "discoverPlugins", detail: "发现没出两支 skill ⇒ 没有尺（探针红，不是产品干净）" };
     }
 
-    const givenFor = (e: NonNullable<typeof userEntry>): string =>
-      pathIn(expandSkillInvocation([e], skillInvokeName(e)).text.slice(-300));
-    const userGiven = givenFor(userEntry);
-    const projGiven = givenFor(projEntry);
-    if (userGiven === "" || projGiven === "") {
+    const suffixFor = (e: NonNullable<typeof userEntry>): string =>
+      expandSkillInvocation([e], skillInvokeName(e), undefined, workspace).text.slice(-300);
+    const userSuffix = suffixFor(userEntry);
+    const projSuffix = suffixFor(projEntry);
+    const userGiven = pathIn(userSuffix);
+    const projGiven = pathIn(projSuffix);
+    if (projGiven === "") {
       return {
         ok: false,
         how: "expandSkillInvocation",
-        detail: `尾注没出来（用户级/项目级各触发一次）⇒ 触发形状不对（探针红）：user=${String(userGiven.length)} proj=${String(projGiven.length)}`,
+        detail: "区内那案（项目级插件）没给出取回地址 ⇒ 触发形状不对（探针红）：" + projSuffix.slice(-110),
       };
     }
 
-    const asWrittenUser = await hopWithReadFile(workspace, userGiven);
     const asWrittenProj = await hopWithReadFile(workspace, projGiven);
-    const relProj = await hopWithReadFile(workspace, relative(workspace, projGiven));
+    // #47 落地后的判据（两半都要，缺一半就能骗过去）：
+    //   区内 ⇒ 必须递**相对**地址且照原文真读得到；区外 ⇒ 必须**不递地址**并明说读不到。
+    const projHonest = !projGiven.startsWith("/") && asWrittenProj.reached;
+    const userHonest = userGiven === "" && userSuffix.includes("读不到");
     return {
-      // 判定只看"照那句做得到吗"；两案的分界留给修法（不给那道信任边界添例外）
-      ok: asWrittenProj.reached,
-      how: "discoverPlugins（产品取 path 那一句）→ expandSkillInvocation（产品拼尾注那一句）→ 真 read_file",
+      ok: projHonest && userHonest,
+      how: "discoverPlugins（产品取 path 那一句）→ expandSkillInvocation（带真 workspace）→ 真 read_file",
       detail:
-        `交给模型的地址是绝对路径：${userGiven.startsWith("/") && projGiven.startsWith("/") ? "两案皆是" : "否"}` +
-        `｜项目级插件（文件就在工作区内）照原文递 read_file：${asWrittenProj.reached ? "读得到" : "读不到"}` +
-        `（${asWrittenProj.why.slice(0, 80)}）` +
-        `｜同一支改按工作区相对写法：${relProj.reached ? "读得到" : "读不到"}` +
-        `｜用户级插件（在工作区外）照原文：${asWrittenUser.reached ? "读得到" : "读不到"}` +
-        ` ⇒ 绝对路径这一层对**两案都拒**；相对写法只救得了项目级那一案`,
+        `区内那案：递「${projGiven.slice(0, 60)}」⇒ ${asWrittenProj.reached ? "读得到" : "读不到"}` +
+        `（绝对地址？${projGiven.startsWith("/") ? "是＝不合格" : "否"}）` +
+        `｜区外那案：${userHonest ? "不递地址且明说读不到（合格）" : "不合格，仍递：" + userGiven}｜尾注原文：${userSuffix.slice(-70)}`,
     };
   } finally {
     await rm(userRoot, { recursive: true, force: true });
     await rm(projectRoot, { recursive: true, force: true });
   }
-}
-
-/** `context.ts` 的「全文见事件流」：那句里有没有地址 + 有没有任何一把工具读得到事件流。 */
-async function hopEventStream(workspace: string, logPath: string): Promise<Verdict> {
-  const events = [
-    { type: "user_message", content: "第一轮" },
-    { type: "verify_result", auto: true, ok: false, results: [{ command: "pnpm test", ok: false, exitCode: 1, tail: "boom " + "x".repeat(200) }] },
-    { type: "verify_result", auto: true, ok: false, results: [{ command: "pnpm test", ok: false, exitCode: 1, tail: "boom2 " + "y".repeat(200) }] },
-  ] as unknown as AgentEvent[];
-  const note = projectContext(events).find((m) => typeof m.content === "string" && m.content.includes("见事件流"));
-  const body = typeof note?.content === "string" ? note.content : "";
-  if (body === "") return { ok: false, how: "projectContext", detail: "那句没出现 ⇒ 触发形状不对（探针红，不是产品干净）" };
-  const given = pathIn(body);
-  const hop = await hopWithReadFile(workspace, given);
-  return {
-    ok: given !== "" && hop.reached,
-    how: "projectContext（产品真注入那条 user 消息）→ 真 read_file",
-    detail:
-      `那句给的地址=${given === "" ? "无（只说「事件流」三个字）" : given}｜事件流真身=${logPath}` +
-      `｜模型侧能读事件流的工具=0 把（七把碰文件的工具全走 resolveInWorkspace，绝对路径第一句即拒）` +
-      `｜照原文递 read_file：${hop.reached ? "读得到" : "读不到"}（${hop.why}）`,
-  };
 }
 
 /** `orchestrator-join` 的「再调一次 wait_for_agents 即可取回其摘要」：受众拿得到那把工具吗 + 单次 re-wait 真给摘要吗。 */
@@ -319,11 +296,13 @@ function hopPruneStub(): Verdict {
   };
 }
 
-/** 每个模型可见面的判定归属：键 = `<file>#<fn>`。**加一面就必须在这里登记一条**，否则本探针红。 */
+/**
+ * 每个模型可见面的判定归属：键 = `<file>#<fn>`。**加一面就必须在这里登记一条**，否则本探针红。
+ * 键跟着**发射处**走：#47 把三处副本收成一支 `skillRecallSuffix` 之后，旧的两个键当场失效——
+ * 下面的陈旧格会拦住"登记表烂在这儿"（与 D-8 ② 同族）。
+ */
 export const RUNNERS: Readonly<Record<string, string>> = {
-  "src/agent/plugins/index.ts#triggerSkill": "hopSkill",
-  "src/agent/plugins/skills.ts#expandSkillInvocation": "hopSkill",
-  "src/agent/context.ts#head": "hopEventStream",
+  "src/agent/plugins/skills.ts#skillRecallSuffix": "hopSkill",
   "src/agent/orchestrator-join.ts#renderJoinPayload": "hopJoinPayload",
   "src/agent/prune.ts#stub": "hopPruneStub",
   "src/main/agent-runner.ts#body": "hopMapDemo",
@@ -374,9 +353,6 @@ async function main(): Promise<void> {
   }
 
   const workspace = await mkdtemp(join(tmpdir(), "promise-recall-ws-"));
-  const logDir = await mkdtemp(join(tmpdir(), "promise-recall-logs-"));
-  const logPath = join(logDir, "session.events.jsonl");
-  await writeFile(logPath, "", "utf8");
   await writeFile(join(workspace, "target.ts"), "export const x = 1;\n", "utf8");
 
   const verdictCache = new Map<string, Promise<Verdict>>();
@@ -385,10 +361,9 @@ async function main(): Promise<void> {
     if (hit) return hit;
     const next: Promise<Verdict> =
       name === "hopSkill" ? hopSkill(workspace)
-        : name === "hopEventStream" ? hopEventStream(workspace, logPath)
-          : name === "hopJoinPayload" ? Promise.resolve(hopJoinPayload())
-            : name === "hopMapDemo" ? Promise.resolve(hopMapDemo())
-              : Promise.resolve(hopPruneStub());
+        : name === "hopJoinPayload" ? Promise.resolve(hopJoinPayload())
+          : name === "hopMapDemo" ? Promise.resolve(hopMapDemo())
+            : Promise.resolve(hopPruneStub());
     verdictCache.set(name, next);
     return next;
   };
@@ -411,6 +386,13 @@ async function main(): Promise<void> {
       line(v.ok ? "✅" : "❌", `${key} ⇒ ${v.detail}`);
       console.log(`      量法：${v.how}`);
     }
+
+    // 登记表也不许烂在这儿（与 D-8 ② 同族）：把三处副本收成一支 helper 之后，旧键若还挂着，
+    // 读表的人会以为那一面还有判定在守，而它其实守的是一个已经不存在的发射处。
+    const liveKeys = new Set(modelSites.map(siteKey));
+    const staleKeys = Object.keys(RUNNERS).filter((k) => !liveKeys.has(k));
+    line(staleKeys.length === 0 ? "✅" : "❌",
+      staleKeys.length === 0 ? "判定归属表没有陈旧键" : "陈旧归属键：" + staleKeys.join(" | ") + " ⇒ 那一面已不在盘上发射，撤掉这条登记");
 
     // 尺自己也要可证伪（规则 63/65/74）：挑一支**已有面**的文件，在内存里凭空多一处承诺，清单必须报更大的数。
     const target = modelSites[0];
@@ -436,7 +418,6 @@ async function main(): Promise<void> {
       `反向：同形状进模型可见根 ⇒ 仍欠判定（${owedNew ? "是" : "否"}）；进 UI_ROOTS ⇒ 认成 UI 面（${uiExempt ? "是" : "否"}）`);
   } finally {
     await rm(workspace, { recursive: true, force: true });
-    await rm(logDir, { recursive: true, force: true });
   }
 
   console.log(red === 0

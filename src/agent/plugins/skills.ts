@@ -2,6 +2,8 @@
 // 触发才全文进上下文（skill 工具 → tool_result 携带全文）；压缩后重挂最近激活 skill
 // （单 skill 前 5000 token、合计 25000）。$ARGUMENTS / $1 等参数替换 = skill 与 prompt 共用替换器。
 import type { SkillEntry, PromptCommandEntry } from "./types";
+import { isAbsolute, relative } from "node:path";
+import { realpathSync } from "node:fs";
 import { resolveToolName, type ToolName } from "../../tools/base";
 import { clampToTokenBudget, estimateTextTokens } from "../text-budget";
 
@@ -297,6 +299,7 @@ export function expandSkillInvocation(
   skills: readonly SkillEntry[],
   text: string,
   ctxFor?: (s: SkillEntry) => Omit<SubstitutionContext, "args">,
+  workspace?: string,
 ): SkillUserExpansion {
   if (!text.startsWith("/")) return { text, hit: null };
   const rest = text.slice(1);
@@ -311,9 +314,38 @@ export function expandSkillInvocation(
     text: clampSkillBody(
       renderPromptCommand(hit, args, ctxFor?.(hit) ?? {}),
       SKILL_REMOUNT_TOKENS_PER_SKILL,
-      "\n[全文见 " + hit.path + "]"),
+      skillRecallSuffix(hit.path, workspace)),
     hit: { invoke: skillInvokeName(hit), args },
   };
+}
+
+/**
+ * 截断尾注给的取回地址——**按落位分两案**（#47 的裁决：分案改文案，不给 `read_file` 开第二根允许例）。
+ * 旧写法递的是 `entry.path`，那是 `join(root, …)` 的产物 ⇒ 恒为绝对路径，而七把碰文件的工具
+ * 第一句就拒绝对路径 ⇒ 这句「全文见」一次也执行不了（连文件就在工作区里的项目级插件也一样）。
+ * 边界判定走 `resolve` + `relative`（与 `resolveInWorkspace` 同一口径），不按字符串前缀——
+ * 前缀比对会把 `<ws>/../elsewhere` 认成区内，等于当场造一条假承诺。
+ * 没登记工作区（用户侧调用点还没接上那一跳）时按**外面**那一案办：宁可不承诺，不许乱承诺。
+ */
+export function skillRecallSuffix(absPath: string, workspace?: string): string {
+  const unreachable = "\n[正文已按预算截断；完整文件在工作区之外或不可解析，模型侧读不到，要通读请由用户打开]";
+  if (workspace === undefined) return "\n[正文已按预算截断；完整文件在插件目录，模型侧读不到，要通读请由用户打开]";
+  // 与 `assertRealContainment` 同口径走 realpath：按词面比会把软链工作区（macOS 的 /var、/tmp 都指回 /private/var）
+  // 判成区外 ⇒ 把一条本来做得到的承诺**误吞**掉，那与递假地址同样是缺陷（两个方向都要测，见判卷）。
+  const wsReal = tryRealpath(workspace);
+  const fileReal = tryRealpath(absPath);
+  if (wsReal === null || fileReal === null) return unreachable;
+  const rel = relative(wsReal, fileReal);
+  if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) return unreachable;
+  return "\n[全文见 " + rel + "，用 read_file 按这个相对路径取回]";
+}
+
+function tryRealpath(p: string): string | null {
+  try {
+    return realpathSync(p);
+  } catch {
+    return null;
+  }
 }
 
 // ---- 压缩后重挂（§9.4）：最近激活 skill 的全文按预算重注 ----

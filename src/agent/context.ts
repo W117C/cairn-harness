@@ -86,7 +86,8 @@ function autoVerifyNote(results: VerifyCommandResult[], earlierCount: number): s
   const head =
     "[harness 自动验证] 上一轮收尾前系统补跑的 verify **未通过**（不是模型自调 verify 的结果）" +
     (earlierCount > 0
-      ? "；此前另有 " + String(earlierCount) + " 次同类补拍未通过（全文见事件流，不重复注入）"
+      ? "；此前另有 " + String(earlierCount) + " 次同类补拍未通过（旧拍不再重投，本上下文里没有它们的原文）" +
+        "⇒ 要看完整红文就显式跑一次 verify，别去翻事件流（工具面读不到它）"
       : "") +
     " ⇒ 先处理这条再继续新任务（判断它与本任务无关就显式说明理由）。\n";
   // 留尾会砍掉前几段的正文，但命令名一条都不能少：不然模型只看到最后一条日志，不知道该重跑哪条
