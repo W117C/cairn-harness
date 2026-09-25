@@ -59,7 +59,8 @@ describe("grep context / fixed_strings（查改一体：一次调用拿到改点
     const r = await grep.run({ pattern: "needle", context: 1 }, ctx);
     expect(hitLines(r.output).length).toBe(100);
     expect(ctxLines(r.output).length).toBeGreaterThan(0);
-    expect(r.output).toContain("more matches available");
+    expect(r.output).toContain("条命中"); // 第 66 页：命中帽说条数，不说 KB（旧句把 100 条写成 100KB）
+    expect(r.output).not.toContain("KB");
     expect(r.output).not.toContain("KB 预算");
   });
 

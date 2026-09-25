@@ -65,7 +65,9 @@ console.log("\n== grep ==");
   const r1 = await TOOLS.grep.run({ pattern: "needle" }, ctx);
   const hitCount = r1.output.split("\n").filter((l) => l.startsWith("Line ")).length;
   check("① 输出上限：命中 120 条只出 100 条", hitCount === 100, "实际 " + String(hitCount));
-  check("② 截断提示：more matches available", r1.output.includes("more matches available"));
+  // 第 66 页口径：帽提示必须说对量纲。旧断言钉的是英文串，而那句话把「100 条命中帽」写成
+  // 「输出超过 100KB 上限」——所以这里改钉两件事：有统一的 [truncated: 前缀 + 说的是条数、不是 KB。
+  check("② 截断提示：说条数不说 KB", r1.output.includes("[truncated:") && r1.output.includes("条命中") && !r1.output.includes("KB"));
   const r2 = await TOOLS.grep.run({ pattern: "x{2000,}" }, ctx);
   const longLine = (r2.output.split("\n").find((l) => l.startsWith("Line ")) ?? "").slice(0, 3000);
   check("② 截断提示：长行截断到 2000 内", longLine.replace("Line " + "1: ".length, "").length <= 2100);
@@ -101,7 +103,7 @@ console.log("\n== glob ==");
   const r1 = await TOOLS.glob.run({ pattern: "*.txt" }, ctx);
   const fileCount = r1.output.split("\n").filter((l) => l.endsWith(".txt")).length;
   check("① 输出上限：120 个文件只列 100 个", fileCount === 100, "实际 " + String(fileCount));
-  check("② 截断提示：more files available", r1.output.includes("more files available"));
+  check("② 截断提示：说文件数不说 KB", r1.output.includes("[truncated:") && r1.output.includes("个文件") && !r1.output.includes("KB"));
   const r2 = await TOOLS.glob.run({ pattern: "**/*" }, ctx);
   check("② 排除提示：node_modules 不出现", !r2.output.includes("node_modules"));
   check("③ 相对路径：输出无绝对路径", assertNoAbsPath(r2.output, ws));

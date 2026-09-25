@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { relative, resolve, sep } from "node:path";
-import { resolveInWorkspace, truncationNotice, type Tool, type ToolResult } from "./base.js";
+import { resolveInWorkspace, type Tool, type ToolResult } from "./base.js";
+import { countCapNotice } from "./cap-notice.js";
 import { sanitizedEnv } from "./process.js";
 import { rgBinary, rgNegativeNote } from "./ripgrep.js";
 
@@ -73,7 +74,7 @@ export const glob: Tool = {
     const limited = files.length > MAX_FILES;
     const shown = limited ? files.slice(0, MAX_FILES) : files;
     let out = shown.join("\n");
-    if (limited) out += `\n${truncationNotice(MAX_FILES)} more files available, use more specific path/pattern`;
+    if (limited) out += `\n${countCapNotice("个文件", MAX_FILES, files.length - MAX_FILES)}`;
     return { ok: true, output: out };
   },
 };

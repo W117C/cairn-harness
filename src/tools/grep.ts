@@ -1,4 +1,5 @@
-import { resolveInWorkspace, truncationNotice, type Tool, type ToolResult } from "./base.js";
+import { resolveInWorkspace, type Tool, type ToolResult } from "./base.js";
+import { countCapNotice } from "./cap-notice.js";
 import { rgNegativeNote, runRgJson, type RawMatch } from "./ripgrep.js";
 
 // 命中上限与单行截断：输出准确 > 省 token > 功能多。
@@ -73,7 +74,7 @@ function renderMatches(entries: RawMatch[], budget: number | null): Rendered {
 function truncateNote(r: Rendered): string {
   return r.byBudget
     ? `[truncated: 上下文输出超 ${String(CONTEXT_BUDGET_CHARS / 1024)}KB 预算，还有 ${String(r.omittedHits)} 条命中未列出——把 context 调小或收窄 pattern/path]`
-    : truncationNotice(MAX_MATCHES) + " more matches available, use more specific path/pattern";
+    : countCapNotice("条命中", MAX_MATCHES, r.omittedHits);
 }
 
 export const grep: Tool = {

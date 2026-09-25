@@ -38,7 +38,11 @@ describe("grep（M2a 任务 1）", () => {
     expect(res.ok).toBe(true);
     const matchLines = res.output.split("\n").filter((l) => l.startsWith("Line "));
     expect(matchLines.length).toBe(100);
-    expect(res.output).toContain("more matches available");
+    // 第 66 页口径变更：这句旧文案把「100 条命中帽」写成「输出超过 100KB 上限」（量纲错），
+    // 模型会按"再读一段就有"决策，而真实出路是收窄查询。新口径必须报条数 + 未列出条数。
+    expect(res.output).toContain("条命中");
+    expect(res.output).toContain("20 条命中 未列出");
+    expect(res.output).not.toContain("KB");
   });
 
   it("长行截断到 2000 字符且带提示", async () => {
@@ -158,7 +162,8 @@ describe("glob（M2a 任务 2）", () => {
     const res = await glob.run({ pattern: "*.txt" }, ctx);
     const fileLines = res.output.split("\n").filter((l) => l.endsWith(".txt"));
     expect(fileLines.length).toBe(100);
-    expect(res.output).toContain("more files available");
+    expect(res.output).toContain("个文件"); // 第 66 页口径变更：旧句把 100 个文件的帽说成 100KB
+    expect(res.output).not.toContain("KB");
 
     // .gitignore 生效：ignored.txt 不出现
     await writeFile(join(ws, ".gitignore"), "ignored.txt\n", "utf8");
