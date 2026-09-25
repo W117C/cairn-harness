@@ -46,8 +46,16 @@ describe("src/ 的每个模块都要有从测试出发的执行路径", () => {
   });
 
   it("假覆盖要出声：只有类型边连着测试的文件，不得偷偷算作已覆盖", () => {
-    const fakeCover = reach.src.filter((f) => reach.all.has(f) && !reach.live.has(f)).sort();
+    const fakeCover = reach.src.filter((f) => reach.all.has(f) && !reach.naiveLive.has(f)).sort();
     // 今天的真值：唯一一条是纯契约面，它同时也在例外表里 ⇒ 两个集合必须一致
     expect(fakeCover).toEqual([...TYPE_ONLY_SURFACE].sort());
+  });
+
+  // 第三种"没执行"：有测试**值引**它，但那个测试 `vi.mock` 把它换成了桩 ⇒ 真实实现一行都没跑。
+  // 今天 5 条 vi.mock(src) 都没掩盖掉任何模块（每条被 mock 的边之外另有真执行路径）⇒ 真值是空集；
+  // 哪天有人把某模块唯一的测试面 mock 掉，这条会点名它，而不是让"有测试引它"糊过去。
+  it("被 mock 掩盖的执行路径必须单独点名（不许混在「有测试引它」里）", () => {
+    const mockedAway = reach.src.filter((f) => reach.naiveLive.has(f) && !reach.live.has(f)).sort();
+    expect(mockedAway).toEqual([]);
   });
 });

@@ -72,27 +72,89 @@ export function closure(roots: string[], g: Graph, useTypeEdges: boolean): { see
   return { seen, parent };
 }
 
-export interface Reach { src: string[]; tests: string[]; scripts: string[]; all: Set<string>; live: Set<string>; gate: Set<string>; g: Graph }
+export interface Reach {
+  root: string;
+  src: string[];
+  tests: string[];
+  scripts: string[];
+  /** 测试文件 → 它 `vi.mock` 掉的 src 模块（判卷面与读数都要能列出这个） */
+  mocks: Map<string, string[]>;
+  all: Set<string>;
+  /** 不扣 mock 的旧口径，留着量"mock 到底改变了多少"（口径换了要能对照） */
+  naiveLive: Set<string>;
+  /** 真会执行的集合：逐测试求可达（跳过被 mock 的整棵下游）再取并集 */
+  live: Set<string>;
+  /** 每个 src 模块的**第一条**真实执行路径（起点是某个测试文件）；`--why` 与失败信息用它 */
+  paths: Map<string, string[]>;
+  gate: Set<string>;
+  g: Graph;
+}
+
+/** 一个测试文件里 `vi.mock("<…src…>")` 指到的模块。
+ *  为什么单独算：`vi.mock` 会把该模块换成桩，**真实实现一行都不执行**——
+ *  只被 mock 边连到的模块，在"有没有人跑过它"这个问题上是**没跑过**。 */
+export function mockedTargets(file: string, root: string): Set<string> {
+  let text = "";
+  try { text = readFileSync(join(root, file), "utf8"); } catch { return new Set(); }
+  const out = new Set<string>();
+  for (const m of text.matchAll(/vi\.mock\(\s*["']((?:\.[^'"]|\/)[^'"]*)["']/g)) {
+    const p = resolveSpec(file, m[1]!, root);
+    if (p !== null) out.add(p);
+  }
+  return out;
+}
+
+/** 从单个测试根出发的**真实执行**可达集：跳过被 `vi.mock` 的模块及其整棵下游
+ *  （被 mock 的模块不执行，它自己 import 的东西在这个测试里同样不执行）。 */
+function reachableFromTest(t: string, g: Graph, root: string): { seen: Set<string>; parent: Map<string, string> } {
+  const direct = mockedTargets(t, root);
+  const blocked = direct.size === 0 ? new Set<string>() : closure([...direct], g, true).seen;
+  const seen = new Set<string>([t]);
+  const parent = new Map<string, string>();
+  const q = [t];
+  while (q.length > 0) {
+    const cur = q.shift()!;
+    for (const next of g.edges.get(cur)?.value ?? []) {
+      if (seen.has(next) || blocked.has(next)) continue;
+      seen.add(next); parent.set(next, cur); q.push(next);
+    }
+  }
+  return { seen, parent };
+}
 
 export function analyze(root: string): Reach {
   const g = buildGraph(root, ["src", "tests", "scripts"]);
   const src = g.files.filter((f) => f.startsWith("src/"));
   const tests = g.files.filter((f) => f.startsWith("tests/") && f.endsWith(".test.ts"));
   const scripts = g.files.filter((f) => f.startsWith("scripts/"));
+  const live = new Set<string>();
+  const mocks = new Map<string, string[]>();
+  const paths = new Map<string, string[]>(); // 第一条真实执行路径（给 --why 用）
+  for (const t of tests) {
+    const d = [...mockedTargets(t, root)];
+    if (d.length > 0) mocks.set(t, d);
+    const { seen, parent } = reachableFromTest(t, g, root);
+    for (const f of seen) {
+      if (!f.startsWith("src/")) continue;
+      live.add(f);
+      if (!paths.has(f)) {
+        const chain: string[] = [];
+        let cur: string | undefined = f;
+        while (cur !== undefined) { chain.unshift(cur); cur = parent.get(cur); }
+        if (chain[0] === t) paths.set(f, chain);
+      }
+    }
+  }
   return {
-    src, tests, scripts, g,
-    live: closure(tests, g, false).seen,
-    all: closure(tests, g, true).seen,
-    gate: closure(scripts, g, false).seen, // 门脚本：跑门时真执行，但不算判卷面
+    root, src, tests, scripts, mocks, paths, g,
+    all: closure(tests, g, true).seen,          // 含类型边：只看"有没有人引"，用来标假覆盖
+    naiveLive: closure(tests, g, false).seen,   // 不扣 mock 的旧口径，留着量"mock 到底改变了多少"
+    live,
+    gate: closure(scripts, g, false).seen,      // 门脚本：跑门时真执行，但不算判卷面
   };
 }
 
-/** 从某个测试到 target 的值边路径；不可达返回 null。 */
+/** 一条从某个测试到 target 的**真实执行**路径（该测试没把它 mock 掉）；找不到返回 null。 */
 export function valuePath(r: Reach, target: string): string[] | null {
-  const { seen, parent } = closure(r.tests, r.g, false);
-  if (!seen.has(target)) return null;
-  const chain: string[] = [];
-  let cur: string | undefined = target;
-  while (cur !== undefined) { chain.unshift(cur); cur = parent.get(cur); }
-  return chain;
+  return r.paths.get(target) ?? null;
 }
