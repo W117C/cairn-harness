@@ -144,6 +144,36 @@ export function scanPromiseSites(files: readonly { path: string; text: string }[
 
 const siteKey = (s: { file: string; fn: string }): string => s.file + "#" + s.fn;
 
+/**
+ * 清单完整性判定（**判卷与探针共用这一份**，规则 100：同一判据各抄一份迟早漂）。
+ * 两格成对：面缺归属 ⇒ unjudged；归属指向已消失的发射处 ⇒ stale。
+ */
+export interface InventoryFindings {
+  modelKeys: string[];
+  unjudged: string[];
+  stale: string[];
+  byAudience: { model: number; operator: number; ui: number };
+}
+
+export function promiseInventoryFindings(
+  sites: readonly PromiseSite[],
+  runners: Readonly<Record<string, string>> = RUNNERS,
+): InventoryFindings {
+  const modelSites = sites.filter((s) => s.audience === "model");
+  const modelKeys = [...new Set(modelSites.map(siteKey))];
+  const live = new Set(modelKeys);
+  return {
+    modelKeys,
+    unjudged: modelKeys.filter((k) => runners[k] === undefined),
+    stale: Object.keys(runners).filter((k) => !live.has(k)),
+    byAudience: {
+      model: modelSites.length,
+      operator: sites.filter((s) => s.audience === "operator").length,
+      ui: sites.filter((s) => s.audience === "ui").length,
+    },
+  };
+}
+
 // --------------------------------------------------------------------------- 最后一跳
 
 interface Verdict {
@@ -346,6 +376,7 @@ async function main(): Promise<void> {
   }
 
   const modelSites = sites.filter((s) => s.audience === "model");
+  const inv = promiseInventoryFindings(sites);
   const exemptSites = sites.filter((s) => s.audience !== "model");
   for (const s of exemptSites) {
     const why = s.audience === "operator" ? "运维面（console.* 实参位）" : "UI 面（落在 UI_ROOTS＝给人看的桌面层）";
@@ -375,8 +406,9 @@ async function main(): Promise<void> {
       list.push(s);
       grouped.set(siteKey(s), list);
     }
-    for (const [key, group] of grouped) {
-      for (const s of group) console.log(`  面 ${s.file}:${String(s.line)} [${s.fn}]「${s.text}」`);
+    // 两格判定走 promiseInventoryFindings 那一份（判卷 import 的也是它）——不在这里再算一遍。
+    for (const key of inv.modelKeys) {
+      for (const s of grouped.get(key) ?? []) console.log(`  面 ${s.file}:${String(s.line)} [${s.fn}]「${s.text}」`);
       const runner = RUNNERS[key];
       if (runner === undefined) {
         line("❌", `${key} 没有判定归属 ⇒ 新加一句「全文见 X」就必须给一次可达性判定（在 RUNNERS 里登记并写清怎么量的）`);
@@ -386,13 +418,14 @@ async function main(): Promise<void> {
       line(v.ok ? "✅" : "❌", `${key} ⇒ ${v.detail}`);
       console.log(`      量法：${v.how}`);
     }
+    if (inv.unjudged.length === 0 && inv.modelKeys.length === 0) {
+      line("❌", "模型可见的承诺面为 0 ⇒ 没有尺（标记或扫描面漂了），不读成干净");
+    }
 
     // 登记表也不许烂在这儿（与 D-8 ② 同族）：把三处副本收成一支 helper 之后，旧键若还挂着，
     // 读表的人会以为那一面还有判定在守，而它其实守的是一个已经不存在的发射处。
-    const liveKeys = new Set(modelSites.map(siteKey));
-    const staleKeys = Object.keys(RUNNERS).filter((k) => !liveKeys.has(k));
-    line(staleKeys.length === 0 ? "✅" : "❌",
-      staleKeys.length === 0 ? "判定归属表没有陈旧键" : "陈旧归属键：" + staleKeys.join(" | ") + " ⇒ 那一面已不在盘上发射，撤掉这条登记");
+    line(inv.stale.length === 0 ? "✅" : "❌",
+      inv.stale.length === 0 ? "判定归属表没有陈旧键" : "陈旧归属键：" + inv.stale.join(" | ") + " ⇒ 那一面已不在盘上发射，撤掉这条登记");
 
     // 尺自己也要可证伪（规则 63/65/74）：挑一支**已有面**的文件，在内存里凭空多一处承诺，清单必须报更大的数。
     const target = modelSites[0];
