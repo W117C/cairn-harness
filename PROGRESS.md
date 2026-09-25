@@ -2752,6 +2752,26 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
   ⇒ 不擅自装依赖，按"缺底料"记账而不是报 0（同评估面口径）。
 - 读数：判卷面 **6 passed**；自检 7+1 全对；全量 **222 files / 2412 tests、exit 0**；typecheck 真退出码 0；docs-check 全绿；临时文件无残留。
 
+### 2026-09-26 · 第 82 页：现行层 0 个死指针——但这个数先被尺自己骗了一次（`.json` 被交替截成 `.js`）
+
+`outputs/dead-doc-refs-2026-09-26/`。问的是文档层缺口：`docs-check` 八条里**没有一条判"正文里的路径指针还在不在"**
+（D-3 管行号漂移、D-8 管复跑脚本存在），而桌面层刚一次删掉 51 个测试面 + 整棵 renderer。
+
+- 第一版尺造出 5 条**假**死指针：扩展名写成 `(?:ts|js|json|…)` 的交替 ⇒ 交替取**首个**匹配，`js` 在 `json` 之前，
+  于是 `scripts/frozen-sha256.json` 被读成 `…​.js`、`fixtures/gym/baseline.json` 同理、`compaction-card.tsx` 被截成 `.ts`。
+  修法：宽松抓完**整段比白名单 + 右边界不许再接词字符**，并把**用真值做的负控**放在脚本最前面
+  （喂含 `.json`/`.tsx`/`.mjs`/`.mdx` 的样句 ⇒ 前三个必须完整抽出、第四个必须不收；不过就红着退出且**不出统计**）。
+- 修正后的两面读数：现行层（`LIVE_PAGES`，与 D-1/D-2/D-4 同一份定义）3 页 6 处指针 **0 死**；
+  提案/档案层 4 页 230 处指针 10 死（另 15 页盘上已被拿走，明确列"不扫"，第一版在这儿 ENOENT 崩过）。
+  ⇒ 那笔删除里**模块地图页是被同步改过的**（对那会话的在飞工作是正面读数，不是缺陷）。
+- 提案层那 10 个混着三种成因，都不算文档缺陷：拟新增（`scripts/ledger-check.ts`、`tests/gym.test.ts`、`tests/verify-attribution.test.ts`）／
+  外部来源指针（solpi 移植提案引用**被移植项目**的 `src/renderer/app.js`、`…/compaction-card.tsx`、`tests/online-context-compact.test.ts`）／
+  在飞删除（`docs/m3-acceptance.md`、`scripts/agents-check.ts`、`scripts/ui-baseline-sha256.json`）。
+- 结论形态：**D-9 只判现行层**（今天真值 0 ⇒ 上线即绿、是棘轮），**按层切不按措辞切**——
+  用"这句像在讲将来"放行＝把判据挂在写法上，换写法即绕过。落点 `scripts/docs-check.ts`（他人热文件 `M`，未动）⇒ 任务 #13。
+- 顺手记下：这条读数量的是"文档说的东西还在不在"，与第 79/80 页"实现还有没有人跑"是同一族的两面。
+- 读数：`01-scan.mts` exit 0（负控通过、分类互斥完整）；现行层 0 死／提案层 10 死已按三成因归类；本笔不动任何被他人持有的文件。
+
 
 
 
