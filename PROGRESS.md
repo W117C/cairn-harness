@@ -2615,10 +2615,11 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
 - 新砸两条变异针脚（`shell-tail-assembly-drops-tail`、`shell-tail-notice-reserve-removed`，阻断 9 → 11）：
   测试面都还活着，只是针脚字面量要跟着改指 ⇒ 逐字改法已写进任务 #4（靶子 `mutate-verify.mjs` 在别人手里）。
 
-### 2026-09-26 · 第 76 页：整张门表跑下来唯一红的是 PC7，而且它在 HEAD 上就红——一处没登记的「省字节换一次摘要调用」
+### 2026-09-26 · 第 76 页：那批门里唯一红的是 PC7，而且它在 HEAD 上就红——一处没登记的「省字节换一次摘要调用」
 
-`outputs/pc7-amortize-tradeoff-2026-09-26/`。本轮把 17 道门跑完（不含 `mutate-verify`：它就地改源文件，
+`outputs/pc7-amortize-tradeoff-2026-09-26/`。本轮把 17/26 道门跑完（不含 `mutate-verify`：它就地改源文件，
 共享工作树里不能跑）⇒ **16 绿 1 红 + 6 项门自报的"未证"**。红的这条在 `BLOCKED.md` 与 `docs/` 里都搜不到。
+> 该页原先把 17/26 写成「整张门表」。漏跑的第 9 道 `mutate-needles-check` 当天红着（阻断 11）——见第 77 页。
 
 - 归因先做（规则 61/171）：同 HEAD 隔离 worktree（`cp -al node_modules` 真依赖）并排跑同一条门 ⇒
   主树与 HEAD **逐字同值**（关=5 次/42,588 字符，开=6 次/34,925）⇒ 不是在飞造成的，是已提交代码的状态。
@@ -2632,3 +2633,28 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
   两案都要动 `compaction-cost.ts`（干净）可能还有 `glm-session.ts` 那一跳（别人的在飞文件）。
 - 缺省仍是关（`amortizeRewriteCost === true` 才生效）⇒ 这条红不影响今天的真实花费，属"已发货但未证明"。
 - 读数：tsc 0 错；跑完门表后 `prefix-churn-check` 仍只有 PC7 一条 ❌（判定未变）；docs-check exit 0（`UNVERIFIED=3`）。
+
+### 2026-09-26 · 第 77 页：11 条阻断针脚切三刀——6 条是我欠的登记表（逐条实测观测者都还在），而上一轮那句「整张门表」漏掉了唯一能看见这件事的那道门
+
+`outputs/dead-needles-observers-2026-09-26/`。两件：收尾失效锚点 + 补跑漏掉的门。第二件把第一件的来路改了。
+
+- 口径纠正：`GATES.length = 26`，上一轮跑的是 17/26 却写成「整张门表跑了一遍」。排除名单是我按**名字族**
+  划的（"变异那一族不在共享树跑"），而 `mutate-needles-check` 是那一族里**只读、秒级**的那道
+  （`mutate-verify.mjs` 里自己写着"这一支只读"）⇒ 它红着 11 条而我没跑到。本轮补跑 22 道：**绿 20 / 红 2**
+  （红＝PC7 ＋ needles-check），未证 9；累计覆盖 25/26，剩 `mutate-verify`（整表几十分钟且就地改源，不排进本轮）。
+  教训落在**排除名单的口径**上：按"这支会不会改盘/要不要凭据"划，不按名字族；`--only` 自报的
+  「（子集 N/26——非全量运行）」那行不许被转述成"整张"。
+- 11 条阻断切三刀（用**完整**针脚字面量在盘/`git show HEAD:<src>` 各数一次；`needleProblemLine` 打的是前 60 字，
+  `impact-query` 那条的 60 字前缀两边都还在，漂的是第 61 字之后多出的 `maxFiles` ⇒ 按前缀数会得反向结论）：
+  **6 条真漂移全是我这几轮改的**（`impact-query` / `shell-tail` ×2 / `prune-stub` / `skill-primary-hint` / `user-skill-face`），
+  3 条属别人的写作窗（`no-progress.ts`、`events/index.ts` 两条：HEAD 上针脚完好），2 条 mutate-verify 已自报"钉在飞文本"。
+- 针脚失效 ≠ 那一格没人守。探针（`01-probe.mts`，施加该锚点原本要造成的突变 + `finally` 逐字还原）跑那 6 条：
+  **6/6 仍红在它 `expectFail` 那一格**（红几格 2/1/1/1/2/5）⇒ 观测者全在，#50 是纯登记动作，不需要重新判卷。
+- 顺带抓到 `expectFail` 标题也会漂且**无人判**：两条是"字面量 + 标题"同时失效，而 `mutate-anchor-titles.ts`
+  不点名它们——我把题面改成**加后缀**，锚点里的旧标题仍是某条用例的子串，子串关系让漂移不红。
+- 交给 `mutate-verify` 作者会话（那文件此刻是 `M`，我没动）：把"盘上 0 而 HEAD 有"从阻断里分出来，
+  并给标题半边加一只核——本轮实测 3/11 属前者，占阻断的 27%。
+- 探针自己的第一版是坏的：vitest 汇总行带 ANSI 色码 ⇒ 读不出 `N failed` 却仍打"全绿"（规则 128 第三形态）。
+  修法是 `FORCE_COLOR=0`/`NO_COLOR=1` ＋汇总数与退出码互校，不一致时只许打"读数不可信"。
+- 读数：`pgrep` 空（并发前置）；探针跑完 `git status -- src` 里那 5 个文件均不在脏名单；6/6 还原逐字一致。
+
