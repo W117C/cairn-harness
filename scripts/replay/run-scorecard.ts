@@ -19,6 +19,7 @@ import { isEnvVerifyCause } from "../../src/events";
 import { mayHaveWrittenDisk } from "../../src/agent/write-face";
 import { bucketsSpendUsd, priceForModel, type SpendBucket } from "../../src/agent/orchestrator-join";
 import { readJsonl, scanCorpus, zeroCorpusProblem } from "./corpus";
+import { armOfPath, groupPairs, parseArm, taskKey, type ArmOf } from "../lib/eval-arms";
 
 export type RunOutcome =
   | "green-first-try"
@@ -208,6 +209,32 @@ export function splitStreams(events: readonly AgentEvent[]): { main: AgentEvent[
   return { main, workers: [...byId.entries()].map(([agentId, ev]) => ({ agentId, events: ev })) };
 }
 
+/** 「臂 × 任务」的一格：一个文件＝一次 run（它的主会话与 worker 子流合起来算这一格）。 */
+export interface ArmCell {
+  arm: ArmOf;
+  task: string;
+  file: string;
+  judged: number;
+  green: number;
+  tokens: number;
+}
+
+/** 逐文件压成格子。臂由**路径**决定（目录名＝实验条件），任务键由文件名决定 ⇒ 两条臂跑同一个任务才能对着看。 */
+export function armCells(perFile: readonly { file: string; scored: readonly { agentId: string; score: RunScore }[] }[]): ArmCell[] {
+  return perFile.map((p) => {
+    const scores = p.scored.map((s) => s.score);
+    const judgedRows = scores.filter((s) => s.outcome !== "no-write" && s.decisive !== "none");
+    return {
+      arm: parseArm(armOfPath(p.file)),
+      task: taskKey(p.file),
+      file: p.file,
+      judged: judgedRows.length,
+      green: judgedRows.filter((s) => s.decisive === "green").length,
+      tokens: scores.reduce((n, s) => n + s.usage.inputTokens + s.usage.outputTokens, 0),
+    };
+  });
+}
+
 export interface ScorecardAggregate {
   /** 所有流（主会话 + worker）的条数。 */
   rows: number;
@@ -285,8 +312,7 @@ export function aggregateScorecard(rows: readonly RunScore[]): ScorecardAggregat
   };
 }
 
-export interface ScorecardVerdict {
-  measurable: boolean;
+export interface ScorecardVerdict {  measurable: boolean;
   reason: string;
 }
 
@@ -353,6 +379,43 @@ function main(): void {
     console.error("❌ 不可测：" + v.reason);
     process.exitCode = 1;
     return;
+  }
+  // —— 分臂 + 配对。上面那两行是**池化**读数，而池子里有几条臂就得说几次：
+  // 同一任务的两条臂（A/B）与同配置的多次重复，读法相反（前者看差值，后者看抖动是否复现）。
+  const cells = armCells(perFile);
+  const armAgg = new Map<string, { arm: ArmOf; files: number; judged: number; green: number; tokens: number }>();
+  for (const c of cells) {
+    const prev = armAgg.get(c.arm.arm) ?? { arm: c.arm, files: 0, judged: 0, green: 0, tokens: 0 };
+    prev.files += 1;
+    prev.judged += c.judged;
+    prev.green += c.green;
+    prev.tokens += c.tokens;
+    armAgg.set(c.arm.arm, prev);
+  }
+  console.log("  —— 分臂（池化值跨 " + String(armAgg.size) + " 条臂 ⇒ 只能当上下界，不是某一臂的表现）");
+  for (const a of [...armAgg.values()].sort((x, y) => x.arm.arm.localeCompare(y.arm.arm))) {
+    console.log(
+      "    " + a.arm.arm.padEnd(28) +
+        " 文件=" + String(a.files).padStart(2) +
+        " 能定终态=" + String(a.judged).padStart(2) +
+        " 绿=" + String(a.green).padStart(2) +
+        " 成功率=" + (a.judged === 0 ? "不可测" : ((a.green / a.judged) * 100).toFixed(0) + "%").padStart(4) +
+        " token/成功=" + (a.green === 0 ? "—" : String(Math.round(a.tokens / a.green))) +
+        " 族=" + a.arm.family + (a.arm.variant === null ? "（无变体后缀）" : ""),
+    );
+  }
+  const pairs = groupPairs(cells);
+  const abPairs = pairs.filter((g) => g.hasAb);
+  const repPairs = pairs.filter((g) => !g.hasAb);
+  console.log("  —— 配对的格子：A/B " + String(abPairs.length) + " 格 ｜ 同配置重复 " + String(repPairs.length) + " 格");
+  for (const g of [...abPairs, ...repPairs]) {
+    const parts = g.cells.map((c) =>
+      (c.arm.variant ?? "rep" + String(c.arm.rep)) + "=" +
+      (c.judged === 0 ? "不可判" : c.green > 0 ? "绿" : "红") + "/" + String(c.tokens) + "tk");
+    console.log("    [" + (g.hasAb ? "A/B" : "重复") + "] " + g.family + "/" + g.task + " ⇒ " + parts.join(" ｜ "));
+  }
+  if (abPairs.length === 0) {
+    console.log("    （没有可配对的 A/B 格 ⇒ 策略差要等各臂把任务补齐；不许拿两条不同任务的臂算差值）");
   }
   for (const p of perFile) {
     const wrote = p.scored.filter((s) => s.score.outcome !== "no-write");
