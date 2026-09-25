@@ -2834,3 +2834,10 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
 - 顺带把第 71 页一句"按推导，未实测"转正：`prune-attachment-production-entry` 实测红在
   `tests/session-prune-attachments.test.ts:69`（`toContain("读不到")`）⇒ 观测者在，过期的是锚点标题，#50 只需改 `expectFail`。
 - 读数：新判卷面 15 条绿｜typecheck 0 报错｜主树全量 `222 文件 / 2413 条` 绿（改前基线，见上一节）｜针脚体检阻断仍 11 条（全在别人手里）。
+- **同轮更正（我自己的归因错）**：上面那句「同 HEAD 认证（新提交 `2fdae67`）」**不成立**——那次跑的树是 `14bd083` ＋ 我复制进去的 4 份已修文件（三态里的"在飞＋修"）。
+  原因：命令链里 `git checkout --detach 2fdae67` 被那 4 份本地改动挡住而**失败**，我把它的输出重定向掉了，只读了它产出的 log ⇒ "跑完了并留下 log"被当成"切换成功"。
+  补做真认证：新建 `.worktrees/head-cert-b1e7d77`（真·新 HEAD）＋ `cp -al node_modules` ＋ 从旧 worktree 硬链接 `electron`
+  ⇒ `Test Files 2 failed | 264 passed (266)`／`Tests 2 failed | 2848 passed (2850)`（退出码 1，不接管道取的）、`typecheck` 0 报错。
+  我名下的四个面逐条绿（`tools` 10、`src-execution-path` 7、`mutation-rerun-triage` 15、`mutate-anchor-titles` 15 中仅那 1 条渲染层漂移红）。
+  两条新口径：① 认证前把 `git rev-parse HEAD` ＋判卷四面在飞数写进 log 首行；② **依赖集必须等于那棵树的 `package.json`**——
+  直接拿主树（未提交的 core-only 依赖）去认证 HEAD 会得到 `TS2307: Cannot find module 'electron'` 这种**环境假红**（规则 87/103 同族第三次命中）。
