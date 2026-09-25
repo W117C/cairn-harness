@@ -17,9 +17,12 @@ import { readFileSync } from "node:fs";
 import {
   RUN_OUTCOMES,
   aggregateScorecard,
+  costOf,
   scoreStream,
   scorecardVerdict,
   splitStreams,
+  usageOfStream,
+  type UsageTotals,
 } from "../scripts/replay/run-scorecard";
 import { REPLAY_READINGS } from "../scripts/replay-readings";
 import type { AgentEvent, VerifyCause } from "../src/events";
@@ -185,5 +188,88 @@ describe("登记表两侧齐（D-8）", () => {
     const entry = REPLAY_READINGS.find((r) => r.id === "run-scorecard");
     expect(entry, "登记了才有门在扫它").toBeTruthy();
     expect(readFileSync(entry!.script, "utf8")).toContain("export function scoreStream");
+  });
+});
+
+// ---- 代价轴（第 88 页）：报数必须并列「准确率」与「每次成功花多少」----
+// 动因是这条面自己缺的那一维：它有 y 轴（成功/返工）却没有任何代价读数，
+// 而本仓定死的报数口径是「准确率与 $/成功任务 并列」。两条纪律各有用例：
+//   · token 轴与成功率**同一分母**（否则"每次成功更省"可以靠悄悄扩大分母做到）；
+//   · 钱算不出 ⇒ null + 说出缺哪一面，**绝不折成 $0**（"不可知记成免费"是本仓点名的假绿形状）。
+import { DEFAULT_MODEL_TABLE } from "../src/providers/registry";
+
+const usageEv = (inputTokens: number, outputTokens: number, extra: Record<string, unknown> = {}): AgentEvent =>
+  ({ type: "usage", inputTokens, outputTokens, ...extra }) as unknown as AgentEvent;
+
+const emptyTotals = (over: Partial<UsageTotals> = {}): UsageTotals => ({
+  usageEvents: 0, inputTokens: 0, outputTokens: 0, cacheRead: 0, cacheWrite: 0,
+  cacheReadUnreported: 0, cacheWriteUnreported: 0, modelAttributed: 0, buckets: [], ...over,
+});
+
+describe("token 轴：合计与缺报", () => {
+  it("in/out 累加；缓存分块**缺字段算缺报**，不当命中 0（规则 95）", () => {
+    const t = usageOfStream([usageEv(1000, 100, { cacheReadInputTokens: 700 }), usageEv(500, 50)]);
+    expect(t.usageEvents).toBe(2);
+    expect(t.inputTokens).toBe(1500);
+    expect(t.outputTokens).toBe(150);
+    expect(t.cacheRead).toBe(700);
+    expect(t.cacheReadUnreported).toBe(1);
+    expect(t.cacheWriteUnreported).toBe(2); // 两条都没上报写侧
+  });
+
+  it("`inputTokens` 是含缓存的总输入 ⇒ 汇总**不再把 cache 加第二遍**", () => {
+    const t = usageOfStream([usageEv(1000, 100, { cacheReadInputTokens: 900, cacheWriteInputTokens: 50 })]);
+    expect(t.inputTokens + t.outputTokens).toBe(1100);
+  });
+});
+
+describe("钱轴：算不出就说算不出", () => {
+  it("一条 usage 都没有 ⇒ 不可测，原因是『没有钱轴』而不是『没花钱』", () => {
+    const c = costOf([emptyTotals()]);
+    expect(c.measurable).toBe(false);
+    expect(c.usd).toBeNull();
+    expect(c.reason).toContain("一条 usage 事件都没有");
+  });
+
+  it("有 usage 但零 model 归因 ⇒ usd 必须是 null（**负控：不许读成 $0**）——语料现状正是这一格", () => {
+    const c = costOf([emptyTotals({ usageEvents: 166, inputTokens: 1000, outputTokens: 200 })]);
+    expect(c.measurable).toBe(false);
+    expect(c.usd).toBeNull();
+    expect(c.reason).toContain("model");
+    expect(c.unpricedTokens).toBeGreaterThan(0);
+  });
+
+  it("有 model 名字但查不到档位（两表漂移）⇒ 仍 null，不折成 0", () => {
+    const stream: AgentEvent[] = [usageEv(1000, 200, { model: "no-such-model-xyz" })];
+    const c = costOf([usageOfStream(stream)]);
+    expect(c.measurable).toBe(false);
+    expect(c.usd).toBeNull();
+  });
+
+  it("档位表里的真名能走通整条链（名 → priceForModel → 价表 → usd>0）", () => {
+    const spec = DEFAULT_MODEL_TABLE[0]!;
+    const c = costOf([usageOfStream([usageEv(100000, 1000, { model: spec.id })])]);
+    expect(c.measurable, "档位表里第一个名字定价不了 ⇒ 这条链就断了：" + c.reason).toBe(true);
+    expect((c.usd ?? 0) > 0).toBe(true);
+    expect(c.reason).toBe(""); // 全部桶都归了因 ⇒ 不该有「下界」话术
+  });
+});
+
+describe("代价与成功率共用分母", () => {
+  const greenStream = scoreStream([...writePair(), usageEv(2000, 200), green()]);
+  const redStream = scoreStream([...writePair("w2"), usageEv(8000, 800), codeRed()]);
+
+  it("tokensPerGreen 只除以绿的条数（否则扩大分母就能假装『每次成功更省』）", () => {
+    const agg = aggregateScorecard([greenStream, redStream]);
+    expect(agg.judged).toBe(2);
+    expect(agg.green).toBe(1);
+    expect(agg.tokensPerGreen).toBe(2200);
+    expect(agg.tokensPerJudged).toBe(5500); // (2200+8800)/2
+  });
+
+  it("一条都没成 ⇒ tokensPerGreen 是 null，不是 0（0 会被读成『免费成功』的反面：不存在）", () => {
+    const agg = aggregateScorecard([redStream]);
+    expect(agg.tokensPerGreen).toBeNull();
+    expect(agg.tokensPerJudged).toBe(8800);
   });
 });

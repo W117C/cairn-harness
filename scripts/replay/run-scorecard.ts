@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import type { AgentEvent } from "../../src/events";
 import { isEnvVerifyCause } from "../../src/events";
 import { mayHaveWrittenDisk } from "../../src/agent/write-face";
+import { bucketsSpendUsd, priceForModel, type SpendBucket } from "../../src/agent/orchestrator-join";
 import { readJsonl, scanCorpus, zeroCorpusProblem } from "./corpus";
 
 export type RunOutcome =
@@ -51,6 +52,94 @@ export interface RunScore {
   reworkRounds: number;
   /** 最后一条**能定终态**的拍（绿或代码红；环境拍不占位）。 */
   decisive: "green" | "code-red" | "none";
+  /** 这一流的用量合计（token 轴；美元轴见 `costOf`）。**加性字段**：终态判定不读它，两轴互不污染。 */
+  usage: UsageTotals;
+}
+
+/** 一条流的用量合计。
+ *  口径全部来自 `UsageEvent` 的注释，不是我自己定的：
+ *  · `inputTokens` 是**含缓存的总输入**，`cacheRead/Write` 是其中的分块 ⇒ 不许再加一遍；
+ *  · 缓存分块**缺字段 = 那个 provider 没上报，不等于 0** ⇒ 缺报要单独计数报出来，
+ *    否则「缓存命中率 0%」会被读成"这轮真的一次没命中"（规则 95：字段注释里的 null 是判据不是说明）。 */
+export interface UsageTotals {
+  usageEvents: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheRead: number;
+  cacheWrite: number;
+  cacheReadUnreported: number;
+  cacheWriteUnreported: number;
+  /** 带着 `model` 的 usage 事件条数（能定价的前提）。语料里这条**实测为 0** ⇒ 美元轴不可测，见 `costOf`。 */
+  modelAttributed: number;
+  /** 逐条 usage 事件的定价输入，交给唯一的那把真钱尺（`bucketsSpendUsd`）。 */
+  buckets: SpendBucket[];
+}
+
+export function usageOfStream(events: readonly AgentEvent[]): UsageTotals {
+  const t: UsageTotals = {
+    usageEvents: 0, inputTokens: 0, outputTokens: 0,
+    cacheRead: 0, cacheWrite: 0,
+    cacheReadUnreported: 0, cacheWriteUnreported: 0,
+    modelAttributed: 0, buckets: [],
+  };
+  for (const e of events) {
+    if (e.type !== "usage") continue;
+    t.usageEvents += 1;
+    t.inputTokens += Math.max(0, e.inputTokens);
+    t.outputTokens += Math.max(0, e.outputTokens);
+    if (typeof e.cacheReadInputTokens === "number") t.cacheRead += Math.max(0, e.cacheReadInputTokens);
+    else t.cacheReadUnreported += 1;
+    if (typeof e.cacheWriteInputTokens === "number") t.cacheWrite += Math.max(0, e.cacheWriteInputTokens);
+    else t.cacheWriteUnreported += 1;
+    const model = (e as { model?: unknown }).model;
+    if (typeof model === "string" && model !== "") {
+      t.modelAttributed += 1;
+      t.buckets.push({ usage: { inputTokens: e.inputTokens, outputTokens: e.outputTokens }, price: priceForModel(model) });
+    } else {
+      // 没有 model 就没法查价表：交一个 `price: null` 的桶给真钱尺，
+      // 由它按「真实但算不出」计进 unpricedTokens——**不在这里折成 $0**。
+      t.buckets.push({ usage: { inputTokens: e.inputTokens, outputTokens: e.outputTokens }, price: null });
+    }
+  }
+  return t;
+}
+
+export interface CostReading {
+  /** false ⇒ `usd` 一定是 null，且 `reason` 必须能读成"缺哪一面"，不是"没花钱"。 */
+  measurable: boolean;
+  usd: number | null;
+  /** 未定价 token 数（真实存在但算不出价的那部分）。 */
+  unpricedTokens: number;
+  reason: string;
+}
+
+/** 美元轴。**有 usage 事件却一条都定不了价 ⇒ null，不是 0**——
+ *  本仓点名的假绿形状："不可知记成免费"。这条守卫的用例是负控：166 条无 model 的 usage 必须读出"不可测"。 */
+export function costOf(totals: readonly UsageTotals[]): CostReading {
+  const usageEvents = totals.reduce((n, t) => n + t.usageEvents, 0);
+  const attributed = totals.reduce((n, t) => n + t.modelAttributed, 0);
+  const buckets = totals.flatMap((t) => t.buckets);
+  if (usageEvents === 0) {
+    return { measurable: false, usd: null, unpricedTokens: 0, reason: "语料里一条 usage 事件都没有 ⇒ 没有钱轴（不是没花钱）" };
+  }
+  if (attributed === 0) {
+    // 未定价的 token 量从**合计字段**取，而不是再把桶加一遍：桶是按 usage 一条一个建出来的，
+    // 但调用方完全可能只给出合计数（比如从旧快照重建）——两种来源都得读出同一个"这些钱花过、算不出"。
+    const tokens = totals.reduce((n, t) => n + t.inputTokens + t.outputTokens, 0);
+    return {
+      measurable: false, usd: null, unpricedTokens: tokens,
+      reason: `${String(usageEvents)} 条 usage 事件里没有一条带 model 归因 ⇒ 查不到价表键（价表的键是档位 id，模型名必须先经 priceForModel 反查）。` +
+        `写侧补齐归因之前，$/成功任务只能报不可测；token 轴仍可读。`,
+    };
+  }
+  const spent = bucketsSpendUsd(buckets);
+  if (spent === null) {
+    return { measurable: false, usd: null, unpricedTokens: buckets.length, reason: "全部桶都算不出价（未注册档位或价表漂移）⇒ 不折成 $0" };
+  }
+  return {
+    measurable: true, usd: spent.usd, unpricedTokens: spent.unpricedTokens,
+    reason: attributed < usageEvents ? `只有 ${String(attributed)}/${String(usageEvents)} 条能定价 ⇒ 这是**下界**，不是实付` : "",
+  };
 }
 
 /** 一条流（主会话或单个 worker 子流）的结果卡。纯函数，不做 IO。 */
@@ -95,6 +184,7 @@ export function scoreStream(events: readonly AgentEvent[]): RunScore {
     envRed: beatAt.filter((b) => b.env).length,
     reworkRounds,
     decisive,
+    usage: usageOfStream(events),
   };
 }
 
@@ -133,6 +223,16 @@ export interface ScorecardAggregate {
   unproven: number;
   /** 中位返工轮数（只算写过盘的流）；无样本为 null。 */
   medianRework: number | null;
+  /** token 轴。**分母与成功率完全同一套**（同一条面算两个轴，避免两把尺各算各的分母）。 */
+  usageEvents: number;
+  tokensJudged: number;
+  tokensPerJudged: number | null;
+  /** 「最省 token」的真正读数：每**一次成功**花多少 token。green=0 时为 null（不是 0）。 */
+  tokensPerGreen: number | null;
+  /** 缓存分块缺报的 usage 条数：缺报≠命中 0（规则 95）。 */
+  cacheUnreported: number;
+  /** 美元轴；不可测时 `usd=null` 并带原因，绝不折成 $0。 */
+  cost: CostReading;
 }
 
 /** 逐档计数 + 显式分母。任何比值都带着它的分母字段，不让人拿一个百分比就外推。 */
@@ -143,6 +243,29 @@ export function aggregateScorecard(rows: readonly RunScore[]): ScorecardAggregat
   const judgedRows = closedLoop.filter((r) => r.decisive !== "none");
   const green = judgedRows.filter((r) => r.decisive === "green").length;
   const reworks = closedLoop.map((r) => r.reworkRounds).sort((a, b) => a - b);
+  /** token 轴只在**与成功率同一分母**上算：问答流（no-write）、拿不出终态证据的流都不在其中，
+   *  否则"每次成功花多少 token"会与被悄悄扩大的分母一起变小。 */
+  const greenRows = judgedRows.filter((r) => r.decisive === "green");
+  const sumTokens = (rs: readonly RunScore[]): number =>
+    rs.reduce((n, r) => n + r.usage.inputTokens + r.usage.outputTokens, 0);
+  const tokensJudged = sumTokens(judgedRows);
+  const usageOf = (rs: readonly RunScore[]): UsageTotals =>
+    rs.reduce<UsageTotals>((acc, r) => ({
+      usageEvents: acc.usageEvents + r.usage.usageEvents,
+      inputTokens: acc.inputTokens + r.usage.inputTokens,
+      outputTokens: acc.outputTokens + r.usage.outputTokens,
+      cacheRead: acc.cacheRead + r.usage.cacheRead,
+      cacheWrite: acc.cacheWrite + r.usage.cacheWrite,
+      cacheReadUnreported: acc.cacheReadUnreported + r.usage.cacheReadUnreported,
+      cacheWriteUnreported: acc.cacheWriteUnreported + r.usage.cacheWriteUnreported,
+      modelAttributed: acc.modelAttributed + r.usage.modelAttributed,
+      buckets: [...acc.buckets, ...r.usage.buckets],
+    }), {
+      usageEvents: 0, inputTokens: 0, outputTokens: 0, cacheRead: 0, cacheWrite: 0,
+      cacheReadUnreported: 0, cacheWriteUnreported: 0, modelAttributed: 0, buckets: [],
+    });
+  // 一次汇总，多处引用（各调一次会把"同一读数抄三遍"这种漂移留在自己代码里）。
+  const allUsage = usageOf(rows);
   return {
     rows: rows.length,
     byOutcome,
@@ -152,6 +275,13 @@ export function aggregateScorecard(rows: readonly RunScore[]): ScorecardAggregat
     greenRate: judgedRows.length === 0 ? null : green / judgedRows.length,
     unproven: byOutcome["wrote-never-verified"] + byOutcome["env-blocked"],
     medianRework: reworks.length === 0 ? null : reworks[Math.floor(reworks.length / 2)],
+    usageEvents: allUsage.usageEvents,
+    tokensJudged,
+    tokensPerJudged: judgedRows.length === 0 ? null : Math.round(tokensJudged / judgedRows.length),
+    tokensPerGreen: greenRows.length === 0 ? null : Math.round(sumTokens(greenRows) / greenRows.length),
+    cacheUnreported: allUsage.cacheReadUnreported + allUsage.cacheWriteUnreported,
+    // 钱轴按**全部流**汇总（不只 judged）：钱花在没成功的 run 上更要报出来。
+    cost: costOf(rows.map((r) => r.usage)),
   };
 }
 
@@ -210,6 +340,15 @@ function main(): void {
       "（分母=能定终态的 " + String(agg.judged) + " 条）· 证据缺席 " + String(agg.unproven) +
       " · 返工中位 " + String(agg.medianRework ?? "—"),
   );
+  // 准确率与代价**并列**报出：只报成功率就等于不报"这一轮花了多少"（本仓定死的报数口径）。
+  console.log(
+    "  token 轴：每条能定终态 " + String(agg.tokensPerJudged ?? "—") +
+      " · 每**一次成功** " + String(agg.tokensPerGreen ?? "不可测（green=0）") +
+      " · usage 事件 " + String(agg.usageEvents) + "（其中缓存分块缺报 " + String(agg.cacheUnreported) + " 条——缺报≠命中 0）",
+  );
+  console.log("  钱轴：" + (agg.cost.measurable
+    ? "$" + String(agg.cost.usd) + (agg.cost.reason === "" ? "" : "（" + agg.cost.reason + "）")
+    : "不可测 —— " + agg.cost.reason));
   if (!v.measurable) {
     console.error("❌ 不可测：" + v.reason);
     process.exitCode = 1;
