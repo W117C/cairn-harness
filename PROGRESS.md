@@ -2685,4 +2685,33 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
   那 6 条锚点的撤登记条件＝桌面层那笔删除入库时同批摘除，之后从 `NO_RULER` 删名。
 - 读数：`tests/mutate-anchor-titles.test.ts` 单跑 **15 passed**（改前 13，+2）；全量 `vitest run --config` **220 files passed、exit 0**（73.4s，不带管道取真退出码）。
 
+### 2026-09-26 · 第 79 页：桌面层那笔删除摘了 51 个判卷面——4 份实现还活着且树上一条测试都不引它，第一格（updater 的 SSRF/协议/帽半边）当场补上
+
+`outputs/faceless-live-modules-2026-09-26/`。交出去之前先量规模，用只读扫描 `01-sweep.mts`。
+
+- 三态读数：51 个删除的判卷面里 **18 份实现仍在树上** ⇒ 还被引用 17 份，其中**盘上已无任何测试引用** 4 份（A）、
+  只是少一面 13 份（B，如 `base.ts` 剩 20 个判卷面）、没人引用 1 份（C：`scripts/replay/ask-density.ts`＝"忘了删"不是"忘了测"）。
+  A 的口径是"没有任何测试 **import**"：三条"两把尺分歧"（文本搜索认到文件名）逐条人工复判后全部否掉
+  ——分别是锚点 id 字符串、fixture 散文、事件名注释 ⇒ 不构成覆盖（规则 60/117：分歧先复判再报数）。
+- A 的第一格有额外的坏形状：`src/main/updater.ts` 自己注释声明的两个观察者（headless 单测、`commercial-check`）
+  **都是 ` D`**（HEAD 在、盘上没），而实现还被 `settings-handlers.ts` / `ipc-protocol.ts` 引用
+  ⇒ 一段带 https-only SSRF 闸、openExternal 协议白名单、1MB 响应帽、semver 数值比较的代码零观测者。
+- 处置守裁决：**不捞回**他们的文件（桌面层那笔由原作者提交），新开 `tests/updater-safety-core.test.ts` 只覆盖安全半边 7 条，
+  其中"非 https 一律 error 且 **fetch 调用次数为 0**"才是那条闸的真语义（先连再判也算 error，但不算守住）。
+- 观测者证明（`02-probe-red.mts`）：4 条不变量逐条废掉实现 ⇒ 基线全绿 7 条、红 2/1/2/1 格且各红在期望那一格、4/4 逐字还原。
+- 探针自己栽的两个读数坑（都写进脚本注释）：① 按带引号的标题抽失败行——关掉颜色后 vitest 打的是 `× suite > 用例名`
+  ⇒ "红了几格"有数而"红在哪一格"读不出＝半瞎读数不许发；② 基线自检把"全绿时输出里没有 `N failed` 这一段"读成红
+  ⇒ 汇总读数必须三分（拿到 failed / 只有 passed 记 0 / 两个都没有＝没尺）。
+- 剩下 3 格 A 交原作者，其中 `scripts/gate-manifest.ts` 要说细：**运行时观察者还在**（`gates.ts` 每次跑都做漂移校验并出声），
+  失去的是 6 条分支单测，而「EXEMPT 空白理由被拒」那一支**运行时今天走不到**（现存表里没有空条目）⇒ 是覆盖变窄不是没尺；
+  补它要动 `gate-manifest.ts`（他人热文件，`M`），故只登记（任务 #12）。
+- 本扫描不进门禁：它对"他人未提交的删除"必然出声，进门禁＝跨会话假红；归宿是那笔入库后复跑一次，A 与 C 都应为 0。
+- 读数：新判卷面单跑 **7 passed**；复跑扫描 A 4 → **3**（updater 已移入 B）——这是"改动真生效"的规模读数，不是"测试全绿"；
+  全量 `vitest run --config` **221 files / 2406 tests passed、exit 0**（73.2s；改前那次只记到 220 files——当时汇总行按 `Tests ` 抓没抓到数，未追记推导值）。
+- 又一坑（规则 48 再确认）：新测试**先 7 条全绿、tsc 却报 `Cannot find name 'RequestInfo'`**（本仓 tsconfig lib 不含 DOM）
+  ⇒ vitest 只转译不类型检查，"我的测试绿了"永远不等于类型干净；新增 `.ts` 后 tsc 必须重跑，
+  而 `typecheck.ts` 把未跟踪草稿单独归因（`HEAD 内 0 / 未跟踪草稿 1`）——那 1 个是我自己的，不能拿这句免责。
+
+
+
 
