@@ -2545,3 +2545,26 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
   N2 让调用点扫描不筛名字 ⇒ 期望 1 处实读 2 处红。`cp` + `shasum -c` 还原校验 OK，全程不与全量表并发。
 - 门禁：tsc 0 错；`promise-recall-inventory` 8 → 12 条全绿；探针 `exit=1` 不变（红仍 1 格 = #49 卡热文件）；
   #59 那格是 ⚪ **读数**不参与红绿。
+
+### 2026-09-26 · 第 73 页：#56 的活缺陷在**上游**——`read_file` 的 16MB 前缀按字节切，实测交出一个 U+FFFD
+
+`outputs/byte-cut-seam-scan-2026-09-26/`（`01-scan.mts` ＝候选面扫描，`02-*.md` ＝裁决与修法）。
+
+- 先量再修：AST 把 `src/` 的字节切候选摊开（14 处 `toString("utf8")` / 1 处 `subarray(字节帽)` /
+  0 处 `slice(0, 字节样帽)` / 1 处正则定长切块），逐条读出来只有两支相关。⇒ **加宽静态判据是空载**：
+  这次的形状是跨函数数据流（`readPrefix` 交出的缓冲在别处解码），局部 AST 表达不了；
+  按 `.subarray(...).toString()` 收料反而漏掉真缺陷、又误伤按换行切的那些面。
+- **活缺陷**：`read_file.ts` 对 >16MB 的文件走 `readPrefix(abs, LARGE_FILE_PREFIX_BYTES)`——按字节数的一刀，
+  落在多字节序列中间时 `buf.toString("utf8")` 解出 U+FFFD，并跟着 `offset` 一路交给模型。
+  第 67/68 页修的帽在下游（切字符串），这一刀在上游（文件本身被切在半字符上）。
+- TDD：判卷先跑 ⇒ **3 条红**，端到端那句就是复现器（`交付给模型的那一行里有半个字符`）。
+  新原语 `utf8PrefixEnd(buf)`（与 `headWithinBytes` 分两支：切的对象是字节缓冲）；
+  第一版算法写反（退过延续字节就收工 ⇒ `"a中"` 4 字节退成 2），是**穷举配对用例**抓的而不是读代码抓的。
+- 同轮把 `ledger.ts` 预览帽那份手写的字节回退改吃同一支（副本 2 → 1），并补两条它原先没有的观测者：
+  本文件默认样本纯 ASCII ⇒ 判据写在回退那一行上而取料面从没跨界样本（「两头断」：helper 有测、面没测）。
+- 造红：`read_file` 不 trim ⇒ 端到端红；`ledger` 去掉 `utf8PrefixEnd` ⇒ 预览那格红。
+  **一条差点被当成"有观测者"的假存活**：第一次试的 ledger 突变 `Math.min(1024, buffer.length - 1)` 全绿——
+  15000−1 仍 ≥ 1024，帽根本没动＝no-op（规则 128 第一形态，本轮自己踩到并记下来）。
+- 读数：tsc 0 错；`tools-check` exit 0；`docs-check` exit 0（`UNVERIFIED=3`）；
+  全量 core **220 files / 2392 tests 全绿**（起点 2387，+5 = utf8 3 + ledger 2，与新增用例逐笔对得上）。
+- #56 的**变异锚点**那半仍归 #50（靶子 `mutate-verify.mjs` 在别人手里）。

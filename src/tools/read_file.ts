@@ -2,7 +2,7 @@ import { open, readFile, readdir, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { assertRealContainment, resolveInWorkspace, ToolError, type Tool, type ToolResult } from "./base.js";
 import { byteCapNotice } from "./cap-notice.js";
-import { headWithinBytes } from "./output-ring.js";
+import { headWithinBytes, utf8PrefixEnd } from "./output-ring.js";
 import { prefetchLsp } from "./lsp.js";
 
 // 输出上限 50KB；行截断 2000 字符；默认最多 2000 行。
@@ -99,7 +99,10 @@ export const read_file: Tool = {
     if (looksBinary(buf)) {
       throw new ToolError("read_file: 疑似二进制文件，拒绝按文本读取: " + rel);
     }
-    const content = buf.toString("utf8");
+    // #56：oversized 那一刀按**字节数**切，末尾正落在码位中间时 `toString("utf8")` 会解码出一个 U+FFFD，
+    // 而这个字符会跟着 offset 一路交给模型（实测：读到前缀末尾那一行时含半个字符）。非 oversized 读到的是
+    // 整份文件，边界由文件自己给，不用退。
+    const content = oversized ? buf.subarray(0, utf8PrefixEnd(buf)).toString("utf8") : buf.toString("utf8");
     // M2a：read 命中源码 → 后台预热 LSP（尽力而为，零阻塞、零异常冒泡）
     prefetchLsp(ctx.workspace, abs);
     const allLines = content.split("\n");

@@ -20,7 +20,7 @@ import ts from "typescript";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { trackedScriptFiles } from "../scripts/lib/scan-scope";
-import { createChunkText, createOutputRing, headWithinBytes } from "../src/tools/output-ring";
+import { createChunkText, createOutputRing, headWithinBytes, utf8PrefixEnd } from "../src/tools/output-ring";
 import { read_file } from "../src/tools/read_file";
 import type { ToolContext } from "../src/tools/base";
 
@@ -217,5 +217,60 @@ describe("棘轮：这两类写法不许回到 src/ 的取料面上", () => {
 
   it("注释里的示例不算命中（这正是走 AST 不按行 grep 的理由）", () => {
     expect(scanUtf8Hazards("worktree.ts", '// 原先 `stdout.slice(0, OUTPUT_CAP_BYTES)` 切的是字符\nconst a = 1;')).toEqual([]);
+  });
+});
+
+// #56 第三支（第 73 页）：`read_file` 对**超过 16MB 前缀**的文件走 `readPrefix(abs, LARGE_FILE_PREFIX_BYTES)`，
+// 那是一刀切在字节数上 ⇒ 前缀末尾若正落在一个多字节序列中间，`buf.toString("utf8")` 会解码出一个 U+FFFD。
+// 第 67/68 页修的是"输出帽那一刀"（`headWithinBytes`），这一刀在**更上游**：帽没切到它，文件本身就切在了半字符上。
+// 一次性候选扫描（`outputs/byte-cut-seam-scan-2026-09-26/01-scan.mts`）摊开 14 处 `toString("utf8")` 后逐条读出来只有这一处；
+// `ledger.ts#project` 那处自己已经按码位回退（`(buffer[end] & 0xc0) === 0x80` 往回收），`sessions/events` 那些切在换行或整块上。
+describe("#56：字节前缀末尾落在码位中间（read_file 的 oversized 支）", () => {
+  it("utf8PrefixEnd：完整码位原样返回；末尾半字符**整串退掉**（含前导字节落单那一格）", () => {
+    expect(utf8PrefixEnd(Buffer.from("abcdef", "utf8"))).toBe(6);
+    expect(utf8PrefixEnd(Buffer.from("a中", "utf8"))).toBe(4);
+    const cjk = Buffer.from("中中", "utf8"); // E4 B8 AD E4 B8 AD
+    expect(utf8PrefixEnd(cjk.subarray(0, 5))).toBe(3); // 第二个只剩 2 字节 ⇒ 整串退
+    expect(utf8PrefixEnd(cjk.subarray(0, 4))).toBe(3); // 只剩 1 字节
+    expect(utf8PrefixEnd(cjk.subarray(0, 3))).toBe(3); // 正好完整
+    expect(utf8PrefixEnd(cjk.subarray(0, 2))).toBe(0); // 前导 + 1 延续 ⇒ 前导也退
+    expect(utf8PrefixEnd(cjk.subarray(0, 1))).toBe(0);
+    expect(utf8PrefixEnd(Buffer.alloc(0))).toBe(0);
+  });
+
+  it("配对：任意切点退到边界后解码 ⇒ 既不出问号，也仍是原文的前缀（逐字节穷举）", () => {
+    const samples = ["中".repeat(40), "a中b😀c中".repeat(12), "混合 CJK 与 ascii".repeat(9), "\u{1F980}".repeat(11)];
+    for (const s of samples) {
+      const buf = Buffer.from(s, "utf8");
+      for (let cut = 0; cut <= buf.length; cut++) {
+        const head = buf.subarray(0, cut);
+        const out = head.subarray(0, utf8PrefixEnd(head)).toString("utf8");
+        expect(out.includes(replacementChar), s.slice(0, 4) + " cut=" + String(cut)).toBe(false);
+        expect(s.startsWith(out), "退多了就不是原文前缀：" + s.slice(0, 4) + " cut=" + String(cut)).toBe(true);
+      }
+    }
+  });
+
+  it("工具端到端：读到 oversized 文件的**最后一行**（正落在前缀刀口上）不含半个字符", async () => {
+    const CAP = 16 * 1024 * 1024; // 与 `read_file` 的 LARGE_FILE_PREFIX_BYTES 同值：这里刻意写死，
+    // 让"文件跨不过前缀"时本用例当场红（而不是静默走非 oversized 支、绿在一个没被执行过的分支上）。
+    const ws = await mkdtemp(join(tmpdir(), "utf8-prefix-"));
+    try {
+      const tailBytes = 60; // 20 个三字汉字
+      const body = "a".repeat(CAP - tailBytes / 2) + "\n" + "中".repeat(tailBytes / 3);
+      await writeFile(join(ws, "huge.ts"), body, "utf8");
+      const sizeBytes = Buffer.byteLength(body, "utf8");
+      expect(sizeBytes > CAP, "样本没跨过前缀 ⇒ 这一支没测到 oversized（尺空转）").toBe(true);
+      // 前缀末尾必须真的落在某个汉字的中间，否则这条用例绿得没有意义
+      const prefixLast = Buffer.from(body, "utf8").subarray(0, CAP);
+      expect(prefixLast.toString("utf8").includes(replacementChar), "刀口没切进码位 ⇒ 换样本重造").toBe(true);
+      const lines = body.split("\n").length;
+      const r = await read_file.run({ path: "huge.ts", offset: lines }, { workspace: ws, emit: async () => {} } as unknown as ToolContext);
+      expect(r.ok, r.output).toBe(true);
+      expect(r.output.includes(replacementChar), "交付给模型的那一行里有半个字符").toBe(false);
+      expect(/^[中]+/u.test(r.output), r.output.slice(0, 40)).toBe(true);
+    } finally {
+      await rm(ws, { recursive: true, force: true });
+    }
   });
 });

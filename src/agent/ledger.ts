@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import * as fs from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { utf8PrefixEnd } from "../tools/output-ring.js";
 
 export const LEDGER_THRESHOLD_BYTES = 10 * 1024;
 export const RECALL_MAX_BYTES = 16 * 1024;
@@ -286,9 +287,10 @@ export class ObservationLedger {
         const { entry, buffer } = await this.source(m, input.id!);
         if (buffer.toString("utf8") !== input.text) throw fault("ECORRUPT", "event source mismatch");
         if (input.requestNumber <= FULL_SENDS) return { text: input.text, archived: true, id: input.id };
-        let end = Math.min(1024, buffer.length);
-        while (end < buffer.length && (buffer[end]! & 0xc0) === 0x80) end--;
-        return { text: `${buffer.subarray(0, end).toString("utf8")}\n[observation ${input.id}: ${entry.bytes} bytes, ${entry.lines} lines; obs_recall available]`, archived: true, id: input.id };
+        // 预览帽按字节切 ⇒ 必须退到码位边界。这条回退原先是本文件自己抄的一份，
+        // 与 `read_file` 的 16MB 前缀同一件事各答一遍（#56）——现在两支共用 `utf8PrefixEnd`。
+        const head = buffer.subarray(0, Math.min(1024, buffer.length));
+        return { text: `${head.subarray(0, utf8PrefixEnd(head)).toString("utf8")}\n[observation ${input.id}: ${entry.bytes} bytes, ${entry.lines} lines; obs_recall available]`, archived: true, id: input.id };
       });
     } catch (e) { return { text: input.text, archived: false, error: errorText(e) }; }
   }

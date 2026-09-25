@@ -53,6 +53,20 @@ export function headWithinBytes(s: string, max: number): string {
   return s.slice(0, cut);
 }
 
+/** 给定一段**按字节切过**的 UTF-8，返回不越过码位边界的最长前缀长度（#56）。
+ *  用途与 `headWithinBytes` 不同支：那一支切的是字符串，这一支的输入已经是字节缓冲——
+ *  `read_file` 的 16MB 前缀、`ledger` 的预览帽都在这一支上。
+ *  末尾那段延续字节属于**同一个**字符：整串凑得齐就全留，凑不齐就把那个字符整个退掉
+ *  （不是退掉延续字节为止——那样会把完整字符也削掉一半长度）。 */
+export function utf8PrefixEnd(buf: Buffer): number {
+  let j = buf.length;
+  while (j > 0 && (buf[j - 1]! & 0xc0) === 0x80) j--; // 回退过末尾这段延续字节
+  if (j === 0) return 0; // 整段都是延续字节（畸形输入）⇒ 一个完整字符都交不出
+  const lead = buf[j - 1]!;
+  const need = (lead & 0xe0) === 0xc0 ? 2 : (lead & 0xf0) === 0xe0 ? 3 : (lead & 0xf8) === 0xf0 ? 4 : 1;
+  return buf.length - (j - 1) >= need ? buf.length : j - 1;
+}
+
 /** 不越过 max 字节的**最长后缀**；同样按码位回退（代理对成对退，不许留半个）。 */
 function tailWithin(s: string, max: number): string {
   const cps = Array.from(s);

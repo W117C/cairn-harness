@@ -243,3 +243,28 @@ describe("authorized text ledger", () => {
     expect(await a.capture(input(text + "\0"))).toMatchObject({ archived: false, error: expect.stringContaining("EINVAL") });
   });
 });
+
+// #56（第 73 页）：预览帽那 1024 是按**字节**切的，一刀落在汉字中间时交出去的必须是完整码位。
+// 这个形状原先没被观测过：本文件的默认样本 `text` 是纯 ASCII ⇒ 判据写在字节回退那一行上，
+// 而取料面从来没有跨界样本（本仓点名的「两头断」：helper 有测、面没测）。
+describe("预览帽的 UTF-8 缝", () => {
+  const replacementChar = String.fromCharCode(0xfffd); // 源码里不留裸字符（同 `utf8-text-safety` 的写法）
+  const cjk = "汉".repeat(5000); // 15000 字节 ⇒ 过 `LEDGER_THRESHOLD_BYTES`，且 1024 那一刀落在第 342 个汉字里
+  it("前提：跨界样本真的跨界（前提不成立就撤针，假锚点比没锚点更坏）", () => {
+    const buf = Buffer.from(cjk, "utf8");
+    expect(buf.length).toBeGreaterThan(1024);
+    expect((buf[1024]! & 0xc0) === 0x80).toBe(true); // 刀口右边是延续字节 ⇒ 这个字符被切开了
+    expect(buf.subarray(0, 1024).toString("utf8").includes(replacementChar)).toBe(true); // 裸切确实出问号
+  });
+
+  it("project 的预览行不含半个字符，且仍是原文的前缀（退到最近一个完整码位）", async () => {
+    const store = ledger();
+    const r = (await store.archive(input(cjk)))!;
+    expect(r).toBeTruthy();
+    const p = await store.project({ id: r.id, text: cjk, requestNumber: 3 });
+    const preview = p.text.split("\n")[0]!;
+    expect(preview.includes(replacementChar), "交出去的预览里有半个汉字").toBe(false);
+    expect(cjk.startsWith(preview)).toBe(true);
+    expect(preview).toBe("汉".repeat(341)); // 1023 字节：1024 那一格属于第 342 个字符，整串退掉
+  });
+});
