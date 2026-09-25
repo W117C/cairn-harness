@@ -58,9 +58,22 @@ export interface PromiseSite {
   /** 那句原文（压掉空白，截 160 字供逐字读）。 */
   text: string;
   line: number;
-  /** model = 进模型上下文；operator = 只挂 console.* 实参位（不给模型看，不欠最后一跳）。 */
-  audience: "model" | "operator";
+  /**
+   * 受众三态，全部由**结构**判而不是措辞判：
+   * - `model`：在模型可见根内，且不挂在 `console.*` 实参位 ⇒ 欠一次"照那句做一遍"；
+   * - `operator`：`console.*` 实参位 ⇒ 给运维看；
+   * - `ui`：落在 `UI_ROOTS` 里 ⇒ 给人看（HEAD-only 验跑会扫到桌面层，见那条注释）。
+   * 后两态仍进清单（不许静默消失），只是不判可达性。
+   */
+  audience: "model" | "operator" | "ui";
 }
+
+/**
+ * 「给人看」的那两面：AGENTS.md 的 scope 段点名为桌面层（本仓 core-only 迁 removing 的就是它们），
+ * HEAD-only 验跑时它们仍在盘上（实测 `src/renderer/app.js:1091` 那句「全文见安全报告卡」是 UI 文案）。
+ * 判据若不排它会红在一句给人看的话上＝断言越界（规则 60）；但**不删读料**，仍列成 ⚪ 态。
+ */
+export const UI_ROOTS: readonly string[] = ["src/renderer/", "src/preload/"];
 
 function enclosingFnName(node: ts.Node): string {
   let cur: ts.Node = node;
@@ -73,8 +86,9 @@ function enclosingFnName(node: ts.Node): string {
   }
 }
 
-/** 受众：沿 parent 链找最近的 CallExpression，是 `console.*` 的实参位 ⇒ 运维面。 */
-function audienceOf(node: ts.Node): "model" | "operator" {
+/** 受众：先判落位（UI 根＝给人看），再沿 parent 链找最近的 CallExpression 是否 `console.*`。 */
+function audienceOf(node: ts.Node, relFile: string): "model" | "operator" | "ui" {
+  if (UI_ROOTS.some((root) => relFile.startsWith(root))) return "ui";
   let cur: ts.Node = node;
   for (;;) {
     if (ts.isCallExpression(cur)) {
@@ -116,7 +130,7 @@ export function scanPromiseSites(files: readonly { path: string; text: string }[
               mark,
               text: text.replace(/\s+/g, " ").slice(0, 160),
               line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1,
-              audience: audienceOf(node),
+              audience: audienceOf(node, f.path),
             });
             break;
           }
@@ -353,9 +367,10 @@ async function main(): Promise<void> {
   }
 
   const modelSites = sites.filter((s) => s.audience === "model");
-  const operatorSites = sites.filter((s) => s.audience === "operator");
-  for (const s of operatorSites) {
-    console.log(`  ⚪ 运维面（console.* 实参位，不欠模型最后一跳） ${s.file}:${String(s.line)} [${s.fn}]「${s.text}」`);
+  const exemptSites = sites.filter((s) => s.audience !== "model");
+  for (const s of exemptSites) {
+    const why = s.audience === "operator" ? "运维面（console.* 实参位）" : "UI 面（落在 UI_ROOTS＝给人看的桌面层）";
+    console.log(`  ⚪ ${why}，不欠模型最后一跳，但仍进清单 ${s.file}:${String(s.line)} [${s.fn}]「${s.text}」`);
   }
 
   const workspace = await mkdtemp(join(tmpdir(), "promise-recall-ws-"));
@@ -406,6 +421,19 @@ async function main(): Promise<void> {
     ]).length;
     line(extra > base ? "✅" : "❌",
       `自证：往内存里那份源码追加一句承诺 ⇒ 该支清单从 ${String(base)} 变 ${String(extra)}（没变 = 这条判据恒假）`);
+
+    // 反向一侧（规则 60：收窄判定面必须同时补一条 opposite-side 断言）——
+    // 受众豁免只认「落在 UI_ROOTS」这一条路，同形状写进模型可见根就仍欠判定；否则 UI 态是张空白支票。
+    const injected = scanPromiseSites([
+      { path: one.path, text: one.text + '\nfunction __probePromise(): string { return "[全文见 /somewhere/else]"; }\n' },
+    ]);
+    const owedNew = injected.some((s) => s.fn === "__probePromise" && s.audience === "model" &&
+      RUNNERS[siteKey(s)] === undefined);
+    const uiExempt = scanPromiseSites([
+      { path: "src/renderer/__probe.js", text: 'function __probeUi(): string { return "[全文见 安全报告卡]"; }' },
+    ]).some((s) => s.audience === "ui");
+    line(owedNew && uiExempt ? "✅" : "❌",
+      `反向：同形状进模型可见根 ⇒ 仍欠判定（${owedNew ? "是" : "否"}）；进 UI_ROOTS ⇒ 认成 UI 面（${uiExempt ? "是" : "否"}）`);
   } finally {
     await rm(workspace, { recursive: true, force: true });
     await rm(logDir, { recursive: true, force: true });
