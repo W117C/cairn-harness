@@ -2841,3 +2841,23 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
   我名下的四个面逐条绿（`tools` 10、`src-execution-path` 7、`mutation-rerun-triage` 15、`mutate-anchor-titles` 15 中仅那 1 条渲染层漂移红）。
   两条新口径：① 认证前把 `git rev-parse HEAD` ＋判卷四面在飞数写进 log 首行；② **依赖集必须等于那棵树的 `package.json`**——
   直接拿主树（未提交的 core-only 依赖）去认证 HEAD 会得到 `TS2307: Cannot find module 'electron'` 这种**环境假红**（规则 87/103 同族第三次命中）。
+
+### 2026-09-26 · 第 85 页：「认证一棵树」收成一条命令 `scripts/head-cert.ts`——前置是**依赖集**，不是跑门
+
+- 动因是我为"这读数跑在哪棵树上"付过的三次代价：把旧树读数报成新 HEAD 认证（规则 184，`git checkout` 失败被 `>/dev/null` 吞掉而 log 照样在）、
+  被 `TS2307: Cannot find module 'electron'` 的环境假红挡住、以及更早的软链树 `run_shell` 假红（规则 103）。
+- 三件事进脚本：① 每步打印 `exit=` 且**事后复核 `rev-parse HEAD` 等于目标**才继续（不等就 exit 2）；
+  ② 先比「该提交 `package.json` 声明的」vs「树里真装了的」，缺的从本机任一已装副本 `cp -al` 借（只读别人的树），补不齐就在汇总里写死「不可归因于代码」；
+  ③ 退出码直接取 `spawnSync.status`，汇总同时印 `TREE` / `DIRTY_JUDGED` / 两道门读数 / log 路径，并给出回收命令。
+- **活体读数（这条命令自己跑出来的）**：新建树 ⇒ `该提交声明 14 项，缺 4 项：electron、electron-builder、electron-vite、vite`
+  ⇒ 借齐后 `typecheck exit=0`；全量 `Test Files 2 failed | 264 passed (266)`、`Tests 2 failed | 2848 passed (2850)`、`exit=1`。
+  与我上一轮**手工**认证的读数逐字相同 ⇒ 这个面没改结论，只把结论的来源变成一条命令＋一行 `TREE=`。
+  ⇒ 顺带把一句旧话量化了：「HEAD 的 typecheck 红」在主树依赖集（未提交的 core-only 迁移已摘掉 4 个包）下**根本不可信**。
+- 默认树名改成 `.worktrees/head-cert-<sha7>`：`.worktrees/head-cert` 这种通用名可能是**别人正在用的树**，
+  而本脚本会 `checkout --detach` 它——撞上就是替别人切走树。宁可每次新建＋打印回收命令。
+- 纯函数搬进 `scripts/lib/head-cert-deps.ts`，判卷面 `tests/head-cert-deps.test.ts`（9 条）：三种依赖字段算声明、
+  `peerDependencies` **不算**（它可以合法不装，报出来是把人推去装用不上的包）、作用域包必须展开否则假缺、
+  只装不声明不算缺失、坏 `package.json` ⇒ 空而由调用方按"没尺"处理。
+- 边界：不注册成门（`gate-manifest.ts` 在别人手里；且再叠一棵 100s 的树会拖慢每次交付），定位是交付前/归因时手动一跑，
+  #14 的复跑口径已改指它；"绿"的条件是 `依赖完整 ∧ typecheck 0 ∧ test exit 0 ∧ DIRTY_JUDGED=0`。
+- 读数：typecheck 0 报错｜新判卷面 9/9 绿｜一条命令全量认证 exit 1（两条红在他人手里，与手工读数同）。
