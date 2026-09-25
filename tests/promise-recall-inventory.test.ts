@@ -73,4 +73,29 @@ describe("回取承诺清单：每一面都得有判定归属，登记表不许�
     expect(f.modelKeys, JSON.stringify(f.byAudience)).toEqual([]);
     expect(f.unjudged).toEqual([]);
   });
+
+  // #58：收料表原先只有五种中文措辞 ⇒ 英文写法（`obs_recall available`）与另一种中文（`取全文 obs_recall id=`）
+  // 整族漏收（规则 122：机制判据挂在一种写法上＝换写法即绕过）。下面三条把"网加宽了"与
+  // "没宽到把散文当承诺"一起钉住（第 68 页的教训：一条把安全写法也判红的判据，下一轮就有人放宽它）。
+  it("#58 两种新写法都进清单，并且各自当场欠一条判定归属", () => {
+    const sites = scanPromiseSites([
+      { path: "src/__probe_en.ts", text: 'function a(): string { return "[observation abc: 12 bytes, 3 lines; obs_recall available]"; }' },
+      { path: "src/__probe_zh.ts", text: 'function b(): string { return "[source_sha=deadbeef; 取全文 obs_recall id=abc]"; }' },
+    ]);
+    expect(sites.map((s) => s.mark).sort(), JSON.stringify(sites.map((s) => [s.file, s.mark]))).toEqual([" available", "取全文"]);
+    const f = promiseInventoryFindings(sites, RUNNERS);
+    expect(f.unjudged.length, "新面没被要求登记判定 ⇒ 这把尺只收字不逼判定").toBe(2);
+  });
+
+  it("负控：光有 available 而没点一个可调用的工具 ⇒ 不算承诺（本轮实测假红过的那条形状）", () => {
+    const sites = scanPromiseSites([
+      { path: "src/__probe_fp.ts", text: 'function c(): string { return "[context_budget_exceeded] final estimate 9; available 4321; request not sent"; }' },
+    ]);
+    expect(sites).toEqual([]);
+  });
+
+  it("盘上这两格确实进了模型可见清单（合成样本过了而盘上没收，等于没修）", () => {
+    expect(findings.modelKeys).toContain("src/agent/ledger.ts#project");
+    expect(findings.modelKeys).toContain("src/agent/solpi-runtime.ts#candidate");
+  });
 });

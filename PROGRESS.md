@@ -2455,3 +2455,27 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
 - `truncationNotice(n)` 现在零调用者，但 `base.ts` 在别人手里 ⇒ 本轮不删，挂在 #51/#53 那批一起收。
 - 一次工具事故（不属判据）：造红脚本把替换串写成模板字面量 ⇒ `${String(omittedBytes)}` 被脚本自己求值，
   ReferenceError；因为崩在建数组阶段，两个文件都没被碰。写法改成拼接。
+
+### 2026-09-26 · 第 70 页：回取承诺的收料表只认五种中文措辞——英文写法整族漏收，规模是 222 : 2
+
+`outputs/promise-net-wording-gap-2026-09-26/`。第 63–65 页那把尺按**措辞**收料；第 69 页写"下一步"文案时我顺口问了一句
+"换一种语言写承诺还收得到吗"，扫了一把：模型可见文本里点名可调用工具的串（去重）**222 格**，被中文表收到的 **2 格**。
+其中 220 格不是承诺（工具 schema 自身、`switch` 的键、`../verify` 这类 import 路径、错误串）——
+反向的错是把散文当承诺（第 63 页手抄表漏收，这次是它的镜像），所以本轮只认真正漏收的 **2 格**：
+`ledger.ts#project` 的 `[observation …; obs_recall available]` 与 `solpi-runtime.ts#candidate` 的 `[…; 取全文 obs_recall id=…]`。
+
+- 收料加宽：`PROMISE_MARKS` += `" available"`（带前导空格，避开 `archive unavailable`）与 `"取全文"`；
+  **弱标记必须合取**——`" available"` 单独把 `glm-session` 的容量错误串收成了"新面"（本轮当场假红），
+  于是要求那一句还点名一个可调用工具，工具名取 `TOOL_NAMES` + `INJECTED_TOOLS` 两份事实源，不抄清单。加宽后 7 → 9 面、FP 归零。
+- 判定补齐（这才是"原子簇"）：两格各配一条 `RUNNERS`，量法与 skill/join 那两把同形——
+  **把句子里那个 id 真拿去调 `obs_recall`** 并核回来的页里含原文凭证；solpi 那格走 `SolpiRuntime.project` 跑满
+  `FULL_SENDS` 让收据支真发射。两格都判 ✅，读数里写死边界：`worker 可达=false ⇒ 这句只对主会话兑现`。
+  ⇒ 本轮没有产品缺陷可修；收获是"漏收规模第一次有数"，两面从**没判过**变成**判过且为真**。
+- `tests/promise-recall-inventory.test.ts` +3 条：两种新写法进清单且当场欠判定 / **负控**（容量错误串必须不收）/
+  盘上两格确实进了模型面清单（合成样本过了而盘上没收＝等于没修）。
+- 环境假红一条（值得记）：`mkdtemp` 在 macOS 落在 `/var → /private/var` 符号链接下，而 ledger 全程 `O_NOFOLLOW`
+  ⇒ `capture` 直接 `ELOOP`，第一版两条 hop 都红着说"这句承诺在这一刻根本不会发"。改 `realpath(tmpdir())` 后转绿。
+  我把 `capture.error` 印进读数正是为了这一刻——**没印的话我就去改产品了**。
+- 探针读数：承诺面 9、判定归属表 6 条、陈旧键 0、红仍 2（`prune#stub`＝#33 系、`agent-runner#body`＝#49 卡热文件）、`exit=1` 不变。
+- 下一格 **#59**：这张网仍按措辞收料，换第三种写法照旧漏。结构化的定义是"承诺＝在截断/归档点上追加的文案"
+  ⇒ 由 builder 调用（`byteCapNotice`/`countCapNotice`/prune stub/ledger preview/receipt）判定，与 #51/#53 同批做最省。

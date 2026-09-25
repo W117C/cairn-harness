@@ -17,7 +17,7 @@
 // 受众也走结构判定而不是措辞：字面量若挂在 `console.*` 的实参位上，它是给运维看的，
 // 不进"最后一跳"义务（判据宽到把散文当承诺，第 53 页教训 2 已经踩过一次）。
 import { existsSync, readFileSync } from "node:fs";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -28,11 +28,15 @@ import { trackedScriptFiles } from "./lib/scan-scope.js";
 import { discoverPlugins } from "../src/agent/plugins/discover.js";
 import { expandSkillInvocation, skillInvokeName } from "../src/agent/plugins/skills.js";
 import { computePrune } from "../src/agent/prune.js";
+import { createObservationLedger } from "../src/agent/ledger.js";
+import { SolpiRuntime } from "../src/agent/solpi-runtime.js";
+import { createObservationRecallTool } from "../src/tools/observation-capture.js";
 import { renderJoinPayload, shapeJoinRows } from "../src/agent/orchestrator-join.js";
 import { INJECTED_TOOLS } from "../src/agent/tool-surface.js";
 import { read_file } from "../src/tools/read_file.js";
 import type { AgentEvent } from "../src/events/index.js";
 import type { ToolContext } from "../src/tools/base.js";
+import { TOOL_NAMES } from "../src/tools/base.js";
 
 const ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
 
@@ -46,6 +50,11 @@ export const PROMISE_MARKS: readonly string[] = [
   "取回",
   "回取",
   "见事件流",
+  // #58：这两条是**换写法绕过**的实证——`ledger`/`solpi` 两格用英文与另一种中文写"可回取"，
+  // 上面五种中文措辞一个字都不含 ⇒ 整族漏收（规则 122：机制判据挂在一种写法上＝换写法即绕过）。
+  // ` available` 带前导空格，是为了不把 `archive unavailable` 这种反向陈述收进来。
+  " available",
+  "取全文",
 ];
 
 export interface PromiseSite {
@@ -114,6 +123,12 @@ function literalText(node: ts.Node): string | null {
 }
 
 /** AST 扫描（纯函数：判卷可直接喂突变源，不必碰盘）。同一处语句的多支字面量各记一条。 */
+/** 弱标记：英文的 "available" 单独不成承诺——`[context_budget_exceeded] … available 4321; request not sent`
+ *  就是一句容量说明。只有同一句里**点了一个可调用的工具名**，它才构成"照这句做就能取回"。
+ *  工具名一律取事实源（TOOL_NAMES + INJECTED_TOOLS），不在此抄清单（规则 64/122）。 */
+const WEAK_MARKS: readonly string[] = [" available"];
+const CALLABLE_NAMES: readonly string[] = [...TOOL_NAMES, ...INJECTED_TOOLS.map((t) => t.name)];
+
 export function scanPromiseSites(files: readonly { path: string; text: string }[]): PromiseSite[] {
   const out: PromiseSite[] = [];
   for (const f of files) {
@@ -122,17 +137,17 @@ export function scanPromiseSites(files: readonly { path: string; text: string }[
       const text = literalText(node);
       if (text !== null) {
         for (const mark of PROMISE_MARKS) {
-          if (text.includes(mark)) {
-            out.push({
-              file: f.path,
-              fn: enclosingFnName(node),
-              mark,
-              text: text.replace(/\s+/g, " ").slice(0, 160),
-              line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1,
-              audience: audienceOf(node, f.path),
-            });
-            break;
-          }
+          if (!text.includes(mark)) continue;
+          if (WEAK_MARKS.includes(mark) && !CALLABLE_NAMES.some((n) => text.includes(n))) continue;
+          out.push({
+            file: f.path,
+            fn: enclosingFnName(node),
+            mark,
+            text: text.replace(/\s+/g, " ").slice(0, 160),
+            line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1,
+            audience: audienceOf(node, f.path),
+          });
+          break;
         }
       }
       ts.forEachChild(node, visit);
@@ -326,6 +341,87 @@ function hopPruneStub(): Verdict {
   };
 }
 
+const RECALL_HOW = "把句子里点名的 id 真拿去调 obs_recall（shipped：ObservationLedger + createObservationRecallTool），看回来的页里有没有原文凭证";
+
+/** 造一份"够归档"的授权输出（>10KB 且含失败信号行，收据支要拿它做引文）。 */
+function recallFixture(needle: string, fill: string, rows: number): string {
+  return [
+    "test failed: error 断言不符 " + needle,
+    ...Array.from({ length: rows }, (_, i) => "row-" + String(i) + " " + fill.repeat(90) + " 错误上下文"),
+  ].join("\n");
+}
+
+/** #58 面一：`ledger.project` 的预览行 `[observation <id>: …; obs_recall available]`。 */
+async function hopLedgerRecall(): Promise<Verdict> {
+  // macOS 的 /var 是指向 /private/var 的符号链接，而 ledger 一律 O_NOFOLLOW ⇒ 必须先 realpath，
+  // 否则 capture 直接 ELOOP（这格量的就是"照那句真做一遍"，环境假红会把判定淹掉——规则 52/89）。
+  const dir = await mkdtemp(join(await realpath(tmpdir()), "probe-recall-ledger-"));
+  try {
+    const needle = "RECALL-LEDGER-凭证";
+    const text = recallFixture(needle, "x", 130);
+    const ledger = createObservationLedger(dir);
+    const cap = await ledger.capture({ toolName: "run_shell", callId: "c1", source: { kind: "authorized-redacted-text", text } });
+    if (!cap.archived || cap.id === undefined) {
+      return { ok: false, how: RECALL_HOW, detail: "capture 没归档 ⇒ 这句承诺在这一刻根本不会发；error=" + String(cap.error ?? "(无)") };
+    }
+    const proj = await ledger.project({ id: cap.id, text, requestNumber: 3 }); // > FULL_SENDS ⇒ 走预览+提示
+    const promised = proj.text.includes("obs_recall available");
+    const tool = createObservationRecallTool(ledger);
+    const page = tool === undefined
+      ? { ok: false, output: "obs_recall 未注入（ledger disabled）" }
+      : await tool.run({ id: cap.id }, { workspace: dir } as unknown as ToolContext);
+    const reached = page.ok === true && String(page.output).includes(needle);
+    return {
+      ok: promised && reached,
+      how: RECALL_HOW,
+      detail: `capture.error=${String(cap.error ?? "无")}｜提示发了=${String(promised)}｜obs_recall ok=${String(page.ok)}｜页内含原文凭证=${String(reached)}` +
+        `｜worker 可达=false（INJECTED_TOOLS.obs_recall）⇒ 这句只对主会话兑现`,
+    };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+/** #58 面二：`solpi-runtime` 收据行的 `取全文 obs_recall id=<id>`（要跑满 FULL_SENDS 才发）。 */
+async function hopSolpiReceipt(): Promise<Verdict> {
+  const dir = await mkdtemp(join(await realpath(tmpdir()), "probe-recall-solpi-"));
+  try {
+    const needle = "RECALL-SOLPI-凭证";
+    const output = recallFixture(needle, "y", 130);
+    const events = [
+      { type: "tool_call", id: "c1", name: "run_shell", args: { command: "true" } },
+      { type: "tool_result", callId: "c1", ok: false, output },
+    ] as unknown as AgentEvent[];
+    const rt = new SolpiRuntime(dir, { observationPack: true, evidenceReceipts: true });
+    let last = new Map<number, string>();
+    for (let send = 0; send < 4; send++) {
+      last = await rt.project(events);
+      rt.sent([{ role: "tool", tool_call_id: "c1" }], events);
+    }
+    const text = String(last.get(2) ?? "");
+    const id = (text.match(/取全文 obs_recall id=([0-9A-Za-z:._-]+)/) ?? [])[1];
+    if (id === undefined) {
+      return {
+        ok: false, how: RECALL_HOW,
+        detail: "收据支没发出那句承诺（sends 没满 / 收据不比原文小 / 校验没过）⇒ 要么修发射条件，要么这句该删",
+      };
+    }
+    const tool = rt.recallTool(async () => true);
+    const page = tool === undefined
+      ? { ok: false, output: "recallTool 未注入" }
+      : await tool.run({ id }, { workspace: dir } as unknown as ToolContext);
+    const reached = page.ok === true && String(page.output).includes(needle);
+    return {
+      ok: reached,
+      how: RECALL_HOW,
+      detail: `提示发了=true（id 已嵌在收据行里）｜obs_recall ok=${String(page.ok)}｜内含原文凭证=${String(reached)}` +
+        `｜worker 可达=false ⇒ 这句只对主会话兑现`,
+    };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 /**
  * 每个模型可见面的判定归属：键 = `<file>#<fn>`。**加一面就必须在这里登记一条**，否则本探针红。
  * 键跟着**发射处**走：#47 把三处副本收成一支 `skillRecallSuffix` 之后，旧的两个键当场失效——
@@ -336,6 +432,8 @@ export const RUNNERS: Readonly<Record<string, string>> = {
   "src/agent/orchestrator-join.ts#renderJoinPayload": "hopJoinPayload",
   "src/agent/prune.ts#stub": "hopPruneStub",
   "src/main/agent-runner.ts#body": "hopMapDemo",
+  "src/agent/ledger.ts#project": "hopLedgerRecall",
+  "src/agent/solpi-runtime.ts#candidate": "hopSolpiReceipt",
 };
 
 function loadSrcFiles(): { files: { path: string; text: string }[]; missingOnDisk: string[] } {
@@ -394,7 +492,9 @@ async function main(): Promise<void> {
       name === "hopSkill" ? hopSkill(workspace)
         : name === "hopJoinPayload" ? Promise.resolve(hopJoinPayload())
           : name === "hopMapDemo" ? Promise.resolve(hopMapDemo())
-            : Promise.resolve(hopPruneStub());
+            : name === "hopLedgerRecall" ? hopLedgerRecall()
+              : name === "hopSolpiReceipt" ? hopSolpiReceipt()
+                : Promise.resolve(hopPruneStub());
     verdictCache.set(name, next);
     return next;
   };
