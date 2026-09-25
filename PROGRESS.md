@@ -2951,7 +2951,7 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
 - 限制照实记：**本轮没有变异锚点**——靶 `scripts/mutate-verify.mjs` 是别人的在飞改动（此刻 `M`），不动它也不在未跟踪文件挂针；
   新判据的观测者只有 vitest 那 26 条，等那笔入库后该补「摘掉 `minMeasured<2` 半边必须红」。$ 轴与缓存命中率仍不可测（#16/#17），缺口都在**写侧**。
 - 读数：`eval-arms` 26/26 ｜ `replay-run-scorecard` 25/25 ｜ typecheck 0 报错 ｜ 主树全量 `228 文件 / 2506 条` 全绿（退出码单独取）。
-  全量门那一次先红 1 条——**是我自己留在盘上的**：改了 `unreplicated` 那句 reason 没回去跑那条断言（同跑还有一层：接了 `| tail` 之后"exit 0"是 tail 的）。
+  全量门那一次先红 1 条——**是我自己留在盘上的**：改了 `unreplicated` 那句 reason 没回去跑那条断言（同跑还有一层：接了 `| tail` 之后"exit 0"是 tail 的）。＝规则 170 复发，本轮那句"写在散文里的口径等于没写"对我自己同样成立。
 - 页号让位：本条原叫"第 90 页"，落笔后 `grep 第 90 页` 读到另一条线程已用该号
   （`prompt-fixed-cost-2026-09-26`，未跟踪＝对方在飞，其结论"长提示贵在那轮多跑几次请求"与本条判据互不冲突、且互相要求）⇒ 让到 91，不动对方文件。
 - 两条**别人在飞**的红不接也不掩盖：`docs-check` 的 `D-8「登记项没有任何文档引用」`（复跑面 `prompt-fixed-cost`，对方未跟踪新面 `?? scripts/replay/prompt-fixed-cost.ts` ＋ `M scripts/replay-readings.ts`）；
