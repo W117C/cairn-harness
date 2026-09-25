@@ -16,6 +16,7 @@ import {
   tallyPrunePromise,
   type PruneEvent,
 } from "../scripts/replay/prune-promise";
+import { pruneRecallSuffix } from "../src/agent/prune";
 
 const ABS = "/Users/ze/Library/Application Support/m0-agent-loop/sessions/prune-attachments/s1-ab-cd.txt";
 /** 与 `src/agent/prune.ts` 拼的那半句同形（占位符 + 换行 + 一句路径提示）。 */
@@ -110,5 +111,30 @@ describe("prune 回取承诺读数：三种 0 各归各的处置", () => {
     ]);
     expect(t.toolCalls).toBe(2);
     expect(t.stubs).toBe(1);
+  });
+
+  // #33 的文案那半落地后，这一支不许只剩「从没发射过 ⇒ 潜在」：诚实句每出现一次都是**取回能力缺席一次**。
+  // 诚实句**由产品自己拼**（`pruneRecallSuffix` 的区外那一案）——手抄一份措辞的话，产品改口时这把尺会静默失明。
+  it("只有诚实句（假承诺已被替换）⇒ 单独一态，既不读成「潜在」也不读成「活缺陷」", () => {
+    const honest = pruneRecallSuffix(ABS, "/Users/ze/Downloads/some-repo");
+    expect(honest).toContain("读不到"); // 前提：这一支取到的确实是区外那一案
+    const t = tallyPrunePromise([result("c1", true, honest), call("c2", "grep", { pattern: "x" }), result("c2", true, "命中 0 处")]);
+    expect(t.stubs).toBe(0);
+    expect(t.honestStubs).toBe(1); // 0 = 尺对新产品文案失明
+    const v = prunePromiseVerdict(t);
+    expect(v.live).toBe(false);
+    expect(v.why).toContain("诚实句=1");
+    expect(v.why).not.toContain("从没发射");
+  });
+
+  it("两桶分计不并桶：假承诺与诚实句各数各的，两态都在时仍先报假承诺那一态", () => {
+    const honest = pruneRecallSuffix(ABS, "/Users/ze/Downloads/some-repo");
+    const t = tallyPrunePromise([result("c1", true, honest), result("c2", true, stub(ABS))]);
+    expect(t.honestStubs).toBe(1);
+    expect(t.stubs).toBe(1);
+    expect(t.stubsWithAbsPath).toBe(1);
+    const v = prunePromiseVerdict(t);
+    expect(v.why).toContain("无人照做"); // 假承诺仍是主读数（历史语料里两类混着）
+    expect(v.why).toContain("诚实句=1"); // 但诚实句计数不许被吞
   });
 });

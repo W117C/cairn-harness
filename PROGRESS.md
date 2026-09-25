@@ -2479,3 +2479,44 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
 - 探针读数：承诺面 9、判定归属表 6 条、陈旧键 0、红仍 2（`prune#stub`＝#33 系、`agent-runner#body`＝#49 卡热文件）、`exit=1` 不变。
 - 下一格 **#59**：这张网仍按措辞收料，换第三种写法照旧漏。结构化的定义是"承诺＝在截断/归档点上追加的文案"
   ⇒ 由 builder 调用（`byteCapNotice`/`countCapNotice`/prune stub/ledger preview/receipt）判定，与 #51/#53 同批做最省。
+
+### 2026-09-26 · 第 71 页：prune 打桩递的是绝对路径——落位判定收成第二支，区外改口说读不到（#33 文案那半已闭）
+
+`outputs/prune-recall-fail-closed-2026-09-26/`。裁决沿用第 64 页：**分案改文案，不给 `read_file` 开第二根允许例**。
+`probe-promise-recall` 的 `hopPruneStub` 从建出来就红在最后一跳：`工具抛错：read_file: 只允许 workspace 相对路径`。
+
+- 缺陷形状是**同一判断各抄一份**：#47 刚把 skill 那支的「realpath → relative → 判越界」收成 `skillRecallSuffix`，
+  prune 的打桩那行**没有**这一份，无条件把 `join(dirname(logPath), "prune-attachments")` 写进模型上下文。
+  漂的那一支正好是说谎的那一支。⇒ 抽第二份公共件：`src/agent/recall-path.ts` 的
+  `workspaceUsablePath(absPath, workspace?)`（只答可达性），skill 删掉自带的那份改吃它（副本 2 → 1），
+  prune 新增 `pruneRecallSuffix(attachmentFile, workspace?)`，两案两条人话；`PruneInput.workspace` 缺省
+  ⇒ **今天没接线也不会说谎**（fail-closed），附件照旧真落盘（改口≠删能力）。
+- 两个当场发现的约束（不是设想）：①**目标此刻可能还没落盘**——prune 先算投影后写附件，裸 `realpathSync` 直接抛
+  ⇒ 取"最近的已存在祖先"再拼回构造的那几段（造红 M3 有独立用例钉着）；②macOS `/var → /private/var` 软链
+  ⇒ 词面比较会把一条**做得到的**承诺误吞，两个方向都要有用例（第 70 页那条环境假红的同一族）。
+- 判卷面被这次改口打瞎的地方**一起补**（不是下一轮）：`prune-check` ③d/④b 换成"相对路径 + 绝对字节不许出现"、
+  加 **④c：拿句里那条相对路径真调一次 `read_file`**；`probe-prune-recall` 整支重写判生产形状并留反向哨兵
+  （绝对路径仍须被拒）；**`scripts/replay/prune-promise.ts` 按「原文已存附件」收料，文案一改就永远读 0，
+  然后给出「从没发射过 ⇒ 潜在、不值得动」这句会反转未来裁决的结论** ⇒ 补第二标记单列 `honestStubs` + 新态
+  「假承诺已被替换，但每发射一次诚实句＝能力缺席一次，缺的是接线不是文案」，标记取 prune 独有整句
+  （「模型侧读不到」skill 那句也说，两支会并成一桶）；`session-prune-attachments` ①②把**冻进用例的假承诺**拆掉
+  （①旧断言 `toContain("prune-attachments")`、②从打桩文本正则抠路径），②的路径来源换成生产写出的那个目录；
+  `path-boundary` +5 条直接钉这支新原语，含"helper 说可用 ⇒ `read_file` 真读得到"的两半同口径配对。
+- 造红五轮（每轮跑完立刻还原并 `shasum -c` 校验，全程不与全量表并发）：
+  M1 区外退回假承诺 → 4 用例 + 探针 2 格；M2 未知工作区 fail-open → 5 用例跨 4 文件（skill/prune 两面都红）；
+  M3 换回裸 `realpathSync` → 4 用例 + `prune-check` exit 1；M4 诚实句不计数 → 2 用例；M5 该态不可达 → 1 用例。
+- 门禁读数：tsc 0 错；全量 core **220 files / 2383 tests 全绿**（本轮起点 2375，+8 = prune 1 + path-boundary 5 + replay 2，
+  条数与新增用例逐笔对得上）；`tools-check` 36 条 exit 0；`docs-check` exit 0（`UNVERIFIED=3`）；`e2e` exit 0；
+  `prune-check` exit 0（⑥ 451933 → 349641）；`probe-prune-recall` 红 → **exit 0**；
+  `probe-promise-recall` 面 9 / 归属 6 / 陈旧键 0 / **红 3 → 红 1**（剩 `agent-runner.ts#body` = #49 卡热文件）；
+  `replay:prune-promise` exit 0（会话文件 21 / tool_call 285 / 承诺 0 / 诚实句 0）。
+- 归因纠正一处（差点写进记录）：`--check-needles` 阻断 8 → 9，我先写成"别人在飞造成的"。实测
+  `git show HEAD:src/agent/prune.ts` 里那条针脚命中 1 次 ⇒ **新增那条是我的** `prune-stub-hides-attachment-path`
+  （三元的第二支搬进了 `pruneRecallSuffix`）。同轮 `mutate-anchor-titles` 报 2 条 drift：一条我把用例标题改成
+  "仍包含旧串"的诚实长标题（不必登记），另一条 `prune-attachment-production-entry` 走它自带 `KNOWN_DRIFT`
+  登记带理由（1 → 2 条，注明 #50 落笔后必须撤、stale 判据自己催）；登记里明写"变异仍红在新标题"是**推导**
+  而非实测——靶子 `glm-session.ts` 是别人的在飞文件，就地改它会把对方写入卷掉。
+- 剩下的都有名字：**#33 接线那半**（`glm-session.ts:638` 把那层已有的 `workspace` 传进 `computePrune`；
+  不传则区内会话也只会拿到诚实话，回取能力仍为 0 次——同一文件此刻正被并发会话加 `RunRequest attachments`
+  的 path-only 上下文，故本轮不动）、**#50**（上面两条针脚与 `expectFail` 逐字改指）、
+  `replay` 的 `main()` 里 8 个字段手写累加，新增那笔 `honestStubs` **没有观测者**（vitest 判的是纯函数那半）。

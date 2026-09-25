@@ -3,9 +3,12 @@
 // 免剪名单：skill 内容 + 固定回注（user_message / 最新摘要注入）+ 方案/验证卡投影（plan/verify/clarify）。
 // 打桩：投影期替换 "[Old tool result content cleared]"；被裁原文写会话附件目录可回取（GEM 同构）。
 // 事件流零删改：prune 只产出「事件 id → 替换文本」映射，由组装投影（context.ts）消费。
+// 打桩那句"可回取"只在附件**真的落在工作区内**时才交路径（#33）：生产的附件目录在会话日志旁边，
+// 而 `read_file` 只收工作区相对路径 ⇒ 那种情形必须改口"模型侧读不到"，不许递一个走不通的地址。
 import { createHash } from "node:crypto";
 import { access, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { workspaceUsablePath } from "./recall-path";
 import type { AgentEvent } from "../events";
 import { hasWorkerAttribution } from "./context";
 import { estimateTextTokens } from "./text-budget";
@@ -68,6 +71,11 @@ export interface PruneInput {
   attachmentsDir?: string;
   /** 会话 id（附件文件名命名空间）。 */
   sessionId?: string;
+  /**
+   * 工作区根。**给不给都不会把绝对路径写进打桩**（#33）：
+   * 附件在工作区内 ⇒ 交工作区相对路径（模型能真用 `read_file` 取回）；否则只说"读不到、请由用户打开"。
+   */
+  workspace?: string;
 }
 
 export interface PruneOutcome {
@@ -144,6 +152,17 @@ function attachmentName(sessionId: string, callId: string): string {
 }
 
 /**
+ * 打桩的第二行（回取通道）。措辞与 skill 那条各自独立（共用的只是可达性判断，见 `recall-path`），
+ * 因为两处的"下一步"不一样：skill 是"通读整份文件"，这里是"取回被裁的那条原文"。
+ */
+export function pruneRecallSuffix(attachmentFile: string, workspace?: string): string {
+  const rel = workspaceUsablePath(attachmentFile, workspace);
+  return rel === null
+    ? PRUNED_PLACEHOLDER + "\n[原文已另存到会话附件（在工作区之外），模型侧读不到；要通读请由用户打开该会话的附件目录]"
+    : PRUNED_PLACEHOLDER + "\n[原文已存附件 " + rel + "，需要时 read_file 取回]";
+}
+
+/**
  * 计算 prune 投影：从最新回退累计 token 直到保护区边界，对区外的免剪外 tool_result
  * 生成打桩映射。零 LLM、纯本地、确定性。
  */
@@ -208,9 +227,7 @@ export function computePrune(input: PruneInput): PruneOutcome {
     const file = input.attachmentsDir !== undefined
       ? join(input.attachmentsDir, attachmentName(input.sessionId ?? "s", e.callId))
       : null;
-    const stub = file === null
-      ? PRUNED_PLACEHOLDER
-      : PRUNED_PLACEHOLDER + "\n[原文已存附件 " + file + "，需要时 read_file 取回]";
+    const stub = file === null ? PRUNED_PLACEHOLDER : pruneRecallSuffix(file, input.workspace);
     out.replacements.set(i + 1, stub); // 事件 id = 1-based 行号
     // savedTokens 是报给人看的成本读数：按**实际替换文本**计（跟着同一把字重尺），
     // 既不能在中文会话里虚报 4 倍，也不能把新增的那行路径白记成节省。

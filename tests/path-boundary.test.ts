@@ -3,9 +3,11 @@
 //   外部的读写必须被拒；.agent/ 系统区对内容工具整体拒写；插件 manifest 路径覆盖不得
 //   越出插件根。否定式验证锚点：摘除断言调用后本文件必须变红。
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { workspaceUsablePath } from "../src/agent/recall-path";
 import { read_file } from "../src/tools/read_file";
 import { write_file } from "../src/tools/write_file";
 import { edit_file } from "../src/tools/edit_file";
@@ -124,5 +126,56 @@ describe("插件 manifest 路径覆盖包含性（E-12）", () => {
     const parsed = await parsePluginManifest(okRoot);
     expect(parsed.skillsDir).toBe("custom-skills");
     await rm(okRoot, { recursive: true, force: true });
+  });
+});
+
+// #33/#47 的收口点：模型侧「回取地址」给不给，由这一支单独回答（两个发射面共用）。
+// 它必须与上面那把闸**同口径**——helper 说可用而 read_file 拒收 = 假承诺；反过来 = 白丢能力。
+describe("回取地址的落位判定（workspaceUsablePath）", () => {
+  let root = "";
+  let wsRoot = "";
+  async function setup(): Promise<string> {
+    root = await mkdtemp(join(tmpdir(), "recall-path-root-"));
+    wsRoot = join(root, "ws");
+    await mkdir(wsRoot, { recursive: true });
+    return wsRoot;
+  }
+  afterEach(async () => { if (root) await rm(root, { recursive: true, force: true }); root = ""; });
+
+  it("区内已存在的文件：给工作区相对路径，且 read_file 用这条路径真读得到（两半同口径）", async () => {
+    const w = await setup();
+    await writeFile(join(w, "a.txt"), "BODY-A", "utf8");
+    const rel = workspaceUsablePath(join(w, "a.txt"), w);
+    expect(rel).toBe("a.txt");
+    const got = await read_file.run({ path: rel! }, { workspace: w, emit: async () => {} });
+    expect(got.ok).toBe(true);
+    expect(got.output).toContain("BODY-A");
+  });
+
+  it("区内但**还没落盘**（prune 先算投影、后写附件）：按最近的已存在祖先判定，仍给相对路径", async () => {
+    const w = await setup();
+    const at = join(w, "prune-attachments", "s-1-ab.txt"); // 目录与文件都还不存在
+    expect(existsSync(at)).toBe(false);
+    expect(workspaceUsablePath(at, w)).toBe(join("prune-attachments", "s-1-ab.txt"));
+  });
+
+  it("工作区之外：null（fail-closed，发射处必须改口说读不到）", async () => {
+    const w = await setup();
+    expect(workspaceUsablePath(join(root, "outside.txt"), w)).toBeNull();
+  });
+
+  it("`..` 逃逸与软链逃逸都不算区内（与拒穿透那把闸同口径）", async () => {
+    const w = await setup();
+    expect(workspaceUsablePath(join(w, "..", "outside.txt"), w)).toBeNull();
+    const secret = join(root, "secret.txt");
+    await writeFile(secret, "TOPSECRET", "utf8");
+    await symlink(secret, join(w, "leak-link"));
+    expect(workspaceUsablePath(join(w, "leak-link"), w)).toBeNull();
+  });
+
+  it("没登记工作区（调用点还没接上那一跳）：null，不猜一个地址给模型", async () => {
+    const w = await setup();
+    await writeFile(join(w, "a.txt"), "BODY-A", "utf8");
+    expect(workspaceUsablePath(join(w, "a.txt"), undefined)).toBeNull();
   });
 });

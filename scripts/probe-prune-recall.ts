@@ -1,23 +1,24 @@
-// 探针（**不是门**，不在 gate-manifest 里）：prune 打桩那句「需要时 read_file 取回」到底做不做得到。
+// 探针（**不是门**，不在 gate-manifest 里）：生产的 prune 打桩在附件**工作区之外**时，有没有改口成诚实话。
 //
-// 为什么会有这支：§7.4「被裁原文写会话附件目录可回取」的判卷（`scripts/prune-check.ts` ④）用
-// **node:fs 的 readFile** 把附件读回来并比字节——那证的是"文件在、内容对"，
-// 而**打桩文本交给模型的动作是 `read_file` 这个工具**。两者不是同一件事：
-// 七个碰文件的工具（read_file / grep / glob / lsp / write_file / edit_file / impact_query）
-// 全走 `resolveInWorkspace` 那一道信任边界，它**第一句就拒绝对路径**，
-// 而生产算出的附件目录是 `join(dirname(logPath), "prune-attachments")`（会话日志在应用数据目录里）
-// ⇒ 模型照那句去做，拿到的是「只允许 workspace 相对路径」，白跑一轮，且**剪掉的原文再没有工具能取回**。
+// 为什么会有这支：§7.4「被裁原文写会话附件目录可回取」原先无论附件落在哪儿都写
+// 「[原文已存附件 <绝对路径>，需要时 read_file 取回]」。而生产算出的附件目录是
+// `join(dirname(logPath), "prune-attachments")`（会话日志在应用数据目录里），与工作区不同根；
+// 七个碰文件的工具全走 `resolveInWorkspace` 那道信任边界，它**第一句就拒绝对路径**
+// ⇒ 模型照那句去做，拿到「只允许 workspace 相对路径」，白跑一轮，且剪掉的原文再没有工具能取回。
 //
-// 判绿条件（修好之后这一支会自然转绿）：
-//   read_file 用打桩里那条路径能把原文逐字读回。
-// 修法有两族（都还没做，见任务 #33）：给 read_file 一个窄的第二允许根（要动 `glm-session` 的组装那一跳），
-// 或把那句改成"真做得到的动作"（但那样 §7.4 的回取能力就等于收回，属产品裁决）。
+// 判什么（#33 修法＝分案改文案，不开新的允许根）：
+//   ① 区外那一案**不再交绝对路径**，并明说"模型侧读不到、请由用户打开"；
+//   ② 附件仍然真落盘（人还得打开得到，能力没被悄悄删掉）；
+//   ③ 反向哨兵：把旧写法那个绝对路径真拿去调 read_file ⇒ **必须被拒**——
+//      这一格证明"如果哪天有人把绝对路径塞回去，就是假承诺"，尺的靶子没烂。
+// 工作区**之内**那一案（交相对路径、模型真取得回）由 `scripts/prune-check.ts` ③d/④b/④c 判，
+// 两支各判一侧，不重复造尺（规则 100：同一条判据抄两份迟早漂）。
 import { existsSync } from "node:fs";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { computePrune, writePruneAttachments, attachmentPathFor } from "../src/agent/prune.js";
+import { computePrune, writePruneAttachments, attachmentPathFor, PRUNED_PLACEHOLDER } from "../src/agent/prune.js";
 import { read_file } from "../src/tools/read_file.js";
 import type { AgentEvent } from "../src/events/index.js";
 import type { ToolContext } from "../src/tools/base.js";
@@ -39,7 +40,6 @@ async function main(): Promise<void> {
   await writeFile(logPath, "", "utf8");
   // 与 glm-session.ts 里那一行同算法（不是抄的字符串，是同一表达式）：
   const attachmentsDir = join(dirname(logPath), "prune-attachments");
-  await writeFile(join(workspace, "src-legacy-blob.ts"), "x", "utf8");
 
   // 触发形状**逐字照抄** `scripts/prune-check.ts` 的长会话（那边稳定出 `why==="saved"`；
   // 自己减事件会掉回 none，那样本探针就成了"没有尺"而不是"红"——见下一格的守卫）。
@@ -60,7 +60,6 @@ async function main(): Promise<void> {
     { type: "tool_call", id: "c-new", name: "read_file", args: { path: "src/new.ts" } },
     { type: "tool_result", callId: "c-new", ok: true, output: "N".repeat(60 * KB) },
   ] as unknown as AgentEvent[];
-  const original = (events[4] as { output: string }).output;
 
   const outcome = computePrune({ events, attachmentsDir, sessionId: "probe" });
   await writePruneAttachments(events, outcome, attachmentsDir, "probe");
@@ -70,33 +69,31 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // 取产品真交给模型的那一行文本（不是脚本自己算的路径）。
-  // 被剪的可能不止一条 ⇒ 按"哪一条对应 c-old"来挑，别拿 values()[0] 赌顺序。
+  // ① 生产形状：附件在区外 ⇒ 打桩不许交出模型用不了的路径，且必须明说读不到。
   const wanted = attachmentPathFor(attachmentsDir, "probe", "c-old");
-  const stub = [...outcome.replacements.values()].find((s) => s.includes(wanted)) ?? "";
-  const m = /附件 (\S+?)，/.exec(stub);
-  const pathInStub = m?.[1] ?? "";
-  note("c-old 的打桩把路径交给了模型（承诺可见）", pathInStub !== "", JSON.stringify(stub.slice(0, 110)));
-  note("该路径就是实际写出的那个文件（同源）", pathInStub === wanted, pathInStub);
-  note("文件真存在、内容逐字一致（prune-check ④ 已覆盖的那半）",
-    existsSync(pathInStub), "");
-
-  // ★ 这一格才是本探针的存在理由：**照承诺的动作，用真工具、真 ToolContext 做一遍**
+  const stub = [...outcome.replacements.values()].find((sv) => sv.includes(wanted) || sv.includes("模型侧读不到")) ?? "";
+  note("c-old 那条打桩被改写过（含占位原串）", stub.startsWith(PRUNED_PLACEHOLDER), stub.slice(0, 60));
+  note("① 区外那案不再交绝对路径", !stub.includes(attachmentsDir) && !stub.includes(wanted), stub.slice(60, 150));
+  note("① 并且明说模型侧读不到（不假装可回取）",
+    stub.includes("模型侧读不到") && stub.includes("由用户打开"), "");
+  // ② 能力没被悄悄删：原文仍然落盘。
+  note("② 附件仍然真写出（人还打开得到）", existsSync(wanted), wanted.slice(-40));
+  // ③ 反向哨兵：旧写法交出的那个绝对路径，工具今天仍然拒收 ⇒ 塞回去就是假承诺。
   const ctx = { workspace, emit: async () => {} } as unknown as ToolContext;
-  let verdict = "";
-  let recovered = false;
+  let rejected = false;
+  let why = "";
   try {
-    const r = await read_file.run({ path: pathInStub }, ctx);
-    recovered = r.ok && r.output.includes("R".repeat(200));
-    verdict = `ok=${String(r.ok)} 前 60：${r.output.slice(0, 60).replace(/\n/g, " ")}`;
+    const r = await read_file.run({ path: wanted }, ctx);
+    why = "居然读到了：ok=" + String(r.ok);
   } catch (err) {
-    verdict = "工具抛错：" + (err instanceof Error ? err.message : String(err));
+    rejected = true;
+    why = (err instanceof Error ? err.message : String(err)).slice(0, 60);
   }
-  note("模型照那句做得到（read_file 真能取回原文）", recovered, verdict);
+  note("③ 反向哨兵：拿绝对路径去调 read_file 必须被拒", rejected, why);
 
   console.log(red === 0
-    ? "[probe prune-recall] 全绿：§7.4 的回取承诺对模型可执行。"
-    : "[probe prune-recall] 红 " + String(red) + " 条 ⇒ 打桩那句是指向走不通的路（能力 6 的『可回取』在产品路径上不成立）。");
+    ? "[probe prune-recall] 全绿：区外那案已改口成诚实话，附件仍在盘上，绝对路径仍然被拒。"
+    : "[probe prune-recall] 红 " + String(red) + " 条 ⇒ 打桩那句又变成指向走不通的路。");
   process.exit(red === 0 ? 0 : 1);
 }
 

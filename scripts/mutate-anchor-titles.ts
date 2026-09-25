@@ -112,9 +112,15 @@ function titlePresent(expectFail: string, sourceText: string): boolean {
  * `user-skill-face-budget-abolished`：第 64 页 #47 把三处「全文见」副本收成一支 `skillRecallSuffix`
  * 并按落位分两案 ⇒ 那条用例的标题换成"取回那句按落位给，没登记工作区就不递地址"。
  * 锚点行本身在 `scripts/mutate-verify.mjs`（别人的在飞文件），针脚与 expectFail 由 #50 一起改指。
- */
+ * `prune-attachment-production-entry`：第 71 页 #33 把「打桩带绝对路径」那条假承诺改口成
+ * 「区外就明说读不到」，用例标题随之换成 `①生产形状（组装点未传 workspace）：递诚实话，且不递任何模型用不了的路径`。
+ * 这条锚点的**变异仍然红在该用例上**（按推导，未实测：`computePrune({ events })` 只剩裸占位是 prune.test.ts ②
+ * 那条逐字等值断言在守的既有事实 ⇒ 打桩第二行没了 ⇒ `toContain("读不到")` 必炸；不实测是因为靶子
+ * `glm-session.ts` 是别人的在飞文件，就地改它会把对方的写入卷掉），
+ * 只是 `expectFail` 那串旧标题不在盘上了；#50 落笔时逐字换成上面那句，然后撤本条。 */
 export const KNOWN_DRIFT: Readonly<Record<string, string>> = {
   "user-skill-face-budget-abolished": "第 64 页 #47 改了那句尾注的措辞与用例标题；待 #50 把针脚与 expectFail 改指新写法后撤本条",
+  "prune-attachment-production-entry": "第 71 页 #33 把假承诺改成诚实话并换掉用例标题；变异仍红在新标题上，待 #50 把 expectFail 逐字换成新标题后撤本条",
 };
 
 export function checkAnchorTitles(

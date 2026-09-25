@@ -430,7 +430,7 @@ async function hopSolpiReceipt(): Promise<Verdict> {
 export const RUNNERS: Readonly<Record<string, string>> = {
   "src/agent/plugins/skills.ts#skillRecallSuffix": "hopSkill",
   "src/agent/orchestrator-join.ts#renderJoinPayload": "hopJoinPayload",
-  "src/agent/prune.ts#stub": "hopPruneStub",
+  "src/agent/prune.ts#pruneRecallSuffix": "hopPruneStub",
   "src/main/agent-runner.ts#body": "hopMapDemo",
   "src/agent/ledger.ts#project": "hopLedgerRecall",
   "src/agent/solpi-runtime.ts#candidate": "hopSolpiReceipt",

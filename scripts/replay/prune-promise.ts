@@ -18,6 +18,13 @@ import { corpusProblem, corpusRoots, readJsonl, scanCorpus } from "./corpus";
 
 /** 打桩里那句承诺的标记（与 `src/agent/prune.ts` 里拼接的那半句同源；改了那边要改这里）。 */
 const STUB_MARK = "原文已存附件";
+/**
+ * #33 修法落地后新增的第二案措辞（`pruneRecallSuffix` 的「区外/未知」那一案：不递路径、明说取不到）。
+ * 必须单列一数：假承诺那句话消失之后，只数 `STUB_MARK` 会永远得 0 ⇒ 这一支会把它读成
+ * 「从没发射过、属潜在」，而真相是「**每一次裁剪都发射了一句能力缺席的诚实话**」。
+ * 标记取整句里 prune 独有的那段，不取「模型侧读不到」——skill 截断那句也说这五个字，两支会被并成一桶。
+ */
+const HONEST_MARK = "原文已另存到会话附件";
 /** 附件目录名（`src/agent/glm-session.ts` 里 `join(dirname(logPath), "prune-attachments")`）。 */
 const ATTACH_MARK = "prune-attachments";
 /** join 键：call 侧 `id`、result 侧 `callId`（不同名是事件面既有事实，读错键会得到一片零假读数）。 */
@@ -40,6 +47,8 @@ export interface PrunePromiseTally {
   stubs: number;
   /** 其中点了**绝对路径**的（=read_file 当场拒收的那一类）。 */
   stubsWithAbsPath: number;
+  /** 诚实句（区外/未知那一案）发射次数：每次都是「取回能力缺席」，不是「有受害者照做后失败」。 */
+  honestStubs: number;
   /** 模型真的拿附件路径去发起工具调用的次数（任何参数位）。 */
   attempts: number;
   /** 其中拿到 ok=true 回执的。 */
@@ -51,7 +60,7 @@ export interface PrunePromiseTally {
 }
 
 const emptyTally = (): PrunePromiseTally => ({
-  toolCalls: 0, stubs: 0, stubsWithAbsPath: 0, attempts: 0, attemptOk: 0, attemptFailed: 0, attemptNoResult: 0,
+  toolCalls: 0, stubs: 0, stubsWithAbsPath: 0, honestStubs: 0, attempts: 0, attemptOk: 0, attemptFailed: 0, attemptNoResult: 0,
 });
 
 /** 从打桩句里取出被点名的路径（`[原文已存附件 <path>，需要时 read_file 取回]`）。
@@ -87,6 +96,8 @@ export function tallyPrunePromise(events: readonly PruneEvent[]): PrunePromiseTa
     if (out.includes(STUB_MARK)) {
       t.stubs++;
       if (stubPath(out).startsWith("/")) t.stubsWithAbsPath++;
+    } else if (out.includes(HONEST_MARK)) {
+      t.honestStubs++;
     }
     const callId = e[RESULT_KEY] ?? "";
     if (attemptIds.has(callId)) {
@@ -107,6 +118,7 @@ export interface PrunePromiseVerdict {
 /** 结论成一句有名字的话——不把"零命中"留给下一个人自己猜它是读数还是没有尺。 */
 export function prunePromiseVerdict(t: PrunePromiseTally): PrunePromiseVerdict {
   const counts = `承诺=${String(t.stubs)}（点绝对路径 ${String(t.stubsWithAbsPath)}）` +
+    ` 诚实句=${String(t.honestStubs)}` +
     ` 照做=${String(t.attempts)}（成功 ${String(t.attemptOk)} / 失败 ${String(t.attemptFailed)} / 无回执 ${String(t.attemptNoResult)}）`;
   if (t.attemptOk > 0) {
     return { live: false, why: counts + ` ⇒ 通道可用（成功 ${String(t.attemptOk)} 笔），#33 的修法可按"省一次失败"评估` };
@@ -126,6 +138,12 @@ export function prunePromiseVerdict(t: PrunePromiseTally): PrunePromiseVerdict {
         "要判可得性得先造观测者（真会话里跑一次长上下文），不是在这里加断言",
     };
   }
+  // 文案已改口、接线那半没做：诚实句每发射一次，就是「这条能力今天缺席一次」，而不是「从没触发过」。
+  // 把这一态并进最后那句「潜在」会让下一个人以为 #33 已经不用管了（规则 88：后加的面接管旧面职责）。
+  if (t.honestStubs > 0) {
+    return { live: false, why: counts + " ⇒ 假承诺已被诚实句替换（没人再被白跑一轮），但诚实句本身计数：" +
+      "附件每落一次区外就少一次可回取。缺的是「组装那一跳把 workspace 交给 prune」，不是文案" };
+  }
   return { live: false, why: counts + " ⇒ 语料里从没发射过这句（prune 未在有附件的会话里触发过）：属**潜在**，" +
     "不值得为它动 `glm-session` 的组装那一跳；这一支留着，触发一次就会出数" };
 }
@@ -138,6 +156,7 @@ function main(): void {
     total.toolCalls += t.toolCalls;
     total.stubs += t.stubs;
     total.stubsWithAbsPath += t.stubsWithAbsPath;
+    total.honestStubs += t.honestStubs;
     total.attempts += t.attempts;
     total.attemptOk += t.attemptOk;
     total.attemptFailed += t.attemptFailed;

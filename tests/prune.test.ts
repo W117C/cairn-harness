@@ -2,6 +2,7 @@
 // ①预计裁剪未达 20k → 不修剪（too-small，零替换）②最近 2 轮不被剪 ③免剪名单条目不被剪
 // ④被裁原文可从附件目录读回且逐字一致。类型化：code/log/doc 三类 + 摘要 2k 截断。
 import { describe, expect, it, beforeEach } from "vitest";
+import { existsSync } from "node:fs";
 import { mkdtemp, writeFile, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -15,6 +16,8 @@ import {
   PRUNED_PLACEHOLDER,
 } from "../src/agent/prune.js";
 import type { AgentEvent } from "../src/events";
+import { read_file } from "../src/tools/read_file.js";
+import type { ToolContext } from "../src/tools/base.js";
 
 const KB = 1024;
 
@@ -294,19 +297,43 @@ describe("prune 附件回取接进生产", () => {
   ];
   const corpus = (): AgentEvent[] => [...round(1, "F"), ...round(2, "G"), ...round(3, "H"), ...round(4, "I")];
 
-  it("①传 attachmentsDir ⇒ 打桩自带路径，且该路径逐字等于实际写出的那个文件", async () => {
+  // #33：这一格原先钉的是「打桩带**绝对**路径」，而七把碰文件的工具第一句就拒绝对路径
+  // ⇒ 用例把假承诺冻成了期望值。改钉成模型真能执行的那一事：拿句里那条路径调 read_file。
+  it("①传 attachmentsDir ⇒ 打桩自带路径，且该路径逐字等于实际写出的那个文件（区内给相对路径，拿它真能调 read_file）", async () => {
     const events = corpus();
-    const outcome = computePrune({ events, attachmentsDir: attachments, sessionId: "s-1" });
+    const outcome = computePrune({ events, attachmentsDir: attachments, sessionId: "s-1", workspace: attachments });
     expect(outcome.replacements.size).toBeGreaterThan(0);
     const [id, text] = [...outcome.replacements.entries()][0]!;
     const e = events[(id ?? 0) - 1] as { callId: string; output: string };
     const file = attachmentPathFor(attachments, "s-1", e.callId);
     // 原串逐字在场（新增信息另起一行——往被钉住的提示串里并半句是本仓点名的第三种踩法）
     expect(text.startsWith(PRUNED_PLACEHOLDER + "\n")).toBe(true);
-    expect(text).toContain(file);
     await writePruneAttachments(events, outcome, attachments, "s-1");
     expect(await readFile(file, "utf8")).toBe(e.output);
     expect(outcome.attachments).toContain(file);
+    // 句里那条路径 = 实际写出的那个文件（按文件名独立核对，不用 helper 自己算一遍当期望）
+    const rel = /附件 (\S+?)，/u.exec(text)?.[1] ?? "";
+    expect(rel).toBe(file.split("/").pop());
+    expect(rel).not.toMatch(/^\//u); // 绝对路径一个字节都不进上下文
+    const got = await read_file.run({ path: rel }, { workspace: attachments, emit: async () => {} } as unknown as ToolContext);
+    expect(got.ok, got.output).toBe(true);
+    expect(got.output).toContain("F".repeat(1000)); // 取回的是被裁那份，不是别的文件
+  });
+
+  // 生产今天的形状：组装那一跳没传 workspace（`glm-session.ts` 的 computePrune 实参）⇒ 必须走诚实话分支。
+  // 这一格不是"能力已交付"的见证，是"没交付时不许说谎"的见证；接线补上后它仍应绿（区外/未知同一分支）。
+  it("①b 没登记工作区 ⇒ 一个路径都不递，并明说模型侧读不到（不递假地址）", async () => {
+    const events = corpus();
+    const outcome = computePrune({ events, attachmentsDir: attachments, sessionId: "s-1b" });
+    const text = [...outcome.replacements.values()][0]!;
+    expect(text.startsWith(PRUNED_PLACEHOLDER + "\n")).toBe(true);
+    expect(text).toContain("读不到");
+    expect(text).not.toMatch(/附件 \S/); // 不许出现「附件 <路径>」那种做不到的动作
+    expect(text).not.toContain(attachments); // 绝对路径不泄露
+    // 能力没被悄悄删：原文仍然落盘
+    await writePruneAttachments(events, outcome, attachments, "s-1b");
+    expect(outcome.attachments.length).toBeGreaterThan(0);
+    expect(existsSync(outcome.attachments[0]!)).toBe(true);
   });
 
   it("②未传 attachmentsDir ⇒ 打桩仍是裸占位（零回归：三处逐字等值断言不破）", () => {
