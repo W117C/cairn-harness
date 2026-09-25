@@ -189,6 +189,56 @@ export function promiseInventoryFindings(
   };
 }
 
+/**
+ * #59 的候选定义：「回取承诺＝在截断/归档点上调用某个 notice builder」。
+ * 若这条成立，按措辞收料的网（`PROMISE_MARKS`）就能退休——换写法即绕过的那一族病（规则 122）也就没了。
+ * 下面这一格量的就是它成不成立：读的是**两面之差**，不是印象。
+ */
+export const NOTICE_BUILDERS: readonly string[] = [
+  "byteCapNotice", "countCapNotice", "truncationNotice", "pruneRecallSuffix", "skillRecallSuffix",
+];
+
+export interface BuilderCallSite {
+  file: string;
+  fn: string;
+  builder: string;
+  line: number;
+}
+
+/** AST 收 builder 的**调用点**（定义本身不算；只吃传进来的源文本 ⇒ 判卷可直接喂突变源）。 */
+export function scanBuilderCallSites(files: readonly { path: string; text: string }[]): BuilderCallSite[] {
+  const out: BuilderCallSite[] = [];
+  for (const f of files) {
+    const sf = ts.createSourceFile(f.path, f.text, ts.ScriptTarget.ESNext, true, ts.ScriptKind.TS);
+    const visit = (node: ts.Node): void => {
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && NOTICE_BUILDERS.includes(node.expression.text)) {
+        out.push({
+          file: f.path,
+          fn: enclosingFnName(node.expression),
+          builder: node.expression.text,
+          line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1,
+        });
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sf);
+  }
+  return out;
+}
+
+/**
+ * 按 `fn` 把措辞网收到的承诺面分成「由 builder 发射」与「在调用方 inline」。
+ * 只有这一支能回答 #59 的问题（结构网盖不盖得住），且必须比 `fn` 而不是键集——
+ * builder 的**调用点**与字面量所在函数是两回事，比键集恒得 0 交集（一条恒真读数）。
+ */
+export function builderCoverage(modelSites: readonly PromiseSite[]): { viaBuilder: string[]; inline: string[] } {
+  const keys = (list: readonly PromiseSite[]) => [...new Set(list.map((s) => siteKey(s)))];
+  return {
+    viaBuilder: keys(modelSites.filter((s) => NOTICE_BUILDERS.includes(s.fn))),
+    inline: keys(modelSites.filter((s) => !NOTICE_BUILDERS.includes(s.fn))),
+  };
+}
+
 // --------------------------------------------------------------------------- 最后一跳
 
 interface Verdict {
@@ -526,6 +576,33 @@ async function main(): Promise<void> {
     // 读表的人会以为那一面还有判定在守，而它其实守的是一个已经不存在的发射处。
     line(inv.stale.length === 0 ? "✅" : "❌",
       inv.stale.length === 0 ? "判定归属表没有陈旧键" : "陈旧归属键：" + inv.stale.join(" | ") + " ⇒ 那一面已不在盘上发射，撤掉这条登记");
+
+    // #59 的裁决读数（**这是读数不是判据**：红不红仍由上面几格决定）。
+    // 结构网＝「承诺文案由 builder 发射」；措辞网＝现在这张 `PROMISE_MARKS`。
+    // 两边必须比**同一件东西**：措辞面的键是字面量所在函数，builder 的键是它的函数名 ⇒ 比 `fn`，
+    // 不能比 `<file>#<fn>` 键集（那是两回事，比出来恒为 0 交集＝一条恒真读数，规则 128 第二种形态）。
+    {
+      const cov = builderCoverage(modelSites);
+      console.log("  ⚪ #59 读数：模型可见承诺面 " + String(inv.modelKeys.length) + " 格（字面量 " + String(modelSites.length) + " 处），" +
+        "其中由 builder 发射 " + String(cov.viaBuilder.length) + " 格 / 在调用方 inline " + String(cov.inline.length) + " 格");
+      console.log("      inline 那几格＝按 builder 调用收料会漏的：" + (cov.inline.join(" | ") || "—"));
+      // 反向一侧（规则 60）：builder 的**调用点**里有多少并不产出去取回原文的承诺（那是"少说了多少"，另一族）。
+      const callSites = scanBuilderCallSites(files);
+      const callKeys = [...new Set(callSites.map((c) => siteKey(c)))];
+      const wordingKeys = new Set(inv.modelKeys);
+      const notPromise = callKeys.filter((k) => !wordingKeys.has(k));
+      console.log("      builder 调用点 " + String(callKeys.length) + " 处，其中措辞网未收 " + String(notPromise.length) +
+        " 处（`另有 N 条未列出` 那一族：属**省略量**而非**回取承诺**，不是缺陷）：" + (notPromise.join(" | ") || "—"));
+      // 尺自己也要可证伪（规则 63/65/74）：内存里多一处 builder 调用 ⇒ 结构面必须报更大的数。
+      const t = modelSites[0];
+      const f2 = files.find((x) => x.path === t?.file) ?? files[0] ?? { path: "probe.ts", text: "" };
+      const baseB = scanBuilderCallSites([f2]).length;
+      const extraB = scanBuilderCallSites([
+        { path: f2.path, text: f2.text + '\nfunction __probeBuilder(): string { return byteCapNotice(10, 20, "x"); }\n' },
+      ]).length;
+      line(extraB > baseB ? "✅" : "❌",
+        `自证：追加一次 builder 调用 ⇒ 该支调用点从 ${String(baseB)} 变 ${String(extraB)}（没变 = 结构网恒假）`);
+    }
 
     // 尺自己也要可证伪（规则 63/65/74）：挑一支**已有面**的文件，在内存里凭空多一处承诺，清单必须报更大的数。
     const target = modelSites[0];

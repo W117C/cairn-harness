@@ -13,7 +13,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
-  PROMISE_MARKS, RUNNERS, UI_ROOTS, promiseInventoryFindings, scanPromiseSites,
+  PROMISE_MARKS, RUNNERS, UI_ROOTS, builderCoverage, promiseInventoryFindings,
+  scanBuilderCallSites, scanPromiseSites,
   type PromiseSite,
 } from "../scripts/probe-promise-recall";
 import { trackedScriptFiles } from "../scripts/lib/scan-scope";
@@ -97,5 +98,53 @@ describe("回取承诺清单：每一面都得有判定归属，登记表不许�
   it("盘上这两格确实进了模型可见清单（合成样本过了而盘上没收，等于没修）", () => {
     expect(findings.modelKeys).toContain("src/agent/ledger.ts#project");
     expect(findings.modelKeys).toContain("src/agent/solpi-runtime.ts#candidate");
+  });
+});
+
+// #59 的裁决底料：把「回取承诺＝builder 调用」这一族判据从印象变成可复跑的数。
+// 这一族的意义不在红，在于**下一轮不许再凭印象说"结构化就安全"**（规则 117：要裁决的数先落复跑面）。
+describe("结构网（builder）与措辞网各自盖住几格", () => {
+  it("builder 的**调用点**计数：调一次算一处，定义本身不算，认不出的名字不算", () => {
+    const calls = scanBuilderCallSites([
+      {
+        path: "src/__probe_b.ts",
+        text: 'export function byteCapNotice(a: number, b: number, c: string): string { return a + b + c; }\n' +
+          'function run(): string { return "x" + byteCapNotice(1, 2, "y") + otherNotice(3); }\n',
+      },
+    ]);
+    expect(calls.map((c) => `${c.file}#${c.fn}:${c.builder}`)).toEqual(["src/__probe_b.ts#run:byteCapNotice"]);
+  });
+
+  it("字面量在 builder 体内 ⇒ viaBuilder；在调用方 inline ⇒ inline（这就是 #59 那个分的两栏）", () => {
+    const sites = scanPromiseSites([
+      { path: "src/__probe_x.ts", text: 'function skillRecallSuffix(): string { return "[全文见 a]"; }' },
+      { path: "src/__probe_y.ts", text: 'function project(): string { return "[obs_recall available]"; }' },
+    ]);
+    const cov = builderCoverage(sites);
+    expect(cov.viaBuilder).toEqual(["src/__probe_x.ts#skillRecallSuffix"]);
+    expect(cov.inline).toEqual(["src/__probe_y.ts#project"]);
+  });
+
+  // 陷阱写死成一条用例（规则 128 第二种形态）：builder 的**定义**与它的**调用点**是两个键，
+  // 拿键集取交集会恒得 0 交集 ⇒ 看起来像"两网毫不相干"，实际是比错了东西。
+  it("反向：按键集比 builder 调用点与承诺面会得 0 交集——所以只能按 `fn` 分栏", () => {
+    const sites = scanPromiseSites([
+      { path: "src/__probe_z.ts", text: 'function skillRecallSuffix(): string { return "[全文见 a]"; }' },
+      { path: "src/__probe_z.ts", text: 'function caller(): string { return skillRecallSuffix(); }' },
+    ]);
+    const callKeys = [...new Set(scanBuilderCallSites([
+      { path: "src/__probe_z.ts", text: 'function caller(): string { return skillRecallSuffix(); }' },
+    ]).map((c) => `${c.file}#${c.fn}`))];
+    expect(callKeys).toEqual(["src/__probe_z.ts#caller"]);
+    expect(builderCoverage(sites).viaBuilder).toEqual(["src/__probe_z.ts#skillRecallSuffix"]);
+  });
+
+  it("盘上读数：今天确有承诺是 inline 发出来的 ⇒ 「按 builder 收料」只是补充网，不能替换措辞网", () => {
+    const cov = builderCoverage(sites.filter((s) => s.audience === "model"));
+    for (const k of ["src/agent/plugins/skills.ts#skillRecallSuffix", "src/agent/prune.ts#pruneRecallSuffix"]) {
+      expect(cov.viaBuilder, "两个 builder 面认不出来 = NOTICE_BUILDERS 或取料漂了").toContain(k);
+    }
+    expect(cov.inline.length, "inline 归零说明承诺全搬进 builder 了——那时该重判 #59，别让这条静默绿着").toBeGreaterThan(0);
+    expect(cov.inline).not.toContain("src/agent/prune.ts#pruneRecallSuffix");
   });
 });
