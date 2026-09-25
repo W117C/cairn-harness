@@ -64,6 +64,11 @@ export const REPLAY_READINGS: readonly ReplayReading[] = [
     script: "scripts/replay/cascade-traffic.ts",
     answers: "该不该给级联升档（runCascade / orchestrator 的升档调用点）加 verify cause 的分母：语料里升档出现几次、红拍里环境因占比多少；零流量时判「不可测」而非「没花钱」",
   },
+  {
+    id: "prune-promise",
+    script: "scripts/replay/prune-promise.ts",
+    answers: "任务 #33 的优先级尺：压缩摘要里承诺「用 tool_result:index 回取」的条目，在语料里真被回取过几次（0 次 ⇒ §7.4 那条承诺是空头支票）",
+  },
 ];
 
 export interface ReplayFacts {
@@ -74,6 +79,15 @@ export interface ReplayFacts {
   refs: readonly { file: string; ids: readonly string[] }[];
   /** 各文档实际出现的内联 heredoc 复跑块（`node --import tsx -e`）计数。 */
   inline: readonly { file: string; count: number }[];
+  /** 盘上 `scripts/replay/` 里的实际文件（取料从**盘**出发，不从登记表出发）。
+   *  缺省 = 不查这一格（既有调用方逐字不变）；新那一格由 `tests/replay-readings-registry.test.ts` 真扫盘灌进来。 */
+  onDisk?: readonly ReplayOnDiskFile[];
+}
+
+/** 盘上一个复跑面/取料件的最小事实：路径（仓库相对）+ 源码文本（判"有没有人吃它"）。 */
+export interface ReplayOnDiskFile {
+  path: string;
+  source: string;
 }
 
 export interface ReplayGaps {
@@ -85,19 +99,39 @@ export interface ReplayGaps {
   missingScripts: string[];
   /** 有内联 heredoc 复跑块 ⇒ 新腐的入口（存量走 docs-check 的 LEGACY_WAIVERS，只降不升）。 */
   inlineBlocks: string[];
+  /** 盘上有、表里没有，而且**没有任何已登记的面 import 它** ⇒ 孤儿（第五判据）。
+   *  为什么判"没人吃它"而不是"全部要求登记"：`corpus.ts` 这类共用取料层本来就不该有 `replay:` 语义，
+   *  一律要求登记会把取料件逼进登记表（那张表是"文档可复跑"的账，不是文件清单）。
+   *  反向也成立：一个**新的、没人 import 也没登记**的面——正是我自己 #39 漏进的那一格。 */
+  orphanScripts: string[];
 }
 
 const flatten = (xs: readonly (readonly string[])[]): string[] => [...new Set(xs.flat())];
+
+/** 一个面的源码有没有引到 `./<base>`（含 `.js` 后缀写法）。 */
+function importsBase(source: string, base: string): boolean {
+  return new RegExp("[\"']\\./" + base + "(\\.js)?[\"']", "u").test(source);
+}
 
 export function replayGapsOf(f: ReplayFacts): ReplayGaps {
   const ids = new Set(f.registered.map((r) => r.id));
   const referenced = flatten(f.refs.map((r) => r.ids));
   const referencedSet = new Set(referenced);
+  const onDisk = f.onDisk ?? [];
+  const registeredScripts = new Set(f.registered.map((r) => r.script));
+  const registeredSources = onDisk.filter((x) => registeredScripts.has(x.path));
+  const baseOf = (p: string): string => p.slice(p.lastIndexOf("/") + 1).replace(/\.ts$/u, "");
+  const orphans = onDisk
+    .filter((x) => !registeredScripts.has(x.path))
+    .filter((x) => !registeredSources.some((src) => importsBase(src.source, baseOf(x.path))))
+    .map((x) => x.path)
+    .sort();
   return {
     unregisteredRefs: [...new Set(referenced.filter((id) => !ids.has(id)))],
     unreferencedIds: [...ids].filter((id) => !referencedSet.has(id)),
     missingScripts: [...f.missingScripts],
     inlineBlocks: f.inline.filter((i) => i.count > 0).map((i) => i.file),
+    orphanScripts: orphans,
   };
 }
 

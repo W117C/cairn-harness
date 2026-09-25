@@ -2212,3 +2212,54 @@ $0.2020（standard）/ **$0.8080**（strong）——价表跨度 40 倍。旧算
   环境因占比，那时再给 `runCascade` 的 rung 加 `cause` 表达法。观察着：`tests/replay-cascade-traffic.test.ts` 6 条
   （自检全过 / 零流量必判不可测 / 有流量必给占比 / 结构栏吃 shipped 唯一谓词 + 未归因反向格 / 播报面独立成立）。
   同轮三次自踩都记在 `outputs/head-audit-2026-09-24/` §十一（手抄环境集合、isMain 守卫百分号、自检期望值写错被尺自己拦下）。
+
+### 2026-09-25 · 第 61 页：worker 的验证证据走到「主模型眼前」这一格，补上产品入口那条链
+
+`outputs/worker-evidence-parent-context-2026-09-25/`。能力 5 的**并行那一半**：worker 写盘后那拍自动验证的四态证据
+（`artifacts.verified`）此前只有读**事件面**的观测者（`tests/m3b.test.ts` 的 W4 三条断 `parentOutput`），
+而「设置位到底接没接到 worker 的收束闸上」这一格实测**零观测者**。新判卷 `tests/worker-evidence-parent-context.test.ts`
+3 条：真产品入口（`handleAgentRun` → `buildSessionOrchestrator` → `spawn_agent` → write worker）
++ 既有剧本 `fixtures/agents/write-demo.jsonl` 真写文件 + 目标仓 `verify.test` 是一条 **grep 那个文件** 的命令
+⇒ 同一条剧本、只换命令，父模型正文里的字段就从 `verified` 翻成 `failed`；只读 worker 那一格断**没有** `verified` 键。
+
+三处突变在同 HEAD 的隔离树里手注入取证（`cp -al node_modules` 真依赖，规则 52/103）：
+
+- **A 摘掉父正文里那份证据**（`orchestrator.ts` 终态 body 那一行 spread，事件面留着）⇒ 全量表 258 files / 2751 tests
+  里 4 files / 6 tests 红：`m3b` 2 条 + 本文件 2 条（另两条 `docs-check` D-8、`mutate-anchor-titles` 是 HEAD 固有——
+  把 `orchestrator.ts` 还原后单跑这两只，仍 2 failed / 53 passed）。
+  ⇒ 这一格不空，我最初"事件面一条都不红"的说法**被自己的读数证伪**（读代码得到的红名单不算数，规则 63/67）。
+- **B 把 `s.autoVerify` 那半接线改成 `...(false`**（`agent-runner.ts`）⇒ 同跑 42 条里**只红本文件那 2 条**。
+  这就是真缺口：判卷自己 `new Orchestrator({... workerVerify})`，守不到产品那次构造（规则 123 第三次命中）。
+- **C 给合成回执补一行 `agent_id`**（让它被归因成子流）⇒ 本文件 3 条全红 + `m3b` 1 条红：
+  「父上下文唯一接收物」这条协议（§4.4.4）在新判卷里是双向的（正侧要看得见，反侧不许漏进主上下文）。
+
+另带三个读数，落点全在热文件，本轮只立案不改（逐字块在第 61 页 §6）：
+
+- **未提交的 verify 面 ⇒ worker 静默零拍**（任务 #43）：write worker 的钩子挂在 worktree 上，`surface()` 从那个目录读
+  `.agent/config.json` ⇒ 用户刚配好还没提交时，同一条剧本只差一次 commit：自动拍 0 条 / 1 条，
+  而父模型看到的都是同一个词 `absent`（三成因不分：无面 / 面未提交 / 那轮没改盘；规则 95）。
+- **「worker 无返修轮」定名**（任务 #44）：`orchestrator.ts` 只递 `{verify, autoVerify:true}`，`autoVerifyRepair` 仅主会话有 ⇒
+  同一份红拍主会话可再要一轮修、worker 直接带 `failed` 终态。代价上界已量（最坏 4 并发 ≈170s + 相应 token），
+  重判条件 = `replay:run-scorecard` 的 worker 子流里出现「红拍之后又改过盘」的样本（今天 0，剧本没这一支）。
+- **worker 报告在父正文里两份**（任务 #45）：`emitSyntheticResult` 的 body 同时带 `summary` 与 `artifacts.report`（同一份文本）。
+  探针实测 60 字报告 ⇒ 正文 760 字里 2 份、多付 ≈41 token；真语料 10 条 `agent_result.summary` 中位 1045 token、
+  p90 1750（帽 2000）⇒ 去重最多省 ≈9.8k token / 这 10 次交付。限定：样本小、含剧本态，只当量级。
+
+### 2026-09-25 · 第 62 页：D-8 缺第五判据——登记表看不见的复跑面（我自己上一轮漏的那格）
+
+`outputs/replay-registry-fifth-criterion-2026-09-25/`。D-8 现有四条的取料面是**文档**与**登记表**，
+没有一条问「`scripts/replay/` 里到底有几个文件」⇒ 既没登记、文档也没写 `replay:` 的脚本对整道门隐形。
+本轮实测分母：盘上 11 个文件、表里 9 项，差集两支——`corpus.ts`（被 10 支面 import 的取料层，本就不该登记）
+与 **`prune-promise.ts`**：那是我上一轮按任务 #39 装的面（第 57 页），脚本、8 条判卷、五格突变都齐，
+**唯独没登记、也没引用** ⇒ 正主是我自己。而 `replay-readings.ts` 文件头那句「取料一律从真实文档扫…
+否则未登记项会静默漏在机制外」写的就是这条纪律，它只落了文档那一半（规则 122；同族见规则 64、99）。
+
+修法取**「未登记 且 没有任何已登记面 import 它」⇒ 孤儿**，不取"全部要求登记"（后者会把取料件逼进登记表，
+② 就再也判不出陈旧登记）；import 者只认**已登记**的面，否则两个互相引用的孤儿可以自证清白。
+`replayGapsOf` 输入加可选 `onDisk`（缺省不查 ⇒ 既有调用方逐字不变）、输出加 `orphanScripts`。
+判卷 `tests/replay-readings-registry.test.ts` 4 条（复现器 + 反向哨兵 `corpus.ts` + 自证取料面 + 真盘扫描）。
+TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined ⇒ 未实现就已在真盘取到料）；
+实现后、登记前第 4 条红成 `未登记又没人 import 的复跑面：scripts/replay/prune-promise.ts`——**指名道姓，不是恒空**；
+补登记 + 本页引用（`replay:prune-promise`）后 4 passed。
+`scripts/docs-check.ts` 现在在飞 ⇒ 第五判据**没接进 D-8 报告面**（逐字块交在该页 §5），观测由测试承担；
+任务 #46 记这条接线。
