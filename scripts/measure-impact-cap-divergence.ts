@@ -134,6 +134,9 @@ async function main(): Promise<void> {
   const t = tallyDivergence(pairs);
   const inCapped = new Set(capped.files);
   const extraFiles = full.files.filter((f) => !inCapped.has(f));
+  // 顺带一条**与帽无关**的读数：全量图里有多少符号本来就有好几份同名定义（第 60 页那条"并集自述"
+  // 多久发射一次由此决定）。放在这里是因为两张图都已经建好，加这一条不再花任何解析。
+  const multiDef = [...full.defs.values()].filter((ds) => new Set(ds.map((d) => d.file)).size > 1).length;
   // 自证：漏掉的波及文件**必须全部**来自帽外那批（否则两图之间还有帽以外的差别，这条尺就量错东西了）。
   const missed = new Set(pairs.flatMap((p) => p.full.filter((f) => !p.capped.includes(f))));
   const allFromExcluded = [...missed].every((f) => !inCapped.has(f));
@@ -143,6 +146,7 @@ async function main(): Promise<void> {
     `全量 先=${String(b1.ms)}ms 后=${String(a2.ms)}ms ⇒ 要代价数请跑 --only=cap / --only=full 各数次（独立进程）`,
   );
   console.log(`帽外文件=${String(extraFiles.length)}（这些文件在缺省帽下**根本问不出答案**，只能得到"图外 ⇒ 未知"）：${extraFiles.slice(0, 6).join(", ")} …`);
+  console.log(`同名多份定义的符号=${String(multiDef)} / 图内符号共 ${String(full.defs.size)} ⇒ 并集自述会在这这么多查询上发射（与帽无关，是图本身的性质）`);
   console.log(
     `可比较查询=${String(t.comparable)} 其中答案不同=${String(t.divergent)}` +
     `（${t.comparable > 0 ? ((t.divergent / t.comparable) * 100).toFixed(1) : "n/a"}%）` +

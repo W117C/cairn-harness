@@ -126,6 +126,17 @@ export function capCauseNote(files: number, cap: number): string {
       "（被忽略规则/噪声目录排除、后缀不支持仍然成立）";
 }
 
+/** 并集自述（纯函数）：同名符号在多个文件各有一份定义时，`upward` 给的是**各份的并集**——
+ *  图只按名字连边（`map/parse.ts` 的 tag 只有 def|ref，不采 import），所以里面一定混着
+ *  "另一份定义的调用方"。这一句是把**假阳性**摆到台面上：不问自答的"波及 N 个文件"
+ *  会让模型去改与本次编辑无关的调用方（与覆盖面自述相反的一侧：那边怕漏报，这边怕多报）。
+ *  出路只给真做得到的两件：grep 它的 import 确认归属；或按文件查（那一支会点名哪些符号有歧义）。 */
+export function unionNote(subject: string): string {
+  if (subject === "") return "";
+  return `（同名歧义：${subject} ⇒ 下面波及清单是**各份定义的并集**，本图只按名字连边、不认 import；` +
+    "要收窄就先 grep 它的 import 确认归属，或按文件查 {file:…}）";
+}
+
 /** 调用点按文件汇聚的紧凑清单（与 contextNoteFor 同一套帽：宁少不炸上下文）。 */
 function sitesNote(head: string, sites: ImpactSite[], noun: SiteNoun = UP_NOUN): string {
   if (sites.length === 0) return head + noun.none;
@@ -185,7 +196,11 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
         const head = "[impact] " + r.file + (refSyms.length > 0
           ? "（被跨文件引用的符号 " + String(refSyms.length) + " 个：" + refSyms.slice(0, SYMS_CAP).join(", ")
             + (refSyms.length > SYMS_CAP ? " 等" : "") + "）"
-          : "") + coverageNote(r.graphFiles, maxFiles);
+          : "") + coverageNote(r.graphFiles, maxFiles) +
+          unionNote(r.ambiguousSymbols.length > 0
+            ? r.ambiguousSymbols.slice(0, SYMS_CAP).join(", ") +
+              ` 在别处也有同名定义${r.ambiguousSymbols.length > SYMS_CAP ? " 等 " + String(r.ambiguousSymbols.length) + " 个符号" : ""}`
+            : "");
         return { ok: true, output: sitesNote(head, r.up) };
       }
       const graph = await buildImpact({ workspace: ctx.workspace, cacheDir: dir, maxFiles });
@@ -213,8 +228,10 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
             `要动它的行为请改调用处或直读它的来源`,
         };
       }
-      const symHead = `[impact] ${symbol} 的定义在 ${String(new Set(defined.map((d) => d.file)).size)} 个文件` +
-        coverageNote(graph.files.length, maxFiles);
+      const defFiles = new Set(defined.map((d) => d.file));
+      const symHead = `[impact] ${symbol} 的定义在 ${String(defFiles.size)} 个文件` +
+        coverageNote(graph.files.length, maxFiles) +
+        unionNote(defFiles.size > 1 ? `${symbol} 有 ${String(defFiles.size)} 份定义` : "");
       return { ok: true, output: sitesNote(symHead, upward(graph, symbol)) };
     },
   };

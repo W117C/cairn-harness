@@ -476,3 +476,65 @@ describe("「图里没有」的成因收敛：没到帽时不许把帽列成可�
     expect(r.output).toContain("maxFiles");
   });
 });
+
+describe("多份同名定义：波及清单必须自述是并集，不能当成「我改的那一份」的答案", () => {
+  // 实测（2026-09-25）：`one.ts` 与 `two.ts` 各定义一份互不相干的 `run`，各有 1 个调用方。
+  // 我改的是 one.ts 那份，工具今天回答「波及 2 个文件」并把 useTwo.ts 列进来，**一个字都不说**
+  // 那是并集 ⇒ 模型会去改另一份定义的调用方（假阳性，与第 55/56 页那条"图外 ⇒ 未知"的
+  // 假阴性正好相反的一侧）。符号图只按名字连边（parse 不采 import），所以归属做不到，
+  // 能做到的诚实是：说出份数 + 说这是并集 + 给一条真做得到的归属查法。
+  const dirs: string[] = [];
+  async function mkDefs(spec: readonly [string, string][]): Promise<ToolContext> {
+    const ws = await mkdtemp(join(tmpdir(), "impact-multidef-"));
+    dirs.push(ws);
+    for (const [name, text] of spec) await writeFile(join(ws, name), text, "utf8");
+    return { workspace: ws, emit: async () => {} };
+  }
+  afterAll(async () => { for (const d of dirs) await rm(d, { recursive: true, force: true }); });
+
+  const twoDefs = (): Promise<ToolContext> => mkDefs([
+    ["one.ts", "export function run() { return 1; }\n"],
+    ["useOne.ts", "import { run } from \"./one\";\nexport const a = run();\n"],
+    ["two.ts", "export function run() { return 2; }\n"],
+    ["useTwo.ts", "import { run } from \"./two\";\nexport const b = run();\n"],
+  ]);
+
+  it("两份定义 ⇒ 明说「并集」，并给出可执行的归属查法", async () => {
+    const r = await createImpactQueryTool(cacheDir).run({ symbol: "run" }, await twoDefs());
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("跨文件调用点 2 处"); // 前提：这一格走的是原来的并集答案，不是空答案
+    expect(r.output).toMatch(/2 份定义/u);
+    expect(r.output).toMatch(/并集/u);
+    expect(r.output, "并集那句必须指向一条真做得到的归属查法（否则就是第 51 页那种死出路）").toMatch(/grep/u);
+  });
+
+  it("反向：单一定义时**一个字都不许多**（不许把并集那句挂在所有查询上）", async () => {
+    const r = await createImpactQueryTool(cacheDir).run({ symbol: "compute" }, ctx());
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("定义在 1 个文件");
+    expect(r.output).not.toMatch(/并集|份定义/u);
+  });
+
+  it("三份定义 ⇒ 那句里的份数是真数出来的（不是写死的「2」）", async () => {
+    const c = await mkDefs([
+      ["one.ts", "export function run() { return 1; }\n"],
+      ["two.ts", "export function run() { return 2; }\n"],
+      ["three.ts", "export function run() { return 3; }\n"],
+      ["use.ts", "import { run } from \"./two\";\nexport const x = run();\n"],
+    ]);
+    const r = await createImpactQueryTool(cacheDir).run({ symbol: "run" }, c);
+    expect(r.output).toMatch(/3 份定义/u);
+    expect(r.output).not.toMatch(/2 份定义/u);
+  });
+
+  it("file 模式同一格：该文件的某个符号在别处也有同名定义 ⇒ 波及清单要说明它混进了别人的调用方", async () => {
+    const c = await twoDefs();
+    const r = await createImpactQueryTool(cacheDir).run({ file: "one.ts" }, c);
+    expect(r.ok).toBe(true);
+    // 前提（也是这条缺陷的正面证据）：one.ts 那份 run 被改，答案里却数进了 useTwo.ts —— 并集把
+    // 另一份定义的调用方算成"我这次改动波及的人"。
+    expect(r.output).toContain("波及 2 个文件");
+    expect(r.output).toMatch(/并集/u);
+    expect(r.output, "要点名是哪个符号有歧义，否则模型还得自己比对").toContain("同名歧义：run");
+  });
+});

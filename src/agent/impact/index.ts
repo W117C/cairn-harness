@@ -265,6 +265,10 @@ export interface FileImpactReport {
   /** 这张图实际收录了多少个文件 —— 读端要靠它自述覆盖面：
    *  被帽截断时「波及 1 个文件」与「图只扫了仓库的一小截」在答案里长一模一样。 */
   graphFiles: number;
+  /** 本文件的定义符号里，哪些**在别的文件也有一份同名定义**（按名字顺序）。
+   *  符号图只按名字连边、不采 import ⇒ 这些符号的向上清单是**各份定义的并集**，
+   *  里面混着"另一份定义的调用方"（假阳性）。读端不点名，模型就无从知道该收窄。 */
+  ambiguousSymbols: string[];
 }
 
 /** 计算单个被编辑文件的影响面。文件不在图内（未扫描/不支持后缀/不存在）→ null（不发事件）。
@@ -285,6 +289,10 @@ export async function fileImpact(
     .sort();
   const all: ImpactSite[] = [];
   for (const sym of symbols) all.push(...upward(graph, sym));
+  // 同名歧义：这个符号在别的文件也有一份定义 ⇒ 它的 upward 清单里混着"那份定义的调用方"。
+  const ambiguousSymbols = symbols.filter(
+    (sym) => new Set((graph.defs.get(sym) ?? []).map((d) => d.file)).size > 1,
+  );
   const up = sortedSites(all);
   const truncated = up.length > IMPACT_SITE_LIMIT;
   return {
@@ -293,6 +301,7 @@ export async function fileImpact(
     up: truncated ? up.slice(0, IMPACT_SITE_LIMIT) : up,
     truncated,
     graphFiles: graph.files.length,
+    ambiguousSymbols,
   };
 }
 
