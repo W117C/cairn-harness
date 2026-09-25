@@ -239,6 +239,51 @@ export function builderCoverage(modelSites: readonly PromiseSite[]): { viaBuilde
   };
 }
 
+/**
+ * 「半句话」这条判据挂在**结构**上的那一半（宽版本挂在措辞上，量出来 103 处里 96 处是散文/事件名/规格说明
+ * ⇒ 被否决，见 `outputs/half-sentence-net-2026-09-26/01-measure.mts`）。
+ *
+ * 静态判得定的只有两种形状：
+ *   ① `byteCapNotice(a, b, nextStep)` 的下一步是**调用方给的参数**——给空串就等于模板里那句变成 `（）`；
+ *      「给了一句在这个消费者身上做不到的动作」判不了（第 69 页那句 glob 就是那种，只能逐面配用例）。
+ *   ② `truncationNotice(n)` 那支老文案**不说少了多少**（第 67 页为 `byteCapNotice` 立的就是这条纪律）
+ *      ⇒ 它每多一个调用方，就多一处"只说截断、不说漏了多少"的面。
+ */
+export interface CapNoticeCall {
+  file: string;
+  fn: string;
+  line: number;
+  builder: string;
+  /** 第三实参的原文；缺省（参数没给）＝ `null`。`byteCapNotice` 之外一律 `null`。 */
+  nextStepArg: string | null;
+  /** 只对 `byteCapNotice` 有意义：下一步是空串字面量。 */
+  emptyNextStep: boolean;
+}
+
+export function scanCapNoticeCalls(files: readonly { path: string; text: string }[]): CapNoticeCall[] {
+  const out: CapNoticeCall[] = [];
+  for (const f of files) {
+    const sf = ts.createSourceFile(f.path, f.text, ts.ScriptTarget.ESNext, true, ts.ScriptKind.TS);
+    const visit = (node: ts.Node): void => {
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
+        (node.expression.text === "byteCapNotice" || node.expression.text === "truncationNotice")) {
+        const third = node.expression.text === "byteCapNotice" ? node.arguments[2] : undefined;
+        out.push({
+          file: f.path,
+          fn: enclosingFnName(node.expression),
+          line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1,
+          builder: node.expression.text,
+          nextStepArg: third === undefined ? null : third.getText(sf),
+          emptyNextStep: third !== undefined && ts.isStringLiteral(third) && third.text.trim() === "",
+        });
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sf);
+  }
+  return out;
+}
+
 // --------------------------------------------------------------------------- 最后一跳
 
 interface Verdict {
@@ -602,6 +647,30 @@ async function main(): Promise<void> {
       ]).length;
       line(extraB > baseB ? "✅" : "❌",
         `自证：追加一次 builder 调用 ⇒ 该支调用点从 ${String(baseB)} 变 ${String(extraB)}（没变 = 结构网恒假）`);
+    }
+
+    // 「半句话」读数——宽版本（按措辞）已否决，这里只留挂在结构上的那一半。
+    {
+      const calls = scanCapNoticeCalls(files);
+      const empty = calls.filter((c) => c.emptyNextStep);
+      const legacy = calls.filter((c) => c.builder === "truncationNotice");
+      const byte = calls.filter((c) => c.builder === "byteCapNotice");
+      console.log("  ⚪ 半句话读数（结构版）：`byteCapNotice` 调用 " + String(byte.length) + " 处｜下一步给了空串的 " +
+        String(empty.length) + " 处｜`truncationNotice`（不说少了多少的那支老文案）调用 " + String(legacy.length) + " 处");
+      for (const c of [...empty, ...legacy].slice(0, 10)) {
+        console.log("      " + c.file + ":" + String(c.line) + " [" + c.fn + "] " + c.builder +
+          " 下一步=" + (c.nextStepArg ?? "（没给）"));
+      }
+      const one = files[0] ?? { path: "p.ts", text: "" };
+      const baseC = scanCapNoticeCalls([one]).length;
+      const extraC = scanCapNoticeCalls([
+        { path: one.path, text: one.text + '\nfunction __probeCap(): string { return byteCapNotice(1, 2, ""); }\n' },
+      ]).length;
+      const extraEmpty = scanCapNoticeCalls([
+        { path: one.path, text: one.text + '\nfunction __probeCap(): string { return byteCapNotice(1, 2, ""); }\n' },
+      ]).filter((c) => c.emptyNextStep).length;
+      line(extraC > baseC && extraEmpty > 0 ? "✅" : "❌",
+        `自证：追加一处 ` + "`byteCapNotice(1, 2, \"\")`" + ` ⇒ 调用点 ${String(baseC)}→${String(extraC)}、空下一步 ${String(extraEmpty)}（都要动才算有分辨力）`);
     }
 
     // 尺自己也要可证伪（规则 63/65/74）：挑一支**已有面**的文件，在内存里凭空多一处承诺，清单必须报更大的数。

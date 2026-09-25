@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   PROMISE_MARKS, RUNNERS, UI_ROOTS, builderCoverage, promiseInventoryFindings,
-  scanBuilderCallSites, scanPromiseSites,
+  scanBuilderCallSites, scanCapNoticeCalls, scanPromiseSites,
   type PromiseSite,
 } from "../scripts/probe-promise-recall";
 import { trackedScriptFiles } from "../scripts/lib/scan-scope";
@@ -146,5 +146,36 @@ describe("结构网（builder）与措辞网各自盖住几格", () => {
     }
     expect(cov.inline.length, "inline 归零说明承诺全搬进 builder 了——那时该重判 #59，别让这条静默绿着").toBeGreaterThan(0);
     expect(cov.inline).not.toContain("src/agent/prune.ts#pruneRecallSuffix");
+  });
+});
+
+// 「半句话」这条判据的两种收法，宽窄各一条，数据都在这一面（第 74 页）。
+// 宽版本（按措辞收 `截断/上限/未列出…`）量出来 107 处里 96 处是散文 ⇒ **否决**，读数留在
+// `outputs/half-sentence-net-2026-09-26/01-measure.mts`；这里钉的是挂在结构上的窄版本。
+describe("半句话的窄版本：byteCapNotice 的下一步实参 / truncationNotice 的老文案", () => {
+  it("下一步给空串 ⇒ 抓到；给了动作串 ⇒ 放过；缺参不猜", () => {
+    const calls = scanCapNoticeCalls([
+      { path: "src/__probe_a.ts", text: 'function f(): string { return byteCapNotice(50, 1000, ""); }' },
+      { path: "src/__probe_b.ts", text: 'function g(): string { return byteCapNotice(50, 1000, "接着读用 offset=2"); }' },
+    ]);
+    expect(calls.map((c) => c.file).sort()).toEqual(["src/__probe_a.ts", "src/__probe_b.ts"]);
+    const a = calls.find((c) => c.file.endsWith("__probe_a.ts"))!;
+    const b = calls.find((c) => c.file.endsWith("__probe_b.ts"))!;
+    expect(a.emptyNextStep).toBe(true);
+    expect(b.emptyNextStep).toBe(false);
+    expect(b.nextStepArg).toContain("offset");
+  });
+
+  it("老文案 `truncationNotice(n)` 单独计数（它不说少了多少，第 67 页立的纪律）", () => {
+    const calls = scanCapNoticeCalls([
+      { path: "src/__probe_c.ts", text: 'function h(): string { truncationNotice(50); return capLspOutput("x", 1); }' },
+    ]);
+    expect(calls.map((c) => c.builder)).toEqual(["truncationNotice"]); // 认不出的名字不算（防把每个函数都收进来）
+  });
+
+  it("盘上两个数都得说得出（0 是读数不是没尺：调用点面必须非空）", () => {
+    const calls = scanCapNoticeCalls(scanned.files);
+    expect(calls.some((c) => c.builder === "byteCapNotice"), "byteCapNotice 的调用点一个都没扫到 = 取料漂了").toBe(true);
+    expect(calls.filter((c) => c.emptyNextStep)).toEqual([]); // 今天合格；哪天有人传空串，这条点名它
   });
 });
