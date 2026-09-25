@@ -1,6 +1,7 @@
 import { open, readFile, readdir, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { assertRealContainment, resolveInWorkspace, truncationNotice, ToolError, type Tool, type ToolResult } from "./base.js";
+import { headWithinBytes } from "./output-ring.js";
 import { prefetchLsp } from "./lsp.js";
 
 // 输出上限 50KB；行截断 2000 字符；默认最多 2000 行。
@@ -116,7 +117,9 @@ export const read_file: Tool = {
     const byteLen = Buffer.byteLength(out, "utf8");
     let byteTruncated = false;
     if (byteLen > READ_LIMIT_BYTES) {
-      out = Buffer.from(out, "utf8").subarray(0, READ_LIMIT_BYTES).toString("utf8");
+      // #54：原先按字节裸切（`Buffer...subarray(0, 50K).toString("utf8")`）会把跨界的汉字切成半个——
+      // 实测 400 行纯中文文件：输出尾部留了一个 U+FFFD 进模型。改吃同一份按码位回退的原语。
+      out = headWithinBytes(out, READ_LIMIT_BYTES);
       byteTruncated = true;
     }
     const notices: string[] = [];

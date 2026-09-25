@@ -2405,3 +2405,30 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
 - 源码卫生：我在同一段里两次把**裸 U+FFFD** 打进源文件（Edit 报成功、`grep` 与肉眼都看不出），
   改用 `String.fromCharCode(0xfffd)` 并以 `node -e` 数 `\ufffd` 复认归零。
 
+
+### 2026-09-26 · 第 68 页：半个 UTF-8 字符走进了模型要读的正文——一处原语、四个消费者、一把 AST 棘轮
+
+`outputs/utf8-half-char-in-model-text-2026-09-26/`。第 67 页改完 lsp 我去写反向用例，顺带问"按字节切还会在哪儿留半个字符"，
+摸出两支从没被判过的取料面。**实测**（不是推测）：`worktreeDiff` 的一份 1.29MB 中文 git diff ⇒ **32 处** U+FFFD，
+同一条命令一次解码到底 ⇒ 0 处；`read_file` 的 50KB 帽裸切 400 行纯中文 ⇒ 尾部留 1 个问号。
+同形还有两支：`hooks.ts`（stdout 要回注给模型）与**输出环自己的 `push`**（`run_shell`/`verify` 都走它）。
+
+- 修法是一原语 + 四消费者：`output-ring.ts` 把已在按码位走的 `headWithin` 导出成 `headWithinBytes`、
+  新增 `createChunkText()`（`StringDecoder` 留住不完整尾字节）、环自己的解码也改吃 decoder；
+  `lsp`（**删掉第 67 页早上我刚写的那段内联回退**——同一条规则不留第二份，哪怕这一份是本轮新写的）、
+  `read_file`、`worktree`、`hooks` 四支全改吃它。顺带修 worktree 的第二处量纲错：
+  `stdout.slice(0, OUTPUT_CAP_BYTES)` 切的是 UTF-16 字符而帽叫 BYTES ⇒ 中文最多交出 3 倍却自称"超 32MB 上限"。
+- **棘轮第一次跑就同时抓到东西和假红**：`ripgrep.ts:91` 被报成 offender，而它是 `String(数字)` 拼装消息、
+  且那条流先 `setEncoding("utf8")`（块边界由 Node 自己管住）⇒ 规则收窄成"只认回调自己的 chunk 参数"，
+  并把那个安全形状固化成用例里的**负控**。教训：一条把安全写法也判红的判据，下一轮就有人放宽它。
+- **豁免按结构 + 覆盖率写成不变量**：`git ls-files -- src` 仍列着并发会话正在删的桌面层（入口 + preload + 9 个 renderer，盘上已无）
+  ⇒ 按根豁免（理由挂 AGENTS.md），并断言 `scanned + skipped === 清单长度`——不许有"既不扫也不豁免"的第三格。
+- **棘轮不覆盖的那格自己点名**：把 `read_file` 改回裸切之后，行为用例红而棘轮仍绿 ⇒ 静态两类不覆盖这一格，
+  立案 **#56**（`ledger.ts` 也写这形状但它按前导字节回退是对的；上静态闸不能把对的写法禁掉）。
+- 当场造红（全量表停下之后）：三处单行突变 ⇒ 4 failed / 6 passed，四条各自对得上靶子；还原 `diff -q` 静默后 10/10 绿。
+  **作废的一轮**：第一次突变把 `push` 行的尾逗号一起吃掉 ⇒ 收集期语法崩、报 `FAIL (0 test)` + `Tests no tests`
+  而退出码非零——"非零退出 + 零 FAIL"不是造红成功，是读数不可信（规则 128 的第三种形态）。
+- 门禁：全量 core test **220 files / 2368 tests 全绿**（第 67 页 219/2358 ⇒ +1 文件 +10 条）；
+  `tools-check` exit 0（35 条）；`typecheck` 0 错；`docs-check` exit 0（`UNVERIFIED=3`）；`e2e` exit 0。
+- 针脚体检 **804 条 / 阻断 8**，与本轮开始前**逐名相同** ⇒ 尽管我把 `headWithin` 改名 `headWithinBytes`，
+  没有针脚因此失效。新用例的变异锚点本轮**未挂**（表在别人手里），与 #50 同批做；挂上之前这 10 条的观察着只有全量表。

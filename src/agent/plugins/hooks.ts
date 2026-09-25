@@ -11,6 +11,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isShellFamily, staticRisk } from "../../permissions/risk";
+import { createChunkText } from "../../tools/output-ring";
 import type { PermissionMode } from "../../permissions/modes";
 import { CC_TOOL_ALIAS } from "../../tools/base";
 import { sanitizedEnv, spawnTracked } from "../../tools/process";
@@ -252,8 +253,10 @@ export function parseHookDecision(stdout: string): ParsedDecision {
 function defaultExec(): HookExecFn {
   return async (command, argv, shell, env, cwd, timeoutSec, stdin) => {
     return await new Promise<HookExecOutcome>((resolveP) => {
-      let stdout = "";
-      let stderr = "";
+      // #55：逐块 `d.toString("utf8")` 会把跨块的多字节字符各变成一个 U+FFFD——hook 的 stdout 是
+      // 要回注给模型的上下文（SessionStart / UserPromptSubmit / PostToolUse），不能让解码器改写字节。
+      const stdoutText = createChunkText();
+      const stderrText = createChunkText();
       let killed = false;
       let settled = false;
       let spawnError: string | undefined;
@@ -261,7 +264,7 @@ function defaultExec(): HookExecFn {
         if (settled) return;
         settled = true;
         handle.dispose();
-        resolveP({ code, stdout, stderr, killed, error: spawnError });
+        resolveP({ code, stdout: stdoutText.text(), stderr: stderrText.text(), killed, error: spawnError });
       };
       // 进程组 + 超时强制收束：hook 命令是插件提供的 shell 串，孙进程持有 stdout 时
       // 'close' 永不触发会让 hook 永久挂起（P1-2）。env 已由 hookEnv 白名单消毒。
@@ -280,8 +283,8 @@ function defaultExec(): HookExecFn {
           done(null);
         },
       });
-      handle.child.stdout?.on("data", (d: Buffer) => { stdout += d.toString("utf8"); });
-      handle.child.stderr?.on("data", (d: Buffer) => { stderr += d.toString("utf8"); });
+      handle.child.stdout?.on("data", (d: Buffer) => { stdoutText.push(d); });
+      handle.child.stderr?.on("data", (d: Buffer) => { stderrText.push(d); });
       // 写完必 end：读 stdin 的钩子（`cat` / `jq -R`）在拿到 EOF 前永不退出，不 end 就是挂到
       // 超时被强杀。反过来不读 stdin 的钩子会先退出 ⇒ 写入侧 EPIPE 直接吞（退出码由 close 给）。
       handle.child.stdin?.on("error", () => {});

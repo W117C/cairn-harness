@@ -33,6 +33,7 @@ import {
   type SymbolInformation,
 } from "vscode-languageserver-protocol/node";
 import { resolveInWorkspace, truncationNotice, ToolError, type Tool, type ToolContext, type ToolResult } from "./base.js";
+import { headWithinBytes } from "./output-ring.js";
 
 export interface LspServerConfig {
   command: string;
@@ -579,15 +580,8 @@ function requirePos(v: unknown, label: string, fallback: number): number {
 export const LSP_OUTPUT_LIMIT_BYTES = 32 * 1024;
 export function capLspOutput(text: string): string {
   if (Buffer.byteLength(text, "utf8") <= LSP_OUTPUT_LIMIT_BYTES) return text;
-  const buf = Buffer.from(text, "utf8").subarray(0, LSP_OUTPUT_LIMIT_BYTES);
-  // 按字节切会留下半个多字节序列（那是非法 UTF-8，进 provider 变问号）⇒ 回退到完整字符边界。
-  let end = buf.length;
-  let cut = buf.subarray(0, end).toString("utf8");
-  while (cut.endsWith("\uFFFD") && end > 0) {
-    end--;
-    cut = buf.subarray(0, end).toString("utf8");
-  }
-  return cut + "\n" + truncationNotice(32);
+  // 缝合处按码位回退交给 `headWithinBytes`：按字节裸切会留下半个多字节序列（→ 第 68 页 #54）。
+  return headWithinBytes(text, LSP_OUTPUT_LIMIT_BYTES) + "\n" + truncationNotice(32);
 }
 
 export const lsp: Tool = {

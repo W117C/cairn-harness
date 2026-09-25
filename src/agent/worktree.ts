@@ -11,6 +11,7 @@ import { readdir, rm, symlink, lstat } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { sanitizedEnv } from "../tools/process.js";
+import { createChunkText, headWithinBytes } from "../tools/output-ring.js";
 
 const exec = promisify(execFile);
 
@@ -45,24 +46,28 @@ function gitRun(cwd: string, args: string[]): Promise<GitRun> {
     const child = spawn("git", args, { cwd, env: sanitizedEnv() });
     // A7（审查）：输出累积设字节上限——worktreeDiff 大变更集可产出数百 MB 全驻内存；超限杀进程。
     const OUTPUT_CAP_BYTES = 32 * 1024 * 1024;
-    let stdout = "";
-    let stderr = "";
     let bytes = 0;
+    // #55：逐块 `String(d)` 会把跨块的多字节字符各变成一个 U+FFFD——实测一份 1.29MB 中文 git diff 有 32 处，
+    // 同一条命令一次解码到底 0 处。补丁正文是给模型读的证据，不能让解码器先改写字节。
+    const outText = createChunkText();
+    const errText = createChunkText();
     child.stdout?.on("data", (d: Buffer) => {
       bytes += d.length;
-      stdout += String(d);
+      outText.push(d);
       if (bytes > OUTPUT_CAP_BYTES) child.kill("SIGKILL");
     });
     child.stderr?.on("data", (d: Buffer) => {
-      stderr += String(d);
+      errText.push(d);
     });
-    child.on("error", (err) => settle({ stdout: "", stderr: String(err), code: 127 }));
+    child.on("error", (e: Error) => settle({ stdout: "", stderr: String(e), code: 127 }));
     child.on("close", (code) => {
       if (bytes > OUTPUT_CAP_BYTES) {
-        settle({ stdout: stdout.slice(0, OUTPUT_CAP_BYTES), stderr: stderr + "\n[truncated: git 输出超 32MB 上限，已截断]", code: code ?? 1 });
+        // 帽按字节判、也要按字节切：原先 `stdout.slice(0, OUTPUT_CAP_BYTES)` 切的是 UTF-16 字符
+        // ⇒ 中文正文最多能交出 3 倍（96MB）却自称"超 32MB 上限"。缝合处由原语按码位回退。
+        settle({ stdout: headWithinBytes(outText.text(), OUTPUT_CAP_BYTES), stderr: errText.text() + "\n[truncated: git 输出超 32MB 上限，已截断]", code: code ?? 1 });
         return;
       }
-      settle({ stdout, stderr, code: code ?? 1 });
+      settle({ stdout: outText.text(), stderr: errText.text(), code: code ?? 1 });
     });
   });
 }
