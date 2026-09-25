@@ -118,7 +118,7 @@ async function drive(opts: {
  *    压缩会以「无可压缩事件（会话在 tail 预算内）」正当拒绝）。
  *  · 裁剪样本要的不是「总量够大」而是**保护区边界在驱动期间越过某条老结果**：
  *    每轮都裁同一批旧结果时，已发出的历史仍逐字纯追加，量不到抖动。
- *    配方由 `outputs/prefix-churn-2026-09-23/probe-prune-recipe.mts` 实跑定出：
+ *    配方由 `scripts/probe-prune-recipe.mts` 实跑定出（2026-09-25 自 `outputs/prefix-churn-2026-09-23/` 迁入）：
  *    每轮 `user_message + tool_call + 20k 字结果 + assistant_message`、**种子只给 2 轮**
  *    （`RECENT_ROUNDS_EXEMPT = 2`）⇒ 替换集从第 3 轮起每轮恰好多一个键（3 → 3,7 → 3,7,11 …）。 */
 async function driveMutating(opts: {
@@ -412,7 +412,12 @@ export const CHURN_RULES: readonly ChurnRule[] = [
   },
   {
     id: "PC7-摊销确实少付账（A/B 同一条会话）",
-    why: "断点位置 = 第一个被摘除的消息，与这次摘掉多少**无关** ⇒ 既然横竖要断一次，就该这一次多压一点。这条判据要的是同一会话上的对照读数，不是「逻辑上应该会少」",
+    why: "断点位置 = 第一个被摘除的消息，与这次摘掉多少**无关** ⇒ 既然横竖要断一次，就该这一次多压一点。这条判据要的是同一会话上的对照读数，不是「逻辑上应该会少」\n" +
+      "    2026-09-26（`outputs/pc7-amortize-tradeoff-2026-09-26/`）：这一格在 HEAD 上就是红的，且红得有内容——" +
+      "摊销把重写从 42,588 降到 34,925 字符（它宣称的那个量），代价是多付一次摘要调用（压缩 5→6 次）。" +
+      "两支都处在「每轮都踩在阈值上」的饱和区：关那支到第 7 对不再压（尾部已到底，只能发一份超量的 12,608 字符请求），" +
+      "开那支还能继续压所以多一次。⇒ 红不是回归也不是抖动，是「省字节 vs 多一次 LLM 调用」这笔交换没裁过；" +
+      "detail 里那两组数（压缩落在第几对 / 逐轮发送量）就是为这一步归因加的。",
     run: async () => {
       const rounds = 8;
       const off = await driveMutating({ kind: "compaction", rounds });
@@ -425,6 +430,9 @@ export const CHURN_RULES: readonly ChurnRule[] = [
           threshold: r.triggers.filter((t) => t === "auto" || t === "threshold").length,
           overflow: r.triggers.filter((t) => t === "overflow").length,
           kinds: r.triggers.join(",") || "无",
+          // 归因用（PC7 红过之后要能说出"多出来的那一次发生在哪儿"）：逐轮发送量 + 压缩落在第几对
+          sent: r.obs.map((o) => o.messages.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0)),
+          firedAt: attrs.map((a, i) => (a.fired.includes("compaction") ? i + 1 : 0)).filter((n) => n > 0),
         };
       };
       const a = tally(off), b = tally(on);
@@ -433,6 +441,8 @@ export const CHURN_RULES: readonly ChurnRule[] = [
         detail: `同一条会话 8 轮：关 ⇒ 压缩 ${String(a.compactions)} 次、重写 ${String(a.rewrote)} 字符；` +
           `开 ⇒ 压缩 ${String(b.compactions)} 次、重写 ${String(b.rewrote)} 字符` +
           `｜触发种类 关=[${a.kinds}] 开=[${b.kinds}]` +
+          `｜压缩落在第几对 关=[${a.firedAt.join(",") || "无"}] 开=[${b.firedAt.join(",") || "无"}]` +
+          `｜逐轮发送量 关=[${a.sent.join(",")}] 开=[${b.sent.join(",")}]` +
           (a.compactions < 2 ? "（关那一支都没连压两次 ⇒ 样本无分辨力，门自身红）" : ""),
       };
     },
