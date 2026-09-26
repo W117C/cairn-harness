@@ -712,14 +712,22 @@ export function agedInFlight(
  *  `scripts/prefix-churn-check.ts` 的驱动器自己造 note，而 PC3 只读 `.length` ⇒ 改成驱动器自己的标记
  *  （同族旧账"读数脚本抄产品文案"）。跑过那道门：与 HEAD 同样只剩 PC7 那条**先于本轮**的待裁红，`--self-test` 臂 0 退出。
  *  现在剩的 3 格全是「方案门」＝生产侧同句抄，等 #24。 */
-/** 帽按**树的形状**登记，各只准降（第 108 页补的这一层，起因是同一次 HEAD 认证）：
- *  桌面层那 209 个文件的删除**一条都没入库**（暂存区只有两条别人的重命名，删除 0 条）⇒ 同一把尺
- *  · 在「core-only 的工作树」里读到 已提交态水位 3、裸名字 0；
- *  · 在「HEAD 的树」里读到 10 与 3（多扫到的那几格全在将被删的桌面测试里）。
- *  把两棵树挤进一个数，要么谎报进度（按 10 放宽），要么把别人的在飞账记到我头上（按 3 红）。
- *  「含桌面层」那一行会在删除入库后失去对象 ⇒ 那时**删这一行**，不许把 core-only 那行调大。 */
+/** 帽按**树的形状**登记，各只准降——但比的是「盘上有就算」的总数（`levelVsCap`），不是"已入库多少"。
+ *
+ * 第 108 页补这一层的起因没变：桌面层那 209 个文件一条都没入库时，同一把尺在两棵树里读到不同的格子数，
+ * 挤进一个数就必有一边说谎。**但它当时把帽挂在了"已提交态"那一半上**，于是帽量的其实是
+ * "这棵树此刻有多少内容已入库"——一个随并发落库**单向上涨**的量，被登记成永久帽。
+ * 第 117 页的试算把这一处打死在现场：整簇落库当天 core-only 那行读 10 > 3（`只准降 ⇒ 必红`），
+ * 而那 7 格一直在盘上，只是住在带未提交改动的文件里。
+ *
+ * 现值两行都按"改判据位置后重测"取（复算：`node --import tsx scripts/prose-needle-scan.ts` 三棵树各一次）：
+ *  · core-only 顶包 10 ＝ 主树 `3 已提交 ＋ 6 在飞 ＝ 9` ∪ 落库后新入面的 `tests/prompt-cost.test.ts:47`
+ *    （名单逐格对过：只多这一格，见第 118 页）；裸名字 2 ＝ 两半之和。
+ *  · 含桌面层 10 ＋ 3：多出的那 1 格裸名字住在将被删的桌面测试里（`medium` 那一族，第 108 页已点名）。
+ * 这一行的**抬高**只此一次，凭据是"改名判位置"不是"放宽判据"：新格数全部来自既有的盘上内容，
+ * 没有一格是本轮新造出来的顶包。**此后仍只准降**。 */
 export const SCOPE_CEILINGS = {
-  "core-only": { multiCopy: 3, bareName: 0 },
+  "core-only": { multiCopy: 10, bareName: 2 },
   "含桌面层": { multiCopy: 10, bareName: 3 },
 } as const;
 export type TreeScope = keyof typeof SCOPE_CEILINGS;
@@ -728,6 +736,56 @@ export type TreeScope = keyof typeof SCOPE_CEILINGS;
  *  判据面＝`src/renderer` 在不在盘上——AGENTS.md 把"本 checkout 没有 renderer"写成了 core-only 的定义。 */
 export function treeScopeOf(hasRendererFace: boolean): TreeScope {
   return hasRendererFace ? "含桌面层" : "core-only";
+}
+
+/** 棘轮比的到底是哪个数——第 117 页改的就是这一处判据位置。
+ *
+ * 旧写法拿「已提交态」那一半去比帽，理由是"别人并发改动推不动我的棘轮"。它漏了代价：
+ * 那 7 条顶包**一直就在盘上**，只是住在带未提交改动的文件里；那笔一入库，它们就从 flying 挪进 committed
+ * ⇒ **总数一字未变，红却晚了两拍**，而帽是按"此刻有多少内容已入库"登记的（3），于是整簇落库当天必红。
+ * 实测（三棵树一把尺）：主树 `3 已提交 ＋ 7 在飞`，试算树（core-only 且已入库）`10 ＋ 0`，认证 HEAD 树 `10 ＋ 3`
+ * ——前两个是同一批格子的两种分法。所以"分树登记"这个方向留着（宽窄两行确实差一格裸名字），
+ * 但帽比的是**盘上有就算**的总数，`已提交/在飞` 降级成"谁把它推上去的"这一条解释。
+ *
+ * 纯函数两侧都要钉用例（规则 108 同族）：只钉 `over` 的一边，`committed + flying` 写反成 `committed - flying`
+ * 照样在"全在飞"这种输入下绿着。 */
+export function levelVsCap(committed: number, flying: number, cap: number): { total: number; over: boolean } {
+  const total = committed + flying;
+  return { total, over: total > cap };
+}
+
+/** 两处帽比较的**唯一决策点**：CLI 取它的两条文案，判卷也调它——判卷不许自己再算一遍。
+ *
+ * 为什么要收成这一个函数：先写的对账用例在测试里调 `levelVsCap(r.committedMultiCopy, r.inFlightMultiCopy, …)`
+ * 断 `over === false`，看着像钉住了接线；实跑造红（把 CLI 那行换回旧的 `r.committedMultiCopy > cap`）
+ * **60 条全绿**——测试自己算的那份与 CLI 那份各不相干，比较退回半边口径时两边都不会红。
+ * 现在 CLI 与判卷吃同一个函数的同一次调用，改比较位置＝两侧同时红。
+ * 两条文案各自留在原来的判定槽里（空载 / 数名不同源那两条判据的顺序不变），只是都由这里产出。 */
+export function ceilingBreaches(r: {
+  scope: TreeScope;
+  committedMultiCopy: number;
+  inFlightMultiCopy: number;
+  bareName: readonly { file: string; line: number; field: string; needle: string }[];
+  inFlightBareName: readonly { file: string; line: number; field: string; needle: string }[];
+}): { multi: string; bare: string } {
+  const cap = SCOPE_CEILINGS[r.scope];
+  const named = (v: { file: string; line: number; field: string; needle: string }): string =>
+    v.file + ":" + String(v.line) + " ." + v.field + "「" + v.needle + "」";
+  const multi = levelVsCap(r.committedMultiCopy, r.inFlightMultiCopy, cap.multiCopy);
+  const bare = levelVsCap(r.bareName.length, r.inFlightBareName.length, cap.bareName);
+  return {
+    multi: multi.over
+      ? "❌ 水位上涨：顶包候选 " + String(multi.total) + "（已提交 " + String(r.committedMultiCopy) +
+        " ＋ 在飞 " + String(r.inFlightMultiCopy) + "）> 登记的 " + String(cap.multiCopy) +
+        "（树＝" + r.scope + "；只准下调，降法见任务 #20。两半都算账——在飞那半不是豁免，只是「谁把它推上去的」这条解释）"
+      : "",
+    bare: bare.over
+      ? "❌ 针脚是个裸名字的顶包格 " + String(bare.total) + "（已提交 " + String(r.bareName.length) +
+        " ＋ 在飞 " + String(r.inFlightBareName.length) + "）> 登记的 " + String(cap.bareName) +
+        "（树＝" + r.scope + "）⇒ 把名字放进散文上下文里断言（变量拼 ⇒ 尺不收它）：" +
+        [...r.bareName, ...r.inFlightBareName].map(named).join("、")
+      : "",
+  };
 }
 
 export interface ScanReport {
@@ -985,12 +1043,9 @@ function main(): void {
     process.exitCode = 1;
     return;
   }
-  const cap = SCOPE_CEILINGS[r.scope];
-  if (r.committedMultiCopy > cap.multiCopy) {
-    console.error(
-      "❌ 水位上涨：已提交态顶包候选 " + String(r.committedMultiCopy) + " > 登记的 " + String(cap.multiCopy) +
-        "（树＝" + r.scope + "；只准下调，降法见任务 #20。在飞文件不计入这一格，所以这不是并发噪声）",
-    );
+  const breach = ceilingBreaches(r);
+  if (breach.multi !== "") {
+    console.error(breach.multi);
     process.exitCode = 1;
     return;
   }
@@ -1012,13 +1067,9 @@ function main(): void {
   // 裸名字针脚（第 105 页）：这一族的"副本"是 import 路径与别处的工具清单，一条都喂不进被断言的那个字段，
   // 所以它既不是副本缺陷（改代码没用）也换不出更好的词（下一个名字照样裸）——唯一的修法是把名字放进散文上下文里派生断言。
   // 之所以做成**红**而不是列表：水位管的是"改一处不会响"，管不到"这一格按现在的收法根本修不了"；
-  // 留成软列表就等于让 35 处噪声永久挂在单上。在飞文件不参与（走 `inFlightBareName`，同 drift 那套分法）。
-  if (r.bareName.length > cap.bareName) {
-    console.error(
-      "❌ 针脚是个裸名字的顶包格 " + String(r.bareName.length) + " > 登记的 " + String(cap.bareName) +
-        "（树＝" + r.scope + "）⇒ 把名字放进散文上下文里断言（变量拼 ⇒ 尺不收它）：" +
-        r.bareName.map((v) => v.file + ":" + String(v.line) + " ." + v.field + "「" + v.needle + "」").join("、"),
-    );
+  // 留成软列表就等于让 35 处噪声永久挂在单上。在飞那半**同样算账**（第 117 页）：它只用来点名是谁推上去的。
+  if (breach.bare !== "") {
+    console.error(breach.bare);
     process.exitCode = 1;
     return;
   }
