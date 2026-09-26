@@ -163,6 +163,17 @@ const SIDECHAT_DEMO_FIXTURE = join(DEMO_DIR, "sidechat-demo.jsonl");
 const VITEST_DIRECT =
   'node "' + join(ROOT, "node_modules", "vitest", "vitest.mjs") + '" run --pool=threads';
 
+/** 沙箱里要改写成直连 vitest 的命令写法。原先三处消费者各抄一行字面量（worker 与验证门是全表，
+ *  模型那条 `run_shell` 只认 `pnpm test`）——同族副本还分两种宽度，两边都零观察者（第 141 页复认针脚歧义时看见）。
+ *  收成一份之后，宽度差落成**两个具名名单**：少的那一条是「要不要代替模型改写它自己下的命令」这个裁决，不是漂。 */
+export const SANDBOX_TEST_ALIASES: readonly string[] = ["pnpm test", "pnpm run test"];
+/** 模型自己下的 `run_shell` 只改这一条惯用法（冻结剧本用的那个），其余逐字不动。 */
+export const MODEL_SHELL_TEST_ALIASES: readonly string[] = ["pnpm test"];
+
+export function mapSandboxTestCommand(command: string, aliases: readonly string[] = SANDBOX_TEST_ALIASES): string {
+  return aliases.includes(command.trim()) ? VITEST_DIRECT : command;
+}
+
 interface Session {
   mode: PermissionMode;
   askGate: AskGate | null;
@@ -268,7 +279,7 @@ async function orchestratorExtras(sandbox: SandboxStatus | null = null): Promise
 function workerShellRunnerFor(sandbox: SandboxStatus | null): OrchestratorOptions["workerShell"] {
   if (sandbox === null || !sandbox.available) return undefined;
   return async (command, ctx) => {
-    const mapped = command.trim() === "pnpm test" || command.trim() === "pnpm run test" ? VITEST_DIRECT : command;
+    const mapped = mapSandboxTestCommand(command);
     return await runInSandbox(mapped, { cwd: ctx.workspace, network: "deny" });
   };
 }
@@ -477,7 +488,7 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
       }
       if (name === "run_shell" && s.sandbox !== null && s.sandbox.available) {
         const command = typeof args.command === "string" ? args.command : "";
-        const mapped = command.trim() === "pnpm test" ? VITEST_DIRECT : command;
+        const mapped = mapSandboxTestCommand(command, MODEL_SHELL_TEST_ALIASES);
         // 缺省 deny：profile 里不写任何 network 规则 ⇒ 闭箱即全断网（sandbox:check ④ 钉着）。
         // allow 支的取用条件全部住在 networkProfileFor（网络放行永不免批）。
         const network = networkProfileFor({ wantsNetwork, asked: d.verdict === "ask", approved: humanApproved });
@@ -1190,7 +1201,7 @@ function createProvider(
 export function verifyExec(sandbox: SandboxStatus | null, run: typeof runInSandbox = runInSandbox): ExecFn {
   if (!sandbox?.available) return defaultExec;
   return async (command, cwd, timeoutMs) => {
-    const mapped = command.trim() === "pnpm test" || command.trim() === "pnpm run test" ? VITEST_DIRECT : command;
+    const mapped = mapSandboxTestCommand(command);
     // 超时同样要穿过去：沙箱是发货缺省路径，这里不接就等于语言探测的 300s 白给。
     const res = await run(mapped, { cwd, ...(timeoutMs ? { timeoutMs } : {}) });
     // 归因不能只长在非沙箱那一支：沙箱是发货缺省路径，少这一半就等于"环境红只在降级时才不冤枉模型"。

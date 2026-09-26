@@ -2124,12 +2124,28 @@ const MUTATIONS = [
     id: "verify-exec-pnpm-mapping-lost",
     src: "src/main/agent-runner.ts",
     test: "tests/verify-exec-sandbox.test.ts",
-    desc: "丢掉「沙箱内 pnpm 映射为直连 vitest」（坑三）⇒ 冻结剧本里的 pnpm test 在 Seatbelt 下必然起不来，验证门空转。针脚吃到 verifyExec 那行 return 才唯一：worker 那条路（workerShellRunnerFor）有一行逐字相同的映射，但它没导出、当前零观察者（第 140 页复认记为缺口，不假称有人守）。",
-    apply: (s) => s.replace(
-      "  return async (command, cwd, timeoutMs) => {\n    const mapped = command.trim() === \"pnpm test\" || command.trim() === \"pnpm run test\" ? VITEST_DIRECT : command;",
-      "  return async (command, cwd, timeoutMs) => {\n    const mapped = command;",
-    ),
+    desc: "丢掉「沙箱内 pnpm 映射为直连 vitest」（坑三）⇒ 冻结剧本里的 pnpm test 在 Seatbelt 下必然起不来，验证门空转。第 141 页把三处内联副本收成一份 `mapSandboxTestCommand`，针脚跟着搬到那一份身上——现在摘掉它＝worker／验证门／模型 run_shell 三条路一起坏，一条锚点管得住三处。",
+    apply: (s) => s.replace("  return aliases.includes(command.trim()) ? VITEST_DIRECT : command;", "  return command;"),
     expectFail: "pnpm test / pnpm run test 映射为直连 vitest；其它命令逐字不动",
+  },
+  {
+    id: "sandbox-model-alias-widened",
+    src: "src/main/agent-runner.ts",
+    test: "tests/verify-exec-sandbox.test.ts",
+    desc: "把模型那条 `run_shell` 的窄名单悄悄放宽成全表 ⇒ 我们开始替模型改写它自己下的命令（这条差集是裁决，不是漂：改的是「同意范围」那一族）",
+    apply: (s) => s.replace('export const MODEL_SHELL_TEST_ALIASES: readonly string[] = ["pnpm test"];', "export const MODEL_SHELL_TEST_ALIASES: readonly string[] = [...SANDBOX_TEST_ALIASES];"),
+    expectFail: "窄名单逐字钉住，且与全表的双向差集都要点名（加一条进窄表＝绕开裁决给模型改命令）",
+  },
+  {
+    id: "sandbox-mapping-copy-reintroduced",
+    src: "src/main/agent-runner.ts",
+    test: "tests/verify-exec-sandbox.test.ts",
+    desc: "worker 那一支退回内联三元 ⇒ 同一谓词 again 两份副本，下一轮改动只会漂其中一份（第十三族；第 141 页复认针脚歧义时就是被这三行逐字相同的副本坑到的）",
+    apply: (s) => s.replace(
+      "  return async (command, ctx) => {\n    const mapped = mapSandboxTestCommand(command);",
+      '  return async (command, ctx) => {\n    const mapped = command.trim() === "pnpm test" || command.trim() === "pnpm run test" ? VITEST_DIRECT : command;',
+    ),
+    expectFail: "消费者不再各自内联那句三元：`? VITEST_DIRECT : command` 全文件只剩映射器里那一处",
   },
   {
     id: "verify-exec-reports-internal-command",
