@@ -111,7 +111,9 @@ describe("goal 模式端到端（真入口，缺省零行为）", () => {
     const stops = evts.filter((e) => e.type === "goal_stopped");
     expect(stops.length).toBe(1);
     const reason = stops[0]?.type === "goal_stopped" ? stops[0].reason : "";
-    expect(reason).toContain("无人值守");
+    // 收**这一支独有的整句**，不收裸「无人值守」（7 处副本：定时任务、审批门、协议注释里都写着这个词，
+    // 别的文案撞上它就替一条没走的分支作证——第 95 页）。
+    expect(reason).toContain("无人值守 run 不自动续跑：这条路上审批一律");
     // 顺序即优先级：这条理由**不许**被"没写过任何文件"那条判据理由顶掉——顶掉了就说明
     // 无人值守的 run 仍在按判据决定要不要再烧一轮（正是要拦的事）。
     expect(reason).not.toContain("没有写过任何文件");
