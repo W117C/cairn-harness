@@ -4082,3 +4082,25 @@ git 调用由 `scripts/mutate-verify.mjs` 注入 ⇒ 本模块不自己 spawn �
   中间那次「基线就不是全绿」不是误伤：它报的正是上面那条 fixture 假路径，第一次跑变异时判卷在 HEAD 里还没修好。
 - 代价（这把尺新口径）：整尺 0.28s（451 份正文一次 `cat-file --batch`）；`head-cert` 里接的那半同价；全量判卷 237 files 在 `60cc637` 绿，
   `c2f05fa` 只动判卷 fixture ⇒ 该文件单跑 32 passed。
+
+### 2026-09-27 · 第 136 页 · 门表自己也得是**那一笔**的门表：`head-cert` 现在印「这道门在那一笔上根本跑不起来」
+
+想登记第 24 道门（#12）之前先复核第 133 页那条读数，结果先抓到的是**我自己的口径**：
+我拿**盘上**那份已裁剪的 26 条 `GATES`（`import` 进来的活数组＝别人在飞的改动）去比 **HEAD** 的 `package.json` scripts ⇒ 读出「一条不缺」。
+同一件事按同源口径重算：**HEAD 的门表 37 道里 11 道没有同名 script**，而那 11 道正是桌面层残留
+（`ipc:check`、`ipc-reachability-check`、`build`、`panels-check`、`providers-check`、`sidechat-check`、`agents-check`、`schedule-check`、`commercial-check`、`renderer-arch-check`、`a11y-check`）
+⇒ 第 133 页那条读数仍然成立，#12 的阻塞**没解**（裁剪还在别人手里）；而这次复核顺手补上了一直没人守的那一格。
+
+- **这一格为什么是「没观察者」**：`gate-check` 比的是盘上 manifest × 盘上 package.json——两边一起漂就一起绿；
+  HEAD 侧要看得见，以前只有整棵认证树跑一遍。现在 `head-cert` 在跑 typecheck 之前自己印一行（实测 `3a80a64`）：
+  `门表：37 道，其中该笔 package.json 没有同名 script 的 11 道：…… ⇒ **「整表绿」在这一笔上不可能成立**（这些门 spawn 就失败）`
+- 判据收成纯函数 `headGateTableIntegrity(manifestSrc, pkgJsonText)`（`scripts/lib/head-cert-deps.ts`）：**两头吃文本、同源同 rev**，
+  绝不吃 import 进来的活数组——这条口径本身钉成了接线断言（`expect(src.includes('from "./gate-manifest"')).toBe(false)`）。
+- 三态照旧：任一头没取到 / `GATES` 数组读不出来 / 坏 JSON ⇒ `null` ⇒ 印「门表未取」，**不等于门表完整**（规则 92/210）。
+- 取料的两条实测口径：只认「整行就是一个带引号的名字」⇒ 注释里的 `"build"`、`"ghost"` 不算门（负控配在同一个用例里）；
+  但**行尾注释要容忍**——不容忍就把真门静默丢掉，丢的那一位正好是没人看的观察者。
+- 判卷 17 → **23 passed**（`tests/head-cert-deps.test.ts`，新增 6 条：齐／缺指名、注释负控、行尾注释、三态、真表自证、接线）；
+  锚点 816 → **821**（5 条：`pkgText.out` 换成 HEAD 字面量、manifest 换成 HEAD 字面量、摘掉行尾注释容忍、
+  `withoutScript` 永远读空、没取到当作「零缺失」）；typecheck 0；认证快面本次实测 12.0s（`--skip-test`），worktree 已回收（规则 120）。
+- 代价与位置：这一行是两次 `git show`，秒级以下；它不改本次退出码——门表烂不影响 typecheck/全量的读数，
+  它影响的是**「整表绿」这句话能不能说**（规则 211：凭证不许超卖）。

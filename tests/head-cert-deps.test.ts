@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { certLevel, declaredDeps, installedDeps, missingDeclaredDeps } from "../scripts/lib/head-cert-deps";
+import { certLevel, declaredDeps, headGateTableIntegrity, installedDeps, missingDeclaredDeps } from "../scripts/lib/head-cert-deps";
 
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 const listWorktrees = (cwd: string): string[] =>
@@ -132,5 +132,71 @@ describe("认证流程里的 import 面那一行（接线）", () => {
   it("取不到时必须出声「未取」，不许把空悬空当成自洽（规则 210 那一族）", () => {
     expect(src.includes("import 面未取")).toBe(true);
     expect(src.includes("不等于 import 面自洽")).toBe(true);
+  });
+});
+
+/** 第 136 页：门表本身在**那一笔**上完不完整。起因是想登记第 24 道门时看清了 HEAD 的门表
+ *  ——37 道里 11 道连同名 script 都没有（桌面层的门名还留在表里，script 早被摘走）⇒「整表绿」在那一笔上
+ *  不可能成立，而**没有任何观察者**：`gate-check` 拿盘上那份 manifest 比盘上那份 package.json，两边一起漂就一起绿。
+ *  我自己还先踩了一次混口径：拿**盘上**已裁剪的 26 条去比 **HEAD** 的 scripts ⇒ 当场读出「一条不缺」。
+ *  ⇒ 判据吃**文本**、两头同源，绝不吃 import 进来的活数组。 */
+describe("headGateTableIntegrity：门表与 scripts 必须取自同一笔", () => {
+  const manifest = (names: readonly string[]): string =>
+    `export const GATES: readonly string[] = [\n${names.map((n) => `  "${n}",`).join("\n")}\n];`;
+  const pkgWith = (names: readonly string[]): string =>
+    JSON.stringify({ scripts: Object.fromEntries(names.map((n) => [n, "node x.ts"])) });
+
+  it("齐的读空、缺的按表序指名", () => {
+    const ok = headGateTableIntegrity(manifest(["typecheck", "test"]), pkgWith(["typecheck", "test"]));
+    expect(ok).not.toBeNull();
+    expect(ok?.gates).toEqual(["typecheck", "test"]);
+    expect(ok?.withoutScript).toEqual([]);
+    const bad = headGateTableIntegrity(manifest(["typecheck", "ipc:check", "build"]), pkgWith(["typecheck"]));
+    expect(bad?.withoutScript).toEqual(["ipc:check", "build"]);
+  });
+
+  it("注释里的引号词不算门；真门名带行尾注释要照样收（少一位观察者就是静默失明）", () => {
+    const src = [
+      "export const GATES: readonly string[] = [",
+      '  "typecheck",',
+      '  // 这条门管的是 "build" 那一类，别照抄',
+      '  "docs-check", // 文档预算（旧注释里写过 "ghost"）',
+      "];",
+    ].join("\n");
+    const got = headGateTableIntegrity(src, pkgWith(["typecheck", "docs-check"]));
+    expect(got?.gates).toEqual(["typecheck", "docs-check"]);
+    expect(got?.withoutScript).toEqual([]);
+  });
+
+  it("三态：任一头没取到 / 数组读不出来 / 坏 JSON ⇒ null（没尺，不许读成「一条不缺」）", () => {
+    expect(headGateTableIntegrity(null, pkgWith(["a"]))).toBeNull();
+    expect(headGateTableIntegrity(manifest(["a"]), null)).toBeNull();
+    expect(headGateTableIntegrity("const NOT_EXPORTED = 1;", pkgWith(["a"]))).toBeNull();
+    expect(headGateTableIntegrity(manifest(["a"]), "{ not json")).toBeNull();
+  });
+
+  it("真表自证：HEAD 那份读得出东西，缺的那一撮必须是门表的子集", () => {
+    const atHead = (p: string): string => execFileSync("git", ["show", "HEAD:" + p], { cwd: repoRoot, encoding: "utf8" });
+    const got = headGateTableIntegrity(atHead("scripts/gate-manifest.ts"), atHead("package.json"));
+    expect(got).not.toBeNull();
+    expect(got?.gates).toContain("typecheck");
+    expect(got?.gates).toContain("test");
+    expect(got!.gates.length).toBeGreaterThan(20);
+    for (const g of got!.withoutScript) expect(got!.gates).toContain(g);
+  });
+});
+
+describe("认证流程里的门表那一行（接线）", () => {
+  const src = readFileSync(join(repoRoot, "scripts", "head-cert.ts"), "utf8");
+
+  it("两头都取自被认证的那一笔：绝不许 import 盘上那份活数组", () => {
+    expect(src.includes("headGateTableIntegrity(gateSrc.status === 0 ? gateSrc.out : null, pkgText.out)")).toBe(true);
+    expect(src.includes('run(MAIN, "git", ["show", TARGET + ":scripts/gate-manifest.ts"])')).toBe(true);
+    expect(src.includes('from "./gate-manifest"')).toBe(false);
+  });
+
+  it("取不到时出声「门表未取」，不等于门表完整", () => {
+    expect(src.includes("门表未取")).toBe(true);
+    expect(src.includes("不等于门表完整")).toBe(true);
   });
 });

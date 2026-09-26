@@ -6977,6 +6977,46 @@ const MUTATIONS = [
     apply: (s) => s.replace("const importFace = collectHeadEdges(TARGET);", 'const importFace = collectHeadEdges("HEAD");'),
     expectFail: "必须问被认证的 rev（TARGET），不是问 HEAD 字面量、也不是问盘",
   },
+  {
+    id: "head-cert-gate-table-packages-ask-target",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "认证别的 rev 时门表比的是「那一笔的 manifest × HEAD 的 scripts」⇒ 拿最新提交的 script 清单去证明旧提交能跑，混口径读出来永远「一条不缺」（第 136 页我自己就这么读错过一次）",
+    apply: (s) => s.replace("headGateTableIntegrity(gateSrc.status === 0 ? gateSrc.out : null, pkgText.out)", 'headGateTableIntegrity(gateSrc.status === 0 ? gateSrc.out : null, run(MAIN, "git", ["show", "HEAD:package.json"]).out)'),
+    expectFail: "两头都取自被认证的那一笔：绝不许 import 盘上那份活数组",
+  },
+  {
+    id: "head-cert-gate-table-manifest-ask-target",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "另一头同理：manifest 写成 HEAD 字面量 ⇒ 用现在的门表名去比那一笔的 scripts，改过门名的那一笔会被读成「门表里没这道门」",
+    apply: (s) => s.replace('run(MAIN, "git", ["show", TARGET + ":scripts/gate-manifest.ts"])', 'run(MAIN, "git", ["show", "HEAD:scripts/gate-manifest.ts"])'),
+    expectFail: "两头都取自被认证的那一笔：绝不许 import 盘上那份活数组",
+  },
+  {
+    id: "head-gate-trailing-comment-drops-gate",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "门名行不许带行尾注释：那一行整体匹配不上 ⇒ 真门被静默丢掉，门表读窄了没人说（少一位观察者就是静默失明）",
+    apply: (s) => s.replace('(?:\\/\\/.*)?$', "$"),
+    expectFail: "注释里的引号词不算门；真门名带行尾注释要照样收",
+  },
+  {
+    id: "head-gate-without-script-always-empty",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "「缺 script 的那些」永远读空 ⇒ 这道尺退化成一条只会说「门表完整」的装饰（第 131 页那族「判据在、观察者不在」）",
+    apply: (s) => s.replace("gates.filter((g) => !scripts.has(g))", "gates.filter(() => false)"),
+    expectFail: "齐的读空、缺的按表序指名",
+  },
+  {
+    id: "head-gate-unread-manifest-counts-as-complete",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "取不到料时交一份「空门表、零缺失」⇒ 没尺被读成尺说没问题（规则 92/210 那一族）",
+    apply: (s) => s.replace("if (manifestSrc === null || pkgJsonText === null) return null;", "if (manifestSrc === null || pkgJsonText === null) return { gates: [], withoutScript: [] };"),
+    expectFail: "三态：任一头没取到 / 数组读不出来 / 坏 JSON ⇒ null（没尺，不许读成「一条不缺」）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

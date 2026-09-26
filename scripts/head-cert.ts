@@ -17,7 +17,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { certLevel, declaredDeps, missingDeclaredDeps } from "./lib/head-cert-deps";
+import { certLevel, declaredDeps, headGateTableIntegrity, missingDeclaredDeps } from "./lib/head-cert-deps";
 import { checkHeadImportFace, collectHeadEdges, findDanglingImports } from "./head-import-face";
 
 const argv = process.argv.slice(2);
@@ -137,6 +137,17 @@ if (importFace === null) {
   const face = checkHeadImportFace(dang);
   say(`import 面：${String(importFace.edges.length)} 条边｜悬空 ${String(dang.length)}（其中存量已豁免 ${String(dang.length - face.filter((f) => f.kind === "dangling").length)}）`);
   for (const f of face) say(`  ${f.kind === "dangling" ? "❌" : "⚠️"} ${f.target} — ${f.detail}`);
+}
+
+// ②c 门表完整性（同样问 TARGET：门表与 scripts 两头都要取自**同一笔**，混口径会读出假「一条不缺」）。
+const gateSrc = run(MAIN, "git", ["show", TARGET + ":scripts/gate-manifest.ts"]);
+const table = headGateTableIntegrity(gateSrc.status === 0 ? gateSrc.out : null, pkgText.out);
+if (table === null) {
+  say("⚠️ 门表未取（git 读不到那一笔的 scripts/gate-manifest.ts）⇒ 不等于门表完整");
+} else {
+  const bad = table.withoutScript;
+  say(`门表：${String(table.gates.length)} 道，其中该笔 package.json 没有同名 script 的 ${String(bad.length)} 道`
+    + (bad.length === 0 ? "" : `：${bad.join("、")} ⇒ **「整表绿」在这一笔上不可能成立**（这些门 spawn 就失败）`));
 }
 
 // ③ 跑门（逐条降级：typecheck 跑不起来也不吞掉 test 的读数）。

@@ -55,3 +55,32 @@ export function certLevel(skipTest: boolean, why: string): { level: "full" | "ha
   }
   return { level: "half", ok: true, label: "半把尺：只 typecheck ⇒ **不构成这棵树的全量绿**｜原因：" + reason };
 }
+
+/** 门表在**被认证那一笔**上完不完整：`GATES` 列了、而那笔的 package.json 没有同名 script ⇒ 这道门一 spawn 就失败。
+ *
+ *  动因（第 136 页）。想登记第 24 道门时被提交前的归属检查拦下，顺手才看见：HEAD 的门表 37 道里
+ *  **11 道连 script 都没有**（桌面层迁移把门留在表里、把 script 摘了，两边分在两笔里）⇒「整表绿」在那一笔上
+ *  根本不可能成立，而**这件事没有任何观察者**：`gate-check` 拿盘上那份 manifest 比盘上那份 package.json，
+ *  两边一起漂就一起绿。
+ *  我自己还先踩了一次口径坑：拿**盘上**已裁剪的 26 条去比 **HEAD** 的 scripts ⇒ 读出「一条不缺」。
+ *  ⇒ 判据两头都必须来自同一个 rev，所以这里吃**文本**，绝不吃 import 进来的活数组。
+ *
+ *  三态（规则 92）：任一输入没取到、或数组读不出来 ⇒ `null`＝**没取到**，不等于"门表完整"。 */
+export function headGateTableIntegrity(manifestSrc: string | null, pkgJsonText: string | null): { gates: string[]; withoutScript: string[] } | null {
+  if (manifestSrc === null || pkgJsonText === null) return null;
+  const body = /export const GATES[\s\S]*?=\s*\[([\s\S]*?)\n\]/.exec(manifestSrc)?.[1];
+  if (body === undefined) return null;
+  // 只认"整行就是一个带引号的名字（可带行尾注释）"：注释里出现的引号词不许算门（第 125 页 `from "…"` 那一族同一个病），
+  // 而真门名后面跟人写的行尾说明必须照样收（漏一条＝静默少一位观察者）。
+  const gates = [...new Set(body.split("\n")
+    .map((l) => /^\s*["']([^"']+)["']\s*,?\s*(?:\/\/.*)?$/.exec(l)?.[1])
+    .filter((n): n is string => n !== undefined))];
+  let scripts: Set<string>;
+  try {
+    const pkg = JSON.parse(pkgJsonText) as { scripts?: Record<string, unknown> };
+    scripts = new Set(Object.keys(pkg.scripts ?? {}));
+  } catch {
+    return null;
+  }
+  return { gates, withoutScript: gates.filter((g) => !scripts.has(g)) };
+}
