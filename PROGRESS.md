@@ -4001,3 +4001,23 @@ git 调用由 `scripts/mutate-verify.mjs` 注入 ⇒ 本模块不自己 spawn �
 - 顺手收的一笔残留：回收我自己那棵已用完的认证树 `.worktrees/head-cert-fb3f2d6`（第 124 页那次跑的，规则 120）。
   另两棵**没动**：`head-cert-25e02b0` 干净但不是我建的；`head-cert-d2958b2` 里有 1 项在飞改动
   （`M scripts/prose-needle-scan.ts`）⇒ 那是别人的草稿，按仓规不代删、不代收。
+### 2026-09-27 · 第 133 页 · 想把 0.2 秒那把尺接进门，被提交前的逐文件归属检查拦下：`gate-manifest.ts` 是别人在飞的表面
+
+**先说这笔没做成**：新门 `head-import-check` 的两处改动（package.json ＋ GATES 名单）我写完也测过了，
+但 `git diff --numstat` 在暂存后显示 `scripts/gate-manifest.ts` 是 **4 增 / 28 删**——我只加了 4 行，
+那 28 删是**别人未提交的核心化裁剪**（HEAD 的门表 37 道，他们裁到 23 道）。
+`git commit -- <paths>` 是 `--only` 语义＝取工作树，所以那一笔会把**他们的裁剪连同我的四行一起落库**，
+提交说明却只写着"新增一道门"——正是第 126 页那 166 条锚点进 HEAD 的同一条路。⇒ 两处改动都已还原
+（`package.json` 现干净、`gate-manifest.ts` 回到只有他们那 28 删），登记挂到任务 #12，等那片表面入库后再做。
+
+- 归因过程也记一下，因为它一度把我自己骗了：我先跑 `git status --porcelain -- scripts/gates.ts scripts/gate-check.ts package.json`
+  看到干净就判定"这张表我是 writer"——**而我要改的是 `gate-manifest.ts`，它不在我问过的那三个里**。
+  ⇒ 归属问题只能问**我要改的那个路径**，不能问它的邻居（同第 121 页「grep 单文件没命中≠没接线」的镜像）。
+- 顺手量到一条新的 HEAD 现态（读 HEAD 的 `gate-manifest.ts` ＋ HEAD 的 `package.json`）：
+  **门表 37 道里 11 道在 HEAD 里根本没有对应 script**（`ipc:check`、`ipc-reachability-check`、`build`、`panels-check`、
+  `providers-check`、`sidechat-check`、`agents-check`、`schedule-check`、`commercial-check`、`renderer-arch-check`、`a11y-check`）。
+  ⇒ 对任务 #4 的说法要改：HEAD 的整表不是"跑起来红"，而是**跑不动**——桌面层那笔（`69fbb0d`）删了脚本却没删门表，
+  而这条缺口今天正由别人那笔在飞的裁剪补上。所以"每笔付 69 秒验 HEAD"这个问题要等他们入库再裁，
+  现在裁是在一份跑不动的表上谈代价。
+- 已落地的那部分不依赖这笔：尺本体（`scripts/head-import-face.ts` ＋ 12 条判卷 ＋ 4 条锚点）已在 `238aa8b`，
+  现在就能 `node --import tsx scripts/head-import-face.ts` 手跑（0.2s；整道门含 tsx 启动实测 1.31s）。
