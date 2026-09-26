@@ -20,6 +20,7 @@ import {
   isBareNameNeedle,
   isInputRegistry,
   KNOWN_NON_DRIFT,
+  onlyTestSuppliedIntegers,
   scanRepo,
   SCOPE_CEILINGS,
   SELF_EXCLUDED_TESTS,
@@ -201,6 +202,49 @@ describe("classifyNeedles：五态各自点名，一条不许静默归进『没�
     );
     expect(v!.kind).toBe("drift");
     expect(v!.lostRun).toBe("但后半句生产侧没有");
+  });
+
+  // 第 116 页两棵树并排跑现形的**假红灯**：`tests/docs-check.test.ts:156` 断 `toContain("水位 30000")`，
+  // 而生产那句是 `；存量水位 ${String(wa.upTo)}（…）`——散文段 `水位` 抽得到，缺的那个数是测试
+  // 自己用 `w(30_000)` 喂进去的。`suppliedInTest` 只认「整串另有一处」，而 `30_000` 与 `"30000"`
+  // 是同一个数、不是同一个字面量 ⇒ 旧写法一律落进 drift。主树里它被「在飞」按住，
+  // 干净的 HEAD 树里它自己红（规则 58 的新变体：**跑一棵树 ≠ 跑那把尺**）。
+  it("⑤b 缺的那半是测试自己给的整数（数字分隔符写法不同）⇒ echo，不是 drift", () => {
+    const prod = src(
+      "scripts/docs-check.ts",
+      "kept.push({ detail: `；存量水位 ${String(wa.upTo)}（超出即新增违规）` });",
+    );
+    const testText = "const d = waive(over(30_001), w(30_000)).kept;\nexpect(d[0]!.detail).toContain(\"水位 30000\");";
+    const [v] = classifyNeedles([n("水位 30000", "detail")], [prod], new Map([["a.test.ts", testText]]));
+    expect(v!.kind).toBe("echo-caller-text");
+    expect(v!.detail).toContain("测试自己喂进去的整数");
+  });
+
+  it("⑤b 反向一侧：生产侧改成带千位分隔的写法，而测试给的对不上 ⇒ 仍是 drift", () => {
+    const prod = src(
+      "scripts/docs-check.ts",
+      "kept.push({ detail: `；存量水位 ${formatThousands(wa.upTo)}（超出即新增违规）` });",
+    );
+    const testText = "const d = waive(over(30_001), w(30_000)).kept;";
+    const [v] = classifyNeedles([n("水位 30 000", "detail")], [prod], new Map([["a.test.ts", testText]]));
+    expect(v!.kind).toBe("drift");
+  });
+
+  it("⑤b 只免「缺的全是值」那一格：散文段也没见证时不许当 echo（seen 空 ⇒ 仍走原路）", () => {
+    const [v] = classifyNeedles(
+      [n("压根没有的散文 30000", "detail")],
+      [src("scripts/docs-check.ts", "kept.push({ detail: `；存量水位 ${String(wa.upTo)}` });")],
+      new Map([["a.test.ts", "w(30_000)"]]),
+    );
+    expect(v!.kind).toBe("drift");
+  });
+
+  it("onlyTestSuppliedIntegers 的取值域：整数收、小数/带单位不收、空集不收", () => {
+    expect(onlyTestSuppliedIntegers(["30000"], "const d = w(30_000);")).toBe(true);
+    expect(onlyTestSuppliedIntegers(["0.1"], "const t = 0.1;")).toBe(false);
+    expect(onlyTestSuppliedIntegers(["30000", "ms"], "30_000 ms")).toBe(false);
+    expect(onlyTestSuppliedIntegers([], "30_000")).toBe(false);
+    expect(onlyTestSuppliedIntegers(["30000"], "const d = w(31_000);")).toBe(false);
   });
 
   // 这条是第 95 页**我自己踩的**：在生产侧注释里写了「测试调用」，`tests/net.test.ts:54` 那条真 drift

@@ -241,6 +241,31 @@ export function staticRuns(needle: string): string[] {
 /** 纯数字/标点 ⇒ 收的是**算出来的值**，生产侧不会有这句字面量，不许混进 drift。 */
 const ONLY_VALUES = /^[\d.,%\s+−–:：=×/~-]+$/;
 
+/** 整条断言只剩「测试自己给的整数」对不上时，那句文案**不算漂**（第五态 echo 的第二种形状）。
+ *
+ * 为什么单开：`suppliedInTest` 认的是「整串字面量在本 test 文件里另有的一处」，而
+ * `toContain("水位 30000")` 那格里断言串与输入串**不是同一个字面量**——输入写成数字
+ * `30_000`（Node 的数字分隔符），断言写 `"水位 30000"`，于是整串永远只出现一次。
+ * 生产侧那句是 `；存量水位 ${String(wa.upTo)}（…）`：散文段 `水位` 抽得到、数值得自插值 ⇒
+ * `seen` 非空、缺的只有那个数 ⇒ 旧写法一律落进 drift。而 drift 是**红**：第 116 页在两棵树上
+ * 并排跑，主树里它被「在飞」按下去，干净的 HEAD 树里它自己红着——本仓的账上多一盏假红灯。
+ *
+ * 收紧到「缺的段全部是纯整数、且该整数以同值字面量出现在同一个 test 文件里（`_` 只是写法）」：
+ *  ① 措辞漂了（缺的是散文段）不满足 ① ⇒ 照旧红；
+ *  ② 生产侧改了数而断言没改 ⇒ 那个新数不在 test 文件里 ⇒ 照旧红；
+ *  ③ 真被执行的那一半由 vitest 自己看着：这条断言会真的跑 `waive(over(30_001), w(30_000))`，
+ *     格式变了它当场红——本尺只管「文案字面量漂了没人改断言」，不替运行时断言记账。
+ * 带小数/单位的段（`0.1`、`ms`）一律**不收**：那种段既可能是文案也可能是值，留红比放宽便宜。 */
+export function onlyTestSuppliedIntegers(missing: readonly string[], testText: string): boolean {
+  if (missing.length === 0) return false;
+  const digits = missing.map((r) => r.trim());
+  if (!digits.every((d) => /^\d+$/.test(d))) return false;
+  const inTest = new Set(
+    (testText.match(/\b\d[\d_]*\b/g) ?? []).map((s) => s.replace(/_/g, "")),
+  );
+  return digits.every((d) => inTest.has(d));
+}
+
 export type CoverKind = "verbatim" | "across-interpolation" | "non-prose" | "echo-caller-text" | "drift";
 
 export interface NeedleVerdict extends ProseNeedle {
@@ -520,6 +545,25 @@ export function classifyNeedles(
         ...n,
         kind: "echo-caller-text",
         detail: "这段是测试自己喂进去的标签被抄回文案 ⇒ 生产侧本就不该有，不算漂",
+        lostRun: "",
+        copies: 0,
+        rawCopies: copyCount(chunks, n.needle),
+        copySites: [],
+      };
+    }
+    // 同一态的第二种形状（见 `onlyTestSuppliedIntegers` 的理由）：散文段已在生产侧见证，
+    // 缺的那几段全是**测试自己给的整数**（`30_000` 与 `"30000"` 是同一个数、不是同一个字面量）。
+    const missingRuns = runs.filter((r) => !seen.has(r));
+    if (seen.size > 0 && onlyTestSuppliedIntegers(missingRuns, testTexts.get(n.file) ?? "")) {
+      return {
+        ...n,
+        kind: "echo-caller-text",
+        detail:
+          "散文段「" +
+          [...seen].join("」「") +
+          "」已在生产侧见证，缺的「" +
+          missingRuns.join("」「") +
+          "」是测试自己喂进去的整数（数字分隔符写法不同）⇒ 不算漂",
         lostRun: "",
         copies: 0,
         rawCopies: copyCount(chunks, n.needle),
