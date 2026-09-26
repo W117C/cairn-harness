@@ -1,5 +1,6 @@
 import { isEnvVerifyCause } from "../events";
 import type { AgentEvent, EventLog, SkillInvocationMeta, UserMessageOrigin } from "../events";
+import { redactSecrets } from "./security/scan";
 import { autoOf, denyReason, gate, type PermissionMode, type ToolResultWithAudit } from "../permissions";
 import type { HookEngine } from "./plugins/hooks";
 import { projectContext } from "./context";
@@ -100,6 +101,32 @@ export interface LoopOptions {
 function isAbortLike(err: unknown): boolean {
   return typeof err === "object" && err !== null &&
     (err as { name?: unknown }).name === "AbortError";
+}
+
+/** 事件日志落盘前的凭据脱敏（§A4）。
+ *
+ *  事件日志是**可重放**的：一份 JSONL 存着每一条 tool_call 的 args 与每一条 tool_result 的
+ *  output 原文。`run_shell` 的 `cat ~/.aws/credentials` 于是把凭据永久留在盘上——`sanitizedEnv`
+ *  只挡 `process.env` 泄漏，挡不住工具**读出来的文件内容**。
+ *  `redactSecrets` 本仓早就有了（记忆 / worker 报告 / 评审都过它），唯独这条落盘面漏着。
+ *
+ *  两处口径：结构不变（只换字符串叶子），非字符串值原样返回——事件形状是重放契约的一部分，
+ *  不能因为脱敏顺手改掉。命中即掩码，与 remember 同一条契约（那里遇 `blocked` 抛错，
+ *  这里不能：工具已经跑完、模型已经看过，抛错会吞掉一次真实结果）。 */
+function redactValue(v: unknown): unknown {
+  if (typeof v === "string") return redactSecrets(v).text;
+  if (Array.isArray(v)) return v.map(redactValue);
+  if (typeof v === "object" && v !== null) {
+    const out: Record<string, unknown> = {};
+    for (const [k, inner] of Object.entries(v as Record<string, unknown>)) out[k] = redactValue(inner);
+    return out;
+  }
+  return v;
+}
+
+/** tool_call 落盘用：args 的字符串叶子过脱敏，其余字段逐字带走。 */
+function redactToolCallForLog(e: Extract<AgentEvent, { type: "tool_call" }>): AgentEvent {
+  return { ...e, args: redactValue(e.args) as Record<string, unknown> };
 }
 
 export async function runLoop(opts: LoopOptions): Promise<void> {
@@ -268,7 +295,9 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
     currentStep = step;
     let sawToolCall = false;
     for await (const output of streamFn(projectContext(seen))) {
-      await events.append(output);
+      // 落盘的那一份与执行用的那一份必须分开：args 只在落盘面脱敏，执行面照原样拿
+      // （模型自己写的凭据原样执行，不要在这里把它改成一个掩码路径）。
+      await events.append(output.type === "tool_call" ? redactToolCallForLog(output) : output);
       if (output.type !== "tool_call") continue; // assistant_message / delta / usage：继续
 
       sawToolCall = true;
@@ -385,6 +414,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       // D7 覆盖前快照：正文里那句给模型看（它得知道去哪儿找回原件），这个字段给界面与审计看。
       // 同一个事实只有一个 writer（写工具），这里只搬运不改写。
       const snapshotId = (result as { snapshotId?: string }).snapshotId;
+      const change = (result as { change?: "created" | "modified" }).change;
       // 换路压力记账（只读，不改事件序）：动作换了 ⇒ 上一轮的重复段结束，解除提示帽
       let repeatNote = "";
       if (opts.stuckNudge === true) {
@@ -422,10 +452,11 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         type: "tool_result",
         callId: output.id,
         ok: result.ok,
-        output: result.output + postContext + repeatNote,
+        output: redactSecrets(result.output + postContext + repeatNote).text,
         ...(gateMeta ? { gate: gateMeta } : {}),
         ...(audit ? { auto: audit } : {}),
         ...(snapshotId !== undefined ? { snapshotId } : {}),
+        ...(change !== undefined ? { change } : {}),
       });
       if (result.ok && mayHaveWrittenDisk(name, output.args ?? {})) {
         wroteThisRun = true;
