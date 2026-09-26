@@ -22,7 +22,7 @@ import { execFileSync } from "node:child_process";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, expectFailProblemLine, killerAttributionOk, failingTestText } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -5966,6 +5966,25 @@ const MUTATIONS = [
     expectFail: "真表自证：整张表的 killer 指针必须 0 失效（新增一条断指针＝当场红）",
   },
   {
+    id: "head-pointer-filter-ignored",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "HEAD 侧那一遍不再筛『这条锚点在 HEAD 的表里吗／判卷相对 HEAD 动过吗』⇒ 本笔同时改表与改判卷的正常提交会被读成缺陷（假红方向），逼人回去放宽或删掉这一维",
+    apply: (s) => s.replace("entries.filter((e) => e.test !== \"\" && opts.inHeadTable(e.id) && opts.judgeDirty(e.test)),", "entries.filter((e) => e.test !== \"\"),"),
+    expectFail: "本笔同时改表与改判卷的那条**不判**（那格归同笔规矩）；判卷没动过的也不重复判",
+  },
+  {
+    id: "head-pointer-dimension-not-summed",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "第 6 维算出来了却没喂进求和 ⇒ 门照跑、汇总照印绿（接线没有编译期信号）。针脚取两行：这条锚点自己的 apply 字面量里也写着那两行文字（同一个文件）。",
+    apply: (s) => s.replace(
+      "    expectFail: stalePointers.length,\n    headPointer: headPointers.length,",
+      "    expectFail: stalePointers.length,",
+    ),
+    expectFail: "第 6 维（HEAD 侧指针失效）也要喂进求和，且 runner 真去调那把尺",
+  },
+  {
     id: "attribution-reads-whole-output",
     src: "scripts/lib/mutate-gates.ts",
     test: "tests/mutate-verify-gates.test.ts",
@@ -7210,6 +7229,10 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
      再喂一遍 HEAD 那份内容取差集 ⇒ 锚点钉在**在飞文本**上（锚点行已入库、实现改动还没）从此在主树也出声。
      blob 按不同 src 缓存（一个文件一次 `git show`），门保持秒级。 */
   const drift = [];
+  /* 指针的 HEAD 侧那一半（第 141 页）：盘上尺只答「指针指得到盘上那条标题」；锚点行入库了、判卷里那条
+     标题没入库时，HEAD 上它指不到任何东西，而盘上照样绿。普查里这一格 23 条，是花 21.8 分钟跑整表才发现的。 */
+  const headPointers = [];
+  const pointerEntries = entries.map((e) => ({ id: e.id, test: e.test ?? "", expectFail: e.expectFail ?? "" }));
   if (inHead !== null) {
     try {
       const blobs = new Map();
@@ -7224,6 +7247,24 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
       };
       const missingSrc = new Set(untracked.filter((u) => u.what === "被测面").map((u) => u.path));
       drift.push(...headOnlyNeedleProblems(problems, auditNeedles(checkable, readHeadBlob), missingSrc));
+      const headTable = readHeadBlob("scripts/mutate-verify.mjs");
+      if (headTable === null) {
+        headUnchecked = 1;
+        console.log("⚠️ 指针的 HEAD 侧比对未查（HEAD 里读不到本表文件）");
+      } else {
+        // 只比"相对 HEAD 有改动"的判卷：没改动的两头读数一样，盘上那一遍已经覆盖。
+        const dirty = new Set(execFileSync("git", ["diff", "--name-only", "HEAD"], { cwd: ROOT, encoding: "utf8" })
+          .split("\n").filter(Boolean));
+        // 取 HEAD 那份表里的 id 用**行首锚定**的正则。这里刻意不写那段"字段名＋冒号＋引号"的原文：
+        // 判卷那把尺抽条目时只看文字、不分代码与注释，第一版因此在表里凭空多出一条 src 为 null 的假锚点
+        // （被它自己的「每条都要有 src」自检当场抓住——这条自检就是它的价值所在）。
+        const headIds = new Set([...headTable.matchAll(/^[ \t]+id:[ \t]*"([^"]+)"/gm)].map((m) => m[1]));
+        headPointers.push(...headPointerProblems(pointerEntries, {
+          inHeadTable: (id) => headIds.has(id),
+          judgeDirty: (rel) => dirty.has(rel),
+          readAtHead: readHeadBlob,
+        }));
+      }
     } catch (err) {
       headUnchecked = 1;
       console.log("⚠️ 针脚的 HEAD 侧比对未查（git show 失败：" + (err instanceof Error ? err.message : String(err)) + "）");
@@ -7232,11 +7273,11 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
     headUnchecked = 1;
   }
   for (const d of drift) console.log("❌ " + headOnlyNeedleLine(d));
+  for (const p of headPointers) console.log("❌ " + expectFailProblemLine(p) + " ｜HEAD 侧：锚点行已入库、判卷里那条标题还没");
   /* expectFail 指针体检（第 138 页）：一条锚点「杀掉」的判据是**测试红在它期望的那条用例上**；
      用例改过标题而指针还写着旧的，报告说的是「变异存活或误伤」——听起来像代码没被守住，实际是指针断了。
      以前发现它要付出「把那条变异跑一遍」的代价（整表几十分钟），而静态扫是秒级。 */
-  const stalePointers = auditExpectFails(
-    entries.map((e) => ({ id: e.id, test: e.test ?? "", expectFail: e.expectFail ?? "" })),
+  const stalePointers = auditExpectFails(pointerEntries,
     (rel) => { try { return readFileSync(join(ROOT, rel), "utf8"); } catch { return null; } },
   );
   for (const p of stalePointers) console.log("❌ " + expectFailProblemLine(p));
@@ -7244,8 +7285,9 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
   const blockingTotal = blockingTotalOf({
     needle: blocking.length, duplicateIds: dup.length, untracked: untracked.length, drift: drift.length,
     expectFail: stalePointers.length,
+    headPointer: headPointers.length,
   });
-  console.log(`针脚体检：${String(entries.length)} 条 —— 阻断 ${String(blockingTotal)}，待复认 ${String(warn.length)}，未覆盖 ${String(unparsed.length)}，逐行式 ${String(lineWise.length)}，未入库面 ${String(untracked.length)}（被测面 + 判卷两面），钉在飞文本 ${String(drift.length)}，killer 指针失效 ${String(stalePointers.length)}${headUnchecked === 0 ? "" : "（HEAD 归属未查）"}`);
+  console.log(`针脚体检：${String(entries.length)} 条 —— 阻断 ${String(blockingTotal)}，待复认 ${String(warn.length)}，未覆盖 ${String(unparsed.length)}，逐行式 ${String(lineWise.length)}，未入库面 ${String(untracked.length)}（被测面 + 判卷两面），钉在飞文本 ${String(drift.length)}，killer 指针失效 ${String(stalePointers.length)}（其中 HEAD 侧 ${String(headPointers.length)}）${headUnchecked === 0 ? "" : "（HEAD 归属未查）"}`);
   return blockingTotal;
 }
 

@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { anchorFaces, auditExpectFails, blockingTotalOf, budgetMsOf, classifyArgs, entryDisposition, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
+import { anchorFaces, auditExpectFails, blockingTotalOf, budgetMsOf, classifyArgs, entryDisposition, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
 import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
 
 describe("budgetMsOf + classifyArgs 的值位（自我预算这条手段本身要有判卷）", () => {
@@ -316,8 +316,8 @@ describe("anchorFaces + blockingTotalOf：接线缺件必须当场崩，不许�
     expect(anchorFaces([])).toEqual([]);
   });
 
-  it("五支数都给 ⇒ 求和（0 也算数，不许被当成缺项丢掉）", () => {
-    expect(blockingTotalOf({ needle: 3, duplicateIds: 0, untracked: 4, drift: 5, expectFail: 6 })).toEqual(18);
+  it("六支数都给 ⇒ 求和（0 也算数，不许被当成缺项丢掉）", () => {
+    expect(blockingTotalOf({ needle: 3, duplicateIds: 0, untracked: 4, drift: 5, expectFail: 6, headPointer: 7 })).toEqual(25);
   });
 
   it("缺一支 ⇒ 抛并点名缺哪支（门报红却少算一维 = 这条门唯一的产出被废）", () => {
@@ -326,12 +326,59 @@ describe("anchorFaces + blockingTotalOf：接线缺件必须当场崩，不许�
     // 第 138 页新加的那一维（killer 指针失效）同样必须被强制喂：接线少喂一支＝那一维静默不算。
     const noPointer = { needle: 0, duplicateIds: 0, untracked: 0, drift: 0 } as unknown as Parameters<typeof blockingTotalOf>[0];
     expect(() => blockingTotalOf(noPointer)).toThrow(/expectFail/);
+    // 第 141 页的 HEAD 侧那一维，同理
+    const noHead = { needle: 0, duplicateIds: 0, untracked: 0, drift: 0, expectFail: 0 } as unknown as Parameters<typeof blockingTotalOf>[0];
+    expect(() => blockingTotalOf(noHead)).toThrow(/headPointer/);
   });
 
   it("非有限数（NaN / Infinity）也算缺项： typeof 是 number，但读数本身不可信", () => {
-    expect(() => blockingTotalOf({ needle: NaN, duplicateIds: 0, untracked: 0, drift: 0, expectFail: 0 })).toThrow(/needle/);
-    expect(() => blockingTotalOf({ needle: 1, duplicateIds: 0, untracked: 0, drift: Infinity, expectFail: 0 })).toThrow(/drift/);
-    expect(() => blockingTotalOf({ needle: 0, duplicateIds: 0, untracked: 0, drift: 0, expectFail: NaN })).toThrow(/expectFail/);
+    expect(() => blockingTotalOf({ needle: NaN, duplicateIds: 0, untracked: 0, drift: 0, expectFail: 0, headPointer: 0 })).toThrow(/needle/);
+    expect(() => blockingTotalOf({ needle: 1, duplicateIds: 0, untracked: 0, drift: Infinity, expectFail: 0, headPointer: 0 })).toThrow(/drift/);
+    expect(() => blockingTotalOf({ needle: 0, duplicateIds: 0, untracked: 0, drift: 0, expectFail: NaN, headPointer: 0 })).toThrow(/expectFail/);
+    expect(() => blockingTotalOf({ needle: 0, duplicateIds: 0, untracked: 0, drift: 0, expectFail: 0, headPointer: NaN })).toThrow(/headPointer/);
+  });
+});
+
+describe("headPointerProblems：锚点行入库了、判卷里那条标题没入库", () => {
+  // 动因（第 141 页）：这一格整表普查里 23 条，只能靠 21.8 分钟实跑发现。盘上尺看不到它——
+  // 盘上指针指得到盘上那条标题；差的只有 HEAD 那一侧。
+  const entries = [
+    { id: "in-table-dirty", test: "tests/a.test.ts", expectFail: "只有盘上有的一条用例" },
+    { id: "in-table-clean", test: "tests/b.test.ts", expectFail: "盘上与 HEAD 都有" },
+    { id: "new-this-commit", test: "tests/c.test.ts", expectFail: "本笔新加的锚点" },
+  ];
+  const headFiles: Record<string, string> = {
+    "tests/a.test.ts": 'it("别的用例", () => {});',                 // 判卷改了没入库 ⇒ HEAD 指不到
+    "tests/b.test.ts": 'it("盘上与 HEAD 都有", () => {});',
+    "tests/c.test.ts": "it(\"本笔新加的锚点\", () => {});",
+  };
+  const runWith = (judgeDirty: (rel: string) => boolean) => headPointerProblems(entries, {
+    inHeadTable: (id) => id !== "new-this-commit",
+    judgeDirty,
+    readAtHead: (rel) => headFiles[rel] ?? null,
+  });
+
+  it("判卷在飞且 HEAD 那份指不到 ⇒ 点名（三态里这是「HEAD 侧失效」，不是「没问题」）", () => {
+    expect(runWith((rel) => rel === "tests/a.test.ts").map((p) => `${p.id}/${p.why}`)).toEqual(["in-table-dirty/not-found"]);
+  });
+
+  it("本笔同时改表与改判卷的那条**不判**（那格归同笔规矩）；判卷没动过的也不重复判", () => {
+    expect(runWith(() => false)).toEqual([]);
+    expect(runWith((rel) => rel === "tests/b.test.ts" || rel === "tests/c.test.ts").map((p) => p.id)).toEqual([]);
+  });
+
+  it("HEAD 里根本没有那份判卷 ⇒ unreadable，不等于没问题", () => {
+    const got = headPointerProblems([{ id: "in-table-dirty", test: "tests/gone.test.ts", expectFail: "任何标题" }], {
+      inHeadTable: () => true, judgeDirty: () => true, readAtHead: () => null,
+    });
+    expect(got.map((p) => `${p.id}/${p.why}`)).toEqual(["in-table-dirty/unreadable"]);
+  });
+
+  it("空指针条目不在这里判（那是「没声明 killer」另一档，归盘上那把尺）", () => {
+    expect(runWith(() => true).length).toBe(1);
+    expect(headPointerProblems([{ id: "x", test: "tests/a.test.ts", expectFail: "" }], {
+      inHeadTable: () => true, judgeDirty: () => true, readAtHead: () => "",
+    })).toEqual([]);
   });
 });
 
@@ -442,6 +489,12 @@ describe("auditExpectFails：killer 指针必须指得到活用例", () => {
     // 用正则框住**真实的那个调用**，不能只 includes 一行文字：
     // 这条锚点自己的 apply 里也写着那句文字（同一份文件），单行文字判据会连被改掉的那次也读成"还在"。
     expect(/blockingTotalOf\(\{[^}]*expectFail:[^}]*\}\)/s.test(src)).toBe(true);
+  });
+
+  it("第 6 维（HEAD 侧指针失效）也要喂进求和，且 runner 真去调那把尺", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    expect(/blockingTotalOf\(\{[^}]*headPointer:[^}]*\}\)/s.test(src)).toBe(true);
+    expect(/^\s*headPointers\.push\(\.\.\.headPointerProblems\(/m.test(src)).toBe(true);
   });
 });
 

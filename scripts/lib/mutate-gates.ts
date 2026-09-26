@@ -318,9 +318,11 @@ export interface BlockingParts {
   untracked: number;
   drift: number;
   expectFail: number;
+  /** 锚点行已入库、判卷里那条标题还没 ⇒ HEAD 上指针指不到（第 141 页普查里这一格占了 23 条，只能靠 21.8 分钟实跑发现）。 */
+  headPointer: number;
 }
 
-const BLOCKING_KEYS: (keyof BlockingParts)[] = ["needle", "duplicateIds", "untracked", "drift", "expectFail"];
+const BLOCKING_KEYS: (keyof BlockingParts)[] = ["needle", "duplicateIds", "untracked", "drift", "expectFail", "headPointer"];
 
 /** 阻断总数。缺一支或非有限数 ⇒ 抛并点名（`0` 是合法读数，不许当缺项丢掉）。 */
 export function blockingTotalOf(parts: BlockingParts): number {
@@ -498,8 +500,23 @@ export function auditExpectFails(
   return out;
 }
 
-/** 一行可机读的判读（门输出格式：id + 判卷文件 + 原因 + 指针前 60 字）。 */
-export function expectFailProblemLine(p: ExpectFailProblem): string {
+/** HEAD 侧的指针体检（第 141 页）：锚点行已经入库、判卷里那条标题还没 ⇒ 干净 HEAD 上这条锚点指不到活用例。
+ *  普查里这一格占了 23 条，只能靠 21.8 分钟实跑发现；静态能秒级点出来，因为它两头都在盘上。
+ *  只查**同时满足两条**的锚点，否则会把"本笔同时改表与改判卷"误判成缺陷（那格由 217 的同笔规矩管）：
+ *  ① 这条锚点的 `id` 在 HEAD 那份表里就存在（不是本笔新加的）；
+ *  ② 它的判卷文件相对 HEAD 有改动（没改动的判卷，盘上尺与 HEAD 尺读数相同，不必重复取）。
+ *  纯函数：两个谓词与取内容都由调用方注入（单测喂假内容，门喂 `git show`）。 */
+export function headPointerProblems(
+  entries: readonly ExpectFailEntry[],
+  opts: { inHeadTable: (id: string) => boolean; judgeDirty: (rel: string) => boolean; readAtHead: (rel: string) => string | null },
+): ExpectFailProblem[] {
+  return auditExpectFails(
+    entries.filter((e) => e.test !== "" && opts.inHeadTable(e.id) && opts.judgeDirty(e.test)),
+    opts.readAtHead,
+  );
+}
+
+/** 一行可机读的判读（门输出格式：id + 判卷文件 + 原因 + 指针前 60 字）。 */export function expectFailProblemLine(p: ExpectFailProblem): string {
   const why = p.why === "unreadable"
     ? "判卷文件读不到（不等于指针没问题）"
     : "这条用例标题在该判卷文件里找不到（多半是用例改过名，而指针还写着旧的）";
