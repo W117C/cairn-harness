@@ -5958,6 +5958,14 @@ const MUTATIONS = [
     expectFail: "没有 usage：不可测且原因是 no-usage，不许把「没记账」读成「没花钱」",
   },
   {
+    id: "list-rows-not-flattened",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "`--list` 不再把字段压成一行 ⇒ desc 里带换行的那条被拆成两行，行数列数都不对，而吃这份取料面的两把静态尺只是**少读一条**（不报错）。第 141 页实测：表里 833 条，尺只读到 832 条。",
+    apply: (s) => s.replace("].map(oneLine).join(\"\\t\"));", "].join(\"\\t\"));"),
+    expectFail: "真表自证：整张表的 killer 指针必须 0 失效（新增一条断指针＝当场红）",
+  },
+  {
     id: "attribution-reads-whole-output",
     src: "scripts/lib/mutate-gates.ts",
     test: "tests/mutate-verify-gates.test.ts",
@@ -7375,7 +7383,10 @@ if (plan.mode === "list") {
   // 后两列（判卷文件 + JSON 化的 killer 指针）是给判卷用的：`tests/mutate-verify-gates.test.ts`
   // 要走这条**不改源文件**的入口拿到整张表，而不能 spawn `--check-needles`——那会在变异跑到一半时被调用，
   // 撞上本门自己的备份文件预检，报「读不到汇总行」（第 138 页实测：三条新锚点的单跑全被这个假信号带红）。
-  for (const m of MUTATIONS) console.log(`${m.id}\t${m.src}\t${m.desc}\t${m.test}\t${JSON.stringify(m.expectFail ?? "")}`);
+  // 列协议必须无损：字段里可以带换行/制表符（真踩过——`impact-closure-glob-broken` 的 desc 里有换行，
+  // 那一行被拆成两行 ⇒ 吃 `--list` 的两把静态尺同时少读一条锚点，而它们自己发现不了）。
+  const oneLine = (v) => String(v).replace(/[\t\n\r]+/gu, " ");
+  for (const m of MUTATIONS) console.log([m.id, m.src, m.desc, m.test, JSON.stringify(m.expectFail ?? "")].map(oneLine).join("\t"));
   process.exit(0);
 }
 /** 只核针脚、不跑测试（秒级）——因此它能进 pnpm gates，而整张变异表要跑几十分钟、

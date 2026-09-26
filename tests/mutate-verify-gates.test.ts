@@ -427,6 +427,10 @@ describe("auditExpectFails：killer 指针必须指得到活用例", () => {
       .map((p) => ({ id: p[0] ?? "", test: p[3] ?? "", expectFail: JSON.parse(p[4] ?? '""') as string }));
     // 空 expectFail 的条目（逐行式那几条）由尺自己跳过，这里只要求表读得出来。
     expect(rows.length).toBeGreaterThan(500);
+    // 「一条都不许丢」：`--list` 是两把静态尺共同的取料面。字段里带换行会把一行拆成两行 ⇒
+    // 那条锚点对两把尺同时隐形，而两把尺都发现不了（今天就抓到 1 条：desc 里带换行）。
+    const tableSrc = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    expect(rows.length).toBe((tableSrc.match(/^\s+id: "/gm) ?? []).length);
     const root = fileURLToPath(new URL("../", import.meta.url));
     expect(auditExpectFails(rows, (rel) => {
       try { return readFileSync(join(root, rel), "utf8"); } catch { return null; }
