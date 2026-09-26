@@ -3360,3 +3360,15 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
 - 留一条产品账（#28，不猜修法）：同一个 ENOENT 两支宽度不同——worker 收尾那支**有** catch 并出声（`按 failed 放行等待方`），
   `cleanupWrite` 的审计 emit 那支**没有**。修法要先有一个生产可达的构造（本轮只有"测试删盘"这一条路），否则就是把估的当测的。
 - 验证：本文件 8 条全绿 exit 0 ｜ 全量 `229 / 2567`、**无 `Errors` 行**、**exit 0** ｜ typecheck 0。
+
+### 2026-09-26 · 第 111 页 · 门禁 `mutate-needles-check` 今天红：11 条阻断分成「现在能修 6」＋「等入库 5」
+
+`outputs/dead-anchors-workorder-2026-09-26/01-门禁今天红11条阻断分成现在能修6等入库5.md`
+
+- 只读跑法实测：`--check-needles` 报 `804 条 —— 阻断 11，待复认 3，未覆盖 0，逐行式 11，未入库面 0，钉在飞文本 2`、exit 1；跑前后脏项 321→321、无 `.mutbak`（确认它是只读面）。这道门在 `gate-manifest.ts:39` 里 ⇒ **`pnpm gates` 今天是红的**。
+- "11" 这个数不告诉人哪条能修 ⇒ 按**源文件在不在飞**分诊：6 条死锚的 src ＝ HEAD 干净（我现在就能改）、3 条 src 在别人手里（`no-progress.ts`、`events/index.ts`×2）、2 条是"钉在飞文本"（门的原话：锚点行已入库、被锚定的实现还没；**不许**把针脚改回 HEAD 旧写法）。
+- 6 条改指工单已逐条实测唯一性（旧针脚 0 处、新针脚 1 处）：`impact-query`（多了第 4 个实参 `maxFiles`）、`shell-tail`×2（拼装插进 `MIDDLE_TRUNCATION_HINT`；预留量 256→512）、`skill-primary-hint-lost` ＋ `user-skill-face-budget-abolished`（两句「全文见」一起搬进 `skillRecallSuffix()` 助手）、`prune-stub`（搬进 `pruneRecallSuffix()`，变量 `file`→`rel`）。
+  两条 skill 面是**同一笔搬动的两个落点**——只报"某锚点红了"会丢掉这个事实，所以表里成对登记。
+- 顺带用实测关掉 #27 另两个候选（不是按名字猜完就划掉）：`gate-check.ts` 零 fs 读 ⇒ 无树形状依赖；锚点表 124 源面缺 0、166 判卷面缺 1（`tests/updater.test.ts` 牵连 6 条）⇒ 那是**读数**不是病（表本来就有 `entryDisposition`／「未证 ≠ 通过」）。
+- 刻意**没造第二把尺**：针脚唯一性已是 `--check-needles` 的判据；一次性核对放 `/tmp/needle-check-111.mts`，跑完即删、不进仓。
+- 施工停在这页的原因写死在页里：6 处 needle 全在 `scripts/mutate-verify.mjs`，而它实测 `M`（别人的在飞改动）⇒ 只交工件。表腾出来后的次序与**期望读数（阻断 11 → 5，不是 0）**都在 §四。
