@@ -3917,3 +3917,33 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
   口径要说清（任务 #4 那条）：**这是工作树绿**——树里还带着别人未提交的改动（`docs-check`、`replay-readings` 等），
   而本笔修完之后 HEAD 自己那版要等入库再验一次；`docs-check` 那道 D-8（`prompt-fixed-cost` 登记了没有文档引用）
   仍挂在别人那笔在飞的 `M scripts/replay-readings.ts` 上，本会话不代改。
+### 2026-09-27 · 第 130 页 · 针脚红现在自己说「谁搬走的」：11 条死锚点背后是 8 笔互不相干的修复，没有一条是故意摘的
+
+判据加在 `scripts/lib/mutate-gates.ts`（纯函数 `needleMoveCause` ＋ 三态格式化 `needleMoveCauseSuffix`），
+git 调用由 `scripts/mutate-verify.mjs` 注入 ⇒ 本模块不自己 spawn 子进程（同 `untrackedAnchorPaths` 的 `isTracked` 口径）。
+
+- **现读（真表 802→805 条，门 exit 1）**：`hits===0` 的红行 12 条，其中 **10 条当场点到具体提交**，2 条属
+  「钉在飞文本」那一档（另一种成因，不共用这行判读）。归属表：
+  | 谁搬走的 | 那笔在修什么 | 饿死的锚点 |
+  | --- | --- | --- |
+  | `9f4fe45` | 事件日志别把明文密钥留在盘上 | `loop-repeat-nudge-note-dropped` |
+  | `dfcc4bc` | `impact_query` 那句「调大 maxFiles 后重问」指向不存在的参数 | `impact-query-deps-ghost-file-silent` |
+  | `21d9a02` | run_shell 超限那句补"下一步做什么" | `shell-tail-assembly-drops-tail`、`shell-tail-notice-reserve-removed` |
+  | `9620e91` | 「全文见」三处副本收成一支（第 64 页 #47/#48） | `skill-primary-hint-lost`、`user-skill-face-budget-abolished` |
+  | `b7cb5d1` | prune 打桩不再递模型用不了的绝对路径（第 71 页 #33） | `prune-stub-hides-attachment-path` |
+  | `90b0533` | 能力 14 无进展检测 | `np-write-suppression-ignored` |
+  | `8361657` | 事件流统一盖时钟戳 | `event-stamp-dropped`、`event-stamp-overwrites-producer-ts` |
+  （第 12 条 `sessions-delete-force-false` 与 `supervise-…` 同属"钉在飞文本"档；`unknown-tool-silently-dropped` 已在第 128 页修掉。）
+- **本页最重要的读法是这张表的形状**：8 笔提交全在修**别的真缺陷**，没有一笔是"为了摘锚点"——
+  也就是说锚点饿死是**好工作的副作用**：改实现的人不知道该同步针脚，而当时没有任何界面把这件事摆在他眼前。
+  ⇒ 这解释了为什么这一族反复出现（`9620e91` 与 `b7cb5d1` 的提交说明里都出现过「针脚」二字——各 1 次，
+  它们确实改了想改的那几条，却仍分别漏掉 2 条与 1 条），
+  也解释了为什么第 128 页"按文件猜归属"必然出错：**搬走文本的人从来不在"这个文件现在谁在写"里**。
+- 代价与射程要写清：这道门原本是秒级快门（整跑 `mutate-verify` 是 36 分钟那把），加归属后实测 **6.13s**（12 次 pickaxe，每次 ~0.5s）。
+  仍远快于整跑，但**不再是"顺手一跑"**：`pnpm gates` 那 26 道里它从此占 6 秒。
+  只查 `hits===0`（warn 档针脚还在盘上，查了只会误导，并由一条用例钉住"一次都不该调 git"）。
+- 三态不许合并：`查到` / `git 没答上来`（印「成因未取」）/ `该路径历史里从未出现`（印「表写错路径或锚点从未生效」）——
+  合成就等于把"查询坏了"读成"没人搬走"。**这条尺自己也配了 3 个变异锚点**（第 127 页那条顺序：判据与针脚同一笔落库），
+  加判卷 21 passed、`mutate-anchor-titles` 23 passed（三条 expectFail 无漂移）、typecheck 0。
+- 过程中被自己的老毛病咬了一次：desc 里用 ASCII 双引号包中文短语，直接把 `mutate-verify.mjs` 写成语法坏（`node --check` 抓到）。
+  **而单测全绿**（它只把那文件当文本读）⇒ 又一个「判卷面读文本时，语法坏对它透明」的实例：交笔前的凭证必须包含 `node --check`，不能只有测试。

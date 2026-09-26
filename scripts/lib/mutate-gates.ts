@@ -189,8 +189,9 @@ export function auditNeedles(entries: readonly NeedleEntry[], readSrc: (rel: str
   return problems;
 }
 
-/** 一行可机读的判读结论（门的输出格式：id + 源 + 原因 + 针脚前 60 字）。 */
-export function needleProblemLine(p: NeedleProblem): string {
+/** 一行可机读的判读结论（门的输出格式：id + 源 + 原因 + 针脚前 60 字）。
+ *  `cause` 只影响 hits===0 那一档，其余档印空串（见 `needleMoveCauseSuffix`）。 */
+export function needleProblemLine(p: NeedleProblem, cause?: NeedleCause): string {
   const why = p.hits === -1
     ? "源文件读不到"
     : p.hits === -2
@@ -198,8 +199,43 @@ export function needleProblemLine(p: NeedleProblem): string {
       : p.hits === 0
         ? "针脚已不在源文件里（变异必然不生效——多半是被锚定的实现搬走了，改指它）"
         : `针脚命中 ${String(p.hits)} 处（replace 只改第一处，需人工复认改到的是哪一处）`;
-  return `${p.id} — ${p.srcRel} — ${why}：${JSON.stringify(p.needle.slice(0, 60))}`;
+  return `${p.id} — ${p.srcRel} — ${why}：${JSON.stringify(p.needle.slice(0, 60))}${needleMoveCauseSuffix(p, cause)}`;
 }
+
+/** 「谁把这段针脚搬走的」的三态。判据保持纯函数（同 `untrackedAnchorPaths` 的 `isTracked` 口径），
+ *  git 查询由调用方做完再喂进来——本模块不许偷偷 spawn 子进程。
+ *
+ *  为什么要这一栏（2026-09-27 实测）：门只报「针脚已不在源文件里」时，读的人会按**文件**猜归属，
+ *  于是一批红里有几条被记到别人头上（本仓第 127/128 页就是这么指错人的：`skills.ts` 恰好也是
+ *  别人在飞的文件，而那条死针脚其实是我自己两页之前留下的）。
+ *  一条 `git log -S<needle> -- <src>` 就把归属变成事实：谁的最后一次提交让这段文字消失，就归谁。 */
+export type NeedleCause = { sha: string; subject: string } | null;
+
+/** 三态必须分开印——**"没查" 会被读成 "没人搬走"**（本仓「缺省要出声」那一族）。 */
+export function needleMoveCauseSuffix(p: NeedleProblem, cause: NeedleCause | undefined): string {
+  if (p.hits !== 0) return "";
+  if (cause === undefined) return " ｜成因未取（git 查不到 ⇒ 不等于没人搬走）";
+  if (cause === null) return " ｜这段文字在该路径的历史里从未出现 ⇒ 表写错路径，或这条锚点从写下起就没生效过";
+  return ` ｜谁搬走的：${cause.sha} ${cause.subject}`;
+}
+
+/** 取「谁让这段针脚在该路径上消失」：pickaxe 找最后一次改变其出现次数的提交。
+ *  `runGit` 由调用方注入（本模块不许自己 spawn 子进程；同 `untrackedAnchorPaths` 的 `isTracked` 口径），
+ *  返回值三态：对象＝查到；`null`＝这段文字在该路径历史里从未出现；`undefined`＝git 没答上来（含报错）。 */
+export function needleMoveCause(
+  p: NeedleProblem,
+  runGit: (args: readonly string[]) => string | null,
+): NeedleCause | undefined {
+  if (p.hits !== 0) return undefined; // 只谈"整段没了"；warn 档的针脚还在盘上
+  const out = runGit(["log", "--format=%h\u001f%s", "-S", p.needle, "-1", "--", p.srcRel]);
+  if (out === null) return undefined;
+  const line = out.trim().split("\n")[0] ?? "";
+  if (line === "") return null;
+  const [sha = "", ...rest] = line.split("\u001f");
+  return { sha, subject: rest.join(" ").slice(0, 90) };
+}
+
+
 
 // ---- 锚点的两个文件面在不在版本控制里 ----
 // 动因（2026-09-23，#37 的根因）：锚点的 `src` 指向**未跟踪**文件时，主树跑 `--check-needles` 读的是

@@ -2,8 +2,11 @@
 // 动因（2026-09-19）：把被锚定的实现搬进共用原语后忘了改指锚点 ⇒ 那条变异成了空操作，
 // 而要等整张表跑完才会红——整跑常被并发堵几天。这条秒级门把「重构后改指」变成机械要求。
 import { describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
-  auditNeedles, classifyArgs, duplicateIds, isLineWiseApply, needleHits, needleProblemLine, needleSeverity,
+  auditNeedles, classifyArgs, duplicateIds, isLineWiseApply, needleHits, needleMoveCause, needleMoveCauseSuffix, needleProblemLine, needleSeverity,
 } from "../scripts/lib/mutate-gates";
 
 const SRC = "const a = 1;\nconst b = a + 1;\nconst a2 = 1;\n";
@@ -116,5 +119,77 @@ describe("锚点 id 唯一性 duplicateIds", () => {
   it("空表与单条表不误报（判据不许把「没东西」读成「有重复」）", () => {
     expect(duplicateIds([])).toEqual([]);
     expect(duplicateIds(["only"])).toEqual([]);
+  });
+});
+
+/** 第 130 页：红行要自己说清「谁把这段针脚搬走的」。
+ *  动因不是抽象的：第 127 页我把一批针脚红**按文件**归属，结果指错了人——
+ *  那条死针脚其实是我自己两页前留下的（`git log -S` 一条就点出来）。归属能机器查，就不该留给人猜。 */
+describe("针脚红的归属（needleMoveCauseSuffix）", () => {
+  const gone = { id: "m", srcRel: "src/a.ts", hits: 0, needle: "const z = 9;" };
+
+  it("只有 hits===0 才谈成因：warn（多处命中）的针脚还在盘上，查归属只会误导", () => {
+    expect(needleMoveCauseSuffix({ ...gone, hits: 3 }, { sha: "aaaaaaa", subject: "x" })).toBe("");
+    expect(needleMoveCauseSuffix({ ...gone, hits: -1 }, null)).toBe("");
+    expect(needleMoveCauseSuffix({ ...gone, hits: -2 }, { sha: "aaaaaaa", subject: "x" })).toBe("");
+  });
+
+  it("三态分开印，且「没查到」不许被压成「查到没人搬走」", () => {
+    const found = needleMoveCauseSuffix(gone, { sha: "abc1234", subject: "修：把 x 收进共用件" });
+    expect(found).toContain("谁搬走的：abc1234 修：把 x 收进共用件");
+    // 未取（git 坏了／调用方没接线）与"历史里从未出现"必须是两句话，且都不许含"谁搬走的："
+    const notTaken = needleMoveCauseSuffix(gone, undefined);
+    const neverSeen = needleMoveCauseSuffix(gone, null);
+    expect(notTaken).toContain("成因未取");
+    expect(neverSeen).toContain("从未出现");
+    expect(notTaken).not.toContain("谁搬走的：");
+    expect(neverSeen).not.toContain("谁搬走的：");
+    expect(notTaken).not.toBe(neverSeen);
+  });
+
+  it("判读行：成因接在行尾，且不吞掉原来那句（老 caller 不传 cause ⇒ 明说未取，不许留白）", () => {
+    const withCause = needleProblemLine(gone, { sha: "abc1234", subject: "s" });
+    expect(withCause).toContain("针脚已不在源文件里");
+    expect(withCause).toContain("｜谁搬走的：abc1234");
+    expect(needleProblemLine(gone)).toContain("成因未取");
+    // 反向：warn 档不传 cause 也不该冒出"成因"字样
+    expect(needleProblemLine({ ...gone, hits: 2 })).not.toContain("成因");
+  });
+
+  it("成因取法本身可测：三态由注入的 git 决定（本模块不许自己 spawn 子进程）", () => {
+    const found = needleMoveCause(gone, () => "abc1234\u001f修：把 x 收进共用件\n");
+    expect(found).toEqual({ sha: "abc1234", subject: "修：把 x 收进共用件" });
+    expect(needleMoveCause(gone, () => "")).toBeNull();          // git 答"没有" ⇒ 从未出现
+    expect(needleMoveCause(gone, () => null)).toBeUndefined();   // git 没答上来 ⇒ 成因未取
+    // warn／-1／-2 一律不查（查了只会误导），并且**一次都不该调 git**：
+    let calls = 0;
+    const counting = (): string => { calls += 1; return ""; };
+    expect(needleMoveCause({ ...gone, hits: 3 }, counting)).toBeUndefined();
+    expect(needleMoveCause({ ...gone, hits: -1 }, counting)).toBeUndefined();
+    expect(calls).toBe(0);
+    // 多行输出只取第一条（`-1` 已限，但注入方可能给多行）
+    expect(needleMoveCause(gone, () => "dead001\u001f甲\ndead002\u001f乙")).toEqual({ sha: "dead001", subject: "甲" });
+  });
+
+  it("真 git 一次：本仓那条已知死针脚必须被点到 1f16bea（第 121 页搬走文本的那笔）", () => {
+    const run = (args: readonly string[]): string | null => {
+      try {
+        return execFileSync("git", [...args], { cwd: resolve(__dirname, ".."), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+      } catch { return null; }
+    };
+    const c = needleMoveCause(
+      { id: "unknown-tool-silently-dropped", srcRel: "src/agent/plugins/skills.ts", hits: 0, needle: 'out.unknown.push(behavior + ":" + item);' },
+      run,
+    );
+    expect(c?.sha).toBe("1f16bea");
+    expect(c?.subject).toContain("121");
+  });
+
+  it("接线：门真跑时必须把成因喂进行builder（grep 判据文件不等于接上了，这里钉调用点）", () => {
+    const mjs = readFileSync(resolve(__dirname, "..", "scripts", "mutate-verify.mjs"), "utf8")
+      .split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+    expect(mjs).toContain("needleProblemLine(p, needleMoveCause(p, runGit))");
+    // 反向：warn 档必须**不**带成因参数（它的针脚还在盘上，查归属会误导）
+    expect(mjs).toContain('for (const p of warn) console.log("⚠️ " + needleProblemLine(p));');
   });
 });

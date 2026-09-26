@@ -22,7 +22,7 @@ import { execFileSync } from "node:child_process";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -6864,6 +6864,30 @@ const MUTATIONS = [
     apply: (s) => s.replace("src: srcLit?.[1] === undefined ? null : decode(srcLit[1]),", "src: null,"),
     expectFail: "取料面自己要先可信：抽取漏了 src 栏 ⇒ 「零锚点」会被虚报，所以每一行都必须抽出 src",
   },
+  {
+    id: "needle-cause-two-states-merged",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-needles-check.test.ts",
+    desc: "「git 没答上来」与「这段文字从未在该路径出现过」合成一句 ⇒ 查询坏了会被读成「这条锚点从写下起就没生效过」，而那是两种要办不同事的结论",
+    apply: (s) => s.replace('  if (cause === undefined) return " ｜成因未取（git 查不到 ⇒ 不等于没人搬走）";', '  if (cause === undefined) return " ｜这段文字在该路径的历史里从未出现 ⇒ 表写错路径，或这条锚点从写下起就没生效过";'),
+    expectFail: "三态分开印，且「没查到」不许被压成「查到没人搬走」",
+  },
+  {
+    id: "needle-cause-printed-for-warn-hits",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-needles-check.test.ts",
+    desc: "去掉「只有 hits===0 才谈成因」那道守卫 ⇒ 多处命中的针脚（还活着）也被冠上「谁搬走的」，读的人去查一段根本没消失的代码",
+    apply: (s) => s.replace('  if (p.hits !== 0) return "";\n  if (cause === undefined)', '  if (p.hits === -2) return "";\n  if (cause === undefined)'),
+    expectFail: "只有 hits===0 才谈成因：warn（多处命中）的针脚还在盘上，查归属只会误导",
+  },
+  {
+    id: "needle-cause-queries-git-for-every-problem",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-needles-check.test.ts",
+    desc: "取成因那一侧也不判 hits ⇒ 每条 warn 都发一次 pickaxe：这道门的存在理由就是「秒级」（整跑 36 分钟才是慢的那把），代价先炸给自己",
+    apply: (s) => s.replace('  if (p.hits !== 0) return undefined; // 只谈"整段没了"；warn 档的针脚还在盘上', '  // 守卫被摘：每条问题都查'),
+    expectFail: "成因取法本身可测：三态由注入的 git 决定（本模块不许自己 spawn 子进程）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
@@ -6892,7 +6916,18 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
   });
   const blocking = problems.filter((p) => needleSeverity(p.hits) === "blocking");
   const warn = problems.filter((p) => needleSeverity(p.hits) === "warn");
-  for (const p of blocking) console.log("❌ " + needleProblemLine(p));
+  /* 「针脚没了」这行红如果只说"没了"，读的人会按**文件**猜归属——本仓为此指错过一次人
+   * （第 127 页那批里有一条其实是我自己两页前留下的死针脚，而那个文件恰好也是别人在飞的）。
+   *  归属改成事实：`needleMoveCause` 用 pickaxe 找最后一次让这段文字在该路径上增减的提交。
+   *  只查 blocking 且 hits===0 的那些（判据自己会跳过 warn）。一次 pickaxe ~0.5s，存量 10 条量级可接受。 */
+  const runGit = (args) => {
+    try {
+      return execFileSync("git", [...args], { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    } catch {
+      return null; // 让判据印「成因未取」，而不是悄悄留白
+    }
+  };
+  for (const p of blocking) console.log("❌ " + needleProblemLine(p, needleMoveCause(p, runGit)));
   for (const p of warn) console.log("⚠️ " + needleProblemLine(p));
   if (showUnparsed && unparsed.length > 0) {
     console.log(`ℹ️ 静态检未覆盖 ${String(unparsed.length)} 条（apply 非通行写法）：${unparsed.join("、")}`);
