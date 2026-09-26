@@ -16,7 +16,7 @@
 // drift 走存量豁免（`KNOWN_NON_DRIFT`）：逐条带理由，名单外新增即红，**登记了却不再命中的也算红**
 // （stale-waiver，同 docs-check 的 LEGACY_WAIVERS 规矩）——豁免不许静默烂在这儿。
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
@@ -655,7 +655,23 @@ function inFlightPaths(root: string): Set<string> {
  *  `scripts/prefix-churn-check.ts` 的驱动器自己造 note，而 PC3 只读 `.length` ⇒ 改成驱动器自己的标记
  *  （同族旧账"读数脚本抄产品文案"）。跑过那道门：与 HEAD 同样只剩 PC7 那条**先于本轮**的待裁红，`--self-test` 臂 0 退出。
  *  现在剩的 3 格全是「方案门」＝生产侧同句抄，等 #24。 */
-export const MULTI_COPY_CEILING = 3;
+/** 帽按**树的形状**登记，各只准降（第 108 页补的这一层，起因是同一次 HEAD 认证）：
+ *  桌面层那 209 个文件的删除**一条都没入库**（暂存区只有两条别人的重命名，删除 0 条）⇒ 同一把尺
+ *  · 在「core-only 的工作树」里读到 已提交态水位 3、裸名字 0；
+ *  · 在「HEAD 的树」里读到 10 与 3（多扫到的那几格全在将被删的桌面测试里）。
+ *  把两棵树挤进一个数，要么谎报进度（按 10 放宽），要么把别人的在飞账记到我头上（按 3 红）。
+ *  「含桌面层」那一行会在删除入库后失去对象 ⇒ 那时**删这一行**，不许把 core-only 那行调大。 */
+export const SCOPE_CEILINGS = {
+  "core-only": { multiCopy: 3, bareName: 0 },
+  "含桌面层": { multiCopy: 10, bareName: 3 },
+} as const;
+export type TreeScope = keyof typeof SCOPE_CEILINGS;
+
+/** 纯谓词（抽出来是为了两侧都能钉用例：恒真＝帽永远取宽的那行，恒假＝HEAD 验跑必红在别人的账上）。
+ *  判据面＝`src/renderer` 在不在盘上——AGENTS.md 把"本 checkout 没有 renderer"写成了 core-only 的定义。 */
+export function treeScopeOf(hasRendererFace: boolean): TreeScope {
+  return hasRendererFace ? "含桌面层" : "core-only";
+}
 
 export interface ScanReport {
   needles: number;
@@ -706,6 +722,9 @@ export interface ScanReport {
   flyingMultiCopy: WailedRow[];
   /** 此刻工作树≠HEAD 的文件；水位分两半靠它，也用来对账"在飞那些格真的都落在这些文件里"。 */
   inFlightFiles: string[];
+  /** 这棵树的形状：`src/renderer` 在不在。**帽与红都按它取**——桌面层的删除还没入库时，
+   *  同一把尺在 HEAD 的树里多扫到将被删的桌面测试，那些格子不是 core-only 那行的账（第 108 页）。 */
+  scope: TreeScope;
 }
 
 /** 扫整仓（读盘 IO 集中在这里；纯函数由 tests/ 直接消费）。 */
@@ -756,6 +775,8 @@ export function scanRepo(root: string): ScanReport {
   } as Record<CoverKind, number>;
   for (const r of rows) counts[r.kind] += 1;
   const fly = inFlightPaths(root);
+  // 树的形状：桌面层在不在（`src/renderer` 是最直接的判据，AGENTS.md  declares 本 checkout 没有它）。
+  const scope = treeScopeOf(existsSync(resolve(root, "src/renderer")));
   const allDrift = rows.filter((r) => r.kind === "drift" && !r.waived);
   const driftSplit = splitByInFlight(allDrift, fly);
   const copySplit = splitByInFlight(rows.filter((x) => x.copies > 1), fly);
@@ -785,6 +806,7 @@ export function scanRepo(root: string): ScanReport {
     inFlightMultiCopy: copySplit.flying.length,
     flyingMultiCopy: copySplit.flying,
     inFlightFiles: [...fly],
+    scope,
     maskedSameSentence,
     maskedSharedWord: rows.filter((x) => x.copies > 1).length - maskedSameSentence,
     bareName: bareSplit.committed,
@@ -807,7 +829,8 @@ function main(): void {
   const r = scanRepo(root);
   console.log(
     "prose-needle-scan：收料断言 " + String(r.needles) + " 条（扫 " + String(r.testFiles) +
-      " 个 test 文件）｜生产侧 " + String(r.sourceFiles) + " 个文件",
+      " 个 test 文件）｜生产侧 " + String(r.sourceFiles) + " 个文件｜树＝" + r.scope +
+      "（帽 顶包 " + String(SCOPE_CEILINGS[r.scope].multiCopy) + " ＋ 裸名字 " + String(SCOPE_CEILINGS[r.scope].bareName) + "）",
   );
   console.log(
     "  取料写法：字段直取 " + String(r.viaCounts["字段直取"]) +
@@ -874,10 +897,11 @@ function main(): void {
     process.exitCode = 1;
     return;
   }
-  if (r.committedMultiCopy > MULTI_COPY_CEILING) {
+  const cap = SCOPE_CEILINGS[r.scope];
+  if (r.committedMultiCopy > cap.multiCopy) {
     console.error(
-      "❌ 水位上涨：已提交态顶包候选 " + String(r.committedMultiCopy) + " > 登记的 " + String(MULTI_COPY_CEILING) +
-        "（只准下调；降法见任务 #20。在飞文件不计入这一格，所以这不是并发噪声）",
+      "❌ 水位上涨：已提交态顶包候选 " + String(r.committedMultiCopy) + " > 登记的 " + String(cap.multiCopy) +
+        "（树＝" + r.scope + "；只准下调，降法见任务 #20。在飞文件不计入这一格，所以这不是并发噪声）",
     );
     process.exitCode = 1;
     return;
@@ -901,9 +925,10 @@ function main(): void {
   // 所以它既不是副本缺陷（改代码没用）也换不出更好的词（下一个名字照样裸）——唯一的修法是把名字放进散文上下文里派生断言。
   // 之所以做成**红**而不是列表：水位管的是"改一处不会响"，管不到"这一格按现在的收法根本修不了"；
   // 留成软列表就等于让 35 处噪声永久挂在单上。在飞文件不参与（走 `inFlightBareName`，同 drift 那套分法）。
-  if (r.bareName.length > 0) {
+  if (r.bareName.length > cap.bareName) {
     console.error(
-      "❌ 针脚是个裸名字的顶包格 " + String(r.bareName.length) + " 条 ⇒ 把名字放进散文上下文里断言（变量拼 ⇒ 尺不收它）：" +
+      "❌ 针脚是个裸名字的顶包格 " + String(r.bareName.length) + " > 登记的 " + String(cap.bareName) +
+        "（树＝" + r.scope + "）⇒ 把名字放进散文上下文里断言（变量拼 ⇒ 尺不收它）：" +
         r.bareName.map((v) => v.file + ":" + String(v.line) + " ." + v.field + "「" + v.needle + "」").join("、"),
     );
     process.exitCode = 1;

@@ -2,6 +2,8 @@
  *  分两层：纯函数用合成夹具（每条判态各钉一格，含两格反控）；最后一条打**真仓**——
  *  它同时是本面的"不许空载"自检（挑不到料就是尺坏了，不是全绿）。 */
 import { execFileSync } from "node:child_process";
+import { readdirSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -17,13 +19,14 @@ import {
   isBareNameNeedle,
   isInputRegistry,
   KNOWN_NON_DRIFT,
-  MULTI_COPY_CEILING,
   scanRepo,
+  SCOPE_CEILINGS,
   SELF_EXCLUDED_TESTS,
   sharesOneSentence,
   shadowFilesOf,
   splitByInFlight,
   staticRuns,
+  treeScopeOf,
   type CopySite,
   type ProseNeedle,
 } from "../scripts/prose-needle-scan";
@@ -400,6 +403,22 @@ describe("isBareNameNeedle：裸名字的针脚不是『再挑一个词』能修
   });
 });
 
+describe("treeScopeOf：帽挂在树的形状上，不挂在『今天扫的是哪棵树』的心情上（第 108 页）", () => {
+  it("两侧各有格：有 renderer ⇒ 含桌面层，没有 ⇒ core-only（恒真＝永远拿宽帽，恒假＝HEAD 验跑红在别人的账上）", () => {
+    expect(treeScopeOf(true)).toBe("含桌面层");
+    expect(treeScopeOf(false)).toBe("core-only");
+  });
+
+  it("帽表两行都要在，且窄帽不许比宽帽松（否则分树等于没分）", () => {
+    expect(Object.keys(SCOPE_CEILINGS).sort()).toEqual(["core-only", "含桌面层"].sort());
+    for (const k of ["multiCopy", "bareName"] as const) {
+      expect(SCOPE_CEILINGS["core-only"][k]).toBeLessThanOrEqual(SCOPE_CEILINGS["含桌面层"][k]);
+    }
+    // 分歧格：两行必须**不一样**，完全相同的两行＝这条分层是装饰（判据在，但没有它会红的输入）。
+    expect(SCOPE_CEILINGS["core-only"]).not.toEqual(SCOPE_CEILINGS["含桌面层"]);
+  });
+});
+
 describe("applyWaivers：豁免要带理由，且不许静默烂在这儿", () => {
   const drift = (file: string, lostRun: string) => ({
     file, line: 1, field: "reason", via: "字段直取" as const, needle: lostRun, suppliedInTest: false,
@@ -426,10 +445,20 @@ describe("applyWaivers：豁免要带理由，且不许静默烂在这儿", () =
 describe("真仓扫：这把尺自己不许空载", () => {
   const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
   const r = scanRepo(root);
+  // 帽按树的形状取：同 HEAD 的隔离树上"在飞"那一半必然为空，硬编 core-only 的数会把别人的账记成我的红。
+  const cap = SCOPE_CEILINGS[r.scope];
 
   it("挑得到收料断言（0 条＝尺坏了，不是全绿）", () => {
     expect(r.needles).toBeGreaterThan(20);
     expect(r.sourceFiles).toBeGreaterThan(50);
+  });
+
+  it("报告那行「树＝」必须真是这棵树的形状（换一把原语互检接线）", () => {
+    // 纯函数用例只钉得住谓词，钉不住"接线读的是哪个路径"：`src/renderer` 写成 `src/renderers`
+    // 时谓词依旧正确，只是恒假 ⇒ 帽永远取窄的那行，HEAD 验跑红在别人的账上（第 108 页那 4 格就是这个形状）。
+    const hasRenderer = readdirSync(resolve(root, "src")).includes("renderer");
+    expect(r.scope).toBe(treeScopeOf(hasRenderer));
+    expect(Object.keys(SCOPE_CEILINGS)).toContain(r.scope);
   });
 
   // 加宽之后新增的两格读数。都是**结构性**的：`viaCounts` 三分法之和必须等于总条数（少一条＝
@@ -456,7 +485,7 @@ describe("真仓扫：这把尺自己不许空载", () => {
   });
 
   it("顶包候选的水位只准降（已提交态；在飞文件不计入 ⇒ 并发推不动我的棘轮）", () => {
-    expect(r.committedMultiCopy).toBeLessThanOrEqual(MULTI_COPY_CEILING);
+    expect(r.committedMultiCopy).toBeLessThanOrEqual(cap.multiCopy);
     expect(r.committedMultiCopy + r.inFlightMultiCopy).toBe(r.multiCopy.length);
   });
 
@@ -484,13 +513,17 @@ describe("真仓扫：这把尺自己不许空载", () => {
     expect(r.maskedSameSentence).toBeGreaterThan(0);
     expect(r.maskedSharedWord).toBeGreaterThan(0);
     // 第三族（裸名字）：①它是顶包名单的**子集**，不许另开一条清单外的路；②两半不许重叠（红的那半 vs 在飞那半）；
-    // ③第 105 页把最后两格改成派生断言之后，**已提交态这一族应为空**——今天为空的读数由在飞那一半作证：
-    //   谓词在真仓上确实认得出东西（`rev`、`STATE.md` 就在别人的文件里），不是恒假的空转（规则 129/196）。
+    // ③两半之和＝按谓词挑出的全部（分面漏一半会在这儿红，且这一条**与树的脏净无关**）；
+    // ④帽按 scope 取：第 105 页清空后 core-only 那行登记 0，而 HEAD 的树里仍有 3 格在将被删的桌面测试里。
+    //   "谓词不空转"的活证因此改成两半之和 > 0——干净树上有已提交那 3 格作证，脏树上有在飞那半作证。
     expect(r.bareName.every((v) => r.multiCopy.includes(v))).toBe(true);
     expect(r.inFlightBareName.every((v) => r.multiCopy.includes(v))).toBe(true);
     expect(r.bareName.filter((v) => r.inFlightBareName.includes(v))).toEqual([]);
-    expect(r.bareName).toEqual([]);
-    expect(r.inFlightBareName.length).toBeGreaterThan(0);
+    expect(r.bareName.length + r.inFlightBareName.length).toBe(
+      r.multiCopy.filter((v) => isBareNameNeedle(v.needle)).length,
+    );
+    expect(r.bareName.length).toBeLessThanOrEqual(cap.bareName);
+    expect(r.bareName.length + r.inFlightBareName.length).toBeGreaterThan(0);
   });
 
   // 「在飞」那一半只给个数＝逃生口（第 93 页给 drift 立的规矩，这页补到顶包候选上）。
@@ -498,7 +531,17 @@ describe("真仓扫：这把尺自己不许空载", () => {
     expect(r.flyingMultiCopy.length).toBe(r.inFlightMultiCopy);
     expect(r.flyingMultiCopy.every((v) => r.inFlightFiles.includes(v.file))).toBe(true);
     expect(r.multiCopy.filter((v) => !r.inFlightFiles.includes(v.file)).length).toBe(r.committedMultiCopy);
-    expect(r.inFlightFiles.length).toBeGreaterThan(0);
+    // 「今天有没有人在飞」是盘上的状态，不是这把尺的标准 ⇒ 不许拿它当活证（HEAD-only 认证跑就在干净树上，
+    //   那一支这里必须读到 0 且不红）。活证改成**互斥配对**：在飞清单为空 ⇒ 所有 flying* 必须同时归 0，
+    //   否则"排除在飞"是在凭空抹格子（第 108 页：原断言 `> 0` 在同 HEAD 隔离树上必红，把别人的没提交当成我的尺坏）。
+    if (r.inFlightFiles.length === 0) {
+      expect(r.inFlightMultiCopy).toBe(0);
+      expect(r.inFlightDrift.length).toBe(0);
+      expect(r.inFlightBareName.length).toBe(0);
+      expect(r.committedMultiCopy).toBe(r.multiCopy.length);
+    } else {
+      expect(r.inFlightFiles.some((f) => f.startsWith("tests/") || f.startsWith("src/"))).toBe(true);
+    }
   });
 
   // 影子排除是"把判据关小一格"的动作，所以它自己必须有观测者：
@@ -519,7 +562,7 @@ describe("真仓扫：这把尺自己不许空载", () => {
     expect(new Set(r.anchorTables.map((a) => a.kind))).toEqual(new Set(["登记表", "用例表"]));
     // 第三格观测者，来自本轮造红（把 `isInputRegistry` 阈值抬到 999＝关掉这条谓词，跑完即删）：
     // 水位**不弹**——用例表免计的那格本来就只剩 1 份副本，关掉谓词后它变成"verbatim 1 处"，
-    // 既不进顶包名单也不进 drift ⇒ `MULTI_COPY_CEILING` 对它零分辨力，只有"态"会动。
+    // 既不进顶包名单也不进 drift ⇒ `SCOPE_CEILINGS[scope].multiCopy` 对它零分辨力，只有"态"会动。
     // ⇒ 排除面若只作用在"掉不进判卷名单"的格子上，就必须钉住那个态本身（本轮＝ echo 那一格）。
     expect(r.shadowCleared.some((v) => v.kind === "echo-caller-text")).toBe(true);
     // 第 98 页那条收窄（点名豁免分字段）今天在真仓里**有没有货**：登记表散文栏挡下的字面量条数。
