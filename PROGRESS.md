@@ -3543,3 +3543,34 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
   文档分层一旦把 PROGRESS 归档，D-8 会成批红。这条属"待裁"，本提案不动。
 - 探针的局限也照实交：①整串规范化匹配会把"改写过但等价"的条目算成丢件（#5 就是），所以分桶只是**待人工过的名单**；
   ②预检的文档面比 `runDocsCheck` 窄（我数出 3 项 D-8 而现门报 1 项），**比较只在两侧同面时成立**。
+
+### 2026-09-26 · 第 119 页 · 取料面的第三种态：未跟踪 ∧ 盘上有 —— 今天 17 支没有尺，而报告上一个字都不说
+
+`outputs/scan-third-state-2026-09-26/01-取料面的第三种态未跟踪且盘上有.md`
+
+- 面过去只有两态：`已跟踪∧盘上有`（进面）、`已跟踪∧盘上没有`（第 109 页起了名字）。第三种既不进面也不在缺席名单里
+  ⇒ **少算是静默的**。成因不是猜：第 118 页逐格 diff 出主树顶包 9、落库后 10，唯一差格
+  `tests/prompt-cost.test.ts:47` 当时就是未跟踪新件。
+- **只出声、不改面**：`scripts/lib/scan-scope.ts` 头注释明写"只判 git 已跟踪的脚本"是刻意决策
+  （未跟踪草稿属"隔壁会话正在写探针"，不属 HEAD 回归），把 17 支算进判据面＝拿别人写了一半的东西推我的棘轮，
+  是第 108 页那个错的镜像。要真算进面得走第 117 页 §四 的乙案（帽＝该 SHA 的实测函数）。
+  所以这一格与第 113 页的在飞年龄同处理法：**读数，判据一字未动**。
+- 现算读数：未跟踪 17 支 ＝ 生产面 9（`src/main/` 5 ＋ `src/providers/capabilities.ts` ＋ `scripts/` 3）
+  ＋ 判卷面 8（`tests/` 下 `prompt-cost`、`session-metadata`、`project-registry`… 八支）。
+  17 支此刻没有任何针脚盯着，落库那一刻会一次性进面。
+- 实现收成一份而不是再抄一支：`pickByExts` 抽出（原先"已跟踪"那支自己内联了 `split/filter`）、
+  `gitOthersArgs` 抽成纯函数、`untrackedHeldOutOf` 去重＋剔面内＋排序、
+  `untrackedFaceReading(count, unavailable)` 三态各一句且 **`unavailable` 压过计数**（"按态不按数"）。
+  CLI 与判卷吃同一个函数——第 118 页刚记下的教训，这一页直接照做。
+- 造红四台，**其中一台当场逼出第五处施工**：M3（生产面枚举换成空）红在真仓互检；M4（删 `unavailable` 分支＝fail-open）
+  红在三态那条；**M5（去掉 `--exclude-standard`）第一版 exit 0、没有任何用例会红**
+  ⇒ 一个"在当前输入下无差别"的旗标就是没观测者的旗标（今天 `tests/`、`src/`、`scripts/` 下恰好没有被 ignore 的源码），
+  于是把 argv 抽成纯函数补一条针脚；M5b 重跑同一突变 ⇒ 红。四台跑完 `cp` 复原、`MUTATION` 残骸 0。
+- 真仓那条钉的是**集合相等**不是"非空就行"：与 `git status --porcelain -uall` 逐支相同、列出的每支真在盘上、
+  且与 `missingOnDisk` 不重叠（两支是两件事，混了就回到只有一个数的老路）。
+- 自己又踩的两条（同族）：Edit 的 `file_path` 再一次多了一层 `/Users/ze/ze/…` 前缀（本轮第三、四次）；
+  另一次 `old_string` 0 命中是因为**拿自己打算写的文案当锚**而不是盘上的原文 ⇒ 改前先读那一处的实际字节。
+- 验证：本面判卷 63 → **69 passed** exit 0｜typecheck 0｜尺 CLI exit 0，帽仍 `顶包 10 ＋ 裸名字 2`（没往名单添格子）
+  ｜主树全量 `229 / 2591` 全绿 exit 0 无 Errors（2585→2591 与本面净增 6 条对得上）。
+- 下一步不变：等第 118 页那份 L0 提案批下来 ⇒ 换 `AGENTS.md` 跑门 ⇒ 再谈整簇落库（A／B 两盏红的靶仍是
+  `scripts/mutate-verify.mjs`，实测 `M`）。锚点建议名两条待挂：`ceiling-counts-flying-half`、`untracked-face-third-state`。

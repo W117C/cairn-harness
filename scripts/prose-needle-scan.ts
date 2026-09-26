@@ -605,9 +605,64 @@ export function applyWaivers(
   return { rows, stale: Object.keys(waivers).filter((k) => !hit.has(k)) };
 }
 
+function pickByExts(raw: string, exts: readonly string[]): string[] {
+  return raw.split("\0").filter((p) => p !== "" && exts.some((e) => p.endsWith(e)));
+}
+
 function trackedFiles(prefixes: readonly string[], exts: readonly string[], root: string): string[] {
   const raw = execFileSync("git", ["ls-files", "-z", ...prefixes], { encoding: "utf8", cwd: root });
-  return raw.split("\0").filter((p) => p !== "" && exts.some((e) => p.endsWith(e)));
+  return pickByExts(raw, exts);
+}
+
+/** 纯函数：第三态名单＝「未跟踪 ∧ 盘上有 ∧ 不在面里」。
+ *  三面配对的判据挂在这里（不挂在 git 输出上），所以两侧都能钉用例：
+ *  把"排除面里已有的"那一步漏掉 ⇒ 同一支文件既算面内又算被挡，两个数加起来大于仓里的文件数。 */
+export function untrackedHeldOutOf(trackedFace: readonly string[], others: readonly string[]): string[] {
+  const inFace = new Set(trackedFace);
+  return [...new Set(others)].filter((p) => !inFace.has(p)).sort();
+}
+
+/** 三态的说法收成**一个纯函数**（"按态不按数"，同 `probe-promise-recall` 那族的正确形状）：
+ *  「没有」与「取不到」是两个意思，混着说就是把 fail-open 写进了文案。
+ *  钉不住这一格的改动（比如删掉 `unavailable` 那条分支）不会让任何计数变化——所以它必须有自己的判据位。 */
+export function untrackedFaceReading(count: number, unavailable: boolean): string {
+  if (unavailable) return "取不到（不等于没有）";
+  if (count === 0) return "没有（清单可取且为空）";
+  return String(count) + " 支";
+}
+
+/** argv 抽成纯函数的理由：造红实测「去掉 `--exclude-standard`」这条**没有任何用例会红**
+ *  （今天 `tests/`、`src/`、`scripts/` 下正好没有被 ignore 的源码文件）。
+ *  一个只有"当前输入下无差别"的旗标＝没观测者的旗标，哪天 .gitignore 一加规则，它就直接决定这把尺会不会
+ *  把运行期垃圾目录当成"没有尺的新件"报出来。 */
+export function gitOthersArgs(prefixes: readonly string[]): string[] {
+  return ["ls-files", "-z", "--others", "--exclude-standard", "--", ...prefixes];
+}
+
+/** 取料面的**第三态**：`未跟踪 ∧ 盘上有`。
+ *
+ * 面过去只有两态——`已跟踪∧盘上有`（进面）与 `已跟踪∧盘上没有`（第 109 页起名叫 `missingOnDisk`）。
+ * 第三种既不进面也不在缺席名单里 ⇒ **静默少算**：第 118 页实测主树顶包 9（3 已提交＋6 在飞），
+ * 同一批内容落库后读 10，差的那格 `tests/prompt-cost.test.ts:47` 当时就是未跟踪新件。
+ *
+ * 这一格**只是把数交出来**，不改面：`scripts/lib/scan-scope.ts` 头注释明写"只判 git 已跟踪的脚本"
+ * 是刻意决策（未跟踪草稿属"隔壁会话正在写探针"，不属 HEAD 回归），翻它属人类裁决（任务 #3 记着两条路）。
+ * `--exclude-standard` 让 .gitignore 与本地 exclude 说了算 ⇒ 运行期垃圾目录不会混进来。
+ * git 拿不到清单时**不许**读成"没有未跟踪件"：交 `unavailable`，与第 109 页那第三态同规。 */
+function untrackedFiles(
+  prefixes: readonly string[],
+  exts: readonly string[],
+  root: string,
+): { files: string[]; unavailable: boolean } {
+  try {
+    const raw = execFileSync("git", gitOthersArgs(prefixes), {
+      encoding: "utf8",
+      cwd: root,
+    });
+    return { files: pickByExts(raw, exts), unavailable: false };
+  } catch {
+    return { files: [], unavailable: true };
+  }
 }
 
 /** 本面自己的 test 文件：它的**夹具**里就写着 `expect(m.reason).toContain("…")` 这类样本，
@@ -798,6 +853,11 @@ export interface ScanReport {
   testFiles: number;
   sourceFiles: number;
   missingOnDisk: string[];
+  /** 取料面的第三态（未跟踪 ∧ 盘上有）被现口径挡在面外的文件名。**只是读数**——
+   *  第 118 页实测：主树顶包 9、同批内容落库后 10，差的一格就是这里列出的一支未跟踪 test。
+   *  空数组只有配上 `untrackedListUnavailable === false` 才等于"仓里确实没有"（同第 109 页那第三态）。 */
+  untrackedHeldOut: string[];
+  untrackedListUnavailable: boolean;
   counts: Record<CoverKind, number>;
   drift: WailedRow[];
   /** 落在**他人在飞文件**里的 drift：单列点名，不并进红（判据不能拿别人没写完的行当我的账）。 */
@@ -867,7 +927,16 @@ export function scanRepo(root: string): ScanReport {
   const allTests = trackedFiles(["tests"], [".test.ts"], root);
   const selfExcluded = allTests.filter((p) => SELF_EXCLUDED_TESTS.includes(p));
   const testFiles = load(allTests.filter((p) => !SELF_EXCLUDED_TESTS.includes(p)));
-  const sources = load(trackedFiles(["src", "scripts"], [".ts", ".mts", ".mjs"], root));
+  const allSources = trackedFiles(["src", "scripts"], [".ts", ".mts", ".mjs"], root);
+  const sources = load(allSources);
+  // 第三态：被"只判已跟踪"这条刻意口径挡在面外的文件（＝今天没有尺的新件）。只出声、不改面。
+  const utTests = untrackedFiles(["tests"], [".test.ts"], root);
+  const utSources = untrackedFiles(["src", "scripts"], [".ts", ".mts", ".mjs"], root);
+  const untrackedHeldOut = [
+    ...untrackedHeldOutOf(allTests, utTests.files),
+    ...untrackedHeldOutOf(allSources, utSources.files),
+  ].sort();
+  const untrackedListUnavailable = utTests.unavailable || utSources.unavailable;
   const collected = testFiles.map((f) => collectNeedles(f.path, f.text));
   const needles = collected.flatMap((c) => c.needles);
   const unresolvedMatcher = collected.reduce((a, c) => a + c.unresolved, 0);
@@ -920,6 +989,8 @@ export function scanRepo(root: string): ScanReport {
     testFiles: testFiles.length,
     sourceFiles: sources.length,
     missingOnDisk,
+    untrackedHeldOut,
+    untrackedListUnavailable,
     counts,
     drift: driftSplit.committed,
     inFlightDrift: driftSplit.flying,
@@ -973,6 +1044,16 @@ function main(): void {
     console.log(
       "  ⚠️ 清单里有 " + String(r.missingOnDisk.length) + " 个文件盘上不存在（他人的在飞删除），已跳过：" +
         r.missingOnDisk.slice(0, 6).join("、"),
+    );
+  }
+  // 第三态出声（只是读数，不改面）：三种说法互斥——"没有"与"取不到"不许混着讲（第 109 页同规）。
+  if (r.untrackedListUnavailable || r.untrackedHeldOut.length > 0) {
+    console.log(
+      "  未跟踪且盘上有：" +
+        untrackedFaceReading(r.untrackedHeldOut.length, r.untrackedListUnavailable) +
+        " 按「只判已跟踪」的口径不进面（＝它们此刻没有尺；一入库就进名单，第 118 页实测落库前后差 1 格）：" +
+        r.untrackedHeldOut.slice(0, 6).join("、") +
+        (r.untrackedHeldOut.length > 6 ? "（还有 " + String(r.untrackedHeldOut.length - 6) + " 支未印）" : ""),
     );
   }
   if (r.inFlightFiles.length > 0) {

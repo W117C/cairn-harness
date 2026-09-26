@@ -2,7 +2,7 @@
  *  分两层：纯函数用合成夹具（每条判态各钉一格，含两格反控）；最后一条打**真仓**——
  *  它同时是本面的"不许空载"自检（挑不到料就是尺坏了，不是全绿）。 */
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -32,6 +32,9 @@ import {
   STALE_IN_FLIGHT_MS,
   staticRuns,
   treeScopeOf,
+  gitOthersArgs,
+  untrackedFaceReading,
+  untrackedHeldOutOf,
   type CopySite,
   type ProseNeedle,
 } from "../scripts/prose-needle-scan";
@@ -539,6 +542,43 @@ describe("ceilingBreaches：帽的两处比较收成**一个**决策点，判卷
   });
 });
 
+describe("untrackedHeldOutOf：取料面的第三态必须有名字（第 119 页）", () => {
+  it("面里已有的不许再算成「被挡」；重复去掉；顺序稳定（不然两个数没法比）", () => {
+    expect(
+      untrackedHeldOutOf(["tests/a.test.ts"], ["tests/z.test.ts", "tests/a.test.ts", "tests/z.test.ts"]),
+    ).toEqual(["tests/z.test.ts"]);
+  });
+
+  it("两份都空 ⇒ 交空数组；空数组只有配上 `unavailable=false` 才允许说「确实没有」", () => {
+    expect(untrackedHeldOutOf([], [])).toEqual([]);
+  });
+
+  it("取未跟踪清单的 argv：`--exclude-standard` 必须在，前缀要跟在 `--` 之后", () => {
+    // 造红实测：把旗标去掉，今天**没有任何别的用例会红**（那三个前缀下暂无被 ignore 的源码文件）
+    // ⇒ 这条针脚是给"哪天 .gitignore 多了规则"准备的，不是给今天准备的。
+    expect(gitOthersArgs(["tests"])).toEqual(["ls-files", "-z", "--others", "--exclude-standard", "--", "tests"]);
+  });
+});
+
+describe("untrackedFaceReading：「没有」与「取不到」是两个意思，混着说＝把 fail-open 写进文案", () => {
+  it("三态各有自己的说法，且 unavailable 压过计数（拿 0 冒充「确实没有」就是这一格）", () => {
+    expect(untrackedFaceReading(0, false)).toContain("没有");
+    expect(untrackedFaceReading(17, false)).toBe("17 支");
+    expect(untrackedFaceReading(0, true)).toContain("取不到");
+    expect(untrackedFaceReading(17, true)).toContain("取不到");
+  });
+
+  it("接线钉：CLI 的第三态那行必须吃这个函数（自己拼字符串＝第二份口径，第 118 页同一坑）", () => {
+    const raw = readFileSync(new URL("../scripts/prose-needle-scan.ts", import.meta.url), "utf8");
+    const code = raw
+      .split("\n")
+      .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
+      .join("\n");
+    // 针脚要收**调用形状**：`untrackedFaceReading(` 连定义行一起命中（2 次），那样这条永远不红。
+    expect((code.match(/untrackedFaceReading\(r\./g) ?? []).length).toBe(1);
+  });
+});
+
 describe("agedInFlight：「在飞」有两种，年龄只作读数不作判据（第 113 页）", () => {
   const H = 60 * 60 * 1000;
   it("两侧各有格：25h 前进名单、1h 前不进；恰好 24h 算过期（>=）", () => {
@@ -634,6 +674,33 @@ describe("真仓扫：这把尺自己不许空载", () => {
     expect(ceilingBreaches(r)).toEqual({ multi: "", bare: "" });
     // 两半之和＝名单总数：分面漏一半（只数已提交／只数在飞）会在这儿红，且与树脏净无关。
     expect(r.committedMultiCopy + r.inFlightMultiCopy).toBe(r.multiCopy.length);
+  });
+
+  // 第三态（未跟踪∧盘上有）要与**另一把原语**对账：少报＝静默少算（第 118 页那 1 格的成因），
+  // 多报＝把 .gitignore/本地 exclude 的东西算进面外名单。两边都是集合相等，不是"非空就行"。
+  it("未跟踪清单与 `git status --porcelain -uall` 互检，且列出的每支都真在盘上", () => {
+    expect(r.untrackedListUnavailable).toBe(false); // 命令写坏了 ⇒ 这里红，而不是静默读成「没有」
+    const out = execFileSync("git", ["status", "--porcelain", "-uall", "--", "tests", "src", "scripts"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const viaStatus = [
+      ...new Set(
+        out
+          .split("\n")
+          .filter((l) => l.startsWith("?? "))
+          .map((l) => l.slice(3).trim())
+          .filter(
+            (p) =>
+              p.endsWith(".test.ts") ||
+              ((p.startsWith("src/") || p.startsWith("scripts/")) && /\.(?:ts|mts|mjs)$/.test(p)),
+          ),
+      ),
+    ].sort();
+    expect([...r.untrackedHeldOut].sort()).toEqual(viaStatus);
+    for (const p of r.untrackedHeldOut) expect(existsSync(resolve(root, p))).toBe(true);
+    // 面外名单不许与"已跟踪但盘上没有"那一批重叠——两支是两件事，混了就又回到只有一个数的老路。
+    expect(r.untrackedHeldOut.filter((p) => r.missingOnDisk.includes(p))).toEqual([]);
   });
 
   // 计数要点得出名：一格说"3 处"就得交出是哪三处，否则这张表还是得人回仓里猜（第 101 页）。
