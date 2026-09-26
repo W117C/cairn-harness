@@ -32,7 +32,7 @@ import {
   type Location,
   type SymbolInformation,
 } from "vscode-languageserver-protocol/node";
-import { resolveInWorkspace, ToolError, type Tool, type ToolContext, type ToolResult } from "./base.js";
+import { assertRealContainment, resolveInWorkspace, ToolError, type Tool, type ToolContext, type ToolResult } from "./base.js";
 import { byteCapNotice } from "./cap-notice.js";
 import { headWithinBytes } from "./output-ring.js";
 
@@ -620,6 +620,9 @@ export const lsp: Tool = {
     const rel = typeof args.path === "string" ? args.path : "";
     if (!rel) throw new ToolError("lsp: path 参数必须是非空字符串");
     const abs = resolveInWorkspace(ctx.workspace, rel, "lsp");
+    // 词法闸之外还要判软链归属：openFile/hover 原样吃绝对路径，语言服务器读到什么就回什么——
+    // 界外软链经此直接把界外文件内容带回来（与 read_file 同一形状的漏）。
+    await assertRealContainment(ctx.workspace, abs, "lsp");
     const serverId = pickServerForFile(cfg, abs);
     if (!serverId) {
       throw new ToolError("lsp: 没有服务器处理扩展名 " + extname(abs) + "（检查 .agent/lsp.json 的 extensions）");

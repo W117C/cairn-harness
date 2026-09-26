@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { relative, resolve, sep } from "node:path";
-import { resolveInWorkspace, type Tool, type ToolResult } from "./base.js";
+import { assertRealContainment, resolveInWorkspace, type Tool, type ToolResult } from "./base.js";
 import { countCapNotice } from "./cap-notice.js";
 import { sanitizedEnv } from "./process.js";
 import { rgBinary, rgNegativeNote } from "./ripgrep.js";
@@ -14,6 +14,9 @@ export const glob: Tool = {
     const pattern = typeof args.pattern === "string" && args.pattern.trim() ? args.pattern : "**/*";
     const rel = typeof args.path === "string" && args.path.trim() ? args.path : ".";
     const abs = rel === "." ? ctx.workspace : resolveInWorkspace(ctx.workspace, rel, "glob");
+    // 词法闸之外还要判软链归属（与 grep/read_file 同口径）：rg 收到显式路径参数会跟进软链。
+    // glob 只回文件名不回内容，泄漏面是「界外有什么」而不是「界外写了什么」——轻一档，但同一行修。
+    if (rel !== ".") await assertRealContainment(ctx.workspace, abs, "glob");
     // rg --files 天然尊重 .gitignore；噪音目录显式排除。注意 rg 多个 --glob 按「后写优先」裁决，
     // 排除规则必须排在用户 pattern 之后，否则会被 pattern 覆盖（实测坑）。
     // 但 --glob 的排除**不像 .gitignore 那样让位于显式路径**（实测：`--files node_modules`

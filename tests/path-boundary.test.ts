@@ -11,6 +11,9 @@ import { workspaceUsablePath } from "../src/agent/recall-path";
 import { read_file } from "../src/tools/read_file";
 import { write_file } from "../src/tools/write_file";
 import { edit_file } from "../src/tools/edit_file";
+import { grep } from "../src/tools/grep";
+import { glob } from "../src/tools/glob";
+import { lsp } from "../src/tools/lsp";
 import { parsePluginManifest, PluginLoadError } from "../src/agent/plugins/manifest";
 import type { ToolContext } from "../src/tools";
 
@@ -172,8 +175,62 @@ describe("插件 manifest 路径覆盖包含性（E-12）", () => {
   });
 });
 
-// #33/#47 的收口点：模型侧「回取地址」给不给，由这一支单独回答（两个发射面共用）。
+// grep / glob / lsp 三个工具此前只挂词法闸，同样是「工作区内软链指向外部」这个形状。
+// grep 与 lsp 回的是**文件内容**（`Line N: <原文>` / hover 文本），所以和 read_file 同级；
+// glob 只回文件名，泄漏的是「界外有什么」——轻一档，但缺口是同一个，一并补上。
+describe("grep / glob / lsp 的软链归属（与 read_file 同口径）", () => {
+  it("grep 指向界外的软链：拒绝（否则直接读出界外原文）", async () => {
+    const ctx = await newCtx();
+    const outside = await mkdtemp(join(tmpdir(), "h2-outside-"));
+    await writeFile(join(outside, "secret.txt"), "TOPSECRET\n", "utf8");
+    await symlink(outside, join(ws, "leak"));
+    await expect(grep.run({ pattern: "TOPSECRET", path: "leak" }, ctx))
+      .rejects.toThrow(/越出 workspace 边界/);
+    await rm(outside, { recursive: true, force: true });
+  });
+
+  it("glob 指向界外的软链：拒绝（回的是文件名，泄漏存在性）", async () => {
+    const ctx = await newCtx();
+    const outside = await mkdtemp(join(tmpdir(), "h2-outside-"));
+    await writeFile(join(outside, "secret.txt"), "x", "utf8");
+    await symlink(outside, join(ws, "leak"));
+    await expect(glob.run({ pattern: "**/*", path: "leak" }, ctx))
+      .rejects.toThrow(/越出 workspace 边界/);
+    await rm(outside, { recursive: true, force: true });
+  });
+
+  it("lsp 指向界外的软链：拒绝（openFile 会把界外文件喂给语言服务器）", async () => {
+    const ctx = await newCtx();
+    const outside = await mkdtemp(join(tmpdir(), "h2-outside-"));
+    await writeFile(join(outside, "secret.ts"), "export const TOPSECRET = 1;\n", "utf8");
+    await symlink(join(outside, "secret.ts"), join(ws, "leak.ts"));
+    // 闸排在 getLspClient 之前，所以这里根本不需要真的语言服务器——命令写成
+    // 一条「一跑就留下痕迹」的哨兵，越界路径若没被拦住就会看见它。
+    await mkdir(join(ws, ".agent"), { recursive: true });
+    await writeFile(
+      join(ws, ".agent", "lsp.json"),
+      JSON.stringify({ lsp: { ts: { command: "touch", args: ["SENTINEL_SPAWNED"], extensions: [".ts"] } } }),
+      "utf8",
+    );
+    await expect(lsp.run({ operation: "hover", path: "leak.ts", line: 1, column: 1 }, ctx))
+      .rejects.toThrow(/越出 workspace 边界/);
+    expect(existsSync(join(ws, "SENTINEL_SPAWNED"))).toBe(false); // 语言服务器没被拉起来
+    await rm(outside, { recursive: true, force: true });
+  });
+
+  it("界内软链照常可用（三处都没被误伤）", async () => {
+    const ctx = await newCtx();
+    await mkdir(join(ws, "real"), { recursive: true });
+    await writeFile(join(ws, "real", "hit.txt"), "NEEDLE\n", "utf8");
+    await symlink(join(ws, "real"), join(ws, "alias"));
+    const g = await grep.run({ pattern: "NEEDLE", path: "alias" }, ctx);
+    expect(g.output).toContain("NEEDLE");
+    const gl = await glob.run({ pattern: "**/*", path: "alias" }, ctx);
+    expect(gl.output).toContain("hit.txt");
+  });
+});
 // 它必须与上面那把闸**同口径**——helper 说可用而 read_file 拒收 = 假承诺；反过来 = 白丢能力。
+// #33/#47 的收口点：模型侧「回取地址」给不给，由这一支单独回答（两个发射面共用）。
 describe("回取地址的落位判定（workspaceUsablePath）", () => {
   let root = "";
   let wsRoot = "";

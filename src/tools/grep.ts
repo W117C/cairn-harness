@@ -1,4 +1,4 @@
-import { resolveInWorkspace, type Tool, type ToolResult } from "./base.js";
+import { assertRealContainment, resolveInWorkspace, type Tool, type ToolResult } from "./base.js";
 import { countCapNotice } from "./cap-notice.js";
 import { rgNegativeNote, runRgJson, type RawMatch } from "./ripgrep.js";
 
@@ -85,6 +85,9 @@ export const grep: Tool = {
     const rel = typeof args.path === "string" && args.path.trim() ? args.path : ".";
     // path 入参走统一信任边界校验（越界拒绝），"." 表示整个 workspace。
     const abs = rel === "." ? ctx.workspace : resolveInWorkspace(ctx.workspace, rel, "grep");
+    // 词法闸之外还要判软链归属：rg 收到显式路径参数时会跟进软链（--follow 只管目录遍历），
+    // 而 grep 回的是 `Line N: <原文>`——指向界外的软链会直接把界外文件内容读出来。
+    if (rel !== ".") await assertRealContainment(ctx.workspace, abs, "grep");
     // context：一次调用拿到「命中 + 现场」。缺它时定位完还得 read_file 同一段重读一遍，
     // 每一处待改点都多花一轮往返（查/改代码的主路径上，这是按次计的钱）。
     const contextRaw = args.context;
