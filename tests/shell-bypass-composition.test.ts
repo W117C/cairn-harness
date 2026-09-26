@@ -132,7 +132,8 @@ describe("③ worker 的 git 静态闸（此前全仓零锚点的一支）", () 
     // （第 96 页实测：这把尺给它算出 60 处副本）。真正在生产文案里的话由下一条钉。
     const named = cmd.slice(0, cmd.indexOf(" --"));
     expect(blocked.why).toContain(named);
-    expect(blocked.why).toContain("合并唯一出口");
+    // 「合并唯一出口」在生产侧有三处（编排器的登记校验、worker 工具规格说明）⇒ 改收只有这道静态闸会说的权属半句。
+    expect(blocked.why).toContain("worker 无合并/提交/分支权");
   });
 });
 
@@ -267,7 +268,20 @@ describe("⑨ deny 的 token 边界：过覆盖那一侧已修，漏判那一侧
     const d = evaluate("run_shell", { command: "sudo git push --force" }, session());
     const reason = d.verdict === "deny" ? d.reason : "根本没被 deny（" + d.verdict + "）";
     expect(reason).toContain("deny:run_shell:git push --force");
-    expect(reason, "只给 ruleId 时没人看得懂为什么被拦").toContain("匹配按完整 token 为界");
+    // 旧针脚收「匹配按完整 token 为界」——读数脚本 `scripts/probe-shell-bypass.ts` 里也有同一句 ⇒ 尺算出 2 处副本。
+    // 改收生产侧那半句的**形状**：前导破折号只有 `ruleHitReason` 会加。
+    expect(reason, "只给 ruleId 时没人看得懂为什么被拦").toContain("——匹配按完整 token 为界");
+  });
+
+  // 反向那一半：那句边界只对**带 pattern** 的命中成立 ⇒ 裸工具名条目不许也带上它（带上就是假指引）。
+  it("裸工具名 deny 条目不说「按 token 为界」（整句形状钉住）", () => {
+    const rules = parsePermissionsFile(
+      JSON.stringify({ rules: [{ behavior: "deny", tool: "write_file", scope: "always" }] }),
+      "test",
+    );
+    const d = evaluate("write_file", { path: "src/a.ts" }, session(rules));
+    const reason = d.verdict === "deny" ? d.reason : "根本没被 deny（" + d.verdict + "）";
+    expect(reason).toBe("deny 规则命中（deny:write_file#0）");
   });
 
   it("allow 侧同样讲边界（不对称的是形态面，不是边界）：「allow git status」不覆盖 `git status-bar`", () => {
@@ -336,7 +350,8 @@ describe("⑩ 未知前缀词降为必问、中间插参数照原样 deny", () =
     const d = evaluate("run_shell", { command: "setsid git push --force" }, session());
     const reason = d.verdict === "ask" ? d.reason : "没出卡（" + d.verdict + "）";
     expect(reason).toContain("setsid");
-    expect(reason, "降级的根据必须写在卡上，否则用户以为自己写了 deny 就被禁了").toContain("首词");
+    // 旧针脚「首词」在两支读数脚本里也出现（尺算 3 处副本）⇒ 改收只有 `ruleHitReason` 那句会说的降级根据。
+    expect(reason, "降级的根据必须写在卡上，否则用户以为自己写了 deny 就被禁了").toContain("不在已知包装器表里");
   });
 
   it("⑧ 那三支真强推：首词就是 git ⇒ 按序命中也照原样 deny，不降级", () => {

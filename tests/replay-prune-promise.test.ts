@@ -64,7 +64,8 @@ describe("prune 回取承诺读数：三种 0 各归各的处置", () => {
     const v = prunePromiseVerdict(t);
     expect(v.live).toBe(false);
     expect(v.why).toContain("无人照做");
-    expect(v.why).toContain("不能读成");
+    // 「不能读成」在 `stagnation-burn` 那句里也有（两处只是共享一个词）⇒ 收这一支独有的整句。
+    expect(v.why).toContain("不能读成「没问题」");
   });
 
   it("语料里从没发射过 ⇒ 「潜在」态（与上一态措辞必须不同，否则两个 0 会被读成同一个）", () => {
@@ -83,7 +84,8 @@ describe("prune 回取承诺读数：三种 0 各归各的处置", () => {
     expect(t.attempts).toBe(1);
     expect(t.attemptNoResult).toBe(1);
     expect(t.attemptFailed).toBe(0);
-    expect(prunePromiseVerdict(t).why).toContain("无从判定");
+    // 「无从判定」三支读数脚本都在说（`verify-cause-mix` / `sandbox-check`）⇒ 收「态名 + 这一支独有的成因」整段。
+    expect(prunePromiseVerdict(t).why).toContain("无从判定：照做过但没有一次配到回执");
   });
 
   it("数的是「绝对路径」那一类，不是所有承诺（相对路径的打桩不许被算进 unreachable 半句）", () => {

@@ -622,8 +622,18 @@ function inFlightPaths(root: string): Set<string> {
  *  `src/agent/sequencer.ts` 在别人手里飞 ⇒ m3c 那格只换了针脚、没做生产者突变（不记成已验收）。
  *  修正一处旧账：上面说「方案门」三处——`copySites` 实测是**四处**（多一份在 `scripts/gate-check.ts#makeDriver`）。
  *  剩 11 格：6 格是"同句抄写"（`方案门`×3 等 #24；`rev`/`STATE.md` 在他人手里；`grep` 那格是标识符重复、仍属换针脚），
- *  5 格等热文件（`skill-tool-policy` 两格的producer 在飞、`replay-*` 两格、`shell-bypass` 一格）。 */
-export const MULTI_COPY_CEILING = 11;
+ *  5 格等热文件（`skill-tool-policy` 两格的producer 在飞、`replay-*` 两格、`shell-bypass` 一格）。
+ *  → **5（第 104 页）**：上面那句"5 格等热文件"是**未证的归因**——按第 102 页的句面字段回读，
+ *  那五格里只有 `skill-tool-policy` 两格的 producer 真在飞，其余三格（`replay-corpus-inventory`、
+ *  `replay-prune-promise` ×2、`shell-bypass-composition` ×2 格）生产者全干净 ⇒ 本轮一次摘 6 格：
+ *  「参数一字不变=0」→「无卡死证据」＋「「参数一字不变」>0」（数那格改成派生断言）、
+ *  「不能读成」→「不能读成「没问题」」、「无从判定」→「无从判定：照做过但没有一次配到回执」、
+ *  「合并唯一出口」→「worker 无合并/提交/分支权」、「匹配按完整 token 为界」→「——匹配按完整 token 为界」、
+ *  「首词」→「不在已知包装器表里」。顺带补了那条**反向**用例（裸工具名条目不许说"按 token 为界"）。
+ *  造红：四支生产者改六句（去掉新针脚、**留着旧针脚**，跑完即删，`git status` 已确认复原）⇒ 换掉的 6 格全红，
+ *  而旧针脚在那六条 Received 里逐字命中（`参数一字不变=0` / `不能读成` / `无从判定` / `合并唯一出口` /
+ *  `匹配按完整 token 为界` / `首词` 全在），同批跑的 `tests/autonomy.test.ts` 17 条仍全绿 ⇒ 换的是分辨力不是措辞。 */
+export const MULTI_COPY_CEILING = 5;
 
 export interface ScanReport {
   needles: number;

@@ -72,9 +72,14 @@ describe("tallyInventory：重复统计不许静默偏小", () => {
 
 describe("决策线与规范化", () => {
   it("零原样重试 ⇒ 不给主 loop 加压（今天的真语料形状）", () => {
-    const v = repeatOfFailed({ maxSameFailedRun: 2, retryIdenticalArgs: 0, failedCalls: 15, retrySameName: 7 });
+    const t = { maxSameFailedRun: 2, retryIdenticalArgs: 0, failedCalls: 15, retrySameName: 7 };
+    const v = repeatOfFailed(t);
     expect(v.shouldAct).toBe(false);
-    expect(v.why).toContain("参数一字不变=0");
+    // 旧针脚「参数一字不变=0」的标签在生产侧有两条出口（决策句 ＋ 读数脚本自己的 console 行）⇒ 换收
+    // 只有这一支会说的话（另一支是「有卡死证据」）＋那条阈值理由；数本身改成派生断言。
+    expect(v.why).toContain("无卡死证据");
+    expect(v.why).toContain("「参数一字不变」>0");
+    expect(v.why).toContain("=" + String(t.retryIdenticalArgs) + " 最深连败");
   });
 
   it("run ≥ 3 且存在原样重试 ⇒ 该动，理由带那两个数", () => {

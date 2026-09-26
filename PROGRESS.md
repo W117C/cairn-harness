@@ -3206,3 +3206,29 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
   ＋ 等热文件 5（`skill-tool-policy:192/193`、`replay-*` 两格、`shell-bypass:135/270/339` 的在飞部分）。
 - 验证：六个被测文件 84 条全绿 ｜ `prose-needle-scan` 45 全绿 ｜ typecheck 0 报错 ｜ 主树全量 `229 文件 / 2555 条` 全绿（退出码 0）｜
   **提交后复跑**扫描器退出码 0、已提交态 11（＝ ceiling）。
+
+### 2026-09-26 · 第 104 页：「等热文件」是归因不是读数——五格里三格根本没人挡着 —— 水位 11 → 5
+
+`outputs/masking-sweep-clean-producers-2026-09-26/01-等热文件是归因不是读数五格里三格根本没人挡着.md`
+
+- 开工第一步不是改测试，是把上一轮那句"等热文件 5 格"逐格回读 producer：
+  `git status --porcelain` 显示只有 `skill-tool-policy` 两格的 `src/agent/glm-session.ts` 真在飞，
+  `corpus-inventory.ts`、`prune-promise.ts`、`worker-shell-tools.ts`、`autonomy.ts` **全干净**
+  ⇒ 上一轮把三格能做的活登记成了做不了（形状同规则 93，代价方向相反：这次是欠自己的账）。记成规则 201。
+- 执行 #25，摘 6 格：`corpus-inventory:77`→「无卡死证据」＋「「参数一字不变」>0」（数改成派生断言）、
+  `prune-promise:67`→「不能读成「没问题」」、`:86`→「无从判定：照做过但没有一次配到回执」（态名不许丢）、
+  `shell-bypass:135`→「worker 无合并/提交/分支权」、`:270`→「**——**匹配按完整 token 为界」、`:339`→「不在已知包装器表里」。
+  断言条数 97 → **99**（只增不减），verbatim 78 → 80，across 5 → 4。
+- 新针脚把判定面收窄到"这一支独有的破折号"，所以按规则 60 补了**反向**用例：
+  裸工具名（无 pattern）的 deny 必须整句等于 `deny 规则命中（deny:write_file#0）`——写 `toBe` 而不是 `not.toContain`，
+  多写任何东西都响（规则 96）。`shell-bypass-composition` 37 → 38 条。
+- 造红（规则 195）：四支生产者改六句，每句**只去掉新针脚、留着旧针脚** ⇒ 6 条红、六条 Received 里旧针脚逐字命中
+  （`参数一字不变=0` / `不能读成` / `无从判定` / `合并唯一出口` / `匹配按完整 token 为界` / `首词` 全在）；
+  同批的 `tests/autonomy.test.ts` 17 条全绿；那条派生断言在 `corpus-inventory` 突变下**照绿**（数确实还在句里）；
+  `git status` 确认四支生产者逐字复原。棘轮自己作证：帽临时压到 4 ⇒ 退出码 1 `已提交态顶包候选 5 > 登记的 4`（规则 83）。
+- 剩 5 格由字段分成两族，且**不再混为一谈**：3 格 `方案门`＝生产侧同句抄（#24，等 `agent-runner.ts` 落地）；
+  2 格 `skill-tool-policy`＝**尺的口径**（针脚收的是标识符/调用名，"副本"大半是 import 路径与别的字段）
+  ⇒ 第 105 页题目：非散文的宿主字面量不许替散文作证 ＋ 把名字放进散文上下文里断言。这两格不必等 `glm-session.ts`。
+- 验证：`shell-bypass-composition` 38 ｜ `replay-corpus-inventory` 11 ｜ `replay-prune-promise` 10 ｜
+  `prose-needle-scan` 45 全绿 ｜ typecheck 0 报错 ｜ 主树全量 `229 文件 / 2556 条` 全绿（退出码 0）｜
+  **提交后复跑**扫描器退出码 0、已提交态 5（＝ 新帽）。
