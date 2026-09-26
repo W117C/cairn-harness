@@ -41,10 +41,16 @@ const clean: HeadState = "clean";
 const dirty: HeadState = "dirty";
 const untracked: HeadState = "untracked";
 
+// 这两条路径是**喂给 `entryDisposition` 的输入**，被返回的那句只是把它们抄回理由里（第 97 页的 echo 形状）。
+// 断言里写它们的字面量＝让"任何含 src/a.ts 的文案"替这条作证（实测「src/a.ts」在仓里有 2 处字面量），
+// 所以取派生值：真正要钉的是**成因那半句**，见下面各条的 `toContain`。
+const SRC_REL = "src/a.ts";
+const TEST_REL = "tests/a.test.ts";
+
 const info = (srcState: HeadState, testState: HeadState) => ({
-  srcRel: "src/a.ts",
+  srcRel: SRC_REL,
   srcState,
-  testRel: "tests/a.test.ts",
+  testRel: TEST_REL,
   testState,
 });
 
@@ -56,21 +62,26 @@ describe("entryDisposition（变异条目开跑前的可判性判定）", () => 
   it("被测源文件在飞 → refused，理由说清是回滚兜底问题", () => {
     const r = entryDisposition(info(dirty, clean));
     expect(r.kind).toBe("refused");
-    expect(r.why).toContain("src/a.ts");
-    expect(r.why).toContain("相对 HEAD 有改动");
+    expect(r.why).toContain(SRC_REL);
+    expect(r.why).toContain("属在飞改动集");
   });
 
   it("被测源文件未跟踪 → 同样 refused，但理由区分于在飞（未跟踪无 HEAD 可回滚）", () => {
     const r = entryDisposition(info(untracked, clean));
     expect(r.kind).toBe("refused");
-    expect(r.why).toContain("未跟踪");
+    // 「未跟踪」这三个字在仓里有 6 处字面量（改一处不会响）⇒ 钉这一支独有的成因：没有 HEAD 可回滚。
+    // 注意别用「不在 HEAD 里」——它同时出现在变异表某条 `desc:` 的散文里，而那条散文永远流不到这里。
+    expect(r.why).toContain("未跟踪（不在 HEAD 里）");
+    expect(r.why).toContain("无回滚兜底");
   });
 
   it("源文件干净、**判卷测试文件在飞** → unverified（不得冒充变异存活或基线红）", () => {
     const r = entryDisposition(info(clean, dirty));
     expect(r.kind).toBe("unverified");
-    expect(r.why).toContain("tests/a.test.ts");
-    expect(r.why).toContain("判卷");
+    expect(r.why).toContain(TEST_REL);
+    // 「判卷」在仓里有 34 处字面量 ⇒ 钉这一支独有的裁决：既不判存活也不判基线红，而是「不可判」
+    expect(r.why).toContain("该条不可判");
+    expect(r.why).toContain("不得伪装成变异表退化");
   });
 
   it("未跟踪的判卷文件同样走 unverified，不静默开跑", () => {
@@ -100,7 +111,7 @@ describe("整跑前预检 preflightRefusals", () => {
   it("未跟踪与在飞的源文件都进名单，并带上是哪一条与为什么", () => {
     const r = preflightRefusals([ent("ok", clean, clean), ent("u", untracked, clean), ent("d", dirty, clean)]);
     expect(r.map((x) => x.id)).toEqual(["u", "d"]);
-    expect(r[0]!.why).toContain("未跟踪");
+    expect(r[0]!.why).toContain("无回滚兜底");
     expect(r[1]!.why).toContain("在飞改动集");
   });
 
@@ -129,7 +140,7 @@ describe("splitRunnable（预检逐条跳过，其余照跑）", () => {
     expect(r.refused.map((x) => x.id)).toEqual(["a", "c"]);
     expect(r.runnable).toEqual(["b", "d"]);
     expect(r.refused[0]!.why).toContain("在飞改动集");
-    expect(r.refused[1]!.why).toContain("未跟踪");
+    expect(r.refused[1]!.why).toContain("无回滚兜底");
   });
 
   it("不安全的一条都不许进 runnable（跳过要真跳过，别只看名单照样跑）", () => {

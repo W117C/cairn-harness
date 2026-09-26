@@ -524,8 +524,16 @@ function inFlightPaths(root: string): Set<string> {
  *  是一行**用例清单**（喂给被测函数的输入），这一条真正的态是 `echo-caller-text`。
  *  ⇒ 27 比应有的低 1 格，这条错位写在 `outputs/anchor-shadow-copies-2026-09-26/` §五，不收掉不许当"已验收"。
  *  `net.test.ts:53`「停滞超时」只从 3 降到 2——它另有**两份**真生产者（`updater.ts#stallMessage`、`net.ts#arm`），
- *  照旧留在单上：这条排除不是把清单缩短的手段。 */
-export const MULTI_COPY_CEILING = 27;
+ *  照旧留在单上：这条排除不是把清单缩短的手段。
+ *  → **22（第 98 页）**：`tests/mutate-verify-gates.test.ts` 一次摘 5 格——三条「未跟踪」（6 处）换成生产侧唯一的
+ *  「无回滚兜底」，「判卷」（34 处）换成「该条不可判」＋「不得伪装成变异表退化」，两条夹具路径
+ *  （`src/a.ts`、`tests/a.test.ts`）改成**派生值**（那是喂进去的输入被抄回理由，第 97 页的 echo 形状）。
+ *  造红：把 `mutate-gates.ts` 那句改成「未跟踪，拒绝变异」⇒ 新针脚 3 条红，而旧针脚 `toContain("未跟踪")`
+ *  在同一次突变下**仍为真** ⇒ 这一格换的不是措辞，是分辨力。
+ *  途中量到一条**排除面的过宽**：「不在 HEAD 里」看着独有，实为 2 处——第二处在变异表某条 `desc:` 的散文里，
+ *  而 `desc` 是给人读的，永远流不到被断言的那句。⇒ 「测试点名该表 ⇒ 该表算生产者」这条豁免按**文件名**认，
+ *  分不清"表产出的字段"（`expectFail:`、报告行）与"表里谈论文的散文"（`desc:`）。已立任务待收窄，先绕开不掩饰。 */
+export const MULTI_COPY_CEILING = 22;
 
 export interface ScanReport {
   needles: number;
