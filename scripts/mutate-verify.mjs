@@ -5702,7 +5702,7 @@ const MUTATIONS = [
     test: "tests/prefix-churn.test.ts",
     desc: "「有没有出声」直接当真 ⇒ 工具面静默变化这一族从判据里消失",
     apply: (s) => s.replace("    const named = (now.faceNote ?? \"\").length > 0 || (before.faceNote ?? \"\").length > 0;", "    const named = true;"),
-    expectFail: "PC3 变了且点名 = 过；变了不点名 = 红；一次都没变 = 红（无分辨力）",
+    expectFail: "--self-test 全造得红，且**每条规则都有自己的反向对照**（加规则不加对照即红）",
   },
   {
     id: "pc-determinism-count-hardcoded",
@@ -6046,7 +6046,7 @@ const MUTATIONS = [
     test: "tests/no-progress.test.ts",
     desc: "把真实语料上零触发（既没证明有用也没证明无害）的往返规则提到 escalate ⇒ 分级不再由测量决定，外部那种「重 grep 被判环直接 exit 1」的错法就回来了",
     apply: (s) => s.replace('    promote("note", "alternating_thrash", signals.thrash.evidence);', '    promote("escalate", "alternating_thrash", signals.thrash.evidence);'),
-    expectFail: "本模块绝不主动终止：action-shaped 再多次也只到 directive",
+    expectFail: "停滞 ⇒ escalate；action-shaped ⇒ directive；只有往返 ⇒ note；全静 ⇒ silent",
   },
   {
     id: "np-evidence-not-named",

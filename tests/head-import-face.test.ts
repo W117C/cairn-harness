@@ -57,6 +57,11 @@ describe("parseImportStatements：取料单位是整条语句，不是行", () =
   it("clause 不许跨过语句边界：出现 `(` `)` `=` `;` 就该停（实测：上一版把尺自己报成悬空）", () => {
     const text = 'export function resolveIt(spec: string): string {\n  // 注释里举例：from "./todo"\n  return spec;\n}\nimport { ok } from "./ok";';
     expect(parseImportStatements(text).map((s) => s.spec)).toEqual(["./ok"]);
+    // 上面那条**对这条不变量零分辨力**（第 141 页普查实测：把 clause 的字符禁区摘掉，两种口径都只读出 `./ok`
+    // ——注释在函数体里，非贪婪那一截根本不会走到它前面）。真正能分开的是"注释独立成行、夹在两条语句之间"：
+    // 摘掉禁区 ⇒ 从上一行的 `}` 之后一路跨进来，多出一条不存在的边。
+    const between = 'export function g(a: string): string {\n  const t = h(a);\n  return t;\n}\n// 说明文字 from "./doc"\nimport { ok } from "./ok";';
+    expect(parseImportStatements(between).map((s) => s.spec)).toEqual(["./ok"]);
   });
 
   it("不带 from 的两种写法也是边（副作用与动态 import），但只判模块不点名", () => {
