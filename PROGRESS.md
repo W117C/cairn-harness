@@ -3951,3 +3951,47 @@ git 调用由 `scripts/mutate-verify.mjs` 注入 ⇒ 本模块不自己 spawn �
   本页那 3 条按第 127 页的顺序同笔入库后自己清账 ⇒ 那条顺序现在是可复用的，不只是记在文档里。
 - 同批复跑全量：**236 files / 2701 tests passed，exit 0**（2695 → 2701 ＝ 本页 6 条新用例；
   口径仍是工作树——树里带着别人未提交的改动）。
+### 2026-09-27 · 第 131 页 · 读数：HEAD 从 `834ba3a` 起就是红的，已经骑了 10 笔（含本会话 8 笔），而主树一直全绿
+
+起因不是抓 bug，是给任务 #4 量代价：跑一次 `head-cert`（认证树里 typecheck ＋ 全量），
+实测 **69.36s**，退出 1 —— 于是拿到 HEAD 现态：
+
+- **typecheck 8 条错**：`Cannot find module './main/provider-runtime'`、`'./run-request'`、`'./run-attachments'`、
+  `'../providers/capabilities'`，＋ `glm-session` 少一个 `SessionTransport` 导出，＋ 2 条连带 any。
+- **vitest：34 个判卷文件红 / 194 绿（共 228）**、5 条用例红。同一时刻**主树 236 files / 2701 tests 全绿**。
+- 差的 8 个判卷文件也不是小事：`git ls-files --others tests` 里有
+  `main-provider-runtime`／`main-run-routing`／`provider-capabilities`／`run-attachments`／`project-registry`／
+  `prompt-cost`／`session-metadata`／`session-organization` ——**8 支为那几个缺失模块写的新测试，也从未入库**。
+- **归属按 `git log -S`（第 128 页那条办法），不按文件猜**：4 个模块的引用最早由 **`834ba3a`** 引进
+  `src/main/agent-runner.ts`，`cb70297` 又加了第 4 个消费者（`src/cli.ts` → `provider-runtime`）；
+  而那 4 个文件至今是 `?? 未跟踪`。⇒ **同一笔 `834ba3a` 犯了两个方向的"半落库"**：
+  别人的删除被卷进 HEAD（第 126 页），自己的新文件没被带进去（本页）。
+- 骑乘：`git rev-list --count 834ba3a..HEAD` = **10**，其中本会话 8 笔。
+  ⇒ 一句必须说出口的话：**本会话今天交出的所有"全量绿"凭证都是主树口径**，
+  本会话那 8 笔没有一笔碰过这 4 个模块（不是踩坏的，是骑在红 HEAD 上继续盖楼）。
+  这正是规则 211（凭据等级要印出来）要管的东西：以后交笔写"主树绿／HEAD 未验"，
+  别让"236 files 全绿"被读成"仓库是好的"。
+- **没有代别人补这 4 个文件**：它们是别人未跟踪的在飞工作，按仓规不代提交。
+  解锁只需一笔 `git add` 带走 4 个模块（＋那 8 支测试，如果作者认为它们到了入库的时候）＋
+  `glm-session` 的 `SessionTransport` 导出。已成立务 #11 记这个缺口。
+- 给任务 #4 的准数：认证树"快面"＝ typecheck ＋ 全量 ≈ **69 秒**（19.6 分钟那是整表 26 道，不是这一下）；
+  其中"模块未入库"这一类已能压到 **0.2 秒**（第 132 页新尺），"少导出符号"那一类仍只有 typecheck 看得见。
+
+### 2026-09-27 · 第 132 页 · 尺：HEAD 的 import 面自洽——0.2 秒、不需要第二棵认证树
+
+`scripts/head-import-face.ts`：取料 = `git ls-tree -r HEAD` ＋ `git grep <rev>`（**读提交对象，不碰工作区**）
+⇒ 别人盘上的未提交改动**盖不住**这条红（那正是第 131 页那次事故的成因：主树永远绿）。
+判据是纯函数（`findDanglingImports`／`checkHeadImportFace`，存在性注入），三态分开印：
+悬空且**盘上有**＝「漏 `git add`」；悬空且盘上也没有＝「引用写错或模块被删而引用没跟着改」；
+＋ `--at=<rev>`／`--no-waivers` 两个开关，用来拿事故当时那一笔自证。存量 4 条进 `HEAD_DANGLING_WAIVERS`，逐条带页号出处。
+
+- **反事实实测（这把尺咬得住的证据）**：`--at=834ba3a`／`cb70297`／`9f4fe45` 都报 3–4 条悬空，
+  `--at=69fbb0d`（core-only 迁移那笔）**悬空 0** ⇒ 不是"看什么都红"；HEAD 现读 4 条、全部在存量里 ⇒ finding 0、exit 0。
+- 第一版 **47 条假红**，两批根因（都是本仓点过名的老形状）：
+  ① 只做"加后缀"不做"换后缀" ⇒ `src/tools/index.ts` 那批 `./x.js` 写法（TS ESM 指向 `.ts`）全被判悬空；
+  ② `from "…"` 一律当 import ⇒ 判卷里的假源码字符串（`const fake = 'import … from "./todo";'`）被当真边
+  （与第 125 页 `measure-deleted-test-coverage` 那 4 条假阳性同一个病）。加了两道之后 47 → 4。
+- 判卷 `tests/head-import-face.test.ts` **12 passed**（含"取料面不许空载"：HEAD 449 文件／2512 条边）。
+  4 条变异锚点同笔入库（规则 217 的顺序）：换后缀守卫、逐行锚、两态合一、豁免不记 hit（stale 永不触发）。
+- 射程边界：只管**仓内相对边**（裸包名不算）、只管**模块存在性**——
+  `SessionTransport` 那种"文件在、少导出符号"要 typecheck；跨行 `from` 串会漏（`git grep` 是逐行匹配）。

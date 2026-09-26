@@ -6888,6 +6888,38 @@ const MUTATIONS = [
     apply: (s) => s.replace('  if (p.hits !== 0) return undefined; // 只谈"整段没了"；warn 档的针脚还在盘上', '  // 守卫被摘：每条问题都查'),
     expectFail: "成因取法本身可测：三态由注入的 git 决定（本模块不许自己 spawn 子进程）",
   },
+  {
+    id: "head-import-js-suffix-never-swapped",
+    src: "scripts/head-import-face.ts",
+    test: "tests/head-import-face.test.ts",
+    desc: "只做「加后缀」不做「换后缀」⇒ `./x.js` 这类 ESM 写法全被判成悬空（第一版实测 47 条假红里最大的一族）；假红一多，人们关的是门不是修尺",
+    apply: (s) => s.replace("    if (!rel.endsWith(from)) continue;", "    if (true) continue;"),
+    expectFail: "`./x.js` 这种 ESM 写法指向的其实是 x.ts（第二版没做换后缀，凭空 40+ 条假红）",
+  },
+  {
+    id: "head-import-fixture-strings-counted",
+    src: "scripts/head-import-face.ts",
+    test: "tests/head-import-face.test.ts",
+    desc: "不要求「这一行本身就是 import」⇒ 判卷里假源码字符串（`const fake = 'import … from \"./todo\";'`）被当成真边，凭空多出十几条悬空",
+    apply: (s) => s.replace("    if (!headFiles.has(from) || !IMPORT_LINE.test(m[3]!)) continue;", "    if (!headFiles.has(from)) continue;"),
+    expectFail: "HEAD 现读：悬空集合必须**落在存量名单里**，且 finding 为 0（新增即红；名单里的补好了由 stale 那条逼人来删名）",
+  },
+  {
+    id: "head-import-two-states-collapse",
+    src: "scripts/head-import-face.ts",
+    test: "tests/head-import-face.test.ts",
+    desc: "「漏 git add」与「模块不存在」压成一态 ⇒ 修法完全不同的两类红长得一样（前者补一笔、后者要找删它的提交）",
+    apply: (s) => s.replace("onDisk: existsOnDisk(target)", "onDisk: true"),
+    expectFail: "两态分开判：盘上有＝「漏 git add」，盘上也没有＝「引用写错/模块被删」",
+  },
+  {
+    id: "head-import-waiver-never-goes-stale",
+    src: "scripts/head-import-face.ts",
+    test: "tests/head-import-face.test.ts",
+    desc: "命中豁免却不记 hit ⇒ stale 永不触发，补好之后那条名还躺在表里（本仓「豁免不许静默烂在这儿」那一族）",
+    apply: (s) => s.replace("{ hit.add(d.target); continue; }", "{ continue; }"),
+    expectFail: "豁免是双向的：名单内不红；不再悬空则 stale 红（不许静默烂在表里）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
