@@ -3632,3 +3632,62 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
 - 验证：`tests/skill-tool-policy.test.ts` 18 → **23 passed**｜typecheck 0｜尺 exit 0（裸名字回到帽内）｜
   `plugins-check 42✅/0❌/1 未证`（与改前同）｜全量 **229 files / 2602 tests passed，exit 0**（82.69s；首跑那 1 红见上条，已修）。
   **这行凭证里没有 `docs-check`**——交这页前我没跑它，跑出来的那条真仓红不属这页（第 122 页立案）。
+- 更正（本页交笔后才测的）：那句「第 122 页立案」把案情写错了——`grep -c prompt-fixed-cost PROGRESS.md` = **5**，
+  那条 `D-8` 红第 91／95／109／116 页各点过名，**不是新案**；而且门一直在管它（`scripts/gate-manifest.ts:20` 有 `docs-check`，
+  `pnpm gates` 今天实跑就报 `❌ docs-check exit=1`）。缺的不是门，是**我这六页的凭证里没跑整表**。
+  第 122 页立的是旁边那件事：`BLOCKED.md` 127,023 B / 1,188 行被在飞那簇换成 296 B 的 stub，13 处按编号引用同时变死。
+
+### 2026-09-27 · 第 122 页 · 裁决台账正被整簇删空：127,023 B → 296 B，同时 13 处「按编号引用」变死
+
+`outputs/blocked-queue-deleted-2026-09-26/01-裁决台账被整簇删空-127023B到296B-13处按编号引用同时变死.md`
+
+- 现算（复跑面＝同目录 `measure-citations.mts`）：`BLOCKED.md` HEAD **127,023 B / 1,188 行 / 67 个标题**｜在飞那版
+  **296 B / 6 行**（−99.77%，mtime 09-24 17:41，两天没入库）。`src/ scripts/ tests/ docs/` 465 个文件里
+  **14 处编号引用 / 6 个编号 / 12 个文件**；编号在 HEAD 台账查得到 **5/6**，在飞版 **0/6** ⇒ 落库那天 **13 处变死**。
+  分子口径：只算 `src/ scripts/ tests/ docs/` 四棵活树；同一条正则扫 `outputs/`（dated 档案层）另有 22 处命中，
+  按 `docs-check.ts:136` 的「archive/、dated specs/ 不受这条管」口径**不进账**——报的是下界，不是全仓上界。
+- 死掉的是**别人仍在引用的裁决原文**，不是历史：`scripts/gym-long.ts:6`、`src/agent/gym/probe.ts:231` 引「裁决 3 的原话」，
+  `scripts/plugins-check.ts:145` 引「裁决 4」当判据修正依据，`scripts/replay-determinism-check.ts:4/99` 把门立在「待办 #56」上，
+  `tests/runscope.test.ts:1` 引「D-2 立项的验收标准」。更要紧的是反面读数：**这页在仓里没有「受管」身份**——
+  `docs-check.ts:115` 的 `LIVE_PAGES` 四项（AGENTS.md／STATE.md／docs/README.md／docs/CODE-WIKI.md）**不含 `BLOCKED.md`**；
+  `judge-input-face.ts:21` 那张 `ROOT_FILES` 只是认路径的白名单（唯一消费者是它自己的测试）；
+  `tests/judge-frozen-gate.test.ts:46` 那句「写 BLOCKED.md 换判据」管的是**模型别动判据**，不是「别人删空它有人喊」。
+- 为什么没有一把尺抓到：**D-3 只检查 `页:行号` 形状**，实测真源码里 `BLOCKED.md:<行>` **0 处**（只有测试 fixture 的 4 处反例素材），
+  全是 `裁决 N｜#N｜D-N` 这种编号形状 ⇒ 对这次删除分辨力为零。`DOC_BUDGETS` 是「只准下调」的帽，删到 296 B 天然在帽内。
+  一般形状：**同一类跨面耦合，换了指针语法就没有门**——这是「同一谓词几份副本宽度不同」那族的又一次命中，漂的是语法不是谓词。
+- 门不缺，缺的是我这笔的凭证：`scripts/gate-manifest.ts:20` 里就有 `docs-check`，`pnpm gates` 整表今天实跑报
+  `❌ docs-check exit=1`（就是第 121 页那条 D-8 红）。`grep -rln runDocsCheck tests/` = **0** ⇒ **全量测试绿不含文档面**；
+  第 116–121 页每页交的都是「主树全量＋typecheck＋单把尺」，六页没跑过整表。
+- 点名 ≠ 交接：那条 D-8 红被第 91／95／109／116／121 页点过 **5 次**名，`BLOCKED.md` 里 **0 条**（HEAD 与在飞版都 0，实测）。
+  反面自查一并量了：`PROGRESS.md` 里 `待裁|待办|立案` **31 处**、`工单` **4 处**，而仓内**没有任何工单文件**
+  （`git ls-files` 扫 `todo|工单|task` 只命中靶场 fixture）——包括我自己第 121 页那句「记进工单」：
+  **它记在会话本地的任务表里，换一个会话就看不见**。仓内唯一的队列就是那份正在被删的台账 ⇒ 任务 #2 是 #6 的前置，两条要一起裁。
+- 严重度分层（别把 13 处都说成"会红"）：**全仓运行时读者 0 个**（`grep -rlE "(readFile|existsSync)…BLOCKED" src scripts tests` 只有本探针自己）
+  ⇒ 落库不会让任何断言变红，这正是"没有门"的机制解释。13 处拆开：**12 处是注释/文档里的语义引用**（逐条点名在工件 §二·补），
+  **1 处是可打印的门文案**（`replay-determinism-check.ts:99`：债命中时印「见 BLOCKED #56；修好后要删条目」＝对一条即将不存在的页下指令）；
+  今天这一支没走到（`grep -c "见 BLOCKED #56" /tmp/gates-122.log` = 0），也没有用例钉过这句（`grep -rn 登记的债 tests/` = 0）
+  ⇒ 「模型可见文本的承诺」那族（此前记 4 次）新增第 5 次命中。
+- 与第 118 页同族、不是重复：那页量的是 `AGENTS.md`（27,738 B 规矩册 → 996 B），本页是 `BLOCKED.md`。两面合起来说明缺的是
+  **覆盖所有受管页的「改册不丢件」判据** ⇒ 任务 #2 的第 0 步变成「**先定哪张表是事实源**」：`LIVE_PAGES` 缺 `BLOCKED.md`，
+  `ROOT_FILES` 只是路径白名单且 7 项里 `components.json`、`electron.vite.config.ts` 盘上已是 `D`（HEAD 有、工作树无）。
+- 同一次迁移的**正例对照**：core-only 迁移删 `docs/ui-fact-baseline.md` 时同轮撤了 `LIVE_PAGES` 条目并把理由写进注释
+  （`scripts/docs-check.ts:119-122`）——说明这规矩做得到，只是 `BLOCKED.md` 这一面没人按它走。
+- 同页出第二份工件 `02-BLOCKED台账逐条去向提案-…md`（等批，与第 118 页的 AGENTS.md 提案**合并成一次批准**）：
+  台账按行段全分开（1–797＝92,240 B 里程碑期／798–1187＝34,783 B 现代期，相加正好 127,023 B），逐条给去向。
+  核现态时抓出**三条已过期**：裁决 1 的前提「没有合法注入通道」已被代码推翻（`settings.ts:124 autoVerifyRepair:false` ＋
+  `loop.ts:462` 的 `auto-red` 第二拍分支在位）；裁决 2 已执行（09-23 `bc52ab3` 只翻 `autoVerify`，`settings.ts:123` 实测 `true`）；
+  点名桌面层的 6 个标题逐条分流——其中 **`map-check` ④ 那条不许按"桌面层已删"误杀**（`map-check` 仍在 26 道门表里），
+  `:784` 是用户拍过的裁决记录，只能归档不能判作废。
+- 要人裁的两条（已立任务 #2 与 #6）：① 受管页删除必须逐条给落点（回原页／进替代页并点名／作废并写明理由，**空不许通过**）；
+  ② 观察到的红要落到「有人看得见」的面——台账若被删就无处可落，所以 ① 是 ② 的前置。
+- 五处自纠都记在工件 §六：单位（`.length` 当字节，中文台账差 1.77×）／join 键（抽 id 带前缀 ⇒ 假「查不到」一片）／
+  假新案（把 5 页前就开着的红当本页立案）／假「没有尺」（只 grep 了 `gates.ts`，忘了门表在 `gate-manifest.ts`）／
+  把「表里列了它」当成「有门管它」（`ROOT_FILES` 是路径白名单，`LIVE_PAGES` 不含这页）。
+- 本轮没碰：`BLOCKED.md`（受判输入面，AGENTS.md 明令不改冻结判卷文件）、`scripts/replay-readings.ts`（`M`）与
+  `scripts/replay/prompt-fixed-cost.ts`（`??`，那条 D-8 红的主人）、`scripts/docs-check.ts`（`M` 在飞）。
+- 验证：`measure-citations.mts` exit 0（正控＝5 个编号在 HEAD 命中数 3/3/1/2/1；负控＝`裁决记录 §3` 查不到，属歧义引用，不计进 13 处）｜
+  typecheck 0｜**`pnpm gates` 整表首跑（本页凭证第一次含它）：总退出码 1**（取日志里自写的 `GATES_EXIT=`，后台通知报的 0 是尾部 `echo` 的码——规则 206 当场复发），
+  26 道＝**23 ✅ ＋ 3 ❌**：`docs-check`（那条 D-8，他人未跟踪面）、`mutate-verify` **1,013,121ms ≈ 16.9 分钟**（7 条变异存活＋未证 265：236 源文件在飞/未跟踪、29 判卷在飞）、
+  `mutate-needles-check`（804 条针脚：阻断 **12**、待复认 3、钉在飞文本 2）。逐道读数与两条附带读数（236 条＝第 119 页第三态在锚点尺上的同源读数；
+  断言体检自己印「15 个文件盘上不存在，已跳过」）见工件 §七。
+  抽门名那条正则又漏计一次：`[a-zA-Z:_-]+` 不含数字 ⇒ `e2e` 被静默跳过（24 道只抽出 23）——已写进 §七，规则 206 同族。
