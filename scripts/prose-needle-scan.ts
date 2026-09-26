@@ -209,10 +209,10 @@ function inFlightPaths(root: string): Set<string> {
 }
 
 /** 顶包候选的水位（**只准下调**，同 `docs-check` 的 `DOC_BUDGETS`）。
- *  登记的是**已提交态**那个数（35，2026-09-26 第 92 页收尾时实测；在飞那 7 条不计入），
- *  因为在共享工作树里，盘上的数两分钟内就能被别人推动 41→44——拿它当水位等于把并发噪声记到我账上。
- *  降它的方法见任务 #20。 */
-export const MULTI_COPY_CEILING = 35;
+ *  登记的是**已提交态**那个数（在飞文件不计入 ⇒ 别人并发改动推不动我的棘轮）。
+ *  历史：35（第 92 页登记）→ 31（第 93 页摘掉 4 格冗余文案断言）。
+ *  降它的方法见任务 #20：**每降一格就把这里一起下调**，否则棘轮只是张装饰性的表。 */
+export const MULTI_COPY_CEILING = 31;
 
 export interface ScanReport {
   needles: number;

@@ -68,7 +68,8 @@ describe("classify：四种结局＋一种「读不出」，且优先级确定",
     ].join("\n");
     const r = classify(out, 1);
     expect(r.verdict).toBe("红了未点名");
-    expect(r.note).toContain("expectFail");
+    // 不再 `toContain("expectFail")`：`verdict` 这个封闭枚举就是这条判据的观测者，
+    // 而「expectFail」在整表里是 7 处副本 ⇒ 收它等于没收（改坏措辞也不会红）。
   });
 
   it("红的判据要能认出 vitest 两种排版（`Failed Tests N` 段头 或 行首 FAIL）", () => {
@@ -88,11 +89,27 @@ describe("classify：四种结局＋一种「读不出」，且优先级确定",
   it("反向一侧：非零退出而输出里没有任何可认的汇总行 ⇒ 读不出，绝不默认成『已杀死』", () => {
     const r = classify("some crash without summary", 1);
     expect(r.verdict).toBe("读不出");
-    expect(r.note).toContain("不可信");
+    // 收 `cause` 字段而不是 `note` 的措辞（「不可信」在本仓有 7 处副本 ⇒ 收它是假验收）
+    expect(r.cause).toBe("no-summary");
   });
 
   it("spawn 自己失败（没跑到）也是读不出，且退出码不参与判读", () => {
-    expect(classify("", null, "ENOENT").verdict).toBe("读不出");
+    const r = classify("", null, "ENOENT");
+    expect(r.verdict).toBe("读不出");
+    expect(r.cause).toBe("spawn");
+  });
+
+  // 这一格以前没有：两个成因曾被同一个 `if` 合并，note 里只用 `${… ?? "无退出码"}` 区分，
+  // 于是"进程被信号杀掉（有 spawn、没退出码）"与"spawn 失败"在读数上长得一样 ⇒ 修法不同却同读。
+  it("只有『没退出码』时 cause 必须是 no-exit-code，不与 spawn 混读", () => {
+    const r = classify("", null);
+    expect(r.verdict).toBe("读不出");
+    expect(r.cause).toBe("no-exit-code");
+  });
+
+  it("其余各态 cause 一律空串（『读不出』才有成因；别把成因当成只有失败才有）", () => {
+    expect(classify("✅ 全部变异被正确杀死（断言非恒真）", 0).cause).toBe("");
+    expect(classify("1 条变异存活或误伤", 1).cause).toBe("");
   });
 });
 

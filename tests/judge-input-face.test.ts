@@ -73,17 +73,20 @@ describe("attributeInputs：两把尺分开标，空集说「未记」", () => {
     expect(r.hits.map((h) => h.via)).toEqual(["import 闭包"]);
   });
 
-  it("只有文本指针命中 ⇒ note 必须写明是提示级、要人工复判（规则 177）", () => {
+  it("只有文本指针命中 ⇒ 必须标成提示级、要人工复判（规则 177）", () => {
     const text = 'const table = read("scripts/mutate-verify.mjs");';
     const r = attributeInputs("tests/a.test.ts", { graph: g, text, inFlight: new Set(["scripts/mutate-verify.mjs"]) });
     expect(r.hits.map((h) => h.file)).toEqual(["scripts/mutate-verify.mjs"]);
-    expect(r.note).toContain("提示级");
+    // 收**整条 `via`**，不收 `note` 里的短片段：「提示级」这三个字在 `via` 与 `note` 两处都有（顶包候选），
+    // 改另一处它照样绿；而"这一格凭什么算提示级"的真相就是那条 `via`（结构字段，不是措辞）。
+    expect(r.hits.map((h) => h.via)).toEqual(["路径字面量（提示级，不是证明）"]);
   });
 
   it("两把尺都没命中 ⇒ 不许读成「确认没人垫」", () => {
     const r = attributeInputs("tests/a.test.ts", { graph: g, text: "没有路径", inFlight: new Set(["src/unrelated.ts"]) });
     expect(r.hits).toEqual([]);
-    expect(r.note).toContain("未记");
+    // 整句前缀逐字比，不 `toContain("未记")`：那两个字在本仓有 4 处副本（规则 183：两把尺不许同源）。
+    expect(r.note.startsWith("**取料面未记**＝没查到在飞依赖，不等于确认没人垫")).toBe(true);
   });
 
   it("该文件根本不在 import 图里 ⇒ 未记原因要点名这条（`.mts` 读数脚本就是这种）", () => {

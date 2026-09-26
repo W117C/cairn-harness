@@ -44,21 +44,33 @@ function sawRedTest(stdout: string): boolean {
   return /Failed Tests\s+\d+/.test(stdout) || /^ *FAIL +\S+/m.test(stdout);
 }
 
+/** 「读不出」的**成因**必须是字段：三种成因的修法各不相同
+ *  （spawn 没起来＝修执行；没退出码＝修采集；有输出但认不出汇总行＝修尺）。
+ *  以前只有 `note` 里的一句话 ⇒ 判卷面只能去 `toContain` 那句话，而那词有好几处副本（顶包）。 */
+export type TriageCause = "" | "spawn" | "no-exit-code" | "no-summary";
+
 /** 单条复跑的读数归类。**只认这几类汇总行**，其余一律「读不出」——
  *  非零退出而输出里没有可认的汇总行时，把 0 结论读成"已杀死"就是假绿（规则 128）。 */
-export function classify(stdout: string, status: number | null, spawnError?: string): { verdict: TriageVerdict; note: string } {
-  if (spawnError !== undefined || status === null) {
-    return { verdict: "读不出", note: `spawn 失败：${spawnError ?? "无退出码"} ⇒ 本条没有读数` };
+export function classify(
+  stdout: string,
+  status: number | null,
+  spawnError?: string,
+): { verdict: TriageVerdict; note: string; cause: TriageCause } {
+  if (spawnError !== undefined) {
+    return { verdict: "读不出", note: `spawn 失败：${spawnError} ⇒ 本条没有读数`, cause: "spawn" };
   }
-  if (/基线就不是全绿/.test(stdout)) return { verdict: "基线红", note: "判卷文件自己有已提交的红灯 ⇒ 本条判定被污染，不算存活的证据" };
-  if (/突变未生效|变异未生效/.test(stdout)) return { verdict: "未生效", note: "针脚不在这份源文件里 ⇒ 空操作（先去修针脚，见任务 #50）" };
-  if (/全部变异被正确杀死/.test(stdout)) return { verdict: "已杀死", note: "" };
+  if (status === null) {
+    return { verdict: "读不出", note: "没有退出码（进程没跑完/被信号杀掉）⇒ 本条没有读数", cause: "no-exit-code" };
+  }
+  if (/基线就不是全绿/.test(stdout)) return { verdict: "基线红", note: "判卷文件自己有已提交的红灯 ⇒ 本条判定被污染，不算存活的证据", cause: "" };
+  if (/突变未生效|变异未生效/.test(stdout)) return { verdict: "未生效", note: "针脚不在这份源文件里 ⇒ 空操作（先去修针脚，见任务 #50）", cause: "" };
+  if (/全部变异被正确杀死/.test(stdout)) return { verdict: "已杀死", note: "", cause: "" };
   if (/条变异存活/.test(stdout)) {
     return sawRedTest(stdout)
-      ? { verdict: "红了未点名", note: "测试红了而 runner 没在 expectFail 点名的那条上找到 ⇒ 观测者在，锚点期望过期（改 expectFail，别补测试）" }
-      : { verdict: "存活", note: "改坏了而测试仍全绿 ⇒ 这条不变量没有观测者" };
+      ? { verdict: "红了未点名", note: "测试红了而 runner 没在 expectFail 点名的那条上找到 ⇒ 观测者在，锚点期望过期（改 expectFail，别补测试）", cause: "" }
+      : { verdict: "存活", note: "改坏了而测试仍全绿 ⇒ 这条不变量没有观测者", cause: "" };
   }
-  return { verdict: "读不出", note: `exit=${String(status)} 而输出里没有可认的汇总行（非零退出＋零结论＝读数不可信）` };
+  return { verdict: "读不出", note: `exit=${String(status)} 而输出里没有可认的汇总行（非零退出＋零结论＝读数不可信）`, cause: "no-summary" };
 }
 
 /** 要人处理的三类（修法各不同：存活＝补观测者；红了未点名＝改 expectFail；读不出＝先修尺）。 */
