@@ -3947,3 +3947,7 @@ git 调用由 `scripts/mutate-verify.mjs` 注入 ⇒ 本模块不自己 spawn �
   加判卷 21 passed、`mutate-anchor-titles` 23 passed（三条 expectFail 无漂移）、typecheck 0。
 - 过程中被自己的老毛病咬了一次：desc 里用 ASCII 双引号包中文短语，直接把 `mutate-verify.mjs` 写成语法坏（`node --check` 抓到）。
   **而单测全绿**（它只把那文件当文本读）⇒ 又一个「判卷面读文本时，语法坏对它透明」的实例：交笔前的凭证必须包含 `node --check`，不能只有测试。
+- 页尾回填（`dcf19d2` 落库后复跑）：3 条新锚点单跑全 ✅ exit 0；针脚体检 **15 → 12**（`未入库面 0，钉在飞文本 2`，exit 1），
+  本页那 3 条按第 127 页的顺序同笔入库后自己清账 ⇒ 那条顺序现在是可复用的，不只是记在文档里。
+- 同批复跑全量：**236 files / 2701 tests passed，exit 0**（2695 → 2701 ＝ 本页 6 条新用例；
+  口径仍是工作树——树里带着别人未提交的改动）。
