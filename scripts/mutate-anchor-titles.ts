@@ -8,6 +8,7 @@
  *
  * 名单（`KNOWN_DRIFT`）的规矩照 `docs-check` 的 `LEGACY_WAIVERS`：存量逐条带理由，
  * 名单外新增即红；**登记了却不再命中的条目也算红（stale-waiver）**——豁免不许静默烂在这儿。 */
+import { expectFailMatchesTitles } from "./lib/mutate-gates";
 
 export interface AnchorRow {
   id: string;
@@ -69,47 +70,10 @@ export function parseAnchors(tableText: string): AnchorRow[] {
   return out;
 }
 
-const PLACEHOLDER = /(\$\{[\s\S]*?\}|\$[A-Za-z_]\w*|%[sdijfovc#])/;
-const WILDCARD = "@@wildcard@@";
-
-/** 抽源码里的用例标题。四支缺一不可：
- *  直接 `it("…")` / 模板字面量 / **柯里 `it.each([...])("…")`** / 后两者的模板形式。
- *  柯里那一支是第一版漏掉的：真表里 4 条被误判成漂移，全是 `it.each` 的标题（标题在第二个括号里）。 */
-function extractTitles(sourceText: string): string[] {
-  const MOD = String.raw`(?:\.each|\.skip|\.todo|\.only|\.fails|\.concurrent|\.sequential)?`;
-  const SQ = String.raw`"((?:[^"\\]|\\.)*)"`;
-  const BQ = "`((?:[^`\\\\]|\\\\.)*)`";
-  const EACH_TAIL = String.raw`\((?:[^()]|\([^()]*\))*\)\s*\(\s*`;
-  const pats = [
-    new RegExp(String.raw`\b(?:it|test)` + MOD + String.raw`\s*\(\s*` + SQ, "g"),
-    new RegExp(String.raw`\b(?:it|test)\.each\s*` + EACH_TAIL + SQ, "g"),
-    new RegExp(String.raw`\b(?:it|test)` + MOD + String.raw`\s*\(\s*` + BQ, "g"),
-    new RegExp(String.raw`\b(?:it|test)\.each\s*` + EACH_TAIL + BQ, "g"),
-  ];
-  const out: string[] = [];
-  for (const re of pats) for (const m of sourceText.matchAll(re)) out.push(m[1]!);
-  return out;
-}
-
-function titlePatterns(sourceText: string): RegExp[] {
-  return extractTitles(sourceText).map((lit) => {
-    const un = lit.replace(/\\(.)/g, "$1");
-    // 顺序要紧：先按占位符切开、只转义字面段、再把通配拼回去。
-    // 若先整体转义，`${…}` 会变成 `\$\{…\}`，之后就再也认不出它是占位符（第一版栽在这）。
-    const body = un
-      .split(PLACEHOLDER)
-      .map((piece) => (PLACEHOLDER.test(piece) ? WILDCARD : piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
-      .join("");
-    return new RegExp("^[\\s\\S]*" + body.split(WILDCARD).join("[\\s\\S]*?") + "[\\s\\S]*$");
-  });
-}
-
-/** 命中判据（两条任一即算在场，与 runner 的 `输出含这段` 语义同宽）：
- *  ① 解出来的 expectFail 逐字出现在该 test 文件源码里；② 它整串匹配某条（含占位符的）标题。 */
-function titlePresent(expectFail: string, sourceText: string): boolean {
-  if (sourceText.includes(expectFail)) return true;
-  return titlePatterns(sourceText).some((re) => re.test(expectFail));
-}
+// 用例标题的抽取与命中判据在 `./lib/mutate-gates.ts`（`vitestTitlePatterns` / `expectFailMatchesTitles`）。
+// 第 138 页从本文件搬过去的：`mutate-verify --check-needles` 新加的「killer 指针失效」那一维是**同一个判据**，
+// 两处各写一份立刻漂宽——新那份按整句逐字比，一次报了 10 条假红（柯里 `it.each`、`$label` 插值、转义引号它都不认）。
+// 同一谓词两份副本、宽度不同 ⇒ 最宽那份才是对的（第十三族）；留这份注释是为了下一个人不再抄第三份。
 
 /** 存量名单：**当前为空**——这一栏本来记过 8 条"待判定"的漂移（`auto-verify-default-on`、
  *  `worker-impact-spec-not-appended`、`renderer-hides-worker-spend`、`panel-dirty-*`、`redaction-stops-recursing-into-containers` 等）。
@@ -122,20 +86,11 @@ function titlePresent(expectFail: string, sourceText: string): boolean {
  *      在那棵树里改无处可改（对方副本已删），所以**不修只记**；若桌面层方向回退，这两条要重判。
  *  留这段话是给下一个人：**先问抽取面缺不缺形状，再考虑登记成存量**。 */
 /**
- * 存量豁免（只准带理由登记；#50 落笔后这条必须撤，届时 stale 机制会自己点名）。
- * `user-skill-face-budget-abolished`：第 64 页 #47 把三处「全文见」副本收成一支 `skillRecallSuffix`
- * 并按落位分两案 ⇒ 那条用例的标题换成"取回那句按落位给，没登记工作区就不递地址"。
- * 锚点行本身在 `scripts/mutate-verify.mjs`（别人的在飞文件），针脚与 expectFail 由 #50 一起改指。
- * `prune-attachment-production-entry`：第 71 页 #33 把「打桩带绝对路径」那条假承诺改口成
- * 「区外就明说读不到」，用例标题随之换成 `①生产形状（组装点未传 workspace）：递诚实话，且不递任何模型用不了的路径`。
- * 这条锚点的**变异仍然红在该用例上**（按推导，未实测：`computePrune({ events })` 只剩裸占位是 prune.test.ts ②
- * 那条逐字等值断言在守的既有事实 ⇒ 打桩第二行没了 ⇒ `toContain("读不到")` 必炸；不实测是因为靶子
- * `glm-session.ts` 是别人的在飞文件，就地改它会把对方的写入卷掉），
- * 只是 `expectFail` 那串旧标题不在盘上了；#50 落笔时逐字换成上面那句，然后撤本条。 */
-export const KNOWN_DRIFT: Readonly<Record<string, string>> = {
-  "user-skill-face-budget-abolished": "第 64 页 #47 改了那句尾注的措辞与用例标题；待 #50 把针脚与 expectFail 改指新写法后撤本条",
-  "prune-attachment-production-entry": "第 71 页 #33 把假承诺改成诚实话并换掉用例标题；变异仍红在新标题上，待 #50 把 expectFail 逐字换成新标题后撤本条",
-};
+ * 存量豁免（只准带理由登记；不再命中即 stale 红）。
+ * **当前为空**——第 138 页把最后两条撤了：`user-skill-face-budget-abolished` 与 `prune-attachment-production-entry`
+ * 登记时写的是「待 #50 把针脚与 expectFail 改指新写法后撤本条」，那一天正是第 138 页（7 条失效针脚逐条改指并单跑全杀）。
+ * 撤名是这条机制唯一的自检：登记时不写"什么时候撤"，存量就变成长期豁免（第 124 页立这条时的原话）。 */
+export const KNOWN_DRIFT: Readonly<Record<string, string>> = {};
 
 export function checkAnchorTitles(
   rows: readonly AnchorRow[],
@@ -159,7 +114,7 @@ export function checkAnchorTitles(
       out.push({ kind: "unverified-file", id: r.id, source: r.test, detail: `读不到 ${r.test} ⇒ 没尺，不判` });
       continue;
     }
-    if (!titlePresent(r.expectFail, text)) {
+    if (!expectFailMatchesTitles(r.expectFail, text)) {
       drifting.add(r.id);
       if (waivers[r.id] === undefined) {
         out.push({ kind: "drift", id: r.id, source: r.test, detail: `expectFail 在该 test 文件里找不到对应标题（${r.test}）；旧标题「${r.expectFail}」⇒ 同步 expectFail 或改回标题` });

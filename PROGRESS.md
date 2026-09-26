@@ -4181,3 +4181,26 @@ git 调用由 `scripts/mutate-verify.mjs` 注入 ⇒ 本模块不自己 spawn �
   而它自己的 apply 里也写着那句针脚文字 ⇒ 判卷若用单行 `includes` 会连"被改掉的那次"也读成还在
   ⇒ 接线断言改成正则框住**真实的那个调用**（`/blockingTotalOf\(\{[^}]*expectFail:[^}]*\}\)/s`）。
 - 判卷 41 → **49 passed**（真表自证换成 `--list` 版 ＋ 新增接线那一支）。
+
+### 2026-09-27 · 第 139 页 · 撤名是那条机制唯一的自检；撤的时候发现自己写了第三份副本
+
+第 138 页落库后全量套件第一次报 **1 failed**（不是 0）：`tests/mutate-anchor-titles.test.ts` 的真表用例印出
+`stale-waiver:user-skill-face-budget-abolished`、`stale-waiver:prune-attachment-production-entry`。
+那两条 `KNOWN_DRIFT` 登记时写的就是「待 #50 把针脚与 expectFail 改指新写法后撤本条」——**我第 138 页做的那件事正是它的前件**。
+⇒ 存量豁免的设计目的就在这里：登记时不写"什么时候撤"，存量就变成长期豁免；写了，机制会在条件满足那天自己点名（第 124 页立这条时的原话）。两条撤名，注释里留「为什么能撤」。
+
+撤名时顺手抓到自己昨天埋的那一格——**我为了这条新尺写了第三份副本**：
+
+- `auditExpectFails`（第 138 页，新）与 `mutate-anchor-titles` 里的 `titlePresent`（第 124 页，旧）是**同一个判据**：「expectFail 认不认得这份判卷」。
+  旧那份早就认柯里 `it.each([...])("…%s…")` 与 `$label` 插值；新那份只认逐字 ⇒ 才需要"片段口径"打补丁。两份宽度不同＝第十三族，最宽那份才是对的。
+- ⇒ 标题抽取整体搬进 `scripts/lib/mutate-gates.ts`（`vitestTitles` / `vitestTitlePatterns` / `expectFailMatchesTitles`），
+  两把尺共用一份；片段判据（`expectFailFragments` / `expectFailRecognizable`）**删掉**；旧文件留一段"为什么搬走"的注释，防下一个人抄第四份。
+- 配一条**同宽见证**（这条才是"收成一份"的验收）：同一批刁钻 fixture（拼出来的标题／带转义引号的标题／普通标题／真改过名）
+  分别喂两把尺，两边的失配集合必须逐字相等；再钉一条「非 vitest 面不判」——那一格归旧尺点名，不在这里造第三把尺。
+- 锚点跟着改指：`pointer-audit-recognizes-anything` 的旧针脚（`frags.some(...)`）随片段判据一起消失，
+  改钉 `vitestTitlePatterns(sourceText).some(...)`，改法＝把它摘成恒假（那样"拼出来的标题"和"带转义引号的标题"会全被判成失效＝假红一族）。
+- **退出码那条老规矩今天又演了一次**：后台命令的完成通知说 `exit code 0`，而它包的是我那条 `echo`；
+  真正的读数是汇总行 `Test Files 1 failed | 236 passed`。**通知里的退出码不是判据的退出码**（规则 206），
+  差一步我就把"套件绿"写进本页。
+- 现态：typecheck 0；`mutate-verify-gates` 49 → 51；`--check-needles` 826 条、阻断 6（5 条别人在飞 ＋ 1 条随本笔自清）、
+  待复认 4、killer 指针失效 0。

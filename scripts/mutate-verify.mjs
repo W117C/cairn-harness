@@ -7045,9 +7045,9 @@ const MUTATIONS = [
     id: "pointer-audit-recognizes-anything",
     src: "scripts/lib/mutate-gates.ts",
     test: "tests/mutate-verify-gates.test.ts",
-    desc: "片段判据恒真 ⇒ 整把尺退化成「永远 0 失效」的装饰；这条尺唯一的产出就是那一条红",
-    apply: (s) => s.replace("return frags.some((f) => hay.includes(unescapeForCompare(f)));", "return true;"),
-    expectFail: "齐的读空；真改过名的按 not-found 报出来",
+    desc: "标题匹配那一支被摘成恒假 ⇒ 「拼出来的标题 / 带转义引号的标题」全被判成指针失效：假红一多，人们关的是门不是修尺（ runner 自己判的是「输出含这段」，运行时它是活的）",
+    apply: (s) => s.replace("return vitestTitlePatterns(sourceText).some((re) => re.test(expectFail));", "return false;"),
+    expectFail: "带转义引号的标题不许误报（表里存解码值，盘上是源码文字）",
   },
   {
     id: "pointer-block-dimension-not-summed",

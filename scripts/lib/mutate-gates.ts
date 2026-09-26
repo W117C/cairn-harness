@@ -407,30 +407,47 @@ export interface ExpectFailProblem {
   why: "unreadable" | "not-found";
 }
 
-/** 指针与判卷文字之间的比较口径。两件事把「逐字比」打掉了：
- *  ① 表里存的是**解码后的字符串**，判卷文件里那句标题是**带转义的源码文字**（`it("… \"Edit\" …")`）；
- *  ② 标题可以是**拼出来的**：`it("零行为回退：" + label + " → 无 verify_result…")` ⇒ 整句在盘上根本不存在，
- *    而跑起来那刻它是存在的（`auto-verify-default-on` 实测就是这样：静态报失配，变异单跑 ✅ 杀死）。
- *  ⇒ 判据退一步按**片段**比：指针里最长的可辨片段要能在文件里逐字找到。
- *    真改过名的条目（片段全找不到）仍然红；只有片段一个都对不上的畸形短指针放行（宁少报，不假红）。 */
-const POINTER_FRAG_SEP = /[\s"“”'‘’（）()、，,：:；;/|｜→⇒…+\-]+/u;
+/** 比较口径。**这份标题抽取是从 `scripts/mutate-anchor-titles.ts` 搬进 lib 的**（第 138 页）：
+ *  同一判据两处各写一份必然漂宽（第十三族）——我新写的那把先按整句逐字比（一次报 10 条假红），
+ *  而旧的那把早就认柯里 `it.each([...])("…%s…")` 与 `$label` 插值。搬过来＝两把尺共用一份实现。
+ *  两件事会把「逐字比」打掉：① 表里存的是解码后的字符串，盘上是带转义的源码文字（`it("… \"Edit\" …")`）；
+ *  ② 标题可以是拼出来的（`it("零行为回退：" + label + " → …")` ⇒ 盘上没有整句，跑起来才有）。
+ *  四支抽取缺一不可：直接 `it("…")` / 模板字面量 / 柯里 `it.each([...])("…")` / 后两者的模板形式。 */
+const PLACEHOLDER = /(\$\{[\s\S]*?\}|\$[A-Za-z_]\w*|%[sdijfovc#])/;
+const WILDCARD = "@@wildcard@@";
 
-export function expectFailFragments(pointer: string): string[] {
-  return pointer
-    .split(POINTER_FRAG_SEP)
-    .map((t) => t.trim())
-    .filter((t) => Array.from(t).length >= 4)
-    .sort((a, b) => b.length - a.length);
+export function vitestTitles(sourceText: string): string[] {
+  const MOD = String.raw`(?:\.each|\.skip|\.todo|\.only|\.fails|\.concurrent|\.sequential)?`;
+  const SQ = String.raw`"((?:[^"\\]|\\.)*)"`;
+  const BQ = "`((?:[^`\\\\]|\\\\.)*)`";
+  const EACH_TAIL = String.raw`\((?:[^()]|\([^()]*\))*\)\s*\(\s*`;
+  const pats = [
+    new RegExp(String.raw`\b(?:it|test)` + MOD + String.raw`\s*\(\s*` + SQ, "g"),
+    new RegExp(String.raw`\b(?:it|test)\.each\s*` + EACH_TAIL + SQ, "g"),
+    new RegExp(String.raw`\b(?:it|test)` + MOD + String.raw`\s*\(\s*` + BQ, "g"),
+    new RegExp(String.raw`\b(?:it|test)\.each\s*` + EACH_TAIL + BQ, "g"),
+  ];
+  const out: string[] = [];
+  for (const re of pats) for (const m of sourceText.matchAll(re)) out.push(m[1]!);
+  return out;
 }
 
-const unescapeForCompare = (s: string): string => s.replace(/\\/g, "");
+/** 标题 → 匹配式：先按占位符切开、只转义字面段、再把通配拼回去（顺序反了 `${…}` 会永远认不出）。 */
+export function vitestTitlePatterns(sourceText: string): RegExp[] {
+  return vitestTitles(sourceText).map((lit) => {
+    const un = lit.replace(/\\(.)/g, "$1");
+    const body = un
+      .split(PLACEHOLDER)
+      .map((piece) => (PLACEHOLDER.test(piece) ? WILDCARD : piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
+      .join("");
+    return new RegExp("^[\\s\\S]*" + body.split(WILDCARD).join("[\\s\\S]*?") + "[\\s\\S]*$");
+  });
+}
 
-/** 指针在判卷文字里认不认得（片段口径，见上）。 */
-export function expectFailRecognizable(pointer: string, testFileText: string): boolean {
-  const hay = unescapeForCompare(testFileText);
-  const frags = expectFailFragments(pointer);
-  if (frags.length === 0) return true;
-  return frags.some((f) => hay.includes(unescapeForCompare(f)));
+/** `expectFail` 认不认得这份判卷：逐字命中，或整串匹配某条（含占位符的）标题——与 runner 的「输出含这段」同宽。 */
+export function expectFailMatchesTitles(expectFail: string, sourceText: string): boolean {
+  if (sourceText.includes(expectFail)) return true;
+  return vitestTitlePatterns(sourceText).some((re) => re.test(expectFail));
 }
 
 /** 纯函数：`readTest` 由调用方注入（单测喂假文件，门喂真盘）。 */
@@ -444,10 +461,12 @@ export function auditExpectFails(
     // 空 expectFail 不是「失效」而是「这条锚点没声明 killer」——那是另一格（表里逐行式的条目就有这种情况），
     // 这里不许把它和指针断裂混成一档。
     if (e.expectFail === "" || e.test === "") continue;
+    // 非 vitest 面不判（那一格的口径由 `mutate-anchor-titles` 单独点名；两把尺必须同宽，别在这儿造第二套）。
+    if (!e.test.endsWith(".test.ts")) continue;
     if (!cache.has(e.test)) cache.set(e.test, readTest(e.test));
     const text = cache.get(e.test);
     if (text === null || text === undefined) out.push({ id: e.id, test: e.test, expectFail: e.expectFail, why: "unreadable" });
-    else if (!expectFailRecognizable(e.expectFail, text)) out.push({ id: e.id, test: e.test, expectFail: e.expectFail, why: "not-found" });
+    else if (!expectFailMatchesTitles(e.expectFail, text)) out.push({ id: e.id, test: e.test, expectFail: e.expectFail, why: "not-found" });
   }
   return out;
 }

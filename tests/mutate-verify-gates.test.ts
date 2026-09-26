@@ -6,7 +6,8 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { anchorFaces, auditExpectFails, blockingTotalOf, budgetMsOf, classifyArgs, entryDisposition, expectFailFragments, expectFailRecognizable, headOnlyNeedleLine, headOnlyNeedleProblems, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
+import { anchorFaces, auditExpectFails, blockingTotalOf, budgetMsOf, classifyArgs, entryDisposition, headOnlyNeedleLine, headOnlyNeedleProblems, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
+import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
 
 describe("budgetMsOf + classifyArgs 的值位（自我预算这条手段本身要有判卷）", () => {
   it("flag 优先于 env；两者都缺 ⇒ 不限且不吭声", () => {
@@ -391,10 +392,28 @@ describe("auditExpectFails：killer 指针必须指得到活用例", () => {
     expect(auditExpectFails([{ id: "w", test: "tests/x.test.ts", expectFail: "" }, { id: "v", test: "", expectFail: "有内容" }], read(file(["任何东西"])))).toEqual([]);
   });
 
-  it("片段口径本身：按分隔切、丢掉 4 字以下的碎片、长片段排在前面", () => {
-    expect(expectFailFragments("a b、cd efghijklmnop abcd_efg")).toEqual(["efghijklmnop", "abcd_efg"]);
-    // 整句全是三四字以下的碎片 ⇒ 没判据，放行（宁少报，不假红）。
-    expect(expectFailRecognizable("ab cd", "anything")).toBe(true);
+  it("两把尺同宽（同一判据只许有一份）：新尺与 `mutate-anchor-titles` 对同一批判卷判定必须一致", () => {
+    const srcs = [
+      { path: "tests/loop.test.ts", text: '  it("零行为回退：" + label + " → 无 verify_result、请求数与旧行为同形", async () => {});' },
+      { path: "tests/hooks.test.ts", text: '  it("纯精确名不做子串：matcher \\"Edit\\" 不得命中 NotebookEdit", async () => {});' },
+      { path: "tests/plain.test.ts", text: '  it("反面对手：不同 callId 的两条 result 绝不合并", () => {});' },
+    ];
+    const read = (rel: string): string | null => srcs.find((s) => s.path === rel)?.text ?? null;
+    const rows = [
+      { id: "curried", test: "tests/loop.test.ts", expectFail: "零行为回退：缺省不开闸（未给 autoVerify） → 无 verify_result、请求数与旧行为同形" },
+      { id: "escaped", test: "tests/hooks.test.ts", expectFail: '纯精确名不做子串：matcher "Edit" 不得命中 NotebookEdit' },
+      { id: "plain", test: "tests/plain.test.ts", expectFail: "反面对手：不同 callId 的两条 result 绝不合并" },
+      { id: "renamed", test: "tests/plain.test.ts", expectFail: "旧标题里那句再也没出现过的一句话" },
+    ];
+    const mine = auditExpectFails(rows, read).map((p) => p.id);
+    const theirs = checkAnchorTitles(rows.map((r) => ({ ...r, src: "src/x.ts" })), srcs, {})
+      .filter((f) => f.kind === "drift").map((f) => f.id);
+    expect(mine).toEqual(["renamed"]);
+    expect(theirs).toEqual(mine);
+  });
+
+  it("非 vitest 面不判（test 指向 .ts/.md 之类）：那一格归 `mutate-anchor-titles` 单独点名，不造第三把尺", () => {
+    expect(auditExpectFails([{ id: "n", test: "scripts/x.ts", expectFail: "任何句子" }], () => "什么句子都没有")).toEqual([]);
   });
 
   it("真表自证：整张表的 killer 指针必须 0 失效（新增一条断指针＝当场红）", () => {
