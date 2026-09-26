@@ -3537,8 +3537,8 @@ const MUTATIONS = [
     id: "unknown-tool-silently-dropped",
     src: "src/agent/plugins/skills.ts",
     test: "tests/skill-tool-policy.test.ts",
-    desc: "认不出的工具名直接跳过不出声 ⇒ 作者以为摘掉了某个工具，实际那条申报什么都没做（把不可知记成「这里没有东西」）",
-    apply: (s) => s.replace('      if (tool === null) {\n        out.unknown.push(behavior + ":" + item);\n        continue;\n      }', "      if (tool === null) continue;"),
+    desc: "认不出的工具名直接跳过不出声 ⇒ 作者以为摘掉了某个工具，实际那条申报什么都没做（把不可知记成「这里没有东西」）。第 121 页把 allow/deny 拆成两支后针脚跟着改指**两支**——实测只摘任一支都会红（判卷对两个方向分别有断言，所以「只指一支就是假覆盖」这句不成立），指全两支是为了这条锚点不随其中一处被改写而整条失效。",
+    apply: (s) => s.replace('out.unknown.push("allow:" + item);', "void item;").replace('out.unknown.push("deny:" + item);', "void item;"),
     expectFail: "认不出的名字另列且带方向前缀（不静默当真，也不静默丢掉）",
   },
   {
