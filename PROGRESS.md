@@ -4204,3 +4204,7 @@ git 调用由 `scripts/mutate-verify.mjs` 注入 ⇒ 本模块不自己 spawn �
   差一步我就把"套件绿"写进本页。
 - 现态：typecheck 0；`mutate-verify-gates` 49 → 51；`--check-needles` 826 条、阻断 6（5 条别人在飞 ＋ 1 条随本笔自清）、
   待复认 4、killer 指针失效 0。
+- 页尾回填（`a223aa1` 落库后复跑）：3 条指针锚点在干净 HEAD 上逐条单跑**全杀**；针脚体检 **826 条 —— 阻断 5、待复认 4、未入库面 0、killer 指针失效 0、钉在飞文本 2**
+  （我这 3 条随同笔自清，剩下的 5 条全是别人在飞的源文件）；全量判卷 **237 files passed / 84.12s**（主树口径，HEAD 仍红＝#11）；typecheck 0。
+- 记一条口径，因为上一轮差点用错：**后台命令的完成通知里那个 exit code 是 wrapper 的**——`vitest > log; grep…` 这条的退出码来自 `grep`，
+  通知报 0 而汇总行写着 `1 failed | 236 passed`。凭证只认汇总行与判据自己的退出码（规则 206 的又一次命中）。
