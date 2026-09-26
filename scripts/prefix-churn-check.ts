@@ -19,7 +19,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createEventLog, replay } from "../src/events";
-import { createMockSummarizer } from "../src/agent/compaction";
+import { createMockSummarizer, type Summarizer } from "../src/agent/compaction";
 import { computePrune } from "../src/agent/prune";
 import { freeRideCoincidence, thresholdKnobIsWired } from "../src/agent/prune-batching";
 import { gateToolSpecs, sessionToolSpecs } from "../src/agent/glm-session";
@@ -143,6 +143,8 @@ async function driveMutating(opts: {
   /** 逐轮三读数：决策时刻有多少可剪的量 / 本轮压了几次 / 本轮落了几份附件。
    *  PC9 判的就是这三者之间的** coincidence**，光看"抖没抖"判不出来。 */
   perRound: { prunableAtDecision: number; compactions: number; attachments: number }[];
+  /** 摘要调用的**实测**字符花费（门这侧包的计数器，不读产品）：PC7 要说得出"多付的那一次买了什么"。 */
+  summarySpend: { calls: number; inputChars: number; outputChars: number };
 }> {
   const dir = mkdtempSync(join(tmpdir(), "prefix-churn-mut-"));
   const path = join(dir, "events.jsonl");
@@ -161,6 +163,9 @@ async function driveMutating(opts: {
     { type: "tool_result", callId: "c" + String(i), ok: true, output: cjk(20_000) },
     { type: "assistant_message", content: "A" + String(i) },
   ];
+  // 花费累加器**声明在 try 外面**：return 在 finally 之后，放 try 里就是另一个作用域
+  // （第一版就炸在这：门当场 `summarySpend is not defined`，连累 PC7/PC8/PC9 一起红）。
+  const summarySpend = { calls: 0, inputChars: 0, outputChars: 0 };
   try {
     if (bigResults) {
       for (let i = 0; i < 2; i++) for (const e of roundEvents(i)) await log.append(e as never);
@@ -175,6 +180,16 @@ async function driveMutating(opts: {
     // 与驱动器 A 同理：**一个 run 一个 provider**，跨请求的状态才量得到（PC7 的摊销判定读的就是它）。
     let roundIndex = 0;
     let faceNote = "";
+    // PC7 要回答的是「多付的那一次摘要到底买了什么」⇒ 摘要调用的**输入/输出字符**必须被量到。
+    // 量在门这一侧（summarizer 本来就是注入点），不为此改产品一行——判卷不许把自己想要的字段塞进被测面。
+    const mockSummarizer = createMockSummarizer(SUMMARY_TEXT);
+    const countedSummarizer: Summarizer = async (input) => {
+      summarySpend.calls += 1;
+      summarySpend.inputChars += input.conversation.length + (input.priorSummary ?? "").length;
+      const out = await mockSummarizer(input);
+      summarySpend.outputChars += out.text.length;
+      return out;
+    };
     const provider = createGlmSessionProvider(path, {
       map: false,
       workspace: dir,
@@ -191,7 +206,7 @@ async function driveMutating(opts: {
               // inputLimit 在 PC7/PC9 各取一份：PC9 要「大结果 + 压缩」同场，窗口必须容得下 40k 结果
               // 又能在几轮后够到阈值（实测 60,000 ⇒ 8 轮压 3 次，逐轮交替）。
               config: { inputLimit: opts.kind === "both" ? 60_000 : 12_000, maxOutputReserve: 400, ratio: 0.35, retryBackoffMs: 1 },
-              summarizer: createMockSummarizer("SUMMARY：前文已压缩为一段，结论与未收口项都在里面。".repeat(12)),
+              summarizer: countedSummarizer,
               amortizeRewriteCost: opts.amortize === true,
             },
           }
@@ -237,8 +252,11 @@ async function driveMutating(opts: {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-    return { obs, firedPerPair, triggers, perRound };
+    return { obs, firedPerPair, triggers, perRound, summarySpend };
 }
+
+/** 台架里摘要的固定正文（mock 明卷，确定性）。收成一份常量：驱动器要同时用它建 mock 与算花费。 */
+const SUMMARY_TEXT = "SUMMARY：前文已压缩为一段，结论与未收口项都在里面。".repeat(12);
 
 /** 从事件流里读每次压缩的触发种类（真实痕迹，不是推断）。 */
 function readCompactionTriggers(path: string): string[] {
@@ -435,6 +453,9 @@ export const CHURN_RULES: readonly ChurnRule[] = [
           // 归因用（PC7 红过之后要能说出"多出来的那一次发生在哪儿"）：逐轮发送量 + 压缩落在第几对
           sent: r.obs.map((o) => o.messages.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0)),
           firedAt: attrs.map((a, i) => (a.fired.includes("compaction") ? i + 1 : 0)).filter((n) => n > 0),
+          // 「多付的那一次摘要」的**实测**字符量：输入＝那一次真正喂进摘要器的字符（含上一份摘要的滚动合并），
+          // 输出＝摘要正文。价表 GLM 三档是占位数（`calibrated=false`，只可横向比较）⇒ 这里只交字符当量，不交美元。
+          spend: r.summarySpend,
         };
       };
       const a = tally(off), b = tally(on);
@@ -445,6 +466,9 @@ export const CHURN_RULES: readonly ChurnRule[] = [
           `｜触发种类 关=[${a.kinds}] 开=[${b.kinds}]` +
           `｜压缩落在第几对 关=[${a.firedAt.join(",") || "无"}] 开=[${b.firedAt.join(",") || "无"}]` +
           `｜逐轮发送量 关=[${a.sent.join(",")}] 开=[${b.sent.join(",")}]` +
+          `｜摘要实测花费 关=${String(a.spend.calls)} 次/入 ${String(a.spend.inputChars)}/出 ${String(a.spend.outputChars)}` +
+          ` 开=${String(b.spend.calls)} 次/入 ${String(b.spend.inputChars)}/出 ${String(b.spend.outputChars)}` +
+          `｜省 ${String(a.rewrote - b.rewrote)} 字符 vs 多付 ${String(b.spend.inputChars - a.spend.inputChars)} 字符摘要输入` +
           (a.compactions < 2 ? "（关那一支都没连压两次 ⇒ 样本无分辨力，门自身红）" : ""),
       };
     },
