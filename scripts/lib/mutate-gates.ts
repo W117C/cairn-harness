@@ -516,6 +516,15 @@ export function headPointerProblems(
   );
 }
 
+/** 基线红的分诊（第 143 页）：判卷**载不动**（`Cannot find module …`）与「基线真的不绿」是两种信号。
+ *  前者是**量不了**——第 141 页普查里 167 条这一类全部来自别人半落库（未跟踪的模块、只在盘上的修复），
+ *  却被报成「基线就不是全绿（不应发生）」＝阻断，于是这张表唯一的信号（表退化）被环境噪声淹了。
+ *  ⇒ 载不动＝未证（仍然红，但要说清是量不了不是没守住）；其余才按阻断。 */
+export function baselineRedKind(vitestOut: string): { kind: "unloadable"; module: string } | { kind: "blocking" } {
+  const m = /Cannot find module ['"]([^'"]+)['"]/.exec(vitestOut);
+  return m === null ? { kind: "blocking" } : { kind: "unloadable", module: m[1] ?? "" };
+}
+
 /** 一行可机读的判读（门输出格式：id + 判卷文件 + 原因 + 指针前 60 字）。 */export function expectFailProblemLine(p: ExpectFailProblem): string {
   const why = p.why === "unreadable"
     ? "判卷文件读不到（不等于指针没问题）"

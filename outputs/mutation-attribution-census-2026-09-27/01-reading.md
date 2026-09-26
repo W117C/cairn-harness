@@ -100,3 +100,22 @@ cd .worktrees/<名>-<sha> && node --import tsx scripts/mutate-verify.mjs
 # 单条复认（几秒）：主树里跑就行，源文件在飞的那条会被预检拒（那是正确行为，不是失败）
 node --import tsx scripts/mutate-verify.mjs <锚点 id>
 ```
+
+## HEAD 上「量不出来」那 167 条：逐签名归因（去重后只有 7 个源头，全在半落库）
+
+`基线就不是全绿` 的 167 条不是 167 个缺陷，是 7 个源头被 167 条锚点各自踩到。逐条在干净 HEAD 树里复现过：
+
+| 条数 | 签名 | 归因 |
+| --- | --- | --- |
+| 111 | 判卷载不动：`Cannot find module '../providers/capabilities'`（被已入库的 `src/main/agent-runner.ts:63` 指着） | **#11**：那 4 个模块只盘上有——`git cat-file -e HEAD:<四个路径>` 四个全「无」 |
+| 25 | `mutate-verify-gates > 真表自证：killer 指针必须 0 失效` | 锚点 `supervise-retired-error-verdict-revived` 的标题只在盘上有 ⇒ 第 142 页新加的**静态第 6 维**现在 6.6 秒就点名它 |
+| 16 | `docs-check > D-8 迁移后无存量豁免`（HEAD 上残留 10 项，首条 `D-1|AGENTS.md`） | 修复只存在于别人未提交的改动里 ⇒ #2/#6 |
+| 10 | `map-parse > 真仓库里那四个…` | HEAD 版清单写着 `scripts/ipc-reachability-check-core.ts`——**盘上与 HEAD 都没有这个文件**；该判卷正被别人改着（`M tests/map-parse.test.ts`） |
+| 4 | `mutate-anchor-titles > 真表：漂移必须 0` | 同一个 `supervise-retired…`（漂移名单里就是它） |
+| 2 | `sessions.test.ts` 的两条增量计数用例 | 被锚定的实现只在盘上（`src/main/sessions.ts` 在飞）⇒ 与 `sessions-delete-force-false` 同格 |
+| 1 | `prefix-churn > --self-test 全造得红…` | PC3 那条的反向对照在别人未提交的改动里（与 `outputs → scripts` 那两笔改名同源） |
+
+⇒ **HEAD 上量不出来的格子，100% 来自「半落库」**（未跟踪的模块 ＋ 只在盘上的修复），没有一条是代码本身坏。
+但这张表也暴露变异机自己的一个口径错：它把环境的红收进自己账本，报成 `基线就不是全绿（不应发生）`＝**阻断**。
+按规则 92（三态）这一格应是**未证**——不是"没守住"，是"量不了"。第 143 页已把这条改判（点名缺的是哪个模块），
+否则下一次普查仍会把 167 条环境噪声混进"表退化"的信号里。

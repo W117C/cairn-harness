@@ -22,7 +22,7 @@ import { execFileSync } from "node:child_process";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -5985,6 +5985,33 @@ const MUTATIONS = [
     expectFail: "第 6 维（HEAD 侧指针失效）也要喂进求和，且 runner 真去调那把尺",
   },
   {
+    id: "baseline-red-always-blocking",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "基线红一律算阻断 ⇒ 别人半落库造成的「判卷载不动」重新淹掉这张表唯一的信号（第 141 页 167 条环境红混进 13 条真红那次）",
+    apply: (s) => s.replace('return m === null ? { kind: "blocking" } : { kind: "unloadable", module: m[1] ?? "" };', 'return { kind: "blocking" };'),
+    expectFail: "判卷载不动 ⇒ 未证，且点名是哪个模块",
+  },
+  {
+    id: "baseline-red-always-unloadable",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "反向那一半：基线红一律算载不动 ⇒ 真把表跑退化（判卷自己坏了）也被洗成「量不了」，门从此不再报退化",
+    apply: (s) => s.replace('return m === null ? { kind: "blocking" } : { kind: "unloadable", module: m[1] ?? "" };', 'return { kind: "unloadable", module: "" };'),
+    expectFail: "别的原因让基线红（真缺陷）⇒ 仍按阻断，不许把表退化洗成未证",
+  },
+  {
+    id: "baseline-red-triage-call-removed",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "分诊算出来了但基线那一支不接 ⇒ lib 单测全绿、门照旧把环境红报成阻断（接线没有编译期信号）。针脚取两行避开本条自指。",
+    apply: (s) => s.replace(
+      "      const kind = baselineRedKind(base.out);\n      if (kind.kind === \"unloadable\") {",
+      "      const kind = baselineRedKind(base.out);\n      if (false) {",
+    ),
+    expectFail: "接线：基线那一步真调这把分诊尺（不然是拿着读数当结论）",
+  },
+  {
     id: "attribution-reads-whole-output",
     src: "scripts/lib/mutate-gates.ts",
     test: "tests/mutate-verify-gates.test.ts",
@@ -7374,9 +7401,15 @@ function verifyEntry(m) {
   inFlight = { srcAbs, original, backup, mutated: false }; // 备份一落盘就要能被收尾
   let restored = false;
   try {
-    // ① 基线：突变前该测试必须绿
+    // ① 基线：突变前该测试必须绿。载不动（判卷 import 不到的东西没入库）不是"基线不绿"——那是量不了（第 143 页）。
     const base = runTest(m.test);
-    if (base.code !== 0) return { m, ok: false, why: `基线就不是全绿（不应发生）:\n${base.out.slice(-800)}` };
+    if (base.code !== 0) {
+      const kind = baselineRedKind(base.out);
+      if (kind.kind === "unloadable") {
+        return { m, ok: null, unloadable: kind.module, why: `判卷载不动（Cannot find module "${kind.module}"）⇒ 本条量不了，按未证记账；这不是「表退化」，是环境没备齐（多半是别人半落库，见 #11）` };
+      }
+      return { m, ok: false, why: `基线就不是全绿（不应发生）:\n${base.out.slice(-800)}` };
+    }
 
     // ② 注入突变
     const mutated = m.apply(original);
@@ -7605,8 +7638,10 @@ const unverified = results.filter((r) => r.ok === null);
 const unverifiedTotal = unverified.length + refusedCount;
 if (unverifiedTotal > 0) {
   const parts = [];
+  const unloadable = results.filter((r) => r.ok === null && typeof r.unloadable === "string").length;
   if (refusedCount > 0) parts.push(`${String(refusedCount)} 条源文件在飞/未跟踪 ⇒ 根本没跑`);
-  if (unverified.length - stoppedEarly > 0) parts.push(`${String(unverified.length - stoppedEarly)} 条判卷文件在飞 ⇒ 量不出分辨力`);
+  if (unverified.length - stoppedEarly - unloadable > 0) parts.push(`${String(unverified.length - stoppedEarly - unloadable)} 条判卷文件在飞 ⇒ 量不出分辨力`);
+  if (unloadable > 0) parts.push(`${String(unloadable)} 条判卷载不动（HEAD 缺模块 ⇒ 环境没备齐，不是表退化）`);
   if (stoppedEarly > 0) parts.push(`${String(stoppedEarly)} 条预算用尽没跑到`);
   console.log(`  ⚠️  未证 ${String(unverifiedTotal)} 条（${parts.join("；")}）——都不等于已杀死`);
   console.log("UNVERIFIED=" + String(unverifiedTotal));

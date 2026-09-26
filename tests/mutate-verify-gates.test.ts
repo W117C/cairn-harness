@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { anchorFaces, auditExpectFails, blockingTotalOf, budgetMsOf, classifyArgs, entryDisposition, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
+import { anchorFaces, auditExpectFails, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, entryDisposition, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
 import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
 
 describe("budgetMsOf + classifyArgs 的值位（自我预算这条手段本身要有判卷）", () => {
@@ -535,5 +535,26 @@ describe("killerAttributionOk：归因只认失败面（通过的用例那一行
     // 不加 `$` 的话"真调用被摘掉、字面量还留着"照样读成在（第 138 页那条自指）。
     expect(/^\s*if \(!killerAttributionOk\(m\.expectFail, hit\.out\)\) \{$/m.test(src)).toBe(true);
     expect(src.includes("hit.out.includes(m.expectFail)")).toBe(false);
+  });
+});
+
+describe("baselineRedKind：基线红要分「载不动」与「真的不绿」", () => {
+  // 第 141 页普查里 167/180 条红是判卷 import 不到未入库的模块，被报成「基线就不是全绿（不应发生）」＝阻断，
+  // 于是这张表唯一的信号（表退化）被环境噪声淹掉。分诊成未证之后：仍然红（未证就红），但说的是"量不了"。
+  it("判卷载不动 ⇒ 未证，且点名是哪个模块", () => {
+    const out = "Error: Cannot find module '../providers/capabilities' imported from /repo/src/main/agent-runner.ts";
+    expect(baselineRedKind(out)).toEqual({ kind: "unloadable", module: "../providers/capabilities" });
+  });
+
+  it("别的原因让基线红（真缺陷）⇒ 仍按阻断，不许把表退化洗成未证", () => {
+    expect(baselineRedKind("AssertionError: expected 3 to be 4")).toEqual({ kind: "blocking" });
+    // 反向对照：不是"任何错误都算载不动"——缺文件是另一回事（判卷自己被删走的是未跟踪那一维）
+    expect(baselineRedKind("Error: ENOENT: no such file or directory, open '/repo/x.ts'")).toEqual({ kind: "blocking" });
+  });
+
+  it("接线：基线那一步真调这把分诊尺（不然是拿着读数当结论）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    expect(/^\s*const kind = baselineRedKind\(base\.out\);$/m.test(src)).toBe(true);
+    expect(/^\s*if \(kind\.kind === "unloadable"\) \{$/m.test(src)).toBe(true);
   });
 });
