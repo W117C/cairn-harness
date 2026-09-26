@@ -165,21 +165,32 @@ describe("流切分与汇总", () => {
 });
 
 describe("不可测的三种状态必须红，不许读成「成功率 0」", () => {
-  it("一行都没有 ⇒ 不可测（语料不存在与「一单没成」是两件事）", () => {
+  // 三种"不可测"的**修法不同**（补语料 / 换任务面 / 等 run 留下终态证据），所以判据收 `cause` 字段；
+  // 以前收的是 `reason` 里的子串——「语料」在本仓有 33 处副本，改另一处它照样绿（第 92 页量到的那格）。
+  it("一行都没有 ⇒ 不可测，cause 是 no-streams（语料不存在与「一单没成」是两件事）", () => {
     const v = scorecardVerdict([]);
     expect(v.measurable).toBe(false);
-    expect(v.reason).toContain("语料");
+    expect(v.cause).toBe("no-streams");
   });
 
-  it("全是 no-write ⇒ 不可测（没有一条改过盘，绿灯率无从谈起）", () => {
+  it("全是 no-write ⇒ cause 是 no-writes（没有一条改过盘，绿灯率无从谈起）", () => {
     const v = scorecardVerdict([scoreStream(readPair()), scoreStream(readPair("r2"))]);
     expect(v.measurable).toBe(false);
+    expect(v.cause).toBe("no-writes");
     expect(v.reason, "原因句必须说清是「没写过盘」而不是「跑不起来」").toContain("没有一条改过盘");
   });
 
-  it("有写过盘的 run ⇒ 可测，且 env-blocked 单独报出不进成功率分子分母", () => {
+  it("写过盘但没有一条留下终态证据 ⇒ 第三种 cause（no-decisive-beat），只能报证据缺席", () => {
+    // 这一格以前没有用例：三种不可测里只有它藏在前两种后面，`reason` 不同而 `measurable` 相同 ⇒ 不可见。
+    const v = scorecardVerdict([scoreStream([...writePair(), envRed()]), scoreStream(writePair())]);
+    expect(v.measurable).toBe(false);
+    expect(v.cause).toBe("no-decisive-beat");
+  });
+
+  it("有写过盘且能定终态的 run ⇒ 可测，cause 必须是空串（env-blocked 单独报出不进分子分母）", () => {
     const v = scorecardVerdict([scoreStream([...writePair(), green()]), scoreStream([...writePair(), envRed()])]);
     expect(v.measurable).toBe(true);
+    expect(v.cause).toBe("");
   });
 });
 
@@ -223,11 +234,15 @@ describe("token 轴：合计与缺报", () => {
   });
 });
 
-describe("钱轴：算不出就说算不出", () => {
-  it("一条 usage 都没有 ⇒ 不可测，原因是『没有钱轴』而不是『没花钱』", () => {
+describe("钱轴：算不出就说算不出，并说清缺哪一面（cause）", () => {
+  // 三种"算不出"的修法各不相同：no-usage＝这条面没取到 usage；no-attribution＝写侧没报 model（#16）；
+  // unpriced-bucket＝名字有了但价表查不到（两表漂移）。收 `cause` 而不是 `reason` 的子串：
+  // 「model」这个词在本仓有 48 处字面量在管，改任意另一处断言照样绿。
+  it("一条 usage 都没有 ⇒ cause 是 no-usage，原因是『没有钱轴』而不是『没花钱』", () => {
     const c = costOf([emptyTotals()]);
     expect(c.measurable).toBe(false);
     expect(c.usd).toBeNull();
+    expect(c.cause).toBe("no-usage");
     expect(c.reason).toContain("一条 usage 事件都没有");
   });
 
@@ -235,21 +250,23 @@ describe("钱轴：算不出就说算不出", () => {
     const c = costOf([emptyTotals({ usageEvents: 166, inputTokens: 1000, outputTokens: 200 })]);
     expect(c.measurable).toBe(false);
     expect(c.usd).toBeNull();
-    expect(c.reason).toContain("model");
+    expect(c.cause).toBe("no-attribution");
     expect(c.unpricedTokens).toBeGreaterThan(0);
   });
 
-  it("有 model 名字但查不到档位（两表漂移）⇒ 仍 null，不折成 0", () => {
+  it("有 model 名字但查不到档位（两表漂移）⇒ 仍 null、cause 是第三种，不折成 0", () => {
     const stream: AgentEvent[] = [usageEv(1000, 200, { model: "no-such-model-xyz" })];
     const c = costOf([usageOfStream(stream)]);
     expect(c.measurable).toBe(false);
     expect(c.usd).toBeNull();
+    expect(c.cause).toBe("unpriced-bucket");
   });
 
   it("档位表里的真名能走通整条链（名 → priceForModel → 价表 → usd>0）", () => {
     const spec = DEFAULT_MODEL_TABLE[0]!;
     const c = costOf([usageOfStream([usageEv(100000, 1000, { model: spec.id })])]);
     expect(c.measurable, "档位表里第一个名字定价不了 ⇒ 这条链就断了：" + c.reason).toBe(true);
+    expect(c.cause, "可测时 cause 必须是空串（别把『没成因』写成另一种成因）").toBe("");
     expect((c.usd ?? 0) > 0).toBe(true);
     expect(c.reason).toBe(""); // 全部桶都归了因 ⇒ 不该有「下界」话术
   });

@@ -2991,3 +2991,16 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
   verbatim 68 ｜ across 6 ｜ non-prose 10 ｜ drift（未登记）0 ｜ stale 0。
 - 剩下 31 格的口径写进 #20：先分"文案即产品"（该收，但收**唯一副本的整句**）与"第二把尺"（直接删）；按**函数**数副本才作数。
 - 读数：`mutation-rerun-triage` 17/17 ｜ `judge-input-face` 11/11 ｜ `prose-needle-scan` 19/19 ｜ typecheck 0 ｜ 扫描退出码 0（贴着水位）｜ 主树全量 `229 文件 / 2527 条` 全绿。
+
+### 2026-09-26 · 第 94 页：水位 31 → 29 —— 两种"不可测"以前只靠一句话区分，而那句话里有 48 处副本
+
+- 继续 #20，挑的是整张表里**副本最多**的两格（`.reason ⊇ "语料"` 33 处、`⊇ "model"` 48 处）：它们早已不是在守文案，是在**假装**有观测者。
+- 改法不是把文案改长，是给成因加字段：`scorecardVerdict` 补 `cause: no-streams | no-writes | no-decisive-beat`、
+  `costOf` 补 `cause: no-usage | no-attribution | unpriced-bucket` —— 六种"不可测"的**修法各不同**（补语料／换任务面／等终态证据；补 usage／写侧补 model 归因 #16／补价表档位），
+  以前全挤在 `reason` 的一句话里。判卷面改收枚举等值，并补"可测时 cause 必须是空串"。
+- **真收获是被逼出来的那一格**：写 `VerdictCause` 时才发现第三条分支（写过盘但没留终态证据）**以前零用例**——
+  三条 `measurable:false` 里只有它没人断言，因为 `measurable` 相同、只有 `reason` 不同 ⇒ 在旧判据眼里它不存在（同规则 191⑦）。
+  `costOf` 的"两表漂移"那格同理从"只断言 usd===null"变成钉 `unpriced-bucket`。
+- 读数：收料断言 84 → 82、顶包候选已提交态 **31 → 29**（`MULTI_COPY_CEILING` 同笔下调；曲线 35→31→29）。
+  verbatim 66 ｜ across 6 ｜ non-prose 10 ｜ drift 0 ｜ stale 0。
+- 验证：`replay-run-scorecard` 26/26 ｜ `prose-needle-scan` 19/19 ｜ typecheck 0 报错 ｜ 扫描退出码 0（贴着新水位）｜ 主树全量 `229 文件 / 2528 条` 全绿。

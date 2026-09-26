@@ -105,12 +105,18 @@ export function usageOfStream(events: readonly AgentEvent[]): UsageTotals {
   return t;
 }
 
+/** 钱轴"不可测"的三种成因。**修法各不同**（补语料 / 写侧补 model 归因 / 补价表档位），
+ *  所以必须是字段：以前只有 `reason` 一句话区分，判卷面就只能去 `toContain` 那半句——
+ *  而「model」「语料」这种词在本仓有几十处副本，改了另一处断言照样绿（第 92 页量的那格）。 */
+export type CostCause = "" | "no-usage" | "no-attribution" | "unpriced-bucket";
+
 export interface CostReading {
-  /** false ⇒ `usd` 一定是 null，且 `reason` 必须能读成"缺哪一面"，不是"没花钱"。 */
+  /** false ⇒ `usd` 一定是 null，且 `cause` 必须说清缺哪一面（`reason` 给人看，`cause` 给判据用）。 */
   measurable: boolean;
   usd: number | null;
   /** 未定价 token 数（真实存在但算不出价的那部分）。 */
   unpricedTokens: number;
+  cause: CostCause;
   reason: string;
 }
 
@@ -121,24 +127,24 @@ export function costOf(totals: readonly UsageTotals[]): CostReading {
   const attributed = totals.reduce((n, t) => n + t.modelAttributed, 0);
   const buckets = totals.flatMap((t) => t.buckets);
   if (usageEvents === 0) {
-    return { measurable: false, usd: null, unpricedTokens: 0, reason: "语料里一条 usage 事件都没有 ⇒ 没有钱轴（不是没花钱）" };
+    return { measurable: false, usd: null, unpricedTokens: 0, cause: "no-usage", reason: "语料里一条 usage 事件都没有 ⇒ 没有钱轴（不是没花钱）" };
   }
   if (attributed === 0) {
     // 未定价的 token 量从**合计字段**取，而不是再把桶加一遍：桶是按 usage 一条一个建出来的，
     // 但调用方完全可能只给出合计数（比如从旧快照重建）——两种来源都得读出同一个"这些钱花过、算不出"。
     const tokens = totals.reduce((n, t) => n + t.inputTokens + t.outputTokens, 0);
     return {
-      measurable: false, usd: null, unpricedTokens: tokens,
+      measurable: false, usd: null, unpricedTokens: tokens, cause: "no-attribution",
       reason: `${String(usageEvents)} 条 usage 事件里没有一条带 model 归因 ⇒ 查不到价表键（价表的键是档位 id，模型名必须先经 priceForModel 反查）。` +
         `写侧补齐归因之前，$/成功任务只能报不可测；token 轴仍可读。`,
     };
   }
   const spent = bucketsSpendUsd(buckets);
   if (spent === null) {
-    return { measurable: false, usd: null, unpricedTokens: buckets.length, reason: "全部桶都算不出价（未注册档位或价表漂移）⇒ 不折成 $0" };
+    return { measurable: false, usd: null, unpricedTokens: buckets.length, cause: "unpriced-bucket", reason: "全部桶都算不出价（未注册档位或价表漂移）⇒ 不折成 $0" };
   }
   return {
-    measurable: true, usd: spent.usd, unpricedTokens: spent.unpricedTokens,
+    measurable: true, usd: spent.usd, unpricedTokens: spent.unpricedTokens, cause: "",
     reason: attributed < usageEvents ? `只有 ${String(attributed)}/${String(usageEvents)} 条能定价 ⇒ 这是**下界**，不是实付` : "",
   };
 }
@@ -312,19 +318,27 @@ export function aggregateScorecard(rows: readonly RunScore[]): ScorecardAggregat
   };
 }
 
-export interface ScorecardVerdict {  measurable: boolean;
+/** 「不可测」的三种成因，修法各不同：`no-streams`＝语料/面没取到东西（没有尺）；
+ *  `no-writes`＝读的是问答流（换面或换任务）；`no-decisive-beat`＝写过盘但没留终态证据（等 run 跑完）。
+ *  判据要问"为什么不可测"，所以它是字段；`reason` 给人看。 */
+export type VerdictCause = "" | "no-streams" | "no-writes" | "no-decisive-beat";
+
+export interface ScorecardVerdict {
+  measurable: boolean;
+  cause: VerdictCause;
   reason: string;
 }
 
 /** 「没语料」「没改过盘」与「改了但没成」必须长成三个不同的样子。 */
 export function scorecardVerdict(rows: readonly RunScore[]): ScorecardVerdict {
   if (rows.length === 0) {
-    return { measurable: false, reason: "语料里一条 run 流都没读到（不是成功率 0，是没有尺）" };
+    return { measurable: false, cause: "no-streams", reason: "语料里一条 run 流都没读到（不是成功率 0，是没有尺）" };
   }
   const closed = rows.filter((r) => r.outcome !== "no-write").length;
   if (closed === 0) {
     return {
       measurable: false,
+      cause: "no-writes",
       reason: `${String(rows.length)} 条流没有一条改过盘 ⇒ 闭环成功率无从谈起（读的是问答流，不是失败）`,
     };
   }
@@ -332,12 +346,13 @@ export function scorecardVerdict(rows: readonly RunScore[]): ScorecardVerdict {
   if (judged === 0) {
     return {
       measurable: false,
+      cause: "no-decisive-beat",
       reason:
         `${String(closed)} 条改过盘的流里，没有一条留下能定终态的验证拍` +
         `（全在 wrote-never-verified / env-blocked）⇒ 只能报"证据缺席"，不能报成功率`,
     };
   }
-  return { measurable: true, reason: "" };
+  return { measurable: true, cause: "", reason: "" };
 }
 
 function main(): void {
