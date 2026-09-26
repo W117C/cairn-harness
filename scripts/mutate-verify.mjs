@@ -22,7 +22,7 @@ import { execFileSync } from "node:child_process";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, expectFailProblemLine } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -1651,7 +1651,7 @@ const MUTATIONS = [
     src: "src/agent/loop.ts",
     test: "tests/loop-repeat-nudge.test.ts",
     desc: "检测照跑、提示却没落进 tool_result（模型看到的仍是裸错误 ⇒ 换路压力为零，重复照旧烧到 maxSteps）",
-    apply: (s) => s.replace("        output: result.output + postContext + repeatNote,\n", "        output: result.output + postContext,\n"),
+    apply: (s) => s.replace("output: redactSecrets(result.output + postContext + repeatNote).text,", "output: redactSecrets(result.output + postContext).text,"),
     expectFail: "同一调用连败 3 次：提示挂在那条 tool_result 尾部，前两次一字不加",
   },
   {
@@ -1857,7 +1857,7 @@ const MUTATIONS = [
     src: "src/tools/impact-query.ts",
     test: "tests/impact-query.test.ts",
     desc: "deps 分支不查图内成员（路径写错/后缀不支持时报「依赖面为 0」）⇒ 模型把「没扫到」读成「这个文件不依赖任何东西」",
-    apply: (s) => s.replace("          if (!graph.files.includes(rel)) return { ok: false, output: await notInGraphNote(ctx.workspace, rel, abs) };\n", ""),
+    apply: (s) => s.replace("          if (!graph.files.includes(rel)) return { ok: false, output: await notInGraphNote(ctx.workspace, rel, abs, maxFiles) };\n", ""),
     expectFail: "deps 模式下不在图内的文件仍然 fail-visible",
   },
   {
@@ -1873,7 +1873,7 @@ const MUTATIONS = [
     src: "src/tools/output-ring.ts",
     test: "tests/shell-tail.test.ts",
     desc: "尾环算好了却在拼装时没接上（模型看到的仍是纯头部）",
-    apply: (s) => s.replace("    ? head + \"\\n\" + middleTruncationNotice(seen - bytesOf(head) - bytesOf(tail)) + \"\\n\" + tail\n", "    ? head + \"\\n\" + middleTruncationNotice(seen - bytesOf(head) - bytesOf(tail))\n"),
+    apply: (s) => s.replace(' + "\\n" + MIDDLE_TRUNCATION_HINT + "\\n" + tail', ' + "\\n" + MIDDLE_TRUNCATION_HINT'),
     expectFail: "超上限时头部与**结尾**都在（旧实现于源头丢掉了 32KB 之后的一切）",
   },
   {
@@ -1889,7 +1889,7 @@ const MUTATIONS = [
     src: "src/tools/output-ring.ts",
     test: "tests/tools.test.ts",
     desc: "取消提示行的预算预留 ⇒ 提示自己把「输出 ≤ 32KB」撑破（中文提示一行就 ~150B）",
-    apply: (s) => s.replace("const NOTICE_RESERVE_BYTES = 256;", "const NOTICE_RESERVE_BYTES = 0;"),
+    apply: (s) => s.replace("const keepBytes = limitBytes - NOTICE_RESERVE_BYTES;", "const keepBytes = limitBytes;"),
     expectFail: "超限：输出超过 32KB 截断并附一行提示",
   },
   {
@@ -2183,7 +2183,7 @@ const MUTATIONS = [
     src: "src/agent/plugins/index.ts",
     test: "tests/skill-body-cap.test.ts",
     desc: "截断后不给全文路径 ⇒ 模型只看到「已截断」却没有任何取回通道，只能凭半份正文动手（或反复重触发同一个 skill）",
-    apply: (s) => s.replace("\"\\n[全文见 \" + entry.path + \"]\"),", "\"\"),"),
+    apply: (s) => s.replace("skillRecallSuffix(entry.path, this.opts.workspace)", '""'),
     expectFail: "200KB 正文收到单 skill 预算内，头部留住并给出全文路径",
   },
   {
@@ -2899,14 +2899,14 @@ const MUTATIONS = [
     test: "tests/session-prune-attachments.test.ts",
     desc: "生产组装退回只传 {events} ⇒ 附件恒空、打桩里那行路径指向空气（§7.4「存盘回取」两头断的正是这一格）",
     apply: (s) => s.replace("const outcome = computePrune({ events, attachmentsDir: pruneAttachmentsDir, sessionId: pruneSessionId });", "const outcome = computePrune({ events });"),
-    expectFail: "①打桩文本带着附件路径，模型能照着取回全文",
+    expectFail: "②附件真落在盘上且逐字等于被裁原文（不是只写了个路径）",
   },
   {
     id: "prune-stub-hides-attachment-path",
     src: "src/agent/prune.ts",
     test: "tests/prune.test.ts",
     desc: "算了附件路径却不写进打桩文本 ⇒ 回取通道对模型不可见，裁剪变成不可逆的信息销毁",
-    apply: (s) => s.replace('      : PRUNED_PLACEHOLDER + "\\n[原文已存附件 " + file + "，需要时 read_file 取回]";', '      : PRUNED_PLACEHOLDER;'),
+    apply: (s) => s.replace("pruneRecallSuffix(file, input.workspace)", "PRUNED_PLACEHOLDER"),
     expectFail: "①传 attachmentsDir ⇒ 打桩自带路径，且该路径逐字等于实际写出的那个文件",
   },
   {
@@ -3570,8 +3570,8 @@ const MUTATIONS = [
     src: "src/agent/plugins/skills.ts",
     test: "tests/skill-user-invocation.test.ts",
     desc: "用户那条 face 不设顶帽 ⇒ 敲一次 /skill 就把 200KB 的 SKILL.md 原样买进上下文，而它整段会话都要付费（模型那条有帽、这头没有）",
-    apply: (s) => s.replace('    text: clampSkillBody(\n      renderPromptCommand(hit, args, ctxFor?.(hit) ?? {}),\n      SKILL_REMOUNT_TOKENS_PER_SKILL,\n      "\\n[全文见 " + hit.path + "]"),', "    text: renderPromptCommand(hit, args, ctxFor?.(hit) ?? {}),"),
-    expectFail: "超预算的正文按模型侧同一顶帽裁掉，并留全文通道（用户敲一次不能买下整段会话）",
+    apply: (s) => s.replace('    text: clampSkillBody(\n      renderPromptCommand(hit, args, ctxFor?.(hit) ?? {}),\n      SKILL_REMOUNT_TOKENS_PER_SKILL,\n      skillRecallSuffix(hit.path, workspace)),', "    text: renderPromptCommand(hit, args, ctxFor?.(hit) ?? {}),"),
+    expectFail: "超预算的正文按模型侧同一顶帽裁掉",
   },
   // ---- §9.5 PreCompact 生产端（任务 #40：手动/阈值自动/超窗三条压缩路径的唯一必经点）----
   {
@@ -7033,6 +7033,30 @@ const MUTATIONS = [
     apply: (s) => s.replace("importFace !== null && (importFace.headFiles.size === 0 || importFace.edges.length === 0)", "importFace !== null && false"),
     expectFail: "取到**空面**（文件 0 或边 0）与未取同处置：0 条 findings 正好像「自洽」（空载棘轮，规则 129/196）",
   },
+  {
+    id: "pointer-audit-treats-unreadable-file-as-fine",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "判卷文件读不到时不报 ⇒ 「指针没问题」被从「没查到」偷来（规则 92/210：三态里最贵的是把未查证说成通过）",
+    apply: (s) => s.replace('if (text === null || text === undefined) out.push({ id: e.id, test: e.test, expectFail: e.expectFail, why: "unreadable" });', "if (text === null || text === undefined) continue;"),
+    expectFail: "判卷文件读不到 ⇒ unreadable，不许当「指针没问题」（规则 92/210 那一族）",
+  },
+  {
+    id: "pointer-audit-recognizes-anything",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "片段判据恒真 ⇒ 整把尺退化成「永远 0 失效」的装饰；这条尺唯一的产出就是那一条红",
+    apply: (s) => s.replace("return frags.some((f) => hay.includes(unescapeForCompare(f)));", "return true;"),
+    expectFail: "齐的读空；真改过名的按 not-found 报出来",
+  },
+  {
+    id: "pointer-block-dimension-not-summed",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "新维算出来了却没喂进求和 ⇒ 门照跑、汇总照印绿。针脚取两行是为绕开自指：这条锚点自己的 apply 里也写着那句文字（单行 needle 会在本文件命中 2 处，落进「待复认」那一档）",
+    apply: (s) => s.replace("needle: blocking.length, duplicateIds: dup.length, untracked: untracked.length, drift: drift.length,\n    expectFail: stalePointers.length,", "needle: blocking.length, duplicateIds: dup.length, untracked: untracked.length, drift: drift.length,"),
+    expectFail: "真门自证：整张表的 killer 指针必须 0 失效（新增一条断指针＝当场红）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
@@ -7126,11 +7150,20 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
     headUnchecked = 1;
   }
   for (const d of drift) console.log("❌ " + headOnlyNeedleLine(d));
+  /* expectFail 指针体检（第 138 页）：一条锚点「杀掉」的判据是**测试红在它期望的那条用例上**；
+     用例改过标题而指针还写着旧的，报告说的是「变异存活或误伤」——听起来像代码没被守住，实际是指针断了。
+     以前发现它要付出「把那条变异跑一遍」的代价（整表几十分钟），而静态扫是秒级。 */
+  const stalePointers = auditExpectFails(
+    entries.map((e) => ({ id: e.id, test: e.test ?? "", expectFail: e.expectFail ?? "" })),
+    (rel) => { try { return readFileSync(join(ROOT, rel), "utf8"); } catch { return null; } },
+  );
+  for (const p of stalePointers) console.log("❌ " + expectFailProblemLine(p));
   // 一次求和、两处使用（汇总里印出来的数与 exit 码用的是同一个值；分开算就可能各说各话）。
   const blockingTotal = blockingTotalOf({
     needle: blocking.length, duplicateIds: dup.length, untracked: untracked.length, drift: drift.length,
+    expectFail: stalePointers.length,
   });
-  console.log(`针脚体检：${String(entries.length)} 条 —— 阻断 ${String(blockingTotal)}，待复认 ${String(warn.length)}，未覆盖 ${String(unparsed.length)}，逐行式 ${String(lineWise.length)}，未入库面 ${String(untracked.length)}（被测面 + 判卷两面），钉在飞文本 ${String(drift.length)}${headUnchecked === 0 ? "" : "（HEAD 归属未查）"}`);
+  console.log(`针脚体检：${String(entries.length)} 条 —— 阻断 ${String(blockingTotal)}，待复认 ${String(warn.length)}，未覆盖 ${String(unparsed.length)}，逐行式 ${String(lineWise.length)}，未入库面 ${String(untracked.length)}（被测面 + 判卷两面），钉在飞文本 ${String(drift.length)}，killer 指针失效 ${String(stalePointers.length)}${headUnchecked === 0 ? "" : "（HEAD 归属未查）"}`);
   return blockingTotal;
 }
 

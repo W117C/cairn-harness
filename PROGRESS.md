@@ -4138,3 +4138,37 @@ git 调用由 `scripts/mutate-verify.mjs` 注入 ⇒ 本模块不自己 spawn �
 - `docs-check` 复跑变绿（exit 0，「受检项全绿，另有 3 项未检」）：第 136 页那条 D-8 红（`replay:prompt-fixed-cost` 无文档引用）
   在两次跑之间被**别人的在飞改动**补上了——我没碰那一面。当时那条红是真的，#11 里记的「脚本本身未入库」也仍然成立（`git cat-file -e HEAD:…` 依旧报 not in HEAD）。
 - 代价复测（不复用旧数）：整尺三次 **0.21 / 0.21 / 0.26 秒**——第 135 页写的 0.28 是当次读数，范围以这三条为准；判卷 25 条单跑 282ms。
+
+### 2026-09-27 · 第 138 页 · 把「假守护」两头一起收：7 条失效针脚改指 ＋ 新尺「killer 指针自己指不指得到」
+
+`--check-needles` 今天报 阻断 12。逐条分诊（按第 130 页那个口径：源文件在飞＝等入库，源文件干净＝我能修）：
+
+- **能修 7 条**（源文件都干净，是**被锚定的实现搬走了**，各自都有 `git log -S` 的落点）：
+  `loop-repeat-nudge-note-dropped`（`9f4fe45` 把拼装裹进 `redactSecrets(...)`）、
+  `impact-query-deps-ghost-file-silent`（`dfcc4bc` 给 `notInGraphNote` 加了 `maxFiles` 实参）、
+  `shell-tail-assembly-drops-tail` ＋ `shell-tail-notice-reserve-removed`（`21d9a02` 加了 `MIDDLE_TRUNCATION_HINT`；预留量从 256 抬到 512）、
+  `skill-primary-hint-lost` ＋ `user-skill-face-budget-abolished`（`9620e91` 把三处「全文见」收成一支 `skillRecallSuffix`）、
+  `prune-stub-hides-attachment-path`（`b7cb5d1` 把打桩尾注收成 `pruneRecallSuffix`）。
+  ⇒ 7 条逐条单跑**全杀**（exit 0）。这 7 条在此之前是**空操作**：表上挂着、跑起来什么也不守（规则 216 那一族最直白的形态）。
+- **等入库 5 条**：源文件在别人在飞的那支里（`no-progress.ts`、`events/index.ts` ×2、`sessions.ts`、`supervisor.ts`）⇒ 按未证记账，不动。
+
+顺手把「针脚之外」的那一根指针也变成尺：锚点的 `expectFail` 指的是**用例标题**，用例改名而指针没跟着改时，
+报告的措辞是「变异存活或误伤」——把**指针断了**说成**代码没守住**，而发现它以前要把那条变异跑一遍（整表几十分钟）。
+
+- 新尺 `auditExpectFails`（`scripts/lib/mutate-gates.ts`，纯函数 + 注入读文件）：每条锚点的 `expectFail` 必须在自己那条判卷文件里认得出来；
+  判卷文件读不到 ⇒ 报 `unreadable`，**不许当成「指针没问题」**。红点并入 `blockingTotalOf` 的**第 5 维**（少喂一支当场抛，接线漏计没有编译期信号）。
+- **这把尺第一版报了 10 条，其中 5 条是假红**——逐条单跑证明它们「✅ 杀死」。根因两种：
+  ①表里存的是解码后的字符串，盘上是带转义的源码文字（`it("… \"Edit\" …")`）；
+  ②标题可以是**拼出来的**：`it("零行为回退：" + label + " → 无 verify_result…")` ⇒ 整句在盘上不存在，跑起来才存在。
+  ⇒ 判据退一步按**片段**比（按分隔切、丢 4 字以下碎片、最长片段必须认得）；报数 10 → 6，
+  剩下 6 条里 5 条单跑确认是真的（其中 `prune-attachment-production-entry` 确实被 `b7cb5d1` 改过名），
+  1 条（`auto-verify-default-on`）经单跑证明是假红 ⇒ 片段口径把它放掉了。**尺的口径是被跑红的记录校准出来的，不是我推出来的。**
+- 片段口径的**少报面**要说清：只要有一个 ≥4 字的片段还在，指针就算活着 ⇒ 只改半句标题的情形可能放过；
+  真值仍以「跑那条变异」为准，这条尺的作用是把几十分钟的普查压成秒级预筛。
+- `prune-attachment-production-entry` 的指针改指 `②附件真落在盘上且逐字等于被裁原文（不是只写了个路径）`——
+  **这一条的杀没验过**：它的 `src` 是 `src/agent/glm-session.ts`（#11 那支未入库文件在飞），今天单跑被预检拒。
+  按规矩记为**未证**，等那支入库后补跑。
+- 判卷：`tests/mutate-verify-gates.test.ts` 41 → **48 passed**（新 7 条：齐／改名／拼出来的标题／转义引号／读不到／空指针分档／片段本身 ＋ 真门自证 spawn 一次 `--check-needles` 断「killer 指针失效 0」）；
+  `blockingTotalOf` 的三支断言同步扩到五支（少喂新维必须抛）；typecheck 0；锚点 **823 → 826**（新 3 条：判卷读不到不报／片段判据恒真／新维算出不喂求和）。
+- 自指的一条施工记：`pointer-block-dimension-not-summed` 的 `src` 就是本表文件，单行针脚会**在这条锚点自己的 apply 里再命中一次**（落进「待复认」）
+  ⇒ 针脚取两行（真实的两行相邻，而 apply 里的 `\n` 是两个字符，不构成换行）⇒ 命中 1 处。

@@ -317,9 +317,10 @@ export interface BlockingParts {
   duplicateIds: number;
   untracked: number;
   drift: number;
+  expectFail: number;
 }
 
-const BLOCKING_KEYS: (keyof BlockingParts)[] = ["needle", "duplicateIds", "untracked", "drift"];
+const BLOCKING_KEYS: (keyof BlockingParts)[] = ["needle", "duplicateIds", "untracked", "drift", "expectFail"];
 
 /** 阻断总数。缺一支或非有限数 ⇒ 抛并点名（`0` 是合法读数，不许当缺项丢掉）。 */
 export function blockingTotalOf(parts: BlockingParts): number {
@@ -384,4 +385,77 @@ export function classifyArgs(args: readonly string[]): ArgPlan {
  *  而假警报备出来的代价是真警被人一起忽略。 */
 export function isLineWiseApply(applySource: string): boolean {
   return applySource.includes(".split(");
+}
+
+// ---- expectFail 这个指针本身可不可用（第 138 页） ----------------------------
+// 动因：一条锚点「杀掉」的判据是**测试红在那条用例上**；用例改了标题而 `expectFail` 还写着旧标题时，
+// 报告说的是「变异存活或误伤」——听起来像代码没被守住，实际上是**指针断了**。
+// 这个 bug 2026-09-23 就咬过一次（表里那条注释），今天是第二次（我自己那条被 #47 改名）。
+// 而发现它要付出「跑那条变异」的代价；整张表跑一遍是几十分钟，静态扫是秒级。
+// ⇒ 判据挂在盘上的文字事实上：`expectFail` 必须能在它自己那条 `test` 文件里逐字找到。
+export interface ExpectFailEntry {
+  id: string;
+  test: string;
+  expectFail: string;
+}
+
+export interface ExpectFailProblem {
+  id: string;
+  test: string;
+  expectFail: string;
+  /** `unreadable`＝判卷文件读不到（三态：不能当成「指针没问题」）；`not-found`＝文件里找不到这句话。 */
+  why: "unreadable" | "not-found";
+}
+
+/** 指针与判卷文字之间的比较口径。两件事把「逐字比」打掉了：
+ *  ① 表里存的是**解码后的字符串**，判卷文件里那句标题是**带转义的源码文字**（`it("… \"Edit\" …")`）；
+ *  ② 标题可以是**拼出来的**：`it("零行为回退：" + label + " → 无 verify_result…")` ⇒ 整句在盘上根本不存在，
+ *    而跑起来那刻它是存在的（`auto-verify-default-on` 实测就是这样：静态报失配，变异单跑 ✅ 杀死）。
+ *  ⇒ 判据退一步按**片段**比：指针里最长的可辨片段要能在文件里逐字找到。
+ *    真改过名的条目（片段全找不到）仍然红；只有片段一个都对不上的畸形短指针放行（宁少报，不假红）。 */
+const POINTER_FRAG_SEP = /[\s"“”'‘’（）()、，,：:；;/|｜→⇒…+\-]+/u;
+
+export function expectFailFragments(pointer: string): string[] {
+  return pointer
+    .split(POINTER_FRAG_SEP)
+    .map((t) => t.trim())
+    .filter((t) => Array.from(t).length >= 4)
+    .sort((a, b) => b.length - a.length);
+}
+
+const unescapeForCompare = (s: string): string => s.replace(/\\/g, "");
+
+/** 指针在判卷文字里认不认得（片段口径，见上）。 */
+export function expectFailRecognizable(pointer: string, testFileText: string): boolean {
+  const hay = unescapeForCompare(testFileText);
+  const frags = expectFailFragments(pointer);
+  if (frags.length === 0) return true;
+  return frags.some((f) => hay.includes(unescapeForCompare(f)));
+}
+
+/** 纯函数：`readTest` 由调用方注入（单测喂假文件，门喂真盘）。 */
+export function auditExpectFails(
+  entries: readonly ExpectFailEntry[],
+  readTest: (rel: string) => string | null,
+): ExpectFailProblem[] {
+  const cache = new Map<string, string | null>();
+  const out: ExpectFailProblem[] = [];
+  for (const e of entries) {
+    // 空 expectFail 不是「失效」而是「这条锚点没声明 killer」——那是另一格（表里逐行式的条目就有这种情况），
+    // 这里不许把它和指针断裂混成一档。
+    if (e.expectFail === "" || e.test === "") continue;
+    if (!cache.has(e.test)) cache.set(e.test, readTest(e.test));
+    const text = cache.get(e.test);
+    if (text === null || text === undefined) out.push({ id: e.id, test: e.test, expectFail: e.expectFail, why: "unreadable" });
+    else if (!expectFailRecognizable(e.expectFail, text)) out.push({ id: e.id, test: e.test, expectFail: e.expectFail, why: "not-found" });
+  }
+  return out;
+}
+
+/** 一行可机读的判读（门输出格式：id + 判卷文件 + 原因 + 指针前 60 字）。 */
+export function expectFailProblemLine(p: ExpectFailProblem): string {
+  const why = p.why === "unreadable"
+    ? "判卷文件读不到（不等于指针没问题）"
+    : "这条用例标题在该判卷文件里找不到（多半是用例改过名，而指针还写着旧的）";
+  return `${p.id} — ${p.test} — ${why}：${JSON.stringify(p.expectFail.slice(0, 60))}`;
 }

@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { anchorFaces, blockingTotalOf, budgetMsOf, classifyArgs, entryDisposition, headOnlyNeedleLine, headOnlyNeedleProblems, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
+import { anchorFaces, auditExpectFails, blockingTotalOf, budgetMsOf, classifyArgs, entryDisposition, expectFailFragments, expectFailRecognizable, headOnlyNeedleLine, headOnlyNeedleProblems, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
 
 describe("budgetMsOf + classifyArgs 的值位（自我预算这条手段本身要有判卷）", () => {
   it("flag 优先于 env；两者都缺 ⇒ 不限且不吭声", () => {
@@ -313,18 +313,22 @@ describe("anchorFaces + blockingTotalOf：接线缺件必须当场崩，不许�
     expect(anchorFaces([])).toEqual([]);
   });
 
-  it("四支数都给 ⇒ 求和（0 也算数，不许被当成缺项丢掉）", () => {
-    expect(blockingTotalOf({ needle: 3, duplicateIds: 0, untracked: 4, drift: 5 })).toEqual(12);
+  it("五支数都给 ⇒ 求和（0 也算数，不许被当成缺项丢掉）", () => {
+    expect(blockingTotalOf({ needle: 3, duplicateIds: 0, untracked: 4, drift: 5, expectFail: 6 })).toEqual(18);
   });
 
   it("缺一支 ⇒ 抛并点名缺哪支（门报红却少算一维 = 这条门唯一的产出被废）", () => {
     const partial = { needle: 3, duplicateIds: 0, untracked: 4 } as unknown as Parameters<typeof blockingTotalOf>[0];
     expect(() => blockingTotalOf(partial)).toThrow(/drift/);
+    // 第 138 页新加的那一维（killer 指针失效）同样必须被强制喂：接线少喂一支＝那一维静默不算。
+    const noPointer = { needle: 0, duplicateIds: 0, untracked: 0, drift: 0 } as unknown as Parameters<typeof blockingTotalOf>[0];
+    expect(() => blockingTotalOf(noPointer)).toThrow(/expectFail/);
   });
 
   it("非有限数（NaN / Infinity）也算缺项： typeof 是 number，但读数本身不可信", () => {
-    expect(() => blockingTotalOf({ needle: NaN, duplicateIds: 0, untracked: 0, drift: 0 })).toThrow(/needle/);
-    expect(() => blockingTotalOf({ needle: 1, duplicateIds: 0, untracked: 0, drift: Infinity })).toThrow(/drift/);
+    expect(() => blockingTotalOf({ needle: NaN, duplicateIds: 0, untracked: 0, drift: 0, expectFail: 0 })).toThrow(/needle/);
+    expect(() => blockingTotalOf({ needle: 1, duplicateIds: 0, untracked: 0, drift: Infinity, expectFail: 0 })).toThrow(/drift/);
+    expect(() => blockingTotalOf({ needle: 0, duplicateIds: 0, untracked: 0, drift: 0, expectFail: NaN })).toThrow(/expectFail/);
   });
 });
 
@@ -349,4 +353,52 @@ describe("被 import 时必须拒绝运行（它会就地改源文件）", () =>
     // 只给下限不给等式：条目数会随锚点增减（事实源是那张表本身），这里判的是"入口还活着"。
     expect(r.stdout.split("\n").filter((l) => l.includes("\t")).length).toBeGreaterThan(500);
   });
+});
+
+/* 第 138 页：`expectFail` 自己也是一根指针。它断在「用例改过名」上时，报告的措辞是「变异存活或误伤」——
+   把**指针坏了**说成**代码没守住**，而发现它以前要把那条变异跑一遍（整表几十分钟）。
+   这条尺的校准过程值得留在判卷里：第一版按整句逐字比，报了 10 条，其中 5 条单跑是 ✅ 杀死的假红
+   （标题是 `"…：" + label + " → …"` 拼出来的，盘上根本没有整句）⇒ 判据改成**最长片段**必须认得。 */
+describe("auditExpectFails：killer 指针必须指得到活用例", () => {
+  const file = (titles: string[]): string => titles.map((t) => `  it("${t}", () => {});`).join("\n");
+  const read = (text: string) => (): string => text;
+
+  it("齐的读空；真改过名的按 not-found 报出来", () => {
+    const ok = auditExpectFails([{ id: "a1", test: "tests/x.test.ts", expectFail: "开关开着就红一次" }], read(file(["开关开着就红一次"])));
+    expect(ok).toEqual([]);
+    const bad = auditExpectFails([{ id: "a2", test: "tests/x.test.ts", expectFail: "旧标题里那句再也没出现过的一句话" }], read(file(["新标题：同一件事换了说法"])));
+    expect(bad.map((p) => `${p.id}/${p.why}`)).toEqual(["a2/not-found"]);
+  });
+
+  it("拼出来的标题（盘上没有整句，跑起来才有）不许报红——这条是校准出来的，不是推的", () => {
+    const text = '  it("零行为回退：" + label + " → 无 verify_result、请求数与旧行为同形", async () => {});';
+    expect(auditExpectFails([{ id: "auto-verify-default-on", test: "tests/loop.test.ts", expectFail: "零行为回退：缺省不开闸（未给 autoVerify） → 无 verify_result、请求数与旧行为同形" }], () => text)).toEqual([]);
+  });
+
+  it("带转义引号的标题不许误报（表里存解码值，盘上是源码文字）", () => {
+    const text = 'it("纯精确名不做子串：matcher \\"Edit\\" 不得命中 NotebookEdit", async () => {});';
+    expect(auditExpectFails([{ id: "h", test: "tests/y.test.ts", expectFail: '纯精确名不做子串：matcher "Edit" 不得命中 NotebookEdit' }], () => text)).toEqual([]);
+  });
+
+  it("判卷文件读不到 ⇒ unreadable，不许当「指针没问题」（规则 92/210 那一族）", () => {
+    const got = auditExpectFails([{ id: "z", test: "tests/gone.test.ts", expectFail: "任何句子" }], () => null);
+    expect(got.map((p) => p.why)).toEqual(["unreadable"]);
+  });
+
+  it("空 expectFail / 空 test 跳过：那是「没声明 killer」，与指针断裂分两档", () => {
+    expect(auditExpectFails([{ id: "w", test: "tests/x.test.ts", expectFail: "" }, { id: "v", test: "", expectFail: "有内容" }], read(file(["任何东西"])))).toEqual([]);
+  });
+
+  it("片段口径本身：按分隔切、丢掉 4 字以下的碎片、长片段排在前面", () => {
+    expect(expectFailFragments("a b、cd efghijklmnop abcd_efg")).toEqual(["efghijklmnop", "abcd_efg"]);
+    // 整句全是三四字以下的碎片 ⇒ 没判据，放行（宁少报，不假红）。
+    expect(expectFailRecognizable("ab cd", "anything")).toBe(true);
+  });
+
+  it("真门自证：整张表的 killer 指针必须 0 失效（新增一条断指针＝当场红）", () => {
+    const script = fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url));
+    const r = spawnSync(process.execPath, [script, "--check-needles"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    const line = (r.stdout ?? "").split("\n").find((l) => l.includes("针脚体检：")) ?? "读不到汇总行";
+    expect(line).toContain("killer 指针失效 0");
+  }, 120_000);
 });
