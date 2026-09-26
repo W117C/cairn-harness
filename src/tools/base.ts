@@ -1,5 +1,6 @@
-import { realpath } from "node:fs/promises";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { lstat, readlink, realpath } from "node:fs/promises";
+import type { Stats } from "node:fs";
+import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import type { AgentEvent, ClarifyAnswerMap, ImpactReportEvent } from "../events";
 
 /** 工具可预期失败的统一错误类型：loop 捕获后转成 ok:false 的 tool_result。 */
@@ -49,6 +50,8 @@ export interface ToolResult {
   /** D7 覆盖前快照落成的路径（workspace 相对）。缺席 = 没落快照（新建 / 空文件 / 快照自身失败）。
    *  同一个事实有两个读者：正文里那句给模型看（它得知道去哪儿找回原件），这个字段给事件流与界面看。 */
   snapshotId?: string;
+  /** 写工具的结构化变更类型；缺席时事件消费者必须显示 unknown，不能从工具名猜。 */
+  change?: "created" | "modified";
   /** 进程退出码；被超时强杀 / 根本没起来 = null。此前只有 `ok` 与拼进 output 的那句
    *  `[exit code: N]` 活到收束处，**结构化信号在 settle 时被丢掉** ⇒ 任何想区分"工具链没装（127）"
    *  与"你的测试挂了"的读者只能去匹配文案。verify 归因需要它，所以在这里补回来。 */
@@ -103,8 +106,54 @@ export function resolveInWorkspace(workspace: string, rel: string, label: string
 }
 
 // 内容归属校验（审查 C-2/C-3，根因 3）：词法 resolve/relative 挡不住「工作区内软链指向外部」——
-// 把目标沿现存祖先链 realpath 后，校验落点仍在 realpath(workspace) 之内。
-// 目标不存在时最深现存祖先即其父目录：新建文件不可能凭空穿透，软链必须先存在于链上。
+// 把落点沿软链逐段解析后，校验它仍在 realpath(workspace) 之内。
+// 落点不存在时解析到「最深一段存在为止」：新建文件不可能凭空穿透，软链必须先存在于链上。
+
+/** 手动软链解析的层数上限。realpath 遇环抛 ELOOP 收束，readlink 不会——只能自己掐。
+ *  取 40：真实路径远够不到，成环转 40 圈也该判失败了（沿 command-shape 的深度上限惯例）。 */
+const SYMLINK_DEPTH_CAP = 40;
+
+/** 单段 lstat，失败一律当「不存在」——EACCES 之类在本闸的语义下同样是不予放行。 */
+async function lstatOrNull(p: string): Promise<Stats | null> {
+  try {
+    return await lstat(p);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 逐段解析软链，返回落点解析后最深的那段真实位置（其后若还有段则原样接上）。
+ *
+ * 不用 realpath 的原因：realpath 要求**整条路径存在**。末段是悬空软链（指向不存在的目标）
+ * 时它抛 ENOENT，于是「末段是软链」这个事实被一并丢掉，祖先回溯退到词法父目录——
+ * 父目录在界内，真实落点却在界外，门就这么放行了。lstat 对软链本身成功且不跟随，
+ * 正好分得开「不存在」（退回接余段）与「是软链」（readlink 后从落点重走）。
+ */
+async function resolveDeepest(abs: string, label: string): Promise<string> {
+  const root = parse(abs).root;
+  const pending = abs.slice(root.length).split(sep).filter((s) => s.length > 0);
+  let cur = root;
+  let links = 0;
+  while (pending.length > 0) {
+    const next = join(cur, pending.shift()!);
+    const st = await lstatOrNull(next);
+    if (st === null) return join(next, ...pending); // 这一段起不存在，余段是字面名，原样接上
+    if (!st.isSymbolicLink()) {
+      cur = next;
+      continue;
+    }
+    if (++links > SYMLINK_DEPTH_CAP) throw new ToolError(`${label}: 软链层数超过 ${SYMLINK_DEPTH_CAP}，疑似成环: ${abs}`);
+    // 相对目标按软链自身所在目录解析（与内核同规则）
+    const target = await readlink(next);
+    const landed = isAbsolute(target) ? resolve(target) : resolve(dirname(next), target);
+    const lRoot = parse(landed).root;
+    pending.unshift(...landed.slice(lRoot.length).split(sep).filter((s) => s.length > 0));
+    cur = lRoot;
+  }
+  return cur;
+}
+
 export async function assertRealContainment(workspace: string, abs: string, label: string): Promise<void> {
   let wsReal: string;
   try {
@@ -112,18 +161,7 @@ export async function assertRealContainment(workspace: string, abs: string, labe
   } catch {
     throw new ToolError(`${label}: workspace 不可解析: ${workspace}`);
   }
-  let cur = abs;
-  for (;;) {
-    try {
-      cur = await realpath(cur);
-      break;
-    } catch {
-      const parent = dirname(cur);
-      if (parent === cur) throw new ToolError(`${label}: 路径不可解析: ${abs}`);
-      cur = parent;
-    }
-  }
-  const relBack = relative(wsReal, cur);
+  const relBack = relative(wsReal, await resolveDeepest(abs, label));
   if (relBack !== "" && (relBack.startsWith("..") || isAbsolute(relBack))) {
     throw new ToolError(`${label}: 路径经软链解析后越出 workspace 边界: ${abs}`);
   }
@@ -139,22 +177,11 @@ export function assertNotAgentArea(rel: string, label: string): void {
 
 // C3（审查 P1-6）：.agent 拒写只在词法 rel 段判定可被软链绕过——`foo -> .agent` 的 rel 里
 // 没有 ".agent" 字样，两道既有闸（词法 + containment）都放行，写入落到 .agent/lsp.json
-//（任意 command → RCE）或 .agent/permissions.json（跨会话提权）。realpath 解析落点后复查归属。
+//（任意 command → RCE）或 .agent/permissions.json（跨会话提权）。逐段解析软链后复查归属。
 export async function assertNotAgentAreaReal(workspace: string, abs: string, label: string): Promise<void> {
   const wsReal = await realpath(workspace).catch(() => null);
   if (wsReal === null) return; // workspace 不可解析时由 assertRealContainment 拒绝（职责不在本闸）
-  let cur = abs;
-  for (;;) {
-    try {
-      cur = await realpath(cur);
-      break;
-    } catch {
-      const parent = dirname(cur);
-      if (parent === cur) return; // 链根都不可解析：同上，交 containment 判
-      cur = parent;
-    }
-  }
-  const relReal = relative(wsReal, cur);
+  const relReal = relative(wsReal, await resolveDeepest(abs, label));
   if (relReal.split(/[\\/]/).includes(".agent")) {
     throw new ToolError(`${label}: .agent/ 是系统区——路径经软链解析后写入落点在 .agent/ 内（${relReal}），已拒绝: ${abs}`);
   }

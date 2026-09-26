@@ -63,6 +63,49 @@ describe("工具路径边界 · realpath 归属校验（C-2/C-3）", () => {
     const read = await read_file.run({ path: "src/ok.txt" }, ctx);
     expect(read.output).toContain("hello");
   });
+
+  // 上面三条软链用例的目标**都存在**——所以下面这个形状一直没人写：realpath 要求整条路径
+  // 存在，悬空软链让它抛 ENOENT，祖先回溯于是退到词法父目录，把「末段是软链」丢了。门看到的
+  // 是「写在 ws 里」，实际写的是软链指向的界外位置。git 保留软链，恶意 clone 就带着它。
+  it("悬空软链（目标不存在）写出去仍被拒：这是上一组三条都覆盖不到的形状", async () => {
+    const ctx = await newCtx();
+    const outside = await mkdtemp(join(tmpdir(), "h2-outside-"));
+    await symlink(join(outside, "pwned.txt"), join(ws, "ghost")); // 目标刻意不存在
+    await expect(write_file.run({ path: "ghost", content: "pwned" }, ctx))
+      .rejects.toThrow(/越出 workspace 边界/);
+    const { readFile: rd } = await import("node:fs/promises");
+    expect(existsSync(join(outside, "pwned.txt"))).toBe(false); // 界外文件没被创建出来
+    await rm(outside, { recursive: true, force: true });
+  });
+
+  it("悬空软链读出去同样被拒", async () => {
+    const ctx = await newCtx();
+    const outside = await mkdtemp(join(tmpdir(), "h2-outside-"));
+    await writeFile(join(outside, "secret.txt"), "TOPSECRET", "utf8");
+    await symlink(join(outside, "gone.txt"), join(ws, "ghost")); // 目标不存在
+    await expect(read_file.run({ path: "ghost" }, ctx))
+      .rejects.toThrow(/越出 workspace 边界/);
+    await rm(outside, { recursive: true, force: true });
+  });
+
+  it("悬空软链指向界内不存在的路径：正常放行（新建语义，零行为变化）", async () => {
+    const ctx = await newCtx();
+    await mkdir(join(ws, "real"), { recursive: true });
+    await symlink(join(ws, "real", "later.txt"), join(ws, "ghost")); // 界内，将来会有
+    const res = await write_file.run({ path: "ghost", content: "ok" }, ctx);
+    expect(res.ok).toBe(true);
+    const { readFile: rd } = await import("node:fs/promises");
+    expect(await rd(join(ws, "real", "later.txt"), "utf8")).toBe("ok");
+  });
+
+  it("软链环不靠 realpath 收束，靠本仓自己的深度上限收束（a→b→a）", async () => {
+    const ctx = await newCtx();
+    await symlink(join(ws, "b"), join(ws, "a"));
+    await symlink(join(ws, "a"), join(ws, "b"));
+    // realpath 在这里会抛 ELOOP；手动 readlink 不会，没有上限就是死循环。
+    await expect(write_file.run({ path: "a", content: "x" }, ctx))
+      .rejects.toThrow(/软链层数超过/);
+  });
 });
 
 describe(".agent/ 系统区拒写（C-11）", () => {
