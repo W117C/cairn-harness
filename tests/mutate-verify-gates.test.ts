@@ -3,6 +3,8 @@
 // 「基线就不是全绿」+「变异存活」——真回归信号被并发噪声伪装掉了。
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { anchorFaces, auditExpectFails, blockingTotalOf, budgetMsOf, classifyArgs, entryDisposition, expectFailFragments, expectFailRecognizable, headOnlyNeedleLine, headOnlyNeedleProblems, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
 
@@ -395,10 +397,27 @@ describe("auditExpectFails：killer 指针必须指得到活用例", () => {
     expect(expectFailRecognizable("ab cd", "anything")).toBe(true);
   });
 
-  it("真门自证：整张表的 killer 指针必须 0 失效（新增一条断指针＝当场红）", () => {
+  it("真表自证：整张表的 killer 指针必须 0 失效（新增一条断指针＝当场红）", () => {
+    // 只走 `--list` 这条**不改源文件**的入口。以前这里 spawn `--check-needles`，结果在变异单跑时
+    // 撞上门自己的备份文件预检 ⇒「读不到汇总行」把三条本来好好的锚点带红（第 138 页）。
     const script = fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url));
-    const r = spawnSync(process.execPath, [script, "--check-needles"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-    const line = (r.stdout ?? "").split("\n").find((l) => l.includes("针脚体检：")) ?? "读不到汇总行";
-    expect(line).toContain("killer 指针失效 0");
-  }, 120_000);
+    const r = spawnSync(process.execPath, [script, "--list"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    const rows = (r.stdout ?? "").split("\n")
+      .map((l) => l.split("\t"))
+      .filter((p) => p.length >= 5 && p[4] !== undefined && p[4].startsWith("\""))
+      .map((p) => ({ id: p[0] ?? "", test: p[3] ?? "", expectFail: JSON.parse(p[4] ?? '""') as string }));
+    // 空 expectFail 的条目（逐行式那几条）由尺自己跳过，这里只要求表读得出来。
+    expect(rows.length).toBeGreaterThan(500);
+    const root = fileURLToPath(new URL("../", import.meta.url));
+    expect(auditExpectFails(rows, (rel) => {
+      try { return readFileSync(join(root, rel), "utf8"); } catch { return null; }
+    }).map((p) => `${p.id}/${p.why}`)).toEqual([]);
+  }, 60_000);
+
+  it("求和那一行必须把第 5 维喂进去（钉接线：少喂一支＝门照跑、汇总照印绿）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    // 用正则框住**真实的那个调用**，不能只 includes 一行文字：
+    // 这条锚点自己的 apply 里也写着那句文字（同一份文件），单行文字判据会连被改掉的那次也读成"还在"。
+    expect(/blockingTotalOf\(\{[^}]*expectFail:[^}]*\}\)/s.test(src)).toBe(true);
+  });
 });

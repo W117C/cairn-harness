@@ -7055,7 +7055,7 @@ const MUTATIONS = [
     test: "tests/mutate-verify-gates.test.ts",
     desc: "新维算出来了却没喂进求和 ⇒ 门照跑、汇总照印绿。针脚取两行是为绕开自指：这条锚点自己的 apply 里也写着那句文字（单行 needle 会在本文件命中 2 处，落进「待复认」那一档）",
     apply: (s) => s.replace("needle: blocking.length, duplicateIds: dup.length, untracked: untracked.length, drift: drift.length,\n    expectFail: stalePointers.length,", "needle: blocking.length, duplicateIds: dup.length, untracked: untracked.length, drift: drift.length,"),
-    expectFail: "真门自证：整张表的 killer 指针必须 0 失效（新增一条断指针＝当场红）",
+    expectFail: "求和那一行必须把第 5 维喂进去（钉接线：少喂一支＝门照跑、汇总照印绿）",
   },
 ];
 
@@ -7296,7 +7296,10 @@ if (plan.unknown.length > 0) {
   process.exit(2);
 }
 if (plan.mode === "list") {
-  for (const m of MUTATIONS) console.log(`${m.id}\t${m.src}\t${m.desc}`);
+  // 后两列（判卷文件 + JSON 化的 killer 指针）是给判卷用的：`tests/mutate-verify-gates.test.ts`
+  // 要走这条**不改源文件**的入口拿到整张表，而不能 spawn `--check-needles`——那会在变异跑到一半时被调用，
+  // 撞上本门自己的备份文件预检，报「读不到汇总行」（第 138 页实测：三条新锚点的单跑全被这个假信号带红）。
+  for (const m of MUTATIONS) console.log(`${m.id}\t${m.src}\t${m.desc}\t${m.test}\t${JSON.stringify(m.expectFail ?? "")}`);
   process.exit(0);
 }
 /** 只核针脚、不跑测试（秒级）——因此它能进 pnpm gates，而整张变异表要跑几十分钟、
