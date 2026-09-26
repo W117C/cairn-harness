@@ -1,16 +1,22 @@
-/** `scripts/head-import-face.ts` 的判卷（第 131 页立尺）。
+/** `scripts/head-import-face.ts` 的判卷（第 131 页立尺，第 135 页补符号那一半）。
  *  立尺的实测：`834ba3a` 把 4 个新模块留在未跟踪状态就提交了消费者 ⇒ HEAD 从那时起
  *  typecheck 8 条错、干净树 34 个判卷文件红，而**主树全量绿**——主树的判卷永远看不见这件事。
- *  本尺只看提交对象（`git ls-tree` ＋ `git grep <rev>`），所以别人盘上的未提交改动盖不住它。
- *  判卷全部喂假表（存在性注入）⇒ 不依赖真仓内容，除最后两条自证。 */
+ *  本尺只看提交对象（`git ls-tree` ＋ `git cat-file --batch`），所以别人盘上的未提交改动盖不住它。
+ *  判卷全部喂假表（存在性/正文注入）⇒ 不依赖真仓内容，除最后几条自证。 */
 import { describe, expect, it } from "vitest";
 import {
-  HEAD_DANGLING_WAIVERS, checkHeadImportFace, collectHeadEdges, findDanglingImports, resolveRelativeSpec,
+  HEAD_DANGLING_WAIVERS, HEAD_MISSING_SYMBOL_WAIVERS, checkHeadImportFace, checkMissingSymbols,
+  clauseNames, collectHeadEdges, exportedNames, findDanglingImports, findMissingExports,
+  parseBatchResponse, parseImportStatements, readHeadBlobs, resolveRelativeSpec, type HeadEdge,
 } from "../scripts/head-import-face";
 
 const FILES = new Set(["src/a.ts", "src/tools/run_shell.ts", "src/util/index.ts", "tests/a.test.ts"]);
 const noDisk = (): boolean => false;
 const allDisk = (): boolean => true;
+
+/** 用真解析器造边（判卷不自己抄一份 clause 规则，否则尺和刀一起错也发现不了）。 */
+const edgesOf = (from: string, text: string): HeadEdge[] =>
+  parseImportStatements(text).map((s) => ({ from, spec: s.spec, names: s.clause.names }));
 
 describe("resolveRelativeSpec：先要解析得对，才轮得到判悬空", () => {
   it("同目录、跨目录、带后缀三种写法都落到 HEAD 里那个文件", () => {
@@ -30,6 +36,130 @@ describe("resolveRelativeSpec：先要解析得对，才轮得到判悬空", () 
   it("裸包名不是仓内边，一律不算（npm 包在 HEAD 文件表里本来就没有）", () => {
     expect(resolveRelativeSpec("src/a.ts", "vitest", FILES)).toBeNull();
     expect(resolveRelativeSpec("src/a.ts", "@electron/remote", FILES)).toBeNull();
+  });
+});
+
+describe("parseImportStatements：取料单位是整条语句，不是行", () => {
+  it("跨行的命名导入要抽出全部名字（第 131 页那条 SessionTransport 就是这个形状漏掉的）", () => {
+    const text = 'import {\n  ALPHA,\n  type BETA,\n  GAMMA as DELTA,\n} from "./sibling";';
+    const s = parseImportStatements(text);
+    expect(s).toHaveLength(1);
+    expect(s[0]?.spec).toBe("./sibling");
+    expect(s[0]?.clause.names).toEqual(["ALPHA", "BETA", "GAMMA"]); // `as` 取源侧那个名字
+    expect(s[0]?.clause.opaque).toBe(false);
+  });
+
+  it("假源码字符串不算边：`import` 前面既不是行首也不是 `;`", () => {
+    const text = `const fake = 'import { ghost } from "./nope";';\nimport { real } from "./real";`;
+    expect(parseImportStatements(text).map((s) => s.spec)).toEqual(["./real"]);
+  });
+
+  it("clause 不许跨过语句边界：出现 `(` `)` `=` `;` 就该停（实测：上一版把尺自己报成悬空）", () => {
+    const text = 'export function resolveIt(spec: string): string {\n  // 注释里举例：from "./todo"\n  return spec;\n}\nimport { ok } from "./ok";';
+    expect(parseImportStatements(text).map((s) => s.spec)).toEqual(["./ok"]);
+  });
+
+  it("不带 from 的两种写法也是边（副作用与动态 import），但只判模块不点名", () => {
+    const text = `import "./styles";\nconst p = async (): Promise<unknown> => await import("./lazy");`;
+    const s = parseImportStatements(text);
+    expect(s.map((x) => x.spec)).toEqual(["./styles", "./lazy"]);
+    expect(s.every((x) => x.clause.names.length === 0)).toBe(true);
+  });
+
+  it("`export *`／`import * as ns` 不给名字，但模块边要留着（漏了边＝漏了悬空）", () => {
+    const s = parseImportStatements('export * from "./a";\nexport * as ns from "./b";\nimport * as all from "./c";');
+    expect(s.map((x) => x.spec)).toEqual(["./a", "./b", "./c"]);
+    expect(s.every((x) => x.clause.names.length === 0 && x.clause.namespace)).toBe(true);
+  });
+});
+
+describe("clauseNames：读不懂就整条不点名（宁少报，不假红）", () => {
+  it("内联 `type` 修饰与 `as` 改名都要认（上一版 6 条假红全在这一族）", () => {
+    expect(clauseNames("{ q, type R, s as t }").names).toEqual(["q", "R", "s"]);
+    expect(clauseNames("{ q, type R, s as t }").opaque).toBe(false);
+  });
+
+  it("混合形状（默认导入 + 花括号）整条标 unreadable ⇒ 一个名字都不报", () => {
+    const c = clauseNames("Foo, { bar }");
+    expect(c.names).toEqual([]);
+    expect(c.opaque).toBe(true);
+  });
+});
+
+describe("exportedNames：目标那一版到底导出了什么", () => {
+  it("声明式、`export {a, b as c}`、`export type {}` 三种都要收（漏一种＝把合法写法报成缺失）", () => {
+    const text = [
+      "export const A = 1;",
+      "export interface I {}",
+      "export type T = number;",
+      "export function f() {}",
+      "export { g, h as renamed };",
+      'export type { Q } from "./x";',
+    ].join("\n");
+    const e = exportedNames(text);
+    expect([...e.names].sort()).toEqual(["A", "I", "Q", "T", "f", "g", "renamed"]);
+    expect(e.opaque).toBe(false);
+  });
+
+  it("`export * from` 把整面挡住 ⇒ opaque；`export * as ns` 只贡献一个名字，不算看不全", () => {
+    expect(exportedNames('export * from "./a";').opaque).toBe(true);
+    const one = exportedNames('export * as ns from "./a";');
+    expect(one.opaque).toBe(false);
+    expect(one.names.has("ns")).toBe(true);
+  });
+});
+
+describe("findMissingExports：命名导入的名字必须在目标的导出面里", () => {
+  it("跨行 import 少一个导出 ⇒ 报（这一条就是立尺根因；逐行取料的那版对它失明）", () => {
+    const texts = new Map([
+      ["src/consumer.ts", 'import {\n  keep,\n  gone,\n} from "./lib";'],
+      ["src/lib.ts", "export const keep = 1;"],
+    ]);
+    const files = new Set(["src/consumer.ts", "src/lib.ts"]);
+    const m = findMissingExports(edgesOf("src/consumer.ts", texts.get("src/consumer.ts")!), files, (rel) => texts.get(rel) ?? null);
+    expect(m.map((x) => `${x.target}:${x.symbol}`)).toEqual(["src/lib.ts:gone"]);
+  });
+
+  it("合法写法一律不许报：再导出、内联 type、as 改名、`export type {}`", () => {
+    const lib = ["export const MODES = [];", "export type Mode = string;", "export function rank() {}", "export { MODES as ALL };"].join("\n");
+    const idx = 'export { MODES, type Mode, rank, ALL } from "./lib";';
+    const files = new Set(["src/idx.ts", "src/lib.ts"]);
+    const m = findMissingExports(edgesOf("src/idx.ts", idx), files, (rel) => (rel === "src/lib.ts" ? lib : null));
+    expect(m).toEqual([]);
+  });
+
+  it("目标看不全（`export *`）⇒ 整份不判", () => {
+    const files = new Set(["src/consumer.ts", "src/lib.ts"]);
+    const m = findMissingExports(edgesOf("src/consumer.ts", 'import { anything } from "./lib";'), files, () => 'export * from "./other";');
+    expect(m).toEqual([]);
+  });
+
+  it("模块本身缺失时不报符号（归悬空那一半，一条缺陷不许报两次）", () => {
+    const files = new Set(["src/consumer.ts"]);
+    const m = findMissingExports(edgesOf("src/consumer.ts", 'import { whatever } from "./nope";'), files, () => null);
+    expect(m).toEqual([]);
+  });
+
+  it("豁免表外新出现的缺失即红；补好后 stale 红（两张表同一个规矩）", () => {
+    const missing = [{ target: "src/lib.ts", symbol: "gone", importers: ["src/a.ts"] }];
+    const key = "src/lib.ts:gone";
+    expect(checkMissingSymbols(missing, { [key]: "第 135 页：示例" })).toEqual([]);
+    expect(checkMissingSymbols(missing, {}).map((f) => f.kind)).toEqual(["missing-symbol"]);
+    expect(checkMissingSymbols([], { [key]: "第 135 页：示例" }).map((f) => f.kind)).toEqual(["stale-waiver"]);
+  });
+});
+
+describe("parseBatchResponse：半份正文不能当成整份导出面", () => {
+  it("齐的照单收；`missing` 只占一行，不吞掉下一条", () => {
+    const m = parseBatchResponse(["a.ts", "b.ts"], Buffer.from("aaa blob 3\nabc\nbbb blob 1\nx\n"));
+    expect(m && [...m.entries()]).toEqual([["a.ts", "abc"], ["b.ts", "x"]]);
+    const withMissing = parseBatchResponse(["a.ts", "gone.ts"], Buffer.from("aaa blob 3\nabc\ngone.ts missing\n"));
+    expect(withMissing && [...withMissing.keys()]).toEqual(["a.ts"]);
+  });
+
+  it("回包形状不认识 ⇒ 整批判「未取」，不交半份面（交了就是拿不存在当自洽）", () => {
+    expect(parseBatchResponse(["a.ts", "b.ts"], Buffer.from("aaa blob 3\nabc\nwtf\n"))).toBeNull();
+    expect(parseBatchResponse(["a.ts"], Buffer.from("aaa blob 9\nabc\n"))).toBeNull(); // 声称 9 字节、只回 3
   });
 });
 
@@ -74,12 +204,48 @@ describe("真表自证：这把尺不许是空载的，也不许对事故那笔�
     expect(got!.edges.length).toBeGreaterThan(1500);
   });
 
+  it("取料自证：`cat-file --batch` 必须把文件表里每一份都真读到（半份面判绿＝假绿）", () => {
+    const got = collectHeadEdges();
+    expect(got).not.toBeNull();
+    expect(got!.texts.size).toBe(got!.headFiles.size);
+    for (const p of ["scripts/head-import-face.ts", "src/main/agent-runner.ts"]) {
+      expect(got!.texts.get(p) ?? "").not.toBe("");
+    }
+    expect(readHeadBlobs("HEAD", ["no/such/file.ts"])?.size).toBe(0);
+  });
+
   it("HEAD 现读：悬空集合必须**落在存量名单里**，且 finding 为 0（新增即红；名单里的补好了由 stale 那条逼人来删名）", () => {
     const got = collectHeadEdges();
     if (got === null) return; // 上一条已经红了
     const dang = findDanglingImports(got.edges, got.headFiles, () => true);
     for (const d of dang) expect(Object.keys(HEAD_DANGLING_WAIVERS)).toContain(d.target);
     expect(checkHeadImportFace(dang)).toEqual([]);
+  });
+
+  it("HEAD 现读（符号那一半）：缺失集合同样必须落在名单里，且 finding 为 0", () => {
+    const got = collectHeadEdges();
+    if (got === null) return;
+    const missing = findMissingExports(got.edges, got.headFiles, (rel) => got.texts.get(rel) ?? null);
+    for (const m of missing) expect(Object.keys(HEAD_MISSING_SYMBOL_WAIVERS)).toContain(m.target + ":" + m.symbol);
+    expect(checkMissingSymbols(missing)).toEqual([]);
+  });
+
+  it("事故那一笔（`834ba3a`）必须整条咬住：4 条模块悬空 ＋ `SessionTransport` 符号缺失", () => {
+    const got = collectHeadEdges("834ba3a");
+    if (got === null) return; // rev 不在了不算红（本仓不 rewrite history，真在时这条必过）
+    const dang = findDanglingImports(got.edges, got.headFiles, () => true);
+    const missing = findMissingExports(got.edges, got.headFiles, (rel) => got.texts.get(rel) ?? null);
+    expect(dang.map((d) => d.target).sort()).toEqual([
+      "src/main/provider-runtime.ts", "src/main/run-attachments.ts", "src/main/run-request.ts", "src/providers/capabilities.ts",
+    ]);
+    expect(missing.map((m) => m.target + ":" + m.symbol)).toEqual(["src/agent/glm-session.ts:SessionTransport"]);
+  });
+
+  it("干净的那一笔（`69fbb0d`）必须 0 项：尺不许靠假红证明自己在干活", () => {
+    const got = collectHeadEdges("69fbb0d");
+    if (got === null) return;
+    expect(findDanglingImports(got.edges, got.headFiles, () => true)).toEqual([]);
+    expect(findMissingExports(got.edges, got.headFiles, (rel) => got.texts.get(rel) ?? null)).toEqual([]);
   });
 
   it("换 rev 也能跑（`--at` 的用面）：上一笔的取料结果与 HEAD 不是同一份常量", () => {
@@ -90,10 +256,10 @@ describe("真表自证：这把尺不许是空载的，也不许对事故那笔�
     expect(head!.headFiles.size).toBeGreaterThanOrEqual(prev!.headFiles.size - 20);
   });
 
-  it("存量每条必须带理由且点名是哪一页判的", () => {
-    for (const [t, why] of Object.entries(HEAD_DANGLING_WAIVERS)) {
+  it("存量每条必须带理由且点名是哪一页判的（两张表都算）", () => {
+    for (const [t, why] of Object.entries({ ...HEAD_DANGLING_WAIVERS, ...HEAD_MISSING_SYMBOL_WAIVERS })) {
       expect(why.trim(), `${t} 缺理由`).not.toBe("");
-      expect(why, `${t} 理由里没写出处`).toMatch(/第 \d+ 页/);
+      expect(why, `${t} 理由里没写出处`).toMatch(/第 [\d/]+ 页/);
     }
   });
 });

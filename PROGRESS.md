@@ -4041,3 +4041,31 @@ git 调用由 `scripts/mutate-verify.mjs` 注入 ⇒ 本模块不自己 spawn �
   而"判卷文件在别人工作树里被删、HEAD 里还在"那一类（第 124 页那两盏）它也不管 ⇒ 任务 #4 剩下的正是这一格。
 - 页尾回填（`0aab963` 落库后复跑）：新锚点单跑 ✅ exit 0；针脚体检 **13 → 12**
   （`810 条 —— 阻断 12，未入库面 0，钉在飞文本 2`，exit 1）⇒ 那条"钉在飞文本"随同笔入库自清，第 127 页的顺序第三次被复用有效。
+
+### 2026-09-27 · 第 135 页 · 尺的第二半：从「模块在不在」到「那个导出在不在」——取料单位换成整条语句
+
+第 134 页末尾我给自己留了一句「边界照实说：这把尺只管模块存在性，`SessionTransport` 那种文件在、少一个导出的仍只有 typecheck 看得见」。
+今天补的就是那一格。第一版（逐行 grep 上加正则）实测**两头都错**：
+
+- 假红：HEAD 印出 6 条符号缺失，逐条回看全是合法写法——`export { A, type B } from` 的内联 `type` 修饰、`export type { T }` 整条，
+  两种都没被认出来 ⇒ 名字对不上号。
+- 静默漏报：真缺陷 `SessionTransport` **一条都没报**——它在 `src/main/agent-runner.ts` 里是 17–22 行的**跨行** import，
+  逐行取料看不见 clause（这正是第 131 页那次事故剩下的那半根因）。
+
+修法是换取料口径，不是再加一条特例：**读整条语句**，正文一次 `git cat-file --batch` 从提交对象里拿（451 份，整尺仍 <0.3s，不需要工作树）。
+
+- **第三次被同一族咬**：`a as b` 取哪一侧，我在导入侧和导出侧各抄了一份解析，两份宽度不同（第十三族）。
+  收成一份 `specifiers(body, side)`，两个方向各配一条断言（导入侧取源侧名、导出侧取报出去的名）。
+- **第二版尺把尺自己报成悬空**（实测，不是我推的）：clause 那一截不设字符禁区 ⇒ 非贪婪从本文件的
+  `export function resolveRelativeSpec(` 一路跨过 70 行函数体，撞上注释里举例用的 `from "./todo"`。
+  ⇒ clause 禁含 `(` `)` `=` `;`：跨行要允许，跨语句不允许。这条配了锚点 `head-import-clause-spans-into-body`。
+- 现态三个读数：HEAD＝`2657 条边｜符号缺失 1｜模块悬空 4` ⇒ finding **0**（5 条全在两张存量表内）；
+  `--at=834ba3a --no-waivers`＝**5 项**（4 条悬空 + `glm-session.ts:SessionTransport`）；`--at=69fbb0d --no-waivers`＝**0 项**。
+  边数 2517 → 2657：多出的 140 条来自跨行 clause 与 `import "x"`/`import("x")` 两种不带 `from` 的写法——**前一版对它们静默失明**。
+- 判卷 12 → **32 passed**（`tests/head-import-face.test.ts`）：新增 `parseImportStatements`／`clauseNames`／`exportedNames`／
+  `findMissingExports`／`parseBatchResponse` 五组，外加三条真表自证（事故那笔必须咬住、干净那笔必须 0 项、`cat-file` 必须把文件表里每一份都真读到）。
+  `readHeadBlobs` 拆成纯函数 `parseBatchResponse` + 薄壳：**半份正文不许当成整份导出面**（规则 92）。
+- 锚点 4 → 10 条（新 6 ＋ 改指 1：`head-import-fixture-strings-counted` 的旧针脚随 `IMPORT_LINE` 一起消失，
+  按第 130 页那个口径改成钉新边界；表 810 → 816，`--check-needles` 盘上全过、HEAD 侧 7 条报「钉在飞文本」＝同笔入库自清）。
+- 顺手一把自己的尺：出处判据写的是 `/第 \d+ 页/`，不接受我自己写的「第 131/134 页」⇒ 判据错，放宽成 `/第 [\d/]+ 页/`。
+- 待回填：7 条新/改指锚点在**入库后**单跑取真读数（现在 mutate-verify 按规矩拒变异在飞源文件，只算未证）。
