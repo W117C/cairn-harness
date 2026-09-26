@@ -4244,3 +4244,41 @@ git 调用由 `scripts/mutate-verify.mjs` 注入 ⇒ 本模块不自己 spawn �
   实测两遍才看清：把针脚退回旧的单行写法（落 `no-usage` 那一支）再跑，声明的那条「真实红跑：零 verified…」全程是 `✓`，
   红的是隔壁「没有 usage…」，而表上照样印 ✅；把指针换成一句不存在的标题，才逼出 `❌ 没红在期望用例上` 并印出失败面。
   ⇒ 修法不是"新增归因"，是把那句换成**只认失败面**（`FAIL … > 标题` 与 `×` 两种写法），见第 141 页。
+
+### 2026-09-27 · 第 141 页 · 归因只认失败面之后，整张表重跑一遍：10 条一直红在别的用例上，167 条在 HEAD 上根本量不出来
+
+判据补上了（`scripts/lib/mutate-gates.ts` 的 `failingTestText` / `killerAttributionOk`，runner 那一处换成它，
+配 3 条锚点钉这把尺自己：退回整串 includes／只认 `FAIL` 一种写法／把调用摘掉）。接着要回答的是：
+**这张 831 条的表里，有多少条一直是"绿得没道理"的？**
+
+- 跑法：`.worktrees/attribution-census-727bad3`（独立树 ＋ node_modules 软链）——共享树里跑 831 次"改文件再还原"
+  ＝随时可能把别人同时的编辑按原样盖回去，这格不能省。汇总行：`跑了 831/831 条 · 本次耗时 1308.6s`（21.8 分钟）。
+- 分类口径要现读：取每条 `❌` 后面的**第一行判读**。第一版我在整块里 grep 关键字，把「基线不绿」块里的 `FAIL` 行
+  误读成归因失败 ⇒ 多算了 4 条（同一页里第二次栽在"用命中当判据"）。
+  定稿读数：**归因成立 651 ｜ 基线不绿 167 ｜ 红在别的用例上 10 ｜ 突变未生效 2 ｜ 变异存活 1**。
+  明细与逐条去向落在 `outputs/mutation-attribution-census-2026-09-27/01-reading.md`。
+- **那 167 条不是代码坏，是别人半落库的价**：111 条 `Cannot find module '../providers/capabilities'`（＝#11 那四个未入库模块）；
+  23 条红在 `mutate-verify-gates` 的真表自证（内因 `supervise-retired…/not-found`：锚点行入库了、判卷里那条新标题没入库）；
+  16 条红在 `docs-check` D-8「迁移后无存量」——HEAD 上残留 **10 项**（首条 `D-1|AGENTS.md`），修复只存在于盘上（＝#2/#6）；另 6＋4＋7 条别的。
+  ⇒ 口径并列：主树全量绿（237 files / 2759 tests），同一棵 HEAD 的干净树里**约两成锚点量不出分辨力**。
+  这就是 #4（HEAD-only 全量绿门）与 #11 一直缺的那张成本凭证。
+- **10 条假归因逐条处置完**（7 条第一批＋3 条第二批）：8 条是"变异有效、指针写的是隔壁那条用例"⇒ 改指针，
+  逐条单跑 `entropy-path-veto-removed`、`silent-green-overreach-onto-red`、`shape-downstream-option-both-faces-lost`、
+  `mem-budget-unit-chars`、`pc-face-change-named-shortcut`、`econ-plan-coverage-check-vacuous` 全部 ✅ 红在声明的那条上；
+  3 条（`sessions-lines-nonempty`、`prune-attachment-production-entry`、`np-unmeasured-rule-escalated`）的源文件在飞，
+  被预检正确拒掉（未证≠已杀），等入库复跑。
+- **抓到一条我自己写的零分辨力判卷**：`head-import-clause-spans-into-body` 的指针标的用例是对的，那格测例却分不开两种实现。
+  把改法套在**临时副本**上量（不碰盘上文件）：注释在函数体里时，摘掉 clause 禁区前后都只读出 1 条边；
+  换成"注释独立成行、夹在两条语句之间"才分开（1 vs 2，多出一条不存在的 `./doc`）⇒ **补强判卷、指针一字未动**，改完在干净 HEAD 上 ✅。
+  通例：「没红在期望用例上」有两种相反成因——指针指错格（改指针）／判卷那一格本来就量不出来（改判卷）；分诊要看"这个突变在两种实现下分别产出什么"，不能读标题猜。
+- **两把不同源的尺对上了**：普查那 2 条「突变未生效」＝秒级静态尺点的 2 条「钉在飞文本」，逐条一致（20 分钟实跑 vs 盘上文本判读）。
+- 顺带修掉两个洞：
+  ① `--list` 的列会被字段里的换行打断——`impact-closure-glob-broken` 的 desc 带换行 ⇒ 那一条被印成两行、列数不对 ⇒
+     吃这份取料面的两把静态尺**同时少读一条**（表里 833，尺读到 832），而谁都不报错。修法：字段压成一行 ＋ 判卷加「行数＝表内条数」自检 ＋ 锚点 `list-rows-not-flattened`。
+  ② 先按"指针必须等于某条 `it` 标题"量，报 **32 条**假缺陷；补上"可以是某条标题的子串"剩 2 条；再查这 2 条：
+     一条指 `describe` 套件名（`FAIL` 行里确实含它），一条指**循环生成的标题**（`for (const cmd of WRAPPED) it(cmd, …)`）
+     ⇒ 现读 **0 条指不到用例标题**，而"收紧成只认标题"会当场造 2 条假红。口径还是跑出来的，不是推出来的（规则 223⑵ 第三次命中）。
+- 现态：`--check-needles` 834 条 —— 阻断 5（全是别人在飞的源文件）、待复认 0、killer 指针失效 0、钉在飞文本 2；改法语法体检 834 条全过；
+  typecheck 0；全量判卷 **237 files / 2759 tests passed / 84.17s**；两棵临时树已回收（`git worktree remove --force`，主树 node_modules 完好）。
+- 归属现读一句：本树当前分支是 `codex/dsh-security-product`（会话开始时的快照写的是 `codex/dsh-structural-hardening`）；
+  今天这 6 笔（`bc40ed8 → 92f7729`）全部落在现支上。
