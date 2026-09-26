@@ -230,7 +230,12 @@ export class PluginRuntime {
     const p = skillToolPolicy(frontmatter);
     this.skillScopes.set(invoke, p);
     // 认不出的名字不静默吞：与 §9.8「运行时还没兑现的字段当场说出来」同一条纪律。
-    for (const u of p.unknown) console.warn("[skill] 工具名认不出（" + invoke + " 申报 " + u + "）⇒ 本轮不生效");
+    // 文案要说清**申报域**是哪两张表——否则下一个"认不出"会被当成拼写错误，而不是面没接上。
+    for (const u of p.unknown) {
+      console.warn(
+        "[skill] 工具名不在申报域（静态工具表 ∪ 注入面清单）内（" + invoke + " 申报 " + u + "）⇒ 本轮不生效",
+      );
+    }
     return p;
   }
 

@@ -8,6 +8,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PluginRuntime, skillToolPolicy, setCurrentPluginRuntime } from "../src/agent/plugins";
+import { resolveDeclaredTool } from "../src/agent/plugins/skills";
+import { INJECTED_TOOLS } from "../src/agent/tool-surface";
 import { runLoop, type LoopOptions } from "../src/agent/loop";
 import { runAgent, handleAgentState, sessionToolFace, withSkillAllowNote } from "../src/main/agent-runner";
 import { sessionToolSpecs } from "../src/agent/glm-session";
@@ -32,6 +34,58 @@ describe("skillToolPolicy（申报解析）", () => {
   it("没有申报 = 三个空表（零行为：既有会话不因此多出任何改动）", () => {
     expect(skillToolPolicy(undefined)).toEqual({ allow: [], deny: [], unknown: [] });
     expect(skillToolPolicy({ description: "x" })).toEqual({ allow: [], deny: [], unknown: [] });
+  });
+});
+
+describe("申报域 = 整张模型面（收紧向）——第 121 页：以前 13 把注入工具一条都禁不掉", () => {
+  const INJECTED = ["spawn_agent", "wait_for_agents", "cancel_agents", "refine_goal", "remember",
+    "impact_query", "obs_recall", "skill", "automation_create", "automation_update",
+    "automation_delete", "automation_run_now", "automation_list"];
+
+  it("一条「禁用整张模型面」的申报：静态 10 ＋ 注入 13 全部进 deny[]，unknown 必须为空", () => {
+    const p = skillToolPolicy({ "disallowed-tools": [...TOOL_NAMES, ...INJECTED].join(",") });
+    expect(p.unknown).toEqual([]);
+    // 两半都得在：只数静态会得到 10 条而"看起来没问题"（这一格以前就是这样红不起来的）。
+    expect(p.deny.filter((t) => (TOOL_NAMES as readonly string[]).includes(t))).toHaveLength(TOOL_NAMES.length);
+    expect(INJECTED.filter((n) => !p.deny.includes(n))).toEqual([]);
+  });
+
+  it("不对称必须保住：同一个注入工具名写进 `allowed-tools` 仍算认不出（放宽向不跟着扩面）", () => {
+    const p = skillToolPolicy({ "allowed-tools": "spawn_agent automation_create" });
+    expect(p.allow).toEqual([]);
+    expect(p.unknown).toEqual(["allow:spawn_agent", "allow:automation_create"]);
+  });
+
+  it("端到端：申报生效时模型清单里真的少那把，且摘除说明点名（不许「看得见却被拒」）", () => {
+    // 名字取自上面那张表，不再抄一遍字面量：尺对"裸名字针脚"这一族是不收的（变量拼 ⇒ 收料要落在散文里），
+    // 抄第二处只会往顶包名单里添一格"改一处不会响"。
+    const [probe] = INJECTED;
+    const p = skillToolPolicy({ "disallowed-tools": probe });
+    expect(p.deny).toEqual([probe]);
+    const denied = new Set(p.deny);
+    const face = sessionToolFace({ skillDenial: (t) => (denied.has(t) ? "plugin:x" : null) }, { mode: "auto" });
+    expect(face.tools.map((s) => s.function.name)).not.toContain(probe);
+    expect(face.removed).toEqual([{ name: probe, by: "plugin:x" }]);
+    expect(face.note).toContain(probe);
+  });
+
+  // 反向：放宽到"整张面"不等于"什么字符串都收"——拼错与 MCP 动态名仍要点名。
+  it("拼错的名字与 MCP 动态名仍然落 unknown（申报域是两张表的并集，不是任意字符串）", () => {
+    const p = skillToolPolicy({ "disallowed-tools": "spawn_agents mcp__foo__bar" });
+    expect(p.deny).toEqual([]);
+    expect(p.unknown).toEqual(["deny:spawn_agents", "deny:mcp__foo__bar"]);
+  });
+
+  // 防复发的那一条：病灶不是"少了一把"，是**归一函数的覆盖面会随模型面扩大而静默缩水**
+  // （09-24 立案时 7 把免疫，今天 13 把——中间只是 `INJECTED_TOOLS` 长了一次）。
+  // 所以判据不能手抄名字，必须枚举两张表的现值：加第 14 把注入工具而忘了申报域 ⇒ 这里红。
+  it("枚举两表现值：模型面上每一把都必须可申报", () => {
+    const declarable = [...TOOL_NAMES, ...INJECTED_TOOLS.map((t) => t.name)];
+    const immune = declarable.filter((n) => resolveDeclaredTool(n) === null);
+    expect(immune).toEqual([]);
+    // 且这条用例自己不许空转：两张表今天都得有货。
+    expect(TOOL_NAMES.length).toBeGreaterThan(0);
+    expect(INJECTED_TOOLS.length).toBeGreaterThan(0);
   });
 });
 

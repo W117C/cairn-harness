@@ -4,6 +4,7 @@
 import type { SkillEntry, PromptCommandEntry } from "./types";
 import { workspaceUsablePath } from "../recall-path";
 import { resolveToolName, type ToolName } from "../../tools/base";
+import { INJECTED_TOOLS } from "../tool-surface";
 import { clampToTokenBudget, estimateTextTokens } from "../text-budget";
 
 /** 路由清单字符上限（§9.4 定稿）。 */
@@ -48,14 +49,33 @@ export function modelInvocable(s: RoutingSkillInput): boolean {
   return !fmBool(s.frontmatter, "disable-model-invocation");
 }
 
-/** §9.3「权限联动」的一份产物：一条 skill/command 申报的工具面改动。 */
+/** §9.3「权限联动」的一份产物：一条 skill/command 申报的工具面改动。
+ *
+ * ⚠️ 两条申报的**申报域不一样宽**，这是刻意的，方向取决于它是收紧还是放宽：
+ *  - `deny`（收紧向）＝整张模型面：静态注册表 10 把 ＋ 运行期注入 13 把（`INJECTED_TOOLS` 那份唯一清单）。
+ *    以前它只认静态 10 把，于是第 121 页实测：**一条写着「禁用整张模型面」的 skill，13 把注入工具一条都禁不掉**
+ *    （全落进 `unknown` ⇒ 闸根本没收到），其中含 `spawn_agent` 这种派活花钱面。
+ *    执行闸与规格面都按**名字字符串**比对（`skillDenial(tool)`），所以放开申报域只改归一这一步，两脸同源。
+ *  - `allow`（放宽向）＝仍只认规范名，且即便认得也**不扩权**（只登记，见 `skillAllowNote`）。
+ *    放宽向的申报域绝不能跟着扩——那等于插件作者替用户把注入面预批了。 */
 export interface SkillToolPolicy {
   /** 申报要预批的工具（规范名）。 */
   allow: ToolName[];
-  /** 申报要摘除的工具（规范名）——这条是真闸（见 PluginRuntime.skillDenial）。 */
-  deny: ToolName[];
+  /** 申报要摘除的工具（静态名或注入面名）——这条是真闸（见 PluginRuntime.skillDenial）。 */
+  deny: string[];
   /** 认不出的申报项原文（带 `allow:` / `deny:` 前缀）——点名，不静默丢。 */
   unknown: string[];
+}
+
+/** 注入面那份唯一清单的名字集合——不自己抄第二张表（抄了就漂）。 */
+const INJECTED_TOOL_NAMES: ReadonlySet<string> = new Set(INJECTED_TOOLS.map((t) => t.name));
+
+/** 收紧向的申报名归一：静态表（含 CC 别名）∪ 注入面清单。认不出才落 `unknown`。 */
+export function resolveDeclaredTool(raw: string): string | null {
+  const stat = resolveToolName(raw);
+  if (stat !== null) return stat;
+  const key = raw.trim();
+  return INJECTED_TOOL_NAMES.has(key) ? key : null;
 }
 
 /** frontmatter 里的工具清单：CC 给法是逗号/空格分隔的字符串，也接受数组。 */
@@ -76,13 +96,21 @@ export function skillToolPolicy(fm: Record<string, unknown> | undefined): SkillT
   const out: SkillToolPolicy = { allow: [], deny: [], unknown: [] };
   const push = (behavior: "allow" | "deny", items: string[]): void => {
     for (const item of items) {
-      const tool = resolveToolName(item);
-      if (tool === null) {
-        out.unknown.push(behavior + ":" + item);
+      if (behavior === "allow") {
+        const t = resolveToolName(item);
+        if (t === null) {
+          out.unknown.push("allow:" + item);
+          continue;
+        }
+        if (!out.allow.includes(t)) out.allow.push(t);
         continue;
       }
-      const into = behavior === "allow" ? out.allow : out.deny;
-      if (!into.includes(tool)) into.push(tool);
+      const d = resolveDeclaredTool(item);
+      if (d === null) {
+        out.unknown.push("deny:" + item);
+        continue;
+      }
+      if (!out.deny.includes(d)) out.deny.push(d);
     }
   };
   push("allow", toolListField(fm, "allowed-tools"));
