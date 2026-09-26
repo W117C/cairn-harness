@@ -3691,3 +3691,30 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
   `mutate-needles-check`（804 条针脚：阻断 **12**、待复认 3、钉在飞文本 2）。逐道读数与两条附带读数（236 条＝第 119 页第三态在锚点尺上的同源读数；
   断言体检自己印「15 个文件盘上不存在，已跳过」）见工件 §七。
   抽门名那条正则又漏计一次：`[a-zA-Z:_-]+` 不含数字 ⇒ `e2e` 被静默跳过（24 道只抽出 23）——已写进 §七，规则 206 同族。
+
+### 2026-09-27 · 第 123 页 · 红门不可定位：`gates` 把失败输出截到 12 行且不落盘，一次整表跑丢 7 条明细
+
+`outputs/gate-red-not-diagnosable-2026-09-26/01-红门不可定位-gates把失败输出截到12行且不落盘-一次整表跑丢7条明细.md`
+
+- 起点是第 122 页那次整表实跑撞到的墙：`mutate-verify` 报「7 条变异存活或误伤」却**给不出那 7 条的名字**——
+  `scripts/gates.ts:144-148` 旧形状是 `slice(-12)` 只贴尾巴，全量既不打印也不落盘（`grep writeFileSync|appendFile` 在该文件里改前 **0 命中**，
+  耗时账本 `appendRun` 只记 gate/exit/ms/unverified）。旧形状下唯一的取证路径是单独复跑：**1,007.4s**（它自报，568/568 条）。
+- 代价有了准数（这条直接进任务 #4 的裁决输入）：26 道 ms 相加 **1,177,973ms ≈ 19.6 分钟**，其中 `mutate-verify` 一道 **16.9 分钟＝86%**
+  ⇒ HEAD-only 那道门要么每笔 ＋20 分钟，要么丢掉最大的一块判卷面；这不是能不能做，是要不要那 86%。
+- 改法：新增 `scripts/lib/gate-failure-log.ts`（`FAILURE_DIR`/`FAILURE_TAIL_LINES`/`failureFileName`/`failureFilePath`/`failureFooter`/`writeFailureLog`），
+  红门分支**全量落盘＋把路径说出口**，展示仍只贴 12 行；落盘失败印 `⚠️ …（上面这些就是全部证据）`且**不抛**——
+  侧信道不许把"一道门红"升级成"整表崩"（同 `gates.ts` 耗时账本那条纪律）。门名→文件名不赌上游：`/`、`:`、前导点压掉。
+- 端到端实测收益（不是只有单测）：`--only=mutate-needles-check` 落盘 **23 行／13 条 ❌**，而打印只有 **6 条** ⇒ **旧形状下 7 条阻断明细根本不存在于任何地方**；
+  `--only=docs-check` 也落盘（10 行／735 B）。`.tmp/` 在 `.gitignore` 第 5 行（实测）⇒ 生成物不入库。
+- 判据 13 条（`tests/gate-failure-log.test.ts`）：三种真实门名形状、`..`/`/`/空白不逃目录、**`GATES` 全清单两两不撞文件名**（枚举现值，加门自动受检）、
+  200 行落盘后**行数不减**、空输出也留文件、同门连红只留最后一份、`root` 是普通文件时返回 `error` 不抛；
+  接线用**代码行**判（滤注释行，避开我自己的注释自我命中——第 118 页那条假阳性同法防住）。
+- 造红三台，各红在正确那条（`cp` 备份逐台复原，复原后三处锚点 `grep -c` 各 1）：
+  A 去掉门名清洗 ⇒ 形状＋逃目录＋撞名 **3 条红**；B 落盘改写尾巴 ⇒ 「行数不减」那条红；D 不打印 footer ⇒ 接线那条红。
+- 两条协作读数一并记：① **共享工作树的分支被别的会话切走**——第 121 页在 `codex/dsh-structural-hardening`，第 122 页提交时已在
+  `codex/dsh-security-product`（reflog 切点正是 `1f16bea`），两笔线性可达没丢东西，但**"我这笔在哪个分支"不能靠记忆**，交笔前重读 `git branch --show-current`；
+  ② zsh 的 `${PIPESTATUS[0]}` 是空串（那里是 `$pipestatus`、1 起索引）⇒ 我第一次跑新用例把退出码读成空，改成 `> log 2>&1; echo EXIT=$?`。
+- 没做的两件：锚点不登记（靶 `mutate-verify.mjs` 在飞、`mutate-needles-check` 今天阻断 12），建议名 `gate-failure-log-not-persisted`，
+  合到任务 #29/#30 那批；不给红门自动展开更多行（证据在盘上，stdout 不洪水）。
+- 验证：新用例 **13 passed** exit 0｜全量 **230 files / 2615 tests passed，exit 0**（229→230＝本笔）｜typecheck 0｜
+  两条 `--only` 端到端实跑如上｜三台变异如上。

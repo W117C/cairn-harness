@@ -16,6 +16,7 @@ import { SCAN_EXT, trackedExistingFiles } from "./lib/scan-scope";
 import { verdictLine } from "./lib/gate-verdict";
 // 认证面自述（同族：判据在 ./lib/certified-face.ts，那边可单测；本文件只取料 + 打印）。
 import { certifiedFace, porcelainStatus } from "./lib/certified-face";
+import { FAILURE_TAIL_LINES, failureFooter, writeFailureLog } from "./lib/gate-failure-log";
 // 跑一条命令 + 超时终止阶梯（同族：判据在 ./lib/gate-runner.ts 与 ./lib/gate-kill.ts，那边可单测；
 // 本文件只组命令）。旧实现把 spawn 与「超时直接整组 SIGKILL」写在这里，测不到也换不掉。
 import { runCommand, type GateResult } from "./lib/gate-runner";
@@ -142,9 +143,14 @@ async function main(): Promise<void> {
     gateRuns.push({ gate: g, exit: r.code, ms: r.ms, unverified: uv });
     process.stdout.write("\r  " + (r.code === 0 ? "✅" : "❌") + " " + g.padEnd(18) + " exit=" + String(r.code) + "  " + String(r.ms) + "ms\n");
     if (r.code !== 0) {
-      const tail = r.output.trim().split("\n").slice(-12).join("\n");
-      console.log("      ── 失败输出尾 12 行 ──");
+      const fl = writeFailureLog(ROOT, g, r.output);
+      const tail = r.output.trim().split("\n").slice(-FAILURE_TAIL_LINES).join("\n");
+      console.log("      ── 失败输出尾 " + String(FAILURE_TAIL_LINES) + " 行 ──");
       console.log(tail.split("\n").map((l) => "      " + l).join("\n"));
+      // 路径必须说出口；落盘失败也要说——否则"贴了尾巴"会被读成"证据就这么多"。
+      console.log(fl.error !== undefined
+        ? "      ⚠️ 完整输出落盘失败：" + fl.error + "（上面这些就是全部证据）"
+        : failureFooter(fl.path));
     } else {
       // 绿门也把它自己的结论带出来：过去整表跑完看不出这道门跑了多少东西，要数就得单独复跑。
       const verdict = verdictLine(r.output);
