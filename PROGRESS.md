@@ -4104,3 +4104,8 @@ git 调用由 `scripts/mutate-verify.mjs` 注入 ⇒ 本模块不自己 spawn �
   `withoutScript` 永远读空、没取到当作「零缺失」）；typecheck 0；认证快面本次实测 12.0s（`--skip-test`），worktree 已回收（规则 120）。
 - 代价与位置：这一行是两次 `git show`，秒级以下；它不改本次退出码——门表烂不影响 typecheck/全量的读数，
   它影响的是**「整表绿」这句话能不能说**（规则 211：凭证不许超卖）。
+- 页尾回填（`514b8a3` 落库后复跑）：5 条新锚点在干净 HEAD 上**逐条单跑全杀**（exit 0）；针脚体检 **821 条 —— 阻断 12、钉在飞文本 2**
+  ⇒ 我这 5 条随同笔入库自清，阻断回到别人那批存量（与第 134 页页尾同一个数）。全量判卷 **237 files passed**（主树口径；HEAD 侧仍红，见 #11）。
+- 顺带看见的一条（不改判，先登记）：`docs-check` 今天红在 D-8＝`replay:prompt-fixed-cost` 无文档引用，
+  而 `scripts/replay/prompt-fixed-cost.ts` **盘上有、git 里没有**（`git ls-files --error-unmatch` 报 did not match）
+  ⇒ 登记表 `scripts/replay-readings.ts:53` 指着的那份脚本本身没入库：这是 #11 那一族的**新实例**（不止 4 个模块），已并入 #11 的清单。
