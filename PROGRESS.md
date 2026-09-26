@@ -4304,3 +4304,20 @@ git 调用由 `scripts/mutate-verify.mjs` 注入 ⇒ 本模块不自己 spawn �
 - 现态：`836 条 —— 阻断 8、待复认 0、killer 指针失效 0（其中 HEAD 侧 1）、钉在飞文本 4`；两条新锚点在干净 HEAD 上单跑**全杀**（8.5s）；
   `mutate-verify-gates` 54 → **59**；typecheck 0；全量判卷 **237 files / 2764 tests passed / 83.5s**。
 - 一句口径：新维度**今天就把这一格咬死**（进 `blockingTotalOf` 第 6 支，少喂即抛），没走存量水位——因为现读只有 1 条，而那条正是别人欠的 add（#11），不是要豁免的历史。
+
+### 2026-09-27 · 第 143 页 · 普查唯一一条真存活分诊完：两道闸同拦一件事时，摘一道必存活——那不是守卫多余，是判卷没量到它独有的那一格
+
+第 141 页普查的 180 条红里，只有一条属于最难判的那格：**变异存活**（测试全绿）。它是 `agent-area-lexical-dropped`——摘掉 `.agent/` 的**词法**拒写闸，`tests/path-boundary.test.ts` 22 条全绿。
+
+- 分诊不靠猜。读了实现（`src/tools/base.ts:170-188`）：这块有**两道**闸——词法闸看 `rel` 里有没有 `.agent` 段，C3 复查闸看**软链解析后**的落点。
+  现有判卷喂的输入是 `.agent/permissions.json`（`.agent` 是真目录）⇒ **两道都会拒**，摘掉任一道另一道照样拦 ⇒ 这条锚点必然存活。
+  ⇒ 结论既不是"闸多余"也不是"判卷坏了"，而是：**旧判卷没有一条能量到词法闸独有的那一格**。
+- 那一格是什么：词法闸的承诺是「`.agent` 这个名字本身保留」。于是造一条只有它看得见的输入——`.agent` 做成指向 `staging/` 的软链：
+  复查闸解析后落点是 `staging/permissions.json`（不含 `.agent`）⇒ 只有词法闸会拒。补进判卷，并配**反向对照**：
+  同一份字节走 `staging/permissions.json`（不借这个名字）必须写得进去——少了这一句，那条红可能来自别的旁路（越界/内容拦截），词法闸依旧没被量到。
+- 复跑凭证：干净 HEAD 上 `agent-area-lexical-dropped` **✅ 1.1s 杀死**，且严格归因认的就是新加那条用例。普查读数至此清零（10 假归因 ＋ 1 存活全部分诊，剩 3 条等别人的源文件入库）。
+- 一次自撞，两句都要留：
+  ① 我在锚点 `desc` 里用**直双引号**包了个词 ⇒ 整张表语法坏（这坑记忆里写着，第三次踩）；
+  ② 判它的时候跑的是 `node --check … | head -4 && echo SYNTAX_OK`——那句 `SYNTAX_OK` 是 `head` 的退出码，不是 `node --check` 的（规则 206 现场重演）。
+  重跑成 `node --check scripts/mutate-verify.mjs; echo EXIT=$?` 才拿到真凭证 0。
+- 现态：typecheck 0；全量判卷 **237 files / 2765 tests passed**；`--check-needles` 836 条、阻断 7（全是别人在飞的源文件）；本笔只动 `scripts/mutate-verify.mjs` ＋ `tests/path-boundary.test.ts`。
