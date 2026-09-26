@@ -3385,3 +3385,17 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
 - 同时结掉 #27 候选 4：`docs-check.ts` 走 `readdirSync` 磁盘枚举，与第 109 页那族**镜像相反**（这里是"登记过但盘上没有"，那里是"git 跟踪但盘上没有"），
   且这里已出声 ⇒ 剩的是取值域问题，不是有无名字问题。
 - 不施工：`scripts/docs-check.ts` 实测 `M`（别人的在飞改动）。
+
+### 2026-09-26 · 第 113 页 · 「在飞」有两种：114 个能算年龄的在飞文件里 107 个已 ≥24h 没被碰过
+
+`outputs/in-flight-age-2026-09-26/01-在飞有两种107比114已24小时没被碰过.md`
+
+- 连着三页（#12、#13、#29）停在同一句「文件在别人手里飞 ⇒ 我等」，而 `git status` 把**正在写**与**两天前没提交**压成同一个词。
+  新读数：**107 / 114 ≈ 94%** 的在飞文件（能算 mtime 的那批）超过 24h 没被碰；另有 211 个在飞项盘上根本不存在（没有 mtime ⇒ 单列成 `inFlightAgeChecked`，不混进分母，规则 82）。
+  挡点实测：`mutate-verify.mjs` 09-25 00:34（＋44/−1370）、`docs-check.ts` 09-25 00:26、`src/tools/base.ts` 09-24 16:59（**只有 ＋2**）、`agent-runner.ts` 09-24 17:17、`orchestrator.ts` 09-24 18:23（＋1/−2）。
+- 这格**只作读数**：判据一字未动（在飞仍不计我的账，第 108 页的规矩保持），改变的是动作——该问"这些还要不要"，而不是每轮重撞同一批文件。
+- 代码：`agedInFlight(entries, nowMs, thresholdMs?)` 纯函数 ＋ `inFlightStale`/`inFlightAgeChecked` 两个字段 ＋ CLI 一行；用例 49 → **52**。
+  真仓那条只钉一致性（`⊆`、分母不大于总数），**不钉"必须有过期的"**——那是盘的状态不是尺的标准。
+- 造红：`>=` 翻成 `<` ⇒ 纯函数两条同时红（`expected ['src/fresh.ts'] to deeply equal ['src/old.ts','src/edge.ts']`），`2 failed | 50 passed`；`cp` 复原后 52 全绿。
+- 自己的一处误判就地更正：我说过"`base.ts` 五分钟内从干净翻脏"——错，13:34 查的是 `src/agent/base.ts`，#51 要动的是 `src/tools/base.ts`，**两个同名文件**，后者连续两天都脏。前置条件类判断必须按完整路径测。
+- 验证：typecheck 0 ｜ 本面 52 全绿 ｜ 主树全量 `229 / 2570` 全绿、exit 0、无 Errors ｜ 尺 CLI exit 0、帽仍 3/0。

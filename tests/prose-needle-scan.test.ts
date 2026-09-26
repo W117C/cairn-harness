@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyWaivers,
+  agedInFlight,
   blankComments,
   classifyNeedles,
   collectNeedles,
@@ -25,6 +26,7 @@ import {
   sharesOneSentence,
   shadowFilesOf,
   splitByInFlight,
+  STALE_IN_FLIGHT_MS,
   staticRuns,
   treeScopeOf,
   type CopySite,
@@ -419,6 +421,32 @@ describe("treeScopeOf：帽挂在树的形状上，不挂在『今天扫的是�
   });
 });
 
+describe("agedInFlight：「在飞」有两种，年龄只作读数不作判据（第 113 页）", () => {
+  const H = 60 * 60 * 1000;
+  it("两侧各有格：25h 前进名单、1h 前不进；恰好 24h 算过期（>=）", () => {
+    const now = 1_700_000_000_000;
+    const r = agedInFlight(
+      [
+        { file: "src/old.ts", mtimeMs: now - 25 * H },
+        { file: "src/fresh.ts", mtimeMs: now - 1 * H },
+        { file: "src/edge.ts", mtimeMs: now - STALE_IN_FLIGHT_MS },
+      ],
+      now,
+    );
+    expect(r).toEqual(["src/old.ts", "src/edge.ts"]);
+  });
+
+  it("空输入交空名单（不许把「没有在飞文件」读成「全都在飞」，也不许造一个假名字）", () => {
+    expect(agedInFlight([], Date.now())).toEqual([]);
+  });
+
+  it("阈值可传（默认 24h 是**登记值**，不是写在调用点的一个数）", () => {
+    const now = 1_700_000_000_000;
+    expect(agedInFlight([{ file: "a", mtimeMs: now - 3 * H }], now)).toEqual([]);
+    expect(agedInFlight([{ file: "a", mtimeMs: now - 3 * H }], now, 2 * H)).toEqual(["a"]);
+  });
+});
+
 describe("applyWaivers：豁免要带理由，且不许静默烂在这儿", () => {
   const drift = (file: string, lostRun: string) => ({
     file, line: 1, field: "reason", via: "字段直取" as const, needle: lostRun, suppliedInTest: false,
@@ -531,6 +559,10 @@ describe("真仓扫：这把尺自己不许空载", () => {
     expect(r.flyingMultiCopy.length).toBe(r.inFlightMultiCopy);
     expect(r.flyingMultiCopy.every((v) => r.inFlightFiles.includes(v.file))).toBe(true);
     expect(r.multiCopy.filter((v) => !r.inFlightFiles.includes(v.file)).length).toBe(r.committedMultiCopy);
+    // 年龄那一格只作读数（第 113 页）：不许把判据挂上去，但两半的**包含关系**必须成立——
+    // 过期名单里冒出一个不在在飞清单的名字 ＝ 分诊面自己造假；分母大于总数 ＝ 把盘上不存在也算进了年龄。
+    expect(r.inFlightStale.every((f) => r.inFlightFiles.includes(f))).toBe(true);
+    expect(r.inFlightAgeChecked).toBeLessThanOrEqual(r.inFlightFiles.length);
     // 「今天有没有人在飞」是盘上的状态，不是这把尺的标准 ⇒ 不许拿它当活证（HEAD-only 认证跑就在干净树上，
     //   那一支这里必须读到 0 且不红）。活证改成**互斥配对**：在飞清单为空 ⇒ 所有 flying* 必须同时归 0，
     //   否则"排除在飞"是在凭空抹格子（第 108 页：原断言 `> 0` 在同 HEAD 隔离树上必红，把别人的没提交当成我的尺坏）。

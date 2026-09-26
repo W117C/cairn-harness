@@ -16,7 +16,7 @@
 // drift 走存量豁免（`KNOWN_NON_DRIFT`）：逐条带理由，名单外新增即红，**登记了却不再命中的也算红**
 // （stale-waiver，同 docs-check 的 LEGACY_WAIVERS 规矩）——豁免不许静默烂在这儿。
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
@@ -583,6 +583,19 @@ function inFlightPaths(root: string): Set<string> {
   return out;
 }
 
+/** 「在飞」这个词把两种完全不同的状态压成一个：别人**正在写**，与别人**两天前留下的半成品**——
+ *  `git status` 里两者长得一模一样，而每轮"这个文件在飞 ⇒ 我等"的判断就建在它上面。
+ *  年龄只作**读数**：在飞仍然不计我的账（第 108 页那条规矩不动），多出来的是"要不要问一句"的依据。
+ *  纯函数、两侧都能钉用例（新鲜的一格 + 过期的一格），所以不进 fs 也不进 git。 */
+export const STALE_IN_FLIGHT_MS = 24 * 60 * 60 * 1000;
+export function agedInFlight(
+  entries: readonly { file: string; mtimeMs: number }[],
+  nowMs: number,
+  thresholdMs: number = STALE_IN_FLIGHT_MS,
+): string[] {
+  return entries.filter((e) => nowMs - e.mtimeMs >= thresholdMs).map((e) => e.file);
+}
+
 /** 顶包候选的水位（**只准下调**，同 `docs-check` 的 `DOC_BUDGETS`）。
  *  登记的是**已提交态**那个数（在飞文件不计入 ⇒ 别人并发改动推不动我的棘轮）。
  *  历史：35（第 92 页登记）→ 31（第 93 页摘 4 格）→ 29（第 94 页把两种"不可测"拆成 `cause` 字段，摘 2 格）
@@ -722,6 +735,10 @@ export interface ScanReport {
   flyingMultiCopy: WailedRow[];
   /** 此刻工作树≠HEAD 的文件；水位分两半靠它，也用来对账"在飞那些格真的都落在这些文件里"。 */
   inFlightFiles: string[];
+  /** 在飞文件里「≥24h 没被碰过」的那些（**只是读数**：在飞仍然不计我的账）。
+   *  与 `inFlightAgeChecked` 成对——分母只算盘上真有的（被删的那一半没有 mtime）。 */
+  inFlightStale: string[];
+  inFlightAgeChecked: number;
   /** 这棵树的形状：`src/renderer` 在不在。**帽与红都按它取**——桌面层的删除还没入库时，
    *  同一把尺在 HEAD 的树里多扫到将被删的桌面测试，那些格子不是 core-only 那行的账（第 108 页）。 */
   scope: TreeScope;
@@ -775,6 +792,16 @@ export function scanRepo(root: string): ScanReport {
   } as Record<CoverKind, number>;
   for (const r of rows) counts[r.kind] += 1;
   const fly = inFlightPaths(root);
+  // 在飞年龄：只算盘上真有的——被删的那一半没有 mtime ⇒ 分母单列成 `inFlightAgeChecked`，不混进 `inFlightFiles.length`。
+  const aged: { file: string; mtimeMs: number }[] = [];
+  for (const f of fly) {
+    try {
+      aged.push({ file: f, mtimeMs: statSync(resolve(root, f)).mtimeMs });
+    } catch {
+      // 盘上不存在：本面算不出年龄，`missingOnDisk` 那一格已经点过名——这里不静默补一个"很旧"的值。
+    }
+  }
+  const inFlightStale = agedInFlight(aged, Date.now());
   // 树的形状：桌面层在不在（`src/renderer` 是最直接的判据，AGENTS.md  declares 本 checkout 没有它）。
   const scope = treeScopeOf(existsSync(resolve(root, "src/renderer")));
   const allDrift = rows.filter((r) => r.kind === "drift" && !r.waived);
@@ -806,6 +833,8 @@ export function scanRepo(root: string): ScanReport {
     inFlightMultiCopy: copySplit.flying.length,
     flyingMultiCopy: copySplit.flying,
     inFlightFiles: [...fly],
+    inFlightStale,
+    inFlightAgeChecked: aged.length,
     scope,
     maskedSameSentence,
     maskedSharedWord: rows.filter((x) => x.copies > 1).length - maskedSameSentence,
@@ -842,6 +871,21 @@ function main(): void {
     console.log(
       "  ⚠️ 清单里有 " + String(r.missingOnDisk.length) + " 个文件盘上不存在（他人的在飞删除），已跳过：" +
         r.missingOnDisk.slice(0, 6).join("、"),
+    );
+  }
+  if (r.inFlightFiles.length > 0) {
+    // 「在飞」有两种：正在写、与两天前留下的半成品。这一行只报年龄，不改变任何判据（在飞仍不计我的账）。
+    const noMtime = r.inFlightFiles.length - r.inFlightAgeChecked;
+    console.log(
+      "  在飞分诊：" + String(r.inFlightStale.length) + " / " + String(r.inFlightAgeChecked) +
+        " 个 ≥24h 没被碰过（只是读数；另有 " + String(noMtime) + " 个盘上不存在⇒没有 mtime，不在分母里）",
+    );
+    const head = r.inFlightStale.slice(0, 12);
+    console.log(
+      "    · " + head.join("、") +
+        (r.inFlightStale.length > head.length
+          ? "（还有 " + String(r.inFlightStale.length - head.length) + " 个未印，全量在报告字段 r.inFlightStale）"
+          : ""),
     );
   }
   console.log(
