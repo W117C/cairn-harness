@@ -3745,3 +3745,99 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
   （`git grep -c` = 3）⇒ 是被入库版本取代的旧草稿。**没删任何 worktree**（回收命令由 `head-cert` 自己印，交各持有者）。
 - 验证：`head-cert` 汇总行 `exit=1`（码取自脚本自己写的行，不是后台通知）｜探针 exit 0（修 join 键前后各一次）｜
   本轮**未改任何源文件**、未动他人在飞面。
+- 更正（本页交笔后 20 分钟内发生的）：上面所有"落库会…"的措辞**已过期为现态**——别的会话把整簇落了库
+  （`69fbb0d 移除 Electron 桌面层与 UI 原型资产`，209 files／54,571 行删除，含**测试文件 50 个**）。
+  ⇒ 第 122／123／124 页等的那个"合并窗口"不再是要等的东西，而是已经发生的事实；三条 stranded 模块现在是**当前缺陷**，
+  不再是预测。第 125 页据此开工。
+
+### 2026-09-27 · 第 125 页 · 源码散文点名了 4 个不存在的脚本（3 处是现在时祈使句）——加了一把尺，并且它第一件事就抓到我
+
+`outputs/dead-script-pointers-2026-09-26/01-源码散文点名了4个不存在的脚本-3处是现在时祈使句-现在有条尺管着.md`
+
+- 现算（落库后的残渣）：`src/`＋`scripts/` 里点名 `scripts/<file>` 共 **85 处**，其中 **6 处指向盘上不存在的**，
+  目标是 4 个脚本：两个**今天被删**（`commercial-check.ts`、`ipc-reachability-check-core.ts`，删除笔 `69fbb0d`），
+  两个**从未入库**（`sidebar-probe.ts`、`arch-boundary-check.ts`——`git log --diff-filter=D` 查无此文件，一直是草稿却被当既成事实引用）。
+- 分两类不是修辞：**现在时祈使句 3 处**会误导行动（`src/main/onboarding-groups.ts:6`「供 `scripts/commercial-check.ts` 断言用」、
+  `model-surface-check.ts:307` 与 `prefix-churn-check.ts:708`「照 `scripts/arch-boundary-check.ts` 的写法」）——
+  与第 122 页那句「见 BLOCKED #56；修好后要删条目」同族；**过去时读数出处 3 处**只是目标不在了，一条都不许删（删了就把当时的实测一起销毁）。
+- 改法：2 处祈使句改指**活范例**（`scripts/no-progress-check.ts`）；`onboarding-groups` 头部重写，把"旧观察者已删、门表里从来没有它"写明；
+  3 处历史引用就地加〔未入库〕／（已删 `69fbb0d`）。
+- 新尺 `scripts/lib/dead-script-refs.ts` ＋ 判据 `tests/dead-script-refs.test.ts`（12 条）：纯函数、"在不在盘上"由调用点注入；
+  取料面**显式排除 `tests/`**（否则我自己的假引用让判据自证——第 118 页同形）；放行只认同行「已删／未入库／不再存在」（登记式，不许静默）；
+  面下限按**分面形状**写（`src`>100、`scripts`>50）而不是抄总数 228，别人删文件时不会先红在尺上。
+- **它上线第一分钟抓的是我自己的手**：首跑 2 条红全指向 `scripts/lib/dead-script-refs.ts:3`——我写的立项说明点名了那两个不存在的脚本却没带标记。
+  修法就是补标记，不是放宽判据。
+- 顺带补上任务 #8 的第一格（落库后无人守的模块）：`tests/onboarding-groups.test.ts`（5 条）。
+  旧 observer 的机制半边（`groupOnboardingSteps`）住在已删的渲染层，所以不复制旧断言，改钉当下成立的两半——
+  数据面（id 唯一、`Record<OnboardingGroup["id"], true>` 全映射＝类型与表同增同删否则 **typecheck 红**、步号只用 1–4 且四步全有归属、label/entry 非空）
+  ＋消费者面（`settings-handlers.ts:78` 的 `onboardingGroups()` 内容等于常量且**是新数组**：清空返回值不许动模块常量）。
+  余下两格（`src/agent/sidechat`、`scripts/replay/ask-density`）仍在任务 #8。
+- 射程边界写进工件 §五：只认带 `scripts/` 前缀的形状（裸名如旧句"缺组 = commercial-check 红"抓不到，那条靠人工修；
+  按裸名判会与门名大面积撞车）；不判 `docs/**`（D-3/D-8 的地盘）；只判存在性，不判"脚本还在但它已不做这事"。
+- 落库只落了**半边**（现读，不是推断）：`69fbb0d` 只带走代码与资产，**文档层还在树上没入库**
+  （`AGENTS.md` HEAD 27,738 B／工作树 996 B、`BLOCKED.md` HEAD 127,023 B／工作树 296 B，两者都还是 `M`；`docs/*` 同）。
+  ⇒ HEAD 现在是**自相矛盾**的：它的 L0 规矩册仍写着「一个 Electron 桌面编程 agent」「起界面：`pnpm start`（构建 + 启动 Electron）」
+  「`src/main/`、`src/preload/`、`src/renderer/` —— M0b Electron 壳」，**点名已删面共 33 行**，而它自己的代码已经没有那些目录。
+  工作树那版把 33 行删了，但同时删掉了 27,738 B 的规矩（第 118 页那 15 条无落点）。**两个都不是终点**——
+  任务 #2（等批的 L0 提案＋本页 §五那类「改册不丢件」判据）现在是从 HEAD 走出这个半落库态的唯一出路，优先级高于新增能力。
+- 任务 #8 三格里当场补掉两格：`tests/sidechat-core.test.ts` **15 passed**——被删的 `tests/sidechat.test.ts` 有 18 条，
+  其中 15 条只依赖核心（模块 `src/agent/sidechat.ts` **仍在发货**：`agent-runner.ts:94` 直接 import），救回来的都是安全/隔离判据
+  （写向工具不在旁路表、旁路事件落自己 JSONL 且主会话字节不变、已压缩不丢尾、worker 子流不得冒充主摘要、
+  `@path` 越界 fail-closed、promote 私钥整条拒／控制标签转义／空 `source_event_ids` 拒、超预算自压缩）；
+  不重建的 3 条（token 归因分解）＋2 段徽标断言测的是已删的 `src/renderer/projections`，**理由写在原地而不是悄悄删用例**。
+  加上 `onboarding-groups` 那 5 条，只剩 `scripts/replay/ask-density` 待判。
+- 验证：新用例 **17 passed**（12＋5）exit 0｜typecheck 0｜同一把尺量真仓：死引用 **6 → 0**（复跑：`measure-citations.mts` 仍报 14 处／6 编号，落库没改变引用面）｜
+  造红两台各红在正确用例（A 拆豁免 ⇒ 反相那条＋真仓那条**同时**红；B 面收窄到只剩 `src` ⇒ 面下限那条红），
+  `cp` 备份逐台复原，复原后两处锚点 `grep -c` 各 1｜**全量回填：236 files / 2687 tests passed，exit 0，85.89s**（并发窗结束后的 quiet-window 复跑）。
+
+### 2026-09-27 · 第 126 页 · 锚点表在一次无关提交里掉了 165 行——4 个仍在发货的文件从此零变异观察者；同窗拿到的存活名单是 25 条不是 7 条
+
+工件：`outputs/anchor-loss-shipped-face-2026-09-27/`（`01-…md` ＋ 可复跑探针 `measure-anchor-loss.mts`，exit 0）。
+
+- **事情怎么发生的（逐笔可查，不是推测）**：`834ba3a`「修：worker 整支在 Seatbelt 之外」提交说明里没有一个字提到锚点，
+  但它把 `scripts/mutate-verify.mjs` 的**工作树版本**一起提交了 ⇒ 另一条线上「一次摘 160 条锚点」的在途改动顺手落库。
+  表行数 `ae8ac33` 963 → `834ba3a` 798 → 现 HEAD `9f4fe45` 798（净 −165；按 id 集合差实际摘 166 条，同笔补进 1 条新的）。
+  这是 `git commit -- <paths>` 的 `--only` 语义**第二次**把同一簇 160 条锚点卷进别人的提交——
+  上一次（2026-09-24）靠条数读数当场抓到并回滚（见 [[project-multi-session-coordination]]），
+  这次没人跑条数对照，于是它落库了：**同一个事故，抓到才是"回滚"，没抓到就成了"历史"**。
+- **三态口径（一律问 HEAD 不问盘）**：166 条里 **A 摘得对 141**（`src:` 已不在 HEAD）｜
+  **B 被测面还在发货 24**（`src:` 在 HEAD 且被别的 HEAD 文件 import）｜**C 该删没删 1**（`src:` 在 HEAD 但零 import）。
+  第 114 页当时判「141 配得上／19 条被测面在发货」：**A=141 两边一字不差**，B 由 19 变 24 ⇒ 差的 5 条不拿来判谁对，
+  两次基线不同（那次对当天的树、这次对 HEAD，中间 HEAD 又走六笔）。B 的 24 条里判卷文件也 24/24 已不在 HEAD。
+- **结论比标题窄，这是本页最该留的一句**：B 覆盖 12 个 src，但多数文件表里还有别的锚点
+  （`agent-runner` 62、`orchestrator` 45、`autonomy` 15…）⇒ 真正**零变异观察者**的只有 4 个文件 12 条：
+  `src/main/updater.ts`（−6）、`scripts/gate-manifest.ts`（−4）、`src/agent/security/llm-review.ts`（−1）、`scripts/replay/ask-density.ts`（−1）。
+  其中 `gate-manifest` 那 4 条最疼：逐条抄自旧表 `desc:`——摘守卫⇒未登记的门 spawn 空命令退出码 0、
+  空白正文只认 `=== ""`⇒`"  "` 放行、缺省执行器 `pnpm run`→`pnpm exec` 漂移、直跑不前置 `node_modules/.bin`⇒门以 127 假死。
+  **四条全是「门禁层自己怎么假绿」**，而 `gate-manifest.ts` 正是 26 道门的唯一事实源。
+- **只有 `ask-density` 一格是「完全没人看」**（0 生产侧 import＋0 测试）⇒ 任务 #8 最后一格判**「该删没删」而不是「忘了测」**：
+  它靠 `scripts/replay-readings.ts:23` 登记表与 `docs/judgment-layer-calibration-proposal.md:449` 复跑块活着，
+  而 D-8 对账只管"存不存在"、不管行为；删它要走判断层 §7 路线裁决，不走顺手清掉。
+  另外三个「零锚点」文件各有 1 支直接测试（`updater-safety-core`／`gate-failure-log`／`hardening3`）⇒ 落回老账
+  「有直接测试 ≠ 有变异观察者」，探针口径也写在工件里：**只算 import 边**，
+  `tests/remember-secret-hygiene.test.ts:109` 那种字符串字面量里提到 `gate-manifest.ts` 不算引用。
+- **为什么没有尺拦住这次缩水（又一族「两头断」）**：`mutate-anchor-titles` 判的是活着的锚点自洽（标题漂没漂、指向的文件在不在），
+  **整条被删对它透明**；`wiring-coverage` 棘轮只管 agent-runner 那一格（还剩 62 条⇒没触发）；
+  `mutate-verify` 表小了就少跑几条，**它只为"某条没杀"出声，不为"少了几条"出声**。⇒ 立任务 #9：
+  照 `KNOWN_DRIFT`／`LEGACY_WAIVERS` 同形状做「零锚点且在发货」名单棘轮（新点即红、存量要么补要么写明裁决、stale 也红）；
+  基线不能钉 rev（每次正常摘除后立刻过期）——这条设计难点记在工件 §五。
+- **同窗第二笔读数（任务 #7 交答案）**：认证树 `fb3f2d6`（＝第 124 页那一笔，跑的是**旧 963 条表**）
+  `mutate-verify` 实跑 **25 条存活/误伤**、963/963、2116.0s，**MV_EXIT=1**——
+  后台通知又报"exit code 0"，那是包壳末尾 `echo` 的码（规则 206 第三次命中，判据仍是日志里的 `MV_EXIT`）。
+  归属：**16 条同撞在 `tests/docs-check.test.ts`**（别人在飞的文档层重写，`M scripts/docs-check.ts`＋LEGACY_WAIVERS 10 条），
+  1 条（`security-confidence-guard-always-true`）**已从 HEAD 表里消失**＝本页 B 类的活样本，
+  余 8 条一条一个判卷文件（`impact-query`／`shell-tail`／`tools`／`skill-body-cap`／`session-prune-attachments`／`prune`／
+  `skill-tool-policy`／`skill-user-invocation`）⇒ 只有 `skill-tool-policy` 这条是我第 121 页自己写的，逐条判归属另开页。
+- **并发窗里的一次现读更正**：跑第 125 页验证的窗内主树分支被别的会话从 `codex/dsh-structural-hardening` 切到
+  `codex/dsh-security-product`（HEAD 9f4fe45）。第 125 页那 4 个新文件全部幸存、6 处注释修正在树、
+  `dead-script-refs` 真仓读数仍 0（228 文件）；三个新测试文件**在移动后的 HEAD 上重跑 32 passed exit 0**——
+  「编辑成功」不等于「还在原地」，切分支也是同一种事故（同规则 92 的三态纪律）。
+- 验证（本页）：探针 `measure-anchor-loss.mts` exit 0，分类计数 **141＋24＋1＝166** 与总摘除数闭合（不漏不重）｜
+  探针第一版把 `git cat-file -e` 的正常"没有这个文件"打成 30 多行 `fatal:` 噪声（execFileSync 在子进程失败时转发 stderr），
+  收掉后 stderr 为空、读数不变——**"文件不存在"是这条探针的合法回答，不是它的错误**。
+- 顺带一笔属于任务 #6 的现读：`docs-check` 在**工作树**红 1 项（`D-8 scripts/replay/prompt-fixed-cost.ts` 登记了却没有任何文档引用），
+  同一道门在认证树 `fb3f2d6` **exit 0** ⇒ 红来自别人未提交的 `M scripts/replay-readings.ts`（新增 `prompt-fixed-cost` 表项），
+  不是本页带来的、也不是 HEAD 现态。这正是「观察到的红没有看得见落册面」的第 6 次点名：**门的红写在日志里，成因写在别人的工作树里**，
+  两边没有任何一格把它们连起来——本页把它记在页里，仍不代别人改文件。
+
+
