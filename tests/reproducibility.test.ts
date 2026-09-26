@@ -60,7 +60,8 @@ describe("可复现性判据：纯函数", () => {
   it("requireDebtHit 只对「复查登记表」那条开——干净状态不该因为没踩到债而红", () => {
     const clean = classifyDivergence([]);
     expect(reproducibleVerdict(clean).ok).toBe(true); // RD1 这类：等值就过
-    expect(reproducibleVerdict(clean).detail).toContain("等值");
+    // 「等值」在仓里有 3 处字面量（RD 的其它条目名里也有）⇒ 钉这一支真正给出的那句结论
+    expect(reproducibleVerdict(clean).detail).toContain("两次跑逐字段等值");
     expect(reproducibleVerdict(clean).detail).not.toContain("该删条目"); // 文案与判定必须同一个式子
     expect(reproducibleVerdict(clean, { requireDebtHit: true }).ok).toBe(false); // RD4：条目没被用到就要报
     expect(reproducibleVerdict(clean, { requireDebtHit: true }).detail).toContain("该删条目");

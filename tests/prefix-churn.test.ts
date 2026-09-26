@@ -89,7 +89,8 @@ describe("前缀抖动：四条判据各自可红", () => {
   it("PC2 的「无分辨力」本身判红：易变块整轮不变时不许报通过", () => {
     const still = [obs({ history: 1, volatile: "SAME" }), obs({ history: 2, volatile: "SAME" })];
     expect(cacheableSurvivesVolatileChange(still).ok).toBe(false);
-    expect(cacheableSurvivesVolatileChange(still).detail).toContain("无分辨力");
+    // 「无分辨力」在仓里有 9 处字面量（好几条判据都写这句）⇒ 钉这一支独有的现象：易变块整轮没变
+    expect(cacheableSurvivesVolatileChange(still).detail).toContain("整轮没变");
   });
 
   it("PC3 变了且点名 = 过；变了不点名 = 红；一次都没变 = 红（无分辨力）", () => {

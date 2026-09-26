@@ -14,7 +14,8 @@ describe("分批裁剪策略：纯判据", () => {
   it("未启用 ⇒ 恒照旧（零回归支），且理由写清", () => {
     const d = shouldApplyPrune({ enabled: false, savedTokens: 1, estimatedTokens: 0, availableTokens: 1000 });
     expect(d.apply).toBe(true);
-    expect(d.why).toContain("未启用");
+    // 「未启用」在仓里有 3 处字面量（lsp 的报错、tools-check 的说明都算）⇒ 钉这一支独有的口径
+    expect(d.why).toContain("未启用分批");
   });
 
   it("没攒够且头寸不紧 ⇒ 推迟（不断前缀）", () => {
@@ -69,7 +70,7 @@ describe("免费车（freeRide）：断过头的那一轮不攒", () => {
     // 未启用 = 逐字旧行为（照剪），旗标在场也不改口径
     const disabled = shouldApplyPrune({ ...base, enabled: false, freeRide: true, savedTokens: 1 });
     expect(disabled.apply).toBe(true);
-    expect(disabled.why).toContain("未启用");
+    expect(disabled.why).toContain("未启用分批");
     // 头寸紧本来就照剪：旗标不得把理由换成"蹭压缩"（否则观测时会误判成策略生效）
     const tight = shouldApplyPrune({ enabled: true, savedTokens: 1, estimatedTokens: 100_000, availableTokens: 100_000, freeRide: true });
     expect(tight.apply).toBe(true);

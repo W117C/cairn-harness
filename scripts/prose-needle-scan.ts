@@ -557,8 +557,17 @@ function inFlightPaths(root: string): Set<string> {
  *  在同一次突变下**仍为真** ⇒ 这一格换的不是措辞，是分辨力。
  *  途中量到一条**排除面的过宽**：「不在 HEAD 里」看着独有，实为 2 处——第二处在变异表某条 `desc:` 的散文里，
  *  而 `desc` 是给人读的，永远流不到被断言的那句。⇒ 「测试点名该表 ⇒ 该表算生产者」这条豁免按**文件名**认，
- *  分不清"表产出的字段"（`expectFail:`、报告行）与"表里谈论文的散文"（`desc:`）。已立任务待收窄，先绕开不掩饰。 */
-export const MULTI_COPY_CEILING = 22;
+ *  分不清"表产出的字段"（`expectFail:`、报告行）与"表里谈论文的散文"（`desc:`）。已立任务待收窄，先绕开不掩饰。
+ *  → **18（第 100 页）**：再摘 4 格，全用同一套办法（针脚换成该出口独有的短句）——
+ *  「未启用」4→1 处（`prune-batching.ts#未启用分批`，另两处是 lsp 的报错与 tools-check 的说明）、
+ *  「无分辨力」9 处（`prefix-churn.ts` 那句「整轮没变」）、「等值」3 处（`reproducibility.ts` 那句「两次跑逐字段等值」）。
+ *  造红同第 98 页那套：三个生产者各改一句（保留旧针脚、去掉新针脚，跑完即删）⇒ 4 条红，
+ *  而旧针脚在三个文件里仍分别命中 1/4/1 处 ⇒ 换的是分辨力。
+ *  下一批要动的是生产者不是测试：「方案门」那句 `先批后写（当前没有已批准的方案）` 在
+ *  `permissions/index.ts`、`permissions/autonomy.ts`、`main/agent-runner.ts` **三处各抄一份**（同族副本缺陷），
+ *  所以任何取自那行的针脚都永远 ≥3 处——修法是把拒因收成 `plan-state.ts` 的一份常量；
+ *  本轮不动它：`agent-runner.ts` 与变异表都在别人手里飞，改那三行会连带把别人的锚点针脚弄失效。 */
+export const MULTI_COPY_CEILING = 18;
 
 export interface ScanReport {
   needles: number;
