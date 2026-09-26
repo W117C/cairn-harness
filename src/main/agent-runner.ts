@@ -18,6 +18,7 @@ import {
   gateToolSpecs,
   sessionToolSpecs,
   type SessionPluginTool,
+  type SessionTransport,
 } from "../agent/glm-session";
 import { ClarifyGate, PlanGate } from "../agent/gates";
 import { classifyVerifyFailure, createVerifyHook, defaultExec, withVerifyCauseNote, type ExecFn } from "../agent/verify";
@@ -57,8 +58,18 @@ import { type ProviderKind } from "./settings";
 import { getLastWorkspace, setRunWorkspace } from "./runner-workspace";
 import { createSession, pathOf, readSessionEvents, sessionExists, createSidechatSession, listSidechatSessions, readSidechatEvents, sidechatDir, sidechatEventsPath, type SessionInfo } from "./sessions";
 import { createMockProvider } from "../providers/mock";
-import { streamGlm, type GlmToolSpec } from "../providers/glm";
-import type { ModelOutput, Provider } from "../providers";
+import type { GlmToolSpec } from "../providers/glm";
+import { toWorkerModel, type RegistryWorkerModel } from "../providers/registry";
+import { validateThinkingEffort } from "../providers/capabilities";
+import type { ModelOutput, Provider, ProviderToolSpec } from "../providers";
+import { validateRunRequestEnvelope } from "./run-request";
+import { formatAttachmentContext, validateRunAttachments, type ValidatedRunAttachment } from "./run-attachments";
+import {
+  assertProviderKeyConfigured,
+  providerKindFromEnv,
+  resolveMainModel,
+  type MainModelSelection,
+} from "./provider-runtime";
 import { TOOLS, type Tool, type ToolResult } from "../tools";
 import { remember } from "../tools/remember";
 import type { ToolName } from "../tools/base";
@@ -247,6 +258,21 @@ async function orchestratorExtras(sandbox: SandboxStatus | null = null): Promise
   };
 }
 
+/** worker 的 shell 出口：沙箱可用时走 `runInSandbox`，不可用/未接线时落回裸执行。
+ *
+ *  口径与主会话 run_shell 那道门（:461）逐条对齐：那里是 `s.sandbox !== null && s.sandbox.available`
+ *  才进沙箱，否则原样落回 `original.run`——worker 这边不做更严的判断，否则非 macOS 宿主上
+ *  worker 一条命令都发不出去。
+ *  缺省断网：主会话那条路的 `networkProfileFor` 要审批上下文，worker 门里没有这条通道，
+ *  于是按 profile 缺省（无 network 规则 ⇒ 闭箱全断）取 deny。worker 要联网只能回主会话发。 */
+function workerShellRunnerFor(sandbox: SandboxStatus | null): OrchestratorOptions["workerShell"] {
+  if (sandbox === null || !sandbox.available) return undefined;
+  return async (command, ctx) => {
+    const mapped = command.trim() === "pnpm test" || command.trim() === "pnpm run test" ? VITEST_DIRECT : command;
+    return await runInSandbox(mapped, { cwd: ctx.workspace, network: "deny" });
+  };
+}
+
 /** **唯一的编排器构造口**：两处调用者（runAgent 现场 / 崩溃恢复兜底）只递各自不同的那几件
  *  （logPath / workspace / 父档位 / emit / 沙箱 / 已加载的规则库 + 可选注入模型），
  *  其余口径全在这里，结构上没法再各写一份。
@@ -266,6 +292,7 @@ async function buildSessionOrchestrator(a: {
   modelFor?: OrchestratorOptions["modelFor"];
 }): Promise<Orchestrator> {
   const s = await store().get();
+  const workerShell = workerShellRunnerFor(a.sandbox);
   return new Orchestrator({
     logPath: a.logPath,
     workspace: a.workspace,
@@ -273,6 +300,7 @@ async function buildSessionOrchestrator(a: {
     emit: a.emit,
     rules: a.rules,
     sandboxAvailable: a.sandbox ? a.sandbox.available : null,
+    ...(workerShell ? { workerShell } : {}),
     safeMode: await resolveSafeMode(), // M3b §11.6：off 不跑 / report 只标 / gate 红标 + 二次确认
     // B1 语义合并闸：影响面开启时，spawn 的写租约判定多问一层「波及集相交」——
     // 两个 worker 各改各的文件（glob 不相交）但改动波及同一批调用点，合并时同样会打架。
@@ -1059,6 +1087,10 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
   message: string;
   mode: PermissionMode;
   logPath: string;
+  /** Resolved once by handleAgentRun; direct callers may omit and get the settings/env selection. */
+  modelSelection?: MainModelSelection;
+  /** Canonical in-workspace references; contents are never copied into RunRequest or preload. */
+  attachments?: ValidatedRunAttachment[];
   /** M1e：会话模式 —— 日志 append 到既有会话（不 rm）。缺省 false（旧行为：fresh 日志）。 */
   sessionId?: string;
   onEvent?: (e: AgentEvent) => void;
@@ -1080,55 +1112,51 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
   actionFusion?: boolean;
 }
 
-/** 主对话 provider 档位解析：env 覆盖优先（既有 check/演示脚本依赖），否则读 settings。
- *  P-1 步骤 2：此前全仓无人写 M0A_PROVIDER ⇒ 打包后的主对话恒走冻结剧本；档位进 settings 后
- *  设置页/用户配置才真正可选中真实通道。 */
+/** Explicit non-empty M0A_PROVIDER wins; empty means settings. Unknown env values fail visibly. */
 export async function resolveProviderKind(): Promise<ProviderKind> {
-  const env = process.env.M0A_PROVIDER;
-  if (env === "glm") return "glm";
-  if (env === "demo" || env === "mock") return "demo";
-  return (await store().get()).provider;
+  return providerKindFromEnv(process.env.M0A_PROVIDER) ?? (await store().get()).provider;
 }
 
-/** 真实通道缺 key 的显式失败（不静默回落 mock——静默回落会让用户以为在用真模型）。 */
-function assertRealProviderReady(kind: ProviderKind): void {
-  if (kind !== "glm") return;
-  if (process.env.M0_API_KEY) return;
-  throw new Error(
-    "provider=glm 但未配置 API key（BYOK / M0_API_KEY 缺失）：真实模型通道不可用。" +
-      "请先在设置页配置 key，或把 provider 切回 demo（冻结剧本，显式演示档）——不静默回落 mock。",
-  );
-}
-
-// 主 GLM 会话按日志逐轮组装；显式演示通道和 demo 档保持兼容。
-// 未传 sessionOptions 的分支仅供会话尾沉淀，消费调用方组装的消息。
-function createProvider(userMessage: string, systemPrefix?: string, sessionOptions?: Pick<RunOptions, "logPath" | "workspace"> & {
-  emit: (event: AgentEvent) => Promise<void>;
-  plugins?: NonNullable<Parameters<typeof createGlmSessionProvider>[1]>["plugins"];
-  /** 逐请求工具面：provider 每次组装现算 ⇒ run 中途被点起来的 skill，下一轮的清单里就没有那把工具了
-   *  （构造时冻结一份只能靠 loop 拒一次，白叫）。 */
-  requestFace: () => { tools: GlmToolSpec[]; note: string };
-  solpi?: SolpiRuntime;
-  /** §9.5 PreCompact 的自动档生产者（钩子引擎在编排侧，压缩在会话 provider 里发起）。 */
-  onPreCompact?: (trigger: "manual" | "auto") => Promise<void>;
-}, kindOverride?: ProviderKind, modelOverride?: string): Provider {
-  // M1c 明卷通道：M1C_AUTONOMY_SCRIPT 指向冻结剧本（autonomy-check 三条路径复用同一接线）。
+// Main-session wrapper + non-session transport share one selected registry model.
+// Explicit fixture env paths still win, preserving frozen demo/e2e bytes.
+function createProvider(
+  _userMessage: string,
+  systemPrefix: string | undefined,
+  selection: MainModelSelection,
+  sessionOptions?: Pick<RunOptions, "logPath" | "workspace" | "attachments"> & {
+    emit: (event: AgentEvent) => Promise<void>;
+    plugins?: NonNullable<Parameters<typeof createGlmSessionProvider>[1]>["plugins"];
+    requestFace: () => { tools: GlmToolSpec[]; note: string };
+    solpi?: SolpiRuntime;
+    promptCache?: boolean;
+    onPreCompact?: (trigger: "manual" | "auto") => Promise<void>;
+  },
+): Provider {
   const autonomyScript = process.env.M1C_AUTONOMY_SCRIPT;
-  // M3a 演示通道：M3A_MAIN_SCRIPT 指定主剧本（显式路径优先）；M3A_AGENTS_DEMO=1 → main-demo.jsonl
-  //（spawn_agent 闭环演示）。worker 模型经 loadDemoWorkerModels 从 fixtures/agents 装载。
   if (process.env.M3A_MAIN_SCRIPT) return createMockProvider(resolve(process.env.M3A_MAIN_SCRIPT));
   if (process.env.M3A_AGENTS_DEMO === "1") return createMockProvider(join(ROOT, "fixtures", "agents", "main-demo.jsonl"));
   if (process.env.M1B_GATE_FLOW === "1") return createMockProvider(GATE_FIXTURE);
   if (autonomyScript) return createMockProvider(autonomyScript);
-  // M2a 截图通道：M2A_LSP_DEMO 指向演示剧本（write_file → 真实诊断回流管线），缺省零行为。
-  // M2g：M2A_LSP_DEMO=1 → 剧本取 fixtures/demo/lsp-demo.jsonl（显式路径仍可覆盖）。
   if (process.env.M2A_LSP_DEMO) {
     return createMockProvider(process.env.M2A_LSP_DEMO === "1" ? LSP_DEMO_FIXTURE : process.env.M2A_LSP_DEMO);
   }
-  const kind = kindOverride ?? (process.env.M0A_PROVIDER === "glm" ? "glm" : "demo");
-  if (kind !== "glm") return createMockProvider(MOCK_FIXTURE);
-  assertRealProviderReady(kind);
+  if (selection.kind === "demo") return createMockProvider(MOCK_FIXTURE);
+
+  assertProviderKeyConfigured(selection.kind);
+  const modelTransport: RegistryWorkerModel = toWorkerModel(selection.spec, {
+    promptCache: sessionOptions?.promptCache === true,
+  });
+  // createGlmSessionProvider predates native adapters and exposes a GLM-shaped transport slot.
+  // This adapter forwards cancellation + OpenAI/GLM metering while binding the already-resolved spec.
+  const transport: SessionTransport = (messages, options, tools, call) => modelTransport(messages, tools ?? [], {
+    call,
+    ...(options?.stream !== undefined ? { stream: options.stream } : {}),
+    ...(options?.metering ? { metering: options.metering } : {}),
+  });
+  const label = selection.spec.provider;
+
   if (sessionOptions) {
+    const attachmentContext = formatAttachmentContext(sessionOptions.attachments ?? [], sessionOptions.workspace);
     return createGlmSessionProvider(sessionOptions.logPath, {
       system: systemPrefix,
       workspace: sessionOptions.workspace,
@@ -1139,17 +1167,19 @@ function createProvider(userMessage: string, systemPrefix?: string, sessionOptio
       emit: sessionOptions.emit,
       plugins: sessionOptions.plugins,
       solpi: sessionOptions.solpi,
-      ...(modelOverride ? { model: modelOverride } : {}),
+      // Preserve the pre-CX main-session GLM default compaction budget. An explicit request/settings
+      // model opts into the registry window; other providers always use their registry spec.
+      ...(selection.kind !== "glm" || selection.modelExplicit ? { model: selection.spec.model } : {}),
+      transport,
+      transportLabel: label,
+      ...(attachmentContext ? { attachmentContext } : {}),
     });
   }
+
   return {
-    stream(messages, _tools, call) {
-      return streamGlm(
-        messages,
-        modelOverride ? { model: modelOverride } : {},
-        gateToolSpecs().filter((spec) => spec.function.name === "remember"),
-        call,
-      );
+    stream(messages, _tools: ProviderToolSpec[] | undefined, call) {
+      const rememberTool = gateToolSpecs().filter((spec) => spec.function.name === "remember");
+      return transport(messages, {}, rememberTool, call);
     },
   };
 }
@@ -1178,7 +1208,6 @@ export function verifyExec(sandbox: SandboxStatus | null, run: typeof runInSandb
 /** 核心：mock（或演示通道）驱动跑一轮 loop；每条事件先落 JSONL 再回调。返回完整事件流。
  *  M1b：接线三门 —— clarify/plan 通道（挂起等人）+ verify 反射循环钩子。 */
 const liveRunPaths = new Set<string>();
-const sessionOrchestrators = new Map<string, Orchestrator>();
 const deletingSessionPaths = new Set<string>();
 /** 「这条会话日志正被占用」的唯一判据：run 起时的互斥、手动压缩时的让路，两处读同一个式子。 */
 export function isSessionLogBusy(logPath: string): boolean {
@@ -1273,7 +1302,6 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       ...(demoModelFor ? { modelFor: demoModelFor } : {}),
     });
     runScope.orchestrator = orchestrator;
-    sessionOrchestrators.set(resolve(opts.logPath), orchestrator);
     if (interactive) activeOrchestrator = orchestrator; // H3 D-2：unattended 不抢交互面的审批路由
     // M2e：插件运行时（会话启动静态扫描产加载清单，不新增事件类型）。
     // 零插件环境（无 .agent/plugins、无 M2E_USER_PLUGINS/M2E_LOOSE_SKILLS）= 空清单 = 零行为。
@@ -1335,9 +1363,14 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       }
     }
     const skillsRouting = rt && rt.routingList().text !== "" ? rt.routingList().text : null;
-    // P-1 步骤 2：主对话 provider 档位与模型（settings 为准；M0A_PROVIDER / M0_MODEL env 仍是覆盖通道）。
-    const providerKind = await resolveProviderKind();
-    const settingsModel = (await store().get()).model;
+    // One resolved registry selection is reused by the main turn and session-end distillation.
+    const providerSettings = await store().get();
+    const modelSelection = opts.modelSelection ?? resolveMainModel({
+      forcedKind: providerKindFromEnv(process.env.M0A_PROVIDER),
+      configuredKind: providerSettings.provider,
+      settingsModel: providerSettings.model,
+      legacyEnvModel: process.env.M0_MODEL,
+    });
     // H3-P4（编排提示词审查 §一）：生产主会话必须有基座系统提示词——此前只有插件路由 + hook 上下文，
     // 模型在撞墙前不知道墙存在（机制成本已付、收益只兑现一半），验收暗卷脚本反而比生产多了角色说明。
     // 系统提示词已提到模块级 BASE_SYSTEM（可被单测锁住）；这里只消费。
@@ -1378,8 +1411,8 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       // 两个都开才传，避免"闸关着却许诺返修"这种读起来矛盾的配置。
       ...(opts.autoVerify === true && opts.autoVerifyRepair === true ? { autoVerifyRepair: true } : {}),
       stuckNudge: true, // 主会话（人直用那条）才有换路提示：worker 有看门、靶场按字节计量，见 LoopOptions
-      provider: createProvider(promptText, BASE_SYSTEM, {
-        ...opts, emit: pipeline, solpi,
+      provider: createProvider(promptText, BASE_SYSTEM, modelSelection, {
+        ...opts, emit: pipeline, solpi, promptCache: providerSettings.promptCache,
         requestFace: () => sessionToolFace(rt, faceArgs),
         // §9.5：自动/溢出压缩的 PreCompact 只有这一条生产者（provider 每会话一个，钩子引擎在 rt 上）
         ...(rt ? { onPreCompact: (trigger: "manual" | "auto") => firePreCompactHook(rt?.hooks, trigger) } : {}),
@@ -1388,7 +1421,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
           hookContext,
           deriveRemount: (events: AgentEvent[]) => rt.remountFromEvents(events).text,
         } } : {}),
-      }, providerKind, settingsModel),
+      }),
       events: { append: pipeline },
       ...(recall || impactTool
         ? { tools: { ...TOOLS, ...(recall ? { obs_recall: recall } : {}), ...(impactTool ? { impact_query: impactTool } : {}) } }
@@ -1485,7 +1518,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
         enabled: autoMemory && opts.mode !== "read-only" && opts.unattended !== true,
         logPath: opts.logPath,
         workspace: opts.workspace,
-        provider: createProvider(promptText, undefined, undefined, providerKind, settingsModel),
+        provider: createProvider(promptText, undefined, modelSelection),
         signal,
         rememberTool: remember, // 合并审批即本轮权限门（未加门的工具本体）
         emit: pipeline,
@@ -1592,12 +1625,13 @@ export function resolveRunWorkspace(
 export async function handleAgentRun(
   req: RunRequest,
   over: RunOverrides = {},
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; attachmentCount?: number }> {
   try {
-    // M1e 会话模式：sessionId 在场 → logPath = 会话 JSONL（append；不 rm）；
-    // 旧行为（无 sessionId）= tmp 日志 + 每轮 rm（e2e/ipc-check 等脚本路径字节不变）。
-    // P-1 步骤 3 补漏：请求体里的 sessionId 此前被静默忽略（只认 overrides）——IPC 层恰好同时传了两处
-    // 才没暴露，直调方（脚本/测试/内部调用）传了 req.sessionId 却仍落临时日志。现取并集，语义一致。
+    const validatedRequest = validateRunRequestEnvelope(req);
+    if (!validatedRequest.ok) return { ok: false, error: validatedRequest.error };
+    req = validatedRequest.value;
+
+    const settings = await store().get();
     const sessionId = over.sessionId ?? req.sessionId;
     const sessionMode = sessionId !== undefined;
     const logPath = over.logPath ?? (sessionMode ? pathOf(requireSessionsDir(), sessionId) : join(tmpdir(), "m0b-agent-events.jsonl"));
@@ -1605,9 +1639,39 @@ export async function handleAgentRun(
       over.workspace,
       req.workspace,
       process.env.M0B_WORKSPACE,
-      (await store().get()).workspace,
+      settings.workspace,
       WORKSPACE,
     );
+
+    let attachments: ValidatedRunAttachment[] = [];
+    if (req.attachments !== undefined) {
+      const checked = await validateRunAttachments(req.attachments, workspace);
+      if (!checked.ok) return { ok: false, error: `附件校验失败: ${checked.error}` };
+      const external = checked.value.filter((attachment) => attachment.requiresExternalApproval);
+      if (external.length > 0) {
+        return {
+          ok: false,
+          error: "附件超出 workspace；approval-required（需显式外部引用审批）",
+        };
+      }
+      attachments = checked.value;
+    }
+
+    const modelSelection = resolveMainModel({
+      forcedKind: providerKindFromEnv(process.env.M0A_PROVIDER),
+      configuredKind: settings.provider,
+      requestModel: req.model,
+      settingsModel: settings.model,
+      legacyEnvModel: process.env.M0_MODEL,
+    });
+    if (modelSelection.kind === "demo") {
+      if (req.thinking !== undefined && req.thinking !== "off") {
+        return { ok: false, error: "demo provider 不支持 thinking；当前只允许 off" };
+      }
+    } else {
+      validateThinkingEffort(modelSelection.spec, req.thinking);
+    }
+    const attachmentCount = attachments.length;
     // ---- goal 模式：一次 run 结束 ≠ 目标达成。续跑走同一入口、同一装配，判据全在 goal.ts ----
     // 轮次上限本由 spec 管（goalStopDecision）；这里的常数是"投影万一出 bug 也不会无限烧钱"的兜底闸。
     const hardCap = GOAL_TURN_CAP_MAX + 2;
@@ -1624,6 +1688,8 @@ export async function handleAgentRun(
         planRequired: over.planRequired ?? (await store().get()).planRequiredByDefault,
         ...(goalTurn ? { goalTurn } : {}),
         logPath,
+        modelSelection,
+        ...(attachmentCount > 0 ? { attachments } : {}),
         ...(sessionMode ? { sessionId } : {}),
         ...(over.unattended ? { unattended: true as const } : {}),
         ...(over.signal ? { signal: over.signal } : {}),
@@ -1651,7 +1717,7 @@ export async function handleAgentRun(
         sandbox: sandboxState,
       });
       const next = await goalNextTurn({ logPath, sessionId, unattended: over.unattended === true, aborted: () => over.signal?.aborted === true });
-      if (next === null) return { ok: true };
+      if (next === null) return { ok: true, ...(attachmentCount > 0 ? { attachmentCount } : {}) };
       message = next.message;
       goalTurn = next.origin;
     }

@@ -27,13 +27,11 @@ function inHead(rel: string): boolean | null {
  *  为什么改成按文件：以前这里手抄了 6 个锚点 id，而 id 集合取决于对方那笔删除删掉了哪份测试文件
  *  ⇒ 同一条等号在 HEAD（文件在、6 条全不命中）和本树（文件不在、6 条全命中）里必然一边红。
  *  现在改成判「成因」：`unverified-file` 的每一个来源都必须满足「HEAD 里有、盘上没有」＝别人的删除还没入库。
- *  撤登记条件写在下述理由里，并由「登记的的文件必须仍在 HEAD 里」那条用例强制回看。 */
-const DELETED_IN_FLIGHT: Readonly<Record<string, string>> = {
-  "tests/updater.test.ts":
-    "桌面层那笔删除摘掉了这份判卷面（盘上无、HEAD 仍在），实现 src/main/updater.ts 还留在树上 ⇒ 指向它的锚点此刻没有观测者，整表真跑会报成「变异存活」。" +
-    "核心层已补 tests/updater-safety-core.test.ts（https-only / 协议白名单 / semver 数值比较 / 响应帽）。" +
-    "撤登记：那笔删除入库后从本表删名——届时仍指向 tests/updater.test.ts 的锚点会被「HEAD 里也没有」那条判成红，那就是提醒去摘锚点或补齐判卷面。",
-};
+ *  撤登记条件写在下述理由里，并由「登记的的文件必须仍在 HEAD 里」那条用例强制回看。
+ *
+ *  2026-09-27：本表清空。桌面层那笔删除已入库（`tests/updater.test.ts` 连同 209 个路径一起落进
+ *  core-only 迁移提交），登记条件「HEAD 里有、盘上没有」不再成立——按本表自己写的撤登记条件删名。 */
+const DELETED_IN_FLIGHT: Readonly<Record<string, string>> = {};
 
 describe("parseAnchors：取料面自己要先可信", () => {
   it("按 id 边界切块；三条就是三条（整块切错会读出『总数 1』这种恒真读数）", () => {

@@ -9,6 +9,7 @@ import type { VerifyHook } from "./verify";
 import type { HookEngine } from "./plugins/hooks";
 import type { WorkerModel } from "./worker-model";
 import type { WorkerPrice } from "./orchestrator-join";
+import type { WorkerShellRunner } from "./worker-shell-tools";
 
 export interface SpawnArgs {
   task?: unknown;
@@ -244,6 +245,10 @@ export interface OrchestratorOptions {
   rules?: PermissionRule[];
   /** P0-2（审查）：父 run 的沙箱自检结果（null = 未接线）——worker 沙箱降级送审通道同口径。 */
   sandboxAvailable?: boolean | null;
+  /** worker shell（`shell_ro`/`shell_rw`）的实际执行出口。宿主有沙箱时注入沙箱版，注入即生效；
+   *  **缺省 undefined = 裸 run_shell**（不过沙箱）——这是没有沙箱的宿主上唯一能跑的口径，
+   *  与主会话 `s.sandbox === null` 时落回裸执行完全同一条降级线，不是额外开的口子。 */
+  workerShell?: WorkerShellRunner;
   /** W4a（spec §6:95）：write worker 的收束闸钩子工厂（入参 = 该 worker 的 worktree 目录）。
    *  **缺省 undefined = 零行为**（worker 的 runLoop 既不接 verify 也不补拍——今日现状）。
    *  开闸代价与读数见 outputs/auto-verify-readout-2026-09-20.md §2：单次实测百毫秒级起，

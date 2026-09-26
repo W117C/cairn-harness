@@ -14,21 +14,24 @@ import { evaluate, gateBase, scopeKey, type AskScope, type AutonomySession, type
 import { WORKER_IMPACT_TOOL } from "./orchestrator-config";
 import type { Orchestrator } from "./orchestrator";
 import type { WorkerHandle } from "./orchestrator-types";
-import { shell_ro, shell_rw } from "./worker-shell-tools";
+import { makeShellRo, makeShellRw, type WorkerShellRunner } from "./worker-shell-tools";
 
 /** worker 工具执行表（三重硬闸之一）：read mode = 只读面；write mode = worktree 可写面 +
  *  remember（重定向主 checkout）。spawn_agent/run_shell/merge/commit 在任何模式都不在表内。 */
 export function buildWorkerToolTable(
   w: WorkerHandle,
   orch: Orchestrator,
-  opts: { impactAnalysis?: boolean } = {},
+  opts: { impactAnalysis?: boolean; shell?: WorkerShellRunner } = {},
 ): Record<string, Tool> {
   const table: Record<string, Tool> = {
     read_file: gatedWorkerTool("read_file", read_file, w, orch),
     grep: gatedWorkerTool("grep", grep, w, orch),
     glob: gatedWorkerTool("glob", glob, w, orch),
     lsp: gatedWorkerTool("lsp", lsp, w, orch),
-    shell_ro: gatedWorkerTool("shell_ro", shell_ro, w, orch),
+    // shell 是 worker 唯一的命令出口，而主会话那道沙箱门只认 `run_shell` 这个名字
+    // （agent-runner 的 `name === "run_shell"` 分支）——`shell_ro`/`shell_rw` 走的是本文件
+    // 另一扇门，不注入就等于 worker 整支都在 Seatbelt 之外。宿主有沙箱就注入沙箱版。
+    shell_ro: gatedWorkerTool("shell_ro", makeShellRo(opts.shell), w, orch),
   };
   // 影响面读端与主会话同一份实现；这里不传 cacheDir ⇒ 用缺省应用数据目录（绝不写用户仓库）。
   // 刻意**不**接写侧 per-edit 钩子：worker 的 worktree 是仓库副本，缓存按绝对路径键 ⇒ 每个 worker
@@ -88,7 +91,7 @@ export function buildWorkerToolTable(
     };
     table.write_file = gatedWorkerTool("write_file", clearAnchorsWrite, w, orch, { autonomy: w.toolAutonomy });
     table.edit_file = gatedWorkerTool("edit_file", snapshotEdit, w, orch, { autonomy: w.toolAutonomy });
-    table.shell_rw = gatedWorkerTool("shell_rw", shell_rw, w, orch, { autonomy: w.toolAutonomy });
+    table.shell_rw = gatedWorkerTool("shell_rw", makeShellRw(opts.shell), w, orch, { autonomy: w.toolAutonomy });
     table.remember = gatedWorkerTool("remember", rememberMain, w, orch); // 记忆面走 clampTier 档位（主 checkout 是共享面）
   }
   return table;

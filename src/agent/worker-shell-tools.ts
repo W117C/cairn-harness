@@ -82,18 +82,32 @@ export function isReadOnlyShellCommand(command: string): { ok: boolean; why?: st
   return { ok: true };
 }
 
-/** worker 只读 bash 工具：静态过滤（fail-closed 拒绝）→ 直连 run_shell 原始实现（不过主会话工具门）。 */
-export const shell_ro: Tool = {
-  name: "shell_ro",
-  async run(args, ctx: ToolContext): Promise<ToolResult> {
-    const command = typeof args.command === "string" ? args.command : "";
-    const gate = isReadOnlyShellCommand(command);
-    if (!gate.ok) {
-      return { ok: false, output: "[read-only] 只读 bash 静态过滤拒绝：" + (gate.why ?? "未知原因") };
-    }
-    return await run_shell.run({ command }, ctx);
-  },
-};
+/** worker shell 的执行出口。缺省 = 裸 `run_shell`（不进沙箱）。
+ *
+ *  为什么是注入而不是 `src/agent` 直接 import `src/main/sandbox`：`src/agent` 不许反向依赖
+ *  `src/main`（AGENTS.md 的核心层禁令），而沙箱实现在 main 侧。注入还顺带让接线可测——
+ *  结构测试能钉住「worker shell 走注入的出口」这件事本身，摘掉即红。
+ *  宿主（agent-runner）有沙箱时注入沙箱版，判据与主会话 run_shell 那道门同一口径。 */
+export type WorkerShellRunner = (command: string, ctx: ToolContext) => Promise<ToolResult>;
+
+/** 缺省出口：裸 run_shell（不过沙箱）。宿主没注入时用它，与本模块迁移前的行为逐字一致。 */
+const bareShell: WorkerShellRunner = async (command, ctx) => await run_shell.run({ command }, ctx);
+
+/** worker 只读 bash 工具：静态过滤（fail-closed 拒绝）→ 执行出口。 */
+export function makeShellRo(run: WorkerShellRunner = bareShell): Tool {
+  return {
+    name: "shell_ro",
+    async run(args, ctx: ToolContext): Promise<ToolResult> {
+      const command = typeof args.command === "string" ? args.command : "";
+      const gate = isReadOnlyShellCommand(command);
+      if (!gate.ok) {
+        return { ok: false, output: "[read-only] 只读 bash 静态过滤拒绝：" + (gate.why ?? "未知原因") };
+      }
+      return await run(command, ctx);
+    },
+  };
+}
+export const shell_ro: Tool = makeShellRo();
 
 // ---- M3b write mode：shell_rw（git 破坏命令静态拦截层，§4.4.5 / 任务书裁决 3/4）----
 // worker 自己不 commit、不 merge（合并唯一出口 = git 面板，§4.3）；shell_rw 内 git 子命令
@@ -174,17 +188,20 @@ export function interceptDestructiveGit(command: string): { ok: boolean; why?: s
 }
 
 /** write worker shell 工具：git 破坏命令静态拦截（fail-closed + reason 落流）→ run_shell（cwd 由 loop 锁定 worktree）。 */
-export const shell_rw: Tool = {
-  name: "shell_rw",
-  async run(args, ctx: ToolContext): Promise<ToolResult> {
-    const command = typeof args.command === "string" ? args.command : "";
-    const gate = interceptDestructiveGit(command);
-    if (!gate.ok) {
-      return { ok: false, output: "[git-guard] git 破坏命令静态拦截：" + (gate.why ?? "未知原因") };
-    }
-    return await run_shell.run({ command }, ctx);
-  },
-};
+export function makeShellRw(run: WorkerShellRunner = bareShell): Tool {
+  return {
+    name: "shell_rw",
+    async run(args, ctx: ToolContext): Promise<ToolResult> {
+      const command = typeof args.command === "string" ? args.command : "";
+      const gate = interceptDestructiveGit(command);
+      if (!gate.ok) {
+        return { ok: false, output: "[git-guard] git 破坏命令静态拦截：" + (gate.why ?? "未知原因") };
+      }
+      return await run(command, ctx);
+    },
+  };
+}
+export const shell_rw: Tool = makeShellRw();
 
 // ---- worker 工具规格（模型可见面）：从 gateToolSpecs 过滤 + shell_ro 规格 ----
 

@@ -761,46 +761,6 @@ const MUTATIONS = [
     expectFail: "verifyLicenseFile：无文件 = inactive（未激活不阻断）；坏 JSON = invalid；好文件走同一矩阵",
   },
   {
-    id: "updater-manifest-https-only",
-    src: "src/main/updater.ts",
-    test: "tests/updater.test.ts",
-    desc: "manifest URL 放行 http/file（借主进程网络面做 SSRF/明文劫持）",
-    apply: (s) => s.replace("if (p.protocol !== \"https:\") return { state: \"error\",", "if (false) return { state: \"error\","),
-    expectFail: "manifest URL 只允许 https（D5：放行 http/file = 借主进程做 SSRF/明文劫持）",
-  },
-  {
-    id: "updater-semver-direction",
-    src: "src/main/updater.ts",
-    test: "tests/updater.test.ts",
-    desc: "同版 manifest 被判为有新版（重复弹更新卡，版本语义反转）",
-    apply: (s) => s.replace("if (cmp <= 0) return { state: \"up-to-date\",", "if (cmp < 0) return { state: \"up-to-date\","),
-    expectFail: "checkUpdate：同版 / 旧版 → up-to-date（显式「已是最新」）",
-  },
-  {
-    id: "updater-semver-strict",
-    src: "src/main/updater.ts",
-    test: "tests/updater.test.ts",
-    desc: "semver 解析放宽（非三段版本被接受，版本比较可返回错误结果）",
-    apply: (s) => s.replace("if (!/^\\d+\\.\\d+\\.\\d+$/.test(v)) return null;", "if (!/.*/.test(v)) return null;"),
-    expectFail: "semver 比对矩阵（三段逐段数值比较；非法 = null）",
-  },
-  {
-    id: "updater-manifest-unknown-fields",
-    src: "src/main/updater.ts",
-    test: "tests/updater.test.ts",
-    desc: "manifest 未知字段不拒绝（恶意 manifest 可夹带任意内容）",
-    apply: (s) => s.replace("if (unknownKeys.length > 0) return { state: \"error\",", "if (false) return { state: \"error\","),
-    expectFail: "checkUpdate：manifest 结构坏（未知字段 / version 非法 / 缺 url / 当前版本非法）→ error",
-  },
-  {
-    id: "updater-safe-external-url",
-    src: "src/main/updater.ts",
-    test: "tests/updater.test.ts",
-    desc: "下载页白名单放行任意协议（file:/javascript: 经 openExternal 执行 = RCE/信息泄漏面）",
-    apply: (s) => s.replace("return p.protocol === \"https:\" || p.protocol === \"http:\";", "return true;"),
-    expectFail: "下载页白名单：仅 http(s) 可 openExternal（防 manifest 注入 file:/自定义协议）",
-  },
-  {
     id: "sandbox-sensitive-deny",
     src: "src/main/sandbox.ts",
     test: "tests/sandbox.test.ts",
@@ -1027,7 +987,9 @@ const MUTATIONS = [
     src: "src/main/sessions.ts",
     test: "tests/sessions.test.ts",
     desc: "删除改用 force:true（不存在的会话静默成功，fail-loud 语义失效）",
-    apply: (s) => s.replace("await rm(sessionPath(root, id), { force: false });", "await rm(sessionPath(root, id), { force: true });"),
+    apply: (s) => s
+      .replace("await rename(source, staged);", "await rename(source, staged).catch(() => undefined);")
+      .replace("await rm(staged, { force: false });", "await rm(staged, { force: true });"),
     expectFail: "非法名字 fail-closed（路径分隔/点开头/空）；删除不存在会话抛错",
   },
   {
@@ -1183,79 +1145,7 @@ const MUTATIONS = [
     expectFail: "同一份历史：缺省 128k 帽下 fail-closed 拒发，换 256k 窗口模型后照常发出",
   },
   // ---- 门 0（ipc-reachability）：可达性棘轮的解析面 ----
-  {
-    id: "ipc-preload-crossline-attribution-lost",
-    src: "scripts/ipc-reachability-check-core.ts",
-    test: "tests/ipc-reachability.test.ts",
-    desc: "方法名归属在遇到任何非键行时被清空（跨行写的箭头体全查不到通道 → A1a 漏红）",
-    apply: (s) => s.replace("if (key) current = key[1];", "if (key) current = key[1]; else current = null;"),
-    expectFail: "invoke 归属最近的方法名；带返回类型注解不算漏；subscribe 记为 push",
-  },
-  {
-    id: "ipc-preload-push-subscribe-blind",
-    src: "scripts/ipc-reachability-check-core.ts",
-    test: "tests/ipc-reachability.test.ts",
-    desc: "push 识别只认 ipcRenderer.on、不认 subscribe 包装（preload 三条推送桥全蒸发，A1c 变成空判）",
-    apply: (s) => s.replace("subscribe[\\w<>,\\s]*|", ""),
-    expectFail: "invoke 归属最近的方法名；带返回类型注解不算漏；subscribe 记为 push",
-  },
-  {
-    id: "ipc-preload-orphan-call-misattributed",
-    src: "scripts/ipc-reachability-check-core.ts",
-    test: "tests/ipc-reachability.test.ts",
-    desc: "去掉「不在对象内就不归属」前置（对象外的 ipcRenderer 调用被挂到上一个键上 = 桥表凭空多出一条，棘轮基线被污染）",
-    apply: (s) => s.replace("    if (!current) continue;\n", ""),
-    expectFail: "对象外的 ipcRenderer 调用不归属任何方法（不误挂到上一个键上）",
-  },
-  {
-    id: "ipc-renderer-bracket-chain-name-lost",
-    src: "scripts/ipc-reachability-check-core.ts",
-    test: "tests/ipc-reachability.test.ts",
-    desc: "全括号链 `window[\"agent\"][\"X\"]()` 收的是整段匹配而非方法名（这类引用一律判成「渲染层没调」→ 已接上 UI 的桥被误算成孤儿）",
-    apply: (s) => s.replace('for (const m of src.matchAll(/\\]\\s*\\[\\s*"(\\w+)"\\s*\\]/g)) out.add(m[1]);', 'for (const m of src.matchAll(/\\]\\s*\\[\\s*"(\\w+)"\\s*\\]/g)) out.add(m[0]);'),
-    expectFail: 'api.X / window.agent.X / agent?.X / api["X"] 都算引用',
-  },
-  {
-    id: "ipc-ratchet-added-blind",
-    src: "scripts/ipc-reachability-check-core.ts",
-    test: "tests/ipc-reachability.test.ts",
-    desc: "棘轮只查「变好」不查「变坏」（新写一条 UI 不引用的桥不再红 → 门 0 要防的那种塌陷正好漏掉）",
-    apply: (s) => s.replace("added: [...o].filter((c) => !b.has(c)).sort(),", "added: [],"),
-    expectFail: "新增孤儿桥 ⇒ added 点名（A2a 的判据：写一条 UI 不引用的桥就红）",
-  },
-  {
-    id: "ipc-ratchet-stale-blind",
-    src: "scripts/ipc-reachability-check-core.ts",
-    test: "tests/ipc-reachability.test.ts",
-    desc: "基线失效方向不再比对（欠账只增不减：接上了也不删记录，基线沦为免检声明）",
-    apply: (s) => s.replace("fixed: [...b].filter((c) => !o.has(c)).sort(),", "fixed: [],"),
-    expectFail: "基线里的通道已接上 UI ⇒ fixed 点名（A2b 的判据：还留着欠账记录也算红）",
-  },
-  {
-    id: "ipc-a3-unknown-ref-blind",
-    src: "scripts/ipc-reachability-check-core.ts",
-    test: "tests/ipc-reachability.test.ts",
-    desc: "A3 内核恒返回空表（桥名拼错的引用不再点名 → 澄清卡那类「渲染得出、按钮按不动」的 P1 回到无人可查；正是要防的那次实踩）",
-    apply: (s) => s.replace("  return [...bad].sort();", "  return [];"),
-    expectFail: "非表内的 api.X / api?.X 点名（桥名是本仓自己拼的，拼错＝调用静默变 undefined、卡片渲染得出按钮按不动）",
-  },
-  {
-    id: "ipc-a3-alias-width-lost",
-    src: "scripts/ipc-reachability-check-core.ts",
-    test: "tests/ipc-reachability.test.ts",
-    desc: "去掉「独立别名」前置（任何对象的 .api.X 都被当成 window.agent 的调用 = 误报面回来了，A3 会被当成噪声门关掉）",
-    apply: (s) => s.replace("(?<![.\\w])api\\??\\.", "api\\??\\."),
-    expectFail: "表内名字不报；宽度只认独立别名 api（svc.api.list / window.agent.foo 都不收，同名对象不该被卷进来）",
-  },
-  {
-    id: "ipc-comment-face-counts-as-ref",
-    src: "scripts/ipc-reachability-check-core.ts",
-    test: "tests/ipc-reachability.test.ts",
-    desc: "引用面不剥注释（散文里写一句 `api.submitClarify ? …` 就把没人调的桥记成「已可达」，欠账清单可被一句话抹掉——本仓 2026-09-20 实踩）",
-    apply: (s) => s.replace("export function stripCommentFaces(src: string): string {", "export function stripCommentFaces(src: string): string {\n  return src;"),
-    expectFail: "注释里的桥名不算引用（否则一句话就能把棘轮的欠账记录抹掉）",
-  },
-  // ---- worker 上下文预算认模型（1e85544）----
+                    // ---- worker 上下文预算认模型（1e85544）----
   {
     id: "worker-budget-window-ignored",
     src: "src/agent/orchestrator-config.ts",
@@ -2506,23 +2396,7 @@ const MUTATIONS = [
     apply: (s) => s.replace("return applySource.includes(\".split(\");", "return true;"),
     expectFail: "认得 split/map 式写法，普通单点 replace 不误判",
   },
-  {
-    id: "wizard-definers-not-excluded",
-    src: "scripts/lib/commercial-reachability.ts",
-    test: "tests/commercial-reachability.test.ts",
-    desc: "不排除定义层 ⇒ 数据文件自己引用自己的名字就算「产品可达」，这条门退化成自证通过（正是它要防的那种绿）",
-    apply: (s) => s.replace("    .filter((f) => !WIZARD_DEFINERS.some((p) => f.path.includes(p)))\n", ""),
-    expectFail: "定义层自己写 ONBOARDING_GROUPS / onboarded 不算消费者（否则永远自证通过）",
-  },
-  {
-    id: "wizard-reachability-always-true",
-    src: "scripts/lib/commercial-reachability.ts",
-    test: "tests/commercial-reachability.test.ts",
-    desc: "一律判可达 ⇒ 「首启必弹向导」重新变回假绿，未证计数永远是 0，严格模式也拦不住",
-    apply: (s) => s.replace("return { reachable: consumers.length > 0, consumers };", "return { reachable: true, consumers };"),
-    expectFail: "只有定义层（当前 HEAD 的真实形态）⇒ 不可达，不得算通过",
-  },
-  // ---- W1a 收队（spec §3 / 计划 Task 1–5）：三段帽 + 等待边界 + 工具 fail-closed + 静态门自身 ----
+      // ---- W1a 收队（spec §3 / 计划 Task 1–5）：三段帽 + 等待边界 + 工具 fail-closed + 静态门自身 ----
   {
     id: "join-row-cap-not-counted",
     src: "src/agent/orchestrator-join.ts",
@@ -2860,65 +2734,7 @@ const MUTATIONS = [
     expectFail: "工具执行中途 emit 正文（结果在 assistant 之后才回）⇒ 绝不许说「没有收到结果」",
   },
   // ---- 终端面板两格（#58）：缺席≠运行中、子流≠父会话跑过（tests/renderer-terminal-liveness.test.ts）----
-  {
-    id: "term-null-always-claims-running",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-terminal-liveness.test.ts",
-    desc: "null 分支不看 liveness ⇒ 重放一条早死掉的会话永远显示「执行中」：把结果缺席当运行中，" +
-      "是「代理信号当事实」那一族的界面版（真窗口侧由 panels-check B26 同向钉住）",
-    apply: (s) => s.replace("    return live\n", "    return true\n"),
-    expectFail: "panelLive=false 且无结果 ⇒ 渲染 lost，不渲染「执行中…」",
-  },
-  {
-    id: "term-terminal-no-attribution-filter",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-terminal-liveness.test.ts",
-    desc: "terminal 段不过归因 ⇒ worker 执行的命令出现在父会话「本会话命令」里（对话面两处都过了" +
-      " entersMainConversation，面板面漏了＝同一份解析只硬化一支）",
-    apply: (s) => s.replace("    if (!entersMainConversation(e)) continue;", "    if (false) continue;"),
-    expectFail: "父 + worker 混排 ⇒ 只剩父那一行（同一份流既要过对话面也要过面板面）",
-  },
-  {
-    // 共用件 unansweredToolCalls（转录面 + 投影出口都读它）：归因那一半。
-    id: "term-unanswered-set-counts-worker-calls",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-terminal-liveness.test.ts",
-    desc: "算「哪几笔没结果」时不看归因 ⇒ worker 的调用被算成父会话断掉的那笔，" +
-      "转录里子流的任务会在父转录上挂出「无结果」",
-    apply: (s) => s.replace("    if (typeof e.agent_id === \"string\" && e.agent_id !== \"\") continue;\n    opened.add(e.id);", "    if (false) continue;\n    opened.add(e.id);"),
-    expectFail: "worker 子流不算父会话的账",
-  },
-  {
-    id: "term-write-null-collapses-to-written",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-terminal-liveness.test.ts",
-    desc: "未确认的写回退成「已落盘」（label 空 ⇒ 界面什么都不写）⇒ 审阅页与文件树把没结果的写入" +
-      "读成成功，能力 7 的可审计面被折叠掉（真窗口侧由 panels-check B27 同向钉住）",
-    apply: (s) => s.replace("  if (ok === null) return { kind: \"unconfirmed\", label: \"未确认（没有结果）\" };", "  if (ok === null) return { kind: \"written\", label: \"\" };"),
-    expectFail: "ok===null ⇒ kind=unconfirmed 且有文案（缺席必须占位，否则读起来像已落盘）",
-  },
-  {
-    id: "branch-panel-restores-demo-rows",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-no-demo-data.test.ts",
-    desc: "工作树看板退回演示分支行（撤掉空态、重新画 .branch-row）⇒ 屏上又开始谎报 HEAD 在哪，" +
-      "而桥接层至今没有任何 git 通道（`grep -ci \"git\\|branch\" src/preload/index.ts` → 0）",
-    apply: (s) => s.replace("panelEmptyHTML('分支未接入：这一格要读仓库的 git 状态，而桥接层还没有该通道')",
-      "'<button class=\"branch-row\">main</button>'"),
-    expectFail: "工作树那一格必须自己说未接入（撤假数据不等于留白）",
-  },
-  {
-    id: "workspace-panel-unwraps-agent-branch",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-no-demo-data.test.ts",
-    desc: "关掉 `workspaceViewHTML` 里真运行时那一条分支 ⇒ 产品态退回原型态的演示列表：" +
-      "屏上又列出用户没有的三个文件夹，那句「已切换工作区…」照旧可证伪" +
-      "（B29 改前实测 names=[coding-suite, docs-site, edge-gateway]，而芯片写着 运行目录 · proj-ws）",
-    apply: (s) => s.replace("  if (window.agent) {\n    const rows = realWorkspaceRows();",
-      "  if (false) {\n    const rows = realWorkspaceRows();"),
-    expectFail: "agent 态：演示文件夹名与「打开其他文件夹…」都不许出现（那句「已切换」可证伪）",
-  },
-  /* 切片边界棘轮的两半各钉一条（同一判据由两支共同成立，一条变异只该废掉它负责的那半边）。 */
+              /* 切片边界棘轮的两半各钉一条（同一判据由两支共同成立，一条变异只该废掉它负责的那半边）。 */
   {
     id: "slice-boundary-scanner-blind",
     src: "scripts/assertion-health.ts",
@@ -2962,15 +2778,7 @@ const MUTATIONS = [
     expectFail: "表内没有 verify ⇒ 钩子一次都不执行，按工具表摘除拒绝",
   },
   // ---- W4a/W4b：worker 收束闸与证据标记（tests/m3b.test.ts + tests/worker-evidence.test.ts）----
-  {
-    id: "worker-verify-missing-autoverify",
-    src: "src/agent/orchestrator.ts",
-    test: "tests/m3b.test.ts",
-    desc: "给 worker 接了钩子却忘了开 autoVerify ⇒ 收束闸永不落拍，worker 回程仍是纯自述",
-    apply: (s) => s.replace("...(workerVerify ? { verify: workerVerify, autoVerify: true } : {}),", "...(workerVerify ? { verify: workerVerify } : {}),"),
-    expectFail: "开闸且绿 ⇒ 补一拍（零额外模型请求），证据标 verified",
-  },
-  {
+    {
     id: "evidence-red-beat-as-verified",
     src: "src/agent/worker-report.ts",
     test: "tests/worker-evidence.test.ts",
@@ -2994,15 +2802,7 @@ const MUTATIONS = [
     apply: (s) => s.replace("      if (e.ok && c !== undefined && mayHaveWrittenDisk(c.name, c.args)) lastWrite = i;", "      if (c !== undefined && mayHaveWrittenDisk(c.name, c.args)) lastWrite = i;"),
     expectFail: "被拒的写（ok:false）不构成过期证据",
   },
-  {
-    id: "evidence-marks-without-writes",
-    src: "src/agent/orchestrator.ts",
-    test: "tests/m3b.test.ts",
-    desc: "不分「有没有改过文件」一律打标记 ⇒ 只读 worker 也背上一个「跑过了」位，父面出现无从谈起的证据",
-    apply: (s) => s.replace("      const evidence = filesChanged.length > 0 ? workerVerificationEvidence(w.events) : undefined;", "      const evidence = workerVerificationEvidence(w.events);"),
-    expectFail: "read worker（没改过文件）⇒ 根本不打证据标记（无「跑过了」可标）",
-  },
-  // ---- W3② 价格标签（tests/worker-spent-usd.test.ts）：钱的话只准一处说，且不可知 ≠ 免费 ----
+    // ---- W3② 价格标签（tests/worker-spent-usd.test.ts）：钱的话只准一处说，且不可知 ≠ 免费 ----
   {
     id: "spent-usd-unknown-as-zero",
     src: "src/agent/orchestrator-join.ts",
@@ -3092,45 +2892,7 @@ const MUTATIONS = [
     expectFail: "glmDefaultModelName 与 streamGlm 真实拨号用的模型名逐字相等（防第四份 env 副本漂移）",
   },
   // ---- 门的执行计划（scripts/gate-manifest.gateCommand，tests/gate-manifest.test.ts）----
-  {
-    id: "gate-direct-guards-deleted",
-    src: "scripts/gate-manifest.ts",
-    test: "tests/gate-manifest.test.ts",
-    desc: "删掉「脚本查不到」两道守卫 ⇒ 直跑模式对未登记的门 spawn 空命令，退出码 0 = 一道从不运行的门被当成跑过了",
-    apply: (s) => s.replace(`  if (typeof body !== "string") {
-    return { cmd: "", args: [], missingScript: true };
-  }
-  if (body.trim() === "") {
-    return { cmd: "", args: [], missingScript: true };
-  }
-`, "  void body;\n"),
-    expectFail: "直跑但 scripts 里没有这道门 ⇒ missingScript（调用方必须判红，不得当成无事发生）",
-  },
-  {
-    id: "gate-direct-blank-body-passes",
-    src: "scripts/gate-manifest.ts",
-    test: "tests/gate-manifest.test.ts",
-    desc: "空白正文判据写坏（只认 === \"\"）⇒ \"  \" 这种正文放行，`sh -c \"  \"` 退出码 0 同样是一道静默跳过的门",
-    apply: (s) => s.replace('  if (body.trim() === "") {', '  if (body === "") {'),
-    expectFail: "直跑但脚本正文是空白 ⇒ 同样判 missingScript（空命令的退出码 0 就是静默跳门）",
-  },
-  {
-    id: "gate-direct-default-executor-drifts",
-    src: "scripts/gate-manifest.ts",
-    test: "tests/gate-manifest.test.ts",
-    desc: "加直跑模式时顺手改了缺省分支（pnpm run → pnpm exec）⇒ 主树那条路语义跟着变，而新增能力只需多一条路、不需要动旧路",
-    apply: (s) => s.replace('if (opts.direct !== true) return { cmd: "pnpm", args: ["run", name] };', 'if (opts.direct !== true) return { cmd: "pnpm", args: ["exec", name] };'),
-    expectFail: "缺省（非直跑）：门名原样交给 pnpm run，不改写命令",
-  },
-  {
-    id: "gate-direct-path-prepend-dropped",
-    src: "scripts/gate-manifest.ts",
-    test: "tests/gate-manifest.test.ts",
-    desc: "直跑不前置 node_modules/.bin ⇒ 脚本正文里的裸 `vitest`/`electron-vite` 在 sh 下找不到命令，门以 127 假死",
-    apply: (s) => s.replace('return { cmd: "/bin/sh", args: ["-c", body], pathPrepend: join(opts.root, "node_modules", ".bin") };', 'return { cmd: "/bin/sh", args: ["-c", body] };'),
-    expectFail: "直跑：跑 package.json 的脚本正文，并把该仓 node_modules/.bin 顶到 PATH 前",
-  },
-  // ---- prune 存盘回取接进生产（tests/prune.test.ts + tests/session-prune-attachments.test.ts）----
+          // ---- prune 存盘回取接进生产（tests/prune.test.ts + tests/session-prune-attachments.test.ts）----
   {
     id: "prune-attachment-production-entry",
     src: "src/agent/glm-session.ts",
@@ -4382,25 +4144,7 @@ const MUTATIONS = [
     apply: (s) => s.replace("enterPlanRunScope(opts.planRequired === true);", "enterPlanRunScope(true);"),
     expectFail: "unattended + 武装方案门 ⇒ 拒因来自方案门而不是无人值守闸，盘上不留痕（J3：不是被忽略）",
   },
-  {
-    // 这两条补的是「同一句判据的两支」里被漏掉的那一支：panels-check B7 走的是空闲提交
-    // （onEvent 在 !real.running 时整段重投，落 showHistory），删掉 live 尾巴那句 syncGoalChip 实测全绿。
-    id: "goal-chip-live-tail-not-synced",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-goal-chip-live.test.ts",
-    desc: "renderEvent 那一支只记账不刷芯片 ⇒ 续跑期（real.running 为真，事件全走这支）芯片停在旧读数：goal 模式设完目标看着像没在跑",
-    apply: (s) => s.replace("      goalEventsSession = real.id;\n      syncGoalChip();", "      goalEventsSession = real.id;"),
-    expectFail: "live 尾巴（续跑期每一轮）：芯片跟着轮次自己变，不等整段重投",
-  },
-  {
-    id: "goal-chip-mirror-counts-replay-events",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-goal-chip-live.test.ts",
-    desc: "丢掉 rc.replay 守卫 ⇒ 重放期每条 goal 事件被镜像二次累加：芯片轮数虚增，而轮数正是轮次闸的读数（显示第 4 轮、判据以为第 2 轮）",
-    apply: (s) => s.replace("if (!rc.replay && goalRelevant(e)) {", "if (goalRelevant(e)) {"),
-    expectFail: "重放期间不得二次累加镜像（showHistory 已经整段筛过）",
-  },
-  {
+      {
     id: "manual-compact-push-only-never-persisted",
     src: "src/main/agent-runner.ts",
     test: "tests/compact-wiring.test.ts",
@@ -4416,136 +4160,8 @@ const MUTATIONS = [
     apply: (s) => s.replace("if (over.sessionId !== undefined) {", "if (false) {"),
     expectFail: "压的是 sessionId 那条，不是「本进程最后跑过的」那条",
   },
-  {
-    id: "memory-panel-delete-keeps-stale-snapshot",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-memory-panel.test.ts",
-    desc: "删完不清不回读 ⇒ 面板留着那一行：告诉用户「它还在」。删除是盘上动作，界面必须以盘上为准",
-    apply: (s) => s.replace("    memoryCache = null;\n    await loadMemory(true);", "    void 0;"),
-    expectFail: "点删除：按行上的 scope + topic 调桥，成功后清空缓存回读快照并重画",
-  },
-  {
-    id: "memory-panel-rejection-shown-as-success",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-memory-panel.test.ts",
-    desc: "回条 ok:false 也报「已删除」⇒ 用户以为删掉了（记忆是长期态，假成功的代价是下次又读到它）",
-    apply: (s) => s.replace("toast(r && r.ok ? '已删除记忆：' + topic : '删除失败：'", "toast('已删除记忆：' + topic || '删除失败：'"),
-    expectFail: "主进程拒绝 ⇒ 原话上 toast，并且照样回读（列表以盘上为准）",
-  },
-  {
-    id: "memory-panel-topic-row-loses-scope",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-memory-panel.test.ts",
-    desc: "行上不写 data-scope（写死 project）⇒ 删全局层的条目会去删项目层同名 topic：跨层误删",
-    apply: (s) => s.replace("data-scope=\"' + esc(scope)", "data-scope=\"' + \"project\""),
-    expectFail: "两层各列自己的 topic：名字 / 类型 / 字节 / 层路径，删除按钮带上 scope 与 topic",
-  },
-  {
-    id: "plugin-panel-cannot-revoke-trust",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-plugin-panel.test.ts",
-    desc: "已信任的插件不再显示「拒绝」⇒ 授权变成一次性门票，用户无法撤回（安全边界上的动作必须可回滚）",
-    apply: (s) => s.replace("(trust === 'declined' ? '' : '<button class=\"sched-btn danger\" data-plug-act=\"decline\">拒绝</button>')", "''"),
-    expectFail: "授权按钮必须可回滚：待决给两颗，已信任只剩「拒绝」，已拒绝只剩「信任」",
-  },
-  {
-    id: "plugin-panel-decline-reported-as-trust",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-plugin-panel.test.ts",
-    desc: "无论决议结果都报「已信任」⇒ 用户以为拒绝掉的插件没在跑，而它确实不该激活（反向亦然）",
-    apply: (s) => s.replace("(trusted ? '已信任：' + name + '（其 skill / 命令 / hook 从此激活）' : '已拒绝：' + name + '（保持不激活）')", "'已信任：' + name + '（其 skill / 命令 / hook 从此激活）'"),
-    expectFail: "点「拒绝」不报「已信任」；回条 ok=false 也不报成功，且一律回读",
-  },
-  {
-    id: "plugin-panel-hides-load-errors",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-plugin-panel.test.ts",
-    desc: "不渲染 errors 段 ⇒ 插件装载失败时用户没有任何线索（快照里明明有，界面选择不说）",
-    apply: (s) => s.replace("const errs = pluginCache.errors || [];", "const errs = [];"),
-    expectFail: "加载错误必须上屏（插件没跑起来时，这是用户唯一的线索）",
-  },
-  {
-    id: "merge-tower-hides-verification-evidence",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-git-evidence.test.ts",
-    desc: "合并控制塔不渲染证据徽标 ⇒ W4b 的四态只活在事件流里，用户看一列 merged 就以为交付验过了（「说验过」与「验过」再一次不分）",
-    apply: (s) => s.replace("'<span class=\"tag\" data-ev=\"' + esc(c.verified ?? 'none') + '\">' + esc(workerEvidenceLabel(c.verified)) + '</span>' +", "'' +"),
-    expectFail: "每一列都带证据态与花费账，且证据态有机器可查的 data-ev",
-  },
-  {
-    id: "worker-evidence-unknown-said-as-absent",
-    src: "src/renderer/projections.ts",
-    test: "tests/projections.test.ts",
-    desc: "「这一拍没带标记」折成「无验证拍」⇒ 旧会话与机器判出的零验证被说成同一件事（把不可知记成一个已知事实）",
-    apply: (s) => s.replace('  return "无回程标记";', '  return "无验证拍";'),
-    expectFail: "「没带标记」与「机器判出没有验证拍」是两句话，不许合并",
-  },
-  {
-    id: "worker-price-unknown-rendered-as-zero",
-    src: "src/renderer/projections.ts",
-    test: "tests/projections.test.ts",
-    desc: "价格不可知渲染成 $0.0000 ⇒ 面板上这条 worker 看着没花钱（§4.4.8 的 BYOK 底线：不可知不得记成免费）",
-    apply: (s) => s.replace('return spentUsd === null ? "价格未知" : "$" + spentUsd.toFixed(4);', 'return "$" + (spentUsd ?? 0).toFixed(4);'),
-    expectFail: "价格不可知说「价格未知」，真话 $0 才写 $0.0000（不可知≠免费）",
-  },
-  {
-    id: "panel-data-drops-agents",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-agents-view.test.ts",
-    desc: "projectPanelData 不再返回 agents ⇒ 子智能体页恒空态：投影仍被 agents.test 判绿，产品里却一屏看不见 worker（「能力已发货、产品路径绕过它」的渲染层版本）",
-    apply: (s) => s.replace("    agents: projectAgentPanel(events),", "    agents: [],"),
-    expectFail: "真实事件流经 projectPanelData 也能长出这一行",
-  },
-  // ---- 影响面挂到审阅页（#29：能力 1 的可见面；两侧都判——投影一层、行渲染一层）----
-  {
-    id: "impact-panel-never-attached",
-    src: "src/renderer/projections.ts",
-    test: "tests/panel-data.test.ts",
-    desc: "projectPanelData 算了影响面却不往文件行上挂 ⇒ 单测仍在判那个纯函数绿，面板一屏看不见（本仓第七次「两头断」的渲染层版）",
-    apply: (s) => s.replace("...(impacts.has(normRel(d.path)) ? { impact: impacts.get(normRel(d.path)) } : {}),",
-      "...(impacts.size < 0 ? { impact: impacts.get(normRel(d.path)) } : {}),"),
-    expectFail: "报告汇聚到被改文件：调用点数 + 波及文件数 + 帽标记",
-  },
-  {
-    id: "mount-no-followup-frame",
-    src: "src/renderer/history-window.js",
-    test: "tests/renderer-history-mount.test.ts",
-    desc: "本拍挂了新节点却不续下一拍 ⇒ 新挂的格永远没被测高（测高循环读的是上一拍的节点），changed 恒假、" +
-      "窗口停在估算窗。真窗口里表现为偶发「卡片头 8 / 盘上 25 行 / 距底 0px」且不抛异常——" +
-      "收敛被押在一个可能不会来的 scroll 事件上（首拍已把 scrollTop 钉到底，app 那句吸底换不来事件）",
-    apply: (s) => s.replace("if (changed || mountedNew) schedule();", "if (changed) schedule();"),
-    expectFail: "换不来一次 scroll 也必须收敛：挂载自己得续拍（真窗口那条偶发红的机制）",
-  },
-  {
-    id: "null-shell-silent-skip",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-history-live.test.ts",
-    desc: "buildUnit 交不出 .msg 壳时不再 console.error ⇒ 虚拟化只会按 0 高静默跳过那一格，" +
-      "事实丢失重新变得无人知晓（崩溃撤掉了，观测者也一起撤了就是另一种回归）",
-    apply: (s) => s.replace("console.error('转录单元渲染不出 .msg 壳：'", "void ('转录单元渲染不出 .msg 壳：'"),
-    expectFail: "单元渲染不出壳时必须出声：跳过是虚拟化的权利，静默不是",
-  },
-  {
-    id: "per-type-shell-blindspot",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-run-control.test.ts",
-    desc: "通用记录支把某一型提前 break 在卡外 ⇒ 那一型照样落盘、照样成单元，只是永远画不出壳。" +
-      "#31 那一族的通用形状（孤儿 tool_result 只是一个实例），逐型样例表是一次覆盖全部注册类型的观测者",
-    apply: (s) => s.replace("        finalizePending();\n        appendRecordCard(cardHost(), eventLabel(e), e);",
-      "        if (e.type === 'goal_set') break;\n        finalizePending();\n        appendRecordCard(cardHost(), eventLabel(e), e);"),
-    expectFail: "每种型单独进流：成了单元就必须有壳，没成单元只许那两型",
-  },
-  {
-    id: "per-type-double-shell",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-run-control.test.ts",
-    desc: "不变量的另一半：孤儿结果那支改成另开一个壳（`openMsg` 顶掉 `cardHost`）⇒ 同一格里长出两个 .msg，" +
-      "事实没丢、只是布局被撑高一格——正因它不崩也不少东西，比「零壳」更容易长期无人发现，所以逐格数壳要单独钉",
-    apply: (s) => s.replace("appendRecordCard(cardHost(), ok ?",
-      "appendRecordCard(openMsg('ai').querySelector('.msg-body'), ok ?"),
-    expectFail: "孤儿 tool_result 与重复投递：两份都要有壳，且原文在卡里",
-  },
-  {
+                      // ---- 影响面挂到审阅页（#29：能力 1 的可见面；两侧都判——投影一层、行渲染一层）----
+            {
     id: "impact-cause-existence-collapsed",
     src: "src/tools/impact-query.ts",
     test: "tests/impact-query.test.ts",
@@ -4648,316 +4264,9 @@ const MUTATIONS = [
     apply: (s) => s.replace("rgNegativeNote(\"跳过了 .gitignore 里的条目与 .git/node_modules/dist\")", "\"（本次跳过 .gitignore 与噪声目录）\""),
     expectFail: "零命中不许只回三个字：补「这不是仓库里没有」+ 逃生口，且字数有帽",
   },
-  {
-    id: "null-unit-eats-whole-window",
-    src: "src/renderer/history-window.js",
-    test: "tests/renderer-history-mount.test.ts",
-    desc: "某一格 renderUnit 返回 null 时不再跳过而是照旧 node.style.margin ⇒ TypeError 出在 rAF 回调里，" +
-      "挂载循环从那一格往前的单元全部不挂（#31 的真根因：贴底却只剩半截转录，且没有一道门报红）",
-    apply: (s) => s.replace("        if (!node) { heights[i] = 0; nullUnit = true; continue; }\n", ""),
-    expectFail: "某一格渲染不出壳 ⇒ 只许它自己缺席，不许把整窗拖死",
-  },
-  {
-    id: "orphan-tool-result-silent-drop",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-history-live.test.ts",
-    desc: "找不到可并入调用的 tool_result 退回直接 break ⇒ 那条结果从转录里无声消失（重复投递/归因不一致/崩溃少行三种可达），" +
-      "并连带让那一格产不出 .msg 壳",
-    apply: (s) => s.replace("if (!item) {\n          finalizePending();\n          appendRecordCard(cardHost(), ok ?",
-      "if (!item) { break; }\n        if (false) {\n          finalizePending();\n          appendRecordCard(cardHost(), ok ?"),
-    expectFail: "孤儿 tool_result 的分支不许静默 break：事实要落成卡，那一格要有壳",
-  },
-  {
-    id: "impact-panel-absent-as-zero",
-    src: "src/renderer/projections.ts",
-    test: "tests/panel-data.test.ts",
-    desc: "没有报告的文件行也写一份 0 ⇒ 设置关着时界面说「这里测过、波及 0 处」，那是假证据不是空态（缺席与 0 必须是两句话）",
-    apply: (s) => s.replace("...(impacts.has(normRel(d.path)) ? { impact: impacts.get(normRel(d.path)) } : {}),",
-      "...(impacts.has(normRel(d.path)) ? { impact: impacts.get(normRel(d.path)) } : { impact: { sites: 0, files: 0, truncated: false } }),"),
-    expectFail: "缺席 ≠ 波及 0：没有 impact_report 时字段必须缺席",
-  },
-  {
-    id: "impact-panel-join-key-not-normalised",
-    src: "src/renderer/projections.ts",
-    test: "tests/panel-data.test.ts",
-    desc: "join 键不归一（三个取料面各留各的原始路径）⇒ `./src/x.ts` 写的文件永远挂不上读数，面板看起来像「从没算过」而事实是键没对上。" +
-      "三支一起改：只改一支时另一支仍把数据喂成对得上（第一版就这么存活过——两侧数据同值的经典陷阱）",
-    apply: (s) => s
-      .replace("...(impacts.has(normRel(d.path)) ? { impact: impacts.get(normRel(d.path)) } : {}),",
-        "...(impacts.has(d.path) ? { impact: impacts.get(d.path) } : {}),")
-      .replace("files.add(normRel(s.file));", "files.add(s.file);")
-      .replace("out.set(normRel(e.file), { sites:", "out.set(e.file, { sites:"),
-    expectFail: "join 键归一",
-  },
-  {
-    id: "impact-projection-first-report-wins",
-    src: "src/renderer/projections.ts",
-    test: "tests/panel-data.test.ts",
-    desc: "同一文件多条报告取第一条 ⇒ 面板报的是被推翻的旧读数（改了三轮还给你看第一轮的影响面）",
-    apply: (s) => s.replace("    out.set(normRel(e.file), { sites:", "    out.has(normRel(e.file)) || out.set(normRel(e.file), { sites:"),
-    expectFail: "同一文件两条报告取最后一条",
-  },
-  {
-    id: "impact-projection-truncated-plus-dropped",
-    src: "src/renderer/projections.ts",
-    test: "tests/panel-data.test.ts",
-    desc: "撞帽标记丢掉 ⇒ 被截到 200 个调用点的符号显示成「波及 200 处」，把下限说成精确数",
-    apply: (s) => s.replace('const sites = i.sites + (i.truncated ? "+" : "");', 'const sites = i.sites * 1;'),
-    expectFail: "撞限量帽要说成 N+，不能报成精确数",
-  },
-  {
-    id: "impact-projection-sites-counted-as-files",
-    src: "src/renderer/projections.ts",
-    test: "tests/panel-data.test.ts",
-    desc: "调用点数改按去重后的文件数算 ⇒「波及 3 处」被说成 2 处（两个数必须各记各的：同文件多调用点是常见形状）",
-    apply: (s) => s.replace("sites: e.up.length, files: files.size", "sites: files.size, files: files.size"),
-    expectFail: "报告汇聚到被改文件：调用点数 + 波及文件数 + 帽标记",
-  },
-  {
-    id: "review-row-drops-impact-span",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-panels-real-data.test.ts",
-    desc: "投影算到了但行渲染不挂 ⇒ 审阅页只剩路径与 +行数的老形状，能力 1 那条「这个改动会影响哪里」在界面上又一次隐形",
-    apply: (s) => s.replace(`(f.impact ? '<span class="dim" data-impact="'`, `(false ? '<span class="dim" data-impact="'`),
-    expectFail: "审阅页那一行真把影响面挂上文件行",
-  },
-  {
-    id: "agents-view-waiting-said-as-running",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-agents-view.test.ts",
-    desc: "waiting_approval 投影成「运行中」⇒ 把卡住说成进展：worker 停在审批门等人，用户以为它在干活（长任务的可观测性正损在这一个词上）",
-    apply: (s) => s.replace('  if (status === "waiting_approval") return "等人审批";', '  if (status === "waiting_approval") return "运行中";'),
-    expectFail: "不与「运行中」混为一谈；未终态时长不写 0.0s",
-  },
-  {
-    id: "agents-view-token-cost-hard-zero",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-agents-view.test.ts",
-    desc: "每 worker 的 token 合计写死成 0 ⇒ 派活的成本在界面上永远是零（能力 9：并行/路由要能在效果和开销之间权衡，前提是每个 worker 的开销可见）",
-    apply: (s) => s.replace("String((c.usage ? c.usage.inputTokens + c.usage.outputTokens : 0)) + ' tok · '", "'0' + ' tok · '"),
-    expectFail: "状态中文化、token 合计、工具计数、任务与报告",
-  },
-  {
-    id: "worker-approval-raises-card-for-dead-worker",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-worker-approval.test.ts",
-    desc: "终态 worker 的未答审批也弹卡 ⇒ 给用户一个必然失败的按钮（§4.4.9 扫成 failed 的那一列早已无处路由）",
-    apply: (s) => s.replace('c.status !== "waiting_approval" && c.status !== "waiting_input" && c.status !== "running"', '(c.status as string) === "__never__"'),
-    expectFail: "已答的、已死的、主会话的，都不许再弹卡",
-  },
-  {
-    id: "worker-approval-payload-loses-approval-id",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-worker-approval.test.ts",
-    desc: "card_action 载荷不写 approval_id ⇒ 主进程退回拿 cardId 当审批 id（「approval:apr-1」查无此审批），用户点了批准而 worker 仍在等",
-    apply: (s) => s.replace("payload: { approval_id: ask.askId },", "payload: {},"),
-    expectFail: "停在审批门上的 worker 长出一张卡，且载荷指向这条审批本身",
-  },
-  {
-    id: "worker-approval-deny-sends-approve",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-worker-approval.test.ts",
-    desc: "拒绝也发 action=approve ⇒ 用户点「拒绝」却把命令放行了（审批门反向 = 权限面上最坏的一种错）",
-    apply: (s) => s.replace('action: approved ? "approve" : "reject",', 'action: "approve",'),
-    expectFail: "停在审批门上的 worker 长出一张卡，且载荷指向这条审批本身",
-  },
-  {
-    id: "panel-dirty-never-mentions-approval-events",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-worker-approval.test.ts",
-    desc: "审批事件不进面板脏集 ⇒ 「写租约相交」那处 approval_requested 不伴随 agent_status，卡要等下一个无关事件才出现（最长等到 120s 自动拒之后）",
-    apply: (s) => s.replace('  "approval_requested", "approval_resolved", "diff_comment",\n', ""),
-    expectFail: "审批事件在面板脏集里",
-  },
-  {
-    id: "worker-row-offers-cancel-to-every-column",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-agents-view.test.ts",
-    desc: "按钮规则退化成「所有列都给取消」⇒ 跑完的、已取消的列上挂一个点了必然失败的按钮（假出口比没有出口更坏：用户以为还能管）",
-    apply: (s) => s.replace('col.status === "running" || col.status === "waiting_approval" || col.status === "waiting_input"', 'col.status !== "__never__"'),
-    expectFail: "行内按钮只给还能做动作的列",
-  },
-  {
-    id: "worker-respawn-drops-the-write-mode",
-    src: "src/agent/recovery.ts",
-    test: "tests/renderer-worker-approval.test.ts",
-    // 09-24：mode 归一随重派载荷一起从渲染层搬进唯一映射（projections 不再自己造载荷）——
-    // 针脚跟着职责搬，不留在原处当恒绿假锚（原针脚 `col.mode === "write"` 已随重构消失）。
-    desc: "重派恒按 read 档重起 ⇒ 一个写盘 worker 被重派成只读调研：跑完了什么也写不了，而看着像「按原任务重来了」",
-    apply: (s) => s.replace('mode: spawned.mode === "write" ? "write" : "read",', 'mode: "read" as const,'),
-    expectFail: "取消发 agent_card/cancel，重派把原 spawn 参数带回 payload.respawn",
-  },
-  {
-    id: "worker-cancel-sends-an-unrouted-action",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-worker-approval.test.ts",
-    desc: "取消的 action 名写错 ⇒ card_action 落流后走到 handleCardAction 末尾的 return {ok:true}：用户看到「已请求取消」而 worker 继续跑、继续花钱",
-    apply: (s) => s.replace("    targetAgentId: col.agent_id,\n    action,\n  };", "    targetAgentId: col.agent_id,\n    action: action === \"cancel\" ? (\"stop\" as typeof action) : action,\n  };"),
-    expectFail: "取消发 agent_card/cancel，重派把原 spawn 参数带回 payload.respawn",
-  },
-  {
-    id: "worker-row-offers-resume-to-any-waiting-input",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-agents-view.test.ts",
-    desc: "把「等人回答」一律当成卡死并给「继续」⇒ resumeAgent 对非 stuck 的 worker 返回 false，用户点下去只得到一句「无卡死态」（把两种等待混为一谈＝把没那个状态说成有）",
-    apply: (s) => s.replace('col.status === "waiting_input" && col.reason === "stuck"', 'col.status === "waiting_input"'),
-    expectFail: "卡死那一列给「继续」并留「取消」",
-  },
-  {
-    id: "worker-resume-sends-an-unrouted-action-name",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-worker-approval.test.ts",
-    desc: "继续的 action 名不是 resume ⇒ card_action 落流后落到 handleCardAction 末尾的 return {ok:true}：暂停闸没人解，worker 停在原地而界面报「已请求继续」（花钱不等于在干活）",
-    apply: (s) => s.replace("    targetAgentId: col.agent_id,\n    action,\n  };", "    targetAgentId: col.agent_id,\n    action: action === \"resume\" ? (\"continue\" as typeof action) : action,\n  };"),
-    expectFail: "重派把原 spawn 参数带回 payload.respawn",
-  },
-  {
-    id: "skip-reason-shown-as-raw-token",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-skip-reason.test.ts",
-    desc: "跳过一行的标题退回原始 token（overlap）⇒ 无人值守任务为什么没跑，用户仍得展开卡片读 JSON（§12.2.6 承诺的中文标签又一次只落在代码里）",
-    apply: (s) => s.replace("return base + '：' + nm + skipReasonLabel(e.reason);", "return base + '：' + nm + String(e.reason);"),
-    expectFail: "跳过一行的标题说清是哪条任务、为什么跳过",
-  },
-  {
-    id: "empty-panel-shape-missing-a-field",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-skip-reason.test.ts",
-    desc: "PanelData 加了字段而 EMPTY_PANEL_DATA 没跟上 ⇒ 空态与投影形状分叉，渲染层按 undefined 索引就整块空掉（历史上加 agents 就得同时改两处）",
-    apply: (s) => s.replace("terminal: [], merge: [], agents: [] };", "terminal: [], merge: [] };"),
-    expectFail: "空态面板形状 = 投影形状",
-  },
-  {
-    id: "automation-failed-still-titled-completed",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-skip-reason.test.ts",
-    desc: "无人值守的一次运行不看 status 一律写「完成」⇒ 夜里跑砸了的定时任务在时间线上看着像成功（§12.2 完成回写的全部信息量被抹平）",
-    apply: (s) => s.replace("const failed = e.status === 'failed';", "const failed = false;"),
-    expectFail: "无人值守的一次运行：失败不顶着「完成」",
-  },
-  {
-    id: "automation-run-title-loses-task-name",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-skip-reason.test.ts",
-    desc: "标题不写是哪条任务 ⇒ 多条自动化并存时，用户无法判断哪条没跑、哪条砸了（事件里有 task_name 却不显示，属「只推不落」的读端版）",
-    apply: (s) => s.replace("(failed ? '定时任务失败：' : '定时任务完成：') + nm + why;", "(failed ? '定时任务失败：' : '定时任务完成：') + why;"),
-    expectFail: "无人值守的一次运行：失败不顶着「完成」",
-  },
-  {
-    id: "tz-note-emitted-for-every-task",
-    src: "src/main/scheduler.ts",
-    test: "tests/schedule-timezone-note.test.ts",
-    desc: "时区注记不再只在两值不同时给 ⇒ 每条任务都挂一句「本机/规则同一个时区」的废话，真需要提示的那条被淹掉（提示的可信度靠稀疏维持）",
-    apply: (s) => s.replace("} else if (norm !== sysTz) {", "} else {"),
-    expectFail: "只有时区与本机不同（或声明值非法）才给注记",
-  },
-  {
-    id: "tz-note-computed-but-never-rendered",
-    src: "src/renderer/app.js",
-    test: "tests/schedule-timezone-note.test.ts",
-    desc: "快照算好了注记而面板不打印 ⇒ 又一份「main 有字段、界面看不见」（timeZoneOffsetLabel 此前正是这样当了整轮孤儿）",
-    apply: (s) => s.replace("esc(scheduleCache.tzNotes[t.id])", "''"),
-    expectFail: "注记上屏：面板不会算完就丢",
-  },
-  // ---- 新建定时任务的表单面（#62）：形状映射、白名单、回条，一条都不能是摆设 ----
-  {
-    id: "sched-form-bypasses-the-kind-whitelist",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-schedule-form.test.ts",
-    desc: "提交时 form=false ⇒ 界面虽然只列四种 kind，主进程的表单白名单这道闸一次也没判过；表单与工具两条路从此不同闸（§12.2.1「表单只暴露四 kind」只剩下拉框的自觉）",
-    apply: (s) => s.replace("api.scheduleUpsert(schedFormPayload(fields), true)", "api.scheduleUpsert(schedFormPayload(fields), false)"),
-    expectFail: "提交带 form=true",
-  },
-  {
-    id: "sched-form-rejection-reported-as-success",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-schedule-form.test.ts",
-    desc: "只判 !r 不判 r.ok ⇒ 主进程把拒因写进回条而界面报「已创建」，用户以为任务设好了，其实盘上一条也没有（定时任务的失败天生无人值守，没人会当场发现）",
-    apply: (s) => s.replace("if (!r || r.ok !== true) {\n          const msg = (r && r.error) || '未知原因';", "if (!r) {\n          const msg = (r && r.error) || '未知原因';"),
-    expectFail: "被拒不报成功",
-  },
-  {
-    id: "sched-form-inserts-its-own-row",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-schedule-form.test.ts",
-    desc: "创建成功后不丢开缓存回读快照 ⇒ 面板那份列表由渲染层自己插一行：main 生成的 id/nextRunAt/时区都不在屏幕上，列表成了第二份事实源",
-    apply: (s) => s.replace("scheduleCache = null; // 列表一律回读快照", "void 0; // 列表一律回读快照"),
-    expectFail: "创建成功后回读快照重画，本地不插一行",
-  },
-  {
-    id: "sched-empty-state-back-to-todo-copy",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-schedule-form.test.ts",
-    desc: "空态退回「创建入口后续接…」⇒ 入口明明做好了却还告诉用户没有；留位文案一旦过期就是最便宜也最常见的假红源",
-    apply: (s) => s.replace("用输入框下方的「定时任务」芯片新建", "创建入口后续接 scheduleUpsert 表单白名单"),
-    expectFail: "空态不再写「后续接」",
-  },
-  {
-    id: "sched-daily-row-reads-a-field-main-never-writes",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-schedule-form.test.ts",
-    desc: "daily 行读 sc.at（main 存的是 sc.time）⇒ 面板写「每天 」空尾巴：任务到底几点跑，屏幕上看不出来。这条正是本锚点落地前产品里的真状态",
-    apply: (s) => s.replace("if (sc.kind === 'daily') return '每天 ' + hhmm(sc.time);", "if (sc.kind === 'daily') return '每天 ' + hhmm(sc.at);"),
-    expectFail: "每天/每周把时刻与日子写在行上",
-  },
-  {
-    id: "sched-weekly-row-drops-days-and-time",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-schedule-form.test.ts",
-    desc: "weekly 行只写「每周」丢掉日子与时刻 ⇒ 用户设的「周一三五 07:30」在列表里塌成「每周」，多条周任务长得一模一样",
-    apply: (s) => s.replace("if (sc.kind === 'weekly') return '每周 ' + (sc.weekdays || []).map(d => WEEKDAY_CN[d] ?? '?').join('、') + ' ' + hhmm(sc.time);", "if (sc.kind === 'weekly') return '每周';"),
-    expectFail: "每天/每周把时刻与日子写在行上",
-  },
-  {
-    id: "sched-interval-empty-collapses-to-zero",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-schedule-form.test.ts",
-    desc: "留空的分钟数直接 Number('') === 0 ⇒ 载荷带着 everyMinutes=0；main 若哪天把下限挪位，就是一条每 0 分钟触发的任务（每次都花真钱）",
-    apply: (s) => s.replace("f.everyMinutes.trim() === \"\" ? undefined : Number(f.everyMinutes)", "Number(f.everyMinutes)"),
-    expectFail: "留空不等于 0",
-  },
-  {
-    id: "sched-form-kinds-drift-from-mains-whitelist",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-schedule-form.test.ts",
-    desc: "渲染层自己往四 kind 里加一种 ⇒ 表单出现 main 拒收的种类，用户每次提交都被打回（两份清单必然漂移，对表就是为了让它漂不了）",
-    apply: (s) => s.replace("export const SCHED_FORM_KINDS = [\"once\", \"interval\", \"daily\", \"weekly\"] as const;", "export const SCHED_FORM_KINDS = [\"once\", \"interval\", \"daily\", \"weekly\", \"hourly\"] as const;"),
-    expectFail: "种类清单与 main 的 FORM_KINDS 逐字同集",
-  },
-  {
-    id: "sched-default-kind-picked-by-taste-not-by-cost",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-schedule-form.test.ts",
-    desc: "缺省种类从「跑一次的 once」改成会循环的 interval ⇒ 用户没动过下拉框就设下一条反复触发的任务；缺省值该站在最便宜那一侧",
-    apply: (s) => s.replace("'<form class=\"goal-form sched-form\" data-kind=\"' + esc(SCHED_FORM_KINDS[0]) + '\">'", "'<form class=\"goal-form sched-form\" data-kind=\"interval\">'"),
-    expectFail: "表单只开 main 的四种种类，缺省选中最便宜的 once",
-  },
-  {
-    id: "sched-toggle-revalidated-against-form-kinds",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-schedule-form.test.ts",
-    desc: "只改 enabled 开关也带 form=true ⇒ 已存在的 hourly/monthly/custom 任务（工具面或旧数据）再也关不掉：想停用一条危险任务的人被白名单挡在门外",
-    apply: (s) => s.replace("r = await api.scheduleUpsert({ ...task, enabled: !task.enabled }, false);", "r = await api.scheduleUpsert({ ...task, enabled: !task.enabled }, true);"),
-    expectFail: "停用/启用不被表单白名单二次审判",
-  },
-  {
-    id: "sched-row-action-swallow-the-reply",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-schedule-form.test.ts",
-    desc: "run/del 的回条不判 ⇒ 点「删除」失败照样弹「已删除」，行在下一轮回读后又长回来；用户以为删掉了，任务继续按天花钱",
-    apply: (s) => s.replace("if (r && r.ok === false) toast('未执行：' + (r.error || '未知原因'));", "if (false) toast('未执行：');"),
-    expectFail: "立即运行/删除：ok=false 不许报成功",
-  },
-  // ---- 运行历史六态筛选（§12.2.6）：筛在 main，界面只存「选了哪个状态」这一份 UI 态 ----
-  {
-    id: "sched-history-filter-is-a-dummy-control",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-schedule-history.test.ts",
-    desc: "要快照时恒传 all ⇒ 下拉能选、选完什么也不变：一个只会自我安慰的控件比没有控件更坏（用户以为已经筛过了）",
-    apply: (s) => s.replace("api.scheduleSnapshot(schedHistFilter)", "api.scheduleSnapshot('all')"),
-    expectFail: "要快照时把当前筛选值递过去",
-  },
-  {
+                                                    // ---- 新建定时任务的表单面（#62）：形状映射、白名单、回条，一条都不能是摆设 ----
+                        // ---- 运行历史六态筛选（§12.2.6）：筛在 main，界面只存「选了哪个状态」这一份 UI 态 ----
+    {
     id: "snapshot-ignores-the-history-filter",
     src: "src/main/scheduler.ts",
     test: "tests/schedule.test.ts",
@@ -4965,31 +4274,7 @@ const MUTATIONS = [
     apply: (s) => s.replace("history: Scheduler.filterHistory(history, historyFilter),", "history,"),
     expectFail: "snapshot(状态) 真按状态筛",
   },
-  {
-    id: "history-row-prints-the-raw-state-token",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-schedule-history.test.ts",
-    desc: "行上退回印 succeeded / skipped ⇒ §12.2.6 承诺的「给人读的运行历史」又回到机器 token（同一族的 skipReasonLabel 已栽过一次）",
-    apply: (s) => s.replace("esc(HISTORY_STATE_LABELS[h.state] ?? h.state)", "esc(h.state)"),
-    expectFail: "行上写中文状态、段头带筛选下拉且当前值选中",
-  },
-  {
-    id: "sched-filter-refilters-the-stale-window",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-schedule-history.test.ts",
-    desc: "换筛选不清缓存、直接在本地那份上滤 ⇒ 只有最近 12 条参与，某状态整段落在窗口外时显示「没有记录」：假空，而 main 的筛选成了摆设",
-    apply: (s) => s.replace("    scheduleCache = null;\n    await loadSchedule(true);", "    await loadSchedule(true);"),
-    expectFail: "换筛选 = 丢开缓存 + 重新要快照 + 重画",
-  },
-  {
-    id: "sched-filter-accepts-any-string",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-schedule-history.test.ts",
-    desc: "界面态收下任意字符串 ⇒ 一个认不出的值让段头写「只看 undefined」，筛选器与清单各说各话（筛选值必须落在同一份 HISTORY_STATES 里）",
-    apply: (s) => s.replace("if (typeof v !== 'string' || !HISTORY_STATES.includes(v) || v === schedHistFilter) return;", "if (typeof v !== 'string' || v === schedHistFilter) return;"),
-    expectFail: "换筛选 = 丢开缓存 + 重新要快照 + 重画",
-  },
-  {
+        {
     id: "unknown-history-filter-becomes-a-real-state",
     src: "src/main/scheduler.ts",
     test: "tests/schedule.test.ts",
@@ -4997,214 +4282,11 @@ const MUTATIONS = [
     apply: (s) => s.replace("(HISTORY_FILTERS as readonly string[]).includes(raw)", "true"),
     expectFail: "snapshot(状态) 真按状态筛",
   },
-  {
-    id: "sched-filter-lists-drift-from-main",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-schedule-history.test.ts",
-    desc: "渲染层往筛选清单里多加一项 ⇒ 下拉出现 main 不认的状态，选中它要么被静默归一要么筛出空（两份清单必然漂移，与 FORM_KINDS 同一条规矩）",
-    apply: (s) => s.replace("\"skipped\", \"cancelled\"] as const;", "\"skipped\", \"cancelled\", \"expired\"] as const;"),
-    expectFail: "筛选值清单与 main 的 HISTORY_FILTERS 逐字同集",
-  },
-  // ---- git 面板的评审读端（#25 补齐）：面板那一列 = 合并控制塔的列本身 ----
-  {
-    id: "merge-panel-trims-the-column-again",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-merge-review.test.ts",
-    desc: "把列重新裁成 6 字段 ⇒ 补丁 / 安全发现 / 评论又到不了界面（投影算得出来、屏幕一片空白，正是本仓最贵的那族缺陷）",
-    apply: (s) => s.replace(
-      "merge: projectMergeTower(events),",
-      "merge: projectMergeTower(events).map((c) => ({ agent_id: c.agent_id, task: c.task, status: c.status, outcome: c.outcome, verified: c.verified, spentUsd: c.spentUsd })),",
-    ),
-    expectFail: "补丁快照给的是最新那份",
-  },
-  {
-    id: "merge-panel-shows-the-overridden-patch",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-merge-review.test.ts",
-    desc: "取 diffs[0] ⇒ 评审闭环 v1→v2 里给用户看的是已被推翻的那版：审的是旧代码，改回来的却是新代码",
-    apply: (s) => s.replace("c.diffs[c.diffs.length - 1]", "c.diffs[0]"),
-    expectFail: "补丁快照给的是最新那份",
-  },
-  {
-    id: "merge-panel-lists-no-findings",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-merge-review.test.ts",
-    desc: "发现项一律截成 0 条（汇总数字还在）⇒ 用户看到「安全报告 2 项」却一条也点不到，只能自己去翻代码",
-    apply: (s) => s.replace("rep.findings.slice(0, 8).map(", "rep.findings.slice(0, 0).map("),
-    expectFail: "安全报告：汇总数、逐项 path:line 与「模型未复核」都上屏",
-  },
-  {
-    id: "merge-panel-claims-llm-reviewed",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-merge-review.test.ts",
-    desc: "复核标记不看 rep.llmReviewed 一律写「模型已复核」⇒ 把「只有规则扫过」说成「模型看过」，正是本仓最忌的把不可知记成已知",
-    apply: (s) => s.replace("(rep.llmReviewed ? '模型已复核' : '仅规则扫描（模型未复核）')", "'模型已复核'"),
-    expectFail: "安全报告：汇总数、逐项 path:line 与「模型未复核」都上屏",
-  },
-  {
-    id: "merge-panel-drops-review-comments",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-merge-review.test.ts",
-    desc: "评论不上屏 ⇒ 用户写完评审不知道有没有送达、diff_comment 事件成了只写不读的账",
-    apply: (s) => s.replace("c.comments.slice(0, 20).map(", "c.comments.slice(0, 0).map("),
-    expectFail: "行级评论投影上屏",
-  },
-  {
-    id: "merge-panel-bound-count-never-advertised",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-merge-review.test.ts",
-    desc: "截断后不说「另有 N 条」⇒ 界面把「我们只画了 8 条」演成「一共就 8 条」，有界性必须自带诚实说明",
-    apply: (s) => s.replace("String(rep.findings.length - 8)", '"0"'),
-    expectFail: "长列表有界",
-  },
-  {
-    id: "merge-empty-state-claims-panel-unwired",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-merge-review.test.ts",
-    desc: "空态退回「Git 面板尚未接入」⇒ 读端已通却告诉用户没有面板；过期留位文案是最便宜也最常见的假绿源",
-    apply: (s) => s.replace("本会话没有 write worker", "Git 面板尚未接入"),
-    expectFail: "空态文案不再谎称「面板尚未接入」",
-  },
-  // ---- 行级评审写端（#59 第四条动作 comment）----
-  {
-    id: "patch-segment-path-ignores-plus-side",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-line-comment-write.test.ts",
-    desc: "改名时不用 +++ 侧覆盖 path ⇒ 评论挂到旧路径上，main 原样注入 worker（它只判 path 非空）",
-    apply: (s) => s.replace("cur.path = plus[1];", "cur.path = cur.path;"),
-    expectFail: "两份文件头不一致时以 +++ 为准",
-  },
-  {
-    id: "patch-segment-invents-filename-for-bare-hunk",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-line-comment-write.test.ts",
-    desc: "没有文件头的 hunk 被安上一个假文件名 ⇒ 界面给一条无名补丁长出评论入口，坐标是编的",
-    apply: (s) => s.replace('cur = open("");', 'cur = open("unknown.ts");'),
-    expectFail: "光秃秃的 hunk（没有文件头）成一段空 path",
-  },
-  {
-    id: "comment-action-name-drifts",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-line-comment-write.test.ts",
-    desc: "action 名写错一字 ⇒ main 的 comment 分支永不命中，动作静默落成一条无人路由的 card_action",
-    apply: (s) => s.replace('action: "comment",', 'action: "review_comment",'),
-    expectFail: "cardActionForComment 组出 main 要的四面",
-  },
-  {
-    id: "comment-reply-ok-false-treated-as-delivered",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-line-comment-write.test.ts",
-    desc: "只判 !r 不判 r.ok ⇒ main 的拒绝被当成功，评审意见蒸发而界面一声不响",
-    apply: (s) => s.replace("if (!r || r.ok !== true) { cmtFail(", "if (!r) { cmtFail("),
-    expectFail: "main 拒（ok:false）⇒ 判因原样回显成未送达",
-  },
-  {
-    id: "comment-injected-false-claims-delivered",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-line-comment-write.test.ts",
-    desc: "injected:false（只落流、worker 已不再读）被说成「已送进子流」⇒ 把没送达说成送达",
-    apply: (s) => s.replace("r.injected === false", "r.injected === undefined"),
-    expectFail: "injected=false ⇒ 说「只落进事件流、它已不再读」",
-  },
-  {
-    id: "comment-anchor-accepts-line-zero",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-line-comment-write.test.ts",
-    desc: "行号只判整数不判 ≥1 ⇒ 弹出一个必然被 main 拒的框，用户白填一段意见",
-    apply: (s) => s.replace("!Number.isInteger(line) || line < 1", "!Number.isInteger(line)"),
-    expectFail: "行号不是整数 ⇒ 同样不弹",
-  },
-  {
-    id: "git-panel-drops-anchor-mode",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-merge-review.test.ts",
-    desc: "补丁不再要 anchors 形态 ⇒ 行号与「评」整片消失，而读端看着一切正常（写端入口没了）",
-    apply: (s) => s.replace(", { anchors: true, comment: canReview })", ")"),
-    expectFail: "补丁按 anchors 形态着色",
-  },
-  {
-    id: "diff-comment-missing-from-panel-dirty-set",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-line-comment-write.test.ts",
-    desc: "脏集漏掉 diff_comment ⇒ 送出去的评论要等下一个无关事件才上屏，甚至永远等不到",
-    apply: (s) => s.replace('"approval_resolved", "diff_comment",', '"approval_resolved",'),
-    expectFail: "diff_comment 在面板脏集里",
-  },
-  // ---- 面板重绘的用户态保全（4dd11d6）----
-  {
-    id: "panel-state-reads-attribute-not-live-property",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-panel-state.test.ts",
-    desc: "抓展开态去读 hasAttribute('open') ⇒ 用户手点开的从不改属性，等于什么都没抓到（静默恒空集）",
-    apply: (s) => s.replace("if (d.open) opened.push(i)", "if (d.hasAttribute('open')) opened.push(i)"),
-    expectFail: "抓到的是用户实时展开的那几项",
-  },
-  {
-    id: "panel-state-restore-crashes-on-shorter-list",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-panel-state.test.ts",
-    desc: "恢复时不判越界 ⇒ 重绘后折叠块变少（worker 列被撤）就在渲染中途抛，整块面板挂",
-    apply: (s) => s.replace("const d = list[i]; if (d) d.open = true;", "list[i].open = true;"),
-    expectFail: "重绘后折叠块变少",
-  },
-  {
-    id: "render-side-rewrites-without-restoring",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-panel-state.test.ts",
-    desc: "抓了不还原：重写照旧 innerHTML 全写，补丁照样塌回去（这一对里只剩一半 = 装饰性代码）",
-    apply: (s) => s.replace("restorePanelState(section, kept);", ";"),
-    expectFail: "renderSide 的重写分支成对使用这一对",
-  },
-  {
-    id: "render-side-captures-nothing",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-panel-state.test.ts",
-    desc: "压根没抓（快照恒 null）⇒ restore 走空返回，界面回到默认折叠——与「没做」完全等价",
-    apply: (s) => s.replace("const kept = capturePanelState(section);", "const kept = null;"),
-    expectFail: "renderSide 的重写分支成对使用这一对",
-  },
-  // ---- 已收尾那一列不给评论入口（f83abe3）----
-  {
-    id: "dead-column-rule-forgets-rejected-and-cleaned",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-line-comment-write.test.ts",
-    desc: "收尾三态只认出 merged ⇒ rejected / cleaned 那一列仍长出一个必然失败的「送给它」",
-    apply: (s) => s.replace('outcome !== "merged" && outcome !== "rejected" && outcome !== "cleaned"', 'outcome !== "merged"'),
-    expectFail: "commentReadsBack：只有工作树已收尾的三态读不到",
-  },
-  {
-    id: "git-panel-ignores-dead-column-rule",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-merge-review.test.ts",
-    desc: "规则写好了但界面不查（恒给入口）⇒ 与「没做」一字不差，而投影侧的单测仍是绿的",
-    apply: (s) => s.replace("const canReview = commentReadsBack(c.outcome);", "const canReview = true;"),
-    expectFail: "合并决策已定（merged / rejected / cleaned）",
-  },
-  {
-    id: "git-panel-drops-comment-option",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-merge-review.test.ts",
-    desc: "不把 canReview 递给着色器 ⇒ 判定算了但没用上，已收尾那一列照旧长按钮",
-    apply: (s) => s.replace("{ anchors: true, comment: canReview }", "{ anchors: true }"),
-    expectFail: "合并决策已定（merged / rejected / cleaned）",
-  },
-  {
-    id: "dead-column-hint-drops-the-way-out",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-merge-review.test.ts",
-    desc: "只说「读不到」不说出路 ⇒ 用户看见一句判决却没有下一步（撤入口必须同时给路）",
-    apply: (s) => s.replace("要改就按原任务重派一列。", "。"),
-    expectFail: "合并决策已定（merged / rejected / cleaned）",
-  },
-  // ---- 已知字段名单由契约导出（606fe7f）----
-  {
-    id: "manifest-field-list-forgot-notes-again",
-    src: "src/main/updater.ts",
-    test: "tests/updater.test.ts",
-    desc: "名单与 interface 分家的标准下场：notes 没进填满式 Record ⇒ 合法 manifest 被判「未知字段」整条拒收",
-    apply: (s) => s.replace("{ version: true, url: true, notes: true };", "{ version: true, url: true };"),
-    expectFail: "checkUpdate：有新版 → available",
-  },
+    // ---- git 面板的评审读端（#25 补齐）：面板那一列 = 合并控制塔的列本身 ----
+                // ---- 行级评审写端（#59 第四条动作 comment）----
+                  // ---- 面板重绘的用户态保全（4dd11d6）----
+          // ---- 已收尾那一列不给评论入口（f83abe3）----
+          // ---- 已知字段名单由契约导出（606fe7f）----
   {
     id: "lsp-known-fields-forgot-diagnostics",
     src: "src/agent/plugins/types.ts",
@@ -5234,39 +4316,7 @@ const MUTATIONS = [
     expectFail: "写序守恒",
   },
   // ---- 残留工作树从盘上到屏上（39d76bc）----
-  {
-    id: "orphan-zero-state-drops-its-source-key",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-orphan-worktrees.test.ts",
-    desc: "「确实没有」那一支丢掉 data-wt ⇒ 屏上文案还在，但再也分不开「写没有」与「压根没读」",
-    apply: (s) => s.replace("<div class=\"wt-orphan\" data-wt=\"0\">本机没有残留工作树", "<div class=\"wt-orphan\">本机没有残留工作树"),
-    expectFail: "没数过就一句都不写",
-  },
-  {
-    id: "orphan-count-failure-silenced-as-none",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-orphan-worktrees.test.ts",
-    desc: "数不出来被并给「没数过」那一支 ⇒ 假空：扫描失败静默长成「本机没有残留工作树」",
-    apply: (s) => s.replace("  if (!orphanWorktrees) return '';", "  if (!orphanWorktrees || !orphanWorktrees.orphans) return '';"),
-    expectFail: "数不出来就说数不出来",
-  },
-  {
-    id: "orphan-block-gets-a-clean-button",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-orphan-worktrees.test.ts",
-    desc: "给未裁决的清理动作长出一个按钮（清理 = 连 agent/*- 分支一起 branch -D 且不判是否已合并）",
-    apply: (s) => s.replace("<p class=\"mc-hint\">界面上不给清理按钮", "<p class=\"mc-hint\"><button data-act=\"wt-clean\">清理</button>界面上不给清理按钮"),
-    expectFail: "且一个按钮也不给",
-  },
-  {
-    id: "orphan-block-wired-into-one-path-only",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-orphan-worktrees.test.ts",
-    desc: "只接列表态、空态漏接 ⇒ 会话没派过 write worker 时（恰恰是最需要看见残留的一刻）这一段永远不出现",
-    apply: (s) => s.replace("orphanBlockHTML() +\n", "\"\" +\n"),
-    expectFail: "gitViewHTML 的两条返回路径都带上这一段",
-  },
-  // ---- 原子写收口（5ed68bf）：临时名唯一性 = 同进程并发写不撞名 ----
+          // ---- 原子写收口（5ed68bf）：临时名唯一性 = 同进程并发写不撞名 ----
   {
     id: "atomic-tmp-name-not-unique-per-process",
     src: "src/atomic-write.ts",
@@ -5283,85 +4333,8 @@ const MUTATIONS = [
     apply: (s) => s.replace("    await unlink(tmp).catch(() => {});\n", ""),
     expectFail: "写失败时 tmp 被清理，且不截断既有密文存储",
   },
-  {
-    // 分辨力在 HEAD 的隔离 worktree 里实测过（另一会话占着写窗口，本轮不在主树跑本工具）：
-    // 去掉 injected 一位后回条变成 {ok:true}，新判据当场红在「未收尾的 worker：评论应真的进子流」。
-    id: "card-action-comment-drops-injected",
-    src: "src/main/agent-runner.ts",
-    test: "tests/m3b.test.ts",
-    desc: "IPC 回条把 injected 吞掉（= 曾经的样子）⇒ 界面只剩「已送进子流」可说，把没送达说成送达",
-    apply: (s) => s.replace(
-      'return { ok: true, injected: r.injected, ...(r.injected || !r.error ? {} : { error: r.error }) };',
-      'return { ok: true, ...(r.injected || !r.error ? {} : { error: r.error }) };',
-    ),
-    expectFail: "IPC 回条带得出 injected（映射行有观测者）",
-  },
-  /* ── 辅助对话面板（§10.8，10fece3）：形状由 vm 切片判，八条各钉一个「看得见但说谎」的落点 ── */
-  {
-    id: "sc-promote-anchor-drops-event-id",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-sidechat-view.test.ts",
-    desc: "「提升」按钮不带 data-sc-ev ⇒ 点得动却送不出坐标：提升哪一条旁路消息，界面自己也不知道",
-    apply: (s) => s.replace("data-sc-act=\"promote\" data-sc-ev=\"' + String(lastAns) + '\">提升最近一条答", "data-sc-act=\"promote\">提升最近一条答"),
-    expectFail: "一行一条问答，带行号出处与提升锚点",
-  },
-  {
-    id: "sc-promote-anchor-points-at-oldest-answer",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-sidechat-view.test.ts",
-    desc: "找「最近一条答案」从头部扫 ⇒ 锚到最早那条：用户刚拿到的结论提升不了，提升出去的是半小时前的旧话",
-    apply: (s) => s.replace("for (let i = list.length - 1; i >= 0; i--) {", "for (let i = 0; i < list.length; i++) {"),
-    expectFail: "一行一条问答，带行号出处与提升锚点",
-  },
-  {
-    id: "sc-zero-usage-printed-as-measured",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-sidechat-view.test.ts",
-    desc: "去掉「三项全零整段不写」⇒ 一条没问过的旁路显示「用量 0 次 · 进出 0/0 tok」：把没量过说成量过（本仓点名的把不可知记成已知）",
-    apply: (s) => s.replace("  if (n === 0 && i === 0 && o === 0) return '';\n", ""),
-    expectFail: "一次用量也没有时整段不写",
-  },
-  {
-    id: "sc-session-cap-ignores-limit",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-sidechat-view.test.ts",
-    desc: "会话数折了但列表照全出 ⇒ 同时写着「另有 1 个未列出」：折叠计数与实际渲染不一致，那个数字就成了装饰",
-    apply: (s) => s.replace("? sessions.slice(0, SC_SESSION_LIMIT).map(s => scSessionHTML(s, promoted)).join('') +", "? sessions.map(s => scSessionHTML(s, promoted)).join('') +"),
-    expectFail: "有界性折得看得见",
-  },
-  {
-    id: "sc-msg-cap-ignores-limit",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-sidechat-view.test.ts",
-    desc: "每会话消息数不折 ⇒ 面板变成转录查看器（一屏几百条），且「另有 N 条未列出」永远不再出现：长会话在界面上静默消失",
-    apply: (s) => s.replace("  const shown = all.slice(-SC_MSG_LIMIT);", "  const shown = all;"),
-    expectFail: "有界性折得看得见",
-  },
-  {
-    id: "sc-text-trim-drops-ellipsis",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-sidechat-view.test.ts",
-    desc: "单条文本不截断 ⇒ 一条 300 字的旁路回答整段铺进右栏；截断标记「…」一旦不在，用户也无从知道后面还有",
-    apply: (s) => s.replace("  return s.length > SC_TEXT_LIMIT ? s.slice(0, SC_TEXT_LIMIT) + '…' : s;", "  return s;"),
-    expectFail: "有界性折得看得见",
-  },
-  {
-    id: "sc-error-state-merged-into-empty",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-sidechat-view.test.ts",
-    desc: "读失败那一支并进空态 ⇒ 快照读不到时告诉用户「还没有旁路会话」：把失败说成没有，是最难被发现的一种假空",
-    apply: (s) => s.replace("  if (sidechatSnap.error) return '<p class=\"sched-empty\">旁路快照读取失败：' + esc(sidechatSnap.error) + '</p>';\n", ""),
-    expectFail: "三态各说各的话",
-  },
-  {
-    id: "sc-promoted-badge-never-shown",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-sidechat-view.test.ts",
-    desc: "徽标不随 origin 反向投影出 ⇒ 提升过的消息与没提升的长得一样，用户只能重复提升同一条",
-    apply: (s) => s.replace("(promoted ? '<span class=\"sc-badge\">已提升</span>' : '')", "''"),
-    expectFail: "已提升徽标来自 origin 反向投影",
-  },
-  // ---- 停止原因第一次有读者（§3.3 / outputs/stop-reason-blindspot-2026-09-21.md）----
+    /* ── 辅助对话面板（§10.8，10fece3）：形状由 vm 切片判，八条各钉一个「看得见但说谎」的落点 ── */
+                  // ---- 停止原因第一次有读者（§3.3 / outputs/stop-reason-blindspot-2026-09-21.md）----
   {
     id: "stop-reason-keeps-wire-text",
     src: "src/providers/stop-reason.ts",
@@ -5550,31 +4523,7 @@ const MUTATIONS = [
   },
   // ---- 事件类型清单三面一致闸（tests/event-type-coverage.test.ts，2026-09-21）----
   // 这张闸本身也是「按类型白名单取料」的东西：没有锚点看着，它一样会静默塌成恒真。
-  {
-    id: "registry-drops-a-card-type",
-    src: "src/events/index.ts",
-    test: "tests/event-type-coverage.test.ts",
-    desc: "KNOWN_TYPES 少一个联合成员 ⇒ append 当场拒收这条事件（落不了盘，后面三面全看不见它）",
-    apply: (s) => s.replace('  "turn_truncated",\n', ""),
-    expectFail: "注册表与联合类型同集合（多一个少一个都算漂移）",
-  },
-  {
-    id: "card-type-without-label",
-    src: "src/renderer/app.js",
-    test: "tests/event-type-coverage.test.ts",
-    desc: "删掉一条卡片标签 ⇒ 标题退回原始英文类型名（正是 2026-09-21 turn_truncated 撞的那件事）",
-    apply: (s) => s.replace("    turn_truncated: '助手输出被截断',\n", ""),
-    expectFail: "每个卡片型事件都有地方接住它：EVENT_LABELS 或卡片 switch 的单独 case",
-  },
-  {
-    id: "label-for-a-non-card-type",
-    src: "src/renderer/app.js",
-    test: "tests/event-type-coverage.test.ts",
-    desc: "给一个不会成卡片的类型留标签 ⇒ 这一条永远读不到，标签表开始攒尸体（反向也判）",
-    apply: (s) => s.replace("const EVENT_LABELS = {", "const EVENT_LABELS = {\n  usage: '用量',"),
-    expectFail: "EVENT_LABELS 里没有死条目（不为非卡片类型留标签）",
-  },
-  // ---- 停止原因的另外两支读数：非流式分支与 prompt 级拦截（2026-09-21 第二次实测）----
+        // ---- 停止原因的另外两支读数：非流式分支与 prompt 级拦截（2026-09-21 第二次实测）----
   {
     id: "openai-nonstream-blind",
     src: "src/providers/openai.ts",
@@ -5642,23 +4591,7 @@ const MUTATIONS = [
     expectFail: "「对着红字改」只在该说的证据态出现：absent 与 stale 手上根本没有红字",
   },
   // ---- 截断卡的标题面（tests/renderer-truncation-label.test.ts，2026-09-21）----
-  {
-    id: "renderer-merges-truncation-causes",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-truncation-label.test.ts",
-    desc: "两种原因并成一句 ⇒ 用户看不出该续写同一句还是换个说法绕开",
-    apply: (s) => s.replace("e.outcome === 'content_blocked' ? '被内容策略中止' : '没写完就被收走'", "'没写完就被收走'"),
-    expectFail: "两种原因各说各的（下一步不同，不许并成一句）",
-  },
-  {
-    id: "renderer-hides-truncation-token-reading",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-truncation-label.test.ts",
-    desc: "不落已用输出 token ⇒ 标题只剩形容词，离帽多远这个唯一可行动的数没了",
-    apply: (s) => s.replace("'，已用 ' + String(e.output_tokens) + ' 输出 token'", "''"),
-    expectFail: "线上停止原因与已用输出 token 都上屏（离帽多远是唯一可行动的数字）",
-  },
-  {
+      {
     id: "worker-prose-unattributed",
     src: "src/agent/worker-projection.ts",
     test: "tests/worker-attribution.test.ts",
@@ -5716,105 +4649,9 @@ const MUTATIONS = [
     expectFail: "末尾放子流大块：不吃保护区预算，老结果 q 仍受保护",
   },
   // ---- 子流准入的界面那一半（projections + 两条渲染器，2026-09-22）----
-  {
-    id: "renderer-live-draws-child-detail",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-history-live.test.ts",
-    desc: "live 那支不看归因 ⇒ 跑动中 worker 的正文与工具直接落进父的消息泡（刷新前看得见的那半边）",
-    apply: (s) => s.replace("    if (!entersMainConversation(e)) return;\n", ""),
-    expectFail: "live：worker 的执行细节不落地",
-  },
-  {
-    id: "renderer-replay-draws-child-detail",
-    src: "src/renderer/history-window.js",
-    test: "tests/history-window.test.ts",
-    desc: "重放那支不看归因 ⇒ 同一份流刷新后凭空长出一排 worker 单元（与上一条正是「两支各漏一边」的形状）",
-    apply: (s) => s.replace("    if (!entersMainConversation(e)) return;\n", ""),
-    expectFail: "worker 子流的执行细节（正文/工具/错误/截断）根本不进单元集",
-  },
-  {
-    id: "renderer-hides-worker-spend",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-child-admission.test.ts",
-    desc: "把 usage 一并藏进子流 ⇒ 底栏少报 worker 花的真钱（隐藏执行细节不许顺手隐藏它的成本）",
-    apply: (s) => s.replace('"tool_result", "error", "turn_truncated"]);', '"tool_result", "error", "turn_truncated", "usage"]);'),
-    expectFail: "usage 带归因仍进主流",
-  },
-  {
-    id: "admission-hides-unattributed-prose",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-child-admission.test.ts",
-    desc: "判据反转成「不带归因就不进主流」⇒ 把父会话自己的正文整块藏掉，主流只剩卡片",
-    apply: (s) => s.replace('if (typeof e.agent_id !== "string" || e.agent_id === "") return true;', 'if (typeof e.agent_id !== "string" || e.agent_id === "") return false;'),
-    expectFail: "判据永不藏掉不带归因的事件",
-  },
-  {
-    id: "admission-treats-empty-agent-id-as-child",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-child-admission.test.ts",
-    desc: "漏掉空串归因 ⇒ legacy 流（agent_id 曾可选、历史盘上是空串）被整段当成子流藏掉",
-    apply: (s) => s.replace('if (typeof e.agent_id !== "string" || e.agent_id === "") return true;', 'if (typeof e.agent_id !== "string") return true;'),
-    expectFail: "空串归因按「不带」处理",
-  },
-  // ---- 工具摘要政策的一份实现（projections.toolArgsSummary，2026-09-22）----
-  {
-    id: "panel-recent-drops-tool-target",
-    src: "src/renderer/projections.ts",
-    test: "tests/tool-args-summary.test.ts",
-    desc: "右栏 recent 退回只写工具名 ⇒ 准入轮把 worker 的 tool_call 摘出主流后，「它碰过哪个文件」无处可读",
-    apply: (s) => s.replace('"🔧 " + e.name + " · " + toolArgsSummary(e.args)', '"🔧 " + e.name'),
-    expectFail: "右栏 worker 行的 recent 带得上目标",
-  },
-  {
-    id: "app-reinlines-its-own-tool-summary",
-    src: "src/renderer/app.js",
-    test: "tests/tool-args-summary.test.ts",
-    desc: "主转录那行自己抄一份取料 ⇒ 两份政策，一份记得 path、另一份迟早忘（同族各抄一份）",
-    apply: (s) => s.replace("esc(toolArgsSummary(e.args))", "esc(String((e.args && e.args.path) || ''))"),
-    expectFail: "主转录那行取的是 projections 的同一个实现",
-  },
-  {
-    id: "tool-summary-picks-command-before-file",
-    src: "src/renderer/projections.ts",
-    test: "tests/tool-args-summary.test.ts",
-    desc: "取料顺序倒过来（命令先于文件）⇒ 写文件的一行显示的是别的字段，用户看不出这次动的是谁",
-    apply: (s) => s.replace('    pick("path", "file", "filePath", "target", "filename") ||\n    pick("command", "cmd", "script") ||', '    pick("command", "cmd", "script") ||\n    pick("path", "file", "filePath", "target", "filename") ||'),
-    expectFail: "文件位优先",
-  },
-  {
-    id: "tool-summary-unbounded-string-leaks",
-    src: "src/renderer/projections.ts",
-    test: "tests/tool-args-summary.test.ts",
-    desc: "只截非串值不截长字符串 ⇒ 一条长参数整段进那一行 DOM，「摘要」变成「全文」",
-    apply: (s) => s.replace('return raw === "" ? "—" : raw.slice(0, 120);', 'return raw === "" ? "—" : raw;'),
-    expectFail: "有界：三个分支各自都不超过 120 字",
-  },
-  // ---- 面板重绘触发集的双向闸（projections.PANEL_DIRTY_TYPES，2026-09-22）----
-  {
-    id: "panel-dirty-misses-review-and-progress-events",
-    src: "src/renderer/projections.ts",
-    test: "tests/panel-dirty-freshness.test.ts",
-    desc: "脏集退回「只认工具与编排」⇒ usage/进展/报告/安全发现四类改了投影却不重绘，右栏停在上一批数据上仍看着像当前结论",
-    apply: (s) => s.replace('  "usage", "agent_message", "agent_result", "security_report",\n', ""),
-    expectFail: "security_report 实测改投影",
-  },
-  {
-    id: "panel-dirty-refreshes-on-inert-events",
-    src: "src/renderer/projections.ts",
-    test: "tests/panel-dirty-freshness.test.ts",
-    desc: "把不改投影的类型也塞进脏集 ⇒ 每条事件一次 O(全量) 重投影；白刷的成本最终会逼后人把表整个改窄（连正确的漏判一起改掉）",
-    apply: (s) => s.replace('"agent_result", "security_report",', '"agent_result", "security_report", "error",'),
-    expectFail: "error 实测零影响",
-  },
-  {
-    id: "app-keeps-its-own-panel-dirty-copy",
-    src: "src/renderer/app.js",
-    test: "tests/panel-dirty-freshness.test.ts",
-    desc: "渲染层自己内联一份触发清单 ⇒ 与投影分家，加字段的那一侧再也不会想起这里（同族各抄一份）",
-    apply: (s) => s.replace("PANEL_DIRTY_TYPES.has(e.type)", '["tool_call", "tool_result", "agent_spawned", "agent_status", "approval_requested", "approval_resolved", "diff_comment"].includes(e.type)'),
-    expectFail: "判据只有一张表",
-  },
-  // ---- 落流脱敏的覆盖面（worker-projection 的正文表，2026-09-22）----
+            // ---- 工具摘要政策的一份实现（projections.toolArgsSummary，2026-09-22）----
+          // ---- 面板重绘触发集的双向闸（projections.PANEL_DIRTY_TYPES，2026-09-22）----
+        // ---- 落流脱敏的覆盖面（worker-projection 的正文表，2026-09-22）----
   {
     id: "redaction-drops-delta-from-body-table",
     src: "src/agent/worker-projection.ts",
@@ -5889,74 +4726,7 @@ const MUTATIONS = [
     apply: (s) => s.replace("    if (looksLikePath(token)) continue;\n", ""),
     expectFail: "绝对路径形状否决：真实 mkdtemp 目录与其下的文件逐字不变",
   },
-  {
-    id: "modal-dismiss-priority-inverted",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-modal-dismiss.test.ts",
-    desc: "把 settingsOverlay 排到 riskScrim 前面 ⇒ 数组序即优先级这张表反过来：安全确认的浮层被设置页抢走这一次 Escape",
-    apply: (s) => s.replace(
-      "  { sel: '#riskScrim', close: () => closeRisk() },\n  { sel: '#settingsOverlay', close: () => closeSettings() },\n",
-      "  { sel: '#settingsOverlay', close: () => closeSettings() },\n  { sel: '#riskScrim', close: () => closeRisk() },\n",
-    ),
-    expectFail: "数组序即优先级：两支同时开着 ⇒ 交出去的是安全确认那一支",
-  },
-  {
-    id: "modal-dismiss-register-noop",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-modal-dismiss.test.ts",
-    desc: "登记函数收下参数却不写进表（装载收下、执行端不读的同族形态）⇒ 新浮层静默没有键盘退路，正是 d4a91a6 之前第四支的遭遇",
-    apply: (s) => s.replace("  if (!MODAL_DISMISS.some((m) => m.sel === sel)) MODAL_DISMISS.push({ sel, close });\n", ""),
-    expectFail: "自己登记的浮层才有键盘退路；登记前表完全不认它（第四支被漏掉的那件事）",
-  },
-  {
-    id: "modal-dismiss-dedup-removed",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-modal-dismiss.test.ts",
-    desc: "去掉「同一选择器只登记一次」的守卫 ⇒ 重复登记加长表并把 close 换成后到的那一份（优先级与回调归属都变了）",
-    apply: (s) => s.replace("  if (!MODAL_DISMISS.some((m) => m.sel === sel)) MODAL_DISMISS.push({ sel, close });", "  MODAL_DISMISS.push({ sel, close });"),
-    expectFail: "同一选择器重复登记不加长表，也不夺走已有那一行的 close",
-  },
-  {
-    id: "modal-dismiss-ignores-show-state",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-modal-dismiss.test.ts",
-    desc: "查表时不看 `show` ⇒ 只要登记过就永远有「开着的浮层」，Escape 被浮层独占、芯片看板那一支再也拿不到按键",
-    apply: (s) => s.replace("    if (el && el.classList.contains('show')) return { el, close: m.close };", "    if (el) return { el, close: m.close };"),
-    expectFail: "负控：一支都没开着 ⇒ null（Escape 才落到芯片看板那一支）",
-  },
-  {
-    id: "backdrop-inert-decided-by-dismiss-registry",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-modal-backdrop.test.ts",
-    desc: "inert 判据退回取 `openModal()`（收起表）⇒ 未登记的浮层自动漏在锁外：静态预览里新手引导的登记在 window.agent 桥接段内、整段提前 return，实测该相红 56",
-    apply: (s) => s.replace("  if (document.querySelector('[role=\"dialog\"][aria-modal=\"true\"].show') !== null) {", "  if (openModal() !== null) {"),
-    expectFail: "判据不取收起表：只查「背景 + 开着的那个选择器」，一次都不按 id 找浮层",
-  },
-  {
-    id: "backdrop-observer-loses-subtree",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-modal-backdrop.test.ts",
-    desc: "观测器去掉 `subtree: true` ⇒ 只盯 body 自己的属性，浮层改 class 一次也不回调（09-22 实踩过：装完 inert 读数纹丝不动）",
-    apply: (s) => s.replace("subtree: true });", "subtree: false });"),
-    expectFail: "观测必须带 subtree:true 且盯的是 body：只盯 body 自己时子元素改 class 一次也不回调",
-  },
-  {
-    id: "backdrop-never-uninerts-on-close",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-modal-backdrop.test.ts",
-    desc: "关掉浮层时不摘 inert ⇒ 「锁死背景」这一种做法也能一直判绿：设置关掉之后整个主界面再也点不动（门的 5c 成对反例同源）",
-    apply: (s) => s.replace("  } else {\n    app.removeAttribute('inert');", "  } else {"),
-    expectFail: "开↔关来回都要重刷：关掉的浮层不能把背景留在锁死态",
-  },
-  {
-    id: "backdrop-resyncs-on-any-class-change",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-modal-backdrop.test.ts",
-    desc: "records 谓词写成恒真 ⇒ 任何元素改 class 都重刷背景：真凶是「浮层状态变了才需要重刷」这条筛选，去掉它任何一次列表重绘都会走同步",
-    apply: (s) => s.replace("return t instanceof Element && (t.matches('[role=\"dialog\"][aria-modal=\"true\"]') || t === document.body);", "return t instanceof Element;"),
-    expectFail: "只有对话框（或 body）的 class 改动才触发重刷，无关元素的不触发",
-  },
-  {
+                  {
     id: "worker-git-newline-not-a-separator",
     src: "src/agent/worker-shell-tools.ts",
     test: "tests/shell-bypass-composition.test.ts",
@@ -7345,120 +6115,7 @@ const MUTATIONS = [
   },
 
   // ── 第 4 档 guided（judgment-layer §7 第 1 步）：政策表的每一格都要有「废掉它必须有名字红」的锚
-  {
-    id: "guided-risk-line-collapsed-to-auto",
-    src: "src/permissions/autonomy.ts",
-    test: "tests/permission-mode-guided.test.ts",
-    desc: "把 guided 的风险线抬回 high ⇒ 它与 auto 成为同一档（中间档名存实亡：默认档 89 次出卡只降了 0 次，读数上谁也发现不了）",
-    apply: (s) => s.replace('guided: { writeAsk: false, scopeMemory: true, riskAskAt: "medium"', 'guided: { writeAsk: false, scopeMemory: true, riskAskAt: "high"'),
-    expectFail: "medium 风险写向（edit_file）：auto 放行，guided 出卡 L4-risk，default 出卡 L3-mode",
-  },
-  {
-    id: "guided-scope-memory-dropped",
-    src: "src/permissions/autonomy.ts",
-    test: "tests/permission-mode-guided.test.ts",
-    desc: "guided 不吃「本会话允许这类」⇒ 审批卡在新档成了一次静默无效的点击（点完仍每笔照问，用户无从察觉）",
-    apply: (s) => s.replace('guided: { writeAsk: false, scopeMemory: true, riskAskAt: "medium"', 'guided: { writeAsk: false, scopeMemory: false, riskAskAt: "medium"'),
-    expectFail: "本会话已记此类 ⇒ guided 放行 L3-scope；网络类命令不吃这条快捷",
-  },
-  {
-    id: "default-write-ask-flag-flipped",
-    src: "src/permissions/autonomy.ts",
-    test: "tests/permission-mode-guided.test.ts",
-    desc: "默认档的 writeAsk 翻成 false ⇒ 「本笔不动 default 语义」这句承诺失去观测者（低危写向从此静默放行，读数只在 ask-density 里看得见）",
-    apply: (s) => s.replace('default: { writeAsk: true, scopeMemory: true', 'default: { writeAsk: false, scopeMemory: true'),
-    expectFail: "低风险写向：default 出卡 L3-mode，guided 放行 L4-pass，auto 亦放行",
-  },
-  {
-    id: "mode-policy-unknown-fallback-loosest",
-    src: "src/permissions/autonomy.ts",
-    test: "tests/permission-mode-guided.test.ts",
-    desc: "表外档位的兜底从「按默认档」改成「按自主档」⇒ 未升级的持久化值静默拿到最松一档（本仓修过一次的那族，换个字段复现）",
-    apply: (s) => s.replace("return MODE_POLICY[mode] ?? MODE_POLICY.default;", "return MODE_POLICY[mode] ?? MODE_POLICY.auto;"),
-    expectFail: "未知 mode 走默认档政策：写向逐次审批，不是静默放行",
-  },
-  {
-    id: "tier-order-second-copy-back",
-    src: "src/agent/worker-report.ts",
-    test: "tests/permission-mode-guided.test.ts",
-    desc: "clampTier 回到本地数字表 ⇒ 新档插在中间时名次仍按旧表算（「子档不宽于父档」这条单调序的第二份事实源）",
-    apply: (s) => s.replace("if (permissionModeRank(requested) <= permissionModeRank(parent)) return { mode: requested, clamped: false };", "if (true) return { mode: requested, clamped: false };"),
-    expectFail: "父档 default 拒住 guided 子档；父档 guided 拒住 auto 子档",
-  },
-  {
-    id: "ask-density-arm-missing",
-    src: "scripts/replay/ask-density.ts",
-    test: "tests/permission-mode-guided.test.ts",
-    desc: "复跑面少一臂 ⇒ 那一档的出卡密度没人量（尺不会报错，只会读成没有这一行）",
-    apply: (s) => s.replace('  { mode: "guided", sandbox: null },\n', ""),
-    expectFail: "ask-density 的臂覆盖每一档",
-  },
-  {
-    id: "renderer-perm-alias-copy-missing-mode",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-perm-default-mode.test.ts",
-    // 别名表搬到 projections 之后才有这一格：它一旦留在 app.js 的字面量里，加一档只有 tsc 那侧叫得醒，
-    // 而"设置里存得下这一档、产品面上却选不出来"在运行时是全绿的。
-    // （不钉 index.html 那个按钮：改法语法探针用 `ts.transpileModule`，整份 HTML 在它眼里就是语法错。）
-    desc: "档位↔看板行 id 的别名表少一档 ⇒ 反向派生表缺一行：设置能存、界面选不出",
-    apply: (s) => s.replace("  guided: 'guided',\n", ""),
-    expectFail: "反向表与正向表互逆，且值集合 = 档位集合（新档在产品面可达的判据）",
-  },
-  {
-    id: "renderer-perm-map-second-copy-back",
-    src: "src/renderer/app.js",
-    test: "tests/renderer-perm-default-mode.test.ts",
-    desc: "PERM_MAP 退回在渲染层再抄一份字面量 ⇒ 别名表变成两处（去名字化是幻觉，表只是挪位置；挪回去就得有人判）",
-    apply: (s) => s.replace("const PERM_MAP = permModeMapByRow();", "const PERM_MAP = { strict: 'read-only', standard: 'default', yolo: 'auto' };"),
-    expectFail: "app.js 的 PERM_MAP 由这只表派生，不再自己写一遍档名字面量",
-  },
-  {
-    id: "perm-seed-clobbers-user-choice",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-perm-default-mode.test.ts",
-    desc: "回灌不看「用户刚点过」⇒ 异步到达的设置盖掉人手选的档（点一下被撤销，且界面不会说）",
-    apply: (s) => s.replace("  if (opts.userChose) return null;", "  if (false) return null;"),
-    expectFail: "用户已经手动选过 ⇒ 不动（异步加载的设置不得盖掉刚点的那一下）",
-  },
-  {
-    id: "perm-seed-guesses-default-row",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-perm-default-mode.test.ts",
-    desc: "认不出的档位回落到默认行 ⇒ 「不猜」这条没了：陌生设置值会把用户的现场换掉。判据必须带一格「当前不是默认行」，否则这条突变全绿（用例里那两行 yolo/strict 现值就是为此而在）",
-    // 第一版钉的是 `permRowIdForMode` 尾部那句 `typeof row === 'string' ? row : null`——**实测变异存活**：
-    // 上一行已经过了 hasOwnProperty 闸，表又由 tsc 保证每档都是字符串，那条回落分支根本到不了
-    // ⇒ 形似的改法 = 自己写了条恒真锚点（抓到的不是"不猜"这条丢了，而是靶子选错）。
-    // 真正的失效面在取到 row 之后：`?? PERM_DEFAULT_ROW` 才是"认不出就换档"的写法。
-    apply: (s) => s.replace("  const row = permRowIdForMode(opts.storedMode);", "  const row = permRowIdForMode(opts.storedMode) ?? PERM_DEFAULT_ROW;"),
-    expectFail: "设置认不出 / 与当前行相同 ⇒ 不动（认不出时不降级到默认档，保持现场）",
-  },
-  {
-    id: "cdp-port-timeout-reads-free",
-    src: "scripts/lib/cdp-port.ts",
-    test: "tests/scripts-cdp-port.test.ts",
-    desc: "等端口超时 ⇒ 报「空」（把「没等到」读成「没问题」：起窗照旧、连上的是旧浏览器，产出的是假读数）",
-    apply: (s) => s.replace("    if (now() - start >= opts.budgetMs) return { free: false, probes, waitedMs: now() - start };", "    if (now() - start >= opts.budgetMs) return { free: true, probes, waitedMs: now() - start };"),
-    expectFail: "预算用尽仍有人听 ⇒ free=false（把「等不到」读成「空」就等于放行旧窗）",
-  },
-  {
-    id: "cdp-port-probe-error-reads-free",
-    src: "scripts/lib/cdp-port.ts",
-    test: "tests/scripts-cdp-port.test.ts",
-    desc: "探针自己抛 ⇒ 当成「空」放行（坏仪器冒充读数）；顺带丢掉 error，等不到与探不到就再也分不开",
-    apply: (s) => s.replace("      return { free: false, probes, waitedMs: now() - start, error: err instanceof Error ? err.message : String(err) };", "      return { free: true, probes, waitedMs: now() - start };"),
-    expectFail: "探针抛错 ⇒ 按「没空出来」处理并停止（坏仪器不许冒充读数）",
-  },
-  {
-    id: "cdp-port-spawn-guard-fakes-the-wait",
-    src: "scripts/panels-check.ts",
-    test: "tests/scripts-cdp-port.test.ts",
-    // 三态判卷全绿也允许某一相「假装等过了」：这里把真探测换成一个写死的 free:true，
-    // 于是旧窗又被当成本轮现场。锚点钉在**接线**那一行，不是钉在纯函数上。
-    desc: "起窗前的等待被换成写死的「已空」⇒ 旧窗照样能连，而门报出来的是绿",
-    apply: (s) => s.replace("  const wait = await waitForPortFree(PORT, { budgetMs: 12_000 });", "  const wait: PortWait = { free: true, probes: 1, waitedMs: 0 };"),
-    expectFail: "spawnElectron 内先等端口、等不到就中止（不 spawn 进旧窗）",
-  },
-  {
+                            {
     id: "distill-gate-whitelist-unlabeled",
     src: "src/agent/memory/distill.ts",
     test: "tests/distill.test.ts",
@@ -7484,33 +6141,7 @@ const MUTATIONS = [
     apply: (s) => s.replace("    layer: d.layer,\n    mode,", "    layer: d.layer,"),
     expectFail: "gateBase 的产物必带 mode（`X-` 面才允许缺）",
   },
-  {
-    id: "llm-confidence-fabricated-default",
-    src: "src/agent/security/llm-review.ts",
-    test: "tests/m3b.test.ts",
-    desc: "模型没自报把握度就编一个 medium ⇒ 审计面上「模型没说」被说成「模型说了个中等把握」",
-    apply: (s) => s.replace("      ...(isSecurityConfidence(r.confidence) ? { confidence: r.confidence } : {}),", "      confidence: r.confidence ?? \"medium\","),
-    expectFail: "自报 confidence 既不编造，也不决定一条发现是否成立",
-  },
-  {
-    id: "llm-confidence-gates-finding",
-    src: "src/agent/security/scan.ts",
-    test: "tests/m3b.test.ts",
-    // 这一根守的是**漏报**：自报值一旦回到结构校验里，模型把 confidence 拼错 = 一条真安全发现静默消失。
-    // 与上一根同族但不同面：上一根管"别说假话"，这一根管"别因为别人说错话而漏报"。
-    desc: "confidence 回到 validateFinding 的门槛位 ⇒ 模型拼错自报值，那条发现整条被丢（安全审查漏报）",
-    apply: (s) => s.replace("    (r.confidence === undefined || isSecurityConfidence(r.confidence))", "    isSecurityConfidence(r.confidence)"),
-    expectFail: "自报 confidence 既不编造，也不决定一条发现是否成立",
-  },
-  {
-    id: "security-confidence-guard-always-true",
-    src: "src/agent/security/scan.ts",
-    test: "tests/m3b.test.ts",
-    desc: "isSecurityConfidence 恒真 ⇒ 非法/缺席的自报值被原样塞进 finding，「字段缺席 = 没自报」这条口径作废",
-    apply: (s) => s.replace("  return typeof value === \"string\" && CONFIDENCES.includes(value);", "  return true;"),
-    expectFail: "自报 confidence 既不编造，也不决定一条发现是否成立",
-  },
-  {
+        {
     id: "remember-gate-if-chain-back",
     src: "src/main/agent-runner.ts",
     test: "tests/remember.test.ts",
@@ -7826,23 +6457,7 @@ const MUTATIONS = [
     apply: (s) => s.replace("    return await this.spawn({ ...args }, ctx);", "    return await this.spawn({ task: args.task, mode: args.mode }, ctx);"),
     expectFail: "真链：落流的角色 → respawnArgsFrom → respawn() 的新 agent_spawned 仍带同一角色（全新 agent_id）",
   },
-  {
-    id: "panel-respawn-payload-lossy",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-worker-approval.test.ts",
-    desc: "面板「重派」载荷回到自造 {mode, task} ⇒ 用户点的那一跳与恢复卡两份参数（max_turns/档位/模型/角色全丢）",
-    apply: (s) => s.replace("        respawn: respawnArgsFrom(e),", "        respawn: { mode: e.mode, task: e.task },"),
-    expectFail: "取消发 agent_card/cancel，重派把原 spawn 参数带回 payload.respawn",
-  },
-  {
-    id: "panel-invents-respawn-payload-for-orphan",
-    src: "src/renderer/projections.ts",
-    test: "tests/renderer-worker-approval.test.ts",
-    desc: "没有 spawn 参数也照发载荷 ⇒ 给一个从未见过的 worker 编一份重派参数（main 侧的出声拒永远走不到）",
-    apply: (s) => s.replace("    ...(col.respawn ? { payload: { respawn: col.respawn } } : {}),", '    payload: { respawn: col.respawn ?? { mode: "read", task: "" } },'),
-    expectFail: "取消发 agent_card/cancel，重派把原 spawn 参数带回 payload.respawn",
-  },
-  // ---- 判卷面硬闸（L0）：一条闸有四格装配，每格都得有人守 ----
+      // ---- 判卷面硬闸（L0）：一条闸有四格装配，每格都得有人守 ----
   // 立闸时只留了一句「变异锚点候选 judge-frozen-wiring-dropped」在注释里（`agent-runner.ts:1150`），
   // 四天没人补 ⇒ 本轮补五条：判定本体 / 会话工厂 / 主会话装配 / worker 两面装配。
   {
@@ -7927,6 +6542,17 @@ const MUTATIONS = [
     desc: "禁改面违反不再先于凭据 ⇒ 触碰 forbidden 的环只要verify绿就被 accept（契约让位于测试颜色）",
     apply: (s) => s.replace("  if (ctx.forbiddenViolated) return \"fail\";", "  if (false) return \"fail\";"),
     expectFail: "禁改面被触碰：即使凭据是 verified 也判 fail（forbidden 硬闸不被凭据顶掉）",
+  },
+  {
+    // 这支钉的是**删除**：`RingVerdict` 里的「error」从未有生产者（`ringVerdict`/`parseVerdict` 都产不出），
+    // 旧守卫却让它与 fail 同路走 retry ⇒ 读起来像「错误有专门通道」。变异 = 把那一支放回去，
+    // 越界值重新被吞成 retry，用例必须红。
+    id: "supervise-retired-error-verdict-revived",
+    src: "src/agent/supervisor.ts",
+    test: "tests/supervise-ring-verdict.test.ts",
+    desc: "越界判据不再落畸形桶（恢复旧守卫里无生产者的那一支）⇒ 没人造得出的判据换来一次真钱重试",
+    apply: (s) => s.replace("if (ctx.verdict !== \"pass\" && ctx.verdict !== \"fail\") {", "if (ctx.verdict !== \"pass\" && ctx.verdict !== \"fail\" && ctx.verdict !== \"error\") {"),
+    expectFail: "越界判据（已删的「error」那一支，全仓无生产者）⇒ escalate，不再与 fail 同路烧一次重试",
   },
   // ---- 09-24 写向判据收成一份（`src/agent/write-face.ts`）：四处清单漂移里最贵的两格 ----
   // shell 命令形状这一支决定「经 shell 落盘算不算写过盘」；两个显式名单各是一个**刻意不做的动作**，

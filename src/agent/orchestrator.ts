@@ -885,8 +885,7 @@ export class Orchestrator {
   }
 
   /** 取消单 worker（§4.4.2：只 abort 该 worker；cancelled = 终态，子流终止 + 合成 tool_result 标 cancelled）。 */
-  cancelAgent(agentId: string): boolean {
-    const w = this.workers.get(agentId);
+  cancelAgent(agentId: string): boolean {    const w = this.workers.get(agentId);
     if (!w || w.finished) return false;
     // 等待中的审批一并释放（取消优先于审批等待，否则 promise 悬挂）
     for (const [id, p] of this.pendingApprovals) {
@@ -1780,7 +1779,11 @@ export class Orchestrator {
       // M3c：插件角色工具面裁剪（frontmatter.tools 白名单 − disallowedTools；裁剪后必须非空）
       // M7：影响面读端三处同源（规格 / 实例 / loop 白名单），开关关着时一处都不加 ⇒ 零行为。
       const impactOn = this.opts.impactAnalysis === true;
-      const baseTable = buildWorkerToolTable(w, this, { impactAnalysis: impactOn });
+      const baseTable = buildWorkerToolTable(w, this, {
+        impactAnalysis: impactOn,
+        // 沙箱出口随 worker 一起下传：worker 的 shell 是独立于主会话那一道门的执行面。
+        ...(this.opts.workerShell ? { shell: this.opts.workerShell } : {}),
+      });
       const table = filterWorkerTable(w, baseTable);
       const specs = filterWorkerSpecs(w, workerToolSpecs(w.mode, { impactAnalysis: impactOn }));
       const provider = createWorkerProvider({
