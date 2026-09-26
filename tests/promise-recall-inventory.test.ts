@@ -7,7 +7,9 @@
 // 判的两格（缺一格就能骗过去）：
 //   ① 每个模型可见的回取承诺面都有判定归属（新加一句「全文见 X」而不登记 ⇒ 红）；
 //   ② 判定归属表里没有陈旧键（把三处副本收成一支之后旧键还挂着 ⇒ 红，与 D-8 ② 同族）。
-import { existsSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -17,23 +19,17 @@ import {
   scanBuilderCallSites, scanCapNoticeCalls, scanPromiseSites,
   type PromiseSite,
 } from "../scripts/probe-promise-recall";
-import { trackedScriptFiles } from "../scripts/lib/scan-scope";
+import { trackedExistingFiles } from "../scripts/lib/scan-scope";
 
 const ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
 
-/** 真盘取料：与探针同一套口径（`trackedScriptFiles` 那份，不各抄一份 git ls-files）。 */
+/** 真盘取料：与探针同一套口径（收成一份的 `trackedExistingFiles`，两支不再各抄一遍循环）。 */
 function srcSources(): { files: { path: string; text: string }[]; missingOnDisk: string[] } {
-  const tracked = trackedScriptFiles(ROOT, "src") ?? [];
-  const files: { path: string; text: string }[] = [];
-  const missingOnDisk: string[] = [];
-  for (const p of tracked) {
-    if (!existsSync(join(ROOT, p))) {
-      missingOnDisk.push(p);
-      continue;
-    }
-    files.push({ path: p, text: readFileSync(join(ROOT, p), "utf8") });
-  }
-  return { files, missingOnDisk };
+  const scope = trackedExistingFiles(ROOT, "src");
+  return {
+    files: scope.files.map((p) => ({ path: p, text: readFileSync(join(ROOT, p), "utf8") })),
+    missingOnDisk: scope.missingOnDisk,
+  };
 }
 
 const scanned = srcSources();
@@ -177,5 +173,36 @@ describe("半句话的窄版本：byteCapNotice 的下一步实参 / truncationN
     const calls = scanCapNoticeCalls(scanned.files);
     expect(calls.some((c) => c.builder === "byteCapNotice"), "byteCapNotice 的调用点一个都没扫到 = 取料漂了").toBe(true);
     expect(calls.filter((c) => c.emptyNextStep)).toEqual([]); // 今天合格；哪天有人传空串，这条点名它
+  });
+});
+
+// 取料口径收成一份以后，这支自己要有判卷：它现在是 `gates.ts`、探针与本判卷三家的共用面。
+describe("trackedExistingFiles：「已跟踪」与「盘上有」是两件事，缺席那一半必须有名字", () => {
+  it("三态各自交出：在盘的进 files、不在盘的进 missingOnDisk、第三态不许混进前两态", () => {
+    const dir = mkdtempSync(join(tmpdir(), "dsh-scan-existing-"));
+    try {
+      const git = (args: string[]): void => { execFileSync("git", args, { cwd: dir, stdio: "ignore" }); };
+      git(["init", "-q"]);
+      mkdirSync(join(dir, "scripts"));
+      writeFileSync(join(dir, "scripts", "on-disk.ts"), "export const a = 1;\n");
+      writeFileSync(join(dir, "scripts", "deleted.ts"), "export const b = 1;\n");
+      git(["add", "scripts/on-disk.ts", "scripts/deleted.ts"]);
+      rmSync(join(dir, "scripts", "deleted.ts")); // 别人未提交的删除：索引里还在，盘上没了
+      const r = trackedExistingFiles(dir);
+      expect(r.trackedUnavailable).toBe(false);
+      expect(r.files).toEqual(["scripts/on-disk.ts"]);
+      // 关键在第二半：原来那一支写成 `.filter(existsSync)`，这里只会读出"扫描面 1 支"，
+      // 而报告写着"扫了已跟踪脚本"⇒ 范围成了数出来的差值而不是字段（规则 82/92）。
+      expect(r.missingOnDisk).toEqual(["scripts/deleted.ts"]);
+      expect(r.files.length + r.missingOnDisk.length).toBe(2);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("拿不到 git 清单 ⇒ trackedUnavailable＝true，且不许被读成『没有要扫的东西』（fail-open 那一侧）", () => {
+    const r = trackedExistingFiles(tmpdir());
+    expect(r.trackedUnavailable).toBe(true);
+    expect(r.files).toEqual([]); // 空**不是**"干净"，调用方必须据此退回磁盘遍历并出声
   });
 });

@@ -3324,3 +3324,22 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
   不加进 `KNOWN_NON_DRIFT`——那条注释原文是"那时该由改动方自己处理，不是这里加回"；留在 #12/#14 线上，两棵树的读数都指向同一格。
 - 下一步（交数不改判）：这页只在 `prose-needle-scan` 上闭合了"读数依赖树的形状"这一族；同形状还在别的面（先实测别按名字猜）——
   `scripts/mutate-verify.mjs`（整表变异）、`scripts/gate-check.ts`、`needles-check` 的 B 半（#11 本来就是"缺 HEAD 分诊"）。
+
+### 2026-09-26 · 第 109 页 · 取料口径收成一份：「已跟踪」与「盘上有」是两件事，缺席那一半必须有名字
+
+`outputs/scan-scope-one-face-2026-09-26/01-已跟踪与盘上有是两件事缺席那一半必须有名字.md`
+
+- #27 的第一格实测：同一份 `trackedScriptFiles` 在仓里有**四支**，宽度差不在谓词，而在「缺席那一半有没有名字」——
+  `gates.ts`（打 `gone`）、`probe-promise-recall.ts`（`missingOnDisk` 字段）、`promise-recall-inventory.test.ts`（抄探针那份）都出声，
+  **只有判卷面 `tests/assertion-health-scan.test.ts` 用 `.filter(existsSync)` 静默丢**：scripts 面 86→71（丢 15）、tests 面 276→225（丢 51），两句仍写着「扫已跟踪脚本」。
+  它另有两道下限（`>10`、`>50`）⇒ **下限断言防得住清零，防不住比例级收缩**（规则 82 的新变体）。
+- 三面读数用两把尺对过：`已跟踪 − 盘上没有 ＝ 真读`，且「盘上没有」逐面等于 `git diff --diff-filter=D` 的同面计数（15 / 51 / 11 三格全等）
+  ⇒ 这一格量的是**别人的未提交删除**，不是仓的属性 ⇒ 只能作为字段交出；写成常量就是把第 108 页那个错再犯一次。
+- 收成一份：新增 `trackedExistingFiles(cwd, prefix)` 交 `{files, missingOnDisk, trackedUnavailable}`。第三态不是装饰——
+  原来两支写 `trackedScriptFiles(...) ?? []`，把「拿不到 git 清单」读成「没有要扫的东西」＝ fail-open。
+  迁了三家；**第四家没迁**：那两处 `.filter(existsSync)` 在别人的在飞 hunk 里（正是那笔 hunk 加进来的），按规矩不动，改法一行写进 #12。
+- 造红两次各红一条：M1 把 `missingOnDisk` 写死 `[]` ⇒ `expected [] to deeply equal ['scripts/deleted.ts']`；M2 把 `trackedUnavailable` 恒写 false ⇒ `expected false to be true`；
+  跑完 `cp` 复原、`grep -c MUTATION-109` ＝ 0。覆盖边界照实交数：**M2 那格在生产支路上没有第二个观测者**（主树 git 可用 ⇒ `gates` 在 M2 下仍印 71），第三态目前只有那条用例在守。
+- 验证：typecheck 0 ｜ `promise-recall-inventory` 15 → **17** 条全绿 ｜ `gates --only=docs-check --direct` 印「扫描面 71 个已跟踪且在盘」＋「15 个盘上不存在，已跳过」＋体检零命中 ｜
+  主树全量 `229 / 2567` 全绿 ｜ `prose-needle-scan` exit 0、帽仍 3/0（本轮没给顶包名单添格子）。
+- 一条无关但要点名的红：`docs-check` 的 `D-8 scripts/replay/prompt-fixed-cost.ts`——该文件是**未跟踪**（`??`）的别人在飞新脚本，本轮没碰 `DOC_BUDGETS` 也没碰它。

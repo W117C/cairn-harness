@@ -5,6 +5,8 @@
 // `scripts/gates.ts` 另抄了一份"遍历 scripts/ 磁盘目录"的实现 ⇒ 同一件事两支各答一遍，
 // 硬化了一支、另一支照旧把在飞草稿算成红（本仓同族：同一条判据各抄一份）。现在两支共用这一份。
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 
 export const SCAN_EXT = /\.(?:ts|tsx|mjs|cjs|js)$/;
 
@@ -29,4 +31,23 @@ export function trackedScriptFiles(cwd: string, prefix = "scripts"): string[] | 
   if (r.status !== 0) return null;
   const files = scriptFilesFromLsFiles(r.stdout ?? "");
   return files.length === 0 ? null : files;
+}
+
+/** 取料口径的**第二跳**：「git 已跟踪」与「盘上有这个文件」在桌面层删除在飞时不是一件事
+ *  （实测 `scripts/` 有 17 支、`tests/` 51 支、`src/` 12 支已跟踪但盘上没有）。
+ *  分成两个字段交出去，是为了让"扫描面变小"这件事有名字：随手 `.filter(existsSync)` 的那一支
+ *  会把 92 → 75 读成全量，报告照样写着"扫了已跟踪脚本"（规则 82：范围得是字段，不是数出来的差值）。
+ *
+ *  `trackedUnavailable` ＝第三态：拿不到 git 清单。调用方必须出声并退回磁盘遍历（同上一条的规矩），
+ *  不许把"取不到清单"当成"没有要扫的东西"。 */
+export function trackedExistingFiles(
+  cwd: string,
+  prefix = "scripts",
+): { files: string[]; missingOnDisk: string[]; trackedUnavailable: boolean } {
+  const tracked = trackedScriptFiles(cwd, prefix);
+  if (tracked === null) return { files: [], missingOnDisk: [], trackedUnavailable: true };
+  const files: string[] = [];
+  const missingOnDisk: string[] = [];
+  for (const p of tracked) (existsSync(resolve(cwd, p)) ? files : missingOnDisk).push(p);
+  return { files, missingOnDisk, trackedUnavailable: false };
 }

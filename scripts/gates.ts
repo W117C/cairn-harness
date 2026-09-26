@@ -8,12 +8,11 @@
 //       pnpm gates --only=test,tools-check   （只跑指定门，调试用）
 //       pnpm gates --no-scan   （跳过恒真式体检）
 //       pnpm gates --direct    （绕开 pnpm 的 deps 检查：主树被别的会话占着时，去隔离 worktree 跑整表）
-import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { countUnverified, gateUnverified, scanAssertionHealth, scanDisjunctions, silentGreenGate, type ScanHit } from "./assertion-health";
-import { SCAN_EXT, trackedScriptFiles } from "./lib/scan-scope";
+import { SCAN_EXT, trackedExistingFiles } from "./lib/scan-scope";
 import { verdictLine } from "./lib/gate-verdict";
 // 认证面自述（同族：判据在 ./lib/certified-face.ts，那边可单测；本文件只取料 + 打印）。
 import { certifiedFace, porcelainStatus } from "./lib/certified-face";
@@ -51,24 +50,25 @@ async function scanAll(): Promise<ScanHit[]> {
     }
     return out;
   };
-  // 扫描面 = 已跟踪脚本（口径见 ./lib/scan-scope.ts）。git 清单取不到时退回磁盘遍历并出声：
+  // 扫描面 = 已跟踪**且在盘上**的脚本（口径见 ./lib/scan-scope.ts）。git 清单取不到时退回磁盘遍历并出声：
   // 宁可把在飞草稿多判几条，也不许"取不到清单"变成"没有要扫的东西"。
-  const tracked = trackedScriptFiles(ROOT);
-  const files = tracked ?? await walk(dir);
-  if (tracked === null) console.log("  ⚠️ 取不到 git 清单，体检退回磁盘遍历（会把未跟踪的在飞草稿一起判）");
-  else console.log("  扫描面：" + String(files.length) + " 个已跟踪脚本（未跟踪草稿不判，口径同 tests/assertion-health-scan.test.ts）");
-  const gone: string[] = [];
+  const scope = trackedExistingFiles(ROOT);
+  const files = scope.trackedUnavailable ? await walk(dir) : scope.files;
+  if (scope.trackedUnavailable) console.log("  ⚠️ 取不到 git 清单，体检退回磁盘遍历（会把未跟踪的在飞草稿一起判）");
+  else {
+    console.log("  扫描面：" + String(files.length) + " 个已跟踪且在盘的脚本" +
+      "（未跟踪草稿不判，口径同 tests/assertion-health-scan.test.ts）");
+  }
   for (const rel of files) {
-    const abs = join(ROOT, rel);
-    if (!existsSync(abs)) {
-      gone.push(rel); // 别人未提交的删除：跳过但不静默
-      continue;
-    }
-    const src = await readFile(abs, "utf8");
+    const src = await readFile(join(ROOT, rel), "utf8");
     hits.push(...scanAssertionHealth(rel, src));
     hits.push(...scanDisjunctions(rel, src)); // H-1：AST 级析取式弱断言
   }
-  if (gone.length > 0) console.log("  ⚠️ 清单里有 " + String(gone.length) + " 个文件盘上不存在，已跳过：" + gone.join("、"));
+  // 「已跟踪但盘上没有」＝别人未提交的删除：跳过可以，静默不行（原来那句"扫描面 92 个"里含 17 支读不到的，
+  // 于是范围是数出来的差值而不是字段——同族规则 82）。
+  if (scope.missingOnDisk.length > 0) {
+    console.log("  ⚠️ 清单里有 " + String(scope.missingOnDisk.length) + " 个文件盘上不存在，已跳过：" + scope.missingOnDisk.join("、"));
+  }
   return hits;
 }
 

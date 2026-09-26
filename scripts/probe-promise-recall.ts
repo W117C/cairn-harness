@@ -16,7 +16,7 @@
 //
 // 受众也走结构判定而不是措辞：字面量若挂在 `console.*` 的实参位上，它是给运维看的，
 // 不进"最后一跳"义务（判据宽到把散文当承诺，第 53 页教训 2 已经踩过一次）。
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -24,7 +24,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
-import { trackedScriptFiles } from "./lib/scan-scope.js";
+import { trackedExistingFiles } from "./lib/scan-scope.js";
 import { discoverPlugins } from "../src/agent/plugins/discover.js";
 import { expandSkillInvocation, skillInvokeName } from "../src/agent/plugins/skills.js";
 import { computePrune } from "../src/agent/prune.js";
@@ -532,19 +532,15 @@ export const RUNNERS: Readonly<Record<string, string>> = {
 };
 
 function loadSrcFiles(): { files: { path: string; text: string }[]; missingOnDisk: string[] } {
-  const tracked = trackedScriptFiles(ROOT, "src") ?? [];
-  const files: { path: string; text: string }[] = [];
-  const missingOnDisk: string[] = [];
-  for (const p of tracked) {
-    // 「git 跟踪」与「盘上有这个文件」在桌面层迁移在飞时不是一件事（实测 src/main/index.ts 已删未提交）。
-    // 少读一支不等于扫过了 ⇒ 缺席清单出声（规则 92 同族）。
-    if (!existsSync(join(ROOT, p))) {
-      missingOnDisk.push(p);
-      continue;
-    }
-    files.push({ path: p, text: readFileSync(join(ROOT, p), "utf8") });
-  }
-  return { files, missingOnDisk };
+  // 「git 跟踪」与「盘上有这个文件」在桌面层迁移在飞时不是一件事（实测 src/main/index.ts 已删未提交）。
+  // 少读一支不等于扫过了 ⇒ 缺席清单出声（规则 92 同族）。
+  // 这一跳的**口径收成一份**（`trackedExistingFiles`）：判卷 `tests/promise-recall-inventory.test.ts`
+  // 原先抄着同一份循环 ⇒ 同一条取料两支各答一遍，改一支另一支照旧（本仓最忌的那族）。
+  const scope = trackedExistingFiles(ROOT, "src");
+  return {
+    files: scope.files.map((p) => ({ path: p, text: readFileSync(join(ROOT, p), "utf8") })),
+    missingOnDisk: scope.missingOnDisk,
+  };
 }
 
 let red = 0;
