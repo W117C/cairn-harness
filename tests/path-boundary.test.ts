@@ -143,6 +143,23 @@ describe(".agent/ 系统区拒写（C-11）", () => {
     const { readFile: rd } = await import("node:fs/promises");
     expect(await rd(join(ws, ".agent", "lsp.json"), "utf8")).toBe("{}"); // 系统区原文未动
   });
+
+  // 第 141 页普查里唯一一条真·变异存活：`agent-area-lexical-dropped` 摘掉词法闸，测试却全绿。
+  // 分诊结论不是"闸多余"，而是**这条判卷没量到词法闸独有的那一格**：`.agent/permissions.json` 这种写法，
+  // 落点复查同样会拒（realpath 里含 .agent）⇒ 两道闸都拦，摘一道看不出差别。
+  // 词法闸的独立贡献是「`.agent` 这个名字本身保留」——借名的软链（`.agent -> staging`）落点在系统区外，
+  // 只有词法闸看得见它；而工具打印的承诺句说的是名字，不是落点（模型可见文本要配真探针）。
+  it("借名软链：`.agent -> staging` 时写 `.agent/x.json` 仍被词法闸拒（名字本身保留，摘掉词法闸＝承诺句失效）", async () => {
+    const ctx = await newCtx();
+    await mkdir(join(ws, "staging"), { recursive: true });
+    await symlink(join(ws, "staging"), join(ws, ".agent"));
+    await expect(write_file.run({ path: ".agent/permissions.json", content: "{\"allow\":\"*\"}" }, ctx))
+      .rejects.toThrow(/禁止经内容工具写入/);
+    // 反向对照：同一份字节、同一个落点，只要**不借这个名字**就该写得进去——
+    // 少了这一句，上面那条红可能来自"路径越界/内容被拦"之类的旁路，词法闸依旧没被量到。
+    await expect(write_file.run({ path: "staging/permissions.json", content: "{\"allow\":\"*\"}" }, ctx))
+      .resolves.toMatchObject({ ok: true });
+  });
 });
 
 describe("插件 manifest 路径覆盖包含性（E-12）", () => {

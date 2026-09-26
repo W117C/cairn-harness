@@ -270,9 +270,9 @@ const MUTATIONS = [
     id: "agent-area-lexical-dropped",
     src: "src/tools/base.ts",
     test: "tests/path-boundary.test.ts",
-    desc: ".agent/ 系统区的词法拒写被拆 ⇒ 模型可直接改 permissions.json（跨会话提权）",
+    desc: ".agent/ 系统区的词法拒写被拆 ⇒ 模型可直接改 permissions.json（跨会话提权）。第 141 页普查里它是**唯一一条真存活**：分诊结论不是「闸多余」，而是旧判卷量不到这一格——`.agent/permissions.json` 这种写法落点复查也会拒，两道闸都拦 ⇒ 摘一道看不出来。词法闸独有的那一格是「`.agent` 这个名字本身保留」（借名软链 `.agent -> staging` 只有词法闸看得见），补了那条判卷它才有牙齿。",
     apply: (s) => s.replace("  if (typeof rel === \"string\" && rel.split(/[\\\\/]/).includes(\".agent\")) {", "  if (false) {"),
-    expectFail: "write_file 写 .agent/permissions.json 被拒（跨会话提权面）",
+    expectFail: "借名软链：`.agent -> staging` 时写 `.agent/x.json` 仍被词法闸拒（名字本身保留，摘掉词法闸＝承诺句失效）",
   },
   {
     id: "agent-area-real-recheck-dropped",
