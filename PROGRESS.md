@@ -4282,3 +4282,25 @@ git 调用由 `scripts/mutate-verify.mjs` 注入 ⇒ 本模块不自己 spawn �
   typecheck 0；全量判卷 **237 files / 2759 tests passed / 84.17s**；两棵临时树已回收（`git worktree remove --force`，主树 node_modules 完好）。
 - 归属现读一句：本树当前分支是 `codex/dsh-security-product`（会话开始时的快照写的是 `codex/dsh-structural-hardening`）；
   今天这 6 笔（`bc40ed8 → 92f7729`）全部落在现支上。
+
+### 2026-09-27 · 第 142 页 · 把 21.8 分钟那一格压回 6.6 秒：静态尺补上 HEAD 侧的另一半（顺带被自己的文本尺撞了一次）
+
+第 141 页的普查里 23 条锚点之所以量不出来，内因只有一句：**锚点行入库了、判卷里那条用例标题没入库**。
+这一格两头都在盘上（表 ＋ `git show HEAD:<判卷>`），本来就该秒级判出来——于是把它补进静态尺。
+
+- 判据：`headPointerProblems(entries, { inHeadTable, judgeDirty, readAtHead })`（`scripts/lib/mutate-gates.ts`）——
+  **复用**盘上那把 `auditExpectFails`，只把取内容换成 HEAD 那份，两个筛选谓词由调用方注入（单测喂假内容，门喂 `git show`）。
+  收成一份的规矩照守：口径不许再写第二遍。
+- 两条筛子是这个设计的全部难点：只查「这条锚点在 HEAD 的表里就存在」**且**「它的判卷相对 HEAD 有改动」的条目。
+  少了前者，本笔同时改表与改判卷的**正常提交**会被读成缺陷（那格归规则 217 的同笔规矩管，不在这里）；少了后者，237 份判卷每份都要 `git show` 一遍。
+  两条各配一条反向判卷（`runWith(() => false)` ⇒ 空；本笔新加的那条 ⇒ 不判）。
+- **门当场点出真格**：`supervise-retired-error-verdict-revived` 的指针「越界判据（已删的「error」那一支…）」在 HEAD 那份
+  `tests/supervise-ring-verdict.test.ts` 里找不到 ⇒ 盘上绿、HEAD 指不到。**同一件事，第 141 页花 21.8 分钟，这里 6.6 秒。**
+- 自撞一次，而且撞得有价值：我在那段代码的**注释里**把尺用的字段标记原文写了出来，
+  于是判卷把注释当成一条锚点，表里凭空多出一行 `src` 为 null 的假条目。
+  抓住它的正是这条尺自带的「每条都必须解析出 src」自检（第 9 页立的那条），不是我肉眼看的。
+  ⇒ 通例：**文本尺对"这段是注释还是代码"是透明的**（规则 219 的又一次）——在受该尺解析的文件里解释它的标记，本身就会成为标记。
+- 成本要说：`--check-needles` 6.13s → **6.6s**（三次实测 6.59／6.67／6.60；新增 1 次表 blob ＋ 1 次 `git diff --name-only` ＋ 每份在飞判卷一次 `git show`）。
+- 现态：`836 条 —— 阻断 8、待复认 0、killer 指针失效 0（其中 HEAD 侧 1）、钉在飞文本 4`；两条新锚点在干净 HEAD 上单跑**全杀**（8.5s）；
+  `mutate-verify-gates` 54 → **59**；typecheck 0；全量判卷 **237 files / 2764 tests passed / 83.5s**。
+- 一句口径：新维度**今天就把这一格咬死**（进 `blockingTotalOf` 第 6 支，少喂即抛），没走存量水位——因为现读只有 1 条，而那条正是别人欠的 add（#11），不是要豁免的历史。
