@@ -9,6 +9,7 @@ import {
   blankComments,
   classifyNeedles,
   collectNeedles,
+  emittedChunks,
   extractLiterals,
   isAnchorTable,
   isInputRegistry,
@@ -312,6 +313,32 @@ describe("影子池：登记表的引用与用例表的输入都不算生产者"
     expect(v!.kind).toBe("drift");
     expect(v!.copies).toBe(0);
   });
+
+  // 点名豁免回灌那张表时，**只回灌它产出的字段**。登记表每条锚点都带一句 `desc:`（给人读的缺陷说明），
+  // 它永远不流进任何输出，可它常常顺手抄着生产侧那句话——实测就是把一条本来唯一的针脚垫成"2 处副本＝顶包"。
+  const proseTable =
+    'function rowA() {\n  return { id: "a", desc: "只有散文栏有这句" };\n}\n' +
+    'function rowB() {\n  return { id: "b", expectFail: "只有产出栏有那句" };\n}\n' +
+    table(60);
+  const proseSources = [
+    src(realPath, 'function gate() {\n  reason = "只有散文栏有这句";\n}\nfunction gate2() {\n  reason = "只有产出栏有那句";\n}'),
+    src(anchorPath, proseTable),
+  ];
+  const namedTable = new Map([["tests/e.test.ts", 'spawnSync("node", ["scripts/mutate-verify.mjs"])']]);
+
+  it(`点名豁免分字段：表里 \`desc:\` 的散文不算生产者，\`expectFail:\` 那栏照算`, () => {
+    const [prose] = classifyNeedles([nd("tests/e.test.ts", "只有散文栏有这句")], proseSources, namedTable);
+    expect([prose!.kind, prose!.copies, prose!.rawCopies]).toEqual(["verbatim", 1, 2]);
+    // 反向一侧（同一条豁免的另一边）：表**产出**的那栏仍然算——判卷面收的就是它
+    const [emitted] = classifyNeedles([nd("tests/e.test.ts", "只有产出栏有那句")], proseSources, namedTable);
+    expect([emitted!.kind, emitted!.copies]).toEqual(["verbatim", 2]);
+  });
+
+  it("字面量要带得上所在的属性键（豁免分字段靠它），且不因此多收/少收一段", () => {
+    const got = extractLiterals("t.ts", 'const T = [{ note: "甲", desc: "乙" }];\nconst top = "丙";');
+    expect(got.map((c) => [c.key, c.chunk])).toEqual([["note", "甲"], ["desc", "乙"], ["", "丙"]]);
+    expect(emittedChunks(got).map((c) => c.chunk)).toEqual(["甲", "丙"]);
+  });
 });
 
 describe("applyWaivers：豁免要带理由，且不许静默烂在这儿", () => {
@@ -395,6 +422,9 @@ describe("真仓扫：这把尺自己不许空载", () => {
     // 既不进顶包名单也不进 drift ⇒ `MULTI_COPY_CEILING` 对它零分辨力，只有"态"会动。
     // ⇒ 排除面若只作用在"掉不进判卷名单"的格子上，就必须钉住那个态本身（本轮＝ echo 那一格）。
     expect(r.shadowCleared.some((v) => v.kind === "echo-caller-text")).toBe(true);
+    // 第 98 页那条收窄（点名豁免分字段）今天在真仓里**有没有货**：登记表散文栏挡下的字面量条数。
+    // 读成 0 ＝ 它在空转（不代表判据错，但不许把那份绿读成"已在起作用"）。
+    expect(r.proseHeldBack).toBeGreaterThan(0);
   });
 
   it("本面自己的夹具不算断言（不排就是量自己写的字符串），且排除必须列出来", () => {

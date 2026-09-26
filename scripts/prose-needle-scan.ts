@@ -276,6 +276,9 @@ export interface LiteralChunk {
   fn: string;
   /** 该字面量里的一段静态文本（`${…}` 会把它切开）。 */
   chunk: string;
+  /** 它作值为哪个属性键（不是属性赋值＝`""`）。点名豁免要靠它分清
+   *  一张表**产出的**字段与**给人读的散文**栏（见 `emittedChunks`）。 */
+  key: string;
 }
 
 /** 字面量起点往前最近的函数头＝它所在的函数。只用来分副本，不是完整作用域分析（上限见页里写明）。 */
@@ -293,23 +296,30 @@ export function extractLiterals(path: string, text: string): LiteralChunk[] {
   const { code, source } = lex(text);
   const out: LiteralChunk[] = [];
   const K = ts.SyntaxKind;
-  const push = (node: ts.Node, raw: string): void => {
+  const push = (node: ts.Node, raw: string, key: string): void => {
     const chunk = decodeJs(raw);
-    if (chunk.trim() !== "") out.push({ path, fn: enclosingFn(code, node.getStart(source)), chunk });
+    if (chunk.trim() !== "") out.push({ path, fn: enclosingFn(code, node.getStart(source)), key, chunk });
   };
-  const walk = (node: ts.Node): void => {
+  const walk = (node: ts.Node, key: string): void => {
     const t = node.getText(source);
     if (node.kind === K.StringLiteral || node.kind === K.NoSubstitutionTemplateLiteral || node.kind === K.TemplateTail) {
-      push(node, t.slice(1, -1));
+      push(node, t.slice(1, -1), key);
       return;
     }
     if (node.kind === K.TemplateHead || node.kind === K.TemplateMiddle) {
-      push(node, t.slice(1, -2));
+      push(node, t.slice(1, -2), key);
       return;
     }
-    node.forEachChild(walk);
+    // 属性赋值：只把键名带给 initializer；遍历形状与原来逐字相同（键名自己仍按"无键"收，不增不减口径）
+    if (node.kind === K.PropertyAssignment) {
+      const pa = node as ts.PropertyAssignment;
+      const k = pa.name.getText(source).replace(/^["']|["']$/g, "");
+      node.forEachChild((c) => walk(c, c === pa.initializer ? k : key));
+      return;
+    }
+    node.forEachChild((c) => walk(c, key));
   };
-  source.statements.forEach(walk);
+  source.statements.forEach((s) => walk(s, ""));
   return out;
 }
 
@@ -325,6 +335,16 @@ const ANCHOR_TABLE_MIN = 50;
 export function isAnchorTable(text: string): number {
   const hits = text.split(ANCHOR_MARKER).length - 1;
   return hits >= ANCHOR_TABLE_MIN ? hits : 0;
+}
+
+/** 表里**给人读的散文栏**：它们不流进任何输出，所以不许替生产文案"作证"。
+ *  实测（第 98 页）：`scripts/mutate-verify.mjs:5317` 的一条 `desc:` 抄了「不在 HEAD 里」
+ *  ⇒ 一条本来只有一处生产者的针脚被垫成"2 处副本＝顶包"，而那句话永远到不了被断言的字段。 */
+export const DOC_PROSE_KEYS: readonly string[] = ["desc"];
+
+/** 一张表真正"产自"它的字面量——点名豁免只回灌这些（散文栏除外）。 */
+export function emittedChunks(chunks: readonly LiteralChunk[]): LiteralChunk[] {
+  return chunks.filter((c) => !DOC_PROSE_KEYS.includes(c.key));
 }
 
 /** 第二族影子：**用例表**——一批导出的字符串数组常量，且本文件不导出任何函数。
@@ -390,6 +410,9 @@ export function classifyNeedles(
   const producerChunks = chunks.filter((c) => !shadowPaths.has(c.path));
   const producerByPath = new Map<string, string>();
   for (const c of producerChunks) producerByPath.set(c.path, (producerByPath.get(c.path) ?? "") + c.chunk);
+  // 点名豁免只回灌表**产出的**字面量（`desc:` 那类给人读的散文栏不算，见 `emittedChunks`）
+  const emittedByPath = new Map<string, LiteralChunk[]>();
+  for (const p of anchorPaths) emittedByPath.set(p, emittedChunks(chunksOf.get(p) ?? []));
   const reachedBy = (testFile: string): Set<string> => {
     const text = testTexts.get(testFile) ?? "";
     const out = new Set<string>();
@@ -406,12 +429,14 @@ export function classifyNeedles(
       return { ...n, ...zero, kind: "non-prose", detail: "收的是算出来的值/标点，不比对生产文案" };
     }
     const reached = reachedBy(n.file);
+    // 点名豁免回灌的只是那张表**产出的**字面量：`desc:` 那类给人读的散文栏不在此列（见 `emittedChunks`）
+    const emitted = (p: string): LiteralChunk[] => emittedByPath.get(p) ?? [];
     const pool = reached.size === 0
       ? producerChunks
-      : producerChunks.concat(...[...reached].map((p) => chunksOf.get(p) ?? []));
+      : producerChunks.concat(...[...reached].map(emitted));
     const byPath = reached.size === 0
       ? producerByPath
-      : new Map([...producerByPath, ...[...reached].map((p): [string, string] => [p, (chunksOf.get(p) ?? []).map((c) => c.chunk).join("")])]);
+      : new Map([...producerByPath, ...[...reached].map((p): [string, string] => [p, emitted(p).map((c) => c.chunk).join("")])]);
     const count = (sought: string): { copies: number; rawCopies: number } => ({
       copies: copyCount(pool, sought),
       rawCopies: copyCount(chunks, sought),
@@ -561,6 +586,8 @@ export interface ScanReport {
   /** 因"登记表影子"而从 ≥2 降到 ≤1 的格子，**逐条点名**（`rawCopies` 与 `copies` 两个数并排着看）：
    *  排除面只留下一个变小了的数＝把判据关掉还不说（规则 101 的反向一侧）。 */
   shadowCleared: WailedRow[];
+  /** 点名豁免挡在门外的**登记表散文栏**（`desc:`）字面量条数。0 ＝ 这条收窄今天空转。 */
+  proseHeldBack: number;
   /** 被排除的本面自己的 test 文件（夹具自引用）。空＝排除没生效。 */
   selfExcluded: string[];
   /** 只算**已提交态**（剔掉在飞文件）的顶包候选数——棘轮判这个数，别人并发改动推不动它。 */
@@ -601,6 +628,11 @@ export function scanRepo(root: string): ScanReport {
   } as Record<ProseNeedle["via"], number>;
   const { rows, stale } = applyWaivers(classifyNeedles(needles, sources, new Map(testFiles.map((f) => [f.path, f.text]))));
   const anchorTables = shadowFilesOf(sources);
+  // 点名豁免**挡在门外**的那些：登记表里给人读的散文栏（`desc:`）。读数为 0 ＝ 这条豁免今天空转。
+  const anchorSet = new Set(anchorTables.filter((t) => t.kind === "登记表").map((t) => t.path));
+  const proseHeldBack = sources
+    .filter((s) => anchorSet.has(s.path))
+    .reduce((a, s) => a + extractLiterals(s.path, s.text).filter((c) => DOC_PROSE_KEYS.includes(c.key)).length, 0);
   // 被"登记表影子"解释掉的格子：必须并列报出来，排除面不许只留下一个变小了的数。
   const shadowCleared = rows.filter((r) => r.rawCopies > 1 && r.copies < r.rawCopies);
   const counts = {
@@ -631,6 +663,7 @@ export function scanRepo(root: string): ScanReport {
     stale,
     anchorTables,
     shadowCleared,
+    proseHeldBack,
     selfExcluded,
     committedMultiCopy: copySplit.committed.length,
     inFlightMultiCopy: copySplit.flying.length,
@@ -697,6 +730,8 @@ function main(): void {
   for (const v of r.shadowCleared) {
     console.log("    · 免计 " + v.file + ":" + String(v.line) + " ." + v.field + "「" + v.needle + "」原 " + String(v.rawCopies) + " 处 → " + String(v.copies) + " 处");
   }
+  console.log("  点名豁免挡下的散文栏：" + String(r.proseHeldBack) +
+    " 条字面量（登记表 `desc:` 那类给人读的说明——它不流进任何输出，所以不许替生产文案作证）");
   console.log("  自排除（本面自己的夹具）：" + (r.selfExcluded.length > 0 ? r.selfExcluded.join("、") : "空"));
   if (r.anchorTables.length === 0) {
     console.error("❌ 一张登记表都没认出 ⇒ 内容谓词失效（或表改了写法），排除面正在悄悄改变副本数却无人作证");
