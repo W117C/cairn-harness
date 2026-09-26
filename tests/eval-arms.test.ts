@@ -133,7 +133,8 @@ describe("magnitudeOfAb：比值可以印，引用资格要另判", () => {
     expect(m.minReps).toBe(1);
     // 数字不藏：藏掉会让人自己去 Excel 里除一个更差的数
     expect(m.ratio).toBeCloseTo(1.629, 2);
-    expect(m.reason).toContain("不足两次同配置重复");
+    // 这里**不再**收 `reason` 的文案：判态已由 `verdict` 枚举钉住，再收一遍同源文案＝第二把尺不独立；
+    // 且 `prose-needle-scan` 量到那句文案落在 2 处字面量里 ⇒ 改另一处它照样绿（假验收）。
   });
 
   // 这条是整组的**反控**：宽松实现（族级借底）在此处会判 citable。
@@ -168,7 +169,8 @@ describe("magnitudeOfAb：比值可以印，引用资格要另判", () => {
     expect(m.minReps).toBe(2);
     expect(m.floor).toBeCloseTo(2.0, 5);
     expect(m.verdict).toBe("within-noise");
-    expect(m.reason).toContain("噪声底");
+    // 判态与底都是数值/枚举，够钉住这条判据；`reason` 的文案这里不收
+    // （`prose-needle-scan` 量到「噪声底」落在 3 处字面量里 ⇒ 改另一处照样绿＝假验收）
     // 统计量自己是字段＝有观测者；取「上中位」会读成 2000/1210
     expect(m.variants.map((v) => v.median)).toEqual([1500, 1155]);
   });
