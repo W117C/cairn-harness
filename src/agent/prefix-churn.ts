@@ -253,3 +253,32 @@ export function breakByMiddleSplice<T>(items: readonly T[]): T[] {
   if (items.length < 3) return [...items];
   return [...items.slice(0, 1), ...items.slice(2)];
 }
+
+/** PC7 的裁决（案 A，2026-09-26 由人裁）：摊销买的是**字符当量上的净省**，不是"少压一次"。
+ *  省＝关臂累计重写 − 开臂累计重写（这些是后续主请求里按全价重发的输入字符）；
+ *  付＝开臂多用的摘要输入字符 ＋ 多出来的摘要输出字符 × 输出/输入单价比。
+ *  「压缩次数不得升」这条代理指标为什么撤：第 106 页实测——关臂到第 7 对已没空档（尾部到底，只能发一份超量请求），
+ *  开臂还能继续压 ⇒ **次数 +1 与省 7,663 字符同向发生**；断"次数不升"实际是在要求多付一次重写。
+ *  `outputOverInput` 由调用方从价表取：判据里不许写死价格，这样加一档更贵的输出价时这条线自己收紧。 */
+export interface AmortizationExchange {
+  rewroteOff: number;
+  rewroteOn: number;
+  summaryInputOff: number;
+  summaryInputOn: number;
+  summaryOutputOff: number;
+  summaryOutputOn: number;
+  outputOverInput: number;
+}
+
+export function amortizationIsPaidOff(x: AmortizationExchange): {
+  ok: boolean; priced: boolean; saved: number; paid: number; shortfall: number;
+} {
+  const saved = x.rewroteOff - x.rewroteOn;
+  // 价表里没有一条已校准的行 ⇒ 这条线**算不出来**。退化成"只看省没省"是 fail-open（输出再贵也不会响），
+  // 所以缺价就红，并且把 `priced:false` 交出去——"没价"与"没省到"是两件事，不许在话术里合并。
+  const priced = x.outputOverInput > 0;
+  const paid = priced
+    ? x.summaryInputOn - x.summaryInputOff + (x.summaryOutputOn - x.summaryOutputOff) * x.outputOverInput
+    : Number.POSITIVE_INFINITY;
+  return { ok: priced && saved > 0 && saved >= paid, priced, saved, paid, shortfall: paid - saved };
+}

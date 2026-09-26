@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { gateToolSpecs } from "../src/agent/glm-session";
 import type { GlmMessage } from "../src/providers/glm";
 import {
+  amortizationIsPaidOff,
   attributeChurn,
   breakByFoldingVolatileIntoHead,
   breakByMiddleSplice,
@@ -19,6 +20,7 @@ import {
   volatileSystemLayer,
   type AssemblyObservation,
 } from "../src/agent/prefix-churn";
+import { worstCalibratedOutputRatio, type ModelPrice } from "../src/routing/pricing";
 import { CHURN_RULES, runChurnSelfTest } from "../scripts/prefix-churn-check";
 
 const BASE = "固定基础提示";
@@ -155,5 +157,54 @@ describe("前缀抖动：门的反向对照", () => {
     for (const rule of CHURN_RULES) expect(r.caught).toContain(rule.id);
     // 另有一条元对照：判据「无分辨力」本身必须红
     expect(r.caught.length).toBe(CHURN_RULES.length + 1);
+  });
+});
+
+// PC7 案 A（2026-09-26 由人裁）：判据断的是**字符当量上的净省**，不再断"压缩次数不得升"。
+// 这只纯函数同时被门与 `--self-test` 用（旧 self-test 手抄了一遍谓词 ⇒ 判据改了它不会跟着改）。
+describe("amortizationIsPaidOff：省必须盖过多付的摘要字符", () => {
+  const base = { rewroteOff: 5_000, summaryInputOff: 10_000, summaryOutputOff: 1_500, outputOverInput: 5 };
+  it("省过线 ⇒ ok；省不过线 ⇒ 不 ok 且说出差多少", () => {
+    const win = amortizationIsPaidOff({ ...base, rewroteOn: 3_000, summaryInputOn: 11_000, summaryOutputOn: 1_600 });
+    expect(win).toEqual({ ok: true, priced: true, saved: 2_000, paid: 1_500, shortfall: -500 });
+    const lose = amortizationIsPaidOff({ ...base, rewroteOn: 4_800, summaryInputOn: 14_000, summaryOutputOn: 1_800 });
+    expect(lose.ok).toBe(false);
+    expect(lose.saved).toBe(200);
+    expect(lose.paid).toBe(5_500);
+    expect(lose.shortfall).toBe(5_300);
+  });
+
+  // 缺价那一侧（fail-open 形状）：比值 0 ⇒ 这条线**算不出来**，不许退化成"只看省没省"。
+  // 这一格的分歧点是：同一组数在 R=5 下是过线的，所以红只能来自"没价"，不能来自"没省到"。
+  it("价表没有已校准行 ⇒ 门自身红，而不是悄悄放宽", () => {
+    const noPrice = amortizationIsPaidOff({ ...base, outputOverInput: 0, rewroteOn: 3_000, summaryInputOn: 11_000, summaryOutputOn: 1_600 });
+    expect(noPrice.priced).toBe(false);
+    expect(noPrice.ok).toBe(false);
+    expect(noPrice.saved).toBe(2_000); // 确实省到了——红不是因为这个
+  });
+
+  // 分歧格（规则 78）：`saved > 0` 与 `saved >= paid` 是两个条件，必须各挑一格让它们答案不同。
+  it("一模一样不算省到；省 1 字符且没多付 ⇒ 算省到", () => {
+    expect(amortizationIsPaidOff({ ...base, rewroteOn: 5_000, summaryInputOn: 10_000, summaryOutputOn: 1_500 }).ok).toBe(false);
+    expect(amortizationIsPaidOff({ ...base, rewroteOn: 4_999, summaryInputOn: 10_000, summaryOutputOn: 1_500 }).ok).toBe(true);
+  });
+
+  // 比值是这条线的**放大器**：同一组数，价比从 3 抬到 8 就翻面 ⇒ 判据跟着价表走，没把价格写死。
+  it("抬比值可以翻同一笔交换", () => {
+    const x = { ...base, rewroteOn: 3_000, summaryInputOn: 11_000, summaryOutputOn: 1_800 };
+    expect(amortizationIsPaidOff({ ...x, outputOverInput: 3 }).ok).toBe(true);
+    expect(amortizationIsPaidOff({ ...x, outputOverInput: 8 }).ok).toBe(false);
+  });
+
+  it("比值取自价表：占位行与 input=0 都不许进线（真表上量到数）", () => {
+    const t = {
+      cheap: { inputPerMTok: 1, outputPerMTok: 4, cacheReadPerMTok: 0.5, cacheWritePerMTok: null, calibrated: true },
+      priceyUncalibrated: { inputPerMTok: 1, outputPerMTok: 50, cacheReadPerMTok: null, cacheWritePerMTok: null, calibrated: false },
+      zeroIn: { inputPerMTok: 0, outputPerMTok: 9, cacheReadPerMTok: null, cacheWritePerMTok: null, calibrated: true },
+    } as unknown as Record<string, ModelPrice>;
+    expect(worstCalibratedOutputRatio(t)).toBe(4);
+    // 真表：今天最不利的一档 = 2.5/0.3（gemini-cheap）。这一格证明判据**不是空载**（读到 0 会让线退化成只看 saved）。
+    expect(worstCalibratedOutputRatio()).toBeGreaterThan(8);
+    expect(worstCalibratedOutputRatio({})).toBe(0);
   });
 });

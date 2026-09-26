@@ -25,6 +25,7 @@ import { freeRideCoincidence, thresholdKnobIsWired } from "../src/agent/prune-ba
 import { gateToolSpecs, sessionToolSpecs } from "../src/agent/glm-session";
 import type { GlmMessage, GlmToolSpec } from "../src/providers/glm";
 import {
+  amortizationIsPaidOff,
   attributeChurn,
   breakByFoldingVolatileIntoHead,
   breakByMiddleSplice,
@@ -39,6 +40,7 @@ import {
   type ChurnVerdict,
 } from "../src/agent/prefix-churn";
 import { planSurfaceBudget } from "../src/agent/model-surface";
+import { worstCalibratedOutputRatio } from "../src/routing/pricing";
 import { pluginFixture } from "./model-surface-check";
 
 const SYSTEM_TEXT = "你是前缀抖动门的固定基础提示。".repeat(8);
@@ -437,7 +439,10 @@ export const CHURN_RULES: readonly ChurnRule[] = [
       "摊销把重写从 42,588 降到 34,925 字符（它宣称的那个量），代价是多付一次摘要调用（压缩 5→6 次）。" +
       "两支都处在「每轮都踩在阈值上」的饱和区：关那支到第 7 对不再压（尾部已到底，只能发一份超量的 12,608 字符请求），" +
       "开那支还能继续压所以多一次。⇒ 红不是回归也不是抖动，是「省字节 vs 多一次 LLM 调用」这笔交换没裁过；" +
-      "detail 里那两组数（压缩落在第几对 / 逐轮发送量）就是为这一步归因加的。",
+      "detail 里那两组数（压缩落在第几对 / 逐轮发送量）就是为这一步归因加的。\n" +
+      "    2026-09-26 案 A（人裁）：判据改成字符当量的不等式（省 ≥ 摘要输入增量 ＋ 输出增量 × 价表最不利比值），" +
+      "**刻意不再断「压缩次数不得升」**——第 106 页量到它与省钱反向（关臂尾部没空档、开臂多压一次换来 7,663 字符不重发）。" +
+      "次数仍印在 detail 里，但它是读数不是判据。未覆盖：GLM 三档是占位数（真钱等 #16/#17）、行为质量未量。",
     run: async () => {
       const rounds = 8;
       const off = await driveMutating({ kind: "compaction", rounds });
@@ -459,8 +464,22 @@ export const CHURN_RULES: readonly ChurnRule[] = [
         };
       };
       const a = tally(off), b = tally(on);
+      // 案 A（2026-09-26 由人裁）：断的是**字符当量上的净省**，不是"压缩次数不得升"。
+      // 撤掉那半句的理由（为什么它是代理指标）：关臂到第 7 对已没空档、开臂还能继续压 ⇒ 次数 +1 与省字节**同向**发生，
+      // 断"次数不升"实际是在要求多付一次重写（第 106 页实测）。次数从此只作为读数印出来，不再当判据。
+      // 比值从价表取，不写死：加一档更贵的输出价 ⇒ 这条线自己收紧（机制判据挂现状不挂抄本）。
+      const ratio = worstCalibratedOutputRatio();
+      const deal = amortizationIsPaidOff({
+        rewroteOff: a.rewrote,
+        rewroteOn: b.rewrote,
+        summaryInputOff: a.spend.inputChars,
+        summaryInputOn: b.spend.inputChars,
+        summaryOutputOff: a.spend.outputChars,
+        summaryOutputOn: b.spend.outputChars,
+        outputOverInput: ratio,
+      });
       return {
-        ok: a.compactions >= 2 && b.compactions < a.compactions && b.rewrote < a.rewrote,
+        ok: a.compactions >= 2 && deal.ok,
         detail: `同一条会话 8 轮：关 ⇒ 压缩 ${String(a.compactions)} 次、重写 ${String(a.rewrote)} 字符；` +
           `开 ⇒ 压缩 ${String(b.compactions)} 次、重写 ${String(b.rewrote)} 字符` +
           `｜触发种类 关=[${a.kinds}] 开=[${b.kinds}]` +
@@ -469,6 +488,12 @@ export const CHURN_RULES: readonly ChurnRule[] = [
           `｜摘要实测花费 关=${String(a.spend.calls)} 次/入 ${String(a.spend.inputChars)}/出 ${String(a.spend.outputChars)}` +
           ` 开=${String(b.spend.calls)} 次/入 ${String(b.spend.inputChars)}/出 ${String(b.spend.outputChars)}` +
           `｜省 ${String(a.rewrote - b.rewrote)} 字符 vs 多付 ${String(b.spend.inputChars - a.spend.inputChars)} 字符摘要输入` +
+          deal.priced
+            ? `｜判据（案 A）省 ${String(Math.round(deal.saved))} ${deal.saved >= deal.paid ? "≥" : "<"} 付 ${String(Math.round(deal.paid))}` +
+              `（＝摘要输入增量 ＋ 输出增量 × ${String(Math.round(ratio * 100) / 100)}，比值取自价表已校准行的最不利者）⇒ ${
+                deal.ok ? "过线" : "差 " + String(Math.round(deal.shortfall))}`
+            : `｜判据（案 A）价表里没有已校准行 ⇒ 这条线算不出，门自身红（不退化成"只看省没省"）` +
+              `｜省 ${String(Math.round(deal.saved))} 字符（确实省到了，红不是因为这个）` +
           (a.compactions < 2 ? "（关那一支都没连压两次 ⇒ 样本无分辨力，门自身红）" : ""),
       };
     },
@@ -567,14 +592,23 @@ export function runChurnSelfTest(): { caught: string[]; missed: string[] } {
       predicateSaysRed: () => !churnIsAttributed([attributeChurn(clean[0]!, clean[1]!, ["prune"])], false).ok,
     },
     {
-      // PC7 的分辨力：拿「开的那支反而更多」的对照喂进去必须红（否则 A/B 是装饰）
+      // PC7 的分辨力（案 A 之后）：**共用门里那只纯判据**，不再手抄一遍谓词——
+      // 旧写法把断言复制进 self-test，判据改了它不会跟着改（自检与门不同源＝自检在证明另一件事）。
+      // 两个方向都要证：省不过线必须红；省过线必须不红（否则这条线只是恒红的装饰）。
       id: "PC7-摊销确实少付账（A/B 同一条会话）",
-      predicateSaysRed: () => {
-        const a = { compactions: 2, rewrote: 5_000 };
-        const b = { compactions: 3, rewrote: 6_000 };
-        const holds = a.compactions >= 2 && b.compactions < a.compactions && b.rewrote < a.rewrote;
-        return !holds;
-      },
+      predicateSaysRed: () =>
+        !amortizationIsPaidOff({
+          rewroteOff: 5_000, rewroteOn: 4_800,
+          summaryInputOff: 10_000, summaryInputOn: 14_000,
+          summaryOutputOff: 1_500, summaryOutputOn: 1_800,
+          outputOverInput: 5,
+        }).ok &&
+        amortizationIsPaidOff({
+          rewroteOff: 5_000, rewroteOn: 3_000,
+          summaryInputOff: 10_000, summaryInputOn: 11_000,
+          summaryOutputOff: 1_500, summaryOutputOn: 1_600,
+          outputOverInput: 5,
+        }).ok,
     },
     {
       // PC8 的分辨力：把「分批反而更多」的对照喂进去必须红（否则 A/B 是装饰）

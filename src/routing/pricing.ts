@@ -98,6 +98,20 @@ export function costUsd(
   return (plain * p.inputPerMTok + read * readRate + write * writeRate + usage.outputTokens * p.outputPerMTok) / 1_000_000;
 }
 
+/** 已校准行里**最不利**的输出/输入单价比（PC7 的摊销判据用它）。
+ *  为什么不把比值写死在判据里：那样加一档更贵的输出价时判据不会跟着收紧（机制判据挂现状不挂抄本）。
+ *  只算 `calibrated: true` 的行——占位数（GLM 三档）按本文件口径不可当省钱证据，宁可让线由已校准行决定。 */
+export function worstCalibratedOutputRatio(
+  table: Readonly<Record<string, ModelPrice>> = DEFAULT_PRICE_TABLE,
+): number {
+  let worst = 0;
+  for (const p of Object.values(table)) {
+    if (!p.calibrated || p.inputPerMTok <= 0) continue;
+    worst = Math.max(worst, p.outputPerMTok / p.inputPerMTok);
+  }
+  return worst;
+}
+
 /** 白名单覆盖检查：价格表必须覆盖档位表全部 id（漂移护栏——新增 model 忘配价 = 显式失败）。 */
 export function priceCoverage(table: Readonly<Record<string, ModelPrice>> = DEFAULT_PRICE_TABLE): string[] {
   return DEFAULT_MODEL_TABLE.filter((s) => table[s.id] === undefined).map((s) => s.id);
