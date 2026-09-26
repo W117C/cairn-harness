@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { anchorFaces, auditExpectFails, blockingTotalOf, budgetMsOf, classifyArgs, entryDisposition, headOnlyNeedleLine, headOnlyNeedleProblems, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
+import { anchorFaces, auditExpectFails, blockingTotalOf, budgetMsOf, classifyArgs, entryDisposition, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
 import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
 
 describe("budgetMsOf + classifyArgs 的值位（自我预算这条手段本身要有判卷）", () => {
@@ -438,5 +438,45 @@ describe("auditExpectFails：killer 指针必须指得到活用例", () => {
     // 用正则框住**真实的那个调用**，不能只 includes 一行文字：
     // 这条锚点自己的 apply 里也写着那句文字（同一份文件），单行文字判据会连被改掉的那次也读成"还在"。
     expect(/blockingTotalOf\(\{[^}]*expectFail:[^}]*\}\)/s.test(src)).toBe(true);
+  });
+});
+
+describe("killerAttributionOk：归因只认失败面（通过的用例那一行不算）", () => {
+  // 真事（第 141 页）：`cpp-zero-boundary-ratio-zero` 的针脚落在 `no-usage` 那一支，
+  // 真红的是「没有 usage…」，而它声明的「真实红跑：零 verified…」那条**是绿的**——
+  // runner 那句 `hit.out.includes(expectFail)` 被 vitest 列出的 `✓` 行满足了 ⇒ 表上照样报 ✅。
+  const OUT = [
+    " ✓ 真实红跑：零 verified ⇒ 不可测（不是 0 也不是 Infinity），整笔主面就是死跑成本 3ms",
+    " × 没有 usage：不可测且原因是 no-usage，不许把「没记账」读成「没花钱」 2ms",
+    "",
+    "⎯⎯⎯ Failed Tests 1 ⎯⎯⎯",
+    " FAIL  tests/cost-per-progress.test.ts > 比值：与分母同面，零前进是不可测 > 没有 usage：不可测且原因是 no-usage，不许把「没记账」读成「没花钱」",
+  ].join("\n");
+
+  it("声明的那条只是**通过**了 ⇒ 不算归因（旧判据在这里报真）", () => {
+    expect(killerAttributionOk("真实红跑：零 verified ⇒ 不可测（不是 0 也不是 Infinity），整笔主面就是死跑成本", OUT)).toBe(false);
+    // 失败面本身也要只剩红的那两条（`✓` 行整行丢掉，否则下一环又把它读回来）
+    const face = failingTestText(OUT);
+    expect(face.includes("真实红跑：零 verified")).toBe(false);
+    expect(face.split("\n").filter((l) => l.includes("没有 usage"))).toHaveLength(2);
+  });
+
+  it("红的那条正是声明的那条 ⇒ 认；`FAIL … > 标题` 与 `×` 两种失败面都要认", () => {
+    expect(killerAttributionOk("没有 usage：不可测且原因是 no-usage，不许把「没记账」读成「没花钱」", OUT)).toBe(true);
+    expect(killerAttributionOk("只有 × 那一面", " × 只有 × 那一面 1ms\n Test Files 1 failed (1)")).toBe(true);
+    // 颜色开着也不能瞎（runner 里 TERM=dumb，但别人换 reporter/换环境时这条得跟着成立）
+    expect(killerAttributionOk("带颜色的标题", " \u001b[31m×\u001b[39m 带颜色的标题 1ms")).toBe(true);
+  });
+
+  it("没声明 killer（空指针）不在这里判——那是静态那把尺点名的另一档", () => {
+    expect(killerAttributionOk("", OUT)).toBe(true);
+  });
+
+  it("接线：runner 归因那一步真调这把尺，且旧的整串 includes 已经不在", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    // 行首＋行尾锚定：这条锚点自己的 apply 字面量里也写着同一句话（同一个文件），
+    // 不加 `$` 的话"真调用被摘掉、字面量还留着"照样读成在（第 138 页那条自指）。
+    expect(/^\s*if \(!killerAttributionOk\(m\.expectFail, hit\.out\)\) \{$/m.test(src)).toBe(true);
+    expect(src.includes("hit.out.includes(m.expectFail)")).toBe(false);
   });
 });

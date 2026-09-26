@@ -22,7 +22,7 @@ import { execFileSync } from "node:child_process";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, expectFailProblemLine } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, expectFailProblemLine, killerAttributionOk, failingTestText } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -5942,6 +5942,33 @@ const MUTATIONS = [
     expectFail: "没有 usage：不可测且原因是 no-usage，不许把「没记账」读成「没花钱」",
   },
   {
+    id: "attribution-reads-whole-output",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "归因退回「整串输出里找得到那句话」⇒ vitest 把通过的用例也列出来（`✓ …`），一条绿用例就能满足它 ⇒ 锚点声明的 killer 从没红过也照样报 ✅（第 141 页就是这么发现 cpp 那条改在隔壁支的）",
+    apply: (s) => s.replace("  return expectFailMatchesTitles(expectFail, failingTestText(vitestOut));", "  return expectFailMatchesTitles(expectFail, vitestOut);"),
+    expectFail: "声明的那条只是**通过**了 ⇒ 不算归因（旧判据在这里报真）",
+  },
+  {
+    id: "attribution-fail-face-drops-x-marker",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "失败面只认 `FAIL` 那种写法 ⇒ 逐条列表里的 `×` 行被扔掉，红在期望用例上也被读成「没红在期望用例上」（假警方向：正当的杀被判成误伤，逼人回去放宽判据）",
+    apply: (s) => s.replace(".filter((line) => /^\\s*(?:FAIL\\b|[×✕✗])/.test(line))", ".filter((line) => /^\\s*FAIL\\b/.test(line))"),
+    expectFail: "红的那条正是声明的那条 ⇒ 认；`FAIL … > 标题` 与 `×` 两种失败面都要认",
+  },
+  {
+    id: "runner-attribution-call-removed",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "runner 不调这把尺（归因那一步摘掉）⇒ lib 的单测全绿而门照旧印 ✅：接线没有编译期信号。针脚取两行——本条 apply 的字面量里也写着那句调用（同一个文件），单行判据会连「被摘掉那次」也读成还在。",
+    apply: (s) => s.replace(
+      "    if (!killerAttributionOk(m.expectFail, hit.out)) {\n      const failedFace = failingTestText(hit.out).slice(0, 300);",
+      "    if (false) {\n      const failedFace = failingTestText(hit.out).slice(0, 300);",
+    ),
+    expectFail: "接线：runner 归因那一步真调这把尺，且旧的整串 includes 已经不在",
+  },
+  {
     id: "cpp-dead-spend-hidden",
     src: "src/agent/cost-per-progress.ts",
     test: "tests/cost-per-progress.test.ts",
@@ -7299,8 +7326,10 @@ function verifyEntry(m) {
     inFlight = null;
     restored = true;
     if (hit.code === 0) return { m, ok: false, why: "变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）" };
-    if (!hit.out.includes(m.expectFail)) {
-      return { m, ok: false, why: `测试红了但没红在期望用例「${m.expectFail}」上——可能误伤无关用例:\n${hit.out.slice(-800)}` };
+    // 归因只认**失败面**：`hit.out.includes(指针)` 会被一条 `✓` 通过的用例满足（第 141 页实测）。
+    if (!killerAttributionOk(m.expectFail, hit.out)) {
+      const failedFace = failingTestText(hit.out).slice(0, 300);
+      return { m, ok: false, why: `测试红了但没红在期望用例「${m.expectFail}」上——红的是别的用例（针脚可能落在隔壁支/隔壁函数）:\n${failedFace || "(输出里没有失败面那几行，按未归因处置)"}\n--- 尾部 ---\n${hit.out.slice(-500)}` };
     }
     // ④ 还原后必须恢复全绿
     const back = runTest(m.test);

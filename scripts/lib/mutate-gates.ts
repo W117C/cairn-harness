@@ -450,6 +450,33 @@ export function expectFailMatchesTitles(expectFail: string, sourceText: string):
   return vitestTitlePatterns(sourceText).some((re) => re.test(expectFail));
 }
 
+const ANSI_SEQUENCE = /\u001b\[[0-9;]*m/g;
+
+/** 判卷输出里**红掉的那些用例**的文字。只有它们能证明「红在了期望用例上」。
+ *
+ *  动因（第 141 页）。runner 原先的归因判据是 `hit.out.includes(expectFail)`——而 vitest 默认 reporter
+ *  会把**通过的**用例一起列出来（`✓ …`）⇒ 一条通过的用例就能满足它。实测踩到：
+ *  `cpp-zero-boundary-ratio-zero` 的针脚落在 `no-usage` 那一支（隔壁支），真红的是「没有 usage…」那条，
+ *  声明的「真实红跑：零 verified…」那条**是绿的**，而这条锚点照样报 ✅。
+ *  ⇒ 「被杀死」从来不需要声明的那条 killer 红——整张表的归因栏都建在这一句松判据上。
+ *
+ *  失败面认两种写法（缺任何一种就会把真红读成"没红在期望用例上"＝假警）：
+ *  `FAIL <file> > <suite> > <title>` 那一行，与逐条列表里的 `× / ✕ / ✗` 行。 */
+export function failingTestText(vitestOut: string): string {
+  return vitestOut
+    .replace(ANSI_SEQUENCE, "")
+    .split("\n")
+    .filter((line) => /^\s*(?:FAIL\b|[×✕✗])/.test(line))
+    .join("\n");
+}
+
+/** 「这次变异红在了它声明的那条用例上吗」——与静态那把尺共用同一份宽度（`expectFailMatchesTitles`），
+ *  区别只在喂进去的是**失败面**而不是判卷源文件。 */
+export function killerAttributionOk(expectFail: string, vitestOut: string): boolean {
+  if (expectFail === "") return true; // 没声明 killer 的条目（逐行式那一族）不在这儿判
+  return expectFailMatchesTitles(expectFail, failingTestText(vitestOut));
+}
+
 /** 纯函数：`readTest` 由调用方注入（单测喂假文件，门喂真盘）。 */
 export function auditExpectFails(
   entries: readonly ExpectFailEntry[],
