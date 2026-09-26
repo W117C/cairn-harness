@@ -26,6 +26,14 @@ let work = "";
 let repo = "";
 let logPath = "";
 
+// 本文件故意把环挂在 tool_call 上 ⇒ `orch.spawn(...)` 是**游离**的（`void` 掉的那个 promise）。
+// 游离不等于可以不结：`cancelAll()` 之后它还要走 `cleanupSuperseded → cleanupWrite → emit`，
+// 而 `emit` 写的是本用例的 `work/events.jsonl`。原来 `afterEach` 直接 `rm(work)` ⇒ 全量并发下
+// 那条 append 撞上已消失的目录：2567 条断言全绿，vitest 仍以「Unhandled Rejection 1」退出 1（第 109 页实测）。
+const detached: Promise<unknown>[] = [];
+const DETACH_BOUND_MS = 5_000;
+function detach(p: Promise<unknown>): void { detached.push(p); }
+
 beforeEach(async () => {
   work = await mkdtemp(join(tmpdir(), "chain-lease-"));
   repo = join(work, "repo");
@@ -41,7 +49,21 @@ beforeEach(async () => {
   logPath = join(work, "events.jsonl");
   await writeFile(logPath, "", "utf8");
 });
-afterEach(async () => { await rm(work, { recursive: true, force: true }).catch(() => {}); });
+afterEach(async () => {
+  const pending = detached.splice(0, detached.length);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const settled = await Promise.race([
+    Promise.allSettled(pending),
+    new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), DETACH_BOUND_MS); }),
+  ]);
+  if (timer !== undefined) clearTimeout(timer);
+  await rm(work, { recursive: true, force: true }).catch(() => {});
+  // 两侧都要出声：没落地＝有环没被收队（下一轮它会把审计写进已经不存在的目录）；
+  // 落地但被拒＝真错误，今天它只以"进程级 Unhandled Rejection"的形式冒出来，用例仍然全绿。
+  expect(settled !== null, "游离的 spawn 链在 " + String(DETACH_BOUND_MS) + "ms 内没落地 ⇒ 有环没被 cancelAll 收队").toBe(true);
+  const rejected = (settled ?? []).filter((s) => s.status === "rejected");
+  expect(rejected.length, "游离的 spawn 链被拒绝：" + rejected.map((s) => String((s as PromiseRejectedResult).reason)).join(" | ")).toBe(0);
+});
 
 function makeOrch(hang: Map<string, () => void>, approvalTimeoutMs = 20_000): { orch: Orchestrator; events: AgentEvent[] } {
   const events: AgentEvent[] = [];
@@ -80,9 +102,9 @@ describe("链的环 worker 真持有申报的写租约", () => {
   it("pipeline：整链申报 resources ⇒ 环的 agent_spawned 带它，且环活着时 leaseConflicts 认得它", async () => {
     const hang = new Map<string, () => void>();
     const { orch, events } = makeOrch(hang);
-    void orch.spawn({
+    detach(orch.spawn({
       mode: "pipeline", resources: ["src/**"], stages: [{ role: "implement", task: "改 src/a.ts" }],
-    } as SpawnArgs, { callId: "pipe-lease" });
+    } as SpawnArgs, { callId: "pipe-lease" }));
     expect(await waitFor(() => approvals(events).length >= 1, 4000), "链审批没出现").toBe(true);
     orch.decideWorkerApproval(approvals(events)[0]!.id, true, "once");
     expect(await waitFor(() => events.some((e) => e.type === "agent_spawned"), 4000), "环没起来").toBe(true);
@@ -97,9 +119,9 @@ describe("链的环 worker 真持有申报的写租约", () => {
   it("supervise：受限循环的环同样持有（真轨迹那次就是这么申报的）", async () => {
     const hang = new Map<string, () => void>();
     const { orch, events } = makeOrch(hang);
-    void orch.spawn({
+    detach(orch.spawn({
       mode: "supervise", task: "修三处计价 bug", resources: ["src/a.ts"], supervise: { maxStages: 2 },
-    } as SpawnArgs, { callId: "sup-lease" });
+    } as SpawnArgs, { callId: "sup-lease" }));
     expect(await waitFor(() => approvals(events).length >= 1, 4000)).toBe(true);
     orch.decideWorkerApproval(approvals(events)[0]!.id, true, "once");
     expect(await waitFor(() => events.some((e) => e.type === "agent_spawned"), 4000), "环没起来").toBe(true);
@@ -112,9 +134,9 @@ describe("链的环 worker 真持有申报的写租约", () => {
   it("约束的另一侧：环活着时，另派一个相交的 write worker 会撞到租约审批卡（不是默默并发放行）", async () => {
     const hang = new Map<string, () => void>();
     const { orch, events } = makeOrch(hang);
-    void orch.spawn({
+    detach(orch.spawn({
       mode: "pipeline", resources: ["src/**"], stages: [{ role: "implement", task: "改 src/a.ts" }],
-    } as SpawnArgs, { callId: "pipe-clash" });
+    } as SpawnArgs, { callId: "pipe-clash" }));
     await waitFor(() => approvals(events).length >= 1, 4000);
     orch.decideWorkerApproval(approvals(events)[0]!.id, true, "once");
     await waitFor(() => events.some((e) => e.type === "agent_spawned"), 4000);
@@ -130,7 +152,7 @@ describe("链的环 worker 真持有申报的写租约", () => {
   it("反向那一格：没申报 resources ⇒ 环不落 resources 字段、不凭空占租约（零申报零行为）", async () => {
     const hang = new Map<string, () => void>();
     const { orch, events } = makeOrch(hang);
-    void orch.spawn({ mode: "pipeline", stages: [{ role: "implement", task: "改 src/a.ts" }] } as SpawnArgs, { callId: "pipe-bare" });
+    detach(orch.spawn({ mode: "pipeline", stages: [{ role: "implement", task: "改 src/a.ts" }] } as SpawnArgs, { callId: "pipe-bare" }));
     await waitFor(() => approvals(events).length >= 1, 4000);
     orch.decideWorkerApproval(approvals(events)[0]!.id, true, "once");
     await waitFor(() => events.some((e) => e.type === "agent_spawned"), 4000);

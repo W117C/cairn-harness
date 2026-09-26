@@ -3343,3 +3343,20 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
 - 验证：typecheck 0 ｜ `promise-recall-inventory` 15 → **17** 条全绿 ｜ `gates --only=docs-check --direct` 印「扫描面 71 个已跟踪且在盘」＋「15 个盘上不存在，已跳过」＋体检零命中 ｜
   主树全量 `229 / 2567` 全绿 ｜ `prose-needle-scan` exit 0、帽仍 3/0（本轮没给顶包名单添格子）。
 - 一条无关但要点名的红：`docs-check` 的 `D-8 scripts/replay/prompt-fixed-cost.ts`——该文件是**未跟踪**（`??`）的别人在飞新脚本，本轮没碰 `DOC_BUDGETS` 也没碰它。
+
+### 2026-09-26 · 第 110 页 · 2567 条全绿而门以 exit 1 退出：游离的 spawn 链必须在本用例删盘之前落地
+
+`outputs/detached-spawn-drain-2026-09-26/01-2567条全绿而门以exit1退出游离链必须删盘前落地.md`
+
+- 第 109 页跑全量时量到的独立缺陷：`229 文件 / 2567 条 passed` **＋ `Errors 1` ＋ exit 1**。汇总行与退出码是两个数 ⇒ 只读汇总行会把红的门报成绿。
+- 机制不用猜（栈是现成的）：`emit(测试自己那份) ← orchestrator.ts:184 ← cleanupWrite:2237 ← cleanupSuperseded:1497 ← rejectRings:1058 ← spawnSupervise:1115`，
+  `ENOENT /tmp/chain-lease-*/events.jsonl`。本文件**故意**把环挂在 `tool_call` 上（否则量不到「环活着的时候」），于是 `orch.spawn(...)` 是 `void` 掉的游离 promise；
+  用例结尾 `cancelAll()` 让环开始收尾，而 `afterEach` 只做 `rm(work)` ⇒ 收尾那步审计 append 落在删盘之后就没人接它的 rejection。
+- 单独跑 ×3 不复现（并发相关）；族宽实测：`void orch.spawn(` 全仓 5 处，**全在这一个文件**（其余判卷 0 处）⇒ 单文件收尾问题，不是全仓病。
+- 修法只在测试侧：`detach()` 收游离线 ＋ `afterEach` **有界排空（5s）** ＋ 两条观察（没落地＝有环没被收队；被拒＝真错误要有名字）。
+  清理 `rm` 仍在断言之前的必经位置（规则 120）。**没动产品**：`src/agent/orchestrator.ts` 此刻在别人手里飞（实测 `M`），且生产上没有"删掉自己的盘"这个动作。
+- 造红（规则 65）：抽掉 `supervise` 那格的 `release()` ⇒ `游离的 spawn 链在 5000ms 内没落地 ⇒ 有环没被 cancelAll 收队`，`1 failed / 7 passed`；
+  `cp` 复原后 `diff` 逐字节一致。
+- 留一条产品账（#28，不猜修法）：同一个 ENOENT 两支宽度不同——worker 收尾那支**有** catch 并出声（`按 failed 放行等待方`），
+  `cleanupWrite` 的审计 emit 那支**没有**。修法要先有一个生产可达的构造（本轮只有"测试删盘"这一条路），否则就是把估的当测的。
+- 验证：本文件 8 条全绿 exit 0 ｜ 全量 `229 / 2567`、**无 `Errors` 行**、**exit 0** ｜ typecheck 0。
