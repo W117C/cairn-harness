@@ -81,7 +81,9 @@ async function drive(opts: {
         });
         if (opts.faceChangeAt !== undefined && r >= opts.faceChangeAt) {
           const dropped = base.specs[base.specs.length - 1];
-          faceNote = "[skill 工具面] 本 turn 已按 disallowed-tools 从可见工具表摘除：" + String(dropped?.function.name ?? "?");
+          // 这句是**驱动器自己造的**"工具面变了"信号：PC3 只判「变了有没有出声」（读 `faceNote.length`），不读文案。
+          // 所以它不许抄产品那句原文——抄一份就多一处副本，而且会让产品文案的针脚在这张假面上被喂饱（第 105 页）。
+          faceNote = "[driver] 第 " + String(r) + " 轮工具面变了，摘掉 " + String(dropped?.function.name ?? "?");
           return { tools: base.specs.slice(0, -1), note: faceNote };
         }
         faceNote = "";

@@ -14,6 +14,7 @@ import {
   emittedChunks,
   extractLiterals,
   isAnchorTable,
+  isBareNameNeedle,
   isInputRegistry,
   KNOWN_NON_DRIFT,
   MULTI_COPY_CEILING,
@@ -383,6 +384,22 @@ describe("copySites：计数要点得出名（两把尺互检）", () => {
   });
 });
 
+// 第三族（第 105 页）：针脚收的是**一个名字**时，那 N 处"副本"里大多是 import 路径与别处的工具清单，
+// 一条都流不进被断言的字段 ⇒ 这一族既不能靠"改代码"也不能靠"换一句"摘掉，只能改成派生断言。
+// 所以它不是软列表而是**红**；红就得两侧钉住：漏认（这一族永远空）与误收（把整句收进来）都要响。
+describe("isBareNameNeedle：裸名字的针脚不是『再挑一个词』能修的", () => {
+  it("一个名字 ⇒ 是；句子里的一个词 ⇒ 不是（两侧）", () => {
+    for (const t of ["grep", "read_file", "/pol:sec", "STATE.md"]) expect(isBareNameNeedle(t)).toBe(true);
+    for (const t of ["从可见工具表摘除", "pnpm facts", "参数一字不变=0", "——匹配按完整 token 为界"])
+      expect(isBareNameNeedle(t)).toBe(false);
+    // 长度上限是这条谓词唯一的"软"处：12 个字符以内才算名字。两侧各钉一格，
+    // 免得哪天有人把上限放宽到能装下一句人话——那会让"整句"也落进这一族、永远不红。
+    expect(isBareNameNeedle("0123456789ab")).toBe(true);
+    expect(isBareNameNeedle("0123456789abc")).toBe(false);
+    expect(isBareNameNeedle("")).toBe(false); // 空针脚不算名字（它是 non-prose，另一族）
+  });
+});
+
 describe("applyWaivers：豁免要带理由，且不许静默烂在这儿", () => {
   const drift = (file: string, lostRun: string) => ({
     file, line: 1, field: "reason", via: "字段直取" as const, needle: lostRun, suppliedInTest: false,
@@ -466,6 +483,14 @@ describe("真仓扫：这把尺自己不许空载", () => {
     expect(r.maskedSameSentence + r.maskedSharedWord).toBe(r.multiCopy.length);
     expect(r.maskedSameSentence).toBeGreaterThan(0);
     expect(r.maskedSharedWord).toBeGreaterThan(0);
+    // 第三族（裸名字）：①它是顶包名单的**子集**，不许另开一条清单外的路；②两半不许重叠（红的那半 vs 在飞那半）；
+    // ③第 105 页把最后两格改成派生断言之后，**已提交态这一族应为空**——今天为空的读数由在飞那一半作证：
+    //   谓词在真仓上确实认得出东西（`rev`、`STATE.md` 就在别人的文件里），不是恒假的空转（规则 129/196）。
+    expect(r.bareName.every((v) => r.multiCopy.includes(v))).toBe(true);
+    expect(r.inFlightBareName.every((v) => r.multiCopy.includes(v))).toBe(true);
+    expect(r.bareName.filter((v) => r.inFlightBareName.includes(v))).toEqual([]);
+    expect(r.bareName).toEqual([]);
+    expect(r.inFlightBareName.length).toBeGreaterThan(0);
   });
 
   // 「在飞」那一半只给个数＝逃生口（第 93 页给 drift 立的规矩，这页补到顶包候选上）。

@@ -411,6 +411,19 @@ export function sharesOneSentence(sites: readonly CopySite[]): boolean {
   return false;
 }
 
+/** 这一格收的是**一个名字**（工具名 / skill 调用名 / 路径片段）还是一句人话？
+ *  第 105 页实测：`tests/skill-tool-policy.test.ts:192` 收「grep」，尺算出 35 处副本，
+ *  其中 24 处是 import 路径（`./grep.js`、`../tools/ripgrep.js`）与裸标识符，另 11 处是别的话里的工具清单
+ *  （「可用工具：read_file / grep / …」）——**没有一条流进被断言的那个 `.note`**。
+ *  ⇒ 名字在仓里重复是数据的形状，不是"改一处不会响"的顶包；按第 98/100 页那套再挑一个词也治不了它，
+ *  因为下一个名字照样裸。真正的修法只有一种：**把名字放进散文上下文里断言**
+ *  （`expect(note).toContain(droppedName + "（由 " + by + "）")`，变量实参 ⇒ 尺不收它）。
+ *  所以这一族不进"换针脚"的账，而是当场红——留成软列表＝把 35 处噪声永久挂在单子上。 */
+export function isBareNameNeedle(needle: string): boolean {
+  const t = needle.trim();
+  return t.length > 0 && t.length <= 12 && !/\s/.test(t) && !/[^\x00-\x7F]/.test(t);
+}
+
 export interface ShadowFile {
   path: string;
   kind: "登记表" | "用例表";
@@ -632,8 +645,17 @@ function inFlightPaths(root: string): Set<string> {
  *  「首词」→「不在已知包装器表里」。顺带补了那条**反向**用例（裸工具名条目不许说"按 token 为界"）。
  *  造红：四支生产者改六句（去掉新针脚、**留着旧针脚**，跑完即删，`git status` 已确认复原）⇒ 换掉的 6 格全红，
  *  而旧针脚在那六条 Received 里逐字命中（`参数一字不变=0` / `不能读成` / `无从判定` / `合并唯一出口` /
- *  `匹配按完整 token 为界` / `首词` 全在），同批跑的 `tests/autonomy.test.ts` 17 条仍全绿 ⇒ 换的是分辨力不是措辞。 */
-export const MULTI_COPY_CEILING = 5;
+ *  `匹配按完整 token 为界` / `首词` 全在），同批跑的 `tests/autonomy.test.ts` 17 条仍全绿 ⇒ 换的是分辨力不是措辞。
+ *  → **3（第 105 页）**：`skill-tool-policy` 那两格既不是"等热文件"也不是"换一句"能修的——针脚收的是**一个名字**
+ *  （`grep`、`/pol:sec`），35 处"副本"里 24 处是 import 路径（`./grep.js`；`../routing/policy` 含 `/pol`）
+ *  与别处的工具清单，**一条都流不进被断言的 `.note`** ⇒ 测量产物，改尺（规则 197）。
+ *  尺侧：这一族单列成 `bareName` 并**当场红**（软列表会让 35 处噪声永久挂在单上）；谓词两侧各有用例，
+ *  长度上限也钉了分歧格（哪天放宽到装得下一句人话＝这一族永远不红）。测试侧：散文那句「从可见工具表摘除」由尺收，
+ *  「摘了哪把 · 被谁摘」的成对形状由变量拼 ⇒ 尺不收它。顺带清掉生产侧真抄了一遍的那份：
+ *  `scripts/prefix-churn-check.ts` 的驱动器自己造 note，而 PC3 只读 `.length` ⇒ 改成驱动器自己的标记
+ *  （同族旧账"读数脚本抄产品文案"）。跑过那道门：与 HEAD 同样只剩 PC7 那条**先于本轮**的待裁红，`--self-test` 臂 0 退出。
+ *  现在剩的 3 格全是「方案门」＝生产侧同句抄，等 #24。 */
+export const MULTI_COPY_CEILING = 3;
 
 export interface ScanReport {
   needles: number;
@@ -674,6 +696,12 @@ export interface ScanReport {
    *  不能留给读报告的人自己判断。 */
   maskedSameSentence: number;
   maskedSharedWord: number;
+  /** 顶包名单里针脚是个**裸名字**的那几格（第 105 页）：单列出来，而且**红**。
+   *  它们既不是副本缺陷（35 处里 24 处是 import 路径），也换不出更好的句子（名字本身就是要断言的数据），
+   *  唯一的修法是把名字放进散文上下文里派生断言 ⇒ 软列表会让这一族永远躺在单上。
+   *  在飞文件里的那些走 `inFlightBareName`，不记我的账（同 drift 的分法）。 */
+  bareName: WailedRow[];
+  inFlightBareName: WailedRow[];
   /** 上面那 N 格**是哪几格**（第 101 页立的规矩同样适用于"在飞"这一半：只给个数＝逃生口）。 */
   flyingMultiCopy: WailedRow[];
   /** 此刻工作树≠HEAD 的文件；水位分两半靠它，也用来对账"在飞那些格真的都落在这些文件里"。 */
@@ -733,6 +761,8 @@ export function scanRepo(root: string): ScanReport {
   const copySplit = splitByInFlight(rows.filter((x) => x.copies > 1), fly);
   // 同一句抄两处（修代码）vs 只是共享一个词（修测试）——这个分法本身也是判据，必须是字段而不是感想。
   const maskedSameSentence = rows.filter((x) => x.copies > 1 && sharesOneSentence(x.copySites)).length;
+  // 第三族：针脚是个裸名字（第 105 页）。它是 `multiCopy` 的**子集**，不另开一条清单外的路（下面有用例钉住这个包含关系）。
+  const bareSplit = splitByInFlight(rows.filter((x) => x.copies > 1 && isBareNameNeedle(x.needle)), fly);
   return {
     needles: needles.length,
     viaCounts,
@@ -757,6 +787,8 @@ export function scanRepo(root: string): ScanReport {
     inFlightFiles: [...fly],
     maskedSameSentence,
     maskedSharedWord: rows.filter((x) => x.copies > 1).length - maskedSameSentence,
+    bareName: bareSplit.committed,
+    inFlightBareName: bareSplit.flying,
   };
 }
 
@@ -807,7 +839,8 @@ function main(): void {
     "  顶包候选（收料那段在 ≥2 处字面量里 ⇒ 改一处不会响）：" + String(r.multiCopy.length) + " 条" +
       "（已提交态 " + String(r.committedMultiCopy) + " ＋ 在飞 " + String(r.inFlightMultiCopy) + "）" +
       "｜同一句抄 ≥2 处（改代码）" + String(r.maskedSameSentence) + " 条" +
-      "｜只是共享一个词（改针脚）" + String(r.maskedSharedWord) + " 条",
+      "｜只是共享一个词（改针脚）" + String(r.maskedSharedWord) + " 条" +
+      "｜针脚是个裸名字（改成派生断言，红）" + String(r.bareName.length) + " 条",
   );
   // 列全，不切片：这条清单是分流用的工作表，`slice(0, 10)` 会把第 11 格以后藏起来，
   // 而"看不见"在这张表里会被下游读成"没了"（规则 70/116 同一格）。
@@ -817,6 +850,7 @@ function main(): void {
     const flying = r.inFlightFiles.includes(v.file) ? "（在飞，不属我的账）" : "";
     console.log("    ⚠️ " + String(v.copies) + " 处 · " + v.file + ":" + String(v.line) + " ." + v.field + "「" + v.needle + "」" + flying +
       (sharesOneSentence(v.copySites) ? " ⚑同一句抄了两遍" : "") +
+      (isBareNameNeedle(v.needle) ? " ⚑裸名字（副本里那些 import 路径/标识符喂不进被断言的字段）" : "") +
       "＝" + v.copySites.map((s) => s.site + " ▸ " + s.text).join(" ｜ "));
   }
   console.log(
@@ -859,6 +893,18 @@ function main(): void {
     console.error(
       "❌ 顶包名单上有格子的点名数与副本数不一致 ⇒ 读数不可信：" +
         nameless.map((v) => v.file + ":" + String(v.line) + "「" + v.needle + "」" + String(v.copies) + "≠" + String(v.copySites.length)).join("、"),
+    );
+    process.exitCode = 1;
+    return;
+  }
+  // 裸名字针脚（第 105 页）：这一族的"副本"是 import 路径与别处的工具清单，一条都喂不进被断言的那个字段，
+  // 所以它既不是副本缺陷（改代码没用）也换不出更好的词（下一个名字照样裸）——唯一的修法是把名字放进散文上下文里派生断言。
+  // 之所以做成**红**而不是列表：水位管的是"改一处不会响"，管不到"这一格按现在的收法根本修不了"；
+  // 留成软列表就等于让 35 处噪声永久挂在单上。在飞文件不参与（走 `inFlightBareName`，同 drift 那套分法）。
+  if (r.bareName.length > 0) {
+    console.error(
+      "❌ 针脚是个裸名字的顶包格 " + String(r.bareName.length) + " 条 ⇒ 把名字放进散文上下文里断言（变量拼 ⇒ 尺不收它）：" +
+        r.bareName.map((v) => v.file + ":" + String(v.line) + " ." + v.field + "「" + v.needle + "」").join("、"),
     );
     process.exitCode = 1;
     return;

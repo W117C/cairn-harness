@@ -188,9 +188,14 @@ describe("PluginRuntime 的登记面（两条 face 同一个入口）", () => {
     expect(before.note).toBe(""); // 没激活 ⇒ 一个字都不该变（既有会话零回归）
     e.triggerSkill("/pol:sec", "");
     const after = sessionToolFace(e, { mode: "default" });
-    expect(specNames(after.tools)).toEqual(specNames(before.tools).filter((n) => n !== "grep"));
-    expect(after.note).toContain("grep");
-    expect(after.note).toContain("/pol:sec"); // 说清是谁摘的：静默少工具等于让模型自己猜
+    const denied = "grep";
+    const by = "/pol:sec";
+    expect(specNames(after.tools)).toEqual(specNames(before.tools).filter((n) => n !== denied));
+    // 第 105 页：名字本身不许当针脚。旧写法 `toContain("grep")` 被尺算成 35 处"副本"，其中 24 处是
+    // import 路径（`./grep.js`）与别处的工具清单——一条都流不进被断言的这个 `.note`。
+    // ⇒ 散文那句由下一条钉（摘除说明只有这一支会说），「摘了哪把 · 被谁摘」成对形状由变量拼出来。
+    expect(after.note).toContain("从可见工具表摘除");
+    expect(after.note, "说清是谁摘的：静默少工具等于让模型自己猜").toContain(denied + "（由 " + by + "）");
   });
 
   it("规格面与活闸同一份谓词（两份实现必漂）", () => {
