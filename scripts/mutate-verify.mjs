@@ -513,7 +513,7 @@ const MUTATIONS = [
     test: "tests/economics.test.ts",
     desc: "「批准过的文件都写完了」这道判定直接返回真 ⇒ 计划只做一半就在边界处剪掉前面的证据",
     apply: (s) => s.replace("  const planCovered = () => plan === null ||", "  const planCovered = () => true ||"),
-    expectFail: "requires all approved files, fresh verify and complete verify pair before cutting",
+    expectFail: "will not cut an unfinished plan/pair, failed write, stale verify, or worker pair",
   },
   {
     id: "econ-empty-verify-counts-as-proof",
@@ -1014,7 +1014,7 @@ const MUTATIONS = [
     test: "tests/sessions.test.ts",
     desc: "行数口径把空行计入（投影事件数虚高 +1，验收口径破裂）——2026-09-20 改指 d9f4d0b 搬进 countNonEmpty 的那一处",
     apply: (s) => s.replace("for (const s of segments) if (s.trim().length > 0) n++;", "for (const s of segments) n++;"),
-    expectFail: "新建 → 出现在列表；事件追加后行数 = JSONL 行数",
+    expectFail: "追加后按增量计数：含纯空白行不计、未换行尾段计 1 且补全后不双计",
   },
   {
     id: "sessions-name-trim",
@@ -2516,7 +2516,7 @@ const MUTATIONS = [
     test: "tests/memory-inject-token-budget.test.ts",
     desc: "记忆注入的总预算又按字符帽收（tokenBudget×4）⇒ 中文一字≈一 token，6K 预算实到 14K+，而这块每轮重送",
     apply: (s) => s.replace("if (runningWeight > tokenBudget) {", "if (runningWeight > tokenBudget * CHARS_PER_TOKEN) {"),
-    expectFail: "中文语料超预算：整块按字重收进声明预算内，且如实报 truncated",
+    expectFail: "纯 ASCII 会话：换口径不收紧（字符帽仍是那条线，两套读数同值）",
   },
   {
     id: "mem-weight-ascii-count",
@@ -2932,7 +2932,7 @@ const MUTATIONS = [
     test: "tests/session-prune-attachments.test.ts",
     desc: "生产组装退回只传 {events} ⇒ 附件恒空、打桩里那行路径指向空气（§7.4「存盘回取」两头断的正是这一格）",
     apply: (s) => s.replace("const outcome = computePrune({ events, attachmentsDir: pruneAttachmentsDir, sessionId: pruneSessionId });", "const outcome = computePrune({ events });"),
-    expectFail: "②附件真落在盘上且逐字等于被裁原文（不是只写了个路径）",
+    expectFail: "①生产形状（组装点未传 workspace）：递诚实话，且不递任何模型用不了的路径",
   },
   {
     id: "prune-stub-hides-attachment-path",
@@ -4757,7 +4757,7 @@ const MUTATIONS = [
     test: "tests/redact.test.ts",
     desc: "去掉绝对路径否决 ⇒ 字符集含 `/`，一条 tmpdir 整段成为候选（实测 `/var/folders/…` 落成 `/var****`），落流与归档两面的路径全毁",
     apply: (s) => s.replace("    if (looksLikePath(token)) continue;\n", ""),
-    expectFail: "绝对路径形状否决：真实 mkdtemp 目录与其下的文件逐字不变",
+    expectFail: "刻意接受的口子（钉住，不是遗漏）：以 / 开头的 base64 串不再由熵分支覆盖",
   },
                   {
     id: "worker-git-newline-not-a-separator",
@@ -4804,7 +4804,7 @@ const MUTATIONS = [
       "[tokenize(segment), ...invocations(segment).map((i) => [i.bin, ...i.args])]",
       "[tokenize(segment)]",
     ),
-    expectFail: "五支写法在自主档全由 L1-deny 拦下",
+    expectFail: "九支写法两支面都拦（含叠套 `sudo time xargs git …` 与引号载荷）",
   },
   {
     id: "shape-suffix-forms-also-for-wrappers",
@@ -5121,7 +5121,7 @@ const MUTATIONS = [
     desc: "判据丢掉输出面只看退出码 ⇒ 红门也被计一次未证，「未证」总数被红门污染，" +
       "严格模式下同一件事既算红又算未证（两个口径互相吞）",
     apply: (s) => s.replace("  return code === 0 && output.trim() === \"\";", "  return code === 0;"),
-    expectFail: "红 + 空输出 ⇒ 不判为静默（红门已经判红，不再重复计未证）",
+    expectFail: "绿 + 有输出 ⇒ 不判为静默（不误伤正常汇报的门）",
   },
   {
     id: "empty-assert-tail-arg-treated-as-condition",
