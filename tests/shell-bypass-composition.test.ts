@@ -124,9 +124,14 @@ describe("③ worker 的 git 静态闸（此前全仓零锚点的一支）", () 
   });
 
   it("拦下来要说得出为什么、放行什么（worker 无合并权，reason 是用户唯一的解释面）", () => {
-    const blocked = interceptDestructiveGit("git reset --hard");
+    const cmd = "git reset --hard";
+    const blocked = interceptDestructiveGit(cmd);
     expect(blocked.ok).toBe(false);
-    expect(blocked.why).toContain("git reset");
+    // 卡面必须点名被拦的那一支 ⇒ 收**从输入派生**的值，不收字面量：生产侧那句是
+    // `` `git ${sub} 被拦截（…）` `` 的插值，写字面量 "git reset" 等于让任何含 git/reset 的句子替它作证
+    // （第 96 页实测：这把尺给它算出 60 处副本）。真正在生产文案里的话由下一条钉。
+    const named = cmd.slice(0, cmd.indexOf(" --"));
+    expect(blocked.why).toContain(named);
     expect(blocked.why).toContain("合并唯一出口");
   });
 });

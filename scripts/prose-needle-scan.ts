@@ -327,45 +327,75 @@ export function isAnchorTable(text: string): number {
   return hits >= ANCHOR_TABLE_MIN ? hits : 0;
 }
 
-/** 这段文字落在几处**不同函数的不同字面量**里（>1 ⇒ "漂了也不响"的风险，单列出声）。
- *  `anchors` = 登记表文件的路径集：它们的副本**只在还有别处真生产者时**才不计
- *  （若唯一副本就在登记表里，那这条断言收的就是登记表自己的文案 ⇒ 照算，不许读成 0）。 */
-export function copyCount(
-  chunks: readonly LiteralChunk[],
-  needle: string,
-  anchors: ReadonlySet<string> = new Set(),
-  realProducers: ReadonlySet<string> = new Set(),
-): number {
-  const all = new Set<string>();
-  const strict = new Set<string>();
-  for (const c of chunks) {
-    if (!c.chunk.includes(needle)) continue;
-    const key = c.path + "\u0000" + c.fn;
-    all.add(key);
-    // 登记表是"另一把尺"——除非这条断言所在的路径本来就指着它（`realProducers` 由调用方按 test 文件是否点名该表算出）。
-    if (anchors.has(c.path) && !realProducers.has(c.path)) continue;
-    strict.add(key);
-  }
-  return strict.size > 0 ? strict.size : all.size;
+/** 第二族影子：**用例表**——一批导出的字符串数组常量，且本文件不导出任何函数。
+ *  它的字面量是**喂给被测函数的输入**（`"setsid git push --force"`），不是任何字段的出处。
+ *  实测：`scripts/lib/shell-bypass-cases.ts` 14 条导出的数组常量、0 个导出函数 ⇒ 上一版把它认成生产者，
+ *  于是用例「卡面说得出为什么不是 deny：首词不在已知包装器表里」被算成顶包候选（它其实该判 `echo-caller-text`）。
+ *  与登记表同一套规矩：断言自己点名它 ⇒ 它对该条断言就是生产者；两者都不是 ⇒ 落进 drift（响）。 */
+export function isInputRegistry(text: string): number {
+  if (/^export (?:async )?function /m.test(text)) return 0;
+  const lists = (text.match(/^export const [A-Za-z_$][\w$]*\s*:\s*(?:readonly\s+)?(?:string\[\]|Array<|[A-Za-z_$]+\[\])/gm) ?? []).length;
+  return lists >= 5 ? lists : 0;
 }
 
-/** 逐条判四态。`sources` = 生产侧文件。 */
+/** 这段文字落在几处**不同函数的不同字面量**里（>1 ⇒ "漂了也不响"的风险，单列出声）。
+ *  传进来的 `chunks` 已经是**生产者池**（影子池的排除在 `classifyNeedles` 里做），所以这里不再兜底：
+ *  池里数到 0 就是 0，而"命中"也不可能发生在池外。 */
+export function copyCount(chunks: readonly LiteralChunk[], needle: string): number {
+  const seen = new Set<string>();
+  for (const c of chunks) if (c.chunk.includes(needle)) seen.add(c.path + "\u0000" + c.fn);
+  return seen.size;
+}
+
+export interface ShadowFile {
+  path: string;
+  kind: "登记表" | "用例表";
+  /** 命中该谓词的条数（`expectFail:` / 用例常量），读数用。 */
+  entries: number;
+}
+
+/** 影子池 = 登记表 ∪ 用例表（都用内容谓词认，不写文件名清单）。 */
+export function shadowFilesOf(sources: readonly { path: string; text: string }[]): ShadowFile[] {
+  const out: ShadowFile[] = [];
+  for (const s of sources) {
+    const a = isAnchorTable(s.text);
+    if (a > 0) {
+      out.push({ path: s.path, kind: "登记表", entries: a });
+      continue;
+    }
+    const r = isInputRegistry(s.text);
+    if (r > 0) out.push({ path: s.path, kind: "用例表", entries: r });
+  }
+  return out;
+}
+
+/** 逐条判五态。`sources` = 生产侧文件；`testTexts` = test 文件原文（认"这条断言点名了哪张表"）。
+ *  **影子池**：登记表（逐字引用被锚行）与用例表（喂给被测函数的输入）都不是字段出处 ⇒
+ *  命中、across、`seen` 与副本数一律只在**生产者池**里算；test 自己点名某张表时，该表对该条断言就是生产者。
+ *  池外只剩影子时不许读成 verbatim：它要么落进 echo（测试自备），要么落进 drift（响）——两个都是出声的方向。 */
 export function classifyNeedles(
   needles: readonly ProseNeedle[],
   sources: readonly { path: string; text: string }[],
   testTexts: ReadonlyMap<string, string> = new Map(),
 ): NeedleVerdict[] {
   const chunks = sources.flatMap((s) => extractLiterals(s.path, s.text));
-  const byPath = new Map<string, string>();
-  for (const c of chunks) byPath.set(c.path, (byPath.get(c.path) ?? "") + c.chunk);
-  // 登记表（内容谓词认出来的，不是写死的文件名）与"这条断言是否本来就指着它"。
-  const anchors = new Set(sources.filter((s) => isAnchorTable(s.text) > 0).map((s) => s.path));
+  const kinds = shadowFilesOf(sources);
+  const shadowPaths = new Set(kinds.map((s) => s.path));
+  // 点名只对**登记表**有效：test 断言的是那张表产出的文案（判卷面自己的 `.why`）⇒ 对它而言那张表就是生产者。
+  // **用例表**永远不算：它的字面量是被 import 进来当输入的样本，被断言的那句是判据**插值**出来的，
+  // 不是清单里的字符串——把"引用了这张表"当成"表是生产者"会把输入错认成出处（实测 `setsid` 那格）。
+  const anchorPaths = new Set(kinds.filter((s) => s.kind === "登记表").map((s) => s.path));
+  const chunksOf = new Map<string, LiteralChunk[]>();
+  for (const c of chunks) chunksOf.set(c.path, [...(chunksOf.get(c.path) ?? []), c]);
+  const producerChunks = chunks.filter((c) => !shadowPaths.has(c.path));
+  const producerByPath = new Map<string, string>();
+  for (const c of producerChunks) producerByPath.set(c.path, (producerByPath.get(c.path) ?? "") + c.chunk);
   const reachedBy = (testFile: string): Set<string> => {
     const text = testTexts.get(testFile) ?? "";
     const out = new Set<string>();
-    for (const a of anchors) {
-      const base = a.slice(a.lastIndexOf("/") + 1);
-      if (text.includes(base) || text.includes(a)) out.add(a);
+    for (const path of anchorPaths) {
+      const base = path.slice(path.lastIndexOf("/") + 1);
+      if (text.includes(base) || text.includes(path)) out.add(path);
     }
     return out;
   };
@@ -376,11 +406,17 @@ export function classifyNeedles(
       return { ...n, ...zero, kind: "non-prose", detail: "收的是算出来的值/标点，不比对生产文案" };
     }
     const reached = reachedBy(n.file);
-    const count = (sought: string): { copies: number; rawCopies: number } => {
-      const rawCopies = copyCount(chunks, sought);
-      return { copies: copyCount(chunks, sought, anchors, reached), rawCopies };
-    };
-    const hit = chunks.find((c) => c.chunk.includes(n.needle));
+    const pool = reached.size === 0
+      ? producerChunks
+      : producerChunks.concat(...[...reached].map((p) => chunksOf.get(p) ?? []));
+    const byPath = reached.size === 0
+      ? producerByPath
+      : new Map([...producerByPath, ...[...reached].map((p): [string, string] => [p, (chunksOf.get(p) ?? []).map((c) => c.chunk).join("")])]);
+    const count = (sought: string): { copies: number; rawCopies: number } => ({
+      copies: copyCount(pool, sought),
+      rawCopies: copyCount(chunks, sought),
+    });
+    const hit = pool.find((c) => c.chunk.includes(n.needle));
     if (hit !== undefined) {
       return { ...n, kind: "verbatim", detail: hit.path, lostRun: "", ...count(n.needle) };
     }
@@ -390,11 +426,12 @@ export function classifyNeedles(
         return { ...n, kind: "across-interpolation", detail: path, lostRun: "", ...count(runs[0]!) };
       }
     }
-    const seen = new Set(runs.filter((r) => chunks.some((c) => c.chunk.includes(r))));
-    // 第五态：这段**测试自己就有一份**（当输入喂给了被测函数）且生产侧一段都对不上 ⇒
-    // 它收的是「调用方的标签被抄回文案」，那句本来就不该躺在生产字面量里（实测 `tests/net.test.ts:54`
-    // 的「测试调用」被上一版报成 drift）。单独点名而不是并进 verbatim：这条断言验的是**回显**、
-    // 不是文案，混进"接上了"就是把没尺的格子读成已验收。
+    const seen = new Set(runs.filter((r) => pool.some((c) => c.chunk.includes(r))));
+    // 第五态：这段**测试自己就有一份**（当输入喂给了被测函数）且生产侧**一段**都对不上 ⇒
+    // 它验的是「调用方给的标签被抄回文案」，那句本来就不该躺在生产字面量里
+    // （实测 `tests/net.test.ts:54` 的「测试调用」、`tests/shell-bypass-composition.test.ts:333` 的「setsid」）。
+    // 门槛留着（`seen.size === 0`）是有原因的：只要有一个静态段在生产侧找得到，这条就可能是
+    // **"半真半输入"的文案钉**，漂了必须响——放宽成"测试自备即回显"会把那一半保护撤掉。
     if (n.suppliedInTest && seen.size === 0) {
       return {
         ...n,
@@ -402,7 +439,7 @@ export function classifyNeedles(
         detail: "这段是测试自己喂进去的标签被抄回文案 ⇒ 生产侧本就不该有，不算漂",
         lostRun: "",
         copies: 0,
-        rawCopies: 0,
+        rawCopies: copyCount(chunks, n.needle),
       };
     }
     const lost = runs.find((r) => !seen.has(r)) ?? runs[0]!;
@@ -510,9 +547,9 @@ export interface ScanReport {
   /** 收料那段落在 ≥2 处字面量里：这句漂了也不响，是**顶包候选**清单（不红，但必须列出来）。 */
   multiCopy: WailedRow[];
   stale: string[];
-  /** 靠内容谓词认出的登记表（`expectFail:` 成批出现）：它们的逐字引用不计进 `copies`。
+  /** 靠内容谓词认出的影子池（登记表＝逐字引用被锚行；用例表＝喂给被测函数的输入）。
    *  空集＝谓词没认出任何表 ⇒ 排除面等于没生效，这条读数必须出现在报告里。 */
-  anchorTables: { path: string; entries: number }[];
+  anchorTables: ShadowFile[];
   /** 因"登记表影子"而从 ≥2 降到 ≤1 的格子，**逐条点名**（`rawCopies` 与 `copies` 两个数并排着看）：
    *  排除面只留下一个变小了的数＝把判据关掉还不说（规则 101 的反向一侧）。 */
   shadowCleared: WailedRow[];
@@ -555,11 +592,9 @@ export function scanRepo(root: string): ScanReport {
     "字段别名": needles.filter((n) => n.via === "字段别名").length,
   } as Record<ProseNeedle["via"], number>;
   const { rows, stale } = applyWaivers(classifyNeedles(needles, sources, new Map(testFiles.map((f) => [f.path, f.text]))));
-  const anchorTables = sources
-    .map((s) => ({ path: s.path, entries: isAnchorTable(s.text) }))
-    .filter((a) => a.entries > 0);
+  const anchorTables = shadowFilesOf(sources);
   // 被"登记表影子"解释掉的格子：必须并列报出来，排除面不许只留下一个变小了的数。
-  const shadowCleared = rows.filter((r) => r.rawCopies > 1 && r.copies <= 1);
+  const shadowCleared = rows.filter((r) => r.rawCopies > 1 && r.copies < r.rawCopies);
   const counts = {
     verbatim: 0,
     "across-interpolation": 0,
@@ -647,9 +682,9 @@ function main(): void {
     console.log("    ⚠️ " + String(v.copies) + " 处 · " + v.file + ":" + String(v.line) + " ." + v.field + "「" + v.needle + "」");
   }
   console.log(
-    "  登记表影子：认出 " + String(r.anchorTables.length) + " 张表（" +
-      r.anchorTables.map((a) => a.path + " " + String(a.entries) + " 条").join("、") +
-      "），因逐字引用而免计的格子 " + String(r.shadowCleared.length) + " 格",
+    "  影子池：认出 " + String(r.anchorTables.length) + " 张（" +
+      r.anchorTables.map((a) => a.kind + " " + a.path + " " + String(a.entries) + " 条").join("、") +
+      "），因引用/输入而免计的格子 " + String(r.shadowCleared.length) + " 格",
   );
   for (const v of r.shadowCleared) {
     console.log("    · 免计 " + v.file + ":" + String(v.line) + " ." + v.field + "「" + v.needle + "」原 " + String(v.rawCopies) + " 处 → " + String(v.copies) + " 处");

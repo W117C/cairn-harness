@@ -9,13 +9,14 @@ import {
   blankComments,
   classifyNeedles,
   collectNeedles,
-  copyCount,
   extractLiterals,
   isAnchorTable,
+  isInputRegistry,
   KNOWN_NON_DRIFT,
   MULTI_COPY_CEILING,
   scanRepo,
   SELF_EXCLUDED_TESTS,
+  shadowFilesOf,
   splitByInFlight,
   staticRuns,
   type ProseNeedle,
@@ -248,49 +249,68 @@ describe("splitByInFlight：判据判已提交态，在飞的那一半必须单�
   });
 });
 
-describe("登记表影子：逐字引用被锚那一行，不算第二个生产者", () => {
-  // 谓词是**内容**（`expectFail:` 成批出现），不是文件名清单——登记表改名、搬走都还认得。
+describe("影子池：登记表的引用与用例表的输入都不算生产者", () => {
+  // 两条谓词都只看**内容**（成批 `expectFail:` / 成批导出的字符串数组常量），不写文件名清单——
+  // 表改名、搬目录、换执行器都还认得（规则 122）。
+  const anchorPath = "scripts/mutate-verify.mjs";
+  const casePath = "scripts/lib/cases.ts";
+  const realPath = "src/agent/goal.ts";
   const table = (times: number): string =>
     Array.from({ length: times }, (_, i) => `  { apply: (s) => s, expectFail: "用例 ${String(i)}" },`).join("\n");
+  const registry = (lists: number): string =>
+    Array.from({ length: lists }, (_, i) => `export const CASES_${String(i)}: string[] = [\n  "样本 ${String(i)}",\n];`).join("\n");
+  const nd = (file: string, sought: string, suppliedInTest = false): ProseNeedle => ({
+    file, line: 1, field: "reason", via: "字段直取", needle: sought, suppliedInTest,
+  });
+  const sources = [
+    src(realPath, 'function gate() {\n  reason = "美元闸本次不生效";\n}'),
+    src(anchorPath, table(60) + '\nfunction probe() {\n  why = "美元闸本次不生效";\n}'),
+    src(casePath, registry(6) + '\nexport const CMD: string[] = [\n  "setsid 强推样本",\n];'),
+  ];
 
-  it("成批 `expectFail:` ⇒ 认出是登记表；零星两条 ⇒ 不是", () => {
+  it("谓词两侧：登记表按 `expectFail:` 成批，用例表按'导出字符串数组常量＋零导出函数'", () => {
     expect(isAnchorTable(table(50))).toBe(50);
     expect(isAnchorTable(table(2))).toBe(0);
+    expect(isInputRegistry(registry(6))).toBe(6);
+    // 有导出函数就不是"只有数据的清单"——那条判据不许把生产者文件吸进影子池
+    expect(isInputRegistry(registry(6) + "\nexport function f() {\n  return 1;\n}\n")).toBe(0);
+    expect(shadowFilesOf(sources).map((s) => s.kind)).toEqual(["登记表", "用例表"]);
   });
 
-  const anchorPath = "scripts/mutate-verify.mjs";
-  const realPath = "src/agent/goal.ts";
-  const chunks = extractLiterals(realPath, 'function gate() {\n  note = "美元闸本次不生效";\n}')
-    .concat(extractLiterals(anchorPath, 'function table() {\n  apply = "if (x) return \\"美元闸本次不生效\\"";\n}'));
-
-  it("一份真生产者 ＋ 一份登记表引用 ⇒ copies=1（但 rawCopies=2，两个数都要在）", () => {
-    const anchors = new Set([anchorPath]);
-    expect(copyCount(chunks, "美元闸本次不生效")).toBe(2);
-    expect(copyCount(chunks, "美元闸本次不生效", anchors, new Set())).toBe(1);
+  it("真生产者 ＋ 登记表引用 ⇒ verbatim、copies=1，而 rawCopies=2 一并交出", () => {
+    const [v] = classifyNeedles([nd("tests/a.test.ts", "美元闸本次不生效")], sources);
+    expect([v!.kind, v!.copies, v!.rawCopies]).toEqual(["verbatim", 1, 2]);
   });
 
-  it("反向一侧 A：这条断言本来就指着登记表 ⇒ 它的副本照算（判卷面的 `.why` 就产自那张表）", () => {
-    expect(copyCount(chunks, "美元闸本次不生效", new Set([anchorPath]), new Set([anchorPath]))).toBe(2);
+  it("反向一侧 A：断言点名**登记表** ⇒ 那张表对它而言就是生产者（判卷面自己的 `.why` 就产自它）", () => {
+    const [v] = classifyNeedles(
+      [nd("tests/gates.test.ts", "美元闸本次不生效")], sources,
+      new Map([["tests/gates.test.ts", 'import { main } from "../scripts/mutate-verify.mjs";']]),
+    );
+    expect(v!.copies).toBe(2);
   });
 
-  it("反向一侧 B：唯一副本就在登记表里 ⇒ 不许读成 0（排除面不许把生产者一起排掉）", () => {
-    const only = extractLiterals(anchorPath, 'function table() {\n  why = "未跟踪文件拒绝";\n}');
-    expect(copyCount(only, "未跟踪文件拒绝", new Set([anchorPath]), new Set())).toBe(1);
+  it("反向一侧 B：点名**用例表**不算——那字面量是 import 进来的输入，被断言那句是判据插值的", () => {
+    const [v] = classifyNeedles(
+      [nd("tests/b.test.ts", "setsid 强推样本")], sources,
+      new Map([["tests/b.test.ts", 'import { CMD } from "../scripts/lib/cases";']],),
+    );
+    expect(v!.kind).toBe("drift");
+    expect(v!.copies).toBe(0);
   });
 
-  it("classifyNeedles 认表并交出 rawCopies；test 文件点名该表时两份都算", () => {
-    const sources = [
-      src(realPath, 'function gate() {\n  note = "美元闸本次不生效";\n}'),
-      src(anchorPath, table(60) + '\nfunction probe() {\n  apply = "美元闸本次不生效";\n}'),
-    ];
-    const needle: ProseNeedle = {
-      file: "tests/goal-stop-decision.test.ts", line: 1, field: "note", via: "本地 helper",
-      needle: "美元闸本次不生效", suppliedInTest: false,
-    };
-    const [quiet] = classifyNeedles([needle], sources);
-    expect([quiet!.copies, quiet!.rawCopies]).toEqual([1, 2]);
-    const [loud] = classifyNeedles([needle], sources, new Map([[needle.file, 'import "../scripts/' + anchorPath.split("/")[1] + '"; // 判的是 mutate-verify.mjs 自己']]));
-    expect(loud!.copies).toBe(2);
+  it("同一串是测试自己喂进去的输入 ⇒ 落 echo（本轮 setsid 那格的真实态），既不算顶包也不算漂", () => {
+    const [v] = classifyNeedles([nd("tests/c.test.ts", "setsid 强推样本", true)], sources);
+    expect(v!.kind).toBe("echo-caller-text");
+  });
+
+  it("唯一副本就在登记表里、断言也没点名它 ⇒ drift（引用不许被读成 verbatim）", () => {
+    const [v] = classifyNeedles(
+      [nd("tests/d.test.ts", "只在锚点描述里的句子")],
+      [src(anchorPath, table(60) + '\nfunction probe() {\n  desc = "只在锚点描述里的句子";\n}'), src(realPath, 'function gate() {\n  reason = "别的文案";\n}')],
+    );
+    expect(v!.kind).toBe("drift");
+    expect(v!.copies).toBe(0);
   });
 });
 
@@ -356,16 +376,25 @@ describe("真仓扫：这把尺自己不许空载", () => {
 
   // 影子排除是"把判据关小一格"的动作，所以它自己必须有观测者：
   // ①一张表都没认出 ⇒ 谓词失效（排除面在悄悄改副本数却无人作证）；
-  // ②每一格免计都必须**留下至少一个生产者**（`copies ≥ 1`），且两数并排（`rawCopies > copies`）——
-  //   免计掉的是引用，不是被引用的那一行。
-  it("登记表影子的排除面自己要有名字：认出几张表、免计了哪几格、每格还留着生产者", () => {
+  // ②每一格都要能说出差额（`rawCopies > copies`）；而**只要还判 verbatim，就必须留着生产者**（`copies ≥ 1`）。
+  //   落到 echo/drift 的格子 copies 归 0 是对的——那两态的意思本来就是"生产侧没有这句"
+  //   （本轮 `setsid` 就走这条路：它是测试自己喂进去的命令，被断言的那句是判据插值出来的）。
+  it("影子池的排除面自己要有名字：认出几张表、免计了哪几格、verbatim 那几格还留着生产者", () => {
     expect(r.anchorTables.length).toBeGreaterThan(0);
     for (const v of r.shadowCleared) {
-      expect(v.copies).toBeGreaterThanOrEqual(1);
       expect(v.rawCopies).toBeGreaterThan(v.copies);
+      if (v.kind === "verbatim") expect(v.copies).toBeGreaterThanOrEqual(1);
     }
-    // 本轮实录：认出 `scripts/mutate-verify.mjs`（804 条 `expectFail:`），免计 3 格。
+    // 本轮实录：登记表 `scripts/mutate-verify.mjs`（804 条 `expectFail:`）＋ 用例表
+    // `scripts/lib/shell-bypass-cases.ts`（14 条导出样本常量）。两条谓词都要在真仓里有货，
+    // 少一族＝那一族的排除悄悄失效了。
     expect(r.anchorTables.some((a) => a.entries > 100)).toBe(true);
+    expect(new Set(r.anchorTables.map((a) => a.kind))).toEqual(new Set(["登记表", "用例表"]));
+    // 第三格观测者，来自本轮造红（把 `isInputRegistry` 阈值抬到 999＝关掉这条谓词，跑完即删）：
+    // 水位**不弹**——用例表免计的那格本来就只剩 1 份副本，关掉谓词后它变成"verbatim 1 处"，
+    // 既不进顶包名单也不进 drift ⇒ `MULTI_COPY_CEILING` 对它零分辨力，只有"态"会动。
+    // ⇒ 排除面若只作用在"掉不进判卷名单"的格子上，就必须钉住那个态本身（本轮＝ echo 那一格）。
+    expect(r.shadowCleared.some((v) => v.kind === "echo-caller-text")).toBe(true);
   });
 
   it("本面自己的夹具不算断言（不排就是量自己写的字符串），且排除必须列出来", () => {
