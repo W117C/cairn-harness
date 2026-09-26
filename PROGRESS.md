@@ -4321,3 +4321,20 @@ git 调用由 `scripts/mutate-verify.mjs` 注入 ⇒ 本模块不自己 spawn �
   ② 判它的时候跑的是 `node --check … | head -4 && echo SYNTAX_OK`——那句 `SYNTAX_OK` 是 `head` 的退出码，不是 `node --check` 的（规则 206 现场重演）。
   重跑成 `node --check scripts/mutate-verify.mjs; echo EXIT=$?` 才拿到真凭证 0。
 - 现态：typecheck 0；全量判卷 **237 files / 2765 tests passed**；`--check-needles` 836 条、阻断 7（全是别人在飞的源文件）；本笔只动 `scripts/mutate-verify.mjs` ＋ `tests/path-boundary.test.ts`。
+
+### 2026-09-27 · 第 144 页 · 普查把环境红算成了表退化：基线红现在分「载不动」与「真的不绿」
+
+第 141 页那 180 条红里，**167 条是别人半落库导致判卷 import 不到东西**，却被这张表报成 `基线就不是全绿（不应发生）`＝阻断。
+按规则 92 这是三态用错：**量不了 ≠ 没守住**。这一格不修，下一次普查仍会把环境噪声算进"表退化"这个唯一的信号里。
+
+- 判据 `baselineRedKind`（`scripts/lib/mutate-gates.ts`，纯函数可单测）：输出里有 `Cannot find module '<X>'` ⇒ 未证，并把 **X 点名**；其余红仍按阻断。
+  runner 那一支接上它，未证汇总新增第四类：`N 条判卷载不动（HEAD 缺模块 ⇒ 环境没备齐，不是表退化）`——**仍然红**（未证就红），只是不再谎报成"表退化"。
+  三条锚点：① 分诊尺恒按阻断（环境红重新淹掉信号）；② **反向那一半**——恒按载不动，于是真把表跑退化也被洗成"量不了"，门从此不报退化；③ 接线（算出来不接）。
+- 端到端凭证（不是只跑单测）：在干净 HEAD 的独立树里跑 `verify-exec-pnpm-mapping-lost`，拿到
+  `判卷载不动（Cannot find module "../providers/capabilities"）⇒ 本条量不了，按未证记账` ＋ `未证 1 条（1 条判卷载不动…）`、汇总 `0 条被正确杀死，另 1 条未证`。
+  跑完把树回收（`unlink` 软链 → `git worktree remove --force`）。
+- 普查工件补上**逐签名归因表**（167 条实际只有 7 个源头）：111 缺 `../providers/capabilities`｜25 `真表自证`（＝`supervise-retired…` 的标题没入库，第 142 页那把新尺 6.6 秒就能点名）｜16 `docs-check` D-8 残留 10 项｜10 `map-parse` 的清单写着 `scripts/ipc-reachability-check-core.ts`（盘上与 HEAD 都没有该文件，判卷正被别人改着）｜4 同一个 supervise｜2 `sessions.test.ts` 增量计数（实现在飞）｜1 `prefix-churn` 反向对照。
+  ⇒ **HEAD 上量不出来的格子 100% 来自半落库，没有一条是代码坏**；而"表本身的账"只有那 13 条（10 假归因 ＋ 2 钉在飞文本 ＋ 1 存活，全部分诊完毕）。
+- 现态：锚点表 836 → **839 条**（+3），改法语法体检全过；`mutate-verify-gates` 59 → **62**；typecheck 0；
+  全量判卷 **237 files / 2768 tests passed**；新加的 3 条锚点在干净 HEAD 上单跑**全杀**（13.2s）。
+- 剩：#17 那 3 条等别人源文件入库后复跑；#11 现在是"有价目表"的催办——167 条格子 ＋ 7 个签名，报数不用再靠感觉。
