@@ -112,6 +112,8 @@ describe("长时程回放：机制与红线", () => {
     const d = diffLongReplay(off, on);
     expect(on.compactions).toBeLessThanOrEqual(off.compactions);
     expect(d.totalRewroteBytes).toBeLessThan(0);
+    // 差分字段自己也要断：只比原始账单的话，「Δ总 prompt」那一列印给读者、符号却没人管（第 140 页复认针脚歧义时补）
+    expect(d.totalPromptBytes).toBeLessThan(0);
     expect(on.totalPromptBytes).toBeLessThan(off.totalPromptBytes);
   }, 240_000);
 
