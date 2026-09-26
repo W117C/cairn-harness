@@ -1,7 +1,7 @@
 // 门禁自检判据的回归测试（H-1 / H-2）。
 // 这些用例守的是「体检本身」：体检若漏判，其余 22 道门的可信度都无从谈起。
 import { describe, expect, it } from "vitest";
-import { countUnverified, gateUnverified, scanDisjunctions, silentGreenGate } from "../scripts/assertion-health";
+import { countUnverified, gateUnverified, scanDisjunctions, silentGreenGate, unverifiedBreakdown } from "../scripts/assertion-health";
 import { VERDICT_MAX_CHARS, verdictLine } from "../scripts/lib/gate-verdict";
 import { certifiedFace } from "../scripts/lib/certified-face";
 
@@ -226,5 +226,33 @@ describe("认证面声明 certifiedFace（整表绿的是哪一棵树，必须�
     expect(certifiedFace(quoted).judged).toBe(1);
     expect(certifiedFace(quoted).judgedDeleted).toBe(1);
     expect(certifiedFace("R  src/old.ts -> src/new.ts\n").judged).toBe(1);
+  });
+});
+describe("unverifiedBreakdown：未证的总数必须交得出名字，两个口径分叉就判红（第 115 页）", () => {
+  it("逐道点名：只列有未证的门，顺序按传入序", () => {
+    const r = unverifiedBreakdown([
+      { gate: "typecheck", unverified: 0 },
+      { gate: "compaction-check", unverified: 1 },
+      { gate: "plugins-check", unverified: 2 },
+    ], 3);
+    expect(r.text).toBe("compaction-check 1｜plugins-check 2");
+    expect(r.total).toBe(3);
+    expect(r.consistent).toBe(true);
+  });
+
+  it("分叉必须抓住：汇总 6 而逐道之和 3 ⇒ false（漏登记一道门就是这座形状）", () => {
+    const r = unverifiedBreakdown([{ gate: "a", unverified: 3 }], 6);
+    expect(r.total).toBe(3);
+    expect(r.consistent).toBe(false);
+  });
+
+  it("零未证那一侧也钉：全 0 且聚合 0 ⇒ 空名字串＋一致（空串不许被读成异常）", () => {
+    const r = unverifiedBreakdown([{ gate: "a", unverified: 0 }, { gate: "b", unverified: 0 }], 0);
+    expect(r.text).toBe("");
+    expect(r.consistent).toBe(true);
+  });
+
+  it("非零总数配零点名 ⇒ 分叉（这个数不是从门来的，取料面有洞）", () => {
+    expect(unverifiedBreakdown([{ gate: "a", unverified: 0 }], 4).consistent).toBe(false);
   });
 });

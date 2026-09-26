@@ -251,3 +251,20 @@ export function silentGreenGate(code: number, output: string): boolean {
 export function gateUnverified(code: number, output: string): number {
   return countUnverified(output) + (silentGreenGate(code, output) ? 1 : 0);
 }
+
+/** 未证的总数必须**交得出名字**：过去汇总只印一个「未证 6 项」，要说是谁就得逐道复跑去数
+ *  （规则 82/198：计数类读数只给一个数＝范围是数出来的差值，不是字段）。
+ *  两把尺互检：调用方手里的聚合数（`aggregate`）与逐道之和必须由这条函数比对——
+ *  上面那条注释记下过一次"账本说零未证、屏幕说 1"的分叉，分叉在这里会被 `consistent:false` 抓住。 */
+export function unverifiedBreakdown(
+  runs: readonly { gate: string; unverified: number }[],
+  aggregate: number,
+): { text: string; total: number; consistent: boolean } {
+  const named = runs.filter((r) => r.unverified > 0);
+  const total = named.reduce((a, r) => a + r.unverified, 0);
+  return {
+    text: named.map((r) => r.gate + " " + String(r.unverified)).join("｜"),
+    total,
+    consistent: total === aggregate,
+  };
+}

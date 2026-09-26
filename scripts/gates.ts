@@ -11,7 +11,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { countUnverified, gateUnverified, scanAssertionHealth, scanDisjunctions, silentGreenGate, type ScanHit } from "./assertion-health";
+import { countUnverified, gateUnverified, scanAssertionHealth, scanDisjunctions, silentGreenGate, unverifiedBreakdown, type ScanHit } from "./assertion-health";
 import { SCAN_EXT, trackedExistingFiles } from "./lib/scan-scope";
 import { verdictLine } from "./lib/gate-verdict";
 // 认证面自述（同族：判据在 ./lib/certified-face.ts，那边可单测；本文件只取料 + 打印）。
@@ -191,12 +191,21 @@ async function main(): Promise<void> {
   if (silent.length > 0) {
     console.log("  ⚠️  绿而零输出的门（查了没发现 与 没查 同形，已按未证计入）：" + silent.join("、"));
   }
+  // 「未证 6 项」这种总数过去只能靠逐道复跑去数是谁（规则 82/198：计数得交出名字）。
+  // 逐道之和与汇总数是两把尺：分叉过一次（账本说零未证、屏幕说 1），所以这里不一致就判红。
+  const bd = unverifiedBreakdown(gateRuns, unverified);
   if (unverified > 0) {
     console.log("  ⚠️  未证 " + String(unverified) + " 项（连网/凭据限制未跑到的断言，或绿而零输出的门——**不等于通过**）");
+    console.log("     逐道：" + (bd.text === ""
+      ? "（每道门都交 0 却有个非零总数 ⇒ 这个数不是从门来的，取料面有洞）"
+      : bd.text));
     console.log("     严格模式：DSH_STRICT_UNVERIFIED=1 或 --strict-unverified 可让未证直接判红");
   }
+  if (!bd.consistent) {
+    console.log("  ❌ 未证两个口径分叉：逐道之和 " + String(bd.total) + " ≠ 汇总 " + String(unverified) + " ⇒ 本表汇总不可信，先修计数器再谈绿");
+  }
 
-  if (drift.length > 0 || failed.length > 0 || scanHits.length > 0) {
+  if (drift.length > 0 || failed.length > 0 || scanHits.length > 0 || !bd.consistent) {
     process.exitCode = 1;
   } else if (strictUnverified && unverified > 0) {
     // H-2：严格模式下未证 = 红（CI / 有凭据环境用），杜绝「降级成未证 yet 全绿」。
