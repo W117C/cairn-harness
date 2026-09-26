@@ -125,7 +125,13 @@ describe("m0 CLI：审批门在没人能答时 fail-closed", () => {
 
   it("rl.question 的 throw 被吞掉并转成拒绝（不许冒进工具执行）", () => {
     const src = readFileSync(join(ROOT, "src", "cli.ts"), "utf8");
-    const fn = src.slice(src.indexOf("function promptForApproval"), src.indexOf("// ---- 主流程"));
+    // 边界用代码标识而不是注释文字（`tests/assertion-health-scan.test.ts` 那条棘轮管这个）。
+    // 两个位置还要显式核：`indexOf` 找不到返回 -1，slice 会静默少截一段——断言于是变成"少看一段仍绿"。
+    const from = src.indexOf("function promptForApproval");
+    const to = src.indexOf("function printHelp");
+    expect(from).toBeGreaterThanOrEqual(0);
+    expect(to).toBeGreaterThan(from);
+    const fn = src.slice(from, to);
     expect(fn).toMatch(/try\s*\{[\s\S]*rl\.question\([\s\S]*\}\s*catch\s*\{/);
     expect(fn).toContain("gate.decide(req.askId, false");
   });
