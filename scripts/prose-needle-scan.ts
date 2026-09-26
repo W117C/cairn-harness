@@ -6,27 +6,88 @@
 // 还在不在它所指的那个 test 文件里」。**反方向一直没人查**：test 侧按诊断字段收料的那串字面量，
 // 还在不在生产侧。本面补的就是这半边。
 //
-// 四态各自点名，一条都不许静默归进"没问题"（口径同规则 82/117）：
+// 五态各自点名，一条都不许静默归进"没问题"（口径同规则 82/117）：
 //   verbatim            生产侧逐字有这段 ⇒ 真接上了；
 //   across-interpolation 逐字没有，但拆出的每个静态段都落在**同一个**生产文件里
 //                       ⇒ 中间隔着 `${…}` 的运行时值（数字/名字/sha），不是漂了；
 //   non-prose           收的是算出来的值/标点（计数、比值）⇒ 生产侧本来就不会有这句；
-//   drift               连静态段都对不齐 ⇒ 这才是"改了文案没改断言"的候选缺陷。
+//   echo-caller-text    这段是测试自己喂进去的标签被抄回文案（验的是回显，不是文案）；
+//   drift               连静态段都对不齐，且不是测试自备的 ⇒ 这才是"改了文案没改断言"的候选缺陷。
 // drift 走存量豁免（`KNOWN_NON_DRIFT`）：逐条带理由，名单外新增即红，**登记了却不再命中的也算红**
 // （stale-waiver，同 docs-check 的 LEGACY_WAIVERS 规矩）——豁免不许静默烂在这儿。
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 /** 只收**诊断字段**（`reason`/`why`/`detail`/`note`）。
  *  第一版把 `text`/`message`/`error` 也收了，结果 15 条 drift 里 10 条收的是**被测内容**
  *  （`api_key`、`alpha2`、工具输出片段）——那类断言本来就该长这样，报它"生产侧没有"是我这把尺的噪声。
  *  `.not.toContain`（不要求存在）与 `toContain(SHIP.sha)`（变量，没字面量可对）都不收。
- *  `)` 后面那个点不许漏：`expect(x.reason).toContain("…")` 里收料方法挂在成员访问上——
- *  漏了就**整面恒 0 命中**（第一版正是这样，靠"零命中即红"那条自检才没被读成全绿）。 */
-const NEEDLE =
-  /\.\s*(reason|why|detail|note)\s*\)\s*\.\s*(not\.)?\s*(?:toContain|toMatch|includes)\s*\(\s*"((?:[^"\\]|\\.)*)"/g;
+ *  **第 95 页加宽**：第一版把「`.字段` 紧跟闭括号」这一种写法直接编进正则（`x.reason).toContain`），
+ *  于是同一族断言换个写法就静默绕过——`reasonOf(d)).toContain(…)`（本地 helper 把字段递出来，
+ *  `tests/goal-stop-decision.test.ts` 里就是这一族）与 `x.reason ?? "").toContain(…)` 一概不认。
+ *  那是规则 122 那一格：**机制判据挂在一种写法上＝换写法即绕过**。
+ *  现在按「取料来源」收：matcher 调用点 → 回走配对括号取被断言的表达式 → 表达式里出现过诊断字段
+ *  （或调用了本文件里返回诊断字段的 helper）就算。走不通的那一格必须被数出来（`unresolved`），
+ *  因为「看不见」和「没有」在报告里必须是两个数。 */
+const MATCH_CALL =
+  /\)\s*\.\s*(not\.)?\s*(?:toContain|toMatch|includes)\s*\(\s*"((?:[^"\\]|\\.)*)"/g;
+
+/** 诊断字段名（唯一一份事实源：字段访问、helper 返回体、`via` 判读都从这里拼）。 */
+const DIAG_FIELDS = "reason|why|detail|note";
+const FIELD_ACCESS = new RegExp("\\.\\s*(" + DIAG_FIELDS + ")\\b", "g");
+
+/** 把注释**等长涂白**（非换行字符换成空格 ⇒ 偏移与行号一律不漂，取料清单还能一跳到位）。
+ *  为什么必须有：上一版用正则扫"字面量"，而正则分不清注释——注释里的**一对引号**（中文行文里
+ *  常见的 `'…'` / `"…"` / 反引号）会被当成一条生产字面量。第 95 页当场炸给自己看：
+ *  我在这把尺的注释里写了「测试调用」，于是 `tests/net.test.ts:54` 那条**真 drift** 被洗成 verbatim，
+ *  报告上写着 `drift 0`（假绿的方向正是这把尺存在的理由）。
+ *  走 TS 词法拿精确区间，而不是再叠一条正则：规则 79 同一格——按行的判据会把注释里的示例当代码。 */
+export interface Lexed {
+  /** 注释等长涂白后的文本（偏移与行号与原文一致）。 */
+  code: string;
+  /** 词法树：字面量取料与注释区间都从这里来，一次解析两处共用。 */
+  source: ts.SourceFile;
+}
+
+/** 一次词法，两处共用：注释区间（涂白）与字面量（取料）。
+ *  等长涂白是关键——非换行字符换成空格，行号与偏移一律不漂，取料清单还能一跳到位。 */
+export function lex(text: string): Lexed {
+  const source = ts.createSourceFile("probe.ts", text, ts.ScriptTarget.Latest, true);
+  const ranges = new Map<number, number>();
+  const collect = (pos: number): void => {
+    for (const r of ts.getLeadingCommentRanges(text, pos) ?? []) ranges.set(r.pos, r.end);
+    for (const r of ts.getTrailingCommentRanges(text, pos) ?? []) ranges.set(r.pos, r.end);
+  };
+  const walk = (node: ts.Node): void => {
+    collect(node.pos);
+    node.forEachChild(walk);
+  };
+  source.statements.forEach(walk);
+  walk(source.endOfFileToken);
+  let code = text;
+  if (ranges.size > 0) {
+    const chars = Array.from(text);
+    for (const [pos, end] of ranges) {
+      for (let i = pos; i < end && i < chars.length; i++) {
+        if (chars[i] !== "\n" && chars[i] !== "\r") chars[i] = " ";
+      }
+    }
+    code = chars.join("");
+  }
+  return { code, source };
+}
+
+/** 把注释**等长涂白**：上一版用正则扫"字面量"，而正则分不清注释——注释里的**一对引号**
+ *  （中文行文里常见的 `'…'` / `"…"`）会被当成一条生产字面量。第 95 页当场炸给自己看：
+ *  我在这把尺的注释里写了「测试调用」，于是 `tests/net.test.ts:54` 那条**真 drift** 被洗成
+ *  verbatim/across，报告上写着"一切正常"（假绿的方向正是这把尺存在的理由）。
+ *  走 TS 词法拿精确区间，而不是再叠一条正则：规则 79 同一格。 */
+export function blankComments(text: string): string {
+  return lex(text).code;
+}
 
 /** 表里/源码里的字面量是 JS 转义态（`\n`、`\"`），运行时比的是解出来的真字符。 */
 function decodeJs(lit: string): string {
@@ -41,19 +102,134 @@ export interface ProseNeedle {
   file: string;
   line: number;
   field: string;
+  /** 这一条是**怎么**从诊断字段取到料的：直取成员，还是经本文件的 helper 递出来。
+   *  写成字段而不是只认一种写法：加宽之后要能回答「新收进来的是哪一族」，
+   *  否则下一次再换写法（跨文件 helper）照样看不见，而报告上仍然是"82 条，一切正常"。 */
+  via: "字段直取" | "本地 helper" | "字段别名";
   needle: string;
+  /** 这串字面量在**本 test 文件里还另有一处**（＝测试自己把它喂给了被测函数）。
+   *  它是第五态 `echo-caller-text` 的判据：文案里的这段是调用方给的标签被抄回来的，
+   *  生产侧永远不该有这句，把它报成 drift 是这把尺的噪声（第 95 页实测 `tests/net.test.ts:54`）。 */
+  suppliedInTest: boolean;
+}
+
+/** 从 matcher 前面那个闭括号往回走到配对的开括号，取括号**内**的被断言表达式。
+ *  走不通（不配对 / 超出 2000 字符）返回 null：那是"这把尺看不见这条"，必须被数出来，
+ *  不许和「这条断言不收」混成同一个数。 */
+function operandInsideParens(text: string, closeIdx: number): string | null {
+  let depth = 0;
+  for (let i = closeIdx; i > closeIdx - 2000 && i >= 0; i--) {
+    const c = text[i];
+    if (c === ")") depth += 1;
+    else if (c === "(") {
+      depth -= 1;
+      if (depth === 0) return text.slice(i + 1, closeIdx);
+    }
+  }
+  return null;
+}
+
+/** 本文件里「把诊断字段递出来」的本地取料函数：`function reasonOf(d){ … return d.reason }`、
+ *  `const noteOf = (d) => d.note`。只在本文件内解析（跨文件 helper 是另一族，今天全仓 0 例；
+ *  有例再加，不替假想需求建数据流）。返回体里取**第一个**诊断字段访问。 */
+export function localFieldHelpers(text: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const firstField = (body: string): string | null => {
+    FIELD_ACCESS.lastIndex = 0;
+    const m = FIELD_ACCESS.exec(body);
+    return m === null ? null : m[1]!;
+  };
+  for (const m of text.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)\s*\([\s\S]{0,200}?\)\s*(?:[^{};]{0,160})?\{([\s\S]{0,800}?)\n\}/g)) {
+    const field = firstField(m[2]!);
+    if (field !== null) out.set(m[1]!, field);
+  }
+  for (const m of text.matchAll(/\b(?:const|let)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]{0,120})?=\s*(?:\([^)]{0,160}\)|[A-Za-z_$][\w$]*)\s*=>\s*([^;]{0,200})/g)) {
+    const field = firstField(m[2]!);
+    if (field !== null) out.set(m[1]!, field);
+  }
+  // 单行写法（`function labelOf(d) { return d.note }`）：上面那条 `\n\}` 收尾的正则够不着它。
+  for (const m of text.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)\s*\([^)]{0,160}\)\s*(?::[^{;]{0,80})?\{\s*return\s+([^;\}]{0,200})/g)) {
+    const field = firstField(m[2]!);
+    if (field !== null) out.set(m[1]!, field);
+  }
+  return out;
+}
+
+/** 把诊断字段**赋给局部变量**的那些声明：`const reason = stops[0]?.reason ?? ""`。
+ *  第三族写法（实测 `tests/goal-continue.test.ts:317` 就是它）：断言读的是变量，
+ *  既没有 `.reason)` 也不是 helper 调用 ⇒ 只认前两种的面照样看不见这条。
+ *  与 helper 同一套规矩：初始化式里第一个诊断字段访问就是它读的字段。 */
+export function localFieldAliases(text: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const m of text.matchAll(/\b(?:const|let)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]{0,120})?=\s*([^;\n]{0,240})/g)) {
+    const init = m[2]!;
+    if (/=>/.test(init)) continue;
+    FIELD_ACCESS.lastIndex = 0;
+    const field = FIELD_ACCESS.exec(init);
+    if (field !== null) out.set(m[1]!, field[1]!);
+  }
+  return out;
 }
 
 /** 从一个 test 文件里挑料；行号按换行数算（读数要一跳到位）。 */
-export function collectNeedles(relPath: string, text: string): ProseNeedle[] {
-  const out: ProseNeedle[] = [];
-  for (const m of text.matchAll(NEEDLE)) {
-    if (m[2] !== undefined) continue;
-    const needle = decodeJs(m[3]!);
+export function collectNeedles(
+  relPath: string,
+  text: string,
+): { needles: ProseNeedle[]; unresolved: number } {
+  const code = blankComments(text);
+  const helpers = localFieldHelpers(code);
+  const aliases = localFieldAliases(code);
+  const testChunks = extractLiterals(relPath, code);
+  const needles: ProseNeedle[] = [];
+  let unresolved = 0;
+  for (const m of code.matchAll(MATCH_CALL)) {
+    if (m[1] !== undefined) continue;
+    const operand = operandInsideParens(code, m.index);
+    if (operand === null) {
+      unresolved += 1;
+      continue;
+    }
+    let via: ProseNeedle["via"] | null = null;
+    let field = "";
+    FIELD_ACCESS.lastIndex = 0;
+    const direct = FIELD_ACCESS.exec(operand);
+    if (direct !== null) {
+      via = "字段直取";
+      field = direct[1]!;
+    } else {
+      for (const [name, f] of helpers) {
+        if (new RegExp("\\b" + name + "\\s*\\(").test(operand)) {
+          via = "本地 helper";
+          field = f;
+          break;
+        }
+      }
+      if (via === null) {
+        for (const [name, f] of aliases) {
+          if (new RegExp("\\b" + name + "\\b").test(operand)) {
+            via = "字段别名";
+            field = f;
+            break;
+          }
+        }
+      }
+    }
+    if (via === null) continue;
+    const needle = decodeJs(m[2]!);
     if (needle.trim() === "") continue;
-    out.push({ file: relPath, line: text.slice(0, m.index).split("\n").length, field: m[1]!, needle });
+    // matcher 自己那条字面量必然含这串一次；**再多一次**＝测试把它当输入喂给了被测函数。
+    let occurrences = 0;
+    for (const c of testChunks) occurrences += c.chunk.split(needle).length - 1;
+    needles.push({
+      file: relPath,
+      line: code.slice(0, m.index).split("\n").length,
+      field,
+      via,
+      needle,
+      suppliedInTest: occurrences >= 2,
+    });
   }
-  return out;
+  return { needles, unresolved };
 }
 
 /** 把 needle 切成静态段：CJK 连续 2 字以上、ASCII/数字连续 3 字符以上；标点与空格当分隔。
@@ -65,7 +241,7 @@ export function staticRuns(needle: string): string[] {
 /** 纯数字/标点 ⇒ 收的是**算出来的值**，生产侧不会有这句字面量，不许混进 drift。 */
 const ONLY_VALUES = /^[\d.,%\s+−–:：=×/~-]+$/;
 
-export type CoverKind = "verbatim" | "across-interpolation" | "non-prose" | "drift";
+export type CoverKind = "verbatim" | "across-interpolation" | "non-prose" | "echo-caller-text" | "drift";
 
 export interface NeedleVerdict extends ProseNeedle {
   kind: CoverKind;
@@ -77,16 +253,18 @@ export interface NeedleVerdict extends ProseNeedle {
   copies: number;
 }
 
-/** 取料只认**字符串/模板字面量**，并且数它出现在几处字面量里。
+/** 取料只认**字符串/模板字面量**（走词法，不是正则扫引号），并且数它出现在几处字面量里。
  *  为什么不是"整文件文本里 grep"：本仓注释极密，中文短语在注释里重复是常态，
  *  而更坏的一类是**同模块另一句无关文案替被锚定的文案顶包**——
  *  造红实测：我把 `reason` 那句改了字，同文件里 `repRowLine` 的"（不足两次同配置重复）"
  *  把断言喂饱了 ⇒ 错报 0 drift。字面量级 + 副本计数让这一格从"静默"变成"出声的读数"
  *  （口径同规则 82/98：认不出≠没事，要单列）。
  *  曾用过"字段名须在 ±400 字符邻域"的邻居约束：它把跨层传话（events 抛的 Error 文案进 distill 的 `.why`）
- *  误判成 drift ⇒ 判的是"离得近"而不是"谁产出的"，撤。 */
-const LITERAL = /"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)'|`((?:[^`\\]|\\.)*)`/gs;
-
+ *  误判成 drift ⇒ 判的是"离得近"而不是"谁产出的"，撤。
+ *  第 95 页改走词法：正则那版按引号对切，会被**正则字面量里的引号**带偏——
+ *  `src/permissions/risk.ts` 的威胁表里有 `/echo\s+["']…/` 这类模式，带偏之后该文件里
+ *  `` `${t.note}（静态威胁表：…）`` 这条真字面量**整段读不到**（实测 127 段只收到几条），
+ *  于是断言被报成 across 并指认了别的文件。规则 79 同一格：静态判据要走词法，副本数才是真的。 */
 export interface LiteralChunk {
   path: string;
   /** 该字面量所在的函数名（找不到＝模块顶层，记 `(top)`）。
@@ -105,17 +283,29 @@ function enclosingFn(text: string, at: number): string {
   return fn;
 }
 
-/** 抽字面量并按 `${…}` 切成静态段（同一段字面量切出的块共享同一个 fn）。 */
+/** 抽字面量的静态段：词法树上取 `StringLiteral` / 模板的 head·middle·tail，
+ *  `${…}` 天然就是段与段的边界，所以不再需要按正则切；每段共享所在函数的 `fn`。 */
 export function extractLiterals(path: string, text: string): LiteralChunk[] {
+  const { code, source } = lex(text);
   const out: LiteralChunk[] = [];
-  for (const m of text.matchAll(LITERAL)) {
-    const raw = m[1] ?? m[2] ?? m[3] ?? "";
-    const fn = enclosingFn(text, m.index ?? 0);
-    for (const piece of raw.split(/\$\{[\s\S]*?\}/)) {
-      const chunk = decodeJs(piece);
-      if (chunk.trim() !== "") out.push({ path, fn, chunk });
+  const K = ts.SyntaxKind;
+  const push = (node: ts.Node, raw: string): void => {
+    const chunk = decodeJs(raw);
+    if (chunk.trim() !== "") out.push({ path, fn: enclosingFn(code, node.getStart(source)), chunk });
+  };
+  const walk = (node: ts.Node): void => {
+    const t = node.getText(source);
+    if (node.kind === K.StringLiteral || node.kind === K.NoSubstitutionTemplateLiteral || node.kind === K.TemplateTail) {
+      push(node, t.slice(1, -1));
+      return;
     }
-  }
+    if (node.kind === K.TemplateHead || node.kind === K.TemplateMiddle) {
+      push(node, t.slice(1, -2));
+      return;
+    }
+    node.forEachChild(walk);
+  };
+  source.statements.forEach(walk);
   return out;
 }
 
@@ -151,6 +341,19 @@ export function classifyNeedles(
       }
     }
     const seen = new Set(runs.filter((r) => chunks.some((c) => c.chunk.includes(r))));
+    // 第五态：这段**测试自己就有一份**（当输入喂给了被测函数）且生产侧一段都对不上 ⇒
+    // 它收的是「调用方的标签被抄回文案」，那句本来就不该躺在生产字面量里（实测 `tests/net.test.ts:54`
+    // 的「测试调用」被上一版报成 drift）。单独点名而不是并进 verbatim：这条断言验的是**回显**、
+    // 不是文案，混进"接上了"就是把没尺的格子读成已验收。
+    if (n.suppliedInTest && seen.size === 0) {
+      return {
+        ...n,
+        kind: "echo-caller-text",
+        detail: "这段是测试自己喂进去的标签被抄回文案 ⇒ 生产侧本就不该有，不算漂",
+        lostRun: "",
+        copies: 0,
+      };
+    }
     const lost = runs.find((r) => !seen.has(r)) ?? runs[0]!;
     return { ...n, kind: "drift", detail: `生产侧的字面量里没有这一段：「${lost}」`, lostRun: lost, copies: 0 };
   });
@@ -210,18 +413,36 @@ function inFlightPaths(root: string): Set<string> {
 
 /** 顶包候选的水位（**只准下调**，同 `docs-check` 的 `DOC_BUDGETS`）。
  *  登记的是**已提交态**那个数（在飞文件不计入 ⇒ 别人并发改动推不动我的棘轮）。
- *  历史：35（第 92 页登记）→ 31（第 93 页摘 4 格）→ 29（第 94 页把两种"不可测"拆成 `cause` 字段，摘 2 格）。
+ *  历史：35（第 92 页登记）→ 31（第 93 页摘 4 格）→ 29（第 94 页把两种"不可测"拆成 `cause` 字段，摘 2 格）
+ *  → **29（第 95 页：数字没动，底下换了一遍）**。这一轮三面同时修：
+ *  ①收料面加宽——本地 helper（`reasonOf(d))`）与字段别名（`const reason = …`）两族写法以前整族看不见，
+ *  收料断言 82 → 98 条；②生产侧"字面量"改走词法——正则扫引号会被**正则字面量里的引号**带偏
+ *  （`src/permissions/risk.ts` 的威胁表 `/echo\s+["']…/` 实测让该文件 127 段字面量只收到几条）；
+ *  ③注释等长涂白——我自己那条提到「测试调用」的注释，把一格真 drift 洗成了 verbatim。
+ *  三处修完顶包候选一度 29 → 38（旧盲区现形 9 格）；同轮把 13 处针脚换成生产侧唯一的整句
+ *  （goal 一族 10 ＋ 权限来源标记 1 ＋ 可行性聚合 2）⇒ 回到 29。
+ *  **上调依然不成立**：量尺加宽不等于文案变坏，而修掉的比看见的多；
+ *  今后再动这个数，先证明"新增的格子是加宽看见的、且同轮没有等量的修掉"。
  *  降它的方法见任务 #20：**每降一格就把这里一起下调**，否则棘轮只是张装饰性的表。 */
 export const MULTI_COPY_CEILING = 29;
 
 export interface ScanReport {
   needles: number;
+  /** 三种取料写法各收到几条：这一族第 95 页以前只认第一种，其余整族静默绕过。
+   *  留成分布读数而不是一个总数 ⇒ 哪天又漂回"只认直取"，这三格会露形，报告不会仍然写着"一切正常"。 */
+  viaCounts: Record<ProseNeedle["via"], number>;
+  /** matcher 调用点里括号回走走不通的条数＝**这把尺看不见那些断言**，与「没有那种断言」是两个数。 */
+  unresolvedMatcher: number;
   testFiles: number;
   sourceFiles: number;
   missingOnDisk: string[];
   counts: Record<CoverKind, number>;
   drift: WailedRow[];
+  /** 落在**他人在飞文件**里的 drift：单列点名，不并进红（判据不能拿别人没写完的行当我的账）。 */
+  inFlightDrift: WailedRow[];
   across: WailedRow[];
+  /** 收的是测试自己喂进去的标签被抄回文案（验的是回显，不是文案）——列出来供复核，不红。 */
+  echo: WailedRow[];
   /** 收料那段落在 ≥2 处字面量里：这句漂了也不响，是**顶包候选**清单（不红，但必须列出来）。 */
   multiCopy: WailedRow[];
   stale: string[];
@@ -255,27 +476,55 @@ export function scanRepo(root: string): ScanReport {
   const selfExcluded = allTests.filter((p) => SELF_EXCLUDED_TESTS.includes(p));
   const testFiles = load(allTests.filter((p) => !SELF_EXCLUDED_TESTS.includes(p)));
   const sources = load(trackedFiles(["src", "scripts"], [".ts", ".mts", ".mjs"], root));
-  const needles = testFiles.flatMap((f) => collectNeedles(f.path, f.text));
+  const collected = testFiles.map((f) => collectNeedles(f.path, f.text));
+  const needles = collected.flatMap((c) => c.needles);
+  const unresolvedMatcher = collected.reduce((a, c) => a + c.unresolved, 0);
+  const viaCounts = {
+    "字段直取": needles.filter((n) => n.via === "字段直取").length,
+    "本地 helper": needles.filter((n) => n.via === "本地 helper").length,
+    "字段别名": needles.filter((n) => n.via === "字段别名").length,
+  } as Record<ProseNeedle["via"], number>;
   const { rows, stale } = applyWaivers(classifyNeedles(needles, sources));
-  const counts = { verbatim: 0, "across-interpolation": 0, "non-prose": 0, drift: 0 } as Record<CoverKind, number>;
+  const counts = {
+    verbatim: 0,
+    "across-interpolation": 0,
+    "non-prose": 0,
+    "echo-caller-text": 0,
+    drift: 0,
+  } as Record<CoverKind, number>;
   for (const r of rows) counts[r.kind] += 1;
-  const multiCopy = rows.filter((r) => r.copies > 1);
   const fly = inFlightPaths(root);
-  const committed = multiCopy.filter((r) => !fly.has(r.file));
+  const allDrift = rows.filter((r) => r.kind === "drift" && !r.waived);
+  const driftSplit = splitByInFlight(allDrift, fly);
+  const copySplit = splitByInFlight(rows.filter((r) => r.copies > 1), fly);
   return {
     needles: needles.length,
+    viaCounts,
+    unresolvedMatcher,
     testFiles: testFiles.length,
     sourceFiles: sources.length,
     missingOnDisk,
     counts,
-    drift: rows.filter((r) => r.kind === "drift" && !r.waived),
+    drift: driftSplit.committed,
+    inFlightDrift: driftSplit.flying,
     across: rows.filter((r) => r.kind === "across-interpolation"),
-    multiCopy,
+    echo: rows.filter((r) => r.kind === "echo-caller-text"),
+    multiCopy: rows.filter((r) => r.copies > 1),
     stale,
     selfExcluded,
-    committedMultiCopy: committed.length,
-    inFlightMultiCopy: multiCopy.length - committed.length,
+    committedMultiCopy: copySplit.committed.length,
+    inFlightMultiCopy: copySplit.flying.length,
   };
+}
+
+/** 按「文件在不在飞」把清单分成两半（第 93 页给水位立的规矩，这里给 drift 与顶包候选共用）：
+ *  判卷只判**已提交态**——别人写到一半的文件里，"漂了"与"还没写完"在盘上长得一模一样，
+ *  把它算进我的红＝牵连；但这一半必须**单列点名**，否则"在飞"会变成随手关掉判据的逃生口。 */
+export function splitByInFlight<T extends { file: string }>(rows: readonly T[], inFlight: ReadonlySet<string>): { committed: T[]; flying: T[] } {
+  const committed: T[] = [];
+  const flying: T[] = [];
+  for (const r of rows) (inFlight.has(r.file) ? flying : committed).push(r);
+  return { committed, flying };
 }
 
 function main(): void {
@@ -284,6 +533,12 @@ function main(): void {
   console.log(
     "prose-needle-scan：收料断言 " + String(r.needles) + " 条（扫 " + String(r.testFiles) +
       " 个 test 文件）｜生产侧 " + String(r.sourceFiles) + " 个文件",
+  );
+  console.log(
+    "  取料写法：字段直取 " + String(r.viaCounts["字段直取"]) +
+      " ＋ 本地 helper " + String(r.viaCounts["本地 helper"]) +
+      " ＋ 字段别名 " + String(r.viaCounts["字段别名"]) +
+      " ｜括号回走走不通（＝这些断言本面看不见，不是没有）" + String(r.unresolvedMatcher),
   );
   if (r.missingOnDisk.length > 0) {
     console.log(
@@ -295,18 +550,23 @@ function main(): void {
     "  verbatim " + String(r.counts.verbatim) +
       " ｜ across-interpolation " + String(r.counts["across-interpolation"]) +
       " ｜ non-prose " + String(r.counts["non-prose"]) +
+      " ｜ echo（测试自备标签回显）" + String(r.counts["echo-caller-text"]) +
       " ｜ drift（未登记）" + String(r.drift.length),
   );
   for (const v of r.drift) console.log("  ❌ drift " + v.file + ":" + String(v.line) + " ." + v.field + " ⇒ " + v.detail);
+  for (const v of r.inFlightDrift) console.log("  ⚠️ drift(在飞，不计我的账) " + v.file + ":" + String(v.line) + " ." + v.field + " ⇒ " + v.detail);
+  for (const v of r.echo) console.log("  · echo " + v.file + ":" + String(v.line) + " ." + v.field + "「" + v.needle + "」");
   for (const k of r.stale) console.log("  ❌ stale-waiver " + k + " ⇒ 已不再命中：从 KNOWN_NON_DRIFT 删掉它");
-  for (const v of r.across.slice(0, 12)) {
+  for (const v of r.across) {
     console.log("  ⚠️ across " + v.file + ":" + String(v.line) + " ." + v.field + " ⇒ " + v.detail + "（整串「" + v.needle + "」）");
   }
   console.log(
     "  顶包候选（收料那段在 ≥2 处字面量里 ⇒ 改一处不会响）：" + String(r.multiCopy.length) + " 条" +
       "（已提交态 " + String(r.committedMultiCopy) + " ＋ 在飞 " + String(r.inFlightMultiCopy) + "）",
   );
-  for (const v of r.multiCopy.slice(0, 10)) {
+  // 列全，不切片：这条清单是分流用的工作表，`slice(0, 10)` 会把第 11 格以后藏起来，
+  // 而"看不见"在这张表里会被下游读成"没了"（规则 70/116 同一格）。
+  for (const v of r.multiCopy) {
     console.log("    ⚠️ " + String(v.copies) + " 处 · " + v.file + ":" + String(v.line) + " ." + v.field + "「" + v.needle + "」");
   }
   console.log("  自排除（本面自己的夹具）：" + (r.selfExcluded.length > 0 ? r.selfExcluded.join("、") : "空"));

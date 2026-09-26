@@ -460,7 +460,7 @@ describe("goal 续跑判据", () => {
     const d = goalStopDecision({ turn: 8, spec: SPEC, spentUsd: null, evidence: "absent", wrote: false, truncated: true });
     expect(d.kind).toBe("stop");
     if (d.kind !== "stop") throw new Error("该停");
-    expect(d.reason).toContain("轮次上限");
+    expect(d.reason).toContain("已用尽而目标未达成");
   });
 
   it("美元上限已花到 + 被截断 ⇒ 仍然停（截断不给额外的钱）", () => {
@@ -469,7 +469,7 @@ describe("goal 续跑判据", () => {
     });
     expect(d.kind).toBe("stop");
     if (d.kind !== "stop") throw new Error("该停");
-    expect(d.reason).toContain("美元上限");
+    expect(d.reason).toContain("已花到（实花");
   });
 
   it("读过事件流就能拿到这个判断（projectGoal 算了不许丢——「两头断」防线）", () => {

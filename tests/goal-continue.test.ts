@@ -158,7 +158,7 @@ describe("goal 模式端到端（真入口，缺省零行为）", () => {
     // maxTurns=1：第 1 轮跑完就停，一条续跑轮都不许起（轮次闸在"无产出闸"之前判，理由点名轮次）
     expect(turns.length).toBe(1);
     const stop = evts.find((e) => e.type === "goal_stopped");
-    expect(stop?.type === "goal_stopped" && stop.reason).toContain("轮次上限");
+    expect(stop?.type === "goal_stopped" && stop.reason).toContain("已用尽而目标未达成");
   });
 
   it("清除目标 = 落一条 goal_stopped（不开新事件、不开新通道）：幂等，且此后不再自动续跑", async () => {
@@ -315,10 +315,11 @@ describe("goal 美元闸端到端：模型名也算得出钱，并且真的拦�
     const stops = evts.filter((e) => e.type === "goal_stopped");
     expect(stops.length).toBe(1);
     const reason = stops[0]?.type === "goal_stopped" ? stops[0].reason : "";
-    expect(reason).toContain("美元上限");
+    expect(reason).toContain("已花到（实花");
     // 闸惰掉时会退到下一条理由——这两条"不许出现"就是本用例的分辨力所在
-    expect(reason).not.toContain("轮次上限");
-    expect(reason).not.toContain("没有写过任何文件");
+    // （收各支**独有的整句**，不收 3~4 字片段：片段撞车就会替一条没触发的闸作证，第 95 页）
+    expect(reason).not.toContain("已用尽而目标未达成");
+    expect(reason).not.toContain("没有可验证的产出，自动续跑只会白花钱");
     expect(userTurns(evts).filter((t) => t.type === "user_message" && t.origin?.kind === "goal").length).toBe(0);
   });
 });

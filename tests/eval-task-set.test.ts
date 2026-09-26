@@ -123,7 +123,9 @@ describe("feasibility：能不能跑，缺什么要说名字", () => {
   it("整批因工具链缺席而不可跑 ⇒ measurable=false，与「跑出来是红的」是两种读数", () => {
     const agg = aggregateFeasibility([feasibility(task, probe({ canRunVerifier: () => false }))]);
     expect(agg.measurable).toBe(false);
-    expect(agg.reason).toContain("不可跑");
+    // 收「全部不可跑」而不是裸「不可跑」：后者在 `scripts/loop-eval.ts` 的逐条打印里也写着，
+    // 那是**另一个面**的同一词——第 95 页词法修好后这格才现形（旧面读不到那条模板字面量）。
+    expect(agg.reason).toContain("全部不可跑");
   });
 
   it("没预先 fetch 仓库快照 ⇒ 不可跑，且 blocker 指名是哪个 commit（这是'没有尺'，不是失败）", () => {
@@ -141,7 +143,7 @@ describe("feasibility：能不能跑，缺什么要说名字", () => {
   it("聚合三态：全部不可跑时 reason 说'无从谈起'，且 runnable 计数为 0 而不是成功率 0", () => {
     const agg = aggregateFeasibility([feasibility(task, probe({ hasRepoSnapshot: () => false }))]);
     expect(agg.measurable).toBe(false);
-    expect(agg.reason).toContain("不可跑");
+    expect(agg.reason).toContain("基准读数无从谈起");
     expect(agg.total).toBe(1);
     expect(agg.runnable).toBe(0);
   });

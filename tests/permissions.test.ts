@@ -320,7 +320,9 @@ describe("重定向写面进威胁表（09-22 补 ④ 段）", () => {
       "echo x > ~/.ssh/authorized_keys",
     ]) {
       expect(risk(cmd).level, cmd).toBe("high");
-      expect(risk(cmd).reason, cmd).toContain("静态威胁表");
+      // 收的是那对**括号来源标记**（`（静态威胁表：…）`），不收裸「静态威胁表」：后者在仓里另有
+      // 探针文案与变异锚点引用同一串字，第 95 页量到 5 处副本＝改生产那句可以不作声。
+      expect(risk(cmd).reason, cmd).toContain("（静态威胁表：");
     }
   });
 

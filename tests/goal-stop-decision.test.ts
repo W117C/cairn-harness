@@ -98,15 +98,18 @@ describe("goalStopDecision：done 只认绿证据，停止理由必须可命名"
   });
 
   it("轮次上限：到点就停，理由带上当前证据态（不许只写「结束」）", () => {
-    const d = decide({ turn: 8, evidence: "failed" });
+    const ev = "failed" as const;
+    const d = decide({ turn: 8, evidence: ev });
     expect(d.kind).toBe("stop");
-    expect(reasonOf(d)).toContain("轮次上限");
-    expect(reasonOf(d)).toContain("failed");
+    expect(reasonOf(d)).toContain("已用尽而目标未达成");
+    // 证据态那半边收**当场那个枚举值**而不是收字面量：写死 `toContain("failed")` 等于让
+    // 任何恰好含 failed 的句子替这条断言作证（第 95 页量到 60 处副本）。
+    expect(reasonOf(d)).toContain(ev);
   });
 
   it("美元闸：花到上限即停；**价格不可知时明写闸不生效**，只按轮次闸走", () => {
-    expect(reasonOf(decide({ spentUsd: 0.5 }))).toContain("美元上限");
-    expect(noteOf(decide({ spentUsd: null, turn: 2 }))).toContain("美元闸");
+    expect(reasonOf(decide({ spentUsd: 0.5 }))).toContain("已花到（实花");
+    expect(noteOf(decide({ spentUsd: null, turn: 2 }))).toContain("美元闸本次不生效");
     // 反向对照：价格未知不等于没花钱，也不等于轮次闸跟着失效——到点照样停
     expect(decide({ spentUsd: null, turn: 8 }).kind).toBe("stop");
   });
@@ -116,7 +119,9 @@ describe("goalStopDecision：done 只认绿证据，停止理由必须可命名"
   });
 
   it("无产出可续：既没写过盘也没任何验证证据 ⇒ 停（读答型目标不该被自动续跑烧钱）", () => {
-    expect(reasonOf(decide({ evidence: "absent", wrote: false }))).toContain("没有");
+    // 旧写法收的是 `toContain("没有")`——第 95 页量到 **124 处**副本，等于恒真：
+    // 换成这一支独有的整句，别的分支再说「没有…」也喂不饱它。
+    expect(reasonOf(decide({ evidence: "absent", wrote: false }))).toContain("没有可验证的产出，自动续跑只会白花钱");
     // 写过盘但没验 ⇒ 属于「还没验」而不是「无事可做」，必须继续
     expect(decide({ evidence: "absent", wrote: true }).kind).toBe("continue");
   });
@@ -127,8 +132,43 @@ describe("goalStopDecision：done 只认绿证据，停止理由必须可命名"
     }
     // stale 与 failed 的区别必须原样传给模型：一个是「验过但被后续写入作废」，一个是「验了没过」，
     // 混成一句「证据不足」就会让它去重跑一遍已经验过的东西（多花一轮真钱）。
-    expect(noteOf(decide({ evidence: "stale" }))).toContain("作废");
-    expect(noteOf(decide({ evidence: "failed" }))).toContain("未通过");
+    expect(noteOf(decide({ evidence: "stale" }))).toContain("要重新 verify 才算");
+    expect(noteOf(decide({ evidence: "failed" }))).toContain("最近一次验证未通过");
+  });
+
+  // 这一条把「顶包」从计数题变成**构造题**。以前散在三个 test 文件里的 5 格都只能收 3~4 个字的片段
+  // （`toContain("轮次上限")`／`("美元上限")`／`("没有")`——最后那条实测有 124 处副本），
+  // 而片段撞车就是假绿：别的分支的文案只要含这几个字，断言就替一条根本没触发的闸作证。
+  // 现在换成逐分支扫输入 ⇒ ①每条 stop 文案**恰好命中一条**独有句（互斥 ⇒ 张冠李戴当场红）；
+  // ②每条登记的独有句都必须被某个输入打中（登记了却打不中＝装饰性表，规则 129 的第三态）；
+  // ③新加一支 stop 而没登记独有句 ⇒ 那一支的文案命中 0 条 ⇒ 第一条红。
+  const STOP_MARKS = {
+    turns: "已用尽而目标未达成",
+    usd: "已花到（实花",
+    noOutput: "没有可验证的产出，自动续跑只会白花钱",
+  } as const;
+
+  it("stop 分支的文案互斥且穷尽：每条只认得自己那一支，也没有第四支逃在表外", () => {
+    const reasonByInput = (over: Partial<GoalDecisionInput>): string | null => {
+      const d = decide(over);
+      return d.kind === "stop" ? d.reason : null;
+    };
+    const marks = Object.values(STOP_MARKS);
+    const hitMarks = new Set<string>();
+    for (const evidence of ["verified", "stale", "failed", "absent"] as const) {
+      for (const wrote of [true, false]) {
+        for (const truncated of [true, false]) {
+          for (const gate of [{ turn: 8, spentUsd: 0.5 }, { turn: 1, spentUsd: 0.5 }, { turn: 8, spentUsd: 0.02 }, { turn: 1, spentUsd: 0.02 }]) {
+            const reason = reasonByInput({ evidence, wrote, truncated, ...gate });
+            if (reason === null) continue;
+            const hits = marks.filter((m) => reason.includes(m));
+            expect(hits.length, "停止文案要恰好命中一条独有句，实得 " + String(hits.length) + "：" + reason).toBe(1);
+            hitMarks.add(hits[0]!);
+          }
+        }
+      }
+    }
+    expect(Object.entries(STOP_MARKS).filter(([, m]) => !hitMarks.has(m)).map(([k]) => k)).toEqual([]);
   });
 });
 
