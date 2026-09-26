@@ -156,15 +156,14 @@ export function classifyNeedles(
   });
 }
 
-/** 存量豁免（键＝`test 文件|对不齐的那段`）。今天两条同因：诊断句里嵌了**当场输入**
- *  （fixture 给的路径片段 / 用例自带的预算数字），生产侧不该出现它们——这类断言是健康的。
- *  撤登记条件：那两条用例改成收真文案（或收料段换成变量）之后，本表会自己报 stale-waiver。 */
-export const KNOWN_NON_DRIFT: Readonly<Record<string, string>> = {
-  "tests/docs-check.test.ts|30000":
-    "该条 detail 嵌的是这条用例自己给的预算夹具值，不是本仓写的文案 ⇒ 生产侧无从出现",
-  "tests/docs-check.test.ts|no-such":
-    "该条 detail 嵌的是当场输入的路径片段（故意不存在的那个名字）⇒ 判的是缺文件分支，不是文案",
-};
+/** 存量豁免（键＝`test 文件|对不齐的那段`）。
+ *  **今天登记过两条，又在今天被自己判成 stale 删掉**：`tests/docs-check.test.ts` 的
+ *  「30000」「no-such」两条在登记后不到一小时内不再命中（那个文件被别人在飞改动改到了 ⇒
+ *  它们现在落在 verbatim/across 里）。机制照 `docs-check` 的 `LEGACY_WAIVERS`：
+ *  名单外新增即红，**登记了却不再命中的也算红**——豁免不许静默烂在这儿。
+ *  留这段是给下一个人：登记豁免前要确认命中的是**谁的在飞改动**，否则这条登记会跟着对方的树一起烂。
+ *  已知风险：若那笔在飞改动回退，这两格会重新以 drift 出现（那时该由改动方自己处理，不是这里加回）。 */
+export const KNOWN_NON_DRIFT: Readonly<Record<string, string>> = {};
 
 export interface WailedRow extends NeedleVerdict {
   waived: boolean;
@@ -192,6 +191,29 @@ function trackedFiles(prefixes: readonly string[], exts: readonly string[], root
   return raw.split("\0").filter((p) => p !== "" && exts.some((e) => p.endsWith(e)));
 }
 
+/** 本面自己的 test 文件：它的**夹具**里就写着 `expect(m.reason).toContain("…")` 这类样本，
+ *  收料面若把它当断言，就是在量自己写进去的字符串——实测多算 3 条顶包候选（41 → 44）。
+ *  排除必须**列出来**（报告里的 `selfExcluded`），否则这就是一个静默盲区。 */
+export const SELF_EXCLUDED_TESTS: readonly string[] = ["tests/prose-needle-scan.test.ts"];
+
+/** 在飞文件（工作树 ≠ HEAD）：共享工作树里别人正在改的东西不许推动我的棘轮
+ *  （实测两分钟之内 41 → 44，推手全是别人的落地/未落地改动）。 */
+function inFlightPaths(root: string): Set<string> {
+  const raw = execFileSync("git", ["status", "--porcelain", "-z"], { encoding: "utf8", cwd: root });
+  const out = new Set<string>();
+  for (const rec of raw.split("\0")) {
+    if (rec.length < 4) continue;
+    out.add(rec.slice(3).split(" -> ").pop()!);
+  }
+  return out;
+}
+
+/** 顶包候选的水位（**只准下调**，同 `docs-check` 的 `DOC_BUDGETS`）。
+ *  登记的是**已提交态**那个数（35，2026-09-26 第 92 页收尾时实测；在飞那 7 条不计入），
+ *  因为在共享工作树里，盘上的数两分钟内就能被别人推动 41→44——拿它当水位等于把并发噪声记到我账上。
+ *  降它的方法见任务 #20。 */
+export const MULTI_COPY_CEILING = 35;
+
 export interface ScanReport {
   needles: number;
   testFiles: number;
@@ -203,6 +225,12 @@ export interface ScanReport {
   /** 收料那段落在 ≥2 处字面量里：这句漂了也不响，是**顶包候选**清单（不红，但必须列出来）。 */
   multiCopy: WailedRow[];
   stale: string[];
+  /** 被排除的本面自己的 test 文件（夹具自引用）。空＝排除没生效。 */
+  selfExcluded: string[];
+  /** 只算**已提交态**（剔掉在飞文件）的顶包候选数——棘轮判这个数，别人并发改动推不动它。 */
+  committedMultiCopy: number;
+  /** 在飞文件里出现的顶包候选数（单列，不并进水位，也不许悄悄算进棘轮）。 */
+  inFlightMultiCopy: number;
 }
 
 /** 扫整仓（读盘 IO 集中在这里；纯函数由 tests/ 直接消费）。 */
@@ -223,12 +251,17 @@ export function scanRepo(root: string): ScanReport {
     }
     return out;
   };
-  const testFiles = load(trackedFiles(["tests"], [".test.ts"], root));
+  const allTests = trackedFiles(["tests"], [".test.ts"], root);
+  const selfExcluded = allTests.filter((p) => SELF_EXCLUDED_TESTS.includes(p));
+  const testFiles = load(allTests.filter((p) => !SELF_EXCLUDED_TESTS.includes(p)));
   const sources = load(trackedFiles(["src", "scripts"], [".ts", ".mts", ".mjs"], root));
   const needles = testFiles.flatMap((f) => collectNeedles(f.path, f.text));
   const { rows, stale } = applyWaivers(classifyNeedles(needles, sources));
   const counts = { verbatim: 0, "across-interpolation": 0, "non-prose": 0, drift: 0 } as Record<CoverKind, number>;
   for (const r of rows) counts[r.kind] += 1;
+  const multiCopy = rows.filter((r) => r.copies > 1);
+  const fly = inFlightPaths(root);
+  const committed = multiCopy.filter((r) => !fly.has(r.file));
   return {
     needles: needles.length,
     testFiles: testFiles.length,
@@ -237,8 +270,11 @@ export function scanRepo(root: string): ScanReport {
     counts,
     drift: rows.filter((r) => r.kind === "drift" && !r.waived),
     across: rows.filter((r) => r.kind === "across-interpolation"),
-    multiCopy: rows.filter((r) => r.copies > 1),
+    multiCopy,
     stale,
+    selfExcluded,
+    committedMultiCopy: committed.length,
+    inFlightMultiCopy: multiCopy.length - committed.length,
   };
 }
 
@@ -267,10 +303,25 @@ function main(): void {
     console.log("  ⚠️ across " + v.file + ":" + String(v.line) + " ." + v.field + " ⇒ " + v.detail + "（整串「" + v.needle + "」）");
   }
   console.log(
-    "  顶包候选（收料那段在 ≥2 处字面量里 ⇒ 改一处不会响）：" + String(r.multiCopy.length) + " 条",
+    "  顶包候选（收料那段在 ≥2 处字面量里 ⇒ 改一处不会响）：" + String(r.multiCopy.length) + " 条" +
+      "（已提交态 " + String(r.committedMultiCopy) + " ＋ 在飞 " + String(r.inFlightMultiCopy) + "）",
   );
   for (const v of r.multiCopy.slice(0, 10)) {
     console.log("    ⚠️ " + String(v.copies) + " 处 · " + v.file + ":" + String(v.line) + " ." + v.field + "「" + v.needle + "」");
+  }
+  console.log("  自排除（本面自己的夹具）：" + (r.selfExcluded.length > 0 ? r.selfExcluded.join("、") : "空"));
+  if (r.selfExcluded.length !== SELF_EXCLUDED_TESTS.length) {
+    console.error("❌ 自排除清单没全命中 ⇒ 登记与取料面脱节（要么文件改名了，要么排除失效）");
+    process.exitCode = 1;
+    return;
+  }
+  if (r.committedMultiCopy > MULTI_COPY_CEILING) {
+    console.error(
+      "❌ 水位上涨：已提交态顶包候选 " + String(r.committedMultiCopy) + " > 登记的 " + String(MULTI_COPY_CEILING) +
+        "（只准下调；降法见任务 #20。在飞文件不计入这一格，所以这不是并发噪声）",
+    );
+    process.exitCode = 1;
+    return;
   }
   if (r.needles === 0) {
     console.error("❌ 一条收料断言都没挑到 ⇒ 取料面自己坏了，这不是「全绿」");

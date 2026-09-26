@@ -8,7 +8,10 @@ import {
   applyWaivers,
   classifyNeedles,
   collectNeedles,
+  KNOWN_NON_DRIFT,
+  MULTI_COPY_CEILING,
   scanRepo,
+  SELF_EXCLUDED_TESTS,
   staticRuns,
   type ProseNeedle,
 } from "../scripts/prose-needle-scan";
@@ -149,9 +152,22 @@ describe("真仓扫：这把尺自己不许空载", () => {
     expect(r.sourceFiles).toBeGreaterThan(50);
   });
 
-  it("未登记的 drift ＝ 0；两条存量豁免仍在命中（不命中就红）", () => {
+  it("未登记的 drift ＝ 0；豁免表为空 ⇒ stale 也必须为空（登记烂在这儿要红）", () => {
     expect(r.drift.map((d) => `${d.file}:${d.lostRun}`)).toEqual([]);
     expect(r.stale).toEqual([]);
+    // 本轮实录：曾登记过两条（docs-check 的「30000」「no-such」），登记后不到一小时被别人的在飞改动
+    // 解掉 ⇒ stale-waiver 机制自己点名、我删登记。这条断言保证"清空"不是我把表抹了。
+    expect(Object.keys(KNOWN_NON_DRIFT)).toEqual([]);
+  });
+
+  it("顶包候选的水位只准降（已提交态；在飞文件不计入 ⇒ 并发推不动我的棘轮）", () => {
+    expect(r.committedMultiCopy).toBeLessThanOrEqual(MULTI_COPY_CEILING);
+    expect(r.committedMultiCopy + r.inFlightMultiCopy).toBe(r.multiCopy.length);
+  });
+
+  it("本面自己的夹具不算断言（不排就是量自己写的字符串），且排除必须列出来", () => {
+    expect(r.selfExcluded).toEqual([...SELF_EXCLUDED_TESTS]);
+    expect(r.drift.concat(r.multiCopy).some((v) => v.file === "tests/prose-needle-scan.test.ts")).toBe(false);
   });
 
   it("被跳过的文件只可能是『已跟踪但盘上没有』（他人的在飞删除），且这条读数必须报出来", () => {
