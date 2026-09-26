@@ -4208,3 +4208,33 @@ git 调用由 `scripts/mutate-verify.mjs` 注入 ⇒ 本模块不自己 spawn �
   （我这 3 条随同笔自清，剩下的 5 条全是别人在飞的源文件）；全量判卷 **237 files passed / 84.12s**（主树口径，HEAD 仍红＝#11）；typecheck 0。
 - 记一条口径，因为上一轮差点用错：**后台命令的完成通知里那个 exit code 是 wrapper 的**——`vitest > log; grep…` 这条的退出码来自 `grep`，
   通知报 0 而汇总行写着 `1 failed | 236 passed`。凭证只认汇总行与判据自己的退出码（规则 206 的又一次命中）。
+
+### 2026-09-27 · 第 140 页 · 复认 4 条「针脚命中 2 处」：其中一条一直改在隔壁支上，而"被杀死"这件事的粒度量不到它
+
+第 138/139 页留下的 warn 档：826 条锚点里 4 条针脚命中 2 处。warn 的机制含义是 `String.replace` 只改**第一处** ⇒
+这 4 条锚点每次跑都在"猜"自己改到了哪一行。逐条复认（判据：把针脚扩到唯一，不用正则；改完逐条单跑仍杀，并核一眼改到的到底是哪一处）：
+
+- **`cpp-zero-boundary-ratio-zero` 复认出错——而且错得有代表性**：它声明的 killer 是「真实红跑：零 verified ⇒ 不可测」，
+  那一支的 return 在 `src/agent/cost-per-progress.ts:98`；但单行针脚的第一处命中在 `:90`（**no-usage 那一支**）。
+  ⇒ 这条锚点长期"绿着"，杀它的却是同文件里那条「没有 usage…」的断言——**它守的格与它宣称的格不是同一格**。
+  修法：针脚吃到上一行 `mainTokens: split.mainTokens` 唯一化 ⇒ 落回 `:98`；`:90` 那一支另配一条真观察者名下的新锚点
+  `cpp-no-usage-ratio-zero`（那条分支的 `tokensPerBoundary: null` 有断言读，不补等于白丢一格）。两处现在各钉各的。
+- `probe-delta-sign-reversed`：`diffAssembly:145` 与 `diffLongReplay:347` 的头两行差分**逐字相同** ⇒ 针脚吃到只有装配表才有的 `cacheableBytes` 那行。
+  顺带看清了长时程那一支：**它此前零观察者**。`tests/gym-long-replay.test.ts` 的 A/B 用例只断言原始账单（`on.totalPromptBytes < off.totalPromptBytes`），
+  从没读差分字段；而 `scripts/gym-long.ts:119` 把 `Δ总 prompt` 这一列**印给人看**（用来判断摊销有没有省）⇒ 符号翻过去，没有一条用例会红。
+  次序按老规矩：先补观察者（用例里加一行 `expect(d.totalPromptBytes).toBeLessThan(0)`，与既有那条同向、不增脆），再钉锚点 `probe-long-replay-delta-sign-reversed`。
+  见证取自改后的文件：整个判卷里读 `d.` 的只有两行（`:114` 作废字节、`:116` 本笔新加那行）——`d.totalPromptBytes` 在加这行之前无人读。
+- `verify-exec-pnpm-mapping-lost`：另一处相同文字在 `workerShellRunnerFor`（`src/main/agent-runner.ts:271`）。针脚吃到 `verifyExec` 那句
+  `return async (command, cwd, timeoutMs) => {` ⇒ 落 `:1193`。**worker 那一支记为缺口而不是补一条**：那函数没导出，全仓测试对它的 pnpm 映射零断言
+  （`grep "pnpm test" tests/` 命中的全是权限门/自动验证/渲染那些不相干的用例）⇒ 现在钉锚点只能钉出一个恒假判卷。要守它得先导出，那是另一笔。
+- `tool-result-merge-ignores-id`：落 `src/agent/context.ts:177`（`mergeToolResultsById` 的合并键）；`:215` 那行同文字但它是 declared-id 收集循环，不是合并键 ⇒ 针脚吃到 `for` 那行。
+
+**这一页真正的收获是那条机制边界**：mutate-verify 判"杀死"用的是判卷文件的 vitest 退出码，**不印失败的用例名** ⇒
+"这条锚点被杀死"从来不等价于"它声明的那条 killer 用例红了"。cpp 那条正是靠这个粒度混过去的：隔壁用例替它挨了红，表上记的是它守住了。
+⇒ 登记新缺口：runner 应把 failing 用例名与 `expectFail` 对齐（对齐不上＝按未证或失配处置），否则 `expectFail` 那一栏只是给人看的注释。
+
+- 读数：`--check-needles` 826 → **828 条**（+2 新锚点，条数按 `before + 新增条数` 核过），**待复认 4 → 0**，阻断仍 5（全是别人在飞的源文件）、
+  killer 指针失效 0、钉在飞文本 2、未入库面 0；改法语法体检 828 条全产出合法源文件。
+- 逐条单跑：5 条复认/新增锚点 **6.4s 全杀**，新加那条长时程锚点 **1.4s 杀**。中间被自家三态拦了一次：
+  我改了判卷文件 ⇒ 该条判"判卷文件在飞 ⇒ 不可判（未证 1，不等于已杀死）"——落库后复跑才拿到干净 HEAD 上的那个杀。
+- typecheck 0；全量判卷 **237 files / 2752 tests passed / 83.06s**（主树口径，HEAD 仍红＝#11）。
