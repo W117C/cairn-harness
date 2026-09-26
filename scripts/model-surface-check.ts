@@ -304,7 +304,7 @@ async function main(): Promise<void> {
   process.exit(failed === 0 ? 0 : 1);
 }
 
-// 入口判定：单测 import 本模块不得把门跑起来（照 scripts/arch-boundary-check.ts 的写法）。
+// 入口判定：单测 import 本模块不得把门跑起来（同款写法见 scripts/no-progress-check.ts）。
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   void main();
 }

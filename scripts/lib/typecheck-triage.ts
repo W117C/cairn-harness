@@ -1,7 +1,7 @@
 /** typecheck 报错的**归因**（不改判定，只说清是谁的红）。
  *  tsc 扫的是整棵树，含**未跟踪**文件——于是别人正在写的草稿能把 `pnpm typecheck` 弄红，
  *  而 HEAD 本身是干净的。本仓已为此两次开 HEAD worktree 手工对照
- *  （`tests/observation-capture.test.ts` 缺参数类型那次、`scripts/sidebar-probe.ts` 4 条那次）。
+ *  （`tests/observation-capture.test.ts` 缺参数类型那次、`scripts/sidebar-probe.ts` 4 条那次——后者未入库，只是当时的工作草稿）。
  *  对照要占一整轮且容易被误读成回归，所以把「哪些报错文件在 HEAD、哪些还是在飞草稿」做成一行输出。
  *  ⚠️ 退出码照抄 tsc：这里只归因，不豁免——草稿也是错，只是不该记在 HEAD 账上。 */
 

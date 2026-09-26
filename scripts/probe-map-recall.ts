@@ -7,7 +7,7 @@
 // 09-23 主动收掉的假边来源，不是这里要追的召回。
 //
 // 首跑读数（本仓 405 个 .ts）：召回 0.9863、**4 个合法文件整文件零抽取**
-// （`src/agent/map/parse.ts` / `scripts/ipc-reachability-check-core.ts` / `tests/secrets.test.ts` /
+// （`src/agent/map/parse.ts` / `scripts/ipc-reachability-check-core.ts`（已删 `69fbb0d`）/ `tests/secrets.test.ts` /
 // `tests/sessions.test.ts`）。四个的共性是 grammar 误报（`import("pkg").T`、嵌套泛型实参、含 `//`
 // 的正则字面量），而旧 `fileTags` 对 `hasError` 一票否决整文件。改成部分回收后：
 // 召回 0.9991、零抽取 0 个。`map-check` ⑦ 现在把「零抽取 == 0」当机制不变量守住（阈值不守：

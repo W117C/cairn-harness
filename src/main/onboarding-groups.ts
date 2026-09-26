@@ -1,12 +1,15 @@
 /**
- * §13 七组设置项 → 向导步号与入口说明（覆盖清单；缺组 = commercial-check 红）。
+ * §13 七组设置项 → 向导步号与入口说明（覆盖清单；缺组 = `tests/onboarding-groups.test.ts` 红）。
  *
- * 从 `src/renderer/onboarding.tsx`（已删的 React 实现）抽出来的**纯数据**部分。
- * 原文件是 React 组件 + shadcn 渲染整份向导；本模块只承载"七组覆盖面"这一规范，
- * 供 `scripts/commercial-check.ts`（D1 引导七组覆盖）断言用。
+ * 从 `src/renderer/onboarding.tsx`（已删，`69fbb0d`）抽出来的**纯数据**部分。
+ * 原文件是 React 组件 + shadcn 渲染整份向导；本模块只承载"七组覆盖面"这一规范。
+ *
+ * ⚠️ 观察者换过，别再照旧文案去找门：旧 observer 是已删的 `scripts/commercial-check.ts`（D1 引导七组覆盖，
+ * 已删于 `69fbb0d`，且 `scripts/gate-manifest.ts` 的 26 道里从来没有它）。今天守这条的是
+ * `tests/onboarding-groups.test.ts`——它同时钉「形状与步号域」「消费者拿到的必须是副本」两半。
  *
  * 命名前缀 `Onboarding` 保留以维持历史注释的指向；这是规范的单一事实源，
- * 任何对组的增删改都须同步到这里和 §13 文档。
+ * 任何对组的增删改都须同步到这里、那条用例与 §13 文档。
  */
 
 export interface OnboardingGroup {

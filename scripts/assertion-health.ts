@@ -36,7 +36,7 @@ export function scanTautologies(file: string, src: string): ScanHit[] {
  *
  * 判据是**按位置**而不是按实参个数：本仓断言签名至少三套（cond-first、label-first、
  * 三参等值 `check(name, actual, expected)`），等值签名里第三位是**期望值**、第二位是 actual。
- * 旧正则"最后一个实参是不是 true"把等值那一族整批判成空断言（实测 `scripts/sidebar-probe.ts`
+ * 旧正则"最后一个实参是不是 true"把等值那一族整批判成空断言（实测 `scripts/sidebar-probe.ts`——未入库的草稿探针，
  * 三条里中两条、漏一条——漏的那条只因参数里带括号才侥幸），同时又会放过 label-first 带 detail 的真空断言。
  *
  * 两支都从"按行正则"改成 AST 的另一半原因：**注释里的示例会被当成代码**。旧写法只 strip
