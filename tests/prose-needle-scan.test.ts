@@ -9,7 +9,9 @@ import {
   blankComments,
   classifyNeedles,
   collectNeedles,
+  copyCount,
   extractLiterals,
+  isAnchorTable,
   KNOWN_NON_DRIFT,
   MULTI_COPY_CEILING,
   scanRepo,
@@ -246,10 +248,56 @@ describe("splitByInFlight：判据判已提交态，在飞的那一半必须单�
   });
 });
 
+describe("登记表影子：逐字引用被锚那一行，不算第二个生产者", () => {
+  // 谓词是**内容**（`expectFail:` 成批出现），不是文件名清单——登记表改名、搬走都还认得。
+  const table = (times: number): string =>
+    Array.from({ length: times }, (_, i) => `  { apply: (s) => s, expectFail: "用例 ${String(i)}" },`).join("\n");
+
+  it("成批 `expectFail:` ⇒ 认出是登记表；零星两条 ⇒ 不是", () => {
+    expect(isAnchorTable(table(50))).toBe(50);
+    expect(isAnchorTable(table(2))).toBe(0);
+  });
+
+  const anchorPath = "scripts/mutate-verify.mjs";
+  const realPath = "src/agent/goal.ts";
+  const chunks = extractLiterals(realPath, 'function gate() {\n  note = "美元闸本次不生效";\n}')
+    .concat(extractLiterals(anchorPath, 'function table() {\n  apply = "if (x) return \\"美元闸本次不生效\\"";\n}'));
+
+  it("一份真生产者 ＋ 一份登记表引用 ⇒ copies=1（但 rawCopies=2，两个数都要在）", () => {
+    const anchors = new Set([anchorPath]);
+    expect(copyCount(chunks, "美元闸本次不生效")).toBe(2);
+    expect(copyCount(chunks, "美元闸本次不生效", anchors, new Set())).toBe(1);
+  });
+
+  it("反向一侧 A：这条断言本来就指着登记表 ⇒ 它的副本照算（判卷面的 `.why` 就产自那张表）", () => {
+    expect(copyCount(chunks, "美元闸本次不生效", new Set([anchorPath]), new Set([anchorPath]))).toBe(2);
+  });
+
+  it("反向一侧 B：唯一副本就在登记表里 ⇒ 不许读成 0（排除面不许把生产者一起排掉）", () => {
+    const only = extractLiterals(anchorPath, 'function table() {\n  why = "未跟踪文件拒绝";\n}');
+    expect(copyCount(only, "未跟踪文件拒绝", new Set([anchorPath]), new Set())).toBe(1);
+  });
+
+  it("classifyNeedles 认表并交出 rawCopies；test 文件点名该表时两份都算", () => {
+    const sources = [
+      src(realPath, 'function gate() {\n  note = "美元闸本次不生效";\n}'),
+      src(anchorPath, table(60) + '\nfunction probe() {\n  apply = "美元闸本次不生效";\n}'),
+    ];
+    const needle: ProseNeedle = {
+      file: "tests/goal-stop-decision.test.ts", line: 1, field: "note", via: "本地 helper",
+      needle: "美元闸本次不生效", suppliedInTest: false,
+    };
+    const [quiet] = classifyNeedles([needle], sources);
+    expect([quiet!.copies, quiet!.rawCopies]).toEqual([1, 2]);
+    const [loud] = classifyNeedles([needle], sources, new Map([[needle.file, 'import "../scripts/' + anchorPath.split("/")[1] + '"; // 判的是 mutate-verify.mjs 自己']]));
+    expect(loud!.copies).toBe(2);
+  });
+});
+
 describe("applyWaivers：豁免要带理由，且不许静默烂在这儿", () => {
   const drift = (file: string, lostRun: string) => ({
     file, line: 1, field: "reason", via: "字段直取" as const, needle: lostRun, suppliedInTest: false,
-    kind: "drift" as const, detail: "", lostRun, copies: 0,
+    kind: "drift" as const, detail: "", lostRun, copies: 0, rawCopies: 0,
   });
 
   it("名单内的 drift 被压住（但单列 waived，不折进 verbatim）", () => {
@@ -304,6 +352,20 @@ describe("真仓扫：这把尺自己不许空载", () => {
   it("顶包候选的水位只准降（已提交态；在飞文件不计入 ⇒ 并发推不动我的棘轮）", () => {
     expect(r.committedMultiCopy).toBeLessThanOrEqual(MULTI_COPY_CEILING);
     expect(r.committedMultiCopy + r.inFlightMultiCopy).toBe(r.multiCopy.length);
+  });
+
+  // 影子排除是"把判据关小一格"的动作，所以它自己必须有观测者：
+  // ①一张表都没认出 ⇒ 谓词失效（排除面在悄悄改副本数却无人作证）；
+  // ②每一格免计都必须**留下至少一个生产者**（`copies ≥ 1`），且两数并排（`rawCopies > copies`）——
+  //   免计掉的是引用，不是被引用的那一行。
+  it("登记表影子的排除面自己要有名字：认出几张表、免计了哪几格、每格还留着生产者", () => {
+    expect(r.anchorTables.length).toBeGreaterThan(0);
+    for (const v of r.shadowCleared) {
+      expect(v.copies).toBeGreaterThanOrEqual(1);
+      expect(v.rawCopies).toBeGreaterThan(v.copies);
+    }
+    // 本轮实录：认出 `scripts/mutate-verify.mjs`（804 条 `expectFail:`），免计 3 格。
+    expect(r.anchorTables.some((a) => a.entries > 100)).toBe(true);
   });
 
   it("本面自己的夹具不算断言（不排就是量自己写的字符串），且排除必须列出来", () => {

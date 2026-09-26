@@ -249,8 +249,12 @@ export interface NeedleVerdict extends ProseNeedle {
   detail: string;
   /** drift 时对不齐的那一段 ⇒ 存量豁免的键（整串含运行时值，改一个字就换键，登记不住）。 */
   lostRun: string;
-  /** 这段落在几处**不同字面量**里（>1 ⇒ 顶包风险：改了其中一处，断言照样绿 ⇒ 单列出声）。 */
+  /** 这段落在几处**不同字面量**里（>1 ⇒ 顶包风险：改了其中一处，断言照样绿 ⇒ 单列出声）。
+   *  登记表的影子副本不计在这里，计在 `rawCopies`。 */
   copies: number;
+  /** 不做任何排除时的副本数——与 `copies` 的差＝被"登记表影子"解释掉的那几处，
+   *  必须并列报出来：排除面不许只留下一个变小了的数（规则 101 的反向一侧）。 */
+  rawCopies: number;
 }
 
 /** 取料只认**字符串/模板字面量**（走词法，不是正则扫引号），并且数它出现在几处字面量里。
@@ -309,35 +313,81 @@ export function extractLiterals(path: string, text: string): LiteralChunk[] {
   return out;
 }
 
-/** 这段文字落在几处**不同函数的不同字面量**里（>1 ⇒ "漂了也不响"的风险，单列出声）。 */
-export function copyCount(chunks: readonly LiteralChunk[], needle: string): number {
-  const seen = new Set<string>();
-  for (const c of chunks) if (c.chunk.includes(needle)) seen.add(c.path + "\u0000" + c.fn);
-  return seen.size;
+/** 「登记表影子」的内容谓词（**不写路径清单**，规则 122/191）：
+ *  一个文件里成批出现 `expectFail:` 键 ⇒ 它是变异锚点登记表。登记表的 `apply` 字符串
+ *  **按定义要逐字引用被锚那一行**，所以它对副本数的贡献是"另一把尺的影子"，不是第二个生产者。
+ *  实测：`tests/goal-stop-decision.test.ts:112` 的第二份副本来自 `scripts/mutate-verify.mjs:4072`
+ *  对同一行的引用 ⇒ 那一格从测试侧永远清不掉，而它本来就不是顶包。
+ *  今天登记表 804 条 `expectFail:`，阈值取 50（数量级判据，不靠文件名）。 */
+const ANCHOR_MARKER = "expectFail:";
+const ANCHOR_TABLE_MIN = 50;
+
+export function isAnchorTable(text: string): number {
+  const hits = text.split(ANCHOR_MARKER).length - 1;
+  return hits >= ANCHOR_TABLE_MIN ? hits : 0;
+}
+
+/** 这段文字落在几处**不同函数的不同字面量**里（>1 ⇒ "漂了也不响"的风险，单列出声）。
+ *  `anchors` = 登记表文件的路径集：它们的副本**只在还有别处真生产者时**才不计
+ *  （若唯一副本就在登记表里，那这条断言收的就是登记表自己的文案 ⇒ 照算，不许读成 0）。 */
+export function copyCount(
+  chunks: readonly LiteralChunk[],
+  needle: string,
+  anchors: ReadonlySet<string> = new Set(),
+  realProducers: ReadonlySet<string> = new Set(),
+): number {
+  const all = new Set<string>();
+  const strict = new Set<string>();
+  for (const c of chunks) {
+    if (!c.chunk.includes(needle)) continue;
+    const key = c.path + "\u0000" + c.fn;
+    all.add(key);
+    // 登记表是"另一把尺"——除非这条断言所在的路径本来就指着它（`realProducers` 由调用方按 test 文件是否点名该表算出）。
+    if (anchors.has(c.path) && !realProducers.has(c.path)) continue;
+    strict.add(key);
+  }
+  return strict.size > 0 ? strict.size : all.size;
 }
 
 /** 逐条判四态。`sources` = 生产侧文件。 */
 export function classifyNeedles(
   needles: readonly ProseNeedle[],
   sources: readonly { path: string; text: string }[],
+  testTexts: ReadonlyMap<string, string> = new Map(),
 ): NeedleVerdict[] {
   const chunks = sources.flatMap((s) => extractLiterals(s.path, s.text));
   const byPath = new Map<string, string>();
   for (const c of chunks) byPath.set(c.path, (byPath.get(c.path) ?? "") + c.chunk);
+  // 登记表（内容谓词认出来的，不是写死的文件名）与"这条断言是否本来就指着它"。
+  const anchors = new Set(sources.filter((s) => isAnchorTable(s.text) > 0).map((s) => s.path));
+  const reachedBy = (testFile: string): Set<string> => {
+    const text = testTexts.get(testFile) ?? "";
+    const out = new Set<string>();
+    for (const a of anchors) {
+      const base = a.slice(a.lastIndexOf("/") + 1);
+      if (text.includes(base) || text.includes(a)) out.add(a);
+    }
+    return out;
+  };
   return needles.map((n) => {
     const runs = staticRuns(n.needle);
-    const zero = { detail: "", lostRun: "", copies: 0 };
+    const zero = { detail: "", lostRun: "", copies: 0, rawCopies: 0 };
     if (runs.length === 0 || runs.every((r) => ONLY_VALUES.test(r))) {
       return { ...n, ...zero, kind: "non-prose", detail: "收的是算出来的值/标点，不比对生产文案" };
     }
+    const reached = reachedBy(n.file);
+    const count = (sought: string): { copies: number; rawCopies: number } => {
+      const rawCopies = copyCount(chunks, sought);
+      return { copies: copyCount(chunks, sought, anchors, reached), rawCopies };
+    };
     const hit = chunks.find((c) => c.chunk.includes(n.needle));
     if (hit !== undefined) {
-      return { ...n, kind: "verbatim", detail: hit.path, lostRun: "", copies: copyCount(chunks, n.needle) };
+      return { ...n, kind: "verbatim", detail: hit.path, lostRun: "", ...count(n.needle) };
     }
     // across：同一文件里各静态段按顺序拼得出整串 ⇒ 中间隔的是 `${…}` 的运行时值。
     for (const [path, whole] of byPath) {
       if (runs.every((r) => whole.includes(r))) {
-        return { ...n, kind: "across-interpolation", detail: path, lostRun: "", copies: copyCount(chunks, runs[0]!) };
+        return { ...n, kind: "across-interpolation", detail: path, lostRun: "", ...count(runs[0]!) };
       }
     }
     const seen = new Set(runs.filter((r) => chunks.some((c) => c.chunk.includes(r))));
@@ -352,10 +402,11 @@ export function classifyNeedles(
         detail: "这段是测试自己喂进去的标签被抄回文案 ⇒ 生产侧本就不该有，不算漂",
         lostRun: "",
         copies: 0,
+        rawCopies: 0,
       };
     }
     const lost = runs.find((r) => !seen.has(r)) ?? runs[0]!;
-    return { ...n, kind: "drift", detail: `生产侧的字面量里没有这一段：「${lost}」`, lostRun: lost, copies: 0 };
+    return { ...n, kind: "drift", detail: `生产侧的字面量里没有这一段：「${lost}」`, lostRun: lost, copies: 0, rawCopies: 0 };
   });
 }
 
@@ -428,8 +479,16 @@ function inFlightPaths(root: string): Set<string> {
  *  降它要动的是副本计数本身（任务 #20 §七），不是测试。
  *  另记一笔自己的方法论错：**提交前读的 29 把"我自己的在飞改动"也排除了**，提交后两格落回判据桶 ⇒ 31。
  *  ⇒ 「在飞排除」对判卷者自己同样成立：**水位必须提交后复跑一次**才算数（规则 108 的形状，第二次兑现）。
- *  降它的方法见任务 #20：**每降一格就把这里一起下调**，否则棘轮只是张装饰性的表。 */
-export const MULTI_COPY_CEILING = 30;
+ *  降它的方法见任务 #20：**每降一格就把这里一起下调**，否则棘轮只是张装饰性的表。
+ *  → **27（第 96 页）**：副本计数不再把**变异锚点的逐字引用**当第二个生产者（内容谓词认表，不是写文件名），
+ *  免计的 3 格逐条点名（`autonomy:190`「断路器」、`goal-stop-decision:112`「美元闸本次不生效」、
+ *  `shell-bypass-composition:333`「setsid」）——前两格免计后各留一个真生产者（`autonomy.ts#evaluate`、
+ *  `goal.ts#budgetLine`），**第三格不是**：`setsid` 剩下的那份在 `scripts/lib/shell-bypass-cases.ts:132`，
+ *  是一行**用例清单**（喂给被测函数的输入），这一条真正的态是 `echo-caller-text`。
+ *  ⇒ 27 比应有的低 1 格，这条错位写在 `outputs/anchor-shadow-copies-2026-09-26/` §五，不收掉不许当"已验收"。
+ *  `net.test.ts:53`「停滞超时」只从 3 降到 2——它另有**两份**真生产者（`updater.ts#stallMessage`、`net.ts#arm`），
+ *  照旧留在单上：这条排除不是把清单缩短的手段。 */
+export const MULTI_COPY_CEILING = 27;
 
 export interface ScanReport {
   needles: number;
@@ -451,6 +510,12 @@ export interface ScanReport {
   /** 收料那段落在 ≥2 处字面量里：这句漂了也不响，是**顶包候选**清单（不红，但必须列出来）。 */
   multiCopy: WailedRow[];
   stale: string[];
+  /** 靠内容谓词认出的登记表（`expectFail:` 成批出现）：它们的逐字引用不计进 `copies`。
+   *  空集＝谓词没认出任何表 ⇒ 排除面等于没生效，这条读数必须出现在报告里。 */
+  anchorTables: { path: string; entries: number }[];
+  /** 因"登记表影子"而从 ≥2 降到 ≤1 的格子，**逐条点名**（`rawCopies` 与 `copies` 两个数并排着看）：
+   *  排除面只留下一个变小了的数＝把判据关掉还不说（规则 101 的反向一侧）。 */
+  shadowCleared: WailedRow[];
   /** 被排除的本面自己的 test 文件（夹具自引用）。空＝排除没生效。 */
   selfExcluded: string[];
   /** 只算**已提交态**（剔掉在飞文件）的顶包候选数——棘轮判这个数，别人并发改动推不动它。 */
@@ -489,7 +554,12 @@ export function scanRepo(root: string): ScanReport {
     "本地 helper": needles.filter((n) => n.via === "本地 helper").length,
     "字段别名": needles.filter((n) => n.via === "字段别名").length,
   } as Record<ProseNeedle["via"], number>;
-  const { rows, stale } = applyWaivers(classifyNeedles(needles, sources));
+  const { rows, stale } = applyWaivers(classifyNeedles(needles, sources, new Map(testFiles.map((f) => [f.path, f.text]))));
+  const anchorTables = sources
+    .map((s) => ({ path: s.path, entries: isAnchorTable(s.text) }))
+    .filter((a) => a.entries > 0);
+  // 被"登记表影子"解释掉的格子：必须并列报出来，排除面不许只留下一个变小了的数。
+  const shadowCleared = rows.filter((r) => r.rawCopies > 1 && r.copies <= 1);
   const counts = {
     verbatim: 0,
     "across-interpolation": 0,
@@ -516,6 +586,8 @@ export function scanRepo(root: string): ScanReport {
     echo: rows.filter((r) => r.kind === "echo-caller-text"),
     multiCopy: rows.filter((r) => r.copies > 1),
     stale,
+    anchorTables,
+    shadowCleared,
     selfExcluded,
     committedMultiCopy: copySplit.committed.length,
     inFlightMultiCopy: copySplit.flying.length,
@@ -574,7 +646,20 @@ function main(): void {
   for (const v of r.multiCopy) {
     console.log("    ⚠️ " + String(v.copies) + " 处 · " + v.file + ":" + String(v.line) + " ." + v.field + "「" + v.needle + "」");
   }
+  console.log(
+    "  登记表影子：认出 " + String(r.anchorTables.length) + " 张表（" +
+      r.anchorTables.map((a) => a.path + " " + String(a.entries) + " 条").join("、") +
+      "），因逐字引用而免计的格子 " + String(r.shadowCleared.length) + " 格",
+  );
+  for (const v of r.shadowCleared) {
+    console.log("    · 免计 " + v.file + ":" + String(v.line) + " ." + v.field + "「" + v.needle + "」原 " + String(v.rawCopies) + " 处 → " + String(v.copies) + " 处");
+  }
   console.log("  自排除（本面自己的夹具）：" + (r.selfExcluded.length > 0 ? r.selfExcluded.join("、") : "空"));
+  if (r.anchorTables.length === 0) {
+    console.error("❌ 一张登记表都没认出 ⇒ 内容谓词失效（或表改了写法），排除面正在悄悄改变副本数却无人作证");
+    process.exitCode = 1;
+    return;
+  }
   if (r.selfExcluded.length !== SELF_EXCLUDED_TESTS.length) {
     console.error("❌ 自排除清单没全命中 ⇒ 登记与取料面脱节（要么文件改名了，要么排除失效）");
     process.exitCode = 1;
