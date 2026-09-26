@@ -97,7 +97,8 @@ describe("均值与分母体检：不可测的点名，不并均值", () => {
     expect(good.ok).toBe(true);
     expect(denominatorCoverage([row("a", { verifiedBoundaries: 0, measurable: false, tokensPerBoundary: null }), row("b", { verifiedBoundaries: 0, measurable: false, tokensPerBoundary: null })]).ok).toBe(false);
     expect(denominatorCoverage([row("a", {}), row("b", {})]).ok).toBe(false);
-    expect(good.detail).toContain("死跑成本");
+    // 「死跑成本」也被读数脚本自己的输出用着（`｜死跑成本=…`）⇒ 收产品这条聚合句独有的半句
+    expect(good.detail).toContain("整笔主面开销就是");
   });
 });
 

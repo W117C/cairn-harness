@@ -50,7 +50,8 @@ describe("停滞守卫 stallGuard（根因 4）", () => {
     await sleep(160);
     expect(g.signal.aborted).toBe(true);
     expect(g.stalled()).toBe(true);
-    expect(String(g.signal.reason)).toContain("停滞超时");
+    // 「停滞超时」有两份真生产者（`updater.ts#stallMessage` 与 `net.ts#arm`）⇒ 收这一支独有的下半句
+    expect(String(g.signal.reason)).toContain("ms 内无任何数据（对端挂起或网络黑洞）");
     expect(String(g.signal.reason)).toContain("测试调用");
     g.dispose();
   });

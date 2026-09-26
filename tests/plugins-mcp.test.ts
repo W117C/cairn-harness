@@ -82,7 +82,8 @@ describe("M2e MCP 适配器（任务 7，真 stub server）", () => {
     expect(at("read-only", wr).verdict).toBe("deny");
     const roDeny = at("read-only", no);
     if (roDeny.verdict !== "deny") throw new Error("无注解在只读档应被拒，实得 " + roDeny.verdict);
-    expect(roDeny.reason).toContain("只读注解白名单");
+    // 「只读注解白名单」也被 `plugins-check.ts` 自己那句断言消息用着 ⇒ 收产品依据句独有的条款号
+    expect(roDeny.reason).toContain("§11.7.2 只读注解白名单");
     // 默认档：只读放行，其余逐次
     expect(at("default", ro).verdict).toBe("approve");
     expect(at("default", wr).verdict).toBe("ask");
@@ -94,7 +95,7 @@ describe("M2e MCP 适配器（任务 7，真 stub server）", () => {
     expect(deAsk.risk).toBe("high");
     const autoNo = at("auto", no);
     if (autoNo.verdict !== "ask") throw new Error("无注解在自主档必须送审，实得 " + autoNo.verdict);
-    expect(autoNo.reason).toContain("无注解");
+    expect(autoNo.reason).toContain("亦逐次（§11.7.2 fail-closed）");
     // 反面：少传注解 ≠ 不是 MCP（按无注解处理，fail-closed）
     expect(evaluate(name, {}, newAutonomySession("auto", {})).verdict).toBe("ask");
     // 非 MCP 的读类工具不受影响（新增谓词没把静态表拖下水）

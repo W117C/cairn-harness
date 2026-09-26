@@ -161,7 +161,8 @@ describe("M3c sequencer 纯函数", () => {
     expect(empty.ok).toBe(false);
     const missTask = parseStages([{ role: "review" }]);
     expect(missTask.ok).toBe(false);
-    expect((missTask as { ok: false; why: string }).why).toContain("task 必填");
+    // 「task 必填」另有 `orchestrator.ts` 的一句（spawn 参数校验），且那份文案在别人手里飞 ⇒ 收这一支独有的整句
+    expect((missTask as { ok: false; why: string }).why).toContain("].task 必填（worker 上下文唯一来源）");
     const tooMany = parseStages(Array.from({ length: 9 }, (_, i) => ({ task: "t" + String(i) })));
     expect(tooMany.ok).toBe(false);
     const ok = parseStages([{ task: "实现" }, { role: "review", task: "评审", gate: true }]);

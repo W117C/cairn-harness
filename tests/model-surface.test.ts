@@ -131,7 +131,8 @@ describe("模型面总预算：降配梯", () => {
   it("省了谁必须说出去：note 点名每一把丢弃工具并写出帽值", () => {
     const specs = faceWith(80, 500);
     const plan = planSurfaceBudget({ specs, systemChars: SYSTEM_CHARS, coreNames: CORE });
-    expect(plan.note).toContain("模型面预算");
+    // 同一文件里 `capDescription` 也写着「模型面预算…」⇒ 收 note 这条独有的账（帽值＋超出量成对出现）
+    expect(plan.note).toContain("字符已满（本轮超出");
     expect(plan.note).toContain(String(MODEL_SURFACE_TOTAL_CHAR_LIMIT));
     for (const name of plan.dropped) expect(plan.note).toContain(name);
   });

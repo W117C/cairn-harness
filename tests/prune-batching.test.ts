@@ -63,7 +63,8 @@ describe("免费车（freeRide）：断过头的那一轮不攒", () => {
     const without = shouldApplyPrune({ ...base, ...unreachable });
     expect(withFlag.apply).toBe(true);
     expect(without.apply).toBe(false);
-    expect(withFlag.why).toContain("已被压缩打断");
+    // 「已被压缩打断」也被 `prefix-churn-check.ts` 的说明句用着 ⇒ 收这一支独有的裁决半句
+    expect(withFlag.why).toContain("已被压缩打断 ⇒ 顺手剪");
   });
 
   it("免费车不许绕过「未启用」与「算不出头寸」那两支的既有语义", () => {

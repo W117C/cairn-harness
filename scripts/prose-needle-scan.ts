@@ -612,8 +612,18 @@ function inFlightPaths(root: string): Set<string> {
  *  下一批要动的是生产者不是测试：「方案门」那句 `先批后写（当前没有已批准的方案）` 在
  *  `permissions/index.ts`、`permissions/autonomy.ts`、`main/agent-runner.ts` **三处各抄一份**（同族副本缺陷），
  *  所以任何取自那行的针脚都永远 ≥3 处——修法是把拒因收成 `plan-state.ts` 的一份常量；
- *  本轮不动它：`agent-runner.ts` 与变异表都在别人手里飞，改那三行会连带把别人的锚点针脚弄失效。 */
-export const MULTI_COPY_CEILING = 18;
+ *  本轮不动它：`agent-runner.ts` 与变异表都在别人手里飞，改那三行会连带把别人的锚点针脚弄失效。
+ *  → **11（第 103 页）**：第 102 页的分族字段一生效，"同词不同句"那一族就变成机械步骤——本轮一次摘 7 格：
+ *  「停滞超时」→「ms 内无任何数据（对端挂起或网络黑洞）」、「task 必填」→「].task 必填（worker 上下文唯一来源）」、
+ *  「只读注解白名单」→「§11.7.2 只读注解白名单」、「无注解」→「亦逐次（§11.7.2 fail-closed）」、
+ *  「已被压缩打断」→「已被压缩打断 ⇒ 顺手剪」、「死跑成本」→「整笔主面开销就是」、「模型面预算」→「字符已满（本轮超出」。
+ *  造红：五个生产者各改一句（跑完即删、`git status` 已确认复原）⇒ `5 failed | 79 passed`，
+ *  而**旧针脚在那五个文件里仍分别命中 1/1/5/2/2/2 处、新针脚全部归 0** ⇒ 换的是分辨力不是措辞。
+ *  `src/agent/sequencer.ts` 在别人手里飞 ⇒ m3c 那格只换了针脚、没做生产者突变（不记成已验收）。
+ *  修正一处旧账：上面说「方案门」三处——`copySites` 实测是**四处**（多一份在 `scripts/gate-check.ts#makeDriver`）。
+ *  剩 11 格：6 格是"同句抄写"（`方案门`×3 等 #24；`rev`/`STATE.md` 在他人手里；`grep` 那格是标识符重复、仍属换针脚），
+ *  5 格等热文件（`skill-tool-policy` 两格的producer 在飞、`replay-*` 两格、`shell-bypass` 一格）。 */
+export const MULTI_COPY_CEILING = 11;
 
 export interface ScanReport {
   needles: number;
