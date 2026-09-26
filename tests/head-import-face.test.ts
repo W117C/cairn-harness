@@ -60,9 +60,11 @@ describe("parseImportStatements：取料单位是整条语句，不是行", () =
   });
 
   it("不带 from 的两种写法也是边（副作用与动态 import），但只判模块不点名", () => {
-    const text = `import "./styles";\nconst p = async (): Promise<unknown> => await import("./lazy");`;
+    // 两条 specifier 都指 HEAD 里**真的存在**的文件：本判卷自己也在取料面里，
+    // 假路径写进 fixture 就等于给这把尺造一条真悬空（`./lazy` 实测在 HEAD 上造出 tests/lazy.ts 红）。
+    const text = `import "../scripts/head-import-face";\nconst p = async (): Promise<unknown> => await import("../scripts/head-import-face");`;
     const s = parseImportStatements(text);
-    expect(s.map((x) => x.spec)).toEqual(["./styles", "./lazy"]);
+    expect(s.map((x) => x.spec)).toEqual(["../scripts/head-import-face", "../scripts/head-import-face"]);
     expect(s.every((x) => x.clause.names.length === 0)).toBe(true);
   });
 
