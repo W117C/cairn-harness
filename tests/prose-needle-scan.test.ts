@@ -9,6 +9,8 @@ import {
   blankComments,
   classifyNeedles,
   collectNeedles,
+  copyCount,
+  copySites,
   emittedChunks,
   extractLiterals,
   isAnchorTable,
@@ -341,10 +343,30 @@ describe("影子池：登记表的引用与用例表的输入都不算生产者"
   });
 });
 
+describe("copySites：计数要点得出名（两把尺互检）", () => {
+  const pool = [
+    // f1 里故意放**两段**同样的字面量：同一函数只算一处（否则"同一句里出现两次"会被读成两处）
+    ...extractLiterals("src/a.ts", 'function f1() {\n  reason = "这一句出现了两次";\n  note = "这一句出现了两次";\n}\nfunction f2() {\n  reason = "这一句出现了两次";\n}'),
+    ...extractLiterals("scripts/b.ts", 'function main() {\n  const s = "这一句出现了两次";\n}'),
+    ...extractLiterals("scripts/c.ts", 'function g() {\n  const t = "别的文案";\n}'),
+    // 第四处是**故意**加的：少于 4 处时，"只交前 3 个名字"这种截断骗得过下面那条互检（3==3 也成立）。
+    ...extractLiterals("scripts/d.ts", 'function h() {\n  const u = "这一句出现了两次";\n}'),
+  ];
+  it("同一函数的两段算一处、不同函数各算一处，顺序＝取料顺序", () => {
+    expect(copySites(pool, "这一句出现了两次")).toEqual(["src/a.ts#f1", "src/a.ts#f2", "scripts/b.ts#main", "scripts/d.ts#h"]);
+  });
+  // `copyCount` 与 `copySites` 是**两份独立实现**（不互相委托）：一份按 NUL 分隔、一份按 `#`。
+  // 哪天口径漂了（比如某个路径里出现 `#`），这一条会响——计数与名字必须互为对账，不同源（规则 184）。
+  it("与 `copyCount` 对得上（同口径互检）", () => {
+    for (const needle of ["这一句出现了两次", "别的文案", "根本没有的句子"])
+      expect(copySites(pool, needle).length).toBe(copyCount(pool, needle));
+  });
+});
+
 describe("applyWaivers：豁免要带理由，且不许静默烂在这儿", () => {
   const drift = (file: string, lostRun: string) => ({
     file, line: 1, field: "reason", via: "字段直取" as const, needle: lostRun, suppliedInTest: false,
-    kind: "drift" as const, detail: "", lostRun, copies: 0, rawCopies: 0,
+    kind: "drift" as const, detail: "", lostRun, copies: 0, rawCopies: 0, copySites: [] as string[],
   });
 
   it("名单内的 drift 被压住（但单列 waived，不折进 verbatim）", () => {
@@ -399,6 +421,21 @@ describe("真仓扫：这把尺自己不许空载", () => {
   it("顶包候选的水位只准降（已提交态；在飞文件不计入 ⇒ 并发推不动我的棘轮）", () => {
     expect(r.committedMultiCopy).toBeLessThanOrEqual(MULTI_COPY_CEILING);
     expect(r.committedMultiCopy + r.inFlightMultiCopy).toBe(r.multiCopy.length);
+  });
+
+  // 计数要点得出名：一格说"3 处"就得交出是哪三处，否则这张表还是得人回仓里猜（第 101 页）。
+  // 第二句是"有货"读数：真仓里确实存在跨文件的那一类（＝同一句抄在多个生产者里，修法在代码不在测试）。
+  it("顶包名单每一格都点得出名（`copySites.length === copies`），且跨文件那一类今天就在单上", () => {
+    for (const v of r.multiCopy) {
+      expect(v.copySites.length).toBe(v.copies);
+      expect(v.copies).toBeGreaterThan(1);
+    }
+    const crossFile = r.multiCopy.filter(
+      (v) => new Set(v.copySites.map((s) => s.slice(0, s.lastIndexOf("#")))).size > 1,
+    );
+    expect(crossFile.length).toBeGreaterThan(0);
+    // 本轮实录：`compaction`「膨胀」、`cost-per-progress`「死跑成本」、`plugins-mcp`「只读注解白名单」…
+    // 这些都是**读数脚本（scripts/*-check）抄了产品文案**那一族——第 170/171 页规则的同一形状。
   });
 
   // 影子排除是"把判据关小一格"的动作，所以它自己必须有观测者：

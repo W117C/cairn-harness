@@ -255,6 +255,9 @@ export interface NeedleVerdict extends ProseNeedle {
   /** 不做任何排除时的副本数——与 `copies` 的差＝被"登记表影子"解释掉的那几处，
    *  必须并列报出来：排除面不许只留下一个变小了的数（规则 101 的反向一侧）。 */
   rawCopies: number;
+  /** 这几处**是谁**（`path#fn`，生产者池里算的）。计数必须点得出名：
+   *  「两处不同出口」＝针脚挑错了字，「同一句抄在 N 个生产者」＝代码的副本缺陷，修法相反。 */
+  copySites: string[];
 }
 
 /** 取料只认**字符串/模板字面量**（走词法，不是正则扫引号），并且数它出现在几处字面量里。
@@ -367,6 +370,25 @@ export function copyCount(chunks: readonly LiteralChunk[], needle: string): numb
   return seen.size;
 }
 
+/** 这段落在**哪几处**（`path#fn`，按取料顺序；同一函数只算一次，与 `copyCount` 同口径）。
+ *  第 101 页补这个：光秃秃一个"3 处"要人回仓里猜哪三处＝把顶包的账又交回人肉。
+ *  而"是哪三处"恰好决定修法：两处不同出口 ⇒ 针脚挑错了字（换短句）；
+ *  同一句抄在 N 个生产者里 ⇒ 那是代码的副本缺陷，改测试永远清不掉（本轮「方案门」三格就是这个）。
+ *  与 `copyCount` 是**两份独立实现**（不是互相委托）：两者不一致就是口径漂了，
+ *  所以有一条用例与一条真仓断言专门对这两把尺（规则 184：自检的两把尺不许同源）。 */
+export function copySites(chunks: readonly LiteralChunk[], needle: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const c of chunks) {
+    if (!c.chunk.includes(needle)) continue;
+    const key = c.path + "#" + c.fn;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  return out;
+}
+
 export interface ShadowFile {
   path: string;
   kind: "登记表" | "用例表";
@@ -424,7 +446,7 @@ export function classifyNeedles(
   };
   return needles.map((n) => {
     const runs = staticRuns(n.needle);
-    const zero = { detail: "", lostRun: "", copies: 0, rawCopies: 0 };
+    const zero = { detail: "", lostRun: "", copies: 0, rawCopies: 0, copySites: [] as string[] };
     if (runs.length === 0 || runs.every((r) => ONLY_VALUES.test(r))) {
       return { ...n, ...zero, kind: "non-prose", detail: "收的是算出来的值/标点，不比对生产文案" };
     }
@@ -437,9 +459,10 @@ export function classifyNeedles(
     const byPath = reached.size === 0
       ? producerByPath
       : new Map([...producerByPath, ...[...reached].map((p): [string, string] => [p, emitted(p).map((c) => c.chunk).join("")])]);
-    const count = (sought: string): { copies: number; rawCopies: number } => ({
+    const count = (sought: string): { copies: number; rawCopies: number; copySites: string[] } => ({
       copies: copyCount(pool, sought),
       rawCopies: copyCount(chunks, sought),
+      copySites: copySites(pool, sought),
     });
     const hit = pool.find((c) => c.chunk.includes(n.needle));
     if (hit !== undefined) {
@@ -465,10 +488,11 @@ export function classifyNeedles(
         lostRun: "",
         copies: 0,
         rawCopies: copyCount(chunks, n.needle),
+        copySites: [],
       };
     }
     const lost = runs.find((r) => !seen.has(r)) ?? runs[0]!;
-    return { ...n, kind: "drift", detail: `生产侧的字面量里没有这一段：「${lost}」`, lostRun: lost, copies: 0, rawCopies: 0 };
+    return { ...n, ...zero, kind: "drift", detail: `生产侧的字面量里没有这一段：「${lost}」`, lostRun: lost };
   });
 }
 
@@ -729,7 +753,9 @@ function main(): void {
   // 列全，不切片：这条清单是分流用的工作表，`slice(0, 10)` 会把第 11 格以后藏起来，
   // 而"看不见"在这张表里会被下游读成"没了"（规则 70/116 同一格）。
   for (const v of r.multiCopy) {
-    console.log("    ⚠️ " + String(v.copies) + " 处 · " + v.file + ":" + String(v.line) + " ." + v.field + "「" + v.needle + "」");
+    // 副本"是谁"一起印：光一个数要人回仓里猜，而"哪几处"决定修测试还是修代码（见 `copySites`）。
+    console.log("    ⚠️ " + String(v.copies) + " 处 · " + v.file + ":" + String(v.line) + " ." + v.field + "「" + v.needle + "」" +
+      "＝" + v.copySites.join(" ｜ "));
   }
   console.log(
     "  影子池：认出 " + String(r.anchorTables.length) + " 张（" +
@@ -762,6 +788,16 @@ function main(): void {
   }
   if (r.needles === 0) {
     console.error("❌ 一条收料断言都没挑到 ⇒ 取料面自己坏了，这不是「全绿」");
+    process.exitCode = 1;
+    return;
+  }
+  // 数与名必须同源：有一格交不出名字（或名字数≠副本数）＝这把尺在报一个它自己都对不上的数。
+  const nameless = r.multiCopy.filter((v) => v.copySites.length !== v.copies);
+  if (nameless.length > 0) {
+    console.error(
+      "❌ 顶包名单上有格子的点名数与副本数不一致 ⇒ 读数不可信：" +
+        nameless.map((v) => v.file + ":" + String(v.line) + "「" + v.needle + "」" + String(v.copies) + "≠" + String(v.copySites.length)).join("、"),
+    );
     process.exitCode = 1;
     return;
   }
