@@ -3718,3 +3718,30 @@ TDD 实录：实现前 4 failed（字段还没有，第 4 条同样 undefined �
   合到任务 #29/#30 那批；不给红门自动展开更多行（证据在盘上，stdout 不洪水）。
 - 验证：新用例 **13 passed** exit 0｜全量 **230 files / 2615 tests passed，exit 0**（229→230＝本笔）｜typecheck 0｜
   两条 `--only` 端到端实跑如上｜三台变异如上。
+
+### 2026-09-27 · 第 124 页 · HEAD 现态：两盏红骑了 94／88 笔提交，而落库还会让 3 个模块的直接测试归零
+
+`outputs/head-state-2026-09-26/01-HEAD现态两盏红骑了94与88笔-落库还会让3个模块的直接测试归零.md`
+
+- 认证树重测（`head-cert.ts`，`TREE=fb3f2d6`、判卷四面在飞 0、依赖借 4 项）：typecheck 0，
+  全量 **2 failed｜270 passed (272 files)／2 failed｜3027 passed (3029 tests)，exit=1**；
+  而**同一提交的主树是 230 files／2615 tests 全绿** ⇒ 这两盏红只有 HEAD-only 树看得见（规则 97/98「门读盘对 HEAD 零信号」的现态实例）。
+- 两盏红逐条解锁条件（都不在我面上，所以交清单不交修复）：
+  ① `tests/docs-check.test.ts:312` 要 `LEGACY_WAIVERS` 为 0、实得 **10**（首键 `D-1|AGENTS.md`）⇒ 等 `scripts/docs-check.ts`
+  （`M`，mtime 09-25 00:26，握了约 41 小时）落库时清豁免并写理由；该断言自 `02c4563` 起已骑 **94 笔**（`git rev-list --count`）。
+  ② `mutate-anchor-titles` 存量 2 条 `drift:renderer-hides-worker-spend`／`drift:panel-dirty-misses-review-and-progress-events`
+  ⇒ 等 `scripts/mutate-verify.mjs`（`M`，09-25 00:34）的 `KNOWN_DRIFT` 结案，自 `0d947d7` 起 **88 笔**。
+- **落库覆盖风险（新量）**：`tests/*.test.ts` 三态＝已跟踪 272 ＝ 在盘 222 ＋ 被删 **50**（`it(`/`test(` 口径 **436 条**；
+  vitest 口径 3029→2615，−414 里 +13 是本页前一笔新增）。其中 **17 个被删测试引着盘上仍存在的非测试模块**
+  （含 `scripts/gate-manifest`、`src/permissions/modes`、`src/main/scheduler`、`src/main/updater`、`src/agent/sidechat`）
+  ⇒ 「桌面层删了所以这些用例该死」是断言不是读数。**落库后直接 importer 归零的模块 3 个**：
+  `src/main/onboarding-groups`（**硬**，全仓零提及）、`src/agent/sidechat`（软，6 个测试只在文本里提 sidechat——文本提及≠依赖）、
+  `scripts/replay/ask-density`（软，只剩登记表对账管"存不存在"）。
+- 探针自己的三个口径限制写在页里：`from "…"` 一律当 import ⇒ 「4 个在盘测试断链」是**假阳性**
+  （实读 `tests/judge-input-face.test.ts:46` 是断言里的字符串）；同一原因抬高 importer ⇒ **3 个 stranded 是下界**；
+  「引着」≠「断言其行为」⇒ 17 是待判清单不是定罪。修 join 键前后各跑一次：**12 个断链 → 4 个**（本会话第 3 次撞同一个坑）。
+- 认证树残留 5 棵（`1bf573e`/`10711f4`/`25e02b0`/`d2958b2`/`fb3f2d6`）。`d2958b2` 里那份 `M scripts/prose-needle-scan.ts`
+  我先怀疑是自己漏交的工作，核下来**不是**：草稿「有而主树没有的导出」`comm` 比对为空，且 `onlyTestSuppliedIntegers` 已在 HEAD
+  （`git grep -c` = 3）⇒ 是被入库版本取代的旧草稿。**没删任何 worktree**（回收命令由 `head-cert` 自己印，交各持有者）。
+- 验证：`head-cert` 汇总行 `exit=1`（码取自脚本自己写的行，不是后台通知）｜探针 exit 0（修 join 键前后各一次）｜
+  本轮**未改任何源文件**、未动他人在飞面。
