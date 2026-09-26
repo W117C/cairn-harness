@@ -257,7 +257,7 @@ export interface NeedleVerdict extends ProseNeedle {
   rawCopies: number;
   /** 这几处**是谁**（`path#fn`，生产者池里算的）。计数必须点得出名：
    *  「两处不同出口」＝针脚挑错了字，「同一句抄在 N 个生产者」＝代码的副本缺陷，修法相反。 */
-  copySites: string[];
+  copySites: CopySite[];
 }
 
 /** 取料只认**字符串/模板字面量**（走词法，不是正则扫引号），并且数它出现在几处字面量里。
@@ -376,17 +376,39 @@ export function copyCount(chunks: readonly LiteralChunk[], needle: string): numb
  *  同一句抄在 N 个生产者里 ⇒ 那是代码的副本缺陷，改测试永远清不掉（本轮「方案门」三格就是这个）。
  *  与 `copyCount` 是**两份独立实现**（不是互相委托）：两者不一致就是口径漂了，
  *  所以有一条用例与一条真仓断言专门对这两把尺（规则 184：自检的两把尺不许同源）。 */
-export function copySites(chunks: readonly LiteralChunk[], needle: string): string[] {
+export interface CopySite {
+  /** `path#fn`——这一处是谁。 */
+  site: string;
+  /** 该处**字面量本体**（折叠空白、截到 40 字）。带上它才分得开两种账：
+   *  各处的 `text` 全相同＝同一句抄在 N 处（改代码，#24 那族）；
+   *  `text` 不同＝只是共享一个词的两句话（改针脚，第 98/100 页那套）。
+   *  第 101 页我只看 `path#fn` 就把 8 格误判成"脚本抄了产品文案"，实际 `compaction` 那两格是后者。 */
+  text: string;
+}
+
+export function copySites(chunks: readonly LiteralChunk[], needle: string): CopySite[] {
   const seen = new Set<string>();
-  const out: string[] = [];
+  const out: CopySite[] = [];
   for (const c of chunks) {
     if (!c.chunk.includes(needle)) continue;
-    const key = c.path + "#" + c.fn;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(key);
+    const site = c.path + "#" + c.fn;
+    if (seen.has(site)) continue;
+    seen.add(site);
+    out.push({ site, text: c.chunk.replace(/\s+/g, " ").trim().slice(0, 40) });
   }
   return out;
+}
+
+/** 这一格的几处里，有没有**同一句**被抄了两遍（≥2 处的字面量相同）？
+ *  是 ⇒ 代码的副本缺陷（收成一份，测试侧永远清不掉）；
+ *  否 ⇒ 只是针脚收的那个词出现在几句**不同**的话里（换该出口独有的短句就能摘，第 98/100 页那套）。 */
+export function sharesOneSentence(sites: readonly CopySite[]): boolean {
+  const seen = new Set<string>();
+  for (const s of sites) {
+    if (seen.has(s.text)) return true;
+    seen.add(s.text);
+  }
+  return false;
 }
 
 export interface ShadowFile {
@@ -446,7 +468,7 @@ export function classifyNeedles(
   };
   return needles.map((n) => {
     const runs = staticRuns(n.needle);
-    const zero = { detail: "", lostRun: "", copies: 0, rawCopies: 0, copySites: [] as string[] };
+    const zero = { detail: "", lostRun: "", copies: 0, rawCopies: 0, copySites: [] as CopySite[] };
     if (runs.length === 0 || runs.every((r) => ONLY_VALUES.test(r))) {
       return { ...n, ...zero, kind: "non-prose", detail: "收的是算出来的值/标点，不比对生产文案" };
     }
@@ -459,7 +481,7 @@ export function classifyNeedles(
     const byPath = reached.size === 0
       ? producerByPath
       : new Map([...producerByPath, ...[...reached].map((p): [string, string] => [p, emitted(p).map((c) => c.chunk).join("")])]);
-    const count = (sought: string): { copies: number; rawCopies: number; copySites: string[] } => ({
+    const count = (sought: string): { copies: number; rawCopies: number; copySites: CopySite[] } => ({
       copies: copyCount(pool, sought),
       rawCopies: copyCount(chunks, sought),
       copySites: copySites(pool, sought),
@@ -627,6 +649,15 @@ export interface ScanReport {
   committedMultiCopy: number;
   /** 在飞文件里出现的顶包候选数（单列，不并进水位，也不许悄悄算进棘轮）。 */
   inFlightMultiCopy: number;
+  /** 顶包名单按**句子**分两族的格数：同一句抄在 ≥2 处（修法在代码：收成一份）vs 只是共享一个词的两句话
+   *  （修法在测试：换该出口独有的短句）。第 101 页我把两族混记成一族，所以这个分法必须是**字段**，
+   *  不能留给读报告的人自己判断。 */
+  maskedSameSentence: number;
+  maskedSharedWord: number;
+  /** 上面那 N 格**是哪几格**（第 101 页立的规矩同样适用于"在飞"这一半：只给个数＝逃生口）。 */
+  flyingMultiCopy: WailedRow[];
+  /** 此刻工作树≠HEAD 的文件；水位分两半靠它，也用来对账"在飞那些格真的都落在这些文件里"。 */
+  inFlightFiles: string[];
 }
 
 /** 扫整仓（读盘 IO 集中在这里；纯函数由 tests/ 直接消费）。 */
@@ -679,7 +710,9 @@ export function scanRepo(root: string): ScanReport {
   const fly = inFlightPaths(root);
   const allDrift = rows.filter((r) => r.kind === "drift" && !r.waived);
   const driftSplit = splitByInFlight(allDrift, fly);
-  const copySplit = splitByInFlight(rows.filter((r) => r.copies > 1), fly);
+  const copySplit = splitByInFlight(rows.filter((x) => x.copies > 1), fly);
+  // 同一句抄两处（修代码）vs 只是共享一个词（修测试）——这个分法本身也是判据，必须是字段而不是感想。
+  const maskedSameSentence = rows.filter((x) => x.copies > 1 && sharesOneSentence(x.copySites)).length;
   return {
     needles: needles.length,
     viaCounts,
@@ -700,6 +733,10 @@ export function scanRepo(root: string): ScanReport {
     selfExcluded,
     committedMultiCopy: copySplit.committed.length,
     inFlightMultiCopy: copySplit.flying.length,
+    flyingMultiCopy: copySplit.flying,
+    inFlightFiles: [...fly],
+    maskedSameSentence,
+    maskedSharedWord: rows.filter((x) => x.copies > 1).length - maskedSameSentence,
   };
 }
 
@@ -748,14 +785,19 @@ function main(): void {
   }
   console.log(
     "  顶包候选（收料那段在 ≥2 处字面量里 ⇒ 改一处不会响）：" + String(r.multiCopy.length) + " 条" +
-      "（已提交态 " + String(r.committedMultiCopy) + " ＋ 在飞 " + String(r.inFlightMultiCopy) + "）",
+      "（已提交态 " + String(r.committedMultiCopy) + " ＋ 在飞 " + String(r.inFlightMultiCopy) + "）" +
+      "｜同一句抄 ≥2 处（改代码）" + String(r.maskedSameSentence) + " 条" +
+      "｜只是共享一个词（改针脚）" + String(r.maskedSharedWord) + " 条",
   );
   // 列全，不切片：这条清单是分流用的工作表，`slice(0, 10)` 会把第 11 格以后藏起来，
   // 而"看不见"在这张表里会被下游读成"没了"（规则 70/116 同一格）。
   for (const v of r.multiCopy) {
-    // 副本"是谁"一起印：光一个数要人回仓里猜，而"哪几处"决定修测试还是修代码（见 `copySites`）。
-    console.log("    ⚠️ " + String(v.copies) + " 处 · " + v.file + ":" + String(v.line) + " ." + v.field + "「" + v.needle + "」" +
-      "＝" + v.copySites.join(" ｜ "));
+    // 副本"是谁 + 那一处写的是什么"一起印：光一个数要人回仓里猜，而**句子**才分得开
+    // "同一句抄在 N 处"（改代码）与"共享一个词的两句话"（改针脚）——第 101 页我就是只看了路径才误判的。
+    const flying = r.inFlightFiles.includes(v.file) ? "（在飞，不属我的账）" : "";
+    console.log("    ⚠️ " + String(v.copies) + " 处 · " + v.file + ":" + String(v.line) + " ." + v.field + "「" + v.needle + "」" + flying +
+      (sharesOneSentence(v.copySites) ? " ⚑同一句抄了两遍" : "") +
+      "＝" + v.copySites.map((s) => s.site + " ▸ " + s.text).join(" ｜ "));
   }
   console.log(
     "  影子池：认出 " + String(r.anchorTables.length) + " 张（" +

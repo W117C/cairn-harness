@@ -19,9 +19,11 @@ import {
   MULTI_COPY_CEILING,
   scanRepo,
   SELF_EXCLUDED_TESTS,
+  sharesOneSentence,
   shadowFilesOf,
   splitByInFlight,
   staticRuns,
+  type CopySite,
   type ProseNeedle,
 } from "../scripts/prose-needle-scan";
 
@@ -353,7 +355,25 @@ describe("copySites：计数要点得出名（两把尺互检）", () => {
     ...extractLiterals("scripts/d.ts", 'function h() {\n  const u = "这一句出现了两次";\n}'),
   ];
   it("同一函数的两段算一处、不同函数各算一处，顺序＝取料顺序", () => {
-    expect(copySites(pool, "这一句出现了两次")).toEqual(["src/a.ts#f1", "src/a.ts#f2", "scripts/b.ts#main", "scripts/d.ts#h"]);
+    expect(copySites(pool, "这一句出现了两次").map((s) => s.site))
+      .toEqual(["src/a.ts#f1", "src/a.ts#f2", "scripts/b.ts#main", "scripts/d.ts#h"]);
+  });
+
+  // 光有名字仍会误判：第 101 页我就是只读 `path#fn`，把"共享一个词的两句话"记成了"脚本抄了产品文案"。
+  // 所以每一处还要交出**那一处的句子**——同句抄写 ⇒ 修代码；同词两句 ⇒ 换针脚。
+  it("每一处都交出句子：同句抄写与同词两句分得开（两侧各一条）", () => {
+    expect(new Set(copySites(pool, "这一句出现了两次").map((s) => s.text))).toEqual(new Set(["这一句出现了两次"]));
+    const mixed = copySites(
+      [...pool, ...extractLiterals("scripts/e.ts", 'function k() {\n  const v = "这一句出现了两次，可这里还有半句";\n}')],
+      "这一句出现了两次",
+    );
+    expect(new Set(mixed.map((s) => s.text)).size).toBe(2);
+    // 分族谓词两侧：同句 ⇒ true（夹具四处一句）；各处句子不同 ⇒ false
+    expect(sharesOneSentence(copySites(pool, "这一句出现了两次"))).toBe(true);
+    expect(sharesOneSentence([
+      { site: "src/a.ts#one", text: "第一句里也有这个词" },
+      { site: "src/b.ts#two", text: "第二句里也有这个词" },
+    ])).toBe(false);
   });
   // `copyCount` 与 `copySites` 是**两份独立实现**（不互相委托）：一份按 NUL 分隔、一份按 `#`。
   // 哪天口径漂了（比如某个路径里出现 `#`），这一条会响——计数与名字必须互为对账，不同源（规则 184）。
@@ -366,7 +386,7 @@ describe("copySites：计数要点得出名（两把尺互检）", () => {
 describe("applyWaivers：豁免要带理由，且不许静默烂在这儿", () => {
   const drift = (file: string, lostRun: string) => ({
     file, line: 1, field: "reason", via: "字段直取" as const, needle: lostRun, suppliedInTest: false,
-    kind: "drift" as const, detail: "", lostRun, copies: 0, rawCopies: 0, copySites: [] as string[],
+    kind: "drift" as const, detail: "", lostRun, copies: 0, rawCopies: 0, copySites: [] as CopySite[],
   });
 
   it("名单内的 drift 被压住（但单列 waived，不折进 verbatim）", () => {
@@ -424,18 +444,36 @@ describe("真仓扫：这把尺自己不许空载", () => {
   });
 
   // 计数要点得出名：一格说"3 处"就得交出是哪三处，否则这张表还是得人回仓里猜（第 101 页）。
-  // 第二句是"有货"读数：真仓里确实存在跨文件的那一类（＝同一句抄在多个生产者里，修法在代码不在测试）。
-  it("顶包名单每一格都点得出名（`copySites.length === copies`），且跨文件那一类今天就在单上", () => {
+  // 名字之外还要交出**那一处的句子**：第 101 页我只看 `path#fn`，把"共享一个词的两句话"（`compaction`「膨胀」）
+  // 记成了"读数脚本抄了产品文案"——只有句子能分开这两种账（修法相反：换针脚 vs 改代码）。
+  it("顶包名单每一格都点得出名与句子，且两族今天都真有货", () => {
     for (const v of r.multiCopy) {
       expect(v.copySites.length).toBe(v.copies);
       expect(v.copies).toBeGreaterThan(1);
+      for (const s of v.copySites) {
+        expect(s.site).toContain("#");
+        expect(s.text.length).toBeGreaterThan(0);
+      }
     }
     const crossFile = r.multiCopy.filter(
-      (v) => new Set(v.copySites.map((s) => s.slice(0, s.lastIndexOf("#")))).size > 1,
+      (v) => new Set(v.copySites.map((s) => s.site.slice(0, s.site.lastIndexOf("#")))).size > 1,
     );
     expect(crossFile.length).toBeGreaterThan(0);
-    // 本轮实录：`compaction`「膨胀」、`cost-per-progress`「死跑成本」、`plugins-mcp`「只读注解白名单」…
-    // 这些都是**读数脚本（scripts/*-check）抄了产品文案**那一族——第 170/171 页规则的同一形状。
+    // 两族今天都真有货，而且分族是**字段**（不是读报告的人自己判断）：
+    // 同一句抄 ≥2 处 ⇒ 修代码；各句只是共享一个词 ⇒ 换针脚。第 101 页我把两族混成一族记过账。
+    expect(r.multiCopy.some((v) => sharesOneSentence(v.copySites))).toBe(true);
+    expect(r.multiCopy.some((v) => !sharesOneSentence(v.copySites))).toBe(true);
+    expect(r.maskedSameSentence + r.maskedSharedWord).toBe(r.multiCopy.length);
+    expect(r.maskedSameSentence).toBeGreaterThan(0);
+    expect(r.maskedSharedWord).toBeGreaterThan(0);
+  });
+
+  // 「在飞」那一半只给个数＝逃生口（第 93 页给 drift 立的规矩，这页补到顶包候选上）。
+  it("在飞那一半点得出名，并且已提交那一半里不许混进在飞文件（两侧配对）", () => {
+    expect(r.flyingMultiCopy.length).toBe(r.inFlightMultiCopy);
+    expect(r.flyingMultiCopy.every((v) => r.inFlightFiles.includes(v.file))).toBe(true);
+    expect(r.multiCopy.filter((v) => !r.inFlightFiles.includes(v.file)).length).toBe(r.committedMultiCopy);
+    expect(r.inFlightFiles.length).toBeGreaterThan(0);
   });
 
   // 影子排除是"把判据关小一格"的动作，所以它自己必须有观测者：
