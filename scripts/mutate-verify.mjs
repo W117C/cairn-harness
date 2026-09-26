@@ -6920,6 +6920,14 @@ const MUTATIONS = [
     apply: (s) => s.replace("{ hit.add(d.target); continue; }", "{ continue; }"),
     expectFail: "豁免是双向的：名单内不红；不再悬空则 stale 红（不许静默烂在表里）",
   },
+  {
+    id: "head-cert-import-face-asks-head-not-target",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "认证别的 rev 时 import 面却去问 HEAD ⇒ 用 `--at=<旧提交>` 复查历史红因（第 131 页就是这么定位到 `834ba3a`）时，报的是当前 HEAD 的悬空——「验的是这棵树」被偷偷换成「验的是最新提交」",
+    apply: (s) => s.replace("const importFace = collectHeadEdges(TARGET);", 'const importFace = collectHeadEdges("HEAD");'),
+    expectFail: "必须问被认证的 rev（TARGET），不是问 HEAD 字面量、也不是问盘",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

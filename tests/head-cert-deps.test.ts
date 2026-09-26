@@ -116,3 +116,21 @@ describe("certLevel：半把尺不许冒充认证（第 119 页，起因是第 1
     expect(src.includes("certLevel(true,")).toBe(false);
   });
 });
+
+/** 第 134 页：认证一棵树时先跑 0.2 秒的 import 面自洽，把「typecheck 必红」的成因印在它前面。
+ *  这里钉的是**接线**（同上面 certLevel 那条的形状）：判据本体有自己的 12 条用例与 4 条锚点，
+ *  但"head-cert 有没有真的在认证那个 rev 上调它"只有这一条管。 */
+describe("认证流程里的 import 面那一行（接线）", () => {
+  const src = readFileSync(join(repoRoot, "scripts", "head-cert.ts"), "utf8");
+
+  it("必须问被认证的 rev（TARGET），不是问 HEAD 字面量、也不是问盘", () => {
+    expect(src.includes("collectHeadEdges(TARGET)")).toBe(true);
+    expect(src.includes('collectHeadEdges("HEAD")')).toBe(false);
+    expect(src.includes("collectHeadEdges()")).toBe(false);
+  });
+
+  it("取不到时必须出声「未取」，不许把空悬空当成自洽（规则 210 那一族）", () => {
+    expect(src.includes("import 面未取")).toBe(true);
+    expect(src.includes("不等于 import 面自洽")).toBe(true);
+  });
+});

@@ -4021,3 +4021,21 @@ git 调用由 `scripts/mutate-verify.mjs` 注入 ⇒ 本模块不自己 spawn �
   现在裁是在一份跑不动的表上谈代价。
 - 已落地的那部分不依赖这笔：尺本体（`scripts/head-import-face.ts` ＋ 12 条判卷 ＋ 4 条锚点）已在 `238aa8b`，
   现在就能 `node --import tsx scripts/head-import-face.ts` 手跑（0.2s；整道门含 tsx 启动实测 1.31s）。
+### 2026-09-27 · 第 134 页 · 门进不去，那就把尺接进门表以外的地方：`head-cert` 现在自己说「typecheck 为什么必红」
+
+任务 #12 挂在别人那笔 `gate-manifest.ts` 裁剪上（第 133 页），但 0.2 秒那把尺不必等它——
+它最该在的地方本来就是**取 HEAD 凭证的那条路**：`scripts/head-cert.ts` 在跑 typecheck 之前先跑 import 面自洽，
+把成因印在红的前面。
+
+- 实跑（认证 `550fd4c`，`--skip-test` 半把尺）：
+  `import 面：2516 条边｜悬空 4（其中存量已豁免 4）` 紧跟 `typecheck exit=2 … 报错文件归因：HEAD 内 2 个 / 未跟踪草稿 0 个`
+  ⇒ 第 131 页我要靠人肉数"8 条错里哪几条是同一件事"，现在那一行自己说完。
+- **问的是 `TARGET`，不是 HEAD 字面量**：`head-cert --at=<rev>` 能去认证任意一笔，
+  如果 import 面写死问 HEAD，那用 `--at=834ba3a` 复查红因时报的就是"现在 HEAD 的悬空"——
+  「验的是这棵树」被偷偷换成「验的是最新提交」。这一条配了变异锚点
+  `head-cert-import-face-asks-head-not-target`（改法就是把 `TARGET` 换成 `"HEAD"`），
+  并且钉了反向那一半：**git 取不到时必须印「import 面未取」，不许把空悬空当成自洽**（规则 210 那一族）。
+- 判卷：`tests/head-cert-deps.test.ts` **17 passed**（15＋2，两条都是接线钉，形状照该文件原有的 `certLevel` 那条）；
+  typecheck 0；回收了本次新建的 `.worktrees/hc-iface`（用完即删，规则 120）。
+- 边界照实说：这把尺只管**模块存在性**。`SessionTransport` 那种"文件在、少一个导出符号"仍只有 typecheck 看得见；
+  而"判卷文件在别人工作树里被删、HEAD 里还在"那一类（第 124 页那两盏）它也不管 ⇒ 任务 #4 剩下的正是这一格。

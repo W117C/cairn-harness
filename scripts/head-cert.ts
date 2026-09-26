@@ -18,6 +18,7 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { certLevel, declaredDeps, missingDeclaredDeps } from "./lib/head-cert-deps";
+import { checkHeadImportFace, collectHeadEdges, findDanglingImports } from "./head-import-face";
 
 const argv = process.argv.slice(2);
 const opt = (name: string, dflt: string): string => {
@@ -124,6 +125,19 @@ if (missing.length > 0 && !flag("no-borrow")) {
 }
 const certifiable = missing.length === 0;
 if (!certifiable) say("⚠️ 依赖不全 ⇒ 下面的红**不可归因于代码**（先装齐或换一棵树；这是规则 87/103/184 那一族）");
+
+/* ②b import 面自洽（问的是**被认证的那个 rev**，不是盘）。放在这里的原因：它 0.2 秒，
+ *  而它说的那件事正是下面 typecheck 为什么必红——第 131 页那次，`834ba3a` 把消费者入库了、
+ *  4 个新模块留在未跟踪，认证树报"8 条错 / 34 个判卷文件红"，读的人得自己数才发现其中 4 条是同一件事。 */
+const importFace = collectHeadEdges(TARGET);
+if (importFace === null) {
+  say("⚠️ import 面未取（git 读不到 " + TARGET.slice(0, 7) + "）⇒ 不等于 import 面自洽");
+} else {
+  const dang = findDanglingImports(importFace.edges, importFace.headFiles, (rel) => existsSync(join(MAIN, rel)));
+  const face = checkHeadImportFace(dang);
+  say(`import 面：${String(importFace.edges.length)} 条边｜悬空 ${String(dang.length)}（其中存量已豁免 ${String(dang.length - face.filter((f) => f.kind === "dangling").length)}）`);
+  for (const f of face) say(`  ${f.kind === "dangling" ? "❌" : "⚠️"} ${f.target} — ${f.detail}`);
+}
 
 // ③ 跑门（逐条降级：typecheck 跑不起来也不吞掉 test 的读数）。
 const logDir = join("/tmp", `dsh-head-cert-${TARGET.slice(0, 7)}`);
