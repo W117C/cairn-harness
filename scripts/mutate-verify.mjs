@@ -6832,6 +6832,38 @@ const MUTATIONS = [
     apply: (s) => s.replace('/^\\s*table\\["([a-z_][a-z0-9_]*)\"\\]\\s*=/gm', '/^\\s*NEVER\\["([a-z_][a-z0-9_]*)\"\\]\\s*=/gm'),
     expectFail: "扩形后的分母自证：table[\"name\"] = 那一形确实被算进来了（解析器静默 0 命中比不扩更坏）",
   },
+  {
+    id: "anchor-face-count-floor-flip-hits-exact-line",
+    src: "scripts/mutate-anchor-titles.ts",
+    test: "tests/mutate-anchor-titles.test.ts",
+    desc: "帽的比较符翻成 <= ⇒ 现表 798 恰好踩线就红：正在加锚点的人被这条尺打（第 126 页：整块摘除没人出声，补的这条也不能反过来咬新增）",
+    apply: (s) => s.replace("if (rows.length < floor) {", "if (rows.length <= floor) {"),
+    expectFail: "反向配对：多于下限不许红（否则这条尺会惩罚正在加锚点的人）",
+  },
+  {
+    id: "anchor-face-dead-src-unreported",
+    src: "scripts/mutate-anchor-titles.ts",
+    test: "tests/mutate-anchor-titles.test.ts",
+    desc: "dead-src 那半不发现在册种类 ⇒ 锚点指向面上不存在的文件时无人点名，那条变异就在空转",
+    apply: (s) => s.replace('out.push({ kind: "dead-src"', 'out.push({ kind: "unverified-file"'),
+    expectFail: "src 指向面上不存在的文件 ⇒ 点名那条锚点（这条变异在空转）",
+  },
+  {
+    id: "anchor-face-zero-review-only-checks-shipping",
+    src: "scripts/mutate-anchor-titles.ts",
+    test: "tests/mutate-anchor-titles.test.ts",
+    desc: "欠条判据收成只看「文件在不在」⇒ 补回锚点或文件被删都不会逼人回来销账（豁免烂在表里没人清的形状）",
+    apply: (s) => s.replace("if (shipping && count === 0) continue;", "if (shipping) continue;"),
+    expectFail: "欠条：文件在面上且零锚点 ⇒ 不红；补回一条 或 文件消失 ⇒ 都要人来销账",
+  },
+  {
+    id: "anchor-face-src-column-not-parsed",
+    src: "scripts/mutate-anchor-titles.ts",
+    test: "tests/mutate-anchor-titles.test.ts",
+    desc: "抽取面不再抽 `src:` ⇒ 每行的 src 恒为 null，「这个文件零锚点」全是从漏计里读出来的 0（比不判更坏，因为它看着像判过）",
+    apply: (s) => s.replace("src: srcLit?.[1] === undefined ? null : decode(srcLit[1]),", "src: null,"),
+    expectFail: "取料面自己要先可信：抽取漏了 src 栏 ⇒ 「零锚点」会被虚报，所以每一行都必须抽出 src",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

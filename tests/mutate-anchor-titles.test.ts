@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
-import { KNOWN_DRIFT, checkAnchorTitles, parseAnchors, type Finding, type TableSource } from "../scripts/mutate-anchor-titles";
+import { ANCHOR_COUNT_FLOOR, KNOWN_DRIFT, ZERO_ANCHOR_REVIEW, checkAnchorFace, checkAnchorTitles, parseAnchors, type Finding, type TableSource } from "../scripts/mutate-anchor-titles";
 
 const ROOT = resolve(__dirname, "..");
 const read = (rel: string): string | null => {
@@ -188,3 +188,71 @@ describe("真表：新漂移必须红，存量必须逐条点名", () => {
     }
   });
 });
+
+/** 第 126 页带来的另一半：上面那套只判「活着的锚点自洽」，所以 963→798 那次整块摘除对它完全透明。
+ *  本组把「表在缩小」这件事变成有判据的方向（规则 208 的两向配对：只管加宽不管收窄＝只有一半）。 */
+describe("checkAnchorFace：表只能被「摘得对」地缩小", () => {
+  const row = (id: string, srcPath: string): string => `{ id: "${id}", src: "${srcPath}", test: "tests/x.test.ts", expectFail: "标题", },`;
+  const many = (n: number, srcPath: string): string => Array.from({ length: n }, (_, i) => row("a" + i, srcPath)).join("\n");
+  const yes = (): boolean => true;
+
+  it("行数跌破下限即红，并且报出**差了几条**（只说「少了」逼人自己数）", () => {
+    const rows = parseAnchors(many(3, "src/a.ts"));
+    const f = checkAnchorFace(rows, yes, 5, {});
+    expect(f.map((x) => x.kind)).toEqual(["count-under-floor"]);
+    expect(f[0]!.detail).toContain("摘掉 2 条");
+    expect(f[0]!.detail).toContain("3 条");
+  });
+
+  it("反向配对：多于下限不许红（否则这条尺会惩罚正在加锚点的人）", () => {
+    expect(checkAnchorFace(parseAnchors(many(6, "src/a.ts")), yes, 5, {})).toEqual([]);
+    expect(checkAnchorFace(parseAnchors(many(5, "src/a.ts")), yes, 5, {})).toEqual([]); // 恰好踩线＝绿
+  });
+
+  it("src 指向面上不存在的文件 ⇒ 点名那条锚点（这条变异在空转）", () => {
+    const table = row("keep", "src/a.ts") + "\n" + row("gone", "src/deleted.ts");
+    const f = checkAnchorFace(parseAnchors(table), (p) => p === "src/a.ts", 0, {});
+    expect(f.map((x) => x.kind + ":" + x.id)).toEqual(["dead-src:gone"]);
+  });
+
+  it("欠条：文件在面上且零锚点 ⇒ 不红；补回一条 或 文件消失 ⇒ 都要人来销账", () => {
+    const review = { "src/ghost.ts": "示例欠条" };
+    const shipping = parseAnchors(""); // 表里一条都没有，但文件还在
+    expect(checkAnchorFace(shipping, (p) => p === "src/ghost.ts", 0, review)).toEqual([]);
+    const refilled = checkAnchorFace(parseAnchors(row("back", "src/ghost.ts")), (p) => p === "src/ghost.ts", 0, review);
+    expect(refilled.map((x) => x.kind)).toEqual(["stale-zero-anchor-review"]);
+    expect(refilled[0]!.detail).toContain("已补回 1 条锚点");
+    const deleted = checkAnchorFace(shipping, () => false, 0, review);
+    expect(deleted.map((x) => x.kind)).toEqual(["stale-zero-anchor-review"]);
+    expect(deleted[0]!.detail).toContain("文件已不在面上");
+  });
+
+  it("取料面自己要先可信：抽取漏了 src 栏 ⇒ 「零锚点」会被虚报，所以每一行都必须抽出 src", () => {
+    const rows = parseAnchors(many(4, "src/a.ts"));
+    expect(rows).toHaveLength(4);
+    expect(rows.filter((r) => r.src === null)).toEqual([]);
+  });
+
+  it("真表现读：零发现，且解析到的行数与表里 id 行数一致（不许拿漏计当结论）", () => {
+    const tableText = read("scripts/mutate-verify.mjs");
+    expect(tableText).not.toBeNull();
+    const rows = parseAnchors(tableText ?? "");
+    const rawIds = [...(tableText ?? "").matchAll(/\bid:\s*"/g)].length;
+    expect(rows.length).toBe(rawIds);
+    expect(rows.every((r) => r.src !== null)).toBe(true);
+    expect(checkAnchorFace(rows, (rel) => existsSync(join(ROOT, rel)))).toEqual([]);
+  });
+
+  it("真表的下限不许是手抄的旧数：帽必须 ≤ 现表行数（否则本闸一落地就红在帽上）", () => {
+    const rows = parseAnchors(read("scripts/mutate-verify.mjs") ?? "");
+    expect(ANCHOR_COUNT_FLOOR).toBeLessThanOrEqual(rows.length);
+  });
+
+  it("欠条逐条带理由，且理由必须点名是哪一页判的（销账时要能找到出处）", () => {
+    for (const [srcPath, reason] of Object.entries(ZERO_ANCHOR_REVIEW)) {
+      expect(reason.trim(), `ZERO_ANCHOR_REVIEW[${srcPath}] 缺理由`).not.toBe("");
+      expect(reason, `ZERO_ANCHOR_REVIEW[${srcPath}] 理由里没写出处`).toMatch(/第 \d+ 页/);
+    }
+  });
+});
+

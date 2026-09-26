@@ -11,6 +11,8 @@
 
 export interface AnchorRow {
   id: string;
+  /** 被测面。第 126 页之前不抽这一栏：那张表 963→798 条时没有任何尺看过「被摘的锚点指向谁」。 */
+  src: string | null;
   test: string | null;
   expectFail: string | null;
 }
@@ -20,7 +22,14 @@ export interface TableSource {
   text: string;
 }
 
-export type FindingKind = "drift" | "stale-waiver" | "unverified-face" | "unverified-file";
+export type FindingKind =
+  | "drift"
+  | "stale-waiver"
+  | "unverified-face"
+  | "unverified-file"
+  | "dead-src"
+  | "count-under-floor"
+  | "stale-zero-anchor-review";
 
 export interface Finding {
   kind: FindingKind;
@@ -48,9 +57,11 @@ export function parseAnchors(tableText: string): AnchorRow[] {
     const end = i + 1 < at.length ? at[i + 1]!.index! : tableText.length;
     const chunk = tableText.slice(start, end);
     const test = /\btest:\s*"((?:[^"\\]|\\.)*)"/.exec(chunk);
+    const srcLit = /\bsrc:\s*"((?:[^"\\]|\\.)*)"/.exec(chunk);
     const ef = /\bexpectFail:\s*"((?:[^"\\]|\\.)*)"/.exec(chunk);
     out.push({
       id: at[i]![1]!,
+      src: srcLit?.[1] === undefined ? null : decode(srcLit[1]),
       test: decode(test?.[1] ?? "") || null,
       expectFail: ef?.[1] === undefined ? null : decode(ef[1]),
     });
@@ -160,3 +171,66 @@ export function checkAnchorTitles(
   }
   return out;
 }
+
+/** 锚点表条数下限（**只准调高**，调低必须在提交说明里点名是哪笔摘除、为什么）。
+ *
+ *  为什么需要它：2026-09-27 实测 `834ba3a`（提交说明写的是 worker 沙箱）把 `scripts/mutate-verify.mjs` 的
+ *  工作树版本一起提交 ⇒ 表从 963 掉到 798，**没有任何尺出声**：
+ *  `checkAnchorTitles` 判的是"活着的锚点自洽"，整行被删对它透明；`wiring-coverage` 只咬 agent-runner 那一格；
+ *  `mutate-verify` 只为"某条没杀"出声，不为"少了几条"出声。⇒ 又一族「两头断」（规则 208 的反向配对）。
+ *
+ *  这条帽刻意**不按工作树/index 状态取**（同第 123 页那条：帽不能挂在 index 状态上）：
+ *  判的是"落库面丢了多少条"，所以由消费方把表文本喂进来，本函数只看行数。 */
+export const ANCHOR_COUNT_FLOOR = 798;
+
+/** 「在发货且零变异观察者」的欠条名单：**登记即放行，条目烂掉才红**。
+ *  命中条件（=今天为真 ⇒ 不红）：该文件仍在取料面上，且当前锚点数 == 0。
+ *  任一条件失效（补回锚点 / 文件本身被删）⇒ `stale-zero-anchor-review` 红，逼人来把这条账销掉——
+ *  这正是第 126 页的教训：那 4 个文件掉了 12 条锚点时，没有任何一个地方"记得它们曾经有过"。
+ *  名单只保护**已经判定重要**的文件，不是全仓覆盖度度量（边界写在 tests/ 那条用例上）。 */
+export const ZERO_ANCHOR_REVIEW: Readonly<Record<string, string>> = {
+  "scripts/gate-manifest.ts": "第 126 页：4 条 gate-direct-* 随 834ba3a 消失，而它是 26 道门的唯一事实源；摘掉的四条全是「门禁层自己怎么假绿」",
+  "src/main/updater.ts": "第 126 页：6 条 updater-* 锚点消失；文件仍被 ipc-protocol/settings-handlers import，只剩 tests/updater-safety-core.test.ts 一支直接测试",
+  "src/agent/security/llm-review.ts": "第 126 页：llm-confidence-fabricated-default 消失（「缺席不得编成 medium」那条），orchestrator 仍在 import；tests/hardening3.test.ts 只 import buildMessages",
+  "scripts/replay/ask-density.ts": "第 126 页 C 类：0 生产 import＋0 测试，但它是 replay-readings 登记面＋判断层 §7 复跑块 ⇒ 待裁决「该删没删」，先记欠条而不是顺手清掉",
+};
+
+/** 锚点表对「面」的三条判据：行数没跌破帽、`src:` 不许指向不存在的文件、欠条名单不许烂掉。
+ *  存在性由调用方注入（同 `checkAnchorTitles` 只吃文本的口径）⇒ 本函数可拿假表逐条判，不触真仓。 */
+export function checkAnchorFace(
+  rows: readonly AnchorRow[],
+  exists: (rel: string) => boolean,
+  floor: number = ANCHOR_COUNT_FLOOR,
+  review: Readonly<Record<string, string>> = ZERO_ANCHOR_REVIEW,
+): Finding[] {
+  const out: Finding[] = [];
+  if (rows.length < floor) {
+    out.push({
+      kind: "count-under-floor",
+      id: "table",
+      source: null,
+      detail: `锚点表 ${rows.length} 条 ＜ 下限 ${floor} 条 ⇒ 有人在一次改动里摘掉 ${floor - rows.length} 条观察者。补回来，或显式调低 ANCHOR_COUNT_FLOOR 并在提交说明里点名哪笔摘除、为什么`,
+    });
+  }
+  const perSrc = new Map<string, number>();
+  for (const r of rows) {
+    if (r.src === null) continue;
+    perSrc.set(r.src, (perSrc.get(r.src) ?? 0) + 1);
+    if (!exists(r.src)) {
+      out.push({ kind: "dead-src", id: r.id, source: r.src, detail: `锚点 ${r.id} 的 src 指向面上不存在的文件（${r.src}）⇒ 这条变异要么在空转，要么跟着一次删除一起烂掉` });
+    }
+  }
+  for (const [src, why] of Object.entries(review)) {
+    const shipping = exists(src);
+    const count = perSrc.get(src) ?? 0;
+    if (shipping && count === 0) continue; // 欠条仍然成立
+    out.push({
+      kind: "stale-zero-anchor-review",
+      id: src,
+      source: src,
+      detail: `欠条已不再成立（${shipping ? `已补回 ${count} 条锚点` : "文件已不在面上"}）⇒ 从 ZERO_ANCHOR_REVIEW 删掉它并回看第 126 页（${why}）`,
+    });
+  }
+  return out;
+}
+
