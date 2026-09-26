@@ -1,8 +1,17 @@
 /** 认证一棵树之前的那道前置检查（第 84 页：我两次把**环境假红**读成代码红）。
- *  纯函数层：`declaredDeps` / `installedDeps` / `missingDeclaredDeps`。 */
+ *  纯函数层：`declaredDeps` / `installedDeps` / `missingDeclaredDeps` / `certLevel`（第 119 页加的等级）。 */
+import { spawnSync, execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { declaredDeps, installedDeps, missingDeclaredDeps } from "../scripts/lib/head-cert-deps";
+import { certLevel, declaredDeps, installedDeps, missingDeclaredDeps } from "../scripts/lib/head-cert-deps";
+
+const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
+const listWorktrees = (cwd: string): string[] =>
+  execFileSync("git", ["worktree", "list", "--porcelain"], { cwd, encoding: "utf8" })
+    .split("\n")
+    .filter((l) => l.startsWith("worktree "));
 
 const pkg = (fields: Record<string, Record<string, string>>): string => JSON.stringify(fields);
 
@@ -58,5 +67,52 @@ describe("missingDeclaredDeps：只报『声明了而没装』那一格", () => 
 
   it("package.json 读不到 ⇒ 空，而**调用方**必须把空当『没尺』：这里给一条钉住语义的反向用例", () => {
     expect(missingDeclaredDeps("", ["anything"])).toEqual([]);
+  });
+});
+
+describe("certLevel：半把尺不许冒充认证（第 119 页，起因是第 116/117 页我自己踩的那盏假灯）", () => {
+  it("不跳测＝完整认证", () => {
+    expect(certLevel(false, "")).toEqual({ level: "full", ok: true, label: "完整（typecheck ＋ 全量）" });
+  });
+
+  it(`跳测又没写理由 ⇒ ok=false（脚本据此 exit 2），文案点名要 --why`, () => {
+    const r = certLevel(true, "   ");
+    expect(r.level).toBe("half");
+    expect(r.ok).toBe(false);
+    expect(r.label).toContain("--why");
+  });
+
+  it("跳测但写了理由 ⇒ 放行，可文案必须自带『不构成全量绿』＋把理由印出来", () => {
+    const r = certLevel(true, "只看 typecheck 那一条面");
+    expect(r.ok).toBe(true);
+    expect(r.label).toContain("不构成这棵树的全量绿");
+    expect(r.label).toContain("只看 typecheck 那一条面");
+  });
+
+  // 反向钉：把 `ok` 写成恒真（`--skip-test` 又不要理由）时，上面第二条必须红。
+  it("空白理由不许被当成『写了理由』（trim 这一步是判据，不是清洁工）", () => {
+    expect(certLevel(true, "").ok).toBe(false);
+    expect(certLevel(true, "\t\n ").ok).toBe(false);
+  });
+
+  // 纯函数钉不住接线（第 118 页的同一课）：这里**真跑一次 CLI** 钉住"脚本确实按 ok 退出 2"。
+  // 放在 guard 之后 ⇒ 不建 worktree、不装依赖，秒级。
+  it("真跑：`--skip-test` 不带 `--why` ⇒ 脚本 exit 2，且不建 worktree", () => {
+    const before = listWorktrees(repoRoot).length;
+    const r = spawnSync(process.execPath, ["--import", "tsx", "scripts/head-cert.ts", "--at=HEAD", "--skip-test"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+    });
+    expect(r.status).toBe(2);
+    expect(r.stdout + r.stderr).toContain("--why");
+    expect(listWorktrees(repoRoot).length).toBe(before); // 抱怨之前不许先花两分钟建树
+  });
+
+  // 反向那一半（"完整认证也被逼着写 --why"）跑不了全量验证（那要建一棵真树），
+  // 所以钉最小可疑点：条件必须来自 `flag("skip-test")`，写死 `true` 就等于把这条判据挂到所有人身上。
+  it("guard 的输入必须来自命令行，不是写死的 true", () => {
+    const src = readFileSync(join(repoRoot, "scripts/head-cert.ts"), "utf8");
+    expect(src.includes('certLevel(flag("skip-test"), opt("why", ""))')).toBe(true);
+    expect(src.includes("certLevel(true,")).toBe(false);
   });
 });

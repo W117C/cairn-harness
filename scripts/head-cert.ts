@@ -8,14 +8,16 @@
  *     ⇒ 拿它认证仍含桌面层的 HEAD 会得到 `TS2307: Cannot find module 'electron'` 这种**环境假红**（规则 87/103 同族）。
  *     本脚本先比"这棵树声明了什么 vs 装了什么"，缺的从本机其它 worktree 硬链接补上，补不齐就在汇总里写明"不可归因于代码"。
  *
- * 用法：`node --import tsx scripts/head-cert.ts [--at=HEAD] [--tree=.worktrees/head-cert] [--skip-test] [--no-borrow]`
- * 退出码：0＝两条门都绿；1＝有红（读数照常打印）；2＝连认证的前置都不成立（切树失败 / 取不到 package.json）。
+ * 用法：`node --import tsx scripts/head-cert.ts [--at=HEAD] [--tree=.worktrees/head-cert] [--skip-test --why=<文本>] [--no-borrow]`
+ *   · `--skip-test` 必须配 `--why`，否则 exit 2：它只跑 typecheck，**不构成"这棵树全量绿"**（见 `certLevel` 的理由）。
+ * 退出码：0＝所跑的每条门都绿（等级见汇总里的「认证等级」）；1＝有红（读数照常打印）；2＝连认证的前置都不成立
+ *   （切树失败 / 取不到 package.json / `--skip-test` 没写 `--why`）。
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { declaredDeps, missingDeclaredDeps } from "./lib/head-cert-deps";
+import { certLevel, declaredDeps, missingDeclaredDeps } from "./lib/head-cert-deps";
 
 const argv = process.argv.slice(2);
 const opt = (name: string, dflt: string): string => {
@@ -33,6 +35,14 @@ const shaShortForDefault = (runGit: () => { status: number | null; out: string }
   return s.status === 0 ? s.out.trim().slice(0, 7) : "tmp";
 };
 const TREE = opt("tree", ".worktrees/head-cert-" + shaShortForDefault(() => run(MAIN, "git", ["rev-parse", AT])));
+
+// 认证等级要在**干活之前**判掉：`--skip-test` 配不上 `--why` 就是用法错，别先花两分钟建树再抱怨。
+const LEVEL = certLevel(flag("skip-test"), opt("why", ""));
+if (!LEVEL.ok) {
+  console.error(`❌ ${LEVEL.label}`);
+  console.error("   要么去掉 --skip-test 跑全量，要么写清这次为什么只算半把尺（下一轮读进度页的人看得见这句话）。");
+  process.exit(2);
+}
 
 function run(cwd: string, cmd: string, args: string[], logPath?: string): { status: number | null; out: string } {
   const r = spawnSync(cmd, args, { cwd, encoding: "utf8", maxBuffer: 128 * 1024 * 1024 });
@@ -120,7 +130,7 @@ const logDir = join("/tmp", `dsh-head-cert-${TARGET.slice(0, 7)}`);
 const tc = run(TREE, "node", ["--import", "tsx", "scripts/typecheck.ts"], join(logDir, "typecheck.log"));
 say(`typecheck exit=${String(tc.status)}${tc.status === 0 ? "（0 报错）" : "：\n  " + tc.out.trim().split("\n").slice(-4).join("\n  ")}`);
 let testStatus: number | null = null;
-let summary = "（--skip-test：本次没跑全量）";
+let summary = LEVEL.label;
 if (!flag("skip-test")) {
   const t = run(TREE, "node", ["node_modules/vitest/vitest.mjs", "run", "--config", "tests/vitest.config.ts"], join(logDir, "test.log"));
   testStatus = t.status;

@@ -37,3 +37,21 @@ export function missingDeclaredDeps(pkgJsonText: string, topLevelEntries: readon
   const installed = new Set(installedDeps(topLevelEntries));
   return declaredDeps(pkgJsonText).filter((d) => !installed.has(d));
 }
+
+/** 认证**等级**：`--skip-test` 只跑 typecheck，它不等于"这棵树的全量绿"。
+ *
+ * 为什么要做成判据而不是注释（都是实跑撞到的）：`--skip-test` 的退出码以前与完整认证**一模一样是 0**，
+ * 汇总行也只写一句括号里的「（--skip-test：本次没跑全量）」。第 116 页有人（我）拿着它的 exit 0
+ * 在进度页上写"同 HEAD 隔离树跑过"，而它根本没跑全量 —— 于是 HEAD 上那盏已红 86 笔的灯又躲过一轮。
+ * 本仓的老规矩在这儿同样成立：**汇总行与退出码是两个数**，一个能冒充另一个的凭据面就是假绿源。
+ *
+ * 两条收紧：① `--skip-test` 必须配 `--why=<非空>`，把"为什么这次不跑全量"逼成文字（下一轮读者看得见）；
+ * ② 等级要印出来，且**半把尺不许叫认证**。 */
+export function certLevel(skipTest: boolean, why: string): { level: "full" | "half"; ok: boolean; label: string } {
+  if (!skipTest) return { level: "full", ok: true, label: "完整（typecheck ＋ 全量）" };
+  const reason = why.trim();
+  if (reason === "") {
+    return { level: "half", ok: false, label: "半把尺（--skip-test 必须配 --why=<为什么不跑全量>）" };
+  }
+  return { level: "half", ok: true, label: "半把尺：只 typecheck ⇒ **不构成这棵树的全量绿**｜原因：" + reason };
+}
