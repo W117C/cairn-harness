@@ -75,6 +75,9 @@ export function headGateTableIntegrity(manifestSrc: string | null, pkgJsonText: 
   const gates = [...new Set(body.split("\n")
     .map((l) => /^\s*["']([^"']+)["']\s*,?\s*(?:\/\/.*)?$/.exec(l)?.[1])
     .filter((n): n is string => n !== undefined))];
+  // 读得出数组却一条门都没收到 ⇒ 这是**取料形状变了**（例如整表写成一行的排版），不是"门表空"。
+  // 空面与没取到同处置（空载棘轮那一族，规则 129/196）：0 道门、0 条缺失读起来比"红"更像"绿"。
+  if (gates.length === 0) return null;
   let scripts: Set<string>;
   try {
     const pkg = JSON.parse(pkgJsonText) as { scripts?: Record<string, unknown> };

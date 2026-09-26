@@ -4109,3 +4109,27 @@ git 调用由 `scripts/mutate-verify.mjs` 注入 ⇒ 本模块不自己 spawn �
 - 顺带看见的一条（不改判，先登记）：`docs-check` 今天红在 D-8＝`replay:prompt-fixed-cost` 无文档引用，
   而 `scripts/replay/prompt-fixed-cost.ts` **盘上有、git 里没有**（`git ls-files --error-unmatch` 报 did not match）
   ⇒ 登记表 `scripts/replay-readings.ts:53` 指着的那份脚本本身没入库：这是 #11 那一族的**新实例**（不止 4 个模块），已并入 #11 的清单。
+
+### 2026-09-27 · 第 137 页 · 两条候选尺被读数否掉，转而补这两把尺自己的「空载」那一格
+
+接着找下一格没观察者的位置，先量了两条候选，**两条都不该建**：
+
+- 候选①「散文/登记表点名的脚本必须在那一笔里存在」（动机是 #11 新登记的那格 `scripts/replay/prompt-fixed-cost.ts`）。
+  现读 HEAD：**88 条命中**。逐条看下来一大半是我的 join 键漏了 `.mjs`（`scripts/mutate-verify.mjs` 明明在 HEAD 里却被报成悬空，
+  因为文件表只收 `.ts/.tsx/.mts`），而 `dead-script-refs` 那套「同行写明已删/未入库即放行」的豁免我没接。
+  更要紧的是：今天那条真缺陷**根本不在 HEAD 的文字里**（`scripts/replay-readings.ts` 本身还在飞，` M`）⇒ 这条尺开张就要背 88 条存量，
+  而它要抓的那一条还得不到见证。**不建**（读数把方向改了，不是我觉得麻烦）。
+- 候选②「HEAD 里有、盘上没了的判卷文件」（第 124 页那两盏的口径）。现读：**229 个 HEAD 判卷文件、盘上缺 0 个**；
+  `src`＋`scripts` 同样缺 0 ⇒ 空载尺不建（规则 129/196：帽子不许挂在没有观测对象的格上）。
+
+于是把力气放回**这两把尺自己**的空载那一格——它们都有一条「读出来正好像绿」的路：
+
+- `headGateTableIntegrity`：数组读得出、里面**一条门名都没收到**（排版变了：整表压成一行，或门名被写成注释）
+  ⇒ 以前印「门表：0 道，缺 0 道」＝比红更像绿；现在与「没取到」同处置（返回 null ⇒ 印「门表未取」）。
+  见证是专门造的：`export const GATES: readonly string[] = [ // 全写成注释 ]` 必须 null。
+- `head-cert` 的 ②b：`collectHeadEdges` 取到空面（文件 0 **或** 边 0）时以前照常走进「悬空 0」那一支。
+  现在与 `git 读不到` 合并成一句「import 面未取（取到空面：文件 N 个、边 M 条）」⇒ 没尺不许冒充自洽。
+- 判卷 23 → **25 passed**；typecheck 0；锚点 **821 → 823**（`head-gate-hollow-array-counts-as-complete`、
+  `head-cert-empty-import-face-reads-as-clean`），与判据同笔落库（规则 217）。
+- 施工自记（我这一轮踩的）：一次 Edit 把两行注释的**第一行吞了**，typecheck 与判卷全绿——吞掉的是说明不是判据，
+  所以退出码不会告诉我。修完逐行 `grep -c` 点名回来才算改对（与「编辑成功≠位置对/没吞行」同一条，本轮再加一例）。

@@ -133,6 +133,11 @@ describe("认证流程里的 import 面那一行（接线）", () => {
     expect(src.includes("import 面未取")).toBe(true);
     expect(src.includes("不等于 import 面自洽")).toBe(true);
   });
+
+  it("取到**空面**（文件 0 或边 0）与未取同处置：0 条 findings 正好像「自洽」（空载棘轮，规则 129/196）", () => {
+    expect(src.includes("importFace.headFiles.size === 0 || importFace.edges.length === 0")).toBe(true);
+    expect(src.includes("取到空面")).toBe(true);
+  });
 });
 
 /** 第 136 页：门表本身在**那一笔**上完不完整。起因是想登记第 24 道门时看清了 HEAD 的门表
@@ -173,6 +178,13 @@ describe("headGateTableIntegrity：门表与 scripts 必须取自同一笔", () 
     expect(headGateTableIntegrity(manifest(["a"]), null)).toBeNull();
     expect(headGateTableIntegrity("const NOT_EXPORTED = 1;", pkgWith(["a"]))).toBeNull();
     expect(headGateTableIntegrity(manifest(["a"]), "{ not json")).toBeNull();
+  });
+
+  it("排版变了也别说「门表完整」：数组在、里面一条名字都没有 ⇒ 按 null 处置（0 道读起来比红更像绿）", () => {
+    const hollowed = "export const GATES: readonly string[] = [\n  // 这一版把门名都写成注释了\n];";
+    expect(headGateTableIntegrity(hollowed, pkgWith(["typecheck"]))).toBeNull();
+    // 压成一行的排版同样不许冒充「齐的」：要么读得出东西，要么说没取到。
+    expect(headGateTableIntegrity('export const GATES = ["typecheck", "test"];', pkgWith(["typecheck", "test"]))).toBeNull();
   });
 
   it("真表自证：HEAD 那份读得出东西，缺的那一撮必须是门表的子集", () => {

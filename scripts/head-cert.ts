@@ -130,8 +130,13 @@ if (!certifiable) say("⚠️ 依赖不全 ⇒ 下面的红**不可归因于代�
  *  而它说的那件事正是下面 typecheck 为什么必红——第 131 页那次，`834ba3a` 把消费者入库了、
  *  4 个新模块留在未跟踪，认证树报"8 条错 / 34 个判卷文件红"，读的人得自己数才发现其中 4 条是同一件事。 */
 const importFace = collectHeadEdges(TARGET);
-if (importFace === null) {
-  say("⚠️ import 面未取（git 读不到 " + TARGET.slice(0, 7) + "）⇒ 不等于 import 面自洽");
+// 空面＝没尺：`cat-file` 整批失败、或那一笔三面皆空时 findings 天然为 0，读起来正好像「自洽」。
+// 与「未取」同处置（空载棘轮那一族，规则 129/196）——0 条边不许被当成绿灯。
+const faceEmpty = importFace !== null && (importFace.headFiles.size === 0 || importFace.edges.length === 0);
+if (importFace === null || faceEmpty) {
+  say("⚠️ import 面未取（"
+    + (importFace === null ? "git 读不到 " + TARGET.slice(0, 7) : "取到空面：文件 " + String(importFace.headFiles.size) + " 个、边 " + String(importFace.edges.length) + " 条")
+    + "）⇒ 不等于 import 面自洽");
 } else {
   const dang = findDanglingImports(importFace.edges, importFace.headFiles, (rel) => existsSync(join(MAIN, rel)));
   const face = checkHeadImportFace(dang);

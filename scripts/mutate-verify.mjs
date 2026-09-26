@@ -7017,6 +7017,22 @@ const MUTATIONS = [
     apply: (s) => s.replace("if (manifestSrc === null || pkgJsonText === null) return null;", "if (manifestSrc === null || pkgJsonText === null) return { gates: [], withoutScript: [] };"),
     expectFail: "三态：任一头没取到 / 数组读不出来 / 坏 JSON ⇒ null（没尺，不许读成「一条不缺」）",
   },
+  {
+    id: "head-gate-hollow-array-counts-as-complete",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "数组读得出、里面一条门名都没收到（排版变了：整表压成一行，或门名全被注释掉）⇒ 「0 道门、0 条缺失」印出来比红更像绿（空载棘轮，规则 129/196）",
+    apply: (s) => s.replace("if (gates.length === 0) return null;", "if (gates.length < 0) return null;"),
+    expectFail: "排版变了也别说「门表完整」：数组在、里面一条名字都没有 ⇒ 按 null 处置（0 道读起来比红更像绿）",
+  },
+  {
+    id: "head-cert-empty-import-face-reads-as-clean",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "import 面取到空（文件 0 或边 0）时照常走进印「悬空 0」的那一支 ⇒ findings 天然为 0，读起来正是「自洽」——这一支的前提是**真读到了东西**",
+    apply: (s) => s.replace("importFace !== null && (importFace.headFiles.size === 0 || importFace.edges.length === 0)", "importFace !== null && false"),
+    expectFail: "取到**空面**（文件 0 或边 0）与未取同处置：0 条 findings 正好像「自洽」（空载棘轮，规则 129/196）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
