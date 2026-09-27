@@ -504,7 +504,7 @@ describe("认证树的锁：谁能占这棵树（谓词）", () => {
   it("超过帽才回收，差一秒不算：帽的边界不许靠感觉（活人跑长一点就被抢＝假自愈）", () => {
     const stale = decide(lock({ startedAt: NOW - CERT_LOCK_MAX_AGE_MS - 1 }));
     expect(stale.kind).toBe("reclaim");
-    if (stale.kind === "reclaim") expect(stale.reason).toContain("分钟");
+    if (stale.kind === "reclaim") expect(stale.reason).toContain("超过帽");
     expect(decide(lock({ startedAt: NOW - CERT_LOCK_MAX_AGE_MS + 5_000 })).kind, "没超帽就回收＝帽等于没有").toBe("held");
   });
 
@@ -639,7 +639,13 @@ describe("接线：真跑 head-cert——占不到锁就不许动树", () => {
 
   it("三态不许互相冒充：free 那一支永远不 exit，未取到锁面只出声不停门", () => {
     const src = readFileSync(join(repoRoot, "scripts", "head-cert.ts"), "utf8");
-    const block = src.slice(src.indexOf("/* ⓪ 占锁"), src.indexOf("// ① 切树"));
+    // 切片边界用**代码标识**，不用注释文字（`assertion-health-scan` 那条棘轮喊的，09-28 实测我第一版拿的是
+    // `/* ⓪ 占锁 */` 与 `// ① 切树` 两句注释 ⇒ 改一句注释，这段切片就静默变空、断言照绿）。
+    const from = src.indexOf("const pidAlive = ");
+    const to = src.indexOf("const treeAbs = ");
+    const block = src.slice(from, to);
+    expect(from).toBeGreaterThan(-1);
+    expect(to).toBeGreaterThan(from);
     expect(block.length).toBeGreaterThan(0);
     expect(/"free"[\s\S]{0,160}process\.exit/.test(block), "把 free 也 exit＝这道门依赖锁文件存在").toBe(false);
     expect(block).toContain("锁面未取");
