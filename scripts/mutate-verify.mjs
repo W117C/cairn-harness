@@ -7472,6 +7472,106 @@ const MUTATIONS = [
     ),
     expectFail: "作废必须改退出码：只印一行而门照绿 ⇒ 这道门永远不会因为树被切走而红",
   },
+  // ── 第 156 页 · head-cert 的「并发判卷」读数：撞窗的红要门里就有归因方向
+  {
+    id: "concurrency-shape-matched-by-adjacency",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "退回「按字面串挨着匹配」那版：真机现行的命令行在 `run` 与 `--config` 中间插了 `--pool` ⇒ 明明有人在跑却读成 0 套。这格读成 0 比读错更糟——它会让人**排除掉一个真实存在的撞窗**（今天我自己就这么漏过一次）",
+    apply: (s) => s.replace(
+      "  return SUITE_BIN_SHAPE.test(line) && RUN_SHAPE.test(line) && CONFIG_SHAPE.test(line);",
+      '  return line.includes("vitest.mjs run --config");',
+    ),
+    expectFail: "真机现行：`run` 与 `--config` 中间插了 --pool ⇒ 仍然认得出（按字面串匹配的那版在这里读成 0 套）",
+  },
+  {
+    id: "concurrency-watcher-line-counted",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "不摘看门那行 ⇒ `pgrep -f vitest.mjs run --config …` 这类监视进程被算成一套判卷（我今天写的等窗循环正是这个形状），于是「有人在跑」变成常态，这格从此没人信",
+    apply: (s) => s.replace(
+      "  if (WATCHER_SHAPE.test(line)) return false;",
+      "  if (false) return false;",
+    ),
+    expectFail: "看门的那行不算一套：pgrep 自己带着同样的字面（今天我就写了这么一条等窗循环）",
+  },
+  {
+    id: "concurrency-pgid-dedupe-dropped",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "按行去重改成按整行 ⇒ 一套判卷的 shell 包装行与 node 子进程行各算一套，「我自己在跑」被读成撞窗，红的时候会把人送去查一个不存在的邻居",
+    apply: (s) => s.replace(
+      "    groups.add(cols[1]);",
+      "    groups.add(line);",
+    ),
+    expectFail: "一套判卷在 ps 里留两行（shell 包装 + node 子进程）⇒ 数成一套：按行计数会把「我自己在跑」读成撞窗",
+  },
+  {
+    id: "concurrency-malformed-reads-zero",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "取料形状不对（少了 pgid 那一列）时把 -1 改成继续数 ⇒ 「没量到」被读成「量到了且是 1 套/0 套」，规则 222 的文本尺老假绿路在这一格重开",
+    apply: (s) => s.replace(
+      "    if (cols.length < 2 || !NUMERIC_SHAPE.test(cols[1])) return -1;",
+      "    if (cols.length < 2) return -1;",
+    ),
+    expectFail: "取料形状不对（没有 pgid 那一列）⇒ 回 -1 而不是 0：「没量到」不许长成「量到且没问题」",
+  },
+  {
+    id: "concurrency-hint-fires-on-green",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "判卷绿也照喊撞窗 ⇒ 一道门喊没人会信的狼，下一次真撞窗时这句话已经没人看了（第 154 页「无差别的旗标＝没观测者」的反面：有旗标但永远举）",
+    apply: (s) => s.replace(
+      "  if (testStatus === null || testStatus === 0) return null;",
+      "  if (testStatus === null) return null;",
+    ),
+    expectFail: "判卷有红且两端采到别人 ⇒ 那句话给归因方向并点名套数；判卷绿 ⇒ 一声不出",
+  },
+  {
+    id: "concurrency-reading-unknown-collapsed",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "「取不到」那一支被摘掉 ⇒ 汇总行把 -1 一路印成「两端独占」，等于把没量到宣称成量过且没问题",
+    apply: (s) => s.replace(
+      '  if (before < 0 || after < 0) return "并发判卷=取不到（ps 没跑起来 ⇒ 撞窗无从判定，这一格不许读成 0）";',
+      '  if (false) return "并发判卷=取不到（ps 没跑起来 ⇒ 撞窗无从判定，这一格不许读成 0）";',
+    ),
+    expectFail: "汇总行三种「没数」分列印：未采／取不到／独占／撞窗，谁也不许冒充 0",
+  },
+  {
+    id: "concurrency-samples-only-before",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "只在起判卷前采一次 ⇒ 判卷这 90 秒里开起来的那套看不见（这半把尺本身就是本笔要修的东西：我的等窗循环就是这么漏的）",
+    apply: (s) => s.replace(
+      '  psAfter = countConcurrentSuites(run(MAIN, "ps", ["-eo", "pid,pgid,command"]).out);',
+      "  psAfter = -1;",
+    ),
+    expectFail: "起前与跑完各采一次（只采一端的读数是半把尺：中途开起来的那套看不见）",
+  },
+  {
+    id: "concurrency-hint-computed-not-printed",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "算出来不接（规则 230 的同一格）：归因方向有了，但没人印 ⇒ 读的人看到的还是一句「exit=1」，仍然得自己去 ps",
+    apply: (s) => s.replace(
+      "if (hint !== null) say(`⚠️ ${hint}`);",
+      "if (false) say(`⚠️ ${hint}`);",
+    ),
+    expectFail: "读数印进汇总，且 --skip-test 那一路不许伪装成「跑过且独占」",
+  },
+  {
+    id: "concurrency-wired-into-exit-code",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "反向哨兵：把并发套数接进退出码 ⇒ 别的会话在跑就让门红，这道门从此是共享树上的随机红（本笔的裁决是「只出声、不闸住」，改判要连着改这一条）",
+    apply: (s) => s.replace(
+      "dirtyCount === 0 && drift === null ? 0 : 1",
+      "dirtyCount === 0 && drift === null && psBefore === 0 ? 0 : 1",
+    ),
+    expectFail: "反向哨兵：并发套数刻意**不进退出码**（别的会话在跑不是我这笔代码错，接进去＝共享树上的随机红）",
+  },
   {
     id: "read-invalidated-missing-rev-reads-clean",
     src: "scripts/lib/head-cert-deps.ts",

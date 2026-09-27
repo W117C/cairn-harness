@@ -6,7 +6,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { certLevel, declaredDeps, depDirs, headGateTableIntegrity, installedDeps, missingDeclaredDeps, readInvalidated } from "../scripts/lib/head-cert-deps";
+import { certLevel, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, headGateTableIntegrity, installedDeps, missingDeclaredDeps, readInvalidated } from "../scripts/lib/head-cert-deps";
 
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 const listWorktrees = (cwd: string): string[] =>
@@ -336,5 +336,96 @@ describe("接线：认证流程真的做收尾复核，且它进得了退出码"
     const check = src.indexOf('const drift = readInvalidated(');
     expect(suite).toBeGreaterThan(-1);
     expect(check, "复核被挪到判卷之前 ⇒ 又变成切树时那次，白加").toBeGreaterThan(suite);
+  });
+});
+
+/* 第 155 页凭证的动因：我为了"别撞窗"写的等窗循环只在交接那一瞬成立，认证真跑起来后主树又开了第二套判卷。
+   本次读数绿（并行只造假红、造不出假绿），但门里当时没有这一格读数——红的时候我只能事后 `ps` 反查。 */
+describe("并发判卷读数：撞窗的红要有门里的归因方向，而不是人事后 ps", () => {
+  // 逐字取自 09-27 真 `ps -eo pid,pgid,command` 的形状：外层 shell 把整条命令写在自己的命令行里，
+  // node 子进程又是同一行形状 ⇒ 按行计数会把一套数成两套。
+  const ONE_SUITE = [
+    "  PID  PGID COMMAND",
+    " 9113  9113 /bin/zsh -c source /tmp/snap.sh && node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts 2>&1 | tail -60",
+    " 9116  9113 node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts",
+    " 9118  9113 /Users/ze/.hermes/node/bin/node --require /repo/node_modules/vitest/suppress-warnings.cjs /repo/node_modules/vitest/dist/workers/forks.js",
+  ].join("\n");
+
+  it("一套判卷在 ps 里留两行（shell 包装 + node 子进程）⇒ 数成一套：按行计数会把「我自己在跑」读成撞窗", () => {
+    expect(countConcurrentSuites(ONE_SUITE)).toBe(1);
+  });
+
+  it("两个 pgid ⇒ 两套并行；一行都不匹配 ⇒ 0（真独占要与「取不到」分得开）", () => {
+    const two = ONE_SUITE + "\n 2222  2222 node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts";
+    expect(countConcurrentSuites(two)).toBe(2);
+    expect(countConcurrentSuites("  PID  PGID COMMAND\n 100  100 node scripts/typecheck.ts\n")).toBe(0);
+  });
+
+  it("取料形状不对（没有 pgid 那一列）⇒ 回 -1 而不是 0：「没量到」不许长成「量到且没问题」", () => {
+    const noPgidCols = "node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts";
+    expect(countConcurrentSuites(noPgidCols)).toBe(-1);
+    expect(countConcurrentSuites(null)).toBe(-1);
+    expect(countConcurrentSuites("")).toBe(-1);
+  });
+
+  it("真机现行：`run` 与 `--config` 中间插了 --pool ⇒ 仍然认得出（按字面串匹配的那版在这里读成 0 套）", () => {
+    const pooled = "  PID  PGID COMMAND\n 95637 28142 /Users/ze/.hermes/node/bin/node /repo/node_modules/vitest/vitest.mjs run --pool=threads --config tests/vitest.config.ts tests";
+    expect(countConcurrentSuites(pooled)).toBe(1);
+  });
+
+  it("看门的那行不算一套：pgrep 自己带着同样的字面（今天我就写了这么一条等窗循环）", () => {
+    const watcher = "  PID  PGID COMMAND\n 1234 1234 /bin/zsh -c pgrep -f vitest.mjs run --config tests/vitest.config.ts";
+    expect(countConcurrentSuites(watcher)).toBe(0);
+  });
+
+  it("判卷有红且两端采到别人 ⇒ 那句话给归因方向并点名套数；判卷绿 ⇒ 一声不出", () => {
+    const hint = collisionHint(1, 0, 2);
+    expect(hint).not.toBeNull();
+    expect(hint).toContain("先排撞窗");
+    expect(hint, "不点名的话，读的人还得自己再 ps 一遍").toContain("2");
+    expect(collisionHint(0, 3, 3), "绿的时候报撞窗 ⇒ 一道门喊了没人会信的狼").toBeNull();
+    expect(collisionHint(null, 3, 3), "本次没跑判卷 ⇒ 没有红可归因").toBeNull();
+  });
+
+  it("反向哨兵：判卷红而两端独占 ⇒ 不许甩锅撞窗（这条红就是代码的，得去查代码）", () => {
+    expect(collisionHint(1, 0, 0)).toBeNull();
+    expect(collisionHint(1, -1, -1), "ps 取不到时也不许断言「有人并行」").toBeNull();
+  });
+
+  it("汇总行三种「没数」分列印：未采／取不到／独占／撞窗，谁也不许冒充 0", () => {
+    expect(concurrencyReading(-1, -1, false)).toContain("未采");
+    expect(concurrencyReading(-1, -1, true)).toContain("取不到");
+    expect(concurrencyReading(0, 0, true)).toContain("独占");
+    const collided = concurrencyReading(0, 1, true);
+    expect(collided).toContain("撞窗");
+    expect(collided).toContain("1");
+    expect(concurrencyReading(-1, -1, true), "取不到那一支印出 0 ⇒ 这一格从此只会假绿").not.toContain(" 0 套");
+  });
+});
+
+describe("接线：认证流程真的两端各采一次，且这格进得了汇总行", () => {
+  const src = readFileSync(join(repoRoot, "scripts", "head-cert.ts"), "utf8");
+
+  it("起前与跑完各采一次（只采一端的读数是半把尺：中途开起来的那套看不见）", () => {
+    expect(src).toContain('psBefore = countConcurrentSuites(run(MAIN, "ps", ["-eo", "pid,pgid,command"]).out);');
+    expect(src).toContain('psAfter = countConcurrentSuites(run(MAIN, "ps", ["-eo", "pid,pgid,command"]).out);');
+    const before = src.indexOf("psBefore = countConcurrentSuites(");
+    const suite = src.indexOf('node_modules/vitest/vitest.mjs');
+    const after = src.indexOf("psAfter = countConcurrentSuites(");
+    expect(before).toBeGreaterThan(-1);
+    expect(suite).toBeGreaterThan(before);
+    expect(after, "跑完那次挪到判卷之前 ⇒ 只剩起前那一端").toBeGreaterThan(suite);
+  });
+
+  it("读数印进汇总，且 --skip-test 那一路不许伪装成「跑过且独占」", () => {
+    expect(src).toContain("concurrencyReading(psBefore, psAfter, testStatus !== null)");
+    expect(src, "只算不印＝这格永远没人看").toContain("${concurrencyReading(");
+    expect(src, "算出了归因方向却不印 ⇒ 读的人仍然只能自己去 ps").toContain("if (hint !== null) say(");
+  });
+
+  it("反向哨兵：并发套数刻意**不进退出码**（别的会话在跑不是我这笔代码错，接进去＝共享树上的随机红）", () => {
+    const exitLine = src.split("\n").find((l) => l.startsWith("process.exit(")) ?? "";
+    expect(exitLine).toContain("drift === null");
+    expect(exitLine, "把并发接进退出码＝这道门从此看别人脸色").not.toMatch(/ps(Before|After)/);
   });
 });

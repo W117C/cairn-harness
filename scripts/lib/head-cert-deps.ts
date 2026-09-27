@@ -125,3 +125,59 @@ export function readInvalidated(afterRev: string | null, target: string): string
   if (got === target) return null;
   return `跑完复核：那棵树现在是 ${got.slice(0, 7)}，认证目标是 ${target.slice(0, 7)} ⇒ 中途被切走，本次读数作废（谁在用同一棵树？）`;
 }
+
+/** 一行的命令字段是不是"在跑本仓的 vitest 判卷"。**按记号认，不按字面串的顺序认**。
+ *
+ *  为什么不写成一条字面量 `vitest.mjs run --config tests/vitest.config.ts`：09-27 真机抓的现行是
+ *  `…/node /…/vitest/vitest.mjs run --pool=threads --config tests/vitest.config.ts tests`
+ *  ——变异机在 `run` 与 `--config` **中间**插了 `--pool`，字面串直接不匹配，于是"明明有人在跑"读成 0 套。
+ *  这格读数是 0 的话比读错更糟：它会让人**排除掉一个真实存在的撞窗**。 */
+const WATCHER_SHAPE = /(^|\s)(pgrep|grep)(\s|$)/;
+const SUITE_BIN_SHAPE = /(^|\s)\/?\S*vitest\.mjs(?=\s|$)/;
+const RUN_SHAPE = /\brun\b/;
+const CONFIG_SHAPE = /(^|\s)--config(\s|$)/;
+const NUMERIC_SHAPE = /^\d+$/;
+
+function isJudgeSuiteLine(line: string): boolean {
+  if (WATCHER_SHAPE.test(line)) return false; // 看门的那行自己带着同样的字面（今天我就写了这么一条等窗循环）
+  return SUITE_BIN_SHAPE.test(line) && RUN_SHAPE.test(line) && CONFIG_SHAPE.test(line);
+}
+
+/** 同一时刻有几套全量判卷在跑（`ps -eo pid,pgid,command` 原文 → 套数；-1＝取不到）。
+ *  这里数的是"套"而不是"进程"：变异机一轮判卷会连续起几十个 vitest 进程，但它们同属一个 pgid，
+ *  对本格的危险（两套判卷共享 /tmp）而言那是一路。
+ *
+ *  为什么按 **pgid 去重**：一次判卷在 `ps` 里通常留**两行**——外层 shell 的 `-c '… node …vitest.mjs run…'`
+ *  把它自己那份命令行也写全了，加上真正的 node 子进程。按行计数会把一套数成两套（09-27 实测的 ps 输出就是这样），
+ *  而"两套"和"一套"在这格里的含义完全不同：前者是真撞窗，后者只是我自己。
+ *
+ *  为什么"取不到"要回 -1 而不是 0：这是文本尺的老假绿路（规则 222）——把"没量到"读成"量到且为 0"，
+ *  于是撞窗的红从此查不出来，还自以为排除了。 */
+export function countConcurrentSuites(psOut: string | null): number {
+  if (psOut === null || psOut.trim() === "") return -1;
+  const groups = new Set<string>();
+  for (const line of psOut.split("\n")) {
+    if (!isJudgeSuiteLine(line)) continue;
+    const cols = line.trim().split(/\s+/);
+    if (cols.length < 2 || !NUMERIC_SHAPE.test(cols[1])) return -1;
+    groups.add(cols[1]);
+  }
+  return groups.size;
+}
+
+/** 撞窗红该说的那句话：绿的时候这格只是背景，红的时候它是**归因方向**。
+ *  刻意不改退出码——别的会话在跑不是我这笔代码错，接进退出码等于把这道门变成共享树上的随机红。 */
+export function collisionHint(testStatus: number | null, before: number, after: number): string | null {
+  if (testStatus === null || testStatus === 0) return null;
+  const peaked = Math.max(before, after);
+  if (peaked <= 0) return null;
+  return `判卷有红，且两端采到 ${String(peaked)} 套判卷并行 ⇒ 先排撞窗再查代码（判卷面有写共享 /tmp 的用例，两套并行会互踩出假红；本次读数不是独占跑的）`;
+}
+
+/** 汇总行那一格。**三种"没数"要分列印**，不许都写成 0：未采（本次没跑判卷）／取不到（ps 坏了）／采到 0 套（真独占）。
+ *  把它们混成一个 0，就是"把没量到读成量过且没问题"（规则 222 的文本尺老形状）。 */
+export function concurrencyReading(before: number, after: number, judged: boolean): string {
+  if (!judged) return "并发判卷=未采（本次没跑全量判卷，撞窗与否无从谈起）";
+  if (before < 0 || after < 0) return "并发判卷=取不到（ps 没跑起来 ⇒ 撞窗无从判定，这一格不许读成 0）";
+  return `并发判卷=起前 ${String(before)} 套／跑完 ${String(after)} 套${Math.max(before, after) > 0 ? "（撞窗：本仓判卷有读写共享 /tmp 的用例）" : "（两端独占）"}`;
+}

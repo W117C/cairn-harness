@@ -19,7 +19,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { certLevel, declaredDeps, depDirs, headGateTableIntegrity, missingDeclaredDeps, readInvalidated } from "./lib/head-cert-deps";
+import { certLevel, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, headGateTableIntegrity, missingDeclaredDeps, readInvalidated } from "./lib/head-cert-deps";
 import { checkHeadImportFace, collectHeadEdges, findDanglingImports } from "./head-import-face";
 
 const argv = process.argv.slice(2);
@@ -192,8 +192,16 @@ const tc = run(TREE, "node", ["--import", "tsx", "scripts/typecheck.ts"], join(l
 say(`typecheck exit=${String(tc.status)}${tc.status === 0 ? "（0 报错）" : "：\n  " + tc.out.trim().split("\n").slice(-4).join("\n  ")}`);
 let testStatus: number | null = null;
 let summary = LEVEL.label;
+let psBefore = -1;
+let psAfter = -1;
 if (!flag("skip-test")) {
+  // 撞窗读数（第 155 页凭证的动因）：判卷面有用例读写**共享的** `/tmp/m1e-default-settings.json`
+  // （`src/main/settings-handlers.ts` 的缺省设置盘），两套全量判卷并行会互踩出假红。
+  // 两端各采一次——中间那 90 秒采不到（判卷是阻塞的 spawnSync），所以这格只回答"起前/跑完有没有别人"，
+  // 不回答"中途有没有"；红的时候它给的是**归因方向**，不是结论。
+  psBefore = countConcurrentSuites(run(MAIN, "ps", ["-eo", "pid,pgid,command"]).out);
   const t = run(TREE, "node", ["node_modules/vitest/vitest.mjs", "run", "--config", "tests/vitest.config.ts"], join(logDir, "test.log"));
+  psAfter = countConcurrentSuites(run(MAIN, "ps", ["-eo", "pid,pgid,command"]).out);
   testStatus = t.status;
   const strip = t.out.replace(/\x1b\[[0-9;]*m/g, "");
   const files = /Test Files +(.*)$/m.exec(strip)?.[1] ?? "读不到";
@@ -208,6 +216,10 @@ const drift = readInvalidated(afterRev.status === 0 ? afterRev.out : null, TARGE
 if (drift !== null) say(`❌ ${drift}`);
 say(`  TREE=${TARGET.slice(0, 7)} DIRTY_JUDGED=${String(dirtyCount)} 依赖完整=${certifiable ? "是" : "否（缺 " + missing.join("、") + "）"} 收尾复核=${drift === null ? "同一笔" : "作废"}`);
 say(`  ${summary}`);
+say(`  ${concurrencyReading(psBefore, psAfter, testStatus !== null)}`);
+const hint = collisionHint(testStatus, psBefore, psAfter);
+if (hint !== null) say(`⚠️ ${hint}`);
 say(`  逐条日志：${logDir}`);
 say(`  回收这棵树（规则 120，别留残留）：git worktree remove --force ${TREE}`);
+// 并发套数**刻意不进下面这个退出码**：别的会话在跑不是我这笔代码错，接进去等于把这道门变成共享树上的随机红。
 process.exit(certifiable && tc.status === 0 && (testStatus === null || testStatus === 0) && dirtyCount === 0 && drift === null ? 0 : 1);
