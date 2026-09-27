@@ -520,6 +520,28 @@ export function auditExpectFails(
   return out;
 }
 
+/** 「松钉」＝逐字认不出、只有靠占位符展开的标题模式才认下的指针（拼接标题／带转义引号的那两类必然落在这里）。
+ *
+ *  这一格要**有读数**：09-27 现读 10／872，且这 10 根所在的 9 个判卷文件对一根假指针全部拒收 ⇒ 松钉本身不是洞。
+ *  但没有这个数字的话，下一次"标题改了、指针跟着漂"只会花 21 分钟实跑后以「红了但没红在期望用例」出现——
+ *  本轮那条「四支／六支」就是这条来路（它当时逐字也认不出，是被恒真模式放过的）。 */
+export function looseOnlyPointers(
+  entries: readonly ExpectFailEntry[],
+  readTest: (rel: string) => string | null,
+): string[] {
+  const cache = new Map<string, string | null>();
+  const out: string[] = [];
+  for (const e of entries) {
+    if (e.expectFail === "" || e.test === "" || !e.test.endsWith(".test.ts")) continue;
+    if (!cache.has(e.test)) cache.set(e.test, readTest(e.test));
+    const text = cache.get(e.test);
+    // 读不到 ⇒ 不归这里：那一格由 `auditExpectFails` 报 `unreadable`，两把尺各记各的，不互相顶账。
+    if (text === null || text === undefined) continue;
+    if (!text.includes(e.expectFail) && expectFailMatchesTitles(e.expectFail, text)) out.push(e.id);
+  }
+  return out;
+}
+
 /** HEAD 侧的指针体检（第 141 页）：锚点行已经入库、判卷里那条标题还没 ⇒ 干净 HEAD 上这条锚点指不到活用例。
  *  普查里这一格占了 23 条，只能靠 21.8 分钟实跑发现；静态能秒级点出来，因为它两头都在盘上。
  *  只查**同时满足两条**的锚点，否则会把"本笔同时改表与改判卷"误判成缺陷（那格由 217 的同笔规矩管）：

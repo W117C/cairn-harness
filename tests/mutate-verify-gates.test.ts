@@ -6,8 +6,24 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { anchorFaces, auditExpectFails, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, entryDisposition, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
+import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, entryDisposition, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
 import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
+
+/** 从锚点表取 `{id,test,expectFail}`：只走 `--list` 这条**不改源文件**的入口。
+ *  以前这里 spawn `--check-needles`，结果在变异单跑时撞上门自己的备份文件预检 ⇒「读不到汇总行」
+ *  把三条本来好好的锚点带红（第 138 页）。两把尺共用这一份取料，别各写一遍（第十三族）。 */
+function listAnchorRows(): { id: string; test: string; expectFail: string }[] {
+  const script = fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url));
+  const r = spawnSync(process.execPath, [script, "--list"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  return (r.stdout ?? "").split("\n")
+    .map((l) => l.split("\t"))
+    .filter((p) => p.length >= 5 && p[4] !== undefined && p[4].startsWith("\""))
+    .map((p) => ({ id: p[0] ?? "", test: p[3] ?? "", expectFail: JSON.parse(p[4] ?? '""') as string }));
+}
+
+function readRel(rel: string): string | null {
+  try { return readFileSync(join(fileURLToPath(new URL("../", import.meta.url)), rel), "utf8"); } catch { return null; }
+}
 
 describe("budgetMsOf + classifyArgs 的值位（自我预算这条手段本身要有判卷）", () => {
   it("flag 优先于 env；两者都缺 ⇒ 不限且不吭声", () => {
@@ -501,12 +517,7 @@ describe("auditExpectFails：killer 指针必须指得到活用例", () => {
   it("真表自证：整张表的 killer 指针必须 0 失效（新增一条断指针＝当场红）", () => {
     // 只走 `--list` 这条**不改源文件**的入口。以前这里 spawn `--check-needles`，结果在变异单跑时
     // 撞上门自己的备份文件预检 ⇒「读不到汇总行」把三条本来好好的锚点带红（第 138 页）。
-    const script = fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url));
-    const r = spawnSync(process.execPath, [script, "--list"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-    const rows = (r.stdout ?? "").split("\n")
-      .map((l) => l.split("\t"))
-      .filter((p) => p.length >= 5 && p[4] !== undefined && p[4].startsWith("\""))
-      .map((p) => ({ id: p[0] ?? "", test: p[3] ?? "", expectFail: JSON.parse(p[4] ?? '""') as string }));
+    const rows = listAnchorRows();
     // 空 expectFail 的条目（逐行式那几条）由尺自己跳过，这里只要求表读得出来。
     expect(rows.length).toBeGreaterThan(500);
     // 「一条都不许丢」：`--list` 是两把静态尺共同的取料面。字段里带换行会把一行拆成两行 ⇒
@@ -517,6 +528,44 @@ describe("auditExpectFails：killer 指针必须指得到活用例", () => {
     expect(auditExpectFails(rows, (rel) => {
       try { return readFileSync(join(root, rel), "utf8"); } catch { return null; }
     }).map((p) => `${p.id}/${p.why}`)).toEqual([]);
+  }, 60_000);
+
+  // 第 154 页：「松钉」＝逐字认不出、只靠占位符展开的标题模式过关的指针。这一格以前没有读数，
+  // 所以"标题改了、指针跟着漂"只能花 21 分钟实跑后以「红了但没红在期望用例」出现（本轮「四支／六支」就是这条来路）。
+  const LOOSE_CAP = 10;
+  it("松钉要单独点名：拼接标题与带转义引号两类算松钉，逐字命中的不算，真断的也不算（那是 not-found）", () => {
+    const srcs = [
+      { path: "tests/loop.test.ts", text: '  it("零行为回退：" + label + " → 无 verify_result、请求数与旧行为同形", async () => {});' },
+      { path: "tests/hooks.test.ts", text: '  it("纯精确名不做子串：matcher \\"Edit\\" 不得命中 NotebookEdit", async () => {});' },
+      { path: "tests/plain.test.ts", text: '  it("反面对手：不同 callId 的两条 result 绝不合并", () => {});' },
+    ];
+    const read3 = (rel: string): string | null => srcs.find((s) => s.path === rel)?.text ?? null;
+    const rows = [
+      { id: "curried", test: "tests/loop.test.ts", expectFail: "零行为回退：缺省不开闸（未给 autoVerify） → 无 verify_result、请求数与旧行为同形" },
+      { id: "escaped", test: "tests/hooks.test.ts", expectFail: '纯精确名不做子串：matcher "Edit" 不得命中 NotebookEdit' },
+      { id: "plain", test: "tests/plain.test.ts", expectFail: "反面对手：不同 callId 的两条 result 绝不合并" },
+      { id: "renamed", test: "tests/plain.test.ts", expectFail: "旧标题里那句再也没出现过的一句话" },
+    ];
+    expect(looseOnlyPointers(rows, read3)).toEqual(["curried", "escaped"]);
+    // 反向：同一根指针在 auditExpectFails 那里必须是干净的（两把尺各记各的，不许互相顶账）
+    expect(auditExpectFails(rows, read3).map((p) => p.id)).toEqual(["renamed"]);
+  });
+
+  it("判卷文件读不到 ⇒ 不进松钉（那一格归 unreadable，松钉计数不许把它吞了）", () => {
+    expect(looseOnlyPointers([{ id: "gone", test: "tests/gone.test.ts", expectFail: "任何句子" }], () => null)).toEqual([]);
+  });
+
+  it("接线：门自己那一步要真拿整张表去数松钉（只印不数＝这一格永远 0，且永远不红）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    expect(src).toContain("const loosePinned = looseOnlyPointers(pointerEntries,");
+    expect(src).toContain("松钉指针 ${String(loosePinned.length)} 条");
+  });
+
+  it(`水位：真表现读松钉只准调低（帽 ${String(LOOSE_CAP)}，09-27 现读 10）——新增一根要写明为什么`, () => {
+    const loose = looseOnlyPointers(listAnchorRows(), readRel);
+    expect(loose.length, "松钉指针：" + loose.join("、")).toBeLessThanOrEqual(LOOSE_CAP);
+    // 帽不许悄悄失效：帽本身必须钉在现读附近（现读掉到帽以下很远处，就该收帽而不是留着一张空帽）
+    expect(LOOSE_CAP - loose.length).toBeLessThan(5);
   }, 60_000);
 
   it("求和那一行必须把第 5 维喂进去（钉接线：少喂一支＝门照跑、汇总照印绿）", () => {

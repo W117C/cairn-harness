@@ -22,7 +22,7 @@ import { execFileSync } from "node:child_process";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -7297,6 +7297,33 @@ const MUTATIONS = [
     expectFail: "过修的反面：带字面残迹的标题要**留着**通配（参数化标题仍然认得渲染后的样子）",
   },
   {
+    id: "loose-pointer-blind",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "松钉那一格永远数出 0 ⇒ 门照样印「松钉指针 0 条」，看起来比今天更干净，" +
+      "而拼接标题／带转义引号那两类指针从此无人知道它们是松的（这一格的用处就是「有读数」，不是阻断）",
+    apply: (s) => s.replace("if (!text.includes(e.expectFail) && expectFailMatchesTitles(e.expectFail, text)) out.push(e.id);", "if (false) out.push(e.id);"),
+    expectFail: "松钉要单独点名：拼接标题与带转义引号两类算松钉，逐字命中的不算，真断的也不算（那是 not-found）",
+  },
+  {
+    id: "loose-pointer-counts-literal",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "漏掉「逐字认不出」这一半条件 ⇒ 每一根正常指针都被算成松钉（现读 10 变 872），" +
+      "水位帽当场失效之外更糟：这个数字不再有意义，读的人据它判断「这表几乎全是松钉」而放弃这一格",
+    apply: (s) => s.replace("if (!text.includes(e.expectFail) && expectFailMatchesTitles(e.expectFail, text)) out.push(e.id);", "if (expectFailMatchesTitles(e.expectFail, text)) out.push(e.id);"),
+    expectFail: "水位：真表现读松钉只准调低（帽 10，09-27 现读 10）——新增一根要写明为什么",
+  },
+  {
+    id: "loose-pointer-computed-not-wired",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "尺接在门上但喂空表 ⇒ 印出来的永远是「松钉指针 0 条」（规则 230 的接线课：钉调用点连同它的入参，只钉函数名则「算出来不接」存活）。" +
+      "针脚取两行是为绕开自指：单行的话这条 apply 自己就含那句文字，本文件命中 2 处会落进「待复认」",
+    apply: (s) => s.replace("  const loosePinned = looseOnlyPointers(pointerEntries,\n    (rel) =>", "  const loosePinned = looseOnlyPointers([],\n    (rel) =>"),
+    expectFail: "接线：门自己那一步要真拿整张表去数松钉（只印不数＝这一格永远 0，且永远不红）",
+  },
+  {
     id: "pointer-block-dimension-not-summed",
     src: "scripts/mutate-verify.mjs",
     test: "tests/mutate-verify-gates.test.ts",
@@ -7646,6 +7673,12 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
     (rel) => { try { return readFileSync(join(ROOT, rel), "utf8"); } catch { return null; } },
   );
   for (const p of stalePointers) console.log("❌ " + expectFailProblemLine(p));
+  // 「松钉」那一格要有读数（不阻断，但每次跑门都印出来 ⇒ 数字变了就看得见）：
+  // 逐字认不出、只靠占位符展开过关的指针。现读 10／872，水位由 tests/mutate-verify-gates.test.ts 钉住（只准调低）。
+  const loosePinned = looseOnlyPointers(pointerEntries,
+    (rel) => { try { return readFileSync(join(ROOT, rel), "utf8"); } catch { return null; } },
+  );
+  console.log(`ℹ️  松钉指针 ${String(loosePinned.length)} 条（逐字认不出、只靠占位符展开的标题模式过关——拼接标题与带转义引号那两类必然如此）${loosePinned.length === 0 ? "" : "：" + loosePinned.join("、")}`);
   // 一次求和、两处使用（汇总里印出来的数与 exit 码用的是同一个值；分开算就可能各说各话）。
   const blockingTotal = blockingTotalOf({
     needle: blocking.length, duplicateIds: dup.length, untracked: untracked.length, drift: drift.length,
