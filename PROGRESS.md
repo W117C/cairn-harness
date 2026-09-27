@@ -4511,3 +4511,17 @@ import 面 2792 条边 悬空 0、**门表 27 道 缺 script 0 道**）⇒
 现态：typecheck 0；`usage-attribution` 22/22、`budget-price-key` 7/7、`events` 21/21、`worker-role` 8/8、`replay-run-scorecard` 26/26（五支合跑 84/84）；
 `--check-needles` 854 条，阻断 14 —— 全部是"判卷/被测面尚未入库"与"钉在飞文本"两档，即本笔尚未提交所致（规则 217：尺与针脚同笔落库，入库后复跑清零）。
 **待办的读数义务**：钱轴与缓存折价都要等一次真会话（花真钱）才有新语料——存量那 166 条不会回填，这道窗口与判断层 §7 第 3 步是同一扇。
+
+#### 第 148 页凭证 · 认证 HEAD 现读 240 文件／2811 条全绿；七条新锚点 15.7s 全杀
+
+- `--check-needles` 于 `8906362`：**854 条 —— 阻断 0／待复认 0／未覆盖 0／未入库面 0／钉在飞文本 0／killer 指针失效 0**，
+  且 854 条改法全部产出合法源文件。⇒ 提交前那 14 条红全是"本笔尚未入库"造成，尺与针脚同一笔落库（规则 217）当场清账。
+- 七条新锚点在**独立 worktree**（`git worktree add --detach` + 硬链 `node_modules`，跑完回收）逐条验杀：
+  **7/7 全杀，本次耗时 15.7s**（`usage-stamp-call-dropped`／`usage-stamp-after-append`／`main-usage-model-ignores-scripted-channel`／
+  `worker-usage-borrows-main-tier`／`usage-attribution-reads-declared-tier`／`usage-stamp-overwrites-producer-model`／`orchestrator-spawned-usage-model-dropped`）。
+- `node --import tsx scripts/head-cert.ts` 于 `8906362`：`TREE=8906362 DIRTY_JUDGED=0`、依赖声明 10 项缺 0 项、
+  硬链靶子仓库依赖 exit=0、**import 面 2806 条边 悬空 0（豁免 0）**、**门表 27 道 缺 script 0 道**、typecheck 0、
+  **`Test Files 240 passed (240)｜Tests 2811 passed (2811)｜exit=0`**（退出码直接取，不接管道）。
+- 一条新的刻度读数，值得单记：认证树全量判卷 **Duration 86.66s**（日志 `/tmp/dsh-head-cert-8906362/test.log`，我的新判卷文件在内、22 条）。
+  ⇒ 从前心里那个"全量 ≈ 20 分钟"是**整张变异表**的耗时，不是判卷全量；两者别再混着引用（规则 206 同族：数要跟着被量的那个东西）。
+  这条直接改任务 #4 的代价估计：**HEAD-only 全量绿那道门便宜到没有理由不建**（现读 0 红 ⇒ 不需要存量豁免）。
