@@ -16,7 +16,7 @@
 // 可判性三分（entryDisposition）：源文件在飞/未跟踪 = 拒绝并抛死（无回滚兜底）；
 // **判卷测试文件**在飞 = 本条记「未证」跳过——否则别人的在飞编辑会伪装成「变异存活」或「基线红」。
 
-import { cpSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync, writeSync, rmSync } from "node:fs";
 import ts from "typescript";
 import { execFileSync } from "node:child_process";
 import { join, dirname, resolve } from "node:path";
@@ -6014,9 +6014,9 @@ const MUTATIONS = [
     id: "list-rows-not-flattened",
     src: "scripts/mutate-verify.mjs",
     test: "tests/mutate-verify-gates.test.ts",
-    desc: "`--list` 不再把字段压成一行 ⇒ desc 里带换行的那条被拆成两行，行数列数都不对，而吃这份取料面的两把静态尺只是**少读一条**（不报错）。第 141 页实测：表里 833 条，尺只读到 832 条。",
-    apply: (s) => s.replace("].map(oneLine).join(\"\\t\"));", "].join(\"\\t\"));"),
-    expectFail: "真表自证：整张表的 killer 指针必须 0 失效（新增一条断指针＝当场红）",
+    desc: "`--list` 不再把字段压成一行 ⇒ desc 里带换行的那条被拆成两行，行数列数都不对，而吃这份取料面的两把静态尺只是**少读一条**（不报错）。第 141 页实测：表里 833 条，尺只读到 832 条。（第 163 页补⑵：这一支的写法从「逐行 console.log」改成「整块 writeSync」，针脚跟着实现走——旧针脚 `].map(oneLine).join(\\t));` 当场 0 命中，是门喊的，不是我看出来的。）",
+    apply: (s) => s.replace('].map(oneLine).join("\\t")).join("\\n")', '].join("\\t")).join("\\n")'),
+    expectFail: "真跑：--list 经管道交给读者的行数必须等于表长（少一行＝两把静态尺一起少读一条锚点而不自知）",
   },
   {
     id: "head-pointer-filter-ignored",
@@ -7775,6 +7775,28 @@ const MUTATIONS = [
     ),
     expectFail: "`--lock-tag` 两种写法都认、值不进 targets，而隔壁拼错的 `--lock-tx=` 照拒",
   },
+  {
+    id: "mutate-flush-helper-back-to-async-write",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "把「写满为止」那一圈拆掉（`while`→`if`）＝一次 `writeSync` 只交得进内核缓冲那一截，剩下的直接丢：09-28 实测第一版就这么把 920 行的名单砍到几百行，三条吃 `--list` 的判卷一起红。四个出口共用这一圈，所以这一针同时守着名单／残留提示／针脚汇总／本次耗时（规则 214/225）",
+    apply: (s) => s.replace(
+      "\n  while (off < buf.length) {",
+      "\n  if (off < buf.length) {",
+    ),
+    expectFail: "真跑：--list 经管道交给读者的行数必须等于表长（少一行＝两把静态尺一起少读一条锚点而不自知）",
+  },
+  {
+    id: "mutate-flush-one-site-bypasses-helper",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "只把 `--list` 这一处绕开 helper（其余三处照旧）⇒ 四个同步出口数变 3，而表照样印得出来、退出码照样 0：这正是「一处的例外长期活着」的形状。计数按行首语句核，绕开＝少一处",
+    apply: (s) => s.replace(
+      "\n  emitAndExit(body, 0);",
+      "\n  console.log(body.slice(0, -1));\n  process.exit(0);",
+    ),
+    expectFail: "helper 本体按字节写满、四个出口都经它（一次 writeSync 只交得进内核缓冲那一截）",
+  },
   // ── 第 160 页 · 「能派不可撤」要在派活之前说出口（任务 #5）
   {
     id: "strands-predicate-ignores-visible-side",
@@ -8294,6 +8316,30 @@ function verifyEntry(m) {
   }
 }
 
+/* 「印完就退」的出口必须**同步写满**：`console.log` 到管道是异步排队的，紧随其后的 `process.exit()`
+ *  会把还没交给内核的尾巴丢掉。09-28 现读到过两次残缺：判卷在变异机里数出 `--list` 874/918 行，
+ *  以及我在隔壁树上 `--list | awk` 数出某判卷文件只有 1 条锚点（同一张表用 node 数是 48 条）。
+ *  这张表是两把静态尺共同的取料面，而汇总行是凭证的证据本体——展示可以被截，证据不能被内核丢掉（规则 214/225）。
+ *  ⚠️ 单次 `writeSync(1, text)` 也**不够**：fd 1 接管道时是非阻塞的，一次只交得进内核缓冲那一截
+ *  （改完第一版实测：920 行的名单被砍到几百行，三条吃 `--list` 的判卷当场一起红）。所以按返回字节数推进、写满为止：
+ *  `EAGAIN`＝读者还没排空，重试；`EPIPE`／写不进＝读者走了或盘不对，不再转，剩下的由判卷的「行数≠表长」喊红。 */
+const emitAndExit = (text, code) => {
+  const buf = Buffer.from(text, "utf8");
+  let off = 0;
+  while (off < buf.length) {
+    let n = 0;
+    try {
+      n = writeSync(1, buf, off);
+    } catch (e) {
+      if (String((e && e.code) || "") === "EAGAIN") continue;
+      break;
+    }
+    if (n <= 0) break;
+    off += n;
+  }
+  process.exit(code);
+};
+
 const plan = classifyArgs(process.argv.slice(2));
 /** 锁面位置要从 git 问（`join(root, ".git")` 在 linked worktree 里是**文件**不是目录 ⇒ 每棵树各算一份锁＝没有锁）。
  *  定义放在只读分支之前，是为了让「只读面不许占锁」这条判卷能用真 common dir 造出反例：
@@ -8374,8 +8420,8 @@ if (plan.mode === "list") {
   const oneLine = (v) => String(v).replace(/[\t\n\r]+/gu, " ");
   // 没给 `--changed-since` 时"选中 0 条"是**未筛**，不是筛出空表——所以判据看的是"给没给 flag"，不是 pickedCount
   const rows = sinceArg === null ? MUTATIONS : MUTATIONS.filter((m) => derived.ids.includes(m.id));
-  for (const m of rows) console.log([m.id, m.src, m.desc, m.test, JSON.stringify(m.expectFail ?? "")].map(oneLine).join("\t"));
-  process.exit(0);
+  const body = rows.map((m) => [m.id, m.src, m.desc, m.test, JSON.stringify(m.expectFail ?? "")].map(oneLine).join("\t")).join("\n") + "\n";
+  emitAndExit(body, 0);
 }
 /** 只核针脚、不跑测试（秒级）——因此它能进 pnpm gates，而整张变异表要跑几十分钟、
  *  常被并发堵着：那段时间里失效的锚点在「假装守护」。 */
@@ -8386,8 +8432,7 @@ if (plan.mode === "check-needles") {
   const corpses = leftoverBackupPaths([...new Set(MUTATIONS.map((m) => m.src))], (rel) => existsSync(join(ROOT, rel)));
   if (corpses.length > 0) {
     for (const p of corpses) console.log(`  ❌ 残留 ${p} —— 同名的源文件可能是未还原的突变体，下面的针脚是从它算的，不可信`);
-    console.log("[mutate-needles-check] 先跑一次 mutate-verify（开跑前会按证据自愈），再核针脚");
-    process.exit(1);
+    emitAndExit("[mutate-needles-check] 先跑一次 mutate-verify（开跑前会按证据自愈），再核针脚\n", 1);
   }
   const bad = reportNeedles(MUTATIONS);
   // 顺带核每条**改法**产出的还是不是合法源文件：整张变异表要跑几十分钟且常被并发堵着，
@@ -8414,10 +8459,10 @@ if (plan.mode === "check-needles") {
   for (const [id, why] of syntaxBad) console.log(`  ❌ ${id} — ${why}`);
   if (syntaxBad.length > 0) console.log(`改法语法体检：${String(syntaxBad.length)} 条改法把源文件改坏 ❌`);
   else console.log(`改法语法体检：${String(MUTATIONS.length)} 条改法全部产出合法源文件 ✅`);
-  console.log(bad === 0 && syntaxBad.length === 0
+  const allGreen = bad === 0 && syntaxBad.length === 0;
+  emitAndExit((allGreen
     ? "[mutate-needles-check] 全部锚点针脚可判定 ✅"
-    : `[mutate-needles-check] ${String(bad + syntaxBad.length)} 条锚点针脚/改法失效 ❌`);
-  process.exit(bad === 0 && syntaxBad.length === 0 ? 0 : 1);
+    : `[mutate-needles-check] ${String(bad + syntaxBad.length)} 条锚点针脚/改法失效 ❌`) + "\n", allGreen ? 0 : 1);
 }
 
 const targets = [...new Set([...plan.targets, ...derived.ids])];
@@ -8591,8 +8636,8 @@ console.log(`\n${failed.length === 0
 // 耗时与「跑了几条」要自己报出来：外层对本门的超时是猜的（实测 1200s 掐死于表中途），
 // 而这张表到底要跑多久此前没人打印过——没有读数，下一个人只能继续猜。
 const secs = (Date.now() - startedAt) / 1000;
-console.log(`[mutate-verify] 本次耗时 ${secs.toFixed(1)}s · 跑了 ${String(results.length - stoppedEarly)}/${String(entries.length)} 条` +
-  (budget.ms > 0 ? ` · 预算 ${String(Math.round(budget.ms / 1000))}s` : " · 未设预算（外层超时会在中途杀我，见 --budget-ms）"));
+const timing = `[mutate-verify] 本次耗时 ${secs.toFixed(1)}s · 跑了 ${String(results.length - stoppedEarly)}/${String(entries.length)} 条` +
+  (budget.ms > 0 ? ` · 预算 ${String(Math.round(budget.ms / 1000))}s` : " · 未设预算（外层超时会在中途杀我，见 --budget-ms）") + `\n锁=${LOCK.cell}`;
 // 有未证就红：这张表没判完不等于判完了（AGENTS：「主动拒变在飞文件」属正确红，不是回归）。
 // 预算中途停下同样红：`stoppedEarly > 0` 时 failed 可以全空，但那只是「还没轮到」。
-process.exit(failed.length === 0 && refusedCount === 0 && stoppedEarly === 0 ? 0 : 1);
+emitAndExit(timing + "\n", failed.length === 0 && refusedCount === 0 && stoppedEarly === 0 ? 0 : 1);

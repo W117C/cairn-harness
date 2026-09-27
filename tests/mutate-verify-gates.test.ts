@@ -846,13 +846,19 @@ describe("mutate-verify 也接了这把锁：占不到就不许动盘（那份�
       const listed = runMv(["--list"]);
       expect(listed.status).toBe(0);
       expect(listed.out).not.toContain("正被占用");
-      expect((listed.out ?? "").split("\n").filter((l) => l.includes("\t")).length).toBeGreaterThan(900);
+      const rows = (listed.out ?? "").split("\n").filter((l) => l.includes("\t")).length;
+      // 分母取**同一张表**的现读（表里的 `id:` 数），不写死水位：09-28 机器里跑的一次读到过 874/918，
+      // 而同条命令在 shell 管道里连测 20 次全是 918、把这条锚点的突变落到盘上再数也是 918 ⇒ 成因未定。
+      // 写死 `>900` 只会把一次未定读数变成常驻假红；换成相对读数后这一格反而更硬——它成了
+      // 「列协议一条都不许丢」（规则 225）在**锁语境下**的观测者，与上面那条真表自证各守一侧。
+      const tableSrc = readFileSync(script, "utf8");
+      expect(rows, "名单行数不等于表长＝吃 `--list` 的两把静态尺会少读锚点而不自知").toBe((tableSrc.match(/^\s+id: "/gm) ?? []).length);
       const chk = runMv(["--check-needles"]);
       expect(chk.status, "只读体检被锁拒成 exit 2 ⇒ 读的人只会以为门坏了，不会知道有人在跑").not.toBe(2);
       expect(chk.out).not.toContain("正被占用");
     } finally { clear(); }
     expect(existsSync(LOCK_AT), "只读入口自己占了一把锁 ⇒ 两条并发 --list 会互相拒跑，而它一个字节都不改").toBe(false);
-    // 这条要跑两次真子进程（`--check-needles` 对 916 条改法做语法体检≈7s），默认 5s 判卷窗口载不动。
+    // 这条要跑两次真子进程（一次 `--check-needles` 对 918 条改法做语法体检≈7s），默认 5s 判卷窗口载不动。
   }, 90_000);
 
   it("接线形状：占锁排在自愈与开跑之前，消费者侧不留第二份三态判断", () => {
@@ -884,4 +890,21 @@ describe("mutate-verify 也接了这把锁：占不到就不许动盘（那份�
     expect(bare.status).toBe(2);
     expect(bare.out).toContain("需要一个标签");
   }, 30_000);
+});
+
+describe("印完就退的出口必须同步写：--list 是两把静态尺共同的取料面", () => {
+  const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+  it("helper 本体按字节写满、四个出口都经它（一次 writeSync 只交得进内核缓冲那一截）", () => {
+    expect(src, "helper 不循环写满 ⇒ 长名单被砍掉尾巴：09-28 第一版实测 920 行只剩几百行").toMatch(
+      /\nconst emitAndExit = \(text, code\) => \{[\s\S]{0,320}while \(off < buf\.length\) \{[\s\S]{0,220}writeSync\(1, buf, off\);/);
+    expect((src.match(/\n\s*emitAndExit\(/g) ?? []).length, "四个同步出口：--list 名单／残留提示／针脚汇总／本次耗时").toBe(4);
+  });
+
+  it("真跑：--list 经管道交给读者的行数必须等于表长（少一行＝两把静态尺一起少读一条锚点而不自知）", () => {
+    const script = fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url));
+    const r = spawnSync(process.execPath, ["--import", "tsx", script, "--list"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    expect(r.status).toBe(0);
+    const rows = (r.stdout ?? "").split("\n").filter((l) => l.includes("\t")).length;
+    expect(rows, "行数≠表长＝列协议在生产侧就漏了（不是读者的锅）").toBe((src.match(/^\s+id: "/gm) ?? []).length);
+  }, 60_000);
 });
