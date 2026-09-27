@@ -7572,6 +7572,51 @@ const MUTATIONS = [
     ),
     expectFail: "反向哨兵：并发套数刻意**不进退出码**（别的会话在跑不是我这笔代码错，接进去＝共享树上的随机红）",
   },
+  // ── 第 159 页 · head-cert 的未知开关：拼错一次就会去认证另一棵树
+  {
+    id: "cert-unknown-flag-never-reported",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "拒收函数恒回空 ⇒ 未知开关又被静默丢掉：`--tre=` 拼错时脚本会转去建**默认那棵共享树**并跑完整轮，操作者以为在读自己指定的那棵（09-27 实测过一次，探针顺手建了棵树）",
+    apply: (s) => s.replace(
+      "  return argv.filter((a) => {",
+      "  return ([] as string[]).filter((a) => {",
+    ),
+    expectFail: "拼错的开关（--tre=…）必须被点名拒收：实测它会转去建**默认那棵共享树**并跑完整轮",
+  },
+  {
+    id: "cert-unknown-flag-requires-equals",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "取名字时连着 `=值` 一起当名字 ⇒ 所有带值开关（`--at=`／`--tree=`／`--why=`）都被判成未知：这道门从此没人能跑（fail-closed 过头也是一种坏）",
+    apply: (s) => s.replace(
+      "    const name = (eq === -1 ? a.slice(2) : a.slice(2, eq)).trim();",
+      "    const name = (eq === -1 ? a.slice(2) : a.slice(2)).trim();",
+    ),
+    expectFail: "反向哨兵：合法组合一条都不许被拒（拒了就是把这道门自己关死，门表会红成「没人能认证」）",
+  },
+  {
+    id: "cert-known-list-drops-a-flag",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "名单与实际读取漂开（这里是撤掉 `no-borrow`）⇒ 传一条**合法**的开关会被自己的闸拒掉。这类「表与代码各说各话」只有双向对照能同时抓住两头（规则 208）",
+    apply: (s) => s.replace(
+      'export const CERT_FLAGS: readonly string[] = ["skip-test", "no-borrow"];',
+      'export const CERT_FLAGS: readonly string[] = ["skip-test"];',
+    ),
+    expectFail: "名单与脚本真正读的开关双向对得上：漏登记＝自拒，多登记＝那张表是假的",
+  },
+  {
+    id: "cert-unknown-check-computed-not-wired",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "算出来不接（规则 230 的同一格）：纯函数有了、main() 里却不拒 ⇒ 拼错的开关照跑，这闸是纸糊的",
+    apply: (s) => s.replace(
+      "if (badArgs.length > 0) {",
+      "if (false) {",
+    ),
+    expectFail: "接线：main() 真的调它、非空就 exit 2（只写纯函数不接＝没有闸）",
+  },
   {
     id: "read-invalidated-missing-rev-reads-clean",
     src: "scripts/lib/head-cert-deps.ts",

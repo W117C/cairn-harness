@@ -181,3 +181,20 @@ export function concurrencyReading(before: number, after: number, judged: boolea
   if (before < 0 || after < 0) return "并发判卷=取不到（ps 没跑起来 ⇒ 撞窗无从判定，这一格不许读成 0）";
   return `并发判卷=起前 ${String(before)} 套／跑完 ${String(after)} 套${Math.max(before, after) > 0 ? "（撞窗：本仓判卷有读写共享 /tmp 的用例）" : "（两端独占）"}`;
 }
+
+/** 本脚本认的开关（`--x=v` 形式）与裸 flag。**只此一表**：新增开关不在这儿登记，就等于给自己留一条"拼错也照跑"的路。 */
+export const CERT_OPTS: readonly string[] = ["at", "tree", "why"];
+export const CERT_FLAGS: readonly string[] = ["skip-test", "no-borrow"];
+
+/** 不认识的 `--…` 参数。为什么要拒绝而不是忽略：09-27 实测 `--tre=.worktrees/nope` 被静默丢掉，
+ *  脚本转而去**建默认那棵共享树**并跑完 typecheck——操作者以为在认证自己指定的那棵，读数是另一棵的。
+ *  拼错的开关在 CLI 上属于"操作者意图丢了"，这类只能 fail-closed（与 `--skip-test` 缺 `--why` 就 exit 2 同一档）。 */
+export function unknownCertArgs(argv: readonly string[]): string[] {
+  return argv.filter((a) => {
+    if (!a.startsWith("--")) return false;
+    const eq = a.indexOf("=");
+    const name = (eq === -1 ? a.slice(2) : a.slice(2, eq)).trim();
+    if (name === "") return true;
+    return !CERT_OPTS.includes(name) && !CERT_FLAGS.includes(name);
+  });
+}

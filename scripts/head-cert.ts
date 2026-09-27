@@ -19,7 +19,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { certLevel, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, headGateTableIntegrity, missingDeclaredDeps, readInvalidated } from "./lib/head-cert-deps";
+import { certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, headGateTableIntegrity, missingDeclaredDeps, readInvalidated, unknownCertArgs } from "./lib/head-cert-deps";
 import { checkHeadImportFace, collectHeadEdges, findDanglingImports } from "./head-import-face";
 
 const argv = process.argv.slice(2);
@@ -38,6 +38,15 @@ const shaShortForDefault = (runGit: () => { status: number | null; out: string }
   return s.status === 0 ? s.out.trim().slice(0, 7) : "tmp";
 };
 const TREE = opt("tree", ".worktrees/head-cert-" + shaShortForDefault(() => run(MAIN, "git", ["rev-parse", AT])));
+
+// 未知开关**先拒**，一次树都不许多建：09-27 实测 `--tre=` 拼错被静默丢掉，脚本转而去建**默认那棵共享树**
+// 并跑完整轮 typecheck——操作者以为在认证自己指定的那棵，读数其实是另一棵的（与 `--skip-test` 缺 `--why` 同档，fail-closed）。
+const badArgs = unknownCertArgs(argv);
+if (badArgs.length > 0) {
+  console.error(`❌ 不认识的参数：${badArgs.join("、")}`);
+  console.error(`   本脚本只认 --${CERT_OPTS.join(" --")} 与 --${CERT_FLAGS.join(" --")}（拼错的开关不许降级成"用默认值继续跑"）。`);
+  process.exit(2);
+}
 
 // 认证等级要在**干活之前**判掉：`--skip-test` 配不上 `--why` 就是用法错，别先花两分钟建树再抱怨。
 const LEVEL = certLevel(flag("skip-test"), opt("why", ""));

@@ -6,7 +6,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { certLevel, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, headGateTableIntegrity, installedDeps, missingDeclaredDeps, readInvalidated } from "../scripts/lib/head-cert-deps";
+import { certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, headGateTableIntegrity, installedDeps, missingDeclaredDeps, readInvalidated, unknownCertArgs } from "../scripts/lib/head-cert-deps";
 
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 const listWorktrees = (cwd: string): string[] =>
@@ -400,6 +400,43 @@ describe("并发判卷读数：撞窗的红要有门里的归因方向，而不�
     expect(collided).toContain("撞窗");
     expect(collided).toContain("1");
     expect(concurrencyReading(-1, -1, true), "取不到那一支印出 0 ⇒ 这一格从此只会假绿").not.toContain(" 0 套");
+  });
+});
+
+describe("未知开关：fail-closed，不许静默退回默认那棵树", () => {
+  const src = readFileSync(join(repoRoot, "scripts", "head-cert.ts"), "utf8");
+
+  it("拼错的开关（--tre=…）必须被点名拒收：实测它会转去建**默认那棵共享树**并跑完整轮", () => {
+    expect(unknownCertArgs(["--tre=.worktrees/nope", "--at=HEAD"])).toEqual(["--tre=.worktrees/nope"]);
+    expect(unknownCertArgs(["--at=HEAD", "--tree=.worktrees/mine", "--skip-test", "--why=x"])).toEqual([]);
+  });
+
+  it("不带 = 的裸 flag 也认：--skip-test 合法、--skip 未知（只按前缀放行就会放过半条命令）", () => {
+    expect(unknownCertArgs(["--skip-test"])).toEqual([]);
+    expect(unknownCertArgs(["--no-borrow"])).toEqual([]);
+    expect(unknownCertArgs(["--skip"])).toEqual(["--skip"]);
+    expect(unknownCertArgs(["--bogus=1"])).toEqual(["--bogus=1"]);
+  });
+
+  it("反向哨兵：合法组合一条都不许被拒（拒了就是把这道门自己关死，门表会红成「没人能认证」）", () => {
+    const allLegal = [...CERT_OPTS.map((o) => `--${o}=x`), ...CERT_FLAGS.map((f) => `--${f}`)];
+    expect(unknownCertArgs(allLegal)).toEqual([]);
+  });
+
+  it("名单与脚本真正读的开关双向对得上：漏登记＝自拒，多登记＝那张表是假的", () => {
+    const usedFlags = [...src.matchAll(/flag\("([^"]+)"\)/g)].map((m) => m[1] as string);
+    const usedOpts = [...src.matchAll(/opt\("([^"]+)"/g)].map((m) => m[1] as string);
+    expect(usedFlags.length).toBeGreaterThan(0);
+    expect(usedOpts.length).toBeGreaterThan(0);
+    for (const f of usedFlags) expect(CERT_FLAGS, `脚本读 --${f} 却没登记 ⇒ 传它会被自己拒收`).toContain(f);
+    for (const o of usedOpts) expect(CERT_OPTS, `脚本读 --${o}= 却没登记 ⇒ 传它会被自己拒收`).toContain(o);
+    for (const f of CERT_FLAGS) expect(usedFlags, `名单里的 --${f} 脚本已不再读：那张表在骗人`).toContain(f);
+    for (const o of CERT_OPTS) expect(usedOpts, `名单里的 --${o} 脚本已不再读：那张表在骗人`).toContain(o);
+  });
+
+  it("接线：main() 真的调它、非空就 exit 2（只写纯函数不接＝没有闸）", () => {
+    expect(src).toContain("const badArgs = unknownCertArgs(argv);");
+    expect(src, "算了 badArgs 却不拒 ⇒ 拼错的开关照跑，这闸是纸糊的").toContain("if (badArgs.length > 0) {");
   });
 });
 
