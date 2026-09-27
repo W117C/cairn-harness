@@ -49,10 +49,11 @@ const MUTATIONS = [
     id: "frozen-s3-9",
     src: "src/frozen.ts",
     test: "tests/frozen-drift.test.ts",
-    desc: "S3-9 原 bug 复活：表里的条目不做存在性 stat ⇒ 判卷文件消失报不出来。针脚随实现搬家（普查实测：旧针脚打在 `extraFiles` 那一次 stat 上，而 `inTableNotOnDisk` 现在由下面那条**逐条 stat 循环**独立算 ⇒ 改前者已与结论等价＝空操作）",
+    desc: "S3-9 原 bug 复活：表里的条目不做存在性 stat ⇒ 判卷文件消失报不出来。针脚随实现搬家（普查实测：旧针脚打在 `extraFiles` 那一次 stat 上，而 `inTableNotOnDisk` 现在由下面那条**逐条 stat 循环**独立算 ⇒ 改前者已与结论等价＝空操作）。" +
+      "变异方向要钉「一律不报」不是「一律报」：期望那条用例的子树里表内**唯一**条目就是缺失文件，全报＝蒙对（实测 `if (true)` 红在别的用例上）。",
     apply: (s) => s.replace(
       "    if (!(await stat(join(root, rel)).then(() => true, () => false))) missing.push(rel);",
-      "    if (true) missing.push(rel);",
+      "    if (false) missing.push(rel);",
     ),
     expectFail: "S3-9 回归：gym/index.json 不存在时不算入盘上集合（不掩盖判卷文件消失）",
   },
@@ -5538,10 +5539,11 @@ const MUTATIONS = [
     src: "scripts/lib/mutate-gates.ts",
     test: "tests/mutate-verify-gates.test.ts",
     desc: "求和写死成漏掉 drift ⇒ 「钉在飞文本」照旧印在汇总里、却不再决定 exit：" +
-      "门报红而全量门禁照样绿（有读数、无后果，正是本仓最忌的形状）",
+      "门报红而全量门禁照样绿（有读数、无后果，正是本仓最忌的形状）。" +
+      "指针不写「四支／六支」：BLOCKING_KEYS 每加一维那个数量词就要改标题，写死即静默守旧标题（实测本条红在别的用例上）。",
     apply: (s) => s.replace("return BLOCKING_KEYS.reduce((n, k) => n + parts[k], 0);",
       "return parts.needle + parts.duplicateIds + parts.untracked;"),
-    expectFail: "四支数都给 ⇒ 求和（0 也算数，不许被当成缺项丢掉）",
+    expectFail: "数都给 ⇒ 求和（0 也算数，不许被当成缺项丢掉）",
   },
   {
     id: "blocking-total-swallows-missing-part",

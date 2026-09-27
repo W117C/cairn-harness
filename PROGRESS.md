@@ -4610,3 +4610,17 @@ import 面 2792 条边 悬空 0、**门表 27 道 缺 script 0 道**）⇒
 后者改的是 core-only 迁移里**已不存在**的脚本（`ipc-check`/`agents-check`/`schedule-check`），已核过没有丢人的活。
 锚点 862 → **867**；现读：typecheck 0、`blocked-citation-face` 11/11、`replay-run-scorecard` 29/29、`docs-check` 42/42、`frozen-drift` 7/7、
 `usage-attribution` 22/22、`head-cert-deps` 37/37、`gate-manifest` 9/9；`mutate-verify-gates` 的唯一红是上面那条并发改名（盘侧，HEAD 侧 0）。
+
+**第 151 页凭证 · 普查尾款清账**：在**无残留**的隔离树（`.worktrees/tail-kill`：f7b6278 纯 checkout、`cp -al` 带上的依赖、`git status` 只有锚点表那一处改动）个别复跑那 4 条 ⇒ **4/4 全杀，15.7s**。
+其中两条**不是环境扰动**，是我上面那张表的「处置」写 incomplete（规则 218：`desc` 里的断言也要实测）：
+
+- `frozen-s3-9`：「针脚搬家」只说对一半——针脚改对后它**仍然**红在别的用例上。真因是**变异方向**：`if (true) missing.push(rel)`＝一律上报，而那条期望用例的子树里**表内唯一条目就是那个缺失文件** ⇒ 一律上报恰好蒙对。改成 `if (false)`（一律不报＝原 bug 形状）才红在它身上。
+  **把针脚挪到承载不变量的那一行，不等于变异打在那条用例看得见的方向上**：判卷对象里「只有一份输入」时，两个相反的方向可以给出同一个读数。
+- `blocking-total-drops-drift-from-sum`：也不是「针脚落在隔壁支」。是 `expectFail` 里写了数量词「四支」，而 `BLOCKING_KEYS` 从 4 涨到 6 时**用例标题**改成了「六支」⇒ 指针静默守着一个已经不存在的标题（静态体检对占位符放宽，所以它没喊）。指针已去掉数量词。
+  与规则 229 同族而方向不同：**229 讲 apply 的整行针脚脆，这条讲 expectFail 的标题针脚脆**——指针里只要抄了"会被枚举数量改动的词"，加一维就断一次，而那一维正是加维那笔提交想守的东西。
+
+另两条（`scan-scope-empty-list-silent`、`mutate-preflight-safety-dropped`）在去掉 `.mutbak`／上一条锚点在飞态的树里正常杀死 ⇒ 记为环境扰动，但**扰动自身的机制没复现**（我只证明"没有它时这两条会杀"），不当已证。
+
+现读：`mutate-needles-check` 867 条——阻断 0／待复认 0／未覆盖 0／killer 指针失效 0（其中 HEAD 侧 0）／钉在飞文本 0，867 条改法全部产出合法源文件；typecheck `tsc --noEmit` 0 条；`frozen-drift` 7/7、`mutate-verify-gates` 62/62、`mutate-anchor-titles` 23/23。锚点条数未变（**867**）。
+
+**覆盖口径要说清**（别让这句被读成"整表在 867 上绿过"）：867 条各有"至少被杀过一次"的记录，但来源是两段——859 条来自一次整表普查（2163.1s，彼时表 859），其后新增／改动的 13 条来自尾批逐条复跑。**没有**"当前 867 条在同一个 HEAD 上一次跑完"的读数；那一次会由 `mutate-verify` 这道门在下一次全量 `gates` 里自然产生，不另花 36 分钟专门跑一遍。
