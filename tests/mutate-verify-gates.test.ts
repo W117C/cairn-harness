@@ -430,6 +430,39 @@ describe("auditExpectFails：killer 指针必须指得到活用例", () => {
     expect(auditExpectFails([{ id: "h", test: "tests/y.test.ts", expectFail: '纯精确名不做子串：matcher "Edit" 不得命中 NotebookEdit' }], () => text)).toEqual([]);
   });
 
+  // 第 152 页：整条都是占位符的标题（生成式 `it(`${t}`, …)`）编译出来是一条**匹配任何输入**的模式，
+  // 于是压在**那份判卷文件**上的全部指针体检一起变恒真——本轮那条「四支／六支」死指针就是靠这个洞活到 21 分钟实跑才喊。
+  it("生成式标题不许把整份判卷的体检缴械：指向不存在用例的指针仍要报 not-found", () => {
+    const text = ['  it("${t}", () => {});', '  it("一句真实存在的标题", () => {});'].join("\n");
+    expect(auditExpectFails([{ id: "vac", test: "tests/x.test.ts", expectFail: "这句话在仓库里不存在 ZZZ-9x7" }], read(text)))
+      .toEqual([{ id: "vac", test: "tests/x.test.ts", expectFail: "这句话在仓库里不存在 ZZZ-9x7", why: "not-found" }]);
+    // 反向：同文件里那条真实标题必须还指得到（否则就成了"把所有模式清空"这种过修）
+    expect(auditExpectFails([{ id: "real", test: "tests/x.test.ts", expectFail: "一句真实存在的标题" }], read(text))).toEqual([]);
+  });
+
+  it("变体：标题里除了占位符只剩空白 ⇒ 同样缴械，也要丢（不 trim 就漏这一格）", () => {
+    const text = '  it(" ${t} ", () => {});';
+    expect(auditExpectFails([{ id: "ws", test: "tests/x.test.ts", expectFail: "任何不相干的句子" }], read(text))).toHaveLength(1);
+  });
+
+  it("过修的反面：带字面残迹的标题要**留着**通配（参数化标题仍然认得渲染后的样子）", () => {
+    const text = '  it("参数化 ${t} 那一格", () => {});';
+    expect(auditExpectFails([{ id: "keep", test: "tests/x.test.ts", expectFail: "参数化 run-scorecard 那一格" }], read(text))).toEqual([]);
+  });
+
+  it("本文件自己就是案发现场：那串 fixture 生成器里的 it 不是真标题，收紧后假指针必须报出来", () => {
+    // 洞的来源正是本文件上面那行 `titles.map(...)` 里的 `it("${t}"` ——正则取料分不清"真标题"与"字符串里长得像标题的文字"，
+    // 于是它编译成了一条恒真模式。读自己这一份，比再造一份合成输入更能钉住"这条修法在真盘上有效"。
+    const self = readFileSync(fileURLToPath(import.meta.url), "utf8");
+    // 指针要**拼**出来，不许整串写死：`auditExpectFails` 第一支判据是"判卷源文件里逐字含这句"，
+    // 而我正在读自己这份文件——整串写死的话，那句字面量本身就躺在文件里 ⇒ 尺永远答"指针有效"（实测第一版就是这么绿的）。
+    const bogus = "绝不可能出现" + "在判卷里的一句话";
+    const rows = [{ id: "self", test: "tests/mutate-verify-gates.test.ts", expectFail: bogus }];
+    expect(self).toContain('it("${t}"'); // 自证：这份判卷里确实躺着那条恒真模式的原型
+    expect(self).not.toContain(bogus);
+    expect(auditExpectFails(rows, () => self)).toHaveLength(1);
+  });
+
   it("判卷文件读不到 ⇒ unreadable，不许当「指针没问题」（规则 92/210 那一族）", () => {
     const got = auditExpectFails([{ id: "z", test: "tests/gone.test.ts", expectFail: "任何句子" }], () => null);
     expect(got.map((p) => p.why)).toEqual(["unreadable"]);

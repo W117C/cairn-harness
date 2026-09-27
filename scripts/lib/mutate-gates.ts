@@ -434,15 +434,26 @@ export function vitestTitles(sourceText: string): string[] {
   return out;
 }
 
-/** 标题 → 匹配式：先按占位符切开、只转义字面段、再把通配拼回去（顺序反了 `${…}` 会永远认不出）。 */
+/** 一条标题去掉通配后剩下的**字面文字**；空 ⇒ 整条都是占位符（生成式标题），不能当模式用。
+ *  单独抽出还有一个用处：`isLineWiseApply` 按"改法文字里含 `.split(`"豁免针脚，
+ *  判据若与那句 split 写在同一行，锚点会被连带误豁免（第 152 页实测 3 条新锚点中了这一枪）。 */
+const literalOf = (body: string): string => body.split(WILDCARD).join("").trim();
+
+/** 标题 → 匹配式：先按占位符切开、只转义字面段、再把通配拼回去（顺序反了 `${…}` 会永远认不出）。
+ *  返回的数组**不与** `vitestTitles` 下标对齐（生成式标题会被丢掉），消费者只有 `expectFailMatchesTitles` 的 `.some`。 */
 export function vitestTitlePatterns(sourceText: string): RegExp[] {
-  return vitestTitles(sourceText).map((lit) => {
+  return vitestTitles(sourceText).flatMap((lit) => {
     const un = lit.replace(/\\(.)/g, "$1");
     const body = un
       .split(PLACEHOLDER)
       .map((piece) => (PLACEHOLDER.test(piece) ? WILDCARD : piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
       .join("");
-    return new RegExp("^[\\s\\S]*" + body.split(WILDCARD).join("[\\s\\S]*?") + "[\\s\\S]*$");
+    // 整条标题都是占位符（`it(\`${t}\`, …)` 这类生成式标题）⇒ 这条模式匹配**任何**输入。
+    // 留着它，落在这份判卷文件上的全部 expectFail 指针体检一起变恒真：实测 241 个判卷文件里有 2 个含这种标题，
+    // 压在它们上面的 33 条锚点因此缴械（本轮那条「四支／六支」死指针就是靠这个洞活到实跑 21 分钟才喊）。
+    // 生成式标题在运行时会被渲染成具体文本，指针本来就点不到它 ⇒ 丢掉，让那格退化成"静态验不了"，而不是"静态永远对"。
+    if (literalOf(body) === "") return [];
+    return [new RegExp("^[\\s\\S]*" + body.split(WILDCARD).join("[\\s\\S]*?") + "[\\s\\S]*$")];
   });
 }
 

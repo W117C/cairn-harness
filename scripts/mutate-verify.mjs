@@ -7248,6 +7248,36 @@ const MUTATIONS = [
     expectFail: "带转义引号的标题不许误报（表里存解码值，盘上是源码文字）",
   },
   {
+    id: "pointer-vacuous-title-kept",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "整条都是占位符的生成式标题不丢 ⇒ 它编译成一条匹配任何输入的模式，压在那份判卷文件上的**全部**指针体检一起恒真。" +
+      "真盘现场：241 个判卷文件里 2 个含这种标题（其中一个的成因是它自己的 fixture 生成器里那段「it( 双引号 美元花括号 t 花括号 」的文字，" +
+      "正则取料分不清真标题与字符串里长得像标题的东西），上面 33 条锚点因此缴械；" +
+      "本轮那条「四支／六支」死指针正是靠这个洞活到 21 分钟实跑才喊（修法见第 152 页）",
+    apply: (s) => s.replace('if (literalOf(body) === "") return [];', "if (false) return [];"),
+    expectFail: "生成式标题不许把整份判卷的体检缴械：指向不存在用例的指针仍要报 not-found",
+  },
+  {
+    id: "pointer-vacuous-title-not-trimmed",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "丢的时候不 trim ⇒ 只剩空白的生成式标题（占位符两侧只有空格）仍被当成有字面残迹，恒真模式换个写法就回来了。" +
+      "与上一条分开钉：去掉这一位，上面那条用例照样绿（它的残迹是空串），所以这一格没有别的见证。" +
+      "针脚只取「join 空串再 trim」那半截、不写整行：整行会带上 split( 字样，被 isLineWiseApply 误认成逐行式而躲过针脚体检（第 152 页实测）",
+    apply: (s) => s.replace('.join("").trim();', '.join("");'),
+    expectFail: "变体：标题里除了占位符只剩空白 ⇒ 同样缴械，也要丢（不 trim 就漏这一格）",
+  },
+  {
+    id: "pointer-all-dynamic-titles-dropped",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "过修那一侧：把**任何**含占位符的标题都丢掉 ⇒ 参数化标题再也指不到（渲染后的文字盘上本来就没有），" +
+      "第 138 页校准出来的那两条（拼出来的标题／带转义引号的标题）一起变假红——假红一多，人关的是门不是修尺",
+    apply: (s) => s.replace('if (literalOf(body) === "") return [];', "if (PLACEHOLDER.test(un)) return [];"),
+    expectFail: "过修的反面：带字面残迹的标题要**留着**通配（参数化标题仍然认得渲染后的样子）",
+  },
+  {
     id: "pointer-block-dimension-not-summed",
     src: "scripts/mutate-verify.mjs",
     test: "tests/mutate-verify-gates.test.ts",
