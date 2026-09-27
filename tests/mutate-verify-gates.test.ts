@@ -838,7 +838,7 @@ describe("mutate-verify 也接了这把锁：占不到就不许动盘（那份�
     expect(existsSync(LOCK_AT), "跑完没放锁 ⇒ 下一次只能靠 90 分钟的帽自愈").toBe(false);
   }, 30_000);
 
-  it("只读入口不许被这把门锁死：--list／--check-needles 在有人占着时照跑", () => {
+  it("只读入口不许被这把门锁死：--list 在有人占着时照跑，而 `--check-needles` 与它同一先（按结构钉）", () => {
     noForeignLock();
     clear();
     hold();
@@ -853,13 +853,28 @@ describe("mutate-verify 也接了这把锁：占不到就不许动盘（那份�
       // 「列协议一条都不许丢」（规则 225）在**锁语境下**的观测者，与上面那条真表自证各守一侧。
       const tableSrc = readFileSync(script, "utf8");
       expect(rows, "名单行数不等于表长＝吃 `--list` 的两把静态尺会少读锚点而不自知").toBe((tableSrc.match(/^\s+id: "/gm) ?? []).length);
-      const chk = runMv(["--check-needles"]);
-      expect(chk.status, "只读体检被锁拒成 exit 2 ⇒ 读的人只会以为门坏了，不会知道有人在跑").not.toBe(2);
-      expect(chk.out).not.toContain("正被占用");
+      // `--check-needles` 这一支**不再 spawn**（它内部要对 920 条改法做语法体检，≈7.7s，而挂在本文件上的锚点有几十条、
+      // 每条都要跑三遍 ⇒ 本判卷一个用例把整表成本抬了 19 分钟；09-28 现读：13.6s → 5.9s）。
+      // 它换来的是同一条确定性的事：两条只读分支都在占锁之前 exit——按行首语句比**位置**，不是比措辞。
+      const readBranch = tableSrc.indexOf('\nif (plan.mode === "check-needles") {');
+      const claimAt = tableSrc.indexOf("\nconst LOCK = acquireToolLock({");
+      expect(readBranch, "只读体检那一条分支不在了 ⇒ 下面这条位置比较失去意义（本文件基线红）").toBeGreaterThan(-1);
+      expect(readBranch, "体检分支排到占锁之后＝不改盘的那一半也被锁死（读的人只会以为门坏了）").toBeLessThan(claimAt);
+      const listBranch = tableSrc.indexOf('\nif (plan.mode === "list") {');
+      expect(listBranch, "--list 分支同理，且要在体检之前（名单是别的尺的取料面）").toBeLessThan(readBranch);
     } finally { clear(); }
     expect(existsSync(LOCK_AT), "只读入口自己占了一把锁 ⇒ 两条并发 --list 会互相拒跑，而它一个字节都不改").toBe(false);
-    // 这条要跑两次真子进程（一次 `--check-needles` 对 918 条改法做语法体检≈7s），默认 5s 判卷窗口载不动。
-  }, 90_000);
+  }, 30_000);
+
+  it("成本钉：本文件的判卷不许再 spawn 只读体检（挂在本文件上的锚点每条要跑三遍）", () => {
+    // 探针**拼出来**，且只查 spawn 那一行的入参：这条判卷读的就是它自己所在的文件，
+    // 而文件里别处（用例标题、注释）本来就该提得到这个名字——上一版我拿全文做 `not.toContain`，被自己的标题打红（规则 236 的"读自己"变体）。
+    const probe = "--check-" + "needles";
+    const self = readFileSync(fileURLToPath(new URL("mutate-verify-gates.test.ts", import.meta.url)), "utf8");
+    const expensiveSpawns = self.split("\n").filter((l) => l.includes("spawnSync(") && l.includes(probe));
+    expect(expensiveSpawns, "把只读体检请回本文件＝一次 7.7s × 每条锚点三遍：09-28 现读本文件 13.6s → 5.9s，"
+      + "而挂在它上面的锚点有 50 条 ⇒ 整表与派生名单各多付十几分钟（规则 240 的代价侧）").toEqual([]);
+  });
 
   it("接线形状：占锁排在自愈与开跑之前，消费者侧不留第二份三态判断", () => {
     const src = readFileSync(script, "utf8");

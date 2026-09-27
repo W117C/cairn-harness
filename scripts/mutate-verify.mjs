@@ -7743,7 +7743,7 @@ const MUTATIONS = [
       '\nif (plan.mode === "list") {',
       '\nif (plan.mode === "list") { acquireToolLock({ tool: "mutate-verify", root: ROOT, tree: ROOT, target: "list", commonDirOut: gitCommonDirOut(), harm: "锚点造的：只读面也占锁", say: (line) => console.log(line) });',
     ),
-    expectFail: "只读入口不许被这把门锁死：--list／--check-needles 在有人占着时照跑",
+    expectFail: "只读入口不许被这把门锁死：--list 在有人占着时照跑，而 `--check-needles` 与它同一先（按结构钉）",
   },
   {
     id: "mutate-lock-cell-not-printed",
