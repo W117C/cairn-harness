@@ -7212,6 +7212,23 @@ const MUTATIONS = [
     apply: (s) => s.replace("for (const d of subDirs) {", "for (const d of [] as string[]) {"),
     expectFail: "接线：认证流程真的按它补子仓库依赖",
   },
+  // ---- 09-27 门表护栏自己也得有人验收：登记 head-import-check 时发现 checkGateManifest 零判卷 ----
+  {
+    id: "manifest-orphan-check-unconditional",
+    src: "scripts/gate-manifest.ts",
+    test: "tests/gate-manifest.test.ts",
+    desc: "跳过「已在 GATES 里」那一判 ⇒ 每张正常门表都被报成孤儿：护栏一旦无差别地喊，读的人只会整条忽略（规则 210）",
+    apply: (s) => s.replace("    if (gates.has(name)) continue;", "    if (false) continue;"),
+    expectFail: "已在 GATES 里的脚本不许被报成孤儿",
+  },
+  {
+    id: "manifest-gate-without-script-dropped",
+    src: "scripts/gate-manifest.ts",
+    test: "tests/gate-manifest.test.ts",
+    desc: "反向那一半：不再核「门表列了而 scripts 没有」⇒ 一道 spawn 必失败的门可以静默存在（第 145 页认证树量的就是这一格）",
+    apply: (s) => s.replace("    if (!scriptNames.has(gate)) {", "    if (false) {"),
+    expectFail: "GATES 列了而 package.json 没有同名 script",
+  },
   {
     id: "pointer-audit-treats-unreadable-file-as-fine",
     src: "scripts/lib/mutate-gates.ts",

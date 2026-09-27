@@ -35,6 +35,9 @@ export const GATES: readonly string[] = [
   "replay-determinism-check",
   "no-progress-check",
   "cost-per-progress-check",
+  // 第 146 页登记：0.26s 的一把尺，量的正是「消费者入库了新文件没入库」这一格——
+  // 那一格从第 131 页起让认证树连续多笔读不到东西（167 条格子量不出来），而默认门表里没人问它。
+  "head-import-check",
   "mutate-verify",
   "mutate-needles-check",
 ];
@@ -65,8 +68,14 @@ export interface ManifestViolation {
  * - gate-without-script：GATES 里列了，但 package.json 没有同名 script（会 spawn 失败）
  * - exempt-unknown-script：EXEMPT 里列了，但 package.json 没有同名 script（陈旧豁免）
  * - exempt-without-reason：EXEMPT 的值是空白理由
- */
-export function checkGateManifest(scripts: Record<string, string>): ManifestViolation[] {
+ *
+ * `exempt` 之所以开成一个形参（缺省仍是那张表）：豁免表**今天是空的**，
+ *  那两个分支因此没有任何输入能走到——"留着但没人验收"不等于"已验收"（规则 210/223 那一族）。
+ *  有了这个口子，判卷才能当场造一份豁免表把两条分支各测一次。 */
+export function checkGateManifest(
+  scripts: Record<string, string>,
+  exempt: Readonly<Record<string, string>> = EXEMPT_SCRIPTS,
+): ManifestViolation[] {
   const out: ManifestViolation[] = [];
   const scriptNames = new Set(Object.keys(scripts));
   const gates = new Set(GATES);
@@ -74,7 +83,7 @@ export function checkGateManifest(scripts: Record<string, string>): ManifestViol
   for (const name of Object.keys(scripts)) {
     if (!ACCEPTANCE_SHAPE.test(name)) continue;
     if (gates.has(name)) continue;
-    if (Object.prototype.hasOwnProperty.call(EXEMPT_SCRIPTS, name)) continue;
+    if (Object.prototype.hasOwnProperty.call(exempt, name)) continue;
     out.push({
       kind: "orphan-acceptance-script",
       name,
@@ -92,7 +101,7 @@ export function checkGateManifest(scripts: Record<string, string>): ManifestViol
     }
   }
 
-  for (const [name, reason] of Object.entries(EXEMPT_SCRIPTS)) {
+  for (const [name, reason] of Object.entries(exempt)) {
     if (!scriptNames.has(name)) {
       out.push({ kind: "exempt-unknown-script", name, detail: "EXEMPT_SCRIPTS 列了不存在的 script: " + name });
     }

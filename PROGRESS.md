@@ -4435,3 +4435,26 @@ git 调用由 `scripts/mutate-verify.mjs` 注入 ⇒ 本模块不自己 spawn �
   跑完按规则 120 回收了这棵认证树。三条新锚点在 `f8382ad` 的独立树单跑 **3.8s 全杀**。
 - 这件事改变了任务 #4 的形状：门不再需要"存量豁免"——**登记时的现读就是 0**，任何一条红都是新增（规则 209/216 里最省事的一种：不写名单，直接 0 起建）。
   仍等 #12/#13 的 `gate-manifest` 裁剪窗口把这道门登记进去；能跑的那条命令已经现成（`head-cert` 一条命令出认证等级＋逐条日志）。
+
+### 2026-09-27 · 第 147 页 · 门表护栏自己在零判卷状态下跑了很久；顺手把第 27 道门登记进去
+
+HEAD 全量绿之后第一件事是把 #12 结掉：`head-import-check` 进门表。做的时候撞到两格更基础的空位。
+
+- **登记门**：`package.json` 加 `head-import-check = node --import tsx scripts/head-import-face.ts`，
+  `GATES` 加同名一条，位置刻意排在昂贵的 `mutate-verify` **之前**（半落库要早发现，别排在 20 分钟那道门后面）。
+  现跑凭证：`gates --only=head-import-check --direct` ⇒ `exit=0 228ms`，子集读数明写「1/27 道门——非全量运行，不等于全量全绿」。
+  门成本：**+0.23s**（这把尺本来就 0.26s 量级），且它只读 git，不改盘、不 spawn 模型。
+- **护栏自己没判卷**：`checkGateManifest`（三张表一致性）只有 `scripts/gates.ts:118` 一个运行时消费者，
+  `grep tests/ checkGateManifest` = **0 命中** ⇒ 四种违例一支都没被验收过；把 `if (gates.has(name)) continue;` 改坏，
+  整张门表会瞬间全报孤儿（读的人只会整条忽略），把 `if (!scriptNames.has(gate))` 改坏则一道 spawn 必失败的门可以静默存在。
+  ⇒ 新增 `tests/gate-manifest.test.ts` 8 条：orphan 报出／形状按词根判（`foo-checker`、`bar:check2` 逃不掉，`build`/`start` 不误伤）／
+  已在 GATES 的不许报（真表现读 0 违例）／gate-without-script／**两条豁免分支靠注入合成豁免表才走得到**／
+  现读豁免表为空这条事实也钉住／登记面（`head-import-check` 在 GATES 且排在 `mutate-verify` 前）。
+- 为了让那两条豁免分支可测，`checkGateManifest` 多了一个**缺省即原表**的 `exempt` 形参：
+  豁免表今天是空的 ⇒ 不注入就没有任何输入能走到那两个分支（"留着但没人验收"≠"已验收"，规则 210/223）。
+  这不是兼容垫片，是取料口子——判卷当场造一份豁免表就能各测一次。
+- 锚点 845 → **847**（`manifest-orphan-check-unconditional`、`manifest-gate-without-script-dropped`）。
+- 顺带把任务 #13 的账清了：认证树读的是 `门表：26 道，缺 script 0 道` ⇒ 从前那「HEAD 侧 11 道只有认证树看得见」已经不存在
+  （那 11 条随文档裁剪那笔一起补了 script），#13 从此只剩"门表两头都要在 HEAD 上成立"这一条读数义务。
+- 现态：typecheck 0；`gate-manifest` 8/8、`head-cert-deps` 31/31；`--check-needles` 847 条、阻断 2（都是本笔判卷文件未入库，入库即清）；
+  两条新锚点的杀死凭证与「新门进表后 HEAD 仍然全绿」的复跑记在本页末尾。
