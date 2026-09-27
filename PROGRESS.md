@@ -5400,3 +5400,26 @@ fd 1 接管道时是**非阻塞**的，一次 `writeSync` 只交得进内核缓�
 
 **未证两条**：① `wx` 那一格只有结构钉＋锚点，行为侧要造"同名符号链接已存在"的合成夹具，本笔没造；
 ② `summary.txt` 的行为侧留给紧接着的那次认证真跑核（跑完看文件在不在、内容是否含汇总行）——写在这里就是不许把它当已证。
+
+### 2026-09-28 · 第 164 页凭证：派生 58/58 全杀（470.1s，≈8.1s/条）＋ `head-cert` @`173ddd5` 241 文件／2911 条 exit=0，两格未证当场被这次真跑结掉一格
+
+**干净树复跑**：`.worktrees/verify-164` @`173ddd5`（先核 0 项在飞）跑 `--changed-since=173ddd5~1`
+⇒ 派生 **58/925**（手抄只会有 5 条：本笔新增锚点的数量），**58 杀／0 存活**，耗时 **470.1s**。
+本笔五条新锚点逐条认账（`killed=1`）：`stale-tree-unreadable-reads-as-zero`、`stale-tree-ignores-dirty-face`、
+`stale-tree-ignores-branch-face`、`lock-tmp-opened-without-wx`、`cert-summary-not-durable`。
+成本对照（同一把尺两种宿主文件的价差）：上一批 50 条 1125.0s≈22.5s/条（宿主是 `mutate-verify-gates`），
+这一批 58 条 470.1s≈**8.1s/条**（宿主是 `head-cert-deps`）⇒ 任务 #34 要搬的就是前者那 4 条 spawn 判卷，数字支持它。
+
+**认证**：`head-cert --at=HEAD` @`173ddd5` ⇒ `Test Files 241 passed／Tests 2911 passed／exit=0（退出码直接取，不接管道）`、
+`依赖完整=是`（声明 10 项缺 0 项，含 `fixtures/todo-app/node_modules` 硬链接）、`DIRTY_JUDGED=0`、`收尾复核=同一笔`、
+`并发判卷=起前 0 套／跑完 0 套（两端独占）`、`认证树锁=本进程持有`、import 面 2820 条边｜悬空 0、`HEADCERT_EXIT=0`。
+条数对账：`Tests` 2904→**2911**（+7）与本笔判卷 `head-cert-deps` 71→**78**（+7）逐条相等——没减判卷、没加豁免。
+
+**页上那两条未证的处置**：② `summary.txt` 行为侧由这次真跑结案——文件在（1114 字节）、含 `常驻残留树=0` 那一行、
+且汇总行末尾印出路径 `/tmp/dsh-head-cert-173ddd5/summary.txt`；① `wx` 的行为侧**仍未证**（要"同名符号链接已存在"的合成夹具），
+今天只有结构钉 + 一条会把 `wx` 摘掉的锚点，写在 #32 结案处备用。
+新读数目前第一次有数：`常驻残留树=0`——本笔之前是 3 棵（`verify-161`、`head-cert-03e4e7e`、`head-cert-ad829ba`），
+真收之后归零；`head-cert-d2958b2` 有 1 项在飞（隔壁会话 `scripts/prose-needle-scan.ts`），按判据**不算残留**、也没被碰。
+
+**清场**：`.worktrees/verify-164` 与 `.worktrees/head-cert-173ddd5` 逐棵核过 0 项在飞、无进程在跑后回收（规则 120）。
+这次不同之处是回收之后有读数会替这句话作证：下一次任何人跑 `head-cert`，`常驻残留树` 那一格就会把"说了收、其实没收"喊出来。
