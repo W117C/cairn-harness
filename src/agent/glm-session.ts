@@ -14,6 +14,7 @@ import { computePrune, writePruneAttachments } from "./prune";
 import { basename, dirname, join } from "node:path";
 import { createMapBuilder, type MapBuilder } from "./map/build";
 import { AUTOMATION_TOOL_NAMES, automationToolSpecs } from "./automation-surface";
+import { strandsWorkersOnSpawn } from "./tool-surface";
 import {
   DEFAULT_COMPACTION_CONFIG,
   CompactionCoordinator,
@@ -426,10 +427,17 @@ export function sessionToolSpecs(
     else kept.push(s);
   }
   // 摘除也要说得出口：可见清单静默少几把工具，等于让模型自己猜哪把没了（下一跳才吃一句"不可用"）。
-  // 清单不会被摘空：`remember` / `spawn_agent` 这类不在 ToolName 键域里的规格根本不可申报（装载即出声）。
+  // 09-27 实测更正：这句原先写「`remember`/`spawn_agent` 这类根本不可申报（装载即出声）」——#19 之后**不成立**，
+  // 申报域＝静态表∪注入面（三把编排原语都能被 skill 摘掉，实测见 outputs/cancel-asymmetry-2026-09-27/measure.mts）。
+  // 于是多出一格必须说出口的可达态：只摘撤活、留着派活 ⇒ 这一轮的钱花出去就收不回（`strandsWorkersOnSpawn`）。
+  const stranded = strandsWorkersOnSpawn(removed.map((r) => r.name), kept.map((s) => s.function.name));
   const note = removed.length === 0 ? "" :
     "[skill 工具面] 本 turn 已按 disallowed-tools 从可见工具表摘除：" +
-    removed.map((r) => r.name + "（由 " + r.by + "）").join("、");
+    removed.map((r) => r.name + "（由 " + r.by + "）").join("、") +
+    (stranded
+      ? "。另有一格后果要提前说：`spawn_agent` 还在面内而 `cancel_agents` 已被摘 ⇒ **这一轮派出去的 worker 撤不回来**" +
+        "（只能等它自己收敛，或由人在面板上撤）。派活前请把它当成不可撤销的开销。"
+      : "");
   return { specs: kept, skipped, removed, note };
 }
 

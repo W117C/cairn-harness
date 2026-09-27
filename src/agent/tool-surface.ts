@@ -44,3 +44,17 @@ export const INJECTED_TOOLS: readonly InjectedToolSurface[] = [
 export function missingFromFace(names: readonly string[], face: ReadonlySet<string>): string[] {
   return names.filter((n) => !face.has(n));
 }
+
+/** 派活／撤活这一对的名字（唯一落点；`src/tools/cancel_agents.ts` 里的 `CANCEL_AGENTS_TOOL` 由判卷钉住与此一致）。 */
+export const SPAWN_AGENT_NAME = "spawn_agent";
+export const CANCEL_AGENTS_NAME = "cancel_agents";
+
+/** 「派得出去、撤不回来」：撤活被摘（skill 的 disallowed-tools 只写了 `cancel_agents`）而派活仍在模型可见面内。
+ *  为什么不拦这个组合：§9.3 承诺"插件申报什么就生效什么"，替作者配对是扩权（`allow` 刻意不跟扩是同一课）。
+ *  要的是**在派活之前**把它说出口：派完才发现撤不掉，与派之前知道撤不掉，是两个不同的成本
+ *  （可达性实测：`outputs/cancel-asymmetry-2026-09-27/measure.mts`，注脚今天只报名字不报后果）。 */
+export function strandsWorkersOnSpawn(deniedNames: Iterable<string>, visibleNames: Iterable<string>): boolean {
+  const denied = new Set(deniedNames);
+  const visible = new Set(visibleNames);
+  return denied.has(CANCEL_AGENTS_NAME) && visible.has(SPAWN_AGENT_NAME);
+}

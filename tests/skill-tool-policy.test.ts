@@ -9,7 +9,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PluginRuntime, skillToolPolicy, setCurrentPluginRuntime } from "../src/agent/plugins";
 import { resolveDeclaredTool } from "../src/agent/plugins/skills";
-import { INJECTED_TOOLS } from "../src/agent/tool-surface";
+import { CANCEL_AGENTS_NAME, INJECTED_TOOLS, SPAWN_AGENT_NAME } from "../src/agent/tool-surface";
+import { CANCEL_AGENTS_TOOL } from "../src/tools/cancel_agents";
 import { runLoop, type LoopOptions } from "../src/agent/loop";
 import { runAgent, handleAgentState, sessionToolFace, withSkillAllowNote } from "../src/main/agent-runner";
 import { sessionToolSpecs } from "../src/agent/glm-session";
@@ -354,4 +355,42 @@ describe("runAgent 真入口：用户敲一条带申报的 /skill，工具面确
     expect(lines).toHaveLength(1); // 恰好一次：登记面与规格面各喊一遍就是两份实现
     expect(lines[0]).toContain("grep←/pol:sec");
   }, 120_000);
+});
+
+/* 任务 #5 的现读（outputs/cancel-asymmetry-2026-09-27/measure.mts）：#19 把申报域扩到注入面之后，
+   「只禁 cancel_agents、留着 spawn_agent」成为**可达**配置；此前没有任何判据读过 `note`（摘除出声这半是无人守的）。 */
+describe("能派不可撤：这一格要在派活之前说出口（任务 #5）", () => {
+  const face = (denied: string[]) => {
+    const set = new Set(denied);
+    return sessionToolSpecs({ mode: "auto", skillDenial: (n) => (set.has(n) ? "pol:strict" : null) });
+  };
+  const visible = (f: ReturnType<typeof face>, name: string): boolean =>
+    f.specs.some((s) => s.function.name === name);
+
+  it("只摘撤活时注脚必须点出后果：派出去的 worker 这一轮撤不回来", () => {
+    const f = face([CANCEL_AGENTS_NAME]);
+    expect(visible(f, SPAWN_AGENT_NAME), "派活被一起摘掉的话这格就不成立了（见反向哨兵）").toBe(true);
+    expect(visible(f, CANCEL_AGENTS_NAME)).toBe(false);
+    expect(f.note).toContain("撤不回来");
+    expect(f.note, "光说「撤不回来」不给出路：模型要知道剩下两条路是什么").toContain("人在面板上撤");
+  });
+
+  it("反向哨兵：连派活一起摘 ⇒ 不许再喊撤不回（没东西可派，就不该有这句吓人的话）", () => {
+    const f = face([CANCEL_AGENTS_NAME, SPAWN_AGENT_NAME]);
+    expect(visible(f, SPAWN_AGENT_NAME)).toBe(false);
+    expect(f.note).toContain("cancel_agents（由 pol:strict）"); // 摘除本身照旧要点名
+    expect(f.note).not.toContain("撤不回来");
+  });
+
+  it("注脚本身有观测者：没摘任何工具时它是空串，摘了才非空（此前 tests/ 里零断言）", () => {
+    expect(sessionToolSpecs({ mode: "auto", skillDenial: () => null }).note).toBe("");
+    expect(face(["grep"]).note).toContain("grep（由 pol:strict）");
+  });
+
+  it("名字不许长出第二份：tool-surface 的两个常量与 tools 里的常量、注入面清单三处同源", () => {
+    expect(CANCEL_AGENTS_NAME).toBe(CANCEL_AGENTS_TOOL);
+    const listed = INJECTED_TOOLS.map((t) => t.name);
+    expect(listed).toContain(CANCEL_AGENTS_NAME);
+    expect(listed).toContain(SPAWN_AGENT_NAME);
+  });
 });

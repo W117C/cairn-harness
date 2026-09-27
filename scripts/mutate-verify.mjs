@@ -3706,8 +3706,12 @@ const MUTATIONS = [
     id: "spec-face-drop-unexplained",
     src: "src/agent/glm-session.ts",
     test: "tests/skill-tool-policy.test.ts",
-    desc: "摘了工具不给说明 ⇒ 模型的清单静默少几把，只能猜哪把没了（本仓规矩：不静默改语义，也不静默不兑现）",
-    apply: (s) => s.replace('    "[skill 工具面] 本 turn 已按 disallowed-tools 从可见工具表摘除：" +\n    removed.map((r) => r.name + "（由 " + r.by + "）").join("、");', '    "";'),
+    desc: "摘了工具不给说明 ⇒ 模型的清单静默少几把，只能猜哪把没了（本仓规矩：不静默改语义，也不静默不兑现）。针脚 09-27 跟着 #5 那一笔挪过：note 表达式尾部从 `;` 变成 `+ (stranded ? …)" +
+      "`，旧两行式针脚随之 0 命中 ⇒ 同笔改指「拼被摘清单」那半行（规则 229：别人——这次是我——提交实现后针脚必须当场跟着走）",
+    apply: (s) => s.replace(
+      '    removed.map((r) => r.name + "（由 " + r.by + "）").join("、") +',
+      '    "" +',
+    ),
     expectFail: "规格面同步：激活后那把工具从模型可见清单消失，只摘申报的那把、不误伤别个",
   },
   {
@@ -7616,6 +7620,51 @@ const MUTATIONS = [
       "if (false) {",
     ),
     expectFail: "接线：main() 真的调它、非空就 exit 2（只写纯函数不接＝没有闸）",
+  },
+  // ── 第 160 页 · 「能派不可撤」要在派活之前说出口（任务 #5）
+  {
+    id: "strands-predicate-ignores-visible-side",
+    src: "src/agent/tool-surface.ts",
+    test: "tests/skill-tool-policy.test.ts",
+    desc: "只看「撤活被摘」、不看「派活还在不在」 ⇒ 连派活一起摘的配置也会喊一句「派出去撤不回」——那格根本没东西可派，喊出来是噪声（规则 208 的反向那一半）",
+    apply: (s) => s.replace(
+      "  return denied.has(CANCEL_AGENTS_NAME) && visible.has(SPAWN_AGENT_NAME);",
+      "  return denied.has(CANCEL_AGENTS_NAME);",
+    ),
+    expectFail: "反向哨兵：连派活一起摘 ⇒ 不许再喊撤不回（没东西可派，就不该有这句吓人的话）",
+  },
+  {
+    id: "strands-predicate-sides-swapped",
+    src: "src/agent/tool-surface.ts",
+    test: "tests/skill-tool-policy.test.ts",
+    desc: "两边弄反（禁了派活、留着撤活时喊「撤不回」）⇒ 真该出声的那格（禁撤留派）永远不出声，而模型偏偏在这一轮把钱花成不可撤销",
+    apply: (s) => s.replace(
+      "  return denied.has(CANCEL_AGENTS_NAME) && visible.has(SPAWN_AGENT_NAME);",
+      "  return denied.has(SPAWN_AGENT_NAME) && visible.has(CANCEL_AGENTS_NAME);",
+    ),
+    expectFail: "只摘撤活时注脚必须点出后果：派出去的 worker 这一轮撤不回来",
+  },
+  {
+    id: "stranded-clause-computed-not-appended",
+    src: "src/agent/glm-session.ts",
+    test: "tests/skill-tool-policy.test.ts",
+    desc: "算出来不接（规则 230 的同一格，第三次命中）：谓词对、变量在、注脚里却不拼那句话 ⇒ 模型仍要等派完活、想撤才发现撤不掉",
+    apply: (s) => s.replace(
+      "    (stranded",
+      "    (false",
+    ),
+    expectFail: "只摘撤活时注脚必须点出后果：派出去的 worker 这一轮撤不回来",
+  },
+  {
+    id: "cancel-name-constant-drifts",
+    src: "src/agent/tool-surface.ts",
+    test: "tests/skill-tool-policy.test.ts",
+    desc: "名字改动一处、另一处忘跟 ⇒ 谓词查的是不存在的键，这格从此恒不成立（工具名在本仓已有 `src/tools/cancel_agents.ts` 那份常量，这条锚点钉的是「两份不许漂」）",
+    apply: (s) => s.replace(
+      'export const CANCEL_AGENTS_NAME = "cancel_agents";',
+      'export const CANCEL_AGENTS_NAME = "cancel";',
+    ),
+    expectFail: "名字不许长出第二份：tool-surface 的两个常量与 tools 里的常量、注入面清单三处同源",
   },
   {
     id: "read-invalidated-missing-rev-reads-clean",
