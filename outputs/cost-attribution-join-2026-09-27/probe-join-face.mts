@@ -26,7 +26,14 @@ const roots = corpusRoots();
 
 let usageEvents = 0;
 let usageWithModel = 0;
-let cacheChunkReported = 0;
+/** 缓存分块**按字段分开数**（第 149 页，规则 231⑷）：旧版用两字段的"或"合成一个 `cacheChunkReported`，
+ *  于是"read 全在场、write 全缺席"被印成一句"带缓存分块 166/166"——合并读数会同时藏住"有"和"没有"。 */
+let cacheReadPresent = 0;
+let cacheReadPositive = 0;
+let cacheReadSum = 0;
+let cacheWritePresent = 0;
+let cacheWritePositive = 0;
+let cacheWriteSum = 0;
 /** 每种事件类型里带 model / picked 字段的行数 —— 「流里到底有没有那一列」的原始证据。 */
 const modelBearing = new Map<string, number>();
 /** 按 agent_id 归因（缺省 = 主会话那一格 ""）：最近一次看到的档位/模型名。 */
@@ -70,7 +77,16 @@ for (const path of files) {
     usageEvents += 1;
     acc.usage += 1;
     if (typeof e.model === "string" && e.model !== "") usageWithModel += 1;
-    if (typeof e.cacheReadInputTokens === "number" || typeof e.cacheWriteInputTokens === "number") cacheChunkReported += 1;
+    if (typeof e.cacheReadInputTokens === "number") {
+      cacheReadPresent += 1;
+      cacheReadSum += Math.max(0, e.cacheReadInputTokens);
+      if (e.cacheReadInputTokens > 0) cacheReadPositive += 1;
+    }
+    if (typeof e.cacheWriteInputTokens === "number") {
+      cacheWritePresent += 1;
+      cacheWriteSum += Math.max(0, e.cacheWriteInputTokens);
+      if (e.cacheWriteInputTokens > 0) cacheWritePositive += 1;
+    }
     const seen = lastModel.get(e.agent_id ?? "");
     if (seen === undefined) continue;
     joinable += 1;
@@ -90,7 +106,10 @@ for (const path of files) {
 }
 
 console.log(`语料：${String(files.length)} 个 .jsonl，根 = ${roots.join(" | ")}`);
-console.log(`usage 事件 ${String(usageEvents)} 条 —— 自己带 model ${String(usageWithModel)}，带缓存分块 ${String(cacheChunkReported)}`);
+console.log(`usage 事件 ${String(usageEvents)} 条 —— 自己带 model ${String(usageWithModel)} 条`);
+console.log(`缓存分块（**按字段分开数**，两半合起来会把"有"和"没有"一起藏住）：` +
+  ` 读侧在场 ${String(cacheReadPresent)} · 为正 ${String(cacheReadPositive)} · 合计 ${String(cacheReadSum)}` +
+  ` ｜ 写侧在场 ${String(cacheWritePresent)} · 为正 ${String(cacheWritePositive)} · 合计 ${String(cacheWriteSum)}`);
 console.log(`join 得到档位的 ${String(joinable)} 条（占 ${String(Math.round((joinable / Math.max(1, usageEvents)) * 100))}%），其中 picked 命中价表可折美元的 ${String(joinableAndPriced)} 条`);
 console.log(`可折部分：token ${String(tokensPriced)} · 表价 $${usdPriced.toFixed(4)}`);
 console.log(`join 键来源：${[...joinableByKind.entries()].map(([k, v]) => `${k}×${String(v)}`).join(", ") || "(无)"}`);

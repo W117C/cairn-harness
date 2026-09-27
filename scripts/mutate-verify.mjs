@@ -49,10 +49,10 @@ const MUTATIONS = [
     id: "frozen-s3-9",
     src: "src/frozen.ts",
     test: "tests/frozen-drift.test.ts",
-    desc: "S3-9 原 bug 复活：清单单文件无条件计入盘上集合（掩盖判卷文件消失）",
+    desc: "S3-9 原 bug 复活：表里的条目不做存在性 stat ⇒ 判卷文件消失报不出来。针脚随实现搬家（普查实测：旧针脚打在 `extraFiles` 那一次 stat 上，而 `inTableNotOnDisk` 现在由下面那条**逐条 stat 循环**独立算 ⇒ 改前者已与结论等价＝空操作）",
     apply: (s) => s.replace(
-      "if (await stat(join(root, f)).then(() => true, () => false))",
-      "if (true)",
+      "    if (!(await stat(join(root, rel)).then(() => true, () => false))) missing.push(rel);",
+      "    if (true) missing.push(rel);",
     ),
     expectFail: "S3-9 回归：gym/index.json 不存在时不算入盘上集合（不掩盖判卷文件消失）",
   },
@@ -7382,6 +7382,95 @@ const MUTATIONS = [
     desc: "脚本在 package.json 里而门表没登记 ⇒ 认证 HEAD 变成一条从不运行的门（provider:check 那个历史实例的同一形状，正由本文件的 orphan 护栏兜住）",
     apply: (s) => s.replace('  "head-cert-check",\n', ""),
     expectFail: "登记面：head-cert-check 进了门表，且用的是**门自己那棵**认证树（任务 #4）",
+  },
+
+  // ── 第 150 页 · 读数仪的成对字段：合并读数会同时藏住"有"和"没有"（规则 231⑷）
+  {
+    id: "cache-unreported-merged-back",
+    src: "scripts/replay/run-scorecard.ts",
+    test: "tests/replay-run-scorecard.test.ts",
+    desc: "两半又加回一个数（哪怕塞进其中一格）⇒「读侧全在场、写侧全缺席」与「反过来」印成同一句话，本次就是被这个形状骗出一条错批语",
+    apply: (s) => s.replace(
+      "cacheUnreported: { read: allUsage.cacheReadUnreported, write: allUsage.cacheWriteUnreported },",
+      "cacheUnreported: { read: allUsage.cacheReadUnreported + allUsage.cacheWriteUnreported, write: 0 },",
+    ),
+    expectFail: "两条各缺一侧 ⇒ 两半各记 1（合并成一个数就只能报「缺报 2」，谁缺的说不清）",
+  },
+  {
+    id: "cache-line-drops-write-half",
+    src: "scripts/replay/run-scorecard.ts",
+    test: "tests/replay-run-scorecard.test.ts",
+    desc: "那一行只印读侧 ⇒ 写侧整列缺席（今天真实的情况）没人说出口，看的人以为自己那半有数",
+    apply: (s) => s.replace(
+      '" 条 · 写侧 " + String(un.write) + " 条"',
+      '" 条"',
+    ),
+    expectFail: "「读侧全在场、写侧全缺」与反过来，必须印成两句不同的话（这就是本次缺陷的正反两格）",
+  },
+  {
+    id: "cache-line-prints-sum-for-both",
+    src: "scripts/replay/run-scorecard.ts",
+    test: "tests/replay-run-scorecard.test.ts",
+    desc: "两半都印同一个合计 ⇒ 分列印只剩排版，「读侧 0 · 写侧 3」与「读侧 3 · 写侧 0」又印成一件事（恒真的仪表比没有仪表更贵）",
+    apply: (s) => s.replace(
+      'String(un.read) + " 条 · 写侧 " + String(un.write)',
+      'String(un.read + un.write) + " 条 · 写侧 " + String(un.read + un.write)',
+    ),
+    expectFail: "「读侧全在场、写侧全缺」与反过来，必须印成两句不同的话（这就是本次缺陷的正反两格）",
+  },
+
+  // ── 第 150 页 · 台账编号引用的可解析性尺（14 处引用被一笔整树入库同时删死，而全仓没有一把尺喊过）
+  {
+    id: "blocked-citation-dead-not-reported",
+    src: "scripts/lib/blocked-citations.ts",
+    test: "tests/blocked-citation-face.test.ts",
+    desc: "死指针算出来了却不进违例 ⇒ 台账再被整簇删空一次仍然全绿（第 122 页那次就是这个形状：14 处引用当场变死，没人喊）",
+    apply: (s) => s.replace(
+      '    out.push({ kind: "dead-pointer", detail: `${d.id}｜用 ${String(d.uses)} 次｜查不到落点：${d.where.join("、")}` });',
+      "    void d;",
+    ),
+    expectFail: "负控 A：只给 `BLOCKED.md`（＝台账被删空那天的现态）⇒ 必须一片死指针并点到文件:行",
+  },
+  {
+    id: "blocked-citation-dead-loses-location",
+    src: "scripts/lib/blocked-citations.ts",
+    test: "tests/blocked-citation-face.test.ts",
+    desc: "只报编号不报 `文件:行` ⇒ 红是红了，但下一位要去自己 grep 一遍才知道改哪里（第 123 页给红门补落点，同一件事要做到判据身上）",
+    apply: (s) => s.replace(
+      '查不到落点：${d.where.join("、")}',
+      "查不到落点",
+    ),
+    expectFail: "负控 A：只给 `BLOCKED.md`（＝台账被删空那天的现态）⇒ 必须一片死指针并点到文件:行",
+  },
+  {
+    id: "blocked-citation-empty-face-reads-clean",
+    src: "scripts/lib/blocked-citations.ts",
+    test: "tests/blocked-citation-face.test.ts",
+    desc: "引用面 0 处被读成「全部可解析」 ⇒ 取料面坏掉（或引用被人删净）那天，这把尺自己先假绿（规则 222 的三条假绿路之一）",
+    apply: (s) => s.replace(
+      '    out.push({ kind: "empty-face", detail: "引用面 0 处：要么引用被删了，要么取料面坏掉 ⇒ 两种都不算「全部可解析」" });',
+      "    void cites;",
+    ),
+    expectFail: "空引用面＝没尺，不许读成「全部可解析」（规则 222 那一族）",
+  },
+  {
+    id: "blocked-citation-no-ledger-also-blames-face",
+    src: "scripts/lib/blocked-citations.ts",
+    test: "tests/blocked-citation-face.test.ts",
+    desc: "落点全部读不到时不早退 ⇒ 同一份读数既说「没尺」又说「引用面空」，把取料坏报成「引用被删了」（归因方向错到人身上，规则 218 同族）",
+    apply: (s) => s.replace("  if (ledgersRead.length === 0) return out;\n", ""),
+    expectFail: "一个落点都读不到 ⇒ 只报「没尺」，不许顺手报 empty-face（那会把取料坏说成引用被删）",
+  },
+  {
+    id: "blocked-citation-join-key-keeps-prefix",
+    src: "scripts/lib/blocked-citations.ts",
+    test: "tests/blocked-citation-face.test.ts",
+    desc: "`待办 #56` 整串去当键 ⇒ 台账里以 `#56` 立项的那条必然查不到 ⇒ 报出一片**假的**死引用（第 122 页自纠过的 join 键形状，做成锚点而不是记在注释里）",
+    apply: (s) => s.replace(
+      '  return raw.replace(/^待办\\s+/, "").replace(/\\s+/g, " ").trim();',
+      '  return raw.replace(/\\s+/g, " ").trim();',
+    ),
+    expectFail: "join 键的自证：`待办 #56` 的键是 `#56`（带前缀去查必然查不到＝假死引用，第 122 页踩过）",
   },
 ];
 

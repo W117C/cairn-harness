@@ -132,7 +132,7 @@ fixtures/gym/
 
 **`expect.json` 字段**：`{ mustPassVerify: true, mustChangeFiles: string[], mustNotChangeFiles: string[], maxTurns?: number }`
 
-**`negative.json`**：一条已知的错误解法（例如只改测试不改源码）。**靶场必须判它失败**——这是"尺子本身有没有刻度"的唯一证明，缺了它靶场就是恒真判据（正是 `BLOCKED.md` 裁决记录 §3 批评过的东西）。
+**`negative.json`**：一条已知的错误解法（例如只改测试不改源码）。**靶场必须判它失败**——这是"尺子本身有没有刻度"的唯一证明；缺了它靶场就是恒真判据，正是 `BLOCKED.md` 裁决记录里「**恒真式体检 3 命中修复**」那条批评过的东西（原文现按逐字节恢复放在 `outputs/blocked-ledger-recovered-2026-09-27/BLOCKED-ledger-1187.txt`）。
 
 **冻结决策**：`fixtures/gym/cases/**` 与 `index.json` 登记进 `scripts/frozen-sha256.json`。理由：改 case = 改判据 = 作弊。代价：加 case 要走改冻结文件的流程（可接受，且是纪律）。
 

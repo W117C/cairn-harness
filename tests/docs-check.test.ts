@@ -99,9 +99,12 @@ describe("D-3 文档指针禁用行号", () => {
     expect(checkLineCitations([s("tests/x.test.ts", text)])).toHaveLength(0);
   });
 
+  // 反向那一格必须让"整份扫"真的能扫到：`ALLOW_MARK` 没有 `m` 旗标，`$` 只认输入末尾
+  // ⇒ 标记写在**首行**时，`.exec(s.text)` 与 `.exec(line)` 在这份输入上等价（普查实测：那条锚点存活就是这原因）。
+  // 所以标记要落在末行，且未豁免的引用留在它上面——这样"豁免整个文件"会少报两条，才是有分辨力的用例。
   it("豁免标记只保所在行，不豁免整个文件", () => {
-    const text = '// docs-check:allow 只保这一行\nconst b = "BLOCKED.md:9";\n';
-    expect(hit(checkLineCitations([s("t.ts", text)]), "D-3")).toHaveLength(1);
+    const text = 'const a = "BLOCKED.md:9";\nconst b = "STATE.md:3";\n// docs-check:allow 这只是文件末的一行标记，不该豁免上面两行';
+    expect(hit(checkLineCitations([s("t.ts", text)]), "D-3")).toHaveLength(2);
   });
 
   it("标记后不写理由 → 不豁免（豁免必须可审计）", () => {

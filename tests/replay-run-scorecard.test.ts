@@ -17,6 +17,7 @@ import { readFileSync } from "node:fs";
 import {
   RUN_OUTCOMES,
   aggregateScorecard,
+  cacheUnreportedLine,
   costOf,
   scoreStream,
   scorecardVerdict,
@@ -231,6 +232,36 @@ describe("token 轴：合计与缺报", () => {
   it("`inputTokens` 是含缓存的总输入 ⇒ 汇总**不再把 cache 加第二遍**", () => {
     const t = usageOfStream([usageEv(1000, 100, { cacheReadInputTokens: 900, cacheWriteInputTokens: 50 })]);
     expect(t.inputTokens + t.outputTokens).toBe(1100);
+  });
+});
+
+/* 第 150 页（规则 231⑷）：**成对可选字段不许用「或」/相加合成一个读数**。
+   教材就是这条面自己的存量语料：read 字段 166/166 在场（97 条为正、合计 274,880 token），write 字段 **0/166 在场**。
+   旧写法 `cacheReadUnreported + cacheWriteUnreported` 把这两件相反的事印成一句"缺报 166"——
+   合并的读数会同时藏住"有"和"没有"，我据此写过一条错批语（"命中率卡在无 cache 分块"）。 */
+describe("缓存分块缺报要分列印（read / write 各一格）", () => {
+  it("两条各缺一侧 ⇒ 两半各记 1（合并成一个数就只能报「缺报 2」，谁缺的说不清）", () => {
+    const agg = aggregateScorecard([scoreStream([
+      usageEv(1000, 100, { cacheReadInputTokens: 700 }),
+      usageEv(500, 50, { cacheWriteInputTokens: 30 }),
+    ])]);
+    expect(agg.cacheUnreported).toEqual({ read: 1, write: 1 });
+  });
+
+  it("「读侧全在场、写侧全缺」与反过来，必须印成两句不同的话（这就是本次缺陷的正反两格）", () => {
+    const writeAllMissing = cacheUnreportedLine(3, { read: 0, write: 3 });
+    const readAllMissing = cacheUnreportedLine(3, { read: 3, write: 0 });
+    expect(writeAllMissing).not.toBe(readAllMissing);
+    expect(writeAllMissing).toContain("读侧 0");
+    expect(writeAllMissing).toContain("写侧 3");
+    // 牙齿：两半都要在行里出现，且**各自带自己的数**——只印一个合并数时这条正则是空的
+    expect(writeAllMissing.split("缺报：")[1]).toMatch(/读侧 \d+ 条 · 写侧 \d+ 条/);
+  });
+
+  it("汇总那一行不许再把两半加回去（加回去＝本次修的缺陷复活，且这次没人会再发现）", () => {
+    const src = readFileSync(new URL("../scripts/replay/run-scorecard.ts", import.meta.url), "utf8");
+    expect(src).not.toContain("cacheReadUnreported + allUsage.cacheWriteUnreported");
+    expect(src).toContain("cacheUnreported: { read: allUsage.cacheReadUnreported, write: allUsage.cacheWriteUnreported }");
   });
 });
 

@@ -262,13 +262,24 @@ export interface ScorecardAggregate {
   tokensPerJudged: number | null;
   /** 「最省 token」的真正读数：每**一次成功**花多少 token。green=0 时为 null（不是 0）。 */
   tokensPerGreen: number | null;
-  /** 缓存分块缺报的 usage 条数：缺报≠命中 0（规则 95）。 */
-  cacheUnreported: number;
+  /** 缓存分块缺报的 usage 条数：缺报≠命中 0（规则 95）。
+   *  **read / write 分开记**（第 149 页，规则 231⑷）：合成一个数会同时藏住"有"和"没有"——
+   *  存量语料实测 read 字段 166/166 在场、write 0/166 在场（GLM/OpenAI 本就没有写缓存这笔钱），
+   *  一个合并读数把这两件相反的事都印成"缺报 166"。 */
+  cacheUnreported: { read: number; write: number };
   /** 美元轴；不可测时 `usd=null` 并带原因，绝不折成 $0。 */
   cost: CostReading;
 }
 
 /** 逐档计数 + 显式分母。任何比值都带着它的分母字段，不让人拿一个百分比就外推。 */
+/** 缓存分块那一行。导出来是为了让判卷能吃它——"合并两半"这种毛病只在印出来之后才看得见，
+ *  而印出来的东西若不可测，就没人会被它骗到（规则 231⑷）。 */
+export function cacheUnreportedLine(usageEvents: number, un: { read: number; write: number }): string {
+  return "usage 事件 " + String(usageEvents) +
+    "（缓存分块缺报：读侧 " + String(un.read) + " 条 · 写侧 " + String(un.write) + " 条" +
+    "——两半分开报：写侧全缺＝这条通道本就没有写缓存这笔钱，不是丢了字段；缺报≠命中 0）";
+}
+
 export function aggregateScorecard(rows: readonly RunScore[]): ScorecardAggregate {
   const byOutcome = Object.fromEntries(RUN_OUTCOMES.map((o) => [o, 0])) as Record<RunOutcome, number>;
   for (const r of rows) byOutcome[r.outcome] += 1;
@@ -312,7 +323,7 @@ export function aggregateScorecard(rows: readonly RunScore[]): ScorecardAggregat
     tokensJudged,
     tokensPerJudged: judgedRows.length === 0 ? null : Math.round(tokensJudged / judgedRows.length),
     tokensPerGreen: greenRows.length === 0 ? null : Math.round(sumTokens(greenRows) / greenRows.length),
-    cacheUnreported: allUsage.cacheReadUnreported + allUsage.cacheWriteUnreported,
+    cacheUnreported: { read: allUsage.cacheReadUnreported, write: allUsage.cacheWriteUnreported },
     // 钱轴按**全部流**汇总（不只 judged）：钱花在没成功的 run 上更要报出来。
     cost: costOf(rows.map((r) => r.usage)),
   };
@@ -385,7 +396,7 @@ function main(): void {
   console.log(
     "  token 轴：每条能定终态 " + String(agg.tokensPerJudged ?? "—") +
       " · 每**一次成功** " + String(agg.tokensPerGreen ?? "不可测（green=0）") +
-      " · usage 事件 " + String(agg.usageEvents) + "（其中缓存分块缺报 " + String(agg.cacheUnreported) + " 条——缺报≠命中 0）",
+      " · " + cacheUnreportedLine(agg.usageEvents, agg.cacheUnreported),
   );
   console.log("  钱轴：" + (agg.cost.measurable
     ? "$" + String(agg.cost.usd) + (agg.cost.reason === "" ? "" : "（" + agg.cost.reason + "）")
