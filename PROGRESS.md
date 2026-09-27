@@ -5035,6 +5035,12 @@ killer 指针失效 0，905 条改法语法全部合法；`typecheck` 0 报错�
 ③ 真正的竞争（两个进程同一毫秒内都判 `free`）只由 `link` 那一支挡着，我没有造出真并发去证它——
    判卷证的是"锁在位时拒跑"，不是"抢占窗口里必然只有一家赢"。
 
+〔**09-28 更正上面①，把推断改成读数**：linked worktree 那一半其实**已经被证过**了——凭证（2/2）那次认证的判卷就跑在
+`.worktrees/head-cert-ad829ba`（它的 `.git` 是 78 字节的 gitdir 文件，不是目录），vitest 报的 root 是
+`/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-ad829ba`，其中 `tests/head-cert-deps.test.ts (69 tests) 683ms` 全绿
+⇒ 那 4 条真跑子进程的锁判卷在**绝对 common dir** 那一支上也成立（`resolve` 而不是 `join` 的原因）。
+剩下真正未证的只有：跨机／网络文件系统上共享同一棵树。〕
+
 补（同一天，干净树 @`5a7a6aa` 逐条杀新锚点时抓的）：**9 条里 1 条存活**——`cert-lock-unreadable-silently-overwritten`。
 先分诊（规则 233：实现搬家与判卷零分辨力修法相反）：实现没动 ⇒ 是**判卷零分辨力**。
 真因很有意思：我把 `unreadable` 那一支拆掉之后，代码继续走到 `link`，而那把坏锁文件**还在** ⇒ EEXIST ⇒ 仍然 exit 2，
