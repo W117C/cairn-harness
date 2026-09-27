@@ -4458,3 +4458,17 @@ HEAD 全量绿之后第一件事是把 #12 结掉：`head-import-check` 进门�
   （那 11 条随文档裁剪那笔一起补了 script），#13 从此只剩"门表两头都要在 HEAD 上成立"这一条读数义务。
 - 现态：typecheck 0；`gate-manifest` 8/8、`head-cert-deps` 31/31；`--check-needles` 847 条、阻断 2（都是本笔判卷文件未入库，入库即清）；
   两条新锚点的杀死凭证与「新门进表后 HEAD 仍然全绿」的复跑记在本页末尾。
+
+#### 第 147 页凭证 · 新门进表后 HEAD 的现读是 1 红，而那一条正是我自己欠的账
+
+`node --import tsx scripts/head-cert.ts` 于 `4ae189c`（依赖完整=是、硬链靶子仓库依赖 exit=0、typecheck 0、
+import 面 2792 条边 悬空 0、**门表 27 道 缺 script 0 道**）⇒
+**`Test Files 1 failed | 238 passed (239)｜Tests 1 failed | 2788 passed (2789)｜exit=1`**。
+
+- 唯一那条红是 `tests/mutate-anchor-titles.test.ts` 的真表现读：
+  `stale-zero-anchor-review｜scripts/gate-manifest.ts｜欠条已不再成立（已补回 2 条锚点）⇒ 从 ZERO_ANCHOR_REVIEW 删掉它`。
+  ⇒ 第 9 页那道棘轮**按设计咬到了我身上**：我为了补门表护栏加的 2 条锚点，正好把那份"零观察者"欠条的前提打掉，
+  名单不删就是红——它不是"报错了别人"，是**逼加锚点的人当场销账**（规则 223⑹：登记存量必须自带撤销条件）。
+- 处置：删掉 `scripts/gate-manifest.ts` 那一条欠条（其余 3 条仍成立），`mutate-anchor-titles` 23/23 绿。
+- 一条刻度上的分工，值得记：`--check-needles` 当时报的是**阻断 0**（六支里不含"欠条是否还成立"这一支），
+  这条红只有全量判卷看得见 ⇒ 「秒级尺绿」与「HEAD 绿」是两个数，交笔凭证要按门表取（规则 212 的又一形状）。

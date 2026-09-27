@@ -144,7 +144,6 @@ export const ANCHOR_COUNT_FLOOR = 798;
  *  这正是第 126 页的教训：那 4 个文件掉了 12 条锚点时，没有任何一个地方"记得它们曾经有过"。
  *  名单只保护**已经判定重要**的文件，不是全仓覆盖度度量（边界写在 tests/ 那条用例上）。 */
 export const ZERO_ANCHOR_REVIEW: Readonly<Record<string, string>> = {
-  "scripts/gate-manifest.ts": "第 126 页：4 条 gate-direct-* 随 834ba3a 消失，而它是 26 道门的唯一事实源；摘掉的四条全是「门禁层自己怎么假绿」",
   "src/main/updater.ts": "第 126 页：6 条 updater-* 锚点消失；文件仍被 ipc-protocol/settings-handlers import，只剩 tests/updater-safety-core.test.ts 一支直接测试",
   "src/agent/security/llm-review.ts": "第 126 页：llm-confidence-fabricated-default 消失（「缺席不得编成 medium」那条），orchestrator 仍在 import；tests/hardening3.test.ts 只 import buildMessages",
   "scripts/replay/ask-density.ts": "第 126 页 C 类：0 生产 import＋0 测试，但它是 replay-readings 登记面＋判断层 §7 复跑块 ⇒ 待裁决「该删没删」，先记欠条而不是顺手清掉",
