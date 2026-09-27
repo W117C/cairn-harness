@@ -603,7 +603,7 @@ describe("接线：真跑 head-cert——占不到锁就不许动树", () => {
     }
   });
 
-  it("锁文件读不出 ⇒ exit 2 且点名锁文件路径（不覆盖、不死等，也不落到切树之后）", () => {
+  it("锁文件读不出 ⇒ exit 2、点名是哪把锁，也不许冒领「被别人占走」那一支的措辞", () => {
     clearLock();
     mkdirSync(dirname(LOCK_AT), { recursive: true });
     writeFileSync(LOCK_AT, "{pid:");
@@ -611,6 +611,11 @@ describe("接线：真跑 head-cert——占不到锁就不许动树", () => {
       const { status, out } = runCert();
       expect(status).toBe(2);
       expect(out).toContain("dsh-lock-witness.lock");
+      // `exit=2` ＋「点名路径」这一对**两支拒跑都给**（抢占失败那条也印同一个路径）⇒ 只钉这两样，
+      // 把 unreadable 那一支整支拆掉仍然全绿：09-28 实测，这条锚点第一版就是这么活过来的。
+      // 修法＝钉**这一支自己的措辞**，并配一条"不许出现另一支的话"（同规则 233 的零分辨力那一类）。
+      expect(out, "第三态被吞 ⇒ 读不出被当没人占，最后靠抢占失败蒙对退出码").toContain("锁文件在但读不出");
+      expect(out, "把「读不出」报成「被别人占走」＝把自己的坑说成别人的").not.toContain("被别人占走");
       expect(out).not.toContain("worktree add exit=");
     } finally {
       clearLock();

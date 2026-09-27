@@ -7639,12 +7639,12 @@ const MUTATIONS = [
     id: "cert-lock-unreadable-silently-overwritten",
     src: "scripts/head-cert.ts",
     test: "tests/head-cert-deps.test.ts",
-    desc: "读不出的锁被当「没人占」覆盖（第三态被吞）⇒ 正有人用时一把抢走，而且抢的痕迹只剩一行日志",
+    desc: "读不出的锁被当「没人占」覆盖（第三态被吞）⇒ 正有人用时一把抢走，而且抢的痕迹只剩一行日志。这条第一版**活过一次**：`exit=2` ＋「点名锁文件路径」那对读数两支拒跑都给 ⇒ 拆掉这一支仍然全绿，判卷要钉本支自己的措辞（规则 233 的零分辨力那一类）",
     apply: (s) => s.replace(
       'if (decision.kind === "unreadable") {',
       'if (decision.kind === "unreadable" && false) {',
     ),
-    expectFail: "锁文件读不出 ⇒ exit 2 且点名锁文件路径（不覆盖、不死等，也不落到切树之后）",
+    expectFail: "锁文件读不出 ⇒ exit 2、点名是哪把锁，也不许冒领「被别人占走」那一支的措辞",
   },
   {
     id: "cert-lock-stale-not-unlinked",
