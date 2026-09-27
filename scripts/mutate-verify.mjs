@@ -7753,6 +7753,28 @@ const MUTATIONS = [
     apply: (s) => s.replace('\nconsole.log("[mutate-verify] 锁="', '\nconsole.log("[mutate-verify] 锁未印="'),
     expectFail: "反向哨兵：同一入参、没有锁 ⇒ 必须走到「未知 id」，并且占过又放掉（上面那条的红只能来自锁）",
   },
+  {
+    id: "mutate-lock-tag-ignored",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "算出标签却不接进锁身份（`tree` 仍然写死 ROOT）⇒ 判卷带标签也没用，它 plant 的那把与子进程读的那把不是同一文件：三条锁判卷全绿，而机器一跑表它们就集体判「基线不绿」（09-28 实测 46 条，规则 230「算出来不接」第六次）",
+    apply: (s) => s.replace(
+      "\n  tree: lockTagRaw.given ? lockTagRaw.value : ROOT,",
+      "\n  tree: ROOT,",
+    ),
+    expectFail: "活人占着 ⇒ exit 2、点名是谁、拒在开跑之前，并且不替别人删锁",
+  },
+  {
+    id: "mutate-flag-registry-drops-lock-tag",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "脚本读了 `--lock-tag` 而登记表里漏它 ⇒ 带标签的命令被「未知即拒」当场拦下，判卷自己撞死在这道闸上（登记与读取双向对得上：cert 侧那条闸在这里的配对）",
+    apply: (s) => s.replace(
+      '\nexport const MUTATE_VALUE_FLAGS = ["--budget-ms", "--changed-since", "--lock-tag"] as const;',
+      '\nexport const MUTATE_VALUE_FLAGS = ["--budget-ms", "--changed-since"] as const;',
+    ),
+    expectFail: "`--lock-tag` 两种写法都认、值不进 targets，而隔壁拼错的 `--lock-tx=` 照拒",
+  },
   // ── 第 160 页 · 「能派不可撤」要在派活之前说出口（任务 #5）
   {
     id: "strands-predicate-ignores-visible-side",
@@ -8324,6 +8346,25 @@ if (sinceArg !== null) {
   console.log(`改动面派生：rev=${sinceArg} → 变更文件 ${String(derived.faceCount)} 个 ⇒ 选中锚点 ${String(derived.pickedCount)}/${String(derived.total)} 条`);
   if (derived.pickedCount === 0) console.log("ℹ️ 选中 0 条：改动面里没有文件是任一锚点的两面之一（纯文档/配置改动会这样）⇒ 这**不是**「整表验过了」。");
 }
+/* 锁的身份默认＝这棵树的目录名；`--lock-tag=<标签>` 是给**判卷**留的隔离位。
+ *  为什么需要它（09-28 实测，我自己撞出来的）：变异机跑某条锚点时会 spawn 那条锚点的判卷文件，
+ *  而那判卷里有一条会往锁面上写"活人锁"——不加标签时它写的正是**这台机器自己占着**的那把，
+ *  于是判卷自己喊「撞窗」⇒ 整个判卷文件基线红 ⇒ 挂在它上面的 46 条锚点全被判「基线就不是全绿」。
+ *  机器的锁名永远是树名，带标签的那把只有判卷自己会碰到，两边就分开了（规则 223：判卷不许拿被度量者自己的状态当输入；
+ *  head-cert 的同一格早有先例，那边是靠 `--tree=<witness>` 这个名字本身隔离的）。
+ *  校验排在两条只读分支**之前**：这是入参形状（与 `--changed-since` 不给 rev 同档），不是占锁——
+ *  只读面照样不被锁死，只是拿空标签的命令根本不该被读成"用默认那把"。 */
+const lockTagRaw = (() => {
+  const a = process.argv.slice(2);
+  const eq = a.find((x) => x.startsWith("--lock-tag="));
+  if (eq !== undefined) return { given: true, value: eq.slice("--lock-tag=".length).trim() };
+  const i = a.indexOf("--lock-tag");
+  return i === -1 ? { given: false, value: "" } : { given: true, value: String(a[i + 1] ?? "").trim() };
+})();
+if (lockTagRaw.given && lockTagRaw.value === "") {
+  console.error("--lock-tag 需要一个标签（空值不等于「用默认那把」；要默认就别带这个参数）");
+  process.exit(2);
+}
 if (plan.mode === "list") {
   // 后两列（判卷文件 + JSON 化的 killer 指针）是给判卷用的：`tests/mutate-verify-gates.test.ts`
   // 要走这条**不改源文件**的入口拿到整张表，而不能 spawn `--check-needles`——那会在变异跑到一半时被调用，
@@ -8393,7 +8434,7 @@ const requested = targets.length ? MUTATIONS.filter((m) => targets.includes(m.id
 const LOCK = acquireToolLock({
   tool: "mutate-verify",
   root: ROOT,
-  tree: ROOT,
+  tree: lockTagRaw.given ? lockTagRaw.value : ROOT,
   target: (() => {
     try { return execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim(); }
     catch { return "取不到HEAD"; }

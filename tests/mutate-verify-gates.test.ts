@@ -162,6 +162,17 @@ describe("--changed-since 的参数形状：放行连写，但不放宽「未知
     expect(classifyArgs(["--list=HEAD"]).unknown).toEqual(["--list=HEAD"]);
     expect(classifyArgs(["--budget-ms=600000"]).unknown).toEqual(["--budget-ms=600000"]);
   });
+
+  it("`--lock-tag` 两种写法都认、值不进 targets，而隔壁拼错的 `--lock-tx=` 照拒", () => {
+    // 登记与读取必须双向对得上（cert 侧那条同名的闸在这里没有配对，所以这里补一条）：
+    // 只加进 flag 表而脚本不读＝白放行，脚本读了没登记＝把标签当未知 flag 拒跑，判卷自己先撞死。
+    expect(classifyArgs(["--lock-tag=judge-1"]).unknown).toEqual([]);
+    expect(classifyArgs(["--lock-tag=judge-1"]).targets).toEqual([]);
+    const spaced = classifyArgs(["--lock-tag", "judge-1", "some-id"]);
+    expect(spaced.unknown).toEqual([]);
+    expect(spaced.targets).toEqual(["some-id"]);
+    expect(classifyArgs(["--lock-tx=judge-1"]).unknown).toEqual(["--lock-tx=judge-1"]);
+  });
 });
 
 const clean: HeadState = "clean";
@@ -759,10 +770,14 @@ describe("mutate-verify 也接了这把锁：占不到就不许动盘（那份�
   // 路径**另算一份**（不复用 toolLockPath）：拿被测函数算被测函数读的路径＝那条断言没有观测者。
   // 末段是这棵树自己的目录名（sanitize 后），所以这里也照抄那一步——实现若退回「锁写死在主树 .git」，两边位置分叉，下面当场红。
   const gitCommon = execFileSync("git", ["rev-parse", "--git-common-dir"], { cwd: repoRoot, encoding: "utf8" }).trim();
-  const leaf = (repoRoot.replace(/[\\/]+$/u, "").split(/[\\/]+/).pop() ?? "").replace(/[^A-Za-z0-9._-]/gu, "_");
-  const LOCK_AT = join(resolve(repoRoot, gitCommon), "dsh-tool-locks", "mutate-verify-" + leaf + ".lock");
+  /* 一律带 `--lock-tag=judge-<pid>`：机器的锁名永远是**那棵树的目录名**，而跑锚点时它会 spawn 本文件——
+   *  不带标签的话这里写的正是那台机器自己占着的锁，`noForeignLock` 当场喊撞窗 ⇒ 本文件基线红 ⇒ 挂在它上面的几十条锚点一起判「基线就不是全绿」。
+   *  （09-28 实测：干净树里 83 条派生名单有 46 条就是这么红的，规则 223「判卷不许拿被度量者自己的状态当输入」的第六次命中。）
+   *  带标签后两边永不撞名，而默认那条路（不带标签＝树名）由下面接线判卷钉住。 */
+  const TAG = "judge-" + String(process.pid);
+  const LOCK_AT = join(resolve(repoRoot, gitCommon), "dsh-tool-locks", "mutate-verify-" + TAG + ".lock");
   const runMv = (args: string[]): { status: number | null; out: string } => {
-    const r = spawnSync(process.execPath, ["--import", "tsx", script, ...args], { cwd: repoRoot, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    const r = spawnSync(process.execPath, ["--import", "tsx", script, "--lock-tag=" + TAG, ...args], { cwd: repoRoot, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
     return { status: r.status, out: (r.stdout ?? "") + (r.stderr ?? "") };
   };
   /* 探锁用**一个不存在的 id**：它会一路走到「未知 id」那支 exit 2，中间一个源文件都不碰。
@@ -850,5 +865,23 @@ describe("mutate-verify 也接了这把锁：占不到就不许动盘（那份�
     expect(heal, "自愈会写盘：占锁排在它之后＝「占不到就不许动盘」是空话").toBeGreaterThan(startPrint);
     // 按**行首语句**匹配：这张锚点表就写在同一个文件里，`toContain(那段文字)` 在这儿恒真（规则 236）。
     expect(src, "第二份三态判断＝「占不到就不许动盘」有两个事实源，改一处漏一处").not.toMatch(/(^|\n)[ \t]*if \(decision\.kind === "(?:held|unreadable|reclaim)"\)/);
+    // 锁身份的默认值与隔离位都要钉：只钉"占锁"不钉"占的是哪把"，把标签接丢也会全绿（那正是撞回机器自己那把的样子）。
+    expect(src, "--lock-tag 算出来却没接进锁身份 ⇒ 判卷写的就是机器自己那把锁").toMatch(/\n\s*tree: lockTagRaw\.given \? lockTagRaw\.value : ROOT,/);
   });
+
+  it("空标签不是「默认」：`--lock-tag=` 与 `--lock-tag \"\"` 一律 exit 2 并说明怎么要默认", () => {
+    // 这里**不能**用 runMv：它自己会先带一个合法标签，而取料读的是第一个出现的那对 ⇒ 空标签会被前面的合法值盖掉，
+    // 测出来的是"runMv 的默认值有效"，不是"空标签被拒"。裸 spawn 一条，入参就是这条要验的形状。
+    const raw = (args: string[]) => {
+      const r = spawnSync(process.execPath, ["--import", "tsx", script, ...args], { cwd: repoRoot, encoding: "utf8" });
+      return { status: r.status, out: (r.stdout ?? "") + (r.stderr ?? "") };
+    };
+    const eq = raw(["--lock-tag=", "--list"]);
+    expect(eq.status).toBe(2);
+    expect(eq.out).toContain("需要一个标签");
+    expect(eq.out, "给了空标签还照常印名单 ⇒ 「带参数」与「没带参数」在输出上没区别").not.toContain("选中锚点");
+    const bare = raw(["--lock-tag", "", "--list"]);
+    expect(bare.status).toBe(2);
+    expect(bare.out).toContain("需要一个标签");
+  }, 30_000);
 });
