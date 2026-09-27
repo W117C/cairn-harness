@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, entryDisposition, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
+import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, entryDisposition, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, selectChangedEntries, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
 import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
 
 /** 从锚点表取 `{id,test,expectFail}`：只走 `--list` 这条**不改源文件**的入口。
@@ -53,6 +53,94 @@ describe("budgetMsOf + classifyArgs 的值位（自我预算这条手段本身�
 
   it("未知 flag 照旧当场拒（新认的两个 flag 不放宽这条）", () => {
     expect(classifyArgs(["--budgett-ms", "600000"]).unknown).toEqual(["--budgett-ms"]);
+  });
+});
+
+/* 第 162 页 · `--changed-since`：把「该杀哪几条锚点」从人肉名单改成从改动面派生。
+   动因不是想要个新功能，是规则 229 反复喊的那格——手抄名单只会抄到**我想到的**那几条，
+   而同一个文件上那些旧锚点，恰恰是在我改了实现之后最容易变成空操作的那些。 */
+describe("改动面派生：一条锚点的两面都要认（被测源 ∪ 判卷文件）", () => {
+  const table = [
+    { id: "a", src: "src/agent/x.ts", test: "tests/x.test.ts" },
+    { id: "b", src: "src/agent/y.ts", test: "tests/y.test.ts" },
+    { id: "c", src: "scripts/z.ts", test: "tests/z.test.ts" },
+  ];
+
+  it("改被测源 ⇒ 选中；改判卷文件 ⇒ 也要选中（只认一头＝另一半搬家没人知道）", () => {
+    expect(selectChangedEntries(table, ["src/agent/x.ts"]).ids).toEqual(["a"]);
+    expect(selectChangedEntries(table, ["tests/y.test.ts"]).ids, "判卷文件自己改了取料面，也该重杀一次").toEqual(["b"]);
+  });
+
+  it("两面都不在改动面 ⇒ 一条不选，但把「表多大／面多大」一起交回去（0 条要能被分诊）", () => {
+    const r = selectChangedEntries(table, ["README.md", "docs/x.md"]);
+    expect(r.ids).toEqual([]);
+    expect(r.faceCount).toBe(2);
+    expect(r.pickedCount).toBe(0);
+    expect(r.total, "分母必须是整表条数：不然「选中 2 条」读起来像全跑完了").toBe(3);
+  });
+
+  it("git 输出的尾换行不算一个文件；同一锚点两面都改也只选一次", () => {
+    expect(selectChangedEntries(table, ["", ""]).faceCount, "空路径进面＝虚增分母").toBe(0);
+    expect(selectChangedEntries(table, ["src/agent/x.ts", "tests/x.test.ts"]).ids).toEqual(["a"]);
+  });
+
+  it("接线：派生出来的 id 真的并进 targets（只写纯函数不接＝名单还是人手抄的）", () => {
+    const src = readFileSync(join(fileURLToPath(new URL("../", import.meta.url)), "scripts", "mutate-verify.mjs"), "utf8");
+    expect(src).toContain("derived = selectChangedEntries(MUTATIONS, changed)");
+    expect(src, "算出 ids 却不并进 targets ⇒ 这条手段等于没有").toContain("...plan.targets, ...derived.ids]");
+    expect(src, "git 取不到改动面时必须停下来，不许把「取不到」读成「没有要跑的锚点」").toContain("不许读成「没有要跑的锚点」");
+  });
+
+  it("真跑：`--changed-since` 不给 rev ⇒ exit 2，且一条源文件都不许动", () => {
+    const script = fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url));
+    const r = spawnSync(process.execPath, ["--import", "tsx", script, "--changed-since"], { encoding: "utf8" });
+    expect(r.status).toBe(2);
+    expect(r.stdout + r.stderr).toContain("需要一个 rev");
+  });
+
+  // 这一支比上面那条值钱：拼错的 rev 是**真实会发生**的输入，而它的默认读法（"没东西要跑"）长得跟"验完了"一模一样。
+  it("派生可以只看名单不真跑：`--list --changed-since=<rev>` 只印选中的那些，且不碰任何源文件", () => {
+    const script = fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url));
+    const one = (args: string[]) => spawnSync(process.execPath, ["--import", "tsx", script, ...args], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    const picked = one(["--list", "--changed-since=HEAD"]);
+    expect(picked.status).toBe(0);
+    expect(picked.stdout, "派生行必须印出来：不然「筛过」与「没筛」在输出上没区别").toContain("改动面派生：rev=HEAD");
+    const rows = (picked.stdout ?? "").split("\n").filter((l) => l.includes("\t")).length;
+    expect(rows).toBeLessThan(900);
+    // 反向那一半是这条用例存在的理由：**没给 flag 时"选中 0 条"是未筛，不是筛出空表**。
+    // 写错成一律 filter ⇒ `--list` 印 0 行，而吃 `--list` 的两把静态尺会把整张表读成"表空了"。
+    const all = one(["--list"]);
+    expect(all.stdout).not.toContain("改动面派生");
+    expect((all.stdout ?? "").split("\n").filter((l) => l.includes("\t")).length).toBeGreaterThanOrEqual(900);
+  });
+
+  it("真跑：rev 取不到 ⇒ exit 2 并点名那个 rev（「取料坏」不许退化成「选中 0 条」）", () => {
+    const script = fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url));
+    const r = spawnSync(process.execPath, ["--import", "tsx", script, "--changed-since=no-such-rev-xyz"], { encoding: "utf8" });
+    expect(r.status).toBe(2);
+    const out = r.stdout + r.stderr;
+    expect(out).toContain("no-such-rev-xyz");
+    expect(out, "把取料坏印成一条正常的派生读数 ⇒ 下一句就是「0 条，全绿」").not.toContain("改动面派生：");
+  });
+});
+
+describe("--changed-since 的参数形状：放行连写，但不放宽「未知即拒」", () => {
+  it("`--changed-since=HEAD~1` 认，那个值也不被当成锚点 id", () => {
+    const p = classifyArgs(["--changed-since=HEAD~1"]);
+    expect(p.unknown).toEqual([]);
+    expect(p.targets).toEqual([]);
+  });
+
+  it("空格写法同样认：rev 不进 targets，位置参数照旧是 id", () => {
+    const p = classifyArgs(["--changed-since", "HEAD~1", "some-id"]);
+    expect(p.unknown).toEqual([]);
+    expect(p.targets).toEqual(["some-id"]);
+  });
+
+  it("两条反向哨兵：不带值的 flag 硬塞值照样拒；`--budget-ms=600000` 刻意**不**放行", () => {
+    // budgetMsOf 只解析空格写法——放行 `=` 写法＝"给了值却按不限跑"，正是本文件要拒的静默按缺省。
+    expect(classifyArgs(["--list=HEAD"]).unknown).toEqual(["--list=HEAD"]);
+    expect(classifyArgs(["--budget-ms=600000"]).unknown).toEqual(["--budget-ms=600000"]);
   });
 });
 

@@ -353,11 +353,22 @@ export function duplicateIds(ids: readonly string[]): DuplicateId[] {
 // 动因（2026-09-19 实踩）：一条还没合进 HEAD 的 `--check-needles` 在主树里被当成「无参数」，
 // 而该脚本的缺省语义是**跑全表**——它会就地改源文件、跑几十分钟。拼错一个 flag 就等于
 // 在别人的写作窗里放火，所以「看不懂」不能退化成「按缺省办」。
-export const MUTATE_FLAGS = ["--list", "--check-needles", "--budget-ms"] as const;
+export const MUTATE_FLAGS = ["--list", "--check-needles", "--budget-ms", "--changed-since"] as const;
 /** 带值的 flag：它**下一个** token 是值，不是锚点 id。漏了这条，`--budget-ms 600000` 会把
  *  `600000` 当成一个不存在的锚点 id 报「未知 id」——于是没人能给它设预算（而预算正是
- *  别被外层超时杀在突变那一拍的手段）。 */
-export const MUTATE_VALUE_FLAGS = ["--budget-ms"] as const;
+ *  别被外层超时杀在突变那一拍的手段）。`--changed-since HEAD~1` 同一个坑：rev 会被当成 id。 */
+export const MUTATE_VALUE_FLAGS = ["--budget-ms", "--changed-since"] as const;
+/** 允许 `--flag=值` 连写的那批。`--budget-ms` **刻意不在这里**：它的读取器 `budgetMsOf` 只解析空格写法，
+ *  放行 `--budget-ms=600000` 会变成"给了值却被当成不限"——静默按缺省跑，正是本文件开头要拒的那一类。
+ *  新增值 flag 时：先给读取器加上 `=` 解析，再往这张表里加名字，顺序反了就是一条假绿。 */
+export const MUTATE_EQ_VALUE_FLAGS = ["--changed-since"] as const;
+
+/** 这个 token 是不是被认识的 flag（三种写法：裸 flag、`--flag 值`、`--flag=值`）。 */
+export function isKnownMutateFlag(arg: string): boolean {
+  if ((MUTATE_FLAGS as readonly string[]).includes(arg)) return true;
+  const eq = arg.indexOf("=");
+  return eq > 0 && (MUTATE_EQ_VALUE_FLAGS as readonly string[]).includes(arg.slice(0, eq));
+}
 
 export interface ArgPlan {
   mode: "list" | "check-needles" | "run";
@@ -365,6 +376,23 @@ export interface ArgPlan {
   unknown: string[];
   /** 位置参数 = 要跑的条目 id。 */
   targets: string[];
+}
+
+/** 一条锚点的"面"＝**被测源 ∪ 它的判卷文件**：只认一头必漏另一头（规则 208 的两半）。
+ *
+ *  动因（第 161 页）：交笔时"该杀哪几条锚点"是我手抄的名单——手抄只会抄到**我想到的**那几条，
+ *  而规则 229 反复喊的是"别人把实现搬走 ⇒ 那些锚点当场变空操作"。改成从改动面派生，
+ *  同一个文件上的旧锚点会被自动带进来，不依赖我记得它们存在。
+ *
+ *  返回结构而不是 id 数组：这一格最容易出的事故不是选错，而是**选了 0 条还被读成"都验过了"**
+ *  （空载那一族，规则 129/196）。所以把改动面大小与表大小一起交回去，逼调用方把三个数都印出来。 */
+export function selectChangedEntries(
+  entries: readonly { id: string; src: string; test?: string }[],
+  changedPaths: readonly string[],
+): { ids: string[]; faceCount: number; pickedCount: number; total: number } {
+  const changed = new Set(changedPaths.filter((p) => p !== ""));
+  const ids = entries.filter((e) => changed.has(e.src) || (e.test !== undefined && changed.has(e.test))).map((e) => e.id);
+  return { ids, faceCount: changed.size, pickedCount: ids.length, total: entries.length };
 }
 
 export function classifyArgs(args: readonly string[]): ArgPlan {
@@ -376,7 +404,7 @@ export function classifyArgs(args: readonly string[]): ArgPlan {
     consumed.add(i);
     if (args[i + 1] !== undefined && !args[i + 1].startsWith("--")) consumed.add(i + 1);
   });
-  const unknown = args.filter((a, i) => !consumed.has(i) && a.startsWith("--") && !(MUTATE_FLAGS as readonly string[]).includes(a));
+  const unknown = args.filter((a, i) => !consumed.has(i) && a.startsWith("--") && !isKnownMutateFlag(a));
   const targets = args.filter((a, i) => !consumed.has(i) && !a.startsWith("--"));
   const mode = args.includes("--list") ? "list" : args.includes("--check-needles") ? "check-needles" : "run";
   return { mode, unknown, targets };

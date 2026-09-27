@@ -22,7 +22,7 @@ import { execFileSync } from "node:child_process";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -2427,8 +2427,9 @@ const MUTATIONS = [
     src: "scripts/lib/mutate-gates.ts",
     test: "tests/mutate-needles-check.test.ts",
     desc: "未知 flag 不再收集 ⇒ 拼错/未合并的 `--check-needles` 被当成无参数，脚本直接开跑全表：在别人的写作窗里就地改源文件几十分钟" +
-      "（2026-09-23 改指：`classifyArgs` 为 `--budget-ms <值>` 加了 consumed 分流，旧针脚整行失效）",
-    apply: (s) => s.replace(`const unknown = args.filter((a, i) => !consumed.has(i) && a.startsWith("--") && !(MUTATE_FLAGS as readonly string[]).includes(a));`, "const unknown: string[] = [];"),
+      "（2026-09-23 改指：`classifyArgs` 为 `--budget-ms <值>` 加了 consumed 分流，旧针脚整行失效）" +
+      "（2026-09-28 第二次改指：放行 `--flag=值` 连写时这一行改查 `isKnownMutateFlag`，旧针脚又整行失效——规则 229，这次的「别人」还是我）",
+    apply: (s) => s.replace(`const unknown = args.filter((a, i) => !consumed.has(i) && a.startsWith("--") && !isKnownMutateFlag(a));`, "const unknown: string[] = [];"),
     expectFail: "拼错/未实现的 flag 落进 unknown，且不混进 targets",
   },
   {
@@ -7884,6 +7885,102 @@ const MUTATIONS = [
     ),
     expectFail: "join 键的自证：`待办 #56` 的键是 `#56`（带前缀去查必然查不到＝假死引用，第 122 页踩过）",
   },
+  // ── 第 162 页 · `--changed-since`：把「该杀哪几条锚点」从人肉名单改成从改动面派生
+  // 这一组里有两条**故意不进表**，写在这里免得下一个人以为是漏做：
+  // ① `if (sinceArg === "")` 那一支——它的失败形状是「空 rev 落到缺省语义＝跑整张表」，
+  //    把这条 mutation 放进表里会在验它的 30 分钟里就地改遍源文件；那一格改由行为判卷守（真跑 exit 2）。
+  // ② 派生读数的 print 本身（`改动面派生：rev=…`）——它只有一处印，删掉它没有可判的行为差；由接线判卷的文字钉守。
+  // ③ 这一组钉在 `mutate-verify.mjs` 自己身上的三根针，针脚**一律以真换行开头**：锚点表与实现同一个文件，
+  //    表里那两处 `apply` 字面量含同样的文字 ⇒ 不带头一个换行就命中 2 处，而 `replace` 只改第一处＝改到表自己身上
+  //    （门当场喊「待复认」，09-28 实测；这是规则 236 那个自指族的第四次，也是本文件第三次）。表里写的是 `\n` 两个字符，凑不出真换行。
+  {
+    id: "changed-since-list-mode-always-filters",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "把「筛过的名单」当默认：没给 `--changed-since` 时「选中 0 条」是**未筛**，一律 filter 会让 `--list` 印 0 行，而吃这条取料的两把静态尺会把整张表读成「表空了」（空面与没取到是两个数，规则 129/196/222）",
+    apply: (s) => s.replace(
+      "\n  const rows = sinceArg === null ? MUTATIONS : MUTATIONS.filter((m) => derived.ids.includes(m.id));",
+      "\n  const rows = MUTATIONS.filter((m) => derived.ids.includes(m.id));",
+    ),
+    expectFail: "派生可以只看名单不真跑：`--list --changed-since=<rev>` 只印选中的那些，且不碰任何源文件",
+  },
+  {
+    id: "changed-since-picks-only-src-face",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "只认被测源这一面 ⇒ 别人改了判卷文件（取料面／标题／断言都算）时派生名单是空的，这条手段正好在它最该出声的那一半上沉默（规则 208 的两半）",
+    apply: (s) => s.replace(
+      "  const ids = entries.filter((e) => changed.has(e.src) || (e.test !== undefined && changed.has(e.test))).map((e) => e.id);",
+      "  const ids = entries.filter((e) => changed.has(e.src)).map((e) => e.id);",
+    ),
+    expectFail: "改被测源 ⇒ 选中；改判卷文件 ⇒ 也要选中（只认一头＝另一半搬家没人知道）",
+  },
+  {
+    id: "changed-since-total-reported-as-picked",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "分母写成分支自身的长度 ⇒ 印出来永远是「选中 N/N」：选中 0 条也长成「全部验过」的样子（规则 222 那条「0 命中有两条假绿路」在这里的第三种）",
+    apply: (s) => s.replace(
+      "  return { ids, faceCount: changed.size, pickedCount: ids.length, total: entries.length };",
+      "  return { ids, faceCount: changed.size, pickedCount: ids.length, total: ids.length };",
+    ),
+    expectFail: "两面都不在改动面 ⇒ 一条不选，但把「表多大／面多大」一起交回去（0 条要能被分诊）",
+  },
+  {
+    id: "changed-since-empty-path-counted-as-file",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "git 每行输出尾部那个换行被当成一个文件 ⇒ 改动面分母虚增，而「面 3 个文件、选中 0 条」与「面 2 个、选中 0 条」是两种解释（读数被自己的取料污染）",
+    apply: (s) => s.replace(
+      '  const changed = new Set(changedPaths.filter((p) => p !== ""));',
+      "  const changed = new Set(changedPaths);",
+    ),
+    expectFail: "git 输出的尾换行不算一个文件；同一锚点两面都改也只选一次",
+  },
+  {
+    id: "changed-since-eq-form-whitens-any-flag",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "为支持 `--flag=值` 而把「带 = 的都放行」⇒ `--list=…`、`--budget-ms=600000` 一起被放过，后者更坏：读取器只认空格写法，给了值却按「不限」跑（静默按缺省，正是这张表开头拒的那类）",
+    apply: (s) => s.replace(
+      "  return eq > 0 && (MUTATE_EQ_VALUE_FLAGS as readonly string[]).includes(arg.slice(0, eq));",
+      "  return eq > 0;",
+    ),
+    expectFail: "两条反向哨兵：不带值的 flag 硬塞值照样拒；`--budget-ms=600000` 刻意**不**放行",
+  },
+  {
+    id: "changed-since-derived-not-unioned-into-targets",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "算出派生名单却不并进 targets ⇒ 门照跑人手抄那几条，而输出里那句「选中 N/M」仍然印得出来的样子最骗人（规则 230「算出来不接」第四次命中，这次的接线在参数分流处）",
+    apply: (s) => s.replace(
+      "\nconst targets = [...new Set([...plan.targets, ...derived.ids])];",
+      "\nconst targets = [...plan.targets];",
+    ),
+    expectFail: "接线：派生出来的 id 真的并进 targets（只写纯函数不接＝名单还是人手抄的）",
+  },
+  {
+    id: "changed-since-face-passed-as-empty",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "把改动面传成空表（这里是最容易写错的一种：变量名打错成字面量）⇒ 派生恒 0 条，而派生行照样印得整整齐齐 ⇒ 「今天没东西要验」被读成「今天改动无关」",
+    apply: (s) => s.replace(
+      "\n    derived = selectChangedEntries(MUTATIONS, changed);",
+      "\n    derived = selectChangedEntries(MUTATIONS, []);",
+    ),
+    expectFail: "接线：派生出来的 id 真的并进 targets（只写纯函数不接＝名单还是人手抄的）",
+  },
+  {
+    id: "changed-since-bad-rev-exits-zero",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "git 取不到改动面时退 0（把「取料坏」当成「没有要跑的锚点」）⇒ 一次拼错的 rev 长得像一次全绿；文本尺的三态在这里是 exit 码这一格（规则 222/227）",
+    apply: (s) => s.replace(
+      "\n    process.exit(2); // 取料坏 ≠ 空面",
+      "\n    process.exit(0); // 取料坏 ≠ 空面",
+    ),
+    expectFail: "真跑：rev 取不到 ⇒ exit 2 并点名那个 rev（「取料坏」不许退化成「选中 0 条」）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
@@ -8159,6 +8256,38 @@ if (plan.unknown.length > 0) {
   console.error(`未知参数：${plan.unknown.join(" ")} —— 无参数即「跑全表」（就地改源文件），不把拼错的 flag 静默当缺省`);
   process.exit(2);
 }
+/* `--changed-since=<rev>`：把「该杀哪几条锚点」从人肉名单改成从**改动面**派生。
+ *  一条锚点的面＝被测源 ∪ 它的判卷文件（只认一头必漏另一头，规则 208 的两半）。
+ *  取料＝`rev → 工作树`的全部差异 ＋ 未跟踪文件：只比 HEAD 会把「这笔还没入库的改动」读成「没变」，
+ *  而那恰好就是本笔要验的那些（第 161 页我手抄 9 条 id，代价是**同文件上的旧锚点全靠我记得**——规则 229 说的正是记不住的那天）。
+ *  这段排在 `--list` 之前是有意的：`--list --changed-since=<rev>`＝**只印名单不改源文件**，
+ *  于是"这次会验到哪些"能在跑之前先量出来（规则 222：候选尺开张前先量现读；没有这一格，想知道名单就必须真跑）。 */
+const sinceArg = (() => {
+  const a = process.argv.slice(2);
+  const eq = a.find((x) => x.startsWith("--changed-since="));
+  if (eq !== undefined) return eq.slice("--changed-since=".length).trim();
+  const i = a.indexOf("--changed-since");
+  return i === -1 ? null : String(a[i + 1] ?? "").trim();
+})();
+let derived = { ids: [], faceCount: 0, pickedCount: 0, total: MUTATIONS.length };
+if (sinceArg !== null) {
+  if (sinceArg === "") {
+    console.error("--changed-since 需要一个 rev（空值不等于「不限」；要跑整表就不带参数）");
+    process.exit(2);
+  }
+  try {
+    const diff = execFileSync("git", ["diff", "--name-only", sinceArg], { cwd: ROOT, encoding: "utf8" });
+    const others = execFileSync("git", ["ls-files", "--others", "--exclude-standard"], { cwd: ROOT, encoding: "utf8" });
+    const changed = [...new Set([...diff.split("\n"), ...others.split("\n")].map((s) => s.trim()).filter((s) => s !== ""))];
+    derived = selectChangedEntries(MUTATIONS, changed);
+  } catch (e) {
+    // 「取不到改动面」与「改动面为空」是两个数：前一个必须停下来，否则会被读成"没有要跑的锚点"＝白过
+    console.error(`--changed-since=${sinceArg} 取不到改动面（git 报错）⇒ 不许读成「没有要跑的锚点」：${String((e && e.message) || e).split("\n")[0]}`);
+    process.exit(2); // 取料坏 ≠ 空面：这里退 0 会让一次拼错的 rev 长得像"全表已验"
+  }
+  console.log(`改动面派生：rev=${sinceArg} → 变更文件 ${String(derived.faceCount)} 个 ⇒ 选中锚点 ${String(derived.pickedCount)}/${String(derived.total)} 条`);
+  if (derived.pickedCount === 0) console.log("ℹ️ 选中 0 条：改动面里没有文件是任一锚点的两面之一（纯文档/配置改动会这样）⇒ 这**不是**「整表验过了」。");
+}
 if (plan.mode === "list") {
   // 后两列（判卷文件 + JSON 化的 killer 指针）是给判卷用的：`tests/mutate-verify-gates.test.ts`
   // 要走这条**不改源文件**的入口拿到整张表，而不能 spawn `--check-needles`——那会在变异跑到一半时被调用，
@@ -8166,7 +8295,9 @@ if (plan.mode === "list") {
   // 列协议必须无损：字段里可以带换行/制表符（真踩过——`impact-closure-glob-broken` 的 desc 里有换行，
   // 那一行被拆成两行 ⇒ 吃 `--list` 的两把静态尺同时少读一条锚点，而它们自己发现不了）。
   const oneLine = (v) => String(v).replace(/[\t\n\r]+/gu, " ");
-  for (const m of MUTATIONS) console.log([m.id, m.src, m.desc, m.test, JSON.stringify(m.expectFail ?? "")].map(oneLine).join("\t"));
+  // 没给 `--changed-since` 时"选中 0 条"是**未筛**，不是筛出空表——所以判据看的是"给没给 flag"，不是 pickedCount
+  const rows = sinceArg === null ? MUTATIONS : MUTATIONS.filter((m) => derived.ids.includes(m.id));
+  for (const m of rows) console.log([m.id, m.src, m.desc, m.test, JSON.stringify(m.expectFail ?? "")].map(oneLine).join("\t"));
   process.exit(0);
 }
 /** 只核针脚、不跑测试（秒级）——因此它能进 pnpm gates，而整张变异表要跑几十分钟、
@@ -8212,7 +8343,7 @@ if (plan.mode === "check-needles") {
   process.exit(bad === 0 && syntaxBad.length === 0 ? 0 : 1);
 }
 
-const targets = plan.targets;
+const targets = [...new Set([...plan.targets, ...derived.ids])];
 const requested = targets.length ? MUTATIONS.filter((m) => targets.includes(m.id)) : MUTATIONS;
 if (targets.length && requested.length !== targets.length) {
   console.error(`未知 id: ${targets.filter((t) => !MUTATIONS.some((m) => m.id === t)).join(", ")}`);
