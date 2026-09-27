@@ -7952,7 +7952,7 @@ const MUTATIONS = [
     id: "changed-since-derived-not-unioned-into-targets",
     src: "scripts/mutate-verify.mjs",
     test: "tests/mutate-verify-gates.test.ts",
-    desc: "算出派生名单却不并进 targets ⇒ 门照跑人手抄那几条，而输出里那句「选中 N/M」仍然印得出来的样子最骗人（规则 230「算出来不接」第四次命中，这次的接线在参数分流处）",
+    desc: "算出派生名单却不并进 targets ⇒ 门照跑人手抄那几条，而输出里那句「选中 N/M」仍然印得出来的样子最骗人（规则 230「算出来不接」第四次命中，这次的接线在参数分流处）。第一版判卷写成 `toContain(那行文字)` ⇒ **存活过一次**：表里那份针脚字面替实现背了书（规则 236 第五次），现已改钉带真换行的跨行正则",
     apply: (s) => s.replace(
       "\nconst targets = [...new Set([...plan.targets, ...derived.ids])];",
       "\nconst targets = [...plan.targets];",
@@ -7963,7 +7963,7 @@ const MUTATIONS = [
     id: "changed-since-face-passed-as-empty",
     src: "scripts/mutate-verify.mjs",
     test: "tests/mutate-verify-gates.test.ts",
-    desc: "把改动面传成空表（这里是最容易写错的一种：变量名打错成字面量）⇒ 派生恒 0 条，而派生行照样印得整整齐齐 ⇒ 「今天没东西要验」被读成「今天改动无关」",
+    desc: "把改动面传成空表（这里是最容易写错的一种：变量名打错成字面量）⇒ 派生恒 0 条，而派生行照样印得整整齐齐 ⇒ 「今天没东西要验」被读成「今天改动无关」。第一版**也存活过一次**：那条接线判卷是文字钉，被同文件里表自己的针脚字面满足 ⇒ 现改由 `--list --changed-since=<空树>` 那条行为判卷抓（与空树比＝全部文件都变了 ⇒ 选中必须等于整表）",
     apply: (s) => s.replace(
       "\n    derived = selectChangedEntries(MUTATIONS, changed);",
       "\n    derived = selectChangedEntries(MUTATIONS, []);",

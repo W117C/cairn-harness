@@ -2,7 +2,7 @@
 // 动因（2026-09-19 实跑）：另一会话正在改判卷测试文件时，本门把两条正常条目报成
 // 「基线就不是全绿」+「变异存活」——真回归信号被并发噪声伪装掉了。
 import { describe, expect, it } from "vitest";
-import { spawnSync } from "node:child_process";
+import { spawnSync, execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -86,9 +86,29 @@ describe("改动面派生：一条锚点的两面都要认（被测源 ∪ 判�
 
   it("接线：派生出来的 id 真的并进 targets（只写纯函数不接＝名单还是人手抄的）", () => {
     const src = readFileSync(join(fileURLToPath(new URL("../", import.meta.url)), "scripts", "mutate-verify.mjs"), "utf8");
-    expect(src).toContain("derived = selectChangedEntries(MUTATIONS, changed)");
-    expect(src, "算出 ids 却不并进 targets ⇒ 这条手段等于没有").toContain("...plan.targets, ...derived.ids]");
-    expect(src, "git 取不到改动面时必须停下来，不许把「取不到」读成「没有要跑的锚点」").toContain("不许读成「没有要跑的锚点」");
+    // 两根都必须是**带真换行的跨行正则**，不能是 `toContain(那行文字)`：锚点表就住在这同一个文件里，
+    // 表中的针脚字面就是这两行原文 ⇒ 实现被改掉、表里那份字面还在 ⇒ 断言恒真。
+    // 09-28 实测：这两条锚点第一版就是这么**存活**的（规则 236 那一族的第五次，也是变异机第一次
+    // 抓到我写的接线判卷恒真——它当时喊的是「待复认」，我照提示改成真换行才让这两条开口）。
+    expect(src, "派生调用整支没接上 ⇒ selectChangedEntries 是个没人调的纯函数").toMatch(
+      /\n\s*derived = selectChangedEntries\(MUTATIONS, changed\);/);
+    expect(src, "算出 ids 却不并进 targets ⇒ 跑的还是人手抄那几条").toMatch(
+      /\nconst targets = \[\.\.\.new Set\(\[\.\.\.plan\.targets, \.\.\.derived\.ids\]\)\];/);
+    expect(src, "这一支是上面那条的反面：把并集换成只取人手抄的名单").not.toMatch(
+      /\nconst targets = \[\.\.\.plan\.targets\];/);
+  });
+
+  it("派生可以只看名单不真跑：`--list --changed-since=<空树>` ⇒ 每条锚点两面都在跟踪文件里，必须选中整表", () => {
+    const script = fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url));
+    const emptyTree = execFileSync("git", ["hash-object", "-t", "tree", "/dev/null"], { encoding: "utf8" }).trim();
+    const r = spawnSync(process.execPath, ["--import", "tsx", script, "--list", "--changed-since=" + emptyTree],
+      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    expect(r.status).toBe(0);
+    const rows = (r.stdout ?? "").split("\n").filter((l) => l.includes("\t"));
+    expect(rows.length).toBeGreaterThan(900);
+    // 「选中 N/N」而不是「选中 0/N」：这是**行为读数**，名单被筛空或被忽略时它当场变样——
+    // 上面那条文字钉抓不到第 4 条锚点那种"传了个空面"的坏（它照样命中文字）。
+    expect(r.stdout).toContain(`选中锚点 ${String(rows.length)}/${String(rows.length)} 条`);
   });
 
   it("真跑：`--changed-since` 不给 rev ⇒ exit 2，且一条源文件都不许动", () => {
