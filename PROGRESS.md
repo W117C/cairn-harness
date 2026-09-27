@@ -5330,3 +5330,39 @@ fd 1 接管道时是**非阻塞**的，一次 `writeSync` 只交得进内核缓�
 920 条改法全部产出合法源文件 ✅；typecheck 0；三个受影响判卷文件 183 passed。
 **这一格的收获不是那个 bug，是形状**：凡是"印给别的尺读"的出口，判据都得写成**相对读数**（等于自己的表长／等于自己的分母），
 绝对阈值既会在少给时红得没指向性，也会在表自然变化时变成常驻假红（与规则 209「棘轮不许挂在易变状态上」同一格）。
+
+### 2026-09-28 · 第 163 页凭证：两轮流派生名单 + 一次 HEAD 全量认证，把"派生名单碰到宿主文件要跑一遍"这条规矩第一次跑满
+
+实现簇四笔：`df5476b`（页 163：过程收成 `acquireToolLock`，接到 mutate-verify）→ `d23c7ac`（页 163 补：`--lock-tag` 判卷隔离位）
+→ `77f1317`（页 163 补⑵：页）→ `9ee9ac1`（补⑵ 的实现：`--list` 出口写满为止）。
+**本簇分两笔落库这一格要说清**：页先入库、码后入库，是因为写完页才在第一次试跑里被三条 `--list` 判卷喊出"单次 `writeSync` 也丢尾"；
+规则 217 要的是**尺与实现同笔**（锚点与判卷都在 `9ee9ac1`，满足），页早一笔属文档顺序瑕疵。
+
+**干净树逐笔复跑（`.worktrees/verify-163`，0 项在飞才动手，node_modules 与 todo-app 依赖按第 146 页那招硬链接补）**
+· @`df5476b`，`--changed-since=971fc14` ⇒ 派生 99/916，**98 杀／1 判"存活"**，耗时 1132.1s。
+  那 1 条（`pointer-block-dimension-not-summed`）分诊：单跑 ✅ 21.1s 杀死；把它的 apply 真落到盘上再数 `--list`＝918、`id:` 改前改后同数、needle 命中 1 处
+  ⇒ **不是分辨力问题，是那条判卷读了个少给的出口**（后来补⑵就是冲它去的）。
+· @`9ee9ac1`，`--changed-since=d23c7ac` ⇒ 派生 50/920，**50 杀／0 存活**，耗时 1125.0s。
+  本簇新增/改指的 mv 侧锚点逐条认账：`mutate-lock-not-acquired`、`mutate-lock-read-only-face-locked`、`mutate-lock-cell-not-printed`、
+  `mutate-lock-tag-ignored`、`mutate-flag-registry-drops-lock-tag`、`mutate-flush-helper-back-to-async-write`、`mutate-flush-one-site-bypasses-helper`、
+  改指过的 `list-rows-not-flattened` —— 全 ✅；
+  前一轮 @`df5476b` 已把 9 条 `cert-lock-*`（含 6 条改指到 `scripts/lib/tool-lock.ts` 的）逐条杀死 ✅。
+
+**`head-cert --at=HEAD` @`9ee9ac1`：Test Files 241 passed／Tests 2904 passed／exit=0**（退出码直接取，不接管道）、
+`依赖完整=是`、`DIRTY_JUDGED=0`、`收尾复核=同一笔`、`并发判卷=起前 0 套／跑完 0 套（两端独占）`、
+`认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-9ee9ac1.lock）`、import 面 2820 条边｜悬空 0（存量已豁免 0）、`HEADCERT_EXIT=0`。
+（第 161 页为 head-cert 建的那把锁，现在认证自己也在用它：这一格在凭证里第一次有读数。）
+条数对账：`it()` 用例数 `ad829ba`→`HEAD` 差 **+21**，与凭证读数 2883→2904 的 **+21** 一致——没有减判卷、没有加豁免。
+针脚现读：920 条／阻断 0／待复认 0／未覆盖 0／逐行式 4／**松钉 10（帽 10，未动）**／920 条改法全部合法 ✅；typecheck 0 报错。
+
+**代价读数（写给下一个跑派生名单的人）**：50 条 1125.0s ≈ **22.5s/条**，而整表均速是 2.2s/条——差 10 倍的原因在本簇自己身上：
+往 `tests/mutate-verify-gates.test.ts` 放了 4 条真子进程判卷（其中一条每次要跑 7.7s 的 needles 体检），
+而挂在它上面的锚点有 **50 条**，每条都要跑三遍（基线／突变／还原）。⇒ 派生名单碰到这个宿主文件时按 ~40s/条估，别按 2.2s 估。
+要不要把这 4 条挪到一个宿主文件外的独立判卷文件（宿主文件的成本由"条数 × 3"放大，不是由"用例数"），记成一条待裁的减法。
+
+**未证与待办，写在这里不当结论用**：① `link` 抢占失败（EEXIST）那一支仍无判卷（造不出判卷的锚点必然存活 ⇒ 不加）；
+② `--lock-tag` 只解决"判卷与机器共用锁面"，跨机／网络盘上的锁语义仍未证（第 161 页那条未证还在）；
+③ `head-cert` 自己的汇总行仍走 stdout（本簇只把 mutate-verify 的四个出口改成写满为止）——它一次只印十几行、没撞到管道缓冲，所以是**风险不是缺陷**，
+要收就得配判卷，别只改文案；④ 任务 #32（临时名该用 `wx` 开）与本条同族，一并留给下一笔。
+
+**清场**：`.worktrees/verify-163` 与 `.worktrees/head-cert-9ee9ac1` 两棵——逐棵先核 `git status` 为 0 项在飞、无进程在跑，再回收（规则 120）。
