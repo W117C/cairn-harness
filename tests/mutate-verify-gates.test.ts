@@ -557,7 +557,9 @@ describe("auditExpectFails：killer 指针必须指得到活用例", () => {
 
   it("接线：门自己那一步要真拿整张表去数松钉（只印不数＝这一格永远 0，且永远不红）", () => {
     const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
-    expect(src).toContain("const loosePinned = looseOnlyPointers(pointerEntries,");
+    // 必须用**带真换行的正则**钉，不许用 toContain：这条锚点自己的 apply 里就写着那句文字（转义形式），
+    // 任何整段子串断言都会读到表自己 ⇒ 变异把调用改成喂空表之后，那句文字仍躺在文件里，判卷当场失去分辨力（实测存活一次）。
+    expect(/const loosePinned = looseOnlyPointers\(pointerEntries,\n\s*\(rel\) =>/.test(src)).toBe(true);
     expect(src).toContain("松钉指针 ${String(loosePinned.length)} 条");
   });
 
