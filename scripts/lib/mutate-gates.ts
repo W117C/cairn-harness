@@ -385,8 +385,17 @@ export function classifyArgs(args: readonly string[]): ArgPlan {
 /** 逐行式 apply（`s.split("\n").map(...)` 一类）：它**就是**要改所有匹配行，
  *  所以「针脚命中多处」在这里不是风险信号。不认它，静态检就会长期挂着一排假 ⚠️，
  *  而假警报备出来的代价是真警被人一起忽略。 */
+/** 逐行式的形状：箭头的**第一个操作**就是 `<入参>.split(`（允许中间隔一句 `const x = ` 的块体开头）。 */
+const LINE_WISE_SHAPE = /=>\s*(?:\{\s*(?:const|let)\s+\w+\s*=\s*)?\w+\.split\(/;
+
+/** 「逐行式 apply」＝先把**输入**按行拆开、再逐行改写（这类改法的针脚天生要在多处命中，所以不核针脚）。
+ *
+ *  判据必须挂在上面那个形状上，不能挂在"改法文字里出现过 `.split(`"——
+ *  后者会把两类无关的东西一起放进免检名单：① 针脚**指向**一条含 `split(` 的实现，② **替换文字**里含 `split(`。
+ *  09-27 实测（`outputs/line-wise-exemption-2026-09-27/measure.mts`，870 条 apply 全量）：旧判据认 11 条，
+ *  其中真逐行式只有 4 条 ⇒ 另 7 条一直在免检，实现搬家后它们会静默变成空操作而表上仍报 ✅。 */
 export function isLineWiseApply(applySource: string): boolean {
-  return applySource.includes(".split(");
+  return LINE_WISE_SHAPE.test(applySource);
 }
 
 // ---- expectFail 这个指针本身可不可用（第 138 页） ----------------------------

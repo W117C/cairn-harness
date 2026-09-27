@@ -2444,8 +2444,9 @@ const MUTATIONS = [
     id: "line-wise-apply-never-recognized",
     src: "scripts/lib/mutate-gates.ts",
     test: "tests/mutate-needles-check.test.ts",
-    desc: "不认逐行式 apply ⇒ 那些「故意改所有匹配行」的锚点长期挂 ⚠️ 假警；假警报攒多了，真警也会被一起忽略",
-    apply: (s) => s.replace("return applySource.includes(\".split(\");", "return false;"),
+    desc: "不认逐行式 apply ⇒ 那些「故意改所有匹配行」的锚点长期挂 ⚠️ 假警；假警报攒多了，真警也会被一起忽略。" +
+      "针脚随第 153 页的判据搬家（旧针脚指着 `applySource.includes` 那句，已经不在盘上）",
+    apply: (s) => s.replace("return LINE_WISE_SHAPE.test(applySource);", "return false;"),
     expectFail: "认得 split/map 式写法，普通单点 replace 不误判",
   },
   {
@@ -2453,8 +2454,26 @@ const MUTATIONS = [
     src: "scripts/lib/mutate-gates.ts",
     test: "tests/mutate-needles-check.test.ts",
     desc: "一律当成逐行式 ⇒ 普通单点锚点全都不再核针脚，静态检退回「什么都没看」的空门",
-    apply: (s) => s.replace("return applySource.includes(\".split(\");", "return true;"),
+    apply: (s) => s.replace("return LINE_WISE_SHAPE.test(applySource);", "return true;"),
     expectFail: "认得 split/map 式写法，普通单点 replace 不误判",
+  },
+  {
+    id: "line-wise-exemption-by-text-shape",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-needles-check.test.ts",
+    desc: "退回旧判据「改法文字里含 .split( 」⇒ 免检名单从 4 条涨回 11 条，" +
+      "而那 7 条（针脚或替换文字里恰好含 split( 的普通单点改法）再次静默脱离针脚体检——今天不红，等实现搬家那天也不红",
+    apply: (s) => s.replace("return LINE_WISE_SHAPE.test(applySource);", "return applySource.includes(\".split(\");"),
+    expectFail: "针脚指向含 split( 的实现 ⇒ 不算逐行式（这条豁免是给改写策略的，不是给文字形状的）",
+  },
+  {
+    id: "line-wise-block-branch-dropped",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-needles-check.test.ts",
+    desc: "收紧时把「块体第一句才拆开输入」那一支漏掉 ⇒ 4 条真逐行式里最少有一条被拖回针脚体检，" +
+      "而它们的改法本来就要在多处命中 ⇒ 静态门凭空造出假红（收紧判据必须配反向哨兵，规则 227）",
+    apply: (s) => s.replace("return LINE_WISE_SHAPE.test(applySource);", "return /=>\\s*\\w+\\.split\\(/.test(applySource);"),
+    expectFail: "反向哨兵：块体里第一句就把输入按行拆开 ⇒ 仍要认成逐行式（收紧不许把 4 条真豁免砸成假红）",
   },
       // ---- W1a 收队（spec §3 / 计划 Task 1–5）：三段帽 + 等待边界 + 工具 fail-closed + 静态门自身 ----
   {

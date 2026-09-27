@@ -101,6 +101,20 @@ describe("isLineWiseApply（逐行式 apply 的多处命中即设计）", () => 
     expect(isLineWiseApply('(s) => s.split("\\n").map((l) => (l.includes("e.output") ? l : l)).join("\\n")')).toBe(true);
     expect(isLineWiseApply('(s) => s.replace("if (a) {", "if (false) {")')).toBe(false);
   });
+
+  // 第 153 页：旧判据是"改法文字里含 .split(" —— 于是**针脚指向一条含 split( 的实现**、或**替换文字里含 split(**
+  // 都会被误判成逐行式而躲过针脚体检（09-27 实测 11 条免检里只有 4 条是真逐行式，另 7 条一直在免检）。
+  it("针脚指向含 split( 的实现 ⇒ 不算逐行式（这条豁免是给改写策略的，不是给文字形状的）", () => {
+    expect(isLineWiseApply('  (s) => s.replace("if (typeof rel === \\"string\\" && rel.split(/[\\\\/]/).includes(\\".agent\\")) {", "if (false) {")')).toBe(false);
+  });
+
+  it("替换文字里含 split( ⇒ 也不算逐行式", () => {
+    expect(isLineWiseApply('  (s) => s.replace("const repeat = a === b;", \'const repeat = digest.split("\\\\n")[0] === (last ?? "").split("\\\\n")[0];\')')).toBe(false);
+  });
+
+  it("反向哨兵：块体里第一句就把输入按行拆开 ⇒ 仍要认成逐行式（收紧不许把 4 条真豁免砸成假红）", () => {
+    expect(isLineWiseApply('(s) => {\n      const lines = s.split("\\n");\n      const i = lines.findIndex((l) => l.trim() === "try {");\n      if (i < 0) return s;\n    }')).toBe(true);
+  });
 });
 
 // 锚点 id 必须唯一：重复时 `mutate-verify <id>` 会同时跑两条，报告里两行同 id 不同改法，
