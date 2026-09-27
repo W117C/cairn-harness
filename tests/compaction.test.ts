@@ -282,7 +282,10 @@ describe("质量闸与降级链", () => {
       config: { ...TINY, minProgress: 0.9 },
     });
     expect(outcome.ok).toBe(false);
-    if (!outcome.ok) expect(outcome.why).toContain("最小进度");
+    // 钉**闸报出来的数**（被压 / 可见 / 本次配的 minProgress），不是「最小进度」这四个字：
+    // 那四个字在 compaction-check 的闸名里也有一份，测试照抄就成了一把量不到自己的尺
+    // （顶包候选）。数字只有生产那一条路算得出来，复制品算不出。
+    if (!outcome.ok) expect(outcome.why).toMatch(/被压 \d+ < 可见 \d+ × 0\.9/);
   });
 
   it("失败退避重试 1 次；连续 2 败 → 停用摘要（auto 跳过，overflow 截断照走）", async () => {
