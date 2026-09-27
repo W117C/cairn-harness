@@ -83,7 +83,7 @@ import { MAX_CONCURRENT_WORKERS, READ_MODE_MAX_TURNS, SPAWN_MODES, WORKER_TOOL_T
 import { shell_rw, workerToolSpecs } from "./worker-shell-tools";
 import { clampTier, clipWorkerSummary, isPermissionMode, parseSpawnedAgentId, scanModelOutput, workerVerificationEvidence } from "./worker-report";
 import { priceForModel, priceTagText, shapeJoinRows, spentUsdFor, bucketsSpendUsd, type JoinInput, type JoinPayloadBody, type SpendBucket, type WorkerPrice } from "./orchestrator-join";
-import { WorkerCancelled, defaultWorkerModel, isScriptedModel, type WorkerModel } from "./worker-model";
+import { WorkerCancelled, defaultWorkerModel, isScriptedModel, usageNameOf, type WorkerModel } from "./worker-model";
 import { type OrchestratorOptions, type PipelineChain, type SpawnArgs, type StageRoleResolution, type WorkerContext, type WorkerHandle } from "./orchestrator-types";
 import { chainTable, digestArgs, filterWorkerSpecs, filterWorkerTable, parseStringList, parseWorkerContext, scanStreamEvent, withAgentId } from "./worker-projection";
 import { globIntersects, semanticConflictsVia } from "./lease-conflicts";
@@ -603,7 +603,10 @@ export class Orchestrator {
     // 事后另算一遍就等于两处尺（第 145 页 budgetPriceKeyOf 的同一课）。剧本通道两者都留空。
     let usageModel = "";
     if (!isScriptedModel(model)) {
-      usageModel = routedSpec?.model ?? glmDefaultModelName();
+      // 取值顺序即优先级：**模型自述的真名**（`toWorkerModel` 盖章，注入面可自带）> 路由解出的 spec > harness 缺省档。
+      // 旧实现里没有第一档，而 `modelFor` 注入时 `routedSpec` 被强制成 null ⇒ 注入的模型无论拨谁都记成缺省那一档
+      // （第 148 页点名的盲区）。只剩"注入且没自述名"这一格仍落缺省档，那是诚实的：注入方是缺省那一路的替身。
+      usageModel = usageNameOf(model) || routedSpec?.model || glmDefaultModelName();
       price = priceForModel(usageModel, routeDecision?.picked);
     }
     const requested = isPermissionMode(args.tier) ? args.tier : this.opts.parentMode;

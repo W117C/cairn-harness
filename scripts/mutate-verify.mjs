@@ -7400,6 +7400,44 @@ const MUTATIONS = [
     expectFail: "生产者自己带了 model ⇒ 不覆盖（provider 回执比我们推断权威）",
   },
   {
+    id: "worker-selfname-not-stamped",
+    src: "src/providers/registry.ts",
+    test: "tests/usage-attribution.test.ts",
+    desc: "适配器不盖自述名 ⇒ 四支 provider 全落 harness 缺省档，而归因键与折价同一个变量，" +
+      "所以两者一起偏、永不互相打脸（#22 的盲区形状）。盖章点必须在包装函数里，四支各写一遍＝第五族「只硬化一支」",
+    apply: (s) => s.replace("  model.usageName = spec.model;\n  return model;", "  return model;"),
+    expectFail: "表里每一档都带自述名，且四个 provider 都被枚举到（漏一支＝那一支静默错档）",
+  },
+  {
+    id: "worker-selfname-ignored-by-orchestrator",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/usage-attribution.test.ts",
+    desc: "算出来不接（规则 230）：自述名有了、取值式子里却不读它 ⇒ 注入面带不带名字都一样，" +
+      "而带名字那条用例只看 usage_model 会误绿——所以见证比的是「两档给出两个不同的钱数」",
+    apply: (s) => s.replace(
+      "usageModel = usageNameOf(model) || routedSpec?.model || glmDefaultModelName();",
+      "usageModel = routedSpec?.model || glmDefaultModelName();",
+    ),
+    expectFail: "注入带自述名的模型 ⇒ 键用真名，且折价随它换档（旧实现两档注入给出同一个数）",
+  },
+  {
+    id: "usage-name-of-skips-callable-check",
+    src: "src/agent/worker-model.ts",
+    test: "tests/usage-attribution.test.ts",
+    desc: "不核可调用 ⇒ 任意带 usageName 字段的对象都被当成一路模型（这一格的入参来自 provider 侧，脏数据不该产出键）",
+    apply: (s) => s.replace('  if (typeof model !== "function") return "";', "  if (false) return \"\";"),
+    expectFail: "取值只有一个入口，且优先级写在式子里：自述名 > 路由 spec > 缺省档",
+  },
+  {
+    id: "usage-name-of-accepts-non-string",
+    src: "src/agent/worker-model.ts",
+    test: "tests/usage-attribution.test.ts",
+    desc: "自述位不核类型 ⇒ 数字/对象被当成模型名往下传，后面 `priceForModel` 反查不到却也不出声——" +
+      "「不可知」要由空串表达，不能由一个非字符串值表达",
+    apply: (s) => s.replace('return typeof name === "string" ? name : "";', "return (name ?? \"\") as string;"),
+    expectFail: "取值只有一个入口，且优先级写在式子里：自述名 > 路由 spec > 缺省档",
+  },
+  {
     id: "orchestrator-spawned-usage-model-dropped",
     src: "src/agent/orchestrator.ts",
     test: "tests/usage-attribution.test.ts",

@@ -85,11 +85,16 @@ export interface RegistryWorkerCallOptions {
 }
 
 /** Worker/main shared transport. The optional third argument preserves the old two-argument worker API. */
-export type RegistryWorkerModel = (
+export type RegistryWorkerModel = ((
   messages: GlmMessage[],
   tools: GlmToolSpec[],
   options?: RegistryWorkerCallOptions,
-) => AsyncIterable<ModelOutput>;
+) => AsyncIterable<ModelOutput>) & {
+  /** #22：这个适配器**真拨的模型名**（取自 `spec.model`）。worker 的用量归因键与价格标签据此定档；
+   *  注入面（`modelFor`）若不带这个自述位，就会被记到 harness 缺省档上——归因与折价同一变量，
+   *  所以两者不会互相打脸，只会一起偏（这正是第 148 页点名的盲区形状）。 */
+  usageName?: string;
+};
 
 /** GlmToolSpec（openai wire）→ ProviderToolSpec（统一中立面）：照抄 glm.ts 的 unified 映射。 */
 export function toProviderTools(tools: GlmToolSpec[] | undefined): ProviderToolSpec[] | undefined {
@@ -110,7 +115,7 @@ export interface ToWorkerModelOptions {
 }
 
 /** 薄适配器：按 spec.provider 路由到对应适配器（M6 白名单）。未知 provider fail-visible 抛错。 */
-export function toWorkerModel(spec: ModelSpec, opts: ToWorkerModelOptions = {}): RegistryWorkerModel {
+function pickWorkerModel(spec: ModelSpec, opts: ToWorkerModelOptions): RegistryWorkerModel {
   const fetchImpl = opts.fetchImpl;
   switch (spec.provider) {
     case "glm":
@@ -151,4 +156,13 @@ export function toWorkerModel(spec: ModelSpec, opts: ToWorkerModelOptions = {}):
     default:
       throw new Error(`未知 provider: ${JSON.stringify(spec.provider)}（白名单：${PROVIDER_IDS.join(", ")}）`);
   }
+}
+
+/** 薄包装：**自述名的唯一盖章点**。四支 provider 适配器各写一遍 `usageName = spec.model`
+ *  就是第五族那个老形状（同一条解析只硬化一支）——今天 glm 支带了名、明天有人加分支忘了带，
+ *  错档不会报错，只会让归因和折价一起偏。 */
+export function toWorkerModel(spec: ModelSpec, opts: ToWorkerModelOptions = {}): RegistryWorkerModel {
+  const model = pickWorkerModel(spec, opts);
+  model.usageName = spec.model;
+  return model;
 }

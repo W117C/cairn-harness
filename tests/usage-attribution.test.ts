@@ -16,6 +16,8 @@ import { createUsageAttributor } from "../src/agent/usage-attribution";
 import { Orchestrator, scriptedWorkerModel, type SpawnArgs } from "../src/agent/orchestrator";
 import { budgetPriceKeyOf, mainUsageModelOf, resolveRunModel, scriptedMainModelPath } from "../src/main/agent-runner";
 import { priceForModel, spentUsdFor } from "../src/agent/orchestrator-join";
+import { DEFAULT_MODEL_TABLE, PROVIDER_IDS, toWorkerModel } from "../src/providers/registry";
+import { usageNameOf } from "../src/agent/worker-model";
 import { costOf, usageOfStream } from "../scripts/replay/run-scorecard";
 
 /** 三档真名，单价两两不同（本仓价表 flash 与 standard 差 4 倍）⇒ 混档必须改变钱数，判据才有分辨力。 */
@@ -271,6 +273,31 @@ describe("真编排器：agent_spawned 上的归因键随「拨不拨号」分�
     await second.orch.cancelAll();
   });
 
+  it("注入带自述名的模型 ⇒ 键用真名，且折价随它换档（旧实现两档注入给出同一个数）", async () => {
+    clearScripted();
+    delete process.env.M0_MODEL;
+    const named = (name: string): unknown => Object.assign(async function* () { /* 拨号替身 */ }, { usageName: name });
+    for (const name of [WORKER, DECLARED_ONLY]) {
+      const run = makeOrch(() => named(name));
+      await run.orch.spawn({ mode: "read", task: "调研 " + name } as SpawnArgs, { callId: "n-" + name });
+      expect(spawnedOf(run.events)[0]?.usage_model, name + " 这一档没落 spawned（空判）").toBe(name);
+      await run.orch.cancelAll();
+    }
+    // 只比"名字对"不够：`modelFor` 注入时 `routedSpec` 是 null，旧实现退回 `glmDefaultModelName()`，
+    // 而测试环境里 M0_MODEL 恰好可以等于那个名字 ⇒ 名字对上、档位其实错。所以必须比"两档给出两个不同的数"。
+    expect(usdOf(WORKER)).not.toEqual(usdOf(DECLARED_ONLY));
+    expect(usdOf(DECLARED_ONLY)).not.toEqual(usdOf(MAIN));
+  });
+
+  it("反向哨兵：注入方没自述 ⇒ 仍落 harness 缺省档（那一格是诚实的替身语义，不许顺手改成静默丢归因）", async () => {
+    clearScripted();
+    process.env.M0_MODEL = DECLARED_ONLY;
+    const run = makeOrch(silentRealModel);
+    await run.orch.spawn({ mode: "read", task: "调研 z.ts" } as SpawnArgs, { callId: "z1" });
+    expect(spawnedOf(run.events)[0]?.usage_model).toBe(DECLARED_ONLY);
+    await run.orch.cancelAll();
+  });
+
   it("冻结剧本 worker ⇒ 键整个缺席（demo 通道的用量一旦可定价，评估面就会把没花过的钱当真钱）", async () => {
     clearScripted();
     const { orch, events } = makeOrch(() => scriptedWorkerModel([{ type: "assistant_message", content: "## 结论\n- 完\n\n## 证据路径\n- a.ts:1\n\n## 风险\n- 低\n\n## 未决问题\n- 无" }]));
@@ -319,5 +346,29 @@ describe("接线：盖章点只有一个，且不许再抄第二份剧本枚举"
     expect(t, "spawned 不带归因键 ⇒ worker 的钱永远定不了价").toMatch(
       /\.\.\.\(usageModel !== "" \? \{ usage_model: usageModel \} : \{\}\)/);
     expect(t, "归因键回到剧本通道 ⇒ 没花的钱会被当真钱").toMatch(/let usageModel = "";\n    if \(!isScriptedModel\(model\)\) \{/);
+  });
+});
+
+// #22：注入面的自述名。归因键与价格标签吃同一个变量 ⇒ 没自述名时两者一起错档、永不互相打脸，
+// 所以这一面必须**双向**钉：带名要随名字变，没名要留在缺省档（不许改成"静默不记账"，那会让 demo 面丢键）。
+describe("自述名盖章点：toWorkerModel 一处，四个 provider 支共用", () => {
+  it("表里每一档都带自述名，且四个 provider 都被枚举到（漏一支＝那一支静默错档）", () => {
+    const seen = new Set<string>();
+    for (const spec of DEFAULT_MODEL_TABLE) {
+      seen.add(spec.provider);
+      expect(toWorkerModel(spec).usageName, spec.id + " 这一档没带自述名").toBe(spec.model);
+    }
+    expect([...seen].sort()).toEqual([...PROVIDER_IDS].sort());
+    expect(DEFAULT_MODEL_TABLE.length).toBeGreaterThan(PROVIDER_IDS.length); // 每支至少一档，别拿"表只有 4 行"糊过去
+  });
+
+  it("取值只有一个入口，且优先级写在式子里：自述名 > 路由 spec > 缺省档", () => {
+    expect(usageNameOf(Object.assign(function* () {}, { usageName: "glm-5.2-pro" }))).toBe("glm-5.2-pro");
+    expect(usageNameOf(function* () {})).toBe("");            // 没自述 ⇒ 空串，由调用方决定退哪一档
+    expect(usageNameOf(undefined)).toBe("");
+    expect(usageNameOf({ usageName: "不是函数" })).toBe("");   // 只有可调用对象才配自述
+    expect(usageNameOf(Object.assign(function* () {}, { usageName: 42 } as never))).toBe(""); // 自述位必须是字符串
+    const t = readFileSync(fileURLToPath(new URL("../src/agent/orchestrator.ts", import.meta.url)), "utf8");
+    expect(t, "编排器绕过 usageNameOf 自己 cast ⇒ 第二份尺").toMatch(/usageModel = usageNameOf\(model\) \|\| routedSpec\?\.model \|\| glmDefaultModelName\(\);/);
   });
 });

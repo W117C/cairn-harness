@@ -8,6 +8,10 @@ export type WorkerModel = ((messages: GlmMessage[], tools: GlmToolSpec[]) => Asy
   /** W3②：「这一路不拨号、不付钱」的自述标记。只有 `scriptedWorkerModel` 打它——
    *  编排器的价格标签据此缺席（demo/checks 的冻结剧本若也报 $x，就是拿 0 用量冒充实付）。 */
   scripted?: true;
+  /** #22：这一路**真拨的模型名**。注入面（`modelFor`）与 `toWorkerModel` 带它；
+   *  缺这个位时编排器退回 harness 缺省档——所以"注入了另一个模型却没自述"会静默错档，
+   *  归因与折价同一个变量，因此不会互相打脸（见 `usageNameOf` 的取值顺序）。 */
+  usageName?: string;
 };
 
 /** 缺省 worker 模型：GLM 会话型（模型侧自持上下文口径与 sidechat/M2c-2 一致）。 */
@@ -29,6 +33,15 @@ export function scriptedWorkerModel(script: ModelOutput[], capture?: GlmMessage[
  *  在 union 上直接取 `.scripted` 编译不过，写 cast 的那两处以后会各漂一份。 */
 export function isScriptedModel(model: unknown): boolean {
   return typeof model === "function" && (model as WorkerModel).scripted === true;
+}
+
+/** 这一路模型自述的**真名**（没有则空串，交给调用方决定退回哪一档）。
+ *  收在函数里与 `isScriptedModel` 同因：`WorkerModel` 与 `RegistryWorkerModel` 是两个类型，
+ *  在 union 上直接取 `.usageName` 编译不过，让调用方各写一次 cast 就会各漂一份。 */
+export function usageNameOf(model: unknown): string {
+  if (typeof model !== "function") return "";
+  const name = (model as WorkerModel).usageName;
+  return typeof name === "string" ? name : "";
 }
 
 /** 从 fixture JSONL 加载 worker 剧本（fixtures/agents/**，惰性单次读盘）。 */
