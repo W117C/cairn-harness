@@ -317,18 +317,14 @@ export function findMissingExports(
 // ---- 存量豁免（只准带理由；不再命中即 stale 红） ----------------------------
 
 /** 形状照 `docs-check` 的 `LEGACY_WAIVERS`。 */
-export const HEAD_DANGLING_WAIVERS: Readonly<Record<string, string>> = {
-  "src/main/provider-runtime.ts": "第 131 页：`cb70297` 提交了消费者没提交新文件；等作者补 add（盘上有）",
-  "src/main/run-request.ts": "第 131 页：同上（盘上有）",
-  "src/main/run-attachments.ts": "第 131 页：同上（盘上有）",
-  "src/providers/capabilities.ts": "第 131 页：同上（盘上有）",
-};
+// 两张存量表都已清空：`14d2736` 把第 131 页那 4 个模块（provider-runtime / run-request /
+// run-attachments / capabilities）和 `834ba3a` 欠的 `SessionTransport` 一并入库了，豁免逐条不再命中。
+// 空表不是"没检查"——`checkDanglingImports` 仍要求每个悬空都在表里（新增即红），
+// `checkMissingSymbols` 仍要求每个缺失符号都在表里；表空时任何新悬空/新缺失都会当场红。
+export const HEAD_DANGLING_WAIVERS: Readonly<Record<string, string>> = {};
 
-/** 符号那一半的存量（键＝`文件:符号`）。今天这条就是第 131 页那笔的剩余根因：
- *  消费者入库了，`SessionTransport` 这个导出还留在别人未提交的那份 `glm-session.ts` 里。 */
-export const HEAD_MISSING_SYMBOL_WAIVERS: Readonly<Record<string, string>> = {
-  "src/agent/glm-session.ts:SessionTransport": "第 131/134 页：`834ba3a` 提交了引用它的 agent-runner，导出本身未入库；等作者补那一笔",
-};
+/** 符号那一半的存量（键＝`文件:符号`）。同样随 `14d2736` 清空。 */
+export const HEAD_MISSING_SYMBOL_WAIVERS: Readonly<Record<string, string>> = {};
 
 export interface HeadImportFinding {
   kind: "dangling" | "missing-symbol" | "stale-waiver";
