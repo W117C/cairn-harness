@@ -7621,6 +7621,108 @@ const MUTATIONS = [
     ),
     expectFail: "接线：main() 真的调它、非空就 exit 2（只写纯函数不接＝没有闸）",
   },
+  // ── 第 161 页 · 认证树的锁：占不到就不动树（任务 #29）
+  // 这一组的判卷**真跑子进程**（`--tree=/dev/null/…` 那棵必然建不起来），所以前四条的"杀死"来自行为而不是文字：
+  // 拒跑那一支被拆掉后，输出里会出现 `worktree add exit=`＝它已经动过树了。
+  {
+    id: "cert-lock-held-not-refused",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "读到「别人活着占着」却不拒 ⇒ 照旧切树：这把锁退回第 155/160 页那格「事后才发现撞窗」的读数，共享写点还是没人守",
+    apply: (s) => s.replace(
+      'if (decision.kind === "held") {',
+      'if (decision.kind === "held" && false) {',
+    ),
+    expectFail: "锁被活人占着 ⇒ exit 2、点名是谁、**没走到切树**，并且不替别人删锁",
+  },
+  {
+    id: "cert-lock-unreadable-silently-overwritten",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "读不出的锁被当「没人占」覆盖（第三态被吞）⇒ 正有人用时一把抢走，而且抢的痕迹只剩一行日志",
+    apply: (s) => s.replace(
+      'if (decision.kind === "unreadable") {',
+      'if (decision.kind === "unreadable" && false) {',
+    ),
+    expectFail: "锁文件读不出 ⇒ exit 2 且点名锁文件路径（不覆盖、不死等，也不落到切树之后）",
+  },
+  {
+    id: "cert-lock-stale-not-unlinked",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "判定可回收却不先摘旧锁 ⇒ 下面那次 `link` 必 EEXIST：崩溃残留永远回收不了，而报错写的是「被别人占走」＝把自己的坑说成别人的（09-27 现跑第一次就撞在这格）",
+    apply: (s) => s.replace(
+      "try { unlinkSync(LOCK_PATH); } catch { /* 别人先摘了也算回收成功 */ }",
+      "// 摘旧锁这一步被删了",
+    ),
+    expectFail: "陈旧锁（pid 已死）⇒ 出声回收并**继续**：不先摘旧锁，抢占那次 link 必 EEXIST＝陈旧锁永远回收不了",
+  },
+  {
+    id: "cert-lock-reclaim-branch-silent",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "回收那一支整支不认（既不印原因也不摘锁）⇒ 自愈还在、读的人却不知道锁被换过手，出事后无从回溯是谁摘的",
+    apply: (s) => s.replace(
+      'if (decision.kind === "reclaim") {',
+      'if (decision.kind === "reclaim" && false) {',
+    ),
+    expectFail: "陈旧锁（pid 已死）⇒ 出声回收并**继续**：不先摘旧锁，抢占那次 link 必 EEXIST＝陈旧锁永远回收不了",
+  },
+  {
+    id: "cert-lock-alive-always-true",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "探活写成「永远活着」⇒ 崩溃残留要等满 30 分钟的帽才回收；一次崩溃之后这道门连续红半小时，而下一个人只会去删文件、不会知道锁在骗人",
+    apply: (s) => s.replace(
+      "selfPid: process.pid, alive: pidAlive });",
+      "selfPid: process.pid, alive: () => true });",
+    ),
+    expectFail: "接线形状：先占锁再切树、探活是真的、抢占用 link 而不是会替换的 rename",
+  },
+  {
+    id: "cert-lock-release-not-by-identity",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "放锁不认身份（这里换成一个不存在的 pid＝只放别人的不放自己的）⇒ 残留累积成「每次都要先删锁」，而这道门的自愈一旦靠帽，撞窗保护就整段失效（同 `mutate-verify` 的备份身份复核那条纪律）",
+    apply: (s) => s.replace(
+      "if (shouldReleaseLock(now, process.pid)) {",
+      "if (shouldReleaseLock(now, 999_999)) {",
+    ),
+    expectFail: "反向哨兵：没有锁文件 ⇒ 不许以「锁面不存在」为由拒跑，照常走到切树那一步",
+  },
+  {
+    id: "cert-lock-cell-not-printed",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "占到锁这件事不印进汇总 ⇒ 凭证里看不出这次是独占还是抢来的（规则 211/231：读数要印出来，藏在日志里等于没有）",
+    apply: (s) => s.replace(
+      "认证树锁=${lockCell}",
+      "锁=未印",
+    ),
+    expectFail: "接线形状：先占锁再切树、探活是真的、抢占用 link 而不是会替换的 rename",
+  },
+  {
+    id: "cert-lock-path-segments-swapped",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "拼锁路径时把 common dir 与目录名调换 ⇒ 路径看着还行、实际落在 `<root>/dsh-cert-locks/.git/…`，每次都在新建的目录里「独占」，别人永远看不见（与 `join` 拼绝对 common dir 同一格：接线读的是错位置）",
+    apply: (s) => s.replace(
+      'return resolve(root, common, LOCK_DIR_NAME, leaf + ".lock");',
+      'return resolve(root, LOCK_DIR_NAME, common, leaf + ".lock");',
+    ),
+    expectFail: "锁路径：相对 .git 与 linked worktree 的绝对 common dir 必须各自落在**它自己**那一份上",
+  },
+  {
+    id: "cert-lock-pid-zero-accepted",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "只核 typeof pid 是不是数字、不核正负 ⇒ pid 0 也被当持有者：探活对 0 恒真（POSIX 里那是「发信号给整个进程组」），一把坏锁能把这道门永久钉死",
+    apply: (s) => s.replace(
+      'if (typeof o.pid !== "number" || !Number.isInteger(o.pid) || o.pid <= 0) return null;',
+      'if (typeof o.pid !== "number" || !Number.isInteger(o.pid)) return null;',
+    ),
+    expectFail: "parseCertLock 不许猜 pid：缺字段／pid 不是正整数一律 null（猜出来的 pid 会把活人的锁抢走）",
+  },
   // ── 第 160 页 · 「能派不可撤」要在派活之前说出口（任务 #5）
   {
     id: "strands-predicate-ignores-visible-side",

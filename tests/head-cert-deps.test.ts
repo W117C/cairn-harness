@@ -2,11 +2,11 @@
  *  纯函数层：`declaredDeps` / `installedDeps` / `missingDeclaredDeps` / `certLevel`（第 119 页加的等级）
  *  / `readInvalidated`（第 149 页：这道门进了默认门表，共享树上的写点要有人复核）。 */
 import { spawnSync, execFileSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, headGateTableIntegrity, installedDeps, missingDeclaredDeps, readInvalidated, unknownCertArgs } from "../scripts/lib/head-cert-deps";
+import { certLevel, certLockPath, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, decideCertLock, depDirs, headGateTableIntegrity, installedDeps, missingDeclaredDeps, parseCertLock, readInvalidated, shouldReleaseLock, unknownCertArgs, CERT_LOCK_MAX_AGE_MS } from "../scripts/lib/head-cert-deps";
 
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 const listWorktrees = (cwd: string): string[] =>
@@ -464,5 +464,179 @@ describe("接线：认证流程真的两端各采一次，且这格进得了汇�
     const exitLine = src.split("\n").find((l) => l.startsWith("process.exit(")) ?? "";
     expect(exitLine).toContain("drift === null");
     expect(exitLine, "把并发接进退出码＝这道门从此看别人脸色").not.toMatch(/ps(Before|After)/);
+  });
+});
+
+/* 任务 #29：认证一棵树是在**共享写点**上落刀。`package.json` 的 `head-cert-check` 把 `--tree` 写死成
+   `.worktrees/gate-head-cert`，而手跑时的默认名带着提交号 ⇒ 两个会话认证同一个 HEAD 会算出同一个树名，
+   谁后跑谁替前者 `checkout --detach`：前者打出来的每一条读数其实是别人那笔的。
+   第 155/160 页两次撞窗都是这个形状——上一轮只补了"事后有一格 ps 读数"，这次修成"事前占不到就不动树"。 */
+describe("认证树的锁：谁能占这棵树（谓词）", () => {
+  const NOW = 1_800_000_000_000;
+  const mine = 1000;
+  const lock = (over: Record<string, unknown> = {}): string =>
+    JSON.stringify({ pid: 4242, target: "a".repeat(40), tree: ".worktrees/gate-head-cert", startedAt: NOW, ...over });
+  const decide = (text: string | null, alive: (pid: number) => boolean = () => true) =>
+    decideCertLock({ path: "/repo/.git/dsh-cert-locks/x.lock", text, now: NOW, selfPid: mine, alive });
+
+  it("没有锁文件 ⇒ free（反向哨兵：这道门**不许**依赖锁文件存在）", () => {
+    expect(decide(null).kind).toBe("free");
+    expect(decide(""), "空文件＝还没人写过，不是坏 JSON").not.toBeNull();
+  });
+
+  it("别人活着占着 ⇒ held，且 reason 点名 pid（不点名，读的人不知道该等谁）", () => {
+    const d = decide(lock());
+    expect(d.kind).toBe("held");
+    if (d.kind === "held") {
+      expect(d.by.pid).toBe(4242);
+      expect(d.reason).toContain("4242");
+    }
+  });
+
+  it("持有者 pid 已死 ⇒ reclaim：崩溃残留要能自愈，不能等人来删", () => {
+    expect(decide(lock(), () => false).kind).toBe("reclaim");
+  });
+
+  it("pid 就是本进程 ⇒ reclaim（上一次留下的不许把自己锁死）", () => {
+    expect(decide(lock({ pid: mine }), () => true).kind).toBe("reclaim");
+  });
+
+  it("超过帽才回收，差一秒不算：帽的边界不许靠感觉（活人跑长一点就被抢＝假自愈）", () => {
+    const stale = decide(lock({ startedAt: NOW - CERT_LOCK_MAX_AGE_MS - 1 }));
+    expect(stale.kind).toBe("reclaim");
+    if (stale.kind === "reclaim") expect(stale.reason).toContain("分钟");
+    expect(decide(lock({ startedAt: NOW - CERT_LOCK_MAX_AGE_MS + 5_000 })).kind, "没超帽就回收＝帽等于没有").toBe("held");
+  });
+
+  it("锁文件读不出 ⇒ 第三态：既不当「没人占」覆盖，也不当「有人占」死等，并且点名是哪个文件", () => {
+    const d = decide("{pid:");
+    expect(d.kind).toBe("unreadable");
+    if (d.kind === "unreadable") expect(d.path).toContain("x.lock");
+  });
+
+  it("parseCertLock 不许猜 pid：缺字段／pid 不是正整数一律 null（猜出来的 pid 会把活人的锁抢走）", () => {
+    expect(parseCertLock(null)).toBeNull();
+    expect(parseCertLock('{"pid":"4242","target":"t","tree":"x","startedAt":1}')).toBeNull();
+    expect(parseCertLock('{"pid":0,"target":"t","tree":"x","startedAt":1}')).toBeNull();
+    expect(parseCertLock('{"pid":4242,"tree":"x","startedAt":1}')).toBeNull();
+    expect(parseCertLock(lock())?.pid).toBe(4242);
+  });
+
+  it("放锁要认身份：只有自己的锁才删（不看身份就 unlink＝抹掉别人的在飞锁）", () => {
+    expect(shouldReleaseLock(lock({ pid: mine }), mine)).toBe(true);
+    expect(shouldReleaseLock(lock({ pid: 4242 }), mine)).toBe(false);
+    expect(shouldReleaseLock("{pid:", mine)).toBe(false);
+    expect(shouldReleaseLock(null, mine)).toBe(false);
+  });
+
+  it("锁路径：相对 .git 与 linked worktree 的绝对 common dir 必须各自落在**它自己**那一份上", () => {
+    // 主 worktree：git 给相对 `.git`；linked worktree：git 给**绝对路径**。用 join 拼绝对路径会把 root
+    // 接在前面（`<root>//abs/.git`）⇒ 每棵树各算一份锁面，锁看着在工作、别人永远看不见。
+    expect(certLockPath(".git", "/repo", ".worktrees/gate-head-cert")).toBe("/repo/.git/dsh-cert-locks/gate-head-cert.lock");
+    expect(certLockPath("/main/.git", "/repo/wt", ".worktrees/gate-head-cert")).toBe("/main/.git/dsh-cert-locks/gate-head-cert.lock");
+    expect(certLockPath("  .git\n", "/repo", ".worktrees/x")).toBe("/repo/.git/dsh-cert-locks/x.lock");
+  });
+
+  it("树名可来自 --tree=：只取末段并剥掉不安全字符，穿越写法不许把锁写到仓外", () => {
+    const p = certLockPath(".git", "/repo", "../../etc/evil") ?? "";
+    expect(p).toBe("/repo/.git/dsh-cert-locks/evil.lock");
+    expect(p.startsWith("/repo/.git/")).toBe(true);
+    expect(certLockPath("", "/repo", ".worktrees/x")).toBeNull();
+    expect(certLockPath(".git", "/repo", ".worktrees/..")).toBeNull();
+  });
+});
+
+describe("接线：真跑 head-cert——占不到锁就不许动树", () => {
+  // 这棵树名必然建不起来（`/dev/null` 下面开不出目录）⇒ 判卷能证明"走到了切树那一步"，又不会留下 worktree。
+  const WITNESS_TREE = "/dev/null/dsh-lock-witness";
+  // 路径**另算一份**（不复用 certLockPath）：拿被测函数算被测函数读的路径＝那条断言没有观测者。
+  // 这里问 git 要 common dir（在 linked worktree 里 `.git` 是个文件，写死 `repoRoot/.git` 会把判卷自己搞崩），
+  // 而实现若退回 `join(root, common)`，两边算出的位置在认证树里就会分叉 ⇒ 下面"被占用"那条当场红。
+  const gitCommon = execFileSync("git", ["rev-parse", "--git-common-dir"], { cwd: repoRoot, encoding: "utf8" }).trim();
+  const LOCK_AT = join(resolve(repoRoot, gitCommon), "dsh-cert-locks", "dsh-lock-witness.lock");
+  const runCert = (): { status: number | null; out: string } => {
+    const r = spawnSync(process.execPath, ["--import", "tsx", "scripts/head-cert.ts",
+      "--at=HEAD", "--tree=" + WITNESS_TREE, "--skip-test", "--why=判卷：只看锁那一支"], { cwd: repoRoot, encoding: "utf8" });
+    return { status: r.status, out: (r.stdout ?? "") + (r.stderr ?? "") };
+  };
+  const heldBy = (pid: number, startedAt: number): void => {
+    mkdirSync(dirname(LOCK_AT), { recursive: true });
+    writeFileSync(LOCK_AT, JSON.stringify({ pid, target: "b".repeat(40), tree: WITNESS_TREE, startedAt }));
+  };
+  const clearLock = (): void => { try { unlinkSync(LOCK_AT); } catch { /* 本来就没有 */ } };
+
+  it("锁被活人占着 ⇒ exit 2、点名是谁、**没走到切树**，并且不替别人删锁", () => {
+    clearLock();
+    heldBy(process.pid, Date.now());
+    try {
+      const { status, out } = runCert();
+      expect(status).toBe(2);
+      expect(out).toContain(String(process.pid));
+      expect(out, "抱怨之前先动了树 ⇒ 这句话只是给已经发生的破坏补个说明").not.toContain("worktree add exit=");
+      expect(existsSync(LOCK_AT), "拒跑的那一支把别人的锁删了＝一次自愈抹掉别人的在飞锁").toBe(true);
+    } finally {
+      clearLock();
+    }
+  });
+
+  it("反向哨兵：没有锁文件 ⇒ 不许以「锁面不存在」为由拒跑，照常走到切树那一步", () => {
+    clearLock();
+    try {
+      const { out } = runCert();
+      expect(out, "锁面为空就停 ⇒ 这道门从依赖别人写的文件里长出来，第一次跑必红").not.toContain("正被占用");
+      expect(out).toContain("worktree add exit=");
+      expect(existsSync(LOCK_AT), "跑完没放锁 ⇒ 下一次只能靠 30 分钟的帽自愈").toBe(false);
+    } finally {
+      clearLock();
+    }
+  });
+
+  it("陈旧锁（pid 已死）⇒ 出声回收并**继续**：不先摘旧锁，抢占那次 link 必 EEXIST＝陈旧锁永远回收不了", () => {
+    clearLock();
+    heldBy(999_999, Date.now()); // pid 探不到活人：这条在真机上由 `process.kill(pid, 0)` 判
+    try {
+      const { out } = runCert();
+      expect(out).toContain("回收");
+      expect(out).toContain("worktree add exit=");
+    } finally {
+      clearLock();
+    }
+  });
+
+  it("锁文件读不出 ⇒ exit 2 且点名锁文件路径（不覆盖、不死等，也不落到切树之后）", () => {
+    clearLock();
+    mkdirSync(dirname(LOCK_AT), { recursive: true });
+    writeFileSync(LOCK_AT, "{pid:");
+    try {
+      const { status, out } = runCert();
+      expect(status).toBe(2);
+      expect(out).toContain("dsh-lock-witness.lock");
+      expect(out).not.toContain("worktree add exit=");
+    } finally {
+      clearLock();
+    }
+  });
+
+  it("接线形状：先占锁再切树、探活是真的、抢占用 link 而不是会替换的 rename", () => {
+    const src = readFileSync(join(repoRoot, "scripts", "head-cert.ts"), "utf8");
+    const claim = src.indexOf("const decision = decideCertLock({");
+    const checkout = src.indexOf('"worktree", "add"');
+    expect(claim, "整支占锁没接上 ⇒ decideCertLock 是个没人调的纯函数").toBeGreaterThan(-1);
+    expect(checkout).toBeGreaterThan(claim);
+    expect(src).toContain("selfPid: process.pid");
+    expect(src).toContain("alive: pidAlive");
+    expect(src, "探活写成 () => true ⇒ 崩溃残留的锁要等 30 分钟才回收得到").toContain("process.kill(pid, 0)");
+    expect(src, "rename 会**替换**别人的锁：两个同时启动的进程各自都以为占到了").not.toContain("renameSync(tmp, LOCK_PATH)");
+    expect(src).toContain("linkSync(tmp, LOCK_PATH)");
+    expect(src).toContain("if (shouldReleaseLock(now, process.pid))");
+    expect(src).toContain("认证树锁=${lockCell}");
+  });
+
+  it("三态不许互相冒充：free 那一支永远不 exit，未取到锁面只出声不停门", () => {
+    const src = readFileSync(join(repoRoot, "scripts", "head-cert.ts"), "utf8");
+    const block = src.slice(src.indexOf("/* ⓪ 占锁"), src.indexOf("// ① 切树"));
+    expect(block.length).toBeGreaterThan(0);
+    expect(/"free"[\s\S]{0,160}process\.exit/.test(block), "把 free 也 exit＝这道门依赖锁文件存在").toBe(false);
+    expect(block).toContain("锁面未取");
   });
 });
