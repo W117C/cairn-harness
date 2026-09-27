@@ -7332,6 +7332,57 @@ const MUTATIONS = [
     ),
     expectFail: "注入真拨模型 ⇒ 落 glmDefaultModelName 那一档，且跟着 M0_MODEL 走（不是写死的名字）",
   },
+
+  // ── 第 149 页 · head-cert 进默认门表：共享树上多一个写点，收尾复核是它的前提
+  {
+    id: "head-cert-drift-check-call-dropped",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "复核调用被换成恒不漂 ⇒ 树在中途被别的会话/别的门切走时，这道门照样把旧树的读数当本次认证打印（切树时那次核不到这 90 秒）",
+    apply: (s) => s.replace(
+      "const drift = readInvalidated(afterRev.status === 0 ? afterRev.out : null, TARGET);",
+      "const drift: string | null = null;",
+    ),
+    expectFail: "复核的对象是**跑完之后**那棵树的 rev，比的是被认证的那一笔（钉整条调用，不只钉函数名）",
+  },
+  {
+    id: "head-cert-drift-not-in-exit-code",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "只在汇总里印一行、不进退出码 ⇒ 进了门表也永远不会因为树被切走而红（「出声」不等于「闸住」，规则 210 那一族）",
+    apply: (s) => s.replace(
+      "dirtyCount === 0 && drift === null ? 0 : 1",
+      "dirtyCount === 0 ? 0 : 1",
+    ),
+    expectFail: "作废必须改退出码：只印一行而门照绿 ⇒ 这道门永远不会因为树被切走而红",
+  },
+  {
+    id: "read-invalidated-missing-rev-reads-clean",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "复核本身跑不起来（git 读不到那棵树）被读成「没漂」⇒ 把「没量到」记成「量过且没问题」（规则 92 三态里最贵的那一格）",
+    apply: (s) => s.replace(
+      '  if (afterRev === null) return "收尾复核没跑起来（git 读不到那棵树）⇒ 本次读数不可归因于代码，也不能算已认证";',
+      "  if (afterRev === null) return null;",
+    ),
+    expectFail: "复核本身没跑起来（git 读不到那棵树）⇒ 同样不算通过（「没量到」不许读成「量过且没问题」）",
+  },
+  {
+    id: "read-invalidated-drops-trim",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "不 trim 直接比 ⇒ `git rev-parse` 的行尾换行让每一次都「漂」，一道天天假红的门会被关掉而不是被修（假红的代价由下一个读数的人付）",
+    apply: (s) => s.replace("  const got = afterRev.trim();", "  const got = afterRev;"),
+    expectFail: "跑完还在同一笔 ⇒ 不作废（尾部换行是 git 的常态，要 trim）",
+  },
+  {
+    id: "gate-manifest-head-cert-unregistered",
+    src: "scripts/gate-manifest.ts",
+    test: "tests/gate-manifest.test.ts",
+    desc: "脚本在 package.json 里而门表没登记 ⇒ 认证 HEAD 变成一条从不运行的门（provider:check 那个历史实例的同一形状，正由本文件的 orphan 护栏兜住）",
+    apply: (s) => s.replace('  "head-cert-check",\n', ""),
+    expectFail: "登记面：head-cert-check 进了门表，且用的是**门自己那棵**认证树（任务 #4）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

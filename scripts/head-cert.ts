@@ -10,14 +10,16 @@
  *
  * 用法：`node --import tsx scripts/head-cert.ts [--at=HEAD] [--tree=.worktrees/head-cert] [--skip-test --why=<文本>] [--no-borrow]`
  *   · `--skip-test` 必须配 `--why`，否则 exit 2：它只跑 typecheck，**不构成"这棵树全量绿"**（见 `certLevel` 的理由）。
- * 退出码：0＝所跑的每条门都绿（等级见汇总里的「认证等级」）；1＝有红（读数照常打印）；2＝连认证的前置都不成立
+ * 退出码：0＝所跑的每条门都绿**且**跑完之后那棵树还在同一笔上（等级见汇总里的「认证等级」）；
+ *   1＝有红，或收尾复核发现树被切走（后者是"读数作废"，不是"HEAD 红"——汇总里会点名）；
+ *   2＝连认证的前置都不成立
  *   （切树失败 / 取不到 package.json / `--skip-test` 没写 `--why`）。
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { certLevel, declaredDeps, depDirs, headGateTableIntegrity, missingDeclaredDeps } from "./lib/head-cert-deps";
+import { certLevel, declaredDeps, depDirs, headGateTableIntegrity, missingDeclaredDeps, readInvalidated } from "./lib/head-cert-deps";
 import { checkHeadImportFace, collectHeadEdges, findDanglingImports } from "./head-import-face";
 
 const argv = process.argv.slice(2);
@@ -199,8 +201,13 @@ if (!flag("skip-test")) {
   summary = `Test Files ${files}｜Tests ${tests}｜exit=${String(testStatus)}（退出码直接取，不接管道）`;
 }
 say("\n== 认证汇总 ==");
-say(`  TREE=${TARGET.slice(0, 7)} DIRTY_JUDGED=${String(dirtyCount)} 依赖完整=${certifiable ? "是" : "否（缺 " + missing.join("、") + "）"}`);
+// 收尾复核：切树时核过一次，但那一次管不到判卷这 90 秒——同一棵认证树可以被别的会话/别的门中途切走，
+// 那时候打出来的绿/红都不是这一笔的。读数作废是第三种态：既不算 HEAD 红，也不算已认证（规则 92）。
+const afterRev = run(TREE, "git", ["rev-parse", "HEAD"]);
+const drift = readInvalidated(afterRev.status === 0 ? afterRev.out : null, TARGET);
+if (drift !== null) say(`❌ ${drift}`);
+say(`  TREE=${TARGET.slice(0, 7)} DIRTY_JUDGED=${String(dirtyCount)} 依赖完整=${certifiable ? "是" : "否（缺 " + missing.join("、") + "）"} 收尾复核=${drift === null ? "同一笔" : "作废"}`);
 say(`  ${summary}`);
 say(`  逐条日志：${logDir}`);
 say(`  回收这棵树（规则 120，别留残留）：git worktree remove --force ${TREE}`);
-process.exit(certifiable && tc.status === 0 && (testStatus === null || testStatus === 0) && dirtyCount === 0 ? 0 : 1);
+process.exit(certifiable && tc.status === 0 && (testStatus === null || testStatus === 0) && dirtyCount === 0 && drift === null ? 0 : 1);

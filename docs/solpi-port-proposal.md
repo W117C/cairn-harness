@@ -332,7 +332,7 @@ SoL-Pi 的四个机制里，**三个是给我们已有规格补接线**（回取
 | opt-in 开关先例（缺省 false = 零行为）| `src/main/settings.ts:48,68,124,155`；反向断言 `scripts/routing-check.ts:184-195` |
 | 靶场：fork@event + score + 基线回退线（成功率降 >2% / token 升 >5%）；明卷 token 是剧本纯函数 | `scripts/gym-run.ts:69-71,87-103,119-121`、`src/agent/gym/runner.ts:35-49,94-95` |
 | 冻结判卷 28 项 | `scripts/frozen-sha256.json` |
-| 门禁清单 26 道 + 漂移四违规 + 恒真/析取体检 | `scripts/gate-manifest.ts:12-39,44,50-60`、`scripts/assertion-health.ts:8,18,28-45,68-105` |
+| 门禁清单（道数以 `GATES` 现读为准，写死数字第二天就漂）＋ 漂移四违规 ＋ 恒真/析取体检 | `scripts/gate-manifest.ts`（`GATES`、`ACCEPTANCE_SHAPE`、`checkGateManifest`）、`scripts/assertion-health.ts` |
 | 压缩卡 payload | `src/agent/compaction.ts:614`、`src/renderer/cards/compaction-card.tsx` |
 | 规格授权面 | `agent-plan.md` §5.4:480-482（写后 lint）、§6.2:548-555（整形表）、§7.3-7.4:649-724（压缩/prune 定稿）、§7.7:744-753（不做清单） |
 

@@ -113,3 +113,15 @@ export function depDirs(list: (rel: string) => { name: string; dir: boolean }[],
   walk("", 0);
   return out;
 }
+
+/** 收尾复核：跑完之后那棵树还在不在**同一笔**上。
+ *  为什么单独抽出来：认证树是共享目录里的一棵树，另一个会话（或另一条门）可以在判卷跑到一半时
+ *  把它 `checkout` 走——切树时我核过 rev，但**那一次复核管不到这 90 秒里发生的事**。
+ *  读数作废与判卷有红是两件事：这里不许把它算成"HEAD 红了"（假红），也不许当"绿"放过（假绿），
+ *  只能是第三种：这一把尺没量到东西（规则 92 的三态）。 */
+export function readInvalidated(afterRev: string | null, target: string): string | null {
+  if (afterRev === null) return "收尾复核没跑起来（git 读不到那棵树）⇒ 本次读数不可归因于代码，也不能算已认证";
+  const got = afterRev.trim();
+  if (got === target) return null;
+  return `跑完复核：那棵树现在是 ${got.slice(0, 7)}，认证目标是 ${target.slice(0, 7)} ⇒ 中途被切走，本次读数作废（谁在用同一棵树？）`;
+}

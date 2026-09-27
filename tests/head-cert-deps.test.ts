@@ -1,11 +1,12 @@
 /** 认证一棵树之前的那道前置检查（第 84 页：我两次把**环境假红**读成代码红）。
- *  纯函数层：`declaredDeps` / `installedDeps` / `missingDeclaredDeps` / `certLevel`（第 119 页加的等级）。 */
+ *  纯函数层：`declaredDeps` / `installedDeps` / `missingDeclaredDeps` / `certLevel`（第 119 页加的等级）
+ *  / `readInvalidated`（第 149 页：这道门进了默认门表，共享树上的写点要有人复核）。 */
 import { spawnSync, execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { certLevel, declaredDeps, depDirs, headGateTableIntegrity, installedDeps, missingDeclaredDeps } from "../scripts/lib/head-cert-deps";
+import { certLevel, declaredDeps, depDirs, headGateTableIntegrity, installedDeps, missingDeclaredDeps, readInvalidated } from "../scripts/lib/head-cert-deps";
 
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 const listWorktrees = (cwd: string): string[] =>
@@ -287,5 +288,53 @@ describe("depDirs：一棵树里需要各自装依赖的目录", () => {
     expect(src, "补不齐不出声 ⇒ 下一条读数又会把环境红算成代码红").toContain("不可归因于代码");
     // 反向：根那份的取料不许被子仓库这一层取代（两半都要在）
     expect(src, "根 node_modules 那一半被顺手摘了").toContain('run(MAIN, "cp", ["-al", join(MAIN, "node_modules"), nm])');
+  });
+});
+
+/* 第 149 页：`head-cert-check` 进默认门表 ⇒ 认证树从"我手动跑一次"变成"每次跑门都要动一次"。
+   共享树上多一个写点，就必须回答：判卷那 90 秒里，这棵树还在不在**同一笔**上？
+   （切树时核过一次 rev，但那一次管不到中途——别的会话/别的门可以把它 checkout 走。） */
+describe("readInvalidated：收尾复核（读数作废是第三态，既不是红也不是绿）", () => {
+  const T = "a".repeat(40);
+  const OTHER = "b".repeat(40);
+
+  it("跑完还在同一笔 ⇒ 不作废（尾部换行是 git 的常态，要 trim）", () => {
+    expect(readInvalidated(T + "\n", T)).toBeNull();
+  });
+
+  it("中途被切走 ⇒ 点名两边，并且**不说成「HEAD 红」**（假红会把人送去查代码）", () => {
+    const r = readInvalidated(OTHER, T);
+    expect(r).not.toBeNull();
+    expect(r).toContain("作废");
+    expect(r, "把读数作废写成红 ⇒ 归因方向错到人身上").not.toContain("红");
+    expect(r).toContain(OTHER.slice(0, 7));
+    expect(r).toContain(T.slice(0, 7));
+  });
+
+  it("复核本身没跑起来（git 读不到那棵树）⇒ 同样不算通过（「没量到」不许读成「量过且没问题」）", () => {
+    const r = readInvalidated(null, T);
+    expect(r).not.toBeNull();
+    expect(r).toContain("读不到");
+  });
+});
+
+describe("接线：认证流程真的做收尾复核，且它进得了退出码", () => {
+  const src = readFileSync(join(repoRoot, "scripts", "head-cert.ts"), "utf8");
+
+  it("复核的对象是**跑完之后**那棵树的 rev，比的是被认证的那一笔（钉整条调用，不只钉函数名）", () => {
+    expect(src, "复核调用没接上 ⇒ readInvalidated 是个没人调的纯函数").toContain(
+      'const drift = readInvalidated(afterRev.status === 0 ? afterRev.out : null, TARGET);');
+    expect(src, "复核取的是切树时那份 rev（恒等，等于没复核）").toContain('run(TREE, "git", ["rev-parse", "HEAD"])');
+  });
+
+  it("作废必须改退出码：只印一行而门照绿 ⇒ 这道门永远不会因为树被切走而红", () => {
+    expect(src).toContain("dirtyCount === 0 && drift === null ? 0 : 1");
+  });
+
+  it("复核发生在判卷之后（切树时那次管不到这 90 秒）", () => {
+    const suite = src.indexOf("vitest.mjs");
+    const check = src.indexOf('const drift = readInvalidated(');
+    expect(suite).toBeGreaterThan(-1);
+    expect(check, "复核被挪到判卷之前 ⇒ 又变成切树时那次，白加").toBeGreaterThan(suite);
   });
 });

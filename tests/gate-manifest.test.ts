@@ -63,6 +63,19 @@ describe("checkGateManifest：三张表的一致性护栏", () => {
     expect(Object.keys(EXEMPT_SCRIPTS)).toEqual([]);
   });
 
+  it("登记面：head-cert-check 进了门表，且用的是**门自己那棵**认证树（任务 #4）", () => {
+    const i = GATES.indexOf("head-cert-check");
+    expect(i, "没登记进门表 ⇒ 认证 HEAD 又变成「没人跑的脚本」").toBeGreaterThan(-1);
+    const cmd = pkg.scripts["head-cert-check"] ?? "";
+    expect(cmd).toContain("scripts/head-cert.ts");
+    // 树名必须点名：head-cert 的缺省树名带提交号，但门会反复跑 ⇒ 通用名会撞上别的会话正在用的树
+    expect(cmd, "门不许去 checkout 一个通用名/别人在用的树").toContain("--tree=.worktrees/gate-head-cert");
+    // 排在昂贵的 mutate-verify 之前：HEAD 本来就红这件事，要在花 17 分钟跑变异之前先说出来
+    expect(i).toBeLessThan(GATES.indexOf("mutate-verify"));
+    // 反向：这道门自己不能被豁免掉（豁免表今天仍为空）
+    expect(Object.keys(EXEMPT_SCRIPTS)).not.toContain("head-cert-check");
+  });
+
   it("登记面：head-import-check 进了门表，且命令就是那把 0.26s 的尺（任务 #12）", () => {
     const i = GATES.indexOf("head-import-check");
     expect(i, "没登记进门表 ⇒ 这把尺又是一条从不运行的门").toBeGreaterThan(-1);

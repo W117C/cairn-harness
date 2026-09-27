@@ -38,6 +38,12 @@ export const GATES: readonly string[] = [
   // 第 146 页登记：0.26s 的一把尺，量的正是「消费者入库了新文件没入库」这一格——
   // 那一格从第 131 页起让认证树连续多笔读不到东西（167 条格子量不出来），而默认门表里没人问它。
   "head-import-check",
+  // 第 149 页登记（任务 #4 结案）：认证**干净 HEAD** 的整棵树（切树→核 rev→补依赖→import 面→门表→typecheck→全量判卷）。
+  // 为什么要进默认门表：`"test"` 那道门量的是工作树，而工作树可以替 HEAD 遮红——第 123 页数过：86 笔提交跑在红灯上。
+  // 代价实测（本文件同笔，`gates --only=head-cert-check` 于 `123835b`）：**这道门 123.7s**（其中全量判卷 86.66s，其余是切树/补依赖/import 面/门表/typecheck），
+  // 相对 mutate-verify 一道 16.9 分钟是 1/8。从前挂在这道门上的"整表 20 分钟"这个反对理由，量的其实是整张变异表——两把尺的数不许互借。
+  // 它排在 mutate-verify 之前：这道门红的时候，先知道"HEAD 本来就红"比先花 17 分钟跑变异更有用。
+  "head-cert-check",
   "mutate-verify",
   "mutate-needles-check",
 ];
