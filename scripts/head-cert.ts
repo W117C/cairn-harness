@@ -16,10 +16,11 @@
  *   （切树失败 / 取不到 package.json / `--skip-test` 没写 `--why` / **那棵认证树正被别的进程占着**）。
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, linkSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { certLevel, certLockPath, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, decideCertLock, declaredDeps, depDirs, headGateTableIntegrity, missingDeclaredDeps, readInvalidated, shouldReleaseLock, unknownCertArgs, type CertLock } from "./lib/head-cert-deps";
+import { certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, headGateTableIntegrity, missingDeclaredDeps, readInvalidated, unknownCertArgs } from "./lib/head-cert-deps";
+import { acquireToolLock } from "./lib/tool-lock";
 import { checkHeadImportFace, collectHeadEdges, findDanglingImports } from "./head-import-face";
 
 const argv = process.argv.slice(2);
@@ -81,63 +82,16 @@ say(`目标提交：${TARGET.slice(0, 7)}（--at=${AT}）`);
  *  所以顺序是：**先占到锁，再动树**。占不到就 exit 2——它不是"我这笔代码红"，是"这次根本没认证任何东西"，
  *  与 `--skip-test` 缺 `--why` 同档（前置不成立）。
  *  锁放在 git 的 common dir 下：worktree 之间共享（这正是需要的），且不会出现在 `git status` 里被误提交。 */
-const pidAlive = (pid: number): boolean => {
-  try { process.kill(pid, 0); return true; }
-  catch (e) { return (e as NodeJS.ErrnoException).code === "EPERM"; } // 存在但不是我 → 活着
-};
-const LOCK_PATH = certLockPath(run(MAIN, "git", ["rev-parse", "--git-common-dir"]).out, MAIN, TREE);
-/** 锁文件 → 原文。null＝没有锁；**空串＝文件在但读不出**（权限／设备），这两态在 `decideCertLock` 里是分开的。 */
-const readLock = (): string | null => {
-  if (LOCK_PATH === null) return null;
-  try { return readFileSync(LOCK_PATH, "utf8"); }
-  catch (e) { return (e as NodeJS.ErrnoException).code === "ENOENT" ? null : ""; }
-};
-let lockCell = "未采（锁面未取：git 读不到 common dir ⇒ 本次不占锁，撞窗只由「并发判卷」那一格说话）";
-if (LOCK_PATH !== null) {
-  const decision = decideCertLock({ path: LOCK_PATH, text: readLock(), now: Date.now(), selfPid: process.pid, alive: pidAlive });
-  if (decision.kind === "held") {
-    console.error(`❌ 认证树 ${TREE} 正被占用：${decision.reason}`);
-    console.error("   占这棵树会替别人把它切走（它随后的读数其实是这一笔的）。等它跑完，或换一个 --tree。");
-    process.exit(2);
-  }
-  if (decision.kind === "unreadable") {
-    console.error(`❌ 锁文件在但读不出：${decision.path}`);
-    console.error("   不当「没人占」覆盖掉（可能正有人用），也不当「有人占」死等 ⇒ 这一眼要人看：核过内容后手工删掉该文件。");
-    process.exit(2);
-  }
-  if (decision.kind === "reclaim") {
-    say(`♻️ 回收一把不能用的锁：${decision.reason}`);
-    // 不先摘掉旧锁，下面那次 `link` 必然 EEXIST ⇒ 陈旧锁永远回收不了，读起来还像"正被人抢着占"。
-    // 这里只摘**已经判定不能用的**那一把（pid 死了／超过帽／是自己留下的），活人的锁在上面就 exit 2 了。
-    try { unlinkSync(LOCK_PATH); } catch { /* 别人先摘了也算回收成功 */ }
-  }
-  mkdirSync(dirname(LOCK_PATH), { recursive: true });
-  const tmp = LOCK_PATH + "." + String(process.pid) + ".tmp";
-  const mine: CertLock = { pid: process.pid, target: TARGET, tree: TREE, startedAt: Date.now() };
-  // 内容先完整落到临时名，再用 `link` 占位：`rename` 会**替换**别人的锁（两个同时启动的进程各自都以为占到了），
-  // `link` 在目标已存在时直接 EEXIST ⇒ 抢占是原子的，而半截 JSON 那一坑（读侧要拒跑）也留不出来。
-  writeFileSync(tmp, JSON.stringify(mine));
-  try {
-    linkSync(tmp, LOCK_PATH);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "EEXIST") {
-      say(`⚠️ 锁写不下去（${String((e as NodeJS.ErrnoException).code)}）⇒ 本次不占锁，撞窗只由「并发判卷」那一格说话`);
-    } else {
-      console.error(`❌ 就在刚才 ${TREE} 被别人占走了（${LOCK_PATH} 已存在）⇒ 本次不动这棵树`);
-      unlinkSync(tmp);
-      process.exit(2);
-    }
-  }
-  unlinkSync(tmp);
-  lockCell = `本进程持有（${LOCK_PATH.replace(MAIN + "/", "")}）`;
-  process.on("exit", () => {
-    // 身份复核：文件里的持有者不是本进程 ⇒ 已经被别人回收过，删它就是抹掉别人的锁（同 `mutate-verify` 那条纪律）
-    const now = readLock();
-    if (now === null) return;
-    if (shouldReleaseLock(now, process.pid)) { try { unlinkSync(LOCK_PATH); } catch { /* 收尾不掷 */ } }
-    else say(`⚠️ 锁没放：文件里的持有者不是本进程 ${String(process.pid)}（${LOCK_PATH}）⇒ 不替别人删`);
-  });
-}
+const LOCK = acquireToolLock({
+  tool: "head-cert",
+  root: MAIN,
+  tree: TREE,
+  target: TARGET,
+  commonDirOut: run(MAIN, "git", ["rev-parse", "--git-common-dir"]).out,
+  harm: "占这棵树会替别人把它切走（它随后的读数其实是这一笔的）",
+  say,
+});
+const lockCell = LOCK.cell;
 
 // ① 切树：新建树用 worktree add，已存在的用 checkout；**不许吞输出**，且事后复核 rev-parse。
 const treeAbs = join(MAIN, TREE);

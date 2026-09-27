@@ -7,8 +7,6 @@
  * 这是**环境假红**，很容易被读成"HEAD 本来就红"（与规则 87/103 同族：软链树对 `run_shell` 面造假红、
  * 新装树没有 `electron/dist` 的 ENOENT 不是代码红）。所以认证的第一步是核依赖集，不是跑门。 */
 
-import { basename, resolve } from "node:path";
-
 /** HEAD（或任意 rev）里声明的依赖名：`dependencies` + `devDependencies` + `optionalDependencies`。
  *  `peerDependencies` 不算：npm/pnpm 对它可以真的不装，报出来是噪声。 */
 export function declaredDeps(pkgJsonText: string): string[] {
@@ -201,85 +199,5 @@ export function unknownCertArgs(argv: readonly string[]): string[] {
   });
 }
 
-/* ---------------------------------------------------------------- 认证树的锁（任务 #29） */
-
-/** 一把认证树的持有者登记（落在 `.git/dsh-cert-locks/<树名>.lock`，随仓走、不会被误提交）。 */
-export interface CertLock { pid: number; target: string; tree: string; startedAt: number; }
-
-/** 锁文件路径：git **common dir** 下的 `dsh-cert-locks/<树名>.lock`（common dir 而非 git dir：
- *  linked worktree 各自的 `.git` 文件会把锁关进单棵树，而"共享写点"要跨 worktree 才看得见）。
- *
- *  为什么单独抽出来（不留在脚本里内联）：`git rev-parse --git-common-dir` 在主 worktree 给相对 `.git`、
- *  在 linked worktree 给**绝对路径**。用 `join(root, common)` 会把绝对路径接在 root 后面
- *  （`<root>//Users/…/.git`），于是每棵树各算一份锁面 ⇒ 锁**看起来在工作**（自己占、自己放），
- *  而别人永远看不见 ⇒ 撞窗退回原样。这一格用 resolve 语义，并由判卷拿绝对/相对两种输入各钉一次。
- *
- *  树名可来自 `--tree=`：先取末段再剥非安全字符，否则 `--tree=../../x` 能把锁写到仓外。
- *  回 null＝**锁面取不到**：调用方要出声，但不许据此拒跑（这道门不许依赖锁文件存在，判卷有反向哨兵）。 */
-export function certLockPath(commonDirOut: string, root: string, tree: string): string | null {
-  const common = commonDirOut.trim();
-  if (common === "") return null;
-  const leaf = basename(tree).replace(/[^A-Za-z0-9._-]/g, "_");
-  if (leaf === "" || leaf === "." || leaf === "..") return null;
-  return resolve(root, common, LOCK_DIR_NAME, leaf + ".lock");
-}
-
-/** 锁目录名（只在拼路径处用；判卷**故意另写一份字面**，改名时要被行为用例抓到，不是跟着一起漂）。 */
-const LOCK_DIR_NAME = "dsh-cert-locks";
-
-/** 认证一棵树实测 ~2.5–4 分钟（含全量判卷）。帽放到 30 分钟：宁可让下一次**等**，不可让下一次**抢**。
- *  pid 已死的情况由 `alive` 那一支先接住，年龄只是崩溃在容器里／跨机 pid 复用时的兜底。 */
-export const CERT_LOCK_MAX_AGE_MS = 30 * 60_000;
-
-/** 锁文件内容 → 结构。坏 JSON／缺字段一律回 null（**不猜**：猜出来的 pid 会把活人的锁抢走）。 */
-export function parseCertLock(text: string | null): CertLock | null {
-  if (text === null) return null;
-  let parsed: unknown;
-  try { parsed = JSON.parse(text) as unknown; } catch { return null; }
-  if (typeof parsed !== "object" || parsed === null) return null;
-  const o = parsed as Record<string, unknown>;
-  if (typeof o.pid !== "number" || !Number.isInteger(o.pid) || o.pid <= 0) return null;
-  if (typeof o.target !== "string" || typeof o.tree !== "string" || typeof o.startedAt !== "number") return null;
-  return { pid: o.pid, target: o.target, tree: o.tree, startedAt: o.startedAt };
-}
-
-export type LockDecision =
-  | { kind: "free" }
-  /** 有文件但读不出 ⇒ 既不能当"没锁"覆盖，也不能当"有锁"死等：这是第三态，要人看一眼。 */
-  | { kind: "unreadable"; path: string }
-  | { kind: "held"; by: CertLock; reason: string }
-  | { kind: "reclaim"; by: CertLock | null; reason: string };
-
-/** 能不能占这棵认证树。`alive` 注入是为了判卷能造"pid 死了/活着"两种形状；
- *  **缺省必须是真探活**（`process.kill(pid, 0)`）——由 `head-cert` 的接线判卷钉住，否则接缝自己变成一条恒真的洞。 */
-export function decideCertLock(input: {
-  path: string;
-  text: string | null;
-  now: number;
-  selfPid: number;
-  alive: (pid: number) => boolean;
-  maxAgeMs?: number;
-}): LockDecision {
-  if (input.text === null) return { kind: "free" };
-  const by = parseCertLock(input.text);
-  if (by === null) return { kind: "unreadable", path: input.path };
-  const cap = input.maxAgeMs ?? CERT_LOCK_MAX_AGE_MS;
-  if (by.pid === input.selfPid) return { kind: "reclaim", by, reason: `pid ${String(by.pid)} 就是本进程（上一次留下的）` };
-  if (!input.alive(by.pid)) return { kind: "reclaim", by, reason: `持有者 pid ${String(by.pid)} 已不在 ⇒ 崩溃残留，按证据回收` };
-  const age = input.now - by.startedAt;
-  if (age > cap) {
-    return { kind: "reclaim", by, reason: `持有已 ${String(Math.floor(age / 60_000))} 分钟，超过帽 ${String(cap / 60_000)} 分钟（pid 还活着，但认证一棵树不该跑这么久）` };
-  }
-  return {
-    kind: "held",
-    by,
-    reason: `pid ${String(by.pid)} 正在认证 ${by.target.slice(0, 7)}（已 ${String(Math.max(0, Math.floor(age / 1000)))}s）⇒ 抢它会替别人把那棵树切走`,
-  };
-}
-
-/** 收尾放锁：**只有自己的锁才删**。与自愈同一条纪律（`mutate-verify` 那条"备份落盘后别人改了同一份文件"
- *  的同族）——不看身份就 unlink，等于把别人的在飞锁抹掉。 */
-export function shouldReleaseLock(text: string | null, selfPid: number): boolean {
-  const by = parseCertLock(text);
-  return by !== null && by.pid === selfPid;
-}
+/* ---- 共享写点上的锁：已挪到 `scripts/lib/tool-lock.ts`（第 161 页为 head-cert 建，第 162 页起 mutate-verify 共用）。
+ *      放在这里 = 第二个事实源，所以只留这一行指针。 */

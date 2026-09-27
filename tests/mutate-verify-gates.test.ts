@@ -3,8 +3,8 @@
 // 「基线就不是全绿」+「变异存活」——真回归信号被并发噪声伪装掉了。
 import { describe, expect, it } from "vitest";
 import { spawnSync, execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, entryDisposition, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, selectChangedEntries, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
 import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
@@ -750,5 +750,105 @@ describe("baselineRedKind：基线红要分「载不动」与「真的不绿」"
     const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
     expect(/^\s*const kind = baselineRedKind\(base\.out\);$/m.test(src)).toBe(true);
     expect(/^\s*if \(kind\.kind === "unloadable"\) \{$/m.test(src)).toBe(true);
+  });
+});
+
+describe("mutate-verify 也接了这把锁：占不到就不许动盘（那份过程的第二个消费者）", () => {
+  const script = fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url));
+  const repoRoot = fileURLToPath(new URL("../", import.meta.url));
+  // 路径**另算一份**（不复用 toolLockPath）：拿被测函数算被测函数读的路径＝那条断言没有观测者。
+  // 末段是这棵树自己的目录名（sanitize 后），所以这里也照抄那一步——实现若退回「锁写死在主树 .git」，两边位置分叉，下面当场红。
+  const gitCommon = execFileSync("git", ["rev-parse", "--git-common-dir"], { cwd: repoRoot, encoding: "utf8" }).trim();
+  const leaf = (repoRoot.replace(/[\\/]+$/u, "").split(/[\\/]+/).pop() ?? "").replace(/[^A-Za-z0-9._-]/gu, "_");
+  const LOCK_AT = join(resolve(repoRoot, gitCommon), "dsh-tool-locks", "mutate-verify-" + leaf + ".lock");
+  const runMv = (args: string[]): { status: number | null; out: string } => {
+    const r = spawnSync(process.execPath, ["--import", "tsx", script, ...args], { cwd: repoRoot, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    return { status: r.status, out: (r.stdout ?? "") + (r.stderr ?? "") };
+  };
+  /* 探锁用**一个不存在的 id**：它会一路走到「未知 id」那支 exit 2，中间一个源文件都不碰。
+   * 于是两个 exit 2 在措辞上分得开——抱怨「正被占用」＝锁在管，抱怨「未知 id」＝锁没管。
+   * 这比钉源码文字硬一档（规则 239）：拿「必然让下一步失败」的入参跑真子进程，锁没接上就会当场露形。 */
+  const BOGUS = ["anchor-id-that-does-not-exist"];
+  const readPid = (): number | null | "unreadable" => {
+    let raw: string;
+    try { raw = readFileSync(LOCK_AT, "utf8"); } catch { return null; }
+    try {
+      const o = JSON.parse(raw) as unknown;
+      const p = (o as { pid?: unknown }).pid;
+      return typeof p === "number" ? p : "unreadable";
+    } catch { return "unreadable"; } // 文件在但读不出＝第三态，判卷也不许删（同被度量那条纪律）
+  };
+  const alive = (pid: number): boolean => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  /** 只清自己那一份：活人的锁留给活人，本判卷宁可判红也不抹别人的在飞锁。 */
+  const clear = (): void => {
+    const pid = readPid();
+    if (pid === "unreadable") return;
+    if (pid !== null && pid !== process.pid && alive(pid)) return;
+    try { unlinkSync(LOCK_AT); } catch { /* 本来就没有 */ }
+  };
+  const noForeignLock = (): void => {
+    const pid = readPid();
+    if (pid === "unreadable") throw new Error(`锁面 ${LOCK_AT} 读不出 ⇒ 本判卷要在这上面写，先人工核过再跑（不许自动覆盖）`);
+    if (pid !== null && pid !== process.pid && alive(pid)) {
+      throw new Error(`撞窗：mutate-verify 正被 pid ${String(pid)} 真跑着 ⇒ 本判卷不许碰共享锁面，也不许把这条跳成绿`);
+    }
+  };
+  const hold = (): void => {
+    mkdirSync(dirname(LOCK_AT), { recursive: true });
+    writeFileSync(LOCK_AT, JSON.stringify({ tool: "mutate-verify", pid: process.pid, target: "c".repeat(40), tree: repoRoot, startedAt: Date.now() }));
+  };
+
+  it("活人占着 ⇒ exit 2、点名是谁、拒在开跑之前，并且不替别人删锁", () => {
+    noForeignLock();
+    clear();
+    hold();
+    try {
+      const { status, out } = runMv(BOGUS);
+      expect(status).toBe(2);
+      expect(out).toContain(String(process.pid));
+      expect(out).toContain("正被占用");
+      expect(out, "拒跑的话没说到锁，只说到 id ⇒ 说明锁那一支根本没拦，这条红来自隔壁支").not.toContain("未知 id");
+      expect(out, "抱怨之前已经开跑＝这句拒绝只是给破坏补个说明").not.toContain("变异验证：");
+      expect(existsSync(LOCK_AT), "拒跑那一支把别人的锁删了＝一次自愈抹掉别人的在飞锁").toBe(true);
+    } finally { clear(); }
+  }, 30_000);
+
+  it("反向哨兵：同一入参、没有锁 ⇒ 必须走到「未知 id」，并且占过又放掉（上面那条的红只能来自锁）", () => {
+    noForeignLock();
+    clear();
+    const { status, out } = runMv(BOGUS);
+    expect(status).toBe(2);
+    expect(out).toContain("未知 id");
+    expect(out, "占到锁这件事不出声 ⇒ 凭证里看不出这次是独占还是根本没占（规则 211）").toContain("锁=本进程持有");
+    expect(existsSync(LOCK_AT), "跑完没放锁 ⇒ 下一次只能靠 90 分钟的帽自愈").toBe(false);
+  }, 30_000);
+
+  it("只读入口不许被这把门锁死：--list／--check-needles 在有人占着时照跑", () => {
+    noForeignLock();
+    clear();
+    hold();
+    try {
+      const listed = runMv(["--list"]);
+      expect(listed.status).toBe(0);
+      expect(listed.out).not.toContain("正被占用");
+      expect((listed.out ?? "").split("\n").filter((l) => l.includes("\t")).length).toBeGreaterThan(900);
+      const chk = runMv(["--check-needles"]);
+      expect(chk.status, "只读体检被锁拒成 exit 2 ⇒ 读的人只会以为门坏了，不会知道有人在跑").not.toBe(2);
+      expect(chk.out).not.toContain("正被占用");
+    } finally { clear(); }
+    expect(existsSync(LOCK_AT), "只读入口自己占了一把锁 ⇒ 两条并发 --list 会互相拒跑，而它一个字节都不改").toBe(false);
+    // 这条要跑两次真子进程（`--check-needles` 对 916 条改法做语法体检≈7s），默认 5s 判卷窗口载不动。
+  }, 90_000);
+
+  it("接线形状：占锁排在自愈与开跑之前，消费者侧不留第二份三态判断", () => {
+    const src = readFileSync(script, "utf8");
+    const claim = src.indexOf("\nconst LOCK = acquireToolLock({");
+    const startPrint = src.indexOf("\nconsole.log(`变异验证：");
+    const heal = src.indexOf("\nhealLeftoverBackups();");
+    expect(claim, "整支占锁没接上 ⇒ tool-lock 是个没人调的第二份 lib（第 161 页那把锁的同格）").toBeGreaterThan(-1);
+    expect(startPrint, "开跑那句不见了 ⇒ 上面两条按顺序比的读数全失去意义").toBeGreaterThan(claim);
+    expect(heal, "自愈会写盘：占锁排在它之后＝「占不到就不许动盘」是空话").toBeGreaterThan(startPrint);
+    // 按**行首语句**匹配：这张锚点表就写在同一个文件里，`toContain(那段文字)` 在这儿恒真（规则 236）。
+    expect(src, "第二份三态判断＝「占不到就不许动盘」有两个事实源，改一处漏一处").not.toMatch(/(^|\n)[ \t]*if \(decision\.kind === "(?:held|unreadable|reclaim)"\)/);
   });
 });

@@ -16,11 +16,12 @@
 // 可判性三分（entryDisposition）：源文件在飞/未跟踪 = 拒绝并抛死（无回滚兜底）；
 // **判卷测试文件**在飞 = 本条记「未证」跳过——否则别人的在飞编辑会伪装成「变异存活」或「基线红」。
 
-import { cpSync, existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync, rmSync } from "node:fs";
 import ts from "typescript";
 import { execFileSync } from "node:child_process";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { acquireToolLock } from "./lib/tool-lock.ts";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
 import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries } from "./lib/mutate-gates.ts";
 
@@ -7627,9 +7628,9 @@ const MUTATIONS = [
   // 拒跑那一支被拆掉后，输出里会出现 `worktree add exit=`＝它已经动过树了。
   {
     id: "cert-lock-held-not-refused",
-    src: "scripts/head-cert.ts",
+    src: "scripts/lib/tool-lock.ts",
     test: "tests/head-cert-deps.test.ts",
-    desc: "读到「别人活着占着」却不拒 ⇒ 照旧切树：这把锁退回第 155/160 页那格「事后才发现撞窗」的读数，共享写点还是没人守",
+    desc: "读到「别人活着占着」却不拒 ⇒ 照旧切树：这把锁退回第 155/160 页那格「事后才发现撞窗」的读数，共享写点还是没人守（第 163 页：过程收进 lib，这一针现在同时守着 head-cert 与 mutate-verify 两个消费者）",
     apply: (s) => s.replace(
       'if (decision.kind === "held") {',
       'if (decision.kind === "held" && false) {',
@@ -7638,7 +7639,7 @@ const MUTATIONS = [
   },
   {
     id: "cert-lock-unreadable-silently-overwritten",
-    src: "scripts/head-cert.ts",
+    src: "scripts/lib/tool-lock.ts",
     test: "tests/head-cert-deps.test.ts",
     desc: "读不出的锁被当「没人占」覆盖（第三态被吞）⇒ 正有人用时一把抢走，而且抢的痕迹只剩一行日志。这条第一版**活过一次**：`exit=2` ＋「点名锁文件路径」那对读数两支拒跑都给 ⇒ 拆掉这一支仍然全绿，判卷要钉本支自己的措辞（规则 233 的零分辨力那一类）",
     apply: (s) => s.replace(
@@ -7649,18 +7650,18 @@ const MUTATIONS = [
   },
   {
     id: "cert-lock-stale-not-unlinked",
-    src: "scripts/head-cert.ts",
+    src: "scripts/lib/tool-lock.ts",
     test: "tests/head-cert-deps.test.ts",
     desc: "判定可回收却不先摘旧锁 ⇒ 下面那次 `link` 必 EEXIST：崩溃残留永远回收不了，而报错写的是「被别人占走」＝把自己的坑说成别人的（09-27 现跑第一次就撞在这格）",
     apply: (s) => s.replace(
-      "try { unlinkSync(LOCK_PATH); } catch { /* 别人先摘了也算回收成功 */ }",
+      "try { unlinkSync(lockPath); } catch { /* 别人先摘了也算回收成功 */ }",
       "// 摘旧锁这一步被删了",
     ),
     expectFail: "陈旧锁（pid 已死）⇒ 出声回收并**继续**：不先摘旧锁，抢占那次 link 必 EEXIST＝陈旧锁永远回收不了",
   },
   {
     id: "cert-lock-reclaim-branch-silent",
-    src: "scripts/head-cert.ts",
+    src: "scripts/lib/tool-lock.ts",
     test: "tests/head-cert-deps.test.ts",
     desc: "回收那一支整支不认（既不印原因也不摘锁）⇒ 自愈还在、读的人却不知道锁被换过手，出事后无从回溯是谁摘的",
     apply: (s) => s.replace(
@@ -7671,18 +7672,18 @@ const MUTATIONS = [
   },
   {
     id: "cert-lock-alive-always-true",
-    src: "scripts/head-cert.ts",
+    src: "scripts/lib/tool-lock.ts",
     test: "tests/head-cert-deps.test.ts",
-    desc: "探活写成「永远活着」⇒ 崩溃残留要等满 30 分钟的帽才回收；一次崩溃之后这道门连续红半小时，而下一个人只会去删文件、不会知道锁在骗人",
+    desc: "探活写成「永远活着」⇒ 崩溃残留要等满帽才回收；一次崩溃之后这道门连续红半小时，而下一个人只会去删文件、不会知道锁在骗人",
     apply: (s) => s.replace(
       "selfPid: process.pid, alive: pidAlive });",
       "selfPid: process.pid, alive: () => true });",
     ),
-    expectFail: "接线形状：先占锁再切树、探活是真的、抢占用 link 而不是会替换的 rename",
+    expectFail: "陈旧锁（pid 已死）⇒ 出声回收并**继续**：不先摘旧锁，抢占那次 link 必 EEXIST＝陈旧锁永远回收不了",
   },
   {
     id: "cert-lock-release-not-by-identity",
-    src: "scripts/head-cert.ts",
+    src: "scripts/lib/tool-lock.ts",
     test: "tests/head-cert-deps.test.ts",
     desc: "放锁不认身份（这里换成一个不存在的 pid＝只放别人的不放自己的）⇒ 残留累积成「每次都要先删锁」，而这道门的自愈一旦靠帽，撞窗保护就整段失效（同 `mutate-verify` 的备份身份复核那条纪律）",
     apply: (s) => s.replace(
@@ -7700,11 +7701,11 @@ const MUTATIONS = [
       "认证树锁=${lockCell}",
       "锁=未印",
     ),
-    expectFail: "接线形状：先占锁再切树、探活是真的、抢占用 link 而不是会替换的 rename",
+    expectFail: "接线形状：head-cert 真调 acquireToolLock 且早于切树，三态那份唯一过程在 tool-lock 里",
   },
   {
     id: "cert-lock-path-segments-swapped",
-    src: "scripts/lib/head-cert-deps.ts",
+    src: "scripts/lib/tool-lock.ts",
     test: "tests/head-cert-deps.test.ts",
     desc: "拼锁路径时把 common dir 与目录名调换 ⇒ 路径看着还行、实际落在 `<root>/dsh-cert-locks/.git/…`，每次都在新建的目录里「独占」，别人永远看不见（与 `join` 拼绝对 common dir 同一格：接线读的是错位置）",
     apply: (s) => s.replace(
@@ -7715,14 +7716,42 @@ const MUTATIONS = [
   },
   {
     id: "cert-lock-pid-zero-accepted",
-    src: "scripts/lib/head-cert-deps.ts",
+    src: "scripts/lib/tool-lock.ts",
     test: "tests/head-cert-deps.test.ts",
     desc: "只核 typeof pid 是不是数字、不核正负 ⇒ pid 0 也被当持有者：探活对 0 恒真（POSIX 里那是「发信号给整个进程组」），一把坏锁能把这道门永久钉死",
     apply: (s) => s.replace(
       'if (typeof o.pid !== "number" || !Number.isInteger(o.pid) || o.pid <= 0) return null;',
       'if (typeof o.pid !== "number" || !Number.isInteger(o.pid)) return null;',
     ),
-    expectFail: "parseCertLock 不许猜 pid：缺字段／pid 不是正整数一律 null（猜出来的 pid 会把活人的锁抢走）",
+    expectFail: "parseToolLock 不许猜 pid：缺字段／pid 不是正整数一律 null（猜出来的 pid 会把活人的锁抢走）",
+  },
+  // ── 第 163 页 · 同一把锁接到 mutate-verify（任务 #31）：过程收成一份之后，消费者侧各钉三针
+  {
+    id: "mutate-lock-not-acquired",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "占锁那一步换成「自己拼一个空结果」＝算出锁面却不占 ⇒ 同树两个 mutate-verify 照旧并发抢 .mutbak，而 tool-lock 变成第二份没人调的 lib（规则 230 的「算出来不接」同格）。针脚带真换行：这张表就写在同一个文件里，不带换行的针脚会被表里那段转义文字命中，改了表、实现没动（规则 236）",
+    apply: (s) => s.replace("\nconst LOCK = acquireToolLock({", "\nconst LOCK = ({"),
+    expectFail: "活人占着 ⇒ exit 2、点名是谁、拒在开跑之前，并且不替别人删锁",
+  },
+  {
+    id: "mutate-lock-read-only-face-locked",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "把只读的 `--list` 也接去占锁 ⇒ 两条并发 --list 互相拒跑，而吃 `--list` 的那两把静态尺（anchor-titles／gates）会在别人跑表时集体红——这道门不许把**不改盘**的那一半也关死（收紧必须配反向对照，规则 227）",
+    apply: (s) => s.replace(
+      '\nif (plan.mode === "list") {',
+      '\nif (plan.mode === "list") { acquireToolLock({ tool: "mutate-verify", root: ROOT, tree: ROOT, target: "list", commonDirOut: gitCommonDirOut(), harm: "锚点造的：只读面也占锁", say: (line) => console.log(line) });',
+    ),
+    expectFail: "只读入口不许被这把门锁死：--list／--check-needles 在有人占着时照跑",
+  },
+  {
+    id: "mutate-lock-cell-not-printed",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "占到没占到锁不进读数 ⇒ 凭证里分不清这次是独占、是没占、还是占锁那一步根本没接（规则 211：半把尺与没尺要各自看得见）",
+    apply: (s) => s.replace('\nconsole.log("[mutate-verify] 锁="', '\nconsole.log("[mutate-verify] 锁未印="'),
+    expectFail: "反向哨兵：同一入参、没有锁 ⇒ 必须走到「未知 id」，并且占过又放掉（上面那条的红只能来自锁）",
   },
   // ── 第 160 页 · 「能派不可撤」要在派活之前说出口（任务 #5）
   {
@@ -8244,6 +8273,13 @@ function verifyEntry(m) {
 }
 
 const plan = classifyArgs(process.argv.slice(2));
+/** 锁面位置要从 git 问（`join(root, ".git")` 在 linked worktree 里是**文件**不是目录 ⇒ 每棵树各算一份锁＝没有锁）。
+ *  定义放在只读分支之前，是为了让「只读面不许占锁」这条判卷能用真 common dir 造出反例：
+ *  把它塞进 `--list` 那一支的变异如果只能拿 `""` 当入参，那支变异会**假装被杀死**（它根本占不到锁）。 */
+const gitCommonDirOut = () => {
+  try { return execFileSync("git", ["rev-parse", "--git-common-dir"], { cwd: ROOT, encoding: "utf8" }); }
+  catch { return ""; } // 取不到锁面 ⇒ 不占锁但不停门（这道门不许依赖锁文件存在）
+};
 /* 本文件在**顶层**跑表，所以 `import("scripts/mutate-verify.mjs")` 就等于发起一次整表变异
  * （实测：一次"只想数一下条目数"的 `node -e` 探针就在主树跑了起来，SIGKILL 后留下一枚 mutant，
  *  靠 `.mutbak` + 三条证据前提还原）。条目数请走 `--list`；被 import 时一个字节都不许动。 */
@@ -8345,6 +8381,29 @@ if (plan.mode === "check-needles") {
 
 const targets = [...new Set([...plan.targets, ...derived.ids])];
 const requested = targets.length ? MUTATIONS.filter((m) => targets.includes(m.id)) : MUTATIONS;
+
+/* ⓪ 占锁：本门**就地改源文件**，所以同一棵树上的第二个实例不是"排队等待"，而是抢同一批 `.mutbak`——
+ *  它的「残留备份自愈」会把第一个实例正在用的备份判成可恢复并盖回（第 161 页给 head-cert 建那把锁时，这一格只是没接）。
+ *  于是顺序固定为：**先占到锁，再碰盘**（碰盘的第一件事就是 `healLeftoverBackups` 的写）。
+ *  上面那两条只读入口（`--list`／`--check-needles`）在占锁之前就 exit 了 ⇒ 只读面永远不被这把门锁死，判卷有反向哨兵。
+ *  占锁排在「未知 id 校验」**之前**，是为了给判卷一个不改盘的探法：带一个不存在的 id 真跑一次，
+ *  拒跑措辞说「正被占用」＝锁在管，说「未知 id」＝锁没管——两个 exit 2 分得开，而这条路永远走不到写（规则 239）。
+ *  占锁过程本身在 `scripts/lib/tool-lock.ts` 里只有一份：「占不到就不许动盘」这条纪律抄第二遍就是让
+ *  第 161 页那几个坑（陈旧锁不先摘 ⇒ link 必 EEXIST／rename 会替换别人的锁／放锁不核身份）各复活一次。 */
+const LOCK = acquireToolLock({
+  tool: "mutate-verify",
+  root: ROOT,
+  tree: ROOT,
+  target: (() => {
+    try { return execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim(); }
+    catch { return "取不到HEAD"; }
+  })(),
+  commonDirOut: gitCommonDirOut(),
+  harm: "抢这棵树会替别人改盘：第二个实例的自愈会把第一个正在用的 .mutbak 判成可恢复并盖回去",
+  say: (line) => console.log(line),
+});
+console.log("[mutate-verify] 锁=" + LOCK.cell);
+
 if (targets.length && requested.length !== targets.length) {
   console.error(`未知 id: ${targets.filter((t) => !MUTATIONS.some((m) => m.id === t)).join(", ")}`);
   process.exit(2);
