@@ -599,9 +599,12 @@ export class Orchestrator {
     // 冻结剧本（scriptedWorkerModel 自带 scripted 标）不拨号不付钱 ⇒ price=null：宁可说「价格未知」，
     // 也不拿 $0 冒充实付（把不可知记成免费是本仓点名的假绿形状）。
     let price: WorkerPrice | null = null;
+    // 归因键与价格标签**同一个式子、同一个分支**：这笔 worker 花的钱要能在评估面按模型名反查回档位，
+    // 事后另算一遍就等于两处尺（第 145 页 budgetPriceKeyOf 的同一课）。剧本通道两者都留空。
+    let usageModel = "";
     if (!isScriptedModel(model)) {
-      const name = routedSpec?.model ?? glmDefaultModelName();
-      price = priceForModel(name, routeDecision?.picked);
+      usageModel = routedSpec?.model ?? glmDefaultModelName();
+      price = priceForModel(usageModel, routeDecision?.picked);
     }
     const requested = isPermissionMode(args.tier) ? args.tier : this.opts.parentMode;
     const { mode: tier, clamped, warning } = clampTier(requested, this.opts.parentMode);
@@ -739,6 +742,7 @@ export class Orchestrator {
       ...(worktree ? { worktree } : {}),
       ...(baseCommit ? { base_commit: baseCommit } : {}),
       ...(routeDecision ? { model: routeDecision.picked } : typeof args.model === "string" && args.model !== "" ? { model: args.model } : {}),
+      ...(usageModel !== "" ? { usage_model: usageModel } : {}),
       max_turns: maxTurns,
       permission_mode: tier,
       ...(clamped ? { permission_mode_requested: requested } : {}),

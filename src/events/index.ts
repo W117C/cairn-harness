@@ -48,7 +48,11 @@ export interface ToolResultEvent { type: "tool_result"; callId: string; ok: bool
 export interface UsageEvent { type: "usage"; inputTokens: number; outputTokens: number; /** 缓存分列（可选）：**缺字段 = 该 provider 没上报，不等于 0**。约定 `inputTokens` 是含缓存的总输入，
    *  下面两个是其中的分块——不得再与 inputTokens 相加（metering 的 MeterUsage 要互斥桶，适配器换算后再交）。
    *  写侧断点（Anthropic cache_control / 稳定前缀排布）尚未接线：先把「命中没有」测出来，再谈制造命中。 */
-  cacheReadInputTokens?: number; cacheWriteInputTokens?: number; /** M3a §4.4.10：usage 按 agent 归因（主 loop usage 无此字段）。 */ agent_id?: string }
+  cacheReadInputTokens?: number; cacheWriteInputTokens?: number; /** M3a §4.4.10：usage 按 agent 归因（主 loop usage 无此字段）。 */ agent_id?: string; /** 产生这笔用量的模型名（provider 名或档位 id 两态都收，价表键由 `priceForModel` 反查）。
+   *  **缺字段 = 这一笔定不了价**（旧日志、剧本/demo 通道、worker 没在流里留过档）⇒ 消费方按「价格不可知」记，
+   *  绝不折成 $0（评估面的 `$ / 成功任务` 一直报不可测，缺的就是这一列，见 2026-09-27 第 148 页）。
+   *  写侧只有一个盖章点：会话落盘的漏斗 `runAgent` 的 pipeline（主会话与 worker 子流都过它）。 */
+  model?: string }
 /** 会话元信息：分支会话首行携带 branch_of 指向原会话；
  *  M2f：sidechat 会话首行携带 kind="sidechat" + parent_session_id 指向主会话；
  *  M4a：定时任务触发的新会话首行携带 origin="scheduled" + automation_id/automation_name（§12.2.2）。 */
@@ -269,6 +273,12 @@ export interface AgentSpawnedEvent {
   /** M3b write mode：spawn 时主 checkout HEAD（diff 与合并的对比基线）。 */
   base_commit?: string;
   model?: string;
+  /** 那一次派活**真拨的模型名**（价表的反查键），仅在真拨号时落；剧本 / demo 通道缺省。
+   *  为什么不复用上一条：`model` 记的是「派工时申报 / 路由选中的档位 id」，而这一跳实际拨了哪一档
+   *  由 `modelFor` 与路由共同决定，两者可以不同（无路由时 `model` 干脆缺席）。把归因挂在申报档位上
+   *  ＝回到 2026-09-27 刚修掉的那个形状：按申报档折钱、按真拨档花钱。
+   *  取值与 worker 的价格标签同一个式子（`orchestrator` 的 `routedSpec?.model ?? glmDefaultModelName()`）。 */
+  usage_model?: string;
   max_turns: number;
   /** worker 有效权限档（§11.7.6 单调继承：worker ≤ 父，越界裁到父档）。 */
   permission_mode: AgentPermissionMode;

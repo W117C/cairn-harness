@@ -7253,6 +7253,85 @@ const MUTATIONS = [
     apply: (s) => s.replace("needle: blocking.length, duplicateIds: dup.length, untracked: untracked.length, drift: drift.length,\n    expectFail: stalePointers.length,", "needle: blocking.length, duplicateIds: dup.length, untracked: untracked.length, drift: drift.length,"),
     expectFail: "求和那一行必须把第 5 维喂进去（钉接线：少喂一支＝门照跑、汇总照印绿）",
   },
+
+  // ── 第 148 页 · usage 模型归因（钱轴第一次可有数；七条各对应一种假绿／假数形状）
+  {
+    id: "usage-stamp-call-dropped",
+    src: "src/main/agent-runner.ts",
+    test: "tests/usage-attribution.test.ts",
+    desc: "盖章器建出来了却没接进落盘漏斗 ⇒ 消费端照旧读到恒零归因，钱轴继续报不可测，而这一层的代码全在（「装配存在」≠「这格有不变量」那一族）",
+    apply: (s) => s.replace(
+      "        usageAttribution.stamp(e); // 落盘前先盖：live 与盘必须是同一个对象（同 events 盖 ts 的口径）\n        await log!.append(e);",
+      "        await log!.append(e);",
+    ),
+    expectFail: "pipeline 里 stamp 在 append **之前**（live 与盘必须同一个对象），且全仓只有这一处盖章",
+  },
+  {
+    id: "usage-stamp-after-append",
+    src: "src/main/agent-runner.ts",
+    test: "tests/usage-attribution.test.ts",
+    desc: "先落盘后盖章 ⇒ 盘上那条没 model、内存里那条有：`onEvent` 看板算得出钱，重放与评估面算不出，两条对不上时没人知道自己看的是哪一份",
+    apply: (s) => s.replace(
+      "        usageAttribution.stamp(e); // 落盘前先盖：live 与盘必须是同一个对象（同 events 盖 ts 的口径）\n        await log!.append(e);",
+      "        await log!.append(e);\n        usageAttribution.stamp(e);",
+    ),
+    expectFail: "pipeline 里 stamp 在 append **之前**（live 与盘必须同一个对象），且全仓只有这一处盖章",
+  },
+  {
+    id: "main-usage-model-ignores-scripted-channel",
+    src: "src/main/agent-runner.ts",
+    test: "tests/usage-attribution.test.ts",
+    desc: "归因键不再问「这一轮走的是剧本吗」⇒ 冻结剧本的用量被盖上真档位名，评估面把从未发生的花费当真钱（与 `isScriptedModel ⇒ price=null` 同一口径）",
+    apply: (s) => s.replace(
+      '  return scriptedMainModelPath() === null ? budgetPriceKeyOf(selection) : "";',
+      "  return budgetPriceKeyOf(selection);",
+    ),
+    expectFail: "五个剧本通道逐个枚举 ⇒ 各指向自己的剧本，且归因键一律置空",
+  },
+  {
+    id: "worker-usage-borrows-main-tier",
+    src: "src/agent/usage-attribution.ts",
+    test: "tests/usage-attribution.test.ts",
+    desc: "worker 查不到自己的档时回落主会话那一档 ⇒ 本仓 flash 与 standard 差 4 倍、与 strong 差更多，整笔钱按错的档折（2026-09-23 那次 40 倍分叉的同一形状）",
+    apply: (s) => s.replace(
+      '      const key = e.agent_id === undefined ? getMainModel() : byAgent.get(e.agent_id) ?? "";',
+      "      const key = getMainModel();",
+    ),
+    expectFail: "worker 那一笔取 spawned 留的档，且**不许借主会话那一档**（纪律⑵）",
+  },
+  {
+    id: "usage-attribution-reads-declared-tier",
+    src: "src/agent/usage-attribution.ts",
+    test: "tests/usage-attribution.test.ts",
+    desc: "把归因挂回 `agent_spawned.model`（那个字段记的是申报/路由选中的**档位 id**，且无路由时整个缺席）⇒ 钱按申报档折、按真拨档花，正是第 145 页刚修掉的形状",
+    apply: (s) => s.replace(
+      "        const model = (e as { usage_model?: unknown }).usage_model;",
+      "        const model = (e as { model?: unknown }).model;",
+    ),
+    expectFail: "归因取「真拨的模型名」，不取 spawned 上那个申报档位",
+  },
+  {
+    id: "usage-stamp-overwrites-producer-model",
+    src: "src/agent/usage-attribution.ts",
+    test: "tests/usage-attribution.test.ts",
+    desc: "不再先看 `e.model` ⇒ 生产者（provider 回执）自己上报的模型名被本地推断覆盖：provider 说得出的比我们猜的准，覆盖等于把最可靠的一格改成最可疑的一格",
+    apply: (s) => s.replace(
+      "      if (e.type !== \"usage\" || e.model !== undefined) return false;",
+      "      if (e.type !== \"usage\") return false;",
+    ),
+    expectFail: "生产者自己带了 model ⇒ 不覆盖（provider 回执比我们推断权威）",
+  },
+  {
+    id: "orchestrator-spawned-usage-model-dropped",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/usage-attribution.test.ts",
+    desc: "spawned 事件不带归因键 ⇒ 主会话的钱可有数了，worker 那一半仍然定不了价（同一份预算里两条通路只修通一条，就是半落库）",
+    apply: (s) => s.replace(
+      '      ...(usageModel !== "" ? { usage_model: usageModel } : {}),\n',
+      "",
+    ),
+    expectFail: "注入真拨模型 ⇒ 落 glmDefaultModelName 那一档，且跟着 M0_MODEL 走（不是写死的名字）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

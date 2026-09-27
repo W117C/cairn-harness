@@ -24,6 +24,7 @@ import { ClarifyGate, PlanGate } from "../agent/gates";
 import { classifyVerifyFailure, createVerifyHook, defaultExec, withVerifyCauseNote, type ExecFn } from "../agent/verify";
 import { createActionFusion } from "../agent/action-fusion";
 import { SolpiRuntime, privateSessionDirectory, removePrivateSessionData, observationRecallSpec, solpiEnabled, type SolpiFlags } from "../agent/solpi-runtime";
+import { createUsageAttributor } from "../agent/usage-attribution";
 import { affectedFilesOf, defaultImpactHook } from "../agent/impact/index.js";
 import { createImpactQueryTool, impactQuerySpec } from "../tools/impact-query";
 import { createWaitForAgentsTool } from "../tools/wait_for_agents";
@@ -251,6 +252,26 @@ export function resolveRunModel(
  *  必须同一个数。demo 通道不拨号不付钱 ⇒ 空串 = 价不可知，由闸出声，绝不折成 $0。 */
 export function budgetPriceKeyOf(selection: MainModelSelection): string {
   return selection.kind === "demo" ? "" : selection.spec.model;
+}
+
+/** 这一轮主会话走的是**预录剧本**吗？是 ⇒ 返回那份剧本的路径；否 ⇒ null。
+ *  这五行 env 判定原先只活在 `createProvider` 里，而"这笔用量是不是真钱"要问的是同一件事
+ *  ⇒ 抄第二份迟早漂（第十三族）。现在装配与归因都吃这一个式子。
+ *  顺序即语义：越靠前的通道越优先（`M3A_MAIN_SCRIPT` 指的是显式文件路径，故要 resolve）。 */
+export function scriptedMainModelPath(env: NodeJS.ProcessEnv = process.env): string | null {
+  if (env.M3A_MAIN_SCRIPT) return resolve(env.M3A_MAIN_SCRIPT);
+  if (env.M3A_AGENTS_DEMO === "1") return join(ROOT, "fixtures", "agents", "main-demo.jsonl");
+  if (env.M1B_GATE_FLOW === "1") return GATE_FIXTURE;
+  if (env.M1C_AUTONOMY_SCRIPT) return env.M1C_AUTONOMY_SCRIPT;
+  if (env.M2A_LSP_DEMO) return env.M2A_LSP_DEMO === "1" ? LSP_DEMO_FIXTURE : env.M2A_LSP_DEMO;
+  return null;
+}
+
+/** 这一轮主会话的 usage 归因键：真拨号 ⇒ 与美元闸同一个档位名；剧本 / demo ⇒ 空串（不可定价，由消费方出声）。
+ *  单独成函数是因为**装配与归因必须答同一个问题**（`createProvider` 依它选传输通道，盖章器依它决定盖不盖）；
+ *  抄第二份迟早漂（第十三族），且写成一行内联赋值就没有判卷能进到这个决策点里。 */
+export function mainUsageModelOf(selection: MainModelSelection): string {
+  return scriptedMainModelPath() === null ? budgetPriceKeyOf(selection) : "";
 }
 
 /** M3c 编排器扩展接线（agentRoleFor / workerSummarizer / budget）：runAgent 与会话重派共用同一口径。
@@ -1172,14 +1193,8 @@ function createProvider(
     onPreCompact?: (trigger: "manual" | "auto") => Promise<void>;
   },
 ): Provider {
-  const autonomyScript = process.env.M1C_AUTONOMY_SCRIPT;
-  if (process.env.M3A_MAIN_SCRIPT) return createMockProvider(resolve(process.env.M3A_MAIN_SCRIPT));
-  if (process.env.M3A_AGENTS_DEMO === "1") return createMockProvider(join(ROOT, "fixtures", "agents", "main-demo.jsonl"));
-  if (process.env.M1B_GATE_FLOW === "1") return createMockProvider(GATE_FIXTURE);
-  if (autonomyScript) return createMockProvider(autonomyScript);
-  if (process.env.M2A_LSP_DEMO) {
-    return createMockProvider(process.env.M2A_LSP_DEMO === "1" ? LSP_DEMO_FIXTURE : process.env.M2A_LSP_DEMO);
-  }
+  const scripted = scriptedMainModelPath();
+  if (scripted !== null) return createMockProvider(scripted);
   if (selection.kind === "demo") return createMockProvider(MOCK_FIXTURE);
 
   assertProviderKeyConfigured(selection.kind);
@@ -1302,6 +1317,10 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   let solpi: SolpiRuntime | undefined;
   let parentFinished = false;
   let eventQueue: Promise<void> = Promise.resolve();
+  // 用量归因的唯一盖章点（见 usage-attribution.ts）。主会话那一档要等下面 modelSelection 解析出来才有值，
+  // 所以这里给闭包不给快照；空串 = 「这一笔定不了价」（剧本 / demo 通道恒空，绝不拿档位名冒充真钱）。
+  let mainUsageModel = "";
+  const usageAttribution = createUsageAttributor(() => mainUsageModel);
   try {
     // M1e 会话模式：sessionId 在场 = 会话列表里的既有会话，append（JSONL 即会话，重放无损）；
     // 无 sessionId = 旧行为（每轮新日志，e2e/ipc-check 等脚本路径字节不变）。
@@ -1318,6 +1337,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     }
     const pipeline = (e: AgentEvent): Promise<void> => {
       const task = eventQueue.then(async () => {
+        usageAttribution.stamp(e); // 落盘前先盖：live 与盘必须是同一个对象（同 events 盖 ts 的口径）
         await log!.append(e);
         if (!parentFinished && !(e as { agent_id?: string }).agent_id && e.type === "verify_result") solpi?.meter?.recordVerification({ id: `${e.callId}:${e.attempt}`, ok: e.ok, elapsedMs: null }); // worker 子流不进父验证计量（同投影同口径）
         opts.onEvent?.(e);
@@ -1408,6 +1428,8 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // One resolved registry selection is reused by the main turn and session-end distillation.
     const providerSettings = await store().get();
     const modelSelection = opts.modelSelection ?? resolveRunModel(providerSettings);
+    // 归因用的档位名与美元闸同源（同一个 budgetPriceKeyOf，见第 145 页）；剧本通道置空＝这笔不折钱。
+    mainUsageModel = mainUsageModelOf(modelSelection);
     // H3-P4（编排提示词审查 §一）：生产主会话必须有基座系统提示词——此前只有插件路由 + hook 上下文，
     // 模型在撞墙前不知道墙存在（机制成本已付、收益只兑现一半），验收暗卷脚本反而比生产多了角色说明。
     // 系统提示词已提到模块级 BASE_SYSTEM（可被单测锁住）；这里只消费。
