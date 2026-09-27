@@ -264,47 +264,14 @@ if (!process.env.M0_API_KEY) {
 const frozenPost = await sha256MatchesFrozen(ROOT);
 assert(frozenPost.ok, "收口时判卷文件 sha256 仍与冻结基线逐字一致");
 // H7（审查 P2）：冻结覆盖漂移——判卷区目录枚举与冻结表双向一致（新增判卷文件必须入表）。
+// 第三维 = 表里出现、但没登记为判卷区的目录：那一维只查存在性，"新文件没入表"对它不生效 ⇒ 必须显式登记。
 const driftH7 = await frozenCoverageDrift(ROOT);
 const driftDetailH7 = JSON.stringify(driftH7).slice(0, 300);
 assert(
-  driftH7.onDiskNotInTable.length === 0 && driftH7.inTableNotOnDisk.length === 0,
-  "H7 冻结表与判卷区目录双向一致（新增判卷文件不许逃出冻结面）" + (driftDetailH7.length > 15 ? "：" + driftDetailH7 : ""),
+  driftH7.onDiskNotInTable.length === 0 && driftH7.inTableNotOnDisk.length === 0 && driftH7.tableDirsNotSwept.length === 0,
+  "H7 冻结表与判卷区目录双向一致（新增判卷文件不许逃出冻结面；新判卷目录须登记进 src/frozen.ts 的 areas）"
+    + (driftDetailH7.length > 15 ? "：" + driftDetailH7 : ""),
 );
-
-// ---- G12（审查 P3）：@shadcn-modified 约定门禁化——ui 组件与基线不一致时必须有标记。
-// 旧约定处于"空转"状态（grep 0 命中、无任何门检查）。基线 = scripts/ui-baseline-sha256.json
-//（生成时刻的全部 29 个未改组件哈希）；改动组件必须带 // @shadcn-modified 头标记。
-{
-  const { readdirSync, readFileSync: rf, existsSync } = await import("node:fs");
-  const { createHash } = await import("node:crypto");
-  const uiDir = join(ROOT, "src", "renderer", "components", "ui");
-  const baseline = JSON.parse(rf(join(ROOT, "scripts", "ui-baseline-sha256.json"), "utf8")) as Record<string, string>;
-  const offenders: string[] = [];
-  // 前端 vanilla 迁移：src/renderer/components/ui 已整体归档删除（React 树不是发货路径）。
-  // 目录不存在时 G12 的比较面为空——基线里的 29 个组件已无对应文件，「改过必须带标记」的约束
-  // 自然满足（vacuously true）。显式跳过而非抛 ENOENT：本门是「改过的组件必须带标记」，
-  // 不是「components/ui 必须存在」。将来若恢复该目录，walkUi 自动重新生效。
-  const uiExists = existsSync(uiDir);
-  const walkUi = (d: string): void => {
-    for (const e of readdirSync(d, { withFileTypes: true })) {
-      const p = join(d, e.name);
-      if (e.isDirectory()) walkUi(p);
-      else if (e.isFile()) {
-        const rel = p.slice(ROOT.length + 1);
-        const actual = createHash("sha256").update(rf(p)).digest("hex");
-        // G12（审查 S3-11 收紧）：约定是「改过生成组件时在**文件头**加 @shadcn-modified」，
-        // 旧判据全文 includes → 组件正文里出现该字符串（注释/字符串字面量）即放行，等于
-        // 用一行文本换掉整份哈希基线。收紧为：前 3 行内的注释形态标记才算。
-        const headMarker = /^\s*(\/\/|\/\*)\s*@shadcn-modified/m.test(rf(p, "utf8").split("\n").slice(0, 3).join("\n"));
-        if (baseline[rel] !== undefined && baseline[rel] !== actual && !headMarker) {
-          offenders.push(rel);
-        }
-      }
-    }
-  };
-  if (uiExists) walkUi(uiDir);
-  assert(offenders.length === 0, "G12 ui 组件与基线不一致处均带 @shadcn-modified 标记" + (offenders.length > 0 ? "：" + offenders.slice(0, 3).join(",") : ""));
-}
 
 if (failures > 0) {
   console.error(`[gate-check] 失败: ${String(failures)} 项断言未通过`);

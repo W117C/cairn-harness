@@ -31,11 +31,15 @@ export const write_file: Tool = {
     // 不拿「不知道」当「新建」。读失败的非 ENOENT 分支不单独处理：那种路径紧随的 writeFile
     // 同样会失败，永远走不到这里——为它写一条测不到的分支就是本仓忌的防御性死码。
     let oldText: string | null = null;
+    let existed: boolean | null = null;
     try {
       const st = await stat(abs);
+      existed = true;
       oldText = st.size <= DELTA_READ_LIMIT_BYTES ? await readFile(abs, "utf8") : null;
-    } catch {
-      oldText = "";
+    } catch (error) {
+      // ENOENT 是可证明的新建；其它 stat 失败只能标 unknown，不能把“看不见”说成“新建”。
+      existed = (error as NodeJS.ErrnoException).code === "ENOENT" ? false : null;
+      oldText = existed === false ? "" : null;
     }
     await mkdir(dirname(abs), { recursive: true });
     // D7：覆盖已有文件前先把原件抄进 .agent/snapshots/（新建文件不占快照；失败不改写盘结果）。
@@ -57,6 +61,11 @@ export const write_file: Tool = {
     const diag = await collectDiagnostics(ctx.workspace, abs);
     // M7 影响面：写盘成功后回注跨文件波及（best-effort，见 appendImpact）。
     const output = await appendImpact(ctx, rel, summary + diag);
-    return { ok: true, output, ...(snapshotId !== null ? { snapshotId } : {}) };
+    return {
+      ok: true,
+      output,
+      ...(existed === true ? { change: "modified" as const } : existed === false ? { change: "created" as const } : {}),
+      ...(snapshotId !== null ? { snapshotId } : {}),
+    };
   },
 };

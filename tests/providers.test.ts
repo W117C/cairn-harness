@@ -290,10 +290,10 @@ describe("findSpecByNameOrId（档位 id 与 provider 模型名双态，重复�
 describe("BYOK 可达性（env 名映射 + byokGapsOf 逐格）", () => {
   const cleanFacts = {
     routable: ["glm", "openai", "anthropic", "gemini"],
-    storable: ["glm"],
+    storable: ["glm", "openai", "anthropic", "gemini"],
     envKeyed: ENV_KEYED_PROVIDERS,
     injected: ENV_KEYED_PROVIDERS,
-    offered: ["demo", "glm"],
+    offered: ["demo", "glm", "openai", "anthropic", "gemini"],
   };
 
   it("env 名映射恰好覆盖路由白名单（两张表各抄一份迟早漂）", () => {
@@ -302,12 +302,12 @@ describe("BYOK 可达性（env 名映射 + byokGapsOf 逐格）", () => {
     expect([...ENV_KEYED_PROVIDERS].sort()).toEqual([...PROVIDER_IDS].sort());
   });
 
-  it("现状事实 ⇒ 四格全空（openai/anthropic/gemini 存不进 key 由水位那条判，不在此列）", () => {
+  it("四家 key 存储/注入/settings 均接通 ⇒ 四格全空", () => {
     const g = byokGapsOf(cleanFacts);
     expect(g.routableWithoutEnvKey).toEqual([]);
     expect(g.storableNotInjected).toEqual([]);
     expect(g.offeredNotStorable).toEqual([]);
-    expect(g.routableNotStorable).toEqual(["openai", "anthropic", "gemini"]);
+    expect(g.routableNotStorable).toEqual([]);
   });
 
   it("逐格破坏：每支取料面失效只点亮它自己那一格", () => {
@@ -315,14 +315,13 @@ describe("BYOK 可达性（env 名映射 + byokGapsOf 逐格）", () => {
     expect(byokGapsOf({ ...cleanFacts, routable: [...cleanFacts.routable, "mistral"] }).routableWithoutEnvKey).toEqual(["mistral"]);
     // 存进 key 了，注入面漏它（白名单扩到 anthropic 而注入面仍只跑 glm 就是这个形态）
     expect(byokGapsOf({ ...cleanFacts, storable: ["glm", "anthropic"], injected: ["glm"] }).storableNotInjected).toEqual(["anthropic"]);
-    // 注：injected=["glm"] 而白名单**没**扩家时该格仍为空——所以门另有一条按 env 表全量对账的断言，
-    //     它才是能抓住旧实现（硬编码 glm）的那一半。
-    expect(byokGapsOf({ ...cleanFacts, injected: ["glm"] }).storableNotInjected).toEqual([]);
+    // 当前白名单四家时，注入面只写 glm 会点名其余三家。
+    expect(byokGapsOf({ ...cleanFacts, injected: ["glm"] }).storableNotInjected).toEqual(["openai", "anthropic", "gemini"]);
     // 注入面返回乱序/含重复 ⇒ sameSet 必须认（否则扩家顺序一变就假红）
     expect(sameSet(["b", "a", "a"], ["a", "b"])).toBe(true);
     expect(sameSet(["a"], ["a", "b"])).toBe(false);
     // UI 给了 openai 但存储白名单不收
-    expect(byokGapsOf({ ...cleanFacts, offered: ["demo", "glm", "openai"] }).offeredNotStorable).toEqual(["openai"]);
+    expect(byokGapsOf({ ...cleanFacts, storable: ["glm"], offered: ["demo", "glm", "openai"] }).offeredNotStorable).toEqual(["openai"]);
     // demo 是冻结剧本通道、不需要 key，故不占 offeredNotStorable
     expect(byokGapsOf({ ...cleanFacts, offered: ["demo"] }).offeredNotStorable).toEqual([]);
   });

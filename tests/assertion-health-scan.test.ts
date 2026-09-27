@@ -6,7 +6,7 @@
 // 属"在飞改动、不属 HEAD 回归"，与 scripts/typecheck.ts 的归因同一套 —— 判卷不许因为
 // 隔壁会话正在写一个探针就红。
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,37 +20,7 @@ const ROOT = process.cwd();
    迁移 = 从这里删一条 + 把那条测试的边界换成代码标识。**只减不增**——新增由上一条判据拦。
    清单在 2026-09-23 建成，实测覆盖 29 个唯一标记 / 47 处 / 21 个文件。
    为什么按标记而不是按文件记账：文件级豁免会让"已经豁免的那个文件再加一条"静默通过。 */
-const LEGACY_COMMENT_BOUNDARIES: readonly string[] = [
-  "\n/* 会话操作菜单",
-  "  /* ---------- 工具 / 卡片 ---------- */",
-  "  /* ---------- 会话列表",
-  "  /* ---------- 会话列表 ---------- */",
-  "  /* ---------- 启动 ---------- */",
-  "  /* ---------- 审批（",
-  "  /* ---------- 事件订阅 ---------- */",
-  "  /* ---------- 消息流构造",
-  "  /* ---------- 运行目录接线结束",
-  "  /* ---------- 真实运行目录：",
-  "  /* ---------- diff 卡行级评审",
-  "  /* §8.1.7：删除只此一路",
-  "  /* 插件快照与信任决议（§9.8）",
-  "  /* 打开标签页时刷新对应快照",
-  "  /* 记忆快照随 agent:state",
-  "  /* 目标态镜像：showHistory 全量筛",
-  "  /* 运行历史的状态筛选：界面只存",
-  "/* ============ 消息滚动入场动效",
-  "/* 插件面板：装了什么",
-  "/* 定时任务面板的纯渲染部分",
-  "/* 记忆面板：",
-  "/* 记忆面板：两层",
-  "/* 折叠的唯一实现",
-  "/* 重绘时的用户态保全。",
-  "/* 子智能体（worker）一列一行",
-  "/* Escape 分层收起",
-  "/** 事件类型 → 一行中文标签",
-  "/** 通用记录卡",
-  "/** 一条 shell 调用 → 终端行",
-];
+const LEGACY_COMMENT_BOUNDARIES: readonly string[] = [];
 
 async function hitsOf(files: string[]): Promise<string[]> {
   const perFile = await Promise.all(files.map(async (rel) => {
@@ -63,7 +33,7 @@ async function hitsOf(files: string[]): Promise<string[]> {
 
 describe("判卷面断言体检（快路，与 pnpm gates 同一把尺）", () => {
   it("已跟踪的 scripts/ 里没有空断言、恒真式、暗卷段零断言、未豁免的析取式", async () => {
-    const files = trackedScriptFiles(ROOT) ?? [];
+    const files = (trackedScriptFiles(ROOT) ?? []).filter((rel) => existsSync(join(ROOT, rel)));
     expect(files.length, "扫描面本身不能是空的（扫不到文件 = 判据真空通过）").toBeGreaterThan(10);
     expect(await hitsOf(files)).toEqual([]);
   });
@@ -168,7 +138,7 @@ describe("空断言 / 恒真式判据的边界（AST 化以后两头都不许失
 
 /** 全仓（已跟踪的 tests/）当前在用的注释边界标记，去重。 */
 async function markersInUse(): Promise<string[]> {
-  const files = trackedScriptFiles(ROOT, "tests") ?? [];
+  const files = (trackedScriptFiles(ROOT, "tests") ?? []).filter((rel) => existsSync(join(ROOT, rel)));
   // 扫描面为空 = 判据真空通过，所以先量面；tests/ 远多于这个数，掉到这里说明 git 取清单失败。
   expect(files.length, "切片边界的扫描面不能空（拿不到已跟踪清单就不许判绿）").toBeGreaterThan(50);
   const found = new Set<string>();

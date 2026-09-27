@@ -6,8 +6,11 @@ import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "nod
 import { join } from "node:path";
 import type { AgentEvent } from "../events";
 import { createEventLog, replay } from "../events";
+import { tmpPathFor } from "../atomic-write";
+import type { SessionMetadataRecord, SessionMetadataRepository } from "./session-metadata";
 
-export interface SessionInfo {
+/** 文件事实始终来自 JSONL；sidecar 字段只在确有 metadata 时合并，老会话不会被伪造成默认记录。 */
+export interface SessionInfo extends Partial<SessionMetadataRecord> {
   /** 会话名 = 文件名（去 .jsonl 后缀）。 */
   id: string;
   mtimeMs: number;
@@ -171,8 +174,12 @@ function sessionPath(root: string, id: string): string {
   return join(root, id + ".jsonl");
 }
 
-/** 扫描会话目录：mtime 降序（最近在上），行数 = 非空行数。 */
-export async function listSessions(root: string): Promise<SessionInfo[]> {
+/** 扫描会话目录：mtime 降序（最近在上），行数 = 非空行数。
+ *  metadataById 只做已存在 sidecar 的合并；缺失键不会补造 pinned/archived/projectId/时间。 */
+export async function listSessions(
+  root: string,
+  metadataById?: ReadonlyMap<string, SessionMetadataRecord>,
+): Promise<SessionInfo[]> {
   let names: string[] = [];
   try {
     names = await readdir(root);
@@ -189,11 +196,22 @@ export async function listSessions(root: string): Promise<SessionInfo[]> {
       if (!st.isFile()) continue;
       const lines = await countSessionLines(p, st); // 未变即复用计数，不再整份读文件体
       const meta = await readHeadMeta(p); // 只读首行（旧实现在此之上还要整份 readFile 数行）
+      const organization = metadataById?.get(id);
       out.push({
         id,
         mtimeMs: st.mtimeMs,
         lines,
         ...(meta?.badge ?? {}), // 徽标整体摊平：判定与字段成形都在 projectHeadLine，这里不再重判一遍
+        ...(organization
+          ? {
+              title: organization.title,
+              pinned: organization.pinned,
+              archived: organization.archived,
+              ...(organization.projectId !== undefined ? { projectId: organization.projectId } : {}),
+              createdAt: organization.createdAt,
+              updatedAt: organization.updatedAt,
+            }
+          : {}),
       });
     } catch {
       // 竞态删除/不可读：跳过，不出现在列表
@@ -202,8 +220,12 @@ export async function listSessions(root: string): Promise<SessionInfo[]> {
   return out.sort((a, b) => b.mtimeMs - a.mtimeMs);
 }
 
-/** 新建会话：名字缺省 = 时间戳；撞名自动加序号。返回会话名。 */
-export async function createSession(root: string, name?: string): Promise<string> {
+/** 新建会话：名字缺省 = 时间戳；撞名自动加序号。可选 sidecar 写入失败时回滚空 JSONL。 */
+export async function createSession(
+  root: string,
+  name?: string,
+  metadata?: Pick<SessionMetadataRepository, "create">,
+): Promise<string> {
   const base = name?.trim() || `会话 ${new Date().toLocaleString("sv-SE").replace(/[T]/g, " ").slice(0, 16)}`;
   if (!isValidSessionName(base)) throw new Error(`非法会话名: ${JSON.stringify(name)}`);
   let id = base;
@@ -216,7 +238,16 @@ export async function createSession(root: string, name?: string): Promise<string
     }
   }
   await mkdir(root, { recursive: true });
-  await writeFile(join(root, id + ".jsonl"), "", "utf8"); // 空文件：JSONL 即会话，0 行 = 空投影
+  const file = join(root, id + ".jsonl");
+  await writeFile(file, "", "utf8"); // 空文件：JSONL 即会话，0 行 = 空投影
+  if (metadata) {
+    try {
+      await metadata.create(id, id);
+    } catch (error) {
+      await rm(file, { force: true }).catch(() => undefined);
+      throw error;
+    }
+  }
   return id;
 }
 
@@ -230,8 +261,13 @@ export function pathOf(root: string, id: string): string {
   return sessionPath(root, id);
 }
 
-/** 重命名：文件重命名（内容逐字不变，重放无损）。 */
-export async function renameSession(root: string, oldId: string, newName: string): Promise<string> {
+/** 重命名：文件重命名（内容逐字不变，重放无损）；sidecar 跟随迁移，失败则回滚文件名。 */
+export async function renameSession(
+  root: string,
+  oldId: string,
+  newName: string,
+  metadata?: Pick<SessionMetadataRepository, "rename">,
+): Promise<string> {
   if (!isValidSessionName(newName)) throw new Error(`非法会话名: ${JSON.stringify(newName)}`);
   const from = sessionPath(root, oldId);
   const to = sessionPath(root, newName);
@@ -248,12 +284,50 @@ export async function renameSession(root: string, oldId: string, newName: string
     }
   }
   await rename(from, to);
+  if (metadata) {
+    try {
+      await metadata.rename(oldId, newName, newName);
+    } catch (error) {
+      await rename(to, from).catch(() => undefined);
+      throw error;
+    }
+  }
   return newName;
 }
 
-/** 删除会话文件（任务 4 验收要求；只删 sessions root 内的单个 .jsonl，路径已校验）。 */
-export async function deleteSession(root: string, id: string): Promise<void> {
-  await rm(sessionPath(root, id), { force: false });
+/** 硬删除：只触及 sessions root 内已校验的单个 JSONL；metadata 一并清理，任一步失败都回滚暂存文件。 */
+export async function deleteSession(
+  root: string,
+  id: string,
+  metadata?: Pick<SessionMetadataRepository, "find" | "remove" | "restore">,
+): Promise<void> {
+  const source = sessionPath(root, id);
+  const staged = tmpPathFor(source);
+  await rename(source, staged); // 先原子移出列表；清理失败可原名恢复
+  let record: SessionMetadataRecord | undefined;
+  try {
+    record = metadata ? await metadata.find(id) : undefined;
+    if (record && metadata) await metadata.remove(id);
+    await rm(staged, { force: false });
+  } catch (error) {
+    const rollbackErrors: unknown[] = [];
+    if (record && metadata) {
+      try {
+        await metadata.restore(record);
+      } catch (rollbackError) {
+        rollbackErrors.push(rollbackError);
+      }
+    }
+    try {
+      await rename(staged, source);
+    } catch (rollbackError) {
+      rollbackErrors.push(rollbackError);
+    }
+    if (rollbackErrors.length > 0) {
+      throw new AggregateError([error, ...rollbackErrors], `删除会话失败且回滚不完整: ${id}`);
+    }
+    throw error;
+  }
 }
 
 /** 空会话文件存在性检查。 */

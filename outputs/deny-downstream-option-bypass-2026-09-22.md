@@ -172,8 +172,9 @@ doas / sudoedit / script / unshare / flock / taskset / prlimit / strace / busybo
 `approve@L4-pass`（探针 ⑦ 段逐支印出）。**每层容器、调度器、追踪器都会再贡献几个词**——
 按名字往 `EXEC_WRAPPERS` 里加是无穷追赶，所以这一轮**不加词**，改为把「往哪走」量成可裁的数字。
 
-读数脚本：`outputs/measure-prefix-word-candidates-2026-09-22.mts`
-（跑法 `node --import tsx outputs/measure-prefix-word-candidates-2026-09-22.mts`；一次性观测，不进门禁）。
+读数脚本：`scripts/measure-prefix-word-candidates-2026-09-22.mts`
+（跑法 `node --import tsx scripts/measure-prefix-word-candidates-2026-09-22.mts`；一次性观测，不进门禁。
+2026-09-25 该脚本自 `outputs/` 迁入 `scripts/`——旧路径失效，读数与口径一字未动。）
 匹配口径与 `rules.ts:matchSegment` 一致（deny 侧对形态做 pattern 前缀匹配）。
 
 | 候选 | 15 支缺口 | 已收口 25 支 | 本仓真命令语料 40 支被牵连 | 手写负控 13 支被牵连 |

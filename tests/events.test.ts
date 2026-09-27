@@ -22,7 +22,7 @@ describe("事件流", () => {
     const events = await replay(logPath);
     expect(events).toHaveLength(3);
     // 除落盘时钟戳外逐字相等；戳本身的存在性/单调由下面「落盘时钟戳」那组用例钉。
-    expect(stripTs(events)).toEqual([...written]);
+    expect(stripTs(events)).toEqual(stripTs(written));
     // 顺序一致性：逐条比对类型与关键字段
     expect(events.map((e) => e.type)).toEqual(["user_message", "tool_call", "tool_result"]);
   });
@@ -59,7 +59,7 @@ describe("事件流", () => {
     for (const e of written) await log.append(e);
     const events = await replay(logPath);
     expect(events).toHaveLength(5);
-    expect(stripTs(events)).toEqual([...written]);
+    expect(stripTs(events)).toEqual(stripTs(written));
     expect(events.map((e) => e.type)).toEqual([
       "user_message", "assistant_delta", "assistant_delta", "tool_call", "usage",
     ]);
@@ -79,7 +79,7 @@ describe("事件流", () => {
     for (const e of written) await log.append(e);
     const three = await replay(logPath, "3");
     expect(three).toHaveLength(3);
-    expect(stripTs(three)).toEqual([...written].slice(0, 3));
+    expect(stripTs(three)).toEqual(stripTs(written).slice(0, 3));
     expect(await replay(logPath, "1")).toHaveLength(1);
     expect(await replay(logPath, "5")).toHaveLength(5);
     // 非法 id 一律报错（fail loud），不静默截断
@@ -233,7 +233,7 @@ describe("A1 常驻句柄（事件落盘）", () => {
     }
     const events = await replay(logPath);
     expect(events).toHaveLength(200);
-    expect(stripTs(events)).toEqual(written);
+    expect(stripTs(events)).toEqual(stripTs(written));
   });
 
   it("(b) rm 后重建：新句柄写到新 inode（不写进已 unlink 的旧 inode）", async () => {
@@ -336,11 +336,16 @@ describe("落盘时钟戳", () => {
     for (let i = 1; i < ts.length; i++) expect(ts[i]!).toBeGreaterThanOrEqual(ts[i - 1]!);
   });
 
-  it("不改写调用方手里的对象：live 那份仍不带 ts（盖戳是落盘这一跳的事）", async () => {
+  it("盘与 live 必须是同一个式子：盖的那枚戳同时落在调用方手里的事件上（重放等价的前提）", async () => {
+    // 曾经这里是反过来的（"不改写调用方手里的对象"），而那句和两条老不变量互斥：
+    // `ipc:check` 的「丢弃内存态 → 重放等价」与 `schedule-check` 的「append→replay 逐字无损」
+    // 都要求 live 与盘逐字相等。四个断言凑不齐时，该撤的是最新那条（它把 ts 变成"只存在于盘上"
+    // 的观测字段），不是那两条重的审计面——重放分叉正是评审里 P1 级的问题。
     dir = await mkdtemp(join(tmpdir(), "m0-ts-"));
-    const e = { type: "user_message", content: "a" } as const;
-    await createEventLog(join(dir, "events.jsonl")).append(e);
-    expect(Object.prototype.hasOwnProperty.call(e, "ts")).toBe(false);
+    const logPath = join(dir, "events.jsonl");
+    const live = { type: "user_message", content: "a" } as AgentEvent;
+    await createEventLog(logPath).append(live);
+    expect(JSON.stringify(await replay(logPath))).toBe(JSON.stringify([live]));
   });
 });
 

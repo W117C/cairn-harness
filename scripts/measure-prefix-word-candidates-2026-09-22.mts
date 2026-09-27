@@ -3,7 +3,8 @@
  * 一次性读数脚本：不进门禁、不被任何判据消费，只为把「往哪走」变成可裁的数字。
  *
  * 问的不是哪条更聪明，而是换掉白名单后：⑴ 15 支缺口收回几支；⑵ 本仓天天在跑的真命令被牵连几支。
- * 跑法：node --import tsx outputs/measure-prefix-word-candidates-2026-09-22.mts
+ * 跑法：node --import tsx scripts/measure-prefix-word-candidates-2026-09-22.mts
+ * （2026-09-25 自 `outputs/` 迁入 `scripts/`：进 tsc 与 docs-check 的取料面。旧路径失效。）
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

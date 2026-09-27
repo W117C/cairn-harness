@@ -117,7 +117,9 @@ export const LIVE_PAGES: readonly string[] = [
   STATE_FILE,
   "docs/README.md",
   "docs/CODE-WIKI.md",
-  "docs/ui-fact-baseline.md",
+  // core-only 迁移（2026-09-24）删掉了 `docs/ui-fact-baseline.md` ⇒ 条目同轮撤掉：
+  // 留着的唯一效果是门每轮印一行「该页不存在⇒未受检」的假未检，把 4 项噪声当读数。
+  // 该页若回归，条目与它的 [spec]/观测值纪律同轮补回。
 ];
 
 /** 规格值免检：带比较符/预算字样的行是契约；`[spec]` / `[facts]` 是显式标记。 */
@@ -244,32 +246,7 @@ export const waiverKey = (rule: Finding["rule"], file: string): string => rule +
  * **只准调低、迁移提交（spec §8）整条删除**；一旦某条目不再被命中，waive() 会把它
  * 报成 stale 红——豁免不许静默烂在这儿。
  */
-export const LEGACY_WAIVERS: Readonly<Record<string, Waiver>> = {
-  [waiverKey("D-1", "AGENTS.md")]: {
-    upTo: 30_000,
-    reason: "现态 26KB 未拆；水位只留追注余量防误伤并发会话，spec §8 迁移提交须整条删除（届时 >8000B 即红）",
-  },
-  [waiverKey("D-3", "scripts/a11y-check.ts")]: { upTo: 1, reason: "存量行号指针，§8 同提交改标签锚点后删除" },
-  [waiverKey("D-3", "scripts/lib/harness.ts")]: { upTo: 2, reason: "存量行号指针 ×2，§8 同提交改标签锚点后删除" },
-  [waiverKey("D-3", "scripts/renderer-arch-check.ts")]: { upTo: 1, reason: "存量行号指针，§8 同提交改标签锚点后删除" },
-  // 计数类判据按**实测条数原样入表、不留余量**：条数增长需要一个刻意动作（往规矩页抄观测值 /
-  // 用追注代替改写 / 把图塞回 docs/），那正是本门要拦的事——与 D-1 不同，字节数被日常小改就会顶上去。
-  [waiverKey("D-2", "AGENTS.md")]: {
-    upTo: 7,
-    reason: "存量手抄观测值 7 行（含 §0 那句 ~800s），§8 迁移整段进 archive 后本条须整条删除",
-  },
-  [waiverKey("D-2", "docs/CODE-WIKI.md")]: {
-    upTo: 1,
-    reason: "166 行「32KB 截断、60s 超时」实为配置规格值 = 本判据已知假阳性面；§8 给该行补 [spec] 后本条删除",
-  },
-  [waiverKey("D-4", "AGENTS.md")]: { upTo: 2, reason: "存量就地追注 2 处，§8 拆层后删除" },
-  [waiverKey("D-4", "docs/README.md")]: { upTo: 2, reason: "「过时登记表」本身在用散文登记散文的漂移，§8 删表后本条删除" },
-  [waiverKey("D-7", "docs")]: { upTo: 25, reason: "React 时代验收截图 25 张（docs/README.md 已声明全部过时），§8 git mv 走" },
-  [waiverKey("D-8", "docs/PROJECT-REPORT-2026-09-22.md")]: {
-    upTo: 1,
-    reason: "dated 交付报告＝当日证据快照，其内联复跑命令随当日口径冻结；不迁成常态读数（迁了反而会被人当现态读）",
-  },
-};
+export const LEGACY_WAIVERS: Readonly<Record<string, Waiver>> = {};
 
 /** 用存量水位筛掉老账，并挑出已不再被命中的豁免条目。 */
 export function waive(

@@ -81,4 +81,16 @@ describe("supervise 环判据来源：机器凭据优先，散文只在无写盘
       expect(a.why, "implement 角色本就没有 verdict 契约行，把它说成「畸形」是把缺陷记在模型账上").not.toContain("畸形");
     },
   );
+
+  it(
+    "越界判据（已删的「error」那一支，全仓无生产者）⇒ escalate，不再与 fail 同路烧一次重试",
+    () => {
+      // 旧实现把 "error" 写进取值域并让它走 retry，而 `ringVerdict` 与 `parseVerdict` 都产不出这个值
+      // ⇒ 那一支永不可达，读起来却像「错误有专门通道」。删除后越界值落进畸形桶：交给人判，而不是
+      // 花一次环去重试一个没人能造出来的判据。
+      const retired = "error" as unknown as Parameters<typeof decideSupervisor>[0]["verdict"];
+      const a = decideSupervisor({ verdict: retired, stageCount: 2, lastAgentId: "w1" });
+      expect(a.kind).toBe("escalate");
+    },
+  );
 });

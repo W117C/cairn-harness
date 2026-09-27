@@ -5,7 +5,15 @@ import {
 } from "./provider-keys";
 import { verifyLicenseFile, type LicenseState } from "./license";
 import { checkUpdate, type UpdateCheckResult } from "./updater";
-import { SettingsStore, type AppSettings, type ProviderKind } from "./settings";
+import { PROVIDER_KINDS, SettingsStore, type AppSettings, type ProviderKind } from "./settings";
+import { DEFAULT_MODEL_TABLE, findSpecByNameOrId } from "../providers/registry";
+import { ENV_KEYED_PROVIDERS, envKeyOf } from "../providers/env-keys";
+import {
+  buildProviderInfo,
+  providerKindFromEnv,
+  resolveMainModel,
+  type ProviderInfo,
+} from "./provider-runtime";
 import { ONBOARDING_GROUPS, type OnboardingGroup } from "./onboarding-groups";
 
 // ---- M1e：settings 存储 + 会话目录 + Provider 只读信息 ----
@@ -47,6 +55,13 @@ export async function getSettings(): Promise<AppSettings> {
 }
 
 export async function setSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
+  if (patch === null || typeof patch !== "object" || Array.isArray(patch)) throw new Error("settings patch 必须是对象");
+  if (patch.provider !== undefined && !(PROVIDER_KINDS as readonly string[]).includes(patch.provider)) {
+    throw new Error(`未知 provider: ${String(patch.provider)}`);
+  }
+  if (patch.model !== undefined && patch.model !== "" && !findSpecByNameOrId(DEFAULT_MODEL_TABLE, patch.model)) {
+    throw new Error(`未知模型: ${JSON.stringify(patch.model)}`);
+  }
   const next = await store().set(patch);
   // 环境转发：gatedTool 读 M1E_SAFE_MODE（M1e 最小语义）；主题/档位由 renderer 持有并随 run 传回
   if (patch.safeMode !== undefined) {
@@ -64,15 +79,16 @@ export async function onboardingGroups(): Promise<OnboardingGroup[]> {
   return [...ONBOARDING_GROUPS];
 }
 
-/** Provider 只读展示（设置页）：与 run 同源（settings + env 覆盖），不读 key 不落日志。
- *  P-1 步骤 2：此前只认 M0A_PROVIDER env ⇒ 设置页永远显示 mock，与「用户其实选了真模型」脱节。 */
-export async function providerInfo(): Promise<{ provider: string; model: string; kind: ProviderKind }> {
-  const kind = await host.resolveProviderKind();
-  if (kind === "glm") {
-    const model = (await store().get()).model || process.env.M0_MODEL || "glm-5.2";
-    return { provider: "GLM（OpenAI 兼容）", model, kind };
-  }
-  return { provider: "demo（冻结剧本，非真实模型）", model: "mock-script", kind };
+/** Settings/provider read model. It resolves the same selection as a run and exposes only registry rows. */
+export async function providerInfo(): Promise<ProviderInfo> {
+  const settings = await store().get();
+  const selection = resolveMainModel({
+    forcedKind: providerKindFromEnv(process.env.M0A_PROVIDER),
+    configuredKind: await host.resolveProviderKind(),
+    settingsModel: settings.model,
+    legacyEnvModel: process.env.M0_MODEL,
+  });
+  return buildProviderInfo(selection);
 }
 
 // ---- M4b：BYOK key（safeStorage）+ license V1 + 更新检查（§2.1/§2.2/§2.3）----
@@ -93,7 +109,13 @@ export async function handleProviderKeyDelete(provider: string): Promise<{ ok: b
 /** 状态面（设置页徽标 + env 并存提示；不含 key 值）。 */
 export async function handleProviderKeyStatus(): Promise<{ available: boolean; stored: string[]; envActive: boolean }> {
   const st = await providerKeyStatus();
-  return { ...st, envActive: !!process.env.M0_API_KEY };
+  return {
+    ...st,
+    envActive: ENV_KEYED_PROVIDERS.some((provider) => {
+      const envName = envKeyOf(provider);
+      return envName !== null && !!process.env[envName];
+    }),
+  };
 }
 
 let licenseFilePath: string | null = null;

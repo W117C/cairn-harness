@@ -6,7 +6,7 @@
 // 审批面双轨（§5.1）：supervise 模式审批卡批准 { goal, budget, forbidden, maxStages }，
 // 与 pipeline 的 stages 全表审批语义**分开**——不动旧模式（agents-check N1c–N1d / N5 冻结语义不变红）。
 import type { WorkerEvidence } from "../events";
-import type { StageVerdict as ProseVerdict } from "./sequencer";
+import type { ProseVerdict } from "./sequencer";
 
 /** 封闭动作空间（唯一合法输出形态）。 */
 export type SupervisorAction =
@@ -18,11 +18,17 @@ export type SupervisorAction =
 
 export const SUPERVISOR_ACTION_KINDS = ["spawn", "retry", "accept", "escalate", "abort"] as const;
 
-export type StageVerdict = "pass" | "fail" | "error";
+/** 环判据的取值域。名字与 `ringVerdict` 对齐：这里的 verdict 是**一整环的裁决**，不是报告里那行
+ *  散文（那个叫 `ProseVerdict`，多一个 `"unspecified"` 态）。两支枚举曾同名 `StageVerdict` 而字面量
+ *  集不同，读一处像读两处。
+ *  第三支 `"error"` 已删：`ringVerdict` 与 `parseVerdict` 都产不出它，全仓唯一写它的地方是
+ *  supervisor-check 的输入表 ⇒ 那一支永不可达，却读起来像「错误有专门的通道」。越界值现在与
+ *  畸形同路（escalate），符合本文件自立的不静默猜。 */
+export type RingVerdict = "pass" | "fail";
 
 export interface SupervisorContext {
   /** 前环判据（由 `ringVerdict` 从机器凭据 / 契约行算出；无判据 → null → escalate）。 */
-  verdict: StageVerdict | null;
+  verdict: RingVerdict | null;
   /** 已用环数（1-based）。 */
   stageCount: number;
   /** 有界保险①：最大环数（缺省 6；超限 abort）。 */
@@ -51,11 +57,11 @@ export function decideSupervisor(ctx: SupervisorContext): SupervisorAction {
   // 无判据 → escalate（fail-visible，不静默猜。原因句不写「报告畸形」：implement 角色的任务书
   // 本来就不要求 verdict 行，把契约缺口说成模型的错，等于把缺陷记在它账上——真语料里三次复跑
   // 全死在这条，而三次的 agent_result 都是 status=done 且改动正确）。
-  if (ctx.verdict !== "pass" && ctx.verdict !== "fail" && ctx.verdict !== "error") {
-    return { kind: "escalate", why: "无判据（既没有机器验证凭据，报告也没有 verdict 契约行），升级人工裁决" };
+  if (ctx.verdict !== "pass" && ctx.verdict !== "fail") {
+    return { kind: "escalate", why: "无判据（verdict 缺位或不在取值域：既没有机器验证凭据，报告也没有 verdict 契约行），升级人工裁决" };
   }
   if (ctx.verdict === "pass") return { kind: "accept" };
-  // fail/error → 有前一环则 retry，否则 spawn 下一环（错误永不冒充结果）
+  // fail → 有前一环则 retry，否则 spawn 下一环（错误永不冒充结果）
   if (ctx.lastAgentId !== undefined && ctx.lastAgentId !== "") {
     return { kind: "retry", agent_id: ctx.lastAgentId, feedback: ctx.lastFailure ?? "前环失败，重试" };
   }
@@ -74,7 +80,7 @@ export function ringVerdict(ctx: {
   evidence: WorkerEvidence | undefined;
   prose: ProseVerdict;
   forbiddenViolated: boolean;
-}): "pass" | "fail" | null {
+}): RingVerdict | null {
   if (ctx.forbiddenViolated) return "fail";
   if (ctx.evidence === "verified") return "pass";
   if (ctx.evidence === "failed") return "fail";

@@ -227,11 +227,37 @@ function currentOrchestrator(): Orchestrator | null {
   return runScopeALS.getStore()?.orchestrator ?? activeOrchestrator;
 }
 
+/** run 起一次模型选择：把「env 覆盖 + 设置盘 + 逐请求指定」三输入喂给唯一那把纯函数 `resolveMainModel`。
+ *  此前这段式子在两个入口各抄一份、闸的价键另抄第三份（只读设置盘字段），三份里最窄的那份决定了
+ *  用户看到的「花了多少」⇒ 收成一处，拨号与折钱不可能再各说各话。 */
+export function resolveRunModel(
+  settings: { provider: ProviderKind; model: string },
+  requestModel?: string,
+): MainModelSelection {
+  return resolveMainModel({
+    forcedKind: providerKindFromEnv(process.env.M0A_PROVIDER),
+    configuredKind: settings.provider,
+    settingsModel: settings.model,
+    legacyEnvModel: process.env.M0_MODEL,
+    ...(requestModel !== undefined ? { requestModel } : {}),
+  });
+}
+
+/** 美元闸的价键 = **这一跳真拨的那个模型**，不是设置盘上那个字段。
+ *  为什么（2026-09-27 实测，见 outputs/cost-price-key-2026-09-27/）：`settings.model` 出厂留空是
+ *  文档化缺省（「留空 = 由 provider 层取缺省」），per-run 又能指定别的档位 ⇒ 读盘上字段会让闸
+ *  ①在缺省配置下算不出价（整闸惰掉：用户买的保险没生效）、②按错档折（指定强档时只读到实付的
+ *  1/4，指定便宜档时读到 10 倍 ⇒ 任务被假「预算耗尽」掐掉）。同一个 run 里「估多少」与「花多少」
+ *  必须同一个数。demo 通道不拨号不付钱 ⇒ 空串 = 价不可知，由闸出声，绝不折成 $0。 */
+export function budgetPriceKeyOf(selection: MainModelSelection): string {
+  return selection.kind === "demo" ? "" : selection.spec.model;
+}
+
 /** M3c 编排器扩展接线（agentRoleFor / workerSummarizer / budget）：runAgent 与会话重派共用同一口径。
  *  - agentRoleFor：插件 agent 角色解析（stages[].role = "plugin-name:agent-name"，§9.6/§9.11-4）；
  *  - workerSummarizer：worker 压缩摘要器（§7.5 同一 runCompaction 链；GLM 暗卷需 M0_API_KEY）；
  *  - budget：会话成本闸（§4.4.8 maxBudgetUsd；0 = off 零行为）。 */
-async function orchestratorExtras(sandbox: SandboxStatus | null = null): Promise<
+async function orchestratorExtras(sandbox: SandboxStatus | null = null, runModel?: MainModelSelection): Promise<
   Pick<OrchestratorOptions, "agentRoleFor" | "workerSummarizer" | "budget" | "routing" | "banditStatePath" | "promptCache" | "impactAnalysis" | "workerVerify" | "workerHooks">
 > {
   const s = await store().get();
@@ -242,8 +268,9 @@ async function orchestratorExtras(sandbox: SandboxStatus | null = null): Promise
     workerHooks: (mode: "read" | "write") => currentPluginRuntime()?.hooks.forWorkerMode(mode) ?? null,
     ...(process.env.M0_API_KEY ? { workerSummarizer: createGlmSummarizer() } : {}),
     // 会话成本底线（§4.4.8）：maxUsd = 0 ⇒ 整闸不接（缺省零行为）。单价留给价表兜底，
-    // 所以这里必须把**当前模型**一起递下去——只递 maxUsd 会让闸在最常见配置下估不出价。
-    ...(s.maxBudgetUsd > 0 ? { budget: { maxUsd: s.maxBudgetUsd, pricePerMTok: s.budgetPricePerMTok, priceModel: s.model } } : {}),
+    // 所以这里必须把**当前真拨的那个模型**一起递下去——只递 maxUsd 会让闸在最常见配置下估不出价，
+    // 而递设置盘字段会在「留空」与「per-run 指定档位」两种合法配置下和实付分叉（`budgetPriceKeyOf`）。
+    ...(s.maxBudgetUsd > 0 ? { budget: { maxUsd: s.maxBudgetUsd, pricePerMTok: s.budgetPricePerMTok, priceModel: budgetPriceKeyOf(runModel ?? resolveRunModel(s)) } } : {}),
     // M7 影响面读端与主会话同一个设置位（worker 能在动手前问「谁在调用它」）。
     ...(s.impactAnalysis ? { impactAnalysis: true } : {}),
     // W4a：worker 的收束闸**复用同一个设置位**（`autoVerify`）——不新增开关、不改 UI 文案
@@ -301,6 +328,8 @@ async function buildSessionOrchestrator(a: {
   sandbox: SandboxStatus | null;
   rules: ReturnType<typeof loadPermissionRules>;
   modelFor?: OrchestratorOptions["modelFor"];
+  /** 本 run 已解析的模型选择（逐请求指定的档位在这里）；缺省 = 按 env + 设置盘现算（同一把纯函数）。 */
+  runModel?: MainModelSelection;
 }): Promise<Orchestrator> {
   const s = await store().get();
   const workerShell = workerShellRunnerFor(a.sandbox);
@@ -316,7 +345,7 @@ async function buildSessionOrchestrator(a: {
     // B1 语义合并闸：影响面开启时，spawn 的写租约判定多问一层「波及集相交」——
     // 两个 worker 各改各的文件（glob 不相交）但改动波及同一批调用点，合并时同样会打架。
     ...(s.impactAnalysis ? { semanticLease: (globs: string[]) => affectedFilesOf(a.workspace, globs) } : {}),
-    ...(await orchestratorExtras(a.sandbox)), // M3c：插件角色 / worker 压缩摘要器 / 成本闸 / W4a worker 收束闸
+    ...(await orchestratorExtras(a.sandbox, a.runModel)), // M3c：插件角色 / worker 压缩摘要器 / 成本闸 / W4a worker 收束闸
     ...(a.modelFor ? { modelFor: a.modelFor } : {}),
   });
 }
@@ -1311,6 +1340,8 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       sandbox: opts.sandbox ?? null,
       rules,
       ...(demoModelFor ? { modelFor: demoModelFor } : {}),
+      // 成本闸的价键跟着**这个 run 真拨的那一档**走（逐请求指定的模型只在调用手里，重派路径没有）。
+      ...(opts.modelSelection ? { runModel: opts.modelSelection } : {}),
     });
     runScope.orchestrator = orchestrator;
     if (interactive) activeOrchestrator = orchestrator; // H3 D-2：unattended 不抢交互面的审批路由
@@ -1376,12 +1407,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     const skillsRouting = rt && rt.routingList().text !== "" ? rt.routingList().text : null;
     // One resolved registry selection is reused by the main turn and session-end distillation.
     const providerSettings = await store().get();
-    const modelSelection = opts.modelSelection ?? resolveMainModel({
-      forcedKind: providerKindFromEnv(process.env.M0A_PROVIDER),
-      configuredKind: providerSettings.provider,
-      settingsModel: providerSettings.model,
-      legacyEnvModel: process.env.M0_MODEL,
-    });
+    const modelSelection = opts.modelSelection ?? resolveRunModel(providerSettings);
     // H3-P4（编排提示词审查 §一）：生产主会话必须有基座系统提示词——此前只有插件路由 + hook 上下文，
     // 模型在撞墙前不知道墙存在（机制成本已付、收益只兑现一半），验收暗卷脚本反而比生产多了角色说明。
     // 系统提示词已提到模块级 BASE_SYSTEM（可被单测锁住）；这里只消费。
@@ -1668,13 +1694,7 @@ export async function handleAgentRun(
       attachments = checked.value;
     }
 
-    const modelSelection = resolveMainModel({
-      forcedKind: providerKindFromEnv(process.env.M0A_PROVIDER),
-      configuredKind: settings.provider,
-      requestModel: req.model,
-      settingsModel: settings.model,
-      legacyEnvModel: process.env.M0_MODEL,
-    });
+    const modelSelection = resolveRunModel(settings, req.model);
     if (modelSelection.kind === "demo") {
       if (req.thinking !== undefined && req.thinking !== "off") {
         return { ok: false, error: "demo provider 不支持 thinking；当前只允许 off" };
@@ -1727,7 +1747,7 @@ export async function handleAgentRun(
         askGate: over.unattended ? unattendedAskGate : appAskGate,
         sandbox: sandboxState,
       });
-      const next = await goalNextTurn({ logPath, sessionId, unattended: over.unattended === true, aborted: () => over.signal?.aborted === true });
+      const next = await goalNextTurn({ logPath, sessionId, unattended: over.unattended === true, aborted: () => over.signal?.aborted === true, runModel: modelSelection });
       if (next === null) return { ok: true, ...(attachmentCount > 0 ? { attachmentCount } : {}) };
       message = next.message;
       goalTurn = next.origin;
@@ -1763,6 +1783,8 @@ async function goalNextTurn(args: {
   /** 无人值守（定时 / schedule 触发的 run）。goal 模式在这条路上被显式拒续，理由见下面的规则。 */
   unattended?: boolean;
   aborted: () => boolean;
+  /** 本 run 的模型选择：美元闸的价键由它派生（与拨号同一个数，见 `budgetPriceKeyOf`）。 */
+  runModel: MainModelSelection;
 }): Promise<{ message: string; origin: GoalTurnOrigin } | null> {
   if (args.aborted()) return null; // 用户已经按停止：不再起新轮（取消是最高优先级，不是预算）
   const events = await replay(args.logPath);
@@ -1784,11 +1806,12 @@ async function goalNextTurn(args: {
     });
     return null;
   }
-  const model = (await store().get()).model;
-  // 花费读数交给纯函数（`goalWindowSpend`）：settings.model 是 provider 模型名（glm-5.2）而价表的键是
+  const model = budgetPriceKeyOf(args.runModel);
+  // 花费读数交给纯函数（`goalWindowSpend`）：闸要的价键是 provider 模型名（glm-5.2）而价表的键是
   // 档位 id（glm-standard），反查只许有一处（orchestrator-join 的 priceForModel）——那一跳以前躺在这行，
-  // 写错就恒 null、闸恒惰，而单测全绿（它们直接注入 spentUsd）。表里没有 / 没填 model ⇒ 不可知，
-  // 美元闸惰掉并在提醒块里明写，**绝不**按 $0 继续烧（「把不可知记成免费」）。
+  // 写错就恒 null、闸恒惰，而单测全绿（它们直接注入 spentUsd）。**名字本身**要取自本 run 真拨的那一档
+  // （`budgetPriceKeyOf`）：读设置盘字段会在「model 留空」与「per-run 指定档位」下和实付分叉。
+  // 表里没有 / 不可知 ⇒ 美元闸惰掉并在提醒块里明写，**绝不**按 $0 继续烧（「把不可知记成免费」）。
   // 计量窗口 = view.window（本目标之后那段），与证据/写盘同轴：设 $0.5 之前会话已花多少与这个闸无关。
   // **worker 那一段用回执里已入账的表价**，不再按会话那一档估：会话档与 worker 档在本仓价表里
   // 差到 40 倍，一乘就把闸与同一屏的回执弄成两个数（能力 39 修的是成本闸，这一支是同一族的第二支）。

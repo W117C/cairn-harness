@@ -1,0 +1,41 @@
+[
+ {
+  "r": {
+   "id": "I2",
+   "name": "修 bug·复现先行",
+   "rep": 1,
+   "system": "base",
+   "seconds": 233.516,
+   "requests": 14,
+   "tokensIn": 65469,
+   "tokensOut": 3066,
+   "cny": 0.06096,
+   "toolCalls": 16,
+   "toolFailures": 4,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 5,
+   "readsBeforeFirstWrite": 2,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 2,
+   "verifyOkLast": false,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    ".npmrc",
+    "src/todo.ts"
+   ],
+   "exitError": "terminated"
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:terminated"
+   ]
+  }
+ }
+]

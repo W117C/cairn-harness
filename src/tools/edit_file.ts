@@ -92,6 +92,6 @@ export const edit_file: Tool = {
       "已替换 " + rel + "（" + replacements + " 处，+" + String(d.added) + " −" + String(d.removed) + " 行）" +
         (snapshotId !== null ? snapshotNote(snapshotId) : "") + diag,
     );
-    return { ok: true, output, ...(snapshotId !== null ? { snapshotId } : {}) };
+    return { ok: true, output, change: "modified", ...(snapshotId !== null ? { snapshotId } : {}) };
   },
 };

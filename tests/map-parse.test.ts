@@ -74,7 +74,7 @@ describe("map parse（任务 1）", () => {
     const { readFile } = await import("node:fs/promises");
     // 这四个是 `probe-map-recall.ts` 首跑实测出来的：TS 认得过、tree-sitter 报 ERROR ⇒ 旧口径整文件丢弃。
     // 钉真文件而不是只钉夹具：夹具会随 grammar 升级失真，这四个是这条缺陷在本仓的存在证明。
-    for (const rel of ["src/agent/map/parse.ts", "scripts/ipc-reachability-check-core.ts", "tests/secrets.test.ts", "tests/sessions.test.ts"]) {
+    for (const rel of ["src/agent/map/parse.ts", "tests/secrets.test.ts", "tests/sessions.test.ts"]) {
       const src = await readFile(new URL("../" + rel, import.meta.url), "utf8");
       const defs = (await fileTags(src, "ts")).filter((t) => t.kind === "def");
       expect(defs.length, rel + " 不许整文件零抽取").toBeGreaterThan(0);

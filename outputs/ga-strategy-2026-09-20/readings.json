@@ -1,0 +1,176 @@
+{
+  "caseId": "order-pricing-triple-fix",
+  "arms": [
+    {
+      "arm": "solo",
+      "score": 1,
+      "verifyOk": true,
+      "changedFiles": [
+        ".gitignore",
+        "src/cart.js",
+        "src/shipping.js",
+        "src/totals.js"
+      ],
+      "requests": 3,
+      "toolCalls": 8,
+      "byToolName": {
+        "read_file": {
+          "calls": 4,
+          "failures": 0
+        },
+        "edit_file": {
+          "calls": 3,
+          "failures": 0
+        },
+        "verify": {
+          "calls": 1,
+          "failures": 0
+        }
+      },
+      "spawns": 0,
+      "waitCalls": 0,
+      "workerTerminals": {},
+      "writeSessionsWithoutVerifyPass": 0,
+      "verifyPasses": 1,
+      "approvals": 0,
+      "tokens": {
+        "mainIn": 5495,
+        "mainOut": 292,
+        "workerIn": 0,
+        "workerOut": 0
+      },
+      "usd": 0.0011574,
+      "priceModel": "glm-5.3-flash",
+      "seconds": 26.058,
+      "capped": false,
+      "error": null,
+      "eventsPath": "/Users/ze/Downloads/deepseek harness/outputs/ga-strategy-2026-09-20/solo.events.jsonl"
+    },
+    {
+      "arm": "fanout",
+      "score": 1,
+      "verifyOk": true,
+      "changedFiles": [
+        ".gitignore",
+        "src/cart.js",
+        "src/shipping.js",
+        "src/totals.js"
+      ],
+      "requests": 8,
+      "toolCalls": 44,
+      "byToolName": {
+        "spawn_agent": {
+          "calls": 3,
+          "failures": 0
+        },
+        "read_file": {
+          "calls": 23,
+          "failures": 0
+        },
+        "glob": {
+          "calls": 5,
+          "failures": 0
+        },
+        "grep": {
+          "calls": 6,
+          "failures": 0
+        },
+        "wait_for_agents": {
+          "calls": 2,
+          "failures": 0
+        },
+        "shell_ro": {
+          "calls": 1,
+          "failures": 0
+        },
+        "edit_file": {
+          "calls": 3,
+          "failures": 0
+        },
+        "verify": {
+          "calls": 1,
+          "failures": 0
+        }
+      },
+      "spawns": 3,
+      "waitCalls": 2,
+      "workerTerminals": {
+        "done": 3
+      },
+      "writeSessionsWithoutVerifyPass": 0,
+      "verifyPasses": 1,
+      "approvals": 0,
+      "tokens": {
+        "mainIn": 110523,
+        "mainOut": 7031,
+        "workerIn": 48397,
+        "workerOut": 14034
+      },
+      "usd": 0.035997,
+      "priceModel": "glm-5.3-flash",
+      "seconds": 337.422,
+      "capped": false,
+      "error": null,
+      "eventsPath": "/Users/ze/Downloads/deepseek harness/outputs/ga-strategy-2026-09-20/fanout.events.jsonl"
+    },
+    {
+      "arm": "supervise",
+      "score": 1,
+      "verifyOk": true,
+      "changedFiles": [
+        ".gitignore",
+        "src/cart.js",
+        "src/shipping.js",
+        "src/totals.js"
+      ],
+      "requests": 7,
+      "toolCalls": 22,
+      "byToolName": {
+        "read_file": {
+          "calls": 11,
+          "failures": 0
+        },
+        "spawn_agent": {
+          "calls": 1,
+          "failures": 1
+        },
+        "edit_file": {
+          "calls": 6,
+          "failures": 0
+        },
+        "shell_rw": {
+          "calls": 2,
+          "failures": 0
+        },
+        "run_shell": {
+          "calls": 1,
+          "failures": 1
+        },
+        "verify": {
+          "calls": 1,
+          "failures": 0
+        }
+      },
+      "spawns": 1,
+      "waitCalls": 0,
+      "workerTerminals": {
+        "done": 1
+      },
+      "writeSessionsWithoutVerifyPass": 0,
+      "verifyPasses": 1,
+      "approvals": 1,
+      "tokens": {
+        "mainIn": 31946,
+        "mainOut": 3109,
+        "workerIn": 17517,
+        "workerOut": 694
+      },
+      "usd": 0.010653200000000002,
+      "priceModel": "glm-5.3-flash",
+      "seconds": 131.07,
+      "capped": false,
+      "error": null,
+      "eventsPath": "/Users/ze/Downloads/deepseek harness/outputs/ga-strategy-2026-09-20/supervise.events.jsonl"
+    }
+  ]
+}

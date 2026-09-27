@@ -304,7 +304,11 @@ describe("goal 美元闸端到端：模型名也算得出钱，并且真的拦�
   it("设 $0.05 上限 × 一轮 200k/20k 用量 ⇒ goal_stopped 点名美元上限（不被轮次/无产出理由顶包）", async () => {
     process.env.M3A_MAIN_SCRIPT = scriptPath;
     initSettingsStore(join(root, "settings.json")); // 缺省落在 /tmp/m1e-default-settings.json，跨用例共享 ⇒ 自己指一份
-    await setSettings({ model: "glm-5.2" });
+    // provider 也要真指一个：价键取自**这一跳真拨的模型**（budgetPriceKeyOf），出厂缺省是 demo
+    // ——demo 通道不拨号不付钱，价键就是空串，闸按「价格不可知」惰掉（provider-runtime.ts 的
+    // 「stale legacy model 不得悄悄把真 provider 点亮」是刻意的）。只设 model 不设 provider
+    // 的话这条会退到下一条理由，而那正是它本来要防的假绿。
+    await setSettings({ provider: "glm", model: "glm-5.2" });
     await script(JSON.stringify({ type: "usage", inputTokens: 200_000, outputTokens: 20_000 }) + "\n" + TEXT_ONLY);
     const set = await handleGoalSet({ sessionId: "s-plain", objective: "把测试修绿", maxTurns: 8, maxUsd: 0.05 });
     expect(set.ok).toBe(true);

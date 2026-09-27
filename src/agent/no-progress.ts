@@ -33,6 +33,9 @@ export interface VerifyBeat {
   named: string[];
   /** 上一次 verify 到现在有没有成功的写动作。R1 的头号抑制条件。 */
   wroteSinceLast: boolean;
+  /** 两次 verify 之间用户有没有说过话。说过 ⇒ 目标被改写过，"同一条结论再红一次"不再是同一件事。
+   *  可选：缺席 = 旧事件流/旧调用方，判定必须与改动前逐字相同（零回归落点）。 */
+  userSpokeSinceLast?: boolean;
 }
 
 /** 归一化：数字 / 长哈希串 / 空白抹平，让「同一个失败」能被认成同一件。
@@ -73,9 +76,15 @@ export function verifyBeatsFromEvents(events: readonly Record<string, unknown>[]
   for (const e of events) if (e["type"] === "tool_call") nameByCall.set(String(e["id"] ?? ""), String(e["name"] ?? "?"));
   const beats: VerifyBeat[] = [];
   let wroteSinceLast = false;
+  let userSpoke = false;
   let attempt = 0;
   let maxAttempts = 3;
   events.forEach((e, i) => {
+    if (e["type"] === "user_message") {
+      // 用户说过话 = 目标被改写过。下一次红不能算"同一条结论的第 N 次"。
+      userSpoke = true;
+      return;
+    }
     if (e["type"] === "tool_result") {
       const name = nameByCall.get(String(e["callId"] ?? "")) ?? "";
       if (WRITE_TOOLS.has(name) && e["ok"] !== false) wroteSinceLast = true;
@@ -94,8 +103,10 @@ export function verifyBeatsFromEvents(events: readonly Record<string, unknown>[]
       signature: e["ok"] === false ? signature : "ok",
       named,
       wroteSinceLast,
+      userSpokeSinceLast: userSpoke,
     });
     wroteSinceLast = false;
+    userSpoke = false;
   });
   return beats;
 }
@@ -112,7 +123,8 @@ export function detectVerifyStagnation(beats: readonly VerifyBeat[], minRepeats 
   for (const cur of beats) {
     if (cur.ok) { run = 0; lastRed = null; continue; }
     const sameKey = lastRed !== null && cur.signature !== "" && cur.signature === lastRed.signature;
-    run = sameKey && !cur.wroteSinceLast ? run + 1 : 1;
+    // `!== true` 是刻意的：字段缺席（旧事件流）时判定必须与改动前逐字相同。
+    run = sameKey && !cur.wroteSinceLast && cur.userSpokeSinceLast !== true ? run + 1 : 1;
     lastRed = cur;
     if (run >= minRepeats) {
       return {

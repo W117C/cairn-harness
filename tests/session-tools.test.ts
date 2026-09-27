@@ -160,10 +160,13 @@ it("provider/model 由 settings 决定，providerInfo 与 run 同源", async () 
   vi.stubEnv("M0A_PROVIDER", "");
   expect((await providerInfo()).kind).toBe("demo"); // 缺省 = 显式演示档
 
-  await setSettings({ provider: "glm", model: "glm-settings-model" });
+  await setSettings({ provider: "glm", model: "glm-5.2" }); // legacy settings model name remains accepted
   const info = await providerInfo();
   expect(info.kind).toBe("glm");
-  expect(info.model).toBe("glm-settings-model");
+  expect(info.model).toBe("glm-5.2");
+  expect(info.modelId).toBe("glm-standard");
+  expect(info.models.map((model) => model.id)).toEqual(expect.arrayContaining(["glm-standard", "openai-standard", "anthropic-standard", "gemini-standard"]));
+  expect(info.models.every((model) => !model.capability.thinking.supported)).toBe(true);
 
   vi.stubEnv("M0A_PROVIDER", "demo"); // env 覆盖仍然有效（既有 check/演示脚本依赖）
   expect((await providerInfo()).kind).toBe("demo");

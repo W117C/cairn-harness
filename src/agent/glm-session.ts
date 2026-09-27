@@ -440,8 +440,20 @@ export async function buildGlmHistory(logPath: string): Promise<RawMessage[]> {
   return projectContext(await replayIncremental(logPath)) as unknown as RawMessage[];
 }
 
-/** GLM 暗卷摘要器：非流式单轮调用（thinking/streaming 关），只调用只读的 src/providers/glm.ts。 */
-export function createGlmSummarizer(model?: string, meter?: RequestMeter, transport: typeof streamGlm = streamGlm): Summarizer {
+export type SessionTransport = (
+  messages: GlmMessage[],
+  options: GlmOptions | undefined,
+  tools: GlmToolSpec[] | undefined,
+  call?: ProviderCall,
+) => AsyncIterable<ModelOutput>;
+
+/** Session summarizer over the selected transport. Legacy default remains GLM. */
+export function createGlmSummarizer(
+  model?: string,
+  meter?: RequestMeter,
+  transport: SessionTransport = streamGlm,
+  label = "GLM",
+): Summarizer {
   return async (input: SummarizerInput): Promise<SummarizerOutput> => {
     const modelName = model && model !== "" ? model : (process.env.M0_MODEL ?? "glm-5.2");
     const msgs: GlmMessage[] = [
@@ -464,14 +476,14 @@ export function createGlmSummarizer(model?: string, meter?: RequestMeter, transp
       // 没收——半份摘要会被当成完整结论落进记录，而它替掉的旧事件已经不会再回来了。
       else if (e.type === "turn_truncated") truncated = e.stop_reason;
     }
-    if (!text.trim()) throw new Error("GLM 摘要器返回空摘要");
+    if (!text.trim()) throw new Error(`${label} 摘要器返回空摘要`);
     return { text, usage, model: modelName, ...(truncated !== undefined ? { truncated } : {}) };
   };
 }
 
 export interface GlmSessionCompaction {
   config?: Partial<CompactionConfig>;
-  /** 缺省 = M0_API_KEY 在场时用 GLM 暗卷摘要器。 */
+  /** 缺省 = 显式 transport，或 legacy M0_API_KEY + GLM。 */
   summarizer?: Summarizer;
   /** system prompt / 工具 schema / 记忆注入开销字符数（触发估算全量计入，§7.3(a)）。 */
   overhead?: AssemblyOverhead;
@@ -501,6 +513,8 @@ export function composeTurnMessages(opts: {
    *  刻意排在最后一个 system 块：这一句本来就只在「池子满了」那几轮出现，放前头会把
    *  可缓存前缀自己抖掉——而它要省的就是这份缓存。 */
   surfaceNote?: string;
+  /** Validated local attachment paths. Never contains file contents. */
+  attachmentContext?: string;
 }): GlmMessage[] {
   const msgs: GlmMessage[] = [];
   if (opts.system) msgs.push({ role: "system", content: opts.system });
@@ -514,6 +528,7 @@ export function composeTurnMessages(opts: {
     });
   }
   if (opts.surfaceNote) msgs.push({ role: "system", content: opts.surfaceNote });
+  if (opts.attachmentContext) msgs.push({ role: "system", content: opts.attachmentContext });
   for (const m of opts.history) msgs.push(m);
   return msgs;
 }
@@ -527,7 +542,7 @@ export function createGlmSessionProvider(
      *  构造时冻结的清单会把「摘掉」推迟到下一轮，而下一轮明明还能拒得更早（白叫一次 + 说明过期）。
      *  返回值同时带摘除说明，所以规格与解释永远同源同刻。 */
     requestFace?: () => { tools?: GlmToolSpec[]; note?: string };
-    transport?: typeof streamGlm;
+    transport?: SessionTransport;
     /** Persist and publish system events through the owning session pipeline. */
     emit?: (event: AgentEvent) => Promise<void>;
     compaction?: GlmSessionCompaction;
@@ -551,6 +566,10 @@ export function createGlmSessionProvider(
     };
     /** 真实通道模型名（缺省 = provider 层读 M0_MODEL env；settings.model 在场时优先）。 */
     model?: string;
+    /** Path-only context for validated in-workspace RunRequest attachments. */
+    attachmentContext?: string;
+    /** Provider label used in summarizer failures when transport is not GLM. */
+    transportLabel?: string;
     solpi?: SolpiRuntime;
   } = {},
 ): Provider {
@@ -573,10 +592,13 @@ export function createGlmSessionProvider(
     const merged: CompactionConfig = { ...withModelBudget(DEFAULT_COMPACTION_CONFIG, window), ...opts.compaction?.config };
     return typeof window === "number" ? { ...merged, inputLimit: Math.min(merged.inputLimit, window) } : merged;
   };
+  const defaultSummarizer = opts.transport || process.env.M0_API_KEY
+    ? createGlmSummarizer(opts.model, opts.solpi?.meter, opts.transport, opts.transportLabel)
+    : undefined;
   const coordinator = opts.compaction
     ? new CompactionCoordinator({
         config: budgetConfig(),
-        summarizer: opts.compaction.summarizer ?? (process.env.M0_API_KEY ? createGlmSummarizer(opts.model, opts.solpi?.meter, opts.transport) : undefined),
+        summarizer: opts.compaction.summarizer ?? defaultSummarizer,
         ...(opts.compaction.onPreCompact ? { onPreCompact: opts.compaction.onPreCompact } : {}),
       })
     : null;
@@ -735,7 +757,7 @@ export function createGlmSessionProvider(
       if (coordinator && opts.compaction) {
         const factor = calibrateFactor(events);
         const overhead: AssemblyOverhead = {
-          systemChars: (opts.system?.length ?? 0) + (skillsBlock?.length ?? 0),
+          systemChars: (opts.system?.length ?? 0) + (skillsBlock?.length ?? 0) + (opts.attachmentContext?.length ?? 0),
           toolSchemaChars: tools ? JSON.stringify(tools).length : 0,
           ...opts.compaction.overhead,
           memoryChars,
@@ -788,6 +810,7 @@ export function createGlmSessionProvider(
         history,
         ...(skillsBlock ? { skills: skillsBlock } : {}),
         ...(surfaceNoteText ? { surfaceNote: surfaceNoteText } : {}),
+        ...(opts.attachmentContext ? { attachmentContext: opts.attachmentContext } : {}),
       });
       // 压缩重写代价的**实测**（不是估算）：本轮装配与上一轮比，头部仍然逐字相同的那段占多少。
       // 只有本轮真的压过才记账——prune/skill 重挂造成的抖动不归这条策略管（它们各有判据）。

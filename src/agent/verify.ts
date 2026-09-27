@@ -83,7 +83,9 @@ export const defaultExec: ExecFn = (command, cwd, timeoutMs = DEFAULT_VERIFY_TIM
       // 绿结果不带 cause：这字段是"这次红算谁的"，给成功结果挂一个 code 会让人误读成结局字段。
       settle({ command, ok, output: output.replace(/\n+$/, ""), ...(ok ? {} : { cause }), exitCode: code });
     };
-    const handle = spawnTracked("bash", ["-c", command], {
+    // pipefail：管道里任一环节失败都要把非零码带出来。今天 `pnpm test | tail -50` 会把测试失败
+    // 吞成 exit 0 ⇒ 判卷面给出 ok:true。预检已在本宿主跑过（bash 3.2.57 支持 -o pipefail）。
+    const handle = spawnTracked("bash", ["-o", "pipefail", "-c", command], {
       cwd,
       env: sanitizedEnv(),
       timeoutMs,

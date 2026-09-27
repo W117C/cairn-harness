@@ -43,7 +43,8 @@ export interface ToolCallEvent { type: "tool_call"; id: string; name: string; ar
  *  类型不自家再定义一份——它的真身在权限层，且由 `autoOf(gate)` 派生（两份同形定义迟早漂）。 */
 export interface ToolResultEvent { type: "tool_result"; callId: string; ok: boolean; output: string; auto?: AutoMeta; /** 权限判定留痕：谁判的（layer）、怎么判的（verdict）、当时风险与档位 */ gate?: GateMeta; agent_id?: string; /** D7 覆盖前快照（§10.4）：被覆盖原件在 `.agent/snapshots/` 下的路径。
    *  缺席 = 这一笔没有原件可保（新建 / 空文件 / 快照失败）。增量字段，旧日志重放逐字不变。 */
-  snapshotId?: string }
+  snapshotId?: string; /** 写工具的结构化变更类型；旧事件缺席时由投影显式标 unknown，不猜。 */
+  change?: "created" | "modified" }
 export interface UsageEvent { type: "usage"; inputTokens: number; outputTokens: number; /** 缓存分列（可选）：**缺字段 = 该 provider 没上报，不等于 0**。约定 `inputTokens` 是含缓存的总输入，
    *  下面两个是其中的分块——不得再与 inputTokens 相加（metering 的 MeterUsage 要互斥桶，适配器换算后再交）。
    *  写侧断点（Anthropic cache_control / 稳定前缀排布）尚未接线：先把「命中没有」测出来，再谈制造命中。 */
@@ -660,9 +661,14 @@ export function createEventLog(path: string): EventLog {
       // 时钟戳盖在**落盘这一处**，不让每个生产者自己记得：`ts?: number` 曾声明在十个事件类型上，
       // 而真语料里 282 条 tool_call 一条都没带 ⇒ 工具耗时、轮耗时、「模型时间 vs 工具时间」占比
       // 在盘上全都不可测（可选字段当默认行为，等于没有行为）。producer 自带的值原样保留
-      // （automation 那批本来就自己盖，覆盖会把它们的语义洗掉）；不改动调用方手里的那个对象。
-      const stamped = { ...event, ts: (event as { ts?: number }).ts ?? Date.now() };
-      await cur.write(JSON.stringify(stamped) + "\n");
+      // （automation 那批本来就自己盖，覆盖会把它们的语义洗掉）。
+      // **盖在事件本身上，不另造一份只存在于盘上的副本**：`ipc:check` 的「丢弃内存态 → 重放等价」
+      // 与 `schedule-check` 的「append→replay 逐字无损」两条老不变量都要求 live 与盘同一个式子；
+      // 副本让那两条恒红（2026-09-24 实测：ipc:check / schedule-check J1 J2 三门同时红，
+      // 而单测面用 stripTs 各自绕过了它——同一件事在五个测试文件里各抄一份归一化，就是这种漏口的形状）。
+      const holder = event as { ts?: number };
+      if (holder.ts === undefined) holder.ts = Date.now();
+      await cur.write(JSON.stringify(event) + "\n");
     },
     async close() {
       // 关闭本实例对应 path 的缓存句柄（仅当缓存中仍是本实例解析的那个）。不在 append 后自动关闭。

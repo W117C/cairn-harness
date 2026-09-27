@@ -1,13 +1,12 @@
 // M5b/M6 provider 档位表（§m5-proposal 步骤 6 + M6 白名单）：多 provider 多档位。
-// 背景（§1.1 事实 1）：四个适配器（openai/anthropic/gemini/glm）已实现但从未接入运行时——
-// 本模块是它们的运行时消费面。M5 只装配 GLM（§4.3 权衡）；M6 开白名单到四家（registry 的
-// provider 字段按 §4.3 预留，开白名单零重构）。
+// 四个 adapter 的 worker/main-session 共同路由面；两处必须调用同一个 toWorkerModel，
+// 禁止各自维护模型目录或 provider 分支。
 // 档位模型名与价格为**占位**——需联网实测校准（m5-acceptance C5：provider 可用性抽样 + 价格核实）。
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "./glm";
-import { streamOpenAI } from "./openai";
+import { streamOpenAI, type OpenAiOptions } from "./openai";
 import { streamAnthropic } from "./anthropic";
 import { streamGemini } from "./gemini";
-import type { ModelOutput, ProviderMessage, ProviderToolSpec } from "./index";
+import type { ModelOutput, ProviderCall, ProviderMessage, ProviderToolSpec } from "./index";
 
 export type ModelTier = "cheap" | "standard" | "strong";
 
@@ -19,7 +18,7 @@ export interface ModelSpec {
   ctxWindow: number;
 }
 
-/** M6：真多 provider 白名单（§4.3 预留面开闸；M5 期只装配 glm）。 */
+/** Worker/main shared provider whitelist. */
 export const PROVIDER_IDS = ["glm", "openai", "anthropic", "gemini"] as const;
 
 /** 缺省档位表（表序 = 档位默认的 provider 优先级：glm 第一——tier-default 取 direct[0]）。
@@ -77,9 +76,20 @@ export function resolveModel(table: readonly ModelSpec[], id: string): ModelSpec
   return spec;
 }
 
-/** WorkerModel 签名（与 orchestrator 的 WorkerModel 同形；registry 不自引编排层避免环依赖）。
- *  构造零拨号——无 key 时**调用**才失败（fail-closed）。 */
-export type RegistryWorkerModel = (messages: GlmMessage[], tools: GlmToolSpec[]) => AsyncIterable<ModelOutput>;
+export interface RegistryWorkerCallOptions {
+  call?: ProviderCall;
+  /** GLM/OpenAI non-stream mode used by the legacy compaction summarizer. */
+  stream?: boolean;
+  /** OpenAI/GLM-compatible request metering. Other native adapters do not expose this option yet. */
+  metering?: OpenAiOptions["metering"];
+}
+
+/** Worker/main shared transport. The optional third argument preserves the old two-argument worker API. */
+export type RegistryWorkerModel = (
+  messages: GlmMessage[],
+  tools: GlmToolSpec[],
+  options?: RegistryWorkerCallOptions,
+) => AsyncIterable<ModelOutput>;
 
 /** GlmToolSpec（openai wire）→ ProviderToolSpec（统一中立面）：照抄 glm.ts 的 unified 映射。 */
 export function toProviderTools(tools: GlmToolSpec[] | undefined): ProviderToolSpec[] | undefined {
@@ -104,20 +114,40 @@ export function toWorkerModel(spec: ModelSpec, opts: ToWorkerModelOptions = {}):
   const fetchImpl = opts.fetchImpl;
   switch (spec.provider) {
     case "glm":
-      return (messages, tools) => streamGlm(messages, { model: spec.model, ...(fetchImpl ? { fetchImpl } : {}) }, tools);
+      return (messages, tools, callOptions) => streamGlm(
+        messages,
+        {
+          model: spec.model,
+          ...(fetchImpl ? { fetchImpl } : {}),
+          ...(callOptions?.stream !== undefined ? { stream: callOptions.stream } : {}),
+          ...(callOptions?.metering ? { metering: callOptions.metering } : {}),
+        },
+        tools,
+        callOptions?.call,
+      );
     case "openai":
-      return (messages, tools) =>
-        streamOpenAI(messages as ProviderMessage[], { model: spec.model, ...(fetchImpl ? { fetchImpl } : {}) }, toProviderTools(tools));
+      return (messages, tools, callOptions) => streamOpenAI(
+        messages as ProviderMessage[],
+        {
+          model: spec.model,
+          ...(fetchImpl ? { fetchImpl } : {}),
+          ...(callOptions?.stream !== undefined ? { stream: callOptions.stream } : {}),
+          ...(callOptions?.metering ? { metering: callOptions.metering } : {}),
+        },
+        toProviderTools(tools),
+        callOptions?.call,
+      );
     case "anthropic":
-      return (messages, tools) =>
+      return (messages, tools, callOptions) =>
         streamAnthropic(
           messages,
           { model: spec.model, ...(fetchImpl ? { fetchImpl } : {}), ...(opts.promptCache === true ? { promptCache: true } : {}) },
           toProviderTools(tools),
+          callOptions?.call,
         );
     case "gemini":
-      return (messages, tools) =>
-        streamGemini(messages, { model: spec.model, ...(fetchImpl ? { fetchImpl } : {}) }, toProviderTools(tools));
+      return (messages, tools, callOptions) =>
+        streamGemini(messages, { model: spec.model, ...(fetchImpl ? { fetchImpl } : {}) }, toProviderTools(tools), callOptions?.call);
     default:
       throw new Error(`未知 provider: ${JSON.stringify(spec.provider)}（白名单：${PROVIDER_IDS.join(", ")}）`);
   }

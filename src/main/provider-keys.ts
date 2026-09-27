@@ -6,6 +6,7 @@
 import { readFile } from "node:fs/promises";
 import { writeFileAtomic } from "../atomic-write";
 import type { SafeStorageIo } from "../agent/plugins/secrets";
+import { ENV_KEYED_PROVIDERS, type EnvKeyedProvider } from "../providers/env-keys";
 
 export type { SafeStorageIo };
 
@@ -20,9 +21,9 @@ export interface ProviderKeyStore {
 export const PROVIDER_KEY_NO_BACKEND_ERROR =
   "无安全存储后端（headless 或 safeStorage 不可用）→ 拒存 provider key（fail-closed，不落明文）";
 
-/** provider id 白名单（V1 单 provider：glm / OpenAI 兼容端点）。 */
-export const PROVIDER_IDS = ["glm"] as const;
-export type ProviderId = (typeof PROVIDER_IDS)[number];
+/** BYOK 白名单直接复用 provider env-key 唯一事实源；demo 不需要/不接受 key。 */
+export const PROVIDER_IDS = Object.freeze([...ENV_KEYED_PROVIDERS]) as readonly EnvKeyedProvider[];
+export type ProviderId = EnvKeyedProvider;
 
 export interface ProviderKeyBackend {
   name: string;
@@ -105,7 +106,7 @@ export function validateProviderKeyStore(raw: unknown): { ok: true; value: Provi
   if (unknown.length > 0) return { ok: false, reason: "未知字段：" + unknown.join("、") };
   const keys: ProviderKeyStore["keys"] = {};
   for (const [id, v] of Object.entries(r.keys as Record<string, unknown>)) {
-    if (id.trim() === "") return { ok: false, reason: "provider id 为空" };
+    if (!isProviderId(id)) return { ok: false, reason: "未知 provider id：" + id };
     if (typeof v !== "object" || v === null) return { ok: false, reason: "keys[" + id + "] 不是对象" };
     const e = v as Record<string, unknown>;
     const uk = Object.keys(e).filter((k) => k !== "ciphertext" && k !== "updatedAt");

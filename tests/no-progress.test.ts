@@ -200,3 +200,30 @@ describe("判据自身的分辨力（gate 与测例共用同一只）", () => {
     }
   }, 300_000);
 });
+
+describe("R1 的用户转向抑制（22 页施工；字段缺席必须零回归）", () => {
+  const RED = { command: "pnpm test", ok: false, output: "FAIL src/cart.test.ts > total\nAssertionError: expected 3 to be 2" };
+  const events = (withInterjection: boolean): Record<string, unknown>[] => {
+    const evs: Record<string, unknown>[] = [
+      { type: "user_message", content: "修 total" },
+      { type: "verify_result", callId: "v1", ok: false, attempt: 1, maxAttempts: 5, results: [RED] },
+    ];
+    if (withInterjection) evs.push({ type: "user_message", content: "换路子：别看 length，看金额求和" });
+    evs.push({ type: "verify_result", callId: "v2", ok: false, attempt: 2, maxAttempts: 5, results: [RED] });
+    return evs;
+  };
+
+  it("同一条结论再红、但中间用户改过口 ⇒ 不判停滞（目标被改写过，不是原地打转）", () => {
+    expect(detectVerifyStagnation(verifyBeatsFromEvents(events(true))).stagnant).toBe(false);
+  });
+
+  it("对照：一次转向都没有 ⇒ 仍判停滞（加抑制不等于把 R1 判废）", () => {
+    expect(detectVerifyStagnation(verifyBeatsFromEvents(events(false))).stagnant).toBe(true);
+  });
+
+  it("旧调用方手搭的 beat 不带这个字段 ⇒ 判定与施工前逐字相同（零回归落点）", () => {
+    const legacy: VerifyBeat[] = [beat(0, "sig", false), beat(1, "sig", false)];
+    expect(legacy.every((b) => b.userSpokeSinceLast === undefined)).toBe(true);
+    expect(detectVerifyStagnation(legacy).stagnant).toBe(true);
+  });
+});

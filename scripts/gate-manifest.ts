@@ -14,56 +14,28 @@ export const GATES: readonly string[] = [
   "typecheck",
   "test",
   "e2e",
-  "ipc:check",
-  // 门 0 可达性：IPC 桥两端对齐 + 渲染层可达性棘轮（能力已发货但用户点不到 = 零价值）。
-  "ipc-reachability-check",
   "sandbox:check",
-  "build",
   "fork-check",
   "gate-check",
-  // 文档分层预算：现行层字节预算 + 文档指针禁行号 + STATE.md rev 真伪（D-2 禁手抄观测值待 spec §12 D 段）。
   "docs-check",
   "autonomy-check",
   "compaction-check",
-  "panels-check",
   "tools-check",
   "map-check",
   "prune-check",
-  "providers-check",
   "provider:check",
   "memory-check",
   "plugins-check",
-  "sidechat-check",
   "security-check",
-  "agents-check",
-  "schedule-check",
-  "commercial-check",
   "gym-check",
   "routing-check",
   "supervisor-check",
-  "renderer-arch-check",
-  // 模型面总预算门：每请求固定成本（基础提示 + 工具规格）此前逐件有帽、总和无人记账——
-  // MCP 工具在 sessionToolSpecs 里是裸 push，装三个话痨 server 就能把固定面抬一个数量级而不惊动任何门。
   "model-surface-check",
-  // 前缀抖动门：命中率由上游支配（实测 41.5% 的暖轮整段归零），不能拿它当判据；
-  // 我们这一侧确定可判的是「没有声明的变异源时装配必须逐字纯追加」——钉住排序纪律。
   "prefix-churn-check",
-  // 可复现性门：同一输入两次跑必须逐字段等值。起因是 BLOCKED #56——wall-clock 漏进身份字段
-  // （D7 快照目录名 + 模型可见的快照提示），判卷层的「两次跑一致」从此静默失效。
-  // ts 只准用于观测：本仓今天没人读它，这条把「今天成立」钉成「一直成立」。
   "replay-determinism-check",
-  // 无进展检测门：判的是**误报**（外部两家 shipped 检测器都只公布阈值、不公布 precision）。
-  // 语料 4 条真实录制 + 3 条对照；该报的必须指名，不该报的一条都不许报。
   "no-progress-check",
-  // 成本 ÷ 前进门：分子分母必须同面（前进边界按定义只算主面），零前进是「不可测」不是 0/Infinity。
-  // 起因是第一次把 deriveProgressBoundaries 与 usage 放到同一个读数上就抓到单位混算（差 4.9 倍）。
   "cost-per-progress-check",
-  "a11y-check",
-  // 变异验证：证明单元断言非恒真（注入行为突变必须被测试杀死）。
-  // 与 gate-check 的静态恒真式体检互补——静态查不出「非空但没对准逻辑」的断言。
   "mutate-verify",
-  // 变异表针脚静态预检（秒级，不跑测试）：整张变异表要跑几十分钟且常被并发堵着，
-  // 那段时间里「针脚已随重构失效」的锚点在假装守护——这条把那种失效变成当场红。
   "mutate-needles-check",
 ];
 

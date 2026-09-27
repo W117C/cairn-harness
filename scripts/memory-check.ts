@@ -44,7 +44,7 @@ async function main(): Promise<void> {
 
   // ---------- A 两层布局与读写 ----------
   console.log("[memory-check] A 两层布局与读写/frontmatter");
-  await remember.run({ scope: "project", kind: "architecture", op: "append", content: "# 架构速览\n- 前端 Electron + React" }, ctx);
+  await remember.run({ scope: "project", kind: "architecture", op: "append", content: "# 架构速览\n- agent/core modules" }, ctx);
   const arch = await readFile(join(ws, ".agent", "ARCHITECTURE.md"), "utf8");
   check(arch.includes("架构速览"), "A1 kind=architecture → .agent/ARCHITECTURE.md");
   await remember.run({ scope: "project", kind: "decision", content: "采纳 pnpm 作包管理器" }, ctx);
@@ -54,10 +54,10 @@ async function main(): Promise<void> {
   await remember.run({ scope: "project", kind: "preference", op: "append", content: "代码注释用中文" }, ctx);
   const prefs = await readFile(join(ws, ".agent", "preferences.md"), "utf8");
   check(prefs.includes("代码注释用中文"), "A3 kind=preference → .agent/preferences.md");
-  await remember.run({ scope: "project", kind: "memory", type: "project", topic: "flaky-e2e", content: "panels-check 在 CI 偶发超时" }, ctx);
+  await remember.run({ scope: "project", kind: "memory", type: "project", topic: "flaky-e2e", content: "sandbox-check 在 CI 偶发超时" }, ctx);
   const topicRaw = await readFile(join(ws, ".agent", "memory", "flaky-e2e.md"), "utf8");
   const index = await readFile(join(ws, ".agent", "memory", "MEMORY.md"), "utf8");
-  check(topicRaw.includes("panels-check 在 CI 偶发超时") && index.includes("flaky-e2e"), "A4 kind=memory(project) → .agent/memory/<topic>.md + 索引 upsert");
+  check(topicRaw.includes("sandbox-check 在 CI 偶发超时") && index.includes("flaky-e2e"), "A4 kind=memory(project) → .agent/memory/<topic>.md + 索引 upsert");
   await remember.run({ scope: "global", kind: "memory", type: "user", topic: "editor", content: "用户偏好 VSCode 深色主题" }, ctx);
   const gRaw = await readFile(join(home, "editor.md"), "utf8");
   const gIndex = await readFile(join(home, "MEMORY.md"), "utf8");

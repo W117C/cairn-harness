@@ -169,11 +169,14 @@ function parseToolList(v: unknown): string[] {
 
 // ---- verdict 解析（gate 环标注，V1 不重跑）----
 
-export type StageVerdict = "pass" | "fail" | "unspecified";
+/** 报告里那行 verdict 契约的三种读法。**不叫 `StageVerdict`**：环的裁决另有取值域
+ *  （`supervisor.ts` 的 `RingVerdict` = pass|fail|null，由凭据与这行散文一起算），
+ *  两支同名而字面量集不同时，读一处会以为是读两处。 */
+export type ProseVerdict = "pass" | "fail" | "unspecified";
 
 /** 从结构化报告解析 verdict 行（/^verdict\s*[:：]\s*(pass|fail)$/im；锚定行首防正文误伤）。
  *  捕获组归一小写（verdict: PASS 与 pass 同义——大小写不敏感匹配的语义闭环）。 */
-export function parseVerdict(report: string): StageVerdict {
+export function parseVerdict(report: string): ProseVerdict {
   const m = /(^|\n)[ \t]*(?:[*_-]*\s*)?verdict(?:[*_-]*)?[ \t]*[:：][ \t]*(pass|fail)\b/im.exec(report);
   if (!m) return "unspecified";
   return m[2]!.toLowerCase() === "pass" ? "pass" : "fail";

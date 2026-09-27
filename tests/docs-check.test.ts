@@ -61,15 +61,15 @@ describe("D-3 文档指针禁用行号", () => {
   const TWO = "PROGRESS.md:12 与 BLOCKED.md:7"; // docs-check:allow D-3 反例素材，同行两处命中
 
   it("源码引行号判红，file 报的是被扫描的源文件", () => {
-    const v = checkLineCitations([s("scripts/a11y-check.ts", "// 已归档于 " + CITE + "。")]);
+    const v = checkLineCitations([s("scripts/core-check.ts", "// 已归档于 " + CITE + "。")]);
     const d = hit(v, "D-3");
     expect(d).toHaveLength(1);
-    expect(d[0]!.file).toBe("scripts/a11y-check.ts");
+    expect(d[0]!.file).toBe("scripts/core-check.ts");
     expect(d[0]!.detail).toContain(CITE);
   });
 
   it("标签式锚点不判红（改指法本身就是放行通道）", () => {
-    expect(checkLineCitations([s("scripts/x.ts", "// 见 archive/blocked.md#panels-check-立案")])).toHaveLength(0);
+    expect(checkLineCitations([s("scripts/x.ts", "// 见 archive/blocked.md#sandbox-立案")])).toHaveLength(0);
   });
 
   it("代码文件的行号引用不判红（本判据只管文档指针）", () => {

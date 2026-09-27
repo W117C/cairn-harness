@@ -1,7 +1,6 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { stripTs } from "./helpers/stream-equals";
 import { afterEach, describe, expect, it } from "vitest";
 import { createEventLog, replay, type AgentEvent } from "../src/events";
 import { projectContext, summaryEnvelope } from "../src/agent/context";
@@ -429,7 +428,7 @@ describe("事件流契约", () => {
     };
     await log.append(e);
     const back = await replay(logPath);
-    expect(stripTs(back)).toEqual([e]);
+    expect(back).toEqual([e]);
     expect(back[0].type).toBe("compaction");
   });
 });

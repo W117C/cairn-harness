@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 /** 判卷表路径 = **唯一事实源**：下面的 sha 校验与权限层的「判卷面硬闸」都读这一处，
  *  第二份字面量就是本仓点名的「同族出口策略副本」（一张表两个地址 ⇒ 改一处即静默失配）。 */
@@ -42,11 +42,25 @@ export async function sha256MatchesFrozen(root: string): Promise<{ ok: boolean; 
 
 /** H7（审查 P2）：冻结覆盖漂移——冻结表是白名单枚举，**新增**判卷文件不会被发现。
  *  对判卷区（fixtures/mock/** + fixtures/todo-app/tests/** + M5a fixtures/gym/cases/**
- *  + M7 fixtures/impact/**）
- *  做目录枚举并与冻结表双向集合比对：盘上有而表没有（新判卷文件未入表）/ 表有而盘上无（陈旧条目）均记漂移。
- *  M5a 扩展：fixtures/gym/index.json 是 case 清单（判据），单文件不属目录区，显式并入盘上集合。 */
-export async function frozenCoverageDrift(root: string): Promise<{ onDiskNotInTable: string[]; inTableNotOnDisk: string[] }> {
-  const areas = [join("fixtures", "mock"), join("fixtures", "todo-app", "tests"), join("fixtures", "gym", "cases"), join("fixtures", "impact")];
+ *  + M7 fixtures/impact/** + 能力 14 fixtures/no-progress/**）
+ *  做目录枚举并与冻结表双向比对。
+ *  M5a 扩展：fixtures/gym/index.json 是 case 清单（判据），单文件不属目录区，显式并入盘上集合。
+ *
+ *  两个方向的语义各自不同，别再混成一件事（2026-09-23 实踩，见下面的 `tableDirsNotSwept`）：
+ *  · `onDiskNotInTable` = **区内的盘上集合** 减 表 ⇒ 这一维必须按区枚举（"没入表的新判卷文件"）。
+ *  · `inTableNotOnDisk` = **表里每条自己存不存在**。原先写成"表 减 盘上集合"，而盘上集合只覆盖已登记区
+ *    ⇒ 任何**新判卷区**（第一个案例就是刚冻结的 fixtures/no-progress 7 条）一入表就被读成"盘上没有"，
+ *    门红得理直气壮而文件好好地在那儿——那是判据越界，不是产品说谎。
+ *  · `tableDirsNotSwept` = 表里出现、但不属于任何已登记区的目录 ⇒ **显式登记**才能享受"新文件不漏"那一维。
+ *    不登记不是错，但也不能静默：机制覆盖不到的东西必须自己说出来（同族：未证 ≠ 通过）。 */
+export async function frozenCoverageDrift(root: string): Promise<{
+  onDiskNotInTable: string[]; inTableNotOnDisk: string[]; tableDirsNotSwept: string[];
+}> {
+  const areas = [
+    join("fixtures", "mock"), join("fixtures", "todo-app", "tests"),
+    join("fixtures", "gym", "cases"), join("fixtures", "impact"),
+    join("fixtures", "no-progress"),
+  ].map((a) => a.replaceAll("\\", "/"));
   const extraFiles = ["fixtures/gym/index.json"];
   // 审查 S3-9（agents 分片 #5）：清单里的单文件过去**无条件**计入盘上集合，文件被删时
   // 它仍在集合里 → 表里也有 → 报不出 inTableNotOnDisk，反而把「判卷文件消失」这件事
@@ -68,19 +82,26 @@ export async function frozenCoverageDrift(root: string): Promise<{ onDiskNotInTa
       else if (ent.isFile()) onDisk.push(childRel);
     }
   };
-  for (const area of areas) await walk(area.replaceAll("\\", "/"));
+  for (const area of areas) await walk(area);
   let table: string[] = [];
   try {
     const frozen = JSON.parse(await readFile(join(root, "scripts", "frozen-sha256.json"), "utf8")) as Record<string, string>;
-    table = Object.keys(frozen);
+    table = Object.keys(frozen).map((k) => k.split("\\").join("/"));
   } catch {
     /* 表读取失败由 sha256MatchesFrozen 负责，本函数只做集合比对 */
   }
   const tableSet = new Set(table);
-  const diskSet = new Set(onDisk);
+  const inSweptArea = (rel: string): boolean =>
+    areas.some((a) => rel.startsWith(a + "/")) || extraFiles.includes(rel);
+  // 存在性逐条 stat（不看区）：表里的东西消失 = 陈旧条目，无论它住在哪个目录。
+  const missing: string[] = [];
+  for (const rel of table) {
+    if (!(await stat(join(root, rel)).then(() => true, () => false))) missing.push(rel);
+  }
   return {
     onDiskNotInTable: onDisk.filter((f) => !tableSet.has(f)).sort(),
-    inTableNotOnDisk: table.filter((f) => !diskSet.has(f)).sort(),
+    inTableNotOnDisk: missing.sort(),
+    tableDirsNotSwept: [...new Set(table.filter((f) => !inSweptArea(f)).map((f) => dirname(f)))].sort(),
   };
 }
 

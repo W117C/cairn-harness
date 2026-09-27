@@ -151,3 +151,17 @@ async function mkTmpEmptyRepo(): Promise<string> {
   const path = await import("node:path");
   return fs.mkdtempSync(path.join(os.tmpdir(), "dsh-verify-empty-"));
 }
+
+describe("pipefail：管道里的失败不得被尾端吞掉（25 页施工回归）", () => {
+  it("`false | tail -1` ⇒ ok:false、exitCode=1（施工前这里给的是 ok:true，判卷面据此报绿）", async () => {
+    const r = await defaultExec("false | tail -1", process.cwd());
+    expect(r.ok).toBe(false);
+    expect(r.exitCode).toBe(1);
+  });
+
+  it("对照：整条管道真成功 ⇒ 仍然 ok:true（这条改的是吞码，不是把所有管道判红）", async () => {
+    const r = await defaultExec("printf 'a\\nb\\n' | tail -1", process.cwd());
+    expect(r.ok).toBe(true);
+    expect(r.output.trim()).toBe("b");
+  });
+});

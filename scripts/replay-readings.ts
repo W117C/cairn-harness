@@ -50,6 +50,11 @@ export const REPLAY_READINGS: readonly ReplayReading[] = [
     answers: "工具耗时分布 + 「一轮发几个调用」（§5 D8 并发只读工具的触发面；时间面要靠 append 盖的时钟戳）",
   },
   {
+    id: "prompt-fixed-cost",
+    script: "scripts/replay/prompt-fixed-cost.ts",
+    answers: "生产系统提示的固定开销：每请求约多少 token、占实测输入多少（A/B 幅度要等噪声底，这一块不用）",
+  },
+  {
     id: "run-scorecard",
     script: "scripts/replay/run-scorecard.ts",
     answers: "能力 10 的 y 轴基线：每个 run 一行终态（一次绿 / 返工后绿 / 终局红 / 证据缺席 / 没改盘）+ 返工轮数",

@@ -62,6 +62,16 @@ describe("provider key（safeStorage，明文零落盘）", () => {
     expect(await providerKeyStatus()).toEqual({ available: true, stored: ["glm"] });
   });
 
+  it("四家真实 provider 都能存取；demo/未知 id 仍拒收", async () => {
+    installProviderKeyBackend(makeFakeSafeStorage(), storePath);
+    for (const provider of ["glm", "openai", "anthropic", "gemini"] as const) {
+      expect(await putProviderKey(provider, `${FAKE_KEY}-${provider}`)).toEqual({ ok: true });
+    }
+    expect((await providerKeyStatus()).stored).toEqual(["anthropic", "gemini", "glm", "openai"]);
+    expect((await putProviderKey("demo", FAKE_KEY)).ok).toBe(false);
+    expect((await putProviderKey("unknown", FAKE_KEY)).ok).toBe(false);
+  });
+
   it("fail-closed：无后端（safeStorage 不可用）→ 拒存 + 显式错误；任何路径不产生 store 文件", async () => {
     expect(installProviderKeyBackend({ isEncryptionAvailable: () => false, encryptString: () => Buffer.alloc(0), decryptString: () => "" }, storePath)).toBe(false);
     setProviderKeyBackend(null);
@@ -111,6 +121,7 @@ describe("provider key（safeStorage，明文零落盘）", () => {
     expect(validateProviderKeyStore({ version: 1, keys: {} }).ok).toBe(true);
     expect(validateProviderKeyStore({ version: 2, keys: {} }).ok).toBe(false);
     expect(validateProviderKeyStore({ version: 1, keys: {}, extra: 1 }).ok).toBe(false);
+    expect(validateProviderKeyStore({ version: 1, keys: { unknown: { ciphertext: "QUJD", updatedAt: "2026-09-12T00:00:00Z" } } }).ok).toBe(false);
     expect(validateProviderKeyStore({ version: 1 }).ok).toBe(false);
     expect(validateProviderKeyStore({ version: 1, keys: { glm: { ciphertext: "不是 base64!", updatedAt: "2026-09-12T00:00:00Z" } } }).ok).toBe(false);
     expect(validateProviderKeyStore({ version: 1, keys: { glm: { ciphertext: "QUJD", updatedAt: "不是时间" } } }).ok).toBe(false);
@@ -178,10 +189,10 @@ describe("provider key（safeStorage，明文零落盘）", () => {
     try {
       delete process.env.M0_API_KEY;
       delete process.env.ANTHROPIC_API_KEY;
-      // 缺省 = 存储白名单（今天只有 glm）⇒ 存了 anthropic 也不会被凭空激活
+      // 缺省 = 四家存储白名单；每家写进自己的 env，不能只激活 glm。
       expect(await injectStoredProviderKey()).toBe(true);
       expect(process.env.M0_API_KEY).toBe("byok-probe-glm-0123456789");
-      expect(process.env.ANTHROPIC_API_KEY).toBeUndefined();
+      expect(process.env.ANTHROPIC_API_KEY).toBe("byok-probe-anthropic-0123456789");
       // 按清单调用：每家写到自己那个 env 名（envKeyOf 决定，不是 M0_API_KEY 一把筐）
       delete process.env.M0_API_KEY;
       expect(await injectStoredProviderKey(["glm", "anthropic"])).toBe(true);

@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { stripTs, withoutTs } from "./helpers/stream-equals";
+import { withoutTs } from "./helpers/stream-equals";
 import { afterEach, expect, it, vi } from "vitest";
 import { handleRunCancel, initSettingsStore, runAgent } from "../src/main/agent-runner";
 import { createEventLog, replay, type AgentEvent } from "../src/events";
@@ -111,7 +111,8 @@ it("production GLM run restores history and sends tool feedback in a fresh reque
   expect(requests[0]?.tools?.map((tool) => tool.function.name)).not.toContain("write_file");
   expect(requests[1]?.messages).toContainEqual(expect.objectContaining({ role: "tool", tool_call_id: "read-one", content: expect.stringContaining("WORKSPACE_FEEDBACK") }));
   expect(withoutTs(result[0]!)).toEqual({ type: "user_message", content: "PRIOR_HISTORY" });
-  expect(live).toEqual(stripTs(result.slice(2)));
+  // 落盘戳盖在事件本身上 ⇒ live 与重放必须是同一个式子（不剥字段）
+  expect(live).toEqual(result.slice(2));
   const resumed = await runAgent({
     workspace: dir, message: "FOLLOW_UP", mode: "read-only", sessionId: "session", logPath,
   });
@@ -194,6 +195,6 @@ it.each([false, true])("production GLM compaction publishes only completed summa
   expect(remount).toHaveBeenCalledTimes(2);
   const compact = live.find((e) => e.type === "compaction");
   expect(compact).toMatchObject({ trigger: "auto", reason: "threshold" });
-  expect(stripTs(result.slice(61))).toEqual(live);
+  expect(result.slice(61)).toEqual(live);
   if (compact?.type === "compaction") expect(compact.tokens_after).toBeLessThan(compact.tokens_before);
 });

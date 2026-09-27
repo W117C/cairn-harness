@@ -1204,6 +1204,32 @@ const MUTATIONS = [
     apply: (s) => s.replace("          if (e.agent_id === undefined) {", "          if (false) {"),
     expectFail: "主会话那一桶与 worker 那一桶各算一次：不漏 main，也不因为拆桶而双计",
   },
+  // ---- 09-27 同一族的第三、四支：**主会话**那一桶的价键。两道美元闸原先读设置盘字段、拨号读 resolved
+  // spec，实测三种合法配置下分叉（留空 ⇒ 闸惰；指定强档 ⇒ 只读到实付 1/4；指定便宜档 ⇒ 读到 10 倍）。
+  {
+    id: "session-budget-key-from-settings-field",
+    src: "src/main/agent-runner.ts",
+    test: "tests/budget-price-key.test.ts",
+    desc: "会话成本闸的价键退回设置盘那个字段（拨号仍按 resolved 档）⇒ 闸与实付两个数：最常见的「model 留空」配置下整闸惰掉",
+    apply: (s) => s.replace("priceModel: budgetPriceKeyOf(runModel ?? resolveRunModel(s))", "priceModel: s.model"),
+    expectFail: "两处消费各自接线在位",
+  },
+  {
+    id: "goal-budget-key-from-settings-field",
+    src: "src/main/agent-runner.ts",
+    test: "tests/budget-price-key.test.ts",
+    desc: "只修会话闸、goal 美元闸那一半退回读盘上字段 ⇒ 同一个 run 里两道闸各说各话（判据要求两条接线同时在位）",
+    apply: (s) => s.replace("  const model = budgetPriceKeyOf(args.runModel);", "  const model = (await store().get()).model;"),
+    expectFail: "两处消费各自接线在位",
+  },
+  {
+    id: "run-model-resolution-drops-request-model",
+    src: "src/main/agent-runner.ts",
+    test: "tests/budget-price-key.test.ts",
+    desc: "解析时丢掉逐请求指定的模型 ⇒ 闸与拨号仍然「一致」但一起错档：只比「闸=拨号」的判据零分辨力，咬住它的是那条「必须与设置盘字段折出的数不同」的牙齿",
+    apply: (s) => s.replace("    ...(requestModel !== undefined ? { requestModel } : {}),\n", ""),
+    expectFail: "per-run 指定强档",
+  },
   {
     id: "budget-unpriced-tokens-swallowed",
     src: "src/agent/orchestrator-join.ts",
@@ -4094,7 +4120,7 @@ const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/goal-continue.test.ts",
     desc: "run 尾不再问判据（整条续跑/停止链被旁路）⇒ goal_set 成了只写不读的陈列，理由也从不上屏",
-    apply: (s) => s.replace("const next = await goalNextTurn({ logPath, sessionId, unattended: over.unattended === true, aborted: () => over.signal?.aborted === true });", "const next: { message: string; origin: GoalTurnOrigin } | null = null;"),
+    apply: (s) => s.replace("const next = await goalNextTurn({ logPath, sessionId, unattended: over.unattended === true, aborted: () => over.signal?.aborted === true, runModel: modelSelection });", "const next: { message: string; origin: GoalTurnOrigin } | null = null;"),
     expectFail: "设了目标但这一轮没写盘也没验证 ⇒ 立刻停，并落一条写明理由的 goal_stopped（读答型目标不烧钱）",
   },
   {

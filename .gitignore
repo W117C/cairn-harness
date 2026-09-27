@@ -1,8 +1,7 @@
 .DS_Store
 oh-src/
 node_modules/
-dist/
-out/
+# Build/cache outputs
 .tmp/
 # 代码地图/索引工具的运行缓存（17M 级 codegraph.db + daemon.log，非源码）。
 .codegraph/
@@ -24,3 +23,8 @@ fixtures/todo-app/.agent/
 
 # 门禁耗时账本：pnpm gates 每次跑完自己写，值只活在这儿（文档写「见 pnpm facts」，不抄值）
 docs/facts/
+
+# AI 工具运行时产物（会话车道/运行记忆，非源码；.workbuddy-ai 此前只在 .git/info/exclude，此处一并入仓级忽略）
+.qoder/
+.workbuddy/
+.workbuddy-ai/

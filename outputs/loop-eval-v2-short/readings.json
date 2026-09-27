@@ -1,0 +1,149 @@
+[
+ {
+  "r": {
+   "id": "I1",
+   "name": "歧义·加开关",
+   "rep": 1,
+   "system": "short",
+   "seedVerifyOk": true,
+   "seconds": 98.375,
+   "requests": 8,
+   "tokensIn": 26689,
+   "tokensOut": 1860,
+   "cny": 0.0265592,
+   "toolCalls": 10,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 66,
+   "readsBeforeFirstWrite": 2,
+   "clarified": 1,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/todo.ts"
+   ],
+   "exitError": null
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "写盘前没有 propose_plan"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "I2",
+   "name": "修 bug·复现先行",
+   "rep": 1,
+   "system": "short",
+   "seedVerifyOk": false,
+   "seconds": 97.184,
+   "requests": 4,
+   "tokensIn": 11518,
+   "tokensOut": 281,
+   "cny": 0.010001199999999998,
+   "toolCalls": 5,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": null
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "写盘前一次都没读"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "I3",
+   "name": "优化·不改行为",
+   "rep": 1,
+   "system": "short",
+   "seedVerifyOk": true,
+   "seconds": 93.101,
+   "requests": 7,
+   "tokensIn": 22206,
+   "tokensOut": 953,
+   "cny": 0.0204332,
+   "toolCalls": 9,
+   "toolFailures": 1,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 21,
+   "readsBeforeFirstWrite": 3,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": true,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/todo.ts"
+   ],
+   "exitError": null
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "I4",
+   "name": "造功能·自验收",
+   "rep": 1,
+   "system": "short",
+   "seedVerifyOk": true,
+   "seconds": 43.232,
+   "requests": 3,
+   "tokensIn": 8827,
+   "tokensOut": 1033,
+   "cny": 0.009954,
+   "toolCalls": 6,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 36,
+   "readsBeforeFirstWrite": 2,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": true,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": true,
+   "touchedJudge": true,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    "src/todo.ts",
+    "tests/todo.test.ts"
+   ],
+   "exitError": null
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ }
+]

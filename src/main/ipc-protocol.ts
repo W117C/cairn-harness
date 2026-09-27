@@ -8,10 +8,20 @@ import type { OnboardingGroup } from "./onboarding-groups";
 import type { ScheduleSnapshot } from "./scheduler";
 import type { LicenseState } from "./license";
 import type { UpdateCheckResult } from "./updater";
+import type { AddProjectInput, ProjectRecord } from "./project-registry";
+import type { SessionMetadataRecord } from "./session-metadata";
+import type { RunAttachmentReference } from "./run-attachments";
+import type { ThinkingEffort } from "../providers/capabilities";
+import type { ProviderInfo } from "./provider-runtime";
 
 export type { AgentEvent } from "../events";
 export type { PermissionMode } from "../permissions";
 export type { AppSettings } from "./settings";
+export type { AddProjectInput, ProjectRecord } from "./project-registry";
+export type { SessionMetadataRecord } from "./session-metadata";
+export type { RunAttachmentReference } from "./run-attachments";
+export type { ThinkingEffort } from "../providers/capabilities";
+export type { ProviderInfo } from "./provider-runtime";
 
 export interface RunRequest {
   message: string;
@@ -20,11 +30,19 @@ export interface RunRequest {
   sessionId?: string;
   /** SoL-Pi P-1 步骤 3：本次 run 的工作区（绝对路径）；缺省按 overrides → env → settings → 内置靶子解析。 */
   workspace?: string;
+  /** Stable registry id (for example openai-standard). Provider wire model names are settings-only legacy input. */
+  model?: string;
+  /** Provider capability gate. All current adapters only accept off until thinking is wired to the wire. */
+  thinking?: ThinkingEffort;
+  /** Local references only. Main validates canonical location/type before the run starts. */
+  attachments?: RunAttachmentReference[];
 }
 
 export interface RunResponse {
   ok: boolean;
   error?: string;
+  /** Present only when validated references were consumed as path context. */
+  attachmentCount?: number;
 }
 export interface AskPayload {
   askId: string;
@@ -91,7 +109,8 @@ export interface CompactResponse {
 /** 澄清表单提交值：key = 问题原文，value = 选中项或自由补充。 */
 export type ClarifyAnswers = Record<string, string | string[]>;
 
-/** M1e 会话列表条目（main → renderer）。M4a：定时会话徽标投影（origin/automation_id，§12.2.6）。 */
+/** M1e 会话列表条目（main → renderer）。CX-01 的 sidecar 字段仅在确有 metadata 时出现，
+ *  因而老会话保持旧 payload 形状，不被列表读取凭空补造。 */
 export interface SessionInfoPayload {
   id: string;
   mtimeMs: number;
@@ -99,6 +118,12 @@ export interface SessionInfoPayload {
   origin?: "scheduled";
   automationId?: string;
   automationName?: string;
+  title?: string;
+  pinned?: boolean;
+  archived?: boolean;
+  projectId?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // ---- M2d 记忆快照（getState 透传：两层记忆 + 外部引用待批清单）----
@@ -141,8 +166,8 @@ export interface AgentApi {
   onAsk(cb: (p: AskPayload) => void): () => void;
   onAskDone(cb: (p: AskOutcomePayload) => void): () => void;
   getState(): Promise<StateResponse>;
-  /** M1e：Provider 只读信息（设置页展示）。 */
-  getProviderInfo(): Promise<{ provider: string; model: string }>;
+  /** Provider/model/capability catalog derived from the same registry used by workers. */
+  getProviderInfo(): Promise<ProviderInfo>;
   /** §13 新手引导覆盖面（只读，唯一事实源在主进程 `onboarding-groups.ts`）。
    *  必选而非 `?`：删掉桥接行就 typecheck 红，不用运行时 typeof 自证。 */
   getOnboarding(): Promise<OnboardingGroup[]>;
@@ -155,6 +180,13 @@ export interface AgentApi {
   openSession(id: string): Promise<{ events: AgentEvent[] }>;
   renameSession(oldId: string, newName: string): Promise<{ id: string }>;
   deleteSession(id: string): Promise<{ currentSession: string | null }>;
+  // ---- CX-01：真实项目注册表 + Session-plane 组织记录（必选桥；不是 renderer-local state）----
+  listProjects(): Promise<ProjectRecord[]>;
+  addProject(input: AddProjectInput): Promise<ProjectRecord>;
+  removeProject(id: string): Promise<ProjectRecord>;
+  setSessionPinned(sessionId: string, pinned: boolean): Promise<SessionMetadataRecord>;
+  setSessionArchived(sessionId: string, archived: boolean): Promise<SessionMetadataRecord>;
+  assignSessionProject(sessionId: string, projectId: string | null): Promise<SessionMetadataRecord>;
   // ---- M2g：preload 清账（六条通道全部桥接完成，`?` 按实际**收紧**为必选）----
   // 收紧理由：preload 现已无条件暴露这六条，optional 只会掩盖「桥接被删」的回归——
   // 收紧后谁删桥接行 typecheck 即红（静态兜住，不再靠运行时 typeof 探测）。

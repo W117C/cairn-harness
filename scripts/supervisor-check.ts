@@ -39,7 +39,10 @@ const A_CASES: Array<[SupervisorContext, SupervisorAction["kind"]]> = [
   [{ verdict: "pass", stageCount: 1 }, "accept"],
   [{ verdict: "fail", stageCount: 1, lastAgentId: "w1", lastFailure: "挂" }, "retry"],
   [{ verdict: "fail", stageCount: 1 }, "spawn"],
-  [{ verdict: "error", stageCount: 2, lastAgentId: "w1" }, "retry"],
+  // `"error"` 曾在这支枚举里、与 fail 同路走 retry，但 `ringVerdict`/`parseVerdict` 都产不出它
+  // （全仓唯一写它的地方就是本行）⇒ 2026-09-24 删。留一行**越界值**钉子：删掉之后这类输入
+  // 按畸形走 escalate，不再悄悄换一次重试；它不是产品可达格，别读成覆盖。
+  [{ verdict: "error" as unknown as SupervisorContext["verdict"], stageCount: 2, lastAgentId: "w1" }, "escalate"],
   [{ verdict: null, stageCount: 1 }, "escalate"], // 畸形 report
   [{} as SupervisorContext, "escalate"], // 完全畸形（verdict undefined）
   [{ verdict: "pass", stageCount: 6 }, "abort"], // maxStages 耗尽

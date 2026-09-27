@@ -2,6 +2,8 @@
 // 非法值回退默认（验收：写入后重新加载得到相同布局 / 非法布局值回退默认）。electron-free，可 headless 单测。
 import { readFile } from "node:fs/promises";
 import { writeFileAtomic } from "../atomic-write";
+import { ENV_KEYED_PROVIDERS } from "../providers/env-keys";
+import { findSpecByNameOrId, DEFAULT_MODEL_TABLE } from "../providers/registry";
 
 // M2d：第四面板 memory（两层记忆快照 + 会话内 remember 审计投影）；M2e：第五面板 plugins（插件容器）；
 // M2f：第六面板 sidechat（辅助对话：只读旁路会话 + 提升记录投影）；
@@ -11,7 +13,7 @@ export const PANEL_IDS = ["approvals", "token", "git", "memory", "plugins", "sid
 export type PanelId = (typeof PANEL_IDS)[number];
 
 export interface LayoutState {
-  /** 每面板开/关（缺省 false；Partial 因 panels-check 冻结字面量只写三类键，M2d 增至四类）。 */
+  /** 每面板开/关（缺省 false；布局状态由应用服务持久化）。 */
   open: Partial<Record<PanelId, boolean>>;
   /** 当前打开的面板（单面板制 §10.1；null = 右栏收起）。 */
   activePanel: PanelId | null;
@@ -24,8 +26,8 @@ export { PERMISSION_MODES, type PermissionMode } from "../permissions/modes";
 import { PERMISSION_MODES, type PermissionMode } from "../permissions/modes";
 export type SafeMode = "off" | "report" | "gate";
 export type ThemeSetting = "system" | "light" | "dark";
-/** 主对话模型通道：demo = 冻结剧本（无 key 也能跑通的显式演示档）；glm = 真实 OpenAI 兼容通道。 */
-export type ProviderKind = "demo" | "glm";
+/** 主对话模型通道：demo 是冻结剧本；其余四家与 worker registry / env-key 表同源。 */
+export type ProviderKind = "demo" | (typeof ENV_KEYED_PROVIDERS)[number];
 
 export interface AppSettings {
   layout: LayoutState;
@@ -114,7 +116,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   evidenceReceipts: false,
   economicCompaction: false,
   impactAnalysis: false,
-  // 能力 5 的收束闸：`agent-plan.md` §483 写的是「桌面产品 lint/test 两者默认开」，而这里曾长期 false
+  // 能力 5 的收束闸：核心产品要求 lint/test 两者默认开，而这里曾长期 false
   // （09-19 设计稿 D7 记的"燃料默认不在线"）。用户裁决 2026-09-23：**只翻这一项**，
   // `actionFusion` 仍留关，等准确率与 `$/成功任务` 的对照数出来再裁。
   // 硬上界（开闸时）：每 run 至多一拍、模型自调过 verify 即让位、仓库没有可验面则整段跳过。
@@ -125,9 +127,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 const SAFE_MODES = ["off", "report", "gate"] as const;
 const THEMES = ["system", "light", "dark"] as const;
-/** 设置面「模型通道」的可持久化取值。导出给 `providers-check` ⑦ 对账：显示面（index.html）与
- *  能力面（key 存储白名单）任一支跑在它前面，都是「点了存不下」或「存得进没人显示」。 */
-export const PROVIDER_KINDS = ["demo", "glm"] as const;
+/** 设置面可持久化的主会话 provider：demo + 四个真实 adapter。 */
+export const PROVIDER_KINDS = ["demo", ...ENV_KEYED_PROVIDERS] as const;
 
 function isPanelId(v: unknown): v is PanelId {
   return typeof v === "string" && (PANEL_IDS as readonly string[]).includes(v);
@@ -164,6 +165,11 @@ export function validateSettings(raw: unknown): AppSettings {
   const capRaw = typeof r.scheduleConcurrencyCap === "number" && Number.isInteger(r.scheduleConcurrencyCap)
     ? r.scheduleConcurrencyCap
     : null;
+  // Legacy settings may store either the stable registry id or the provider wire model name.
+  // Unregistered strings are discarded here; RunRequest itself remains strict-id-only.
+  const model = typeof r.model === "string" && findSpecByNameOrId(DEFAULT_MODEL_TABLE, r.model)
+    ? r.model.slice(0, 200)
+    : d.model;
   return {
     layout: { open, activePanel, width },
     mode: PERMISSION_MODES.includes(r.mode as PermissionMode) ? (r.mode as PermissionMode) : d.mode,
@@ -196,7 +202,7 @@ export function validateSettings(raw: unknown): AppSettings {
     autoVerifyRepair: r.autoVerifyRepair === true,
     planRequiredByDefault: r.planRequiredByDefault === true,
     provider: PROVIDER_KINDS.includes(r.provider as ProviderKind) ? (r.provider as ProviderKind) : d.provider,
-    model: typeof r.model === "string" ? r.model.slice(0, 200) : d.model,
+    model,
     // 工作区：非空字符串取原值（越界长度回退默认，避免把畸形路径带进 run 装配）；其余回退 null
     workspace:
       typeof r.workspace === "string" && r.workspace.trim() !== "" && r.workspace.length <= 4096
