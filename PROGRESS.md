@@ -4379,3 +4379,24 @@ git 调用由 `scripts/mutate-verify.mjs` 注入 ⇒ 本模块不自己 spawn �
 - 剩（本条欠的一格）：评估面的钱轴还缺**另一半**——`UsageEvent` 上没有 model（`src/events/index.ts:48`），
   整份语料实测 usage 166 条自带 model **0**、带缓存分块 **0**，全语料没有任何一行带 `model`/`picked`（含 `agent_spawned`、`routing_decision`）⇒ 无处可 join。
   那个文件此刻有别人两块在飞改动，本轮刻意不叠第三块。
+
+#### 第 145 页尾款 · 整树入库把 3 条锚点的针脚留在原地（空操作），另有一格顺手结案
+
+- `14d2736` 那次「工作树整体入库」除了带走我的原子簇，还把两条**别人在飞的重写**一并落进 HEAD：
+  `src/events/index.ts` 的落盘盖戳从「造一份盘上副本 `stamped`」改成「盖在事件本身上 `holder.ts`」（为了让
+  `ipc:check`/`schedule-check` 的 live≡盘 两条老不变式不再恒红），以及 `no-progress.ts` 的抑制条件多了一位
+  `userSpokeSinceLast`。两处实现一动，**钉着旧写法的 3 条锚点当场变成空操作**（针脚 0 命中 ⇒ 变异永不生效，
+  而报告只说「基线不绿」不会说"我守的东西搬家了"）：`event-stamp-dropped`、`event-stamp-overwrites-producer-ts`、
+  `np-write-suppression-ignored`。⇒ 这正是规则 217 的反向：**别人提交了实现，我的针脚就得跟着走**，
+  而秒级尺（`--check-needles`）已经在报这件事——这次是它自己抓的，不是我人肉看出来的。
+- 改法：`event-stamp` 两条改指 `if (holder.ts === undefined) holder.ts = Date.now();`（一条摘赋值、一条改成无条件赋值）；
+  `np-write-suppression` 不再钉整行——**整行式针脚在被测那一行"再加一个条件"时必然 0 命中**，
+  改成只钉 `!cur.wroteSinceLast && ` 那一位，下次谁再加条件它不碎。
+- 复跑凭证：干净 HEAD（`9028507`）独立树单跑 3 条 **3.4s 全杀**；`--check-needles` 842 条 **阻断 13 → 0**
+  （这把尺开张以来第一次读到 0：`待复认 0｜未覆盖 0｜未入库面 0｜钉在飞文本 0｜killer 指针失效 0`，改法语法体检全过）。
+- 顺手结案 #11：那批"消费者入库、新模块未跟踪"的半落库随整树入库一起没了——现读
+  `src/main/provider-runtime.ts`／`run-request.ts`／`run-attachments.ts`／`src/providers/capabilities.ts`／
+  `scripts/replay/prompt-fixed-cost.ts` **全部 tracked**，`head-import-face` 读到
+  `文件 471｜import 边 2788｜符号缺失 0｜模块悬空 0（存量已豁免 0）`✅。
+  ⇒ 第 144 页那张 167 条未证的价目表**前提已消失**：下一次整表普查应显著少掉那批"判卷载不动"，
+  届时按规则 227 的新分类复算（这条也并进 #17 的复跑理由）。
