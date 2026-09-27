@@ -87,3 +87,29 @@ export function headGateTableIntegrity(manifestSrc: string | null, pkgJsonText: 
   }
   return { gates, withoutScript: gates.filter((g) => !scripts.has(g)) };
 }
+
+/** 一棵树里**需要各自装依赖**的目录（根 ＋ 每个自带 `package.json` 的子仓库），返回相对根的路径。
+ *
+ * 为什么要有这一层（2026-09-27 实测，第一次在干净 HEAD 上跑全量判卷）：
+ * `head-cert` 只把**根** `node_modules` 硬链接进隔离树，而 `fixtures/todo-app` 这类**靶子仓库**
+ * 是被判卷拿去真跑命令的（`gated-tools` 的 run_shell、`runner-gates` 的 verify 拍都在它里面执行）。
+ * 它的 `node_modules` 由 `.gitignore` 排除 ⇒ 干净树里没有 ⇒ 那两条判卷在 HEAD 上**必红**，
+ * 而红的是环境不是代码（规则 87/103/227 那一族在"整表"面上的形状：不分开记，HEAD 的账就永远说不清）。
+ *
+ * 取料＝盘上目录树，由调用方注入 `list`（本层不碰盘，与同文件其余纯函数同纪律）；
+ * **不写死 `fixtures/todo-app` 这个名字**——别人再加一个靶子仓库时自动跟上（挂现状不挂手抄表）。 */
+export function depDirs(list: (rel: string) => { name: string; dir: boolean }[], maxDepth = 3): string[] {
+  const out: string[] = [];
+  const walk = (rel: string, depth: number): void => {
+    const entries = list(rel);
+    if (entries.some((e) => !e.dir && e.name === "package.json")) out.push(rel);
+    if (depth >= maxDepth) return;
+    for (const e of entries) {
+      // `node_modules` 里每个包都有自己的 package.json：跟进去就会把整棵依赖图当成靶子仓库
+      if (!e.dir || e.name === "node_modules" || e.name.startsWith(".")) continue;
+      walk(rel === "" ? e.name : rel + "/" + e.name, depth + 1);
+    }
+  };
+  walk("", 0);
+  return out;
+}

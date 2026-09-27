@@ -7187,6 +7187,31 @@ const MUTATIONS = [
     apply: (s) => s.replace("importFace !== null && (importFace.headFiles.size === 0 || importFace.edges.length === 0)", "importFace !== null && false"),
     expectFail: "取到**空面**（文件 0 或边 0）与未取同处置：0 条 findings 正好像「自洽」（空载棘轮，规则 129/196）",
   },
+  // ---- 09-27 第 146 页：认证树要连**靶子仓库**的依赖一起备齐（干净 HEAD 全量 5 红里有 2 红是环境）----
+  {
+    id: "depdirs-descends-into-node-modules",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "不许走进 node_modules：那里每个包都自带 package.json ⇒ 一进去就把整棵依赖图当成靶子仓库，认证一次要硬链接成百上千个目录（且没有一个是被测的）",
+    apply: (s) => s.replace('if (!e.dir || e.name === "node_modules" || e.name.startsWith(".")) continue;', 'if (!e.dir || e.name.startsWith(".")) continue;'),
+    expectFail: "node_modules 里那些 package.json 不许算",
+  },
+  {
+    id: "depdirs-depth-cap-dropped",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "摘掉深度帽 ⇒ 取料没有边界（今天只有 4 层，将来谁把 monorepo 塞进来就得走穿整棵树）；这一行是「成本有界」的唯一执行点",
+    apply: (s) => s.replace("    if (depth >= maxDepth) return;", "    if (false) return;"),
+    expectFail: "深度帽：maxDepth 之外的不收",
+  },
+  {
+    id: "head-cert-subdep-loop-dropped",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "算出来不接：遍历一个空数组 ⇒ 缺额照报、读数照印，而依赖一个都没补。接线判据因此钉**循环头**而不是函数名（只钉函数名时这条变异会存活）",
+    apply: (s) => s.replace("for (const d of subDirs) {", "for (const d of [] as string[]) {"),
+    expectFail: "接线：认证流程真的按它补子仓库依赖",
+  },
   {
     id: "pointer-audit-treats-unreadable-file-as-fine",
     src: "scripts/lib/mutate-gates.ts",

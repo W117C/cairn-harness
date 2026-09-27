@@ -1,11 +1,11 @@
 /** 认证一棵树之前的那道前置检查（第 84 页：我两次把**环境假红**读成代码红）。
  *  纯函数层：`declaredDeps` / `installedDeps` / `missingDeclaredDeps` / `certLevel`（第 119 页加的等级）。 */
 import { spawnSync, execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { certLevel, declaredDeps, headGateTableIntegrity, installedDeps, missingDeclaredDeps } from "../scripts/lib/head-cert-deps";
+import { certLevel, declaredDeps, depDirs, headGateTableIntegrity, installedDeps, missingDeclaredDeps } from "../scripts/lib/head-cert-deps";
 
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 const listWorktrees = (cwd: string): string[] =>
@@ -210,5 +210,82 @@ describe("认证流程里的门表那一行（接线）", () => {
   it("取不到时出声「门表未取」，不等于门表完整", () => {
     expect(src.includes("门表未取")).toBe(true);
     expect(src.includes("不等于门表完整")).toBe(true);
+  });
+});
+
+/* 第 146 页：第一次在干净 HEAD 上跑全量判卷（5 红 / 2770 绿）。其中 2 条红的是**环境**——
+   `gated-tools` 与 `runner-gates` 都在靶子仓库 `fixtures/todo-app` 里真跑命令，而它的 `node_modules`
+   被 `.gitignore` 排除 ⇒ 认证树里根本没有。`head-cert` 原先只硬链接**根** node_modules。 */
+describe("depDirs：一棵树里需要各自装依赖的目录", () => {
+  // 目录树写成 `Record<路径, 条目[]>`，条目以 `/` 结尾表示目录。
+  const tree = (spec: Record<string, string[]>) => (rel: string): { name: string; dir: boolean }[] =>
+    (spec[rel] ?? []).map((raw) => raw.endsWith("/")
+      ? { name: raw.slice(0, -1), dir: true }
+      : { name: raw, dir: false });
+
+  it("根与每个自带 package.json 的子目录都算（不写死名字 ⇒ 再加一个靶子仓库自动跟上）", () => {
+    const got = depDirs(tree({
+      "": ["package.json", "src/", "fixtures/"],
+      "src": ["main.ts"],
+      "fixtures": ["todo-app/", "notes.md"],
+      "fixtures/todo-app": ["package.json", "src/"],
+    }));
+    expect(got).toEqual(["", "fixtures/todo-app"]);
+  });
+
+  it("node_modules 里那些 package.json 不许算：否则整棵依赖图都被当成靶子仓库", () => {
+    const got = depDirs(tree({
+      "": ["package.json", "node_modules/"],
+      "node_modules": ["vitest/"],
+      "node_modules/vitest": ["package.json", "node_modules/"],
+      "node_modules/vitest/node_modules": ["uikit/"],
+      "node_modules/vitest/node_modules/uikit": ["package.json"],
+    }));
+    expect(got).toEqual([""]);
+  });
+
+  it("隐藏目录不进（`.worktrees` 里全是别的树，它们的 package.json 与本树无关）", () => {
+    const got = depDirs(tree({
+      "": ["package.json", ".worktrees/", ".agent/"],
+      ".worktrees": ["head-cert/"],
+      ".worktrees/head-cert": ["package.json"],
+      ".agent": ["config.json"],
+    }));
+    expect(got).toEqual([""]);
+  });
+
+  it("深度帽：maxDepth 之外的不收（取料成本有界，不许为了找靶子把整仓扫穿）", () => {
+    const deep = tree({
+      "": ["package.json", "a/"],
+      "a": ["package.json", "b/"],
+      "a/b": ["package.json", "c/"],
+      "a/b/c": ["package.json"],
+    });
+    expect(depDirs(deep, 2)).toEqual(["", "a", "a/b"]);
+    expect(depDirs(deep, 3)).toEqual(["", "a", "a/b", "a/b/c"]);
+  });
+
+  it("真表自证：本仓现读必须含根与 fixtures/todo-app（这条尺自己不许空载）", () => {
+    const root = repoRoot;
+    const got = depDirs((rel) => {
+      try {
+        return readdirSync(join(root, rel), { withFileTypes: true })
+          .map((e) => ({ name: e.name, dir: e.isDirectory() }));
+      } catch {
+        return [];
+      }
+    });
+    expect(got).toContain("");
+    expect(got).toContain("fixtures/todo-app");
+  });
+
+  it("接线：认证流程真的按它补子仓库依赖，补不齐就点名（算出来不接＝没有）", () => {
+    const src = readFileSync(join(repoRoot, "scripts", "head-cert.ts"), "utf8");
+    expect(src, "没调 depDirs ⇒ 靶子仓库的判卷在干净树上必假红").toContain("depDirs((rel) =>");
+    expect(src, "调了不接（算出来没人用）⇒ 这条判据要钉循环头，不只钉函数名").toContain("for (const d of subDirs) {");
+    expect(src, "补齐动作丢了 ⇒ 只是知道缺，没修").toContain('run(MAIN, "cp", ["-al", from, into])');
+    expect(src, "补不齐不出声 ⇒ 下一条读数又会把环境红算成代码红").toContain("不可归因于代码");
+    // 反向：根那份的取料不许被子仓库这一层取代（两半都要在）
+    expect(src, "根 node_modules 那一半被顺手摘了").toContain('run(MAIN, "cp", ["-al", join(MAIN, "node_modules"), nm])');
   });
 });

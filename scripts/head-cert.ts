@@ -17,7 +17,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { certLevel, declaredDeps, headGateTableIntegrity, missingDeclaredDeps } from "./lib/head-cert-deps";
+import { certLevel, declaredDeps, depDirs, headGateTableIntegrity, missingDeclaredDeps } from "./lib/head-cert-deps";
 import { checkHeadImportFace, collectHeadEdges, findDanglingImports } from "./head-import-face";
 
 const argv = process.argv.slice(2);
@@ -125,6 +125,35 @@ if (missing.length > 0 && !flag("no-borrow")) {
 }
 const certifiable = missing.length === 0;
 if (!certifiable) say("⚠️ 依赖不全 ⇒ 下面的红**不可归因于代码**（先装齐或换一棵树；这是规则 87/103/184 那一族）");
+
+/* ②b 子仓库的依赖集：`fixtures/todo-app` 这类**靶子仓库**是被判卷拿去真跑命令的（run_shell / verify 拍），
+ *  而它的 `node_modules` 被 `.gitignore` 排除 ⇒ 干净树里根本没有 ⇒ 那两条在 HEAD 上必红，红的却是环境。
+ *  上面那条只处理根 `node_modules`，所以这里按"盘上哪些目录自带 package.json"现派生（不写死名字）。
+ *  补不齐就点名——不点名就会被读成"HEAD 本来就红"（第 146 页，第一次干净 HEAD 全量 5 红里 2 条是这一类）。 */
+const subDirs = depDirs((rel) => {
+  try {
+    return readdirSync(join(treeAbs, rel), { withFileTypes: true }).map((e) => ({ name: e.name, dir: e.isDirectory() }));
+  } catch {
+    return [];
+  }
+}).filter((d) => d !== "");
+const subMissing: string[] = [];
+for (const d of subDirs) {
+  const into = join(treeAbs, d, "node_modules");
+  if (existsSync(into)) continue;
+  const from = join(MAIN, d, "node_modules");
+  if (!existsSync(from)) {
+    subMissing.push(d);
+    say(`  子仓库 ${d}/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令`);
+    continue;
+  }
+  const linked = run(MAIN, "cp", ["-al", from, into]);
+  say(`  硬链接子仓库依赖 ${d}/node_modules ← 主树 exit=${String(linked.status)}`);
+  if (linked.status !== 0) subMissing.push(d);
+}
+if (subMissing.length > 0) {
+  say(`⚠️ 这些靶子仓库的依赖补不齐：${subMissing.join("、")} ⇒ 在其中真跑命令的判卷红**不可归因于代码**`);
+}
 
 /* ②b import 面自洽（问的是**被认证的那个 rev**，不是盘）。放在这里的原因：它 0.2 秒，
  *  而它说的那件事正是下面 typecheck 为什么必红——第 131 页那次，`834ba3a` 把消费者入库了、
