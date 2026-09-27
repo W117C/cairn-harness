@@ -17,9 +17,9 @@
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
-import { certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, headGateTableIntegrity, missingDeclaredDeps, readInvalidated, unknownCertArgs } from "./lib/head-cert-deps";
+import { certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, headGateTableIntegrity, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "./lib/head-cert-deps";
 import { acquireToolLock } from "./lib/tool-lock";
 import { checkHeadImportFace, collectHeadEdges, findDanglingImports } from "./head-import-face";
 
@@ -66,7 +66,12 @@ function run(cwd: string, cmd: string, args: string[], logPath?: string): { stat
   }
   return { status: r.status, out };
 }
-const say = (line: string): void => { console.log(line); };
+/* 印出来的每一行同时留在 `spoken` 里，收尾时同步落盘成 `summary.txt`：
+ *  凭证的证据本体不该只活在 stdout 上——`console.log` 到管道是异步排队的，而本脚本结尾是 `process.exit`，
+ *  尾巴有被丢掉的风险（同一族在 mutate-verify 里 09-28 实测到过：`--list` 数出 874/918）。
+ *  规则 214：门禁可以截展示，不可以截证据。 */
+const spoken: string[] = [];
+const say = (line: string): void => { console.log(line); spoken.push(line); };
 
 const sha = run(MAIN, "git", ["rev-parse", AT]);
 if (sha.status !== 0 || sha.out.trim() === "") {
@@ -248,5 +253,29 @@ const hint = collisionHint(testStatus, psBefore, psAfter);
 if (hint !== null) say(`⚠️ ${hint}`);
 say(`  逐条日志：${logDir}`);
 say(`  回收这棵树（规则 120，别留残留）：git worktree remove --force ${TREE}`);
+/* 清场读数（任务 #33）：别的 scratch 树收没收，门只报数、不动手（`git worktree remove` 是破坏性操作，归人）。
+ * 取在飞项一律 `--no-optional-locks`：`git status` 默认会**刷新那棵树的 index**，
+ * 那等于我在别人正在用的树上留下写痕——读数不许以污染被读对象为代价（AGENTS：保留别的会话的在飞改动）。 */
+const wtRows = parseWorktreeList(run(MAIN, "git", ["worktree", "list", "--porcelain"]).out);
+const staleCell = staleTreeCell(wtRows, staleScratchTrees(wtRows, {
+  selfPath: MAIN,
+  certTree: resolve(MAIN, TREE), // `worktree list` 给绝对路径，`--tree=` 可以是相对的 ⇒ 比之前先归一化
+  isAncestor: (shaArg) => run(MAIN, "git", ["merge-base", "--is-ancestor", shaArg, TARGET]).status === 0,
+  dirtyCountOf: (p) => {
+    const r = run(p, "git", ["status", "--porcelain", "--no-optional-locks"]);
+    if (r.status !== 0) return null; // 取不到＝不算残留（"没量到"不许长成"量到且没问题"）
+    return r.out.split("\n").filter((l) => l.trim() !== "").length;
+  },
+}));
+say(`  ${staleCell}（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）`);
 // 并发套数**刻意不进下面这个退出码**：别的会话在跑不是我这笔代码错，接进去等于把这道门变成共享树上的随机红。
-process.exit(certifiable && tc.status === 0 && (testStatus === null || testStatus === 0) && dirtyCount === 0 && drift === null ? 0 : 1);
+// 同理，**常驻残留数也不进退出码**——它是卫生读数，不是我这笔的回归；它进的是"每一次认证都会被看见"这一格。
+const code = certifiable && tc.status === 0 && (testStatus === null || testStatus === 0) && dirtyCount === 0 && drift === null ? 0 : 1;
+try {
+  mkdirSync(logDir, { recursive: true });
+  writeFileSync(join(logDir, "summary.txt"), spoken.join("\n") + "\n");
+  say(`  汇总已同步落盘（不靠 stdout 的尾）：${join(logDir, "summary.txt")}`);
+} catch (e) {
+  say(`⚠️ 汇总落盘失败（${String((e as NodeJS.ErrnoException).code)}) ⇒ 这次的完整读数只在 stdout 上，可能被截`);
+}
+process.exit(code);

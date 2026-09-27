@@ -5366,3 +5366,37 @@ fd 1 接管道时是**非阻塞**的，一次 `writeSync` 只交得进内核缓�
 要收就得配判卷，别只改文案；④ 任务 #32（临时名该用 `wx` 开）与本条同族，一并留给下一笔。
 
 **清场**：`.worktrees/verify-163` 与 `.worktrees/head-cert-9ee9ac1` 两棵——逐棵先核 `git status` 为 0 项在飞、无进程在跑，再回收（规则 120）。
+
+### 2026-09-28 · 第 164 页 · 清场要有读数：`head-cert` 现在会报「常驻残留树=N」，顺带收了临时名的 `wx` 与汇总落盘
+
+动因不是卫生洁癖，是**一份与盘不符的凭证**：第 162 页补写着「`verify-161` 与 `head-cert-83fd48a` 两棵逐棵核过 0 项在飞后回收」，
+而本笔现读 `git worktree list` 里 `.worktrees/verify-161` 还在（干净、0 进程、那一笔 `971fc14` 早已在主干上）
+⇒ 声称回收 ≠ 回收，而没有任何一处会喊这件事（规则 210：无差别的旗标＝没观测者；规则 120 只活在纸上）。
+本笔先把已声称回收却没掉的两棵真收了（`verify-161`、`head-cert-03e4e7e`、`head-cert-ad829ba`），
+**留下** `head-cert-d2958b2`——它树上有 1 项在飞（`scripts/prose-needle-scan.ts`，隔壁会话的活），读数与判卷都不许把它算成垃圾。
+
+尺的形状（三件纯函数，接进 `head-cert.ts` 的汇总行）：`parseWorktreeList`（porcelain 原文→行；整表读不到回 **null**＝没尺，
+缺 `path`/`HEAD` 的块丢掉而不是猜）、`staleScratchTrees`（四个条件缺一不可：detached ∧ 0 项在飞 ∧ 那一笔已是本次认证目标的祖先 ∧ 不是本次那棵认证树）、
+`staleTreeCell`（未取／0 棵／N 棵三种形态分列印，未取那一支**不许**写成 0）。
+**刻意不进退出码**：别的会话没收尾不是我这笔代码错，接进去等于把这道门变成共享树上的随机红（与第 155 页「并发套数」同一档判据）。
+取在飞一律 `git status --porcelain --no-optional-locks`——缺省写法会**刷新那棵树的 index**，
+那等于我的读数把被读对象写脏了（AGENTS：保留别的会话的在飞改动）。同时候选范围排除了带分支的树：本仓同时挂着 doc-layer／goal-plan／r1b／ui-codex-bench 四棵工作支。
+
+同一笔收掉两件同族的（都属"共享写点上的自我污染"）：
+① 任务 #32：临时名 `<lock>.<pid>.tmp` 现在用 `{ flag: "wx" }` 打开（缺省写法会**跟随**一个已经在那里的名字，含符号链接 ⇒
+   最小权限那句"只写自己新起的名字"）；`EEXIST` 是上一轮自己留的残骸，摘掉重写一次而不是砸门。
+② `head-cert` 的汇总从"只印"改成"印 + 同步落盘 `${logDir}/summary.txt`"——
+   上一笔刚实测过 `console.log` + `process.exit` 会丢尾巴（`--list` 数出 874/918），本脚本结尾同样是 `process.exit`，
+   证据本体不该只活在 stdout 上（规则 214：展示可截，证据不可截）。
+
+自己撞的一格，写下来因为它是通则：**我把退出码式子抽成 `const code = …` 之后，第 161 页我自己写的那条反向哨兵当场红**
+（它钉的是"`process.exit(` 那一行含 `drift === null`"）。⇒ 整行式针脚的脆（规则 229）这次落在我自己的判据上；
+修法不是把代码改回去迁就判卷，而是**按内容找式子**，并补一条"式子算出来必须真的交给 `process.exit`"（只算不接＝退出码是摆设）。
+
+现读与计数：判卷 `head-cert-deps` 71→**78**（取料三态／四条件反向／形态分列印／真读现喂／接线与不进退出码／落盘／wx），
+锚点 920→**925**（`stale-tree-unreadable-reads-as-zero`、`stale-tree-ignores-dirty-face`、`stale-tree-ignores-branch-face`、
+`lock-tmp-opened-without-wx`、`cert-summary-not-durable`）；typecheck 0；两个受影响判卷文件 167 passed；
+针脚 925 条／阻断 5（全是钉在飞文本，本笔落库归零）／待复认 0／逐行式 4／松钉 10（帽 10 未动）；本机 worktree 现读 8 棵。
+
+**未证两条**：① `wx` 那一格只有结构钉＋锚点，行为侧要造"同名符号链接已存在"的合成夹具，本笔没造；
+② `summary.txt` 的行为侧留给紧接着的那次认证真跑核（跑完看文件在不在、内容是否含汇总行）——写在这里就是不许把它当已证。

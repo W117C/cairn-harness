@@ -7797,6 +7797,62 @@ const MUTATIONS = [
     ),
     expectFail: "helper 本体按字节写满、四个出口都经它（一次 writeSync 只交得进内核缓冲那一截）",
   },
+  // ── 第 164 页 · 清场读数（任务 #33）＋临时名 wx（任务 #32）＋汇总落盘
+  {
+    id: "stale-tree-unreadable-reads-as-zero",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "取不到 worktree 清单那一支回「常驻残留树=0」⇒ 没尺长得跟「量到且干净」一模一样；而这格存在的理由就是让「忘了收」可见（第 162 页补的凭证正是这么与盘不符的）。空载棘轮同族：规则 129/196/222",
+    apply: (s) => s.replace(
+      'if (rows === null) return "常驻残留树=未取（git 读不到 worktree 清单 ⇒ 不等于没有残留）";',
+      'if (rows === null) return "常驻残留树=0";',
+    ),
+    expectFail: "那一格三种形态分列印：未取／0 棵／N 棵，未取不许写成 0（空载棘轮同族）",
+  },
+  {
+    id: "stale-tree-ignores-dirty-face",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "不看在飞项 ⇒ 把别人正在写的树报成垃圾（AGENTS：保留别的会话的脏改动）。摘掉这一位，判卷里那棵 dirty 树就会出现在名单上——门喊的是「去收它」，最坏的读法",
+    apply: (s) => s.replace(
+      "if (opt.dirtyCountOf(r.path) !== 0) continue;",
+      "if (false) continue;",
+    ),
+    expectFail: "四个条件缺一不可：带分支／有在飞／未入库／是本次那棵认证树，各一条反向（把别人正在用的树喊成垃圾是最坏的读法）",
+  },
+  {
+    id: "stale-tree-ignores-branch-face",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "不辨 detached ⇒ 带分支的工作支（本仓同时有 doc-layer／goal-plan／r1b 等）也被报成残留。与上一条分开钉：两个条件都往「少报」的方向错，但踩的是不同的人",
+    apply: (s) => s.replace(
+      "if (!r.detached) continue;",
+      "if (false) continue;",
+    ),
+    expectFail: "四个条件缺一不可：带分支／有在飞／未入库／是本次那棵认证树，各一条反向（把别人正在用的树喊成垃圾是最坏的读法）",
+  },
+  {
+    id: "lock-tmp-opened-without-wx",
+    src: "scripts/lib/tool-lock.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "临时名不带 `wx` ⇒ 同名文件已存在时这次写会**跟随**它（含符号链接）写到别处去：最小权限那条「只写自己新起的名字」。摘掉之后 EEXIST 那一支也永远不会触发，所以现场看不出来",
+    apply: (s) => s.replace(
+      'const WX: { flag: string } = { flag: "wx" };',
+      'const WX: { flag: string } = {}; // 丢掉 wx：缺省写法会跟随已存在的同名文件',
+    ),
+    expectFail: "临时名必须是自己新建的（wx）：缺省写法会跟随已存在的同名文件/符号链接",
+  },
+  {
+    id: "cert-summary-not-durable",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "汇总只走 stdout（`console.log` 到管道是异步排队，而脚本结尾是 `process.exit`）⇒ 凭证的证据本体有被丢尾的风险，且落盘那份一旦没有，红门日志里就只剩逐条子进程日志。规则 214：展示可截，证据不可截",
+    apply: (s) => s.replace(
+      'writeFileSync(join(logDir, "summary.txt"), spoken.join("\\n") + "\\n");',
+      "void spoken.length; // 只印不落盘",
+    ),
+    expectFail: "汇总要同步落盘：stdout 只是展示，summary.txt 才是证据（本脚本结尾是 process.exit）",
+  },
   // ── 第 160 页 · 「能派不可撤」要在派活之前说出口（任务 #5）
   {
     id: "strands-predicate-ignores-visible-side",

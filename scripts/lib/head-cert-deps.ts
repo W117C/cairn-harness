@@ -201,3 +201,66 @@ export function unknownCertArgs(argv: readonly string[]): string[] {
 
 /* ---- 共享写点上的锁：已挪到 `scripts/lib/tool-lock.ts`（第 161 页为 head-cert 建，第 162 页起 mutate-verify 共用）。
  *      放在这里 = 第二个事实源，所以只留这一行指针。 */
+
+/* ---- 清场读数（任务 #33，第 164 页）----
+ * 动因是**一份与盘不符的凭证**：第 162 页补写着「verify-161 与 head-cert-83fd48a 已回收」，
+ * 而 09-28 现读 `git worktree list` 里 `.worktrees/verify-161` 还在（干净、0 进程、那一笔早已在主干上）。
+ * 规则 120 的"回收"只写在纸上、没有读数，于是"忘了收"这件事没有任何一处会喊（规则 210）。
+ * 这一格只**报数**：`git worktree remove` 是破坏性操作，归人做；门负责让残留可见。 */
+
+/** 一棵 worktree 的登记（来自 `git worktree list --porcelain`）。 */
+export interface WorktreeRow { path: string; head: string; detached: boolean; branch: string | null; }
+
+/** porcelain 原文 → 行。形状是 `worktree <路径>` 起块，块内 `HEAD <sha>`／`detached`／`branch refs/…`。
+ *  整表读不到（null／空）回 **null**＝没尺，不许读成"没有残留"（规则 222 的三态）；
+ *  缺 `path` 或缺 `HEAD` 的块丢掉而不是猜——路径猜错会把别人正在用的树报成垃圾。 */
+export function parseWorktreeList(text: string | null): WorktreeRow[] | null {
+  if (text === null || text.trim() === "") return null;
+  const rows: WorktreeRow[] = [];
+  let cur: { path?: string; head?: string; detached: boolean; branch: string | null } | null = null;
+  const flush = (): void => {
+    if (cur !== null && cur.path !== undefined && cur.head !== undefined) {
+      rows.push({ path: cur.path, head: cur.head, detached: cur.detached, branch: cur.branch });
+    }
+    cur = null;
+  };
+  for (const raw of text.split("\n")) {
+    const line = raw.trimEnd();
+    if (line.startsWith("worktree ")) { flush(); cur = { path: line.slice("worktree ".length).trim(), detached: false, branch: null }; continue; }
+    if (cur === null) continue;
+    if (line.startsWith("HEAD ")) cur.head = line.slice("HEAD ".length).trim();
+    else if (line === "detached") cur.detached = true;
+    else if (line.startsWith("branch ")) cur.branch = line.slice("branch ".length).trim();
+  }
+  flush();
+  return rows.length === 0 ? null : rows;
+}
+
+/** 哪些算"常驻残留的 scratch 树"。四个条件缺一不可：
+ *  ① detached——带分支的树可能是别人正在写的工作支（本仓同时有 doc-layer／goal-plan／r1b 等分支树）；
+ *  ② 0 项在飞——有在飞就是别人的活，碰都不能碰（AGENTS：保留别的会话的脏改动）；
+ *  ③ 那一笔已是当前认证目标的祖先——未入库的 commit 可能正是隔壁会话在验的那笔；
+ *  ④ 不是我自己这棵，也不是本次刚用的那棵认证树（那棵由汇总行末尾的回收命令单独点名，报成残留是噪声）。
+ *  `dirtyCountOf` 回 null（取不到）＝**不算残留**：三态里"没量到"永远不许长成"量到且没问题"。 */
+export function staleScratchTrees(
+  rows: WorktreeRow[] | null,
+  opt: { selfPath: string; certTree: string; isAncestor: (sha: string) => boolean; dirtyCountOf: (path: string) => number | null },
+): { path: string; head: string }[] {
+  if (rows === null) return [];
+  const out: { path: string; head: string }[] = [];
+  for (const r of rows) {
+    if (!r.detached) continue;
+    if (r.path === opt.selfPath || r.path === opt.certTree) continue;
+    if (opt.dirtyCountOf(r.path) !== 0) continue;
+    if (!opt.isAncestor(r.head)) continue;
+    out.push({ path: r.path, head: r.head });
+  }
+  return out;
+}
+
+/** 那一格要怎么说话：未取／0 棵／N 棵三种形态分开，且**永不**把"没量到"写成 0。 */
+export function staleTreeCell(rows: WorktreeRow[] | null, stale: { path: string; head: string }[]): string {
+  if (rows === null) return "常驻残留树=未取（git 读不到 worktree 清单 ⇒ 不等于没有残留）";
+  if (stale.length === 0) return "常驻残留树=0";
+  return `常驻残留树=${String(stale.length)}（${stale.map((s) => `${s.path}@${s.head.slice(0, 7)}`).join("、")}）`;
+}

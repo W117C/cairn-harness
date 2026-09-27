@@ -169,9 +169,21 @@ export function acquireToolLock(input: {
   mkdirSync(dirname(lockPath), { recursive: true });
   const tmp = lockPath + "." + String(process.pid) + ".tmp";
   const mine: ToolLock = { tool: input.tool, pid: process.pid, target: input.target, tree: input.tree, startedAt: Date.now() };
+  /* 临时名必须**由我新建**（`flag: "wx"`）：缺省写法会跟随一个已经在那里的名字——同用户的另一个进程先把
+   *  `<lock>.<我的pid>.tmp` 做成指向别处的符号链接，我这一写就写到链接那头去了（最小权限那条：
+   *  只写自己新起的名字，不写"碰巧在那儿的名字"）。`EEXIST`＝上一轮自己留的残骸（pid 是我的），摘掉重写一次。 */
+  const WX: { flag: string } = { flag: "wx" };
+  const writeFresh = (): void => {
+    try { writeFileSync(tmp, JSON.stringify(mine), WX); }
+    catch (e) {
+      if (String((e as NodeJS.ErrnoException).code) !== "EEXIST") throw e;
+      unlinkSync(tmp);
+      writeFileSync(tmp, JSON.stringify(mine), WX);
+    }
+  };
+  writeFresh();
   // 内容先完整落到临时名，再用 `link` 占位：`rename` 会**替换**别人的锁（两个同时启动的进程各自都以为占到了），
   // `link` 在目标已存在时直接 EEXIST ⇒ 抢占是原子的，而半截 JSON 那一坑（读侧要拒跑）也留不出来。
-  writeFileSync(tmp, JSON.stringify(mine));
   try {
     linkSync(tmp, lockPath);
   } catch (e) {

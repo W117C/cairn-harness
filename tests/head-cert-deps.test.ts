@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFile
 import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, headGateTableIntegrity, installedDeps, missingDeclaredDeps, readInvalidated, unknownCertArgs } from "../scripts/lib/head-cert-deps";
+import { certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, headGateTableIntegrity, installedDeps, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "../scripts/lib/head-cert-deps";
 import { decideToolLock, lockAgeCap, parseToolLock, shouldReleaseLock, toolLockPath } from "../scripts/lib/tool-lock";
 
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
@@ -462,9 +462,13 @@ describe("接线：认证流程真的两端各采一次，且这格进得了汇�
   });
 
   it("反向哨兵：并发套数刻意**不进退出码**（别的会话在跑不是我这笔代码错，接进去＝共享树上的随机红）", () => {
-    const exitLine = src.split("\n").find((l) => l.startsWith("process.exit(")) ?? "";
-    expect(exitLine).toContain("drift === null");
-    expect(exitLine, "把并发接进退出码＝这道门从此看别人脸色").not.toMatch(/ps(Before|After)/);
+    // 09-28：那一条式子被抽成 `const code = …`（末尾要先同步落盘再 exit），所以这里**按内容找式子**，
+    // 不按 `process.exit(` 那一行——整行式针脚的脆法（规则 229）这次轮到自己挨：改的是结构，判据跟着走。
+    const formula = src.split("\n").find((l) => l.startsWith("const code = ")) ?? "";
+    expect(formula, "找不到退出码的式子＝这条反向哨兵从此恒真地通过").not.toBe("");
+    expect(formula).toContain("drift === null");
+    expect(formula, "把并发接进退出码＝这道门从此看别人脸色").not.toMatch(/ps(Before|After)/);
+    expect(src, "式子算出来却不交给 process.exit＝退出码是摆设").toContain("\nprocess.exit(code);");
   });
 });
 
@@ -680,5 +684,94 @@ describe("接线：真跑 head-cert——占不到锁就不许动树", () => {
     const nullCell = block.slice(block.indexOf("lockPath === null"), block.indexOf("lockPath === null") + 240);
     expect(nullCell, "未取到锁面要 return 不要 exit（否则 git 一抖，整道门对所有树同时关死）").not.toContain("process.exit");
     expect(block).toContain("锁面未取");
+  });
+});
+
+describe("清场读数：常驻残留的 scratch 树要自己报数（任务 #33）", () => {
+  const PORCELAIN = [
+    "worktree /repo", "HEAD aaa", "",
+    "worktree /repo/.worktrees/branchy", "HEAD bbb", "branch refs/heads/feat", "",
+    "worktree /repo/.worktrees/dirty", "HEAD ccc", "detached", "",
+    "worktree /repo/.worktrees/stale", "HEAD ddd", "detached", "",
+    "worktree /repo/.worktrees/notancestor", "HEAD eee", "detached", "",
+    "worktree /repo/.worktrees/unreadable", "HEAD fff", "detached", "",
+    "worktree /repo/.worktrees/head-cert-aaa", "HEAD aaa", "detached", "",
+  ].join("\n");
+  const rows = parseWorktreeList(PORCELAIN);
+  const OPT = {
+    selfPath: "/repo",
+    certTree: "/repo/.worktrees/head-cert-aaa",
+    isAncestor: (sha: string): boolean => sha !== "eee",
+    dirtyCountOf: (p: string): number | null => (p.endsWith("dirty") ? 2 : p.endsWith("unreadable") ? null : 0),
+  };
+
+  it("取料：整表空 ⇒ null（没尺，不等于「没有残留」）；缺 path 或缺 HEAD 的块丢掉而不是猜", () => {
+    expect(parseWorktreeList(null)).toBeNull();
+    expect(parseWorktreeList("   \n")).toBeNull();
+    expect(parseWorktreeList("garbage not porcelain")).toBeNull();
+    // 一棵只有 `worktree` 行、没有 HEAD 行的块：报了路径也没法判祖先 ⇒ 丢，别猜
+    expect(parseWorktreeList("worktree /x\nsome other line\n")).toBeNull();
+    const got = parseWorktreeList(PORCELAIN);
+    expect(got === null ? -1 : got.length).toBe(7);
+  });
+
+  it("四个条件缺一不可：带分支／有在飞／未入库／是本次那棵认证树，各一条反向（把别人正在用的树喊成垃圾是最坏的读法）", () => {
+    expect(staleScratchTrees(rows, OPT).map((s) => s.path)).toEqual(["/repo/.worktrees/stale"]);
+    expect(staleScratchTrees(null, OPT)).toEqual([]);
+    // 条件本身也要能单独被拆：只留「detached」时会把分支树与未入库那笔一起算进来（⇒ 门会喊人去删别人的活）
+    const loose = { ...OPT, isAncestor: () => true, dirtyCountOf: () => 0 as number };
+    expect(staleScratchTrees(rows, loose).length, "祖先与在飞两项一放宽，branchy/notancestor/dirty 全被算成残留").toBeGreaterThan(3);
+  });
+
+  it("那一格三种形态分列印：未取／0 棵／N 棵，未取不许写成 0（空载棘轮同族）", () => {
+    expect(staleTreeCell(null, [])).toContain("未取");
+    expect(staleTreeCell(rows, [])).toBe("常驻残留树=0");
+    const one = staleTreeCell(rows, [{ path: "/repo/.worktrees/stale", head: "d".repeat(40) }]);
+    expect(one).toContain("常驻残留树=1");
+    expect(one, "不点名路径，读的人不知道该去收哪一棵").toContain("/repo/.worktrees/stale");
+  });
+
+  it("真读现喂：拿本机真的 worktree 清单喂进去不许崩，且绝不点到自己这棵", () => {
+    const real = parseWorktreeList(execFileSync("git", ["worktree", "list", "--porcelain"], { cwd: repoRoot, encoding: "utf8" }).trim() === "" ? null : execFileSync("git", ["worktree", "list", "--porcelain"], { cwd: repoRoot, encoding: "utf8" }));
+    expect(real, "这台机器上真有 worktree，读到空＝取料坏了").not.toBeNull();
+    const stale = staleScratchTrees(real, {
+      selfPath: repoRoot,
+      certTree: resolve(repoRoot, ".worktrees/none-such"),
+      isAncestor: (sha) => {
+        try { execFileSync("git", ["merge-base", "--is-ancestor", sha, "HEAD"], { cwd: repoRoot, encoding: "utf8", stdio: "ignore" }); return true; }
+        catch { return false; } // 非零退出＝不是祖先；**不许**让它抛（抛出去这格就变成"没量到"）
+      },
+      dirtyCountOf: (p) => {
+        try { return execFileSync("git", ["status", "--porcelain", "--no-optional-locks"], { cwd: p, encoding: "utf8" }).split("\n").filter((l) => l.trim() !== "").length; }
+        catch { return null; }
+      },
+    });
+    for (const s of stale) {
+      expect(s.path).not.toBe(repoRoot);
+      expect(s.path, "报出来的必须是本仓 .worktrees 下的 scratch 树：" + s.path).toContain(join(repoRoot, ".worktrees"));
+    }
+  });
+
+  it("接线：head-cert 真调它、进汇总行，而这格刻意不进退出码；取在飞要 --no-optional-locks", () => {
+    const src = readFileSync(join(repoRoot, "scripts", "head-cert.ts"), "utf8");
+    expect(src, "只写纯函数不接＝没有读数（规则 230）").toContain("staleScratchTrees(wtRows");
+    expect(src, "数出来了但不印＝这格没有观测者（规则 210）").toContain("${staleCell}");
+    expect(src, "默认写法会刷新别人那棵树的 index＝读数把被读对象写脏了").toContain('"--no-optional-locks"');
+    const exitLine = src.split("\n").find((l) => l.startsWith("const code = "));
+    expect(exitLine, "别的会话没收尾不是我这笔代码错 ⇒ 接进退出码＝共享树上的随机红").not.toContain("stale");
+    expect(exitLine).not.toContain("wtRows");
+  });
+
+  it("汇总要同步落盘：stdout 只是展示，summary.txt 才是证据（本脚本结尾是 process.exit）", () => {
+    const src = readFileSync(join(repoRoot, "scripts", "head-cert.ts"), "utf8");
+    expect(src, "say 不记录 ⇒ 落盘的那份是空表，凭证还是只能靠 stdout").toContain("console.log(line); spoken.push(line);");
+    expect(src, "落盘走 writeFileSync（同步交给内核），不是 console.log＋exit").toContain('writeFileSync(join(logDir, "summary.txt")');
+    expect(src).toContain("spoken.join(");
+  });
+
+  it("临时名必须是自己新建的（wx）：缺省写法会跟随已存在的同名文件/符号链接", () => {
+    const lib = readFileSync(join(repoRoot, "scripts", "lib", "tool-lock.ts"), "utf8");
+    expect(lib, '不带 flag ⇒ 别人预置一个 `<lock>.<pid>.tmp` 符号链接，我这一写就写到链接那头').toContain('{ flag: "wx" }');
+    expect(lib, "EEXIST 是上一轮自己的残骸（名字带我的 pid）：摘掉重写一次，而不是把整道门砸了").toContain('!== "EEXIST"');
   });
 });
