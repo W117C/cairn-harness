@@ -4338,3 +4338,44 @@ git 调用由 `scripts/mutate-verify.mjs` 注入 ⇒ 本模块不自己 spawn �
 - 现态：锚点表 836 → **839 条**（+3），改法语法体检全过；`mutate-verify-gates` 59 → **62**；typecheck 0；
   全量判卷 **237 files / 2768 tests passed**；新加的 3 条锚点在干净 HEAD 上单跑**全杀**（13.2s）。
 - 剩：#17 那 3 条等别人源文件入库后复跑；#11 现在是"有价目表"的催办——167 条格子 ＋ 7 个签名，报数不用再靠感觉。
+
+### 2026-09-27 · 第 145 页 · 美元闸的价键读的是设置盘那个字段，钱是按 resolved 档花的
+
+上一轮把评估面的钱轴读完，发现"缺的是归因"；回到产品侧再量一遍，撞到同一族的第四支：
+**两道美元闸的价键来源**（`outputs/cost-price-key-2026-09-27/01-读数.md`）。
+
+- 读数（固定 100k in + 10k out，同一份用量）：
+  ① `provider=glm` 且 `settings.model` **留空**（这是注释里写明的出厂缺省「留空 = 由 provider 层取缺省」）
+  ⇒ 实际拨 glm-5.2、该花 $0.22，而闸拿 `""` 当键 ⇒ `null` ⇒ **整闸惰**：用户设的 maxBudgetUsd 没生效；
+  ② per-run 指定 `glm-strong`（`RunRequest.model`，产品支持的路径）⇒ 闸读到 $0.22 而实付 $0.88 ⇒ **上限晚 4 倍才触发**；
+  ③ per-run 指定 `glm-flash` ⇒ 闸读到 $0.22 而实付 $0.022 ⇒ **10 倍过头，还在预算内就被假「预算耗尽」掐掉**；
+  ④ 一致配置（对照）⇒ 1.00。⇒ 分叉只取决于配置，不是运气；两个方向都错，所以不能说"保守一点"。
+- 归因：同一条规则写了三遍——拨号在 `agent-runner.ts:1379/1671` 调 `resolveMainModel({env, provider, 逐请求 model, 设置 model, M0_MODEL})`；
+  会话成本闸 `:246` 递 `priceModel: s.model`；goal 美元闸 `:1787` 递 `(await store().get()).model`。
+  后两行在 HEAD 上**零判卷**（grep tests/ 读不到它们），所以这一格是"consumer 有判据（反查、`bucketsSpendUsd` 出声）
+  而 producer 递进去的键是错的"，且单测一律直接注入 `spentUsd` ⇒ 全表绿。
+- 修法（收成一份）：`resolveRunModel(settings, requestModel?)` 把那份三输入式子从两个入口收进来；
+  `budgetPriceKeyOf(selection)` 一处派生价键（demo ⇒ 空串 = 不拨号不付钱，也不许估出一笔钱）；
+  两处消费各自接上，`goalNextTurn` 多一位**必填** `runModel`（不留"省略即退回旧行为"的半格）。缺省 `maxBudgetUsd=0` ⇒ 整段不接线。
+- 判卷：新增 `tests/budget-price-key.test.ts` 7 条（952ms）——四种配置各一条 + demo + env 覆盖 provider，
+  两条接线形状闸（两个函数都未导出，沿用 `goal-stop-decision.test.ts` 那条先例）＋反向对照
+  （`priceModel: s.model`、`const model = (await store().get()).model` 不许复活）。
+  **牙齿不在"闸=拨号"那一半**：把 `requestModel` 丢掉那条变异会让闸与拨号**一起**错档，只比相等看不出 ⇒
+  咬住它的是"必须与设置盘字段折出的数不同"（这条已写进锚点 desc）。
+- 锚点 839 → **842**（`session-budget-key-from-settings-field`、`goal-budget-key-from-settings-field`、
+  `run-model-resolution-drops-request-model`），另把 `goal-continuation-hook-skipped` 的针脚跟着调用行改（我改了那一行 ⇒ 尺当场点名自己，没留断针入库）。
+- 一次撞窗，记下来别再拿它当读数：我第一次全量跑红 1 条 `goal-continuation` 的美元闸用例，**单跑与两条同跑都绿**；
+  第二次全量它绿了，却红在别处（HEAD 侧悬空名单那两条）。`ps` 一看：另一会话此刻正在 `/tmp/dsh-head`
+  认证树里跑同一套 vitest，而这套判卷的缺省设置盘写在**共享的** `/tmp/m1e-default-settings.json`。
+  ⇒ 全量表在共享树上的红要先问"有没有别人在跑"，别把撞窗读成分叉（规则 61/97 的又一形状：先确认对照面）。
+- 现态（入库方式要说清，不是我自己那一笔）：`14d2736 工作树整体入库` 把**整棵脏树**一次带走，本原子的
+  生产面＋判卷＋3 条锚点＋两份探针因此进了 HEAD，别人那一笔也顺带把我那块 judge（`goal-continue` 美元闸用例补 `provider: "glm"`）
+  与我的生产改动凑成了同一对——**这次恰好凑对**（那条用例本来就是被我改的语义逼红的），但形状仍是"抓到才叫回滚，没抓到就叫历史"。
+  我这边只剩这一页 PROGRESS 由自己提交。
+- 凭证（都在干净 HEAD 的独立树里拿的，跑完回收）：typecheck 0；`budget-price-key` 7/7（952ms）；
+  `--check-needles` 842 条、阻断 **13 → 3**（本笔带来的 4 条清零：3 未入库面 + 1 钉在飞文本；剩 3 条是别人的面——
+  `np-write-suppression-ignored` 与 `event-stamp-*` 两条的针脚在 `14d2736` 之后已不在源文件里，属 #11 那一类半落库）；
+  三条新锚点单跑 **9.9s 全杀**（含严格归因认到期望用例）。
+- 剩（本条欠的一格）：评估面的钱轴还缺**另一半**——`UsageEvent` 上没有 model（`src/events/index.ts:48`），
+  整份语料实测 usage 166 条自带 model **0**、带缓存分块 **0**，全语料没有任何一行带 `model`/`picked`（含 `agent_spawned`、`routing_decision`）⇒ 无处可 join。
+  那个文件此刻有别人两块在飞改动，本轮刻意不叠第三块。
