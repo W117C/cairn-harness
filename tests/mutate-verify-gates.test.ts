@@ -442,7 +442,9 @@ describe("auditExpectFails：killer 指针必须指得到活用例", () => {
 
   it("变体：标题里除了占位符只剩空白 ⇒ 同样缴械，也要丢（不 trim 就漏这一格）", () => {
     const text = '  it(" ${t} ", () => {});';
-    expect(auditExpectFails([{ id: "ws", test: "tests/x.test.ts", expectFail: "任何不相干的句子" }], read(text))).toHaveLength(1);
+    // 指针必须**带空档**：不 trim 时那条模式的字面残迹是两个空格，它只认得"空格…空格"形状的句子；
+    // 拿无空格的句子去问，两种实现都给 not-found ⇒ 这条用例分辨不出这一位（第一版就是这样让锚点存活的）。
+    expect(auditExpectFails([{ id: "ws", test: "tests/x.test.ts", expectFail: "任何 不相干 的句子" }], read(text))).toHaveLength(1);
   });
 
   it("过修的反面：带字面残迹的标题要**留着**通配（参数化标题仍然认得渲染后的样子）", () => {
