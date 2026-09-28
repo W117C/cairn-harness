@@ -19,7 +19,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-import { certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, headGateTableIntegrity, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "./lib/head-cert-deps";
+import { certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, gitInflightArgs, headGateTableIntegrity, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "./lib/head-cert-deps";
 import { acquireToolLock } from "./lib/tool-lock";
 import { checkHeadImportFace, collectHeadEdges, findDanglingImports } from "./head-import-face";
 
@@ -254,7 +254,9 @@ if (hint !== null) say(`⚠️ ${hint}`);
 say(`  逐条日志：${logDir}`);
 say(`  回收这棵树（规则 120，别留残留）：git worktree remove --force ${TREE}`);
 /* 清场读数（任务 #33）：别的 scratch 树收没收，门只报数、不动手（`git worktree remove` 是破坏性操作，归人）。
- * 取在飞项一律 `--no-optional-locks`：`git status` 默认会**刷新那棵树的 index**，
+ * 取在飞项的参数形状在 `gitInflightArgs()`（判卷与生产共用同一份）：`--no-optional-locks` 是 git 的**全局**选项，
+ * 位置必须在子命令**前面**——写在 `status` 后面 git 报 unknown option 退出 129，于是每棵树都「取不到」（第 165 页实测）。
+ * 要带它的原因：`git status` 默认会**刷新那棵树的 index**，
  * 那等于我在别人正在用的树上留下写痕——读数不许以污染被读对象为代价（AGENTS：保留别的会话的在飞改动）。 */
 const wtRows = parseWorktreeList(run(MAIN, "git", ["worktree", "list", "--porcelain"]).out);
 const staleCell = staleTreeCell(wtRows, staleScratchTrees(wtRows, {
@@ -262,8 +264,8 @@ const staleCell = staleTreeCell(wtRows, staleScratchTrees(wtRows, {
   certTree: resolve(MAIN, TREE), // `worktree list` 给绝对路径，`--tree=` 可以是相对的 ⇒ 比之前先归一化
   isAncestor: (shaArg) => run(MAIN, "git", ["merge-base", "--is-ancestor", shaArg, TARGET]).status === 0,
   dirtyCountOf: (p) => {
-    const r = run(p, "git", ["status", "--porcelain", "--no-optional-locks"]);
-    if (r.status !== 0) return null; // 取不到＝不算残留（"没量到"不许长成"量到且没问题"）
+    const r = run(p, "git", gitInflightArgs());
+    if (r.status !== 0) return null; // 取不到＝交 `staleTreeCell` 的第四态列印，既不算残留也不算干净
     return r.out.split("\n").filter((l) => l.trim() !== "").length;
   },
 }));

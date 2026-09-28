@@ -2,11 +2,12 @@
  *  纯函数层：`declaredDeps` / `installedDeps` / `missingDeclaredDeps` / `certLevel`（第 119 页加的等级）
  *  / `readInvalidated`（第 149 页：这道门进了默认门表，共享树上的写点要有人复核）。 */
 import { spawnSync, execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, headGateTableIntegrity, installedDeps, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "../scripts/lib/head-cert-deps";
+import { certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, gitInflightArgs, headGateTableIntegrity, installedDeps, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "../scripts/lib/head-cert-deps";
 import { decideToolLock, lockAgeCap, parseToolLock, shouldReleaseLock, toolLockPath } from "../scripts/lib/tool-lock";
 
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
@@ -716,17 +717,29 @@ describe("清场读数：常驻残留的 scratch 树要自己报数（任务 #33
   });
 
   it("四个条件缺一不可：带分支／有在飞／未入库／是本次那棵认证树，各一条反向（把别人正在用的树喊成垃圾是最坏的读法）", () => {
-    expect(staleScratchTrees(rows, OPT).map((s) => s.path)).toEqual(["/repo/.worktrees/stale"]);
-    expect(staleScratchTrees(null, OPT)).toEqual([]);
+    expect(staleScratchTrees(rows, OPT).stale.map((s) => s.path)).toEqual(["/repo/.worktrees/stale"]);
+    expect(staleScratchTrees(null, OPT)).toEqual({ stale: [], unmeasured: [] });
     // 条件本身也要能单独被拆：只留「detached」时会把分支树与未入库那笔一起算进来（⇒ 门会喊人去删别人的活）
     const loose = { ...OPT, isAncestor: () => true, dirtyCountOf: () => 0 as number };
-    expect(staleScratchTrees(rows, loose).length, "祖先与在飞两项一放宽，branchy/notancestor/dirty 全被算成残留").toBeGreaterThan(3);
+    expect(staleScratchTrees(rows, loose).stale.length, "祖先与在飞两项一放宽，branchy/notancestor/dirty 全被算成残留").toBeGreaterThan(3);
+  });
+
+  it("第四态：在飞数取不到的那棵要单独点名——既不进残留名单，也不许被那个 0 吞掉", () => {
+    const res = staleScratchTrees(rows, OPT);
+    // fixture 里 `unreadable` 那棵的 dirtyCountOf 回 null：旧写法直接 continue 掉它，于是"一把坏掉的尺"永远报「收干净了」
+    expect(res.unmeasured, "取不到＝静默丢弃 ⇒ 这一格从此只能印 0（第 165 页实测就是这个形状）").toEqual(["/repo/.worktrees/unreadable"]);
+    expect(res.stale.map((s) => s.path), "取不到的那棵不许被算成残留（喊人去删一棵没量过的树，比不报更坏）").not.toContain("/repo/.worktrees/unreadable");
+    const cell = staleTreeCell(rows, res);
+    expect(cell, "数量不列印出来＝这格没有观测者（规则 210）").toContain("在飞数取不到 1 棵");
+    expect(cell, "得点名到路径，否则读的人不知道该去核哪一棵").toContain("/repo/.worktrees/unreadable");
+    expect(staleTreeCell(rows, { stale: [], unmeasured: ["/repo/.worktrees/x"] }).startsWith("常驻残留树=0／"), "残留 0 棵但有一棵没量过 ⇒ 整句不许只剩 =0").toBe(true);
+    expect(staleTreeCell(rows, { stale: [], unmeasured: [] }), "全都量到、全都干净 ⇒ 才是那个 0").toBe("常驻残留树=0");
   });
 
   it("那一格三种形态分列印：未取／0 棵／N 棵，未取不许写成 0（空载棘轮同族）", () => {
-    expect(staleTreeCell(null, [])).toContain("未取");
-    expect(staleTreeCell(rows, [])).toBe("常驻残留树=0");
-    const one = staleTreeCell(rows, [{ path: "/repo/.worktrees/stale", head: "d".repeat(40) }]);
+    expect(staleTreeCell(null, { stale: [], unmeasured: [] })).toContain("未取");
+    expect(staleTreeCell(rows, { stale: [], unmeasured: [] })).toBe("常驻残留树=0");
+    const one = staleTreeCell(rows, { stale: [{ path: "/repo/.worktrees/stale", head: "d".repeat(40) }], unmeasured: [] });
     expect(one).toContain("常驻残留树=1");
     expect(one, "不点名路径，读的人不知道该去收哪一棵").toContain("/repo/.worktrees/stale");
   });
@@ -734,7 +747,8 @@ describe("清场读数：常驻残留的 scratch 树要自己报数（任务 #33
   it("真读现喂：拿本机真的 worktree 清单喂进去不许崩，且绝不点到自己这棵", () => {
     const real = parseWorktreeList(execFileSync("git", ["worktree", "list", "--porcelain"], { cwd: repoRoot, encoding: "utf8" }).trim() === "" ? null : execFileSync("git", ["worktree", "list", "--porcelain"], { cwd: repoRoot, encoding: "utf8" }));
     expect(real, "这台机器上真有 worktree，读到空＝取料坏了").not.toBeNull();
-    const stale = staleScratchTrees(real, {
+    const candidates = (real ?? []).filter((r) => r.detached && r.path !== repoRoot).length;
+    const res = staleScratchTrees(real, {
       selfPath: repoRoot,
       certTree: resolve(repoRoot, ".worktrees/none-such"),
       isAncestor: (sha) => {
@@ -742,13 +756,67 @@ describe("清场读数：常驻残留的 scratch 树要自己报数（任务 #33
         catch { return false; } // 非零退出＝不是祖先；**不许**让它抛（抛出去这格就变成"没量到"）
       },
       dirtyCountOf: (p) => {
-        try { return execFileSync("git", ["status", "--porcelain", "--no-optional-locks"], { cwd: p, encoding: "utf8" }).split("\n").filter((l) => l.trim() !== "").length; }
-        catch { return null; }
+        // 用**被测那对参数**跑，并读退出码：旧写法在这里自己拼了一份后置形状的命令，
+        // 又被 `catch { return null; }` 把 129 咽掉 ⇒ 名单恒空、断言在空表上循环 ⇒ 这条判卷恒真（规则 224 的又一记）。
+        const r = spawnSync("git", gitInflightArgs(), { cwd: p, encoding: "utf8" });
+        if (r.status !== 0) return null;
+        return (r.stdout ?? "").split("\n").filter((l) => l.trim() !== "").length;
       },
     });
-    for (const s of stale) {
+    for (const s of res.stale) {
       expect(s.path).not.toBe(repoRoot);
       expect(s.path, "报出来的必须是本仓 .worktrees 下的 scratch 树：" + s.path).toContain(join(repoRoot, ".worktrees"));
+    }
+    if (candidates > 0) {
+      expect(res.unmeasured.length, `本机 ${String(candidates)} 棵候选树**全部**取不到在飞数＝git 那条命令本身跑不通（参数形状坏了），这格就又变成恒 0`).toBeLessThan(candidates);
+    }
+  });
+
+  it("行为证人：这对参数交给真 git——跑得出 0、脏树量得出 1 而干净树是 0，并且不碰那棵树的 index", () => {
+    // 这条是第 165 页那一格的正面证人：`--no-optional-locks` 是 git 的**全局**选项，位置写错时 git 退 129，
+    // 而**文字钉看不见位置**（旧断言 toContain 那串引号，写在前面还是后面都过）。这里让真 git 说话。
+    const dir = mkdtempSync(join(tmpdir(), "dsh-inflight-")); // 唯一名：固定名会和隔壁并发的判卷互相踩（/tmp 共享面撞过）
+    const repo = join(dir, "repo");
+    mkdirSync(repo);
+    const git = (args: string[]): { status: number | null; out: string } => {
+      const r = spawnSync("git", args, { cwd: repo, encoding: "utf8" });
+      return { status: r.status, out: (r.stdout ?? "") + (r.stderr ?? "") };
+    };
+    try {
+      expect(git(["init", "-q", "."]).status).toBe(0);
+      git(["config", "user.email", "judge@example.invalid"]);
+      git(["config", "user.name", "judge"]);
+      writeFileSync(join(repo, "f.txt"), "a\n");
+      expect(git(["add", "f.txt"]).status).toBe(0);
+      expect(git(["commit", "-q", "-m", "init"]).status).toBe(0);
+      const clean = git(gitInflightArgs());
+      expect(clean.status, "git 跑不通＝这对参数是坏的；坏掉之后每棵树都『取不到』⇒ 那一格只能印 0（第 165 页实测）").toBe(0);
+      expect(clean.out.trim(), "干净树要量出 0 项").toBe("");
+      writeFileSync(join(repo, "f.txt"), "b\n");
+      const dirty = git(gitInflightArgs());
+      expect(dirty.status).toBe(0);
+      expect(dirty.out.trim().split("\n").filter((l) => l.trim() !== "").length, "脏树要量出 1 项：同一对参数分不出两态，那个 0 就没有证人").toBe(1);
+
+      const idx = join(repo, ".git", "index");
+      const staleIt = (): void => { const t = Date.now() / 1000 + 5; utimesSync(join(repo, "f.txt"), t, t); }; // 只改 mtime，让 git 想去刷新 index
+      let touched = false;
+      for (let k = 0; k < 3 && !touched; k++) {
+        staleIt();
+        const before = statSync(idx).mtimeMs;
+        expect(git(gitInflightArgs()).status).toBe(0);
+        touched = statSync(idx).mtimeMs !== before;
+      }
+      expect(touched, "带着 --no-optional-locks 还是刷新了别人的 index＝这选项的存在没有证人；读数把被读对象写脏了").toBe(false);
+      let flipped = false;
+      for (let k = 0; k < 3 && !flipped; k++) {
+        staleIt();
+        const before = statSync(idx).mtimeMs;
+        expect(git(["status", "--porcelain"]).status).toBe(0);
+        flipped = statSync(idx).mtimeMs !== before;
+      }
+      expect(flipped, "反向对照：连读三次不带它也不动 index ⇒ 上面那条『带着它没动』是常数而不是观测（规则 208），这条判卷得改形状").toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 
@@ -756,7 +824,9 @@ describe("清场读数：常驻残留的 scratch 树要自己报数（任务 #33
     const src = readFileSync(join(repoRoot, "scripts", "head-cert.ts"), "utf8");
     expect(src, "只写纯函数不接＝没有读数（规则 230）").toContain("staleScratchTrees(wtRows");
     expect(src, "数出来了但不印＝这格没有观测者（规则 210）").toContain("${staleCell}");
-    expect(src, "默认写法会刷新别人那棵树的 index＝读数把被读对象写脏了").toContain('"--no-optional-locks"');
+    expect(src, "调用点自己拼一份命令＝两份形状可以各错各的（规则 205 收成一份）；而它错的那一份恰好让 git 退 129").toContain('run(p, "git", gitInflightArgs())');
+    const libSrc = readFileSync(join(repoRoot, "scripts", "lib", "head-cert-deps.ts"), "utf8");
+    expect(libSrc, "位置这件事只有真 git 看得见（上面那条行为证人），而这份形状必须是唯一事实源").toContain('return ["--no-optional-locks", "status", "--porcelain"];');
     const exitLine = src.split("\n").find((l) => l.startsWith("const code = "));
     expect(exitLine, "别的会话没收尾不是我这笔代码错 ⇒ 接进退出码＝共享树上的随机红").not.toContain("stale");
     expect(exitLine).not.toContain("wtRows");

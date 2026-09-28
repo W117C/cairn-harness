@@ -7815,10 +7815,54 @@ const MUTATIONS = [
     test: "tests/head-cert-deps.test.ts",
     desc: "不看在飞项 ⇒ 把别人正在写的树报成垃圾（AGENTS：保留别的会话的脏改动）。摘掉这一位，判卷里那棵 dirty 树就会出现在名单上——门喊的是「去收它」，最坏的读法",
     apply: (s) => s.replace(
-      "if (opt.dirtyCountOf(r.path) !== 0) continue;",
+      "if (dirty !== 0) continue;",
       "if (false) continue;",
     ),
     expectFail: "四个条件缺一不可：带分支／有在飞／未入库／是本次那棵认证树，各一条反向（把别人正在用的树喊成垃圾是最坏的读法）",
+  },
+  {
+    id: "inflight-args-flag-position-wrong",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "把 `--no-optional-locks` 挪到子命令后面 ⇒ git 报 unknown option 退 129 ⇒ 每棵树都「取不到」⇒ 那一格只能印 0，而表上照旧报 ✅。第 165 页实测到的就是这一位；文字钉 `toContain(那串引号)` 看不见位置（规则 239），所以这一针必须由真跑 git 的那条判卷咬",
+    apply: (s) => s.replace(
+      'return ["--no-optional-locks", "status", "--porcelain"];',
+      'return ["status", "--porcelain", "--no-optional-locks"];',
+    ),
+    expectFail: "行为证人：这对参数交给真 git——跑得出 0、脏树量得出 1 而干净树是 0，并且不碰那棵树的 index",
+  },
+  {
+    id: "inflight-args-drop-the-global-flag",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "整对参数能跑但把选项摘掉 ⇒ 读一棵树就刷新那棵树的 index（AGENTS：不许污染别人的在飞态）。与上一条的输入不同之处靠 mtime 那格分开：摘掉选项时 git 仍退 0、脏净仍分得出，只有「index 会不会被动」这一格看得见（规则 226：同拦一件事的两道闸要给各自看得见的输入）",
+    apply: (s) => s.replace(
+      'return ["--no-optional-locks", "status", "--porcelain"];',
+      'return ["status", "--porcelain"];',
+    ),
+    expectFail: "行为证人：这对参数交给真 git——跑得出 0、脏树量得出 1 而干净树是 0，并且不碰那棵树的 index",
+  },
+  {
+    id: "stale-tree-unmeasurable-dropped-silently",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "「取不到在飞数」那棵又被 `continue` 掉（不进 unmeasured）⇒ 名单空、第三态空，那一格重新变成一把只能报 0 的尺。这一格的存在理由就是「没量到不许长成量到且干净」",
+    apply: (s) => s.replace(
+      "if (dirty === null) { unmeasured.push(r.path); continue; }",
+      "if (dirty === null) { continue; }",
+    ),
+    expectFail: "第四态：在飞数取不到的那棵要单独点名——既不进残留名单，也不许被那个 0 吞掉",
+  },
+  {
+    id: "stale-tree-cell-hides-unmeasured",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "谓词数出来了但那一格不说（尾巴恒空）⇒ 读的人看到的还是「常驻残留树=0」。与上一条分开钉：一个错在算，一个错在说，两处的修法不同（规则 210 的两半）",
+    apply: (s) => s.replace(
+      "const tail = res.unmeasured.length === 0",
+      "const tail = true",
+    ),
+    expectFail: "第四态：在飞数取不到的那棵要单独点名——既不进残留名单，也不许被那个 0 吞掉",
   },
   {
     id: "stale-tree-ignores-branch-face",

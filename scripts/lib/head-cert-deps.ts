@@ -236,31 +236,49 @@ export function parseWorktreeList(text: string | null): WorktreeRow[] | null {
   return rows.length === 0 ? null : rows;
 }
 
+/** 取一棵树「几项在飞」要交给真 git 的那对参数。`--no-optional-locks` 是 git 的**全局**选项，必须排在子命令**前面**：
+ *  写在 `git status` 后面 git 报 unknown option、退出 **129** ⇒ 每棵树都「取不到」⇒ 那一格只能印 0（第 165 页实测就是这个形状）。
+ *  收成一份的理由与规则 205 同：判卷与生产各拼一份，位置写错只有真跑 git 才看得见，而两边跑的是各自那一份。 */
+export function gitInflightArgs(): string[] {
+  return ["--no-optional-locks", "status", "--porcelain"];
+}
+
 /** 哪些算"常驻残留的 scratch 树"。四个条件缺一不可：
  *  ① detached——带分支的树可能是别人正在写的工作支（本仓同时有 doc-layer／goal-plan／r1b 等分支树）；
  *  ② 0 项在飞——有在飞就是别人的活，碰都不能碰（AGENTS：保留别的会话的脏改动）；
  *  ③ 那一笔已是当前认证目标的祖先——未入库的 commit 可能正是隔壁会话在验的那笔；
  *  ④ 不是我自己这棵，也不是本次刚用的那棵认证树（那棵由汇总行末尾的回收命令单独点名，报成残留是噪声）。
- *  `dirtyCountOf` 回 null（取不到）＝**不算残留**：三态里"没量到"永远不许长成"量到且没问题"。 */
+ *  `dirtyCountOf` 回 null（取不到）＝**既不进残留名单，也不算干净**：它进 `unmeasured` 由 `staleTreeCell` 单独列印。
+ *  旧写法直接 `continue` 掉，于是「一把坏掉的尺」永远报「收干净了」——第 165 页撞到的正是这个。 */
 export function staleScratchTrees(
   rows: WorktreeRow[] | null,
   opt: { selfPath: string; certTree: string; isAncestor: (sha: string) => boolean; dirtyCountOf: (path: string) => number | null },
-): { path: string; head: string }[] {
-  if (rows === null) return [];
-  const out: { path: string; head: string }[] = [];
+): { stale: { path: string; head: string }[]; unmeasured: string[] } {
+  const stale: { path: string; head: string }[] = [];
+  const unmeasured: string[] = [];
+  if (rows === null) return { stale, unmeasured };
   for (const r of rows) {
     if (!r.detached) continue;
     if (r.path === opt.selfPath || r.path === opt.certTree) continue;
-    if (opt.dirtyCountOf(r.path) !== 0) continue;
+    const dirty = opt.dirtyCountOf(r.path);
+    if (dirty === null) { unmeasured.push(r.path); continue; }
+    if (dirty !== 0) continue;
     if (!opt.isAncestor(r.head)) continue;
-    out.push({ path: r.path, head: r.head });
+    stale.push({ path: r.path, head: r.head });
   }
-  return out;
+  return { stale, unmeasured };
 }
 
-/** 那一格要怎么说话：未取／0 棵／N 棵三种形态分开，且**永不**把"没量到"写成 0。 */
-export function staleTreeCell(rows: WorktreeRow[] | null, stale: { path: string; head: string }[]): string {
+/** 那一格要怎么说话：未取／0 棵／N 棵三种形态分开，且**永不**把"没量到"写成 0；
+ *  「在飞数取不到」是第四种形态，单独点名——并进 0 就等于让一把坏掉的尺报「收干净了」。 */
+export function staleTreeCell(
+  rows: WorktreeRow[] | null,
+  res: { stale: { path: string; head: string }[]; unmeasured: string[] },
+): string {
   if (rows === null) return "常驻残留树=未取（git 读不到 worktree 清单 ⇒ 不等于没有残留）";
-  if (stale.length === 0) return "常驻残留树=0";
-  return `常驻残留树=${String(stale.length)}（${stale.map((s) => `${s.path}@${s.head.slice(0, 7)}`).join("、")}）`;
+  const tail = res.unmeasured.length === 0
+    ? ""
+    : `／在飞数取不到 ${String(res.unmeasured.length)} 棵（${res.unmeasured.join("、")}）＝这几棵没量过，不等于干净`;
+  if (res.stale.length === 0) return `常驻残留树=0${tail}`;
+  return `常驻残留树=${String(res.stale.length)}（${res.stale.map((s) => `${s.path}@${s.head.slice(0, 7)}`).join("、")}）${tail}`;
 }
