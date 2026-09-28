@@ -280,6 +280,15 @@ describe("parseArgs：取料坏与拼错 flag 分两格印", () => {
     expect(p.problem).toContain("budget-ms");
   });
 
+  it("--force-split 只认 host|roundrobin：别的值进「值坏」那一格，不算拼错 flag", () => {
+    const p = parseArgs(["--trees=a,b", "--force-split=whatever"]);
+    expect(p.flags).toBeNull();
+    expect(p.unknown).toEqual([]);
+    expect(p.problem).toContain("force-split");
+    expect(parseArgs(["--trees=a,b", "--force-split=roundrobin"]).flags?.forceSplit).toBe("roundrobin");
+    expect(parseArgs(["--trees=a,b"]).flags?.forceSplit).toBe("host");
+  });
+
   it("合法参数解析成形状：两棵树＋预算＋串行分母＋位置 id", () => {
     const p = parseArgs(["--trees=a,b", "--budget-ms=5000", "--serial-seconds=31", "id-1", "id-2"]);
     expect(p.flags?.trees).toEqual(["a", "b"]);
@@ -358,6 +367,29 @@ describe("treeProblem 与编排器的前置闸：脏树不许当片用", () => {
       expect(r.out).toContain("只出计划，一条没跑");
       expect(r.out).not.toContain("变异验证：");
     } finally { wt.drop(); }
+  });
+
+  /** 观察输入（`--force-split=roundrobin`）存在的全部理由：这条守卫从前只有文字钉，
+   *  把 `if (split.length > 0)` 改成 `if (false)` 时那条文字钉**照绿**（正则里那两行还在），
+   *  实测「变异存活：测试全绿」——与第 186 页同一次课：存活不是没人守，是这个形状没有可达的输入。 */
+  it("同一宿主被摊到两片 ⇒ 行为上当场拒（默认切法同输入放行）", () => {
+    const one = cleanWorktree();
+    const two = cleanWorktree();
+    try {
+      // 三条**同宿主**的 id：轮转必把它们拆开，按宿主成组必把它们放在一起。
+      const trio = ["shard-plan-missing-hardcoded", "shard-merge-unreadable-as-killed", "shard-speed-null-guard-dropped"];
+      const bad = runEntry([`--trees=${one.path},${two.path}`, "--dry-run", "--force-split=roundrobin", ...trio], one.path);
+      expect(bad.status).toBe(2);
+      expect(bad.out).toContain("被摊到两片以上");
+      expect(bad.out).not.toContain("只出计划");
+      const good = runEntry([`--trees=${one.path},${two.path}`, "--dry-run", ...trio], one.path);
+      expect(good.status).toBe(0);
+      expect(good.out).toContain("切法=host");
+      expect(good.out).toContain("只出计划，一条没跑");
+    } finally {
+      one.drop();
+      two.drop();
+    }
   });
 });
 

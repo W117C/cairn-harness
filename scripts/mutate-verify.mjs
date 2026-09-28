@@ -8931,9 +8931,12 @@ const MUTATIONS = [
     test: "tests/mutate-shards.test.ts",
     desc: "算出「同一判卷宿主被摊到两片」却不拦 ⇒ 两个真进程并发真跑同一份判卷文件。" +
       "09-29 实测：轮转切法把 `tests/head-cert-deps.test.ts` 摊进四片，其中一片的 `cert-lock-stale-not-unlinked` " +
-      "因认证树注册名（按提交 sha 定）撞车判成「基线就不是全绿」，同一条串行复跑 ⇒ `✅` 1.1s（钉调用点要连同它的入参，规则 230）",
+      "因认证树注册名（按提交 sha 定）撞车判成「基线就不是全绿」，同一条串行复跑 ⇒ `✅` 1.1s（钉调用点要连同它的入参，规则 230）。" +
+      "**本条第一版存活过一次**：killer 挂的是那条文字接线钉，而 `if (split.length > 0)` → `if (false)` 之后" +
+      "正则要的那两行还在原地 ⇒ 测试全绿。现挂**行为证人**：判卷用 `--force-split=roundrobin` 造出同宿主被拆的输入，" +
+      "闸门被解除时那一跑会放行 ⇒ 断言当场红（第 186 页同一次课：存活不是没人守，是这个形状没有可达的输入）",
     apply: (s) => s.replace("if (split.length > 0) {", "if (false) {"),
-    expectFail: "「同一宿主不许跨片」也接在闸上",
+    expectFail: "同一宿主被摊到两片 ⇒ 行为上当场拒（默认切法同输入放行）",
   },
   {
     id: "shard-duplicate-tree-gate-dropped",

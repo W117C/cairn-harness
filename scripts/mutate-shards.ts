@@ -14,7 +14,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { hostsSplitAcrossShards, mergeShards, partitionProof, planShards, rollupLine, shardRow, type ShardRow } from "./lib/shard-plan";
+import { hostsSplitAcrossShards, mergeShards, partitionProof, planShards, rollupLine, shardRow, splitShards, type ShardRow } from "./lib/shard-plan";
 
 const MV = "scripts/mutate-verify.mjs";
 const MAX_BUF = 64 * 1024 * 1024;
@@ -26,6 +26,10 @@ interface Flags {
   serialSeconds: number | null;
   lockTagBase: string;
   dryRun: boolean;
+  /** 切法。缺省 `host`＝按判卷宿主成组（安全）；`roundrobin` 是**给反向证人用的观察输入**：
+   *  它把同一宿主摊开，好让「不许跨片」那一格有可达的输入可红——
+   *  否则那条守卫只有文字钉，把 `if (split.length > 0)` 改成 `if (false)` 也照样绿（第 186 页同一课）。 */
+  forceSplit: "host" | "roundrobin";
   ids: string[];
 }
 
@@ -41,6 +45,7 @@ export function parseArgs(argv: readonly string[]): { flags: Flags | null; unkno
   let serialSeconds: number | null = null;
   let lockTagBase = "shard";
   let dryRun = false;
+  let forceSplit: Flags["forceSplit"] = "host";
   let problem = "";
   for (const a of argv) {
     if (a === "--dry-run") { dryRun = true; continue; }
@@ -49,6 +54,12 @@ export function parseArgs(argv: readonly string[]): { flags: Flags | null; unkno
     if (a.startsWith("--budget-ms=")) { budgetMs = Number(a.slice(12)); continue; }
     if (a.startsWith("--serial-seconds=")) { serialSeconds = Number(a.slice(17)); continue; }
     if (a.startsWith("--lock-tag-base=")) { lockTagBase = a.slice(16); continue; }
+    if (a.startsWith("--force-split=")) {
+      const v = a.slice(14);
+      if (v !== "host" && v !== "roundrobin") { problem = `--force-split 只认 host|roundrobin，收到：${v}`; }
+      else forceSplit = v;
+      continue;
+    }
     if (a.startsWith("--")) { unknown.push(a); continue; }
     ids.push(a);
   }
@@ -59,7 +70,7 @@ export function parseArgs(argv: readonly string[]): { flags: Flags | null; unkno
   }
   if (problem !== "" || unknown.length > 0) return { flags: null, unknown, problem };
   return {
-    flags: { trees, changedSince, budgetMs, serialSeconds, lockTagBase, dryRun, ids },
+    flags: { trees, changedSince, budgetMs, serialSeconds, lockTagBase, dryRun, forceSplit, ids },
     unknown,
     problem,
   };
@@ -150,7 +161,7 @@ async function main(): Promise<void> {
     return;
   }
   const ids = rows.map((r) => r.id);
-  const shards = planShards(rows, distinct.length);
+  const shards = f.forceSplit === "roundrobin" ? splitShards(ids, distinct.length) : planShards(rows, distinct.length);
   const proof = partitionProof(ids, shards);
   if (proof.missing.length > 0 || proof.duplicated.length > 0 || proof.outside.length > 0) {
     console.error(
@@ -170,7 +181,7 @@ async function main(): Promise<void> {
     return;
   }
   const counts = proof.counts.join("+");
-  console.log(`名单 ${String(ids.length)} 条 → ${String(shards.length)} 片（${counts}）· 每片一棵树，锁标签 ${f.lockTagBase}-<i>`);
+  console.log(`名单 ${String(ids.length)} 条 → ${String(shards.length)} 片（${counts}）· 切法=${f.forceSplit} · 每片一棵树，锁标签 ${f.lockTagBase}-<i>`);
   if (f.dryRun) {
     for (let i = 0; i < shards.length; i += 1) console.log(`  片 ${String(i)}：${shards[i]!.length} 条 @ ${distinct[i % distinct.length]}`);
     console.log("（--dry-run：只出计划，一条没跑）");
