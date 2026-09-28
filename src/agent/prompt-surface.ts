@@ -23,10 +23,15 @@ export type PromptSurfaceFinding = {
  *  ⑴ 蛇形（`edit_file`）——形状判，不需词表；
  *  ⑵ 已知工具名单里的裸名（`verify`、`clarify` 这类单词名）。
  *  只按形状判会漏掉单词名（现读 `BASE_SYSTEM` 的 4 个蛇形 token 之外还点了 `verify`/`clarify`），
- *  只按名单判会漏掉「名单里已经不存在的那个名字」——那正是 dead 类，所以两路都要。 */
-export function toolNameTokens(prose: string, knownNames: readonly string[]): string[] {
+ *  只按名单判会漏掉「名单里已经不存在的那个名字」——那正是 dead 类，所以两路都要。
+ *  `namesOnly`（工具**描述**那一类面）：描述里的蛇形大量是**参数名/目录名**（现读 `old_string`、`replace_all`、
+ *  `agent_ids`、`worker_cap`、`node_modules`、`fixed_strings`），形状判据在那一面会把它们全报成死引用；
+ *  所以那一类面只认名单——代价是「描述里指着一把已删工具」在这一面看不见，这是明写的边界，不是漏。 */
+export function toolNameTokens(prose: string, knownNames: readonly string[], opts?: { namesOnly?: boolean }): string[] {
   const out = new Set<string>();
-  for (const t of prose.match(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/gu) ?? []) out.add(t);
+  if (opts?.namesOnly !== true) {
+    for (const t of prose.match(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/gu) ?? []) out.add(t);
+  }
   for (const n of knownNames) {
     if (n === "") continue;
     if (new RegExp(`(^|[^A-Za-z0-9_])${n}([^A-Za-z0-9_]|$)`, "u").test(prose)) out.add(n);
@@ -39,7 +44,7 @@ export function toolNameTokens(prose: string, knownNames: readonly string[]): st
 export type PromptSurfaceExempt = readonly { token: string; mode: string; why: string }[];
 
 export function promptSurfaceFindings(
-  faces: readonly { name: string; text: string; modes?: readonly string[] }[],
+  faces: readonly { name: string; text: string; modes?: readonly string[]; namesOnly?: boolean }[],
   tablesByMode: Record<string, readonly string[]>,
   knownNames: readonly string[],
   exempt: PromptSurfaceExempt = [],
@@ -57,7 +62,7 @@ export function promptSurfaceFindings(
     if (scope.some((m) => !(m in tablesByMode))) {
       throw new Error(`文本面 ${face.name} 声明了不存在的档 ⇒ 取料坏了（覆盖档必须来自工具面那张表）`);
     }
-    for (const token of toolNameTokens(face.text, knownNames)) {
+    for (const token of toolNameTokens(face.text, knownNames, { namesOnly: face.namesOnly })) {
       // dead＝名字在**全局**任何档都没有 ⇒ 文本指着不存在的能力（改名／删文案），一条发现点名所有档。
       if (!unionAll.has(token)) {
         if (!waived.has(`${token}@*`)) out.push({ token, face: face.name, modes: allModes, kind: "dead" });

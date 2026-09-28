@@ -29,11 +29,14 @@ export function tablesByMode(): Record<string, string[]> {
   return out;
 }
 
+/** 一把文本面：文本 + 它实际发给哪几档 + 认工具名时是否只认名单。 */
+export type SurfaceFace = { name: string; text: string; modes: readonly string[]; namesOnly?: boolean };
+
 /** 取料与生产端**共用同一个决策点**：文本面不是手抄清单，而是逐档调 `systemPromptFor`，
  *  再把「文本逐字相同」的那些档合并成一面（同一份文本对几档 ⇒ 那几档共用它，odd 才有意义）。
  *  好处是反过来的也成立：若有人把某一档的差异抹平，那些档会自动并成一面，共用文本对缺席档的承诺当场报 odd——
  *  不需要有人记得来改这份清单（`报数前先重测`／`判据要与生产端共用决策点`）。 */
-export function proseFaces(): { name: string; text: string; modes: readonly string[] }[] {
+export function proseFaces(): SurfaceFace[] {
   const byText = new Map<string, string[]>();
   for (const m of PERMISSION_MODES) {
     const text = systemPromptFor(m);
@@ -48,12 +51,34 @@ export function proseFaces(): { name: string; text: string; modes: readonly stri
   }));
 }
 
+/** 第二类模型可见文本：**每把工具自己的 description**。它比散文更容易长出「指着别的能力」的句子——
+ *  本笔就是靠它抓到现读的 `propose_plan`：缺省描述写「批准前 write_file/run_shell 会被权限层拒绝」，
+ *  而只读档那两把连面都不在（那句等于让模型去理解一个它拿不到的能力）。
+ *  取料逐调 `sessionToolSpecs({mode})`（生产端同一个决策点），面覆盖档＝那一档。
+ *  判据按面选 `namesOnly`：描述里的蛇形多数是参数名/目录名（现读 `old_string`／`node_modules`），形状判据会把它们全报成死引用。 */
+export function descriptionFaces(): SurfaceFace[] {
+  const out: SurfaceFace[] = [];
+  for (const m of PERMISSION_MODES) {
+    for (const s of sessionToolSpecs({ mode: m }).specs) {
+      out.push({ name: `desc[${m}].${s.function.name}`, text: String(s.function.description ?? ""), modes: [m], namesOnly: true });
+    }
+  }
+  return out;
+}
+
+export function allFaces(): SurfaceFace[] {
+  return [...proseFaces(), ...descriptionFaces()];
+}
+
 export function main(argv: string[] = process.argv.slice(2)): number {
   const selfTest = argv.includes("--self-test");
   const tables = tablesByMode();
-  const faces = proseFaces();
+  const system = proseFaces();
+  const descs = descriptionFaces();
+  const faces: SurfaceFace[] = [...system, ...descs];
   const counts = Object.entries(tables).map(([m, t]) => `${m}=${String(t.length)}`).join(" ");
-  console.log(`[prompt-surface] 取料：文本面 ${String(faces.length)} 份（${faces.map((f) => f.name).join("、")}）｜工具面 ${counts}｜工具名单 ${String(TOOL_NAMES.length)} 个`);
+  console.log(`[prompt-surface] 取料：系统文本 ${String(system.length)} 份（${system.map((f) => f.name).join("、")}）` +
+    `｜工具描述 ${String(descs.length)} 份（按档取规格面，namesOnly）｜工具面 ${counts}｜工具名单 ${String(TOOL_NAMES.length)} 个`);
 
   if (selfTest) return selfTestRun();
 
@@ -71,7 +96,9 @@ export function main(argv: string[] = process.argv.slice(2)): number {
     console.log(`  ❌ 豁免过期：\`${e.token}@${e.mode}\` 已经不命中了 ⇒ 该条要从表里删掉（留着它就会放过同名的新问题）`);
   }
   // 反向读数：形状判据本身要有产出，否则「0 发现」可能只是尺坏了。
-  const tokens = [...new Set(faces.flatMap((f) => toolNameTokens(f.text, TOOL_NAMES)))];
+  // 这一行必须**按面自己的判据**取 token（与上面 findings 同一份谓词、同一组开关）——
+  // 拿两种口径印读数，就是规则 253 点名的「同一件事两把尺，各自漂」。
+  const tokens = [...new Set(faces.flatMap((f) => toolNameTokens(f.text, TOOL_NAMES, { namesOnly: f.namesOnly })))];
   console.log(`  ℹ️  文本里点到的工具名 ${String(tokens.length)} 个：${tokens.join(" ")}`);
   const newIssues = findings.length;
   console.log(newIssues === 0 && stale.length === 0 ? "[prompt-surface] 全部通过 ✅" : "[prompt-surface] 有要处理的格子 ❌");
@@ -94,6 +121,15 @@ function selfTestRun(): number {
   // 否则拆开之后那些档会被牵连报红（不拆的理由就没了），而把缺席档的承诺放过去又正好是这一格要抓的事。
   const scopedHit = promptSurfaceFindings([{ name: "t", text: "改文件用 edit_file", modes: ["read"] }], tables, TOOL_NAMES, []);
   const scopedClean = promptSurfaceFindings([{ name: "t", text: "改文件用 edit_file", modes: ["auto"] }], tables, TOOL_NAMES, []);
+  // 第四轴（第 176 页）：**工具描述**也是模型可见文本，而它按 namesOnly 判——
+  // 否则参数名／目录名（`old_string`／`node_modules`）会被整报成死引用，那面就再也读不出真承诺。
+  // 这一对控件要另建合成面：`write_file` 必须在**别档**存在（缺了它就成了 dead，而真实现读的形状是 odd——
+  // 上一版直接复用了 `tables`，于是控件把自己的形状写错了，红是尺抓到了我，不是我抓到了尺）。
+  const dTables = { auto: ["edit_file", "verify", "write_file"], read: ["verify"] } as const;
+  const descPromise = promptSurfaceFindings(
+    [{ name: "d", text: "批准前 write_file 会被权限层拒绝", modes: ["read"], namesOnly: true }], dTables, TOOL_NAMES, []);
+  const descParams = promptSurfaceFindings(
+    [{ name: "d", text: "排除 node_modules，按 old_string 精确替换", modes: ["read"], namesOnly: true }], dTables, TOOL_NAMES, []);
   const lines = [
     [dead.some((f) => f.kind === "dead" && f.token === "no_such_tool"), "死引用那一档要能报出来"],
     [odd.some((f) => f.kind === "odd" && f.token === "edit_file" && f.modes.join() === "read"), "共用文本对缺席档要报不可达"],
@@ -101,6 +137,8 @@ function selfTestRun(): number {
     [waived.length === 0, "豁免要真能消掉那一条"],
     [scopedHit.some((f) => f.kind === "odd" && f.modes.join() === "read"), "只发给缺席档的文本也要报（覆盖档由调用方给）"],
     [scopedClean.length === 0, "只发给在场档的文本不许报（覆盖档不是全局四档）"],
+    [descPromise.some((f) => f.kind === "odd" && f.token === "write_file"), "描述里点了别档才有的工具要报（namesOnly 仍然认名单）"],
+    [descParams.length === 0, "描述里的参数名／目录名不许当工具承诺（namesOnly 的意义）"],
   ] as const;
   let bad = 0;
   for (const [ok, what] of lines) {

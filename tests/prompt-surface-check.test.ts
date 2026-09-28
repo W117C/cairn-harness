@@ -16,9 +16,12 @@ import { BASE_SYSTEM, systemPromptFor } from "../src/main/agent-runner";
 import { GATES } from "../scripts/gate-manifest";
 import {
   PROMPT_SURFACE_EXEMPT,
+  allFaces,
+  descriptionFaces,
   proseFaces,
   tablesByMode,
 } from "../scripts/prompt-surface-check";
+import { sessionToolSpecs } from "../src/agent/glm-session";
 import { TOOL_NAMES } from "../src/tools/base";
 
 const TABLES = { auto: ["edit_file", "verify", "clarify"], read: ["verify", "clarify"] } as const;
@@ -174,5 +177,55 @@ describe("按档拆文本（第 175 页，任务 #16）", () => {
     const src = readFileSync(fileURLToPath(new URL("../src/main/agent-runner.ts", import.meta.url)), "utf8");
     const hits = src.match(/^ {6}provider: createProvider\(promptText, systemPromptFor\(opts\.mode\), modelSelection, \{$/gmu);
     expect(hits ?? [], "装配点还是硬传 BASE_SYSTEM ⇒ 拆完的文本没人消费（门会绿而这格没接线）").toHaveLength(1);
+  });
+});
+
+describe("工具描述也是模型可见文本（第 176 页）", () => {
+  const TABLES2 = { auto: ["edit_file", "verify", "write_file"], read: ["verify"] } as Record<string, readonly string[]>;
+  const known = ["edit_file", "verify", "write_file", "run_shell"];
+
+  it("namesOnly 只认名单：参数名／目录名不当工具承诺，名单里的名字照认", () => {
+    expect(toolNameTokens("排除 node_modules，按 old_string 精确替换", known, { namesOnly: true })).toEqual([]);
+    expect(toolNameTokens("批准前 write_file 会被拒绝", known, { namesOnly: true })).toEqual(["write_file"]);
+    // 配对判据（规则 228）：同一串料走缺省判据时那两个蛇形就该被形状抓出来——
+    // 否则「namesOnly 生效」与「这一面什么都不认」是同一种绿，分不开。
+    expect(toolNameTokens("排除 node_modules，按 old_string 精确替换", known)).toEqual(["node_modules", "old_string"]);
+  });
+
+  it("描述面的缺席只在覆盖档里算；认不出名单外的名字是这一面的边界，要如实写", () => {
+    const odd = promptSurfaceFindings(
+      [{ name: "d", text: "批准前 write_file 会被拒绝", modes: ["read"], namesOnly: true }], TABLES2, known, []);
+    expect(odd.map((f: PromptSurfaceFinding) => `${f.kind}:${f.token}:${f.modes.join()}`)).toEqual(["odd:write_file:read"]);
+    const blind = promptSurfaceFindings(
+      [{ name: "d", text: "先调 spawn_agent 再说", modes: ["read"], namesOnly: true }], TABLES2, known, []);
+    expect(blind, "spawn_agent 不在名单里 ⇒ namesOnly 面认不出（这条是边界证人，不是缺陷）").toHaveLength(0);
+  });
+
+  it("真取料：每把工具自己的描述，不点名它那一档拿不到的工具", () => {
+    const faces = descriptionFaces();
+    const tables = tablesByMode();
+    expect(faces.length, "描述面数＝四档工具面之和（现读 8＋20＋20＋20）").toBe(
+      Object.values(tables).reduce((a, t) => a + t.length, 0),
+    );
+    for (const f of faces) {
+      expect(f.namesOnly, `${f.name} 必须按名单判，否则参数名会淹掉真承诺`).toBe(true);
+      expect(f.modes).toHaveLength(1);
+    }
+    expect(promptSurfaceFindings(faces, tables, TOOL_NAMES, []), "描述里点了别档才有的工具 ⇒ 红着点名").toHaveLength(0);
+  });
+
+  it("propose_plan：只读档不再点名写向那两把，可写档的原文案一字未动", () => {
+    const roText = String(sessionToolSpecs({ mode: "read-only" }).specs.find((s) => s.function.name === "propose_plan")?.function.description ?? "");
+    const defText = String(sessionToolSpecs({ mode: "default" }).specs.find((s) => s.function.name === "propose_plan")?.function.description ?? "");
+    expect(roText, "只读档还在许诺 write_file（那一档没装配它）").not.toContain("write_file");
+    expect(roText).not.toContain("run_shell");
+    expect(roText, "换写法不等于删说明：这一档该说自己是什么").toContain("提交方案");
+    expect(defText).toContain("write_file");
+  });
+
+  it("门真的把描述面喂进去（不是只喂系统文本）", () => {
+    const all = allFaces();
+    expect(all).toHaveLength(proseFaces().length + descriptionFaces().length);
+    expect(all.some((f) => f.name.startsWith("desc[read-only].")), "描述面没进门 ⇒ 上一条判卷只证明了它自己读了自己").toBe(true);
   });
 });

@@ -365,15 +365,29 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
     // 定时五件同因：只读会话不该能排下一次会写盘的无人值守跑。
     // 每个摘除项各占一行：往这条链上追加一族工具是常规动作（定时五件即是），写成一行会把
     // 守护前两件的变异针脚整条顶掉（2026-09-24 实踩——bd2cf3e 加第三项即致两条锚点失效）。
-    return specs.filter((s) =>
+    return readOnlyDescriptions(specs.filter((s) =>
       !isSideEffectTool(s.function.name) &&
       s.function.name !== "remember" &&
       s.function.name !== "wait_for_agents" &&
       s.function.name !== "cancel_agents" &&
       !AUTOMATION_TOOL_NAMES.includes(s.function.name),
-    );
+    ));
   }
   return specs;
+}
+
+/** 工具**描述**也是模型可见文本（第 176 页）。`propose_plan` 的缺省描述写着「批准前 write_file/run_shell 会被权限层拒绝」，
+ *  而这两把在只读档连面都不在 ⇒ 那句话对该档是在描述一个它拿不到的能力，正是同类事故第四次（前三次：glob 逃生口／
+ *  maxFiles 死参数／prune 附件）。这里只换需要换的那一把的描述，其余逐字沿用同一份源——与 `systemPromptFor` 同一套纪律。 */
+const READ_ONLY_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  propose_plan: "提交方案等用户批准；本档不装配写文件与跑命令的工具，方案是给用户的交付物，不由本会话执行",
+};
+
+function readOnlyDescriptions(specs: GlmToolSpec[]): GlmToolSpec[] {
+  return specs.map((s) => {
+    const alt = READ_ONLY_DESCRIPTIONS[s.function.name];
+    return alt === undefined ? s : { ...s, function: { ...s.function, description: alt } };
+  });
 }
 
 /** 运行时注入的工具（插件 skill / MCP server 工具）的模型可见规格。

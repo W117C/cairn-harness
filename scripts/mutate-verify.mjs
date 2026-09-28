@@ -8559,6 +8559,42 @@ const MUTATIONS = [
     ),
     expectFail: "四档各属一面，且没有第五面",
   },
+  {
+    id: "prompt-surface-readonly-description-not-applied",
+    src: "src/agent/glm-session.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "按档换描述那一格摘掉 ⇒ 只读档的 `propose_plan` 继续写「批准前 write_file/run_shell 会被权限层拒绝」，" +
+      "而那两把在这一档连面都不在——文本描述一个它拿不到的能力（第 176 页现读抓到的那一格，同类事故第四次）",
+    apply: (s) => s.replace(
+      "return alt === undefined ? s : { ...s, function: { ...s.function, description: alt } };",
+      "return s;",
+    ),
+    expectFail: "可写档的原文案一字未动",
+  },
+  {
+    id: "prompt-surface-namesonly-switch-ignored",
+    src: "src/agent/prompt-surface.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "把「描述面只认名单」这个开关摘掉（永远走形状）⇒ 参数名／目录名（`old_string`、`node_modules`）整报成死引用，" +
+      "门的读数会被噪声淹没，而真承诺（描述点了别档才有的工具）反而没人愿意看（规则 242：读数一坏，整格就失去证人）",
+    apply: (s) => s.replace(
+      "if (opts?.namesOnly !== true) {",
+      "if (false) {",
+    ),
+    expectFail: "参数名／目录名不当工具承诺",
+  },
+  {
+    id: "prompt-surface-description-faces-not-swept",
+    src: "scripts/prompt-surface-check.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "门的取料退回只喂系统文本 ⇒ 68 份工具描述面不再被扫，`propose_plan` 那一格会重新长回来而门照绿；" +
+      "判卷里那条「描述不点名别档工具」自己仍然绿，因为它读的是 descriptionFaces() 而不是门实际喂出去的那份（规则 236：接线要单独钉）",
+    apply: (s) => s.replace(
+      "return [...proseFaces(), ...descriptionFaces()];",
+      "return [...proseFaces()];",
+    ),
+    expectFail: "门真的把描述面喂进去",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
