@@ -8790,6 +8790,65 @@ const MUTATIONS = [
     apply: (s) => s.replace('cause === "toolchain-missing"', 'cause === "timeout"'),
     expectFail: "两类各贴一句",
   },
+
+  // ── 第 185 页：每请求固定**面**（分子补上工具规格）＋ 占比不许夹住 ＋ 系数自检
+  {
+    id: "prompt-cost-face-drops-specs",
+    src: "scripts/lib/prompt-cost.ts",
+    test: "tests/prompt-cost.test.ts",
+    desc: "固定面退回只数系统提示 ⇒ 标签还说「面」而分子少了九成（default 档规格 10,131 字符 = 提示的 15.1 倍），"+
+      "整条成本尺继续把主要成本当不存在",
+    apply: (s) => s.replace("const toolSpecChars = JSON.stringify(input.specs).length;", "const toolSpecChars = 0;"),
+    expectFail: "面 = 系统提示 + 序列化工具规格",
+  },
+  {
+    id: "prompt-cost-face-pools-modes",
+    src: "scripts/lib/prompt-cost.ts",
+    test: "tests/prompt-cost.test.ts",
+    desc: "逐档面并成一条（只算第一档）⇒ read-only 的 8 把与 default 的 20 把被并成一个数，"+
+      "「只读会话便宜多少」这项决策再没有读数（并集读数不能当「每一档都成立」的证人，规则 255）",
+    apply: (s) => s.replace("  return inputs.map((i) => fixedFaceOfMode(i));", "  return [fixedFaceOfMode(inputs[0]!)];"),
+    expectFail: "逐档分开数",
+  },
+  {
+    id: "prompt-cost-share-clamp-restored",
+    src: "scripts/lib/prompt-cost.ts",
+    test: "tests/prompt-cost.test.ts",
+    desc: "把 `Math.min(1, …)` 夹住装回来 ⇒ 18/19 条流一起报 100%，那片相同的数正是规则 242 说的「常数签名」；"+
+      "夹住之后「系数把成本放大一倍」这件事在读数里彻底消失",
+    apply: (s) => s.replace("  return fixedTokens / measuredInputTokens;", "  return Math.min(1, fixedTokens / measuredInputTokens);"),
+    expectFail: "占比不夹住",
+  },
+  {
+    id: "prompt-cost-admissible-not-tightest",
+    src: "scripts/lib/prompt-cost.ts",
+    test: "tests/prompt-cost.test.ts",
+    desc: "系数自检取第一条流而不是最紧那条 ⇒ 反解出的「下界」偏小，按它摊仍然估超实测输入"+
+      "（自检给出假安心，比没有自检更坏）",
+    apply: (s) => s.replace("    if (lo === null || need > lo) lo = need;", "    if (lo === null) lo = need;"),
+    expectFail: "取最紧那条流反解",
+  },
+  {
+    id: "prompt-cost-overshoot-not-counted",
+    src: "scripts/lib/prompt-cost.ts",
+    test: "tests/prompt-cost.test.ts",
+    desc: "超界计数写死 0 ⇒ note 还在逐行说，但汇总与「这条尺有几行不成立」这一格变成常数，"+
+      "读的人不会再去看那一列（三态要分开印，缺项要单列计数，规则 239/242）",
+    apply: (s) => s.replace("    overshoot: shares.filter((s) => s > 1).length,", "    overshoot: 0,"),
+    expectFail: "超限行带 note 说破原因",
+  },
+  {
+    id: "prompt-fixed-cost-rows-use-prompt-only",
+    src: "scripts/replay/prompt-fixed-cost.ts",
+    test: "tests/prompt-cost.test.ts",
+    desc: "逐档面算出来了、也印了，但摊给每条流时实参仍递提示那份（「算出来不接」第四次，这次在成本尺）⇒"+
+      "汇总里那些固定 token 全部偏小一个数量级，而头部几行看着完全正确",
+    apply: (s) => s.replace(
+      "const rows = promptCostRows(perFile, { promptChars: billed.totalChars, factor });",
+      "const rows = promptCostRows(perFile, { promptChars: billed.promptChars, factor });",
+    ),
+    expectFail: "分子被换掉就破",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
