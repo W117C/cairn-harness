@@ -7738,10 +7738,14 @@ const MUTATIONS = [
     id: "mutate-lock-read-only-face-locked",
     src: "scripts/mutate-verify.mjs",
     test: "tests/mutate-verify-gates.test.ts",
-    desc: "把只读的 `--list` 也接去占锁 ⇒ 两条并发 --list 互相拒跑，而吃 `--list` 的那两把静态尺（anchor-titles／gates）会在别人跑表时集体红——这道门不许把**不改盘**的那一半也关死（收紧必须配反向对照，规则 227）",
+    desc: "把只读的 `--list` 也接去占锁 ⇒ 两条并发 --list 互相拒跑，而吃 `--list` 的那两把静态尺（anchor-titles／gates）会在别人跑表时集体红——这道门不许把**不改盘**的那一半也关死（收紧必须配反向对照，规则 227）。" +
+      "**第 186 页重铸**：这条从第 163 页起一直存活，原因不是「场上没人占锁」而是「占错了锁」——旧改法写死 `tree: ROOT`，" +
+      "而判卷与变异机都带 `--lock-tag` ⇒ 探针种下的那把锁叫 `mutate-verify-judge-<pid>.lock`，突变体去占的却是 `mutate-verify-<树名>.lock`（没人）⇒ 拿到锁照常跑，行为零差异（等价突变，规则 260 的第二形态：不是判据没有观测者，是**突变挑错了资源**）。" +
+      "现在改法与真实占锁那一支用同一个身份表达式（`lockTagRaw.given ? lockTagRaw.value : ROOT`），于是被判卷那颗活人锁当场拦住 ⇒ exit 2 ≠ 0。" +
+      "`--check-needles` 那一支仍只由位置比较钉（真跑它一次 ≈7.7s，而挂在本文件的锚点几十条、每条两拍 ⇒ 实测把本判卷抬到 19 分钟，故意不换）",
     apply: (s) => s.replace(
       '\nif (plan.mode === "list") {',
-      '\nif (plan.mode === "list") { acquireToolLock({ tool: "mutate-verify", root: ROOT, tree: ROOT, target: "list", commonDirOut: gitCommonDirOut(), harm: "锚点造的：只读面也占锁", say: (line) => console.log(line) });',
+      '\nif (plan.mode === "list") { acquireToolLock({ tool: "mutate-verify", root: ROOT, tree: lockTagRaw.given ? lockTagRaw.value : ROOT, target: "list", commonDirOut: gitCommonDirOut(), harm: "锚点造的：只读面也占锁", say: (line) => console.log(line) });',
     ),
     expectFail: "只读入口不许被这把门锁死：--list 在有人占着时照跑，而 `--check-needles` 与它同一先（按结构钉）",
   },
