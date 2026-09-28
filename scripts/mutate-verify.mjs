@@ -7879,12 +7879,23 @@ const MUTATIONS = [
     id: "lock-tmp-opened-without-wx",
     src: "scripts/lib/tool-lock.ts",
     test: "tests/head-cert-deps.test.ts",
-    desc: "临时名不带 `wx` ⇒ 同名文件已存在时这次写会**跟随**它（含符号链接）写到别处去：最小权限那条「只写自己新起的名字」。摘掉之后 EEXIST 那一支也永远不会触发，所以现场看不出来",
+    desc: "临时名不带 `wx` ⇒ 同名文件已存在时这次写会**跟随**它（含符号链接）写到别处去：最小权限那条「只写自己新起的名字」。第 166 页之前这条只有结构钉（判卷读源码里那对花括号），摘掉 wx 之后代码照样跑到下一步、现场看不出来；现在它咬的是行为证人——链接那头被动了一个字节就红",
     apply: (s) => s.replace(
       'const WX: { flag: string } = { flag: "wx" };',
       'const WX: { flag: string } = {}; // 丢掉 wx：缺省写法会跟随已存在的同名文件',
     ),
-    expectFail: "临时名必须是自己新建的（wx）：缺省写法会跟随已存在的同名文件/符号链接",
+    expectFail: "临时名上已有一个指向别处的符号链接 ⇒ 链接那头一个字节不许被动，而锁照样占到",
+  },
+  {
+    id: "lock-tmp-eexist-retry-dropped",
+    src: "scripts/lib/tool-lock.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "EEXIST 那一支不再「摘掉重写一次」而是直接抛 ⇒ 上一轮自己留的残骸（名字里就是本进程 pid）把整道门砸死，读起来像抢锁失败。与上一条各咬一支：摘 wx 时这条仍绿（没有 EEXIST 可触发），砸重用时那条也红但归因在这条的标题上（规则 226：同一处两道闸要给各自看得见的输入）",
+    apply: (s) => s.replace(
+      'if (String((e as NodeJS.ErrnoException).code) !== "EEXIST") throw e;',
+      'if (true) throw e; // 把同名残骸当成不可恢复的失败',
+    ),
+    expectFail: "临时名上是上一轮自己留的普通残骸 ⇒ 摘掉重写一次就占到，不许把整道门砸了",
   },
   {
     id: "cert-summary-not-durable",
