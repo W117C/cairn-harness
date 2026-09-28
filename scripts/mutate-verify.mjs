@@ -8275,7 +8275,7 @@ const MUTATIONS = [
     src: "scripts/lib/mutate-gates.ts",
     test: "tests/mutate-verify-gates.test.ts",
     desc: "收尾行读不到时回 0 ⇒「这格没量到」与「一条也没选中」合一，两种红的修法相反（前者是取料坏，后者是锚点失效）。第 166 页同一族：0 不许冒充读数",
-    apply: (s) => s.replace("    if (line === undefined) return null;", "    if (line === undefined) return 0;"),
+    apply: (s) => s.replace("  if (line === undefined) return null;", "  if (line === undefined) return 0;"),
     expectFail: "选中条数只从 vitest 真实的收尾行读，两种实测形状给两个数；读不到那行是 null 不是 0",
   },
   {
@@ -8291,7 +8291,10 @@ const MUTATIONS = [
     src: "scripts/mutate-verify.mjs",
     test: "tests/mutate-verify-gates.test.ts",
     desc: "标题原文直接当 `-t` 的正则拼进去 ⇒ 真标题里的 ( ) [ ] . * + 变成通配与量词，选中的可能根本不是那条 killer 用例，而单价读数照旧好看",
-    apply: (s) => s.replace('args.push("-t", escapeTitlePattern(pattern));', 'args.push("-t", pattern);'),
+    apply: (s) => s.replace(
+      '\n  if (typeof pattern === "string" && pattern !== "") args.push("-t", escapeTitlePattern(pattern));',
+      '\n  if (typeof pattern === "string" && pattern !== "") args.push("-t", pattern);',
+    ),
     expectFail: "接线：-t 这一支要经转义，不许把标题当通配符拼进命令（表与实现同文件 ⇒ 钉跨行/字面正则，规则 236）",
   },
   {
@@ -8300,8 +8303,8 @@ const MUTATIONS = [
     test: "tests/mutate-verify-gates.test.ts",
     desc: "不分模式一律塞 -t ⇒ 那 13 条「选不中／不唯一」的锚点从此只跑不存在的用例，等于整条保护被换成空转（两种跑法共存是刻意的，见第 169 页未证②）",
     apply: (s) => s.replace(
-      'const pattern = mode === "selector" ? String(m.expectFail ?? "") : "";',
-      'const pattern = String(m.expectFail ?? "");',
+      '\n  const pattern = mode === "selector" ? String(m.expectFail ?? "") : "";',
+      '\n  const pattern = String(m.expectFail ?? "");',
     ),
     expectFail: "接线：只有 selector 模式才塞 -t，其余必须走整文件（两种跑法共存是刻意的）",
   },
@@ -8311,8 +8314,8 @@ const MUTATIONS = [
     test: "tests/mutate-verify-gates.test.ts",
     desc: "「选中 0 条」不再判红 ⇒ 这条闸正是 `-t` 上线唯一的安全带：摘掉后一次改名就能让整条锚点永远绿着跑完（vitest 对无匹配的 -t 退 0）",
     apply: (s) => s.replace(
-      'if (vacuous === null && mode === "selector" && (r.selected === null || r.selected === 0)) {',
-      "if (false) {",
+      '\n    if (vacuous === null && mode === "selector" && (r.selected === null || r.selected === 0)) {',
+      "\n    if (false) {",
     ),
     expectFail: "接线：每一拍都过「选中几条」这道闸，闸的拍数与 runTest 调用点相对相等（选不中不许读成绿）",
   },
