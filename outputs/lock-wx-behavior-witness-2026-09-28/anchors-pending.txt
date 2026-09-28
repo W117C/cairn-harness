@@ -1,0 +1,41 @@
+第 167 页（2026-09-28）· 待补的两条锚点条目（原文，等 `scripts/mutate-verify.mjs` 只剩自己的 hunk 再插）
+────────────────────────────────────────────────────────────────────────────────────────────
+为什么要等：现读该文件被隔壁会话改着——`git diff` 20 个 hunk、88 增／14 删，全在 `runTest`／`verifyEntry`／
+`reportNeedles` 与汇总行那一带（他们在做任务 #37：给每次判卷记墙钟）。我的两个 hunk 与他们的**行区间不重叠**，
+但**提交面重叠**：`git add <文件>` 取的是整份工作树版本，一审计入他们未落库的 88 行（仓史 09-27 两次
+「整树入库」事故的反方向形状）。⇒ 判卷先落库（它不依赖表），锚点排队，等表干净。
+
+补进去之后要做的事（一次做完，别只插不验）：
+1. `node --import tsx scripts/mutate-verify.mjs --check-needles` ⇒ 除隔壁在飞那条 `goal-continuation-hook-skipped` 外应为 0 阻断；
+2. 干净 worktree @新 HEAD 跑 `--changed-since=HEAD~1` ⇒ 这两条必须被杀（`killed=1`），一条存活就按规则 233 分诊；
+3. 表长读数从现读 929 变成 930（新增 1 条：第 1 条是**改指**，不加行），凭证里要写这条对账。
+────────────────────────────────────────────────────────────────────────────────────────────
+
+【改动一】把已有那条 `lock-tmp-opened-without-wx`（现表内 src=scripts/lib/tool-lock.ts）的两行改掉：
+
+  desc: "临时名不带 `wx` ⇒ 同名文件已存在时这次写会**跟随**它（含符号链接）写到别处去：最小权限那条「只写自己新起的名字」。第 166 页之前这条只有结构钉（判卷读源码里那对花括号），摘掉 wx 之后代码照样跑到下一步、现场看不出来；现在它咬的是行为证人——链接那头被动了一个字节就红",
+  expectFail: "临时名上已有一个指向别处的符号链接 ⇒ 链接那头一个字节不许被动，而锁照样占到",
+（apply 不变；原 expectFail "临时名必须是自己新建的（wx）：缺省写法会跟随已存在的同名文件/符号链接" 对应的那条判卷**保留不删**，
+ 它仍是便宜的秒级结构钉，只是不再当这条锚点的归因目标——规则 226：同一处两道闸要给各自看得见的输入。）
+
+【改动二】紧随其后新增一条：
+
+  {
+    id: "lock-tmp-eexist-retry-dropped",
+    src: "scripts/lib/tool-lock.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "EEXIST 那一支不再「摘掉重写一次」而是直接抛 ⇒ 上一轮自己留的残骸（名字里就是本进程 pid）把整道门砸死，读起来像抢锁失败。与上一条各咬一支：摘 wx 时这条仍绿（没有 EEXIST 可触发），砸重用时那条也红但归因在这条的标题上",
+    apply: (s) => s.replace(
+      'if (String((e as NodeJS.ErrnoException).code) !== "EEXIST") throw e;',
+      'if (true) throw e; // 把同名残骸当成不可恢复的失败',
+    ),
+    expectFail: "临时名上是上一轮自己留的普通残骸 ⇒ 摘掉重写一次就占到，不许把整道门砸了",
+  },
+
+两条针脚唯一性已现读核过（`grep -cF` 各 1 处）：
+  'const WX: { flag: string } = { flag: "wx" };'                                    → scripts/lib/tool-lock.ts 1 处
+  'if (String((e as NodeJS.ErrnoException).code) !== "EEXIST") throw e;'            → scripts/lib/tool-lock.ts 1 处
+（隔壁那条 `linkSync` 分支里的判断写成 `if ((e as NodeJS.ErrnoException).code !== "EEXIST")`，没有 `String(...)`，不会串。）
+
+对应的三条判卷已落库（`tests/head-cert-deps.test.ts`，describe「临时名只写自己新起的名字：`wx` 与 EEXIST 重写的行为证人（任务 #35）」）：
+  ①符号链接证人 ②残骸证人 ③反向哨兵。

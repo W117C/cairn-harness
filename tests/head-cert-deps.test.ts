@@ -2,13 +2,13 @@
  *  纯函数层：`declaredDeps` / `installedDeps` / `missingDeclaredDeps` / `certLevel`（第 119 页加的等级）
  *  / `readInvalidated`（第 149 页：这道门进了默认门表，共享树上的写点要有人复核）。 */
 import { spawnSync, execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, gitInflightArgs, headGateTableIntegrity, installedDeps, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "../scripts/lib/head-cert-deps";
-import { decideToolLock, lockAgeCap, parseToolLock, shouldReleaseLock, toolLockPath } from "../scripts/lib/tool-lock";
+import { acquireToolLock, decideToolLock, lockAgeCap, parseToolLock, shouldReleaseLock, toolLockPath } from "../scripts/lib/tool-lock";
 
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 const listWorktrees = (cwd: string): string[] =>
@@ -851,5 +851,69 @@ describe("清场读数：常驻残留的 scratch 树要自己报数（任务 #33
     const lib = readFileSync(join(repoRoot, "scripts", "lib", "tool-lock.ts"), "utf8");
     expect(lib, '不带 flag ⇒ 别人预置一个 `<lock>.<pid>.tmp` 符号链接，我这一写就写到链接那头').toContain('{ flag: "wx" }');
     expect(lib, "EEXIST 是上一轮自己的残骸（名字带我的 pid）：摘掉重写一次，而不是把整道门砸了").toContain('!== "EEXIST"');
+  });
+});
+
+describe("临时名只写自己新起的名字：`wx` 与 EEXIST 重写的行为证人（任务 #35）", () => {
+  /* 这一格以前只有结构钉（上面那条 `toContain({ flag: "wx" })`）——结构钉看不见**后果**：把 wx 摘掉，代码照样跑到下一步。
+   *  行为证人能造出来的关键是：临时名的 pid 就是**我这条判卷自己的 pid**，所以判卷可以提前在那个名字上放东西。
+   *  锁面一律落在 `mkdtemp` 出来的临时根里，不碰本机 `.git/dsh-tool-locks`（规则 240：判卷往共享介质写活人状态＝它读到的就是度量机自己）。 */
+  const mk = (): string => {
+    const d = mkdtempSync(join(tmpdir(), "dsh-lock-wx-"));
+    mkdirSync(join(d, "repo"));
+    return d;
+  };
+  const faceOf = (root: string, tree: string): { lockPath: string; tmp: string } => {
+    const p = toolLockPath("git", root, "head-cert", tree);
+    if (p === null) throw new Error("锁面路径算不出来 ⇒ 这三条量不了（tree 名不合法？）：" + tree);
+    return { lockPath: p, tmp: p + "." + String(process.pid) + ".tmp" };
+  };
+  const acquire = (root: string, tree: string): string =>
+    acquireToolLock({ tool: "head-cert", root, tree, target: "a".repeat(40), commonDirOut: "git", harm: "判卷：这三条不许动真机的锁面", say: () => {} }).cell;
+
+  it("临时名上已有一个指向别处的符号链接 ⇒ 链接那头一个字节不许被动，而锁照样占到", () => {
+    const d = mk();
+    try {
+      const root = join(d, "repo");
+      const victim = join(d, "victim.txt");
+      writeFileSync(victim, "ORIGINAL\n");
+      const { lockPath, tmp } = faceOf(root, "witness-a");
+      mkdirSync(dirname(lockPath), { recursive: true });
+      symlinkSync(victim, tmp); // 别人预置：`<lock>.<我的pid>.tmp` → 指向别处
+      expect(acquire(root, "witness-a"), "被符号链接吓住而没占到＝这条没跑到要证的那一步").toContain("本进程持有");
+      expect(readFileSync(victim, "utf8"), "这一次写跟着链接走到别人文件里去了 ⇒「只写自己新起的名字」这句承诺没有证人").toBe("ORIGINAL\n");
+      expect(parseToolLock(readFileSync(lockPath, "utf8"))?.pid, "锁面要真占到，不是靠没写成功蒙过去").toBe(process.pid);
+      expect(existsSync(tmp), "占到之后临时名要清掉：留着就是下一次「跟着已存在的名字写」的入口").toBe(false);
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+    }
+  });
+
+  it("临时名上是上一轮自己留的普通残骸 ⇒ 摘掉重写一次就占到，不许把整道门砸了", () => {
+    const d = mk();
+    try {
+      const root = join(d, "repo");
+      const { lockPath, tmp } = faceOf(root, "witness-b");
+      mkdirSync(dirname(lockPath), { recursive: true });
+      writeFileSync(tmp, "上一轮我自己的残骸\n");
+      expect(acquire(root, "witness-b"), "EEXIST 是同名残骸，不是抢锁失败：拿它砸门＝一个 pid 撞一次就再也跑不动").toContain("本进程持有");
+      expect(parseToolLock(readFileSync(lockPath, "utf8"))?.pid).toBe(process.pid);
+      expect(existsSync(tmp), "残骸被摘掉又留下新的临时名＝下一次还要靠帽自愈").toBe(false);
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+    }
+  });
+
+  it("反向哨兵：临时名与锁面都不存在 ⇒ 照常占到（上面两条的红不许来自「路径算不出」或「目录建不起来」）", () => {
+    const d = mk();
+    try {
+      const root = join(d, "repo");
+      const { lockPath, tmp } = faceOf(root, "witness-c");
+      expect(acquire(root, "witness-c")).toContain("本进程持有");
+      expect(existsSync(lockPath)).toBe(true);
+      expect(existsSync(tmp)).toBe(false);
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+    }
   });
 });
