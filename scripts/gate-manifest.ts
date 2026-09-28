@@ -32,6 +32,13 @@ export const GATES: readonly string[] = [
   "supervisor-check",
   "model-surface-check",
   "prefix-churn-check",
+  // 第 174 页登记（任务 #13）：模型可见文本里点到的工具名，要在**每一档的工具面**上真拿得到。
+  // 动因：`BASE_SYSTEM` 是一份文本对四档（现读 read-only 面 8 把、其余三档 20 把），而同类事故已命中四次
+  // （glob 那句逃生口 / maxFiles 死参数 / prune 附件说 read_file 够不到 / verify 指向 .agent/ 禁写面）。
+  // 存量按豁免表逐条带理由登记（3 条 odd，全在 read-only），**只准调低、过期即红**；真修法是拆 per-mode 文本（任务 #16）。
+  // 同轮声明代价：本道门实测 **981ms**（走 `pnpm gates --only=prompt-surface-check`，取的是 runner 印的那一道的毫秒数；
+  // 直接跑脚本 0.45s／runner 总墙钟 1.96s，另含断言体检）——相对 mutate-verify 一轮（单价×条数见上面那段）可忽略。
+  "prompt-surface-check",
   "replay-determinism-check",
   "no-progress-check",
   "cost-per-progress-check",

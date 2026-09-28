@@ -142,7 +142,7 @@ describe("结构化那一行优先（第 172 页⑪，任务 #12）", () => {
     expect(classify(`x\n${kinds({ misattributed: 1 })}`, 1).verdict).toBe("红了未点名");
     expect(classify(`x\n${kinds({ "baseline-red": 1 })}`, 1).verdict).toBe("基线红");
     expect(classify(`x\n${kinds({ "no-effect": 1 })}`, 1).verdict).toBe("未生效");
-    expect(classify(`x\n${kinds({ vacuous: 1 })}`, 1).note).toContain("REDKINDS");
+    expect(classify(`x\n${kinds({ vacuous: 1 })}`, 1).note).toContain("由 REDKINDS 那一行直接给出");
   });
 
   it("同一件事的结构化读法与散文读法必须给同一个归宿（两份谓词不许各漂各的）", () => {

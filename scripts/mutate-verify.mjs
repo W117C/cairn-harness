@@ -8475,6 +8475,42 @@ const MUTATIONS = [
     ),
     expectFail: "REDKINDS 在场就直接认类别，不再回头猜散文",
   },
+  {
+    id: "prompt-surface-empty-take-material-returns-green",
+    src: "src/agent/prompt-surface.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "取料为空从「抛」改成「印 0 条发现」⇒ 装配面读不到时这道门给出**绿色读数**，" +
+      "而它存在的理由正是「文本承诺了一格、面上没有」（规则 128：非零退出＋零结论＝读数不可信，这里连退出码都变 0）",
+    apply: (s) => s.replace(
+      'if (modes.length === 0) throw new Error("工具面一格都没取到 ⇒ 不能把「没读到」读成「没有可达性问题」");',
+      "if (modes.length === 0) return [];",
+    ),
+    expectFail: "取料坏了要抛，不许印 0",
+  },
+  {
+    id: "prompt-surface-dead-counted-as-odd",
+    src: "src/agent/prompt-surface.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "把 dead 并进 odd ⇒ 两类修法相反的事合成一个数：dead 要改名／删文案，odd 要拆 per-mode 文本（任务 #16），" +
+      "合并后剩下的计数读起来像「只差档没覆盖」，实际是指着不存在的能力（规则 239：三态要分开印）",
+    apply: (s) => s.replace(
+      'out.push({ token, face: face.name, modes, kind: "dead" });',
+      'out.push({ token, face: face.name, modes, kind: "odd" });',
+    ),
+    expectFail: "面上完全没有 ⇒ dead",
+  },
+  {
+    id: "prompt-surface-exempt-leaks-across-modes",
+    src: "src/agent/prompt-surface.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "豁免键从 `token@mode` 放宽成「这个 token 在任何档被登过就全放过」⇒ 一条 read-only 的存量理由" +
+      "会把 default 档新出现的缺席一起消掉，存量水位（只准调低）被静默抬高（规则 238：豁免只能由命中方清空）",
+    apply: (s) => s.replace(
+      "if (waived.has(`${token}@${m}`)) continue;",
+      "if ([...waived].some((k) => k.startsWith(`${token}@`))) continue;",
+    ),
+    expectFail: "豁免要真能消掉那一条，其他档不许跟着被消",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
