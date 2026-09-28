@@ -747,6 +747,14 @@ describe("清场读数：常驻残留的 scratch 树要自己报数（任务 #33
   it("真读现喂：拿本机真的 worktree 清单喂进去不许崩，且绝不点到自己这棵", () => {
     const real = parseWorktreeList(execFileSync("git", ["worktree", "list", "--porcelain"], { cwd: repoRoot, encoding: "utf8" }).trim() === "" ? null : execFileSync("git", ["worktree", "list", "--porcelain"], { cwd: repoRoot, encoding: "utf8" }));
     expect(real, "这台机器上真有 worktree，读到空＝取料坏了").not.toBeNull();
+    /* 仓库根要**问 git**，不许拿"当前这棵树"当根：判卷在链接树里跑时，别的 scratch 树住在**主树**的 `.worktrees` 下，
+     * 而 `repoRoot` 是那棵链接树自己 ⇒ 用 `join(repoRoot, ".worktrees")` 做包含断言在主树里恒过、在链接树里恒红。
+     * 09-28 实测：这个错让派生名单 62 条里 46 条判「基线就不是全绿」（规则 240 那一族——判卷读到的是自己所住那棵树的状态）。 */
+    const mainRoot = dirname(resolve(repoRoot, execFileSync("git", ["rev-parse", "--git-common-dir"], { cwd: repoRoot, encoding: "utf8" }).trim()));
+    // 这根"我在哪棵树"的自证必须留着：链接树的 `.git` 是个**文件**，主树的才是目录。
+    // 谁再把根算成 `repoRoot` 自己，这条会在**每一次派生名单**（都在链接树里跑）当场红，而不是变成 46 条没有指向性的「基线不绿」。
+    expect(existsSync(join(mainRoot, ".git")), "算出来的主树不存在：" + mainRoot).toBe(true);
+    expect(statSync(join(mainRoot, ".git")).isDirectory(), "主树的 .git 必须是目录（链接树的那个是文件）⇒ 根算错了：" + mainRoot).toBe(true);
     const candidates = (real ?? []).filter((r) => r.detached && r.path !== repoRoot).length;
     const res = staleScratchTrees(real, {
       selfPath: repoRoot,
@@ -765,7 +773,7 @@ describe("清场读数：常驻残留的 scratch 树要自己报数（任务 #33
     });
     for (const s of res.stale) {
       expect(s.path).not.toBe(repoRoot);
-      expect(s.path, "报出来的必须是本仓 .worktrees 下的 scratch 树：" + s.path).toContain(join(repoRoot, ".worktrees"));
+      expect(s.path.startsWith(join(mainRoot, ".worktrees")), "报出来的必须是主树 .worktrees 下的 scratch 树：" + s.path).toBe(true);
     }
     if (candidates > 0) {
       expect(res.unmeasured.length, `本机 ${String(candidates)} 棵候选树**全部**取不到在飞数＝git 那条命令本身跑不通（参数形状坏了），这格就又变成恒 0`).toBeLessThan(candidates);
