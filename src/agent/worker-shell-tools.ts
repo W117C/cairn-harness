@@ -3,6 +3,7 @@ import type { Tool, ToolContext, ToolResult } from "../tools/base";
 import { invocations, tokenize } from "../permissions/command-shape";
 import { impactQuerySpec } from "../tools/impact-query";
 import { run_shell } from "../tools/run_shell";
+import { annotateExecCause } from "./verify";
 import { gateToolSpecs } from "./glm-session";
 
 // ---- 只读 bash 静态过滤（§4.4.6：显式白名单命令集，其余拒绝） ----
@@ -103,7 +104,11 @@ export function makeShellRo(run: WorkerShellRunner = bareShell): Tool {
       if (!gate.ok) {
         return { ok: false, output: "[read-only] 只读 bash 静态过滤拒绝：" + (gate.why ?? "未知原因") };
       }
-      return await run(command, ctx);
+      // 沙箱出口（宿主注入的 `runInSandbox`）不经过 run_shell ⇒ 在这一层补同一只归因。
+      // 缺省出口 `bareShell` 走 run_shell，它自己已经贴过：那一支的结果没有结构化 exitCode/timedOut
+      // ⇒ 这里判成 `code` 不贴，加上函数本身幂等 ⇒ 两条出口各贴一次，不会叠两层。
+      const res = await run(command, ctx);
+      return annotateExecCause(res, { timedOut: res.timedOut === true, exitCode: res.exitCode ?? null });
     },
   };
 }
@@ -197,7 +202,11 @@ export function makeShellRw(run: WorkerShellRunner = bareShell): Tool {
       if (!gate.ok) {
         return { ok: false, output: "[git-guard] git 破坏命令静态拦截：" + (gate.why ?? "未知原因") };
       }
-      return await run(command, ctx);
+      // 沙箱出口（宿主注入的 `runInSandbox`）不经过 run_shell ⇒ 在这一层补同一只归因。
+      // 缺省出口 `bareShell` 走 run_shell，它自己已经贴过：那一支的结果没有结构化 exitCode/timedOut
+      // ⇒ 这里判成 `code` 不贴，加上函数本身幂等 ⇒ 两条出口各贴一次，不会叠两层。
+      const res = await run(command, ctx);
+      return annotateExecCause(res, { timedOut: res.timedOut === true, exitCode: res.exitCode ?? null });
     },
   };
 }

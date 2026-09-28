@@ -8736,6 +8736,60 @@ const MUTATIONS = [
     apply: (s) => s.replace("  return candidates > files", "  return files >= cap"),
     expectFail: "capCauseNote 与它同判据",
   },
+
+  // ── 第 184 页：shell 家族的失败归因（判据只有一只，文案按出口分档；待办 #25）
+  // 四条出口各有锚点：run_shell 直连 / worker 两条（逐行式，两处同文）/ 主会话沙箱出口。
+  {
+    id: "run-shell-cause-unwired",
+    src: "src/tools/run_shell.ts",
+    test: "tests/shell-family-cause.test.ts",
+    desc: "run_shell 收束处不贴归因 ⇒ 模型看到 `bash: foo: command not found` 与 `[exit code: 127]`，"+
+      "照着这条环境红去改本来正确的代码（真语料里 run_shell 的红全部无类，第 182 页）",
+    apply: (s) => s.replace("settle(cancelled ? res : annotateExecCause(res, { timedOut, exitCode: code }));", "settle(res);"),
+    expectFail: "点名 127",
+  },
+  {
+    id: "worker-shell-cause-layer-unwired",
+    src: "src/agent/worker-shell-tools.ts",
+    test: "tests/shell-family-cause.test.ts",
+    desc: "worker 两条 shell 出口不补归因 ⇒ 宿主注入沙箱 runner 时（那条路整个绕过 run_shell）"+
+      "worker 的回执没有这一句。两处代码逐字相同 ⇒ 改法走逐行式、一次摘两层；"+
+      "**只摘其中一支没有专属锚点**——那一支由自己的用例当行为证人（shell_rw 那条不许冒领 shell_ro 的断言）",
+    apply: (s) => s.split("\n").map((l) => (l.includes("return annotateExecCause(res,")
+      ? l.replace("annotateExecCause(res, { timedOut: res.timedOut === true, exitCode: res.exitCode ?? null })", "res")
+      : l)).join("\n"),
+    expectFail: "shell_ro 走注入出口",
+  },
+  {
+    id: "runner-sandbox-exit-cause-unwired",
+    src: "src/main/agent-runner.ts",
+    test: "tests/shell-family-cause.test.ts",
+    desc: "主会话开沙箱那条出口（run_shell 被 runInSandbox 整个顶掉）不补归因 ⇒"+
+      "同一台机器上换档就没人归因（第十三族：同一条判据只硬化一支）",
+    apply: (s) => s.replace(
+      "annotateExecCause(sand, { timedOut: sand.timedOut === true, exitCode: sand.exitCode ?? null })",
+      "sand",
+    ),
+    expectFail: "三处都真的调了同一只归因函数",
+  },
+  {
+    id: "exec-cause-ok-guard-dropped",
+    src: "src/agent/verify.ts",
+    test: "tests/shell-family-cause.test.ts",
+    desc: "去掉「成功回执不贴」那道守卫 ⇒ `pnpm install` 成功但正文里带一行 ERR_PNPM 就被判成"+
+      "「命令根本没跑成」——把绿的说成红的，比不归因更坏",
+    apply: (s) => s.replace("  if (r.ok) return r;", "  if (false) return r;"),
+    expectFail: "成功回执不贴",
+  },
+  {
+    id: "exec-cause-class-maps-wrong-text",
+    src: "src/agent/verify.ts",
+    test: "tests/shell-family-cause.test.ts",
+    desc: "127 那一类错领了包管理器的文案 ⇒ 模型按「等依赖装好」去等，而真因是命令名不在 PATH"+
+      "（归因错了比不归因更贵：它会指一条不存在的出路）",
+    apply: (s) => s.replace('cause === "toolchain-missing"', 'cause === "timeout"'),
+    expectFail: "两类各贴一句",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

@@ -22,7 +22,7 @@ import {
 } from "../agent/glm-session";
 import { ClarifyGate, PlanGate } from "../agent/gates";
 import { applyModeLineEdits } from "../agent/prompt-surface";
-import { classifyVerifyFailure, createVerifyHook, defaultExec, withVerifyCauseNote, type ExecFn } from "../agent/verify";
+import { annotateExecCause, classifyVerifyFailure, createVerifyHook, defaultExec, withVerifyCauseNote, type ExecFn } from "../agent/verify";
 import { createActionFusion } from "../agent/action-fusion";
 import { SolpiRuntime, privateSessionDirectory, removePrivateSessionData, observationRecallSpec, solpiEnabled, type SolpiFlags } from "../agent/solpi-runtime";
 import { createUsageAttributor } from "../agent/usage-attribution";
@@ -571,7 +571,10 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
           // 这条出口经 run_shell 工具而非 runInSandbox，故同一判据的提示在这里补（两处共用一只函数）。
           return withGate(annotateNetworkDenial(await original.run({ command }, ctx), network));
         }
-        return withGate(await runInSandbox(mapped, { cwd: ctx.workspace, network }));
+        const sand = await runInSandbox(mapped, { cwd: ctx.workspace, network });
+        // 上面那条注释说的是「经 run_shell 的那条出口」；这一条不经，故同一只归因函数在这里补
+        // （verify 不走这条路，所以不会与它那句「测试脚本未被执行」叠两层）。
+        return withGate(annotateExecCause(sand, { timedOut: sand.timedOut === true, exitCode: sand.exitCode ?? null }));
       }
       let result = await original.run(args, ctx);
       if (name !== "run_shell" && result.ok && s.actionFusion) {

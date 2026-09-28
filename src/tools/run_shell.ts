@@ -1,4 +1,5 @@
 import { type Tool, type ToolResult } from "./base.js";
+import { annotateExecCause } from "../agent/verify.js";
 import { killGroup, sanitizedEnv, spawnTracked } from "./process.js";
 import { createOutputRing } from "./output-ring.js";
 
@@ -30,7 +31,11 @@ export const run_shell: Tool = {
         if (timedOut) output += "\n[error: run_shell 超时（60s），已强制终止]";
         if (cancelled) output += "\n[error: run_shell 随会话取消终止]";
         if (code !== 0 && !timedOut && !cancelled) output += `\n[exit code: ${String(code)}]`;
-        settle({ ok: code === 0 && !timedOut && !cancelled, output: output.replace(/\n+$/, "") });
+        const res: ToolResult = { ok: code === 0 && !timedOut && !cancelled, output: output.replace(/\n+$/, "") };
+        // 归因走 verify 那一只谓词（`classifyVerifyFailure`，同正则同枚举）：127 与「包管理器自身报错」
+        // 这两类「命令根本没跑成」对模型必须点名，否则它会照着一条环境红去改本来正确的代码
+        // （取消这一支不贴——它的原因已经写在 `[error: … 随会话取消终止]` 那行了）。
+        settle(cancelled ? res : annotateExecCause(res, { timedOut, exitCode: code }));
       };
       // env 消毒：spawn 不传 env 会继承 process.env，而主进程把 BYOK key 写进了
       // process.env.M0_API_KEY —— 一条 `env` 就能把明文 key 读进事件流（P1-1）。
