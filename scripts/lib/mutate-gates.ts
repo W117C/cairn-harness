@@ -602,6 +602,63 @@ export function baselineRedKind(vitestOut: string): { kind: "unloadable"; module
   return `${p.id} — ${p.test} — ${why}：${JSON.stringify(p.expectFail.slice(0, 60))}`;
 }
 
+// ---- 选择子唯一性（第 169 页的前置闸）：一条锚点能不能只跑**自己那条** killer 用例 ----
+// 动因（09-28 第 168 页的读数）：一条锚点的单价＝**判卷宿主文件时长的 3 倍**（实测 23.1s/条，换一份 1.1s 的宿主就是 20.6×），
+// 而它真正要证的只有自己那条用例。要让 `runTest` 改吃 `-t` 的精确跑法，前提是指针能**逐字唯一定位**那条标题：
+// 0 命中时 vitest 不会失败，它只是**一条也没跑** ⇒ 基线与突变两拍都白过，这把尺会安静地变成假绿（第 166 页那族）。
+// 所以先要有一格读数把「选不中」的条数点名，而不是等 `-t` 上线后才发现名单里混着选不中的。
+export interface SelectorProblem {
+  id: string;
+  test: string;
+  /** 逐字命中该指针的 it()/test() 标题条数。0＝只靠占位符展开才认得出；>1＝选择子不唯一。 */
+  hits: number;
+}
+
+/** 数每条锚点的指针在它自己的判卷文件里逐字命中几条标题。只回 ≠1 的那些（==1 是能走 -t 的那一批）。
+ *  判卷文件读不到、或指针为空、或不是 vitest 文件 ⇒ **不数**（那些另有归属：`auditExpectFails` 的 unreadable、结构钉型判卷），
+ *  所以 `inspected` 是被数过的条数：拿整表条数去除会以假绿的方式低估可选率。 */
+export interface SelectorScan {
+  problems: SelectorProblem[];
+  inspected: number;
+}
+
+const TITLE_RE = /^\s*(?:it|test)(?:\.\w+)?\s*\(\s*(["`'])((?:\\.|(?!\1)[^\\])*)\1/gmu;
+
+export function selectorAmbiguity(
+  entries: readonly ExpectFailEntry[],
+  readTest: (rel: string) => string | null,
+): SelectorScan {
+  const cache = new Map<string, string[] | null>();
+  const problems: SelectorProblem[] = [];
+  let inspected = 0;
+  for (const e of entries) {
+    if (e.expectFail === "" || !e.test.endsWith(".test.ts")) continue;
+    if (!cache.has(e.test)) {
+      const text = readTest(e.test);
+      cache.set(e.test, text === null ? null : [...text.matchAll(TITLE_RE)].map((m) => m[2] ?? ""));
+    }
+    const titles = cache.get(e.test);
+    if (titles === null || titles === undefined || titles.length === 0) continue;
+    inspected += 1;
+    const hits = titles.filter((t) => t.includes(e.expectFail)).length;
+    if (hits !== 1) problems.push({ id: e.id, test: e.test, hits });
+  }
+  return { problems, inspected };
+}
+
+/** 那一格的措辞：三态分开印，且**不许**把「选不中」并成「没什么问题」。
+ *  存量不是 0（现读 13 条），所以这一格走水位法：只准调低，涨了要交代。 */
+export function selectorCell(problems: readonly SelectorProblem[], inspected: number): string {
+  const zero = problems.filter((p) => p.hits === 0);
+  const many = problems.filter((p) => p.hits > 1);
+  const parts = [
+    `选择子：${String(inspected - problems.length)}/${String(inspected)} 条能逐字唯一定位自己的 killer 用例（其余走整文件跑法）`,
+    zero.length === 0 ? "" : `零命中 ${String(zero.length)} 条（标题是拼出来的或已改名 ⇒ -t 会一条也选不中）`,
+    many.length === 0 ? "" : `多命中 ${String(many.length)} 条（选择子不唯一）`,
+  ].filter((s) => s !== "");
+  return parts.join("·") + (problems.length === 0 ? "" : "：" + problems.map((p) => `${p.id}(${String(p.hits)})`).join("、"));
+}
+
 // ---- 每条锚点的真实成本（任务 #37：分母必须是读数，不是「次数 × 文件时长」的模型） ----
 // 动因（09-28 第 165 页自己打的脸）：那句「裁掉判卷文件 7.7s ⇒ 挂在它上面的每条锚点少付 21s」是按
 // 「每条跑三次 × 宿主文件全时长」**推**出来的，同分母实测把它打掉（每条只少 1.4–2.2s）。

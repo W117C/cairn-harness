@@ -6,7 +6,7 @@ import { spawnSync, execFileSync } from "node:child_process";
 import { readFileSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, costRollupOf, entryDisposition, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, selectChangedEntries, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type AnchorCostRow, type HeadState } from "../scripts/lib/mutate-gates";
+import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, costRollupOf, entryDisposition, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, selectChangedEntries, selectorAmbiguity, selectorCell, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type AnchorCostRow, type HeadState } from "../scripts/lib/mutate-gates";
 import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
 
 /** 从锚点表取 `{id,test,expectFail}`：只走 `--list` 这条**不改源文件**的入口。
@@ -974,5 +974,79 @@ describe("成本分母：每条锚点实际 spawn 了几次判卷", () => {
     const exits = (src.match(/return \{ m, ok/g) ?? []).length;
     const carried = (src.match(/runsMs: runs/g) ?? []).length;
     expect(carried, "有出口没带账本＝那条锚点的花费从分母里消失").toBe(exits);
+  });
+});
+
+// ---- 第 169 页前置闸：选择子唯一性 ----
+// 动因（09-28 第 168 页的读数）：一条锚点的单价＝判卷宿主时长的 3 倍（实测 23.1s/条 vs 1.1s/条＝20.6×，
+// 56 条挂在一份宿主上吃掉整批 98.8% 的时间）。要改成「只跑自己那条 killer 用例」，前提是指针能逐字唯一定位那条标题；
+// 选不中时 vitest 不是失败而是**一条也没跑**，基线与突变两拍都白过 ⇒ 先要有读数点名「选不中的是哪些」。
+const SELECTOR_CAP = 13;
+
+describe("选择子唯一性：一条锚点能不能只跑自己那条 killer 用例", () => {
+  const judge = (body: string) => body;
+
+  it("只数被数过的：判卷读不到／指针为空／不是 vitest 文件都不进 inspected", () => {
+    const entries = [
+      { id: "a", test: "tests/one.test.ts", expectFail: "甲说的事" },
+      { id: "b", test: "tests/two.test.ts", expectFail: "乙说的事" },
+      { id: "c", test: "tests/gone.test.ts", expectFail: "读不到的那条" },
+      { id: "d", test: "scripts/not-a-test.ts", expectFail: "结构钉型的指针" },
+      { id: "e", test: "tests/one.test.ts", expectFail: "" },
+    ];
+    const read = (rel: string): string | null => {
+      if (rel === "tests/one.test.ts") return judge('it("甲说的事", () => {});\n');
+      if (rel === "tests/two.test.ts") return judge('it("乙说的事", () => {});\n');
+      return null;
+    };
+    const r = selectorAmbiguity(entries, read);
+    expect(r.inspected, "读不到的判卷、非 vitest 的 test、空指针都不该进分母").toBe(2);
+    expect(r.problems).toEqual([]);
+    expect(selectorCell(r.problems, r.inspected)).toContain("2/2");
+  });
+
+  it("零命中与多命中分开印，并点名是哪几条（0 命中＝-t 会一条也没跑）", () => {
+    const entries = [
+      { id: "zero", test: "tests/x.test.ts", expectFail: "标题是拼出来的那类" },
+      { id: "two", test: "tests/x.test.ts", expectFail: "默认开着" },
+      { id: "one", test: "tests/x.test.ts", expectFail: "唯一的那条" },
+    ];
+    const src = 'it("唯一的那条 说的事", () => {});\nit("默认开着 甲", () => {});\nit("默认开着 乙", () => {});\n';
+    const r = selectorAmbiguity(entries, () => src);
+    expect(r.inspected).toBe(3);
+    expect(r.problems.map((p) => `${p.id}:${String(p.hits)}`).sort()).toEqual(["two:2", "zero:0"]);
+    const cell = selectorCell(r.problems, r.inspected);
+    expect(cell, cell).toContain("零命中 1 条");
+    expect(cell, cell).toContain("多命中 1 条");
+    expect(cell, cell).toContain("zero(0)");
+  });
+
+  it("可选率的分母是被数过的条数，不是整表条数（拿整表去除＝把选不中的洗成可选）", () => {
+    const entries = [
+      { id: "u", test: "tests/x.test.ts", expectFail: "唯一命中的一条" },
+      { id: "z", test: "tests/x.test.ts", expectFail: "标题拼出来的" },
+      { id: "gone", test: "tests/none.test.ts", expectFail: "读不到" },
+    ];
+    const read = (rel: string): string | null =>
+      rel === "tests/x.test.ts" ? 'it("唯一命中的一条 的事", () => {});\n' : null;
+    const r = selectorAmbiguity(entries, read);
+    expect(r.inspected, "读不到的那份判卷不进分母").toBe(2);
+    expect(selectorCell(r.problems, r.inspected), selectorCell(r.problems, r.inspected)).toContain("1/2");
+  });
+
+  it("接线：门自己那一步真拿整张表去数选择子，并把两份数一起交给措辞（只印不数＝这一格永远 0）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    expect(src, "取料必须是整张表的指针面，喂空表＝这一格永远印 0/0").toMatch(
+      /\n\s{2}const selectorScan = selectorAmbiguity\(pointerEntries, /);
+    expect(src, "措辞吃的是 problems 与 inspected 两份，少一份就退化成一个数").toMatch(
+      /\n\s*console\.log\("ℹ️  " \+ selectorCell\(selectorScan\.problems, selectorScan\.inspected\)\);/);
+  });
+
+  it(`水位：真表现读「选不中＋不唯一」只准调低（帽 ${SELECTOR_CAP}，09-28 现读 13＝11 零命中＋2 多命中）——新增一根要写明为什么`, () => {
+    const rows = listAnchorRows();
+    const r = selectorAmbiguity(rows, (rel) => readRel(rel));
+    expect(r.problems.length, "选择子失准：" + r.problems.map((p) => `${p.id}(${String(p.hits)})`).join("、")).toBeLessThanOrEqual(SELECTOR_CAP);
+    expect(SELECTOR_CAP - r.problems.length).toBeLessThan(5);
+    expect(r.inspected, "取料面塌了＝inspected 归零，这一格又不能印错只能印 0").toBeGreaterThan(500);
   });
 });

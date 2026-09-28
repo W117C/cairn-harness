@@ -23,7 +23,7 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { acquireToolLock } from "./lib/tool-lock.ts";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, selectorAmbiguity, selectorCell } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -8224,6 +8224,51 @@ const MUTATIONS = [
     ),
     expectFail: "接线：汇总那一行吃的是 runner 自己那份 runsMs，且每个出口都带账本（表与实现同文件 ⇒ 钉跨行正则，规则 236）",
   },
+  // ── 第 169 页 · 选择子唯一性（`-t` 精确跑法的前置闸）：四条各咬一处——不报／三态合一／分母／接线
+  {
+    id: "selector-ambiguity-never-reports",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "命中数不为 1 时不再记录 ⇒ 这一格永远印「全部可选」，真正选不中的那些会在改跑法时被当成能走 -t；而 0 命中不是失败，是 vitest 一条也没跑，基线与突变两拍都白过",
+    apply: (s) => s.replace(
+      "if (hits !== 1) problems.push({ id: e.id, test: e.test, hits });",
+      "if (false) problems.push({ id: e.id, test: e.test, hits });",
+    ),
+    expectFail: "可选率的分母是被数过的条数，不是整表条数（拿整表去除＝把选不中的洗成可选）",
+  },
+  {
+    id: "selector-cell-merges-zero-into-clean",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "零命中不再单独数 ⇒「选不中」并进「没什么问题」，那句 0 会被读成「11 条都正常」（第 166 页那把只能印 0 的尺，同一族换了载体）",
+    apply: (s) => s.replace(
+      "const zero = problems.filter((p) => p.hits === 0);",
+      "const zero: SelectorProblem[] = [];",
+    ),
+    expectFail: "零命中与多命中分开印，并点名是哪几条（0 命中＝-t 会一条也没跑）",
+  },
+  {
+    id: "selector-inspected-counts-unreadable-judges",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "判卷读不到／指针为空那些条也计入分母 ⇒ 可选率虚高，而「取料坏」被洗成「量过了」（规则 222 的三态：未取 ≠ 空面 ≠ 零命中）",
+    apply: (s) => s.replace(
+      "if (titles === null || titles === undefined || titles.length === 0) continue;",
+      "inspected += 1;",
+    ),
+    expectFail: "只数被数过的：判卷读不到／指针为空／不是 vitest 文件都不进 inspected",
+  },
+  {
+    id: "selector-scan-fed-empty-table",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "门那一步喂空表而不是整张锚点表 ⇒ 这一格永远 0/0 且永不红。表与实现同文件，所以判卷钉跨行正则而不是 toContain（规则 236）",
+    apply: (s) => s.replace(
+      "\n  const selectorScan = selectorAmbiguity(pointerEntries, ",
+      "\n  const selectorScan = selectorAmbiguity([], ",
+    ),
+    expectFail: "接线：门自己那一步真拿整张表去数选择子，并把两份数一起交给措辞（只印不数＝这一格永远 0）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
@@ -8353,6 +8398,12 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
     (rel) => { try { return readFileSync(join(ROOT, rel), "utf8"); } catch { return null; } },
   );
   console.log(`ℹ️  松钉指针 ${String(loosePinned.length)} 条（逐字认不出、只靠占位符展开的标题模式过关——拼接标题与带转义引号那两类必然如此）${loosePinned.length === 0 ? "" : "：" + loosePinned.join("、")}`);
+  /* 选择子唯一性（第 169 页的前置闸）：一条锚点的单价＝判卷宿主时长 ×3（第 168 页实测 23.1s/条），
+   *  而它真正要证的只有自己那条 killer 用例。想让 `runTest` 改吃 `-t`，前提是指针**逐字唯一定位**那条标题——
+   *  0 命中时 vitest 不是失败，是一条也没跑，两拍都白过（第 166 页「只能印 0 的尺」那一族换了载体）。
+   *  这一格刻意不进退出码：存量 13 条不是本笔造成的，按水位法只准调低；先把名单点出来，再谈改跑法。 */
+  const selectorScan = selectorAmbiguity(pointerEntries, (rel) => { try { return readFileSync(join(ROOT, rel), "utf8"); } catch { return null; } });
+  console.log("ℹ️  " + selectorCell(selectorScan.problems, selectorScan.inspected));
   // 一次求和、两处使用（汇总里印出来的数与 exit 码用的是同一个值；分开算就可能各说各话）。
   const blockingTotal = blockingTotalOf({
     needle: blocking.length, duplicateIds: dup.length, untracked: untracked.length, drift: drift.length,
