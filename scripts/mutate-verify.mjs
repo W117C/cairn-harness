@@ -8600,7 +8600,7 @@ const MUTATIONS = [
     id: "prompt-surface-reminder-faces-not-swept",
     src: "scripts/prompt-surface-check.ts",
     test: "tests/prompt-surface-check.test.ts",
-    desc: "续跑提醒那一族不再逐证据态渲染（枚举退化成空）⇒ 门只读到 70 份面里最静态的那些，" +
+    desc: "续跑提醒那一族不再逐证据态渲染（枚举退化成空）⇒ 门只读到静态的那两族（系统文本与工具描述），" +
       "而**逐轮重发的 goal 提醒**回到没人看的状态——09-24 那次「join 文案命令模型去调不存在的工具」正是在这一族里，" +
       "不在系统提示词里（规则 222：取料面空掉时「0 发现」是最像好消息的假绿）",
     apply: (s) => s.replace(
@@ -8625,7 +8625,7 @@ const MUTATIONS = [
     id: "prompt-surface-param-faces-not-swept",
     src: "scripts/prompt-surface-check.ts",
     test: "tests/prompt-surface-check.test.ts",
-    desc: "门的取料不再把 189 份参数描述面喂进去 ⇒ 「参数说明里点了本档拿不到的工具」这一格回到没人看的状态；" +
+    desc: "门的取料不再把参数描述那一族喂进去（现读 189 份，2026-09-28 第 178 页）⇒ 「参数说明里点了本档拿不到的工具」这一格回到没人看的状态；" +
       "同笔那两条真取料判卷仍然绿，因为它们各自直接调 `paramFaces()`，看不见门实际喂出的那份（规则 236 第三次命中这一形状）。" +
       "与 `description-faces-not-swept` 共用同一条 killer 用例——两条守的是同一行组成的不同成员，用例断言的是「四族都在面里」这个整体",
     apply: (s) => s.replace(
