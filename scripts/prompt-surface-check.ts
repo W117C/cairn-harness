@@ -122,9 +122,12 @@ function collectParamDescriptions(node: unknown, path: string, out: { path: stri
  *  `propose_plan` 的嵌套形状由 `items.required` 声明——再在参数级抄一遍就是第二份真相（规则 205）。
  *  判「有说明」只看参数自己那一格，不看子树：现读实测「直接说明」与「子树里有说明」两种口径**零个参数不同**
  *  （2026-09-28 探针：DIRECT_VS_NESTED_DIFFERENT=0）⇒ 子树那一支没有证人，就不写它（规则 243/257②）。
- *  为什么这一格不进退出码：判「缺说明是否会害模型填错」需要真轨迹，而 `.agent/sessions` 现读是空的
- *  （0 个会话目录）⇒ 把它做成红就是替一个没有读数的裁决背书（规则 245：没记的账不许当成记了 0）。
- *  有了带凭据的真会话之后，再按「失败调用是否落在这些参数上」决定升不升成闸（任务 #17／#20）。 */
+ *  为什么这一格不进退出码：判它得看真轨迹，而现读轨迹里没有"参数形状写错"这一类失败——
+ *  共用 `scripts/replay/corpus.ts` 的取料扫 24 个 `.jsonl`：`tool_call` 301 次、`ok:false` 15 次，
+ *  15 次里 0 次来自参数校验器（内容是环境红／命令红／worker 回传红，唯一次形状类是 `edit_file` 的
+ *  「old_string 0 处匹配」——那是抄错内容，不是不知道字段含义，且那条回执当场给了下一步）。
+ *  ⇒ 没有失败证据就把覆盖率做成红，等于用文案量代替行为量（规则 245）。
+ *  有了带归因的跑批之后（任务：把这张表变成常驻读数）再决定升不升成闸。 */
 export function paramProseCoverage(): { tool: string; declared: number; explained: number; missing: string[] }[] {
   const byTool = new Map<string, { declared: number; explained: number; missing: string[] }>();
   for (const md of PERMISSION_MODES) {
