@@ -11,8 +11,9 @@
 // 退出码三态：0＝每一片都判「已杀死」；1＝有片判红（存活／红了未点名／基线红／未生效）；
 // 2＝**取料坏**（树不干净／两片同一路径／名单为空／红行抽取对不上）——这一档不是「没有红」，是没尺。
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { hostsSplitAcrossShards, mergeShards, partitionProof, planShards, rollupLine, shardRow, splitShards, type ShardRow } from "./lib/shard-plan";
 
@@ -122,6 +123,13 @@ function runShard(tree: string, ids: readonly string[], tag: string, budgetMs: n
   });
 }
 
+/** 每片原文落一个文件。第 187 页落地当场就撞上这件事的价值：两片里有一片报「基线红」，
+ *  而合并层只把**类别**并成一句话——没有原文，读者只能重跑一遍去猜。
+ *  路径要印出来（不是只存在内存里），否则「有日志」与「拿得到日志」又是两回事。 */
+export function shardLogPath(base: string, i: number): string {
+  return join(tmpdir(), `mutate-shards-${base}-${String(i)}.log`);
+}
+
 async function main(): Promise<void> {
   const parsed = parseArgs(process.argv.slice(2));
   if (parsed.flags === null) {
@@ -193,9 +201,14 @@ async function main(): Promise<void> {
   const raw = await Promise.all(shards.map((sh, i) => runShard(distinct[i % distinct.length]!, sh, `${f.lockTagBase}-${String(i)}`, f.budgetMs)));
   const wallSec = (Date.now() - t0) / 1000;
   const shardRows: ShardRow[] = raw.map((r, i) => shardRow(distinct[i % distinct.length]!, shards[i]!.length, r.stdout, r.status, r.spawnError));
+  const logs = shardRows.map((_, i) => {
+    const p = shardLogPath(f.lockTagBase, i);
+    writeFileSync(p, raw[i]!.stdout + (raw[i]!.spawnError !== undefined ? `\nspawn 失败：${raw[i]!.spawnError}` : ""));
+    return p;
+  });
   for (let i = 0; i < shardRows.length; i += 1) {
     const r = shardRows[i]!;
-    console.log(`  片 ${String(i)} ${r.tree.split("/").slice(-1)[0]}：${String(r.given)} 条 ⇒ ${r.verdict}${r.cause === "" ? "" : "（" + r.cause + "）"}${r.redIds.length === 0 ? "" : " 红行 " + r.redIds.join(",")}`);
+    console.log(`  片 ${String(i)} ${r.tree.split("/").slice(-1)[0]}：${String(r.given)} 条 ⇒ ${r.verdict}${r.cause === "" ? "" : "（" + r.cause + "）"}${r.redIds.length === 0 ? "" : " 红行 " + r.redIds.join(",")} · 原文=${logs[i]}`);
   }
   const m = mergeShards(shardRows);
   console.log(rollupLine(m, shardRows.length, wallSec, f.serialSeconds));

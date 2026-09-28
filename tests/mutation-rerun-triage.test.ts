@@ -113,6 +113,43 @@ describe("classify：四种结局＋一种「读不出」，且优先级确定",
   });
 });
 
+describe("被度量者自己的文案不许当成读数（第 188 页：锚点 desc 里引了判据那句话）", () => {
+  /** 逐字取自 09-29 那一次分片跑的片 1 原文（10/10 全杀）——区别只在我把「基线就不是全绿」写进了 desc。 */
+  const echoedGreen = [
+    "变异验证：10 条",
+    "✅ shard-host-split-gate-dropped — 算出「同一判卷宿主被摊到两片」却不拦 ⇒ 其中一片被「基线就不是全绿」那一格读走",
+    "✅ shard-dirty-tree-accepted — 脏树检查算出条数却不回理由",
+    "全部变异被正确杀死（断言非恒真）",
+    "[mutate-verify] 本次耗时 13.4s · 跑了 10/10 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）",
+  ].join("\n");
+
+  it("绿跑里有一条 ✅ 描述正好引用了『基线就不是全绿』⇒ 仍判已杀死，不许读成基线红", () => {
+    expect(classify(echoedGreen, 0).verdict).toBe("已杀死");
+  });
+
+  it("反方向更要紧：红跑的 ✅ 描述里引用了『全部变异被正确杀死』⇒ 不许读成已杀死", () => {
+    const forged = [
+      "❌ vacuous-run-guard-dropped — 把闸摘掉后那句『全部变异被正确杀死』照样印得出",
+      "1 条判红（按类别分开数，修法各不同——见上一行起的分类名单）",
+    ].join("\n");
+    expect(classify(forged, 1).verdict).toBe("存活");
+  });
+
+  it("真的基线红那一行照旧认（缩进在行首，不是任意位置）", () => {
+    const real = [
+      "❌ cert-lock-stale-not-unlinked — 判定可回收却不先摘旧锁",
+      "   基线就不是全绿（不应发生）:",
+      " transform 23%, import 13%, worker 1%)",
+    ].join("\n");
+    expect(classify(real, 1).verdict).toBe("基线红");
+  });
+
+  it("未生效那一档也只认行首形状（带 ❌ 前缀的分类行算，写在描述中间的不算）", () => {
+    expect(classify("  ❌ 判红·突变未生效（针脚不在源文件里）⇒ 空操作（1 条）：x", 1).verdict).toBe("未生效");
+    expect(classify("✅ some-anchor — 说明里写着「不要把 突变未生效 当结论」", 0).verdict).toBe("读不出");
+  });
+});
+
 describe("needsAction：只有三类要人处理，其余不许牵连", () => {
   it("存活、红了未点名、读不出点名；基线红/未生效/已杀死都不算本轮的账", () => {
     const rows = [

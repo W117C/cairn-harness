@@ -83,10 +83,17 @@ export function classify(
       };
     }
   }
-  if (/基线就不是全绿/.test(stdout)) return { verdict: "基线红", note: "判卷文件自己有已提交的红灯 ⇒ 本条判定被污染，不算存活的证据", cause: "" };
-  if (/突变未生效|变异未生效/.test(stdout)) return { verdict: "未生效", note: "针脚不在这份源文件里 ⇒ 空操作（先去修针脚，见任务 #50）", cause: "" };
-  if (/全部变异被正确杀死/.test(stdout)) return { verdict: "已杀死", note: "", cause: "" };
-  if (/条变异存活/.test(stdout)) {
+  /** 散文兜底**只能认机器自己那几行的行首**。
+   *  09-29 实测到反向咬人：runner 把每条锚点的 `desc` 原样印进 `✅ <id> — <desc>` 那一行，
+   *  而我在 desc 里写了「判成『基线就不是全绿』」这句话（第 187 页 `shard-host-split-gate-dropped`）⇒
+   *  一条不 anchored 的 `/基线就不是全绿/` 把一次 10/10 全杀的绿跑读成「基线红」。
+   *  同一形状的更坏方向是假绿：表里有一条 desc 含「全部变异被正确杀死」（现读 1 条），
+   *  一次真判红的跑如果碰上它，就会从 `已杀死` 那一支先出去。规则 251 的第二注入面在这里不是外部输入，
+   *  是**被度量者自己的文案**——所以判据只准吃行首形状，不准吃任意位置的字符串。 */
+  if (/^[ \t]*基线就不是全绿/mu.test(stdout)) return { verdict: "基线红", note: "判卷文件自己有已提交的红灯 ⇒ 本条判定被污染，不算存活的证据", cause: "" };
+  if (/^[ \t]*(?:❌ 判红·)?(?:突变|变异)未生效/mu.test(stdout)) return { verdict: "未生效", note: "针脚不在这份源文件里 ⇒ 空操作（先去修针脚，见任务 #50）", cause: "" };
+  if (/^[ \t]*(?:✅ )?全部变异被正确杀死/mu.test(stdout)) return { verdict: "已杀死", note: "", cause: "" };
+  if (/^\d+ 条(?:变异存活或误伤|判红)/mu.test(stdout)) {
     return sawRedTest(stdout)
       ? { verdict: "红了未点名", note: "测试红了而 runner 没在 expectFail 点名的那条上找到 ⇒ 观测者在，锚点期望过期（改 expectFail，别补测试）", cause: "" }
       : { verdict: "存活", note: "改坏了而测试仍全绿 ⇒ 这条不变量没有观测者", cause: "" };

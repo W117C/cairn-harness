@@ -20,7 +20,7 @@ import {
   splitShards,
   type ShardRow,
 } from "../scripts/lib/shard-plan";
-import { parseArgs, treeProblem } from "../scripts/mutate-shards";
+import { parseArgs, shardLogPath, treeProblem } from "../scripts/mutate-shards";
 
 /** 真机末段（第 186 页 `--changed-since=be18607`，27 条全杀）——只留判卷要认的那几行，文字与原文一致。 */
 const REAL_ALL_KILLED = [
@@ -395,6 +395,15 @@ describe("treeProblem 与编排器的前置闸：脏树不许当片用", () => {
 
 describe("编排器接线：合并层不是挂在墙上的仪表", () => {
   const src = readFileSync(ENTRY, "utf8");
+
+  it("每片的原文落到**读者拿得到的路径**，且那片行里印出该路径（这一页就是靠它才看清「片绿而判定红」）", () => {
+    const p0 = shardLogPath("judge-x", 0);
+    const p1 = shardLogPath("judge-x", 1);
+    expect(p0).toContain("mutate-shards-judge-x-0.log");
+    expect(p0).not.toBe(p1);
+    expect(src).toMatch(/原文=\$\{logs\[i\]\}/u);
+    expect(src).toMatch(/writeFileSync\(p, raw\[i\]!\.stdout/u);
+  });
 
   it("分片自检的结论**决定跑不跑**：非空即退 2，一条不跑", () => {
     expect(src).toMatch(/const proof = partitionProof\(ids, shards\);[\s\S]{0,600}process\.exitCode = 2;/u);

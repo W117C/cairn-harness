@@ -8931,7 +8931,9 @@ const MUTATIONS = [
     test: "tests/mutate-shards.test.ts",
     desc: "算出「同一判卷宿主被摊到两片」却不拦 ⇒ 两个真进程并发真跑同一份判卷文件。" +
       "09-29 实测：轮转切法把 `tests/head-cert-deps.test.ts` 摊进四片，其中一片的 `cert-lock-stale-not-unlinked` " +
-      "因认证树注册名（按提交 sha 定）撞车判成「基线就不是全绿」，同一条串行复跑 ⇒ `✅` 1.1s（钉调用点要连同它的入参，规则 230）。" +
+      "因认证树注册名（按提交 sha 定）撞车，被归进「基线那一档就不绿」，同一条串行复跑 ⇒ `✅` 1.1s（钉调用点要连同它的入参，规则 230）。" +
+      "**这句本身也是第 188 页的教训**：文案里原样引用机器那行诊断文字，会被读日志的那把尺当成诊断信号——" +
+      "散文不许冒充读数（本条原先写的正是那句，现已改写）。" +
       "**本条第一版存活过一次**：killer 挂的是那条文字接线钉，而 `if (split.length > 0)` → `if (false)` 之后" +
       "正则要的那两行还在原地 ⇒ 测试全绿。现挂**行为证人**：判卷用 `--force-split=roundrobin` 造出同宿主被拆的输入，" +
       "闸门被解除时那一跑会放行 ⇒ 断言当场红（第 186 页同一次课：存活不是没人守，是这个形状没有可达的输入）",
@@ -8955,6 +8957,55 @@ const MUTATIONS = [
       "这条理由与「不是 git 工作树」分两格印，混了就没人知道该去清哪一格",
     apply: (s) => s.replace('if (dirty !== "") return', 'if (dirty !== "" && false) return'),
     expectFail: "放一个在飞文件＝点名条数",
+  },
+  {
+    id: "triage-baseline-prose-not-line-anchored",
+    src: "scripts/lib/mutation-rerun-triage.ts",
+    test: "tests/mutation-rerun-triage.test.ts",
+    desc: "「基线红」那一档的 `m` 旗标摘掉 ⇒ 只有当那句诊断正好落在**整段输出第一行**才认。" +
+      "真机把基线诊断印在缩进的分类行上（`   基线就不是全绿（不应发生）:`），摘掉 `m` 就整档失灵，" +
+      "于是被污染的判定会被读成「读不出」而不是「基线红」——后者才说得出「别信这一条存活/红的结论」（规则 251 的第二注入面）",
+    apply: (s) => s.replace("基线就不是全绿/mu.test(stdout)", "基线就不是全绿/gu.test(stdout)"),
+    expectFail: "真的基线红那一行仍然认（缩进在行首，不是任意位置）",
+  },
+  {
+    id: "triage-killed-requires-checkmark-prefix",
+    src: "scripts/lib/mutation-rerun-triage.ts",
+    test: "tests/mutation-rerun-triage.test.ts",
+    desc: "把「已杀死」那一档的可选前缀写成必需 ⇒ 真机那句无后缀的汇总行认不出来。" +
+      "第 188 页实测的形状：runner 把每条锚点的 desc **原样**印进 `✅ <id> — <desc>`，" +
+      "所以任何不认行首的判据都会把「描述里引用了这句话」读成「机器说了这句话」",
+    apply: (s) => s.replace("(?:✅ )?全部变异被正确杀死", "✅ 全部变异被正确杀死"),
+    expectFail: "绿跑里有一条 ✅ 描述正好引用了『基线就不是全绿』⇒ 仍判已杀死，不许读成基线红",
+  },
+  {
+    id: "triage-noeffect-prose-not-line-anchored",
+    src: "scripts/lib/mutation-rerun-triage.ts",
+    test: "tests/mutation-rerun-triage.test.ts",
+    desc: "「未生效」那一档摘掉 `m` ⇒ 缩进的分类行不再算，只在整段第一行才认。" +
+      "这一档认错的方向是**多做事**：空操作被读成读不出，读者会去重跑一条本来就什么都不改的锚点",
+    apply: (s) => s.replace("(?:突变|变异)未生效/mu.test(stdout)", "(?:突变|变异)未生效/gu.test(stdout)"),
+    expectFail: "未生效那一档也只认行首形状（带 ❌ 前缀的分类行算，写在描述中间的不算）",
+  },
+  {
+    id: "triage-red-summary-drops-new-wording",
+    src: "scripts/lib/mutation-rerun-triage.ts",
+    test: "tests/mutation-rerun-triage.test.ts",
+    desc: "判红汇总行只认旧措辞（丢掉『|判红』那一支）⇒ 新版 runner 那句「N 条判红（按类别分开数…）」被读成「读不出」。" +
+      "更坏的组合在这里：这一档失灵之后，如果某条描述里恰好写着『已杀死』那句原文的逐字形式，" +
+      "一次真判红的跑就能从「已杀死」那一支出出去＝**假绿**（现读：表里确有描述含那句原文）",
+    apply: (s) => s.replace("条(?:变异存活或误伤|判红)", "条变异存活或误伤"),
+    expectFail: "反方向更要紧：红跑的 ✅ 描述里引用了『全部变异被正确杀死』⇒ 不许读成已杀死",
+  },
+  {
+    id: "shard-log-path-not-in-verdict-line",
+    src: "scripts/mutate-shards.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "每片原文落了盘，但那行读数不印路径 ⇒ 合并层报「基线红」时读者手上只有结论、没有证据。" +
+      "第 187 页落地当场就是靠这句路径才发现：片 1 的原文写着 10/10 全杀，而判定行写着基线红——" +
+      "红的是**尺**（描述冒充了诊断行），不是被测面（「算出来」还要「拿得到」，规则 211/241 同族）",
+    apply: (s) => s.replace("原文=${logs[i]}", "原文=（未印路径）"),
+    expectFail: "每片的原文落到**读者拿得到的路径**",
   },
 ];
 
