@@ -691,9 +691,12 @@ export function vacuousRunLine(id: string, phase: string, selected: number | nul
  *  每行是一次 spawn：`mode` 精确／整文件，`ms` 这一次多久，`selected` 本次选中几条用例（null＝收尾行没读到）。 */
 export function runModeCell(rows: readonly { mode: "selector" | "whole"; ms: number; selected: number | null }[]): string {
   if (rows.length === 0) return "跑法单价：本次没有 spawn ⇒ 这一格没有分母";
-  const modes = [...new Set(rows.map((r) => r.mode))].sort();
+  // 两种跑法**定长**列印（第 171 页，任务 #15）：从前只遍历出现过的模式 ⇒ 某一支 0 拍时整支从行里消失，
+  // 而「这一支没拍到」与「这一支不需要成本」是两件事。上面那句兜底只管**全局**零 spawn，管不到按模式分列的这一格。
+  const modes: Array<"selector" | "whole"> = ["selector", "whole"];
   const parts = modes.map((mode) => {
     const list = rows.filter((r) => r.mode === mode);
+    if (list.length === 0) return `${mode} 0 拍·这一支本次没有 spawn ⇒ 没有分母`;
     const sorted = list.map((r) => r.ms).sort((a, b) => a - b);
     const mid = sorted[Math.floor(sorted.length / 2)] ?? 0;
     const vacuous = list.filter((r) => runReadingIsBad(mode, r.selected)).length;

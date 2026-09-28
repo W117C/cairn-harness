@@ -1002,6 +1002,17 @@ describe("按标题选跑法：选中几条必须被读出来", () => {
     expect(runModeFor("unknown", set)).toBe("whole");
   });
 
+  it("两种跑法定长列印：这一趟只拍到一种，另一种也要印出没有分母而不是整支消失", () => {
+    // 09-28 实测到的形状：补跑那 30 条全是 selector 拍，`跑法单价：selector 90 拍…` 这一行里 whole 整支不见了，
+    // 读者分不清「这一趟没有整文件拍」与「这一格忘了印」——第 163 页给全局立的那把尺，欠的就是子列这一格。
+    const onlySel = runModeCell([{ mode: "selector", ms: 380, selected: 1 }]);
+    expect(onlySel, "whole 那一支消失 ⇒ 缺席被读成「本次不需要成本」").toContain("whole 0 拍·这一支本次没有 spawn ⇒ 没有分母");
+    const onlyWhole = runModeCell([{ mode: "whole", ms: 900, selected: 40 }]);
+    expect(onlyWhole, "反方向同样不许消失").toContain("selector 0 拍·这一支本次没有 spawn ⇒ 没有分母");
+    expect(onlySel.split(" vs "), "两支都在：分隔符两侧各一条，谁也没被挤掉").toHaveLength(2);
+    expect(onlyWhole.split(" vs "), "两支都在（反向对照）").toHaveLength(2);
+  });
+
   it("跑法单价那一格分开印两种跑法，并把两种跑法各自的「坏拍」数出来——省了多少由它说，不许推算", () => {
     expect(runModeCell([]), "一次都没跑时不许印成 0 秒的单价").toContain("这一格没有分母");
     const cell = runModeCell([

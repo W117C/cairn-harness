@@ -8413,6 +8413,19 @@ const MUTATIONS = [
     ),
     expectFail: "接线：未证名单走同步写满的那条出口，UNVERIFIED 标记只印一次",
   },
+  {
+    id: "run-mode-cell-drops-absent-mode",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "跑法单价只遍历这一趟出现过的模式 ⇒ 另一种跑法 0 拍时整支从行里消失，「这一支没拍到」被读成「这一支不需要成本」" +
+      "（09-28 实测：补跑那 30 条全是 selector 拍，whole 那一支整个不见，而汇总行照样印得整齐）。" +
+      "全局零 spawn 那格早有兜底，欠的是**子列**这一格（规则 245/241 同族）",
+    apply: (s) => s.replace(
+      '  const modes: Array<"selector" | "whole"> = ["selector", "whole"];\n  const parts = modes.map((mode) => {',
+      '  const modes = [...new Set(rows.map((r) => r.mode))].sort();\n  const parts = modes.map((mode) => {',
+    ),
+    expectFail: "两种跑法定长列印：这一趟只拍到一种，另一种也要印出没有分母而不是整支消失",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
