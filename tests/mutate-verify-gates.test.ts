@@ -1023,12 +1023,29 @@ describe("按标题选跑法：选中几条必须被读出来", () => {
     expect(many, many).toContain("whole 1 拍·中位 0.90s·坏拍（没量到或 0 条） 0");
   });
 
-  it("接线：-t 这一支要经转义，不许把标题当通配符拼进命令（表与实现同文件 ⇒ 必须行锚定，规则 236）", () => {
+  it("接线：testNamePattern 这一支要经转义，不许把标题当通配符拼进命令（表与实现同文件 ⇒ 必须行锚定，规则 236）", () => {
     const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
     // 不锚定行的正则会先撞上**锚点表里那条引文**（表与本文件同树同文件），于是突变后仍然匹配 ⇒ 变异存活。
     // 实测踩过：这条一开始写成 `/args\.push\("-t", escapeTitlePattern\(pattern\)\);/`，机器报「测试全绿」。
-    expect(src, "不转义就拼成 -t ⇒ 元字符把选择子变成通配，选中几条就不再是那条 killer 用例").toMatch(
-      /^ {2}if \(typeof pattern === "string" && pattern !== ""\) args\.push\("-t", escapeTitlePattern\(pattern\)\);$/mu);
+    expect(src, "不转义就拼成选择子 ⇒ 元字符把它变成通配，选中几条就不再是那条 killer 用例").toMatch(
+      /^ {2}if \(typeof pattern === "string" && pattern !== ""\) args\.push\("--testNamePattern=" \+ escapeTitlePattern\(pattern\)\);$/mu);
+  });
+
+  it("行为证人：指针以 `-` 开头时两种写法给两个读数——等号写法选中 1 条，空格写法被 CLI 当旗标吞掉", () => {
+    /* 整表第一遍（949/949）唯一那条红就是这个形状：`pc-face-change-named-shortcut` 的 expectFail 以 `--` 开头。
+       旧写法 `-t <值>` 把值交给 vitest 的 CLI 再解析一次，于是「--self-test …」成了**旗标**：
+       那一拍一条用例都没跑，退的却是 1，收尾行也读不到 ⇒ 旧读数只会喊「基线不绿」，把「取料坏」伪装成「判卷坏了」。
+       这里真跑两次 vitest，拿「读到几条」当读数，不钉 CLI 的报错文字（规则 239）；等号写法把值绑回值里。 */
+    const pat = escapeTitlePattern("--self-test 全造得红，且**每条规则都有自己的反向对照**（加规则不加对照即红）");
+    const root = fileURLToPath(new URL("..", import.meta.url));
+    const run = (extra: string[]): string => {
+      const r = spawnSync(process.execPath,
+        ["node_modules/vitest/vitest.mjs", "run", "--pool=threads", "--config", "tests/vitest.config.ts", "tests/prefix-churn.test.ts", ...extra],
+        { cwd: root, encoding: "utf8", env: { ...process.env, TERM: "dumb" } });
+      return (r.stdout ?? "") + (r.stderr ?? "");
+    };
+    expect(selectedTestCount(run([`--testNamePattern=${pat}`])), "等号写法要真选中那一条").toBe(1);
+    expect(selectedTestCount(run(["-t", pat])), "空格写法被当成旗标 ⇒ 这一拍没跑，读数必须是「没量到」而不是 0").toBeNull();
   });
 
   it("接线：只有 selector 模式才塞 -t，其余必须走整文件（两种跑法共存是刻意的）", () => {

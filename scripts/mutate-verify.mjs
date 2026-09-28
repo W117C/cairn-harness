@@ -8292,10 +8292,22 @@ const MUTATIONS = [
     test: "tests/mutate-verify-gates.test.ts",
     desc: "标题原文直接当 `-t` 的正则拼进去 ⇒ 真标题里的 ( ) [ ] . * + 变成通配与量词，选中的可能根本不是那条 killer 用例，而单价读数照旧好看",
     apply: (s) => s.replace(
-      '\n  if (typeof pattern === "string" && pattern !== "") args.push("-t", escapeTitlePattern(pattern));',
-      '\n  if (typeof pattern === "string" && pattern !== "") args.push("-t", pattern);',
+      '\n  if (typeof pattern === "string" && pattern !== "") args.push("--testNamePattern=" + escapeTitlePattern(pattern));',
+      '\n  if (typeof pattern === "string" && pattern !== "") args.push("--testNamePattern=" + pattern);',
     ),
-    expectFail: "接线：-t 这一支要经转义，不许把标题当通配符拼进命令（表与实现同文件 ⇒ 必须行锚定，规则 236）",
+    expectFail: "接线：testNamePattern 这一支要经转义，不许把标题当通配符拼进命令（表与实现同文件 ⇒ 必须行锚定，规则 236）",
+  },
+  {
+    // 整表第一遍（09-28，949/949）唯一一条红就是它：`pc-face-change-named-shortcut` 的指针以 `-` 开头。
+    id: "run-mode-dash-value-back-to-space-form",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "选择子换回 `-t <值>` 的空格写法 ⇒ 凡指针以 `-` 开头就被 CLI 当成旗标：实测那条 `--self-test …` 的基线一拍根本没跑（收尾行读不到），却退 1——旧读数只会喊「基线不绿」，把「取料坏」伪装成「判卷坏了」",
+    apply: (s) => s.replace(
+      '\n  if (typeof pattern === "string" && pattern !== "") args.push("--testNamePattern=" + escapeTitlePattern(pattern));',
+      '\n  if (typeof pattern === "string" && pattern !== "") args.push("-t", escapeTitlePattern(pattern));',
+    ),
+    expectFail: "行为证人：指针以 `-` 开头时两种写法给两个读数——等号写法选中 1 条，空格写法被 CLI 当旗标吞掉",
   },
   {
     id: "run-mode-selector-check-dropped",
@@ -8518,7 +8530,7 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
 function runTest(testRel, pattern) {
   const started = Date.now();
   const args = [VITEST, "run", "--pool=threads", "--config", "tests/vitest.config.ts", testRel];
-  if (typeof pattern === "string" && pattern !== "") args.push("-t", escapeTitlePattern(pattern));
+  if (typeof pattern === "string" && pattern !== "") args.push("--testNamePattern=" + escapeTitlePattern(pattern));
   try {
     const out = execFileSync(process.execPath, args,
       { cwd: ROOT, env: { ...process.env, TERM: "dumb" }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
