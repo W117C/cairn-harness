@@ -6,11 +6,13 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
+  applyModeLineEdits,
   promptSurfaceFindings,
   toolNameTokens,
   unhitExemptions,
   type PromptSurfaceFinding,
 } from "../src/agent/prompt-surface";
+import { BASE_SYSTEM, systemPromptFor } from "../src/main/agent-runner";
 import { GATES } from "../scripts/gate-manifest";
 import {
   PROMPT_SURFACE_EXEMPT,
@@ -88,8 +90,8 @@ describe("现读：真面、真文本、真注册", () => {
     expect(tokens).toContain("edit_file");
   });
 
-  it("存量水位：豁免表只准调低（09-28 现读 3 条），且每条本次都要真命中", () => {
-    expect(PROMPT_SURFACE_EXEMPT.length).toBeLessThanOrEqual(3);
+  it("存量水位：豁免表已清到 0（第 175 页拆完 per-mode 文本），要加长就得重新逐条带理由", () => {
+    expect(PROMPT_SURFACE_EXEMPT, "这张表从第 175 页起是空的：新登记一根＝重新开一轮存量，须逐条写理由").toHaveLength(0);
     const tables = tablesByMode();
     const raw = promptSurfaceFindings(proseFaces(), tables, TOOL_NAMES, []);
     expect(unhitExemptions(PROMPT_SURFACE_EXEMPT, raw), "有不命中的豁免留在表里＝会放过同名的新问题").toHaveLength(0);
@@ -101,5 +103,76 @@ describe("现读：真面、真文本、真注册", () => {
     const pkg = JSON.parse(readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8")) as
       { scripts?: Record<string, string> };
     expect(pkg.scripts?.["prompt-surface-check"] ?? "").toContain("scripts/prompt-surface-check.ts");
+  });
+});
+
+describe("按档拆文本（第 175 页，任务 #16）", () => {
+  const SRC = ["a1", "b1", "c1"].join("\n");
+
+  it("applyModeLineEdits 只动指定的那几行，其余逐字沿用同一份源", () => {
+    const r = applyModeLineEdits(SRC, { replacements: [{ prefix: "b", text: "B2" }], drops: ["c"] });
+    expect(r.text).toBe("a1\nB2");
+    expect(r.changed).toEqual({ dropped: 1, replaced: 1 });
+  });
+
+  it("落点 0 命中要抛：那一行的开头字变了 ⇒ 这一档的差异会静默消失", () => {
+    expect(() => applyModeLineEdits(SRC, { replacements: [{ prefix: "b", text: "B2" }], drops: ["zzz"] })).toThrow(/落点没对上/u);
+  });
+
+  it("落点命中多行也要抛：前缀太松会把邻居一起换掉", () => {
+    expect(() => applyModeLineEdits("a1\na2", { replacements: [{ prefix: "a", text: "X" }], drops: [] })).toThrow(/实换 2 行/u);
+  });
+
+  it("可写那三档拿到的还是同一份 BASE_SYSTEM（等价性由判卷钉），而 read-only 确实不同", () => {
+    for (const m of ["default", "guided", "auto"] as const) expect(systemPromptFor(m), `${m} 档不该被改写`).toBe(BASE_SYSTEM);
+    // 配对判据（规则 228）：只钉「三档相等」的话，「四档全等」这个退化也照样绿。
+    expect(systemPromptFor("read-only")).not.toBe(BASE_SYSTEM);
+    expect(systemPromptFor(undefined), "缺省（没给档）必须退回共用文本，不能抛").toBe(BASE_SYSTEM);
+  });
+
+  it("read-only 的文本不再点名它拿不到的那三把，而共用文本里它们还在（尺看得见）", () => {
+    const ro = new Set(toolNameTokens(systemPromptFor("read-only"), TOOL_NAMES));
+    for (const gone of ["edit_file", "write_file", "wait_for_agents"]) expect([...ro], `read-only 文本仍点名 ${gone}`).not.toContain(gone);
+    const shared = new Set(toolNameTokens(BASE_SYSTEM, TOOL_NAMES));
+    expect([...shared]).toContain("edit_file");
+  });
+
+  it("纪律编号 1–6 在 read-only 档也连续（断号会让模型以为后面的约束可省）", () => {
+    const lines = systemPromptFor("read-only").split("\n");
+    for (const n of [1, 2, 3, 4, 5, 6]) {
+      expect(lines.filter((l) => l.startsWith(`${String(n)})`)), `纪律 ${String(n)} 那一行没了`).toHaveLength(1);
+    }
+    expect(lines.filter((l) => l.startsWith("编排")), "派活那一段对没有 spawn 面的档不适用").toHaveLength(0);
+  });
+
+  it("这一档的文本确实更短：每轮重送的静态段，省下的字节要印出来", () => {
+    const before = Buffer.byteLength(BASE_SYSTEM, "utf8");
+    const after = Buffer.byteLength(systemPromptFor("read-only"), "utf8");
+    expect(after, `read-only 静态段 ${String(after)}B，未短于共用的 ${String(before)}B`).toBeLessThan(before);
+    expect(before - after, "省的量小于 100 字节 ⇒ 像是只删了标点，编排段没落下去").toBeGreaterThanOrEqual(100);
+  });
+
+  it("覆盖档参与判定：缺席只在被声明的那几档里算，写错档名要抛", () => {
+    const tables = { auto: ["edit_file", "verify"], read: ["verify"] } as Record<string, readonly string[]>;
+    const hit = promptSurfaceFindings([{ name: "t", text: "改文件用 edit_file", modes: ["read"] }], tables, TOOL_NAMES, []);
+    expect(hit.map((f: PromptSurfaceFinding) => `${f.kind}:${f.modes.join()}`)).toEqual(["odd:read"]);
+    const clean = promptSurfaceFindings([{ name: "t", text: "改文件用 edit_file", modes: ["auto"] }], tables, TOOL_NAMES, []);
+    expect(clean, "只发给在场档的文本不许报——否则拆开之后那些档会被牵连").toHaveLength(0);
+    expect(() => promptSurfaceFindings([{ name: "t", text: "x", modes: ["nosuch"] }], tables, TOOL_NAMES, []),
+      "覆盖档名字写错＝那一档的工具面读不到，不许读成「那一档没承诺」").toThrow(/不存在的档/u);
+  });
+
+  it("取料面由装配函数分组生成（不是手抄清单）：四档各属一面，且没有第五面", () => {
+    const faces = proseFaces();
+    const covered = faces.flatMap((f) => [...f.modes]).sort();
+    expect(covered).toEqual(["auto", "default", "guided", "read-only"]);
+    expect(faces.length, "面数＝不同文本的条数；今日现读是 2（共用一份 + read-only 自己一份）").toBe(2);
+    for (const f of faces) expect(f.text).toBe(systemPromptFor(f.modes[0] as never));
+  });
+
+  it("接线：生产装配点把按档取的面交给 provider（行锚定，防同字面量冒领）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../src/main/agent-runner.ts", import.meta.url)), "utf8");
+    const hits = src.match(/^ {6}provider: createProvider\(promptText, systemPromptFor\(opts\.mode\), modelSelection, \{$/gmu);
+    expect(hits ?? [], "装配点还是硬传 BASE_SYSTEM ⇒ 拆完的文本没人消费（门会绿而这格没接线）").toHaveLength(1);
   });
 });

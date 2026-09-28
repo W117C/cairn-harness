@@ -6,7 +6,7 @@
  */
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { BASE_SYSTEM } from "../src/main/agent-runner";
+import { systemPromptFor } from "../src/main/agent-runner";
 import { TOOL_NAMES } from "../src/tools/base";
 import { PERMISSION_MODES } from "../src/permissions/modes";
 import { sessionToolSpecs } from "../src/agent/glm-session";
@@ -18,14 +18,10 @@ import {
   type PromptSurfaceExempt,
 } from "../src/agent/prompt-surface";
 
-/** 存量豁免：逐条带理由，**只准调低**（新增一根就红）。清法是拆 per-mode 提示词（见任务 #16），不是把名单加长。
- *  理由的形状：这三把在 read-only 档确实拿不到，而那句文本是「若要写/若要派活该怎么做」的**说明**，
- *  不是「你现在可以调它」的承诺；权限层另有拒绝兜底。 */
-export const PROMPT_SURFACE_EXEMPT: PromptSurfaceExempt = [
-  { token: "edit_file", mode: "read-only", why: "纪律 3 是「怎么改文件」的条件说明；read-only 档拿不到该工具，由权限层拒绝兜底（拆 per-mode 文本见任务 #16）" },
-  { token: "write_file", mode: "read-only", why: "同上：`write_file` 只用于新建文件那句是条件说明，read-only 不装配它" },
-  { token: "wait_for_agents", mode: "read-only", why: "编排段整段对 read-only 档不适用（该档没有 spawn 面）；段首已写「派子代理时」这一前置条件" },
-];
+/** 存量豁免：**空**。第 174 页登记过 3 条（edit_file／write_file／wait_for_agents @read-only），
+ *  任务 #16 把那一档的文本拆开后（`systemPromptFor("read-only")`）三条一起失去存在理由。
+ *  这张表要加长，必须是**新一轮登记**：逐条带理由、只准调低、过期即红（规则 238）。 */
+export const PROMPT_SURFACE_EXEMPT: PromptSurfaceExempt = [];
 
 export function tablesByMode(): Record<string, string[]> {
   const out: Record<string, string[]> = {};
@@ -33,8 +29,23 @@ export function tablesByMode(): Record<string, string[]> {
   return out;
 }
 
-export function proseFaces(): { name: string; text: string }[] {
-  return [{ name: "BASE_SYSTEM", text: String(BASE_SYSTEM) }];
+/** 取料与生产端**共用同一个决策点**：文本面不是手抄清单，而是逐档调 `systemPromptFor`，
+ *  再把「文本逐字相同」的那些档合并成一面（同一份文本对几档 ⇒ 那几档共用它，odd 才有意义）。
+ *  好处是反过来的也成立：若有人把某一档的差异抹平，那些档会自动并成一面，共用文本对缺席档的承诺当场报 odd——
+ *  不需要有人记得来改这份清单（`报数前先重测`／`判据要与生产端共用决策点`）。 */
+export function proseFaces(): { name: string; text: string; modes: readonly string[] }[] {
+  const byText = new Map<string, string[]>();
+  for (const m of PERMISSION_MODES) {
+    const text = systemPromptFor(m);
+    const list = byText.get(text);
+    if (list === undefined) byText.set(text, [m]);
+    else list.push(m);
+  }
+  return [...byText.entries()].map(([text, modes]) => ({
+    name: `systemPrompt[${modes.join(",")}]`,
+    text,
+    modes,
+  }));
 }
 
 export function main(argv: string[] = process.argv.slice(2)): number {
@@ -79,11 +90,17 @@ function selfTestRun(): number {
   const clean = promptSurfaceFindings([{ name: "t", text: "先 verify 再把结论收在一句里" }], tables, TOOL_NAMES, []);
   const waived = promptSurfaceFindings([{ name: "t", text: "改文件用 edit_file" }], tables, TOOL_NAMES,
     [{ token: "edit_file", mode: "read", why: "test" }]);
+  // 第 175 页（任务 #16）新增的第三轴：**一份文本可以只发给部分档**。这一面必须只看它覆盖的那几档，
+  // 否则拆开之后那些档会被牵连报红（不拆的理由就没了），而把缺席档的承诺放过去又正好是这一格要抓的事。
+  const scopedHit = promptSurfaceFindings([{ name: "t", text: "改文件用 edit_file", modes: ["read"] }], tables, TOOL_NAMES, []);
+  const scopedClean = promptSurfaceFindings([{ name: "t", text: "改文件用 edit_file", modes: ["auto"] }], tables, TOOL_NAMES, []);
   const lines = [
     [dead.some((f) => f.kind === "dead" && f.token === "no_such_tool"), "死引用那一档要能报出来"],
     [odd.some((f) => f.kind === "odd" && f.token === "edit_file" && f.modes.join() === "read"), "共用文本对缺席档要报不可达"],
     [clean.length === 0, "都在面上时不许造红（负控）"],
     [waived.length === 0, "豁免要真能消掉那一条"],
+    [scopedHit.some((f) => f.kind === "odd" && f.modes.join() === "read"), "只发给缺席档的文本也要报（覆盖档由调用方给）"],
+    [scopedClean.length === 0, "只发给在场档的文本不许报（覆盖档不是全局四档）"],
   ] as const;
   let bad = 0;
   for (const [ok, what] of lines) {
@@ -94,6 +111,10 @@ function selfTestRun(): number {
   try { promptSurfaceFindings([{ name: "t", text: "x" }], {}, TOOL_NAMES, []); } catch { threw = true; }
   console.log(`  ${threw ? "✅" : "❌"} 自检：工具面一格都没取到时要抛，不许印 0`);
   if (!threw) bad += 1;
+  let threwScope = false;
+  try { promptSurfaceFindings([{ name: "t", text: "x", modes: ["nosuchmode"] }], tables, TOOL_NAMES, []); } catch { threwScope = true; }
+  console.log(`  ${threwScope ? "✅" : "❌"} 自检：覆盖档写错名字要抛（不能把「读不到那一档」读成「那一档没承诺」）`);
+  if (!threwScope) bad += 1;
   console.log(bad === 0 ? "[prompt-surface] --self-test 全造得红 ✅" : `[prompt-surface] --self-test 有 ${String(bad)} 条不红 ❌`);
   return bad === 0 ? 0 : 1;
 }

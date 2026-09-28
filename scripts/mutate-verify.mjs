@@ -8482,8 +8482,8 @@ const MUTATIONS = [
     desc: "取料为空从「抛」改成「印 0 条发现」⇒ 装配面读不到时这道门给出**绿色读数**，" +
       "而它存在的理由正是「文本承诺了一格、面上没有」（规则 128：非零退出＋零结论＝读数不可信，这里连退出码都变 0）",
     apply: (s) => s.replace(
-      'if (modes.length === 0) throw new Error("工具面一格都没取到 ⇒ 不能把「没读到」读成「没有可达性问题」");',
-      "if (modes.length === 0) return [];",
+      'if (allModes.length === 0) throw new Error("工具面一格都没取到 ⇒ 不能把「没读到」读成「没有可达性问题」");',
+      "if (allModes.length === 0) return [];",
     ),
     expectFail: "取料坏了要抛，不许印 0",
   },
@@ -8494,8 +8494,8 @@ const MUTATIONS = [
     desc: "把 dead 并进 odd ⇒ 两类修法相反的事合成一个数：dead 要改名／删文案，odd 要拆 per-mode 文本（任务 #16），" +
       "合并后剩下的计数读起来像「只差档没覆盖」，实际是指着不存在的能力（规则 239：三态要分开印）",
     apply: (s) => s.replace(
-      'out.push({ token, face: face.name, modes, kind: "dead" });',
-      'out.push({ token, face: face.name, modes, kind: "odd" });',
+      'out.push({ token, face: face.name, modes: allModes, kind: "dead" });',
+      'out.push({ token, face: face.name, modes: allModes, kind: "odd" });',
     ),
     expectFail: "面上完全没有 ⇒ dead",
   },
@@ -8510,6 +8510,54 @@ const MUTATIONS = [
       "if ([...waived].some((k) => k.startsWith(`${token}@`))) continue;",
     ),
     expectFail: "豁免要真能消掉那一条，其他档不许跟着被消",
+  },
+  {
+    id: "prompt-surface-face-scope-ignored",
+    src: "src/agent/prompt-surface.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "把「这份文本只发给哪几档」的覆盖档丢掉、永远按全局四档判 ⇒ 拆开之后只发给在场档的文本也被牵连报红，" +
+      "而写错的档名不再抛（把「那一档的面读不到」静默读成「那一档没承诺」）——按档拆文本这一步就此失去证人",
+    apply: (s) => s.replace(
+      "const scope = face.modes && face.modes.length > 0 ? [...face.modes].sort() : allModes;",
+      "const scope = allModes;",
+    ),
+    expectFail: "覆盖档参与判定",
+  },
+  {
+    id: "prompt-surface-readonly-text-not-applied",
+    src: "src/main/agent-runner.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "装配点不再按档取文本（四档都拿共用文本）⇒ read-only 的模型继续读到 edit_file／wait_for_agents 这些它拿不到的承诺，" +
+      "而门仍然绿：门读的是 systemPromptFor 的输出，读不到「生产有没有真的调它」（规则 236：接线要单独钉）",
+    apply: (s) => s.replace(
+      'if (mode !== "read-only") return BASE_SYSTEM;',
+      "return BASE_SYSTEM;",
+    ),
+    expectFail: "而 read-only 确实不同",
+  },
+  {
+    id: "prompt-surface-line-edit-guard-skips",
+    src: "src/agent/prompt-surface.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "摘掉「落点必须恰好命中」那一格 ⇒ 源文本里那行的开头字一改，这一档的差异就**静默消失**（模型读到别档的承诺而没人红），" +
+      "前缀写松了也会连坐邻居行；两种都只能在这一刻报，事后无从分辨",
+    apply: (s) => s.replace(
+      "if (dropped !== edits.drops.length || replaced !== edits.replacements.length) {",
+      "if (false) {",
+    ),
+    expectFail: "落点 0 命中要抛",
+  },
+  {
+    id: "prompt-surface-faces-not-grouped",
+    src: "scripts/prompt-surface-check.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "取料面从「按文本相同合并」退化成「一档一面」⇒ 「一份文本对几档」这个信号消失，共用文本对缺席档的承诺永远不会报 odd" +
+      "（每档各自成面时，缺席那档的面就是它自己的文本，奇偶性被结构抹平）",
+    apply: (s) => s.replace(
+      "    if (list === undefined) byText.set(text, [m]);\n    else list.push(m);",
+      "    byText.set(text, [m]);",
+    ),
+    expectFail: "四档各属一面，且没有第五面",
   },
 ];
 

@@ -39,25 +39,33 @@ export function toolNameTokens(prose: string, knownNames: readonly string[]): st
 export type PromptSurfaceExempt = readonly { token: string; mode: string; why: string }[];
 
 export function promptSurfaceFindings(
-  faces: readonly { name: string; text: string }[],
+  faces: readonly { name: string; text: string; modes?: readonly string[] }[],
   tablesByMode: Record<string, readonly string[]>,
   knownNames: readonly string[],
   exempt: PromptSurfaceExempt = [],
 ): PromptSurfaceFinding[] {
-  const modes = Object.keys(tablesByMode).sort();
-  if (modes.length === 0) throw new Error("工具面一格都没取到 ⇒ 不能把「没读到」读成「没有可达性问题」");
-  const union = new Set<string>(modes.flatMap((m) => tablesByMode[m] ?? []));
-  if (union.size === 0) throw new Error("所有档的工具面都是空的 ⇒ 取料坏了，这一格不能印 0");
+  const allModes = Object.keys(tablesByMode).sort();
+  if (allModes.length === 0) throw new Error("工具面一格都没取到 ⇒ 不能把「没读到」读成「没有可达性问题」");
+  const unionAll = new Set<string>(allModes.flatMap((m) => tablesByMode[m] ?? []));
+  if (unionAll.size === 0) throw new Error("所有档的工具面都是空的 ⇒ 取料坏了，这一格不能印 0");
   const waived = new Set(exempt.map((e) => `${e.token}@${e.mode}`));
   const out: PromptSurfaceFinding[] = [];
   for (const face of faces) {
+    // 一份文本可以只发给部分档（`systemPromptFor` 拆完之后就是这形状）。覆盖哪些档由**调用方从装配处取**，
+    // 不在这里写死四档：写死了就等于假设「永远是一份文本对四档」，那正是这一格从前的错误前提。
+    const scope = face.modes && face.modes.length > 0 ? [...face.modes].sort() : allModes;
+    if (scope.some((m) => !(m in tablesByMode))) {
+      throw new Error(`文本面 ${face.name} 声明了不存在的档 ⇒ 取料坏了（覆盖档必须来自工具面那张表）`);
+    }
     for (const token of toolNameTokens(face.text, knownNames)) {
-      if (!union.has(token)) {
-        if (!waived.has(`${token}@*`)) out.push({ token, face: face.name, modes, kind: "dead" });
+      // dead＝名字在**全局**任何档都没有 ⇒ 文本指着不存在的能力（改名／删文案），一条发现点名所有档。
+      if (!unionAll.has(token)) {
+        if (!waived.has(`${token}@*`)) out.push({ token, face: face.name, modes: allModes, kind: "dead" });
         continue;
       }
-      const missing = modes.filter((m) => !(tablesByMode[m] ?? []).includes(token));
-      for (const m of missing) {
+      // odd＝能力在别档有、在这份文本覆盖的这几档没有 ⇒ 改这一档的文本（与 dead 修法相反，故分两类）。
+      const missingIn = scope.filter((m) => !(tablesByMode[m] ?? []).includes(token));
+      for (const m of missingIn) {
         if (waived.has(`${token}@${m}`)) continue;
         out.push({ token, face: face.name, modes: [m], kind: "odd" });
       }
@@ -73,6 +81,32 @@ export function unhitExemptions(
   rawFindings: readonly PromptSurfaceFinding[],
 ): PromptSurfaceExempt {
   return exempt.filter((e) => !rawFindings.some((f) => f.token === e.token && f.modes.includes(e.mode)));
+}
+
+/** 按档改共用文本的**唯一**做法：只换/删指定的那几行，其余行逐字沿用同一份源（规则 205：同一句话不许抄两份）。
+ *  两处失败都当场抛，不留「看起来改了」的空档：
+ *  ⑴ 某个落点一处没命中 ⇒ 那一行的开头字变了，这一档的差异会**静默消失**（模型继续读到别档的承诺）；
+ *  ⑵ 某个落点命中多行 ⇒ 前缀写得太松，会把不该改的行一起换掉。
+ *  返回 `changed`（删了几行、换了几行）是为了让调用方能把它当读数印出来，而不是只信"没抛"。 */
+export function applyModeLineEdits(
+  source: string,
+  edits: { readonly replacements: readonly { prefix: string; text: string }[]; readonly drops: readonly string[] },
+): { text: string; changed: { dropped: number; replaced: number } } {
+  const lines = source.split("\n");
+  const hitCount = (pred: (line: string) => boolean) => lines.filter((l) => pred(l)).length;
+  const dropped = hitCount((l) => edits.drops.some((d) => l.startsWith(d)));
+  const replaced = hitCount((l) => edits.replacements.some((r) => l.startsWith(r.prefix)));
+  if (dropped !== edits.drops.length || replaced !== edits.replacements.length) {
+    throw new Error(`按档改文本的落点没对上：该删 ${String(edits.drops.length)} 行实删 ${String(dropped)} 行` +
+      `／该换 ${String(edits.replacements.length)} 行实换 ${String(replaced)} 行（0＝那一行的开头字变了，差异会静默消失）`);
+  }
+  const out: string[] = [];
+  for (const line of lines) {
+    if (edits.drops.some((d) => line.startsWith(d))) continue;
+    const rep = edits.replacements.find((r) => line.startsWith(r.prefix));
+    out.push(rep === undefined ? line : rep.text);
+  }
+  return { text: out.join("\n"), changed: { dropped, replaced } };
 }
 
 /** 读数行：门与判卷共用这一份措辞（规则 205：别在两边各拼一句）。 */
