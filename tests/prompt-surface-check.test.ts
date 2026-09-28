@@ -19,8 +19,10 @@ import {
   allFaces,
   descriptionFaces,
   proseFaces,
+  reminderFaces,
   tablesByMode,
 } from "../scripts/prompt-surface-check";
+import { EVIDENCE_TEXT } from "../src/agent/goal";
 import { sessionToolSpecs } from "../src/agent/glm-session";
 import { TOOL_NAMES } from "../src/tools/base";
 
@@ -225,7 +227,31 @@ describe("工具描述也是模型可见文本（第 176 页）", () => {
 
   it("门真的把描述面喂进去（不是只喂系统文本）", () => {
     const all = allFaces();
-    expect(all).toHaveLength(proseFaces().length + descriptionFaces().length);
+    expect(all).toHaveLength(proseFaces().length + descriptionFaces().length + reminderFaces().length);
     expect(all.some((f) => f.name.startsWith("desc[read-only].")), "描述面没进门 ⇒ 上一条判卷只证明了它自己读了自己").toBe(true);
+    expect(all.some((f) => f.name.startsWith("goalReminder[")), "续跑提醒没进门 ⇒ 那一族还是没人看").toBe(true);
+  });
+
+  it("续跑提醒取料：逐证据态各渲两份，且渲出来的不是空串（空面＝尺瞎了）", () => {
+    const faces = reminderFaces();
+    expect(Object.keys(EVIDENCE_TEXT).sort()).toEqual(["absent", "failed", "stale", "verified"]);
+    expect(faces.length, "面数＝证据态数 × 2（hint 会**替换**默认指令那句，两种都得渲）").toBe(Object.keys(EVIDENCE_TEXT).length * 2);
+    for (const f of faces) {
+      expect(f.text.length, `${f.name} 渲染成空串 ⇒ 0 发现是假绿`).toBeGreaterThan(80);
+      expect(f.text).toContain("goal 续跑");
+      expect(f.modes).toEqual(["read-only", "default", "guided", "auto"]);
+    }
+  });
+
+  it("续跑提醒里点到的工具，四档都得真拿得到（它逐轮重发，是模型唯一读到的指令）", () => {
+    const tokens = new Set(reminderFaces().flatMap((f) => toolNameTokens(f.text, TOOL_NAMES)));
+    expect([...tokens], "提醒里一个工具名都没认出来 ⇒ 多半是 goalReminder 不再提 verify，或取料坏了").toContain("verify");
+    const tables = tablesByMode();
+    for (const t of tokens) {
+      for (const m of ["read-only", "default", "guided", "auto"]) {
+        expect(tables[m], `提醒让模型调 ${t}，但 ${m} 档的面上没有它`).toContain(t);
+      }
+    }
+    expect(promptSurfaceFindings(reminderFaces(), tables, TOOL_NAMES, [])).toHaveLength(0);
   });
 });

@@ -10,6 +10,7 @@ import { systemPromptFor } from "../src/main/agent-runner";
 import { TOOL_NAMES } from "../src/tools/base";
 import { PERMISSION_MODES } from "../src/permissions/modes";
 import { sessionToolSpecs } from "../src/agent/glm-session";
+import { EVIDENCE_TEXT, goalReminder } from "../src/agent/goal";
 import {
   promptSurfaceCell,
   promptSurfaceFindings,
@@ -66,8 +67,28 @@ export function descriptionFaces(): SurfaceFace[] {
   return out;
 }
 
+/** 第三类面：**goal 续跑提醒**——它是逐轮重发的动态文本，却和系统提示词一样是模型唯一能读到的指令。
+ *  09-24 那次事故（join 文案命令模型去调一把不存在的工具）就在这一族里，而前两族都覆盖不到它。
+ *  渲染取料：`goalReminder` 是纯函数，逐证据态 × hint 有无 各渲一份；
+ *  objective 用**不含任何工具名**的合成目标——真人写的需求里出现工具词是用户的话，不是我们的承诺，
+ *  把那种文本喂进来只会让门去管不属于它的东西。 */
+export function reminderFaces(): SurfaceFace[] {
+  const out: SurfaceFace[] = [];
+  for (const evidence of Object.keys(EVIDENCE_TEXT)) {
+    for (const withHint of [false, true]) {
+      const body = goalReminder(
+        { objective: "把这一件事做完，按验收口径交结果。", maxTurns: 20, maxUsd: 2 } as never,
+        3, 0.42, evidence as never,
+        withHint ? "上一轮按失败信息改完后重跑，再看证据态。" : undefined,
+      );
+      out.push({ name: `goalReminder[${evidence}${withHint ? "+hint" : ""}]`, text: body, modes: PERMISSION_MODES });
+    }
+  }
+  return out;
+}
+
 export function allFaces(): SurfaceFace[] {
-  return [...proseFaces(), ...descriptionFaces()];
+  return [...proseFaces(), ...descriptionFaces(), ...reminderFaces()];
 }
 
 export function main(argv: string[] = process.argv.slice(2)): number {
@@ -75,10 +96,13 @@ export function main(argv: string[] = process.argv.slice(2)): number {
   const tables = tablesByMode();
   const system = proseFaces();
   const descs = descriptionFaces();
-  const faces: SurfaceFace[] = [...system, ...descs];
+  const reminders = reminderFaces();
+  const faces: SurfaceFace[] = [...system, ...descs, ...reminders];
   const counts = Object.entries(tables).map(([m, t]) => `${m}=${String(t.length)}`).join(" ");
   console.log(`[prompt-surface] 取料：系统文本 ${String(system.length)} 份（${system.map((f) => f.name).join("、")}）` +
-    `｜工具描述 ${String(descs.length)} 份（按档取规格面，namesOnly）｜工具面 ${counts}｜工具名单 ${String(TOOL_NAMES.length)} 个`);
+    `｜工具描述 ${String(descs.length)} 份（按档取规格面，namesOnly）` +
+    `｜续跑提醒 ${String(reminders.length)} 份（goalReminder 逐证据态渲染）` +
+    `｜工具面 ${counts}｜工具名单 ${String(TOOL_NAMES.length)} 个`);
 
   if (selfTest) return selfTestRun();
 

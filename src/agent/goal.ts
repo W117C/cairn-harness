@@ -50,7 +50,9 @@ export type GoalStop =
   | { kind: "continue"; note: string; hint?: string }
   | { kind: "stop"; reason: string };
 
-const EVIDENCE_TEXT: Record<WorkerEvidence, string> = {
+/** 证据态的措辞表。**导出是为了让取料面能枚举这一族**（`prompt-surface-check` 逐态渲染续跑提醒）——
+ *  在别处再抄一份四元素名单就是第二份副本，加一态就会漂（第十三族）。 */
+export const EVIDENCE_TEXT: Record<WorkerEvidence, string> = {
   verified: "verified（验证通过且没被后续写入作废）",
   stale: "stale（验过之后又写了盘 ⇒ 那份绿证据已作废，要重新 verify 才算）",
   failed: "failed（最近一次验证未通过）",

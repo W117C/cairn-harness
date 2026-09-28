@@ -8590,10 +8590,35 @@ const MUTATIONS = [
     desc: "门的取料退回只喂系统文本 ⇒ 68 份工具描述面不再被扫，`propose_plan` 那一格会重新长回来而门照绿；" +
       "判卷里那条「描述不点名别档工具」自己仍然绿，因为它读的是 descriptionFaces() 而不是门实际喂出去的那份（规则 236：接线要单独钉）",
     apply: (s) => s.replace(
-      "return [...proseFaces(), ...descriptionFaces()];",
-      "return [...proseFaces()];",
+      "return [...proseFaces(), ...descriptionFaces(), ...reminderFaces()];",
+      "return [...proseFaces(), ...reminderFaces()];",
     ),
     expectFail: "门真的把描述面喂进去",
+  },
+  {
+    id: "prompt-surface-reminder-faces-not-swept",
+    src: "scripts/prompt-surface-check.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "续跑提醒那一族不再逐证据态渲染（枚举退化成空）⇒ 门只读到 70 份面里最静态的那些，" +
+      "而**逐轮重发的 goal 提醒**回到没人看的状态——09-24 那次「join 文案命令模型去调不存在的工具」正是在这一族里，" +
+      "不在系统提示词里（规则 222：取料面空掉时「0 发现」是最像好消息的假绿）",
+    apply: (s) => s.replace(
+      "for (const evidence of Object.keys(EVIDENCE_TEXT)) {",
+      "for (const evidence of []) {",
+    ),
+    expectFail: "逐证据态各渲两份",
+  },
+  {
+    id: "prompt-surface-goal-reminder-drops-verify",
+    src: "src/agent/goal.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "收束条件那句不再点名 verify（改成「只有验证通过」）⇒ goal 模式每轮重送的指令失去**该调哪把工具**，" +
+      "模型只能凭猜；这条锚点守的是「提醒里点到的工具必须四档都在面上」这个不变量的前半（后半是逐档可得性判定）",
+    apply: (s) => s.replace(
+      '"\\n收束条件：只有 verify 通过且之后不再写盘才算完成；认为已达成就调用 verify 拿绿证据再收束。"',
+      '"\\n收束条件：只有验证通过且之后不再写盘才算完成。"',
+    ),
+    expectFail: "四档都得真拿得到",
   },
 ];
 
