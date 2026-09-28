@@ -8302,12 +8302,12 @@ const MUTATIONS = [
     id: "run-mode-dash-value-back-to-space-form",
     src: "scripts/mutate-verify.mjs",
     test: "tests/mutate-verify-gates.test.ts",
-    desc: "选择子换回 `-t <值>` 的空格写法 ⇒ 凡指针以 `-` 开头就被 CLI 当成旗标：实测那条 `--self-test …` 的基线一拍根本没跑（收尾行读不到），却退 1——旧读数只会喊「基线不绿」，把「取料坏」伪装成「判卷坏了」",
+    desc: "选择子换回 `-t <值>` 的空格写法 ⇒ 凡指针以 `-` 开头就被 CLI 当成旗标：实测那条 `--self-test …` 的基线一拍根本没跑（收尾行读不到），却退 1——旧读数只会喊「基线不绿」，把「取料坏」伪装成「判卷坏了」。这一条的 killer 必须挂**接线判卷**：第一版挂的是那条行为证人，而它自己同时跑两种写法 ⇒ 改生产行改不到它 ⇒ 实测「变异存活：测试全绿」（规则 236 又一次命中：判卷自己再算一遍＝对生产零分辨力）",
     apply: (s) => s.replace(
       '\n  if (typeof pattern === "string" && pattern !== "") args.push("--testNamePattern=" + escapeTitlePattern(pattern));',
       '\n  if (typeof pattern === "string" && pattern !== "") args.push("-t", escapeTitlePattern(pattern));',
     ),
-    expectFail: "行为证人：指针以 `-` 开头时两种写法给两个读数——等号写法选中 1 条，空格写法被 CLI 当旗标吞掉",
+    expectFail: "接线：testNamePattern 这一支要经转义，不许把标题当通配符拼进命令（表与实现同文件 ⇒ 必须行锚定，规则 236）",
   },
   {
     id: "run-mode-selector-check-dropped",
