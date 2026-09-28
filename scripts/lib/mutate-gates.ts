@@ -833,3 +833,55 @@ export function costCell(r: CostRollup): string {
   return `成本分母：判卷 spawn ${String(r.spawns)} 次／${String(r.anchors)} 条（每条次数分布 ${dist}）` +
     `· 单次中位 ${perNth}· ${slowest}${never}`;
 }
+
+// ---- 第 171 页（任务 #14）：未证那一态要带名单，而且要能原样补跑 ----
+/** 未证的四个来源，分开数、分开印——每类的下一步动作不同，混成一句就会把人指错方向。
+ *  类名是**数据**（判卷与消费者按它分诊），措辞是**给人看的**（label），两者不许合一。 */
+export const UNVERIFIED_CLASSES = ["src-in-flight", "judge-in-flight", "judge-unloadable", "budget-stopped"] as const;
+export type UnverifiedClass = (typeof UNVERIFIED_CLASSES)[number];
+
+const UNVERIFIED_LABEL: Record<UnverifiedClass, string> = {
+  "src-in-flight": "源文件在飞/未跟踪 ⇒ 根本没跑",
+  "judge-in-flight": "判卷文件在飞 ⇒ 量不出分辨力",
+  "judge-unloadable": "判卷载不动（HEAD 缺模块 ⇒ 环境没备齐，不是表退化）",
+  "budget-stopped": "预算用尽没跑到",
+};
+
+/** 未证汇总那一格：从前只印「未证 30 条」这种光秃秃的数，读者要补跑就得自己拿 `--list` 与日志求差集
+ *  （09-28 我就是这么补的，算错一次就把没验的读成验了）。两条纪律：
+ *  ① **计数由名单求和**——两个口径各写一遍必有一处先漂（规则 209/225）；
+ *  ② 认不出的类当场崩并点名第几条——把「没归类」读成「没有未证」会让总数变小，看起来更便宜（规则 245）。
+ *  `rerun` 只收「预算用尽」那一类：源文件在飞那类等别人落库才有意义，载不动那类要先把环境备齐，
+ *  给一条注定跑不动的补跑命令比不给更坏。 */
+export function unverifiedCell(rows: readonly { id: string; cls: UnverifiedClass }[]): {
+  total: number;
+  summary: string;
+  list: string[];
+  rerun: string[];
+} {
+  const buckets = new Map<UnverifiedClass, string[]>();
+  for (const cls of UNVERIFIED_CLASSES) buckets.set(cls, []);
+  for (const r of rows) {
+    const b = buckets.get(r.cls);
+    if (b === undefined) {
+      throw new Error(`未证分类不认识 "${r.cls}"（第 ${r.id} 条）⇒ 不许把它算进任何一类，也不许让它从总数里消失`);
+    }
+    b.push(r.id);
+  }
+  const total = rows.length; // 计数＝名单长度之和，同源；不许另起一个 filter 再数一遍
+  const parts: string[] = [];
+  const list: string[] = [];
+  for (const cls of UNVERIFIED_CLASSES) {
+    const ids = buckets.get(cls) ?? [];
+    if (ids.length === 0) continue;
+    parts.push(`${String(ids.length)} 条${UNVERIFIED_LABEL[cls]}`);
+    list.push(`  ⚠️ 未证·${UNVERIFIED_LABEL[cls]}（${String(ids.length)} 条）：${ids.join(" ")}`);
+  }
+  const rerun = buckets.get("budget-stopped") ?? [];
+  return {
+    total,
+    summary: `  ⚠️  未证 ${String(total)} 条（${parts.join("；")}）——都不等于已杀死`,
+    list,
+    rerun,
+  };
+}

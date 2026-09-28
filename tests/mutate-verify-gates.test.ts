@@ -6,7 +6,7 @@ import { spawnSync, execFileSync } from "node:child_process";
 import { readFileSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, costRollupOf, entryDisposition, escapeTitlePattern, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, runModeCell, runModeFor, runReadingIsBad, selectChangedEntries, selectorAmbiguity, selectorCell, selectedTestCount, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, vacuousRunLine, type AnchorCostRow, type HeadState } from "../scripts/lib/mutate-gates";
+import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, costRollupOf, entryDisposition, escapeTitlePattern, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, runModeCell, runModeFor, runReadingIsBad, selectChangedEntries, selectorAmbiguity, selectorCell, selectedTestCount, splitRunnable, unverifiedCell, untrackedAnchorLine, untrackedAnchorPaths, vacuousRunLine, type AnchorCostRow, type HeadState } from "../scripts/lib/mutate-gates";
 import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
 
 /** 从锚点表取 `{id,test,expectFail}`：只走 `--list` 这条**不改源文件**的入口。
@@ -1160,5 +1160,50 @@ describe("选择子唯一性：一条锚点能不能只跑自己那条 killer �
     expect(r.problems.length, "选择子失准：" + r.problems.map((p) => `${p.id}(${String(p.hits)})`).join("、")).toBeLessThanOrEqual(SELECTOR_CAP);
     expect(SELECTOR_CAP - r.problems.length).toBeLessThan(5);
     expect(r.inspected, "取料面塌了＝inspected 归零，这一格又不能印错只能印 0").toBeGreaterThan(500);
+  });
+});
+
+describe("未证那一态的名单与补跑（第 171 页，任务 #14）", () => {
+  const rows7 = [
+    { id: "a1", cls: "src-in-flight" as const },
+    { id: "a2", cls: "src-in-flight" as const },
+    { id: "b1", cls: "judge-in-flight" as const },
+    { id: "c1", cls: "judge-unloadable" as const },
+    { id: "d1", cls: "budget-stopped" as const },
+    { id: "d2", cls: "budget-stopped" as const },
+    { id: "d3", cls: "budget-stopped" as const },
+  ];
+
+  it("未证四类各印各的名单，总数等于名单长度之和", () => {
+    const u = unverifiedCell(rows7);
+    expect(u.total).toBe(7);
+    expect(u.summary).toContain("未证 7 条");
+    expect(u.list, "四类各一行，混成一行就把「等别人落库」和「现在就能补跑」指到同一个动作上").toHaveLength(4);
+    expect(u.summary).toContain("2 条源文件在飞/未跟踪");
+    expect(u.summary).toContain("3 条预算用尽没跑到");
+    const seen = u.list.map((line) => (line.split("：")[1] ?? "").trim().split(/\s+/u).filter((t) => t.length > 0)).flat();
+    expect(seen.sort().join(","), "名单里数得出的 id 必须就是那 7 条——只报数不报名单，补跑得读者自己算差集").toBe(
+      rows7.map((r) => r.id).sort().join(","),
+    );
+  });
+
+  it("认不出的未证类别当场崩并点名第几条，不许从总数里消失", () => {
+    expect(() => unverifiedCell([{ id: "ghost", cls: "who-knows" as never }])).toThrow(/ghost/u);
+  });
+
+  it("补跑命令只收预算用尽那一类，那一类为空就不许印命令", () => {
+    expect(unverifiedCell(rows7).rerun).toEqual(["d1", "d2", "d3"]);
+    expect(unverifiedCell([{ id: "a1", cls: "src-in-flight" }]).rerun,
+      "源文件在飞时补跑照样跑不动 ⇒ 给一条注定失败的命令比不给更坏（它会被人当「已经试过了」）").toEqual([]);
+  });
+
+  it("接线：未证名单走同步写满的那条出口，UNVERIFIED 标记只印一次", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    expect(src, "名单退回 console.log ⇒ process.exit 掐掉异步尾，几百条名单只剩内核缓冲那一截（规则 241）").toMatch(
+      /^emitAndExit\(unvText \+ timing \+ /mu);
+    const markers = (src.match(/"UNVERIFIED="|UNVERIFIED=" /gu) ?? []).length;
+    expect(markers, "gates 那边把每一行 UNVERIFIED= 相加，多印一行就把未证总数翻倍").toBe(1);
+    expect(src, "类别按字段认，不按 why 的措辞认——改一句文案就分错类").toMatch(
+      /^ {4}cls: typeof r\.unloadable === "string" \? "judge-unloadable" : r\.stopped === true \? "budget-stopped" : "judge-in-flight",$/mu);
   });
 });

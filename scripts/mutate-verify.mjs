@@ -23,7 +23,7 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { acquireToolLock } from "./lib/tool-lock.ts";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, selectorAmbiguity, selectorCell, selectedTestCount, escapeTitlePattern, runModeFor, runReadingIsBad, vacuousRunLine, runModeCell } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, selectorAmbiguity, selectorCell, selectedTestCount, escapeTitlePattern, runModeFor, runReadingIsBad, vacuousRunLine, runModeCell, unverifiedCell } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -8377,6 +8377,42 @@ const MUTATIONS = [
     ),
     expectFail: "跑法单价那一格分开印两种跑法，并把两种跑法各自的「坏拍」数出来——省了多少由它说，不许推算",
   },
+  {
+    id: "unverified-total-counted-separately",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "未证的总数另起一个口径数（少算一类）⇒ 名单摆着 7 条、汇总只报 5 条，读的人按 5 条决定补跑多少，剩下两条永远不会有人碰。" +
+      "第 168 页那句「计数由名单求和」落到这一格才算接线（规则 209/225：两个口径各写一遍必有一处先漂）",
+    apply: (s) => s.replace(
+      '  const total = rows.length; // 计数＝名单长度之和，同源；不许另起一个 filter 再数一遍\n  const parts: string[] = [];',
+      '  const total = rows.filter((x) => x.cls !== "src-in-flight").length;\n  const parts: string[] = [];',
+    ),
+    expectFail: "未证四类各印各的名单，总数等于名单长度之和",
+  },
+  {
+    id: "unverified-list-not-routed-through-exit",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "名单不进那条同步写满的出口 ⇒ 几百条 id（几 KB）交给异步队列后就 `process.exit()`，只剩内核缓冲那一截，" +
+      "而汇总行照样印「未证 N 条」——读者以为名单发全了，按残缺的名单补跑（规则 241 实测砍过 920 行的 --list）",
+    apply: (s) => s.replace(
+      '// 用 `console.log` 交给异步队列再 `process.exit()` 就是拿丢掉尾巴的运气当读数（规则 241）。\nemitAndExit(unvText + timing + ',
+      '// 用 `console.log` 交给异步队列再 `process.exit()` 就是拿丢掉尾巴的运气当读数（规则 241）。\nemitAndExit(timing + ',
+    ),
+    expectFail: "接线：未证名单走同步写满的那条出口，UNVERIFIED 标记只印一次",
+  },
+  {
+    id: "unverified-class-read-from-prose",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "按 `why` 的措辞认未证的类别 ⇒ 改一句文案就分错类，「等别人落库」被印成「现在就能补跑」，读者白跑一趟还把那条读成已验；" +
+      "分类必须认字段（stopped／unloadable／refused 名单）",
+    apply: (s) => s.replace(
+      '    id: r.m.id,\n    cls: typeof r.unloadable === "string" ? "judge-unloadable" : r.stopped === true ? "budget-stopped" : "judge-in-flight",',
+      '    id: r.m.id,\n    cls: typeof r.unloadable === "string" ? "judge-unloadable" : String(r.why ?? "").includes("预算") ? "budget-stopped" : "judge-in-flight",',
+    ),
+    expectFail: "接线：未证名单走同步写满的那条出口，UNVERIFIED 标记只印一次",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
@@ -8967,7 +9003,7 @@ for (let i = 0; i < entries.length; i++) {
   const m = entries[i];
   if (budget.ms > 0 && Date.now() - startedAt >= budget.ms) {
     stoppedEarly = entries.length - i;
-    for (const rest of entries.slice(i)) results.push({ m: rest, ok: null, runsMs: [], why: "预算用尽，没跑到（不等于已杀死）" });
+    for (const rest of entries.slice(i)) results.push({ m: rest, ok: null, stopped: true, runsMs: [], why: "预算用尽，没跑到（不等于已杀死）" });
     console.error(`[mutate-verify] ⏳ 预算 ${String(budget.ms)}ms 用尽：已跑 ${String(i)}/${String(entries.length)}，未判 ${String(stoppedEarly)} 条。` +
       "在条目边界主动收尾（源文件已全部还原），剩下的按未证记账并判红。");
     break;
@@ -8992,18 +9028,24 @@ if (statusOut) {
 }
 const failed = results.filter((r) => r.ok === false);
 const unverified = results.filter((r) => r.ok === null);
-// 未证有三类，分开数但同一处出口——每类的下一步动作不同，混成一句就会把人指错方向：
-// ① 预检跳过（源文件在飞/未跟踪，根本没跑）② 判卷文件在飞（跑到了但量不出分辨力）③ 预算用尽（还没轮到）
-const unverifiedTotal = unverified.length + refusedCount;
+/* 未证分四类，计数与名单同源（第 171 页，任务 #14）。从前这里每个数各自 `filter` 一遍、只印一句「未证 30 条」，
+ * 于是补跑得读者自己拿 `--list` 与日志求差集（09-28 实测就是这样补的 30 条）——算错一次就把没验的读成验了。
+ * 分类按**字段**（`stopped`／`unloadable`／refused 名单），不按措辞：拿 `why` 的文字认类别，改一句文案就分错。 */
+const unverifiedRows = [
+  ...split.refused.map((r) => ({ id: r.id, cls: "src-in-flight" })),
+  ...unverified.map((r) => ({
+    id: r.m.id,
+    cls: typeof r.unloadable === "string" ? "judge-unloadable" : r.stopped === true ? "budget-stopped" : "judge-in-flight",
+  })),
+];
+const unv = unverifiedCell(unverifiedRows);
+const unverifiedTotal = unv.total;
+let unvText = "";
 if (unverifiedTotal > 0) {
-  const parts = [];
-  const unloadable = results.filter((r) => r.ok === null && typeof r.unloadable === "string").length;
-  if (refusedCount > 0) parts.push(`${String(refusedCount)} 条源文件在飞/未跟踪 ⇒ 根本没跑`);
-  if (unverified.length - stoppedEarly - unloadable > 0) parts.push(`${String(unverified.length - stoppedEarly - unloadable)} 条判卷文件在飞 ⇒ 量不出分辨力`);
-  if (unloadable > 0) parts.push(`${String(unloadable)} 条判卷载不动（HEAD 缺模块 ⇒ 环境没备齐，不是表退化）`);
-  if (stoppedEarly > 0) parts.push(`${String(stoppedEarly)} 条预算用尽没跑到`);
-  console.log(`  ⚠️  未证 ${String(unverifiedTotal)} 条（${parts.join("；")}）——都不等于已杀死`);
-  console.log("UNVERIFIED=" + String(unverifiedTotal));
+  const rerunLine = unv.rerun.length > 0
+    ? `  ↻ 可原样补跑（只含「预算用尽」那一类；其余两类要等落库／备齐环境，现在补跑也没用）：node --import tsx scripts/mutate-verify.mjs ${unv.rerun.join(" ")}\n`
+    : "";
+  unvText = unv.summary + "\n" + unv.list.join("\n") + "\n" + rerunLine + "UNVERIFIED=" + String(unverifiedTotal) + "\n";
 }
 const killed = results.length - failed.length - unverified.length;
 console.log(`\n${failed.length === 0
@@ -9029,4 +9071,6 @@ const timing = `[mutate-verify] 本次耗时 ${secs.toFixed(1)}s · 跑了 ${Str
   `\n${costLine}` + `\n${modeLine}` + `\n锁=${LOCK.cell}`;
 // 有未证就红：这张表没判完不等于判完了（AGENTS：「主动拒变在飞文件」属正确红，不是回归）。
 // 预算中途停下同样红：`stoppedEarly > 0` 时 failed 可以全空，但那只是「还没轮到」。
-emitAndExit(timing + "\n", failed.length === 0 && refusedCount === 0 && stoppedEarly === 0 ? 0 : 1);
+// 名单与补跑命令一起走 `emitAndExit` 那条**同步写满**的出口：名单可能几百条、几 KB，
+// 用 `console.log` 交给异步队列再 `process.exit()` 就是拿丢掉尾巴的运气当读数（规则 241）。
+emitAndExit(unvText + timing + "\n", failed.length === 0 && refusedCount === 0 && stoppedEarly === 0 ? 0 : 1);
