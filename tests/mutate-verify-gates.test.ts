@@ -6,7 +6,7 @@ import { spawnSync, execFileSync } from "node:child_process";
 import { readFileSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, entryDisposition, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, selectChangedEntries, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type HeadState } from "../scripts/lib/mutate-gates";
+import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, costRollupOf, entryDisposition, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, selectChangedEntries, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type AnchorCostRow, type HeadState } from "../scripts/lib/mutate-gates";
 import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
 
 /** 从锚点表取 `{id,test,expectFail}`：只走 `--list` 这条**不改源文件**的入口。
@@ -922,4 +922,57 @@ describe("印完就退的出口必须同步写：--list 是两把静态尺共同
     const rows = (r.stdout ?? "").split("\n").filter((l) => l.includes("\t")).length;
     expect(rows, "行数≠表长＝列协议在生产侧就漏了（不是读者的锅）").toBe((src.match(/^\s+id: "/gm) ?? []).length);
   }, 60_000);
+});
+
+// ---- 成本分母（任务 #37）：每条锚点实际付了几次判卷，必须是读数 ----
+// 动因（09-28 第 165 页自己打的脸）：「裁掉判卷文件 7.7s ⇒ 挂在它上面的每条锚点少付 21s」是按
+// 「每条 3 次 × 宿主文件全时长」**推**出来的，同分母实测只有 1.4–2.2s。早退路径本来就只付 1~2 次，
+// 而第一拍还多付 vite 冷启动——这两个结构都没人印过，所以每个人都只能继续推。
+describe("成本分母：每条锚点实际 spawn 了几次判卷", () => {
+  it("早退路径按实际 spawn 次数分桶，且第 1 次与第 2、3 次的中位分开求（第一拍付 vite 冷启动）", () => {
+    const r = costRollupOf([
+      { id: "a", runsMs: [3000, 1000, 1000] },
+      { id: "b", runsMs: [500] },
+      { id: "c", runsMs: [] },
+    ]);
+    expect(r.spawns, "3＋1＋0＝4，不是「每条三次」的 9").toBe(4);
+    expect(r.perAnchorSpawns).toEqual([{ runs: 0, anchors: 1 }, { runs: 1, anchors: 1 }, { runs: 3, anchors: 1 }]);
+    // 混成一个平均就看不见结构：池化后全体都是 1000，而第 1 拍真实是 1750
+    expect(r.medianByNth).toEqual([{ nth: 1, medianMs: 1750 }, { nth: 2, medianMs: 1000 }, { nth: 3, medianMs: 1000 }]);
+    expect(r.slowestAnchorId, "最贵的那条要能点名，否则读数只能把人送回整张表逐条分诊").toBe("a");
+    expect(r.neverRan).toBe(1);
+  });
+
+  it("一次判卷都没 spawn ⇒ 那一格印「没有分母」，不许长得像「每条 0 秒」", () => {
+    const cell = costCell(costRollupOf([{ id: "x", runsMs: [] }, { id: "y", runsMs: [] }]));
+    expect(cell).toContain("spawn 0 次");
+    expect(cell).toContain("没有分母");
+    // 反向半：一个像读数的 `0.0s` 会把「没量」洗成「量过且很快」（本仓那一族尺的判据位置）
+    expect(cell, cell).not.toContain("0.0s");
+  });
+
+  it("没跑的条要单列在句尾（并进平均值就是把「没量到」读成「跑得很快」）", () => {
+    const cell = costCell(costRollupOf([{ id: "a", runsMs: [1000] }, { id: "b", runsMs: [] }]));
+    expect(cell, cell).toContain("另 1 条没跑（不等于 0 秒）");
+    expect(cell, cell).toContain("最贵一条 a 1.0s");
+  });
+
+  it("账本里缺 runsMs 的行当场崩并点名第几行（接线漏计在 .mjs 里没有编译期信号）", () => {
+    const rows: AnchorCostRow[] = [{ id: "a", runsMs: [1] }, { id: "b" }];
+    expect(() => costRollupOf(rows)).toThrow(/第 2 行/);
+    expect(() => costRollupOf([{ id: "a", runsMs: [Number.NaN] }])).toThrow("非有限数");
+  });
+
+  it("接线：汇总那一行吃的是 runner 自己那份 runsMs，且每个出口都带账本（表与实现同文件 ⇒ 钉跨行正则，规则 236）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    expect(src).toMatch(
+      /\nconst costRows = results\.map\(\(r\) => \(\{ id: r\.m\.id, runsMs: r\.runsMs \}\)\);\nconst costLine = costCell\(costRollupOf\(costRows\)\);/);
+    expect(src, "runTest 不记时 ⇒ 分母退化回「次数 × 文件时长」的模型").toMatch(
+      /\nfunction runTest\(testRel\) \{\n  const started = Date\.now\(\);/);
+    expect(src).toMatch(/\nconst timing = [\s\S]{0,400}\$\{costLine\}/);
+    // 相对读数（不写死条数）：有几个出口就有几份账本
+    const exits = (src.match(/return \{ m, ok/g) ?? []).length;
+    const carried = (src.match(/runsMs: runs/g) ?? []).length;
+    expect(carried, "有出口没带账本＝那条锚点的花费从分母里消失").toBe(exits);
+  });
 });

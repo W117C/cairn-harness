@@ -23,7 +23,7 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { acquireToolLock } from "./lib/tool-lock.ts";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -8154,6 +8154,65 @@ const MUTATIONS = [
     ),
     expectFail: "真跑：rev 取不到 ⇒ exit 2 并点名那个 rev（「取料坏」不许退化成「选中 0 条」）",
   },
+  // ── 第 167 页 · 成本分母（任务 #37）：每条锚点实际付了几次判卷，必须是读数而不是「次数 × 单价」的模型
+  // 六条各咬一处：算错分桶／把「没量」说成 0 秒／撤掉缺项守卫／没跑的条不单列／汇总不真吃账本／时间根本没记。
+  {
+    id: "cost-nth-samples-pooled-into-one-median",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "把第 1／2／3 拍的中位混成一个平均 ⇒ #37 要量的那个结构（第一拍多付 vite 冷启动、后面几拍复用盘上转换缓存）被抹平，成本又只能靠推",
+    apply: (s) => s.replace(
+      "medianByNth: [...byNth].sort((a, b) => a[0] - b[0]).map(([idx, vals]) => ({ nth: idx + 1, medianMs: medianOf(vals) })),",
+      "medianByNth: [{ nth: 1, medianMs: medianOf(lists.flatMap((l) => l.runs)) }],",
+    ),
+    expectFail: "早退路径按实际 spawn 次数分桶，且第 1 次与第 2、3 次的中位分开求（第一拍付 vite 冷启动）",
+  },
+  {
+    id: "cost-cell-zero-spawns-printed-as-measured",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "零 spawn 那一支不再走「没有分母」的措辞 ⇒ 一把只能印 0 的尺：把「这次一条没量」洗成「每条 0 秒」（第 166 页那把尺换了载体，同一族）",
+    apply: (s) => s.replace("  if (r.spawns === 0) {", "  if (false) {"),
+    expectFail: "一次判卷都没 spawn ⇒ 那一格印「没有分母」，不许长得像「每条 0 秒」",
+  },
+  {
+    id: "cost-rollup-tolerates-missing-runs",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "账本缺行不再当场崩而是继续汇总 ⇒ 那条锚点的花费被静默读成 0 次，分母变小、单价看起来更便宜（`.mjs` 没有编译期信号，本文件的做法是崩并点名）",
+    apply: (s) => s.replace("  if (unaccounted.length > 0) {", "  if (false) {"),
+    expectFail: "账本里缺 runsMs 的行当场崩并点名第几行（接线漏计在 .mjs 里没有编译期信号）",
+  },
+  {
+    id: "cost-never-ran-not-counted",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "没跑的条不再计数 ⇒ 预检跳过／预算用尽那些从句尾消失，「没量到」与「量了且很快」合一（与上面那条各咬一处：那条是措辞，这条是取数）",
+    apply: (s) => s.replace("    if (runs.length === 0) neverRan += 1;", "    // 不再单列没跑的条：缺席即视为 0"),
+    expectFail: "没跑的条要单列在句尾（并进平均值就是把「没量到」读成「跑得很快」）",
+  },
+  {
+    id: "cost-rollup-not-fed-by-runner",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "汇总吃的是写死的空账本而不是 runner 自己那份 runsMs ⇒ 这一格永远印「spawn 0 次／没有分母」，读起来像「本次没跑」而实际跑了几百条。表与实现同文件，所以判卷钉跨行正则而不是 toContain（规则 236）",
+    apply: (s) => s.replace(
+      "const costRows = results.map((r) => ({ id: r.m.id, runsMs: r.runsMs }));\nconst costLine = costCell(costRollupOf(costRows));",
+      "const costRows = results.map((r) => ({ id: r.m.id, runsMs: [] }));\nconst costLine = costCell(costRollupOf(costRows));",
+    ),
+    expectFail: "接线：汇总那一行吃的是 runner 自己那份 runsMs，且每个出口都带账本（表与实现同文件 ⇒ 钉跨行正则，规则 236）",
+  },
+  {
+    id: "cost-run-test-uninstrumented",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "runTest 不再记这一次的时间 ⇒ 每个位置的中位整个消失，#37 的分母退回到「拿文件时长乘次数」那种推（这条咬的是取料源头，上一条咬的是接线出口）",
+    apply: (s) => s.replace(
+      "  const started = Date.now();\n  try {",
+      "  try {",
+    ),
+    expectFail: "接线：汇总那一行吃的是 runner 自己那份 runsMs，且每个出口都带账本（表与实现同文件 ⇒ 钉跨行正则，规则 236）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
@@ -8293,14 +8352,16 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
   return blockingTotal;
 }
 
+/** 跑一次判卷文件，并把**这一次**的墙钟毫秒带回来（#37：分母要读数，不能拿「次数 × 文件时长」推）。 */
 function runTest(testRel) {
+  const started = Date.now();
   try {
     const out = execFileSync(process.execPath, [
       VITEST, "run", "--pool=threads", "--config", "tests/vitest.config.ts", testRel,
     ], { cwd: ROOT, env: { ...process.env, TERM: "dumb" }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-    return { code: 0, out };
+    return { code: 0, out, ms: Date.now() - started };
   } catch (e) {
-    return { code: e.status ?? 1, out: (e.stdout ?? "") + (e.stderr ?? "") };
+    return { code: e.status ?? 1, out: (e.stdout ?? "") + (e.stderr ?? ""), ms: Date.now() - started };
   }
 }
 
@@ -8358,6 +8419,10 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
 }
 
 function verifyEntry(m) {
+  /** 这条锚点**实际**付了几次判卷（#37）。早退路径本来就少付：基线不绿只跑 1 次、
+   *  变异存活／未归因只跑 2 次、量不了（载不动／判卷在飞）跑 0~1 次。
+   *  写死「每条三次」就是把模型当读数——第 165 页那句「每条少付 21s」正是这么推出来的。 */
+  const runs = [];
   const disp = entryDisposition({
     srcRel: m.src,
     srcState: headStateOf(m.src),
@@ -8367,7 +8432,7 @@ function verifyEntry(m) {
   // refused 仍 fail-closed 抛死：源文件无 HEAD 兜底，崩了就回不来。
   if (disp.kind === "refused") throw new Error(disp.why);
   // unverified 只跳过本条——判卷文件只读不写，没有回滚风险，但也不能拿它当分辨力证据。
-  if (disp.kind === "unverified") return { m, ok: null, why: disp.why };
+  if (disp.kind === "unverified") return { m, ok: null, why: disp.why, runsMs: runs };
 
   const srcAbs = join(ROOT, m.src);
   const backup = `${srcAbs}.mutbak`;
@@ -8378,37 +8443,40 @@ function verifyEntry(m) {
   try {
     // ① 基线：突变前该测试必须绿。载不动（判卷 import 不到的东西没入库）不是"基线不绿"——那是量不了（第 143 页）。
     const base = runTest(m.test);
+    runs.push(base.ms);
     if (base.code !== 0) {
       const kind = baselineRedKind(base.out);
       if (kind.kind === "unloadable") {
-        return { m, ok: null, unloadable: kind.module, why: `判卷载不动（Cannot find module "${kind.module}"）⇒ 本条量不了，按未证记账；这不是「表退化」，是环境没备齐（多半是别人半落库，见 #11）` };
+        return { m, ok: null, unloadable: kind.module, runsMs: runs, why: `判卷载不动（Cannot find module "${kind.module}"）⇒ 本条量不了，按未证记账；这不是「表退化」，是环境没备齐（多半是别人半落库，见 #11）` };
       }
-      return { m, ok: false, why: `基线就不是全绿（不应发生）:\n${base.out.slice(-800)}` };
+      return { m, ok: false, runsMs: runs, why: `基线就不是全绿（不应发生）:\n${base.out.slice(-800)}` };
     }
 
     // ② 注入突变
     const mutated = m.apply(original);
-    if (mutated === original) return { m, ok: false, why: "突变未生效（锚点可能已失效）" };
+    if (mutated === original) return { m, ok: false, runsMs: runs, why: "突变未生效（锚点可能已失效）" };
     const syntax = mutantSyntaxProblem(mutated);
-    if (syntax !== null) return { m, ok: false, why: syntax };
+    if (syntax !== null) return { m, ok: false, runsMs: runs, why: syntax };
     inFlight.mutated = true; // 从这一行起，盘上的源文件是**改过**的内容
     writeFileSync(srcAbs, mutated);
 
     // ③ 突变后必须红，且红在期望的那条用例上
     const hit = runTest(m.test);
+    runs.push(hit.ms);
     writeFileSync(srcAbs, original); // 尽早还原
     inFlight = null;
     restored = true;
-    if (hit.code === 0) return { m, ok: false, why: "变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）" };
+    if (hit.code === 0) return { m, ok: false, runsMs: runs, why: "变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）" };
     // 归因只认**失败面**：`hit.out.includes(指针)` 会被一条 `✓` 通过的用例满足（第 141 页实测）。
     if (!killerAttributionOk(m.expectFail, hit.out)) {
       const failedFace = failingTestText(hit.out).slice(0, 300);
-      return { m, ok: false, why: `测试红了但没红在期望用例「${m.expectFail}」上——红的是别的用例（针脚可能落在隔壁支/隔壁函数）:\n${failedFace || "(输出里没有失败面那几行，按未归因处置)"}\n--- 尾部 ---\n${hit.out.slice(-500)}` };
+      return { m, ok: false, runsMs: runs, why: `测试红了但没红在期望用例「${m.expectFail}」上——红的是别的用例（针脚可能落在隔壁支/隔壁函数）:\n${failedFace || "(输出里没有失败面那几行，按未归因处置)"}\n--- 尾部 ---\n${hit.out.slice(-500)}` };
     }
     // ④ 还原后必须恢复全绿
     const back = runTest(m.test);
-    if (back.code !== 0) return { m, ok: false, why: `还原后未恢复全绿:\n${back.out.slice(-800)}` };
-    return { m, ok: true };
+    runs.push(back.ms);
+    if (back.code !== 0) return { m, ok: false, runsMs: runs, why: `还原后未恢复全绿:\n${back.out.slice(-800)}` };
+    return { m, ok: true, runsMs: runs };
   } finally {
     inFlight = null; // 早退路径（基线不绿 / 突变未生效 / 语法错）也要清，别留一个指向已还原文件的空档
     if (!restored) writeFileSync(srcAbs, original);
@@ -8689,7 +8757,7 @@ for (let i = 0; i < entries.length; i++) {
   const m = entries[i];
   if (budget.ms > 0 && Date.now() - startedAt >= budget.ms) {
     stoppedEarly = entries.length - i;
-    for (const rest of entries.slice(i)) results.push({ m: rest, ok: null, why: "预算用尽，没跑到（不等于已杀死）" });
+    for (const rest of entries.slice(i)) results.push({ m: rest, ok: null, runsMs: [], why: "预算用尽，没跑到（不等于已杀死）" });
     console.error(`[mutate-verify] ⏳ 预算 ${String(budget.ms)}ms 用尽：已跑 ${String(i)}/${String(entries.length)}，未判 ${String(stoppedEarly)} 条。` +
       "在条目边界主动收尾（源文件已全部还原），剩下的按未证记账并判红。");
     break;
@@ -8736,8 +8804,15 @@ console.log(`\n${failed.length === 0
 // 耗时与「跑了几条」要自己报出来：外层对本门的超时是猜的（实测 1200s 掐死于表中途），
 // 而这张表到底要跑多久此前没人打印过——没有读数，下一个人只能继续猜。
 const secs = (Date.now() - startedAt) / 1000;
+/* 成本分母（任务 #37）：这次**实际**spawn 了几次判卷、每个位置的中位多久。
+ * 第 165 页那句「每条锚点少付 21s」是按「每条 3 次 × 宿主文件全时长」推的，实测只有 1.4–2.2s——
+ * 因为早退路径只付 1~2 次，而第一拍还多付 vite 冷启动。没有这一行，下一个人仍然只能靠推。
+ * 取料直接吃 `results` 里那份 `runsMs`：判卷不许自己再算一遍（规则 205/236），缺项由 `costRollupOf` 当场崩。 */
+const costRows = results.map((r) => ({ id: r.m.id, runsMs: r.runsMs }));
+const costLine = costCell(costRollupOf(costRows));
 const timing = `[mutate-verify] 本次耗时 ${secs.toFixed(1)}s · 跑了 ${String(results.length - stoppedEarly)}/${String(entries.length)} 条` +
-  (budget.ms > 0 ? ` · 预算 ${String(Math.round(budget.ms / 1000))}s` : " · 未设预算（外层超时会在中途杀我，见 --budget-ms）") + `\n锁=${LOCK.cell}`;
+  (budget.ms > 0 ? ` · 预算 ${String(Math.round(budget.ms / 1000))}s` : " · 未设预算（外层超时会在中途杀我，见 --budget-ms）") +
+  `\n${costLine}` + `\n锁=${LOCK.cell}`;
 // 有未证就红：这张表没判完不等于判完了（AGENTS：「主动拒变在飞文件」属正确红，不是回归）。
 // 预算中途停下同样红：`stoppedEarly > 0` 时 failed 可以全空，但那只是「还没轮到」。
 emitAndExit(timing + "\n", failed.length === 0 && refusedCount === 0 && stoppedEarly === 0 ? 0 : 1);

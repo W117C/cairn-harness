@@ -601,3 +601,107 @@ export function baselineRedKind(vitestOut: string): { kind: "unloadable"; module
     : "这条用例标题在该判卷文件里找不到（多半是用例改过名，而指针还写着旧的）";
   return `${p.id} — ${p.test} — ${why}：${JSON.stringify(p.expectFail.slice(0, 60))}`;
 }
+
+// ---- 每条锚点的真实成本（任务 #37：分母必须是读数，不是「次数 × 文件时长」的模型） ----
+// 动因（09-28 第 165 页自己打的脸）：那句「裁掉判卷文件 7.7s ⇒ 挂在它上面的每条锚点少付 21s」是按
+// 「每条跑三次 × 宿主文件全时长」**推**出来的，同分母实测把它打掉（每条只少 1.4–2.2s）。
+// 推不动的根因是这张表从来没记过**每条实际 spawn 了几次判卷、每次多久**：
+// 早退路径（基线不绿／突变未生效／还原未绿）本来就只付 1~2 次，把「三条」当「三次」就是把模型当读数。
+// 这里把它做成读数：runner 逐次喂 `runsMs`，汇总与列印都只吃这一份（判卷不许自己再算一遍，规则 205/236）。
+export interface AnchorCostRow {
+  /** 点名用：汇总里那一格要说「最贵的一条是哪条」，否则读数只能指回整张表让人逐条分诊。 */
+  id: string;
+  /** 这条锚点实际 spawn 判卷的墙钟毫秒，按发生顺序（基线／突变／还原）。
+   *  一次没跑要**显式**喂空数组：字段缺席＝接线漏计，`costRollupOf` 当场崩并点名第几行——
+   *  「没记账」长成「记了 0 次」的话，汇总就悄悄把那条贵的锚点从分母里摘掉了。 */
+  runsMs?: readonly number[];
+}
+
+export interface CostRollup {
+  anchors: number;
+  spawns: number;
+  /** 显式记为「一次没跑」的条数（预检跳过／预算用尽）——与「跑了但很快」是两个数。 */
+  neverRan: number;
+  /** 按每条实际 spawn 次数分桶（升序），例如 `[{runs:1,anchors:7},{runs:3,anchors:46}]`。 */
+  perAnchorSpawns: readonly { runs: number; anchors: number }[];
+  /** 按**第几次 spawn** 求的中位毫秒。分开求是 #37 的另一半：第一次付 vite 冷启动，
+   *  后面几次复用盘上的转换缓存 ⇒ 同一份判卷文件的三个单价不同，混成一个平均就把这个结构抹平了。 */
+  medianByNth: readonly { nth: number; medianMs: number }[];
+  slowestAnchorMs: number;
+  slowestAnchorId: string | null;
+}
+
+function medianOf(values: readonly number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 1) return sorted[mid] ?? 0;
+  return ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
+}
+
+/** 成本汇总。缺 `runsMs` 或非有限数 ⇒ 抛并点名（`.mjs` 没有编译期信号，本文件一贯的做法是当场崩）。
+ *  局部名刻意不叫 `missing`：那个字面量是 `blockingTotalOf` 那条锚点的针脚，撞名会让它命中两处。 */
+export function costRollupOf(rows: readonly AnchorCostRow[]): CostRollup {
+  const unaccounted: number[] = [];
+  const lists: { id: string; runs: number[] }[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const runs = row?.runsMs;
+    if (!Array.isArray(runs) || runs.some((n) => !Number.isFinite(n))) {
+      unaccounted.push(i + 1);
+      continue;
+    }
+    lists.push({ id: row?.id ?? "", runs: [...runs] });
+  }
+  if (unaccounted.length > 0) {
+    throw new Error(`成本账本第 ${unaccounted.slice(0, 8).join("、")}${unaccounted.length > 8 ? "…" : ""} 行没有 runsMs（或含非有限数）` +
+      " ⇒ 那条锚点付了几次判卷没人知道；宁可当场崩：分母缺项的汇总会被读成「每条就这么贵」");
+  }
+  const counts = new Map<number, number>();
+  const byNth = new Map<number, number[]>();
+  let spawns = 0;
+  let neverRan = 0;
+  let slowestMs = 0;
+  let slowestId: string | null = null;
+  for (const { id, runs } of lists) {
+    spawns += runs.length;
+    counts.set(runs.length, (counts.get(runs.length) ?? 0) + 1);
+    if (runs.length === 0) neverRan += 1;
+    const total = runs.reduce((a, b) => a + b, 0);
+    if (total > slowestMs) {
+      slowestMs = total;
+      slowestId = id;
+    }
+    runs.forEach((ms, idx) => {
+      const bucket = byNth.get(idx);
+      if (bucket === undefined) byNth.set(idx, [ms]);
+      else bucket.push(ms);
+    });
+  }
+  return {
+    anchors: rows.length,
+    spawns,
+    neverRan,
+    perAnchorSpawns: [...counts].sort((a, b) => a[0] - b[0]).map(([runs, anchors]) => ({ runs, anchors })),
+    medianByNth: [...byNth].sort((a, b) => a[0] - b[0]).map(([idx, vals]) => ({ nth: idx + 1, medianMs: medianOf(vals) })),
+    slowestAnchorMs: slowestMs,
+    slowestAnchorId: slowestId,
+  };
+}
+
+const secsOf = (ms: number): string => (ms / 1000).toFixed(1);
+
+/** 汇总那一行。`spawns === 0` 时不许长得像「每条 0 秒」——这一格**没有**分母，只能这么说。 */
+export function costCell(r: CostRollup): string {
+  if (r.spawns === 0) {
+    return `成本分母：本次判卷 spawn 0 次（${String(r.anchors)} 条里 ${String(r.neverRan)} 条一条没跑）` +
+      " ⇒ 这一格没有分母，别按「每条 X 秒」估";
+  }
+  const dist = r.perAnchorSpawns.map((b) => `${String(b.runs)}×${String(b.anchors)}`).join(" ");
+  const perNth = r.medianByNth.map((b) => `第${String(b.nth)}次 ${secsOf(b.medianMs)}s`).join("／");
+  const never = r.neverRan === 0 ? "" : `· 另 ${String(r.neverRan)} 条没跑（不等于 0 秒）`;
+  const slowest = r.slowestAnchorId === null
+    ? `最贵一条 ${secsOf(r.slowestAnchorMs)}s`
+    : `最贵一条 ${r.slowestAnchorId} ${secsOf(r.slowestAnchorMs)}s`;
+  return `成本分母：判卷 spawn ${String(r.spawns)} 次／${String(r.anchors)} 条（每条次数分布 ${dist}）` +
+    `· 单次中位 ${perNth}· ${slowest}${never}`;
+}
