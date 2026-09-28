@@ -23,7 +23,7 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { acquireToolLock } from "./lib/tool-lock.ts";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, selectorAmbiguity, selectorCell, selectedTestCount, escapeTitlePattern, runModeFor, runReadingIsBad, vacuousRunLine, runModeCell, unverifiedCell, restoreDiffProblem } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, selectorAmbiguity, selectorCell, selectedTestCount, escapeTitlePattern, runModeFor, runReadingIsBad, vacuousRunLine, runModeCell, unverifiedCell, restoreDiffProblem, redVerdictCell, redKindsLine } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -8396,8 +8396,8 @@ const MUTATIONS = [
     desc: "名单不进那条同步写满的出口 ⇒ 几百条 id（几 KB）交给异步队列后就 `process.exit()`，只剩内核缓冲那一截，" +
       "而汇总行照样印「未证 N 条」——读者以为名单发全了，按残缺的名单补跑（规则 241 实测砍过 920 行的 --list）",
     apply: (s) => s.replace(
+      '// 用 `console.log` 交给异步队列再 `process.exit()` 就是拿丢掉尾巴的运气当读数（规则 241）。\nemitAndExit(redText + unvText + timing + ',
       '// 用 `console.log` 交给异步队列再 `process.exit()` 就是拿丢掉尾巴的运气当读数（规则 241）。\nemitAndExit(unvText + timing + ',
-      '// 用 `console.log` 交给异步队列再 `process.exit()` 就是拿丢掉尾巴的运气当读数（规则 241）。\nemitAndExit(timing + ',
     ),
     expectFail: "接线：未证名单走同步写满的那条出口，UNVERIFIED 标记只印一次",
   },
@@ -8434,8 +8434,8 @@ const MUTATIONS = [
       "而收尾那句 `git diff HEAD --quiet` 只在**整轮跑完**时看总账，看不出「第 517 条还原时写歪了」这一格。" +
       "这一拍换成字节比对本来就是拿「更强的证据」换掉「更贵的一拍」，换弱了就得有人喊",
     apply: (s) => s.replace(
-      '    const restoreProblem = restoreDiffProblem(original, readFileSync(srcAbs, "utf8"));\n    if (restoreProblem !== null) return { m, ok: false, runsMs: runs, why: `还原未逐字节相同：${restoreProblem}` };',
-      '    const restoreProblem = restoreDiffProblem(original, readFileSync(srcAbs, "utf8"));\n    if (false) return { m, ok: false, runsMs: runs, why: `还原未逐字节相同：${restoreProblem}` };',
+      '    const restoreProblem = restoreDiffProblem(original, readFileSync(srcAbs, "utf8"));\n    if (restoreProblem !== null) return red("restore-mismatch", `还原未逐字节相同：${restoreProblem}`);',
+      '    const restoreProblem = restoreDiffProblem(original, readFileSync(srcAbs, "utf8"));\n    if (false) return red("restore-mismatch", `还原未逐字节相同：${restoreProblem}`);',
     ),
     expectFail: "接线：每条锚点只付两拍，还原那一拍不再 spawn 判卷",
   },
@@ -8450,6 +8450,30 @@ const MUTATIONS = [
       '  if (before.length === after.length) return null;',
     ),
     expectFail: "字节相同＝到位；长度不同与等长不同要各点名自己的那一格",
+  },
+  {
+    id: "red-kind-guard-silently-skips",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "把「认不出类别就崩」那一格摘掉 ⇒ 没归类的判红不进任何一类却仍算进总数，分类名单读起来比实际少，" +
+      "而最贵的「存活」恰恰是最容易被漏掉的那一类（规则 245：把「没记账」读成「记了 0 次」会让分母看起来更干净）",
+    apply: (s) => s.replace(
+      '    const k = r.kind;\n    if (k === undefined || !FAIL_KINDS.includes(k)) {',
+      '    const k = r.kind;\n    if (false) {',
+    ),
+    expectFail: "判红缺类别／认不出的类别当场崩并点名第几条",
+  },
+  {
+    id: "triage-ignores-structured-kinds-line",
+    src: "scripts/lib/mutation-rerun-triage.ts",
+    test: "tests/mutation-rerun-triage.test.ts",
+    desc: "下游不读 `REDKINDS=` 那一行、只回头猜散文 ⇒ runner 在出口定好类别这件事白做，" +
+      "改一句给人看的文案就让归因静默降级（规则 205/213：同一谓词不许两份副本，宽度还各不一样）",
+    apply: (s) => s.replace(
+      '  const kinds = redKindsOf(stdout);\n  if (kinds !== null) {',
+      '  const kinds = null;\n  if (kinds !== null) {',
+    ),
+    expectFail: "REDKINDS 在场就直接认类别，不再回头猜散文",
   },
 ];
 
@@ -8721,24 +8745,28 @@ function verifyEntry(m) {
   cpSync(srcAbs, backup);
   inFlight = { srcAbs, original, backup, mutated: false }; // 备份一落盘就要能被收尾
   let restored = false;
+  /** 判红**在出口就带类别**（第 172 页⑪，任务 #12）：末尾按类别分开数、下游 triage 读结构化那一行，
+   *  不再回头解析给人看的散文。收成这一个 helper 是因为：少一处 helper 就多一处「忘了带类别」的出口，
+   *  而那由 `redVerdictCell` 当场崩并点名第几条——它不许任何一条判红悄悄从总数里消失。 */
+  const red = (failKind, why) => ({ m, ok: false, failKind, runsMs: runs, why });
   try {
     // ① 基线：突变前该测试必须绿。载不动（判卷 import 不到的东西没入库）不是"基线不绿"——那是量不了（第 143 页）。
     const base = runTest(m.test, pattern);
     note("基线", base);
-    if (vacuous !== null) return { m, ok: false, runsMs: runs, why: vacuous };
+    if (vacuous !== null) return red("vacuous", vacuous);
     if (base.code !== 0) {
       const kind = baselineRedKind(base.out);
       if (kind.kind === "unloadable") {
         return { m, ok: null, unloadable: kind.module, runsMs: runs, why: `判卷载不动（Cannot find module "${kind.module}"）⇒ 本条量不了，按未证记账；这不是「表退化」，是环境没备齐（多半是别人半落库，见 #11）` };
       }
-      return { m, ok: false, runsMs: runs, why: `基线就不是全绿（不应发生）:\n${base.out.slice(-800)}` };
+      return red("baseline-red", `基线就不是全绿（不应发生）:\n${base.out.slice(-800)}`);
     }
 
     // ② 注入突变
     const mutated = m.apply(original);
-    if (mutated === original) return { m, ok: false, runsMs: runs, why: "突变未生效（锚点可能已失效）" };
+    if (mutated === original) return red("no-effect", "突变未生效（锚点可能已失效）");
     const syntax = mutantSyntaxProblem(mutated);
-    if (syntax !== null) return { m, ok: false, runsMs: runs, why: syntax };
+    if (syntax !== null) return red("syntax", syntax);
     inFlight.mutated = true; // 从这一行起，盘上的源文件是**改过**的内容
     writeFileSync(srcAbs, mutated);
 
@@ -8748,18 +8776,18 @@ function verifyEntry(m) {
     writeFileSync(srcAbs, original); // 尽早还原
     inFlight = null;
     restored = true;
-    if (vacuous !== null) return { m, ok: false, runsMs: runs, why: vacuous };
-    if (hit.code === 0) return { m, ok: false, runsMs: runs, why: "变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）" };
+    if (vacuous !== null) return red("vacuous", vacuous);
+    if (hit.code === 0) return red("survived", "变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）");
     // 归因只认**失败面**：`hit.out.includes(指针)` 会被一条 `✓` 通过的用例满足（第 141 页实测）。
     if (!killerAttributionOk(m.expectFail, hit.out)) {
       const failedFace = failingTestText(hit.out).slice(0, 300);
-      return { m, ok: false, runsMs: runs, why: `测试红了但没红在期望用例「${m.expectFail}」上——红的是别的用例（针脚可能落在隔壁支/隔壁函数）:\n${failedFace || "(输出里没有失败面那几行，按未归因处置)"}\n--- 尾部 ---\n${hit.out.slice(-500)}` };
+      return red("misattributed", `测试红了但没红在期望用例「${m.expectFail}」上——红的是别的用例（针脚可能落在隔壁支/隔壁函数）:\n${failedFace || "(输出里没有失败面那几行，按未归因处置)"}\n--- 尾部 ---\n${hit.out.slice(-500)}`);
     }
     // ④ 还原到位＝盘上字节与突变前逐字节相同（第 171 页⑩，任务 #10：整表每条少付一拍）。
     // 原来这一拍是「还原后再跑一遍要绿」——那证明的是「还能跑」，而基线那一拍已经用同一份字节绿过一次：
     // 字节相同 ⇒ 行为等价于①，不必再花一次 spawn 复核；字节不同 ⇒ 直接点名差在哪，比“测试没绿”更准。
     const restoreProblem = restoreDiffProblem(original, readFileSync(srcAbs, "utf8"));
-    if (restoreProblem !== null) return { m, ok: false, runsMs: runs, why: `还原未逐字节相同：${restoreProblem}` };
+    if (restoreProblem !== null) return red("restore-mismatch", `还原未逐字节相同：${restoreProblem}`);
     return { m, ok: true, runsMs: runs };
   } finally {
     inFlight = null; // 早退路径（基线不绿 / 突变未生效 / 语法错）也要清，别留一个指向已还原文件的空档
@@ -9086,11 +9114,20 @@ if (unverifiedTotal > 0) {
   unvText = unv.summary + "\n" + unv.list.join("\n") + "\n" + rerunLine + "UNVERIFIED=" + String(unverifiedTotal) + "\n";
 }
 const killed = results.length - failed.length - unverified.length;
+/* 判红按类别分开（第 172 页⑪）：从前这里只说「N 条变异存活或误伤」，而这几类的**修法相反**——
+ * 存活要补观测者、红了未点名只改期望标题、基线红要先修那条红灯、取料坏根本没判。
+ * 类别在各自的出口就定好（`red()` helper），这里只汇总；下游 `mutation-rerun-triage` 读 `REDKINDS=` 那一行，
+ * 不再回头解析给人看的这句散文（同一件事两份谓词，改一句文案它就静默读成「读不出」——规则 205/213）。 */
+const redCell = redVerdictCell(failed.map((r) => ({ id: r.m.id, kind: r.failKind })));
+let redText = "";
+if (redCell.total > 0) {
+  redText = redCell.summary + "\n" + redCell.list.join("\n") + "\n" + redKindsLine(redCell.counts) + "\n";
+}
 console.log(`\n${failed.length === 0
   ? (unverifiedTotal === 0
       ? "全部变异被正确杀死（断言非恒真）"
       : `${String(killed)} 条被正确杀死，另 ${String(unverifiedTotal)} 条未证`)
-  : `${String(failed.length)} 条变异存活或误伤`}`);
+  : `${String(failed.length)} 条判红（按类别分开数，修法各不同——见上一行起的分类名单）`}`);
 // 耗时与「跑了几条」要自己报出来：外层对本门的超时是猜的（实测 1200s 掐死于表中途），
 // 而这张表到底要跑多久此前没人打印过——没有读数，下一个人只能继续猜。
 const secs = (Date.now() - startedAt) / 1000;
@@ -9111,4 +9148,4 @@ const timing = `[mutate-verify] 本次耗时 ${secs.toFixed(1)}s · 跑了 ${Str
 // 预算中途停下同样红：`stoppedEarly > 0` 时 failed 可以全空，但那只是「还没轮到」。
 // 名单与补跑命令一起走 `emitAndExit` 那条**同步写满**的出口：名单可能几百条、几 KB，
 // 用 `console.log` 交给异步队列再 `process.exit()` 就是拿丢掉尾巴的运气当读数（规则 241）。
-emitAndExit(unvText + timing + "\n", failed.length === 0 && refusedCount === 0 && stoppedEarly === 0 ? 0 : 1);
+emitAndExit(redText + unvText + timing + "\n", failed.length === 0 && refusedCount === 0 && stoppedEarly === 0 ? 0 : 1);

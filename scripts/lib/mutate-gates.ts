@@ -852,6 +852,84 @@ export function costCell(r: CostRollup): string {
     `· 单次中位 ${perNth}· ${slowest}${never}`;
 }
 
+/** 判红的七个来源，**在各自的出口就定好类别**（第 172 页⑪，任务 #12）。
+ *  从前 runner 末尾只印一句「N 条变异存活或误伤」，而下游 `mutation-rerun-triage` 靠正则回头猜这句散文——
+ *  同一件事两份谓词，宽度还不一样（规则 205/213）：改一句文案下游就静默读成「读不出」。
+ *  `verdict` 列是那层的归宿（它有自己的判卷面），这里只许一份事实源。 */
+export const FAIL_KINDS = [
+  "survived",
+  "misattributed",
+  "baseline-red",
+  "no-effect",
+  "syntax",
+  "restore-mismatch",
+  "vacuous",
+] as const;
+export type FailKind = (typeof FAIL_KINDS)[number];
+
+/** 每类的下一步动作——分这一刀是因为**修法不同**：存活要补观测者，红了未点名只改期望标题。 */
+const FAIL_LABEL: Record<FailKind, string> = {
+  survived: "变异存活（测试仍全绿 ⇒ 该不变量没有观测者）",
+  misattributed: "红了但没红在点名的那条用例上 ⇒ 观测者在、锚点期望过期",
+  "baseline-red": "基线就不绿 ⇒ 本条判定被污染，不算存活的证据",
+  "no-effect": "突变未生效（针脚不在源文件里）⇒ 空操作",
+  syntax: "突变产出语法坏的源文件 ⇒ 改法本身不合法",
+  "restore-mismatch": "还原未逐字节相同 ⇒ 盘上留着突变或写歪了",
+  vacuous: "那一拍没真选中用例 ⇒ 这一条根本没判（取料坏）",
+};
+
+/** 下游 triage 的归宿表，与上面同一份事实源（`TriageVerdict` 的字面量在 triage 侧，这里只给类名）。 */
+export const FAIL_VERDICT: Record<FailKind, string> = {
+  survived: "存活",
+  misattributed: "红了未点名",
+  "baseline-red": "基线红",
+  "no-effect": "未生效",
+  syntax: "读不出",
+  "restore-mismatch": "读不出",
+  vacuous: "读不出",
+};
+
+/** 判红汇总那一格：总数与名单同源（与 `unverifiedCell` 同一纪律，规则 209/225），
+ *  只印非零的类；缺类别／认不出的类别当场崩并点名第几条——
+ *  「没归类」被读成「没有那一类」会让最贵的那一格（存活）看起来比实际少。 */
+export function redVerdictCell(rows: readonly { id: string; kind?: FailKind }[]): {
+  total: number;
+  summary: string;
+  list: string[];
+  counts: Record<FailKind, number>;
+} {
+  const counts = {} as Record<FailKind, number>;
+  const ids = {} as Record<FailKind, string[]>;
+  for (const k of FAIL_KINDS) { counts[k] = 0; ids[k] = []; }
+  for (const r of rows) {
+    const k = r.kind;
+    if (k === undefined || !FAIL_KINDS.includes(k)) {
+      throw new Error(`判红没有类别（第 ${r.id} 条，kind=${String(k)}）⇒ 不许把它算进任何一类，也不许让它从总数里消失`);
+    }
+    counts[k] += 1;
+    ids[k].push(r.id);
+  }
+  const parts: string[] = [];
+  const list: string[] = [];
+  for (const k of FAIL_KINDS) {
+    const n = counts[k];
+    if (n === 0) continue;
+    parts.push(`${k} ${String(n)}`);
+    list.push(`  ❌ 判红·${FAIL_LABEL[k]}（${String(n)} 条）：${ids[k].join(" ")}`);
+  }
+  return {
+    total: rows.length,
+    summary: `  ❌ 判红 ${String(rows.length)} 条，按类别分开（修法各不同，混成一句会把人指错方向）：${parts.join("；")}`,
+    list,
+    counts,
+  };
+}
+
+/** 机器可读那一行：给下游共用，别再回头解析给人看的那句散文（规则 205/241——要写满为止）。 */
+export function redKindsLine(counts: Record<FailKind, number>): string {
+  return "REDKINDS=" + FAIL_KINDS.map((k) => `${k}:${String(counts[k])}`).join(",");
+}
+
 // ---- 第 171 页（任务 #14）：未证那一态要带名单，而且要能原样补跑 ----
 /** 未证的四个来源，分开数、分开印——每类的下一步动作不同，混成一句就会把人指错方向。
  *  类名是**数据**（判卷与消费者按它分诊），措辞是**给人看的**（label），两者不许合一。 */

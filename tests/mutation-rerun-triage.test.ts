@@ -4,7 +4,7 @@
  *  否则它只有门脚本会跑到，改坏了没人红（规则 118：只有门在守的格子挂不上锚点）。 */
 import { describe, expect, it } from "vitest";
 
-import { classify, failedIds, failedLineCount, looseFailedLineCount, needsAction } from "../scripts/lib/mutation-rerun-triage";
+import { classify, failedIds, failedLineCount, looseFailedLineCount, needsAction, redKindsOf } from "../scripts/lib/mutation-rerun-triage";
 
 describe("failedIds：取料面先要可信", () => {
   it("三条 ❌ 就是三条，按行首锚定（描述里再出现 ❌ 也不额外多抽）", () => {
@@ -128,5 +128,42 @@ describe("needsAction：只有三类要人处理，其余不许牵连", () => {
 
   it("空表返回空——这一条是负控：函数不许在没跑的时候也报『有活要干』", () => {
     expect(needsAction([])).toEqual([]);
+  });
+});
+
+describe("结构化那一行优先（第 172 页⑪，任务 #12）", () => {
+  const kinds = (over: Partial<Record<string, number>> = {}) => {
+    const base = { "survived": 0, "misattributed": 0, "baseline-red": 0, "no-effect": 0, "syntax": 0, "restore-mismatch": 0, "vacuous": 0, ...over };
+    return "REDKINDS=" + Object.entries(base).map(([k, v]) => `${k}:${String(v)}`).join(",");
+  };
+
+  it("REDKINDS 在场就直接认类别，不再回头猜散文", () => {
+    expect(classify(`x\n${kinds({ survived: 1 })}`, 1).verdict).toBe("存活");
+    expect(classify(`x\n${kinds({ misattributed: 1 })}`, 1).verdict).toBe("红了未点名");
+    expect(classify(`x\n${kinds({ "baseline-red": 1 })}`, 1).verdict).toBe("基线红");
+    expect(classify(`x\n${kinds({ "no-effect": 1 })}`, 1).verdict).toBe("未生效");
+    expect(classify(`x\n${kinds({ vacuous: 1 })}`, 1).note).toContain("REDKINDS");
+  });
+
+  it("同一件事的结构化读法与散文读法必须给同一个归宿（两份谓词不许各漂各的）", () => {
+    // 存活：散文里没有失败面
+    const proseAlive = classify("1 条变异存活或误伤", 1).verdict;
+    expect(classify(`1 条判红\n${kinds({ survived: 1 })}`, 1).verdict, "结构化读出的归宿必须等于散文读出的").toBe(proseAlive);
+    // 红了未点名：散文里有 FAIL 行
+    const proseMis = classify("   FAIL  tests/x.test.ts > a\n1 条变异存活或误伤", 1).verdict;
+    expect(classify(`   FAIL  tests/x.test.ts > a\n1 条判红\n${kinds({ misattributed: 1 })}`, 1).verdict).toBe(proseMis);
+  });
+
+  it("认不出的类别不许静默跳过——它只会来自一张长大了的表", () => {
+    const r = classify("x\nREDKINDS=some-new-kind:2,survived:0", 1);
+    expect(r.verdict).toBe("读不出");
+    expect(r.note, "要点名是哪一类不认识，否则下一张表加类别就是无声降级").toContain("some-new-kind");
+    expect(redKindsOf("REDKINDS=some-new-kind:2,survived:0")?.unknown).toEqual(["some-new-kind:2"]);
+  });
+
+  it("旧日志没有 REDKINDS 那一行 ⇒ 退回散文那一档，不许读成『读不出』", () => {
+    expect(redKindsOf("1 条变异存活或误伤")).toBeNull();
+    expect(classify("1 条变异存活或误伤", 1).verdict).toBe("存活");
+    expect(classify("全部变异被正确杀死（断言非恒真）", 0).verdict).toBe("已杀死");
   });
 });

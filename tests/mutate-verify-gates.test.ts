@@ -6,7 +6,7 @@ import { spawnSync, execFileSync } from "node:child_process";
 import { readFileSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, costRollupOf, entryDisposition, escapeTitlePattern, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, runModeCell, runModeFor, runReadingIsBad, restoreDiffProblem, selectChangedEntries, selectorAmbiguity, selectorCell, selectedTestCount, splitRunnable, unverifiedCell, untrackedAnchorLine, untrackedAnchorPaths, vacuousRunLine, type AnchorCostRow, type HeadState } from "../scripts/lib/mutate-gates";
+import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, costRollupOf, entryDisposition, escapeTitlePattern, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, runModeCell, runModeFor, runReadingIsBad, restoreDiffProblem, redVerdictCell, redKindsLine, selectChangedEntries, selectorAmbiguity, selectorCell, selectedTestCount, splitRunnable, unverifiedCell, untrackedAnchorLine, untrackedAnchorPaths, vacuousRunLine, type AnchorCostRow, type HeadState } from "../scripts/lib/mutate-gates";
 import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
 
 /** 从锚点表取 `{id,test,expectFail}`：只走 `--list` 这条**不改源文件**的入口。
@@ -970,10 +970,13 @@ describe("成本分母：每条锚点实际 spawn 了几次判卷", () => {
     expect(src, "runTest 不记时 ⇒ 分母退化回「次数 × 文件时长」的模型").toMatch(
       /\nfunction runTest\(testRel, pattern\) \{\n  const started = Date\.now\(\);/);
     expect(src).toMatch(/\nconst timing = [\s\S]{0,400}\$\{costLine\}/);
-    // 相对读数（不写死条数）：有几个出口就有几份账本
-    const exits = (src.match(/return \{ m, ok/g) ?? []).length;
-    const carried = (src.match(/runsMs: runs/g) ?? []).length;
-    expect(carried, "有出口没带账本＝那条锚点的花费从分母里消失").toBe(exits);
+    // 相对读数（不写死条数）：每个内联出口那一行自己就得带账本；`return red(` 那份由 helper 统一带（helper 自己必须带）。
+    const start = src.indexOf("function verifyEntry(");
+    const body = src.slice(start, src.indexOf("\n}\n", start) + 2);
+    const unled = body.split("\n").filter((l) => /\{ m, ok/u.test(l) && !/runsMs: runs/u.test(l));
+    expect(unled, "有出口没带账本＝那条锚点的花费从分母里消失").toEqual([]);
+    expect((body.match(/\{ m, ok: false/gu) ?? []).length,
+      "判红的构造点只许有 helper 一处：多一处内联 `{ m, ok: false` 就多一处可以忘了带类别").toBe(1);
   });
 });
 
@@ -1190,12 +1193,52 @@ describe("还原那一拍换成字节比对（第 171 页⑩，任务 #10）", (
     const notes = (src.match(/\n\s*note\("/gu) ?? []).length;
     expect(notes, "记拍点从 2 变回 3 ⇒ 整表每条多花一次 spawn，而这张表是默认门里最贵的一道").toBe(2);
     expect(src, "字节比对被摘掉 ⇒ 盘上留着半个突变也照样算绿").toMatch(
-      /^ {4}if \(restoreProblem !== null\) return \{ m, ok: false, runsMs: runs, why: `还原未逐字节相同/mu);
+      /^ {4}if \(restoreProblem !== null\) return red\("restore-mismatch", `还原未逐字节相同/mu);
     expect(src).not.toMatch(/note\("还原"/u);
   });
 });
 
+describe("判红按类别分开（第 172 页⑪，任务 #12）", () => {
+  const rows = [
+    { id: "s1", kind: "survived" as const },
+    { id: "s2", kind: "survived" as const },
+    { id: "m1", kind: "misattributed" as const },
+    { id: "v1", kind: "vacuous" as const },
+  ];
+
+  it("判红的总数等于名单长度之和，只印非零的类别", () => {
+    const c = redVerdictCell(rows);
+    expect(c.total).toBe(4);
+    expect(c.summary).toContain("survived 2");
+    expect(c.list, "四类里只有三类非零 ⇒ 空类别不许占行，但也不能把有的那类合并掉").toHaveLength(3);
+    const ids = c.list.map((l) => (l.split("：")[1] ?? "").trim().split(/\s+/u).filter((t) => t.length > 0)).flat();
+    expect(ids.sort().join(","), "名单就是那 4 条——计数与名单同源（规则 209/225）").toBe("m1,s1,s2,v1");
+    const kindsLine = redKindsLine(c.counts);
+    expect(kindsLine.startsWith("REDKINDS="), "机器可读那一行的前缀是下游唯一的取料键").toBe(true);
+    expect((kindsLine.match(/:/gu) ?? []).length, "七个类别都要在这一行里报到，缺席的类别会被读成「没有那一类」").toBe(7);
+    expect(kindsLine).toContain("survived:2");
+    expect(kindsLine).toContain("baseline-red:0");
+  });
+
+  it("判红缺类别／认不出的类别当场崩并点名第几条", () => {
+    expect(() => redVerdictCell([{ id: "ghost" } as never])).toThrow(/ghost/u);
+    expect(() => redVerdictCell([{ id: "x1", kind: "why" as never }])).toThrow(/x1/u);
+  });
+
+  it("接线：runner 在出口就定类别，汇总与机器行都从同一份取料来", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    expect(src, "出口不带类别 ⇒ 汇总只能猜散文，而下游已经在猜（规则 205/213）").toMatch(
+      /^ {2}const red = \(failKind, why\) => \(\{ m, ok: false, failKind, runsMs: runs, why \}\);$/mu);
+    const vs = src.indexOf("function verifyEntry(");
+    const body = src.slice(vs, src.indexOf("\n}\n", vs) + 2);
+    expect((body.match(/return red\(/gu) ?? []).length,
+      "八条判红出口里只要有一条绕过 helper，那一类就永远不会出现在分类名单上").toBeGreaterThanOrEqual(8);
+    expect(src, "机器行没进载荷 ⇒ 下游退回猜散文，改一句文案就静默降级").toMatch(/redKindsLine\(redCell\.counts\)/u);
+  });
+});
+
 describe("未证那一态的名单与补跑（第 171 页，任务 #14）", () => {
+
   const rows7 = [
     { id: "a1", cls: "src-in-flight" as const },
     { id: "a2", cls: "src-in-flight" as const },
@@ -1232,7 +1275,7 @@ describe("未证那一态的名单与补跑（第 171 页，任务 #14）", () =
   it("接线：未证名单走同步写满的那条出口，UNVERIFIED 标记只印一次", () => {
     const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
     expect(src, "名单退回 console.log ⇒ process.exit 掐掉异步尾，几百条名单只剩内核缓冲那一截（规则 241）").toMatch(
-      /^emitAndExit\(unvText \+ timing \+ /mu);
+      /^emitAndExit\(redText \+ unvText \+ timing \+ /mu);
     const markers = (src.match(/"UNVERIFIED="|UNVERIFIED=" /gu) ?? []).length;
     expect(markers, "gates 那边把每一行 UNVERIFIED= 相加，多印一行就把未证总数翻倍").toBe(1);
     expect(src, "类别按字段认，不按 why 的措辞认——改一句文案就分错类").toMatch(
