@@ -8966,7 +8966,7 @@ const MUTATIONS = [
       "真机把基线诊断印在缩进的分类行上（`   基线就不是全绿（不应发生）:`），摘掉 `m` 就整档失灵，" +
       "于是被污染的判定会被读成「读不出」而不是「基线红」——后者才说得出「别信这一条存活/红的结论」（规则 251 的第二注入面）",
     apply: (s) => s.replace("基线就不是全绿/mu.test(stdout)", "基线就不是全绿/gu.test(stdout)"),
-    expectFail: "真的基线红那一行仍然认（缩进在行首，不是任意位置）",
+    expectFail: "真的基线红那一行照旧认（缩进在行首，不是任意位置）",
   },
   {
     id: "triage-killed-requires-checkmark-prefix",
@@ -8983,9 +8983,11 @@ const MUTATIONS = [
     src: "scripts/lib/mutation-rerun-triage.ts",
     test: "tests/mutation-rerun-triage.test.ts",
     desc: "「未生效」那一档摘掉 `m` ⇒ 缩进的分类行不再算，只在整段第一行才认。" +
-      "这一档认错的方向是**多做事**：空操作被读成读不出，读者会去重跑一条本来就什么都不改的锚点",
+      "这一档认错的方向是**多做事**：空操作被读成读不出，读者会去重跑一条本来就什么都不改的锚点。" +
+      "**第一版判卷杀不掉这条**：样本写成单行字符串，那句本来就在整段开头 ⇒ 有 `m` 没 `m` 同行为（等价突变，第 186 页那一族的第三种表现）。" +
+      "现在样本前面垫了一行 `变异验证：1 条`",
     apply: (s) => s.replace("(?:突变|变异)未生效/mu.test(stdout)", "(?:突变|变异)未生效/gu.test(stdout)"),
-    expectFail: "未生效那一档也只认行首形状（带 ❌ 前缀的分类行算，写在描述中间的不算）",
+    expectFail: "未生效那一档也只认行首形状（带 ❌ 判红· 前缀的分类行算，塞在描述中间不算）",
   },
   {
     id: "triage-red-summary-drops-new-wording",
