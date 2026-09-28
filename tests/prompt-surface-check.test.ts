@@ -244,14 +244,20 @@ describe("工具描述也是模型可见文本（第 176 页）", () => {
   });
 
   it("续跑提醒里点到的工具，四档都得真拿得到（它逐轮重发，是模型唯一读到的指令）", () => {
-    const tokens = new Set(reminderFaces().flatMap((f) => toolNameTokens(f.text, TOOL_NAMES)));
-    expect([...tokens], "提醒里一个工具名都没认出来 ⇒ 多半是 goalReminder 不再提 verify，或取料坏了").toContain("verify");
     const tables = tablesByMode();
+    const faces = reminderFaces();
+    const tokens = new Set(faces.flatMap((f) => toolNameTokens(f.text, TOOL_NAMES)));
+    expect([...tokens], "提醒里一个工具名都没认出来 ⇒ 多半是 goalReminder 不再提 verify，或取料坏了").toContain("verify");
+    // **逐面**都要有 verify，不能只看并集：某一态的证据文案本身就带「verify」二字，
+    // 只看并集时「收束条件那句被改掉」会被别的面替它作证（09-28 实测：这么写的第一版**变异存活**）。
+    for (const f of faces) {
+      expect(toolNameTokens(f.text, TOOL_NAMES), `${f.name} 这一份提醒没告诉模型该调 verify`).toContain("verify");
+    }
     for (const t of tokens) {
       for (const m of ["read-only", "default", "guided", "auto"]) {
         expect(tables[m], `提醒让模型调 ${t}，但 ${m} 档的面上没有它`).toContain(t);
       }
     }
-    expect(promptSurfaceFindings(reminderFaces(), tables, TOOL_NAMES, [])).toHaveLength(0);
+    expect(promptSurfaceFindings(faces, tables, TOOL_NAMES, [])).toHaveLength(0);
   });
 });
