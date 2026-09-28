@@ -8647,6 +8647,44 @@ const MUTATIONS = [
     ),
     expectFail: "每把工具的参数 prose 都在面里",
   },
+  {
+    id: "prompt-surface-coverage-denominator-unfiltered",
+    src: "scripts/prompt-surface-check.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "覆盖率的分母不再滤掉「没有参数的工具」⇒ `verify`／`automation_list` 以 declared=0 进面，" +
+      "分母从 18 涨到 20，覆盖率从此替形状报错（一个从来没有参数的工具被读成「有参数没说明」）。" +
+      "读数类判据的分母必须与被度量对象同口径，否则「有 2 把没说明」这句话在骗人（规则 245／257①）",
+    apply: (s) => s.replace(
+      "if (named.length === 0) continue;",
+      "if (named.length < 0) continue;",
+    ),
+    expectFail: "分母只数「有声明参数的工具」",
+  },
+  {
+    id: "prompt-surface-edit-path-prose-removed",
+    src: "src/agent/glm-session.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "把 `edit_file.path` 的说明摘掉 ⇒ 模型只能靠撞闸才知道「绝对路径会被拒」（`resolveInWorkspace` 硬拒两种形状：绝对路径、越界），" +
+      "而每撞一次闸要付一整轮往返（现读一次模型往返 8.7–42s）。判卷两头都钉：说明里点名这两种拒绝 ＋ 闸真按这句话拒，" +
+      "再加一条「合规相对路径必须放行」防上面两条变成恒真（规则 228）",
+    apply: (s) => s.replace(
+      'path: { type: "string", description: "workspace 相对路径（绝对路径或越出工作区一律拒绝）" },',
+      'path: { type: "string" },',
+    ),
+    expectFail: "edit_file 的 path 说明写出那两条拒绝",
+  },
+  {
+    id: "prompt-surface-write-path-prose-removed",
+    src: "src/agent/glm-session.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "只给两把写向工具中的一把补说明 ⇒ 同一族里规矩看起来不同（模型会按「有说明那把」的规矩推另一把）。" +
+      "这条与 `edit-path-prose-removed` 各用自己的 killer 用例：两条分支共用一条断言时，摘掉一支仍然全绿是本仓反复踩过的形状（规则 239）",
+    apply: (s) => s.replace(
+      'path: { type: "string", description: "workspace 相对路径，指向要整文件覆盖的新内容（绝对路径或越出工作区一律拒绝）" },',
+      'path: { type: "string" },',
+    ),
+    expectFail: "write_file 的 path 说明与 edit_file 同族",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

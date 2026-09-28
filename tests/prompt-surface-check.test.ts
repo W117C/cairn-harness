@@ -19,10 +19,13 @@ import {
   allFaces,
   descriptionFaces,
   paramFaces,
+  paramProseCoverage,
   proseFaces,
   reminderFaces,
   tablesByMode,
 } from "../scripts/prompt-surface-check";
+import { resolveInWorkspace } from "../src/tools/base";
+import type { PermissionMode } from "../src/permissions/modes";
 import { EVIDENCE_TEXT } from "../src/agent/goal";
 import { sessionToolSpecs } from "../src/agent/glm-session";
 import { TOOL_NAMES } from "../src/tools/base";
@@ -245,11 +248,11 @@ describe("工具描述也是模型可见文本（第 176 页）", () => {
       const m = f.name.slice("params[".length, f.name.indexOf("]."));
       perMode.set(m, (perMode.get(m) ?? 0) + 1);
     }
-    // 现读水位：只读档 15 份、三个可写档各 58 份（合计 189）。
-    // 这一格必须**精确**：只读到 183 的那一版（不递归）就是靠它露馅的；改规格的人跟着改这一格，
-    // 而不是把它放宽成「≥ 某个数」——放宽之后「少走一族参数」仍然绿（规则 222）。
-    expect(perMode.get("read-only"), "只读档参数描述面数（现读 15）").toBe(15);
-    expect(perMode.get("default"), "缺省档参数描述面数（现读 58）").toBe(58);
+    // 现读水位：只读档 15 份、三个可写档各 60 份（合计 195）。
+    // 这一格必须**精确**：只读到 183 的那一版（不递归）就是靠它露馅的；放宽成「≥ 某个数」之后
+    // 「少走一族参数」仍然绿（规则 222）。改规格的人跟着改这一格。
+    expect(perMode.get("read-only"), "只读档参数描述面数（现读 15；它没有 write_file/edit_file）").toBe(15);
+    expect(perMode.get("default"), "缺省档参数描述面数（现读 60＝第 179 页给两把写向工具的 path 补了说明）").toBe(60);
     for (const m of ["guided", "auto"]) {
       expect(perMode.get(m), `${m} 与 default 档的工具面同日同表，参数面数不该分叉`).toBe(perMode.get("default"));
     }
@@ -297,5 +300,47 @@ describe("工具描述也是模型可见文本（第 176 页）", () => {
       }
     }
     expect(promptSurfaceFindings(faces, tables, TOOL_NAMES, [])).toHaveLength(0);
+  });
+
+  it("参数说明覆盖：分母只数「有声明参数的工具」，名单与计数是现读水位", () => {
+    const cov = paramProseCoverage();
+    expect(cov.length, "有参数的工具数（现读 18；verify／automation_list 没有参数，不进分母）").toBe(18);
+    expect(cov.every((c: { declared: number }) => c.declared >= 1), "分母里混进无参数的工具＝覆盖率替形状报错").toBe(true);
+    for (const c of cov) {
+      expect(c.explained + c.missing.length, `${c.tool} 的 explained＋missing 必须等于声明数，少一格就是计数坏了`).toBe(c.declared);
+    }
+    expect(cov.some((c: { tool: string }) => c.tool === "verify"), "verify 无参数，不该出现在覆盖面上").toBe(false);
+    // 水位（只准调低）：第 179 页把两把写向工具的 path 补上之后从 4 降到 3。
+    expect(cov.filter((c: { explained: number }) => c.explained === 0).map((c: { tool: string }) => c.tool), "前三把刻意不补：bounds 在工具级描述里、形状在 required 里，再抄一遍就是第二份真相").toEqual(["clarify", "propose_plan", "run_shell"]);
+    expect(cov.filter((c: { explained: number; declared: number }) => c.explained > 0 && c.explained < c.declared)
+      .map((c) => `${c.tool} ${String(c.explained)}/${String(c.declared)} 缺:${c.missing.join(",")}`), "不全那一格（现读 write_file 缺 content）").toEqual(["write_file 1/2 缺:content"]);
+  });
+
+  it("edit_file 的 path 说明写出那两条拒绝，而闸当场都拒（说明不许骗模型）", () => {
+    const pathDesc = (mode: PermissionMode, tool: string): string => {
+      const spec = sessionToolSpecs({ mode }).specs.find((s) => s.function.name === tool);
+      const params = spec?.function.parameters as { properties?: Record<string, { description?: string }> } | undefined;
+      return String(params?.properties?.path?.description ?? "");
+    };
+    for (const m of ["default", "guided", "auto"] as const) {
+      const d = pathDesc(m, "edit_file");
+      expect(d, `edit_file 在 ${m} 档没有 path 说明 ⇒ 「只能给相对路径」这一类只能靠撞闸才知道`).toContain("绝对路径");
+      expect(d, `edit_file.${m} 的说明没写清是相对谁 ⇒ 应当与 lsp.path 同族措辞`).toContain("workspace");
+    }
+    // 行为那一半（规则 228：写了「说明里有这句话」还必须配「闸真按这句话拒」）。
+    expect(() => resolveInWorkspace("/repo", "/etc/passwd", "probe"), "说明承诺拒绝对路径，闸没拒就是文案在骗模型").toThrow(/绝对路径/u);
+    expect(() => resolveInWorkspace("/repo", "../outside", "probe")).toThrow(/越出/u);
+    expect(resolveInWorkspace("/repo", "src/a.ts", "probe"), "合规相对路径不该被拒（否则上面两条是恒真）").toBe("/repo/src/a.ts");
+  });
+
+  it("write_file 的 path 说明与 edit_file 同族——两把写向工具不许一把有一把没有", () => {
+    for (const m of ["default", "guided", "auto"] as const) {
+      const spec = sessionToolSpecs({ mode: m }).specs.find((s) => s.function.name === "write_file");
+      const params = spec?.function.parameters as { properties?: Record<string, { description?: string }> } | undefined;
+      const d = String(params?.properties?.path?.description ?? "");
+      expect(d, `write_file 在 ${m} 档的 path 没说明：同一族工具里只有一把被解释，模型会以为另一把规矩不同`).toContain("绝对路径");
+      expect(d).toContain("workspace 相对路径");
+      expect(params?.properties?.content?.description ?? "", "content 刻意不补：工具级描述已写「覆盖式」（第二份真相，规则 205）").toBe("");
+    }
   });
 });

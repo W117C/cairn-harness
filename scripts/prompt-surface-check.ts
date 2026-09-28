@@ -115,6 +115,38 @@ function collectParamDescriptions(node: unknown, path: string, out: { path: stri
   }
 }
 
+/** 参数说明**覆盖率**：逐把「有声明参数」的工具数它有几条**自己写着说明**的参数。
+ *  只印、不拦。现读（2026-09-28 第 179 页）：18 把有参数的工具里 3 把一条说明都没有
+ *  （`clarify`／`propose_plan`／`run_shell`），1 把不全（`write_file` 缺 `content`）。
+ *  前三把刻意不补：`clarify` 的 1–4 问／2–4 选项写在**工具级描述**里且与校验器常量对上，
+ *  `propose_plan` 的嵌套形状由 `items.required` 声明——再在参数级抄一遍就是第二份真相（规则 205）。
+ *  判「有说明」只看参数自己那一格，不看子树：现读实测「直接说明」与「子树里有说明」两种口径**零个参数不同**
+ *  （2026-09-28 探针：DIRECT_VS_NESTED_DIFFERENT=0）⇒ 子树那一支没有证人，就不写它（规则 243/257②）。
+ *  为什么这一格不进退出码：判「缺说明是否会害模型填错」需要真轨迹，而 `.agent/sessions` 现读是空的
+ *  （0 个会话目录）⇒ 把它做成红就是替一个没有读数的裁决背书（规则 245：没记的账不许当成记了 0）。
+ *  有了带凭据的真会话之后，再按「失败调用是否落在这些参数上」决定升不升成闸（任务 #17／#20）。 */
+export function paramProseCoverage(): { tool: string; declared: number; explained: number; missing: string[] }[] {
+  const byTool = new Map<string, { declared: number; explained: number; missing: string[] }>();
+  for (const md of PERMISSION_MODES) {
+    for (const s of sessionToolSpecs({ mode: md }).specs) {
+      const props = (s.function.parameters as Record<string, unknown>).properties as Record<string, unknown> | undefined;
+      if (props === undefined) continue;
+      const named = Object.keys(props);
+      if (named.length === 0) continue;
+      const missing: string[] = [];
+      for (const key of named) {
+        const v = props[key] as { description?: unknown } | null;
+        if (typeof v?.description !== "string") missing.push(key);
+      }
+      // 同一把工具在多档各出现一次：规格同源，所以按名字去重（取第一次读数）。
+      if (!byTool.has(s.function.name)) byTool.set(s.function.name, { declared: named.length, explained: named.length - missing.length, missing });
+    }
+  }
+  return [...byTool.entries()]
+    .map(([tool, v]) => ({ tool, declared: v.declared, explained: v.explained, missing: v.missing }))
+    .sort((a, b) => a.tool.localeCompare(b.tool));
+}
+
 /** 四族面**只在这一处组成**：`main()` 与判卷读的都是同一份，加一族只改这一行。
  *  （原先 `main()` 自己 `[...system, ...descs, ...reminders]` 拼了一份，判卷读的是 `allFaces()` 那一份——
  *  两份列表就是规则 253 点名的「同一件事两把尺」：门实际扫的面可以悄悄比判卷看见的面少。） */
@@ -160,6 +192,14 @@ export function main(argv: string[] = process.argv.slice(2)): number {
   // 拿两种口径印读数，就是规则 253 点名的「同一件事两把尺，各自漂」。
   const tokens = [...new Set(faces.flatMap((f) => toolNameTokens(f.text, TOOL_NAMES, { namesOnly: f.namesOnly })))];
   console.log(`  ℹ️  文本里点到的工具名 ${String(tokens.length)} 个：${tokens.join(" ")}`);
+  // 覆盖率那一格**只印不拦**（理由见 `paramProseCoverage` 的头注）：分母是「有声明参数的工具数」，
+  // 而不是工具总数——`verify`／`automation_list` 没有参数，把它们算进分母会让覆盖率替形状报错。
+  const cov = paramProseCoverage();
+  const noProse = cov.filter((c) => c.explained === 0);
+  const partial = cov.filter((c) => c.explained > 0 && c.explained < c.declared);
+  console.log(`  ℹ️  参数说明覆盖（不计入退出码）：有参数的工具 ${String(cov.length)} 把，` +
+    `一条说明都没有 ${String(noProse.length)} 把（${noProse.map((c) => c.tool).join(" ")}）` +
+    `，不全 ${String(partial.length)} 把（${partial.map((c) => `${c.tool} ${String(c.explained)}/${String(c.declared)} 缺:${c.missing.join(",")}`).join("；")}）`);
   const newIssues = findings.length;
   console.log(newIssues === 0 && stale.length === 0 ? "[prompt-surface] 全部通过 ✅" : "[prompt-surface] 有要处理的格子 ❌");
   // 取料坏了也算红：一个工具名都没在文本里认出来 ⇒ 多半是面/名单没读到，而不是提示词突然不提工具了。

@@ -140,7 +140,7 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
           "精确字符串替换编辑；old_string 必须唯一匹配（多处匹配报错并给出处数），确要全部替换加 replace_all: true",
         parameters: obj(
           {
-            path: { type: "string" },
+            path: { type: "string", description: "workspace 相对路径（绝对路径或越出工作区一律拒绝）" },
             old_string: { type: "string", description: "要被替换的原文（必须唯一）" },
             new_string: { type: "string", description: "替换后的新文本" },
             replace_all: { type: "boolean", description: "全部替换（缺省 false）" },
@@ -155,7 +155,10 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         name: "write_file",
         description: "写入工作区内文件（覆盖式）",
         parameters: obj(
-          { path: { type: "string" }, content: { type: "string" } },
+          {
+            path: { type: "string", description: "workspace 相对路径，指向要整文件覆盖的新内容（绝对路径或越出工作区一律拒绝）" },
+            content: { type: "string" },
+          },
           ["path", "content"],
         ),
       },
