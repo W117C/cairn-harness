@@ -6,7 +6,7 @@ import { spawnSync, execFileSync } from "node:child_process";
 import { readFileSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, costRollupOf, entryDisposition, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, selectChangedEntries, selectorAmbiguity, selectorCell, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type AnchorCostRow, type HeadState } from "../scripts/lib/mutate-gates";
+import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, costRollupOf, entryDisposition, escapeTitlePattern, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, runModeCell, runModeFor, selectChangedEntries, selectorAmbiguity, selectorCell, selectedTestCount, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type AnchorCostRow, type HeadState } from "../scripts/lib/mutate-gates";
 import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
 
 /** 从锚点表取 `{id,test,expectFail}`：只走 `--list` 这条**不改源文件**的入口。
@@ -968,12 +968,72 @@ describe("成本分母：每条锚点实际 spawn 了几次判卷", () => {
     expect(src).toMatch(
       /\nconst costRows = results\.map\(\(r\) => \(\{ id: r\.m\.id, runsMs: r\.runsMs \}\)\);\nconst costLine = costCell\(costRollupOf\(costRows\)\);/);
     expect(src, "runTest 不记时 ⇒ 分母退化回「次数 × 文件时长」的模型").toMatch(
-      /\nfunction runTest\(testRel\) \{\n  const started = Date\.now\(\);/);
+      /\nfunction runTest\(testRel, pattern\) \{\n  const started = Date\.now\(\);/);
     expect(src).toMatch(/\nconst timing = [\s\S]{0,400}\$\{costLine\}/);
     // 相对读数（不写死条数）：有几个出口就有几份账本
     const exits = (src.match(/return \{ m, ok/g) ?? []).length;
     const carried = (src.match(/runsMs: runs/g) ?? []).length;
     expect(carried, "有出口没带账本＝那条锚点的花费从分母里消失").toBe(exits);
+  });
+});
+
+// ---- 第 170 页：按标题选跑法（`-t`）----
+// 实测单价（同一棵树、同一份宿主、各复测两次）：整文件 7.97s／8.51s 一拍 vs 只跑自己那条 0.136s／0.143s 一拍＝约 57×。
+// 这笔买卖的代价是「选不中」这件事在 vitest 里**不长成失败**（下面第一条用的就是实测到的那两行原文），
+// 所以每个形状都得有证人，否则省下来的时间会把整张保护表换成空转。
+describe("按标题选跑法：选中几条必须被读出来", () => {
+  it("选中条数只从 vitest 真实的收尾行读，两种实测形状给两个数；读不到那行是 null 不是 0", () => {
+    expect(selectedTestCount(" Test Files  1 passed (1)\n      Tests  1 passed | 99 skipped (100)\n   Duration  136ms\n")).toBe(1);
+    expect(selectedTestCount("      Tests  100 skipped (100)\n   Duration  156ms\n"), "选不中时 vitest 退 0 并把全部标成 skipped").toBe(0);
+    expect(selectedTestCount("      Tests  2 failed | 98 passed (100)\n")).toBe(100);
+    expect(selectedTestCount("no summary line here"), "取料坏不许读成「一条也没选中」——两种红的修法相反").toBeNull();
+  });
+
+  it("标题当正则喂给 -t ⇒ 元字符必须转义（现读真标题里有 ( ) [ ] . * + 与全角括号）", () => {
+    const p = escapeTitlePattern("a.c");
+    expect(new RegExp(p).test("a.c"), "转义后的模式要逐字命中").toBe(true);
+    expect(new RegExp(p).test("abc"), "未转义的点会匹配任意字符 ⇒ 选错用例").toBe(false);
+    expect(escapeTitlePattern("（甲）[乙]*+?^${}()|\\")).toContain("\\[");
+  });
+
+  it("两种跑法共存：只有能唯一定位自己用例的那批走 -t，其余照旧整文件", () => {
+    const set = new Set(["known"]);
+    expect(runModeFor("known", set)).toBe("selector");
+    expect(runModeFor("unknown", set)).toBe("whole");
+  });
+
+  it("跑法单价那一格分开印两种跑法，并把「选中 0 条的拍」数出来——省了多少由它说，不许推算", () => {
+    expect(runModeCell([]), "一次都没跑时不许印成 0 秒的单价").toContain("这一格没有分母");
+    const cell = runModeCell([
+      { mode: "selector", ms: 140, selected: 1 },
+      { mode: "selector", ms: 160, selected: 1 },
+      { mode: "whole", ms: 8000, selected: 0 },
+      { mode: "whole", ms: 8500, selected: 95 },
+    ]);
+    expect(cell, cell).toContain("selector 2 拍·中位 0.16s·选中 0 条的拍 0");
+    expect(cell, cell).toContain("whole 2 拍·中位 8.50s·选中 0 条的拍 1");
+  });
+
+  it("接线：-t 这一支要经转义，不许把标题当通配符拼进命令（表与实现同文件 ⇒ 钉跨行/字面正则，规则 236）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    expect(src, "不转义就拼成 -t ⇒ 元字符把选择子变成通配，选中几条就不再是那条 killer 用例").toMatch(
+      /args\.push\("-t", escapeTitlePattern\(pattern\)\);/);
+  });
+
+  it("接线：只有 selector 模式才塞 -t，其余必须走整文件（两种跑法共存是刻意的）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    expect(src, "非唯一命中的那条也塞 -t ⇒ 整文件跑法这一支就没了，而那 13 条本来只能靠它").toMatch(
+      /\n\s*const pattern = mode === "selector" \? String\(m\.expectFail \?\? ""\) : "";/);
+  });
+
+  it("接线：每一拍都过「选中几条」这道闸，闸的拍数与 runTest 调用点相对相等（选不中不许读成绿）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    expect(src, "选中 0 条不判红 ⇒ 空转的这一拍会被读成基线绿").toMatch(
+      /\n\s*if \(vacuous === null && mode === "selector" && \(r\.selected === null \|\| r\.selected === 0\)\) \{/);
+    const calls = (src.match(/= runTest\(m\.test, pattern\);/g) ?? []).length;
+    const noted = (src.match(/note\("/g) ?? []).length;
+    expect(calls, "跑法改了新加一拍却忘了过闸").toBeGreaterThan(0);
+    expect(noted, "某一拍没过账本与选中数这道闸").toBe(calls);
   });
 });
 

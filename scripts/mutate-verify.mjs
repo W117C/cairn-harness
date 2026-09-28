@@ -23,7 +23,7 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { acquireToolLock } from "./lib/tool-lock.ts";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, selectorAmbiguity, selectorCell } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, selectorAmbiguity, selectorCell, selectedTestCount, escapeTitlePattern, runModeFor, vacuousRunLine, runModeCell } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -8219,8 +8219,8 @@ const MUTATIONS = [
     test: "tests/mutate-verify-gates.test.ts",
     desc: "runTest 不再记这一次的时间 ⇒ 每个位置的中位整个消失，#37 的分母退回到「拿文件时长乘次数」那种推（这条咬的是取料源头，上一条咬的是接线出口）",
     apply: (s) => s.replace(
-      "  const started = Date.now();\n  try {",
-      "  try {",
+      "  const started = Date.now();\n  const args = [VITEST,",
+      "  const args = [VITEST,",
     ),
     expectFail: "接线：汇总那一行吃的是 runner 自己那份 runsMs，且每个出口都带账本（表与实现同文件 ⇒ 钉跨行正则，规则 236）",
   },
@@ -8268,6 +8268,64 @@ const MUTATIONS = [
       "\n  const selectorScan = selectorAmbiguity([], ",
     ),
     expectFail: "接线：门自己那一步真拿整张表去数选择子，并把两份数一起交给措辞（只印不数＝这一格永远 0）",
+  },
+  // ── 第 170 页 · 按标题选跑法（`-t`）：六条各咬一处——取料坏当 0／把 skipped 当跑过／不转义／共存支／闸门／空格子
+  {
+    id: "selected-count-treats-missing-summary-as-zero",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "收尾行读不到时回 0 ⇒「这格没量到」与「一条也没选中」合一，两种红的修法相反（前者是取料坏，后者是锚点失效）。第 166 页同一族：0 不许冒充读数",
+    apply: (s) => s.replace("    if (line === undefined) return null;", "    if (line === undefined) return 0;"),
+    expectFail: "选中条数只从 vitest 真实的收尾行读，两种实测形状给两个数；读不到那行是 null 不是 0",
+  },
+  {
+    id: "selected-count-counts-skipped-as-run",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "把 skipped 也算进「选中几条」⇒ `-t` 一条没选中的那一拍被读成测过了（实测：`Tests 100 skipped (100)`＋退出码 0）。与上一条共用那条判卷用例：同一个谓词的两种失真，各自要一条变异才咬得住（规则 226）",
+    apply: (s) => s.replace("  return total - skipped;", "  return total;"),
+    expectFail: "选中条数只从 vitest 真实的收尾行读，两种实测形状给两个数；读不到那行是 null 不是 0",
+  },
+  {
+    id: "run-mode-pattern-not-escaped",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "标题原文直接当 `-t` 的正则拼进去 ⇒ 真标题里的 ( ) [ ] . * + 变成通配与量词，选中的可能根本不是那条 killer 用例，而单价读数照旧好看",
+    apply: (s) => s.replace('args.push("-t", escapeTitlePattern(pattern));', 'args.push("-t", pattern);'),
+    expectFail: "接线：-t 这一支要经转义，不许把标题当通配符拼进命令（表与实现同文件 ⇒ 钉跨行/字面正则，规则 236）",
+  },
+  {
+    id: "run-mode-selector-check-dropped",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "不分模式一律塞 -t ⇒ 那 13 条「选不中／不唯一」的锚点从此只跑不存在的用例，等于整条保护被换成空转（两种跑法共存是刻意的，见第 169 页未证②）",
+    apply: (s) => s.replace(
+      'const pattern = mode === "selector" ? String(m.expectFail ?? "") : "";',
+      'const pattern = String(m.expectFail ?? "");',
+    ),
+    expectFail: "接线：只有 selector 模式才塞 -t，其余必须走整文件（两种跑法共存是刻意的）",
+  },
+  {
+    id: "vacuous-run-guard-dropped",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "「选中 0 条」不再判红 ⇒ 这条闸正是 `-t` 上线唯一的安全带：摘掉后一次改名就能让整条锚点永远绿着跑完（vitest 对无匹配的 -t 退 0）",
+    apply: (s) => s.replace(
+      'if (vacuous === null && mode === "selector" && (r.selected === null || r.selected === 0)) {',
+      "if (false) {",
+    ),
+    expectFail: "接线：每一拍都过「选中几条」这道闸，闸的拍数与 runTest 调用点相对相等（选不中不许读成绿）",
+  },
+  {
+    id: "run-mode-cell-silent-when-no-spawns",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "没有 spawn 时那一格不再说「没有分母」而是印出空串 ⇒ 读数缺席被读成「本次不需要成本」（第 163 页 --list 那一格的同一族）",
+    apply: (s) => s.replace(
+      '  if (rows.length === 0) return "跑法单价：本次没有 spawn ⇒ 这一格没有分母";',
+      '  if (false) return "跑法单价：本次没有 spawn ⇒ 这一格没有分母";',
+    ),
+    expectFail: "跑法单价那一格分开印两种跑法，并把「选中 0 条的拍」数出来——省了多少由它说，不许推算",
   },
 ];
 
@@ -8414,16 +8472,22 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
   return blockingTotal;
 }
 
-/** 跑一次判卷文件，并把**这一次**的墙钟毫秒带回来（#37：分母要读数，不能拿「次数 × 文件时长」推）。 */
-function runTest(testRel) {
+/** 跑一次判卷文件，并把**这一次**的墙钟毫秒与「本次选中几条用例」带回来。
+ *  `pattern` 非空 ⇒ 走 `-t` 精确跑法（第 170 页）：一条锚点只跑自己那条 killer 用例，
+ *  实测单价从「宿主时长 ×3」的 8.0s/拍降到 0.14s/拍（同一棵树、同一份宿主、复测两次：8.0/8.5s vs 0.136/0.143s）。
+ *  ⚠️ 代价是 `-t` 选不中时 vitest **退出码 0**、全部 skipped——那一条拍什么都没测，所以 `selected` 必须回传，
+ *  由调用侧把「选中 0 条」判红（规则 246）。 */
+function runTest(testRel, pattern) {
   const started = Date.now();
+  const args = [VITEST, "run", "--pool=threads", "--config", "tests/vitest.config.ts", testRel];
+  if (typeof pattern === "string" && pattern !== "") args.push("-t", escapeTitlePattern(pattern));
   try {
-    const out = execFileSync(process.execPath, [
-      VITEST, "run", "--pool=threads", "--config", "tests/vitest.config.ts", testRel,
-    ], { cwd: ROOT, env: { ...process.env, TERM: "dumb" }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-    return { code: 0, out, ms: Date.now() - started };
+    const out = execFileSync(process.execPath, args,
+      { cwd: ROOT, env: { ...process.env, TERM: "dumb" }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    return { code: 0, out, ms: Date.now() - started, selected: selectedTestCount(out) };
   } catch (e) {
-    return { code: e.status ?? 1, out: (e.stdout ?? "") + (e.stderr ?? ""), ms: Date.now() - started };
+    const out = (e.stdout ?? "") + (e.stderr ?? "");
+    return { code: e.status ?? 1, out, ms: Date.now() - started, selected: selectedTestCount(out) };
   }
 }
 
@@ -8480,11 +8544,41 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
   });
 }
 
+/* 跑法选择表与逐拍台账（第 170 页）。
+ * SELECTABLE 是**懒算**的：模块级直接算会在每次 `--list`（判卷反复 spawn 的那条入口）都去读几十份判卷文件，
+ * 把一条秒级尺拖成秒级×N；只有真跑锚点时才需要它。判据与第 169 页那把闸共用同一份谓词——
+ * 唯一能逐字定位自己那条 killer 用例的锚点才走 `-t`，其余继续整文件跑法（两种跑法共存是刻意的，见那一页的未证②）。 */
+let SELECTABLE = null;
+const SPAWNS = [];
+
+function selectableIds() {
+  if (SELECTABLE === null) {
+    const scan = selectorAmbiguity(
+      MUTATIONS.map((m) => ({ id: m.id, test: m.test, expectFail: String(m.expectFail ?? "") })),
+      (rel) => { try { return readFileSync(join(ROOT, rel), "utf8"); } catch { return null; } },
+    );
+    SELECTABLE = new Set(scan.selectableIds);
+  }
+  return SELECTABLE;
+}
+
 function verifyEntry(m) {
   /** 这条锚点**实际**付了几次判卷（#37）。早退路径本来就少付：基线不绿只跑 1 次、
    *  变异存活／未归因只跑 2 次、量不了（载不动／判卷在飞）跑 0~1 次。
    *  写死「每条三次」就是把模型当读数——第 165 页那句「每条少付 21s」正是这么推出来的。 */
   const runs = [];
+  const mode = runModeFor(m.id, selectableIds());
+  const pattern = mode === "selector" ? String(m.expectFail ?? "") : "";
+  let vacuous = null;
+  /** 每一拍都记账：毫秒进 #37 那份分母，模式与「本次选中几条」进跑法单价。
+   *  精确跑法下选中 0 条 ⇒ 这一拍什么都没测，判红（不许读成绿，也不许读成「基线不绿」——它根本没跑）。 */
+  const note = (phase, r) => {
+    runs.push(r.ms);
+    SPAWNS.push({ mode, ms: r.ms, selected: r.selected });
+    if (vacuous === null && mode === "selector" && (r.selected === null || r.selected === 0)) {
+      vacuous = vacuousRunLine(m.id, phase, r.selected);
+    }
+  };
   const disp = entryDisposition({
     srcRel: m.src,
     srcState: headStateOf(m.src),
@@ -8504,8 +8598,9 @@ function verifyEntry(m) {
   let restored = false;
   try {
     // ① 基线：突变前该测试必须绿。载不动（判卷 import 不到的东西没入库）不是"基线不绿"——那是量不了（第 143 页）。
-    const base = runTest(m.test);
-    runs.push(base.ms);
+    const base = runTest(m.test, pattern);
+    note("基线", base);
+    if (vacuous !== null) return { m, ok: false, runsMs: runs, why: vacuous };
     if (base.code !== 0) {
       const kind = baselineRedKind(base.out);
       if (kind.kind === "unloadable") {
@@ -8523,11 +8618,12 @@ function verifyEntry(m) {
     writeFileSync(srcAbs, mutated);
 
     // ③ 突变后必须红，且红在期望的那条用例上
-    const hit = runTest(m.test);
-    runs.push(hit.ms);
+    const hit = runTest(m.test, pattern);
+    note("突变", hit);
     writeFileSync(srcAbs, original); // 尽早还原
     inFlight = null;
     restored = true;
+    if (vacuous !== null) return { m, ok: false, runsMs: runs, why: vacuous };
     if (hit.code === 0) return { m, ok: false, runsMs: runs, why: "变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）" };
     // 归因只认**失败面**：`hit.out.includes(指针)` 会被一条 `✓` 通过的用例满足（第 141 页实测）。
     if (!killerAttributionOk(m.expectFail, hit.out)) {
@@ -8535,8 +8631,9 @@ function verifyEntry(m) {
       return { m, ok: false, runsMs: runs, why: `测试红了但没红在期望用例「${m.expectFail}」上——红的是别的用例（针脚可能落在隔壁支/隔壁函数）:\n${failedFace || "(输出里没有失败面那几行，按未归因处置)"}\n--- 尾部 ---\n${hit.out.slice(-500)}` };
     }
     // ④ 还原后必须恢复全绿
-    const back = runTest(m.test);
-    runs.push(back.ms);
+    const back = runTest(m.test, pattern);
+    note("还原", back);
+    if (vacuous !== null) return { m, ok: false, runsMs: runs, why: vacuous };
     if (back.code !== 0) return { m, ok: false, runsMs: runs, why: `还原后未恢复全绿:\n${back.out.slice(-800)}` };
     return { m, ok: true, runsMs: runs };
   } finally {
@@ -8872,9 +8969,12 @@ const secs = (Date.now() - startedAt) / 1000;
  * 取料直接吃 `results` 里那份 `runsMs`：判卷不许自己再算一遍（规则 205/236），缺项由 `costRollupOf` 当场崩。 */
 const costRows = results.map((r) => ({ id: r.m.id, runsMs: r.runsMs }));
 const costLine = costCell(costRollupOf(costRows));
+/* 跑法单价（第 170 页）：精确跑法与整文件跑法各自的拍数、中位与「选中 0 条的拍数」。
+ * 「省了多少」以后由这一格说，不由任何人推算。 */
+const modeLine = runModeCell(SPAWNS);
 const timing = `[mutate-verify] 本次耗时 ${secs.toFixed(1)}s · 跑了 ${String(results.length - stoppedEarly)}/${String(entries.length)} 条` +
   (budget.ms > 0 ? ` · 预算 ${String(Math.round(budget.ms / 1000))}s` : " · 未设预算（外层超时会在中途杀我，见 --budget-ms）") +
-  `\n${costLine}` + `\n锁=${LOCK.cell}`;
+  `\n${costLine}` + `\n${modeLine}` + `\n锁=${LOCK.cell}`;
 // 有未证就红：这张表没判完不等于判完了（AGENTS：「主动拒变在飞文件」属正确红，不是回归）。
 // 预算中途停下同样红：`stoppedEarly > 0` 时 failed 可以全空，但那只是「还没轮到」。
 emitAndExit(timing + "\n", failed.length === 0 && refusedCount === 0 && stoppedEarly === 0 ? 0 : 1);

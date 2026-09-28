@@ -620,6 +620,8 @@ export interface SelectorProblem {
 export interface SelectorScan {
   problems: SelectorProblem[];
   inspected: number;
+  /** 逐字唯一定位自己那条 killer 用例的 id（第 170 页的跑法选择表只吃这一份，调用侧不许再算一遍）。 */
+  selectableIds: readonly string[];
 }
 
 const TITLE_RE = /^\s*(?:it|test)(?:\.\w+)?\s*\(\s*(["`'])((?:\\.|(?!\1)[^\\])*)\1/gmu;
@@ -630,6 +632,7 @@ export function selectorAmbiguity(
 ): SelectorScan {
   const cache = new Map<string, string[] | null>();
   const problems: SelectorProblem[] = [];
+  const selectableIds: string[] = [];
   let inspected = 0;
   for (const e of entries) {
     if (e.expectFail === "" || !e.test.endsWith(".test.ts")) continue;
@@ -642,8 +645,9 @@ export function selectorAmbiguity(
     inspected += 1;
     const hits = titles.filter((t) => t.includes(e.expectFail)).length;
     if (hits !== 1) problems.push({ id: e.id, test: e.test, hits });
+    else selectableIds.push(e.id);
   }
-  return { problems, inspected };
+  return { problems, inspected, selectableIds };
 }
 
 /** 那一格的措辞：三态分开印，且**不许**把「选不中」并成「没什么问题」。
@@ -659,6 +663,54 @@ export function selectorCell(problems: readonly SelectorProblem[], inspected: nu
   return parts.join("·") + (problems.length === 0 ? "" : "：" + problems.map((p) => `${p.id}(${String(p.hits)})`).join("、"));
 }
 
+/** 一行可机读的判读（门输出格式：id + 本次选中几条 + 原因）。 */
+export function vacuousRunLine(id: string, phase: string, selected: number | null): string {
+  return `${id} — ${phase}这一拍选中 ${selected === null ? "未取到（收尾行没读到＝取料坏）" : String(selected) + " 条用例"} ⇒ 什么都没测，不许当成绿也不许当成红`;
+}
+
+/** 两种跑法的单价那一格（第 170 页）：上线之后「省了多少」必须由这张表自己印出来，
+ *  不许再来一句「按推算应该省 X」——第 165 页就是被这种推算打过脸的。
+ *  每行是一次 spawn：`mode` 精确／整文件，`ms` 这一次多久，`selected` 本次选中几条用例（null＝收尾行没读到）。 */
+export function runModeCell(rows: readonly { mode: "selector" | "whole"; ms: number; selected: number | null }[]): string {
+  if (rows.length === 0) return "跑法单价：本次没有 spawn ⇒ 这一格没有分母";
+  const modes = [...new Set(rows.map((r) => r.mode))].sort();
+  const parts = modes.map((mode) => {
+    const list = rows.filter((r) => r.mode === mode);
+    const sorted = list.map((r) => r.ms).sort((a, b) => a - b);
+    const mid = sorted[Math.floor(sorted.length / 2)] ?? 0;
+    const vacuous = list.filter((r) => r.selected === null || r.selected === 0).length;
+    return `${mode} ${String(list.length)} 拍·中位 ${(mid / 1000).toFixed(2)}s·选中 0 条的拍 ${String(vacuous)}`;
+  });
+  return `跑法单价：${parts.join(" vs ")}`;
+}
+
+// ---- 第 170 页：按标题选跑法（`-t`）的两个底层判据 ----
+/** 从 vitest 的收尾行读「本次真选中几条用例」。
+ *  实测两种形状（09-28，同一棵树）：`Tests 1 passed | 99 skipped (100)` 与 `-t` 选不中时的
+ *  `Tests 100 skipped (100)`＋**退出码 0**——这就是为什么「跑了」不能由退出码代表。
+ *  收尾行读不到 ⇒ null（取料坏），**不许回 0**：0 是「一条也没选中」，null 是「这一格没量到」，两个红的修法相反。 */
+export function selectedTestCount(vitestOut: string): number | null {
+  const lines = vitestOut.split("\n");
+  let line: string | undefined;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (/^\s*Tests\s/u.test(lines[i] ?? "")) { line = lines[i]; break; }
+  }
+  if (line === undefined) return null;
+  const total = Number(/ *\((\d+)\)/u.exec(line)?.[1] ?? "");
+  if (!Number.isFinite(total) || total <= 0) return null;
+  const skipped = Number(/(\d+) skipped/u.exec(line)?.[1] ?? 0);
+  return total - skipped;
+}
+
+/** 标题要当**正则**喂给 `-t` ⇒ 元字符必须转义（现读：真标题里有 `( ) [ ] . * + / "` 与中文全角括号）。 */
+export function escapeTitlePattern(title: string): string {
+  return title.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+/** 一条锚点该走哪种跑法。选择（唯一命中）的判据与第 169 页那把闸共用同一份谓词，这里只问结果。 */
+export function runModeFor(id: string, selectableIds: ReadonlySet<string>): "selector" | "whole" {
+  return selectableIds.has(id) ? "selector" : "whole";
+}
 // ---- 每条锚点的真实成本（任务 #37：分母必须是读数，不是「次数 × 文件时长」的模型） ----
 // 动因（09-28 第 165 页自己打的脸）：那句「裁掉判卷文件 7.7s ⇒ 挂在它上面的每条锚点少付 21s」是按
 // 「每条跑三次 × 宿主文件全时长」**推**出来的，同分母实测把它打掉（每条只少 1.4–2.2s）。
