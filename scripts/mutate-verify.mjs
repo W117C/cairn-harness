@@ -8853,6 +8853,106 @@ const MUTATIONS = [
     ),
     expectFail: "分子被换掉就破",
   },
+  {
+    id: "shard-plan-empty-shards-allowed",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "片数按**请求的片数**开而不是按 min(片数, 宿主数) ⇒ 条数少于片数时造出空片，" +
+      "空片会被并进「这一片跑了 0 条且判定已杀死」那格——读者以为整表都验过（三态里「没尺」被读成 0，规则 239）",
+    apply: (s) => s.replace(
+      "const out: string[][] = Array.from({ length: k }, () => []);",
+      "const out: string[][] = Array.from({ length: shards }, () => []);",
+    ),
+    expectFail: "片数上限由宿主数决定而不是由请求的片数决定（不造空片）",
+  },
+  {
+    id: "shard-plan-missing-hardcoded",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "分片自检里 missing 写成常数空数组 ⇒ 「漏跑」这一格永远绿，而「不重不漏」这句话仍然印得出来。" +
+      "漏跑是这一层最坏的读数形状：四份日志合起来比表短，读者以为整表跑过",
+    apply: (s) => s.replace("    missing: input.filter((it) => !seen.has(it)),", "    missing: [],"),
+    expectFail: "少给一条要在 missing 里现身",
+  },
+  {
+    id: "shard-merge-unreadable-as-killed",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "合并时把「读不出」也计入 killedTotal ⇒ 崩掉的那一片被当成跑完且全绿；" +
+      "byVerdict 里那一列照印，所以只有拿总数去核对的读者会中招（规则 211：半把尺与没尺要各自看得见）",
+    apply: (s) => s.replace(
+      'if (r.verdict === "已杀死") killedTotal += r.given;',
+      'if (r.verdict === "已杀死" || r.verdict === "读不出") killedTotal += r.given;',
+    ),
+    expectFail: "不并进「已杀死」的条数",
+  },
+  {
+    id: "shard-merge-empty-table-green",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "allKilled 只写 `rows.every(...)`（丢掉「有一片才算」那一半）⇒ 空表退化成 true，" +
+      "编排器就会在**一片都没起**的时候报绿（`every` 对空集为真是这条尺的老坑）",
+    apply: (s) => s.replace(
+      'allKilled: rows.length > 0 && rows.every((r) => r.verdict === "已杀死"),',
+      'allKilled: rows.every((r) => r.verdict === "已杀死"),',
+    ),
+    expectFail: "空片表 ⇒ allKilled 是**假**",
+  },
+  {
+    id: "shard-speed-null-guard-dropped",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "把「没有串行分母」那格的 `||` 写成 `&&` ⇒ 条件恒假，没分母时也走除法那一支，" +
+      "对 null 调 toFixed 直接抛——加速比这一格必须**要么有分母、要么明说没分母**，不许拿 0 顶（规则 206/239）",
+    apply: (s) => s.replace("serialSec === null || serialSec <= 0", "serialSec === null && serialSec <= 0"),
+    expectFail: "不许印 Infinity 或 0",
+  },
+  {
+    id: "shard-rollup-mismatch-not-printed",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "抽取不符的片数算出来了却不进那行读数 ⇒ 红行名单被静默吃掉时，同一行里的「交出 N 条／判定[...]」" +
+      "照旧印，而它们已经不可信（接线要连入参一起钉，规则 230）",
+    apply: (s) => s.replace("(m.mismatchShards > 0 ?", "(false ?"),
+    expectFail: "抽取对不上的片数要印在行里",
+  },
+  {
+    id: "shard-ghost-ids-accepted",
+    src: "scripts/mutate-shards.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "不核「给的 id 在这张表上吗」⇒ 拼错的锚点 id 被 filter 静默丢掉，剩下的条数照样分片、照样跑，" +
+      "而读者以为那几条验过了（取料坏要说成取料坏，不能退化成「少跑几条」）",
+    apply: (s) => s.replace("if (ghost.length > 0) {", "if (false) {"),
+    expectFail: "给了不在表上的 id ⇒ 拒",
+  },
+  {
+    id: "shard-host-split-gate-dropped",
+    src: "scripts/mutate-shards.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "算出「同一判卷宿主被摊到两片」却不拦 ⇒ 两个真进程并发真跑同一份判卷文件。" +
+      "09-29 实测：轮转切法把 `tests/head-cert-deps.test.ts` 摊进四片，其中一片的 `cert-lock-stale-not-unlinked` " +
+      "因认证树注册名（按提交 sha 定）撞车判成「基线就不是全绿」，同一条串行复跑 ⇒ `✅` 1.1s（钉调用点要连同它的入参，规则 230）",
+    apply: (s) => s.replace("if (split.length > 0) {", "if (false) {"),
+    expectFail: "「同一宿主不许跨片」也接在闸上",
+  },
+  {
+    id: "shard-duplicate-tree-gate-dropped",
+    src: "scripts/mutate-shards.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "不去重 `--trees` ⇒ 同一棵树被两片同时就地改源文件、互踩 `.mutbak`，" +
+      "还原判据看的是「字节等不等」而不是「是谁写的」，于是两边的收尾复核都能假绿",
+    apply: (s) => s.replace("if (distinct.length !== f.trees.length) {", "if (false) {"),
+    expectFail: "同一棵树填两遍 ⇒ 拒",
+  },
+  {
+    id: "shard-dirty-tree-accepted",
+    src: "scripts/mutate-shards.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "脏树检查算出条数却不回理由 ⇒ 别人在飞的树被当片用，突变就地改它、还原时把别人的改动一起抹掉。" +
+      "这条理由与「不是 git 工作树」分两格印，混了就没人知道该去清哪一格",
+    apply: (s) => s.replace('if (dirty !== "") return', 'if (dirty !== "" && false) return'),
+    expectFail: "放一个在飞文件＝点名条数",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

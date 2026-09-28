@@ -1,0 +1,200 @@
+// 复跑面 · `mutate-shards`：把整张变异表切 N 份、在 N 棵**各自的**干净树里并发跑，再把判定并回一句话。
+//
+// 为什么不是把 mutate-verify 改成本机并行：那台机器**就地改源文件**，一个进程只能占一棵树；
+// 并行的唯一安全形状是「一片一棵树＋一片一个锁标签」。所以这里不碰那台机器的内部，
+// 只在外面做三件事：① 取料（名单来自它自己的 `--list` 协议，不另起一把尺）② 切分并**证分割**
+// ③ 每片的判定用**已有的** triage 谓词归类，再合并（读不出不并进 0）。
+//
+// 实测依据（`outputs/mutation-parallel-shard-2026-09-29/measurements.md`）：4 路并发在 8 核机上给 2.38×，
+// 且「会写树外面量的那一族判卷」三次并发都没偶发红——所以缺的不是许可，是合并这一步。
+//
+// 退出码三态：0＝每一片都判「已杀死」；1＝有片判红（存活／红了未点名／基线红／未生效）；
+// 2＝**取料坏**（树不干净／两片同一路径／名单为空／红行抽取对不上）——这一档不是「没有红」，是没尺。
+import { execFileSync, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { hostsSplitAcrossShards, mergeShards, partitionProof, planShards, rollupLine, shardRow, type ShardRow } from "./lib/shard-plan";
+
+const MV = "scripts/mutate-verify.mjs";
+const MAX_BUF = 64 * 1024 * 1024;
+
+interface Flags {
+  trees: string[];
+  changedSince: string | null;
+  budgetMs: number | null;
+  serialSeconds: number | null;
+  lockTagBase: string;
+  dryRun: boolean;
+  ids: string[];
+}
+
+/** 只认这几种写法，认不出就拒（同 `mutate-verify` 那条纪律：看不懂不能退化成「按缺省办」）。
+ *  `problem` 与 `unknown` 分开：「给了 `--budget-ms=abc`」不是拼错 flag，是值坏——
+ *  合成一格会让读者去查一个其实存在的 flag（第 184 页那条「归因守错格」的同族）。 */
+export function parseArgs(argv: readonly string[]): { flags: Flags | null; unknown: string[]; problem: string } {
+  const unknown: string[] = [];
+  const trees: string[] = [];
+  const ids: string[] = [];
+  let changedSince: string | null = null;
+  let budgetMs: number | null = null;
+  let serialSeconds: number | null = null;
+  let lockTagBase = "shard";
+  let dryRun = false;
+  let problem = "";
+  for (const a of argv) {
+    if (a === "--dry-run") { dryRun = true; continue; }
+    if (a.startsWith("--trees=")) { trees.push(...a.slice(8).split(",").filter((s) => s !== "")); continue; }
+    if (a.startsWith("--changed-since=")) { changedSince = a.slice(16); continue; }
+    if (a.startsWith("--budget-ms=")) { budgetMs = Number(a.slice(12)); continue; }
+    if (a.startsWith("--serial-seconds=")) { serialSeconds = Number(a.slice(17)); continue; }
+    if (a.startsWith("--lock-tag-base=")) { lockTagBase = a.slice(16); continue; }
+    if (a.startsWith("--")) { unknown.push(a); continue; }
+    ids.push(a);
+  }
+  if (problem === "") {
+    if (budgetMs !== null && !Number.isFinite(budgetMs)) problem = `--budget-ms 的值不是数：${String(budgetMs)}`;
+    else if (serialSeconds !== null && !Number.isFinite(serialSeconds)) problem = `--serial-seconds 的值不是数：${String(serialSeconds)}`;
+    else if (trees.length === 0) problem = "缺 --trees=树1,树2[,…]（并行至少要两棵；一棵请直接跑 mutate-verify）";
+  }
+  if (problem !== "" || unknown.length > 0) return { flags: null, unknown, problem };
+  return {
+    flags: { trees, changedSince, budgetMs, serialSeconds, lockTagBase, dryRun, ids },
+    unknown,
+    problem,
+  };
+}
+
+/** 一棵树能不能当一片用：存在、是 worktree、HEAD 取到、**工作树干净**。
+ *  脏＝别人正在飞，突变会就地改它的源文件 ⇒ 拒，而不是「先跑起来再说」。
+ *  导出只为让判卷能直接喂临时树（CLI 那一层造脏树太慢，而这一格判的是**理由分型**）。 */
+export function treeProblem(tree: string): string {
+  const abs = resolve(tree);
+  if (!existsSync(abs)) return "目录不存在";
+  try {
+    execFileSync("git", ["-C", abs, "rev-parse", "--git-dir"], { encoding: "utf8" });
+  } catch {
+    return "不是 git 工作树";
+  }
+  const dirty = execFileSync("git", ["-C", abs, "status", "--porcelain"], { encoding: "utf8" }).trim();
+  if (dirty !== "") return `工作树有 ${String(dirty.split("\n").length)} 项在飞`;
+  return "";
+}
+
+/** 名单只从机器自己那份协议取（5 列、制表符分隔）：另起一把尺就是第二份取料面，会跟表长不一致。
+ *  第 4 列＝判卷文件＝**宿主**，分片要按它成组（见 `shard-plan` 里 head-cert 那一族撞窗的实测）。 */
+function roster(tree: string, changedSince: string | null): { id: string; host: string }[] {
+  const args = ["--import", "tsx", MV, "--list"];
+  if (changedSince !== null) args.push("--changed-since=" + changedSince);
+  const out = execFileSync(process.execPath, args, { cwd: resolve(tree), encoding: "utf8", maxBuffer: MAX_BUF });
+  return out.split("\n")
+    .filter((l) => (l.match(/\t/g) ?? []).length >= 4)
+    .map((l) => {
+      const cols = l.split("\t");
+      return { id: (cols[0] ?? "").trim(), host: (cols[3] ?? "").trim() };
+    })
+    .filter((r) => r.id !== "" && r.host !== "");
+}
+
+function runShard(tree: string, ids: readonly string[], tag: string, budgetMs: number | null): Promise<{ stdout: string; status: number | null; spawnError?: string }> {
+  return new Promise((done) => {
+    const args = ["--import", "tsx", MV, "--lock-tag=" + tag];
+    if (budgetMs !== null) args.push("--budget-ms", String(budgetMs)); // **空格写法**：`--budget-ms=` 会被机器判「未知参数」，
+    args.push(...ids);                                                 // 而它的读取器只认空格——放行连写＝给了预算却按不限跑
+    const child = spawn(process.execPath, args, { cwd: resolve(tree) });
+    let buf = "";
+    let over = false;
+    child.stdout.on("data", (c: Buffer) => { if (buf.length < MAX_BUF) buf += c.toString(); else over = true; });
+    child.stderr.on("data", (c: Buffer) => { if (buf.length < MAX_BUF) buf += c.toString(); else over = true; });
+    child.on("error", (e) => done({ stdout: buf, status: null, spawnError: e.message }));
+    child.on("close", (code) => done({ stdout: over ? buf + "\n❌ 输出超出缓冲上限 ⇒ 本片判定不可信" : buf, status: code }));
+  });
+}
+
+async function main(): Promise<void> {
+  const parsed = parseArgs(process.argv.slice(2));
+  if (parsed.flags === null) {
+    if (parsed.unknown.length > 0) console.error("取料坏：认不出的参数 ⇒ 一条不跑：" + parsed.unknown.join(" "));
+    if (parsed.problem !== "") console.error("取料坏：" + parsed.problem);
+    console.error("用法：node --import tsx scripts/mutate-shards.ts --trees=树1,树2[,…] [--changed-since=<rev> | id…] [--budget-ms=N] [--serial-seconds=N] [--lock-tag-base=…] [--dry-run]");
+    process.exitCode = 2;
+    return;
+  }
+  const f = parsed.flags;
+  const distinct = [...new Set(f.trees.map((t) => resolve(t)))];
+  if (distinct.length !== f.trees.length) {
+    console.error("取料坏：--trees 里有重复路径 ⇒ 同树两个进程会互改源文件（.mutbak 会互相踩），一条不跑");
+    process.exitCode = 2;
+    return;
+  }
+  const refused = distinct.map((t) => ({ t, why: treeProblem(t) })).filter((r) => r.why !== "");
+  if (refused.length > 0) {
+    for (const r of refused) console.error(`拒跑：${r.t} —— ${r.why}`);
+    console.error(`取料坏：${String(refused.length)}/${String(distinct.length)} 棵树不合格 ⇒ 一条不跑（这不是「没有红」，是没尺）`);
+    process.exitCode = 2;
+    return;
+  }
+
+  const all = roster(distinct[0]!, f.changedSince);
+  const wanted = [...new Set(f.ids)];
+  const ghost = wanted.filter((id) => !all.some((r) => r.id === id));
+  if (ghost.length > 0) {
+    console.error(`取料坏：给了 ${String(ghost.length)} 条不在这张表上的 id ⇒ 一条不跑：${ghost.join(" ")}`);
+    process.exitCode = 2;
+    return;
+  }
+  const rows = wanted.length === 0 ? all : all.filter((r) => wanted.includes(r.id));
+  if (rows.length === 0) {
+    console.error("取料坏：名单为空 ⇒ 无从分片（`--list` 一条也没吐，或 rev 拼错）");
+    process.exitCode = 2;
+    return;
+  }
+  const ids = rows.map((r) => r.id);
+  const shards = planShards(rows, distinct.length);
+  const proof = partitionProof(ids, shards);
+  if (proof.missing.length > 0 || proof.duplicated.length > 0 || proof.outside.length > 0) {
+    console.error(
+      `取料坏：分片不是分割 ⇒ 一条不跑（缺 ${String(proof.missing.length)} 条／重 ${String(proof.duplicated.length)} 条／外来 ${String(proof.outside.length)} 条）`,
+    );
+    process.exitCode = 2;
+    return;
+  }
+  // 反向证人：同一宿主被摊到两片＝两个真进程同时真跑那份判卷文件。
+  // 这不是理论风险——09-29 实测轮转切法把 `tests/head-cert-deps.test.ts` 摊进四片，其中一片的
+  // `cert-lock-stale-not-unlinked` 因认证树注册名（按提交 sha 定）撞车而判「基线就不是全绿」，
+  // 同一条串行复跑 ⇒ `✅` 1.1s。`partitionProof` 对那种切法全绿（不重不漏），只有这一格认得出。
+  const split = hostsSplitAcrossShards(rows, shards);
+  if (split.length > 0) {
+    console.error(`取料坏：${String(split.length)} 个判卷宿主被摊到两片以上 ⇒ 会并发真跑同一份判卷，一条不跑：${split.join(",")}`);
+    process.exitCode = 2;
+    return;
+  }
+  const counts = proof.counts.join("+");
+  console.log(`名单 ${String(ids.length)} 条 → ${String(shards.length)} 片（${counts}）· 每片一棵树，锁标签 ${f.lockTagBase}-<i>`);
+  if (f.dryRun) {
+    for (let i = 0; i < shards.length; i += 1) console.log(`  片 ${String(i)}：${shards[i]!.length} 条 @ ${distinct[i % distinct.length]}`);
+    console.log("（--dry-run：只出计划，一条没跑）");
+    process.exitCode = 0;
+    return;
+  }
+
+  const t0 = Date.now();
+  const raw = await Promise.all(shards.map((sh, i) => runShard(distinct[i % distinct.length]!, sh, `${f.lockTagBase}-${String(i)}`, f.budgetMs)));
+  const wallSec = (Date.now() - t0) / 1000;
+  const shardRows: ShardRow[] = raw.map((r, i) => shardRow(distinct[i % distinct.length]!, shards[i]!.length, r.stdout, r.status, r.spawnError));
+  for (let i = 0; i < shardRows.length; i += 1) {
+    const r = shardRows[i]!;
+    console.log(`  片 ${String(i)} ${r.tree.split("/").slice(-1)[0]}：${String(r.given)} 条 ⇒ ${r.verdict}${r.cause === "" ? "" : "（" + r.cause + "）"}${r.redIds.length === 0 ? "" : " 红行 " + r.redIds.join(",")}`);
+  }
+  const m = mergeShards(shardRows);
+  console.log(rollupLine(m, shardRows.length, wallSec, f.serialSeconds));
+  if (m.actionableIds.length > 0) console.log("待处理 id：" + m.actionableIds.join(" "));
+  if (!m.allKilled) {
+    process.exitCode = m.mismatchShards > 0 || shardRows.some((r) => r.verdict === "读不出") ? 2 : 1;
+    return;
+  }
+  process.exitCode = m.mismatchShards > 0 ? 2 : 0;
+}
+
+const invokedDirectly = process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (invokedDirectly) void main();
