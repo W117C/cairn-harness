@@ -18,6 +18,7 @@ import {
   PROMPT_SURFACE_EXEMPT,
   allFaces,
   descriptionFaces,
+  paramFaces,
   proseFaces,
   reminderFaces,
   tablesByMode,
@@ -225,11 +226,48 @@ describe("工具描述也是模型可见文本（第 176 页）", () => {
     expect(defText).toContain("write_file");
   });
 
-  it("门真的把描述面喂进去（不是只喂系统文本）", () => {
+  it("门真的把每一族模型可见文本都喂进去（不是只喂系统文本）", () => {
     const all = allFaces();
-    expect(all).toHaveLength(proseFaces().length + descriptionFaces().length + reminderFaces().length);
+    expect(all).toHaveLength(proseFaces().length + descriptionFaces().length + reminderFaces().length + paramFaces().length);
     expect(all.some((f) => f.name.startsWith("desc[read-only].")), "描述面没进门 ⇒ 上一条判卷只证明了它自己读了自己").toBe(true);
     expect(all.some((f) => f.name.startsWith("goalReminder[")), "续跑提醒没进门 ⇒ 那一族还是没人看").toBe(true);
+    expect(all.some((f) => f.name.startsWith("params[")), "参数描述没进门 ⇒ 下面那两条判卷只证明了它们自己读了自己").toBe(true);
+  });
+
+  it("参数描述面取料：每把工具的参数 prose 都在面里，嵌套那几份只有递归读得到", () => {
+    const faces = paramFaces();
+    const tables = tablesByMode();
+    const perMode = new Map<string, number>();
+    for (const f of faces) {
+      expect(f.namesOnly, `${f.name} 必须按名单判：参数名不是工具承诺`).toBe(true);
+      expect(f.modes).toHaveLength(1);
+      expect(f.text.length, `${f.name} 取成空串 ⇒ 0 发现是假绿`).toBeGreaterThan(0);
+      const m = f.name.slice("params[".length, f.name.indexOf("]."));
+      perMode.set(m, (perMode.get(m) ?? 0) + 1);
+    }
+    // 现读水位：只读档 15 份、三个可写档各 58 份（合计 189）。
+    // 这一格必须**精确**：只读到 183 的那一版（不递归）就是靠它露馅的；改规格的人跟着改这一格，
+    // 而不是把它放宽成「≥ 某个数」——放宽之后「少走一族参数」仍然绿（规则 222）。
+    expect(perMode.get("read-only"), "只读档参数描述面数（现读 15）").toBe(15);
+    expect(perMode.get("default"), "缺省档参数描述面数（现读 58）").toBe(58);
+    for (const m of ["guided", "auto"]) {
+      expect(perMode.get(m), `${m} 与 default 档的工具面同日同表，参数面数不该分叉`).toBe(perMode.get("default"));
+    }
+    // 面上不许出现名单外的「幽灵工具」：出现＝名字拼错了或规格来自别处，那一份 prose 就没人认得它属于谁。
+    for (const f of faces) {
+      const pre = `params[${f.modes[0] as string}].`;
+      const tool = f.name.slice(pre.length).split(".")[0] as string;
+      expect(tables[f.modes[0] as string] ?? [], `${f.name} 的工具名不在 ${f.modes[0]} 档的面上`).toContain(tool);
+    }
+    // 递归的存在证人：现读有 6 份在**两层** properties 下（spawn_agent 的 supervise 子对象 × 三个可写档）。
+    // 只走顶层 properties 读到 183——所以「为什么要递归」有量出来的证人，不是假想需求（规则 243）。
+    const nested = faces.filter((f) => (f.name.match(/\.properties\./gu) ?? []).length >= 2);
+    expect(nested.length, "两层嵌套下的参数描述面数为 0 ⇒ 这一族是靠递归读全的").toBe(6);
+    for (const f of nested) expect(f.name, `${f.name} 不在两层 properties 下，判据形状变了`).toContain("supervise");
+    // 反向哨兵：这一族的文本里确实点到了工具名（现读 `glob`），否则「0 发现」可能只是尺瞎了（规则 242）。
+    const named = new Set(faces.flatMap((f) => toolNameTokens(f.text, TOOL_NAMES, { namesOnly: true })));
+    expect([...named], "参数描述里一个工具名都没认出来 ⇒ 取料可疑").toContain("glob");
+    expect(promptSurfaceFindings(faces, tables, TOOL_NAMES, []), "参数描述点了本档拿不到的工具 ⇒ 红着点名").toHaveLength(0);
   });
 
   it("续跑提醒取料：逐证据态各渲两份，且渲出来的不是空串（空面＝尺瞎了）", () => {

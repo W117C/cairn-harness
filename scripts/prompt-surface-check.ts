@@ -87,21 +87,57 @@ export function reminderFaces(): SurfaceFace[] {
   return out;
 }
 
+/** 第四类面：**参数自己的描述**（schema 里每一处 `description`）。
+ *  它比工具级 description 更细一格：模型看到的参数说明是逐字段写进规格里的，同样是指令。
+ *  必须**递归**走树：现读 189 份里有 6 份在两层嵌套下（`spawn_agent.supervise.*`），
+ *  只走顶层 `properties` 的那一版读到 183——这 6 份就是「为什么要递归」的证人，不是假想需求。
+ *  一份都没取到要抛：`0 发现`在这一族里长得最像好消息（规则 242）。 */
+export function paramFaces(): SurfaceFace[] {
+  const out: SurfaceFace[] = [];
+  for (const md of PERMISSION_MODES) {
+    for (const s of sessionToolSpecs({ mode: md }).specs) {
+      const hits: { path: string; text: string }[] = [];
+      collectParamDescriptions(s.function.parameters, s.function.name, hits);
+      for (const h of hits) out.push({ name: `params[${md}].${h.path}`, text: h.text, modes: [md], namesOnly: true });
+    }
+  }
+  if (out.length === 0) throw new Error("参数描述面一份都没取到 ⇒ 走树坏了，这一格不能印 0");
+  return out;
+}
+
+function collectParamDescriptions(node: unknown, path: string, out: { path: string; text: string }[]): void {
+  if (typeof node === "string") return;
+  if (Array.isArray(node)) { for (const item of node) collectParamDescriptions(item, path, out); return; }
+  if (node === null || typeof node !== "object") return;
+  for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+    if (key === "description" && typeof value === "string") { out.push({ path, text: value }); continue; }
+    collectParamDescriptions(value, `${path}.${key}`, out);
+  }
+}
+
+/** 四族面**只在这一处组成**：`main()` 与判卷读的都是同一份，加一族只改这一行。
+ *  （原先 `main()` 自己 `[...system, ...descs, ...reminders]` 拼了一份，判卷读的是 `allFaces()` 那一份——
+ *  两份列表就是规则 253 点名的「同一件事两把尺」：门实际扫的面可以悄悄比判卷看见的面少。） */
+export type FaceFamily = "prose" | "desc" | "reminder" | "param";
+
+export function faceFamilies(): Record<FaceFamily, SurfaceFace[]> {
+  return { prose: proseFaces(), desc: descriptionFaces(), reminder: reminderFaces(), param: paramFaces() };
+}
+
 export function allFaces(): SurfaceFace[] {
-  return [...proseFaces(), ...descriptionFaces(), ...reminderFaces()];
+  return Object.values(faceFamilies()).flat();
 }
 
 export function main(argv: string[] = process.argv.slice(2)): number {
   const selfTest = argv.includes("--self-test");
   const tables = tablesByMode();
-  const system = proseFaces();
-  const descs = descriptionFaces();
-  const reminders = reminderFaces();
-  const faces: SurfaceFace[] = [...system, ...descs, ...reminders];
+  const fams = faceFamilies();
+  const faces = Object.values(fams).flat();
   const counts = Object.entries(tables).map(([m, t]) => `${m}=${String(t.length)}`).join(" ");
-  console.log(`[prompt-surface] 取料：系统文本 ${String(system.length)} 份（${system.map((f) => f.name).join("、")}）` +
-    `｜工具描述 ${String(descs.length)} 份（按档取规格面，namesOnly）` +
-    `｜续跑提醒 ${String(reminders.length)} 份（goalReminder 逐证据态渲染）` +
+  console.log(`[prompt-surface] 取料：系统文本 ${String(fams.prose.length)} 份（${fams.prose.map((f) => f.name).join("、")}）` +
+    `｜工具描述 ${String(fams.desc.length)} 份（按档取规格面，namesOnly）` +
+    `｜续跑提醒 ${String(fams.reminder.length)} 份（goalReminder 逐证据态渲染）` +
+    `｜参数描述 ${String(fams.param.length)} 份（逐档递归走 schema，namesOnly）` +
     `｜工具面 ${counts}｜工具名单 ${String(TOOL_NAMES.length)} 个`);
 
   if (selfTest) return selfTestRun();

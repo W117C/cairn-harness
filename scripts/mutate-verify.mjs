@@ -8588,12 +8588,13 @@ const MUTATIONS = [
     src: "scripts/prompt-surface-check.ts",
     test: "tests/prompt-surface-check.test.ts",
     desc: "门的取料退回只喂系统文本 ⇒ 68 份工具描述面不再被扫，`propose_plan` 那一格会重新长回来而门照绿；" +
-      "判卷里那条「描述不点名别档工具」自己仍然绿，因为它读的是 descriptionFaces() 而不是门实际喂出去的那份（规则 236：接线要单独钉）",
+      "判卷里那条「描述不点名别档工具」自己仍然绿，因为它读的是 descriptionFaces() 而不是门实际喂出去的那份（规则 236：接线要单独钉）。" +
+      "09-28 第 178 页重指：四族面收成 `faceFamilies()` 一处组成（`main()` 与判卷读同一份），旧针脚那条 `allFaces()` 拼接送不到这儿了",
     apply: (s) => s.replace(
-      "return [...proseFaces(), ...descriptionFaces(), ...reminderFaces()];",
-      "return [...proseFaces(), ...reminderFaces()];",
+      "desc: descriptionFaces(), ",
+      "",
     ),
-    expectFail: "门真的把描述面喂进去",
+    expectFail: "门真的把每一族模型可见文本都喂进去",
   },
   {
     id: "prompt-surface-reminder-faces-not-swept",
@@ -8619,6 +8620,32 @@ const MUTATIONS = [
       '"\\n收束条件：只有验证通过且之后不再写盘才算完成。"',
     ),
     expectFail: "四档都得真拿得到",
+  },
+  {
+    id: "prompt-surface-param-faces-not-swept",
+    src: "scripts/prompt-surface-check.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "门的取料不再把 189 份参数描述面喂进去 ⇒ 「参数说明里点了本档拿不到的工具」这一格回到没人看的状态；" +
+      "同笔那两条真取料判卷仍然绿，因为它们各自直接调 `paramFaces()`，看不见门实际喂出的那份（规则 236 第三次命中这一形状）。" +
+      "与 `description-faces-not-swept` 共用同一条 killer 用例——两条守的是同一行组成的不同成员，用例断言的是「四族都在面里」这个整体",
+    apply: (s) => s.replace(
+      ", param: paramFaces()",
+      "",
+    ),
+    expectFail: "门真的把每一族模型可见文本都喂进去",
+  },
+  {
+    id: "prompt-surface-param-walk-freezes-path",
+    src: "scripts/prompt-surface-check.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "走树仍然递归、但不再往下带路径（`collectParamDescriptions(value, path, out)`）⇒ 面数一个不少（189 照样 189），" +
+      "只有「两层嵌套那 6 份在不在面里」那条判据看得见：嵌套参数说明全被并成同一个名字，递归这一支失去证人。" +
+      "选这个方向而不是「删掉递归」是有意的：后者会让取料数为 0 直接抛，任何判卷都红，分辨不出这一族到底被走没被走（规则 226：要给那道闸造只有它看得见的输入）",
+    apply: (s) => s.replace(
+      "collectParamDescriptions(value, `${path}.${key}`, out);",
+      "collectParamDescriptions(value, path, out);",
+    ),
+    expectFail: "每把工具的参数 prose 都在面里",
   },
 ];
 
