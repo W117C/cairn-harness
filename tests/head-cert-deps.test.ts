@@ -806,7 +806,17 @@ describe("清场读数：常驻残留的 scratch 树要自己报数（任务 #33
       expect(dirty.out.trim().split("\n").filter((l) => l.trim() !== "").length, "脏树要量出 1 项：同一对参数分不出两态，那个 0 就没有证人").toBe(1);
 
       const idx = join(repo, ".git", "index");
-      const staleIt = (): void => { const t = Date.now() / 1000 + 5; utimesSync(join(repo, "f.txt"), t, t); }; // 只改 mtime，让 git 想去刷新 index
+      // 只改 mtime、内容不变 ⇒ git 重算 sha、发现一致 ⇒ 刷新 stat 缓存并**重写 index**；下面两圈都要拿到这次写盘。
+      // 从前这里是 `Date.now()/1000 + 5`（未来时刻、整数秒粒度）：负载高时三圈落在同一秒内，第二圈起文件 mtime
+      // 与 git 刚缓存下的那个值相同 ⇒ 它认为不必刷新 ⇒ 反向对照翻不出 true，判卷退化成偶发红
+      // （2026-09-29 全量判卷实测：单跑 2/2 绿、并发全量 1 红）。改成**过去时刻且每圈不同**：每圈都与缓存里的 stat 不同，
+      // 刷新必然发生，不再依赖调度。
+      let staleN = 0;
+      const staleIt = (): void => {
+        staleN += 1;
+        const t = Math.floor(Date.now() / 1000) - 120 + staleN;
+        utimesSync(join(repo, "f.txt"), t, t);
+      };
       let touched = false;
       for (let k = 0; k < 3 && !touched; k++) {
         staleIt();
