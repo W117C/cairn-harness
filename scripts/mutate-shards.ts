@@ -11,7 +11,7 @@
 // 退出码三态：0＝每一片都判「已杀死」；1＝有片判红（存活／红了未点名／基线红／未生效）；
 // 2＝**取料坏**（树不干净／两片同一路径／名单为空／红行抽取对不上）——这一档不是「没有红」，是没尺。
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -122,7 +122,11 @@ function roster(tree: string, changedSince: string | null): { id: string; host: 
     .filter((r) => r.id !== "" && r.host !== "");
 }
 
-function runShard(tree: string, ids: readonly string[], tag: string, budgetMs: number | null): Promise<{ stdout: string; status: number | null; spawnError?: string }> {
+/** 一片的原文**边跑边落盘**（不是跑完再一次性写）：整表 4 片要七八分钟，
+ *  缓冲到结束才落盘意味着——① 跑的过程中读者 tail 不到任何东西；
+ *  ② 外层超时/信号把编排器杀掉时，四片原文一起丢（机器自己的突变还原是它那一层的事，救不了这里的读数）。
+ *  路径在**开跑之前**就印出来，同一行里给出「哪一片、多少条、写到哪」。 */
+function runShard(tree: string, ids: readonly string[], tag: string, budgetMs: number | null, logPath: string): Promise<{ stdout: string; status: number | null; spawnError?: string }> {
   return new Promise((done) => {
     const args = ["--import", "tsx", MV, "--lock-tag=" + tag];
     if (budgetMs !== null) args.push("--budget-ms", String(budgetMs)); // **空格写法**：`--budget-ms=` 会被机器判「未知参数」，
@@ -130,10 +134,18 @@ function runShard(tree: string, ids: readonly string[], tag: string, budgetMs: n
     const child = spawn(process.execPath, args, { cwd: resolve(tree) });
     let buf = "";
     let over = false;
-    child.stdout.on("data", (c: Buffer) => { if (buf.length < MAX_BUF) buf += c.toString(); else over = true; });
-    child.stderr.on("data", (c: Buffer) => { if (buf.length < MAX_BUF) buf += c.toString(); else over = true; });
-    child.on("error", (e) => done({ stdout: buf, status: null, spawnError: e.message }));
-    child.on("close", (code) => done({ stdout: over ? buf + "\n❌ 输出超出缓冲上限 ⇒ 本片判定不可信" : buf, status: code }));
+    const sink = (c: Buffer): void => {
+      const text = c.toString();
+      try { appendFileSync(logPath, text); } catch { /* 落盘失败不许把片杀掉：判定仍从内存那份算 */ }
+      if (buf.length < MAX_BUF) buf += text; else over = true;
+    };
+    child.stdout.on("data", sink);
+    child.stderr.on("data", sink);
+    child.on("error", (e) => {
+      try { appendFileSync(logPath, `\nspawn 失败：${e.message}`); } catch { /* 同上 */ }
+      done({ stdout: buf, status: null, spawnError: e.message });
+    });
+    child.on("close", (code) => done({ stdout: over ? buf + "\n❌ 输出超出缓冲上限 ⇒ 内存那份不完整（文件那份仍是全的）" : buf, status: code }));
   });
 }
 
@@ -203,26 +215,25 @@ async function main(): Promise<void> {
     return;
   }
   const counts = proof.counts.join("+");
+  const logs = shards.map((_, i) => shardLogPath(f.lockTagBase, i));
   console.log(`名单 ${String(ids.length)} 条 → ${String(shards.length)} 片（${counts}）· 切法=${f.forceSplit} · 每片一棵树，锁标签 ${f.lockTagBase}-<i>`);
+  for (let i = 0; i < shards.length; i += 1) {
+    console.log(`  片 ${String(i)}：${String(shards[i]!.length)} 条 @ ${distinct[i % distinct.length]} · 原文=${logs[i]}`);
+  }
   if (f.dryRun) {
-    for (let i = 0; i < shards.length; i += 1) console.log(`  片 ${String(i)}：${shards[i]!.length} 条 @ ${distinct[i % distinct.length]}`);
     console.log("（--dry-run：只出计划，一条没跑）");
     process.exitCode = 0;
     return;
   }
 
+  for (const p of logs) writeFileSync(p, ""); // 先截断：边跑边 append，不截断就会把上一轮的原文续在同一份里
   const t0 = Date.now();
-  const raw = await Promise.all(shards.map((sh, i) => runShard(distinct[i % distinct.length]!, sh, `${f.lockTagBase}-${String(i)}`, f.budgetMs)));
+  const raw = await Promise.all(shards.map((sh, i) => runShard(distinct[i % distinct.length]!, sh, `${f.lockTagBase}-${String(i)}`, f.budgetMs, logs[i]!)));
   const wallSec = (Date.now() - t0) / 1000;
   const shardRows: ShardRow[] = raw.map((r, i) => shardRow(distinct[i % distinct.length]!, shards[i]!.length, r.stdout, r.status, r.spawnError));
-  const logs = shardRows.map((_, i) => {
-    const p = shardLogPath(f.lockTagBase, i);
-    writeFileSync(p, raw[i]!.stdout + (raw[i]!.spawnError !== undefined ? `\nspawn 失败：${raw[i]!.spawnError}` : ""));
-    return p;
-  });
   for (let i = 0; i < shardRows.length; i += 1) {
     const r = shardRows[i]!;
-    console.log(`  片 ${String(i)} ${r.tree.split("/").slice(-1)[0]}：${String(r.given)} 条 ⇒ ${r.verdict}${r.cause === "" ? "" : "（" + r.cause + "）"}${r.redIds.length === 0 ? "" : " 红行 " + r.redIds.join(",")} · 原文=${logs[i]}`);
+    console.log(`  判定 片 ${String(i)} ${r.tree.split("/").slice(-1)[0]}：${String(r.given)} 条 ⇒ ${r.verdict}${r.cause === "" ? "" : "（" + r.cause + "）"}${r.redIds.length === 0 ? "" : " 红行 " + r.redIds.join(",")}`);
   }
   const m = mergeShards(shardRows);
   console.log(rollupLine(m, shardRows.length, wallSec, f.serialSeconds));

@@ -423,8 +423,28 @@ describe("编排器接线：合并层不是挂在墙上的仪表", () => {
     expect(p0).toContain("mutate-shards-judge-x-0.log");
     expect(p0).not.toBe(p1);
     expect(src).toMatch(/原文=\$\{logs\[i\]\}/u);
-    expect(src).toMatch(/writeFileSync\(p, raw\[i\]!\.stdout/u);
   });
+
+  /** 「边跑边落盘」是这一层第 190 页要钉的那一半：缓冲到结束才写，意味着外层超时会把四片原文一起带走。 */
+  it("原文是**开跑前就建好、逐块追加**的（不是跑完一次性写），且计划行先印路径", () => {
+    expect(src).toMatch(/for \(const p of logs\) writeFileSync\(p, ""\);/u);
+    expect(src).toMatch(/appendFileSync\(logPath, text\)/u);
+    expect(src).toMatch(/runShard\([^;]*f\.budgetMs, logs\[i\]!\)/u);
+  });
+
+  it("真跑一条：片文件里确有机器原文（这条是整个编排器的端到端证人）", () => {
+    const wt = cleanWorktree();
+    const base = "judge-e2e-" + String(process.pid);
+    try {
+      const r = runEntry([`--trees=${wt.path}`, `--lock-tag-base=${base}`, "shard-plan-missing-hardcoded"], wt.path);
+      expect([0, 1]).toContain(r.status); // 杀没杀掉都由机器那一行说，这里只验「取料到、跑起来了、原文落了盘」
+      const log = join(tmpdir(), `mutate-shards-${base}-0.log`);
+      const text = readFileSync(log, "utf8");
+      expect(text).toContain("变异验证：1 条");
+      expect(text).toMatch(/本次耗时 [0-9.]+s · 跑了 1\/1 条/u);
+      expect(r.out).toContain("原文=" + log);
+    } finally { wt.drop(); }
+  }, 120_000);
 
   it("分片自检的结论**决定跑不跑**：非空即退 2，一条不跑", () => {
     expect(src).toMatch(/const proof = partitionProof\(ids, shards\);[\s\S]{0,600}process\.exitCode = 2;/u);

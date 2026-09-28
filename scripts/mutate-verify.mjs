@@ -9005,7 +9005,8 @@ const MUTATIONS = [
     test: "tests/mutate-shards.test.ts",
     desc: "每片原文落了盘，但那行读数不印路径 ⇒ 合并层报「基线红」时读者手上只有结论、没有证据。" +
       "第 187 页落地当场就是靠这句路径才发现：片 1 的原文写着 10/10 全杀，而判定行写着基线红——" +
-      "红的是**尺**（描述冒充了诊断行），不是被测面（「算出来」还要「拿得到」，规则 211/241 同族）",
+      "红的是**尺**（描述冒充了诊断行），不是被测面（「算出来」还要「拿得到」，规则 211/241 同族）。" +
+      "第 190 页起这句印在**计划行**（开跑前就有），判定行不再重复",
     apply: (s) => s.replace("原文=${logs[i]}", "原文=（未印路径）"),
     expectFail: "每片的原文落到**读者拿得到的路径**",
   },
@@ -9029,6 +9030,27 @@ const MUTATIONS = [
       "而真正少的是那个值（归因守错格，规则 224）。缺值与值坏要两句话",
     apply: (s) => s.replace("if (value === undefined) {", "if (false) {"),
     expectFail: "空格写法后面缺值 ⇒ 点名「后面没有值」，不许退化成 NaN 或「按缺省跑」",
+  },
+  {
+    id: "shards-cli-log-append-dropped",
+    src: "scripts/mutate-shards.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "片原文仍然只在跑完后一次性落盘（把逐块 append 摘掉）⇒ 七八分钟的整表跑里读者 tail 不到东西，" +
+      "而外层超时把编排器杀掉时四片原文一起丢——机器那一层的突变还原是它自己的事，救不了这里的读数。" +
+      "**这一条只有接线证人，没有行为证人**：『边跑边写』与『跑完再写』在同一份最终文件上不可分辨，" +
+      "要分辨得去观察中途时刻，那是把判卷押在调度上（规则 256）",
+    apply: (s) => s.replace("appendFileSync(logPath, text)", "void logPath"),
+    expectFail: "原文是**开跑前就建好、逐块追加**的（不是跑完一次性写），且计划行先印路径",
+  },
+  {
+    id: "shards-cli-shard-log-not-truncated",
+    src: "scripts/mutate-shards.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "落盘改成追加却不截断 ⇒ 同一个锁标签跑第二遍时，新原文接在上一遍后面，" +
+      "于是 `classify` 会同时看见两跑的汇总行（判红/判绿能互相顶掉），端到端那条证人也会读到上一遍的旧块。" +
+      "追加型日志的「一次跑＝一份新文件」是它的计数前提（规则 220：计数类不许留旧账）",
+    apply: (s) => s.replace('for (const p of logs) writeFileSync(p, "");', 'for (const p of []) writeFileSync(p, "");'),
+    expectFail: "原文是**开跑前就建好、逐块追加**的（不是跑完一次性写），且计划行先印路径",
   },
 ];
 
