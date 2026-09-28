@@ -706,6 +706,21 @@ export function runModeCell(rows: readonly { mode: "selector" | "whole"; ms: num
   return `跑法单价：${parts.join(" vs ")}`;
 }
 
+/** 还原那一拍换成字节比对（第 171 页⑩，任务 #10）：整表每条锚点此前付满 3 拍（基线／突变／还原），
+ *  第三拍跑的是「还原后再测一遍要绿」——它证明的是「这文件还能跑」，而**逐字节相同**证明的是「盘上就是突变前那份」，后者更强：
+ *  基线那一拍已经用同一份字节绿过一次，内容等价就不需要再花一次 spawn 复核行为。
+ *  省下的是每条锚点三次里的一次（09-28 现读 954 条 × 1 拍），而这张表是默认门里最贵的一道。
+ *  返回 null＝还原到位；否则点名差在哪（字节数／首个不同的位置），不许只说「还原失败」。 */
+export function restoreDiffProblem(before: string, after: string): string | null {
+  if (before === after) return null;
+  if (before.length !== after.length) {
+    return `字节数不同：突变前 ${String(before.length)}／还原后 ${String(after.length)}`;
+  }
+  let i = 0;
+  while (i < before.length && before.charCodeAt(i) === after.charCodeAt(i)) i += 1;
+  return `长度相同但内容不同（首个差异在第 ${String(i + 1)} 个字符：突变前 "${before[i]}"、还原后 "${after[i]}"）`;
+}
+
 // ---- 第 170 页：按标题选跑法（`-t`）的两个底层判据 ----
 /** 从 vitest 的收尾行读「本次真选中几条用例」。
  *  实测两种形状（09-28，同一棵树）：`Tests 1 passed | 99 skipped (100)` 与 `-t` 选不中时的
@@ -742,7 +757,7 @@ export function runModeFor(id: string, selectableIds: ReadonlySet<string>): "sel
 export interface AnchorCostRow {
   /** 点名用：汇总里那一格要说「最贵的一条是哪条」，否则读数只能指回整张表让人逐条分诊。 */
   id: string;
-  /** 这条锚点实际 spawn 判卷的墙钟毫秒，按发生顺序（基线／突变／还原）。
+  /** 这条锚点实际 spawn 判卷的墙钟毫秒，按发生顺序（基线／突变——第 171 页⑩ 之后还原那一拍换成字节比对，不再 spawn）。
    *  一次没跑要**显式**喂空数组：字段缺席＝接线漏计，`costRollupOf` 当场崩并点名第几行——
    *  「没记账」长成「记了 0 次」的话，汇总就悄悄把那条贵的锚点从分母里摘掉了。 */
   runsMs?: readonly number[];

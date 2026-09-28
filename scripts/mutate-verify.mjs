@@ -23,7 +23,7 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { acquireToolLock } from "./lib/tool-lock.ts";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, selectorAmbiguity, selectorCell, selectedTestCount, escapeTitlePattern, runModeFor, runReadingIsBad, vacuousRunLine, runModeCell, unverifiedCell } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, selectorAmbiguity, selectorCell, selectedTestCount, escapeTitlePattern, runModeFor, runReadingIsBad, vacuousRunLine, runModeCell, unverifiedCell, restoreDiffProblem } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -8426,6 +8426,31 @@ const MUTATIONS = [
     ),
     expectFail: "两种跑法定长列印：这一趟只拍到一种，另一种也要印出没有分母而不是整支消失",
   },
+  {
+    id: "restore-byte-check-neutered",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "把还原那一格的判据摘掉（换成恒不成立）⇒ 盘上留着半个突变、或被写成别的内容，这条照样算绿；" +
+      "而收尾那句 `git diff HEAD --quiet` 只在**整轮跑完**时看总账，看不出「第 517 条还原时写歪了」这一格。" +
+      "这一拍换成字节比对本来就是拿「更强的证据」换掉「更贵的一拍」，换弱了就得有人喊",
+    apply: (s) => s.replace(
+      '    const restoreProblem = restoreDiffProblem(original, readFileSync(srcAbs, "utf8"));\n    if (restoreProblem !== null) return { m, ok: false, runsMs: runs, why: `还原未逐字节相同：${restoreProblem}` };',
+      '    const restoreProblem = restoreDiffProblem(original, readFileSync(srcAbs, "utf8"));\n    if (false) return { m, ok: false, runsMs: runs, why: `还原未逐字节相同：${restoreProblem}` };',
+    ),
+    expectFail: "接线：每条锚点只付两拍，还原那一拍不再 spawn 判卷",
+  },
+  {
+    id: "restore-diff-problem-only-compares-length",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "只比长度不比内容 ⇒ 等长那类突变被原样留在盘上（现读：可解析出两个字面量的 947 对 apply 里有 11 对是等长替换），" +
+      "还原检查当场变成恒真，而它正是省下第三次 spawn 所换来的那份更强证据",
+    apply: (s) => s.replace(
+      '  if (before === after) return null;',
+      '  if (before.length === after.length) return null;',
+    ),
+    expectFail: "字节相同＝到位；长度不同与等长不同要各点名自己的那一格",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
@@ -8730,11 +8755,11 @@ function verifyEntry(m) {
       const failedFace = failingTestText(hit.out).slice(0, 300);
       return { m, ok: false, runsMs: runs, why: `测试红了但没红在期望用例「${m.expectFail}」上——红的是别的用例（针脚可能落在隔壁支/隔壁函数）:\n${failedFace || "(输出里没有失败面那几行，按未归因处置)"}\n--- 尾部 ---\n${hit.out.slice(-500)}` };
     }
-    // ④ 还原后必须恢复全绿
-    const back = runTest(m.test, pattern);
-    note("还原", back);
-    if (vacuous !== null) return { m, ok: false, runsMs: runs, why: vacuous };
-    if (back.code !== 0) return { m, ok: false, runsMs: runs, why: `还原后未恢复全绿:\n${back.out.slice(-800)}` };
+    // ④ 还原到位＝盘上字节与突变前逐字节相同（第 171 页⑩，任务 #10：整表每条少付一拍）。
+    // 原来这一拍是「还原后再跑一遍要绿」——那证明的是「还能跑」，而基线那一拍已经用同一份字节绿过一次：
+    // 字节相同 ⇒ 行为等价于①，不必再花一次 spawn 复核；字节不同 ⇒ 直接点名差在哪，比“测试没绿”更准。
+    const restoreProblem = restoreDiffProblem(original, readFileSync(srcAbs, "utf8"));
+    if (restoreProblem !== null) return { m, ok: false, runsMs: runs, why: `还原未逐字节相同：${restoreProblem}` };
     return { m, ok: true, runsMs: runs };
   } finally {
     inFlight = null; // 早退路径（基线不绿 / 突变未生效 / 语法错）也要清，别留一个指向已还原文件的空档

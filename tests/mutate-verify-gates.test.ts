@@ -6,7 +6,7 @@ import { spawnSync, execFileSync } from "node:child_process";
 import { readFileSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, costRollupOf, entryDisposition, escapeTitlePattern, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, runModeCell, runModeFor, runReadingIsBad, selectChangedEntries, selectorAmbiguity, selectorCell, selectedTestCount, splitRunnable, unverifiedCell, untrackedAnchorLine, untrackedAnchorPaths, vacuousRunLine, type AnchorCostRow, type HeadState } from "../scripts/lib/mutate-gates";
+import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, costRollupOf, entryDisposition, escapeTitlePattern, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, runModeCell, runModeFor, runReadingIsBad, restoreDiffProblem, selectChangedEntries, selectorAmbiguity, selectorCell, selectedTestCount, splitRunnable, unverifiedCell, untrackedAnchorLine, untrackedAnchorPaths, vacuousRunLine, type AnchorCostRow, type HeadState } from "../scripts/lib/mutate-gates";
 import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
 
 /** 从锚点表取 `{id,test,expectFail}`：只走 `--list` 这条**不改源文件**的入口。
@@ -1171,6 +1171,27 @@ describe("选择子唯一性：一条锚点能不能只跑自己那条 killer �
     expect(r.problems.length, "选择子失准：" + r.problems.map((p) => `${p.id}(${String(p.hits)})`).join("、")).toBeLessThanOrEqual(SELECTOR_CAP);
     expect(SELECTOR_CAP - r.problems.length).toBeLessThan(5);
     expect(r.inspected, "取料面塌了＝inspected 归零，这一格又不能印错只能印 0").toBeGreaterThan(500);
+  });
+});
+
+describe("还原那一拍换成字节比对（第 171 页⑩，任务 #10）", () => {
+  it("字节相同＝到位；长度不同与等长不同要各点名自己的那一格", () => {
+    expect(restoreDiffProblem("abc", "abc"), "同一份字节就是同一份字节，不许含糊").toBeNull();
+    expect(restoreDiffProblem("", ""), "空对空也是到位（截断还原要由长度那一格喊，不是这里）").toBeNull();
+    const short = restoreDiffProblem("abcdef", "abc");
+    expect(short, "少了一截＝还原后文件被写坏，必须报出两边的字节数").toContain("字节数不同：突变前 6／还原后 3");
+    const sameLen = restoreDiffProblem("abcdef", "abcxef");
+    expect(sameLen, "长度相同但内容不同 ⇒ 只报「失败」等于没报，要给出首个差异的位置").toContain("首个差异在第 4 个字符");
+    expect(sameLen).toContain("长度相同但内容不同");
+  });
+
+  it("接线：每条锚点只付两拍，还原那一拍不再 spawn 判卷", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    const notes = (src.match(/\n\s*note\("/gu) ?? []).length;
+    expect(notes, "记拍点从 2 变回 3 ⇒ 整表每条多花一次 spawn，而这张表是默认门里最贵的一道").toBe(2);
+    expect(src, "字节比对被摘掉 ⇒ 盘上留着半个突变也照样算绿").toMatch(
+      /^ {4}if \(restoreProblem !== null\) return \{ m, ok: false, runsMs: runs, why: `还原未逐字节相同/mu);
+    expect(src).not.toMatch(/note\("还原"/u);
   });
 });
 
