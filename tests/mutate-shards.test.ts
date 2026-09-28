@@ -289,6 +289,27 @@ describe("parseArgs：取料坏与拼错 flag 分两格印", () => {
     expect(parseArgs(["--trees=a,b"]).flags?.forceSplit).toBe("host");
   });
 
+  /** 第 189 页现场：我照 `mutate-verify` 那份手册敲 `--budget-ms 480000`（机器**只认空格写法**），
+   *  而编排器从前只认连写 ⇒ 自己的入口把自己的参数判成「未知参数」，一条没跑。 */
+  it("带值的旗标两种写法收同一个值，且值不许漏成位置 id", () => {
+    const spaced = parseArgs(["--trees", "a,b", "--budget-ms", "5000", "--serial-seconds", "31"]);
+    expect(spaced.flags?.trees).toEqual(["a", "b"]);
+    expect(spaced.flags?.budgetMs).toBe(5000);
+    expect(spaced.flags?.serialSeconds).toBe(31);
+    expect(spaced.flags?.ids, "空格写法的值被当成锚点 id ⇒ 这一跑会多筛掉一条").toEqual([]);
+    const eq = parseArgs(["--trees=a,b", "--budget-ms=5000", "--serial-seconds=31"]);
+    expect(eq.flags?.trees).toEqual(["a", "b"]);
+    expect(eq.flags?.budgetMs).toBe(5000);
+    expect(eq.flags?.serialSeconds).toBe(31);
+  });
+
+  it("空格写法后面缺值 ⇒ 点名「后面没有值」，不许退化成 NaN 或「按缺省跑」", () => {
+    const p = parseArgs(["--trees=a,b", "--budget-ms"]);
+    expect(p.flags).toBeNull();
+    expect(p.unknown).toEqual([]);
+    expect(p.problem).toContain("后面没有值");
+  });
+
   it("合法参数解析成形状：两棵树＋预算＋串行分母＋位置 id", () => {
     const p = parseArgs(["--trees=a,b", "--budget-ms=5000", "--serial-seconds=31", "id-1", "id-2"]);
     expect(p.flags?.trees).toEqual(["a", "b"]);

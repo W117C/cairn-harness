@@ -9009,6 +9009,27 @@ const MUTATIONS = [
     apply: (s) => s.replace("原文=${logs[i]}", "原文=（未印路径）"),
     expectFail: "每片的原文落到**读者拿得到的路径**",
   },
+  {
+    id: "shards-cli-space-form-value-leaks-as-id",
+    src: "scripts/mutate-shards.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "空格写法收了值却不推进游标 ⇒ 那个值下一轮被当成**锚点 id**。" +
+      "第 189 页现场：我照 `mutate-verify` 那份手册敲 `--budget-ms 480000`（机器只认空格写法），" +
+      "编排器却只认连写 ⇒ 480000 要么被判「未知 id」要么被筛进名单，而参数看起来是给了的。" +
+      "同一扇门两种形状＝第十三族在 CLI 上的样子：包装层的旗标形状要跟被包那层一致",
+    apply: (s) => s.replace("else { take(name, argv[i + 1]); i += 1; }", "else { take(name, argv[i + 1]); }"),
+    expectFail: "且值不许漏成位置 id",
+  },
+  {
+    id: "shards-cli-missing-value-unflagged",
+    src: "scripts/mutate-shards.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "`--budget-ms` 后面缺值时不报错 ⇒ 一路走到 `Number(undefined)＝NaN`，" +
+      "报出来的是「值不是数」而不是「旗标漏了值」——读者会去查自己拼没拼对数字，" +
+      "而真正少的是那个值（归因守错格，规则 224）。缺值与值坏要两句话",
+    apply: (s) => s.replace("if (value === undefined) {", "if (false) {"),
+    expectFail: "空格写法后面缺值 ⇒ 点名「后面没有值」，不许退化成 NaN 或「按缺省跑」",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

@@ -48,17 +48,31 @@ export function parseArgs(argv: readonly string[]): { flags: Flags | null; unkno
   let dryRun = false;
   let forceSplit: Flags["forceSplit"] = "host";
   let problem = "";
-  for (const a of argv) {
+  /** 两种写法都收：`--flag=值` 与 `--flag 值`。
+   *  这不是"贴心"，是**同一扇门的两条缝**：被包起来的 `mutate-verify` 只认 `--budget-ms 值`（空格写法，
+   *  它的读取器不解析连写），而本编排器从前只认连写 ⇒ 照机器那份手册去敲的命令，会在自己这一层被判「未知参数」。
+   *  第十三族（同族出口抄两份、宽度不同）在 CLI 形状上的样子。 */
+  const VALUE_FLAGS = ["--trees", "--changed-since", "--budget-ms", "--serial-seconds", "--lock-tag-base", "--force-split"] as const;
+  const take = (name: string, value: string | undefined): void => {
+    if (value === undefined) { problem = `${name} 后面没有值`; return; }
+    if (name === "--trees") trees.push(...value.split(",").filter((s) => s !== ""));
+    else if (name === "--changed-since") changedSince = value;
+    else if (name === "--budget-ms") budgetMs = Number(value);
+    else if (name === "--serial-seconds") serialSeconds = Number(value);
+    else if (name === "--lock-tag-base") lockTagBase = value;
+    else {
+      if (value !== "host" && value !== "roundrobin") problem = `--force-split 只认 host|roundrobin，收到：${value}`;
+      else forceSplit = value;
+    }
+  };
+  for (let i = 0; i < argv.length; i += 1) {
+    const a = argv[i]!;
     if (a === "--dry-run") { dryRun = true; continue; }
-    if (a.startsWith("--trees=")) { trees.push(...a.slice(8).split(",").filter((s) => s !== "")); continue; }
-    if (a.startsWith("--changed-since=")) { changedSince = a.slice(16); continue; }
-    if (a.startsWith("--budget-ms=")) { budgetMs = Number(a.slice(12)); continue; }
-    if (a.startsWith("--serial-seconds=")) { serialSeconds = Number(a.slice(17)); continue; }
-    if (a.startsWith("--lock-tag-base=")) { lockTagBase = a.slice(16); continue; }
-    if (a.startsWith("--force-split=")) {
-      const v = a.slice(14);
-      if (v !== "host" && v !== "roundrobin") { problem = `--force-split 只认 host|roundrobin，收到：${v}`; }
-      else forceSplit = v;
+    const eq = a.indexOf("=");
+    const name = eq > 0 ? a.slice(0, eq) : a;
+    if ((VALUE_FLAGS as readonly string[]).includes(name)) {
+      if (eq > 0) take(name, a.slice(eq + 1));
+      else { take(name, argv[i + 1]); i += 1; }
       continue;
     }
     if (a.startsWith("--")) { unknown.push(a); continue; }
@@ -135,7 +149,7 @@ async function main(): Promise<void> {
   if (parsed.flags === null) {
     if (parsed.unknown.length > 0) console.error("取料坏：认不出的参数 ⇒ 一条不跑：" + parsed.unknown.join(" "));
     if (parsed.problem !== "") console.error("取料坏：" + parsed.problem);
-    console.error("用法：node --import tsx scripts/mutate-shards.ts --trees=树1,树2[,…] [--changed-since=<rev> | id…] [--budget-ms=N] [--serial-seconds=N] [--lock-tag-base=…] [--dry-run]");
+    console.error("用法：node --import tsx scripts/mutate-shards.ts --trees 树1,树2[,…] [--changed-since=<rev> | id…] [--budget-ms N] [--serial-seconds N] [--lock-tag-base …] [--dry-run]（带值的旗标两种写法都收）");
     process.exitCode = 2;
     return;
   }
