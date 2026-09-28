@@ -8685,6 +8685,57 @@ const MUTATIONS = [
     ),
     expectFail: "write_file 的 path 说明与 edit_file 同族",
   },
+
+  // ── 第 183 页：影响面覆盖面自述带上**分母**（`ImpactGraph.candidates` = 帽切之前的全量候选数）
+  // 这一支的取料本来就先数全量再切片 ⇒ 分母免费；缺了它，「图非全量」是一句没有量的话。
+  {
+    id: "impact-candidates-count-post-cap",
+    src: "src/agent/impact/index.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "图自报的候选数取成**切片后**的长度 ⇒ 分母恒等于收录数，覆盖面自述在任何仓上都闭嘴"+
+      "（`candidates <= files` 永真）——比旧的「非全量但不说几个」更坏：那句子至少还在",
+    apply: (s) => s.replace("candidates: candidates.length,", "candidates: files.length,"),
+    expectFail: "图外还有几个候选要说得出数",
+  },
+  {
+    id: "impact-graph-candidates-not-carried-through-report",
+    src: "src/agent/impact/index.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "分母没穿过 fileImpact ⇒ 只有 symbol 支带数、file 支回到旧句子"+
+      "（三支各组装一次覆盖面，少接一层就是那一支静默不一致，规则 239）",
+    apply: (s) => s.replace("graphCandidates: graph.candidates,", "graphCandidates: graph.files.length,"),
+    expectFail: "file 支的同一个数要穿过 fileImpact",
+  },
+  {
+    id: "impact-coverage-denominator-constant-zero",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "覆盖面句里的漏报数写死 0 ⇒ 句子形状还在、数永远假（「另有 0 个候选没进图」），"+
+      "模型据此认为图基本全量",
+    apply: (s) => s.replace(
+      "`另有 ${String(candidates - files)} 个候选文件没进这张图（帽外或被跳过）⇒ 图非全量，`",
+      "`另有 0 个候选文件没进这张图（帽外或被跳过）⇒ 图非全量，`",
+    ),
+    expectFail: "部分覆盖时报出实数，收全时闭嘴",
+  },
+  {
+    id: "impact-coverage-trigger-reverts-to-cap-compare",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "判据退回旧的 `files < cap` ⇒ 两个方向同时错：候选正好等于帽时**误报**非全量（模型白重问一次），"+
+      "而有文件被读/解析失败跳过时（files < cap 但候选更多）**漏报**（模型以为问全了）",
+    apply: (s) => s.replace('  if (candidates <= files) return "";', "  if (files < cap) return \"\";"),
+    expectFail: "旧判据在这里误报",
+  },
+  {
+    id: "impact-cap-cause-judgement-diverges-from-coverage",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "阴性一侧的成因判据与阳性一侧分家 ⇒ 同一张图一边说「另有 N 个没进图」、"+
+      "另一边说「与帽无关」，两句话互相拆台（共用同一判据是这条政策的形状）",
+    apply: (s) => s.replace("  return candidates > files", "  return files >= cap"),
+    expectFail: "capCauseNote 与它同判据",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
