@@ -8295,7 +8295,7 @@ const MUTATIONS = [
       '\n  if (typeof pattern === "string" && pattern !== "") args.push("-t", escapeTitlePattern(pattern));',
       '\n  if (typeof pattern === "string" && pattern !== "") args.push("-t", pattern);',
     ),
-    expectFail: "接线：-t 这一支要经转义，不许把标题当通配符拼进命令（表与实现同文件 ⇒ 钉跨行/字面正则，规则 236）",
+    expectFail: "接线：-t 这一支要经转义，不许把标题当通配符拼进命令（表与实现同文件 ⇒ 必须行锚定，规则 236）",
   },
   {
     id: "run-mode-selector-check-dropped",

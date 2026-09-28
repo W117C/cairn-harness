@@ -1014,10 +1014,12 @@ describe("按标题选跑法：选中几条必须被读出来", () => {
     expect(cell, cell).toContain("whole 2 拍·中位 8.50s·选中 0 条的拍 1");
   });
 
-  it("接线：-t 这一支要经转义，不许把标题当通配符拼进命令（表与实现同文件 ⇒ 钉跨行/字面正则，规则 236）", () => {
+  it("接线：-t 这一支要经转义，不许把标题当通配符拼进命令（表与实现同文件 ⇒ 必须行锚定，规则 236）", () => {
     const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    // 不锚定行的正则会先撞上**锚点表里那条引文**（表与本文件同树同文件），于是突变后仍然匹配 ⇒ 变异存活。
+    // 实测踩过：这条一开始写成 `/args\.push\("-t", escapeTitlePattern\(pattern\)\);/`，机器报「测试全绿」。
     expect(src, "不转义就拼成 -t ⇒ 元字符把选择子变成通配，选中几条就不再是那条 killer 用例").toMatch(
-      /args\.push\("-t", escapeTitlePattern\(pattern\)\);/);
+      /^ {2}if \(typeof pattern === "string" && pattern !== ""\) args\.push\("-t", escapeTitlePattern\(pattern\)\);$/mu);
   });
 
   it("接线：只有 selector 模式才塞 -t，其余必须走整文件（两种跑法共存是刻意的）", () => {
