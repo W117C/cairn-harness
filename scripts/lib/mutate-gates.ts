@@ -663,9 +663,27 @@ export function selectorCell(problems: readonly SelectorProblem[], inspected: nu
   return parts.join("·") + (problems.length === 0 ? "" : "：" + problems.map((p) => `${p.id}(${String(p.hits)})`).join("、"));
 }
 
-/** 一行可机读的判读（门输出格式：id + 本次选中几条 + 原因）。 */
+/** 一拍读数坏没坏——闸与单价格共用这一份判据，两边不许各算一遍（规则 228：分叉的副本会一起错档）。
+ *  selector 只认「恰好 1 条」：`-t` 在 vitest 那边匹配的是 **整条标题**（describe 前缀＋it 标题），
+ *  而体检数的是 **it 字面量**（`selectorAmbiguity`），两个分母不是一回事；选中 2 条时红的那条
+ *  未必是本锚点那条 killer 用例——那正是「锚点长期守错格」的入口（规则 224 同一族）。
+ *  whole 不该有 0 条／读不到：整文件那一拍要么量到用例数，要么就是取料坏。
+ *  收紧前量的存量：09-28 整表 selector 873 拍／whole 9 拍，按本判据的坏拍数都是 0（见第 170 页凭证）。 */
+export function runReadingIsBad(mode: "selector" | "whole", selected: number | null): boolean {
+  if (mode === "selector") return selected !== 1;
+  return selected === null || selected === 0;
+}
+
+/** 一行可机读的判读（门输出格式：id + 本次选中几条 + 原因）。
+ *  三种坏读数印三种措辞，因为修法相反：没读到＝取料坏；0 条＝选择子选不中；>1 条＝守错了用例。
+ *  写成一句「什么都没测」会让第三种被读成第二种，而第三种恰恰是「绿着失效」的那一种。 */
 export function vacuousRunLine(id: string, phase: string, selected: number | null): string {
-  return `${id} — ${phase}这一拍选中 ${selected === null ? "未取到（收尾行没读到＝取料坏）" : String(selected) + " 条用例"} ⇒ 什么都没测，不许当成绿也不许当成红`;
+  const state = selected === null
+    ? "未取到（收尾行没读到＝取料坏）"
+    : selected === 0
+      ? "0 条用例＝这一拍什么都没测"
+      : `${String(selected)} 条用例＝不止本锚点那条 killer 用例，红的未必是它`;
+  return `${id} — ${phase}这一拍选中 ${state} ⇒ 不许当成绿也不许当成红`;
 }
 
 /** 两种跑法的单价那一格（第 170 页）：上线之后「省了多少」必须由这张表自己印出来，
@@ -678,8 +696,9 @@ export function runModeCell(rows: readonly { mode: "selector" | "whole"; ms: num
     const list = rows.filter((r) => r.mode === mode);
     const sorted = list.map((r) => r.ms).sort((a, b) => a - b);
     const mid = sorted[Math.floor(sorted.length / 2)] ?? 0;
-    const vacuous = list.filter((r) => r.selected === null || r.selected === 0).length;
-    return `${mode} ${String(list.length)} 拍·中位 ${(mid / 1000).toFixed(2)}s·选中 0 条的拍 ${String(vacuous)}`;
+    const vacuous = list.filter((r) => runReadingIsBad(mode, r.selected)).length;
+    const label = mode === "selector" ? "坏拍（选中≠1）" : "坏拍（没量到或 0 条）";
+    return `${mode} ${String(list.length)} 拍·中位 ${(mid / 1000).toFixed(2)}s·${label} ${String(vacuous)}`;
   });
   return `跑法单价：${parts.join(" vs ")}`;
 }

@@ -23,7 +23,7 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { acquireToolLock } from "./lib/tool-lock.ts";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, selectorAmbiguity, selectorCell, selectedTestCount, escapeTitlePattern, runModeFor, vacuousRunLine, runModeCell } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, selectorAmbiguity, selectorCell, selectedTestCount, escapeTitlePattern, runModeFor, runReadingIsBad, vacuousRunLine, runModeCell } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -8312,12 +8312,47 @@ const MUTATIONS = [
     id: "vacuous-run-guard-dropped",
     src: "scripts/mutate-verify.mjs",
     test: "tests/mutate-verify-gates.test.ts",
-    desc: "「选中 0 条」不再判红 ⇒ 这条闸正是 `-t` 上线唯一的安全带：摘掉后一次改名就能让整条锚点永远绿着跑完（vitest 对无匹配的 -t 退 0）",
+    desc: "「选中几条」这道闸整个摘掉 ⇒ 这条闸正是 `-t` 上线唯一的安全带：摘掉后一次改名就能让整条锚点永远绿着跑完（vitest 对无匹配的 -t 退 0）",
     apply: (s) => s.replace(
-      '\n    if (vacuous === null && mode === "selector" && (r.selected === null || r.selected === 0)) {',
+      '\n    if (vacuous === null && runReadingIsBad(mode, r.selected)) {',
       "\n    if (false) {",
     ),
-    expectFail: "接线：每一拍都过「选中几条」这道闸，闸的拍数与 runTest 调用点相对相等（选不中不许读成绿）",
+    expectFail: "接线：每一拍都过共用的那道读数闸，闸的拍数与 runTest 调用点相对相等（选不中、选多条都不许读成绿）",
+  },
+  {
+    // 与上一条咬同一处接线、但失真方向不同（规则 226：同一不变量的两种失真各要一条变异）：
+    // 上面是「整个摘掉」，这条是「退回只否 0 条」——后者不留任何痕迹，因为 0 条那一半照常红。
+    id: "selector-guard-ignores-multi-hit",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "闸退回「只有 0 条／没读到才判坏」⇒ 选中 2 条以上的那一拍被读成测过了，可红的未必是本锚点那条 killer 用例：vitest 的 `-t` 匹配整条标题（describe 前缀也算），而体检数的是 it 字面量——两个分母本来就不是一回事",
+    apply: (s) => s.replace(
+      '\n    if (vacuous === null && runReadingIsBad(mode, r.selected)) {',
+      '\n    if (vacuous === null && mode === "selector" && (r.selected === null || r.selected === 0)) {',
+    ),
+    expectFail: "接线：每一拍都过共用的那道读数闸，闸的拍数与 runTest 调用点相对相等（选不中、选多条都不许读成绿）",
+  },
+  {
+    id: "selector-predicate-accepts-multi",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "selector 那一支从「恰好 1 条」放宽成「只否 0 条与没读到」⇒ 闸与单价格都还在，只是多选的那条永远不出声（放宽分级必须配反向锚点，规则 227）",
+    apply: (s) => s.replace(
+      '  if (mode === "selector") return selected !== 1;',
+      '  if (mode === "selector") return selected === null || selected === 0;',
+    ),
+    expectFail: "读数闸的判据只有一份：selector 那一拍恰好选中 1 条才算合格，0 条／多条／没读到三种都判坏",
+  },
+  {
+    id: "vacuous-line-merges-empty-into-unreadable",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "把「0 条＝空跑」印成「取料坏」⇒ 两种红的修法相反却被读成同一种（第 166 页那把只能印 0 的尺，同一族换了载体）；判卷要三种措辞互不冒领",
+    apply: (s) => s.replace(
+      '      ? "0 条用例＝这一拍什么都没测"',
+      '      ? "未取到（收尾行没读到＝取料坏）"',
+    ),
+    expectFail: "三种坏读数印三种不同措辞：取料坏／一条没选中／选中多条，两两不许相同",
   },
   {
     id: "run-mode-cell-silent-when-no-spawns",
@@ -8328,7 +8363,7 @@ const MUTATIONS = [
       '  if (rows.length === 0) return "跑法单价：本次没有 spawn ⇒ 这一格没有分母";',
       '  if (false) return "跑法单价：本次没有 spawn ⇒ 这一格没有分母";',
     ),
-    expectFail: "跑法单价那一格分开印两种跑法，并把「选中 0 条的拍」数出来——省了多少由它说，不许推算",
+    expectFail: "跑法单价那一格分开印两种跑法，并把两种跑法各自的「坏拍」数出来——省了多少由它说，不许推算",
   },
 ];
 
@@ -8574,11 +8609,12 @@ function verifyEntry(m) {
   const pattern = mode === "selector" ? String(m.expectFail ?? "") : "";
   let vacuous = null;
   /** 每一拍都记账：毫秒进 #37 那份分母，模式与「本次选中几条」进跑法单价。
-   *  精确跑法下选中 0 条 ⇒ 这一拍什么都没测，判红（不许读成绿，也不许读成「基线不绿」——它根本没跑）。 */
+   *  「这一拍坏没坏」只有一份判据（`runReadingIsBad`）：闸与单价格各写一遍就会有一处先漂（规则 228），
+   *  而这一闸是 `-t` 上线唯一的安全带——它同时否掉「什么都没测」与「测的是别条用例」。 */
   const note = (phase, r) => {
     runs.push(r.ms);
     SPAWNS.push({ mode, ms: r.ms, selected: r.selected });
-    if (vacuous === null && mode === "selector" && (r.selected === null || r.selected === 0)) {
+    if (vacuous === null && runReadingIsBad(mode, r.selected)) {
       vacuous = vacuousRunLine(m.id, phase, r.selected);
     }
   };
@@ -8972,7 +9008,8 @@ const secs = (Date.now() - startedAt) / 1000;
  * 取料直接吃 `results` 里那份 `runsMs`：判卷不许自己再算一遍（规则 205/236），缺项由 `costRollupOf` 当场崩。 */
 const costRows = results.map((r) => ({ id: r.m.id, runsMs: r.runsMs }));
 const costLine = costCell(costRollupOf(costRows));
-/* 跑法单价（第 170 页）：精确跑法与整文件跑法各自的拍数、中位与「选中 0 条的拍数」。
+/* 跑法单价（第 170 页）：精确跑法与整文件跑法各自的拍数、中位与「坏拍数」——
+ * 坏的定义只有一份（`runReadingIsBad`）：selector 选中≠1，whole 没量到或 0 条。
  * 「省了多少」以后由这一格说，不由任何人推算。 */
 const modeLine = runModeCell(SPAWNS);
 const timing = `[mutate-verify] 本次耗时 ${secs.toFixed(1)}s · 跑了 ${String(results.length - stoppedEarly)}/${String(entries.length)} 条` +

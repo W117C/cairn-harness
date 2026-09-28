@@ -6,7 +6,7 @@ import { spawnSync, execFileSync } from "node:child_process";
 import { readFileSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, costRollupOf, entryDisposition, escapeTitlePattern, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, runModeCell, runModeFor, selectChangedEntries, selectorAmbiguity, selectorCell, selectedTestCount, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type AnchorCostRow, type HeadState } from "../scripts/lib/mutate-gates";
+import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, costRollupOf, entryDisposition, escapeTitlePattern, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, runModeCell, runModeFor, runReadingIsBad, selectChangedEntries, selectorAmbiguity, selectorCell, selectedTestCount, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, vacuousRunLine, type AnchorCostRow, type HeadState } from "../scripts/lib/mutate-gates";
 import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
 
 /** 从锚点表取 `{id,test,expectFail}`：只走 `--list` 这条**不改源文件**的入口。
@@ -1002,7 +1002,7 @@ describe("按标题选跑法：选中几条必须被读出来", () => {
     expect(runModeFor("unknown", set)).toBe("whole");
   });
 
-  it("跑法单价那一格分开印两种跑法，并把「选中 0 条的拍」数出来——省了多少由它说，不许推算", () => {
+  it("跑法单价那一格分开印两种跑法，并把两种跑法各自的「坏拍」数出来——省了多少由它说，不许推算", () => {
     expect(runModeCell([]), "一次都没跑时不许印成 0 秒的单价").toContain("这一格没有分母");
     const cell = runModeCell([
       { mode: "selector", ms: 140, selected: 1 },
@@ -1010,8 +1010,17 @@ describe("按标题选跑法：选中几条必须被读出来", () => {
       { mode: "whole", ms: 8000, selected: 0 },
       { mode: "whole", ms: 8500, selected: 95 },
     ]);
-    expect(cell, cell).toContain("selector 2 拍·中位 0.16s·选中 0 条的拍 0");
-    expect(cell, cell).toContain("whole 2 拍·中位 8.50s·选中 0 条的拍 1");
+    expect(cell, cell).toContain("selector 2 拍·中位 0.16s·坏拍（选中≠1） 0");
+    expect(cell, cell).toContain("whole 2 拍·中位 8.50s·坏拍（没量到或 0 条） 1");
+    // 两种跑法的「坏」定义相反：整文件那一拍选中 40 条是常态，精确那一拍选中 2 条才是病。
+    // 只数 0 条的那一份读数看不见这一格（第 170 页⑵上线要的就是它）。
+    const many = runModeCell([
+      { mode: "selector", ms: 100, selected: 1 },
+      { mode: "selector", ms: 120, selected: 2 },
+      { mode: "whole", ms: 900, selected: 40 },
+    ]);
+    expect(many, many).toContain("selector 2 拍·中位 0.12s·坏拍（选中≠1） 1");
+    expect(many, many).toContain("whole 1 拍·中位 0.90s·坏拍（没量到或 0 条） 0");
   });
 
   it("接线：-t 这一支要经转义，不许把标题当通配符拼进命令（表与实现同文件 ⇒ 必须行锚定，规则 236）", () => {
@@ -1028,14 +1037,38 @@ describe("按标题选跑法：选中几条必须被读出来", () => {
       /\n\s*const pattern = mode === "selector" \? String\(m\.expectFail \?\? ""\) : "";/);
   });
 
-  it("接线：每一拍都过「选中几条」这道闸，闸的拍数与 runTest 调用点相对相等（选不中不许读成绿）", () => {
+  it("接线：每一拍都过共用的那道读数闸，闸的拍数与 runTest 调用点相对相等（选不中、选多条都不许读成绿）", () => {
     const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
-    expect(src, "选中 0 条不判红 ⇒ 空转的这一拍会被读成基线绿").toMatch(
-      /\n\s*if \(vacuous === null && mode === "selector" && \(r\.selected === null \|\| r\.selected === 0\)\) \{/);
+    // 钉的是「这一拍过的是共用那份判据」，不是「这里有个 if」：退回内联的
+    // `(r.selected === null || r.selected === 0)` 仍然要判红——那种写法看不见「选中多条」。
+    // 表与实现同文件 ⇒ 必须行锚定（规则 236/247）。
+    expect(src, "不调共用判据 ⇒ 闸与单价格各漂各的，多选的那一拍永远不出声").toMatch(
+      /^ {4}if \(vacuous === null && runReadingIsBad\(mode, r\.selected\)\) \{$/mu);
     const calls = (src.match(/= runTest\(m\.test, pattern\);/g) ?? []).length;
     const noted = (src.match(/note\("/g) ?? []).length;
     expect(calls, "跑法改了新加一拍却忘了过闸").toBeGreaterThan(0);
     expect(noted, "某一拍没过账本与选中数这道闸").toBe(calls);
+  });
+
+  it("读数闸的判据只有一份：selector 那一拍恰好选中 1 条才算合格，0 条／多条／没读到三种都判坏", () => {
+    expect(runReadingIsBad("selector", 1), "恰好本锚点那条 killer 用例＝合格").toBe(false);
+    expect(runReadingIsBad("selector", 0)).toBe(true);
+    expect(runReadingIsBad("selector", 2), "选中多条＝红的未必是本锚点那条（-t 匹配整条标题，体检数的是 it 字面量）").toBe(true);
+    expect(runReadingIsBad("selector", null), "收尾行没读到＝取料坏").toBe(true);
+    expect(runReadingIsBad("whole", 95), "整文件那一拍选中很多条是常态，不许当病判").toBe(false);
+    expect(runReadingIsBad("whole", 0)).toBe(true);
+    expect(runReadingIsBad("whole", null)).toBe(true);
+  });
+
+  it("三种坏读数印三种不同措辞：取料坏／一条没选中／选中多条，两两不许相同", () => {
+    const unreadable = vacuousRunLine("x", "基线", null);
+    const none = vacuousRunLine("x", "基线", 0);
+    const many = vacuousRunLine("x", "基线", 3);
+    expect(new Set([unreadable, none, many]).size, "两种红的修法相反却被印成同一句 ⇒ 读的人分不出该改哪个").toBe(3);
+    expect(none, "0 条那一格要说「什么都没测」").toContain("什么都没测");
+    expect(many, "多条那一格要说选中的不止本锚点那条用例").toContain("不止本锚点");
+    expect(unreadable, "没读到那一格要说取料坏，不许冒充 0 条").toContain("取料坏");
+    expect(many, "选中多条不是空跑——别条用例的红不许冒本锚点的红").not.toContain("什么都没测");
   });
 });
 
