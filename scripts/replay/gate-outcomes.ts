@@ -9,15 +9,16 @@
 // 三条口径纪律：
 //  ⑴ 矩阵按 `GATE_LAYERS × GATE_VERDICTS` **铺满骨架**再计数——只列非零格会让"新加一层/一种结果"
 //     静默少一列（读数看着完整，其实漏计）；表外字面量单独进 unknown*，不许丢。
-//  ⑵ `tool_result` 上没有工具名，受管判定必须经 `callId → tool_call.name` join（同 corpus-inventory）；
-//     join 不上的单独计数，不静默跳过——那正是"读数取不到"的入口。
+//  ⑵ `tool_result` 上没有工具名，受管判定必须经 `callId → tool_call.name` join——那只索引**在取料层**
+//     （`corpus.callNameIndex`，与 exec 面共用），本面不抄第二份；join 不上的单独计数，不静默跳过——
+//     那正是"读数取不到"的入口。
 //  ⑶ 三态守卫：零语料 / 有语料但 0 条受管 / 有受管但 0 条带 gate，**全部红着退出**并说清缺哪一环，
 //     禁止打出 0 后退 0 让人读成"人从没拒过"。
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GATE_LAYERS, GATE_VERDICTS } from "../../src/permissions/autonomy";
 import type { GateVerdict } from "../../src/permissions";
-import { isGatedTool, readJsonl, scanCorpus, zeroCorpusProblem } from "./corpus";
+import { callNameIndex, isGatedTool, readJsonl, scanCorpus, zeroCorpusProblem } from "./corpus";
 
 export const CELL_SEP = "␟";
 
@@ -66,11 +67,7 @@ function bump(m: Map<string, number>, k: string): void {
 
 /** 纯函数：吃一堆原始事件对象（多文件拼接后的数组），吐交叉表。 */
 export function tallyGateEvents(raws: readonly unknown[]): GateTally {
-  const nameByCall = new Map<string, string>();
-  for (const raw of raws) {
-    const e = raw as { type?: string; id?: string; name?: string };
-    if (e.type === "tool_call" && typeof e.id === "string") nameByCall.set(e.id, String(e.name ?? ""));
-  }
+  const nameByCall = callNameIndex(raws); // join 语义在取料层（`corpus.callNameIndex`），本面不另抄一份
   const t: GateTally = {
     cells: emptyCells(),
     unknownLayer: new Map<string, number>(),

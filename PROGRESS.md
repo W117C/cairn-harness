@@ -6654,3 +6654,19 @@ typecheck：主树 1 条报错在 `src/cli.ts:709`（本笔没碰 `src/`），�
    （`head-cert-8a9ce3e`＝那笔红的历史证据、`head-cert-70eab48`＝本凭证那棵）；其余 15 棵里 `cost-rank`／`gate-*`／`p169-staging`／
    `p170-tighten`／`p187-a..d`／`p211-shard-a..d`／`p211-verify`／`head-cert-02ddabd…f0473b9` 全按规则 120 判"可回收"，
    但**判据不是授权**（09-28 那条教训）⇒ 等用户点头再逐棵 `git worktree remove`。带分支的树（`doc-layer`／`goal-plan`／`opt`／`r1b`／`ui-codex-bench`）与 `verify-*` 那几棵一律不碰。
+### 2026-09-30 · 第 218 页 · #41 结案：join 语义的**第二份副本**折进取料层——一把尺的两个面从此共用一只索引
+
+1. **改动**：`scripts/replay/gate-outcomes.ts` 删掉自己那 5 行 `nameByCall` 构造，改吃 `callNameIndex(raws)`（`scripts/replay/corpus.ts`，第 217 页为 exec 面建的那只）；
+   模块头的口径叙述第 ⑵ 条同步改掉「同 corpus-inventory」那句手抄指路——**指路也要指事实源**，不然注释会替副本背书。
+2. **折层前先核字节**（规则 284/299：搬共用判据前先 grep 谁钉过这几行）：该文件名下三条锚点的针脚全是**单行**、且都不在待搬那 5 行里
+   （`    if (tool === undefined) {`／`    if (!layerOk) bump(t.unknownLayer, g.layer);`／骨架那行 `for (const l of GATE_LAYERS) for (const v of GATE_VERDICTS) …`）
+   ⇒ 预期可安全折；折后逐条复跑（读数见下一页凭证，不预填）。
+3. **A/B 自证 = 字节等式，不是叙述**（规则 262 的接线证人形状）：同一份取料面、新旧两份代码各跑一次 `replay:gate-outcomes`
+   （旧那份从 `70eab48` 的认证树里加载，**cwd 固定在主树** ⇒ 两侧吃同一批 jsonl）⇒ `diff` 退出码 0、退出码同为 1。
+   读数：`受管 tool_result=98 · 带 gate 留痕=0 ⇒ **不可测**`（这一格与 §7 第 3 步的"语料旧"前提同源，本笔不动它）。
+   取料与两份原文入 `outputs/join-index-fold-2026-09-30/`。
+4. **反拷贝的证人加一条，且加在跨面那一格**：同一份事件流上两个读数面的 `unmatched` 必须是**同一个数**
+   （`tests/replay-gate-outcomes.test.ts` 新增第 4 条）——钉"共用一只索引"要拿两侧读数对账，而不是钉两处措辞。
+5. **判卷**：该文件 5→6 条，两文件合计 33 条绿；typecheck 0 条报错。
+6. **这一笔没有新锚点**，理由是现读不是省事：被折掉的那份副本本来就没有自己的机器证人（它的三条锚点钉的是**别的格子**），
+   而共用后的那只索引已有 `replay-call-index-type-check-dropped` 守着 ⇒ 同一格加第二条锚点只会翻倍 spawn 不加分辨力（规则 247 的"恰好 1 条"反过来用）。

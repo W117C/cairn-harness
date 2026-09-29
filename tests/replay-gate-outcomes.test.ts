@@ -7,6 +7,7 @@ import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { GATE_LAYERS, GATE_VERDICTS } from "../src/permissions";
 import { cellOf, emptyCells, tallyGateEvents } from "../scripts/replay/gate-outcomes";
+import { execMixOf } from "../scripts/replay/verify-cause-mix";
 import { REPLAY_READINGS } from "../scripts/replay-readings";
 
 const call = (id: string, name: string) => ({ type: "tool_call", id, name, args: {} });
@@ -45,6 +46,15 @@ describe("gate-outcomes 的分母与两种口径", () => {
     expect(t.gatedResults).toBe(1);
     expect(t.withGate).toBe(1);
     expect(t.unmatched).toBe(1);
+  });
+
+  it("同一份事件流上，两个读数面的 join 不上是同一个数（索引共用，不各抄一份）", () => {
+    const raws = [
+      call("c1", "run_shell"), result("c1"),
+      result("ghost-a"), result("ghost-b"),
+    ];
+    expect(tallyGateEvents(raws).unmatched).toBe(2);
+    expect(execMixOf(raws).unmatched).toBe(2);
   });
 
   it("denied 计可标（读数 A 口径）却不计问过人的——两个数不是一回事", () => {
