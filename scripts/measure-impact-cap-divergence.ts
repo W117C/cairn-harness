@@ -14,7 +14,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildImpact, upward, IMPACT_MAX_FILES_CEILING, type ImpactGraph } from "../src/agent/impact/index.js";
-import { MAX_FILES_DEFAULT, scanSourceFilesAll } from "../src/agent/map/build.js";
+import { scanSourceFilesAll } from "../src/agent/map/build.js";
+import { MAX_FILES_DEFAULT } from "../src/agent/map/cap.js";
 
 export interface AnswerPair {
   file: string;

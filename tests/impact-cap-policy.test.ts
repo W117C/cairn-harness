@@ -11,7 +11,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { applyFileCap, compareCandidates, MAX_FILES_CEILING, MAX_FILES_DEFAULT, scanSourceFilesAll, scanSourceFiles, type ScannedFile } from "../src/agent/map/build";
+import { applyFileCap, compareCandidates, scanSourceFilesAll, scanSourceFiles, type ScannedFile } from "../src/agent/map/build";
+import { MAX_FILES_CEILING, MAX_FILES_DEFAULT } from "../src/agent/map/cap";
 import { affectedFilesOf, buildImpact, contextNoteFor, defaultImpactHook, fileImpact } from "../src/agent/impact/index";
 import { coverageNote, graphIsPartial } from "../src/agent/impact/coverage";
 

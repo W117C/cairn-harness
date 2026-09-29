@@ -10,7 +10,8 @@
 // 不进静态工具表 ⇒ 关着的时候一次请求都不为该工具付字节。
 import { defaultImpactCacheDir, downward, fileImpact, upward, buildImpact, IMPACT_CONTEXT_FILES, IMPACT_CONTEXT_SYMBOLS_PER_FILE, IMPACT_MAX_FILES_CEILING, type ImpactSite } from "../agent/impact/index.js";
 import { access } from "node:fs/promises";
-import { MAX_FILES_DEFAULT, scanSourceFilesAll } from "../agent/map/build.js";
+import { scanSourceFilesAll } from "../agent/map/build.js";
+import { MAX_FILES_DEFAULT } from "../agent/map/cap.js";
 import { capAtCeiling, capCauseNote, capWayOut, coverageNote } from "../agent/impact/coverage.js";
 import { SUPPORTED_EXTS } from "../agent/map/parse.js";
 import { assertNotAgentArea, assertRealContainment, resolveInWorkspace, ToolError, type Tool, type ToolResult } from "./base.js";

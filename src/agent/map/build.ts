@@ -12,21 +12,12 @@ import { sanitizedEnv } from "../../tools/process.js";
 import { fileTags, SUPPORTED_EXTS, TAGS_EXTRACT_VERSION, TreeSitterUnavailableError, type SymbolTag } from "./parse.js";
 import { buildGraph, personalizedPageRank, type FileTagsInput } from "./rank.js";
 import { clampBudget, renderMapBudget } from "./render.js";
+import { MAX_FILES_DEFAULT } from "./cap.js";
+import { coverageNote } from "../impact/coverage.js";
 
 const NOISE_GLOBS = ["**/.git/**", "**/node_modules/**", "**/dist/**", "**/out/**"];
-/** 文件数帽的**唯一事实源**（impact 侧以前各写一个 400 字面量 ⇒ 一处调、另一处静默不跟）。
- *
- *  为什么缺省＝上限（09-30 改）：这一位从前是 **400**，而切片前那份候选是**按 mtime 降序**排的
- *  （下面 `scanSourceFilesAll` 那行注释自己写着"优先最近改动的文件"）⇒ 它的真实语义不是"最重要的 400 个"，
- *  而是"**这台机器最近动过的 400 个**"。实测两棵同一份代码的树：`git worktree add` 出来的树里所有文件同一个 mtime，
- *  入图最旧与图外最新同秒 ⇒ 边界由 `rg` 的遍历顺序决定；把口径换成字典序，入图集合差 21–28%
- *  （读数与复跑命令：`outputs/impact-cap-decision-2026-09-30/`）。同一顶帽还喂着**给模型看的仓库地图**
- *  （`buildMap` 也走 `scanSourceFiles`）与**spawn 准入的语义租约**（`affectedFilesOf`），后者把"图外"读成"不相交"。
- *  ⇒ 帽不该是覆盖面政策，只该是**成本安全阀**：正常仓库全收（本仓 512 个候选，实测代价 ＋176ms／次建图，
- *  1071→1247ms、同臂散布 ≤13ms），只有大到 `MAX_FILES_CEILING` 才切——那一刀之后**不再谎称"调大 maxFiles"能救**
- *  （见 `tools/impact-query.ts` 的帽外文案：到了上限就把出路换成"按目录拆仓/直读"）。 */
-export const MAX_FILES_CEILING = 5000;
-export const MAX_FILES_DEFAULT = MAX_FILES_CEILING;
+// 文件数帽那两个数住在 `./cap.js`（唯一事实源）。为什么不在这里：`impact/coverage.ts` 的文案
+// 要吃同一个上限，而文案模块被地图这一侧复用 ⇒ 常量留在本文件就会成环（说明见 cap.ts 头注）。
 const RECOMPUTE_EVERY_DEFAULT = 10;
 
 export interface TagsCacheEntry {
@@ -183,8 +174,32 @@ export interface MapBuildResult {
   /** 渲染内存缓存命中（指纹未变）。 */
   fromRenderCache: boolean;
   fingerprint: string;
-  /** 降级原因（ok=false 时有值；诊断用，不进上下文）。 */
+  /** 帽（实发值）／进图文件数／帽前候选数 —— 注入面靠这三个数说同一句覆盖面自述。
+   *  为什么带出来而不是在注入侧再算：`applyFileCap` 只在这一处切 ⇒ 分母也只能在这一处取；
+   *  注入侧自己再扫一遍就是第二份取料面（会跟这张图不一致，规则 261 同族）。 */
+  cap: number;
+  graphFiles: number;
+  candidates: number;
+  /** 降级原因（ok=false 时有值）。09-30 起**会**进上下文（一句有界说明，见 `mapInjectText`）——
+   *  从前它只走 `console.debug`，模型读到的是"没有地图"，与"这仓库没结构"同形。 */
   error?: string;
+}
+
+/** 降级那一句说明（模型可见）。原因来自异常消息 ⇒ 截 200 字：那是别人的文本，不是我们承诺的长度。 */
+export function mapUnavailableText(why: string): string {
+  return `[map] 仓库地图本次不可用（原因：${why.slice(0, 200)}）⇒ 这**不代表仓库没有结构**，也不要当成"没有依赖关系"；` +
+    "请改用 glob/grep/read_file 定位，必要时稍后重试";
+}
+
+/** 把一次构建结果收成**注入给模型的文本**（`null` = 这一轮什么都不加）。
+ *  三态不许同形（规则 261）：
+ *  ⑴ `ok:false`（grammar/环境级失败、内部异常）⇒ 必须出声，并说清"这不是仓库没有结构"；
+ *  ⑵ 正常但图非全量 ⇒ 复用 `impact/coverage.ts` 那把尺的同一句话（地图与影响面共用一个判据）；
+ *  ⑶ 正常且收全 ⇒ 正文逐字不变（零回归哨兵，另有判卷钉着）。 */
+export function mapInjectText(built: MapBuildResult): string | null {
+  if (!built.ok) return mapUnavailableText(built.error ?? "未记原因");
+  if (built.text === "") return null;
+  return built.text + coverageNote(built.graphFiles, built.cap, built.candidates);
 }
 
 /** 上下文文件签名：文件集 {rel,mtime,size} + mentioned_idents + context_files + 预算 → sha1。
@@ -228,7 +243,11 @@ export function createMapBuilder(defaults: Partial<BuildMapOptions> = {}): MapBu
       const merged: BuildMapOptions = { ...defaults, ...opts };
       try {
         const budget = clampBudget(merged.budgetTokens, merged.maxInputTokens);
-        const files = await scanSourceFiles(merged.workspace, merged.maxFiles ?? MAX_FILES_DEFAULT);
+        // 帽在这一处解析、切片只在 `applyFileCap` 一处发生；**帽前全量候选**要留着当自述的分母
+        // （从前这里走 `scanSourceFiles`，那函数内部就切了 ⇒ 地图这一侧数不出"漏了几个"，只能闭嘴）。
+        const cap = merged.maxFiles ?? MAX_FILES_DEFAULT;
+        const candidates = await scanSourceFilesAll(merged.workspace);
+        const files = applyFileCap(candidates, cap);
         const fingerprint = mapFingerprint(files, merged.mentionedIdents, budget, merged.contextFiles);
         const cached = cache.get(merged.workspace);
         const round = merged.nowRound ?? 0;
@@ -242,6 +261,9 @@ export function createMapBuilder(defaults: Partial<BuildMapOptions> = {}): MapBu
             parsed: 0,
             fromRenderCache: true,
             fingerprint,
+            cap,
+            graphFiles: files.length,
+            candidates: candidates.length,
           };
         }
 
@@ -309,11 +331,19 @@ export function createMapBuilder(defaults: Partial<BuildMapOptions> = {}): MapBu
           parsed: files.length - hits,
           fromRenderCache: false,
           fingerprint,
+          cap,
+          graphFiles: files.length,
+          candidates: candidates.length,
         };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.debug("[map] 构建失败，静默降级为无地图:", msg);
-        return { text: "", tokens: 0, ok: false, fromTagsCache: 0, parsed: 0, fromRenderCache: false, fingerprint: "", error: msg };
+        // 降级面上的三个数取"什么都不知道"那一档：图是空的 ⇒ 自述由 `mapInjectText` 的 ok:false 分支出声，
+        // 不走覆盖面那句（拿 0/0 去说"另有 0 个没进图"会把失败读成"收全了"）。
+        return {
+          text: "", tokens: 0, ok: false, fromTagsCache: 0, parsed: 0, fromRenderCache: false, fingerprint: "",
+          cap: merged.maxFiles ?? MAX_FILES_DEFAULT, graphFiles: 0, candidates: 0, error: msg,
+        };
       }
     },
   };

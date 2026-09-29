@@ -6185,3 +6185,41 @@ typecheck：主树 1 条报错在 `src/cli.ts:709`（本笔没碰 `src/`），�
    #33 那半边（仓库地图仍不自述、失败仍走 `console.debug`）；本笔只把地图的覆盖面随缺省帽一起修好了。
    整张变异表 1023 条在本 HEAD 上的全量复跑**没做**——这一页只认证了「本笔动过的 7 条」＋「整棵判卷面 3180 条」。
    要拿整表认证当下一页凭证的话，得再花一趟四片并行（第 203 页实测 474.7s／2.29×）。
+
+### 2026-09-30 · 第 206 页 · #33 那两半落地：地图第一次自己说「我没收全」，也第一次在坏的时候**出声**
+（认证读数在下一页。）
+
+1. **改了什么**：
+   - `src/agent/map/build.ts`：`createMapBuilder().build()` 从前调 `scanSourceFiles()`（那函数内部就切了 ⇒ 地图这一侧
+     数不出"漏了几个"）。现在走 `scanSourceFilesAll()` ＋ `applyFileCap()`——切片仍只在那一处发生，
+     但**帽前那份全量候选留在了手上**，于是 `MapBuildResult` 多出三个数：`cap` / `graphFiles` / `candidates`
+     （缓存命中那一支也带，否则第二次构建就"忽然全量"了）。
+   - 新增纯函数 `mapInjectText(built)`：`ok:false` ⇒ 一句"仓库地图本次不可用（原因：…）⇒ 这**不代表仓库没有结构**"；
+     正常但图非全量 ⇒ 正文后面追加 `coverageNote(...)`（与影响面**同一把尺、同一句话**）；正常且收全 ⇒ 逐字不变。
+     另有 `mapUnavailableText(why)`：原因截 200 字（异常消息是别人的文本，我们不替它的长度做承诺）。
+   - `src/agent/glm-session.ts:779/:785`：注入点从 `built.text || null` 改成 `mapInjectText(built)`，
+     而 catch 那一支从前只 `console.debug` 然后返回 null ⇒ 现在回同一句说明。**两个失败出口**（内部降级／构建器抛出）
+     各有各的锚点，只守一个就会让另一个静默回到"读不到"与"没有问题"同形（规则 261）。
+2. **为了这一步先拆了一个环**（这是本页最值得记的形状课）：地图要用那句自述，就得 import 文案模块；
+   而文案模块 `impact/coverage.ts` 正 import `map/build.ts` 取那个上限 ⇒ `map/build → impact/coverage → map/build`。
+   修法不是把文案复制一份（第十四族就是这么来的），而是把**那两个常数**抽成不 import 任何人的叶子模块
+   `src/agent/map/cap.ts`：`cap` ← 谁都能吃、它谁都不吃 ⇒ 方向只剩一条（build→cap、coverage→cap、build→coverage）。
+   代价：6 个 import 站点跟着改路径，1 条锚点（`impact-cap-default-reverts-to-mtime-slice`）的 `src:` 从
+   `map/build.ts` 改成 `map/cap.ts`——**这正是第 205 页规则 285 说的那件事**：搬之前先 grep 谁在钉它的字节，
+   本次实测这张表里只有那一条命中（`grep -n "MAX_FILES_DEFAULT = MAX_FILES_CEILING" scripts/mutate-verify.mjs` → 1 行）。
+3. **判卷**（新文件 `tests/map-self-report.test.ts`，4 格）：
+   ① 6 个候选、帽 2 ⇒ `mapInjectText` 带"另有 4 个候选文件没进这张图"，且是**追加**在正文之后；
+   ② 反向对照：缺省帽 ⇒ 注入文本 `===` 地图正文（多一个字就红）；
+   ③ 真失败（工作区不存在 ⇒ rg 退出码 2 ⇒ 走内部 catch，不是 mock）⇒ 那句"不可用"要出现，
+      要带原因（断言里点名 `rg`），要带"不代表仓库没有结构"；
+   ④ **接线证人**：拿 `createGlmSessionProvider` 的 transport 抓首轮请求，三种 builder 各验一遍
+      （ok:false／非全量正文／收全正文），再加构建器**抛异常**那一支与 `map:false` 的零行为对照。
+      为什么要有这格：这张表里"纯函数有测、装配面没人看"已第 N 次命中（`defaultImpactHook` 曾零调用者、
+      `mapBuilder` 此前在 `tests/` 里**一次都没被传过**）。
+4. **锚点**：表长 1023 → **1027**（`map-self-report-dropped`／`map-candidates-denominator-lost`／
+   `map-degradation-ok-false-silent`／`map-inject-throw-swallowed`）。两条出声的分别钉两个出口，
+   不是重复：摘掉任何一个，另一个仍然绿——那正是这次要防的形状。
+5. **本笔没做的**：
+   - 地图仍**只在首轮注入**（`historyForMap.length > 2 ⇒ null`）：长会话中途模型再拿不到全局视图。
+     要不要按"每 N 轮／每次 plan 变更"重投，得先量那份正文每轮重送多少钱——已登记在 #33 第 ③ 条，未裁。
+   - 缺陷 B（夹具占全量图 49.4% 的边）仍在 #21。

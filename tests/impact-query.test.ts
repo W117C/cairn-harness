@@ -10,7 +10,7 @@ import { createImpactQueryTool, graphAbsenceNote, graphCandidatePosition, impact
 // 覆盖面两把纯函数 09-30 挪进 `src/agent/impact/coverage.ts`：同一张图的四个消费者要说同一句话，
 // 判据留在读端工具里就会被别处再抄一遍（第十四族）。
 import { capCauseNote, coverageNote } from "../src/agent/impact/coverage";
-import { MAX_FILES_CEILING, MAX_FILES_DEFAULT } from "../src/agent/map/build";
+import { MAX_FILES_CEILING, MAX_FILES_DEFAULT } from "../src/agent/map/cap";
 import { TOOLS } from "../src/tools";
 import type { ToolContext } from "../src/tools/base";
 import { checkPermission, isSideEffectTool } from "../src/permissions";

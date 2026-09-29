@@ -5,7 +5,7 @@
 // 而判据从前只写在 `src/tools/impact-query.ts` 里 ⇒ 另两侧要出声就得再抄一遍谓词
 // （本仓第十四族：同一判据 N 份副本，每份宽度不同、最宽那份才是对的）。
 // 这里只放**判据 + 文案**，不放取数：分母 `candidates` 由各消费者自己传到建图那一层去拿。
-import { MAX_FILES_CEILING } from "../map/build.js";
+import { MAX_FILES_CEILING } from "../map/cap.js";
 
 /** 「图非全量」的唯一判据：**帽前候选数 > 实际收录数**。
  *  为什么不看「收录数 < 帽」（旧判据，2026-09-25 换掉）：切片之外还有「单文件读/解析失败被跳过」

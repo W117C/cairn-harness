@@ -8746,7 +8746,7 @@ const MUTATIONS = [
   // 单价见本表尾行的分母（判卷宿主 = impact-cap-policy.test.ts，冷建 405 个文件那一格最贵）。
   {
     id: "impact-cap-default-reverts-to-mtime-slice",
-    src: "src/agent/map/build.ts",
+    src: "src/agent/map/cap.ts",
     test: "tests/impact-cap-policy.test.ts",
     desc: "缺省帽退回 400 ⇒ 覆盖面重新变成「这台机器最近动过的 400 个」：同一份代码在 worktree 里"+
       "由 rg 遍历顺序决定谁进图，实测两棵树入图集合差 21–28%、确证口径 88 条查询答不同",
@@ -8779,6 +8779,46 @@ const MUTATIONS = [
       "模型以为问全了（读端工具早自述、注入面从不自述＝同族只硬化一支）",
     apply: (s) => s.replace("  const cov = coverageNote(r.graphFiles, r.graphCap, r.graphCandidates);\n", "  const cov = \"\";\n"),
     expectFail: "注入摘要带上同一句覆盖面自述（图全量时逐字不变）",
+  },
+  // ── 第 206 页：仓库地图那两半（#33）——覆盖面自述 + 降级出声。
+  // 四条各钉一个决策点：追加那一句／分母从帽前来／ok:false 那一支出声／构建器抛出来那一支出声。
+  // 后两条为什么必须分开：地图有两个失败出口（内部 catch 给 ok:false、外面抛给调用方），
+  // 只守一个就会让另一个静默回到「读不到」与「没有问题」同形（规则 261）。
+  {
+    id: "map-self-report-dropped",
+    src: "src/agent/map/build.ts",
+    test: "tests/map-self-report.test.ts",
+    desc: "地图正文不再追加覆盖面自述 ⇒ 模型看到一张少了 4 个文件的图而以为问全了"+
+      "（读端工具早自述、地图这一支从不自述＝同族只硬化一支）",
+    apply: (s) => s.replace("  return built.text + coverageNote(built.graphFiles, built.cap, built.candidates);", "  return built.text;"),
+    expectFail: "地图非全量时正文带同一句覆盖面自述",
+  },
+  {
+    id: "map-candidates-denominator-lost",
+    src: "src/agent/map/build.ts",
+    test: "tests/map-self-report.test.ts",
+    desc: "分母退回「切片之后的文件数」⇒ graphFiles 与 candidates 恒等 ⇒ 自述永远不会开口，"+
+      "而帽子那一刀照咬（句子形状还在、数永远假，与 impact-coverage-denominator-constant-zero 同方向）",
+    apply: (s) => s.replaceAll("candidates: candidates.length,", "candidates: files.length,"),
+    expectFail: "地图非全量时正文带同一句覆盖面自述",
+  },
+  {
+    id: "map-degradation-ok-false-silent",
+    src: "src/agent/map/build.ts",
+    test: "tests/map-self-report.test.ts",
+    desc: "ok:false 那一支不出声（回到从前只走 console.debug）⇒ 模型读到「这轮没有地图」，"+
+      "与「这仓库没有结构」同形；它据此放弃结构化定位、开始乱 grep",
+    apply: (s) => s.replace('  if (!built.ok) return mapUnavailableText(built.error ?? "未记原因");', "  if (!built.ok) return null;"),
+    expectFail: "地图降级要出声，并且不许被读成「仓库没有结构」",
+  },
+  {
+    id: "map-inject-throw-swallowed",
+    src: "src/agent/glm-session.ts",
+    test: "tests/map-self-report.test.ts",
+    desc: "注入侧 catch 那一支仍返回 null ⇒ 两个失败出口只守了一个（装配面的一次抛出比内部降级更常见："+
+      "builder 自己没入库、缓存目录坏了）；「读不到」与「没有问题」再次同形",
+    apply: (s) => s.replace("          return mapUnavailableText(why);\n", "          return null;\n"),
+    expectFail: "会话首请求里带着地图的自述行与降级行（装配面有观察者）",
   },
 
   // ── 第 184 页：shell 家族的失败归因（判据只有一只，文案按出口分档；待办 #25）

@@ -12,7 +12,7 @@ import { buildMemoryInjection, type MemoryInjection } from "./memory/inject";
 import { REMEMBER_DESCRIPTION } from "../tools/remember";
 import { computePrune, writePruneAttachments } from "./prune";
 import { basename, dirname, join } from "node:path";
-import { createMapBuilder, type MapBuilder } from "./map/build";
+import { createMapBuilder, mapInjectText, mapUnavailableText, type MapBuilder } from "./map/build";
 import { AUTOMATION_TOOL_NAMES, automationToolSpecs } from "./automation-surface";
 import { strandsWorkersOnSpawn } from "./tool-surface";
 import {
@@ -776,10 +776,13 @@ export function createGlmSessionProvider(
             maxInputTokens: 128_000,
             nowRound: round++,
           });
-          return built.text || null;
+          return mapInjectText(built);
         } catch (err) {
-          console.debug("[map] 注入失败，静默跳过:", err instanceof Error ? err.message : String(err));
-          return null;
+          // 构建器**抛出来**的那一支（不是它内部 ok:false 的降级）从前只走 console.debug 就返回 null
+          // ⇒ 模型读到"这轮没有地图"，与"这仓库没结构"同形。同一句说明，两个出口共用一个措辞。
+          const why = err instanceof Error ? err.message : String(err);
+          console.debug("[map] 注入失败:", why);
+          return mapUnavailableText(why);
         }
       };
       let mapText = await buildMapText(history);

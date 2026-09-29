@@ -9,7 +9,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileTags, TAGS_EXTRACT_VERSION, TreeSitterUnavailableError, type SymbolTag } from "../map/parse.js";
-import { applyFileCap, MAX_FILES_CEILING, MAX_FILES_DEFAULT, scanSourceFilesAll, type ScannedFile } from "../map/build.js";
+import { applyFileCap, scanSourceFilesAll, type ScannedFile } from "../map/build.js";
+import { MAX_FILES_CEILING, MAX_FILES_DEFAULT } from "../map/cap.js";
 import { coverageNote, graphIsPartial } from "./coverage.js";
 
 /** grammar 环境级失败（坏/缺失 wasm）：影响面是护栏能力，必须 fail-loud。
