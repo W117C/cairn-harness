@@ -12,7 +12,10 @@ node outputs/exec-cause-mix-2026-09-30/probe-exec-shape.mjs        # 独立探�
 node outputs/exec-cause-mix-2026-09-30/probe-exec-red-shapes.mjs   # 五条红拍逐条原文
 ```
 
-## 1. 现读（`after-both-faces.txt`，21 个 jsonl / 11MB 语料）
+## 1. 现读（`after-both-faces.txt`，21 个 jsonl / **1,689.5 KB** 语料：outputs 1,687.3 KB ＋ 会话目录 2.2 KB）
+
+> 就地更正（规则 289）：这一行原先写「11MB」，那其实是 `du -sh outputs` 整目录的字节数（含 png/json/非 jsonl 文件），
+> 不是尺吃的取料面。上面这个数是 09-30 现读 21 个 `.jsonl` 各自 `stat().size` 之和，声明见 PROGRESS 第 217 页补⑵ 第 6 条。
 
 ```
 [verify 面] verify_result 事件=19 红事件=3 红命令=3

@@ -6633,3 +6633,24 @@ typecheck：主树 1 条报错在 `src/cli.ts:709`（本笔没碰 `src/`），�
    （`inFlightFiles.some(f => f.startsWith("tests/") || f.startsWith("scripts/"))`）在三种窗口形状下给出三种脸色：
    干净认证树＝绿、本笔脏（有测试文件在飞）＝绿、而**"判卷已提交＋工作树只剩未跟踪的 outputs 文件"**这一态＝红。
    它押在"谁的窗口里恰好有什么在飞"上 ⇒ 与本仓规则 255/256（判卷不许押在时钟粒度／调度上）同族，另立任务。
+### 2026-09-30 · 第 217 页补⑵ · 本笔（`70eab48`）凭证：认证 249 文件／3222 条 exit=0 且两端独占，六条新锚点 6/6 全杀（3.8s、12 拍、坏拍 0）
+
+1. **认证**（`outputs/exec-cause-mix-2026-09-30/head-cert-70eab48.log`，退出码由脚本自己印）：
+   `TREE=70eab48 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有` ·
+   `Test Files 249 passed (249)｜Tests 3222 passed (3222)｜exit=0` · `并发判卷=起前 0 套／跑完 0 套（两端独占）` ·
+   `import 面：2946 条边｜悬空 0` · `门表：29 道，缺 script 的 0 道` · `typecheck exit=0（0 报错）`。
+   与上一页那笔（`8a9ce3e`，同一面 1 failed／exit=1）合起来读：**判卷面从红到绿只换了本判卷的两条断言写法**，没动邻居的尺、没放宽帽。
+2. **针脚体检在认证树里**（`needles-check-in-cert-tree.log`）：`1044 条 —— 阻断 0，待复认 0，未覆盖 0，逐行式 5，未入库面 0，钉在飞文本 0，killer 指针失效 0`。
+   主树在落库前同一格印的是 `阻断 12（钉在飞文本 6 ＋ 未入库面 6）`——两读数都留着，因为"提交前必红"这一格本身就是规则 283 的证人。
+3. **六条新锚点逐条杀**（`kill-6-new-anchors-at-70eab48.log`，锁标签 `p217-new`）：`✅ ×6`、`全部变异被正确杀死（断言非恒真）`、
+   `本次耗时 3.8s · 跑了 6/6 条`、`判卷 spawn 12 次／6 条（每条次数分布 2×6）· 单次中位 第1次 0.3s／第2次 0.3s · 最贵一条 0.6s`、
+   `selector 12 拍·中位 0.29s·坏拍（选中≠1）0`；`whole` 那一支本次 0 拍 ⇒ **没有分母**（照实印，不拿别的臂顶）。单价账已回填 `scripts/gate-manifest.ts`。
+4. **门表侧另跑**（规则 292：cert 只数门不跑门）：`docs-check exit=0`，尾行 `UNVERIFIED=3`＝`STATE.md` 不存在那三格（照常印，不等于通过）。
+5. **就地更正声明（规则 289）**：`outputs/exec-cause-mix-2026-09-30/readings.md` §1 标题行原写「21 个 jsonl / **11MB** 语料」——
+   那个 11MB 是 `du -sh outputs` 的整目录数（含 png/json 等非 jsonl 文件），**标签大于取料面**。现读改成
+   `1,689.5 KB（outputs 1,687.3 KB ＋ 会话目录 2.2 KB）`，取料面与尺同一条口径（同两个根、深度 4、只认 `.jsonl`），
+   探针与输出入 `probe-corpus-size.{mjs,txt}`。更正只改这一行数，页内其余结论一字未动。
+6. **清场读数（只报不删，回收要点头）**：`git worktree list` 现读常驻残留树 **17** 棵，本笔新增两棵我的认证树
+   （`head-cert-8a9ce3e`＝那笔红的历史证据、`head-cert-70eab48`＝本凭证那棵）；其余 15 棵里 `cost-rank`／`gate-*`／`p169-staging`／
+   `p170-tighten`／`p187-a..d`／`p211-shard-a..d`／`p211-verify`／`head-cert-02ddabd…f0473b9` 全按规则 120 判"可回收"，
+   但**判据不是授权**（09-28 那条教训）⇒ 等用户点头再逐棵 `git worktree remove`。带分支的树（`doc-layer`／`goal-plan`／`opt`／`r1b`／`ui-codex-bench`）与 `verify-*` 那几棵一律不碰。

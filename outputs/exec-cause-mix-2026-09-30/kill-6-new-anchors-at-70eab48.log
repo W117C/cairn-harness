@@ -1,0 +1,14 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p217-new.lock）
+变异验证：6 条
+✅ replay-exec-unmatched-swallowed — join 不上 tool_call 的红拍不再计数 ⇒ exec 面的分母少一块而读数看着完整。与 gate-outcomes 同一条纪律、同一族老事故（2026-09-21 那片零假读数就是从这儿丢的）：「差值就是尺」，本条红 = 那个差值从此没人印（规则 258/261） ｜本机实测 0.6s／2 拍
+✅ replay-exec-nonshell-in-denominator — 分母不再限 shell 家族 ⇒ 一条 read_file 的失败也被算进「exec 可归因占比」。面划错之后，同一句读数说的已经不是同一件事（第十三族：同一条判据在主面／worker 面代价各量一遍） ｜本机实测 0.6s／2 拍
+✅ replay-exec-no-structure-read-as-code — 结构字段两只都不在时不再报「读不到」，而是落到产品谓词的缺省那一格 ⇒ 「尺读不到」与「量到了、就是代码错」同形（规则 261 的正面），分子当场虚高、占比永远好看 ｜本机实测 0.6s／2 拍
+✅ replay-exec-no-exit-code-folded-into-code — 本尺比产品谓词多出来的那一格被收回去 ⇒ 取消／被信号杀（没有退出码）重新被说成「代码错了」。针脚同时钉住两边各说什么：谓词哪天补上这一态，这条用例立刻红着提醒收敛成一处（规则 224：归因守对格） ｜本机实测 0.6s／2 拍
+✅ replay-exec-text-anchor-lost — 文案栏丢掉行首锚定 ⇒ 被跑的那条命令自己的正文成为第二个注入面（它打印一句 「[exit code: 127]」就算环境红）。规则 264 在 exec 面的同型：散文判据只准认行首 ｜本机实测 0.6s／2 拍
+✅ replay-call-index-type-check-dropped — join 索引不再只看 tool_call ⇒ 任何带 id 的事件（审批两型真带）都能把工具名覆成空，那条红拍就从分母里静默消失。取料层共用一只函数之后，这一格是**全族**的，不只 exec 面 ｜本机实测 0.6s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 3.8s · 跑了 6/6 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 12 次／6 条（每条次数分布 2×6）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 replay-exec-unmatched-swallowed 0.6s
+跑法单价：selector 12 拍·中位 0.29s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p217-new.lock）
