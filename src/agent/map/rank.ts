@@ -232,10 +232,15 @@ function nodeKeyOf(g: BuiltGraph, i: number): string {
   return nodeKey(n.file, n.name, n.kind);
 }
 
-/** 排名后的节点（降序）。 */
+/** 排名后的节点（降序）。同分必须有次级键：
+ *  PageRank 的浮点在结构对称的节点上会给**完全相同**的值（两个互不引用的同形文件就是），
+ *  而只比 `b.r - a.r` 时这一位的次序就由 `g.nodes` 的插入序决定。扫描层在 #21 笔1 已经收成
+ *  「mtime 降序＋rel 升序」，这一支是同一条判据没铺到的接缝——
+ *  09-30 实测本仓当前没撞到同分（冷/热缓存、隔 95s 重建都逐字相同），所以登记为**潜在**而非现行偏差。 */
 export function rankedNodes(g: BuiltGraph, ranks: number[]): MapNode[] {
+  const byStr = (x: string, y: string): number => (x < y ? -1 : x > y ? 1 : 0);
   return g.nodes
     .map((n, i) => ({ node: n, r: ranks[i] ?? 0 }))
-    .sort((a, b) => b.r - a.r)
+    .sort((a, b) => (b.r - a.r) || byStr(a.node.file, b.node.file) || byStr(a.node.name, b.node.name) || byStr(a.node.kind, b.node.kind))
     .map((x) => x.node);
 }

@@ -112,4 +112,16 @@ describe("map rank（任务 2）", () => {
     expect(personalizedPageRank(buildGraph([]))).toEqual([]);
     expect(rankedNodes(g, personalizedPageRank(g))[0].name).toBe("lonely");
   });
+
+  it("同分节点按 file→name→kind 升序，而不是按插入序", () => {
+    // 两个互不引用的同形文件：PageRank 必然给**完全相同**的值 ⇒ 只比分数时，次序由 g.nodes 的插入序决定。
+    // 这里刻意**倒着插**（z 在前、a 在后）：认插入序的写法会把 z 排在前面，这条断言就是只有次级键才看得见的形状。
+    const g = buildGraph([
+      file("z.ts", [["same", "def", 1]]),
+      file("a.ts", [["same", "def", 1]]),
+    ]);
+    const ranked = rankedNodes(g, personalizedPageRank(g));
+    expect(ranked).toHaveLength(2);
+    expect(ranked.map((n) => n.file)).toEqual(["a.ts", "z.ts"]);
+  });
 });

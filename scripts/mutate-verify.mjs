@@ -8876,6 +8876,18 @@ const MUTATIONS = [
     expectFail: "首轮带地图正文，次轮不带，也不写成「本次不可用」",
   },
   {
+    id: "rank-tiebreak-removed",
+    src: "src/agent/map/rank.ts",
+    test: "tests/map-rank.test.ts",
+    desc: "排名只比分数、同分就退回**插入序** ⇒ 同一份仓库换个遍历/缓存次序就给出两份地图正文，而这两份在模型眼里" +
+      "是同一句「仓库长这样」。扫描层的同秒兜底（mtime 降序＋rel 升序）在 #21 笔1 已经补过，这一支是同一条判据没铺到的接缝。" +
+      "判卷刻意把两个同形文件**倒着插**（z 在前）⇒ 只有次级键才看得见正确次序；本仓当前实测没撞到同分（冷/热缓存与隔 95s 重建逐字相同），" +
+      "所以这条钉的是**潜在**偏差，不是现行读数" +
+      "（09-30 第 214 页：从前那句「地图随相对年龄漂」是我把「自己正在改仓库」读成了时钟，已被快照自证的探针撤掉）",
+    apply: (s) => s.replace(".sort((a, b) => (b.r - a.r) || byStr(a.node.file, b.node.file) || byStr(a.node.name, b.node.name) || byStr(a.node.kind, b.node.kind))", ".sort((a, b) => b.r - a.r)"),
+    expectFail: "同分节点按 file→name→kind 升序，而不是按插入序",
+  },
+  {
     id: "map-degradation-ok-false-silent",
     src: "src/agent/map/build.ts",
     test: "tests/map-self-report.test.ts",
