@@ -1,0 +1,17 @@
+目标提交：e237788（--at=HEAD）
+worktree add exit=0
+已核：TREE=e237788ae55d9e590178defa2185db4ad80d45d6｜判卷四面在飞 0 项
+cp -al node_modules exit=0
+依赖核对：该提交声明 10 项，缺 0 项
+  硬链接子仓库依赖 fixtures/todo-app/node_modules ← 主树 exit=0
+import 面：2921 条边｜悬空 0（其中存量已豁免 0）
+门表：29 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证汇总 ==
+  TREE=e237788 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-p209-headcert.lock）
+  Test Files 246 passed (246)｜Tests 3186 passed (3186)｜exit=0（退出码直接取，不接管道）
+  并发判卷=起前 0 套／跑完 0 套（两端独占）
+  逐条日志：/tmp/dsh-head-cert-e237788
+  回收这棵树（规则 120，别留残留）：git worktree remove --force .worktrees/p209-headcert
+  常驻残留树=6（/Users/ze/Downloads/deepseek harness/.worktrees/cost-rank@27a2459、/Users/ze/Downloads/deepseek harness/.worktrees/gate-head-cert@ae80d6e、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-verify@1c40df7、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-03af5f5@03af5f5、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-1c40df7@1c40df7、/Users/ze/Downloads/deepseek harness/.worktrees/p209-verify@e237788）（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）

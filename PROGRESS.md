@@ -6316,3 +6316,24 @@ typecheck：主树 1 条报错在 `src/cli.ts:709`（本笔没碰 `src/`），�
    它是"我自己把被钉的那行删了"（盘上 grep 命中 0），不是"HEAD 里还没有"。规则 285 在这里是**正向**用了一次。
 5. **代价**：静态尺这一趟不新增 spawn（只多一个 map 与一次 join）；门那侧的增量＝＋2 条锚点＝＋4 拍，
    单价与这趟 `--check-needles` 的实测秒数都由凭证页回填，本页不预测。
+
+### 2026-09-30 · 第 210 页 · 凭证：`e237788` 认证通过（246 文件／3186 条 exit=0、两端独占）＋#26 那 3 条锚点全杀
+原始读数入库：`outputs/e237788-credential-2026-09-30/`（head-cert 的 summary/test/stdout ＋ 三条锚点的原文 ＋ 针脚体检原文）。
+
+1. **认证**（`--at=HEAD --tree=.worktrees/p209-headcert`，exit 0）：`Test Files 246 passed`／`Tests 3186 passed`（退出码直接取）、
+   `typecheck exit=0`、`import 面 2921 条边｜悬空 0`、`DIRTY_JUDGED=0`、`门表 29 道／该笔没有同名 script 的 0 道`、
+   **并发判卷＝起前 0 套／跑完 0 套（两端独占）**。条数比上一页多 2 ＝ 本笔新增的那两格判卷。
+2. **锚点**：`selector-blind-file-not-tracked`（管"记没记"）、`selector-cell-hides-blind-count`（管"说没说"）、
+   `selector-inspected-counts-unreadable-judges`（本笔改指新支的那条）——在一次性树 `p209-verify`@`e237788` 上
+   **3/3 全杀**：`本次耗时 2.4s · 跑了 3/3 条`、`判卷 spawn 6 次／3 条（2×3）`、
+   `跑法单价：selector 6 拍·中位 0.32s·坏拍（选中≠1）0`。⇒ 上一页第 5 项留空的那格回填完毕：＋2 条锚点的门账 ≈ 2 秒。
+3. **静态尺那一格的数也回填**：同一棵树上 `--check-needles` 自报 **9 秒**（含 node 启动与读入面），
+   `针脚体检：1029 条 —— 阻断 0，待复认 0，未覆盖 0，钉在飞文本 0，killer 指针失效 0`。
+   门表里那条 `mutate-needles-check` 的历史基线 6.13s 是**另一个测量点**（走 gates 跑器、在认证树里），两把尺的数不互借。
+4. **第三态在真表上长什么样**（这一格的存在就是本笔的全部理由）：
+   `选择子：1015/1028 …·可判面 1028／表 1029：不数的 1 条＝按设计不数 0、判卷读不到 0、`
+   `**读得到文件却一条标题都抽不到 1**（tests/solpi-receipt-integration.test.ts⇒evidence-receipt-reports-known-completeness-as-unknown）`。
+   同一条信息在上一版的读数里是**不存在**的（那一版直接印 `1013/1026`，读者以为分母就是 1026）。
+5. **收尾**：本会话两棵树（`p209-verify`、`p209-headcert`）回收；邻居的树与锁照旧不动。
+6. **仍开**：`TITLE_RE` 认不认 `it.each`（认了要处理 `%s` 展开⇒那条锚点从唯一命中变零命中，先量存量）——
+   这条现在**有了入口**（第三态点名是哪个文件、哪条锚点），登记在 #26 的结案说明里，不当作未做的缺陷。

@@ -1,0 +1,11 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p209kill.lock）
+变异验证：3 条
+✅ selector-inspected-counts-unreadable-judges — 判卷读不到／指针为空那些条也计入分母 ⇒ 可选率虚高，而「取料坏」被洗成「量过了」（规则 222 的三态：未取 ≠ 空面 ≠ 零命中） ｜本机实测 0.8s／2 拍
+✅ selector-blind-file-not-tracked — 「文件读得到、却一条标题都抽不到」这一态不记账（回到旧实现：与「这文件没锚点问题」同形）⇒ 解析器对整份判卷瞎（真仓成因：it.each 的标题不在 TITLE_RE 面上）时，普查少一条而读数一个字不说（规则 261/262） ｜本机实测 0.6s／2 拍
+✅ selector-cell-hides-blind-count — 取料记了、措辞却不印那一格 ⇒ 第三态又变回静默（读数与数据分家是本仓点名的假绿形状；本条与上一条分开钉：一条管「记没记」，一条管「说没说」） ｜本机实测 0.6s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 2.4s · 跑了 3/3 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 6 次／3 条（每条次数分布 2×3）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 selector-inspected-counts-unreadable-judges 0.8s
+跑法单价：selector 6 拍·中位 0.32s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p209kill.lock）
