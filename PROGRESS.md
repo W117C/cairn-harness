@@ -6399,4 +6399,12 @@ typecheck：主树 1 条报错在 `src/cli.ts:709`（本笔没碰 `src/`），�
    而不是印成「源=--cost-logs · 没有权重来源」这种自相矛盾的读法：本页第一趟整表就是这么退化成按条数装箱的，实测在案）。
 6. **清场**：本会话自己造的六棵树（`p211-shard-a..d`、`p211-verify`、`head-cert-0513d13`）跑完都是 detached∧0 项在飞∧那一笔已入库，
    按规则 120 属可回收；**回收要用户点头**，所以这页只报名单不擅动。认证自报的常驻残留树＝10 棵，其中 5 棵不是本会话造的，更不动。
+7. **本笔（`02ddabd`）自己也被同一套尺跑过**（不拿上一节的数顶：注释改的是 `scripts/gate-manifest.ts`，而这份文件正是三条锚点的被变异面）：
+   `--check-needles` 在 `02ddabd` 的干净树里印 `1031 条 —— 阻断 0，待复认 0，未覆盖 0，钉在飞文本 0，killer 指针失效 0`（exit=0），
+   三条同宿主锚点 `manifest-orphan-check-unconditional`／`manifest-gate-without-script-dropped`／`gate-manifest-head-cert-unregistered` **全杀**（`跑了 3/3 条 · 1.7s`），
+   认证 `Test Files 246｜Tests 3186｜exit=0`、`typecheck exit=0`、`TREE=02ddabd DIRTY_JUDGED=0 收尾复核=同一笔`、两端独占；
+   改掉那句措辞之后 `docs-check` 在主树与在 `0513d13` 干净树上都是 exit=0（第 5 节那格红的结案）。取料同目录。
+8. **所以第 5 节那格的口径要说清**：认证 `0513d13` 与认证 `02ddabd` 都是 `exit=0`，而 `docs-check` 在 `0513d13` 上是红的——
+   这不是两次认证打架，是 cert 的面里本来就没有门表面（#36）。凭证页从此**并列自报**，别再写「cert 通过＝这一笔绿」。
+
 

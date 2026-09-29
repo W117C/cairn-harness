@@ -1,0 +1,6 @@
+  ❌ D-8 PROGRESS.md
+     引用 replay:arg-error-mix 但登记表里没有这一项——先把复跑脚本建出来并登记进 scripts/replay-readings.ts
+  ℹ️  跳过 D-1 STATE.md 不存在（迁移前属正常）——该文件未受检，不等于通过
+  ℹ️  跳过 D-5 STATE.md 不存在（迁移前属正常）——rev 真伪未检，不等于通过
+  ℹ️  跳过 D-2/D-4 STATE.md 不存在（迁移前属正常）——该页未受检，不等于通过
+docs-check: ❌ 1 项违规 D-8=1（预算常量在本文件 DOC_BUDGETS，只准下调）
