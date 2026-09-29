@@ -11,11 +11,11 @@
 // 退出码三态：0＝每一片都判「已杀死」；1＝有片判红（存活／红了未点名／基线红／未生效）；
 // 2＝**取料坏**（树不干净／两片同一路径／名单为空／红行抽取对不上）——这一档不是「没有红」，是没尺。
 import { execFileSync, spawn } from "node:child_process";
-import { appendFileSync, existsSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { hostsSplitAcrossShards, mergeShards, partitionProof, planShards, rollupLine, shardRow, splitShards, type ShardRow } from "./lib/shard-plan";
+import { anchorCostsFromLog, hostsSplitAcrossShards, mergeShards, packingCell, partitionProof, planShards, rollupLine, shardRow, splitShards, type ShardRow } from "./lib/shard-plan";
 
 const MV = "scripts/mutate-verify.mjs";
 const MAX_BUF = 64 * 1024 * 1024;
@@ -31,6 +31,8 @@ interface Flags {
    *  它把同一宿主摊开，好让「不许跨片」那一格有可达的输入可红——
    *  否则那条守卫只有文字钉，把 `if (split.length > 0)` 改成 `if (false)` 也照样绿（第 186 页同一课）。 */
   forceSplit: "host" | "roundrobin";
+  /** 装箱权重的来源文件（机器原文）。空＝用**本标签上一轮**的片原文（读权重发生在截断之前）。 */
+  costLogs: string[];
   ids: string[];
 }
 
@@ -40,6 +42,7 @@ interface Flags {
 export function parseArgs(argv: readonly string[]): { flags: Flags | null; unknown: string[]; problem: string } {
   const unknown: string[] = [];
   const trees: string[] = [];
+  const costLogs: string[] = [];
   const ids: string[] = [];
   let changedSince: string | null = null;
   let budgetMs: number | null = null;
@@ -52,10 +55,11 @@ export function parseArgs(argv: readonly string[]): { flags: Flags | null; unkno
    *  这不是"贴心"，是**同一扇门的两条缝**：被包起来的 `mutate-verify` 只认 `--budget-ms 值`（空格写法，
    *  它的读取器不解析连写），而本编排器从前只认连写 ⇒ 照机器那份手册去敲的命令，会在自己这一层被判「未知参数」。
    *  第十三族（同族出口抄两份、宽度不同）在 CLI 形状上的样子。 */
-  const VALUE_FLAGS = ["--trees", "--changed-since", "--budget-ms", "--serial-seconds", "--lock-tag-base", "--force-split"] as const;
+  const VALUE_FLAGS = ["--trees", "--changed-since", "--budget-ms", "--serial-seconds", "--lock-tag-base", "--force-split", "--cost-logs"] as const;
   const take = (name: string, value: string | undefined): void => {
     if (value === undefined) { problem = `${name} 后面没有值`; return; }
     if (name === "--trees") trees.push(...value.split(",").filter((s) => s !== ""));
+    else if (name === "--cost-logs") costLogs.push(...value.split(",").filter((s) => s !== ""));
     else if (name === "--changed-since") changedSince = value;
     else if (name === "--budget-ms") budgetMs = Number(value);
     else if (name === "--serial-seconds") serialSeconds = Number(value);
@@ -85,7 +89,7 @@ export function parseArgs(argv: readonly string[]): { flags: Flags | null; unkno
   }
   if (problem !== "" || unknown.length > 0) return { flags: null, unknown, problem };
   return {
-    flags: { trees, changedSince, budgetMs, serialSeconds, lockTagBase, dryRun, forceSplit, ids },
+    flags: { trees, changedSince, budgetMs, serialSeconds, lockTagBase, dryRun, forceSplit, costLogs, ids },
     unknown,
     problem,
   };
@@ -156,12 +160,27 @@ export function shardLogPath(base: string, i: number): string {
   return join(tmpdir(), `mutate-shards-${base}-${String(i)}.log`);
 }
 
+/** 装箱权重的取料：`--cost-logs` 给了就用那些文件，没给就用**本标签上一轮**的片原文
+ *  （调用点保证在读完之后才截断）。一条都抽不到 ⇒ 返回空表，`planShards` 因此退回按条数装，
+ *  而计划行会写「没有权重来源」——第一次跑本来就没有权重，这不叫失败，但也不许装作有权重。
+ *  读不到的文件静默跳过：默认来源在首跑时就是不存在的，把它当「取料坏」会让第一次跑不起来。 */
+export function costWeights(explicit: readonly string[], ownPrevLogs: readonly string[]): { weights: Map<string, number>; whence: string } {
+  const sources = explicit.length > 0 ? explicit.map((p) => resolve(p)) : ownPrevLogs.map((p) => resolve(p));
+  const whence = explicit.length > 0 ? "--cost-logs" : "上一轮本标签片原文";
+  const merged = new Map<string, number>();
+  for (const p of sources) {
+    if (!existsSync(p)) continue;
+    anchorCostsFromLog(readFileSync(p, "utf8"), merged); // 「同一条取最大」那份规则在取料函数里，这里不重抄
+  }
+  return { weights: merged, whence };
+}
+
 async function main(): Promise<void> {
   const parsed = parseArgs(process.argv.slice(2));
   if (parsed.flags === null) {
     if (parsed.unknown.length > 0) console.error("取料坏：认不出的参数 ⇒ 一条不跑：" + parsed.unknown.join(" "));
     if (parsed.problem !== "") console.error("取料坏：" + parsed.problem);
-    console.error("用法：node --import tsx scripts/mutate-shards.ts --trees 树1,树2[,…] [--changed-since=<rev> | id…] [--budget-ms N] [--serial-seconds N] [--lock-tag-base …] [--dry-run]（带值的旗标两种写法都收）");
+    console.error("用法：node --import tsx scripts/mutate-shards.ts --trees 树1,树2[,…] [--changed-since=<rev> | id…] [--budget-ms N] [--serial-seconds N] [--lock-tag-base …] [--cost-logs 机器原文,…] [--dry-run]（带值的旗标两种写法都收）");
     process.exitCode = 2;
     return;
   }
@@ -195,7 +214,11 @@ async function main(): Promise<void> {
     return;
   }
   const ids = rows.map((r) => r.id);
-  const shards = f.forceSplit === "roundrobin" ? splitShards(ids, distinct.length) : planShards(rows, distinct.length);
+  // **先读权重再截断**：默认权重来源就是本标签**上一轮**的片原文，而下面这些路径马上要被清空重写。
+  const cost = costWeights(f.costLogs, Array.from({ length: distinct.length }, (_, i) => shardLogPath(f.lockTagBase, i)));
+  const shards = f.forceSplit === "roundrobin"
+    ? splitShards(ids, distinct.length)
+    : planShards(rows, distinct.length, cost.weights);
   const proof = partitionProof(ids, shards);
   if (proof.missing.length > 0 || proof.duplicated.length > 0 || proof.outside.length > 0) {
     console.error(
@@ -216,7 +239,11 @@ async function main(): Promise<void> {
   }
   const counts = proof.counts.join("+");
   const logs = shards.map((_, i) => shardLogPath(f.lockTagBase, i));
-  console.log(`名单 ${String(ids.length)} 条 → ${String(shards.length)} 片（${counts}）· 切法=${f.forceSplit} · 每片一棵树，锁标签 ${f.lockTagBase}-<i>`);
+  // 轮转那把观察输入不看重量 ⇒ 那一格必须说「不适用」，不许让读者以为这轮是按秒装的。
+  const packCell = f.forceSplit === "roundrobin"
+    ? "装箱=不适用（轮转不看重量）"
+    : packingCell(rows, cost.weights) + `·源=${cost.whence}`;
+  console.log(`名单 ${String(ids.length)} 条 → ${String(shards.length)} 片（${counts}）· 切法=${f.forceSplit}· ${packCell} · 每片一棵树，锁标签 ${f.lockTagBase}-<i>`);
   for (let i = 0; i < shards.length; i += 1) {
     console.log(`  片 ${String(i)}：${String(shards[i]!.length)} 条 @ ${distinct[i % distinct.length]} · 原文=${logs[i]}`);
   }

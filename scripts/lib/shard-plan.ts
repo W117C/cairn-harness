@@ -44,23 +44,80 @@ export function groupByHost(rows: readonly RosterRow[]): { host: string; ids: st
   return order.map((host) => ({ host, ids: map.get(host)! }));
 }
 
-/** 分片＝**把整组宿主塞进某一片**（最长优先、给当前最空的片），所以一个宿主不会跨片。
+/** 分片＝**把整组宿主塞进某一片**（重的优先、给当前最空的片），所以一个宿主不会跨片。
  *  为什么按宿主成组而不是按条数轮转（09-29 实测）：
  *  ① 同宿主的判卷文件在同一时刻只该被一棵树真跑——head-cert 那一族会撞共享的 git worktree 注册表；
  *  ② 顺带把「一片只跑一个宿主的一段」变成常态，同宿主的锚点单价相近，片时长因此更平。
- *  条数少于片数时不造空片（空片＝「跑了 0 条且全绿」那种假读数）。 */
-export function planShards(rows: readonly RosterRow[], shards: number): string[][] {
+ *  条数少于片数时不造空片（空片＝「跑了 0 条且全绿」那种假读数）。
+ *
+ *  `weights`（第 192 页，任务 #28）＝每条锚点的实测秒。给了就按**秒**装箱，不给按**条数**。
+ *  动因是现读：整表 4 片各 252 条，跑出来 323.6／391.1／419.9／443.0s（极差 +37%），
+ *  而 09-29 那次派生 94 条里 p90 以上那 10.6% 的条数占掉 36.3% 的时间 ⇒ 条数不是重量，长尾才是。
+ *  名单里缺权重的条按**已知权重的中位**补（不是 0：把没量过的条当免费，恰好会让重物叠在同一片上）。 */
+export function planShards(
+  rows: readonly RosterRow[],
+  shards: number,
+  weights: ReadonlyMap<string, number> | null = null,
+): string[][] {
   if (!Number.isInteger(shards) || shards < 1) throw new Error(`分片数必须是 ≥1 的整数，收到 ${String(shards)}`);
-  const groups = groupByHost(rows).sort((a, b) => b.ids.length - a.ids.length);
-  const k = Math.min(shards, groups.length);
+  const useWeights = weights !== null && weights.size > 0;
+  const fallback = useWeights ? fallbackSecondsOf(weights) : 1;
+  const groups = groupByHost(rows);
+  const cost = useWeights
+    ? (g: { ids: string[] }) => g.ids.reduce((a, id) => a + (weights.get(id) ?? fallback), 0)
+    : (g: { ids: string[] }) => g.ids.length;
+  const sorted = [...groups].sort((a, b) => cost(b) - cost(a));
+  const k = Math.min(shards, sorted.length);
   const out: string[][] = Array.from({ length: k }, () => []);
-  for (const g of groups) {
+  const load: number[] = Array.from({ length: k }, () => 0);
+  for (const g of sorted) {
     let target = 0;
-    for (let i = 1; i < out.length; i += 1) if (out[i]!.length < out[target]!.length) target = i;
+    for (let i = 1; i < out.length; i += 1) if (load[i]! < load[target]!) target = i;
     out[target]!.push(...g.ids);
+    load[target]! += cost(g);
   }
   return out;
 }
+
+/** 缺权重时按多少秒补＝**已知权重的中位**。单列一份，好让装箱与那句声明读同一个数（判卷不许自己再算一遍）。 */
+export function fallbackSecondsOf(weights: ReadonlyMap<string, number>): number {
+  const nums = [...weights.values()].filter((n) => Number.isFinite(n)).sort((a, b) => a - b);
+  if (nums.length === 0) return 1;
+  const mid = Math.floor(nums.length / 2);
+  return nums.length % 2 === 1 ? nums[mid]! : ((nums[mid - 1] ?? 0) + (nums[mid] ?? 0)) / 2;
+}
+
+/** 从机器原文抽「每条锚点的实测秒」——第 191 页那一格的第一个读者。
+ *  认的是**行尾那一格**的形状：`<标记> <id> — …｜本机实测 N.Ns／K 拍$`。
+ *  标记位刻意不枚举表情（✅／❌／⏭️ 的变体选择符会骗人），而行尾锚定是必须的：
+ *  散文里出现同样一串字面（描述引用了这格自己）不算读数（规则 264：散文不许冒充读数）。
+ *  `一次没跑 ⇒ 这一格没有分母`那一态**不进表**——把没量过的条当 0 秒装进片里＝让盲区优先跑（规则 245）。
+ *  同一条出现多次取**最大值**：装箱宁可高估长尾，低估会把两个重物叠进同一片，而墙钟由最慢那片决定。
+ *  `into` 让多份原文并进同一张表（编排器读上一轮的多个片文件）——**取最大的规则只许有一份**，
+ *  在调用点再抄一遍就是第十三族（规则 205/213）。 */
+export function anchorCostsFromLog(text: string, into: Map<string, number> = new Map<string, number>()): Map<string, number> {
+  for (const line of text.split("\n")) {
+    const m = /^\S+ (\S+) — .*｜本机实测 ([0-9.]+)s／\d+ 拍$/u.exec(line);
+    if (m === null) continue;
+    const id = m[1]!;
+    const sec = Number(m[2]);
+    const prev = into.get(id);
+    if (prev === undefined || sec > prev) into.set(id, sec);
+  }
+  return into;
+}
+
+/** 装箱那一格怎么说自己：用了权重就说来源与缺口，没用就说没用。
+ *  「缺多少条按中位补」必须印出来——不印的话，读者会把这份计划当成全量实测过的。 */
+export function packingCell(rows: readonly RosterRow[], weights: ReadonlyMap<string, number> | null): string {
+  if (weights === null || weights.size === 0) return "装箱=条数（没有权重来源）";
+  const ids = new Set(rows.map((r) => r.id));
+  const known = [...ids].filter((id) => weights.has(id)).length;
+  const missing = ids.size - known;
+  return `装箱=实测秒（权重 ${String(known)}/${String(ids.size)} 条` +
+    (missing === 0 ? "）" : `·缺 ${String(missing)} 条按中位 ${fallbackSecondsOf(weights).toFixed(2)}s 补）`);
+}
+
 
 /** 反向证人：**哪些宿主的条被摊到了两片以上**。空数组＝分片没有把同一宿主拆开。
  *  这把尺必须独立存在：`planShards` 若退化成轮转，`partitionProof` 仍然全绿（不重不漏），

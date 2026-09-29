@@ -10,9 +10,12 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  anchorCostsFromLog,
+  fallbackSecondsOf,
   groupByHost,
   hostsSplitAcrossShards,
   mergeShards,
+  packingCell,
   partitionProof,
   planShards,
   rollupLine,
@@ -20,7 +23,8 @@ import {
   splitShards,
   type ShardRow,
 } from "../scripts/lib/shard-plan";
-import { parseArgs, shardLogPath, treeProblem } from "../scripts/mutate-shards";
+import { anchorCostCell } from "../scripts/lib/mutate-gates";
+import { costWeights, parseArgs, shardLogPath, treeProblem } from "../scripts/mutate-shards";
 
 /** 真机末段（第 186 页 `--changed-since=be18607`，27 条全杀）——只留判卷要认的那几行，文字与原文一致。 */
 const REAL_ALL_KILLED = [
@@ -461,5 +465,123 @@ describe("编排器接线：合并层不是挂在墙上的仪表", () => {
   it("退出码由合并结果决定（allKilled／抽取不符），不许写死", () => {
     expect(src).toMatch(/process\.exitCode = m\.mismatchShards > 0 \|\| shardRows\.some\(\(r\) => r\.verdict === "读不出"\) \? 2 : 1;/u);
     expect(src).toMatch(/process\.exitCode = m\.mismatchShards > 0 \? 2 : 0;/u);
+  });
+});
+
+// ---- 第 192 页：逐条实测秒当装箱权重（任务 #28）----
+// 动因是读数本身：整表 4 片各 252 条却跑出 323.6／391.1／419.9／443.0s（极差 +37%），
+// 而第 191 页那一格的首份现场显示 p90 以上那 10.6% 的条数占掉 36.3% 的时间 ⇒ **条数不是重量，长尾才是**。
+/** 真机原文（第 191 页那一跑 `mutate-shards-p191-verify-0.log`）：行首与行尾逐字一致，中间描述照实省略。 */
+const REAL_COST_LINES = [
+  "✅ loose-pointer-counts-literal — 漏掉「逐字认不出」这一半条件 ｜本机实测 17.7s／2 拍",
+  "✅ mutate-gates-judge-file-blind — 退回「判卷测试文件不在闸内」的旧语义 ｜本机实测 0.9s／2 拍",
+  "✅ verify-per-anchor-cost-not-printed — 逐条结果行不带那一格 ｜本机实测 2.8s／2 拍",
+].join("\n");
+
+describe("取料：机器原文 → 每条实测秒", () => {
+  it("判卷吃生产端那一份：anchorCostCell 印出来的行必须能被 anchorCostsFromLog 读回来", () => {
+    const line = "✅ probe-id — 任意描述 ｜" + anchorCostCell([1200, 100]);
+    expect([...anchorCostsFromLog(line).entries()]).toEqual([["probe-id", 1.3]]);
+    expect(anchorCostsFromLog("⏭️ skip-id — 没跑到 ｜" + anchorCostCell([])).size,
+      "「这一格没有分母」不许进表：进表就是按 0 秒装，盲区会优先被跑").toBe(0);
+  });
+
+  it("只认行尾那一格：描述里引用同样字面不算读数（规则 264：散文不许冒充读数）", () => {
+    const prose = "✅ quoting-anchor — 这条锚点的 desc 写着「｜本机实测 9.9s／2 拍」，但那不是行尾";
+    expect(anchorCostsFromLog(prose).size).toBe(0);
+    const m = anchorCostsFromLog(REAL_COST_LINES);
+    expect(m.size).toBe(3);
+    expect(m.get("loose-pointer-counts-literal")).toBe(17.7);
+  });
+
+  it("同一条多次出现取最大值：低估长尾会把两个重物叠进同一片，而墙钟由最慢那片决定", () => {
+    const m = anchorCostsFromLog([
+      "✅ a — x ｜本机实测 1.0s／2 拍",
+      "✅ a — x ｜本机实测 9.0s／2 拍",
+      "✅ a — x ｜本机实测 2.0s／2 拍",
+    ].join("\n"));
+    expect(m.get("a")).toBe(9);
+  });
+});
+
+describe("装箱：权重改变排法，且那一格要说清自己", () => {
+  const rows = [
+    { id: "s1", host: "cheap.test.ts" }, { id: "s2", host: "cheap.test.ts" }, { id: "s3", host: "cheap.test.ts" },
+    { id: "s4", host: "cheap.test.ts" }, { id: "s5", host: "cheap.test.ts" }, { id: "h1", host: "heavy.test.ts" },
+  ];
+
+  it("按条数装与按秒装给出不同的两片（负控：不给权重＝逐字等于旧行为）", () => {
+    const byCount = planShards(rows, 2);
+    const bySeconds = planShards(rows, 2, new Map([
+      ["s1", 0.1], ["s2", 0.1], ["s3", 0.1], ["s4", 0.1], ["s5", 0.1], ["h1", 10],
+    ]));
+    expect(byCount[0].length, "条数等分：5 条那片先起，那条 10s 的排后面").toBe(5);
+    expect(bySeconds[0], "按秒：10s 那一条自己先起一片").toEqual(["h1"]);
+    expect(JSON.stringify(bySeconds)).not.toEqual(JSON.stringify(byCount));
+    expect(planShards(rows, 2, null), "null＝没有来源").toEqual(byCount);
+    expect(planShards(rows, 2, new Map()), "空表＝没有来源，同样退回条数").toEqual(byCount);
+  });
+
+  it("名单里缺权重的条按**已知中位**补，不许当 0 秒（否则盲区优先跑）", () => {
+    expect(fallbackSecondsOf(new Map([["k1", 6], ["k2", 1], ["k3", 9]]))).toBe(6);
+    const blind = [
+      { id: "m1", host: "unknown.test.ts" }, { id: "m2", host: "unknown.test.ts" }, { id: "h1", host: "known.test.ts" },
+    ];
+    const weights = new Map([["h1", 1], ["k1", 6], ["k2", 6]]); // 中位 6；m1／m2 不在表上
+    expect(planShards(blind, 2, weights)[0], "两个盲区按中位算 12s ⇒ 比那条 1s 的重，先起").toEqual(["m1", "m2"]);
+    expect(fallbackSecondsOf(new Map()), "空表没有中位可取 ⇒ 退成 1（等价条数）").toBe(1);
+  });
+
+  it("那一格三态分开印：没有来源／全量命中／缺口按中位（缺口要报数）", () => {
+    const two = [{ id: "a", host: "h1" }, { id: "b", host: "h2" }];
+    const none = packingCell(two, null);
+    const all = packingCell(two, new Map([["a", 1], ["b", 2]]));
+    const part = packingCell(two, new Map([["a", 1]]));
+    expect(none).toBe("装箱=条数（没有权重来源）");
+    expect(all).toContain("实测秒");
+    expect(all).not.toContain("中位");
+    expect(part).toContain("缺 1 条按中位");
+    expect(new Set([none, all, part]).size, "三态不许同形（规则 239）").toBe(3);
+  });
+});
+
+describe("编排器的权重取料面", () => {
+  it("--cost-logs 给了就用它，缺文件静默跳过；没给就说来源是上一轮本标签", () => {
+    const dir = mkdtempSync(join(tmpdir(), "p192-cost-"));
+    const f1 = join(dir, "a.log");
+    writeFileSync(f1, REAL_COST_LINES);
+    try {
+      const explicit = costWeights([f1, join(dir, "missing.log")], []);
+      expect(explicit.whence).toBe("--cost-logs");
+      expect(explicit.weights.size, "读不到的那份不许把整次取料作废，也不许伪装成读到过").toBe(3);
+      expect(costWeights([], [f1]).whence).toBe("上一轮本标签片原文");
+      expect(costWeights([], []).weights.size).toBe(0);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  /** 观察输入：真跑 CLI 的 `--dry-run`。只钉源码文字的话，「算了却不印」这种形状会照样绿（规则 230）。 */
+  it("真跑 --dry-run：给了 --cost-logs 就必须在那一行上说清权重与来源", () => {
+    const wt = cleanWorktree();
+    const log = join(tmpdir(), `p192-cost-${String(process.pid)}.log`);
+    writeFileSync(log, REAL_COST_LINES);
+    try {
+      const r = runEntry([
+        `--trees=${wt.path}`, `--lock-tag-base=p192-dry-${String(process.pid)}`, `--cost-logs=${log}`,
+        "--changed-since=HEAD~1", "--dry-run",
+      ], wt.path);
+      expect(r.status, r.out).toBe(0);
+      expect(r.out).toContain("装箱=实测秒（权重 3/");
+      expect(r.out).toContain("·源=--cost-logs");
+    } finally { rmSync(log, { force: true }); wt.drop(); }
+  }, 120_000);
+
+  it("接线：读权重发生在**截断之前**，且计划行带那一格", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-shards.ts", import.meta.url)), "utf8");
+    expect(src).toMatch(/^  const cost = costWeights\(f\.costLogs, Array\.from\(\{ length: distinct\.length \}, \(_, i\) => shardLogPath\(f\.lockTagBase, i\)\)\);$/mu);
+    expect(src).toMatch(/const shards = f\.forceSplit === "roundrobin"\n[\s\S]{0,140}planShards\(rows, distinct\.length, cost\.weights\);/u);
+    expect(src).toMatch(/· \$\{packCell\} · 每片一棵树/u);
+    // 顺序证人：默认权重就是「本标签上一轮的片原文」，而这几份文件开跑前会被清空——
+    // 先截断后读＝每次都是「没有权重」，而那一格会诚实地说没来源，于是缺陷读起来像首跑。
+    expect(src).toMatch(/const cost = costWeights\([\s\S]*\n  for \(const p of logs\) writeFileSync\(p, ""\);/u);
   });
 });

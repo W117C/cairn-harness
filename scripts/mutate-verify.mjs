@@ -9081,6 +9081,52 @@ const MUTATIONS = [
     apply: (s) => s.replace("return `本机实测 ${secsOf(runsMs.reduce((a, b) => a + b, 0))}s／${String(runsMs.length)} 拍`;", "return `本机实测 ${secsOf(runsMs.reduce((a, b) => a + b, 0))}s`;"),
     expectFail: "取料形状：有分母那一支固定成 秒／拍 两段（#28 的装箱按它读，改形状要同轮换读者）",
   },
+  {
+    id: "shard-plan-weights-ignored",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "有权重却仍按条数装（把权重那一支换回 `g.ids.length`）⇒ 第 191 页首份现场读出的长尾进不了装箱" +
+      "（p90 以上那 10.6% 的条数占掉 36.3% 的时间，最慢一条 17.7s 自己就占 18%），" +
+      "整表墙钟继续由最慢那片决定——第 190 页那个 +37% 极差就是这么来的",
+    apply: (s) => s.replace("    ? (g: { ids: string[] }) => g.ids.reduce((a, id) => a + (weights.get(id) ?? fallback), 0)\n", "    ? (g: { ids: string[] }) => g.ids.length\n"),
+    expectFail: "按条数装与按秒装给出不同的两片（负控：不给权重＝逐字等于旧行为）",
+  },
+  {
+    id: "shard-plan-missing-weight-as-zero",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "缺权重的条按 0 秒装 ⇒ 盲区变成「免费的重物」，装箱会优先把没量过的宿主整组塞进同一片，" +
+      "而那一片的真实时长无人知道（规则 245：把「没记账」读成「记了 0」会让单价看起来更便宜，诱人以下算）",
+    apply: (s) => s.replace("(weights.get(id) ?? fallback)", "(weights.get(id) ?? 0)"),
+    expectFail: "名单里缺权重的条按**已知中位**补，不许当 0 秒（否则盲区优先跑）",
+  },
+  {
+    id: "shard-cost-parser-first-wins",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "同一条多次出现时保留第一次看到的 ⇒ 权重回到「早退那一拍」的量级，" +
+      "长尾被静默削平（而装箱正是为长尾才改的）。这一格取最大值是有理由的：低估会把两个重物叠进同一片",
+    apply: (s) => s.replace("if (prev === undefined || sec > prev) into.set(id, sec);", "if (prev === undefined) into.set(id, sec);"),
+    expectFail: "同一条多次出现取最大值：低估长尾会把两个重物叠进同一片，而墙钟由最慢那片决定",
+  },
+  {
+    id: "shard-cost-parser-unanchored-tail",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "取料正则丢掉行尾锚定 ⇒ 锚点描述里那句引用「｜本机实测 9.9s／2 拍」的散文被当成读数收进表，" +
+      "权重表混进不存在的秒。第 188 页同一课换了载体：**被度量者自己的文案是第二个注入面**（规则 264）",
+    apply: (s) => s.replace("拍$/u.exec(line)", "拍/u.exec(line)"),
+    expectFail: "只认行尾那一格：描述里引用同样字面不算读数（规则 264：散文不许冒充读数）",
+  },
+  {
+    id: "shard-cli-pack-cell-not-printed",
+    src: "scripts/mutate-shards.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "算了权重却不印那一格 ⇒ 读者只能看到「切法=host」，分不清这一轮是按秒装的还是首跑按条数装的，" +
+      "而这两者的墙钟期望差 37%（「算出来」还要「拿得到」，规则 211/241 同族；本条由**真跑 --dry-run** 那条证人杀，不是钉文字）",
+    apply: (s) => s.replace("${packCell} · 每片一棵树，锁标签", "每片一棵树，锁标签"),
+    expectFail: "真跑 --dry-run：给了 --cost-logs 就必须在那一行上说清权重与来源",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
