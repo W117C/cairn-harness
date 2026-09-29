@@ -8853,6 +8853,29 @@ const MUTATIONS = [
     expectFail: "地图非全量时正文带同一句覆盖面自述",
   },
   {
+    id: "map-turn-gate-bound-loosened",
+    src: "src/agent/glm-session.ts",
+    test: "tests/map-turn-gate.test.ts",
+    desc: "首轮闸的界被放松（>2 → >200）⇒ 长会话每轮都重送地图正文。这一格从前**零观测者**：" +
+      "第 206 页那条尺只钉「首轮有没有」，没钉「次轮还送不送」，把 >2 改成 >200 全量判卷一条不红。" +
+      "而每轮重送抖掉的不是那 919 token，是排在它后面的整段可缓存前缀（地图消息在历史之前）。" +
+      "实测（09-30 本机、本仓 523 个候选文件）：同一份仓库连建两次逐字相同；只动一个文件的 mtime 就在第 804 字符分叉；" +
+      "仓库一字不动、隔 90s 再建**也在第 804 字符分叉** ⇒ 排名吃的是相对年龄，不是绝对时间戳",
+    apply: (s) => s.replace("if (!mapBuilder || historyForMap.length > 2) return null;", "if (!mapBuilder || historyForMap.length > 200) return null;"),
+    expectFail: "首轮带地图正文，次轮不带，也不写成「本次不可用」",
+  },
+  {
+    id: "map-turn-gate-prints-degradation",
+    src: "src/agent/glm-session.ts",
+    test: "tests/map-turn-gate.test.ts",
+    desc: "闸还在、但把「这一位根本没有」改成「送一句降级说明」⇒ 模型读到「这轮没有地图」，" +
+      "与「这仓库没有结构」同形（第 206 页拆掉的就是这个形状，规则 261）。" +
+      "与上一条各红一条**不同**的断言：这条咬「次轮不许出现降级行」，那条咬「次轮不许出现地图标题」" +
+      "（同一判据的两半，两个突变各看得见一半——规则 224 那一族要的正是这个形状）",
+    apply: (s) => s.replace("historyForMap.length > 2) return null;", "historyForMap.length > 2) return mapUnavailableText(\"首轮之后不再重送\");"),
+    expectFail: "首轮带地图正文，次轮不带，也不写成「本次不可用」",
+  },
+  {
     id: "map-degradation-ok-false-silent",
     src: "src/agent/map/build.ts",
     test: "tests/map-self-report.test.ts",
