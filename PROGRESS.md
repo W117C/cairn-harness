@@ -6580,3 +6580,34 @@ typecheck：主树 1 条报错在 `src/cli.ts:709`（本笔没碰 `src/`），�
 
 
 
+### 2026-09-30 · 第 217 页 · #38 结案成尺：一把尺两个面——exec 红拍今天可机器归因 **0/5**，而其中三格不是「等真会话」能闭的（表长 1038→1044）
+
+1. **任务原句与选择**。#38 写的是「等结构面试运行事件后才量得出」。现读之后这一句分两半：占比那一半确实要等（下面第 2 条给它配了证人），
+   但**造这把尺的过程当场量出三格缺陷**，它们与"有没有新会话"无关 ⇒ 按任务的两个选项中那条：
+   扩 `replay:verify-cause-mix` 的面（同族同格，一把尺两个面），**不另开第二把**。
+2. **现读**（原文与四份探针日志入 `outputs/exec-cause-mix-2026-09-30/`）。
+   - exec 面：shell 家族 `tool_result`=40（run_shell 26／shell_ro 8／shell_rw 6）· 红拍=5 · join 不上=9 · **带结构字段=0**
+     ⇒ 可机器归因 `0.00 (0/5)`、环境类 `0.00 (0/5)`；文案栏 `code-or-unknown:4 denied-by-readonly-filter:1`。
+   - **这个 0 有证人**（不是又一片裸零，规则 119/261）：语料最新事件 2026-09-20 早于结构字段落到盘面那一笔
+     （`9e2f15c`／2026-09-29，由 `execFieldShipDate` 现读 `git log -S "result.exitCode !== undefined" -- src/agent/loop.ts`）⇒ 判「数据年龄」。
+   - 独立探针（不走尺的代码）给同一组数：`exitCode`/`timedOut` 在场 **0/40**、`tool_result` 键形状只有两种
+     （`callId,ok,output,type` 197 条 ＋ 带 `agent_id` 89 条）、**整批 0 条 result 自带 `ts`** ⇒ 年龄只能跨全部事件取（尺与判卷都是这一条口径）。
+   - 没动的那一半**逐字不变**：改前改后的 verify 面 6 行，剥掉新增的 `[verify 面] ` 前缀后 `diff` 为空。
+3. **三格现读缺陷**（各有 `file:line` 证人；本笔只量、不改产品行为 ⇒ 各挂任务）。
+   ① **权限拒绝落盘时既不带 `gate` 也不带结构字段**（`src/agent/loop.ts:409-414` 只写 `callId/ok/output`），
+      `unknown tool:` 同形状（`loop.ts:421`）⇒ 在结构栏里与"旧日志"同形，今天只有文案栏看得见它（语料 5 条红里正好 1 条）。
+      这一格还顺带说明：`gate` 留痕（judgment-layer §5）目前**不覆盖 deny 那一支**。
+   ② **`exitCode:null + timedOut:false` 在产品谓词里落到缺省 `"code"`**（`src/agent/verify.ts:25-30`）。
+      到这一格的真路径有两条：取消支（`src/tools/run_shell.ts:39` 的 `exitCode: cancelled ? null : code`）与被信号杀后的 `close(null)`
+      ⇒ 把"没有退出码"说成"代码错了"。本尺因此**比谓词多印一格** `no-exit-code`，并把"两边各说什么"钉在同一条用例里（谓词哪天补上这态，用例立刻红着提醒收敛）。
+   ③ **spawn 的 `error` 出口不经过 `annotateExecCause`**（`src/tools/run_shell.ts:78-83` 直接 settle 一个裸对象）⇒ 又是 `no-structure`。
+      这三格合起来就是尺上那句 `⚠️ 这一格有三种真成因、本面分不开`。
+4. **取料层收口**：新增共用 `callNameIndex(raws)`（`scripts/replay/corpus.ts`）——立这只模块的理由与 roots 同一条：
+   **join 语义抄两份，就会各自漂出「join 不上算什么」**（09-21 那片零假读数的入口）。本笔只让新面吃它；
+   `gate-outcomes.ts` 里那份内联 join 从此是**第二份副本**，已立任务折过来（它那三条锚点针脚都是单行，搬动不吞字节——先量再动，规则 299）。
+5. **尺与针脚同笔**：`tests/replay-verify-cause-exec.test.ts` 27 条（分母 4＋结构栏 11＋文案栏 9＋年龄 2＋取料失败 1；三格负控）
+   ＋ 6 条新锚点（`replay-exec-unmatched-swallowed`／`-nonshell-in-denominator`／`-no-structure-read-as-code`／`-no-exit-code-folded-into-code`／`-text-anchor-lost`／`replay-call-index-type-check-dropped`）。
+   登记项 id 没变，只把 `answers` 那句从「verify 红」扩成两句——**取料面长大了，标签必须跟着长大**（规则 258 反向）。
+   入库前 `--check-needles` 印 `阻断 12`（钉在飞文本 6 ＋ 未入库面 6）＝设计内那一态，落库后必须回到 0。
+6. **归属／撞窗现读**：共享主树的分支已被邻居切到 `zcode`（tip=`5d22f0f`＝我上一笔），`codex/dsh-security-product` 是它的祖先、落后 26 笔
+   ⇒ 我的簇一笔没丢，但这一页要说出口；邻居的未跟踪件（`outputs/_audit-*.md`、`outputs/impact-accuracy-probe-2026-09-29/`）一字不碰。

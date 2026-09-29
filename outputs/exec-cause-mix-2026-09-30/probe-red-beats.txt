@@ -1,0 +1,15 @@
+=== supervise.events.jsonl | run_shell | exitCode=undefined timedOut=undefined
+"FAIL: subtotal 要按 price×qty 累加（期望 37，实得 16.5）\nFAIL: 税额 = 小计 × 20 / 100，不是把 20 当金额加（期望 96，实得 100）\nFAIL: 非整数小计按比例并四舍五入到分（期望 40.18，实得 44.55）\nFAIL: 2.2kg 按 3kg 计（向上取整）（期望 24，实得 16）\n4 项断言失败\n\n[exit code: 1]"
+   hints: exit-code-bracket=true 127=false 超时=false ERR_PNPM=false
+=== fanout.events.jsonl | shell_ro | exitCode=undefined timedOut=undefined
+"[read-only] 只读 bash 静态过滤拒绝：withDiscount\" 不在只读白名单（允许：ls cat head tail wc pwd echo grep rg file stat which 与 git 只读子命令）"
+   hints: exit-code-bracket=false 127=false 超时=false ERR_PNPM=false
+=== I2-rep1-base.events.jsonl | run_shell | exitCode=undefined timedOut=undefined
+"total 8\ndrwxr-xr-x@ 8 ze  staff  256 Sep 20 17:13 .\ndrwx------@ 4 ze  staff  128 Sep 20 17:13 ..\ndrwxr-xr-x@ 2 ze  staff   64 Sep 20 17:13 .agents\ndrwxr-xr-x@ 2 ze  staff   64 Sep 20 17:13 .tmp\nlrwxr-xr-x@ 1 ze  staff   67 Sep 20 17:13 node_modules -> /Users/ze/Downloads/deepseek harness/fixtures/todo-app/node_modules\n-rw-------@ 1 ze  staff  131 Sep 20 17:13 package.json\ndrwxr-xr-x@ 3 ze  staff  "
+   hints: exit-code-bracket=true 127=false 超时=false ERR_PNPM=false
+=== I2-rep1-base.events.jsonl | run_shell | exitCode=undefined timedOut=undefined
+"---\n.\n..\n.agents\n.tmp\nnode_modules\npackage.json\nsrc\ntests\n===\n\n[exit code: 1]"
+   hints: exit-code-bracket=true 127=false 超时=false ERR_PNPM=false
+=== I3-rep1-base.events.jsonl | run_shell | exitCode=undefined timedOut=undefined
+".\n..\n.agents\n.tmp\nnode_modules\npackage.json\nsrc\ntests\n\n[exit code: 1]"
+   hints: exit-code-bracket=true 127=false 超时=false ERR_PNPM=false

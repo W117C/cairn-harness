@@ -1,0 +1,22 @@
+files 21
+maxTsAny 2026-09-20T04:15:25.980Z
+shell tool_result 40 red 5 unjoined 9
+exitCode key present 0 timedOut key present 0 neither 40
+maxTs shell red -
+red exitCode histogram [ [ '(absent)', 5 ] ]
+top tool names [
+  [ 'read_file', 116 ],
+  [ 'edit_file', 57 ],
+  [ 'run_shell', 26 ],
+  [ 'spawn_agent', 21 ],
+  [ 'glob', 12 ],
+  [ 'grep', 11 ],
+  [ 'propose_plan', 10 ],
+  [ '(unjoined)', 9 ],
+  [ 'shell_ro', 8 ],
+  [ 'shell_rw', 6 ],
+  [ 'wait_for_agents', 4 ],
+  [ 'verify', 3 ],
+  [ 'clarify', 2 ],
+  [ 'write_file', 1 ]
+]

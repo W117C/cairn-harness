@@ -9347,6 +9347,61 @@ const MUTATIONS = [
     apply: (s) => s.replace("    if (head !== null) current = head[1]!;\n", "    if (head !== null) current = head[1]!;\n    else current = \"\";\n"),
     expectFail: "desc 含真换行时，成本格挂在续行上也要记回那条 id（尺自己记住 id，不要求内容迁就尺）",
   },
+  {
+    id: "replay-exec-unmatched-swallowed",
+    src: "scripts/replay/verify-cause-mix.ts",
+    test: "tests/replay-verify-cause-exec.test.ts",
+    desc: "join 不上 tool_call 的红拍不再计数 ⇒ exec 面的分母少一块而读数看着完整。" +
+      "与 gate-outcomes 同一条纪律、同一族老事故（2026-09-21 那片零假读数就是从这儿丢的）：" +
+      "「差值就是尺」，本条红 = 那个差值从此没人印（规则 258/261）",
+    apply: (s) => s.replace("t.unmatched++;", "t.unmatched += 0;"),
+    expectFail: "绿拍不进红拍分母；join 不上的单独计数，两边都不当没有",
+  },
+  {
+    id: "replay-exec-nonshell-in-denominator",
+    src: "scripts/replay/verify-cause-mix.ts",
+    test: "tests/replay-verify-cause-exec.test.ts",
+    desc: "分母不再限 shell 家族 ⇒ 一条 read_file 的失败也被算进「exec 可归因占比」。" +
+      "面划错之后，同一句读数说的已经不是同一件事（第十三族：同一条判据在主面／worker 面代价各量一遍）",
+    apply: (s) => s.replace("    if (!SHELL_FAMILY.has(tool)) continue;", "    if (false) continue;"),
+    expectFail: "非 shell 的红拍（read_file／edit_file）绝不进分母，哪怕它带着 127",
+  },
+  {
+    id: "replay-exec-no-structure-read-as-code",
+    src: "scripts/replay/verify-cause-mix.ts",
+    test: "tests/replay-verify-cause-exec.test.ts",
+    desc: "结构字段两只都不在时不再报「读不到」，而是落到产品谓词的缺省那一格 ⇒ " +
+      "「尺读不到」与「量到了、就是代码错」同形（规则 261 的正面），分子当场虚高、占比永远好看",
+    apply: (s) => s.replace("if (!hasCode && !hasTimeout)", "if (false)"),
+    expectFail: "占比分子＝正证四类，且环境类是它的子集",
+  },
+  {
+    id: "replay-exec-no-exit-code-folded-into-code",
+    src: "scripts/replay/verify-cause-mix.ts",
+    test: "tests/replay-verify-cause-exec.test.ts",
+    desc: "本尺比产品谓词多出来的那一格被收回去 ⇒ 取消／被信号杀（没有退出码）重新被说成「代码错了」。" +
+      "针脚同时钉住两边各说什么：谓词哪天补上这一态，这条用例立刻红着提醒收敛成一处（规则 224：归因守对格）",
+    apply: (s) => s.replace("if (e.timedOut === false && e.exitCode === null)", "if (false)"),
+    expectFail: "本尺比谓词多的那一格：同一输入两边各说什么，都要钉住",
+  },
+  {
+    id: "replay-exec-text-anchor-lost",
+    src: "scripts/replay/verify-cause-mix.ts",
+    test: "tests/replay-verify-cause-exec.test.ts",
+    desc: "文案栏丢掉行首锚定 ⇒ 被跑的那条命令自己的正文成为第二个注入面（它打印一句 " +
+      "「[exit code: 127]」就算环境红）。规则 264 在 exec 面的同型：散文判据只准认行首",
+    apply: (s) => s.replace("T_EXIT_127 = /^", "T_EXIT_127 = /"),
+    expectFail: "同一段文字缩进／引用在正文中间 ⇒ 不许算线索（被度量者的正文是第二个注入面）",
+  },
+  {
+    id: "replay-call-index-type-check-dropped",
+    src: "scripts/replay/corpus.ts",
+    test: "tests/replay-verify-cause-exec.test.ts",
+    desc: "join 索引不再只看 tool_call ⇒ 任何带 id 的事件（审批两型真带）都能把工具名覆成空，" +
+      "那条红拍就从分母里静默消失。取料层共用一只函数之后，这一格是**全族**的，不只 exec 面",
+    apply: (s) => s.replace("if (e.type === \"tool_call\" && typeof e.id === \"string\")", "if (typeof e.id === \"string\")"),
+    expectFail: "join 键只认 tool_call：同 id 的审批事件（也带 id）不许把工具名覆成空",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

@@ -32,7 +32,7 @@ export const REPLAY_READINGS: readonly ReplayReading[] = [
   {
     id: "verify-cause-mix",
     script: "scripts/replay/verify-cause-mix.ts",
-    answers: "judgment-layer §9 第 0 步的分母：verify 红里有几条今天能被机器归因（P1-3 的 before/after 尺）",
+    answers: "judgment-layer §9 第 0 步的分母，两个面各一行：verify 红命令 / shell 家族红拍里各有几条今天能被机器归因（P1-3 的 before/after 尺）",
   },
   {
     id: "gate-outcomes",

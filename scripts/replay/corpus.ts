@@ -84,6 +84,20 @@ export function readJsonl(file: string): unknown[] {
   return out;
 }
 
+/**
+ * `callId → tool_call.name` 的 join 索引：`tool_result` 上**没有工具名**，凡按工具划面的读数都得先 join。
+ * 收进取料层的理由与 roots 那一条相同——各处自写一遍 join，就会各自漂出「join 不上算什么」的口径
+ * （2026-09-21 那片零假读数正是这里丢的）。**join 不上必须由调用方自己计数并印出来**，不许当没有。
+ */
+export function callNameIndex(raws: readonly unknown[]): Map<string, string> {
+  const byCall = new Map<string, string>();
+  for (const raw of raws) {
+    const e = raw as { type?: string; id?: string; name?: string };
+    if (e.type === "tool_call" && typeof e.id === "string") byCall.set(e.id, String(e.name ?? ""));
+  }
+  return byCall;
+}
+
 /** 第一格：一个 `.jsonl` 也没扫到。单独可调用——有的读数只关心"有没有料"，不关心料里认不认得事件。 */
 export function zeroCorpusProblem(scan: CorpusScan): string | null {
   if (scan.files.length === 0) {

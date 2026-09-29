@@ -1,0 +1,5 @@
+supervise.events.jsonl red#1 tool=run_shell len=200 keys=callId,ok,output,type tail="）\nFAIL: 2.2kg 按 3kg 计（向上取整）（期望 24，实得 16）\n4 项断言失败\n\n[exit code: 1]"
+fanout.events.jsonl red#1 tool=shell_ro len=117 keys=agent_id,callId,ok,output,type tail="s cat head tail wc pwd echo grep rg file stat which 与 git 只读子命令）"
+I2-rep1-base.events.jsonl red#1 tool=run_shell len=484 keys=callId,ok,output,type tail="\ndrwxr-xr-x@ 3 ze  staff   96 Sep 20 17:13 tests\n\n[exit code: 1]"
+I2-rep1-base.events.jsonl red#2 tool=run_shell len=77 keys=callId,ok,output,type tail="nts\n.tmp\nnode_modules\npackage.json\nsrc\ntests\n===\n\n[exit code: 1]"
+I3-rep1-base.events.jsonl red#1 tool=run_shell len=69 keys=callId,ok,output,type tail=".agents\n.tmp\nnode_modules\npackage.json\nsrc\ntests\n\n[exit code: 1]"
