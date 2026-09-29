@@ -1,0 +1,11 @@
+面 = /Users/ze/Downloads/deepseek harness
+全量候选 = 511 个 · 缺省帽 = 400 · 全量帽(=IMPACT_MAX_FILES_CEILING 同位) = 5000 · 渲染帽 MAP_TOKENS_MAX = 4096
+
+[缺省帽] maxFiles=400 budgetTokens=缺省 ok=true parsed=400 tokens=914 文本行=166 文中出现的路径=38 耗时=1152ms
+
+[全量帽] maxFiles=5000 budgetTokens=缺省 ok=true parsed=511 tokens=982 文本行=172 文中出现的路径=50 耗时=987ms
+
+帽换掉之后，地图里**多出现**的路径 17 个（测试=2 夹具=4 真项目文件=11）：tests/secrets.test.ts, fixtures/gym/cases/order-pricing-triple-fix/repo/tests/run.mjs, fixtures/gym/cases/config-default/repo/tests/run.mjs, fixtures/gym/cases/sum-clamp/repo/tests/run.mjs, fixtures/gym/cases/todo-completed-count/repo/tests/run.mjs, src/providers/mock.ts, src/providers/glm.ts, src/main/ask-gate.ts, src/agent/gym/case.ts, src/agent/plugins/hooks.ts, src/agent/memory/inject.ts, src/agent/verify.ts …
+反向（缺省帽独有）5 个（真项目文件=4 测试=1）：outputs/impact-cap-decision-2026-09-30/probe-mtime-cut.mjs, outputs/impact-cap-decision-2026-09-30/probe-fixture-edges.mjs, outputs/impact-cap-decision-2026-09-30/probe-fixture-split.mjs, tests/impact.test.ts, src/cli.ts
+文本是否逐字相同＝false · 长度 3654 vs 3925 字符 · 指纹 a3cb73833ed0 vs 8aebc4573420
+自述检查：地图正文里有没有"覆盖／帽／另有"这类字＝没有（模型看不到自己拿到的是残缺地图）

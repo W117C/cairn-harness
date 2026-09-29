@@ -8,6 +8,10 @@
 
 export type TriageVerdict = "已杀死" | "存活" | "红了未点名" | "未生效" | "基线红" | "读不出";
 
+/** 类别与归宿表都在 `mutate-gates` 那一侧（runner 的出口就是在那儿定类的）——
+ *  这里再写一份映射就是第十三族（同一谓词多份副本、宽度不同）。 */
+import { FAIL_KINDS, FAIL_VERDICT, type FailKind } from "./mutate-gates";
+
 /** 抽 id：整表日志的行形状是 `❌ <id> — <描述>`。按行首锚定（描述里也可能出现 `❌`）。
  *  去重是必须的：同一条锚点在日志里可能出现两次（首次判定 + 末尾汇总回显），不去重就会复跑两遍。 */
 export function failedIds(logText: string): string[] {
@@ -62,10 +66,34 @@ export function classify(
   if (status === null) {
     return { verdict: "读不出", note: "没有退出码（进程没跑完/被信号杀掉）⇒ 本条没有读数", cause: "no-exit-code" };
   }
-  if (/基线就不是全绿/.test(stdout)) return { verdict: "基线红", note: "判卷文件自己有已提交的红灯 ⇒ 本条判定被污染，不算存活的证据", cause: "" };
-  if (/突变未生效|变异未生效/.test(stdout)) return { verdict: "未生效", note: "针脚不在这份源文件里 ⇒ 空操作（先去修针脚，见任务 #50）", cause: "" };
-  if (/全部变异被正确杀死/.test(stdout)) return { verdict: "已杀死", note: "", cause: "" };
-  if (/条变异存活/.test(stdout)) {
+  /** 先读结构化那一行（第 172 页⑪）：新版 runner 把类别写在出口就定好并印 `REDKINDS=`，
+   *  这层就不必再回头猜散文。认不出的类别**不当未知数忽略**：它只会来自一张长大了的表，
+   *  忽略＝把新那一类读成「没有那一类」，而读成「没有」比读成「读不出」便宜、也更容易被当成好消息。 */
+  const kinds = redKindsOf(stdout);
+  if (kinds !== null) {
+    if (kinds.unknown.length > 0) {
+      return { verdict: "读不出", note: `REDKINDS 里有本层不认识的类别：${kinds.unknown.join(",")} ⇒ 补 FAIL_VERDICT 那张表，别静默跳过`, cause: "no-summary" };
+    }
+    const hit = FAIL_KINDS.find((k) => (kinds.counts[k] ?? 0) > 0);
+    if (hit !== undefined) {
+      return {
+        verdict: FAIL_VERDICT[hit] as TriageVerdict,
+        note: `由 REDKINDS 那一行直接给出（${hit}:${String(kinds.counts[hit])}），不再靠散文猜`,
+        cause: "",
+      };
+    }
+  }
+  /** 散文兜底**只能认机器自己那几行的行首**。
+   *  09-29 实测到反向咬人：runner 把每条锚点的 `desc` 原样印进 `✅ <id> — <desc>` 那一行，
+   *  而我在 desc 里写了「判成『基线就不是全绿』」这句话（第 187 页 `shard-host-split-gate-dropped`）⇒
+   *  一条不 anchored 的 `/基线就不是全绿/` 把一次 10/10 全杀的绿跑读成「基线红」。
+   *  同一形状的更坏方向是假绿：表里有一条 desc 含「全部变异被正确杀死」（现读 1 条），
+   *  一次真判红的跑如果碰上它，就会从 `已杀死` 那一支先出去。规则 251 的第二注入面在这里不是外部输入，
+   *  是**被度量者自己的文案**——所以判据只准吃行首形状，不准吃任意位置的字符串。 */
+  if (/^[ \t]*基线就不是全绿/mu.test(stdout)) return { verdict: "基线红", note: "判卷文件自己有已提交的红灯 ⇒ 本条判定被污染，不算存活的证据", cause: "" };
+  if (/^[ \t]*(?:❌ 判红·)?(?:突变|变异)未生效/mu.test(stdout)) return { verdict: "未生效", note: "针脚不在这份源文件里 ⇒ 空操作（先去修针脚，见任务 #50）", cause: "" };
+  if (/^[ \t]*(?:✅ )?全部变异被正确杀死/mu.test(stdout)) return { verdict: "已杀死", note: "", cause: "" };
+  if (/^\d+ 条(?:变异存活或误伤|判红)/mu.test(stdout)) {
     return sawRedTest(stdout)
       ? { verdict: "红了未点名", note: "测试红了而 runner 没在 expectFail 点名的那条上找到 ⇒ 观测者在，锚点期望过期（改 expectFail，别补测试）", cause: "" }
       : { verdict: "存活", note: "改坏了而测试仍全绿 ⇒ 这条不变量没有观测者", cause: "" };
@@ -75,6 +103,27 @@ export function classify(
 
 /** 要人处理的三类（修法各不同：存活＝补观测者；红了未点名＝改 expectFail；读不出＝先修尺）。 */
 export const ACTIONABLE: readonly TriageVerdict[] = ["存活", "红了未点名", "读不出"];
+
+/** 结构化那一行（第 172 页⑪）：新版 runner 在末尾印 `REDKINDS=survived:1,misattributed:0,…`，
+ *  类别由 runner 在**各自的出口**定好（见 `mutate-verify.mjs` 的 `red()` helper）。
+ *  本层从前靠正则回头猜那句「N 条变异存活或误伤」——同一件事两份谓词，而且改一句文案这层就静默读成「读不出」（规则 205/213）。
+ *  认不出的类别**不许忽略**：它只会来自一张长大了的表，忽略等于把新那一类读成「没有那一类」。 */
+export function redKindsOf(stdout: string): { counts: Partial<Record<FailKind, number>>; unknown: string[] } | null {
+  const line = /^REDKINDS=(.*)$/mu.exec(stdout.replace(/\r$/u, ""));
+  if (line === null) return null;
+  const counts: Partial<Record<FailKind, number>> = {};
+  const unknown: string[] = [];
+  for (const part of (line[1] ?? "").split(",")) {
+    const i = part.indexOf(":");
+    if (i <= 0) continue;
+    const k = part.slice(0, i);
+    const n = Number(part.slice(i + 1));
+    if (!Number.isFinite(n)) continue;
+    if ((FAIL_KINDS as readonly string[]).includes(k)) counts[k as FailKind] = n;
+    else unknown.push(`${k}:${String(n)}`);
+  }
+  return { counts, unknown };
+}
 
 /** 归类后的表：把"必须逐条处理"的挑出来。 */
 export function needsAction(rows: readonly { id: string; verdict: TriageVerdict }[]): string[] {

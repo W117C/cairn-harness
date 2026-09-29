@@ -36,6 +36,7 @@
     "supervisor-check": "node --import tsx scripts/supervisor-check.ts",
     "model-surface-check": "node --import tsx scripts/model-surface-check.ts",
     "prefix-churn-check": "node --import tsx scripts/prefix-churn-check.ts",
+    "prompt-surface-check": "node --import tsx scripts/prompt-surface-check.ts",
     "replay-determinism-check": "node --import tsx scripts/replay-determinism-check.ts",
     "no-progress-check": "node --import tsx scripts/no-progress-check.ts",
     "cost-per-progress-check": "node --import tsx scripts/cost-per-progress-check.ts",

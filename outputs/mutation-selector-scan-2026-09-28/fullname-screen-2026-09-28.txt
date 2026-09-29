@@ -1,0 +1,11 @@
+# 全名接缝筛选（第 170 页闸的自测）· 2026-09-28
+
+取料树：主树工作副本（HEAD 6849e35 ＋ 隔壁 mutateTreeGuard 在飞 hunk ＋ 我这一笔第 169 页的旧版 hunk）⇒ 条数与独立树 946 那条口径差 7 条，只用于筛「有没有接缝风险」这一问。
+命令：node --import tsx outputs/mutation-selector-scan-2026-09-28/fullname-screen.mts
+
+只数 it 标题时唯一的那些条：919
+按全名（describe > it）却不止一条：0
+判卷里没有 describe/it 标题（读不到或非 vitest）：1
+
+判读：只按 it 标题唯一的那些条（919）里，按全名（describe > it）出现多条命中的是 **0** 条 ⇒ 今天没有接缝风险。
+但这只是「今天为 0」，不是不变量：改名或嵌套 describe 就会打开它。⇒ 落库那一笔把 selector 模式的闸从「selected ≥ 1」收成「selected === 1」，让这类漂移表现为一条红，而不是安静的少测/错测。

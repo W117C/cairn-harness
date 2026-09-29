@@ -9,7 +9,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileTags, TAGS_EXTRACT_VERSION, TreeSitterUnavailableError, type SymbolTag } from "../map/parse.js";
-import { MAX_FILES_DEFAULT, scanSourceFiles, type ScannedFile } from "../map/build.js";
+import { applyFileCap, MAX_FILES_DEFAULT, scanSourceFilesAll, type ScannedFile } from "../map/build.js";
 
 /** grammar 环境级失败（坏/缺失 wasm）：影响面是护栏能力，必须 fail-loud。
  *  文案固定含 "unavailable"（判卷锚点）。 */
@@ -36,6 +36,11 @@ export interface ImpactEdge {
 export interface ImpactGraph {
   /** 参与建图的源文件（workspace 相对，排序）。 */
   files: string[];
+  /** 帽**切之前**的全量候选数（rg + 后缀过滤 + mtime 排序）。读端要靠它把「图非全量」
+   *  说成带分母的一句话：`scanSourceFiles` 本来就是先取全量再 `applyFileCap` 切片，
+   *  所以这个数不要第二次 rg（第 55 页「挤掉多少个要重扫全量候选，这一格不值一次 rg」
+   *  那句理由在建图这一支不成立——切片就在这行发生）。 */
+  candidates: number;
   /** symbol → 定义点（可能多文件同名人）。 */
   defs: Map<string, ImpactSite[]>;
   /** symbol → 引用点（含同文件自引用；查询层负责过滤跨文件）。 */
@@ -120,7 +125,10 @@ function addSites(map: Map<string, ImpactSite[]>, sym: string, site: ImpactSite)
 export async function buildImpact(opts: BuildImpactOptions): Promise<ImpactGraph> {
   // 帽走 build.ts 那一个常量：读端（impact_query 的分诊）报「第几位 / 收录几个」用的是同一个数，
   // 两边各写一个 400 就会一处调、另一处静默说错话。
-  const files = await scanSourceFiles(opts.workspace, opts.maxFiles ?? MAX_FILES_DEFAULT);
+  // 切片前后两份都要：`candidates`（帽前全量）是读端覆盖面自述的分母，取它不要第二次 rg。
+  const cap = opts.maxFiles ?? MAX_FILES_DEFAULT;
+  const candidates = await scanSourceFilesAll(opts.workspace);
+  const files = applyFileCap(candidates, cap);
   const dir = opts.cacheDir ?? defaultImpactCacheDir();
   const defs = new Map<string, ImpactSite[]>();
   const refs = new Map<string, ImpactSite[]>();
@@ -198,6 +206,7 @@ export async function buildImpact(opts: BuildImpactOptions): Promise<ImpactGraph
 
   return {
     files: [...files.map((f) => f.rel)].sort(),
+    candidates: candidates.length,
     defs,
     refs,
     edges,
@@ -265,6 +274,10 @@ export interface FileImpactReport {
   /** 这张图实际收录了多少个文件 —— 读端要靠它自述覆盖面：
    *  被帽截断时「波及 1 个文件」与「图只扫了仓库的一小截」在答案里长一模一样。 */
   graphFiles: number;
+  /** 帽切之前的全量候选数（同 `ImpactGraph.candidates`，一路带到读端当分母）。
+   *  不带它，file 支只能说「非全量」而说不出漏了几个 —— 三支自述里只有这一支的数
+   *  要穿过 `fileImpact` 这一层，少接一层就是那一支静默回到没有分母的旧句子。 */
+  graphCandidates: number;
   /** 本文件的定义符号里，哪些**在别的文件也有一份同名定义**（按名字顺序）。
    *  符号图只按名字连边、不采 import ⇒ 这些符号的向上清单是**各份定义的并集**，
    *  里面混着"另一份定义的调用方"（假阳性）。读端不点名，模型就无从知道该收窄。 */
@@ -301,6 +314,7 @@ export async function fileImpact(
     up: truncated ? up.slice(0, IMPACT_SITE_LIMIT) : up,
     truncated,
     graphFiles: graph.files.length,
+    graphCandidates: graph.candidates,
     ambiguousSymbols,
   };
 }

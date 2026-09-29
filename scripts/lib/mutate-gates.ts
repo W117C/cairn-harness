@@ -716,6 +716,8 @@ export interface SelectorProblem {
 export interface SelectorScan {
   problems: SelectorProblem[];
   inspected: number;
+  /** 逐字唯一定位自己那条 killer 用例的 id（第 170 页的跑法选择表只吃这一份，调用侧不许再算一遍）。 */
+  selectableIds: readonly string[];
 }
 
 const TITLE_RE = /^\s*(?:it|test)(?:\.\w+)?\s*\(\s*(["`'])((?:\\.|(?!\1)[^\\])*)\1/gmu;
@@ -726,6 +728,7 @@ export function selectorAmbiguity(
 ): SelectorScan {
   const cache = new Map<string, string[] | null>();
   const problems: SelectorProblem[] = [];
+  const selectableIds: string[] = [];
   let inspected = 0;
   for (const e of entries) {
     if (e.expectFail === "" || !e.test.endsWith(".test.ts")) continue;
@@ -738,8 +741,9 @@ export function selectorAmbiguity(
     inspected += 1;
     const hits = titles.filter((t) => t.includes(e.expectFail)).length;
     if (hits !== 1) problems.push({ id: e.id, test: e.test, hits });
+    else selectableIds.push(e.id);
   }
-  return { problems, inspected };
+  return { problems, inspected, selectableIds };
 }
 
 /** 那一格的措辞：三态分开印，且**不许**把「选不中」并成「没什么问题」。
@@ -755,6 +759,92 @@ export function selectorCell(problems: readonly SelectorProblem[], inspected: nu
   return parts.join("·") + (problems.length === 0 ? "" : "：" + problems.map((p) => `${p.id}(${String(p.hits)})`).join("、"));
 }
 
+/** 一拍读数坏没坏——闸与单价格共用这一份判据，两边不许各算一遍（规则 228：分叉的副本会一起错档）。
+ *  selector 只认「恰好 1 条」：`-t` 在 vitest 那边匹配的是 **整条标题**（describe 前缀＋it 标题），
+ *  而体检数的是 **it 字面量**（`selectorAmbiguity`），两个分母不是一回事；选中 2 条时红的那条
+ *  未必是本锚点那条 killer 用例——那正是「锚点长期守错格」的入口（规则 224 同一族）。
+ *  whole 不该有 0 条／读不到：整文件那一拍要么量到用例数，要么就是取料坏。
+ *  收紧前量的存量：09-28 整表 selector 873 拍／whole 9 拍，按本判据的坏拍数都是 0（见第 170 页凭证）。 */
+export function runReadingIsBad(mode: "selector" | "whole", selected: number | null): boolean {
+  if (mode === "selector") return selected !== 1;
+  return selected === null || selected === 0;
+}
+
+/** 一行可机读的判读（门输出格式：id + 本次选中几条 + 原因）。
+ *  三种坏读数印三种措辞，因为修法相反：没读到＝取料坏；0 条＝选择子选不中；>1 条＝守错了用例。
+ *  写成一句「什么都没测」会让第三种被读成第二种，而第三种恰恰是「绿着失效」的那一种。 */
+export function vacuousRunLine(id: string, phase: string, selected: number | null): string {
+  const state = selected === null
+    ? "未取到（收尾行没读到＝取料坏）"
+    : selected === 0
+      ? "0 条用例＝这一拍什么都没测"
+      : `${String(selected)} 条用例＝不止本锚点那条 killer 用例，红的未必是它`;
+  return `${id} — ${phase}这一拍选中 ${state} ⇒ 不许当成绿也不许当成红`;
+}
+
+/** 两种跑法的单价那一格（第 170 页）：上线之后「省了多少」必须由这张表自己印出来，
+ *  不许再来一句「按推算应该省 X」——第 165 页就是被这种推算打过脸的。
+ *  每行是一次 spawn：`mode` 精确／整文件，`ms` 这一次多久，`selected` 本次选中几条用例（null＝收尾行没读到）。 */
+export function runModeCell(rows: readonly { mode: "selector" | "whole"; ms: number; selected: number | null }[]): string {
+  if (rows.length === 0) return "跑法单价：本次没有 spawn ⇒ 这一格没有分母";
+  // 两种跑法**定长**列印（第 171 页，任务 #15）：从前只遍历出现过的模式 ⇒ 某一支 0 拍时整支从行里消失，
+  // 而「这一支没拍到」与「这一支不需要成本」是两件事。上面那句兜底只管**全局**零 spawn，管不到按模式分列的这一格。
+  const modes: Array<"selector" | "whole"> = ["selector", "whole"];
+  const parts = modes.map((mode) => {
+    const list = rows.filter((r) => r.mode === mode);
+    if (list.length === 0) return `${mode} 0 拍·这一支本次没有 spawn ⇒ 没有分母`;
+    const sorted = list.map((r) => r.ms).sort((a, b) => a - b);
+    const mid = sorted[Math.floor(sorted.length / 2)] ?? 0;
+    const vacuous = list.filter((r) => runReadingIsBad(mode, r.selected)).length;
+    const label = mode === "selector" ? "坏拍（选中≠1）" : "坏拍（没量到或 0 条）";
+    return `${mode} ${String(list.length)} 拍·中位 ${(mid / 1000).toFixed(2)}s·${label} ${String(vacuous)}`;
+  });
+  return `跑法单价：${parts.join(" vs ")}`;
+}
+
+/** 还原那一拍换成字节比对（第 171 页⑩，任务 #10）：整表每条锚点此前付满 3 拍（基线／突变／还原），
+ *  第三拍跑的是「还原后再测一遍要绿」——它证明的是「这文件还能跑」，而**逐字节相同**证明的是「盘上就是突变前那份」，后者更强：
+ *  基线那一拍已经用同一份字节绿过一次，内容等价就不需要再花一次 spawn 复核行为。
+ *  省下的是每条锚点三次里的一次（09-28 现读 954 条 × 1 拍），而这张表是默认门里最贵的一道。
+ *  返回 null＝还原到位；否则点名差在哪（字节数／首个不同的位置），不许只说「还原失败」。 */
+export function restoreDiffProblem(before: string, after: string): string | null {
+  if (before === after) return null;
+  if (before.length !== after.length) {
+    return `字节数不同：突变前 ${String(before.length)}／还原后 ${String(after.length)}`;
+  }
+  let i = 0;
+  while (i < before.length && before.charCodeAt(i) === after.charCodeAt(i)) i += 1;
+  return `长度相同但内容不同（首个差异在第 ${String(i + 1)} 个字符：突变前 "${before[i]}"、还原后 "${after[i]}"）`;
+}
+
+// ---- 第 170 页：按标题选跑法（`-t`）的两个底层判据 ----
+/** 从 vitest 的收尾行读「本次真选中几条用例」。
+ *  实测两种形状（09-28，同一棵树）：`Tests 1 passed | 99 skipped (100)` 与 `-t` 选不中时的
+ *  `Tests 100 skipped (100)`＋**退出码 0**——这就是为什么「跑了」不能由退出码代表。
+ *  收尾行读不到 ⇒ null（取料坏），**不许回 0**：0 是「一条也没选中」，null 是「这一格没量到」，两个红的修法相反。 */
+export function selectedTestCount(vitestOut: string): number | null {
+  const lines = vitestOut.split("\n");
+  let line: string | undefined;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (/^\s*Tests\s/u.test(lines[i] ?? "")) { line = lines[i]; break; }
+  }
+  if (line === undefined) return null;
+  const total = Number(/ *\((\d+)\)/u.exec(line)?.[1] ?? "");
+  if (!Number.isFinite(total) || total <= 0) return null;
+  const skipped = Number(/(\d+) skipped/u.exec(line)?.[1] ?? 0);
+  return total - skipped;
+}
+
+/** 标题要当**正则**喂给 `-t` ⇒ 元字符必须转义（现读：真标题里有 `( ) [ ] . * + / "` 与中文全角括号）。 */
+export function escapeTitlePattern(title: string): string {
+  return title.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+/** 一条锚点该走哪种跑法。选择（唯一命中）的判据与第 169 页那把闸共用同一份谓词，这里只问结果。 */
+export function runModeFor(id: string, selectableIds: ReadonlySet<string>): "selector" | "whole" {
+  return selectableIds.has(id) ? "selector" : "whole";
+}
+
 // ---- 每条锚点的真实成本（任务 #37：分母必须是读数，不是「次数 × 文件时长」的模型） ----
 // 动因（09-28 第 165 页自己打的脸）：那句「裁掉判卷文件 7.7s ⇒ 挂在它上面的每条锚点少付 21s」是按
 // 「每条跑三次 × 宿主文件全时长」**推**出来的，同分母实测把它打掉（每条只少 1.4–2.2s）。
@@ -764,7 +854,7 @@ export function selectorCell(problems: readonly SelectorProblem[], inspected: nu
 export interface AnchorCostRow {
   /** 点名用：汇总里那一格要说「最贵的一条是哪条」，否则读数只能指回整张表让人逐条分诊。 */
   id: string;
-  /** 这条锚点实际 spawn 判卷的墙钟毫秒，按发生顺序（基线／突变／还原）。
+  /** 这条锚点实际 spawn 判卷的墙钟毫秒，按发生顺序（基线／突变——第 171 页⑩ 之后还原那一拍换成字节比对，不再 spawn）。
    *  一次没跑要**显式**喂空数组：字段缺席＝接线漏计，`costRollupOf` 当场崩并点名第几行——
    *  「没记账」长成「记了 0 次」的话，汇总就悄悄把那条贵的锚点从分母里摘掉了。 */
   runsMs?: readonly number[];
@@ -857,4 +947,143 @@ export function costCell(r: CostRollup): string {
     : `最贵一条 ${r.slowestAnchorId} ${secsOf(r.slowestAnchorMs)}s`;
   return `成本分母：判卷 spawn ${String(r.spawns)} 次／${String(r.anchors)} 条（每条次数分布 ${dist}）` +
     `· 单次中位 ${perNth}· ${slowest}${never}`;
+}
+
+/** 逐条那一格的实测成本。整表汇总只指得出「最贵一条」，而并行分片装箱（任务 #28）要的是**每条**的秒：
+ *  第 190 页实测按条数等分四片各 252 条，跑出来 323.6／391.1／419.9／443.0s（极差 +37%）⇒ 条数不是重量。
+ *  空账本是第三态：这一条本机一次判卷也没 spawn（预检跳过／预算用尽），要印「没有分母」而不是 `0.0s`（规则 245）。
+ *  有分母那一支的形状（`N.Ns／K 拍`）是下游取料面的读法 ⇒ 由判据钉住，改形状要同轮换读者（规则 251/253）。 */
+export function anchorCostCell(runsMs: readonly number[]): string {
+  if (runsMs.length === 0) return "本机实测 一次没跑 ⇒ 这一格没有分母";
+  return `本机实测 ${secsOf(runsMs.reduce((a, b) => a + b, 0))}s／${String(runsMs.length)} 拍`;
+}
+
+/** 判红的七个来源，**在各自的出口就定好类别**（第 172 页⑪，任务 #12）。
+ *  从前 runner 末尾只印一句「N 条变异存活或误伤」，而下游 `mutation-rerun-triage` 靠正则回头猜这句散文——
+ *  同一件事两份谓词，宽度还不一样（规则 205/213）：改一句文案下游就静默读成「读不出」。
+ *  `verdict` 列是那层的归宿（它有自己的判卷面），这里只许一份事实源。 */
+export const FAIL_KINDS = [
+  "survived",
+  "misattributed",
+  "baseline-red",
+  "no-effect",
+  "syntax",
+  "restore-mismatch",
+  "vacuous",
+] as const;
+export type FailKind = (typeof FAIL_KINDS)[number];
+
+/** 每类的下一步动作——分这一刀是因为**修法不同**：存活要补观测者，红了未点名只改期望标题。 */
+const FAIL_LABEL: Record<FailKind, string> = {
+  survived: "变异存活（测试仍全绿 ⇒ 该不变量没有观测者）",
+  misattributed: "红了但没红在点名的那条用例上 ⇒ 观测者在、锚点期望过期",
+  "baseline-red": "基线就不绿 ⇒ 本条判定被污染，不算存活的证据",
+  "no-effect": "突变未生效（针脚不在源文件里）⇒ 空操作",
+  syntax: "突变产出语法坏的源文件 ⇒ 改法本身不合法",
+  "restore-mismatch": "还原未逐字节相同 ⇒ 盘上留着突变或写歪了",
+  vacuous: "那一拍没真选中用例 ⇒ 这一条根本没判（取料坏）",
+};
+
+/** 下游 triage 的归宿表，与上面同一份事实源（`TriageVerdict` 的字面量在 triage 侧，这里只给类名）。 */
+export const FAIL_VERDICT: Record<FailKind, string> = {
+  survived: "存活",
+  misattributed: "红了未点名",
+  "baseline-red": "基线红",
+  "no-effect": "未生效",
+  syntax: "读不出",
+  "restore-mismatch": "读不出",
+  vacuous: "读不出",
+};
+
+/** 判红汇总那一格：总数与名单同源（与 `unverifiedCell` 同一纪律，规则 209/225），
+ *  只印非零的类；缺类别／认不出的类别当场崩并点名第几条——
+ *  「没归类」被读成「没有那一类」会让最贵的那一格（存活）看起来比实际少。 */
+export function redVerdictCell(rows: readonly { id: string; kind?: FailKind }[]): {
+  total: number;
+  summary: string;
+  list: string[];
+  counts: Record<FailKind, number>;
+} {
+  const counts = {} as Record<FailKind, number>;
+  const ids = {} as Record<FailKind, string[]>;
+  for (const k of FAIL_KINDS) { counts[k] = 0; ids[k] = []; }
+  for (const r of rows) {
+    const k = r.kind;
+    if (k === undefined || !FAIL_KINDS.includes(k)) {
+      throw new Error(`判红没有类别（第 ${r.id} 条，kind=${String(k)}）⇒ 不许把它算进任何一类，也不许让它从总数里消失`);
+    }
+    counts[k] += 1;
+    ids[k].push(r.id);
+  }
+  const parts: string[] = [];
+  const list: string[] = [];
+  for (const k of FAIL_KINDS) {
+    const n = counts[k];
+    if (n === 0) continue;
+    parts.push(`${k} ${String(n)}`);
+    list.push(`  ❌ 判红·${FAIL_LABEL[k]}（${String(n)} 条）：${ids[k].join(" ")}`);
+  }
+  return {
+    total: rows.length,
+    summary: `  ❌ 判红 ${String(rows.length)} 条，按类别分开（修法各不同，混成一句会把人指错方向）：${parts.join("；")}`,
+    list,
+    counts,
+  };
+}
+
+/** 机器可读那一行：给下游共用，别再回头解析给人看的那句散文（规则 205/241——要写满为止）。 */
+export function redKindsLine(counts: Record<FailKind, number>): string {
+  return "REDKINDS=" + FAIL_KINDS.map((k) => `${k}:${String(counts[k])}`).join(",");
+}
+
+// ---- 第 171 页（任务 #14）：未证那一态要带名单，而且要能原样补跑 ----
+/** 未证的四个来源，分开数、分开印——每类的下一步动作不同，混成一句就会把人指错方向。
+ *  类名是**数据**（判卷与消费者按它分诊），措辞是**给人看的**（label），两者不许合一。 */
+export const UNVERIFIED_CLASSES = ["src-in-flight", "judge-in-flight", "judge-unloadable", "budget-stopped"] as const;
+export type UnverifiedClass = (typeof UNVERIFIED_CLASSES)[number];
+
+const UNVERIFIED_LABEL: Record<UnverifiedClass, string> = {
+  "src-in-flight": "源文件在飞/未跟踪 ⇒ 根本没跑",
+  "judge-in-flight": "判卷文件在飞 ⇒ 量不出分辨力",
+  "judge-unloadable": "判卷载不动（HEAD 缺模块 ⇒ 环境没备齐，不是表退化）",
+  "budget-stopped": "预算用尽没跑到",
+};
+
+/** 未证汇总那一格：从前只印「未证 30 条」这种光秃秃的数，读者要补跑就得自己拿 `--list` 与日志求差集
+ *  （09-28 我就是这么补的，算错一次就把没验的读成验了）。两条纪律：
+ *  ① **计数由名单求和**——两个口径各写一遍必有一处先漂（规则 209/225）；
+ *  ② 认不出的类当场崩并点名第几条——把「没归类」读成「没有未证」会让总数变小，看起来更便宜（规则 245）。
+ *  `rerun` 只收「预算用尽」那一类：源文件在飞那类等别人落库才有意义，载不动那类要先把环境备齐，
+ *  给一条注定跑不动的补跑命令比不给更坏。 */
+export function unverifiedCell(rows: readonly { id: string; cls: UnverifiedClass }[]): {
+  total: number;
+  summary: string;
+  list: string[];
+  rerun: string[];
+} {
+  const buckets = new Map<UnverifiedClass, string[]>();
+  for (const cls of UNVERIFIED_CLASSES) buckets.set(cls, []);
+  for (const r of rows) {
+    const b = buckets.get(r.cls);
+    if (b === undefined) {
+      throw new Error(`未证分类不认识 "${r.cls}"（第 ${r.id} 条）⇒ 不许把它算进任何一类，也不许让它从总数里消失`);
+    }
+    b.push(r.id);
+  }
+  const total = rows.length; // 计数＝名单长度之和，同源；不许另起一个 filter 再数一遍
+  const parts: string[] = [];
+  const list: string[] = [];
+  for (const cls of UNVERIFIED_CLASSES) {
+    const ids = buckets.get(cls) ?? [];
+    if (ids.length === 0) continue;
+    parts.push(`${String(ids.length)} 条${UNVERIFIED_LABEL[cls]}`);
+    list.push(`  ⚠️ 未证·${UNVERIFIED_LABEL[cls]}（${String(ids.length)} 条）：${ids.join(" ")}`);
+  }
+  const rerun = buckets.get("budget-stopped") ?? [];
+  return {
+    total,
+    summary: `  ⚠️  未证 ${String(total)} 条（${parts.join("；")}）——都不等于已杀死`,
+    list,
+    rerun,
+  };
 }

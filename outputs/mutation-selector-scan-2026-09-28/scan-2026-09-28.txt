@@ -1,0 +1,8 @@
+锚点总数：936
+指针为空（结构钉型判卷，不参与 -t）：0
+唯一命中（可直接吃 -t）：922
+命中 >1（要先把指针写窄）：2 ⇒ settings-default-on-key-read-by-strict-true → 2 条、settings-auto-verify-default-reverted → 2 条
+一条都没命中（标题已被改名／写法对不上）：11
+判卷文件取不到或无 it() 标题：1
+判卷不是 vitest 文件：0
+lib 谓词（标题模式）认不出的条数：40 ⇒ session-budget-key-from-settings-field、goal-budget-key-from-settings-field、run-model-resolution-drops-request-model、impact-query-deps-ghost-file-silent、prune-stub-hides-attachment-path、user-skill-face-budget-abolished、snapshot-ignores-the-history-filter、unknown-history-filter-becomes-a-real-state、lsp-known-fields-forgot-diagnostics、settings-writes-not-serialized

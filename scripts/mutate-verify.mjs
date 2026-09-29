@@ -23,7 +23,7 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { acquireToolLock } from "./lib/tool-lock.ts";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, mutateTreeGuard, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, judgeWithRetry, restoreCheck, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, selectorAmbiguity, selectorCell } from "./lib/mutate-gates.ts";
+import { entryDisposition, mutateTreeGuard, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, judgeWithRetry, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, anchorCostCell, selectorAmbiguity, selectorCell, selectedTestCount, escapeTitlePattern, runModeFor, runReadingIsBad, vacuousRunLine, runModeCell, unverifiedCell, restoreDiffProblem, redVerdictCell, redKindsLine } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -7738,10 +7738,14 @@ const MUTATIONS = [
     id: "mutate-lock-read-only-face-locked",
     src: "scripts/mutate-verify.mjs",
     test: "tests/mutate-verify-gates.test.ts",
-    desc: "把只读的 `--list` 也接去占锁 ⇒ 两条并发 --list 互相拒跑，而吃 `--list` 的那两把静态尺（anchor-titles／gates）会在别人跑表时集体红——这道门不许把**不改盘**的那一半也关死（收紧必须配反向对照，规则 227）",
+    desc: "把只读的 `--list` 也接去占锁 ⇒ 两条并发 --list 互相拒跑，而吃 `--list` 的那两把静态尺（anchor-titles／gates）会在别人跑表时集体红——这道门不许把**不改盘**的那一半也关死（收紧必须配反向对照，规则 227）。" +
+      "**第 186 页重铸**：这条从第 163 页起一直存活，原因不是「场上没人占锁」而是「占错了锁」——旧改法写死 `tree: ROOT`，" +
+      "而判卷与变异机都带 `--lock-tag` ⇒ 探针种下的那把锁叫 `mutate-verify-judge-<pid>.lock`，突变体去占的却是 `mutate-verify-<树名>.lock`（没人）⇒ 拿到锁照常跑，行为零差异（等价突变，规则 260 的第二形态：不是判据没有观测者，是**突变挑错了资源**）。" +
+      "现在改法与真实占锁那一支用同一个身份表达式（`lockTagRaw.given ? lockTagRaw.value : ROOT`），于是被判卷那颗活人锁当场拦住 ⇒ exit 2 ≠ 0。" +
+      "`--check-needles` 那一支仍只由位置比较钉（真跑它一次 ≈7.7s，而挂在本文件的锚点几十条、每条两拍 ⇒ 实测把本判卷抬到 19 分钟，故意不换）",
     apply: (s) => s.replace(
       '\nif (plan.mode === "list") {',
-      '\nif (plan.mode === "list") { acquireToolLock({ tool: "mutate-verify", root: ROOT, tree: ROOT, target: "list", commonDirOut: gitCommonDirOut(), harm: "锚点造的：只读面也占锁", say: (line) => console.log(line) });',
+      '\nif (plan.mode === "list") { acquireToolLock({ tool: "mutate-verify", root: ROOT, tree: lockTagRaw.given ? lockTagRaw.value : ROOT, target: "list", commonDirOut: gitCommonDirOut(), harm: "锚点造的：只读面也占锁", say: (line) => console.log(line) });',
     ),
     expectFail: "只读入口不许被这把门锁死：--list 在有人占着时照跑，而 `--check-needles` 与它同一先（按结构钉）",
   },
@@ -8219,10 +8223,920 @@ const MUTATIONS = [
     test: "tests/mutate-verify-gates.test.ts",
     desc: "runTest 不再记这一次的时间 ⇒ 每个位置的中位整个消失，#37 的分母退回到「拿文件时长乘次数」那种推（这条咬的是取料源头，上一条咬的是接线出口）",
     apply: (s) => s.replace(
-      "  const started = Date.now();\n  try {",
-      "  try {",
+      "  const started = Date.now();\n  const args = [VITEST,",
+      "  const args = [VITEST,",
     ),
     expectFail: "接线：汇总那一行吃的是 runner 自己那份 runsMs，且每个出口都带账本（表与实现同文件 ⇒ 钉跨行正则，规则 236）",
+  },
+  // ── 第 169 页 · 选择子唯一性（`-t` 精确跑法的前置闸）：四条各咬一处——不报／三态合一／分母／接线
+  {
+    id: "selector-ambiguity-never-reports",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "命中数不为 1 时不再记录 ⇒ 这一格永远印「全部可选」，真正选不中的那些会在改跑法时被当成能走 -t；而 0 命中不是失败，是 vitest 一条也没跑，基线与突变两拍都白过",
+    apply: (s) => s.replace(
+      "if (hits !== 1) problems.push({ id: e.id, test: e.test, hits });",
+      "if (false) problems.push({ id: e.id, test: e.test, hits });",
+    ),
+    expectFail: "可选率的分母是被数过的条数，不是整表条数（拿整表去除＝把选不中的洗成可选）",
+  },
+  {
+    id: "selector-cell-merges-zero-into-clean",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "零命中不再单独数 ⇒「选不中」并进「没什么问题」，那句 0 会被读成「11 条都正常」（第 166 页那把只能印 0 的尺，同一族换了载体）",
+    apply: (s) => s.replace(
+      "const zero = problems.filter((p) => p.hits === 0);",
+      "const zero: SelectorProblem[] = [];",
+    ),
+    expectFail: "零命中与多命中分开印，并点名是哪几条（0 命中＝-t 会一条也没跑）",
+  },
+  {
+    id: "selector-inspected-counts-unreadable-judges",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "判卷读不到／指针为空那些条也计入分母 ⇒ 可选率虚高，而「取料坏」被洗成「量过了」（规则 222 的三态：未取 ≠ 空面 ≠ 零命中）",
+    apply: (s) => s.replace(
+      "if (titles === null || titles === undefined || titles.length === 0) continue;",
+      "inspected += 1;",
+    ),
+    expectFail: "只数被数过的：判卷读不到／指针为空／不是 vitest 文件都不进 inspected",
+  },
+  {
+    id: "selector-scan-fed-empty-table",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "门那一步喂空表而不是整张锚点表 ⇒ 这一格永远 0/0 且永不红。表与实现同文件，所以判卷钉跨行正则而不是 toContain（规则 236）",
+    apply: (s) => s.replace(
+      "\n  const selectorScan = selectorAmbiguity(pointerEntries, ",
+      "\n  const selectorScan = selectorAmbiguity([], ",
+    ),
+    expectFail: "接线：门自己那一步真拿整张表去数选择子，并把两份数一起交给措辞（只印不数＝这一格永远 0）",
+  },
+  // ── 第 170 页 · 按标题选跑法（`-t`）：六条各咬一处——取料坏当 0／把 skipped 当跑过／不转义／共存支／闸门／空格子
+  {
+    id: "selected-count-treats-missing-summary-as-zero",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "收尾行读不到时回 0 ⇒「这格没量到」与「一条也没选中」合一，两种红的修法相反（前者是取料坏，后者是锚点失效）。第 166 页同一族：0 不许冒充读数",
+    apply: (s) => s.replace("  if (line === undefined) return null;", "  if (line === undefined) return 0;"),
+    expectFail: "选中条数只从 vitest 真实的收尾行读，两种实测形状给两个数；读不到那行是 null 不是 0",
+  },
+  {
+    id: "selected-count-counts-skipped-as-run",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "把 skipped 也算进「选中几条」⇒ `-t` 一条没选中的那一拍被读成测过了（实测：`Tests 100 skipped (100)`＋退出码 0）。与上一条共用那条判卷用例：同一个谓词的两种失真，各自要一条变异才咬得住（规则 226）",
+    apply: (s) => s.replace("  return total - skipped;", "  return total;"),
+    expectFail: "选中条数只从 vitest 真实的收尾行读，两种实测形状给两个数；读不到那行是 null 不是 0",
+  },
+  {
+    id: "run-mode-pattern-not-escaped",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "标题原文直接当 `-t` 的正则拼进去 ⇒ 真标题里的 ( ) [ ] . * + 变成通配与量词，选中的可能根本不是那条 killer 用例，而单价读数照旧好看",
+    apply: (s) => s.replace(
+      '\n  if (typeof pattern === "string" && pattern !== "") args.push("--testNamePattern=" + escapeTitlePattern(pattern));',
+      '\n  if (typeof pattern === "string" && pattern !== "") args.push("--testNamePattern=" + pattern);',
+    ),
+    expectFail: "接线：testNamePattern 这一支要经转义，不许把标题当通配符拼进命令（表与实现同文件 ⇒ 必须行锚定，规则 236）",
+  },
+  {
+    // 整表第一遍（09-28，949/949）唯一一条红就是它：`pc-face-change-named-shortcut` 的指针以 `-` 开头。
+    id: "run-mode-dash-value-back-to-space-form",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "选择子换回 `-t <值>` 的空格写法 ⇒ 凡指针以 `-` 开头就被 CLI 当成旗标：实测那条 `--self-test …` 的基线一拍根本没跑（收尾行读不到），却退 1——旧读数只会喊「基线不绿」，把「取料坏」伪装成「判卷坏了」。这一条的 killer 必须挂**接线判卷**：第一版挂的是那条行为证人，而它自己同时跑两种写法 ⇒ 改生产行改不到它 ⇒ 实测「变异存活：测试全绿」（规则 236 又一次命中：判卷自己再算一遍＝对生产零分辨力）",
+    apply: (s) => s.replace(
+      '\n  if (typeof pattern === "string" && pattern !== "") args.push("--testNamePattern=" + escapeTitlePattern(pattern));',
+      '\n  if (typeof pattern === "string" && pattern !== "") args.push("-t", escapeTitlePattern(pattern));',
+    ),
+    expectFail: "接线：testNamePattern 这一支要经转义，不许把标题当通配符拼进命令（表与实现同文件 ⇒ 必须行锚定，规则 236）",
+  },
+  {
+    id: "run-mode-selector-check-dropped",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "不分模式一律塞 -t ⇒ 那 13 条「选不中／不唯一」的锚点从此只跑不存在的用例，等于整条保护被换成空转（两种跑法共存是刻意的，见第 169 页未证②）",
+    apply: (s) => s.replace(
+      '\n  const pattern = mode === "selector" ? String(m.expectFail ?? "") : "";',
+      '\n  const pattern = String(m.expectFail ?? "");',
+    ),
+    expectFail: "接线：只有 selector 模式才塞 -t，其余必须走整文件（两种跑法共存是刻意的）",
+  },
+  {
+    id: "vacuous-run-guard-dropped",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "「选中几条」这道闸整个摘掉 ⇒ 这条闸正是 `-t` 上线唯一的安全带：摘掉后一次改名就能让整条锚点永远绿着跑完（vitest 对无匹配的 -t 退 0）",
+    apply: (s) => s.replace(
+      '\n    if (vacuous === null && runReadingIsBad(mode, r.selected)) {',
+      "\n    if (false) {",
+    ),
+    expectFail: "接线：每一拍都过共用的那道读数闸，闸的拍数与 runTest 调用点相对相等（选不中、选多条都不许读成绿）",
+  },
+  {
+    // 与上一条咬同一处接线、但失真方向不同（规则 226：同一不变量的两种失真各要一条变异）：
+    // 上面是「整个摘掉」，这条是「退回只否 0 条」——后者不留任何痕迹，因为 0 条那一半照常红。
+    id: "selector-guard-ignores-multi-hit",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "闸退回「只有 0 条／没读到才判坏」⇒ 选中 2 条以上的那一拍被读成测过了，可红的未必是本锚点那条 killer 用例：vitest 的 `-t` 匹配整条标题（describe 前缀也算），而体检数的是 it 字面量——两个分母本来就不是一回事",
+    apply: (s) => s.replace(
+      '\n    if (vacuous === null && runReadingIsBad(mode, r.selected)) {',
+      '\n    if (vacuous === null && mode === "selector" && (r.selected === null || r.selected === 0)) {',
+    ),
+    expectFail: "接线：每一拍都过共用的那道读数闸，闸的拍数与 runTest 调用点相对相等（选不中、选多条都不许读成绿）",
+  },
+  {
+    id: "selector-predicate-accepts-multi",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "selector 那一支从「恰好 1 条」放宽成「只否 0 条与没读到」⇒ 闸与单价格都还在，只是多选的那条永远不出声（放宽分级必须配反向锚点，规则 227）",
+    apply: (s) => s.replace(
+      '  if (mode === "selector") return selected !== 1;',
+      '  if (mode === "selector") return selected === null || selected === 0;',
+    ),
+    expectFail: "读数闸的判据只有一份：selector 那一拍恰好选中 1 条才算合格，0 条／多条／没读到三种都判坏",
+  },
+  {
+    id: "vacuous-line-merges-empty-into-unreadable",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "把「0 条＝空跑」印成「取料坏」⇒ 两种红的修法相反却被读成同一种（第 166 页那把只能印 0 的尺，同一族换了载体）；判卷要三种措辞互不冒领",
+    apply: (s) => s.replace(
+      '      ? "0 条用例＝这一拍什么都没测"',
+      '      ? "未取到（收尾行没读到＝取料坏）"',
+    ),
+    expectFail: "三种坏读数印三种不同措辞：取料坏／一条没选中／选中多条，两两不许相同",
+  },
+  {
+    id: "run-mode-cell-silent-when-no-spawns",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "没有 spawn 时那一格不再说「没有分母」而是印出空串 ⇒ 读数缺席被读成「本次不需要成本」（第 163 页 --list 那一格的同一族）",
+    apply: (s) => s.replace(
+      '  if (rows.length === 0) return "跑法单价：本次没有 spawn ⇒ 这一格没有分母";',
+      '  if (false) return "跑法单价：本次没有 spawn ⇒ 这一格没有分母";',
+    ),
+    expectFail: "跑法单价那一格分开印两种跑法，并把两种跑法各自的「坏拍」数出来——省了多少由它说，不许推算",
+  },
+  {
+    id: "unverified-total-counted-separately",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "未证的总数另起一个口径数（少算一类）⇒ 名单摆着 7 条、汇总只报 5 条，读的人按 5 条决定补跑多少，剩下两条永远不会有人碰。" +
+      "第 168 页那句「计数由名单求和」落到这一格才算接线（规则 209/225：两个口径各写一遍必有一处先漂）",
+    apply: (s) => s.replace(
+      '  const total = rows.length; // 计数＝名单长度之和，同源；不许另起一个 filter 再数一遍\n  const parts: string[] = [];',
+      '  const total = rows.filter((x) => x.cls !== "src-in-flight").length;\n  const parts: string[] = [];',
+    ),
+    expectFail: "未证四类各印各的名单，总数等于名单长度之和",
+  },
+  {
+    id: "unverified-list-not-routed-through-exit",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "名单不进那条同步写满的出口 ⇒ 几百条 id（几 KB）交给异步队列后就 `process.exit()`，只剩内核缓冲那一截，" +
+      "而汇总行照样印「未证 N 条」——读者以为名单发全了，按残缺的名单补跑（规则 241 实测砍过 920 行的 --list）",
+    apply: (s) => s.replace(
+      '// 用 `console.log` 交给异步队列再 `process.exit()` 就是拿丢掉尾巴的运气当读数（规则 241）。\nemitAndExit(redText + unvText + timing + ',
+      '// 用 `console.log` 交给异步队列再 `process.exit()` 就是拿丢掉尾巴的运气当读数（规则 241）。\nemitAndExit(unvText + timing + ',
+    ),
+    expectFail: "接线：未证名单走同步写满的那条出口，UNVERIFIED 标记只印一次",
+  },
+  {
+    id: "unverified-class-read-from-prose",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "按 `why` 的措辞认未证的类别 ⇒ 改一句文案就分错类，「等别人落库」被印成「现在就能补跑」，读者白跑一趟还把那条读成已验；" +
+      "分类必须认字段（stopped／unloadable／refused 名单）",
+    apply: (s) => s.replace(
+      '    id: r.m.id,\n    cls: typeof r.unloadable === "string" ? "judge-unloadable" : r.stopped === true ? "budget-stopped" : "judge-in-flight",',
+      '    id: r.m.id,\n    cls: typeof r.unloadable === "string" ? "judge-unloadable" : String(r.why ?? "").includes("预算") ? "budget-stopped" : "judge-in-flight",',
+    ),
+    expectFail: "接线：未证名单走同步写满的那条出口，UNVERIFIED 标记只印一次",
+  },
+  {
+    id: "run-mode-cell-drops-absent-mode",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "跑法单价只遍历这一趟出现过的模式 ⇒ 另一种跑法 0 拍时整支从行里消失，「这一支没拍到」被读成「这一支不需要成本」" +
+      "（09-28 实测：补跑那 30 条全是 selector 拍，whole 那一支整个不见，而汇总行照样印得整齐）。" +
+      "全局零 spawn 那格早有兜底，欠的是**子列**这一格（规则 245/241 同族）",
+    apply: (s) => s.replace(
+      '  const modes: Array<"selector" | "whole"> = ["selector", "whole"];\n  const parts = modes.map((mode) => {',
+      '  const modes = [...new Set(rows.map((r) => r.mode))].sort();\n  const parts = modes.map((mode) => {',
+    ),
+    expectFail: "两种跑法定长列印：这一趟只拍到一种，另一种也要印出没有分母而不是整支消失",
+  },
+  {
+    id: "restore-byte-check-neutered",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "把还原那一格的判据摘掉（换成恒不成立）⇒ 盘上留着半个突变、或被写成别的内容，这条照样算绿；" +
+      "而收尾那句 `git diff HEAD --quiet` 只在**整轮跑完**时看总账，看不出「第 517 条还原时写歪了」这一格。" +
+      "这一拍换成字节比对本来就是拿「更强的证据」换掉「更贵的一拍」，换弱了就得有人喊",
+    apply: (s) => s.replace(
+      '    const restoreProblem = restoreDiffProblem(original, readFileSync(srcAbs, "utf8"));\n    if (restoreProblem !== null) return red("restore-mismatch", `还原未逐字节相同：${restoreProblem}`);',
+      '    const restoreProblem = restoreDiffProblem(original, readFileSync(srcAbs, "utf8"));\n    if (false) return red("restore-mismatch", `还原未逐字节相同：${restoreProblem}`);',
+    ),
+    expectFail: "接线：每条锚点只付两拍，还原那一拍不再 spawn 判卷",
+  },
+  {
+    id: "restore-diff-problem-only-compares-length",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "只比长度不比内容 ⇒ 等长那类突变被原样留在盘上（现读：可解析出两个字面量的 947 对 apply 里有 11 对是等长替换），" +
+      "还原检查当场变成恒真，而它正是省下第三次 spawn 所换来的那份更强证据",
+    apply: (s) => s.replace(
+      '  if (before === after) return null;',
+      '  if (before.length === after.length) return null;',
+    ),
+    expectFail: "字节相同＝到位；长度不同与等长不同要各点名自己的那一格",
+  },
+  {
+    id: "red-kind-guard-silently-skips",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "把「认不出类别就崩」那一格摘掉 ⇒ 没归类的判红不进任何一类却仍算进总数，分类名单读起来比实际少，" +
+      "而最贵的「存活」恰恰是最容易被漏掉的那一类（规则 245：把「没记账」读成「记了 0 次」会让分母看起来更干净）",
+    apply: (s) => s.replace(
+      '    const k = r.kind;\n    if (k === undefined || !FAIL_KINDS.includes(k)) {',
+      '    const k = r.kind;\n    if (false) {',
+    ),
+    expectFail: "判红缺类别／认不出的类别当场崩并点名第几条",
+  },
+  {
+    id: "triage-ignores-structured-kinds-line",
+    src: "scripts/lib/mutation-rerun-triage.ts",
+    test: "tests/mutation-rerun-triage.test.ts",
+    desc: "下游不读 `REDKINDS=` 那一行、只回头猜散文 ⇒ runner 在出口定好类别这件事白做，" +
+      "改一句给人看的文案就让归因静默降级（规则 205/213：同一谓词不许两份副本，宽度还各不一样）",
+    apply: (s) => s.replace(
+      '  const kinds = redKindsOf(stdout);\n  if (kinds !== null) {',
+      '  const kinds = null;\n  if (kinds !== null) {',
+    ),
+    expectFail: "REDKINDS 在场就直接认类别，不再回头猜散文",
+  },
+  {
+    id: "prompt-surface-empty-take-material-returns-green",
+    src: "src/agent/prompt-surface.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "取料为空从「抛」改成「印 0 条发现」⇒ 装配面读不到时这道门给出**绿色读数**，" +
+      "而它存在的理由正是「文本承诺了一格、面上没有」（规则 128：非零退出＋零结论＝读数不可信，这里连退出码都变 0）",
+    apply: (s) => s.replace(
+      'if (allModes.length === 0) throw new Error("工具面一格都没取到 ⇒ 不能把「没读到」读成「没有可达性问题」");',
+      "if (allModes.length === 0) return [];",
+    ),
+    expectFail: "取料坏了要抛，不许印 0",
+  },
+  {
+    id: "prompt-surface-dead-counted-as-odd",
+    src: "src/agent/prompt-surface.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "把 dead 并进 odd ⇒ 两类修法相反的事合成一个数：dead 要改名／删文案，odd 要拆 per-mode 文本（任务 #16），" +
+      "合并后剩下的计数读起来像「只差档没覆盖」，实际是指着不存在的能力（规则 239：三态要分开印）",
+    apply: (s) => s.replace(
+      'out.push({ token, face: face.name, modes: allModes, kind: "dead" });',
+      'out.push({ token, face: face.name, modes: allModes, kind: "odd" });',
+    ),
+    expectFail: "面上完全没有 ⇒ dead",
+  },
+  {
+    id: "prompt-surface-exempt-leaks-across-modes",
+    src: "src/agent/prompt-surface.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "豁免键从 `token@mode` 放宽成「这个 token 在任何档被登过就全放过」⇒ 一条 read-only 的存量理由" +
+      "会把 default 档新出现的缺席一起消掉，存量水位（只准调低）被静默抬高（规则 238：豁免只能由命中方清空）",
+    apply: (s) => s.replace(
+      "if (waived.has(`${token}@${m}`)) continue;",
+      "if ([...waived].some((k) => k.startsWith(`${token}@`))) continue;",
+    ),
+    expectFail: "豁免要真能消掉那一条，其他档不许跟着被消",
+  },
+  {
+    id: "prompt-surface-face-scope-ignored",
+    src: "src/agent/prompt-surface.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "把「这份文本只发给哪几档」的覆盖档丢掉、永远按全局四档判 ⇒ 拆开之后只发给在场档的文本也被牵连报红，" +
+      "而写错的档名不再抛（把「那一档的面读不到」静默读成「那一档没承诺」）——按档拆文本这一步就此失去证人",
+    apply: (s) => s.replace(
+      "const scope = face.modes && face.modes.length > 0 ? [...face.modes].sort() : allModes;",
+      "const scope = allModes;",
+    ),
+    expectFail: "覆盖档参与判定",
+  },
+  {
+    id: "prompt-surface-readonly-text-not-applied",
+    src: "src/main/agent-runner.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "装配点不再按档取文本（四档都拿共用文本）⇒ read-only 的模型继续读到 edit_file／wait_for_agents 这些它拿不到的承诺，" +
+      "而门仍然绿：门读的是 systemPromptFor 的输出，读不到「生产有没有真的调它」（规则 236：接线要单独钉）",
+    apply: (s) => s.replace(
+      'if (mode !== "read-only") return BASE_SYSTEM;',
+      "return BASE_SYSTEM;",
+    ),
+    expectFail: "而 read-only 确实不同",
+  },
+  {
+    id: "prompt-surface-line-edit-guard-skips",
+    src: "src/agent/prompt-surface.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "摘掉「落点必须恰好命中」那一格 ⇒ 源文本里那行的开头字一改，这一档的差异就**静默消失**（模型读到别档的承诺而没人红），" +
+      "前缀写松了也会连坐邻居行；两种都只能在这一刻报，事后无从分辨",
+    apply: (s) => s.replace(
+      "if (dropped !== edits.drops.length || replaced !== edits.replacements.length) {",
+      "if (false) {",
+    ),
+    expectFail: "落点 0 命中要抛",
+  },
+  {
+    id: "prompt-surface-faces-not-grouped",
+    src: "scripts/prompt-surface-check.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "取料面从「按文本相同合并」退化成「一档一面」⇒ 「一份文本对几档」这个信号消失，共用文本对缺席档的承诺永远不会报 odd" +
+      "（每档各自成面时，缺席那档的面就是它自己的文本，奇偶性被结构抹平）",
+    apply: (s) => s.replace(
+      "    if (list === undefined) byText.set(text, [m]);\n    else list.push(m);",
+      "    byText.set(text, [m]);",
+    ),
+    expectFail: "四档各属一面，且没有第五面",
+  },
+  {
+    id: "prompt-surface-readonly-description-not-applied",
+    src: "src/agent/glm-session.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "按档换描述那一格摘掉 ⇒ 只读档的 `propose_plan` 继续写「批准前 write_file/run_shell 会被权限层拒绝」，" +
+      "而那两把在这一档连面都不在——文本描述一个它拿不到的能力（第 176 页现读抓到的那一格，同类事故第四次）",
+    apply: (s) => s.replace(
+      "return alt === undefined ? s : { ...s, function: { ...s.function, description: alt } };",
+      "return s;",
+    ),
+    expectFail: "可写档的原文案一字未动",
+  },
+  {
+    id: "prompt-surface-namesonly-switch-ignored",
+    src: "src/agent/prompt-surface.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "把「描述面只认名单」这个开关摘掉（永远走形状）⇒ 参数名／目录名（`old_string`、`node_modules`）整报成死引用，" +
+      "门的读数会被噪声淹没，而真承诺（描述点了别档才有的工具）反而没人愿意看（规则 242：读数一坏，整格就失去证人）",
+    apply: (s) => s.replace(
+      "if (opts?.namesOnly !== true) {",
+      "if (false) {",
+    ),
+    expectFail: "参数名／目录名不当工具承诺",
+  },
+  {
+    id: "prompt-surface-description-faces-not-swept",
+    src: "scripts/prompt-surface-check.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "门的取料退回只喂系统文本 ⇒ 68 份工具描述面不再被扫，`propose_plan` 那一格会重新长回来而门照绿；" +
+      "判卷里那条「描述不点名别档工具」自己仍然绿，因为它读的是 descriptionFaces() 而不是门实际喂出去的那份（规则 236：接线要单独钉）。" +
+      "09-28 第 178 页重指：四族面收成 `faceFamilies()` 一处组成（`main()` 与判卷读同一份），旧针脚那条 `allFaces()` 拼接送不到这儿了",
+    apply: (s) => s.replace(
+      "desc: descriptionFaces(), ",
+      "",
+    ),
+    expectFail: "门真的把每一族模型可见文本都喂进去",
+  },
+  {
+    id: "prompt-surface-reminder-faces-not-swept",
+    src: "scripts/prompt-surface-check.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "续跑提醒那一族不再逐证据态渲染（枚举退化成空）⇒ 门只读到静态的那两族（系统文本与工具描述），" +
+      "而**逐轮重发的 goal 提醒**回到没人看的状态——09-24 那次「join 文案命令模型去调不存在的工具」正是在这一族里，" +
+      "不在系统提示词里（规则 222：取料面空掉时「0 发现」是最像好消息的假绿）",
+    apply: (s) => s.replace(
+      "for (const evidence of Object.keys(EVIDENCE_TEXT)) {",
+      "for (const evidence of []) {",
+    ),
+    expectFail: "逐证据态各渲两份",
+  },
+  {
+    id: "prompt-surface-goal-reminder-drops-verify",
+    src: "src/agent/goal.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "收束条件那句不再点名 verify（改成「只有验证通过」）⇒ goal 模式每轮重送的指令失去**该调哪把工具**，" +
+      "模型只能凭猜；这条锚点守的是「提醒里点到的工具必须四档都在面上」这个不变量的前半（后半是逐档可得性判定）",
+    apply: (s) => s.replace(
+      '"\\n收束条件：只有 verify 通过且之后不再写盘才算完成；认为已达成就调用 verify 拿绿证据再收束。"',
+      '"\\n收束条件：只有验证通过且之后不再写盘才算完成。"',
+    ),
+    expectFail: "四档都得真拿得到",
+  },
+  {
+    id: "prompt-surface-param-faces-not-swept",
+    src: "scripts/prompt-surface-check.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "门的取料不再把参数描述那一族喂进去（现读 189 份，2026-09-28 第 178 页）⇒ 「参数说明里点了本档拿不到的工具」这一格回到没人看的状态；" +
+      "同笔那两条真取料判卷仍然绿，因为它们各自直接调 `paramFaces()`，看不见门实际喂出的那份（规则 236 第三次命中这一形状）。" +
+      "与 `description-faces-not-swept` 共用同一条 killer 用例——两条守的是同一行组成的不同成员，用例断言的是「四族都在面里」这个整体",
+    apply: (s) => s.replace(
+      ", param: paramFaces()",
+      "",
+    ),
+    expectFail: "门真的把每一族模型可见文本都喂进去",
+  },
+  {
+    id: "prompt-surface-param-walk-freezes-path",
+    src: "scripts/prompt-surface-check.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "走树仍然递归、但不再往下带路径（`collectParamDescriptions(value, path, out)`）⇒ 面数一个不少（189 照样 189），" +
+      "只有「两层嵌套那 6 份在不在面里」那条判据看得见：嵌套参数说明全被并成同一个名字，递归这一支失去证人。" +
+      "选这个方向而不是「删掉递归」是有意的：后者会让取料数为 0 直接抛，任何判卷都红，分辨不出这一族到底被走没被走（规则 226：要给那道闸造只有它看得见的输入）",
+    apply: (s) => s.replace(
+      "collectParamDescriptions(value, `${path}.${key}`, out);",
+      "collectParamDescriptions(value, path, out);",
+    ),
+    expectFail: "每把工具的参数 prose 都在面里",
+  },
+  {
+    id: "prompt-surface-coverage-denominator-unfiltered",
+    src: "scripts/prompt-surface-check.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "覆盖率的分母不再滤掉「没有参数的工具」⇒ `verify`／`automation_list` 以 declared=0 进面，" +
+      "分母从 18 涨到 20，覆盖率从此替形状报错（一个从来没有参数的工具被读成「有参数没说明」）。" +
+      "读数类判据的分母必须与被度量对象同口径，否则「有 2 把没说明」这句话在骗人（规则 245／257①）",
+    apply: (s) => s.replace(
+      "if (named.length === 0) continue;",
+      "if (named.length < 0) continue;",
+    ),
+    expectFail: "分母只数「有声明参数的工具」",
+  },
+  {
+    id: "prompt-surface-edit-path-prose-removed",
+    src: "src/agent/glm-session.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "把 `edit_file.path` 的说明摘掉 ⇒ 模型只能靠撞闸才知道「绝对路径会被拒」（`resolveInWorkspace` 硬拒两种形状：绝对路径、越界），" +
+      "而每撞一次闸要付一整轮往返（现读一次模型往返 8.7–42s）。判卷两头都钉：说明里点名这两种拒绝 ＋ 闸真按这句话拒，" +
+      "再加一条「合规相对路径必须放行」防上面两条变成恒真（规则 228）",
+    apply: (s) => s.replace(
+      'path: { type: "string", description: "workspace 相对路径（绝对路径或越出工作区一律拒绝）" },',
+      'path: { type: "string" },',
+    ),
+    expectFail: "edit_file 的 path 说明写出那两条拒绝",
+  },
+  {
+    id: "prompt-surface-write-path-prose-removed",
+    src: "src/agent/glm-session.ts",
+    test: "tests/prompt-surface-check.test.ts",
+    desc: "只给两把写向工具中的一把补说明 ⇒ 同一族里规矩看起来不同（模型会按「有说明那把」的规矩推另一把）。" +
+      "这条与 `edit-path-prose-removed` 各用自己的 killer 用例：两条分支共用一条断言时，摘掉一支仍然全绿是本仓反复踩过的形状（规则 239）",
+    apply: (s) => s.replace(
+      'path: { type: "string", description: "workspace 相对路径，指向要整文件覆盖的新内容（绝对路径或越出工作区一律拒绝）" },',
+      'path: { type: "string" },',
+    ),
+    expectFail: "write_file 的 path 说明与 edit_file 同族",
+  },
+
+  // ── 第 183 页：影响面覆盖面自述带上**分母**（`ImpactGraph.candidates` = 帽切之前的全量候选数）
+  // 这一支的取料本来就先数全量再切片 ⇒ 分母免费；缺了它，「图非全量」是一句没有量的话。
+  {
+    id: "impact-candidates-count-post-cap",
+    src: "src/agent/impact/index.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "图自报的候选数取成**切片后**的长度 ⇒ 分母恒等于收录数，覆盖面自述在任何仓上都闭嘴"+
+      "（`candidates <= files` 永真）——比旧的「非全量但不说几个」更坏：那句子至少还在",
+    apply: (s) => s.replace("candidates: candidates.length,", "candidates: files.length,"),
+    expectFail: "图外还有几个候选要说得出数",
+  },
+  {
+    id: "impact-graph-candidates-not-carried-through-report",
+    src: "src/agent/impact/index.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "分母没穿过 fileImpact ⇒ 只有 symbol 支带数、file 支回到旧句子"+
+      "（三支各组装一次覆盖面，少接一层就是那一支静默不一致，规则 239）",
+    apply: (s) => s.replace("graphCandidates: graph.candidates,", "graphCandidates: graph.files.length,"),
+    expectFail: "file 支的同一个数要穿过 fileImpact",
+  },
+  {
+    id: "impact-coverage-denominator-constant-zero",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "覆盖面句里的漏报数写死 0 ⇒ 句子形状还在、数永远假（「另有 0 个候选没进图」），"+
+      "模型据此认为图基本全量",
+    apply: (s) => s.replace(
+      "`另有 ${String(candidates - files)} 个候选文件没进这张图（帽外或被跳过）⇒ 图非全量，`",
+      "`另有 0 个候选文件没进这张图（帽外或被跳过）⇒ 图非全量，`",
+    ),
+    expectFail: "部分覆盖时报出实数，收全时闭嘴",
+  },
+  {
+    id: "impact-coverage-trigger-reverts-to-cap-compare",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "判据退回旧的 `files < cap` ⇒ 两个方向同时错：候选正好等于帽时**误报**非全量（模型白重问一次），"+
+      "而有文件被读/解析失败跳过时（files < cap 但候选更多）**漏报**（模型以为问全了）",
+    apply: (s) => s.replace('  if (candidates <= files) return "";', "  if (files < cap) return \"\";"),
+    expectFail: "旧判据在这里误报",
+  },
+  {
+    id: "impact-cap-cause-judgement-diverges-from-coverage",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "阴性一侧的成因判据与阳性一侧分家 ⇒ 同一张图一边说「另有 N 个没进图」、"+
+      "另一边说「与帽无关」，两句话互相拆台（共用同一判据是这条政策的形状）",
+    apply: (s) => s.replace("  return candidates > files", "  return files >= cap"),
+    expectFail: "capCauseNote 与它同判据",
+  },
+
+  // ── 第 184 页：shell 家族的失败归因（判据只有一只，文案按出口分档；待办 #25）
+  // 四条出口各有锚点：run_shell 直连 / worker 两条（逐行式，两处同文）/ 主会话沙箱出口。
+  {
+    id: "run-shell-cause-unwired",
+    src: "src/tools/run_shell.ts",
+    test: "tests/shell-family-cause.test.ts",
+    desc: "run_shell 收束处不贴归因 ⇒ 模型看到 `bash: foo: command not found` 与 `[exit code: 127]`，"+
+      "照着这条环境红去改本来正确的代码（真语料里 run_shell 的红全部无类，第 182 页）",
+    apply: (s) => s.replace("settle(cancelled ? res : annotateExecCause(res, { timedOut, exitCode: code }));", "settle(res);"),
+    expectFail: "点名 127",
+  },
+  {
+    id: "worker-shell-cause-layer-unwired",
+    src: "src/agent/worker-shell-tools.ts",
+    test: "tests/shell-family-cause.test.ts",
+    desc: "worker 两条 shell 出口不补归因 ⇒ 宿主注入沙箱 runner 时（那条路整个绕过 run_shell）"+
+      "worker 的回执没有这一句。两处代码逐字相同 ⇒ 改法走逐行式、一次摘两层；"+
+      "**只摘其中一支没有专属锚点**——那一支由自己的用例当行为证人（shell_rw 那条不许冒领 shell_ro 的断言）",
+    apply: (s) => s.split("\n").map((l) => (l.includes("return annotateExecCause(res,")
+      ? l.replace("annotateExecCause(res, { timedOut: res.timedOut === true, exitCode: res.exitCode ?? null })", "res")
+      : l)).join("\n"),
+    expectFail: "shell_ro 走注入出口",
+  },
+  {
+    id: "runner-sandbox-exit-cause-unwired",
+    src: "src/main/agent-runner.ts",
+    test: "tests/shell-family-cause.test.ts",
+    desc: "主会话开沙箱那条出口（run_shell 被 runInSandbox 整个顶掉）不补归因 ⇒"+
+      "同一台机器上换档就没人归因（第十三族：同一条判据只硬化一支）",
+    apply: (s) => s.replace(
+      "annotateExecCause(sand, { timedOut: sand.timedOut === true, exitCode: sand.exitCode ?? null })",
+      "sand",
+    ),
+    expectFail: "三处都真的调了同一只归因函数",
+  },
+  {
+    id: "exec-cause-ok-guard-dropped",
+    src: "src/agent/verify.ts",
+    test: "tests/shell-family-cause.test.ts",
+    desc: "去掉「成功回执不贴」那道守卫 ⇒ `pnpm install` 成功但正文里带一行 ERR_PNPM 就被判成"+
+      "「命令根本没跑成」——把绿的说成红的，比不归因更坏",
+    apply: (s) => s.replace("  if (r.ok) return r;", "  if (false) return r;"),
+    expectFail: "成功回执不贴",
+  },
+  {
+    id: "exec-cause-class-maps-wrong-text",
+    src: "src/agent/verify.ts",
+    test: "tests/shell-family-cause.test.ts",
+    desc: "127 那一类错领了包管理器的文案 ⇒ 模型按「等依赖装好」去等，而真因是命令名不在 PATH"+
+      "（归因错了比不归因更贵：它会指一条不存在的出路）",
+    apply: (s) => s.replace('cause === "toolchain-missing"', 'cause === "timeout"'),
+    expectFail: "两类各贴一句",
+  },
+
+  // ── 第 185 页：每请求固定**面**（分子补上工具规格）＋ 占比不许夹住 ＋ 系数自检
+  {
+    id: "prompt-cost-face-drops-specs",
+    src: "scripts/lib/prompt-cost.ts",
+    test: "tests/prompt-cost.test.ts",
+    desc: "固定面退回只数系统提示 ⇒ 标签还说「面」而分子少了九成（default 档规格 10,131 字符 = 提示的 15.1 倍），"+
+      "整条成本尺继续把主要成本当不存在",
+    apply: (s) => s.replace("const toolSpecChars = JSON.stringify(input.specs).length;", "const toolSpecChars = 0;"),
+    expectFail: "面 = 系统提示 + 序列化工具规格",
+  },
+  {
+    id: "prompt-cost-face-pools-modes",
+    src: "scripts/lib/prompt-cost.ts",
+    test: "tests/prompt-cost.test.ts",
+    desc: "逐档面并成一条（只算第一档）⇒ read-only 的 8 把与 default 的 20 把被并成一个数，"+
+      "「只读会话便宜多少」这项决策再没有读数（并集读数不能当「每一档都成立」的证人，规则 255）",
+    apply: (s) => s.replace("  return inputs.map((i) => fixedFaceOfMode(i));", "  return [fixedFaceOfMode(inputs[0]!)];"),
+    expectFail: "逐档分开数",
+  },
+  {
+    id: "prompt-cost-share-clamp-restored",
+    src: "scripts/lib/prompt-cost.ts",
+    test: "tests/prompt-cost.test.ts",
+    desc: "把 `Math.min(1, …)` 夹住装回来 ⇒ 18/19 条流一起报 100%，那片相同的数正是规则 242 说的「常数签名」；"+
+      "夹住之后「系数把成本放大一倍」这件事在读数里彻底消失",
+    apply: (s) => s.replace("  return fixedTokens / measuredInputTokens;", "  return Math.min(1, fixedTokens / measuredInputTokens);"),
+    expectFail: "占比不夹住",
+  },
+  {
+    id: "prompt-cost-admissible-not-tightest",
+    src: "scripts/lib/prompt-cost.ts",
+    test: "tests/prompt-cost.test.ts",
+    desc: "系数自检取第一条流而不是最紧那条 ⇒ 反解出的「下界」偏小，按它摊仍然估超实测输入"+
+      "（自检给出假安心，比没有自检更坏）",
+    apply: (s) => s.replace("    if (lo === null || need > lo) lo = need;", "    if (lo === null) lo = need;"),
+    expectFail: "取最紧那条流反解",
+  },
+  {
+    id: "prompt-cost-overshoot-not-counted",
+    src: "scripts/lib/prompt-cost.ts",
+    test: "tests/prompt-cost.test.ts",
+    desc: "超界计数写死 0 ⇒ note 还在逐行说，但汇总与「这条尺有几行不成立」这一格变成常数，"+
+      "读的人不会再去看那一列（三态要分开印，缺项要单列计数，规则 239/242）",
+    apply: (s) => s.replace("    overshoot: shares.filter((s) => s > 1).length,", "    overshoot: 0,"),
+    expectFail: "超限行带 note 说破原因",
+  },
+  {
+    id: "prompt-fixed-cost-rows-use-prompt-only",
+    src: "scripts/replay/prompt-fixed-cost.ts",
+    test: "tests/prompt-cost.test.ts",
+    desc: "逐档面算出来了、也印了，但摊给每条流时实参仍递提示那份（「算出来不接」第四次，这次在成本尺）⇒"+
+      "汇总里那些固定 token 全部偏小一个数量级，而头部几行看着完全正确",
+    apply: (s) => s.replace(
+      "const rows = promptCostRows(perFile, { promptChars: billed.totalChars, factor });",
+      "const rows = promptCostRows(perFile, { promptChars: billed.promptChars, factor });",
+    ),
+    expectFail: "分子被换掉就破",
+  },
+  {
+    id: "shard-plan-empty-shards-allowed",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "片数按**请求的片数**开而不是按 min(片数, 宿主数) ⇒ 条数少于片数时造出空片，" +
+      "空片会被并进「这一片跑了 0 条且判定已杀死」那格——读者以为整表都验过（三态里「没尺」被读成 0，规则 239）",
+    apply: (s) => s.replace(
+      "const out: string[][] = Array.from({ length: k }, () => []);",
+      "const out: string[][] = Array.from({ length: shards }, () => []);",
+    ),
+    expectFail: "片数上限由宿主数决定而不是由请求的片数决定（不造空片）",
+  },
+  {
+    id: "shard-plan-missing-hardcoded",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "分片自检里 missing 写成常数空数组 ⇒ 「漏跑」这一格永远绿，而「不重不漏」这句话仍然印得出来。" +
+      "漏跑是这一层最坏的读数形状：四份日志合起来比表短，读者以为整表跑过",
+    apply: (s) => s.replace("    missing: input.filter((it) => !seen.has(it)),", "    missing: [],"),
+    expectFail: "少给一条要在 missing 里现身",
+  },
+  {
+    id: "shard-merge-unreadable-as-killed",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "合并时把「读不出」也计入 killedTotal ⇒ 崩掉的那一片被当成跑完且全绿；" +
+      "byVerdict 里那一列照印，所以只有拿总数去核对的读者会中招（规则 211：半把尺与没尺要各自看得见）",
+    apply: (s) => s.replace(
+      'if (r.verdict === "已杀死") killedTotal += r.given;',
+      'if (r.verdict === "已杀死" || r.verdict === "读不出") killedTotal += r.given;',
+    ),
+    expectFail: "不并进「已杀死」的条数",
+  },
+  {
+    id: "shard-merge-empty-table-green",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "allKilled 只写 `rows.every(...)`（丢掉「有一片才算」那一半）⇒ 空表退化成 true，" +
+      "编排器就会在**一片都没起**的时候报绿（`every` 对空集为真是这条尺的老坑）",
+    apply: (s) => s.replace(
+      'allKilled: rows.length > 0 && rows.every((r) => r.verdict === "已杀死"),',
+      'allKilled: rows.every((r) => r.verdict === "已杀死"),',
+    ),
+    expectFail: "空片表 ⇒ allKilled 是**假**",
+  },
+  {
+    id: "shard-speed-null-guard-dropped",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "把「没有串行分母」那格的 `||` 写成 `&&` ⇒ 条件恒假，没分母时也走除法那一支，" +
+      "对 null 调 toFixed 直接抛——加速比这一格必须**要么有分母、要么明说没分母**，不许拿 0 顶（规则 206/239）",
+    apply: (s) => s.replace("serialSec === null || serialSec <= 0", "serialSec === null && serialSec <= 0"),
+    expectFail: "不许印 Infinity 或 0",
+  },
+  {
+    id: "shard-rollup-mismatch-not-printed",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "抽取不符的片数算出来了却不进那行读数 ⇒ 红行名单被静默吃掉时，同一行里的「交出 N 条／判定[...]」" +
+      "照旧印，而它们已经不可信（接线要连入参一起钉，规则 230）",
+    apply: (s) => s.replace("(m.mismatchShards > 0 ?", "(false ?"),
+    expectFail: "抽取对不上的片数要印在行里",
+  },
+  {
+    id: "shard-ghost-ids-accepted",
+    src: "scripts/mutate-shards.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "不核「给的 id 在这张表上吗」⇒ 拼错的锚点 id 被 filter 静默丢掉，剩下的条数照样分片、照样跑，" +
+      "而读者以为那几条验过了（取料坏要说成取料坏，不能退化成「少跑几条」）",
+    apply: (s) => s.replace("if (ghost.length > 0) {", "if (false) {"),
+    expectFail: "给了不在表上的 id ⇒ 拒",
+  },
+  {
+    id: "shard-host-split-gate-dropped",
+    src: "scripts/mutate-shards.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "算出「同一判卷宿主被摊到两片」却不拦 ⇒ 两个真进程并发真跑同一份判卷文件。" +
+      "09-29 实测：轮转切法把 `tests/head-cert-deps.test.ts` 摊进四片，其中一片的 `cert-lock-stale-not-unlinked` " +
+      "因认证树注册名（按提交 sha 定）撞车，被归进「基线那一档就不绿」，同一条串行复跑 ⇒ `✅` 1.1s（钉调用点要连同它的入参，规则 230）。" +
+      "**这句本身也是第 188 页的教训**：文案里原样引用机器那行诊断文字，会被读日志的那把尺当成诊断信号——" +
+      "散文不许冒充读数（本条原先写的正是那句，现已改写）。" +
+      "**本条第一版存活过一次**：killer 挂的是那条文字接线钉，而 `if (split.length > 0)` → `if (false)` 之后" +
+      "正则要的那两行还在原地 ⇒ 测试全绿。现挂**行为证人**：判卷用 `--force-split=roundrobin` 造出同宿主被拆的输入，" +
+      "闸门被解除时那一跑会放行 ⇒ 断言当场红（第 186 页同一次课：存活不是没人守，是这个形状没有可达的输入）",
+    apply: (s) => s.replace("if (split.length > 0) {", "if (false) {"),
+    expectFail: "同一宿主被摊到两片 ⇒ 行为上当场拒（默认切法同输入放行）",
+  },
+  {
+    id: "shard-duplicate-tree-gate-dropped",
+    src: "scripts/mutate-shards.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "不去重 `--trees` ⇒ 同一棵树被两片同时就地改源文件、互踩 `.mutbak`，" +
+      "还原判据看的是「字节等不等」而不是「是谁写的」，于是两边的收尾复核都能假绿",
+    apply: (s) => s.replace("if (distinct.length !== f.trees.length) {", "if (false) {"),
+    expectFail: "同一棵树填两遍 ⇒ 拒",
+  },
+  {
+    id: "shard-dirty-tree-accepted",
+    src: "scripts/mutate-shards.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "脏树检查算出条数却不回理由 ⇒ 别人在飞的树被当片用，突变就地改它、还原时把别人的改动一起抹掉。" +
+      "这条理由与「不是 git 工作树」分两格印，混了就没人知道该去清哪一格",
+    apply: (s) => s.replace('if (dirty !== "") return', 'if (dirty !== "" && false) return'),
+    expectFail: "放一个在飞文件＝点名条数",
+  },
+  {
+    id: "triage-baseline-prose-not-line-anchored",
+    src: "scripts/lib/mutation-rerun-triage.ts",
+    test: "tests/mutation-rerun-triage.test.ts",
+    desc: "「基线红」那一档的 `m` 旗标摘掉 ⇒ 只有当那句诊断正好落在**整段输出第一行**才认。" +
+      "真机把基线诊断印在缩进的分类行上（`   基线就不是全绿（不应发生）:`），摘掉 `m` 就整档失灵，" +
+      "于是被污染的判定会被读成「读不出」而不是「基线红」——后者才说得出「别信这一条存活/红的结论」（规则 251 的第二注入面）",
+    apply: (s) => s.replace("基线就不是全绿/mu.test(stdout)", "基线就不是全绿/gu.test(stdout)"),
+    expectFail: "真的基线红那一行照旧认（缩进在行首，不是任意位置）",
+  },
+  {
+    id: "triage-killed-requires-checkmark-prefix",
+    src: "scripts/lib/mutation-rerun-triage.ts",
+    test: "tests/mutation-rerun-triage.test.ts",
+    desc: "把「已杀死」那一档的可选前缀写成必需 ⇒ 真机那句无后缀的汇总行认不出来。" +
+      "第 188 页实测的形状：runner 把每条锚点的 desc **原样**印进 `✅ <id> — <desc>`，" +
+      "所以任何不认行首的判据都会把「描述里引用了这句话」读成「机器说了这句话」",
+    apply: (s) => s.replace("(?:✅ )?全部变异被正确杀死", "✅ 全部变异被正确杀死"),
+    expectFail: "绿跑里有一条 ✅ 描述正好引用了『基线就不是全绿』⇒ 仍判已杀死，不许读成基线红",
+  },
+  {
+    id: "triage-noeffect-prose-not-line-anchored",
+    src: "scripts/lib/mutation-rerun-triage.ts",
+    test: "tests/mutation-rerun-triage.test.ts",
+    desc: "「未生效」那一档摘掉 `m` ⇒ 缩进的分类行不再算，只在整段第一行才认。" +
+      "这一档认错的方向是**多做事**：空操作被读成读不出，读者会去重跑一条本来就什么都不改的锚点。" +
+      "**第一版判卷杀不掉这条**：样本写成单行字符串，那句本来就在整段开头 ⇒ 有 `m` 没 `m` 同行为（等价突变，第 186 页那一族的第三种表现）。" +
+      "现在样本前面垫了一行 `变异验证：1 条`",
+    apply: (s) => s.replace("(?:突变|变异)未生效/mu.test(stdout)", "(?:突变|变异)未生效/gu.test(stdout)"),
+    expectFail: "未生效那一档也只认行首形状（带 ❌ 判红· 前缀的分类行算，塞在描述中间不算）",
+  },
+  {
+    id: "triage-red-summary-drops-new-wording",
+    src: "scripts/lib/mutation-rerun-triage.ts",
+    test: "tests/mutation-rerun-triage.test.ts",
+    desc: "判红汇总行只认旧措辞（丢掉『|判红』那一支）⇒ 新版 runner 那句「N 条判红（按类别分开数…）」被读成「读不出」。" +
+      "更坏的组合在这里：这一档失灵之后，如果某条描述里恰好写着『已杀死』那句原文的逐字形式，" +
+      "一次真判红的跑就能从「已杀死」那一支出出去＝**假绿**（现读：表里确有描述含那句原文）",
+    apply: (s) => s.replace("条(?:变异存活或误伤|判红)", "条变异存活或误伤"),
+    expectFail: "反方向更要紧：红跑的 ✅ 描述里引用了『全部变异被正确杀死』⇒ 不许读成已杀死",
+  },
+  {
+    id: "shard-log-path-not-in-verdict-line",
+    src: "scripts/mutate-shards.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "每片原文落了盘，但那行读数不印路径 ⇒ 合并层报「基线红」时读者手上只有结论、没有证据。" +
+      "第 187 页落地当场就是靠这句路径才发现：片 1 的原文写着 10/10 全杀，而判定行写着基线红——" +
+      "红的是**尺**（描述冒充了诊断行），不是被测面（「算出来」还要「拿得到」，规则 211/241 同族）。" +
+      "第 190 页起这句印在**计划行**（开跑前就有），判定行不再重复",
+    apply: (s) => s.replace("原文=${logs[i]}", "原文=（未印路径）"),
+    expectFail: "每片的原文落到**读者拿得到的路径**",
+  },
+  {
+    id: "shards-cli-space-form-value-leaks-as-id",
+    src: "scripts/mutate-shards.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "空格写法收了值却不推进游标 ⇒ 那个值下一轮被当成**锚点 id**。" +
+      "第 189 页现场：我照 `mutate-verify` 那份手册敲 `--budget-ms 480000`（机器只认空格写法），" +
+      "编排器却只认连写 ⇒ 480000 要么被判「未知 id」要么被筛进名单，而参数看起来是给了的。" +
+      "同一扇门两种形状＝第十三族在 CLI 上的样子：包装层的旗标形状要跟被包那层一致",
+    apply: (s) => s.replace("else { take(name, argv[i + 1]); i += 1; }", "else { take(name, argv[i + 1]); }"),
+    expectFail: "且值不许漏成位置 id",
+  },
+  {
+    id: "shards-cli-missing-value-unflagged",
+    src: "scripts/mutate-shards.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "`--budget-ms` 后面缺值时不报错 ⇒ 一路走到 `Number(undefined)＝NaN`，" +
+      "报出来的是「值不是数」而不是「旗标漏了值」——读者会去查自己拼没拼对数字，" +
+      "而真正少的是那个值（归因守错格，规则 224）。缺值与值坏要两句话",
+    apply: (s) => s.replace("if (value === undefined) {", "if (false) {"),
+    expectFail: "空格写法后面缺值 ⇒ 点名「后面没有值」，不许退化成 NaN 或「按缺省跑」",
+  },
+  {
+    id: "shards-cli-log-append-dropped",
+    src: "scripts/mutate-shards.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "片原文仍然只在跑完后一次性落盘（把逐块 append 摘掉）⇒ 七八分钟的整表跑里读者 tail 不到东西，" +
+      "而外层超时把编排器杀掉时四片原文一起丢——机器那一层的突变还原是它自己的事，救不了这里的读数。" +
+      "**这一条只有接线证人，没有行为证人**：『边跑边写』与『跑完再写』在同一份最终文件上不可分辨，" +
+      "要分辨得去观察中途时刻，那是把判卷押在调度上（规则 256）",
+    apply: (s) => s.replace("appendFileSync(logPath, text)", "void logPath"),
+    expectFail: "原文是**开跑前就建好、逐块追加**的（不是跑完一次性写），且计划行先印路径",
+  },
+  {
+    id: "shards-cli-shard-log-not-truncated",
+    src: "scripts/mutate-shards.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "落盘改成追加却不截断 ⇒ 同一个锁标签跑第二遍时，新原文接在上一遍后面，" +
+      "于是 `classify` 会同时看见两跑的汇总行（判红/判绿能互相顶掉），端到端那条证人也会读到上一遍的旧块。" +
+      "追加型日志的「一次跑＝一份新文件」是它的计数前提（规则 220：计数类不许留旧账）",
+    apply: (s) => s.replace('for (const p of logs) writeFileSync(p, "");', 'for (const p of []) writeFileSync(p, "");'),
+    expectFail: "原文是**开跑前就建好、逐块追加**的（不是跑完一次性写），且计划行先印路径",
+  },
+  {
+    id: "verify-per-anchor-cost-not-printed",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "逐条结果行不带那一格 ⇒ 整表汇总仍然印「最贵一条」，但「这条锚点值几秒」回到只能推。" +
+      "第 190 页实测按条数装箱：四片各 252 条跑出 323.6／391.1／419.9／443.0s（极差 +37%）⇒ 条数不是重量，" +
+      "而 #28 要的取料面就是这一格（账本 `runsMs` 一直在记，只是没有出口＝规则 245 那一族）。" +
+      "针脚含真换行：表与实现在同一份文件里，单行搜索串会先撞上这张表自己那份引文（规则 247）",
+    apply: (s) => s.replace("${m.desc} ｜${anchorCostCell(r.runsMs)}`);\n  if (r.ok !== true)", "${m.desc}`);\n  if (r.ok !== true)"),
+    expectFail: "接线：逐条结果那一行真把账本印出去了（表与实现同文件 ⇒ 行锚定，规则 236/247）",
+  },
+  {
+    id: "verify-per-anchor-cost-empty-as-zero",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "空账本印成 `0.0s／0 拍` ⇒ 「这条没被判过」被洗成「这条很便宜」，" +
+      "而装箱会把没量过的条优先塞进片里（规则 245：「没跑」是第三态，不许印成 0.0s）",
+    apply: (s) => s.replace('if (runsMs.length === 0) return "本机实测 一次没跑 ⇒ 这一格没有分母";', 'if (runsMs.length === 0) return "本机实测 0.0s／0 拍";'),
+    expectFail: "逐条那一格：跑了印「N.Ns／K 拍」，一次没跑印「没有分母」，两态不许同形",
+  },
+  {
+    id: "verify-per-anchor-cost-shape-drifted",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "把 `／K 拍` 那一半去掉 ⇒ 读数只剩秒，取料方分不清「一条锚点跑了 1 拍（早退）」与「跑了 3 拍」，" +
+      "而这两个形状的单价差一个量级（第 168 页：第 1 拍付 vite 冷启动）。列印形状是下游读法的一部分，改形状要同轮换读者（规则 251/253）",
+    apply: (s) => s.replace("return `本机实测 ${secsOf(runsMs.reduce((a, b) => a + b, 0))}s／${String(runsMs.length)} 拍`;", "return `本机实测 ${secsOf(runsMs.reduce((a, b) => a + b, 0))}s`;"),
+    expectFail: "取料形状：有分母那一支固定成 秒／拍 两段（#28 的装箱按它读，改形状要同轮换读者）",
+  },
+  {
+    id: "shard-plan-weights-ignored",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "有权重却仍按条数装（把权重那一支换回 `g.ids.length`）⇒ 第 191 页首份现场读出的长尾进不了装箱" +
+      "（p90 以上那 10.6% 的条数占掉 36.3% 的时间，最慢一条 17.7s 自己就占 18%），" +
+      "整表墙钟继续由最慢那片决定——第 190 页那个 +37% 极差就是这么来的",
+    apply: (s) => s.replace("    ? (g: { ids: string[] }) => g.ids.reduce((a, id) => a + (weights.get(id) ?? fallback), 0)\n", "    ? (g: { ids: string[] }) => g.ids.length\n"),
+    expectFail: "按条数装与按秒装给出不同的两片（负控：不给权重＝逐字等于旧行为）",
+  },
+  {
+    id: "shard-plan-missing-weight-as-zero",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "缺权重的条按 0 秒装 ⇒ 盲区变成「免费的重物」，装箱会优先把没量过的宿主整组塞进同一片，" +
+      "而那一片的真实时长无人知道（规则 245：把「没记账」读成「记了 0」会让单价看起来更便宜，诱人以下算）",
+    apply: (s) => s.replace("(weights.get(id) ?? fallback)", "(weights.get(id) ?? 0)"),
+    expectFail: "名单里缺权重的条按**已知中位**补，不许当 0 秒（否则盲区优先跑）",
+  },
+  {
+    id: "shard-cost-parser-first-wins",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "同一条多次出现时保留第一次看到的 ⇒ 权重回到「早退那一拍」的量级，" +
+      "长尾被静默削平（而装箱正是为长尾才改的）。这一格取最大值是有理由的：低估会把两个重物叠进同一片",
+    apply: (s) => s.replace("if (prev === undefined || sec > prev) into.set(current, sec);", "if (prev === undefined) into.set(current, sec);"),
+    expectFail: "同一条多次出现取最大值：低估长尾会把两个重物叠进同一片，而墙钟由最慢那片决定",
+  },
+  {
+    id: "shard-cost-parser-unanchored-tail",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "取料正则丢掉行尾锚定 ⇒ 锚点描述里那句引用「｜本机实测 9.9s／2 拍」的散文被当成读数收进表，" +
+      "权重表混进不存在的秒。第 188 页同一课换了载体：**被度量者自己的文案是第二个注入面**（规则 264）",
+    apply: (s) => s.replace("拍$/u.exec(line)", "拍/u.exec(line)"),
+    expectFail: "只认行尾那一格：描述里引用同样字面不算读数（规则 264：散文不许冒充读数）",
+  },
+  {
+    id: "shard-cli-pack-cell-not-printed",
+    src: "scripts/mutate-shards.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "算了权重却不印那一格 ⇒ 读者只能看到「切法=host」，分不清这一轮是按秒装的还是首跑按条数装的，" +
+      "而这两者的墙钟期望差 37%（「算出来」还要「拿得到」，规则 211/241 同族；本条由**真跑 --dry-run** 那条证人杀，不是钉文字）",
+    apply: (s) => s.replace("${packCell} · 每片一棵树，锁标签", "每片一棵树，锁标签"),
+    expectFail: "真跑 --dry-run：给了 --cost-logs 就说清权重与来源，不给就说没有来源",
+  },
+  {
+    id: "shard-cost-parser-forgets-current-id",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "每读到一条非结果行就把「当前 id」清空 ⇒ 只有 id 与成本格挤在同一行时才配得上。" +
+      "整表实测：1018 条抽到 1017 条，缺的那条 `impact-closure-glob-broken` 的 desc 含**真换行**，" +
+      "成本格因此落在没有 id 的续行上。desc 换行是被度量者的合法内容（本仓另有 5 条逐行式锚点），" +
+      "**不许为了让尺好读去改它** ⇒ 有状态的解析才是那一格的修法；发现手段就是计划行那句「权重 1017/1018」（规则 270/271）",
+    apply: (s) => s.replace("    if (head !== null) current = head[1]!;\n", "    if (head !== null) current = head[1]!;\n    else current = \"\";\n"),
+    expectFail: "desc 含真换行时，成本格挂在续行上也要记回那条 id（尺自己记住 id，不要求内容迁就尺）",
   },
 ];
 
@@ -8369,16 +9283,22 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
   return blockingTotal;
 }
 
-/** 跑一次判卷文件，并把**这一次**的墙钟毫秒带回来（#37：分母要读数，不能拿「次数 × 文件时长」推）。 */
-function runTest(testRel) {
+/** 跑一次判卷文件，并把**这一次**的墙钟毫秒与「本次选中几条用例」带回来。
+ *  `pattern` 非空 ⇒ 走 `-t` 精确跑法（第 170 页）：一条锚点只跑自己那条 killer 用例，
+ *  实测单价从「宿主时长 ×3」的 8.0s/拍降到 0.14s/拍（同一棵树、同一份宿主、复测两次：8.0/8.5s vs 0.136/0.143s）。
+ *  ⚠️ 代价是 `-t` 选不中时 vitest **退出码 0**、全部 skipped——那一条拍什么都没测，所以 `selected` 必须回传，
+ *  由调用侧把「选中 0 条」判红（规则 246）。 */
+function runTest(testRel, pattern) {
   const started = Date.now();
+  const args = [VITEST, "run", "--pool=threads", "--config", "tests/vitest.config.ts", testRel];
+  if (typeof pattern === "string" && pattern !== "") args.push("--testNamePattern=" + escapeTitlePattern(pattern));
   try {
-    const out = execFileSync(process.execPath, [
-      VITEST, "run", "--pool=threads", "--config", "tests/vitest.config.ts", testRel,
-    ], { cwd: ROOT, env: { ...process.env, TERM: "dumb" }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-    return { code: 0, out, ms: Date.now() - started };
+    const out = execFileSync(process.execPath, args,
+      { cwd: ROOT, env: { ...process.env, TERM: "dumb" }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    return { code: 0, out, ms: Date.now() - started, selected: selectedTestCount(out) };
   } catch (e) {
-    return { code: e.status ?? 1, out: (e.stdout ?? "") + (e.stderr ?? ""), ms: Date.now() - started };
+    const out = (e.stdout ?? "") + (e.stderr ?? "");
+    return { code: e.status ?? 1, out, ms: Date.now() - started, selected: selectedTestCount(out) };
   }
 }
 
@@ -8435,11 +9355,42 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
   });
 }
 
+/* 跑法选择表与逐拍台账（第 170 页）。
+ * SELECTABLE 是**懒算**的：模块级直接算会在每次 `--list`（判卷反复 spawn 的那条入口）都去读几十份判卷文件，
+ * 把一条秒级尺拖成秒级×N；只有真跑锚点时才需要它。判据与第 169 页那把闸共用同一份谓词——
+ * 唯一能逐字定位自己那条 killer 用例的锚点才走 `-t`，其余继续整文件跑法（两种跑法共存是刻意的，见那一页的未证②）。 */
+let SELECTABLE = null;
+const SPAWNS = [];
+
+function selectableIds() {
+  if (SELECTABLE === null) {
+    const scan = selectorAmbiguity(
+      MUTATIONS.map((m) => ({ id: m.id, test: m.test, expectFail: String(m.expectFail ?? "") })),
+      (rel) => { try { return readFileSync(join(ROOT, rel), "utf8"); } catch { return null; } },
+    );
+    SELECTABLE = new Set(scan.selectableIds);
+  }
+  return SELECTABLE;
+}
+
 function verifyEntry(m) {
   /** 这条锚点**实际**付了几次判卷（#37）。早退路径本来就少付：基线不绿只跑 1 次、
    *  变异存活／未归因只跑 2 次、量不了（载不动／判卷在飞）跑 0~1 次。
    *  写死「每条三次」就是把模型当读数——第 165 页那句「每条少付 21s」正是这么推出来的。 */
   const runs = [];
+  const mode = runModeFor(m.id, selectableIds());
+  const pattern = mode === "selector" ? String(m.expectFail ?? "") : "";
+  let vacuous = null;
+  /** 每一拍都记账：毫秒进 #37 那份分母，模式与「本次选中几条」进跑法单价。
+   *  「这一拍坏没坏」只有一份判据（`runReadingIsBad`）：闸与单价格各写一遍就会有一处先漂（规则 228），
+   *  而这一闸是 `-t` 上线唯一的安全带——它同时否掉「什么都没测」与「测的是别条用例」。 */
+  const note = (phase, r) => {
+    runs.push(r.ms);
+    SPAWNS.push({ mode, ms: r.ms, selected: r.selected });
+    if (vacuous === null && runReadingIsBad(mode, r.selected)) {
+      vacuous = vacuousRunLine(m.id, phase, r.selected);
+    }
+  };
   const disp = entryDisposition({
     srcRel: m.src,
     srcState: headStateOf(m.src),
@@ -8457,45 +9408,61 @@ function verifyEntry(m) {
   cpSync(srcAbs, backup);
   inFlight = { srcAbs, original, backup, mutated: false }; // 备份一落盘就要能被收尾
   let restored = false;
+  /** 判红**在出口就带类别**（第 172 页⑪，任务 #12）：末尾按类别分开数、下游 triage 读结构化那一行，
+   *  不再回头解析给人看的散文。收成这一个 helper 是因为：少一处 helper 就多一处「忘了带类别」的出口，
+   *  而那由 `redVerdictCell` 当场崩并点名第几条——它不许任何一条判红悄悄从总数里消失。 */
+  const red = (failKind, why) => ({ m, ok: false, failKind, runsMs: runs, why });
   try {
-    /* ① 基线：突变前该测试必须绿。走 judgeWithRetry：判卷里碰真机的用例会偶发红，与本条变异无关，
-     * 却会把基线读成「红」——09-28 整表实测 depdirs-descends-into-node-modules 就这样丢的认证
-     * （红的是同文件里那条与它无关的 index mtime 负控）。瞬时红放过、持续红照旧按最终那拍判；
-     * 载不动（判卷 import 不到的东西没入库）不是"基线不绿"——那是量不了（第 143 页），判定不变。 */
-    const baseRun = judgeWithRetry(() => runTest(m.test));
-    runs.push(...baseRun.runsMs);
-    if (baseRun.probe.code !== 0) {
+    /* ① 基线：突变前该测试必须绿。两半各守一件事，都要保住——
+     *  · 偶发红（`1c40df7` 那笔的理由）：判卷里碰真机的用例会偶发红，与本条变异无关，却会把基线读成「红」——
+     *    09-28 整表实测 depdirs-descends-into-node-modules 就这样丢的认证（红的是同文件里那条与它无关的 index mtime 负控）。
+     *    所以走 `judgeWithRetry`：瞬时红放过、持续红照旧按**最终那拍**判。
+     *  · 每一次 spawn 都要进分母（任务 #37）：记账放在被重试的那次调用里做（`note` 同时喂 #37 的毫秒与跑法单价），
+     *    被重试掉的第一次不许从读数里消失——否则「每条实际付了几拍」又变回一个乘数。
+     *  载不动（判卷 import 不到的东西没入库）不是"基线不绿"——那是量不了（第 143 页）。 */
+    const baseRun = judgeWithRetry(() => {
+      const r = runTest(m.test, pattern);
+      note("基线", r);
+      return r;
+    });
+    const base = baseRun.probe;
+    if (vacuous !== null) return red("vacuous", vacuous);
+    if (base.code !== 0) {
       const kind = baselineRedKind(baseRun.probe.out);
       if (kind.kind === "unloadable") {
         return { m, ok: null, unloadable: kind.module, runsMs: runs, why: `判卷载不动（Cannot find module "${kind.module}"）⇒ 本条量不了，按未证记账；这不是「表退化」，是环境没备齐（多半是别人半落库，见 #11）` };
       }
-      return { m, ok: false, runsMs: runs, why: `基线就不是全绿（不应发生）:\n${baseRun.probe.out.slice(-800)}` };
+      return red("baseline-red", `基线就不是全绿（不应发生）:\n${base.out.slice(-800)}`);
     }
 
     // ② 注入突变
     const mutated = m.apply(original);
-    if (mutated === original) return { m, ok: false, runsMs: runs, why: "突变未生效（锚点可能已失效）" };
+    if (mutated === original) return red("no-effect", "突变未生效（锚点可能已失效）");
     const syntax = mutantSyntaxProblem(mutated);
-    if (syntax !== null) return { m, ok: false, runsMs: runs, why: syntax };
+    if (syntax !== null) return red("syntax", syntax);
     inFlight.mutated = true; // 从这一行起，盘上的源文件是**改过**的内容
     writeFileSync(srcAbs, mutated);
 
     // ③ 突变后必须红，且红在期望的那条用例上
-    const hit = runTest(m.test);
-    runs.push(hit.ms);
+    const hit = runTest(m.test, pattern);
+    note("突变", hit);
     writeFileSync(srcAbs, original); // 尽早还原
     inFlight = null;
     restored = true;
-    if (hit.code === 0) return { m, ok: false, runsMs: runs, why: "变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）" };
+    if (vacuous !== null) return red("vacuous", vacuous);
+    if (hit.code === 0) return red("survived", "变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）");
     // 归因只认**失败面**：`hit.out.includes(指针)` 会被一条 `✓` 通过的用例满足（第 141 页实测）。
     if (!killerAttributionOk(m.expectFail, hit.out)) {
       const failedFace = failingTestText(hit.out).slice(0, 300);
-      return { m, ok: false, runsMs: runs, why: `测试红了但没红在期望用例「${m.expectFail}」上——红的是别的用例（针脚可能落在隔壁支/隔壁函数）:\n${failedFace || "(输出里没有失败面那几行，按未归因处置)"}\n--- 尾部 ---\n${hit.out.slice(-500)}` };
+      return red("misattributed", `测试红了但没红在期望用例「${m.expectFail}」上——红的是别的用例（针脚可能落在隔壁支/隔壁函数）:\n${failedFace || "(输出里没有失败面那几行，按未归因处置)"}\n--- 尾部 ---\n${hit.out.slice(-500)}`);
     }
-    // ④ 还原后必须恢复全绿（判定在 lib：瞬时红重试一次放过、持续红仍判失败）
-    const chk = restoreCheck(() => runTest(m.test));
-    for (const t of chk.runsMs) runs.push(t);
-    if (!chk.ok) return { m, ok: false, runsMs: runs, why: chk.why };
+    // ④ 还原到位＝盘上字节与突变前逐字节相同（第 171 页⑩，任务 #10：整表每条少付一拍）。
+    // 原来这一拍是「还原后再跑一遍要绿」（`restoreCheck`，含瞬时红重试）——那证明的是「还能跑」，
+    // 而基线那一拍已经用同一份字节绿过一次：字节相同 ⇒ 行为等价于①，不必再花一次 spawn 复核；
+    // 字节不同 ⇒ 直接点名差在哪，比"测试没绿"更准。**顺带把 `1c40df7` 那条偶发红的前提消掉了**：
+    // 这一拍不再 spawn，就没有"重试一次才敢判绿"的那件事可发生（所以这里不保留 `restoreCheck`）。
+    const restoreProblem = restoreDiffProblem(original, readFileSync(srcAbs, "utf8"));
+    if (restoreProblem !== null) return red("restore-mismatch", `还原未逐字节相同：${restoreProblem}`);
     return { m, ok: true, runsMs: runs };
   } finally {
     inFlight = null; // 早退路径（基线不绿 / 突变未生效 / 语法错）也要清，别留一个指向已还原文件的空档
@@ -8875,14 +9842,14 @@ for (let i = 0; i < entries.length; i++) {
   const m = entries[i];
   if (budget.ms > 0 && Date.now() - startedAt >= budget.ms) {
     stoppedEarly = entries.length - i;
-    for (const rest of entries.slice(i)) results.push({ m: rest, ok: null, runsMs: [], why: "预算用尽，没跑到（不等于已杀死）" });
+    for (const rest of entries.slice(i)) results.push({ m: rest, ok: null, stopped: true, runsMs: [], why: "预算用尽，没跑到（不等于已杀死）" });
     console.error(`[mutate-verify] ⏳ 预算 ${String(budget.ms)}ms 用尽：已跑 ${String(i)}/${String(entries.length)}，未判 ${String(stoppedEarly)} 条。` +
       "在条目边界主动收尾（源文件已全部还原），剩下的按未证记账并判红。");
     break;
   }
   const r = verifyEntry(m);
   const mark = r.ok === null ? "⏭️" : r.ok ? "✅" : "❌";
-  console.log(`${mark} ${m.id} — ${m.desc}`);
+  console.log(`${mark} ${m.id} — ${m.desc} ｜${anchorCostCell(r.runsMs)}`);
   if (r.ok !== true) console.log(`   ${r.why}`);
   results.push(r);
 }
@@ -8900,25 +9867,40 @@ if (statusOut) {
 }
 const failed = results.filter((r) => r.ok === false);
 const unverified = results.filter((r) => r.ok === null);
-// 未证有三类，分开数但同一处出口——每类的下一步动作不同，混成一句就会把人指错方向：
-// ① 预检跳过（源文件在飞/未跟踪，根本没跑）② 判卷文件在飞（跑到了但量不出分辨力）③ 预算用尽（还没轮到）
-const unverifiedTotal = unverified.length + refusedCount;
+/* 未证分四类，计数与名单同源（第 171 页，任务 #14）。从前这里每个数各自 `filter` 一遍、只印一句「未证 30 条」，
+ * 于是补跑得读者自己拿 `--list` 与日志求差集（09-28 实测就是这样补的 30 条）——算错一次就把没验的读成验了。
+ * 分类按**字段**（`stopped`／`unloadable`／refused 名单），不按措辞：拿 `why` 的文字认类别，改一句文案就分错。 */
+const unverifiedRows = [
+  ...split.refused.map((r) => ({ id: r.id, cls: "src-in-flight" })),
+  ...unverified.map((r) => ({
+    id: r.m.id,
+    cls: typeof r.unloadable === "string" ? "judge-unloadable" : r.stopped === true ? "budget-stopped" : "judge-in-flight",
+  })),
+];
+const unv = unverifiedCell(unverifiedRows);
+const unverifiedTotal = unv.total;
+let unvText = "";
 if (unverifiedTotal > 0) {
-  const parts = [];
-  const unloadable = results.filter((r) => r.ok === null && typeof r.unloadable === "string").length;
-  if (refusedCount > 0) parts.push(`${String(refusedCount)} 条源文件在飞/未跟踪 ⇒ 根本没跑`);
-  if (unverified.length - stoppedEarly - unloadable > 0) parts.push(`${String(unverified.length - stoppedEarly - unloadable)} 条判卷文件在飞 ⇒ 量不出分辨力`);
-  if (unloadable > 0) parts.push(`${String(unloadable)} 条判卷载不动（HEAD 缺模块 ⇒ 环境没备齐，不是表退化）`);
-  if (stoppedEarly > 0) parts.push(`${String(stoppedEarly)} 条预算用尽没跑到`);
-  console.log(`  ⚠️  未证 ${String(unverifiedTotal)} 条（${parts.join("；")}）——都不等于已杀死`);
-  console.log("UNVERIFIED=" + String(unverifiedTotal));
+  const rerunLine = unv.rerun.length > 0
+    ? `  ↻ 可原样补跑（只含「预算用尽」那一类；其余两类要等落库／备齐环境，现在补跑也没用）：node --import tsx scripts/mutate-verify.mjs ${unv.rerun.join(" ")}\n`
+    : "";
+  unvText = unv.summary + "\n" + unv.list.join("\n") + "\n" + rerunLine + "UNVERIFIED=" + String(unverifiedTotal) + "\n";
 }
 const killed = results.length - failed.length - unverified.length;
+/* 判红按类别分开（第 172 页⑪）：从前这里只说「N 条变异存活或误伤」，而这几类的**修法相反**——
+ * 存活要补观测者、红了未点名只改期望标题、基线红要先修那条红灯、取料坏根本没判。
+ * 类别在各自的出口就定好（`red()` helper），这里只汇总；下游 `mutation-rerun-triage` 读 `REDKINDS=` 那一行，
+ * 不再回头解析给人看的这句散文（同一件事两份谓词，改一句文案它就静默读成「读不出」——规则 205/213）。 */
+const redCell = redVerdictCell(failed.map((r) => ({ id: r.m.id, kind: r.failKind })));
+let redText = "";
+if (redCell.total > 0) {
+  redText = redCell.summary + "\n" + redCell.list.join("\n") + "\n" + redKindsLine(redCell.counts) + "\n";
+}
 console.log(`\n${failed.length === 0
   ? (unverifiedTotal === 0
       ? "全部变异被正确杀死（断言非恒真）"
       : `${String(killed)} 条被正确杀死，另 ${String(unverifiedTotal)} 条未证`)
-  : `${String(failed.length)} 条变异存活或误伤`}`);
+  : `${String(failed.length)} 条判红（按类别分开数，修法各不同——见上一行起的分类名单）`}`);
 // 耗时与「跑了几条」要自己报出来：外层对本门的超时是猜的（实测 1200s 掐死于表中途），
 // 而这张表到底要跑多久此前没人打印过——没有读数，下一个人只能继续猜。
 const secs = (Date.now() - startedAt) / 1000;
@@ -8928,9 +9910,15 @@ const secs = (Date.now() - startedAt) / 1000;
  * 取料直接吃 `results` 里那份 `runsMs`：判卷不许自己再算一遍（规则 205/236），缺项由 `costRollupOf` 当场崩。 */
 const costRows = results.map((r) => ({ id: r.m.id, runsMs: r.runsMs }));
 const costLine = costCell(costRollupOf(costRows));
+/* 跑法单价（第 170 页）：精确跑法与整文件跑法各自的拍数、中位与「坏拍数」——
+ * 坏的定义只有一份（`runReadingIsBad`）：selector 选中≠1，whole 没量到或 0 条。
+ * 「省了多少」以后由这一格说，不由任何人推算。 */
+const modeLine = runModeCell(SPAWNS);
 const timing = `[mutate-verify] 本次耗时 ${secs.toFixed(1)}s · 跑了 ${String(results.length - stoppedEarly)}/${String(entries.length)} 条` +
   (budget.ms > 0 ? ` · 预算 ${String(Math.round(budget.ms / 1000))}s` : " · 未设预算（外层超时会在中途杀我，见 --budget-ms）") +
-  `\n${costLine}` + `\n锁=${LOCK.cell}`;
+  `\n${costLine}` + `\n${modeLine}` + `\n锁=${LOCK.cell}`;
 // 有未证就红：这张表没判完不等于判完了（AGENTS：「主动拒变在飞文件」属正确红，不是回归）。
 // 预算中途停下同样红：`stoppedEarly > 0` 时 failed 可以全空，但那只是「还没轮到」。
-emitAndExit(timing + "\n", failed.length === 0 && refusedCount === 0 && stoppedEarly === 0 ? 0 : 1);
+// 名单与补跑命令一起走 `emitAndExit` 那条**同步写满**的出口：名单可能几百条、几 KB，
+// 用 `console.log` 交给异步队列再 `process.exit()` 就是拿丢掉尾巴的运气当读数（规则 241）。
+emitAndExit(redText + unvText + timing + "\n", failed.length === 0 && refusedCount === 0 && stoppedEarly === 0 ? 0 : 1);

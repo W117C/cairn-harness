@@ -95,19 +95,25 @@ export async function graphCandidatePosition(workspace: string, rel: string): Pr
   }
 }
 
-/** 覆盖面自述（纯函数）：图被文件数帽挤过时，**成功**答案也要说清自己量了多大一块。
+/** 覆盖面自述（纯函数）：图没把候选收全时，**成功**答案也要说清自己量了多大一块。
  *
  *  为什么阳性一侧也要说：本工具的**阴性**结论早就各自带分诊（"无跨文件调用点"、"图里没有这个符号"
  *  都会说"不等于 0"），但一个**成立**的答复原先只报结果不报覆盖面 ⇒ 模型看到"波及 1 个文件"就以为
  *  问全了，而这张图可能只收了仓库的一小截（2026-09-25 本仓实测：451 个候选只收 400）。
  *  这与 grep/glob 那条"阴性要说清扫描面"是同一条政策的后半句。
  *
- *  判据是**精确**的而非保守的：`applyFileCap` 只做 `slice(0, maxFiles)` ⇒ 「收录数 < 帽」⟺ 这一刀
- *  没切到东西（真全量，一字不许多，零回归）；只有「收录数 ≥ 帽」才可能有文件被挤在图外。
- *  措辞说"非全量"而不是"漏了 N 个"：挤掉多少个要重扫全量候选才知道，而这一格不值一次 rg。 */
-export function coverageNote(files: number, cap: number): string {
-  if (files < cap) return "";
-  return `（覆盖度：本图收录 ${String(files)} 个文件＝帽 ${String(cap)} ⇒ 图非全量，` +
+ *  判据从「收录数 < 帽」换成「候选数 > 收录数」，两侧都比旧句子准：
+ *  ⑴ 旧句在 `收录数 == 帽 == 候选数` 时**误报**"非全量"（一个都没漏，模型白重问一次）；
+ *  ⑵ 反向漏报更实在：单文件读/解析失败被跳过时 `收录数 < 帽`，旧句直接闭嘴，而那张图确实缺文件。
+ *     切片之外还有 skip 这一支，所以只有候选数能判覆盖面；
+ *  ⑶ 分母本来就免费——`buildImpact` 里那份全量候选是切片**前**数组的长度，不是第二次 rg。
+ *     第 55 页那句"挤掉多少个要重扫全量候选才知道，而这一格不值一次 rg"在建图这一支不成立：
+ *     真正需要重扫的是「图里没有它」那条分诊（`graphCandidatePosition`），那一支照旧自己付。
+ *  措辞把"没进图"的两种成因一起点名（帽外 / 被跳过），不只怪帽。 */
+export function coverageNote(files: number, cap: number, candidates: number): string {
+  if (candidates <= files) return "";
+  return `（覆盖度：本图收录 ${String(files)} 个文件＝帽 ${String(cap)}，` +
+    `另有 ${String(candidates - files)} 个候选文件没进这张图（帽外或被跳过）⇒ 图非全量，` +
     "图里没有 ≠ 仓库里没有；要更全调大 maxFiles 后重问）";
 }
 
@@ -117,12 +123,12 @@ export function coverageNote(files: number, cap: number): string {
  *  而 `applyFileCap` 只在候选数 > 帽时才切那一刀 ⇒ 在小仓库上"被帽挡"是一句**不可能成立**的假设，
  *  模型照着去调大 `maxFiles` 就是白跑一轮（与第 51 页那条「死参数式文案」同族：文案指向此输入下
  *  不存在的开关）。反过来真到帽时这一类必须留着——否则又回到"把未知说成没有"。
- *  与 `coverageNote` 共用同一判据（`files >= cap`），两处不会自相矛盾。 */
-export function capCauseNote(files: number, cap: number): string {
-  return files >= cap
-    ? `本图收录 ${String(files)} 个文件＝帽 ${String(cap)}（非全量）⇒ 这一刀可能把它切在图外，` +
-      "调大 maxFiles 后重问可排除这一成因"
-    : `与帽无关：本图收录 ${String(files)} 个文件，未到帽 ${String(cap)} ⇒ 没有文件是被帽切掉的` +
+ *  与 `coverageNote` 共用同一判据（`candidates > files`），两处不会自相矛盾。 */
+export function capCauseNote(files: number, cap: number, candidates: number): string {
+  return candidates > files
+    ? `本图收录 ${String(files)} 个文件＝帽 ${String(cap)}，另有 ${String(candidates - files)} 个候选没进这张图` +
+      `（非全量）⇒ 这一刀可能把它切在图外，调大 maxFiles 后重问可排除这一成因`
+    : `与帽无关：本图收录 ${String(files)} 个文件，全仓候选 ${String(candidates)} 个 ⇒ 没有文件是被帽切掉的` +
       "（被忽略规则/噪声目录排除、后缀不支持仍然成立）";
 }
 
@@ -185,7 +191,7 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
           const graph = await buildImpact({ workspace: ctx.workspace, cacheDir: dir, maxFiles });
           const rel = fileArg.replace(/\\/g, "/");
           if (!graph.files.includes(rel)) return { ok: false, output: await notInGraphNote(ctx.workspace, rel, abs, maxFiles) };
-          const depHead = "[impact] " + rel + " 引用的外部定义（我在调用谁）" + coverageNote(graph.files.length, maxFiles);
+          const depHead = "[impact] " + rel + " 引用的外部定义（我在调用谁）" + coverageNote(graph.files.length, maxFiles, graph.candidates);
           return { ok: true, output: sitesNote(depHead, downward(graph, rel), DEP_NOUN) };
         }
         const r = await fileImpact(ctx.workspace, fileArg, dir, maxFiles);
@@ -196,7 +202,7 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
         const head = "[impact] " + r.file + (refSyms.length > 0
           ? "（被跨文件引用的符号 " + String(refSyms.length) + " 个：" + refSyms.slice(0, SYMS_CAP).join(", ")
             + (refSyms.length > SYMS_CAP ? " 等" : "") + "）"
-          : "") + coverageNote(r.graphFiles, maxFiles) +
+          : "") + coverageNote(r.graphFiles, maxFiles, r.graphCandidates) +
           unionNote(r.ambiguousSymbols.length > 0
             ? r.ambiguousSymbols.slice(0, SYMS_CAP).join(", ") +
               ` 在别处也有同名定义${r.ambiguousSymbols.length > SYMS_CAP ? " 等 " + String(r.ambiguousSymbols.length) + " 个符号" : ""}`
@@ -210,7 +216,7 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
         return {
           ok: false,
           output: `impact_query: 图里没有符号 ${JSON.stringify(symbol)}` +
-            `（改名、未被引用、或不在已扫描的后缀内）。${capCauseNote(graph.files.length, maxFiles)}`,
+            `（改名、未被引用、或不在已扫描的后缀内）。${capCauseNote(graph.files.length, maxFiles, graph.candidates)}`,
         };
       }
       if (defined.length === 0) {
@@ -223,14 +229,14 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
           ok: true,
           output: `[impact] ${symbol}：这张图里没有任何文件**定义**它 ⇒ 它是外部或全局符号` +
             `（定义在 node_modules、由环境注入，或定义它的那个文件压根没进这张图：` +
-            `${capCauseNote(graph.files.length, maxFiles)}。图内没有 ≠ 仓库里没有）` +
+            `${capCauseNote(graph.files.length, maxFiles, graph.candidates)}。图内没有 ≠ 仓库里没有）` +
             `。引用它的文件 ${String(files.size)} 个，但「改它会波及谁」这一问在此不适用；` +
             `要动它的行为请改调用处或直读它的来源`,
         };
       }
       const defFiles = new Set(defined.map((d) => d.file));
       const symHead = `[impact] ${symbol} 的定义在 ${String(defFiles.size)} 个文件` +
-        coverageNote(graph.files.length, maxFiles) +
+        coverageNote(graph.files.length, maxFiles, graph.candidates) +
         unionNote(defFiles.size > 1 ? `${symbol} 有 ${String(defFiles.size)} 份定义` : "");
       return { ok: true, output: sitesNote(symHead, upward(graph, symbol)) };
     },

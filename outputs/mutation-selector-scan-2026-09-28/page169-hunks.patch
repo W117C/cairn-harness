@@ -1,0 +1,237 @@
+diff --git a/scripts/lib/mutate-gates.ts b/scripts/lib/mutate-gates.ts
+index fc9639b..11d88bf 100644
+--- a/scripts/lib/mutate-gates.ts
++++ b/scripts/lib/mutate-gates.ts
+@@ -602,6 +602,63 @@ export function baselineRedKind(vitestOut: string): { kind: "unloadable"; module
+   return `${p.id} — ${p.test} — ${why}：${JSON.stringify(p.expectFail.slice(0, 60))}`;
+ }
+ 
++// ---- 选择子唯一性（第 169 页的前置闸）：一条锚点能不能只跑**自己那条** killer 用例 ----
++// 动因（09-28 第 168 页的读数）：一条锚点的单价＝**判卷宿主文件时长的 3 倍**（实测 23.1s/条，换一份 1.1s 的宿主就是 20.6×），
++// 而它真正要证的只有自己那条用例。要让 `runTest` 改吃 `-t` 的精确跑法，前提是指针能**逐字唯一定位**那条标题：
++// 0 命中时 vitest 不会失败，它只是**一条也没跑** ⇒ 基线与突变两拍都白过，这把尺会安静地变成假绿（第 166 页那族）。
++// 所以先要有一格读数把「选不中」的条数点名，而不是等 `-t` 上线后才发现名单里混着选不中的。
++export interface SelectorProblem {
++  id: string;
++  test: string;
++  /** 逐字命中该指针的 it()/test() 标题条数。0＝只靠占位符展开才认得出；>1＝选择子不唯一。 */
++  hits: number;
++}
++
++/** 数每条锚点的指针在它自己的判卷文件里逐字命中几条标题。只回 ≠1 的那些（==1 是能走 -t 的那一批）。
++ *  判卷文件读不到、或指针为空、或不是 vitest 文件 ⇒ **不数**（那些另有归属：`auditExpectFails` 的 unreadable、结构钉型判卷），
++ *  所以 `inspected` 是被数过的条数：拿整表条数去除会以假绿的方式低估可选率。 */
++export interface SelectorScan {
++  problems: SelectorProblem[];
++  inspected: number;
++}
++
++const TITLE_RE = /^\s*(?:it|test)(?:\.\w+)?\s*\(\s*(["`'])((?:\\.|(?!\1)[^\\])*)\1/gmu;
++
++export function selectorAmbiguity(
++  entries: readonly ExpectFailEntry[],
++  readTest: (rel: string) => string | null,
++): SelectorScan {
++  const cache = new Map<string, string[] | null>();
++  const problems: SelectorProblem[] = [];
++  let inspected = 0;
++  for (const e of entries) {
++    if (e.expectFail === "" || !e.test.endsWith(".test.ts")) continue;
++    if (!cache.has(e.test)) {
++      const text = readTest(e.test);
++      cache.set(e.test, text === null ? null : [...text.matchAll(TITLE_RE)].map((m) => m[2] ?? ""));
++    }
++    const titles = cache.get(e.test);
++    if (titles === null || titles === undefined || titles.length === 0) continue;
++    inspected += 1;
++    const hits = titles.filter((t) => t.includes(e.expectFail)).length;
++    if (hits !== 1) problems.push({ id: e.id, test: e.test, hits });
++  }
++  return { problems, inspected };
++}
++
++/** 那一格的措辞：三态分开印，且**不许**把「选不中」并成「没什么问题」。
++ *  存量不是 0（现读 13 条），所以这一格走水位法：只准调低，涨了要交代。 */
++export function selectorCell(problems: readonly SelectorProblem[], inspected: number): string {
++  const zero = problems.filter((p) => p.hits === 0);
++  const many = problems.filter((p) => p.hits > 1);
++  const parts = [
++    `选择子：${String(inspected - problems.length)}/${String(inspected)} 条能逐字唯一定位自己的 killer 用例（其余走整文件跑法）`,
++    zero.length === 0 ? "" : `零命中 ${String(zero.length)} 条（标题是拼出来的或已改名 ⇒ -t 会一条也选不中）`,
++    many.length === 0 ? "" : `多命中 ${String(many.length)} 条（选择子不唯一）`,
++  ].filter((s) => s !== "");
++  return parts.join("·") + (problems.length === 0 ? "" : "：" + problems.map((p) => `${p.id}(${String(p.hits)})`).join("、"));
++}
++
+ // ---- 每条锚点的真实成本（任务 #37：分母必须是读数，不是「次数 × 文件时长」的模型） ----
+ // 动因（09-28 第 165 页自己打的脸）：那句「裁掉判卷文件 7.7s ⇒ 挂在它上面的每条锚点少付 21s」是按
+ // 「每条跑三次 × 宿主文件全时长」**推**出来的，同分母实测把它打掉（每条只少 1.4–2.2s）。
+diff --git a/scripts/mutate-verify.mjs b/scripts/mutate-verify.mjs
+index 4d3ff76..267fe97 100644
+--- a/scripts/mutate-verify.mjs
++++ b/scripts/mutate-verify.mjs
+@@ -23,7 +23,7 @@ import { join, dirname, resolve } from "node:path";
+ import { fileURLToPath } from "node:url";
+ import { acquireToolLock } from "./lib/tool-lock.ts";
+ // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
+-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell } from "./lib/mutate-gates.ts";
++import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, selectorAmbiguity, selectorCell } from "./lib/mutate-gates.ts";
+ 
+ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+ const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
+@@ -8224,6 +8224,51 @@ const MUTATIONS = [
+     ),
+     expectFail: "接线：汇总那一行吃的是 runner 自己那份 runsMs，且每个出口都带账本（表与实现同文件 ⇒ 钉跨行正则，规则 236）",
+   },
++  // ── 第 169 页 · 选择子唯一性（`-t` 精确跑法的前置闸）：四条各咬一处——不报／三态合一／分母／接线
++  {
++    id: "selector-ambiguity-never-reports",
++    src: "scripts/lib/mutate-gates.ts",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "命中数不为 1 时不再记录 ⇒ 这一格永远印「全部可选」，真正选不中的那些会在改跑法时被当成能走 -t；而 0 命中不是失败，是 vitest 一条也没跑，基线与突变两拍都白过",
++    apply: (s) => s.replace(
++      "if (hits !== 1) problems.push({ id: e.id, test: e.test, hits });",
++      "if (false) problems.push({ id: e.id, test: e.test, hits });",
++    ),
++    expectFail: "可选率的分母是被数过的条数，不是整表条数（拿整表去除＝把选不中的洗成可选）",
++  },
++  {
++    id: "selector-cell-merges-zero-into-clean",
++    src: "scripts/lib/mutate-gates.ts",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "零命中不再单独数 ⇒「选不中」并进「没什么问题」，那句 0 会被读成「11 条都正常」（第 166 页那把只能印 0 的尺，同一族换了载体）",
++    apply: (s) => s.replace(
++      "const zero = problems.filter((p) => p.hits === 0);",
++      "const zero: SelectorProblem[] = [];",
++    ),
++    expectFail: "零命中与多命中分开印，并点名是哪几条（0 命中＝-t 会一条也没跑）",
++  },
++  {
++    id: "selector-inspected-counts-unreadable-judges",
++    src: "scripts/lib/mutate-gates.ts",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "判卷读不到／指针为空那些条也计入分母 ⇒ 可选率虚高，而「取料坏」被洗成「量过了」（规则 222 的三态：未取 ≠ 空面 ≠ 零命中）",
++    apply: (s) => s.replace(
++      "if (titles === null || titles === undefined || titles.length === 0) continue;",
++      "inspected += 1;",
++    ),
++    expectFail: "只数被数过的：判卷读不到／指针为空／不是 vitest 文件都不进 inspected",
++  },
++  {
++    id: "selector-scan-fed-empty-table",
++    src: "scripts/mutate-verify.mjs",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "门那一步喂空表而不是整张锚点表 ⇒ 这一格永远 0/0 且永不红。表与实现同文件，所以判卷钉跨行正则而不是 toContain（规则 236）",
++    apply: (s) => s.replace(
++      "\n  const selectorScan = selectorAmbiguity(pointerEntries, ",
++      "\n  const selectorScan = selectorAmbiguity([], ",
++    ),
++    expectFail: "接线：门自己那一步真拿整张表去数选择子，并把两份数一起交给措辞（只印不数＝这一格永远 0）",
++  },
+ ];
+ 
+ /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
+@@ -8353,6 +8398,12 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
+     (rel) => { try { return readFileSync(join(ROOT, rel), "utf8"); } catch { return null; } },
+   );
+   console.log(`ℹ️  松钉指针 ${String(loosePinned.length)} 条（逐字认不出、只靠占位符展开的标题模式过关——拼接标题与带转义引号那两类必然如此）${loosePinned.length === 0 ? "" : "：" + loosePinned.join("、")}`);
++  /* 选择子唯一性（第 169 页的前置闸）：一条锚点的单价＝判卷宿主时长 ×3（第 168 页实测 23.1s/条），
++   *  而它真正要证的只有自己那条 killer 用例。想让 `runTest` 改吃 `-t`，前提是指针**逐字唯一定位**那条标题——
++   *  0 命中时 vitest 不是失败，是一条也没跑，两拍都白过（第 166 页「只能印 0 的尺」那一族换了载体）。
++   *  这一格刻意不进退出码：存量 13 条不是本笔造成的，按水位法只准调低；先把名单点出来，再谈改跑法。 */
++  const selectorScan = selectorAmbiguity(pointerEntries, (rel) => { try { return readFileSync(join(ROOT, rel), "utf8"); } catch { return null; } });
++  console.log("ℹ️  " + selectorCell(selectorScan.problems, selectorScan.inspected));
+   // 一次求和、两处使用（汇总里印出来的数与 exit 码用的是同一个值；分开算就可能各说各话）。
+   const blockingTotal = blockingTotalOf({
+     needle: blocking.length, duplicateIds: dup.length, untracked: untracked.length, drift: drift.length,
+diff --git a/tests/mutate-verify-gates.test.ts b/tests/mutate-verify-gates.test.ts
+index d34685b..bbef031 100644
+--- a/tests/mutate-verify-gates.test.ts
++++ b/tests/mutate-verify-gates.test.ts
+@@ -6,7 +6,7 @@ import { spawnSync, execFileSync } from "node:child_process";
+ import { readFileSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+ import { dirname, join, resolve } from "node:path";
+ import { fileURLToPath } from "node:url";
+-import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, costRollupOf, entryDisposition, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, selectChangedEntries, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type AnchorCostRow, type HeadState } from "../scripts/lib/mutate-gates";
++import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, costRollupOf, entryDisposition, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, selectChangedEntries, selectorAmbiguity, selectorCell, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type AnchorCostRow, type HeadState } from "../scripts/lib/mutate-gates";
+ import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
+ 
+ /** 从锚点表取 `{id,test,expectFail}`：只走 `--list` 这条**不改源文件**的入口。
+@@ -976,3 +976,77 @@ describe("成本分母：每条锚点实际 spawn 了几次判卷", () => {
+     expect(carried, "有出口没带账本＝那条锚点的花费从分母里消失").toBe(exits);
+   });
+ });
++
++// ---- 第 169 页前置闸：选择子唯一性 ----
++// 动因（09-28 第 168 页的读数）：一条锚点的单价＝判卷宿主时长的 3 倍（实测 23.1s/条 vs 1.1s/条＝20.6×，
++// 56 条挂在一份宿主上吃掉整批 98.8% 的时间）。要改成「只跑自己那条 killer 用例」，前提是指针能逐字唯一定位那条标题；
++// 选不中时 vitest 不是失败而是**一条也没跑**，基线与突变两拍都白过 ⇒ 先要有读数点名「选不中的是哪些」。
++const SELECTOR_CAP = 13;
++
++describe("选择子唯一性：一条锚点能不能只跑自己那条 killer 用例", () => {
++  const judge = (body: string) => body;
++
++  it("只数被数过的：判卷读不到／指针为空／不是 vitest 文件都不进 inspected", () => {
++    const entries = [
++      { id: "a", test: "tests/one.test.ts", expectFail: "甲说的事" },
++      { id: "b", test: "tests/two.test.ts", expectFail: "乙说的事" },
++      { id: "c", test: "tests/gone.test.ts", expectFail: "读不到的那条" },
++      { id: "d", test: "scripts/not-a-test.ts", expectFail: "结构钉型的指针" },
++      { id: "e", test: "tests/one.test.ts", expectFail: "" },
++    ];
++    const read = (rel: string): string | null => {
++      if (rel === "tests/one.test.ts") return judge('it("甲说的事", () => {});\n');
++      if (rel === "tests/two.test.ts") return judge('it("乙说的事", () => {});\n');
++      return null;
++    };
++    const r = selectorAmbiguity(entries, read);
++    expect(r.inspected, "读不到的判卷、非 vitest 的 test、空指针都不该进分母").toBe(2);
++    expect(r.problems).toEqual([]);
++    expect(selectorCell(r.problems, r.inspected)).toContain("2/2");
++  });
++
++  it("零命中与多命中分开印，并点名是哪几条（0 命中＝-t 会一条也没跑）", () => {
++    const entries = [
++      { id: "zero", test: "tests/x.test.ts", expectFail: "标题是拼出来的那类" },
++      { id: "two", test: "tests/x.test.ts", expectFail: "默认开着" },
++      { id: "one", test: "tests/x.test.ts", expectFail: "唯一的那条" },
++    ];
++    const src = 'it("唯一的那条 说的事", () => {});\nit("默认开着 甲", () => {});\nit("默认开着 乙", () => {});\n';
++    const r = selectorAmbiguity(entries, () => src);
++    expect(r.inspected).toBe(3);
++    expect(r.problems.map((p) => `${p.id}:${String(p.hits)}`).sort()).toEqual(["two:2", "zero:0"]);
++    const cell = selectorCell(r.problems, r.inspected);
++    expect(cell, cell).toContain("零命中 1 条");
++    expect(cell, cell).toContain("多命中 1 条");
++    expect(cell, cell).toContain("zero(0)");
++  });
++
++  it("可选率的分母是被数过的条数，不是整表条数（拿整表去除＝把选不中的洗成可选）", () => {
++    const entries = [
++      { id: "u", test: "tests/x.test.ts", expectFail: "唯一命中的一条" },
++      { id: "z", test: "tests/x.test.ts", expectFail: "标题拼出来的" },
++      { id: "gone", test: "tests/none.test.ts", expectFail: "读不到" },
++    ];
++    const read = (rel: string): string | null =>
++      rel === "tests/x.test.ts" ? 'it("唯一命中的一条 的事", () => {});\n' : null;
++    const r = selectorAmbiguity(entries, read);
++    expect(r.inspected, "读不到的那份判卷不进分母").toBe(2);
++    expect(selectorCell(r.problems, r.inspected), selectorCell(r.problems, r.inspected)).toContain("1/2");
++  });
++
++  it("接线：门自己那一步真拿整张表去数选择子，并把两份数一起交给措辞（只印不数＝这一格永远 0）", () => {
++    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
++    expect(src, "取料必须是整张表的指针面，喂空表＝这一格永远印 0/0").toMatch(
++      /\n\s{2}const selectorScan = selectorAmbiguity\(pointerEntries, /);
++    expect(src, "措辞吃的是 problems 与 inspected 两份，少一份就退化成一个数").toMatch(
++      /\n\s*console\.log\("ℹ️  " \+ selectorCell\(selectorScan\.problems, selectorScan\.inspected\)\);/);
++  });
++
++  it(`水位：真表现读「选不中＋不唯一」只准调低（帽 ${SELECTOR_CAP}，09-28 现读 13＝11 零命中＋2 多命中）——新增一根要写明为什么`, () => {
++    const rows = listAnchorRows();
++    const r = selectorAmbiguity(rows, (rel) => readRel(rel));
++    expect(r.problems.length, "选择子失准：" + r.problems.map((p) => `${p.id}(${String(p.hits)})`).join("、")).toBeLessThanOrEqual(SELECTOR_CAP);
++    expect(SELECTOR_CAP - r.problems.length).toBeLessThan(5);
++    expect(r.inspected, "取料面塌了＝inspected 归零，这一格又不能印错只能印 0").toBeGreaterThan(500);
++  });
++});

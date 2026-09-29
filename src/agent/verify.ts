@@ -29,6 +29,32 @@ export function classifyVerifyFailure(f: { timedOut: boolean; exitCode: number |
   return "code";
 }
 
+/** shell 家族的失败归因（`run_shell` ＋ worker 的 `shell_ro`/`shell_rw` ＋ 两条沙箱出口）。
+ *
+ *  为什么单列一支文案而不动 verify 那句：verify 能说「测试脚本未被执行」，一条任意 shell 命令不能这么说
+ *  （它可能就是 `pnpm install`）。**判据不重写**——吃的还是上面那一只 `classifyVerifyFailure`
+ *  （同一正则、同一枚举）；「同一判据四份副本、宽度各不同」是本仓第十三族点过名的形状。
+ *  超时不另贴：两条出口自己那行 `[error: … 超时 …]` 说的就是同一件事，再贴一遍是白付字节。
+ *  幂等（与 `withVerifyCauseNote` 同口径）：worker 的缺省出口本来就是 `run_shell`，
+ *  同一条结果会先后过两层 ⇒ 不幂等就会把同一句贴两遍。
+ *  可达性实测（2026-09-28 本机）：`sandbox-exec -p … bash -c 不存在的命令` 退出码仍是 **127**、
+ *  pnpm 的错误码行也原样进输出 ⇒ 两类在两条出口上都真能发生（不是替不存在的情形写代码）。 */
+export function annotateExecCause<T extends { ok: boolean; output: string }>(
+  r: T,
+  f: { timedOut: boolean; exitCode: number | null },
+): T {
+  if (r.ok) return r;
+  const cause = classifyVerifyFailure({ ...f, output: r.output });
+  const note =
+    cause === "toolchain-missing"
+      ? "[exec: 退出码 127 = 这个命令不在 PATH 里 ⇒ 命令根本没跑成，这不是代码失败（先确认二进制名 / 是否安装）]"
+      : cause === "pkg-manager"
+        ? "[exec: 包管理器自身报错（安装目录/依赖状态），命令本体未被执行 ⇒ 这不是代码失败，别照它改代码]"
+        : "";
+  if (note === "" || r.output.includes(note)) return r;
+  return { ...r, output: r.output + "\n" + note };
+}
+
 export interface VerifyConfig {
   lint?: string[];
   test?: string[];

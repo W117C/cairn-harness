@@ -7,7 +7,7 @@ import { readFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, costRollupOf, entryDisposition, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, judgeWithRetry, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, mutateTreeGuard, needleProblemLine, preflightRefusals, restoreCheck, selectChangedEntries, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type AnchorCostRow, type HeadState, type RestoreVerdict } from "../scripts/lib/mutate-gates";
+import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, anchorCostCell, costRollupOf, entryDisposition, escapeTitlePattern, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, judgeWithRetry, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, mutateTreeGuard, needleProblemLine, preflightRefusals, runModeCell, runModeFor, runReadingIsBad, restoreCheck, restoreDiffProblem, redVerdictCell, redKindsLine, selectChangedEntries, selectorAmbiguity, selectorCell, selectedTestCount, splitRunnable, unverifiedCell, untrackedAnchorLine, untrackedAnchorPaths, vacuousRunLine, type AnchorCostRow, type HeadState, type RestoreVerdict } from "../scripts/lib/mutate-gates";
 import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
 
 /** 从锚点表取 `{id,test,expectFail}`：只走 `--list` 这条**不改源文件**的入口。
@@ -969,12 +969,339 @@ describe("成本分母：每条锚点实际 spawn 了几次判卷", () => {
     expect(src).toMatch(
       /\nconst costRows = results\.map\(\(r\) => \(\{ id: r\.m\.id, runsMs: r\.runsMs \}\)\);\nconst costLine = costCell\(costRollupOf\(costRows\)\);/);
     expect(src, "runTest 不记时 ⇒ 分母退化回「次数 × 文件时长」的模型").toMatch(
-      /\nfunction runTest\(testRel\) \{\n  const started = Date\.now\(\);/);
+      /\nfunction runTest\(testRel, pattern\) \{\n  const started = Date\.now\(\);/);
     expect(src).toMatch(/\nconst timing = [\s\S]{0,400}\$\{costLine\}/);
-    // 相对读数（不写死条数）：有几个出口就有几份账本
-    const exits = (src.match(/return \{ m, ok/g) ?? []).length;
-    const carried = (src.match(/runsMs: runs/g) ?? []).length;
-    expect(carried, "有出口没带账本＝那条锚点的花费从分母里消失").toBe(exits);
+    // 相对读数（不写死条数）：每个内联出口那一行自己就得带账本；`return red(` 那份由 helper 统一带（helper 自己必须带）。
+    const start = src.indexOf("function verifyEntry(");
+    const body = src.slice(start, src.indexOf("\n}\n", start) + 2);
+    const unled = body.split("\n").filter((l) => /\{ m, ok/u.test(l) && !/runsMs: runs/u.test(l));
+    expect(unled, "有出口没带账本＝那条锚点的花费从分母里消失").toEqual([]);
+    expect((body.match(/\{ m, ok: false/gu) ?? []).length,
+      "判红的构造点只许有 helper 一处：多一处内联 `{ m, ok: false` 就多一处可以忘了带类别").toBe(1);
+  });
+
+  /** 第 191 页：整表汇总指得出「最贵一条」，但「这条锚点值几秒」从前只能推 ⇒ 逐条也得一格。
+   *  动因是第 190 页那个 +37%：四片各 252 条却跑出 323.6／391.1／419.9／443.0s（条数不是重量）。 */
+  it("逐条那一格：跑了印「N.Ns／K 拍」，一次没跑印「没有分母」，两态不许同形", () => {
+    expect(anchorCostCell([1200, 100])).toBe("本机实测 1.3s／2 拍");
+    const none = anchorCostCell([]);
+    expect(none, none).toContain("没有分母");
+    // 反向半：一个像读数的 `0.0s` 会把「这条没被判过」洗成「这条很便宜」，装箱会优先塞没量过的条
+    expect(none, none).not.toMatch(/[0-9]\.?[0-9]*s/u);
+  });
+
+  it("取料形状：有分母那一支固定成 秒／拍 两段（#28 的装箱按它读，改形状要同轮换读者）", () => {
+    expect(anchorCostCell([1200, 100])).toMatch(/^本机实测 \d+\.\ds／\d+ 拍$/u);
+    expect(anchorCostCell([250, 250])).toMatch(/^本机实测 \d+\.\ds／\d+ 拍$/u);
+  });
+
+  it("接线：逐条结果那一行真把账本印出去了（表与实现同文件 ⇒ 行锚定，规则 236/247）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    expect(src).toMatch(/^  console\.log\(`\$\{mark\} \$\{m\.id\} — \$\{m\.desc\} ｜\$\{anchorCostCell\(r\.runsMs\)\}`\);$/mu);
+    expect(src).toMatch(/costRollupOf, costCell, anchorCostCell,/u);
+  });
+});
+
+// ---- 第 170 页：按标题选跑法（`-t`）----
+// 实测单价（同一棵树、同一份宿主、各复测两次）：整文件 7.97s／8.51s 一拍 vs 只跑自己那条 0.136s／0.143s 一拍＝约 57×。
+// 这笔买卖的代价是「选不中」这件事在 vitest 里**不长成失败**（下面第一条用的就是实测到的那两行原文），
+// 所以每个形状都得有证人，否则省下来的时间会把整张保护表换成空转。
+describe("按标题选跑法：选中几条必须被读出来", () => {
+  it("选中条数只从 vitest 真实的收尾行读，两种实测形状给两个数；读不到那行是 null 不是 0", () => {
+    expect(selectedTestCount(" Test Files  1 passed (1)\n      Tests  1 passed | 99 skipped (100)\n   Duration  136ms\n")).toBe(1);
+    expect(selectedTestCount("      Tests  100 skipped (100)\n   Duration  156ms\n"), "选不中时 vitest 退 0 并把全部标成 skipped").toBe(0);
+    expect(selectedTestCount("      Tests  2 failed | 98 passed (100)\n")).toBe(100);
+    expect(selectedTestCount("no summary line here"), "取料坏不许读成「一条也没选中」——两种红的修法相反").toBeNull();
+  });
+
+  it("标题当正则喂给 -t ⇒ 元字符必须转义（现读真标题里有 ( ) [ ] . * + 与全角括号）", () => {
+    const p = escapeTitlePattern("a.c");
+    expect(new RegExp(p).test("a.c"), "转义后的模式要逐字命中").toBe(true);
+    expect(new RegExp(p).test("abc"), "未转义的点会匹配任意字符 ⇒ 选错用例").toBe(false);
+    expect(escapeTitlePattern("（甲）[乙]*+?^${}()|\\")).toContain("\\[");
+  });
+
+  it("两种跑法共存：只有能唯一定位自己用例的那批走 -t，其余照旧整文件", () => {
+    const set = new Set(["known"]);
+    expect(runModeFor("known", set)).toBe("selector");
+    expect(runModeFor("unknown", set)).toBe("whole");
+  });
+
+  it("两种跑法定长列印：这一趟只拍到一种，另一种也要印出没有分母而不是整支消失", () => {
+    // 09-28 实测到的形状：补跑那 30 条全是 selector 拍，`跑法单价：selector 90 拍…` 这一行里 whole 整支不见了，
+    // 读者分不清「这一趟没有整文件拍」与「这一格忘了印」——第 163 页给全局立的那把尺，欠的就是子列这一格。
+    const onlySel = runModeCell([{ mode: "selector", ms: 380, selected: 1 }]);
+    expect(onlySel, "whole 那一支消失 ⇒ 缺席被读成「本次不需要成本」").toContain("whole 0 拍·这一支本次没有 spawn ⇒ 没有分母");
+    const onlyWhole = runModeCell([{ mode: "whole", ms: 900, selected: 40 }]);
+    expect(onlyWhole, "反方向同样不许消失").toContain("selector 0 拍·这一支本次没有 spawn ⇒ 没有分母");
+    expect(onlySel.split(" vs "), "两支都在：分隔符两侧各一条，谁也没被挤掉").toHaveLength(2);
+    expect(onlyWhole.split(" vs "), "两支都在（反向对照）").toHaveLength(2);
+  });
+
+  it("跑法单价那一格分开印两种跑法，并把两种跑法各自的「坏拍」数出来——省了多少由它说，不许推算", () => {
+    expect(runModeCell([]), "一次都没跑时不许印成 0 秒的单价").toContain("这一格没有分母");
+    const cell = runModeCell([
+      { mode: "selector", ms: 140, selected: 1 },
+      { mode: "selector", ms: 160, selected: 1 },
+      { mode: "whole", ms: 8000, selected: 0 },
+      { mode: "whole", ms: 8500, selected: 95 },
+    ]);
+    expect(cell, cell).toContain("selector 2 拍·中位 0.16s·坏拍（选中≠1） 0");
+    expect(cell, cell).toContain("whole 2 拍·中位 8.50s·坏拍（没量到或 0 条） 1");
+    // 两种跑法的「坏」定义相反：整文件那一拍选中 40 条是常态，精确那一拍选中 2 条才是病。
+    // 只数 0 条的那一份读数看不见这一格（第 170 页⑵上线要的就是它）。
+    const many = runModeCell([
+      { mode: "selector", ms: 100, selected: 1 },
+      { mode: "selector", ms: 120, selected: 2 },
+      { mode: "whole", ms: 900, selected: 40 },
+    ]);
+    expect(many, many).toContain("selector 2 拍·中位 0.12s·坏拍（选中≠1） 1");
+    expect(many, many).toContain("whole 1 拍·中位 0.90s·坏拍（没量到或 0 条） 0");
+  });
+
+  it("接线：testNamePattern 这一支要经转义，不许把标题当通配符拼进命令（表与实现同文件 ⇒ 必须行锚定，规则 236）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    // 不锚定行的正则会先撞上**锚点表里那条引文**（表与本文件同树同文件），于是突变后仍然匹配 ⇒ 变异存活。
+    // 实测踩过：这条一开始写成 `/args\.push\("-t", escapeTitlePattern\(pattern\)\);/`，机器报「测试全绿」。
+    expect(src, "不转义就拼成选择子 ⇒ 元字符把它变成通配，选中几条就不再是那条 killer 用例").toMatch(
+      /^ {2}if \(typeof pattern === "string" && pattern !== ""\) args\.push\("--testNamePattern=" \+ escapeTitlePattern\(pattern\)\);$/mu);
+  });
+
+  it("行为证人：指针以 `-` 开头时两种写法给两个读数——等号写法选中 1 条，空格写法被 CLI 当旗标吞掉", () => {
+    /* 整表第一遍（949/949）唯一那条红就是这个形状：`pc-face-change-named-shortcut` 的 expectFail 以 `--` 开头。
+       旧写法 `-t <值>` 把值交给 vitest 的 CLI 再解析一次，于是「--self-test …」成了**旗标**：
+       那一拍一条用例都没跑，退的却是 1，收尾行也读不到 ⇒ 旧读数只会喊「基线不绿」，把「取料坏」伪装成「判卷坏了」。
+       这里真跑两次 vitest，拿「读到几条」当读数，不钉 CLI 的报错文字（规则 239）；等号写法把值绑回值里。 */
+    const pat = escapeTitlePattern("--self-test 全造得红，且**每条规则都有自己的反向对照**（加规则不加对照即红）");
+    const root = fileURLToPath(new URL("..", import.meta.url));
+    const run = (extra: string[]): string => {
+      const r = spawnSync(process.execPath,
+        ["node_modules/vitest/vitest.mjs", "run", "--pool=threads", "--config", "tests/vitest.config.ts", "tests/prefix-churn.test.ts", ...extra],
+        { cwd: root, encoding: "utf8", env: { ...process.env, TERM: "dumb" } });
+      return (r.stdout ?? "") + (r.stderr ?? "");
+    };
+    expect(selectedTestCount(run([`--testNamePattern=${pat}`])), "等号写法要真选中那一条").toBe(1);
+    expect(selectedTestCount(run(["-t", pat])), "空格写法被当成旗标 ⇒ 这一拍没跑，读数必须是「没量到」而不是 0").toBeNull();
+  });
+
+  it("接线：只有 selector 模式才塞 -t，其余必须走整文件（两种跑法共存是刻意的）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    expect(src, "非唯一命中的那条也塞 -t ⇒ 整文件跑法这一支就没了，而那 13 条本来只能靠它").toMatch(
+      /\n\s*const pattern = mode === "selector" \? String\(m\.expectFail \?\? ""\) : "";/);
+  });
+
+  it("接线：每一拍都过共用的那道读数闸，闸的拍数与 runTest 调用点相对相等（选不中、选多条都不许读成绿）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    // 钉的是「这一拍过的是共用那份判据」，不是「这里有个 if」：退回内联的
+    // `(r.selected === null || r.selected === 0)` 仍然要判红——那种写法看不见「选中多条」。
+    // 表与实现同文件 ⇒ 必须行锚定（规则 236/247）。
+    expect(src, "不调共用判据 ⇒ 闸与单价格各漂各的，多选的那一拍永远不出声").toMatch(
+      /^ {4}if \(vacuous === null && runReadingIsBad\(mode, r\.selected\)\) \{$/mu);
+    const calls = (src.match(/= runTest\(m\.test, pattern\);/g) ?? []).length;
+    const noted = (src.match(/note\("/g) ?? []).length;
+    expect(calls, "跑法改了新加一拍却忘了过闸").toBeGreaterThan(0);
+    expect(noted, "某一拍没过账本与选中数这道闸").toBe(calls);
+  });
+
+  it("读数闸的判据只有一份：selector 那一拍恰好选中 1 条才算合格，0 条／多条／没读到三种都判坏", () => {
+    expect(runReadingIsBad("selector", 1), "恰好本锚点那条 killer 用例＝合格").toBe(false);
+    expect(runReadingIsBad("selector", 0)).toBe(true);
+    expect(runReadingIsBad("selector", 2), "选中多条＝红的未必是本锚点那条（-t 匹配整条标题，体检数的是 it 字面量）").toBe(true);
+    expect(runReadingIsBad("selector", null), "收尾行没读到＝取料坏").toBe(true);
+    expect(runReadingIsBad("whole", 95), "整文件那一拍选中很多条是常态，不许当病判").toBe(false);
+    expect(runReadingIsBad("whole", 0)).toBe(true);
+    expect(runReadingIsBad("whole", null)).toBe(true);
+  });
+
+  it("三种坏读数印三种不同措辞：取料坏／一条没选中／选中多条，两两不许相同", () => {
+    const unreadable = vacuousRunLine("x", "基线", null);
+    const none = vacuousRunLine("x", "基线", 0);
+    const many = vacuousRunLine("x", "基线", 3);
+    expect(new Set([unreadable, none, many]).size, "两种红的修法相反却被印成同一句 ⇒ 读的人分不出该改哪个").toBe(3);
+    expect(none, "0 条那一格要说「什么都没测」").toContain("什么都没测");
+    expect(many, "多条那一格要说选中的不止本锚点那条用例").toContain("不止本锚点");
+    expect(unreadable, "没读到那一格要说取料坏，不许冒充 0 条").toContain("取料坏");
+    expect(many, "选中多条不是空跑——别条用例的红不许冒本锚点的红").not.toContain("什么都没测");
+  });
+});
+
+// ---- 第 169 页前置闸：选择子唯一性 ----
+// 动因（09-28 第 168 页的读数）：一条锚点的单价＝判卷宿主时长的 3 倍（实测 23.1s/条 vs 1.1s/条＝20.6×，
+// 56 条挂在一份宿主上吃掉整批 98.8% 的时间）。要改成「只跑自己那条 killer 用例」，前提是指针能逐字唯一定位那条标题；
+// 选不中时 vitest 不是失败而是**一条也没跑**，基线与突变两拍都白过 ⇒ 先要有读数点名「选不中的是哪些」。
+const SELECTOR_CAP = 13;
+
+describe("选择子唯一性：一条锚点能不能只跑自己那条 killer 用例", () => {
+  const judge = (body: string) => body;
+
+  it("只数被数过的：判卷读不到／指针为空／不是 vitest 文件都不进 inspected", () => {
+    const entries = [
+      { id: "a", test: "tests/one.test.ts", expectFail: "甲说的事" },
+      { id: "b", test: "tests/two.test.ts", expectFail: "乙说的事" },
+      { id: "c", test: "tests/gone.test.ts", expectFail: "读不到的那条" },
+      { id: "d", test: "scripts/not-a-test.ts", expectFail: "结构钉型的指针" },
+      { id: "e", test: "tests/one.test.ts", expectFail: "" },
+    ];
+    const read = (rel: string): string | null => {
+      if (rel === "tests/one.test.ts") return judge('it("甲说的事", () => {});\n');
+      if (rel === "tests/two.test.ts") return judge('it("乙说的事", () => {});\n');
+      return null;
+    };
+    const r = selectorAmbiguity(entries, read);
+    expect(r.inspected, "读不到的判卷、非 vitest 的 test、空指针都不该进分母").toBe(2);
+    expect(r.problems).toEqual([]);
+    expect(selectorCell(r.problems, r.inspected)).toContain("2/2");
+  });
+
+  it("零命中与多命中分开印，并点名是哪几条（0 命中＝-t 会一条也没跑）", () => {
+    const entries = [
+      { id: "zero", test: "tests/x.test.ts", expectFail: "标题是拼出来的那类" },
+      { id: "two", test: "tests/x.test.ts", expectFail: "默认开着" },
+      { id: "one", test: "tests/x.test.ts", expectFail: "唯一的那条" },
+    ];
+    const src = 'it("唯一的那条 说的事", () => {});\nit("默认开着 甲", () => {});\nit("默认开着 乙", () => {});\n';
+    const r = selectorAmbiguity(entries, () => src);
+    expect(r.inspected).toBe(3);
+    expect(r.problems.map((p) => `${p.id}:${String(p.hits)}`).sort()).toEqual(["two:2", "zero:0"]);
+    const cell = selectorCell(r.problems, r.inspected);
+    expect(cell, cell).toContain("零命中 1 条");
+    expect(cell, cell).toContain("多命中 1 条");
+    expect(cell, cell).toContain("zero(0)");
+  });
+
+  it("可选率的分母是被数过的条数，不是整表条数（拿整表去除＝把选不中的洗成可选）", () => {
+    const entries = [
+      { id: "u", test: "tests/x.test.ts", expectFail: "唯一命中的一条" },
+      { id: "z", test: "tests/x.test.ts", expectFail: "标题拼出来的" },
+      { id: "gone", test: "tests/none.test.ts", expectFail: "读不到" },
+    ];
+    const read = (rel: string): string | null =>
+      rel === "tests/x.test.ts" ? 'it("唯一命中的一条 的事", () => {});\n' : null;
+    const r = selectorAmbiguity(entries, read);
+    expect(r.inspected, "读不到的那份判卷不进分母").toBe(2);
+    expect(selectorCell(r.problems, r.inspected), selectorCell(r.problems, r.inspected)).toContain("1/2");
+  });
+
+  it("接线：门自己那一步真拿整张表去数选择子，并把两份数一起交给措辞（只印不数＝这一格永远 0）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    expect(src, "取料必须是整张表的指针面，喂空表＝这一格永远印 0/0").toMatch(
+      /\n\s{2}const selectorScan = selectorAmbiguity\(pointerEntries, /);
+    expect(src, "措辞吃的是 problems 与 inspected 两份，少一份就退化成一个数").toMatch(
+      /\n\s*console\.log\("ℹ️  " \+ selectorCell\(selectorScan\.problems, selectorScan\.inspected\)\);/);
+  });
+
+  it(`水位：真表现读「选不中＋不唯一」只准调低（帽 ${SELECTOR_CAP}，09-28 现读 13＝11 零命中＋2 多命中）——新增一根要写明为什么`, () => {
+    const rows = listAnchorRows();
+    const r = selectorAmbiguity(rows, (rel) => readRel(rel));
+    expect(r.problems.length, "选择子失准：" + r.problems.map((p) => `${p.id}(${String(p.hits)})`).join("、")).toBeLessThanOrEqual(SELECTOR_CAP);
+    expect(SELECTOR_CAP - r.problems.length).toBeLessThan(5);
+    expect(r.inspected, "取料面塌了＝inspected 归零，这一格又不能印错只能印 0").toBeGreaterThan(500);
+  });
+});
+
+describe("还原那一拍换成字节比对（第 171 页⑩，任务 #10）", () => {
+  it("字节相同＝到位；长度不同与等长不同要各点名自己的那一格", () => {
+    expect(restoreDiffProblem("abc", "abc"), "同一份字节就是同一份字节，不许含糊").toBeNull();
+    expect(restoreDiffProblem("", ""), "空对空也是到位（截断还原要由长度那一格喊，不是这里）").toBeNull();
+    const short = restoreDiffProblem("abcdef", "abc");
+    expect(short, "少了一截＝还原后文件被写坏，必须报出两边的字节数").toContain("字节数不同：突变前 6／还原后 3");
+    const sameLen = restoreDiffProblem("abcdef", "abcxef");
+    expect(sameLen, "长度相同但内容不同 ⇒ 只报「失败」等于没报，要给出首个差异的位置").toContain("首个差异在第 4 个字符");
+    expect(sameLen).toContain("长度相同但内容不同");
+  });
+
+  it("接线：每条锚点只付两拍，还原那一拍不再 spawn 判卷", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    const notes = (src.match(/\n\s*note\("/gu) ?? []).length;
+    expect(notes, "记拍点从 2 变回 3 ⇒ 整表每条多花一次 spawn，而这张表是默认门里最贵的一道").toBe(2);
+    expect(src, "字节比对被摘掉 ⇒ 盘上留着半个突变也照样算绿").toMatch(
+      /^ {4}if \(restoreProblem !== null\) return red\("restore-mismatch", `还原未逐字节相同/mu);
+    expect(src).not.toMatch(/note\("还原"/u);
+  });
+});
+
+describe("判红按类别分开（第 172 页⑪，任务 #12）", () => {
+  const rows = [
+    { id: "s1", kind: "survived" as const },
+    { id: "s2", kind: "survived" as const },
+    { id: "m1", kind: "misattributed" as const },
+    { id: "v1", kind: "vacuous" as const },
+  ];
+
+  it("判红的总数等于名单长度之和，只印非零的类别", () => {
+    const c = redVerdictCell(rows);
+    expect(c.total).toBe(4);
+    expect(c.summary).toContain("survived 2");
+    expect(c.list, "四类里只有三类非零 ⇒ 空类别不许占行，但也不能把有的那类合并掉").toHaveLength(3);
+    const ids = c.list.map((l) => (l.split("：")[1] ?? "").trim().split(/\s+/u).filter((t) => t.length > 0)).flat();
+    expect(ids.sort().join(","), "名单就是那 4 条——计数与名单同源（规则 209/225）").toBe("m1,s1,s2,v1");
+    const kindsLine = redKindsLine(c.counts);
+    expect(kindsLine.startsWith("REDKINDS="), "机器可读那一行的前缀是下游唯一的取料键").toBe(true);
+    expect((kindsLine.match(/:/gu) ?? []).length, "七个类别都要在这一行里报到，缺席的类别会被读成「没有那一类」").toBe(7);
+    expect(kindsLine).toContain("survived:2");
+    expect(kindsLine).toContain("baseline-red:0");
+  });
+
+  it("判红缺类别／认不出的类别当场崩并点名第几条", () => {
+    expect(() => redVerdictCell([{ id: "ghost" } as never])).toThrow(/ghost/u);
+    expect(() => redVerdictCell([{ id: "x1", kind: "why" as never }])).toThrow(/x1/u);
+  });
+
+  it("接线：runner 在出口就定类别，汇总与机器行都从同一份取料来", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    expect(src, "出口不带类别 ⇒ 汇总只能猜散文，而下游已经在猜（规则 205/213）").toMatch(
+      /^ {2}const red = \(failKind, why\) => \(\{ m, ok: false, failKind, runsMs: runs, why \}\);$/mu);
+    const vs = src.indexOf("function verifyEntry(");
+    const body = src.slice(vs, src.indexOf("\n}\n", vs) + 2);
+    expect((body.match(/return red\(/gu) ?? []).length,
+      "八条判红出口里只要有一条绕过 helper，那一类就永远不会出现在分类名单上").toBeGreaterThanOrEqual(8);
+    expect(src, "机器行没进载荷 ⇒ 下游退回猜散文，改一句文案就静默降级").toMatch(/redKindsLine\(redCell\.counts\)/u);
+  });
+});
+
+describe("未证那一态的名单与补跑（第 171 页，任务 #14）", () => {
+
+  const rows7 = [
+    { id: "a1", cls: "src-in-flight" as const },
+    { id: "a2", cls: "src-in-flight" as const },
+    { id: "b1", cls: "judge-in-flight" as const },
+    { id: "c1", cls: "judge-unloadable" as const },
+    { id: "d1", cls: "budget-stopped" as const },
+    { id: "d2", cls: "budget-stopped" as const },
+    { id: "d3", cls: "budget-stopped" as const },
+  ];
+
+  it("未证四类各印各的名单，总数等于名单长度之和", () => {
+    const u = unverifiedCell(rows7);
+    expect(u.total).toBe(7);
+    expect(u.summary).toContain("未证 7 条");
+    expect(u.list, "四类各一行，混成一行就把「等别人落库」和「现在就能补跑」指到同一个动作上").toHaveLength(4);
+    expect(u.summary).toContain("2 条源文件在飞/未跟踪");
+    expect(u.summary).toContain("3 条预算用尽没跑到");
+    const seen = u.list.map((line) => (line.split("：")[1] ?? "").trim().split(/\s+/u).filter((t) => t.length > 0)).flat();
+    expect(seen.sort().join(","), "名单里数得出的 id 必须就是那 7 条——只报数不报名单，补跑得读者自己算差集").toBe(
+      rows7.map((r) => r.id).sort().join(","),
+    );
+  });
+
+  it("认不出的未证类别当场崩并点名第几条，不许从总数里消失", () => {
+    expect(() => unverifiedCell([{ id: "ghost", cls: "who-knows" as never }])).toThrow(/ghost/u);
+  });
+
+  it("补跑命令只收预算用尽那一类，那一类为空就不许印命令", () => {
+    expect(unverifiedCell(rows7).rerun).toEqual(["d1", "d2", "d3"]);
+    expect(unverifiedCell([{ id: "a1", cls: "src-in-flight" }]).rerun,
+      "源文件在飞时补跑照样跑不动 ⇒ 给一条注定失败的命令比不给更坏（它会被人当「已经试过了」）").toEqual([]);
+  });
+
+  it("接线：未证名单走同步写满的那条出口，UNVERIFIED 标记只印一次", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    expect(src, "名单退回 console.log ⇒ process.exit 掐掉异步尾，几百条名单只剩内核缓冲那一截（规则 241）").toMatch(
+      /^emitAndExit\(redText \+ unvText \+ timing \+ /mu);
+    const markers = (src.match(/"UNVERIFIED="|UNVERIFIED=" /gu) ?? []).length;
+    expect(markers, "gates 那边把每一行 UNVERIFIED= 相加，多印一行就把未证总数翻倍").toBe(1);
+    expect(src, "类别按字段认，不按 why 的措辞认——改一句文案就分错类").toMatch(
+      /^ {4}cls: typeof r\.unloadable === "string" \? "judge-unloadable" : r\.stopped === true \? "budget-stopped" : "judge-in-flight",$/mu);
   });
 });
 

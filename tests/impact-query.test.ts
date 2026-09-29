@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { createImpactQueryTool, graphAbsenceNote, graphCandidatePosition, impactQuerySpec } from "../src/tools/impact-query";
+import { capCauseNote, coverageNote, createImpactQueryTool, graphAbsenceNote, graphCandidatePosition, impactQuerySpec } from "../src/tools/impact-query";
 import { MAX_FILES_DEFAULT } from "../src/agent/map/build";
 import { TOOLS } from "../src/tools";
 import type { ToolContext } from "../src/tools/base";
@@ -400,6 +400,68 @@ describe("覆盖度自述：图被帽截断时，成功答案也要说「这图�
     expect(r.ok).toBe(true);
     expect(r.output).toContain("跨文件调用点 1 处");
     expect(r.output).not.toMatch(/帽/u);
+  });
+
+  // 第 55 页那句自述只说「图非全量」，不说漏了几个 —— 当时给的理由是"挤掉多少个要重扫全量候选，
+  // 这一格不值一次 rg"。今天读 build.ts 才发现那句理由在建图这一支不成立：`scanSourceFiles`
+  // 本来就是先取全量候选、再 `applyFileCap` 切片 ⇒ 分母是切片前那份数组的长度，**不要第二次 rg**。
+  // 所以这一组钉的是「三支都把实数报出来」，各钉一支：覆盖面由三支各自组装，少接一支就是那支
+  // 静默回到没有分母的旧句子（同族只硬化一支的第十一/十三族）。
+  it("覆盖度自述带分母：图外还有几个候选要说得出数（不是只说「非全量」）", async () => {
+    const c = await mk();
+    const r = await createImpactQueryTool(cacheDir).run({ symbol: "target", maxFiles: 2 }, c);
+    expect(r.ok).toBe(true);
+    expect(r.output, "候选 4 个 / 收录 2 个 ⇒ 必须报出「另有 2 个」").toContain("另有 2 个候选文件没进这张图");
+    expect(r.output).toContain("收录 2 个文件＝帽 2");
+  });
+
+  it("file 支的同一个数要穿过 fileImpact（少接一层 report 就只剩没有分母的旧句子）", async () => {
+    const c = await mk();
+    const r = await createImpactQueryTool(cacheDir).run({ file: "a.ts", maxFiles: 2 }, c);
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("另有 2 个候选文件没进这张图");
+  });
+
+  it("deps 支的同一个数也从 graph 带过来（三支同判据，不许一支有一支没有）", async () => {
+    const c = await mk();
+    const r = await createImpactQueryTool(cacheDir).run({ file: "b.ts", deps: true, maxFiles: 2 }, c);
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("我在调用谁");
+    expect(r.output).toContain("另有 2 个候选文件没进这张图");
+  });
+
+  it("收录数正好等于帽、候选也只有这么多 ⇒ 一个字都不许多（旧判据在这里误报「非全量」）", async () => {
+    // `applyFileCap` 只做 slice：files.length == cap **不等于**这一刀切掉了东西。
+    // 旧判据 `files >= cap` 在这一格会喊"图非全量"，而图就是全量 ⇒ 模型白重问一次。
+    const only2 = await mkdtemp(join(tmpdir(), "impact-exact-cap-"));
+    await writeFile(join(only2, "a.ts"), "export function target(x) { return x + 1; }\n", "utf8");
+    await writeFile(join(only2, "b.ts"), "import { target } from \"./a\";\nexport function use(y) { return target(y); }\n", "utf8");
+    try {
+      const r = await createImpactQueryTool(cacheDir).run({ symbol: "target", maxFiles: 2 }, { workspace: only2, emit: async () => {} });
+      expect(r.ok).toBe(true);
+      expect(r.output).toContain("跨文件调用点 1 处"); // 前提：这一支真的答出来了，不是走了别的分诊
+      expect(r.output).not.toMatch(/帽|非全量/u);
+    } finally {
+      await rm(only2, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("覆盖面两把纯函数的判据：候选数 > 收录数，而不是收录数 < 帽", () => {
+  it("coverageNote：部分覆盖时报出实数，收全时闭嘴", () => {
+    expect(coverageNote(400, 400, 508)).toContain("另有 108 个候选文件没进这张图");
+    expect(coverageNote(400, 400, 400)).toBe(""); // ⑴ 旧判据 `files >= cap` 在这里误报
+    // ⑵ 反向：切片之外还有「读/解析失败被跳过」这一支 —— 收录数低于帽并不等于收全了。
+    expect(coverageNote(398, 400, 400)).toContain("另有 2 个候选文件没进这张图");
+  });
+
+  it("capCauseNote 与它同判据：一处说漏了、另一处不许说没漏", () => {
+    expect(capCauseNote(400, 400, 508)).toContain("另有 108 个候选没进这张图");
+    expect(capCauseNote(398, 400, 400)).toContain("另有 2 个候选没进这张图");
+    const none = capCauseNote(400, 400, 400);
+    expect(none).toMatch(/与帽无关/u);
+    expect(none).toContain("全仓候选 400 个"); // 阴性一侧也带分母，不说空头的「与帽无关」
+    expect(none).not.toContain("maxFiles"); // 没切东西时这一位不是出路（第 51 页死参数式文案）
   });
 });
 

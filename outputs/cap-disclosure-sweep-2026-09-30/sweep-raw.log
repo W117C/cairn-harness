@@ -1,0 +1,201 @@
+
+=== MAX_EVIDENCE_ITEMS = 12  ·  src/agent/evidence.ts:12  · 用处 2  · 附近无自述词 1（其中 MODEL 1／DECISION 0）
+    [MODEL] src/agent/evidence.ts:68  const maxItems = Math.max(1, Math.min(MAX_EVIDENCE_ITEMS, Math.floor(opt.maxItems ?? MAX_EVIDENCE_ITEMS)));
+    [MODEL] src/agent/evidence.ts:142  if (items.length === 0 || items.length > MAX_EVIDENCE_ITEMS) return { ok: false, reason: "schema-mismatch" };   ⟦附近无自述词⟧
+
+=== MAX_QUOTE_CHARS = 600  ·  src/agent/evidence.ts:13  · 用处 2  · 附近无自述词 1（其中 MODEL 1／DECISION 0）
+    [MODEL] src/agent/evidence.ts:69  const maxQuoteChars = Math.max(1, Math.min(MAX_QUOTE_CHARS, Math.floor(opt.maxQuoteChars ?? MAX_QUOTE_CHARS)));
+    [MODEL] src/agent/evidence.ts:151  if (typeof it.quote !== "string" || it.quote.length === 0 || it.quote.length > MAX_QUOTE_CHARS) {   ⟦附近无自述词⟧
+
+=== GOAL_TURN_CAP_DEFAULT = 8  ·  src/agent/goal-trace.ts:12  · 用处 4  · 附近无自述词 0（其中 MODEL 0／DECISION 0）
+    [MODEL] src/agent/goal.ts:10  import { GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, traceGoal } from "./goal-trace";
+    [MODEL] src/agent/goal.ts:17  export { GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN };
+    [MODEL] src/agent/goal.ts:78  let maxTurns = GOAL_TURN_CAP_DEFAULT;
+    [MODEL] src/agent/goal.ts:89  clamped.push("轮次上限不是有限数 ⇒ 用缺省 " + String(GOAL_TURN_CAP_DEFAULT) + "（实得 " + String(raw.maxTurns) + "）");
+
+=== GOAL_TURN_CAP_MIN = 1  ·  src/agent/goal-trace.ts:13  · 用处 5  · 附近无自述词 0（其中 MODEL 0／DECISION 0）
+    [MODEL] src/agent/goal.ts:10  import { GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, traceGoal } from "./goal-trace";
+    [MODEL] src/agent/goal.ts:17  export { GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN };
+    [MODEL] src/agent/goal.ts:81  if (maxTurns < GOAL_TURN_CAP_MIN) {
+    [MODEL] src/agent/goal.ts:82  clamped.push("轮次上限低于 " + String(GOAL_TURN_CAP_MIN) + " ⇒ 钳到 " + String(GOAL_TURN_CAP_MIN) + "（实得 " + String(raw.maxTurns) + "）");
+    [MODEL] src/agent/goal.ts:83  maxTurns = GOAL_TURN_CAP_MIN;
+
+=== GOAL_TURN_CAP_MAX = 25  ·  src/agent/goal-trace.ts:14  · 用处 7  · 附近无自述词 1（其中 MODEL 0／DECISION 0）
+    [MODEL] src/agent/goal.ts:10  import { GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, traceGoal } from "./goal-trace";
+    [MODEL] src/agent/goal.ts:17  export { GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN };
+    [MODEL] src/agent/goal.ts:84  } else if (maxTurns > GOAL_TURN_CAP_MAX) {
+    [MODEL] src/agent/goal.ts:85  clamped.push("轮次上限高于 " + String(GOAL_TURN_CAP_MAX) + " ⇒ 钳到 " + String(GOAL_TURN_CAP_MAX) + "（实得 " + String(raw.maxTurns) + "）");
+    [MODEL] src/agent/goal.ts:86  maxTurns = GOAL_TURN_CAP_MAX;
+    [OTHER] src/main/agent-runner.ts:39  import { GOAL_TURN_CAP_MAX, goalReminder, goalStopDecision, goalWindowSpend, parseGoalSpec, projectGoal } from "../agent/goal";   ⟦附近无自述词⟧
+    …另有 1 处未列（分诊用，见上计数）
+
+=== GOAL_REMINDER_TOKEN_CAP = 700  ·  src/agent/goal.ts:22  · 用处 1  · 附近无自述词 0（其中 MODEL 0／DECISION 0）
+    [MODEL] src/agent/goal.ts:211  return clampToTokenBudget(body, GOAL_REMINDER_TOKEN_CAP, "goal 提醒");
+
+=== IMPACT_MAX_FILES_CEILING = 5000  ·  src/agent/impact/index.ts:69  · 用处 4  · 附近无自述词 0（其中 MODEL 0／DECISION 0）
+    [MODEL] src/tools/impact-query.ts:11  import { defaultImpactCacheDir, downward, fileImpact, upward, buildImpact, IMPACT_CONTEXT_FILES, IMPACT_CONTEXT_SYMBOLS_PER_FILE, IMPACT_MAX_FILES_CEI
+    [MODEL] src/tools/impact-query.ts:73  *  `IMPACT_MAX_FILES_CEILING` 的实测注释）。 */
+    [MODEL] src/tools/impact-query.ts:76  if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 1 || raw > IMPACT_MAX_FILES_CEILING) {
+    [MODEL] src/tools/impact-query.ts:78  `impact_query: maxFiles 必须是 1..${String(IMPACT_MAX_FILES_CEILING)} 的整数` +
+
+=== IMPACT_SITE_LIMIT = 200  ·  src/agent/impact/index.ts:257  · 用处 3  · 附近无自述词 0（其中 MODEL 0／DECISION 0）
+    [OTHER] src/agent/impact/index.ts:310  const truncated = up.length > IMPACT_SITE_LIMIT;
+    [OTHER] src/agent/impact/index.ts:314  up: truncated ? up.slice(0, IMPACT_SITE_LIMIT) : up,
+    [OTHER] src/agent/impact/index.ts:329  *  膨胀度量：旧实现逐条注入最多 IMPACT_SITE_LIMIT 行 `symbol <- file:line`，
+
+=== RECALL_MAX_BYTES = 16  ·  src/agent/ledger.ts:8  · 用处 2  · 附近无自述词 1（其中 MODEL 1／DECISION 0）
+    [MODEL] src/agent/ledger.ts:302  const max = Math.min(integer(input.max ?? (by === "bytes" ? RECALL_MAX_BYTES : RECALL_MAX_LINES), 1), by === "bytes" ? RECALL_MAX_BYTES : RECALL_MAX_L
+    [MODEL] src/agent/ledger.ts:321  let end = Math.min(buffer.length, start + (by === "bytes" ? max : RECALL_MAX_BYTES));   ⟦附近无自述词⟧
+
+=== RECALL_MAX_LINES = 400  ·  src/agent/ledger.ts:9  · 用处 2  · 附近无自述词 1（其中 MODEL 1／DECISION 0）
+    [MODEL] src/agent/ledger.ts:302  const max = Math.min(integer(input.max ?? (by === "bytes" ? RECALL_MAX_BYTES : RECALL_MAX_LINES), 1), by === "bytes" ? RECALL_MAX_BYTES : RECALL_MAX_L
+    [MODEL] src/agent/ledger.ts:323  const lineCap = by === "lines" ? max : RECALL_MAX_LINES;   ⟦附近无自述词⟧
+
+=== MAX_FILES_DEFAULT = 400  ·  src/agent/map/build.ts:18  · 用处 9  · 附近无自述词 2（其中 MODEL 0／DECISION 0）
+    [OTHER] src/agent/impact/index.ts:12  import { applyFileCap, MAX_FILES_DEFAULT, scanSourceFilesAll, type ScannedFile } from "../map/build.js";   ⟦附近无自述词⟧
+    [OTHER] src/agent/impact/index.ts:129  const cap = opts.maxFiles ?? MAX_FILES_DEFAULT;
+    [OTHER] src/agent/map/build.ts:89  export async function scanSourceFiles(workspace: string, maxFiles = MAX_FILES_DEFAULT): Promise<ScannedFile[]> {
+    [OTHER] src/agent/map/build.ts:211  const files = await scanSourceFiles(merged.workspace, merged.maxFiles ?? MAX_FILES_DEFAULT);   ⟦附近无自述词⟧
+    [MODEL] src/tools/impact-query.ts:13  import { MAX_FILES_DEFAULT, scanSourceFilesAll } from "../agent/map/build.js";
+    [MODEL] src/tools/impact-query.ts:56  *  （`MAX_FILES_DEFAULT`），两边各写一个数字就会一处调、另一处静默说错话。
+    …另有 3 处未列（分诊用，见上计数）
+
+=== MAP_TOKENS_MAX = 4096  ·  src/agent/map/render.ts:10  · 用处 1  · 附近无自述词 0（其中 MODEL 0／DECISION 0）
+    [MODEL] src/agent/map/render.ts:18  b = Math.min(MAP_TOKENS_MAX, Math.max(MAP_TOKENS_MIN, b));
+
+=== ARCH_OUTLINE_MAX_CHARS = 4_096  ·  src/agent/memory/inject.ts:29  · 用处 2  · 附近无自述词 0（其中 MODEL 0／DECISION 0）
+    [MODEL] src/agent/memory/inject.ts:107  // ① 不超过 ARCH_OUTLINE_MAX_CHARS；② 小于原文（取一半）——门槛按字节、帽按字符时，
+    [MODEL] src/agent/memory/inject.ts:110  const outlineCap = Math.min(ARCH_OUTLINE_MAX_CHARS, Math.floor(raw.length / 2));
+
+=== INDEX_MAX_LINES = 200  ·  src/agent/memory/store.ts:23  · 用处 2  · 附近无自述词 0（其中 MODEL 0／DECISION 0）
+    [MODEL] src/agent/memory/store.ts:113  if (lines > INDEX_MAX_LINES || bytes > INDEX_MAX_BYTES) {
+    [MODEL] src/agent/memory/store.ts:116  "remember: MEMORY.md 索引超硬上限（" + lines + " 行 / " + bytes + " 字节，上限 " + INDEX_MAX_LINES + " 行 / " + INDEX_MAX_BYTES + " 字节）——写入端拒绝，请改写索引：缩短/合并条目、把内容下沉到 
+
+=== INDEX_MAX_BYTES = 25  ·  src/agent/memory/store.ts:24  · 用处 2  · 附近无自述词 0（其中 MODEL 0／DECISION 0）
+    [MODEL] src/agent/memory/store.ts:113  if (lines > INDEX_MAX_LINES || bytes > INDEX_MAX_BYTES) {
+    [MODEL] src/agent/memory/store.ts:116  "remember: MEMORY.md 索引超硬上限（" + lines + " 行 / " + bytes + " 字节，上限 " + INDEX_MAX_LINES + " 行 / " + INDEX_MAX_BYTES + " 字节）——写入端拒绝，请改写索引：缩短/合并条目、把内容下沉到 
+
+=== MODEL_SURFACE_TOTAL_CHAR_LIMIT = 24_000  ·  src/agent/model-surface.ts:21  · 用处 2  · 附近无自述词 1（其中 MODEL 1／DECISION 0）
+    [MODEL] src/agent/model-surface.ts:84  const limitChars = input.limitChars ?? MODEL_SURFACE_TOTAL_CHAR_LIMIT;   ⟦附近无自述词⟧
+    [MODEL] src/agent/model-surface.ts:148  const limitChars = input.limitChars ?? MODEL_SURFACE_TOTAL_CHAR_LIMIT;
+
+=== MODEL_SURFACE_TIGHT_DESC_CHAR_CAP = 600  ·  src/agent/model-surface.ts:25  · 用处 1  · 附近无自述词 0（其中 MODEL 0／DECISION 0）
+    [MODEL] src/agent/model-surface.ts:149  const tightCap = input.tightDescCapChars ?? MODEL_SURFACE_TIGHT_DESC_CHAR_CAP;
+
+=== MAX_CONCURRENT_WORKERS = 4  ·  src/agent/orchestrator-config.ts:5  · 用处 10  · 附近无自述词 2（其中 MODEL 0／DECISION 2）
+    [MODEL] src/agent/orchestrator-join.ts:6  // 「数量有界 ≠ 体积有界」（MAX_CONCURRENT_WORKERS=4 时 4×400 仍会把父上下文塞穿）。
+    [DECISION] src/agent/orchestrator.ts:82  import { MAX_CONCURRENT_WORKERS, READ_MODE_MAX_TURNS, SPAWN_MODES, WORKER_TOOL_TABLE, WRITE_WORKER_TOOL_TABLE, workerBudgetConfig, workerToolTable } f   ⟦附近无自述词⟧
+    [DECISION] src/agent/orchestrator.ts:377  *  判据来自候选产物而非 worker 自证）。N 硬上限 3（MAX_CONCURRENT_WORKERS=4，留 1 给审查环）。
+    [DECISION] src/agent/orchestrator.ts:387  if (this.activeCount() + this.spawnReserve + k >= MAX_CONCURRENT_WORKERS) {
+    [DECISION] src/agent/orchestrator.ts:390  output: `spawn_agent(race): 并发预算不足（${String(k)} 候选 + 1 余量 > ${String(MAX_CONCURRENT_WORKERS)}），不排队`,
+    [DECISION] src/agent/orchestrator.ts:505  if (this.activeCount() + this.spawnReserve >= MAX_CONCURRENT_WORKERS) {
+    …另有 4 处未列（分诊用，见上计数）
+
+=== READ_MODE_MAX_TURNS = 40  ·  src/agent/orchestrator-config.ts:7  · 用处 3  · 附近无自述词 3（其中 MODEL 0／DECISION 3）
+    [DECISION] src/agent/orchestrator.ts:82  import { MAX_CONCURRENT_WORKERS, READ_MODE_MAX_TURNS, SPAWN_MODES, WORKER_TOOL_TABLE, WRITE_WORKER_TOOL_TABLE, workerBudgetConfig, workerToolTable } f   ⟦附近无自述词⟧
+    [DECISION] src/agent/orchestrator.ts:619  : READ_MODE_MAX_TURNS;   ⟦附近无自述词⟧
+    [DECISION] src/agent/orchestrator.ts:2510  MAX_CONCURRENT_WORKERS, MAX_PIPELINE_STAGES, ORCHESTRATOR_STUCK_CONFIG, READ_MODE_MAX_TURNS,   ⟦附近无自述词⟧
+
+=== SUMMARY_TOKEN_CAP = 2_000  ·  src/agent/orchestrator-config.ts:9  · 用处 4  · 附近无自述词 1（其中 MODEL 0／DECISION 1）
+    [MODEL] src/agent/orchestrator-join.ts:12  /** 单条 worker 摘要上限（token）。`SUMMARY_TOKEN_CAP`(2000) 是给一次 spawn 回执用的，
+    [DECISION] src/agent/orchestrator.ts:2511  SPAWN_MODES, SUMMARY_TOKEN_CAP, WORKER_COMPACTION_CONFIG, WORKER_FORBIDDEN_TOOLS, WORKER_TOOL_TABLE,   ⟦附近无自述词⟧
+    [OTHER] src/agent/worker-report.ts:5  import { SUMMARY_TOKEN_CAP } from "./orchestrator-config";
+    [OTHER] src/agent/worker-report.ts:66  export function clipWorkerSummary(text: string, capTokens: number = SUMMARY_TOKEN_CAP): ClippedSummary {
+
+=== MAX_PIPELINE_STAGES = 8  ·  src/agent/orchestrator-config.ts:77  · 用处 1  · 附近无自述词 1（其中 MODEL 0／DECISION 1）
+    [DECISION] src/agent/orchestrator.ts:2510  MAX_CONCURRENT_WORKERS, MAX_PIPELINE_STAGES, ORCHESTRATOR_STUCK_CONFIG, READ_MODE_MAX_TURNS,   ⟦附近无自述词⟧
+
+=== WAIT_ROW_TOKEN_CAP = 400  ·  src/agent/orchestrator-join.ts:14  · 用处 1  · 附近无自述词 0（其中 MODEL 0／DECISION 0）
+    [MODEL] src/agent/orchestrator-join.ts:182  const clipped = clipWorkerSummary(input.report, WAIT_ROW_TOKEN_CAP);
+
+=== WAIT_BATCH_TOKEN_CAP = 2_400  ·  src/agent/orchestrator-join.ts:16  · 用处 1  · 附近无自述词 0（其中 MODEL 0／DECISION 0）
+    [MODEL] src/agent/orchestrator-join.ts:187  const fits = used + cost <= WAIT_BATCH_TOKEN_CAP;
+
+=== WAIT_TIMEOUT_MAX_MS = 600_000  ·  src/agent/orchestrator-join.ts:18  · 用处 1  · 附近无自述词 1（其中 MODEL 1／DECISION 0）
+    [MODEL] src/agent/orchestrator-join.ts:234  if (raw > WAIT_TIMEOUT_MAX_MS) return { ms: WAIT_TIMEOUT_MAX_MS, clamped: true };   ⟦附近无自述词⟧
+
+=== HOOK_OUTPUT_CAP = 10_000  ·  src/agent/plugins/hooks.ts:22  · 用处 3  · 附近无自述词 2（其中 MODEL 1／DECISION 0）
+    [MODEL] src/agent/plugins/hooks.ts:455  if (stdout.length > HOOK_OUTPUT_CAP) {   ⟦附近无自述词⟧
+    [MODEL] src/agent/plugins/hooks.ts:482  const text = stdout.length > HOOK_OUTPUT_CAP ? stdout.slice(0, HOOK_OUTPUT_CAP) : stdout;
+    [OTHER] src/agent/plugins/index.ts:58  export { HookEngine, hookEnv, pluginOptionEnv, parseHookDecision, mergeDecision, parseHookIf, hookIfMatches, HOOK_OUTPUT_CAP, HOOK_CONTEXT_TOTAL_CHAR_   ⟦附近无自述词⟧
+
+=== HOOK_CONTEXT_TOTAL_CHAR_LIMIT = 24_000  ·  src/agent/plugins/hooks.ts:24  · 用处 4  · 附近无自述词 1（其中 MODEL 0／DECISION 0）
+    [MODEL] src/agent/model-surface.ts:8  // skill 重挂 `SKILL_REMOUNT_TOKENS_TOTAL`、hook 上下文 `HOOK_CONTEXT_TOTAL_CHAR_LIMIT`、
+    [MODEL] src/agent/plugins/hooks.ts:487  if (result.additionalContext.length + text.length > HOOK_CONTEXT_TOTAL_CHAR_LIMIT) {
+    [MODEL] src/agent/plugins/hooks.ts:496  result.additionalContext += "\n[hook 上下文预算 " + String(HOOK_CONTEXT_TOTAL_CHAR_LIMIT) +
+    [OTHER] src/agent/plugins/index.ts:58  export { HookEngine, hookEnv, pluginOptionEnv, parseHookDecision, mergeDecision, parseHookIf, hookIfMatches, HOOK_OUTPUT_CAP, HOOK_CONTEXT_TOTAL_CHAR_   ⟦附近无自述词⟧
+
+=== HOOK_REASON_CHAR_LIMIT = 2_000  ·  src/agent/plugins/hooks.ts:26  · 用处 3  · 附近无自述词 1（其中 MODEL 0／DECISION 0）
+    [MODEL] src/agent/plugins/hooks.ts:30  return text.length > HOOK_REASON_CHAR_LIMIT
+    [MODEL] src/agent/plugins/hooks.ts:31  ? text.slice(0, HOOK_REASON_CHAR_LIMIT) + " …[hook 理由超 " + String(HOOK_REASON_CHAR_LIMIT) + " 字符，已截断]"
+    [OTHER] src/agent/plugins/index.ts:58  export { HookEngine, hookEnv, pluginOptionEnv, parseHookDecision, mergeDecision, parseHookIf, hookIfMatches, HOOK_OUTPUT_CAP, HOOK_CONTEXT_TOTAL_CHAR_   ⟦附近无自述词⟧
+
+=== MCP_RESULT_CHAR_LIMIT = 32  ·  src/agent/plugins/mcp.ts:31  · 用处 1  · 附近无自述词 0（其中 MODEL 0／DECISION 0）
+    [OTHER] src/agent/plugins/mcp.ts:37  export function capMcpResult(text: string, limit = MCP_RESULT_CHAR_LIMIT): string {
+
+=== MCP_DESCRIPTION_CHAR_LIMIT = 2  ·  src/agent/plugins/mcp.ts:32  · 用处 3  · 附近无自述词 0（其中 MODEL 0／DECISION 0）
+    [MODEL] src/agent/model-surface.ts:9  // 单条 MCP 描述 `MCP_DESCRIPTION_CHAR_LIMIT`），**唯独模型面没有总闸**——MCP 工具是一条裸
+    [MODEL] src/agent/model-surface.ts:24  *  比 `MCP_DESCRIPTION_CHAR_LIMIT`（2048，装载期守住的单条上限）更狠，因为它只在**池子已满**时生效。 */
+    [OTHER] src/agent/plugins/mcp.ts:49  export function capMcpDescription(text: string, limit = MCP_DESCRIPTION_CHAR_LIMIT): string {
+
+=== MCP_SCHEMA_LEAF_CHAR_LIMIT = 600  ·  src/agent/plugins/mcp.ts:61  · 用处 3  · 附近无自述词 0（其中 MODEL 0／DECISION 0）
+    [OTHER] src/agent/plugins/mcp.ts:65  if (text.length <= MCP_SCHEMA_LEAF_CHAR_LIMIT) return text;
+    [OTHER] src/agent/plugins/mcp.ts:66  const lineEnd = text.lastIndexOf("\n", MCP_SCHEMA_LEAF_CHAR_LIMIT);
+    [OTHER] src/agent/plugins/mcp.ts:67  const cut = lineEnd > Math.floor(MCP_SCHEMA_LEAF_CHAR_LIMIT * 0.5) ? lineEnd : MCP_SCHEMA_LEAF_CHAR_LIMIT;
+
+=== MCP_SCHEMA_DEPTH_LIMIT = 6  ·  src/agent/plugins/mcp.ts:62  · 用处 2  · 附近无自述词 0（其中 MODEL 0／DECISION 0）
+    [OTHER] src/agent/plugins/mcp.ts:78  if (depth >= MCP_SCHEMA_DEPTH_LIMIT) {
+    [OTHER] src/agent/plugins/mcp.ts:80  return { type: "object", description: "[嵌套超 " + String(MCP_SCHEMA_DEPTH_LIMIT) + " 层，已省略]" };
+
+=== SKILL_ROUTING_CHAR_LIMIT = 1536  ·  src/agent/plugins/skills.ts:11  · 用处 4  · 附近无自述词 1（其中 MODEL 0／DECISION 0）
+    [OTHER] src/agent/plugins/index.ts:66  SKILL_ROUTING_CHAR_LIMIT, SKILL_REMOUNT_TOKENS_PER_SKILL, SKILL_REMOUNT_TOKENS_TOTAL,   ⟦附近无自述词⟧
+    [OTHER] src/agent/plugins/skills.ts:142  "\n[清单超 " + String(SKILL_ROUTING_CHAR_LIMIT) + " 字符，已截断：另有 " + String(dropped) + " 条未列出]";
+    [OTHER] src/agent/plugins/skills.ts:151  if (text.length <= SKILL_ROUTING_CHAR_LIMIT) return { text, truncated: false, dropped: 0 };
+    [OTHER] src/agent/plugins/skills.ts:154  const budget = SKILL_ROUTING_CHAR_LIMIT - routingTruncationMarker(lines.length).length;
+
+=== SIDECHAT_PROJECTION_MAX_CHARS = 8_000  ·  src/agent/sidechat.ts:42  · 用处 2  · 附近无自述词 0（其中 MODEL 0／DECISION 0）
+    [MODEL] src/agent/sidechat.ts:192  if (text.length > SIDECHAT_PROJECTION_MAX_CHARS) {
+    [MODEL] src/agent/sidechat.ts:193  text = "…（更早内容已截断）\n" + text.slice(text.length - SIDECHAT_PROJECTION_MAX_CHARS);
+
+=== SUPERVISE_MAX_STAGES_MIN = 1  ·  src/agent/supervise-contract.ts:12  · 用处 3  · 附近无自述词 2（其中 MODEL 0／DECISION 2）
+    [DECISION] src/agent/supervise-contract.ts:28  "受限循环最多几环（" + String(SUPERVISE_MAX_STAGES_MIN) + "–" + String(SUPERVISE_MAX_STAGES_MAX) +
+    [DECISION] src/agent/supervise-contract.ts:68  if (typeof m !== "number" || !Number.isInteger(m) || m < SUPERVISE_MAX_STAGES_MIN || m > SUPERVISE_MAX_STAGES_MAX) {   ⟦附近无自述词⟧
+    [DECISION] src/agent/supervise-contract.ts:71  error: "supervise.maxStages 须为 " + String(SUPERVISE_MAX_STAGES_MIN) + "–" +   ⟦附近无自述词⟧
+
+=== SUPERVISE_MAX_STAGES_MAX = 20  ·  src/agent/supervise-contract.ts:13  · 用处 3  · 附近无自述词 2（其中 MODEL 0／DECISION 2）
+    [DECISION] src/agent/supervise-contract.ts:28  "受限循环最多几环（" + String(SUPERVISE_MAX_STAGES_MIN) + "–" + String(SUPERVISE_MAX_STAGES_MAX) +
+    [DECISION] src/agent/supervise-contract.ts:68  if (typeof m !== "number" || !Number.isInteger(m) || m < SUPERVISE_MAX_STAGES_MIN || m > SUPERVISE_MAX_STAGES_MAX) {   ⟦附近无自述词⟧
+    [DECISION] src/agent/supervise-contract.ts:72  String(SUPERVISE_MAX_STAGES_MAX) + " 的整数（fail-visible 拒绝，不回落缺省）",   ⟦附近无自述词⟧
+
+=== SUPERVISE_MAX_STAGES_DEFAULT = 6  ·  src/agent/supervise-contract.ts:15  · 用处 3  · 附近无自述词 2（其中 MODEL 0／DECISION 2）
+    [DECISION] src/agent/supervise-contract.ts:29  " 的整数，缺省 " + String(SUPERVISE_MAX_STAGES_DEFAULT) + "）。按任务分解的步数给，别随手填上限。",
+    [DECISION] src/agent/supervise-contract.ts:48  if (raw === undefined || raw === null) return { contract: { maxStages: SUPERVISE_MAX_STAGES_DEFAULT, forbidden: [] }, error: null };   ⟦附近无自述词⟧
+    [DECISION] src/agent/supervise-contract.ts:65  let maxStages = SUPERVISE_MAX_STAGES_DEFAULT;   ⟦附近无自述词⟧
+
+=== MAX_PROMPT_CHARS = 4_000  ·  src/main/automations.ts:51  · 用处 2  · 附近无自述词 0（其中 MODEL 0／DECISION 0）
+    [OTHER] src/main/automations.ts:262  } else if (raw.prompt.length > MAX_PROMPT_CHARS) {
+    [OTHER] src/main/automations.ts:263  errors.push(`prompt 超过 ${String(MAX_PROMPT_CHARS)} 字符上限（当前 ${String(raw.prompt.length)}）`);
+
+=== MAX_NAME_CHARS = 40  ·  src/main/automations.ts:53  · 用处 2  · 附近无自述词 0（其中 MODEL 0／DECISION 0）
+    [OTHER] src/main/automations.ts:254  if (typeof raw.name !== "string" || raw.name.length < 1 || raw.name.length > MAX_NAME_CHARS) {
+    [OTHER] src/main/automations.ts:255  errors.push(`name 必须是 1-${String(MAX_NAME_CHARS)} 字符的字符串`);
+
+=== DEFAULT_CONCURRENCY_CAP = 2  ·  src/main/scheduler.ts:42  · 用处 2  · 附近无自述词 0（其中 MODEL 0／DECISION 0）
+    [DECISION] src/main/scheduler.ts:490  const c = this.deps.getCap?.() ?? DEFAULT_CONCURRENCY_CAP;
+    [DECISION] src/main/scheduler.ts:491  return Number.isInteger(c) && c >= 1 && c <= 8 ? c : DEFAULT_CONCURRENCY_CAP;
+
+=== MAX_AUTO_APPROVALS = 50  ·  src/permissions/autonomy.ts:123  · 用处 3  · 附近无自述词 2（其中 MODEL 0／DECISION 2）
+    [DECISION] src/permissions/autonomy.ts:423  ? `断路器触发：连续自动放行达 ${String(MAX_AUTO_APPROVALS)}，降级为逐次审批（直至会话重开）`   ⟦附近无自述词⟧
+    [DECISION] src/permissions/autonomy.ts:481  if (s.consecutiveAutoApprovals >= MAX_AUTO_APPROVALS) s.breakerTripped = true;
+    [DECISION] src/permissions/index.ts:65  MAX_AUTO_APPROVALS,   ⟦附近无自述词⟧
+
+=== CRITICAL_DENIAL_LIMIT = 3  ·  src/permissions/autonomy.ts:125  · 用处 2  · 附近无自述词 1（其中 MODEL 0／DECISION 1）
+    [DECISION] src/permissions/autonomy.ts:499  if (s.consecutiveCriticalDenials < CRITICAL_DENIAL_LIMIT) return null;
+    [DECISION] src/permissions/index.ts:66  CRITICAL_DENIAL_LIMIT,   ⟦附近无自述词⟧
+
+=== LSP_OUTPUT_LIMIT_BYTES = 32  ·  src/tools/lsp.ts:581  · 用处 2  · 附近无自述词 0（其中 MODEL 0／DECISION 0）
+    [OTHER] src/tools/lsp.ts:584  if (bytes <= LSP_OUTPUT_LIMIT_BYTES) return text;
+    [OTHER] src/tools/lsp.ts:586  const cut = headWithinBytes(text, LSP_OUTPUT_LIMIT_BYTES);
+
+口径：帽常量 42 个 · 用处合计 119 · 附近无自述词 30 · 其中 MODEL 7／DECISION 16
+再次声明：⟦附近无自述词⟧ 只说明**这一处 ±14 行没有自述形状**，不等于「没人自述」；判档 MODEL/DECISION 是按**文件名**猜用途，也要人核。

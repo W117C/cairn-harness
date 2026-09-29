@@ -4,7 +4,7 @@
  *  否则它只有门脚本会跑到，改坏了没人红（规则 118：只有门在守的格子挂不上锚点）。 */
 import { describe, expect, it } from "vitest";
 
-import { classify, failedIds, failedLineCount, looseFailedLineCount, needsAction } from "../scripts/lib/mutation-rerun-triage";
+import { classify, failedIds, failedLineCount, looseFailedLineCount, needsAction, redKindsOf } from "../scripts/lib/mutation-rerun-triage";
 
 describe("failedIds：取料面先要可信", () => {
   it("三条 ❌ 就是三条，按行首锚定（描述里再出现 ❌ 也不额外多抽）", () => {
@@ -113,6 +113,48 @@ describe("classify：四种结局＋一种「读不出」，且优先级确定",
   });
 });
 
+describe("被度量者自己的文案不许当成读数（第 188 页：锚点 desc 里引了判据那句话）", () => {
+  /** 逐字取自 09-29 那一次分片跑的片 1 原文（10/10 全杀）——区别只在我把「基线就不是全绿」写进了 desc。 */
+  const echoedGreen = [
+    "变异验证：10 条",
+    "✅ shard-host-split-gate-dropped — 算出「同一判卷宿主被摊到两片」却不拦 ⇒ 其中一片被「基线就不是全绿」那一格读走",
+    "✅ shard-dirty-tree-accepted — 脏树检查算出条数却不回理由",
+    "全部变异被正确杀死（断言非恒真）",
+    "[mutate-verify] 本次耗时 13.4s · 跑了 10/10 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）",
+  ].join("\n");
+
+  it("绿跑里有一条 ✅ 描述正好引用了『基线就不是全绿』⇒ 仍判已杀死，不许读成基线红", () => {
+    expect(classify(echoedGreen, 0).verdict).toBe("已杀死");
+  });
+
+  it("反方向更要紧：红跑的 ✅ 描述里引用了『全部变异被正确杀死』⇒ 不许读成已杀死", () => {
+    const forged = [
+      "❌ vacuous-run-guard-dropped — 把闸摘掉后那句『全部变异被正确杀死』照样印得出",
+      "1 条判红（按类别分开数，修法各不同——见上一行起的分类名单）",
+    ].join("\n");
+    expect(classify(forged, 1).verdict).toBe("存活");
+  });
+
+  it("真的基线红那一行照旧认（缩进在行首，不是任意位置）", () => {
+    const real = [
+      "❌ cert-lock-stale-not-unlinked — 判定可回收却不先摘旧锁",
+      "   基线就不是全绿（不应发生）:",
+      " transform 23%, import 13%, worker 1%)",
+    ].join("\n");
+    expect(classify(real, 1).verdict).toBe("基线红");
+  });
+
+  it("未生效那一档也只认行首形状（带 ❌ 判红· 前缀的分类行算，塞在描述中间不算）", () => {
+    // 必须**接在别的行后面**：单行样本里那句本来就在整段开头，摘掉 `m` 旗标也一样命中 ⇒ 突变等价、杀不掉。
+    const real = [
+      "变异验证：1 条",
+      "  ❌ 判红·突变未生效（针脚不在源文件里）⇒ 空操作（1 条）：x",
+    ].join("\n");
+    expect(classify(real, 1).verdict).toBe("未生效");
+    expect(classify("✅ some-anchor — 说明里写着「不要把 突变未生效 当结论」", 0).verdict).toBe("读不出");
+  });
+});
+
 describe("needsAction：只有三类要人处理，其余不许牵连", () => {
   it("存活、红了未点名、读不出点名；基线红/未生效/已杀死都不算本轮的账", () => {
     const rows = [
@@ -128,5 +170,42 @@ describe("needsAction：只有三类要人处理，其余不许牵连", () => {
 
   it("空表返回空——这一条是负控：函数不许在没跑的时候也报『有活要干』", () => {
     expect(needsAction([])).toEqual([]);
+  });
+});
+
+describe("结构化那一行优先（第 172 页⑪，任务 #12）", () => {
+  const kinds = (over: Partial<Record<string, number>> = {}) => {
+    const base = { "survived": 0, "misattributed": 0, "baseline-red": 0, "no-effect": 0, "syntax": 0, "restore-mismatch": 0, "vacuous": 0, ...over };
+    return "REDKINDS=" + Object.entries(base).map(([k, v]) => `${k}:${String(v)}`).join(",");
+  };
+
+  it("REDKINDS 在场就直接认类别，不再回头猜散文", () => {
+    expect(classify(`x\n${kinds({ survived: 1 })}`, 1).verdict).toBe("存活");
+    expect(classify(`x\n${kinds({ misattributed: 1 })}`, 1).verdict).toBe("红了未点名");
+    expect(classify(`x\n${kinds({ "baseline-red": 1 })}`, 1).verdict).toBe("基线红");
+    expect(classify(`x\n${kinds({ "no-effect": 1 })}`, 1).verdict).toBe("未生效");
+    expect(classify(`x\n${kinds({ vacuous: 1 })}`, 1).note).toContain("由 REDKINDS 那一行直接给出");
+  });
+
+  it("同一件事的结构化读法与散文读法必须给同一个归宿（两份谓词不许各漂各的）", () => {
+    // 存活：散文里没有失败面
+    const proseAlive = classify("1 条变异存活或误伤", 1).verdict;
+    expect(classify(`1 条判红\n${kinds({ survived: 1 })}`, 1).verdict, "结构化读出的归宿必须等于散文读出的").toBe(proseAlive);
+    // 红了未点名：散文里有 FAIL 行
+    const proseMis = classify("   FAIL  tests/x.test.ts > a\n1 条变异存活或误伤", 1).verdict;
+    expect(classify(`   FAIL  tests/x.test.ts > a\n1 条判红\n${kinds({ misattributed: 1 })}`, 1).verdict).toBe(proseMis);
+  });
+
+  it("认不出的类别不许静默跳过——它只会来自一张长大了的表", () => {
+    const r = classify("x\nREDKINDS=some-new-kind:2,survived:0", 1);
+    expect(r.verdict).toBe("读不出");
+    expect(r.note, "要点名是哪一类不认识，否则下一张表加类别就是无声降级").toContain("some-new-kind");
+    expect(redKindsOf("REDKINDS=some-new-kind:2,survived:0")?.unknown).toEqual(["some-new-kind:2"]);
+  });
+
+  it("旧日志没有 REDKINDS 那一行 ⇒ 退回散文那一档，不许读成『读不出』", () => {
+    expect(redKindsOf("1 条变异存活或误伤")).toBeNull();
+    expect(classify("1 条变异存活或误伤", 1).verdict).toBe("存活");
+    expect(classify("全部变异被正确杀死（断言非恒真）", 0).verdict).toBe("已杀死");
   });
 });

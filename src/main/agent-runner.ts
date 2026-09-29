@@ -21,7 +21,8 @@ import {
   type SessionTransport,
 } from "../agent/glm-session";
 import { ClarifyGate, PlanGate } from "../agent/gates";
-import { classifyVerifyFailure, createVerifyHook, defaultExec, withVerifyCauseNote, type ExecFn } from "../agent/verify";
+import { applyModeLineEdits } from "../agent/prompt-surface";
+import { annotateExecCause, classifyVerifyFailure, createVerifyHook, defaultExec, withVerifyCauseNote, type ExecFn } from "../agent/verify";
 import { createActionFusion } from "../agent/action-fusion";
 import { SolpiRuntime, privateSessionDirectory, removePrivateSessionData, observationRecallSpec, solpiEnabled, type SolpiFlags } from "../agent/solpi-runtime";
 import { createUsageAttributor } from "../agent/usage-attribution";
@@ -155,6 +156,23 @@ export const BASE_SYSTEM = [
   "- deny 规则与 critical 风险的强制审批不可绕过；会话成本超限会拒绝新 spawn；长时间无进展会被暂停等待恢复指令；",
   "- 权限被拒 → 换合规路径或先提交方案；测试失败 → 按失败信息修复后重跑 verify。",
 ].join("\n");
+
+/** read-only 档的工具面只有 8 把（现读：clarify glob grep lsp propose_plan read_file refine_goal verify），
+ *  而纪律 3 与「编排」段是按**能写文件、能派子代理**那张面写的 ⇒ 对它是不可达承诺
+ *  （第 174 页那道门登记的 3 条存量豁免就落在这两行上，任务 #16 把它们清掉）。
+ *  这里**只改那一档需要改的行**：其余行与 `BASE_SYSTEM` 是同一份源文本（不是抄两份，规则 205），
+ *  而纪律编号 1–6 在两档都保持连续（断号会让模型以为后面的约束可省，`base-system-discipline` 钉着）。 */
+const READ_ONLY_LINE_REPLACEMENTS: readonly { prefix: string; text: string }[] = [
+  { prefix: "3) ", text: "3) 本档不装配写文件与跑命令的工具：要把改动落到盘上，就在收尾时写清「哪个文件、哪几行、改成什么」，由用户在可写档执行，不要声称已改；" },
+];
+/** 整行删掉的条件段：它存在的前提是「本档能派子代理」，read-only 不满足那个前提。 */
+const READ_ONLY_LINE_DROPS: readonly string[] = ["编排（派子代理时）"];
+
+/** 生产装配点用的系统提示词：按档取面。非 read-only 逐字返回 `BASE_SYSTEM`（等价性由判卷钉，不是注释）。 */
+export function systemPromptFor(mode: PermissionMode | undefined): string {
+  if (mode !== "read-only") return BASE_SYSTEM;
+  return applyModeLineEdits(String(BASE_SYSTEM), { replacements: READ_ONLY_LINE_REPLACEMENTS, drops: READ_ONLY_LINE_DROPS }).text;
+}
 // M2g 任务 6：演示通道剧本外部化（fixtures/demo/**，带冻结 sha 于 scripts/frozen-demo-sha256.json；
 // **独立**于判卷区 frozen-sha256.json）。缺省零行为不变；显式给路径的旧用法保留。
 const DEMO_DIR = join(ROOT, "fixtures", "demo");
@@ -558,7 +576,10 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
           // 这条出口经 run_shell 工具而非 runInSandbox，故同一判据的提示在这里补（两处共用一只函数）。
           return withGate(annotateNetworkDenial(await original.run({ command }, ctx), network));
         }
-        return withGate(await runInSandbox(mapped, { cwd: ctx.workspace, network }));
+        const sand = await runInSandbox(mapped, { cwd: ctx.workspace, network });
+        // 上面那条注释说的是「经 run_shell 的那条出口」；这一条不经，故同一只归因函数在这里补
+        // （verify 不走这条路，所以不会与它那句「测试脚本未被执行」叠两层）。
+        return withGate(annotateExecCause(sand, { timedOut: sand.timedOut === true, exitCode: sand.exitCode ?? null }));
       }
       let result = await original.run(args, ctx);
       if (name !== "run_shell" && result.ok && s.actionFusion) {
@@ -1531,7 +1552,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       // 两个都开才传，避免"闸关着却许诺返修"这种读起来矛盾的配置。
       ...(opts.autoVerify === true && opts.autoVerifyRepair === true ? { autoVerifyRepair: true } : {}),
       stuckNudge: true, // 主会话（人直用那条）才有换路提示：worker 有看门、靶场按字节计量，见 LoopOptions
-      provider: createProvider(promptText, BASE_SYSTEM, modelSelection, {
+      provider: createProvider(promptText, systemPromptFor(opts.mode), modelSelection, {
         ...opts, emit: pipeline, solpi, promptCache: providerSettings.promptCache,
         requestFace: () => sessionToolFace(rt, faceArgs),
         // §9.5：自动/溢出压缩的 PreCompact 只有这一条生产者（provider 每会话一个，钩子引擎在 rt 上）
