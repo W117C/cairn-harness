@@ -8786,7 +8786,7 @@ const MUTATIONS = [
     desc: "判据还在、结论不接 ⇒ 拒跑那句话再也不印（五处接线断言都认这个句子，但它们只在真跑那支里跑，" +
       "机器证人缺位时这一格就是「尺与针脚不同笔」的现行样本）。本条同时回答 #8 的前置疑问：" +
       "变异机吃不吃 `scripts/*.mjs` 这一面——它杀得动就是吃得下",
-    apply: (s) => s.replace('if (TREE.kind === "refused") {', "if (false) {"),
+    apply: (s) => s.replace("if (TREE.kind === \"refused\") {\n  console.error(", "if (false) {\n  console.error("),
     expectFail: "主检出里真跑 ⇒ exit 2、说清是主检出、且盘上一个字节都没动",
   },
   // ── 第 204 页：文件帽从「覆盖面政策」改成「成本安全阀」（待办 #21 笔1）
