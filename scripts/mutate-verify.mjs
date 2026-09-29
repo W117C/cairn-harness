@@ -9106,7 +9106,7 @@ const MUTATIONS = [
     test: "tests/mutate-shards.test.ts",
     desc: "同一条多次出现时保留第一次看到的 ⇒ 权重回到「早退那一拍」的量级，" +
       "长尾被静默削平（而装箱正是为长尾才改的）。这一格取最大值是有理由的：低估会把两个重物叠进同一片",
-    apply: (s) => s.replace("if (prev === undefined || sec > prev) into.set(id, sec);", "if (prev === undefined) into.set(id, sec);"),
+    apply: (s) => s.replace("if (prev === undefined || sec > prev) into.set(current, sec);", "if (prev === undefined) into.set(current, sec);"),
     expectFail: "同一条多次出现取最大值：低估长尾会把两个重物叠进同一片，而墙钟由最慢那片决定",
   },
   {
@@ -9126,6 +9126,17 @@ const MUTATIONS = [
       "而这两者的墙钟期望差 37%（「算出来」还要「拿得到」，规则 211/241 同族；本条由**真跑 --dry-run** 那条证人杀，不是钉文字）",
     apply: (s) => s.replace("${packCell} · 每片一棵树，锁标签", "每片一棵树，锁标签"),
     expectFail: "真跑 --dry-run：给了 --cost-logs 就说清权重与来源，不给就说没有来源",
+  },
+  {
+    id: "shard-cost-parser-forgets-current-id",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "每读到一条非结果行就把「当前 id」清空 ⇒ 只有 id 与成本格挤在同一行时才配得上。" +
+      "整表实测：1018 条抽到 1017 条，缺的那条 `impact-closure-glob-broken` 的 desc 含**真换行**，" +
+      "成本格因此落在没有 id 的续行上。desc 换行是被度量者的合法内容（本仓另有 5 条逐行式锚点），" +
+      "**不许为了让尺好读去改它** ⇒ 有状态的解析才是那一格的修法；发现手段就是计划行那句「权重 1017/1018」（规则 270/271）",
+    apply: (s) => s.replace("    if (head !== null) current = head[1]!;\n", "    if (head !== null) current = head[1]!;\n    else current = \"\";\n"),
+    expectFail: "desc 含真换行时，成本格挂在续行上也要记回那条 id（尺自己记住 id，不要求内容迁就尺）",
   },
 ];
 

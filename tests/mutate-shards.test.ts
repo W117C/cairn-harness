@@ -504,6 +504,21 @@ describe("取料：机器原文 → 每条实测秒", () => {
     ].join("\n"));
     expect(m.get("a")).toBe(9);
   });
+
+  /** 形状取自整表真机原文（`mutate-shards-p192-full-count-0.log` 第 38–39 行）：
+   *  1018 条里有 1 条的 desc 含真换行 ⇒ 成本格落在**没有 id 的续行**上。
+   *  这不是"样本写错了"——desc 换行是合法内容，不许为了让尺好读去改被度量者。 */
+  it("desc 含真换行时，成本格挂在续行上也要记回那条 id（尺自己记住 id，不要求内容迁就尺）", () => {
+    const wrapped = [
+      "✅ impact-closure-glob-broken — 波及闭包的入面从 glob 匹配退化成前缀匹配（",
+      "  再也算不出波及） ｜本机实测 3.1s／2 拍",
+      "✅ next-anchor — 下一条照常 ｜本机实测 1.0s／2 拍",
+    ].join("\n");
+    const m = anchorCostsFromLog(wrapped);
+    expect(m.get("impact-closure-glob-broken"), "续行上没有 id，就得由尺记住它是哪一条").toBe(3.1);
+    expect(m.get("next-anchor")).toBe(1);
+    expect(m.size).toBe(2);
+  });
 });
 
 describe("装箱：权重改变排法，且那一格要说清自己", () => {

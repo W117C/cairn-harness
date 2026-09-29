@@ -88,21 +88,23 @@ export function fallbackSecondsOf(weights: ReadonlyMap<string, number>): number 
 }
 
 /** 从机器原文抽「每条锚点的实测秒」——第 191 页那一格的第一个读者。
- *  认的是**行尾那一格**的形状：`<标记> <id> — …｜本机实测 N.Ns／K 拍$`。
- *  标记位刻意不枚举表情（✅／❌／⏭️ 的变体选择符会骗人），而行尾锚定是必须的：
- *  散文里出现同样一串字面（描述引用了这格自己）不算读数（规则 264：散文不许冒充读数）。
- *  `一次没跑 ⇒ 这一格没有分母`那一态**不进表**——把没量过的条当 0 秒装进片里＝让盲区优先跑（规则 245）。
- *  同一条出现多次取**最大值**：装箱宁可高估长尾，低估会把两个重物叠进同一片，而墙钟由最慢那片决定。
- *  `into` 让多份原文并进同一张表（编排器读上一轮的多个片文件）——**取最大的规则只许有一份**，
- *  在调用点再抄一遍就是第十三族（规则 205/213）。 */
+ *  认的是**行尾那一格**的形状：`｜本机实测 N.Ns／K 拍$`，id 取**最近一条结果行的行首**
+ *  （第 193 页整表实测：1018 条里有 1 条 `impact-closure-glob-broken` 的 desc 含真换行，
+ *  成本格因此挂在没有 id 的续行上——**desc 换行是合法内容，不许为了让尺好读去改它**，所以尺自己记住 id）。
+ *  仍然要行尾锚定：描述里引用同样字面不算读数（规则 264：被度量者的文案＝第二注入面）。
+ *  `一次没跑 ⇒ 这一格没有分母`那一态**不进表**——进表就是把没量过的条当 0 秒装（规则 245）。
+ *  同一条多次出现取**最大值**：装箱宁可高估长尾，低估会把两个重物叠进同一片，而墙钟由最慢那片决定。
+ *  `into` 让多份原文并进同一张表（编排器读上一轮的多个片文件）——**取最大的规则只许有一份**（规则 205/213）。 */
 export function anchorCostsFromLog(text: string, into: Map<string, number> = new Map<string, number>()): Map<string, number> {
+  let current = "";
   for (const line of text.split("\n")) {
-    const m = /^\S+ (\S+) — .*｜本机实测 ([0-9.]+)s／\d+ 拍$/u.exec(line);
-    if (m === null) continue;
-    const id = m[1]!;
-    const sec = Number(m[2]);
-    const prev = into.get(id);
-    if (prev === undefined || sec > prev) into.set(id, sec);
+    const head = /^\S+ (\S+) — /u.exec(line);
+    if (head !== null) current = head[1]!;
+    const tail = /｜本机实测 ([0-9.]+)s／\d+ 拍$/u.exec(line);
+    if (tail === null || current === "") continue;
+    const prev = into.get(current);
+    const sec = Number(tail[1]);
+    if (prev === undefined || sec > prev) into.set(current, sec);
   }
   return into;
 }
