@@ -6337,3 +6337,29 @@ typecheck：主树 1 条报错在 `src/cli.ts:709`（本笔没碰 `src/`），�
 5. **收尾**：本会话两棵树（`p209-verify`、`p209-headcert`）回收；邻居的树与锁照旧不动。
 6. **仍开**：`TITLE_RE` 认不认 `it.each`（认了要处理 `%s` 展开⇒那条锚点从唯一命中变零命中，先量存量）——
    这条现在**有了入口**（第三态点名是哪个文件、哪条锚点），登记在 #26 的结案说明里，不当作未做的缺陷。
+
+### 2026-09-30 · 第 211 页 · 两本台账一起清：#8 给主检出树闸补上机器证人（表长 1029→1031），#25 由现读结案
+（这一页的杀法读数在下一页凭证；同时后台在跑整张 1029 条的四片并行——那片读数的对象是 `7da5c50`，不含本笔。）
+
+1. **#8 的正解**：这道闸的**判卷一直是齐的**（本体四支＋真 git 证人＋五处接线断言，都是邻居 `1c40df7` 带来的），
+   缺的只有"变异证人"这一半（规则 217「尺与针脚同笔」在这一格没满足）。补两条，各钉一半：
+   - `tree-guard-main-checkout-accepted`（钉**判据本身**：
+     `if (resolve(input.root, g) === resolve(input.root, c)) {` 摘掉 ⇒ 判卷那支"两支只差一个维度"就红。
+     为什么不钉「主检出」三个字：那个词在两条无关错误消息里也各有一次，钉它等于没钉——这是判卷自己的注释早就写过的教训）；
+   - `tree-guard-refusal-not-wired`（钉**接线**：`if (TREE.kind === "refused") {` 摘掉 ⇒ 判据还在但结论不接，
+     拒跑那句话再也不印 ⇒ 真跑那支（"主检出里真跑 ⇒ exit 2、说清是主检出、且盘上一个字节都没动"）红。
+     这正是本仓最贵那一族「门装了不锁」的现行样本。
+2. **#8 那条前置疑问由这两条锚点自己回答**：原任务写着"先确认变异机吃不吃 `scripts/*.mjs` 与 `scripts/lib/*.ts` 这一面"。
+   不必先做实验——**锚点杀得动就是吃得下**，而两条的判卷宿主都是 `tests/mutate-verify-gates.test.ts`
+   （真 git 证人那一组会把 `scripts/mutate-verify.mjs`、`scripts/lib/mutate-gates.ts`、`scripts/lib/tool-lock.ts`
+   三份代码搬进临时仓再跑 ⇒ 被量的就是被改的那份，不是复刻）。凭证见下一页。
+3. **#25 按现读结案（不是"做完了"，是"本来就已经发货了"）**：`src/agent/verify.ts:32-56` 的 `annotateExecCause`
+   注释与实现覆盖面就是 #25 要的（`run_shell` ＋ worker 两条 shell ＋ 两条沙箱出口），
+   且**判据不重写**——内部吃的还是 `classifyVerifyFailure`（同一正则同一枚举）；接线在 `src/tools/run_shell.ts:35`
+   与 `src/main/agent-runner.ts:25/1332`，判卷是 `tests/shell-family-cause.test.ts`，四条出口各有锚点（第 184 页那组）。
+   ⇒ 台账把它留在 pending 里，就是一个"已发货的东西排在待办"的现场（规则 278 的正面），所以这条**当场改状态**而不是顺手再写一份。
+4. **#24 因此被改窄**（写清楚，别让下一位再走一遍）：语料里的 `tool_result` 事件不带 `exitCode`/`timedOut`，
+   而 `classifyVerifyFailure` 判 `toolchain-missing` 要 `exitCode` ⇒ 对 09-20 那批语料只能走
+   "这一族无 cause、占比只报分子分母"那一档；而 `replay:arg-error-mix` **在仓库里还不存在**
+   （`grep -rn "arg-error-mix" scripts tests docs` → 0 命中）⇒ #24 的真实工作量是"新造一道读数并按现有谓词聚合"，
+   不是"改造一份既有代码"。这个差别要写在任务里（规则 279：待办要写现读态）。

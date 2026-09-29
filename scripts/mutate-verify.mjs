@@ -8765,6 +8765,30 @@ const MUTATIONS = [
     apply: (s) => s.replace("  return graphIsPartial(files, candidates)", "  return files >= cap"),
     expectFail: "capCauseNote 与它同判据",
   },
+  // ── 第 211 页：主检出树闸的两名变异证人（待办 #8 结案：判卷早就齐，缺的是锚点）
+  // 两条分钉两半：`mutateTreeGuard` 的判据（git-dir vs common-dir 同指＝主检出），与「判据的结论真的接在退出码上」。
+  // 后一条是本仓最贵那一族（门装了不锁）：判卷那五处断言认的是 stderr 里的句子，
+  // 把 `if (TREE.kind === "refused")` 摘掉，句子就再也不出现——只有真跑那支能看见，所以必须有一条机器证人。
+  {
+    id: "tree-guard-main-checkout-accepted",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "「git-dir 与 git-common-dir 同指一处＝主检出」这条判据摘掉 ⇒ 就地改源文件的门可以在用户工作树上跑，" +
+      "被外层超时杀掉就留下一地突变体与 .mutbak（这道闸存在的全部理由）。" +
+      "针脚钉判据本身而不是钉「主检出」三字：那个词在两条无关错误消息里也各有一次，钉它等于没钉",
+    apply: (s) => s.replace("  if (resolve(input.root, g) === resolve(input.root, c)) {", "  if (false) {"),
+    expectFail: "主检出拒跑、linked worktree 放行——两支只差一个维度，结论换人",
+  },
+  {
+    id: "tree-guard-refusal-not-wired",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "判据还在、结论不接 ⇒ 拒跑那句话再也不印（五处接线断言都认这个句子，但它们只在真跑那支里跑，" +
+      "机器证人缺位时这一格就是「尺与针脚不同笔」的现行样本）。本条同时回答 #8 的前置疑问：" +
+      "变异机吃不吃 `scripts/*.mjs` 这一面——它杀得动就是吃得下",
+    apply: (s) => s.replace('if (TREE.kind === "refused") {', "if (false) {"),
+    expectFail: "主检出里真跑 ⇒ exit 2、说清是主检出、且盘上一个字节都没动",
+  },
   // ── 第 204 页：文件帽从「覆盖面政策」改成「成本安全阀」（待办 #21 笔1）
   // 四条锚点各钉一个决策点：帽的缺省值／候选次序的第二级／租约的出声／回注的自述。
   // 单价见本表尾行的分母（判卷宿主 = impact-cap-policy.test.ts，冷建 405 个文件那一格最贵）。
