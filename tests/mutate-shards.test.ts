@@ -471,11 +471,13 @@ describe("编排器接线：合并层不是挂在墙上的仪表", () => {
 // ---- 第 192 页：逐条实测秒当装箱权重（任务 #28）----
 // 动因是读数本身：整表 4 片各 252 条却跑出 323.6／391.1／419.9／443.0s（极差 +37%），
 // 而第 191 页那一格的首份现场显示 p90 以上那 10.6% 的条数占掉 36.3% 的时间 ⇒ **条数不是重量，长尾才是**。
-/** 真机原文（第 191 页那一跑 `mutate-shards-p191-verify-0.log`）：行首与行尾逐字一致，中间描述照实省略。 */
+/** 真机原文（第 191 页那一跑 `mutate-shards-p191-verify-0.log`）：行首与行尾逐字一致，中间描述照实省略。
+ *  三个 id 单独列出来，因为下面那条 CLI 证人要**按 id 点名取料**（见那条里的理由）。 */
+const COST_FIXTURE_IDS = ["loose-pointer-counts-literal", "mutate-gates-judge-file-blind", "verify-per-anchor-cost-not-printed"];
 const REAL_COST_LINES = [
-  "✅ loose-pointer-counts-literal — 漏掉「逐字认不出」这一半条件 ｜本机实测 17.7s／2 拍",
-  "✅ mutate-gates-judge-file-blind — 退回「判卷测试文件不在闸内」的旧语义 ｜本机实测 0.9s／2 拍",
-  "✅ verify-per-anchor-cost-not-printed — 逐条结果行不带那一格 ｜本机实测 2.8s／2 拍",
+  `✅ ${COST_FIXTURE_IDS[0]} — 漏掉「逐字认不出」这一半条件 ｜本机实测 17.7s／2 拍`,
+  `✅ ${COST_FIXTURE_IDS[1]} — 退回「判卷测试文件不在闸内」的旧语义 ｜本机实测 0.9s／2 拍`,
+  `✅ ${COST_FIXTURE_IDS[2]} — 逐条结果行不带那一格 ｜本机实测 2.8s／2 拍`,
 ].join("\n");
 
 describe("取料：机器原文 → 每条实测秒", () => {
@@ -559,19 +561,24 @@ describe("编排器的权重取料面", () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
-  /** 观察输入：真跑 CLI 的 `--dry-run`。只钉源码文字的话，「算了却不印」这种形状会照样绿（规则 230）。 */
-  it("真跑 --dry-run：给了 --cost-logs 就必须在那一行上说清权重与来源", () => {
+  /** 观察输入：真跑 CLI 的 `--dry-run`。只钉源码文字的话，「算了却不印」这种形状会照样绿（规则 230）。
+   *  取料**按 id 点名**而不是 `--changed-since`：那种写法让名单随仓库历史漂，
+   *  于是「权重覆盖几条」在飞树里是 3/3、在别的提交上就成 1/48 ⇒ 同一份判卷在干净树里直接基线红
+   *  （第 192 页复认当场就是这种红，见 `page169-170-progress.md` 第 192 页补）。 */
+  it("真跑 --dry-run：给了 --cost-logs 就说清权重与来源，不给就说没有来源", () => {
     const wt = cleanWorktree();
     const log = join(tmpdir(), `p192-cost-${String(process.pid)}.log`);
     writeFileSync(log, REAL_COST_LINES);
+    const base = `p192-dry-${String(process.pid)}`;
     try {
-      const r = runEntry([
-        `--trees=${wt.path}`, `--lock-tag-base=p192-dry-${String(process.pid)}`, `--cost-logs=${log}`,
-        "--changed-since=HEAD~1", "--dry-run",
-      ], wt.path);
-      expect(r.status, r.out).toBe(0);
-      expect(r.out).toContain("装箱=实测秒（权重 3/");
-      expect(r.out).toContain("·源=--cost-logs");
+      const weighted = runEntry([`--trees=${wt.path}`, `--lock-tag-base=${base}-w`, `--cost-logs=${log}`, "--dry-run", ...COST_FIXTURE_IDS], wt.path);
+      expect(weighted.status, weighted.out).toBe(0);
+      expect(weighted.out, weighted.out).toContain("装箱=实测秒（权重 3/3 条");
+      expect(weighted.out, weighted.out).toContain("·源=--cost-logs");
+      const plain = runEntry([`--trees=${wt.path}`, `--lock-tag-base=${base}-c`, "--dry-run", ...COST_FIXTURE_IDS], wt.path);
+      expect(plain.status, plain.out).toBe(0);
+      expect(plain.out, plain.out).toContain("装箱=条数（没有权重来源）");
+      expect(plain.out, plain.out).not.toContain("装箱=实测秒");
     } finally { rmSync(log, { force: true }); wt.drop(); }
   }, 120_000);
 
