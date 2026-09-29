@@ -44,7 +44,13 @@ export interface ToolCallEvent { type: "tool_call"; id: string; name: string; ar
 export interface ToolResultEvent { type: "tool_result"; callId: string; ok: boolean; output: string; auto?: AutoMeta; /** 权限判定留痕：谁判的（layer）、怎么判的（verdict）、当时风险与档位 */ gate?: GateMeta; agent_id?: string; /** D7 覆盖前快照（§10.4）：被覆盖原件在 `.agent/snapshots/` 下的路径。
    *  缺席 = 这一笔没有原件可保（新建 / 空文件 / 快照失败）。增量字段，旧日志重放逐字不变。 */
   snapshotId?: string; /** 写工具的结构化变更类型；旧事件缺席时由投影显式标 unknown，不猜。 */
-  change?: "created" | "modified" }
+  change?: "created" | "modified"; /** 进程退出码（run_shell / worker shell / 沙箱出口才有）。
+   *  **缺席 = 这一笔不是跑进程的工具**（或旧日志），绝不等于 0；`null` 才是"进程没起来/被强杀"。
+   *  为什么现在才落：这两个字段一直活在 `ToolResult` 上，却在落盘面那一步被丢掉 ⇒
+   *  任何下游读者（额度、按档升级、沉淀、评估失败轨迹）只能去匹配 `[exit code: 127]` 那句文案，
+   *  而文案面刚被证明是不可靠判据（judgment-layer §9.1）。 */
+  exitCode?: number | null; /** 是否因墙钟上限被强杀（与退出码分开的两态：超时后 code 常为 null）。 */
+  timedOut?: boolean }
 export interface UsageEvent { type: "usage"; inputTokens: number; outputTokens: number; /** 缓存分列（可选）：**缺字段 = 该 provider 没上报，不等于 0**。约定 `inputTokens` 是含缓存的总输入，
    *  下面两个是其中的分块——不得再与 inputTokens 相加（metering 的 MeterUsage 要互斥桶，适配器换算后再交）。
    *  写侧断点（Anthropic cache_control / 稳定前缀排布）尚未接线：先把「命中没有」测出来，再谈制造命中。 */

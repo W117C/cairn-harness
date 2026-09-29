@@ -8909,6 +8909,27 @@ const MUTATIONS = [
     expectFail: "真跑 --dry-run：给了 --cost-logs 就说清权重与来源，不给就说没有来源",
   },
   {
+    id: "exec-outcome-not-landed",
+    src: "src/agent/loop.ts",
+    test: "tests/exec-outcome-face.test.ts",
+    desc: "跑进程类工具的结局只在内存里活过一次：`ToolResult` 带着 exitCode/timedOut，落 `tool_result` 时不抄 ⇒ " +
+      "事件面上「工具链没装（127）」「被墙钟杀掉」「模型代码真错了」三件事同形，下游（verify 额度、按档升级、沉淀、失败轨迹评估）" +
+      "只能去匹配 `[exit code: 127]` 那句文案——而文案面已被证明不可当判据（judgment-layer §9.1）。" +
+      "钉的是**落盘那一跳**（生产端另有两条用例；两条各看得见一半，规则 224 那一族）",
+    apply: (s) => s.replace("...(result.exitCode !== undefined ? { exitCode: result.exitCode } : {}),", "...(false ? { exitCode: result.exitCode } : {}),"),
+    expectFail: "落盘端：真穿过 loop 落进事件流；读文件那一类**不带**（负控防恒真）",
+  },
+  {
+    id: "exec-cause-stamp-dropped",
+    src: "src/agent/verify.ts",
+    test: "tests/exec-outcome-face.test.ts",
+    desc: "四条 exec 出口共用的那一只函数只贴文案、不落结构 ⇒ 走注入出口的 worker shell 与两条沙箱出口拿不到退出码" +
+      "（run_shell 自己那支另有落法，故本条钉的是共用出口这一半）。" +
+      "成功支也要落：`exitCode=0` 与「这一位缺席＝不是跑进程的工具」是两件事，混了就又回到「读不到与没有问题同形」",
+    apply: (s) => s.replace("{ ...r, exitCode: f.exitCode, timedOut: f.timedOut }", "{ ...r, exitCode: null, timedOut: false }"),
+    expectFail: "共用出口 `annotateExecCause` 四条出口都盖：成功回执也带着这两个字段（幂等，不叠第二层）",
+  },
+  {
     id: "map-degradation-ok-false-silent",
     src: "src/agent/map/build.ts",
     test: "tests/map-self-report.test.ts",

@@ -42,8 +42,11 @@ export function classifyVerifyFailure(f: { timedOut: boolean; exitCode: number |
 export function annotateExecCause<T extends { ok: boolean; output: string }>(
   r: T,
   f: { timedOut: boolean; exitCode: number | null },
-): T {
-  if (r.ok) return r;
+): T & { exitCode: number | null; timedOut: boolean } {
+  // 结构化信号在这里落进结果对象，**成功支也落**：`exitCode=0` 与"这个工具不跑进程"是两件事，
+  // 只给 127 那条文案配一句说明、却把退出码丢在 settle 处，等于让下游读者回去匹配文案（本注释上面那段历史）。
+  const stamped: T & { exitCode: number | null; timedOut: boolean } = { ...r, exitCode: f.exitCode, timedOut: f.timedOut };
+  if (r.ok) return stamped;
   const cause = classifyVerifyFailure({ ...f, output: r.output });
   const note =
     cause === "toolchain-missing"
@@ -51,8 +54,8 @@ export function annotateExecCause<T extends { ok: boolean; output: string }>(
       : cause === "pkg-manager"
         ? "[exec: 包管理器自身报错（安装目录/依赖状态），命令本体未被执行 ⇒ 这不是代码失败，别照它改代码]"
         : "";
-  if (note === "" || r.output.includes(note)) return r;
-  return { ...r, output: r.output + "\n" + note };
+  if (note === "" || r.output.includes(note)) return stamped;
+  return { ...stamped, output: r.output + "\n" + note };
 }
 
 export interface VerifyConfig {

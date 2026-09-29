@@ -485,6 +485,11 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         ...(audit ? { auto: audit } : {}),
         ...(snapshotId !== undefined ? { snapshotId } : {}),
         ...(change !== undefined ? { change } : {}),
+        // 跑进程类工具的结局必须**结构地**活到落盘面：从前 `ok:false` ＋一句文案就是全部，
+        // 于是"工具链没装（127）／被墙钟杀掉／模型代码真错了"三件事在事件流里长得一模一样，
+        // 下游（额度、按档升级、沉淀、失败轨迹评估）只能回去匹配文案。缺席＝这一笔不是跑进程的工具。
+        ...(result.exitCode !== undefined ? { exitCode: result.exitCode } : {}),
+        ...(result.timedOut !== undefined ? { timedOut: result.timedOut } : {}),
       });
       if (result.ok && mayHaveWrittenDisk(name, output.args ?? {})) {
         wroteThisRun = true;

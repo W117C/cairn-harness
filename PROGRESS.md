@@ -6526,6 +6526,32 @@ typecheck：主树 1 条报错在 `src/cli.ts:709`（本笔没碰 `src/`），�
    `import 面：2929 条边｜悬空 0`（与上一笔同一个数——本笔没动 import 面）、`TREE=f0473b9 DIRTY_JUDGED=0 收尾复核=同一笔`、`并发判卷=起前 0 套／跑完 0 套（两端独占）`；
    门表面另跑 `docs-check` exit=0。取料：`outputs/packing-readout-2026-09-30/`（readings＋四份原文）。
 
+### 2026-09-30 · 第 216 页 · #24 的真实形状：不是"缺第二份谓词"，是**结构面死在落盘之前**——exec 的退出码/超时从此进事件流
+本笔改动面：`src/agent/verify.ts`（共用出口落结构）＋`src/tools/run_shell.ts`（自落，为取消支）＋`src/agent/loop.ts`（抄进事件）＋`src/events/index.ts`（事件加两位）＋`tests/exec-outcome-face.test.ts`（新判卷 5 条）＋两条锚点（表长 1036→1038）。
+
+1. **任务的现读态改写**（规则 278/279）：#24 原句是"改为聚合已有的 `classifyVerifyFailure`，不新造第二份谓词"。
+   现读：谓词**只有一份**，`annotateExecCause` 也确实吃它（#25 已结案）——所以那句话没有工作量。
+   真的洞在下一跳：`ToolResult` 一直带着 `exitCode`/`timedOut`（`src/tools/base.ts` 的注释自己就写着"结构化信号在 settle 时被丢掉"），
+   但 `src/agent/loop.ts` 落 `tool_result` 只抄 `ok`/`output`/`gate`/`auto`/`snapshotId`/`change` ⇒
+   **事件面上「工具链没装（127）」「被墙钟杀掉」「模型代码真错了」三件事同形**，
+   下游（verify 额度、按档升级、沉淀、失败轨迹评估）只能回去匹配 `[exit code: 127]` 那句文案——
+   而文案面本仓已定案不可当判据（judgment-layer §9.1）。⇒ #24 结案由"给已有谓词加聚合"改成"把结构接进落盘面"。
+2. **改的是三跳，一处不复制判据**：共用出口 `annotateExecCause` 现在把 `exitCode`/`timedOut` 写进结果对象（**成功支也写**）；
+   `run_shell` 自己那一支也写——因为它有一条**取消**路径绕过共用出口；`loop` 把两位抄进事件；事件类型加两位并写明**缺席的定义**：
+   "这一笔不是跑进程的工具"（`null` 才是"进程没起来/被强杀"）。为什么不折成 0：把"没量过"当 0 是本仓点了十几次的那一族（规则 261/262）。
+3. **判卷 5 条按三跳分**（真 spawn，不是推理）：`exit 3` ⇒ 结构里有 3；不存在的命令 ⇒ `exitCode=127`（正文那句照旧在）；
+   成功命令 ⇒ `exitCode=0`；共用出口幂等（两层出口叠上去不叠第二份）；**穿过 loop** ⇒ 事件带 `exitCode=7`，
+   而 `read_file` 那一类**不带**（负控——没有它，前四条都可能恒真）。全量判卷 248 文件／3195 条 exit=0，typecheck 0。
+4. **两条锚点各咬一跳**：`exec-outcome-not-landed`（摘掉 loop 那一抄）⇒ 只有穿过 loop 那条红；
+   `exec-cause-stamp-dropped`（共用出口写死 null/false）⇒ 只有幂等/成功支那条红。
+   **如实记一格没有行为证人的**：`run_shell` 自己那次 `res.exitCode = …` 只为**取消支**服务（其余路径都被共用出口盖住），
+   本笔没给它造证人——按规则 267，写明白比假装有强。
+5. **门耗时同轮声明**：表长 1036→**1038**（＋2 条，宿主 `tests/exec-outcome-face.test.ts`，各付 2 拍）；
+   该宿主含真 spawn 与一次 loop 往返 ⇒ 单价与纯函数宿主不同量级，由本笔机器自报回填（第 215 页第 3 节同一口径）。
+6. 接下来才轮到读数：事件里有了结构，`replay` 面那条"exec 失败里有多少条可机器归因"（原 #24 想做的事）才量得准——
+   登记成 #38；旧语料没这两位，跑出来要按"数据年龄"报而不是报 0（`verify-cause-mix` 已有这套形状可复用）。
+
+
 
 
 

@@ -31,7 +31,14 @@ export const run_shell: Tool = {
         if (timedOut) output += "\n[error: run_shell 超时（60s），已强制终止]";
         if (cancelled) output += "\n[error: run_shell 随会话取消终止]";
         if (code !== 0 && !timedOut && !cancelled) output += `\n[exit code: ${String(code)}]`;
-        const res: ToolResult = { ok: code === 0 && !timedOut && !cancelled, output: output.replace(/\n+$/, "") };
+        const res: ToolResult = {
+          ok: code === 0 && !timedOut && !cancelled,
+          output: output.replace(/\n+$/, ""),
+          // 退出码与「是否超时」在这里落进结构，而不是只留在 `[exit code: N]` 那句正文里：
+          // 取消这一支不走 annotateExecCause，所以两个字段必须由本处自己写，否则下游又要回去匹配文案。
+          exitCode: cancelled ? null : code,
+          timedOut,
+        };
         // 归因走 verify 那一只谓词（`classifyVerifyFailure`，同正则同枚举）：127 与「包管理器自身报错」
         // 这两类「命令根本没跑成」对模型必须点名，否则它会照着一条环境红去改本来正确的代码
         // （取消这一支不贴——它的原因已经写在 `[error: … 随会话取消终止]` 那行了）。
