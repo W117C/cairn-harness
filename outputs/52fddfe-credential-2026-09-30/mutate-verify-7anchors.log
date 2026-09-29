@@ -1,0 +1,15 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p204kill7.lock）
+变异验证：7 条
+✅ impact-coverage-denominator-constant-zero — 覆盖面句里的漏报数写死 0 ⇒ 句子形状还在、数永远假（「另有 0 个候选没进图」），模型据此认为图基本全量（09-30：这两把纯函数从 tools 挪到 impact/coverage.ts，因为回注摘要与语义租约要说同一句 ⇒ 针脚坐标跟着挪） ｜本机实测 1.1s／2 拍
+✅ impact-coverage-trigger-reverts-to-cap-compare — 阳性一侧不接共用判据、退回旧的 `files < cap` ⇒ 两个方向同时错：候选正好等于帽时**误报**非全量（模型白重问一次），而有文件被读/解析失败跳过时（files < cap 但候选更多）**漏报**（模型以为问全了） ｜本机实测 1.3s／2 拍
+✅ impact-cap-cause-judgement-diverges-from-coverage — 阴性一侧的成因判据不接共用判据、与阳性一侧分家 ⇒ 同一张图一边说「另有 N 个没进图」、另一边说「与帽无关」，两句话互相拆台（共用同一判据是这条政策的形状） ｜本机实测 0.9s／2 拍
+✅ impact-cap-default-reverts-to-mtime-slice — 缺省帽退回 400 ⇒ 覆盖面重新变成「这台机器最近动过的 400 个」：同一份代码在 worktree 里由 rg 遍历顺序决定谁进图，实测两棵树入图集合差 21–28%、确证口径 88 条查询答不同 ｜本机实测 1.1s／2 拍
+✅ impact-candidate-order-nondeterministic — 排序摘掉第二级（同秒按路径字典序）⇒ 只剩 mtime：`git worktree add` 出来的树里所有文件同一个秒，「谁进图」改由 rg 的目录遍历顺序决定。本机实测该顺序是乱序（`y a e d x c z b m`），所以这一刀可观察 ｜本机实测 0.6s／2 拍
+✅ impact-lease-partial-graph-silent — 语义租约在图非全量时不出声 ⇒ orchestrator 拿到空波及就当「无冲突」，连审批卡都不发；对照：钩子抛错那一支会 warn＝故障出声、缺料不出声（第 201 页两面实测：缺省臂冲突 0 条＝放行） ｜本机实测 1.0s／2 拍
+✅ impact-hook-note-loses-coverage — write/edit 后那句回注不再带覆盖面自述 ⇒「波及 2 个文件」与「图只扫了 3 个文件」同形，模型以为问全了（读端工具早自述、注入面从不自述＝同族只硬化一支） ｜本机实测 1.0s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 7.4s · 跑了 7/7 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 14 次／7 条（每条次数分布 2×7）· 单次中位 第1次 0.5s／第2次 0.5s· 最贵一条 impact-coverage-trigger-reverts-to-cap-compare 1.3s
+跑法单价：selector 14 拍·中位 0.49s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p204kill7.lock）

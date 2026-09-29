@@ -6151,3 +6151,37 @@ typecheck：主树 1 条报错在 `src/cli.ts:709`（本笔没碰 `src/`），�
      本笔只做了 A；B 仍是 #21 的开放项。
    - 语义租约面对非全量图选的是**出声**，不是「建全量图」——#21 ③ 给的是二选一；
      5000 帽之下正常仓库不会走到那一支，走到时（真超大仓）也只是 warn 一行，不改变放行/拦下的判定。
+
+### 2026-09-30 · 第 205 页 · 凭证：`52fddfe` 认证通过（245 文件／3180 条 exit=0），本笔改动的 7 条锚点全杀（7.4s／14 拍）
+原始读数全部入库：`outputs/52fddfe-credential-2026-09-30/`＝`head-cert-52fddfe.{summary,test,typecheck}.log`
+＋`head-cert-stdout.log`＋`mutate-verify-7anchors.log`＋`mutate-needles-check.log`（80KB，页里引的都不是临时文件）。
+
+1. **认证 `52fddfe` 本体**（`node --import tsx scripts/head-cert.ts --at=HEAD --tree=.worktrees/p204-headcert`，exit 0）：
+   `Test Files 245 passed`／`Tests 3180 passed`／退出码直接取不接管道；`typecheck exit=0（0 报错）`；
+   `import 面：2906 条边｜悬空 0`（第 204 页新增 `src/agent/impact/coverage.ts` 与 `tests/impact-cap-policy.test.ts`
+   两个文件都在面里，`DIRTY_JUDGED=0`⇒ 判卷四面没有在飞的东西）；依赖 10/10 齐；收尾复核＝同一笔。
+   **两端独占成立**：并发判卷＝起前 0 套／跑完 0 套（这一句在第 167 页学到过：不成立时不许写成成立）。
+   文件数从上一页的 244／3169 条长到 245／3180＝本笔那份新判卷文件（10 条）＋ `tests/impact-query.test.ts` 净增 1 条。
+2. **本笔的 7 条锚点逐条杀死**（一棵一次性树 `.worktrees/kill7-52fddfe`@`52fddfe`，`--lock-tag=p204kill7`，exit 0）：
+   4 条新增（`impact-cap-default-reverts-to-mtime-slice`／`impact-candidate-order-nondeterministic`／
+   `impact-lease-partial-graph-silent`／`impact-hook-note-loses-coverage`）
+   ＋3 条改了坐标的（`impact-coverage-denominator-constant-zero`／`impact-coverage-trigger-reverts-to-cap-compare`／
+   `impact-cap-cause-judgement-diverges-from-coverage`）＝**7/7 全杀，一条存活都没有**。
+   成本读数（上一页第 6 项留空的那格，现在由机器自报回填）：`本次耗时 7.4s · 跑了 7/7 条`、
+   `判卷 spawn 14 次／7 条（每条次数分布 2×7）`、`跑法单价：selector 14 拍·中位 0.49s·坏拍（选中≠1）0`。
+   ⇒ 这 4 条新锚点给门加的账＝**约 7 秒**，不是第 197 页整表那种量级（1019 条 1085.3s＝1.065s/条）。
+   为什么它们便宜而整表贵：判卷宿主是两份小文件（合成靶子 405 个**一句话**文件、不是真仓），selector 只跑自己那条。
+3. **静态那三把尺**：`--check-needles` 在 `52fddfe` 上印 `针脚体检：1023 条 —— 阻断 0，待复认 0，未覆盖 0，
+   钉在飞文本 0，killer 指针失效 0`；`改法语法体检：1023 条改法全部产出合法源文件 ✅`；
+   选择子那一行 `1009/1022 条能逐字唯一定位自己的 killer 用例`，本笔 4 条新锚点**都不在**零命中／多命中名单里。
+   提交前后各跑一次不是重复：跑之前 HEAD 还没有这些 id（`grep -c` 在 HEAD 里是 0、在工作树是 1），
+   那一趟的阻断数是**暂存态的读数**（规则 284）。
+4. **主检出树闸这次又拒了我一次**（这是它该有的样子）：第一次直接在主树跑那 7 条 ⇒ `exit=2`＋
+   「这棵是主检出……改法：去一棵一次性 worktree 跑」。它拒得对，我按它给的路径建了树再跑，没有绕闸。
+5. **收尾**：本会话自己建的两棵树（`kill7-52fddfe`、`p204-headcert`）验完即回收（两棵都 detached、0 项在飞、
+   对应笔已入库）。`常驻残留树=6` 里那 5 棵邻居的（`cost-rank@27a2459`、`gate-head-cert@ae80d6e`、
+   `gate-mutate-verify@1c40df7`、`head-cert-03af5f5`、`head-cert-1c40df7`）**照旧不动**——那是判据不是授权（规则见记忆 [[project-multi-session-coordination]] 09-28 段）。
+6. **仍未结案**（不是这一页的功劳也不是这一页的欠账）：#21 里缺陷 B（夹具占全量图 49.4% 的边）；
+   #33 那半边（仓库地图仍不自述、失败仍走 `console.debug`）；本笔只把地图的覆盖面随缺省帽一起修好了。
+   整张变异表 1023 条在本 HEAD 上的全量复跑**没做**——这一页只认证了「本笔动过的 7 条」＋「整棵判卷面 3180 条」。
+   要拿整表认证当下一页凭证的话，得再花一趟四片并行（第 203 页实测 474.7s／2.29×）。
