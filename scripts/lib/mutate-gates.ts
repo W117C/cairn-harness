@@ -852,6 +852,15 @@ export function costCell(r: CostRollup): string {
     `· 单次中位 ${perNth}· ${slowest}${never}`;
 }
 
+/** 逐条那一格的实测成本。整表汇总只指得出「最贵一条」，而并行分片装箱（任务 #28）要的是**每条**的秒：
+ *  第 190 页实测按条数等分四片各 252 条，跑出来 323.6／391.1／419.9／443.0s（极差 +37%）⇒ 条数不是重量。
+ *  空账本是第三态：这一条本机一次判卷也没 spawn（预检跳过／预算用尽），要印「没有分母」而不是 `0.0s`（规则 245）。
+ *  有分母那一支的形状（`N.Ns／K 拍`）是下游取料面的读法 ⇒ 由判据钉住，改形状要同轮换读者（规则 251/253）。 */
+export function anchorCostCell(runsMs: readonly number[]): string {
+  if (runsMs.length === 0) return "本机实测 一次没跑 ⇒ 这一格没有分母";
+  return `本机实测 ${secsOf(runsMs.reduce((a, b) => a + b, 0))}s／${String(runsMs.length)} 拍`;
+}
+
 /** 判红的七个来源，**在各自的出口就定好类别**（第 172 页⑪，任务 #12）。
  *  从前 runner 末尾只印一句「N 条变异存活或误伤」，而下游 `mutation-rerun-triage` 靠正则回头猜这句散文——
  *  同一件事两份谓词，宽度还不一样（规则 205/213）：改一句文案下游就静默读成「读不出」。

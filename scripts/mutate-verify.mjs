@@ -23,7 +23,7 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { acquireToolLock } from "./lib/tool-lock.ts";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, selectorAmbiguity, selectorCell, selectedTestCount, escapeTitlePattern, runModeFor, runReadingIsBad, vacuousRunLine, runModeCell, unverifiedCell, restoreDiffProblem, redVerdictCell, redKindsLine } from "./lib/mutate-gates.ts";
+import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, anchorCostCell, selectorAmbiguity, selectorCell, selectedTestCount, escapeTitlePattern, runModeFor, runReadingIsBad, vacuousRunLine, runModeCell, unverifiedCell, restoreDiffProblem, redVerdictCell, redKindsLine } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -9052,6 +9052,35 @@ const MUTATIONS = [
     apply: (s) => s.replace('for (const p of logs) writeFileSync(p, "");', 'for (const p of []) writeFileSync(p, "");'),
     expectFail: "原文是**开跑前就建好、逐块追加**的（不是跑完一次性写），且计划行先印路径",
   },
+  {
+    id: "verify-per-anchor-cost-not-printed",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "逐条结果行不带那一格 ⇒ 整表汇总仍然印「最贵一条」，但「这条锚点值几秒」回到只能推。" +
+      "第 190 页实测按条数装箱：四片各 252 条跑出 323.6／391.1／419.9／443.0s（极差 +37%）⇒ 条数不是重量，" +
+      "而 #28 要的取料面就是这一格（账本 `runsMs` 一直在记，只是没有出口＝规则 245 那一族）。" +
+      "针脚含真换行：表与实现在同一份文件里，单行搜索串会先撞上这张表自己那份引文（规则 247）",
+    apply: (s) => s.replace("${m.desc} ｜${anchorCostCell(r.runsMs)}`);\n  if (r.ok !== true)", "${m.desc}`);\n  if (r.ok !== true)"),
+    expectFail: "接线：逐条结果那一行真把账本印出去了（表与实现同文件 ⇒ 行锚定，规则 236/247）",
+  },
+  {
+    id: "verify-per-anchor-cost-empty-as-zero",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "空账本印成 `0.0s／0 拍` ⇒ 「这条没被判过」被洗成「这条很便宜」，" +
+      "而装箱会把没量过的条优先塞进片里（规则 245：「没跑」是第三态，不许印成 0.0s）",
+    apply: (s) => s.replace('if (runsMs.length === 0) return "本机实测 一次没跑 ⇒ 这一格没有分母";', 'if (runsMs.length === 0) return "本机实测 0.0s／0 拍";'),
+    expectFail: "逐条那一格：跑了印「N.Ns／K 拍」，一次没跑印「没有分母」，两态不许同形",
+  },
+  {
+    id: "verify-per-anchor-cost-shape-drifted",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "把 `／K 拍` 那一半去掉 ⇒ 读数只剩秒，取料方分不清「一条锚点跑了 1 拍（早退）」与「跑了 3 拍」，" +
+      "而这两个形状的单价差一个量级（第 168 页：第 1 拍付 vite 冷启动）。列印形状是下游读法的一部分，改形状要同轮换读者（规则 251/253）",
+    apply: (s) => s.replace("return `本机实测 ${secsOf(runsMs.reduce((a, b) => a + b, 0))}s／${String(runsMs.length)} 拍`;", "return `本机实测 ${secsOf(runsMs.reduce((a, b) => a + b, 0))}s`;"),
+    expectFail: "取料形状：有分母那一支固定成 秒／拍 两段（#28 的装箱按它读，改形状要同轮换读者）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
@@ -9653,7 +9682,7 @@ for (let i = 0; i < entries.length; i++) {
   }
   const r = verifyEntry(m);
   const mark = r.ok === null ? "⏭️" : r.ok ? "✅" : "❌";
-  console.log(`${mark} ${m.id} — ${m.desc}`);
+  console.log(`${mark} ${m.id} — ${m.desc} ｜${anchorCostCell(r.runsMs)}`);
   if (r.ok !== true) console.log(`   ${r.why}`);
   results.push(r);
 }

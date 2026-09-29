@@ -6,7 +6,7 @@ import { spawnSync, execFileSync } from "node:child_process";
 import { readFileSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, costRollupOf, entryDisposition, escapeTitlePattern, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, runModeCell, runModeFor, runReadingIsBad, restoreDiffProblem, redVerdictCell, redKindsLine, selectChangedEntries, selectorAmbiguity, selectorCell, selectedTestCount, splitRunnable, unverifiedCell, untrackedAnchorLine, untrackedAnchorPaths, vacuousRunLine, type AnchorCostRow, type HeadState } from "../scripts/lib/mutate-gates";
+import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, anchorCostCell, costRollupOf, entryDisposition, escapeTitlePattern, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, runModeCell, runModeFor, runReadingIsBad, restoreDiffProblem, redVerdictCell, redKindsLine, selectChangedEntries, selectorAmbiguity, selectorCell, selectedTestCount, splitRunnable, unverifiedCell, untrackedAnchorLine, untrackedAnchorPaths, vacuousRunLine, type AnchorCostRow, type HeadState } from "../scripts/lib/mutate-gates";
 import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
 
 /** 从锚点表取 `{id,test,expectFail}`：只走 `--list` 这条**不改源文件**的入口。
@@ -977,6 +977,27 @@ describe("成本分母：每条锚点实际 spawn 了几次判卷", () => {
     expect(unled, "有出口没带账本＝那条锚点的花费从分母里消失").toEqual([]);
     expect((body.match(/\{ m, ok: false/gu) ?? []).length,
       "判红的构造点只许有 helper 一处：多一处内联 `{ m, ok: false` 就多一处可以忘了带类别").toBe(1);
+  });
+
+  /** 第 191 页：整表汇总指得出「最贵一条」，但「这条锚点值几秒」从前只能推 ⇒ 逐条也得一格。
+   *  动因是第 190 页那个 +37%：四片各 252 条却跑出 323.6／391.1／419.9／443.0s（条数不是重量）。 */
+  it("逐条那一格：跑了印「N.Ns／K 拍」，一次没跑印「没有分母」，两态不许同形", () => {
+    expect(anchorCostCell([1200, 100])).toBe("本机实测 1.3s／2 拍");
+    const none = anchorCostCell([]);
+    expect(none, none).toContain("没有分母");
+    // 反向半：一个像读数的 `0.0s` 会把「这条没被判过」洗成「这条很便宜」，装箱会优先塞没量过的条
+    expect(none, none).not.toMatch(/[0-9]\.?[0-9]*s/u);
+  });
+
+  it("取料形状：有分母那一支固定成 秒／拍 两段（#28 的装箱按它读，改形状要同轮换读者）", () => {
+    expect(anchorCostCell([1200, 100])).toMatch(/^本机实测 \d+\.\ds／\d+ 拍$/u);
+    expect(anchorCostCell([250, 250])).toMatch(/^本机实测 \d+\.\ds／\d+ 拍$/u);
+  });
+
+  it("接线：逐条结果那一行真把账本印出去了（表与实现同文件 ⇒ 行锚定，规则 236/247）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    expect(src).toMatch(/^  console\.log\(`\$\{mark\} \$\{m\.id\} — \$\{m\.desc\} ｜\$\{anchorCostCell\(r\.runsMs\)\}`\);$/mu);
+    expect(src).toMatch(/costRollupOf, costCell, anchorCostCell,/u);
   });
 });
 
