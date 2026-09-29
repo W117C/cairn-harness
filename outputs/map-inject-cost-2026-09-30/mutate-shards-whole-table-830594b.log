@@ -1,0 +1,10 @@
+名单 1034 条 → 4 片（270+233+310+221）· 切法=host· 装箱=实测秒（权重 1031/1034 条·缺 3 条按中位 1.00s 补）·源=--cost-logs · 每片一棵树，锁标签 p214w-<i>
+  片 0：270 条 @ /Users/ze/Downloads/deepseek harness/.worktrees/p211-shard-a · 原文=/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/mutate-shards-p214w-0.log
+  片 1：233 条 @ /Users/ze/Downloads/deepseek harness/.worktrees/p211-shard-b · 原文=/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/mutate-shards-p214w-1.log
+  片 2：310 条 @ /Users/ze/Downloads/deepseek harness/.worktrees/p211-shard-c · 原文=/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/mutate-shards-p214w-2.log
+  片 3：221 条 @ /Users/ze/Downloads/deepseek harness/.worktrees/p211-shard-d · 原文=/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/mutate-shards-p214w-3.log
+  判定 片 0 p211-shard-a：270 条 ⇒ 已杀死
+  判定 片 1 p211-shard-b：233 条 ⇒ 已杀死
+  判定 片 2 p211-shard-c：310 条 ⇒ 已杀死
+  判定 片 3 p211-shard-d：221 条 ⇒ 已杀死
+分片 4 份 · 交出 1034 条 · 墙钟 348.3s · 判定[已杀死:4] · 已杀死那几片合计 1034 条 · 待处理 0 条 · 没有串行分母 ⇒ 不报加速比（这句不是「并行没省时」，是没尺）
