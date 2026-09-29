@@ -1,0 +1,11 @@
+面 = /Users/ze/Downloads/deepseek harness/.worktrees/p170-tighten
+全量候选 = 516 个 · 缺省帽 = 400 · 全量帽(=IMPACT_MAX_FILES_CEILING 同位) = 5000 · 渲染帽 MAP_TOKENS_MAX = 4096
+
+[缺省帽] maxFiles=400 budgetTokens=缺省 ok=true parsed=400 tokens=922 文本行=167 文中出现的路径=32 耗时=1108ms
+
+[全量帽] maxFiles=5000 budgetTokens=缺省 ok=true parsed=516 tokens=881 文本行=149 文中出现的路径=50 耗时=1008ms
+
+帽换掉之后，地图里**多出现**的路径 23 个（真项目文件=18 夹具=4 测试=1）：src/agent/ledger.ts, fixtures/gym/cases/todo-completed-count/repo/tests/run.mjs, fixtures/gym/cases/sum-clamp/repo/tests/run.mjs, fixtures/gym/cases/order-pricing-triple-fix/repo/tests/run.mjs, fixtures/gym/cases/config-default/repo/tests/run.mjs, scripts/gym-long.ts, src/main/settings-handlers.ts, scripts/lib/reach-graph.ts, src/providers/mock.ts, src/agent/compaction.ts, src/atomic-write.ts, src/main/ask-gate.ts …
+反向（缺省帽独有）5 个（测试=2 真项目文件=3）：tests/mutate-shards.test.ts, scripts/lib/shard-plan.ts, scripts/mutate-shards.ts, tests/mutate-verify-gates.test.ts, scripts/lib/mutate-gates.ts
+文本是否逐字相同＝false · 长度 3685 vs 3524 字符 · 指纹 dcac2bc1454b vs 7c971aee23d7
+自述检查：地图正文里有没有"覆盖／帽／另有"这类字＝没有（模型看不到自己拿到的是残缺地图）
