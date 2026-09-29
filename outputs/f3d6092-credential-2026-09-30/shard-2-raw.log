@@ -1,0 +1,235 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-f3d6092-shard-2.lock）
+变异验证：227 条
+✅ verify-fail-closed-empty — 无配置时不 fail-closed 而放行（验证门空转，未验证即宣称通过） ｜本机实测 1.8s／2 拍
+✅ verify-all-green — 任一命令失败仍判 ok（全绿门槛被拆，验证门可被单条失败绕过） ｜本机实测 1.8s／2 拍
+✅ verify-bad-array-fail-loud — verify.lint 非数组不抛错（外部配置错误被吞，静默执行非法命令） ｜本机实测 1.5s／2 拍
+✅ verify-bad-json-fail-loud — config.json 坏 JSON 不重抛（非 ENOENT 也降级到探测，配置错误被掩盖） ｜本机实测 1.4s／2 拍
+✅ verify-pkgjson-fail-loud — package.json 坏 JSON 不重抛（静默降级到语言探测）⇒ 与 config.json 那条是**两道独立闸**，只拆一条另一条仍在，故各须一条锚点 ｜本机实测 1.3s／2 拍
+✅ user-agent-role-not-lookupable — 查找口只看插件角色 ⇒ 用户放好的文件既在清单里又调不动（装载即陈列的老形状） ｜本机实测 1.8s／2 拍
+✅ user-agent-role-hidden-from-routing — 路由清单不再列用户级角色 ⇒ 模型没有任何地方能读到它，只能猜名字、猜错才被拒 ｜本机实测 1.7s／2 拍
+✅ user-agent-duplicate-name-silent-override — 两个来源同名时静默覆盖 ⇒ 用户改了文件却没生效，而且没人吭声（清单与查找还各自剩一条） ｜本机实测 1.6s／2 拍
+✅ role-spec-desc-hides-user-form — spawn_agent 的 role 说明退回只写 plugin: 形态 ⇒ 模型被自己的工具说明书劝退，用户级角色永不被动用 ｜本机实测 1.6s／2 拍
+✅ econ-hard-window-threshold-off-by-one — 余量阈值从 >= 改成 > ⇒ 正好落在阈值上那一拍不再受硬窗保护，而这一拍恰恰是必爆的那一拍 ｜本机实测 0.8s／2 拍
+✅ econ-unknown-cost-faked-as-zero — 成本未知时按 0 计 ⇒ 压缩看起来永远免费，break-even 恒成立（不编数这条规矩的反面） ｜本机实测 0.8s／2 拍
+✅ econ-plan-coverage-check-vacuous — 「批准过的文件都写完了」这道判定直接返回真 ⇒ 计划只做一半就在边界处剪掉前面的证据 ｜本机实测 0.8s／2 拍
+✅ econ-empty-verify-counts-as-proof — 去掉 results.length>0 ⇒ 空 results 的 every 真空成立，一次没跑任何命令的 verify 也能关边界 ｜本机实测 0.8s／2 拍
+✅ econ-pre-approval-write-credited — 覆盖登记不再看批准时刻 ⇒ 批准前那次写被算作计划已完成，用户没批的动作替计划交差 ｜本机实测 0.9s／2 拍
+✅ econ-duplicate-tool-call-id-ignored — 重复 tool_call id 不再判畸形 ⇒ 一条结果能同时给两次调用收口（复用旧证据=造边界） ｜本机实测 0.8s／2 拍
+✅ cancel-agents-spec-visible-in-read-only — 只读档不再摘掉 cancel_agents ⇒ 模型看得见、白名单挡着，白叫一次再吃一句不可用（两头断的规格半边） ｜本机实测 1.7s／2 拍
+✅ spawn-receipt-hides-in-flight-and-cap — 回执不报在途数与上限 ⇒ 「还要不要再拆一个」只能凭感觉，撞到 MAX_CONCURRENT_WORKERS 才知道有闸 ｜本机实测 1.7s／2 拍
+✅ cancel-agents-partial-execution-on-unknown-id — 含未知 id 时不再整批拒 ⇒ 撤掉认得的那几个、剩下的静默不管（撤一半是最难复现的错法） ｜本机实测 1.9s／2 拍
+✅ join-timeout-note-names-phantom-tool — 超时提示回到「可再 cancelAgent」——那是编排器的方法名，模型面上没有 ⇒ 文案给一扇不存在的门 ｜本机实测 1.9s／2 拍
+✅ auto-verify-default-on — 收束闸缺省变开（每 run 多拍一次真 lint/test，撞 action-fusion 已钉的验证执行次数记账） ｜本机实测 1.7s／2 拍
+✅ auto-verify-surface-probe-unguarded — 可验面探测的 catch 翻成放行（写坏 .agent/config.json 时整轮被 SyntaxError 炸掉） ｜本机实测 1.7s／2 拍
+✅ session-spawn-visible-side-effect — spawn_agent 从写向工具集合里摘掉（只读档会话就能派 worker：花真钱 + write 档 worker 会写盘） ｜本机实测 3.2s／2 拍
+✅ session-budget-table-fallback-dropped — 单价缺省时不再查内置价表（估价恒 0 ⇒ 用户只设 maxBudgetUsd 的常见配置下，spec 的 BYOK 底线静默失效）。针脚必须指**给钱的那一行**：上一版指相邻的 budgetRateKnown 早退，那行删掉行为不变（spentUsdFor 自己就 null→0），变异当场存活 ｜本机实测 3.3s／2 拍
+✅ goal-gate-call-site-bypassed — 调用点递空窗口（函数没错、闸拿不到数）⇒ 美元闸惰掉，理由退到轮次上限，用户设的钱闸变随机数 ｜本机实测 3.2s／2 拍
+✅ goal-lag-count-not-passed-at-call-site — 调用点不递第 6 个实参 ⇒ 提醒块永远不提「本拍的美元里还没有在途 worker 那一段」 ｜本机实测 1.6s／2 拍
+✅ session-budget-inert-silent — 「估不出价所以闸不生效」不再出声（用户设的成本底线悄悄不存在，且读日志的人也拿不到模型名） ｜本机实测 3.4s／2 拍
+✅ probe-long-replay-delta-sign-reversed — 长时程差分的「Δ总 prompt」符号反过来 ⇒ gym-long 印给读者那一列读反。复认针脚歧义时才发现这一支此前**零观察者**：A/B 用例只断言了原始账单（on < off），没读差分字段。 ｜本机实测 1.8s／2 拍
+✅ prompt-cache-default-flipped-back-off — 缺省翻回 false（2026-09-19 开闸裁决被静默撤销：新用户首启即关，Anthropic 写侧断点整条不上线） ｜本机实测 1.0s／2 拍
+✅ prompt-cache-reader-loses-fallback — 读法退回 `=== true`（磁盘上已有 settings JSON 的老用户没这个键 → undefined === true 把「缺省开」读成关；DEFAULT_SETTINGS 仍写着 true，只看对象测不出） ｜本机实测 1.1s／2 拍
+✅ facts-ring-cap-dropped — 去掉环形上限（账本只增不减，第三份 PROGRESS.md 就是这么长出来的） ｜本机实测 0.8s／2 拍
+✅ facts-maxms-takes-last-sample — 历史最贵退化成「最近一次的 ms」（最贵那次被最近一次覆盖 → 「砍哪道门省时间」这张表读出来是错的） ｜本机实测 0.8s／2 拍
+✅ shell-tail-transition-remainder-lost — 溢出发生在单个 chunk 内部时不喂尾环（子进程一次吐完 60KB 是常态）⇒ 「保留了结尾」变成假话，尾部结论仍被丢 ｜本机实测 1.0s／2 拍
+✅ shell-tail-assembly-drops-tail — 尾环算好了却在拼装时没接上（模型看到的仍是纯头部） ｜本机实测 0.9s／2 拍
+✅ shell-tail-omitted-count-lies — 省略字节数写死 0（提示说「什么都没省」）⇒ 模型据此认为看到的就是全部输出 ｜本机实测 0.9s／2 拍
+✅ verify-output-cap-removed — 验证门不接环（无上限）⇒ 一次失败的测试跑把整段日志原样灌进同轮上下文，token 账单按套件规模长 ｜本机实测 1.6s／2 拍
+✅ verify-repeat-never-detected — 去重的相等判定被摘掉 ⇒ 每一拍都重发整段失败日志（省 token 这件事根本没发生） ｜本机实测 1.6s／2 拍
+✅ verify-repeat-note-appends-digest — 提示行照发、整段摘要还是跟在后面 ⇒ 文案说「不再重复注入」而实现仍然注入（比值断言当场红） ｜本机实测 1.6s／2 拍
+✅ verify-repeat-compares-first-line-only — 按首行（=命令名）判重 ⇒ 命令没变就被当成「结果没变」，后续真正不同的错误输出被误判为重复而永不注入 ｜本机实测 1.8s／2 拍
+✅ verify-repeat-note-loses-command-list — 提示里不写是哪些命令没变 ⇒ 「没新信息」变成一句无法据以行动的空话 ｜本机实测 1.7s／2 拍
+✅ cjk-weight-collapsed-to-quarter — 退回「一律 chars/4」⇒ 中文段被低估四倍，「≤ 2000 token」的角色块实际能到 6k+，且纯英文测试完全测不出 ｜本机实测 0.8s／2 拍
+✅ cjk-han-range-narrowed — 常用汉字区间被写窄 ⇒ 绝大多数中文正文仍走 1/4 权重（区间表写错比不写更难查：只有生僻字面才露馅） ｜本机实测 0.7s／2 拍
+✅ clamp-cut-by-chars-not-weight — 估算器按类别计数、取点却仍按字符数 ⇒ 中文正文截完仍超预算（估算与执行两套口径，本仓反复踩的同族） ｜本机实测 0.8s／2 拍
+✅ impact-note-symbols-uncapped — 无调用点分支的符号清单取消每文件帽 ⇒ 这条是**最常见**分支，大文件上百个定义（含局部名）整串进每次写入的 tool_result ｜本机实测 1.0s／2 拍
+✅ impact-note-count-lies — 计数尾写死帽值 ⇒ 「等 4 个」与只列 4 个自相矛盾，模型据此以为文件里就这几个定义（少字节的前提是如实报数） ｜本机实测 1.1s／2 拍
+✅ wait-unknown-id-enters-waiters — 未知 id 不先摘 ⇒ 进 terminalWaiters 永不触发：这次等待永挂 + 等待项泄漏（waitForAgentTerminal 的原语行为，所以必须在调用方挡） ｜本机实测 3.9s／2 拍
+✅ wait-returns-before-terminal — 把「等终态」摘成立即返回 ⇒ 收队永远只报 running，模型读到的是「团队还没干活」而不是「我在等」 ｜本机实测 2.2s／2 拍
+✅ wait-timeout-gate-removed — 取消超时闸 ⇒ 收队变成无界等待：主会话的整轮挂在一次工具调用上（等人门必须有上限，同 UNATTENDED_GATE_WAIT_MS 族） ｜本机实测 7.3s／2 拍
+✅ shape-doc-head-not-charged-to-cap — [开头] 又无条件追加 ⇒ 一个长段落就把 maxChars 撑穿，而同族 shapeCode/shapeLog 都严格切帽（调用方按帽记账） ｜本机实测 0.8s／2 拍
+✅ shape-doc-head-always-dropped — 把「装得下才补」写成永不补 ⇒ 大纲丢掉开头上下文（信息更少并不更安全），零回归侧必须拦住它 ｜本机实测 0.8s／2 拍
+✅ mem-eviction-not-named — 整段抽干了哪几段不点名 ⇒ 模型看到一目录条目却不知道架构/决策被省了，只能重新 grep 或以为项目没架构 ｜本机实测 0.9s／2 拍
+✅ mem-eviction-had-recorded-after-drop — 「原有几行」改记成 0 ⇒ 事后永远判不出谁被抽干（就地 splice 之后再量必然全 0），点名静默失效 ｜本机实测 0.9s／2 拍
+✅ avnote-never-projected — 整条注入分支不落地 ⇒ 收束闸验出的红只有时间线看得见，模型下一轮带着「已经收工」的叙事继续（能力 5 缺修正拍） ｜本机实测 1.4s／2 拍
+✅ avnote-attribution-lost — 只按 ok:false 筛、不看 auto 字段 ⇒ 模型自调那一拍的红被投两次（tool_result 一份 + user 一份），同一拍两份事实 ｜本机实测 1.4s／2 拍
+✅ avnote-not-latest-beat — 取首拍而非最新拍 ⇒ 模型带着早已被后续改动推翻的旧红继续修，而真正卡住它的那条不在上下文里 ｜本机实测 1.3s／2 拍
+✅ avnote-uncapped — 帽形同虚设 ⇒ 单条 verify 输出本就环限 32KB，这条每轮重送的注入能把上下文吃掉一半 ｜本机实测 1.4s／2 拍
+✅ avnote-commands-list-tail-only — 失败命令清单只留最后一条 ⇒ 留尾砍掉前面那段正文后，模型再不知道有哪几条在红，只能把额度烧在猜命令上 ｜本机实测 1.3s／2 拍
+✅ avnote-ignores-exclusion — 预扫描不看排除集 ⇒ 已摘除的那拍顶掉存活那拍成为「最新」，主循环早退让它也不注入：整条通道静默失效 ｜本机实测 1.3s／2 拍
+✅ slice-boundary-scanner-blind — 尺子变瞎：切片调用里的注释标记不再被认出来 ⇒ 整条棘轮失去分辨力（清单还在，但没人读盘）。钉的是「识别」这一半，不是「清单」那一半 ｜本机实测 1.5s／2 拍
+✅ slice-boundary-every-string-is-a-marker — 撤掉「以注释标点开头的才算边界」这道筛 ⇒ 切片调用里的每个字符串（含喂给被测码的 fixture 文本）都成标记 ⇒ 快路必然红、且正当用途被逼去写豁免。钉的是「别误伤」那一半 ｜本机实测 2.7s／2 拍
+✅ tail-clamp-keeps-head — 留尾一支退化成留头 ⇒ 错误日志的结论行（N failed / stack 末行）整段丢失，注入的正文改无可改 ｜本机实测 0.8s／2 拍
+✅ tail-clamp-marker-free — 提示行不计入预算 ⇒「≤ 预算」这句承诺被自己的提示撑破（NOTICE_RESERVE 同族坑，这座帽是跨轮重送的） ｜本机实测 0.9s／2 拍
+✅ verify-bypasses-tool-table — verify 系统门越过工具表硬闸（今天不暴露，因为 worker 不传 verify 钩子；W4a 一接上就是「表里没有 verify 却能执行 verify」的权限旁路） ｜本机实测 1.8s／2 拍
+✅ prune-attachment-production-entry — 生产组装退回只传 {events} ⇒ 附件恒空、打桩里那行路径指向空气（§7.4「存盘回取」两头断的正是这一格） ｜本机实测 1.5s／2 拍
+✅ plugin-lsp-never-activated — 运行时装载了插件、面板数了 .lsp.json，却没人调激活 ⇒ 装载即陈列回到原样（这条锚点杀的是**入口那一跳**，不是激活函数本身） ｜本机实测 2.8s／2 拍
+✅ plugin-lsp-not-merged-into-config — 注册表有了，但 loadLspConfig 不并入 ⇒ pickServerForFile 永远看不见插件服务器，注册只是把对象塞进一个没人读的 Map ｜本机实测 3.0s／2 拍
+✅ plugin-lsp-trust-gate-open — 注册 LSP 时不看信任态 ⇒ 未批准的插件服务器（command = 任意可执行文件）被会话拉起，绕过 §9.5 信任边界 ｜本机实测 3.1s／2 拍
+✅ plugin-lsp-root-not-expanded — 不展开 ${PLUGIN_ROOT} ⇒ spawn 的参数是一个字面量占位串，服务器永远起不来（CC 的插件包全靠这条路径写相对资源） ｜本机实测 3.3s／2 拍
+✅ plugin-lsp-init-options-dropped — initialize 不带 initializationOptions ⇒ 服务器拿不到插件自己声明的配置，字段收下即丢（§9.8 的映射只做半套） ｜本机实测 3.2s／2 拍
+✅ plugin-lsp-diagnostics-switch-ignored — diagnostics.enabled=false 照样回流 ⇒ 作者关掉的噪声（或某个乱报诊断的 server）关不掉，配置只是装饰 ｜本机实测 3.3s／2 拍
+✅ plugin-lsp-not-unregistered-on-shutdown — shutdown 不摘注册表 ⇒ 下一个会话继承上一个插件的服务器；插件目录被卸载后 pickServerForFile 会挑到一个不存在的 command ｜本机实测 3.3s／2 拍
+✅ plugin-lsp-unhonored-fields-silent — 运行时还没兑现的字段不吭声 ⇒ 作者以为配了重启策略，实际崩了就崩了（本仓规矩：不静默改语义，也不静默不兑现） ｜本机实测 3.1s／2 拍
+✅ verify-result-out-of-attribution — 把 verify_result 摘出归因面 ⇒ worker 的验证证据回到「与父会话难分」的状态：上下文红回流、父验证计量、假完成率三处同时被骗 ｜本机实测 1.0s／2 拍
+✅ glm-tool-stream-switch-ignored — 关位被无视、永远发 tool_stream ⇒ 严格代理上 provider:check 与每个 worker spawn 第一跳 400（能力有、路径堵） ｜本机实测 0.9s／2 拍
+✅ glm-tool-stream-default-flipped-off — 缺省翻成「不发」⇒ 官方智谱的工具调用流式静默退化（该开关本意是 opt-out，不是改缺省） ｜本机实测 0.9s／2 拍
+✅ glm-tool-stream-garbage-turns-it-off — 任意字符串都当「关」⇒ 把 0 打成 oh/false1 时人以为开关生效、实际还在 400，比直接报错更难查 ｜本机实测 0.8s／2 拍
+✅ mcp-spec-carrier-drops-grade — 规格面不带注解出厂 ⇒ 下游的 mode 判定没有输入，只能凭空猜哪把是只读的（摘除面与门面重新分家） ｜本机实测 2.9s／2 拍
+✅ mcp-spec-face-read-only-filter-two-standards — 规格面的只读摘除改用静态写向表 ⇒ 门必拒的 MCP 工具仍挂在模型清单上，白叫一轮再吃一句拒绝 ｜本机实测 2.8s／2 拍
+✅ bandit-cost-term-zeroed — 代价项换成常量 0（§1.3 那次「从 token 代理升级成真钱」被静默摘掉：路由只学成功率、不看钱 ⇒ 越学越往贵的档走也没人发现）。旧断言 β≥2 / β>2 对这条完全无分辨力，现由等式 + 比例性一条判住 ｜本机实测 2.2s／2 拍
+✅ plan-gate-required-clause-dropped — 摘掉用户武装项 ⇒ 方案门退回「模型自愿交方案才生效」，设置页那个开关成为摆设 ｜本机实测 1.1s／2 拍
+✅ plan-gate-required-anded-not-ored — required 与 proposed 由「或」变「与」⇒ 用户武装但模型还没交方案时不拦，恰好漏掉本功能唯一要拦的那一格 ｜本机实测 1.1s／2 拍
+✅ plan-run-scope-swallows-required — run 入口吞掉 required ⇒ 生产路径的武装整条失效（runWithPlanScope 那条只有判卷在用，两条入口必须分别钉住） ｜本机实测 0.9s／2 拍
+✅ plan-propose-clears-user-arm — 模型交方案时把 required 一并抹掉 ⇒ 用户的闸能被模型的自愿动作解除 ｜本机实测 0.9s／2 拍
+✅ plan-live-delegate-default-lost — 构造器缺省从活委托退回常量 false ⇒ worker / 级联那份权限会话又回到「调用方不刷就永不拦」，#52 那条「派生即提权」的旁路复活 ｜本机实测 1.0s／2 拍
+✅ plan-required-default-flipped-on — 缺省被翻成开 ⇒ 用户没同意过就默认拦写向工具 ｜本机实测 0.9s／2 拍
+✅ settings-whitelist-drops-plan-required-key — 合并基漏登记一个标量键（旧写法抄名单漏一项、新写法在 rest 解构里点名剔掉一项，同一件事）⇒ 开关看着能动、重启就没 ｜本机实测 1.0s／2 拍
+✅ goal-done-never-fires — 摘掉「绿证据 ⇒ done」这条唯一放行口 ⇒ 验过也要继续跑到轮次上限（多烧的钱正好是这条能力要省的） ｜本机实测 1.8s／2 拍
+✅ goal-turn-cap-removed — 摘掉轮次上限 ⇒ 自动续跑没有停点（长任务变成无限任务） ｜本机实测 1.6s／2 拍
+✅ goal-usd-cap-removed — 摘掉美元闸 ⇒ 用户设的钱上限只是装饰 ｜本机实测 1.6s／2 拍
+✅ goal-price-unknown-silent — 价格不可知时不再说话 ⇒ 「算不出花了多少」被读成「还没花钱」（把不可知记成免费） ｜本机实测 1.5s／2 拍
+✅ goal-noop-continue-burns-money — 摘掉「没写盘也没证据 ⇒ 停」⇒ 读答型目标被自动续跑跑到轮次上限，纯烧钱 ｜本机实测 1.6s／2 拍
+✅ goal-window-covers-pre-goal-history — 证据窗口从「本目标之后」放宽成「整段会话」⇒ 上一段工作的绿证据替新目标宣布达成 ｜本机实测 3.0s／2 拍
+✅ goal-turn-not-counted — 不数 goal 代发轮 ⇒ turn 恒为 1，轮次闸永不触发（且芯片显示的轮数是假的） ｜本机实测 2.9s／2 拍
+✅ goal-continuation-hook-skipped — run 尾不再问判据（整条续跑/停止链被旁路）⇒ goal_set 成了只写不读的陈列，理由也从不上屏 ｜本机实测 2.8s／2 拍
+✅ goal-continuation-unattended-guard-dropped — 摘掉「无人值守不自动续跑」这道闸 ⇒ 定时任务回到按判据决定续不续：那条路审批全被 fail-closed 拒，写不了盘、验不出绿，却能一路烧到轮次上限 ｜本机实测 2.9s／2 拍
+✅ goal-usd-gate-price-key-as-model-name — 美元闸把 settings 里的**模型名**直接当价表键传（价表键是档位 id）⇒ 对产品里可选的每个模型都恒「价格不可知」，闸一次也没触发过；而判据侧单测全绿（它们直接注入 spentUsd）——#54 定名的那处实踩。09-24 反查随美元闸一起从 agent-runner 搬进 goalWindowSpend，针脚跟过去 ｜本机实测 2.8s／2 拍
+✅ goal-usd-window-axis — 美元闸的计量窗口退回整段会话（证据/写盘看窗口、钱看全量）⇒ 设 $0.5 却因上一段花掉的 $0.6 第一轮就停，用户设的闸成随机数 ｜本机实测 2.5s／2 拍
+✅ goal-stopped-flag-ignored — 已停之后还继续判 ⇒ 用户再发一条消息就把自动续跑唤回来，goal_stopped 落第二条（停止不再是终态） ｜本机实测 3.1s／2 拍
+✅ goal-clear-branch-removed — 清除分支整个摘掉 ⇒ 点「清除」掉进设定分支，报一句 objective 缺失，用户关不掉自动续跑（只能反复按停止） ｜本机实测 2.9s／2 拍
+✅ goal-clear-not-idempotent — 已停还补记第二条 goal_stopped ⇒ 审计面上「这个目标停过几次」变成假的（重复点击 = 重复落事实） ｜本机实测 2.9s／2 拍
+✅ goal-clear-enoesnt-read-as-io-error — 新建会话（日志还不存在）的 ENOENT 不再当成「没有目标」⇒ 把文件系统噪声端给用户当结论，且拒因文案消失 ｜本机实测 3.1s／2 拍
+✅ plan-required-run-override-ignored — run 入口只看 settings、丢掉 runtime override ⇒ 调用方（IPC 覆盖 / 测试 / 将来的按会话武装）说了不算 ｜本机实测 2.9s／2 拍
+✅ plan-gate-armed-for-every-run — 每次 run 无条件武装方案门 ⇒ 「缺省零行为」破了：没开 plan 模式的会话第一次写就被拒（未武装那支当场换拒因） ｜本机实测 2.7s／2 拍
+✅ facts-run-scope-guessed-as-full — 「旧账本没记范围」被读成整跑 ⇒ 缺字段这种「信息根本没有」的状态冒充出一个结论；`--only=` 的调试跑同样会在页头自称整跑（本轮我就是这样把 1 道门读成整跑 0.0 分钟） ｜本机实测 0.8s／2 拍
+✅ settings-writes-not-serialized — 撤掉写队列：两笔 set 同时跑 ⇒ 撞同一个临时文件名（pid+毫秒同值）抛 ENOENT，或后落地那笔拿旧缓存把对方字段盖回 ｜本机实测 0.9s／2 拍
+✅ settings-scalar-patch-dropped — 标量合并退回「手抄名单」的下场（名单漏一项 = 整笔 patch 静默丢成 {}）：theme/mode 再也落不了盘 ｜本机实测 1.0s／2 拍
+✅ atomic-tmp-name-not-unique-per-process — 退回「pid + 毫秒」：同进程同一毫秒的两笔写算出同一个临时名，先 rename 的搬走文件、后 rename 的抛 ENOENT（学习面静默丢） ｜本机实测 2.0s／2 拍
+✅ d7-snapshot-taken-for-new-file — 去掉「不存在/非普通文件/空文件」三道不占快照的界 ⇒ 每次新建都往用户仓库塞一份原件（噪音变垃圾） ｜本机实测 1.6s／2 拍
+✅ d7-worker-optout-ignored — 无视 ctx.snapshot === false ⇒ worker 写侧照落快照、worktree 脏文件面被撑大（实测连带 m3b 的 mergeWorker 判红） ｜本机实测 1.7s／2 拍
+✅ d7-snapshot-id-not-in-event — 快照路径只留在 tool 正文、不进 tool_result 事件 ⇒ 事后审计与界面无从取证（§10.4 要的正事件里那一条） ｜本机实测 2.1s／2 拍
+✅ compaction-accepts-truncated-summary — 摘掉第四闸 ⇒ 半句摘要落进记录并替掉它替掉的旧事件（不可逆的那一面） ｜本机实测 1.2s／2 拍
+✅ goal-hint-lost-at-callsite — 生产入口不传 decision.hint ⇒ 被收走的那一轮仍收到「针对红字继续」（算了没人读的第 10 次） ｜本机实测 1.5s／2 拍
+✅ goal-reminder-ignores-hint — hint 收进参数却不用 ⇒ 块里同时留着「针对红字继续」那句错指令 ｜本机实测 1.4s／2 拍
+✅ goal-truncation-branch-forgets-hint — continue 判对了但不给 hint ⇒ 续跑照跑，可模型收到的仍是「对着红字改」 ｜本机实测 1.4s／2 拍
+✅ goal-reminder-follow-ignores-evidence — 下一步那一句不看证据态、恒用 failed 的话 ⇒ 「从没跑过验证」的一轮被教成「去改红字」 ｜本机实测 1.4s／2 拍
+✅ worker-prose-unattributed — 归因面不收 assistant_message ⇒ worker 的正文以父会话「自己说过」的形态进父投影 ｜本机实测 0.8s／2 拍
+✅ worker-delta-unattributed — 不收 assistant_delta：流式那半句同样越界（正文不是只从 assistant_message 来的） ｜本机实测 0.8s／2 拍
+✅ worker-error-unattributed — 不收 error ⇒ worker 炸了在主转录里显示成父会话的错误（并会进父的失败沉淀） ｜本机实测 0.9s／2 拍
+✅ compaction-summary-leaks-child-stream — 摘要输入不看归因 ⇒ worker 的内部转录被父会话「做过」的形态写进长期留存的摘要 ｜本机实测 1.1s／2 拍
+✅ compaction-child-skip-merges-deltas — 跳过子流时不先收尾正文 ⇒ 子流两侧的两段父正文粘成一段（父说过什么被改写） ｜本机实测 1.1s／2 拍
+✅ empty-assert-tail-arg-treated-as-condition — 把条件位判回「最后一个实参是不是 true」（旧正则的形状）⇒ 三参等值签名 check(name, actual, expected) 那族真断言又被整批判成空断言，而体检命中是判红的：判据越界会把「解释怎么写」变成「门表怎么红」 ｜本机实测 1.3s／2 拍
+✅ empty-assert-detail-form-lost — 条件位收成「只有两参时才算」⇒ label-first 带 detail 的 `check(标签, true, detail)` 回到网外。上一版锚点存活就是因为用例挑了三参等值那侧：两条规则只在「true 第二位 + 还有后续实参」这一格分歧 ｜本机实测 1.2s／2 拍
+✅ empty-assert-label-first-lost — 收窄判定面时把该留的那一半也收掉了 ⇒ label-first 的 check("x", true) 不再报，空断言重新无声通过 ｜本机实测 1.2s／2 拍
+✅ tautology-left-branch-lost — 恒真式只认右支字面 true（旧正则的形状）⇒ `true || x` 这一支回到网外。加宽判定面必须有用例钉住新那一支，否则加宽是无声的 ｜本机实测 1.2s／2 拍
+✅ scan-scope-empty-list-silent — 「没拿到清单」与「没有要扫的东西」同形 ⇒ 体检在 git 异常/空清单时静默扫 0 个文件并报零命中（假绿） ｜本机实测 1.2s／2 拍
+✅ impact-local-var-gate-dropped-graph-face — 同一条判据的**消费面**：抽取漏了闸，最终坏在「两个同名局部变量的文件之间出现一条边」这件事上。一支锚点只认一支判卷 ⇒ 图侧那组断言若哪天只看图不看 tags，就得有这条替它盯着 ｜本机实测 1.4s／2 拍
+✅ settings-default-on-key-read-by-strict-true — 缺省开的键改用 `=== true` 读 ⇒ 盘上 JSON 没有这个键的老机器静默拿到 false：DEFAULT_SETTINGS 那行改得再对也到不了用户手上，而单测只测对象的话全绿（这正是 promptCache 当年写那条注释的原因，同族第二实例） ｜本机实测 0.9s／2 拍
+✅ settings-auto-verify-default-reverted — 缺省被悄悄改回关 ⇒ §483 的「桌面产品默认开」失效，能力 5 的收束闸退回零真流量（09-19 设计稿 D7 记的就是这串默认关造成的『永远未证』） ｜本机实测 0.9s／2 拍
+✅ autoverify-ipc-settings-fallback-dropped — 生产入口不再回退到 settings 的值 ⇒ 设置页那半边白做：用户在界面里打开的开关到不了 loop（真流量恒关） ｜本机实测 2.7s／2 拍
+✅ autoverify-ipc-override-ignored — 那一行改成「只读 settings」⇒ 调用方显式传的 false 被吞掉（要临时关一次的人只能去改设置文件），且没有任何用例会红 ｜本机实测 2.5s／2 拍
+✅ request-metering-settings-fallback-dropped — 盘上的 requestMetering 到不了主会话 ⇒ 计量报告只剩 worker 有，主会话的钱看不见 ｜本机实测 2.7s／2 拍
+✅ evidence-receipts-settings-fallback-dropped — 盘上的 evidenceReceipts 到不了主会话 ⇒ 私密报告不落盘，「可审计」那一面在主会话静默没有 ｜本机实测 3.0s／2 拍
+✅ economic-compaction-settings-fallback-dropped — 盘上的 economicCompaction 到不了主会话 ⇒ 经济报告恒 null，压缩债务没人记账 ｜本机实测 2.6s／2 拍
+✅ plan-required-settings-fallback-dropped — 盘上的 planRequiredByDefault 到不了主会话 ⇒ 设置里那句「每轮先出计划」是装饰（J3 那格给的是 override，照绿） ｜本机实测 2.4s／2 拍
+✅ plan-required-override-ignored — 那一行改成「只读 settings」⇒ 调用方显式传的 planRequired 被吞（J3 那格的武装态从此失效，闸不再说话） ｜本机实测 2.3s／2 拍
+✅ observation-pack-settings-fallback-dropped — 盘上的 observationPack 到不了主会话 ⇒ 第 3 次发送仍全文（那条 `obs_recall` 标记不算数：`observationPack || evidenceReceipts` 任一为真都有它） ｜本机实测 2.5s／2 拍
+✅ pc-serialize-layer-keeps-closing-bracket — 序列化留着数组尾那个右方括号 ⇒ 纯追加永远差一个括号，PC1 整条判据失灵 ｜本机实测 1.3s／2 拍
+✅ pc-pure-append-always-true — 纯追加判定恒真 ⇒ 中段重写（prune 改写历史中段那一族）再也判不出红 ｜本机实测 1.3s／2 拍
+✅ pc-volatile-changed-conjunct-dropped — 只看「可缓存面没变」不看「易变块真的变了」⇒ 什么都不动的样本也能报通过（本仓最忌的真空通过） ｜本机实测 1.3s／2 拍
+✅ pc-face-change-named-shortcut — 「有没有出声」直接当真 ⇒ 工具面静默变化这一族从判据里消失 ｜本机实测 1.2s／2 拍
+✅ pc-determinism-count-hardcoded — 降配抖动计数写死成 1 ⇒ 每轮重写一遍前缀的代价再也量不出来 ｜本机实测 1.4s／2 拍
+✅ pc-attribution-ignores-evidence — 「抖了但没有认账来源」不再算静默重写 ⇒ 压缩/裁剪只要发生就一律放过，证据链失去意义 ｜本机实测 1.2s／2 拍
+✅ pc-first-rewrite-index-flattened — 重写点一律报第 0 条 ⇒ 读数再也指不出「是哪一条被改」，而这条判据的全部价值就是定位 ｜本机实测 1.3s／2 拍
+✅ pc-silent-check-dropped-from-expect-rewrite — 要求抖的那一支只看「抖没抖」不看证据 ⇒ PC5/PC6 退化成一条存在性断言 ｜本机实测 1.5s／2 拍
+✅ cc-off-path-still-amortizes — 去掉「未启用即原样」支 ⇒ 一条没被打开的策略开始改生产装配（缺省零行为是这类能力的底线） ｜本机实测 1.4s／2 拍
+✅ cc-overflow-guard-dropped — overflow 也摊销 ⇒ 已经装不下时少压一点，下一轮立刻再撞硬闸（fail-safe 被反向拆掉） ｜本机实测 1.4s／2 拍
+✅ cc-only-one-tail-knob-tightened — 只钉一个边界 ⇒ clamp 的另一只求值顺序会把它顶回原值（策略看着在跑其实什么都没做） ｜本机实测 1.4s／2 拍
+✅ cc-floor-lets-working-set-shrink — 去掉工作集下限 ⇒ 小 tail 预算被继续砍，策略从「省缓存」变成「忘事」 ｜本机实测 1.4s／2 拍
+✅ cc-head-survival-never-recorded — 每轮把上一轮装配清空 ⇒ 头部存活比永远量不出来，策略只在关那一支生效（A/B 读成「策略无效」） ｜本机实测 1.5s／2 拍
+✅ cc-coordinator-ignores-config-override — 逐次 config 覆盖被忽略 ⇒ 上游算了摊销也用不上（本仓点名的「两头断」形状） ｜本机实测 1.4s／2 拍
+✅ lr-growth-invented-not-from-script — 增长内容退回我编的字数 ⇒ 所有 case 量出同一张表，读数却写着 case 名（第一版真的这样跑通过） ｜本机实测 1.8s／2 拍
+✅ lr-empty-script-silently-accepted — 剧本没正文时静默拼空串 ⇒ 长时程读数变成「只长了我塞的分隔符」 ｜本机实测 2.0s／2 拍
+✅ lr-head-survival-claims-perfect-append — 头部存活比恒报 1 ⇒ 「一次压缩作废 42 万字符」这类读数从此消失，摊销也就无从判有无效果 ｜本机实测 1.7s／2 拍
+✅ lr-compaction-count-ignores-evidence — 压缩次数拿「抖了几次」冒充而不是数事件流 ⇒ 与 PC5/PC6 的认账口径分家，两个数从此互相矛盾 ｜本机实测 1.8s／2 拍
+✅ pb-pressure-escape-removed — 去掉「头寸紧就照剪」的逃生舱 ⇒ 为了少断前缀而把会话推到撞最终硬闸（fail-closed 变成会话失败） ｜本机实测 1.4s／2 拍
+✅ pb-threshold-always-apply — 门槛判定恒真 ⇒ 分批退化成旧行为，而门里 PC8 的对照还在报「策略有效」 ｜本机实测 1.4s／2 拍
+✅ pb-disabled-path-still-defers — 去掉「未启用即照旧」支 ⇒ 一条没人打开的策略改了生产装配（缺省零行为是底线） ｜本机实测 1.5s／2 拍
+✅ pb-fresh-savings-counts-everything — 增量把已发出去的几条也算进来 ⇒ 「永远已经攒够」，分批静默退化成逐轮剪（PC8 会红，但要先知道是这里） ｜本机实测 1.5s／2 拍
+✅ pb-wiring-passes-cumulative-not-fresh — 装配链把累计值递给策略（而不是增量）⇒ 策略算对了、判据照样无效果：本仓点名的「两头断」形状 ｜本机实测 1.7s／2 拍
+✅ pb-free-ride-branch-removed — 删掉「本轮已断过头就别攒」那条支路 ⇒ 压缩刚重写完整前缀，下一轮又为省未来的断再断一次（付两次钱只省了零次） ｜本机实测 1.4s／2 拍
+✅ pb-free-ride-flag-sticky — 旗标取用后不清零 ⇒ 蹭的那一次断变成之后每轮都免检：分批策略整条失效（PC9 判的是集合相等，正是为这一形而生的） ｜本机实测 1.8s／2 拍
+✅ pb-free-ride-flag-never-set — 压缩成功后不置旗标 ⇒ 白断一次头却仍然攒着，下一轮再断一次（同一原理的另一头断） ｜本机实测 1.8s／2 拍
+✅ pb-object-threshold-ignored — 只认 `pruneBatching: true`、把对象形式丢掉 ⇒ 门的对照臂（门槛=1）实际跑的是生产 40k 门槛，于是「只有压缩轮落盘」可能只是别的轮没活——主判据的对照变空 ｜本机实测 1.8s／2 拍
+✅ pb-control-arm-always-wired — 对照臂恒判「旋钮接得上」⇒ PC9 那半边成了装饰，主判据退化成「反正没别的能放行」的恒真式 ｜本机实测 2.1s／2 拍
+✅ permission-mode-unknown-fallthrough-blind — 去掉表外档位的 ask 兜底 ⇒ 未知 mode 拿到 undefined/宽松路径（旧写法是以 return allow 收尾：加一档或持久化冒出陌生值时静默全放行，正是本仓最忌的「少一档没人被编译器叫住」） ｜本机实测 1.6s／2 拍
+✅ permission-mode-events-copy-drift-blind — events 那份抄本少一档 ⇒ 对账判卷若测不出来，「唯一事实源」就是假的：permissions 加了档、events/IPC/worker 侧仍按旧集走，且没人报错 ｜本机实测 1.5s／2 拍
+✅ distill-gate-whitelist-unlabeled — 沉淀轮的白名单拒绝不带留痕 ⇒ §7 的可标分母少一格（受管调用发生了、判定也发生了，只是没人记） ｜本机实测 0.9s／2 拍
+✅ distill-gate-merged-verdict-collapse — 把「人说不」记成「门拦的」（rejected → denied）⇒ 最稀缺的正例静默消失，而读数看起来总条数没变 ｜本机实测 1.0s／2 拍
+✅ join-lapse-denominator-diluted — 分母把无 worker 的普通会话也算进去 ⇒ 占比被大量不相关 run 稀释成好看的 0，W1b 就此「有据」不做 ｜本机实测 1.9s／2 拍
+✅ join-lapse-terminal-list-recopied — 「在途」另抄一份判定而不复用 interruptedWorkers ⇒ 恢复面加一种终态时这里读成在途，两处分叉（第六族） ｜本机实测 1.8s／2 拍
+✅ join-lapse-unmeasurable-as-zero — 零 worker 时不走「不可测」分支 ⇒ 0/0 与「占比是 0」长成同一句话，读的人据此判定不用建闸（未证读成通过） ｜本机实测 1.8s／2 拍
+✅ join-lapse-families-counted-all-runs — 样本宽度按全语料数目录 ⇒ 无 worker 的文件把「样本只来自一次实验」这句警告自己稀释掉（本面施工时真踩过） ｜本机实测 1.8s／2 拍
+✅ latency-d8-rule-all-or-nothing — 可并发判据退回「整轮全是只读工具」⇒ 真语料那个 25 调用的轮（23 读 + 2 别的）被整轮判 0，读数与结论一起翻向 ｜本机实测 0.9s／2 拍
+✅ latency-streams-flattened — 把多个会话拼成一条数组再 tally ⇒ 一条流末尾未闭合的调用吞掉下一条流的「轮」（实测 189 轮读成 19 轮） ｜本机实测 1.1s／2 拍
+✅ latency-unmeasurable-as-zero — 无戳不再单独判「不可测」⇒ 旧语料上印出「工具耗时 0ms / 占比 0%」，D8 就据此被判定不值得做 ｜本机实测 0.9s／2 拍
+✅ latency-picker-swallows-empty-path — 指到的路径里没有 .jsonl 却不被记下 ⇒ 读数为空却像「本次跑过了」，与全语料那批混成一谈 ｜本机实测 0.9s／2 拍
+✅ latency-picker-always-uses-corpus — 无视命令行路径、永远扫登记表语料 ⇒ 「这一批的数」里混进别处的会话（e2e 读数就此失去归因） ｜本机实测 0.9s／2 拍
+✅ projection-exit-demote-orphan-unwired — 投影出口不再降级无前驱的回执 ⇒ 孤儿 tool 消息重新进上下文（三家 provider 各一种后果：两种 400 + 一种静默改名） ｜本机实测 0.9s／2 拍
+✅ scorecard-env-beats-billed-to-model — 不再识别环境拍 ⇒ 装不上工具链的机器把 run 判成「模型没修好」，成功率与返工数一起说谎（P1-3 归因白做） ｜本机实测 1.7s／2 拍
+✅ scorecard-private-write-list — 面里另抄一份两名字写向清单（不用 mayHaveWrittenDisk）⇒ shell 改盘的 run 被判 no-write，分母反过来骗人 ｜本机实测 1.7s／2 拍
+✅ scorecard-denominator-includes-unproven — 成功率分母把「证据缺席」的流也算进去 ⇒ 一个没人验过的 run 直接压低分数，读数不再可比 ｜本机实测 1.5s／2 拍
+✅ auto-verify-repair-settings-fallback-dropped — 生产入口不读盘上的 autoVerifyRepair ⇒ 设置界面那个「拍红后再要一轮去修」的开关是空的（内核那 7 条用例照绿） ｜本机实测 3.3s／2 拍
+✅ orchestrator-project-rules-not-passed — 构造口不递项目规则库 ⇒ worker 侧的 deny 全线失效（P0-2 那句「否则规则对 worker 全表失效」重新成立），而所有直接 new Orchestrator 的用例照绿 ｜本机实测 33.3s／2 拍
+✅ automation-face-dropped — 不拼那五份规格 ⇒ 模型面上又是零个（实现照装、能力照发不出去，且没人报错） ｜本机实测 1.2s／2 拍
+✅ automation-face-in-read-only — 只读档漏摘 ⇒ 只读会话能排下一次无人值守的写盘（与 wait/cancel 同族的漏摘形状） ｜本机实测 1.2s／2 拍
+✅ automation-specs-become-core — core 集合不减低频族 ⇒ 五件每次请求都进固定面、降配梯再也砍不掉它们 ｜本机实测 1.4s／2 拍
+✅ automation-spec-invents-a-field — 规格发明一个校验器不认的字段 ⇒ 模型照规格写必被拒成「未知字段」（规格与校验器两处手写的必然下场） ｜本机实测 1.5s／2 拍
+✅ head-import-js-suffix-never-swapped — 只做「加后缀」不做「换后缀」⇒ `./x.js` 这类 ESM 写法全被判成悬空（第一版实测 47 条假红里最大的一族）；假红一多，人们关的是门不是修尺 ｜本机实测 0.9s／2 拍
+✅ head-import-two-states-collapse — 「漏 git add」与「模块不存在」压成一态 ⇒ 修法完全不同的两类红长得一样（前者补一笔、后者要找删它的提交） ｜本机实测 1.0s／2 拍
+✅ head-import-waiver-never-goes-stale — 命中豁免却不记 hit ⇒ stale 永不触发，补好之后那条名还躺在表里（本仓「豁免不许静默烂在这儿」那一族） ｜本机实测 0.9s／2 拍
+✅ head-import-fixture-strings-counted — 去掉「行首或分号之后才算一条语句」这道边界 ⇒ 判卷里的假源码字符串（一行中间写着 import … from ./nope）又被当成真边，凭空多出十几条悬空 ｜本机实测 0.9s／2 拍
+✅ head-import-clause-spans-into-body — clause 那一截不设字符禁区 ⇒ 非贪婪从 export function f( 一路跨过整个函数体，撞上注释里举例用的 from ./todo ⇒ 尺把**自己**报成悬空（第 135 页实测） ｜本机实测 0.9s／2 拍
+✅ head-import-inline-type-not-stripped — 花括号里的内联 type 修饰不剥 ⇒ 「type B」整个当名字 ⇒ 既把合法写法报成缺失，又把整条标成读不懂而静默不判（第 135 页那 6 条假红全在这一族） ｜本机实测 0.8s／2 拍
+✅ head-import-as-side-swapped — a as b 在导入侧要源侧的 a、在导出侧要报出去的 b；取错一侧 ⇒ 目标明明导出 renamed 却按本地名判缺失（第十三族：一份谓词抄两处，这次收成一处，两处一起验） ｜本机实测 0.9s／2 拍
+✅ head-import-opaque-target-judged — 摘掉「目标看不全就不判」这道闸 ⇒ 凡是 export * from 的中转文件都会把下游名字报成缺失（假红一族，数量随依赖深度涨） ｜本机实测 0.8s／2 拍
+✅ head-import-partial-batch-counts-as-face — cat-file 回包形状不认识时交出「已经读到的那部分」⇒ 半份导出面拿去判自洽＝假绿（规则 92：读不到要说读不到） ｜本机实测 0.8s／2 拍
+✅ head-import-symbol-waiver-never-goes-stale — 符号那张豁免表命中却不记 hit ⇒ 补好后那条名永远躺在表里（本仓「豁免不许静默烂在这儿」那一族的第二张表） ｜本机实测 0.9s／2 拍
+✅ usage-stamp-call-dropped — 盖章器建出来了却没接进落盘漏斗 ⇒ 消费端照旧读到恒零归因，钱轴继续报不可测，而这一层的代码全在（「装配存在」≠「这格有不变量」那一族） ｜本机实测 3.1s／2 拍
+✅ usage-stamp-after-append — 先落盘后盖章 ⇒ 盘上那条没 model、内存里那条有：`onEvent` 看板算得出钱，重放与评估面算不出，两条对不上时没人知道自己看的是哪一份 ｜本机实测 3.0s／2 拍
+✅ main-usage-model-ignores-scripted-channel — 归因键不再问「这一轮走的是剧本吗」⇒ 冻结剧本的用量被盖上真档位名，评估面把从未发生的花费当真钱（与 `isScriptedModel ⇒ price=null` 同一口径） ｜本机实测 2.9s／2 拍
+✅ worker-usage-borrows-main-tier — worker 查不到自己的档时回落主会话那一档 ⇒ 本仓 flash 与 standard 差 4 倍、与 strong 差更多，整笔钱按错的档折（2026-09-23 那次 40 倍分叉的同一形状） ｜本机实测 2.9s／2 拍
+✅ usage-attribution-reads-declared-tier — 把归因挂回 `agent_spawned.model`（那个字段记的是申报/路由选中的**档位 id**，且无路由时整个缺席）⇒ 钱按申报档折、按真拨档花，正是第 145 页刚修掉的形状 ｜本机实测 3.0s／2 拍
+✅ usage-stamp-overwrites-producer-model — 不再先看 `e.model` ⇒ 生产者（provider 回执）自己上报的模型名被本地推断覆盖：provider 说得出的比我们猜的准，覆盖等于把最可靠的一格改成最可疑的一格 ｜本机实测 2.8s／2 拍
+✅ worker-selfname-not-stamped — 适配器不盖自述名 ⇒ 四支 provider 全落 harness 缺省档，而归因键与折价同一个变量，所以两者一起偏、永不互相打脸（#22 的盲区形状）。盖章点必须在包装函数里，四支各写一遍＝第五族「只硬化一支」 ｜本机实测 3.1s／2 拍
+✅ worker-selfname-ignored-by-orchestrator — 算出来不接（规则 230）：自述名有了、取值式子里却不读它 ⇒ 注入面带不带名字都一样，而带名字那条用例只看 usage_model 会误绿——所以见证比的是「两档给出两个不同的钱数」 ｜本机实测 3.0s／2 拍
+✅ usage-name-of-skips-callable-check — 不核可调用 ⇒ 任意带 usageName 字段的对象都被当成一路模型（这一格的入参来自 provider 侧，脏数据不该产出键） ｜本机实测 2.9s／2 拍
+✅ usage-name-of-accepts-non-string — 自述位不核类型 ⇒ 数字/对象被当成模型名往下传，后面 `priceForModel` 反查不到却也不出声——「不可知」要由空串表达，不能由一个非字符串值表达 ｜本机实测 3.0s／2 拍
+✅ orchestrator-spawned-usage-model-dropped — spawned 事件不带归因键 ⇒ 主会话的钱可有数了，worker 那一半仍然定不了价（同一份预算里两条通路只修通一条，就是半落库） ｜本机实测 3.4s／2 拍
+✅ cache-unreported-merged-back — 两半又加回一个数（哪怕塞进其中一格）⇒「读侧全在场、写侧全缺席」与「反过来」印成同一句话，本次就是被这个形状骗出一条错批语 ｜本机实测 1.8s／2 拍
+✅ cache-line-drops-write-half — 那一行只印读侧 ⇒ 写侧整列缺席（今天真实的情况）没人说出口，看的人以为自己那半有数 ｜本机实测 1.6s／2 拍
+✅ cache-line-prints-sum-for-both — 两半都印同一个合计 ⇒ 分列印只剩排版，「读侧 0 · 写侧 3」与「读侧 3 · 写侧 0」又印成一件事（恒真的仪表比没有仪表更贵） ｜本机实测 1.7s／2 拍
+✅ prompt-surface-empty-take-material-returns-green — 取料为空从「抛」改成「印 0 条发现」⇒ 装配面读不到时这道门给出**绿色读数**，而它存在的理由正是「文本承诺了一格、面上没有」（规则 128：非零退出＋零结论＝读数不可信，这里连退出码都变 0） ｜本机实测 3.1s／2 拍
+✅ prompt-surface-dead-counted-as-odd — 把 dead 并进 odd ⇒ 两类修法相反的事合成一个数：dead 要改名／删文案，odd 要拆 per-mode 文本（任务 #16），合并后剩下的计数读起来像「只差档没覆盖」，实际是指着不存在的能力（规则 239：三态要分开印） ｜本机实测 3.0s／2 拍
+✅ prompt-surface-exempt-leaks-across-modes — 豁免键从 `token@mode` 放宽成「这个 token 在任何档被登过就全放过」⇒ 一条 read-only 的存量理由会把 default 档新出现的缺席一起消掉，存量水位（只准调低）被静默抬高（规则 238：豁免只能由命中方清空） ｜本机实测 2.8s／2 拍
+✅ prompt-surface-face-scope-ignored — 把「这份文本只发给哪几档」的覆盖档丢掉、永远按全局四档判 ⇒ 拆开之后只发给在场档的文本也被牵连报红，而写错的档名不再抛（把「那一档的面读不到」静默读成「那一档没承诺」）——按档拆文本这一步就此失去证人 ｜本机实测 3.0s／2 拍
+✅ prompt-surface-readonly-text-not-applied — 装配点不再按档取文本（四档都拿共用文本）⇒ read-only 的模型继续读到 edit_file／wait_for_agents 这些它拿不到的承诺，而门仍然绿：门读的是 systemPromptFor 的输出，读不到「生产有没有真的调它」（规则 236：接线要单独钉） ｜本机实测 3.0s／2 拍
+✅ prompt-surface-line-edit-guard-skips — 摘掉「落点必须恰好命中」那一格 ⇒ 源文本里那行的开头字一改，这一档的差异就**静默消失**（模型读到别档的承诺而没人红），前缀写松了也会连坐邻居行；两种都只能在这一刻报，事后无从分辨 ｜本机实测 2.9s／2 拍
+✅ prompt-surface-faces-not-grouped — 取料面从「按文本相同合并」退化成「一档一面」⇒ 「一份文本对几档」这个信号消失，共用文本对缺席档的承诺永远不会报 odd（每档各自成面时，缺席那档的面就是它自己的文本，奇偶性被结构抹平） ｜本机实测 3.0s／2 拍
+✅ prompt-surface-readonly-description-not-applied — 按档换描述那一格摘掉 ⇒ 只读档的 `propose_plan` 继续写「批准前 write_file/run_shell 会被权限层拒绝」，而那两把在这一档连面都不在——文本描述一个它拿不到的能力（第 176 页现读抓到的那一格，同类事故第四次） ｜本机实测 2.8s／2 拍
+✅ prompt-surface-namesonly-switch-ignored — 把「描述面只认名单」这个开关摘掉（永远走形状）⇒ 参数名／目录名（`old_string`、`node_modules`）整报成死引用，门的读数会被噪声淹没，而真承诺（描述点了别档才有的工具）反而没人愿意看（规则 242：读数一坏，整格就失去证人） ｜本机实测 2.1s／2 拍
+✅ prompt-surface-description-faces-not-swept — 门的取料退回只喂系统文本 ⇒ 68 份工具描述面不再被扫，`propose_plan` 那一格会重新长回来而门照绿；判卷里那条「描述不点名别档工具」自己仍然绿，因为它读的是 descriptionFaces() 而不是门实际喂出去的那份（规则 236：接线要单独钉）。09-28 第 178 页重指：四族面收成 `faceFamilies()` 一处组成（`main()` 与判卷读同一份），旧针脚那条 `allFaces()` 拼接送不到这儿了 ｜本机实测 2.0s／2 拍
+✅ prompt-surface-reminder-faces-not-swept — 续跑提醒那一族不再逐证据态渲染（枚举退化成空）⇒ 门只读到静态的那两族（系统文本与工具描述），而**逐轮重发的 goal 提醒**回到没人看的状态——09-24 那次「join 文案命令模型去调不存在的工具」正是在这一族里，不在系统提示词里（规则 222：取料面空掉时「0 发现」是最像好消息的假绿） ｜本机实测 1.9s／2 拍
+✅ prompt-surface-goal-reminder-drops-verify — 收束条件那句不再点名 verify（改成「只有验证通过」）⇒ goal 模式每轮重送的指令失去**该调哪把工具**，模型只能凭猜；这条锚点守的是「提醒里点到的工具必须四档都在面上」这个不变量的前半（后半是逐档可得性判定） ｜本机实测 1.9s／2 拍
+✅ prompt-surface-param-faces-not-swept — 门的取料不再把参数描述那一族喂进去（现读 189 份，2026-09-28 第 178 页）⇒ 「参数说明里点了本档拿不到的工具」这一格回到没人看的状态；同笔那两条真取料判卷仍然绿，因为它们各自直接调 `paramFaces()`，看不见门实际喂出的那份（规则 236 第三次命中这一形状）。与 `description-faces-not-swept` 共用同一条 killer 用例——两条守的是同一行组成的不同成员，用例断言的是「四族都在面里」这个整体 ｜本机实测 1.9s／2 拍
+✅ prompt-surface-param-walk-freezes-path — 走树仍然递归、但不再往下带路径（`collectParamDescriptions(value, path, out)`）⇒ 面数一个不少（189 照样 189），只有「两层嵌套那 6 份在不在面里」那条判据看得见：嵌套参数说明全被并成同一个名字，递归这一支失去证人。选这个方向而不是「删掉递归」是有意的：后者会让取料数为 0 直接抛，任何判卷都红，分辨不出这一族到底被走没被走（规则 226：要给那道闸造只有它看得见的输入） ｜本机实测 1.9s／2 拍
+✅ prompt-surface-coverage-denominator-unfiltered — 覆盖率的分母不再滤掉「没有参数的工具」⇒ `verify`／`automation_list` 以 declared=0 进面，分母从 18 涨到 20，覆盖率从此替形状报错（一个从来没有参数的工具被读成「有参数没说明」）。读数类判据的分母必须与被度量对象同口径，否则「有 2 把没说明」这句话在骗人（规则 245／257①） ｜本机实测 2.0s／2 拍
+✅ prompt-surface-edit-path-prose-removed — 把 `edit_file.path` 的说明摘掉 ⇒ 模型只能靠撞闸才知道「绝对路径会被拒」（`resolveInWorkspace` 硬拒两种形状：绝对路径、越界），而每撞一次闸要付一整轮往返（现读一次模型往返 8.7–42s）。判卷两头都钉：说明里点名这两种拒绝 ＋ 闸真按这句话拒，再加一条「合规相对路径必须放行」防上面两条变成恒真（规则 228） ｜本机实测 2.0s／2 拍
+✅ prompt-surface-write-path-prose-removed — 只给两把写向工具中的一把补说明 ⇒ 同一族里规矩看起来不同（模型会按「有说明那把」的规矩推另一把）。这条与 `edit-path-prose-removed` 各用自己的 killer 用例：两条分支共用一条断言时，摘掉一支仍然全绿是本仓反复踩过的形状（规则 239） ｜本机实测 2.0s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 453.1s · 跑了 227/227 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 454 次／227 条（每条次数分布 2×227）· 单次中位 第1次 0.8s／第2次 0.8s· 最贵一条 orchestrator-project-rules-not-passed 33.3s
+跑法单价：selector 446 拍·中位 0.79s·坏拍（选中≠1） 0 vs whole 8 拍·中位 0.87s·坏拍（没量到或 0 条） 0
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-f3d6092-shard-2.lock）

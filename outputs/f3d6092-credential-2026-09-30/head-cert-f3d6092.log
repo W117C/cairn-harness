@@ -1,0 +1,18 @@
+目标提交：f3d6092（--at=HEAD）
+worktree add exit=0
+已核：TREE=f3d609247f7f696b1af3a78f6ce6f4d489714492｜判卷四面在飞 0 项
+cp -al node_modules exit=0
+依赖核对：该提交声明 10 项，缺 0 项
+  硬链接子仓库依赖 fixtures/todo-app/node_modules ← 主树 exit=0
+import 面：2894 条边｜悬空 0（其中存量已豁免 0）
+门表：29 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证汇总 ==
+  TREE=f3d6092 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-f3d6092.lock）
+  Test Files 244 passed (244)｜Tests 3169 passed (3169)｜exit=0（退出码直接取，不接管道）
+  并发判卷=起前 1 套／跑完 1 套（撞窗：本仓判卷有读写共享 /tmp 的用例）
+  逐条日志：/tmp/dsh-head-cert-f3d6092
+  回收这棵树（规则 120，别留残留）：git worktree remove --force .worktrees/head-cert-f3d6092
+  常驻残留树=6（/Users/ze/Downloads/deepseek harness/.worktrees/cost-rank@27a2459、/Users/ze/Downloads/deepseek harness/.worktrees/gate-head-cert@ae80d6e、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-verify@1c40df7、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-03af5f5@03af5f5、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-1c40df7@1c40df7、/Users/ze/Downloads/deepseek harness/.worktrees/verify-f3d6092@f3d6092）（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）
+  汇总已同步落盘（不靠 stdout 的尾）：/tmp/dsh-head-cert-f3d6092/summary.txt

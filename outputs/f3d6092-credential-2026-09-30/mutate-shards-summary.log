@@ -1,0 +1,10 @@
+名单 1019 条 → 4 片（293+238+227+261）· 切法=host· 装箱=实测秒（权重 1019/1019 条）·源=--cost-logs · 每片一棵树，锁标签 f3d6092-shard-<i>
+  片 0：293 条 @ /Users/ze/Downloads/deepseek harness/.worktrees/verify-f3d6092 · 原文=/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/mutate-shards-f3d6092-shard-0.log
+  片 1：238 条 @ /Users/ze/Downloads/deepseek harness/.worktrees/shard-f3d6092-b · 原文=/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/mutate-shards-f3d6092-shard-1.log
+  片 2：227 条 @ /Users/ze/Downloads/deepseek harness/.worktrees/shard-f3d6092-c · 原文=/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/mutate-shards-f3d6092-shard-2.log
+  片 3：261 条 @ /Users/ze/Downloads/deepseek harness/.worktrees/shard-f3d6092-d · 原文=/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/mutate-shards-f3d6092-shard-3.log
+  判定 片 0 verify-f3d6092：293 条 ⇒ 已杀死
+  判定 片 1 shard-f3d6092-b：238 条 ⇒ 已杀死
+  判定 片 2 shard-f3d6092-c：227 条 ⇒ 已杀死
+  判定 片 3 shard-f3d6092-d：261 条 ⇒ 已杀死
+分片 4 份 · 交出 1019 条 · 墙钟 474.7s · 判定[已杀死:4] · 已杀死那几片合计 1019 条 · 待处理 0 条 · 加速比 2.29×（串行分母 1085.3s 由参数给出）
