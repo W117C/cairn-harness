@@ -115,7 +115,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   observationPack: false,
   evidenceReceipts: false,
   economicCompaction: false,
-  impactAnalysis: false,
+  // 跨文件波及面：写完一个文件后告诉模型「谁调用了它」，让它在改第二处之前先看见第一处。
+  // 用户裁决 2026-09-27 翻默认——三个「省钱 / 少返工」开关里只翻这一个：它不改花钱行为，
+  // 而 `routingBandit`（每轮换模型）与 `maxBudgetUsd`（要一个具体数字）都改，且仓里还没有
+  // 外部基准读数可依（要翻先得接基准）。代价是每次写后多一次跨文件调用点扫描。
+  impactAnalysis: true,
   // 能力 5 的收束闸：核心产品要求 lint/test 两者默认开，而这里曾长期 false
   // （09-19 设计稿 D7 记的"燃料默认不在线"）。用户裁决 2026-09-23：**只翻这一项**，
   // `actionFusion` 仍留关，等准确率与 `$/成功任务` 的对照数出来再裁。
@@ -194,7 +198,9 @@ export function validateSettings(raw: unknown): AppSettings {
     observationPack: r.observationPack === true,
     evidenceReceipts: r.evidenceReceipts === true,
     economicCompaction: r.economicCompaction === true,
-    impactAnalysis: r.impactAnalysis === true,
+    // 缺省开的键一律走 `d.` 回退（`promptCache` / `autoVerify` 同族）：写成 `=== true` 会让
+    // 「缺省开」对每一台已写过 settings 文件的机器静默变成「关」——2026-09-27 翻默认时踩过。
+    impactAnalysis: typeof r.impactAnalysis === "boolean" ? r.impactAnalysis : d.impactAnalysis,
     // 缺省开的键一律走 `d.` 回退（上一条 `promptCache` 同族）：写成 `=== true` 会让「缺省开」
     // 对每一台已写过 settings 文件的机器静默变成「关」——而 §483 要的正是默认开。
     autoVerify: typeof r.autoVerify === "boolean" ? r.autoVerify : d.autoVerify,

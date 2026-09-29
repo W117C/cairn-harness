@@ -15,5 +15,10 @@ there is no Electron entry, preload, renderer, or desktop build configuration in
 - Keep core modules free of UI and Electron imports.
 - Run `node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts` for the full core suite.
 - Run `node --import tsx scripts/typecheck.ts` before handing off changes.
+- `pnpm mutate-verify` measures **HEAD, not the working tree**. It re-execs itself into a disposable
+  worktree, because that gate edits source files in place and its cleanup cannot survive a timeout
+  (a killed run leaves mutants and `.mutbak` files behind in `src/`). To mutation-verify an
+  uncommitted change, commit it first. Running the script directly in a main checkout is refused
+  rather than run in place.
 - Do not modify frozen judge files or fixtures as a workaround.
 - Preserve unrelated dirty changes from other sessions; do not reset or stash them.

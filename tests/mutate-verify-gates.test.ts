@@ -3,10 +3,11 @@
 // 「基线就不是全绿」+「变异存活」——真回归信号被并发噪声伪装掉了。
 import { describe, expect, it } from "vitest";
 import { spawnSync, execFileSync } from "node:child_process";
-import { readFileSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, costRollupOf, entryDisposition, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, selectChangedEntries, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type AnchorCostRow, type HeadState } from "../scripts/lib/mutate-gates";
+import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, costRollupOf, entryDisposition, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, judgeWithRetry, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, mutateTreeGuard, needleProblemLine, preflightRefusals, restoreCheck, selectChangedEntries, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type AnchorCostRow, type HeadState, type RestoreVerdict } from "../scripts/lib/mutate-gates";
 import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
 
 /** 从锚点表取 `{id,test,expectFail}`：只走 `--list` 这条**不改源文件**的入口。
@@ -759,7 +760,7 @@ describe("baselineRedKind：基线红要分「载不动」与「真的不绿」"
 
   it("接线：基线那一步真调这把分诊尺（不然是拿着读数当结论）", () => {
     const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
-    expect(/^\s*const kind = baselineRedKind\(base\.out\);$/m.test(src)).toBe(true);
+    expect(/^\s*const kind = baselineRedKind\(baseRun\.probe\.out\);$/m.test(src)).toBe(true);
     expect(/^\s*if \(kind\.kind === "unloadable"\) \{$/m.test(src)).toBe(true);
   });
 });
@@ -974,5 +975,368 @@ describe("成本分母：每条锚点实际 spawn 了几次判卷", () => {
     const exits = (src.match(/return \{ m, ok/g) ?? []).length;
     const carried = (src.match(/runsMs: runs/g) ?? []).length;
     expect(carried, "有出口没带账本＝那条锚点的花费从分母里消失").toBe(exits);
+  });
+});
+
+/* V-1/V-2（审查，09-28 整表实测 936 条）：判卷里一条**与变异无关**的偶发红（tests/head-cert-deps.test.ts
+   的 index mtime 负控，碰真 git）同时污染了两个观测点——第 ① 步基线把
+   `depdirs-descends-into-node-modules` 读成「基线红」，第 ④ 步把 `concurrency-hint-fires-on-green`
+   读成「还原没还原好」。两条是同一个病根，且这个判卷文件被 47 条锚点共用（`--list` 实点），
+   一次翻红就集体丢认证。⇒ 瞬时红的概率没法靠再多读一遍数压掉，只能在读数那一格放过。
+   这一组量的是两格共用的那个重试原语：绿的一拍不多跑、瞬时红放过、持续红仍按最终那拍算。 */
+describe("判卷重试原语：瞬时红放过、持续红仍红（V-1/V-2）", () => {
+  const probe = (code: number, ms: number, out = "out") => ({ code, ms, out });
+  /** 喂一个按次序返回的脚本，run 每次调一格；用完就说明调用次数超了脚本长度。 */
+  const scripted = (codes: number[]): { run: () => { code: number; ms: number; out: string }; calls: () => number } => {
+    let i = 0;
+    return {
+      run: () => {
+        if (i >= codes.length) throw new Error(`judgeWithRetry 多跑了一格：脚本只有 ${codes.length} 格`);
+        const n = i;
+        i++;
+        return probe(codes[n], 100 * (n + 1), `第${n + 1}拍`);
+      },
+      calls: () => i,
+    };
+  };
+
+  it("第一次就绿 ⇒ 只跑一格，不多付那一拍", () => {
+    const s = scripted([0]);
+    const r = judgeWithRetry(s.run);
+    expect(r.probe.code).toBe(0);
+    expect(r.runsMs, "绿了就该收手：白跑一格就是白烧").toEqual([100]);
+    expect(s.calls()).toBe(1);
+  });
+
+  it("第一次红、重试绿 ⇒ 最终交回的是**重试那拍**（V-1 那一格：基线偶发红不许读成真红）", () => {
+    const s = scripted([1, 0]);
+    const r = judgeWithRetry(s.run);
+    expect(r.probe.code, "瞬时红放过，基线才走得下去").toBe(0);
+    expect(r.probe.out, "交回的必须是最终那拍的输出，不是第一次那个红的").toBe("第2拍");
+    expect(r.runsMs, "多付的那一拍要照实记进账本").toEqual([100, 200]);
+    expect(s.calls()).toBe(2);
+  });
+
+  it("两次都红 ⇒ 最终交回红（持续红不许被放过：还原/基线真坏掉时这道保证不许松）", () => {
+    const s = scripted([1, 1]);
+    const r = judgeWithRetry(s.run);
+    expect(r.probe.code, "持续红＝真坏掉，不许放过").not.toBe(0);
+    expect(r.probe.out, "要交回最终那拍，读的人才知道重试也没救回来").toBe("第2拍");
+    expect(r.runsMs).toEqual([100, 200]);
+  });
+
+  it("反向：把重试删掉（第一次红就交回）这条判卷当场红——否则基线/还原两格对偶发红没有牙", () => {
+    // 变异体：judgeWithRetry 少了第二次 run。
+    const mutant = (run: () => { code: number; ms: number; out: string }): { probe: { code: number; ms: number; out: string }; runsMs: number[] } => {
+      const first = run();
+      return { probe: first, runsMs: [first.ms] };
+    };
+    const s = scripted([1, 0]);
+    const r = mutant(s.run);
+    expect(r.probe.code, "这一格就是 V-1/V-2 的正解：没有重试，偶发红会把基线/还原读成真红").not.toBe(0);
+    expect(s.calls(), "没有第二次 run，重试这一格整个不存在").toBe(1);
+  });
+});
+
+/* V-2（审查）：上一组量的是共用的重试原语，这里量的是第 ④ 步**自己那层壳**——把 probe 翻成
+   `verifyEntry` 真正读的那份 ok/why 契约，以及两条只在壳上才会犯的错（删掉重试、恒真放过）。 */
+describe("还原后那格（V-2）：重试原语在壳上翻成 ok/why", () => {
+  const probe = (code: number, ms: number, out = "out") => ({ code, ms, out });
+  /** 喂一个按次序返回的脚本，run 每次调一格；用完就说明调用次数超了脚本长度。 */
+  const scripted = (codes: number[]): { run: () => { code: number; ms: number; out: string }; calls: () => number } => {
+    let i = 0;
+    return {
+      run: () => {
+        if (i >= codes.length) throw new Error(`restoreCheck 多跑了一格：脚本只有 ${codes.length} 格`);
+        const n = i;
+        i++;
+        return probe(codes[n], 100 * (n + 1), `第${n + 1}拍`);
+      },
+      calls: () => i,
+    };
+  };
+
+  it("还原后第一次就绿 ⇒ 只跑一格，不多付那一拍", () => {
+    const s = scripted([0]);
+    const v = restoreCheck(s.run);
+    expect(v.ok).toBe(true);
+    expect(v.runsMs, "绿了就该收手：白跑一格就是白烧").toEqual([100]);
+    expect(s.calls()).toBe(1);
+  });
+
+  it("第一次红、重试绿 ⇒ 放过（判卷里与本条无关的偶发红不许把已杀死的锚点记成存活）", () => {
+    const s = scripted([1, 0]);
+    const v = restoreCheck(s.run);
+    expect(v.ok, "第 ③ 步已经正确杀死的锚点，还原那一步偶发红就得放过").toBe(true);
+    expect(v.runsMs, "多付的那一拍要照实记进账本").toEqual([100, 200]);
+    expect(s.calls()).toBe(2);
+  });
+
+  it("重试仍红 ⇒ 判失败，且措辞点名「重试仍红」（还原真坏掉时这道保证不许松）", () => {
+    const s = scripted([1, 1]);
+    const v = restoreCheck(s.run);
+    expect(v.ok, "持续红＝还原没成功或判卷持续坏，两种都不许放过").toBe(false);
+    expect(v.why).toContain("重试仍红");
+    expect(v.why, "失败时要点名是哪一拍的输出，否则读的人无从判断").toContain("第2拍");
+    expect(v.runsMs).toEqual([100, 200]);
+  });
+
+  it("反向：把重试删掉（第一次红就判失败）这条判卷当场红——否则「放过瞬时红」没有牙", () => {
+    // 变异体：restoreCheck 少了第二次 run，红 ⇒ 失败。
+    const mutant = (run: () => { code: number; ms: number; out: string }): RestoreVerdict => {
+      const first = run();
+      const runsMs = [first.ms];
+      return first.code === 0 ? { ok: true, runsMs } : { ok: false, runsMs, why: `还原后未恢复全绿:\n${first.out.slice(-800)}` };
+    };
+    const s = scripted([1, 0]);
+    const v = mutant(s.run);
+    expect(v.ok, "这一格就是 V-2 的正解：删了重试，偶发红会把已杀死的锚点记成存活").toBe(false);
+    expect(s.calls(), "没有第二次 run，重试这一格整个不存在").toBe(1);
+  });
+
+  it("反向：把「重试仍红也放过」写死（恒真）这条判卷当场红——持续红的保证不许被放宽", () => {
+    // 变异体：无论重试红不红都算过。
+    const mutant = (run: () => { code: number; ms: number; out: string }): RestoreVerdict => {
+      const first = run();
+      const runsMs = [first.ms];
+      if (first.code === 0) return { ok: true, runsMs };
+      const retry = run();
+      runsMs.push(retry.ms);
+      return { ok: true, runsMs };
+    };
+    const s = scripted([1, 1]);
+    const v = mutant(s.run);
+    expect(v.ok, "放过持续红＝还原彻底坏掉也不报，那这道门就只剩表演").toBe(true);
+    expect(v.why, "判过却带着 why，读者会被误导").toBeUndefined();
+  });
+});
+
+/* S-2（审查）：本门**就地改源文件**，而收尾兜底拦不住超时——`verifyEntry` 上方「实测边界（09-23）」
+   记的就是那次：SIGTERM 进不了 `execFileSync` 阻塞着的事件循环，突变体与 `.mutbak` 一起留在 `src/` 里。
+   所以能动的树必须是一次性的 worktree。这一组三支各钉一格：判据本身、判据接的是不是**真 git**的形状、
+   以及两端真跑（本树拒／一次性树放行）时盘上有没有被动过。 */
+describe("树闸：就地改源文件这件事只许发生在一棵一次性 worktree 里", () => {
+  const MAIN_SHAPE = { root: "/repo", gitDir: ".git\n", commonDir: ".git\n" };
+  const WT_SHAPE = { root: "/repo/.worktrees/gate-mutate-verify", gitDir: "/repo/.git/worktrees/gate-mutate-verify\n", commonDir: "/repo/.git\n" };
+
+  it("主检出拒跑、linked worktree 放行——两支只差一个维度，结论换人", () => {
+    const main = mutateTreeGuard(MAIN_SHAPE);
+    expect(main.kind, "主检出放行＝突变体可以直接落在用户的工作树上").toBe("refused");
+    // 针脚钉的是**判据本身**（两条 git 路径同指一处），不是「主检出」这三个字：那个词在
+    // `mutate-verify.mjs` 的两条无关错误消息里也各有一次，钉它等于没钉——真把相等判断翻成不等，
+    // 断言照样绿。改成钉判据后，副本从 3 处降到 1 处，也就不再是「顶包候选」了。
+    expect(main.kind === "refused" && main.why).toContain("git-dir 与 git-common-dir 同指");
+    // 对照支：只把两个 git 路径换成一棵链接树的形状，其余入参一字不动。
+    expect(mutateTreeGuard(WT_SHAPE)).toEqual({ kind: "go" });
+  });
+
+  it("相对 `.git` 与绝对路径按 root 解析后再比（格式差不许被读成「两棵树」）", () => {
+    // 主树给的是**相对** `.git`，链接树给的是绝对路径。直接比字符串时，下面这组会被误判成 linked ⇒ 放行。
+    const same = mutateTreeGuard({ root: "/repo", gitDir: "/repo/.git", commonDir: ".git" });
+    expect(same.kind, "同一个 .git 写成两种形状就被当成两棵树，树闸等于没有").toBe("refused");
+  });
+
+  it("读不出 git 的答案按主检出处置（fail-closed：证明不了自己是一次性的，就不许动盘）", () => {
+    for (const bad of [{ ...MAIN_SHAPE, gitDir: "" }, { ...MAIN_SHAPE, commonDir: "  " }]) {
+      const g = mutateTreeGuard(bad);
+      expect(g.kind, "git 读不出来就放行＝在没装 git 的机器上直接改盘").toBe("refused");
+      expect(g.kind === "refused" && g.why).toContain("证明不了");
+    }
+  });
+
+  it("行为证人：这对入参交给**真 git**——同一台机器上主检出同指、linked worktree 分指，两支各自过闸", () => {
+    // 纯函数那一支证明的是「我写的判据自洽」；这一支证明的是「我喂进去的形状真的是 git 说的那种」。
+    // 形状写反了（以为主树给绝对路径、链接树给同一个）的话，三条纯函数断言照样全绿。
+    const dir = mkdtempSync(join(tmpdir(), "dsh-treeguard-"));
+    const repo = join(dir, "repo");
+    const wt = join(dir, "wt");
+    try {
+      mkdirSync(repo);
+      const git = (args: string[], cwd: string): string =>
+        execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+      git(["init", "-q"], repo);
+      writeFileSync(join(repo, "a.txt"), "seed\n", "utf8");
+      git(["add", "-A"], repo);
+      git(["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"], repo);
+      git(["worktree", "add", "--detach", "-q", wt, "HEAD"], repo);
+
+      const at = (root: string) => ({ root, gitDir: git(["rev-parse", "--git-dir"], root), commonDir: git(["rev-parse", "--git-common-dir"], root) });
+      const inMain = at(repo);
+      const inWt = at(wt);
+      expect(mutateTreeGuard(inMain).kind, "主检出的真实 git 形状必须被拒：" + JSON.stringify(inMain)).toBe("refused");
+      expect(mutateTreeGuard(inWt).kind, "linked worktree 的真实 git 形状必须放行：" + JSON.stringify(inWt)).toBe("go");
+      // 两支的差别只在「git-dir 与 common-dir 是不是同一处」，不是别的什么玄学条件。
+      expect(resolve(repo, inMain.gitDir) === resolve(repo, inMain.commonDir)).toBe(true);
+      expect(resolve(wt, inWt.gitDir) === resolve(wt, inWt.commonDir)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("树闸接线：真跑本脚本——主检出拒跑且一个字节都没改过盘，linked worktree 放行", () => {
+  const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
+  const ANCHOR = "frozen-s3-9";
+  const ANCHOR_SRC = "src/frozen.ts";
+  const mutbaksIn = (root: string): string[] => {
+    const out: string[] = [];
+    const walk = (abs: string): void => {
+      let es;
+      try { es = readdirSync(abs, { withFileTypes: true }); } catch { return; }
+      for (const e of es) {
+        if (e.isDirectory()) walk(join(abs, e.name));
+        else if (e.name.endsWith(".mutbak")) out.push(join(abs, e.name));
+      }
+    };
+    for (const d of ["src", "scripts", "tests"]) walk(join(root, d));
+    return out.sort();
+  };
+
+  /* 靶子是一座**临时 git 仓库**，不是本仓：① 主检出那一支的读数必须是「这座仓库是主检出」，
+     在别人的工作树上跑本文件时（head-cert 就是这么跑的）那句话会变成假的前提；
+     ② 真跑本脚本会占锁、会在 linked worktree 上留下 git 的登记，靶子自己带回收，不碰本仓任何状态。
+     搬进来的只有**被测的那三份代码**——树闸住在里面，判卷跑的是真代码，不是照着源码形状写的那份复刻。 */
+  const fixture = (): { dir: string; main: string; wt: string } => {
+    const dir = mkdtempSync(join(tmpdir(), "dsh-s2-tree-"));
+    const main = join(dir, "repo");
+    mkdirSync(join(main, "scripts/lib"), { recursive: true });
+    mkdirSync(join(main, "src"), { recursive: true });
+    for (const rel of ["scripts/mutate-verify.mjs", "scripts/lib/mutate-gates.ts", "scripts/lib/tool-lock.ts"]) {
+      writeFileSync(join(main, rel), readFileSync(join(repoRoot, rel), "utf8"), "utf8");
+    }
+    writeFileSync(join(main, ANCHOR_SRC), "export const ANCHOR_SENTINEL = 1;\n", "utf8");
+    symlinkSync(join(repoRoot, "node_modules"), join(main, "node_modules")); // 软链只为 import typescript/tsx 用
+    const git = (args: string[]): string => execFileSync("git", args, { cwd: main, encoding: "utf8" }).trim();
+    git(["init", "-q"]);
+    git(["add", "-A", "--", "src", "scripts"]);
+    git(["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "fixture"]);
+    const wt = join(dir, "wt");
+    execFileSync("git", ["worktree", "add", "--detach", "-q", wt, "HEAD"], { cwd: main, encoding: "utf8" });
+    symlinkSync(join(repoRoot, "node_modules"), join(wt, "node_modules"));
+    return { dir, main, wt };
+  };
+  // ⚠️ 入参是**脚本自己的绝对路径**，`ROOT` 由 `import.meta.url` 推出来 ⇒ cwd 在哪棵树与它无关。
+  // 这不是判卷取巧，是本门真实的形状：`cd <worktree> && node <主检出>/scripts/mutate-verify.mjs`
+  // 一点隔离都没得到。树闸认的是「脚本住在哪棵树」，所以对照支必须换成树里那份副本。
+  // 路径**不过** `realpathSync`：靶子落在 `tmpdir()` 下，macOS 上那串路径带 `/var` 软链，
+  // 正是脚本必须自己扛住的形状——脚本那道闸两边都归一化真路径之后才比（S2-3）。
+  // 这里原来有一处 `realpathSync` 兜底，那是给那个 bug 打的补丁；病根修好就把补丁拆了，
+  // 让本 describe 的每一条判卷都跑在调用方真会敲进来的那一串路径上。
+  const runAt = (script: string, cwd: string, tag: string): { status: number | null; out: string } => {
+    const r = spawnSync(process.execPath, ["--import", "tsx", script, "--lock-tag=" + tag, ANCHOR], { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    return { status: r.status, out: (r.stdout ?? "") + (r.stderr ?? "") };
+  };
+
+  it("主检出里真跑 ⇒ exit 2、说清是主检出、且盘上一个字节都没动", () => {
+    const f = fixture();
+    try {
+      const before = readFileSync(join(f.main, ANCHOR_SRC), "utf8");
+      const { status, out } = runAt(join(f.main, "scripts/mutate-verify.mjs"), f.main, "s2-main");
+      expect(status, out).toBe(2);
+      expect(out, "拒跑那一支必须说清是主检出（读的人要知道该去哪跑）").toContain("git-dir 与 git-common-dir 同指");
+      expect(out).toContain("树闸拒跑");
+      // 这两支才是这次修复的**全部**承诺：拒跑，且拒跑不改盘。
+      expect(readFileSync(join(f.main, ANCHOR_SRC), "utf8"), "拒跑了却把源文件改了").toBe(before);
+      expect(mutbaksIn(f.main), "拒跑了却留下/吃掉了 .mutbak").toEqual([]);
+    } finally {
+      rmSync(f.dir, { recursive: true, force: true });
+    }
+  });
+
+  it("同一份代码换进 linked worktree ⇒ 树闸放行，接着被预检按「源文件在飞」停在写盘之前", () => {
+    // 上面那支的对照：代码、锚点、入参形状全一样，只差「脚本住在哪棵树」。
+    const f = fixture();
+    try {
+      // 让锚点的 src 相对这棵树自己的 HEAD 有改动 ⇒ 预检必拒它 ⇒ 一个突变体都不会产生。
+      writeFileSync(join(f.wt, ANCHOR_SRC), readFileSync(join(f.wt, ANCHOR_SRC), "utf8") + "// 在飞改动\n", "utf8");
+      const { status, out } = runAt(join(f.wt, "scripts/mutate-verify.mjs"), f.wt, "s2-wt");
+      expect(out, "linked worktree 里被树闸拦下 ⇒ 判据读错了自己的树").not.toContain("树闸拒跑");
+      expect(out, "没走到预检 ⇒ 这一支根本没证明「放行」").toContain("预检拒 1 条");
+      expect(status, out).toBe(1);
+      expect(mutbaksIn(f.wt), "预检拒掉的那一条不许留下 .mutbak").toEqual([]);
+    } finally {
+      rmSync(f.dir, { recursive: true, force: true });
+    }
+  });
+
+  it("反向哨兵：主检出那支要是靠 `--in-worktree` 逃出去的，这条当场红（隔离必须由树闸保证，不靠调用方记得带参数）", () => {
+    // 判卷跑整表时通常带 `--in-worktree`（门表就这么接的）；不带的话这道闸是唯一一道。
+    // 所以这里量的是**不带那个参数**时的行为：它拒 ⇒ 任何绕过 package.json 的调用都动不了主检出。
+    const f = fixture();
+    try {
+      const r = spawnSync(process.execPath, ["--import", "tsx", join(f.main, "scripts/mutate-verify.mjs"), ANCHOR], { cwd: f.main, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+      const out = (r.stdout ?? "") + (r.stderr ?? "");
+      expect(r.status, out).toBe(2);
+      expect(out).toContain("树闸拒跑");
+    } finally {
+      rmSync(f.dir, { recursive: true, force: true });
+    }
+  });
+
+  it("语义钉：建出来被量的那棵树是 **HEAD**，主树里未提交的那份改动不进它（AGENTS.md 那条工作规则的可执行面）", () => {
+    /* 这条钉的是 (c) 换来的那份能力缩减，而且是钉在**盘上**而不是文档里：主树改了文件，
+     * 门量到的必须还是 HEAD 那一份。文档那句「想验在飞改动先提交」没有判卷兜着就会烂掉——
+     * 而这里量的是真脚本建出来的真树，读数改不了。 */
+    const f = fixture();
+    try {
+      const git = (args: string[]): string => execFileSync("git", args, { cwd: f.main, encoding: "utf8" }).trim();
+      writeFileSync(join(f.main, ANCHOR_SRC), "export const ANCHOR_SENTINEL = 2;\n", "utf8"); // 提交之前改
+      expect(git(["status", "--porcelain", "--", ANCHOR_SRC]), "前提：这份改动确实在飞").not.toBe("");
+
+      // 坏 id 让子进程在未知 id 校验处提前 exit 2：本用例要量的是**建出来那棵树的内容**，
+      // 整表跑完（十几分钟）与这个断言无关，不花那个钱。
+      const r = spawnSync(process.execPath, ["--import", "tsx", join(f.main, "scripts/mutate-verify.mjs"), "--in-worktree=.worktrees/head-only", "no-such-id-zzz"], { cwd: f.main, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+      const out = (r.stdout ?? "") + (r.stderr ?? "");
+      expect(r.status, out).toBe(2);
+      expect(out, "重定向那一支要没过树闸，这棵树压根没建起来，下面三条都是空断言").not.toContain("树闸拒跑");
+
+      const built = readFileSync(join(f.main, ".worktrees/head-only", ANCHOR_SRC), "utf8");
+      expect(built, "被量的那棵树必须是 HEAD 那一份").toContain("ANCHOR_SENTINEL = 1");
+      expect(built, "主树里未提交的那份不许被带进被量的树").not.toContain("ANCHOR_SENTINEL = 2");
+      expect(readFileSync(join(f.main, ANCHOR_SRC), "utf8"), "主树的在飞改动不许被这一趟改掉").toContain("ANCHOR_SENTINEL = 2");
+    } finally {
+      rmSync(f.dir, { recursive: true, force: true });
+    }
+  });
+
+  it("软链路径调脚本不许被误判成「被 import」（S2-3）", () => {
+    /* 显式造一个软链，而不是靠靶子恰好落在 `/var` 后面。理由是覆盖率按平台而变：macOS 上
+     * `tmpdir()` 返回 `/var/...`（软链），本 describe 的每一条判卷其实已经隐式覆盖了这一格；
+     * Linux 上 `/tmp` 是真目录，隐式覆盖**不存在**——不显式钉住，这道修复在那边就没人盯。
+     * 老症状：脚本拿 `resolve(argv[1])`（未归一化）去比 `import.meta.url`（真路径），
+     * 于是软链调用被以「被 import」的措辞拒掉，理由与真实原因毫无关系。 */
+    const f = fixture();
+    try {
+      const alias = join(f.dir, "alias");
+      symlinkSync(f.main, alias);
+      const r = spawnSync(process.execPath, ["--import", "tsx", join(alias, "scripts", "mutate-verify.mjs"), ANCHOR], { cwd: f.main, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+      const out = (r.stdout ?? "") + (r.stderr ?? "");
+      expect(r.status, out).toBe(2);
+      expect(out, "软链路径调用被说成「被 import」＝ S2-3 没修好（措辞与真实原因毫无关系）").not.toContain("被 import");
+      expect(out, "它应当走到树闸那一支：靶子是主检出 ⇒ 拒跑").toContain("树闸拒跑");
+    } finally {
+      rmSync(f.dir, { recursive: true, force: true });
+    }
+  });
+
+  it("树名的包含判定：解完仍在主检出里就放行，解出去了才拒（S2-4 拆掉的那格假阳性）", () => {
+    /* 三格对照，同一个靶子、同一种「带坏 id 提前 exit 2」的跑法，量的是措辞：
+     *  ① `..foo` 名字里带 `..`，但 `resolve` 完仍在仓内 ⇒ 放行（旧尺见 `..` 就拒，是白拒）；
+     *  ② `../evil` 真逃出去了 ⇒ 拒；
+     *  ③ `.` 就指着当前这棵树 ⇒ 拒，但理由必须是「没有隔离」，不许混进「逃出」那一条——
+     *     两条都是 exit 2 而措辞不同，判卷读的就是这个区别（锁那条探法靠的也是同一格分辨）。 */
+    const f = fixture();
+    try {
+      const script = join(f.main, "scripts", "mutate-verify.mjs");
+      const run = (tree: string): string => {
+        const r = spawnSync(process.execPath, ["--import", "tsx", script, "--in-worktree=" + tree, "no-such-id-zzz"], { cwd: f.main, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+        return (r.stdout ?? "") + (r.stderr ?? "");
+      };
+      expect(run("..foo"), "名字带 `..` 但解完仍在仓内 ⇒ 不该被拒（这一格就是 S2-4 要拆的假阳性）").not.toContain("逃出了主检出");
+      expect(run("../evil"), "真逃出主检出必须拒").toContain("逃出了主检出");
+      expect(run("."), "指着当前这棵树必须拒，且理由是「没有隔离」不是「逃出」").toContain("没有隔离");
+    } finally {
+      rmSync(f.dir, { recursive: true, force: true });
+    }
   });
 });

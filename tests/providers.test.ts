@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { mergeAssistantDeltas, type AgentEvent, type AssistantDeltaEvent, type ToolCallEvent, type UsageEvent } from "../src/events";
 import type { ProviderMessage, ProviderToolSpec } from "../src/providers";
-import { streamOpenAI } from "../src/providers/openai";
+import { chatCompletionsEndpoint, streamOpenAI } from "../src/providers/openai";
 import { streamAnthropic } from "../src/providers/anthropic";
 import { streamGemini } from "../src/providers/gemini";
 import {
@@ -108,6 +108,29 @@ describe.each([
     const withNoise = [...base.slice(0, 1), "data: ping", ": keep-alive", ...base.slice(1)];
     const events = await collect(stream(USER, { apiKey: "test", fetchImpl: stubFetch(withNoise) }, [SPEC]));
     expect(mergeAssistantDeltas(deltasOf(events))).toBe("你好，世界");
+  });
+});
+
+describe("OpenAI 兼容网关的 baseURL 归一", () => {
+  it("给到 /v1 一层的 base 会补 /chat/completions（README 那条 recipe 原本照抄必然 404）", () => {
+    expect(chatCompletionsEndpoint("https://api.deepseek.com/v1")).toBe("https://api.deepseek.com/v1/chat/completions");
+    expect(chatCompletionsEndpoint("https://openrouter.ai/api/v1")).toBe("https://openrouter.ai/api/v1/chat/completions");
+  });
+
+  it("已经带全的 endpoint 原样用（GLM_ENDPOINT 那种写法零破坏），尾斜杠不产生双斜杠", () => {
+    expect(chatCompletionsEndpoint("https://open.bigmodel.cn/api/paas/v4/chat/completions"))
+      .toBe("https://open.bigmodel.cn/api/paas/v4/chat/completions");
+    expect(chatCompletionsEndpoint("https://api.deepseek.com/v1/")).toBe("https://api.deepseek.com/v1/chat/completions");
+  });
+
+  it("拨号用的就是归一后的地址：base 写法打到补全后的路径上", async () => {
+    let seen = "";
+    const stubFetch = async (url: string): Promise<Response> => {
+      seen = String(url);
+      return new Response("data: [DONE]\n\n", { status: 200 });
+    };
+    await collect(streamOpenAI(USER, { apiKey: "test", baseURL: "https://example.test/v1", fetchImpl: stubFetch as unknown as typeof fetch }, [SPEC]));
+    expect(seen).toBe("https://example.test/v1/chat/completions");
   });
 });
 

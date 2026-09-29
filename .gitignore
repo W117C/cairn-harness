@@ -28,3 +28,10 @@ docs/facts/
 .qoder/
 .workbuddy/
 .workbuddy-ai/
+
+# mutate-verify 的原件备份：它就地改写源文件，把原件复制成 <file>.mutbak 再还原。
+# 2026-09-28 实测：它在主树跑时把备份散在 src/agent/、src/permissions/、src/tools/ 下，
+# 而 *.mutbak 从未进过本文件 ⇒ 任何 `git add -A` 都会把备份当新文件扫进去。
+# 更要紧的是它被杀（SIGTERM）时会把**突变体**留在盘上（mutate-verify.mjs:7871），
+# 那份残留和这些备份长得一样，都不是源码。
+*.mutbak

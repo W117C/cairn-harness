@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { REPLAY_READINGS, type ReplayReading } from "../scripts/replay-readings";
+import { REPLAY_READINGS, countInlineReplay, type ReplayReading } from "../scripts/replay-readings";
 import {
   checkAppendOnlyCorrections,
   checkBudget,
@@ -300,10 +300,32 @@ describe("D-8 复跑面登记表与引用对账", () => {
   });
 
   it("内联 heredoc 复跑块按文件出一条（不过编译 ⇒ 形状一 drift 就静默失效）", () => {
-    const f = checkReplay([{ path: "docs/y.md", text: 'a\nnode --import tsx -e "$(cat <<TS\nx\nTS\n)"\nnode --import tsx -e 又一条' }], hasFile, []);
+    // **这两条必须带 fences**：D-8 问的是「文档教人粘的那一串」。旧尺是裸全文匹配，
+    // 于是正文里**引用**一句 `node --import tsx -e` 也被判成块——2026-09-28 `PROGRESS.md`
+    // 上就是一条这种引用把闸打红的（那页全文 0 个真块）。尺改成围栏感知后，
+    // 下面这条若不补 fences 就会转绿，而它**不该**转绿：真块还得抓得到。
+    const fenced = '```bash\nnode --import tsx -e "$(cat <<TS\nx\nTS\n)"\nnode --import tsx -e 又一条\n```';
+    const f = checkReplay([{ path: "docs/y.md", text: fenced }], hasFile, []);
     expect(f).toHaveLength(1);
     expect(f[0]!.detail).toContain("2");
     expect(f[0]!.file).toBe("docs/y.md");
+  });
+
+  it("正文里**提到**那条命令不算复跑块，一字不差搬进围栏才算（同一句、两种语境，结论换人）", () => {
+    // 病灶原文（抄自 PROGRESS.md 那次误报本体——2026-09-28 它把 docs-check 打红的就是这一句）。
+    // 不写行号：行号随重排漂掉，D-3 正是为这件事立的。
+    const mentioned = "⇒ 计数一律从**对象**取（我随后那条 `node --import tsx -e` 直接 import `REPLAY_READINGS` 逐条印）";
+    expect(countInlineReplay(mentioned), "正文里的引用被算成块 = 旧尺那个误报").toBe(0);
+    // 对照支：**同一个字符串**包一层 fences ⇒ 结论必须翻过来，否则这把尺等于废了。
+    expect(countInlineReplay("```bash\n" + mentioned + "\n```")).toBe(1);
+  });
+
+  it("围栏扫描的边界：闭合须同类且不短于开启的那条；未闭合的块照样算（fences 写坏时判卷不许跟着瞎）", () => {
+    expect(countInlineReplay("~~~\nnode --import tsx -e 一条\n```\n")).toBe(1); // ~~~ 不被 ``` 闭合 ⇒ 延伸到文末
+    expect(countInlineReplay("````\nnode --import tsx -e 一条\n```\n")).toBe(1); // 四反引号里，三反引号是**内容**不是闭合（CommonMark）
+    expect(countInlineReplay("```\nnode --import tsx -e 一条\n``` 收尾\n")).toBe(1); // 闭合围栏后有正文 ⇒ 不是闭合
+    // 反相：块在四反引号里真的闭合了，块外那行不算——否则「关掉围栏就不算」这条会被人反着用。
+    expect(countInlineReplay("````\n````\nnode --import tsx -e 块外\n")).toBe(0);
   });
 
   it("真登记表里每条脚本都真在盘上（防「表写了、文件没了」这一格没人看）", () => {
@@ -313,8 +335,10 @@ describe("D-8 复跑面登记表与引用对账", () => {
 
   it("迁移后无存量豁免：内联复跑块直接判红", () => {
     expect(Object.keys(LEGACY_WAIVERS)).toHaveLength(0);
+    // 输入带 fences（尺改成围栏感知之后）：这里要证的是「没有存量豁免、真块直接红」，
+    // 断言一个字没动。上面那条已证「正文里的引用不算块」，两支合起来才是这把尺的完整形状。
     const findings = checkReplay(
-      [{ path: "docs/new.md", text: "node --import tsx -e x" }],
+      [{ path: "docs/new.md", text: "```bash\nnode --import tsx -e x\n```" }],
       () => false,
       [],
     );

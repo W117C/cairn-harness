@@ -574,6 +574,10 @@ export function createGlmSessionProvider(
     };
     /** 真实通道模型名（缺省 = provider 层读 M0_MODEL env；settings.model 在场时优先）。 */
     model?: string;
+    /** 调用方**已经解析好**的模型窗口（如 `--model` 自由档位合成 spec 上的那个）。
+     *  `opts.model` 那条查表的路只认得表内模型；自由档位的名字按定义不在表里，查表恒为 undefined ⇒
+     *  窗口得由调用方递进来，否则这一路的预算只能吃 `DEFAULT_COMPACTION_CONFIG` 的硬编码。 */
+    ctxWindow?: number;
     /** Path-only context for validated in-workspace RunRequest attachments. */
     attachmentContext?: string;
     /** Provider label used in summarizer failures when transport is not GLM. */
@@ -596,7 +600,8 @@ export function createGlmSessionProvider(
    *  一旦 model 变成逐请求（按请求路由 / worker 热恢复），构造快照立刻成第二把尺——届时要把
    *  现取的 config 交给 coordinator（getter 或 setConfig），别继续假设三处同源。 */
   const budgetConfig = (): CompactionConfig => {
-    const window = findSpecByNameOrId(DEFAULT_MODEL_TABLE, opts.model)?.ctxWindow;
+    // 显式窗口优先于查表：自由档位的模型名不在表里，查表那条对它恒为 undefined（M-1）。
+    const window = opts.ctxWindow ?? findSpecByNameOrId(DEFAULT_MODEL_TABLE, opts.model)?.ctxWindow;
     const merged: CompactionConfig = { ...withModelBudget(DEFAULT_COMPACTION_CONFIG, window), ...opts.compaction?.config };
     return typeof window === "number" ? { ...merged, inputLimit: Math.min(merged.inputLimit, window) } : merged;
   };

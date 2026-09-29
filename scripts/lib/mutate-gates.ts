@@ -1,3 +1,5 @@
+import { resolve } from "node:path";
+
 /** 某文件相对 HEAD 的状态：干净 / 有工作树改动 / 未跟踪。 */
 export type HeadState = "clean" | "dirty" | "untracked";
 
@@ -34,6 +36,54 @@ export function entryDisposition(info: EntryInfo): Disposition {
     return { kind: "unverified", why: `判卷文件 ${info.testRel} ${how}——该条不可判（并发在飞不得伪装成变异表退化）` };
   }
   return { kind: "run" };
+}
+
+export interface TreeGuardInput {
+  /** 当前这棵树的绝对根。 */
+  root: string;
+  /** `git rev-parse --git-dir` 的原样输出。 */
+  gitDir: string;
+  /** `git rev-parse --git-common-dir` 的原样输出。 */
+  commonDir: string;
+}
+
+export type TreeGuard = { kind: "go" } | { kind: "refused"; why: string };
+
+/**
+ * 「这棵树能不能改」——比 `entryDisposition` 更高一层的闸，因为它问的不是某个文件而是**整棵树**。
+ *
+ * 动因：本门 `verifyEntry` 是**就地改源文件**（`cpSync` 备份 → `apply` 写回），而实测过的收尾手段
+ * 拦不住超时——`runTest` 走 `execFileSync` 同步阻塞整个事件循环，外层超时发来的 SIGTERM 进不来，
+ * 突变体与 `.mutbak` 一起留在 `src/` 里（verifyEntry 上方「实测边界（09-23）」记的就是这次，
+ * 本机也留着一枚 `.worktrees/verify-dd3af4e/scripts/lib/mutate-gates.ts.mutbak` 作证）。主检出那份工作树里
+ * 可能是别人正在写的活，也可能是自己没提交的活，两者都经不起「就地改」这一下。
+ *
+ * 判据只问 git 自己给的两条路径：linked worktree 里 `--git-dir`（`.git/worktrees/<名>`）与
+ * `--git-common-dir`（主树那份 `.git`）**不是同一处**；主检出里两者都指 `.git`。
+ * 读不出答案按主检出处置（fail-closed）——证明不了自己是一次性的，就不许动盘。
+ *
+ * 两边都按 root 解析成绝对路径再比：主树给的是**相对** `.git`、链接树给的是绝对路径，
+ * 直接比字符串会把「相对 vs 绝对」这个格式差误读成「两棵树」（`toolLockPath` 栽过同一处，
+ * 见 tests/head-cert-deps.test.ts 里那条锁路径用例）。
+ */
+export function mutateTreeGuard(input: TreeGuardInput): TreeGuard {
+  const g = input.gitDir.trim();
+  const c = input.commonDir.trim();
+  if (g === "" || c === "") {
+    return {
+      kind: "refused",
+      why: "取不到这棵树的 git 归属（`git rev-parse --git-dir/--git-common-dir` 读不出）——证明不了它是一次性的树，拒跑（就地改源文件这道风险不许靠猜）",
+    };
+  }
+  if (resolve(input.root, g) === resolve(input.root, c)) {
+    return {
+      kind: "refused",
+      why: `这棵是**主检出**（git-dir 与 git-common-dir 同指 ${c}）——本门就地改源文件，被外层超时杀掉就收不回来，` +
+        "突变体与 .mutbak 会留在 src/ 里。改法：去一棵一次性 worktree 跑（`pnpm mutate-verify` 已按此接线，" +
+        "它会把本脚本重新 exec 到 .worktrees/ 下的专用树里），或手动 `git worktree add --detach .worktrees/<名> HEAD` 后在那棵树里执行本脚本。",
+    };
+  }
+  return { kind: "go" };
 }
 
 /**
@@ -353,7 +403,7 @@ export function duplicateIds(ids: readonly string[]): DuplicateId[] {
 // 动因（2026-09-19 实踩）：一条还没合进 HEAD 的 `--check-needles` 在主树里被当成「无参数」，
 // 而该脚本的缺省语义是**跑全表**——它会就地改源文件、跑几十分钟。拼错一个 flag 就等于
 // 在别人的写作窗里放火，所以「看不懂」不能退化成「按缺省办」。
-export const MUTATE_FLAGS = ["--list", "--check-needles", "--budget-ms", "--changed-since", "--lock-tag"] as const;
+export const MUTATE_FLAGS = ["--list", "--check-needles", "--budget-ms", "--changed-since", "--lock-tag", "--in-worktree"] as const;
 /** 带值的 flag：它**下一个** token 是值，不是锚点 id。漏了这条，`--budget-ms 600000` 会把
  *  `600000` 当成一个不存在的锚点 id 报「未知 id」——于是没人能给它设预算（而预算正是
  *  别被外层超时杀在突变那一拍的手段）。`--changed-since HEAD~1` 同一个坑：rev 会被当成 id。 */
@@ -361,7 +411,7 @@ export const MUTATE_VALUE_FLAGS = ["--budget-ms", "--changed-since", "--lock-tag
 /** 允许 `--flag=值` 连写的那批。`--budget-ms` **刻意不在这里**：它的读取器 `budgetMsOf` 只解析空格写法，
  *  放行 `--budget-ms=600000` 会变成"给了值却被当成不限"——静默按缺省跑，正是本文件开头要拒的那一类。
  *  新增值 flag 时：先给读取器加上 `=` 解析，再往这张表里加名字，顺序反了就是一条假绿。 */
-export const MUTATE_EQ_VALUE_FLAGS = ["--changed-since", "--lock-tag"] as const;
+export const MUTATE_EQ_VALUE_FLAGS = ["--changed-since", "--lock-tag", "--in-worktree"] as const;
 
 /** 这个 token 是不是被认识的 flag（三种写法：裸 flag、`--flag 值`、`--flag=值`）。 */
 export function isKnownMutateFlag(arg: string): boolean {
@@ -527,6 +577,52 @@ export function killerAttributionOk(expectFail: string, vitestOut: string): bool
   return expectFailMatchesTitles(expectFail, failingTestText(vitestOut));
 }
 
+export interface JudgeProbe {
+  code: number;
+  ms: number;
+  out: string;
+}
+export interface JudgeRetryResult {
+  probe: JudgeProbe;
+  runsMs: number[];
+}
+
+/**
+ * 跑一次判卷；红了**重试一次**，把最终那一拍连同全部耗时交回调用方。
+ *
+ * 动因（09-28 整表 936 条实测）：判卷文件里碰真机的用例会**偶发**红（真 git 的 index mtime 负控…），
+ * 与本条变异毫无关系，却会同时污染两个观测点——第 ① 步基线（基线看起来红）和第 ④ 步还原（还原看起来没还原好）。
+ * 实测那两条失败（`depdirs-descends-into-node-modules` 基线红、`concurrency-hint-fires-on-green` 还原红）
+ * 就是同一条负控翻红造成的：一个挂在这个判卷文件上的锚点集体丢认证。
+ *
+ * 关键取舍：**瞬时红放过、持续红按最终那一拍算**——还原真坏掉时重试也红，两个观测点的保证一点没松。
+ * 全部耗时照实交回 `runsMs`，成本分母不白烧。绿的那一拍不重试（白跑一格就是白烧）。
+ */
+export function judgeWithRetry(run: () => JudgeProbe): JudgeRetryResult {
+  const first = run();
+  if (first.code === 0) return { probe: first, runsMs: [first.ms] };
+  const retry = run();
+  return { probe: retry, runsMs: [first.ms, retry.ms] };
+}
+
+export interface RestoreVerdict {
+  ok: boolean;
+  runsMs: number[];
+  why?: string;
+}
+
+/**
+ * 第 ④ 步「还原后必须恢复全绿」的判定，走 `judgeWithRetry` 那个共享重试。
+ * 放不放得过由 `killerAttributionOk` 在第 ③ 步定（分辨力在那边），这里只管还原后这一格：
+ * 还原后最终那一拍绿 ⇒ 过；红 ⇒ 判失败并点名是哪一拍的输出。
+ */
+export function restoreCheck(run: () => JudgeProbe): RestoreVerdict {
+  const { probe, runsMs } = judgeWithRetry(run);
+  return probe.code === 0
+    ? { ok: true, runsMs }
+    : { ok: false, runsMs, why: `还原后未恢复全绿（重试仍红）:\n${probe.out.slice(-800)}` };
+}
+
 /** 纯函数：`readTest` 由调用方注入（单测喂假文件，门喂真盘）。 */
 export function auditExpectFails(
   entries: readonly ExpectFailEntry[],
@@ -600,6 +696,63 @@ export function baselineRedKind(vitestOut: string): { kind: "unloadable"; module
     ? "判卷文件读不到（不等于指针没问题）"
     : "这条用例标题在该判卷文件里找不到（多半是用例改过名，而指针还写着旧的）";
   return `${p.id} — ${p.test} — ${why}：${JSON.stringify(p.expectFail.slice(0, 60))}`;
+}
+
+// ---- 选择子唯一性（第 169 页的前置闸）：一条锚点能不能只跑**自己那条** killer 用例 ----
+// 动因（09-28 第 168 页的读数）：一条锚点的单价＝**判卷宿主文件时长的 3 倍**（实测 23.1s/条，换一份 1.1s 的宿主就是 20.6×），
+// 而它真正要证的只有自己那条用例。要让 `runTest` 改吃 `-t` 的精确跑法，前提是指针能**逐字唯一定位**那条标题：
+// 0 命中时 vitest 不会失败，它只是**一条也没跑** ⇒ 基线与突变两拍都白过，这把尺会安静地变成假绿（第 166 页那族）。
+// 所以先要有一格读数把「选不中」的条数点名，而不是等 `-t` 上线后才发现名单里混着选不中的。
+export interface SelectorProblem {
+  id: string;
+  test: string;
+  /** 逐字命中该指针的 it()/test() 标题条数。0＝只靠占位符展开才认得出；>1＝选择子不唯一。 */
+  hits: number;
+}
+
+/** 数每条锚点的指针在它自己的判卷文件里逐字命中几条标题。只回 ≠1 的那些（==1 是能走 -t 的那一批）。
+ *  判卷文件读不到、或指针为空、或不是 vitest 文件 ⇒ **不数**（那些另有归属：`auditExpectFails` 的 unreadable、结构钉型判卷），
+ *  所以 `inspected` 是被数过的条数：拿整表条数去除会以假绿的方式低估可选率。 */
+export interface SelectorScan {
+  problems: SelectorProblem[];
+  inspected: number;
+}
+
+const TITLE_RE = /^\s*(?:it|test)(?:\.\w+)?\s*\(\s*(["`'])((?:\\.|(?!\1)[^\\])*)\1/gmu;
+
+export function selectorAmbiguity(
+  entries: readonly ExpectFailEntry[],
+  readTest: (rel: string) => string | null,
+): SelectorScan {
+  const cache = new Map<string, string[] | null>();
+  const problems: SelectorProblem[] = [];
+  let inspected = 0;
+  for (const e of entries) {
+    if (e.expectFail === "" || !e.test.endsWith(".test.ts")) continue;
+    if (!cache.has(e.test)) {
+      const text = readTest(e.test);
+      cache.set(e.test, text === null ? null : [...text.matchAll(TITLE_RE)].map((m) => m[2] ?? ""));
+    }
+    const titles = cache.get(e.test);
+    if (titles === null || titles === undefined || titles.length === 0) continue;
+    inspected += 1;
+    const hits = titles.filter((t) => t.includes(e.expectFail)).length;
+    if (hits !== 1) problems.push({ id: e.id, test: e.test, hits });
+  }
+  return { problems, inspected };
+}
+
+/** 那一格的措辞：三态分开印，且**不许**把「选不中」并成「没什么问题」。
+ *  存量不是 0（现读 13 条），所以这一格走水位法：只准调低，涨了要交代。 */
+export function selectorCell(problems: readonly SelectorProblem[], inspected: number): string {
+  const zero = problems.filter((p) => p.hits === 0);
+  const many = problems.filter((p) => p.hits > 1);
+  const parts = [
+    `选择子：${String(inspected - problems.length)}/${String(inspected)} 条能逐字唯一定位自己的 killer 用例（其余走整文件跑法）`,
+    zero.length === 0 ? "" : `零命中 ${String(zero.length)} 条（标题是拼出来的或已改名 ⇒ -t 会一条也选不中）`,
+    many.length === 0 ? "" : `多命中 ${String(many.length)} 条（选择子不唯一）`,
+  ].filter((s) => s !== "");
+  return parts.join("·") + (problems.length === 0 ? "" : "：" + problems.map((p) => `${p.id}(${String(p.hits)})`).join("、"));
 }
 
 // ---- 每条锚点的真实成本（任务 #37：分母必须是读数，不是「次数 × 文件时长」的模型） ----

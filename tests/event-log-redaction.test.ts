@@ -109,3 +109,54 @@ describe("事件日志落盘前脱敏（凭据不留盘）", () => {
     expect(log).not.toContain("****");
   });
 });
+
+/* 同一族的第二个落盘面：**verify**。`verify_result.results[].output` 是测试输出——子流早就有
+   这个洞（worker-projection.ts:92 的 `verify_result: [["results"]]` 就是它），主会话这条却漏着。
+   判卷是**对比支**：两支只差 verify 输出里有没有凭据，结论从「盘上逐字不变」换成「盘上没有明文
+   但有掩码留痕」。只钉一支的话，把 redactVerifyResults 整个删掉，另一支照样绿。 */
+describe("verify 面落盘前脱敏（同一族的第二个落盘面）", () => {
+  /** 走 verify 系统门那条真实路径：模型发一个 tool_call{name:"verify"}，loop 短路去调 opts.verify。 */
+  async function runVerifyAndReadLog(o: { command: string; output: string }): Promise<string> {
+    const ws = await mkdtemp(join(tmpdir(), "a4-redact-verify-"));
+    dirs.push(ws);
+    const logPath = join(ws, "events.jsonl");
+    const events: EventLog = createEventLog(logPath);
+    await runLoop({
+      workspace: ws,
+      provider: providerEmitting({ id: "v1", name: "verify", args: {} }),
+      tools: {} as never,
+      mode: "auto",
+      events,
+      verify: {
+        async run() {
+          return { ok: false, results: [{ command: o.command, output: o.output, ok: false }] };
+        },
+      },
+    });
+    await events.close?.();
+    return await readFile(logPath, "utf8");
+  }
+
+  it("支一：verify 输出里的凭据在盘上没有明文，且掩码留痕（不是「什么都没记」）", async () => {
+    const log = await runVerifyAndReadLog({
+      // 命令行里就带着 key（`AWS_SECRET_ACCESS_KEY=… pnpm test` 是常见写法）⇒ 与输出同一族，都要净。
+      // 别拿 `cat .env` 当这条的判据：那条命令本身没有秘密，脱敏原样放过才是对的（正是支二）。
+      command: `AWS_SECRET_ACCESS_KEY=${FAKE_AWS} pnpm test`,
+      output: `tests failed\nAKIA:${FAKE_AWS}\nOPENAI_API_KEY=${FAKE_KEY}\n`,
+    });
+    expect(log, "verify 这一拍根本没跑 ⇒ 这条判卷没有分辨力").toContain("verify_result");
+    // 两份原文都要净：verify_result.results[].output，以及 loop 为同一拍补的那条 tool_result
+    // （failureDigest 把 results 整段拼进去）。只净前一份 = 掩码在门里、钥匙在门口。
+    expect(log).not.toContain(FAKE_AWS);
+    expect(log).not.toContain(FAKE_KEY);
+    expect(log).toContain("AKIA****");
+  });
+
+  it("支二：输出干净的同一拍逐字不变（脱敏不得改写没有秘密的字节）", async () => {
+    const out = "FAIL src/a.test.ts\n  Expected 1 to be 2\nTests 1 failed\n";
+    const log = await runVerifyAndReadLog({ command: "pnpm test", output: out });
+    expect(log).toContain("verify_result");
+    expect(log).toContain(JSON.stringify(out).slice(1, -1)); // 转义后的原文逐字在场
+    expect(log).not.toContain("****");
+  });
+});

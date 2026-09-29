@@ -9,6 +9,7 @@ import {
   DEFAULT_MODEL_TABLE,
   PROVIDER_IDS as REGISTRY_PROVIDER_IDS,
   findSpecByNameOrId,
+  freeformModelId,
   lookupModel,
   type ModelSpec,
 } from "../providers/registry";
@@ -75,15 +76,35 @@ export interface ResolveMainModelInput {
   configuredKind: ProviderKind;
   /** RunRequest.model: stable registry id only. */
   requestModel?: string;
+  /** 自由档位的线上模型名（CLI --model）：不在档位表里，合成一条 spec 用。 */
+  explicitModel?: string;
+  /** CLI --ctx-window：用户申报的 `explicitModel` 真实窗口。只在 explicitModel 在场时有意义。 */
+  explicitCtxWindow?: number;
   /** Legacy settings field: stable id or provider model name. */
   settingsModel: string;
   /** Legacy GLM model env; consulted only for a selected GLM run with no explicit/settings model. */
   legacyEnvModel?: string;
 }
 
+/** 自由档位（`--model`）的上下文缺省：取档位表里**最小**的那个窗口。
+ *  未知模型的真实窗口无从查证，而两侧代价不对称——**低估只导致提前压缩，高估会撞爆上下文**。
+ *  同一个取舍 `findSpecByNameOrId` 已经写下（「预算只允许保守，绝不放大」），这里沿用同一侧。
+ *
+ *  这行以前是硬编码的 `128_000`，而注释写着「取最小的」——两句话靠巧合对上（今天的表恰好最小是 128k），
+ *  没有任何东西保证它们继续一致：加一行 64k 档位，注释当场变假且无人报警。现在改成真推导。
+ *
+ *  ⚠️ 即便如此，**这个缺省对小于它的模型仍然是高估**，而高估那一侧正是上面写的「撞爆上下文」。
+ *  `--model` 的存在意义正是够到表外的模型（小窗网关模型、预览版），所以这个洞是它自己的靶心，
+ *  靠调缺省堵不死（调低则每个未知模型都提前压缩，白烧一次摘要）。⇒ 真解是让用户自己声明：
+ *  `--ctx-window <n>`（`--model` 专用，不给 `--model` 时拒跑而不是静默忽略）。 */
+const FREEFORM_CTX_WINDOW = Math.min(...DEFAULT_MODEL_TABLE.map((s) => s.ctxWindow));
+
 export function resolveMainModel(input: ResolveMainModelInput): MainModelSelection {
   if (input.forcedKind === "demo") {
     if (input.requestModel !== undefined) throw new Error("RunRequest.model 与 M0A_PROVIDER=demo 不匹配");
+    if (input.explicitModel !== undefined && input.explicitModel !== "") {
+      throw new Error(`explicitModel=${input.explicitModel} 与 M0A_PROVIDER=demo 不匹配（demo 是预录剧本，不拨号）`);
+    }
     return { kind: "demo" };
   }
 
@@ -97,6 +118,27 @@ export function resolveMainModel(input: ResolveMainModelInput): MainModelSelecti
       throw new Error(`RunRequest.model=${spec.id} 与 M0A_PROVIDER=${input.forcedKind} 不匹配`);
     }
     return { kind: spec.provider, spec, modelExplicit: true };
+  }
+
+  // 自由档位：显式给了线上模型名（`--model`），它按定义不在档位表里。
+  // 放在 demo 回落**之前**是刻意的：显式点名了要拨哪个模型，就绝不能被静默收敛成预录剧本。
+  // 也不进档位表：表是 bandit 代价项与预算折钱的依据，往里塞一个查不到价的行等于让它按假价参与路由。
+  if (input.explicitModel !== undefined && input.explicitModel !== "") {
+    const provider = input.forcedKind ?? input.configuredKind;
+    if (!isRealProviderKind(provider)) {
+      throw new Error(`--model 需要一家真实 provider（得到 ${JSON.stringify(provider)}）：demo 是预录剧本，不拨号`);
+    }
+    return {
+      kind: provider,
+      spec: {
+        id: freeformModelId(input.explicitModel),
+        provider,
+        model: input.explicitModel,
+        tier: "standard",
+        ctxWindow: input.explicitCtxWindow ?? FREEFORM_CTX_WINDOW,
+      },
+      modelExplicit: true,
+    };
   }
 
   // Demo is an explicit no-key mode. A stale legacy model in settings must not silently reactivate a

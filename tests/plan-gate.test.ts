@@ -106,6 +106,39 @@ describe("方案门（loop 级）", () => {
     await rm(logPath, { force: true });
   });
 
+  /* 拒绝行**该不该点名档位**（F-1）。方案门在 `checkPermission` 里先于 `SIDE_EFFECT_DECISION`
+     判（permissions/index.ts:107），四档一律拒、与用户传了什么无关 ⇒ 点一个档是编事实。
+     而这一层的 mode 恒为冻结的 `auto`（agent-runner.ts:1523），于是「在 auto 档」会出现在
+     任何 `--mode` 下的方案门拒绝里，用户会以为自己的 flag 没生效。
+     两支只差一个维度（方案门有没有武装），`mode` 都是 read-only，结论却换人。 */
+  it("④拒绝行只在**档位**参与裁决时点名档；方案门那条不点（否则恒报冻结的 auto 档）", async () => {
+    const denyLineWith = async (proposed: boolean): Promise<string> => {
+      resetPlanState();
+      if (proposed) markPlanProposed();
+      const logPath = join(tmpdir(), `m1b-plan-msg-${String(Date.now())}-${String(proposed)}.jsonl`);
+      const events = createEventLog(logPath);
+      const { provider } = scriptedProvider([
+        { type: "tool_call", id: "w1", name: "write_file", args: { path: "x.txt", content: "hi" } },
+      ]);
+      await runLoop({ provider, events, workspace: tmpdir(), mode: "read-only" });
+      const result = (await replay(logPath)).find((e) => e.type === "tool_result");
+      expect(result?.type === "tool_result" && result.ok, "这一拍没被门拒 ⇒ 这条判卷没有分辨力").toBe(false);
+      await rm(logPath, { force: true });
+      return result?.type === "tool_result" ? result.output : "";
+    };
+
+    const byPlan = await denyLineWith(true);
+    expect(byPlan).toContain("方案门");
+    expect(byPlan, "方案门与档位无关，报一个档就是编事实").not.toContain("档");
+
+    // 对照支：同一个 read-only 档，方案门没武装时它**确实**参与裁决 ⇒ 档位必须照实报出来。
+    // 注意这行与 `gatedTool` 那层（agent-runner.ts:448）形状不同：loop 这层把交互态插在
+    // 「档」与「下」之间。两层各报各的，别把一层的断言抄到另一层上。
+    const byMode = await denyLineWith(false);
+    expect(byMode).toContain("在 read-only 档（非交互）下");
+    expect(byMode).not.toContain("方案门");
+  });
+
   it("②批准后同一调用放行（文件真的写入）", async () => {
     markPlanProposed();
     approvePlan();

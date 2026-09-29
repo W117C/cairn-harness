@@ -7,6 +7,8 @@
 //
 // 修法是注入：src/agent 不许反向依赖 src/main（沙箱实现在 main 侧），所以宿主把出口
 // 递下来。这批用例钉的是**接线本身**——摘掉注入即红，不是钉某个形状。
+// 「即红」这句原本也盖住了宿主侧那一批，2026-09-29 实测**盖不住**：那条路走的是源文本，
+// 把可用态整条路改死、守卫一字不动，7 条全绿。宿主侧现在改为直接调 `workerShellRunnerFor` 看决定。
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -129,5 +131,19 @@ describe("宿主侧接线：沙箱可用时把沙箱出口递给 worker", () => 
     const table = await readFile("src/agent/worker-tool-table.ts", "utf8");
     expect(shellTools).not.toMatch(/from "\.\.\/main\//);
     expect(table).not.toMatch(/from "\.\.\/main\//);
+  });
+});
+
+/* 上一批把「守卫原文在」当成了「守卫在生效」。实测那不成立（2026-09-29）：把**可用态**那条路改成
+   `return undefined`、守卫 `if (sandbox === null || !sandbox.available) return undefined;` 一字不动，
+   上面 7 条全绿——而那正是本文件开头点名的形状：worker 悄悄退回 Seatbelt 之外跑。
+   源文本钉不住「那一条路通不通」，只有**把决定本身调出来看**才钉得住。 */
+describe("宿主侧接线：装不装这个决定本身可判（L-3）", () => {
+  it("沙箱可用 ⇒ 交出出口；不可用 / 没接线 ⇒ 交出 undefined（落回裸执行，与主会话同一条降级线）", async () => {
+    const { workerShellRunnerFor } = await import("../src/main/agent-runner");
+    expect(workerShellRunnerFor(null)).toBeUndefined();
+    expect(workerShellRunnerFor({ available: false, reason: "Seatbelt 不可用" })).toBeUndefined();
+    // 这一格才是有牙的那格：守卫原文照样在，只有这条路死了也只有它红
+    expect(typeof workerShellRunnerFor({ available: true })).toBe("function");
   });
 });

@@ -21,7 +21,7 @@ export interface OpenAiOptions {
   modelEnv?: string;
   /** model 的最终缺省值，缺省 gpt-4o-mini。 */
   defaultModel?: string;
-  /** 完整请求 URL（含 /chat/completions 路径）。 */
+  /** 端点：base（`https://host/v1`）或完整 URL 都行，缺 `/chat/completions` 会补齐（见 chatCompletionsEndpoint）。 */
   baseURL?: string;
   /** baseURL 的环境变量名，缺省 OPENAI_BASE_URL。 */
   baseURLEnv?: string;
@@ -103,6 +103,14 @@ function toWireTools(tools: OpenAiToolSpec[]): unknown[] {
   }));
 }
 
+/** 自建/兼容网关的端点归一：给的可以是 base（`https://host/v1`），也可以是完整 endpoint。
+ *  两侧代价不对称——按原样发一个 base 出去必然 404，而重复拼 `/chat/completions` 同样打不通。
+ *  后缀已经是它就原样用（GLM_ENDPOINT 那种写法保持逐字可用），否则补齐。 */
+export function chatCompletionsEndpoint(base: string): string {
+  const trimmed = base.replace(/\/+$/, "");
+  return trimmed.endsWith("/chat/completions") ? trimmed : `${trimmed}/chat/completions`;
+}
+
 /** 流式一轮对话：把 SSE 增量转成事件 —— delta.content → assistant_delta、
  *  delta.tool_calls → 累积成 tool_call 事件（流末按 index 稳定吐出）、末 chunk usage → usage 事件。 */
 export async function* streamOpenAI(
@@ -116,8 +124,9 @@ export async function* streamOpenAI(
   const apiKey = opts.apiKey ?? process.env[envName];
   if (!apiKey) throw new Error(`${envName} 未设置（key 只从环境变量读取，不落文件）`);
   const model = opts.model ?? process.env[opts.modelEnv ?? "OPENAI_MODEL"] ?? opts.defaultModel ?? "gpt-4o-mini";
-  const endpoint =
-    opts.baseURL ?? process.env[opts.baseURLEnv ?? "OPENAI_BASE_URL"] ?? opts.defaultBaseURL ?? "https://api.openai.com/v1/chat/completions";
+  const endpoint = chatCompletionsEndpoint(
+    opts.baseURL ?? process.env[opts.baseURLEnv ?? "OPENAI_BASE_URL"] ?? opts.defaultBaseURL ?? "https://api.openai.com/v1",
+  );
   const stream = opts.stream ?? true;
   const doFetch = opts.fetchImpl ?? fetch;
 

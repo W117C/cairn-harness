@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { envKeyOf, ENV_KEYED_PROVIDERS, PROVIDER_ENV_KEYS } from "../src/providers/env-keys";
-import { DEFAULT_MODEL_TABLE, PROVIDER_IDS as REGISTRY_PROVIDER_IDS } from "../src/providers/registry";
+import { DEFAULT_MODEL_TABLE, lookupModel, PROVIDER_IDS as REGISTRY_PROVIDER_IDS } from "../src/providers/registry";
 import { PROVIDER_IDS as STORABLE_PROVIDER_IDS } from "../src/main/provider-keys";
 import {
   buildProviderInfo,
@@ -57,6 +59,47 @@ describe("CX-02/CX-03 main provider registry", () => {
     expect(() => resolveMainModel({ configuredKind: "glm", settingsModel: "gpt-4o" })).toThrow(/不匹配/);
     expect(() => resolveMainModel({ forcedKind: "openai", configuredKind: "openai", settingsModel: "", requestModel: "glm-standard" })).toThrow(/不匹配/);
     expect(resolveMainModel({ forcedKind: "demo", configuredKind: "openai", settingsModel: "gpt-4o" })).toEqual({ kind: "demo" });
+  });
+
+  it("自由档位（--model）点名表外模型名：合成 spec，且不落回 demo 也不进档位表", () => {
+    const free = resolveMainModel({ forcedKind: "openai", configuredKind: "openai", settingsModel: "", explicitModel: "stealth/space-bunny-alpha" });
+    if (free.kind === "demo") throw new Error("expected real provider");
+    expect(free.spec.model).toBe("stealth/space-bunny-alpha");
+    expect(free.spec.provider).toBe("openai");
+    expect(free.modelExplicit).toBe(true);
+    // 表外 ⇒ 查不到任何登记行：bandit 与预算折钱因此都拿不到它（前者不路由、后者惰掉并明写）
+    expect(lookupModel(DEFAULT_MODEL_TABLE, free.spec.id)).toBeUndefined();
+    // 上下文按保守缺省：低估只提前压缩，高估会撞爆
+    expect(free.spec.ctxWindow).toBe(Math.min(...DEFAULT_MODEL_TABLE.map((s) => s.ctxWindow)));
+    // settings.model 是登记名，--model 是线上名：显式的那个赢
+    expect(resolveMainModel({ configuredKind: "openai", settingsModel: "gpt-4o", explicitModel: "x/y" })).toMatchObject({ kind: "openai" });
+  });
+
+  it("自由档位点名了却只剩 demo 可选时 fail-visible，不静默收敛成预录剧本", () => {
+    expect(() => resolveMainModel({ forcedKind: "demo", configuredKind: "openai", settingsModel: "", explicitModel: "x/y" }))
+      .toThrow(/demo/);
+  });
+
+  it("--ctx-window 申报的窗口盖过缺省（M-1：缺省对更小的模型是高估 ⇒ 撞远端 400）", () => {
+    const base = { forcedKind: "openai" as const, configuredKind: "openai" as const, settingsModel: "", explicitModel: "stealth/small" };
+    const declared = resolveMainModel({ ...base, explicitCtxWindow: 32_000 });
+    if (declared.kind === "demo") throw new Error("expected real provider");
+    expect(declared.spec.ctxWindow, "申报值必须真的落到合成 spec 上").toBe(32_000);
+    // 缺省那条不受影响：不给申报时仍是表内最小窗口
+    const dflt = resolveMainModel(base);
+    if (dflt.kind === "demo") throw new Error("expected real provider");
+    expect(dflt.spec.ctxWindow).toBe(Math.min(...DEFAULT_MODEL_TABLE.map((s) => s.ctxWindow)));
+  });
+
+  it("接线：合成 spec 上的窗口真被递进 session（否则申报只改到一半，M-2 那一族）", () => {
+    /* 这一格**故意留成结构断言**：包住它的是 `createProvider`，没有导出，而真跑一次要一把真 key。
+     * 上下两端都另有行为判卷在盯——spec 那一面在上面这条，预算那一面在 tests/session-provider.test.ts
+     * 的「自由档位的窗口申报落到预算面」。缺的只是这两端之间那根线，而线断了**只有**这里会红：
+     * 上面的 spec 照样带窗口（它只查 resolveMainModel），下面的预算照样认 opts.ctxWindow
+     * （它只喂 session），中间没人把前者的值送到后者手上。边界用代码标识，不用注释文字。 */
+    const src = readFileSync(fileURLToPath(new URL("../src/main/agent-runner.ts", import.meta.url)), "utf8");
+    expect(src, "自由档位的窗口没递进 session ⇒ --ctx-window 只落在 spec 上，预算那一面看不见")
+      .toMatch(/\.\.\.\(selection\.modelExplicit \? \{ ctxWindow: selection\.spec\.ctxWindow \} : \{\}\),/);
   });
 
   it("exposes only registered models with the shared capability map", () => {

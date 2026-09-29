@@ -144,11 +144,53 @@ describe("autoVerify 缺省开：走读盘路径，不走 DEFAULT_SETTINGS 自�
     expect(DEFAULT_SETTINGS.autoVerify).toBe(true);
   });
 
-  it("反面对手：同族里仍缺省关的那几项不许被顺手改成开", async () => {
+  it("同族里仍缺省关的那几项不许被顺手改成开", async () => {
     const s = await readBack({});
     expect(s.actionFusion).toBe(false);
-    expect(s.impactAnalysis).toBe(false);
     expect(s.evidenceReceipts).toBe(false);
+    expect(s.autoVerifyRepair).toBe(false);
+  });
+});
+
+/* 跨文件波及面（用户裁决 2026-09-27）：`routingBandit` / `maxBudgetUsd` / `impactAnalysis` 三个
+   「省钱 / 少返工」开关里**只翻这一个**——它不改花钱行为，另两个都改，而仓里还没有外部基准
+   读数可依。同一族读盘回退的规则在这里同样适用：真机 settings.json 是在旧默认下写出来的，
+   键缺失必须读到 true。 */
+describe("impactAnalysis 缺省开：走读盘路径，不走 DEFAULT_SETTINGS 自证", () => {
+  let dir: string;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "dsh-settings-impact-"));
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  const readBack = async (raw: Record<string, unknown> | null) => {
+    const file = join(dir, "settings.json");
+    await writeFile(file, raw === null ? "{ 不是 JSON" : JSON.stringify(raw), "utf8");
+    return new SettingsStore(file).get();
+  };
+
+  it("旧机器（JSON 里压根没这个键）读回来必须是 true", async () => {
+    const s = await readBack({ mode: "default", model: "glm-standard" });
+    expect(s.impactAnalysis).toBe(true);
+  });
+
+  it("显式 false 必须仍是 false，空对象与坏 JSON 回缺省", async () => {
+    expect((await readBack({ impactAnalysis: false })).impactAnalysis).toBe(false);
+    expect((await readBack({ impactAnalysis: true })).impactAnalysis).toBe(true);
+    expect((await readBack({})).impactAnalysis).toBe(true);
+    expect((await readBack(null)).impactAnalysis, "JSON 损坏回退整份缺省").toBe(true);
+  });
+
+  it("DEFAULT_SETTINGS 与读盘回退同向（翻一处忘另一处 = 老用户永远拿不到新默认）", () => {
+    expect(DEFAULT_SETTINGS.impactAnalysis).toBe(true);
+  });
+
+  it("只翻这一个：另外两个改花钱行为的仍缺省关（裁决边界，模糊了就等于四件都翻了）", async () => {
+    const s = await readBack({});
+    expect(s.routingBandit).toBe(false);
+    expect(s.maxBudgetUsd).toBe(0);
   });
 });
 

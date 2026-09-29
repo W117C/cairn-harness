@@ -22,7 +22,7 @@ npx m0 "把 tests 里失败的那个用例修好"
 ```sh
 pnpm install
 pnpm typecheck        # tsc --noEmit
-pnpm test             # 整跑（core-only 的 236 个测试文件）
+pnpm test             # 整跑（core-only 全部测试文件）
 ```
 
 跑一轮：
@@ -34,9 +34,41 @@ pnpm test             # 整跑（core-only 的 236 个测试文件）
 # 在别的工作区
 ./bin/m0.mjs --workspace ~/code/some-repo "把失败的测试修好"
 
+# 接着上一次那条会话跑（不抹掉之前的转录）
+./bin/m0.mjs --session cli-1756289123456 "接着刚才那个往下做"
+
 # 装成命令（npm link 或发布后）
 npx m0 --help
 ```
+
+### 目标模式：一轮收束 ≠ 目标达成
+
+`--goal` 给这轮挂一个目标，判据不达标就自动再跑一轮，直到达标、撞轮次/美元上限、或者证据红到没救：
+
+```sh
+./bin/m0.mjs --goal "把 tests 全跑绿" --max-turns 8 --max-usd 0.5 "修掉失败的那些用例"
+```
+
+目标与停止理由都落在事件日志里（`goal_set` / `goal_stopped`），终端上也会打出来——
+**「为什么不跑了」必须是用户看得见的事实**，而不是进程安静地退出。
+
+几个边界：目标只能挂在会话上（所以与 `--log` 互斥）；无人值守的 run（`--unattended`、
+stdin 是管道）**不会自动续跑**——那条路上审批一律 fail-closed 拒，写不了盘也验不出绿，
+续跑只会白烧钱，于是会停下来并把这个理由落到事件流上。美元闸要价表里查得到那个模型才生效，
+查不到时它明写自己没生效，绝不按 $0 继续烧。
+
+### 手动压缩一条会话
+
+```sh
+./bin/m0.mjs --session cli-1756289123456 --compact
+```
+
+把一条已有会话的历史压成一段摘要，压完退出。**这条命令会调模型**（摘要器
+`createGlmSummarizer` 走 GLM），所以要 `M0_API_KEY`；没有 key 时它 fail-closed 拒绝并退出 1，
+**不会静默截断**历史——把长会话悄悄砍掉比报错糟得多。
+
+边界：只能指一条**已有**会话（缺 `--session` 直接 exit 2，不编一个 id 出来再报「不存在」）；
+与 `--goal` 互斥（压缩的是已有历史，不跑目标轮）；与 `--log` 互斥（`--session` 自己决定落在哪）。
 
 ### 配 provider
 
@@ -58,6 +90,25 @@ export OPENAI_API_KEY=<deepseek key>
 npx m0 "..."
 ```
 
+`OPENAI_BASE_URL` 给到 `/v1` 这一层就行，缺 `/chat/completions` 会自动补；已经带全的写法也照样认。
+
+**档位表以外的名字用 `--model`**。默认只拨 `providers/registry.ts` 档位表里登记过的那几档（bandit 与预算折钱
+都按那张表走），但表外的模型——OpenRouter、各家网关的别名、预览版——可以直接点名：
+
+```sh
+export OPENAI_BASE_URL=https://openrouter.ai/api/v1
+export OPENAI_API_KEY=<key>
+npx m0 --provider openai --model stealth/space-bunny-alpha "..."
+```
+
+`--model` 是显式 opt-in：它不进档位表，因此**不参与 bandit 路由**；预算闸查不到它的价时按既有口径惰掉并明写，
+绝不按 $0 继续烧。它的上下文窗口缺省取档位表里**最小**的那个（今天 128k）——这个缺省对**更小**的模型是高估，
+高估会撞远端 400。指向小窗或网关模型时用 `--ctx-window <n>` 申报真实窗口（只配 `--model` 用）：
+
+```sh
+npx m0 --provider openai --model some/small-model --ctx-window 32768 "..."
+```
+
 没给 `--provider` 时按上表顺序找第一个配了 key 的；一个都没配 ⇒ exit 2 并告诉你要设哪个变量。
 
 ---
@@ -72,6 +123,18 @@ npx m0 "..."
 | `auto` | 自动放行——**必须显式 `--mode auto`**，不是缺省 |
 
 审批门在没人能答的时候（管道 / CI）**当场按拒绝收束**，不等超时——一次没人应答的审批不会伪装成工具失败。
+
+模型主动开的两扇门也在终端里问你，没人能答时各自**当场结算**（都不是挂起等超时）：
+
+| 门 | 模型什么时候开 | 交互终端 | 管道 / CI / `--unattended` |
+|---|---|---|---|
+| `propose_plan` | 要写文件前提交方案 | 打出方案（目标 + 每个文件的动作/路径/摘要），问 `[y] 批准 [n] 拒绝` | **拒绝**；写禁不解除，模型须修订后重提 |
+| `clarify` | 任务有歧义 | 逐题问，答选项序号或直接写自由文本 | 提交**空答案** `{}`——如实告诉模型「没人答，自己拿主意」 |
+
+两者形状不同是有原因的：`propose_plan` 是**审批**，拒绝即维持写禁；`clarify` 只是**要信息**，
+而 `ClarifyGate` 只有提交、没有拒绝（唯一的负向出口是中止整轮）。
+提交空答案不是批准，也不解除任何门——写禁只由 `propose_plan` 落下。
+**编造答案才是这里唯一真正危险的事**，空 map 恰好是最不编造的那一种。
 
 `run_shell` 在 macOS 上走 Seatbelt 沙箱（写收敛到工作区、`.ssh`/`.aws` 等敏感目录拒读、默认断网）。
 沙箱不可用时 CLI 会明说，不假装有。
@@ -96,6 +159,29 @@ import { replay } from "./src/events";
 const events = await replay("<path>.jsonl");
 ```
 
+多 agent 的 worker 事件、目标事件都落同一份。worker 的 diff 借一条 `callId: "diff-<agentId>"`
+的 `tool_result` 落地（`events/` 里没有承载 diff 本体的事件类型），CLI 会把它**整块**打出来——
+stat 和 patch 都在，因为看不见的 diff 等于没有审查面。
+
+---
+
+## 设置（`<workspace>/.agent/settings.json`）
+
+CLI 走 `handleAgentRun` 这个装配入口，所以它第一次真正读盘上的设置。缺省开着的是这些：
+
+| 开关 | 缺省 | 做什么 |
+|---|---|---|
+| `impactAnalysis` | **开** | 每次写文件后算一遍跨文件波及面（谁调用了我），把摘要回注给模型——改第二处之前先看见第一处 |
+| `promptCache` | 开 | provider 支持时的稳定前缀缓存 |
+| `autoVerify` | 开 | 收束前补一拍验证（模型没自调 verify 时） |
+
+**改真实花钱行为**、因而默认关着需要手开的是 `routingBandit`（每轮按代价换模型）与 `maxBudgetUsd`（美元闸）。
+仓里目前没有外部基准读数可以拿来裁，所以它们没随这版一起翻：
+
+```json
+{ "routingBandit": true, "maxBudgetUsd": 2.5 }
+```
+
 ---
 
 ## 工具
@@ -105,7 +191,9 @@ const events = await replay("<path>.jsonl");
 `read_file` · `write_file` · `edit_file` · `run_shell` · `grep`（真 ripgrep）· `glob` ·
 `lsp`（真 spawn 语言服务器）· `clarify` · `propose_plan`
 
-运行时注入（`installAppTools`，不占静态名额）：`remember`（记忆沉淀）· `spawn_agent`（编排器未接线时 fail-closed 拒绝）。
+运行时注入（`installAppTools`，不占静态名额）：`remember`（记忆沉淀）· `spawn_agent` / `wait_for_agents` /
+`cancel_agents`（多 agent 编排，CLI 上真能派 worker——`runAgent` 每轮都建会话级编排器）·
+`refine_goal`（模型改自己目标的措辞）。
 
 另有两个不是普通工具：
 
@@ -114,6 +202,11 @@ const events = await replay("<path>.jsonl");
 
 工具面不是提示词自觉，是**硬闸**：`allowedTools` 给出时不在表内的工具一律拒绝执行（摘表，不是劝告）。
 路径另有一道 realcontainment 闸——软链解析后越出 workspace 的读写一律拒。
+
+**CLI 上没有 `automation_*` 那五个定时任务工具**。它们要调度器在跑才有意义（60 秒 tick、七天补跑、
+并发闸 ≤2，全是长驻进程语义），而 CLI 是一次性进程。它们**规格面与执行面一起摘**：只摘执行面的话
+模型照样看得见这五把工具、只吃得到一句 `unknown tool`——比现状更糟。摘干净之后模型连看都看不见，
+也就不会去建一个没人会 tick 的任务。调度器与 `Scheduler` 类本身原样保留，长驻服务时再接。
 
 ---
 
@@ -139,7 +232,7 @@ const events = await replay("<path>.jsonl");
 - `src/permissions/` — 权限策略
 - `src/providers/` — provider 适配器与模型注册表
 - `src/main/` — electron-free 的应用服务（装配根）
-- `scripts/` — 26 道 headless 闸（`pnpm gates` 全跑，清单即事实源）
+- `scripts/` — headless 闸（`pnpm gates` 全跑，清单在 `scripts/gate-manifest.ts`，即事实源）
 
 开发规则见 [AGENTS.md](AGENTS.md)；架构说明见 [docs/CODE-WIKI.md](docs/CODE-WIKI.md)。
 

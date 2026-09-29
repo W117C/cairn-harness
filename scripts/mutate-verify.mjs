@@ -16,14 +16,14 @@
 // 可判性三分（entryDisposition）：源文件在飞/未跟踪 = 拒绝并抛死（无回滚兜底）；
 // **判卷测试文件**在飞 = 本条记「未证」跳过——否则别人的在飞编辑会伪装成「变异存活」或「基线红」。
 
-import { cpSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync, writeSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync, writeSync, rmSync } from "node:fs";
 import ts from "typescript";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { acquireToolLock } from "./lib/tool-lock.ts";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell } from "./lib/mutate-gates.ts";
+import { entryDisposition, mutateTreeGuard, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, judgeWithRetry, restoreCheck, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, selectorAmbiguity, selectorCell } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -4146,7 +4146,7 @@ const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/goal-continue.test.ts",
     desc: "run 尾不再问判据（整条续跑/停止链被旁路）⇒ goal_set 成了只写不读的陈列，理由也从不上屏",
-    apply: (s) => s.replace("const next = await goalNextTurn({ logPath, sessionId, unattended: over.unattended === true, aborted: () => over.signal?.aborted === true, runModel: modelSelection });", "const next: { message: string; origin: GoalTurnOrigin } | null = null;"),
+    apply: (s) => s.replace("const next = await goalNextTurn({ logPath, sessionId, unattended: over.unattended === true || over.noAnswerer === true, aborted: () => over.signal?.aborted === true, runModel: modelSelection });", "const next: { message: string; origin: GoalTurnOrigin } | null = null;"),
     expectFail: "设了目标但这一轮没写盘也没验证 ⇒ 立刻停，并落一条写明理由的 goal_stopped（读答型目标不烧钱）",
   },
   {
@@ -6059,8 +6059,8 @@ const MUTATIONS = [
     test: "tests/mutate-verify-gates.test.ts",
     desc: "分诊算出来了但基线那一支不接 ⇒ lib 单测全绿、门照旧把环境红报成阻断（接线没有编译期信号）。针脚取两行避开本条自指。",
     apply: (s) => s.replace(
-      "      const kind = baselineRedKind(base.out);\n      if (kind.kind === \"unloadable\") {",
-      "      const kind = baselineRedKind(base.out);\n      if (false) {",
+      "      const kind = baselineRedKind(baseRun.probe.out);\n      if (kind.kind === \"unloadable\") {",
+      "      const kind = baselineRedKind(baseRun.probe.out);\n      if (false) {",
     ),
     expectFail: "接线：基线那一步真调这把分诊尺（不然是拿着读数当结论）",
   },
@@ -8353,6 +8353,12 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
     (rel) => { try { return readFileSync(join(ROOT, rel), "utf8"); } catch { return null; } },
   );
   console.log(`ℹ️  松钉指针 ${String(loosePinned.length)} 条（逐字认不出、只靠占位符展开的标题模式过关——拼接标题与带转义引号那两类必然如此）${loosePinned.length === 0 ? "" : "：" + loosePinned.join("、")}`);
+  /* 选择子唯一性（第 169 页的前置闸）：一条锚点的单价＝判卷宿主时长 ×3（第 168 页实测 23.1s/条），
+   *  而它真正要证的只有自己那条 killer 用例。想让 `runTest` 改吃 `-t`，前提是指针**逐字唯一定位**那条标题——
+   *  0 命中时 vitest 不是失败，是一条也没跑，两拍都白过（第 166 页「只能印 0 的尺」那一族换了载体）。
+   *  这一格刻意不进退出码：存量 13 条不是本笔造成的，按水位法只准调低；先把名单点出来，再谈改跑法。 */
+  const selectorScan = selectorAmbiguity(pointerEntries, (rel) => { try { return readFileSync(join(ROOT, rel), "utf8"); } catch { return null; } });
+  console.log("ℹ️  " + selectorCell(selectorScan.problems, selectorScan.inspected));
   // 一次求和、两处使用（汇总里印出来的数与 exit 码用的是同一个值；分开算就可能各说各话）。
   const blockingTotal = blockingTotalOf({
     needle: blocking.length, duplicateIds: dup.length, untracked: untracked.length, drift: drift.length,
@@ -8452,15 +8458,18 @@ function verifyEntry(m) {
   inFlight = { srcAbs, original, backup, mutated: false }; // 备份一落盘就要能被收尾
   let restored = false;
   try {
-    // ① 基线：突变前该测试必须绿。载不动（判卷 import 不到的东西没入库）不是"基线不绿"——那是量不了（第 143 页）。
-    const base = runTest(m.test);
-    runs.push(base.ms);
-    if (base.code !== 0) {
-      const kind = baselineRedKind(base.out);
+    /* ① 基线：突变前该测试必须绿。走 judgeWithRetry：判卷里碰真机的用例会偶发红，与本条变异无关，
+     * 却会把基线读成「红」——09-28 整表实测 depdirs-descends-into-node-modules 就这样丢的认证
+     * （红的是同文件里那条与它无关的 index mtime 负控）。瞬时红放过、持续红照旧按最终那拍判；
+     * 载不动（判卷 import 不到的东西没入库）不是"基线不绿"——那是量不了（第 143 页），判定不变。 */
+    const baseRun = judgeWithRetry(() => runTest(m.test));
+    runs.push(...baseRun.runsMs);
+    if (baseRun.probe.code !== 0) {
+      const kind = baselineRedKind(baseRun.probe.out);
       if (kind.kind === "unloadable") {
         return { m, ok: null, unloadable: kind.module, runsMs: runs, why: `判卷载不动（Cannot find module "${kind.module}"）⇒ 本条量不了，按未证记账；这不是「表退化」，是环境没备齐（多半是别人半落库，见 #11）` };
       }
-      return { m, ok: false, runsMs: runs, why: `基线就不是全绿（不应发生）:\n${base.out.slice(-800)}` };
+      return { m, ok: false, runsMs: runs, why: `基线就不是全绿（不应发生）:\n${baseRun.probe.out.slice(-800)}` };
     }
 
     // ② 注入突变
@@ -8483,10 +8492,10 @@ function verifyEntry(m) {
       const failedFace = failingTestText(hit.out).slice(0, 300);
       return { m, ok: false, runsMs: runs, why: `测试红了但没红在期望用例「${m.expectFail}」上——红的是别的用例（针脚可能落在隔壁支/隔壁函数）:\n${failedFace || "(输出里没有失败面那几行，按未归因处置)"}\n--- 尾部 ---\n${hit.out.slice(-500)}` };
     }
-    // ④ 还原后必须恢复全绿
-    const back = runTest(m.test);
-    runs.push(back.ms);
-    if (back.code !== 0) return { m, ok: false, runsMs: runs, why: `还原后未恢复全绿:\n${back.out.slice(-800)}` };
+    // ④ 还原后必须恢复全绿（判定在 lib：瞬时红重试一次放过、持续红仍判失败）
+    const chk = restoreCheck(() => runTest(m.test));
+    for (const t of chk.runsMs) runs.push(t);
+    if (!chk.ok) return { m, ok: false, runsMs: runs, why: chk.why };
     return { m, ok: true, runsMs: runs };
   } finally {
     inFlight = null; // 早退路径（基线不绿 / 突变未生效 / 语法错）也要清，别留一个指向已还原文件的空档
@@ -8527,12 +8536,99 @@ const gitCommonDirOut = () => {
   try { return execFileSync("git", ["rev-parse", "--git-common-dir"], { cwd: ROOT, encoding: "utf8" }); }
   catch { return ""; } // 取不到锁面 ⇒ 不占锁但不停门（这道门不许依赖锁文件存在）
 };
+/** 本树自己的 git 目录。与 common dir 同指一处＝主检出，不同＝linked worktree（`mutateTreeGuard` 的判据）。 */
+const gitDirOut = () => {
+  try { return execFileSync("git", ["rev-parse", "--git-dir"], { cwd: ROOT, encoding: "utf8" }); }
+  catch { return ""; }
+};
+/** 主检出的根：从 common dir 推，不从"我所在这棵树"推——本脚本在链接树里跑时，`.git` 是个**文件**，
+ *  且 `.worktrees/` 下的树住在**主树**里（tests/head-cert-deps.test.ts:750 记的就是这一格算错的后果）。 */
+const mainRootOut = () => {
+  const c = gitCommonDirOut().trim();
+  return c === "" ? "" : dirname(resolve(ROOT, c));
+};
 /* 本文件在**顶层**跑表，所以 `import("scripts/mutate-verify.mjs")` 就等于发起一次整表变异
  * （实测：一次"只想数一下条目数"的 `node -e` 探针就在主树跑了起来，SIGKILL 后留下一枚 mutant，
  *  靠 `.mutbak` + 三条证据前提还原）。条目数请走 `--list`；被 import 时一个字节都不许动。 */
-if (process.argv[1] === undefined || resolve(process.argv[1]) !== fileURLToPath(import.meta.url)) {
+/* 判「是不是被 import」这一格，两边都得是**真路径**再比：脚本自己那份身份是 `import.meta.url`
+ * 给的（那已经是解析过的真路径），而 `process.argv[1]` 是调用方敲进来的那一串——它可以是软链。
+ * macOS 上 `/tmp`→`/private/tmp`、`/var`→`/private/var`，home 目录是软链时同理：不归一化的话，
+ * 一次完全正常的命令行调用会被这道闸以「被 import」的措辞拒掉，理由与真实原因毫无关系
+ * （实测：同一份文件经 `/tmp/...` 调被拒、经 `/private/tmp/...` 调跑得起来）。
+ * 读不出真路径时退回 `resolve`——宁可拒，不许因为"取不到身份"就放行。 */
+const invokedAs = () => {
+  if (process.argv[1] === undefined) return "";
+  try { return realpathSync(process.argv[1]); } catch { return resolve(process.argv[1]); }
+};
+if (invokedAs() !== fileURLToPath(import.meta.url)) {
   console.error("mutate-verify 会就地改源文件：只能经命令行执行（数条目用 `--list`），被 import 时拒绝运行。");
   process.exit(2);
+}
+/* `--in-worktree=<树名>`：把「就地改源文件」这件事关进一棵**一次性**的树里。
+ * 这一支是门表（package.json）与下面那道 `mutateTreeGuard` 之间的接线：门表带这个参数跑，
+ * 本进程切好树之后**重新 exec 那棵树里的脚本副本**——于是 `ROOT`（由 import.meta.url 推出来）
+ * 天然就是那棵树，后面两千行判据一行都不用改。
+ *
+ * 为什么父进程不占锁：它写的那棵树与别人无关，切到谁头上结果都一样（都切到同一个 HEAD，幂等），
+ * 而真正动盘的那一段由**子进程自己**在树上占锁（见下面 ⓪）⇒ 两个并发的 `pnpm gates` 会在树的
+ * 那一格撞窗，而不是并发改同一批 `.mutbak`。
+ *
+ * 排在 `plan.unknown` 之后、被 import 拒绝之后：拼错的 flag 与被 import 进来的情形都必须在**切树之前**停，
+ * 否则一个手误就替用户建出一棵树来。只读面（`--list`／`--check-needles`）不重定向——
+ * 它们不改源文件，留在当前树里跑就行，判卷也依赖 `--list` 在任意树里都读得到整张表。 */
+if (plan.mode === "run" && (process.argv.slice(2).includes("--in-worktree") || process.argv.slice(2).some((a) => a.startsWith("--in-worktree=")))) {
+  if (process.argv.slice(2).includes("--in-worktree")) {
+    console.error("--in-worktree 只认 `--in-worktree=<树名>` 连写（空格写法会让树名被当成锚点 id 报「未知 id」）");
+    process.exit(2);
+  }
+  const treeRel = (process.argv.slice(2).find((a) => a.startsWith("--in-worktree=")) ?? "").slice("--in-worktree=".length).trim();
+  const mainRoot = mainRootOut();
+  if (treeRel === "") {
+    console.error("--in-worktree 需要一个树名（空值不等于「就地跑」——就地跑已被 mutateTreeGuard 挡住）");
+    process.exit(2);
+  }
+  if (mainRoot === "") { console.error("取不到主检出的根（git 读不出 common dir）⇒ 没法切树，拒跑"); process.exit(2); }
+  const treeAbs = resolve(mainRoot, treeRel);
+  if (treeAbs === ROOT) { console.error(`--in-worktree 指向的就是当前这棵树（${ROOT}）⇒ 没有隔离，等于就地跑；换一个树名`); process.exit(2); }
+  // 包含判定只问一句：`resolve` 已经把 `..` 归一化过了，所以「解出来还在不在主检出里」
+  // 就是全部问题。原来还并列了一个 `treeRel` 里出现 `..` 就拒的子句——它被上面那句完全覆盖，
+  // 却多带一格假阳性：`.worktrees/..foo`、`a/../b` 这类**解完仍在仓内**的名字会被它白拒。
+  // 尾斜杠是刻意的：`/repo-evil` 不带斜链就不是 `/repo/` 的前缀，少这一个字符就等于没判。
+  if (!treeAbs.startsWith(mainRoot + "/")) {
+    console.error(`--in-worktree 的树名逃出了主检出（${treeRel} → ${treeAbs}）——不许在仓外开树`);
+    process.exit(2);
+  }
+  const want = (() => { try { return execFileSync("git", ["rev-parse", "HEAD"], { cwd: mainRoot, encoding: "utf8" }).trim(); } catch { return ""; } })();
+  if (want === "") { console.error("主检出取不到 HEAD ⇒ 没法切树，拒跑（不许拿一棵空树当隔离）"); process.exit(2); }
+  if (!existsSync(treeAbs)) {
+    mkdirSync(dirname(treeAbs), { recursive: true });
+    const added = spawnSync("git", ["worktree", "add", "--detach", treeRel, want], { cwd: mainRoot, encoding: "utf8" });
+    console.log(`[mutate-verify] worktree add exit=${String(added.status)}：${treeRel} @ ${want.slice(0, 7)}`);
+    if (added.status !== 0) { console.error((added.stderr || added.stdout || "").trim().split("\n").slice(0, 3).join("\n")); process.exit(2); }
+  } else {
+    const checked = spawnSync("git", ["-C", treeAbs, "checkout", "--detach", "--force", want], { cwd: mainRoot, encoding: "utf8" });
+    console.log(`[mutate-verify] checkout exit=${String(checked.status)}：${treeRel} → ${want.slice(0, 7)}`);
+    if (checked.status !== 0) { console.error((checked.stderr || checked.stdout || "").trim().split("\n").slice(-4).join("\n")); process.exit(2); }
+  }
+  // 切完再核：读数必须是这棵树**自己**的 HEAD（头 cert 那一格栽过的形状——链子里的 checkout 红了而门照跑）。
+  const got = (() => { try { return execFileSync("git", ["-C", treeAbs, "rev-parse", "HEAD"], { cwd: mainRoot, encoding: "utf8" }).trim(); } catch { return ""; } })();
+  if (got !== want) { console.error(`切完再核：树里是 ${got.slice(0, 7) || "读不出"}，目标是 ${want.slice(0, 7)} ⇒ 不一致，停`); process.exit(2); }
+  // 依赖集：脚本要 import typescript / vitest，树里没有 node_modules 就一样跑不起来。硬链接零拷贝。
+  const nm = join(treeAbs, "node_modules");
+  if (!existsSync(nm)) {
+    const copied = spawnSync("cp", ["-al", join(mainRoot, "node_modules"), nm], { encoding: "utf8" });
+    console.log(`[mutate-verify] cp -al node_modules exit=${String(copied.status)}`);
+    if (copied.status !== 0) { console.error((copied.stderr || "").trim()); process.exit(2); }
+  }
+  const childArgs = process.argv.slice(2).filter((a) => !a.startsWith("--in-worktree"));
+  // 路径原样传：脚本自己那道「被 import 时拒绝运行」两边都归一化真路径（S2-3），
+  // 仓库根落在软链后面（macOS 上 `/tmp`、`/var`、以及指向软链的 home 目录都可能）时它认得出来。
+  // 这里原来有一处 `realpathSync` 兜底，那是给那道闸的缺陷打的补丁；病根修好就把补丁拆了——
+  // 补丁留着的话，闸哪天真的退化，这条还会照样绿。
+  const childScript = join(treeAbs, "scripts", "mutate-verify.mjs");
+  const r = spawnSync(process.execPath, ["--import", "tsx", childScript, ...childArgs],
+    { cwd: mainRoot, stdio: "inherit" });
+  process.exit(r.status === null ? 2 : r.status);
 }
 // 认不出的 flag 一律拒跑：本脚本「无参数」的缺省语义是跑全表，那会就地改源文件几十分钟。
 if (plan.unknown.length > 0) {
@@ -8671,6 +8767,17 @@ console.log("[mutate-verify] 锁=" + LOCK.cell);
 
 if (targets.length && requested.length !== targets.length) {
   console.error(`未知 id: ${targets.filter((t) => !MUTATIONS.some((m) => m.id === t)).join(", ")}`);
+  process.exit(2);
+}
+
+/* ⓪½ 树闸：本门**就地改源文件**，而收尾兜底拦不住超时（`verifyEntry` 上方「实测边界（09-23）」），
+ * 所以能动的树必须是一次性的 worktree。这一格排在未知 id 校验**之后**是为了保住 ⓪ 那条探法
+ * （带不存在的 id 在主树真跑一次，措辞要能分出「锁在管」与「锁没管」）——两条都是 exit 2，
+ *  把树闸提到前面，那条探法在主树里就永远只会说出「这是主检出」，锁的两态再也分不开。
+ * 而它排在 `healLeftoverBackups()`（本次第一次写）之前，所以拒跑的这一支一个字节都没改过盘。 */
+const TREE = mutateTreeGuard({ root: ROOT, gitDir: gitDirOut(), commonDir: gitCommonDirOut() });
+if (TREE.kind === "refused") {
+  console.error(`[mutate-verify] 树闸拒跑：${TREE.why}`);
   process.exit(2);
 }
 

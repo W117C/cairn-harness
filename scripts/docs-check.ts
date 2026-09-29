@@ -207,7 +207,7 @@ export function checkReplay(
   registered: readonly ReplayReading[] = REPLAY_READINGS,
 ): Finding[] {
   const refs = docs.map((d) => ({ file: d.path, ids: [...d.text.matchAll(REPLAY_REF)].map((m) => m[1]!) }));
-  const inline = docs.map((d) => ({ file: d.path, count: [...d.text.matchAll(INLINE_REPLAY)].length }));
+  const inline = docs.map((d) => ({ file: d.path, count: countInlineReplay(d.text) }));
   const gaps = replayGapsOf({ registered, missingScripts: registered.filter((r) => !scriptExists(r.script)).map((r) => r.script), refs, inline });
   const out: Finding[] = [];
   for (const r of refs) {
@@ -295,7 +295,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { INLINE_REPLAY, REPLAY_READINGS, REPLAY_REF, replayGapsOf, type ReplayReading } from "./replay-readings";
+import { REPLAY_READINGS, REPLAY_REF, countInlineReplay, replayGapsOf, type ReplayReading } from "./replay-readings";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 

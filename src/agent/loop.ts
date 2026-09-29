@@ -1,5 +1,5 @@
 import { isEnvVerifyCause } from "../events";
-import type { AgentEvent, EventLog, SkillInvocationMeta, UserMessageOrigin } from "../events";
+import type { AgentEvent, EventLog, SkillInvocationMeta, UserMessageOrigin, VerifyCommandResult } from "../events";
 import { redactSecrets } from "./security/scan";
 import { autoOf, denyReason, gate, type PermissionMode, type ToolResultWithAudit } from "../permissions";
 import type { HookEngine } from "./plugins/hooks";
@@ -129,6 +129,21 @@ function redactToolCallForLog(e: Extract<AgentEvent, { type: "tool_call" }>): Ag
   return { ...e, args: redactValue(e.args) as Record<string, unknown> };
 }
 
+/** verify 面落盘用：命令与输出各自过脱敏，其余字段（ok / exitCode / cause）不是文本，原样带走。
+ *
+ *  为什么 tool_call 那两处修了它还漏着：`verify_result.results[].output` 是**测试输出**——
+ *  子流早就有同一个洞，worker-projection.ts:92 的 `verify_result: [["results"]]` 是它的对照
+ *  （那里的注释自己写着「最容易把 env 整段打印出来的地方」），主会话这条落盘面却没接。
+ *  一条 `pnpm test` 把 `.env` 整段打出来，密钥就永久留在可重放的 JSONL 里。
+ *  `command` 同样过：verify 命令行本身就能带凭据（`AWS_SECRET=… pytest`），与 run_shell 的 args 同一族。 */
+function redactVerifyResults(results: VerifyCommandResult[]): VerifyCommandResult[] {
+  return results.map((r) => ({
+    ...r,
+    command: redactSecrets(r.command).text,
+    output: redactSecrets(r.output).text,
+  }));
+}
+
 export async function runLoop(opts: LoopOptions): Promise<void> {
   const { workspace, userMessage, userMessageSkill, userMessageOrigin } = opts;
   const seen: AgentEvent[] = [];
@@ -202,7 +217,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       ok: outcome.ok,
       attempt,
       maxAttempts: maxVerify,
-      results: outcome.results,
+      results: redactVerifyResults(outcome.results),
       // 归因落进事件流（审计面）；下面三处出口据此决定"这一拍算谁的账"。
       ...(cause === undefined ? {} : { cause }),
       ...(auto ? { auto: true } : {}),
@@ -249,7 +264,11 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       type: "tool_result",
       callId,
       ok: false,
-      output: envPreface + (repeat ? repeatDigestNote(outcome, attempt) : digest),
+      // 同一拍验证的**第二份**原文在下面这行（failureDigest 把 results 整段拼进来）。
+      // verify_result 那份脱敏了而这份不脱敏，等于掩码留在门里、钥匙落在门口。
+      // 脱敏只发生在落盘面：`lastVerifyDigest` 的「逐字相同」比的是内存里的原值，
+      // 重复注入的判定不受影响；模型同轮看到的也还是原值（同 runAgent 工具面那条口径）。
+      output: redactSecrets(envPreface + (repeat ? repeatDigestNote(outcome, attempt) : digest)).text,
     });
     return "continue";
   };
@@ -378,11 +397,20 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       const decision = gate(mode, name, interactive);
       if (decision !== "allow") {
         const reason = decision === "deny" ? denyReason(name) : null;
+        // 方案门**不是档位裁决**，所以这条拒绝不报档。`checkPermission` 在查
+        // `SIDE_EFFECT_DECISION` 之前就先判 `planBlocks()`（permissions/index.ts:107），
+        // 四档一律拒、且都与用户传了什么无关。而这一层的 mode 是冻结的 `auto`
+        // （agent-runner.ts:1523），照实写出来就变成「在 auto 档」——传了 `--mode read-only`
+        // 的用户撞到方案门也会看见它，于是以为自己的 flag 没生效，去 debug 错的方向。
+        // 真正的档位裁决在 `gatedTool` 那一层（它读 `s.autonomy.mode`），那一层逐档正确。
+        // 判据用 `reason` 而不是 `decision === "deny"`：非交互时 `ask` 被降级成 deny
+        // （`gate()`）也是 deny，但那一档确实参与过裁决，得照实报。
+        const where = reason === null ? `在 ${mode} 档（${interactive ? "交互" : "非交互"}）下` : "";
         await events.append({
           type: "tool_result",
           callId: output.id,
           ok: false,
-          output: `[permission denied] ${output.name} 在 ${mode} 档（${interactive ? "交互" : "非交互"}）下被门拒绝（${decision}${reason ? `：${reason}` : ""}）`,
+          output: `[permission denied] ${output.name} ${where}被门拒绝（${decision}${reason ? `：${reason}` : ""}）`,
         });
         continue;
       }

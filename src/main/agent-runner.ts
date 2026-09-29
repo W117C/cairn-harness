@@ -30,6 +30,7 @@ import { createImpactQueryTool, impactQuerySpec } from "../tools/impact-query";
 import { createWaitForAgentsTool } from "../tools/wait_for_agents";
 import { createCancelAgentsTool } from "../tools/cancel_agents";
 import { createRefineGoalTool } from "../tools/refine_goal";
+import { AUTOMATION_TOOL_NAMES } from "../agent/automation-surface";
 import { run_shell } from "../tools/run_shell";
 import type { AgentEvent, ClarifyAnswerMap, EventLog, GoalTurnOrigin } from "../events";
 import { frozenJudgePathSet } from "../frozen";
@@ -323,8 +324,12 @@ async function orchestratorExtras(sandbox: SandboxStatus | null = null, runModel
  *  才进沙箱，否则原样落回 `original.run`——worker 这边不做更严的判断，否则非 macOS 宿主上
  *  worker 一条命令都发不出去。
  *  缺省断网：主会话那条路的 `networkProfileFor` 要审批上下文，worker 门里没有这条通道，
- *  于是按 profile 缺省（无 network 规则 ⇒ 闭箱全断）取 deny。worker 要联网只能回主会话发。 */
-function workerShellRunnerFor(sandbox: SandboxStatus | null): OrchestratorOptions["workerShell"] {
+ *  于是按 profile 缺省（无 network 规则 ⇒ 闭箱全断）取 deny。worker 要联网只能回主会话发。
+ *
+ *  导出是为了让「装不装」这个决定本身可判：守卫原文钉在源文本上钉不住**可用态那条路是不是真的通**
+ *  （实测：把可用态整条路改成 `return undefined`、守卫一字不动，那 7 条判卷全绿——而那正是本仓
+ *  反复栽的形状，worker 悄悄退回 Seatbelt 之外）。断网那一格仍留源文本：证它要真起一次 Seatbelt。 */
+export function workerShellRunnerFor(sandbox: SandboxStatus | null): OrchestratorOptions["workerShell"] {
   if (sandbox === null || !sandbox.available) return undefined;
   return async (command, ctx) => {
     const mapped = mapSandboxTestCommand(command);
@@ -646,7 +651,7 @@ export interface PluginToolSource {
  *  导出是为了让这条接线有判据：provider 那条分支要真 key 才走得到，接线本身不能因此永远没证据。 */
 export function sessionToolFace(
   rt: { skillDenial(tool: string): string | null } | null,
-  opts: { mode: RunOptions["mode"]; pluginTools?: readonly SessionPluginTool[] },
+  opts: { mode: RunOptions["mode"]; pluginTools?: readonly SessionPluginTool[]; automationTools?: boolean },
 ): { tools: GlmToolSpec[]; note: string; skipped: string[]; removed: { name: string; by: string }[]; skillDenial: ((tool: string) => string | null) | undefined } {
   const skillDenial = rt ? (tool: string): string | null => rt.skillDenial(tool) : undefined;
   const face = sessionToolSpecs({
@@ -654,7 +659,21 @@ export function sessionToolFace(
     pluginTools: opts.pluginTools ?? [],
     ...(skillDenial ? { skillDenial } : {}),
   });
-  return { tools: face.specs, note: face.note, skipped: face.skipped, removed: face.removed, skillDenial };
+  /* 定时五件：**规格面与执行面一起摘**，判据是同一个 `automationTools`。
+   *
+   *  为什么必须两面都摘（只摘一头都会比现状更糟，两头都是本仓点名的失败形状）：
+   *  · 只摘实现不摘规格：`gateToolSpecs`（glm-session.ts:360）无条件 `push(automationToolSpecs())`，
+   *    于是模型看得见、只吃得到 `unknown tool: automation_create`——比现状那句
+   *    「调度器未初始化（fail-closed）」更难懂，还白烧一轮。
+   *  · 只摘规格不摘实现：反过来，模型看得见工具却永远建不成功，正是「存在 ≠ 接线」本身。
+   *  现状（两面都在、但没有调度器）反而不算坏：五件各自 fail-closed 说清楚在拒什么，
+   *  唯一白烧的一轮是 `automation_create`（审批在 `needScheduler()` 之前）。
+   *  摘掉之后一次性进程上模型连看都看不见它们 ⇒ 那轮也不用烧。 */
+  const specs =
+    opts.automationTools === false
+      ? face.specs.filter((s) => !AUTOMATION_TOOL_NAMES.includes(s.function.name))
+      : face.specs;
+  return { tools: specs, note: face.note, skipped: face.skipped, removed: face.removed, skillDenial };
 }
 
 export function pluginToolSpecsFromRuntime(rt: PluginToolSource | null): SessionPluginTool[] {
@@ -843,6 +862,9 @@ export async function handleCompact(
 }
 
 let installed = false;
+/** 第一场 run 定的定时五件判据（`true` = 装）。**只读**：它唯一的用途是让后一场的异值当场拒，
+ *  不参与任何装/摘决策——真装不装看 `installAppTools` 自己那次调用。 */
+let installedAutomation = true;
 /** M2d：remember 门语义（可测工厂）：方案门写禁 / 档位表判 deny·ask·allow。
  *  §8.1.4「remember 属写动作走权限门」；无权限 → ok:false 且不落盘。
  *  裁决读 `SIDE_EFFECT_DECISION` 那一列（`sideEffectDecisionTable()`）——旧写法是
@@ -870,10 +892,34 @@ export function createGatedRemember(deps: {
     },
   };
 }
-/** 一次性把 TOOLS 里的写工具换成带门 + 沙箱的包装（runLoop 直接读 TOOLS，无注入点）。 */
-export function installAppTools(): void {
-  if (installed) return;
+/** 一次性把 TOOLS 里的写工具换成带门 + 沙箱的包装（runLoop 直接读 TOOLS，无注入点）。
+ *
+ *  `automation: false` 摘掉 M4a 那五个定时任务工具。**为什么 CLI 要摘**：它们要 `initScheduler`
+ *  才有意义（tick 60s / 补跑 7 天 / 并发闸 ≤2，全是长驻进程语义），而 CLI 是一次性进程——
+ *  留着它们，模型看得见就会去建，然后每次都撞 `needScheduler()` 白烧一轮审批。
+ *  **这一个参数只管执行面；规格面在 `sessionToolFace` 里由同一个 `automationTools` 字段管
+ *  （`faceArgs` 同时喂两处）。两处必须一起翻**：只摘执行面的话模型照样看得见这五把工具、
+ *  只吃得到 `unknown tool: automation_create`，比现状那句「调度器未初始化（fail-closed）」更难懂。
+ *  调度器与 `Scheduler` 类本身不动（长驻服务时再接）。 */
+export function installAppTools(opts: { automation?: boolean } = {}): void {
+  // 装/摘的粒度是**进程**（TOOLS 是全局表，守卫只让第一个调用赢），`automationTools` 的粒度是
+  // **每场 run**（规格面 faceArgs 每场重算）。两者对不上时——第二场给出与第一场不同的值——
+  // 规格面照新值重算、执行面不照做 ⇒ 模型看得见五件、只吃得到 `unknown tool`，正是本仓栽过
+  // 多次的那个形状。所以「第一个 run 定终身」这条从散文契约改成硬拒：同值重复（goal 续跑
+  // 一轮轮传同一个值）照旧空转，异值当场抛，在那场 run 出门之前就拒。
+  const wantAutomation = opts.automation !== false;
+  if (installed) {
+    if (wantAutomation !== installedAutomation) {
+      throw new Error(
+        "installAppTools: 同一进程里第二场 run 的 automationTools 与第一场不一致（第一场 " +
+        (installedAutomation ? "装" : "不装") + "定时五件，这一场 " + (wantAutomation ? "装" : "不装") +
+        "）。执行面 TOOLS 只装一次、规格面每场重算，异值会让模型看得见却调不到。",
+      );
+    }
+    return;
+  }
   installed = true;
+  installedAutomation = wantAutomation;
   TOOLS.write_file = gatedTool("write_file", TOOLS.write_file);
   TOOLS.edit_file = gatedTool("edit_file", TOOLS.edit_file);
   TOOLS.run_shell = gatedTool("run_shell", TOOLS.run_shell);
@@ -923,10 +969,12 @@ export function installAppTools(): void {
       turn: view.turn, stopped: view.stopped,
     };
   });
-  // M4a：agent 工具五件（§12.2.5）——automation_create/update/delete/run_now/list。
-  // 一切变更走审批卡（§10.4）；prompt 是持久化攻击面：4k 上限（校验拒）+ 审批卡全文展示（args 原样进审批卡）；
-  // workspace-write 及以上档位 → 审批卡红字「将无人值守执行」（§12.2.5）；调度器未初始化 = fail-closed。
-  installAutomationTools();
+  if (opts.automation !== false) {
+    // M4a：agent 工具五件（§12.2.5）——automation_create/update/delete/run_now/list。
+    // 一切变更走审批卡（§10.4）；prompt 是持久化攻击面：4k 上限（校验拒）+ 审批卡全文展示（args 原样进审批卡）；
+    // workspace-write 及以上档位 → 审批卡红字「将无人值守执行」（§12.2.5）；调度器未初始化 = fail-closed。
+    installAutomationTools();
+  }
 }
 
 const appAskGate = new AskGate({
@@ -1125,20 +1173,23 @@ function installAutomationTools(): void {
 
 let sandboxState: SandboxStatus = { available: false, reason: "尚未自检" };
 
-/** 自检沙箱（app 启动时 / 检查脚本入口调用）。 */
-export async function initSandbox(): Promise<void> {
+/** 自检沙箱（app 启动时 / 检查脚本入口调用）。**返回自检结果**：调用方（CLI）要把「不可用」
+ *  明写给用户看，而重复调一次 `checkSandbox` 就是多 spawn 一个进程——自检只有一份事实。 */
+export async function initSandbox(): Promise<SandboxStatus> {
   sandboxState = await checkSandbox();
+  return sandboxState;
 }
 
-/** M7 影响面：写工具成功后回注跨文件波及（护栏能力，显式开启，默认关闭——与 actionFusion 同族）。 */
+/** M7 影响面：写工具成功后回注跨文件波及（护栏能力）。缺省由 `DEFAULT_SETTINGS.impactAnalysis`
+ *  决定（用户裁决 2026-09-27 翻成**开**）；直接调 `runAgent` 而不给这个键时按关处理
+ *  ——`runAgent` 是内层入口，生产调用者（`handleAgentRun`）总是显式把 settings 的值传下来。 */
 export interface ImpactOptions {
   impactAnalysis?: boolean;
 }
 
 export interface RunOptions extends SolpiFlags, ImpactOptions {
   /** 能力 5 收束闸：写过盘但模型没自调 verify 时，收束前补一拍验证并把红字落进事件流。
-   *  缺省关闭（与 actionFusion / impactAnalysis 同族口径）；一拍 = 真跑一遍 lint/test，
-   *  开闸的代价与判据见 BLOCKED「能力 5 收束闸」立案。 */
+   *  缺省**开**（同族是 `impactAnalysis` / `promptCache`）；一拍 = 真跑一遍 lint/test。 */
   autoVerify?: boolean;
   /** 能力 5 的返修那一环（拍红 → 再要一轮去修 → 重验一次，上限一次）。
    *  **只从 settings 取，不留 override 槽**：`handleAgentRun` 的两个产品调用者从不传它，
@@ -1171,6 +1222,11 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
   signal?: AbortSignal;
   /** C1: opt-in main-run write/edit + configured lint; never forwarded to workers. */
   actionFusion?: boolean;
+  /** 装不装 M4a 那五个 `automation_*` 定时任务工具。**执行面是进程级的**（`installAppTools`
+   *  只让第一个调用赢），所以同一进程里各场 run 必须给同一个值；给成异值会在
+   *  `installAppTools` 当场抛，而不是让规格面（这槽每场重算）与执行面悄悄分家。
+   *  缺省 true = 装（长驻服务语义）。一次性进程传 false。 */
+  automationTools?: boolean;
 }
 
 /** Explicit non-empty M0A_PROVIDER wins; empty means settings. Unknown env values fail visibly. */
@@ -1225,6 +1281,9 @@ function createProvider(
       // Preserve the pre-CX main-session GLM default compaction budget. An explicit request/settings
       // model opts into the registry window; other providers always use their registry spec.
       ...(selection.kind !== "glm" || selection.modelExplicit ? { model: selection.spec.model } : {}),
+      // 自由档位的名字查表恒为 undefined ⇒ 窗口必须由 spec 递进预算，否则 `--ctx-window` 只改到一半
+      // （toWorkerModel 会丢掉 ctxWindow，只有这一条真的落到 inputLimit 上）。
+      ...(selection.modelExplicit ? { ctxWindow: selection.spec.ctxWindow } : {}),
       transport,
       transportLabel: label,
       ...(attachmentContext ? { attachmentContext } : {}),
@@ -1269,7 +1328,7 @@ export function isSessionLogBusy(logPath: string): boolean {
   return liveRunPaths.has(resolve(logPath)) || deletingSessionPaths.has(resolve(logPath));
 }
 export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
-  installAppTools();
+  installAppTools({ automation: opts.automationTools });
   // H2（A-2）：无人值守 run 的等人门上限——定时触发的 clarify/plan 挂起 60s 后 fail-closed。
   // 交互 run 不限时（等人语义不变，仅随取消信号收束）。
   const UNATTENDED_GATE_WAIT_MS = 60_000;
@@ -1450,6 +1509,8 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     const impactTool = opts.impactAnalysis === true ? createImpactQueryTool() : undefined;
     const faceArgs = {
       mode: opts.mode,
+      // 同一个字段喂给规格面（sessionToolFace）与执行面（installAppTools）——两面必须同时摘。
+      automationTools: opts.automationTools,
       pluginTools: [...(recall ? [observationRecallSpec] : []), ...(impactTool ? [impactQuerySpec] : []), ...pluginToolSpecsFromRuntime(rt).filter(t => !recall || t.name !== "obs_recall")],
     };
     // run 起点这份只管两件事：出声（同名冲突 / 摘了谁的哪把）+ 给 loop 一份稳定的活闸闭包。
@@ -1658,6 +1719,27 @@ export interface RunOverrides
   actionFusion?: boolean;
   /** 能力 5 收束闸 runtime override（同 actionFusion 口径：settings 与 IPC 开闸另议）。 */
   autoVerify?: boolean;
+  /** 已解析好的模型选择（CLI `--model` 自由档专用）。
+   *
+   *  为什么需要这个槽，而 `RunRequest.model` 不够：那一档的模型名**按定义不在 `DEFAULT_MODEL_TABLE` 里**
+   *  （`provider-runtime.ts:112-115` 的注释——表是 bandit 代价项与预算折钱的依据），而
+   *  `validateRunRequestEnvelope`（run-request.ts:48）只收已登记的 id。两边都对，所以自由档只能走这里。
+   *  缺省 = 走 `resolveRunModel(settings, req.model)`，与本槽存在前逐字相同。 */
+  modelSelection?: MainModelSelection;
+  /** 装不装 `automation_*` 五件（长驻服务语义）。**不是 settings 开关**——scheduler 初始化与
+   *  tick 是进程级的，settings 存一个「装不装工具」既管不住也没法表达（进程已起来了）。
+   *  判据只有一个：调用方是不是长驻进程。缺省 true。 */
+  automationTools?: boolean;
+  /** 这条 run 现场**没有人能应答**（stdin 非 TTY / 管道 / CI）。
+   *
+   *  为什么与 `unattended` 分成两个槽：那个槽还经 `runAgent` 关掉**会话尾沉淀**
+   *  （`autoMemory`，见下 `enabled: … && opts.unattended !== true`），而「没人答审批」
+   *  与「这是定时任务、不该沉淀」是两件事——CLI 侧刻意只关前者。
+   *  但 goal 续跑**必须**看这一槽：门已经 fail-closed 拒了，写不了盘也验不出绿，
+   *  而判据里「证据 failed」是 continue ⇒ 不看就是一路烧到轮次闸且没有一轮可能成功。
+   *
+   *  缺省 false = 有人在场。与 `unattended` 取或，两条任一成立都不续跑。 */
+  noAnswerer?: boolean;
 }
 
 const unattendedAskGate = new AskGate({ unattended: true });
@@ -1716,7 +1798,7 @@ export async function handleAgentRun(
       attachments = checked.value;
     }
 
-    const modelSelection = resolveRunModel(settings, req.model);
+    const modelSelection = over.modelSelection ?? resolveRunModel(settings, req.model);
     if (modelSelection.kind === "demo") {
       if (req.thinking !== undefined && req.thinking !== "off") {
         return { ok: false, error: "demo provider 不支持 thinking；当前只允许 off" };
@@ -1742,6 +1824,7 @@ export async function handleAgentRun(
         ...(goalTurn ? { goalTurn } : {}),
         logPath,
         modelSelection,
+        ...(over.automationTools === false ? { automationTools: false as const } : {}),
         ...(attachmentCount > 0 ? { attachments } : {}),
         ...(sessionMode ? { sessionId } : {}),
         ...(over.unattended ? { unattended: true as const } : {}),
@@ -1769,7 +1852,7 @@ export async function handleAgentRun(
         askGate: over.unattended ? unattendedAskGate : appAskGate,
         sandbox: sandboxState,
       });
-      const next = await goalNextTurn({ logPath, sessionId, unattended: over.unattended === true, aborted: () => over.signal?.aborted === true, runModel: modelSelection });
+      const next = await goalNextTurn({ logPath, sessionId, unattended: over.unattended === true || over.noAnswerer === true, aborted: () => over.signal?.aborted === true, runModel: modelSelection });
       if (next === null) return { ok: true, ...(attachmentCount > 0 ? { attachmentCount } : {}) };
       message = next.message;
       goalTurn = next.origin;

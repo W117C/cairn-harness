@@ -124,6 +124,46 @@ describe("goal 模式端到端（真入口，缺省零行为）", () => {
     expect(view?.turn).toBe(1);
   });
 
+  it("没人应答（管道/CI）同样不续跑：与「定时任务」分成两支，判据是**同一句停机理由**", async () => {
+    // 这条钉的是 CLI 那条真实路径：`m0 --goal …` 在管道里跑，CLI 不传 `unattended`
+    // （那个槽会连带关掉会话尾沉淀，cli.ts 刻意不翻），只传 `noAnswerer`。
+    // 漏了它就是 README 承诺的「stdin 是管道不会自动续跑」落空：闸只认 `over.unattended`
+    // ⇒ 门全被拒、判据对「证据 failed」是 continue ⇒ 一路烧到轮次闸且没有一轮可能成功。
+    //
+    // 为什么不断言「有没有停」：本剧本不写盘，判据本来就以「没有写过任何文件」停，
+    // 两支**都会停**——那样这条判卷恒真。判据必须是**哪道闸在答话**（同 J3 那条的理由）：
+    // 两支只差 `noAnswerer` 一个维度、停机理由却从「没有写过任何文件」换成「无人值守 run
+    // 不自动续跑」⇒ 这道闸真在管这条路径，而不是被别的原因顺带收场。
+    const reasonOf = async (): Promise<string> => {
+      const stops = (await events()).filter((e) => e.type === "goal_stopped");
+      return stops[0]?.type === "goal_stopped" ? stops[0].reason : "";
+    };
+
+    // 支一：只有 noAnswerer（管道形状——不传 unattended，沉淀那条路留开）
+    process.env.M3A_MAIN_SCRIPT = scriptPath;
+    await handleGoalSet({ sessionId: "s-plain", objective: "把测试跑绿", maxTurns: 8 });
+    const piped = await handleAgentRun(
+      { message: "开始", mode: "auto", sessionId: "s-plain" },
+      { workspace, sessionId: "s-plain", logPath, noAnswerer: true },
+    );
+    expect(piped.ok).toBe(true);
+    expect(await reasonOf()).toContain("无人值守 run 不自动续跑：这条路上审批一律");
+    // 没起第二轮：判卷认的是「续跑 turn 一条也没发」，不是只看最后停在哪
+    expect(userTurns(await events()).filter((t) => t.type === "user_message" && t.origin?.kind === "goal").length).toBe(0);
+
+    // 支二：两支只差 noAnswerer —— 有人在场时停机理由必须是**判据**那句，不许被这槽顶掉
+    logPath = pathOf(sessions, "s-human");
+    await handleGoalSet({ sessionId: "s-human", objective: "把测试跑绿", maxTurns: 8 });
+    const human = await handleAgentRun(
+      { message: "开始", mode: "auto", sessionId: "s-human" },
+      { workspace, sessionId: "s-human", logPath },
+    );
+    expect(human.ok).toBe(true);
+    const humanReason = await reasonOf();
+    expect(humanReason).toContain("没有写过任何文件");
+    expect(humanReason).not.toContain("无人值守 run 不自动续跑");
+  });
+
   it("停过的目标不会因用户再发一条而自动复活：停止是终态，要再跑得改设目标", async () => {
     process.env.M3A_MAIN_SCRIPT = scriptPath;
     await handleGoalSet({ sessionId: "s-plain", objective: "回答问题", maxTurns: 6 });

@@ -41,7 +41,7 @@
     "cost-per-progress-check": "node --import tsx scripts/cost-per-progress-check.ts",
     "head-import-check": "node --import tsx scripts/head-import-face.ts",
     "head-cert-check": "node --import tsx scripts/head-cert.ts --tree=.worktrees/gate-head-cert",
-    "mutate-verify": "node --import tsx scripts/mutate-verify.mjs"
+    "mutate-verify": "node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify"
   },
   "devDependencies": {
     "@types/node": "^26.5.0",

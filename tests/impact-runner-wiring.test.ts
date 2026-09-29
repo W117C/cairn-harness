@@ -25,8 +25,15 @@ const BUG = join(ROOT, "fixtures", "mock", "todo-bug.ts");
 
 let dirs: string[] = [];
 
+/** 本文件首跑时看到的兜底值（vitest.config.ts 设的那个），用于 afterEach 还原。 */
+const impactTagsBase: string | undefined = process.env.M7_IMPACT_TAGS_DIR;
+
 afterEach(async () => {
-  delete process.env.M7_IMPACT_TAGS_DIR;
+  // 还原而不是删掉：vitest.config.ts 把它兜到临时目录（`impactAnalysis` 缺省开之后，
+  // 十来个只跑 agent 的用例也会走建图），`delete` 会把那个兜底一并摘掉，
+  // 于是同进程里排在后面的文件又落回 `~/.m0-agent-loop/impact-tags`。
+  if (impactTagsBase === undefined) delete process.env.M7_IMPACT_TAGS_DIR;
+  else process.env.M7_IMPACT_TAGS_DIR = impactTagsBase;
   for (const d of dirs) await rm(d, { recursive: true, force: true });
   dirs = [];
 });
@@ -98,6 +105,10 @@ describe("影响面第三环：settings ⇒ 构造点 ⇒ 事件流（走真实 
     "关（缺省）：一条 impact_report 都不许出现，但同一条写盘仍成功",
     { timeout: 180_000 },
     async () => {
+      // 「缺省」说的是**内层 runAgent**：RunOptions.impactAnalysis 没给就是没给，钩子不构造。
+      // settings 的缺省开只经 `handleAgentRun` 那层读盘生效（第四环量的是它），不流到这一格。
+      // 用例名被 `scripts/mutate-verify.mjs` 的锚点 `runner-impact-hook-always-constructed` 按名引用，
+      // 改名＝打断那条变异指针（判卷文件是冻结的，不许改那边来迁就这边）。
       const events = await runOnce(await freshWs(), {});
       expect(writeResult(events)?.ok, "写盘都没成功，这条就成了假绿（零事件可以是没写）").toBe(true);
       expect(events.filter((e) => e.type === "impact_report").length).toBe(0);
@@ -151,12 +162,29 @@ describe("影响面第四环：设置盘上的键 ⇒ 生产入口真读它（ov
   );
 
   it(
-    "反向一侧：盘上没这个键（缺省关）⇒ 生产入口零 impact_report，但写盘仍成功",
+    "反向一侧：盘上**显式**关 ⇒ 生产入口零 impact_report，但写盘仍成功",
+    { timeout: 180_000 },
+    async () => {
+      // 2026-09-27 用户裁决把 impactAnalysis 翻成缺省开，于是「盘上没这个键」不再是反例——
+      // 它现在正是一格要成立的**正例**（下面那条）。反例必须显式写 false，否则这条测的是一个
+      // 已经被改掉的状态，而「零事件」仍会被没写盘满足。
+      const events = await runOnceViaProduction(await freshWs(), { impactAnalysis: false });
+      expect(writeResult(events)?.ok, "写盘都没成功 ⇒ 「零事件」可以被没写满足，等于没测").toBe(true);
+      expect(events.filter((e) => e.type === "impact_report").length).toBe(0);
+    },
+  );
+
+  it(
+    "缺省开：盘上没这个键（旧机器的 settings.json）⇒ 生产入口照样出 impact_report",
     { timeout: 180_000 },
     async () => {
       const events = await runOnceViaProduction(await freshWs(), {});
-      expect(writeResult(events)?.ok, "写盘都没成功 ⇒ 「零事件」可以被没写满足，等于没测").toBe(true);
-      expect(events.filter((e) => e.type === "impact_report").length).toBe(0);
+      expect(writeResult(events)?.ok, "写盘都没成功 ⇒ 这条测不到设置读那一行").toBe(true);
+      const reports = events.filter(
+        (e): e is Extract<AgentEvent, { type: "impact_report" }> => e.type === "impact_report",
+      );
+      expect(reports.length, "缺省开了却没生效 = 读盘回退与 DEFAULT_SETTINGS 不同向").toBeGreaterThan(0);
+      expect(reports[0].symbols).toContain("addTodo");
     },
   );
 });

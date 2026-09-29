@@ -179,3 +179,50 @@ describe("主会话预算随模型窗口（128k 帽不再一刀切）", () => {
     await drain(path, { model: "glm-standard", compaction: { config: { inputLimit: 900_000 } } });
   });
 });
+
+/* M-1：`--model` 自由档位的模型名按定义**不在档位表里**，所以 `budgetConfig()` 那条
+   `findSpecByNameOrId(DEFAULT_MODEL_TABLE, opts.model)` 查表恒为 undefined ⇒ 这一路的预算
+   只能吃硬编码 128k。硬编码值对**更小**的模型是高估，而高估那一侧正是「撞远端 400」。
+   这一组量的是「窗口真的落到预算面」——不是 spec 上那个字段改了没有（那只是声明）。 */
+describe("自由档位的窗口申报落到预算面（M-1）", () => {
+  /** 80k token：落在申报的 32k **之上**、128k 缺省**之下**——只有真认了窗口才会拒。
+   *  （拿 150k 那份来试是无效的：它在 128k 缺省之上，认不认窗口都拒，测不出接线。） */
+  const MID = "x".repeat(320_000);
+  /** 150k token：落在 128k 缺省之上、申报的 256k 之下——反方向的那一格。 */
+  const BIG = "x".repeat(600_000);
+  /** 表外名字：自由档位按定义没有登记，查表那条对它必然 undefined。 */
+  const FREEFORM = "stealth/small-window-model";
+
+  const drain = async (path: string, opts: Parameters<typeof createGlmSessionProvider>[1]) => {
+    const provider = createGlmSessionProvider(path, {
+      map: false, workspace: dir,
+      ...opts,
+      transport: async function* (): AsyncGenerator<ModelOutput> {
+        yield { type: "assistant_message", content: "ok" };
+      },
+    });
+    for await (const _ of provider.stream([])) { /* drain */ }
+  };
+
+  it("申报 32k ⇒ 80k 历史本地 fail-closed 拒发（不送到远端吃 400）", async () => {
+    const path = await setup();
+    await log.append({ type: "assistant_message", content: MID });
+    await expect(drain(path, { model: FREEFORM, ctxWindow: 32_000 }))
+      .rejects.toThrow("context_budget_exceeded");
+  });
+
+  it("反向对照：同一个表外名字、窗口报 256k ⇒ 150k 历史照常发出（认的是窗口，不是名字）", async () => {
+    const path = await setup();
+    await log.append({ type: "assistant_message", content: BIG });
+    await drain(path, { model: FREEFORM, ctxWindow: 256_000 });
+  });
+
+  it("缺申报的表外模型仍按 128k 缺省判：80k 放行、150k 拒（这组修的是洞，不是把默认改严了）", async () => {
+    const ok = await setup();
+    await log.append({ type: "assistant_message", content: MID });
+    await drain(ok, { model: FREEFORM }); // 80k < 128k 缺省 ⇒ 放行
+    const over = await setup();
+    await log.append({ type: "assistant_message", content: BIG });
+    await expect(drain(over, { model: FREEFORM })).rejects.toThrow("context_budget_exceeded"); // 150k > 128k ⇒ 拒
+  });
+});

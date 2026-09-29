@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL_TABLE, lookupModel, PROVIDER_IDS, type ModelSpec } from "./registry";
+import { DEFAULT_MODEL_TABLE, isFreeformModelId, lookupModel, PROVIDER_IDS, type ModelSpec } from "./registry";
 
 /** UI 与 RunRequest 共用的思考档位。Provider 不支持时只能使用 off。 */
 export const THINKING_EFFORTS = ["off", "low", "medium", "high"] as const;
@@ -58,7 +58,21 @@ export function capabilityForModel(spec: Pick<ModelSpec, "id" | "provider">): Pr
     throw new Error("模型 capability 缺少稳定 id");
   }
   const registered = lookupModel(DEFAULT_MODEL_TABLE, spec.id);
-  if (!registered || registered.provider !== spec.provider) {
+  if (!registered) {
+    /* 自由档（`--model` 点名的表外模型）按设计不进表，但仍要能被拨 ⇒ 这里合成一份**保守**能力：
+     * thinking 一律 off、只给文本附件、availability 记 unverified。理由与 `capability()` 的
+     * 注释同一条——不能因为「模型可能支持」就把 `supported` 报 true。缺了这一支的话自由档
+     * 会在 `validateThinkingEffort` 上抛「模型 capability 未登记」而**一次都拨不出去**：
+     * 不进表是为了不按假价参与路由，不是为了不让它跑。 */
+    if (isFreeformModelId(spec.id)) {
+      if (!(PROVIDER_IDS as readonly string[]).includes(spec.provider)) {
+        throw new Error(`Provider capability 未登记: ${JSON.stringify(spec.provider)}`);
+      }
+      return capability(spec.id, spec.provider);
+    }
+    throw new Error(`模型 capability 未登记: ${JSON.stringify(spec.id)}`);
+  }
+  if (registered.provider !== spec.provider) {
     throw new Error(`模型 capability 未登记: ${JSON.stringify(spec.id)}`);
   }
   return capability(registered.id, registered.provider);

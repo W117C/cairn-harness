@@ -21,6 +21,21 @@ export interface ModelSpec {
 /** Worker/main shared provider whitelist. */
 export const PROVIDER_IDS = ["glm", "openai", "anthropic", "gemini"] as const;
 
+/** 自由档位的 id 前缀（`--model <线上模型名>`，如 `freeform/stealth/space-bunny-alpha`）。
+ *  这一档**按定义不进 `DEFAULT_MODEL_TABLE`**：表是 bandit 代价项与预算折钱的依据，
+ *  往里塞一个查不到价的行等于让它按假价参与路由。
+ *  前缀是它唯一的身份标记，所以构造 spec（`main/provider-runtime.ts`）与查 capability
+ *  （`providers/capabilities.ts`）两侧都必须走下面这两个函数，不要各自写字面量。 */
+export const FREEFORM_MODEL_ID_PREFIX = "freeform/";
+
+export function freeformModelId(model: string): string {
+  return FREEFORM_MODEL_ID_PREFIX + model;
+}
+
+export function isFreeformModelId(id: string): boolean {
+  return id.startsWith(FREEFORM_MODEL_ID_PREFIX);
+}
+
 /** 缺省档位表（表序 = 档位默认的 provider 优先级：glm 第一——tier-default 取 direct[0]）。
  *  id 命名：glm 沿用 M5 的 flash/standard/strong；其余用 <provider>-<tier>。
  *  `model` = 厂商调用名。2026-09-19 联网实测按官方 catalog 换过一轮（旧值见各行注）：

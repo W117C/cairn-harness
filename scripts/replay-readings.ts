@@ -143,3 +143,45 @@ export function replayGapsOf(f: ReplayFacts): ReplayGaps {
 /** 引用标记与内联块的扫描形状（导出来给单测复用同一把尺，避免测试与门各写一份正则）。 */
 export const REPLAY_REF = /replay:([a-z0-9][a-z0-9-]*)/g;
 export const INLINE_REPLAY = /node --import tsx -e/g;
+
+const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+
+/** 从一段 markdown 里切出**围栏代码块**的正文（不含围栏行本身）。
+ *
+ *  为什么要切：旧的 D-8 取料是拿 `INLINE_REPLAY` 全文匹配，于是正文里一句
+ *  「我随后那条 `node --import tsx -e` 直接 import …」这种**引用**也被算成可粘贴复跑块
+ *  ——2026-09-28 真跑 docs-check 报红的就是这一条（`PROGRESS.md` 全文只有那一处引用、0 个真块）。
+ *  判据要问的是「文档教人粘的那一串」，不是「文档提到过那串」。改的是尺、不是文档：
+ *  那句正文是对的，删它才是倒退。
+ *
+ *  形状按 CommonMark 定的最小子集：围栏行 ≤3 空格缩进、`` ` `` 或 `~` 至少三个、
+ *  闭合围栏须同类且**不短于**开启的那条、其后无正文。未闭合的围块照样算进去
+ *  （文档 fences 写坏时判据不该跟着瞎）。 */
+export function fencedBlocksOf(text: string): string[] {
+  const out: string[] = [];
+  let open: { marker: string; body: string[] } | null = null;
+  for (const line of text.split("\n")) {
+    const m = FENCE.exec(line);
+    if (open === null) {
+      if (m !== null) open = { marker: m[1]!, body: [] };
+      continue;
+    }
+    if (m !== null && m[1]![0] === open.marker[0] && m[1]!.length >= open.marker.length && m[2]!.trim() === "") {
+      out.push(open.body.join("\n"));
+      open = null;
+      continue;
+    }
+    open.body.push(line);
+  }
+  if (open !== null) out.push(open.body.join("\n"));
+  return out;
+}
+
+/** 一篇文档里「教人粘的内联复跑块」有几处（D-8 第四判据的取料）。
+ *
+ *  只在**围栏内**数。正文提到那条命令是叙述；围栏里才是读者要粘的东西。
+ *  这不是把判据放松成「读不到 0 即绿」——见 tests/docs-check.test.ts 里那对对照支：
+ *  同一篇文档、同一个反引号写法，一个在正文里（不算）、搬进围栏就算。 */
+export function countInlineReplay(text: string): number {
+  return fencedBlocksOf(text).reduce((n, block) => n + [...block.matchAll(INLINE_REPLAY)].length, 0);
+}
