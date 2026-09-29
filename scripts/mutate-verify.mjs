@@ -9402,6 +9402,24 @@ const MUTATIONS = [
     apply: (s) => s.replace("if (e.type === \"tool_call\" && typeof e.id === \"string\")", "if (typeof e.id === \"string\")"),
     expectFail: "join 键只认 tool_call：同 id 的审批事件（也带 id）不许把工具名覆成空",
   },
+  {
+    id: "timeout-note-run-shell-rehardcodes-seconds",
+    src: "src/tools/run_shell.ts",
+    test: "tests/timeout-text-single-source.test.ts",
+    desc: "把墙钟秒数重新写回正文（第 219 页 #42 的原状）⇒ `SHELL_TIMEOUT_MS` 改了而模型读的那句还说 60s。" +
+      "那句话是模型决定「再等一下」还是「换路」的依据，说错数比不归因更坏（同族：verify／ripgrep／sandbox 三支早就插值了）",
+    apply: (s) => s.replace('" + String(SHELL_TIMEOUT_MS / 1000) + "s）', "60s）"),
+    expectFail: "现读普查：没有任何一支把秒数写死在正文里",
+  },
+  {
+    id: "timeout-note-glob-rehardcodes-seconds",
+    src: "src/tools/glob.ts",
+    test: "tests/timeout-text-single-source.test.ts",
+    desc: "同一族的第二支：原先 `60_000` 与正文里的「60s」写在一行的两头 ⇒ 改一头另一头就替假话背书。" +
+      "本条与上一条同尺（普查面按 `src/**/*.ts` 现走，新增站点自动进分母）",
+    apply: (s) => s.replace("超时（${String(GLOB_RG_TIMEOUT_MS / 1000)}s", "超时（60s"),
+    expectFail: "现读普查：没有任何一支把秒数写死在正文里",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

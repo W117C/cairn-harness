@@ -28,7 +28,9 @@ export const run_shell: Tool = {
         settled = true;
         handle.dispose();
         let output = ring.read();
-        if (timedOut) output += "\n[error: run_shell 超时（60s），已强制终止]";
+        // 墙钟数字由 `SHELL_TIMEOUT_MS` 说话，不在此重写一遍字面量：改帽而文案还说 60s，
+        // 模型就是照着一句假话决定「再等一下」还是「换路」（verify／ripgrep 那两支本来就是插值的）。
+        if (timedOut) output += "\n[error: run_shell 超时（" + String(SHELL_TIMEOUT_MS / 1000) + "s），已强制终止]";
         if (cancelled) output += "\n[error: run_shell 随会话取消终止]";
         if (code !== 0 && !timedOut && !cancelled) output += `\n[exit code: ${String(code)}]`;
         const res: ToolResult = {

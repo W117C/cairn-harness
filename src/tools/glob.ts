@@ -6,6 +6,9 @@ import { sanitizedEnv } from "./process.js";
 import { rgBinary, rgNegativeNote } from "./ripgrep.js";
 
 const MAX_FILES = 100;
+/** rg 子进程墙钟（C10）：与 `ripgrep.ts` 的 `RG_TIMEOUT_MS` 同形——**帽与文案必须是同一个数**，
+ *  原先这里把 `60_000` 与正文里的「60s」写在一行的两头，改一头另一头就替假话背书。 */
+const GLOB_RG_TIMEOUT_MS = 60_000;
 const NOISE_DIRS = [".git", "node_modules", "dist"];
 
 export const glob: Tool = {
@@ -38,7 +41,7 @@ export const glob: Tool = {
         child.kill("SIGKILL");
         rejectPromise(new Error(msg));
       };
-      const timer = setTimeout(() => killWith("glob: rg 超时（60s，已终止——查询面过大）"), 60_000);
+      const timer = setTimeout(() => killWith(`glob: rg 超时（${String(GLOB_RG_TIMEOUT_MS / 1000)}s，已终止——查询面过大）`), GLOB_RG_TIMEOUT_MS);
       timer.unref?.();
       child.stdout.setEncoding("utf8");
       child.stdout.on("data", (d: string) => {
