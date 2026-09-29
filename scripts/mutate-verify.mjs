@@ -8988,8 +8988,10 @@ const MUTATIONS = [
     src: "src/agent/verify.ts",
     test: "tests/shell-family-cause.test.ts",
     desc: "去掉「成功回执不贴」那道守卫 ⇒ `pnpm install` 成功但正文里带一行 ERR_PNPM 就被判成"+
-      "「命令根本没跑成」——把绿的说成红的，比不归因更坏",
-    apply: (s) => s.replace("  if (r.ok) return r;", "  if (false) return r;"),
+      "「命令根本没跑成」——把绿的说成红的，比不归因更坏。"+
+      "针脚在 09-30（#24 那笔）跟着字节挪过一次：成功支从 `return r` 改成 `return stamped`（要把 exitCode/timedOut 也落到成功支），"+
+      "守卫的语义一个字没动 ⇒ 只改指字节、不动 expectFail（规则 284）",
+    apply: (s) => s.replace("  if (r.ok) return stamped;", "  if (false) return stamped;"),
     expectFail: "成功回执不贴",
   },
   {
