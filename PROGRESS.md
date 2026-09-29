@@ -6670,3 +6670,19 @@ typecheck：主树 1 条报错在 `src/cli.ts:709`（本笔没碰 `src/`），�
 5. **判卷**：该文件 5→6 条，两文件合计 33 条绿；typecheck 0 条报错。
 6. **这一笔没有新锚点**，理由是现读不是省事：被折掉的那份副本本来就没有自己的机器证人（它的三条锚点钉的是**别的格子**），
    而共用后的那只索引已有 `replay-call-index-type-check-dropped` 守着 ⇒ 同一格加第二条锚点只会翻倍 spawn 不加分辨力（规则 247 的"恰好 1 条"反过来用）。
+### 2026-09-30 · 第 218 页补 · 本笔（`e493e24`）凭证：认证 249 文件／3223 条 exit=0 两端独占，折层后四条相关锚点 4/4 全杀（2.9s、8 拍、坏拍 0）
+
+1. **认证**（`outputs/join-index-fold-2026-09-30/head-cert-e493e24.log`）：
+   `已核：TREE=e493e24…｜判卷四面在飞 0 项` · `DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有` ·
+   `Test Files 249 passed (249)｜Tests 3223 passed (3223)｜exit=0` · `并发判卷=起前 0 套／跑完 0 套（两端独占）` ·
+   `import 面 2947 条边｜悬空 0`（比上一笔 ＋1 条边＝`gate-outcomes` 新 import 取料层那只索引）· `门表 29 道／缺 script 0 道` · `typecheck 0 条报错`。
+2. **折层没让任何一条既有证人变哑**（`kill-4-anchors-at-e493e24.log`）：
+   `✅ gate-outcomes-unmatched-swallowed / -unknown-dropped / -skeleton-per-side-only / replay-call-index-type-check-dropped`、
+   `本次耗时 2.9s · 跑了 4/4 条`、`spawn 8 次／4 条（2×4）`、`selector 8 拍·中位 0.31s·坏拍 0`。
+   最后那条现在同时守着**两个面**（exec 面与 gate 面共用一只索引）。
+3. **针脚体检在认证树里**：`1044 条 —— 阻断 0，待复认 0，未覆盖 0，未入库面 0，钉在飞文本 0，killer 指针失效 0`。
+4. **门耗时这一格本笔增量为 0**，且这是声明不是遗漏：表长仍 1044 条（没加锚点，理由见第 218 页第 6 条），
+   判卷文件数 249→249、用例 3222→3223（新增那条跨面对账）⇒ `gate-manifest` 不再补单价行。
+5. **门表侧另跑**（规则 292）：`docs-check exit=0`（`UNVERIFIED=3`＝STATE.md 缺失那三格）；`prose-needle-scan` 顶包候选仍 10＝帽内。
+6. **清场读数只报不删**：`git worktree list` 现读 39 条目，其中本会话这三笔新建的认证树 `head-cert-8a9ce3e`／`head-cert-70eab48`／`head-cert-e493e24`
+   都是 detached、0 项在飞、对应提交已入库＝规则 120 意义上的可回收；**判据不是授权**，等用户点头再逐棵回收。

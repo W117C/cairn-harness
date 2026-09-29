@@ -1,0 +1,12 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p218-fold.lock）
+变异验证：4 条
+✅ gate-outcomes-unmatched-swallowed — join 不上 tool_call 的受管结果被静默跳过 ⇒ 分母少一块而读数看起来完整（「读数取不到」老族：差值就是尺，别把差值丢掉） ｜本机实测 0.7s／2 拍
+✅ gate-outcomes-unknown-dropped — 表外 layer/verdict 不记账 ⇒ 新加一层/一种结果时它整列消失，而不是矩阵多出一格空行 ｜本机实测 0.6s／2 拍
+✅ gate-outcomes-skeleton-per-side-only — 骨架只按层铺、不按结果铺 ⇒ 少一列没人知道（格数必须等于两层数之积，这条断言就是它的守门人） ｜本机实测 0.7s／2 拍
+✅ replay-call-index-type-check-dropped — join 索引不再只看 tool_call ⇒ 任何带 id 的事件（审批两型真带）都能把工具名覆成空，那条红拍就从分母里静默消失。取料层共用一只函数之后，这一格是**全族**的，不只 exec 面 ｜本机实测 0.6s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 2.9s · 跑了 4/4 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 8 次／4 条（每条次数分布 2×4）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 gate-outcomes-skeleton-per-side-only 0.7s
+跑法单价：selector 8 拍·中位 0.31s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p218-fold.lock）
