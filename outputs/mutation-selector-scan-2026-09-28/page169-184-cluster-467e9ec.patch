@@ -1,0 +1,3076 @@
+diff --git a/package.json b/package.json
+index 5a6529e..9e90277 100644
+--- a/package.json
++++ b/package.json
+@@ -36,6 +36,7 @@
+     "supervisor-check": "node --import tsx scripts/supervisor-check.ts",
+     "model-surface-check": "node --import tsx scripts/model-surface-check.ts",
+     "prefix-churn-check": "node --import tsx scripts/prefix-churn-check.ts",
++    "prompt-surface-check": "node --import tsx scripts/prompt-surface-check.ts",
+     "replay-determinism-check": "node --import tsx scripts/replay-determinism-check.ts",
+     "no-progress-check": "node --import tsx scripts/no-progress-check.ts",
+     "cost-per-progress-check": "node --import tsx scripts/cost-per-progress-check.ts",
+diff --git a/scripts/gate-manifest.ts b/scripts/gate-manifest.ts
+index 6aa249e..8c95c43 100644
+--- a/scripts/gate-manifest.ts
++++ b/scripts/gate-manifest.ts
+@@ -32,6 +32,19 @@ export const GATES: readonly string[] = [
+   "supervisor-check",
+   "model-surface-check",
+   "prefix-churn-check",
++  // 第 174 页登记（任务 #13）：模型可见文本里点到的工具名，要在**每一档的工具面**上真拿得到。
++  // 动因：`BASE_SYSTEM` 是一份文本对四档（现读 read-only 面 8 把、其余三档 20 把），而同类事故已命中四次
++  // （glob 那句逃生口 / maxFiles 死参数 / prune 附件说 read_file 够不到 / verify 指向 .agent/ 禁写面）。
++  // 存量按豁免表逐条带理由登记（3 条 odd，全在 read-only），**只准调低、过期即红**；真修法是拆 per-mode 文本（任务 #16）。
++  // 同轮声明代价：取的是 runner 印的那一道门。第 174 页首测 **981ms**（一份文本对四档）；
++  // 第 175 页拆成 per-mode 文本后 **814ms**（两份系统文本）；第 176 页加 68 份工具描述面后 **773ms**；
++  // 第 177 页再加 8 份 goal 续跑提醒（共 78 份面）复测 **829ms**——单次读数，与前三次同量级（不是复测求出的噪声底）。
++  // 第 178 页再加 189 份**参数描述**面（共 267 份，面数 ×3.4）：runner 三次读数 800/716/703ms，中位 **716ms**
++  // ⇒ 与第 177 页那一次同量级、没有可分辨的涨幅（代价主要在 tsx 启动，不在面数）。
++  // 第 179 页加覆盖率那一格（只印不拦）＋两把写向工具的 path 说明（参数面 189→195）：
++  // runner 三次 846/744/741ms，中位 **744ms**——仍在同一噪声带内，同样没有可分辨涨幅。
++  // 相对 mutate-verify 一轮（单价×条数见上面那段）可忽略。
++  "prompt-surface-check",
+   "replay-determinism-check",
+   "no-progress-check",
+   "cost-per-progress-check",
+@@ -40,9 +53,13 @@ export const GATES: readonly string[] = [
+   "head-import-check",
+   // 第 149 页登记（任务 #4 结案）：认证**干净 HEAD** 的整棵树（切树→核 rev→补依赖→import 面→门表→typecheck→全量判卷）。
+   // 为什么要进默认门表：`"test"` 那道门量的是工作树，而工作树可以替 HEAD 遮红——第 123 页数过：86 笔提交跑在红灯上。
+-  // 代价实测（本文件同笔，`gates --only=head-cert-check` 于 `123835b`）：**这道门 123.7s**（其中全量判卷 86.66s，其余是切树/补依赖/import 面/门表/typecheck），
+-  // 相对 mutate-verify 一道 16.9 分钟是 1/8。从前挂在这道门上的"整表 20 分钟"这个反对理由，量的其实是整张变异表——两把尺的数不许互借。
+-  // 它排在 mutate-verify 之前：这道门红的时候，先知道"HEAD 本来就红"比先花 17 分钟跑变异更有用。
++  // 代价实测（本文件同笔，`gates --only=head-cert-check` 于 `123835b`）：**这道门 123.7s**（其中全量判卷 86.66s，其余是切树/补依赖/import 面/门表/typecheck）。
++  // 对照的那一道必须带分母（第 170 页改的这句：从前只写「一道 16.9 分钟＝1/8」，条数一变就替错误背书——规则 245/250）：
++  //   那 16.9 分钟是 26 道门那一趟里 mutate-verify 的墙钟，同一趟自己印的是 `跑了 568/568 条`＋`未证 265 条（236 条源文件在飞/未跟踪 ⇒ 根本没跑；29 条判卷文件在飞）`
++  //   ⇒ 买到的只有**跑到的 568 条**＝单价 1.77s/条，当时表长 833 条（568＋265 对得上），今天的表 950 条。取料：`outputs/mutation-selector-scan-2026-09-28/old-mode-price-from-logs-2026-09-28.md`。
++  //   现读同分母（第 170 页 selector 跑法、独占窗口、`6172a62`）：`跑了 949/949 条 · 本次耗时 1472.3s`＝1.55s/条 ⇒ 这道门相对是 **1/11.9**（不是 1/8）。
++  // 从前挂在这道门上的「整表 20 分钟」这个反对理由，量的其实是整张变异表——两把尺的数不许互借。
++  // 它排在 mutate-verify 之前：这道门红的时候，先知道「HEAD 本来就红」比先花 24.5 分钟跑变异更有用（跑法再变，这个次序都不变）。
+   "head-cert-check",
+   "mutate-verify",
+   "mutate-needles-check",
+diff --git a/scripts/lib/mutate-gates.ts b/scripts/lib/mutate-gates.ts
+index fc9639b..ab0e262 100644
+--- a/scripts/lib/mutate-gates.ts
++++ b/scripts/lib/mutate-gates.ts
+@@ -602,6 +602,152 @@ export function baselineRedKind(vitestOut: string): { kind: "unloadable"; module
+   return `${p.id} — ${p.test} — ${why}：${JSON.stringify(p.expectFail.slice(0, 60))}`;
+ }
+ 
++// ---- 选择子唯一性（第 169 页的前置闸）：一条锚点能不能只跑**自己那条** killer 用例 ----
++// 动因（09-28 第 168 页的读数）：一条锚点的单价＝**判卷宿主文件时长的 3 倍**（实测 23.1s/条，换一份 1.1s 的宿主就是 20.6×），
++// 而它真正要证的只有自己那条用例。要让 `runTest` 改吃 `-t` 的精确跑法，前提是指针能**逐字唯一定位**那条标题：
++// 0 命中时 vitest 不会失败，它只是**一条也没跑** ⇒ 基线与突变两拍都白过，这把尺会安静地变成假绿（第 166 页那族）。
++// 所以先要有一格读数把「选不中」的条数点名，而不是等 `-t` 上线后才发现名单里混着选不中的。
++export interface SelectorProblem {
++  id: string;
++  test: string;
++  /** 逐字命中该指针的 it()/test() 标题条数。0＝只靠占位符展开才认得出；>1＝选择子不唯一。 */
++  hits: number;
++}
++
++/** 数每条锚点的指针在它自己的判卷文件里逐字命中几条标题。只回 ≠1 的那些（==1 是能走 -t 的那一批）。
++ *  判卷文件读不到、或指针为空、或不是 vitest 文件 ⇒ **不数**（那些另有归属：`auditExpectFails` 的 unreadable、结构钉型判卷），
++ *  所以 `inspected` 是被数过的条数：拿整表条数去除会以假绿的方式低估可选率。 */
++export interface SelectorScan {
++  problems: SelectorProblem[];
++  inspected: number;
++  /** 逐字唯一定位自己那条 killer 用例的 id（第 170 页的跑法选择表只吃这一份，调用侧不许再算一遍）。 */
++  selectableIds: readonly string[];
++}
++
++const TITLE_RE = /^\s*(?:it|test)(?:\.\w+)?\s*\(\s*(["`'])((?:\\.|(?!\1)[^\\])*)\1/gmu;
++
++export function selectorAmbiguity(
++  entries: readonly ExpectFailEntry[],
++  readTest: (rel: string) => string | null,
++): SelectorScan {
++  const cache = new Map<string, string[] | null>();
++  const problems: SelectorProblem[] = [];
++  const selectableIds: string[] = [];
++  let inspected = 0;
++  for (const e of entries) {
++    if (e.expectFail === "" || !e.test.endsWith(".test.ts")) continue;
++    if (!cache.has(e.test)) {
++      const text = readTest(e.test);
++      cache.set(e.test, text === null ? null : [...text.matchAll(TITLE_RE)].map((m) => m[2] ?? ""));
++    }
++    const titles = cache.get(e.test);
++    if (titles === null || titles === undefined || titles.length === 0) continue;
++    inspected += 1;
++    const hits = titles.filter((t) => t.includes(e.expectFail)).length;
++    if (hits !== 1) problems.push({ id: e.id, test: e.test, hits });
++    else selectableIds.push(e.id);
++  }
++  return { problems, inspected, selectableIds };
++}
++
++/** 那一格的措辞：三态分开印，且**不许**把「选不中」并成「没什么问题」。
++ *  存量不是 0（现读 13 条），所以这一格走水位法：只准调低，涨了要交代。 */
++export function selectorCell(problems: readonly SelectorProblem[], inspected: number): string {
++  const zero = problems.filter((p) => p.hits === 0);
++  const many = problems.filter((p) => p.hits > 1);
++  const parts = [
++    `选择子：${String(inspected - problems.length)}/${String(inspected)} 条能逐字唯一定位自己的 killer 用例（其余走整文件跑法）`,
++    zero.length === 0 ? "" : `零命中 ${String(zero.length)} 条（标题是拼出来的或已改名 ⇒ -t 会一条也选不中）`,
++    many.length === 0 ? "" : `多命中 ${String(many.length)} 条（选择子不唯一）`,
++  ].filter((s) => s !== "");
++  return parts.join("·") + (problems.length === 0 ? "" : "：" + problems.map((p) => `${p.id}(${String(p.hits)})`).join("、"));
++}
++
++/** 一拍读数坏没坏——闸与单价格共用这一份判据，两边不许各算一遍（规则 228：分叉的副本会一起错档）。
++ *  selector 只认「恰好 1 条」：`-t` 在 vitest 那边匹配的是 **整条标题**（describe 前缀＋it 标题），
++ *  而体检数的是 **it 字面量**（`selectorAmbiguity`），两个分母不是一回事；选中 2 条时红的那条
++ *  未必是本锚点那条 killer 用例——那正是「锚点长期守错格」的入口（规则 224 同一族）。
++ *  whole 不该有 0 条／读不到：整文件那一拍要么量到用例数，要么就是取料坏。
++ *  收紧前量的存量：09-28 整表 selector 873 拍／whole 9 拍，按本判据的坏拍数都是 0（见第 170 页凭证）。 */
++export function runReadingIsBad(mode: "selector" | "whole", selected: number | null): boolean {
++  if (mode === "selector") return selected !== 1;
++  return selected === null || selected === 0;
++}
++
++/** 一行可机读的判读（门输出格式：id + 本次选中几条 + 原因）。
++ *  三种坏读数印三种措辞，因为修法相反：没读到＝取料坏；0 条＝选择子选不中；>1 条＝守错了用例。
++ *  写成一句「什么都没测」会让第三种被读成第二种，而第三种恰恰是「绿着失效」的那一种。 */
++export function vacuousRunLine(id: string, phase: string, selected: number | null): string {
++  const state = selected === null
++    ? "未取到（收尾行没读到＝取料坏）"
++    : selected === 0
++      ? "0 条用例＝这一拍什么都没测"
++      : `${String(selected)} 条用例＝不止本锚点那条 killer 用例，红的未必是它`;
++  return `${id} — ${phase}这一拍选中 ${state} ⇒ 不许当成绿也不许当成红`;
++}
++
++/** 两种跑法的单价那一格（第 170 页）：上线之后「省了多少」必须由这张表自己印出来，
++ *  不许再来一句「按推算应该省 X」——第 165 页就是被这种推算打过脸的。
++ *  每行是一次 spawn：`mode` 精确／整文件，`ms` 这一次多久，`selected` 本次选中几条用例（null＝收尾行没读到）。 */
++export function runModeCell(rows: readonly { mode: "selector" | "whole"; ms: number; selected: number | null }[]): string {
++  if (rows.length === 0) return "跑法单价：本次没有 spawn ⇒ 这一格没有分母";
++  // 两种跑法**定长**列印（第 171 页，任务 #15）：从前只遍历出现过的模式 ⇒ 某一支 0 拍时整支从行里消失，
++  // 而「这一支没拍到」与「这一支不需要成本」是两件事。上面那句兜底只管**全局**零 spawn，管不到按模式分列的这一格。
++  const modes: Array<"selector" | "whole"> = ["selector", "whole"];
++  const parts = modes.map((mode) => {
++    const list = rows.filter((r) => r.mode === mode);
++    if (list.length === 0) return `${mode} 0 拍·这一支本次没有 spawn ⇒ 没有分母`;
++    const sorted = list.map((r) => r.ms).sort((a, b) => a - b);
++    const mid = sorted[Math.floor(sorted.length / 2)] ?? 0;
++    const vacuous = list.filter((r) => runReadingIsBad(mode, r.selected)).length;
++    const label = mode === "selector" ? "坏拍（选中≠1）" : "坏拍（没量到或 0 条）";
++    return `${mode} ${String(list.length)} 拍·中位 ${(mid / 1000).toFixed(2)}s·${label} ${String(vacuous)}`;
++  });
++  return `跑法单价：${parts.join(" vs ")}`;
++}
++
++/** 还原那一拍换成字节比对（第 171 页⑩，任务 #10）：整表每条锚点此前付满 3 拍（基线／突变／还原），
++ *  第三拍跑的是「还原后再测一遍要绿」——它证明的是「这文件还能跑」，而**逐字节相同**证明的是「盘上就是突变前那份」，后者更强：
++ *  基线那一拍已经用同一份字节绿过一次，内容等价就不需要再花一次 spawn 复核行为。
++ *  省下的是每条锚点三次里的一次（09-28 现读 954 条 × 1 拍），而这张表是默认门里最贵的一道。
++ *  返回 null＝还原到位；否则点名差在哪（字节数／首个不同的位置），不许只说「还原失败」。 */
++export function restoreDiffProblem(before: string, after: string): string | null {
++  if (before === after) return null;
++  if (before.length !== after.length) {
++    return `字节数不同：突变前 ${String(before.length)}／还原后 ${String(after.length)}`;
++  }
++  let i = 0;
++  while (i < before.length && before.charCodeAt(i) === after.charCodeAt(i)) i += 1;
++  return `长度相同但内容不同（首个差异在第 ${String(i + 1)} 个字符：突变前 "${before[i]}"、还原后 "${after[i]}"）`;
++}
++
++// ---- 第 170 页：按标题选跑法（`-t`）的两个底层判据 ----
++/** 从 vitest 的收尾行读「本次真选中几条用例」。
++ *  实测两种形状（09-28，同一棵树）：`Tests 1 passed | 99 skipped (100)` 与 `-t` 选不中时的
++ *  `Tests 100 skipped (100)`＋**退出码 0**——这就是为什么「跑了」不能由退出码代表。
++ *  收尾行读不到 ⇒ null（取料坏），**不许回 0**：0 是「一条也没选中」，null 是「这一格没量到」，两个红的修法相反。 */
++export function selectedTestCount(vitestOut: string): number | null {
++  const lines = vitestOut.split("\n");
++  let line: string | undefined;
++  for (let i = lines.length - 1; i >= 0; i--) {
++    if (/^\s*Tests\s/u.test(lines[i] ?? "")) { line = lines[i]; break; }
++  }
++  if (line === undefined) return null;
++  const total = Number(/ *\((\d+)\)/u.exec(line)?.[1] ?? "");
++  if (!Number.isFinite(total) || total <= 0) return null;
++  const skipped = Number(/(\d+) skipped/u.exec(line)?.[1] ?? 0);
++  return total - skipped;
++}
++
++/** 标题要当**正则**喂给 `-t` ⇒ 元字符必须转义（现读：真标题里有 `( ) [ ] . * + / "` 与中文全角括号）。 */
++export function escapeTitlePattern(title: string): string {
++  return title.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
++}
++
++/** 一条锚点该走哪种跑法。选择（唯一命中）的判据与第 169 页那把闸共用同一份谓词，这里只问结果。 */
++export function runModeFor(id: string, selectableIds: ReadonlySet<string>): "selector" | "whole" {
++  return selectableIds.has(id) ? "selector" : "whole";
++}
+ // ---- 每条锚点的真实成本（任务 #37：分母必须是读数，不是「次数 × 文件时长」的模型） ----
+ // 动因（09-28 第 165 页自己打的脸）：那句「裁掉判卷文件 7.7s ⇒ 挂在它上面的每条锚点少付 21s」是按
+ // 「每条跑三次 × 宿主文件全时长」**推**出来的，同分母实测把它打掉（每条只少 1.4–2.2s）。
+@@ -611,7 +757,7 @@ export function baselineRedKind(vitestOut: string): { kind: "unloadable"; module
+ export interface AnchorCostRow {
+   /** 点名用：汇总里那一格要说「最贵的一条是哪条」，否则读数只能指回整张表让人逐条分诊。 */
+   id: string;
+-  /** 这条锚点实际 spawn 判卷的墙钟毫秒，按发生顺序（基线／突变／还原）。
++  /** 这条锚点实际 spawn 判卷的墙钟毫秒，按发生顺序（基线／突变——第 171 页⑩ 之后还原那一拍换成字节比对，不再 spawn）。
+    *  一次没跑要**显式**喂空数组：字段缺席＝接线漏计，`costRollupOf` 当场崩并点名第几行——
+    *  「没记账」长成「记了 0 次」的话，汇总就悄悄把那条贵的锚点从分母里摘掉了。 */
+   runsMs?: readonly number[];
+@@ -705,3 +851,133 @@ export function costCell(r: CostRollup): string {
+   return `成本分母：判卷 spawn ${String(r.spawns)} 次／${String(r.anchors)} 条（每条次数分布 ${dist}）` +
+     `· 单次中位 ${perNth}· ${slowest}${never}`;
+ }
++
++/** 判红的七个来源，**在各自的出口就定好类别**（第 172 页⑪，任务 #12）。
++ *  从前 runner 末尾只印一句「N 条变异存活或误伤」，而下游 `mutation-rerun-triage` 靠正则回头猜这句散文——
++ *  同一件事两份谓词，宽度还不一样（规则 205/213）：改一句文案下游就静默读成「读不出」。
++ *  `verdict` 列是那层的归宿（它有自己的判卷面），这里只许一份事实源。 */
++export const FAIL_KINDS = [
++  "survived",
++  "misattributed",
++  "baseline-red",
++  "no-effect",
++  "syntax",
++  "restore-mismatch",
++  "vacuous",
++] as const;
++export type FailKind = (typeof FAIL_KINDS)[number];
++
++/** 每类的下一步动作——分这一刀是因为**修法不同**：存活要补观测者，红了未点名只改期望标题。 */
++const FAIL_LABEL: Record<FailKind, string> = {
++  survived: "变异存活（测试仍全绿 ⇒ 该不变量没有观测者）",
++  misattributed: "红了但没红在点名的那条用例上 ⇒ 观测者在、锚点期望过期",
++  "baseline-red": "基线就不绿 ⇒ 本条判定被污染，不算存活的证据",
++  "no-effect": "突变未生效（针脚不在源文件里）⇒ 空操作",
++  syntax: "突变产出语法坏的源文件 ⇒ 改法本身不合法",
++  "restore-mismatch": "还原未逐字节相同 ⇒ 盘上留着突变或写歪了",
++  vacuous: "那一拍没真选中用例 ⇒ 这一条根本没判（取料坏）",
++};
++
++/** 下游 triage 的归宿表，与上面同一份事实源（`TriageVerdict` 的字面量在 triage 侧，这里只给类名）。 */
++export const FAIL_VERDICT: Record<FailKind, string> = {
++  survived: "存活",
++  misattributed: "红了未点名",
++  "baseline-red": "基线红",
++  "no-effect": "未生效",
++  syntax: "读不出",
++  "restore-mismatch": "读不出",
++  vacuous: "读不出",
++};
++
++/** 判红汇总那一格：总数与名单同源（与 `unverifiedCell` 同一纪律，规则 209/225），
++ *  只印非零的类；缺类别／认不出的类别当场崩并点名第几条——
++ *  「没归类」被读成「没有那一类」会让最贵的那一格（存活）看起来比实际少。 */
++export function redVerdictCell(rows: readonly { id: string; kind?: FailKind }[]): {
++  total: number;
++  summary: string;
++  list: string[];
++  counts: Record<FailKind, number>;
++} {
++  const counts = {} as Record<FailKind, number>;
++  const ids = {} as Record<FailKind, string[]>;
++  for (const k of FAIL_KINDS) { counts[k] = 0; ids[k] = []; }
++  for (const r of rows) {
++    const k = r.kind;
++    if (k === undefined || !FAIL_KINDS.includes(k)) {
++      throw new Error(`判红没有类别（第 ${r.id} 条，kind=${String(k)}）⇒ 不许把它算进任何一类，也不许让它从总数里消失`);
++    }
++    counts[k] += 1;
++    ids[k].push(r.id);
++  }
++  const parts: string[] = [];
++  const list: string[] = [];
++  for (const k of FAIL_KINDS) {
++    const n = counts[k];
++    if (n === 0) continue;
++    parts.push(`${k} ${String(n)}`);
++    list.push(`  ❌ 判红·${FAIL_LABEL[k]}（${String(n)} 条）：${ids[k].join(" ")}`);
++  }
++  return {
++    total: rows.length,
++    summary: `  ❌ 判红 ${String(rows.length)} 条，按类别分开（修法各不同，混成一句会把人指错方向）：${parts.join("；")}`,
++    list,
++    counts,
++  };
++}
++
++/** 机器可读那一行：给下游共用，别再回头解析给人看的那句散文（规则 205/241——要写满为止）。 */
++export function redKindsLine(counts: Record<FailKind, number>): string {
++  return "REDKINDS=" + FAIL_KINDS.map((k) => `${k}:${String(counts[k])}`).join(",");
++}
++
++// ---- 第 171 页（任务 #14）：未证那一态要带名单，而且要能原样补跑 ----
++/** 未证的四个来源，分开数、分开印——每类的下一步动作不同，混成一句就会把人指错方向。
++ *  类名是**数据**（判卷与消费者按它分诊），措辞是**给人看的**（label），两者不许合一。 */
++export const UNVERIFIED_CLASSES = ["src-in-flight", "judge-in-flight", "judge-unloadable", "budget-stopped"] as const;
++export type UnverifiedClass = (typeof UNVERIFIED_CLASSES)[number];
++
++const UNVERIFIED_LABEL: Record<UnverifiedClass, string> = {
++  "src-in-flight": "源文件在飞/未跟踪 ⇒ 根本没跑",
++  "judge-in-flight": "判卷文件在飞 ⇒ 量不出分辨力",
++  "judge-unloadable": "判卷载不动（HEAD 缺模块 ⇒ 环境没备齐，不是表退化）",
++  "budget-stopped": "预算用尽没跑到",
++};
++
++/** 未证汇总那一格：从前只印「未证 30 条」这种光秃秃的数，读者要补跑就得自己拿 `--list` 与日志求差集
++ *  （09-28 我就是这么补的，算错一次就把没验的读成验了）。两条纪律：
++ *  ① **计数由名单求和**——两个口径各写一遍必有一处先漂（规则 209/225）；
++ *  ② 认不出的类当场崩并点名第几条——把「没归类」读成「没有未证」会让总数变小，看起来更便宜（规则 245）。
++ *  `rerun` 只收「预算用尽」那一类：源文件在飞那类等别人落库才有意义，载不动那类要先把环境备齐，
++ *  给一条注定跑不动的补跑命令比不给更坏。 */
++export function unverifiedCell(rows: readonly { id: string; cls: UnverifiedClass }[]): {
++  total: number;
++  summary: string;
++  list: string[];
++  rerun: string[];
++} {
++  const buckets = new Map<UnverifiedClass, string[]>();
++  for (const cls of UNVERIFIED_CLASSES) buckets.set(cls, []);
++  for (const r of rows) {
++    const b = buckets.get(r.cls);
++    if (b === undefined) {
++      throw new Error(`未证分类不认识 "${r.cls}"（第 ${r.id} 条）⇒ 不许把它算进任何一类，也不许让它从总数里消失`);
++    }
++    b.push(r.id);
++  }
++  const total = rows.length; // 计数＝名单长度之和，同源；不许另起一个 filter 再数一遍
++  const parts: string[] = [];
++  const list: string[] = [];
++  for (const cls of UNVERIFIED_CLASSES) {
++    const ids = buckets.get(cls) ?? [];
++    if (ids.length === 0) continue;
++    parts.push(`${String(ids.length)} 条${UNVERIFIED_LABEL[cls]}`);
++    list.push(`  ⚠️ 未证·${UNVERIFIED_LABEL[cls]}（${String(ids.length)} 条）：${ids.join(" ")}`);
++  }
++  const rerun = buckets.get("budget-stopped") ?? [];
++  return {
++    total,
++    summary: `  ⚠️  未证 ${String(total)} 条（${parts.join("；")}）——都不等于已杀死`,
++    list,
++    rerun,
++  };
++}
+diff --git a/scripts/lib/mutation-rerun-triage.ts b/scripts/lib/mutation-rerun-triage.ts
+index 5097ea2..35cae1a 100644
+--- a/scripts/lib/mutation-rerun-triage.ts
++++ b/scripts/lib/mutation-rerun-triage.ts
+@@ -8,6 +8,10 @@
+ 
+ export type TriageVerdict = "已杀死" | "存活" | "红了未点名" | "未生效" | "基线红" | "读不出";
+ 
++/** 类别与归宿表都在 `mutate-gates` 那一侧（runner 的出口就是在那儿定类的）——
++ *  这里再写一份映射就是第十三族（同一谓词多份副本、宽度不同）。 */
++import { FAIL_KINDS, FAIL_VERDICT, type FailKind } from "./mutate-gates";
++
+ /** 抽 id：整表日志的行形状是 `❌ <id> — <描述>`。按行首锚定（描述里也可能出现 `❌`）。
+  *  去重是必须的：同一条锚点在日志里可能出现两次（首次判定 + 末尾汇总回显），不去重就会复跑两遍。 */
+ export function failedIds(logText: string): string[] {
+@@ -62,6 +66,23 @@ export function classify(
+   if (status === null) {
+     return { verdict: "读不出", note: "没有退出码（进程没跑完/被信号杀掉）⇒ 本条没有读数", cause: "no-exit-code" };
+   }
++  /** 先读结构化那一行（第 172 页⑪）：新版 runner 把类别写在出口就定好并印 `REDKINDS=`，
++   *  这层就不必再回头猜散文。认不出的类别**不当未知数忽略**：它只会来自一张长大了的表，
++   *  忽略＝把新那一类读成「没有那一类」，而读成「没有」比读成「读不出」便宜、也更容易被当成好消息。 */
++  const kinds = redKindsOf(stdout);
++  if (kinds !== null) {
++    if (kinds.unknown.length > 0) {
++      return { verdict: "读不出", note: `REDKINDS 里有本层不认识的类别：${kinds.unknown.join(",")} ⇒ 补 FAIL_VERDICT 那张表，别静默跳过`, cause: "no-summary" };
++    }
++    const hit = FAIL_KINDS.find((k) => (kinds.counts[k] ?? 0) > 0);
++    if (hit !== undefined) {
++      return {
++        verdict: FAIL_VERDICT[hit] as TriageVerdict,
++        note: `由 REDKINDS 那一行直接给出（${hit}:${String(kinds.counts[hit])}），不再靠散文猜`,
++        cause: "",
++      };
++    }
++  }
+   if (/基线就不是全绿/.test(stdout)) return { verdict: "基线红", note: "判卷文件自己有已提交的红灯 ⇒ 本条判定被污染，不算存活的证据", cause: "" };
+   if (/突变未生效|变异未生效/.test(stdout)) return { verdict: "未生效", note: "针脚不在这份源文件里 ⇒ 空操作（先去修针脚，见任务 #50）", cause: "" };
+   if (/全部变异被正确杀死/.test(stdout)) return { verdict: "已杀死", note: "", cause: "" };
+@@ -76,6 +97,27 @@ export function classify(
+ /** 要人处理的三类（修法各不同：存活＝补观测者；红了未点名＝改 expectFail；读不出＝先修尺）。 */
+ export const ACTIONABLE: readonly TriageVerdict[] = ["存活", "红了未点名", "读不出"];
+ 
++/** 结构化那一行（第 172 页⑪）：新版 runner 在末尾印 `REDKINDS=survived:1,misattributed:0,…`，
++ *  类别由 runner 在**各自的出口**定好（见 `mutate-verify.mjs` 的 `red()` helper）。
++ *  本层从前靠正则回头猜那句「N 条变异存活或误伤」——同一件事两份谓词，而且改一句文案这层就静默读成「读不出」（规则 205/213）。
++ *  认不出的类别**不许忽略**：它只会来自一张长大了的表，忽略等于把新那一类读成「没有那一类」。 */
++export function redKindsOf(stdout: string): { counts: Partial<Record<FailKind, number>>; unknown: string[] } | null {
++  const line = /^REDKINDS=(.*)$/mu.exec(stdout.replace(/\r$/u, ""));
++  if (line === null) return null;
++  const counts: Partial<Record<FailKind, number>> = {};
++  const unknown: string[] = [];
++  for (const part of (line[1] ?? "").split(",")) {
++    const i = part.indexOf(":");
++    if (i <= 0) continue;
++    const k = part.slice(0, i);
++    const n = Number(part.slice(i + 1));
++    if (!Number.isFinite(n)) continue;
++    if ((FAIL_KINDS as readonly string[]).includes(k)) counts[k as FailKind] = n;
++    else unknown.push(`${k}:${String(n)}`);
++  }
++  return { counts, unknown };
++}
++
+ /** 归类后的表：把"必须逐条处理"的挑出来。 */
+ export function needsAction(rows: readonly { id: string; verdict: TriageVerdict }[]): string[] {
+   return rows.filter((r) => ACTIONABLE.includes(r.verdict)).map((r) => r.id);
+diff --git a/scripts/mutate-verify.mjs b/scripts/mutate-verify.mjs
+index 4d3ff76..e5bdd16 100644
+--- a/scripts/mutate-verify.mjs
++++ b/scripts/mutate-verify.mjs
+@@ -23,7 +23,7 @@ import { join, dirname, resolve } from "node:path";
+ import { fileURLToPath } from "node:url";
+ import { acquireToolLock } from "./lib/tool-lock.ts";
+ // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
+-import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell } from "./lib/mutate-gates.ts";
++import { entryDisposition, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, selectorAmbiguity, selectorCell, selectedTestCount, escapeTitlePattern, runModeFor, runReadingIsBad, vacuousRunLine, runModeCell, unverifiedCell, restoreDiffProblem, redVerdictCell, redKindsLine } from "./lib/mutate-gates.ts";
+ 
+ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+ const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
+@@ -8219,11 +8219,577 @@ const MUTATIONS = [
+     test: "tests/mutate-verify-gates.test.ts",
+     desc: "runTest 不再记这一次的时间 ⇒ 每个位置的中位整个消失，#37 的分母退回到「拿文件时长乘次数」那种推（这条咬的是取料源头，上一条咬的是接线出口）",
+     apply: (s) => s.replace(
+-      "  const started = Date.now();\n  try {",
+-      "  try {",
++      "  const started = Date.now();\n  const args = [VITEST,",
++      "  const args = [VITEST,",
+     ),
+     expectFail: "接线：汇总那一行吃的是 runner 自己那份 runsMs，且每个出口都带账本（表与实现同文件 ⇒ 钉跨行正则，规则 236）",
+   },
++  // ── 第 169 页 · 选择子唯一性（`-t` 精确跑法的前置闸）：四条各咬一处——不报／三态合一／分母／接线
++  {
++    id: "selector-ambiguity-never-reports",
++    src: "scripts/lib/mutate-gates.ts",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "命中数不为 1 时不再记录 ⇒ 这一格永远印「全部可选」，真正选不中的那些会在改跑法时被当成能走 -t；而 0 命中不是失败，是 vitest 一条也没跑，基线与突变两拍都白过",
++    apply: (s) => s.replace(
++      "if (hits !== 1) problems.push({ id: e.id, test: e.test, hits });",
++      "if (false) problems.push({ id: e.id, test: e.test, hits });",
++    ),
++    expectFail: "可选率的分母是被数过的条数，不是整表条数（拿整表去除＝把选不中的洗成可选）",
++  },
++  {
++    id: "selector-cell-merges-zero-into-clean",
++    src: "scripts/lib/mutate-gates.ts",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "零命中不再单独数 ⇒「选不中」并进「没什么问题」，那句 0 会被读成「11 条都正常」（第 166 页那把只能印 0 的尺，同一族换了载体）",
++    apply: (s) => s.replace(
++      "const zero = problems.filter((p) => p.hits === 0);",
++      "const zero: SelectorProblem[] = [];",
++    ),
++    expectFail: "零命中与多命中分开印，并点名是哪几条（0 命中＝-t 会一条也没跑）",
++  },
++  {
++    id: "selector-inspected-counts-unreadable-judges",
++    src: "scripts/lib/mutate-gates.ts",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "判卷读不到／指针为空那些条也计入分母 ⇒ 可选率虚高，而「取料坏」被洗成「量过了」（规则 222 的三态：未取 ≠ 空面 ≠ 零命中）",
++    apply: (s) => s.replace(
++      "if (titles === null || titles === undefined || titles.length === 0) continue;",
++      "inspected += 1;",
++    ),
++    expectFail: "只数被数过的：判卷读不到／指针为空／不是 vitest 文件都不进 inspected",
++  },
++  {
++    id: "selector-scan-fed-empty-table",
++    src: "scripts/mutate-verify.mjs",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "门那一步喂空表而不是整张锚点表 ⇒ 这一格永远 0/0 且永不红。表与实现同文件，所以判卷钉跨行正则而不是 toContain（规则 236）",
++    apply: (s) => s.replace(
++      "\n  const selectorScan = selectorAmbiguity(pointerEntries, ",
++      "\n  const selectorScan = selectorAmbiguity([], ",
++    ),
++    expectFail: "接线：门自己那一步真拿整张表去数选择子，并把两份数一起交给措辞（只印不数＝这一格永远 0）",
++  },
++  // ── 第 170 页 · 按标题选跑法（`-t`）：六条各咬一处——取料坏当 0／把 skipped 当跑过／不转义／共存支／闸门／空格子
++  {
++    id: "selected-count-treats-missing-summary-as-zero",
++    src: "scripts/lib/mutate-gates.ts",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "收尾行读不到时回 0 ⇒「这格没量到」与「一条也没选中」合一，两种红的修法相反（前者是取料坏，后者是锚点失效）。第 166 页同一族：0 不许冒充读数",
++    apply: (s) => s.replace("  if (line === undefined) return null;", "  if (line === undefined) return 0;"),
++    expectFail: "选中条数只从 vitest 真实的收尾行读，两种实测形状给两个数；读不到那行是 null 不是 0",
++  },
++  {
++    id: "selected-count-counts-skipped-as-run",
++    src: "scripts/lib/mutate-gates.ts",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "把 skipped 也算进「选中几条」⇒ `-t` 一条没选中的那一拍被读成测过了（实测：`Tests 100 skipped (100)`＋退出码 0）。与上一条共用那条判卷用例：同一个谓词的两种失真，各自要一条变异才咬得住（规则 226）",
++    apply: (s) => s.replace("  return total - skipped;", "  return total;"),
++    expectFail: "选中条数只从 vitest 真实的收尾行读，两种实测形状给两个数；读不到那行是 null 不是 0",
++  },
++  {
++    id: "run-mode-pattern-not-escaped",
++    src: "scripts/mutate-verify.mjs",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "标题原文直接当 `-t` 的正则拼进去 ⇒ 真标题里的 ( ) [ ] . * + 变成通配与量词，选中的可能根本不是那条 killer 用例，而单价读数照旧好看",
++    apply: (s) => s.replace(
++      '\n  if (typeof pattern === "string" && pattern !== "") args.push("--testNamePattern=" + escapeTitlePattern(pattern));',
++      '\n  if (typeof pattern === "string" && pattern !== "") args.push("--testNamePattern=" + pattern);',
++    ),
++    expectFail: "接线：testNamePattern 这一支要经转义，不许把标题当通配符拼进命令（表与实现同文件 ⇒ 必须行锚定，规则 236）",
++  },
++  {
++    // 整表第一遍（09-28，949/949）唯一一条红就是它：`pc-face-change-named-shortcut` 的指针以 `-` 开头。
++    id: "run-mode-dash-value-back-to-space-form",
++    src: "scripts/mutate-verify.mjs",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "选择子换回 `-t <值>` 的空格写法 ⇒ 凡指针以 `-` 开头就被 CLI 当成旗标：实测那条 `--self-test …` 的基线一拍根本没跑（收尾行读不到），却退 1——旧读数只会喊「基线不绿」，把「取料坏」伪装成「判卷坏了」。这一条的 killer 必须挂**接线判卷**：第一版挂的是那条行为证人，而它自己同时跑两种写法 ⇒ 改生产行改不到它 ⇒ 实测「变异存活：测试全绿」（规则 236 又一次命中：判卷自己再算一遍＝对生产零分辨力）",
++    apply: (s) => s.replace(
++      '\n  if (typeof pattern === "string" && pattern !== "") args.push("--testNamePattern=" + escapeTitlePattern(pattern));',
++      '\n  if (typeof pattern === "string" && pattern !== "") args.push("-t", escapeTitlePattern(pattern));',
++    ),
++    expectFail: "接线：testNamePattern 这一支要经转义，不许把标题当通配符拼进命令（表与实现同文件 ⇒ 必须行锚定，规则 236）",
++  },
++  {
++    id: "run-mode-selector-check-dropped",
++    src: "scripts/mutate-verify.mjs",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "不分模式一律塞 -t ⇒ 那 13 条「选不中／不唯一」的锚点从此只跑不存在的用例，等于整条保护被换成空转（两种跑法共存是刻意的，见第 169 页未证②）",
++    apply: (s) => s.replace(
++      '\n  const pattern = mode === "selector" ? String(m.expectFail ?? "") : "";',
++      '\n  const pattern = String(m.expectFail ?? "");',
++    ),
++    expectFail: "接线：只有 selector 模式才塞 -t，其余必须走整文件（两种跑法共存是刻意的）",
++  },
++  {
++    id: "vacuous-run-guard-dropped",
++    src: "scripts/mutate-verify.mjs",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "「选中几条」这道闸整个摘掉 ⇒ 这条闸正是 `-t` 上线唯一的安全带：摘掉后一次改名就能让整条锚点永远绿着跑完（vitest 对无匹配的 -t 退 0）",
++    apply: (s) => s.replace(
++      '\n    if (vacuous === null && runReadingIsBad(mode, r.selected)) {',
++      "\n    if (false) {",
++    ),
++    expectFail: "接线：每一拍都过共用的那道读数闸，闸的拍数与 runTest 调用点相对相等（选不中、选多条都不许读成绿）",
++  },
++  {
++    // 与上一条咬同一处接线、但失真方向不同（规则 226：同一不变量的两种失真各要一条变异）：
++    // 上面是「整个摘掉」，这条是「退回只否 0 条」——后者不留任何痕迹，因为 0 条那一半照常红。
++    id: "selector-guard-ignores-multi-hit",
++    src: "scripts/mutate-verify.mjs",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "闸退回「只有 0 条／没读到才判坏」⇒ 选中 2 条以上的那一拍被读成测过了，可红的未必是本锚点那条 killer 用例：vitest 的 `-t` 匹配整条标题（describe 前缀也算），而体检数的是 it 字面量——两个分母本来就不是一回事",
++    apply: (s) => s.replace(
++      '\n    if (vacuous === null && runReadingIsBad(mode, r.selected)) {',
++      '\n    if (vacuous === null && mode === "selector" && (r.selected === null || r.selected === 0)) {',
++    ),
++    expectFail: "接线：每一拍都过共用的那道读数闸，闸的拍数与 runTest 调用点相对相等（选不中、选多条都不许读成绿）",
++  },
++  {
++    id: "selector-predicate-accepts-multi",
++    src: "scripts/lib/mutate-gates.ts",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "selector 那一支从「恰好 1 条」放宽成「只否 0 条与没读到」⇒ 闸与单价格都还在，只是多选的那条永远不出声（放宽分级必须配反向锚点，规则 227）",
++    apply: (s) => s.replace(
++      '  if (mode === "selector") return selected !== 1;',
++      '  if (mode === "selector") return selected === null || selected === 0;',
++    ),
++    expectFail: "读数闸的判据只有一份：selector 那一拍恰好选中 1 条才算合格，0 条／多条／没读到三种都判坏",
++  },
++  {
++    id: "vacuous-line-merges-empty-into-unreadable",
++    src: "scripts/lib/mutate-gates.ts",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "把「0 条＝空跑」印成「取料坏」⇒ 两种红的修法相反却被读成同一种（第 166 页那把只能印 0 的尺，同一族换了载体）；判卷要三种措辞互不冒领",
++    apply: (s) => s.replace(
++      '      ? "0 条用例＝这一拍什么都没测"',
++      '      ? "未取到（收尾行没读到＝取料坏）"',
++    ),
++    expectFail: "三种坏读数印三种不同措辞：取料坏／一条没选中／选中多条，两两不许相同",
++  },
++  {
++    id: "run-mode-cell-silent-when-no-spawns",
++    src: "scripts/lib/mutate-gates.ts",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "没有 spawn 时那一格不再说「没有分母」而是印出空串 ⇒ 读数缺席被读成「本次不需要成本」（第 163 页 --list 那一格的同一族）",
++    apply: (s) => s.replace(
++      '  if (rows.length === 0) return "跑法单价：本次没有 spawn ⇒ 这一格没有分母";',
++      '  if (false) return "跑法单价：本次没有 spawn ⇒ 这一格没有分母";',
++    ),
++    expectFail: "跑法单价那一格分开印两种跑法，并把两种跑法各自的「坏拍」数出来——省了多少由它说，不许推算",
++  },
++  {
++    id: "unverified-total-counted-separately",
++    src: "scripts/lib/mutate-gates.ts",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "未证的总数另起一个口径数（少算一类）⇒ 名单摆着 7 条、汇总只报 5 条，读的人按 5 条决定补跑多少，剩下两条永远不会有人碰。" +
++      "第 168 页那句「计数由名单求和」落到这一格才算接线（规则 209/225：两个口径各写一遍必有一处先漂）",
++    apply: (s) => s.replace(
++      '  const total = rows.length; // 计数＝名单长度之和，同源；不许另起一个 filter 再数一遍\n  const parts: string[] = [];',
++      '  const total = rows.filter((x) => x.cls !== "src-in-flight").length;\n  const parts: string[] = [];',
++    ),
++    expectFail: "未证四类各印各的名单，总数等于名单长度之和",
++  },
++  {
++    id: "unverified-list-not-routed-through-exit",
++    src: "scripts/mutate-verify.mjs",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "名单不进那条同步写满的出口 ⇒ 几百条 id（几 KB）交给异步队列后就 `process.exit()`，只剩内核缓冲那一截，" +
++      "而汇总行照样印「未证 N 条」——读者以为名单发全了，按残缺的名单补跑（规则 241 实测砍过 920 行的 --list）",
++    apply: (s) => s.replace(
++      '// 用 `console.log` 交给异步队列再 `process.exit()` 就是拿丢掉尾巴的运气当读数（规则 241）。\nemitAndExit(redText + unvText + timing + ',
++      '// 用 `console.log` 交给异步队列再 `process.exit()` 就是拿丢掉尾巴的运气当读数（规则 241）。\nemitAndExit(unvText + timing + ',
++    ),
++    expectFail: "接线：未证名单走同步写满的那条出口，UNVERIFIED 标记只印一次",
++  },
++  {
++    id: "unverified-class-read-from-prose",
++    src: "scripts/mutate-verify.mjs",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "按 `why` 的措辞认未证的类别 ⇒ 改一句文案就分错类，「等别人落库」被印成「现在就能补跑」，读者白跑一趟还把那条读成已验；" +
++      "分类必须认字段（stopped／unloadable／refused 名单）",
++    apply: (s) => s.replace(
++      '    id: r.m.id,\n    cls: typeof r.unloadable === "string" ? "judge-unloadable" : r.stopped === true ? "budget-stopped" : "judge-in-flight",',
++      '    id: r.m.id,\n    cls: typeof r.unloadable === "string" ? "judge-unloadable" : String(r.why ?? "").includes("预算") ? "budget-stopped" : "judge-in-flight",',
++    ),
++    expectFail: "接线：未证名单走同步写满的那条出口，UNVERIFIED 标记只印一次",
++  },
++  {
++    id: "run-mode-cell-drops-absent-mode",
++    src: "scripts/lib/mutate-gates.ts",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "跑法单价只遍历这一趟出现过的模式 ⇒ 另一种跑法 0 拍时整支从行里消失，「这一支没拍到」被读成「这一支不需要成本」" +
++      "（09-28 实测：补跑那 30 条全是 selector 拍，whole 那一支整个不见，而汇总行照样印得整齐）。" +
++      "全局零 spawn 那格早有兜底，欠的是**子列**这一格（规则 245/241 同族）",
++    apply: (s) => s.replace(
++      '  const modes: Array<"selector" | "whole"> = ["selector", "whole"];\n  const parts = modes.map((mode) => {',
++      '  const modes = [...new Set(rows.map((r) => r.mode))].sort();\n  const parts = modes.map((mode) => {',
++    ),
++    expectFail: "两种跑法定长列印：这一趟只拍到一种，另一种也要印出没有分母而不是整支消失",
++  },
++  {
++    id: "restore-byte-check-neutered",
++    src: "scripts/mutate-verify.mjs",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "把还原那一格的判据摘掉（换成恒不成立）⇒ 盘上留着半个突变、或被写成别的内容，这条照样算绿；" +
++      "而收尾那句 `git diff HEAD --quiet` 只在**整轮跑完**时看总账，看不出「第 517 条还原时写歪了」这一格。" +
++      "这一拍换成字节比对本来就是拿「更强的证据」换掉「更贵的一拍」，换弱了就得有人喊",
++    apply: (s) => s.replace(
++      '    const restoreProblem = restoreDiffProblem(original, readFileSync(srcAbs, "utf8"));\n    if (restoreProblem !== null) return red("restore-mismatch", `还原未逐字节相同：${restoreProblem}`);',
++      '    const restoreProblem = restoreDiffProblem(original, readFileSync(srcAbs, "utf8"));\n    if (false) return red("restore-mismatch", `还原未逐字节相同：${restoreProblem}`);',
++    ),
++    expectFail: "接线：每条锚点只付两拍，还原那一拍不再 spawn 判卷",
++  },
++  {
++    id: "restore-diff-problem-only-compares-length",
++    src: "scripts/lib/mutate-gates.ts",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "只比长度不比内容 ⇒ 等长那类突变被原样留在盘上（现读：可解析出两个字面量的 947 对 apply 里有 11 对是等长替换），" +
++      "还原检查当场变成恒真，而它正是省下第三次 spawn 所换来的那份更强证据",
++    apply: (s) => s.replace(
++      '  if (before === after) return null;',
++      '  if (before.length === after.length) return null;',
++    ),
++    expectFail: "字节相同＝到位；长度不同与等长不同要各点名自己的那一格",
++  },
++  {
++    id: "red-kind-guard-silently-skips",
++    src: "scripts/lib/mutate-gates.ts",
++    test: "tests/mutate-verify-gates.test.ts",
++    desc: "把「认不出类别就崩」那一格摘掉 ⇒ 没归类的判红不进任何一类却仍算进总数，分类名单读起来比实际少，" +
++      "而最贵的「存活」恰恰是最容易被漏掉的那一类（规则 245：把「没记账」读成「记了 0 次」会让分母看起来更干净）",
++    apply: (s) => s.replace(
++      '    const k = r.kind;\n    if (k === undefined || !FAIL_KINDS.includes(k)) {',
++      '    const k = r.kind;\n    if (false) {',
++    ),
++    expectFail: "判红缺类别／认不出的类别当场崩并点名第几条",
++  },
++  {
++    id: "triage-ignores-structured-kinds-line",
++    src: "scripts/lib/mutation-rerun-triage.ts",
++    test: "tests/mutation-rerun-triage.test.ts",
++    desc: "下游不读 `REDKINDS=` 那一行、只回头猜散文 ⇒ runner 在出口定好类别这件事白做，" +
++      "改一句给人看的文案就让归因静默降级（规则 205/213：同一谓词不许两份副本，宽度还各不一样）",
++    apply: (s) => s.replace(
++      '  const kinds = redKindsOf(stdout);\n  if (kinds !== null) {',
++      '  const kinds = null;\n  if (kinds !== null) {',
++    ),
++    expectFail: "REDKINDS 在场就直接认类别，不再回头猜散文",
++  },
++  {
++    id: "prompt-surface-empty-take-material-returns-green",
++    src: "src/agent/prompt-surface.ts",
++    test: "tests/prompt-surface-check.test.ts",
++    desc: "取料为空从「抛」改成「印 0 条发现」⇒ 装配面读不到时这道门给出**绿色读数**，" +
++      "而它存在的理由正是「文本承诺了一格、面上没有」（规则 128：非零退出＋零结论＝读数不可信，这里连退出码都变 0）",
++    apply: (s) => s.replace(
++      'if (allModes.length === 0) throw new Error("工具面一格都没取到 ⇒ 不能把「没读到」读成「没有可达性问题」");',
++      "if (allModes.length === 0) return [];",
++    ),
++    expectFail: "取料坏了要抛，不许印 0",
++  },
++  {
++    id: "prompt-surface-dead-counted-as-odd",
++    src: "src/agent/prompt-surface.ts",
++    test: "tests/prompt-surface-check.test.ts",
++    desc: "把 dead 并进 odd ⇒ 两类修法相反的事合成一个数：dead 要改名／删文案，odd 要拆 per-mode 文本（任务 #16），" +
++      "合并后剩下的计数读起来像「只差档没覆盖」，实际是指着不存在的能力（规则 239：三态要分开印）",
++    apply: (s) => s.replace(
++      'out.push({ token, face: face.name, modes: allModes, kind: "dead" });',
++      'out.push({ token, face: face.name, modes: allModes, kind: "odd" });',
++    ),
++    expectFail: "面上完全没有 ⇒ dead",
++  },
++  {
++    id: "prompt-surface-exempt-leaks-across-modes",
++    src: "src/agent/prompt-surface.ts",
++    test: "tests/prompt-surface-check.test.ts",
++    desc: "豁免键从 `token@mode` 放宽成「这个 token 在任何档被登过就全放过」⇒ 一条 read-only 的存量理由" +
++      "会把 default 档新出现的缺席一起消掉，存量水位（只准调低）被静默抬高（规则 238：豁免只能由命中方清空）",
++    apply: (s) => s.replace(
++      "if (waived.has(`${token}@${m}`)) continue;",
++      "if ([...waived].some((k) => k.startsWith(`${token}@`))) continue;",
++    ),
++    expectFail: "豁免要真能消掉那一条，其他档不许跟着被消",
++  },
++  {
++    id: "prompt-surface-face-scope-ignored",
++    src: "src/agent/prompt-surface.ts",
++    test: "tests/prompt-surface-check.test.ts",
++    desc: "把「这份文本只发给哪几档」的覆盖档丢掉、永远按全局四档判 ⇒ 拆开之后只发给在场档的文本也被牵连报红，" +
++      "而写错的档名不再抛（把「那一档的面读不到」静默读成「那一档没承诺」）——按档拆文本这一步就此失去证人",
++    apply: (s) => s.replace(
++      "const scope = face.modes && face.modes.length > 0 ? [...face.modes].sort() : allModes;",
++      "const scope = allModes;",
++    ),
++    expectFail: "覆盖档参与判定",
++  },
++  {
++    id: "prompt-surface-readonly-text-not-applied",
++    src: "src/main/agent-runner.ts",
++    test: "tests/prompt-surface-check.test.ts",
++    desc: "装配点不再按档取文本（四档都拿共用文本）⇒ read-only 的模型继续读到 edit_file／wait_for_agents 这些它拿不到的承诺，" +
++      "而门仍然绿：门读的是 systemPromptFor 的输出，读不到「生产有没有真的调它」（规则 236：接线要单独钉）",
++    apply: (s) => s.replace(
++      'if (mode !== "read-only") return BASE_SYSTEM;',
++      "return BASE_SYSTEM;",
++    ),
++    expectFail: "而 read-only 确实不同",
++  },
++  {
++    id: "prompt-surface-line-edit-guard-skips",
++    src: "src/agent/prompt-surface.ts",
++    test: "tests/prompt-surface-check.test.ts",
++    desc: "摘掉「落点必须恰好命中」那一格 ⇒ 源文本里那行的开头字一改，这一档的差异就**静默消失**（模型读到别档的承诺而没人红），" +
++      "前缀写松了也会连坐邻居行；两种都只能在这一刻报，事后无从分辨",
++    apply: (s) => s.replace(
++      "if (dropped !== edits.drops.length || replaced !== edits.replacements.length) {",
++      "if (false) {",
++    ),
++    expectFail: "落点 0 命中要抛",
++  },
++  {
++    id: "prompt-surface-faces-not-grouped",
++    src: "scripts/prompt-surface-check.ts",
++    test: "tests/prompt-surface-check.test.ts",
++    desc: "取料面从「按文本相同合并」退化成「一档一面」⇒ 「一份文本对几档」这个信号消失，共用文本对缺席档的承诺永远不会报 odd" +
++      "（每档各自成面时，缺席那档的面就是它自己的文本，奇偶性被结构抹平）",
++    apply: (s) => s.replace(
++      "    if (list === undefined) byText.set(text, [m]);\n    else list.push(m);",
++      "    byText.set(text, [m]);",
++    ),
++    expectFail: "四档各属一面，且没有第五面",
++  },
++  {
++    id: "prompt-surface-readonly-description-not-applied",
++    src: "src/agent/glm-session.ts",
++    test: "tests/prompt-surface-check.test.ts",
++    desc: "按档换描述那一格摘掉 ⇒ 只读档的 `propose_plan` 继续写「批准前 write_file/run_shell 会被权限层拒绝」，" +
++      "而那两把在这一档连面都不在——文本描述一个它拿不到的能力（第 176 页现读抓到的那一格，同类事故第四次）",
++    apply: (s) => s.replace(
++      "return alt === undefined ? s : { ...s, function: { ...s.function, description: alt } };",
++      "return s;",
++    ),
++    expectFail: "可写档的原文案一字未动",
++  },
++  {
++    id: "prompt-surface-namesonly-switch-ignored",
++    src: "src/agent/prompt-surface.ts",
++    test: "tests/prompt-surface-check.test.ts",
++    desc: "把「描述面只认名单」这个开关摘掉（永远走形状）⇒ 参数名／目录名（`old_string`、`node_modules`）整报成死引用，" +
++      "门的读数会被噪声淹没，而真承诺（描述点了别档才有的工具）反而没人愿意看（规则 242：读数一坏，整格就失去证人）",
++    apply: (s) => s.replace(
++      "if (opts?.namesOnly !== true) {",
++      "if (false) {",
++    ),
++    expectFail: "参数名／目录名不当工具承诺",
++  },
++  {
++    id: "prompt-surface-description-faces-not-swept",
++    src: "scripts/prompt-surface-check.ts",
++    test: "tests/prompt-surface-check.test.ts",
++    desc: "门的取料退回只喂系统文本 ⇒ 68 份工具描述面不再被扫，`propose_plan` 那一格会重新长回来而门照绿；" +
++      "判卷里那条「描述不点名别档工具」自己仍然绿，因为它读的是 descriptionFaces() 而不是门实际喂出去的那份（规则 236：接线要单独钉）。" +
++      "09-28 第 178 页重指：四族面收成 `faceFamilies()` 一处组成（`main()` 与判卷读同一份），旧针脚那条 `allFaces()` 拼接送不到这儿了",
++    apply: (s) => s.replace(
++      "desc: descriptionFaces(), ",
++      "",
++    ),
++    expectFail: "门真的把每一族模型可见文本都喂进去",
++  },
++  {
++    id: "prompt-surface-reminder-faces-not-swept",
++    src: "scripts/prompt-surface-check.ts",
++    test: "tests/prompt-surface-check.test.ts",
++    desc: "续跑提醒那一族不再逐证据态渲染（枚举退化成空）⇒ 门只读到静态的那两族（系统文本与工具描述），" +
++      "而**逐轮重发的 goal 提醒**回到没人看的状态——09-24 那次「join 文案命令模型去调不存在的工具」正是在这一族里，" +
++      "不在系统提示词里（规则 222：取料面空掉时「0 发现」是最像好消息的假绿）",
++    apply: (s) => s.replace(
++      "for (const evidence of Object.keys(EVIDENCE_TEXT)) {",
++      "for (const evidence of []) {",
++    ),
++    expectFail: "逐证据态各渲两份",
++  },
++  {
++    id: "prompt-surface-goal-reminder-drops-verify",
++    src: "src/agent/goal.ts",
++    test: "tests/prompt-surface-check.test.ts",
++    desc: "收束条件那句不再点名 verify（改成「只有验证通过」）⇒ goal 模式每轮重送的指令失去**该调哪把工具**，" +
++      "模型只能凭猜；这条锚点守的是「提醒里点到的工具必须四档都在面上」这个不变量的前半（后半是逐档可得性判定）",
++    apply: (s) => s.replace(
++      '"\\n收束条件：只有 verify 通过且之后不再写盘才算完成；认为已达成就调用 verify 拿绿证据再收束。"',
++      '"\\n收束条件：只有验证通过且之后不再写盘才算完成。"',
++    ),
++    expectFail: "四档都得真拿得到",
++  },
++  {
++    id: "prompt-surface-param-faces-not-swept",
++    src: "scripts/prompt-surface-check.ts",
++    test: "tests/prompt-surface-check.test.ts",
++    desc: "门的取料不再把参数描述那一族喂进去（现读 189 份，2026-09-28 第 178 页）⇒ 「参数说明里点了本档拿不到的工具」这一格回到没人看的状态；" +
++      "同笔那两条真取料判卷仍然绿，因为它们各自直接调 `paramFaces()`，看不见门实际喂出的那份（规则 236 第三次命中这一形状）。" +
++      "与 `description-faces-not-swept` 共用同一条 killer 用例——两条守的是同一行组成的不同成员，用例断言的是「四族都在面里」这个整体",
++    apply: (s) => s.replace(
++      ", param: paramFaces()",
++      "",
++    ),
++    expectFail: "门真的把每一族模型可见文本都喂进去",
++  },
++  {
++    id: "prompt-surface-param-walk-freezes-path",
++    src: "scripts/prompt-surface-check.ts",
++    test: "tests/prompt-surface-check.test.ts",
++    desc: "走树仍然递归、但不再往下带路径（`collectParamDescriptions(value, path, out)`）⇒ 面数一个不少（189 照样 189），" +
++      "只有「两层嵌套那 6 份在不在面里」那条判据看得见：嵌套参数说明全被并成同一个名字，递归这一支失去证人。" +
++      "选这个方向而不是「删掉递归」是有意的：后者会让取料数为 0 直接抛，任何判卷都红，分辨不出这一族到底被走没被走（规则 226：要给那道闸造只有它看得见的输入）",
++    apply: (s) => s.replace(
++      "collectParamDescriptions(value, `${path}.${key}`, out);",
++      "collectParamDescriptions(value, path, out);",
++    ),
++    expectFail: "每把工具的参数 prose 都在面里",
++  },
++  {
++    id: "prompt-surface-coverage-denominator-unfiltered",
++    src: "scripts/prompt-surface-check.ts",
++    test: "tests/prompt-surface-check.test.ts",
++    desc: "覆盖率的分母不再滤掉「没有参数的工具」⇒ `verify`／`automation_list` 以 declared=0 进面，" +
++      "分母从 18 涨到 20，覆盖率从此替形状报错（一个从来没有参数的工具被读成「有参数没说明」）。" +
++      "读数类判据的分母必须与被度量对象同口径，否则「有 2 把没说明」这句话在骗人（规则 245／257①）",
++    apply: (s) => s.replace(
++      "if (named.length === 0) continue;",
++      "if (named.length < 0) continue;",
++    ),
++    expectFail: "分母只数「有声明参数的工具」",
++  },
++  {
++    id: "prompt-surface-edit-path-prose-removed",
++    src: "src/agent/glm-session.ts",
++    test: "tests/prompt-surface-check.test.ts",
++    desc: "把 `edit_file.path` 的说明摘掉 ⇒ 模型只能靠撞闸才知道「绝对路径会被拒」（`resolveInWorkspace` 硬拒两种形状：绝对路径、越界），" +
++      "而每撞一次闸要付一整轮往返（现读一次模型往返 8.7–42s）。判卷两头都钉：说明里点名这两种拒绝 ＋ 闸真按这句话拒，" +
++      "再加一条「合规相对路径必须放行」防上面两条变成恒真（规则 228）",
++    apply: (s) => s.replace(
++      'path: { type: "string", description: "workspace 相对路径（绝对路径或越出工作区一律拒绝）" },',
++      'path: { type: "string" },',
++    ),
++    expectFail: "edit_file 的 path 说明写出那两条拒绝",
++  },
++  {
++    id: "prompt-surface-write-path-prose-removed",
++    src: "src/agent/glm-session.ts",
++    test: "tests/prompt-surface-check.test.ts",
++    desc: "只给两把写向工具中的一把补说明 ⇒ 同一族里规矩看起来不同（模型会按「有说明那把」的规矩推另一把）。" +
++      "这条与 `edit-path-prose-removed` 各用自己的 killer 用例：两条分支共用一条断言时，摘掉一支仍然全绿是本仓反复踩过的形状（规则 239）",
++    apply: (s) => s.replace(
++      'path: { type: "string", description: "workspace 相对路径，指向要整文件覆盖的新内容（绝对路径或越出工作区一律拒绝）" },',
++      'path: { type: "string" },',
++    ),
++    expectFail: "write_file 的 path 说明与 edit_file 同族",
++  },
++
++  // ── 第 183 页：影响面覆盖面自述带上**分母**（`ImpactGraph.candidates` = 帽切之前的全量候选数）
++  // 这一支的取料本来就先数全量再切片 ⇒ 分母免费；缺了它，「图非全量」是一句没有量的话。
++  {
++    id: "impact-candidates-count-post-cap",
++    src: "src/agent/impact/index.ts",
++    test: "tests/impact-query.test.ts",
++    desc: "图自报的候选数取成**切片后**的长度 ⇒ 分母恒等于收录数，覆盖面自述在任何仓上都闭嘴"+
++      "（`candidates <= files` 永真）——比旧的「非全量但不说几个」更坏：那句子至少还在",
++    apply: (s) => s.replace("candidates: candidates.length,", "candidates: files.length,"),
++    expectFail: "图外还有几个候选要说得出数",
++  },
++  {
++    id: "impact-graph-candidates-not-carried-through-report",
++    src: "src/agent/impact/index.ts",
++    test: "tests/impact-query.test.ts",
++    desc: "分母没穿过 fileImpact ⇒ 只有 symbol 支带数、file 支回到旧句子"+
++      "（三支各组装一次覆盖面，少接一层就是那一支静默不一致，规则 239）",
++    apply: (s) => s.replace("graphCandidates: graph.candidates,", "graphCandidates: graph.files.length,"),
++    expectFail: "file 支的同一个数要穿过 fileImpact",
++  },
++  {
++    id: "impact-coverage-denominator-constant-zero",
++    src: "src/tools/impact-query.ts",
++    test: "tests/impact-query.test.ts",
++    desc: "覆盖面句里的漏报数写死 0 ⇒ 句子形状还在、数永远假（「另有 0 个候选没进图」），"+
++      "模型据此认为图基本全量",
++    apply: (s) => s.replace(
++      "`另有 ${String(candidates - files)} 个候选文件没进这张图（帽外或被跳过）⇒ 图非全量，`",
++      "`另有 0 个候选文件没进这张图（帽外或被跳过）⇒ 图非全量，`",
++    ),
++    expectFail: "部分覆盖时报出实数，收全时闭嘴",
++  },
++  {
++    id: "impact-coverage-trigger-reverts-to-cap-compare",
++    src: "src/tools/impact-query.ts",
++    test: "tests/impact-query.test.ts",
++    desc: "判据退回旧的 `files < cap` ⇒ 两个方向同时错：候选正好等于帽时**误报**非全量（模型白重问一次），"+
++      "而有文件被读/解析失败跳过时（files < cap 但候选更多）**漏报**（模型以为问全了）",
++    apply: (s) => s.replace('  if (candidates <= files) return "";', "  if (files < cap) return \"\";"),
++    expectFail: "旧判据在这里误报",
++  },
++  {
++    id: "impact-cap-cause-judgement-diverges-from-coverage",
++    src: "src/tools/impact-query.ts",
++    test: "tests/impact-query.test.ts",
++    desc: "阴性一侧的成因判据与阳性一侧分家 ⇒ 同一张图一边说「另有 N 个没进图」、"+
++      "另一边说「与帽无关」，两句话互相拆台（共用同一判据是这条政策的形状）",
++    apply: (s) => s.replace("  return candidates > files", "  return files >= cap"),
++    expectFail: "capCauseNote 与它同判据",
++  },
++
++  // ── 第 184 页：shell 家族的失败归因（判据只有一只，文案按出口分档；待办 #25）
++  // 四条出口各有锚点：run_shell 直连 / worker 两条（逐行式，两处同文）/ 主会话沙箱出口。
++  {
++    id: "run-shell-cause-unwired",
++    src: "src/tools/run_shell.ts",
++    test: "tests/shell-family-cause.test.ts",
++    desc: "run_shell 收束处不贴归因 ⇒ 模型看到 `bash: foo: command not found` 与 `[exit code: 127]`，"+
++      "照着这条环境红去改本来正确的代码（真语料里 run_shell 的红全部无类，第 182 页）",
++    apply: (s) => s.replace("settle(cancelled ? res : annotateExecCause(res, { timedOut, exitCode: code }));", "settle(res);"),
++    expectFail: "点名 127",
++  },
++  {
++    id: "worker-shell-cause-layer-unwired",
++    src: "src/agent/worker-shell-tools.ts",
++    test: "tests/shell-family-cause.test.ts",
++    desc: "worker 两条 shell 出口不补归因 ⇒ 宿主注入沙箱 runner 时（那条路整个绕过 run_shell）"+
++      "worker 的回执没有这一句。两处代码逐字相同 ⇒ 改法走逐行式、一次摘两层；"+
++      "**只摘其中一支没有专属锚点**——那一支由自己的用例当行为证人（shell_rw 那条不许冒领 shell_ro 的断言）",
++    apply: (s) => s.split("\n").map((l) => (l.includes("return annotateExecCause(res,")
++      ? l.replace("annotateExecCause(res, { timedOut: res.timedOut === true, exitCode: res.exitCode ?? null })", "res")
++      : l)).join("\n"),
++    expectFail: "shell_ro 走注入出口",
++  },
++  {
++    id: "runner-sandbox-exit-cause-unwired",
++    src: "src/main/agent-runner.ts",
++    test: "tests/shell-family-cause.test.ts",
++    desc: "主会话开沙箱那条出口（run_shell 被 runInSandbox 整个顶掉）不补归因 ⇒"+
++      "同一台机器上换档就没人归因（第十三族：同一条判据只硬化一支）",
++    apply: (s) => s.replace(
++      "annotateExecCause(sand, { timedOut: sand.timedOut === true, exitCode: sand.exitCode ?? null })",
++      "sand",
++    ),
++    expectFail: "三处都真的调了同一只归因函数",
++  },
++  {
++    id: "exec-cause-ok-guard-dropped",
++    src: "src/agent/verify.ts",
++    test: "tests/shell-family-cause.test.ts",
++    desc: "去掉「成功回执不贴」那道守卫 ⇒ `pnpm install` 成功但正文里带一行 ERR_PNPM 就被判成"+
++      "「命令根本没跑成」——把绿的说成红的，比不归因更坏",
++    apply: (s) => s.replace("  if (r.ok) return r;", "  if (false) return r;"),
++    expectFail: "成功回执不贴",
++  },
++  {
++    id: "exec-cause-class-maps-wrong-text",
++    src: "src/agent/verify.ts",
++    test: "tests/shell-family-cause.test.ts",
++    desc: "127 那一类错领了包管理器的文案 ⇒ 模型按「等依赖装好」去等，而真因是命令名不在 PATH"+
++      "（归因错了比不归因更贵：它会指一条不存在的出路）",
++    apply: (s) => s.replace('cause === "toolchain-missing"', 'cause === "timeout"'),
++    expectFail: "两类各贴一句",
++  },
+ ];
+ 
+ /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
+@@ -8353,6 +8919,12 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
+     (rel) => { try { return readFileSync(join(ROOT, rel), "utf8"); } catch { return null; } },
+   );
+   console.log(`ℹ️  松钉指针 ${String(loosePinned.length)} 条（逐字认不出、只靠占位符展开的标题模式过关——拼接标题与带转义引号那两类必然如此）${loosePinned.length === 0 ? "" : "：" + loosePinned.join("、")}`);
++  /* 选择子唯一性（第 169 页的前置闸）：一条锚点的单价＝判卷宿主时长 ×3（第 168 页实测 23.1s/条），
++   *  而它真正要证的只有自己那条 killer 用例。想让 `runTest` 改吃 `-t`，前提是指针**逐字唯一定位**那条标题——
++   *  0 命中时 vitest 不是失败，是一条也没跑，两拍都白过（第 166 页「只能印 0 的尺」那一族换了载体）。
++   *  这一格刻意不进退出码：存量 13 条不是本笔造成的，按水位法只准调低；先把名单点出来，再谈改跑法。 */
++  const selectorScan = selectorAmbiguity(pointerEntries, (rel) => { try { return readFileSync(join(ROOT, rel), "utf8"); } catch { return null; } });
++  console.log("ℹ️  " + selectorCell(selectorScan.problems, selectorScan.inspected));
+   // 一次求和、两处使用（汇总里印出来的数与 exit 码用的是同一个值；分开算就可能各说各话）。
+   const blockingTotal = blockingTotalOf({
+     needle: blocking.length, duplicateIds: dup.length, untracked: untracked.length, drift: drift.length,
+@@ -8363,16 +8935,22 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
+   return blockingTotal;
+ }
+ 
+-/** 跑一次判卷文件，并把**这一次**的墙钟毫秒带回来（#37：分母要读数，不能拿「次数 × 文件时长」推）。 */
+-function runTest(testRel) {
++/** 跑一次判卷文件，并把**这一次**的墙钟毫秒与「本次选中几条用例」带回来。
++ *  `pattern` 非空 ⇒ 走 `-t` 精确跑法（第 170 页）：一条锚点只跑自己那条 killer 用例，
++ *  实测单价从「宿主时长 ×3」的 8.0s/拍降到 0.14s/拍（同一棵树、同一份宿主、复测两次：8.0/8.5s vs 0.136/0.143s）。
++ *  ⚠️ 代价是 `-t` 选不中时 vitest **退出码 0**、全部 skipped——那一条拍什么都没测，所以 `selected` 必须回传，
++ *  由调用侧把「选中 0 条」判红（规则 246）。 */
++function runTest(testRel, pattern) {
+   const started = Date.now();
++  const args = [VITEST, "run", "--pool=threads", "--config", "tests/vitest.config.ts", testRel];
++  if (typeof pattern === "string" && pattern !== "") args.push("--testNamePattern=" + escapeTitlePattern(pattern));
+   try {
+-    const out = execFileSync(process.execPath, [
+-      VITEST, "run", "--pool=threads", "--config", "tests/vitest.config.ts", testRel,
+-    ], { cwd: ROOT, env: { ...process.env, TERM: "dumb" }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+-    return { code: 0, out, ms: Date.now() - started };
++    const out = execFileSync(process.execPath, args,
++      { cwd: ROOT, env: { ...process.env, TERM: "dumb" }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
++    return { code: 0, out, ms: Date.now() - started, selected: selectedTestCount(out) };
+   } catch (e) {
+-    return { code: e.status ?? 1, out: (e.stdout ?? "") + (e.stderr ?? ""), ms: Date.now() - started };
++    const out = (e.stdout ?? "") + (e.stderr ?? "");
++    return { code: e.status ?? 1, out, ms: Date.now() - started, selected: selectedTestCount(out) };
+   }
+ }
+ 
+@@ -8429,11 +9007,42 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+   });
+ }
+ 
++/* 跑法选择表与逐拍台账（第 170 页）。
++ * SELECTABLE 是**懒算**的：模块级直接算会在每次 `--list`（判卷反复 spawn 的那条入口）都去读几十份判卷文件，
++ * 把一条秒级尺拖成秒级×N；只有真跑锚点时才需要它。判据与第 169 页那把闸共用同一份谓词——
++ * 唯一能逐字定位自己那条 killer 用例的锚点才走 `-t`，其余继续整文件跑法（两种跑法共存是刻意的，见那一页的未证②）。 */
++let SELECTABLE = null;
++const SPAWNS = [];
++
++function selectableIds() {
++  if (SELECTABLE === null) {
++    const scan = selectorAmbiguity(
++      MUTATIONS.map((m) => ({ id: m.id, test: m.test, expectFail: String(m.expectFail ?? "") })),
++      (rel) => { try { return readFileSync(join(ROOT, rel), "utf8"); } catch { return null; } },
++    );
++    SELECTABLE = new Set(scan.selectableIds);
++  }
++  return SELECTABLE;
++}
++
+ function verifyEntry(m) {
+   /** 这条锚点**实际**付了几次判卷（#37）。早退路径本来就少付：基线不绿只跑 1 次、
+    *  变异存活／未归因只跑 2 次、量不了（载不动／判卷在飞）跑 0~1 次。
+    *  写死「每条三次」就是把模型当读数——第 165 页那句「每条少付 21s」正是这么推出来的。 */
+   const runs = [];
++  const mode = runModeFor(m.id, selectableIds());
++  const pattern = mode === "selector" ? String(m.expectFail ?? "") : "";
++  let vacuous = null;
++  /** 每一拍都记账：毫秒进 #37 那份分母，模式与「本次选中几条」进跑法单价。
++   *  「这一拍坏没坏」只有一份判据（`runReadingIsBad`）：闸与单价格各写一遍就会有一处先漂（规则 228），
++   *  而这一闸是 `-t` 上线唯一的安全带——它同时否掉「什么都没测」与「测的是别条用例」。 */
++  const note = (phase, r) => {
++    runs.push(r.ms);
++    SPAWNS.push({ mode, ms: r.ms, selected: r.selected });
++    if (vacuous === null && runReadingIsBad(mode, r.selected)) {
++      vacuous = vacuousRunLine(m.id, phase, r.selected);
++    }
++  };
+   const disp = entryDisposition({
+     srcRel: m.src,
+     srcState: headStateOf(m.src),
+@@ -8451,42 +9060,49 @@ function verifyEntry(m) {
+   cpSync(srcAbs, backup);
+   inFlight = { srcAbs, original, backup, mutated: false }; // 备份一落盘就要能被收尾
+   let restored = false;
++  /** 判红**在出口就带类别**（第 172 页⑪，任务 #12）：末尾按类别分开数、下游 triage 读结构化那一行，
++   *  不再回头解析给人看的散文。收成这一个 helper 是因为：少一处 helper 就多一处「忘了带类别」的出口，
++   *  而那由 `redVerdictCell` 当场崩并点名第几条——它不许任何一条判红悄悄从总数里消失。 */
++  const red = (failKind, why) => ({ m, ok: false, failKind, runsMs: runs, why });
+   try {
+     // ① 基线：突变前该测试必须绿。载不动（判卷 import 不到的东西没入库）不是"基线不绿"——那是量不了（第 143 页）。
+-    const base = runTest(m.test);
+-    runs.push(base.ms);
++    const base = runTest(m.test, pattern);
++    note("基线", base);
++    if (vacuous !== null) return red("vacuous", vacuous);
+     if (base.code !== 0) {
+       const kind = baselineRedKind(base.out);
+       if (kind.kind === "unloadable") {
+         return { m, ok: null, unloadable: kind.module, runsMs: runs, why: `判卷载不动（Cannot find module "${kind.module}"）⇒ 本条量不了，按未证记账；这不是「表退化」，是环境没备齐（多半是别人半落库，见 #11）` };
+       }
+-      return { m, ok: false, runsMs: runs, why: `基线就不是全绿（不应发生）:\n${base.out.slice(-800)}` };
++      return red("baseline-red", `基线就不是全绿（不应发生）:\n${base.out.slice(-800)}`);
+     }
+ 
+     // ② 注入突变
+     const mutated = m.apply(original);
+-    if (mutated === original) return { m, ok: false, runsMs: runs, why: "突变未生效（锚点可能已失效）" };
++    if (mutated === original) return red("no-effect", "突变未生效（锚点可能已失效）");
+     const syntax = mutantSyntaxProblem(mutated);
+-    if (syntax !== null) return { m, ok: false, runsMs: runs, why: syntax };
++    if (syntax !== null) return red("syntax", syntax);
+     inFlight.mutated = true; // 从这一行起，盘上的源文件是**改过**的内容
+     writeFileSync(srcAbs, mutated);
+ 
+     // ③ 突变后必须红，且红在期望的那条用例上
+-    const hit = runTest(m.test);
+-    runs.push(hit.ms);
++    const hit = runTest(m.test, pattern);
++    note("突变", hit);
+     writeFileSync(srcAbs, original); // 尽早还原
+     inFlight = null;
+     restored = true;
+-    if (hit.code === 0) return { m, ok: false, runsMs: runs, why: "变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）" };
++    if (vacuous !== null) return red("vacuous", vacuous);
++    if (hit.code === 0) return red("survived", "变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）");
+     // 归因只认**失败面**：`hit.out.includes(指针)` 会被一条 `✓` 通过的用例满足（第 141 页实测）。
+     if (!killerAttributionOk(m.expectFail, hit.out)) {
+       const failedFace = failingTestText(hit.out).slice(0, 300);
+-      return { m, ok: false, runsMs: runs, why: `测试红了但没红在期望用例「${m.expectFail}」上——红的是别的用例（针脚可能落在隔壁支/隔壁函数）:\n${failedFace || "(输出里没有失败面那几行，按未归因处置)"}\n--- 尾部 ---\n${hit.out.slice(-500)}` };
++      return red("misattributed", `测试红了但没红在期望用例「${m.expectFail}」上——红的是别的用例（针脚可能落在隔壁支/隔壁函数）:\n${failedFace || "(输出里没有失败面那几行，按未归因处置)"}\n--- 尾部 ---\n${hit.out.slice(-500)}`);
+     }
+-    // ④ 还原后必须恢复全绿
+-    const back = runTest(m.test);
+-    runs.push(back.ms);
+-    if (back.code !== 0) return { m, ok: false, runsMs: runs, why: `还原后未恢复全绿:\n${back.out.slice(-800)}` };
++    // ④ 还原到位＝盘上字节与突变前逐字节相同（第 171 页⑩，任务 #10：整表每条少付一拍）。
++    // 原来这一拍是「还原后再跑一遍要绿」——那证明的是「还能跑」，而基线那一拍已经用同一份字节绿过一次：
++    // 字节相同 ⇒ 行为等价于①，不必再花一次 spawn 复核；字节不同 ⇒ 直接点名差在哪，比“测试没绿”更准。
++    const restoreProblem = restoreDiffProblem(original, readFileSync(srcAbs, "utf8"));
++    if (restoreProblem !== null) return red("restore-mismatch", `还原未逐字节相同：${restoreProblem}`);
+     return { m, ok: true, runsMs: runs };
+   } finally {
+     inFlight = null; // 早退路径（基线不绿 / 突变未生效 / 语法错）也要清，别留一个指向已还原文件的空档
+@@ -8768,7 +9384,7 @@ for (let i = 0; i < entries.length; i++) {
+   const m = entries[i];
+   if (budget.ms > 0 && Date.now() - startedAt >= budget.ms) {
+     stoppedEarly = entries.length - i;
+-    for (const rest of entries.slice(i)) results.push({ m: rest, ok: null, runsMs: [], why: "预算用尽，没跑到（不等于已杀死）" });
++    for (const rest of entries.slice(i)) results.push({ m: rest, ok: null, stopped: true, runsMs: [], why: "预算用尽，没跑到（不等于已杀死）" });
+     console.error(`[mutate-verify] ⏳ 预算 ${String(budget.ms)}ms 用尽：已跑 ${String(i)}/${String(entries.length)}，未判 ${String(stoppedEarly)} 条。` +
+       "在条目边界主动收尾（源文件已全部还原），剩下的按未证记账并判红。");
+     break;
+@@ -8793,25 +9409,40 @@ if (statusOut) {
+ }
+ const failed = results.filter((r) => r.ok === false);
+ const unverified = results.filter((r) => r.ok === null);
+-// 未证有三类，分开数但同一处出口——每类的下一步动作不同，混成一句就会把人指错方向：
+-// ① 预检跳过（源文件在飞/未跟踪，根本没跑）② 判卷文件在飞（跑到了但量不出分辨力）③ 预算用尽（还没轮到）
+-const unverifiedTotal = unverified.length + refusedCount;
++/* 未证分四类，计数与名单同源（第 171 页，任务 #14）。从前这里每个数各自 `filter` 一遍、只印一句「未证 30 条」，
++ * 于是补跑得读者自己拿 `--list` 与日志求差集（09-28 实测就是这样补的 30 条）——算错一次就把没验的读成验了。
++ * 分类按**字段**（`stopped`／`unloadable`／refused 名单），不按措辞：拿 `why` 的文字认类别，改一句文案就分错。 */
++const unverifiedRows = [
++  ...split.refused.map((r) => ({ id: r.id, cls: "src-in-flight" })),
++  ...unverified.map((r) => ({
++    id: r.m.id,
++    cls: typeof r.unloadable === "string" ? "judge-unloadable" : r.stopped === true ? "budget-stopped" : "judge-in-flight",
++  })),
++];
++const unv = unverifiedCell(unverifiedRows);
++const unverifiedTotal = unv.total;
++let unvText = "";
+ if (unverifiedTotal > 0) {
+-  const parts = [];
+-  const unloadable = results.filter((r) => r.ok === null && typeof r.unloadable === "string").length;
+-  if (refusedCount > 0) parts.push(`${String(refusedCount)} 条源文件在飞/未跟踪 ⇒ 根本没跑`);
+-  if (unverified.length - stoppedEarly - unloadable > 0) parts.push(`${String(unverified.length - stoppedEarly - unloadable)} 条判卷文件在飞 ⇒ 量不出分辨力`);
+-  if (unloadable > 0) parts.push(`${String(unloadable)} 条判卷载不动（HEAD 缺模块 ⇒ 环境没备齐，不是表退化）`);
+-  if (stoppedEarly > 0) parts.push(`${String(stoppedEarly)} 条预算用尽没跑到`);
+-  console.log(`  ⚠️  未证 ${String(unverifiedTotal)} 条（${parts.join("；")}）——都不等于已杀死`);
+-  console.log("UNVERIFIED=" + String(unverifiedTotal));
++  const rerunLine = unv.rerun.length > 0
++    ? `  ↻ 可原样补跑（只含「预算用尽」那一类；其余两类要等落库／备齐环境，现在补跑也没用）：node --import tsx scripts/mutate-verify.mjs ${unv.rerun.join(" ")}\n`
++    : "";
++  unvText = unv.summary + "\n" + unv.list.join("\n") + "\n" + rerunLine + "UNVERIFIED=" + String(unverifiedTotal) + "\n";
+ }
+ const killed = results.length - failed.length - unverified.length;
++/* 判红按类别分开（第 172 页⑪）：从前这里只说「N 条变异存活或误伤」，而这几类的**修法相反**——
++ * 存活要补观测者、红了未点名只改期望标题、基线红要先修那条红灯、取料坏根本没判。
++ * 类别在各自的出口就定好（`red()` helper），这里只汇总；下游 `mutation-rerun-triage` 读 `REDKINDS=` 那一行，
++ * 不再回头解析给人看的这句散文（同一件事两份谓词，改一句文案它就静默读成「读不出」——规则 205/213）。 */
++const redCell = redVerdictCell(failed.map((r) => ({ id: r.m.id, kind: r.failKind })));
++let redText = "";
++if (redCell.total > 0) {
++  redText = redCell.summary + "\n" + redCell.list.join("\n") + "\n" + redKindsLine(redCell.counts) + "\n";
++}
+ console.log(`\n${failed.length === 0
+   ? (unverifiedTotal === 0
+       ? "全部变异被正确杀死（断言非恒真）"
+       : `${String(killed)} 条被正确杀死，另 ${String(unverifiedTotal)} 条未证`)
+-  : `${String(failed.length)} 条变异存活或误伤`}`);
++  : `${String(failed.length)} 条判红（按类别分开数，修法各不同——见上一行起的分类名单）`}`);
+ // 耗时与「跑了几条」要自己报出来：外层对本门的超时是猜的（实测 1200s 掐死于表中途），
+ // 而这张表到底要跑多久此前没人打印过——没有读数，下一个人只能继续猜。
+ const secs = (Date.now() - startedAt) / 1000;
+@@ -8821,9 +9452,15 @@ const secs = (Date.now() - startedAt) / 1000;
+  * 取料直接吃 `results` 里那份 `runsMs`：判卷不许自己再算一遍（规则 205/236），缺项由 `costRollupOf` 当场崩。 */
+ const costRows = results.map((r) => ({ id: r.m.id, runsMs: r.runsMs }));
+ const costLine = costCell(costRollupOf(costRows));
++/* 跑法单价（第 170 页）：精确跑法与整文件跑法各自的拍数、中位与「坏拍数」——
++ * 坏的定义只有一份（`runReadingIsBad`）：selector 选中≠1，whole 没量到或 0 条。
++ * 「省了多少」以后由这一格说，不由任何人推算。 */
++const modeLine = runModeCell(SPAWNS);
+ const timing = `[mutate-verify] 本次耗时 ${secs.toFixed(1)}s · 跑了 ${String(results.length - stoppedEarly)}/${String(entries.length)} 条` +
+   (budget.ms > 0 ? ` · 预算 ${String(Math.round(budget.ms / 1000))}s` : " · 未设预算（外层超时会在中途杀我，见 --budget-ms）") +
+-  `\n${costLine}` + `\n锁=${LOCK.cell}`;
++  `\n${costLine}` + `\n${modeLine}` + `\n锁=${LOCK.cell}`;
+ // 有未证就红：这张表没判完不等于判完了（AGENTS：「主动拒变在飞文件」属正确红，不是回归）。
+ // 预算中途停下同样红：`stoppedEarly > 0` 时 failed 可以全空，但那只是「还没轮到」。
+-emitAndExit(timing + "\n", failed.length === 0 && refusedCount === 0 && stoppedEarly === 0 ? 0 : 1);
++// 名单与补跑命令一起走 `emitAndExit` 那条**同步写满**的出口：名单可能几百条、几 KB，
++// 用 `console.log` 交给异步队列再 `process.exit()` 就是拿丢掉尾巴的运气当读数（规则 241）。
++emitAndExit(redText + unvText + timing + "\n", failed.length === 0 && refusedCount === 0 && stoppedEarly === 0 ? 0 : 1);
+diff --git a/scripts/prompt-surface-check.ts b/scripts/prompt-surface-check.ts
+new file mode 100644
+index 0000000..a66dd75
+--- /dev/null
++++ b/scripts/prompt-surface-check.ts
+@@ -0,0 +1,266 @@
++/** `pnpm prompt-surface-check` —— 模型可见文本 ↔ 工具面 的可达性门（任务 #13）。
++ *
++ * fail-visible：逐条 ✅/❌ 打印实测读数；取料面为空直接红（真空通过是本仓最忌的假绿）。
++ * 反向对照：`-- --self-test` 用两份合成文本证明这把尺**有分辨力**（dead 与 odd 各咬一处），
++ * 而不是只证明它今天没红。
++ */
++import { realpathSync } from "node:fs";
++import { pathToFileURL } from "node:url";
++import { systemPromptFor } from "../src/main/agent-runner";
++import { TOOL_NAMES } from "../src/tools/base";
++import { PERMISSION_MODES } from "../src/permissions/modes";
++import { sessionToolSpecs } from "../src/agent/glm-session";
++import { EVIDENCE_TEXT, goalReminder } from "../src/agent/goal";
++import {
++  promptSurfaceCell,
++  promptSurfaceFindings,
++  toolNameTokens,
++  unhitExemptions,
++  type PromptSurfaceExempt,
++} from "../src/agent/prompt-surface";
++
++/** 存量豁免：**空**。第 174 页登记过 3 条（edit_file／write_file／wait_for_agents @read-only），
++ *  任务 #16 把那一档的文本拆开后（`systemPromptFor("read-only")`）三条一起失去存在理由。
++ *  这张表要加长，必须是**新一轮登记**：逐条带理由、只准调低、过期即红（规则 238）。 */
++export const PROMPT_SURFACE_EXEMPT: PromptSurfaceExempt = [];
++
++export function tablesByMode(): Record<string, string[]> {
++  const out: Record<string, string[]> = {};
++  for (const m of PERMISSION_MODES) out[m] = sessionToolSpecs({ mode: m }).specs.map((s) => s.function.name);
++  return out;
++}
++
++/** 一把文本面：文本 + 它实际发给哪几档 + 认工具名时是否只认名单。 */
++export type SurfaceFace = { name: string; text: string; modes: readonly string[]; namesOnly?: boolean };
++
++/** 取料与生产端**共用同一个决策点**：文本面不是手抄清单，而是逐档调 `systemPromptFor`，
++ *  再把「文本逐字相同」的那些档合并成一面（同一份文本对几档 ⇒ 那几档共用它，odd 才有意义）。
++ *  好处是反过来的也成立：若有人把某一档的差异抹平，那些档会自动并成一面，共用文本对缺席档的承诺当场报 odd——
++ *  不需要有人记得来改这份清单（`报数前先重测`／`判据要与生产端共用决策点`）。 */
++export function proseFaces(): SurfaceFace[] {
++  const byText = new Map<string, string[]>();
++  for (const m of PERMISSION_MODES) {
++    const text = systemPromptFor(m);
++    const list = byText.get(text);
++    if (list === undefined) byText.set(text, [m]);
++    else list.push(m);
++  }
++  return [...byText.entries()].map(([text, modes]) => ({
++    name: `systemPrompt[${modes.join(",")}]`,
++    text,
++    modes,
++  }));
++}
++
++/** 第二类模型可见文本：**每把工具自己的 description**。它比散文更容易长出「指着别的能力」的句子——
++ *  本笔就是靠它抓到现读的 `propose_plan`：缺省描述写「批准前 write_file/run_shell 会被权限层拒绝」，
++ *  而只读档那两把连面都不在（那句等于让模型去理解一个它拿不到的能力）。
++ *  取料逐调 `sessionToolSpecs({mode})`（生产端同一个决策点），面覆盖档＝那一档。
++ *  判据按面选 `namesOnly`：描述里的蛇形多数是参数名/目录名（现读 `old_string`／`node_modules`），形状判据会把它们全报成死引用。 */
++export function descriptionFaces(): SurfaceFace[] {
++  const out: SurfaceFace[] = [];
++  for (const m of PERMISSION_MODES) {
++    for (const s of sessionToolSpecs({ mode: m }).specs) {
++      out.push({ name: `desc[${m}].${s.function.name}`, text: String(s.function.description ?? ""), modes: [m], namesOnly: true });
++    }
++  }
++  return out;
++}
++
++/** 第三类面：**goal 续跑提醒**——它是逐轮重发的动态文本，却和系统提示词一样是模型唯一能读到的指令。
++ *  09-24 那次事故（join 文案命令模型去调一把不存在的工具）就在这一族里，而前两族都覆盖不到它。
++ *  渲染取料：`goalReminder` 是纯函数，逐证据态 × hint 有无 各渲一份；
++ *  objective 用**不含任何工具名**的合成目标——真人写的需求里出现工具词是用户的话，不是我们的承诺，
++ *  把那种文本喂进来只会让门去管不属于它的东西。 */
++export function reminderFaces(): SurfaceFace[] {
++  const out: SurfaceFace[] = [];
++  for (const evidence of Object.keys(EVIDENCE_TEXT)) {
++    for (const withHint of [false, true]) {
++      const body = goalReminder(
++        { objective: "把这一件事做完，按验收口径交结果。", maxTurns: 20, maxUsd: 2 } as never,
++        3, 0.42, evidence as never,
++        withHint ? "上一轮按失败信息改完后重跑，再看证据态。" : undefined,
++      );
++      out.push({ name: `goalReminder[${evidence}${withHint ? "+hint" : ""}]`, text: body, modes: PERMISSION_MODES });
++    }
++  }
++  return out;
++}
++
++/** 第四类面：**参数自己的描述**（schema 里每一处 `description`）。
++ *  它比工具级 description 更细一格：模型看到的参数说明是逐字段写进规格里的，同样是指令。
++ *  必须**递归**走树：现读 189 份里有 6 份在两层嵌套下（`spawn_agent.supervise.*`），
++ *  只走顶层 `properties` 的那一版读到 183——这 6 份就是「为什么要递归」的证人，不是假想需求。
++ *  一份都没取到要抛：`0 发现`在这一族里长得最像好消息（规则 242）。 */
++export function paramFaces(): SurfaceFace[] {
++  const out: SurfaceFace[] = [];
++  for (const md of PERMISSION_MODES) {
++    for (const s of sessionToolSpecs({ mode: md }).specs) {
++      const hits: { path: string; text: string }[] = [];
++      collectParamDescriptions(s.function.parameters, s.function.name, hits);
++      for (const h of hits) out.push({ name: `params[${md}].${h.path}`, text: h.text, modes: [md], namesOnly: true });
++    }
++  }
++  if (out.length === 0) throw new Error("参数描述面一份都没取到 ⇒ 走树坏了，这一格不能印 0");
++  return out;
++}
++
++function collectParamDescriptions(node: unknown, path: string, out: { path: string; text: string }[]): void {
++  if (typeof node === "string") return;
++  if (Array.isArray(node)) { for (const item of node) collectParamDescriptions(item, path, out); return; }
++  if (node === null || typeof node !== "object") return;
++  for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
++    if (key === "description" && typeof value === "string") { out.push({ path, text: value }); continue; }
++    collectParamDescriptions(value, `${path}.${key}`, out);
++  }
++}
++
++/** 参数说明**覆盖率**：逐把「有声明参数」的工具数它有几条**自己写着说明**的参数。
++ *  只印、不拦。现读（2026-09-28 第 179 页）：18 把有参数的工具里 3 把一条说明都没有
++ *  （`clarify`／`propose_plan`／`run_shell`），1 把不全（`write_file` 缺 `content`）。
++ *  前三把刻意不补：`clarify` 的 1–4 问／2–4 选项写在**工具级描述**里且与校验器常量对上，
++ *  `propose_plan` 的嵌套形状由 `items.required` 声明——再在参数级抄一遍就是第二份真相（规则 205）。
++ *  判「有说明」只看参数自己那一格，不看子树：现读实测「直接说明」与「子树里有说明」两种口径**零个参数不同**
++ *  （2026-09-28 探针：DIRECT_VS_NESTED_DIFFERENT=0）⇒ 子树那一支没有证人，就不写它（规则 243/257②）。
++ *  为什么这一格不进退出码：判它得看真轨迹，而现读轨迹里没有"参数形状写错"这一类失败——
++ *  共用 `scripts/replay/corpus.ts` 的取料扫 24 个 `.jsonl`：`tool_call` 301 次、`ok:false` 15 次，
++ *  15 次里 0 次来自参数校验器（内容是环境红／命令红／worker 回传红，唯一次形状类是 `edit_file` 的
++ *  「old_string 0 处匹配」——那是抄错内容，不是不知道字段含义，且那条回执当场给了下一步）。
++ *  ⇒ 没有失败证据就把覆盖率做成红，等于用文案量代替行为量（规则 245）。
++ *  有了带归因的跑批之后（任务：把这张表变成常驻读数）再决定升不升成闸。 */
++export function paramProseCoverage(): { tool: string; declared: number; explained: number; missing: string[] }[] {
++  const byTool = new Map<string, { declared: number; explained: number; missing: string[] }>();
++  for (const md of PERMISSION_MODES) {
++    for (const s of sessionToolSpecs({ mode: md }).specs) {
++      const props = (s.function.parameters as Record<string, unknown>).properties as Record<string, unknown> | undefined;
++      if (props === undefined) continue;
++      const named = Object.keys(props);
++      if (named.length === 0) continue;
++      const missing: string[] = [];
++      for (const key of named) {
++        const v = props[key] as { description?: unknown } | null;
++        if (typeof v?.description !== "string") missing.push(key);
++      }
++      // 同一把工具在多档各出现一次：规格同源，所以按名字去重（取第一次读数）。
++      if (!byTool.has(s.function.name)) byTool.set(s.function.name, { declared: named.length, explained: named.length - missing.length, missing });
++    }
++  }
++  return [...byTool.entries()]
++    .map(([tool, v]) => ({ tool, declared: v.declared, explained: v.explained, missing: v.missing }))
++    .sort((a, b) => a.tool.localeCompare(b.tool));
++}
++
++/** 四族面**只在这一处组成**：`main()` 与判卷读的都是同一份，加一族只改这一行。
++ *  （原先 `main()` 自己 `[...system, ...descs, ...reminders]` 拼了一份，判卷读的是 `allFaces()` 那一份——
++ *  两份列表就是规则 253 点名的「同一件事两把尺」：门实际扫的面可以悄悄比判卷看见的面少。） */
++export type FaceFamily = "prose" | "desc" | "reminder" | "param";
++
++export function faceFamilies(): Record<FaceFamily, SurfaceFace[]> {
++  return { prose: proseFaces(), desc: descriptionFaces(), reminder: reminderFaces(), param: paramFaces() };
++}
++
++export function allFaces(): SurfaceFace[] {
++  return Object.values(faceFamilies()).flat();
++}
++
++export function main(argv: string[] = process.argv.slice(2)): number {
++  const selfTest = argv.includes("--self-test");
++  const tables = tablesByMode();
++  const fams = faceFamilies();
++  const faces = Object.values(fams).flat();
++  const counts = Object.entries(tables).map(([m, t]) => `${m}=${String(t.length)}`).join(" ");
++  console.log(`[prompt-surface] 取料：系统文本 ${String(fams.prose.length)} 份（${fams.prose.map((f) => f.name).join("、")}）` +
++    `｜工具描述 ${String(fams.desc.length)} 份（按档取规格面，namesOnly）` +
++    `｜续跑提醒 ${String(fams.reminder.length)} 份（goalReminder 逐证据态渲染）` +
++    `｜参数描述 ${String(fams.param.length)} 份（逐档递归走 schema，namesOnly）` +
++    `｜工具面 ${counts}｜工具名单 ${String(TOOL_NAMES.length)} 个`);
++
++  if (selfTest) return selfTestRun();
++
++  const findings = promptSurfaceFindings(faces, tables, TOOL_NAMES, PROMPT_SURFACE_EXEMPT);
++  const cell = promptSurfaceCell(findings);
++  console.log(`  ${findings.length === 0 ? "✅" : "❌"} ${cell}`);
++  for (const f of findings) {
++    console.log(`  ❌ ${f.kind === "dead" ? "死引用" : "不可达承诺"}：${f.face} 里的 \`${f.token}\` 在 ${f.modes.join(",")} 档拿不到`);
++  }
++  // 豁免的账：先按**不豁免**跑一遍拿原始发现，再判每条豁免是不是真挡住了（同一份谓词，两处共用）。
++  const raw = promptSurfaceFindings(faces, tables, TOOL_NAMES, []);
++  const stale = unhitExemptions(PROMPT_SURFACE_EXEMPT, raw);
++  console.log(`  ℹ️  存量豁免 ${String(PROMPT_SURFACE_EXEMPT.length)} 条，其中本次真命中 ${String(PROMPT_SURFACE_EXEMPT.length - stale.length)} 条（命中方清，只准调低）`);
++  for (const e of stale) {
++    console.log(`  ❌ 豁免过期：\`${e.token}@${e.mode}\` 已经不命中了 ⇒ 该条要从表里删掉（留着它就会放过同名的新问题）`);
++  }
++  // 反向读数：形状判据本身要有产出，否则「0 发现」可能只是尺坏了。
++  // 这一行必须**按面自己的判据**取 token（与上面 findings 同一份谓词、同一组开关）——
++  // 拿两种口径印读数，就是规则 253 点名的「同一件事两把尺，各自漂」。
++  const tokens = [...new Set(faces.flatMap((f) => toolNameTokens(f.text, TOOL_NAMES, { namesOnly: f.namesOnly })))];
++  console.log(`  ℹ️  文本里点到的工具名 ${String(tokens.length)} 个：${tokens.join(" ")}`);
++  // 覆盖率那一格**只印不拦**（理由见 `paramProseCoverage` 的头注）：分母是「有声明参数的工具数」，
++  // 而不是工具总数——`verify`／`automation_list` 没有参数，把它们算进分母会让覆盖率替形状报错。
++  const cov = paramProseCoverage();
++  const noProse = cov.filter((c) => c.explained === 0);
++  const partial = cov.filter((c) => c.explained > 0 && c.explained < c.declared);
++  console.log(`  ℹ️  参数说明覆盖（不计入退出码）：有参数的工具 ${String(cov.length)} 把，` +
++    `一条说明都没有 ${String(noProse.length)} 把（${noProse.map((c) => c.tool).join(" ")}）` +
++    `，不全 ${String(partial.length)} 把（${partial.map((c) => `${c.tool} ${String(c.explained)}/${String(c.declared)} 缺:${c.missing.join(",")}`).join("；")}）`);
++  const newIssues = findings.length;
++  console.log(newIssues === 0 && stale.length === 0 ? "[prompt-surface] 全部通过 ✅" : "[prompt-surface] 有要处理的格子 ❌");
++  // 取料坏了也算红：一个工具名都没在文本里认出来 ⇒ 多半是面/名单没读到，而不是提示词突然不提工具了。
++  if (tokens.length === 0) console.log("  ❌ 文本面一个工具名都没认出来 ⇒ 取料可疑，不许读成「没有承诺」");
++  return newIssues === 0 && stale.length === 0 && tokens.length > 0 ? 0 : 1;
++}
++
++/** 合成料证明这把尺**能分辨**，不是只证明它今天没红（规则 222/226）。 */
++function selfTestRun(): number {
++  const tables = { auto: ["edit_file", "verify"], read: ["verify"] };
++  const dead = promptSurfaceFindings([{ name: "t", text: "用 no_such_tool 去做" }], tables, TOOL_NAMES, []);
++  const odd = promptSurfaceFindings([{ name: "t", text: "改文件用 edit_file" }], tables, TOOL_NAMES, []);
++  // 负控的用料必须**都在合成面上**：上一版拿 `clarify` 当「都在面上」的例子，
++  // 而它压根不在那两份合成表里 ⇒ 被判 dead，把负控自己变成了发现（尺没错，是我喂错了）。
++  const clean = promptSurfaceFindings([{ name: "t", text: "先 verify 再把结论收在一句里" }], tables, TOOL_NAMES, []);
++  const waived = promptSurfaceFindings([{ name: "t", text: "改文件用 edit_file" }], tables, TOOL_NAMES,
++    [{ token: "edit_file", mode: "read", why: "test" }]);
++  // 第 175 页（任务 #16）新增的第三轴：**一份文本可以只发给部分档**。这一面必须只看它覆盖的那几档，
++  // 否则拆开之后那些档会被牵连报红（不拆的理由就没了），而把缺席档的承诺放过去又正好是这一格要抓的事。
++  const scopedHit = promptSurfaceFindings([{ name: "t", text: "改文件用 edit_file", modes: ["read"] }], tables, TOOL_NAMES, []);
++  const scopedClean = promptSurfaceFindings([{ name: "t", text: "改文件用 edit_file", modes: ["auto"] }], tables, TOOL_NAMES, []);
++  // 第四轴（第 176 页）：**工具描述**也是模型可见文本，而它按 namesOnly 判——
++  // 否则参数名／目录名（`old_string`／`node_modules`）会被整报成死引用，那面就再也读不出真承诺。
++  // 这一对控件要另建合成面：`write_file` 必须在**别档**存在（缺了它就成了 dead，而真实现读的形状是 odd——
++  // 上一版直接复用了 `tables`，于是控件把自己的形状写错了，红是尺抓到了我，不是我抓到了尺）。
++  const dTables = { auto: ["edit_file", "verify", "write_file"], read: ["verify"] } as const;
++  const descPromise = promptSurfaceFindings(
++    [{ name: "d", text: "批准前 write_file 会被权限层拒绝", modes: ["read"], namesOnly: true }], dTables, TOOL_NAMES, []);
++  const descParams = promptSurfaceFindings(
++    [{ name: "d", text: "排除 node_modules，按 old_string 精确替换", modes: ["read"], namesOnly: true }], dTables, TOOL_NAMES, []);
++  const lines = [
++    [dead.some((f) => f.kind === "dead" && f.token === "no_such_tool"), "死引用那一档要能报出来"],
++    [odd.some((f) => f.kind === "odd" && f.token === "edit_file" && f.modes.join() === "read"), "共用文本对缺席档要报不可达"],
++    [clean.length === 0, "都在面上时不许造红（负控）"],
++    [waived.length === 0, "豁免要真能消掉那一条"],
++    [scopedHit.some((f) => f.kind === "odd" && f.modes.join() === "read"), "只发给缺席档的文本也要报（覆盖档由调用方给）"],
++    [scopedClean.length === 0, "只发给在场档的文本不许报（覆盖档不是全局四档）"],
++    [descPromise.some((f) => f.kind === "odd" && f.token === "write_file"), "描述里点了别档才有的工具要报（namesOnly 仍然认名单）"],
++    [descParams.length === 0, "描述里的参数名／目录名不许当工具承诺（namesOnly 的意义）"],
++  ] as const;
++  let bad = 0;
++  for (const [ok, what] of lines) {
++    if (!ok) bad += 1;
++    console.log(`  ${ok ? "✅" : "❌"} 自检：${what}`);
++  }
++  let threw = false;
++  try { promptSurfaceFindings([{ name: "t", text: "x" }], {}, TOOL_NAMES, []); } catch { threw = true; }
++  console.log(`  ${threw ? "✅" : "❌"} 自检：工具面一格都没取到时要抛，不许印 0`);
++  if (!threw) bad += 1;
++  let threwScope = false;
++  try { promptSurfaceFindings([{ name: "t", text: "x", modes: ["nosuchmode"] }], tables, TOOL_NAMES, []); } catch { threwScope = true; }
++  console.log(`  ${threwScope ? "✅" : "❌"} 自检：覆盖档写错名字要抛（不能把「读不到那一档」读成「那一档没承诺」）`);
++  if (!threwScope) bad += 1;
++  console.log(bad === 0 ? "[prompt-surface] --self-test 全造得红 ✅" : `[prompt-surface] --self-test 有 ${String(bad)} 条不红 ❌`);
++  return bad === 0 ? 0 : 1;
++}
++
++// 入口判定：单测 import 本模块不得把门跑起来（同款写法见 scripts/no-progress-check.ts、model-surface-check.ts）。
++if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
++  process.exit(main());
++}
+diff --git a/src/agent/glm-session.ts b/src/agent/glm-session.ts
+index d6eb853..c1ce097 100644
+--- a/src/agent/glm-session.ts
++++ b/src/agent/glm-session.ts
+@@ -140,7 +140,7 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
+           "精确字符串替换编辑；old_string 必须唯一匹配（多处匹配报错并给出处数），确要全部替换加 replace_all: true",
+         parameters: obj(
+           {
+-            path: { type: "string" },
++            path: { type: "string", description: "workspace 相对路径（绝对路径或越出工作区一律拒绝）" },
+             old_string: { type: "string", description: "要被替换的原文（必须唯一）" },
+             new_string: { type: "string", description: "替换后的新文本" },
+             replace_all: { type: "boolean", description: "全部替换（缺省 false）" },
+@@ -155,7 +155,10 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
+         name: "write_file",
+         description: "写入工作区内文件（覆盖式）",
+         parameters: obj(
+-          { path: { type: "string" }, content: { type: "string" } },
++          {
++            path: { type: "string", description: "workspace 相对路径，指向要整文件覆盖的新内容（绝对路径或越出工作区一律拒绝）" },
++            content: { type: "string" },
++          },
+           ["path", "content"],
+         ),
+       },
+@@ -365,17 +368,31 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
+     // 定时五件同因：只读会话不该能排下一次会写盘的无人值守跑。
+     // 每个摘除项各占一行：往这条链上追加一族工具是常规动作（定时五件即是），写成一行会把
+     // 守护前两件的变异针脚整条顶掉（2026-09-24 实踩——bd2cf3e 加第三项即致两条锚点失效）。
+-    return specs.filter((s) =>
++    return readOnlyDescriptions(specs.filter((s) =>
+       !isSideEffectTool(s.function.name) &&
+       s.function.name !== "remember" &&
+       s.function.name !== "wait_for_agents" &&
+       s.function.name !== "cancel_agents" &&
+       !AUTOMATION_TOOL_NAMES.includes(s.function.name),
+-    );
++    ));
+   }
+   return specs;
+ }
+ 
++/** 工具**描述**也是模型可见文本（第 176 页）。`propose_plan` 的缺省描述写着「批准前 write_file/run_shell 会被权限层拒绝」，
++ *  而这两把在只读档连面都不在 ⇒ 那句话对该档是在描述一个它拿不到的能力，正是同类事故第四次（前三次：glob 逃生口／
++ *  maxFiles 死参数／prune 附件）。这里只换需要换的那一把的描述，其余逐字沿用同一份源——与 `systemPromptFor` 同一套纪律。 */
++const READ_ONLY_DESCRIPTIONS: Readonly<Record<string, string>> = {
++  propose_plan: "提交方案等用户批准；本档不装配写文件与跑命令的工具，方案是给用户的交付物，不由本会话执行",
++};
++
++function readOnlyDescriptions(specs: GlmToolSpec[]): GlmToolSpec[] {
++  return specs.map((s) => {
++    const alt = READ_ONLY_DESCRIPTIONS[s.function.name];
++    return alt === undefined ? s : { ...s, function: { ...s.function, description: alt } };
++  });
++}
++
+ /** 运行时注入的工具（插件 skill / MCP server 工具）的模型可见规格。
+  *  MCP 侧 parameters 直接是 server 的 inputSchema 原文——不翻译、不裁剪，避免两套 schema 漂移。 */
+ export interface SessionPluginTool {
+diff --git a/src/agent/goal.ts b/src/agent/goal.ts
+index 86e4a22..20baad9 100644
+--- a/src/agent/goal.ts
++++ b/src/agent/goal.ts
+@@ -50,7 +50,9 @@ export type GoalStop =
+   | { kind: "continue"; note: string; hint?: string }
+   | { kind: "stop"; reason: string };
+ 
+-const EVIDENCE_TEXT: Record<WorkerEvidence, string> = {
++/** 证据态的措辞表。**导出是为了让取料面能枚举这一族**（`prompt-surface-check` 逐态渲染续跑提醒）——
++ *  在别处再抄一份四元素名单就是第二份副本，加一态就会漂（第十三族）。 */
++export const EVIDENCE_TEXT: Record<WorkerEvidence, string> = {
+   verified: "verified（验证通过且没被后续写入作废）",
+   stale: "stale（验过之后又写了盘 ⇒ 那份绿证据已作废，要重新 verify 才算）",
+   failed: "failed（最近一次验证未通过）",
+diff --git a/src/agent/impact/index.ts b/src/agent/impact/index.ts
+index 7c19181..f0c7d45 100644
+--- a/src/agent/impact/index.ts
++++ b/src/agent/impact/index.ts
+@@ -9,7 +9,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
+ import { homedir } from "node:os";
+ import { join } from "node:path";
+ import { fileTags, TAGS_EXTRACT_VERSION, TreeSitterUnavailableError, type SymbolTag } from "../map/parse.js";
+-import { MAX_FILES_DEFAULT, scanSourceFiles, type ScannedFile } from "../map/build.js";
++import { applyFileCap, MAX_FILES_DEFAULT, scanSourceFilesAll, type ScannedFile } from "../map/build.js";
+ 
+ /** grammar 环境级失败（坏/缺失 wasm）：影响面是护栏能力，必须 fail-loud。
+  *  文案固定含 "unavailable"（判卷锚点）。 */
+@@ -36,6 +36,11 @@ export interface ImpactEdge {
+ export interface ImpactGraph {
+   /** 参与建图的源文件（workspace 相对，排序）。 */
+   files: string[];
++  /** 帽**切之前**的全量候选数（rg + 后缀过滤 + mtime 排序）。读端要靠它把「图非全量」
++   *  说成带分母的一句话：`scanSourceFiles` 本来就是先取全量再 `applyFileCap` 切片，
++   *  所以这个数不要第二次 rg（第 55 页「挤掉多少个要重扫全量候选，这一格不值一次 rg」
++   *  那句理由在建图这一支不成立——切片就在这行发生）。 */
++  candidates: number;
+   /** symbol → 定义点（可能多文件同名人）。 */
+   defs: Map<string, ImpactSite[]>;
+   /** symbol → 引用点（含同文件自引用；查询层负责过滤跨文件）。 */
+@@ -120,7 +125,10 @@ function addSites(map: Map<string, ImpactSite[]>, sym: string, site: ImpactSite)
+ export async function buildImpact(opts: BuildImpactOptions): Promise<ImpactGraph> {
+   // 帽走 build.ts 那一个常量：读端（impact_query 的分诊）报「第几位 / 收录几个」用的是同一个数，
+   // 两边各写一个 400 就会一处调、另一处静默说错话。
+-  const files = await scanSourceFiles(opts.workspace, opts.maxFiles ?? MAX_FILES_DEFAULT);
++  // 切片前后两份都要：`candidates`（帽前全量）是读端覆盖面自述的分母，取它不要第二次 rg。
++  const cap = opts.maxFiles ?? MAX_FILES_DEFAULT;
++  const candidates = await scanSourceFilesAll(opts.workspace);
++  const files = applyFileCap(candidates, cap);
+   const dir = opts.cacheDir ?? defaultImpactCacheDir();
+   const defs = new Map<string, ImpactSite[]>();
+   const refs = new Map<string, ImpactSite[]>();
+@@ -198,6 +206,7 @@ export async function buildImpact(opts: BuildImpactOptions): Promise<ImpactGraph
+ 
+   return {
+     files: [...files.map((f) => f.rel)].sort(),
++    candidates: candidates.length,
+     defs,
+     refs,
+     edges,
+@@ -265,6 +274,10 @@ export interface FileImpactReport {
+   /** 这张图实际收录了多少个文件 —— 读端要靠它自述覆盖面：
+    *  被帽截断时「波及 1 个文件」与「图只扫了仓库的一小截」在答案里长一模一样。 */
+   graphFiles: number;
++  /** 帽切之前的全量候选数（同 `ImpactGraph.candidates`，一路带到读端当分母）。
++   *  不带它，file 支只能说「非全量」而说不出漏了几个 —— 三支自述里只有这一支的数
++   *  要穿过 `fileImpact` 这一层，少接一层就是那一支静默回到没有分母的旧句子。 */
++  graphCandidates: number;
+   /** 本文件的定义符号里，哪些**在别的文件也有一份同名定义**（按名字顺序）。
+    *  符号图只按名字连边、不采 import ⇒ 这些符号的向上清单是**各份定义的并集**，
+    *  里面混着"另一份定义的调用方"（假阳性）。读端不点名，模型就无从知道该收窄。 */
+@@ -301,6 +314,7 @@ export async function fileImpact(
+     up: truncated ? up.slice(0, IMPACT_SITE_LIMIT) : up,
+     truncated,
+     graphFiles: graph.files.length,
++    graphCandidates: graph.candidates,
+     ambiguousSymbols,
+   };
+ }
+diff --git a/src/agent/prompt-surface.ts b/src/agent/prompt-surface.ts
+new file mode 100644
+index 0000000..c8f43e9
+--- /dev/null
++++ b/src/agent/prompt-surface.ts
+@@ -0,0 +1,122 @@
++/** 模型可见文本 ↔ 工具面 的可达性（纯函数层：不 import 提示词、不碰盘、不起进程）。
++ *
++ * 存在的理由（任务 #13）：`BASE_SYSTEM` 是**一份文本对四档**（`agent-runner.ts` 只有一个消费点），
++ * 而四档的装配面差得很远——现读 read-only 只有 8 把、其余三档 20 把。于是提示词里写「改已有文件用
++ * `edit_file`」「派完先调 `wait_for_agents` 收队」这些句子时，read-only 会话里的模型根本拿不到那两把工具：
++ * 它要么白调一次被权限层拒，要么照着说明去理解一个不存在的能力。同类事故已命中多次
++ * （`glob` 那句「把 path 显式指进去」对它自制的 `--glob` 排除讲不通 / `maxFiles` 死参数 /
++ *  prune 附件说 `read_file` 够不到 / verify 指向 `.agent/` 禁写面）——都是「文本承诺了一格，面上没有」。
++ *
++ * 两类发现分开，因为修法不同：
++ *  - **dead**：名字在所有档的面上都不存在 ⇒ 文本在指一个不存在的能力（改名、写错、删了工具没删文案）。
++ *  - **odd**：名字在某些档存在、某些档不存在，而文本是全档共用的 ⇒ 对缺席那一档是不可达承诺。
++ */
++export type PromptSurfaceFinding = {
++  token: string;
++  face: string;
++  /** 缺席的档；dead 类为全部档。 */
++  modes: string[];
++  kind: "dead" | "odd";
++};
++
++/** 散文里「像工具名」的写法：
++ *  ⑴ 蛇形（`edit_file`）——形状判，不需词表；
++ *  ⑵ 已知工具名单里的裸名（`verify`、`clarify` 这类单词名）。
++ *  只按形状判会漏掉单词名（现读 `BASE_SYSTEM` 的 4 个蛇形 token 之外还点了 `verify`/`clarify`），
++ *  只按名单判会漏掉「名单里已经不存在的那个名字」——那正是 dead 类，所以两路都要。
++ *  `namesOnly`（工具**描述**那一类面）：描述里的蛇形大量是**参数名/目录名**（现读 `old_string`、`replace_all`、
++ *  `agent_ids`、`worker_cap`、`node_modules`、`fixed_strings`），形状判据在那一面会把它们全报成死引用；
++ *  所以那一类面只认名单——代价是「描述里指着一把已删工具」在这一面看不见，这是明写的边界，不是漏。 */
++export function toolNameTokens(prose: string, knownNames: readonly string[], opts?: { namesOnly?: boolean }): string[] {
++  const out = new Set<string>();
++  if (opts?.namesOnly !== true) {
++    for (const t of prose.match(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/gu) ?? []) out.add(t);
++  }
++  for (const n of knownNames) {
++    if (n === "") continue;
++    if (new RegExp(`(^|[^A-Za-z0-9_])${n}([^A-Za-z0-9_]|$)`, "u").test(prose)) out.add(n);
++  }
++  return [...out].sort();
++}
++
++/** 豁免只能由**命中方**清空：每条要写明为什么这一格可以留着（与 `gate-manifest` 的 EXEMPT 同一纪律）。
++ *  键是 `token@mode`，因为同一把工具可以在某些档合理缺席。 */
++export type PromptSurfaceExempt = readonly { token: string; mode: string; why: string }[];
++
++export function promptSurfaceFindings(
++  faces: readonly { name: string; text: string; modes?: readonly string[]; namesOnly?: boolean }[],
++  tablesByMode: Record<string, readonly string[]>,
++  knownNames: readonly string[],
++  exempt: PromptSurfaceExempt = [],
++): PromptSurfaceFinding[] {
++  const allModes = Object.keys(tablesByMode).sort();
++  if (allModes.length === 0) throw new Error("工具面一格都没取到 ⇒ 不能把「没读到」读成「没有可达性问题」");
++  const unionAll = new Set<string>(allModes.flatMap((m) => tablesByMode[m] ?? []));
++  if (unionAll.size === 0) throw new Error("所有档的工具面都是空的 ⇒ 取料坏了，这一格不能印 0");
++  const waived = new Set(exempt.map((e) => `${e.token}@${e.mode}`));
++  const out: PromptSurfaceFinding[] = [];
++  for (const face of faces) {
++    // 一份文本可以只发给部分档（`systemPromptFor` 拆完之后就是这形状）。覆盖哪些档由**调用方从装配处取**，
++    // 不在这里写死四档：写死了就等于假设「永远是一份文本对四档」，那正是这一格从前的错误前提。
++    const scope = face.modes && face.modes.length > 0 ? [...face.modes].sort() : allModes;
++    if (scope.some((m) => !(m in tablesByMode))) {
++      throw new Error(`文本面 ${face.name} 声明了不存在的档 ⇒ 取料坏了（覆盖档必须来自工具面那张表）`);
++    }
++    for (const token of toolNameTokens(face.text, knownNames, { namesOnly: face.namesOnly })) {
++      // dead＝名字在**全局**任何档都没有 ⇒ 文本指着不存在的能力（改名／删文案），一条发现点名所有档。
++      if (!unionAll.has(token)) {
++        if (!waived.has(`${token}@*`)) out.push({ token, face: face.name, modes: allModes, kind: "dead" });
++        continue;
++      }
++      // odd＝能力在别档有、在这份文本覆盖的这几档没有 ⇒ 改这一档的文本（与 dead 修法相反，故分两类）。
++      const missingIn = scope.filter((m) => !(tablesByMode[m] ?? []).includes(token));
++      for (const m of missingIn) {
++        if (waived.has(`${token}@${m}`)) continue;
++        out.push({ token, face: face.name, modes: [m], kind: "odd" });
++      }
++    }
++  }
++  return out;
++}
++
++/** 过期豁免：表里登了、这一轮却不再命中的那些。留着它就会**放过同名的新问题**——
++ *  所以豁免只能由命中方清空（与 `gate-manifest` 的 EXEMPT 同一纪律，规则 238）。 */
++export function unhitExemptions(
++  exempt: PromptSurfaceExempt,
++  rawFindings: readonly PromptSurfaceFinding[],
++): PromptSurfaceExempt {
++  return exempt.filter((e) => !rawFindings.some((f) => f.token === e.token && f.modes.includes(e.mode)));
++}
++
++/** 按档改共用文本的**唯一**做法：只换/删指定的那几行，其余行逐字沿用同一份源（规则 205：同一句话不许抄两份）。
++ *  两处失败都当场抛，不留「看起来改了」的空档：
++ *  ⑴ 某个落点一处没命中 ⇒ 那一行的开头字变了，这一档的差异会**静默消失**（模型继续读到别档的承诺）；
++ *  ⑵ 某个落点命中多行 ⇒ 前缀写得太松，会把不该改的行一起换掉。
++ *  返回 `changed`（删了几行、换了几行）是为了让调用方能把它当读数印出来，而不是只信"没抛"。 */
++export function applyModeLineEdits(
++  source: string,
++  edits: { readonly replacements: readonly { prefix: string; text: string }[]; readonly drops: readonly string[] },
++): { text: string; changed: { dropped: number; replaced: number } } {
++  const lines = source.split("\n");
++  const hitCount = (pred: (line: string) => boolean) => lines.filter((l) => pred(l)).length;
++  const dropped = hitCount((l) => edits.drops.some((d) => l.startsWith(d)));
++  const replaced = hitCount((l) => edits.replacements.some((r) => l.startsWith(r.prefix)));
++  if (dropped !== edits.drops.length || replaced !== edits.replacements.length) {
++    throw new Error(`按档改文本的落点没对上：该删 ${String(edits.drops.length)} 行实删 ${String(dropped)} 行` +
++      `／该换 ${String(edits.replacements.length)} 行实换 ${String(replaced)} 行（0＝那一行的开头字变了，差异会静默消失）`);
++  }
++  const out: string[] = [];
++  for (const line of lines) {
++    if (edits.drops.some((d) => line.startsWith(d))) continue;
++    const rep = edits.replacements.find((r) => line.startsWith(r.prefix));
++    out.push(rep === undefined ? line : rep.text);
++  }
++  return { text: out.join("\n"), changed: { dropped, replaced } };
++}
++
++/** 读数行：门与判卷共用这一份措辞（规则 205：别在两边各拼一句）。 */
++export function promptSurfaceCell(findings: readonly PromptSurfaceFinding[]): string {
++  const dead = findings.filter((f) => f.kind === "dead");
++  const odd = findings.filter((f) => f.kind === "odd");
++  return `提示词可达性：dead ${String(dead.length)}（文本指着不存在的能力）／odd ${String(odd.length)}（共用文本对缺席那一档是不可达承诺）`;
++}
+diff --git a/src/agent/verify.ts b/src/agent/verify.ts
+index 6a17589..19204dd 100644
+--- a/src/agent/verify.ts
++++ b/src/agent/verify.ts
+@@ -29,6 +29,32 @@ export function classifyVerifyFailure(f: { timedOut: boolean; exitCode: number |
+   return "code";
+ }
+ 
++/** shell 家族的失败归因（`run_shell` ＋ worker 的 `shell_ro`/`shell_rw` ＋ 两条沙箱出口）。
++ *
++ *  为什么单列一支文案而不动 verify 那句：verify 能说「测试脚本未被执行」，一条任意 shell 命令不能这么说
++ *  （它可能就是 `pnpm install`）。**判据不重写**——吃的还是上面那一只 `classifyVerifyFailure`
++ *  （同一正则、同一枚举）；「同一判据四份副本、宽度各不同」是本仓第十三族点过名的形状。
++ *  超时不另贴：两条出口自己那行 `[error: … 超时 …]` 说的就是同一件事，再贴一遍是白付字节。
++ *  幂等（与 `withVerifyCauseNote` 同口径）：worker 的缺省出口本来就是 `run_shell`，
++ *  同一条结果会先后过两层 ⇒ 不幂等就会把同一句贴两遍。
++ *  可达性实测（2026-09-28 本机）：`sandbox-exec -p … bash -c 不存在的命令` 退出码仍是 **127**、
++ *  pnpm 的错误码行也原样进输出 ⇒ 两类在两条出口上都真能发生（不是替不存在的情形写代码）。 */
++export function annotateExecCause<T extends { ok: boolean; output: string }>(
++  r: T,
++  f: { timedOut: boolean; exitCode: number | null },
++): T {
++  if (r.ok) return r;
++  const cause = classifyVerifyFailure({ ...f, output: r.output });
++  const note =
++    cause === "toolchain-missing"
++      ? "[exec: 退出码 127 = 这个命令不在 PATH 里 ⇒ 命令根本没跑成，这不是代码失败（先确认二进制名 / 是否安装）]"
++      : cause === "pkg-manager"
++        ? "[exec: 包管理器自身报错（安装目录/依赖状态），命令本体未被执行 ⇒ 这不是代码失败，别照它改代码]"
++        : "";
++  if (note === "" || r.output.includes(note)) return r;
++  return { ...r, output: r.output + "\n" + note };
++}
++
+ export interface VerifyConfig {
+   lint?: string[];
+   test?: string[];
+diff --git a/src/agent/worker-shell-tools.ts b/src/agent/worker-shell-tools.ts
+index da4db29..beaa694 100644
+--- a/src/agent/worker-shell-tools.ts
++++ b/src/agent/worker-shell-tools.ts
+@@ -3,6 +3,7 @@ import type { Tool, ToolContext, ToolResult } from "../tools/base";
+ import { invocations, tokenize } from "../permissions/command-shape";
+ import { impactQuerySpec } from "../tools/impact-query";
+ import { run_shell } from "../tools/run_shell";
++import { annotateExecCause } from "./verify";
+ import { gateToolSpecs } from "./glm-session";
+ 
+ // ---- 只读 bash 静态过滤（§4.4.6：显式白名单命令集，其余拒绝） ----
+@@ -103,7 +104,11 @@ export function makeShellRo(run: WorkerShellRunner = bareShell): Tool {
+       if (!gate.ok) {
+         return { ok: false, output: "[read-only] 只读 bash 静态过滤拒绝：" + (gate.why ?? "未知原因") };
+       }
+-      return await run(command, ctx);
++      // 沙箱出口（宿主注入的 `runInSandbox`）不经过 run_shell ⇒ 在这一层补同一只归因。
++      // 缺省出口 `bareShell` 走 run_shell，它自己已经贴过：那一支的结果没有结构化 exitCode/timedOut
++      // ⇒ 这里判成 `code` 不贴，加上函数本身幂等 ⇒ 两条出口各贴一次，不会叠两层。
++      const res = await run(command, ctx);
++      return annotateExecCause(res, { timedOut: res.timedOut === true, exitCode: res.exitCode ?? null });
+     },
+   };
+ }
+@@ -197,7 +202,11 @@ export function makeShellRw(run: WorkerShellRunner = bareShell): Tool {
+       if (!gate.ok) {
+         return { ok: false, output: "[git-guard] git 破坏命令静态拦截：" + (gate.why ?? "未知原因") };
+       }
+-      return await run(command, ctx);
++      // 沙箱出口（宿主注入的 `runInSandbox`）不经过 run_shell ⇒ 在这一层补同一只归因。
++      // 缺省出口 `bareShell` 走 run_shell，它自己已经贴过：那一支的结果没有结构化 exitCode/timedOut
++      // ⇒ 这里判成 `code` 不贴，加上函数本身幂等 ⇒ 两条出口各贴一次，不会叠两层。
++      const res = await run(command, ctx);
++      return annotateExecCause(res, { timedOut: res.timedOut === true, exitCode: res.exitCode ?? null });
+     },
+   };
+ }
+diff --git a/src/main/agent-runner.ts b/src/main/agent-runner.ts
+index 2950d50..1ec095c 100644
+--- a/src/main/agent-runner.ts
++++ b/src/main/agent-runner.ts
+@@ -21,7 +21,8 @@ import {
+   type SessionTransport,
+ } from "../agent/glm-session";
+ import { ClarifyGate, PlanGate } from "../agent/gates";
+-import { classifyVerifyFailure, createVerifyHook, defaultExec, withVerifyCauseNote, type ExecFn } from "../agent/verify";
++import { applyModeLineEdits } from "../agent/prompt-surface";
++import { annotateExecCause, classifyVerifyFailure, createVerifyHook, defaultExec, withVerifyCauseNote, type ExecFn } from "../agent/verify";
+ import { createActionFusion } from "../agent/action-fusion";
+ import { SolpiRuntime, privateSessionDirectory, removePrivateSessionData, observationRecallSpec, solpiEnabled, type SolpiFlags } from "../agent/solpi-runtime";
+ import { createUsageAttributor } from "../agent/usage-attribution";
+@@ -154,6 +155,23 @@ export const BASE_SYSTEM = [
+   "- deny 规则与 critical 风险的强制审批不可绕过；会话成本超限会拒绝新 spawn；长时间无进展会被暂停等待恢复指令；",
+   "- 权限被拒 → 换合规路径或先提交方案；测试失败 → 按失败信息修复后重跑 verify。",
+ ].join("\n");
++
++/** read-only 档的工具面只有 8 把（现读：clarify glob grep lsp propose_plan read_file refine_goal verify），
++ *  而纪律 3 与「编排」段是按**能写文件、能派子代理**那张面写的 ⇒ 对它是不可达承诺
++ *  （第 174 页那道门登记的 3 条存量豁免就落在这两行上，任务 #16 把它们清掉）。
++ *  这里**只改那一档需要改的行**：其余行与 `BASE_SYSTEM` 是同一份源文本（不是抄两份，规则 205），
++ *  而纪律编号 1–6 在两档都保持连续（断号会让模型以为后面的约束可省，`base-system-discipline` 钉着）。 */
++const READ_ONLY_LINE_REPLACEMENTS: readonly { prefix: string; text: string }[] = [
++  { prefix: "3) ", text: "3) 本档不装配写文件与跑命令的工具：要把改动落到盘上，就在收尾时写清「哪个文件、哪几行、改成什么」，由用户在可写档执行，不要声称已改；" },
++];
++/** 整行删掉的条件段：它存在的前提是「本档能派子代理」，read-only 不满足那个前提。 */
++const READ_ONLY_LINE_DROPS: readonly string[] = ["编排（派子代理时）"];
++
++/** 生产装配点用的系统提示词：按档取面。非 read-only 逐字返回 `BASE_SYSTEM`（等价性由判卷钉，不是注释）。 */
++export function systemPromptFor(mode: PermissionMode | undefined): string {
++  if (mode !== "read-only") return BASE_SYSTEM;
++  return applyModeLineEdits(String(BASE_SYSTEM), { replacements: READ_ONLY_LINE_REPLACEMENTS, drops: READ_ONLY_LINE_DROPS }).text;
++}
+ // M2g 任务 6：演示通道剧本外部化（fixtures/demo/**，带冻结 sha 于 scripts/frozen-demo-sha256.json；
+ // **独立**于判卷区 frozen-sha256.json）。缺省零行为不变；显式给路径的旧用法保留。
+ const DEMO_DIR = join(ROOT, "fixtures", "demo");
+@@ -553,7 +571,10 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
+           // 这条出口经 run_shell 工具而非 runInSandbox，故同一判据的提示在这里补（两处共用一只函数）。
+           return withGate(annotateNetworkDenial(await original.run({ command }, ctx), network));
+         }
+-        return withGate(await runInSandbox(mapped, { cwd: ctx.workspace, network }));
++        const sand = await runInSandbox(mapped, { cwd: ctx.workspace, network });
++        // 上面那条注释说的是「经 run_shell 的那条出口」；这一条不经，故同一只归因函数在这里补
++        // （verify 不走这条路，所以不会与它那句「测试脚本未被执行」叠两层）。
++        return withGate(annotateExecCause(sand, { timedOut: sand.timedOut === true, exitCode: sand.exitCode ?? null }));
+       }
+       let result = await original.run(args, ctx);
+       if (name !== "run_shell" && result.ok && s.actionFusion) {
+@@ -1470,7 +1491,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
+       // 两个都开才传，避免"闸关着却许诺返修"这种读起来矛盾的配置。
+       ...(opts.autoVerify === true && opts.autoVerifyRepair === true ? { autoVerifyRepair: true } : {}),
+       stuckNudge: true, // 主会话（人直用那条）才有换路提示：worker 有看门、靶场按字节计量，见 LoopOptions
+-      provider: createProvider(promptText, BASE_SYSTEM, modelSelection, {
++      provider: createProvider(promptText, systemPromptFor(opts.mode), modelSelection, {
+         ...opts, emit: pipeline, solpi, promptCache: providerSettings.promptCache,
+         requestFace: () => sessionToolFace(rt, faceArgs),
+         // §9.5：自动/溢出压缩的 PreCompact 只有这一条生产者（provider 每会话一个，钩子引擎在 rt 上）
+diff --git a/src/tools/impact-query.ts b/src/tools/impact-query.ts
+index 835c9fe..2bb9497 100644
+--- a/src/tools/impact-query.ts
++++ b/src/tools/impact-query.ts
+@@ -95,19 +95,25 @@ export async function graphCandidatePosition(workspace: string, rel: string): Pr
+   }
+ }
+ 
+-/** 覆盖面自述（纯函数）：图被文件数帽挤过时，**成功**答案也要说清自己量了多大一块。
++/** 覆盖面自述（纯函数）：图没把候选收全时，**成功**答案也要说清自己量了多大一块。
+  *
+  *  为什么阳性一侧也要说：本工具的**阴性**结论早就各自带分诊（"无跨文件调用点"、"图里没有这个符号"
+  *  都会说"不等于 0"），但一个**成立**的答复原先只报结果不报覆盖面 ⇒ 模型看到"波及 1 个文件"就以为
+  *  问全了，而这张图可能只收了仓库的一小截（2026-09-25 本仓实测：451 个候选只收 400）。
+  *  这与 grep/glob 那条"阴性要说清扫描面"是同一条政策的后半句。
+  *
+- *  判据是**精确**的而非保守的：`applyFileCap` 只做 `slice(0, maxFiles)` ⇒ 「收录数 < 帽」⟺ 这一刀
+- *  没切到东西（真全量，一字不许多，零回归）；只有「收录数 ≥ 帽」才可能有文件被挤在图外。
+- *  措辞说"非全量"而不是"漏了 N 个"：挤掉多少个要重扫全量候选才知道，而这一格不值一次 rg。 */
+-export function coverageNote(files: number, cap: number): string {
+-  if (files < cap) return "";
+-  return `（覆盖度：本图收录 ${String(files)} 个文件＝帽 ${String(cap)} ⇒ 图非全量，` +
++ *  判据从「收录数 < 帽」换成「候选数 > 收录数」，两侧都比旧句子准：
++ *  ⑴ 旧句在 `收录数 == 帽 == 候选数` 时**误报**"非全量"（一个都没漏，模型白重问一次）；
++ *  ⑵ 反向漏报更实在：单文件读/解析失败被跳过时 `收录数 < 帽`，旧句直接闭嘴，而那张图确实缺文件。
++ *     切片之外还有 skip 这一支，所以只有候选数能判覆盖面；
++ *  ⑶ 分母本来就免费——`buildImpact` 里那份全量候选是切片**前**数组的长度，不是第二次 rg。
++ *     第 55 页那句"挤掉多少个要重扫全量候选才知道，而这一格不值一次 rg"在建图这一支不成立：
++ *     真正需要重扫的是「图里没有它」那条分诊（`graphCandidatePosition`），那一支照旧自己付。
++ *  措辞把"没进图"的两种成因一起点名（帽外 / 被跳过），不只怪帽。 */
++export function coverageNote(files: number, cap: number, candidates: number): string {
++  if (candidates <= files) return "";
++  return `（覆盖度：本图收录 ${String(files)} 个文件＝帽 ${String(cap)}，` +
++    `另有 ${String(candidates - files)} 个候选文件没进这张图（帽外或被跳过）⇒ 图非全量，` +
+     "图里没有 ≠ 仓库里没有；要更全调大 maxFiles 后重问）";
+ }
+ 
+@@ -117,12 +123,12 @@ export function coverageNote(files: number, cap: number): string {
+  *  而 `applyFileCap` 只在候选数 > 帽时才切那一刀 ⇒ 在小仓库上"被帽挡"是一句**不可能成立**的假设，
+  *  模型照着去调大 `maxFiles` 就是白跑一轮（与第 51 页那条「死参数式文案」同族：文案指向此输入下
+  *  不存在的开关）。反过来真到帽时这一类必须留着——否则又回到"把未知说成没有"。
+- *  与 `coverageNote` 共用同一判据（`files >= cap`），两处不会自相矛盾。 */
+-export function capCauseNote(files: number, cap: number): string {
+-  return files >= cap
+-    ? `本图收录 ${String(files)} 个文件＝帽 ${String(cap)}（非全量）⇒ 这一刀可能把它切在图外，` +
+-      "调大 maxFiles 后重问可排除这一成因"
+-    : `与帽无关：本图收录 ${String(files)} 个文件，未到帽 ${String(cap)} ⇒ 没有文件是被帽切掉的` +
++ *  与 `coverageNote` 共用同一判据（`candidates > files`），两处不会自相矛盾。 */
++export function capCauseNote(files: number, cap: number, candidates: number): string {
++  return candidates > files
++    ? `本图收录 ${String(files)} 个文件＝帽 ${String(cap)}，另有 ${String(candidates - files)} 个候选没进这张图` +
++      `（非全量）⇒ 这一刀可能把它切在图外，调大 maxFiles 后重问可排除这一成因`
++    : `与帽无关：本图收录 ${String(files)} 个文件，全仓候选 ${String(candidates)} 个 ⇒ 没有文件是被帽切掉的` +
+       "（被忽略规则/噪声目录排除、后缀不支持仍然成立）";
+ }
+ 
+@@ -185,7 +191,7 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
+           const graph = await buildImpact({ workspace: ctx.workspace, cacheDir: dir, maxFiles });
+           const rel = fileArg.replace(/\\/g, "/");
+           if (!graph.files.includes(rel)) return { ok: false, output: await notInGraphNote(ctx.workspace, rel, abs, maxFiles) };
+-          const depHead = "[impact] " + rel + " 引用的外部定义（我在调用谁）" + coverageNote(graph.files.length, maxFiles);
++          const depHead = "[impact] " + rel + " 引用的外部定义（我在调用谁）" + coverageNote(graph.files.length, maxFiles, graph.candidates);
+           return { ok: true, output: sitesNote(depHead, downward(graph, rel), DEP_NOUN) };
+         }
+         const r = await fileImpact(ctx.workspace, fileArg, dir, maxFiles);
+@@ -196,7 +202,7 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
+         const head = "[impact] " + r.file + (refSyms.length > 0
+           ? "（被跨文件引用的符号 " + String(refSyms.length) + " 个：" + refSyms.slice(0, SYMS_CAP).join(", ")
+             + (refSyms.length > SYMS_CAP ? " 等" : "") + "）"
+-          : "") + coverageNote(r.graphFiles, maxFiles) +
++          : "") + coverageNote(r.graphFiles, maxFiles, r.graphCandidates) +
+           unionNote(r.ambiguousSymbols.length > 0
+             ? r.ambiguousSymbols.slice(0, SYMS_CAP).join(", ") +
+               ` 在别处也有同名定义${r.ambiguousSymbols.length > SYMS_CAP ? " 等 " + String(r.ambiguousSymbols.length) + " 个符号" : ""}`
+@@ -210,7 +216,7 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
+         return {
+           ok: false,
+           output: `impact_query: 图里没有符号 ${JSON.stringify(symbol)}` +
+-            `（改名、未被引用、或不在已扫描的后缀内）。${capCauseNote(graph.files.length, maxFiles)}`,
++            `（改名、未被引用、或不在已扫描的后缀内）。${capCauseNote(graph.files.length, maxFiles, graph.candidates)}`,
+         };
+       }
+       if (defined.length === 0) {
+@@ -223,14 +229,14 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
+           ok: true,
+           output: `[impact] ${symbol}：这张图里没有任何文件**定义**它 ⇒ 它是外部或全局符号` +
+             `（定义在 node_modules、由环境注入，或定义它的那个文件压根没进这张图：` +
+-            `${capCauseNote(graph.files.length, maxFiles)}。图内没有 ≠ 仓库里没有）` +
++            `${capCauseNote(graph.files.length, maxFiles, graph.candidates)}。图内没有 ≠ 仓库里没有）` +
+             `。引用它的文件 ${String(files.size)} 个，但「改它会波及谁」这一问在此不适用；` +
+             `要动它的行为请改调用处或直读它的来源`,
+         };
+       }
+       const defFiles = new Set(defined.map((d) => d.file));
+       const symHead = `[impact] ${symbol} 的定义在 ${String(defFiles.size)} 个文件` +
+-        coverageNote(graph.files.length, maxFiles) +
++        coverageNote(graph.files.length, maxFiles, graph.candidates) +
+         unionNote(defFiles.size > 1 ? `${symbol} 有 ${String(defFiles.size)} 份定义` : "");
+       return { ok: true, output: sitesNote(symHead, upward(graph, symbol)) };
+     },
+diff --git a/src/tools/run_shell.ts b/src/tools/run_shell.ts
+index 280c135..9240fa3 100644
+--- a/src/tools/run_shell.ts
++++ b/src/tools/run_shell.ts
+@@ -1,4 +1,5 @@
+ import { type Tool, type ToolResult } from "./base.js";
++import { annotateExecCause } from "../agent/verify.js";
+ import { killGroup, sanitizedEnv, spawnTracked } from "./process.js";
+ import { createOutputRing } from "./output-ring.js";
+ 
+@@ -30,7 +31,11 @@ export const run_shell: Tool = {
+         if (timedOut) output += "\n[error: run_shell 超时（60s），已强制终止]";
+         if (cancelled) output += "\n[error: run_shell 随会话取消终止]";
+         if (code !== 0 && !timedOut && !cancelled) output += `\n[exit code: ${String(code)}]`;
+-        settle({ ok: code === 0 && !timedOut && !cancelled, output: output.replace(/\n+$/, "") });
++        const res: ToolResult = { ok: code === 0 && !timedOut && !cancelled, output: output.replace(/\n+$/, "") };
++        // 归因走 verify 那一只谓词（`classifyVerifyFailure`，同正则同枚举）：127 与「包管理器自身报错」
++        // 这两类「命令根本没跑成」对模型必须点名，否则它会照着一条环境红去改本来正确的代码
++        // （取消这一支不贴——它的原因已经写在 `[error: … 随会话取消终止]` 那行了）。
++        settle(cancelled ? res : annotateExecCause(res, { timedOut, exitCode: code }));
+       };
+       // env 消毒：spawn 不传 env 会继承 process.env，而主进程把 BYOK key 写进了
+       // process.env.M0_API_KEY —— 一条 `env` 就能把明文 key 读进事件流（P1-1）。
+diff --git a/tests/head-cert-deps.test.ts b/tests/head-cert-deps.test.ts
+index 4c6cca0..f92c71e 100644
+--- a/tests/head-cert-deps.test.ts
++++ b/tests/head-cert-deps.test.ts
+@@ -806,7 +806,17 @@ describe("清场读数：常驻残留的 scratch 树要自己报数（任务 #33
+       expect(dirty.out.trim().split("\n").filter((l) => l.trim() !== "").length, "脏树要量出 1 项：同一对参数分不出两态，那个 0 就没有证人").toBe(1);
+ 
+       const idx = join(repo, ".git", "index");
+-      const staleIt = (): void => { const t = Date.now() / 1000 + 5; utimesSync(join(repo, "f.txt"), t, t); }; // 只改 mtime，让 git 想去刷新 index
++      // 只改 mtime、内容不变 ⇒ git 重算 sha、发现一致 ⇒ 刷新 stat 缓存并**重写 index**；下面两圈都要拿到这次写盘。
++      // 从前这里是 `Date.now()/1000 + 5`（未来时刻、整数秒粒度）：负载高时三圈落在同一秒内，第二圈起文件 mtime
++      // 与 git 刚缓存下的那个值相同 ⇒ 它认为不必刷新 ⇒ 反向对照翻不出 true，判卷退化成偶发红
++      // （2026-09-29 全量判卷实测：单跑 2/2 绿、并发全量 1 红）。改成**过去时刻且每圈不同**：每圈都与缓存里的 stat 不同，
++      // 刷新必然发生，不再依赖调度。
++      let staleN = 0;
++      const staleIt = (): void => {
++        staleN += 1;
++        const t = Math.floor(Date.now() / 1000) - 120 + staleN;
++        utimesSync(join(repo, "f.txt"), t, t);
++      };
+       let touched = false;
+       for (let k = 0; k < 3 && !touched; k++) {
+         staleIt();
+diff --git a/tests/impact-note-bounds.test.ts b/tests/impact-note-bounds.test.ts
+index 3712148..9dcfa54 100644
+--- a/tests/impact-note-bounds.test.ts
++++ b/tests/impact-note-bounds.test.ts
+@@ -5,9 +5,9 @@ import { describe, expect, it } from "vitest";
+ import { contextNoteFor, IMPACT_CONTEXT_SYMBOLS_PER_FILE, type FileImpactReport } from "../src/agent/impact";
+ 
+ function report(symbols: string[], up: FileImpactReport["up"] = []): FileImpactReport {
+-  // graphFiles / ambiguousSymbols 只服务查询端的自述（覆盖面、同名歧义），注入摘要 contextNoteFor
+-  // 两支都不读 ⇒ 这里给真值即可。
+-  return { file: "src/a.ts", symbols, up, truncated: false, graphFiles: 1, ambiguousSymbols: [] };
++  // graphFiles / graphCandidates / ambiguousSymbols 只服务查询端的自述（覆盖面、同名歧义），
++  // 注入摘要 contextNoteFor 三支都不读 ⇒ 这里给真值即可。
++  return { file: "src/a.ts", symbols, up, truncated: false, graphFiles: 1, graphCandidates: 1, ambiguousSymbols: [] };
+ }
+ 
+ describe("无跨文件调用点分支的符号清单有界", () => {
+diff --git a/tests/impact-query.test.ts b/tests/impact-query.test.ts
+index 52bb188..83802e0 100644
+--- a/tests/impact-query.test.ts
++++ b/tests/impact-query.test.ts
+@@ -6,7 +6,7 @@ import { join } from "node:path";
+ import { fileURLToPath } from "node:url";
+ import { afterAll, beforeAll, describe, expect, it } from "vitest";
+ 
+-import { createImpactQueryTool, graphAbsenceNote, graphCandidatePosition, impactQuerySpec } from "../src/tools/impact-query";
++import { capCauseNote, coverageNote, createImpactQueryTool, graphAbsenceNote, graphCandidatePosition, impactQuerySpec } from "../src/tools/impact-query";
+ import { MAX_FILES_DEFAULT } from "../src/agent/map/build";
+ import { TOOLS } from "../src/tools";
+ import type { ToolContext } from "../src/tools/base";
+@@ -401,6 +401,68 @@ describe("覆盖度自述：图被帽截断时，成功答案也要说「这图
+     expect(r.output).toContain("跨文件调用点 1 处");
+     expect(r.output).not.toMatch(/帽/u);
+   });
++
++  // 第 55 页那句自述只说「图非全量」，不说漏了几个 —— 当时给的理由是"挤掉多少个要重扫全量候选，
++  // 这一格不值一次 rg"。今天读 build.ts 才发现那句理由在建图这一支不成立：`scanSourceFiles`
++  // 本来就是先取全量候选、再 `applyFileCap` 切片 ⇒ 分母是切片前那份数组的长度，**不要第二次 rg**。
++  // 所以这一组钉的是「三支都把实数报出来」，各钉一支：覆盖面由三支各自组装，少接一支就是那支
++  // 静默回到没有分母的旧句子（同族只硬化一支的第十一/十三族）。
++  it("覆盖度自述带分母：图外还有几个候选要说得出数（不是只说「非全量」）", async () => {
++    const c = await mk();
++    const r = await createImpactQueryTool(cacheDir).run({ symbol: "target", maxFiles: 2 }, c);
++    expect(r.ok).toBe(true);
++    expect(r.output, "候选 4 个 / 收录 2 个 ⇒ 必须报出「另有 2 个」").toContain("另有 2 个候选文件没进这张图");
++    expect(r.output).toContain("收录 2 个文件＝帽 2");
++  });
++
++  it("file 支的同一个数要穿过 fileImpact（少接一层 report 就只剩没有分母的旧句子）", async () => {
++    const c = await mk();
++    const r = await createImpactQueryTool(cacheDir).run({ file: "a.ts", maxFiles: 2 }, c);
++    expect(r.ok).toBe(true);
++    expect(r.output).toContain("另有 2 个候选文件没进这张图");
++  });
++
++  it("deps 支的同一个数也从 graph 带过来（三支同判据，不许一支有一支没有）", async () => {
++    const c = await mk();
++    const r = await createImpactQueryTool(cacheDir).run({ file: "b.ts", deps: true, maxFiles: 2 }, c);
++    expect(r.ok).toBe(true);
++    expect(r.output).toContain("我在调用谁");
++    expect(r.output).toContain("另有 2 个候选文件没进这张图");
++  });
++
++  it("收录数正好等于帽、候选也只有这么多 ⇒ 一个字都不许多（旧判据在这里误报「非全量」）", async () => {
++    // `applyFileCap` 只做 slice：files.length == cap **不等于**这一刀切掉了东西。
++    // 旧判据 `files >= cap` 在这一格会喊"图非全量"，而图就是全量 ⇒ 模型白重问一次。
++    const only2 = await mkdtemp(join(tmpdir(), "impact-exact-cap-"));
++    await writeFile(join(only2, "a.ts"), "export function target(x) { return x + 1; }\n", "utf8");
++    await writeFile(join(only2, "b.ts"), "import { target } from \"./a\";\nexport function use(y) { return target(y); }\n", "utf8");
++    try {
++      const r = await createImpactQueryTool(cacheDir).run({ symbol: "target", maxFiles: 2 }, { workspace: only2, emit: async () => {} });
++      expect(r.ok).toBe(true);
++      expect(r.output).toContain("跨文件调用点 1 处"); // 前提：这一支真的答出来了，不是走了别的分诊
++      expect(r.output).not.toMatch(/帽|非全量/u);
++    } finally {
++      await rm(only2, { recursive: true, force: true });
++    }
++  });
++});
++
++describe("覆盖面两把纯函数的判据：候选数 > 收录数，而不是收录数 < 帽", () => {
++  it("coverageNote：部分覆盖时报出实数，收全时闭嘴", () => {
++    expect(coverageNote(400, 400, 508)).toContain("另有 108 个候选文件没进这张图");
++    expect(coverageNote(400, 400, 400)).toBe(""); // ⑴ 旧判据 `files >= cap` 在这里误报
++    // ⑵ 反向：切片之外还有「读/解析失败被跳过」这一支 —— 收录数低于帽并不等于收全了。
++    expect(coverageNote(398, 400, 400)).toContain("另有 2 个候选文件没进这张图");
++  });
++
++  it("capCauseNote 与它同判据：一处说漏了、另一处不许说没漏", () => {
++    expect(capCauseNote(400, 400, 508)).toContain("另有 108 个候选没进这张图");
++    expect(capCauseNote(398, 400, 400)).toContain("另有 2 个候选没进这张图");
++    const none = capCauseNote(400, 400, 400);
++    expect(none).toMatch(/与帽无关/u);
++    expect(none).toContain("全仓候选 400 个"); // 阴性一侧也带分母，不说空头的「与帽无关」
++    expect(none).not.toContain("maxFiles"); // 没切东西时这一位不是出路（第 51 页死参数式文案）
++  });
+ });
+ 
+ describe("「图里没有」的成因收敛：没到帽时不许把帽列成可能成因", () => {
+diff --git a/tests/measure-impact-cap-divergence.test.ts b/tests/measure-impact-cap-divergence.test.ts
+index e304eb4..3dfc124 100644
+--- a/tests/measure-impact-cap-divergence.test.ts
++++ b/tests/measure-impact-cap-divergence.test.ts
+@@ -65,7 +65,7 @@ describe("两图答案差集：漏一个就要出声", () => {
+ 
+ const site = (file: string, symbol: string, line = 1): ImpactSite => ({ file, line, symbol }) as ImpactSite;
+ const graph = (files: string[], defs: Record<string, ImpactSite[]>, refs: Record<string, ImpactSite[]>): ImpactGraph =>
+-  ({ files, defs: new Map(Object.entries(defs)), refs: new Map(Object.entries(refs)), edges: [], parsed: 0, fromTagsCache: 0 }) as ImpactGraph;
++  ({ files, candidates: files.length, defs: new Map(Object.entries(defs)), refs: new Map(Object.entries(refs)), edges: [], parsed: 0, fromTagsCache: 0 }) as ImpactGraph;
+ 
+ describe("确证漏报只认全仓唯一的符号（下界不能被撞名多报撑大）", () => {
+   const full1 = graph(
+diff --git a/tests/mutate-verify-gates.test.ts b/tests/mutate-verify-gates.test.ts
+index d34685b..b0f290d 100644
+--- a/tests/mutate-verify-gates.test.ts
++++ b/tests/mutate-verify-gates.test.ts
+@@ -6,7 +6,7 @@ import { spawnSync, execFileSync } from "node:child_process";
+ import { readFileSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+ import { dirname, join, resolve } from "node:path";
+ import { fileURLToPath } from "node:url";
+-import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, costRollupOf, entryDisposition, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, selectChangedEntries, splitRunnable, untrackedAnchorLine, untrackedAnchorPaths, type AnchorCostRow, type HeadState } from "../scripts/lib/mutate-gates";
++import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, costRollupOf, entryDisposition, escapeTitlePattern, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, needleProblemLine, preflightRefusals, runModeCell, runModeFor, runReadingIsBad, restoreDiffProblem, redVerdictCell, redKindsLine, selectChangedEntries, selectorAmbiguity, selectorCell, selectedTestCount, splitRunnable, unverifiedCell, untrackedAnchorLine, untrackedAnchorPaths, vacuousRunLine, type AnchorCostRow, type HeadState } from "../scripts/lib/mutate-gates";
+ import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
+ 
+ /** 从锚点表取 `{id,test,expectFail}`：只走 `--list` 这条**不改源文件**的入口。
+@@ -968,11 +968,317 @@ describe("成本分母：每条锚点实际 spawn 了几次判卷", () => {
+     expect(src).toMatch(
+       /\nconst costRows = results\.map\(\(r\) => \(\{ id: r\.m\.id, runsMs: r\.runsMs \}\)\);\nconst costLine = costCell\(costRollupOf\(costRows\)\);/);
+     expect(src, "runTest 不记时 ⇒ 分母退化回「次数 × 文件时长」的模型").toMatch(
+-      /\nfunction runTest\(testRel\) \{\n  const started = Date\.now\(\);/);
++      /\nfunction runTest\(testRel, pattern\) \{\n  const started = Date\.now\(\);/);
+     expect(src).toMatch(/\nconst timing = [\s\S]{0,400}\$\{costLine\}/);
+-    // 相对读数（不写死条数）：有几个出口就有几份账本
+-    const exits = (src.match(/return \{ m, ok/g) ?? []).length;
+-    const carried = (src.match(/runsMs: runs/g) ?? []).length;
+-    expect(carried, "有出口没带账本＝那条锚点的花费从分母里消失").toBe(exits);
++    // 相对读数（不写死条数）：每个内联出口那一行自己就得带账本；`return red(` 那份由 helper 统一带（helper 自己必须带）。
++    const start = src.indexOf("function verifyEntry(");
++    const body = src.slice(start, src.indexOf("\n}\n", start) + 2);
++    const unled = body.split("\n").filter((l) => /\{ m, ok/u.test(l) && !/runsMs: runs/u.test(l));
++    expect(unled, "有出口没带账本＝那条锚点的花费从分母里消失").toEqual([]);
++    expect((body.match(/\{ m, ok: false/gu) ?? []).length,
++      "判红的构造点只许有 helper 一处：多一处内联 `{ m, ok: false` 就多一处可以忘了带类别").toBe(1);
++  });
++});
++
++// ---- 第 170 页：按标题选跑法（`-t`）----
++// 实测单价（同一棵树、同一份宿主、各复测两次）：整文件 7.97s／8.51s 一拍 vs 只跑自己那条 0.136s／0.143s 一拍＝约 57×。
++// 这笔买卖的代价是「选不中」这件事在 vitest 里**不长成失败**（下面第一条用的就是实测到的那两行原文），
++// 所以每个形状都得有证人，否则省下来的时间会把整张保护表换成空转。
++describe("按标题选跑法：选中几条必须被读出来", () => {
++  it("选中条数只从 vitest 真实的收尾行读，两种实测形状给两个数；读不到那行是 null 不是 0", () => {
++    expect(selectedTestCount(" Test Files  1 passed (1)\n      Tests  1 passed | 99 skipped (100)\n   Duration  136ms\n")).toBe(1);
++    expect(selectedTestCount("      Tests  100 skipped (100)\n   Duration  156ms\n"), "选不中时 vitest 退 0 并把全部标成 skipped").toBe(0);
++    expect(selectedTestCount("      Tests  2 failed | 98 passed (100)\n")).toBe(100);
++    expect(selectedTestCount("no summary line here"), "取料坏不许读成「一条也没选中」——两种红的修法相反").toBeNull();
++  });
++
++  it("标题当正则喂给 -t ⇒ 元字符必须转义（现读真标题里有 ( ) [ ] . * + 与全角括号）", () => {
++    const p = escapeTitlePattern("a.c");
++    expect(new RegExp(p).test("a.c"), "转义后的模式要逐字命中").toBe(true);
++    expect(new RegExp(p).test("abc"), "未转义的点会匹配任意字符 ⇒ 选错用例").toBe(false);
++    expect(escapeTitlePattern("（甲）[乙]*+?^${}()|\\")).toContain("\\[");
++  });
++
++  it("两种跑法共存：只有能唯一定位自己用例的那批走 -t，其余照旧整文件", () => {
++    const set = new Set(["known"]);
++    expect(runModeFor("known", set)).toBe("selector");
++    expect(runModeFor("unknown", set)).toBe("whole");
++  });
++
++  it("两种跑法定长列印：这一趟只拍到一种，另一种也要印出没有分母而不是整支消失", () => {
++    // 09-28 实测到的形状：补跑那 30 条全是 selector 拍，`跑法单价：selector 90 拍…` 这一行里 whole 整支不见了，
++    // 读者分不清「这一趟没有整文件拍」与「这一格忘了印」——第 163 页给全局立的那把尺，欠的就是子列这一格。
++    const onlySel = runModeCell([{ mode: "selector", ms: 380, selected: 1 }]);
++    expect(onlySel, "whole 那一支消失 ⇒ 缺席被读成「本次不需要成本」").toContain("whole 0 拍·这一支本次没有 spawn ⇒ 没有分母");
++    const onlyWhole = runModeCell([{ mode: "whole", ms: 900, selected: 40 }]);
++    expect(onlyWhole, "反方向同样不许消失").toContain("selector 0 拍·这一支本次没有 spawn ⇒ 没有分母");
++    expect(onlySel.split(" vs "), "两支都在：分隔符两侧各一条，谁也没被挤掉").toHaveLength(2);
++    expect(onlyWhole.split(" vs "), "两支都在（反向对照）").toHaveLength(2);
++  });
++
++  it("跑法单价那一格分开印两种跑法，并把两种跑法各自的「坏拍」数出来——省了多少由它说，不许推算", () => {
++    expect(runModeCell([]), "一次都没跑时不许印成 0 秒的单价").toContain("这一格没有分母");
++    const cell = runModeCell([
++      { mode: "selector", ms: 140, selected: 1 },
++      { mode: "selector", ms: 160, selected: 1 },
++      { mode: "whole", ms: 8000, selected: 0 },
++      { mode: "whole", ms: 8500, selected: 95 },
++    ]);
++    expect(cell, cell).toContain("selector 2 拍·中位 0.16s·坏拍（选中≠1） 0");
++    expect(cell, cell).toContain("whole 2 拍·中位 8.50s·坏拍（没量到或 0 条） 1");
++    // 两种跑法的「坏」定义相反：整文件那一拍选中 40 条是常态，精确那一拍选中 2 条才是病。
++    // 只数 0 条的那一份读数看不见这一格（第 170 页⑵上线要的就是它）。
++    const many = runModeCell([
++      { mode: "selector", ms: 100, selected: 1 },
++      { mode: "selector", ms: 120, selected: 2 },
++      { mode: "whole", ms: 900, selected: 40 },
++    ]);
++    expect(many, many).toContain("selector 2 拍·中位 0.12s·坏拍（选中≠1） 1");
++    expect(many, many).toContain("whole 1 拍·中位 0.90s·坏拍（没量到或 0 条） 0");
++  });
++
++  it("接线：testNamePattern 这一支要经转义，不许把标题当通配符拼进命令（表与实现同文件 ⇒ 必须行锚定，规则 236）", () => {
++    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
++    // 不锚定行的正则会先撞上**锚点表里那条引文**（表与本文件同树同文件），于是突变后仍然匹配 ⇒ 变异存活。
++    // 实测踩过：这条一开始写成 `/args\.push\("-t", escapeTitlePattern\(pattern\)\);/`，机器报「测试全绿」。
++    expect(src, "不转义就拼成选择子 ⇒ 元字符把它变成通配，选中几条就不再是那条 killer 用例").toMatch(
++      /^ {2}if \(typeof pattern === "string" && pattern !== ""\) args\.push\("--testNamePattern=" \+ escapeTitlePattern\(pattern\)\);$/mu);
++  });
++
++  it("行为证人：指针以 `-` 开头时两种写法给两个读数——等号写法选中 1 条，空格写法被 CLI 当旗标吞掉", () => {
++    /* 整表第一遍（949/949）唯一那条红就是这个形状：`pc-face-change-named-shortcut` 的 expectFail 以 `--` 开头。
++       旧写法 `-t <值>` 把值交给 vitest 的 CLI 再解析一次，于是「--self-test …」成了**旗标**：
++       那一拍一条用例都没跑，退的却是 1，收尾行也读不到 ⇒ 旧读数只会喊「基线不绿」，把「取料坏」伪装成「判卷坏了」。
++       这里真跑两次 vitest，拿「读到几条」当读数，不钉 CLI 的报错文字（规则 239）；等号写法把值绑回值里。 */
++    const pat = escapeTitlePattern("--self-test 全造得红，且**每条规则都有自己的反向对照**（加规则不加对照即红）");
++    const root = fileURLToPath(new URL("..", import.meta.url));
++    const run = (extra: string[]): string => {
++      const r = spawnSync(process.execPath,
++        ["node_modules/vitest/vitest.mjs", "run", "--pool=threads", "--config", "tests/vitest.config.ts", "tests/prefix-churn.test.ts", ...extra],
++        { cwd: root, encoding: "utf8", env: { ...process.env, TERM: "dumb" } });
++      return (r.stdout ?? "") + (r.stderr ?? "");
++    };
++    expect(selectedTestCount(run([`--testNamePattern=${pat}`])), "等号写法要真选中那一条").toBe(1);
++    expect(selectedTestCount(run(["-t", pat])), "空格写法被当成旗标 ⇒ 这一拍没跑，读数必须是「没量到」而不是 0").toBeNull();
++  });
++
++  it("接线：只有 selector 模式才塞 -t，其余必须走整文件（两种跑法共存是刻意的）", () => {
++    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
++    expect(src, "非唯一命中的那条也塞 -t ⇒ 整文件跑法这一支就没了，而那 13 条本来只能靠它").toMatch(
++      /\n\s*const pattern = mode === "selector" \? String\(m\.expectFail \?\? ""\) : "";/);
++  });
++
++  it("接线：每一拍都过共用的那道读数闸，闸的拍数与 runTest 调用点相对相等（选不中、选多条都不许读成绿）", () => {
++    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
++    // 钉的是「这一拍过的是共用那份判据」，不是「这里有个 if」：退回内联的
++    // `(r.selected === null || r.selected === 0)` 仍然要判红——那种写法看不见「选中多条」。
++    // 表与实现同文件 ⇒ 必须行锚定（规则 236/247）。
++    expect(src, "不调共用判据 ⇒ 闸与单价格各漂各的，多选的那一拍永远不出声").toMatch(
++      /^ {4}if \(vacuous === null && runReadingIsBad\(mode, r\.selected\)\) \{$/mu);
++    const calls = (src.match(/= runTest\(m\.test, pattern\);/g) ?? []).length;
++    const noted = (src.match(/note\("/g) ?? []).length;
++    expect(calls, "跑法改了新加一拍却忘了过闸").toBeGreaterThan(0);
++    expect(noted, "某一拍没过账本与选中数这道闸").toBe(calls);
++  });
++
++  it("读数闸的判据只有一份：selector 那一拍恰好选中 1 条才算合格，0 条／多条／没读到三种都判坏", () => {
++    expect(runReadingIsBad("selector", 1), "恰好本锚点那条 killer 用例＝合格").toBe(false);
++    expect(runReadingIsBad("selector", 0)).toBe(true);
++    expect(runReadingIsBad("selector", 2), "选中多条＝红的未必是本锚点那条（-t 匹配整条标题，体检数的是 it 字面量）").toBe(true);
++    expect(runReadingIsBad("selector", null), "收尾行没读到＝取料坏").toBe(true);
++    expect(runReadingIsBad("whole", 95), "整文件那一拍选中很多条是常态，不许当病判").toBe(false);
++    expect(runReadingIsBad("whole", 0)).toBe(true);
++    expect(runReadingIsBad("whole", null)).toBe(true);
++  });
++
++  it("三种坏读数印三种不同措辞：取料坏／一条没选中／选中多条，两两不许相同", () => {
++    const unreadable = vacuousRunLine("x", "基线", null);
++    const none = vacuousRunLine("x", "基线", 0);
++    const many = vacuousRunLine("x", "基线", 3);
++    expect(new Set([unreadable, none, many]).size, "两种红的修法相反却被印成同一句 ⇒ 读的人分不出该改哪个").toBe(3);
++    expect(none, "0 条那一格要说「什么都没测」").toContain("什么都没测");
++    expect(many, "多条那一格要说选中的不止本锚点那条用例").toContain("不止本锚点");
++    expect(unreadable, "没读到那一格要说取料坏，不许冒充 0 条").toContain("取料坏");
++    expect(many, "选中多条不是空跑——别条用例的红不许冒本锚点的红").not.toContain("什么都没测");
++  });
++});
++
++// ---- 第 169 页前置闸：选择子唯一性 ----
++// 动因（09-28 第 168 页的读数）：一条锚点的单价＝判卷宿主时长的 3 倍（实测 23.1s/条 vs 1.1s/条＝20.6×，
++// 56 条挂在一份宿主上吃掉整批 98.8% 的时间）。要改成「只跑自己那条 killer 用例」，前提是指针能逐字唯一定位那条标题；
++// 选不中时 vitest 不是失败而是**一条也没跑**，基线与突变两拍都白过 ⇒ 先要有读数点名「选不中的是哪些」。
++const SELECTOR_CAP = 13;
++
++describe("选择子唯一性：一条锚点能不能只跑自己那条 killer 用例", () => {
++  const judge = (body: string) => body;
++
++  it("只数被数过的：判卷读不到／指针为空／不是 vitest 文件都不进 inspected", () => {
++    const entries = [
++      { id: "a", test: "tests/one.test.ts", expectFail: "甲说的事" },
++      { id: "b", test: "tests/two.test.ts", expectFail: "乙说的事" },
++      { id: "c", test: "tests/gone.test.ts", expectFail: "读不到的那条" },
++      { id: "d", test: "scripts/not-a-test.ts", expectFail: "结构钉型的指针" },
++      { id: "e", test: "tests/one.test.ts", expectFail: "" },
++    ];
++    const read = (rel: string): string | null => {
++      if (rel === "tests/one.test.ts") return judge('it("甲说的事", () => {});\n');
++      if (rel === "tests/two.test.ts") return judge('it("乙说的事", () => {});\n');
++      return null;
++    };
++    const r = selectorAmbiguity(entries, read);
++    expect(r.inspected, "读不到的判卷、非 vitest 的 test、空指针都不该进分母").toBe(2);
++    expect(r.problems).toEqual([]);
++    expect(selectorCell(r.problems, r.inspected)).toContain("2/2");
++  });
++
++  it("零命中与多命中分开印，并点名是哪几条（0 命中＝-t 会一条也没跑）", () => {
++    const entries = [
++      { id: "zero", test: "tests/x.test.ts", expectFail: "标题是拼出来的那类" },
++      { id: "two", test: "tests/x.test.ts", expectFail: "默认开着" },
++      { id: "one", test: "tests/x.test.ts", expectFail: "唯一的那条" },
++    ];
++    const src = 'it("唯一的那条 说的事", () => {});\nit("默认开着 甲", () => {});\nit("默认开着 乙", () => {});\n';
++    const r = selectorAmbiguity(entries, () => src);
++    expect(r.inspected).toBe(3);
++    expect(r.problems.map((p) => `${p.id}:${String(p.hits)}`).sort()).toEqual(["two:2", "zero:0"]);
++    const cell = selectorCell(r.problems, r.inspected);
++    expect(cell, cell).toContain("零命中 1 条");
++    expect(cell, cell).toContain("多命中 1 条");
++    expect(cell, cell).toContain("zero(0)");
++  });
++
++  it("可选率的分母是被数过的条数，不是整表条数（拿整表去除＝把选不中的洗成可选）", () => {
++    const entries = [
++      { id: "u", test: "tests/x.test.ts", expectFail: "唯一命中的一条" },
++      { id: "z", test: "tests/x.test.ts", expectFail: "标题拼出来的" },
++      { id: "gone", test: "tests/none.test.ts", expectFail: "读不到" },
++    ];
++    const read = (rel: string): string | null =>
++      rel === "tests/x.test.ts" ? 'it("唯一命中的一条 的事", () => {});\n' : null;
++    const r = selectorAmbiguity(entries, read);
++    expect(r.inspected, "读不到的那份判卷不进分母").toBe(2);
++    expect(selectorCell(r.problems, r.inspected), selectorCell(r.problems, r.inspected)).toContain("1/2");
++  });
++
++  it("接线：门自己那一步真拿整张表去数选择子，并把两份数一起交给措辞（只印不数＝这一格永远 0）", () => {
++    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
++    expect(src, "取料必须是整张表的指针面，喂空表＝这一格永远印 0/0").toMatch(
++      /\n\s{2}const selectorScan = selectorAmbiguity\(pointerEntries, /);
++    expect(src, "措辞吃的是 problems 与 inspected 两份，少一份就退化成一个数").toMatch(
++      /\n\s*console\.log\("ℹ️  " \+ selectorCell\(selectorScan\.problems, selectorScan\.inspected\)\);/);
++  });
++
++  it(`水位：真表现读「选不中＋不唯一」只准调低（帽 ${SELECTOR_CAP}，09-28 现读 13＝11 零命中＋2 多命中）——新增一根要写明为什么`, () => {
++    const rows = listAnchorRows();
++    const r = selectorAmbiguity(rows, (rel) => readRel(rel));
++    expect(r.problems.length, "选择子失准：" + r.problems.map((p) => `${p.id}(${String(p.hits)})`).join("、")).toBeLessThanOrEqual(SELECTOR_CAP);
++    expect(SELECTOR_CAP - r.problems.length).toBeLessThan(5);
++    expect(r.inspected, "取料面塌了＝inspected 归零，这一格又不能印错只能印 0").toBeGreaterThan(500);
++  });
++});
++
++describe("还原那一拍换成字节比对（第 171 页⑩，任务 #10）", () => {
++  it("字节相同＝到位；长度不同与等长不同要各点名自己的那一格", () => {
++    expect(restoreDiffProblem("abc", "abc"), "同一份字节就是同一份字节，不许含糊").toBeNull();
++    expect(restoreDiffProblem("", ""), "空对空也是到位（截断还原要由长度那一格喊，不是这里）").toBeNull();
++    const short = restoreDiffProblem("abcdef", "abc");
++    expect(short, "少了一截＝还原后文件被写坏，必须报出两边的字节数").toContain("字节数不同：突变前 6／还原后 3");
++    const sameLen = restoreDiffProblem("abcdef", "abcxef");
++    expect(sameLen, "长度相同但内容不同 ⇒ 只报「失败」等于没报，要给出首个差异的位置").toContain("首个差异在第 4 个字符");
++    expect(sameLen).toContain("长度相同但内容不同");
++  });
++
++  it("接线：每条锚点只付两拍，还原那一拍不再 spawn 判卷", () => {
++    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
++    const notes = (src.match(/\n\s*note\("/gu) ?? []).length;
++    expect(notes, "记拍点从 2 变回 3 ⇒ 整表每条多花一次 spawn，而这张表是默认门里最贵的一道").toBe(2);
++    expect(src, "字节比对被摘掉 ⇒ 盘上留着半个突变也照样算绿").toMatch(
++      /^ {4}if \(restoreProblem !== null\) return red\("restore-mismatch", `还原未逐字节相同/mu);
++    expect(src).not.toMatch(/note\("还原"/u);
++  });
++});
++
++describe("判红按类别分开（第 172 页⑪，任务 #12）", () => {
++  const rows = [
++    { id: "s1", kind: "survived" as const },
++    { id: "s2", kind: "survived" as const },
++    { id: "m1", kind: "misattributed" as const },
++    { id: "v1", kind: "vacuous" as const },
++  ];
++
++  it("判红的总数等于名单长度之和，只印非零的类别", () => {
++    const c = redVerdictCell(rows);
++    expect(c.total).toBe(4);
++    expect(c.summary).toContain("survived 2");
++    expect(c.list, "四类里只有三类非零 ⇒ 空类别不许占行，但也不能把有的那类合并掉").toHaveLength(3);
++    const ids = c.list.map((l) => (l.split("：")[1] ?? "").trim().split(/\s+/u).filter((t) => t.length > 0)).flat();
++    expect(ids.sort().join(","), "名单就是那 4 条——计数与名单同源（规则 209/225）").toBe("m1,s1,s2,v1");
++    const kindsLine = redKindsLine(c.counts);
++    expect(kindsLine.startsWith("REDKINDS="), "机器可读那一行的前缀是下游唯一的取料键").toBe(true);
++    expect((kindsLine.match(/:/gu) ?? []).length, "七个类别都要在这一行里报到，缺席的类别会被读成「没有那一类」").toBe(7);
++    expect(kindsLine).toContain("survived:2");
++    expect(kindsLine).toContain("baseline-red:0");
++  });
++
++  it("判红缺类别／认不出的类别当场崩并点名第几条", () => {
++    expect(() => redVerdictCell([{ id: "ghost" } as never])).toThrow(/ghost/u);
++    expect(() => redVerdictCell([{ id: "x1", kind: "why" as never }])).toThrow(/x1/u);
++  });
++
++  it("接线：runner 在出口就定类别，汇总与机器行都从同一份取料来", () => {
++    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
++    expect(src, "出口不带类别 ⇒ 汇总只能猜散文，而下游已经在猜（规则 205/213）").toMatch(
++      /^ {2}const red = \(failKind, why\) => \(\{ m, ok: false, failKind, runsMs: runs, why \}\);$/mu);
++    const vs = src.indexOf("function verifyEntry(");
++    const body = src.slice(vs, src.indexOf("\n}\n", vs) + 2);
++    expect((body.match(/return red\(/gu) ?? []).length,
++      "八条判红出口里只要有一条绕过 helper，那一类就永远不会出现在分类名单上").toBeGreaterThanOrEqual(8);
++    expect(src, "机器行没进载荷 ⇒ 下游退回猜散文，改一句文案就静默降级").toMatch(/redKindsLine\(redCell\.counts\)/u);
++  });
++});
++
++describe("未证那一态的名单与补跑（第 171 页，任务 #14）", () => {
++
++  const rows7 = [
++    { id: "a1", cls: "src-in-flight" as const },
++    { id: "a2", cls: "src-in-flight" as const },
++    { id: "b1", cls: "judge-in-flight" as const },
++    { id: "c1", cls: "judge-unloadable" as const },
++    { id: "d1", cls: "budget-stopped" as const },
++    { id: "d2", cls: "budget-stopped" as const },
++    { id: "d3", cls: "budget-stopped" as const },
++  ];
++
++  it("未证四类各印各的名单，总数等于名单长度之和", () => {
++    const u = unverifiedCell(rows7);
++    expect(u.total).toBe(7);
++    expect(u.summary).toContain("未证 7 条");
++    expect(u.list, "四类各一行，混成一行就把「等别人落库」和「现在就能补跑」指到同一个动作上").toHaveLength(4);
++    expect(u.summary).toContain("2 条源文件在飞/未跟踪");
++    expect(u.summary).toContain("3 条预算用尽没跑到");
++    const seen = u.list.map((line) => (line.split("：")[1] ?? "").trim().split(/\s+/u).filter((t) => t.length > 0)).flat();
++    expect(seen.sort().join(","), "名单里数得出的 id 必须就是那 7 条——只报数不报名单，补跑得读者自己算差集").toBe(
++      rows7.map((r) => r.id).sort().join(","),
++    );
++  });
++
++  it("认不出的未证类别当场崩并点名第几条，不许从总数里消失", () => {
++    expect(() => unverifiedCell([{ id: "ghost", cls: "who-knows" as never }])).toThrow(/ghost/u);
++  });
++
++  it("补跑命令只收预算用尽那一类，那一类为空就不许印命令", () => {
++    expect(unverifiedCell(rows7).rerun).toEqual(["d1", "d2", "d3"]);
++    expect(unverifiedCell([{ id: "a1", cls: "src-in-flight" }]).rerun,
++      "源文件在飞时补跑照样跑不动 ⇒ 给一条注定失败的命令比不给更坏（它会被人当「已经试过了」）").toEqual([]);
++  });
++
++  it("接线：未证名单走同步写满的那条出口，UNVERIFIED 标记只印一次", () => {
++    const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
++    expect(src, "名单退回 console.log ⇒ process.exit 掐掉异步尾，几百条名单只剩内核缓冲那一截（规则 241）").toMatch(
++      /^emitAndExit\(redText \+ unvText \+ timing \+ /mu);
++    const markers = (src.match(/"UNVERIFIED="|UNVERIFIED=" /gu) ?? []).length;
++    expect(markers, "gates 那边把每一行 UNVERIFIED= 相加，多印一行就把未证总数翻倍").toBe(1);
++    expect(src, "类别按字段认，不按 why 的措辞认——改一句文案就分错类").toMatch(
++      /^ {4}cls: typeof r\.unloadable === "string" \? "judge-unloadable" : r\.stopped === true \? "budget-stopped" : "judge-in-flight",$/mu);
+   });
+ });
+diff --git a/tests/mutation-rerun-triage.test.ts b/tests/mutation-rerun-triage.test.ts
+index 494192d..be6376c 100644
+--- a/tests/mutation-rerun-triage.test.ts
++++ b/tests/mutation-rerun-triage.test.ts
+@@ -4,7 +4,7 @@
+  *  否则它只有门脚本会跑到，改坏了没人红（规则 118：只有门在守的格子挂不上锚点）。 */
+ import { describe, expect, it } from "vitest";
+ 
+-import { classify, failedIds, failedLineCount, looseFailedLineCount, needsAction } from "../scripts/lib/mutation-rerun-triage";
++import { classify, failedIds, failedLineCount, looseFailedLineCount, needsAction, redKindsOf } from "../scripts/lib/mutation-rerun-triage";
+ 
+ describe("failedIds：取料面先要可信", () => {
+   it("三条 ❌ 就是三条，按行首锚定（描述里再出现 ❌ 也不额外多抽）", () => {
+@@ -130,3 +130,40 @@ describe("needsAction：只有三类要人处理，其余不许牵连", () => {
+     expect(needsAction([])).toEqual([]);
+   });
+ });
++
++describe("结构化那一行优先（第 172 页⑪，任务 #12）", () => {
++  const kinds = (over: Partial<Record<string, number>> = {}) => {
++    const base = { "survived": 0, "misattributed": 0, "baseline-red": 0, "no-effect": 0, "syntax": 0, "restore-mismatch": 0, "vacuous": 0, ...over };
++    return "REDKINDS=" + Object.entries(base).map(([k, v]) => `${k}:${String(v)}`).join(",");
++  };
++
++  it("REDKINDS 在场就直接认类别，不再回头猜散文", () => {
++    expect(classify(`x\n${kinds({ survived: 1 })}`, 1).verdict).toBe("存活");
++    expect(classify(`x\n${kinds({ misattributed: 1 })}`, 1).verdict).toBe("红了未点名");
++    expect(classify(`x\n${kinds({ "baseline-red": 1 })}`, 1).verdict).toBe("基线红");
++    expect(classify(`x\n${kinds({ "no-effect": 1 })}`, 1).verdict).toBe("未生效");
++    expect(classify(`x\n${kinds({ vacuous: 1 })}`, 1).note).toContain("由 REDKINDS 那一行直接给出");
++  });
++
++  it("同一件事的结构化读法与散文读法必须给同一个归宿（两份谓词不许各漂各的）", () => {
++    // 存活：散文里没有失败面
++    const proseAlive = classify("1 条变异存活或误伤", 1).verdict;
++    expect(classify(`1 条判红\n${kinds({ survived: 1 })}`, 1).verdict, "结构化读出的归宿必须等于散文读出的").toBe(proseAlive);
++    // 红了未点名：散文里有 FAIL 行
++    const proseMis = classify("   FAIL  tests/x.test.ts > a\n1 条变异存活或误伤", 1).verdict;
++    expect(classify(`   FAIL  tests/x.test.ts > a\n1 条判红\n${kinds({ misattributed: 1 })}`, 1).verdict).toBe(proseMis);
++  });
++
++  it("认不出的类别不许静默跳过——它只会来自一张长大了的表", () => {
++    const r = classify("x\nREDKINDS=some-new-kind:2,survived:0", 1);
++    expect(r.verdict).toBe("读不出");
++    expect(r.note, "要点名是哪一类不认识，否则下一张表加类别就是无声降级").toContain("some-new-kind");
++    expect(redKindsOf("REDKINDS=some-new-kind:2,survived:0")?.unknown).toEqual(["some-new-kind:2"]);
++  });
++
++  it("旧日志没有 REDKINDS 那一行 ⇒ 退回散文那一档，不许读成『读不出』", () => {
++    expect(redKindsOf("1 条变异存活或误伤")).toBeNull();
++    expect(classify("1 条变异存活或误伤", 1).verdict).toBe("存活");
++    expect(classify("全部变异被正确杀死（断言非恒真）", 0).verdict).toBe("已杀死");
++  });
++});
+diff --git a/tests/prompt-surface-check.test.ts b/tests/prompt-surface-check.test.ts
+new file mode 100644
+index 0000000..88587cd
+--- /dev/null
++++ b/tests/prompt-surface-check.test.ts
+@@ -0,0 +1,346 @@
++/** 提示词 ↔ 工具面 可达性这把尺的判卷面（第 174 页，任务 #13）。
++ *  动因：`BASE_SYSTEM` 是一份文本对四档，而 read-only 面只有 8 把工具——「改文件用 edit_file」这类句子
++ *  对它是不可达承诺；同类事故（glob 逃生口 / maxFiles 死参数 / prune 附件 / verify 指向禁写面）已命中四次。
++ *  判卷吃的是 `src/agent/prompt-surface.ts` 那份**共用谓词**，不在测试里再算一遍（规则 205/236）。 */
++import { describe, expect, it } from "vitest";
++import { readFileSync } from "node:fs";
++import { fileURLToPath } from "node:url";
++import {
++  applyModeLineEdits,
++  promptSurfaceFindings,
++  toolNameTokens,
++  unhitExemptions,
++  type PromptSurfaceFinding,
++} from "../src/agent/prompt-surface";
++import { BASE_SYSTEM, systemPromptFor } from "../src/main/agent-runner";
++import { GATES } from "../scripts/gate-manifest";
++import {
++  PROMPT_SURFACE_EXEMPT,
++  allFaces,
++  descriptionFaces,
++  paramFaces,
++  paramProseCoverage,
++  proseFaces,
++  reminderFaces,
++  tablesByMode,
++} from "../scripts/prompt-surface-check";
++import { resolveInWorkspace } from "../src/tools/base";
++import type { PermissionMode } from "../src/permissions/modes";
++import { EVIDENCE_TEXT } from "../src/agent/goal";
++import { sessionToolSpecs } from "../src/agent/glm-session";
++import { TOOL_NAMES } from "../src/tools/base";
++
++const TABLES = { auto: ["edit_file", "verify", "clarify"], read: ["verify", "clarify"] } as const;
++const face = (text: string) => [{ name: "t", text }];
++
++describe("toolNameTokens：两路都要（形状 + 名单）", () => {
++  it("蛇形按形状认，单词名按名单认——只留一路就会漏掉一半", () => {
++    const toks = toolNameTokens("先 verify，再用 edit_file 打补丁，no_such_thing 也算", ["verify", "clarify"]);
++    expect(toks).toContain("verify");
++    expect(toks).toContain("edit_file");
++    expect(toks).toContain("no_such_thing");
++    expect(toks, "不该把普通英文词当工具名").not.toContain("先");
++  });
++
++  it("名字必须是整词：`verified_file` 不算 `verify` 被提到", () => {
++    expect(toolNameTokens("这条 verified_file 只是文件名", ["verify"])).not.toContain("verify");
++  });
++});
++
++describe("promptSurfaceFindings：两类发现分开", () => {
++  it("面上完全没有 ⇒ dead，且点名所有档", () => {
++    const f = promptSurfaceFindings(face("用 ghost_tool 收队"), TABLES, [], []);
++    expect(f).toHaveLength(1);
++    expect(f[0]?.kind).toBe("dead");
++    expect(f[0]?.modes.sort()).toEqual(["auto", "read"]);
++  });
++
++  it("某些档缺席 ⇒ odd，且只报缺席的那一档（不牵连都在的那一档）", () => {
++    const f = promptSurfaceFindings(face("改文件用 edit_file"), TABLES, [], []);
++    expect(f).toHaveLength(1);
++    expect(f[0]?.kind).toBe("odd");
++    expect(f[0]?.modes).toEqual(["read"]);
++  });
++
++  it("负控：名字在每一档都在 ⇒ 一条都不许报", () => {
++    expect(promptSurfaceFindings(face("先 verify 再收尾"), TABLES, [], [])).toHaveLength(0);
++  });
++
++  it("豁免要真能消掉那一条，其他档不许跟着被消", () => {
++    const exempt = [{ token: "edit_file", mode: "read", why: "test" }];
++    expect(promptSurfaceFindings(face("改文件用 edit_file"), TABLES, [], exempt)).toHaveLength(0);
++    const three = { ...TABLES, third: ["verify"] } as Record<string, readonly string[]>;
++    const still = promptSurfaceFindings(face("改文件用 edit_file"), three, [], exempt);
++    expect(still.map((x: PromptSurfaceFinding) => x.modes.join())).toContain("third");
++  });
++
++  it("取料坏了要抛，不许印 0：一档都没有、或所有档都是空面", () => {
++    expect(() => promptSurfaceFindings(face("x"), {}, [], [])).toThrow(/都没取到/u);
++    expect(() => promptSurfaceFindings(face("x"), { auto: [], read: [] }, [], [])).toThrow(/空的/u);
++  });
++
++  it("过期豁免只报「已不命中」的那几条，命中的不许被误报", () => {
++    const raw = promptSurfaceFindings(face("改文件用 edit_file"), TABLES, [], []);
++    const exempt = [
++      { token: "edit_file", mode: "read", why: "真挡着" },
++      { token: "ghost_tool", mode: "auto", why: "已经不命中了" },
++    ];
++    expect(unhitExemptions(exempt, raw).map((e) => e.token)).toEqual(["ghost_tool"]);
++  });
++});
++
++describe("现读：真面、真文本、真注册", () => {
++  it("真取料：四档面非空，文本里认得出工具名（0 个＝尺瞎了，不是没问题）", () => {
++    const tables = tablesByMode();
++    expect(Object.keys(tables).sort()).toEqual(["auto", "default", "guided", "read-only"]);
++    for (const m of Object.keys(tables)) expect((tables[m] ?? []).length, `${m} 档工具面为空`).toBeGreaterThan(0);
++    const tokens = [...new Set(proseFaces().flatMap((f) => toolNameTokens(f.text, TOOL_NAMES)))];
++    expect(tokens.length, "BASE_SYSTEM 里一个工具名都没认出来 ⇒ 多半是面/名单没读到").toBeGreaterThan(0);
++    expect(tokens).toContain("edit_file");
++  });
++
++  it("存量水位：豁免表已清到 0（第 175 页拆完 per-mode 文本），要加长就得重新逐条带理由", () => {
++    expect(PROMPT_SURFACE_EXEMPT, "这张表从第 175 页起是空的：新登记一根＝重新开一轮存量，须逐条写理由").toHaveLength(0);
++    const tables = tablesByMode();
++    const raw = promptSurfaceFindings(proseFaces(), tables, TOOL_NAMES, []);
++    expect(unhitExemptions(PROMPT_SURFACE_EXEMPT, raw), "有不命中的豁免留在表里＝会放过同名的新问题").toHaveLength(0);
++    expect(promptSurfaceFindings(proseFaces(), tables, TOOL_NAMES, PROMPT_SURFACE_EXEMPT), "新出现的不可达承诺要红着说").toHaveLength(0);
++  });
++
++  it("接线：这道门真的进了默认门表，也真的有 script（防孤儿、防只写脚本不登记）", () => {
++    expect(GATES).toContain("prompt-surface-check");
++    const pkg = JSON.parse(readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8")) as
++      { scripts?: Record<string, string> };
++    expect(pkg.scripts?.["prompt-surface-check"] ?? "").toContain("scripts/prompt-surface-check.ts");
++  });
++});
++
++describe("按档拆文本（第 175 页，任务 #16）", () => {
++  const SRC = ["a1", "b1", "c1"].join("\n");
++
++  it("applyModeLineEdits 只动指定的那几行，其余逐字沿用同一份源", () => {
++    const r = applyModeLineEdits(SRC, { replacements: [{ prefix: "b", text: "B2" }], drops: ["c"] });
++    expect(r.text).toBe("a1\nB2");
++    expect(r.changed).toEqual({ dropped: 1, replaced: 1 });
++  });
++
++  it("落点 0 命中要抛：那一行的开头字变了 ⇒ 这一档的差异会静默消失", () => {
++    expect(() => applyModeLineEdits(SRC, { replacements: [{ prefix: "b", text: "B2" }], drops: ["zzz"] })).toThrow(/落点没对上/u);
++  });
++
++  it("落点命中多行也要抛：前缀太松会把邻居一起换掉", () => {
++    expect(() => applyModeLineEdits("a1\na2", { replacements: [{ prefix: "a", text: "X" }], drops: [] })).toThrow(/实换 2 行/u);
++  });
++
++  it("可写那三档拿到的还是同一份 BASE_SYSTEM（等价性由判卷钉），而 read-only 确实不同", () => {
++    for (const m of ["default", "guided", "auto"] as const) expect(systemPromptFor(m), `${m} 档不该被改写`).toBe(BASE_SYSTEM);
++    // 配对判据（规则 228）：只钉「三档相等」的话，「四档全等」这个退化也照样绿。
++    expect(systemPromptFor("read-only")).not.toBe(BASE_SYSTEM);
++    expect(systemPromptFor(undefined), "缺省（没给档）必须退回共用文本，不能抛").toBe(BASE_SYSTEM);
++  });
++
++  it("read-only 的文本不再点名它拿不到的那三把，而共用文本里它们还在（尺看得见）", () => {
++    const ro = new Set(toolNameTokens(systemPromptFor("read-only"), TOOL_NAMES));
++    for (const gone of ["edit_file", "write_file", "wait_for_agents"]) expect([...ro], `read-only 文本仍点名 ${gone}`).not.toContain(gone);
++    const shared = new Set(toolNameTokens(BASE_SYSTEM, TOOL_NAMES));
++    expect([...shared]).toContain("edit_file");
++  });
++
++  it("纪律编号 1–6 在 read-only 档也连续（断号会让模型以为后面的约束可省）", () => {
++    const lines = systemPromptFor("read-only").split("\n");
++    for (const n of [1, 2, 3, 4, 5, 6]) {
++      expect(lines.filter((l) => l.startsWith(`${String(n)})`)), `纪律 ${String(n)} 那一行没了`).toHaveLength(1);
++    }
++    expect(lines.filter((l) => l.startsWith("编排")), "派活那一段对没有 spawn 面的档不适用").toHaveLength(0);
++  });
++
++  it("这一档的文本确实更短：每轮重送的静态段，省下的字节要印出来", () => {
++    const before = Buffer.byteLength(BASE_SYSTEM, "utf8");
++    const after = Buffer.byteLength(systemPromptFor("read-only"), "utf8");
++    expect(after, `read-only 静态段 ${String(after)}B，未短于共用的 ${String(before)}B`).toBeLessThan(before);
++    expect(before - after, "省的量小于 100 字节 ⇒ 像是只删了标点，编排段没落下去").toBeGreaterThanOrEqual(100);
++  });
++
++  it("覆盖档参与判定：缺席只在被声明的那几档里算，写错档名要抛", () => {
++    const tables = { auto: ["edit_file", "verify"], read: ["verify"] } as Record<string, readonly string[]>;
++    const hit = promptSurfaceFindings([{ name: "t", text: "改文件用 edit_file", modes: ["read"] }], tables, TOOL_NAMES, []);
++    expect(hit.map((f: PromptSurfaceFinding) => `${f.kind}:${f.modes.join()}`)).toEqual(["odd:read"]);
++    const clean = promptSurfaceFindings([{ name: "t", text: "改文件用 edit_file", modes: ["auto"] }], tables, TOOL_NAMES, []);
++    expect(clean, "只发给在场档的文本不许报——否则拆开之后那些档会被牵连").toHaveLength(0);
++    expect(() => promptSurfaceFindings([{ name: "t", text: "x", modes: ["nosuch"] }], tables, TOOL_NAMES, []),
++      "覆盖档名字写错＝那一档的工具面读不到，不许读成「那一档没承诺」").toThrow(/不存在的档/u);
++  });
++
++  it("取料面由装配函数分组生成（不是手抄清单）：四档各属一面，且没有第五面", () => {
++    const faces = proseFaces();
++    const covered = faces.flatMap((f) => [...f.modes]).sort();
++    expect(covered).toEqual(["auto", "default", "guided", "read-only"]);
++    expect(faces.length, "面数＝不同文本的条数；今日现读是 2（共用一份 + read-only 自己一份）").toBe(2);
++    for (const f of faces) expect(f.text).toBe(systemPromptFor(f.modes[0] as never));
++  });
++
++  it("接线：生产装配点把按档取的面交给 provider（行锚定，防同字面量冒领）", () => {
++    const src = readFileSync(fileURLToPath(new URL("../src/main/agent-runner.ts", import.meta.url)), "utf8");
++    const hits = src.match(/^ {6}provider: createProvider\(promptText, systemPromptFor\(opts\.mode\), modelSelection, \{$/gmu);
++    expect(hits ?? [], "装配点还是硬传 BASE_SYSTEM ⇒ 拆完的文本没人消费（门会绿而这格没接线）").toHaveLength(1);
++  });
++});
++
++describe("工具描述也是模型可见文本（第 176 页）", () => {
++  const TABLES2 = { auto: ["edit_file", "verify", "write_file"], read: ["verify"] } as Record<string, readonly string[]>;
++  const known = ["edit_file", "verify", "write_file", "run_shell"];
++
++  it("namesOnly 只认名单：参数名／目录名不当工具承诺，名单里的名字照认", () => {
++    expect(toolNameTokens("排除 node_modules，按 old_string 精确替换", known, { namesOnly: true })).toEqual([]);
++    expect(toolNameTokens("批准前 write_file 会被拒绝", known, { namesOnly: true })).toEqual(["write_file"]);
++    // 配对判据（规则 228）：同一串料走缺省判据时那两个蛇形就该被形状抓出来——
++    // 否则「namesOnly 生效」与「这一面什么都不认」是同一种绿，分不开。
++    expect(toolNameTokens("排除 node_modules，按 old_string 精确替换", known)).toEqual(["node_modules", "old_string"]);
++  });
++
++  it("描述面的缺席只在覆盖档里算；认不出名单外的名字是这一面的边界，要如实写", () => {
++    const odd = promptSurfaceFindings(
++      [{ name: "d", text: "批准前 write_file 会被拒绝", modes: ["read"], namesOnly: true }], TABLES2, known, []);
++    expect(odd.map((f: PromptSurfaceFinding) => `${f.kind}:${f.token}:${f.modes.join()}`)).toEqual(["odd:write_file:read"]);
++    const blind = promptSurfaceFindings(
++      [{ name: "d", text: "先调 spawn_agent 再说", modes: ["read"], namesOnly: true }], TABLES2, known, []);
++    expect(blind, "spawn_agent 不在名单里 ⇒ namesOnly 面认不出（这条是边界证人，不是缺陷）").toHaveLength(0);
++  });
++
++  it("真取料：每把工具自己的描述，不点名它那一档拿不到的工具", () => {
++    const faces = descriptionFaces();
++    const tables = tablesByMode();
++    expect(faces.length, "描述面数＝四档工具面之和（现读 8＋20＋20＋20）").toBe(
++      Object.values(tables).reduce((a, t) => a + t.length, 0),
++    );
++    for (const f of faces) {
++      expect(f.namesOnly, `${f.name} 必须按名单判，否则参数名会淹掉真承诺`).toBe(true);
++      expect(f.modes).toHaveLength(1);
++    }
++    expect(promptSurfaceFindings(faces, tables, TOOL_NAMES, []), "描述里点了别档才有的工具 ⇒ 红着点名").toHaveLength(0);
++  });
++
++  it("propose_plan：只读档不再点名写向那两把，可写档的原文案一字未动", () => {
++    const roText = String(sessionToolSpecs({ mode: "read-only" }).specs.find((s) => s.function.name === "propose_plan")?.function.description ?? "");
++    const defText = String(sessionToolSpecs({ mode: "default" }).specs.find((s) => s.function.name === "propose_plan")?.function.description ?? "");
++    expect(roText, "只读档还在许诺 write_file（那一档没装配它）").not.toContain("write_file");
++    expect(roText).not.toContain("run_shell");
++    expect(roText, "换写法不等于删说明：这一档该说自己是什么").toContain("提交方案");
++    expect(defText).toContain("write_file");
++  });
++
++  it("门真的把每一族模型可见文本都喂进去（不是只喂系统文本）", () => {
++    const all = allFaces();
++    expect(all).toHaveLength(proseFaces().length + descriptionFaces().length + reminderFaces().length + paramFaces().length);
++    expect(all.some((f) => f.name.startsWith("desc[read-only].")), "描述面没进门 ⇒ 上一条判卷只证明了它自己读了自己").toBe(true);
++    expect(all.some((f) => f.name.startsWith("goalReminder[")), "续跑提醒没进门 ⇒ 那一族还是没人看").toBe(true);
++    expect(all.some((f) => f.name.startsWith("params[")), "参数描述没进门 ⇒ 下面那两条判卷只证明了它们自己读了自己").toBe(true);
++  });
++
++  it("参数描述面取料：每把工具的参数 prose 都在面里，嵌套那几份只有递归读得到", () => {
++    const faces = paramFaces();
++    const tables = tablesByMode();
++    const perMode = new Map<string, number>();
++    for (const f of faces) {
++      expect(f.namesOnly, `${f.name} 必须按名单判：参数名不是工具承诺`).toBe(true);
++      expect(f.modes).toHaveLength(1);
++      expect(f.text.length, `${f.name} 取成空串 ⇒ 0 发现是假绿`).toBeGreaterThan(0);
++      const m = f.name.slice("params[".length, f.name.indexOf("]."));
++      perMode.set(m, (perMode.get(m) ?? 0) + 1);
++    }
++    // 现读水位：只读档 15 份、三个可写档各 60 份（合计 195）。
++    // 这一格必须**精确**：只读到 183 的那一版（不递归）就是靠它露馅的；放宽成「≥ 某个数」之后
++    // 「少走一族参数」仍然绿（规则 222）。改规格的人跟着改这一格。
++    expect(perMode.get("read-only"), "只读档参数描述面数（现读 15；它没有 write_file/edit_file）").toBe(15);
++    expect(perMode.get("default"), "缺省档参数描述面数（现读 60＝第 179 页给两把写向工具的 path 补了说明）").toBe(60);
++    for (const m of ["guided", "auto"]) {
++      expect(perMode.get(m), `${m} 与 default 档的工具面同日同表，参数面数不该分叉`).toBe(perMode.get("default"));
++    }
++    // 面上不许出现名单外的「幽灵工具」：出现＝名字拼错了或规格来自别处，那一份 prose 就没人认得它属于谁。
++    for (const f of faces) {
++      const pre = `params[${f.modes[0] as string}].`;
++      const tool = f.name.slice(pre.length).split(".")[0] as string;
++      expect(tables[f.modes[0] as string] ?? [], `${f.name} 的工具名不在 ${f.modes[0]} 档的面上`).toContain(tool);
++    }
++    // 递归的存在证人：现读有 6 份在**两层** properties 下（spawn_agent 的 supervise 子对象 × 三个可写档）。
++    // 只走顶层 properties 读到 183——所以「为什么要递归」有量出来的证人，不是假想需求（规则 243）。
++    const nested = faces.filter((f) => (f.name.match(/\.properties\./gu) ?? []).length >= 2);
++    expect(nested.length, "两层嵌套下的参数描述面数为 0 ⇒ 这一族是靠递归读全的").toBe(6);
++    for (const f of nested) expect(f.name, `${f.name} 不在两层 properties 下，判据形状变了`).toContain("supervise");
++    // 反向哨兵：这一族的文本里确实点到了工具名（现读 `glob`），否则「0 发现」可能只是尺瞎了（规则 242）。
++    const named = new Set(faces.flatMap((f) => toolNameTokens(f.text, TOOL_NAMES, { namesOnly: true })));
++    expect([...named], "参数描述里一个工具名都没认出来 ⇒ 取料可疑").toContain("glob");
++    expect(promptSurfaceFindings(faces, tables, TOOL_NAMES, []), "参数描述点了本档拿不到的工具 ⇒ 红着点名").toHaveLength(0);
++  });
++
++  it("续跑提醒取料：逐证据态各渲两份，且渲出来的不是空串（空面＝尺瞎了）", () => {
++    const faces = reminderFaces();
++    expect(Object.keys(EVIDENCE_TEXT).sort()).toEqual(["absent", "failed", "stale", "verified"]);
++    expect(faces.length, "面数＝证据态数 × 2（hint 会**替换**默认指令那句，两种都得渲）").toBe(Object.keys(EVIDENCE_TEXT).length * 2);
++    for (const f of faces) {
++      expect(f.text.length, `${f.name} 渲染成空串 ⇒ 0 发现是假绿`).toBeGreaterThan(80);
++      expect(f.text).toContain("goal 续跑");
++      expect(f.modes).toEqual(["read-only", "default", "guided", "auto"]);
++    }
++  });
++
++  it("续跑提醒里点到的工具，四档都得真拿得到（它逐轮重发，是模型唯一读到的指令）", () => {
++    const tables = tablesByMode();
++    const faces = reminderFaces();
++    const tokens = new Set(faces.flatMap((f) => toolNameTokens(f.text, TOOL_NAMES)));
++    expect([...tokens], "提醒里一个工具名都没认出来 ⇒ 多半是 goalReminder 不再提 verify，或取料坏了").toContain("verify");
++    // **逐面**都要有 verify，不能只看并集：某一态的证据文案本身就带「verify」二字，
++    // 只看并集时「收束条件那句被改掉」会被别的面替它作证（09-28 实测：这么写的第一版**变异存活**）。
++    for (const f of faces) {
++      expect(toolNameTokens(f.text, TOOL_NAMES), `${f.name} 这一份提醒没告诉模型该调 verify`).toContain("verify");
++    }
++    for (const t of tokens) {
++      for (const m of ["read-only", "default", "guided", "auto"]) {
++        expect(tables[m], `提醒让模型调 ${t}，但 ${m} 档的面上没有它`).toContain(t);
++      }
++    }
++    expect(promptSurfaceFindings(faces, tables, TOOL_NAMES, [])).toHaveLength(0);
++  });
++
++  it("参数说明覆盖：分母只数「有声明参数的工具」，名单与计数是现读水位", () => {
++    const cov = paramProseCoverage();
++    expect(cov.length, "有参数的工具数（现读 18；verify／automation_list 没有参数，不进分母）").toBe(18);
++    expect(cov.every((c: { declared: number }) => c.declared >= 1), "分母里混进无参数的工具＝覆盖率替形状报错").toBe(true);
++    for (const c of cov) {
++      expect(c.explained + c.missing.length, `${c.tool} 的 explained＋missing 必须等于声明数，少一格就是计数坏了`).toBe(c.declared);
++    }
++    expect(cov.some((c: { tool: string }) => c.tool === "verify"), "verify 无参数，不该出现在覆盖面上").toBe(false);
++    // 水位（只准调低）：第 179 页把两把写向工具的 path 补上之后从 4 降到 3。
++    expect(cov.filter((c: { explained: number }) => c.explained === 0).map((c: { tool: string }) => c.tool), "前三把刻意不补：bounds 在工具级描述里、形状在 required 里，再抄一遍就是第二份真相").toEqual(["clarify", "propose_plan", "run_shell"]);
++    expect(cov.filter((c: { explained: number; declared: number }) => c.explained > 0 && c.explained < c.declared)
++      .map((c) => `${c.tool} ${String(c.explained)}/${String(c.declared)} 缺:${c.missing.join(",")}`), "不全那一格（现读 write_file 缺 content）").toEqual(["write_file 1/2 缺:content"]);
++  });
++
++  it("edit_file 的 path 说明写出那两条拒绝，而闸当场都拒（说明不许骗模型）", () => {
++    const pathDesc = (mode: PermissionMode, tool: string): string => {
++      const spec = sessionToolSpecs({ mode }).specs.find((s) => s.function.name === tool);
++      const params = spec?.function.parameters as { properties?: Record<string, { description?: string }> } | undefined;
++      return String(params?.properties?.path?.description ?? "");
++    };
++    for (const m of ["default", "guided", "auto"] as const) {
++      const d = pathDesc(m, "edit_file");
++      expect(d, `edit_file 在 ${m} 档没有 path 说明 ⇒ 「只能给相对路径」这一类只能靠撞闸才知道`).toContain("绝对路径");
++      expect(d, `edit_file.${m} 的说明没写清是相对谁 ⇒ 应当与 lsp.path 同族措辞`).toContain("workspace");
++    }
++    // 行为那一半（规则 228：写了「说明里有这句话」还必须配「闸真按这句话拒」）。
++    expect(() => resolveInWorkspace("/repo", "/etc/passwd", "probe"), "说明承诺拒绝对路径，闸没拒就是文案在骗模型").toThrow(/绝对路径/u);
++    expect(() => resolveInWorkspace("/repo", "../outside", "probe")).toThrow(/越出/u);
++    expect(resolveInWorkspace("/repo", "src/a.ts", "probe"), "合规相对路径不该被拒（否则上面两条是恒真）").toBe("/repo/src/a.ts");
++  });
++
++  it("write_file 的 path 说明与 edit_file 同族——两把写向工具不许一把有一把没有", () => {
++    for (const m of ["default", "guided", "auto"] as const) {
++      const spec = sessionToolSpecs({ mode: m }).specs.find((s) => s.function.name === "write_file");
++      const params = spec?.function.parameters as { properties?: Record<string, { description?: string }> } | undefined;
++      const d = String(params?.properties?.path?.description ?? "");
++      expect(d, `write_file 在 ${m} 档的 path 没说明：同一族工具里只有一把被解释，模型会以为另一把规矩不同`).toContain("绝对路径");
++      expect(d).toContain("workspace 相对路径");
++      expect(params?.properties?.content?.description ?? "", "content 刻意不补：工具级描述已写「覆盖式」（第二份真相，规则 205）").toBe("");
++    }
++  });
++});
+diff --git a/tests/shell-family-cause.test.ts b/tests/shell-family-cause.test.ts
+new file mode 100644
+index 0000000..07f7ca9
+--- /dev/null
++++ b/tests/shell-family-cause.test.ts
+@@ -0,0 +1,156 @@
++// shell 家族的失败归因（待办 #25）：verify 早就把「环境红 ≠ 代码红」写进模型看到的正文，
++// 而 run_shell / worker 的 shell_ro·shell_rw / 沙箱出口没有 ⇒ 模型照着一条 127 或 pnpm 自身报错
++// 去改本来正确的代码（真语料里 run_shell 4 条、spawn_agent 6 条红全部无类，见 09-28 第 182 页）。
++// 这一支的规矩：**判据只有一只**（`classifyVerifyFailure`，同正则同枚举），文案按出口分两档
++// （verify 能说「测试脚本未被执行」，任意一条 shell 命令不能这么说）。
++import { mkdtemp, rm } from "node:fs/promises";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { afterAll, beforeAll, describe, expect, it } from "vitest";
++import { annotateExecCause } from "../src/agent/verify";
++import { run_shell } from "../src/tools/run_shell";
++import { makeShellRo, makeShellRw } from "../src/agent/worker-shell-tools";
++import type { ToolContext, ToolResult } from "../src/tools/base";
++
++const PNPM_LINE = "[ERR_PNPM_UNSAFE_MODULES_DIR] Refusing to remove the modules directory at /x/node_modules";
++const noteCount = (s: string): number => (s.match(/\[exec: /gu) ?? []).length;
++
++let ws = "";
++const ctx = (): ToolContext => ({ workspace: ws, emit: async () => {} });
++
++beforeAll(async () => {
++  ws = await mkdtemp(join(tmpdir(), "shell-cause-"));
++});
++afterAll(async () => {
++  await rm(ws, { recursive: true, force: true });
++});
++
++describe("annotateExecCause：三类已有判定各贴各的，代码红一个字都不许多", () => {
++  it("127 与包管理器错误码两类各贴一句，普通代码红不贴", () => {
++    const missing = annotateExecCause({ ok: false, output: "bash: foo: command not found" }, { timedOut: false, exitCode: 127 });
++    expect(missing.output).toContain("127");
++    expect(missing.output, "贴出来的那句必须能指路（PATH / 是否安装）").toContain("PATH");
++    const pnpm = annotateExecCause({ ok: false, output: PNPM_LINE }, { timedOut: false, exitCode: 1 });
++    expect(pnpm.output).toContain("包管理器自身报错");
++    const code = annotateExecCause({ ok: false, output: "AssertionError: expected 1" }, { timedOut: false, exitCode: 3 });
++    expect(code.output).toBe("AssertionError: expected 1"); // 一字不许多：代码红就是代码红
++  });
++
++  it("成功回执不贴：`pnpm install` 正文里有错误码行也不能说命令没跑成", () => {
++    const r = annotateExecCause({ ok: true, output: PNPM_LINE + "\ndone" }, { timedOut: false, exitCode: 0 });
++    expect(r.output).toBe(PNPM_LINE + "\ndone");
++  });
++
++  it("超时不重复贴——两条出口自己那行 `[error: … 超时 …]` 已经说了同一件事", () => {
++    const r = annotateExecCause({ ok: false, output: "partial\n[error: run_shell 超时（60s），已强制终止]" }, { timedOut: true, exitCode: null });
++    expect(r.output).toBe("partial\n[error: run_shell 超时（60s），已强制终止]");
++  });
++
++  it("幂等：同一条结果先后过两层出口（worker 缺省出口就是 run_shell）只贴一遍", () => {
++    const once = annotateExecCause({ ok: false, output: "no such binary" }, { timedOut: false, exitCode: 127 });
++    const twice = annotateExecCause(once, { timedOut: false, exitCode: 127 });
++    expect(noteCount(twice.output)).toBe(1);
++  });
++
++  it("贴的句子必含「不是代码失败」——这句的存在理由就是拦住模型照着环境红改代码", () => {
++    for (const f of [
++      { timedOut: false, exitCode: 127 },
++      { timedOut: false, exitCode: 1 },
++    ]) {
++      const out = annotateExecCause({ ok: false, output: f.exitCode === 1 ? PNPM_LINE : "x" }, f).output;
++      expect(out).toMatch(/不是代码失败/u);
++    }
++  });
++});
++
++describe("run_shell 真 spawn：模型看到的 output 里真的带着这一句", () => {
++  it("跑一条不在 PATH 里的命令 ⇒ 点名 127 与『这不是代码失败』", async () => {
++    const r = await run_shell.run({ command: "dsh-no-such-binary-91347" }, ctx());
++    expect(r.ok).toBe(false);
++    expect(r.output).toContain("[exit code: 127]"); // 前提：退出码那行本身照旧在（新句子是补上去的，不是换掉的）
++    expect(r.output).toContain("不在 PATH 里");
++  });
++
++  it("跑一条打印 pnpm 自有错误码行的命令 ⇒ 贴包管理器那句", async () => {
++    const r = await run_shell.run({ command: `printf '%s\\n' '[ERR_PNPM_UNSAFE_MODULES_DIR] Refusing to remove' >&2; exit 1` }, ctx());
++    expect(r.ok).toBe(false);
++    expect(r.output).toContain("包管理器自身报错");
++  });
++
++  it("控制组：普通 `exit 3` 的输出逐字不变（防上面两条变成恒真）", async () => {
++    const r = await run_shell.run({ command: "echo boom; exit 3" }, ctx());
++    expect(r.ok).toBe(false);
++    // 期望值来自现跑真机而不是推理：`echo` 自带换行 ＋ 出口那句以 `\n` 起头 ⇒ 中间是两个换行。
++    // 这一格钉的是「归因不改变既有回执」，所以逐字比、不放宽成 toContain。
++    expect(r.output).toBe("boom\n\n[exit code: 3]");
++  });
++
++  it("成功命令即便正文里带着 ERR_PNPM 那行也不贴（归因只在失败支上）", async () => {
++    const r = await run_shell.run({ command: `printf '%s\\n' '[ERR_PNPM_UNSAFE_MODULES_DIR] just a log line'; exit 0` }, ctx());
++    expect(r.ok).toBe(true);
++    expect(r.output).not.toContain("[exec:");
++  });
++});
++
++describe("worker shell 两层出口：注入的沙箱出口有人贴，缺省出口不叠第二层", () => {
++  // 沙箱版 runner 由宿主注入（`src/agent` 不许反向依赖 `src/main`），它不经过 run_shell ⇒
++  // 归因必须在 makeShellRo/makeShellRw 这一层补。这里用注入缝把那条出口摆到测得着的位置：
++  // 换掉的只是**执行出口**（本来就是注入点），归因函数与被贴的那一行都是生产代码。
++  const sandboxish = (command: string): ToolResult => ({
++    ok: false,
++    output: command.includes("91347") ? "bash: command not found\n[exit code: 127]" : PNPM_LINE + "\n[exit code: 1]",
++    exitCode: command.includes("91347") ? 127 : 1,
++    timedOut: false,
++  });
++
++  it("shell_ro 走注入出口 ⇒ 127 这一类照样贴（摘掉 worker 这层接线就红）", async () => {
++    // 命令必须真过只读静态白名单（`which` 在里面），否则先被拒绝、根本走不到执行出口——
++    // 那测的就不是这一层了。
++    const tool = makeShellRo(async (command) => sandboxish(command));
++    const r = await tool.run({ command: "which dsh-no-such-binary-91347" }, ctx());
++    expect(r.output).toContain("不在 PATH 里");
++  });
++
++  it("shell_rw 是同一层接线（同族只硬化一支 = 那一支静默不一致）", async () => {
++    const tool = makeShellRw(async (command) => sandboxish(command));
++    const r = await tool.run({ command: "echo x; printf '%s' '" + PNPM_LINE + "'" }, ctx());
++    expect(r.output).toContain("包管理器自身报错");
++  });
++
++  it("缺省出口 bareShell 走 run_shell ⇒ worker 这层不许叠第二句（真 spawn，数 note 出现次数）", async () => {
++    const r = await makeShellRw().run({ command: "dsh-no-such-binary-91347" }, ctx());
++    expect(r.ok).toBe(false);
++    expect(noteCount(r.output)).toBe(1);
++    expect(r.output).toContain("不在 PATH 里");
++  });
++});
++
++describe("四个出口的接线各有证人（同一判据四份副本、宽度各不同 = 本仓第十三族）", () => {
++  // 这一格只补**够不着真 spawn 的那一支**：主会话开着沙箱时 run_shell 整个被 `runInSandbox` 顶掉，
++  // 而那条出口没有注入缝（不像 `verifyExec` 能吃 `run` 参数），本仓对这类接线用行锚定的源码证人。
++  // 语义面不在这里判——上面两组真 spawn 已经判过；这里只答「这一支到底有没有接上同一只函数」。
++  const readFile = async (rel: string): Promise<string> => {
++    const { readFile: rd } = await import("node:fs/promises");
++    const { fileURLToPath } = await import("node:url");
++    // 仓路径里有空格：`.pathname` 会把它编成 %20 而读不到文件 ⇒ 必须走 fileURLToPath。
++    return await rd(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
++  };
++
++  it("主会话沙箱出口、worker 两条出口、run_shell 直连——三处都真的调了同一只归因函数", async () => {
++    const runner = await readFile("../src/main/agent-runner.ts");
++    const worker = await readFile("../src/agent/worker-shell-tools.ts");
++    const shell = await readFile("../src/tools/run_shell.ts");
++    // 行锚定（规则 247）：不锚行首就会撞上注释里那份自述文字，改了注释也算"接上了"。
++    // 允许缩进（这几处都在函数体里），但锚在**语句**开头——注释行以 `//` 起头，进不来。
++    expect(runner).toMatch(/^[ \t]*return withGate\(annotateExecCause\(sand, /mu);
++    const workerCalls = worker.match(/^[ \t]*return annotateExecCause\(res, /gmu) ?? [];
++    expect(workerCalls, "shell_ro 与 shell_rw 两处出口都要接（只接一支＝那一支静默不自述）").toHaveLength(2);
++    expect(shell).toMatch(/^[ \t]*settle\(cancelled \? res : annotateExecCause\(res, /mu);
++  });
++
++  it("反向确认：把归因从某一支摘掉，上面那条接线证人就红（不是恒真正则）", async () => {
++    const worker = await readFile("../src/agent/worker-shell-tools.ts");
++    const oneSiteOnly = worker.replace(/^[ \t]*return annotateExecCause\(res, .*$/mu, "      return res;");
++    expect((oneSiteOnly.match(/^[ \t]*return annotateExecCause\(res, /gmu) ?? []).length).toBe(1);
++  });
++});

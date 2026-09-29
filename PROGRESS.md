@@ -5850,3 +5850,25 @@ typecheck：主树 1 条报错在 `src/cli.ts:709`（本笔没碰 `src/`），�
    而它不会有任何门喊——`--check-needles` 与 docs-check 都不看 outputs。
 
 
+
+### 2026-09-29 · 第 198 页 · 我这三个 dated 工件目录进了簇，入库前过了一遍密钥扫描
+
+第 197 页查出的那格欠账在这笔结掉：`outputs/mutation-parallel-shard-2026-09-29/`（2 个文件，含串行整表原文）、
+`outputs/mutation-selector-scan-2026-09-28/`（29 个文件，含 A/B 跑批原文与簇 patch）、
+`outputs/mutation-cost-rank-2026-09-28/`（1 个文件）——合计 **32 个文件／约 3.4 MB**（其中 `.md` 8 个 215KB、非 `.md` 24 个 3.3MB）。
+现读依据：`outputs/` 下**已有 348 文件／203 个 dated 目录入库**，最大的一条 584KB（`ga-strategy-2026-09-20/fanout.events.jsonl`）
+⇒ "dated 工件跟着落库、原始读数一起留" 是本仓既有规矩，不是我的新偏好。
+
+1. **入历史前做了密钥扫描，并且读了命中内容**（不是只看命中数）：
+   `sk-[a-z0-9]` 命中的是锚点 id `ask-gate-unattended-*` 里的 "**sk-**g"；`secret` 命中的是锚点 id
+   `secrets-fail-closed`；`api[_-]?key` 命中的是注释里的**标识符名** `process.env.M0_API_KEY`；
+   `Bearer` 命中的是"敏感值解不开时填空串 ⇒ 插件拿着「Bearer 」（后面什么都没有）"这句**缺陷描述**；
+   `password`／`Authorization` 零命中。再加一条形状尺：`.log` 里 **40 位以上连续 base64/hex 串＝0 条**。
+   ⇒ 结论：这三份里没有凭据值，只有"关于凭据的讨论"。这一格值得记：**grep 命中不等于泄露，
+   但"我判断它是误报"必须靠读命中内容，不能靠我觉得它眼熟**（规则 259 同一课，这次载体是我自己的工件）。
+2. **刻意没替别人暂存**：`git status --porcelain -- outputs/` 里未跟踪的还有 `outputs/_audit-{claims,quality,usability}.md`
+   与 `outputs/impact-accuracy-probe-2026-09-29/` —— 那些不是我这簇产的（本次会话开始前就在那儿），
+   按"writer 归属问那个路径本身"，不顺手 add 别人的在飞文件。
+3. **拷贝自证**：三目录 `cp -R` 进簇树后逐个 `diff -r` 退出码 **0**（逐字节相同），簇树 `status` 只多这 3 条 `??`。
+4. **又一发同一支枪**：这一步的回显我写成 `echo "CP_$d_EXIT=$?"`，zsh 把 `d_EXIT` 当一个变量 ⇒ 标签退化成 `CP_=0`。
+   数值仍由被跑者自己 echo、可信；丢的是"哪一个目录"。同一族第 269 条，本会话第三次——**要靠枚举写法，不靠我记得**。
