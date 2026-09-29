@@ -1,0 +1,10 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p219-timeout.lock）
+变异验证：2 条
+✅ timeout-note-run-shell-rehardcodes-seconds — 把墙钟秒数重新写回正文（第 219 页 #42 的原状）⇒ `SHELL_TIMEOUT_MS` 改了而模型读的那句还说 60s。那句话是模型决定「再等一下」还是「换路」的依据，说错数比不归因更坏（同族：verify／ripgrep／sandbox 三支早就插值了） ｜本机实测 0.6s／2 拍
+✅ timeout-note-glob-rehardcodes-seconds — 同一族的第二支：原先 `60_000` 与正文里的「60s」写在一行的两头 ⇒ 改一头另一头就替假话背书。本条与上一条同尺（普查面按 `src/**/*.ts` 现走，新增站点自动进分母） ｜本机实测 0.5s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 1.2s · 跑了 2/2 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 4 次／2 条（每条次数分布 2×2）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 timeout-note-run-shell-rehardcodes-seconds 0.6s
+跑法单价：selector 4 拍·中位 0.26s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p219-timeout.lock）

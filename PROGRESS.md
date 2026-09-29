@@ -6705,3 +6705,21 @@ typecheck：主树 1 条报错在 `src/cli.ts:709`（本笔没碰 `src/`），�
 5. **两条新锚点**（表长 1044→**1046**）：`timeout-note-run-shell-rehardcodes-seconds`、`timeout-note-glob-rehardcodes-seconds`
    ——把秒数写回正文 ⇒ 那把普查尺当场红。锚点针脚两侧都含 `"`／`${`，按本仓既有写法用单引号串避转义（规则 288 的唯一命中：两条针脚各 `grep -c -F` = 1）。
 6. **判卷与门**：typecheck 0 条报错；全量判卷、docs-check、锚点复跑与 head-cert 读数见下一页凭证（不在这里预填）。
+### 2026-09-30 · 第 219 页补 · 本笔（`d672e10`）凭证：认证 250 文件／3227 条 exit=0 两端独占，两条新锚点 2/2 全杀（1.2s、4 拍、坏拍 0）
+
+1. **认证**（`outputs/timeout-text-2026-09-30/head-cert-d672e10.log`）：
+   `已核：TREE=d672e10…｜判卷四面在飞 0 项` · `DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有` ·
+   `Test Files 250 passed (250)｜Tests 3227 passed (3227)｜exit=0` · `并发判卷=起前 0 套／跑完 0 套（两端独占）` ·
+   `import 面：2950 条边｜悬空 0`（比上一笔 +3 条边——**成因本笔未查**，这一格的判据是"悬空 0"，边数只是台账）。
+2. **两条新锚点逐条杀**（`kill-2-anchors-at-d672e10.log`）：`✅ ×2`、`全部变异被正确杀死`、`本次耗时 1.2s · 跑了 2/2 条`、
+   `spawn 4 次／2 条（2×2）· 中位 0.26s · 坏拍 0`、`whole 0 拍 ⇒ 没有分母`（照实印）。单价账回填 `scripts/gate-manifest.ts`，
+   同处把上一笔（#41 折层）的**增量 0** 也补成声明而不是留白。
+3. **针脚体检在认证树里**：`1046 条 —— 阻断 0，待复认 0，未覆盖 0，未入库面 0，钉在飞文本 0，killer 指针失效 0`。
+4. **门表侧另跑**（规则 292）：`docs-check exit=0`（`UNVERIFIED=3`＝STATE.md 缺失那三格）、`prose-needle-scan` 顶包候选 10＝帽内、
+   主树全量判卷 `250 files / 3227 tests / suite_exit=0`（原文 `full-suite.log`）。
+5. **顺手把 #40 的前置量清了一格**（现读，不改代码）：主会话那条 deny 想补 `gate` 留痕，卡在 `GateMeta.layer` 是**必填**而
+   `gate()`（`src/permissions/index.ts:119-123`）返回裸 Decision——`gate()` 全仓**只有 1 个调用者**（`loop.ts:397`），
+   `checkPermission` 在 src 里的直接消费者也只有 `gate()` 与 `agent-runner`（`index.ts:105/120`、`agent-runner.ts:41`）
+   ⇒ "把判定层带出来"不是大改，但它是**权限层契约**的动作，且红线写进任务：契约改完之前不许给 deny 编一个 layer（`宁缺不编`，`autonomy.ts` 里 `risk?`/`mode?` 两行注释就是这条）。
+6. **清场读数只报不删**：本会话又新增一棵自己的认证树 `head-cert-d672e10`（detached、0 在飞、提交已入库＝规则 120 意义上的可回收）；
+   连同 216/217/218 页那些，等用户点头逐棵 `git worktree remove`，带分支的树与 `verify-*` 一律不碰。
