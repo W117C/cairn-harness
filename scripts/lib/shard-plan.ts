@@ -110,9 +110,18 @@ export function anchorCostsFromLog(text: string, into: Map<string, number> = new
 }
 
 /** 装箱那一格怎么说自己：用了权重就说来源与缺口，没用就说没用。
- *  「缺多少条按中位补」必须印出来——不印的话，读者会把这份计划当成全量实测过的。 */
-export function packingCell(rows: readonly RosterRow[], weights: ReadonlyMap<string, number> | null): string {
-  if (weights === null || weights.size === 0) return "装箱=条数（没有权重来源）";
+ *  「缺多少条按中位补」必须印出来——不印的话，读者会把这份计划当成全量实测过的。
+ *  `sources`＝**调用方显式给的**权重来源文件数（`--cost-logs`）。没给时编排器读的是派生面（上一轮本标签的片原文），
+ *  第一次跑那些文件本来就不在盘上——那不算"给了却读不出"，所以派生面不许计入这一位（09-30 我第一版就错并了这两态）。
+ *  这一位以前只有「没权重来源」一种说法，于是「给了文件、却一条权重也没抽出」
+ *  （09-30 实测两次踩中：把编排器汇总页当分片原文喂进去）被读成「没给」——
+ *  而读者看到同一行末尾还写着 `源=--cost-logs`，两句互相抵消，退化就静默了（规则 258/261）。 */
+export function packingCell(rows: readonly RosterRow[], weights: ReadonlyMap<string, number> | null, sources = 0): string {
+  if (weights === null || weights.size === 0) {
+    return sources === 0
+      ? "装箱=条数（没有权重来源）"
+      : `装箱=条数（给了 ${String(sources)} 个权重来源文件、抽出 0 条 ⇒ 这一趟不是按实测秒装的）`;
+  }
   const ids = new Set(rows.map((r) => r.id));
   const known = [...ids].filter((id) => weights.has(id)).length;
   const missing = ids.size - known;

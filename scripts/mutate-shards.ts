@@ -164,15 +164,18 @@ export function shardLogPath(base: string, i: number): string {
  *  （调用点保证在读完之后才截断）。一条都抽不到 ⇒ 返回空表，`planShards` 因此退回按条数装，
  *  而计划行会写「没有权重来源」——第一次跑本来就没有权重，这不叫失败，但也不许装作有权重。
  *  读不到的文件静默跳过：默认来源在首跑时就是不存在的，把它当「取料坏」会让第一次跑不起来。 */
-export function costWeights(explicit: readonly string[], ownPrevLogs: readonly string[]): { weights: Map<string, number>; whence: string } {
+export function costWeights(explicit: readonly string[], ownPrevLogs: readonly string[]): { weights: Map<string, number>; whence: string; explicitCount: number; unreadable: number } {
   const sources = explicit.length > 0 ? explicit.map((p) => resolve(p)) : ownPrevLogs.map((p) => resolve(p));
   const whence = explicit.length > 0 ? "--cost-logs" : "上一轮本标签片原文";
   const merged = new Map<string, number>();
+  let unreadable = 0;
   for (const p of sources) {
-    if (!existsSync(p)) continue;
+    if (!existsSync(p)) { unreadable += 1; continue; }
     anchorCostsFromLog(readFileSync(p, "utf8"), merged); // 「同一条取最大」那份规则在取料函数里，这里不重抄
   }
-  return { weights: merged, whence };
+  // `explicitCount`/`unreadable` 是给读数行用的：只报「有没有权重」会把"给了文件但抽出 0 条"和"根本没给"并成一态（规则 261）。
+  //   派生面（上一轮本标签）不计进 `explicitCount`——第一次跑它本来就不在盘上，那不是取料坏。
+  return { weights: merged, whence, explicitCount: explicit.length, unreadable };
 }
 
 async function main(): Promise<void> {
@@ -242,7 +245,8 @@ async function main(): Promise<void> {
   // 轮转那把观察输入不看重量 ⇒ 那一格必须说「不适用」，不许让读者以为这轮是按秒装的。
   const packCell = f.forceSplit === "roundrobin"
     ? "装箱=不适用（轮转不看重量）"
-    : packingCell(rows, cost.weights) + `·源=${cost.whence}`;
+    : packingCell(rows, cost.weights, cost.explicitCount) + `·源=${cost.whence}`
+      + (cost.unreadable === 0 ? "" : `（其中 ${String(cost.unreadable)} 个来源文件不在盘上）`);
   console.log(`名单 ${String(ids.length)} 条 → ${String(shards.length)} 片（${counts}）· 切法=${f.forceSplit}· ${packCell} · 每片一棵树，锁标签 ${f.lockTagBase}-<i>`);
   for (let i = 0; i < shards.length; i += 1) {
     console.log(`  片 ${String(i)}：${String(shards[i]!.length)} 条 @ ${distinct[i % distinct.length]} · 原文=${logs[i]}`);

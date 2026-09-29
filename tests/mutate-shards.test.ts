@@ -549,16 +549,28 @@ describe("装箱：权重改变排法，且那一格要说清自己", () => {
     expect(fallbackSecondsOf(new Map()), "空表没有中位可取 ⇒ 退成 1（等价条数）").toBe(1);
   });
 
-  it("那一格三态分开印：没有来源／全量命中／缺口按中位（缺口要报数）", () => {
+  it("那一格四态分开印：没有来源／给了却抽出 0 条／全量命中／缺口按中位（缺口要报数）", () => {
     const two = [{ id: "a", host: "h1" }, { id: "b", host: "h2" }];
     const none = packingCell(two, null);
+    const givenEmpty = packingCell(two, new Map(), 2);
     const all = packingCell(two, new Map([["a", 1], ["b", 2]]));
     const part = packingCell(two, new Map([["a", 1]]));
     expect(none).toBe("装箱=条数（没有权重来源）");
+    expect(givenEmpty).toContain("给了 2 个权重来源文件");
+    expect(givenEmpty).toContain("抽出 0 条");
     expect(all).toContain("实测秒");
     expect(all).not.toContain("中位");
     expect(part).toContain("缺 1 条按中位");
-    expect(new Set([none, all, part]).size, "三态不许同形（规则 239）").toBe(3);
+    expect(new Set([none, givenEmpty, all, part]).size, "四态不许同形（规则 239/261）").toBe(4);
+  });
+
+  it("「给了文件但抽出 0 条」不能与「没给」同形——这是我自己两次踩到的退化路径", () => {
+    // 09-30 实测：把编排器汇总页（不是分片机器原文）喂给 --cost-logs ⇒ 抽出 0 条，
+    // 而读数同一行还印着 `源=--cost-logs`，两句互相抵消，装箱就静默退回按条数。
+    const two = [{ id: "a", host: "h1" }, { id: "b", host: "h2" }];
+    const cells = [packingCell(two, null, 0), packingCell(two, new Map(), 1)];
+    expect(cells[0]).not.toBe(cells[1]);
+    expect(cells[1], "给了来源就必须说清「给了几个、抽出几条」，别让读者去算差集").not.toBe(cells[0]);
   });
 });
 
@@ -594,6 +606,17 @@ describe("编排器的权重取料面", () => {
       expect(plain.status, plain.out).toBe(0);
       expect(plain.out, plain.out).toContain("装箱=条数（没有权重来源）");
       expect(plain.out, plain.out).not.toContain("装箱=实测秒");
+      // 第三态（09-30 我自己两次踩到的那条退化路）：**给了**文件，可那份文件里没有成本格
+      // （把编排器汇总页当分片机器原文喂进去就是这个形状）⇒ 抽出 0 条。
+      // 从前这一格与"没给"同形，而同一行末尾还印着 `·源=--cost-logs`，两句互相抵消，装箱静默退回按条数。
+      const junk = join(tmpdir(), `p192-junk-${String(process.pid)}.log`);
+      writeFileSync(junk, "分片 4 份 · 交出 1031 条 · 墙钟 377.7s · 判定[已杀死:4]\n");
+      try {
+        const givenButEmpty = runEntry([`--trees=${wt.path}`, `--lock-tag-base=${base}-e`, `--cost-logs=${junk}`, "--dry-run", ...COST_FIXTURE_IDS], wt.path);
+        expect(givenButEmpty.status, givenButEmpty.out).toBe(0);
+        expect(givenButEmpty.out, givenButEmpty.out).toContain("给了 1 个权重来源文件、抽出 0 条");
+        expect(givenButEmpty.out, "给了来源却退化按条数，不许被读成「没给来源」").not.toContain("装箱=条数（没有权重来源）");
+      } finally { rmSync(junk, { force: true }); }
     } finally { rmSync(log, { force: true }); wt.drop(); }
   }, 120_000);
 

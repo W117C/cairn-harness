@@ -8888,6 +8888,27 @@ const MUTATIONS = [
     expectFail: "同分节点按 file→name→kind 升序，而不是按插入序",
   },
   {
+    id: "pack-degraded-state-collapsed",
+    src: "scripts/lib/shard-plan.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "把「给了来源却抽出 0 条」与「根本没给来源」并回一态（`sources === 0` 恒真）⇒ 装箱静默退回按条数，" +
+      "而读数同一行末尾还写着 `源=--cost-logs`，两句互相抵消。这不是假想：09-30 我两次把编排器汇总页当分片原文喂进去，" +
+      "两趟整表都是在这种情况下跑的，机器自己只印了「没有权重来源」——规则 261（读不到与没有问题不许同形）的现行样本。" +
+      "另一半（编排器把显式来源数传给这一格）由 pack-sources-count-not-wired 各咬一条不同用例",
+    apply: (s) => s.replace("sources === 0", "sources >= 0"),
+    expectFail: "「给了文件但抽出 0 条」不能与「没给」同形——这是我自己两次踩到的退化路径",
+  },
+  {
+    id: "pack-sources-count-not-wired",
+    src: "scripts/mutate-shards.ts",
+    test: "tests/mutate-shards.test.ts",
+    desc: "判据在、接线断：编排器不再把**显式给的**来源数传进去 ⇒ 给了坏文件也照印「没有权重来源」。" +
+      "只有真跑 CLI 那支用例看得见（纯函数那两支照绿），所以这条与上一条各红一半。" +
+      "派生面（上一轮本标签的片原文）刻意不计进这一位：第一次跑它本来就不在盘上，那不是取料坏",
+    apply: (s) => s.replace("packingCell(rows, cost.weights, cost.explicitCount)", "packingCell(rows, cost.weights)"),
+    expectFail: "真跑 --dry-run：给了 --cost-logs 就说清权重与来源，不给就说没有来源",
+  },
+  {
     id: "map-degradation-ok-false-silent",
     src: "src/agent/map/build.ts",
     test: "tests/map-self-report.test.ts",
