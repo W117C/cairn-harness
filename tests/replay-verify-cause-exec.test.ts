@@ -132,10 +132,16 @@ describe("exec 面的文案栏：只认行首", () => {
 describe("两半共用一只年龄判据：exec 面换名词，verify 面逐字不变", () => {
   const SHIP = { sha: "9e2f15c", ms: 1_700_000_000_000 };
 
-  it("默认名词 ⇒ verify 面那四句话的措辞一字不改（共用形状 ≠ 共用措辞）", () => {
+  it("默认名词 ⇒ 与显式传「cause」逐字同一（这里不抄句子：抄来的散文句子在本仓是「顶包候选」）", () => {
+    const cases: readonly [number, number, { sha: string; ms: number }, number][] = [
+      [0, SHIP.ms - 1, SHIP, 3], [1, SHIP.ms, SHIP, 3], [0, SHIP.ms, { sha: "", ms: 0 }, 3], [0, SHIP.ms + 1, SHIP, 3],
+    ];
+    for (const [withField, age, ship, red] of cases) {
+      // 四态各比一次：默认值哪天被改掉，这一格红；而措辞由 `replay-verify-cause-dating` 那份钉（一处一份，不重复钉）
+      expect(datingVerdict(withField, age, ship, red).reason)
+        .toBe(datingVerdict(withField, age, ship, red, "cause").reason);
+    }
     expect(datingVerdict(0, SHIP.ms - 1, SHIP, 3).reason).toContain("语料最新事件早于 cause 落盘");
-    expect(datingVerdict(1, SHIP.ms, SHIP, 3).reason).toContain("带 cause 的红命令 > 0");
-    expect(datingVerdict(0, SHIP.ms, { sha: "", ms: 0 }, 3).reason).toContain("查不到 cause 落盘的提交");
   });
 
   it("显式名词 ⇒ 同一格说 exec 面的字段名，且状态不变", () => {
