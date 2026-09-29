@@ -1,0 +1,13 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p206kill.lock）
+变异验证：5 条
+✅ impact-cap-default-reverts-to-mtime-slice — 缺省帽退回 400 ⇒ 覆盖面重新变成「这台机器最近动过的 400 个」：同一份代码在 worktree 里由 rg 遍历顺序决定谁进图，实测两棵树入图集合差 21–28%、确证口径 88 条查询答不同 ｜本机实测 1.3s／2 拍
+✅ map-self-report-dropped — 地图正文不再追加覆盖面自述 ⇒ 模型看到一张少了 4 个文件的图而以为问全了（读端工具早自述、地图这一支从不自述＝同族只硬化一支） ｜本机实测 1.1s／2 拍
+✅ map-candidates-denominator-lost — 分母退回「切片之后的文件数」⇒ graphFiles 与 candidates 恒等 ⇒ 自述永远不会开口，而帽子那一刀照咬（句子形状还在、数永远假，与 impact-coverage-denominator-constant-zero 同方向） ｜本机实测 1.1s／2 拍
+✅ map-degradation-ok-false-silent — ok:false 那一支不出声（回到从前只走 console.debug）⇒ 模型读到「这轮没有地图」，与「这仓库没有结构」同形；它据此放弃结构化定位、开始乱 grep ｜本机实测 0.8s／2 拍
+✅ map-inject-throw-swallowed — 注入侧 catch 那一支仍返回 null ⇒ 两个失败出口只守了一个（装配面的一次抛出比内部降级更常见：builder 自己没入库、缓存目录坏了）；「读不到」与「没有问题」再次同形 ｜本机实测 0.8s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 5.5s · 跑了 5/5 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 10 次／5 条（每条次数分布 2×5）· 单次中位 第1次 0.6s／第2次 0.6s· 最贵一条 impact-cap-default-reverts-to-mtime-slice 1.3s
+跑法单价：selector 10 拍·中位 0.56s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p206kill.lock）

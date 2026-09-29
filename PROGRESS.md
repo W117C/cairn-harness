@@ -6223,3 +6223,32 @@ typecheck：主树 1 条报错在 `src/cli.ts:709`（本笔没碰 `src/`），�
    - 地图仍**只在首轮注入**（`historyForMap.length > 2 ⇒ null`）：长会话中途模型再拿不到全局视图。
      要不要按"每 N 轮／每次 plan 变更"重投，得先量那份正文每轮重送多少钱——已登记在 #33 第 ③ 条，未裁。
    - 缺陷 B（夹具占全量图 49.4% 的边）仍在 #21。
+
+### 2026-09-30 · 第 207 页 · 凭证：`6841892` 认证通过（246 文件／3184 条 exit=0、两端独占），#33 那 4 条锚点全杀
+原始读数入库：`outputs/6841892-credential-2026-09-30/`＝`head-cert-6841892.{summary,test}.log`＋`head-cert-stdout.log`
+＋`mutate-verify-4map-anchors.log`＋`mutate-verify-anchor-uniquified.log`＋`mutate-needles-check.log`（80KB）。
+
+1. **认证的是 `6841892`**（= 第 206 页那笔 `cce4aa7` ＋ 一笔针脚唯一化）：`Test Files 246 passed`／`Tests 3184 passed`、
+   退出码由机器自己取；`typecheck exit=0`；`import 面：2921 条边｜悬空 0`（新文件 `src/agent/map/cap.ts` 与
+   `tests/map-self-report.test.ts` 都在面里）；`DIRTY_JUDGED=0`；依赖 10/10；收尾复核＝同一笔；
+   **并发判卷＝起前 0 套／跑完 0 套 ⇒ 两端独占成立**（这句话在第 167 页学到过：不成立时不许写成成立）。
+   文件数 245→246、条数 3180→3184 ＝ 本笔那份新判卷文件的 4 格。
+2. **锚点**：`--check-needles` 在 `6841892` 上印 `1027 条 —— 阻断 0，待复认 0，未覆盖 0，钉在飞文本 0，killer 指针失效 0`
+   ＋`改法语法体检：1027 条改法全部产出合法源文件 ✅`。
+   本笔 4 条新锚点（`map-self-report-dropped`／`map-candidates-denominator-lost`／
+   `map-degradation-ok-false-silent`／`map-inject-throw-swallowed`）＋ 1 条改坐标的
+   （`impact-cap-default-reverts-to-mtime-slice` 跟着常数搬到 `map/cap.ts`）在 `cce4aa7` 上 **5/5 全杀**
+   （`本次耗时 7.0s`（4 条 5.5s ＋ 复跑 1 条 1.2s）·`判卷 spawn 10 次／5 条（每条 2 拍）`·
+   selector 中位 0.56s·**坏拍（选中≠1）0**）。
+3. **过程中抓到并当场修掉的一条自造噪声**（这一页值得记的就是它）：`map-candidates-denominator-lost` 第一版
+   用 `s.replaceAll("candidates: candidates.length,")`，针脚体检因此印 **`待复认 1`**——体检只按文本数命中处，
+   它不知道我用了 `replaceAll`（`replace` 只改第一处才需要人工复认）。
+   修法不是忽略那一条警告，而是**把针脚写成唯一的**：带上 10 格缩进＋行尾换行 ⇒ 只咬"新构建"那一支
+   （缓存命中那一支缩进 12 格，本来就不在这个面上）。复跑后 `待复认 0`、该锚点仍然 ✅。
+   **为什么值得为它单独一笔**：`待复认` 是共享的读数面，留下一条就等于让下一个交笔的人替我判断"这条要不要理"
+   （规则 241/261 同族：别把"我这边过得去"写成"这一格没有噪声"）。
+4. **收尾**：本会话的两棵树（`p206-verify`、`p206-headcert`）验完即回收，`git worktree list` 里只剩邻居的；
+   主树 tracked 面干净，未跟踪只剩邻居那 4 项。
+5. **仍未结案**：#33 第 ③ 条（地图只在首轮注入 ⇒ 长会话中途拿不到全局视图；要不要按 N 轮／plan 变更重投，
+   先量那份正文每轮重送多少钱）——已从 #33 拆成独立任务 **#34**（本表内的号，不是页里历史提到的那个 #34）；缺陷 B（夹具 49.4% 边）在 #21；
+   整张 1027 条在本 HEAD 上的全量并行复跑**仍未做**（这两页只认证"本笔动过的锚点"＋"整棵判卷面 3184 条"）。
