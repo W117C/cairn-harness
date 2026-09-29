@@ -1,0 +1,10 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p215pack.lock）
+变异验证：2 条
+✅ pack-degraded-state-collapsed — 把「给了来源却抽出 0 条」与「根本没给来源」并回一态（`sources === 0` 恒真）⇒ 装箱静默退回按条数，而读数同一行末尾还写着 `源=--cost-logs`，两句互相抵消。这不是假想：09-30 我两次把编排器汇总页当分片原文喂进去，两趟整表都是在这种情况下跑的，机器自己只印了「没有权重来源」——规则 261（读不到与没有问题不许同形）的现行样本。另一半（编排器把显式来源数传给这一格）由 pack-sources-count-not-wired 各咬一条不同用例 ｜本机实测 0.6s／2 拍
+✅ pack-sources-count-not-wired — 判据在、接线断：编排器不再把**显式给的**来源数传进去 ⇒ 给了坏文件也照印「没有权重来源」。只有真跑 CLI 那支用例看得见（纯函数那两支照绿），所以这条与上一条各红一半。派生面（上一轮本标签的片原文）刻意不计进这一位：第一次跑它本来就不在盘上，那不是取料坏 ｜本机实测 4.6s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 5.4s · 跑了 2/2 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 4 次／2 条（每条次数分布 2×2）· 单次中位 第1次 1.3s／第2次 1.3s· 最贵一条 pack-sources-count-not-wired 4.6s
+跑法单价：selector 4 拍·中位 2.27s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p215pack.lock）
