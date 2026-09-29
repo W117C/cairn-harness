@@ -1,0 +1,11 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p216exec2.lock）
+变异验证：3 条
+✅ exec-outcome-not-landed — 跑进程类工具的结局只在内存里活过一次：`ToolResult` 带着 exitCode/timedOut，落 `tool_result` 时不抄 ⇒ 事件面上「工具链没装（127）」「被墙钟杀掉」「模型代码真错了」三件事同形，下游（verify 额度、按档升级、沉淀、失败轨迹评估）只能去匹配 `[exit code: 127]` 那句文案——而文案面已被证明不可当判据（judgment-layer §9.1）。钉的是**落盘那一跳**（生产端另有两条用例；两条各看得见一半，规则 224 那一族） ｜本机实测 0.9s／2 拍
+✅ exec-cause-stamp-dropped — 四条 exec 出口共用的那一只函数只贴文案、不落结构 ⇒ 走注入出口的 worker shell 与两条沙箱出口拿不到退出码（run_shell 自己那支另有落法，故本条钉的是共用出口这一半）。成功支也要落：`exitCode=0` 与「这一位缺席＝不是跑进程的工具」是两件事，混了就又回到「读不到与没有问题同形」 ｜本机实测 1.1s／2 拍
+✅ exec-cause-ok-guard-dropped — 去掉「成功回执不贴」那道守卫 ⇒ `pnpm install` 成功但正文里带一行 ERR_PNPM 就被判成「命令根本没跑成」——把绿的说成红的，比不归因更坏。针脚在 09-30（#24 那笔）跟着字节挪过一次：成功支从 `return r` 改成 `return stamped`（要把 exitCode/timedOut 也落到成功支），守卫的语义一个字没动 ⇒ 只改指字节、不动 expectFail（规则 284） ｜本机实测 0.8s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 3.0s · 跑了 3/3 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 6 次／3 条（每条次数分布 2×3）· 单次中位 第1次 0.5s／第2次 0.4s· 最贵一条 exec-cause-stamp-dropped 1.1s
+跑法单价：selector 6 拍·中位 0.45s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p216exec2.lock）
