@@ -1,13 +1,17 @@
 # m0 — 可重放的 agent harness
 
 一个事件溯源（event-sourced）的 agent 内核：每一步都落成 JSONL 事件，因此**同一份日志可以被重放、分叉、审计**。
-没有 UI、没有 Electron、没有构建步骤——装上就有一条 `m0` 命令。
+没有 UI、没有 Electron、没有构建步骤——克隆下来 `npm install` 完就有一条 `m0` 命令。
 
 ```sh
-npm install
+git clone <this-repo> && cd m0-agent-loop
+npm install                       # CLI 走 tsx 通道（devDependency），必须装齐才能跑
 export OPENAI_API_KEY=<你的 key>
 npx m0 "把 tests 里失败的那个用例修好"
 ```
+
+> 本包是 `"private": true`，**不经 npm 分发**：没有 `npm install -g m0` 这条路。上面是克隆仓库后的用法——
+> tsx 在 devDependencies 里，源码经 tsx 通道直接跑。
 
 ---
 
@@ -125,7 +129,7 @@ const events = await replay("<path>.jsonl");
 
 ## 这个仓库是什么
 
-内核质量很高、**产品面刚补上**的一棵树：33k 行 `src/`，strict 零报错，fail-closed 是设计意图而非事后补丁，
+内核质量很高、**产品面刚补上**的一棵树：strict 零报错，fail-closed 是设计意图而非事后补丁，
 变异测试的判红标准很硬。桌面层已按明确要求移除（无 Electron / renderer / preload），
 剩下的 electron-free 应用服务在 `src/main/`。
 
