@@ -6285,3 +6285,34 @@ typecheck：主树 1 条报错在 `src/cli.ts:709`（本笔没碰 `src/`），�
    之所以还是做了，是因为它是一条**错误引用**（指向一个不存在的任务号）而不是一个观点。
    边界记成规则 290：**错的事实可以就地改，但要单独声明这一行改了什么；判断/叙述只能追注**。
    这里就是那句"单独声明"。
+
+### 2026-09-30 · 第 209 页 · #26 结案：选择子普查的"读不到"不再是"没有问题"（三态点名＋两个分母并排印）
+（读数取自现 HEAD 工作树那一趟 `--check-needles`；认证读数在下一页。）
+
+1. **这一格原本的形状**：`scripts/lib/mutate-gates.ts` 的 `selectorAmbiguity` 有两条 `continue`，
+   其中 `titles.length === 0` 那一支把**"这份判卷我一条标题都没抽到"**与**"这份判卷没有锚点问题"**合成同一个动作。
+   后果不是跑错（那条锚点走整文件跑法仍然杀得动），而是**尺自己少一条而不说**：
+   汇总行印「针脚体检：1027 条」、同一趟的选择子行印「1013/1026」，那 1 条去哪了没有交代。
+2. **改完的形状**：`SelectorScan` 现在有 `blind`（读得到文件、抽不到标题，按文件归并并带锚点 id）／
+   `unreadable`（判卷读不到）／`excluded`（按设计不数：空指针或非 `.test.ts`）／`total`（表全长）四个字段，
+   `selectorCell` 吃**整份 scan**并印两个分母并列：
+   `可判面 1026／表 1027：不数的 1 条＝按设计不数 0、判卷读不到 0、**读得到文件却一条标题都抽不到 1**（…）`。
+   现读那一个瞎掉的文件点名了：`tests/solpi-receipt-integration.test.ts ⇒ evidence-receipt-reports-known-completeness-as-unknown`
+   （成因就是 #26 记的那条：`it.each([false, true])("…（observationPack=%s）")` 的形状，`TITLE_RE` 只认引号开头）。
+   **`TITLE_RE` 要不要认 `it.each` 这一问仍未做**：认了之后 `%s` 展开的标题与 `expectFail` 不再逐字相等，
+   那条会从「唯一命中」变「零命中」⇒ 存量先量（现在它被点名的这一格就是量的入口）。
+3. **判据**（`tests/mutate-verify-gates.test.ts`，改 4 格＋新增 2 格，整套 144 条全绿）：
+   新增"第三态要点名"（正反两对照：`r.blind` 记到那条、cell 里印出文件名，而文件读得到标题时那一格不许出现）；
+   新增"两个分母并排印"（`可判面 2／表 5` 加各态计数）；
+   水位那格补两条——`blind.length ≤ 1`（**计数类不留余量**）与 `可判面/表全长` 按**同一趟取料**对账，
+   不写死 1027（写死就变成"邻居加一条锚点 ⇒ 我这里常驻红"，规则 273/283 那一族）。
+   接线那格从 `selectorCell(scan.problems, scan.inspected)` 改指 `selectorCell(scan)`，理由写进断言消息：
+   退回只吃两份就把"读瞎"重新变成无声。
+4. **锚点**：表长 1027 → **1029**（`selector-blind-file-not-tracked` 管"记没记"、
+   `selector-cell-hides-blind-count` 管"说没说"——分两条是因为这两半的修法相反，一条红不能替另一条说话）。
+   另有一条**改指**：`selector-inspected-counts-unreadable-judges` 的 needle 正是我这次拆掉的那行
+   （`if (titles === null || titles === undefined || titles.length === 0) continue;` 分成 unreadable／blind 两支），
+   针脚体检在我提交**之前**就印 `❌ 针脚已不在源文件里`——这一条与第 283 页那次不同因：
+   它是"我自己把被钉的那行删了"（盘上 grep 命中 0），不是"HEAD 里还没有"。规则 285 在这里是**正向**用了一次。
+5. **代价**：静态尺这一趟不新增 spawn（只多一个 map 与一次 join）；门那侧的增量＝＋2 条锚点＝＋4 拍，
+   单价与这趟 `--check-needles` 的实测秒数都由凭证页回填，本页不预测。

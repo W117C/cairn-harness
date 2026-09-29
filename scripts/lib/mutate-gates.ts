@@ -711,13 +711,27 @@ export interface SelectorProblem {
 }
 
 /** 数每条锚点的指针在它自己的判卷文件里逐字命中几条标题。只回 ≠1 的那些（==1 是能走 -t 的那一批）。
- *  判卷文件读不到、或指针为空、或不是 vitest 文件 ⇒ **不数**（那些另有归属：`auditExpectFails` 的 unreadable、结构钉型判卷），
- *  所以 `inspected` 是被数过的条数：拿整表条数去除会以假绿的方式低估可选率。 */
+ *  09-30 补（待办 #26）：**"这一条没被数"必须分成三态各自有名**，因为它们的修法相反：
+ *   ⑴ `excluded` 按设计不数（指针为空，或判卷不是 `.test.ts` ⇒ 结构钉型判卷，归属在 `auditExpectFails`）；
+ *   ⑵ `unreadable` 判卷文件读不到（不在盘上／未入库）；
+ *   ⑶ `blind` **文件读到了却一个标题都抽不到**＝解析器对整份文件瞎了。
+ *      现读成因：`tests/solpi-receipt-integration.test.ts` 写的是 `it.each([false, true])("…（observationPack=%s）", …)`，
+ *      而 `TITLE_RE` 只认 `it("…` / `it(` 后面紧跟引号 ⇒ `it.each(` 后面是 `[`，一条标题都抽不到。
+ *  ⑶ 从前与"这文件没问题"同形：那 1 条锚点从普查里静默消失，而 `killer 指针失效 0` 照样印绿——
+ *  尺的"读不到"与"没有问题"不许同形（规则 261/262）。 */
 export interface SelectorScan {
   problems: SelectorProblem[];
   inspected: number;
   /** 逐字唯一定位自己那条 killer 用例的 id（第 170 页的跑法选择表只吃这一份，调用侧不许再算一遍）。 */
   selectableIds: readonly string[];
+  /** ⑶ 读得到文件、却抽不到任何标题的判卷（按文件归并，带上挂在它名下的锚点 id）。 */
+  blind: { test: string; ids: string[] }[];
+  /** ⑵ 判卷读不到的锚点 id。 */
+  unreadable: string[];
+  /** ⑴ 按设计不进这一把尺的锚点条数。 */
+  excluded: number;
+  /** 表全长（＝传进来的 entries.length）：与 `inspected` 并排印，两个分母不许只印一个（规则 262）。 */
+  total: number;
 }
 
 const TITLE_RE = /^\s*(?:it|test)(?:\.\w+)?\s*\(\s*(["`'])((?:\\.|(?!\1)[^\\])*)\1/gmu;
@@ -729,30 +743,50 @@ export function selectorAmbiguity(
   const cache = new Map<string, string[] | null>();
   const problems: SelectorProblem[] = [];
   const selectableIds: string[] = [];
+  const blindByTest = new Map<string, string[]>();
+  const unreadable: string[] = [];
   let inspected = 0;
+  let excluded = 0;
   for (const e of entries) {
-    if (e.expectFail === "" || !e.test.endsWith(".test.ts")) continue;
+    if (e.expectFail === "" || !e.test.endsWith(".test.ts")) { excluded += 1; continue; }
     if (!cache.has(e.test)) {
       const text = readTest(e.test);
       cache.set(e.test, text === null ? null : [...text.matchAll(TITLE_RE)].map((m) => m[2] ?? ""));
     }
     const titles = cache.get(e.test);
-    if (titles === null || titles === undefined || titles.length === 0) continue;
+    if (titles === null || titles === undefined) { unreadable.push(e.id); continue; }
+    if (titles.length === 0) {
+      const hit = blindByTest.get(e.test);
+      if (hit) hit.push(e.id);
+      else blindByTest.set(e.test, [e.id]);
+      continue;
+    }
     inspected += 1;
     const hits = titles.filter((t) => t.includes(e.expectFail)).length;
     if (hits !== 1) problems.push({ id: e.id, test: e.test, hits });
     else selectableIds.push(e.id);
   }
-  return { problems, inspected, selectableIds };
+  return {
+    problems, inspected, selectableIds,
+    blind: [...blindByTest.entries()].map(([test, ids]) => ({ test, ids })),
+    unreadable, excluded, total: entries.length,
+  };
 }
 
-/** 那一格的措辞：三态分开印，且**不许**把「选不中」并成「没什么问题」。
+/** 那一格的措辞：四态分开印，且**不许**把「选不中」「读不到」「整片瞎」并成「没什么问题」。
  *  存量不是 0（现读 13 条），所以这一格走水位法：只准调低，涨了要交代。 */
-export function selectorCell(problems: readonly SelectorProblem[], inspected: number): string {
+export function selectorCell(scan: SelectorScan): string {
+  const { problems, inspected, blind, unreadable, excluded, total } = scan;
   const zero = problems.filter((p) => p.hits === 0);
   const many = problems.filter((p) => p.hits > 1);
   const parts = [
     `选择子：${String(inspected - problems.length)}/${String(inspected)} 条能逐字唯一定位自己的 killer 用例（其余走整文件跑法）`,
+    // 两个分母并排印：只印 inspected 的话，"表 1027 而这一格 1026"那 1 条去哪了无人知道（#26 的原始现场）。
+    inspected === total ? "" : `可判面 ${String(inspected)}／表 ${String(total)}：不数的 ${String(total - inspected)} 条＝` +
+      `按设计不数 ${String(excluded)}、判卷读不到 ${String(unreadable.length)}、` +
+      `**读得到文件却一条标题都抽不到 ${String(blind.reduce((n, b) => n + b.ids.length, 0))}**` +
+      (blind.length === 0 ? "" : `（${blind.map((b) => `${b.test}⇒${b.ids.join("、")}`).join("；")}）`) +
+      "，那些只能整文件跑，**不算这一格通过**",
     zero.length === 0 ? "" : `零命中 ${String(zero.length)} 条（标题是拼出来的或已改名 ⇒ -t 会一条也选不中）`,
     many.length === 0 ? "" : `多命中 ${String(many.length)} 条（选择子不唯一）`,
   ].filter((s) => s !== "");

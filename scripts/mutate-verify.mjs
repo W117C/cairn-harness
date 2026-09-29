@@ -8257,10 +8257,34 @@ const MUTATIONS = [
     test: "tests/mutate-verify-gates.test.ts",
     desc: "判卷读不到／指针为空那些条也计入分母 ⇒ 可选率虚高，而「取料坏」被洗成「量过了」（规则 222 的三态：未取 ≠ 空面 ≠ 零命中）",
     apply: (s) => s.replace(
-      "if (titles === null || titles === undefined || titles.length === 0) continue;",
+      "if (titles === null || titles === undefined) { unreadable.push(e.id); continue; }",
       "inspected += 1;",
     ),
     expectFail: "只数被数过的：判卷读不到／指针为空／不是 vitest 文件都不进 inspected",
+  },
+  {
+    id: "selector-blind-file-not-tracked",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "「文件读得到、却一条标题都抽不到」这一态不记账（回到旧实现：与「这文件没锚点问题」同形）⇒ "+
+      "解析器对整份判卷瞎（真仓成因：it.each 的标题不在 TITLE_RE 面上）时，普查少一条而读数一个字不说（规则 261/262）",
+    apply: (s) => s.replace(
+      "      const hit = blindByTest.get(e.test);\n      if (hit) hit.push(e.id);\n      else blindByTest.set(e.test, [e.id]);\n      continue;",
+      "      continue;",
+    ),
+    expectFail: "读得到文件却一条标题都抽不到 ⇒ 第三态要点名（并进「没问题」＝整份判卷被读瞎也无人说）",
+  },
+  {
+    id: "selector-cell-hides-blind-count",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "取料记了、措辞却不印那一格 ⇒ 第三态又变回静默（读数与数据分家是本仓点名的假绿形状；"+
+      "本条与上一条分开钉：一条管「记没记」，一条管「说没说」）",
+    apply: (s) => s.replace(
+      "读得到文件却一条标题都抽不到 ${String(blind.reduce((n, b) => n + b.ids.length, 0))}**",
+      "读得到文件却一条标题都抽不到 0**",
+    ),
+    expectFail: "读得到文件却一条标题都抽不到 ⇒ 第三态要点名（并进「没问题」＝整份判卷被读瞎也无人说）",
   },
   {
     id: "selector-scan-fed-empty-table",
@@ -9354,7 +9378,7 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
    *  0 命中时 vitest 不是失败，是一条也没跑，两拍都白过（第 166 页「只能印 0 的尺」那一族换了载体）。
    *  这一格刻意不进退出码：存量 13 条不是本笔造成的，按水位法只准调低；先把名单点出来，再谈改跑法。 */
   const selectorScan = selectorAmbiguity(pointerEntries, (rel) => { try { return readFileSync(join(ROOT, rel), "utf8"); } catch { return null; } });
-  console.log("ℹ️  " + selectorCell(selectorScan.problems, selectorScan.inspected));
+  console.log("ℹ️  " + selectorCell(selectorScan));
   // 一次求和、两处使用（汇总里印出来的数与 exit 码用的是同一个值；分开算就可能各说各话）。
   const blockingTotal = blockingTotalOf({
     needle: blocking.length, duplicateIds: dup.length, untracked: untracked.length, drift: drift.length,

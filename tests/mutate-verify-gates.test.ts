@@ -1150,7 +1150,7 @@ describe("选择子唯一性：一条锚点能不能只跑自己那条 killer �
     const r = selectorAmbiguity(entries, read);
     expect(r.inspected, "读不到的判卷、非 vitest 的 test、空指针都不该进分母").toBe(2);
     expect(r.problems).toEqual([]);
-    expect(selectorCell(r.problems, r.inspected)).toContain("2/2");
+    expect(selectorCell(r)).toContain("2/2");
   });
 
   it("零命中与多命中分开印，并点名是哪几条（0 命中＝-t 会一条也没跑）", () => {
@@ -1163,7 +1163,7 @@ describe("选择子唯一性：一条锚点能不能只跑自己那条 killer �
     const r = selectorAmbiguity(entries, () => src);
     expect(r.inspected).toBe(3);
     expect(r.problems.map((p) => `${p.id}:${String(p.hits)}`).sort()).toEqual(["two:2", "zero:0"]);
-    const cell = selectorCell(r.problems, r.inspected);
+    const cell = selectorCell(r);
     expect(cell, cell).toContain("零命中 1 条");
     expect(cell, cell).toContain("多命中 1 条");
     expect(cell, cell).toContain("zero(0)");
@@ -1179,15 +1179,52 @@ describe("选择子唯一性：一条锚点能不能只跑自己那条 killer �
       rel === "tests/x.test.ts" ? 'it("唯一命中的一条 的事", () => {});\n' : null;
     const r = selectorAmbiguity(entries, read);
     expect(r.inspected, "读不到的那份判卷不进分母").toBe(2);
-    expect(selectorCell(r.problems, r.inspected), selectorCell(r.problems, r.inspected)).toContain("1/2");
+    expect(selectorCell(r), selectorCell(r)).toContain("1/2");
+  });
+
+  it("读得到文件却一条标题都抽不到 ⇒ 第三态要点名（并进「没问题」＝整份判卷被读瞎也无人说）", () => {
+    const blindEntry = { id: "each", test: "tests/each.test.ts", expectFail: "参数化那条" };
+    const okEntry = { id: "u", test: "tests/x.test.ts", expectFail: "唯一命中的一条 的事" };
+    const read = (rel: string): string | null =>
+      rel === "tests/each.test.ts"
+        ? 'it.each([false, true])("参数化那条（observationPack=%s）", () => {});\n' // 真仓成因：TITLE_RE 只认引号开头
+        : 'it("唯一命中的一条 的事", () => {});\n';
+    const r = selectorAmbiguity([blindEntry, okEntry], read);
+    expect(r.inspected, "整片读不到标题的那份判卷不许进分母").toBe(1);
+    expect(r.blind.map((b) => `${b.test}⇒${b.ids.join("、")}`)).toEqual(["tests/each.test.ts⇒each"]);
+    const cell = selectorCell(r);
+    expect(cell, cell).toContain("读得到文件却一条标题都抽不到 1");
+    expect(cell, cell).toContain("tests/each.test.ts");
+    expect(cell, cell).toContain("不算这一格通过");
+    // 反向对照：文件读得到标题时这一格不许出现（第三态不许变成常驻噪声）
+    expect(selectorCell(selectorAmbiguity([okEntry], read))).not.toContain("抽不到");
+  });
+
+  it("两个分母并排印（可判面／表全长）：只印被数过的那个数，少的那几条去哪了没人说", () => {
+    const entries = [
+      { id: "a", test: "tests/one.test.ts", expectFail: "甲说的事" },
+      { id: "b", test: "tests/two.test.ts", expectFail: "乙说的事" },
+      { id: "c", test: "tests/gone.test.ts", expectFail: "读不到的那条" },
+      { id: "d", test: "scripts/not-a-test.ts", expectFail: "结构钉型的指针" },
+      { id: "e", test: "tests/one.test.ts", expectFail: "" },
+    ];
+    const read = (rel: string): string | null => {
+      if (rel === "tests/one.test.ts") return 'it("甲说的事", () => {});\n';
+      if (rel === "tests/two.test.ts") return 'it("乙说的事", () => {});\n';
+      return null;
+    };
+    const cell = selectorCell(selectorAmbiguity(entries, read));
+    expect(cell, cell).toContain("可判面 2／表 5");
+    expect(cell, cell).toContain("按设计不数 2");
+    expect(cell, cell).toContain("判卷读不到 1");
   });
 
   it("接线：门自己那一步真拿整张表去数选择子，并把两份数一起交给措辞（只印不数＝这一格永远 0）", () => {
     const src = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
     expect(src, "取料必须是整张表的指针面，喂空表＝这一格永远印 0/0").toMatch(
       /\n\s{2}const selectorScan = selectorAmbiguity\(pointerEntries, /);
-    expect(src, "措辞吃的是 problems 与 inspected 两份，少一份就退化成一个数").toMatch(
-      /\n\s*console\.log\("ℹ️  " \+ selectorCell\(selectorScan\.problems, selectorScan\.inspected\)\);/);
+    expect(src, "措辞吃的是整份 scan（含三态与表全长），退回只吃 problems/inspected 就把「读瞎」重新变成无声").toMatch(
+      /\n\s*console\.log\("ℹ️  " \+ selectorCell\(selectorScan\)\);/);
   });
 
   it(`水位：真表现读「选不中＋不唯一」只准调低（帽 ${SELECTOR_CAP}，09-28 现读 13＝11 零命中＋2 多命中）——新增一根要写明为什么`, () => {
@@ -1196,6 +1233,13 @@ describe("选择子唯一性：一条锚点能不能只跑自己那条 killer �
     expect(r.problems.length, "选择子失准：" + r.problems.map((p) => `${p.id}(${String(p.hits)})`).join("、")).toBeLessThanOrEqual(SELECTOR_CAP);
     expect(SELECTOR_CAP - r.problems.length).toBeLessThan(5);
     expect(r.inspected, "取料面塌了＝inspected 归零，这一格又不能印错只能印 0").toBeGreaterThan(500);
+    // 第三态的水位（计数类**不留余量**）：现读 1 个文件被解析器整片读瞎（`tests/solpi-receipt-integration.test.ts`
+    // 的 `it.each`）。涨了要么是新加了 it.each 判卷（那就得给 TITLE_RE 补形状并处理 %s 展开），
+    // 要么是取料又静默丢条——两种都要写明，不许默默抬帽（第 209 页那条「读不到」与「没问题」同形的复发信号）。
+    expect(r.blind.length, "整片读不到标题的判卷文件：" + r.blind.map((b) => b.test).join("、")).toBeLessThanOrEqual(1);
+    // 分母按**同一趟取料**对账（不写死表长：写死就变成"邻居加一条锚点⇒我这里常驻红"，规则 273/283 那一族）
+    expect(selectorCell(r), selectorCell(r)).toContain(`可判面 ${String(r.inspected)}／表 ${String(rows.length)}`);
+    expect(r.total, "total 必须就是表全长，否则那一格是在自说自话").toBe(rows.length);
   });
 });
 
