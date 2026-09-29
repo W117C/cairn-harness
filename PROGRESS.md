@@ -6096,3 +6096,58 @@ typecheck：主树 1 条报错在 `src/cli.ts:709`（本笔没碰 `src/`），�
 5. **窗口现在的形状与下一步**：主树工作树只剩邻居的 4 项未跟踪（`outputs/_audit-*.md` ×3 与 `impact-accuracy-probe-2026-09-29/`），
    tracked 面 0 项在飞 ⇒ 「先落在飞原子簇、再加新能力」这个前置**已满足**（簇 46 笔已入库）。
    ⇒ 下一笔动代码就是 #21／#33 那一族：影响面与仓库地图共用那顶 mtime 帽（改成与机器状态无关＋两条默认消费者补覆盖面自述＋语义租约不许把空波及当结论）。
+
+### 2026-09-30 · 第 204 页 · #21 笔1 落地：那顶帽从「覆盖面政策」改成「成本安全阀」，四个消费者第一次共用一把尺
+（认证读数在下一页；这一页只写改了什么、判据长什么样、代价谁付、以及**没做**的那几件。）
+
+1. **帽的形状**（`src/agent/map/build.ts`）：
+   - `:28` 新增 `MAX_FILES_CEILING = 5000`，`:29` `MAX_FILES_DEFAULT = MAX_FILES_CEILING`。
+     缺省不再是 400，而是**那顶帽的上限**——它从此只挡「大到解析不动」的仓库，不再决定覆盖面。
+     为什么这是修法而不是把 400 调大：缺陷的真身是「按 mtime 截断」（第 200 页两面实测：同一份代码、
+     换字典序取前 400，入图集合差 21–28%），**任何**固定数字都会把这台机器的近期活动当成仓库的形状。
+   - `:90/:99` 排序抽成 `compareCandidates`：第一键仍是 mtime 新→旧，**第二键是 workspace 相对路径字典序**。
+     第二级不是修饰——worktree 树里所有文件同一个秒，缺了它「谁进图」就由 `rg` 的遍历顺序决定。
+     本机实测该顺序是乱序（九个同 mtime 的 `.ts` 给成 `y a e d x c z b m`），所以摘掉第二级是**可观察**的突变。
+   - `src/agent/impact/index.ts:77` `IMPACT_MAX_FILES_CEILING` 从字面量 5000 改成**别名**（数值事实源只剩一处）。
+2. **「图非全量」这把尺搬到图这一层**（新文件 `src/agent/impact/coverage.ts`）：
+   `graphIsPartial`（判据，:13）／`capAtCeiling`（:20）／`capWayOut`（:26）／`coverageNote`（:40）／`capCauseNote`（:54）。
+   从前判据住在 `src/tools/impact-query.ts`，另外三个消费者（回注摘要、语义租约、仓库地图）要出声只能再抄一遍
+   ——第十四族的标准成因。两个文案函数**逐字搬走**（同一串模板、同一句措辞），读端只 import。
+3. **四个消费者现在共用它**：
+   - 读端 `impact_query`：`graphAbsenceNote` 帽外那一支（`src/tools/impact-query.ts:46-48`）、`resolveMaxFiles` 的拒收文案（:84）、
+     规格那句（:233）——三处都不再说「调大 maxFiles」，因为缺省已是上限 ⇒ 那是**死参数式文案**（第 51 页同族）。
+     规格描述改成「缺省＝上限 5000，只能调小」；体积仍在 <600B 那道闸内（`tests/impact-query.test.ts` 那条规格体积判卷本次一起绿）。
+   - 回注摘要 `contextNoteFor`（`src/agent/impact/index.ts:350`）：`[impact] … 波及 N 个文件` 那句后面现在会带同一句覆盖面自述。
+     为此把实发的帽一路带到读端：`ImpactGraph.cap`（:47）→ `FileImpactReport.graphCap`（:330）。
+   - 语义租约 `affectedFilesOf`（:446）：图非全量时 `console.warn` 出声，明写「**空波及不等于无冲突**」。
+     这一支管 spawn 准入——第 201 页两面实测：缺省臂冲突 0 条＝放行、全量臂冲突 1 条，而它从前**缺料不出声**
+     （对照：钩子抛错那一支会 warn）。同时给它加了第四个可选参 `maxFiles`：生产不传（走缺省＝上限），
+     判卷用它造出「非全量图」而不必造 5001 个文件。
+4. **判据**（新文件 `tests/impact-cap-policy.test.ts`，10 格；连同 `tests/impact-query.test.ts` 那两格改写）：
+   ① 405 个候选在缺省帽下全进图（＝「改回 400 就红」那把尺，也是本仓 512 那条读数的合成版）；
+   ② 反向对照：同一靶子把帽压到 400 ⇒ 真少收 5 个、自述真给得出这个数（没有它，①可能被一把永远闭嘴的自述蒙过）；
+   ③ 切片处只有一个（`scanSourceFiles` ＝ `scanSourceFilesAll` 的前 N 个）；
+   ④ 同 mtime ⇒ 字典序，且帽咬下去时取到的是字典序最小那三个；⑤ mtime 仍是第一键（含一条「只按 mtime 排会给出乱序对」的哨兵）；
+   ⑥ 租约在非全量时出声；⑦ 缺省时不出声（不许把警告变成常驻噪声）；
+   ⑧ 回注摘要带自述＋**全量时逐字不多一个字节**（同一问：帽 3 说「波及 2 个文件」、全量说「波及 7 个」）；
+   ⑨ 冻结靶子 mini-repo 的波及闭包逐字不变；⑩ 规格那句不许承诺拧得动的出路。
+   `tests/impact-query.test.ts` 里那条「帽外必须给出『调帽』出路」的握手尺**分成两档**（帽 < 上限给得出、到上限不许再说），
+   并加了一条 `MAX_FILES_DEFAULT === MAX_FILES_CEILING` 的锚——否则上面那档是一条不会走到的路。
+5. **锚点**（`scripts/mutate-verify.mjs`，表长 1019 → **1023**）：新增 4 条各钉一个决策点
+   （`impact-cap-default-reverts-to-mtime-slice`／`impact-candidate-order-nondeterministic`／
+   `impact-lease-partial-graph-silent`／`impact-hook-note-loses-coverage`）；
+   另有 **3 条改了坐标**（`impact-coverage-denominator-constant-zero`／`impact-coverage-trigger-reverts-to-cap-compare`／
+   `impact-cap-cause-judgement-diverges-from-coverage`）——针脚文本随函数一起从 `src/tools/impact-query.ts` 挪到
+   `src/agent/impact/coverage.ts`，前两条的 needle 同时跟着新写法（`!graphIsPartial(...)`／`return graphIsPartial(...)`）。
+   改坐标不算改判据：**没动任何一条的 expectFail 标题**，也没动任何判卷断言的语义。
+6. **代价（谁付、付多少、出处）**：本仓候选 512 全量建图比帽 400 贵 **＋176ms／次**（1071→1247ms，独立进程两种顺序、
+   同臂散布 ≤13ms；`outputs/impact-cap-decision-2026-09-30/decision-input.md` §三）。付账的是**默认开着**的两条路
+   （`settings.ts` `impactAnalysis: true` ⇒ spawn 准入的语义租约；每次 write/edit 的回注），不是待配置路径。
+   门这一侧：＋4 条锚点＝＋8 拍，单价不猜、由下一页那趟机器自报回填（`scripts/gate-manifest.ts:68` 已把这条账的形状写清）。
+7. **这一笔没做的**（不是遗漏，是登记）：
+   - **#33 那半边**：仓库地图（`buildMap`）现在自动吃到新缺省 ⇒ 覆盖面已与机器状态无关，
+     但它仍**不自述**、失败仍走 `console.debug`（模型看不见）。那是 #33 的正题，下一笔。
+   - **缺陷 B**：夹具占全量图 49.4% 的边（第 200 页实测）。它与 A 方向相反（A 要多收、B 要降权），
+     本笔只做了 A；B 仍是 #21 的开放项。
+   - 语义租约面对非全量图选的是**出声**，不是「建全量图」——#21 ③ 给的是二选一；
+     5000 帽之下正常仓库不会走到那一支，走到时（真超大仓）也只是 warn 一行，不改变放行/拦下的判定。

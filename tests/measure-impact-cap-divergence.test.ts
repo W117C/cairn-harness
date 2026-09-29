@@ -65,7 +65,7 @@ describe("两图答案差集：漏一个就要出声", () => {
 
 const site = (file: string, symbol: string, line = 1): ImpactSite => ({ file, line, symbol }) as ImpactSite;
 const graph = (files: string[], defs: Record<string, ImpactSite[]>, refs: Record<string, ImpactSite[]>): ImpactGraph =>
-  ({ files, candidates: files.length, defs: new Map(Object.entries(defs)), refs: new Map(Object.entries(refs)), edges: [], parsed: 0, fromTagsCache: 0 }) as ImpactGraph;
+  ({ files, candidates: files.length, cap: files.length, defs: new Map(Object.entries(defs)), refs: new Map(Object.entries(refs)), edges: [], parsed: 0, fromTagsCache: 0 }) as ImpactGraph;
 
 describe("确证漏报只认全仓唯一的符号（下界不能被撞名多报撑大）", () => {
   const full1 = graph(

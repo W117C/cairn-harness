@@ -8712,10 +8712,11 @@ const MUTATIONS = [
   },
   {
     id: "impact-coverage-denominator-constant-zero",
-    src: "src/tools/impact-query.ts",
+    src: "src/agent/impact/coverage.ts",
     test: "tests/impact-query.test.ts",
     desc: "覆盖面句里的漏报数写死 0 ⇒ 句子形状还在、数永远假（「另有 0 个候选没进图」），"+
-      "模型据此认为图基本全量",
+      "模型据此认为图基本全量"+
+      "（09-30：这两把纯函数从 tools 挪到 impact/coverage.ts，因为回注摘要与语义租约要说同一句 ⇒ 针脚坐标跟着挪）",
     apply: (s) => s.replace(
       "`另有 ${String(candidates - files)} 个候选文件没进这张图（帽外或被跳过）⇒ 图非全量，`",
       "`另有 0 个候选文件没进这张图（帽外或被跳过）⇒ 图非全量，`",
@@ -8724,21 +8725,60 @@ const MUTATIONS = [
   },
   {
     id: "impact-coverage-trigger-reverts-to-cap-compare",
-    src: "src/tools/impact-query.ts",
+    src: "src/agent/impact/coverage.ts",
     test: "tests/impact-query.test.ts",
-    desc: "判据退回旧的 `files < cap` ⇒ 两个方向同时错：候选正好等于帽时**误报**非全量（模型白重问一次），"+
+    desc: "阳性一侧不接共用判据、退回旧的 `files < cap` ⇒ 两个方向同时错：候选正好等于帽时**误报**非全量（模型白重问一次），"+
       "而有文件被读/解析失败跳过时（files < cap 但候选更多）**漏报**（模型以为问全了）",
-    apply: (s) => s.replace('  if (candidates <= files) return "";', "  if (files < cap) return \"\";"),
+    apply: (s) => s.replace('  if (!graphIsPartial(files, candidates)) return "";', "  if (files < cap) return \"\";"),
     expectFail: "旧判据在这里误报",
   },
   {
     id: "impact-cap-cause-judgement-diverges-from-coverage",
-    src: "src/tools/impact-query.ts",
+    src: "src/agent/impact/coverage.ts",
     test: "tests/impact-query.test.ts",
-    desc: "阴性一侧的成因判据与阳性一侧分家 ⇒ 同一张图一边说「另有 N 个没进图」、"+
+    desc: "阴性一侧的成因判据不接共用判据、与阳性一侧分家 ⇒ 同一张图一边说「另有 N 个没进图」、"+
       "另一边说「与帽无关」，两句话互相拆台（共用同一判据是这条政策的形状）",
-    apply: (s) => s.replace("  return candidates > files", "  return files >= cap"),
+    apply: (s) => s.replace("  return graphIsPartial(files, candidates)", "  return files >= cap"),
     expectFail: "capCauseNote 与它同判据",
+  },
+  // ── 第 204 页：文件帽从「覆盖面政策」改成「成本安全阀」（待办 #21 笔1）
+  // 四条锚点各钉一个决策点：帽的缺省值／候选次序的第二级／租约的出声／回注的自述。
+  // 单价见本表尾行的分母（判卷宿主 = impact-cap-policy.test.ts，冷建 405 个文件那一格最贵）。
+  {
+    id: "impact-cap-default-reverts-to-mtime-slice",
+    src: "src/agent/map/build.ts",
+    test: "tests/impact-cap-policy.test.ts",
+    desc: "缺省帽退回 400 ⇒ 覆盖面重新变成「这台机器最近动过的 400 个」：同一份代码在 worktree 里"+
+      "由 rg 遍历顺序决定谁进图，实测两棵树入图集合差 21–28%、确证口径 88 条查询答不同",
+    apply: (s) => s.replace("export const MAX_FILES_DEFAULT = MAX_FILES_CEILING;", "export const MAX_FILES_DEFAULT = 400;"),
+    expectFail: "缺省帽不再按机器状态切覆盖面：405 个候选全进图",
+  },
+  {
+    id: "impact-candidate-order-nondeterministic",
+    src: "src/agent/map/build.ts",
+    test: "tests/impact-cap-policy.test.ts",
+    desc: "排序摘掉第二级（同秒按路径字典序）⇒ 只剩 mtime：`git worktree add` 出来的树里所有文件同一个秒，"+
+      "「谁进图」改由 rg 的目录遍历顺序决定。本机实测该顺序是乱序（`y a e d x c z b m`），所以这一刀可观察",
+    apply: (s) => s.replace("out.sort(compareCandidates);", "out.sort((a, b) => b.mtimeMs - a.mtimeMs);"),
+    expectFail: "同 mtime 的候选按路径字典序排，边界不再由 rg 决定",
+  },
+  {
+    id: "impact-lease-partial-graph-silent",
+    src: "src/agent/impact/index.ts",
+    test: "tests/impact-cap-policy.test.ts",
+    desc: "语义租约在图非全量时不出声 ⇒ orchestrator 拿到空波及就当「无冲突」，连审批卡都不发；"+
+      "对照：钩子抛错那一支会 warn＝故障出声、缺料不出声（第 201 页两面实测：缺省臂冲突 0 条＝放行）",
+    apply: (s) => s.replace("  if (graphIsPartial(graph.files.length, graph.candidates)) {\n", "  if (false) {\n"),
+    expectFail: "语义租约在图非全量时出声，空波及不当结论",
+  },
+  {
+    id: "impact-hook-note-loses-coverage",
+    src: "src/agent/impact/index.ts",
+    test: "tests/impact-cap-policy.test.ts",
+    desc: "write/edit 后那句回注不再带覆盖面自述 ⇒「波及 2 个文件」与「图只扫了 3 个文件」同形，"+
+      "模型以为问全了（读端工具早自述、注入面从不自述＝同族只硬化一支）",
+    apply: (s) => s.replace("  const cov = coverageNote(r.graphFiles, r.graphCap, r.graphCandidates);\n", "  const cov = \"\";\n"),
+    expectFail: "注入摘要带上同一句覆盖面自述（图全量时逐字不变）",
   },
 
   // ── 第 184 页：shell 家族的失败归因（判据只有一只，文案按出口分档；待办 #25）

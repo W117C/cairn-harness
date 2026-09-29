@@ -11,6 +11,7 @@
 import { defaultImpactCacheDir, downward, fileImpact, upward, buildImpact, IMPACT_CONTEXT_FILES, IMPACT_CONTEXT_SYMBOLS_PER_FILE, IMPACT_MAX_FILES_CEILING, type ImpactSite } from "../agent/impact/index.js";
 import { access } from "node:fs/promises";
 import { MAX_FILES_DEFAULT, scanSourceFilesAll } from "../agent/map/build.js";
+import { capAtCeiling, capCauseNote, capWayOut, coverageNote } from "../agent/impact/coverage.js";
 import { SUPPORTED_EXTS } from "../agent/map/parse.js";
 import { assertNotAgentArea, assertRealContainment, resolveInWorkspace, ToolError, type Tool, type ToolResult } from "./base.js";
 
@@ -42,7 +43,9 @@ export function graphAbsenceNote(rel: string, cap: number, pos: number | null): 
   if (pos >= cap) {
     return `impact_query: ${rel} 在候选集第 ${String(pos + 1)} 位，而本次图只收录 ${String(cap)} 个` +
       `（帽按最近改动取）⇒ 被文件数帽挤掉，波及半径未知（**不等于 0**）；` +
-      "要么直读该文件与其引用方（grep/lsp），要么调大 maxFiles 后重问";
+      (capAtCeiling(cap)
+        ? capWayOut(cap)
+        : `要么直读该文件与其引用方（grep/lsp），要么${capWayOut(cap)}`);
   }
   return `impact_query: ${rel} 排在候选集第 ${String(pos + 1)} 位（帽内），却没进这张图 ⇒ 图是刚才那次构建的快照` +
     "（新建/刚改名，或该文件解析失败被跳过）；再问一次即可让它进图";
@@ -67,16 +70,18 @@ async function notInGraphNote(workspace: string, rel: string, abs: string, cap: 
 }
 
 /** `maxFiles` 的取值口径（纯函数）。非法值一律**点名拒绝**，不静默回落成缺省：
- *  「帽外」那条说明正教模型去调大它，若 0 / 小数 / 超上限被悄悄换成 400，
+ *  「帽外」那条说明正教模型去调它，若 0 / 小数 / 超上限被悄悄换成缺省值，
  *  模型会以为自己的取值生效了——与本工具其他参数同一不妥协口径。
  *  上界不是装饰：这一位现在由模型传，而建图是每文件一次 tree-sitter 解析（依据见
- *  `IMPACT_MAX_FILES_CEILING` 的实测注释）。 */
+ *  `IMPACT_MAX_FILES_CEILING` 的实测注释）。
+ *  09-30 起缺省＝上限 ⇒ 这一位**只能调小**：错误文案不许再说"要更全就报一个上限内的数"
+ *  （那句在没有上调空间时是死参数式文案，判卷见 `graphAbsenceNote` 那组）。 */
 export function resolveMaxFiles(raw: unknown): number {
   if (raw === undefined) return MAX_FILES_DEFAULT;
   if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 1 || raw > IMPACT_MAX_FILES_CEILING) {
     throw new ToolError(
       `impact_query: maxFiles 必须是 1..${String(IMPACT_MAX_FILES_CEILING)} 的整数` +
-        `（收到 ${typeof raw} ${String(raw)}）——缺省是 ${String(MAX_FILES_DEFAULT)}，要更全的图就报一个上限内的数`,
+        `（收到 ${typeof raw} ${String(raw)}）——缺省已是上限 ${String(MAX_FILES_DEFAULT)}，这一位只能往小调`,
     );
   }
   return raw;
@@ -95,42 +100,10 @@ export async function graphCandidatePosition(workspace: string, rel: string): Pr
   }
 }
 
-/** 覆盖面自述（纯函数）：图没把候选收全时，**成功**答案也要说清自己量了多大一块。
- *
- *  为什么阳性一侧也要说：本工具的**阴性**结论早就各自带分诊（"无跨文件调用点"、"图里没有这个符号"
- *  都会说"不等于 0"），但一个**成立**的答复原先只报结果不报覆盖面 ⇒ 模型看到"波及 1 个文件"就以为
- *  问全了，而这张图可能只收了仓库的一小截（2026-09-25 本仓实测：451 个候选只收 400）。
- *  这与 grep/glob 那条"阴性要说清扫描面"是同一条政策的后半句。
- *
- *  判据从「收录数 < 帽」换成「候选数 > 收录数」，两侧都比旧句子准：
- *  ⑴ 旧句在 `收录数 == 帽 == 候选数` 时**误报**"非全量"（一个都没漏，模型白重问一次）；
- *  ⑵ 反向漏报更实在：单文件读/解析失败被跳过时 `收录数 < 帽`，旧句直接闭嘴，而那张图确实缺文件。
- *     切片之外还有 skip 这一支，所以只有候选数能判覆盖面；
- *  ⑶ 分母本来就免费——`buildImpact` 里那份全量候选是切片**前**数组的长度，不是第二次 rg。
- *     第 55 页那句"挤掉多少个要重扫全量候选才知道，而这一格不值一次 rg"在建图这一支不成立：
- *     真正需要重扫的是「图里没有它」那条分诊（`graphCandidatePosition`），那一支照旧自己付。
- *  措辞把"没进图"的两种成因一起点名（帽外 / 被跳过），不只怪帽。 */
-export function coverageNote(files: number, cap: number, candidates: number): string {
-  if (candidates <= files) return "";
-  return `（覆盖度：本图收录 ${String(files)} 个文件＝帽 ${String(cap)}，` +
-    `另有 ${String(candidates - files)} 个候选文件没进这张图（帽外或被跳过）⇒ 图非全量，` +
-    "图里没有 ≠ 仓库里没有；要更全调大 maxFiles 后重问）";
-}
-
-/** 「图里没有它」的成因收敛（纯函数）：把「可能被帽挡在图外」从**恒真**改成**条件真**。
- *
- *  两条阴性出口（符号彻底查不到 / 只有引用没有定义）原先都无条件列着这一成因。
- *  而 `applyFileCap` 只在候选数 > 帽时才切那一刀 ⇒ 在小仓库上"被帽挡"是一句**不可能成立**的假设，
- *  模型照着去调大 `maxFiles` 就是白跑一轮（与第 51 页那条「死参数式文案」同族：文案指向此输入下
- *  不存在的开关）。反过来真到帽时这一类必须留着——否则又回到"把未知说成没有"。
- *  与 `coverageNote` 共用同一判据（`candidates > files`），两处不会自相矛盾。 */
-export function capCauseNote(files: number, cap: number, candidates: number): string {
-  return candidates > files
-    ? `本图收录 ${String(files)} 个文件＝帽 ${String(cap)}，另有 ${String(candidates - files)} 个候选没进这张图` +
-      `（非全量）⇒ 这一刀可能把它切在图外，调大 maxFiles 后重问可排除这一成因`
-    : `与帽无关：本图收录 ${String(files)} 个文件，全仓候选 ${String(candidates)} 个 ⇒ 没有文件是被帽切掉的` +
-      "（被忽略规则/噪声目录排除、后缀不支持仍然成立）";
-}
+/** 覆盖面两把纯函数（`coverageNote` / `capCauseNote`）与「帽还能不能往上拧」那条出路
+ *  （`capWayOut`）现在住在 **`src/agent/impact/coverage.ts`**：同一张图的另外三个消费者
+ *  （write/edit 回注摘要、语义租约、仓库地图）要说同一句话，判据留在这里就得被再抄一遍
+ *  （第十四族）。本工具只是它的读端之一，直接 import。 */
 
 /** 并集自述（纯函数）：同名符号在多个文件各有一份定义时，`upward` 给的是**各份的并集**——
  *  图只按名字连边（`map/parse.ts` 的 tag 只有 def|ref，不采 import），所以里面一定混着
@@ -256,7 +229,8 @@ export const impactQuerySpec = {
       deps: { type: "boolean", description: "配合 file：改列本文件引用的外部定义（我在调用谁）" },
       // 刻意只写这一句：规格是**每轮重送**的固定成本（帽 <600B 有测钉着），长解释留在
       // 真用到它的那条报错文案里（graphAbsenceNote 会报出实发的帽与出路）。
-      maxFiles: { type: "number", description: `帽外时调大（缺省 ${String(MAX_FILES_DEFAULT)}）` },
+      // 09-30：缺省已是上限 ⇒ 这句不再写"帽外时调大"（教模型拧一个拧不动的旋钮＝死参数式文案）。
+      maxFiles: { type: "number", description: `建图文件数帽（缺省＝上限 ${String(MAX_FILES_DEFAULT)}，只能调小）` },
     },
   },
 } as const;

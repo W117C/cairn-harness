@@ -9,7 +9,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileTags, TAGS_EXTRACT_VERSION, TreeSitterUnavailableError, type SymbolTag } from "../map/parse.js";
-import { applyFileCap, MAX_FILES_DEFAULT, scanSourceFilesAll, type ScannedFile } from "../map/build.js";
+import { applyFileCap, MAX_FILES_CEILING, MAX_FILES_DEFAULT, scanSourceFilesAll, type ScannedFile } from "../map/build.js";
+import { coverageNote, graphIsPartial } from "./coverage.js";
 
 /** grammar 环境级失败（坏/缺失 wasm）：影响面是护栏能力，必须 fail-loud。
  *  文案固定含 "unavailable"（判卷锚点）。 */
@@ -41,6 +42,9 @@ export interface ImpactGraph {
    *  所以这个数不要第二次 rg（第 55 页「挤掉多少个要重扫全量候选，这一格不值一次 rg」
    *  那句理由在建图这一支不成立——切片就在这行发生）。 */
   candidates: number;
+  /** **这一张图实际生效的帽**（`opts.maxFiles ?? MAX_FILES_DEFAULT`）。
+   *  读端与回注摘要要说「＝帽 N」时用它，不许自己再解析一遍缺省——那是同族「两处各写一个数字」。 */
+  cap: number;
   /** symbol → 定义点（可能多文件同名人）。 */
   defs: Map<string, ImpactSite[]>;
   /** symbol → 引用点（含同文件自引用；查询层负责过滤跨文件）。 */
@@ -57,16 +61,20 @@ export interface BuildImpactOptions {
   workspace: string;
   /** tags 缓存目录（缺省 = 应用数据目录；测试给临时目录，避免污染用户主目录）。 */
   cacheDir?: string;
-  /** 文件数帽（缺省 400，同 map）。 */
+  /** 文件数帽（缺省＝安全阀 `MAX_FILES_DEFAULT`，同 map——09-30 起它不再是 400，见 `map/build.ts` 那段）。 */
   maxFiles?: number;
 }
 
-/** 帽的上限。为什么要有这一位：`maxFiles` 现在由**模型**传（`impact_query` 的读端说明让它调），
+/** 帽的上限。**数值的事实源在 `map/build.ts:MAX_FILES_CEILING`**，这里只是别名——
+ *  从前两处各写一个 5000/400 ⇒ 一处调、另一处静默不跟（同族：第十四族"同一谓词多份副本"）。
+ *  为什么要有这一位：`maxFiles` 现在由**模型**传（`impact_query` 的读端说明让它调），
  *  没有上界就等于给它一个"解析任意多个文件"的开关——建图是每文件一次 tree-sitter 解析。
  *  取 5000 的依据是本机实测（2026-09-24，本仓 448 个候选源码冷建）：**每文件 ≈1.9ms**，
  *  cap=400 → 827ms、全量 448 → 836ms ⇒ 5000 个 ≈10s，与一次模型往返（8.7–42s）同量级，
- *  且 tags 缓存按文件 `{mtime,size}` 记账，第二次只解析新增那批。 */
-export const IMPACT_MAX_FILES_CEILING = 5000;
+ *  且 tags 缓存按文件 `{mtime,size}` 记账，第二次只解析新增那批。
+ *  09-30 同位补测（独立进程、两种顺序各跑一次，`outputs/impact-cap-decision-2026-09-30/`）：
+ *  本仓候选 512 时 帽400 中位 1071ms → 全量 1247ms ⇒ **＋176ms／次建图**（同臂散布 ≤13ms）。 */
+export const IMPACT_MAX_FILES_CEILING = MAX_FILES_CEILING;
 
 // ---- tags 磁盘缓存（同 map/build.ts 模式：{mtimeMs,size} 指纹；缓存只在 cacheDir 内）----
 
@@ -207,6 +215,7 @@ export async function buildImpact(opts: BuildImpactOptions): Promise<ImpactGraph
   return {
     files: [...files.map((f) => f.rel)].sort(),
     candidates: candidates.length,
+    cap,
     defs,
     refs,
     edges,
@@ -278,6 +287,9 @@ export interface FileImpactReport {
    *  不带它，file 支只能说「非全量」而说不出漏了几个 —— 三支自述里只有这一支的数
    *  要穿过 `fileImpact` 这一层，少接一层就是那一支静默回到没有分母的旧句子。 */
   graphCandidates: number;
+  /** 这一张图生效的帽（同 `ImpactGraph.cap`）。注入摘要要说「＝帽 N」，就得知道 N 是几——
+   *  少带这一位，回注那一侧要出声只能自己再解析一遍缺省（同族「两处各写一个数字」）。 */
+  graphCap: number;
   /** 本文件的定义符号里，哪些**在别的文件也有一份同名定义**（按名字顺序）。
    *  符号图只按名字连边、不采 import ⇒ 这些符号的向上清单是**各份定义的并集**，
    *  里面混着"另一份定义的调用方"（假阳性）。读端不点名，模型就无从知道该收窄。 */
@@ -315,6 +327,7 @@ export async function fileImpact(
     truncated,
     graphFiles: graph.files.length,
     graphCandidates: graph.candidates,
+    graphCap: graph.cap,
     ambiguousSymbols,
   };
 }
@@ -330,13 +343,18 @@ export type ImpactHook = (
  *  广泛调用符号的单次写入输出可达数千 token；新实现按文件归并，
  *  上限约 IMPACT_CONTEXT_FILES * (IMPACT_CONTEXT_SYMBOLS_PER_FILE + 计数尾) 行。 */
 export function contextNoteFor(r: FileImpactReport): string {
+  /* 覆盖面自述与查询端**共用同一把尺**（`impact/coverage.ts`）：图非全量时，这一句里的 N
+   * 本身就是被帽切过的 ⇒ 不带上它，"波及 1 个文件"与"图只扫了仓库的一小截"在注入面长同一个样。
+   *  缺省帽已是安全阀（`MAX_FILES_DEFAULT`），正常仓库收全 ⇒ 这一句今天多半为空，
+   *  空的时候不改任何一个字节（有反向对照判卷钉着）。 */
+  const cov = coverageNote(r.graphFiles, r.graphCap, r.graphCandidates);
   if (r.up.length === 0) {
     // 这条是**最常见**分支（改到没有跨文件引用的文件），而 symbols 含函数内局部名（base/boosted…），
     // 大文件能上百个 ⇒ 注入面按每文件符号帽收窄；全量仍在 impact_report 事件的 symbols 里（面板/审计不丢）。
     const cap = IMPACT_CONTEXT_SYMBOLS_PER_FILE;
     const listed = r.symbols.slice(0, cap).join(", ");
     const tail = r.symbols.length > cap ? ` 等 ${String(r.symbols.length)} 个（全量在 impact_report 事件）` : "";
-    return `[impact] ${r.file}：定义符号 ${r.symbols.length ? listed + tail : "（无）"}，无跨文件调用点（波及半径为 0）`;
+    return `[impact] ${r.file}：定义符号 ${r.symbols.length ? listed + tail : "（无）"}，无跨文件调用点（波及半径为 0）` + cov;
   }
   const byFile = new Map<string, { symbol: string; line: number }[]>();
   for (const s of r.up) {
@@ -364,7 +382,7 @@ export function contextNoteFor(r: FileImpactReport): string {
   if (files.length > shown.length) {
     lines.push(`  \u2026另有 ${files.length - shown.length} 个文件未列出（完整调用点清单在 impact_report 事件里）`);
   }
-  return lines.join("\n");
+  return lines.join("\n") + cov;
 }
 
 export function defaultImpactHook(workspace: string, cacheDir?: string): ImpactHook {
@@ -410,14 +428,28 @@ export function globMatchesPath(glob: string, path: string): boolean {
 }
 
 /** 声明「要写这些 glob」⇒ 实际会波及哪些文件（含被声明文件自身，排序去重）。
- *  grammar/索引不可用 ⇒ 抛 ImpactUnavailableError（调用方按降级处理，不静默返回空集）。 */
+ *  grammar/索引不可用 ⇒ 抛 ImpactUnavailableError（调用方按降级处理，不静默返回空集）。
+ *
+ *  「图非全量」必须**出声**（09-30 补，第 201 页的实测）：这一支的返回值直接进 spawn 准入——
+ *  `semanticConflictsVia` 见空波及就 `return []`，其理由「无跨文件调用点，宁漏不误伤」**默认图是全的**，
+ *  而 orchestrator 冲突 0 条时连审批卡都不发。从前钩子抛错会 `console.warn`、缺料什么都不说
+ *  ⇒ 故障出声、缺料不出声。`maxFiles` 是给读端/判卷留的透传位（同 `fileImpact`）：生产缺省已是
+ *  安全阀上限，正常仓库不会走到那句出声。 */
 export async function affectedFilesOf(
   workspace: string,
   globs: readonly string[],
   cacheDir?: string,
+  maxFiles?: number,
 ): Promise<string[]> {
   if (globs.length === 0) return [];
-  const graph = await buildImpact({ workspace, cacheDir });
+  const graph = await buildImpact({ workspace, cacheDir, maxFiles });
+  if (graphIsPartial(graph.files.length, graph.candidates)) {
+    console.warn(
+      `[impact] 语义租约：本图收录 ${String(graph.files.length)} 个文件＝帽 ${String(graph.cap)}，` +
+        `另有 ${String(graph.candidates - graph.files.length)} 个候选没进这张图（非全量）` +
+        "⇒ 下面的波及闭包可能不完整，**空波及不等于无冲突**",
+    );
+  }
   const out = new Set<string>();
   for (const file of graph.files) {
     if (!globs.some((g) => globMatchesPath(g, file))) continue;

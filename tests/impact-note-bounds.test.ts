@@ -4,10 +4,12 @@
 import { describe, expect, it } from "vitest";
 import { contextNoteFor, IMPACT_CONTEXT_SYMBOLS_PER_FILE, type FileImpactReport } from "../src/agent/impact";
 
-function report(symbols: string[], up: FileImpactReport["up"] = []): FileImpactReport {
-  // graphFiles / graphCandidates / ambiguousSymbols 只服务查询端的自述（覆盖面、同名歧义），
-  // 注入摘要 contextNoteFor 三支都不读 ⇒ 这里给真值即可。
-  return { file: "src/a.ts", symbols, up, truncated: false, graphFiles: 1, graphCandidates: 1, ambiguousSymbols: [] };
+function report(symbols: string[], up: FileImpactReport["up"] = [], face?: { files: number; cap: number; candidates: number }): FileImpactReport {
+  // ambiguousSymbols 只服务查询端（同名歧义那句），注入摘要不读 ⇒ 给真值即可。
+  // graphFiles / graphCap / graphCandidates **被摘要读**（09-30 起）：图非全量时那句覆盖面自述
+  // 要进回注，缺省给"收全"的一组 ⇒ 其余用例逐字不受影响（反向对照另有专条）。
+  const face2 = face ?? { files: 1, cap: 1, candidates: 1 };
+  return { file: "src/a.ts", symbols, up, truncated: false, graphFiles: face2.files, graphCap: face2.cap, graphCandidates: face2.candidates, ambiguousSymbols: [] };
 }
 
 describe("无跨文件调用点分支的符号清单有界", () => {

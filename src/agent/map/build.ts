@@ -14,8 +14,19 @@ import { buildGraph, personalizedPageRank, type FileTagsInput } from "./rank.js"
 import { clampBudget, renderMapBudget } from "./render.js";
 
 const NOISE_GLOBS = ["**/.git/**", "**/node_modules/**", "**/dist/**", "**/out/**"];
-/** 文件数帽的**唯一事实源**（impact 侧以前各写一个 400 字面量 ⇒ 一处调、另一处静默不跟）。 */
-export const MAX_FILES_DEFAULT = 400;
+/** 文件数帽的**唯一事实源**（impact 侧以前各写一个 400 字面量 ⇒ 一处调、另一处静默不跟）。
+ *
+ *  为什么缺省＝上限（09-30 改）：这一位从前是 **400**，而切片前那份候选是**按 mtime 降序**排的
+ *  （下面 `scanSourceFilesAll` 那行注释自己写着"优先最近改动的文件"）⇒ 它的真实语义不是"最重要的 400 个"，
+ *  而是"**这台机器最近动过的 400 个**"。实测两棵同一份代码的树：`git worktree add` 出来的树里所有文件同一个 mtime，
+ *  入图最旧与图外最新同秒 ⇒ 边界由 `rg` 的遍历顺序决定；把口径换成字典序，入图集合差 21–28%
+ *  （读数与复跑命令：`outputs/impact-cap-decision-2026-09-30/`）。同一顶帽还喂着**给模型看的仓库地图**
+ *  （`buildMap` 也走 `scanSourceFiles`）与**spawn 准入的语义租约**（`affectedFilesOf`），后者把"图外"读成"不相交"。
+ *  ⇒ 帽不该是覆盖面政策，只该是**成本安全阀**：正常仓库全收（本仓 512 个候选，实测代价 ＋176ms／次建图，
+ *  1071→1247ms、同臂散布 ≤13ms），只有大到 `MAX_FILES_CEILING` 才切——那一刀之后**不再谎称"调大 maxFiles"能救**
+ *  （见 `tools/impact-query.ts` 的帽外文案：到了上限就把出路换成"按目录拆仓/直读"）。 */
+export const MAX_FILES_CEILING = 5000;
+export const MAX_FILES_DEFAULT = MAX_FILES_CEILING;
 const RECOMPUTE_EVERY_DEFAULT = 10;
 
 export interface TagsCacheEntry {
@@ -76,8 +87,17 @@ export async function scanSourceFilesAll(workspace: string): Promise<ScannedFile
       // stat 失败的文件跳过（ races / 坏链接）
     }
   }
-  out.sort((a, b) => b.mtimeMs - a.mtimeMs); // 优先最近改动的文件
+  out.sort(compareCandidates);
   return out;
+}
+
+/** 候选次序（唯一判据）：**mtime 新→旧，同秒按 workspace 相对路径字典序**。
+ *  第二级不是装饰：`git worktree add`／`git checkout` 出来的树里所有文件共用一个秒，
+ *  只按 mtime 排 ⇒ 谁进图由 `rg` 的目录遍历顺序决定，同一份代码在两台机器上给出两张图。
+ *  本机实测（2026-09-30，`/tmp/rgorder` 九个同 mtime 的 .ts）rg 的原始顺序是
+ *  `y a e d x c z b m`——**不是**字典序 ⇒ 摘掉第二级是可观察的突变（有判卷与锚点）。 */
+export function compareCandidates(a: ScannedFile, b: ScannedFile): number {
+  return (b.mtimeMs - a.mtimeMs) || (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0);
 }
 
 /** 帽只在这一处发生（"取最近 N 个"这条政策不许有第二份实现）。 */

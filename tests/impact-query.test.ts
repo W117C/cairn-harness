@@ -6,8 +6,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { capCauseNote, coverageNote, createImpactQueryTool, graphAbsenceNote, graphCandidatePosition, impactQuerySpec } from "../src/tools/impact-query";
-import { MAX_FILES_DEFAULT } from "../src/agent/map/build";
+import { createImpactQueryTool, graphAbsenceNote, graphCandidatePosition, impactQuerySpec } from "../src/tools/impact-query";
+// 覆盖面两把纯函数 09-30 挪进 `src/agent/impact/coverage.ts`：同一张图的四个消费者要说同一句话，
+// 判据留在读端工具里就会被别处再抄一遍（第十四族）。
+import { capCauseNote, coverageNote } from "../src/agent/impact/coverage";
+import { MAX_FILES_CEILING, MAX_FILES_DEFAULT } from "../src/agent/map/build";
 import { TOOLS } from "../src/tools";
 import type { ToolContext } from "../src/tools/base";
 import { checkPermission, isSideEffectTool } from "../src/permissions";
@@ -320,14 +323,28 @@ describe("maxFiles：说明里那句出路必须真够得着（三个建图出�
   //  structural 上看不见"输出文案里点名的那个参数存不存在"——本轮那条缺陷正好躲在这台机器的
   // 面之外（声明与自读两边都是三个键，完全自洽，而文案在教第四个）。所以这里补一道
   // **文案 ↔ 规格** 的握手：说明里写「调大 X」，X 就必须真的在规格上。
-  it("文案里点名的参数必须真的在规格上（说「调大 X」而 X 不存在＝教模型走一条走不通的路）", () => {
+  // 09-30 补另一半：缺省帽现在**就是**上限 ⇒ 「调大」在默认调用下是死参数式文案，
+  // 握手尺要同时判「能调时给得出出路」与「调不动时不许再教模型去拧」。
+  it("文案里点名的参数必须真的在规格上；顶到上限时那句出路要换成拧得动的", () => {
     const declared = new Set(Object.keys(impactQuerySpec.parameters.properties));
-    for (const c of [1, MAX_FILES_DEFAULT + 5]) {
+    for (const c of [1, 400]) {
       const note = graphAbsenceNote("src/x.ts", c, c + 3); // 帽外那一支
       const named = [...note.matchAll(/调大 ([A-Za-z_][A-Za-z0-9_]*)/gu)].map((m) => m[1]);
       expect(named.length, "帽外这一支必须仍给出「调帽」这条出路").toBeGreaterThan(0);
       for (const key of named) expect(declared.has(key), `文案点名 ${String(key)}，规格里却没有它`).toBe(true);
     }
+    const atCeiling = graphAbsenceNote("src/x.ts", MAX_FILES_CEILING, MAX_FILES_CEILING + 3);
+    expect(atCeiling, "帽已顶到上限还教模型调大＝第 51 页那族死参数式文案").not.toContain("调大 maxFiles");
+    expect(atCeiling).toContain("上限");
+    expect(atCeiling).toContain("按目录拆仓");
+    // 这一格不是假想路径：缺省＝上限 ⇒ 模型不传 maxFiles 时走的就是上面那一支
+    expect(MAX_FILES_DEFAULT, "缺省帽若不再等于上限，上面那句「调不上去」就成了假话").toBe(MAX_FILES_CEILING);
+  });
+
+  it("规格里那句 maxFiles 说明也不许承诺一条拧不动的出路（规格每轮重送，比文案更贵）", () => {
+    const desc = impactQuerySpec.parameters.properties.maxFiles.description;
+    expect(desc).not.toMatch(/调大/u);
+    expect(desc).toContain("只能调小");
   });
 });
 
