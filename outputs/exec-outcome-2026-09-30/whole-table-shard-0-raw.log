@@ -1,0 +1,287 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p216w-0.lock）
+变异验证：278 条
+✅ provider-keys-fail-closed — safeStorage 不可用时仍装配后端（绕过 fail-closed → 明文退路） ｜本机实测 0.9s／2 拍
+✅ lsp-config-fail-loud — 坏 JSON 不 fail loud 而是静默关闭（配置错误被吞，该启用的服务器没启用） ｜本机实测 0.8s／2 拍
+✅ lsp-diag-severity — 去掉 ERROR 级过滤（警告也回流，污染 edit/write 输出） ｜本机实测 0.8s／2 拍
+✅ lsp-diag-cap — 去掉 ≤20 条上限（诊断洪水灌满工具输出，挤掉真正信息） ｜本机实测 0.8s／2 拍
+✅ lsp-diag-1based — 诊断行号忘 +1（对外 1-based 契约破裂，行号全偏 1） ｜本机实测 0.8s／2 拍
+✅ lsp-broken-no-retry — broken 服务器仍重试（已知坏的服务器每次调用都重新 spawn/挂起） ｜本机实测 0.7s／2 拍
+✅ model-goal-set-resets-turn-counter — 模型自设那条也当人设处理 ⇒ 每轮改一次措辞就把轮次帽归零（续跑到天荒地老，还是自己给自己批的） ｜本机实测 1.0s／2 拍
+✅ model-goal-set-can-arm-a-cold-session — 没有已武装目标时模型自设也算武装 ⇒ 模型自己给自己开了续跑通道（武装那道闸归人） ｜本机实测 0.9s／2 拍
+✅ refine-goal-accepts-budget-args — 不再拒 max_turns/max_usd ⇒ 模型可以顺手把自己的额度改了（而它会以为成功） ｜本机实测 1.0s／2 拍
+✅ refine-goal-revives-stopped-target — 已停的目标被一次改措辞复活 ⇒ 「停止是终态」那条既有语义从后门破 ｜本机实测 1.0s／2 拍
+✅ refine-goal-drops-inherited-caps — 落的 goal_set 不带人设的帽而自带一个数 ⇒ 审计面看不出这是谁抬的闸（继承是这条线唯一的实现处） ｜本机实测 1.0s／2 拍
+✅ remember-redact-gate-bypassed — 记忆写入不再过脱敏 pass ⇒ 凭据明文进 .agent/ 与全局层（跨会话、跨项目共享，且会沉淀进索引） ｜本机实测 0.7s／2 拍
+✅ remember-blocked-not-rejected — blocked 档从「拒绝」降级成「照常写」⇒ 私钥块被掩码后落盘，违背 scan.ts 既有契约（调用方应拒绝而非仅脱敏） ｜本机实测 0.7s／2 拍
+✅ semantic-admission-never-reports — 语义波及相交不再上报（B1 退化回「只看 glob」：两个 worker 各改各文件却波及同一批调用点，合并时才打架） ｜本机实测 2.2s／2 拍
+✅ semantic-admission-guard-removed — 去掉「未接钩子 / 空声明 / 无 worker」前置（impactAnalysis 关闭时 spawn 会被 undefined 钩子炸掉） ｜本机实测 1.7s／2 拍
+✅ impact-closure-glob-broken — 波及闭包的入面从 glob 匹配退化成整串相等（目录型 resources 声明
+ 再也算不出波及） ｜本机实测 2.2s／2 拍
+✅ session-spawn-visible-side-effect — spawn_agent 从写向工具集合里摘掉（只读档会话就能派 worker：花真钱 + write 档 worker 会写盘） ｜本机实测 1.9s／2 拍
+✅ context-budget-ignores-model-window — 预算基线退回硬编码 128k（高档位模型提前压缩 = 多烧一次摘要 + 白丢冷细节；误拒合法请求） ｜本机实测 1.0s／2 拍
+✅ goal-window-booked-sum-dropped — worker 回执里已入账的表价不再累加 ⇒ 闸只看主会话那一段，派多少活都不涨钱（上限形同虚设） ｜本机实测 1.0s／2 拍
+✅ goal-window-prices-worker-at-session-tier — 把 worker 的 token 也并进主会话桶 ⇒ 回到「全部 token × 会话档」，与同一屏的回执分叉（40 倍） ｜本机实测 1.0s／2 拍
+✅ goal-lag-note-never-shown — 在途 worker 的滞后不再说出口 ⇒ 下一轮数字突然跳升，会被模型和人读成「上一轮什么都没花」 ｜本机实测 1.0s／2 拍
+✅ anthropic-prompt-cache-default-on — 断点开关缺省变开（未经用户同意就改写请求体形状：system 从整串变块数组，且每次缓存重写多付 25%） ｜本机实测 1.3s／2 拍
+✅ anthropic-breakpoint-on-last-system-block — 断点从首块挪到末块（把逐轮变化的记忆/地图圈进缓存条目 = 每轮重写一段大前缀，比不打点更贵） ｜本机实测 1.2s／2 拍
+✅ anthropic-breakpoint-on-every-tool — 每个 tool 都打断点（Anthropic 上限 4 个断点，工具一多直接 400；且重复条目只会多付写价） ｜本机实测 1.5s／2 拍
+✅ pricing-cache-null-priced-as-zero — 缓存价未标定当成 0（把「不知道多少钱」冒充「命中免费」，bandit 会为了虚假的省钱信号涌向缓存档） ｜本机实测 1.4s／2 拍
+✅ pricing-cache-buckets-unclamped — 分块不夹进总输入区间（对端报数不一致时未命中段变负数，成本能被缓存量抵成负的） ｜本机实测 1.5s／2 拍
+✅ orchestrator-prompt-cache-not-plumbed — 路由分支合成模型时不把开关交给分派层（断点逻辑全对，但没有任何调用方能打开它 = 又一次「发货了没人接」） ｜本机实测 2.0s／2 拍
+✅ probe-all-system-counted-static — 把全部 system 块都算成可缓存前缀（记忆/地图逐轮变化被当成静态段 → A1 的收益与成本全被高估） ｜本机实测 1.3s／2 拍
+✅ probe-tool-schema-not-counted — 装配账里漏掉工具 schema（实测占短任务 prompt 的九成——漏掉它，探针就专门量不到最贵的那一块） ｜本机实测 1.4s／2 拍
+✅ probe-delta-sign-reversed — 装配 A/B 差分前后颠倒（省了报成多花、多花报成省了——这张表就是为这个判断存在的）。针脚要吃到 cacheableBytes 那行才唯一：diffLongReplay 的头两条字段与这里逐字相同。 ｜本机实测 1.3s／2 拍
+✅ probe-script-shape-check-removed — 剧本出现非模型产出类型时不报错继续跑（装配账照发，但回放的是残缺剧本 = 假数） ｜本机实测 1.2s／2 拍
+✅ probe-assembly-not-returned — runCase 算出装配账却不带回结果（CLI 与基线永远看不到那一行——探针退化成只有单测能碰的死码） ｜本机实测 1.6s／2 拍
+✅ probe-ranking-drops-separators — 拆账漏掉数组分隔符（排行相加 ≠ 工具面总字节 → 「砍掉这条省 1710B」算少一截，决策账目不闭合） ｜本机实测 1.3s／2 拍
+✅ probe-ranking-sort-reversed — 排行改成升序（CLI 前三名打成最便宜的三条 → 照着表砍错刀） ｜本机实测 1.4s／2 拍
+✅ probe-ranking-not-attached — 报告不带排行（函数正确但没人拿得到 → CLI 那一行永远不打印） ｜本机实测 1.3s／2 拍
+✅ gym-probe-transport-drains-all — 探针 transport 绕过切源、一次吐完（装配账把 10 轮会话记成 1 次请求，成本面当场少算一个数量级） ｜本机实测 1.3s／2 拍
+✅ pricing-unpriced-audit-always-empty — 占位价审计清单恒空（GLM 三行官方页没抓到数这件事被抹掉 ⇒ 未标定的数被当成实测喂进 bandit 代价项） ｜本机实测 1.5s／2 拍
+✅ pricing-cache-write-bucket-priced-as-zero — 缓存写入段按 0 计（Anthropic 建缓存那一笔实测是输入的 ×1.25，抹成免费 ⇒ 首次请求的成本被系统性低估，路由会被「看起来便宜」的档吸走） ｜本机实测 1.4s／2 拍
+✅ mutate-gates-judge-file-blind — 退回「判卷测试文件不在闸内」的旧语义（别人改到一半的 test 会伪装成基线红或变异存活） ｜本机实测 0.8s／2 拍
+✅ worker-impact-spec-not-appended — worker 规格面不再追加 impact_query（执行表里有、模型看不到 ⇒ 又是一次「能力已发货、模型面不可见」，本仓第 4 例） ｜本机实测 1.2s／2 拍
+✅ worker-impact-instance-not-attached — 只挂规格不挂实例（模型调了就 unknown tool；反向的两头断同样致命） ｜本机实测 1.2s／2 拍
+✅ worker-impact-whitelist-not-appended — 白名单忘了追加（规格与实例都挂上了，却被 loop 的 allowedTools 硬闸摘掉 ⇒ 模型一调就「不在本会话工具表」——三重闸各自为政） ｜本机实测 1.2s／2 拍
+✅ shell-tail-transition-remainder-lost — 溢出发生在单个 chunk 内部时不喂尾环（子进程一次吐完 60KB 是常态）⇒ 「保留了结尾」变成假话，尾部结论仍被丢 ｜本机实测 0.7s／2 拍
+✅ shell-tail-assembly-drops-tail — 尾环算好了却在拼装时没接上（模型看到的仍是纯头部） ｜本机实测 0.7s／2 拍
+✅ shell-tail-omitted-count-lies — 省略字节数写死 0（提示说「什么都没省」）⇒ 模型据此认为看到的就是全部输出 ｜本机实测 0.7s／2 拍
+✅ grep-context-cap-removed — 取消上下文档位帽 ⇒ 一句 context=99 就能把整份文件灌进上下文（预算先到先得，后面的调用点全看不见） ｜本机实测 0.7s／2 拍
+✅ grep-context-lines-eat-hit-budget — 命中帽按「行」而非按「命中」计 ⇒ context=5 时可检索命中数被砍到 1/6，模型以为仓库里只有这几处 ｜本机实测 0.7s／2 拍
+✅ grep-context-marker-collides-hit — 邻行前缀去掉缩进 ⇒ 与命中行难以分辨，模型把邻行抄进 old_string 后 not-found 白跑一轮 ｜本机实测 0.7s／2 拍
+✅ grep-always-emits-context — 缺省就带邻行 ⇒ 既有查询输出全体膨胀（「缺省 = 零行为」这条被破） ｜本机实测 0.7s／2 拍
+✅ grep-fixed-flag-dropped — 接了参数却不传 -F ⇒ fixed_strings 成为空转，模型以为收窄了其实没收窄 ｜本机实测 0.9s／2 拍
+✅ grep-budget-omitted-count-lies — 预算截断时不报未列出条数 ⇒ 模型以为已经看全所有调用点，直接开始改 ｜本机实测 0.7s／2 拍
+✅ cjk-weight-collapsed-to-quarter — 退回「一律 chars/4」⇒ 中文段被低估四倍，「≤ 2000 token」的角色块实际能到 6k+，且纯英文测试完全测不出 ｜本机实测 0.7s／2 拍
+✅ cjk-han-range-narrowed — 常用汉字区间被写窄 ⇒ 绝大多数中文正文仍走 1/4 权重（区间表写错比不写更难查：只有生僻字面才露馅） ｜本机实测 0.6s／2 拍
+✅ clamp-cut-by-chars-not-weight — 估算器按类别计数、取点却仍按字符数 ⇒ 中文正文截完仍超预算（估算与执行两套口径，本仓反复踩的同族） ｜本机实测 0.6s／2 拍
+✅ needle-hits-treats-empty-as-ok — 空针脚不报负值 ⇒ 一条 replace(空串, x) 的锚点看着「命中很多」其实永远改不动目标代码 ｜本机实测 0.7s／2 拍
+✅ needle-severity-flattens-warn — 多处命中并入阻断 ⇒ 存量条目当场全红，这条门反而变成没人敢修的债；后果不同的两档必须分开 ｜本机实测 0.7s／2 拍
+✅ audit-re-reads-source-per-entry — 丢掉源文件缓存 ⇒ 220 条逐条重复读文件，秒级门被拖成分钟级（这条门的意义就是秒级可进门禁） ｜本机实测 0.7s／2 拍
+✅ audit-reports-clean-needles — 把「命中一次」也算问题 ⇒ 门对正常表恒红，于是下一个人的动作是关掉它（假红与假绿同样贵） ｜本机实测 0.7s／2 拍
+✅ classify-unknown-flag-ignored — 未知 flag 不再收集 ⇒ 拼错/未合并的 `--check-needles` 被当成无参数，脚本直接开跑全表：在别人的写作窗里就地改源文件几十分钟（2026-09-23 改指：`classifyArgs` 为 `--budget-ms <值>` 加了 consumed 分流，旧针脚整行失效）（2026-09-28 第二次改指：放行 `--flag=值` 连写时这一行改查 `isKnownMutateFlag`，旧针脚又整行失效——规则 229，这次的「别人」还是我） ｜本机实测 0.7s／2 拍
+✅ classify-flags-counted-as-ids — flag 混进位置参数 ⇒ `--check-needles` 被当成一个条目 id，报「未知 id」而不是执行针脚体检（门从此静默不跑）（2026-09-23 改指：同上，分流现在还要跳过被 consumed 吞掉的值位） ｜本机实测 0.7s／2 拍
+✅ line-wise-apply-never-recognized — 不认逐行式 apply ⇒ 那些「故意改所有匹配行」的锚点长期挂 ⚠️ 假警；假警报攒多了，真警也会被一起忽略。针脚随第 153 页的判据搬家（旧针脚指着 `applySource.includes` 那句，已经不在盘上） ｜本机实测 0.7s／2 拍
+✅ line-wise-apply-always-true — 一律当成逐行式 ⇒ 普通单点锚点全都不再核针脚，静态检退回「什么都没看」的空门 ｜本机实测 0.7s／2 拍
+✅ line-wise-exemption-by-text-shape — 退回旧判据「改法文字里含 .split( 」⇒ 免检名单从 4 条涨回 11 条，而那 7 条（针脚或替换文字里恰好含 split( 的普通单点改法）再次静默脱离针脚体检——今天不红，等实现搬家那天也不红 ｜本机实测 0.6s／2 拍
+✅ line-wise-block-branch-dropped — 收紧时把「块体第一句才拆开输入」那一支漏掉 ⇒ 4 条真逐行式里最少有一条被拖回针脚体检，而它们的改法本来就要在多处命中 ⇒ 静态门凭空造出假红（收紧判据必须配反向哨兵，规则 227） ｜本机实测 0.6s／2 拍
+✅ join-row-cap-not-counted — 逐行帽不计入截断提示 ⇒ 「≤400 token」变成「400 + 提示」，承诺被提示自己撑破（SHELL_NOTICE_RESERVE / 报告裁剪同族坑） ｜本机实测 1.0s／2 拍
+✅ join-batch-cap-dropped — 取消整批帽 ⇒ 并发 4 时 4×400 仍能塞穿父上下文（数量有界 ≠ 体积有界） ｜本机实测 1.0s／2 拍
+✅ join-degraded-row-vanishes — 被整批帽牺牲的行整条消失 ⇒ 模型只能以为那个 worker 白跑（静默丢信息比丢摘要更坏） ｜本机实测 1.0s／2 拍
+✅ join-timeout-silently-defaults — 非法 timeout 静默回落缺省 ⇒ 模型以为自己设了 10 分钟、实际只等 2 分钟（fail-visible 反例） ｜本机实测 1.2s／2 拍
+✅ slice-boundary-scanner-blind — 尺子变瞎：切片调用里的注释标记不再被认出来 ⇒ 整条棘轮失去分辨力（清单还在，但没人读盘）。钉的是「识别」这一半，不是「清单」那一半 ｜本机实测 1.1s／2 拍
+✅ slice-boundary-every-string-is-a-marker — 撤掉「以注释标点开头的才算边界」这道筛 ⇒ 切片调用里的每个字符串（含喂给被测码的 fixture 文本）都成标记 ⇒ 快路必然红、且正当用途被逼去写豁免。钉的是「别误伤」那一半 ｜本机实测 1.9s／2 拍
+✅ tail-clamp-keeps-head — 留尾一支退化成留头 ⇒ 错误日志的结论行（N failed / stack 末行）整段丢失，注入的正文改无可改 ｜本机实测 0.6s／2 拍
+✅ tail-clamp-marker-free — 提示行不计入预算 ⇒「≤ 预算」这句承诺被自己的提示撑破（NOTICE_RESERVE 同族坑，这座帽是跨轮重送的） ｜本机实测 0.6s／2 拍
+✅ hook-matcher-star-not-all — 把 `"*"` 从全配档摘掉 ⇒ 它落到 RegExp("*")（抛错）再回落精确比较 ⇒ CC hooks.json 里最常见的 matcher 静默永不命中 ｜本机实测 1.1s／2 拍
+✅ hook-matcher-exact-list-degrades-to-substring-regex — 精确名列表算完后仍拿 matcher 去跑非锚定正则 ⇒ "Edit" 顺手命中 NotebookEdit/EditFile，钩子在用户没点名的工具上执行 ｜本机实测 1.2s／2 拍
+✅ hook-matcher-field-ignores-event — 所有事件一律拿 tool_name 去配 ⇒ SessionStart("startup")/PreCompact("manual")/Subagent*(agent type) 的 matcher 恒不命中（§9.5 表逐事件规定匹配字段） ｜本机实测 1.1s／2 拍
+✅ hook-stdin-written-empty — 写一个空串交出去 ⇒ 钩子拿到 EOF 却什么都不知道：为 CC 写的 hook 全盲（拦不到具体文件），但表面"跑通了" ｜本机实测 1.0s／2 拍
+✅ hook-stdin-never-ended — 写完不 end ⇒ stdin 是永不 EOF 的管道，`cat`/`jq` 类钩子一直挂到缺省 600s 超时被强杀（一次工具调用挂十分钟） ｜本机实测 3.9s／2 拍
+✅ hook-stdin-keeps-internal-field-name — 把我们内部的 tool_args 原名写进 stdin ⇒ CC 钩子读 tool_input 读到 undefined，字段名翻译正是这条契约的全部内容 ｜本机实测 0.9s／2 拍
+✅ hook-stdin-fabricates-empty-agent-id — 缺席字段兜成空串 ⇒ 钩子读到 "" 会当成"有归因但为空"，与"主会话无 agent_id"是两件事（把不可知记成免费） ｜本机实测 0.9s／2 拍
+✅ hook-if-filter-not-applied — handler 选择面不看 `if`（传 undefined）⇒ 解析器与别名全实现了，只是没人拿它筛，等于收下即丢 ｜本机实测 0.9s／2 拍
+✅ hook-if-malformed-skips-handler — 读不懂的 `if` 判成「不匹配」⇒ 守卫型钩子（作者想拦东西）因一个拼写错而彻底不跑，且没有任何地方说它被关了 ｜本机实测 1.0s／2 拍
+✅ hook-if-exec-receipt-removed — 执行期不留回执 ⇒ 装载期警告被面板刷掉后，这一次到底按什么语义跑的就再也无人知道（不静默改语义这条自身失去凭据） ｜本机实测 0.9s／2 拍
+✅ hook-if-cc-tool-alias-removed — 去掉 CC 工具名别名 ⇒ 为 CC 写的 `Write(...)`/`Edit(...)` 型 if 在我们这里永不匹配，钩子静默不跑（§9.5 照抄语义的另一半）。这张表现在由 hook 的 `if` 与 skill/command 的工具权限联动共用（同一张表在 src/tools/base），故针脚改指它 ｜本机实测 1.0s／2 拍
+✅ skill-var-claude-alias-dropped — 只认自家变量名、不认 CC 的 ${CLAUDE_*} ⇒ 生态里现成的 skill 包一半展不开（§9.3 明写「作解析别名，一处 alternation 兼容」） ｜本机实测 1.1s／2 拍
+✅ skill-unknown-var-forged-empty — 认不出 / 没值的 ${VAR} 一律换成空串 ⇒ 正文里凭空少一段路，而谁都不知道少过（把不可知记成「这里什么都没有」） ｜本机实测 1.1s／2 拍
+✅ hook-exec-form-spawns-first-arg — exec form 把 argv[0] 当可执行文件、丢掉声明的 command ⇒ 每条数组形态钩子都在 spawn 它的第一个「参数」（node -e … 变成 spawn 「-e」）→ ENOENT；既有钩子单测全用替身 exec，真实 spawn 面没人跑过 ｜本机实测 1.0s／2 拍
+✅ hook-spawn-error-reason-dropped — spawn 失败的原因被吞 ⇒ 错误只剩「非零退出 null」，看不出是谁没找到（把不可知记成一个不存在的退出码） ｜本机实测 1.1s／2 拍
+✅ plugin-context-note-part-dropped — 摘除说明拼不进模型看到的 system 块 ⇒ 说明写好了却没人读到（收下即丢的新变体） ｜本机实测 1.1s／2 拍
+✅ plugin-context-routing-part-dropped — skill 路由清单不注入 ⇒ 模型再也不知道有哪些 skill 可点（M2e 的整条注入面在模型端从来没有判据看过，这条现在有了） ｜本机实测 1.1s／2 拍
+✅ request-face-never-recomputed — 逐请求工具面收了却从不重算 ⇒ 回到「run 起点冻结一份」的形态：模型中途点起的 skill，下一轮清单里那把还在，只能白叫一次再被执行面拒 ｜本机实测 1.1s／2 拍
+✅ request-face-tools-ignored — 重算了面却仍把构造时那份 tools 发出去 ⇒ 说明与清单从此各说各话（模型被告知工具没了、请求里却还带着它） ｜本机实测 1.1s／2 拍
+✅ mcp-spec-carrier-drops-grade — 规格面不带注解出厂 ⇒ 下游的 mode 判定没有输入，只能凭空猜哪把是只读的（摘除面与门面重新分家） ｜本机实测 2.4s／2 拍
+✅ mcp-spec-face-read-only-filter-two-standards — 规格面的只读摘除改用静态写向表 ⇒ 门必拒的 MCP 工具仍挂在模型清单上，白叫一轮再吃一句拒绝 ｜本机实测 2.2s／2 拍
+✅ lsp-failure-folded-into-clean — 语言服务器起不来/超时时又回空串 ⇒ 模型把「没验成」读成「没有错误」（写后诊断回流这条能力白装） ｜本机实测 0.8s／2 拍
+✅ lsp-internal-protocol-text-leaks-to-model — 缺席原因不再归类 ⇒ 把 jsonrpc 的内部文本（Pending response rejected…/connection got disposed）原样塞进每次写盘的回流，模型读不懂也改不了 ｜本机实测 0.8s／2 拍
+✅ evidence-receipt-reports-known-completeness-as-unknown — 收据的完整性回条写死 unknown ⇒ 系统明明把每条引文逐字对过原文却报「不知道」，模型只能白召回一次或重跑同一条命令 ｜本机实测 1.1s／2 拍
+✅ price-for-model-lookup-dropped — 反查被摘掉，只认显式传入的档位 id ⇒ 模型名那一态恒不产值表键（worker 未路由时与 goal 续跑两条路一起退回「价格不可知」） ｜本机实测 1.2s／2 拍
+✅ manual-compact-push-only-never-persisted — 手动压缩只推不落盘（历史原样）⇒ 压缩卡当场看得见、下一次 run 重放又是全文：花一次摘要的钱换个零效果。演示那条支用会话管线，所以它红着门也绿 ｜本机实测 2.0s／2 拍
+✅ manual-compacts-last-run-instead-of-open-session — 丢掉 sessionId ⇒ 压到 lastLogPath（本进程最后一次 run 的会话）。用户点的是屏幕上这条，压错的后果是「按了没效果 + 另一条被偷偷改写」 ｜本机实测 2.0s／2 拍
+✅ anchor-duplicate-id-check-lost — 锚点 id 唯一性检查被收成恒不命中 ⇒ 表里两条锚点共用一个 id 时门照样报「全部可判定」，而 `mutate-verify <id>` 会同时跑两条、报告两行同 id 不同改法（读不出哪条活着）。2026-09-23 我往表尾插锚点时真造成过一次，当时秒级门完全没声音 ｜本机实测 0.7s／2 拍
+✅ mutate-preflight-refusals-dropped — 整跑前的拒绝名单收成恒空 ⇒ 门又回到「跑到第 k 条才撞上未跟踪源文件」：实测烧掉 19 分钟，抛死后账本里连一条读数都不留（pnpm facts 看不见这次跑过） ｜本机实测 0.8s／2 拍
+✅ mutate-leftover-backup-blind — 残留备份检查变成恒空 ⇒ 上一次被 kill 的整跑留下的 `.mutbak` 无人报，下一次开跑时被 cpSync 直接覆盖——那份「崩溃前的原始内容」是还原正确的唯一凭证 ｜本机实测 0.8s／2 拍
+✅ runner-impact-hook-never-constructed — 构造点永不出钩子 ⇒ 影响面「两头断」复活：模块、事件、消费端、单测全在，只有 runLoop 那一环没人接（`tests/impact-wiring.test.ts` 手搭 ctx，看不见这一环） ｜本机实测 3.7s／2 拍
+✅ runner-impact-hook-always-constructed — 构造点不看设置位、永远注入钩子 ⇒ 关着的用户每次写盘都白付一次全仓建图（成本与「缺省零行为」两条纪律一起破） ｜本机实测 3.0s／2 拍
+✅ empty-assert-tail-arg-treated-as-condition — 把条件位判回「最后一个实参是不是 true」（旧正则的形状）⇒ 三参等值签名 check(name, actual, expected) 那族真断言又被整批判成空断言，而体检命中是判红的：判据越界会把「解释怎么写」变成「门表怎么红」 ｜本机实测 1.1s／2 拍
+✅ empty-assert-detail-form-lost — 条件位收成「只有两参时才算」⇒ label-first 带 detail 的 `check(标签, true, detail)` 回到网外。上一版锚点存活就是因为用例挑了三参等值那侧：两条规则只在「true 第二位 + 还有后续实参」这一格分歧 ｜本机实测 1.1s／2 拍
+✅ empty-assert-label-first-lost — 收窄判定面时把该留的那一半也收掉了 ⇒ label-first 的 check("x", true) 不再报，空断言重新无声通过 ｜本机实测 1.1s／2 拍
+✅ tautology-left-branch-lost — 恒真式只认右支字面 true（旧正则的形状）⇒ `true || x` 这一支回到网外。加宽判定面必须有用例钉住新那一支，否则加宽是无声的 ｜本机实测 1.1s／2 拍
+✅ scan-scope-empty-list-silent — 「没拿到清单」与「没有要扫的东西」同形 ⇒ 体检在 git 异常/空清单时静默扫 0 个文件并报零命中（假绿） ｜本机实测 1.2s／2 拍
+✅ tags-version-map-face-dead — map 侧不再比对抽取版本 ⇒ 改了 .scm pattern 后，未变更的文件仍从盘上读回旧判据抽出的 tags，新判据看起来「改了没反应」——这个假象会把一次正确的修法骗人回滚掉 ｜本机实测 1.3s／2 拍
+✅ tags-version-impact-face-dead — impact 这张图独立于 map 抄了一份缓存读取面 ⇒ 只修 map 那一支时，影响面照旧吃旧 tags。两支同值才成立的不变量，变异必须各自废一次（上一支锚点测不到这一支） ｜本机实测 1.3s／2 拍
+✅ tags-version-ignores-patterns — 版本号不再把 pattern 文本算进去（只留手写 REV）⇒ 改判据而版本不动，缓存作废链整条失效，且没有任何一处会红——手写常量当版本就是下一处漂移磁铁 ｜本机实测 0.8s／2 拍
+✅ tags-version-hardcoded-literal — 导出的版本被写成字面量 ⇒ 派生函数还在、测试①还绿，但真机上那张图用的已不是它算出来的值。这一格只有「常量 === 按现网 pattern 算出来的值」这条断言能看见 ｜本机实测 0.8s／2 拍
+✅ impact-local-var-gate-dropped-graph-face — 同一条判据的**消费面**：抽取漏了闸，最终坏在「两个同名局部变量的文件之间出现一条边」这件事上。一支锚点只认一支判卷 ⇒ 图侧那组断言若哪天只看图不看 tags，就得有这条替它盯着 ｜本机实测 1.3s／2 拍
+✅ mutate-preflight-refusal-empties-runnable — 预检退回「有条目被拒 ⇒ 一条都不跑」⇒ 别人一个未跟踪的源文件让整张变异表停摆，而红门只报一句『拒绝 1 条』：其余 695 条与在飞改动毫无关系的锚点没人判，读起来像保护还在 ｜本机实测 0.8s／2 拍
+✅ mutate-preflight-safety-dropped — 反过来：为了让表「跑满」而不安全照跑 ⇒ 源文件不在 HEAD 里时崩溃没有回滚兜底，别人的在飞改动会被变异中途的写盘永久盖掉。停摆是损失，越权是损坏 ｜本机实测 0.8s／2 拍
+✅ leftover-heal-ignores-is-our-mutant — 去掉 `isOurMutant` 这道闸 ⇒ 只要「备份 == HEAD 且当前 != HEAD」就自动覆盖，而这两条对「备份落盘后别人自己改了同一个文件」同样成立：一次自愈就能把别人的在飞改动抹掉 ｜本机实测 0.8s／2 拍
+✅ leftover-heal-trusts-non-head-backup — 去掉「备份必须 == HEAD」这道闸 ⇒ 拿一份对不上 HEAD 的备份去盖源文件。备份内容不等于 HEAD 时它可能是别人未提交的原件，这时候连「只删备份」都不该自动做 ｜本机实测 0.8s／2 拍
+✅ budget-missing-value-silent — `--budget-ms` 后面没给值时退化成「不限」且不出声 ⇒ 写的人以为自己给了预算，实际在跑全表，正是被外层超时杀在突变那一拍的形状（未知 flag 同族：看不懂不能当缺省） ｜本机实测 0.8s／2 拍
+✅ budget-value-slot-treated-as-anchor-id — 分流不吞带值 flag 的下一个 token ⇒ `--budget-ms 600000` 里的 600000 被当成锚点 id 报「未知 id」，于是没人能给这张表设预算（而预算正是别被掐死在突变那一拍的手段） ｜本机实测 0.8s／2 拍
+✅ untracked-face-filter-always-empty — 把「未被 git 跟踪的锚点面」判成恒空 ⇒ 整条 HEAD 归属判据退化成装饰：主树照旧全绿，而锚点守护的代码从未入库（追加九实测：主树阻断 0 / 同 HEAD 隔离树阻断 6） ｜本机实测 0.8s／2 拍
+✅ untracked-line-judge-face-uses-src-wording — 判卷面套用被测面的文案 ⇒ 报告说「源文件读不到」，而真因是判卷文件从未入库（干净 HEAD 上连基线都跑不出来，却被伪装成「基线不是全绿」）；两面的修法指不同文件，串了就误导 ｜本机实测 0.8s／2 拍
+✅ untracked-line-judge-fix-points-at-src-file — 判卷面的修法一句写死成「把那份源文件提交」⇒ 照着做会去提交一份本来就入库了的源文件，而缺的那份判卷文件仍然没有进 HEAD（门继续红，且没人知道要提交什么） ｜本机实测 0.8s／2 拍
+✅ drift-double-reports-disk-problems — 去掉「盘上已报过就不重复报」⇒ 同一条锚点同时进「针脚失效」与「钉在飞文本」两栏，汇总的阻断数被同一件事抬高两次（读的人按数去找缺陷，会多算一半） ｜本机实测 0.8s／2 拍
+✅ drift-double-counts-untracked-path — 去掉「路径未入库的归上一条管」⇒ 一个从未入库的文件既进「未入库面」又进「钉在飞文本」，两栏各说一种成因、指向两种修法，而它只有一个 ｜本机实测 0.9s／2 拍
+✅ anchor-faces-drops-judge-face — 取料入口少 push 判卷那一支 ⇒ 接线只剩一面在查，未入库的判卷文件从此无人点名（干净 HEAD 上那些锚点仍会伪装成「基线不是全绿」，而 lib 单测看不见——它拿到的是手搓 items） ｜本机实测 0.8s／2 拍
+✅ blocking-total-drops-drift-from-sum — 求和写死成漏掉 drift ⇒ 「钉在飞文本」照旧印在汇总里、却不再决定 exit：门报红而全量门禁照样绿（有读数、无后果，正是本仓最忌的形状）。指针不写「四支／六支」：BLOCKING_KEYS 每加一维那个数量词就要改标题，写死即静默守旧标题（实测本条红在别的用例上）。 ｜本机实测 0.8s／2 拍
+✅ blocking-total-swallows-missing-part — 去掉「缺一支就当场崩」这道闸 ⇒ 接线漏计一支时照样吐出一个数（NaN 也会被 `+` 吞成读数），而 `.mjs` 不经 tsc，没有任何东西会替这道门发现它少看了一维 ｜本机实测 0.8s／2 拍
+✅ impact-analysis-settings-fallback-dropped — 生产入口不读盘上的 impactAnalysis ⇒ 设置界面那个开关是空的（第三环两格直接把值交给 runAgent，照绿） ｜本机实测 2.4s／2 拍
+✅ request-metering-settings-fallback-dropped — 盘上的 requestMetering 到不了主会话 ⇒ 计量报告只剩 worker 有，主会话的钱看不见 ｜本机实测 2.1s／2 拍
+✅ evidence-receipts-settings-fallback-dropped — 盘上的 evidenceReceipts 到不了主会话 ⇒ 私密报告不落盘，「可审计」那一面在主会话静默没有 ｜本机实测 1.9s／2 拍
+✅ economic-compaction-settings-fallback-dropped — 盘上的 economicCompaction 到不了主会话 ⇒ 经济报告恒 null，压缩债务没人记账 ｜本机实测 1.7s／2 拍
+✅ action-fusion-settings-fallback-dropped — 盘上的 actionFusion 到不了主会话 ⇒ 设置里那个开关换不来一次省掉的往返（override 那一格照绿） ｜本机实测 1.9s／2 拍
+✅ action-fusion-override-ignored — 那一行改成「只读 settings」⇒ 调用方显式传的 actionFusion 被吞（C1 的 runtime 通道整条失效） ｜本机实测 1.8s／2 拍
+✅ observation-pack-settings-fallback-dropped — 盘上的 observationPack 到不了主会话 ⇒ 第 3 次发送仍全文（那条 `obs_recall` 标记不算数：`observationPack || evidenceReceipts` 任一为真都有它） ｜本机实测 1.8s／2 拍
+✅ cc-off-path-still-amortizes — 去掉「未启用即原样」支 ⇒ 一条没被打开的策略开始改生产装配（缺省零行为是这类能力的底线） ｜本机实测 1.0s／2 拍
+✅ cc-overflow-guard-dropped — overflow 也摊销 ⇒ 已经装不下时少压一点，下一轮立刻再撞硬闸（fail-safe 被反向拆掉） ｜本机实测 0.9s／2 拍
+✅ cc-only-one-tail-knob-tightened — 只钉一个边界 ⇒ clamp 的另一只求值顺序会把它顶回原值（策略看着在跑其实什么都没做） ｜本机实测 0.9s／2 拍
+✅ cc-floor-lets-working-set-shrink — 去掉工作集下限 ⇒ 小 tail 预算被继续砍，策略从「省缓存」变成「忘事」 ｜本机实测 0.9s／2 拍
+✅ cc-head-survival-never-recorded — 每轮把上一轮装配清空 ⇒ 头部存活比永远量不出来，策略只在关那一支生效（A/B 读成「策略无效」） ｜本机实测 0.9s／2 拍
+✅ cc-coordinator-ignores-config-override — 逐次 config 覆盖被忽略 ⇒ 上游算了摊销也用不上（本仓点名的「两头断」形状） ｜本机实测 0.9s／2 拍
+✅ rp-stale-debt-check-always-silent — 登记债永远不算过期 ⇒ 白名单只增不减，清偿了也没人来删，下一条泄漏会顺手继承一个能吸收它的条目 ｜本机实测 0.7s／2 拍
+✅ rp-strip-observation-keeps-ts — 观测字段没被剥掉 ⇒ 两次跑必然因 ts 不同而判红，门自己变成假红源 ｜本机实测 0.7s／2 拍
+✅ rp-debt-prefix-not-checked — 债条目不看路径前缀 ⇒ 任何字段上的毫秒都被某条登记债吸收，「白名单只管登记过的位置」失效 ｜本机实测 0.8s／2 拍
+✅ rp-clean-state-reads-red — 「条目没被用到」的复查对所有判据开 ⇒ 干净的 HEAD（没有快照代码）被读成红——会冤枉好状态的判据比没有更糟 ｜本机实测 0.7s／2 拍
+✅ list-rows-not-flattened — `--list` 不再把字段压成一行 ⇒ desc 里带换行的那条被拆成两行，行数列数都不对，而吃这份取料面的两把静态尺只是**少读一条**（不报错）。第 141 页实测：表里 833 条，尺只读到 832 条。（第 163 页补⑵：这一支的写法从「逐行 console.log」改成「整块 writeSync」，针脚跟着实现走——旧针脚 `].map(oneLine).join(\t));` 当场 0 命中，是门喊的，不是我看出来的。） ｜本机实测 1.7s／2 拍
+✅ head-pointer-filter-ignored — HEAD 侧那一遍不再筛『这条锚点在 HEAD 的表里吗／判卷相对 HEAD 动过吗』⇒ 本笔同时改表与改判卷的正常提交会被读成缺陷（假红方向），逼人回去放宽或删掉这一维 ｜本机实测 0.7s／2 拍
+✅ head-pointer-dimension-not-summed — 第 6 维算出来了却没喂进求和 ⇒ 门照跑、汇总照印绿（接线没有编译期信号）。针脚取两行：这条锚点自己的 apply 字面量里也写着那两行文字（同一个文件）。 ｜本机实测 0.7s／2 拍
+✅ baseline-red-always-blocking — 基线红一律算阻断 ⇒ 别人半落库造成的「判卷载不动」重新淹掉这张表唯一的信号（第 141 页 167 条环境红混进 13 条真红那次） ｜本机实测 0.7s／2 拍
+✅ baseline-red-always-unloadable — 反向那一半：基线红一律算载不动 ⇒ 真把表跑退化（判卷自己坏了）也被洗成「量不了」，门从此不再报退化 ｜本机实测 0.7s／2 拍
+✅ baseline-red-triage-call-removed — 分诊算出来了但基线那一支不接 ⇒ lib 单测全绿、门照旧把环境红报成阻断（接线没有编译期信号）。针脚取两行避开本条自指。 ｜本机实测 0.7s／2 拍
+✅ attribution-reads-whole-output — 归因退回「整串输出里找得到那句话」⇒ vitest 把通过的用例也列出来（`✓ …`），一条绿用例就能满足它 ⇒ 锚点声明的 killer 从没红过也照样报 ✅（第 141 页就是这么发现 cpp 那条改在隔壁支的） ｜本机实测 0.7s／2 拍
+✅ attribution-fail-face-drops-x-marker — 失败面只认 `FAIL` 那种写法 ⇒ 逐条列表里的 `×` 行被扔掉，红在期望用例上也被读成「没红在期望用例上」（假警方向：正当的杀被判成误伤，逼人回去放宽判据） ｜本机实测 0.7s／2 拍
+✅ runner-attribution-call-removed — runner 不调这把尺（归因那一步摘掉）⇒ lib 的单测全绿而门照旧印 ✅：接线没有编译期信号。针脚取两行——本条 apply 的字面量里也写着那句调用（同一个文件），单行判据会连「被摘掉那次」也读成还在。 ｜本机实测 0.7s／2 拍
+✅ byok-injector-glm-only — 注入面退回硬编码 glm（本轮之前的真实形态）⇒ 白名单扩家那天，key 存得进、没人读，M6 的多 provider 路由仍然只有 glm 能用 ｜本机实测 0.6s／2 拍
+✅ byok-injector-missing-envmap-falls-back — 未登记 env 名的 provider 不崩、静默借用 glm 的变量名 ⇒ 白名单加一家而忘了登记映射时，用户以为「存了 key 就生效」，实际拿 M0_API_KEY 去拨别家 ｜本机实测 0.6s／2 拍
+✅ byok-offered-checked-against-wrong-face — 设置面越界那格拿 env 表当对照面（env 表四家全含）⇒「UI 给了个存不进 key 的选项」这条永不成立，正是本仓点名的「只在一面对账」 ｜本机实测 0.6s／2 拍
+✅ byok-storable-injection-checked-against-table — 「可存 key ⇒ 被注入」那格改成查 env 表而不是看注入面的实际结果 ⇒ 判据退化成自己跟自己比（表里有就算覆盖），跑真函数那一半失去观测者 ｜本机实测 0.6s／2 拍
+✅ replay-corpus-empty-blinded — 「一个文件都没扫到」这格恒假 ⇒ 干净 checkout（会话流不在 git 里）上复跑命令照样退出 0，「没有尺」之身冒充真读数；另一格的文案不算覆盖，因为那句说的是「形状漂了」而真相是根本没料 ｜本机实测 0.6s／2 拍
+✅ replay-corpus-nocalls-blinded — 「有文件却零 tool_call」这格恒假 ⇒ 事件名/字段一漂，那片零（受管=0 ask=0）照样被当成读数念出去（2026-09-21 的 join 键事故就是这个形状） ｜本机实测 0.6s／2 拍
+✅ verify-exit-attempt-env-blind — loop「这一拍是环境拍」那格恒假 ⇒ 工具链没装/超时/pnpm 拒执行照样吃掉 maxVerify 一格，模型收到的是「连续失败已达上限」：harness 的问题花用户的钱，还教它去改本来正确的代码 ｜本机实测 1.0s／2 拍
+✅ verify-exit-evidence-env-blind — worker 证据那格恒假 ⇒ 环境红落成 failed；级联升档与 bandit 奖励都只读这一格（一只缝不是两只），于是「换个更贵的模型重跑一个装不上工具链的错」成为默认行为 ｜本机实测 1.0s／2 拍
+✅ verify-exit-distill-env-blind — 沉淀那格恒假 ⇒ 环境红进「N 次验证失败」（并顺带被同拍的 tool_result 记成工具失败），下一次会话的模型会读到「我在这个靶子上会失败」这种假经验 ｜本机实测 1.0s／2 拍
+✅ join-lapse-denominator-diluted — 分母把无 worker 的普通会话也算进去 ⇒ 占比被大量不相关 run 稀释成好看的 0，W1b 就此「有据」不做 ｜本机实测 1.0s／2 拍
+✅ join-lapse-terminal-list-recopied — 「在途」另抄一份判定而不复用 interruptedWorkers ⇒ 恢复面加一种终态时这里读成在途，两处分叉（第六族） ｜本机实测 1.1s／2 拍
+✅ join-lapse-unmeasurable-as-zero — 零 worker 时不走「不可测」分支 ⇒ 0/0 与「占比是 0」长成同一句话，读的人据此判定不用建闸（未证读成通过） ｜本机实测 1.1s／2 拍
+✅ join-lapse-families-counted-all-runs — 样本宽度按全语料数目录 ⇒ 无 worker 的文件把「样本只来自一次实验」这句警告自己稀释掉（本面施工时真踩过） ｜本机实测 1.1s／2 拍
+✅ tool-result-merge-skipped — 投影出口不再合并 ⇒ 一个 tool_call_id 发出两条 tool 消息（Anthropic 线格式里就是两个 tool_result 块同一个 tool_use_id） ｜本机实测 0.7s／2 拍
+✅ tool-result-merge-drops-later-content — 合并时只留第一条 ⇒ 形状合法了，但 worker 的正文被丢掉：注入通道还在而报告不再进上下文（修形状修出静默丢数据） ｜本机实测 0.7s／2 拍
+✅ tool-result-merge-ignores-id — 合并键写成固定串 ⇒ 全历史所有工具结果并成一条：位次与逐调用归因一起没了（反面对手那格就是量这个的）。针脚吃到 mergeToolResultsById 的 for 才唯一：同文件 declared-id 那一循环里还有一行逐字相同的 `const id = …`，它不是合并键。 ｜本机实测 0.7s／2 拍
+✅ corpus-inventory-retry-window-adjacent-only — 重试只认紧邻的下一个 tool_call ⇒ 中间隔一次别的调用就漏计，「无卡死证据」是数出来的假读数 ｜本机实测 0.6s／2 拍
+✅ corpus-inventory-canonical-args-dropped — 参数退回原始 JSON.stringify 比对 ⇒ 同一调用换个键序就被读成「改过参数」，「一字不变」偏低 ｜本机实测 0.6s／2 拍
+✅ corpus-inventory-result-joinkey-guard-off — tool_result 缺 callId 不再抛而被静默跳过 ⇒ 「失败=0」这类零读数重新可能（join 键断链要当场崩） ｜本机实测 0.6s／2 拍
+✅ corpus-inventory-repeat-verdict-always-act — 换路压力裁决恒「该动」⇒ 印出来的那行不再是读数，而是口号（决策线两半都得有反例） ｜本机实测 0.6s／2 拍
+✅ corpus-inventory-run-threshold-loosened — run 深度阈值 3 放宽到 2 ⇒ 一次普通重试即被判成卡死（偏大的代价是白加主 loop 闸门） ｜本机实测 0.7s／2 拍
+✅ supervise-ring-credential-dropped — 决策输入里去掉绿凭据那一支 ⇒ 无 verdict 行的环仍被判无判据（散文优先复活） ｜本机实测 0.6s／2 拍
+✅ supervise-ring-stale-trusted — 过期证据不再短路 ⇒ 绿拍之后又写了盘，那份绿被当成有效凭据（或直接回落到散文自述） ｜本机实测 0.6s／2 拍
+✅ supervise-ring-forbidden-overridden — 禁改面违反不再先于凭据 ⇒ 触碰 forbidden 的环只要verify绿就被 accept（契约让位于测试颜色） ｜本机实测 0.6s／2 拍
+✅ supervise-retired-error-verdict-revived — 越界判据不再落畸形桶（恢复旧守卫里无生产者的那一支）⇒ 没人造得出的判据换来一次真钱重试 ｜本机实测 0.6s／2 拍
+✅ writeface-shell-blind-as-before — shell 一律算写向（不收窄命令形状）⇒ 任何 `ls` 都要补一拍目标仓全量测试，收束闸变成免费的性能税 ｜本机实测 1.2s／2 拍
+✅ writeface-shell-never-writes — shell 一律不算写向（回到旧的两名字清单）⇒ 经 shell 落盘既不触发收束闸、也不使绿拍过期（假绿复活） ｜本机实测 1.2s／2 拍
+✅ writeface-spawn-agent-counted-as-disk-write — 把 spawn_agent 也当成本工作区的写盘 ⇒ 派一次活就补一拍主仓验证（它写的是自己那块 worktree，改动另走合并控制塔） ｜本机实测 1.2s／2 拍
+✅ writeface-shellro-reads-command-shape — 去掉 shell_ro 的静态只读豁免 ⇒ 它的白名单命令也被判成写向，而它按契约永远写不了盘 ｜本机实测 1.3s／2 拍
+✅ writeface-everything-is-write — 非 shell 一律算写向（绕开门的写向集）⇒ 「只读名单」与真实判据分叉，覆盖性棘轮的反向一侧必须抓到现场 ｜本机实测 1.2s／2 拍
+✅ mock-round-marker-dropped — 装载器丢掉 round_end ⇒ 哨兵形同虚设：返修那一拍再次结构不可达，而 e2e/gate-check 那些不写哨兵的剧本全绿，看不出这是一次退化 ｜本机实测 0.6s／2 拍
+✅ chain-ring-does-not-hold-lease — 环不带链冻结的写面 ⇒ 登记表回到空租约，后来者看不见这条链正在写盘（合并阶段才炸） ｜本机实测 1.7s／2 拍
+✅ chain-supervise-ring-drops-lease — 只修 pipeline 那一支（本仓点名的「同一条解析只硬化一支」）⇒ supervise 那条真轨迹路径照旧丢租约 ｜本机实测 6.7s／2 拍
+✅ chain-read-ring-holds-phantom-lease — 去掉 write 守卫 ⇒ 只读环也在事件里挂一份永不生效的租约（「印了不占」的缩小版重演） ｜本机实测 1.6s／2 拍
+✅ chain-lease-promise-says-reject — 规格退回承诺硬闸「相交即拒」⇒ 模型以为报了 resources 就有闸，从而不看真保护它的那一层（worktree） ｜本机实测 1.5s／2 拍
+✅ anchor-face-count-floor-flip-hits-exact-line — 帽的比较符翻成 <= ⇒ 现表 798 恰好踩线就红：正在加锚点的人被这条尺打（第 126 页：整块摘除没人出声，补的这条也不能反过来咬新增） ｜本机实测 0.7s／2 拍
+✅ anchor-face-dead-src-unreported — dead-src 那半不发现在册种类 ⇒ 锚点指向面上不存在的文件时无人点名，那条变异就在空转 ｜本机实测 0.7s／2 拍
+✅ anchor-face-zero-review-only-checks-shipping — 欠条判据收成只看「文件在不在」⇒ 补回锚点或文件被删都不会逼人回来销账（豁免烂在表里没人清的形状） ｜本机实测 0.7s／2 拍
+✅ anchor-face-src-column-not-parsed — 抽取面不再抽 `src:` ⇒ 每行的 src 恒为 null，「这个文件零锚点」全是从漏计里读出来的 0（比不判更坏，因为它看着像判过） ｜本机实测 0.7s／2 拍
+✅ needle-cause-two-states-merged — 「git 没答上来」与「这段文字从未在该路径出现过」合成一句 ⇒ 查询坏了会被读成「这条锚点从写下起就没生效过」，而那是两种要办不同事的结论 ｜本机实测 0.7s／2 拍
+✅ needle-cause-printed-for-warn-hits — 去掉「只有 hits===0 才谈成因」那道守卫 ⇒ 多处命中的针脚（还活着）也被冠上「谁搬走的」，读的人去查一段根本没消失的代码 ｜本机实测 0.7s／2 拍
+✅ needle-cause-queries-git-for-every-problem — 取成因那一侧也不判 hits ⇒ 每条 warn 都发一次 pickaxe：这道门的存在理由就是「秒级」（整跑 36 分钟才是慢的那把），代价先炸给自己 ｜本机实测 0.7s／2 拍
+✅ head-import-js-suffix-never-swapped — 只做「加后缀」不做「换后缀」⇒ `./x.js` 这类 ESM 写法全被判成悬空（第一版实测 47 条假红里最大的一族）；假红一多，人们关的是门不是修尺 ｜本机实测 0.7s／2 拍
+✅ head-import-two-states-collapse — 「漏 git add」与「模块不存在」压成一态 ⇒ 修法完全不同的两类红长得一样（前者补一笔、后者要找删它的提交） ｜本机实测 0.7s／2 拍
+✅ head-import-waiver-never-goes-stale — 命中豁免却不记 hit ⇒ stale 永不触发，补好之后那条名还躺在表里（本仓「豁免不许静默烂在这儿」那一族） ｜本机实测 0.7s／2 拍
+✅ head-import-fixture-strings-counted — 去掉「行首或分号之后才算一条语句」这道边界 ⇒ 判卷里的假源码字符串（一行中间写着 import … from ./nope）又被当成真边，凭空多出十几条悬空 ｜本机实测 0.7s／2 拍
+✅ head-import-clause-spans-into-body — clause 那一截不设字符禁区 ⇒ 非贪婪从 export function f( 一路跨过整个函数体，撞上注释里举例用的 from ./todo ⇒ 尺把**自己**报成悬空（第 135 页实测） ｜本机实测 0.7s／2 拍
+✅ head-import-inline-type-not-stripped — 花括号里的内联 type 修饰不剥 ⇒ 「type B」整个当名字 ⇒ 既把合法写法报成缺失，又把整条标成读不懂而静默不判（第 135 页那 6 条假红全在这一族） ｜本机实测 0.7s／2 拍
+✅ head-import-as-side-swapped — a as b 在导入侧要源侧的 a、在导出侧要报出去的 b；取错一侧 ⇒ 目标明明导出 renamed 却按本地名判缺失（第十三族：一份谓词抄两处，这次收成一处，两处一起验） ｜本机实测 0.7s／2 拍
+✅ head-import-opaque-target-judged — 摘掉「目标看不全就不判」这道闸 ⇒ 凡是 export * from 的中转文件都会把下游名字报成缺失（假红一族，数量随依赖深度涨） ｜本机实测 0.7s／2 拍
+✅ head-import-partial-batch-counts-as-face — cat-file 回包形状不认识时交出「已经读到的那部分」⇒ 半份导出面拿去判自洽＝假绿（规则 92：读不到要说读不到） ｜本机实测 0.7s／2 拍
+✅ head-import-symbol-waiver-never-goes-stale — 符号那张豁免表命中却不记 hit ⇒ 补好后那条名永远躺在表里（本仓「豁免不许静默烂在这儿」那一族的第二张表） ｜本机实测 0.7s／2 拍
+✅ manifest-orphan-check-unconditional — 跳过「已在 GATES 里」那一判 ⇒ 每张正常门表都被报成孤儿：护栏一旦无差别地喊，读的人只会整条忽略（规则 210） ｜本机实测 0.6s／2 拍
+✅ manifest-gate-without-script-dropped — 反向那一半：不再核「门表列了而 scripts 没有」⇒ 一道 spawn 必失败的门可以静默存在（第 145 页认证树量的就是这一格） ｜本机实测 0.6s／2 拍
+✅ pointer-audit-treats-unreadable-file-as-fine — 判卷文件读不到时不报 ⇒ 「指针没问题」被从「没查到」偷来（规则 92/210：三态里最贵的是把未查证说成通过） ｜本机实测 0.8s／2 拍
+✅ pointer-audit-recognizes-anything — 标题匹配那一支被摘成恒假 ⇒ 「拼出来的标题 / 带转义引号的标题」全被判成指针失效：假红一多，人们关的是门不是修尺（ runner 自己判的是「输出含这段」，运行时它是活的） ｜本机实测 0.8s／2 拍
+✅ pointer-vacuous-title-kept — 整条都是占位符的生成式标题不丢 ⇒ 它编译成一条匹配任何输入的模式，压在那份判卷文件上的**全部**指针体检一起恒真。真盘现场：241 个判卷文件里 2 个含这种标题（其中一个的成因是它自己的 fixture 生成器里那段「it( 双引号 美元花括号 t 花括号 」的文字，正则取料分不清真标题与字符串里长得像标题的东西），上面 33 条锚点因此缴械；本轮那条「四支／六支」死指针正是靠这个洞活到 21 分钟实跑才喊（修法见第 152 页） ｜本机实测 0.8s／2 拍
+✅ pointer-vacuous-title-not-trimmed — 丢的时候不 trim ⇒ 只剩空白的生成式标题（占位符两侧只有空格）仍被当成有字面残迹，恒真模式换个写法就回来了。与上一条分开钉：去掉这一位，上面那条用例照样绿（它的残迹是空串），所以这一格没有别的见证。针脚只取「join 空串再 trim」那半截、不写整行：整行会带上 split( 字样，被 isLineWiseApply 误认成逐行式而躲过针脚体检（第 152 页实测） ｜本机实测 0.8s／2 拍
+✅ pointer-all-dynamic-titles-dropped — 过修那一侧：把**任何**含占位符的标题都丢掉 ⇒ 参数化标题再也指不到（渲染后的文字盘上本来就没有），第 138 页校准出来的那两条（拼出来的标题／带转义引号的标题）一起变假红——假红一多，人关的是门不是修尺 ｜本机实测 0.8s／2 拍
+✅ loose-pointer-blind — 松钉那一格永远数出 0 ⇒ 门照样印「松钉指针 0 条」，看起来比今天更干净，而拼接标题／带转义引号那两类指针从此无人知道它们是松的（这一格的用处就是「有读数」，不是阻断） ｜本机实测 0.8s／2 拍
+✅ loose-pointer-counts-literal — 漏掉「逐字认不出」这一半条件 ⇒ 每一根正常指针都被算成松钉（现读 10 变 872），水位帽当场失效之外更糟：这个数字不再有意义，读的人据它判断「这表几乎全是松钉」而放弃这一格 ｜本机实测 29.9s／2 拍
+✅ loose-pointer-computed-not-wired — 尺接在门上但喂空表 ⇒ 印出来的永远是「松钉指针 0 条」（规则 230 的接线课：钉调用点连同它的入参，只钉函数名则「算出来不接」存活）。针脚取两行是为绕开自指：单行的话这条 apply 自己就含那句文字，本文件命中 2 处会落进「待复认」 ｜本机实测 0.8s／2 拍
+✅ pointer-block-dimension-not-summed — 新维算出来了却没喂进求和 ⇒ 门照跑、汇总照印绿。针脚取两行是为绕开自指：这条锚点自己的 apply 里也写着那句文字（单行 needle 会在本文件命中 2 处，落进「待复认」那一档） ｜本机实测 0.8s／2 拍
+✅ usage-stamp-call-dropped — 盖章器建出来了却没接进落盘漏斗 ⇒ 消费端照旧读到恒零归因，钱轴继续报不可测，而这一层的代码全在（「装配存在」≠「这格有不变量」那一族） ｜本机实测 2.2s／2 拍
+✅ usage-stamp-after-append — 先落盘后盖章 ⇒ 盘上那条没 model、内存里那条有：`onEvent` 看板算得出钱，重放与评估面算不出，两条对不上时没人知道自己看的是哪一份 ｜本机实测 2.0s／2 拍
+✅ main-usage-model-ignores-scripted-channel — 归因键不再问「这一轮走的是剧本吗」⇒ 冻结剧本的用量被盖上真档位名，评估面把从未发生的花费当真钱（与 `isScriptedModel ⇒ price=null` 同一口径） ｜本机实测 2.0s／2 拍
+✅ worker-usage-borrows-main-tier — worker 查不到自己的档时回落主会话那一档 ⇒ 本仓 flash 与 standard 差 4 倍、与 strong 差更多，整笔钱按错的档折（2026-09-23 那次 40 倍分叉的同一形状） ｜本机实测 1.9s／2 拍
+✅ usage-attribution-reads-declared-tier — 把归因挂回 `agent_spawned.model`（那个字段记的是申报/路由选中的**档位 id**，且无路由时整个缺席）⇒ 钱按申报档折、按真拨档花，正是第 145 页刚修掉的形状 ｜本机实测 2.0s／2 拍
+✅ usage-stamp-overwrites-producer-model — 不再先看 `e.model` ⇒ 生产者（provider 回执）自己上报的模型名被本地推断覆盖：provider 说得出的比我们猜的准，覆盖等于把最可靠的一格改成最可疑的一格 ｜本机实测 2.0s／2 拍
+✅ worker-selfname-not-stamped — 适配器不盖自述名 ⇒ 四支 provider 全落 harness 缺省档，而归因键与折价同一个变量，所以两者一起偏、永不互相打脸（#22 的盲区形状）。盖章点必须在包装函数里，四支各写一遍＝第五族「只硬化一支」 ｜本机实测 2.0s／2 拍
+✅ worker-selfname-ignored-by-orchestrator — 算出来不接（规则 230）：自述名有了、取值式子里却不读它 ⇒ 注入面带不带名字都一样，而带名字那条用例只看 usage_model 会误绿——所以见证比的是「两档给出两个不同的钱数」 ｜本机实测 2.0s／2 拍
+✅ usage-name-of-skips-callable-check — 不核可调用 ⇒ 任意带 usageName 字段的对象都被当成一路模型（这一格的入参来自 provider 侧，脏数据不该产出键） ｜本机实测 2.1s／2 拍
+✅ usage-name-of-accepts-non-string — 自述位不核类型 ⇒ 数字/对象被当成模型名往下传，后面 `priceForModel` 反查不到却也不出声——「不可知」要由空串表达，不能由一个非字符串值表达 ｜本机实测 2.0s／2 拍
+✅ orchestrator-spawned-usage-model-dropped — spawned 事件不带归因键 ⇒ 主会话的钱可有数了，worker 那一半仍然定不了价（同一份预算里两条通路只修通一条，就是半落库） ｜本机实测 2.0s／2 拍
+✅ mutate-lock-not-acquired — 占锁那一步换成「自己拼一个空结果」＝算出锁面却不占 ⇒ 同树两个 mutate-verify 照旧并发抢 .mutbak，而 tool-lock 变成第二份没人调的 lib（规则 230 的「算出来不接」同格）。针脚带真换行：这张表就写在同一个文件里，不带换行的针脚会被表里那段转义文字命中，改了表、实现没动（规则 236） ｜本机实测 1.9s／2 拍
+✅ mutate-lock-read-only-face-locked — 把只读的 `--list` 也接去占锁 ⇒ 两条并发 --list 互相拒跑，而吃 `--list` 的那两把静态尺（anchor-titles／gates）会在别人跑表时集体红——这道门不许把**不改盘**的那一半也关死（收紧必须配反向对照，规则 227）。**第 186 页重铸**：这条从第 163 页起一直存活，原因不是「场上没人占锁」而是「占错了锁」——旧改法写死 `tree: ROOT`，而判卷与变异机都带 `--lock-tag` ⇒ 探针种下的那把锁叫 `mutate-verify-judge-<pid>.lock`，突变体去占的却是 `mutate-verify-<树名>.lock`（没人）⇒ 拿到锁照常跑，行为零差异（等价突变，规则 260 的第二形态：不是判据没有观测者，是**突变挑错了资源**）。现在改法与真实占锁那一支用同一个身份表达式（`lockTagRaw.given ? lockTagRaw.value : ROOT`），于是被判卷那颗活人锁当场拦住 ⇒ exit 2 ≠ 0。`--check-needles` 那一支仍只由位置比较钉（真跑它一次 ≈7.7s，而挂在本文件的锚点几十条、每条两拍 ⇒ 实测把本判卷抬到 19 分钟，故意不换） ｜本机实测 1.9s／2 拍
+✅ mutate-lock-cell-not-printed — 占到没占到锁不进读数 ⇒ 凭证里分不清这次是独占、是没占、还是占锁那一步根本没接（规则 211：半把尺与没尺要各自看得见） ｜本机实测 1.9s／2 拍
+✅ mutate-lock-tag-ignored — 算出标签却不接进锁身份（`tree` 仍然写死 ROOT）⇒ 判卷带标签也没用，它 plant 的那把与子进程读的那把不是同一文件：三条锁判卷全绿，而机器一跑表它们就集体判「基线不绿」（09-28 实测 46 条，规则 230「算出来不接」第六次） ｜本机实测 1.9s／2 拍
+✅ mutate-flag-registry-drops-lock-tag — 脚本读了 `--lock-tag` 而登记表里漏它 ⇒ 带标签的命令被「未知即拒」当场拦下，判卷自己撞死在这道闸上（登记与读取双向对得上：cert 侧那条闸在这里的配对） ｜本机实测 0.8s／2 拍
+✅ mutate-flush-helper-back-to-async-write — 把「写满为止」那一圈拆掉（`while`→`if`）＝一次 `writeSync` 只交得进内核缓冲那一截，剩下的直接丢：09-28 实测第一版就这么把 920 行的名单砍到几百行，三条吃 `--list` 的判卷一起红。四个出口共用这一圈，所以这一针同时守着名单／残留提示／针脚汇总／本次耗时（规则 214/225） ｜本机实测 1.5s／2 拍
+✅ mutate-flush-one-site-bypasses-helper — 只把 `--list` 这一处绕开 helper（其余三处照旧）⇒ 四个同步出口数变 3，而表照样印得出来、退出码照样 0：这正是「一处的例外长期活着」的形状。计数按行首语句核，绕开＝少一处 ｜本机实测 0.8s／2 拍
+✅ gate-manifest-head-cert-unregistered — 脚本在 package.json 里而门表没登记 ⇒ 认证 HEAD 变成一条从不运行的门（provider:check 那个历史实例的同一形状，正由本文件的 orphan 护栏兜住） ｜本机实测 0.6s／2 拍
+✅ changed-since-list-mode-always-filters — 把「筛过的名单」当默认：没给 `--changed-since` 时「选中 0 条」是**未筛**，一律 filter 会让 `--list` 印 0 行，而吃这条取料的两把静态尺会把整张表读成「表空了」（空面与没取到是两个数，规则 129/196/222） ｜本机实测 3.1s／2 拍
+✅ changed-since-picks-only-src-face — 只认被测源这一面 ⇒ 别人改了判卷文件（取料面／标题／断言都算）时派生名单是空的，这条手段正好在它最该出声的那一半上沉默（规则 208 的两半） ｜本机实测 0.8s／2 拍
+✅ changed-since-total-reported-as-picked — 分母写成分支自身的长度 ⇒ 印出来永远是「选中 N/N」：选中 0 条也长成「全部验过」的样子（规则 222 那条「0 命中有两条假绿路」在这里的第三种） ｜本机实测 0.8s／2 拍
+✅ changed-since-empty-path-counted-as-file — git 每行输出尾部那个换行被当成一个文件 ⇒ 改动面分母虚增，而「面 3 个文件、选中 0 条」与「面 2 个、选中 0 条」是两种解释（读数被自己的取料污染） ｜本机实测 0.8s／2 拍
+✅ changed-since-eq-form-whitens-any-flag — 为支持 `--flag=值` 而把「带 = 的都放行」⇒ `--list=…`、`--budget-ms=600000` 一起被放过，后者更坏：读取器只认空格写法，给了值却按「不限」跑（静默按缺省，正是这张表开头拒的那类） ｜本机实测 0.8s／2 拍
+✅ changed-since-derived-not-unioned-into-targets — 算出派生名单却不并进 targets ⇒ 门照跑人手抄那几条，而输出里那句「选中 N/M」仍然印得出来的样子最骗人（规则 230「算出来不接」第四次命中，这次的接线在参数分流处）。第一版判卷写成 `toContain(那行文字)` ⇒ **存活过一次**：表里那份针脚字面替实现背了书（规则 236 第五次），现已改钉带真换行的跨行正则 ｜本机实测 0.8s／2 拍
+✅ changed-since-face-passed-as-empty — 把改动面传成空表（这里是最容易写错的一种：变量名打错成字面量）⇒ 派生恒 0 条，而派生行照样印得整整齐齐 ⇒ 「今天没东西要验」被读成「今天改动无关」。第一版**也存活过一次**：那条接线判卷是文字钉，被同文件里表自己的针脚字面满足 ⇒ 现改由 `--list --changed-since=<空树>` 那条行为判卷抓（与空树比＝全部文件都变了 ⇒ 选中必须等于整表） ｜本机实测 0.8s／2 拍
+✅ changed-since-bad-rev-exits-zero — git 取不到改动面时退 0（把「取料坏」当成「没有要跑的锚点」）⇒ 一次拼错的 rev 长得像一次全绿；文本尺的三态在这里是 exit 码这一格（规则 222/227） ｜本机实测 2.0s／2 拍
+✅ cost-nth-samples-pooled-into-one-median — 把第 1／2／3 拍的中位混成一个平均 ⇒ #37 要量的那个结构（第一拍多付 vite 冷启动、后面几拍复用盘上转换缓存）被抹平，成本又只能靠推 ｜本机实测 0.8s／2 拍
+✅ cost-cell-zero-spawns-printed-as-measured — 零 spawn 那一支不再走「没有分母」的措辞 ⇒ 一把只能印 0 的尺：把「这次一条没量」洗成「每条 0 秒」（第 166 页那把尺换了载体，同一族） ｜本机实测 0.8s／2 拍
+✅ cost-rollup-tolerates-missing-runs — 账本缺行不再当场崩而是继续汇总 ⇒ 那条锚点的花费被静默读成 0 次，分母变小、单价看起来更便宜（`.mjs` 没有编译期信号，本文件的做法是崩并点名） ｜本机实测 0.8s／2 拍
+✅ cost-never-ran-not-counted — 没跑的条不再计数 ⇒ 预检跳过／预算用尽那些从句尾消失，「没量到」与「量了且很快」合一（与上面那条各咬一处：那条是措辞，这条是取数） ｜本机实测 0.8s／2 拍
+✅ cost-rollup-not-fed-by-runner — 汇总吃的是写死的空账本而不是 runner 自己那份 runsMs ⇒ 这一格永远印「spawn 0 次／没有分母」，读起来像「本次没跑」而实际跑了几百条。表与实现同文件，所以判卷钉跨行正则而不是 toContain（规则 236） ｜本机实测 0.8s／2 拍
+✅ cost-run-test-uninstrumented — runTest 不再记这一次的时间 ⇒ 每个位置的中位整个消失，#37 的分母退回到「拿文件时长乘次数」那种推（这条咬的是取料源头，上一条咬的是接线出口） ｜本机实测 0.8s／2 拍
+✅ selector-ambiguity-never-reports — 命中数不为 1 时不再记录 ⇒ 这一格永远印「全部可选」，真正选不中的那些会在改跑法时被当成能走 -t；而 0 命中不是失败，是 vitest 一条也没跑，基线与突变两拍都白过 ｜本机实测 0.8s／2 拍
+✅ selector-cell-merges-zero-into-clean — 零命中不再单独数 ⇒「选不中」并进「没什么问题」，那句 0 会被读成「11 条都正常」（第 166 页那把只能印 0 的尺，同一族换了载体） ｜本机实测 0.8s／2 拍
+✅ selector-inspected-counts-unreadable-judges — 判卷读不到／指针为空那些条也计入分母 ⇒ 可选率虚高，而「取料坏」被洗成「量过了」（规则 222 的三态：未取 ≠ 空面 ≠ 零命中） ｜本机实测 0.8s／2 拍
+✅ selector-blind-file-not-tracked — 「文件读得到、却一条标题都抽不到」这一态不记账（回到旧实现：与「这文件没锚点问题」同形）⇒ 解析器对整份判卷瞎（真仓成因：it.each 的标题不在 TITLE_RE 面上）时，普查少一条而读数一个字不说（规则 261/262） ｜本机实测 0.8s／2 拍
+✅ selector-cell-hides-blind-count — 取料记了、措辞却不印那一格 ⇒ 第三态又变回静默（读数与数据分家是本仓点名的假绿形状；本条与上一条分开钉：一条管「记没记」，一条管「说没说」） ｜本机实测 0.8s／2 拍
+✅ selector-scan-fed-empty-table — 门那一步喂空表而不是整张锚点表 ⇒ 这一格永远 0/0 且永不红。表与实现同文件，所以判卷钉跨行正则而不是 toContain（规则 236） ｜本机实测 0.8s／2 拍
+✅ selected-count-treats-missing-summary-as-zero — 收尾行读不到时回 0 ⇒「这格没量到」与「一条也没选中」合一，两种红的修法相反（前者是取料坏，后者是锚点失效）。第 166 页同一族：0 不许冒充读数 ｜本机实测 0.8s／2 拍
+✅ selected-count-counts-skipped-as-run — 把 skipped 也算进「选中几条」⇒ `-t` 一条没选中的那一拍被读成测过了（实测：`Tests 100 skipped (100)`＋退出码 0）。与上一条共用那条判卷用例：同一个谓词的两种失真，各自要一条变异才咬得住（规则 226） ｜本机实测 0.8s／2 拍
+✅ run-mode-pattern-not-escaped — 标题原文直接当 `-t` 的正则拼进去 ⇒ 真标题里的 ( ) [ ] . * + 变成通配与量词，选中的可能根本不是那条 killer 用例，而单价读数照旧好看 ｜本机实测 0.8s／2 拍
+✅ run-mode-dash-value-back-to-space-form — 选择子换回 `-t <值>` 的空格写法 ⇒ 凡指针以 `-` 开头就被 CLI 当成旗标：实测那条 `--self-test …` 的基线一拍根本没跑（收尾行读不到），却退 1——旧读数只会喊「基线不绿」，把「取料坏」伪装成「判卷坏了」。这一条的 killer 必须挂**接线判卷**：第一版挂的是那条行为证人，而它自己同时跑两种写法 ⇒ 改生产行改不到它 ⇒ 实测「变异存活：测试全绿」（规则 236 又一次命中：判卷自己再算一遍＝对生产零分辨力） ｜本机实测 0.8s／2 拍
+✅ run-mode-selector-check-dropped — 不分模式一律塞 -t ⇒ 那 13 条「选不中／不唯一」的锚点从此只跑不存在的用例，等于整条保护被换成空转（两种跑法共存是刻意的，见第 169 页未证②） ｜本机实测 0.9s／2 拍
+✅ vacuous-run-guard-dropped — 「选中几条」这道闸整个摘掉 ⇒ 这条闸正是 `-t` 上线唯一的安全带：摘掉后一次改名就能让整条锚点永远绿着跑完（vitest 对无匹配的 -t 退 0） ｜本机实测 0.9s／2 拍
+✅ selector-guard-ignores-multi-hit — 闸退回「只有 0 条／没读到才判坏」⇒ 选中 2 条以上的那一拍被读成测过了，可红的未必是本锚点那条 killer 用例：vitest 的 `-t` 匹配整条标题（describe 前缀也算），而体检数的是 it 字面量——两个分母本来就不是一回事 ｜本机实测 0.8s／2 拍
+✅ selector-predicate-accepts-multi — selector 那一支从「恰好 1 条」放宽成「只否 0 条与没读到」⇒ 闸与单价格都还在，只是多选的那条永远不出声（放宽分级必须配反向锚点，规则 227） ｜本机实测 0.8s／2 拍
+✅ vacuous-line-merges-empty-into-unreadable — 把「0 条＝空跑」印成「取料坏」⇒ 两种红的修法相反却被读成同一种（第 166 页那把只能印 0 的尺，同一族换了载体）；判卷要三种措辞互不冒领 ｜本机实测 0.8s／2 拍
+✅ run-mode-cell-silent-when-no-spawns — 没有 spawn 时那一格不再说「没有分母」而是印出空串 ⇒ 读数缺席被读成「本次不需要成本」（第 163 页 --list 那一格的同一族） ｜本机实测 0.8s／2 拍
+✅ unverified-total-counted-separately — 未证的总数另起一个口径数（少算一类）⇒ 名单摆着 7 条、汇总只报 5 条，读的人按 5 条决定补跑多少，剩下两条永远不会有人碰。第 168 页那句「计数由名单求和」落到这一格才算接线（规则 209/225：两个口径各写一遍必有一处先漂） ｜本机实测 0.8s／2 拍
+✅ unverified-list-not-routed-through-exit — 名单不进那条同步写满的出口 ⇒ 几百条 id（几 KB）交给异步队列后就 `process.exit()`，只剩内核缓冲那一截，而汇总行照样印「未证 N 条」——读者以为名单发全了，按残缺的名单补跑（规则 241 实测砍过 920 行的 --list） ｜本机实测 0.8s／2 拍
+✅ unverified-class-read-from-prose — 按 `why` 的措辞认未证的类别 ⇒ 改一句文案就分错类，「等别人落库」被印成「现在就能补跑」，读者白跑一趟还把那条读成已验；分类必须认字段（stopped／unloadable／refused 名单） ｜本机实测 0.8s／2 拍
+✅ run-mode-cell-drops-absent-mode — 跑法单价只遍历这一趟出现过的模式 ⇒ 另一种跑法 0 拍时整支从行里消失，「这一支没拍到」被读成「这一支不需要成本」（09-28 实测：补跑那 30 条全是 selector 拍，whole 那一支整个不见，而汇总行照样印得整齐）。全局零 spawn 那格早有兜底，欠的是**子列**这一格（规则 245/241 同族） ｜本机实测 0.8s／2 拍
+✅ restore-byte-check-neutered — 把还原那一格的判据摘掉（换成恒不成立）⇒ 盘上留着半个突变、或被写成别的内容，这条照样算绿；而收尾那句 `git diff HEAD --quiet` 只在**整轮跑完**时看总账，看不出「第 517 条还原时写歪了」这一格。这一拍换成字节比对本来就是拿「更强的证据」换掉「更贵的一拍」，换弱了就得有人喊 ｜本机实测 0.8s／2 拍
+✅ restore-diff-problem-only-compares-length — 只比长度不比内容 ⇒ 等长那类突变被原样留在盘上（现读：可解析出两个字面量的 947 对 apply 里有 11 对是等长替换），还原检查当场变成恒真，而它正是省下第三次 spawn 所换来的那份更强证据 ｜本机实测 0.8s／2 拍
+✅ red-kind-guard-silently-skips — 把「认不出类别就崩」那一格摘掉 ⇒ 没归类的判红不进任何一类却仍算进总数，分类名单读起来比实际少，而最贵的「存活」恰恰是最容易被漏掉的那一类（规则 245：把「没记账」读成「记了 0 次」会让分母看起来更干净） ｜本机实测 0.8s／2 拍
+✅ tree-guard-main-checkout-accepted — 「git-dir 与 git-common-dir 同指一处＝主检出」这条判据摘掉 ⇒ 就地改源文件的门可以在用户工作树上跑，被外层超时杀掉就留下一地突变体与 .mutbak（这道闸存在的全部理由）。针脚钉判据本身而不是钉「主检出」三字：那个词在两条无关错误消息里也各有一次，钉它等于没钉 ｜本机实测 0.8s／2 拍
+✅ tree-guard-refusal-not-wired — 判据还在、结论不接 ⇒ 拒跑那句话再也不印（五处接线断言都认这个句子，但它们只在真跑那支里跑，机器证人缺位时这一格就是「尺与针脚不同笔」的现行样本）。本条同时回答 #8 的前置疑问：变异机吃不吃 `scripts/*.mjs` 这一面——它杀得动就是吃得下 ｜本机实测 2.4s／2 拍
+✅ verify-per-anchor-cost-not-printed — 逐条结果行不带那一格 ⇒ 整表汇总仍然印「最贵一条」，但「这条锚点值几秒」回到只能推。第 190 页实测按条数装箱：四片各 252 条跑出 323.6／391.1／419.9／443.0s（极差 +37%）⇒ 条数不是重量，而 #28 要的取料面就是这一格（账本 `runsMs` 一直在记，只是没有出口＝规则 245 那一族）。针脚含真换行：表与实现在同一份文件里，单行搜索串会先撞上这张表自己那份引文（规则 247） ｜本机实测 0.7s／2 拍
+✅ verify-per-anchor-cost-empty-as-zero — 空账本印成 `0.0s／0 拍` ⇒ 「这条没被判过」被洗成「这条很便宜」，而装箱会把没量过的条优先塞进片里（规则 245：「没跑」是第三态，不许印成 0.0s） ｜本机实测 0.7s／2 拍
+✅ verify-per-anchor-cost-shape-drifted — 把 `／K 拍` 那一半去掉 ⇒ 读数只剩秒，取料方分不清「一条锚点跑了 1 拍（早退）」与「跑了 3 拍」，而这两个形状的单价差一个量级（第 168 页：第 1 拍付 vite 冷启动）。列印形状是下游读法的一部分，改形状要同轮换读者（规则 251/253） ｜本机实测 0.7s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 347.6s · 跑了 278/278 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 556 次／278 条（每条次数分布 2×278）· 单次中位 第1次 0.4s／第2次 0.4s· 最贵一条 loose-pointer-counts-literal 29.9s
+跑法单价：selector 546 拍·中位 0.42s·坏拍（选中≠1） 0 vs whole 10 拍·中位 0.61s·坏拍（没量到或 0 条） 0
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p216w-0.lock）

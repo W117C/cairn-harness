@@ -1,0 +1,252 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p216w-1.lock）
+变异验证：244 条
+✅ clarify-submit-unknown — 提交到无人等待的 callId 误返回 true（误挂/误改状态） ｜本机实测 1.4s／2 拍
+✅ subprocess-env-default-inherits-host — 省略 env 时的缺省从消毒白名单退回继承主进程 ⇒ BYOK 明文键交给每一个可 spawn 的子进程（fail-open） ｜本机实测 0.7s／2 拍
+✅ hook-env-base-inherits-host — 钩子基础 env 从 sanitizedEnv() 退回 process.env ⇒ 宿主密钥全量进插件子进程，且与另一支重新分家 ｜本机实测 0.8s／2 拍
+✅ containment-realpath-dropped — 词法 resolve/relative 过关后再不做 realpath 归属复查 ⇒ 工作区内一条软链就把读写送出边界（旧实现正是这一形态） ｜本机实测 0.8s／2 拍
+✅ agent-area-lexical-dropped — .agent/ 系统区的词法拒写被拆 ⇒ 模型可直接改 permissions.json（跨会话提权）。第 141 页普查里它是**唯一一条真存活**：分诊结论不是「闸多余」，而是旧判卷量不到这一格——`.agent/permissions.json` 这种写法落点复查也会拒，两道闸都拦 ⇒ 摘一道看不出来。词法闸独有的那一格是「`.agent` 这个名字本身保留」（借名软链 `.agent -> staging` 只有词法闸看得见），补了那条判卷它才有牙齿。 ｜本机实测 0.8s／2 拍
+✅ agent-area-real-recheck-dropped — 落点复查被拆 ⇒ 一条指向 .agent 的软链，rel 里没有 ".agent" 字样，词法闸与 containment 都放行，写入落到 lsp.json（任意 command RCE 面复活） ｜本机实测 0.7s／2 拍
+✅ manifest-cover-escape-accepted — 插件 manifest 的覆盖路径不再校验包含性 ⇒ 不可信清单把插件根外目录挂进来扫描/加载 ｜本机实测 0.8s／2 拍
+✅ taskset-unknown-field-ignored — 认不出的字段被静默忽略 ⇒ 数据集作者写了 verifier 却拼成 verifior，任务照常收进分母但没有判卷 ｜本机实测 0.6s／2 拍
+✅ taskset-dup-id-silently-kept — 重复 id 不再报也不丢 ⇒ 同一实例被数两次，分母与成功率同时失真 ｜本机实测 0.6s／2 拍
+✅ swebench-empty-judge-accepted — 只看 FAIL_TO_PASS 存不存在、不看它是不是空数组 ⇒ 空判卷的实例进来，跑完变成"没坏就算过" ｜本机实测 0.6s／2 拍
+✅ unknown-role-error-hides-user-form — 未知角色的报错少列一种合法形态 ⇒ 猜错名字的模型被告知「这条路不存在」，而它本来写得对 ｜本机实测 1.3s／2 拍
+✅ plan-gate-unapproved-proposal-stops-blocking — 判据只看用户武装的 required、不看「已提交未批准」⇒ 先批后写形同虚设（模型不提交就一路写到底） ｜本机实测 1.2s／2 拍
+✅ plan-gate-deny-not-applied-in-check-permission — 判据算得出「该拦」却没人用它 ⇒ 唯一有强制力的门只剩一句话，auto 档照样落盘 ｜本机实测 1.3s／2 拍
+✅ plan-gate-deny-reason-covers-readonly-tools — 拒绝原因不再按副作用工具判 ⇒ 只读工具也带一句「方案门」，读数开始说谎（该句是给人决定要不要放行看的） ｜本机实测 1.4s／2 拍
+✅ plan-run-scope-isolation-dropped — run 级 plan 作用域退回直接执行 ⇒ A 会话的未批准 plan 拦死 B run 的写、A 的批准解锁 B（并发串味） ｜本机实测 1.5s／2 拍
+✅ propose-plan-missing-channel-not-fail-closed — 缺审批通道（emit/callId/plan 门）不再 fail-closed ⇒ 没有人在场时「提交方案」自己往下走 ｜本机实测 1.3s／2 拍
+✅ prune-minimum-tokens — 最小修剪闸被拆（低于 20k 也裁，无效修剪照做） ｜本机实测 0.9s／2 拍
+✅ prune-protect-region — 保护区累计闸被拆（protectStart 恒为 0，全部事件成候选） ｜本机实测 0.8s／2 拍
+✅ prune-recent-rounds — 最近 N 轮边界恒为 0（全部事件判为最近轮，免剪区吞掉整个裁剪面） ｜本机实测 0.7s／2 拍
+✅ prune-event-id-1based — 替换映射的 1-based 事件 id 变 0-based（投影行号错位，消费者取错事件） ｜本机实测 0.7s／2 拍
+✅ prune-exempt-tools — 免剪名单失效（skill/remember/memory 注入内容可被裁掉，跨会话指令丢失） ｜本机实测 0.7s／2 拍
+✅ prune-grep-glob-lsp — grep/glob/lsp 整形结果免剪失效（已整形产物被重复裁剪，信息损失大于收益） ｜本机实测 0.7s／2 拍
+✅ prune-error-result-exempt — 失败/拒绝结果免剪失效（高价值短结果被裁，错误上下文从上下文消失） ｜本机实测 0.7s／2 拍
+✅ prune-non-toolresult-exempt — 非 tool_result 免剪失效（user_message/tool_call 进候选，裁剪面越界） ｜本机实测 0.7s／2 拍
+✅ prune-verify-card-exempt — verify 卡片投影免剪失效（验证卡面数据源被裁，卡片渲染瞎） ｜本机实测 0.7s／2 拍
+✅ prune-attachment-safesegment — 附件名路径穿越清洗被拆（模型侧 ../../ 直接越出 attachmentsDir） ｜本机实测 0.7s／2 拍
+✅ worker-budget-window-ignored — worker 预算不再采信模型窗口（256k/1M 档仍按硬编码 128k 提前压缩 = 多烧一次摘要 + 白丢冷细节） ｜本机实测 1.2s／2 拍
+✅ worker-budget-clamp-removed — 去掉「显式覆盖绝不超出模型窗口」的钳制（超窗请求发给远端吃 400，本地 fail-closed 失效） ｜本机实测 1.4s／2 拍
+✅ worker-budget-handle-window-lost — spawn 处不把 spec 的 ctxWindow 写进 handle（纯函数与调用点断线：路由选到 strong 档，worker 预算照旧 128k） ｜本机实测 1.5s／2 拍
+✅ session-budget-table-fallback-dropped — 单价缺省时不再查内置价表（估价恒 0 ⇒ 用户只设 maxBudgetUsd 的常见配置下，spec 的 BYOK 底线静默失效）。针脚必须指**给钱的那一行**：上一版指相邻的 budgetRateKnown 早退，那行删掉行为不变（spentUsdFor 自己就 null→0），变异当场存活 ｜本机实测 2.4s／2 拍
+✅ goal-lag-count-not-passed-at-call-site — 调用点不递第 6 个实参 ⇒ 提醒块永远不提「本拍的美元里还没有在途 worker 那一段」 ｜本机实测 1.2s／2 拍
+✅ session-budget-inert-silent — 「估不出价所以闸不生效」不再出声（用户设的成本底线悄悄不存在，且读日志的人也拿不到模型名） ｜本机实测 2.3s／2 拍
+✅ anthropic-total-excludes-cache-buckets — 总输入退回只报 input_tokens（Anthropic 的该字段**不含**缓存读写量 → 长会话输入少算一个量级，底栏 1.5k 而模型实吃 300k） ｜本机实测 0.7s／2 拍
+✅ anthropic-start-cache-frame-ignored — 只认 message_delta 的缓存字段（对端在 message_start 起报、delta 不再回时，整次命中被判成零） ｜本机实测 0.7s／2 拍
+✅ anthropic-delta-cache-frame-ignored — 不认累计帧 message_delta 里的缓存字段（末帧才是权威累计值，漏读即分块恒缺） ｜本机实测 0.7s／2 拍
+✅ openai-cache-read-not-forwarded — 命中量只进 metering 不进事件（UI/账本/回放/bandit 代价面看不见缓存，A1 开不开没有分母） ｜本机实测 0.7s／2 拍
+✅ openai-invents-zero-for-write-bucket — 对端没报写桶时凭空补 0（「缺报」被冒充「写缓存零命中」，meteredCost 的 fail-closed 前提被拆掉） ｜本机实测 0.7s／2 拍
+✅ probe-long-replay-delta-sign-reversed — 长时程差分的「Δ总 prompt」符号反过来 ⇒ gym-long 印给读者那一列读反。复认针脚歧义时才发现这一支此前**零观察者**：A/B 用例只断言了原始账单（on < off），没读差分字段。 ｜本机实测 1.3s／2 拍
+✅ impact-query-param-whitelist-removed — 参数「恰好给一个」的校验摘掉（两个都给时 file 分支先返回、symbol 被静默忽略；都不给时拿 undefined 去查空图 = 假答案） ｜本机实测 1.7s／2 拍
+✅ impact-query-unknown-symbol-silent — 图里没有的符号不再说明原因（改名后的符号会被报成「波及半径为 0」——模型据此判定没人用，直接删掉它） ｜本机实测 1.7s／2 拍
+✅ impact-query-spec-name-drift — 模型可见规格与可执行实例改名分叉（模型调 impact_query、工具表只有 impact ⇒ 「执行面有、模型面没有」的原罪复发） ｜本机实测 1.2s／2 拍
+✅ impact-query-file-mode-lists-local-symbols — file 模式改回照抄 fileImpact.symbols（局部变量 base/boosted 混进摘要：一屏无关名字，token 白花还不给可执行信息） ｜本机实测 1.7s／2 拍
+✅ loop-repeat-nudge-note-dropped — 检测照跑、提示却没落进 tool_result（模型看到的仍是裸错误 ⇒ 换路压力为零，重复照旧烧到 maxSteps） ｜本机实测 1.2s／2 拍
+✅ loop-repeat-nudge-defaults-on — 退回「不开也提示」：worker 的 tool_result 被追加尾注 ⇒ 看门比较的观察串从 ×4 相同被打散成 ×3+1 ⇒ orchestrator 卡死永不触发（m3c 实测形态），靶场按字节推的用量也被扰动 ｜本机实测 1.2s／2 拍
+✅ loop-repeat-nudge-nags-every-repeat — 提示帽摘掉（每次重复都叠一句）⇒ 第 5、6 次重复各多一份同一句话，提示自己变成 token 泄漏面 ｜本机实测 1.2s／2 拍
+✅ loop-repeat-nudge-never-rearms — 换动作时不解除提示帽 ⇒ 一个 run 里第一次被忽略后就永远叫不醒（第二段同样的连败拿不到提示） ｜本机实测 1.2s／2 拍
+✅ impact-query-deps-mode-ignored — deps 分支不进入（参数收了、规格也写了，结果仍只给「谁在调用我」⇒ 反向依赖理解重新变成够不着的能力） ｜本机实测 1.7s／2 拍
+✅ impact-query-deps-combination-unguarded — deps 配 symbol 时不再报错（被静默忽略 ⇒ 模型以为拿到了依赖清单，实际拿到的是波及清单） ｜本机实测 1.5s／2 拍
+✅ impact-query-deps-noun-leaks-into-up — up 方向改用语义标签（措辞串门）⇒ 不带 deps 的既有调用输出不再逐字不变，「谁在调用我」被说成「我在调用谁」 ｜本机实测 1.7s／2 拍
+✅ impact-query-deps-ghost-file-silent — deps 分支不查图内成员（路径写错/后缀不支持时报「依赖面为 0」）⇒ 模型把「没扫到」读成「这个文件不依赖任何东西」 ｜本机实测 2.0s／2 拍
+✅ shell-tail-notice-reserve-removed — 取消提示行的预算预留 ⇒ 提示自己把「输出 ≤ 32KB」撑破（中文提示一行就 ~150B） ｜本机实测 1.0s／2 拍
+✅ probe-go-branch-removed — 摘掉 go.mod 一档 ⇒ Go 仓库又回到「未找到 verify 配置」，闭环照旧是死的 ｜本机实测 0.7s／2 拍
+✅ probe-make-target-not-anchored — test: 判定丢掉行首锚 ⇒ Makefile 里一句注释「run test: pytest」就凭空造出验证面（跑不存在的目标） ｜本机实测 0.7s／2 拍
+✅ probe-invents-lint-commands — 把探到的测试命令同时当 lint 用 ⇒ action-fusion 会拿「风格未整理」把干净改动报成失败 ｜本机实测 0.7s／2 拍
+✅ probe-language-outranks-package-json — package.json 的 scripts 不再优先 ⇒ 仓库明明配了 `vitest run` 却去跑别的 runner，验证结果与项目自己的口径脱节 ｜本机实测 0.7s／2 拍
+✅ probe-bad-package-json-swallowed — 坏 package.json 被静默吞掉 ⇒ 项目自己的 test 脚本消失，还装作「没有验证面」 ｜本机实测 0.7s／2 拍
+✅ verify-127-label-on-wrong-code — 工具链缺失的标注挂到别的退出码上 ⇒ 真失败被说成「工具链没装」，而 127 反而什么都不说 ｜本机实测 0.7s／2 拍
+✅ verify-none-message-hides-probes — none 文案不提语言探测 ⇒ 模型以为 harness 什么都没试，会去手敲一条本可自动跑的测试命令或干脆放弃验证 ｜本机实测 0.7s／2 拍
+✅ verify-timeout-not-threaded-to-exec — 算出了超时却没传给执行器 ⇒ 语言探测档的 300s 只是纸面配置，冷编译照旧被 60s 掐死 ｜本机实测 0.7s／2 拍
+✅ verify-lang-timeout-same-as-npm — 探测档沿用 npm 的 60s ⇒ 探出验证面却让它必然超时（比探不出来更坏：给出「已经验过」的错觉） ｜本机实测 0.7s／2 拍
+✅ verify-timeout-validation-removed — 取消 timeoutMs 校验 ⇒ 单位写错（把秒当毫秒 / 写 0）被静默接受，配置的人以为限制生效了 ｜本机实测 0.7s／2 拍
+✅ verify-timeout-message-hardcoded — 超时消息把秒数写死成 60s ⇒ 配置成别的值时模型读到假限制，会照着「60s 都跑不完」去判断代码 ｜本机实测 4.7s／2 拍
+✅ worker-role-budget-not-applied — 角色块不收窄 ⇒ 插件 agents/*.md（或 spawn_agent 传入）整篇文档作为 system 首块，且它永不进摘要输入 ⇒ 每个 worker 每轮付费 ｜本机实测 0.7s／2 拍
+✅ worker-role-budget-zeroed — 预算写死 0 ⇒ 内置角色也被掐头（一两百 token 的角色定义被截成空壳），worker 的 verdict 纪律整段丢失 ｜本机实测 0.7s／2 拍
+✅ clamp-marker-label-hardcoded — 提示措辞写死成「skill 正文」⇒ 角色块被截时模型看到的是别的面的名字（单位/来源不如实，本仓反复踩过的口径谎言） ｜本机实测 0.7s／2 拍
+✅ gb-parity-face-blind — 对账函数恒返回空 ⇒ 静态门变成盖章机器；门的分辨力必须被它自己测到，否则后续每条「绿」都是空转 ｜本机实测 1.2s／2 拍
+✅ readonly-filter-keeps-wait-tool — 只读档不再显式摘除 wait_for_agents ⇒ 模型面看得见、执行面白名单挡着（本仓第 6 次的那类两头断） ｜本机实测 1.2s／2 拍
+✅ mem-budget-unit-chars — 记忆注入的总预算又按字符帽收（tokenBudget×4）⇒ 中文一字≈一 token，6K 预算实到 14K+，而这块每轮重送 ｜本机实测 0.7s／2 拍
+✅ mem-weight-ascii-count — 丢掉了「按字符类别登记字重」（totalWeight 退回 length×0.25）⇒ 估算器对中文低估 4 倍，预算形同虚设 ｜本机实测 0.7s／2 拍
+✅ mem-drop-cursor-ascii — 删行游标的扣减口径与 totalWeight 脱钩（按 length×0.25 扣）⇒ 中文段一路多删几倍行，预算没超但信息丢了 ｜本机实测 0.7s／2 拍
+✅ mem-metadata-tokens-missing — 元数据行不再报 tokens_current/tokens_limit ⇒ 块里只剩字符帽那把尺，模型自我收敛收敛到错的口径 ｜本机实测 0.7s／2 拍
+✅ mem-tokens-reported-ascii — 自报的 tokens 回到 chars/4 ⇒ 判定按字重、读数按英文口径，同一模块两副口径（本仓「估算与执行两套口径」病） ｜本机实测 0.7s／2 拍
+✅ shape-doc-head-not-charged-to-cap — [开头] 又无条件追加 ⇒ 一个长段落就把 maxChars 撑穿，而同族 shapeCode/shapeLog 都严格切帽（调用方按帽记账） ｜本机实测 0.7s／2 拍
+✅ shape-doc-head-always-dropped — 把「装得下才补」写成永不补 ⇒ 大纲丢掉开头上下文（信息更少并不更安全），零回归侧必须拦住它 ｜本机实测 0.6s／2 拍
+✅ prune-placeholder-tokens-by-chars — 替换文本按裸占位扣（附件路径行不算）⇒「省了多少」被白记一程；改指现实现：savedTokens 只认 PRUNED_PLACEHOLDER，不看 stub ｜本机实测 0.8s／2 拍
+✅ typecheck-triage-scratches-into-tracked — 归因把所有报错都算成 HEAD 内 ⇒ 别人未跟踪的草稿又会被当本仓回归，白开一次 worktree 对照（已发生两次） ｜本机实测 0.6s／2 拍
+✅ typecheck-parse-trims-at-whitespace — 解析报错行改回按非空白切路径 ⇒ 目录名带空格（本仓目录就叫 deepseek harness）时截出半个路径，整列归因作废 ｜本机实测 0.6s／2 拍
+✅ typecheck-clean-verdict-unearned — 「HEAD 态类型干净」改成只要有报错就说 ⇒ 真有 HEAD 缺陷时照样给出一句假绿结论 ｜本机实测 0.6s／2 拍
+✅ evidence-red-beat-as-verified — 只看「有没有 verify 拍」不看 ok ⇒ 红的验证拍被读成 verified，证据位反成粉饰工具 ｜本机实测 1.0s／2 拍
+✅ evidence-ignores-write-order — 丢掉「验后又写」的次序判定 ⇒ 描述的不是即将合并的那份代码也算证据（能力 5 最忌的假绿） ｜本机实测 0.9s／2 拍
+✅ evidence-counts-failed-writes — 被权限门拒掉的写也算「改过盘」⇒ 一次没落盘的 tool_call 就把绿证据打成 stale（读数反过来不诚实） ｜本机实测 1.0s／2 拍
+✅ spent-usd-unknown-as-zero — 价格不可知时回 $0 而不是 null ⇒ 「这个 worker 没花钱」成为假证据（把不可知记成免费） ｜本机实测 1.2s／2 拍
+✅ spent-usd-claims-calibrated — 标定态写死 true ⇒ GLM 三档的占位单价被读成厂商实测价，「省了钱」的宣称失去约束 ｜本机实测 1.2s／2 拍
+✅ spent-usd-price-drift-as-free — 价表查不到时兜一个 0 价档 ⇒ 两表漂移被读成「这个 worker 免费」，且 worker 终态还照常绿（最贵的读数是假的） ｜本机实测 1.3s／2 拍
+✅ spent-usd-infinite-passes — 不做有限性检查 ⇒ Infinity 进 JSON 静默变 null、整批合计被带成 NaN，「省了多少」从此是噪声而不是数 ｜本机实测 1.4s／2 拍
+✅ price-tag-silent-when-unknown — 算不出价时把这一行留空 ⇒ 回执看起来像「报价被省略」，没人知道价格面是黑的 ｜本机实测 1.4s／2 拍
+✅ join-note-hides-unknown-count — 合计只加已知的却不报有几个未知 ⇒ 模型把部分和当整批花费（本仓「整块省略要说省了谁」同族） ｜本机实测 1.4s／2 拍
+✅ join-degraded-row-loses-spent — 整批帽摘摘要时顺手摘掉花费 ⇒ 最贵的那几条恰好看不见钱（判分工值不值的读数被裁掉） ｜本机实测 1.5s／2 拍
+✅ receipt-drops-price-line — 回执不报价 ⇒ 派工时模型只看得到「有几个并发槽」看不到单价，「要不要再拆一个」只能凭感觉（W3② 的正面） ｜本机实测 1.4s／2 拍
+✅ price-resolver-skipped — 价格解析整段不跑（真实 provider 也被判成不可知）⇒ 钱面全黑而回执仍「像在工作」，实测读数无从积累 ｜本机实测 1.4s／2 拍
+✅ scripted-marker-never-set — 剧本模型不打 scripted 标 ⇒ 冻结回放被折算成「花了钱」，checks/demo 轨迹从此污染价格读数 ｜本机实测 1.4s／2 拍
+✅ glm-default-name-ignores-env — glmDefaultModelName 不读 M0_MODEL ⇒ 与实际拨号名各算一份（本仓点名的「与 X 对齐」只是注释） ｜本机实测 1.6s／2 拍
+✅ prune-stub-hides-attachment-path — 算了附件路径却不写进打桩文本 ⇒ 回取通道对模型不可见，裁剪变成不可逆的信息销毁 ｜本机实测 0.9s／2 拍
+✅ prune-attachment-rewrite-every-turn — 去掉「已存在即跳过」⇒ 每次模型调用都把全部附件重写一遍（白 IO，且 mtime 失去「何时被裁」的含义） ｜本机实测 0.9s／2 拍
+✅ prune-saved-tokens-ignores-stub-text — 节省量按 0 扣 ⇒ 面板上的「省了多少」把新增的打桩文本（含路径行）整个算成白赚 ｜本机实测 0.8s／2 拍
+✅ worker-hooks-never-threaded — worker 的 runLoop 不接钩子引擎 ⇒ 用户装的 PreToolUse 拦截钩子挡不住并行 worker 写盘（门装了不锁；§9.10 明文 worker 继承主会话插件启用集） ｜本机实测 2.1s／2 拍
+✅ worker-agent-id-not-threaded — 编排器不把 w.agentId 交给 loop ⇒ 钩子收到的 stdin 里 agent_id 恒缺席，§4.4 的归因面（哪个 worker 触发的）在钩子侧丢失 ｜本机实测 1.9s／2 拍
+✅ loop-does-not-forward-agent-id — loop 收到了 agentId 却不写进 PreToolUse 载荷 ⇒ 同一格「两头断」的另一头：编排端接了、执行端没传 ｜本机实测 1.8s／2 拍
+✅ read-worker-inherits-wide-hook-mode — forWorkerMode 原样返回宽档引擎 ⇒ 只读 worker 也能跑有副作用的钩子命令（最小权限半边没接） ｜本机实测 3.7s／2 拍
+✅ prompt-command-dispatch-never-runs — 派发拿到的命令表是空的 ⇒ commands/*.md 又被装载一次却依旧没人解析（§9.4「渲染成用户消息进事件流」回到今日现状），用户敲 /cmd 得到一串死文本 ｜本机实测 2.1s／2 拍
+✅ prompt-command-refused-silent — user-invocable:false 不再出声 ⇒ 那串斜杠原样进模型，模型只能猜（把「不可调用」降级成静默） ｜本机实测 2.2s／2 拍
+✅ command-invoke-name-drops-plugin-prefix — 调用名去掉插件前缀 ⇒ 两个插件的同名命令撞成一个（scoped 名是 §9.2/§9.6 的消歧面，面板与派发同名） ｜本机实测 2.0s／2 拍
+✅ command-render-keeps-markdown-newline — 不剥 markdown 文件自带的首尾换行 ⇒ 每条命令渲染出的用户消息都带一个空白尾巴（事件流与面板多一行空内容） ｜本机实测 2.0s／2 拍
+✅ skill-routing-drops-when-to-use — 路由清单只留 description ⇒ 模型知道「有这个 skill」却不知道「什么时候该用」，§9.3 的 (+when_to_use) 没落地，触发靠猜 ｜本机实测 1.1s／2 拍
+✅ skill-routing-ignores-disable-model-invocation — 清单不做过滤 ⇒ 声明了「只能用户触发」的 skill 仍每轮占用模型上下文并诱导自动触发（白付 token + 违背插件作者意愿） ｜本机实测 1.0s／2 拍
+✅ skill-fm-bool-only-accepts-boolean — 布尔位只认 true 不认 "true" ⇒ 我们 frontmatter 解析器给的是字符串，CC 插件的这条声明被静默读成「没声明」 ｜本机实测 1.0s／2 拍
+✅ skill-hidden-in-list-but-still-executable — 只把名字从清单里藏掉、执行端不设闸 ⇒ 模型猜中调用名照样拿到全文（「看不见」被当成「挡住了」） ｜本机实测 1.0s／2 拍
+✅ subagent-start-not-fired — worker 生命周期不发 SubagentStart ⇒ §9.5 表里这一行只剩枚举，插件作者给子任务的注入面（施工须知 / 项目黑话表）整条失效 ｜本机实测 1.9s／2 拍
+✅ subagent-start-context-not-threaded — 发了 SubagentStart 却不把 additionalContext 传进 system ⇒ 钩子跑了、模型一个字也没看到——「收下即丢」的第三种写法（前两种：字段不读、回执不接） ｜本机实测 1.9s／2 拍
+✅ subagent-stop-not-fired — 不发 SubagentStop ⇒ 「每次子任务收束都过一次审计钩子」这条承诺（§9.10 的另一半）落空，且终态已经写完才发现没人验收 ｜本机实测 1.8s／2 拍
+✅ subagent-stop-fired-twice — SubagentStop 在运行体和终态漏斗各发一次 ⇒ 每个 worker 被审计两遍（次数断言才看得见：只判「有没有」的哨兵会放它过去） ｜本机实测 1.8s／2 拍
+✅ subagent-agent-type-fabricated-empty — 无名 worker 也塞一个 agent_type 空串 ⇒ 写了 matcher 的钩子从「不匹配」变成「可能匹配上伪造值」，而作者读到 stdin 会以为这子任务真有个空名字的类型 ｜本机实测 1.8s／2 拍
+✅ subagent-agent-type-not-on-handle — spawn 时没把角色名落到 handle ⇒ 事件照发、agent_type 永远缺席，§9.5 里 Subagent* 唯一的 matcher 字段在流水线 stage 上也配不出来 ｜本机实测 1.8s／2 拍
+✅ skill-trigger-skips-substitution — 触发 skill 时原样吐正文 ⇒ 为 CC 写的 SKILL.md 里的 $ARGUMENTS 一路裸着进模型上下文（模型以为要自己填，或干脆照抄变量名） ｜本机实测 1.1s／2 拍
+✅ skill-tool-drops-args-arg — 工具执行面不读 args.args ⇒ 替换器永远收到空串。上面那条锚点杀的是「runtime 不替换」，这条杀的正是最后那一跳：接缝都在、参数没接 ｜本机实测 2.1s／2 拍
+✅ skill-tool-spec-hides-args — 规格面不声明 args ⇒ 执行面读得到但模型看不见，等于这条参数通道对模型不存在（§4.4 三面同源的老形状） ｜本机实测 2.2s／2 拍
+✅ skill-named-arguments-ignored — 不把 frontmatter arguments 的声明序交给替换器 ⇒ §9.3 的 $name 一档全灭，作者按 CC 写法声明的参数面静默失效 ｜本机实测 1.1s／2 拍
+✅ skill-dir-var-missing — 不给 SKILL_DIR ⇒ 正文里「配套脚本见 ${SKILL_DIR}/run.py」这类写法永远展不开，模型拿到一个伪路径字符串 ｜本机实测 1.1s／2 拍
+✅ skill-remount-does-not-replay-args — 压缩后重挂时不重放当年那次调用的参数 ⇒ 同一个 skill 第一次进上下文是替换过的、重挂回来是裸模板，模型看到两份不一样的「权威正文」 ｜本机实测 1.1s／2 拍
+✅ glm-tool-stream-switch-ignored — 关位被无视、永远发 tool_stream ⇒ 严格代理上 provider:check 与每个 worker spawn 第一跳 400（能力有、路径堵） ｜本机实测 0.7s／2 拍
+✅ glm-tool-stream-default-flipped-off — 缺省翻成「不发」⇒ 官方智谱的工具调用流式静默退化（该开关本意是 opt-out，不是改缺省） ｜本机实测 0.7s／2 拍
+✅ glm-tool-stream-garbage-turns-it-off — 任意字符串都当「关」⇒ 把 0 打成 oh/false1 时人以为开关生效、实际还在 400，比直接报错更难查 ｜本机实测 0.7s／2 拍
+✅ cascade-trigger-wider-than-objective-fail — 升级判据放宽成「不是 verified 就算红」⇒ 这一路压根没跑过 verify 的环也被拉去升档，拿猜测换账单 ｜本机实测 21.7s／2 拍
+✅ cascade-rung-accepts-absent-evidence — 升上来的那一档不再要求绿证据 ⇒ 花真钱买回一份比触发时更弱的证据还把环标成 done（假绿形状） ｜本机实测 21.7s／2 拍
+✅ cascade-ladder-cross-provider — 阶梯不再限定同 provider ⇒ 一次 BYOK 会话在升档时被悄悄换成别家的 key 与模型 ｜本机实测 2.0s／2 拍
+✅ cascade-ready-ignores-routing — cascadeReady 丢掉 routing 前置 ⇒ 未路由时档位无从知晓，「升档」退化成花两遍钱跑同一个模型 ｜本机实测 1.7s／2 拍
+✅ cascade-climbs-past-other-class-failure — 升上来的那档终态 failed/cancelled 仍继续往上爬 ⇒ 换一档重跑同一个坏环境，把预算烧在没判据说能修好的失败上 ｜本机实测 2.1s／2 拍
+✅ bandit-rewards-self-reported-done — 奖励只看终态 done、不看客观证据 ⇒ 在恰好被判红的那一跑上给便宜档加分，级联越开越学出「便宜但红」 ｜本机实测 1.7s／2 拍
+✅ goal-done-never-fires — 摘掉「绿证据 ⇒ done」这条唯一放行口 ⇒ 验过也要继续跑到轮次上限（多烧的钱正好是这条能力要省的） ｜本机实测 1.1s／2 拍
+✅ goal-turn-cap-removed — 摘掉轮次上限 ⇒ 自动续跑没有停点（长任务变成无限任务） ｜本机实测 1.1s／2 拍
+✅ goal-usd-cap-removed — 摘掉美元闸 ⇒ 用户设的钱上限只是装饰 ｜本机实测 1.1s／2 拍
+✅ goal-price-unknown-silent — 价格不可知时不再说话 ⇒ 「算不出花了多少」被读成「还没花钱」（把不可知记成免费） ｜本机实测 1.1s／2 拍
+✅ goal-noop-continue-burns-money — 摘掉「没写盘也没证据 ⇒ 停」⇒ 读答型目标被自动续跑跑到轮次上限，纯烧钱 ｜本机实测 1.1s／2 拍
+✅ impact-cause-existence-collapsed — 「不在图内」的成因分诊退回一句话：不再分辨「路径下根本没有这个文件」⇒ 模型对一条写错的路径收到的是「图外、未知 ≠ 0」，于是它去换查法而不是去 glob，白跑一轮（旧文案就是这个形状） ｜本机实测 1.6s／2 拍
+✅ impact-cause-outside-graph-collapsed — 第三种成因（文件在盘上、后缀支持、却在图外——实测支配本仓 36 个图外源码文件的那一类）被并回「没有文件」那句 ⇒ 真缺席重新变回一句假指引，「未知 ≠ 0」这句也不再出现在模型面前 ｜本机实测 1.5s／2 拍
+✅ impact-cause-cap-position-collapsed — 帽外那一支被并回「快照滞后」那句 ⇒ 模型收到「再问一次即可进图」，而事实是再问一万次它也在帽外（本仓实测 36 个文件就是这么消失的）——指错下一步比不说更费轮次 ｜本机实测 1.0s／2 拍
+✅ impact-cause-unknown-note-lost — 丢掉「分辨不出」那一支 ⇒ 重扫失败也去走「永久排除」/「快照滞后」的具名结论。注意这一支的判据在**纯函数**上（把 rg 弄失败又能让文件在盘上的代价不划算）：存活的第一版锚点钉的是 .catch 那格，而 .catch 没有任何观测者——换钉法，不撤判据 ｜本机实测 1.1s／2 拍
+✅ impact-cause-rescan-failure-claims-permanent — 把「扫不动」交回的值从 null 改成 -1 ⇒ 「不确定」在证据上被冒充成「被 .gitignore 永久排除」，模型就此放弃等建图、直接换查法。第一版锚点钉在旧的内联 .catch 上当场存活（那格没有观测者），所以先把 seam 拆成 graphCandidatePosition 并补正反用例，再回来钉这一格 ｜本机实测 1.2s／2 拍
+✅ snapshot-ignores-the-history-filter — 收到筛选值却不筛、回全量 ⇒ 段头写着「只看 失败」而列表里躺着成功与跳过：标签与内容相反，用户按错的名单判断哪条任务健康 ｜本机实测 1.6s／2 拍
+✅ unknown-history-filter-becomes-a-real-state — 跨进程来的未知值不归一、直接当筛选值用 ⇒ 拼错或被改的输入筛出一片空记录：假空比填空更坏，用户会以为任务从没跑过 ｜本机实测 1.5s／2 拍
+✅ stop-reason-keeps-wire-text — 存线上原文而不是归一 token ⇒ 网关给 '  max_tokens \n' 就原样进模型可见上下文 ｜本机实测 1.3s／2 拍
+✅ stop-reason-emits-on-benign-reason — 摘掉「只给 outcome 非 null 才落」这道闸 ⇒ 答完的轮也落证据，既有转录被污染 ｜本机实测 1.3s／2 拍
+✅ stop-reason-drops-case-fold — 去掉 toLowerCase ⇒ Gemini 的 MAX_TOKENS/SAFETY 全落 unknown，这一族静默失明 ｜本机实测 1.3s／2 拍
+✅ stop-reason-hides-zero-output-tokens — 真值判断代替 != null ⇒ output_tokens=0 被折成「provider 没上报」（0 也是读数） ｜本机实测 1.3s／2 拍
+✅ anthropic-never-reads-stop-reason — 摘掉 message_delta 里那句读取 ⇒ 退回本轮动手前的原状（字段在、零读者） ｜本机实测 1.2s／2 拍
+✅ openai-never-reads-finish-reason — 摘掉 finish_reason 的记值 ⇒ GLM 跟着失明（它整文件委托本适配器，没有自己的读取点） ｜本机实测 1.3s／2 拍
+✅ gemini-never-reads-finish-reason — 摘掉 candidates[0].finishReason 的记值 ⇒ 这一家单独回到「截断＝成功」 ｜本机实测 1.4s／2 拍
+✅ context-never-projects-truncation — 证据落了盘但投影不注入 ⇒ 模型下一轮仍把半句话当成自己说完的话（感知到了、没修） ｜本机实测 1.3s／2 拍
+✅ mock-script-cannot-express-truncation — 剧本拒收 turn_truncated ⇒ 截断只能在测试里手写 provider 造，端到端那一跳没有观测者 ｜本机实测 1.3s／2 拍
+✅ compaction-input-drops-truncation — 摘要输入不收这一行 ⇒ 压缩把被排除旧事件里唯一的截断痕迹一起丢掉，半句被摘成完整结论 ｜本机实测 1.3s／2 拍
+✅ compaction-merges-truncation-causes — 把「篇幅用尽」与「内容策略中止」并成一句 ⇒ 摘要里看不出下一步该续写还是改道 ｜本机实测 1.3s／2 拍
+✅ goal-treats-truncation-as-no-output — 摘掉 continue 那一支 ⇒ 被 max_tokens 砍断的一轮被擦成「没有可验证的产出，续跑只会白花钱」并停下 ｜本机实测 1.3s／2 拍
+✅ goal-truncation-scan-blind — 从流尾回走的判据恒返回 false ⇒ 「被打断」与「说完了」在 goal 层重新变成同一个形状 ｜本机实测 1.3s／2 拍
+✅ goal-view-drops-truncated-field — 算了 lastTurnWasTruncated 却不挂进 GoalView ⇒ 生产入口拿不到（纯函数有单测正是漏接的藏身处） ｜本机实测 1.1s／2 拍
+✅ worker-truncation-reaches-parent-untagged — withAgentId 的类型白名单不收 turn_truncated ⇒ 子流截断以「主会话上一轮没说完」落进父转录与父目标判据 ｜本机实测 1.1s／2 拍
+✅ anthropic-null-frame-clobbers-stop-reason — 无条件赋值（只看 !== undefined 或干脆不判）⇒ 后到的 stop_reason:null 帧抹掉已拿到的 max_tokens ｜本机实测 1.2s／2 拍
+✅ token-count-coercion-lost — 去掉 Number.isFinite 这道界 ⇒ NaN/Infinity 当作读数存进来，而它会被拼进滚动摘要的散文行 ｜本机实测 1.1s／2 拍
+✅ openai-nonstream-blind — 非流式分支不读 finish_reason ⇒ 压缩摘要被砍断时账面上是「写完了」 ｜本机实测 1.1s／2 拍
+✅ gemini-blind-to-prompt-feedback — 只读 candidates[0].finishReason ⇒ prompt 级拦截那一帧根本没有 candidates，SAFETY 永远看不见 ｜本机实测 1.1s／2 拍
+✅ summarizer-hides-truncation — 摘要器收下 turn_truncated 却不往外传 ⇒ 第四闸永远等不到它（「两头断」的原型形状） ｜本机实测 1.1s／2 拍
+✅ compaction-accepts-truncated-summary — 摘掉第四闸 ⇒ 半句摘要落进记录并替掉它替掉的旧事件（不可逆的那一面） ｜本机实测 0.9s／2 拍
+✅ goal-hint-lost-at-callsite — 生产入口不传 decision.hint ⇒ 被收走的那一轮仍收到「针对红字继续」（算了没人读的第 10 次） ｜本机实测 1.0s／2 拍
+✅ goal-reminder-ignores-hint — hint 收进参数却不用 ⇒ 块里同时留着「针对红字继续」那句错指令 ｜本机实测 1.0s／2 拍
+✅ goal-truncation-branch-forgets-hint — continue 判对了但不给 hint ⇒ 续跑照跑，可模型收到的仍是「对着红字改」 ｜本机实测 1.0s／2 拍
+✅ goal-reminder-follow-ignores-evidence — 下一步那一句不看证据态、恒用 failed 的话 ⇒ 「从没跑过验证」的一轮被教成「去改红字」 ｜本机实测 1.1s／2 拍
+✅ compaction-summary-leaks-child-stream — 摘要输入不看归因 ⇒ worker 的内部转录被父会话「做过」的形态写进长期留存的摘要 ｜本机实测 1.0s／2 拍
+✅ compaction-child-skip-merges-deltas — 跳过子流时不先收尾正文 ⇒ 子流两侧的两段父正文粘成一段（父说过什么被改写） ｜本机实测 1.0s／2 拍
+✅ prune-candidates-include-child-stream — 候选面不再排除子流 ⇒ worker 的 tool_result 被裁：记一次不存在的节省 + 把内部转录抄进附件 ｜本机实测 0.7s／2 拍
+✅ prune-protection-window-counts-child-stream — 保护区预算把子流体量算进去 ⇒ 父会话里真在上下文中的老结果被提前划出保护区去裁 ｜本机实测 0.7s／2 拍
+✅ redaction-drops-delta-from-body-table — 把 assistant_delta 从正文表里摘掉 ⇒ 擦了最终消息、留着流式分片——同一句话的另一个出口静默失效 ｜本机实测 0.6s／2 拍
+✅ redaction-stops-recursing-into-containers — 容器只原样复制不再归叶子 ⇒ verify_result.results / plan_proposed.plan / agent_result.artifacts 里的正文整段不扫（表看着列了路径，其实什么都不擦） ｜本机实测 0.6s／2 拍
+✅ redaction-scrubs-user-authored-text — 把用户自己贴进来的正文也扫掉 ⇒ 用户贴密钥让 agent 配环境这条正常意图被毁；边界要有名字，不是靠「顺手一起扫」 ｜本机实测 0.6s／2 拍
+✅ redaction-mutates-the-source-event — 就地改事件本体 ⇒ worker 内存态（provider 投影与报告回读用）被脱敏文本污染，模型看到的和自己写的不是同一份 ｜本机实测 0.6s／2 拍
+✅ entropy-candidate-eats-assignment-label — 候选字符集含 `=` ⇒ `SESSION=<高熵>` 整串成为候选，mask() 只留前 4 字符，键名连同值一起吃掉（掩码产物读起来像原文被改坏了） ｜本机实测 0.6s／2 拍
+✅ entropy-path-veto-removed — 去掉绝对路径否决 ⇒ 字符集含 `/`，一条 tmpdir 整段成为候选（实测 `/var/folders/…` 落成 `/var****`），落流与归档两面的路径全毁 ｜本机实测 0.6s／2 拍
+✅ rule-matcher-deny-ignores-wrappers — deny/ask 退回裸文本前缀（不看有效二进制）⇒ 用户手写的 deny 被 /usr/bin/git、env、nohup、timeout、command、bash -c 六类写法静默击穿。**09-22 起要同时废掉两条面**：形态面（`commandForms`）与 ⑩ 按序面里的 `invocations` 候选——⑩ 之后两条都守得住这件事，只改一条会变异存活（这就是「冗余守护」的代价：锚点得指全） ｜本机实测 0.7s／2 拍
+✅ rule-matcher-allow-widens-to-wrappers — 把 allow 也接进形态面 ⇒ 用户点过一次「总是允许 echo hi」的同意被顺带扩大到 `env FOO=1 echo hi`、`nohup echo hi`、`/usr/bin/echo hi`（收紧与放宽的不对称是刻意的，丢掉它等于替他扩大同意范围） ｜本机实测 0.7s／2 拍
+✅ rule-allow-consent-gap-removed — 丢掉「命中前缀之后还剩载荷」的同意范围检查 ⇒ `echo hi` 的一次点击重新覆盖 `echo hi > /tmp/pwned`、`echo hi $(rm -rf …)`（09-21 探针 ② 段原缺陷复活） ｜本机实测 0.7s／2 拍
+✅ threat-pipe-into-shell-downgraded — 「管道进 shell」从 high 降成 medium ⇒ 自主档对 `echo hi | sh` 不再出卡（② 段第五支靠的是这条威胁表条目，不是 allow 判据） ｜本机实测 0.7s／2 拍
+✅ threat-redirect-system-path-downgraded — 「重定向写入系统路径」从 high 降成 medium ⇒ 自主档 `echo x > /etc/hosts` 不再出卡（④ 段原缺陷以另一种方式复活：条目在，分级不在） ｜本机实测 0.7s／2 拍
+✅ threat-redirect-devnull-exclusion-lost — 丢掉 `>&1` 与 `/dev/null` 的负向前瞻 ⇒ 丢弃输出也被当成「往文件里写」，反例那条必须红（这条锚点盯的是判据自己变宽） ｜本机实测 0.7s／2 拍
+✅ threat-redirect-fd-prefix-missed — 重定向正则不吃 fd 数字前缀 ⇒ `build 2>>err.log` 这类真实写面看不见（`2>` 前一个是词字符，前缀类挡住） ｜本机实测 0.7s／2 拍
+✅ silent-green-not-charged — 判据在、组合面没接：一门绿而零输出被算成「没有未证」⇒ 汇总与账本重新对上「全绿」，沉默那格退回无人观测（本仓第 10 次「两头断」的形状：机器齐全、调用方断） ｜本机实测 1.1s／2 拍
+✅ silent-green-predicate-dead — 恒假判据：机制被换成一句永远说「不静默」的常量 ⇒ 三条正例全绿而真实表现回到旧行为（恒假判据永远红，这里是恒假的那一面对红着的用例负责） ｜本机实测 1.0s／2 拍
+✅ silent-green-overreach-onto-red — 判据丢掉输出面只看退出码 ⇒ 红门也被计一次未证，「未证」总数被红门污染，严格模式下同一件事既算红又算未证（两个口径互相吞） ｜本机实测 1.0s／2 拍
+✅ verdict-takes-last-line-not-conclusion — 结论行退回「就取最后一行」⇒ vitest 的收尾是 Duration / Start at，计数在它前面，汇总页于是显示一句没用的话——取错一行比不取更坏，因为它看起来像结论 ｜本机实测 1.1s／2 拍
+✅ verdict-not-stripping-ansi — 剥色没吃共用件（各门自己判一次）⇒ 调用者 TERM 带色时结论行里嵌着 \x1b，汇总页打出一串脏码——同一族在 vitest-summary 里已修过一次，这里不能重抄一份漏掉 ｜本机实测 1.1s／2 拍
+✅ impact-query-defless-claims-impact — 「图里没有它的定义」这一格被删 ⇒ `upward` 把全部同名引用点原样吐出，于是外部/全局符号（`describe`、`expect`）得到「波及 179 个文件」——把「谁提到这个名字」冒充「改它会波及谁」，比回答不了更坏 ｜本机实测 1.6s／2 拍
+✅ pc-serialize-layer-keeps-closing-bracket — 序列化留着数组尾那个右方括号 ⇒ 纯追加永远差一个括号，PC1 整条判据失灵 ｜本机实测 1.1s／2 拍
+✅ pc-pure-append-always-true — 纯追加判定恒真 ⇒ 中段重写（prune 改写历史中段那一族）再也判不出红 ｜本机实测 1.1s／2 拍
+✅ pc-volatile-changed-conjunct-dropped — 只看「可缓存面没变」不看「易变块真的变了」⇒ 什么都不动的样本也能报通过（本仓最忌的真空通过） ｜本机实测 1.1s／2 拍
+✅ pc-face-change-named-shortcut — 「有没有出声」直接当真 ⇒ 工具面静默变化这一族从判据里消失 ｜本机实测 1.1s／2 拍
+✅ pc-determinism-count-hardcoded — 降配抖动计数写死成 1 ⇒ 每轮重写一遍前缀的代价再也量不出来 ｜本机实测 1.0s／2 拍
+✅ pc-attribution-ignores-evidence — 「抖了但没有认账来源」不再算静默重写 ⇒ 压缩/裁剪只要发生就一律放过，证据链失去意义 ｜本机实测 1.0s／2 拍
+✅ pc-first-rewrite-index-flattened — 重写点一律报第 0 条 ⇒ 读数再也指不出「是哪一条被改」，而这条判据的全部价值就是定位 ｜本机实测 1.1s／2 拍
+✅ pc-silent-check-dropped-from-expect-rewrite — 要求抖的那一支只看「抖没抖」不看证据 ⇒ PC5/PC6 退化成一条存在性断言 ｜本机实测 1.1s／2 拍
+✅ lr-growth-invented-not-from-script — 增长内容退回我编的字数 ⇒ 所有 case 量出同一张表，读数却写着 case 名（第一版真的这样跑通过） ｜本机实测 1.2s／2 拍
+✅ lr-empty-script-silently-accepted — 剧本没正文时静默拼空串 ⇒ 长时程读数变成「只长了我塞的分隔符」 ｜本机实测 1.2s／2 拍
+✅ lr-head-survival-claims-perfect-append — 头部存活比恒报 1 ⇒ 「一次压缩作废 42 万字符」这类读数从此消失，摊销也就无从判有无效果 ｜本机实测 1.2s／2 拍
+✅ lr-compaction-count-ignores-evidence — 压缩次数拿「抖了几次」冒充而不是数事件流 ⇒ 与 PC5/PC6 的认账口径分家，两个数从此互相矛盾 ｜本机实测 1.2s／2 拍
+✅ event-stamp-dropped — append 不再盖 ts ⇒ 每条事件的 `ts` 又变成「生产者记得才有」，工具耗时整个面消失（而测试面之外无人知）。针脚随 14d2736 搬家：那次把「另造一份只存在于盘上的副本」改成盖在事件本身上（副本会让 ipc:check / schedule-check 的 live≡盘 恒红） ｜本机实测 0.7s／2 拍
+✅ event-stamp-overwrites-producer-ts — 无条件盖 now() ⇒ 把 automation 那批自己定的时间洗成本机时间（它们语义是「计划/发生时刻」，不是「落盘时刻」）。针脚同上一条一起搬家 ｜本机实测 0.7s／2 拍
+✅ provenance-exit-tool-result-unescaped — 工具正文（含 prune 的第二份替换文本）不再过中和 ⇒ 仓库里写一行 <system-reminder> 就是模型面前的控制标签 ｜本机实测 0.8s／2 拍
+✅ provenance-summary-envelope-unescaped — 压缩摘要信封不过中和 ⇒ 摘要正文由模型从外部内容写出，回读时控制标签原样进上下文 ｜本机实测 0.8s／2 拍
+✅ provenance-auto-verify-note-unescaped — 自动验证拍不过中和 ⇒ 目标仓库里的命令名与失败输出（外界文本）带着标签/harness 前缀回流 ｜本机实测 0.8s／2 拍
+✅ provenance-dangling-note-unescaped — 悬空调用补位不过中和 ⇒ provider 原样带回来的 callId 被拼进 harness 署名的那句说明里 ｜本机实测 0.8s／2 拍
+✅ control-tags-arm-dropped — 共用实现里只留角色行那一臂、摘掉控制标签臂 ⇒ 四处出口同时失去中和而「函数还在」：钉在唯一取料点上，不给四臂各造一条会各自漂移的尺 ｜本机实测 0.8s／2 拍
+✅ agent-spawned-role-not-emitted — agent_spawned 不再带 role ⇒ 角色只活在内存（handle.agentType），崩溃恢复与审计面都读不到 ｜本机实测 1.4s／2 拍
+✅ spawn-role-resolution-short-circuited — 模型点名的 role 被当成空 ⇒ 未注册角色静默按默认面跑（申报的角色面被吞掉） ｜本机实测 1.4s／2 拍
+✅ respawn-args-drops-role — respawnArgsFrom 不映射 role ⇒ 恢复卡的 artifacts.respawn 少一位（重派换了一张角色面） ｜本机实测 1.4s／2 拍
+✅ respawn-forward-back-to-field-list — 重派改回逐字段列写（漏掉 role 等四位）⇒ 映射端补了、转发端没跟上，这一跳静默丢参数 ｜本机实测 1.5s／2 拍
+✅ scorecard-env-beats-billed-to-model — 不再识别环境拍 ⇒ 装不上工具链的机器把 run 判成「模型没修好」，成功率与返工数一起说谎（P1-3 归因白做） ｜本机实测 1.2s／2 拍
+✅ scorecard-private-write-list — 面里另抄一份两名字写向清单（不用 mayHaveWrittenDisk）⇒ shell 改盘的 run 被判 no-write，分母反过来骗人 ｜本机实测 1.2s／2 拍
+✅ scorecard-denominator-includes-unproven — 成功率分母把「证据缺席」的流也算进去 ⇒ 一个没人验过的 run 直接压低分数，读数不再可比 ｜本机实测 1.2s／2 拍
+✅ repair-branch-never-fires — 红拍后那一支永不触发 ⇒ 开关形同虚设，「执行-验证-修正」仍停在验证 ｜本机实测 1.4s／2 拍
+✅ repair-driven-by-env-red — 自动拍的返回值不再区分环境红 ⇒ 装不上工具链的机器多要一轮去重跑同一件必失败的事，P1-3 归因白做 ｜本机实测 1.3s／2 拍
+✅ repair-reverifies-unchanged-code — 第二拍不再要求「这一轮真的又改过盘」⇒ 模型只回一句「知道了」也把同一份代码再验一遍（纯烧一遍全量测试） ｜本机实测 1.3s／2 拍
+✅ auto-verify-repair-settings-fallback-dropped — 生产入口不读盘上的 autoVerifyRepair ⇒ 设置界面那个「拍红后再要一轮去修」的开关是空的（内核那 7 条用例照绿） ｜本机实测 2.3s／2 拍
+✅ recovery-log-path-only-from-memory — 恢复兜底只认内存里的 lastLogPath ⇒ 真重启后（三个内存态全归零）恢复卡的「重派」依旧点不动，只换了句错误文案 ｜本机实测 2.1s／2 拍
+✅ spawn-supervise-drops-stages-silently — 摘掉早期拒绝那一行 ⇒ 申报了不读的键重新静默蒸发（真轨迹那次：三阶段计划整支丢掉、回执无一句话） ｜本机实测 1.5s／2 拍
+✅ spawn-surface-check-uses-wrong-mode — 检查拿错档位（写死 read）⇒ 合法 pipeline 申报 stages 被凭空拒一次，比漏拒更早咬到真调用 ｜本机实测 1.4s／2 拍
+✅ spawn-mode-error-hides-supervise — 纠错文案退回写死档名 ⇒ 打错 supervise 的模型被告知「supervise 不是档位」，一条纠错消息自己制造第二次错 ｜本机实测 1.5s／2 拍
+✅ spawn-surface-refusal-loses-direction — 拒绝语只说不读、不指路 ⇒ 模型知道失败却不知道 stages 该走 pipeline（本笔的价值一半在指路） ｜本机实测 1.5s／2 拍
+✅ spawn-arg-table-loses-a-reader — 表里删掉某档的一个读键而代码仍在读 ⇒ 该键变成「谁都不读」，合法调用被凭空拒（过报侧唯一的机器哨兵） ｜本机实测 1.5s／2 拍
+✅ spawn-arg-unknown-keys-silently-ignored — 未知键不再上报 ⇒ agent_type 这类笔误静默按默认面跑（与已修的 supervise 内层契约同一半没守住） ｜本机实测 1.5s／2 拍
+✅ g-b-injection-face-ignores-table-form — 实例面解析器退回只认一形 ⇒ 走 table 下标注入的工具整个从分母消失，而这道门照常绿（本轮抓到的就是这个） ｜本机实测 1.2s／2 拍
+✅ cache-unreported-merged-back — 两半又加回一个数（哪怕塞进其中一格）⇒「读侧全在场、写侧全缺席」与「反过来」印成同一句话，本次就是被这个形状骗出一条错批语 ｜本机实测 1.2s／2 拍
+✅ cache-line-drops-write-half — 那一行只印读侧 ⇒ 写侧整列缺席（今天真实的情况）没人说出口，看的人以为自己那半有数 ｜本机实测 1.2s／2 拍
+✅ cache-line-prints-sum-for-both — 两半都印同一个合计 ⇒ 分列印只剩排版，「读侧 0 · 写侧 3」与「读侧 3 · 写侧 0」又印成一件事（恒真的仪表比没有仪表更贵） ｜本机实测 1.2s／2 拍
+✅ impact-candidates-count-post-cap — 图自报的候选数取成**切片后**的长度 ⇒ 分母恒等于收录数，覆盖面自述在任何仓上都闭嘴（`candidates <= files` 永真）——比旧的「非全量但不说几个」更坏：那句子至少还在 ｜本机实测 1.7s／2 拍
+✅ impact-graph-candidates-not-carried-through-report — 分母没穿过 fileImpact ⇒ 只有 symbol 支带数、file 支回到旧句子（三支各组装一次覆盖面，少接一层就是那一支静默不一致，规则 239） ｜本机实测 1.7s／2 拍
+✅ impact-coverage-denominator-constant-zero — 覆盖面句里的漏报数写死 0 ⇒ 句子形状还在、数永远假（「另有 0 个候选没进图」），模型据此认为图基本全量（09-30：这两把纯函数从 tools 挪到 impact/coverage.ts，因为回注摘要与语义租约要说同一句 ⇒ 针脚坐标跟着挪） ｜本机实测 1.3s／2 拍
+✅ impact-coverage-trigger-reverts-to-cap-compare — 阳性一侧不接共用判据、退回旧的 `files < cap` ⇒ 两个方向同时错：候选正好等于帽时**误报**非全量（模型白重问一次），而有文件被读/解析失败跳过时（files < cap 但候选更多）**漏报**（模型以为问全了） ｜本机实测 1.7s／2 拍
+✅ impact-cap-cause-judgement-diverges-from-coverage — 阴性一侧的成因判据不接共用判据、与阳性一侧分家 ⇒ 同一张图一边说「另有 N 个没进图」、另一边说「与帽无关」，两句话互相拆台（共用同一判据是这条政策的形状） ｜本机实测 1.3s／2 拍
+✅ impact-cap-default-reverts-to-mtime-slice — 缺省帽退回 400 ⇒ 覆盖面重新变成「这台机器最近动过的 400 个」：同一份代码在 worktree 里由 rg 遍历顺序决定谁进图，实测两棵树入图集合差 21–28%、确证口径 88 条查询答不同 ｜本机实测 1.9s／2 拍
+✅ impact-candidate-order-nondeterministic — 排序摘掉第二级（同秒按路径字典序）⇒ 只剩 mtime：`git worktree add` 出来的树里所有文件同一个秒，「谁进图」改由 rg 的目录遍历顺序决定。本机实测该顺序是乱序（`y a e d x c z b m`），所以这一刀可观察 ｜本机实测 0.8s／2 拍
+✅ impact-lease-partial-graph-silent — 语义租约在图非全量时不出声 ⇒ orchestrator 拿到空波及就当「无冲突」，连审批卡都不发；对照：钩子抛错那一支会 warn＝故障出声、缺料不出声（第 201 页两面实测：缺省臂冲突 0 条＝放行） ｜本机实测 1.3s／2 拍
+✅ impact-hook-note-loses-coverage — write/edit 后那句回注不再带覆盖面自述 ⇒「波及 2 个文件」与「图只扫了 3 个文件」同形，模型以为问全了（读端工具早自述、注入面从不自述＝同族只硬化一支） ｜本机实测 1.3s／2 拍
+✅ rank-tiebreak-removed — 排名只比分数、同分就退回**插入序** ⇒ 同一份仓库换个遍历/缓存次序就给出两份地图正文，而这两份在模型眼里是同一句「仓库长这样」。扫描层的同秒兜底（mtime 降序＋rel 升序）在 #21 笔1 已经补过，这一支是同一条判据没铺到的接缝。判卷刻意把两个同形文件**倒着插**（z 在前）⇒ 只有次级键才看得见正确次序；本仓当前实测没撞到同分（冷/热缓存与隔 95s 重建逐字相同），所以这条钉的是**潜在**偏差，不是现行读数（09-30 第 214 页：从前那句「地图随相对年龄漂」是我把「自己正在改仓库」读成了时钟，已被快照自证的探针撤掉） ｜本机实测 0.7s／2 拍
+✅ run-shell-cause-unwired — run_shell 收束处不贴归因 ⇒ 模型看到 `bash: foo: command not found` 与 `[exit code: 127]`，照着这条环境红去改本来正确的代码（真语料里 run_shell 的红全部无类，第 182 页） ｜本机实测 1.1s／2 拍
+✅ worker-shell-cause-layer-unwired — worker 两条 shell 出口不补归因 ⇒ 宿主注入沙箱 runner 时（那条路整个绕过 run_shell）worker 的回执没有这一句。两处代码逐字相同 ⇒ 改法走逐行式、一次摘两层；**只摘其中一支没有专属锚点**——那一支由自己的用例当行为证人（shell_rw 那条不许冒领 shell_ro 的断言） ｜本机实测 1.2s／2 拍
+✅ runner-sandbox-exit-cause-unwired — 主会话开沙箱那条出口（run_shell 被 runInSandbox 整个顶掉）不补归因 ⇒同一台机器上换档就没人归因（第十三族：同一条判据只硬化一支） ｜本机实测 1.2s／2 拍
+✅ exec-cause-ok-guard-dropped — 去掉「成功回执不贴」那道守卫 ⇒ `pnpm install` 成功但正文里带一行 ERR_PNPM 就被判成「命令根本没跑成」——把绿的说成红的，比不归因更坏。针脚在 09-30（#24 那笔）跟着字节挪过一次：成功支从 `return r` 改成 `return stamped`（要把 exitCode/timedOut 也落到成功支），守卫的语义一个字没动 ⇒ 只改指字节、不动 expectFail（规则 284） ｜本机实测 1.2s／2 拍
+✅ exec-cause-class-maps-wrong-text — 127 那一类错领了包管理器的文案 ⇒ 模型按「等依赖装好」去等，而真因是命令名不在 PATH（归因错了比不归因更贵：它会指一条不存在的出路） ｜本机实测 1.2s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 344.3s · 跑了 244/244 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 488 次／244 条（每条次数分布 2×244）· 单次中位 第1次 0.6s／第2次 0.6s· 最贵一条 cascade-trigger-wider-than-objective-fail 21.7s
+跑法单价：selector 482 拍·中位 0.57s·坏拍（选中≠1） 0 vs whole 6 拍·中位 0.62s·坏拍（没量到或 0 条） 0
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p216w-1.lock）
