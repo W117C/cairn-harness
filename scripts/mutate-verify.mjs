@@ -8797,9 +8797,11 @@ const MUTATIONS = [
     id: "map-candidates-denominator-lost",
     src: "src/agent/map/build.ts",
     test: "tests/map-self-report.test.ts",
-    desc: "分母退回「切片之后的文件数」⇒ graphFiles 与 candidates 恒等 ⇒ 自述永远不会开口，"+
-      "而帽子那一刀照咬（句子形状还在、数永远假，与 impact-coverage-denominator-constant-zero 同方向）",
-    apply: (s) => s.replaceAll("candidates: candidates.length,", "candidates: files.length,"),
+    desc: "分母退回「切片之后的文件数」⇒ graphFiles 与 candidates 恒等 ⇒ 自述永远不会开口，而帽子那一刀照咬"+
+      "（句子形状还在、数永远假，与 impact-coverage-denominator-constant-zero 同方向）。"+
+      "针脚带 10 格缩进＋行尾换行 ⇒ 只咬**新构建那一支**（缓存命中那一支缩进 12 格，不在此面）——"+
+      "不这么写会命中 2 处、给针脚体检留一条常驻「待复认」",
+    apply: (s) => s.replace("          candidates: candidates.length,\n        };", "          candidates: files.length,\n        };"),
     expectFail: "地图非全量时正文带同一句覆盖面自述",
   },
   {
