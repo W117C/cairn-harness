@@ -38,7 +38,11 @@
    ⇒ 剩下的缺口只有两处，都比原先那句窄：
    - (a) 阳性侧只说「非全量」不说「图外 N 个」——这是 `:105-107` 注释里**明写的取舍**（数出 N 个要重扫全量候选，「这一格不值一次 rg」），
      要不要改成给数属裁决，不是缺陷；
+     ⚠️ **09-30 二次复核：这句只在主树（`15fad7b`）成立，在落库后的 HEAD 上已不成立**——本簇自己早已把
+     `coverageNote`/`capCauseNote` 升成吃 `candidates` 的三参版（簇树 `:113`／`:127`，调用点把 `graph.candidates` 透进去）。
+     ⇒ (a) 从"待裁决"改判成"已由本簇发货"；细节与两侧坐标见 **§五·二**。
    - (b) **真正没出声的是不走工具的默认建图路径**（`defaultImpactHook` 与语义租约 `affectedFilesOf`，见第五节）——代价比 (a) 大一个量级。
+     这一条**两棵树都成立**（簇树 `affectedFilesOf` 仍是 `buildImpact({ workspace, cacheDir })`，无 `maxFiles`）。
 3. 同一轮给夹具降权（B）：边集按"任一端在 `fixtures/`"打标，波及清单默认不计、但**保留计数**（不然又是"读 0＝没有"）；
 4. 判卷与锚点同笔（规则 217）：至少四条——① 帽自适应（改回 400 就红）、
    ② **不走工具的两条默认消费者带覆盖面自述**（原写「图外文件数进自述」，读端已做完，见第 2 项——这条改成钉第五节那两处）、
@@ -139,6 +143,42 @@
 ② 语义租约在「图非全量」时不许把空波及当结论：要么把"波及未知"升成一次出声（审批卡文案附覆盖面），
    要么按 ① 直接建全量图把这一格的前提变成真的；
 ③ 判据 ②′ 的写法要能分辨这两半——**只把文案接上、不改判定**的话，第一条锚点就该红（规则 217／236：同文件文字判卷恒真那一族）。
+
+### 五·二 取料面更正：本页的 `impact-query.ts`／`impact/index.ts` 坐标是从**主树**读的，落库后会漂
+
+09-30 复核时发现一件事：**本簇自己就在动这两个文件**（`git diff --name-only 6849e35..71e740a -- <file>` 都命中），
+而本页所有 `:行号` 是在主树 `15fad7b` 上读的 ⇒ 落库后同一句话指的行会漂，且有一处**语义**也漂了。
+
+| 引用的那件事 | 主树 `15fad7b` | 簇 tip `71e740a`（＝落库后的面） | 是不是只是行号漂 |
+| --- | --- | --- | --- |
+| `coverageNote` 的签名 | `:108` 两参 `(files, cap)` | `:113` **三参 `(files, cap, candidates)`** | **不是——语义变了**：阳性侧现在报得出「图外 N 个」 |
+| `capCauseNote` | `:121` 两参 | `:127` 三参 | 同上 |
+| 三处调用点 | `:188/:199/:233` | `:194/:205/:239`（各自把 `graph.candidates`／`r.graphCandidates` 透进去） | 行号漂 ＋ 参数增加 |
+| `fileImpact` 的 `truncated` | `:297` | `:310` | 只是漂（仍＝`IMPACT_SITE_LIMIT` 显示上限，不是文件帽） |
+| `defaultImpactHook` → `fileImpact(workspace, fileRel, cacheDir)` | `:356-358` | `:370-372` | **两棵树都不传帽** ⇒ 缺陷 (b) 成立 |
+| `affectedFilesOf` → `buildImpact({ workspace, cacheDir })` | `:400-406` | `:414-420` | **两棵树都不传帽** ⇒ 缺陷 (b) 成立 |
+| `IMPACT_MAX_FILES_CEILING = 5000` | `:64` | `:69` | 只是漂 |
+| `graphAbsenceNote` `:32`／`resolveMaxFiles` `:74`／`globIntersects`／`lease-conflicts.ts:19-31`／`orchestrator.ts:627-630`／`settings.ts:122`／`map/build.ts:79,85` | — | **同号** | 这些文件本簇没动（`git diff --name-only 6849e35..71e740a` 逐个＝0） |
+
+⇒ **结论随之收窄一处**：§三 第 2 项里的 (a)「阳性侧不给 N 个」在落库后的 HEAD 上**已经不发**——那是本簇早先一页把
+`coverageNote`/`capCauseNote` 升成吃 `candidates` 的三参版的结果（也正是规则 261 那句"分母免费"的落地）。
+剩下的只有 (b) 两条默认消费者，和 §五 那条「空波及＝放行」——**(b) 在两棵树上都实测成立**，不受这次更正影响。
+
+同一支探针在**簇树面**复跑（退出码由探针自己 echo，日志里的每一行都是它自己印的）：
+
+```
+DSH_ROOT="/Users/ze/Downloads/deepseek harness/.worktrees/p170-tighten" \
+  node --import tsx outputs/impact-cap-decision-2026-09-30/probe-lease-blindspot.mjs
+```
+
+| 面 | 全量实收 | A 的波及（缺省臂／全量臂） | 差多少（其中真项目文件） | 挑出来的 B | 缺省臂判定 | 全量臂判定 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 主树 `15fad7b` | 509 | 69／88 | 19（7） | `scripts/agent.ts` | **冲突 0 条＝放行** | 冲突 1 条 |
+| 簇树 `71e740a` | 516 | 63／87 | 24（**24**） | `scripts/replay/cascade-traffic.ts` | **冲突 0 条＝放行** | 冲突 1 条 |
+
+⇒ 两件事一起说：**判定形状在两棵树上一样（缺省帽放行、全量图会拦）**，所以这一格不是"当时那棵树的偶然"；
+但**连 B 是哪只文件都随面变**（`scripts/agent.ts` ↔ `scripts/replay/cascade-traffic.ts`）——
+这正是规则 277 的机制在换证人。⇒ 实施 #21 时引的数要取自**落库后的 HEAD**，并且要连着报这一列的面。
 
 ## 六、为什么这一轮不动代码
 

@@ -5936,3 +5936,27 @@ typecheck：主树 1 条报错在 `src/cli.ts:709`（本笔没碰 `src/`），�
    `node scripts/mutate-verify.mjs --check-needles` 退出 **0**、印 **1019 条 阻断 0／待复认 0／未覆盖 0／钉在飞文本 0**（表长与上一笔同，本笔不加锚点）；
    `node --import tsx scripts/docs-check.ts` 追加前后都印 **D-8=1**（＝簇基线那条既有红，见 #20；新页与新工件没加数）。
    本笔面＝`PROGRESS.md` 尾部纯追加 ＋ 新增 5 个工件文件（`outputs/impact-cap-decision-2026-09-30/`）。
+
+### 2026-09-30 · 第 200 页补记 · 那一页的 (a) 在落库后的 HEAD 上已经不发——我的坐标是从主树读的，而本簇自己就在动那两个文件
+
+1. **触发**：写完第 200 页后按规矩问了一句「本簇有没有动我引用的那些文件」⇒ `git diff --name-only 6849e35..71e740a`
+   命中 `src/agent/impact/index.ts`、`src/tools/impact-query.ts`、`src/main/agent-runner.ts`（各 1 个），
+   而 `lease-conflicts.ts`／`orchestrator.ts`／`settings.ts`／`map/build.ts` 各 0（＝同号可引）。
+   ⇒ 那一页里所有 `impact-query.ts`／`impact/index.ts` 的 `:行号` 都是在**主树 `15fad7b`** 上读的，落库后会漂。
+2. **漂的不只是行号，是「已做／未做」的判断本身**：簇 tip 上 `coverageNote`／`capCauseNote` 已经是吃 `candidates` 的**三参版**
+   （`:113`／`:127`；三处调用点 `:194/:205/:239` 各把 `graph.candidates`／`r.graphCandidates` 透进去），
+   ⇒ 第 200 页第 1 项里那条 (a)「阳性侧只说非全量、不给图外 N 个」**在落库后的 HEAD 上不再成立**——它已由本簇自己发货
+   （正是规则 261 那句"分母免费"的落地：`scanSourceFiles = applyFileCap(scanSourceFilesAll())`，切片前那份数组本来就在手上）。
+   剩下的只有 (b) 两条默认消费者，而 (b) **两棵树都实测成立**：簇树 `affectedFilesOf`（`:414-420`）仍是 `buildImpact({ workspace, cacheDir })`、
+   `defaultImpactHook`（`:370-372`）仍 `fileImpact(workspace, fileRel, cacheDir)`，两处都不传帽。
+   ⇒ 规则 276 的新载体：**页里的引用坐标若来自别的面，落库后翻面的可以是结论而不只是数字**。
+3. **同一支探针在簇树面复跑**（退出码由探针自己 echo）：全量实收 **516**（主树 509）；A `src/events/index.ts` 的波及集
+   缺省臂 **63**／全量臂 **87**，差 **24** 个且**全是真项目文件**（主树：差 19，其中真项目文件 7）；
+   **缺省臂判定＝冲突 0 条（放行）／全量臂＝冲突 1 条**——与主树同形；这一面自己挑出来的 B 换成了
+   `scripts/replay/cascade-traffic.ts`（主树是 `scripts/agent.ts`）。
+   ⇒ 两件事同时成立：**「空波及＝放行」不是某棵树的偶然**（判定形状跨面稳定），
+   而**连证人是哪只文件都随面变**（这正是规则 277 的机制在换证人）⇒ 报数继续必须带面。
+4. **改动面与验证**：本笔只动 `outputs/impact-cap-decision-2026-09-30/decision-input.md`（§三 第 2 项就地加更正、新增 §五·二）＋ 本页纯追加，**不含代码改动**；
+   追加后在簇树复跑三把尺：`typecheck` 退出 **0**（0 条报错）；`--check-needles` 退出 **0**、印 **1019 条 阻断 0／待复认 0／未覆盖 0／逐行式 5／钉在飞文本 0／killer 指针失效 0**（表长与上一笔同＝本笔没加锚点）；
+   `docs-check` 退出 1、仍是 **D-8=1**＝簇基线那条既有红（任务 #20），本页与 §五· 两段新文字**没加数**。
+   `git diff --numstat` ＝ `PROGRESS.md 24 增/0 删`、`decision-input.md 40 增/0 删`（后者是同一文件里两处新增的合并读数，减号仍为 0）。
