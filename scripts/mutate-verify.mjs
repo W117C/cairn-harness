@@ -9617,7 +9617,7 @@ const MUTATIONS = [
     test: "tests/docs-check.test.ts",
     desc: "`=` 前缀那一格撤掉 ⇒ `--budget-ms=2400000` 这类数字又回到候选里。修法选**形状**而不是往豁免里塞一条：" +
       "豁免名单是「别的种类的对象」，数字不是（把误伤登记进豁免＝下一位读者以为真有假 sha）",
-    apply: (s) => s.replace("([^0-9a-zA-Z=])", "([^0-9a-zA-Z])"),
+    apply: (s) => s.replace("|[^0-9a-zA-Z=])", "|[^0-9a-zA-Z])"),
     expectFail: "形状修法：跟在 `=` 后面的数字不算候选",
   },
   {
