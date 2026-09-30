@@ -9036,6 +9036,32 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 6. **锚点两支、各钉一半**：`certface-webfetch-gate-row-dropped`（摘掉那一行 ⇒ ①红）、`certface-webfetch-budget-under-measured`（`1200 → 400`，落到实测以下 ⇒ ②红）。表长 1171 → **1173**。判卷本文件 `15 条`（上一笔是 14）：`✓ tests/cert-gate-face.test.ts (15 tests) 8ms`、`Tests 15 passed (15)`、`Duration 150ms`（`judges-273.log`，退出码 0）。
 7. **刻意未做**：① `tools-check` 8677ms／`supervisor-check` 8399ms／`plugins-check` 14973ms／`map-check` 71832ms 仍不进门面（超线，且不属于第 272 页那一类；要不要为它们单独花一次认证属第 223 页 §5⑶ 那一格裁决）；② `e2e`（3070ms）在 `CERT_GATE_EXCLUDED` 里，本笔不动那条名单——它是"重量级/已自跑"的名单，不是"我暂时不想跑"的名单；③ 没有为了让这条线显得更严而把 1500 改小：线值是门表的历史读数，改它同样要单独一笔。
 
+### 2026-10-01 · 第 273 页补 凭证：本笔（`b3e3abf`）认证 259 文件／3431 条 exit=0、两端独占、本趟墙钟 195.80s；两支新锚点干净树 2/2 全杀（1.7s、坏拍 0）；门面 22 道跑到 22·超预算 0·**新买那道第一次在认证里出声**（`web-fetch-check exit=0 577ms`）；门 21/22 绿·红 1 道仍属隔壁 `1748ca7` 的 H7 ⇒ 不写成「全量绿」
+
+1. **被认证的提交**：`b3e3abf`（页面＋门表＋判卷＋两支锚点同笔，`git show --numstat` 与暂存逐行对上：`12/0 PROGRESS.md`、`11/2 scripts/gate-manifest.ts`、`20/0 scripts/mutate-verify.mjs`、`30/0 tests/cert-gate-face.test.ts` ＋ 5 份 dated 日志）。树：认证用 `.worktrees/head-cert-b3e3abf`（由 `head-cert --at=HEAD` 自建），杀锚点用 `.worktrees/verify-b3e3abf`（`--detach` ＋ `cp -al node_modules`，树内 `status` 核到 0 项）。取料目录 `outputs/gates-outside-cert-2026-10-01/`。
+2. **针脚两份互印**：主检出落库前（`needles-precommit-273.log`，退出码 1）`针脚体检：1173 条 —— 阻断 2，待复认 0，未覆盖 0，逐行式 5，未入库面 0，钉在飞文本 2，killer 指针失效 0（其中 HEAD 侧 0）`，红的正是本笔那两支（钉在飞文本＝实现未入库）；认证树落库后（`needles-at-b3e3abf.log`，退出码 0）`阻断 0 …钉在飞文本 0`＋`改法语法体检：1173 条改法全部产出合法源文件 ✅`。
+3. **本笔两支锚点逐条真杀**（`kill-2-anchors-273.log`，退出码 0，末行 `全部变异被正确杀死（断言非恒真）`），机器自报原文逐字贴：
+   `本次耗时 1.7s · 跑了 2/2 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）`
+   `成本分母：判卷 spawn 4 次／2 条（每条次数分布 2×2）· 单次中位 第1次 0.4s／第2次 0.3s· 最贵一条 certface-webfetch-gate-row-dropped 0.9s`
+   `跑法单价：selector 4 拍·中位 0.31s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母`
+   外层 `/usr/bin/time -p` 的 `real 2.54`。这一对比上一笔（同表形状、判卷是纯函数读表）便宜得多：**0.9s/条 vs 第 272 页那批里最贵的 18.0s**，差别不在突变而在判卷文件本身（`tests/cert-gate-face.test.ts` 只读文本，`tests/prose-needle-scan.test.ts` 要扫真仓）。
+4. **`head-cert` 汇总逐格原文**（`head-cert-b3e3abf.log`，`HEADCERT_EXIT=1`）：
+   `已核：TREE=b3e3abfe44afcafa7993169efeecb8063bfca4ed｜判卷四面在飞 0 项`
+   `typecheck exit=0（0 报错）`
+   `== 认证门面（22 道，名单取自 b3e3abf）==`、`✅ web-fetch-check exit=0 577ms（预算 1200ms）`、`✅ evidence-typecheck-check exit=0 2558ms（预算 5300ms）`、`认证门面=22 道（跑到 22）｜❌ 红 1 道｜⚠️ 超预算 0`
+   `TREE=b3e3abf DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-b3e3abf.lock）`
+   `Test Files 259 passed (259)｜Tests 3431 passed (3431)｜exit=0（退出码直接取，不接管道）`
+   `并发判卷=起前 0 套／跑完 0 套（两端独占）`
+   `本趟墙钟 195.80s（同一进程 hrtime 实测·口径＝起跑→汇总那一行，不含提前退出的那些趟）`
+5. **条数核对式**：判卷 `3431 ＝ 3430 ＋ 1`（本笔只加 `tests/cert-gate-face.test.ts` 一条；该文件自己从 14 条长到 15 条，见 `judges-273.log`：`✓ tests/cert-gate-face.test.ts (15 tests) 8ms`）；锚点 `1173 ＝ 1171 ＋ 2`；门面 `22 道／预算之和 56500ms`（现读，距判卷那条 60000ms 剩 3500ms）。
+6. **归因声明**：唯一的红 `gate-check`（任务 #9，隔壁 `1748ca7` 的 H7 未登记 `fixtures/impact/accuracy-repo/*`），HEAD 常驻、本笔不动 ⇒ 等级写 **21/22 绿**，`HEADCERT_EXIT=1` 里不含本笔新增的红。
+7. **本笔那把尺的现读**（`docs-check-273.log`，退出码 0）：`凭证对账面：可比对 207 个读数（红 0）｜页未点名取料目录 0 个＝未检｜未点名页 0 页（帽 0，只准调低）｜点名但目录读不到 0 个＝取不到｜登记不可回查 4 条｜弱证 0 对（帽 0，只准调低）`；散文侧（`prose-273.log`）`顶包候选 10 条（已提交态 10 ＋ 在飞 0）`＝帽 10、`裸名字 2 条`＝帽 2；`typecheck-273.log`＝`tsc --noEmit 通过（0 条报错）`。凭证段落笔后再跑一次（`docs-check-with-credential-273.log`）：`可比对 207 → 214 个读数（红 0）`、`未点名页 0`、`弱证 0`、`证人无身份行 106 → 110`（本段新引的那几份日志不印提交号＝无从判，故意不设帽，见第 271 页凭证第 8 项②）。
+   ⚠️ 这一格我先落笔写的是 `111`（拿"本段引了几份日志"推出来的），现读是 `110` ⇒ **又被自己抓一次"凭记忆报数"**（规则 245/[[remeasure-before-asserting]]）：改成正文里那句现读，并留下这条自陈——因为下一个读这页的人需要知道这类数是推的还是量的。
+8. **一处读数的漂移，恰好证明第 3 项为什么坚持"同一本日志"**：本笔买进来的那道门，主检出那趟是 `568ms`，认证树这一趟是 `577ms`（＋1.6%）；同一趟里 `evidence-typecheck-check` 从工作树的 `2794ms` 变到认证树的 `2558ms`（−8.5%）。两个方向都有 ⇒ 判卷不许拿"别处的一次读数"当阈值（规则 260/276）。
+9. **刻意未做**：① 没抬 `≤60000ms` 那条门面线（余量只剩 3500ms 这件事写进页里，抬它要单独一笔）；② 没动 `CERT_GATE_EXCLUDED`；③ 没替隔壁补那 4 条危险码（任务 #14，现在由门面这一格自己看着）。
+10. **清场与残留**：本笔两棵树 `verify-b3e3abf`、`head-cert-b3e3abf` 各核 0 项在飞，**未回收**（等用户点头）。累计口径不变：`常驻残留树=32`（第 272 页凭证已报），回收是不可逆动作，我不自己做。
+
+
 
 
 
