@@ -8502,6 +8502,43 @@ const MUTATIONS = [
     ),
     expectFail: "next-page.ts 必须调 claimPage 并在没占到时退 2（只印不占＝号池永远空，撞号照旧）",
   },
+  // ── 第 249 页 · 占号这把尺按评审加固：三条各咬一处——「取不到」冒充 0／边界退化成裸前缀／少一个非零出口
+  {
+    id: "page-claim-unreadable-ledger-prints-zero",
+    src: "scripts/lib/page-claim.ts",
+    test: "tests/page-claim.test.ts",
+    desc: "台账那一维取不到时印「0 个」而不是「取不到」⇒ 调用方读到的是「这仓一个号都没占过」，" +
+      "于是可以把很旧的号发出去；本仓最忌讳的就是把「没量到」印成一个实数（规则 261/262）",
+    apply: (s) => s.replace(
+      'cell: `占号 ${String(candidate)}（台账面 ${ledger === null ? "取不到" :',
+      'cell: `占号 ${String(candidate)}（台账面 ${ledger === null ? "0 个" :',
+    ),
+    expectFail: "台账那一维取不到时要印「取不到」而不是 0，且号池那一维仍然能用",
+  },
+  {
+    id: "page-claim-inside-repo-bare-prefix",
+    src: "scripts/lib/page-claim.ts",
+    test: "tests/page-claim.test.ts",
+    desc: "`insideRepo` 退化成「只要 relative 算得出东西就算在里面」 ⇒ `--file=/etc/passwd`、`/repo/../x`、" +
+      "同前缀兄弟目录全被放行（第十族：前缀匹配要按位置枚举变体；这里连前缀都不如）",
+    apply: (s) => s.replace(
+      '  return rel !== "" && !rel.startsWith("..") && !rel.startsWith("/");',
+      '  return rel !== "";',
+    ),
+    expectFail: "insideRepo：按目录边界判，绝对路径/out/../ 与同前缀兄弟目录都算在外面，空根不算在里面",
+  },
+  {
+    id: "page-claim-cli-exits-1",
+    src: "scripts/next-page.ts",
+    test: "tests/page-claim.test.ts",
+    desc: "四个「没占到」出口里少任何一个 ⇒ CLI 照常打印一句人话然后退 0，调用方把「这一格没量到」读成「号发好了」。" +
+      "判卷数的是**个数**（旧的无 g 正则被第一个出口满足，删掉最后一个仍然绿——评审实测两删都过，这次钉成计数）",
+    apply: (s) => s.replace(
+      "  process.exit(2);\n}\nconsole.log(`✅ 下一页用",
+      '  console.log("（这里少了一个非零出口）");\n}\nconsole.log(`✅ 下一页用',
+    ),
+    expectFail: "next-page.ts 必须调 claimPage 并在没占到时退 2（只印不占＝号池永远空，撞号照旧）",
+  },
   {
     id: "selector-cell-hides-blind-count",
     src: "scripts/lib/mutate-gates.ts",

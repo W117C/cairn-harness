@@ -22,6 +22,12 @@ function listAnchorRows(): { id: string; test: string; expectFail: string }[] {
 }
 
 const rows = listAnchorRows();
+// 取料地板：`--list` 的形状一改（列数、引号）就会读出 0 条，而"0 条"在这把尺上看着完全正常
+// ⇒ 先证有料再谈结论（规则 237/242：一片 0 先怀疑尺；帽值取自判卷里那条 >500 的常驻断言）
+if (rows.length < 500) {
+  console.error(`锚点全长只有 ${String(rows.length)} 条（< 500）⇒ --list 取料坏了，本探针没有量到东西，退出而不是报 0`);
+  process.exit(2);
+}
 const cache = new Map<string, { itTitles: string[]; descs: string[] } | null>();
 function faceOf(rel: string) {
   if (!cache.has(rel)) {

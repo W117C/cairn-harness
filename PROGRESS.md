@@ -8093,8 +8093,9 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 取料：`outputs/page-claim-hardening-2026-09-30/`（占号／针脚／判卷／typecheck／越界拒收五份）、
 `outputs/inflight-index-witness-2026-09-30/`（`probe.mts`×4 份 log、汇总器 `summarize.mts`＋`summary.log`、三份 tsc 留档）。
 
-1. **占号走 243 页的号池**：`占号 249（台账面 207 个＋号池面 7 个）`，0 让位。这一句本身就是加固后的形状——从前它印
-   「已占面 N 个＋号池 M 个」，两个数混着同一个 `taken` 数组，让位过的号会被数两次（自己造一个虚高读数）。
+1. **占号走 243 页的号池**：`占号 249（台账面 207 个＋号池面 7 个）`，0 让位。**号池里有个 248 是空号**（加固做到一半先占了 248，之后 HEAD 被隔壁推进、重跑占号拿到 249；
+   `claimPage` 的口径是单调往上、绝不复用旧号，所以那一格留在池里当历史，台账里没有第 248 页——`claim-248.log` 与 `claim-249` 的读数都在证据目录里）。
+   这一句本身就是加固后的形状——从前它印「已占面 N 个＋号池 M 个」，两个数混着同一个 `taken` 数组，让位过的号会被数两次（自己造一个虚高读数）。
 2. **触发面**：上一笔（243/244）交完后，五位只读评审（typescript-reviewer／quality-reviewer／type-design-analyzer／security-reviewer／code-simplifier）
    对 `page-claim.ts`＋`next-page.ts` 提了真缺陷，本笔按「先量再修」落四条：
    - **`taken: []` 冒充实测**：台账读不到时 CLI 传的是空数组，`claimPage` 把它读成「这仓没人占过号」⇒ 与规则 261/262 同形。

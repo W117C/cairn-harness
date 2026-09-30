@@ -9,6 +9,7 @@ import {
   PAGE_CLAIM_MAX_ATTEMPTS,
   claimPage,
   claimedPages,
+  insideRepo,
   nextFreePage,
   pageNumbersIn,
   type ClaimOps,
@@ -73,6 +74,18 @@ describe("页号取料", () => {
   it("号池目录名只认纯数字（临时名／别人的文件不算占位，也不能因此被删）", () => {
     expect(claimedPages(["12", "13", "tmp-14", ".lock", "14x"]).sort((a, b) => a - b)).toEqual([12, 13]);
   });
+
+  /** `--file=` 是用户给的路径，边界检查必须按**目录段**比而不是裸前缀：
+   *  `/repo/.worktrees-backup/x` 与 `/repo/.worktrees` 共享前缀却不是自家人（第十族：前缀匹配要按位置枚举）。 */
+  it("insideRepo：按目录边界判，绝对路径/out/../ 与同前缀兄弟目录都算在外面，空根不算在里面", () => {
+    expect(insideRepo("/repo/PROGRESS.md", "/repo")).toBe(true);
+    expect(insideRepo("/repo/docs/x.md", "/repo")).toBe(true);
+    expect(insideRepo("/tmp/PROGRESS.md", "/repo")).toBe(false);
+    expect(insideRepo("/repo/../etc/passwd", "/repo")).toBe(false);
+    expect(insideRepo("/repo/.worktrees-backup/x", "/repo/.worktrees")).toBe(false);
+    expect(insideRepo("/repo", "/repo"), "根自己不算「在里面」：调用方拿这个判存在性时会误判").toBe(false);
+    expect(insideRepo("/repo/x", "")).toBe(false);
+  });
 });
 
 describe("claimPage：原子占位", () => {
@@ -98,6 +111,16 @@ describe("claimPage：原子占位", () => {
     expect(tried, "重新扫过就该一步到位：候选序列里不该再出现 242").toEqual([241, 243]);
     expect(r.yielded).toBe(1);
     expect(pool.has("243"), "占到的号必须真的落进池").toBe(true);
+  });
+
+  it("台账那一维取不到时要印「取不到」而不是 0，且号池那一维仍然能用", () => {
+    const { ops } = fakeOps(new Set(["240", "241"]));
+    const r = claimPage({ dir: "/pool", taken: null, ops });
+    expect(r.page, r.cell).toBe(242);
+    expect(r.cell, r.cell).toContain("台账面 取不到");
+    expect(r.cell, "把「读不到」写成实数 0 ＝ 本仓点名的同形假绿").not.toContain("台账面 0");
+    // 反向：台账有料时那一格必须报出条数，不许长期挂「取不到」把这一维藏掉
+    expect(claimPage({ dir: "/pool", taken: [1, 2, 3], ops: fakeOps(new Set()).ops }).cell).toContain("台账面 3 个");
   });
 
   it("号池建不出来＝那一格取不到，且这一态与「读不到」「让位次数用满」各有各的名字（三态同形就没人知道该修哪一台）", () => {
@@ -141,12 +164,29 @@ describe("接线：CLI 吃的是这把尺，不是自己再算一遍", () => {
   it("next-page.ts 必须调 claimPage 并在没占到时退 2（只印不占＝号池永远空，撞号照旧）", () => {
     expect(src, "取料必须走共用的 claimPage，不许在 CLI 里另写一套 max＋1").toMatch(
       /^const r = claimPage\(\{/m);
-    expect(src, "没占到必须非零退出，否则调用方会把空输出读成「这仓没页号」").toMatch(
-      /^  process\.exit\(2\);$/m);
+    /* 每个「没占到」出口都要退 2 ⇒ 数**总个数**而不是找第一个：
+       早先这里是 `/^  process\.exit\(2\);$/m`（无 g），它被 common-dir 那一支先满足，
+       于是把 `page === null` 那支的 exit 删掉，CLI 照样印「❌ 没占到」而退 0——这条判卷当时是零证人（评审实测两删都绿）。
+       数个数才会为"少任何一个出口"而红；分支自己另有锚点（下面两条）。 */
+    const exits = src.match(/^  process\.exit\(2\);$/gm) ?? [];
+    expect(exits.length, `CLI 里 2-空格缩进的 exit(2) 只有 ${String(exits.length)} 处；四个「没占到」出口（common dir／台账路径／两面无料／没占到）一个都不许少`).toBe(4);
+    expect(src, "没占到那一支必须按 page===null 判，而不是按 cell 空判（cell 永远有字）").toMatch(
+      /^if \(r\.page === null\) \{$/m);
   });
 
   it("common dir 取不到要出声并退 2（静默退回 cwd 的 .git＝在 linked 树里各占各的池）", () => {
     expect(src, "取不到 common dir 的那一支必须存在且非零退出").toMatch(
       /^if \(COMMON === null\) \{$/m);
+  });
+
+  it("`--file=` 要归一化并查边界，且台账读不到不许冒充 0 条", () => {
+    expect(src, "`join(cwd, 绝对路径)` 不认第二段 ⇒ 一个看着合法的 `--file=/abs/x.md` 会静默读到不存在的路径；必须先 resolve 再查是否本仓").toMatch(
+      /^const LEDGER = resolve\(CWD, LEDGER_ARG\);$/m);
+    expect(src, "台账路径出仓要退 2，不去仓外读数字").toMatch(
+      /^if \(TOP === null \|\| !insideRepo\(LEDGER, TOP\)\) \{$/m);
+    expect(src, "台账读不到要传 null（由那一格自己说「取不到」），不许吞成空数组").toMatch(
+      /^  taken = pageNumbersIn\(readFileSync\(LEDGER, "utf8"\)\);$/m);
+    expect(src, "号池被清空后会被 recursive mkdir 悄悄重建 ⇒ 必须先记下它在不在").toMatch(
+      /^const poolPreexisting = existsSync\(DIR\);$/m);
   });
 });

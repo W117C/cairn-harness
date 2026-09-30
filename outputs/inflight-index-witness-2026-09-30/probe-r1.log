@@ -1,0 +1,21 @@
+读法对照：mtime 代理 vs 内容哈希代理（同一台机器、同一形状的临时仓；两种内容态各两种读法）
+  [静] 内容脏 · 带 --no-optional-locks：
+    t=1790784064 git退0｜mtime 不变(ns 不变)｜Δms=0.000 Δns=0｜ino 不变｜sha 不变｜size 137→137
+    t=1790784065 git退0｜mtime 不变(ns 不变)｜Δms=0.000 Δns=0｜ino 不变｜sha 不变｜size 137→137
+    t=1790784066 git退0｜mtime 不变(ns 不变)｜Δms=0.000 Δns=0｜ino 不变｜sha 不变｜size 137→137
+  [静] 内容脏 · 不带（plain status）：
+    t=1790784064 git退0｜mtime 变(ns 变)｜Δms=58.874 Δns=58873721｜ino 变｜sha 不变｜size 137→137
+    t=1790784065 git退0｜mtime 变(ns 变)｜Δms=11.863 Δns=11863019｜ino 变｜sha 不变｜size 137→137
+    t=1790784066 git退0｜mtime 变(ns 变)｜Δms=12.724 Δns=12723937｜ino 变｜sha 不变｜size 137→137
+  [静] 内容脏 · 哨兵 git add（非写不可的一次）：
+    t=1790784162 git退0｜mtime 变(ns 变)｜Δms=13.052 Δns=13051521｜ino 变｜sha 变｜size 137→118
+  [静] 内容干净 · 带 --no-optional-locks：
+    t=1790784064 git退0｜mtime 不变(ns 不变)｜Δms=0.000 Δns=0｜ino 不变｜sha 不变｜size 137→137
+    t=1790784065 git退0｜mtime 不变(ns 不变)｜Δms=0.000 Δns=0｜ino 不变｜sha 不变｜size 137→137
+    t=1790784066 git退0｜mtime 不变(ns 不变)｜Δms=0.000 Δns=0｜ino 不变｜sha 不变｜size 137→137
+  [静] 内容干净 · 不带（plain status）：
+    t=1790784064 git退0｜mtime 变(ns 变)｜Δms=64.760 Δns=64759730｜ino 变｜sha 变｜size 137→137
+    t=1790784065 git退0｜mtime 变(ns 变)｜Δms=13.302 Δns=13301772｜ino 变｜sha 变｜size 137→137
+    t=1790784066 git退0｜mtime 变(ns 变)｜Δms=13.608 Δns=13608272｜ino 变｜sha 变｜size 137→137
+  [静] 内容干净 · 哨兵 git add（非写不可的一次）：
+    t=1790784162 git退0｜mtime 变(ns 变)｜Δms=13.283 Δns=13283438｜ino 变｜sha 变｜size 137→118

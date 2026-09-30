@@ -1,0 +1,14 @@
+  18 outputs/selector-uniqueness-2026-09-30/diagnose.mts
+   7 outputs/selector-uniqueness-2026-09-30/width-delta.mts
+   5 outputs/head-cert-drift-witness-2026-09-27/witness.mts
+   3 outputs/selector-uniqueness-2026-09-30/extractor-divergence.mts
+   3 outputs/composed-title-audit-2026-09-30/probe.mts
+   2 outputs/stagnation-detection-2026-09-23/measure-local-base-rate.mts
+   2 outputs/mutation-selector-scan-2026-09-28/cluster-commit-map.mts
+   2 outputs/anchor-resolvability-2026-09-23/measure-anchor.mts
+   1 outputs/sequencer-status-readings-2026-10-01/probe.mts
+   1 outputs/scratch-face-foreign-2026-09-30/probe.mts
+   1 outputs/sandbox-degrade-face-2026-09-24/measure-degrade.mts
+   1 outputs/midrun-steering-2026-09-23/measure-steering.mts
+   1 outputs/map-inject-cost-2026-09-30/probe-determinism-with-snapshot.mts
+   1 outputs/map-inject-cost-2026-09-30/probe-cold-vs-warm.mts

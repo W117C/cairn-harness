@@ -1,0 +1,12 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-48d6f63.lock）
+变异验证：4 条
+✅ page-claim-dirty-values-in-max — 脏值（小数／NaN）也参与 max ⇒ 号变成 10.5 或 NaN：台账上出现一个小数页号，而占号那一步看起来仍然「成功了」 ｜本机实测 0.7s／2 拍
+✅ page-claim-not-monotonic — 回「最小可用号」而不是「max＋1」⇒ 新会话拿回 1，且台账上删过一页就把那个旧号再发一遍。这不是等价的：旧号出现在两处比新号撞车更难查（判卷里那条空洞用例就是为这个存在的） ｜本机实测 0.6s／2 拍
+✅ page-claim-exists-treated-as-ok — 把「已被占」当成「占到了」⇒ 两个会话拿到同一个号而两边都以为自己独占——这正是这把尺要消灭的那件事，而它退化后印的还是一句「占号 N」 ｜本机实测 0.5s／2 拍
+✅ page-claim-cli-not-wired — CLI 不调 claimPage 而自己发一个号 ⇒ 号池永远空、撞号照旧，但那一格读起来像「有工具在管」。钉的是接线不是文字：这里 CLI 与被调的 lib 是两个文件，同文件恒真那一族用不上 ｜本机实测 0.5s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 2.6s · 跑了 4/4 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 8 次／4 条（每条次数分布 2×4）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 page-claim-dirty-values-in-max 0.7s
+跑法单价：selector 8 拍·中位 0.27s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-48d6f63.lock）

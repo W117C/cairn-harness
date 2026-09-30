@@ -1,0 +1,7 @@
+收到 4 份 log：probe-r1.log、probe-r2.log、probe-r3.log、probe.log
+  内容脏 · 带 --no-optional-locks　　　　　　　　　　　 退0×12｜翻圈数 ino 0/12｜mtime 0/12｜sha 0/12｜ns 0/12
+  内容脏 · 不带（plain status）　　　　　　　　　　　　　　　　 退0×12｜翻圈数 ino 9/12｜mtime 9/12｜sha 0/12｜ns 9/12
+  内容脏 · 哨兵 git add（非写不可的一次）　　　　　　　　　　　　　 退0×4｜翻圈数 ino 4/4｜mtime 4/4｜sha 4/4｜ns 4/4
+  内容干净 · 带 --no-optional-locks　　　　　　　　　　 退0×12｜翻圈数 ino 0/12｜mtime 0/12｜sha 0/12｜ns 0/12
+  内容干净 · 不带（plain status）　　　　　　　　　　　　　　　 退0×12｜翻圈数 ino 12/12｜mtime 12/12｜sha 12/12｜ns 12/12
+  内容干净 · 哨兵 git add（非写不可的一次）　　　　　　　　　　　　 退0×4｜翻圈数 ino 4/4｜mtime 4/4｜sha 4/4｜ns 4/4

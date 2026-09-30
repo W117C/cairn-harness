@@ -2,9 +2,10 @@
  *  纯函数层：`declaredDeps` / `installedDeps` / `missingDeclaredDeps` / `certLevel`（第 119 页加的等级）
  *  / `readInvalidated`（第 149 页：这道门进了默认门表，共享树上的写点要有人复核）。 */
 import { spawnSync, execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, gitInflightArgs, headGateTableIntegrity, installedDeps, mainRootFromCommonDir, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "../scripts/lib/head-cert-deps";
@@ -811,13 +812,21 @@ describe("清场读数：常驻残留的 scratch 树要自己报数（任务 #33
         try { execFileSync("git", ["merge-base", "--is-ancestor", sha, "HEAD"], { cwd: repoRoot, encoding: "utf8", stdio: "ignore" }); return true; }
         catch { return false; } // 非零退出＝不是祖先；**不许**让它抛（抛出去这格就变成"没量到"）
       },
-      dirtyCountOf: (p: string) => {
-        // 用**被测那对参数**跑，并读退出码：旧写法在这里自己拼了一份后置形状的命令，
-        // 又被 `catch { return null; }` 把 129 咽掉 ⇒ 名单恒空、断言在空表上循环 ⇒ 这条判卷恒真（规则 224 的又一记）。
-        const r = spawnSync("git", gitInflightArgs(), { cwd: p, encoding: "utf8" });
-        if (r.status !== 0) return null;
-        return (r.stdout ?? "").split("\n").filter((l) => l.trim() !== "").length;
-      },
+      dirtyCountOf: (() => {
+        /* 一树一次、结果缓存：下面要把同一份清单喂**两次**（分位置 vs 不分位置）比划分，
+           而本机别的会话正在建/删/写树——第二遍现读就会拿到不同的脏净态，那条"划分必须相等"的断言
+           于是押在调度上（2026-09-30 实测：`.worktrees/gate-mutate-verify` 在两遍之间翻了态 ⇒ 偶发红，规则 256 同一族）。
+           命令形状仍然走真 git，且每个路径只走一次 ⇒ "这对参数跑不通"那一格照样有证人。 */
+        const seen = new Map<string, number | null>();
+        return (p: string): number | null => {
+          const hit = seen.get(p);
+          if (hit !== undefined) return hit;
+          const r = spawnSync("git", gitInflightArgs(), { cwd: p, encoding: "utf8" });
+          const v = r.status !== 0 ? null : (r.stdout ?? "").split("\n").filter((l) => l.trim() !== "").length;
+          seen.set(p, v);
+          return v;
+        };
+      })(),
     };
     const res = staleScratchTrees(real, { ...OPTS, scratchRoot: join(mainRoot, ".worktrees") });
     for (const s of res.stale) {
@@ -861,34 +870,71 @@ describe("清场读数：常驻残留的 scratch 树要自己报数（任务 #33
       expect(dirty.status).toBe(0);
       expect(dirty.out.trim().split("\n").filter((l) => l.trim() !== "").length, "脏树要量出 1 项：同一对参数分不出两态，那个 0 就没有证人").toBe(1);
 
-      const idx = join(repo, ".git", "index");
-      // 只改 mtime、内容不变 ⇒ git 重算 sha、发现一致 ⇒ 刷新 stat 缓存并**重写 index**；下面两圈都要拿到这次写盘。
-      // 从前这里是 `Date.now()/1000 + 5`（未来时刻、整数秒粒度）：负载高时三圈落在同一秒内，第二圈起文件 mtime
-      // 与 git 刚缓存下的那个值相同 ⇒ 它认为不必刷新 ⇒ 反向对照翻不出 true，判卷退化成偶发红
-      // （2026-09-29 全量判卷实测：单跑 2/2 绿、并发全量 1 红）。改成**过去时刻且每圈不同**：每圈都与缓存里的 stat 不同，
-      // 刷新必然发生，不再依赖调度。
+      /* index 的路径要问 git，不写死 `.git/index`：`GIT_INDEX_FILE` 或 split-index 一旦生效，写死就会去读一份
+         永远不会被写到的文件 ⇒ 正向那条「没动 index」变成**真空里通过**（规则 208 要防的正是这种）。 */
+      const idxPath = git(["rev-parse", "--git-path", "index"]).out.trim();
+      expect(idxPath, "git 连 index 在哪都答不出 ⇒ 这一格没量到，不许把空路径当『没动过』").not.toBe("");
+      const idx = isAbsolute(idxPath) ? idxPath : join(repo, idxPath);
+      const readIdx = (): { ms: number; ino: number; sha: string } => {
+        const buf = readFileSync(idx);
+        const st = statSync(idx);
+        return { ms: st.mtimeMs, ino: st.ino, sha: createHash("sha256").update(buf).digest("hex") };
+      };
+      /* 三种观测各有分工：sha＝内容真换了；ino＝git 用「临时文件＋rename」换 index，**每次写盘 inode 必变，
+         且不受时钟粒度影响**；mtime 只作旁证（它才是上一版唯一依赖的东西，也是它在并发下翻不出来的）。 */
+      const differs = (a: ReturnType<typeof readIdx>, b: ReturnType<typeof readIdx>): string[] => {
+        const out: string[] = [];
+        if (a.sha !== b.sha) out.push("sha");
+        if (a.ino !== b.ino) out.push("ino");
+        if (a.ms !== b.ms) out.push("mtime");
+        return out;
+      };
       let staleN = 0;
       const staleIt = (): void => {
         staleN += 1;
         const t = Math.floor(Date.now() / 1000) - 120 + staleN;
         utimesSync(join(repo, "f.txt"), t, t);
       };
-      let touched = false;
-      for (let k = 0; k < 3 && !touched; k++) {
-        staleIt();
-        const before = statSync(idx).mtimeMs;
-        expect(git(gitInflightArgs()).status).toBe(0);
-        touched = statSync(idx).mtimeMs !== before;
+      /* 正向（带 `--no-optional-locks` 不许动别人的 index）在**两种内容态**下都要成立：生产里读的就是别人那棵树，
+         而它脏不脏不由我定。两态都跑，每圈仍用**过去且互不相同**的时刻（规则 256：不许把结论押在调度或时钟粒度上）。 */
+      for (const state of ["脏", "干净"] as const) {
+        // 回到"内容与 HEAD 一致"那一态：直接改回提交里那句（同为 2 字节，变的只有 mtime 与内容本身）
+        if (state === "干净") writeFileSync(join(repo, "f.txt"), "a\n");
+        const seen: string[] = [];
+        for (let k = 0; k < 3 && seen.length === 0; k++) {
+          staleIt();
+          const before = readIdx();
+          expect(git(gitInflightArgs()).status).toBe(0);
+          seen.push(...differs(before, readIdx()));
+        }
+        expect(seen, `带着 --no-optional-locks 还是动了别人的 index（内容${state}态，观测到 ${seen.join("、")}）＝这选项的存在没有证人；读数把被读对象写脏了`).toEqual([]);
       }
-      expect(touched, "带着 --no-optional-locks 还是刷新了别人的 index＝这选项的存在没有证人；读数把被读对象写脏了").toBe(false);
-      let flipped = false;
-      for (let k = 0; k < 3 && !flipped; k++) {
+      /* 反向对照只能在**内容干净**那一态做，而且要先证明「这一态真的干净」——不能只靠上面那个数组的顺序。
+         实测计数在 `outputs/inflight-index-witness-2026-09-30/summary.log`（4 份 log × 每臂 12 圈，汇总器 summarize.mts）：
+           脏态 · plain status：ino/mtime 翻 **9/12**，而 sha **0/12** ⇒ git 想写就写、写的还是同样的字节，这次写盘是**可选的**；
+           干净态 · plain status：ino/mtime/sha 翻 **12/12**（stat 刷新会落进字节）⇒ 证人取这一态；
+           哨兵 · git add：4/4 三样全翻 ⇒ 这几列本身能翻，不是恒「不变」的坏表；
+           两态 · 带 --no-optional-locks：**0/24** ⇒ 正向那条「没动 index」量的是真事。
+         ⚠️ 上一版在这里错过两次：⑴ 押「脏态必写盘」当反向对照（它就是 2026-09-30 全量认证那格红的成因：
+         `认证树判卷 1 failed`，而单跑该文件 88 条绿 ×3）；⑵ 把探针里恒「不变」的 `ino`/`mtimeNs` 两列
+         （字段根本不存在，`undefined !== undefined` 为假）读成现象，还据此编过一个「时钟粒度／浮点量化」的错机理。
+         时钟那条现已排除：写盘那些圈 Δms ≥ 10、Δns 与它同向。机制仍**没单独量过负载那一臂**。 */
+      expect(git(["status", "--porcelain"]).out.trim(), "反向对照前必须先处在干净态，否则量的又是那个可选的写盘").toBe("");
+      /* 证人必须是**同一圈里同时**看到 sha 与 ino 变化——跨圈拼两个半观测，就等于没看到一次写盘。 */
+      const rounds: string[][] = [];
+      for (let k = 0; k < 3; k++) {
         staleIt();
-        const before = statSync(idx).mtimeMs;
+        const before = readIdx();
         expect(git(["status", "--porcelain"]).status).toBe(0);
-        flipped = statSync(idx).mtimeMs !== before;
+        const d = differs(before, readIdx());
+        rounds.push(d);
+        if (d.includes("sha") && d.includes("ino")) break;
       }
-      expect(flipped, "反向对照：连读三次不带它也不动 index ⇒ 上面那条『带着它没动』是常数而不是观测（规则 208），这条判卷得改形状").toBe(true);
+      const witness = rounds.find((d) => d.includes("sha") && d.includes("ino")) ?? [];
+      expect(witness.includes("sha"), "反向对照：三圈里都没有一次「字节变了」的写盘 ⇒ 上面那条『带着它没动』是常数而不是观测（规则 208）；" +
+        "这一格必须在**内容干净**那态量（脏态下 git 写的是同样的字节，那次写盘是可选的）。逐圈观测：" + JSON.stringify(rounds)).toBe(true);
+      expect(witness.includes("ino"), "ino 也要同圈翻：git 换 index 走临时文件＋rename，inode 必变且不受时钟粒度影响——" +
+        "上一版只依赖 mtime，那正是它偶发红的原因。逐圈观测：" + JSON.stringify(rounds)).toBe(true);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
