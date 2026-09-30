@@ -250,11 +250,12 @@ export function sourcedReadings(face: string): Set<string> {
   return out;
 }
 /** 未点名取料目录的凭证页，按**页**记名（`第 NNN 页` key，Set 去重——同页有多个 `###` 段时不重复计）。
- *  帽登记在第 265 页把自己那三页点名之后的现读，**只准调低**（计数类不留余量）：
- *  再写一笔不点名 `outputs/<主题>-YYYY-MM-DD/` 的凭证页 ⇒ D-9 当场红。
+ *  帽跟着现读走，**只准调低**（计数类不留余量）：再写一笔不点名 `outputs/<主题>-YYYY-MM-DD/` 的凭证页 ⇒ D-9 当场红。
  *  为什么这一档要单独长读数：从前只印条数，没人知道是**哪几页**，于是第 262/263/264 三页凭证（8/6/6 条读数）
- *  落笔时只写了裸文件名（`judges-264.log`），一整页没进对账面，页里却引用了「可比对…（红 0）」——那说的是别的面。 */
-export const CRED_UNNAMED_PAGE_CAP = 11;
+ *  落笔时只写了裸文件名（`judges-264.log`），一整页没进对账面，页里却引用了「可比对…（红 0）」——那说的是别的面。
+ *  历次降帽（每一次都要同笔改那支钉着本行数字的锚点，规则 229——这一格故意不能悄悄降）：
+ *  11（第 265 页点名自己三页）→ 9（第 268 页按 `dir-hunt` 的现读把工件其实还在盘上的两页点名：第 167、257 页）。 */
+export const CRED_UNNAMED_PAGE_CAP = 9;
 
 export function checkCredentialSources(
   pages: readonly CredPage[],
