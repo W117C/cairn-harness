@@ -248,11 +248,11 @@ describe("工具描述也是模型可见文本（第 176 页）", () => {
       const m = f.name.slice("params[".length, f.name.indexOf("]."));
       perMode.set(m, (perMode.get(m) ?? 0) + 1);
     }
-    // 现读水位：只读档 15 份、三个可写档各 60 份（合计 195）。
+    // 现读水位：只读档 16 份、三个可写档各 61 份（合计 199）。
     // 这一格必须**精确**：只读到 183 的那一版（不递归）就是靠它露馅的；放宽成「≥ 某个数」之后
     // 「少走一族参数」仍然绿（规则 222）。改规格的人跟着改这一格。
-    expect(perMode.get("read-only"), "只读档参数描述面数（现读 15；它没有 write_file/edit_file）").toBe(15);
-    expect(perMode.get("default"), "缺省档参数描述面数（现读 60＝第 179 页给两把写向工具的 path 补了说明）").toBe(60);
+    expect(perMode.get("read-only"), "只读档参数描述面数（现读 16；它没有 write_file/edit_file）").toBe(16);
+    expect(perMode.get("default"), "缺省档参数描述面数（现读 61＝第 179 页给两把写向工具的 path 补了说明）").toBe(61);
     for (const m of ["guided", "auto"]) {
       expect(perMode.get(m), `${m} 与 default 档的工具面同日同表，参数面数不该分叉`).toBe(perMode.get("default"));
     }
@@ -304,7 +304,7 @@ describe("工具描述也是模型可见文本（第 176 页）", () => {
 
   it("参数说明覆盖：分母只数「有声明参数的工具」，名单与计数是现读水位", () => {
     const cov = paramProseCoverage();
-    expect(cov.length, "有参数的工具数（现读 18；verify／automation_list 没有参数，不进分母）").toBe(18);
+    expect(cov.length, "有参数的工具数（现读 19；verify／automation_list 没有参数，不进分母）").toBe(19);
     expect(cov.every((c: { declared: number }) => c.declared >= 1), "分母里混进无参数的工具＝覆盖率替形状报错").toBe(true);
     for (const c of cov) {
       expect(c.explained + c.missing.length, `${c.tool} 的 explained＋missing 必须等于声明数，少一格就是计数坏了`).toBe(c.declared);

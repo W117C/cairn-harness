@@ -18,6 +18,14 @@ const NOTICE_RESERVE_BYTES = 512;
 /** 头尾环的分配：头部多留一点（进程刚起的报错、命令行回显在前段），总预算一字不加。 */
 const HEAD_RATIO = 0.55;
 
+/** 溢出提示的缺省值是 shell 那一句，因为它服务的是 shell 的三个消费者。
+ *  **做成可注入**而不是让网页面自己抄一份环：`web_fetch` 交付的不是"一条 shell 命令的 stdout"，
+ *  让它带 `grep -n`/`tail -n 50` 是对模型说胡话；而复制一份头尾环就是 output-ring.ts 头注释
+ *  警告的那个形状（两处各写一份，修好一处另一处仍是旧的）。缺省值逐字不变 ⇒ 既有三面零回归。 */
+export const WEB_CONTENT_TRUNCATION_HINT =
+  "[下一步：这是页面正文，不是整站。要找特定段落就换一个更精确的 URL（锚点/目录页/API 文档页）；" +
+  "本工具不会替你翻页，也没有站内搜索——查不到就换源。]";
+
 /**
  * 溢出时必须跟着的那句下一步。住在环里而不是各面抄一份：三个消费者（`run_shell`、`verify`、
  * 沙箱那条出口）交付的是同一个形状——"一条 shell 命令的 stdout"，所以同一句下一步对三面都成立。
@@ -96,7 +104,7 @@ function tailWithin(s: string, max: number): string {
  *  于是同一参数下中文产出实测撑破 2.9×、提示里的省略量少报 3.0×（ASCII 路径两者同值，
  *  所以这条错在只喂英文的测试里恒绿——`tests/output-ring.test.ts` ⑥ 就是那把尺）。
  *  按字节切会带来新风险：缝合处可能把多字节字符切成半个 ⇒ `headWithinBytes`/`tailWithin` 按码位走。 */
-export function createOutputRing(limitBytes: number): OutputRing {
+export function createOutputRing(limitBytes: number, hint: string = MIDDLE_TRUNCATION_HINT): OutputRing {
   const keepBytes = limitBytes - NOTICE_RESERVE_BYTES;
   const headBudget = Math.floor(keepBytes * HEAD_RATIO);
   const tailBudget = keepBytes - headBudget;
@@ -127,7 +135,7 @@ export function createOutputRing(limitBytes: number): OutputRing {
     tail = tailWithin(tail + s, tailBudget);
   };
   const read = (): string => overflowing
-    ? head + "\n" + middleTruncationNotice(seen - bytesOf(head) - bytesOf(tail)) + "\n" + MIDDLE_TRUNCATION_HINT + "\n" + tail
+    ? head + "\n" + middleTruncationNotice(seen - bytesOf(head) - bytesOf(tail)) + "\n" + hint + "\n" + tail
     : out;
   return { push, read };
 }

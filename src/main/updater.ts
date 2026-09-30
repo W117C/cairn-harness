@@ -3,7 +3,7 @@
 // 「检查更新」= fetch manifest {version, url, notes} → 手写三段 semver 比较 → 有新版返回卡载荷
 // （renderer 出卡引导打开下载页，shell.openExternal 走 IPC agent:update-open，仅 https 白名单）。
 // 网络失败 / 坏 manifest = 显式 error 态，绝不静默。
-import { DEFAULT_STALL_MS, stallGuard } from "../net";
+import { DEFAULT_STALL_MS, readBodyCapped, stallGuard } from "../net";
 import type { StallGuard } from "../net";
 
 export interface UpdateManifest {
@@ -88,7 +88,7 @@ export async function checkUpdate(opts: {
     // D5（审查 P2）：响应体上限——流式读取、超 1MB 即中止（Content-Length 缺失时也无界内存面）。
     let raw: unknown;
     try {
-      raw = JSON.parse(await readBodyCapped(res, MAX_MANIFEST_BYTES, guard)) as unknown;
+      raw = JSON.parse(await manifestText(res, guard)) as unknown;
     } catch (err) {
       // 审查 S3（任务 4.5）：body 读 stalls 时 reader.read() 抛的是守卫的 abort reason，
       // 过去被同一个 catch 吞成「不是合法 JSON」——把网络问题报成格式问题。格式类错误仍走原话术。
@@ -130,7 +130,8 @@ export async function checkUpdate(opts: {
 }
 
 /** manifest 响应体上限（D5，审查 P2）：流式读取，超帽中止（1MB 对版本 manifest 已极宽裕）。
- *  无 body 流（测试替身等）时回退 res.text()——上限由 Content-Length 早帽兜底。 */
+ *  实现搬到了 `src/net.ts`（`web_fetch` 也要流式读），**超帽即抛**这一条留在本仓：
+ *  版本 manifest 超过 1MB 是异常而不是"内容很长"，判失败比截断后拿半份 JSON 去 parse 稳。 */
 const MAX_MANIFEST_BYTES = 1024 * 1024;
 
 /** 守卫文案：优先用 abort reason 自带的可读原因（net.ts 以 Error 作 reason）。 */
@@ -141,28 +142,10 @@ function stallMessage(guard: StallGuard): string {
     : "更新源停滞超时（窗口内无任何数据；对端挂起或网络黑洞）";
 }
 
-async function readBodyCapped(res: Response, cap: number, guard?: StallGuard): Promise<string> {
-  const declared = Number(res.headers?.get?.("content-length") ?? "0");
-  if (Number.isFinite(declared) && declared > cap) throw new Error("body 超上限");
-  const reader = res.body?.getReader?.();
-  if (!reader) return await res.text();
-  const decoder = new TextDecoder();
-  let text = "";
-  let bytes = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    bytes += value.length;
-    // 审查 S3（任务 4.5）：进展即续命——窗口是「停滞」窗口而非「总时长」上限，慢而有进展的
-    // 响应体（弱网/大 manifest）过去会被一次性定时器误杀，bump 就是为此存在。
-    guard?.bump();
-    if (bytes > cap) {
-      void reader.cancel().catch(() => {});
-      throw new Error("body 超上限");
-    }
-    text += decoder.decode(value, { stream: true });
-  }
-  return text;
+async function manifestText(res: Response, guard: StallGuard): Promise<string> {
+  const body = await readBodyCapped(res, MAX_MANIFEST_BYTES, guard);
+  if (body.capped) throw new Error("body 超上限");
+  return body.text;
 }
 
 /** 下载页白名单：只允许 http(s)（防 file:/自定义协议被 manifest 注入 openExternal）。 */

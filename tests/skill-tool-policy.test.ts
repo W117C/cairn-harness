@@ -274,7 +274,7 @@ describe("PluginRuntime 的登记面（两条 face 同一个入口）", () => {
     e.grantSkillScope("/pol:all", { "disallowed-tools": TOOL_NAMES.join(",") });
     const face = sessionToolFace(e, { mode: "default" });
     // 运行期注入面不属于 ToolName 键域，disallowed-tools 不能越过它；这里把当前实际注入的
-    // 十把工具逐项钉住，新增运行时工具时测试会提醒同步契约，而不是静默改变权限语义。
+    // 十一把工具逐项钉住，新增运行时工具时测试会提醒同步契约，而不是静默改变权限语义。
     expect(specNames(face.tools).sort()).toEqual([
       "automation_create",
       "automation_delete",
@@ -286,6 +286,7 @@ describe("PluginRuntime 的登记面（两条 face 同一个入口）", () => {
       "remember",
       "spawn_agent",
       "wait_for_agents",
+      "web_fetch",
     ]);
   });
 });

@@ -38,6 +38,10 @@ export const INJECTED_TOOLS: readonly InjectedToolSurface[] = [
   { name: "automation_delete", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
   { name: "automation_run_now", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
   { name: "automation_list", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  // web_fetch（出网查文档）：不是写向（不落盘、不改仓库）⇒ 只读档也留着——只读会话查文档是
+  // 最正当的用法之一，把它按"写工具"摘掉就等于把"不写盘"误当成"不许学东西"。
+  // worker 面不给是**原则性**的：worker 出网是无条件 deny（要联网只能回主会话发）。
+  { name: "web_fetch", specFace: "static", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
 ];
 
 /** 「缺谁」的单一实现——反向对照也走它，保证判据本身被测过而不是被调绿。 */

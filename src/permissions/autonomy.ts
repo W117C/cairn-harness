@@ -234,6 +234,15 @@ export function scopeKey(tool: ToolName, args: Record<string, unknown>): string 
 }
 
 export function isNetworkCommandCall(tool: ToolName, args: Record<string, unknown>): boolean {
+  // web_fetch：出网**就是**这个工具本身（不是"某个命令碰巧要联网"）。
+  // 这一支的用处不在 L4-network 那条出口（它长在 `if (!policy.writeAsk)` 里，只读/默认两档
+  // `writeAsk: true` ⇒ 那两档永远走不到，而 `web_fetch` 的 risk=high 已由 L4-risk 一网打尽）——
+  // 而在 `gatedTool` 里 `wantsNetwork` 那一处：`effScope = wantsNetwork ? "once" : r.scope`。
+  // 没有它，用户在审批卡上点一次"总是允许"就会 `persistAlwaysRule` 落一条 allow 规则，
+  // 之后每次出网都在 `L3-rule` 直接 approve（那一层只豁免 critical）⇒ "出网永不免批"
+  // 退化成"出网点一次就永久免批"。与 `run_shell` 跑 curl 同口径：**网络类不放行 scope 记忆**。
+  // `as string` 的理由同 `staticRisk` 里那一支：web_fetch 是运行时注入，不在 TOOL_NAMES。
+  if ((tool as string) === "web_fetch") return true;
   if (!isShellFamily(tool)) return false;
   return isNetworkCommand(typeof args.command === "string" ? args.command : undefined);
 }

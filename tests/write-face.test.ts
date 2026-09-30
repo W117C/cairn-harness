@@ -91,6 +91,7 @@ describe("mayHaveWrittenDisk：写向判据的唯一事实源", () => {
       const READ_ONLY_SURFACE = [
         "read_file", "grep", "glob", "lsp", "impact_query", "wait_for_agents", "clarify",
         "propose_plan", "remember", "spawn_agent", "shell_ro", "snapshot", "process",
+        "web_fetch",
       ] as const;
       const names = Object.keys(TOOLS);
       const unclassified = names.filter(

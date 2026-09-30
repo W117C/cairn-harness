@@ -31,6 +31,7 @@ import { createImpactQueryTool, impactQuerySpec } from "../tools/impact-query";
 import { createWaitForAgentsTool } from "../tools/wait_for_agents";
 import { createCancelAgentsTool } from "../tools/cancel_agents";
 import { createRefineGoalTool } from "../tools/refine_goal";
+import { webFetch } from "../tools/web_fetch";
 import { AUTOMATION_TOOL_NAMES } from "../agent/automation-surface";
 import { run_shell } from "../tools/run_shell";
 import type { AgentEvent, ClarifyAnswerMap, EventLog, GoalTurnOrigin } from "../events";
@@ -484,7 +485,12 @@ export function withSkillAllowNote(tool: string, reason: string): string {
     : reason + "（" + invo + " 的 allowed-tools 申报过 " + tool + "，但申报不放行：当前档位仍需确认）";
 }
 
-function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Tool, beforeExecute?: () => Promise<ToolResult | null>): Tool {
+/** `web_fetch` 在这个字面量联合里而不在 `TOOL_NAMES` 里：静态注册表冻结为 9 工具
+ *  （`tools-check.ts` 判据），M2a 起的运行时注入先例不碰它。`name as ToolName` 与
+ *  `staticRisk` 里 `(tool as string) === "web_fetch"` 是同一处类型缝的两面。 */
+type GatedName = "write_file" | "edit_file" | "run_shell" | "web_fetch";
+
+function gatedTool(name: GatedName, original: Tool, beforeExecute?: () => Promise<ToolResult | null>): Tool {
   return {
     name,
     async run(args, ctx) {
@@ -499,7 +505,7 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
         const gateR = await s.askGate.request(name, args, { reason: "安全模式 gate：写工具强制审批", risk: "none", signal: ctx.signal });
         if (gateR.outcome !== "approved") return denied(name, s.autonomy.mode, "安全模式 gate 未批准");
       }
-      const d = evaluate(name, args, s.autonomy);
+      const d = evaluate(name as ToolName, args, s.autonomy);
       const aMode = s.autonomy.mode;
       if (d.verdict === "deny") return denied(name, aMode, d.reason, { ...gateBase(d, aMode), verdict: "denied" });
       // 人工批准时人选的 scope（ask 分支才会赋值）——留痕要能回答「是谁放行的、放到哪一档」。
@@ -507,7 +513,7 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
       // 网络放行的取用面：只有「问过且批了」的网络命令才走 allow 支。
       // §11.4 红线：任何档位下「网络全开」都不是免批条件 ⇒ auto 档的 L4-pass 与无人值守都拿不到，
       // 判据挂在 verdict === "ask" → approved 这一条真实发生过的人工决议上，不挂在分类器上。
-      const wantsNetwork = isNetworkCommandCall(name, args);
+      const wantsNetwork = isNetworkCommandCall(name as ToolName, args);
       let humanApproved = false;
       if (d.verdict === "ask") {
         if (!s.askGate) return denied(name, aMode, "非交互模式（fail-closed）：" + d.reason, { ...gateBase(d, aMode), verdict: "unattended" });
@@ -539,9 +545,9 @@ function gatedTool(name: "write_file" | "edit_file" | "run_shell", original: Too
         // 「asked」由 d.verdict 现算，不另存状态——网络 profile 的三条条件里只有这一条是事件性的。
         humanApproved = true;
         if (effScope === "session_kind") {
-          (s.autonomy.sessionScopes as Set<string>).add(scopeKey(name, args));
+          (s.autonomy.sessionScopes as Set<string>).add(scopeKey(name as ToolName, args));
         } else if (effScope === "always") {
-          await persistAlwaysRule(ctx.workspace, name, args);
+          await persistAlwaysRule(ctx.workspace, name as ToolName, args);
         }
         if (d.risk === "critical") noteCriticalResolved(s.autonomy);
         noteManualDecision(s.autonomy);
@@ -944,6 +950,11 @@ export function installAppTools(opts: { automation?: boolean } = {}): void {
   TOOLS.write_file = gatedTool("write_file", TOOLS.write_file);
   TOOLS.edit_file = gatedTool("edit_file", TOOLS.edit_file);
   TOOLS.run_shell = gatedTool("run_shell", TOOLS.run_shell);
+  // web_fetch：出网取内容。**走 gatedTool 而不是裸挂**——SSRF 判据在工具内，但"要不要问人"
+  // 在权限层，两处都要有：`gatedTool` 负责四档出审批卡 + 非交互 fail-closed，并把 scope
+  // 钉成 `once`（`wantsNetwork` 那一条，见 `isNetworkCommandCall` 的注释：没有它，
+  // 一次"总是允许"就会把出网永久写成免批）。worker 面不给（worker 出网是无条件 deny）。
+  (TOOLS as unknown as Record<string, Tool>).web_fetch = gatedTool("web_fetch", webFetch);
   // M2d：remember 运行时注入（静态注册表冻结为 9 工具，tools-check 判据）
   (TOOLS as unknown as Record<string, Tool>).remember = createGatedRemember({
     getMode: () => currentSession()?.autonomy.mode ?? "default",

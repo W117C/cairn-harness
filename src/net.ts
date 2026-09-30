@@ -96,3 +96,45 @@ export async function withTimeout<T>(p: Promise<T>, ms: number, label: string): 
     if (timer !== undefined) clearTimeout(timer);
   }
 }
+
+export interface BodyRead {
+  /** 已读到的正文（按 UTF-8 逐块解码，跨块的多字节字符不会被切成 U+FFFD）。 */
+  text: string;
+  /** 实际读到的字节数。 */
+  bytes: number;
+  /** 是否撞了 cap 而提前收束。**不抛**——两种语义各有各的消费者：
+   *  版本 manifest 超 1MB 是异常（调用方该判失败），网页正文超帽只是"这个页面很长"（截断后仍有价值）。 */
+  capped: boolean;
+}
+
+/** 流式读响应体，超过 cap 就停。`Content-Length` 先帽（能省掉一次白读的传输），
+ *  真流起来再逐块计数并 `guard.bump()`（进展即续命：慢而有进展的响应体不该被一次性定时器误杀）。
+ *  原先私有于 `src/main/updater.ts`，搬到这里是因为 `src/tools/` 也要用——让工具反向 import
+ *  `main/` 是把装配层压进内核，方向反了。 */
+export async function readBodyCapped(res: Response, cap: number, guard?: StallGuard): Promise<BodyRead> {
+  const declared = Number(res.headers?.get?.("content-length") ?? "0");
+  if (Number.isFinite(declared) && declared > cap) {
+    throw new Error("body 超上限");
+  }
+  const reader = res.body?.getReader?.();
+  if (!reader) {
+    const text = await res.text();
+    return { text, bytes: Buffer.byteLength(text, "utf8"), capped: false };
+  }
+  const decoder = new TextDecoder();
+  let text = "";
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.length;
+    guard?.bump();
+    if (bytes > cap) {
+      void reader.cancel().catch(() => {});
+      return { text, bytes, capped: true };
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  // 收尾那一次 decode：把还挂在解码器里的延续字节吐出来（流末尾常有一个不完整块）。
+  return { text: text + decoder.decode(), bytes, capped: false };
+}

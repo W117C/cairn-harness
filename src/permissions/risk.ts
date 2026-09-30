@@ -121,6 +121,16 @@ export function staticRisk(tool: ToolName, args: Record<string, unknown>): RiskF
   if (tool === "edit_file") {
     return { level: "medium", reason: "编辑文件（写向操作）" };
   }
+  // web_fetch：出网取内容。**必须排在下面 `!hasThreatTableSurface` 早退之前**——非 shell 工具
+  // 默认拿 NONE，插在后面等于没写这一支。
+  //  为什么是 high 而非 medium（`run_shell` 跑 curl 是 medium）：默认档与只读档的 `riskAskAt` 就是 high，
+  //  给 medium 的话那两档根本不会被问——而出网永不免批是本仓的既有立场（`L4-network` 出口 + sandbox.ts
+  // 的红线注释）。high 让四档的 `RISK_ORDER[risk] >= RISK_ORDER[riskAskAt]` 一条出口全中。
+  //  `as string` 是必须的：`web_fetch` 是运行时注入工具，不在 TOOL_NAMES 这个字面量联合里，
+  //  直接 `tool === "web_fetch"` 是 TS2367（两侧无重叠）——反向先例见 agent-runner 的 `as ToolName`。
+  if ((tool as string) === "web_fetch") {
+    return { level: "high", reason: "出网取内容（外部不可信输入，SSRF 面）" };
+  }
   if (!hasThreatTableSurface(tool)) return NONE;
   const command = typeof args.command === "string" ? args.command : "";
   if (command.trim() === "") return NONE;

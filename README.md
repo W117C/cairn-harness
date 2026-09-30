@@ -193,7 +193,11 @@ CLI 走 `handleAgentRun` 这个装配入口，所以它第一次真正读盘上�
 
 运行时注入（`installAppTools`，不占静态名额）：`remember`（记忆沉淀）· `spawn_agent` / `wait_for_agents` /
 `cancel_agents`（多 agent 编排，CLI 上真能派 worker——`runAgent` 每轮都建会话级编排器）·
-`refine_goal`（模型改自己目标的措辞）。
+`refine_goal`（模型改自己目标的措辞）· `web_fetch`（抓一个给定 URL 还原成纯文本，只按 URL 取、不做检索）。
+
+`web_fetch` 只收 http(s)，私网/回环/云元数据地址与每一跳重定向都逐个判掉，**四档权限一律审批**、
+无人值守 fail-closed——与 `run_shell` 跑 curl 同一条红线（`web-fetch-check` 钉着这条）。它不在 worker 面上：
+worker 要联网只能回主会话发。
 
 另有两个不是普通工具：
 

@@ -83,7 +83,13 @@ export const NETWORK_DENIED_NOTE =
 /** 网络放行的**唯一**取用判据（§11.4 红线「任何档位下网络全开都不是免批条件」的实现点）。
  *  三条同时成立才给 allow：命令被认成网络类、这一条确实问过人工、人点了批准。
  *  抽成纯函数的理由：auto 档的 L4-pass 与无人值守 fail-closed 都必须落在这张真值表里，
- *  而不是散在调用方的 if 里——散着写就会出现「分类器命中即放行」那种旁路。 */
+ *  而不是散在调用方的 if 里——散着写就会出现「分类器命中即放行」那种旁路。
+ *
+ *  覆盖面提醒（改这张表时必须一起看）：这里的 `wantsNetwork` 只管**子进程**那条路
+ *  （沙箱 profile 拦的是 shell 的网络）。非 shell 工具在主进程里发包，profile 拦不到，
+ *  所以 `web_fetch`（抓网页）走的是另一条同口径的路——权限层 `staticRisk` 给 `high`，
+ *  四档都在 `L4-risk` 出口被问，且 `isNetworkCommandCall` 把它钉成一次性 scope
+ *  （不落「总是允许」规则）。两处是同一句红线，**各自都要在**；这里这一处只说明它管不到工具面。 */
 export function networkProfileFor(input: { wantsNetwork: boolean; asked: boolean; approved: boolean }): "allow" | "deny" {
   return input.wantsNetwork && input.asked && input.approved ? "allow" : "deny";
 }
