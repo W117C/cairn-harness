@@ -7381,6 +7381,54 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
    要不要把实施页纳进 D-9 属裁决（风险：实施页点名的目录里通常还放着探针脚本，第 228 页立那条时的严格式是在
    26 张凭证页／93 个读数上校准的）——本笔只把这一格登记在这儿。
 
+### 2026-09-30 · 第 230 页补 凭证：本笔（`b4919e3`）认证 `exit=1`，唯一那条红**在改前那一笔上同红**（既有判卷的位置假设被环境打破，与本笔无关）；本笔自己的面全绿（1081 条阻断 0、6/6＋10/10 全杀、同分母 50.8s→10.3s）
+
+取料：`outputs/selector-uniqueness-2026-09-30/`（`needles-at-b4919e3.log`、`kill-new-6.log`、
+`kill-flipped-10-after-selector.log`、`kill-flipped-10-before-whole.log`、`head-cert-b4919e3.log`＋`head-cert-summary.txt`、
+`red-preexisting-at-d2d44a6.log`，另有第 230 页 §1 那两份探针日志与 `findings.md`）。
+
+1. **认证（干净 detached 树 @`b4919e3`，不是主树）**：`TREE=b4919e3｜判卷四面在飞 0 项`、`依赖核对：声明 10 项，缺 0 项`、
+   `import 面：2980 条边｜悬空 0`、`门表：29 道，其中该笔 package.json 没有同名 script 的 0 道`、`typecheck exit=0（0 报错）`、
+   `认证门面=20 道（跑到 20）｜绿 20 道｜⚠️ 超预算 1`、`DIRTY_JUDGED=0`、`收尾复核=同一笔`、`认证树锁=本进程持有`、
+   `并发判卷=起前 0 套／跑完 0 套（两端独占）`、`Test Files 1 failed | 253 passed (254)｜Tests 1 failed | 3300 passed (3301)｜exit=1（退出码直接取，不接管道）`。
+   **墙钟这一格没量**：这趟我没用 `time` 包裹，就不补一个推算值（规则 245）。超预算那一道是 `sandbox:check 2771ms > 名单里的 1700ms`
+   ——门自己说"只出声，不判红"，本笔**不动那个帽**（分不清是环境抖动还是真变慢，动帽就是把噪声写进判据）。
+2. **条数核对式**：`3301 = 3298（第 229 页凭证留档）＋ 3（本笔新增用例）`；文件 `254 = 254 ＋ 0`（本笔没新增判卷文件）——两头都对得上，
+   所以"认证面确实跑到了本笔那三条新用例"不是推测。
+3. **`--check-needles` 两份互相印证**（同一把尺，两个位置）：
+   主树（实现**未**入库时）`针脚体检：1081 条 —— 阻断 6，钉在飞文本 6`，六条点名的正是本笔的 4 新锚点＋2 改指锚点；
+   干净树 @`b4919e3` `阻断 0，待复认 0，未覆盖 0，逐行式 5，未入库面 0，钉在飞文本 0，killer 指针失效 0（其中 HEAD 侧 0）`＋
+   `改法语法体检：1081 条改法全部产出合法源文件 ✅`＋`选择子：1077/1081`。
+   ⇒ 交笔前那 6 个阻断纯粹是"实现还没入库"，落库即归零，与第 230 页 §5 的声明一致。
+4. **锚点两批，都贴机器自己印的原文**（同一棵树、同一个锁）：
+   - 本笔 6 支（4 新＋2 改指）：`跑了 6/6 条 · 本次耗时 6.0s · 预算 480s`、
+     `成本分母：判卷 spawn 12 次／6 条（每条次数分布 2×6）· 单次中位 第1次 0.4s／第2次 0.4s· 最贵一条 pointer-vacuous-title-kept 1.1s`、
+     `跑法单价：selector 12 拍·中位 0.42s·坏拍（选中≠1）0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母`、`全部变异被正确杀死（断言非恒真）`。
+   - 本笔**新转成可选中**的那 10 支（`auto-verify-default-on`、`worker-impact-spec/whitelist-not-appended`、`hook-matcher-…`、
+     `read-worker-inherits-wide-hook-mode`、`evidence-receipt-reports-…`、`redaction-stops-recursing-…`、`worker-git-newline-…`、
+     `g-b-injection-face-…`、`loose-pointer-counts-literal`）：`跑了 10/10 条 · 本次耗时 10.3s`、
+     `跑法单价：selector 20 拍·中位 0.47s·坏拍（选中≠1）0 …`。
+     **这一批才是本页那条判据的端到端证人**：静态说"恰好 1 条"的 10 支，运行时 `-t` 20 拍全部真选中 1 条、0 坏拍。
+5. **同分母 A/B（钱那一格，两版本、同 10 支、复测过）**：改前那棵 `d2d44a6` 跑同样 10 支 ⇒
+   `跑了 10/10 条 · 本次耗时 50.8s`、`跑法单价：… vs whole 20 拍·中位 0.82s·坏拍（没量到或 0 条）0`、`最贵一条 loose-pointer-counts-literal 33.7s`；
+   改后同一批 `10.3s`、`selector 中位 0.47s`、`最贵一条 1.4s`。
+   ⇒ 本批 **50.8s → 10.3s**。**摊薄口径写死在这儿**：这 10 支在整表 1081 支里，省的是"整表一趟约 40s"，
+   **不是**"每条锚点都省 5 倍"（规则 245/246——第 165 页那次就是把"次数 × 文件时长"当读数被打过脸）。
+   钱的分布也说明这条判据的价值在哪：**整文件中位数只差 1.7 倍，害集中在大宿主的那条尾巴**（33.7s 那条挂在 172 条标题的判卷上）。
+6. **归因（本笔没让那条红变成自己的账）**：唯一红的是
+   `tests/head-cert-deps.test.ts > 清场读数：常驻残留的 scratch 树要自己报数 > 真读现喂：拿本机真的 worktree 清单喂进去不许崩，且绝不点到自己这棵`，
+   assertion 是 `报出来的必须是主树 .worktrees 下的 scratch 树：…/.claude/worktrees/goofy-satoshi-0edc69/.claude/worktrees/audit-zcode expected false to be true`。
+   **同一个文件在改前的 `d2d44a6` 上跑出同一句红**（`red-preexisting-at-d2d44a6.log`：`1 failed | 82 passed (83)`）⇒ 与本笔无关。
+   成因现读：本机多了一棵**不住 `.worktrees/`** 而住在隔壁审计会话那棵 `.claude/worktrees/…` 里的 detached 干净树，
+   而那条判卷把"残留树"钉死成"必在主树 `.worktrees` 下"——`staleScratchTrees` 的谓词是"detached ∧ 0 在飞 ∧ 那一笔已入库 ∧ 不是自己/认证树"，**不含位置**。
+   两边一个是判据、一个是谓词，宽度不同＝第十三族那一格；谁对要先定"哪些树算本仓的 scratch"（这关系到回收命令会不会指着别人的树），
+   **本笔不修、也不删那棵树**（不是我的，且回收是破坏性操作），登记为下一笔。
+7. **刻意未做的格子**：① 上面那条红的修复（下一笔）；② §6 那句"哪些树算 scratch"的裁决；③ 第 230 页 §7 那 4 条失准锚点（2 零命中／2 多命中）；
+   ④ `sandbox:check` 的预算帽；⑤ 整表重跑（20 分钟级，本笔只跑了 6＋10 支的相关面）。
+8. **清场结果**：本笔自建 3 棵——`.worktrees/verify-b4919e3`、`.worktrees/verify-d2d44a6`、`.worktrees/head-cert-b4919e3`，
+   逐棵 `git -C … status --porcelain` 核到 **0 项**后 `git worktree remove --force` 回收（三条 exit=0），再 `git worktree prune`。
+   **别人那 21 棵一棵没动**（规则 120 的"可回收"是判据不是授权）。回收后 `常驻残留树` 那一格少 2 棵（本笔的两棵 verify 树当时也被数进去了）。
+
 ### 2026-09-30 · 第 230 页补（隔壁会话）`​.gitignore` 补 `.worktrees/` 一行：本地 exclude 早有，跟踪文件一直缺
 
 1. **这行的来历，两边都对得上**：本会话排查 Mimosa 门禁基线枚举时跑了一条条件追加（`grep 落空 ⇒ echo >>`），

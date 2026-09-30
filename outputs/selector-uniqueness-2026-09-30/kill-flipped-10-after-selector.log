@@ -1,0 +1,18 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-b4919e3.lock）
+变异验证：10 条
+✅ auto-verify-default-on — 收束闸缺省变开（每 run 多拍一次真 lint/test，撞 action-fusion 已钉的验证执行次数记账） ｜本机实测 1.1s／2 拍
+✅ worker-impact-spec-not-appended — worker 规格面不再追加 impact_query（执行表里有、模型看不到 ⇒ 又是一次「能力已发货、模型面不可见」，本仓第 4 例） ｜本机实测 0.9s／2 拍
+✅ worker-impact-whitelist-not-appended — 白名单忘了追加（规格与实例都挂上了，却被 loop 的 allowedTools 硬闸摘掉 ⇒ 模型一调就「不在本会话工具表」——三重闸各自为政） ｜本机实测 0.9s／2 拍
+✅ hook-matcher-exact-list-degrades-to-substring-regex — 精确名列表算完后仍拿 matcher 去跑非锚定正则 ⇒ "Edit" 顺手命中 NotebookEdit/EditFile，钩子在用户没点名的工具上执行 ｜本机实测 0.9s／2 拍
+✅ read-worker-inherits-wide-hook-mode — forWorkerMode 原样返回宽档引擎 ⇒ 只读 worker 也能跑有副作用的钩子命令（最小权限半边没接） ｜本机实测 1.4s／2 拍
+✅ evidence-receipt-reports-known-completeness-as-unknown — 收据的完整性回条写死 unknown ⇒ 系统明明把每条引文逐字对过原文却报「不知道」，模型只能白召回一次或重跑同一条命令 ｜本机实测 0.8s／2 拍
+✅ redaction-stops-recursing-into-containers — 容器只原样复制不再归叶子 ⇒ verify_result.results / plan_proposed.plan / agent_result.artifacts 里的正文整段不扫（表看着列了路径，其实什么都不擦） ｜本机实测 0.6s／2 拍
+✅ worker-git-newline-not-a-separator — 去掉「换行 ↦ 分号」的归一化 ⇒ `echo hi\ngit push --force` 整段首词是 echo，git 段从没被看过（bash 语义里换行就是分隔符） ｜本机实测 0.9s／2 拍
+✅ g-b-injection-face-ignores-table-form — 实例面解析器退回只认一形 ⇒ 走 table 下标注入的工具整个从分母消失，而这道门照常绿（本轮抓到的就是这个） ｜本机实测 0.9s／2 拍
+✅ loose-pointer-counts-literal — 漏掉「逐字认不出」这一半条件 ⇒ 每一根正常指针都被算成松钉（现读 10 变 872），水位帽当场失效之外更糟：这个数字不再有意义，读的人据它判断「这表几乎全是松钉」而放弃这一格 ｜本机实测 1.2s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 10.3s · 跑了 10/10 条 · 预算 480s
+成本分母：判卷 spawn 20 次／10 条（每条次数分布 2×10）· 单次中位 第1次 0.5s／第2次 0.5s· 最贵一条 read-worker-inherits-wide-hook-mode 1.4s
+跑法单价：selector 20 拍·中位 0.47s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-b4919e3.lock）
