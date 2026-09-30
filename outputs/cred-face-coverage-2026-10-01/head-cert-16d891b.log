@@ -1,0 +1,44 @@
+目标提交：16d891b（--at=HEAD）
+worktree add exit=0
+已核：TREE=16d891b614b7f6190c7ecfded279a20c834b7c2a｜判卷四面在飞 0 项
+cp -al node_modules exit=0
+依赖核对：该提交声明 10 项，缺 0 项
+  硬链接子仓库依赖 fixtures/todo-app/node_modules ← 主树 exit=0
+import 面：3060 条边｜悬空 0（其中存量已豁免 0）
+门表：31 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证门面（20 道，名单取自 16d891b）==
+  ✅ no-progress-check exit=0 541ms（预算 1100ms）
+  ✅ prune-check exit=0 567ms（预算 1100ms）
+  ✅ fork-check exit=0 541ms（预算 1100ms）
+  ✅ compaction-check exit=0 636ms（预算 1200ms）
+  ✅ docs-check exit=0 813ms（预算 1300ms）
+  ✅ memory-check exit=0 706ms（预算 1300ms）
+  ✅ head-import-check exit=0 718ms（预算 1400ms）
+  ✅ autonomy-check exit=0 924ms（预算 1500ms）
+  ✅ sandbox:check exit=0 1302ms（预算 1700ms）
+  ✅ security-check exit=0 792ms（预算 1500ms）
+  ✅ provider:check exit=0 535ms（预算 1300ms）
+  ✅ routing-check exit=0 720ms（预算 1400ms）
+  ✅ model-surface-check exit=0 729ms（预算 1300ms）
+  ✅ prefix-churn-check exit=0 856ms（预算 1500ms）
+  ✅ prompt-surface-check exit=0 788ms（预算 1400ms）
+  ✅ replay-determinism-check exit=0 571ms（预算 1100ms）
+  ✅ cost-per-progress-check exit=0 537ms（预算 1000ms）
+  ✅ gym-check exit=0 1357ms（预算 2400ms）
+  ❌ gate-check exit=1 4381ms（预算 5400ms）
+  ✅ mutate-needles-check exit=0 12627ms（预算 20000ms）
+  认证门面=20 道（跑到 20）｜❌ 红 1 道｜⚠️ 超预算 0
+  ❌ gate-check exit=1（4381ms）
+
+== 认证汇总 ==
+  TREE=16d891b DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-16d891b.lock）
+  Test Files 259 passed (259)｜Tests 3418 passed (3418)｜exit=0（退出码直接取，不接管道）
+  并发判卷=起前 0 套／跑完 0 套（两端独占）
+  贴帽读数（缺省＝vitest 默认 5000ms（config 未写 testTimeout））：3418 条里 0 条用时 ≥ 有效预算 80%｜无显式预算按缺省算 3166 条｜标题非字面量（it.each／插值／拼接，按缺省算）114 条｜预算没落到 0 条｜无｜离帽余量最近：tests/m3c.test.ts·M3c pipeline 哑 sequencer（零 LLM） 未获 15180ms/25000ms=61%；tests/head-cert-deps.test.ts·清场读数：常驻残留的 scratch 树要自己报数（任务 #33）  1714ms/5000ms=34%；tests/gate-kill.test.ts·门禁跑命令的超时支路 子进程赖着不走：宽限到点整组强杀，输出如实写「 1618ms/5000ms=32%
+  逐条日志：/tmp/dsh-head-cert-16d891b
+  回收这棵树（规则 120，别留残留）：git worktree remove --force .worktrees/head-cert-16d891b
+  常驻残留树=18（/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-2b3763f@2b3763f、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-2cd6e79@2cd6e79、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-4806388@4806388、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-9e44bba@9e44bba、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-bd5ec44@bd5ec44、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-dfe2d6c@dfe2d6c、/Users/ze/Downloads/deepseek harness/.worktrees/verify-16d891b@16d891b、/Users/ze/Downloads/deepseek harness/.worktrees/verify-2b3763f@2b3763f、/Users/ze/Downloads/deepseek harness/.worktrees/verify-2cd6e79@2cd6e79、/Users/ze/Downloads/deepseek harness/.worktrees/verify-43ace9e@43ace9e、/Users/ze/Downloads/deepseek harness/.worktrees/verify-451f4be@451f4be、/Users/ze/Downloads/deepseek harness/.worktrees/verify-4806388@4806388、/Users/ze/Downloads/deepseek harness/.worktrees/verify-48e30a8@48e30a8、/Users/ze/Downloads/deepseek harness/.worktrees/verify-6aa6e9d@c195135、/Users/ze/Downloads/deepseek harness/.worktrees/verify-9a2fe61@9a2fe61、/Users/ze/Downloads/deepseek harness/.worktrees/verify-9e44bba@9e44bba、/Users/ze/Downloads/deepseek harness/.worktrees/verify-a5197eb@a5197eb、/Users/ze/Downloads/deepseek harness/.worktrees/verify-dfe2d6c@dfe2d6c）／另有 2 棵不住本仓 scratch 面的残留形树（/private/tmp/dsh-foreign-witness-A、/private/tmp/dsh-foreign-witness-B）＝不是本仓建的，别照上面那条回收命令删它们（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）
+  汇总已同步落盘（不靠 stdout 的尾）：/tmp/dsh-head-cert-16d891b/summary.txt
+HEADCERT_EXIT=1
