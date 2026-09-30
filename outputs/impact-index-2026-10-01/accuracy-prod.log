@@ -1,0 +1,11 @@
+graph: files=560 candidates=560 cap=5000 partial=false parsed=0 fromTagsCache=0 fromIndex=true
+
+| 符号 | 图站点 | 真值站点 | tp | fp | fn | precision | recall |
+|---|---|---|---|---|---|---|---|
+| insideScratchFace | 0 | 0 | 0 | 0 | 0 | n/a | n/a |
+| staleScratchTrees | 13 | 13 | 13 | 0 | 0 | 1.000 | 1.000 |
+| runInSandbox | 12 | 12 | 12 | 0 | 0 | 1.000 | 1.000 |
+| appendRun | 1 | 1 | 1 | 0 | 0 | 1.000 | 1.000 |
+
+AGGREGATE precision=1.000 recall=1.000 (tp=26 fp=0 fn=0)
+GATE precision==1.000: true; recall>=0.900: true

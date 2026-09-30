@@ -1,0 +1,34 @@
+{
+  "note": "人工核对的跨文件调用边真值（2026-10-01，逐条对照源码与图合同核对，不是抄探针输出）。口径三条，全部是 impact 图的登记设计边界：①def/ref 按名字连边、不采 import——同名定义（add 在 math.ts 与 legacy-math.ts）的调用点按合同连到全部两份定义（ambiguous=true），不算假阳性；②同文件调用不入图（boundary 登记三条：clamp/padLeft/alias）；③export…from 重导出语句不产生任何 tag（expectedNonEdges 登记），故 index.ts 不是 formatLabel/add 的定义点。",
+  "edgeCount": 16,
+  "edges": [
+    { "from": "api.js", "refLine": 2, "symbol": "slugify", "to": "helpers.js", "defLine": 1 },
+    { "from": "api.js", "refLine": 3, "symbol": "logInfo", "to": "logger.ts", "defLine": 1 },
+    { "from": "api.js", "refLine": 4, "symbol": "createUser", "to": "user-service.ts", "defLine": 1 },
+    { "from": "index.ts", "refLine": 5, "symbol": "formatLabel", "to": "strings.ts", "defLine": 1 },
+    { "from": "order-service.ts", "refLine": 2, "symbol": "mul", "to": "math.ts", "defLine": 5 },
+    { "from": "order-service.ts", "refLine": 3, "symbol": "logInfo", "to": "logger.ts", "defLine": 1 },
+    { "from": "order-service.ts", "refLine": 4, "symbol": "add", "to": "math.ts", "defLine": 1, "ambiguous": true },
+    { "from": "order-service.ts", "refLine": 4, "symbol": "add", "to": "legacy-math.ts", "defLine": 1, "ambiguous": true },
+    { "from": "report.ts", "refLine": 2, "symbol": "mul", "to": "math.ts", "defLine": 5 },
+    { "from": "report.ts", "refLine": 3, "symbol": "add", "to": "math.ts", "defLine": 1, "ambiguous": true },
+    { "from": "report.ts", "refLine": 3, "symbol": "add", "to": "legacy-math.ts", "defLine": 1, "ambiguous": true },
+    { "from": "report.ts", "refLine": 4, "symbol": "formatLabel", "to": "strings.ts", "defLine": 1 },
+    { "from": "user-service.ts", "refLine": 2, "symbol": "formatLabel", "to": "strings.ts", "defLine": 1 },
+    { "from": "user-service.ts", "refLine": 3, "symbol": "logInfo", "to": "logger.ts", "defLine": 1 },
+    { "from": "user-service.ts", "refLine": 4, "symbol": "add", "to": "math.ts", "defLine": 1, "ambiguous": true },
+    { "from": "user-service.ts", "refLine": 4, "symbol": "add", "to": "legacy-math.ts", "defLine": 1, "ambiguous": true }
+  ],
+  "boundary": [
+    { "symbol": "clamp", "file": "math.ts", "refLine": 6, "defLine": 9, "reason": "同文件调用（mul 内用 clamp）——跨文件判据不入图，登记的设计边界" },
+    { "symbol": "padLeft", "file": "strings.ts", "refLine": 2, "defLine": 5, "reason": "同文件调用（formatLabel 内用 padLeft）——同上" }
+  ],
+  "expectedNonEdges": [
+    { "file": "index.ts", "line": 1, "symbol": "formatLabel", "reason": "export…from 重导出语句不产生 def/ref tag——index.ts 不得成为 formatLabel 的定义点" },
+    { "file": "index.ts", "line": 2, "symbol": "add", "reason": "同上——index.ts 不得成为 add 的第三份定义点" },
+    { "file": "report.ts", "line": 4, "symbol": "alias", "reason": "alias 是函数体内局部绑定，isLocalVariableBinding 不把它计成 def——ref 有（report.ts:4）而 def 无 ⇒ 不构成任何边" }
+  ],
+  "zeroRefSymbols": ["logError", "summarize"],
+  "upwardQueries": ["add", "mul", "formatLabel", "logInfo", "createUser", "slugify", "logError", "clamp", "padLeft"],
+  "downwardQueries": ["api.js", "index.ts", "order-service.ts", "report.ts", "user-service.ts", "math.ts", "logger.ts"]
+}

@@ -162,13 +162,14 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
         if (wantDeps) {
           // 反向一跳：downward 早就有实现与单测，但模型面够不着 ⇒ 「跨模块理解依赖」只兑现了一半
           // （只有"谁在用我"，没有"我在用谁"）。图只建一次，不复用 fileImpact（它会再建一遍）。
-          const graph = await buildImpact({ workspace: ctx.workspace, cacheDir: dir, maxFiles });
+          // 三个建图出口都开持久化索引（persistIndex）：同提交＋文件指纹命中 ⇒ 零解析热载。
+          const graph = await buildImpact({ workspace: ctx.workspace, cacheDir: dir, maxFiles, persistIndex: true });
           const rel = fileArg.replace(/\\/g, "/");
           if (!graph.files.includes(rel)) return { ok: false, output: await notInGraphNote(ctx.workspace, rel, abs, maxFiles) };
           const depHead = "[impact] " + rel + " 引用的外部定义（我在调用谁）" + coverageNote(graph.files.length, maxFiles, graph.candidates);
           return { ok: true, output: sitesNote(depHead, downward(graph, rel), DEP_NOUN) };
         }
-        const r = await fileImpact(ctx.workspace, fileArg, dir, maxFiles);
+        const r = await fileImpact(ctx.workspace, fileArg, dir, maxFiles, true);
         if (r === null) return { ok: false, output: await notInGraphNote(ctx.workspace, fileArg.replace(/\\/g, "/"), abs, maxFiles) };
         // 只列**真的被外面引用到**的符号：fileImpact 的 symbols 含函数内局部名（base/boosted…），
         // 照抄会让一屏摘要塞满无关名字——多花 token 还不给可执行信息。
@@ -183,7 +184,7 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
             : "");
         return { ok: true, output: sitesNote(head, r.up) };
       }
-      const graph = await buildImpact({ workspace: ctx.workspace, cacheDir: dir, maxFiles });
+      const graph = await buildImpact({ workspace: ctx.workspace, cacheDir: dir, maxFiles, persistIndex: true });
       const defined = graph.defs.get(symbol) ?? [];
       const refSites = graph.refs.get(symbol) ?? [];
       if (defined.length === 0 && refSites.length === 0) {

@@ -7,11 +7,12 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { fileTags, TAGS_EXTRACT_VERSION, TreeSitterUnavailableError, type SymbolTag } from "../map/parse.js";
 import { applyFileCap, scanSourceFilesAll, type ScannedFile } from "../map/build.js";
 import { MAX_FILES_CEILING, MAX_FILES_DEFAULT } from "../map/cap.js";
 import { coverageNote, graphIsPartial } from "./coverage.js";
+import { currentCommitSha, impactIndexDirFor, loadImpactIndex, saveImpactIndex } from "./persist.js";
 
 /** grammar 环境级失败（坏/缺失 wasm）：影响面是护栏能力，必须 fail-loud。
  *  文案固定含 "unavailable"（判卷锚点）。 */
@@ -56,6 +57,9 @@ export interface ImpactGraph {
   parsed: number;
   /** 本次命中 tags 缓存文件数。 */
   fromTagsCache: number;
+  /** true = 本次图直接从持久化索引载入（零解析；parsed/fromTagsCache 因此为 0）。
+   *  只在 `persistIndex` 开且索引命中时出现——读端可据此与「tags 缓存命中」区分开。 */
+  fromIndex?: boolean;
 }
 
 export interface BuildImpactOptions {
@@ -64,6 +68,13 @@ export interface BuildImpactOptions {
   cacheDir?: string;
   /** 文件数帽（缺省＝安全阀 `MAX_FILES_DEFAULT`，同 map——09-30 起它不再是 400，见 `map/build.ts` 那段）。 */
   maxFiles?: number;
+  /** 持久化索引开关。true ⇒ 同 git 提交＋全量文件指纹命中就直接载入 artifact（零解析，
+   *  `fromIndex: true`）；任一文件变化 ⇒ 走既有 tags 缓存增量、建完覆写 artifact。
+   *  缺省 false：既有判卷（impact.test.ts ⑭）钉死「直接调 buildImpact 的缺省行为＝tags
+   *  缓存增量」这一语义；索引这层进程级热载由装配点显式开（`impact_query` 三个建图出口）。 */
+  persistIndex?: boolean;
+  /** 索引目录（缺省 = cacheDir 的兄弟目录 impact-index；测试注入临时目录用）。 */
+  indexDir?: string;
 }
 
 /** 帽的上限。**数值的事实源在 `map/build.ts:MAX_FILES_CEILING`**，这里只是别名——
@@ -128,7 +139,9 @@ function addSites(map: Map<string, ImpactSite[]>, sym: string, site: ImpactSite)
   else arr.push(site);
 }
 
-/** 构建跨文件调用图。增量：{mtime,size} 指纹未变的文件直接读 tags 缓存。
+/** 构建跨文件调用图。增量：{mtime,size} 指纹未变的文件直接读 tags 缓存；
+ *  `persistIndex` 开时再叠一层进程级热载：同 git 提交＋全量文件指纹命中 ⇒ 直接载入
+ *  artifact（零解析，见 ./persist.ts）。
  *  错误契约：grammar 环境级失败（坏/缺失 wasm）抛 ImpactUnavailableError（fail-loud，
  *  文案含 unavailable）；单文件读/解析失败静默跳过（同 map）。 */
 export async function buildImpact(opts: BuildImpactOptions): Promise<ImpactGraph> {
@@ -139,6 +152,32 @@ export async function buildImpact(opts: BuildImpactOptions): Promise<ImpactGraph
   const candidates = await scanSourceFilesAll(opts.workspace);
   const files = applyFileCap(candidates, cap);
   const dir = opts.cacheDir ?? defaultImpactCacheDir();
+
+  if (opts.persistIndex === true) {
+    const wsAbs = resolve(opts.workspace);
+    const sha = await currentCommitSha(opts.workspace);
+    if (sha !== null) {
+      const indexDir = opts.indexDir ?? impactIndexDirFor(dir);
+      const loaded = await loadImpactIndex(indexDir, wsAbs, sha, files);
+      if (loaded) return loaded;
+      const graph = await buildGraphFromScan(candidates, files, cap, dir);
+      await saveImpactIndex(indexDir, wsAbs, sha, graph, files);
+      return graph;
+    }
+    // sha 取不到（非 git 仓/无提交）→ 落到下面：索引整层不参与（没有稳定键不发明弱键）。
+  }
+  return buildGraphFromScan(candidates, files, cap, dir);
+}
+
+/** 从已扫描的文件清单建图（tags 缓存增量层）。载入/落盘的编排只在 `buildImpact`，
+ *  这一支保持纯建图——两层缓存（tags 文件级、索引图级）的判据互不掺和。
+ *  收 candidates 全量数组只为 return 里那一个 `.length`（帽前分母的锚点针脚钉着这个字面量）。 */
+async function buildGraphFromScan(
+  candidates: ScannedFile[],
+  files: ScannedFile[],
+  cap: number,
+  dir: string,
+): Promise<ImpactGraph> {
   const defs = new Map<string, ImpactSite[]>();
   const refs = new Map<string, ImpactSite[]>();
   let parsed = 0;
@@ -306,8 +345,9 @@ export async function fileImpact(
   fileRel: string,
   cacheDir?: string,
   maxFiles?: number,
+  persistIndex?: boolean,
 ): Promise<FileImpactReport | null> {
-  const graph = await buildImpact({ workspace, cacheDir, maxFiles });
+  const graph = await buildImpact({ workspace, cacheDir, maxFiles, persistIndex });
   const normalized = fileRel.replace(/\\/g, "/");
   if (!graph.files.includes(normalized)) return null;
   const symbols = [...graph.defs.keys()]
