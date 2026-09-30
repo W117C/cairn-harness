@@ -1,0 +1,10 @@
+方案门抢答： {"id":"apr-1-pipeline","outcome":"{\"ok\":true}"}
+
+失败链状态事件 ＝ 4 条
+  · callId=pipeline-pf1 ok=true [sequencer] （只读状态·模型不可改 §4.4.7）链已批准启动：2 环（implement → review）
+  · callId=pipeline-pf1 ok=true [sequencer] （只读状态·模型不可改 §4.4.7）stage 1/2（implement）启动
+  · callId=pipeline-pf1 ok=true [sequencer] （只读状态·模型不可改 §4.4.7）stage 2/2（review）启动
+  · callId=pipeline-pf1 ok=true [sequencer] （只读状态·模型不可改 §4.4.7）整链 done：
+#1 implement worker-1 done｜
+#2 review wo
+agent_result：2 条，ok=[undefined,undefined]
