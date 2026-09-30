@@ -526,21 +526,34 @@ export function vitestTitles(sourceText: string): string[] {
  *  判据若与那句 split 写在同一行，锚点会被连带误豁免（第 152 页实测 3 条新锚点中了这一枪）。 */
 const literalOf = (body: string): string => body.split(WILDCARD).join("").trim();
 
-/** 标题 → 匹配式：先按占位符切开、只转义字面段、再把通配拼回去（顺序反了 `${…}` 会永远认不出）。
- *  返回的数组**不与** `vitestTitles` 下标对齐（生成式标题会被丢掉），消费者只有 `expectFailMatchesTitles` 的 `.some`。 */
+/** 表里存的是解码后的字符串，盘上的标题是带转义的源码文字 ⇒ 比之前先把这条字节还原。 */
+const unescapeTitle = (raw: string): string => raw.replace(/\\(.)/g, "$1");
+
+/** **单条**标题 → 匹配式：先按占位符切开、只转义字面段、再把通配拼回去（顺序反了 `${…}` 会永远认不出）。
+ *  回 null＝这条不能当模式用（生成式标题，见下面那三行）。
+ *  为什么单独成函数（第 230 页）：第二个消费者 `selectorHitCount` 要**按标题逐条**数命中条数，
+ *  而 `vitestTitlePatterns` 把下标丢了 ⇒ 那边只能再抄一份构造。同一判据两处各写一份必然漂宽（第十三族），
+ *  所以把模式构造收在这儿，两个消费者共用。 */
+export function titleMatchPattern(rawTitle: string): RegExp | null {
+  const un = unescapeTitle(rawTitle);
+  const body = un
+    .split(PLACEHOLDER)
+    .map((piece) => (PLACEHOLDER.test(piece) ? WILDCARD : piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
+    .join("");
+  // 整条标题都是占位符（`it(\`${t}\`, …)` 这类生成式标题）⇒ 这条模式匹配**任何**输入。
+  // 留着它，落在这份判卷文件上的全部 expectFail 指针体检一起变恒真：实测 241 个判卷文件里有 2 个含这种标题，
+  // 压在它们上面的 33 条锚点因此缴械（本轮那条「四支／六支」死指针就是靠这个洞活到实跑 21 分钟才喊）。
+  // 生成式标题在运行时会被渲染成具体文本，指针本来就点不到它 ⇒ 丢掉，让那格退化成"静态验不了"，而不是"静态永远对"。
+  if (literalOf(body) === "") return null;
+  return new RegExp("^[\\s\\S]*" + body.split(WILDCARD).join("[\\s\\S]*?") + "[\\s\\S]*$");
+}
+
+/** 判卷源文件里全部**可用**的标题模式（生成式标题会被丢掉）。
+ *  返回的数组**不与** `vitestTitles` 下标对齐，消费者只有 `expectFailMatchesTitles` 的 `.some`。 */
 export function vitestTitlePatterns(sourceText: string): RegExp[] {
   return vitestTitles(sourceText).flatMap((lit) => {
-    const un = lit.replace(/\\(.)/g, "$1");
-    const body = un
-      .split(PLACEHOLDER)
-      .map((piece) => (PLACEHOLDER.test(piece) ? WILDCARD : piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
-      .join("");
-    // 整条标题都是占位符（`it(\`${t}\`, …)` 这类生成式标题）⇒ 这条模式匹配**任何**输入。
-    // 留着它，落在这份判卷文件上的全部 expectFail 指针体检一起变恒真：实测 241 个判卷文件里有 2 个含这种标题，
-    // 压在它们上面的 33 条锚点因此缴械（本轮那条「四支／六支」死指针就是靠这个洞活到实跑 21 分钟才喊）。
-    // 生成式标题在运行时会被渲染成具体文本，指针本来就点不到它 ⇒ 丢掉，让那格退化成"静态验不了"，而不是"静态永远对"。
-    if (literalOf(body) === "") return [];
-    return [new RegExp("^[\\s\\S]*" + body.split(WILDCARD).join("[\\s\\S]*?") + "[\\s\\S]*$")];
+    const re = titleMatchPattern(lit);
+    return re === null ? [] : [re];
   });
 }
 
@@ -700,29 +713,64 @@ export function baselineRedKind(vitestOut: string): { kind: "unloadable"; module
 
 // ---- 选择子唯一性（第 169 页的前置闸）：一条锚点能不能只跑**自己那条** killer 用例 ----
 // 动因（09-28 第 168 页的读数）：一条锚点的单价＝**判卷宿主文件时长的 3 倍**（实测 23.1s/条，换一份 1.1s 的宿主就是 20.6×），
-// 而它真正要证的只有自己那条用例。要让 `runTest` 改吃 `-t` 的精确跑法，前提是指针能**逐字唯一定位**那条标题：
+// 而它真正要证的只有自己那条用例。要让 `runTest` 改吃 `-t` 的精确跑法，前提是指针能**唯一定位**那条标题
+// （宽度与运行时一致，见 `selectorHitCount`；第 230 页之前这里数的是逐字 `includes`，比 `-t` 能做的窄）：
 // 0 命中时 vitest 不会失败，它只是**一条也没跑** ⇒ 基线与突变两拍都白过，这把尺会安静地变成假绿（第 166 页那族）。
 // 所以先要有一格读数把「选不中」的条数点名，而不是等 `-t` 上线后才发现名单里混着选不中的。
+/** `describe(...)` 的标题面（第 233 页）。抽取形状与 `vitestTitles` 的四支一一对应，只是主语换成 `describe`／`context`／`suite`。
+ *  为什么单独要一份：`--testNamePattern` 匹配的是**整条名**（describe 前缀＋it 标题），
+ *  所以指针完全可能写的是某一支 `describe` 的名字——运行时它选中的是**那支下面全部用例**，
+ *  而 it 标题面里一个字都找不到它 ⇒ 从前这一格把它报成「多半是用例改了名」，那是**指责任人**（实测：该指针选中 2 条）。 */
+export function describeTitles(sourceText: string): string[] {
+  const MOD = String.raw`(?:\.each|\.skip|\.todo|\.only|\.each\.object|\.concurrent|\.sequential)?`;
+  const SQ = String.raw`"((?:[^"\\]|\\.)*)"`;
+  const BQ = "`((?:[^`\\\\]|\\\\.)*)`";
+  const pats = [
+    new RegExp(String.raw`\b(?:describe|context|suite)` + MOD + String.raw`\s*\(\s*` + SQ, "g"),
+    new RegExp(String.raw`\b(?:describe|context|suite)` + MOD + String.raw`\s*\(\s*` + BQ, "g"),
+  ];
+  const out: string[] = [];
+  for (const re of pats) for (const m of sourceText.matchAll(re)) out.push(m[1]!);
+  return out;
+}
+
+/** 「0 命中」到底是哪一种 0（第 233 页）。这四种修法互不相同，而旧读数把它们并成一句"多半是改了名"。 */
+export type ZeroHitCause = "describe-title" | "variable-title" | "absent" | "unknown";
+
+export function zeroHitCause(pointer: string, sourceText: string): ZeroHitCause {
+  const descs = describeTitles(sourceText);
+  if (descs.some((d) => d.includes(pointer) || unescapeTitle(d).includes(pointer))) return "describe-title";
+  // 指针这句字节在判卷文件里**有**，只是没有一条 `it` 标题含它 ⇒ 标题多半由变量／循环给出
+  // （实测形状：`for (const cmd of WRAPPED) it(cmd, …)`，运行时 `-t "GIT_PAGER=cat git push --force"` 恰好选中 1 条）
+  if (sourceText.includes(pointer) || sourceText.includes(pointer.replace(/["\\]/gu, ""))) return "variable-title";
+  if (!expectFailMatchesTitles(pointer, sourceText)) return "absent"; // 文件里压根没这句话＝真·指不到
+  return "unknown";
+}
+
 export interface SelectorProblem {
   id: string;
   test: string;
-  /** 逐字命中该指针的 it()/test() 标题条数。0＝只靠占位符展开才认得出；>1＝选择子不唯一。 */
+  /** 这份判卷里**运行时会被这条指针选中**的用例条数（`selectorHitCount`）。0＝对不上任何 `it` 标题；>1＝选择子不唯一。 */
   hits: number;
+  /** 只在 `hits === 0` 时给出：那句 0 是哪一种 0（第 233 页）。四种成因的修法相反，不许并成一句"多半是改了名"。 */
+  cause?: ZeroHitCause;
 }
 
-/** 数每条锚点的指针在它自己的判卷文件里逐字命中几条标题。只回 ≠1 的那些（==1 是能走 -t 的那一批）。
+
+
+/** 数每条锚点的指针在它自己的判卷文件里能选中几条用例。只回 ≠1 的那些（==1 是能走 -t 的那一批）。
  *  09-30 补（待办 #26）：**"这一条没被数"必须分成三态各自有名**，因为它们的修法相反：
  *   ⑴ `excluded` 按设计不数（指针为空，或判卷不是 `.test.ts` ⇒ 结构钉型判卷，归属在 `auditExpectFails`）；
  *   ⑵ `unreadable` 判卷文件读不到（不在盘上／未入库）；
- *   ⑶ `blind` **文件读到了却一个标题都抽不到**＝解析器对整份文件瞎了。
- *      现读成因：`tests/solpi-receipt-integration.test.ts` 写的是 `it.each([false, true])("…（observationPack=%s）", …)`，
- *      而 `TITLE_RE` 只认 `it("…` / `it(` 后面紧跟引号 ⇒ `it.each(` 后面是 `[`，一条标题都抽不到。
+ *   ⑶ `blind` **文件读到了却一个标题都抽不到**＝抽取器对整份文件瞎了。
+ *      这一态从前是**尺自己瞎**：这里另抄了一份只认 `it("…` 的窄正则，而 `it.each([false, true])("…%s")` 的标题
+ *      在它眼里不存在（第 230 页收成共用 `vitestTitles` 后，全表这一格归 0）。
  *  ⑶ 从前与"这文件没问题"同形：那 1 条锚点从普查里静默消失，而 `killer 指针失效 0` 照样印绿——
  *  尺的"读不到"与"没有问题"不许同形（规则 261/262）。 */
 export interface SelectorScan {
   problems: SelectorProblem[];
   inspected: number;
-  /** 逐字唯一定位自己那条 killer 用例的 id（第 170 页的跑法选择表只吃这一份，调用侧不许再算一遍）。 */
+  /** 运行时恰好选中自己那条 killer 用例的 id（第 170 页的跑法选择表只吃这一份，调用侧不许再算一遍）。 */
   selectableIds: readonly string[];
   /** ⑶ 读得到文件、却抽不到任何标题的判卷（按文件归并，带上挂在它名下的锚点 id）。 */
   blind: { test: string; ids: string[] }[];
@@ -734,13 +782,33 @@ export interface SelectorScan {
   total: number;
 }
 
-const TITLE_RE = /^\s*(?:it|test)(?:\.\w+)?\s*\(\s*(["`'])((?:\\.|(?!\1)[^\\])*)\1/gmu;
+/** 这条指针在运行时**能选中几条**用例。宽度对齐 runner，不是对齐字面量：
+ *  `mutate-verify.mjs` 把指针 `escapeTitlePattern` 后交给 `--testNamePattern`，vitest 拿它当正则去匹配**渲染后的**标题，
+ *  所以「标题是拼出来的（`%s`／`${x}`）」与「表里存的是解码后的串、盘上是带转义引号的字节」这两类，运行时都选得中。
+ *  从前这一格只数逐字 `includes` ⇒ 那 10 条被判成「选不中」而只能走整文件跑法（单价是 `-t` 的几十倍，第 168/170 页实测），
+ *  而它们与「松钉 10 根」正好是同一批——两把尺说的是同一件事，就该共用同一份模式构造（第 230 页）。
+ *  但**带占位符的那条标题代表的是 N 条渲染**，所以两种命中要分开记（本文件那条 `each-bare` 用例就是被这一格抓出来的）：
+ *  指针填满了占位符 ⇒ 它就是其中一条渲染，记 1；指针只落在模板的字面段里 ⇒ 每一行参数都被它选中，记 2（＝不唯一）。
+ *  这里记的是「够不够走 -t」这一问的下界，不是渲染行数：静态数不清有几行参数，但知道那不止一条。 */
+export function selectorHitCount(pointer: string, titles: readonly string[]): number {
+  let n = 0;
+  for (const t of titles) {
+    if (!PLACEHOLDER.test(unescapeTitle(t))) {
+      if (t.includes(pointer) || unescapeTitle(t).includes(pointer)) n += 1;
+      continue;
+    }
+    const re = titleMatchPattern(t);
+    if (re !== null && re.test(pointer)) n += 1;
+    else if (t.includes(pointer) || unescapeTitle(t).includes(pointer)) n += 2;
+  }
+  return n;
+}
 
 export function selectorAmbiguity(
   entries: readonly ExpectFailEntry[],
   readTest: (rel: string) => string | null,
 ): SelectorScan {
-  const cache = new Map<string, string[] | null>();
+  const cache = new Map<string, { text: string; titles: string[] } | null>();
   const problems: SelectorProblem[] = [];
   const selectableIds: string[] = [];
   const blindByTest = new Map<string, string[]>();
@@ -751,19 +819,23 @@ export function selectorAmbiguity(
     if (e.expectFail === "" || !e.test.endsWith(".test.ts")) { excluded += 1; continue; }
     if (!cache.has(e.test)) {
       const text = readTest(e.test);
-      cache.set(e.test, text === null ? null : [...text.matchAll(TITLE_RE)].map((m) => m[2] ?? ""));
+      cache.set(e.test, text === null ? null : { text, titles: vitestTitles(text) });
     }
-    const titles = cache.get(e.test);
-    if (titles === null || titles === undefined) { unreadable.push(e.id); continue; }
-    if (titles.length === 0) {
+    const face = cache.get(e.test);
+    if (face === null || face === undefined) { unreadable.push(e.id); continue; }
+    if (face.titles.length === 0) {
       const hit = blindByTest.get(e.test);
       if (hit) hit.push(e.id);
       else blindByTest.set(e.test, [e.id]);
       continue;
     }
     inspected += 1;
-    const hits = titles.filter((t) => t.includes(e.expectFail)).length;
-    if (hits !== 1) problems.push({ id: e.id, test: e.test, hits });
+    const hits = selectorHitCount(e.expectFail, face.titles);
+    if (hits !== 1) {
+      problems.push(hits === 0
+        ? { id: e.id, test: e.test, hits, cause: zeroHitCause(e.expectFail, face.text) }
+        : { id: e.id, test: e.test, hits });
+    }
     else selectableIds.push(e.id);
   }
   return {
@@ -775,22 +847,50 @@ export function selectorAmbiguity(
 
 /** 那一格的措辞：四态分开印，且**不许**把「选不中」「读不到」「整片瞎」并成「没什么问题」。
  *  存量不是 0（现读 13 条），所以这一格走水位法：只准调低，涨了要交代。 */
+/** 「零命中」的四种成因各印一个数，**0 也印**（数量不列印＝那一格没有观测者；并成一句就会指错责任人）。
+ *  动因（第 233 页实测）：这句从前写的是"多半是用例改了名"，而全表那 2 条零命中，
+ *  一条是**指针指在 `describe` 上**（实测 `-t` 选中 2 条＝不唯一，不是选不中），
+ *  一条是**标题由循环变量给出**（`for … it(cmd)`，实测 `-t` 恰好选中 1 条＝运行时选得中，只是静态看不见）。 */
+const ZERO_CAUSE_LABELS: Readonly<Record<ZeroHitCause, string>> = {
+  "describe-title": "指在 describe 上",
+  "variable-title": "标题由变量给出",
+  "absent": "文件里没这句话",
+  "unknown": "说不清",
+};
+
+export function zeroCauseCell(zero: readonly SelectorProblem[]): string {
+  const causes = Object.keys(ZERO_CAUSE_LABELS) as ZeroHitCause[];
+  const counts = new Map<ZeroHitCause, number>(causes.map((c) => [c, 0]));
+  for (const p of zero) {
+    const c = p.cause ?? "unknown";
+    counts.set(c, (counts.get(c) ?? 0) + 1);
+  }
+  return causes.map((c) => `${ZERO_CAUSE_LABELS[c]} ${String(counts.get(c) ?? 0)}`).join("｜");
+}
+
 export function selectorCell(scan: SelectorScan): string {
   const { problems, inspected, blind, unreadable, excluded, total } = scan;
   const zero = problems.filter((p) => p.hits === 0);
   const many = problems.filter((p) => p.hits > 1);
   const parts = [
-    `选择子：${String(inspected - problems.length)}/${String(inspected)} 条能逐字唯一定位自己的 killer 用例（其余走整文件跑法）`,
+    `选择子：${String(inspected - problems.length)}/${String(inspected)} 条能只跑自己那条 killer 用例（宽度与 runner 的 --testNamePattern 一致；其余走整文件跑法）`,
     // 两个分母并排印：只印 inspected 的话，"表 1027 而这一格 1026"那 1 条去哪了无人知道（#26 的原始现场）。
     inspected === total ? "" : `可判面 ${String(inspected)}／表 ${String(total)}：不数的 ${String(total - inspected)} 条＝` +
       `按设计不数 ${String(excluded)}、判卷读不到 ${String(unreadable.length)}、` +
       `**读得到文件却一条标题都抽不到 ${String(blind.reduce((n, b) => n + b.ids.length, 0))}**` +
       (blind.length === 0 ? "" : `（${blind.map((b) => `${b.test}⇒${b.ids.join("、")}`).join("；")}）`) +
       "，那些只能整文件跑，**不算这一格通过**",
-    zero.length === 0 ? "" : `零命中 ${String(zero.length)} 条（标题是拼出来的或已改名 ⇒ -t 会一条也选不中）`,
-    many.length === 0 ? "" : `多命中 ${String(many.length)} 条（选择子不唯一）`,
+    zero.length === 0 ? "" : `零命中 ${String(zero.length)} 条（按成因点名：${zeroCauseCell(zero)}；共同后果是 -t 一条也选不中 ⇒ 走整文件跑法）` + selectorBucketList(zero),
+    many.length === 0 ? "" : `多命中 ${String(many.length)} 条（选择子不唯一）` + selectorBucketList(many),
   ].filter((s) => s !== "");
-  return parts.join("·") + (problems.length === 0 ? "" : "：" + problems.map((p) => `${p.id}(${String(p.hits)})`).join("、"));
+  // 名单**分桶挂各自的标签**（第 236 页）：从前这两个桶的名字并排印在整行末尾，于是唯一的零命中条
+  // 看起来像「多命中」的一员（实测：`多命中 2 条…：shape-…(0)、…(2)、…(2)`）。计数一直是对的，坏的是责任人。
+  return parts.join("·");
+}
+
+/** 一个桶自己的 id 名单。`zero`∪`many` 就是 `problems` 全集（hits===1 的进不了 problems），所以分桶印不丢条。 */
+function selectorBucketList(rows: SelectorProblem[]): string {
+  return "：" + rows.map((p) => `${p.id}(${String(p.hits)})`).join("、");
 }
 
 /** 一拍读数坏没坏——闸与单价格共用这一份判据，两边不许各算一遍（规则 228：分叉的副本会一起错档）。

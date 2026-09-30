@@ -56,10 +56,20 @@ describe("impact_query：改之前问波及谁", () => {
     expect(r.output.split("\n").filter((l) => l.startsWith("  ")).join("\n")).not.toContain("math.js");
   });
 
-  it("只在自己文件内被用的符号 ⇒ 明确报「波及半径为 0」，不是空输出", async () => {
+  it("零调用的符号 ⇒ 明确报「波及半径为 0」，不是空输出（topUp 全仓零引用；旧标题「只在自己文件内被用」与夹具不符，顺手修正）", async () => {
     const r = await tool().run({ symbol: "topUp" }, ctx());
     expect(r.ok).toBe(true);
     expect(r.output).toContain("波及半径为 0");
+  });
+
+  it("同文件独用的符号 ⇒ 点名同文件引用（「跨文件 0」不得谎报成「波及半径 0」——第 241 页）", async () => {
+    // main：app.js:4 定义、:9 同文件调用、:11 再导出——跨文件 0，但「没人用」是假话
+    const r = await tool().run({ symbol: "main" }, ctx());
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("无跨文件调用点");
+    expect(r.output).toContain("同文件引用");
+    expect(r.output).toContain("app.js: main(L9)");
+    expect(r.output).not.toContain("波及半径为 0");
   });
 
   it("file 模式汇聚该文件全部符号的波及面（只列真被外部引用的符号，不抄局部名）", async () => {

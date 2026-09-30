@@ -1,0 +1,14 @@
+当前（窄宽度）失准：14 条｜抽不到标题的文件：0 条
+放宽到 -t 的宽度后失准：4 条
+从整文件跑法转成可选中（≠1 → 1）：10 条
+  + auto-verify-default-on  0→1
+  + worker-impact-spec-not-appended  0→1
+  + worker-impact-whitelist-not-appended  0→1
+  + hook-matcher-exact-list-degrades-to-substring-regex  0→1
+  + read-worker-inherits-wide-hook-mode  0→1
+  + evidence-receipt-reports-known-completeness-as-unknown  0→1
+  + redaction-stops-recursing-into-containers  0→1
+  + worker-git-newline-not-a-separator  0→1
+  + g-b-injection-face-ignores-table-form  0→1
+  + loose-pointer-counts-literal  0→1
+反向（本来恰好 1，放宽后反而不唯一）：0 条

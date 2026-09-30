@@ -1,0 +1,14 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+ [32m✓[39m tests/prose-needle-scan.test.ts [2m([22m[2m69 tests[22m[2m)[22m[32m 29[2mms[22m[39m
+ [32m✓[39m tests/head-cert-deps.test.ts [2m([22m[2m88 tests[22m[2m)[22m[33m 1865[2mms[22m[39m
+   [32m✓[39m 清场读数：常驻残留的 scratch 树要自己报数（任务 #33） [2m(14)[22m
+     [33m[2m✓[22m[39m 真读现喂：拿本机真的 worktree 清单喂进去不许崩，且绝不点到自己这棵[33m 974[2mms[22m[39m
+ [32m✓[39m tests/page-claim.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[32m168 passed[39m[22m[90m (168)[39m
+[2m   Start at [22m 22:49:13
+[2m   Duration [22m 10.30s[2m (import 80%, tests 19%, transform 1%)[22m
+

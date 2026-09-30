@@ -6180,7 +6180,7 @@ const MUTATIONS = [
     test: "tests/prune-batching.test.ts",
     desc: "对照臂恒判「旋钮接得上」⇒ PC9 那半边成了装饰，主判据退化成「反正没别的能放行」的恒真式",
     apply: (s) => s.replace("    ok: stray >= 1,", "    ok: true,"),
-    expectFail: "对照臂判据：门槛旋钮接得上",
+    expectFail: "每轮都落盘 ⇒ 绿；仍然只在压缩轮落盘 ⇒ 红（并说清是对照空了）",
   },
   // ── BYOK 可达性（providers-check ⑦⑧；判据的两半：注入面按清单跑 + 缺口按各自对照面算）
   {
@@ -7280,7 +7280,7 @@ const MUTATIONS = [
       "真盘现场：241 个判卷文件里 2 个含这种标题（其中一个的成因是它自己的 fixture 生成器里那段「it( 双引号 美元花括号 t 花括号 」的文字，" +
       "正则取料分不清真标题与字符串里长得像标题的东西），上面 33 条锚点因此缴械；" +
       "本轮那条「四支／六支」死指针正是靠这个洞活到 21 分钟实跑才喊（修法见第 152 页）",
-    apply: (s) => s.replace('if (literalOf(body) === "") return [];', "if (false) return [];"),
+    apply: (s) => s.replace('if (literalOf(body) === "") return null;', "if (false) return null;"),
     expectFail: "生成式标题不许把整份判卷的体检缴械：指向不存在用例的指针仍要报 not-found",
   },
   {
@@ -7299,7 +7299,7 @@ const MUTATIONS = [
     test: "tests/mutate-verify-gates.test.ts",
     desc: "过修那一侧：把**任何**含占位符的标题都丢掉 ⇒ 参数化标题再也指不到（渲染后的文字盘上本来就没有），" +
       "第 138 页校准出来的那两条（拼出来的标题／带转义引号的标题）一起变假红——假红一多，人关的是门不是修尺",
-    apply: (s) => s.replace('if (literalOf(body) === "") return [];', "if (PLACEHOLDER.test(un)) return [];"),
+    apply: (s) => s.replace('if (literalOf(body) === "") return null;', "if (PLACEHOLDER.test(un)) return null;"),
     expectFail: "过修的反面：带字面残迹的标题要**留着**通配（参数化标题仍然认得渲染后的样子）",
   },
   {
@@ -7825,6 +7825,83 @@ const MUTATIONS = [
     expectFail: "四个条件缺一不可：带分支／有在飞／未入库／是本次那棵认证树，各一条反向（把别人正在用的树喊成垃圾是最坏的读法）",
   },
   {
+    id: "stale-tree-no-location-split",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "分格那一位不发作 ⇒ 外域树重新混进「可以去收」的名单（第 231 页的现读成因：本机有一棵住在 `.claude/worktrees/…` 的隔壁会话树，" +
+      "而那句回收命令就印在它旁边——判卷早就按位置钉过，谓词却没看位置）",
+    apply: (s) => s.replace(
+      "if (!insideScratchFace(r.path, opt.scratchRoot)) { foreign.push(r.path); continue; }",
+      "if (false) { foreign.push(r.path); continue; }",
+    ),
+    expectFail: "外域那棵进 foreign 而不是 stale，且照样在句子里点名（报成「不存在」＝尺把它吞了）",
+  },
+  {
+    id: "stale-tree-scratch-face-bare-prefix",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "目录归属用裸前缀比 ⇒ `/repo/.worktrees-backup/…` 被当自家人，「可以去收」印到别人的树旁边" +
+      "（前缀匹配要按位置枚举变体，第十族同一枪）",
+    apply: (s) => s.replace(
+      'return path === root || path.startsWith(root + "/") || path.startsWith(root + "\\\\");',
+      "return path.startsWith(root);",
+    ),
+    expectFail: "同前缀不是同一面：`.worktrees-backup` 算外域（裸 startsWith 会把别人的树标成可回收）",
+  },
+  {
+    id: "stale-tree-scratch-root-not-wired",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "调用方不传那一面 ⇒ 纯函数与措辞都写对了但这一格永远是空的：分格成了死代码，读数照旧把外域树算进残留" +
+      "（规则 230/254：只写纯函数不接＝没有读数）",
+    apply: (s) => s.replace("scratchRoot: SCRATCH_ROOT,", "scratchRoot: undefined,"),
+    expectFail: "没给 scratchRoot 才退回旧行为（全算本仓）——而调用方必须把它接上，否则分格是死代码",
+  },
+  {
+    id: "stale-tree-foreign-not-printed",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "分格算了却不印 ⇒ 那一串路径从读数里消失，下一次没人知道还有这么棵树；" +
+      "「尺读不到」与「没有问题」不许同形（规则 261/262），这一格同理：分错了也不许静默",
+    apply: (s) => s.replace("const foreignTail = foreign.length === 0", "const foreignTail = foreign.length >= 0"),
+    expectFail: "外域那棵进 foreign 而不是 stale，且照样在句子里点名（报成「不存在」＝尺把它吞了）",
+  },
+  {
+    id: "stale-tree-main-root-joined-not-resolved",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "主树根用 `join` 拼而不是 `resolve` ⇒ `--git-common-dir` 给绝对路径时接出 `<树>//Users/…/.git` 这种假路径，" +
+      "于是 linked 树里跑的那一趟把主树的 scratch 面算错、全部判成外域（与 `toolLockPath` 同一课：两份取料会漂）",
+    apply: (s) => s.replace(
+      "return dirname(resolve(cwdRoot, common));",
+      "return join(cwdRoot, common);",
+    ),
+    expectFail: "主树根两种 git 形状都认：主检出给相对 .git，linked 树给绝对路径；取不到回 null 不猜",
+  },
+  {
+    id: "cert-main-root-empty-guesses-cwd",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "`--git-common-dir` 取空时不回 null 而是**猜成脚下这棵** ⇒ 调用方那句「没主树根要出声」永远不响，" +
+      "而 scratch 面悄悄变成「当前树/.worktrees」：在 linked 树里跑的那一趟会把主树的树全判成外域（第 233 页 §6 登记的反例，本笔补上）",
+    apply: (s) => s.replace(
+      'if (common === "") return null;',
+      'if (common === "") return cwdRoot;',
+    ),
+    expectFail: "主树根两种 git 形状都认：主检出给相对 .git，linked 树给绝对路径；取不到回 null 不猜",
+  },
+  {
+    id: "cert-scratch-root-unknown-silent",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "取不到主树根时不出声 ⇒ 这一格退化得和「什么都没发生」一模一样（规则 261/262：尺的取不到与没问题不许同形）",
+    apply: (s) => s.replace(
+      "if (SCRATCH_ROOT === undefined) say(",
+      "if (false) say(",
+    ),
+    expectFail: "接线：主树根取不到时那一格必须出声，不许静默退回「全都算本仓」",
+  },
+  {
     id: "inflight-args-flag-position-wrong",
     src: "scripts/lib/head-cert-deps.ts",
     test: "tests/head-cert-deps.test.ts",
@@ -8235,8 +8312,8 @@ const MUTATIONS = [
     test: "tests/mutate-verify-gates.test.ts",
     desc: "命中数不为 1 时不再记录 ⇒ 这一格永远印「全部可选」，真正选不中的那些会在改跑法时被当成能走 -t；而 0 命中不是失败，是 vitest 一条也没跑，基线与突变两拍都白过",
     apply: (s) => s.replace(
-      "if (hits !== 1) problems.push({ id: e.id, test: e.test, hits });",
-      "if (false) problems.push({ id: e.id, test: e.test, hits });",
+      "if (hits !== 1) {",
+      "if (false) {",
     ),
     expectFail: "可选率的分母是被数过的条数，不是整表条数（拿整表去除＝把选不中的洗成可选）",
   },
@@ -8257,7 +8334,7 @@ const MUTATIONS = [
     test: "tests/mutate-verify-gates.test.ts",
     desc: "判卷读不到／指针为空那些条也计入分母 ⇒ 可选率虚高，而「取料坏」被洗成「量过了」（规则 222 的三态：未取 ≠ 空面 ≠ 零命中）",
     apply: (s) => s.replace(
-      "if (titles === null || titles === undefined) { unreadable.push(e.id); continue; }",
+      "if (face === null || face === undefined) { unreadable.push(e.id); continue; }",
       "inspected += 1;",
     ),
     expectFail: "只数被数过的：判卷读不到／指针为空／不是 vitest 文件都不进 inspected",
@@ -8267,12 +8344,161 @@ const MUTATIONS = [
     src: "scripts/lib/mutate-gates.ts",
     test: "tests/mutate-verify-gates.test.ts",
     desc: "「文件读得到、却一条标题都抽不到」这一态不记账（回到旧实现：与「这文件没锚点问题」同形）⇒ "+
-      "解析器对整份判卷瞎（真仓成因：it.each 的标题不在 TITLE_RE 面上）时，普查少一条而读数一个字不说（规则 261/262）",
+      "抽取器对整份判卷瞎时，普查少一条而读数一个字不说（第 230 页的真仓成因：这一格曾另抄一份只认 it 紧跟引号的窄正则，" +
+      "it.each 的标题在它眼里不存在；规则 261/262）",
     apply: (s) => s.replace(
       "      const hit = blindByTest.get(e.test);\n      if (hit) hit.push(e.id);\n      else blindByTest.set(e.test, [e.id]);\n      continue;",
       "      continue;",
     ),
     expectFail: "读得到文件却一条标题都抽不到 ⇒ 第三态要点名（并进「没问题」＝整份判卷被读瞎也无人说）",
+  },
+  {
+    id: "selector-hits-rendered-title-selectable",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "把占位符标题的展开态当「选不中」⇒ 指针本来就等于渲染后那一条、`-t` 恰好选中它，却被判去走整文件跑法" +
+      "（单价是 `-t` 的几十倍，第 168/170 页实测）。第 230 页这一格的宽度对齐的是 runner，不是盘上的字节",
+    apply: (s) => s.replace("if (re !== null && re.test(pointer)) n += 1;", "if (false) n += 1;"),
+    expectFail: "标题是拼出来的（it.each 的 %s）不算选不中：-t 拿渲染后的整条恰好选中一条（第 230 页）",
+  },
+  {
+    id: "selector-hits-template-prefix-not-unique",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "指针只落在模板标题的字面段里就记 1 条 ⇒ 发「唯一命中」的身份给一条会选中全部参数行的选择子" +
+      "（`it.each` 的一条标题代表 N 条渲染；并集读数不能当「每一处都成立」的证人，规则 248/255）",
+    apply: (s) => s.replace(
+      "else if (t.includes(pointer) || unescapeTitle(t).includes(pointer)) n += 2;",
+      "else if (t.includes(pointer) || unescapeTitle(t).includes(pointer)) n += 1;",
+    ),
+    expectFail: "标题是拼出来的（it.each 的 %s）不算选不中：-t 拿渲染后的整条恰好选中一条（第 230 页）",
+  },
+  {
+    id: "selector-hits-plain-title-dropped",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "不带占位符的那一支不计数 ⇒ 模板那条与字面那条同名的判卷只剩 1 条命中，重名这条锚点重新领到「唯一」——" +
+      "而 `-t` 那时一次选中两条，红的是哪条说不清",
+    apply: (s) => s.replace(
+      "if (t.includes(pointer) || unescapeTitle(t).includes(pointer)) n += 1;",
+      "if (false) n += 1;",
+    ),
+    expectFail: "放宽宽度不放过重名：模板那条与字面那条都在同一份判卷里 ⇒ 仍报多命中（并集证人不算守护）",
+  },
+  {
+    id: "selector-extraction-not-shared",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "选择子这一格不走共用的 `vitestTitles` 而是自己给一份标题面 ⇒ 与 `expectFailMatchesTitles` 那把尺说的不是同一件事，" +
+      "「整片读不到标题」重新变成尺的瞎而不是盘上没标题（第 230 页收掉的正是这份私有窄抽取，第十三族）",
+    apply: (s) => s.replace(
+      "cache.set(e.test, text === null ? null : { text, titles: vitestTitles(text) });",
+      "cache.set(e.test, text === null ? null : { text, titles: [] });",
+    ),
+    expectFail: "读得到文件却一条标题都抽不到 ⇒ 第三态要点名（并进「没问题」＝整份判卷被读瞎也无人说）",
+  },
+  {
+    id: "selector-zero-cause-fed-titles-only",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "成因那一格只喂标题面（或不喂文字）⇒ `describe` 与循环变量两种成因永远分不出来，" +
+      "读数只能继续把两条好端端的指针说成「多半是用例改了名」（第 233 页实测：它们运行时分别选中 2 条与 1 条）",
+    apply: (s) => s.replace(
+      "        ? { id: e.id, test: e.test, hits, cause: zeroHitCause(e.expectFail, face.text) }",
+      "        ? { id: e.id, test: e.test, hits, cause: zeroHitCause(e.expectFail, \"\") }",
+    ),
+    expectFail: "零命中分四种成因、各印各的数（0 也印）——从前那句「多半是用例改了名」是在指责任人",
+  },
+  {
+    id: "selector-zero-cause-hides-empty-rows",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "只印非零那几档 ⇒ 「说不清 0」这一档消失，将来多出一条分不出成因的锚点时，这一格看起来和今天一模一样" +
+      "（数量不列印＝那一格没有观测者，规则 210；与「三态分开印」239 同一口径）",
+    apply: (s) => s.replace(
+      'return causes.map((c) => `${ZERO_CAUSE_LABELS[c]} ${String(counts.get(c) ?? 0)}`).join("｜");',
+      'return causes.filter((c) => (counts.get(c) ?? 0) > 0).map((c) => `${ZERO_CAUSE_LABELS[c]} ${String(counts.get(c) ?? 0)}`).join("｜");',
+    ),
+    expectFail: "零命中分四种成因、各印各的数（0 也印）——从前那句「多半是用例改了名」是在指责任人",
+  },
+  {
+    id: "selector-describe-face-not-read",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "不读 `describe` 标题面 ⇒ 指针写在支上的那类被归到「标题由变量给出」或「文件里没这句话」，" +
+      "而它的真问题是**这条选择子会选中该支全部用例**（修法是把指针收到具体那条用例上，不是改标题）",
+    apply: (s) => s.replace(
+      "const descs = describeTitles(sourceText);",
+      "const descs: string[] = [];",
+    ),
+    expectFail: "零命中分四种成因、各印各的数（0 也印）——从前那句「多半是用例改了名」是在指责任人",
+  },
+  // ── 第 236 页 · id 名单要分桶挂标签：并排印在整行末尾会把唯一的零命中条指成「多命中」的一员
+  {
+    id: "selector-bucket-list-not-appended",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "多命中那一段不挂自己的名单 ⇒ 名单只剩零命中那半，读的人永远看不到「哪两条重名」。" +
+      "这一格从前是有名单的（两个桶并排印在行末），所以本条钉的是退化：把两种坏读数当成一种",
+    apply: (s) => s.replace(
+      '    many.length === 0 ? "" : `多命中 ${String(many.length)} 条（选择子不唯一）` + selectorBucketList(many),',
+      '    many.length === 0 ? "" : `多命中 ${String(many.length)} 条（选择子不唯一）`,',
+    ),
+    expectFail: "id 名单要挂在各自的桶名下：并排印在行末＝把唯一的零命中条指成「多命中」的一员",
+  },
+  {
+    id: "selector-bucket-lists-swapped",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "零命中那一段挂上多命中的名单 ⇒ 名单还在、责任人换了：读的人会把「-t 一条也选不中」那两条去改用例名，" +
+      "而真该改的是那条重名指针（两种坏读数修法相反，所以桶名与名单必须一起挂，规则 261/262）",
+    apply: (s) => s.replace(
+      "走整文件跑法）` + selectorBucketList(zero),",
+      "走整文件跑法）` + selectorBucketList(many),",
+    ),
+    expectFail: "id 名单要挂在各自的桶名下：并排印在行末＝把唯一的零命中条指成「多命中」的一员",
+  },
+  // ── 第 243 页 · 页号原子占号：四条各咬一处——脏值进 max／号不单调／被占了还当占到／CLI 不吃这把尺
+  {
+    id: "page-claim-dirty-values-in-max",
+    src: "scripts/lib/page-claim.ts",
+    test: "tests/page-claim.test.ts",
+    desc: "脏值（小数／NaN）也参与 max ⇒ 号变成 10.5 或 NaN：台账上出现一个小数页号，而占号那一步看起来仍然「成功了」",
+    apply: (s) => s.replace(
+      "  for (const n of taken) if (Number.isInteger(n) && n > mx) mx = n;",
+      "  for (const n of taken) if (!Number.isNaN(n) && n > mx) mx = n;",
+    ),
+    expectFail: "非整数不参与 max（一个 9.5 或 NaN 都不许把号带到小数／NaN），空面回 start",
+  },
+  {
+    id: "page-claim-not-monotonic",
+    src: "scripts/lib/page-claim.ts",
+    test: "tests/page-claim.test.ts",
+    desc: "回「最小可用号」而不是「max＋1」⇒ 新会话拿回 1，且台账上删过一页就把那个旧号再发一遍。" +
+      "这不是等价的：旧号出现在两处比新号撞车更难查（判卷里那条空洞用例就是为这个存在的）",
+    apply: (s) => s.replace("  return mx + 1;", "  return start;"),
+    expectFail: "连续号回到 max＋1；有空洞也不回填；start 只当**下限**",
+  },
+  {
+    id: "page-claim-exists-treated-as-ok",
+    src: "scripts/lib/page-claim.ts",
+    test: "tests/page-claim.test.ts",
+    desc: "把「已被占」当成「占到了」⇒ 两个会话拿到同一个号而两边都以为自己独占——这正是这把尺要消灭的那件事，" +
+      "而它退化后印的还是一句「占号 N」",
+    apply: (s) => s.replace('    if (outcome === "ok") {', '    if (outcome !== "error") {'),
+    expectFail: "别人抢先占了同一号 ⇒ 让位后**重新 list** 再占一次（拿旧名单里的下一个会把已被占的号再发一遍）",
+  },
+  {
+    id: "page-claim-cli-not-wired",
+    src: "scripts/next-page.ts",
+    test: "tests/page-claim.test.ts",
+    desc: "CLI 不调 claimPage 而自己发一个号 ⇒ 号池永远空、撞号照旧，但那一格读起来像「有工具在管」。" +
+      "钉的是接线不是文字：这里 CLI 与被调的 lib 是两个文件，同文件恒真那一族用不上",
+    apply: (s) => s.replace(
+      "const r = claimPage({",
+      "const r = { page: 0, cell: \"\", yielded: 0 }; void claimPage; const _unused = ({",
+    ),
+    expectFail: "next-page.ts 必须调 claimPage 并在没占到时退 2（只印不占＝号池永远空，撞号照旧）",
   },
   {
     id: "selector-cell-hides-blind-count",

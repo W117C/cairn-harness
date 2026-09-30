@@ -1,0 +1,14 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-b4919e3.lock）
+变异验证：6 条
+✅ pointer-vacuous-title-kept — 整条都是占位符的生成式标题不丢 ⇒ 它编译成一条匹配任何输入的模式，压在那份判卷文件上的**全部**指针体检一起恒真。真盘现场：241 个判卷文件里 2 个含这种标题（其中一个的成因是它自己的 fixture 生成器里那段「it( 双引号 美元花括号 t 花括号 」的文字，正则取料分不清真标题与字符串里长得像标题的东西），上面 33 条锚点因此缴械；本轮那条「四支／六支」死指针正是靠这个洞活到 21 分钟实跑才喊（修法见第 152 页） ｜本机实测 1.1s／2 拍
+✅ pointer-all-dynamic-titles-dropped — 过修那一侧：把**任何**含占位符的标题都丢掉 ⇒ 参数化标题再也指不到（渲染后的文字盘上本来就没有），第 138 页校准出来的那两条（拼出来的标题／带转义引号的标题）一起变假红——假红一多，人关的是门不是修尺 ｜本机实测 0.8s／2 拍
+✅ selector-hits-rendered-title-selectable — 把占位符标题的展开态当「选不中」⇒ 指针本来就等于渲染后那一条、`-t` 恰好选中它，却被判去走整文件跑法（单价是 `-t` 的几十倍，第 168/170 页实测）。第 230 页这一格的宽度对齐的是 runner，不是盘上的字节 ｜本机实测 0.8s／2 拍
+✅ selector-hits-template-prefix-not-unique — 指针只落在模板标题的字面段里就记 1 条 ⇒ 发「唯一命中」的身份给一条会选中全部参数行的选择子（`it.each` 的一条标题代表 N 条渲染；并集读数不能当「每一处都成立」的证人，规则 248/255） ｜本机实测 0.8s／2 拍
+✅ selector-hits-plain-title-dropped — 不带占位符的那一支不计数 ⇒ 模板那条与字面那条同名的判卷只剩 1 条命中，重名这条锚点重新领到「唯一」——而 `-t` 那时一次选中两条，红的是哪条说不清 ｜本机实测 0.9s／2 拍
+✅ selector-extraction-not-shared — 选择子这一格不走共用的 `vitestTitles` 而是自己给一份标题面 ⇒ 与 `expectFailMatchesTitles` 那把尺说的不是同一件事，「整片读不到标题」重新变成尺的瞎而不是盘上没标题（第 230 页收掉的正是这份私有窄抽取，第十三族） ｜本机实测 1.0s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 6.0s · 跑了 6/6 条 · 预算 480s
+成本分母：判卷 spawn 12 次／6 条（每条次数分布 2×6）· 单次中位 第1次 0.4s／第2次 0.4s· 最贵一条 pointer-vacuous-title-kept 1.1s
+跑法单价：selector 12 拍·中位 0.42s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-b4919e3.lock）

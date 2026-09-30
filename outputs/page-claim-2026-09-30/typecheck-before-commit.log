@@ -1,0 +1,5 @@
+scripts/next-page.ts(10,42): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+tests/page-claim.test.ts(16,8): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
+[typecheck] 报错文件归因：HEAD 内 0 个 / 未跟踪草稿 2 个
+[typecheck] ⚠️ 未跟踪草稿（不属 HEAD 回归，属在飞改动）: scripts/next-page.ts, tests/page-claim.test.ts
+[typecheck] 全部报错都在未跟踪草稿里 ⇒ HEAD 态类型干净（同 HEAD 开 worktree 跑 tsc 可复核）

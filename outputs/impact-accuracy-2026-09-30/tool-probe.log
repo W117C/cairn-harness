@@ -1,0 +1,8 @@
+
+===== impact_query {symbol:"insideScratchFace"} ⇒ ok=true =====
+[impact] insideScratchFace 的定义在 1 个文件：无跨文件调用点（波及半径为 0）
+
+===== impact_query {symbol:"staleScratchTrees"} ⇒ ok=true =====
+[impact] staleScratchTrees 的定义在 1 个文件：跨文件调用点 10 处，波及 2 个文件
+  scripts/head-cert.ts: staleScratchTrees(L301)
+  tests/head-cert-deps.test.ts: staleScratchTrees(L721), staleScratchTrees(L722), staleScratchTrees(L725), staleScratchTrees(L729) 等 9 处

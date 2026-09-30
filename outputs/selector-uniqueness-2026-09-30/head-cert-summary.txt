@@ -1,0 +1,41 @@
+目标提交：b4919e3（--at=HEAD）
+worktree add exit=0
+已核：TREE=b4919e3e5b249ee52f505bc3489bf71f86ec1096｜判卷四面在飞 0 项
+cp -al node_modules exit=0
+依赖核对：该提交声明 10 项，缺 0 项
+  硬链接子仓库依赖 fixtures/todo-app/node_modules ← 主树 exit=0
+import 面：2980 条边｜悬空 0（其中存量已豁免 0）
+门表：29 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证门面（20 道，名单取自 b4919e3）==
+  ✅ no-progress-check exit=0 522ms（预算 1100ms）
+  ✅ prune-check exit=0 559ms（预算 1100ms）
+  ✅ fork-check exit=0 529ms（预算 1100ms）
+  ✅ compaction-check exit=0 637ms（预算 1200ms）
+  ✅ docs-check exit=0 735ms（预算 1300ms）
+  ✅ memory-check exit=0 706ms（预算 1300ms）
+  ✅ head-import-check exit=0 703ms（预算 1400ms）
+  ✅ autonomy-check exit=0 926ms（预算 1500ms）
+  ✅ sandbox:check exit=0 2771ms（预算 1700ms）
+  ✅ security-check exit=0 778ms（预算 1500ms）
+  ✅ provider:check exit=0 521ms（预算 1300ms）
+  ✅ routing-check exit=0 728ms（预算 1400ms）
+  ✅ model-surface-check exit=0 927ms（预算 1300ms）
+  ✅ prefix-churn-check exit=0 1036ms（预算 1500ms）
+  ✅ prompt-surface-check exit=0 714ms（预算 1400ms）
+  ✅ replay-determinism-check exit=0 563ms（预算 1100ms）
+  ✅ cost-per-progress-check exit=0 517ms（预算 1000ms）
+  ✅ gym-check exit=0 1315ms（预算 2400ms）
+  ✅ gate-check exit=0 4301ms（预算 5400ms）
+  ✅ mutate-needles-check exit=0 11391ms（预算 20000ms）
+  ⚠️ 超预算（只出声，不判红）：sandbox:check 2771ms > 名单里的 1700ms
+  认证门面=20 道（跑到 20）｜绿 20 道｜⚠️ 超预算 1
+
+== 认证汇总 ==
+  TREE=b4919e3 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-b4919e3.lock）
+  Test Files 1 failed | 253 passed (254)｜Tests 1 failed | 3300 passed (3301)｜exit=1（退出码直接取，不接管道）
+  并发判卷=起前 0 套／跑完 0 套（两端独占）
+  逐条日志：/tmp/dsh-head-cert-b4919e3
+  回收这棵树（规则 120，别留残留）：git worktree remove --force .worktrees/head-cert-b4919e3
+  常驻残留树=5（/Users/ze/Downloads/deepseek harness/.claude/worktrees/goofy-satoshi-0edc69/.claude/worktrees/audit-zcode@d2d44a6、/Users/ze/Downloads/deepseek harness/.worktrees/gate-head-cert@ae80d6e、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-verify@27ffb30、/Users/ze/Downloads/deepseek harness/.worktrees/verify-b4919e3@b4919e3、/Users/ze/Downloads/deepseek harness/.worktrees/verify-d2d44a6@d2d44a6）（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）

@@ -35,3 +35,4 @@ docs/facts/
 # 更要紧的是它被杀（SIGTERM）时会把**突变体**留在盘上（mutate-verify.mjs:7871），
 # 那份残留和这些备份长得一样，都不是源码。
 *.mutbak
+.worktrees/
