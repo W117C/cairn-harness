@@ -9514,6 +9514,44 @@ const MUTATIONS = [
     apply: (s) => s.replace("const T_PKG = PKG_MANAGER_OWN_ERROR_LINE;", "const T_PKG = /^[ \\t]*\\[?ERR_PNPM_[A-Z0-9_]+\\]?/m;"),
     expectFail: "包管理器那一行由产品谓词说话",
   },
+
+  /* ── 第 224 页（#36）：认证面自己跑门。四格各钉一处——少钉任何一处，"cert exit=0" 就又能替红门背书。 ── */
+  {
+    id: "cert-gate-face-not-spawned",
+    src: "scripts/head-cert.ts",
+    test: "tests/cert-gate-face.test.ts",
+    desc: "把跑门那一行的 spawn 目标换掉 ⇒ 认证只印读数不跑门，`cert exit=0` 退回「只代表判卷」。" +
+      "这一格立起来的理由就是那条并存（规则 292）：门表被**数**过不等于门被**跑**过",
+    apply: (s) => s.replace('"scripts/gates.ts", "--only=" + only', '"--version"'),
+    expectFail: "跑门那一行、名单来源、退出码里的门红三项都在语句开头",
+  },
+  {
+    id: "cert-gate-absence-only-warns",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/cert-gate-face.test.ts",
+    desc: "某道门没跑到被降成出声 ⇒ 「跑丢了」与「跑了且绿」同形（规则 261）。" +
+      "gates 的进程被换掉、名单漂了、`--only` 拼错——三种成因今天都会变成绿认证",
+    apply: (s) => s.replace("reds.push(`${g.name} 没跑到", "warns.push(`${g.name} 没跑到"),
+    expectFail: "缺席＝红",
+  },
+  {
+    id: "cert-gate-overbudget-turns-red",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/cert-gate-face.test.ts",
+    desc: "把「超预算」接进判定 ⇒ 认证这道门开始押在时钟上：本机负载、隔壁在跑、CI 抢核都会把绿判成红。" +
+      "规则 256 在这一格的形状——**秒数只能出声，不能翻判定**（名单里的预算是给人看的成本读数）",
+    apply: (s) => s.replace("if (row.ms > g.budgetMs) warns.push(", "if (row.ms > g.budgetMs) reds.push("),
+    expectFail: "超预算只出声，不改判定",
+  },
+  {
+    id: "cert-gate-shape-drift-reads-as-absent",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/cert-gate-face.test.ts",
+    desc: "名单在而形状变了（排版一改就抽不出条目）被读成「这一笔还没有这一格」⇒ 门面**无声消失**，" +
+      "而这正是本格子要消灭的那件事。三态里 broken 必须与 absent 分开（规则 239/261）",
+    apply: (s) => s.replace("!/export const CERT_GATES\\b/.test(manifestSrc)", "!/export const NEVER_MATCHES\\b/.test(manifestSrc)"),
+    expectFail: "格子在而形状变了",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

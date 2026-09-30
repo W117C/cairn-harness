@@ -123,6 +123,35 @@ export const GATES: readonly string[] = [
   "mutate-needles-check",
 ];
 
+/** 认证面**替它跑**的那几道门（第 224 页 #36）。
+ *  为什么要有：`head-cert` 从前只把门表数一遍（「门表：29 道，缺同名 script 0 道」）却不跑，
+ *  于是 `cert exit=0` 与「某道门红着」可以并存（规则 292），每笔凭证页再靠人肉自报"本笔另跑了 docs-check／prose"。
+ *  取哪几道由**实测秒**决定，不靠感觉：`outputs/gate-cost-for-cert-face-2026-09-30/measurements.md`
+ *  在认证树 `2becb8e` 上逐道量过 13 道（墙钟 46.7s、逐道之和 45.8s；分母＝认证树自报判卷 `Duration 122.02s`）。
+ *  名单只收**亚秒档 8 道 ＋ 每笔交笔本来就要跑的两道**（gate-check、mutate-needles-check），
+ *  合计实测 ≈16.7s＝一次认证的 +13.7%；`tools-check`(8.6s)／`map-check`(4.8s)／`plugins-check`(15.2s)
+ *  与那 16 道**没量过的**门都不进——"全吞进来"的性价比要另一笔单独量（第 224 页 §未证）。
+ *  `budgetMs` 是**读数不是判决**：超预算只出声，不把认证判红（规则 256，秒数会被本机负载与隔壁会话挪动）。 */
+export const CERT_GATES: readonly { name: string; budgetMs: number }[] = [
+  { name: "no-progress-check", budgetMs: 1100 },     // 实测 514ms
+  { name: "prune-check", budgetMs: 1100 },           // 实测 524ms
+  { name: "fork-check", budgetMs: 1100 },            // 实测 545ms
+  { name: "compaction-check", budgetMs: 1200 },      // 实测 574ms
+  { name: "docs-check", budgetMs: 1300 },            // 实测 606ms
+  { name: "memory-check", budgetMs: 1300 },          // 实测 638ms
+  { name: "head-import-check", budgetMs: 1400 },     // 实测 667ms
+  { name: "autonomy-check", budgetMs: 1500 },        // 实测 737ms
+  { name: "gate-check", budgetMs: 5400 },            // 实测 2659ms
+  { name: "mutate-needles-check", budgetMs: 20000 }, // 实测 9756ms（针脚体检：钉在飞文本／判卷未入库都靠它）
+];
+
+/** 永远不许进认证面的门：认证这一趟已经自己跑过（`typecheck`／全量判卷），
+ *  或是量级在**分钟以上**（一次 `pnpm gates` 的整表账在这张表头上写着）。
+ *  判卷里有一条用例钉住「名单与这一份不相交」，所以"顺手把 test 也加进来"会当场红。 */
+export const CERT_GATE_EXCLUDED: readonly string[] = [
+  "test", "e2e", "typecheck", "head-cert-check", "mutate-verify",
+];
+
 /** 形如验收脚本的 script 名（这些必须有归宿：要么进 GATES，要么进 EXEMPT）。
  *  H5（审查 P2）：词根匹配——旧实现只认 `-check`/`:check` 结尾，`foo-check.mjs`、
  *  `bar:check2` 等换后缀命名即逃逸孤儿护栏。含 check 词根即视为验收形态（豁免列表可放行）。 */

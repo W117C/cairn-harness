@@ -282,3 +282,72 @@ export function staleTreeCell(
   if (res.stale.length === 0) return `常驻残留树=0${tail}`;
   return `常驻残留树=${String(res.stale.length)}（${res.stale.map((s) => `${s.path}@${s.head.slice(0, 7)}`).join("、")}）${tail}`;
 }
+
+/* ── 认证面的「门」那一格（第 224 页 #36）。
+ * 从前 `head-cert` 只把门表**数**一遍不**跑**（规则 292：`cert exit=0` 与「某道门红着」可以并存），
+ * 于是每笔凭证页都在人肉自报另跑了哪些门。这一格把"跑哪几道、各值多少秒"收成一份，且把**判定与读数分开**：
+ *   · 红＝名单里某道门没跑到，或跑到而退出码非 0（跑不到＝没尺，不许读成绿）；
+ *   · ⚠️ 但不改判定＝某道门实测超出预算——判决不许押在时钟上（规则 256：本机负载、别人在跑都会挪秒数）。 */
+export interface CertGateRow { name: string; exit: number; ms: number; }
+
+/** `gates.ts` 自报的那一行：`✅ docs-check      exit=0  606ms`（前缀图标与 ANSI 都可能出现，先剥）。 */
+const GATE_ROW = /\b([a-z][a-z0-9:_-]{2,})\s+exit=(-?\d+)\s+(\d+)ms/gu;
+
+export function parseCertGateRows(text: string): CertGateRow[] {
+  const clean = text.replace(/\x1b\[[0-9;]*m/gu, "");
+  const out: CertGateRow[] = [];
+  for (const m of clean.matchAll(GATE_ROW)) {
+    out.push({ name: m[1]!, exit: Number(m[2]), ms: Number(m[3]) });
+  }
+  return out;
+}
+
+export interface CertGateVerdict { reds: string[]; warns: string[]; ran: number; }
+
+/** 名单 vs 实跑的三态：缺席（红）、非 0（红）、超预算（⚠️）。名单外的行只出声不判红——
+ *  它说明的是"有一份手写表漂了"，不是"这一笔代码错了"。 */
+export function certGateVerdict(
+  plan: readonly { name: string; budgetMs: number }[],
+  rows: readonly CertGateRow[],
+): CertGateVerdict {
+  const byName = new Map(rows.map((r) => [r.name, r] as const));
+  const reds: string[] = [];
+  const warns: string[] = [];
+  for (const g of plan) {
+    const row = byName.get(g.name);
+    if (row === undefined) {
+      reds.push(`${g.name} 没跑到（gates 的输出里没有这一行 ⇒ 这一道的读数是"没尺"，不是"绿"）`);
+      continue;
+    }
+    if (row.exit !== 0) reds.push(`${g.name} exit=${String(row.exit)}（${String(row.ms)}ms）`);
+    if (row.ms > g.budgetMs) warns.push(`超预算（只出声，不判红）：${g.name} ${String(row.ms)}ms > 名单里的 ${String(g.budgetMs)}ms`);
+  }
+  const extra = rows.filter((r) => !plan.some((g) => g.name === r.name)).map((r) => r.name);
+  if (extra.length > 0) warns.push(`输出里有名单外的门：${extra.join("、")}（不改判定，但名单与实跑不一致＝有一份手写表在漂）`);
+  return { reds, warns, ran: rows.length };
+}
+
+/** 那一格要怎么说话：跑了几道／红几道／超预算几道分开印，绝不把"没量到"并进"绿"。 */
+export function certGateCell(plan: readonly { name: string }[], v: CertGateVerdict): string {
+  const head = `认证门面=${String(plan.length)} 道（跑到 ${String(v.ran)}）`;
+  if (v.reds.length > 0) return `${head}｜❌ 红 ${String(v.reds.length)} 道｜⚠️ 超预算 ${String(v.warns.length)}`;
+  return `${head}｜绿 ${String(plan.length)} 道｜⚠️ 超预算 ${String(v.warns.length)}`;
+}
+
+/** 从**那一笔**的 `scripts/gate-manifest.ts` 文本里读认证门面名单（与 `headGateTableIntegrity` 同一条纪律：
+ *  名单取自被认证的那一笔，不取自正在跑命令的这一棵树的文件）。
+ *  三态分开：`absent`＝那一笔还没有这一格（多半是认证老提交），只出声不判红；
+ *  `broken`＝名单在却一条都没抽出来（排版/形状变了），这必须判红——
+ *  门面无声消失正是本格要消灭的那种绿（规则 239/261：读不到与没有问题不许同形）。 */
+export function certGatePlan(
+  manifestSrc: string | null,
+): { state: "ok" | "absent" | "broken"; plan: { name: string; budgetMs: number }[] } {
+  if (manifestSrc === null || !/export const CERT_GATES\b/.test(manifestSrc)) return { state: "absent", plan: [] };
+  const body = /export const CERT_GATES[\s\S]*?=\s*\[([\s\S]*?)\n\]/.exec(manifestSrc)?.[1];
+  if (body === undefined) return { state: "broken", plan: [] };
+  const plan = body.split("\n")
+    .map((line) => /^\s*\{\s*name:\s*"([^"]+)"\s*,\s*budgetMs:\s*(\d+)\s*,?\s*\}/.exec(line))
+    .filter((m): m is RegExpExecArray => m !== null)
+    .map((m) => ({ name: m[1]!, budgetMs: Number(m[2]) }));
+  return plan.length === 0 ? { state: "broken", plan: [] } : { state: "ok", plan };
+}

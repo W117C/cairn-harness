@@ -10,7 +10,10 @@
  *
  * 用法：`node --import tsx scripts/head-cert.ts [--at=HEAD] [--tree=.worktrees/head-cert] [--skip-test --why=<文本>] [--no-borrow]`
  *   · `--skip-test` 必须配 `--why`，否则 exit 2：它只跑 typecheck，**不构成"这棵树全量绿"**（见 `certLevel` 的理由）。
- * 退出码：0＝所跑的每条门都绿**且**跑完之后那棵树还在同一笔上（等级见汇总里的「认证等级」）；
+ * 退出码：0＝所跑的每条门都绿**且**认证门面（`CERT_GATES`，第 224 页 #36）每道都跑到且退出码 0，
+ *   **且**跑完之后那棵树还在同一笔上（等级见汇总里的「认证等级」）；
+ *   门面里"某道没跑到"与"某道红"都判红；**超出预算只出声**（秒数会被负载挪动，规则 256）；
+ *   那一笔还没有 `CERT_GATES` 时印「认证门面=这一笔还没有这一格」并跳过——认证老提交不该被新格子判红。
  *   1＝有红，或收尾复核发现树被切走（后者是"读数作废"，不是"HEAD 红"——汇总里会点名）；
  *   2＝连认证的前置都不成立
  *   （切树失败 / 取不到 package.json / `--skip-test` 没写 `--why` / **那棵认证树正被别的进程占着**）。
@@ -19,7 +22,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-import { certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, gitInflightArgs, headGateTableIntegrity, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "./lib/head-cert-deps";
+import { certGateCell, certGatePlan, certGateVerdict, certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, gitInflightArgs, headGateTableIntegrity, missingDeclaredDeps, parseCertGateRows, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "./lib/head-cert-deps";
 import { acquireToolLock } from "./lib/tool-lock";
 import { checkHeadImportFace, collectHeadEdges, findDanglingImports } from "./head-import-face";
 
@@ -222,6 +225,36 @@ if (table === null) {
 const logDir = join("/tmp", `dsh-head-cert-${TARGET.slice(0, 7)}`);
 const tc = run(TREE, "node", ["--import", "tsx", "scripts/typecheck.ts"], join(logDir, "typecheck.log"));
 say(`typecheck exit=${String(tc.status)}${tc.status === 0 ? "（0 报错）" : "：\n  " + tc.out.trim().split("\n").slice(-4).join("\n  ")}`);
+
+/* ②d 认证门面（第 224 页 #36）：从前这道门只把门表**数**一遍（上面那行「门表：N 道」）却不跑，
+ *   于是 `cert exit=0` 与「某道门红着」可以并存（规则 292），每笔凭证页都得靠人肉自报另跑了哪些门。
+ *   名单取自**被认证的那一笔**（与门表完整性同一条纪律）；一次 spawn 跑完，逐道退出码与秒数由 `gates.ts` 自报。
+ *   红＝有门没跑到或非 0；**超预算只出声不判红**——判决不许押在时钟上（规则 256）。 */
+const face = certGatePlan(gateSrc.status === 0 ? gateSrc.out : null);
+let gateReds: string[] = [];
+if (face.state === "broken") {
+  gateReds.push("认证门面名单读不出来（`CERT_GATES` 在，但一条都没抽出来 ⇒ 形状变了，这一趟没跑门）");
+  say("❌ " + gateReds[0]);
+} else if (face.state === "absent") {
+  say("认证门面=这一笔还没有这一格（只数门不跑门）⇒ 别把上面那行「门表 N 道」读成「门都跑过」");
+} else {
+  const only = face.plan.map((g) => g.name).join(",");
+  const gr = run(TREE, "node", ["--import", "tsx", "scripts/gates.ts", "--only=" + only], join(logDir, "gates.log"));
+  const rows = parseCertGateRows(gr.out);
+  const verdict = certGateVerdict(face.plan, rows);
+  gateReds = verdict.reds;
+  say(`\n== 认证门面（${String(face.plan.length)} 道，名单取自 ${TARGET.slice(0, 7)}）==`);
+  for (const g of face.plan) {
+    const row = rows.find((x) => x.name === g.name);
+    say(row === undefined
+      ? `  ❌ ${g.name} 没跑到（预算 ${String(g.budgetMs)}ms）`
+      : `  ${row.exit === 0 ? "✅" : "❌"} ${g.name} exit=${String(row.exit)} ${String(row.ms)}ms（预算 ${String(g.budgetMs)}ms）`);
+  }
+  for (const w of verdict.warns) say(`  ⚠️ ${w}`);
+  say(`  ${certGateCell(face.plan, verdict)}`);
+  for (const r of verdict.reds) say(`  ❌ ${r}`);
+}
+
 let testStatus: number | null = null;
 let summary = LEVEL.label;
 let psBefore = -1;
@@ -272,7 +305,7 @@ const staleCell = staleTreeCell(wtRows, staleScratchTrees(wtRows, {
 say(`  ${staleCell}（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）`);
 // 并发套数**刻意不进下面这个退出码**：别的会话在跑不是我这笔代码错，接进去等于把这道门变成共享树上的随机红。
 // 同理，**常驻残留数也不进退出码**——它是卫生读数，不是我这笔的回归；它进的是"每一次认证都会被看见"这一格。
-const code = certifiable && tc.status === 0 && (testStatus === null || testStatus === 0) && dirtyCount === 0 && drift === null ? 0 : 1;
+const code = certifiable && tc.status === 0 && (testStatus === null || testStatus === 0) && gateReds.length === 0 && dirtyCount === 0 && drift === null ? 0 : 1;
 try {
   mkdirSync(logDir, { recursive: true });
   writeFileSync(join(logDir, "summary.txt"), spoken.join("\n") + "\n");
