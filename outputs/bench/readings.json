@@ -1,0 +1,135 @@
+[
+ {
+  "r": {
+   "id": "B1-bugfix-crossfile",
+   "name": "B1-bugfix-crossfile",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 55.777,
+   "requests": 13,
+   "tokensIn": 75406,
+   "tokensOut": 2882,
+   "cny": 0,
+   "toolCalls": 15,
+   "toolFailures": 1,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 3,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    ".agent/snapshots/1790706246284--117f034c-a7e4-433f-8b10-8f3859a5446a/src/checkout.js",
+    "src/checkout.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 216,
+    "procPeak": 6,
+    "cpuMs": 1702,
+    "samples": 112
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B2-feature-export",
+   "name": "B2-feature-export",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 213.29,
+   "requests": 9,
+   "tokensIn": 51040,
+   "tokensOut": 17637,
+   "cny": 0,
+   "toolCalls": 11,
+   "toolFailures": 1,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 8,
+   "readsBeforeFirstWrite": 2,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    ".agent/snapshots/1790706400515--986851df-9efc-43aa-9bd3-0a7b797ec5af/src/fit.js",
+    ".agent/snapshots/1790706464664--fb3d727f-2ad6-46d9-84aa-e8bcb260f57d/src/fit.js",
+    "src/fit.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 106,
+    "procPeak": 6,
+    "cpuMs": 3496,
+    "samples": 426
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B3-refactor-callsite",
+   "name": "B3-refactor-callsite",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 63.397,
+   "requests": 12,
+   "tokensIn": 83073,
+   "tokensOut": 2927,
+   "cny": 0,
+   "toolCalls": 16,
+   "toolFailures": 1,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 12,
+   "readsBeforeFirstWrite": 4,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": true,
+   "touchedJudge": true,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    ".agent/snapshots/1790706524277--736c1669-f3bf-4b55-8d70-7d6f0e6b786b/src/format.js",
+    ".agent/snapshots/1790706527238--cb21cacd-95f6-48b4-8928-2532acf7c950/src/legacy.js",
+    "src/format.js",
+    "src/legacy.js",
+    "tests/legacy.test.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 124,
+    "procPeak": 7,
+    "cpuMs": 3969,
+    "samples": 127
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ }
+]

@@ -192,6 +192,62 @@ function isWriter(name: string): boolean {
   return WRITERS.has(name);
 }
 
+/* 资源采样（2026-09-30 P4 补的那一格）：objective 里写着「CPU/内存占用低（单人 + 多 agent 开发机）」，
+ *  但在这之前**没有任何读数落盘**——只有我聊天里报过一次 185MB。
+ *  没有读数的目标等于没有目标，所以补成读数的一部分：
+ *    · rssPeakMb —— 本次会话（含它 spawn 的子进程）的**峰值**常驻内存；
+ *    · procPeak   —— 同刻的 node 进程数峰值；
+ *    · cpuMs      —— 会话自身的 CPU 时间（user+system，us 转 ms）。
+ *  为什么用 `ps` 而不是别的手段：零依赖（本仓依赖面刻意小），且它能一并数到子进程——
+ *  而 agent 的内存压力**主要来自子进程**（沙箱里跑的测试、LSP、worker），只量自己会严重低估。
+ *  口径说清楚：这是**一台机器上的相对读数**，不是厂商级剖析；
+ *  它的用途是「这次改动有没有把占用搞上去」，不是给绝对性能下结论。 */
+interface ResourceSample { rssPeakMb: number; procPeak: number; cpuMs: number; samples: number }
+
+function startResourceSampler(): () => ResourceSample {
+  const pid = process.pid;
+  let rssPeakKb = 0;
+  let procPeak = 0;
+  let samples = 0;
+  const tick = (): void => {
+    try {
+      // 自身 + 后代：ps 的 %cpu/rss 是瞬时的，这里只取 rss 与进程数
+      const r = spawnSync("ps", ["-eo", "pid,ppid,rss,comm"], { encoding: "utf8", timeout: 2_000 });
+      const out = r.stdout ?? "";
+      const lines = out.trim().split("\n").slice(1);
+      const rows = lines.map((l) => l.trim().split(/\s+/)).filter((c) => c.length >= 4);
+      const kids = new Set<number>([pid]);
+      // 一轮传播即可覆盖「本进程 → 直接子进程」；沙箱/子 shell 再深一层靠 comm 含 node 兜住
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const c of rows) {
+          const p0 = Number(c[0]);
+          const pp = Number(c[1]);
+          if (kids.has(pp) && !kids.has(p0)) { kids.add(p0); grew = true; }
+        }
+      }
+      let rss = 0;
+      for (const c of rows) {
+        if (!kids.has(Number(c[0]))) continue;
+        const kb = Number(c[2]);
+        if (Number.isFinite(kb)) rss += kb;
+      }
+      if (rss > rssPeakKb) rssPeakKb = rss;
+      if (kids.size > procPeak) procPeak = kids.size;
+      samples += 1;
+    } catch { /* 采样失败不影响评测：它只是读数，不是判据 */ }
+  };
+  tick();
+  const timer = setInterval(tick, 500);
+  return () => {
+    clearInterval(timer);
+    tick();
+    const cpu = process.cpuUsage();
+    return { rssPeakMb: Math.round(rssPeakKb / 1024), procPeak, cpuMs: Math.round((cpu.user + cpu.system) / 1000), samples };
+  };
+}
+
 interface Reading {
   id: string; name: string; rep: number; system: string;
   seedVerifyOk: boolean;
@@ -202,6 +258,8 @@ interface Reading {
   verified: number; verifyOkLast: boolean | null; autoVerifyBeat: boolean;
   wroteTests: boolean; touchedJudge: boolean; onlySrcChanged: boolean;
   changedFiles: string[]; exitError: string | null;
+  /** 本次会话的资源占用（见 startResourceSampler 的口径说明）。 */
+  resources: ResourceSample;
 }
 
 async function listFiles(dir: string, base: string = dir, acc: string[] = []): Promise<string[]> {
@@ -261,6 +319,7 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
   // 一次 e2e/agent/gate 就地重置 ⇒ 不能拿它当全局 gate，但必须逐格记进读数：
   // 「模型把红修到绿」与「模型从绿开始又弄红了」是两个完全不同的结论。
   const seedVerifyOk = (await runVerifyOutcome(work, EVAL_EXEC)).ok;
+  const stopSampler = startResourceSampler();
   let exitError: string | null = null;
   try {
     await runLoop({
@@ -287,6 +346,7 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
     exitError = err instanceof Error ? err.message : String(err);
   }
   const seconds = (Date.now() - started) / 1000;
+  const resources = stopSampler();
 
   const ev = await replay(eventsPath);
   const calls = ev.filter((e) => e.type === "tool_call") as Extract<AgentEvent, { type: "tool_call" }>[];
@@ -356,7 +416,7 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
     verified: calls.filter((c) => c.name === "verify").length,
     verifyOkLast: verifies.length > 0 ? verifies[verifies.length - 1]!.ok : null,
     autoVerifyBeat: verifies.some((v) => (v as { auto?: boolean }).auto === true),
-    wroteTests, touchedJudge, onlySrcChanged, changedFiles: changed, exitError,
+    wroteTests, touchedJudge, onlySrcChanged, changedFiles: changed, exitError, resources,
   };
 }
 
@@ -456,7 +516,7 @@ for (let rep = 1; rep <= REPS; rep++) {
       + `读先于写=${r.readsBeforeFirstWrite} clarify=${String(r.clarified)} 先批后写=${r.plannedBeforeWrite ? "Y" : "N"} `
       + `verify=${String(r.verified)}→${String(r.verifyOkLast)} 工具=${String(r.toolCalls)}/${String(r.toolFailures)}败 `
       + `重复=${String(r.repeatedSameAction)} 请求=${String(r.requests)} tok=${String(r.tokensIn)}/${String(r.tokensOut)} `
-      + `¥${r.cny.toFixed(4)} ${String(Math.round(r.seconds))}s`
+      + `¥${r.cny.toFixed(4)} ${String(Math.round(r.seconds))}s 内存峰=${String(r.resources.rssPeakMb)}MB/${String(r.resources.procPeak)}进程 cpu=${String(r.resources.cpuMs)}ms`
       + (g.fails.length > 0 ? " 〔" + g.fails.join("；") + "〕" : ""),
     );
   }
