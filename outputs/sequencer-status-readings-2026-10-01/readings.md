@@ -30,3 +30,13 @@
 
 1. **无 runLoop 驱动的探针跑不出状态事件**：直接 `orch.spawn({mode:"pipeline"})`（不经 runLoop）后事件只有方案门两件——sequencer 转变由 loop 节拍驱动，headless 探针要拿到动态读数必须驱动 `runLoop`（或复用 m3c 的整套驱动）。本页试跑实录：方案门批准走 `decideWorkerApproval`，但 id `apr-1-pipeline` 在 300ms 内已被决议（`未知或已决议的审批 id`）——**这个时序反常本身值得下一笔查**（谁在无决策者时决议了它）。
 2. **方案门 id 时序**：`decideWorkerApproval("apr-1-pipeline")` 返回「未知或已决议」而事件里 `approval_resolved` 已存在——决议者不是本探针。与 §四-1 同根（无驱动者时的 fail-closed 路径），实现折叠前先把这条读数补上，避免把「没驱动」误读成「折叠有风险」。
+
+## 五、动态实测（第 256 页补：runLoop 驱动 + 生产装配接线，`probe-prod.mts`/`probe-prod.log`）
+
+生产装配镜像（spawn_agent.run(args,ctx) → orch.spawn(args,{callId:ctx.callId})，agent-runner.ts:976-982 同款）接进 runLoop 的 tools：
+两环 pipeline 真跑一遍，方案门**抢答成功**（`orchestratorForApproval("apr-1-pipeline")` 路由 → decideWorkerApproval ok:true）。
+
+1. **①格交卷（runLoop 节拍下的状态事件）**：两环链实测 **4 条状态事件**（批准启动／stage 1/2 启动／stage 2/2 启动／整链 done，全 ok=true，各 ~80-100 字节）——与静态普查的 2+环数逐条吻合。
+2. **②格交卷（审批时序）**：10ms 轮询器抢答成功 ⇒ 审批 id 路由可用、链可被外部决策者驱动；250 页的反常（无决策者时 300ms 内被决议）根因收敛为**无决策者时的 fail-closed 自动路径**（deny/收窄），不再是「未知决议者」。
+3. **意外发现（改写裁决 weighs）**：spawn 回执 pc1 本来就有**两条**——即时回执 `{"pipeline":true,"chain_id":...}` ＋ `[harness] pipeline 整链 done` 终态报告挂回（emitSyntheticResult 同款）。⇒ **链结局今天已经挂回模型那次调用**；4 条 "pipeline-*" 状态事件是额外的进度播报（当前走孤儿降级带前言）。
+4. **裁决面更新**：折叠「安全」依旧成立，但动态读数显示折叠**非必要**（结局已挂回）；三选一（折叠／保持现状／终态不重复播）交下一笔裁决，数据齐了。
