@@ -1,0 +1,12 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-2068d6c.lock）
+变异验证：1 条
+✅ docscheck-cred-unnamed-cap-raised-silently — 把帽从现读调大（9 → 10）而不点名任何一页 ⇒ 读数与帽脱钩，这一格从此可以无限装新失检的凭证页。第 268 页降帽（11 → 9，两页真点名了）时这条针脚同笔跟着走：这一格刻意不允许悄悄降——降帽必须同时动这条锚点（规则 229）。 ｜本机实测 1.2s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 1.4s · 跑了 1/1 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 2 次／1 条（每条次数分布 2×1）· 单次中位 第1次 0.8s／第2次 0.5s· 最贵一条 docscheck-cred-unnamed-cap-raised-silently 1.2s
+跑法单价：selector 2 拍·中位 0.75s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-2068d6c.lock）
+real 1.96
+user 1.95
+sys 0.26
