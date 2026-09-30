@@ -1,0 +1,14 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-10debc9.lock）
+变异验证：3 条
+✅ certface-evidence-gate-row-dropped — 把这道门从认证门面里摘掉 ⇒ 覆盖退回到「交笔时手动跑」那句承诺上，而这句话已经在第 268/269/270/271 四笔里连续没成立（规则 292 同族：绿认证与门红并存） ｜本机实测 0.8s／2 拍
+✅ certface-evidence-gate-budget-under-measured — 名单里这道门的预算被写到实测两倍以下 ⇒ 这一格变成「拿一次读数当上限」，本机负载一动就红；这支钉的是买进门面时那条**单价是真测的**，不是给名单随手填个数占位 ｜本机实测 0.6s／2 拍
+✅ prose-scan-inflight-split-swapped — 把「在飞」与「已提交」两半对调 ⇒ 顶包候选的水位帽开始拿别人的在飞文本判我这一笔，而「排除在飞」那套归因话术全部反过来指（第 272 页实测：这一支尺此前在变异表里零条目） ｜本机实测 18.0s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 19.7s · 跑了 3/3 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 6 次／3 条（每条次数分布 2×3）· 单次中位 第1次 0.5s／第2次 0.3s· 最贵一条 prose-scan-inflight-split-swapped 18.0s
+跑法单价：selector 6 拍·中位 0.49s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-10debc9.lock）
+real 20.35
+user 22.33
+sys 0.75

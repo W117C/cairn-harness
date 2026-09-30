@@ -9003,6 +9003,29 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 8. **自我抓到的两处工具链自伤**（同族，见记忆 `feedback-edit-quote-mangling` 与 `remeasure-before-asserting`）：① 往 `gate-manifest.ts` 的 JSDoc 追加正文时把闭合的 `*/` 一起写进去了 ⇒ 落地是语法错（`ERROR: Unexpected "*"` at 164:1），由一次 `node --import tsx` 求和顺手抓到，不是 tsc 先喊；② 注释里先写「预算之和 51000 → 56300」是**凭记忆的数字**，真求和是 `50000 → 55300`，已在原处改成正文里那条现读出处。
 9. **刻意未做**：① `tools-check` 8.6s／`supervisor-check` 8.0s／`plugins-check` 15.4s／`map-check` 53.0s 仍不进门面（超线且不属于「每笔都要成立」那一类）；② 隔壁那 4 条危险码不替他们改（未入库文件是别人的凭证原文）；③ `prose-needle-scan.ts` 其余格子（`levelVsCap` 的帽接线、裸名字两族）本笔只补了一支证人；④ 把这道门接进交笔 Skill 的第一步要改用户目录里的 Skill 文件，**等明文授权**，本笔只把它做成"不需要人记得跑"的门面格子。
 
+### 2026-10-01 · 第 272 页补 凭证：本笔（`10debc9`）认证 259 文件／3430 条 exit=0、两端独占、本趟墙钟 196.68s；三支新锚点在干净树 3/3 全杀；**门面里第一次跑到了证据面那一格**（`evidence-typecheck-check exit=0 2618ms`，认证树＝HEAD）；门 20/21 绿·红 1 道仍属隔壁 `1748ca7` 的 H7 ⇒ 不写成「全量绿」
+
+1. **被认证的提交**：`10debc9`（第 272 页实现簇＋判卷＋三支锚点同笔）。用的树：`.worktrees/head-cert-10debc9`（`scripts/head-cert.ts --at=HEAD` 自建，非主检出）；锚点逐条杀在另一棵 `.worktrees/verify-10debc9`（`git worktree add --detach` ＋ `cp -al node_modules`，树内 `status` 核到 0 项）。取料目录 `outputs/gates-outside-cert-2026-10-01/`。
+2. **`--check-needles` 两份互相印证归因**：主检出落库前（`needles-precommit.log`，退出码 1）`针脚体检：1171 条 —— 阻断 2，待复认 0，未覆盖 0，逐行式 5，未入库面 0，钉在飞文本 2，killer 指针失效 0（其中 HEAD 侧 0）`——那 2 条正是本笔两支钉 `gate-manifest.ts` 新行的锚点（实现未入库 ⇒ 等价于空操作，落库后必须归零）。认证树落库后（`needles-at-10debc9.log`，退出码 0）`阻断 0，待复认 0，未覆盖 0，逐行式 5，未入库面 0，钉在飞文本 0，killer 指针失效 0`＋`改法语法体检：1171 条改法全部产出合法源文件 ✅`。**这一对就是第 271 页那记「钉在飞文本」预言的活证**：同一格红、同一格归零，中间只隔一次提交。
+3. **本笔三支新锚点逐条真杀**（`kill-3-anchors.log`，退出码 0）：`certface-evidence-gate-row-dropped`、`certface-evidence-gate-budget-under-measured`、`prose-scan-inflight-split-swapped` 三条全 `✅`，末行 `全部变异被正确杀死（断言非恒真）`；机器自报原文逐字贴：
+   `本次耗时 19.7s · 跑了 3/3 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）`
+   `成本分母：判卷 spawn 6 次／3 条（每条次数分布 2×3）· 单次中位 第1次 0.5s／第2次 0.3s· 最贵一条 prose-scan-inflight-split-swapped 18.0s`
+   `跑法单价：selector 6 拍·中位 0.49s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母`
+   外层 `/usr/bin/time -p` 的 `real 20.35`。**最贵那条 18.0s 不是变异贵**，是它的判卷文件（`tests/prose-needle-scan.test.ts` 的真仓扫）自己就慢——这条要说清，否则下一个人拿 18s 当突变开销。
+4. **`head-cert` 汇总逐格原文**（`head-cert-10debc9.log`，`HEADCERT_EXIT=1`）：
+   `TREE=10debc9 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-10debc9.lock）`
+   `Test Files 259 passed (259)｜Tests 3430 passed (3430)｜exit=0（退出码直接取，不接管道）`
+   `并发判卷=起前 0 套／跑完 0 套（两端独占）`
+   `本趟墙钟 196.68s（同一进程 hrtime 实测·口径＝起跑→汇总那一行，不含提前退出的那些趟）`
+   `认证门面=21 道（跑到 21）｜❌ 红 1 道｜⚠️ 超预算 0`，其中本笔新买那一道：`✅ evidence-typecheck-check exit=0 2618ms（预算 5300ms）`。
+5. **条数核对式**：`3430 ＝ 3429 ＋ 1`（本笔只新增 `tests/cert-gate-face.test.ts` 一条用例；`tests/prose-needle-scan.test.ts` 是改那条 else，不增条数）。锚点核对式：`1171 ＝ 1168 ＋ 3`。
+6. **归因声明**：唯一的红是 `gate-check exit=1 3812ms（预算 5400ms）`，成因＝任务 #9（隔壁 `1748ca7` 的 H7 未登记 `fixtures/impact/accuracy-repo/*`），HEAD 常驻、本笔不动它 ⇒ 等级写 **20/21 绿**，不写「全量绿」。认证门面的退出码是 1，所以 `HEADCERT_EXIT=1` 里不含本笔的新红：判卷 259 文件全过、typecheck 0 报错、超预算 0。
+7. **这一格的意义单独说一句**（免得凭证被读成"只是加了道门"）：认证树读的是 **HEAD**，所以那一趟 `exit=0` 就是第 272 页第 5 项更正的证据——工作树那 16 条＝12 条登记＋4 条隔壁未入库的探针；本笔落库后 HEAD 侧贴帽。**下一次隔壁把那两份探针落库时，这一格会在每一趟认证里红，不再依赖我记得手动跑。**
+8. **本页那把尺的现读**（`docs-check-after-page272.log`，退出码 0）：`凭证对账面：可比对 200 个读数（红 0）｜页未点名取料目录 0 个＝未检｜未点名页 0 页（帽 0，只准调低）｜点名但目录读不到 0 个＝取不到｜登记不可回查 4 条｜弱证 0 对（帽 0，只准调低）｜证人无身份行 102 对＝这一格无从判｜已登记不可回查 9 页／19 条`。散文侧（`prose-after-page272.log`，退出码 0）：`顶包候选 10 条（已提交态 10 ＋ 在飞 0）`＝帽 10、`裸名字 2 条`＝帽 2。凭证段自己也要被核：本段落笔后重跑（`docs-check-with-credential-272.log`，退出码 0）⇒ `可比对 200 → 207 个读数（红 0）`、`未点名页 0`、`弱证 0`、`已登记不可回查 9 页／19 条`不变；`证人无身份行 102 → 106` 是本段新引的那几份日志（needles／kill／docs-check／prose）自己不印提交号——这一格是「无从判」不是「有问题」，故意不设帽（第 271 页凭证第 8 项②）。散文侧（`prose-with-credential-272.log`，退出码 0）仍是 `顶包候选 10 条（已提交态 10 ＋ 在飞 0）`＝帽 10。
+9. **刻意未做**：① 没有为了「让认证全绿」去动隔壁的 H7；② `web-fetch-check`（本趟实测 568ms、落在那条 1.5s 线内）本笔没买——已立任务 #17、占号第 273 页；③ 认证树日志仍落在 `/tmp/dsh-head-cert-10debc9`（那是 `head-cert` 自己的路径约定，不在本笔范围）。
+10. **清场与残留**：本笔两棵树 `verify-10debc9`、`head-cert-10debc9` 各核 0 项在飞，**未回收**（等用户点头）。同时报一格现读：认证那一趟自报 `常驻残留树=32`（含 `gate-mutate-verify@48071b8`、`gate-head-cert@48071b8` 这类由 `pnpm gates` 建的，以及本会话各笔的 verify／head-cert 对）。回收是不可逆动作，我不自己做；要清的话先逐棵 `git -C <tree> status --porcelain` 核到 0 项、并确认那一笔已入库（规则 120），`/private/tmp/dsh-foreign-witness-A|B` 那两棵不是本仓建的、不许照命令删。
+
+
 
 
 
