@@ -1,0 +1,14 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-a5197eb.lock）
+变异验证：3 条
+✅ page-claim-unreadable-ledger-prints-zero — 台账那一维取不到时印「0 个」而不是「取不到」⇒ 调用方读到的是「这仓一个号都没占过」，于是可以把很旧的号发出去；本仓最忌讳的就是把「没量到」印成一个实数（规则 261/262） ｜本机实测 0.8s／2 拍
+✅ page-claim-inside-repo-bare-prefix — `insideRepo` 退化成「只要 relative 算得出东西就算在里面」 ⇒ `--file=/etc/passwd`、`/repo/../x`、同前缀兄弟目录全被放行（第十族：前缀匹配要按位置枚举变体；这里连前缀都不如） ｜本机实测 0.7s／2 拍
+✅ page-claim-cli-exits-1 — 四个「没占到」出口里少任何一个 ⇒ CLI 照常打印一句人话然后退 0，调用方把「这一格没量到」读成「号发好了」。判卷数的是**个数**（旧的无 g 正则被第一个出口满足，删掉最后一个仍然绿——评审实测两删都过，这次钉成计数） ｜本机实测 0.7s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 2.5s · 跑了 3/3 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 6 次／3 条（每条次数分布 2×3）· 单次中位 第1次 0.3s／第2次 0.4s· 最贵一条 page-claim-unreadable-ledger-prints-zero 0.8s
+跑法单价：selector 6 拍·中位 0.35s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-a5197eb.lock）
+real 3.48
+user 3.10
+sys 0.56

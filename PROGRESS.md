@@ -8157,6 +8157,7 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
    ⇒ 本趟是**绿而撞窗**、不是「绿且独占」（231／247 页同款措辞）。主树此刻另有隔壁在飞面（`outputs/_audit-*.md`、`outputs/selector-uniqueness-2026-09-30/`、`.vitest/`），本笔一棵没碰、一个文件没改。
 7. **纠正第 247 页的一句（这一格是我自己写错的）**：那页凭证写「本笔自建认证树 @`077b13a` 已逐字核 0 项后回收」，
    而本趟门的现读是 `常驻残留树=4（gate-mutate-verify@a5197eb、head-cert-077b13a@077b13a、head-cert-2ee726c@2ee726c、verify-a5197eb@a5197eb）`
+   （**树的绝对路径前缀是我略掉的**，原文四条都带 `/Users/ze/Downloads/deepseek harness/.worktrees/`，逐字见 `head-cert-a5197eb.log`）
    ⇒ **那棵树一直还在**。不是事后被重建：目录 mtime `23:33:41` 早于 247 页提交的 `23:36`。
    成因现读得到：`scripts/head-cert.ts:294` 只**打印**回收命令（`git worktree remove` 是破坏性操作，归人），我把「脚本让我做」写成了「我做完了」。
    本笔不重复这个错：**下列树均未删**，逐棵 `status --porcelain`＝0 项，命令逐字贴在这儿等点头——

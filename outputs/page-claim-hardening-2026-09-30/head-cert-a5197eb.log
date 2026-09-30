@@ -1,0 +1,42 @@
+目标提交：a5197eb（--at=a5197eb）
+worktree add exit=0
+已核：TREE=a5197eb26b4c1cf9d50e9ebb5fa6e583c15b4c39｜判卷四面在飞 0 项
+cp -al node_modules exit=0
+依赖核对：该提交声明 10 项，缺 0 项
+  硬链接子仓库依赖 fixtures/todo-app/node_modules ← 主树 exit=0
+import 面：3021 条边｜悬空 0（其中存量已豁免 0）
+门表：30 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证门面（20 道，名单取自 a5197eb）==
+  ✅ no-progress-check exit=0 722ms（预算 1100ms）
+  ✅ prune-check exit=0 738ms（预算 1100ms）
+  ✅ fork-check exit=0 669ms（预算 1100ms）
+  ✅ compaction-check exit=0 773ms（预算 1200ms）
+  ✅ docs-check exit=0 982ms（预算 1300ms）
+  ✅ memory-check exit=0 890ms（预算 1300ms）
+  ✅ head-import-check exit=0 933ms（预算 1400ms）
+  ✅ autonomy-check exit=0 1128ms（预算 1500ms）
+  ✅ sandbox:check exit=0 1691ms（预算 1700ms）
+  ✅ security-check exit=0 1050ms（预算 1500ms）
+  ✅ provider:check exit=0 651ms（预算 1300ms）
+  ✅ routing-check exit=0 944ms（预算 1400ms）
+  ✅ model-surface-check exit=0 1006ms（预算 1300ms）
+  ✅ prefix-churn-check exit=0 1076ms（预算 1500ms）
+  ✅ prompt-surface-check exit=0 989ms（预算 1400ms）
+  ✅ replay-determinism-check exit=0 725ms（预算 1100ms）
+  ✅ cost-per-progress-check exit=0 659ms（预算 1000ms）
+  ✅ gym-check exit=0 1661ms（预算 2400ms）
+  ✅ gate-check exit=0 4956ms（预算 5400ms）
+  ✅ mutate-needles-check exit=0 15903ms（预算 20000ms）
+  认证门面=20 道（跑到 20）｜绿 20 道｜⚠️ 超预算 0
+
+== 认证汇总 ==
+  TREE=a5197eb DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-a5197eb.lock）
+  Test Files 256 passed (256)｜Tests 3353 passed (3353)｜exit=0（退出码直接取，不接管道）
+  并发判卷=起前 0 套／跑完 1 套（撞窗：本仓判卷有读写共享 /tmp 的用例）
+  逐条日志：/tmp/dsh-head-cert-a5197eb
+  回收这棵树（规则 120，别留残留）：git worktree remove --force .worktrees/head-cert-a5197eb
+  常驻残留树=4（/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-verify@a5197eb、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-077b13a@077b13a、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-2ee726c@2ee726c、/Users/ze/Downloads/deepseek harness/.worktrees/verify-a5197eb@a5197eb）（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）
+  汇总已同步落盘（不靠 stdout 的尾）：/tmp/dsh-head-cert-a5197eb/summary.txt
+HEADCERT_EXIT=0
