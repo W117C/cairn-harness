@@ -10111,6 +10111,88 @@ const MUTATIONS = [
     apply: (s) => s.replace('  if ((tool as string) === "web_fetch") return true;', '  if ((tool as string) === "web_fetch") return false;'),
     expectFail: "点了「总是允许」也不落永久规则",
   },
+
+  /* ── 第 259 页（任务 #4）：证据面类型检查门。八支各钉一个**不同的**判卷，且每一支都对应写门时真犯过的错。
+   *    这一族最坏的地方是「坏法都长得像绿」：解析取错字段 ⇒ 危险码恒 0；退出码认错 ⇒ 红读成没测；
+   *    拒绝分支 fail-open ⇒ 没跑读成跑过。所以钉子全在判定与进程出口上，不在文案上。 ── */
+  {
+    id: "evidence-parse-code-group-off-by-one",
+    src: "scripts/lib/evidence-typecheck.ts",
+    test: "tests/evidence-typecheck.test.ts",
+    desc: "把 `code` 取到 `m[3]`（列号）⇒ 危险码一条也匹配不上，门从「拦得住」变成「永远绿」。" +
+      "这一支钉的是写门时**真犯过的**错：上一版把 `(error)` 也括起来占了一组，`m[4]` 就成了常量 \"error\"；" +
+      "而门自带的「解析 51/51 条」自证完全看不出来——它只数行，不看取错字段（规则 324 的镜像）",
+    apply: (s) => s.replace("return { file: m[1]!, code: m[4]! };", "return { file: m[1]!, code: m[3]! };"),
+    expectFail: "真报错行 ⇒ file 与 code 都取对（code 必须是 TS 码，不是 'error'）",
+  },
+  {
+    id: "evidence-tsc-exit2-read-as-not-run",
+    src: "scripts/lib/evidence-typecheck.ts",
+    test: "tests/evidence-typecheck.test.ts",
+    desc: "只把退出码 1 当「跑过了」⇒ tsc 报出错误时的 2 被归一化成 null，门在**真有料**的那一刻反而出声喊" +
+      "「没跑到」：红被读成没测，且这种输出看起来像谨慎。tsc 的码只有 0（无错）与 2（有错）是给了结论的" +
+      "（本仓 `scripts/typecheck.ts` 原样转发那个 2）——上一版就是这么错的",
+    apply: (s) => s.replace("if (r.status !== 0 && r.status !== 2) {", "if (r.status !== 0 && r.status !== 1) {"),
+    expectFail: "仓内 tsconfig.evidence.json 存在，且 tsc 真跑了（退出码 0 或 2，不是「没跑到」）",
+  },
+  {
+    id: "evidence-verdict-status-validation-dropped",
+    src: "scripts/lib/evidence-typecheck.ts",
+    test: "tests/evidence-typecheck.test.ts",
+    desc: "判定层不再自证退出码（放过 1）⇒「跑到了没有」完全押在调用方那一份归一化上；判卷与门都会直接喂 " +
+      "`{status:1}`，于是 tsc 用法错/内部崩（我们的取证链就崩过一次）被当成「跑了、0 条危险码」＝干净。" +
+      "规则 261/262：取不到不许读成没问题，而且**每个消费点都要自己认这个取不到**",
+    apply: (s) => s.replace("(input.tsc.status !== 0 && input.tsc.status !== 2)", "(input.tsc.status !== 0 && input.tsc.status !== 2 && input.tsc.status !== 1)"),
+    expectFail: "没跑到／取不到 ⇒ unreadable（既不是红也不是绿）",
+  },
+  {
+    id: "evidence-danger-code-filter-dropped",
+    src: "scripts/lib/evidence-typecheck.ts",
+    test: "tests/evidence-typecheck.test.ts",
+    desc: "删掉危险码筛选那行 ⇒ TS7006（隐式 any：只欠一个标注、不改变取到什么，现存量 30 条）也进分子：" +
+      "门第一次跑就从「12 条／帽 12 条」变成「51 条」并红一大片，读数失去含义，门会被人关掉。" +
+      "加码要能点名「哪一族会产出假读数」，不能只按「tsc 报了就算」——那是把别人的 30 处算成这一格的债",
+    apply: (s) => s.replace("    if (!DANGER_CODES.includes(hit.code)) continue;\n", ""),
+    expectFail: "三条真行混合 ⇒ total 与 parsed 相等、perFile 只含危险码那两条",
+  },
+  {
+    id: "evidence-ratchet-equal-counts-as-grew",
+    src: "scripts/lib/evidence-typecheck.ts",
+    test: "tests/evidence-typecheck.test.ts",
+    desc: "把「等于帽」也判成涨 ⇒ 水位门变成常态红：现读 10／帽 10 是**登记存量**的正确状态，" +
+      "红了就没人看第二条（存量水位法的用法是「只准调低」，不是「永远不许等于」）。" +
+      "这一支钉的是比较号方向：改成 `>=` 后，门在自己登记好的仓里也响",
+    apply: (s) => s.replace("if (now > cap) grew.push({ file, now, cap });", "if (now >= cap) grew.push({ file, now, cap });"),
+    expectFail: "现读等于帽 ⇒ clean，且不出声喊调低",
+  },
+  {
+    id: "evidence-unregistered-file-cap-default-zero",
+    src: "scripts/lib/evidence-typecheck.ts",
+    test: "tests/evidence-typecheck.test.ts",
+    desc: "未登记文件的默认帽从 0 抬到 1 ⇒ 每加一个新探针都能**白拿一条**危险码，而 `ino` 那一类假读数正好是" +
+      "一条就够（读一个不存在的属性）。登记不是入口：新文件带危险码就该红，逼人要么修要么显式登记（规则 235）",
+    apply: (s) => s.replace("if (!(file in input.baseline) && now > 0)", "if (!(file in input.baseline) && now > 1)"),
+    expectFail: "新文件带危险码 ⇒ 红（帽按 0 算）——登记不是入口，修它才是",
+  },
+  {
+    id: "evidence-runner-missing-config-exits-zero",
+    src: "scripts/evidence-typecheck-check.ts",
+    test: "tests/evidence-typecheck.test.ts",
+    desc: "取不到 `tsconfig.evidence.json` 时退 0 ⇒ 这一格压根没跑被 CI 读成「跑了且干净」；" +
+      "而门自己的取料口径如果只存在于 /tmp 的一条命令里，仓内就没有任何证人能发现它没了。" +
+      "这一支与上面那支的坏法不同：上面是判定算错，这里是**尺没上架**",
+    apply: (s) => s.replace("process.exit(1);", "process.exit(0);"),
+    expectFail: "口径文件取不到 ⇒ 出声且非零，不许读成干净",
+  },
+  {
+    id: "evidence-runner-unknown-flag-passed-through",
+    src: "scripts/evidence-typecheck-check.ts",
+    test: "tests/evidence-typecheck.test.ts",
+    desc: "认不出的开关被放行 ⇒ 拿默认口径去量另一件事（本仓 `--budget-ms=` 那一族拒收的同款理由：给了参数却当成没给）。" +
+      "门不收参数是**当前**事实，写成拒收是为了将来加参数时不会静默降级；这一支翻红时说明拒收面漏了",
+    apply: (s) => s.replace("if (extra.length > 0) {", "if (extra.length > 1) {"),
+    expectFail: "拼错的开关 ⇒ 退 2 并点名，不许当成「没给参数」拿默认口径跑",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

@@ -8422,3 +8422,52 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 5. **sequencer 三选一（裁决⑥）＝移交隔壁**：其正在飞 `orchestrator.ts`（本笔 Edit 撞「file modified」实测其在编）——250 页静态判定＋256 页动态实测（4 条/链、spawn 回执本就挂回链结局）数据已齐，折叠/保持/去重由在飞者择一落地。
 6. **能力 10（裁决④）＝凭据确实不在**：环境三 env 全 absent（本页现读），loop-eval 无法对真模型跑——**不造假读数**，保持「没有尺」登记；凭据到达当轮出双读数的承诺不变。
 7. **门**：本页零源码（树回收是 git 操作不是文件编辑）⇒ typecheck 不重跑；标题不含「凭证」，不进 D-9 面。
+
+### 2026-10-01 · 第 259 页（本会话）· 证据面进类型检查：`outputs` 里那 51 条报错第一次有尺，危险族按文件登记、只准调低（帽 12 条／8 文件；表 1110→1118）
+
+取料：`outputs/evidence-typecheck-gate-2026-10-01/`（`tsc-raw.log`／`per-file-counts.mts`＋`per-file-counts.log`／`gate-run-worktreeread.log`／`judges.log`／`typecheck.log`／`needles-before-commit.log`／`runner-cwd-trap.log`／`claim-259-transcribed.log`）。
+
+1. **这一格为什么存在（不是补美观）**：主 `tsconfig.json` 的 `include` 是 `["src","scripts","tests"]` ⇒ 仓里 260 个 dated 目录里的探针/取料脚本**全在 typecheck 门外**，
+   而 `node --import tsx` 只剥类型不查类型。第 249 页就这么糊过去的：一把探针的 `readIdx` 返回形状里没有 `ino`，打印行照读 `after.ino`，
+   `undefined !== undefined` 为假 ⇒ 12 圈全印「ino 不变」，与"真的没变"同一个字——**tsc 只要看过一眼就报 TS2339**。
+   现读证据面：**51 条报错／16 个文件**（`tsc-raw.log`，`TSC_EXIT=2`）。
+2. **尺的形状（三段分立，与本仓「判定面可测」同族）**：口径落仓内文件（`tsconfig.evidence.json`：`extends ./tsconfig.json`＋`include:["outputs"]`）
+   → 判定在纯函数（`scripts/lib/evidence-typecheck.ts` 的 `parseTscLine`／`tally`／`verdict`，全部可单测）
+   → 编排只 spawn 与转发退出码（`scripts/evidence-typecheck-check.ts`）。判卷 `tests/evidence-typecheck.test.ts` **14 条**。
+   ⚠️ 为什么不把 `outputs` 直接加进主 tsconfig：那要当场替别人清 51 条。本门只拦**「那个位置拿到不存在的东西」**那一族
+   （TS2339/TS2551 读不存在的属性、TS2304 名字不存在、TS2305/TS2459 import 了没有的名字、TS7053 按字符串下标取不存在的键、TS18048 可能 undefined 却直接吃）——
+   它们的运行时后果是**探针继续跑并把 `undefined` 交出去**，或当场崩，两种都会让打印行不再说明它说的事。
+   不纳的两族各配理由写在门里：**TS7006＝30 条**（只欠一个标注、不改变取到什么，纳了就是把别人的 30 处算成这一格的债）；
+   **TS2353/TS2345/TS2769＝2/2/1 条**（调用点形状不符：后两种当场报错会出声，第一种"多给的选项被静默丢掉"确实也会造假读数 ⇒ 立成待办，
+   它要按「丢了哪个选项」逐条判，不是加个码就能收口）。
+3. **写门时我自己犯的三处，全部变成锚点（这才是这一页真正的产出）**：
+   ⑴ 把 tsc 的退出码当成「0 或 1」⇒ 门在**真有料**那一刻反而出声喊「没跑到」，把红读成没测（锚 `evidence-tsc-exit2-read-as-not-run`）；
+   ⑵ `(error)` 白占一个捕获组 ⇒ `m[4]` 取成常量 `"error"` ⇒ 危险码恒 0 命中、**门永远绿**，而门自带的「解析 51/51 条」自证完全看不见——它只数行、不看取错字段
+      （锚 `evidence-parse-code-group-off-by-one`；与规则 324 互为镜像：字段取错不改变行数）；
+   ⑶ 跨进程判卷的**同码不同因**：为验「取不到口径文件要退非零」我把 cwd 换成空目录，`--import tsx` 这个**裸标识符按 cwd 解析**，
+      于是先炸的是加载器（`ERR_MODULE_NOT_FOUND`）——**也是退 1**。那条判卷差一点就把「加载器没起来」读成「门出声了」；
+      抓住它的是 `toContain(门那一句)` 与 `not.toContain("ERR_MODULE_NOT_FOUND")`，**不是退出码**（`runner-cwd-trap.log` 是那次红的原文）。
+      新形状：**断言退出码的跨进程判卷，必须同时断言被点名的是自己那句话**，否则尺量的是"有没有非零"，不是"谁非的零"。
+4. **门上线后咬到的第一口在我自己嘴里**：初版危险族只 5 个码 ⇒ 10 条／6 文件；把 `per-file-counts.mts` 跑出来的**按码分布**摆上桌
+   （`TS7006=30 TS2339=4 TS2459=4 TS2551=2 TS2353=2 TS2345=2 TS7053=2 TS2304=2 TS2769=1 TS18048=1 TS2305=1`）之后，
+   我原先那句「只有会产出假读数那一族」的口径**写窄了**：TS7053 与 `ino` 一案同机制、TS2459 与 TS2305 同机制（tsc 按码不分类型导入/值导入，按实例分要读 AST，不做）。
+   纳入后危险族读数 10 → **16 条／10 文件**。⚠️ 取料口径同页改了一次，别把两个数当成"别人涨了 6 条"。
+5. **帽只登记在 HEAD 里的文件**：HEAD 侧现读 **12 条／8 个文件**＝帽；工作树多读 4 条来自**隔壁在飞、未入库**的两个探针
+   （`selector-uniqueness-2026-09-30/diagnose.mts` 3 条、`sequencer-dynamic-2026-10-01/probe-prod.mts` 1 条）⇒ 门在主检出**当场红并点名**（`gate-run-worktreeread.log`，`GATE_EXIT=1`），
+   红归它们的主人，我不替别人改探针、也不往登记表里加名字。为什么坚决不登记：登记一个不在 HEAD 的文件，
+   干净树上那条就成了幽灵，而本门的判卷里恰好有一条「不许留幽灵条目」⇒ **`head-cert` 会被自己的登记判红**（第 253 页凭证已把 diagnose.mts 归为隔壁在用）。
+6. **单价与接线裁决**：这道门现读单价 **2.06s**（本趟 2079ms／2971ms 两次，差异全在 tsc 那一次 spawn 上；解析与判定 <5ms）。
+   认证面那条线是「实测 <1.5s 全进」⇒ 它**只进 `GATES`，不进 `CERT_GATES`**：20 道认证门里进面要给门面 ＋7.7%，换到的只是"认证时多看一眼证据面"，
+   而它由 `pnpm gates` 与交笔时手动跑覆盖（理由写进 `scripts/gate-manifest.ts:139` 的注释，不靠沉默）。
+7. **判据与实现同笔**：表 1110→**1118**，八支各钉一条**不同**判卷——
+   `evidence-parse-code-group-off-by-one`／`evidence-tsc-exit2-read-as-not-run`／`evidence-verdict-status-validation-dropped`／`evidence-danger-code-filter-dropped`／
+   `evidence-ratchet-equal-counts-as-grew`／`evidence-unregistered-file-cap-default-zero`／`evidence-runner-missing-config-exits-zero`／`evidence-runner-unknown-flag-passed-through`。
+   前六支钉 `scripts/lib/evidence-typecheck.ts`（判定），后两支钉 `scripts/evidence-typecheck-check.ts`（进程出口）——runner 只有编排，
+   但它那两个拒绝分支是**fail-open** 形状（把"没跑"当结论交出去），所以给它们补了两条真跑子进程的判卷再钉。
+   落库前读数：`针脚体检：1118 条 —— 阻断 16，待复认 0，未覆盖 0，逐行式 5，未入库面 16（被测面＋判卷两面），钉在飞文本 0，killer 指针失效 0`、
+   `改法语法体检：1118 条改法全部产出合法源文件 ✅`（那 16 格全是本笔四个新文件尚未入库，落库后应归 0）；`tests/evidence-typecheck.test.ts` **14/14 绿**、`typecheck exit=0`。
+8. **页号走 243 页的号池**：`占号 259（台账面 223 个＋号池面 17 个）`。文件注释与门表注释我先写成了「第 258 页」，占号回来是 259（258 被隔壁的六项裁决页占了），
+   于是**四处文件五个位置一起改**（runner 注释 1／lib 注释 2／判卷标题 1／门表注释 1），改前逐文件 `grep -c "第 258 页"`＝1/2/1/1、改后残留 **0**；
+   锚点 `expectFail` 与用例标题是逐字同串，只改一边就会变成"指针指向不会红的那条"（253 页补⑵ 犯过的形状）。
+9. **刻意未做（写在纸上）**：不修别人的 51 条报错（登记＝承认存量，修＝别人的靶面）；TS2353 那一族立成待办未纳；不进 `CERT_GATES`；
+   本目录新加的 `per-file-counts.mts` 自己**0 条危险码**——这一格由门量的（它在 `tsc-raw.log` 的 16 个文件里没出现），不是我自证的。

@@ -1,0 +1,146 @@
+/** 证据面（`outputs` 下的 .mts 探针）的类型检查那一格（第 259 页；任务 #4）。
+ *
+ *  为什么要有这一格：`tsconfig.json` 的 `include` 是 `["src","scripts","tests"]` ⇒ 仓里 90 多个探针/取料脚本
+ *  **全在 typecheck 门外**，而 `node --import tsx` 只剥类型不查类型。第 249 页就是这么糊过去的：
+ *  一把探针的 `readIdx` 返回形状里没有 `ino`，打印行照读 `after.ino`，`undefined !== undefined` 为假
+ *  ⇒ 12 圈全印「ino 不变」，与"真的没变"同一个字，而 tsc 只要看过一眼就会报 TS2339。
+ *
+ *  为什么不直接把 `outputs` 加进主 tsconfig：现读存量 51 条报错／16 个文件（`outputs/evidence-typecheck-gate-2026-10-01/tsc-raw.log`），
+ *  里头 30 条是 TS7006（隐式 any，纯标注缺失、不改变取到什么），只有**会产出假读数那一族**值得当闸：
+ *  TS2339/TS2551（读不存在的属性，正是 `ino` 那一案）、TS18048（可能 undefined 却直接吃）、TS2304（名字不存在）、
+ *  TS2305/TS2459（import 了模块里没有的名字）、TS7053（按字符串下标取不存在的键）。
+ *  帽 12 条／8 个文件（只登记**在 HEAD 里**的文件），按「新增门的存量水位法」逐文件登记、**只准调低**；涨一条就红。
+ *  ⚠️ 主检出工作树会多读 4 条（16 条／10 个文件）：来自两个**隔壁在飞、尚未入库**的探针
+ *  ——`outputs/selector-uniqueness-2026-09-30/diagnose.mts`（3 条）与 `outputs/sequencer-dynamic-2026-10-01/probe-prod.mts`（1 条）。
+ *  它们不进登记表：登记一个不在 HEAD 的文件＝干净树上那条登记变成幽灵，而本门的判卷里就有一条「不许留幽灵条目」，
+ *  `head-cert` 会被自己这边的登记判红（253 页凭证里我已把 diagnose.mts 归为隔壁在用、不替他们改）。
+ *  装饰性那一族刻意不纳（纳了就得替别人改 30 处，且它不会产出假读数）——理由写在门里，不靠沉默。
+ *
+ *  ⚠️ 解析形状（同页第二次踩到）：`^([^(]+)\(` 这类"到第一个左括号为止"的写法**会把 tsc 的续行**（缩进的说明行）
+ *  连进文件名——`[^(]` 是字符类，里面含换行。所以这里按「行首到 `(` 之间不许有空白、且整行以 `)` 冒号 error 收尾」钉死，
+ *  并留一条不变量：逐条码数之和必须等于总报错行数（对不上就是解析器坏了，交 `verdict` 报「这一格没量到」）。 */
+import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+
+/** 会产出假读数的错误码：判据是**「那个位置拿到不存在的东西」**——属性名对不上（TS2339/TS2551）、
+ *  名字查不到（TS2304）、import 了模块里没有的（TS2305/TS2459）、按字符串下标取不存在的键（TS7053）、
+ *  可能 undefined 却直接吃（TS18048）。这一族的共同后果是**探针继续跑、并把 `undefined` 交出去**，
+ *  于是打印行与真读数同形（第 249 页的 `ino` 一案就是 TS2339 那一格）。
+ *
+ *  刻意不纳的两族，各配理由（不靠沉默）：
+ *  ⑴ TS7006（隐式 any 的参数，现读 30 条）——它不改变取到什么，只欠一个标注，产出假读数的概率是零；
+ *  ⑵ TS2353/TS2345/TS2769（调用点形状不符：多给了一个不存在的选项、实参类型不配、重载全不匹配，现读 2/2/1 条）
+ *     ——第二、三种当场崩或当场报错，是**会出声**的坏法；第一种（多余选项被静默丢掉）确实也会产出假读数，
+ *     已单独立成待办：它要按「哪个选项被丢了」逐条判，不是加个码就能收口（加进来会把 5 条别人的存量一次登记成帽）。 */
+export const DANGER_CODES: readonly string[] = ["TS2339", "TS2551", "TS18048", "TS2304", "TS2305", "TS2459", "TS7053"];
+
+/** 存量登记（2026-10-01 现读，第 259 页；只登记**在 HEAD 里**的文件——见文件头那条幽灵登记的理由）。
+ *  **只准调低**：清掉一条就把数字改小，涨一条门就红。 */
+export const DANGER_BASELINE: Readonly<Record<string, number>> = {
+  "outputs/anchor-resolvability-2026-09-23/measure-anchor.mts": 2,
+  "outputs/head-cert-drift-witness-2026-09-27/witness.mts": 3,
+  "outputs/midrun-steering-2026-09-23/measure-steering.mts": 1,
+  "outputs/sandbox-degrade-face-2026-09-24/measure-degrade.mts": 1,
+  "outputs/sequencer-dynamic-2026-10-01/probe.mts": 1,
+  "outputs/sequencer-status-readings-2026-10-01/probe-fail.mts": 1,
+  "outputs/sequencer-status-readings-2026-10-01/probe.mts": 1,
+  "outputs/stagnation-detection-2026-09-23/measure-local-base-rate.mts": 2,
+};
+
+/** 一行的报错 → `{file, code}`；不是报错行回 null（tsc 会夹缩进的说明行与空行）。
+ *  ⚠️ 分组号数错过一次：`(error)` 也占一个组，把 `code` 取成 `m[4]` 就得到常量 "error"——
+ *  门于是永远 0 命中、永远绿，而"解析 51/51"的自证完全抓不到（它只数行，不看取错字段）。
+ *  现在 ⑴ 去掉不吃组的 `(error)`；⑵ 判卷里有一条**真喂一行 TS2339**、断言它被算进危险码。 */
+export function parseTscLine(line: string): { file: string; code: string } | null {
+  const m = /^(\S[^()]*?)\((\d+),(\d+)\): error (TS\d+):/u.exec(line);
+  if (m === null) return null;
+  return { file: m[1]!, code: m[4]! };
+}
+
+/** 逐文件数危险码；顺带把"总报错行数"与"逐条解析出来的行数"配成一对（解析器漏行时必须出声）。 */
+export function tally(rows: readonly string[]): { perFile: Record<string, number>; parsed: number; total: number } {
+  const perFile: Record<string, number> = {};
+  let parsed = 0;
+  let total = 0;
+  for (const line of rows) {
+    if (!/: error TS\d+:/.test(line)) continue;
+    total += 1;
+    const hit = parseTscLine(line);
+    if (hit === null) continue;
+    parsed += 1;
+    if (!DANGER_CODES.includes(hit.code)) continue;
+    perFile[hit.file] = (perFile[hit.file] ?? 0) + 1;
+  }
+  return { perFile, parsed, total };
+}
+
+export type EvidenceVerdict = {
+  ok: boolean;
+  /** 三态要分开印（规则 239）：没跑到／跑完没料／跑完有涨。 */
+  state: "unreadable" | "clean" | "grew";
+  cell: string;
+  grew: { file: string; now: number; cap: number }[];
+  /** 现存量低于登记帽的文件——门只报数，撤不撤由人决定（只准调低是规矩，自动调低等于没有读数）。 */
+  lowered: string[];
+};
+
+/** 判定：把现读对上登记帽。**只准调低**——新文件带危险码、或老文件多一条，都是红。 */
+export function verdict(input: {
+  tsc: { status: number | null; out: string } | null;
+  baseline: Readonly<Record<string, number>>;
+}): EvidenceVerdict {
+  /* 「跑到了没有」在判定这一层也要自证：只信调用方把 status 归一化成 null 是不可靠的（门与判卷都会直接喂 {status:1}）。
+     tsc 只有 0（无错）与 2（有错）是"跑过了并给了结论"；其余（含 1＝用法/内部错、null＝没起来）一律「没量到」。 */
+  if (input.tsc === null || input.tsc.status === null || (input.tsc.status !== 0 && input.tsc.status !== 2)) {
+    return { ok: false, state: "unreadable", cell: "证据面 tsc 没跑到（取不到）⇒ 这一格没量到，不等于干净", grew: [], lowered: [] };
+  }
+  const lines = input.tsc.out.split("\n");
+  const t = tally(lines);
+  if (t.total !== t.parsed) {
+    // 解析器漏行＝分母会静默变小，比"没跑到"更坏（它看着像绿）。宁可不判。
+    return { ok: false, state: "unreadable", cell: `证据面 tsc 输出解析不完整（报错 ${String(t.total)} 行、抽出 ${String(t.parsed)} 行）⇒ 这一格没量到`, grew: [], lowered: [] };
+  }
+  const grew: { file: string; now: number; cap: number }[] = [];
+  const lowered: string[] = [];
+  for (const [file, cap] of Object.entries(input.baseline)) {
+    const now = t.perFile[file] ?? 0;
+    if (now > cap) grew.push({ file, now, cap });
+    else if (now < cap) lowered.push(file);
+  }
+  for (const [file, now] of Object.entries(t.perFile)) {
+    if (!(file in input.baseline) && now > 0) grew.push({ file, now, cap: 0 });
+  }
+  grew.sort((a, b) => (a.file < b.file ? -1 : 1));
+  const nowTotal = Object.values(t.perFile).reduce((a, b) => a + b, 0);
+  const capTotal = Object.values(input.baseline).reduce((a, b) => a + b, 0);
+  const head = `证据面危险码 ${String(nowTotal)} 条／帽 ${String(capTotal)} 条（登记 ${String(Object.keys(input.baseline).length)} 个文件；全量报错 ${String(t.total)} 条）`;
+  if (grew.length > 0) {
+    return { ok: false, state: "grew", cell: `${head}｜⚠️ 涨了 ${String(grew.length)} 个文件（只准调低）：${grew.map((g) => `${g.file} ${String(g.now)}>${String(g.cap)}`).join("、")}`, grew, lowered };
+  }
+  return {
+    ok: true,
+    state: "clean",
+    cell: `${head}${lowered.length === 0 ? "" : `｜${String(lowered.length)} 个文件已清到帽下（把登记值调低即可）：${lowered.join("、")}`}`,
+    grew,
+    lowered,
+  };
+}
+
+/** 跑一次证据面 tsc（配置取仓内 `tsconfig.evidence.json`；取不到回 null，让调用方出声）。 */
+export function runEvidenceTsc(cwd: string): { status: number | null; out: string } | null {
+  const cfg = join(cwd, "tsconfig.evidence.json");
+  if (!existsSync(cfg)) return null;
+  const local = join(cwd, "node_modules", "typescript", "bin", "tsc");
+  const r = existsSync(local)
+    ? spawnSync(process.execPath, [local, "-p", cfg, "--noEmit"], { cwd, encoding: "utf8" })
+    : spawnSync("tsc", ["-p", cfg, "--noEmit"], { cwd, encoding: "utf8" });
+  if (r.error !== undefined) return null;
+  /* tsc 的退出码：**0＝无报错、2＝发现了一处或多处错误**（本仓 `scripts/typecheck.ts` 就是原样转发这个 2），
+     1 留给用法/内部错。上一版把 2 当成"用法错"⇒ 门在真有料时反而报「没跑到」，把红读成了没测——
+     正是本门要拦的那类形状，这次拦到了自己身上。判"跑到了没有"要看码是不是 0/2，别按"0/1"想当然。 */
+  if (r.status !== 0 && r.status !== 2) {
+    return { status: null, out: (r.stdout ?? "") + (r.stderr ?? "") };
+  }
+  return { status: r.status, out: (r.stdout ?? "") + (r.stderr ?? "") };
+}

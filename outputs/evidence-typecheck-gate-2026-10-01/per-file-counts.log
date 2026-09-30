@@ -1,0 +1,16 @@
+总报错 51 条／解析 51 条／含危险码的文件 10 个／危险码合计 16 条
+按码分布：TS7006=30 TS2339=4 TS2459=4 TS2551=2 TS2353=2 TS2345=2 TS7053=2 TS2304=2 TS2769=1 TS18048=1 TS2305=1
+危险族（本门登记的那几族）：TS2339 TS2551 TS18048 TS2304 TS2305 TS2459 TS7053
+  outputs/anchor-resolvability-2026-09-23/measure-anchor.mts 现读 2 条｜登记帽 2
+  outputs/head-cert-drift-witness-2026-09-27/witness.mts 现读 3 条｜登记帽 3
+  outputs/midrun-steering-2026-09-23/measure-steering.mts 现读 1 条｜登记帽 1
+  outputs/sandbox-degrade-face-2026-09-24/measure-degrade.mts 现读 1 条｜登记帽 1
+  outputs/selector-uniqueness-2026-09-30/diagnose.mts 现读 3 条｜登记帽 （没登记 ⇒ 按 0 算，门会红）
+  outputs/sequencer-dynamic-2026-10-01/probe-prod.mts 现读 1 条｜登记帽 （没登记 ⇒ 按 0 算，门会红）
+  outputs/sequencer-dynamic-2026-10-01/probe.mts 现读 1 条｜登记帽 1
+  outputs/sequencer-status-readings-2026-10-01/probe-fail.mts 现读 1 条｜登记帽 1
+  outputs/sequencer-status-readings-2026-10-01/probe.mts 现读 1 条｜登记帽 1
+  outputs/stagnation-detection-2026-09-23/measure-local-base-rate.mts 现读 2 条｜登记帽 2
+verdict：state=grew ok=false
+  cell：证据面危险码 16 条／帽 12 条（登记 8 个文件；全量报错 51 条）｜⚠️ 涨了 2 个文件（只准调低）：outputs/selector-uniqueness-2026-09-30/diagnose.mts 3>0、outputs/sequencer-dynamic-2026-10-01/probe-prod.mts 1>0
+PROBE_EXIT=0

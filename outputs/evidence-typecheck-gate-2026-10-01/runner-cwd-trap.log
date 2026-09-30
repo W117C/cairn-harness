@@ -1,0 +1,70 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+ [31m❯[39m tests/evidence-typecheck.test.ts [2m([22m[2m14 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 4099[2mms[22m[39m
+   [32m✓[39m parseTscLine：只吃报错行，字段不许取错 [2m(2)[22m
+     [32m✓[39m 真报错行 ⇒ file 与 code 都取对（code 必须是 TS 码，不是 'error'）[32m 1[2mms[22m[39m
+     [32m✓[39m 非报错行一律 null：缩进续行／汇总行／空行／不带行列号的行[32m 0[2mms[22m[39m
+   [32m✓[39m tally：计数要能自证，装饰性码不许混进危险码 [2m(2)[22m
+     [32m✓[39m 三条真行混合 ⇒ total 与 parsed 相等、perFile 只含危险码那两条[32m 0[2mms[22m[39m
+     [32m✓[39m 解析不完整时不许静默少算：parsed 与 total 的差由 verdict 读成「没量到」（这里先证分母形状）[32m 0[2mms[22m[39m
+   [32m✓[39m verdict：三态分开印，水位只准调低 [2m(6)[22m
+     [32m✓[39m 没跑到／取不到 ⇒ unreadable（既不是红也不是绿）[32m 0[2mms[22m[39m
+     [32m✓[39m 现读等于帽 ⇒ clean，且不出声喊调低[32m 0[2mms[22m[39m
+     [32m✓[39m 老文件多一条 ⇒ 红，且点名 now>cap[32m 0[2mms[22m[39m
+     [32m✓[39m 新文件带危险码 ⇒ 红（帽按 0 算）——登记不是入口，修它才是[32m 0[2mms[22m[39m
+     [32m✓[39m 清了要出声让人调低，但不许自己悄悄降帽[32m 0[2mms[22m[39m
+     [32m✓[39m 分区证人：grew ∪ lowered ∪ 恰好在帽上的文件 必须盖住 baseline 的每一个键（分格不是筛子）[32m 0[2mms[22m[39m
+   [32m✓[39m 真环境：这一格得在真仓里跑得出东西（规则 237/320） [2m(2)[22m
+     [33m[2m✓[22m[39m 仓内 tsconfig.evidence.json 存在，且 tsc 真跑了（退出码 0 或 2，不是「没跑到」）[33m 1983[2mms[22m[39m
+     [32m✓[39m 登记表里的文件都还在盘上（删了的登记＝下一笔必须把帽撤到 0，不许留幽灵条目）[32m 0[2mms[22m[39m
+   [31m❯[39m 门那一半：runner 的两个拒绝分支各自要出声 [2m(2)[22m
+     [33m[2m✓[22m[39m 拼错的开关 ⇒ 退 2 并点名，不许当成「没给参数」拿默认口径跑[33m 2078[2mms[22m[39m
+[31m     [31m×[31m 口径文件取不到 ⇒ 出声且非零，不许读成干净[39m[32m 34[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/evidence-typecheck.test.ts[2m > [22m门那一半：runner 的两个拒绝分支各自要出声[2m > [22m口径文件取不到 ⇒ 出声且非零，不许读成干净
+[31m[1mAssertionError[22m: expected 'node:internal/modules/package_json_re…' to contain 'tsconfig.evidence.json'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- tsconfig.evidence.json[39m
+[31m+ node:internal/modules/package_json_reader:314[39m
+[31m+   throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);[39m
+[31m+         ^[39m
+[31m+[39m
+[31m+ Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'tsx' imported from /private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/dsh-evtsf-BPupx1/[39m
+[31m+     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:314:9)[39m
+[31m+     at packageResolve (node:internal/modules/esm/resolve:768:81)[39m
+[31m+     at moduleResolve (node:internal/modules/esm/resolve:855:18)[39m
+[31m+     at defaultResolve (node:internal/modules/esm/resolve:985:11)[39m
+[31m+     at #cachedDefaultResolve (node:internal/modules/esm/loader:747:20)[39m
+[31m+     at ModuleLoader.resolve (node:internal/modules/esm/loader:724:38)[39m
+[31m+     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:320:38)[39m
+[31m+     at onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:680:36)[39m
+[31m+     at TracingChannel.tracePromise (node:diagnostics_channel:350:14)[39m
+[31m+     at ModuleLoader.import (node:internal/modules/esm/loader:679:21) {[39m
+[31m+   code: 'ERR_MODULE_NOT_FOUND'[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ Node.js v22.23.2[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/evidence-typecheck.test.ts:[2m166:19[22m[39m
+    [90m164|[39m       const { status, out } = runGate([], empty);
+    [90m165|[39m       expect(status, `cwd 换成空目录后现读 ${String(status)}：取不到口径却退 0 ⇒ 「压根没跑…
+    [90m166|[39m       expect(out).toContain("tsconfig.evidence.json");
+    [90m   |[39m                   [31m^[39m
+    [90m167|[39m     } finally {
+    [90m168|[39m       rmSync(empty, { recursive: true, force: true });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m13 passed[39m[22m[90m (14)[39m
+[2m   Start at [22m 01:18:26
+[2m   Duration [22m 4.22s[2m (tests 99%, transform 1%)[22m
+

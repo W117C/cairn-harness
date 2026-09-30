@@ -134,6 +134,11 @@ export const GATES: readonly string[] = [
   "head-cert-check",
   "mutate-verify",
   "mutate-needles-check",
+  // 第 259 页（任务 #4）：证据面（`outputs/**/*.mts`）里"读一个不存在的东西"那一族类型错——
+  // 主 tsconfig 的 include 只有 src/scripts/tests，探针全在门外，而 tsx 只剥类型：第 249 页一把探针因此印了 12 圈假「不变」。
+  // 现读单价 **2.06s**（工作树现读 51 条报错／危险码 16 条／帽 12 条——多出的 4 条是隔壁在飞、未入库的两个探针，见 `scripts/lib/evidence-typecheck.ts` 文件头），高于认证面那条「实测 <1.5s 全进」的线 ⇒ **只进 GATES，不进 CERT_GATES**
+  //   （进认证面要给门面 +7.7%，不划算；它由 `pnpm gates` 与交笔时手动跑覆盖）。登记表只准调低，见 `scripts/lib/evidence-typecheck.ts`。
+  "evidence-typecheck-check",
 ];
 
 /** 认证面**替它跑**的那几道门（第 224 页 #36）。

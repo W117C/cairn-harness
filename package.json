@@ -12,6 +12,7 @@
   "scripts": {
     "gates": "node --import tsx scripts/gates.ts",
     "mutate-needles-check": "node --import tsx scripts/mutate-verify.mjs --check-needles",
+    "evidence-typecheck-check": "node --import tsx scripts/evidence-typecheck-check.ts",
     "facts": "node --import tsx scripts/facts.ts",
     "tool-choice": "node --import tsx scripts/tool-choice.ts",
     "typecheck": "node --import tsx scripts/typecheck.ts",
