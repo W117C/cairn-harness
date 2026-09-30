@@ -8989,6 +8989,21 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 8. **刻意未做**：① 逐条（而非逐页）登记；② 「无身份行 102 对」不设帽；③ 把 `evidence-typecheck-check` 接进交笔流水线（这一记漏跑的正解）——下一条就做。
 9. **清场**：本笔两棵树 `verify-e02b87f`、`head-cert-56effe2` 各核 0 项在飞，**未回收**（等用户点头）。
 
+### 2026-10-01 · 第 272 页 · 「交笔时手动跑」不是覆盖机制：把 `evidence-typecheck-check` 按类买进认证门面（表 1168→1171，判卷 3429→3430），并改掉我自己那把尺上「拿盘上状态当活证」的第二半
+
+1. **这一页的动因不是漏跑，是承诺没有观测者**。第 259 页给这道门写的补偿是「单价 2.06s 高于门面那条『实测 <1.5s 全进』的线 ⇒ 只进 `GATES`、不进 `CERT_GATES`，由 `pnpm gates` 与**交笔时手动跑**覆盖」。我在第 268/269/270/271 连续四笔交笔都没手动跑它，于是**自己第 269 页入库的探针**带着一条类型缺陷落了库：`outputs/cred-unrecoverable-sweep-2026-10-01/sweep.mts(63,5): error TS7053`。这四笔每一笔都跑了 `head-cert`、每一笔凭证都写了「门 19/20 绿」——那句话是真的，而它**恰好绕开了这一格**（规则 292 同族：绿认证与门红可以并存，因为门根本不在被跑的那张表里）。
+2. **修法按类，不按单价线**。`CERT_GATES` 从 20 道买成 **21 道**；现读预算之和 `50000 → 55300ms`（`node --import tsx` 直接对本模块求和，判卷那条线是 ≤60000ms）。新的准确说法写进门表注释：「**≤1.5s 全进；超线的只有『每笔交笔都要成立』这一类能买**」——同族先例就在表里：`mutate-needles-check` 实测 9.7s，买的理由和这次一样。单价声明（现读，主检出工作树，取料 `outputs/gates-outside-cert-2026-10-01/evtc-worktree.log`）：`证据面危险码 16 条／帽 12 条（登记 8 个文件；全量报错 52 条）…（2644ms｜解析 52/52 条）`。
+3. **门表那句旧声称是假的，就在原处更正**（`scripts/gate-manifest.ts` 的 `GATES` 与 `CERT_GATES` 两段注释）：不删历史，写明「第 259 页当初写的是……**那句补偿在 4 笔之后被证伪**」。判卷新增一条（`tests/cert-gate-face.test.ts`）钉三半：这道门**在门面里**、**同时在 `GATES` 上**（名单不许变成第二事实源）、**预算不低于实测两倍**（`2 × 2644ms`）——第三半防的是"为了进门面随手填个数"。
+⑷ 我在数组里插了一段多行注释，所以先跑了一遍判卷那条同源核对的秒级自证（`node --import tsx` 直接调 `certGatePlan(表原文)`）：`state=ok｜解析出 21 道｜表长 21｜解析与表逐字一致=true`——注释块没把解析器读成 `broken`，也没被读成"名单为空"（规则 330 那一族：形状变了必须出声）。
+4. **我自己那条 TS7053 的修复按「读数不变」做**：先重跑同一把尺（`sweep-after-type-fix.log`：`小计：未点名 9 页／19 条读数 ⇒ runner 类有原文 7 条、真不可回查 12 条`，与修改前逐字相同），再把 `kind()` 收成 `FaceKind | null` ＋ 调用点显式 `continue`；门的现读 `17 → 16`。**这条修复在本页入库**（第 271 页凭证第 7 项已声明「不进那一笔、随第 272 页入库」）。
+5. **更正第 271 页凭证第 7 项的一处归因**：我写「剩下 4 条在两份不是我写的**已入库**探针里」——**假的**。现读 `git ls-files --error-unmatch outputs/selector-uniqueness-2026-09-30/diagnose.mts outputs/sequencer-dynamic-2026-10-01/probe-prod.mts` 两份都报 `did not match any file(s) known to git` ⇒ 它们是隔壁**在飞、未入库**的文件。后果不是小事：这意味着 HEAD 侧这一格本来就贴帽（`16 = 12 登记 ＋ 4 在飞`），而我当时把它读成"仓里有 4 条没人认领的债"。任务 #14 已按现读改写。**买这道门之后这一格自己会出声**：那 4 条一旦落库，每一趟认证都会红，不再需要我记得手动跑。
+6. **第二处真红是 `pnpm gates` 那趟抓的，不是我记得的**（这正是"跑一遍全表"的价值，也解释为什么第 5 项的归因错了整整一晚没人喊）：全表 31 道跑完 `GATES_EXIT=1`，红 6 道——`test`（`1 failed | 3428 passed (3429)`）、`gate-check`（HEAD 常驻，任务 #9）、`head-cert-check`（`exit=1 192971ms`，被前两道带红）、`mutate-verify`（`exit=124 1215007ms`＝超预算中止，不是判卷红：尾巴上逐条都是 `✅ … 本机实测 0.9s／2 拍`）、`mutate-needles-check`（`exit=1 13063ms`，红的正是本笔那两支新锚点＝**钉在飞文本**，落库后归零）、`evidence-typecheck-check`（`exit=1 2794ms`，工作树侧那 4 条在飞的危险码）。
+   **回答本页要量那一格：认证门面外那 11 道里现在有 4 道红**（`test`／`head-cert-check`／`mutate-verify`／`evidence-typecheck-check`），绿的 7 道是 `typecheck`／`e2e`／`tools-check` 8677ms／`map-check` 71832ms／`plugins-check` 14973ms／`supervisor-check` 8399ms／`web-fetch-check`。其中真正"没人跑就没人知道"的那一格——证据面——本笔已买进门面；其余四道各有归属（`test` 这一道是判卷自己，红在本页第 6 项那处尺坏）。`test` 那条红落在**我自己的尺**上：`tests/prose-needle-scan.test.ts:761` 的 `else` 分支要求「在飞清单里至少有一个 `tests/` 或 `src/` 文件」，而 06:23 那一趟工作树只有 `outputs/**` 未提交 ⇒ **只剩非源码在飞时这把尺必红**。第 108 页立的纪律（「今天有没有人在飞是盘上的状态，不是这把尺的标准」）当时只改了 `if` 那一半，同一形状在 `else` 里活到今天。改法：换成与树脏净无关的**定义式配对**——`multiCopy` 里按在飞清单筛出的条数必须等于尺自报的 `inFlightMultiCopy`（两边同空也成立；`splitByInFlight` 若改用另一套成员判据就当场红）。
+7. **给这把尺装第一次的结构证人**：新锚点 `prose-scan-inflight-split-swapped`（把 `inFlight.has(r.file) ? flying : committed` 对调）。它买得住是因为 `tests/prose-needle-scan.test.ts:295` 那一组是**合成输入**（假 rows ＋ 真在飞集合），干净树上也可观测；而下面那段「真仓扫」的配对断言在干净树上两侧同为 0，突变不可观测——**那种格子买不了锚点，只能靠合成用例**。顺带报一格存量：`grep -c prose-needle-scan scripts/mutate-verify.mjs` 修改前＝**0**，即这支 1100 行的尺（第 93–118 页建的顶包候选／裸名字两族）此前在变异表里一条目都没有。已立后续任务补另几格。
+8. **自我抓到的两处工具链自伤**（同族，见记忆 `feedback-edit-quote-mangling` 与 `remeasure-before-asserting`）：① 往 `gate-manifest.ts` 的 JSDoc 追加正文时把闭合的 `*/` 一起写进去了 ⇒ 落地是语法错（`ERROR: Unexpected "*"` at 164:1），由一次 `node --import tsx` 求和顺手抓到，不是 tsc 先喊；② 注释里先写「预算之和 51000 → 56300」是**凭记忆的数字**，真求和是 `50000 → 55300`，已在原处改成正文里那条现读出处。
+9. **刻意未做**：① `tools-check` 8.6s／`supervisor-check` 8.0s／`plugins-check` 15.4s／`map-check` 53.0s 仍不进门面（超线且不属于「每笔都要成立」那一类）；② 隔壁那 4 条危险码不替他们改（未入库文件是别人的凭证原文）；③ `prose-needle-scan.ts` 其余格子（`levelVsCap` 的帽接线、裸名字两族）本笔只补了一支证人；④ 把这道门接进交笔 Skill 的第一步要改用户目录里的 Skill 文件，**等明文授权**，本笔只把它做成"不需要人记得跑"的门面格子。
+
+
 
 
 

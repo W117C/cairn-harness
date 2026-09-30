@@ -120,4 +120,16 @@ describe("名单自己的边界（这条门不能变成一次 20 分钟的认证
     expect(total).toBeLessThanOrEqual(60_000);
     for (const g of CERT_GATES) expect(g.budgetMs).toBeGreaterThanOrEqual(400);
   });
+
+  /* 第 272 页。动因是一条被证伪的补偿声称：`evidence-typecheck-check` 建门时（第 259 页）写的是
+     「单价 2.06s 高于 <1.5s 那条线 ⇒ 不进认证面，由 `pnpm gates` 与**交笔时手动跑**覆盖」，
+     而我在第 268/269/270/271 连续四笔都没手动跑 ⇒ 自己第 269 页入库的探针带着一条 TS7053 落了库。
+     ⇒ 「人肉记得跑」不是覆盖机制（规则 292 同族）。这一条用例钉的是**类**：
+       每笔交笔都要成立的判据不许因单价线被挡在门外；挡在门外的每一道都得有真证人，不能只有散文。 */
+  it("交笔必跑的门按类进门面：`evidence-typecheck-check` 在册且预算不低于实测两倍", () => {
+    const row = CERT_GATES.find((g) => g.name === "evidence-typecheck-check");
+    expect(row, "不在门面＝这道门又退化成「交笔时手动跑」那种没人守的承诺").toBeDefined();
+    expect(GATES, "门面名单不许变成第二事实源：这道门必须同时在 `GATES` 上").toContain("evidence-typecheck-check");
+    expect(row!.budgetMs, "预算写成低于实测两倍＝拿一次读数当上限，负载一动就红").toBeGreaterThanOrEqual(2 * 2644);
+  });
 });

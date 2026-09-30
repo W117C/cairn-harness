@@ -752,13 +752,17 @@ describe("真仓扫：这把尺自己不许空载", () => {
     // 「今天有没有人在飞」是盘上的状态，不是这把尺的标准 ⇒ 不许拿它当活证（HEAD-only 认证跑就在干净树上，
     //   那一支这里必须读到 0 且不红）。活证改成**互斥配对**：在飞清单为空 ⇒ 所有 flying* 必须同时归 0，
     //   否则"排除在飞"是在凭空抹格子（第 108 页：原断言 `> 0` 在同 HEAD 隔离树上必红，把别人的没提交当成我的尺坏）。
+    // ⚠️ 第 272 页实测：上面那条纪律只改了**if 那一半**，else 还挂着 `inFlightFiles.some(tests/|src/)`——
+    //   它要求「此刻在飞的文件里必须有一个源码或判卷文件」，于是**只剩 outputs 在飞时这把尺必红**
+    //   （`pnpm gates` 于 06:23 那一趟就是这么红的：那时工作树只有 `outputs/**` 未提交）。
+    //   换成与树脏净无关的**定义式配对**：按在飞清单筛出的多副本数必须等于尺自报的那一半——
+    //   隔壁改没改源码都成立，而分面漏一半（`splitByInFlight` 用另一套成员判据）会当场红。
+    expect(r.multiCopy.filter((v) => r.inFlightFiles.includes(v.file)).length).toBe(r.inFlightMultiCopy);
     if (r.inFlightFiles.length === 0) {
       expect(r.inFlightMultiCopy).toBe(0);
       expect(r.inFlightDrift.length).toBe(0);
       expect(r.inFlightBareName.length).toBe(0);
       expect(r.committedMultiCopy).toBe(r.multiCopy.length);
-    } else {
-      expect(r.inFlightFiles.some((f) => f.startsWith("tests/") || f.startsWith("src/"))).toBe(true);
     }
   });
 

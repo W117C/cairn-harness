@@ -136,8 +136,9 @@ export const GATES: readonly string[] = [
   "mutate-needles-check",
   // 第 259 页（任务 #4）：证据面（`outputs/**/*.mts`）里"读一个不存在的东西"那一族类型错——
   // 主 tsconfig 的 include 只有 src/scripts/tests，探针全在门外，而 tsx 只剥类型：第 249 页一把探针因此印了 12 圈假「不变」。
-  // 现读单价 **2.06s**（工作树现读 51 条报错／危险码 16 条／帽 12 条——多出的 4 条是隔壁在飞、未入库的两个探针，见 `scripts/lib/evidence-typecheck.ts` 文件头），高于认证面那条「实测 <1.5s 全进」的线 ⇒ **只进 GATES，不进 CERT_GATES**
-  //   （进认证面要给门面 +7.7%，不划算；它由 `pnpm gates` 与交笔时手动跑覆盖）。登记表只准调低，见 `scripts/lib/evidence-typecheck.ts`。
+  // ⚠️ 第 259 页当初写的是「单价 2.06s 高于 <1.5s 那条线 ⇒ 只进 GATES、不进 CERT_GATES，由交笔时手动跑覆盖」——
+  //   **那句补偿在 4 笔之后被证伪**（我在 268/269/270/271 都没手动跑，于是自己入库的探针带着 TS7053 落了库）。
+  //   第 272 页按「每笔交笔都要成立的判据」这一类把它买进 `CERT_GATES`（单价与预算的现读出处都在那张表里那道门旁边）。
   "evidence-typecheck-check",
 ];
 
@@ -151,12 +152,15 @@ export const GATES: readonly string[] = [
  *  对认证树判卷 `Duration 121.14s` 是 **+15.4%**——第 223 页那句「≈+13.7%」是买之前的推算，被这个实测替掉（规则 260）；
  *  `tools-check`(8.6s)／`map-check`(4.8s)／`plugins-check`(15.2s)
  *  与那 16 道**没量过的**门都不进——"全吞进来"的性价比要另一笔单独量（第 224 页 §未证）。
- *  ⚠️ 上面这三行数字已被第 226 页的现读替掉一半：另 14 道逐道量完后按「实测 <1.5s 全进」又买十道 ⇒ 现在 20 道；
+ *  ⚠️ 上面这三行数字已被第 226 页的现读替掉一半：另 14 道逐道量完后按「实测 <1.5s 全进」又买十道 ⇒ 那趟是 20 道（**第 272 页按类再买一道 ⇒ 现读 21 道**，见下面那道 `evidence-typecheck-check`）；
  *  而 `map-check` 在主树现读是 **53.0s**（这里曾记 4.8s，量的是认证树 @`2becb8e`）——差的十倍来自取料面：
  *  主树刚被本会话写过，影响面要重建；认证树整棵同秒、"按 mtime 取前 N" 那条帽见规则 276。
  *  ⇒ **门的单价要连着"跑它的那棵树"一起记**，否则下一条预算是拿别的机器的账编的（规则 260）。
- *  仍不进门面的四道（全超这条线）：`tools-check` 8.6s／`supervisor-check` 8.0s／`plugins-check` 15.4s／`map-check` 53.0s；
+ *  仍不进门面的四道（全超这条线，且**不属于**下面那一类）：`tools-check` 8.6s／`supervisor-check` 8.0s／`plugins-check` 15.4s／`map-check` 53.0s；
  *  要不要为它们单独花一次认证，属第 223 页 §5⑶ 那一格裁决。
+ *  ⚠️ 「<1.5s」这条线在**第 272 页**有了一个按类开的例外：`evidence-typecheck-check`（2.6s）买进门面，
+ *  因为它和 `mutate-needles-check`（9.7s）一样是「每笔交笔都要成立的判据」，而给它的那条补偿（「交笔时手动跑」）被四笔漏跑证伪了。
+ *  ⇒ 这条线的准确说法不是「单价 ≤1.5s」，而是「**≤1.5s 全进；超线的只有『每笔都要成立』这一类能买**」，判卷钉的就是这一类（`tests/cert-gate-face.test.ts`）。
  *  `budgetMs` 是**读数不是判决**：超预算只出声，不把认证判红（规则 256，秒数会被本机负载与隔壁会话挪动）。 */
 export const CERT_GATES: readonly { name: string; budgetMs: number }[] = [
   { name: "no-progress-check", budgetMs: 1100 },     // 实测 514ms
@@ -183,6 +187,16 @@ export const CERT_GATES: readonly { name: string; budgetMs: number }[] = [
   { name: "cost-per-progress-check", budgetMs: 1000 },  // 实测 499ms
   { name: "gym-check", budgetMs: 2400 },             // 实测 1188ms（这档里最贵的一道，仍 <1.5s 线内）
   { name: "gate-check", budgetMs: 5400 },            // 实测 2659ms
+  /* 第 272 页：这道门越过「<1.5s」那条线买进来，动因是一条**被证伪的补偿声称**——
+     `evidence-typecheck-check` 原写「不进门面，由 `pnpm gates` 与交笔时手动跑覆盖」，而我在第 268/269/270/271
+     连续四笔交笔都没手动跑它，于是**我自己第 269 页入库的探针**带着一条 TS7053 落了库（`outputs/cred-unrecoverable-sweep-2026-10-01/sweep.mts`）。
+     ⇒ 「交笔时人肉跑」不是覆盖，是没人守的承诺（规则 292 同族：`cert exit=0` 与门红并存）。
+     它与 `mutate-needles-check` 是同一类：不是「某棵树偶发的读数」，而是**每笔交笔都要成立的判据**，所以按类买、不按单价线买。
+     单价现读 **2644ms**（主检出工作树、2026-10-01，取料 `outputs/gates-outside-cert-2026-10-01/evtc-worktree.log`）⇒ 预算 5300ms 是两倍档；
+     买进来后认证门面预算之和 50000 → **55300ms**（现读：`node --import tsx` 直接对本模块求和，判卷钉的是 ≤60000ms 那条线，见 `tests/cert-gate-face.test.ts`）。
+     ⚠️ 这一格**在认证树里读的是 HEAD**：主检出那 4 条来自两份隔壁未入库的探针（`scripts/lib/evidence-typecheck.ts` 文件头记着），
+     它们一旦入库就会让每次认证红——这正是买这道门想要的效果，不再指望我记得手动跑。 */
+  { name: "evidence-typecheck-check", budgetMs: 5300 }, // 实测 2644ms（证据面危险码，第 259 页建门／第 272 页买进门面）
   { name: "mutate-needles-check", budgetMs: 20000 }, // 实测 9756ms（针脚体检：钉在飞文本／判卷未入库都靠它）
 ];
 

@@ -1,0 +1,155 @@
+== pnpm gates ==
+门清单（31 道，清单即事实源）：typecheck test e2e sandbox:check fork-check gate-check docs-check autonomy-check compaction-check tools-check map-check prune-check provider:check memory-check plugins-check security-check gym-check routing-check supervisor-check model-surface-check prefix-churn-check prompt-surface-check replay-determinism-check no-progress-check cost-per-progress-check head-import-check web-fetch-check head-cert-check mutate-verify mutate-needles-check evidence-typecheck-check
+执行器：pnpm run
+  清单漂移校验：✅ GATES ↔ package.json scripts 一致（无孤儿验收脚本）
+
+  ▶ typecheck …  ✅ typecheck          exit=0  4656ms
+      └ typecheck: tsc --noEmit 通过（0 条报错）✅
+  ▶ test …  ❌ test               exit=1  142836ms
+      ── 失败输出尾 12 行 ──
+      ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+      
+      
+       Test Files  1 failed | 258 passed (259)
+            Tests  1 failed | 3428 passed (3429)
+         Start at  06:23:25
+         Duration  142.05s (tests 80%, import 18%, transform 2%)
+      
+          Isolate  259 workers spawned · ~58ms startup each (spawn + environment, per file)
+                   at least ~15.02s faster with isolate: false — reuses workers across files instead of one per file
+      
+      [ELIFECYCLE] Test failed. See above for more details.
+      完整输出已落盘： /Users/ze/Downloads/deepseek harness/.tmp/gate-failures/test.log（这里只贴尾部 12 行）
+  ▶ e2e …  ✅ e2e                exit=0  3070ms
+      └ ✅ 交付时 sha256 与开工冻结逐字一致
+  ▶ sandbox:check …  ✅ sandbox:check      exit=0  870ms
+      └ ✅ ⑤ 尾部结论留住（只留头部时这条必红）
+  ▶ fork-check …  ✅ fork-check         exit=0  516ms
+      └ ✅ 越界 eventId 被拒绝（fail loud）
+  ▶ gate-check …  ❌ gate-check         exit=1  3087ms
+      ── 失败输出尾 12 行 ──
+        ✅ 批准后 write_file 真实执行（写禁解锁）
+        ✅ verify 第 1 次即通过
+        ✅ clarify_requested 携带问题清单
+        ✅ clarify 表单提交值逐字挂回原 tool_use id
+      [gate-check] 靶子修复后: 0 failed | 3 passed
+        ✅ 靶子 1 失败 → 0 失败（verify 真实跑通测试）
+      [gate-check] 暗卷跳过（无 M0_API_KEY）
+      UNVERIFIED=1
+        ✅ 收口时判卷文件 sha256 仍与冻结基线逐字一致
+        ❌ H7 冻结表与判卷区目录双向一致（新增判卷文件不许逃出冻结面；新判卷目录须登记进 src/frozen.ts 的 areas）：{"onDiskNotInTable":["fixtures/impact/accuracy-repo/api.js","fixtures/impact/accuracy-repo/ground-truth.json","fixtures/impact/accuracy-repo/helpers.js","fixtures/impact/accuracy-repo/index.ts","fixtures/impact/accuracy-repo/legacy-math.ts","fixtures/impact/accuracy-repo/logger.ts","fixtures/impact/
+      [gate-check] 失败: 1 项断言未通过
+      [ELIFECYCLE] Command failed with exit code 1.
+      完整输出已落盘： /Users/ze/Downloads/deepseek harness/.tmp/gate-failures/gate-check.log（这里只贴尾部 12 行）
+  ▶ docs-check …  ✅ docs-check         exit=0  856ms
+      └ UNVERIFIED=3
+  ▶ autonomy-check …  ✅ autonomy-check     exit=0  800ms
+      └ ✅ 收口时判卷文件 sha256 仍与冻结基线逐字一致
+  ▶ compaction-check …  ✅ compaction-check   exit=0  633ms
+      └ [compaction-check] 断言全过，但有 1 项未证（不得宣称全绿）
+  ▶ tools-check …  ✅ tools-check        exit=0  8677ms
+      └ ✅ tools-check 全部通过：grep/glob/read_file/lsp 四工具三项全绿；edit_file ①② 显式 n/a（输出有界），③ 相对路径绿。
+  ▶ map-check …  ✅ map-check          exit=0  71832ms
+      └ ✅ map-check 全部通过
+  ▶ prune-check …  ✅ prune-check        exit=0  698ms
+      └ ✅ prune-check 全部通过
+  ▶ provider:check …  ✅ provider:check     exit=0  540ms
+      └ [provider:check] 断言全过，但有 1 项未证（不得宣称全绿）
+  ▶ memory-check …  ✅ memory-check       exit=0  709ms
+      └ ✅ memory-check 全部通过（两层布局/remember/注入预算/索引上限/安全/双轨/压缩接缝）
+  ▶ plugins-check …  ✅ plugins-check      exit=0  14973ms
+      └ plugins-check: 42 ✅ / 0 ❌ / 1 未证
+  ▶ security-check …  ✅ security-check     exit=0  814ms
+      └ [security-check] 全部断言通过 ✅（43 ✅ / 0 ❌）
+  ▶ gym-check …  ✅ gym-check          exit=0  1388ms
+      └ [gym-check] 全部断言通过 ✅（33 ✅ / 0 ❌）
+  ▶ routing-check …  ✅ routing-check      exit=0  717ms
+      └ [routing-check] 全部断言通过 ✅（39 ✅ / 0 ❌）
+  ▶ supervisor-check …  ✅ supervisor-check   exit=0  8399ms
+      └ [supervisor-check] 全部断言通过 ✅（81 ✅ / 0 ❌）
+  ▶ model-surface-check …  ✅ model-surface-check exit=0  725ms
+      └ ✅ MS6-core 不得被自动砍 — unresolvable=true，core 全在=true（丢 30 把，仍超 50685 字符）
+  ▶ prefix-churn-check …  ✅ prefix-churn-check exit=0  814ms
+      └ ✅ PC9-免费车只在断过头的那一轮放行 — 门槛不可达（10^9）下 8 轮：落盘轮=[2,4,6] 压缩轮=[2,4,6] 有量却推迟的轮=4｜对照臂 门槛=1 时：没压缩却落盘的轮 7、有可剪量的轮 7
+  ▶ prompt-surface-check …  ✅ prompt-surface-check exit=0  890ms
+      └ [prompt-surface] 全部通过 ✅
+  ▶ replay-determinism-check …  ✅ replay-determinism-check exit=0  580ms
+      └ ✅ RD4-每条登记的债都必须真能吸收同形差异（分类器复查） — 登记 2 条债，逐条构造同形差异都能吸收
+  ▶ no-progress-check …  ✅ no-progress-check  exit=0  538ms
+      └ ✅ NP5-语料 sha256 与冻结表逐字一致 — 语料 7 份｜冻结表核对 7 份：不在表上或哈希对不上 0
+  ▶ cost-per-progress-check …  ✅ cost-per-progress-check exit=0  532ms
+      └ ✅ CP4-均值只从可测样本取且点名跳过 — 均值=22979（期望 22979）用了 4 条、跳过 2 条[real-red-verify-stagnation:no-progress-boundary,synth-no-usage:no-usage]｜成功跑 4 条：带 verified 边界 4 条、取不到边界…
+  ▶ head-import-check …  ✅ head-import-check  exit=0  689ms
+      └ head-import-face: ✅ import 面自洽（或在内存量已逐条带理由）
+  ▶ web-fetch-check …  ✅ web-fetch-check    exit=0  568ms
+      └ ✅ WF7-没有能关掉红线的开关 — 放行开关扫描：命中 0
+  ▶ head-cert-check …  ❌ head-cert-check    exit=1  192971ms
+      ── 失败输出尾 12 行 ──
+      
+      == 认证汇总 ==
+        TREE=48071b8 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-gate-head-cert.lock）
+        Test Files 259 passed (259)｜Tests 3429 passed (3429)｜exit=0（退出码直接取，不接管道）
+        并发判卷=起前 0 套／跑完 0 套（两端独占）
+        本趟墙钟 191.00s（同一进程 hrtime 实测·口径＝起跑→汇总那一行，不含提前退出的那些趟）
+        贴帽读数（缺省＝vitest 默认 5000ms（config 未写 testTimeout））：3429 条里 0 条用时 ≥ 有效预算 80%｜无显式预算按缺省算 3176 条｜标题非字面量（it.each／插值／拼接，按缺省算）114 条｜预算没落到 0 条｜无｜离帽余量最近：tests/m3c.test.ts·M3c pipeline 哑 sequencer（零 LLM） 未获 15182ms/25000ms=61%；tests/head-cert-deps.test.ts·清场读数：常驻残留的 scratch 树要自己报数（任务 #33）  2463ms/5000ms=49%；tests/gate-kill.test.ts·门禁跑命令的超时支路 子进程赖着不走：宽限到点整组强杀，输出如实写「 1607ms/5000ms=32%
+        逐条日志：/tmp/dsh-head-cert-48071b8
+        回收这棵树（规则 120，别留残留）：git worktree remove --force .worktrees/gate-head-cert
+        常驻残留树=29（/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-12b1931@12b1931、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-16d891b@16d891b、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-2068d6c@2068d6c、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-2b3763f@2b3763f、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-2cd6e79@2cd6e79、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-4806388@4806388、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-56effe2@56effe2、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-869cf73@869cf73、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-9e44bba@9e44bba、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-b40909b@b40909b、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-bd5ec44@bd5ec44、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-dfe2d6c@dfe2d6c、/Users/ze/Downloads/deepseek harness/.worktrees/verify-12b1931@12b1931、/Users/ze/Downloads/deepseek harness/.worktrees/verify-16d891b@16d891b、/Users/ze/Downloads/deepseek harness/.worktrees/verify-2068d6c@2068d6c、/Users/ze/Downloads/deepseek harness/.worktrees/verify-2b3763f@2b3763f、/Users/ze/Downloads/deepseek harness/.worktrees/verify-2cd6e79@2cd6e79、/Users/ze/Downloads/deepseek harness/.worktrees/verify-43ace9e@43ace9e、/Users/ze/Downloads/deepseek harness/.worktrees/verify-451f4be@451f4be、/Users/ze/Downloads/deepseek harness/.worktrees/verify-4806388@4806388、/Users/ze/Downloads/deepseek harness/.worktrees/verify-48e30a8@48e30a8、/Users/ze/Downloads/deepseek harness/.worktrees/verify-6aa6e9d@c195135、/Users/ze/Downloads/deepseek harness/.worktrees/verify-869cf73@869cf73、/Users/ze/Downloads/deepseek harness/.worktrees/verify-9a2fe61@9a2fe61、/Users/ze/Downloads/deepseek harness/.worktrees/verify-9e44bba@9e44bba、/Users/ze/Downloads/deepseek harness/.worktrees/verify-a5197eb@a5197eb、/Users/ze/Downloads/deepseek harness/.worktrees/verify-b40909b@b40909b、/Users/ze/Downloads/deepseek harness/.worktrees/verify-dfe2d6c@dfe2d6c、/Users/ze/Downloads/deepseek harness/.worktrees/verify-e02b87f@e02b87f）／另有 2 棵不住本仓 scratch 面的残留形树（/private/tmp/dsh-foreign-witness-A、/private/tmp/dsh-foreign-witness-B）＝不是本仓建的，别照上面那条回收命令删它们（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）
+        汇总已同步落盘（不靠 stdout 的尾）：/tmp/dsh-head-cert-48071b8/summary.txt
+      [ELIFECYCLE] Command failed with exit code 1.
+      完整输出已落盘： /Users/ze/Downloads/deepseek harness/.tmp/gate-failures/head-cert-check.log（这里只贴尾部 12 行）
+  ▶ mutate-verify …  ❌ mutate-verify      exit=124  1215007ms
+      ── 失败输出尾 12 行 ──
+      ✅ exec-cause-ok-guard-dropped — 去掉「成功回执不贴」那道守卫 ⇒ `pnpm install` 成功但正文里带一行 ERR_PNPM 就被判成「命令根本没跑成」——把绿的说成红的，比不归因更坏。针脚在 09-30（#24 那笔）跟着字节挪过一次：成功支从 `return r` 改成 `return stamped`（要把 exitCode/timedOut 也落到成功支），守卫的语义一个字没动 ⇒ 只改指字节、不动 expectFail（规则 284） ｜本机实测 0.9s／2 拍
+      ✅ exec-cause-class-maps-wrong-text — 127 那一类错领了包管理器的文案 ⇒ 模型按「等依赖装好」去等，而真因是命令名不在 PATH（归因错了比不归因更贵：它会指一条不存在的出路） ｜本机实测 0.9s／2 拍
+      ✅ prompt-cost-face-drops-specs — 固定面退回只数系统提示 ⇒ 标签还说「面」而分子少了九成（default 档规格 10,131 字符 = 提示的 15.1 倍），整条成本尺继续把主要成本当不存在 ｜本机实测 0.6s／2 拍
+      ✅ prompt-cost-face-pools-modes — 逐档面并成一条（只算第一档）⇒ read-only 的 8 把与 default 的 20 把被并成一个数，「只读会话便宜多少」这项决策再没有读数（并集读数不能当「每一档都成立」的证人，规则 255） ｜本机实测 0.6s／2 拍
+      ✅ prompt-cost-share-clamp-restored — 把 `Math.min(1, …)` 夹住装回来 ⇒ 18/19 条流一起报 100%，那片相同的数正是规则 242 说的「常数签名」；夹住之后「系数把成本放大一倍」这件事在读数里彻底消失 ｜本机实测 0.6s／2 拍
+      ✅ prompt-cost-admissible-not-tightest — 系数自检取第一条流而不是最紧那条 ⇒ 反解出的「下界」偏小，按它摊仍然估超实测输入（自检给出假安心，比没有自检更坏） ｜本机实测 0.6s／2 拍
+      ✅ prompt-cost-overshoot-not-counted — 超界计数写死 0 ⇒ note 还在逐行说，但汇总与「这条尺有几行不成立」这一格变成常数，读的人不会再去看那一列（三态要分开印，缺项要单列计数，规则 239/242） ｜本机实测 0.6s／2 拍
+      ✅ prompt-fixed-cost-rows-use-prompt-only — 逐档面算出来了、也印了，但摊给每条流时实参仍递提示那份（「算出来不接」第四次，这次在成本尺）⇒汇总里那些固定 token 全部偏小一个数量级，而头部几行看着完全正确 ｜本机实测 1.3s／2 拍
+      ✅ shard-plan-empty-shards-allowed — 片数按**请求的片数**开而不是按 min(片数, 宿主数) ⇒ 条数少于片数时造出空片，空片会被并进「这一片跑了 0 条且判定已杀死」那格——读者以为整表都验过（三态里「没尺」被读成 0，规则 239） ｜本机实测 0.7s／2 拍
+      ✅ shard-plan-missing-hardcoded — 分片自检里 missing 写成常数空数组 ⇒ 「漏跑」这一格永远绿，而「不重不漏」这句话仍然印得出来。漏跑是这一层最坏的读数形状：四份日志合起来比表短，读者以为整表跑过 ｜本机实测 0.7s／2 拍
+      
+      [gates] 超时（1200s），超时：SIGTERM 宽限 15s 内未退出，已整组 SIGKILL（子进程未自还原） ⇒ 判红
+      完整输出已落盘： /Users/ze/Downloads/deepseek harness/.tmp/gate-failures/mutate-verify.log（这里只贴尾部 12 行）
+  ▶ mutate-needles-check …  ❌ mutate-needles-check exit=1  13063ms
+      ── 失败输出尾 12 行 ──
+      Done in 179ms using pnpm v11.21.0
+      $ node --import tsx scripts/mutate-verify.mjs --check-needles
+      ℹ️ 逐行式 apply 5 条（多处命中即设计，不核针脚）：prune-verify-card-exempt、prune-attachment-safesegment、sessions-name-charset、sessions-rename-clash、worker-shell-cause-layer-unwired
+      ❌ certface-evidence-gate-row-dropped — scripts/gate-manifest.ts — 盘上判得通过，而 HEAD 那份里针脚 0 处 ⇒ 这条锚点钉的是**在飞文本**（锚点行已入库、被锚定的实现改动还没）⇒ 干净 HEAD 上它等价于空操作。修法：等那次实现入库（或撤这条锚点），**不要**把针脚改成 HEAD 里的旧写法——那等于把这条锚点要守护的东西废掉。
+      ❌ certface-evidence-gate-budget-under-measured — scripts/gate-manifest.ts — 盘上判得通过，而 HEAD 那份里针脚 0 处 ⇒ 这条锚点钉的是**在飞文本**（锚点行已入库、被锚定的实现改动还没）⇒ 干净 HEAD 上它等价于空操作。修法：等那次实现入库（或撤这条锚点），**不要**把针脚改成 HEAD 里的旧写法——那等于把这条锚点要守护的东西废掉。
+      ℹ️  松钉指针 10 条（逐字认不出、只靠占位符展开的标题模式过关——拼接标题与带转义引号那两类必然如此）：auto-verify-default-on、worker-impact-spec-not-appended、worker-impact-whitelist-not-appended、hook-matcher-exact-list-degrades-to-substring-regex、read-worker-inherits-wide-hook-mode、evidence-receipt-reports-known-completeness-as-unknown、redaction-stops-recursing-into-containers、worker-git-newline-not-a-separator、g-b-injection-face-ignores-table-form、loose-pointer-counts-literal
+      ℹ️  选择子：1168/1171 条能只跑自己那条 killer 用例（宽度与 runner 的 --testNamePattern 一致；其余走整文件跑法）·零命中 1 条（按成因点名：指在 describe 上 0｜标题由变量给出 1｜文件里没这句话 0｜说不清 0；共同后果是 -t 一条也选不中 ⇒ 走整文件跑法）：shape-leading-env-assignment-not-skipped(0)·多命中 2 条（选择子不唯一）：settings-default-on-key-read-by-strict-true(2)、settings-auto-verify-default-reverted(2)
+      ℹ️  指针接线（**线索，不进门禁**：静态代理按全表量会误喊，多数判卷从上游入口打进来；它只在「变异存活」那条红后面给方向）：接上 266／疑空 708／判不了 197（疑空＝needle 所在函数名在那条用例体里一次都没出现；判不了的四类：无包围函数 184、抽不出针脚或针脚不在源文件 3、标题不在这份判卷 10、两面任一读不到 0）｜样本 cascade-fail-closed、cascade-max-rungs、frozen-s3-9、atomic-rename-dropped、atomic-direct-write-no-tmp、ask-gate-unattended-fail-closed、ask-gate-unattended-notify、lsp-diag-severity｜出口数可数 984 条，其中针脚长在「≥2 条 return」的函数里 533 条（存活时先问判卷喂到了第几支，别撤锚点：规则 329）
+      针脚体检：1171 条 —— 阻断 2，待复认 0，未覆盖 0，逐行式 5，未入库面 0（被测面 + 判卷两面），钉在飞文本 2，killer 指针失效 0（其中 HEAD 侧 0）
+      改法语法体检：1171 条改法全部产出合法源文件 ✅
+      [mutate-needles-check] 2 条锚点针脚/改法失效 ❌
+      [ELIFECYCLE] Command failed with exit code 1.
+      完整输出已落盘： /Users/ze/Downloads/deepseek harness/.tmp/gate-failures/mutate-needles-check.log（这里只贴尾部 12 行）
+  ▶ evidence-typecheck-check …  ❌ evidence-typecheck-check exit=1  2794ms
+      ── 失败输出尾 12 行 ──
+      Already up to date
+      Done in 179ms using pnpm v11.21.0
+      $ node --import tsx scripts/evidence-typecheck-check.ts
+      ❌ evidence-typecheck：证据面危险码 16 条／帽 12 条（登记 8 个文件；全量报错 52 条）｜⚠️ 涨了 2 个文件（只准调低）：outputs/selector-uniqueness-2026-09-30/diagnose.mts 3>0、outputs/sequencer-dynamic-2026-10-01/probe-prod.mts 1>0（2224ms｜解析 52/52 条）
+         被算进危险码的第一行（原文照贴，判卷钉的就是这个形状）：outputs/anchor-resolvability-2026-09-23/measure-anchor.mts(110,14): error TS2551: Property 'line' does not exist on type '{ kind: "path" | "
+         修法：那条读数如果是真的类型缺陷就改掉（证据面的探针也是代码）；
+              如果是新加的探针本来就带危险码，那正是本门要拦的——不要往登记表里加名字，先修它。
+         登记表在 `scripts/lib/evidence-typecheck.ts` 的 `DANGER_BASELINE`，**只准调低**（清掉一条就把数字改小）。
+      [ELIFECYCLE] Command failed with exit code 1.
+      完整输出已落盘： /Users/ze/Downloads/deepseek harness/.tmp/gate-failures/evidence-typecheck-check.log（这里只贴尾部 12 行）
+
+== 断言体检（空断言 / 恒真式 / 暗卷段零断言 / 析取式弱断言）==
+  扫描面：87 个已跟踪且在盘的脚本（未跟踪草稿不判，口径同 tests/assertion-health-scan.test.ts）
+  ✅ 零命中
+
+== 汇总 ==
+  绿 25 / 31，红 6（test、gate-check、head-cert-check、mutate-verify、mutate-needles-check、evidence-typecheck-check）
+  逐道退出码：typecheck=0 test=1 e2e=0 sandbox:check=0 fork-check=0 gate-check=1 docs-check=0 autonomy-check=0 compaction-check=0 tools-check=0 map-check=0 prune-check=0 provider:check=0 memory-check=0 plugins-check=0 security-check=0 gym-check=0 routing-check=0 supervisor-check=0 model-surface-check=0 prefix-churn-check=0 prompt-surface-check=0 replay-determinism-check=0 no-progress-check=0 cost-per-progress-check=0 head-import-check=0 web-fetch-check=0 head-cert-check=1 mutate-verify=124 mutate-needles-check=1 evidence-typecheck-check=1
+  认证面 = **工作树，不是 HEAD**：判卷四面（src/scripts/tests/fixtures）在飞 4 项｜全仓在飞 24 项 ⇒ 本表全 0 **不等于 HEAD 全 0**；要 HEAD 认证请在 HEAD 的隔离 worktree 里跑整表（`git worktree add --detach <tmp> HEAD`；注意 `pnpm gates --direct` 只换执行器〔`pnpm run X` → `/bin/sh -c <script>`〕，**不改取料树**）
+  ⚠️  未证 9 项（连网/凭据限制未跑到的断言，或绿而零输出的门——**不等于通过**）
+     逐道：gate-check 1｜docs-check 3｜autonomy-check 1｜compaction-check 1｜provider:check 1｜plugins-check 1｜gym-check 1
+     严格模式：DSH_STRICT_UNVERIFIED=1 或 --strict-unverified 可让未证直接判红
+GATES_EXIT=1

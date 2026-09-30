@@ -9894,6 +9894,38 @@ const MUTATIONS = [
     expectFail: "格子在而形状变了",
   },
 
+  /* ── 第 272 页：把 `evidence-typecheck-check` 从「单价线外、交笔时人肉跑」买进认证门面。
+   *    两支各钉一半：只钉「在不在名单」，那预算随便填个数也绿；只钉预算，那"这道门被删了"就没人喊。 ── */
+  {
+    id: "certface-evidence-gate-row-dropped",
+    src: "scripts/gate-manifest.ts",
+    test: "tests/cert-gate-face.test.ts",
+    desc: "把这道门从认证门面里摘掉 ⇒ 覆盖退回到「交笔时手动跑」那句承诺上，而这句话已经在第 268/269/270/271 四笔里连续没成立（规则 292 同族：绿认证与门红并存）",
+    apply: (s) => s.replace('  { name: "evidence-typecheck-check", budgetMs: 5300 },', "  "),
+    expectFail: "交笔必跑的门按类进门面：",
+  },
+  {
+    id: "certface-evidence-gate-budget-under-measured",
+    src: "scripts/gate-manifest.ts",
+    test: "tests/cert-gate-face.test.ts",
+    desc: "名单里这道门的预算被写到实测两倍以下 ⇒ 这一格变成「拿一次读数当上限」，本机负载一动就红；" +
+      "这支钉的是买进门面时那条**单价是真测的**，不是给名单随手填个数占位",
+    apply: (s) => s.replace('"evidence-typecheck-check", budgetMs: 5300', '"evidence-typecheck-check", budgetMs: 500'),
+    expectFail: "交笔必跑的门按类进门面：",
+  },
+
+  /* ── 第 272 页：`scripts/prose-needle-scan.ts` 这支尺今天第一次被突变表看见（现读 `grep -c prose-needle-scan` ＝ 0）。
+   *    先钉「在飞/已提交」那一分面：它红的时候，全仓的「这一格属隔壁在飞，不算我的账」的归因都跟着失真。 ── */
+  {
+    id: "prose-scan-inflight-split-swapped",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "把「在飞」与「已提交」两半对调 ⇒ 顶包候选的水位帽开始拿别人的在飞文本判我这一笔，" +
+      "而「排除在飞」那套归因话术全部反过来指（第 272 页实测：这一支尺此前在变异表里零条目）",
+    apply: (s) => s.replace("(inFlight.has(r.file) ? flying : committed)", "(inFlight.has(r.file) ? committed : flying)"),
+    expectFail: "干净文件的账算我的，在飞文件的账不算我的——但两边都要在清单上",
+  },
+
   /* ── 第 225 页（#40）：六道「执行前就拦下」的硬闸各留一格结构证人。
    *    四支钉的是四种坏法：删一行（两处的头与尾）、条件反过来、枚举与实跑漂移。 ── */
   {

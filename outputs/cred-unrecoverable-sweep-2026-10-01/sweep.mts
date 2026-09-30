@@ -19,11 +19,12 @@ if (typeof ROOT !== "string" || ROOT === "") {
   process.exit(2);
 }
 
-const kind = (name: string): "runner" | "probe" | "doc" | "other" => {
+type FaceKind = "runner" | "probe" | "doc";
+const kind = (name: string): FaceKind | null => {
   if (name.endsWith(".log") || name.endsWith(".txt")) return "runner";
   if (name.endsWith(".mts") || name.endsWith(".mjs") || name.endsWith(".ts")) return "probe";
   if (name.endsWith(".md")) return "doc";
-  return "other";
+  return null;
 };
 
 /** 递归收 durable 文本；跳过依赖与验证树（那些不是这个仓的取料面）。 */
@@ -35,7 +36,7 @@ const walk = (dir: string, depth: number, acc: string[]): string[] => {
     let st;
     try { st = statSync(abs); } catch { continue; }
     if (st.isDirectory()) walk(abs, depth + 1, acc);
-    else if (st.isFile() && kind(e) !== "other") acc.push(abs);
+    else if (st.isFile() && kind(e) !== null) acc.push(abs);
   }
   return acc;
 };
@@ -58,6 +59,7 @@ for (const f of corpus) {
   filesSwept++;
   const rel = f.slice(ROOT.length + 1);
   const k = kind(f);
+  if (k === null) continue;   // 证据面（evidence-typecheck）报的 TS7053：从前靠"外面已过滤"兜着，类型看不出来
   for (const num of sourcedReadings(text)) {
     const row = hits.get(num) ?? { runner: [], probe: [], doc: [] };
     row[k].push(rel);
