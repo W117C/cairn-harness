@@ -1,0 +1,15 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-869cf73.lock）
+变异验证：3 条
+✅ docscheck-cred-weak-identity-comparison-cleared — 把「证人那一趟属不属于本页」的比对换成恒不成立 ⇒ 再也没有弱证，别趟的日志只要数值撞对就能替本页作证（这一格从此永远绿，而它防的就是第 255 页那种错指）。第 270 页这条判断被提到分支最前面（强证先放行），针脚跟着走（规则 229） ｜本机实测 0.9s／2 拍
+✅ docscheck-cred-weak-no-identity-folded-into-weak — 把第三态那个条件的 `||` 换成 `&&` ⇒ 「既有别趟原文、又有没印身份的原文」这种混合面从『无从判』掉进弱证，帽被非缺陷灌满、真错指反而被淹没（第 270 页现读：8 对里有 3 对是混合面）。第 269 页那支钉的是 `weakUnjudged++` 那一行，本行形状变了 ⇒ 针脚跟着走（规则 229） ｜本机实测 0.6s／2 拍
+✅ docscheck-cred-weak-cap-raised-silently — 把弱证帽从现调解大（0 → 1）而不新点名任何一条跨趟引用 ⇒ 可比对那一半照旧绿，而这把尺从此允许下一页再塞一条「数对上了、证人不是那一趟」。降帽必须同时动这条锚点（规则 229：这一格刻意不允许悄悄动） ｜本机实测 1.1s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 2.9s · 跑了 3/3 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 6 次／3 条（每条次数分布 2×3）· 单次中位 第1次 0.6s／第2次 0.3s· 最贵一条 docscheck-cred-weak-cap-raised-silently 1.1s
+跑法单价：selector 6 拍·中位 0.49s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-869cf73.lock）
+real 3.59
+user 3.78
+sys 0.56
+KILL_EXIT=0
