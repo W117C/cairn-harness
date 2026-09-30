@@ -7937,3 +7937,18 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 4. **系统盲区（登记，不装没看见）**：同文件调用边不入图——「跨文件调用边」是 `impact/index.ts` 头注写明的设计边界，实测代价是模块私有函数的 upward 默认空手（`insideScratchFace` 0/1、`runInSandbox` 的 sandbox.ts:170 内部自用 0/1）。要不要补同文件边或工具层兜底出声，属下一笔裁决。
 5. **探针方法论自纠**：第一跑把输出接 `| head -60`，SIGPIPE 截掉 `appendRun` 段——差点把「截断」读成「零命中」；证据管道不接 head、全程落盘再读（与「退出码直接取，不接管道」同族）。
 6. **取料**：`outputs/impact-accuracy-2026-09-30/`（`readings.md` 逐符号表＋`probe.mts`／`probe.log`）。零源码 ⇒ typecheck 不重跑；标题不含「凭证」，不进 D-9 面。
+
+### 2026-09-30 · 第 241 页（本会话）· 工具层实测：同文件盲区在模型面的形状是「波及半径为 0」的措辞越权（能力 1，表外零源码）
+
+1. **动因是第 240 页登记的那格**：同文件调用边不入图——本页量的是模型面真实形状：模型调 `impact_query` 时到底读到什么。
+2. **真工具实例逐字输出**（`createImpactQueryTool().run`，原句同目录 `tool-probe.log`）：对照组 `staleScratchTrees`
+   「跨文件调用点 10 处，波及 2 个文件」＋逐文件位点，完全正确；实验组 `insideScratchFace`（模块私有、唯一调用者在同文件）读到的是
+   **「无跨文件调用点（波及半径为 0）」**。
+3. **定性升级**：240 页记的是「设计边界、要登记」；工具层这一句把定性推到**措辞越权**——图只量了跨文件边，
+   句子却断言了**总**波及半径。真值：`insideScratchFace` 有 1 个真实调用者（同文件 `staleScratchTrees:294`，
+   其结果直接喂 231 页新建的 foreign 分格与「可以去收」名单）。模型照这句话办事，可以不改一处调用点地改掉
+   `.worktrees-backup` 撞名防线，门面不红、用户不知。
+4. **修法方向两案（属下一笔，本页不动源码）**：① 空列表分支补同文件调用扫描（定义文件已知，成本一次本文件 grep/AST），
+   顺带把盲区变成读数；② 把「波及半径为 0」软化为「无**跨文件**调用点（同文件调用不在本图内，直读定义文件核对）」。两案都便宜。
+5. **取料**：`outputs/impact-accuracy-2026-09-30/`（`readings.md` §五＋`tool-probe.mts`／`tool-probe.log` 逐字原句）。
+   零源码 ⇒ typecheck 不重跑；标题不含「凭证」，不进 D-9 面。
