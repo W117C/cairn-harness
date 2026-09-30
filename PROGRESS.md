@@ -8696,3 +8696,32 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 7. **裁决**：与第 260 页同批——**线索，不进门禁**。533／961 这种分布如果做成闸，第一天就会把所有多出口函数上的锚点全判红；它的用处只在「存活那一拍」后面给方向。帽没有调，水位没有动。
 
 8. **刻意未做**：⑴ 嵌套闭包里的 `return` 被算进同一段体（上界），注释里写明；不做作用域区分是因为这一格只回答「有几支出口要喂」，多算只会让提示更常出现，不会造成假红。⑵ 不给 `no-symbol`／`no-needle` 那 178 条补包围推断（TS 接口、对象字面量里的方法简写等）——要补先量清收益。⑶ 没把出口数并进 `wiringCensus` 的返回类型（改了会牵动那条「普查合并所有 kind」的锚点），改成在调用点算，等下一次真要用水位时再收成一份。
+
+### 2026-10-01 · 第 263 页补 凭证：本笔（`9e44bba`＝实现簇 `9a2fe61`＋判卷行锚修）认证 259 文件／3409 条 exit=0、两端独占、墙钟 `real 182.57`；八支锚点**第一趟 7 杀 1 存活**（自-hosted 正向断言被表喂绿）、修完 8/8 全杀（6.4s、坏拍 0）；门 19/20 绿·红 1 道仍属隔壁 `1748ca7` 的 H7 ⇒ 本笔不写成「全量绿」
+
+1. **被认证的对象**：`9e44bba`（两笔：`9a2fe61`＝`enclosingSymbolSpan`／`returnExitsOf`／`returns` 那格／普查行与 `wiringHint` 第二半／6 支新锚点＋2 支改指；`9e44bba`＝判卷那条普查断言行锚定）。树：`head-cert.ts` 自建的 `.worktrees/head-cert-9e44bba`（`DIRTY_JUDGED=0`、`收尾复核=同一笔`、锁＝本进程持有）；杀锚点用 `.worktrees/verify-9a2fe61`（第一趟）与 `.worktrees/verify-9e44bba`（复跑），两棵建好各自 `status --porcelain` 为空。等级＝**全量**。
+
+2. **针脚体检（两份对照，归因靠它）**：主树落库前 `针脚体检：1139 条 —— 阻断 8…钉在飞文本 8`、exit=1（`needles-before-commit.log`；那 8 条＝6 新 + 2 改指，钉的全是本笔未入库的实现）。干净树 `9a2fe61`／`9e44bba` 上同一条尺印 `阻断 0，待复认 0，未覆盖 0，逐行式 5，未入库面 0，钉在飞文本 0，killer 指针失效 0`、exit=0，松钉仍 10 条（没涨）。
+   ⚠️ 一条**关于证据本身的更正**：中途我确实看到过一次 `⚠️ exits-census-not-spoken — 针脚命中 2 处` 与 `待复认 2`，但那份日志被**同一条命令的后续复跑覆盖**了（同一个文件名、没按次落名 ⇒ 规则 268 那半在自家身上又犯一次），所以留档里两份 `needles-*.log` 都只印 `待复认 0`。这一条现在不靠记忆：改成一份可复现证人 `self-hosted-double-hit.mts`／`.log`——同一串文字**裸串在这份文件里命中 2 处**（代码那一行 + 表里那条 needle 字面量），**行锚定只命中 1 处**；把代码那行按锚点改法换成常数之后，行锚 1→0（判卷会红）而裸串 2→1（藏住）。
+
+3. **八支锚点两趟**：第一趟（`.worktrees/verify-9a2fe61`）——
+   `❌ 判红·变异存活（测试仍全绿 ⇒ 该不变量没有观测者）（1 条）：exits-census-not-spoken`／`REDKINDS=survived:1,misattributed:0,baseline-red:0,no-effect:0,syntax:0,restore-mismatch:0,vacuous:0`（`kill-8-anchors-first-run-survived.log`）。
+   成因是**新的第四种自-hosted 撞法**：那条判卷正向 `toMatch(/｜出口数可数 \$\{String\(countable\.length\)\} 条/)`，而这条针脚的字面量同时也是表里某行 apply 的文本 ⇒ 代码被改成常数后裸串仍在表里命中（现读：裸串 2 处、行锚后 1 处）。⇒ 规则 328 那句「只留正向断言」对这一类**不够**，凡读源码文字且那个文件装着锚点表，断言必须行锚定。修法只改判卷（`^ {4}`＋反引号＋行尾 `+`），没撤锚点、没改针脚。
+   第二趟（`.worktrees/verify-9e44bba`）8/8：`全部变异被正确杀死（断言非恒真）`／`[mutate-verify] 本次耗时 6.4s · 跑了 8/8 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）`／`成本分母：判卷 spawn 16 次／8 条（每条次数分布 2×8）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 wiring-lineend-drops-needle-line 0.9s`／`跑法单价：selector 16 拍·中位 0.34s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母`。
+
+4. **认证读数（`head-cert-9e44bba.log` 原文照贴，`HEADCERT_EXIT=1`）**：
+   `TREE=9e44bba DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-9e44bba.lock）`
+   `Test Files 259 passed (259)｜Tests 3409 passed (3409)｜exit=0（退出码直接取，不接管道）`
+   `并发判卷=起前 0 套／跑完 0 套（两端独占）`
+   `贴帽读数（缺省＝vitest 默认 5000ms（config 未写 testTimeout））：3409 条里 0 条用时 ≥ 有效预算 80%｜无显式预算按缺省算 3158 条｜标题非字面量（it.each／插值／拼接，按缺省算）114 条｜预算没落到 0 条｜无`
+   `typecheck exit=0（0 报错）`／`认证门面=20 道（跑到 20）｜❌ 红 1 道｜⚠️ 超预算 0`／墙钟 `/usr/bin/time` 实测 `real 182.57`（这次包了，不再是时间戳推算）。
+
+5. **条数核对式**：`3409 ＝ 3404 ＋ 5`（左端为本次自己印的；`3404` 是第 262 页凭证在 `2b3763f` 上的留档，`git log 2b3763f..HEAD` 现读＝我这两笔，中间无别人的判卷改动）；5 ＝ 本笔新增的 5 条判卷（`tests/mutate-verify-gates.test.ts` 实测 157 → 162）。贴帽那格的三档同样自洽：`3158 ＋ 114 ＋ 0 ＝ 3272`，余下 `3409 − 3272 ＝ 137` 条落在「显式预算」那一档（这一格是**减法推出来的**，机器只印前三档；判卷里那条同分母重数断言负责盯住三档自己不相混）。
+
+6. **门耗时一格（不当比值用）**：`✅ mutate-needles-check exit=0 12161ms（预算 20000ms）`，上一笔同一道门是 `11780ms`（表 1133→1139、每行多算一次出口数）。**两趟不同提交、不同负载 ⇒ 只作量级观察，不写成单价差**；真要结案按规则 245 做同温 A/B。
+
+7. **归因声明**：唯一那道红仍是 `❌ gate-check exit=1 4357ms（预算 5400ms）`，失败面是 `H7 冻结表与判卷区目录双向一致…{"onDiskNotInTable":["fixtures/impact/accuracy-repo/…"]}`——那 10 个夹具由隔壁 `1748ca7`（第 261 页）带上盘而没登记进 `src/frozen.ts` 的 areas（台账任务 #9），从 `dfe2d6c` 那趟起一直红着。本笔不动冻结面、不改 `src/frozen.ts`、不放宽 H7 ⇒ 措辞是「除隔壁那一门外全绿」。
+
+8. **刻意未做／边界**：⑴ 出口计数仍是**线索**，不进 GATES 判定、不进 CERT_GATES、不改退出码与任何帽；⑵ 嵌套闭包的 `return` 计入上界（多算只会让提示更常出现，不会造成假红，注释写明）；⑶ `suite.json` 与本次逐条日志在 `/tmp/dsh-head-cert-9e44bba/`（公共可写面）⇒ 需要长期引用的读数已逐字抄进本页。
+
+9. **清场结果（现读，未动手）**：门自己印的是「常驻残留树=12」——`head-cert-2b3763f`、`head-cert-bd5ec44`、`head-cert-dfe2d6c`、`verify-2b3763f`、`verify-43ace9e`、`verify-451f4be`、`verify-48e30a8`、`verify-6aa6e9d`、`verify-9a2fe61`、`verify-9e44bba`、`verify-a5197eb`、`verify-dfe2d6c`（另有 `.worktrees/head-cert-9e44bba` 与 2 棵 `/private/tmp/dsh-foreign-witness-*`，后者不是本仓建的、不许照回收命令删）。本笔**未回收任何一棵**（破坏性操作归人，等明确点头）。
