@@ -8458,6 +8458,48 @@ const MUTATIONS = [
     ),
     expectFail: "id 名单要挂在各自的桶名下：并排印在行末＝把唯一的零命中条指成「多命中」的一员",
   },
+  // ── 第 243 页 · 页号原子占号：四条各咬一处——脏值进 max／号不单调／被占了还当占到／CLI 不吃这把尺
+  {
+    id: "page-claim-dirty-values-in-max",
+    src: "scripts/lib/page-claim.ts",
+    test: "tests/page-claim.test.ts",
+    desc: "脏值（小数／NaN）也参与 max ⇒ 号变成 10.5 或 NaN：台账上出现一个小数页号，而占号那一步看起来仍然「成功了」",
+    apply: (s) => s.replace(
+      "  for (const n of taken) if (Number.isInteger(n) && n > mx) mx = n;",
+      "  for (const n of taken) if (!Number.isNaN(n) && n > mx) mx = n;",
+    ),
+    expectFail: "非整数不参与 max（一个 9.5 或 NaN 都不许把号带到小数／NaN），空面回 start",
+  },
+  {
+    id: "page-claim-not-monotonic",
+    src: "scripts/lib/page-claim.ts",
+    test: "tests/page-claim.test.ts",
+    desc: "回「最小可用号」而不是「max＋1」⇒ 新会话拿回 1，且台账上删过一页就把那个旧号再发一遍。" +
+      "这不是等价的：旧号出现在两处比新号撞车更难查（判卷里那条空洞用例就是为这个存在的）",
+    apply: (s) => s.replace("  return mx + 1;", "  return start;"),
+    expectFail: "连续号回到 max＋1；有空洞也不回填；start 只当**下限**",
+  },
+  {
+    id: "page-claim-exists-treated-as-ok",
+    src: "scripts/lib/page-claim.ts",
+    test: "tests/page-claim.test.ts",
+    desc: "把「已被占」当成「占到了」⇒ 两个会话拿到同一个号而两边都以为自己独占——这正是这把尺要消灭的那件事，" +
+      "而它退化后印的还是一句「占号 N」",
+    apply: (s) => s.replace('    if (outcome === "ok") {', '    if (outcome !== "error") {'),
+    expectFail: "别人抢先占了同一号 ⇒ 让位后**重新 list** 再占一次（拿旧名单里的下一个会把已被占的号再发一遍）",
+  },
+  {
+    id: "page-claim-cli-not-wired",
+    src: "scripts/next-page.ts",
+    test: "tests/page-claim.test.ts",
+    desc: "CLI 不调 claimPage 而自己发一个号 ⇒ 号池永远空、撞号照旧，但那一格读起来像「有工具在管」。" +
+      "钉的是接线不是文字：这里 CLI 与被调的 lib 是两个文件，同文件恒真那一族用不上",
+    apply: (s) => s.replace(
+      "const r = claimPage({",
+      "const r = { page: 0, cell: \"\", yielded: 0 }; void claimPage; const _unused = ({",
+    ),
+    expectFail: "next-page.ts 必须调 claimPage 并在没占到时退 2（只印不占＝号池永远空，撞号照旧）",
+  },
   {
     id: "selector-cell-hides-blind-count",
     src: "scripts/lib/mutate-gates.ts",
