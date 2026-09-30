@@ -7763,6 +7763,35 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
    （日志同目录 `docs-check-at-235-credential.log`；上一笔留档值 84，本笔＋5——**这一格是二阶的**：引用这个数本身会再往里加读数，
    所以落笔后又跑了一遍，两遍都印 89 才算定点；第二遍的 exit 也直接取，不接管道）。
 
+### 2026-09-30 · 第 236 页 · 选择子那格的 id 名单改成分桶挂标签：`(0)` 那条不再顶着「多命中」的名字（表 1091→1093）
+
+1. **动因＝第 235 页凭证 §7-④ 我自己登记的那一格**（不是我读错，是措辞真的会把人带错）：`selectorCell` 把 `problems` 全集的名单接在整行末尾，
+   而它前面的标签各说各的数，于是真表印成 `多命中 2 条（选择子不唯一）：shape-…(0)、…(2)、…(2)`——那个 `(0)` 是**唯一的零命中条**。
+   两态的修法相反（零命中＝指针落点要重挑；多命中＝要给指针配唯一后缀），所以这是规则 261/262 反的那件事：**两种坏读数同形**。
+2. **改法**（`scripts/lib/mutate-gates.ts`）：名单由各桶自己挂——新增 `selectorBucketList(rows)`，
+   `零命中 …）` 后接 `selectorBucketList(zero)`、`多命中 …）` 后接 `selectorBucketList(many)`，整行末尾那份并排名单删掉。
+   不丢条的根据写进了注释：`hits===1` 的根本进不了 `problems`，所以 `zero ∪ many ＝ problems`。
+   这一笔**没有**动选择子的宽度语义（`selectorHitCount`/`vitestTitles` 一字未改），只是把已经算对的东西说给对的人。
+3. **判据**（`tests/mutate-verify-gates.test.ts` 新 1 条；该文件本笔现读 **150 条全绿**，上一笔的条数我没留档、不在这儿补一个推出来的数）：
+   `id 名单要挂在各自的桶名下：并排印在行末＝把唯一的零命中条指成「多命中」的一员`——判的是**区间**：
+   `零命中`→`多命中` 之间含 `zero(0)` 且不含 `two(2)`，`多命中` 之后含 `two(2)` 且不含 `zero(0)`。
+   一条 `toContain` 过不了这一格（旧形状同样含这两个子串，规则 236：只写包含＝对生产零分辨力）。
+   反向哨兵：既有的 `零命中与多命中分开印，并点名是哪几条` 仍绿 ⇒ 本笔没把名单删没。
+4. **两支新锚点**（表 1091→**1093**）：`selector-bucket-list-not-appended`（多命中段不挂名单）、
+   `selector-bucket-lists-swapped`（零命中段挂上多命中的名单——名单还在、责任人换了）。两支都咬同一条判卷，因为两种坏法的**症状不同而病灶同一**。
+5. **读数**：工作树 `--check-needles`（`outputs/selector-cell-bucket-list-2026-09-30/needles-at-236-working.log`）
+   ＝ `针脚体检：1093 条 —— 阻断 2，待复认 0，未覆盖 0，逐行式 5，未入库面 0，钉在飞文本 2，killer 指针失效 0`，
+   那 2 格正是这两支新针脚（实现未入库），落库后归零；`改法语法体检：1093 条改法全部产出合法源文件 ✅`。
+   改后那一格印成 `…零命中 1 条（按成因点名：…）：shape-leading-env-assignment-not-skipped(0)·多命中 2 条（选择子不唯一）：settings-default-on-key-read-by-strict-true(2)、settings-auto-verify-default-reverted(2)`。
+   **对照的分母**：改前那份来自第 235 页留档（表 1091），表长差 2 是本笔新锚点，`problems` 那 3 条一字未变 ⇒
+   这两份只用于**文字形状**的对照，不参与任何计数/单价比较（规则 245：不同分母的读数不并列成前后差）。
+   `typecheck exit=0（0 报错）`、`node --check scripts/mutate-verify.mjs` 通过、该判卷文件 150 条全绿。
+6. **帽与存量**：`SELECTOR_CAP` 维持 3（＝1 零命中＋2 多命中，本笔一条没修掉，所以没资格调低；调低要等有哪条指针真被重挑）。
+7. **仍开**（不变）：`describe > it` 整条名口径、那条「标题由变量给出」的整文件跑法、`foreign` 桶缺生产见证。
+8. **取料**：`outputs/selector-cell-bucket-list-2026-09-30/`（`findings.md` 含改前/改后两句原文＋同分母说明，
+   `needles-at-236-working.log`、`gates-test-at-236-working.log`、`typecheck-at-236-working.log` 三份为本笔工作树态读数）。
+   凭证另起一笔（标题含「凭证」才进 D-9 面，`docs-check.ts:215` 口径）。
+
 ### 2026-09-30 · 第 236 页（本会话）· `--direct` 重标定的实测对比：18 道门双模式全脸，包装层税 7.8s（复合读数 60%）（表外零源码）
 
 1. **缺陷先登记**：台账现有**两个「第 234 页」**——本会话的 `a30a96d`（门读数拆开）与隔壁的 `e9d3155`（主树根反例）。

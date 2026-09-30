@@ -8433,6 +8433,31 @@ const MUTATIONS = [
     ),
     expectFail: "零命中分四种成因、各印各的数（0 也印）——从前那句「多半是用例改了名」是在指责任人",
   },
+  // ── 第 236 页 · id 名单要分桶挂标签：并排印在整行末尾会把唯一的零命中条指成「多命中」的一员
+  {
+    id: "selector-bucket-list-not-appended",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "多命中那一段不挂自己的名单 ⇒ 名单只剩零命中那半，读的人永远看不到「哪两条重名」。" +
+      "这一格从前是有名单的（两个桶并排印在行末），所以本条钉的是退化：把两种坏读数当成一种",
+    apply: (s) => s.replace(
+      '    many.length === 0 ? "" : `多命中 ${String(many.length)} 条（选择子不唯一）` + selectorBucketList(many),',
+      '    many.length === 0 ? "" : `多命中 ${String(many.length)} 条（选择子不唯一）`,',
+    ),
+    expectFail: "id 名单要挂在各自的桶名下：并排印在行末＝把唯一的零命中条指成「多命中」的一员",
+  },
+  {
+    id: "selector-bucket-lists-swapped",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "零命中那一段挂上多命中的名单 ⇒ 名单还在、责任人换了：读的人会把「-t 一条也选不中」那两条去改用例名，" +
+      "而真该改的是那条重名指针（两种坏读数修法相反，所以桶名与名单必须一起挂，规则 261/262）",
+    apply: (s) => s.replace(
+      "走整文件跑法）` + selectorBucketList(zero),",
+      "走整文件跑法）` + selectorBucketList(many),",
+    ),
+    expectFail: "id 名单要挂在各自的桶名下：并排印在行末＝把唯一的零命中条指成「多命中」的一员",
+  },
   {
     id: "selector-cell-hides-blind-count",
     src: "scripts/lib/mutate-gates.ts",

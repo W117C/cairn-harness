@@ -1174,6 +1174,26 @@ describe("选择子唯一性：一条锚点能不能只跑自己那条 killer �
     expect(cell, cell).toContain("zero(0)");
   });
 
+  /** 第 236 页：上一版的这一格把两个桶的 id **并排印在整行末尾**，标签却各说各的数——
+   *  真表实测印成 `多命中 2 条（选择子不唯一）：shape-…(0)、…(2)、…(2)`，
+   *  那个 `(0)` 其实是唯一的零命中条（`needle` 的另一桶）。计数没错、修法相反，所以坏的是"名单不挂桶名"（规则 261/262）。 */
+  it("id 名单要挂在各自的桶名下：并排印在行末＝把唯一的零命中条指成「多命中」的一员", () => {
+    const entries = [
+      { id: "zero", test: "tests/x.test.ts", expectFail: "标题是拼出来的那类" },
+      { id: "two", test: "tests/x.test.ts", expectFail: "默认开着" },
+      { id: "one", test: "tests/x.test.ts", expectFail: "唯一的那条" },
+    ];
+    const src = 'it("唯一的那条 说的事", () => {});\nit("默认开着 甲", () => {});\nit("默认开着 乙", () => {});\n';
+    const cell = selectorCell(selectorAmbiguity(entries, () => src));
+    const zeroSeg = cell.slice(cell.indexOf("零命中"), cell.indexOf("多命中"));
+    const manySeg = cell.slice(cell.indexOf("多命中"));
+    expect(cell, cell).toContain("多命中");
+    expect(zeroSeg, "零命中段里要点名零命中的那条：" + cell).toContain("zero(0)");
+    expect(zeroSeg, "多命中的 id 不许落进零命中段：" + cell).not.toContain("two(2)");
+    expect(manySeg, "多命中段里要点名多命中的那条：" + cell).toContain("two(2)");
+    expect(manySeg, "零命中的 id 不许落进多命中段：" + cell).not.toContain("zero(0)");
+  });
+
   it("可选率的分母是被数过的条数，不是整表条数（拿整表去除＝把选不中的洗成可选）", () => {
     const entries = [
       { id: "u", test: "tests/x.test.ts", expectFail: "唯一命中的一条" },

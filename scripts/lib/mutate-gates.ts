@@ -880,10 +880,17 @@ export function selectorCell(scan: SelectorScan): string {
       `**读得到文件却一条标题都抽不到 ${String(blind.reduce((n, b) => n + b.ids.length, 0))}**` +
       (blind.length === 0 ? "" : `（${blind.map((b) => `${b.test}⇒${b.ids.join("、")}`).join("；")}）`) +
       "，那些只能整文件跑，**不算这一格通过**",
-    zero.length === 0 ? "" : `零命中 ${String(zero.length)} 条（按成因点名：${zeroCauseCell(zero)}；共同后果是 -t 一条也选不中 ⇒ 走整文件跑法）`,
-    many.length === 0 ? "" : `多命中 ${String(many.length)} 条（选择子不唯一）`,
+    zero.length === 0 ? "" : `零命中 ${String(zero.length)} 条（按成因点名：${zeroCauseCell(zero)}；共同后果是 -t 一条也选不中 ⇒ 走整文件跑法）` + selectorBucketList(zero),
+    many.length === 0 ? "" : `多命中 ${String(many.length)} 条（选择子不唯一）` + selectorBucketList(many),
   ].filter((s) => s !== "");
-  return parts.join("·") + (problems.length === 0 ? "" : "：" + problems.map((p) => `${p.id}(${String(p.hits)})`).join("、"));
+  // 名单**分桶挂各自的标签**（第 236 页）：从前这两个桶的名字并排印在整行末尾，于是唯一的零命中条
+  // 看起来像「多命中」的一员（实测：`多命中 2 条…：shape-…(0)、…(2)、…(2)`）。计数一直是对的，坏的是责任人。
+  return parts.join("·");
+}
+
+/** 一个桶自己的 id 名单。`zero`∪`many` 就是 `problems` 全集（hits===1 的进不了 problems），所以分桶印不丢条。 */
+function selectorBucketList(rows: SelectorProblem[]): string {
+  return "：" + rows.map((p) => `${p.id}(${String(p.hits)})`).join("、");
 }
 
 /** 一拍读数坏没坏——闸与单价格共用这一份判据，两边不许各算一遍（规则 228：分叉的副本会一起错档）。
