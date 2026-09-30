@@ -314,9 +314,11 @@ export class Orchestrator {
     }
     // stages 冻结闸（§4.4.7）：同 callId 的 pipeline 已批准运行 → 再次请求 = 变更请求，拒绝并落流
     if (mode === "pipeline" && ctx.callId !== undefined && this.chains.has(ctx.callId)) {
+      // 落流事件与返回体都挂 ctx.callId（第 242 页裁决采纳并列语义）：两条 tool_result 同 id，
+      // mergeToolResultsById 会并成一条且正文不丢——比旧的派生 id（必然走孤儿降级＋前言）少一截噪声。
       await this.opts.emit({
         type: "tool_result",
-        callId: "pipeline-" + ctx.callId,
+        callId: ctx.callId,
         ok: false,
         output: "[sequencer] stages 变更请求被拒（批准后冻结，§4.4.7；该链仍在按原 stages 运行）",
       } as AgentEvent).catch(() => {});
@@ -2065,7 +2067,7 @@ export class Orchestrator {
           const scannedStat = redactSecrets(diff.stat).text;
           await this.opts.emit({
             type: "tool_result",
-            callId: "diff-" + w.agentId,
+            callId: this.receiptCallId(w, "diff"),
             agent_id: w.agentId,
             ok: true,
             output:
@@ -2266,7 +2268,7 @@ export class Orchestrator {
     this.releaseWorkerMemory(w);
     await this.opts.emit({
       type: "tool_result",
-      callId: "wt-cleanup-" + w.agentId,
+      callId: this.receiptCallId(w, "wt-cleanup"),
       agent_id: w.agentId,
       ok: r.removed,
       output: "[worktree] 已清理（" + why + "）：wt-" + w.agentId + (r.branchDeleted ? " + 分支 " + w.branch : "") + (r.error ? "（清理异常：" + r.error + "）" : ""),
@@ -2294,7 +2296,7 @@ export class Orchestrator {
           "gate：存在 critical|high findings " + String(blocking.length) + " 条（" +
           blocking.slice(0, 3).map((f) => f.path + ":" + String(f.line) + " " + f.title).join("；") +
           "）——合并卡红标，需二次确认（force=true「仍要合并」；合并权永远在人）";
-        await this.opts.emit({ type: "tool_result", callId: "merge-" + agentId, agent_id: agentId, ok: false, output: "[gate] " + msg } as AgentEvent);
+        await this.opts.emit({ type: "tool_result", callId: this.receiptCallId(w, "merge"), agent_id: agentId, ok: false, output: "[gate] " + msg } as AgentEvent);
         return { ok: false, error: msg };
       }
     }
@@ -2306,7 +2308,7 @@ export class Orchestrator {
       mergeOwners.set(agentId, this);
       await this.opts.emit({
         type: "tool_result",
-        callId: "merge-" + agentId,
+        callId: this.receiptCallId(w, "merge"),
         agent_id: agentId,
         ok: false,
         output: outcome.conflict
@@ -2322,7 +2324,7 @@ export class Orchestrator {
     await removeWorktree(this.opts.workspace, agentId, { branch: w.branch }).catch(() => ({ removed: false, branchDeleted: false }));
     await this.opts.emit({
       type: "tool_result",
-      callId: "merge-" + agentId,
+      callId: this.receiptCallId(w, "merge"),
       agent_id: agentId,
       ok: true,
       output: "[merged] 已合并（merge --no-ff）：" + w.branch + " → 主分支（commit " + (outcome.mergeCommit ?? "").slice(0, 12) + "）；worktree 已清理",
@@ -2342,7 +2344,7 @@ export class Orchestrator {
     );
     await this.opts.emit({
       type: "tool_result",
-      callId: "merge-" + agentId,
+      callId: this.receiptCallId(w, "merge"),
       agent_id: agentId,
       ok: r.removed,
       output: "[rejected] 已拒绝并清理 worktree wt-" + agentId + (opts.keepBranch ? "（分支 " + w.branch + " 保留）" : "（分支 " + w.branch + " 已删）") + (r.error ? "（清理异常：" + r.error + "）" : ""),
@@ -2391,6 +2393,13 @@ export class Orchestrator {
       ok: r.ok,
       output,
     } as AgentEvent);
+  }
+
+  /** 收据挂回 id：worker 有真实 spawn callId 就挂回它——mergeToolResultsById 会把同 id 的多条
+   *  tool_result 并成一条且正文不丢（第 242 页裁决采纳的并列语义）；内部自造 worker（无 spawn
+   *  callId，理论不可达）才落回旧的派生 id，照旧走孤儿降级带前言。 */
+  private receiptCallId(w: WorkerHandle, kind: string): string {
+    return w.spawnCallId !== "" ? w.spawnCallId : kind + "-" + w.agentId;
   }
 
   /** worker 审批请求（§4.4.3：请求落流 + 等待订阅 approval_resolved by id，不挂任何进行中的 turn）。 */

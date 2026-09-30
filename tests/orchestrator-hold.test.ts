@@ -349,3 +349,23 @@ describe("落盘面接线：返回体上的 hold 要活到 tool_result", () => {
     expect(Object.keys(hit)).not.toContain("hold");
   });
 });
+
+describe("收据挂回接线：worker 收据必须能挂回模型自己的调用（第 245 页）", () => {
+  it("diff/merge/wt-cleanup 收据走 receiptCallId（spawnCallId 优先，真零调用才落回派生 id）", () => {
+    expect(ORCH_SRC).toContain('callId: this.receiptCallId(w, "diff")');
+    expect(ORCH_SRC).toContain('callId: this.receiptCallId(w, "merge")');
+    expect(ORCH_SRC).toContain('callId: this.receiptCallId(w, "wt-cleanup")');
+    expect(ORCH_SRC).toContain('return w.spawnCallId !== "" ? w.spawnCallId : kind + "-" + w.agentId;');
+  });
+
+  it("旧派生 id 不再出现在收据位（反向：换了挂回方式就不许留旧路）", () => {
+    expect(ORCH_SRC).not.toContain('"diff-" + w.agentId');
+    expect(ORCH_SRC).not.toContain('"wt-cleanup-" + w.agentId');
+    expect(ORCH_SRC).not.toContain('"merge-" + agentId');
+  });
+
+  it("pipeline 冻结闸拒绝落流直接挂 ctx.callId（与返回体同 id，折叠后一条不丢）", () => {
+    expect(ORCH_SRC).toContain("callId: ctx.callId,");
+    expect(ORCH_SRC).not.toContain('"pipeline-" + ctx.callId');
+  });
+});

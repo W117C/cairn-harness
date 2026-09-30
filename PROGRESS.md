@@ -8052,3 +8052,12 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 4. **归因**：48d6f63 落库后本笔认证是第一次全套跑 ⇒ 第一次过秤就红。红属 243 页的工作，不属本笔源码（本笔只动了 `impact-query.ts` 与其判卷）。
    修法循 227-补⑶ 先例（判卷不抄生产句子：:523 改派生断言）——但 `page-claim.ts` 此刻有隔壁的在飞改动，地盘是它的，本笔不动。
 5. **清场**：本笔自建的认证树 `head-cert-940dbb9` 逐字 `status --porcelain`＝0 后回收（exit=0）；别人的树一棵没动。
+
+### 2026-09-30 · 第 245 页（本会话）· callId 挂回七站点落地：worker 收据与冻结闸拒绝挂回模型自己的调用（①方向 #45 剩余半边的主体，表 1101）
+
+1. **占号走 243 页的原子号池**（本会话首次使用）：`claimPage` 读台账 155 个页号＋号池 3 个 → 占 245、0 让位。裁决⑥之外的第②方向（并行机制）从「有工具」进到「真在用」。
+2. **改了什么（7 站点）**：① pipeline 冻结闸拒绝落流（L318）直接挂 `ctx.callId`——与返回体同 id，`mergeToolResultsById` 折叠后一条不丢（合并保留首条 ok，拼接按事件序）；② diff 快照、③ wt-cleanup、④-⑦ merge×4 的收据从派生 id 改挂 `w.spawnCallId`（新私有助手 `receiptCallId(w,kind)`：有真 spawn callId 就挂回，内部自造 worker 才落回旧派生 id 照旧走孤儿降级）。**数据本来就在图里/句柄里，点名不花第二次扫描。**
+3. **判据与实现同笔**：`orchestrator-hold.test.ts` 新增 3 条源码证人（接线在、旧派生 id 不在收据位、冻结闸挂 ctx.callId）——15→18 条全绿。m3c 25 条（pipeline 流含状态事件）、terminal-sync 3 条全绿：现有行为零破坏。
+4. **仍留两站（登记不装完）**：budget 事件（L490，4 个调用点需穿线 callId，本轮不硬穿）；sequencer 状态事件（L1529，反复落流的 ok 排序与折叠膨胀需单独一页读数）。`m3c:545` 钉的正是 L1529 旧形状——跳它是对的。
+5. **阻断 1 不归本笔**：`shell-tail-assembly-drops-tail`（`src/tools/output-ring.ts`）——检查器自点名被 `ff0dc7b`（web_fetch 新功能）搬走实现，归属那笔作者改指；本笔六站点编辑不碰 output-ring。
+6. **取料**：census 复跑（16 落点／9 自造→7 站点改造后 2 自造：budget＋sequencer）；探针与真值沿用 241/242 页目录。
