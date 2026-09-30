@@ -385,7 +385,7 @@ describe("M3c 工具面裁剪与成本闸", () => {
     const r = await orch.spawn({ mode: "read", task: "调研" }, { callId: "b1" });
     expect(r.ok).toBe(false);
     expect(r.output).toContain("[budget] 会话成本超限");
-    const warn = events.find((e) => e.type === "tool_result" && (e as { callId: string }).callId.startsWith("budget-")) as Extract<AgentEvent, { type: "tool_result" }> | undefined;
+    const warn = events.find((e) => e.type === "tool_result" && (e as { callId: string }).callId === "b1") as Extract<AgentEvent, { type: "tool_result" }> | undefined; // 第 245 页穿线：事件挂真 callId
     expect(warn?.ok).toBe(false);
     expect(warn?.output).toContain("[budget] 会话成本超限");
     expect(warn?.output).toContain("主 loop 不受闸"); // V1 口径：闸管编排扩张

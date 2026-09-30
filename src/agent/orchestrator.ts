@@ -340,7 +340,7 @@ export class Orchestrator {
     }
     // 会话成本闸（§4.4.8）：超限拒绝新 spawn（含 sequencer 后环）；主 loop 不受闸（V1 口径：闸管编排扩张）
     if (this.budgetBlocked()) {
-      return await this.rejectOnBudget();
+      return await this.rejectOnBudget(ctx.callId);
     }
     if (mode === "pipeline") {
       return await this.spawnPipeline(args, ctx);
@@ -385,7 +385,7 @@ export class Orchestrator {
     ctx: { callId?: string } = {},
   ): Promise<ToolResult> {
     const k = Math.min(Math.max(n, 1), 3);
-    if (this.budgetBlocked()) return await this.rejectOnBudget();
+    if (this.budgetBlocked()) return await this.rejectOnBudget(ctx.callId);
     if (this.activeCount() + this.spawnReserve + k >= MAX_CONCURRENT_WORKERS) {
       return {
         ok: false,
@@ -485,12 +485,15 @@ export class Orchestrator {
    *  只出声）＋真正挂回模型那一次 `spawn_agent` 的返回体。`hold` 两处都盖：那一列描述的是「这一笔是
    *  harness 按住的」，与 callId 真不真无关。自造 callId 要不要换成真 callId（换成后两条会不会被
    *  `mergeToolResultsById` 折成一条模型可见消息）属裁决，不属这一笔——第 229 页登记为仍开的一半。 */
-  private async rejectOnBudget(): Promise<ToolResult> {
+  private async rejectOnBudget(callId?: string): Promise<ToolResult> {
     const estimate = this.budgetEstimateUsd().toFixed(4);
     const cap = String(this.budget?.maxUsd ?? 0);
+    // 落流事件挂真 callId（第 245 页登记的穿线，第 250 页折叠判定安全）：与返回体同 id，
+    // mergeToolResultsById 并成一条、正文不丢；无 callId 的调用点才落回 budget-<ts>（照旧孤儿降级）。
+    const rid = callId !== undefined && callId !== "" ? callId : "budget-" + String(Date.now());
     await this.opts.emit({
       type: "tool_result",
-      callId: "budget-" + String(Date.now()),
+      callId: rid,
       ok: false,
       hold: "budget",
       output: "[budget] 会话成本超限：估价 $" + estimate + " ≥ maxBudgetUsd $" + cap + "（编排扩张被拒；主 loop 不受闸）",
@@ -545,7 +548,7 @@ export class Orchestrator {
       }
     }
     if (this.budgetBlocked()) {
-      return await this.rejectOnBudget();
+      return await this.rejectOnBudget(ctx.callId);
     }
     // ---- M5b 模型路由（§m5-proposal 步骤 8）：opts.routing 启用时决策先行，审计面 = routing_decision ----
     const routingEnabled = this.opts.routing === true;
@@ -1087,7 +1090,7 @@ export class Orchestrator {
         return { ok: false, output: "spawn_agent(supervise): 主会话已取消，受限循环中止（fail-closed）" };
       }
       if (this.budgetBlocked()) {
-        await this.rejectOnBudget();
+        await this.rejectOnBudget(callId);
         await rejectRings(ringAgentIds);
         return { ok: false, output: "spawn_agent(supervise): 成本闸超限，受限循环中止" };
       }

@@ -132,17 +132,18 @@ async function expectHold(ev: { ok: boolean; output: string; hold?: string }, re
 }
 
 describe("编排按住的这一次扩张：每挡各有行为证人", () => {
-  it("成本闸拒绝的 spawn 回执与出声事件都带 hold=budget", async () => {
+  it("成本闸拒绝的 spawn 回执与出声事件都带 hold=budget（事件挂真 callId，与返回体折叠——第 245 页登记的穿线已落）", async () => {
     const { orch, events } = makeOrch({ budget: { maxUsd: 0.5, pricePerMTok: 1 }, model: fastModel });
     await orch.appendProtocol({ type: "usage", inputTokens: 700_000, outputTokens: 400_000 } as AgentEvent);
     expect(orch.budgetBlocked()).toBe(true);
     const r = await orch.spawn({ mode: "read", task: "被拒的活" }, { callId: "c-budget" });
     expect(r.ok).toBe(false);
-    expect(r.hold, "返回体没有这一列 ⇒ 落盘面也不会有（挂回真 callId 的那一半由下面「接线」那一格钉）").toBe("budget");
+    expect(r.hold, "返回体没有这一列 ⇒ 落盘面也不会有").toBe("budget");
     await expectHold(r, "budget", "会话成本超限");
-    const side = events.filter((e): e is ToolResultEvent => e.type === "tool_result" && e.callId.startsWith("budget-"));
-    expect(side, "成本闸那句自造 callId 的出声事件没落流（它仍在，属仍开的一半）").toHaveLength(1);
-    expect(side[0]!.hold).toBe("budget");
+    const folded = events.filter((e): e is ToolResultEvent => e.type === "tool_result" && e.callId === "c-budget");
+    expect(folded, "落流事件挂真 callId（budget-<ts> 自造 id 退役）⇒ 与返回体折叠前各一条").toHaveLength(1);
+    expect(folded[0]!.hold).toBe("budget");
+    expect(folded[0]!.output).toContain("会话成本超限");
   });
 
   it("并发帽拒绝的 spawn 回执带 hold=concurrency-limit", async () => {
@@ -267,8 +268,12 @@ describe("编排按住的这一次扩张：每挡各有行为证人", () => {
     expect(await waitFor(() => hang.has("前环任务A"))).toBe(true);
     await orch.appendProtocol({ type: "usage", inputTokens: 700_000, outputTokens: 400_000 } as AgentEvent);
     releaseOne(hang); // 前环 done → 事件驱动触发后环 → 成本闸把这一环按住
-    expect(await waitFor(() => resultsFor(events, "b4").length === 1)).toBe(true);
-    const ev = resultsFor(events, "b4")[0]!;
+    expect(await waitFor(() => resultsFor(events, "b4").length >= 1)).toBe(true);
+    const evs = resultsFor(events, "b4");
+    // 第 245 页穿线后：触发支的落流事件也挂 b4（两条同 id，投影时 mergeToolResultsById 并成一条、正文不丢）
+    expect(evs.length).toBe(2);
+    const ev = evs.find((x) => (x.output ?? "").includes("reason=budget_exceeded"))!;
+    expect(ev, "散文那半必须有一条（reason= 的家）").toBeTruthy();
     expect(ev.hold, "结构那一半").toBe("budget");
     // 散文那一半钉**字面量**：映射表被改动时这条要红（若写成「等于表里那个值」就成了等价突变，规则 259）。
     expect(ev.output, "散文 reason= 与结构列分手了：从前这里靠匹配文案").toContain("reason=budget_exceeded");

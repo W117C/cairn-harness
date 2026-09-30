@@ -8130,6 +8130,44 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 7. **刻意未做（免得被下游读成已做）**：`ClaimResult` 的判别联集（评审建议，属形状重构，另页）；exit 2 的机器可读原因键；
    247 页旧账里 `mutate-gates` 的 `cause` 必填与分区证人——本笔按评审的**高危**三项走，没顺手改一把已经绿的尺。
 
+### 2026-10-01 · 第 249 页补 凭证：本笔（`a5197eb`）认证 256 文件／3353 条 exit=0、门 20/20 绿·超预算 0、三支新锚点 3/3 全杀（`real 3.48`）；墙钟那格没量到、绿而撞窗（如实记），并纠正第 247 页一句「已回收」
+
+取料：`outputs/page-claim-hardening-2026-09-30/`（`needles-before-commit.log`／`needles-at-a5197eb.log`／`kill-3-anchors-at-a5197eb.log`／`head-cert-a5197eb.log`）、
+`outputs/inflight-index-witness-2026-09-30/`（`probe.log`＋`probe-r1..r3.log`、`summary.log`、`tsc-probes.log`／`tsc-sentinel-missing-prop.log`／`tsc-outputs-blast.log`／`tsc-outputs-per-file.log`）。
+
+1. **被认证的是 `a5197eb`，用独立树** `.worktrees/head-cert-a5197eb`（建树后 `git -C … status --porcelain`＝**0 项**才算干净树；节点 `cp -al node_modules`）。
+2. **针脚两份互证（同一条尺、两个时刻）**：主树落库前 `针脚体检：1104 条 —— 阻断 2 …钉在飞文本 2…`；
+   干净树落库后 `阻断 0 …钉在飞文本 0 … [mutate-needles-check] 全部锚点针脚可判定 ✅`；两份都 `改法语法体检：1104 条改法全部产出合法源文件 ✅`。
+   ⇒ 243／244 页那条先例第四次应验：**阻断数＝未入库的实现数**，落库即归零，不用解释也不用改针脚。
+3. **本笔三条新锚点逐条杀死（在干净树里）**：`✅ page-claim-unreadable-ledger-prints-zero`／`✅ page-claim-inside-repo-bare-prefix`／`✅ page-claim-cli-exits-1`，
+   末行「全部变异被正确杀死（断言非恒真）」，`real 3.48`。机器自印那两行照贴：
+   `成本分母：判卷 spawn 6 次／3 条（每条次数分布 2×3）· 单次中位 第1次 0.3s／第2次 0.4s· 最贵一条 page-claim-unreadable-ledger-prints-zero 0.8s`
+   `跑法单价：selector 6 拍·中位 0.35s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母`
+4. **head-cert 汇总逐格**：`依赖核对：该提交声明 10 项，缺 0 项`、`import 面：3021 条边｜悬空 0（其中存量已豁免 0）`、
+   `认证门面=20 道（跑到 20）｜绿 20 道｜⚠️ 超预算 0`、`TREE=a5197eb DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有`、
+   `Test Files 256 passed (256)｜Tests 3353 passed (3353)｜exit=0（退出码直接取，不接管道）`、`HEADCERT_EXIT=0`。
+   ⚠️ 退出码取自 log 里那一行，**不是**后台通知回显的「exit code 0」——那属于我收尾用的包装命令（规则 249）。
+   ⚠️ **墙钟这一格没量到**：这趟跑批前没加 `/usr/bin/time`。不拿「00:15:15→00:19:17」的区间差冒充读数（规则 245：派生值要标出处，
+   而本仓的单价口径只有机器自印那两行）；下次认证补测，别把「没量」写成「≈4 分钟」。
+5. **条数核对式**：`3353 ＝ 3350（第 247 页凭证 @`077b13a` 的留档）＋ 3`。
+   那 3 条来自 `tests/page-claim.test.ts` 11→14（两侧现读：`git show a5197eb^:… grep -cE '^ {2}it\('`＝11、`a5197eb`＝14）；
+   `tests/head-cert-deps.test.ts` 两侧都 88（重写那条真 git 判卷没增减用例数）；文件数 256 未变（本笔没建新的判卷文件）。
+6. **归因（绿而撞窗）**：`并发判卷=起前 0 套／跑完 1 套（撞窗：本仓判卷有读写共享 /tmp 的用例）`——
+   跑完那一套是隔壁 00:19 起的 `tests/orchestrator-hold.test.ts`（ps 现场 pid 41904），不是本笔的进程。
+   ⇒ 本趟是**绿而撞窗**、不是「绿且独占」（231／247 页同款措辞）。主树此刻另有隔壁在飞面（`outputs/_audit-*.md`、`outputs/selector-uniqueness-2026-09-30/`、`.vitest/`），本笔一棵没碰、一个文件没改。
+7. **纠正第 247 页的一句（这一格是我自己写错的）**：那页凭证写「本笔自建认证树 @`077b13a` 已逐字核 0 项后回收」，
+   而本趟门的现读是 `常驻残留树=4（gate-mutate-verify@a5197eb、head-cert-077b13a@077b13a、head-cert-2ee726c@2ee726c、verify-a5197eb@a5197eb）`
+   ⇒ **那棵树一直还在**。不是事后被重建：目录 mtime `23:33:41` 早于 247 页提交的 `23:36`。
+   成因现读得到：`scripts/head-cert.ts:294` 只**打印**回收命令（`git worktree remove` 是破坏性操作，归人），我把「脚本让我做」写成了「我做完了」。
+   本笔不重复这个错：**下列树均未删**，逐棵 `status --porcelain`＝0 项，命令逐字贴在这儿等点头——
+   本会话自建的 `git worktree remove --force .worktrees/head-cert-a5197eb`、`.worktrees/verify-a5197eb`；
+   本会话前几笔留下的 `.worktrees/head-cert-077b13a`、`.worktrees/head-cert-2ee726c`（那一笔都已入库）；
+   `gate-mutate-verify` 是变异门自己的常驻树（门每次重 exec 到它，不动）。
+8. **刻意未做（免得被读成已做）**：任务 #1（`foreign` 桶的真机见证——要另建外域树再认证，而认证树锁独占，只能排在这趟之后）；
+   任务 #4（把证据面请进 typecheck：存量已量＝48 条报错／14 个文件，逐文件计数在 `tsc-outputs-per-file.log`，水位门未上）；
+   任务 #2（AGENTS.md 那句入口约定，要授权）；`ClaimResult` 判别联集与 exit-2 的机器可读原因键（另页）；
+   以及第 4 页那条**探针负载臂仍未单独量**——本笔的写盘读数只覆盖静态两态，别读成「并发下也这样」。
+
 ### 2026-10-01 · 第 250 页（本会话）· sequencer 状态读数页：折叠推演判定「安全、可做」，动态探针两格如实登记（能力 1，表外零源码）
 
 1. **动因是第 245 页登记的「sequencer 状态…需单独一页读数」**。交卷分两半：静态清单＋折叠推演闭环；动态探针两格登记未交（原因见 §四，不装完）。
@@ -8137,3 +8175,11 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 3. **折叠推演的关键结论**：`mergeToolResultsById` 保留首条 ok——同一链上 spawn 回执必为首条（其 ok 属于 spawn 调用本身），链的失败在正文可见而不翻 ok 位 ⇒ **并列语义下折叠是安全的**；且每链省掉 N 句孤儿前言。静态判定「可做」，实现时两件事同笔：m3c:545 的旧形状过滤、用一条真链 replay 钉死「事件序＝时间序」假设。
 4. **动态探针两格登记**：① 无 runLoop 驱动的 headless 探针跑不出状态事件（sequencer 转变由 loop 节拍驱动）；② 方案门 id `apr-1-pipeline` 在探针无决策者的情况下 300ms 内已被决议（`decideWorkerApproval` 报「未知或已决议」）——这个时序反常本身值得下一笔查。两格都不许读成「折叠有风险」。
 5. **取料**：`outputs/sequencer-status-readings-2026-10-01/`（`readings.md`＋`probe.mts`/`probe.log` 实跑实录）。零源码 ⇒ typecheck 不重跑；标题不含「凭证」，不进 D-9 面。
+
+### 2026-10-01 · 第 251 页（本会话）· budget 事件穿线落地：成本闸拒绝挂真 callId，「波及半径为 0」式自造 id 在编排面清零（callId 线收尾，源码 +14 行）
+
+1. **动因**：第 245 页登记的剩两站之一（budget 事件 4 调用点需穿线）。本页落地后 **callId 线只剩 sequencer 动态两格**（250 页 §四登记，属探针基建不是本线）。
+2. **实现（`rejectOnBudget(callId?)`，+14 行）**：落流事件的 id 取「传入的 ctx.callId，无则落回 `budget-<ts>`」；四个调用点全部穿线（spawn 两支＋spawnRace＋supervise 环——L1090 的 supervise 作用域里本就有 callId）。折叠语义与 245 页冻结闸同款：落流事件与返回体同 id，`mergeToolResultsById` 并成一条、正文不丢。
+3. **判据同笔三处**：hold 成本闸 case 改断真 callId 折叠形状（旧断言「budget-* 出声事件仍在，属仍开的一半」——**那半今天收掉**）；后环 case 改断两条同 id（触发支落流＋回执，投影折一条）并按内容取 reason= 那条；m3c 预算 case 的过滤器改 `callId === "b1"`。
+4. **读数**：hold 18＋m3c 25＋terminal-sync 3 ＝ 46 全绿；final-budget＋context＋prose-needle-scan 70 全绿；针脚 1104 阻断 0；typecheck 0。
+5. **取料**：判卷与体检现读（本轮命令输出）；真值沿 241/242/245 页。
