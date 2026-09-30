@@ -233,13 +233,18 @@ export function credentialPages(text: string): CredPage[] {
   return out;
 }
 
-/** 数在取料面里"算找到原文"——必须**按数位边界**认，不能 `includes`：
- *  `241` 会命中 `2410`、`9.7` 会命中 `19.75`（第一版就是这么错的：三条本该未寻址的读数被判成"已入库"，
- *  于是豁免被报成 stale，红海方向反了）。小数点两侧都不许再粘数字。 */
-/** 探针与复算共用这一份匹配谓词（规则 236：探针"自己再算一遍"＝假读数）。导出的只是判定，不是第二个消费者。 */
-export function hasNumber(face: string, num: string): boolean {
-  const esc = num.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  return new RegExp("(?:^|[^0-9.])" + esc + "(?:[^0-9.]|$)", "mu").test(face);
+/** 回查端与抽取端共用**同一把谓词**（第 266 页，替换从前那支只按裸数位边界的 `hasNumber`）：
+ *  ⑴ 先剥 ANSI——入库日志带色，真机字节是 `Tests ^[[22m ^[[1m^[[32m101 passed`，转义序列正好夹在关键词与数字之间：
+ *     严格式贴不住、而裸数位照样命中 ⇒ 两端各说各话（第 265 页把这 6 条误归因成「靠散文顶住」，现读推翻）。
+ *  ⑵ 只认 `CRED_NUMBER_RES` 的整句形状——与凭证页抽读数用的是同一张表；面上别处出现这个数**不算**原文
+ *     （从前算：散文里一句「帽 10」就能替读数 10 作证，规则 242/262）。
+ *  剥色共用 `lib/vitest-summary` 那份：本仓曾有三门各自内建、漂过一次（那文件的头注释就是证人）。
+ *  数位边界这一半由集合的精确成员关系给：面上只有 `2410` 时，读数 `241` 不在集合里（前身的 `includes` 退化仍会红）。 */
+export function sourcedReadings(face: string): Set<string> {
+  const out = new Set<string>();
+  const clean = stripAnsi(face);
+  for (const re of CRED_NUMBER_RES) for (const m of clean.matchAll(new RegExp(re.source, "gu"))) out.add(m[1]!);
+  return out;
 }
 /** 未点名取料目录的凭证页，按**页**记名（`第 NNN 页` key，Set 去重——同页有多个 `###` 段时不重复计）。
  *  帽登记在第 265 页把自己那三页点名之后的现读，**只准调低**（计数类不留余量）：
@@ -270,10 +275,11 @@ export function checkCredentialSources(
     const blobs = p.dirs.map(readFace);
     if (blobs.every((b) => b === null)) { unmatched += p.numbers.length; unverifiable(); continue; }   // 取不到＝未检，也不红
     const face = blobs.filter((b): b is string => b !== null).join("\n");
+    const found = sourcedReadings(face);
     for (const num of p.numbers) {
       checked++;
       const waiverKey = `${p.key}|${num}`;
-      const sourced = hasNumber(face, num);
+      const sourced = found.has(num);
       const waived = waiverKey in waivers;
       // 取料面已经能顶住的那条，豁免就成了多余登记——留着的代价是"下一位读者以为这数仍查不到"。
       if (waived && sourced) seenKeys.add(waiverKey + "|已入库");
@@ -484,6 +490,7 @@ import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "n
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { REPLAY_READINGS, REPLAY_REF, countInlineReplay, replayGapsOf, type ReplayReading } from "./replay-readings";
+import { stripAnsi } from "./lib/vitest-summary";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 

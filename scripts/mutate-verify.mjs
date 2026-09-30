@@ -9987,9 +9987,38 @@ const MUTATIONS = [
     src: "scripts/docs-check.ts",
     test: "tests/docs-check.test.ts",
     desc: "数位边界退化成 `includes` ⇒ 「241」在「2410」里也算找到：本笔第一版就踩了这一格，" +
-      "三条本该登记为不可回查的读数被判成「已入库」，于是豁免反被报成 stale——**假红指错了方向**。",
-    apply: (s) => s.replace('return new RegExp("(?:^|[^0-9.])" + esc + "(?:[^0-9.]|$)", "mu").test(face);', "return face.includes(num);"),
+      "三条本该登记为不可回查的读数被判成「已入库」，于是豁免反被报成 stale——**假红指错了方向**。" +
+      "第 266 页把回查端换成语境式集合后，这条针脚跟着实现改指到「判定那一行」（旧写法整段已不在盘上＝阻断，规则 229）；" +
+      "危害形状不变，而且现在它还替「散文顶住读数」那一半作证。",
+    apply: (s) => s.replace("      const sourced = found.has(num);", "      const sourced = face.includes(num);"),
     expectFail: "数位边界：面里只有 2410 时",
+  },
+  {
+    id: "docscheck-cred-face-keeps-ansi-escape-codes",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "取料面不剥 ANSI ⇒ 真机汇总行（转义序列正夹在关键词与数字之间）被判成悬空：这是假红海，" +
+      "而它上一次以相反方向出现过——同一份输出在 TERM=dumb 下绿、在裸跑下红（lib/vitest-summary 的头注释就是证人）",
+    apply: (s) => s.replace("  const clean = stripAnsi(face);", "  const clean = face;"),
+    expectFail: "回查端与抽取端同一把谓词：带 ANSI 的真汇总行要算找到，散文里出现同一个数不算",
+  },
+  {
+    id: "docscheck-cred-context-reads-whole-match-not-capture",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "把集合里存的东西从捕获组换成整条匹配 ⇒ 面里存的是「Test Files 253 passed」这种整句，" +
+      "读数 253 永远不在集合里：这一格从此只会在每条真原文上报红（红海的下一次反应是关掉它）",
+    apply: (s) => s.replace("out.add(m[1]!);", "out.add(m[0]);"),
+    expectFail: "点了名且数在面里 ⇒ 可比对计数涨、零红",
+  },
+  {
+    id: "docscheck-cred-predicate-computed-but-not-attached",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "谓词算出来了却不接进判定（喂一个空集合）⇒ 每条点名的读数都悬空、每一页都红，" +
+      "而『零红』那一半的证人必须在这儿翻过来——只印不接的尺在本仓已咬过两次（规则 230/246）",
+    apply: (s) => s.replace("  const found = sourcedReadings(face);", "  const found = new Set<string>();"),
+    expectFail: "点了名且数在面里 ⇒ 可比对计数涨、零红",
   },
   {
     id: "docscheck-cred-unnamed-face-forgets-waivers",

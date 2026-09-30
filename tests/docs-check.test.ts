@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import {
   checkCredentialSources, CREDLEDGER_FILE, CRED_UNNAMED_PAGE_CAP, credentialPages, LEDGER_FILE, ledgerRevFace, ledgerRevTokens,
-  LEDGER_NON_REV, runDocsCheck, UNSOURCED_READINGS,
+  LEDGER_NON_REV, runDocsCheck, sourcedReadings, UNSOURCED_READINGS,
 } from "../scripts/docs-check";
 import { REPLAY_READINGS, countInlineReplay, type ReplayReading } from "../scripts/replay-readings";
 import {
@@ -554,6 +554,46 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
     expect(cred.unnamedPages.length, `现读 ${String(cred.unnamedPages.length)} 页 ≠ 帽 ${String(CRED_UNNAMED_PAGE_CAP)} ⇒ 帽要跟着现读改，别只改数`).toBe(CRED_UNNAMED_PAGE_CAP);
     expect(cred.checked, "可比对分母塌了就不是这一格的账").toBeGreaterThanOrEqual(50);
   }, 60_000);
+
+  it("回查端与抽取端同一把谓词：带 ANSI 的真汇总行要算找到，散文里出现同一个数不算", () => {
+    /* ESC 用 fromCharCode 现拼，不写转义字面量：这文件里的 `\x1b` 曾在编辑中被改写过（本仓老事故）。
+       两半都必要——只补正向那一半，「摘掉剥色」与「退化成裸数位」两种坏法各有一种不红。 */
+    const ESC = String.fromCharCode(27);
+    const colored = `Test Files ${ESC}[22m ${ESC}[1m${ESC}[32m253 passed (253)`;
+    const found = checkCredentialSources(
+      credentialPages(page(["x-2026-10-01"], ["253"])),
+      face({ "x-2026-10-01": colored }),
+      {},
+    );
+    expect(found.findings, `带色的真原文被判成悬空＝假红海（面里这句就是 vitest 印的那一行）：${JSON.stringify(colored)}`).toEqual([]);
+    expect(found.checked).toBe(1);
+    // 负控：面上只在散文里出现过这个数（没有严格式整句）⇒ 必须红，否则「读数」这格永远绿着
+    const prose = checkCredentialSources(
+      credentialPages(page(["x-2026-10-01"], ["253"])),
+      face({ "x-2026-10-01": `说明：帽 253 台，另见 253 页` }),
+      {},
+    );
+    expect(prose.findings, "散文里提到同一个数就顶住读数 ⇒ 这一格退化成『面非空』，红永远不来").toHaveLength(1);
+    expect(prose.findings[0]?.detail).toContain("253");
+  });
+
+  it("sourcedReadings 自己：剥色、只认严格式整句、数位边界由精确成员给", () => {
+    const ESC = String.fromCharCode(27);
+    const text = `前言说 253 台\nTest Files ${ESC}[22m ${ESC}[1m${ESC}[32m253 passed (253)\nTests  102 passed (102)\nreal 182.12\n针脚体检：1148 条\n跑了 6/6 条\n`;
+    const got = [...sourcedReadings(text)].sort();
+    expect(got, "面上每个严格式各贡献一个数；散文里那个 253 不额外算，捕获组取的是数本身而不是整句").toEqual(["102", "1148", "182.12", "253", "6"]);
+    // 数位边界这一半现在由集合的精确成员给：面上只有 2410 时，241 不在集合里
+    expect(sourcedReadings("Test Files  2410 passed (2410)").has("241"), "把语境式退化成子串查找就会在这里翻绿").toBe(false);
+    expect(sourcedReadings("Test Files  241 passed (241)").has("241"), "反向那一半：位数一样的真原文必须算找到").toBe(true);
+  });
+
+  it("接线：回查走 sourcedReadings、它内部真剥色（算出谓词却不接进判定＝这一格永远不响）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/docs-check.ts", import.meta.url)), "utf8");
+    expect(src).toMatch(/^ {4}const found = sourcedReadings\(face\);$/mu);
+    expect(src).toMatch(/^ {6}const sourced = found\.has\(num\);$/mu);
+    expect(src).toMatch(/^ {2}const clean = stripAnsi\(face\);$/mu);
+    expect(src).toMatch(/^import \{ stripAnsi \} from "\.\/lib\/vitest-summary";$/mu);
+  });
 
   it("接线：主段把「未点名页」连同帽一起印出来，且判定真拿帽去比（只算不印＝这格永远没人看）", () => {
     const src = readFileSync(fileURLToPath(new URL("../scripts/docs-check.ts", import.meta.url)), "utf8");

@@ -3,7 +3,12 @@
  *  现在的判定只按裸数位边界 ⇒ 面里散文提到 `8`／`6` 就能替一条读数顶住——抽取端要求语境、回查端不要求，这个不对称就是本探针要量的东西。 */
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { credentialPages, hasNumber, CRED_NUMBER_RES } from "../../scripts/docs-check.ts";
+import { credentialPages, CRED_NUMBER_RES } from "../../scripts/docs-check.ts";
+
+/** 旧的回查形状（只按裸数位边界）。第 266 页把它从生产端换掉了，探针留一份**局部**实现只为复现当时的 A/B 对照：
+ *  生产端不再调用它，所以这里重算不算"抄被度量者"（规则 236 说的是反过来那种情形）。
+ *  写法：把面上所有"数字串"整段切出来做精确成员比对——等价于前后不许粘数字或点，避免正则转义抄错。 */
+const bareNumberHit = (face: string, num: string): boolean => new Set(face.split(/[^0-9.]+/u)).has(num);
 
 const ROOT = process.argv[2];
 if (typeof ROOT !== "string" || ROOT === "") { console.error("用法：tsx context-strictness.mts <仓根>"); process.exit(2); }
@@ -34,7 +39,7 @@ for (const p of pages) {
   const face = blobs.join("\n");
   const ctx = contextNumbers(face);
   for (const n of p.numbers) {
-    const b = hasNumber(face, n), s = ctx.has(n);
+    const b = bareNumberHit(face, n), s = ctx.has(n);
     if (b) bare++;
     if (s) strict++;
     if (b && !s) { flip++; flips.push(`${p.key}|${n}`); }
