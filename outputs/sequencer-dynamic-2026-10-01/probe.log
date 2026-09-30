@@ -1,0 +1,8 @@
+方案门抢答： {"id":"(未见)","outcome":"30 秒内没有 approval_requested"} | 抢答器看到 approved 路径: false
+事件类型分布： [["user_message",1],["tool_call",1],["tool_result",1],["assistant_message",1]]
+
+状态事件（callId "pipeline-*"）＝ 0 条
+
+approval_resolved 原文： undefined
+spawn 回执（callId=pc1）＝ 1 条，ok=[false]
+  回执正文： unknown tool: spawn_agent

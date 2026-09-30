@@ -8224,3 +8224,12 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
    落库前读数：`针脚体检：1109 条 —— 阻断 5＝钉在飞文本 5`（正是本笔未入库的实现）、待复认 0、未覆盖 0、未入库面 0、killer 指针失效 0、`改法语法体检：1109 条…全部产出合法源文件 ✅`、typecheck exit 0、`tests/head-cert-deps.test.ts` 91 全绿。
 8. **刻意未做（免得被读成已做）**：`head-cert` 允许认证一棵**仓外**的树，而 `mutate-verify --in-worktree` 明确拒绝逃出主检出——两个入口对「树能建在哪」口径不一致，这是**裁决不是笔误**，已另挂待裁；
    `canonical` 目前只用于「是不是我自己这棵」这一处，`insideScratchFace` 仍按原始串比前缀（`.worktrees` 那侧两边都来自 git，实测一致；改它要另一页量存量）；本会话在 `.worktrees/` 下留的几棵树仍未回收（等点头，命令在 249 页凭证里）。
+
+### 2026-10-01 · 第 253 页（本会话）· sequencer 动态探针两层实录：runLoop 缺省工具面无 spawn_agent（unknown tool），动态读数需生产装配——两格继续留置并写明路径（能力 1，表外零源码）
+
+1. **第 250 页登记的两格，本轮用两层探针各试一次，都不出状态事件——但每一层都把「为什么」收窄了一格**：
+   ② 方案门时序格：直接 `orch.spawn` 的探针里 `approval_requested` 确实发射，但 `decideWorkerApproval("apr-1-pipeline")` 在 300ms 内报「未知或已决议」（决议者不明——250 页登记的反常仍在）。
+   ① runLoop 格：脚本化 provider 第一轮发 `spawn_agent(pipeline)` ⇒ 回执 **`unknown tool: spawn_agent`**——runLoop 缺省工具面没有编排工具，`spawn_agent` 是 agent-runner 生产装配接进去的。⇒ **动态读数的正确工具是 loop-eval 那条生产装配线**（凭据一到，真模型跑的同一装配天然带编排工具，状态事件的动态读数可以搭车）。
+2. **这两层不白跑**：a) 「unknown tool」把「探针为什么拿不到动态读数」从「时序猜疑」收窄到「装配缺失」，下一笔的路径从猜测变成确定（走 agent-runner 装配或 loop-eval 搭车）；b) 方案门时序反常独立成格，配 `probe.log` 原句可复现。
+3. **修法路径（下一笔，本页不动源码）**：动态探针改走 `agent-runner` 的工具装配（把 `spawn_agent` 与编排实例接进 runLoop 的 `tools`），或等能力 10 凭据落地后直接在 loop-eval 跑真链搭车取读数。两案都满足 250 页 §四的「驱动 runLoop」要求。
+4. **取料**：`outputs/sequencer-dynamic-2026-10-01/`（`probe.mts`＋`probe.log` 两层实录）。零源码 ⇒ typecheck 不重跑。
