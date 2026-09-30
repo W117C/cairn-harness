@@ -42,10 +42,22 @@ describe("workerBudgetConfig（预算基线认模型窗口）", () => {
     expect(c.inputLimit).toBe(128_000);
   });
 
-  it("窗口退化值（NaN / 负数 / ≤ 输出预留）⇒ 不采信，仍按基线", () => {
-    for (const w of [Number.NaN, -1, BASELINE.maxOutputReserve]) {
+  it("窗口退化值（NaN / 负数 / 0）⇒ 不采信，仍按基线", () => {
+    for (const w of [Number.NaN, -1, 0]) {
       expect(workerBudgetConfig({ modelCtxWindow: w })).toEqual(BASELINE);
     }
+  });
+
+  /* 旧口径把「窗口 == 输出预留」也当退化值（那时预留恒 8192，窗口 8192 没有可用输入）。
+     2026-09-30 起预留跟着窗口缩（见 compaction.ts 的 scaledOutputReserve），
+     所以 8192 是一个**合法的小窗口**：inputLimit 认它、预留缩到 2048、可用输入 6144。
+     它仍装不下工具面+系统提示词的 ~3500 固定开销之外太多东西，但那是可用性问题，
+     不是「不采信窗口」——两者不能混（混了就会拿 128k 的预算去打一个 8k 的模型）。 */
+  it("窗口 == 旧预留值 ⇒ 现在是合法小窗口：认窗口、预留按它缩", () => {
+    const c = workerBudgetConfig({ modelCtxWindow: BASELINE.maxOutputReserve });
+    expect(c.inputLimit).toBe(BASELINE.maxOutputReserve);
+    expect(c.maxOutputReserve).toBeLessThan(BASELINE.maxOutputReserve);
+    expect(c.inputLimit - c.maxOutputReserve).toBeGreaterThan(0);
   });
 });
 

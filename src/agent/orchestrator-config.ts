@@ -67,10 +67,15 @@ export function workerBudgetConfig(
 ): CompactionConfig {
   const window = handle.modelCtxWindow;
   const base: CompactionConfig = { ...DEFAULT_COMPACTION_CONFIG, ...WORKER_COMPACTION_CONFIG };
-  // withModelBudget 未采信窗口时按同一性原样返回（退化窗口：非数 / ≤ 输出预留），据此判窗口是否生效
-  const budgeted = withModelBudget(base, window);
+  /* 窗口是否被采信：**显式判据**，不靠 `withModelBudget` 的同一性返回。
+     2026-09-30 改口径时踩到：`withModelBudget` 现在对任何正窗口都返回新对象
+     （输出预留要跟着窗口缩，见那边注释），于是「`budgeted !== base` 即窗口生效」这条推断失效——
+     `tests/worker-budget.test.ts` 的退化值用例当场红。判据写在调用方，
+     别让被调方的返回值形状承担语义（那是隐式契约，改一次实现就断一次）。 */
+  const windowUsable = typeof window === "number" && Number.isFinite(window) && window > 0;
+  const budgeted = windowUsable ? withModelBudget(base, window) : base;
   const merged: CompactionConfig = { ...budgeted, ...overrides };
-  return budgeted !== base ? { ...merged, inputLimit: Math.min(merged.inputLimit, budgeted.inputLimit) } : merged;
+  return windowUsable ? { ...merged, inputLimit: Math.min(merged.inputLimit, budgeted.inputLimit) } : merged;
 }
 
 /** pipeline stages 上限（V1 链长收敛）。 */
