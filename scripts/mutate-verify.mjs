@@ -10031,18 +10031,30 @@ const MUTATIONS = [
     src: "scripts/docs-check.ts",
     test: "tests/docs-check.test.ts",
     desc: "把「证人那一趟属不属于本页」的比对换成恒不成立 ⇒ 再也没有弱证，" +
-      "别趟的日志只要数值撞对就能替本页作证（这一格从此永远绿，而它防的就是第 255 页那种错指）",
-    apply: (s) => s.replace("        else if (!identified.some((f) => f.runs.some((r) => p.shas.includes(r)))) {", "        else if (false) {"),
+      "别趟的日志只要数值撞对就能替本页作证（这一格从此永远绿，而它防的就是第 255 页那种错指）。" +
+      "第 270 页这条判断被提到分支最前面（强证先放行），针脚跟着走（规则 229）",
+    apply: (s) => s.replace("        if (identified.some((f) => f.runs.some((r) => p.shas.includes(r)))) {", "        if (false) {"),
     expectFail: "弱证三态：证人身份与本页对上＝强证；对不上＝弱证并点名文件与那一趟；证人没有身份行＝第三态",
   },
   {
     id: "docscheck-cred-weak-no-identity-folded-into-weak",
     src: "scripts/docs-check.ts",
     test: "tests/docs-check.test.ts",
-    desc: "把「证人没有身份行」并进弱证 ⇒ 帽会被没印 sha 的日志灌满，" +
-      "而真缺陷（身份对不上）反而被淹没——三态混成两态是本仓反复咬过的形状（规则 239/300）",
-    apply: (s) => s.replace("        if (identified.length === 0) weakUnjudged++;", "        if (identified.length === 0) weak.push({ key: p.key, num, files: [], runs: [] });"),
-    expectFail: "弱证三态：证人身份与本页对上＝强证；对不上＝弱证并点名文件与那一趟；证人没有身份行＝第三态",
+    desc: "把第三态那个条件的 `||` 换成 `&&` ⇒ 「既有别趟原文、又有没印身份的原文」这种混合面从『无从判』掉进弱证，" +
+      "帽被非缺陷灌满、真错指反而被淹没（第 270 页现读：8 对里有 3 对是混合面）。" +
+      "第 269 页那支钉的是 `weakUnjudged++` 那一行，本行形状变了 ⇒ 针脚跟着走（规则 229）",
+    apply: (s) => s.replace("        } else if (identified.length === 0 || witnesses.length > identified.length) {", "        } else if (identified.length === 0 && witnesses.length > identified.length) {"),
+    expectFail: "弱证不许过度主张：面上既有别趟的原文、也有没印身份行的原文 ⇒ 这一格算『无从判』",
+  },
+  {
+    id: "docscheck-cred-weak-cap-raised-silently",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "把弱证帽从现调解大（0 → 1）而不新点名任何一条跨趟引用 ⇒ 可比对那一半照旧绿，" +
+      "而这把尺从此允许下一页再塞一条" +
+      "「数对上了、证人不是那一趟」。降帽必须同时动这条锚点（规则 229：这一格刻意不允许悄悄动）",
+    apply: (s) => s.replace("export const CRED_WEAK_WITNESS_CAP = 0;", "export const CRED_WEAK_WITNESS_CAP = 1;"),
+    expectFail: "真仓：未点名页数跟着现读走——涨了要红，凭空把帽调低也要红（只有真把页点名了才允许降）",
   },
   {
     id: "docscheck-cred-weak-cap-comparison-offbyone",

@@ -281,8 +281,12 @@ export function credRunShas(text: string): string[] {
  *  存量两种责任都要在这里说清，否则帽会被读成「全是缺陷」：
  *  ① 合法跨趟引用（页里明说「上一笔同结构认证」，但没写那一笔的 sha——第 226 页 `real 158.55s`）；
  *  ② 真错指（页声称认证 `10bf910`，面上唯一的日志写着 `目标提交：3b3d001`——第 255 页的 `256`／`3356`）。
- *  前者要靠补 sha 把它变强证，后者要么补工件要么更正那一页——都不许靠调大帽解决。 */
-export const CRED_WEAK_WITNESS_CAP = 8;
+ *  前者要靠补 sha 把它变强证，后者要么补工件要么更正那一页——都不许靠调大帽解决。
+ *  历次降帽（每一次都要同笔动那支钉着本行数字的锚点，规则 229）：
+ *  8（第 269 页第一次登记）→ **0**（第 270 页：三处页里补上被引用那一趟的提交号、一处更正 `10bf910` 那句 sha，
+ *  弱证清零）。同页还把判据收紧了一格：「面上既有别趟原文、也有没印身份的原文」改判为**无从判**——
+ *  那 3 对本来就不该算缺陷（判卷日志与 needles 日志压根不印提交号）。 */
+export const CRED_WEAK_WITNESS_CAP = 0;
 /** 未点名取料目录的凭证页，按**页**记名（`第 NNN 页` key，Set 去重——同页有多个 `###` 段时不重复计）。
  *  帽跟着现读走，**只准调低**（计数类不留余量）：再写一笔不点名 `outputs/<主题>-YYYY-MM-DD/` 的凭证页 ⇒ D-9 当场红。
  *  为什么这一档要单独长读数：从前只印条数，没人知道是**哪几页**，于是第 262/263/264 三页凭证（8/6/6 条读数）
@@ -342,8 +346,14 @@ export function checkCredentialSources(
       if (sourced) {
         const witnesses = perFile.filter((f) => f.nums.has(num));
         const identified = witnesses.filter((f) => f.runs.length > 0);
-        if (identified.length === 0) weakUnjudged++;          // 证人里没有身份行 ⇒ 这一格无从判，不冒充读数
-        else if (!identified.some((f) => f.runs.some((r) => p.shas.includes(r)))) {
+        if (identified.some((f) => f.runs.some((r) => p.shas.includes(r)))) {
+          // 强证：本页那一趟的工件里就有这句原文——别处再有什么不算数，这一格不再往下问。
+        } else if (identified.length === 0 || witnesses.length > identified.length) {
+          // 两种"判不了"：面上压根没有身份行；或者既有别趟的原文、也有没印身份的原文——
+          // 后者不能算弱证：那条没身份的日志（判卷日志、needles 日志）本来就是本页最可能的出处，
+          // 拿一份带身份行的别趟日志去指控它，是这条尺的过度主张（第 270 页现读：8 对里有 3 对是这个形状）。
+          weakUnjudged++;
+        } else {
           weak.push({
             key: p.key, num,
             files: identified.map((f) => f.where),

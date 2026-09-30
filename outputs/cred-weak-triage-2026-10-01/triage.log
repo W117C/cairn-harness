@@ -1,0 +1,45 @@
+第 226 页｜读数 158.55 ⇒ ② 这条数不是本页那趟测的
+   现在的证人（身份不属于本页）：hard-gate-block-witness-2026-09-30/head-cert-2735051.log→2735051
+   同一页面里**没有身份行**的证人：（无——这条弱证是干净的：面上只有别趟的原文）
+   本页那趟的工件：hard-gate-block-witness-2026-09-30/head-cert-face20.log
+   其中含这个数的：（没有）
+第 255 页｜读数 256 ⇒ ① 补点名
+   现在的证人（身份不属于本页）：cert-251-threading-2026-10-01/head-cert-10bf910.log→3b3d001
+   同一页面里**没有身份行**的证人：（无——这条弱证是干净的：面上只有别趟的原文）
+   本页那趟的工件：foreign-witness-2026-10-01/cert-skip-test-fixed.log、foreign-witness-2026-10-01/cert-skip-test.log、sequencer-dynamic-2026-10-01/head-cert-69a7819.log
+   其中含这个数的：sequencer-dynamic-2026-10-01/head-cert-69a7819.log
+第 255 页｜读数 3356 ⇒ ② 这条数不是本页那趟测的
+   现在的证人（身份不属于本页）：cert-251-threading-2026-10-01/head-cert-10bf910.log→3b3d001
+   同一页面里**没有身份行**的证人：（无——这条弱证是干净的：面上只有别趟的原文）
+   本页那趟的工件：foreign-witness-2026-10-01/cert-skip-test-fixed.log、foreign-witness-2026-10-01/cert-skip-test.log、sequencer-dynamic-2026-10-01/head-cert-69a7819.log
+   其中含这个数的：（没有）
+第 265 页｜读数 1 ⇒ ③ 合法跨趟引用：把被引用那一趟写进页
+   现在的证人（身份不属于本页）：cred-face-coverage-2026-10-01/triage-flips.log→2b3763f
+   同一页面里**没有身份行**的证人：7 份：cred-face-coverage-2026-10-01/judges-266-first-run.log、cred-face-coverage-2026-10-01/judges-docs-check.log、judge-timeout-2026-10-01/judges-264.log、judge-timeout-2026-10-01/judges-after-null-witness.log
+   本页那趟的工件：（盘上没有）
+   其中含这个数的：（没有）
+第 265 页｜读数 102 ⇒ ③ 合法跨趟引用：把被引用那一趟写进页
+   现在的证人（身份不属于本页）：cred-face-coverage-2026-10-01/triage-flips.log→2b3763f
+   同一页面里**没有身份行**的证人：1 份：judge-timeout-2026-10-01/judges-264.log
+   本页那趟的工件：（盘上没有）
+   其中含这个数的：（没有）
+第 265 页｜读数 182.12 ⇒ ③ 合法跨趟引用：把被引用那一趟写进页
+   现在的证人（身份不属于本页）：pointer-wiring-observer-2026-10-01/head-cert-dfe2d6c.log→dfe2d6c
+   同一页面里**没有身份行**的证人：（无——这条弱证是干净的：面上只有别趟的原文）
+   本页那趟的工件：（盘上没有）
+   其中含这个数的：（没有）
+第 265 页｜读数 182.12 ⇒ ② 这条数不是本页那趟测的
+   现在的证人（身份不属于本页）：pointer-wiring-observer-2026-10-01/head-cert-dfe2d6c.log→dfe2d6c
+   同一页面里**没有身份行**的证人：（无——这条弱证是干净的：面上只有别趟的原文）
+   本页那趟的工件：cred-face-coverage-2026-10-01/head-cert-2cd6e79.log、judge-timeout-2026-10-01/head-cert-4806388-summary.txt、judge-timeout-2026-10-01/head-cert-4806388.log
+   其中含这个数的：（没有）
+第 265 页｜读数 6 ⇒ ② 这条数不是本页那趟测的
+   现在的证人（身份不属于本页）：cred-face-coverage-2026-10-01/triage-flips.log→2b3763f
+   同一页面里**没有身份行**的证人：2 份：cred-face-coverage-2026-10-01/kill-6-anchors.log、judge-timeout-2026-10-01/judges-before-commit.log
+   本页那趟的工件：cred-face-coverage-2026-10-01/head-cert-2cd6e79.log、judge-timeout-2026-10-01/head-cert-4806388-summary.txt、judge-timeout-2026-10-01/head-cert-4806388.log
+   其中含这个数的：（没有）
+小计：待分诊 8 对（索引覆盖 814 份 dated 文件）
+real 0.41
+user 0.20
+sys 0.07
+TRIAGE_EXIT=0

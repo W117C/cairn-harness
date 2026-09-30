@@ -570,6 +570,19 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
     expect(noId.weakUnjudged, "第三态要单独出声，不许被读成『都已核对』").toBe(1);
   });
 
+  it("弱证不许过度主张：面上既有别趟的原文、也有没印身份行的原文 ⇒ 这一格算『无从判』", () => {
+    /* 第 270 页把这条判据收紧了一格。从前只要"有任何带身份行的证人不属于本页"就记弱证，
+       于是本页最可能的出处（判卷日志、needles 日志——它们压根不印提交号）被别趟的 cert 日志顶掉了：
+       现读 8 对弱证里有 3 对是这个形状。改完 8→5，再补上跨趟引用的提交号才归零。 */
+    const mixed = () => [
+      { name: "judges.log", text: "Test Files 253 passed" },
+      { name: "head-cert-abcdef1.log", text: "目标提交：abcdef1\nTest Files 253 passed" },
+    ];
+    const r = checkCredentialSources(credentialPages(page(["x-2026-09-30"], ["253"])), mixed, {}, 99, 0);
+    expect(r.weak, `那条没身份的日志本来就是最可能的出处，拿别趟的日志指控它＝尺的过度主张：${JSON.stringify(r.weak)}`).toEqual([]);
+    expect(r.weakUnjudged, "第三态要接住这种混合面，否则它哪儿都不去、静默消失").toBe(1);
+  });
+
   it("弱证帽只在超出时出声，且 detail 点名是哪一页、哪个数、哪份证人", () => {
     const faceFn = () => [{ name: "head-cert-abcdef1.log", text: "目标提交：abcdef1\nTest Files 253 passed" }];
     const pages = credentialPages(page(["x-2026-09-30"], ["253"]));
@@ -660,7 +673,7 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
     expect(src).toMatch(/^ {4}const found = new Set<string>\(perFile\.flatMap\(\(f\) => \[\.\.\.f\.nums\]\)\);$/mu);
     expect(src).toMatch(/^ {6}const sourced = found\.has\(num\);$/mu);
     expect(src).toMatch(/^ {8}const witnesses = perFile\.filter\(\(f\) => f\.nums\.has\(num\)\);$/mu);
-    expect(src).toMatch(/^ {8}else if \(!identified\.some\(\(f\) => f\.runs\.some\(\(r\) => p\.shas\.includes\(r\)\)\)\) \{$/mu);
+    expect(src).toMatch(/^ {8}if \(identified\.some\(\(f\) => f\.runs\.some\(\(r\) => p\.shas\.includes\(r\)\)\)\) \{$/mu);
     expect(src).toMatch(/^ {2}const clean = stripAnsi\(face\);$/mu);
     expect(src).toMatch(/^import \{ stripAnsi \} from "\.\/lib\/vitest-summary";$/mu);
   });
