@@ -1,0 +1,19 @@
+Already up to date
+Done in 177ms using pnpm v11.21.0
+$ node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify --lock-tag p229-new orchestrator-hold-budget-return-not-stamped orchestrator-hold-dependency-return-not-stamped orchestrator-hold-chain-outlet-not-stamped orchestrator-hold-deferred-propagation-dropped loop-hold-copy-through-dropped events-hold-reason-enum-drift
+[mutate-verify] checkout exit=0：.worktrees/gate-mutate-verify → 27ffb30
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p229-new.lock）
+变异验证：6 条
+✅ orchestrator-hold-budget-return-not-stamped — 成本闸那条拒绝只留散文、不留结构列 ⇒ 模型看得见「被拒」，下游看不见是被哪一挡拒的：钱与人手与取消在这一列上又长成同一个人。钉的是**返回体**那一半（落流那一半另有证人） ｜本机实测 1.3s／2 拍
+✅ orchestrator-hold-dependency-return-not-stamped — 把依赖校验第三支的盖章摘掉 ⇒ 「前环已经倒下」与「参数写错了」重新长成同一种红，而这一格的正证恰好是**只有第三支**该有这一列：同用例里的负控（ghost 那条不盖章）会一起失去意义 ｜本机实测 1.2s／2 拍
+✅ orchestrator-hold-chain-outlet-not-stamped — 整链 failed 的落流不盖章 ⇒ 五挡里只有这一挡的读者回到零：链级「后面的环压根没起」在事件流上又不可读 ｜本机实测 1.2s／2 拍
+✅ orchestrator-hold-deferred-propagation-dropped — 后环那一处只把因写进正文、不把结构列传下去 ⇒ 生产端与投影面对同一个因各判一次，而这条用例同时钉着两半：结构那一格与正文里那个记号（两者要一起断才算这张网在） ｜本机实测 1.2s／2 拍
+✅ loop-hold-copy-through-dropped — 落盘那一步不搬这一格 ⇒ 结构列只活在内存里的返回体上，事件流与任何离线读者永远看不见；这一支的证人是跨面的（判卷在 tests、被改的是 src），不是同文件文字对表 ｜本机实测 1.1s／2 拍
+✅ events-hold-reason-enum-drift — 枚举少一格而落点一个没少 ⇒ 那一列照样印得出来，只有名单对账知道实跑与事实源不是一套。少成员在类型上叫得醒，但判卷跑 tsx 不做类型检查（与 `events-block-reason-enum-drift` 同族同因） ｜本机实测 1.1s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 7.7s · 跑了 6/6 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 12 次／6 条（每条次数分布 2×6）· 单次中位 第1次 0.6s／第2次 0.6s· 最贵一条 orchestrator-hold-budget-return-not-stamped 1.3s
+跑法单价：selector 12 拍·中位 0.60s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p229-new.lock）
+pnpm mutate-verify --lock-tag p229-new     loop-hold-copy-through-dropped   11.12s user 1.73s system 135% cpu 9.521 total
