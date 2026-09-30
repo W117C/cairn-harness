@@ -7904,3 +7904,12 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
    省下的钱不在本页下结论：要比单价就得同锚点、同树、复测（规则 245/311），本笔只有形状与条数。
 7. **取料**：`outputs/composed-title-audit-2026-09-30/`（`findings.md` 汇总＋`probe.mts`＋`probe.log`＋`tp-arm-1.log`/`tp-arm-2.log`/`tp-arm-3.log`）。
    零源码 ⇒ typecheck 不重跑；标题不含「凭证」⇒ 不进 D-9 面（`docs-check.ts:215` 口径）。
+
+### 2026-09-30 · 第 240 页（本会话）· 影响面精度只读探针：跨文件调用边 23/23 全对，同文件边是登记在案的设计盲区（能力 1 底账，表外零源码）
+
+1. **方法**：对 4 个真值已知符号（`appendRun`／`staleScratchTrees`／`runInSandbox`／`insideScratchFace`——全是本会话亲手碰过、调用点真值来自工作记忆＋grep 双源的函数）跑 `upward(谁调用我)`，与 grep 真值并排、逐处差异人工归类。探针与原句在取料目录。
+2. **图的基础盘诚实**：`files=537 · candidates=537 · partial=false`——候选全收、没有截断，覆盖判据这一格有真值。
+3. **跨文件调用边 23/23 全对**（精确率与召回率都不缺）：生产调用点、判卷调用点全中；三种干扰全被正确处理——字符串假调用（判卷 ：899 的 `toContain("staleScratchTrees…")`）不算调用、`.claude` 外域树整份拷贝不进图、多文件同名人按位点区分。
+4. **系统盲区（登记，不装没看见）**：同文件调用边不入图——「跨文件调用边」是 `impact/index.ts` 头注写明的设计边界，实测代价是模块私有函数的 upward 默认空手（`insideScratchFace` 0/1、`runInSandbox` 的 sandbox.ts:170 内部自用 0/1）。要不要补同文件边或工具层兜底出声，属下一笔裁决。
+5. **探针方法论自纠**：第一跑把输出接 `| head -60`，SIGPIPE 截掉 `appendRun` 段——差点把「截断」读成「零命中」；证据管道不接 head、全程落盘再读（与「退出码直接取，不接管道」同族）。
+6. **取料**：`outputs/impact-accuracy-2026-09-30/`（`readings.md` 逐符号表＋`probe.mts`／`probe.log`）。零源码 ⇒ typecheck 不重跑；标题不含「凭证」，不进 D-9 面。

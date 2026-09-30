@@ -1,0 +1,68 @@
+graph: files=537 candidates=537 cap=5000 partial=false
+
+== insideScratchFace ==
+graph upward (0):
+grep 真值候选 (2):
+  scripts/lib/head-cert-deps.ts:251:function insideScratchFace(path: string, root: string | undefined): boolean {
+  scripts/lib/head-cert-deps.ts:294:    if (!insideScratchFace(r.path, opt.scratchRoot)) { foreign.push(r.path); continue; }
+
+== staleScratchTrees ==
+graph upward (10):
+  scripts/head-cert.ts:301 staleScratchTrees
+  tests/head-cert-deps.test.ts:721 staleScratchTrees
+  tests/head-cert-deps.test.ts:722 staleScratchTrees
+  tests/head-cert-deps.test.ts:725 staleScratchTrees
+  tests/head-cert-deps.test.ts:729 staleScratchTrees
+  tests/head-cert-deps.test.ts:759 staleScratchTrees
+  tests/head-cert-deps.test.ts:769 staleScratchTrees
+  tests/head-cert-deps.test.ts:775 staleScratchTrees
+  tests/head-cert-deps.test.ts:822 staleScratchTrees
+  tests/head-cert-deps.test.ts:830 staleScratchTrees
+grep 真值候选 (18):
+  tests/head-cert-deps.test.ts:721:    expect(staleScratchTrees(rows, OPT).stale.map((s) => s.path)).toEqual(["/repo/.worktrees/stale"]);
+  tests/head-cert-deps.test.ts:722:    expect(staleScratchTrees(null, OPT)).toEqual({ stale: [], unmeasured: [], foreign: [] });
+  tests/head-cert-deps.test.ts:725:    expect(staleScratchTrees(rows, loose).stale.length, "祖先与在飞两项一放宽，branchy/notancestor/dirty 全被算成残留").toBeGreaterTha
+  tests/head-cert-deps.test.ts:729:    const res = staleScratchTrees(rows, OPT);
+  tests/head-cert-deps.test.ts:759:    const res = staleScratchTrees(rows2, allClean);
+  tests/head-cert-deps.test.ts:769:    const res = staleScratchTrees(parseWorktreeList(FOREIGN), allClean);
+  tests/head-cert-deps.test.ts:775:    const res = staleScratchTrees(parseWorktreeList(FOREIGN), noRoot);
+  tests/head-cert-deps.test.ts:822:    const res = staleScratchTrees(real, { ...OPTS, scratchRoot: join(mainRoot, ".worktrees") });
+  tests/head-cert-deps.test.ts:830:    const byLocationBlind = staleScratchTrees(real, OPTS);
+  tests/head-cert-deps.test.ts:899:    expect(src, "只写纯函数不接＝没有读数（规则 230）").toContain("staleScratchTrees(wtRows");
+  .claude/worktrees/goofy-satoshi-0edc69/.claude/worktrees/audit-zcode/tests/head-cert-deps.test.ts:720:    expect(staleScratchTrees(rows, OPT).stale.ma
+  .claude/worktrees/goofy-satoshi-0edc69/.claude/worktrees/audit-zcode/tests/head-cert-deps.test.ts:721:    expect(staleScratchTrees(null, OPT)).toEqual
+
+== runInSandbox ==
+graph upward (12):
+  scripts/sandbox-check.ts:85 runInSandbox
+  scripts/sandbox-check.ts:93 runInSandbox
+  scripts/sandbox-check.ts:103 runInSandbox
+  scripts/sandbox-check.ts:107 runInSandbox
+  scripts/sandbox-check.ts:113 runInSandbox
+  scripts/sandbox-check.ts:124 runInSandbox
+  scripts/sandbox-check.ts:125 runInSandbox
+  scripts/sandbox-check.ts:142 runInSandbox
+  scripts/sandbox-check.ts:143 runInSandbox
+  scripts/sandbox-check.ts:150 runInSandbox
+  src/main/agent-runner.ts:354 runInSandbox
+  src/main/agent-runner.ts:579 runInSandbox
+grep 真值候选 (36):
+  .claude/worktrees/goofy-satoshi-0edc69/.claude/worktrees/audit-zcode/scripts/sandbox-check.ts:85:  const w1 = await runInSandbox(
+  .claude/worktrees/goofy-satoshi-0edc69/.claude/worktrees/audit-zcode/scripts/sandbox-check.ts:93:  const w2 = await runInSandbox(
+  .claude/worktrees/goofy-satoshi-0edc69/.claude/worktrees/audit-zcode/scripts/sandbox-check.ts:103:  const r1 = await runInSandbox("node -e \"require('
+  .claude/worktrees/goofy-satoshi-0edc69/.claude/worktrees/audit-zcode/scripts/sandbox-check.ts:107:  const r2 = await runInSandbox("node -e \"require('
+  .claude/worktrees/goofy-satoshi-0edc69/.claude/worktrees/audit-zcode/scripts/sandbox-check.ts:113:  const n1 = await runInSandbox("node -e \"require('
+  .claude/worktrees/goofy-satoshi-0edc69/.claude/worktrees/audit-zcode/scripts/sandbox-check.ts:124:    const nDeny = await runInSandbox(getCmd, { cwd: 
+  .claude/worktrees/goofy-satoshi-0edc69/.claude/worktrees/audit-zcode/scripts/sandbox-check.ts:125:    const nAllow = await runInSandbox(getCmd, { cwd:
+  .claude/worktrees/goofy-satoshi-0edc69/.claude/worktrees/audit-zcode/scripts/sandbox-check.ts:142:  const noteDeny = await runInSandbox(epermShape, { 
+  .claude/worktrees/goofy-satoshi-0edc69/.claude/worktrees/audit-zcode/scripts/sandbox-check.ts:143:  const noteAllow = await runInSandbox(epermShape, {
+  .claude/worktrees/goofy-satoshi-0edc69/.claude/worktrees/audit-zcode/scripts/sandbox-check.ts:150:  const big = await runInSandbox(
+  .claude/worktrees/goofy-satoshi-0edc69/.claude/worktrees/audit-zcode/src/main/sandbox.ts:170:    const res = await runInSandbox("true", { cwd: tmpdir(
+  .claude/worktrees/goofy-satoshi-0edc69/.claude/worktrees/audit-zcode/src/main/agent-runner.ts:355:    return await runInSandbox(mapped, { cwd: ctx.wor
+
+== appendRun ==
+graph upward (1):
+  scripts/gates.ts:164 appendRun
+grep 真值候选 (2):
+  .claude/worktrees/goofy-satoshi-0edc69/.claude/worktrees/audit-zcode/scripts/gates.ts:164:    appendRun({
+  scripts/gates.ts:164:    appendRun({
