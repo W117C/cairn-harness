@@ -1,0 +1,30 @@
+cwd=/Users/ze/Downloads/deepseek harness
+mainRoot=/Users/ze/Downloads/deepseek harness｜scratchRoot=/Users/ze/Downloads/deepseek harness/.worktrees｜TARGET=3c9becf
+parseWorktreeList 抽到 25 棵（null＝取料坏）
+  branch   dirty=11 ancestor=true 不在scratch  /Users/ze/Downloads/deepseek harness@3c9becf
+  branch   dirty=0 ancestor=true 不在scratch  /Users/ze/Downloads/deepseek harness/.claude/worktrees/goofy-satoshi-0edc69@3a6d63c
+  detached dirty=18 ancestor=true 不在scratch  /Users/ze/Downloads/deepseek harness/.claude/worktrees/goofy-satoshi-0edc69/.claude/worktrees/audit-zcode@d2d44a6
+  branch   dirty=0 ancestor=false 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/doc-layer@da60f0d
+  detached dirty=0 ancestor=true 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/gate-head-cert@ae80d6e
+  detached dirty=0 ancestor=true 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-verify@27ffb30
+  branch   dirty=0 ancestor=true 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/goal-plan@1d6093d
+  detached dirty=5 ancestor=true 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/head-audit-0924@6a06249
+  detached dirty=0 ancestor=true 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/head-cert-3c9becf@3c9becf
+  detached dirty=1 ancestor=true 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/head-cert-d2958b2@d2958b2
+  branch   dirty=0 ancestor=false 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/opt@1de92fa
+  detached dirty=0 ancestor=false 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/p169-staging@8c9ce29
+  detached dirty=0 ancestor=false 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/p170-tighten@4177280
+  detached dirty=0 ancestor=false 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/p187-a@aefc50b
+  detached dirty=0 ancestor=false 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/p187-b@aefc50b
+  detached dirty=0 ancestor=false 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/p187-c@aefc50b
+  detached dirty=0 ancestor=false 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/p187-d@aefc50b
+  branch   dirty=0 ancestor=true 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/r1b@0bae71c
+  branch   dirty=16 ancestor=true 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/ui-codex-bench@1243439
+  detached dirty=0 ancestor=false 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/verify-5116b3f@5116b3f
+  detached dirty=0 ancestor=false 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/verify-6d06519@6d06519
+  detached dirty=0 ancestor=false 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/verify-a7370a6@aefc50b
+  detached dirty=0 ancestor=false 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/verify-b248068@aefc50b
+  detached dirty=0 ancestor=false 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/verify-dd3af4e@7164fdf
+  detached dirty=0 ancestor=false 在scratch  /Users/ze/Downloads/deepseek harness/.worktrees/verify-f31e89e@f31e89e
+stale=3 foreign=0 unmeasured=0
+  foreign: （空）

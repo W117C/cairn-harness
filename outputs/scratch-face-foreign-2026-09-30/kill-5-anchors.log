@@ -1,0 +1,13 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-3c9becf.lock）
+变异验证：5 条
+✅ stale-tree-no-location-split — 分格那一位不发作 ⇒ 外域树重新混进「可以去收」的名单（第 231 页的现读成因：本机有一棵住在 `.claude/worktrees/…` 的隔壁会话树，而那句回收命令就印在它旁边——判卷早就按位置钉过，谓词却没看位置） ｜本机实测 1.4s／2 拍
+✅ stale-tree-scratch-face-bare-prefix — 目录归属用裸前缀比 ⇒ `/repo/.worktrees-backup/…` 被当自家人，「可以去收」印到别人的树旁边（前缀匹配要按位置枚举变体，第十族同一枪） ｜本机实测 0.8s／2 拍
+✅ stale-tree-scratch-root-not-wired — 调用方不传那一面 ⇒ 纯函数与措辞都写对了但这一格永远是空的：分格成了死代码，读数照旧把外域树算进残留（规则 230/254：只写纯函数不接＝没有读数） ｜本机实测 0.7s／2 拍
+✅ stale-tree-foreign-not-printed — 分格算了却不印 ⇒ 那一串路径从读数里消失，下一次没人知道还有这么棵树；「尺读不到」与「没有问题」不许同形（规则 261/262），这一格同理：分错了也不许静默 ｜本机实测 0.8s／2 拍
+✅ stale-tree-main-root-joined-not-resolved — 主树根用 `join` 拼而不是 `resolve` ⇒ `--git-common-dir` 给绝对路径时接出 `<树>//Users/…/.git` 这种假路径，于是 linked 树里跑的那一趟把主树的 scratch 面算错、全部判成外域（与 `toolLockPath` 同一课：两份取料会漂） ｜本机实测 0.7s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 4.8s · 跑了 5/5 条 · 预算 480s
+成本分母：判卷 spawn 10 次／5 条（每条次数分布 2×5）· 单次中位 第1次 0.4s／第2次 0.4s· 最贵一条 stale-tree-no-location-split 1.4s
+跑法单价：selector 10 拍·中位 0.38s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-3c9becf.lock）
