@@ -10165,9 +10165,29 @@ const MUTATIONS = [
     id: "docscheck-cred-page-stale-named-not-checked",
     src: "scripts/docs-check.ts",
     test: "tests/docs-check.test.ts",
-    desc: "登记页后来自己点名了目录，这条 stale 不查 ⇒ 登记表只进不出，日后变成第二本没人对的旧账（规则 302 双向钉）",
-    apply: (s) => s.replace("    if (namedKeys.has(key)) {", "    if (false) {"),
+    desc: "登记页后来自己点名了目录，这条 stale 不查 ⇒ 登记表只进不出，日后变成第二本没人对的旧账（规则 302 双向钉）。" +
+      "第 275 页跟着实现改了指针：那一行从 `namedKeys.has(key)` 换成两个计数的等式（同号两页时 Set 会替另一页说话）",
+    apply: (s) => s.replace("    if (total > 0 && named === total) {", "    if (false) {"),
     expectFail: "页级登记的两半 stale 都要出声：这页真点名了目录、或整段没了；理由太短也算没登记",
+  },
+  /* ── 第 275 页：读数面长出「门自己印的那一行」两式，页 key 的 stale 换成按页计数。三支各钉一种坏法。 ── */
+  {
+    id: "docscheck-cred-face-drops-the-two-new-patterns",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "把新纳的两式之一摘掉 ⇒ 我在凭证里写「可比对 214 → 222 个读数」这类**推出来的分母**又没人查了" +
+      "（本笔的动因就是我自己两天里三次把这行的数写成推的：111／222／116，现读 110／221／114）",
+    apply: (s) => s.replace("  /可比对 (\\d+) 个读数/u,\n", ""),
+    expectFail: "新增那两式要真有分辨力：页里的『可比对 N 个读数』在点名的面上找不到原文就红",
+  },
+  {
+    id: "docscheck-cred-collision-stale-uses-any-named",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "把 stale 条件写成『该 key 下任意一页点了名』⇒ 同号两页时，真凭证页一点名就把落地页那条登记判死，" +
+      "而那页压根没点名任何目录——这条登记被删之后，那一页就直接落进受帽管的『未点名页』",
+    apply: (s) => s.replace("named === total", "named > 0"),
+    expectFail: "同一 key 有两页时，登记只在『每一页都点了名』时才算过期",
   },
   {
     id: "docscheck-cred-page-reason-length-not-enforced",

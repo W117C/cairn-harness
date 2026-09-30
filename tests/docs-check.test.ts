@@ -648,7 +648,7 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
     const cred = runDocsCheck().cred;
     expect(cred.unnamedPages.length, `现读 ${String(cred.unnamedPages.length)} 页 ≠ 帽 ${String(CRED_UNNAMED_PAGE_CAP)} ⇒ 帽要跟着现读改，别只改数`).toBe(CRED_UNNAMED_PAGE_CAP);
     expect(cred.registeredPages.length, `登记表 ${String(Object.keys(UNSOURCED_CRED_PAGES).length)} 页，可现读『已登记』只有 ${String(cred.registeredPages.length)} 页 ⇒ 有一页既没点名也没登记，或登记表里的 key 认不出页`).toBe(Object.keys(UNSOURCED_CRED_PAGES).length);
-    expect(cred.registeredReadings, "登记页的读数条数要真从台账里抽出来（第 271 页现读＝19 条）").toBe(19);
+    expect(cred.registeredReadings, "登记页的读数条数要真从台账里抽出来（第 275 页现读＝20 条；第 271 页那批是 19，加进来的第 228 页那一页贡献一条）").toBe(20);
     expect(cred.weak.length, `弱证现读 ${String(cred.weak.length)} 对 ≠ 帽 ${String(CRED_WEAK_WITNESS_CAP)} ⇒ 这一格同样只准跟着现读降（补 sha 或补工件），不许凭空调`).toBe(CRED_WEAK_WITNESS_CAP);
     expect(cred.checked, "可比对分母塌了就不是这一格的账").toBeGreaterThanOrEqual(50);
   }, 60_000);
@@ -697,6 +697,43 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
     expect(src).toMatch(/^import \{ stripAnsi \} from "\.\/lib\/vitest-summary";$/mu);
   });
 
+  /* 第 275 页①：把门自己印的那一行（`可比对 N 个读数`／`证人无身份行 N 对`）纳进严格式。
+     动因不是"覆盖面广一点"，是我两天里**三次**把这行的分母写成推的（`111`／`222`／`116`，现读 110／221／114）。
+     两半都要有：没原文的那页必须红，有原文的那页必须绿且**两个数都真被抽到**（少抽一式＝我写错的那半没人查）。 */
+  it("新增那两式要真有分辨力：页里的『可比对 N 个读数』在点名的面上找不到原文就红，找得到就两个数都记账", () => {
+    const faceFn = () => [{ name: "docs-check.log", text: "凭证对账面：可比对 260 个读数（红 0）｜证人无身份行 149 对＝这一格无从判" }];
+    const bad = checkCredentialSources(
+      credentialPages("### 2026-10-01 · 第 901 页补 凭证：测试页\n\n取料：outputs/x-2026-10-01/\n凭证对账面：可比对 500 个读数（红 0）｜证人无身份行 501 对\n"),
+      faceFn, {}, 0, 0,
+    );
+    const dets = bad.findings.map((f) => f.detail).join("｜");
+    expect(dets, "两个数都要各自点名（只报一个＝抽取端漏了一式）").toContain("500");
+    expect(dets).toContain("501");
+    expect(bad.checked, "页里两个数都进了对账，只是都没原文").toBe(2);
+    const good = checkCredentialSources(
+      credentialPages("### 2026-10-01 · 第 901 页补 凭证：测试页\n\n取料：outputs/x-2026-10-01/\n凭证对账面：可比对 260 个读数（红 0）｜证人无身份行 149 对\n"),
+      faceFn, {}, 0, 0,
+    );
+    expect(good.findings.map((f) => f.detail)).toEqual([]);
+    expect(good.checked).toBe(2);
+  });
+
+  /* 第 275 页②：页 key 只取「第 NNN 页」，而**同号可以有两段**——第 228 页既有落地页（标题里『凭证』二字是在说这件事）
+     又有补凭证页。从前 stale 用一只 Set 记「这个 key 点过名」，于是另一页一点名就把这条登记判死。
+     改成计数之后：只要该 key 下还有一页没点名，登记就仍然有效；每一页都点了名才该删。 */
+  it("同一 key 有两页时，登记只在『每一页都点了名』时才算过期", () => {
+    const landing = "### 2026-09-30 · 第 228 页 · 落地：D-9 把凭证页与它自己点名的取料面对账\n\nTest Files 59 passed\n";
+    const cred = "### 2026-09-30 · 第 228 页补 凭证：测试\n\n取料：outputs/x-2026-09-30/\nTest Files 60 passed\n";
+    const faceFn = () => [{ name: "a.log", text: "目标提交：abcdef1\nTest Files 60 passed" }];
+    const both = credentialPages(landing + cred);
+    expect(both.length, "选择判据故意宽：两段都该被收到").toBe(2);
+    expect(new Set(both.map((p) => p.key)).size, "而它们的 key 相同——这正是本条要钉的那个撞").toBe(1);
+    const one = checkCredentialSources(both, faceFn, {}, 0, 0, { "第 228 页": "落地页不点名目录，那句 59 的原文不在它点名的面上" });
+    expect(one.findings.map((f) => f.detail).join("｜"), "一页没点名 ⇒ 登记仍有效，不许让另一页替它说话").not.toContain("已被它自己点名的取料目录顶住");
+    const named = checkCredentialSources(credentialPages(cred + cred), faceFn, {}, 0, 0, { "第 228 页": "两段都自己点了名 ⇒ 这条登记就是过期" });
+    expect(named.findings.map((f) => f.detail).join("｜")).toContain("已被它自己点名的取料目录顶住");
+  });
+
   it("接线：主段把「未点名页」连同帽一起印出来，且判定真拿帽去比（只算不印＝这格永远没人看）", () => {
     const src = readFileSync(fileURLToPath(new URL("../scripts/docs-check.ts", import.meta.url)), "utf8");
     expect(src.length).toBeGreaterThan(0);
@@ -709,7 +746,11 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
     expect(src, "汇总行里弱证那一格要真取 cred.weak.length——印成常数就没人看得见").toMatch(/^ {4}\+ `｜弱证 \$\{String\(cred\.weak\.length\)\} 对（帽 \$\{String\(CRED_WEAK_WITNESS_CAP\)/mu);
     // 第 271 页的两态：登记要把页从『可行动』挪走，stale 检查与那列印数都得真接上
     expect(src).toMatch(/^ {6}if \(p\.key in pageWaivers\) \{$/mu);
-    expect(src).toMatch(/^ {4}if \(namedKeys\.has\(key\)\) \{$/mu);
+    // 第 275 页改形：`namedKeys`（一只 Set）换成「该 key 下总页数 vs 点了名的页数」两个计数，
+    // 于是 stale 只在**每页都点了名**时出声——同号两页时不再替另一页说话。
+    expect(src).toMatch(/^ {4}if \(total > 0 && named === total\) \{$/mu);
+    expect(src, "两个计数必须真在预轮里累加，不是拿 Set 换个名字").toMatch(/^ {4}keyTotal\.set\(p\.key, \(keyTotal\.get\(p\.key\) \?\? 0\) \+ 1\);$/mu);
+    expect(src).toMatch(/^ {4}if \(p\.dirs\.length > 0\) keyNamed\.set\(p\.key, \(keyNamed\.get\(p\.key\) \?\? 0\) \+ 1\);$/mu);
     expect(src).toMatch(/^ {4}\+ `｜已登记不可回查 \$\{String\(cred\.registeredPages\.length\)\} 页／\$\{String\(cred\.registeredReadings\)\} 条`\);$/mu);
     // 反向那一半：返回体丢了 unnamedPages／weak ⇒ 上面那些印不到，这一条先红
     expect(src).toMatch(/^ {2}return \{ findings: out, checked, unmatched, unnamed, unnamedPages: \[\.\.\.unnamedPageKeys\], registeredPages: \[\.\.\.registeredPageKeys\], registeredReadings, weak, weakUnjudged \};$/mu);
