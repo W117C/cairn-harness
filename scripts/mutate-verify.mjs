@@ -10230,8 +10230,9 @@ const MUTATIONS = [
     id: "docscheck-cred-unnamed-cap-raised-silently",
     src: "scripts/docs-check.ts",
     test: "tests/docs-check.test.ts",
-    desc: "把帽从现读调大（9 → 10）而不点名任何一页 ⇒ 读数与帽脱钩，这一格从此可以无限装新失检的凭证页。" +
-      "第 268 页降帽（11 → 9，两页真点名了）时这条针脚同笔跟着走：这一格刻意不允许悄悄降——降帽必须同时动这条锚点（规则 229）。",
+    desc: "把帽从现读调大（0 → 1）而不点名任何一页 ⇒ 读数与帽脱钩，这一格从此可以无限装新失检的凭证页。" +
+      "历次降帽这条针脚都同笔跟着走：第 268 页 11 → 9（两页真点名）、第 271 页 9 → 0（九页逐页登记）——" +
+      "这一格刻意不允许悄悄动，降帽必须同时改这条锚点（规则 229）。",
     apply: (s) => s.replace("export const CRED_UNNAMED_PAGE_CAP = 0;", "export const CRED_UNNAMED_PAGE_CAP = 1;"),
     expectFail: "真仓：未点名页数跟着现读走——涨了要红，凭空把帽调低也要红（只有真把页点名了才允许降）",
   },
