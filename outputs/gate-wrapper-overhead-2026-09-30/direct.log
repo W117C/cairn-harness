@@ -1,0 +1,34 @@
+== pnpm gates ==
+门清单（8 道，清单即事实源）：sandbox:check fork-check docs-check prune-check memory-check routing-check no-progress-check head-import-check
+执行器：直跑（/bin/sh -c package.json 脚本正文，PATH 前置 node_modules/.bin）
+  清单漂移校验：✅ GATES ↔ package.json scripts 一致（无孤儿验收脚本）
+
+  ▶ sandbox:check …  ✅ sandbox:check      exit=0  362ms
+      └ ✅ ⑤ 尾部结论留住（只留头部时这条必红）
+  ▶ fork-check …  ✅ fork-check         exit=0  62ms
+      └ ✅ 越界 eventId 被拒绝（fail loud）
+  ▶ docs-check …  ✅ docs-check         exit=0  331ms
+      └ UNVERIFIED=3
+  ▶ prune-check …  ✅ prune-check        exit=0  117ms
+      └ ✅ prune-check 全部通过
+  ▶ memory-check …  ✅ memory-check       exit=0  228ms
+      └ ✅ memory-check 全部通过（两层布局/remember/注入预算/索引上限/安全/双轨/压缩接缝）
+  ▶ routing-check …  ✅ routing-check      exit=0  249ms
+      └ [routing-check] 全部断言通过 ✅（39 ✅ / 0 ❌）
+  ▶ no-progress-check …  ✅ no-progress-check  exit=0  73ms
+      └ ✅ NP5-语料 sha256 与冻结表逐字一致 — 语料 7 份｜冻结表核对 7 份：不在表上或哈希对不上 0
+  ▶ head-import-check …  ✅ head-import-check  exit=0  238ms
+      └ head-import-face: ✅ import 面自洽（或在内存量已逐条带理由）
+
+== 断言体检（空断言 / 恒真式 / 暗卷段零断言 / 析取式弱断言）==
+  扫描面：82 个已跟踪且在盘的脚本（未跟踪草稿不判，口径同 tests/assertion-health-scan.test.ts）
+  ✅ 零命中
+
+== 汇总 ==
+  绿 8 / 8，红 0
+  逐道退出码：sandbox:check=0 fork-check=0 docs-check=0 prune-check=0 memory-check=0 routing-check=0 no-progress-check=0 head-import-check=0
+  认证面 = **工作树，不是 HEAD**：判卷四面（src/scripts/tests/fixtures）在飞 3 项｜全仓在飞 15 项 ⇒ 本表全 0 **不等于 HEAD 全 0**；要 HEAD 认证请在 HEAD 的隔离 worktree 里跑整表（`git worktree add --detach <tmp> HEAD`；注意 `pnpm gates --direct` 只换执行器〔`pnpm run X` → `/bin/sh -c <script>`〕，**不改取料树**）
+  ⚠️  未证 3 项（连网/凭据限制未跑到的断言，或绿而零输出的门——**不等于通过**）
+     逐道：docs-check 3
+     严格模式：DSH_STRICT_UNVERIFIED=1 或 --strict-unverified 可让未证直接判红
+  ⚠️  8 道门退出码全 0，但有 3 项未证——不得宣称「全部通过」
