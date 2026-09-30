@@ -23,7 +23,7 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { acquireToolLock } from "./lib/tool-lock.ts";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, mutateTreeGuard, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, expectFailProblemLine, killerAttributionOk, judgeWithRetry, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, anchorCostCell, selectorAmbiguity, selectorCell, selectedTestCount, escapeTitlePattern, runModeFor, runReadingIsBad, vacuousRunLine, runModeCell, unverifiedCell, restoreDiffProblem, redVerdictCell, redKindsLine } from "./lib/mutate-gates.ts";
+import { entryDisposition, mutateTreeGuard, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, auditPointerWiring, wiringCensus, expectFailProblemLine, killerAttributionOk, judgeWithRetry, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, anchorCostCell, selectorAmbiguity, selectorCell, selectedTestCount, escapeTitlePattern, runModeFor, runReadingIsBad, vacuousRunLine, runModeCell, unverifiedCell, restoreDiffProblem, redVerdictCell, redKindsLine } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -10193,6 +10193,57 @@ const MUTATIONS = [
     apply: (s) => s.replace("if (extra.length > 0) {", "if (extra.length > 1) {"),
     expectFail: "拼错的开关 ⇒ 退 2 并点名，不许当成「没给参数」拿默认口径跑",
   },
+
+  /* ── 第 260 页（任务 #6）：锚点指针的「接线」那一格。五支钉三种坏法：
+   *    ⑴取符号时把 needle 自己那一行切掉（声明行→上一条函数）；⑵函数体里的局部 const 被当成边界；
+   *    ⑶源文件读不到却算成 wired（「没尺」读成「尺说没问题」）；⑷分格并成一锅；⑸门那一步被喂空表。
+   *    第⑤支的 src 就是本文件（自-hosted）⇒ 针脚里带**真换行**（写成转义的 `\n`），否则 replace 先撞进这张表自己那份引文，
+   *    代码一个字没动、报成「变异存活」——本仓为这条立过两次（规则 325 那一案的姊妹形）。 */
+  {
+    id: "wiring-lineend-drops-needle-line",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "退回「只切到 needle 起点」⇒ 针脚写在**声明行**上时取到的是上一条函数（本仓第 260 页的探针在真文件上逮到的：`certTreeAbs` 被读成 `mainRootFromCommonDir`）。" +
+      "这一格坏法的后果是双向的：兄弟用例可能被误判 wired，真接线也可能被误判 suspect——而它看起来像尺在正常工作",
+    apply: (s) => s.replace(`const lineEnd = srcText.indexOf("\\n", needleIndex);`, "const lineEnd = needleIndex;"),
+    expectFail: "needle 就写在声明行上时取的是**这一行**的函数名（只切到 needle 起点会把声明行切掉）",
+  },
+  {
+    id: "wiring-scan-stops-at-local-const",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "把函数体里的局部 `const m = …` 当成边界就 return null ⇒ 大量正常锚点全落进「判不了」，" +
+      "这一格从读数退化成空读数（比误喊更隐蔽：汇总行看着像「尺很谨慎」）。只有列 0 的数据声明才是边界",
+    apply: (s) => s.replace("      if (/^\\S/u.test(line)) return null;\n      continue;", "      return null;\n      // eslint-disable-next-line no-unreachable"),
+    expectFail: "needle 就写在声明行上时取的是**这一行**的函数名（只切到 needle 起点会把声明行切掉）",
+  },
+  {
+    id: "wiring-unreadable-counts-as-wired",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "源文件或判卷读不到时被算成 wired ⇒ 「两面之一压根没上架」读成「接线正确」（规则 261/262 的正是这一格）。" +
+      "这一族在本仓的红法一直是「取不到与没问题同形」，写新分时最容易被顺手并进绿的那一侧",
+    apply: (s) => s.replace('if (srcText === null || testText === null) { push("unreadable", null); continue; }', 'if (srcText === null || testText === null) { push("wired", null); continue; }'),
+    expectFail: "四态各归各位：wired／suspect／no-symbol／unreadable，取不到不许并进 wired 也不许并进 suspect",
+  },
+  {
+    id: "wiring-census-merges-all-kinds",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "分格计数并成一锅 ⇒ 汇总行三个数照样印得出、加总也等于条数（配平那条判卷看的是**和**），" +
+      "但「疑空」这一格失去含义：再没人能从数字里看出有多少锚点是真的接上过",
+    apply: (s) => s.replace("  for (const r of rows) c[r.kind] += 1;", "  for (const r of rows) c.wired += 1;"),
+    expectFail: "分格要配平：wired＋suspect＋四类判不了 ＝ 送进去的条数（漏一条就少一个证人）",
+  },
+  {
+    id: "wiring-gate-fed-empty-table",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "门这一步被喂空表 ⇒ 那一行照印「接上 0／疑空 0／判不了 0」，看起来比不印更干净（第 165 页那条「只印不数＝永远 0」的同款形状）。" +
+      "针脚带真换行是自-hosted 的硬性写法：不带就会先改到这张表自己那一行",
+    apply: (s) => s.replace("  const wiringRows = auditPointerWiring(entries.map((e) => ({\n", "  const wiringRows = auditPointerWiring([].map((e) => ({\n"),
+    expectFail: "接线：门那一步真拿整张表去数，且「变异存活」那条红接得上 wiringHint（只印不接＝这一格永远不响）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
@@ -10202,6 +10253,24 @@ function extractNeedle(apply) {
   const m = /\.replace(?:All)?\(\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/u.exec(String(apply));
   if (!m) return null;
   try { return new Function("return " + m[1])(); } catch { return null; }
+}
+
+/** 单条锚点的「指针接线」预检（第 260 页，任务 #6）。只在**变异存活**那条红里出现，不当门禁：
+ *  静态代理按全表量出来的假疑空太高（现读 680/1123——多数判卷是从上游入口打进去的，用例体里当然不提名被改的函数），
+ *  拿它当闸就是"数字不再有意义"那一类（本仓 7320 那条锚点描述的就是这个坑）。
+ *  但它对**那一次真事故**（规则 325：指针指向同文件里不调 `certTreeAbs` 的兄弟用例）是有分辨力的——
+ *  分辨力实测四格见 `outputs/pointer-wiring-observer-2026-10-01/probe.log`。
+ *  所以它的正确位置是：一条已经花掉 2 拍判卷才喊出的红，后面接一句"先排指针、再谈无分辨力"。 */
+const readAnchorFace = (rel) => { try { return readFileSync(join(ROOT, rel), "utf8"); } catch { return null; } };
+function wiringHint(m) {
+  const rows = auditPointerWiring([{
+    id: m.id, srcRel: m.src ?? "", needle: extractNeedle(m.apply), test: m.test ?? "", expectFail: m.expectFail ?? "",
+  }], { readSrc: readAnchorFace, readTest: readAnchorFace });
+  const r = rows[0];
+  if (r === undefined || r.kind !== "suspect" || r.symbol === null) return "";
+  return `\n  ↳ 指针接线预检：针脚长在函数「${r.symbol}」里，而「${m.expectFail}」那条用例体一次没提它` +
+    "⇒ 先排「指针指向不会红的那条」（规则 325 那一次就是这个形状），再谈判卷无分辨力；" +
+    "用例若确实从上游入口打进来，这一句忽略即可（静态代理会误喊，实测假疑空 680/1123）";
 }
 
 /** 针脚体检：blocking = 这条变异是空操作（它在假装守护）；warn = 针脚命中多处，
@@ -10328,6 +10397,22 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
    *  这一格刻意不进退出码：存量 13 条不是本笔造成的，按水位法只准调低；先把名单点出来，再谈改跑法。 */
   const selectorScan = selectorAmbiguity(pointerEntries, (rel) => { try { return readFileSync(join(ROOT, rel), "utf8"); } catch { return null; } });
   console.log("ℹ️  " + selectorCell(selectorScan));
+  /* 指针接线那一格（第 260 页 · 任务 #6）：`killer 指针失效` 只答"标题在判卷里解析得出"，答不出"那条用例调不调被变异的那个符号"。
+   *  规则 325 那一次（`cert-tree-abs-args-swapped`）正是标题解析得出、却指向一条根本不碰 `certTreeAbs` 的兄弟用例——
+   *  花 6.58s 实跑才现形，而这一格是秒级的。第一版**只出声、不进退出码**：先量存量（规则 235），数字看懂了再谈水位帽。
+   *  判据是静态近似：needle 所在的包围函数名 ⇒ 该名字是否出现在那条用例体内。取不到的（表里的数据条目、
+   *  class 方法、判卷读不到）一律进「判不了」，**不并进可疑**——"我没看见"不等于"它没守"（规则 261/262）。 */
+  const readFace = (rel) => { try { return readFileSync(join(ROOT, rel), "utf8"); } catch { return null; } };
+  const wiringRows = auditPointerWiring(entries.map((e) => ({
+    id: e.id, srcRel: e.src ?? "", needle: extractNeedle(e.apply), test: e.test ?? "", expectFail: e.expectFail ?? "",
+  })), { readSrc: readFace, readTest: readFace });
+  const wiring = wiringCensus(wiringRows);
+  const wiringUnknown = wiring["no-symbol"] + wiring["no-needle"] + wiring["no-title"] + wiring.unreadable;
+  const suspectSample = wiringRows.filter((r) => r.kind === "suspect").slice(0, 8).map((r) => r.id);
+  console.log(`ℹ️  指针接线（**线索，不进门禁**：静态代理按全表量会误喊，多数判卷从上游入口打进来；它只在「变异存活」那条红后面给方向）：` +
+    `接上 ${String(wiring.wired)}／疑空 ${String(wiring.suspect)}／判不了 ${String(wiringUnknown)}` +
+    `（疑空＝needle 所在函数名在那条用例体里一次都没出现；判不了的四类：无包围函数 ${String(wiring["no-symbol"])}、抽不出针脚或针脚不在源文件 ${String(wiring["no-needle"])}、` +
+    `标题不在这份判卷 ${String(wiring["no-title"])}、两面任一读不到 ${String(wiring.unreadable)}）${suspectSample.length === 0 ? "" : "｜样本 " + suspectSample.join("、")}`);
   // 一次求和、两处使用（汇总里印出来的数与 exit 码用的是同一个值；分开算就可能各说各话）。
   const blockingTotal = blockingTotalOf({
     needle: blocking.length, duplicateIds: dup.length, untracked: untracked.length, drift: drift.length,
@@ -10505,7 +10590,7 @@ function verifyEntry(m) {
     inFlight = null;
     restored = true;
     if (vacuous !== null) return red("vacuous", vacuous);
-    if (hit.code === 0) return red("survived", "变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）");
+    if (hit.code === 0) return red("survived", "变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）" + wiringHint(m));
     // 归因只认**失败面**：`hit.out.includes(指针)` 会被一条 `✓` 通过的用例满足（第 141 页实测）。
     if (!killerAttributionOk(m.expectFail, hit.out)) {
       const failedFace = failingTestText(hit.out).slice(0, 300);

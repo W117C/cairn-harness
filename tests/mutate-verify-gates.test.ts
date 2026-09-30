@@ -7,7 +7,7 @@ import { readFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { anchorFaces, auditExpectFails, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, anchorCostCell, costRollupOf, entryDisposition, escapeTitlePattern, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, judgeWithRetry, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, mutateTreeGuard, needleProblemLine, preflightRefusals, runModeCell, runModeFor, runReadingIsBad, restoreCheck, restoreDiffProblem, redVerdictCell, redKindsLine, selectChangedEntries, selectorAmbiguity, selectorCell, selectedTestCount, splitRunnable, unverifiedCell, untrackedAnchorLine, untrackedAnchorPaths, vacuousRunLine, type AnchorCostRow, type HeadState, type RestoreVerdict } from "../scripts/lib/mutate-gates";
+import { anchorFaces, auditExpectFails, auditPointerWiring, enclosingSymbol, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, anchorCostCell, costRollupOf, entryDisposition, escapeTitlePattern, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, judgeWithRetry, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, mutateTreeGuard, needleProblemLine, preflightRefusals, runModeCell, runModeFor, runReadingIsBad, restoreCheck, restoreDiffProblem, redVerdictCell, redKindsLine, selectChangedEntries, selectorAmbiguity, selectorCell, selectedTestCount, splitRunnable, testCaseBody, unverifiedCell, untrackedAnchorLine, untrackedAnchorPaths, vacuousRunLine, wiringCensus, type AnchorCostRow, type HeadState, type RestoreVerdict } from "../scripts/lib/mutate-gates";
 import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
 
 /** 从锚点表取 `{id,test,expectFail}`：只走 `--list` 这条**不改源文件**的入口。
@@ -1797,5 +1797,102 @@ describe("树闸接线：真跑本脚本——主检出拒跑且一个字节都�
     } finally {
       rmSync(f.dir, { recursive: true, force: true });
     }
+  });
+});
+
+/* ── 第 260 页（任务 #6）：锚点指针的「接线」那一格。
+      动因是规则 325 记过一次真事故：`expectFail` 写的标题在同一条判卷文件里**解析得出**，
+      却指向一条不调被变异函数的兄弟用例 ⇒ 秒级尺（`killer 指针失效 0`）全绿，只有整表实跑才现形。
+      这一格量的是静态代理，所以判卷的重点不是"它算得准"，而是**它两态不同形、且不许把"我没看见"并进"它没守"**。 */
+describe("指针接线：enclosingSymbol／testCaseBody／auditPointerWiring（第 260 页）", () => {
+  const SRC = [
+    "export function alpha(x: string): string { return x; }",
+    "const beta = (n: number) => n * 2;",
+    "export function gamma(): void {",
+    "  const inner = 1;",
+    "  doThing(inner);",
+    "}",
+    "const TABLE = {",
+    "  id: \"top-level-data\",",
+    "};",
+  ].join("\n");
+
+  it("needle 就写在声明行上时取的是**这一行**的函数名（只切到 needle 起点会把声明行切掉）", () => {
+    const declAt = SRC.indexOf("export function alpha");
+    expect(enclosingSymbol(SRC, declAt), "这一格曾经取成上一条函数——探针在真文件上逮到的（第 260 页）").toBe("alpha");
+    // 反向证人：同一个 needle 若切在起点之前，就会漂到别的符号上 ⇒ 两态必须不同
+    expect(enclosingSymbol(SRC, SRC.indexOf("  const inner")), "needle 在函数体内部 ⇒ 应取包围它的那个").toBe("gamma");
+    expect(enclosingSymbol(SRC, SRC.indexOf("id: \"top-level-data\"")), "表里的数据条目没有包围函数 ⇒ null（判不了，不算可疑）").toBeNull();
+  });
+
+  it("箭头常量与方法写法也要认得出来（只认 function 关键字＝大量锚点全判不了）", () => {
+    const typedSrc = ["export const delta: (a: string) => string = (a) => a;", "class K {", "  epsilon(): void {}", "}"].join("\n");
+    expect(enclosingSymbol(typedSrc, typedSrc.indexOf("=> a;"))).toBe("delta");
+    expect(enclosingSymbol(typedSrc, typedSrc.indexOf("epsilon(): void"))).toBe("epsilon");
+  });
+
+  it("testCaseBody：取到那条用例的体；标题不在回 null", () => {
+    const t = ["describe(\"x\", () => {", "  it(\"甲\", () => {", "    expect(1).toBe(1);", "  });", "});"].join("\n");
+    const body = testCaseBody(t, "甲");
+    expect(body).not.toBeNull();
+    expect(body).toContain("expect(1).toBe(1)");
+    expect(testCaseBody(t, "不存在的标题")).toBeNull();
+  });
+
+  it("四态各归各位：wired／suspect／no-symbol／unreadable，取不到不许并进 wired 也不许并进 suspect", () => {
+    const testText = ["describe(\"d\", () => {", "  it(\"碰 alpha 的那条\", () => {", "    expect(alpha(\"a\")).toBe(\"a\");", "  });",
+      "  it(\"不碰它的兄弟\", () => {", "    expect(beta(2)).toBe(4);", "  });", "});"].join("\n");
+    const rows = auditPointerWiring([
+      { id: "wired", srcRel: "s.ts", needle: "return x;", test: "t.test.ts", expectFail: "碰 alpha 的那条" },
+      { id: "suspect", srcRel: "s.ts", needle: "return x;", test: "t.test.ts", expectFail: "不碰它的兄弟" },
+      { id: "no-symbol", srcRel: "s.ts", needle: "id: \"top-level-data\",", test: "t.test.ts", expectFail: "碰 alpha 的那条" },
+      { id: "unreadable", srcRel: "missing.ts", needle: "x", test: "t.test.ts", expectFail: "碰 alpha 的那条" },
+      { id: "no-needle", srcRel: "s.ts", needle: null, test: "t.test.ts", expectFail: "碰 alpha 的那条" },
+      { id: "not-vitest", srcRel: "s.ts", needle: "return x;", test: "tools/foo.ts", expectFail: "碰 alpha 的那条" },
+    ], { readSrc: (rel) => (rel === "s.ts" ? SRC : null), readTest: (rel) => (rel === "t.test.ts" ? testText : null) });
+    const kindOf = (id: string): string => rows.find((r) => r.id === id)?.kind ?? "(没有这条)";
+    expect(kindOf("wired")).toBe("wired");
+    expect(kindOf("suspect")).toBe("suspect");
+    expect(kindOf("no-symbol")).toBe("no-symbol");
+    expect(kindOf("unreadable"), "源文件读不到被算成 wired＝「没尺」读成「尺说没问题」（规则 261/262）").toBe("unreadable");
+    expect(kindOf("no-needle")).toBe("no-needle");
+    expect(kindOf("not-vitest")).toBe("no-needle");
+  });
+
+  it("分格要配平：wired＋suspect＋四类判不了 ＝ 送进去的条数（漏一条就少一个证人）", () => {
+    const rows = auditPointerWiring([
+      { id: "a", srcRel: "s.ts", needle: "return x;", test: "t.test.ts", expectFail: "甲" },
+      { id: "b", srcRel: "s.ts", needle: "return x;", test: "t.test.ts", expectFail: "乙" },
+      { id: "c", srcRel: "s.ts", needle: null, test: "t.test.ts", expectFail: "甲" },
+    ], { readSrc: () => SRC, readTest: () => "x" });
+    const c = wiringCensus(rows);
+    const sum = c.wired + c.suspect + c["no-symbol"] + c["no-needle"] + c["no-title"] + c.unreadable;
+    expect(sum, " census 少了行＝有些锚点悄悄没人看").toBe(3);
+    expect(c.wired + c.suspect, "判卷里没有那条标题 ⇒ no-title，不许算成疑空").toBe(0);
+    expect(c["no-title"]).toBe(2);
+  });
+
+  it("真面证人：本笔那条锚点判成 wired；只把指针换成同文件里不调 parseTscLine 的兄弟用例，就翻成 suspect", () => {
+    const src = readRel("scripts/lib/evidence-typecheck.ts") ?? "";
+    const test = readRel("tests/evidence-typecheck.test.ts") ?? "";
+    expect(src.length, "取料面读不到 ⇒ 这一格没量到，不等于接线正确").toBeGreaterThan(0);
+    const base = { srcRel: "scripts/lib/evidence-typecheck.ts", needle: "return { file: m[1]!, code: m[4]! };", test: "tests/evidence-typecheck.test.ts" };
+    const good = auditPointerWiring([{ ...base, id: "g", expectFail: "真报错行 ⇒ file 与 code 都取对（code 必须是 TS 码，不是 'error'）" }],
+      { readSrc: readRel, readTest: readRel });
+    const bad = auditPointerWiring([{ ...base, id: "b", expectFail: "登记表里的文件都还在盘上（删了的登记＝下一笔必须把帽撤到 0，不许留幽灵条目）" }],
+      { readSrc: readRel, readTest: readRel });
+    expect(good[0]?.kind).toBe("wired");
+    expect(good[0]?.symbol).toBe("parseTscLine");
+    expect(bad[0]?.kind, "兄弟用例不调这个函数——325 那一案就是这个形状，尺必须翻得过来").toBe("suspect");
+  });
+
+  it("接线：门那一步真拿整张表去数，且「变异存活」那条红接得上 wiringHint（只印不接＝这一格永远不响）", () => {
+    const script = readRel("scripts/mutate-verify.mjs") ?? "";
+    expect(script.length).toBeGreaterThan(0);
+    expect(script).toMatch(/^ {2}const wiringRows = auditPointerWiring\(entries\.map\(/mu);
+    expect(script, "喂空表＝这一格永远数出 0（第 165 页那条同款锚点钉的就是这个形状）").not.toMatch(/auditPointerWiring\(\[\]/u);
+    expect(script, "汇总那行没接进来＝这一格根本没跑（emoji 不进正则：它的变体选择符在两处文件里容易写成不同的字节）").toMatch(/^ {2}console\.log\(`[^\n]*指针接线/mu);
+    expect(script, "存活那条红不接 hint ⇒ 只有全局计数，没人在花了两拍判卷之后给出方向").toMatch(/"变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）" \+ wiringHint\(m\)/u);
+    expect(script).toMatch(/^function wiringHint\(m\) \{/mu);
   });
 });

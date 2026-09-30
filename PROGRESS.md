@@ -8520,6 +8520,44 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
    另有 `/private/tmp/dsh-foreign-witness-A|B` **不是本仓建的、不许照回收命令删**。
    `head-cert` 只**打印**回收命令（`scripts/head-cert.ts:294`），删除归人 ⇒ 这里写「未回收，命令=`git worktree remove --force <树>`」，不写「已回收」。
 
+### 2026-10-01 · 第 260 页（本会话）· 给「锚点指针指向会红的那条」装上观测者：静态接线代理量到 680/1123 疑空 ⇒ 裁成「存活那条红后面的方向」，不当闸（表 1118→1123）
+
+取料：`outputs/pointer-wiring-observer-2026-10-01/`（`claim.log`／`probe.mts`＋`probe.log`／`needles-with-wiring.log`／`needles-baseline-at-bd5ec44.log`＋`-run1.log`／`judges-first-run-red.log`／`judges-second-run-red.log`／`judges-green.log`）。
+
+1. **闭的是哪一格**：规则 325 记过一次真事故——`cert-tree-abs-args-swapped` 的 `expectFail` 写着同一条判卷里**不调 `certTreeAbs`** 的兄弟用例标题。
+   门里那行 `killer 指针失效 0` 当时照样绿，因为它只验两件事：针脚在源文件里存在、这条标题在判卷里解析得出；**它量的不是"指针指向会红的那条"**。
+   发现它的代价是整表实跑 6.58s（本仓最贵的那类"秒级尺看不见"）。这一页就是把那格变成秒级读数。
+2. **尺的形状**（判据在 lib、可单测；门只做编排）：`scripts/lib/mutate-gates.ts` 新增
+   `enclosingSymbol`（从针脚位置往上找包围它的函数名）／`testCaseBody`（取那条用例的体）／`auditPointerWiring`（三态判定）／`wiringCensus`（分格）；
+   `scripts/mutate-verify.mjs` 里 `--check-needles` 多打一行、且**「变异存活」那条红后面接 `wiringHint(m)`**——
+   一条花了两拍判卷才喊出的红，值一句"先排指针、再谈判卷无分辨力"。
+   取证探针 `probe.mts` **import 这三个函数**，不自己再算一遍（否则这张表就成了第二把尺）。
+3. **写尺时我自己错两处，两态证人当场咬住**（`judges-first-run-red.log`／`judges-second-run-red.log` 是那两次红的原文）：
+   ⑴ `slice(0, needleIndex)` 把**针脚自己那一行**切掉了 ⇒ 声明行上的针脚（`export function certTreeAbs(…)`）被读成上一条函数 `mainRootFromCommonDir`——
+      尺在真文件上取错符号，而假件的合成用例照样能过；是探针第 3、4 格先红的。
+   ⑵ 把函数体里的局部 `const m = /…/u.exec(line)` 当成边界 ⇒ `parseTscLine` 这类"needle 在函数中段"的正常锚点全落进「判不了」，
+      那一格从读数退化成空读数（汇总行看着像"尺很谨慎"）。规则改判成：**只有列 0 的数据声明才是边界**。
+4. **读数裁决（这一页真正的结论）**：现读 **接上 256／疑空 680／判不了 187**（合计 1123，配平等式成立；`needles-with-wiring.log`）。
+   疑空占 61% ⇒ **不能当水位帽、不能进退出码**：本仓第 7320 条锚点描述的就是这个坑——"每一根正常指针都被算成松钉，这个数字不再有意义"。
+   成因很实在：多数判卷是从上游入口（`runAgent`、`gates` 那类）打进去的，用例体里当然不提名被改的那个函数。
+   但它对**要它抓的那一案**有分辨力：`probe.log` 四格 4/4（wired 两格、suspect 两格，含 325 那一案的照抄）⇒
+   正确位置是**线索**，不是闸；所以门上那行明写「**线索，不进门禁**」，并在 hint 文案里带上"会误喊、实测 680/1123"这句自我否定。
+5. **成本：同分母 A/B（同一台机器、同一条命令、`/usr/bin/time -p`，三读 vs 三读）**：
+   基线臂（干净树 `bd5ec44`，无这一格）`real 11.48`／`11.02`／`10.77`；加格臂（主检出，1123 条）`real 12.94`／`11.17`／`11.10`。
+   中位差 **+0.15s**，而**单臂自身极差 0.71s** ⇒ 诚实写法是"这一格的净成本**低于本机噪声底，量不出来**"，不写成"几乎为零"（那是把模型当读数，规则 245）。
+6. **判据与实现同笔**：表 1118→**1123**。五支各钉一条不同判卷——`wiring-lineend-drops-needle-line`、`wiring-scan-stops-at-local-const`、
+   `wiring-unreadable-counts-as-wired`、`wiring-census-merges-all-kinds`、`wiring-gate-fed-empty-table`。
+   ⚠️ 最后一支的 `src` 就是本文件（自-hosted）⇒ 针脚里带**真换行**（表里那份写作转义的 `\n`，撞不上），否则 `replace` 先改到这张表自己那一行，
+   代码一个字没动却报成"变异存活"（规则 325 的姊妹形，本仓为它立过两次）。
+   落库前读数：`针脚体检：1123 条 —— 阻断 5，待复认 0，未覆盖 0，逐行式 5，未入库面 0，钉在飞文本 5，killer 指针失效 0`＋`改法语法体检：1123 条改法全部产出合法源文件 ✅`
+   （那 5 格全是本笔实现未入库，落库后应归 0）；`tests/mutate-verify-gates.test.ts` **157 条全绿**（150→157）、`typecheck exit=0`、
+   `evidence-typecheck-check` 在 16 条／帽 12 条那格**没把本目录新探针算进去**（它 0 条危险码，由门自己量的）。
+7. **页号**：`占号 260（台账面 225 个＋号池面 18 个）`，这次命令接了 `>` ⇒ `claim.log` 是真日志（上一笔那条是誊录，已注明）。
+8. **刻意未做（写在纸上）**：不给这一格建水位帽、不进 `blockingTotalOf`（第 4 条的成因）；
+   「判不了 187」里的表条目/字段声明是**设计使然**（那段代码不长在函数上，硬给它找个上游函数就是假接线）；
+   2-hop 可达性（用例提到的函数是否间接调用被改符号）能把 680 压下来——**没有顺手做**，因为它会把"秒级尺"变成一个小号调用图，且要先有分辨力实测才值得（已记成任务）；
+   `extractNeedle` 用 `new Function` 求值锚点表里的字面量——那是本仓既有设计（表就是代码，变异机本来就要执行它），本笔**未改**，不是新引入的执行面。
+
 ### 2026-10-01 · 第 261 页（本会话）· 影响面持久化索引＋准确率基准三任务交付（259 页开工那个 goal 的任务 1/2/3）：索引 artifact 落盘＋同提交热载（560 文件 73ms）、冻结夹具精度基准 16/16、真仓探针 P=1.000/R=1.000 双过；新判卷 16 条全绿、全套 3387 绿
 
 取料：`outputs/impact-index-2026-10-01/`（`readings.md` 全读数＋`accuracy-probe.mts` 夹具核对探针＋`accuracy-prod.mts` 固化真仓探针＋`accuracy-prod.log`）。

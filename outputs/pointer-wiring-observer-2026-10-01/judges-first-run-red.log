@@ -1,0 +1,2341 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+ [31m❯[39m tests/mutate-verify-gates.test.ts [2m([22m[2m157 tests[22m[2m | [22m[31m4 failed[39m[2m)[22m[33m 14535[2mms[22m[39m
+   [32m✓[39m budgetMsOf + classifyArgs 的值位（自我预算这条手段本身要有判卷） [2m(4)[22m
+     [32m✓[39m flag 优先于 env；两者都缺 ⇒ 不限且不吭声[32m 1[2mms[22m[39m
+     [32m✓[39m 非法预算不许静默退化成「没设」（写的人以为给了预算）[32m 0[2mms[22m[39m
+     [32m✓[39m `--budget-ms 600000` 的值不是锚点 id（旧分流会报「未知 id 600000」，等于没人能设预算）[32m 0[2mms[22m[39m
+     [32m✓[39m 未知 flag 照旧当场拒（新认的两个 flag 不放宽这条）[32m 0[2mms[22m[39m
+   [32m✓[39m 改动面派生：一条锚点的两面都要认（被测源 ∪ 判卷文件） [2m(8)[22m
+     [32m✓[39m 改被测源 ⇒ 选中；改判卷文件 ⇒ 也要选中（只认一头＝另一半搬家没人知道）[32m 0[2mms[22m[39m
+     [32m✓[39m 两面都不在改动面 ⇒ 一条不选，但把「表多大／面多大」一起交回去（0 条要能被分诊）[32m 0[2mms[22m[39m
+     [32m✓[39m git 输出的尾换行不算一个文件；同一锚点两面都改也只选一次[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：派生出来的 id 真的并进 targets（只写纯函数不接＝名单还是人手抄的）[32m 2[2mms[22m[39m
+     [33m[2m✓[22m[39m 派生可以只看名单不真跑：`--list --changed-since=<空树>` ⇒ 每条锚点两面都在跟踪文件里，必须选中整表[33m 688[2mms[22m[39m
+     [33m[2m✓[22m[39m 真跑：`--changed-since` 不给 rev ⇒ exit 2，且一条源文件都不许动[33m 550[2mms[22m[39m
+     [33m[2m✓[22m[39m 派生可以只看名单不真跑：`--list --changed-since=<rev>` 只印选中的那些，且不碰任何源文件[33m 1014[2mms[22m[39m
+     [33m[2m✓[22m[39m 真跑：rev 取不到 ⇒ exit 2 并点名那个 rev（「取料坏」不许退化成「选中 0 条」）[33m 524[2mms[22m[39m
+   [32m✓[39m --changed-since 的参数形状：放行连写，但不放宽「未知即拒」 [2m(4)[22m
+     [32m✓[39m `--changed-since=HEAD~1` 认，那个值也不被当成锚点 id[32m 0[2mms[22m[39m
+     [32m✓[39m 空格写法同样认：rev 不进 targets，位置参数照旧是 id[32m 0[2mms[22m[39m
+     [32m✓[39m 两条反向哨兵：不带值的 flag 硬塞值照样拒；`--budget-ms=600000` 刻意**不**放行[32m 0[2mms[22m[39m
+     [32m✓[39m `--lock-tag` 两种写法都认、值不进 targets，而隔壁拼错的 `--lock-tx=` 照拒[32m 0[2mms[22m[39m
+   [32m✓[39m entryDisposition（变异条目开跑前的可判性判定） [2m(6)[22m
+     [32m✓[39m 两者都相对 HEAD 干净 → run（正常判定）[32m 0[2mms[22m[39m
+     [32m✓[39m 被测源文件在飞 → refused，理由说清是回滚兜底问题[32m 0[2mms[22m[39m
+     [32m✓[39m 被测源文件未跟踪 → 同样 refused，但理由区分于在飞（未跟踪无 HEAD 可回滚）[32m 0[2mms[22m[39m
+     [32m✓[39m 源文件干净、**判卷测试文件在飞** → unverified（不得冒充变异存活或基线红）[32m 0[2mms[22m[39m
+     [32m✓[39m 未跟踪的判卷文件同样走 unverified，不静默开跑[32m 0[2mms[22m[39m
+     [32m✓[39m 源文件优先：两个都在飞时报 refused 不报 unverified（前者是崩溃风险，后者只是噪声）[32m 0[2mms[22m[39m
+   [32m✓[39m 整跑前预检 preflightRefusals [2m(3)[22m
+     [32m✓[39m 全干净 ⇒ 空列表（预检本身不许无脑拦停）[32m 0[2mms[22m[39m
+     [32m✓[39m 未跟踪与在飞的源文件都进名单，并带上是哪一条与为什么[32m 0[2mms[22m[39m
+     [32m✓[39m 判卷文件在飞/未跟踪 ⇒ 不进拒绝名单（那是 unverified，不是崩溃风险）[32m 0[2mms[22m[39m
+   [32m✓[39m splitRunnable（预检逐条跳过，其余照跑） [2m(4)[22m
+     [32m✓[39m 一条在飞 ⇒ 只它被跳过，**其余条目必须在 runnable 里**（旧写法这里给空表）[32m 0[2mms[22m[39m
+     [32m✓[39m 不安全的一条都不许进 runnable（跳过要真跳过，别只看名单照样跑）[32m 1[2mms[22m[39m
+     [32m✓[39m 全干净 ⇒ 全可跑、零拒绝；判卷在飞不算拒绝（照常进 runnable，由跑到时记 unverified）[32m 0[2mms[22m[39m
+     [32m✓[39m 全不安全 ⇒ runnable 为空（调用方据此判红，而不是把「没跑」读成「都杀了」）[32m 0[2mms[22m[39m
+   [32m✓[39m 残留备份 leftoverBackupPaths [2m(2)[22m
+     [32m✓[39m 路径 = 源文件 + .mutbak，且只报盘上真在的那几个[32m 0[2mms[22m[39m
+     [32m✓[39m 多条锚点共用一个源文件 ⇒ 只报一次；全无残留 ⇒ 空（不许把「没查到」报成一堆）[32m 0[2mms[22m[39m
+   [32m✓[39m 残留处置决策 leftoverActionOf [2m(5)[22m
+     [32m✓[39m 备份 == HEAD、盘上是本表锚点留下的突变体 ⇒ restore[32m 0[2mms[22m[39m
+     [32m✓[39m 反面对手：同样三份内容，但当前那份对不上任何锚点 ⇒ 绝不自动盖（可能是别人的在飞改动）[32m 0[2mms[22m[39m
+     [32m✓[39m 备份 == HEAD、源文件已经 == HEAD ⇒ 只删过期备份，不动源文件[32m 0[2mms[22m[39m
+     [32m✓[39m 备份 != HEAD ⇒ manual（备份里可能是别人未提交的原件，即便当前内容对得上锚点也不许盖）[32m 0[2mms[22m[39m
+     [32m✓[39m 没有可比基线一律 manual：文件不在 HEAD 里 / 备份读不到 / 源文件不见了[32m 0[2mms[22m[39m
+   [32m✓[39m untrackedAnchorPaths：锚点入库、被测码/判卷从未入库必须当场红 [2m(5)[22m
+     [32m✓[39m 盘上有、HEAD 里没有 ⇒ 点出来（含 id、路径与是哪一面，能直接照着补提交）[32m 0[2mms[22m[39m
+     [32m✓[39m 反面对手：两面都已入库的表 ⇒ 一条都不报（这条判据不许把正常锚点报成红）[32m 0[2mms[22m[39m
+     [32m✓[39m 混合表只报未入库的那几条，且按喂入顺序（整张表 ×2 面要能一眼定位）[32m 0[2mms[22m[39m
+     [32m✓[39m 判卷面缺文件说「连基线都跑不出来」并指向判卷文件，不写「源文件读不到」（两面修法指不同文件）[32m 0[2mms[22m[39m
+     [32m✓[39m 两种红的文案不混：「从未入库」不写「改指针脚」，反之亦然（修法相反，混了就误导）[32m 0[2mms[22m[39m
+   [32m✓[39m headOnlyNeedleProblems：锚点钉在在飞文本上必须点名（否则主树绿洗 HEAD） [2m(5)[22m
+     [32m✓[39m 盘上没问题、HEAD 里 0 处 ⇒ 报这一类[32m 0[2mms[22m[39m
+     [32m✓[39m 盘上已经报过的同一条不重复报（一行红只有一个成因，读的人不必对两行）[32m 0[2mms[22m[39m
+     [32m✓[39m HEAD 里读不到、且该路径已由「未入库」判据报过 ⇒ 不重复报（同一件事两栏都记 = 数被抬高）[32m 0[2mms[22m[39m
+     [32m✓[39m 反面对手：盘上与 HEAD 两份都判得通过 ⇒ 一条都不报[32m 2[2mms[22m[39m
+     [32m✓[39m 三种红的文案互不串（修法各不相同：等实现入库 / 提交那文件 / 改指针脚）[32m 0[2mms[22m[39m
+   [32m✓[39m anchorFaces + blockingTotalOf：接线缺件必须当场崩，不许静默少看一维 [2m(5)[22m
+     [32m✓[39m 每条锚点产出两支面（被测面 + 判卷），且两面各一次（少喂一支 = 那一面静默失效）[32m 0[2mms[22m[39m
+     [32m✓[39m 反面对手：空表 ⇒ 空数组（这条判据不许凭空造出锚点面）[32m 0[2mms[22m[39m
+     [32m✓[39m 六支数都给 ⇒ 求和（0 也算数，不许被当成缺项丢掉）[32m 0[2mms[22m[39m
+     [32m✓[39m 缺一支 ⇒ 抛并点名缺哪支（门报红却少算一维 = 这条门唯一的产出被废）[32m 0[2mms[22m[39m
+     [32m✓[39m 非有限数（NaN / Infinity）也算缺项： typeof 是 number，但读数本身不可信[32m 0[2mms[22m[39m
+   [32m✓[39m headPointerProblems：锚点行入库了、判卷里那条标题没入库 [2m(4)[22m
+     [32m✓[39m 判卷在飞且 HEAD 那份指不到 ⇒ 点名（三态里这是「HEAD 侧失效」，不是「没问题」）[32m 0[2mms[22m[39m
+     [32m✓[39m 本笔同时改表与改判卷的那条**不判**（那格归同笔规矩）；判卷没动过的也不重复判[32m 0[2mms[22m[39m
+     [32m✓[39m HEAD 里根本没有那份判卷 ⇒ unreadable，不等于没问题[32m 0[2mms[22m[39m
+     [32m✓[39m 空指针条目不在这里判（那是「没声明 killer」另一档，归盘上那把尺）[32m 0[2mms[22m[39m
+   [32m✓[39m 被 import 时必须拒绝运行（它会就地改源文件） [2m(2)[22m
+     [33m[2m✓[22m[39m import 进来 ⇒ 退出码 2、点名拒绝，且一条变异都没跑[33m 492[2mms[22m[39m
+     [33m[2m✓[22m[39m 反向一侧：正当入口没被这道闸误伤（--list 仍 exit 0 且列得出条目）[33m 500[2mms[22m[39m
+   [32m✓[39m auditExpectFails：killer 指针必须指得到活用例 [2m(18)[22m
+     [32m✓[39m 齐的读空；真改过名的按 not-found 报出来[32m 0[2mms[22m[39m
+     [32m✓[39m 拼出来的标题（盘上没有整句，跑起来才有）不许报红——这条是校准出来的，不是推的[32m 0[2mms[22m[39m
+     [32m✓[39m 带转义引号的标题不许误报（表里存解码值，盘上是源码文字）[32m 0[2mms[22m[39m
+     [32m✓[39m 生成式标题不许把整份判卷的体检缴械：指向不存在用例的指针仍要报 not-found[32m 0[2mms[22m[39m
+     [32m✓[39m 变体：标题里除了占位符只剩空白 ⇒ 同样缴械，也要丢（不 trim 就漏这一格）[32m 0[2mms[22m[39m
+     [32m✓[39m 过修的反面：带字面残迹的标题要**留着**通配（参数化标题仍然认得渲染后的样子）[32m 0[2mms[22m[39m
+     [32m✓[39m 本文件自己就是案发现场：那串 fixture 生成器里的 it 不是真标题，收紧后假指针必须报出来[32m 2[2mms[22m[39m
+     [32m✓[39m 判卷文件读不到 ⇒ unreadable，不许当「指针没问题」（规则 92/210 那一族）[32m 0[2mms[22m[39m
+     [32m✓[39m 空 expectFail / 空 test 跳过：那是「没声明 killer」，与指针断裂分两档[32m 0[2mms[22m[39m
+     [32m✓[39m 两把尺同宽（同一判据只许有一份）：新尺与 `mutate-anchor-titles` 对同一批判卷判定必须一致[32m 0[2mms[22m[39m
+     [32m✓[39m 非 vitest 面不判（test 指向 .ts/.md 之类）：那一格归 `mutate-anchor-titles` 单独点名，不造第三把尺[32m 0[2mms[22m[39m
+     [32m✓[39m 真表自证：整张表的 killer 指针必须 0 失效（新增一条断指针＝当场红）[32m 275[2mms[22m[39m
+     [32m✓[39m 松钉要单独点名：拼接标题与带转义引号两类算松钉，逐字命中的不算，真断的也不算（那是 not-found）[32m 0[2mms[22m[39m
+     [32m✓[39m 判卷文件读不到 ⇒ 不进松钉（那一格归 unreadable，松钉计数不许把它吞了）[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：门自己那一步要真拿整张表去数松钉（只印不数＝这一格永远 0，且永远不红）[32m 2[2mms[22m[39m
+     [32m✓[39m 水位：真表现读松钉只准调低（帽 10，09-27 现读 10）——新增一根要写明为什么[32m 242[2mms[22m[39m
+     [32m✓[39m 求和那一行必须把第 5 维喂进去（钉接线：少喂一支＝门照跑、汇总照印绿）[32m 2[2mms[22m[39m
+     [32m✓[39m 第 6 维（HEAD 侧指针失效）也要喂进求和，且 runner 真去调那把尺[32m 2[2mms[22m[39m
+   [32m✓[39m killerAttributionOk：归因只认失败面（通过的用例那一行不算） [2m(4)[22m
+     [32m✓[39m 声明的那条只是**通过**了 ⇒ 不算归因（旧判据在这里报真）[32m 0[2mms[22m[39m
+     [32m✓[39m 红的那条正是声明的那条 ⇒ 认；`FAIL … > 标题` 与 `×` 两种失败面都要认[32m 0[2mms[22m[39m
+     [32m✓[39m 没声明 killer（空指针）不在这里判——那是静态那把尺点名的另一档[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：runner 归因那一步真调这把尺，且旧的整串 includes 已经不在[32m 2[2mms[22m[39m
+   [32m✓[39m baselineRedKind：基线红要分「载不动」与「真的不绿」 [2m(3)[22m
+     [32m✓[39m 判卷载不动 ⇒ 未证，且点名是哪个模块[32m 0[2mms[22m[39m
+     [32m✓[39m 别的原因让基线红（真缺陷）⇒ 仍按阻断，不许把表退化洗成未证[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：基线那一步真调这把分诊尺（不然是拿着读数当结论）[32m 2[2mms[22m[39m
+   [32m✓[39m mutate-verify 也接了这把锁：占不到就不许动盘（那份过程的第二个消费者） [2m(6)[22m
+     [33m[2m✓[22m[39m 活人占着 ⇒ exit 2、点名是谁、拒在开跑之前，并且不替别人删锁[33m 520[2mms[22m[39m
+     [33m[2m✓[22m[39m 反向哨兵：同一入参、没有锁 ⇒ 必须走到「未知 id」，并且占过又放掉（上面那条的红只能来自锁）[33m 516[2mms[22m[39m
+     [33m[2m✓[22m[39m 只读入口不许被这把门锁死：--list 在有人占着时照跑，而 `--check-needles` 与它同一先（按结构钉）[33m 511[2mms[22m[39m
+     [32m✓[39m 成本钉：本文件的判卷不许再 spawn 只读体检（挂在本文件上的锚点每条要跑三遍）[32m 1[2mms[22m[39m
+     [32m✓[39m 接线形状：占锁排在自愈与开跑之前，消费者侧不留第二份三态判断[32m 3[2mms[22m[39m
+     [33m[2m✓[22m[39m 空标签不是「默认」：`--lock-tag=` 与 `--lock-tag ""` 一律 exit 2 并说明怎么要默认[33m 991[2mms[22m[39m
+   [32m✓[39m 印完就退的出口必须同步写：--list 是两把静态尺共同的取料面 [2m(2)[22m
+     [32m✓[39m helper 本体按字节写满、四个出口都经它（一次 writeSync 只交得进内核缓冲那一截）[32m 1[2mms[22m[39m
+     [33m[2m✓[22m[39m 真跑：--list 经管道交给读者的行数必须等于表长（少一行＝两把静态尺一起少读一条锚点而不自知）[33m 501[2mms[22m[39m
+   [32m✓[39m 成本分母：每条锚点实际 spawn 了几次判卷 [2m(8)[22m
+     [32m✓[39m 早退路径按实际 spawn 次数分桶，且第 1 次与第 2、3 次的中位分开求（第一拍付 vite 冷启动）[32m 0[2mms[22m[39m
+     [32m✓[39m 一次判卷都没 spawn ⇒ 那一格印「没有分母」，不许长得像「每条 0 秒」[32m 0[2mms[22m[39m
+     [32m✓[39m 没跑的条要单列在句尾（并进平均值就是把「没量到」读成「跑得很快」）[32m 0[2mms[22m[39m
+     [32m✓[39m 账本里缺 runsMs 的行当场崩并点名第几行（接线漏计在 .mjs 里没有编译期信号）[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：汇总那一行吃的是 runner 自己那份 runsMs，且每个出口都带账本（表与实现同文件 ⇒ 钉跨行正则，规则 236）[32m 3[2mms[22m[39m
+     [32m✓[39m 逐条那一格：跑了印「N.Ns／K 拍」，一次没跑印「没有分母」，两态不许同形[32m 0[2mms[22m[39m
+     [32m✓[39m 取料形状：有分母那一支固定成 秒／拍 两段（#28 的装箱按它读，改形状要同轮换读者）[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：逐条结果那一行真把账本印出去了（表与实现同文件 ⇒ 行锚定，规则 236/247）[32m 2[2mms[22m[39m
+   [32m✓[39m 按标题选跑法：选中几条必须被读出来 [2m(11)[22m
+     [32m✓[39m 选中条数只从 vitest 真实的收尾行读，两种实测形状给两个数；读不到那行是 null 不是 0[32m 0[2mms[22m[39m
+     [32m✓[39m 标题当正则喂给 -t ⇒ 元字符必须转义（现读真标题里有 ( ) [ ] . * + 与全角括号）[32m 0[2mms[22m[39m
+     [32m✓[39m 两种跑法共存：只有能唯一定位自己用例的那批走 -t，其余照旧整文件[32m 0[2mms[22m[39m
+     [32m✓[39m 两种跑法定长列印：这一趟只拍到一种，另一种也要印出没有分母而不是整支消失[32m 0[2mms[22m[39m
+     [32m✓[39m 跑法单价那一格分开印两种跑法，并把两种跑法各自的「坏拍」数出来——省了多少由它说，不许推算[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：testNamePattern 这一支要经转义，不许把标题当通配符拼进命令（表与实现同文件 ⇒ 必须行锚定，规则 236）[32m 2[2mms[22m[39m
+     [33m[2m✓[22m[39m 行为证人：指针以 `-` 开头时两种写法给两个读数——等号写法选中 1 条，空格写法被 CLI 当旗标吞掉[33m 594[2mms[22m[39m
+     [32m✓[39m 接线：只有 selector 模式才塞 -t，其余必须走整文件（两种跑法共存是刻意的）[32m 2[2mms[22m[39m
+     [32m✓[39m 接线：每一拍都过共用的那道读数闸，闸的拍数与 runTest 调用点相对相等（选不中、选多条都不许读成绿）[32m 2[2mms[22m[39m
+     [32m✓[39m 读数闸的判据只有一份：selector 那一拍恰好选中 1 条才算合格，0 条／多条／没读到三种都判坏[32m 0[2mms[22m[39m
+     [32m✓[39m 三种坏读数印三种不同措辞：取料坏／一条没选中／选中多条，两两不许相同[32m 0[2mms[22m[39m
+   [32m✓[39m 选择子唯一性：一条锚点能不能只跑自己那条 killer 用例 [2m(13)[22m
+     [32m✓[39m 只数被数过的：判卷读不到／指针为空／不是 vitest 文件都不进 inspected[32m 0[2mms[22m[39m
+     [32m✓[39m 零命中与多命中分开印，并点名是哪几条（0 命中＝-t 会一条也没跑）[32m 0[2mms[22m[39m
+     [32m✓[39m id 名单要挂在各自的桶名下：并排印在行末＝把唯一的零命中条指成「多命中」的一员[32m 0[2mms[22m[39m
+     [32m✓[39m 可选率的分母是被数过的条数，不是整表条数（拿整表去除＝把选不中的洗成可选）[32m 0[2mms[22m[39m
+     [32m✓[39m 读得到文件却一条标题都抽不到 ⇒ 第三态要点名（并进「没问题」＝整份判卷被读瞎也无人说）[32m 0[2mms[22m[39m
+     [32m✓[39m 标题是拼出来的（it.each 的 %s）不算选不中：-t 拿渲染后的整条恰好选中一条（第 230 页）[32m 0[2mms[22m[39m
+     [32m✓[39m 放宽宽度不放过重名：模板那条与字面那条都在同一份判卷里 ⇒ 仍报多命中（并集证人不算守护）[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：选择子与指针体检共用同一份标题抽取，不再另抄正则（抄一份必然漂宽，第十三族）[32m 0[2mms[22m[39m
+     [32m✓[39m 零命中分四种成因、各印各的数（0 也印）——从前那句「多半是用例改了名」是在指责任人[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：0 命中那一格吃的是**整份判卷文字**，不是只有标题面[32m 0[2mms[22m[39m
+     [32m✓[39m 两个分母并排印（可判面／表全长）：只印被数过的那个数，少的那几条去哪了没人说[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：门自己那一步真拿整张表去数选择子，并把两份数一起交给措辞（只印不数＝这一格永远 0）[32m 2[2mms[22m[39m
+     [32m✓[39m 水位：真表现读「选不中＋不唯一」只准调低（帽 3，09-30 第 233 页现读 3＝1 零命中＋2 多命中）——新增一根要写明为什么[32m 255[2mms[22m[39m
+   [32m✓[39m 还原那一拍换成字节比对（第 171 页⑩，任务 #10） [2m(2)[22m
+     [32m✓[39m 字节相同＝到位；长度不同与等长不同要各点名自己的那一格[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：每条锚点只付两拍，还原那一拍不再 spawn 判卷[32m 3[2mms[22m[39m
+   [32m✓[39m 判红按类别分开（第 172 页⑪，任务 #12） [2m(3)[22m
+     [32m✓[39m 判红的总数等于名单长度之和，只印非零的类别[32m 0[2mms[22m[39m
+     [32m✓[39m 判红缺类别／认不出的类别当场崩并点名第几条[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：runner 在出口就定类别，汇总与机器行都从同一份取料来[32m 4[2mms[22m[39m
+   [32m✓[39m 未证那一态的名单与补跑（第 171 页，任务 #14） [2m(4)[22m
+     [32m✓[39m 未证四类各印各的名单，总数等于名单长度之和[32m 0[2mms[22m[39m
+     [32m✓[39m 认不出的未证类别当场崩并点名第几条，不许从总数里消失[32m 0[2mms[22m[39m
+     [32m✓[39m 补跑命令只收预算用尽那一类，那一类为空就不许印命令[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：未证名单走同步写满的那条出口，UNVERIFIED 标记只印一次[32m 2[2mms[22m[39m
+   [32m✓[39m 判卷重试原语：瞬时红放过、持续红仍红（V-1/V-2） [2m(4)[22m
+     [32m✓[39m 第一次就绿 ⇒ 只跑一格，不多付那一拍[32m 0[2mms[22m[39m
+     [32m✓[39m 第一次红、重试绿 ⇒ 最终交回的是**重试那拍**（V-1 那一格：基线偶发红不许读成真红）[32m 0[2mms[22m[39m
+     [32m✓[39m 两次都红 ⇒ 最终交回红（持续红不许被放过：还原/基线真坏掉时这道保证不许松）[32m 0[2mms[22m[39m
+     [32m✓[39m 反向：把重试删掉（第一次红就交回）这条判卷当场红——否则基线/还原两格对偶发红没有牙[32m 0[2mms[22m[39m
+   [32m✓[39m 还原后那格（V-2）：重试原语在壳上翻成 ok/why [2m(5)[22m
+     [32m✓[39m 还原后第一次就绿 ⇒ 只跑一格，不多付那一拍[32m 0[2mms[22m[39m
+     [32m✓[39m 第一次红、重试绿 ⇒ 放过（判卷里与本条无关的偶发红不许把已杀死的锚点记成存活）[32m 0[2mms[22m[39m
+     [32m✓[39m 重试仍红 ⇒ 判失败，且措辞点名「重试仍红」（还原真坏掉时这道保证不许松）[32m 0[2mms[22m[39m
+     [32m✓[39m 反向：把重试删掉（第一次红就判失败）这条判卷当场红——否则「放过瞬时红」没有牙[32m 0[2mms[22m[39m
+     [32m✓[39m 反向：把「重试仍红也放过」写死（恒真）这条判卷当场红——持续红的保证不许被放宽[32m 0[2mms[22m[39m
+   [32m✓[39m 树闸：就地改源文件这件事只许发生在一棵一次性 worktree 里 [2m(4)[22m
+     [32m✓[39m 主检出拒跑、linked worktree 放行——两支只差一个维度，结论换人[32m 0[2mms[22m[39m
+     [32m✓[39m 相对 `.git` 与绝对路径按 root 解析后再比（格式差不许被读成「两棵树」）[32m 0[2mms[22m[39m
+     [32m✓[39m 读不出 git 的答案按主检出处置（fail-closed：证明不了自己是一次性的，就不许动盘）[32m 0[2mms[22m[39m
+     [32m✓[39m 行为证人：这对入参交给**真 git**——同一台机器上主检出同指、linked worktree 分指，两支各自过闸[32m 92[2mms[22m[39m
+   [32m✓[39m 树闸接线：真跑本脚本——主检出拒跑且一个字节都没改过盘，linked worktree 放行 [2m(6)[22m
+     [33m[2m✓[22m[39m 主检出里真跑 ⇒ exit 2、说清是主检出、且盘上一个字节都没动[33m 628[2mms[22m[39m
+     [33m[2m✓[22m[39m 同一份代码换进 linked worktree ⇒ 树闸放行，接着被预检按「源文件在飞」停在写盘之前[33m 704[2mms[22m[39m
+     [33m[2m✓[22m[39m 反向哨兵：主检出那支要是靠 `--in-worktree` 逃出去的，这条当场红（隔离必须由树闸保证，不靠调用方记得带参数）[33m 628[2mms[22m[39m
+     [33m[2m✓[22m[39m 语义钉：建出来被量的那棵树是 **HEAD**，主树里未提交的那份改动不进它（AGENTS.md 那条工作规则的可执行面）[33m 1205[2mms[22m[39m
+     [33m[2m✓[22m[39m 软链路径调脚本不许被误判成「被 import」（S2-3）[33m 654[2mms[22m[39m
+     [33m[2m✓[22m[39m 树名的包含判定：解完仍在主检出里就放行，解出去了才拒（S2-4 拆掉的那格假阳性）[33m 2371[2mms[22m[39m
+   [31m❯[39m 指针接线：enclosingSymbol／testCaseBody／auditPointerWiring（第 260 页） [2m(7)[22m
+[31m     [31m×[31m needle 就写在声明行上时取的是**这一行**的函数名（只切到 needle 起点会把声明行切掉）[39m[32m 7[2mms[22m[39m
+[31m     [31m×[31m 箭头常量与方法写法也要认得出来（只认 function 关键字＝大量锚点全判不了）[39m[32m 1[2mms[22m[39m
+     [32m✓[39m testCaseBody：取到那条用例的体；标题不在回 null[32m 0[2mms[22m[39m
+[31m     [31m×[31m 四态各归各位：wired／suspect／no-symbol／unreadable，取不到不许并进 wired 也不许并进 suspect[39m[32m 1[2mms[22m[39m
+     [32m✓[39m 分格要配平：wired＋suspect＋四类判不了 ＝ 送进去的条数（漏一条就少一个证人）[32m 0[2mms[22m[39m
+     [32m✓[39m 真面证人：本笔那条锚点判成 wired；只把指针换成同文件里不调 parseTscLine 的兄弟用例，就翻成 suspect[32m 1[2mms[22m[39m
+[31m     [31m×[31m 接线：门那一步真拿整张表去数，且「变异存活」那条红接得上 wiringHint（只印不接＝这一格永远不响）[39m[32m 6[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 4 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/mutate-verify-gates.test.ts[2m > [22m指针接线：enclosingSymbol／testCaseBody／auditPointerWiring（第 260 页）[2m > [22mneedle 就写在声明行上时取的是**这一行**的函数名（只切到 needle 起点会把声明行切掉）
+[31m[1mAssertionError[22m: 表里的数据条目没有包围函数 ⇒ null（判不了，不算可疑）: expected 'gamma' to be null[39m
+
+[32m- Expected:[39m
+null
+
+[31m+ Received:[39m
+"gamma"
+
+[36m [2m❯[22m tests/mutate-verify-gates.test.ts:[2m1825:107[22m[39m
+    [90m1823|[39m     // 反向证人：同一个 needle 若切在起点之前，就会漂到别的符号上 ⇒ 两态必须不同
+    [90m1824|[39m     expect(enclosingSymbol(SRC, SRC.indexOf("  const inner")), "needle…
+    [90m1825|[39m     expect(enclosingSymbol(SRC, SRC.indexOf("id: \"top-level-data\""))…
+    [90m   |[39m                                                                                                           [31m^[39m
+    [90m1826|[39m   });
+    [90m1827|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/mutate-verify-gates.test.ts[2m > [22m指针接线：enclosingSymbol／testCaseBody／auditPointerWiring（第 260 页）[2m > [22m箭头常量与方法写法也要认得出来（只认 function 关键字＝大量锚点全判不了）
+[31m[1mAssertionError[22m: expected null to be 'delta' // Object.is equality[39m
+
+[32m- Expected:[39m
+"delta"
+
+[31m+ Received:[39m
+null
+
+[36m [2m❯[22m tests/mutate-verify-gates.test.ts:[2m1830:66[22m[39m
+    [90m1828|[39m   it("箭头常量与方法写法也要认得出来（只认 function 关键字＝大量锚点全判不了）", () => {
+    [90m1829|[39m     const typedSrc = ["export const delta: (a: string) => string = (a)…
+    [90m1830|[39m     expect(enclosingSymbol(typedSrc, typedSrc.indexOf("=> a;"))).toBe(…
+    [90m   |[39m                                                                  [31m^[39m
+    [90m1831|[39m     expect(enclosingSymbol(typedSrc, typedSrc.indexOf("epsilon(): void…
+    [90m1832|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/mutate-verify-gates.test.ts[2m > [22m指针接线：enclosingSymbol／testCaseBody／auditPointerWiring（第 260 页）[2m > [22m四态各归各位：wired／suspect／no-symbol／unreadable，取不到不许并进 wired 也不许并进 suspect
+[31m[1mAssertionError[22m: expected 'suspect' to be 'no-symbol' // Object.is equality[39m
+
+Expected: [32m"no-symbol"[39m
+Received: [31m"suspect"[39m
+
+[36m [2m❯[22m tests/mutate-verify-gates.test.ts:[2m1856:33[22m[39m
+    [90m1854|[39m     expect(kindOf("wired")).toBe("wired");
+    [90m1855|[39m     expect(kindOf("suspect")).toBe("suspect");
+    [90m1856|[39m     expect(kindOf("no-symbol")).toBe("no-symbol");
+    [90m   |[39m                                 [31m^[39m
+    [90m1857|[39m     expect(kindOf("unreadable"), "源文件读不到被算成 wired＝「没尺」读成「尺说没问题」（规则 261…
+    [90m1858|[39m     expect(kindOf("no-needle")).toBe("no-needle");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/mutate-verify-gates.test.ts[2m > [22m指针接线：enclosingSymbol／testCaseBody／auditPointerWiring（第 260 页）[2m > [22m接线：门那一步真拿整张表去数，且「变异存活」那条红接得上 wiringHint（只印不接＝这一格永远不响）
+[31m[1mAssertionError[22m: expected '// 变异验证器：证明单元测试不是恒真的（make-neg-control…' to match /^ {2}console\.log\(`ℹ️  指针接线/u[39m
+
+[32m- Expected:[39m
+/^ {2}console\.log\(`ℹ️  指针接线/u
+
+[31m+ Received:[39m
+"// 变异验证器：证明单元测试不是恒真的（make-neg-controls.mjs 的逻辑层泛化）。
+//
+// 理念：门禁体检只能静态查出「恒真式/空断言」；一条断言即便非空，也可能根本不针对
+// 被测逻辑。唯一可靠的经验证法是**注入一处行为突变，看测试是否真的红**：
+//   存活（mutation survived）= 测试对该逻辑无分辨力 = 恒真式等价物。
+// 这把「我觉得代码能跑」变成「我证明了换掉这段逻辑，验收会抓住」。
+//
+// 用法（须经 tsx 运行——判据本体是 TS，见 scripts/lib/mutate-gates.ts）：
+//   pnpm mutate-verify                    # 跑配置表里全部条目
+//   pnpm mutate-verify <id>               # 只跑一条或几条
+//   pnpm mutate-verify --list             # 列出条目
+//
+// 安全：被测源文件先备份，finally 原样还原；进程退出前强制再校验一次
+// `git diff HEAD --quiet`——还原失败即判红，绝不把突变留在工作树里。
+// （与 M7 在飞集零相交：只动自己登记的源文件，且进出都校验零 diff。）
+// 可判性三分（entryDisposition）：源文件在飞/未跟踪 = 拒绝并抛死（无回滚兜底）；
+// **判卷测试文件**在飞 = 本条记「未证」跳过——否则别人的在飞编辑会伪装成「变异存活」或「基线红」。
+
+import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync, writeSync, rmSync } from \"node:fs\";
+import ts from \"typescript\";
+import { execFileSync, spawnSync } from \"node:child_process\";
+import { join, dirname, resolve } from \"node:path\";
+import { fileURLToPath } from \"node:url\";
+import { acquireToolLock } from \"./lib/tool-lock.ts\";
+// 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
+import { entryDisposition, mutateTreeGuard, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, auditPointerWiring, wiringCensus, expectFailProblemLine, killerAttributionOk, judgeWithRetry, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, anchorCostCell, selectorAmbiguity, selectorCell, selectedTestCount, escapeTitlePattern, runModeFor, runReadingIsBad, vacuousRunLine, runModeCell, unverifiedCell, restoreDiffProblem, redVerdictCell, redKindsLine } from \"./lib/mutate-gates.ts\";
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), \"..\");
+const VITEST = join(ROOT, \"node_modules/vitest/vitest.mjs\");
+
+/** 变异配置表：每条 = 一处语义突变 + 期望被它杀死的具体用例标题。新增模块只追加。 */
+const MUTATIONS = [
+  {
+    id: \"cascade-fail-closed\",
+    src: \"src/routing/cascade.ts\",
+    test: \"tests/cascade.test.ts\",
+    desc: \"去掉 fail-closed：无客观判据时也升级（放行）\",
+    apply: (s) => s.replace(\"if (!opts.hasJudge)\", \"if (false)\"),
+    expectFail: \"失败但无客观判据 → fail-closed 不升级、不猜\",
+  },
+  {
+    id: \"cascade-max-rungs\",
+    src: \"src/routing/cascade.ts\",
+    test: \"tests/cascade.test.ts\",
+    desc: \"去掉 maxRungs 上限检查（允许无限爬升）\",
+    apply: (s) => s.replace(\"if (upgrades >= maxRungs)\", \"if (false)\"),
+    expectFail: \"达到 maxRungs 上限不再爬升（防无限升级）\",
+  },
+  {
+    id: \"frozen-s3-9\",
+    src: \"src/frozen.ts\",
+    test: \"tests/frozen-drift.test.ts\",
+    desc: \"S3-9 原 bug 复活：表里的条目不做存在性 stat ⇒ 判卷文件消失报不出来。针脚随实现搬家（普查实测：旧针脚打在 `extraFiles` 那一次 stat 上，而 `inTableNotOnDisk` 现在由下面那条**逐条 stat 循环**独立算 ⇒ 改前者已与结论等价＝空操作）。\" +
+      \"变异方向要钉「一律不报」不是「一律报」：期望那条用例的子树里表内**唯一**条目就是缺失文件，全报＝蒙对（实测 `if (true)` 红在别的用例上）。\",
+    apply: (s) => s.replace(
+      \"    if (!(await stat(join(root, rel)).then(() => true, () => false))) missing.push(rel);\",
+      \"    if (false) missing.push(rel);\",
+    ),
+    expectFail: \"S3-9 回归：gym/index.json 不存在时不算入盘上集合（不掩盖判卷文件消失）\",
+  },
+  {
+    id: \"secrets-fail-closed\",
+    src: \"src/agent/plugins/secrets.ts\",
+    test: \"tests/secrets.test.ts\",
+    desc: \"safeStorage 不可用时仍装配后端（绕过 fail-closed → 敏感值明文退路）\",
+    apply: (s) => s.replace(\"if (!io.isEncryptionAvailable()) return false;\", \"if (false) return false;\"),
+    expectFail: \"fail-closed：无后端 → 拒存 + 显式错误；safeStorage 不可用 → 不装配且拒存\",
+  },
+  {
+    // 5ed68bf 把这份实现收进 src/atomic-write.ts（原判据与三条锚点都在 secrets.ts 上，
+    // 实现搬走后针脚必然失配——规则一条没少：落定靠 rename、不许裸直写、失败清 tmp）。
+    id: \"atomic-rename-dropped\",
+    src: \"src/atomic-write.ts\",
+    test: \"tests/secrets.test.ts\",
+    desc: \"去掉 rename：tmp 写完不落定（崩溃即丢密文）\",
+    apply: (s) => s.replace(
+      '    await writeFile(tmp, text, \"utf8\");\\n    await rename(tmp, path);',
+      '    await writeFile(tmp, text, \"utf8\");',
+    ),
+    expectFail: \"原子写：经 tmp→rename 落盘，成功后无 .tmp 残留\",
+  },
+  {
+    id: \"atomic-direct-write-no-tmp\",
+    src: \"src/atomic-write.ts\",
+    test: \"tests/secrets.test.ts\",
+    desc: \"tmp+rename 退回裸 writeFile（写中途崩溃截断密文存储）\",
+    apply: (s) => s.replace(
+      '    await writeFile(tmp, text, \"utf8\");\\n    await rename(tmp, path);',
+      '    await writeFile(path, text, \"utf8\");',
+    ),
+    expectFail: \"原子写：经 tmp→rename 落盘，成功后无 .tmp 残留\",
+  },
+  {
+    id: \"ask-gate-unattended-fail-closed\",
+    src: \"src/main/ask-gate.ts\",
+    test: \"tests/ask-gate.test.ts\",
+    desc: \"unattended 不立即拒绝而是进 60s 等待（fail-closed 退回等待）\",
+    apply: (s) => s.replace(\"if (this.opts.unattended) {\", \"if (false) {\"),
+    expectFail: \"M4a unattended：无人值守立即拒绝（fail-closed 不等 60s），落流 reason=unattended\",
+  },
+  {
+    id: \"ask-gate-unattended-notify\",
+    src: \"src/main/ask-gate.ts\",
+    test: \"tests/ask-gate.test.ts\",
+    desc: \"unattended 仍调用 notify（弹审批 UI，与「无人在场」矛盾）\",
+    apply: (s) => s.replace(
+      '      this.opts.notifyOutcome?.(askId, \"rejected\", \"unattended\");',
+      '      this.opts.notify?.({ askId, tool, args });\\n      this.opts.notifyOutcome?.(askId, \"rejected\", \"unattended\");',
+    ),
+    expectFail: \"unattended 下 notify 不被调用（无 UI 等待，直接拒绝）\",
+  },
+  {
+    id: \"clarify-submit-unknown\",
+    src: \"src/agent/gates.ts\",
+    test: \"tests/clarify.test.ts\",
+    desc: \"提交到无人等待的 callId 误返回 true（误挂/误改状态）\",
+    apply: (s) => s.replace(\"    if (!resolve) return false;\\n    this.pending.delete(callId);\\n    resolve(answers);\",
+                            \"    this.pending.delete(callId);\\n    resolve(answers);\"),
+    expectFail: \"提交到无人等待的 callId → 返回 false（不误挂）\",
+  },
+  {
+    id: \"provider-keys-fail-closed\",
+    src: \"src/main/provider-keys.ts\",
+    test: \"tests/provider-keys.test.ts\",
+    desc: \"safeStorage 不可用时仍装配后端（绕过 fail-closed → 明文退路）\",
+    apply: (s) => s.replace(\"if (!io.isEncryptionAvailable()) return false;\", \"if (false) return false;\"),
+    expectFail: \"fail-closed：无后端（safeStorage 不可用）→ 拒存 + 显式错误；任何路径不产生 store 文件\",
+  },  {
+    id: \"lsp-config-fail-loud\",
+    src: \"src/tools/lsp.ts\",
+    test: \"tests/lsp.test.ts\",
+    desc: \"坏 JSON 不 fail loud 而是静默关闭（配置错误被吞，该启用的服务器没启用）\",
+    apply: (s) => s.replace(
+      'throw new ToolError(\"lsp: .agent/lsp.json 不是合法 JSON: \" + (err instanceof Error ? err.message : String(err)));',
+      'return { enabled: false, servers: {} };',
+    ),
+    expectFail: \"配置：缺省关闭；lsp:false 关闭；坏 JSON fail loud\",
+  },
+  {
+    id: \"lsp-diag-severity\",
+    src: \"src/tools/lsp.ts\",
+    test: \"tests/lsp.test.ts\",
+    desc: \"去掉 ERROR 级过滤（警告也回流，污染 edit/write 输出）\",
+    apply: (s) => s.replace(\"diags.filter((d) => d.severity === DiagnosticSeverity.Error)\", \"diags\"),
+    expectFail: \"无错误（仅 WARN 或干净文件）→ 空串（输出不变）\",
+  },
+  {
+    id: \"lsp-diag-cap\",
+    src: \"src/tools/lsp.ts\",
+    test: \"tests/lsp.test.ts\",
+    desc: \"去掉 ≤20 条上限（诊断洪水灌满工具输出，挤掉真正信息）\",
+    apply: (s) => s.replace(\".slice(0, MAX_DIAGNOSTICS)\", \"\"),
+    expectFail: \"只取 ERROR 级，≤20 条，附 <diagnostics> 块在输出尾部\",
+  },
+  {
+    id: \"lsp-diag-1based\",
+    src: \"src/tools/lsp.ts\",
+    test: \"tests/lsp.test.ts\",
+    desc: \"诊断行号忘 +1（对外 1-based 契约破裂，行号全偏 1）\",
+    apply: (s) => s.replace(
+      '\"ERROR [\" + String(d.range.start.line + 1) + \":\" + String(d.range.start.character + 1) + \"] \"',
+      '\"ERROR [\" + String(d.range.start.line) + \":\" + String(d.range.start.character + 1) + \"] \"',
+    ),
+    expectFail: \"只取 ERROR 级，≤20 条，附 <diagnostics> 块在输出尾部\",
+  },
+  {
+    id: \"lsp-broken-no-retry\",
+    src: \"src/tools/lsp.ts\",
+    test: \"tests/lsp.test.ts\",
+    desc: \"broken 服务器仍重试（已知坏的服务器每次调用都重新 spawn/挂起）\",
+    apply: (s) => s.replace(\"if (broken.has(key)) {\", \"if (false) {\"),
+    expectFail: \"server 启动失败进 broken 且不重试\",
+  },
+  {
+    id: \"verify-fail-closed-empty\",
+    src: \"src/agent/verify.ts\",
+    test: \"tests/verify.test.ts\",
+    desc: \"无配置时不 fail-closed 而放行（验证门空转，未验证即宣称通过）\",
+    apply: (s) => s.replace(\"if (commands.length === 0) {\", \"if (false) {\"),
+    expectFail: \"⑤ 无配置无 scripts → fail-closed（ok:false，不空转放行）\",
+  },
+  {
+    id: \"verify-all-green\",
+    src: \"src/agent/verify.ts\",
+    test: \"tests/verify.test.ts\",
+    desc: \"任一命令失败仍判 ok（全绿门槛被拆，验证门可被单条失败绕过）\",
+    apply: (s) => s.replace(\"return { ok: results.every((r) => r.ok), results };\", \"return { ok: true, results };\"),
+    expectFail: \"失败命令 → ok:false；failureDigest 摘要含命令与输出\",
+  },
+  {
+    id: \"verify-bad-array-fail-loud\",
+    src: \"src/agent/verify.ts\",
+    test: \"tests/verify.test.ts\",
+    desc: \"verify.lint 非数组不抛错（外部配置错误被吞，静默执行非法命令）\",
+    apply: (s) => s.replace(\"throw new Error(`verify.${key} 必须是字符串数组`);\", \"/* mutated: 吞掉配置错误 */\"),
+    expectFail: \"verify 配置字段非数组 → fail loud（外部输入不静默放行）\",
+  },
+  {
+    id: \"verify-bad-json-fail-loud\",
+    src: \"src/agent/verify.ts\",
+    test: \"tests/verify.test.ts\",
+    desc: \"config.json 坏 JSON 不重抛（非 ENOENT 也降级到探测，配置错误被掩盖）\",
+    apply: (s) => s.replace('if ((err as NodeJS.ErrnoException).code !== \"ENOENT\") throw err; // 配置存在但坏 → fail loud', 'if (false) throw err; // 配置存在但坏 → fail loud'),
+    expectFail: \"config.json 坏 JSON → fail loud（ENOENT 才可降级到探测）\",
+  },
+  {
+    id: \"verify-pkgjson-fail-loud\",
+    src: \"src/agent/verify.ts\",
+    test: \"tests/verify.test.ts\",
+    desc: \"package.json 坏 JSON 不重抛（静默降级到语言探测）⇒ 与 config.json 那条是**两道独立闸**，只拆一条另一条仍在，故各须一条锚点\",
+    apply: (s) => s.replace('if ((err as NodeJS.ErrnoException).code !== \"ENOENT\") throw err; // package.json 存在但坏 → fail loud', 'if (false) throw err; // package.json 存在但坏 → fail loud'),
+    expectFail: \"package.json 坏 JSON → fail loud（不许静默降级到语言探测，那是第二道独立闸）\",
+  },
+  {
+    id: \"process-env-sanitize\",
+    src: \"src/tools/process.ts\",
+    test: \"tests/process.test.ts\",
+    desc: \"白名单+密钥剥除退回全量继承（BYOK 明文 key 泄进子进程→事件流→模型）\",
+    apply: (s) => s.replace(
+      \"  for (const k of ENV_ALLOW) {\\n    const v = process.env[k];\\n    if (v !== undefined) env[k] = v;\\n  }\\n  for (const k of Object.keys(env)) {\\n    if (ENV_SECRET_RE.test(k)) delete env[k];\\n  }\",
+      \"  Object.assign(env, process.env);\",
+    ),
+    expectFail: \"剥除密钥类变量，只留白名单\",
+  },
+  {
+    id: \"process-killgroup-tree\",
+    src: \"src/tools/process.ts\",
+    test: \"tests/process.test.ts\",
+    desc: \"killGroup 不杀进程组只杀直接子进程（孙进程成孤儿，持有管道致 'close' 永不触发）\",
+    apply: (s) => s.replace(\"process.kill(-pid, signal)\", \"process.kill(pid, signal)\"),
+    expectFail: \"killGroup 收掉整棵进程树（孙进程不留孤儿）\",
+  },
+  {
+    id: \"process-timeout-kill\",
+    src: \"src/tools/process.ts\",
+    test: \"tests/process.test.ts\",
+    desc: \"超时只回调不杀树（onTimeout 结算但进程继续跑，资源泄漏）\",
+    apply: (s) => s.replace(\"    opts.onTimeout();\\n    killGroup(child);\\n\", \"    opts.onTimeout();\\n\"),
+    expectFail: \"超时后整棵进程树被杀（孙进程不留孤儿、不泄漏）\",
+  },
+  {
+    // 第十二族「入口的两半」：同一条 env 消毒，process.ts 的缺省与 hooks.ts 的基础各是一支。
+    // 两支各自有判卷（tests/subprocess-env-face.test.ts 逐键相等 + 真子进程自印 env），故各钉一条。
+    id: \"subprocess-env-default-inherits-host\",
+    src: \"src/tools/process.ts\",
+    test: \"tests/subprocess-env-face.test.ts\",
+    desc: \"省略 env 时的缺省从消毒白名单退回继承主进程 ⇒ BYOK 明文键交给每一个可 spawn 的子进程（fail-open）\",
+    apply: (s) => s.replace(\"  const env = opts.env ?? sanitizedEnv();\", \"  const env = opts.env ?? process.env;\"),
+    expectFail: \"省略 env 时，子进程看不到主进程里的 BYOK 明文键\",
+  },
+  {
+    id: \"hook-env-base-inherits-host\",
+    src: \"src/agent/plugins/hooks.ts\",
+    test: \"tests/subprocess-env-face.test.ts\",
+    desc: \"钩子基础 env 从 sanitizedEnv() 退回 process.env ⇒ 宿主密钥全量进插件子进程，且与另一支重新分家\",
+    apply: (s) => s.replace(\"  for (const [k, v] of Object.entries(sanitizedEnv())) {\", \"  for (const [k, v] of Object.entries(process.env)) {\"),
+    expectFail: \"两侧都必须挡住密钥类变量（这一半今天已绿，属反向钉）\",
+  },
+  // ---- 能力 7 的路径边界三面（H2 加固轮①：C-2/C-3 归属、C-11 系统区、E-12 插件覆盖路径）----
+  // 判卷 tests/path-boundary.test.ts 从写下那天起零锚点（第 37 页的对账机读出来的）。
+  // 三面各一条：词法 resolve/relative、realpath 归属、落点复查是**三道独立的闸**，
+  // 少任何一道都有各自能穿透的形态（绝对路径 / 区内软链 / `link -> .agent`），不是冗余副本。
+  {
+    id: \"containment-realpath-dropped\",
+    src: \"src/tools/base.ts\",
+    test: \"tests/path-boundary.test.ts\",
+    desc: \"词法 resolve/relative 过关后再不做 realpath 归属复查 ⇒ 工作区内一条软链就把读写送出边界（旧实现正是这一形态）\",
+    apply: (s) => s.replace(\"  if (relBack !== \\\"\\\" && (relBack.startsWith(\\\"..\\\") || isAbsolute(relBack))) {\", \"  if (false) {\"),
+    expectFail: \"工作区内软链指向外部：write_file 拒绝（旧实现会穿透写入外部文件）\",
+  },
+  {
+    id: \"agent-area-lexical-dropped\",
+    src: \"src/tools/base.ts\",
+    test: \"tests/path-boundary.test.ts\",
+    desc: \".agent/ 系统区的词法拒写被拆 ⇒ 模型可直接改 permissions.json（跨会话提权）。第 141 页普查里它是**唯一一条真存活**：分诊结论不是「闸多余」，而是旧判卷量不到这一格——`.agent/permissions.json` 这种写法落点复查也会拒，两道闸都拦 ⇒ 摘一道看不出来。词法闸独有的那一格是「`.agent` 这个名字本身保留」（借名软链 `.agent -> staging` 只有词法闸看得见），补了那条判卷它才有牙齿。\",
+    apply: (s) => s.replace(\"  if (typeof rel === \\\"string\\\" && rel.split(/[\\\\\\\\/]/).includes(\\\".agent\\\")) {\", \"  if (false) {\"),
+    expectFail: \"借名软链：`.agent -> staging` 时写 `.agent/x.json` 仍被词法闸拒（名字本身保留，摘掉词法闸＝承诺句失效）\",
+  },
+  {
+    id: \"agent-area-real-recheck-dropped\",
+    src: \"src/tools/base.ts\",
+    test: \"tests/path-boundary.test.ts\",
+    desc: \"落点复查被拆 ⇒ 一条指向 .agent 的软链，rel 里没有 \\\".agent\\\" 字样，词法闸与 containment 都放行，写入落到 lsp.json（任意 command RCE 面复活）\",
+    apply: (s) => s.replace(\"  if (relReal.split(/[\\\\\\\\/]/).includes(\\\".agent\\\")) {\", \"  if (false) {\"),
+    expectFail: \"词法闸看不见的软链落点：`link -> .agent` 时写与改都被拒（C3 复查闸，摘掉它 = RCE 面复活）\",
+  },
+  {
+    id: \"manifest-cover-escape-accepted\",
+    src: \"src/agent/plugins/manifest.ts\",
+    test: \"tests/path-boundary.test.ts\",
+    desc: \"插件 manifest 的覆盖路径不再校验包含性 ⇒ 不可信清单把插件根外目录挂进来扫描/加载\",
+    apply: (s) => s.replace(\"    if (relBack.length > 0 && (relBack.startsWith(\\\"..\\\") || isAbsolute(relBack))) {\", \"    if (false) {\"),
+    expectFail: \"skills 指向 ../ 时拒载（旧实现会挂载扫描插件根外目录）\",
+  },
+  // ---- 能力 10 的评测数据层（src/agent/eval/task-set）：外部基准条目的\"不许静默丢\" ----
+  // 这一族唯一的失败方式就是**分母悄悄地少了**：跑出来的成功率照样是个数，没人能看出它量的是半份数据集。
+  {
+    id: \"taskset-unknown-field-ignored\",
+    src: \"src/agent/eval/task-set.ts\",
+    test: \"tests/eval-task-set.test.ts\",
+    desc: \"认不出的字段被静默忽略 ⇒ 数据集作者写了 verifier 却拼成 verifior，任务照常收进分母但没有判卷\",
+    apply: (s) => s.replace(\"    if (!TASK_FIELDS.has(k)) errors.push(\", \"    if (false) errors.push(\"),
+    expectFail: \"认不出的字段名（如把 verifier 拼成 verifior）必须报错，不许静默忽略\",
+  },
+  {
+    id: \"taskset-dup-id-silently-kept\",
+    src: \"src/agent/eval/task-set.ts\",
+    test: \"tests/eval-task-set.test.ts\",
+    desc: \"重复 id 不再报也不丢 ⇒ 同一实例被数两次，分母与成功率同时失真\",
+    apply: (s) => s.replace(\"    if (n > 1) {\", \"    if (false) {\"),
+    expectFail: \"重复 id 必须点名（静默去重会让分母骗人）\",
+  },
+  {
+    id: \"swebench-empty-judge-accepted\",
+    src: \"src/agent/eval/task-set.ts\",
+    test: \"tests/eval-task-set.test.ts\",
+    desc: \"只看 FAIL_TO_PASS 存不存在、不看它是不是空数组 ⇒ 空判卷的实例进来，跑完变成\\\"没坏就算过\\\"\",
+    apply: (s) => s.replace(\"if (failToPass === null || failToPass.length === 0) {\", \"if (failToPass === null) {\"),
+    expectFail: \"FAIL_TO_PASS 是空数组也算没有判卷（只查 PASS_TO_PASS 会静默变成'没坏就算过'）\",
+  },
+  // ---- 用户级自定义子智能体（`~/.dsh/agents`、`~/.claude/agents`）：装载、查找、发现三面各一条 ----
+  {
+    id: \"user-agent-role-not-lookupable\",
+    src: \"src/agent/plugins/index.ts\",
+    test: \"tests/user-agent-roles.test.ts\",
+    desc: \"查找口只看插件角色 ⇒ 用户放好的文件既在清单里又调不动（装载即陈列的老形状）\",
+    apply: (s) => s.replace(\" ?? this.userAgentRoles().find((a) => a.invoke === invoke)\", \"\"),
+    expectFail: \"findAgentRole 两条来源都能命中，且形态与插件一致（编排器共用同一份映射，不另起一路）\",
+  },
+  {
+    id: \"user-agent-role-hidden-from-routing\",
+    src: \"src/agent/plugins/index.ts\",
+    test: \"tests/user-agent-roles.test.ts\",
+    desc: \"路由清单不再列用户级角色 ⇒ 模型没有任何地方能读到它，只能猜名字、猜错才被拒\",
+    apply: (s) => s.replace(\"    const roleLines = [...this.agentRoles(), ...this.userAgentRoles()].map((a) => {\", \"    const roleLines = this.agentRoles().map((a) => {\"),
+    expectFail: \"发现面：两条来源都出现在同一份路由清单里，并写明能用作 stages[].role\",
+  },
+  {
+    id: \"user-agent-duplicate-name-silent-override\",
+    src: \"src/agent/roles/user-agents.ts\",
+    test: \"tests/user-agent-roles.test.ts\",
+    desc: \"两个来源同名时静默覆盖 ⇒ 用户改了文件却没生效，而且没人吭声（清单与查找还各自剩一条）\",
+    apply: (s) => s.replace(\"      if (hit !== undefined) {\", \"      if (false) {\"),
+    expectFail: \"同名冲突：DSH 自己的目录赢，并点名被盖住的那条路径（静默覆盖=改了没生效）\",
+  },
+  // 模型**手里**的口径：清单列得出名字，工具参数说明与报错只认 plugin: 形态 ⇒ 同一件事两处口径
+  {
+    id: \"role-spec-desc-hides-user-form\",
+    src: \"src/agent/glm-session.ts\",
+    test: \"tests/user-agent-roles.test.ts\",
+    desc: \"spawn_agent 的 role 说明退回只写 plugin: 形态 ⇒ 模型被自己的工具说明书劝退，用户级角色永不被动用\",
+    apply: (s) => s.replace(\"plugin:agent-name / user:agent-name；未注册即拒绝\", \"plugin:agent-name；未注册即拒绝\"),
+    expectFail: \"role 描述同时点名两种形态，且未注册即拒这句还在\",
+  },
+  {
+    id: \"unknown-role-error-hides-user-form\",
+    src: \"src/agent/orchestrator.ts\",
+    test: \"tests/worker-role.test.ts\",
+    desc: \"未知角色的报错少列一种合法形态 ⇒ 猜错名字的模型被告知「这条路不存在」，而它本来写得对\",
+    apply: (s) => s.replace(\"plugin-name:agent-name / user:agent-name 形态\", \"plugin-name:agent-name 形态\"),
+    expectFail: \"未注册的角色出声拒：不落 agent_spawned、不建 worker，并指回缺省行为\",
+  },
+  // ---- 方案门（tests/plan-gate.test.ts 此前零锚点：判据最重的一支权限门，全靠断言自己守自己）----
+  {
+    id: \"plan-gate-unapproved-proposal-stops-blocking\",
+    src: \"src/permissions/plan-state.ts\",
+    test: \"tests/plan-gate.test.ts\",
+    desc: \"判据只看用户武装的 required、不看「已提交未批准」⇒ 先批后写形同虚设（模型不提交就一路写到底）\",
+    apply: (s) => s.replace(\"  return (state.required || state.proposed) && !state.approved;\", \"  return state.required && !state.approved;\"),
+    expectFail: \"①未批准：write_file/run_shell 一律 deny（连 auto 档也拦）；只读与门工具不拦\",
+  },
+  {
+    id: \"plan-gate-deny-not-applied-in-check-permission\",
+    src: \"src/permissions/index.ts\",
+    test: \"tests/plan-gate.test.ts\",
+    desc: \"判据算得出「该拦」却没人用它 ⇒ 唯一有强制力的门只剩一句话，auto 档照样落盘\",
+    apply: (s) => s.replace(\"  if (planBlocks()) return \\\"deny\\\";\", \"\"),
+    expectFail: \"①未批准：write_file/run_shell 一律 deny（连 auto 档也拦）；只读与门工具不拦\",
+  },
+  {
+    id: \"plan-gate-deny-reason-covers-readonly-tools\",
+    src: \"src/permissions/index.ts\",
+    test: \"tests/plan-gate.test.ts\",
+    desc: \"拒绝原因不再按副作用工具判 ⇒ 只读工具也带一句「方案门」，读数开始说谎（该句是给人决定要不要放行看的）\",
+    apply: (s) => s.replace(\"  if (isSideEffectTool(tool) && planBlocks()) return \\\"方案门\", \"  if (planBlocks()) return \\\"方案门\"),
+    expectFail: \"①未批准：write_file/run_shell 一律 deny（连 auto 档也拦）；只读与门工具不拦\",
+  },
+  {
+    id: \"plan-run-scope-isolation-dropped\",
+    src: \"src/permissions/plan-state.ts\",
+    test: \"tests/plan-gate.test.ts\",
+    desc: \"run 级 plan 作用域退回直接执行 ⇒ A 会话的未批准 plan 拦死 B run 的写、A 的批准解锁 B（并发串味）\",
+    apply: (s) => s.replace(\"  return planScopeALS.run({ state: { required, proposed: false, approved: false } }, fn);\", \"  return fn();\"),
+    expectFail: \"run 内 propose → 批准 → run 态解锁且模块态不动；run 外模块态行为不变\",
+  },
+  {
+    id: \"propose-plan-missing-channel-not-fail-closed\",
+    src: \"src/tools/propose_plan.ts\",
+    test: \"tests/plan-gate.test.ts\",
+    desc: \"缺审批通道（emit/callId/plan 门）不再 fail-closed ⇒ 没有人在场时「提交方案」自己往下走\",
+    apply: (s) => s.replace(\"    if (!ctx.emit || ctx.callId === undefined || !ctx.plan) {\", \"    if (false) {\"),
+    expectFail: \"propose_plan：落 plan_proposed → 权限层进入写禁 → 批准后解锁；拒绝则写禁保持\",
+  },
+  // ---- 出网停滞守卫（tests/net.test.ts 零锚点：能力 4「不卡死」与能力 5「收得到错误」的底座）----
+  {
+    id: \"stall-guard-dispose-leaves-timer\",
+    src: \"src/net.ts\",
+    test: \"tests/net.test.ts\",
+    desc: \"dispose 不再清看门狗 ⇒ 收束后定时器还在跑，一次已结束的调用仍能把后续同一 signal 判停滞（泄漏面）\",
+    apply: (s) => s.replace(\"    dispose(): void {\", \"    dispose(): void { return;\"),
+    expectFail: \"dispose 后不再 abort（收束必须清掉看门狗，否则定时器泄漏）\",
+  },
+  {
+    id: \"stall-guard-cannot-be-disabled\",
+    src: \"src/net.ts\",
+    test: \"tests/net.test.ts\",
+    desc: \"windowMs<=0 仍上表 ⇒ 「显式关掉守卫」这条路变成「立刻判停滞」，测试与关开关两条用途一起坏\",
+    apply: (s) => s.replace(\"    if (!enabled) return;\", \"    if (false) return;\"),
+    expectFail: \"windowMs <= 0 → 显式关闭守卫（测试/关闭开关用）\",
+  },
+  {
+    id: \"stall-abort-reason-swallowed\",
+    src: \"src/net.ts\",
+    test: \"tests/net.test.ts\",
+    desc: \"abort 不带原因 ⇒ 上层只拿到通用 AbortError，「对端挂起」与「用户取消」再也分不开\",
+    apply: (s) => s.replace(\"      controller.abort(new Error(`${label} 停滞超时：${String(windowMs)}ms 内无任何数据（对端挂起或网络黑洞）`));\", \"      controller.abort();\"),
+    expectFail: \"静默到点 → signal 被 abort，且 reason 可读（fail-visible，不吞成通用 abort）\",
+  },
+  {
+    id: \"stall-signal-never-reaches-fetch\",
+    src: \"src/providers/retry.ts\",
+    test: \"tests/net.test.ts\",
+    desc: \"看门狗建了却不递给 fetch（两支都撤）⇒ 真 socket 上永久挂起，正是根因 4 原样复发\",
+    apply: (s) => s.replace(\"AbortSignal.any([guard.signal, o.callerSignal]) : guard.signal;\", \"AbortSignal.any([o.callerSignal]) : o.callerSignal;\"),
+    expectFail: \"建连后对端不响应：fetch 被 abort（Anthropic 适配器）\",
+  },
+  {
+    id: \"with-timeout-zero-window-rejects\",
+    src: \"src/net.ts\",
+    test: \"tests/net.test.ts\",
+    desc: \"ms<=0 不再当「关闭超时」⇒ 一次性请求（MCP connect/listTools）直通变秒拒\",
+    apply: (s) => s.replace(\"  if (!Number.isFinite(ms) || ms <= 0) return p;\", \"  if (!Number.isFinite(ms)) return p;\"),
+    expectFail: \"ms <= 0 → 关闭超时（直通）\",
+  },
+  // ---- 边界四件（tests/edge-cases.test.ts 零锚点：补丁正确性 / 目录穿越 / 验证归因 / 大文件声明）----
+  {
+    id: \"edit-file-single-branch-expands-pattern\",
+    src: \"src/tools/edit_file.ts\",
+    test: \"tests/edge-cases.test.ts\",
+    desc: \"单点分支退回裸 replace ⇒ new_string 里的 $& / $1 被展开成别的内容：模型写的补丁落地成另一种代码\",
+    apply: (s) => s.replace(\"content.replace(oldString, () => newString)\", \"content.replace(oldString, newString)\"),
+    expectFail: \"new_string 里的 $& / $1 / $` 原样写入，不被展开为替换模式\",
+  },
+  {
+    id: \"edit-file-replace-all-branch-drifts\",
+    src: \"src/tools/edit_file.ts\",
+    test: \"tests/edge-cases.test.ts\",
+    desc: \"replace_all 分支退回 replace ⇒ 只替第一处（两分支口径又漂开），且一并丢掉字面量语义\",
+    apply: (s) => s.replace(\"content.split(oldString).join(newString)\", \"content.replace(oldString, newString)\"),
+    expectFail: \"replace_all 分支同口径（split/join 亦为字面量，两分支不再互相矛盾）\",
+  },
+  {
+    id: \"prune-attachment-name-not-sanitized\",
+    src: \"src/agent/prune.ts\",
+    test: \"tests/edge-cases.test.ts\",
+    desc: \"附件名不再清洗 ⇒ 模型可控的 callId 里一个 ../ 就把附件写出目录（目录穿越）\",
+    apply: (s) => s.replace(\"  return raw.replace(/[^A-Za-z0-9._-]/g, \\\"_\\\").slice(0, maxLen);\", \"  return raw.slice(0, maxLen);\"),
+    expectFail: \"模型可控 callId 含 ../ 时不越出附件目录（目录穿越），且三处命名口径一致可回取\",
+  },
+  {
+    id: \"read-file-oversize-note-dropped\",
+    src: \"src/tools/read_file.ts\",
+    test: \"tests/edge-cases.test.ts\",
+    desc: \"大文件仍只读前缀，但不声明 ⇒ 模型以为看到了整个文件（静默截断是本仓反复判红的形状）。\" +
+      \"注：只钉声明这一半；readPrefix 那一支无观测者，见规则 57 的撤针署名\",
+    apply: (s) => s.replace(\"    if (oversized) {\", \"    if (false) {\"),
+    expectFail: \"超过 16MB 只读前 16MB 并显式声明截断（旧实现整读进内存）\",
+  },
+  {
+    id: \"verify-hook-error-cause-swallowed\",
+    src: \"src/agent/loop.ts\",
+    test: \"tests/edge-cases.test.ts\",
+    desc: \"钩子异常的真实原因被换成一句套话 ⇒ 模型与面板都看不出是 .agent/config.json 坏了还是沙箱拒了\",
+    apply: (s) => s.replace(\"      hookError = err instanceof Error ? err.message : String(err);\", \"      hookError = \\\"verify 钩子异常\\\";\"),
+    expectFail: \"钩子抛错 → verify_result(ok:false) + tool_result 带真实原因；达环境上限后停止\",
+  },
+  {
+    id: \"verify-hook-error-not-classified-env\",
+    src: \"src/agent/loop.ts\",
+    test: \"tests/edge-cases.test.ts\",
+    desc: \"钩子异常不再按「环境拍」归因 ⇒ 这台机器跑不了验证被记成模型的修复额度，额度耗尽即停（错账 + 错停因）\",
+    apply: (s) => s.replace(\"    const cause = verifyOutcomeCause(outcome, hookError);\", \"    const cause = verifyOutcomeCause(outcome, null);\"),
+    expectFail: \"钩子抛错 → verify_result(ok:false) + tool_result 带真实原因；达环境上限后停止\",
+  },
+  // ---- 经济性裁剪与可信进度边界（tests/economics.test.ts 零锚点：省钱这条线自己那套判据）----
+  {
+    id: \"econ-hard-window-threshold-off-by-one\",
+    src: \"src/agent/economics.ts\",
+    test: \"tests/economics.test.ts\",
+    desc: \"余量阈值从 >= 改成 > ⇒ 正好落在阈值上那一拍不再受硬窗保护，而这一拍恰恰是必爆的那一拍\",
+    apply: (s) => s.replace(\"      input.contextTokens >= input.windowTokens - (valid(c.windowReserveTokens)\", \"      input.contextTokens > input.windowTokens - (valid(c.windowReserveTokens)\"),
+    expectFail: \"hard window overrides every economic decline at exact reserve threshold\",
+  },
+  {
+    id: \"econ-unknown-cost-faked-as-zero\",
+    src: \"src/agent/economics.ts\",
+    test: \"tests/economics.test.ts\",
+    desc: \"成本未知时按 0 计 ⇒ 压缩看起来永远免费，break-even 恒成立（不编数这条规矩的反面）\",
+    apply: (s) => s.replace(\"const rebuildCostTokens = write === null || ratio === null ? null :\", \"const rebuildCostTokens = write === null || ratio === null ? 0 :\"),
+    expectFail: \"does not fake unknown costs, debt, saving or prices; ratio below one floors incremental cost\",
+  },
+  {
+    id: \"econ-plan-coverage-check-vacuous\",
+    src: \"src/agent/economics.ts\",
+    test: \"tests/economics.test.ts\",
+    desc: \"「批准过的文件都写完了」这道判定直接返回真 ⇒ 计划只做一半就在边界处剪掉前面的证据\",
+    apply: (s) => s.replace(\"  const planCovered = () => plan === null ||\", \"  const planCovered = () => true ||\"),
+    expectFail: \"will not cut an unfinished plan/pair, failed write, stale verify, or worker pair\",
+  },
+  {
+    id: \"econ-empty-verify-counts-as-proof\",
+    src: \"src/agent/economics.ts\",
+    test: \"tests/economics.test.ts\",
+    desc: \"去掉 results.length>0 ⇒ 空 results 的 every 真空成立，一次没跑任何命令的 verify 也能关边界\",
+    apply: (s) => s.replace(\"      const ok = e.ok && e.results.length > 0 && e.results.every((r) => r.ok);\", \"      const ok = e.ok && e.results.every((r) => r.ok);\"),
+    expectFail: \"ignores assistant completion claims, failed/orphan verification, and empty evidence\",
+  },
+  {
+    id: \"econ-pre-approval-write-credited\",
+    src: \"src/agent/economics.ts\",
+    test: \"tests/economics.test.ts\",
+    desc: \"覆盖登记不再看批准时刻 ⇒ 批准前那次写被算作计划已完成，用户没批的动作替计划交差\",
+    apply: (s) => s.replace(\"          if (e.ok && pair.at > plan.approvedAt) plan.covered.add(path);\", \"          if (e.ok) plan.covered.add(path);\"),
+    expectFail: \"does not credit pre-approval writes or retain coverage after a failed rewrite\",
+  },
+  {
+    id: \"econ-duplicate-tool-call-id-ignored\",
+    src: \"src/agent/economics.ts\",
+    test: \"tests/economics.test.ts\",
+    desc: \"重复 tool_call id 不再判畸形 ⇒ 一条结果能同时给两次调用收口（复用旧证据=造边界）\",
+    apply: (s) => s.replace(\"      if (usedIds.has(e.id)) { malformed = true; continue; }\", \"      if (false) { malformed = true; continue; }\"),
+    expectFail: \"supports verify evidence after result but rejects duplicate IDs and stale reused proof\",
+  },
+  // ---- 路由清单截断：掉了几个必须是字段 + 文案要带同一个数 ----
+  {
+    id: \"routing-truncation-marker-hides-count\",
+    src: \"src/agent/plugins/skills.ts\",
+    test: \"tests/plugin-role-discoverability.test.ts\",
+    desc: \"标记只说「已截断」不说少几条 ⇒ 模型分不清少 1 条还是少 40 条，也就不会改用更窄的问法\",
+    apply: (s) => s.replace(\" 字符，已截断：另有 \\\" + String(dropped) + \\\" 条未列出]\", \" 字符，已截断]\"),
+    expectFail: \"超限 ⇒ dropped 恰等于没列出的条目数（两处取法互查），且标记里的数字与它一致\",
+  },
+  {
+    id: \"routing-dropped-counts-listed-not-missing\",
+    src: \"src/agent/plugins/skills.ts\",
+    test: \"tests/plugin-role-discoverability.test.ts\",
+    desc: \"dropped 误算成「列出的条数」⇒ 字段与文案各说一套，面板与模型拿到的都是反数\",
+    apply: (s) => s.replace(\"  const dropped = lines.length - kept;\", \"  const dropped = kept;\"),
+    expectFail: \"超限 ⇒ dropped 恰等于没列出的条目数（两处取法互查），且标记里的数字与它一致\",
+  },
+  // ---- 模型自己撤 worker（cancel_agents）：规格面 / 回执分母 / 整批拒 / 文案点名真工具 ----
+  {
+    id: \"cancel-agents-spec-visible-in-read-only\",
+    src: \"src/agent/glm-session.ts\",
+    test: \"tests/cancel-agents-tool.test.ts\",
+    desc: \"只读档不再摘掉 cancel_agents ⇒ 模型看得见、白名单挡着，白叫一次再吃一句不可用（两头断的规格半边）\",
+    apply: (s) => s.replace(\"      s.function.name !== \\\"cancel_agents\\\" &&\\n\", \"\"),
+    expectFail: \"规格与实例同名同串；只读档摘掉；worker 两面都够不着（深度恒 1）\",
+  },
+  {
+    id: \"spawn-receipt-hides-in-flight-and-cap\",
+    src: \"src/agent/orchestrator.ts\",
+    test: \"tests/cancel-agents-tool.test.ts\",
+    desc: \"回执不报在途数与上限 ⇒ 「还要不要再拆一个」只能凭感觉，撞到 MAX_CONCURRENT_WORKERS 才知道有闸\",
+    apply: (s) => s.replace(\"        in_flight: this.inFlightAgents().length,\\n        worker_cap: MAX_CONCURRENT_WORKERS,\", \"\"),
+    expectFail: \"spawn 回执把在途数与上限摆在模型面前（不报价位就只能凭感觉拆）\",
+  },
+  {
+    id: \"cancel-agents-partial-execution-on-unknown-id\",
+    src: \"src/tools/cancel_agents.ts\",
+    test: \"tests/cancel-agents-tool.test.ts\",
+    desc: \"含未知 id 时不再整批拒 ⇒ 撤掉认得的那几个、剩下的静默不管（撤一半是最难复现的错法）\",
+    apply: (s) => s.replace(\"      if (unknown.length > 0) {\", \"      if (false) {\"),
+    expectFail: \"未知 id ⇒ 整批拒（不做部分执行），并把真正在途的 id 列给它\",
+  },
+  {
+    id: \"join-timeout-note-names-phantom-tool\",
+    src: \"src/agent/orchestrator-join.ts\",
+    test: \"tests/cancel-agents-tool.test.ts\",
+    desc: \"超时提示回到「可再 cancelAgent」——那是编排器的方法名，模型面上没有 ⇒ 文案给一扇不存在的门\",
+    apply: (s) => s.replace(\"可再 wait_for_agents 或 cancel_agents\", \"可再 wait_for_agents 或 cancelAgent\"),
+    expectFail: \"超时提示里的取消通道 = 模型面上真有的那个工具名（幻影门第 N 次复发）\",
+  },
+  // ---- 模型改设目标措辞（refine_goal）：闸归人这条线，工具面 + 投影面兜底各一支 ----
+  {
+    id: \"model-goal-set-resets-turn-counter\",
+    src: \"src/agent/goal-trace.ts\",
+    test: \"tests/refine-goal-tool.test.ts\",
+    desc: \"模型自设那条也当人设处理 ⇒ 每轮改一次措辞就把轮次帽归零（续跑到天荒地老，还是自己给自己批的）\",
+    apply: (s) => s.replace(\"    if (e.set_by === \\\"model\\\") {\", \"    if (false) {\"),
+    expectFail: \"模型改设不重置轮次计数：帽仍按人设那次算（绕开工具直接造事件也拿不到额度）\",
+  },
+  {
+    id: \"model-goal-set-can-arm-a-cold-session\",
+    src: \"src/agent/goal-trace.ts\",
+    test: \"tests/refine-goal-tool.test.ts\",
+    desc: \"没有已武装目标时模型自设也算武装 ⇒ 模型自己给自己开了续跑通道（武装那道闸归人）\",
+    apply: (s) => s.replace(\"      if (prev === null) return null; // 没有已武装的目标 ⇒ 模型自设不构成武装（连 spec 都不给）\", \"      if (prev === null) return { spec: { objective: e.objective, maxTurns: e.max_turns, maxUsd: e.max_usd }, turn: 1, stopped: null, at: index };\"),
+    expectFail: \"一条模型自设的 goal_set 不能凭空武装一个没有目标的会话\",
+  },
+  {
+    id: \"refine-goal-accepts-budget-args\",
+    src: \"src/tools/refine_goal.ts\",
+    test: \"tests/refine-goal-tool.test.ts\",
+    desc: \"不再拒 max_turns/max_usd ⇒ 模型可以顺手把自己的额度改了（而它会以为成功）\",
+    apply: (s) => s.replace(\"      for (const k of [\\\"max_turns\\\", \\\"max_usd\\\", \\\"budget\\\", \\\"turns\\\"] as const) {\", \"      for (const k of [] as const) {\"),
+    expectFail: \"想顺带改 max_turns / max_usd ⇒ 拒，并说清这两条归谁（不静默忽略）\",
+  },
+  {
+    id: \"refine-goal-revives-stopped-target\",
+    src: \"src/tools/refine_goal.ts\",
+    test: \"tests/refine-goal-tool.test.ts\",
+    desc: \"已停的目标被一次改措辞复活 ⇒ 「停止是终态」那条既有语义从后门破\",
+    apply: (s) => s.replace(\"      if (view.stopped !== null) {\", \"      if (false) {\"),
+    expectFail: \"目标已停 ⇒ 不许借改措辞复活它\",
+  },
+  {
+    id: \"refine-goal-drops-inherited-caps\",
+    src: \"src/tools/refine_goal.ts\",
+    test: \"tests/refine-goal-tool.test.ts\",
+    desc: \"落的 goal_set 不带人设的帽而自带一个数 ⇒ 审计面看不出这是谁抬的闸（继承是这条线唯一的实现处）\",
+    apply: (s) => s.replace(\"        max_turns: view.maxTurns,\", \"        max_turns: 25,\"),
+    expectFail: \"改措辞成功：落的 goal_set 继承**人设**的两条闸并标 set_by=model\",
+  },
+  // ---- supervise 契约面：规格由解析器那份生成（同源），不可申报的键必须出声拒 ----
+  {
+    id: \"supervise-spec-loses-a-declarable-field\",
+    src: \"src/agent/glm-session.ts\",
+    test: \"tests/supervise-contract.test.ts\",
+    desc: \"规格少列一个解析器认得的字段 ⇒ 模型写不进这一支、只能猜（规格里没有 supervise 那一整段就是这么来的）\",
+    apply: (s) => s.replace(\"              properties: Object.fromEntries(SUPERVISE_MODEL_FIELDS.map((f) => [\", \"              properties: Object.fromEntries(SUPERVISE_MODEL_FIELDS.filter((f) => f.name !== \\\"maxStages\\\").map((f) => [\"),
+    expectFail: \"spawn_agent 规格里有 supervise，且申报字段集与解析器读的完全一致\",
+  },
+  {
+    id: \"supervise-unknown-key-silently-ignored\",
+    src: \"src/agent/supervise-contract.ts\",
+    test: \"tests/supervise-contract.test.ts\",
+    desc: \"笔误键被静默吃掉 ⇒ 模型申报了禁改面、实际一面都没禁（申报了却没生效比少个字段更坏）\",
+    apply: (s) => s.replace(\"  if (unknown.length > 0) {\", \"  if (false) {\"),
+    expectFail: \"笔误键必须点名并列出资格上的合法键 —— 静默吃掉 = 申报了却没生效\",
+  },
+  {
+    id: \"supervise-budget-ownership-note-lost\",
+    src: \"src/agent/supervise-contract.ts\",
+    test: \"tests/supervise-contract.test.ts\",
+    desc: \"拒 budget 时不说「归人」⇒ 模型以为换个写法就能申报，而钱闸归谁这句话消失了\",
+    apply: (s) => s.replace(\"    const owned = unknown.includes(\\\"budget\\\")\", \"    const owned = false\"),
+    expectFail: \"申报 budget ⇒ 拒，并说清这条闸归人（模型不能给自己开预算）\",
+  },
+  {
+    id: \"supervise-forbidden-type-error-swallowed\",
+    src: \"src/agent/supervise-contract.ts\",
+    test: \"tests/supervise-contract.test.ts\",
+    desc: \"forbidden 形状不校验 ⇒ 字符串/混型进来变空列表 = 没有禁改面，而回执上看不出来\",
+    apply: (s) => s.replace(\"    if (!Array.isArray(o.forbidden) || o.forbidden.some((x) => typeof x !== \\\"string\\\" || x.trim() === \\\"\\\")) {\", \"    if (false) {\"),
+    expectFail: \"forbidden 不是字符串数组 ⇒ 拒（旧口径 parseStringList 会把混进来的数字静默丢掉）\",
+  },
+  {
+    id: \"autonomy-allow-critical\",
+    src: \"src/permissions/autonomy.ts\",
+    test: \"tests/autonomy.test.ts\",
+    desc: \"allow 规则可豁免 critical（任何档位强制审批被绕过）\",
+    apply: (s) => s.replace(\"    if (risk === \\\"critical\\\") {\", \"    if (false) {\"),
+    expectFail: \"allow 规则也批不掉 critical（任何档位强制审批）\",
+  },
+  {
+    id: \"autonomy-readonly-strip\",
+    src: \"src/permissions/autonomy.ts\",
+    test: \"tests/autonomy.test.ts\",
+    desc: \"只读档不摘除写向工具（只读边界破裂，worker 可写）\",
+    apply: (s) => s.replace(\"if (mode === \\\"read-only\\\") {\", \"if (false) {\"),
+    expectFail: \"read-only 档工具表不含 write_file/run_shell；其余档完整\",
+  },
+  {
+    id: \"autonomy-breaker\",
+    src: \"src/permissions/autonomy.ts\",
+    test: \"tests/autonomy.test.ts\",
+    desc: \"断路器不触发（连续自动放行无上限，失控自动化）\",
+    apply: (s) => s.replace(\"if (s.consecutiveAutoApprovals >= MAX_AUTO_APPROVALS) s.breakerTripped = true;\", \"if (false) s.breakerTripped = true;\"),
+    expectFail: \"第 51 次降级：50 次 scope 自动放行后，下一次送审且直至会话重开\",
+  },
+  {
+    id: \"autonomy-network-once\",
+    src: \"src/permissions/autonomy.ts\",
+    test: \"tests/autonomy.test.ts\",
+    desc: \"网络类命令吃 session scope 放行（出网审计被绕过）\",
+    apply: (s) => s.replace(
+      \"!s.breakerTripped && !isNetworkCommandCall(tool, args) && s.sessionScopes.has(key)\",
+      \"!s.breakerTripped && s.sessionScopes.has(key)\",
+    ),
+    expectFail: \"网络类命令不吃 scope 放行（强制 once，出网审计）\",
+  },
+  {
+    id: \"autonomy-critical-denial-limit\",
+    src: \"src/permissions/autonomy.ts\",
+    test: \"tests/autonomy.test.ts\",
+    desc: \"critical 降档提示始终返回（拒 1 次就建议降档，误判用户意图）\",
+    apply: (s) => s.replace(\"if (s.consecutiveCriticalDenials < CRITICAL_DENIAL_LIMIT) return null;\", \"if (false) return null;\"),
+    expectFail: \"critical 连拒 3 次 → 降档提示\",
+  },
+  {
+    id: \"license-sig-verify\",
+    src: \"src/main/license.ts\",
+    test: \"tests/license.test.ts\",
+    desc: \"签名校验失败仍放行（伪造/篡改的 license 被接受，离线授权形同虚设）\",
+    apply: (s) => s.replace(\"if (!sigOk) return { state: \\\"invalid\\\",\", \"if (false) return { state: \\\"invalid\\\",\"),
+    expectFail: \"验签矩阵②：篡改 body（licensee / expires_at 改任一字节）→ invalid（签名校验失败）\",
+  },
+  {
+    id: \"license-expiry\",
+    src: \"src/main/license.ts\",
+    test: \"tests/license.test.ts\",
+    desc: \"过期判定被拆（过期 license 仍 valid，时效授权可无限续用）\",
+    apply: (s) => s.replace(\"if (parsed.expiresAt !== null && Date.parse(parsed.expiresAt) < now) {\", \"if (false) {\"),
+    expectFail: \"验签矩阵③：过期判定（expires_at 早于 now）→ expired；等于边界内不算过期\",
+  },
+  {
+    id: \"license-expiry-boundary\",
+    src: \"src/main/license.ts\",
+    test: \"tests/license.test.ts\",
+    desc: \"过期比较从严格小于改成小于等于（恰在到期时刻被误判过期）\",
+    apply: (s) => s.replace(
+      \"parsed.expiresAt !== null && Date.parse(parsed.expiresAt) < now\",
+      \"parsed.expiresAt !== null && Date.parse(parsed.expiresAt) <= now\",
+    ),
+    expectFail: \"验签矩阵③：过期判定（expires_at 早于 now）→ expired；等于边界内不算过期\",
+  },
+  {
+    id: \"license-unknown-fields\",
+    src: \"src/main/license.ts\",
+    test: \"tests/license.test.ts\",
+    desc: \"未知字段不拒绝（license 可夹带任意额外内容，规范边界破裂）\",
+    apply: (s) => s.replace(\"if (unknown.length > 0) return { error: \\\"未知字段：\", \"if (false) return { error: \\\"未知字段：\"),
+    expectFail: \"验签矩阵⑤：结构坏（非对象 / licensee 缺 / signature 缺 / 未知字段 / expires_at 非法）→ invalid 带原因\",
+  },
+  {
+    id: \"license-canonical-order\",
+    src: \"src/main/license.ts\",
+    test: \"tests/license.test.ts\",
+    desc: \"canonical body 字段序被打乱（签发与验签不一致，合法 license 全部验签失败）\",
+    apply: (s) => s.replace(
+      \"JSON.stringify({ licensee: lic.licensee, expires_at: lic.expires_at ?? null })\",
+      \"JSON.stringify({ expires_at: lic.expires_at ?? null, licensee: lic.licensee })\",
+    ),
+    expectFail: \"licenseBodyOf 是 canonical（字段序固定 + 缺省 expires_at 归一 null）——签发与验签共用\",
+  },
+  {
+    id: \"license-badjson-not-inactive\",
+    src: \"src/main/license.ts\",
+    test: \"tests/license.test.ts\",
+    desc: \"坏 JSON 冒充 inactive（损坏的 license 被当成「未激活」而非 invalid，状态机混淆）\",
+    apply: (s) => s.replace(\"const missing = (err as NodeJS.ErrnoException).code === \\\"ENOENT\\\";\", \"const missing = true;\"),
+    expectFail: \"verifyLicenseFile：无文件 = inactive（未激活不阻断）；坏 JSON = invalid；好文件走同一矩阵\",
+  },
+  {
+    id: \"sandbox-sensitive-deny\",
+    src: \"src/main/sandbox.ts\",
+    test: \"tests/sandbox.test.ts\",
+    desc: \"敏感目录拒读规则被移除（.ssh/.aws/Keychains 在沙箱内可读 = 密钥泄漏）\",
+    apply: (s) => s.replace(\"lines.push('(deny file-read* (subpath \\\"' + join(home, rel) + '\\\"))');\", \"/* mutated: 敏感目录拒读被移除 */\"),
+    expectFail: \"可写根与敏感目录路径全部 realpath（坑一：/tmp 实为 /private/tmp）\",
+  },
+  {
+    id: \"sandbox-deny-default\",
+    src: \"src/main/sandbox.ts\",
+    test: \"tests/sandbox.test.ts\",
+    desc: \"移除 (deny default)（沙箱从默认拒绝变成默认放行，所有约束失效）\",
+    apply: (s) => s.replace(\"    \\\"(deny default)\\\",\\n\", \"\"),
+    expectFail: \"默认断网：deny default 且无任何 network 放行\",
+  },
+  {
+    id: \"sandbox-write-confinement\",
+    src: \"src/main/sandbox.ts\",
+    test: \"tests/sandbox.test.ts\",
+    desc: \"写收敛退化为全盘可写（沙箱外任意路径可写 = 破坏面失控）\",
+    apply: (s) => s.replace(\"'(allow file-write* (subpath \\\"' + root + '\\\"))'\", \"'(allow file-write*)'\"),
+    expectFail: \"可写根与敏感目录路径全部 realpath（坑一：/tmp 实为 /private/tmp）\",
+  },
+  {
+    id: \"sandbox-realpath\",
+    src: \"src/main/sandbox.ts\",
+    test: \"tests/sandbox.test.ts\",
+    desc: \"SBPL 路径不走 realpath（/tmp 与 /private/tmp 对不上，规则静默失效 = 假沙箱）\",
+    apply: (s) => s.replace(
+      \"  const root = real(writableRoot);\\n  const home = real(homedir());\",
+      \"  const root = writableRoot;\\n  const home = homedir();\",
+    ),
+    expectFail: \"可写根与敏感目录路径全部 realpath（坑一：/tmp 实为 /private/tmp）\",
+  },
+
+  {
+    id: \"prune-minimum-tokens\",
+    src: \"src/agent/prune.ts\",
+    test: \"tests/prune.test.ts\",
+    desc: \"最小修剪闸被拆（低于 20k 也裁，无效修剪照做）\",
+    apply: (s) => s.replace(\"if (wouldSave < config.minimumTokens) {\", \"if (false) {\"),
+    expectFail: \"①预计裁剪未达 20k → 不修剪（too-small，零替换）\",
+  },
+  {
+    id: \"prune-protect-region\",
+    src: \"src/agent/prune.ts\",
+    test: \"tests/prune.test.ts\",
+    desc: \"保护区累计闸被拆（protectStart 恒为 0，全部事件成候选）\",
+    apply: (s) => s.replace(\"if (acc >= config.protectTokens) {\", \"if (false) {\"),
+    expectFail: \"②最近 2 轮不被剪；第 1 轮的旧大结果被剪\",
+  },
+  {
+    id: \"prune-recent-rounds\",
+    src: \"src/agent/prune.ts\",
+    test: \"tests/prune.test.ts\",
+    desc: \"最近 N 轮边界恒为 0（全部事件判为最近轮，免剪区吞掉整个裁剪面）\",
+    apply: (s) => s.replace(\"if (seen === recentRounds) return i;\", \"if (false) return i;\"),
+    expectFail: \"②最近 2 轮不被剪；第 1 轮的旧大结果被剪\",
+  },
+  {
+    id: \"prune-event-id-1based\",
+    src: \"src/agent/prune.ts\",
+    test: \"tests/prune.test.ts\",
+    desc: \"替换映射的 1-based 事件 id 变 0-based（投影行号错位，消费者取错事件）\",
+    apply: (s) => s.replace(\"out.replacements.set(i + 1, stub);\", \"out.replacements.set(i, stub);\"),
+    expectFail: \"②最近 2 轮不被剪；第 1 轮的旧大结果被剪\",
+  },
+  {
+    id: \"prune-exempt-tools\",
+    src: \"src/agent/prune.ts\",
+    test: \"tests/prune.test.ts\",
+    desc: \"免剪名单失效（skill/remember/memory 注入内容可被裁掉，跨会话指令丢失）\",
+    apply: (s) => s.replace(\"config.exemptTools.includes(callName)\", \"false\"),
+    expectFail: \"免剪名单（skill/remember/memory）免剪；普通 read_file 不免剪\",
+  },
+  {
+    id: \"prune-grep-glob-lsp\",
+    src: \"src/agent/prune.ts\",
+    test: \"tests/prune.test.ts\",
+    desc: \"grep/glob/lsp 整形结果免剪失效（已整形产物被重复裁剪，信息损失大于收益）\",
+    apply: (s) => s.replace('if (callName === \"grep\" || callName === \"glob\" || callName === \"lsp\") return true;', \"if (false) return true;\"),
+    expectFail: \"grep/glob/lsp 命中免剪（整形产物不裁）\",
+  },
+  {
+    id: \"prune-error-result-exempt\",
+    src: \"src/agent/prune.ts\",
+    test: \"tests/prune.test.ts\",
+    desc: \"失败/拒绝结果免剪失效（高价值短结果被裁，错误上下文从上下文消失）\",
+    apply: (s) => s.replace(\"if (!(e as { ok?: boolean }).ok) return true;\", \"if (false) return true;\"),
+    expectFail: \"失败结果（ok:false）免剪；同类成功结果不免剪\",
+  },
+  {
+    id: \"prune-non-toolresult-exempt\",
+    src: \"src/agent/prune.ts\",
+    test: \"tests/prune.test.ts\",
+    desc: \"非 tool_result 免剪失效（user_message/tool_call 进候选，裁剪面越界）\",
+    apply: (s) => s.replace(\"if (e.type !== \\\"tool_result\\\") return true;\", \"if (false) return true;\"),
+    expectFail: \"非 tool_result 一律免剪（user_message / tool_call）\",
+  },
+  {
+    id: \"prune-verify-card-exempt\",
+    src: \"src/agent/prune.ts\",
+    test: \"tests/prune.test.ts\",
+    desc: \"verify 卡片投影免剪失效（验证卡面数据源被裁，卡片渲染瞎）\",
+    apply: (s) => s.split(\"\\n\").map((l) => (l.includes(\".test(e.output)\") ? l.replace(\"e.output\", \"false\") : l)).join(\"\\n\"),
+    expectFail: \"卡片投影免剪：[verify] 前缀的 tool_result 在最近轮外仍免剪\",
+  },
+  {
+    id: \"prune-attachment-safesegment\",
+    src: \"src/agent/prune.ts\",
+    test: \"tests/prune.test.ts\",
+    desc: \"附件名路径穿越清洗被拆（模型侧 ../../ 直接越出 attachmentsDir）\",
+    apply: (s) => s.split(\"\\n\").map((l) => (l.includes(\"return raw.replace\") ? \"  return raw.slice(0, maxLen);\" : l)).join(\"\\n\"),
+    expectFail: \"sessionId 含 ../../ 时清洗后附件仍落在 attachmentsDir 内\",
+  },
+  {
+    id: \"remember-global-memory-only\",
+    src: \"src/tools/remember.ts\",
+    test: \"tests/remember.test.ts\",
+    desc: \"全局层只许记忆笔记的闸被拆（全局层可写根三文件，项目/全局边界破裂）\",
+    apply: (s) => s.replace(\"if (scope === \\\"global\\\" && k !== \\\"memory\\\") {\", \"if (false) {\"),
+    expectFail: \"全局层 + 根三文件 kind → 拒绝；非法 topic → 拒绝\",
+  },
+  {
+    id: \"remember-topic-replace-mismatch\",
+    src: \"src/tools/remember.ts\",
+    test: \"tests/remember.test.ts\",
+    desc: \"topic replace 精确命中检查被拆（不匹配也静默改写，报错重试语义失效）\",
+    apply: (s) => s.replace(\"if (oldContent !== oldBody) {\", \"if (false) {\"),
+    expectFail: \"replace 不命中 → old_content_mismatch（消息可区分）\",
+  },
+  {
+    id: \"remember-empty-change-same\",
+    src: \"src/tools/remember.ts\",
+    test: \"tests/remember.test.ts\",
+    desc: \"old_content===闸后 content 的空变更闸被拆（无写值改写落盘，modified 白滚）（2026-09-24 改指：79f6f66 起比较的是脱敏后的 safe.text）\",
+    apply: (s) => s.replace(\"        if (oldContent === safe.text) {\", \"        if (false) {\"),
+    expectFail: \"空变更：空白 content 与 old_content===content 都报 empty_change（无内容可沉淀）\",
+  },
+  {
+    id: \"remember-rootfile-empty-change-same\",
+    src: \"src/tools/remember.ts\",
+    test: \"tests/remember.test.ts\",
+    desc: \"根文件分支的空变更闸被拆 ⇒ 把 MEMORY.md 原样再写一遍也算「有变更」并落盘；topic 分支与这根是两条独立闸，只拆一条另一条仍在（故须各一条锚点）\",
+    apply: (s) => s.replace(\"    if (oldContent === safe.text) {\\n      throw new MemoryError(\\\"empty_change\\\"\", \"    if (false) {\\n      throw new MemoryError(\\\"empty_change\\\"\"),
+    expectFail: \"根三文件 replace 的空变更同样报 empty_change（与 topic 分支是两道独立闸）\",
+  },
+  {
+    id: \"remember-empty-content-whitespace\",
+    src: \"src/tools/remember.ts\",
+    test: \"tests/remember.test.ts\",
+    desc: \"空白 content 闸被拆（空笔记写入记忆，错误码分型坍塌）\",
+    apply: (s) => s.replace(\"if (content.trim().length === 0) {\", \"if (false) {\"),
+    expectFail: \"空变更：空白 content 与 old_content===content 都报 empty_change（无内容可沉淀）\",
+  },
+  {
+    id: \"remember-decisions-append-only\",
+    src: \"src/tools/remember.ts\",
+    test: \"tests/remember.test.ts\",
+    desc: \"DECISIONS 追加式闸被拆（日志可被整段改写，修订链断裂）\",
+    apply: (s) => s.replace(\"if (k === \\\"decision\\\" && op === \\\"replace\\\") {\", \"if (false) {\"),
+    expectFail: \"DECISIONS 追加式：replace 被拒（修订=新条目「取代」）\",
+  },
+  {
+    id: \"remember-op-enum\",
+    src: \"src/tools/remember.ts\",
+    test: \"tests/remember.test.ts\",
+    desc: \"op 枚举闸被拆（delete 等任意操作被接受，删除权回到模型侧）\",
+    apply: (s) => s.replace(\"if (op !== \\\"append\\\" && op !== \\\"replace\\\") {\", \"if (false) {\"),
+    expectFail: \"kind/操作集里不存在 delete\",
+  },
+  {
+    id: \"remember-memory-type-required\",
+    src: \"src/tools/remember.ts\",
+    test: \"tests/remember.test.ts\",
+    desc: \"kind=memory 必带 type 闸被拆（无类型记忆写入，索引投影缺字段）\",
+    apply: (s) => s.replace(\"if (!isMemoryType(type)) {\", \"if (false) {\"),
+    expectFail: \"全局层 + 根三文件 kind → 拒绝；非法 topic → 拒绝\",
+  },
+  {
+    id: \"remember-topic-required\",
+    src: \"src/tools/remember.ts\",
+    test: \"tests/remember.test.ts\",
+    desc: \"topic 必填闸被拆（空/非法 topic 进入文件名，记忆落盘命名失控）\",
+    apply: (s) => s.replace(\"if (typeof topic !== \\\"string\\\" || topic.length === 0) {\", \"if (false) {\"),
+    expectFail: \"topic 空串/非串由工具层先拦（必带 topic，先于 store 层格式校验）\",
+  },
+  {
+    id: \"remember-rootfile-replace-mismatch\",
+    src: \"src/tools/remember.ts\",
+    test: \"tests/remember.test.ts\",
+    desc: \"根三文件 replace 精确命中检查被拆（不匹配也静默改写 .agent/ 根文件）\",
+    apply: (s) => s.replace(\"if (cur === null || cur !== oldContent) {\", \"if (false) {\"),
+    expectFail: \"根三文件 replace 不命中 → old_content_mismatch，原文不被静默改写\",
+  },
+  {
+    id: \"remember-default-op\",
+    src: \"src/tools/remember.ts\",
+    test: \"tests/remember.test.ts\",
+    desc: \"kind 默认操作映射反转（decision 默认 replace → 追加式日志被改写拒）\",
+    apply: (s) => s.replace(\"kind === \\\"architecture\\\" || kind === \\\"preference\\\" ? \\\"replace\\\" : \\\"append\\\"\", \"kind === \\\"architecture\\\" || kind === \\\"preference\\\" ? \\\"append\\\" : \\\"replace\\\"\"),
+    expectFail: \"architecture/decision/preference 映射 .agent/ 根三文件\",
+  },
+  {
+    // §8.1.8 第 6 条承诺的落点（79f6f66）。取料点是**唯一的闸调用处**：四个写原语共用一份闸后文本，
+    // 所以摘掉这一行 = 四支一起漏（不必各钉一条，也不许只钉其中一支——rule 72 的反面）。
+    id: \"remember-redact-gate-bypassed\",
+    src: \"src/tools/remember.ts\",
+    test: \"tests/remember-secret-hygiene.test.ts\",
+    desc: \"记忆写入不再过脱敏 pass ⇒ 凭据明文进 .agent/ 与全局层（跨会话、跨项目共享，且会沉淀进索引）\",
+    apply: (s) => s.replace(\"    const safe = sanitizeForMemory(content);\", \"    const safe = { text: content, masked: 0 };\"),
+    expectFail: \"已知模式名密钥：落盘不得含明文，回执要点名脱敏\",
+  },
+  {
+    id: \"remember-blocked-not-rejected\",
+    src: \"src/tools/remember.ts\",
+    test: \"tests/remember-secret-hygiene.test.ts\",
+    desc: \"blocked 档从「拒绝」降级成「照常写」⇒ 私钥块被掩码后落盘，违背 scan.ts 既有契约（调用方应拒绝而非仅脱敏）\",
+    apply: (s) => s.replace(\"  if (r.blocked) {\", \"  if (false) {\"),
+    expectFail: \"私钥块 = blocked：拒绝写入且盘上无痕（沿用 scan.ts 既有契约「调用方应拒绝而非仅脱敏」）\",
+  },
+  {
+    id: \"sessions-delete-force-false\",
+    src: \"src/main/sessions.ts\",
+    test: \"tests/sessions.test.ts\",
+    desc: \"删除改用 force:true（不存在的会话静默成功，fail-loud 语义失效）\",
+    apply: (s) => s
+      .replace(\"await rename(source, staged);\", \"await rename(source, staged).catch(() => undefined);\")
+      .replace(\"await rm(staged, { force: false });\", \"await rm(staged, { force: true });\"),
+    expectFail: \"非法名字 fail-closed（路径分隔/点开头/空）；删除不存在会话抛错\",
+  },
+  {
+    id: \"sessions-mtime-desc\",
+    src: \"src/main/sessions.ts\",
+    test: \"tests/sessions.test.ts\",
+    desc: \"会话列表排序反转（最近在上 → 最旧在上，当前会话回退取错）\",
+    apply: (s) => s.replace(\"// 竞态删除/不可读：跳过，不出现在列表\\n    }\\n  }\\n  return out.sort((a, b) => b.mtimeMs - a.mtimeMs);\", \"// 竞态删除/不可读：跳过，不出现在列表\\n    }\\n  }\\n  return out.sort((a, b) => a.mtimeMs - b.mtimeMs);\"),
+    expectFail: \"mtime 降序（最近在上）——当前会话回退取列表首个的数据面\",
+  },
+  {
+    id: \"sessions-collision-suffix\",
+    src: \"src/main/sessions.ts\",
+    test: \"tests/sessions.test.ts\",
+    desc: \"撞名序号从 2 起（① 冲突覆盖：同名会话被新建空文件覆盖）\",
+    apply: (s) => s.replace(\"非法会话名: ${JSON.stringify(name)}`);\\n  let id = base;\\n  for (let i = 2; ; i++) {\", \"非法会话名: ${JSON.stringify(name)}`);\\n  let id = base;\\n  for (let i = 1; ; i++) {\"),
+    expectFail: \"新建撞名自动加序号；空目录列表为空\",
+  },
+  {
+    id: \"sessions-lines-nonempty\",
+    src: \"src/main/sessions.ts\",
+    test: \"tests/sessions.test.ts\",
+    desc: \"行数口径把空行计入（投影事件数虚高 +1，验收口径破裂）——2026-09-20 改指 d9f4d0b 搬进 countNonEmpty 的那一处\",
+    apply: (s) => s.replace(\"for (const s of segments) if (s.trim().length > 0) n++;\", \"for (const s of segments) n++;\"),
+    expectFail: \"追加后按增量计数：含纯空白行不计、未换行尾段计 1 且补全后不双计\",
+  },
+  {
+    id: \"sessions-name-trim\",
+    src: \"src/main/sessions.ts\",
+    test: \"tests/sessions.test.ts\",
+    desc: \"会话名 trim 检查被拆（前后空白的名字合法，列表显示与文件名不一致）\",
+    apply: (s) => s.replace(\"name.trim() === name\", \"true\"),
+    expectFail: \"前后空白的名字非法（trim 规则）\",
+  },
+  {
+    id: \"sessions-name-charset\",
+    src: \"src/main/sessions.ts\",
+    test: \"tests/sessions.test.ts\",
+    desc: \"会话名字符集闸整条拆除（路径分隔/控制字符/点号全放行 → 目录穿越与伪装名）\",
+    apply: (s) => s.split(\"\\n\").map((l) => (l.includes(\"name.trim() === name\") ? \"  return true;\" : l)).join(\"\\n\"),
+    expectFail: \"控制字符 / 点号开头的名字非法\",
+  },
+  {
+    id: \"sessions-path-guard\",
+    src: \"src/main/sessions.ts\",
+    test: \"tests/sessions.test.ts\",
+    desc: \"sessionPath 的非法会话名闸被拆（重命名到可写路径的非法名字静默成功）\",
+    apply: (s) => s.replace(\"if (!isValidSessionName(id)) throw new Error(`非法会话名: \", \"if (false) throw new Error(`非法会话名: \"),
+    expectFail: \"deleteSession / readSessionEvents 对非法名字直接拒绝（消息=非法会话名，而非 ENOENT）\",
+  },
+  {
+    id: \"sessions-rename-clash\",
+    src: \"src/main/sessions.ts\",
+    test: \"tests/sessions.test.ts\",
+    desc: \"重命名撞名检查被拆（目标会话被静默覆盖，用户数据丢失）\",
+    apply: (s) => {
+      const lines = s.split(\"\\n\");
+      const i = lines.findIndex((l, j) => l.trim() === \"try {\" && lines[j + 1] !== undefined && lines[j + 1].includes(\"await stat(to);\"));
+      if (i < 0) return s;
+      let j = i + 1;
+      while (j < lines.length && lines[j] !== \"  }\") j++;
+      lines.splice(i, j - i + 1);
+      return lines.join(\"\\n\");
+    },
+    expectFail: \"重命名撞名被拒：目标会话内容不被覆盖\",
+  },
+  {
+    id: \"sessions-meta-head-strict\",
+    src: \"src/main/sessions.ts\",
+    test: \"tests/sessions.test.ts\",
+    desc: \"scheduled 徽标的投影条件被拆（每个会话都带上自动化徽标 = 面板在撒谎）——2026-09-20 改指 d9f4d0b 搬进 projectHeadLine 的那一处；同行的 meta.type 校验是 belt-and-braces，判据看不见它（首行本来就是 session_meta），不另立锚点\",
+    apply: (s) => s.replace('...(meta.origin === \"scheduled\"', \"...(true\"),
+    expectFail: \"首行是 session_meta 但没有 origin ⇒ 同样不投影（origin 半边：上面那条判不到它，变异存活实测抓出来的缺口）\",
+  },
+  {
+    id: \"semantic-admission-never-reports\",
+    src: \"src/agent/lease-conflicts.ts\",
+    test: \"tests/impact-admission.test.ts\",
+    desc: \"语义波及相交不再上报（B1 退化回「只看 glob」：两个 worker 各改各文件却波及同一批调用点，合并时才打架）\",
+    apply: (x) => x.replace('if (shared.length > 0) out.push({ agentId: w.agentId, resource: \"波及 \" + shared.join(\"、\") });', 'if (false) out.push({ agentId: w.agentId, resource: \"波及 \" + shared.join(\"、\") });'),
+    expectFail: \"utils.js × math.js：glob 不相交，波及集相交 ⇒ 语义闸报冲突\",
+  },
+  {
+    id: \"semantic-admission-guard-removed\",
+    src: \"src/agent/lease-conflicts.ts\",
+    test: \"tests/impact-admission.test.ts\",
+    desc: \"去掉「未接钩子 / 空声明 / 无 worker」前置（impactAnalysis 关闭时 spawn 会被 undefined 钩子炸掉）\",
+    apply: (x) => x.replace(\"if (!hook || resources.length === 0 || workers.length === 0) return [];\", \"if (resources.length === 0 || workers.length === 0) return [];\"),
+    expectFail: \"未接钩子 / 无声明 / 无活跃 worker ⇒ []（零行为 = 连 warn 噪声都没有）\",
+  },
+  {
+    id: \"impact-closure-glob-broken\",
+    src: \"src/agent/impact/index.ts\",
+    test: \"tests/impact-admission.test.ts\",
+    desc: \"波及闭包的入面从 glob 匹配退化成整串相等（目录型 resources 声明\\n 再也算不出波及）\",
+    apply: (x) => x.replace(\"if (!globs.some((g) => globMatchesPath(g, file))) continue;\", \"if (!globs.includes(file)) continue;\"),
+    expectFail: \"目录 glob 把整个子树的波及并进来\",
+  },
+  {
+    id: \"http-retry-replays-fatal-status\",
+    src: \"src/providers/retry.ts\",
+    test: \"tests/http-retry.test.ts\",
+    desc: \"可重试判定变成「全部状态都重试」（400/401/404 这类请求本身的问题被反复重放，白烧预算与限流额度）\",
+    apply: (s) => s.replace(\"return status === 408 || status === 409 || status === 425 || status === 429 || (status >= 500 && status <= 599);\", \"return true;\"),
+    expectFail: \"400 是请求本身的问题：一次即抛，文案与迁移前逐字一致\",
+  },
+  {
+    id: \"http-retry-ignores-cancellation\",
+    src: \"src/providers/retry.ts\",
+    test: \"tests/http-retry.test.ts\",
+    desc: \"重试循环不再看调用方取消信号（用户按停止后仍把剩余 attempts 跑满 = 停止键失灵）\",
+    apply: (s) => s.replace(\" || o.callerSignal?.aborted === true\", \"\"),
+    expectFail: \"调用方取消不是故障：不重试、不吞取消\",
+  },
+  {
+    id: \"http-retry-drops-retry-after\",
+    src: \"src/providers/retry.ts\",
+    test: \"tests/http-retry.test.ts\",
+    desc: \"忽略 Retry-After 头（对端明确要求等多久我们照打 500ms，限流窗口被二次打满）\",
+    apply: (s) => s.replace(\"const headerMs = retryAfterMs(res.headers?.get?.(\\\"retry-after\\\") ?? null, Date.now(), capMs);\", \"const headerMs = null;\"),
+    expectFail: \"429 两次后成功：共 3 次请求、两次重试可查、Retry-After 被遵从\",
+  },
+  {
+    id: \"auto-verify-default-on\",
+    src: \"src/agent/loop.ts\",
+    test: \"tests/loop.test.ts\",
+    desc: \"收束闸缺省变开（每 run 多拍一次真 lint/test，撞 action-fusion 已钉的验证执行次数记账）\",
+    apply: (s) => s.replace(\"opts.verify && opts.autoVerify === true && wroteThisRun\", \"opts.verify && opts.autoVerify !== false && wroteThisRun\"),
+    expectFail: \"零行为回退：缺省不开闸（未给 autoVerify） → 无 verify_result、请求数与旧行为同形\",
+  },
+  {
+    id: \"auto-verify-surface-probe-unguarded\",
+    src: \"src/agent/loop.ts\",
+    test: \"tests/loop.test.ts\",
+    desc: \"可验面探测的 catch 翻成放行（写坏 .agent/config.json 时整轮被 SyntaxError 炸掉）\",
+    apply: (s) => s.replace(\"          hasSurface = false;\\n          console.warn(\", \"          hasSurface = true;\\n          console.warn(\"),
+    expectFail: \"可验面探测炸（config 存在但 JSON 坏）⇒ 不炸 run、不补拍\",
+  },
+  {
+    id: \"session-spawn-visible-side-effect\",
+    src: \"src/permissions/autonomy.ts\",
+    test: \"tests/session-tools.test.ts\",
+    desc: \"spawn_agent 从写向工具集合里摘掉（只读档会话就能派 worker：花真钱 + write 档 worker 会写盘）\",
+    apply: (s) => s.replace('  \"spawn_agent\",\\n', \"\"),
+    expectFail: \"主会话模型可见面含 spawn_agent；只读档随写向工具一并摘除\",
+  },
+  {
+    id: \"context-budget-ignores-model-window\",
+    src: \"src/agent/glm-session.ts\",
+    test: \"tests/session-provider.test.ts\",
+    desc: \"预算基线退回硬编码 128k（高档位模型提前压缩 = 多烧一次摘要 + 白丢冷细节；误拒合法请求）\",
+    apply: (s) => s.replace(\"{ ...withModelBudget(DEFAULT_COMPACTION_CONFIG, window), ...opts.compaction?.config }\", \"{ ...DEFAULT_COMPACTION_CONFIG, ...opts.compaction?.config }\"),
+    expectFail: \"同一份历史：缺省 128k 帽下 fail-closed 拒发，换 256k 窗口模型后照常发出\",
+  },
+  // ---- 门 0（ipc-reachability）：可达性棘轮的解析面 ----
+                    // ---- worker 上下文预算认模型（1e85544）----
+  {
+    id: \"worker-budget-window-ignored\",
+    src: \"src/agent/orchestrator-config.ts\",
+    test: \"tests/worker-budget.test.ts\",
+    desc: \"worker 预算不再采信模型窗口（256k/1M 档仍按硬编码 128k 提前压缩 = 多烧一次摘要 + 白丢冷细节）\",
+    apply: (s) => s.replace(\"const budgeted = withModelBudget(base, window);\", \"const budgeted = base;\"),
+    expectFail: \"窗口比基线大 ⇒ 抬到真实窗口（256k 档不再按 128k 提前压缩），worker 专属 ratio 保留\",
+  },
+  {
+    id: \"worker-budget-clamp-removed\",
+    src: \"src/agent/orchestrator-config.ts\",
+    test: \"tests/worker-budget.test.ts\",
+    desc: \"去掉「显式覆盖绝不超出模型窗口」的钳制（超窗请求发给远端吃 400，本地 fail-closed 失效）\",
+    apply: (s) => s.replace(\"return budgeted !== base ? { ...merged, inputLimit: Math.min(merged.inputLimit, budgeted.inputLimit) } : merged;\", \"return merged;\"),
+    expectFail: \"显式覆盖超出模型窗口 ⇒ 本地钳到窗口（超窗必吃远端 400，fail-closed 不留给远端）\",
+  },
+  {
+    id: \"worker-budget-handle-window-lost\",
+    src: \"src/agent/orchestrator.ts\",
+    test: \"tests/worker-budget.test.ts\",
+    desc: \"spawn 处不把 spec 的 ctxWindow 写进 handle（纯函数与调用点断线：路由选到 strong 档，worker 预算照旧 128k）\",
+    apply: (s) => s.replace(\"      ...(routedSpec ? { modelCtxWindow: routedSpec.ctxWindow } : {}),\\n\", \"\"),
+    expectFail: \"路由选中 strong 档 ⇒ handle 带该档 ctxWindow（无需 registry 二次查名）\",
+  },
+  // ---- 会话成本闸（§4.4.8 BYOK 底线）的估价来源 ----
+  {
+    id: \"session-budget-table-fallback-dropped\",
+    src: \"src/agent/orchestrator.ts\",
+    test: \"tests/m3c.test.ts\",
+    desc: \"单价缺省时不再查内置价表（估价恒 0 ⇒ 用户只设 maxBudgetUsd 的常见配置下，spec 的 BYOK 底线静默失效）。针脚必须指**给钱的那一行**：上一版指相邻的 budgetRateKnown 早退，那行删掉行为不变（spentUsdFor 自己就 null→0），变异当场存活\",
+    apply: (s) => s.replace(\"    return bucketsSpendUsd(this.budgetBuckets());\", \"    return null;\"),
+    expectFail: \"成本闸没填单价 ⇒ 按内置价表分列估价（用户只设 maxBudgetUsd 就该拦住，不是恒 0）\",
+  },
+  // ---- 09-23「每桶按自己那一档折」新增的三格（同一把尺的三个组成面）----
+  {
+    id: \"budget-worker-buckets-dropped\",
+    src: \"src/agent/orchestrator.ts\",
+    test: \"tests/session-spend-ruler.test.ts\",
+    desc: \"worker 桶全被当成「不产生真钱」跳过 ⇒ 上限只按主会话那一小段算，派活越多越拦不住\",
+    apply: (s) => s.replace(\"        realMoney: w.price !== null,\", \"        realMoney: false,\"),
+    expectFail: \"会话档=flash、worker 档=standard：worker 一份重活就把上限花完 ⇒ 下一次 spawn 被拒\",
+  },
+  {
+    id: \"budget-worker-priced-at-session-tier\",
+    src: \"src/agent/orchestrator.ts\",
+    test: \"tests/session-spend-ruler.test.ts\",
+    desc: \"worker 桶改按**会话那一档**计价（= 旧尺换了个位置）⇒ 便宜档 worker 被贵档顶死，上限早触发白停\",
+    apply: (s) => s.replace(\"        price: w.price ?? null,\", '        price: priceForModel(b?.priceModel ?? \"\"),'),
+    expectFail: \"反向那一半：worker 档比会话档便宜 ⇒ 尺跟着降，不再把便宜档的 token 按会话价高估到白拦\",
+  },
+  {
+    id: \"budget-main-bucket-never-accumulated\",
+    src: \"src/agent/orchestrator.ts\",
+    test: \"tests/session-spend-ruler.test.ts\",
+    desc: \"拆桶时把主会话那一段漏掉（只统计带 agent_id 的）⇒ 闸只看得到 worker，主 loop 烧的钱不进账\",
+    apply: (s) => s.replace(\"          if (e.agent_id === undefined) {\", \"          if (false) {\"),
+    expectFail: \"主会话那一桶与 worker 那一桶各算一次：不漏 main，也不因为拆桶而双计\",
+  },
+  // ---- 09-27 同一族的第三、四支：**主会话**那一桶的价键。两道美元闸原先读设置盘字段、拨号读 resolved
+  // spec，实测三种合法配置下分叉（留空 ⇒ 闸惰；指定强档 ⇒ 只读到实付 1/4；指定便宜档 ⇒ 读到 10 倍）。
+  {
+    id: \"session-budget-key-from-settings-field\",
+    src: \"src/main/agent-runner.ts\",
+    test: \"tests/budget-price-key.test.ts\",
+    desc: \"会话成本闸的价键退回设置盘那个字段（拨号仍按 resolved 档）⇒ 闸与实付两个数：最常见的「model 留空」配置下整闸惰掉\",
+    apply: (s) => s.replace(\"priceModel: budgetPriceKeyOf(runModel ?? resolveRunModel(s))\", \"priceModel: s.model\"),
+    expectFail: \"两处消费各自接线在位\",
+  },
+  {
+    id: \"goal-budget-key-from-settings-field\",
+    src: \"src/main/agent-runner.ts\",
+    test: \"tests/budget-price-key.test.ts\",
+    desc: \"只修会话闸、goal 美元闸那一半退回读盘上字段 ⇒ 同一个 run 里两道闸各说各话（判据要求两条接线同时在位）\",
+    apply: (s) => s.replace(\"  const model = budgetPriceKeyOf(args.runModel);\", \"  const model = (await store().get()).model;\"),
+    expectFail: \"两处消费各自接线在位\",
+  },
+  {
+    id: \"run-model-resolution-drops-request-model\",
+    src: \"src/main/agent-runner.ts\",
+    test: \"tests/budget-price-key.test.ts\",
+    desc: \"解析时丢掉逐请求指定的模型 ⇒ 闸与拨号仍然「一致」但一起错档：只比「闸=拨号」的判据零分辨力，咬住它的是那条「必须与设置盘字段折出的数不同」的牙齿\",
+    apply: (s) => s.replace(\"    ...(requestModel !== undefined ? { requestModel } : {}),\\n\", \"\"),
+    expectFail: \"per-run 指定强档\",
+  },
+  {
+    id: \"budget-unpriced-tokens-swallowed\",
+    src: \"src/agent/orchestrator-join.ts\",
+    test: \"tests/session-spend-ruler.test.ts\",
+    desc: \"算不出价的 token 数被吞（仍不折成 $0 计入美元）⇒ 调用方拿不到「闸可能晚于实际上限」的读数，也就不会出声\",
+    apply: (s) => s.replace(\"      unpricedTokens += tokens;\", \"      unpricedTokens += 0;\"),
+    expectFail: \"真实但价不可知的一桶：不折成 $0，token 计入 unpricedTokens，已知的部分照算\",
+  },
+  // ---- goal 美元闸（同一把尺的第二支，`1a36de2`）----
+  {
+    id: \"goal-window-booked-sum-dropped\",
+    src: \"src/agent/goal.ts\",
+    test: \"tests/goal-price.test.ts\",
+    desc: \"worker 回执里已入账的表价不再累加 ⇒ 闸只看主会话那一段，派多少活都不涨钱（上限形同虚设）\",
+    apply: (s) => s.replace(\"      if (typeof s === \\\"number\\\" && Number.isFinite(s) && s > 0) booked += s;\", \"      if (typeof s === \\\"number\\\" && Number.isFinite(s) && s > 0) booked += 0;\"),
+    expectFail: \"正向那一格：worker 跑贵档并已入账 ⇒ 闸按入账的钱停，不按会话的便宜档低估\",
+  },
+  {
+    id: \"goal-window-prices-worker-at-session-tier\",
+    src: \"src/agent/goal.ts\",
+    test: \"tests/goal-price.test.ts\",
+    desc: \"把 worker 的 token 也并进主会话桶 ⇒ 回到「全部 token × 会话档」，与同一屏的回执分叉（40 倍）\",
+    apply: (s) => s.replace(\"      if (e.agent_id === undefined) {\", \"      if (true) {\"),
+    expectFail: \"反向那一格：会话档很贵而 worker 跑便宜档 ⇒ 闸只看回执里那 $0.0202，不乘成 $0.808\",
+  },
+  {
+    id: \"goal-gate-call-site-bypassed\",
+    src: \"src/main/agent-runner.ts\",
+    test: \"tests/goal-continue.test.ts\",
+    desc: \"调用点递空窗口（函数没错、闸拿不到数）⇒ 美元闸惰掉，理由退到轮次上限，用户设的钱闸变随机数\",
+    apply: (s) => s.replace(\"goalWindowSpend(view.window, model)\", \"goalWindowSpend([], model)\"),
+    expectFail: \"设 $0.05 上限 × 一轮 200k/20k 用量 ⇒ goal_stopped 点名美元上限（不被轮次/无产出理由顶包）\",
+  },
+  {
+    id: \"goal-lag-note-never-shown\",
+    src: \"src/agent/goal.ts\",
+    test: \"tests/goal-price.test.ts\",
+    desc: \"在途 worker 的滞后不再说出口 ⇒ 下一轮数字突然跳升，会被模型和人读成「上一轮什么都没花」\",
+    apply: (s) => s.replace(\"  const lag = pendingWorkerSpend > 0\", \"  const lag = pendingWorkerSpend < 0\"),
+    expectFail: \"在途 worker 的那一段写进提醒块；没有在途时逐字不提（每轮重送，少一行是一行的 token）\",
+  },
+  {
+    id: \"goal-lag-count-not-passed-at-call-site\",
+    src: \"src/main/agent-runner.ts\",
+    test: \"tests/goal-stop-decision.test.ts\",
+    // 第一版写这条时**变异存活**：goalReminder 的默认值是 0 ⇒ \"省略这一位\"与\"传 0\"行为逐字相同，
+    // 而可选参数后面加不了必填，编译器也接不了这格。改由那条生产入口形状断言守住
+    // （与 `decision.hint` 同一处、同一手法），这条才有了可杀的靶子。
+    desc: \"调用点不递第 6 个实参 ⇒ 提醒块永远不提「本拍的美元里还没有在途 worker 那一段」\",
+    apply: (s) => s.replace(\"goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint, unbookedWorkers)\", \"goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint)\"),
+    expectFail: \"生产入口真的把 decision.hint 传进去（goalNextTurn 未导出 ⇒ 只能钉这一行的形状）\",
+  },
+  {
+    id: \"session-budget-inert-silent\",
+    src: \"src/agent/orchestrator.ts\",
+    test: \"tests/m3c.test.ts\",
+    desc: \"「估不出价所以闸不生效」不再出声（用户设的成本底线悄悄不存在，且读日志的人也拿不到模型名）\",
+    apply: (s) => s.replace(\"      if (!this.budgetInertWarned) {\", \"      if (false) {\"),
+    expectFail: \"单价填了仍以单价为准（旧语义逐字保留）；估不出价 ⇒ 不拦但出声一次，不拿 $0 冒充实付\",
+  },
+  // ---- 缓存分块进事件流（444fdcd）----
+  {
+    id: \"anthropic-total-excludes-cache-buckets\",
+    src: \"src/providers/anthropic.ts\",
+    test: \"tests/provider-cache-usage.test.ts\",
+    desc: \"总输入退回只报 input_tokens（Anthropic 的该字段**不含**缓存读写量 → 长会话输入少算一个量级，底栏 1.5k 而模型实吃 300k）\",
+    apply: (s) => s.replace(\"inputTokens: (inputTokens ?? 0) + (cacheRead ?? 0) + (cacheWrite ?? 0),\", \"inputTokens: inputTokens ?? 0,\"),
+    expectFail: \"input_tokens 不含缓存 ⇒ 事件 inputTokens 补成含缓存总输入，分块另列\",
+  },
+  {
+    id: \"anthropic-start-cache-frame-ignored\",
+    src: \"src/providers/anthropic.ts\",
+    test: \"tests/provider-cache-usage.test.ts\",
+    desc: \"只认 message_delta 的缓存字段（对端在 message_start 起报、delta 不再回时，整次命中被判成零）\",
+    apply: (s) => s.replace(\"        if (event.message?.usage?.cache_read_input_tokens !== undefined) cacheRead = event.message.usage.cache_read_input_tokens;\\n        if (event.message?.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.message.usage.cache_creation_input_tokens;\\n\", \"\"),
+    expectFail: \"缓存量只出现在 message_start（delta 不回缓存字段）时同样要认\",
+  },
+  {
+    id: \"anthropic-delta-cache-frame-ignored\",
+    src: \"src/providers/anthropic.ts\",
+    test: \"tests/provider-cache-usage.test.ts\",
+    desc: \"不认累计帧 message_delta 里的缓存字段（末帧才是权威累计值，漏读即分块恒缺）\",
+    apply: (s) => s.replace(\"        if (event.usage?.cache_read_input_tokens !== undefined) cacheRead = event.usage.cache_read_input_tokens;\\n        if (event.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.usage.cache_creation_input_tokens;\\n\", \"\"),
+    expectFail: \"缓存量只出现在 message_delta（累计帧）时也认，且不跨帧累加\",
+  },
+  {
+    id: \"openai-cache-read-not-forwarded\",
+    src: \"src/providers/openai.ts\",
+    test: \"tests/provider-cache-usage.test.ts\",
+    desc: \"命中量只进 metering 不进事件（UI/账本/回放/bandit 代价面看不见缓存，A1 开不开没有分母）\",
+    apply: (s) => s.replace(\"    ...(read !== null ? { cacheReadInputTokens: read } : {}),\\n\", \"\"),
+    expectFail: \"prompt_tokens_details.cached_tokens 透出为 cacheReadInputTokens（inputTokens 保持含缓存口径）\",
+  },
+  {
+    id: \"openai-invents-zero-for-write-bucket\",
+    src: \"src/providers/openai.ts\",
+    test: \"tests/provider-cache-usage.test.ts\",
+    desc: \"对端没报写桶时凭空补 0（「缺报」被冒充「写缓存零命中」，meteredCost 的 fail-closed 前提被拆掉）\",
+    apply: (s) => s.replace(\"...(write !== null ? { cacheWriteInputTokens: write } : {}),\", \"cacheWriteInputTokens: write ?? 0,\"),
+    expectFail: \"prompt_tokens_details.cached_tokens 透出为 cacheReadInputTokens（inputTokens 保持含缓存口径）\",
+  },
+  // ---- A1 写侧断点与缓存价（27cadba）----
+  {
+    id: \"anthropic-prompt-cache-default-on\",
+    src: \"src/providers/anthropic.ts\",
+    test: \"tests/prompt-cache-breakpoints.test.ts\",
+    desc: \"断点开关缺省变开（未经用户同意就改写请求体形状：system 从整串变块数组，且每次缓存重写多付 25%）\",
+    apply: (s) => s.replace(\"body.system = opts.promptCache === true\", \"body.system = true\"),
+    expectFail: \"缺省与显式 false ⇒ system 仍是整串、全站零 cache_control（逐字旧行为）\",
+  },
+  {
+    id: \"anthropic-breakpoint-on-last-system-block\",
+    src: \"src/providers/anthropic.ts\",
+    test: \"tests/prompt-cache-breakpoints.test.ts\",
+    desc: \"断点从首块挪到末块（把逐轮变化的记忆/地图圈进缓存条目 = 每轮重写一段大前缀，比不打点更贵）\",
+    apply: (s) => s.replace(\"...(i === 0 ? { cache_control: { type: \\\"ephemeral\\\" } } : {})\", \"...(i === systemParts.length - 1 ? { cache_control: { type: \\\"ephemeral\\\" } } : {})\"),
+    expectFail: \"开启 ⇒ 断点只落在静态段：末个 tool + system 首块（易变的记忆/地图留在断点之后）\",
+  },
+  {
+    id: \"anthropic-breakpoint-on-every-tool\",
+    src: \"src/providers/anthropic.ts\",
+    test: \"tests/prompt-cache-breakpoints.test.ts\",
+    desc: \"每个 tool 都打断点（Anthropic 上限 4 个断点，工具一多直接 400；且重复条目只会多付写价）\",
+    apply: (s) => s.replace(\"...(opts.promptCache === true && i === last ? { cache_control: { type: \\\"ephemeral\\\" } } : {}),\", \"...(opts.promptCache === true ? { cache_control: { type: \\\"ephemeral\\\" } } : {}),\"),
+    expectFail: \"开启 ⇒ 断点只落在静态段：末个 tool + system 首块（易变的记忆/地图留在断点之后）\",
+  },
+  {
+    id: \"pricing-cache-null-priced-as-zero\",
+    src: \"src/routing/pricing.ts\",
+    test: \"tests/prompt-cache-breakpoints.test.ts\",
+    desc: \"缓存价未标定当成 0（把「不知道多少钱」冒充「命中免费」，bandit 会为了虚假的省钱信号涌向缓存档）\",
+    apply: (s) => s.replace(\"const readRate = p.cacheReadPerMTok ?? p.inputPerMTok;\", \"const readRate = p.cacheReadPerMTok ?? 0;\"),
+    expectFail: \"未标定档位 ⇒ 带缓存分块与不带的成本逐字同值（上界口径，零回归）\",
+  },
+  {
+    id: \"pricing-cache-buckets-unclamped\",
+    src: \"src/routing/pricing.ts\",
+    test: \"tests/prompt-cache-breakpoints.test.ts\",
+    desc: \"分块不夹进总输入区间（对端报数不一致时未命中段变负数，成本能被缓存量抵成负的）\",
+    apply: (s) => s.replace(\"const read = Math.max(0, Math.min(usage.cacheReadInputTokens ?? 0, usage.inputTokens));\", \"const read = Math.max(0, usage.cacheReadInputTokens ?? 0);\"),
+    expectFail: \"分块大于总输入（对端报数不一致）⇒ 夹到区间内，不出现负数输入\",
+  },
+  {
+    id: \"orchestrator-prompt-cache-not-plumbed\",
+    src: \"src/agent/orchestrator.ts\",
+    test: \"tests/prompt-cache-breakpoints.test.ts\",
+    desc: \"路由分支合成模型时不把开关交给分派层（断点逻辑全对，但没有任何调用方能打开它 = 又一次「发货了没人接」）\",
+    apply: (s) => s.replace(\"toWorkerModel(routedSpec, this.opts.promptCache === true ? { promptCache: true } : {})\", \"toWorkerModel(routedSpec)\"),
+    expectFail: \"开 promptCache ⇒ worker 出网的请求体里确有 cache_control（能力真可达，不是纸面开关）\",
+  },
+  // ---- 靶场装配探针（fdc1e7b）----
+  {
+    id: \"probe-all-system-counted-static\",
+    src: \"src/agent/gym/probe.ts\",
+    test: \"tests/gym-probe.test.ts\",
+    desc: \"把全部 system 块都算成可缓存前缀（记忆/地图逐轮变化被当成静态段 → A1 的收益与成本全被高估）\",
+    apply: (s) => s.replace(\"if (!seenSystem) { firstSystemBytes = b; seenSystem = true; } else volatileSystemBytes += b;\", \"firstSystemBytes += b; seenSystem = true;\"),
+    expectFail: \"可缓存 = 首条 system + 工具 schema；易变 system 与历史各归各段\",
+  },
+  {
+    id: \"probe-tool-schema-not-counted\",
+    src: \"src/agent/gym/probe.ts\",
+    test: \"tests/gym-probe.test.ts\",
+    desc: \"装配账里漏掉工具 schema（实测占短任务 prompt 的九成——漏掉它，探针就专门量不到最贵的那一块）\",
+    apply: (s) => s.replace('const toolsJson = tools && tools.length > 0 ? JSON.stringify(tools) : \"\";', 'const toolsJson = \"\";'),
+    expectFail: \"没有工具 ⇒ 工具面 0 字节（可缓存段只剩基础提示）\",
+  },
+  {
+    id: \"probe-delta-sign-reversed\",
+    src: \"src/agent/gym/probe.ts\",
+    test: \"tests/gym-probe.test.ts\",
+    desc: \"装配 A/B 差分前后颠倒（省了报成多花、多花报成省了——这张表就是为这个判断存在的）。针脚要吃到 cacheableBytes 那行才唯一：diffLongReplay 的头两条字段与这里逐字相同。\",
+    apply: (s) => s.replace(
+      \"    totalPromptBytes: after.totalPromptBytes - before.totalPromptBytes,\\n    peakPromptBytes: after.peakPromptBytes - before.peakPromptBytes,\\n    cacheableBytes: after.cacheableBytes - before.cacheableBytes,\",
+      \"    totalPromptBytes: before.totalPromptBytes - after.totalPromptBytes,\\n    peakPromptBytes: before.peakPromptBytes - after.peakPromptBytes,\\n    cacheableBytes: before.cacheableBytes - after.cacheableBytes,\",
+    ),
+    expectFail: \"A/B：只读档工具面更小 ⇒ 可缓存前缀变小（差分表能报出这次装载省了多少）\",
+  },
+  {
+    id: \"probe-long-replay-delta-sign-reversed\",
+    src: \"src/agent/gym/probe.ts\",
+    test: \"tests/gym-long-replay.test.ts\",
+    desc: \"长时程差分的「Δ总 prompt」符号反过来 ⇒ gym-long 印给读者那一列读反。复认针脚歧义时才发现这一支此前**零观察者**：A/B 用例只断言了原始账单（on < off），没读差分字段。\",
+    apply: (s) => s.replace(
+      \"    requests: after.requests - before.requests,\\n    totalPromptBytes: after.totalPromptBytes - before.totalPromptBytes,\",
+      \"    requests: after.requests - before.requests,\\n    totalPromptBytes: before.totalPromptBytes - after.totalPromptBytes,\",
+    ),
+    expectFail: \"摊销开关在同一条链上真省：压缩次数不更多、作废前缀严格更少（A/B 可复跑）\",
+  },
+  {
+    id: \"probe-script-shape-check-removed\",
+    src: \"src/agent/gym/script.ts\", // 2026-09-19 剧本装载随切轮重构搬进 script.ts，锚点同迁
+    test: \"tests/gym-probe.test.ts\",
+    desc: \"剧本出现非模型产出类型时不报错继续跑（装配账照发，但回放的是残缺剧本 = 假数）\",
+    apply: (s) => s.replace(\"else throw new Error(`装配探针剧本只接受\", \"else void (`装配探针剧本只接受\"),
+    expectFail: \"剧本形状不合（非 assistant/tool_call）⇒ 显式抛错，不静默少装\",
+  },
+  {
+    id: \"probe-assembly-not-returned\",
+    src: \"src/agent/gym/runner.ts\",
+    test: \"tests/gym-probe.test.ts\",
+    desc: \"runCase 算出装配账却不带回结果（CLI 与基线永远看不到那一行——探针退化成只有单测能碰的死码）\",
+    apply: (s) => s.replace(\"return probe ? { ...result, assembly: probe.report() } : result;\", \"return result;\"),
+    expectFail: \"runCase 的 probe 档把装配账带出来（CLI 走的就是这条路，不是只测纯函数）\",
+  },
+  {
+    id: \"probe-ranking-drops-separators\",
+    src: \"src/agent/gym/probe.ts\",
+    test: \"tests/gym-probe.test.ts\",
+    desc: \"拆账漏掉数组分隔符（排行相加 ≠ 工具面总字节 → 「砍掉这条省 1710B」算少一截，决策账目不闭合）\",
+    apply: (s) => s.replace(\"        + (i < n - 1 ? 1 : 0), // 与下一项之间的 \\\",\\\"\", \"        + 0, // 与下一项之间的 \\\",\\\"\"),
+    expectFail: \"排行相加恰等于工具 schema 总字节（含括号与逗号，不留结构开销当糊涂账）\",
+  },
+  {
+    id: \"probe-ranking-sort-reversed\",
+    src: \"src/agent/gym/probe.ts\",
+    test: \"tests/gym-probe.test.ts\",
+    desc: \"排行改成升序（CLI 前三名打成最便宜的三条 → 照着表砍错刀）\",
+    apply: (s) => s.replace(\".sort((a, b) => b.bytes - a.bytes);\", \".sort((a, b) => a.bytes - b.bytes);\"),
+    expectFail: \"排行相加恰等于工具 schema 总字节（含括号与逗号，不留结构开销当糊涂账）\",
+  },
+  {
+    id: \"probe-ranking-not-attached\",
+    src: \"src/agent/gym/probe.ts\",
+    test: \"tests/gym-probe.test.ts\",
+    desc: \"报告不带排行（函数正确但没人拿得到 → CLI 那一行永远不打印）\",
+    apply: (s) => s.replace(\"report: () => ({ ...summarizeAssembly(opts.caseId, turns), toolRanking: rankToolSpecs(tools) }),\", \"report: () => summarizeAssembly(opts.caseId, turns),\"),
+    expectFail: \"probe 报告带排行；工具面字节的和 = 可缓存前缀里的工具部分\",
+  },
+  {
+    id: \"prompt-cache-default-flipped-back-off\",
+    src: \"src/main/settings.ts\",
+    test: \"tests/settings.test.ts\",
+    desc: \"缺省翻回 false（2026-09-19 开闸裁决被静默撤销：新用户首启即关，Anthropic 写侧断点整条不上线）\",
+    apply: (s) => s.replace(\"  promptCache: true,\\n\", \"  promptCache: false,\\n\"),
+    expectFail: \"缺省值本身也是开（两处必须同向：DEFAULT_SETTINGS 与读盘回退）\",
+  },
+  {
+    id: \"prompt-cache-reader-loses-fallback\",
+    src: \"src/main/settings.ts\",
+    test: \"tests/settings.test.ts\",
+    desc: \"读法退回 `=== true`（磁盘上已有 settings JSON 的老用户没这个键 → undefined === true 把「缺省开」读成关；DEFAULT_SETTINGS 仍写着 true，只看对象测不出）\",
+    apply: (s) => s.replace(
+      \"    promptCache: typeof r.promptCache === \\\"boolean\\\" ? r.promptCache : d.promptCache,\\n\",
+      \"    promptCache: r.promptCache === true,\\n\",
+    ),
+    expectFail: \"老 JSON（完全没有该键）读回来必须是 true\",
+  },
+  {
+    id: \"gym-round-boundary-never-matches\",
+    src: \"src/agent/gym/script.ts\",
+    test: \"tests/gym-script.test.ts\",
+    desc: \"轮边界判据永不成立（一次请求吐完整条剧本 = 靶场退回单次请求会话，逐轮机制再次没有样本）\",
+    apply: (s) => s.replace(\"    if (script[i].type === \\\"tool_call\\\") {\\n\", \"    if (script[i].type === \\\"never-tool-call\\\") {\\n\"),
+    expectFail: \"一轮 = 文本 + 它那一个 tool_call（tool_call 含在本轮内）\",
+  },
+  {
+    id: \"gym-round-cursor-stalls\",
+    src: \"src/agent/gym/script.ts\",
+    test: \"tests/gym-script.test.ts\",
+    desc: \"轮边界处游标不前进（同一条 tool_call 每轮重吐：模型反复执行同一次写入，事件流与判卷全被污染）\",
+    apply: (s) => s.replace(\"      i += 1; // 这一轮到 tool_call 为止，剩下的下轮再给\\n\", \"      // 游标停在 tool_call 上，不前进\\n\"),
+    expectFail: \"切到剧本跑完不丢条、不重复：逐轮串起来恰等于原剧本\",
+  },
+  {
+    id: \"gym-probe-transport-drains-all\",
+    src: \"src/agent/gym/probe.ts\",
+    test: \"tests/gym-rounds-e2e.test.ts\",
+    desc: \"探针 transport 绕过切源、一次吐完（装配账把 10 轮会话记成 1 次请求，成本面当场少算一个数量级）\",
+    apply: (s) => s.replace(
+      \"    const round = takeRound(script, cursor);\\n    cursor = round.next;\\n    for (const output of round.outputs) yield output;\\n\",
+      \"    while (cursor < script.length) yield script[cursor++];\\n\",
+    ),
+    expectFail: \"probe 档逐轮装配：轮号递增、同一输入下账不变、尾部跑完即空\",
+  },
+  {
+    id: \"pricing-unpriced-audit-always-empty\",
+    src: \"src/routing/pricing.ts\",
+    test: \"tests/prompt-cache-breakpoints.test.ts\",
+    desc: \"占位价审计清单恒空（GLM 三行官方页没抓到数这件事被抹掉 ⇒ 未标定的数被当成实测喂进 bandit 代价项）\",
+    apply: (s) => s.replace(
+      \"  return Object.keys(table).filter((id) => table[id].calibrated !== true).sort();\\n\",
+      \"  return [];\\n\",
+    ),
+    expectFail: \"输入价仍是占位的档位单独可查（GLM 官方页没抓到数 ⇒ 不许当省钱证据）\",
+  },
+  {
+    id: \"pricing-cache-write-bucket-priced-as-zero\",
+    src: \"src/routing/pricing.ts\",
+    test: \"tests/prompt-cache-breakpoints.test.ts\",
+    desc: \"缓存写入段按 0 计（Anthropic 建缓存那一笔实测是输入的 ×1.25，抹成免费 ⇒ 首次请求的成本被系统性低估，路由会被「看起来便宜」的档吸走）\",
+    apply: (s) => s.replace(\"const writeRate = p.cacheWritePerMTok ?? p.inputPerMTok;\", \"const writeRate = p.cacheWritePerMTok ?? 0;\"),
+    expectFail: \"未标定档位 ⇒ 带缓存分块与不带的成本逐字同值（上界口径，零回归）\",
+  },
+  {
+    id: \"impact-query-param-whitelist-removed\",
+    src: \"src/tools/impact-query.ts\",
+    test: \"tests/impact-query.test.ts\",
+    desc: \"参数「恰好给一个」的校验摘掉（两个都给时 file 分支先返回、symbol 被静默忽略；都不给时拿 undefined 去查空图 = 假答案）\",
+    apply: (s) => s.replace(\"      if ((symbol === \\\"\\\") === (fileArg === \\\"\\\")) {\\n\", \"      if (false) {\\n\"),
+    expectFail: \"参数必须恰好一个：两个都给 / 都不给 / 类型不对都显式报错\",
+  },
+  {
+    id: \"impact-query-unknown-symbol-silent\",
+    src: \"src/tools/impact-query.ts\",
+    test: \"tests/impact-query.test.ts\",
+    desc: \"图里没有的符号不再说明原因（改名后的符号会被报成「波及半径为 0」——模型据此判定没人用，直接删掉它）\",
+    apply: (s) => s.replace(\"      if (defined.length === 0 && refSites.length === 0) {\\n\", \"      if (false) {\\n\"),
+    expectFail: \"图里没有的符号：fail-visible 说明原因，不静默返回空\",
+  },
+  {
+    id: \"impact-query-spec-name-drift\",
+    src: \"src/tools/impact-query.ts\",
+    test: \"tests/impact-query.test.ts\",
+    desc: \"模型可见规格与可执行实例改名分叉（模型调 impact_query、工具表只有 impact ⇒ 「执行面有、模型面没有」的原罪复发）\",
+    apply: (s) => s.replace(\"export const impactQuerySpec = {\\n  name: \\\"impact_query\\\",\\n\", \"export const impactQuerySpec = {\\n  name: \\\"impact\\\",\\n\"),
+    expectFail: \"规格与实例一一对应，且名字一致\",
+  },
+  {
+    id: \"impact-query-file-mode-lists-local-symbols\",
+    src: \"src/tools/impact-query.ts\",
+    test: \"tests/impact-query.test.ts\",
+    desc: \"file 模式改回照抄 fileImpact.symbols（局部变量 base/boosted 混进摘要：一屏无关名字，token 白花还不给可执行信息）\",
+    apply: (s) => s.replace(\"        const refSyms = [...new Set(r.up.map((s) => s.symbol))].sort();\\n\", \"        const refSyms = [...r.symbols].sort();\\n\"),
+    expectFail: \"file 模式汇聚该文件全部符号的波及面（只列真被外部引用的符号，不抄局部名）\",
+  },
+
+  // ── 文档预算门 / 耗时账本 / 可判性闸（spec §7；判据全是纯函数，内存字符串进 findings 出）
+  {
+    id: \"docs-budget-comparison-flipped\",
+    src: \"scripts/docs-check.ts\",
+    test: \"tests/docs-check.test.ts\",
+    desc: \"字节预算比较符翻成 >=（恰好踩线的合规文件被判红——本仓自己定过「预算只准调低」，误伤即逼人放宽常量）\",
+    apply: (s) => s.replace(\"if (f.bytes > limit) {\", \"if (f.bytes >= limit) {\"),
+    expectFail: \"恰好等于预算不判红（钉住「严格大于」——比较符翻成 >= 即红在此）\",
+  },
+  {
+    id: \"docs-budget-empty-file-blind\",
+    src: \"scripts/docs-check.ts\",
+    test: \"tests/docs-check.test.ts\",
+    desc: \"去掉空壳分支（0 字节的 AGENTS.md 是「门没了」而不是「瘦到位了」，静默放行等于自我关闭）\",
+    apply: (s) => s.replace(\"} else if (f.bytes === 0) {\", \"} else if (false) {\"),
+    expectFail: \"零字节判红（文件缺失不是合规，是空壳）\",
+  },
+  {
+    id: \"docs-citation-exemption-blind\",
+    src: \"scripts/docs-check.ts\",
+    test: \"tests/docs-check.test.ts\",
+    desc: \"行级豁免标记完全不认（逃生舱失效后人们只会去拆字符串绕判据——theme.ts 的 DARK_QUERY 拆行就是本仓归档过的反面样例）\",
+    apply: (s) => s.replace('if (reason !== \"\") continue;', 'if (reason === \"__never__\") continue;'),
+    expectFail: \"同行带 docs-check:allow + 理由 → 放行\",
+  },
+  {
+    id: \"docs-citation-exemption-file-scope\",
+    src: \"scripts/docs-check.ts\",
+    test: \"tests/docs-check.test.ts\",
+    desc: \"豁免标记从「保所在行」扩成「保整个文件」（一个标记即可让全文件的行号引用逃逸，闸变成装饰）\",
+    apply: (s) => s.replace(\"ALLOW_MARK.exec(line)\", \"ALLOW_MARK.exec(s.text)\"),
+    expectFail: \"豁免标记只保所在行，不豁免整个文件\",
+  },
+  {
+    id: \"docs-citation-exemption-unaudited\",
+    src: \"scripts/docs-check.ts\",
+    test: \"tests/docs-check.test.ts\",
+    desc: \"空理由也算豁免（豁免不可审计 = 与没有豁免等价，只是给了静默放行的口子）\",
+    apply: (s) => s.replace('if (reason !== \"\") continue;', \"continue;\"),
+    expectFail: \"标记后不写理由 → 不豁免（豁免必须可审计）\",
+  },
+  {
+    id: \"docs-state-rev-existence-blind\",
+    src: \"scripts/docs-check.ts\",
+    test: \"tests/docs-check.test.ts\",
+    desc: \"不再校验 rev 指向的提交是否真存在（伪 sha 过关 = 这条判据退化成纯格式检查）\",
+    apply: (s) => s.replace(\"if (!shaExists(sha))\", \"if (false)\"),
+    expectFail: \"rev 指向不存在的提交 → 红（防伪引用，且 detail 带那个 sha）\",
+  },
+  {
+    id: \"docs-waiver-stale-blind\",
+    src: \"scripts/docs-check.ts\",
+    test: \"tests/docs-check.test.ts\",
+    desc: \"不再挑 stale 豁免（水位条目烂在表里没人清 = 违规面只会随时间悄悄变大）\",
+    apply: (s) => s.replace(\"if ((byKey.get(k) ?? []).length === 0) stale.push(k);\", \"if (false) stale.push(k);\"),
+    expectFail: \"水位已不再被命中 → 记 stale（豁免烂掉必须被清，不能静默留着）\",
+  },
+  {
+    id: \"docs-waiver-empty-file-waived\",
+    src: \"scripts/docs-check.ts\",
+    test: \"tests/docs-check.test.ts\",
+    desc: \"空壳 0B 也被水位豁免（水位豁免的是存量违规的量，不是「任何违规免死」）\",
+    apply: (s) => s.replace(\"if (v === 0 || v > wa.upTo)\", \"if (v > wa.upTo)\"),
+    expectFail: \"实测 0B（空壳）不被水位豁免——水位豁免的是存量违规的量，不是免死金牌\",
+  },
+  {
+    id: \"docs-waiver-count-offbyone\",
+    src: \"scripts/docs-check.ts\",
+    test: \"tests/docs-check.test.ts\",
+    desc: \"条数水位的边界挪一格（i > upTo：水位 2 却连第 3 处也放掉，棘轮少咬一条）\",
+    apply: (s) => s.replace(\"if (i >= wa.upTo) kept.push(\", \"if (i > wa.upTo) kept.push(\"),
+    expectFail: \"D-3：水位是**条数**——3 处命中配水位 3 全放，配水位 2 只放行前 2 处\",
+  },
+  {
+    id: \"facts-ring-cap-dropped\",
+    src: \"scripts/facts.ts\",
+    test: \"tests/facts.test.ts\",
+    desc: \"去掉环形上限（账本只增不减，第三份 PROGRESS.md 就是这么长出来的）\",
+    apply: (s) => s.replace(\"runs: runs.slice(Math.max(0, runs.length - cap))\", \"runs: runs\"),
+    expectFail: \"超过上限时丢最旧的那次，保留最近的\",
+  },
+  {
+    id: \"facts-maxms-takes-last-sample\",
+    src: \"scripts/facts.ts\",
+    test: \"tests/facts.test.ts\",
+    desc: \"历史最贵退化成「最近一次的 ms」（最贵那次被最近一次覆盖 → 「砍哪道门省时间」这张表读出来是错的）\",
+    apply: (s) => s.replace(\"maxMs: Math.max(prev?.maxMs ?? 0, g.ms),\", \"maxMs: g.ms,\"),
+    expectFail: \"maxMs 取样本里的最大值——「哪道门最贵」直接可读\",
+  },
+  {
+    id: \"mutate-gates-judge-file-blind\",
+    src: \"scripts/lib/mutate-gates.ts\",
+    test: \"tests/mutate-verify-gates.test.ts\",
+    desc: \"退回「判卷测试文件不在闸内」的旧语义（别人改到一半的 test 会伪装成基线红或变异存活）\",
+    apply: (s) => s.replace('if (info.testState !== \"clean\") {', \"if (false) {\"),
+    expectFail: \"源文件干净、**判卷测试文件在飞** → unverified（不得冒充变异存活或基线红）\",
+  },
+  {
+    id: \"edit-file-hint-indent-branch-removed\",
+    src: \"src/tools/edit_file.ts\",
+    test: \"tests/edit-file-hint.test.ts\",
+    desc: \"缩进判据（首行 trim 后逐字相同）拆掉 ⇒ 最典型的「抄丢缩进」退化成词级 100% 相似度，丢掉唯一可执行的原因（改缩进，不是找别处）\",
+    apply: (s) => s.replace(\"    if (lines[i].trim() === want) {\\n\", \"    if (false) {\\n\"),
+    expectFail: \"缩进抄丢了：直接点出那一行，并说明是缩进问题\",
+  },
+  {
+    id: \"edit-file-hint-token-scan-blind\",
+    src: \"src/tools/edit_file.ts\",
+    test: \"tests/edit-file-hint.test.ts\",
+    desc: \"词级扫描不再记录最优行（best 永远 line=-1）⇒ 记错变量名这类 0 匹配回到「重读整个文件再猜」的三轮老路\",
+    apply: (s) => s.replace(\"    if (score > best.score) best = { line: i + 1, score, text: trimmed };\\n\", \"    if (false) best = { line: i + 1, score, text: trimmed };\\n\"),
+    expectFail: \"变量名记错（靶场长 case 的真实形态）：给出行号 + 原文 + 相似度\",
+  },
+  {
+    id: \"edit-file-hint-threshold-zero\",
+    src: \"src/tools/edit_file.ts\",
+    test: \"tests/edit-file-hint.test.ts\",
+    desc: \"相似度阈值 0.5 放到 0（只重合一个词的无关行也算「像」）⇒ 假定位把模型引去改完全不相干的一行，比不给提示更坏\",
+    apply: (s) => s.replace(\"  if (best.score < 0.5 || best.line < 0) return \\\"\\\";\\n\", \"  if (best.line < 0) return \\\"\\\";\\n\"),
+    expectFail: \"只重合四分一不算像（阈值 0.5 是硬闸）：不给提示\",
+  },
+  {
+    id: \"edit-file-hint-long-line-unbounded\",
+    src: \"src/tools/edit_file.ts\",
+    test: \"tests/edit-file-hint.test.ts\",
+    desc: \"命中行 120 字符截断拆掉（整行原文塞进报错）⇒ 失败路径反而成了最大的 token 泄漏面，与「消耗 token 最少」直接冲突\",
+    apply: (s) => s.replace(\"  const shown = best.text.length > 120 ? best.text.slice(0, 120) + \\\"…\\\" : best.text;\\n\", \"  const shown = best.text;\\n\"),
+    expectFail: \"命中超长行时只抄 120 字符（截断带省略号，整条报错仍有界）\",
+  },
+  {
+    id: \"loop-repeat-nudge-note-dropped\",
+    src: \"src/agent/loop.ts\",
+    test: \"tests/loop-repeat-nudge.test.ts\",
+    desc: \"检测照跑、提示却没落进 tool_result（模型看到的仍是裸错误 ⇒ 换路压力为零，重复照旧烧到 maxSteps）\",
+    apply: (s) => s.replace(\"output: redactSecrets(result.output + postContext + repeatNote).text,\", \"output: redactSecrets(result.output + postContext).text,\"),
+    expectFail: \"同一调用连败 3 次：提示挂在那条 tool_result 尾部，前两次一字不加\",
+  },
+  {
+    id: \"loop-repeat-nudge-defaults-on\",
+    src: \"src/agent/loop.ts\",
+    test: \"tests/loop-repeat-nudge.test.ts\",
+    desc: \"退回「不开也提示」：worker 的 tool_result 被追加尾注 ⇒ 看门比较的观察串从 ×4 相同被打散成 ×3+1 ⇒ orchestrator 卡死永不触发（m3c 实测形态），靶场按字节推的用量也被扰动\",
+    apply: (s) => s.replace(\"      if (opts.stuckNudge === true) {\\n\", \"      if (true) {\\n\"),
+    expectFail: \"缺省不开：worker / 靶场 / sidechat 那三条路径的事件流一字不动\",
+  },
+  {
+    id: \"loop-repeat-nudge-nags-every-repeat\",
+    src: \"src/agent/loop.ts\",
+    test: \"tests/loop-repeat-nudge.test.ts\",
+    desc: \"提示帽摘掉（每次重复都叠一句）⇒ 第 5、6 次重复各多一份同一句话，提示自己变成 token 泄漏面\",
+    apply: (s) => s.replace(\"        if (verdict.stuck && !nudgedActions.has(action)) {\\n\", \"        if (verdict.stuck) {\\n\"),
+    expectFail: \"每个 rule+action 只提示一次（第 4、5 次重复不再叠同一句话）\",
+  },
+  {
+    id: \"loop-repeat-nudge-never-rearms\",
+    src: \"src/agent/loop.ts\",
+    test: \"tests/loop-repeat-nudge.test.ts\",
+    desc: \"换动作时不解除提示帽 ⇒ 一个 run 里第一次被忽略后就永远叫不醒（第二段同样的连败拿不到提示）\",
+    apply: (s) => s.replace(\"        if (lastTurn !== undefined && lastTurn.action !== action) nudgedActions.delete(lastTurn.action);\\n\", \"        if (false) nudgedActions.delete(lastTurn.action);\\n\"),
+    expectFail: \"换过动作再回到同一调用 ⇒ 重复段重新计，会再提示一次（不是一 run 只提示一次）\",
+  },
+  {
+    id: \"docs-obs-spec-exempt-blind\",
+    src: \"scripts/docs-check.ts\",
+    test: \"tests/docs-check.test.ts\",
+    desc: \"规格值免检整条摘掉（≤1000ms 这类**契约**被判成手抄观测值 ⇒ 人们只好去改判据，判卷纪律最忌的那一步）\",
+    apply: (s) => s.replace(\"if (SPEC_CONTEXT.test(line)) continue;\", \"if (false) continue;\"),
+    expectFail: \"带比较符的规格阈值放行（≤1000ms 是契约不是观测）\",
+  },
+  {
+    id: \"docs-obs-scope-widened\",
+    src: \"scripts/docs-check.ts\",
+    test: \"tests/docs-check.test.ts\",
+    desc: \"D-2 适用面从「现行层五页」扩到所有页（archive 与 dated spec 里的历史观测值被追溯判红 ⇒ 门变成不可满足，等价于关掉）\",
+    apply: (s) => s.replace(
+      \"if (!LIVE_PAGES.includes(p.path)) continue; // archive/、dated specs/、源码不受这条管\",
+      \"if (false) continue; // archive/、dated specs/、源码不受这条管\",
+    ),
+    expectFail: \"只有受管现行页参与判定：archive/ 与 specs/ 与源码都不判\",
+  },
+  {
+    id: \"docs-appendnote-scope-widened\",
+    src: \"scripts/docs-check.ts\",
+    test: \"tests/docs-check.test.ts\",
+    desc: \"D-4 的档案层放行被摘（archive 就是「当日快照不得改写」这类话的唯一归宿，判红等于禁止留历史）\",
+    apply: (s) => s.replace(
+      \"if (!LIVE_PAGES.includes(p.path)) continue; // 档案层就是这类字的归宿\",
+      \"if (false) continue; // 档案层就是这类字的归宿\",
+    ),
+    expectFail: \"档案层正是这类字的归宿，不判红\",
+  },
+  {
+    id: \"docs-appendnote-wordlist-as-any-digit\",
+    src: \"scripts/docs-check.ts\",
+    test: \"tests/docs-check.test.ts\",
+    desc: \"追注词表退化成「含数字即追注」（带日期的正常裁决句被判红，误伤一次就会有人整条关掉 D-4）\",
+    apply: (s) => s.replace(\"const APPEND_CORRECTION = /上面那句|\", \"const APPEND_CORRECTION = /\\\\d|上面那句|\"),
+    expectFail: \"普通叙述不误伤（带日期不等于追注）\",
+  },
+  {
+    id: \"docs-shots-count-collapsed\",
+    src: \"scripts/docs-check.ts\",
+    test: \"tests/docs-check.test.ts\",
+    desc: \"图片数退化成恒 1（水位 25 变成永远咬不到的摆设，docs/ 可无限塞二进制）\",
+    apply: (s) => s.replace(\"    value: hits.length,\", \"    value: 1,\"),
+    expectFail: \"聚合成一条 finding，value = 文件数\",
+  },
+  {
+    id: \"write-delta-steer-removed\",
+    src: \"src/tools/write_file.ts\",
+    test: \"tests/write-line-delta.test.ts\",
+    desc: \"行数照算但「整份重写只动几行」的提示摘掉 ⇒ 模型下一次照样整文件重抄，改动范围最小成了没有回执的口号\",
+    apply: (s) => s.replace(\"            ? `｜提示：这是对已有 ${oldCount} 行文件的整份重写，实际只动 ${d.added + d.removed} 行——同类改动用 edit_file 更省 output，也不会漏抄未改的行。`\\n\", \"            ? \\\"\\\"\\n\"),
+    expectFail: \"整份重写 60 行文件只动 1 行 ⇒ 报数并提示改用 edit_file\",
+  },
+  {
+    id: \"write-delta-large-file-claims-new\",
+    src: \"src/tools/write_file.ts\",
+    test: \"tests/write-line-delta.test.ts\",
+    desc: \"大到不值得读的既有文件也去读（或统计失败时按 0 行处理）⇒ 把「不知道」报成「新建」，覆盖掉整个旧文件却显示新建\",
+    apply: (s) => s.replace(\"      oldText = st.size <= DELTA_READ_LIMIT_BYTES ? await readFile(abs, \\\"utf8\\\") : null;\\n\", \"      oldText = await readFile(abs, \\\"utf8\\\");\\n\"),
+    expectFail: \"既有文件大到不统计时，退回旧口径而不是假装是新建（不拿「不知道」当「新建」）\",
+  },
+  {
+    id: \"line-delta-trailing-newline-counted\",
+    src: \"src/tools/line-delta.ts\",
+    test: \"tests/line-delta.test.ts\",
+    desc: \"结尾换行不再剥掉 ⇒ 每个正常文件凭空多一行，纯换行符差异也报 +1/−1，行数与编辑器显示不一致\",
+    apply: (s) => s.replace(\"  if (arr[arr.length - 1] === \\\"\\\") arr.pop();\\n\", \"\"),
+    expectFail: \"空串是 0 行；结尾换行不额外算一行\",
+  },
+  {
+    id: \"line-delta-set-not-multiset\",
+    src: \"src/tools/line-delta.ts\",
+    test: \"tests/line-delta.test.ts\",
+    desc: \"匹配到就把该行的计数清零（按集合而非多重集）⇒ 重复行删掉两行只报 −0，「丢代码」的信号被吞\",
+    apply: (s) => s.replace(\"    if (c > 0) counts.set(l, c - 1);\\n\", \"    if (c > 0) counts.set(l, 0);\\n\"),
+    expectFail: \"重复行按多重集算，不按集合（三行相同删掉两行要报 −2）\",
+  },
+  {
+    id: \"line-delta-near-copy-size-floor-removed\",
+    src: \"src/tools/line-delta.ts\",
+    test: \"tests/line-delta.test.ts\",
+    desc: \"去掉 40 行下界 ⇒ 三五行的文件也被告知「该用 edit_file」，提示密度变噪声\",
+    apply: (s) => s.replace(\"  return oldLineCount >= 40 && changedLineCount <= oldLineCount * 0.1;\\n\", \"  return changedLineCount <= oldLineCount * 0.1;\\n\"),
+    expectFail: \"39 行的小文件即使只动 1 行也不提示（重写与补丁的成本差可忽略，提示只是噪声）\",
+  },
+  {
+    id: \"line-delta-near-copy-ratio-never-fires\",
+    src: \"src/tools/line-delta.ts\",
+    test: \"tests/write-line-delta.test.ts\",
+    desc: \"改动占比阈值放到 100% ⇒ 纯改写（60 行动 30 行）也提示「该用 edit_file」，把模型推向更坏的路径\",
+    apply: (s) => s.replace(\"  return oldLineCount >= 40 && changedLineCount <= oldLineCount * 0.1;\\n\", \"  return oldLineCount >= 40;\\n\"),
+    expectFail: \"整份重写确实动了 30 行 ⇒ 不提示（真改写不该被劝去用补丁）\",
+  },
+  {
+    id: \"edit-file-delta-hardcoded-zero\",
+    src: \"src/tools/edit_file.ts\",
+    test: \"tests/write-line-delta.test.ts\",
+    desc: \"edit_file 的行增减写死 0（处数留着、行数假报）⇒ 「一个补丁实际改了 8 行」重新变得看不见\",
+    apply: (s) => s.replace(\"    const d = lineDelta(content, updated);\\n\", \"    const d = { added: 0, removed: 0 };\\n\"),
+    expectFail: \"edit_file 的成功输出带行增减（处数说不了动了多少行）\",
+  },
+  {
+    id: \"worker-impact-spec-not-appended\",
+    src: \"src/agent/worker-shell-tools.ts\",
+    test: \"tests/worker-impact-query.test.ts\",
+    desc: \"worker 规格面不再追加 impact_query（执行表里有、模型看不到 ⇒ 又是一次「能力已发货、模型面不可见」，本仓第 4 例）\",
+    apply: (s) => s.replace(\"  const extras: GlmToolSpec[] = opts.impactAnalysis === true\\n\", \"  const extras: GlmToolSpec[] = false\\n\"),
+    expectFail: \"read 档：开关开启时规格与实例同名同时出现，白名单同步\",
+  },
+  {
+    id: \"worker-impact-instance-not-attached\",
+    src: \"src/agent/worker-tool-table.ts\",
+    test: \"tests/worker-impact-query.test.ts\",
+    desc: \"只挂规格不挂实例（模型调了就 unknown tool；反向的两头断同样致命）\",
+    apply: (s) => s.replace(\"  if (opts.impactAnalysis === true) {\\n\", \"  if (false) {\\n\"),
+    expectFail: \"开关开启时执行面真的挂着 impact_query 实例（不是只有规格——「模型看得见、一调就 unknown tool」）\",
+  },
+  {
+    id: \"worker-impact-whitelist-not-appended\",
+    src: \"src/agent/orchestrator-config.ts\",
+    test: \"tests/worker-impact-query.test.ts\",
+    desc: \"白名单忘了追加（规格与实例都挂上了，却被 loop 的 allowedTools 硬闸摘掉 ⇒ 模型一调就「不在本会话工具表」——三重闸各自为政）\",
+    apply: (s) => s.replace(\"  return impactAnalysis ? [...base, WORKER_IMPACT_TOOL] : base;\\n\", \"  return base;\\n\"),
+    expectFail: \"read 档：开关开启时规格与实例同名同时出现，白名单同步\",
+  },
+  {
+    id: \"base-system-test-first-rule-removed\",
+    src: \"src/main/agent-runner.ts\",
+    test: \"tests/base-system-discipline.test.ts\",
+    desc: \"「先写复现测试跑到红」这条纪律被删（提示词回到「改完就说修好了」，能力 5 最关键那条失去唯一的字面抓手）\",
+    apply: (s) => s.replace(\"  \\\"4) 修 bug 先写一条能复现它的测试并跑到红，再改代码到绿；没有红过的复现就不要宣称已修复；\\\",\\n\", \"\"),
+    expectFail: \"先红后绿写进纪律：修 bug 必须先有跑到红的复现，没红过不得宣称修好（能力 5 的正面）\",
+  },
+  {
+    id: \"base-system-patch-first-rule-removed\",
+    src: \"src/main/agent-runner.ts\",
+    test: \"tests/base-system-discipline.test.ts\",
+    desc: \"「改已有文件用 edit_file 打补丁」被删 ⇒ 模型继续整文件重抄（write_file 的行数提示只在事后，事前预防更省一轮）\",
+    apply: (s) => s.replace(\"  \\\"3) 改已有文件用 edit_file 打补丁，write_file 只用于新建文件（整份重抄既费 output 又容易漏抄未改的行）；\\\",\\n\", \"\"),
+    expectFail: \"补丁优先写进纪律：改已有文件用 edit_file，write_file 只用于新建（能力 2「补丁级 diff」）\",
+  },
+  {
+    id: \"base-system-judging-file-conflict-restored\",
+    src: \"src/main/agent-runner.ts\",
+    test: \"tests/base-system-discipline.test.ts\",
+    desc: \"去掉「第 4 条是新增用例，不是改判卷面」的消歧 ⇒ 两条纪律互相矛盾，模型只能二选一（要么不写复现，要么去改判卷文件）\",
+    apply: (s) => s.replace(\"  \\\"6) 只改任务需要的文件；既有测试与判卷文件不得改写（第 4 条是**新增**用例，不是改判卷面）。\\\",\\n\", \"  \\\"6) 只改任务需要的文件，不改测试与判卷文件。\\\",\\n\"),
+    expectFail: \"两条纪律不互斥：明确「第 4 条是新增用例，不是改判卷文件」\",
+  },
+  {
+    id: \"impact-query-deps-mode-ignored\",
+    src: \"src/tools/impact-query.ts\",
+    test: \"tests/impact-query.test.ts\",
+    desc: \"deps 分支不进入（参数收了、规格也写了，结果仍只给「谁在调用我」⇒ 反向依赖理解重新变成够不着的能力）\",
+    apply: (s) => s.replace(\"        if (wantDeps) {\\n\", \"        if (false) {\\n\"),
+    expectFail: \"deps 模式列本文件引用的外部定义（我在调用谁），自身文件内的定义不算\",
+  },
+  {
+    id: \"impact-query-deps-combination-unguarded\",
+    src: \"src/tools/impact-query.ts\",
+    test: \"tests/impact-query.test.ts\",
+    desc: \"deps 配 symbol 时不再报错（被静默忽略 ⇒ 模型以为拿到了依赖清单，实际拿到的是波及清单）\",
+    apply: (s) => s.replace(\"      if (wantDeps && fileArg === \\\"\\\") {\\n\", \"      if (false) {\\n\"),
+    expectFail: \"deps 只能配 file：配 symbol 或裸给都显式报错（不静默忽略）\",
+  },
+  {
+    id: \"impact-query-deps-noun-leaks-into-up\",
+    src: \"src/tools/impact-query.ts\",
+    test: \"tests/impact-query.test.ts\",
+    desc: \"up 方向改用语义标签（措辞串门）⇒ 不带 deps 的既有调用输出不再逐字不变，「谁在调用我」被说成「我在调用谁」\",
+    apply: (s) => s.replace(\"        return { ok: true, output: sitesNote(head, r.up) };\\n\", \"        return { ok: true, output: sitesNote(head, r.up, DEP_NOUN) };\\n\"),
+    expectFail: \"不带 deps 时 file 模式输出逐字不变（新增方向不得改动既有字节）\",
+  },
+  {
+    id: \"impact-query-deps-ghost-file-silent\",
+    src: \"src/tools/impact-query.ts\",
+    test: \"tests/impact-query.test.ts\",
+    desc: \"deps 分支不查图内成员（路径写错/后缀不支持时报「依赖面为 0」）⇒ 模型把「没扫到」读成「这个文件不依赖任何东西」\",
+    apply: (s) => s.replace(\"          if (!graph.files.includes(rel)) return { ok: false, output: await notInGraphNote(ctx.workspace, rel, abs, maxFiles) };\\n\", \"\"),
+    expectFail: \"deps 模式下不在图内的文件仍然 fail-visible\",
+  },
+  {
+    id: \"shell-tail-transition-remainder-lost\",
+    src: \"src/tools/output-ring.ts\",
+    test: \"tests/shell-tail.test.ts\",
+    desc: \"溢出发生在单个 chunk 内部时不喂尾环（子进程一次吐完 60KB 是常态）⇒ 「保留了结尾」变成假话，尾部结论仍被丢\",
+    apply: (s) => s.replace(\"        tail = tailWithin(out.slice(head.length), tailBudget);\\n\", \"        tail = \\\"\\\";\\n\"),
+    expectFail: \"超上限时头部与**结尾**都在（旧实现于源头丢掉了 32KB 之后的一切）\",
+  },
+  {
+    id: \"shell-tail-assembly-drops-tail\",
+    src: \"src/tools/output-ring.ts\",
+    test: \"tests/shell-tail.test.ts\",
+    desc: \"尾环算好了却在拼装时没接上（模型看到的仍是纯头部）\",
+    // 第 246 页改指：ff0dc7b（web_fetch）把拼装重排成 hint 局部名 + middleTruncationNotice 的形状，
+    // 旧搜索串（MIDDLE_TRUNCATION_HINT 直拼）在源里已绝迹；只动搜索串与替换值，变异语义不变（尾环没接上）。
+    apply: (s) => s.replace(' + \"\\\\n\" + hint + \"\\\\n\" + tail', ' + \"\\\\n\" + hint'),
+    expectFail: \"超上限时头部与**结尾**都在（旧实现于源头丢掉了 32KB 之后的一切）\",
+  },
+  {
+    id: \"shell-tail-omitted-count-lies\",
+    src: \"src/tools/output-ring.ts\",
+    test: \"tests/shell-tail.test.ts\",
+    desc: \"省略字节数写死 0（提示说「什么都没省」）⇒ 模型据此认为看到的就是全部输出\",
+    apply: (s) => s.replace(\"middleTruncationNotice(seen - bytesOf(head) - bytesOf(tail))\", \"middleTruncationNotice(0)\"),
+    expectFail: \"省略字节数如实报出：省略量 + 保留量 = 实际总输出\",
+  },
+  {
+    id: \"shell-tail-notice-reserve-removed\",
+    src: \"src/tools/output-ring.ts\",
+    test: \"tests/tools.test.ts\",
+    desc: \"取消提示行的预算预留 ⇒ 提示自己把「输出 ≤ 32KB」撑破（中文提示一行就 ~150B）\",
+    apply: (s) => s.replace(\"const keepBytes = limitBytes - NOTICE_RESERVE_BYTES;\", \"const keepBytes = limitBytes;\"),
+    expectFail: \"超限：输出超过 32KB 截断并附一行提示\",
+  },
+  {
+    id: \"grep-context-cap-removed\",
+    src: \"src/tools/grep.ts\",
+    test: \"tests/grep-context.test.ts\",
+    desc: \"取消上下文档位帽 ⇒ 一句 context=99 就能把整份文件灌进上下文（预算先到先得，后面的调用点全看不见）\",
+    apply: (s) => s.replace(\"Math.min(CONTEXT_MAX, contextRaw)\", \"Number(contextRaw)\"),
+    expectFail: \"上下文帽到 5 行：context=99 也只各带 5 行（宽档位不许把预算吃光）\",
+  },
+  {
+    id: \"grep-context-lines-eat-hit-budget\",
+    src: \"src/tools/grep.ts\",
+    test: \"tests/grep-context.test.ts\",
+    desc: \"命中帽按「行」而非按「命中」计 ⇒ context=5 时可检索命中数被砍到 1/6，模型以为仓库里只有这几处\",
+    apply: (s) => s.replace(\"if (!m.ctx) {\\n      hits++;\", \"if (true) {\\n      hits++;\"),
+    expectFail: \"邻行不占命中额：130 条命中 + context=1 仍列满 100 条，截断走旧口径而非预算\",
+  },
+  {
+    id: \"grep-context-marker-collides-hit\",
+    src: \"src/tools/grep.ts\",
+    test: \"tests/grep-context.test.ts\",
+    desc: \"邻行前缀去掉缩进 ⇒ 与命中行难以分辨，模型把邻行抄进 old_string 后 not-found 白跑一轮\",
+    apply: (s) => s.replace('? \"  \" + String(m.line) + \" | \"', '? String(m.line) + \" | \"'),
+    expectFail: \"context=1 带回前后各一行，且命中行与邻行前缀可分辨（拼 old_string 不会拿错行）\",
+  },
+  {
+    id: \"grep-always-emits-context\",
+    src: \"src/tools/grep.ts\",
+    test: \"tests/grep-context.test.ts\",
+    desc: \"缺省就带邻行 ⇒ 既有查询输出全体膨胀（「缺省 = 零行为」这条被破）\",
+    apply: (s) => s.replace('...(context > 0 ? [\"-C\", String(context)] : []),', '...([\"-C\", \"1\"] as string[]),'),
+    expectFail: \"缺省不带上下文：输出形态与旧口径逐字一致（零回归）\",
+  },
+  {
+    id: \"grep-fixed-flag-dropped\",
+    src: \"src/tools/grep.ts\",
+    test: \"tests/grep-context.test.ts\",
+    desc: \"接了参数却不传 -F ⇒ fixed_strings 成为空转，模型以为收窄了其实没收窄\",
+    apply: (s) => s.replace('...(fixed ? [\"-F\"] : []),', \"...(fixed ? [] : []),\"),
+    expectFail: \"fixed_strings=true 按字面串匹配：正则模式会把 a.b 曲解成多命中（假阳性且不报错）\",
+  },
+  {
+    id: \"grep-budget-omitted-count-lies\",
+    src: \"src/tools/grep.ts\",
+    test: \"tests/grep-context.test.ts\",
+    desc: \"预算截断时不报未列出条数 ⇒ 模型以为已经看全所有调用点，直接开始改\",
+    apply: (s) => s.replace(\"还有 ${String(r.omittedHits)} 条命中未列出\", \"有命中未列出\"),
+    expectFail: \"上下文预算兜住宽查询：超 8KB 即止并报出未列出条数（不静默半路断）\",
+  },
+  {
+    id: \"verify-output-cap-removed\",
+    src: \"src/agent/verify.ts\",
+    test: \"tests/verify.test.ts\",
+    desc: \"验证门不接环（无上限）⇒ 一次失败的测试跑把整段日志原样灌进同轮上下文，token 账单按套件规模长\",
+    apply: (s) => s.replace(\"const ring = createOutputRing(OUTPUT_LIMIT);\", \"const ring = createOutputRing(Number.MAX_SAFE_INTEGER);\"),
+    expectFail: \"超 32KB 的失败输出：头尾都在，尾部结论进了 failureDigest\",
+  },
+  {
+    id: \"ring-always-treats-as-overflow\",
+    src: \"src/tools/output-ring.ts\",
+    test: \"tests/output-ring.test.ts\",
+    desc: \"溢出判定形同恒真 ⇒ 每一条正常输出都被拼上截断提示（「未溢出逐字不变」这条零回归承诺被破）\",
+    apply: (s) => s.replace(\"if (outBytes > limitBytes) {\", \"if (outBytes >= 0) {\"),
+    expectFail: \"未溢出：逐字全文，一行提示都不加（零回归面）\",
+  },
+  {
+    id: \"ring-tail-window-unbounded\",
+    src: \"src/tools/output-ring.ts\",
+    test: \"tests/output-ring.test.ts\",
+    desc: \"尾环不设窗口 ⇒ 长输出把预算一路撑大（超限截断等于没截），上下文被一次 shell/verify 灌满。\" +
+      \"窗口现在住在**两处**（单次大块写入的缝合处 + 稳态每块），只废一支另一支仍在 ⇒ 一次废两支\",
+    apply: (s) => s
+      .replace(\"        tail = tailWithin(out.slice(head.length), tailBudget);\", \"        tail = out.slice(head.length);\")
+      .replace(\"    tail = tailWithin(tail + s, tailBudget);\", \"    tail = tail + s;\"),
+    expectFail: \"总输出含提示行也不超上限（提示自己占位，否则「≤ 32KB」这句承诺被提示撑破）\",
+  },
+  {
+    id: \"verify-repeat-never-detected\",
+    src: \"src/agent/loop.ts\",
+    test: \"tests/verify.test.ts\",
+    desc: \"去重的相等判定被摘掉 ⇒ 每一拍都重发整段失败日志（省 token 这件事根本没发生）\",
+    apply: (s) => s.replace(\"const repeat = digest === lastVerifyDigest;\", \"const repeat = false;\"),
+    expectFail: \"第 2 拍与第 1 拍逐字相同：改注一行提示，不重发失败正文\",
+  },
+  {
+    id: \"verify-repeat-note-appends-digest\",
+    src: \"src/agent/loop.ts\",
+    test: \"tests/verify.test.ts\",
+    desc: \"提示行照发、整段摘要还是跟在后面 ⇒ 文案说「不再重复注入」而实现仍然注入（比值断言当场红）\",
+    apply: (s) => s.replace(\"repeat ? repeatDigestNote(outcome, attempt) : digest\", \"repeat ? repeatDigestNote(outcome, attempt) + digest : digest\"),
+    expectFail: \"省下的量可测：32KB 级的相同失败摘要，第二拍注入字节 < 第一拍的 1/10\",
+  },
+  {
+    id: \"verify-repeat-compares-first-line-only\",
+    src: \"src/agent/loop.ts\",
+    test: \"tests/verify.test.ts\",
+    desc: \"按首行（=命令名）判重 ⇒ 命令没变就被当成「结果没变」，后续真正不同的错误输出被误判为重复而永不注入\",
+    apply: (s) => s.replace(
+      \"const repeat = digest === lastVerifyDigest;\",
+      'const repeat = digest.split(\"\\\\n\")[0] === (lastVerifyDigest ?? \"\").split(\"\\\\n\")[0];',
+    ),
+    expectFail: \"第 3 拍输出变了 ⇒ 全文照常注入（去重不是「只注入一次」）\",
+  },
+  {
+    id: \"verify-repeat-note-loses-command-list\",
+    src: \"src/agent/verify.ts\",
+    test: \"tests/verify.test.ts\",
+    desc: \"提示里不写是哪些命令没变 ⇒ 「没新信息」变成一句无法据以行动的空话\",
+    apply: (s) => s.replace('(cmds === \"\" ? \"（无）\" : cmds)', '\"（略）\"'),
+    expectFail: \"第 2 拍与第 1 拍逐字相同：改注一行提示，不重发失败正文\",
+  },
+  {
+    id: \"probe-go-branch-removed\",
+    src: \"src/agent/verify.ts\",
+    test: \"tests/verify-probe.test.ts\",
+    desc: \"摘掉 go.mod 一档 ⇒ Go 仓库又回到「未找到 verify 配置」，闭环照旧是死的\",
+    apply: (s) => s.replace('  if (g !== null) return [\"go test ./...\"];\\n', \"\"),
+    expectFail: \"go.mod → go test ./...\",
+  },
+  {
+    id: \"probe-make-target-not-anchored\",
+    src: \"src/agent/verify.ts\",
+    test: \"tests/verify-probe.test.ts\",
+    desc: \"test: 判定丢掉行首锚 ⇒ Makefile 里一句注释「run test: pytest」就凭空造出验证面（跑不存在的目标）\",
+    apply: (s) => s.replace(\"/^test[ \\\\t]*:/m\", \"/test[ \\\\t]*:/m\"),
+    expectFail: \"注释里写着「test:」不算目标（判定锚在行首，否则一句说明就凭空造出验证面）\",
+  },
+  {
+    id: \"probe-invents-lint-commands\",
+    src: \"src/agent/verify.ts\",
+    test: \"tests/verify-probe.test.ts\",
+    desc: \"把探到的测试命令同时当 lint 用 ⇒ action-fusion 会拿「风格未整理」把干净改动报成失败\",
+    apply: (s) => s.replace(\"if (lang.length > 0) return { config: { test: l...
+
+[36m [2m❯[22m tests/mutate-verify-gates.test.ts:[2m1894:20[22m[39m
+    [90m1892|[39m     expect(script).toMatch(/^ {2}const wiringRows = auditPointerWiring…
+    [90m1893|[39m     expect(script, "喂空表＝这一格永远数出 0（第 165 页那条同款锚点钉的就是这个形状）").not.toMatch…
+    [90m1894|[39m     expect(script).toMatch(/^ {2}console\.log\(`ℹ️  指针接线/u);
+    [90m   |[39m                    [31m^[39m
+    [90m1895|[39m     expect(script, "存活那条红不接 hint ⇒ 只有全局计数，没人在花了两拍判卷之后给出方向").toMatch(/"…
+    [90m1896|[39m     expect(script).toMatch(/^function wiringHint\(m\) \{/mu);
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m4 failed[39m[22m[2m | [22m[1m[32m153 passed[39m[22m[90m (157)[39m
+[2m   Start at [22m 02:01:12
+[2m   Duration [22m 14.74s[2m (tests 99%, transform 1%)[22m
+

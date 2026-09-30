@@ -679,6 +679,111 @@ export function looseOnlyPointers(
   return out;
 }
 
+/* ── 指针接线那一格（第 260 页，任务 #6）：`expectFail` 指到的那条用例，**用不用被变异的那个符号**？
+ *    立这一格的理由是规则 325 记过的一次真事故：`cert-tree-abs-args-swapped` 的指针指向同文件里一条
+ *    根本不调 `certTreeAbs` 的 canonical 用例 ⇒ 秒级尺（`killer 指针失效 0`）全绿，只有整表实跑 6.58s 后
+ *    才现出"这一条存活"。那一格今天**没有观测者**：`auditExpectFails` 只答"标题解析得出"，答不出"指向会红的那条"。
+ *    这里的判据是静态近似（不是替代实跑）：needle 所在函数名 ⇒ 该符号是否出现在那条用例体内。
+ *    三态齐印（规则 239/261）：`wired`／`suspect`／判不了（`no-symbol`＝取不到包围函数，如表里的数据条目；
+ *    `unreadable`＝两头任一面读不到；`no-needle`＝needle 不源文件里）。判不了**不算可疑**——
+ *    把"我没看见"报成"它没守"就是这一族要消灭的那件事。 */
+
+export interface WiringEntry {
+  id: string;
+  /** 被变异的源文件（相对仓根）。 */
+  srcRel: string;
+  /** 从 `apply` 闭包里取回的针脚原文；null＝这条抽不出针脚（由 `auditNeedles` 那格管，这里只算判不了）。 */
+  needle: string | null;
+  test: string;
+  expectFail: string;
+}
+
+export type WiringKind = "wired" | "suspect" | "no-symbol" | "no-needle" | "unreadable" | "no-title";
+
+export interface WiringResult {
+  kind: WiringKind;
+  /** 取到的包围函数名（`no-symbol` 时为 null）。 */
+  symbol: string | null;
+}
+
+/** 从 needle 的位置往上找**最近的**声明名：`function NAME` / `const NAME = ( … )` / `const NAME: T = (` / 类方法 `NAME(…) {`。
+ *  都不匹配回 null。注意只看needle 之前的文字——函数**调用点**在文件后半段不影响，这里要的是"这段代码长在谁身上"。 */
+export function enclosingSymbol(srcText: string, needleIndex: number): string | null {
+  // 含**needle 自己那一行**：needle 就写在声明行上时（`export function certTreeAbs(…)` 这种整行针脚），
+  // 只切到 needle 起点会把声明行切掉 ⇒ 取到的是上一条函数（本仓第 260 页的探针实测取成 `mainRootFromCommonDir`，
+  // 两态证人当场把它逮住了）。
+  const lineEnd = srcText.indexOf("\n", needleIndex);
+  const before = srcText.slice(0, lineEnd < 0 ? srcText.length : lineEnd).split("\n");
+  for (let i = before.length - 1; i >= 0; i -= 1) {
+    const line = before[i] ?? "";
+    const fn = /^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)/u.exec(line);
+    if (fn !== null) return fn[1] ?? null;
+    // 变量声明：看**等号右边的形状**判它是不是函数。不写成"跳过类型再匹 `=`"，因为带类型的箭头常量
+    // （`const d: (a: string) => string = (a) => a;`）的类型里就含 `=>`，那种正则会被它打断。
+    const decl = /^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*[:=](.*)$/u.exec(line);
+    if (decl !== null) {
+      const rest = decl[2] ?? "";
+      if (/=>|\bfunction\b|\basync\s*\(/u.test(rest)) return decl[1] ?? null;
+      // 只有**列 0** 的数据声明才是边界（一张表、一个常量）；函数体内部的局部变量不是——
+      // 把它当边界会让 needle 明明在函数里也报「判不了」（本仓第 260 页判卷当场抓到这一格：`const m = /…/.exec(line)`）。
+      if (/^\S/u.test(line)) return null;
+      continue;
+    }
+    const method = /^\s{2,6}(?:static\s+|private\s+|protected\s+|readonly\s+|async\s+)*([A-Za-z0-9_$]+)\s*\([^)]*\)(?:\s*:\s*[^{]+)?\s*\{/u.exec(line);
+    if (method !== null) return method[1] ?? null;
+    // 顶到列 0 的其它行（`}`、`class X {`、顶格注释…）＝出了函数体的边界：判不了，别继续往上漂。
+    if (/^\S/u.test(line)) return null;
+  }
+  return null;
+}
+
+/** 取那条用例的体：从 `expectFail` 命中处往后，到下一个「缩进两空格的 `});`」为止。
+ *  标题若命中的是 `describe`（结构钉型判卷就长这样），这一段会覆盖整个 describe ⇒ 判得**宽**（少报可疑），
+ *  这是刻意的：宁可按"看得见接线"算，也不造一批假红。 */
+export function testCaseBody(testText: string, title: string): string | null {
+  const at = testText.indexOf(title);
+  if (at < 0) return null;
+  const rest = testText.slice(at + title.length);
+  const end = rest.search(/\n {2}\}\);/u);
+  return end < 0 ? rest.slice(0, 4000) : rest.slice(0, end);
+}
+
+/** 纯函数：两面（被测源 + 判卷）的取料都由调用方注入（门喂真盘，单测喂假文字）。 */
+export function auditPointerWiring(
+  entries: readonly WiringEntry[],
+  opts: { readSrc: (rel: string) => string | null; readTest: (rel: string) => string | null },
+): { id: string; kind: WiringKind; symbol: string | null; srcRel: string; test: string }[] {
+  const srcCache = new Map<string, string | null>();
+  const testCache = new Map<string, string | null>();
+  const read = (cache: Map<string, string | null>, get: (rel: string) => string | null, rel: string): string | null => {
+    if (!cache.has(rel)) cache.set(rel, get(rel));
+    return cache.get(rel) ?? null;
+  };
+  const out: { id: string; kind: WiringKind; symbol: string | null; srcRel: string; test: string }[] = [];
+  for (const e of entries) {
+    const push = (kind: WiringKind, symbol: string | null): void => { out.push({ id: e.id, kind, symbol, srcRel: e.srcRel, test: e.test }); };
+    if (e.needle === null || e.srcRel === "" || e.test === "" || e.expectFail === "" || !e.test.endsWith(".test.ts")) { push("no-needle", null); continue; }
+    const srcText = read(srcCache, opts.readSrc, e.srcRel);
+    const testText = read(testCache, opts.readTest, e.test);
+    if (srcText === null || testText === null) { push("unreadable", null); continue; }
+    const at = srcText.indexOf(e.needle);
+    if (at < 0) { push("no-needle", null); continue; }
+    const symbol = enclosingSymbol(srcText, at);
+    if (symbol === null) { push("no-symbol", null); continue; }
+    const body = testCaseBody(testText, e.expectFail);
+    if (body === null) { push("no-title", symbol); continue; }
+    push(new RegExp(`\\b${symbol}\\b`, "u").test(body) ? "wired" : "suspect", symbol);
+  }
+  return out;
+}
+
+/** 分格计数＋汇总行（三态分开印，判不了不并进"可疑"）。 */
+export function wiringCensus(rows: readonly WiringResult[]): Record<WiringKind, number> {
+  const c: Record<WiringKind, number> = { wired: 0, suspect: 0, "no-symbol": 0, "no-needle": 0, unreadable: 0, "no-title": 0 };
+  for (const r of rows) c[r.kind] += 1;
+  return c;
+}
+
 /** HEAD 侧的指针体检（第 141 页）：锚点行已经入库、判卷里那条标题还没 ⇒ 干净 HEAD 上这条锚点指不到活用例。
  *  普查里这一格占了 23 条，只能靠 21.8 分钟实跑发现；静态能秒级点出来，因为它两头都在盘上。
  *  只查**同时满足两条**的锚点，否则会把"本笔同时改表与改判卷"误判成缺陷（那格由 217 的同笔规矩管）：

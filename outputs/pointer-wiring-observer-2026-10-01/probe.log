@@ -1,0 +1,8 @@
+✅ 本笔那条锚点（指针写的就是调 parseTscLine 的用例） ⇒ 期望 wired，现读 wired（符号=parseTscLine）
+✅ 把同一条锚点的指针换成隔壁那条不调它的用例（＝325 的形状） ⇒ 期望 suspect，现读 suspect（符号=parseTscLine）
+✅ 325 那次真事故照抄：needle 在 certTreeAbs 里，指针指向只调 staleScratchTrees 的 canonical 用例 ⇒ 期望 suspect，现读 suspect（符号=certTreeAbs）
+✅ 反向证人：同文件里真调 certTreeAbs 的那条用例 ⇒ 期望 wired，现读 wired（符号=certTreeAbs）
+四格合计：wired=2 suspect=2 判不了=0
+enclosingSymbol 在真文件上取到：parseTscLine
+testCaseBody 取到的体长度：424 字符
+✅ 四格全对：这一把尺既报得出「接上」也报得出「疑空」（两态不同形）
