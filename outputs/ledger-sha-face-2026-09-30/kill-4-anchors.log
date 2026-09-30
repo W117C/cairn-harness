@@ -1,0 +1,15 @@
+改法语法体检：1068 条改法全部产出合法源文件 ✅
+[mutate-needles-check] 1 条锚点针脚/改法失效 ❌
+[ELIFECYCLE] Command failed with exit code 1.
+✅ docscheck-ledger-empty-face-reads-as-green — 抽到 0 条候选被读成「这一格没问题」⇒ 正则一坏、台账一改名，整条门就静默消失（规则 261：尺的「读不到」与「没有问题」不许同形） ｜本机实测 0.6s／2 拍
+✅ docscheck-ledger-waiver-stale-unreported — 不再命中的豁免不报 ⇒ 名单会烂在这儿，而下一位读者拿它当「这里曾有假 sha」的证据。与 LEGACY_WAIVERS 同规矩：豁免**只准调低**，不再命中就该被点名（规则 235） ｜本机实测 0.6s／2 拍
+
+1 条判红（按类别分开数，修法各不同——见上一行起的分类名单）
+  ❌ 判红 1 条，按类别分开（修法各不同，混成一句会把人指错方向）：no-effect 1
+  ❌ 判红·突变未生效（针脚不在源文件里）⇒ 空操作（1 条）：docscheck-ledger-equals-prefix-shape-dropped
+REDKINDS=survived:0,misattributed:0,baseline-red:0,no-effect:1,syntax:0,restore-mismatch:0,vacuous:0
+[mutate-verify] 本次耗时 2.3s · 跑了 4/4 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 7 次／4 条（每条次数分布 1×1 2×3）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 docscheck-ledger-reachability-not-checked 0.6s
+跑法单价：selector 7 拍·中位 0.28s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p227-new.lock）
+[ELIFECYCLE] Command failed with exit code 1.

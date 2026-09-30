@@ -1,0 +1,54 @@
+变异验证：1 条
+✅ docscheck-ledger-equals-prefix-shape-dropped — `=` 前缀那一格撤掉 ⇒ `--budget-ms=2400000` 这类数字又回到候选里。修法选**形状**而不是往豁免里塞一条：豁免名单是「别的种类的对象」，数字不是（把误伤登记进豁免＝下一位读者以为真有假 sha） ｜本机实测 0.6s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 0.8s · 跑了 1/1 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 2 次／1 条（每条次数分布 2×1）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 docscheck-ledger-equals-prefix-shape-dropped 0.6s
+跑法单价：selector 2 拍·中位 0.33s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p227-fix.lock）
+目标提交：dd0e8d9（--at=HEAD）
+worktree add exit=0
+已核：TREE=dd0e8d9df1de9eb28b028fb05e87c54376a10eec｜判卷四面在飞 0 项
+cp -al node_modules exit=0
+依赖核对：该提交声明 10 项，缺 0 项
+  硬链接子仓库依赖 fixtures/todo-app/node_modules ← 主树 exit=0
+import 面：2969 条边｜悬空 0（其中存量已豁免 0）
+门表：29 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证门面（20 道，名单取自 dd0e8d9）==
+  ✅ no-progress-check exit=0 502ms（预算 1100ms）
+  ✅ prune-check exit=0 535ms（预算 1100ms）
+  ✅ fork-check exit=0 519ms（预算 1100ms）
+  ✅ compaction-check exit=0 599ms（预算 1200ms）
+  ❌ docs-check exit=1 660ms（预算 1300ms）
+  ✅ memory-check exit=0 660ms（预算 1300ms）
+  ✅ head-import-check exit=0 688ms（预算 1400ms）
+  ✅ autonomy-check exit=0 889ms（预算 1500ms）
+  ✅ sandbox:check exit=0 1243ms（预算 1700ms）
+  ✅ security-check exit=0 749ms（预算 1500ms）
+  ✅ provider:check exit=0 508ms（预算 1300ms）
+  ✅ routing-check exit=0 716ms（预算 1400ms）
+  ✅ model-surface-check exit=0 693ms（预算 1300ms）
+  ✅ prefix-churn-check exit=0 786ms（预算 1500ms）
+  ✅ prompt-surface-check exit=0 677ms（预算 1400ms）
+  ✅ replay-determinism-check exit=0 534ms（预算 1100ms）
+  ✅ cost-per-progress-check exit=0 492ms（预算 1000ms）
+  ✅ gym-check exit=0 1267ms（预算 2400ms）
+  ✅ gate-check exit=0 4850ms（预算 5400ms）
+  ✅ mutate-needles-check exit=0 10164ms（预算 20000ms）
+  认证门面=20 道（跑到 20）｜❌ 红 1 道｜⚠️ 超预算 0
+  ❌ docs-check exit=1（660ms）
+
+== 认证汇总 ==
+  TREE=dd0e8d9 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-dd0e8d9.lock）
+  Test Files 2 failed | 251 passed (253)｜Tests 2 failed | 3274 passed (3276)｜exit=1（退出码直接取，不接管道）
+  并发判卷=起前 0 套／跑完 0 套（两端独占）
+  逐条日志：/tmp/dsh-head-cert-dd0e8d9
+  回收这棵树（规则 120，别留残留）：git worktree remove --force .worktrees/head-cert-dd0e8d9
+  常驻残留树=25（/Users/ze/Downloads/deepseek harness/.worktrees/cost-rank@27a2459、/Users/ze/Downloads/deepseek harness/.worktrees/gate-head-cert@ae80d6e、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-verify@dd0e8d9、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-02ddabd@02ddabd、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-03af5f5@03af5f5、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-0513d13@0513d13、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-1c40df7@1c40df7、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-2735051@2735051、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-2becb8e@2becb8e、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-419a5ef@419a5ef、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-70eab48@70eab48、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-830594b@830594b、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-8a9ce3e@8a9ce3e、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-9f19c84@9f19c84、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-a00c784@a00c784、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-a8d7eb7@a8d7eb7、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-d672e10@d672e10、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-e493e24@e493e24、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-e7b0501@e7b0501、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-f0473b9@f0473b9、/Users/ze/Downloads/deepseek harness/.worktrees/p211-shard-a@9bf9623、/Users/ze/Downloads/deepseek harness/.worktrees/p211-shard-b@9bf9623、/Users/ze/Downloads/deepseek harness/.worktrees/p211-shard-c@9bf9623、/Users/ze/Downloads/deepseek harness/.worktrees/p211-shard-d@9bf9623、/Users/ze/Downloads/deepseek harness/.worktrees/p211-verify@a00c784）（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）
+  汇总已同步落盘（不靠 stdout 的尾）：/tmp/dsh-head-cert-dd0e8d9/summary.txt
+real 166.13
+user 140.47
+sys 28.93
+cert_exit=1

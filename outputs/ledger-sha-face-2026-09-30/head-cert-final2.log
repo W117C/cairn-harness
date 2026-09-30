@@ -1,0 +1,45 @@
+目标提交：71165d8（--at=HEAD）
+worktree add exit=0
+已核：TREE=71165d867ce52e2996cd50a5866cb48ec801fb80｜判卷四面在飞 0 项
+cp -al node_modules exit=0
+依赖核对：该提交声明 10 项，缺 0 项
+  硬链接子仓库依赖 fixtures/todo-app/node_modules ← 主树 exit=0
+import 面：2969 条边｜悬空 0（其中存量已豁免 0）
+门表：29 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证门面（20 道，名单取自 71165d8）==
+  ✅ no-progress-check exit=0 504ms（预算 1100ms）
+  ✅ prune-check exit=0 539ms（预算 1100ms）
+  ✅ fork-check exit=0 513ms（预算 1100ms）
+  ✅ compaction-check exit=0 604ms（预算 1200ms）
+  ✅ docs-check exit=0 613ms（预算 1300ms）
+  ✅ memory-check exit=0 650ms（预算 1300ms）
+  ✅ head-import-check exit=0 677ms（预算 1400ms）
+  ✅ autonomy-check exit=0 873ms（预算 1500ms）
+  ✅ sandbox:check exit=0 1171ms（预算 1700ms）
+  ✅ security-check exit=0 751ms（预算 1500ms）
+  ✅ provider:check exit=0 510ms（预算 1300ms）
+  ✅ routing-check exit=0 698ms（预算 1400ms）
+  ✅ model-surface-check exit=0 677ms（预算 1300ms）
+  ✅ prefix-churn-check exit=0 785ms（预算 1500ms）
+  ✅ prompt-surface-check exit=0 679ms（预算 1400ms）
+  ✅ replay-determinism-check exit=0 537ms（预算 1100ms）
+  ✅ cost-per-progress-check exit=0 498ms（预算 1000ms）
+  ✅ gym-check exit=0 1317ms（预算 2400ms）
+  ✅ gate-check exit=0 2930ms（预算 5400ms）
+  ✅ mutate-needles-check exit=0 10179ms（预算 20000ms）
+  认证门面=20 道（跑到 20）｜绿 20 道｜⚠️ 超预算 0
+
+== 认证汇总 ==
+  TREE=71165d8 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-71165d8.lock）
+  Test Files 253 passed (253)｜Tests 3276 passed (3276)｜exit=0（退出码直接取，不接管道）
+  并发判卷=起前 0 套／跑完 0 套（两端独占）
+  逐条日志：/tmp/dsh-head-cert-71165d8
+  回收这棵树（规则 120，别留残留）：git worktree remove --force .worktrees/head-cert-71165d8
+  常驻残留树=27（/Users/ze/Downloads/deepseek harness/.worktrees/cost-rank@27a2459、/Users/ze/Downloads/deepseek harness/.worktrees/gate-head-cert@ae80d6e、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-verify@dd0e8d9、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-02ddabd@02ddabd、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-03af5f5@03af5f5、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-0513d13@0513d13、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-1c40df7@1c40df7、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-2735051@2735051、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-2becb8e@2becb8e、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-419a5ef@419a5ef、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-70eab48@70eab48、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-830594b@830594b、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-8a9ce3e@8a9ce3e、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-8ad8b70@8ad8b70、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-9f19c84@9f19c84、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-a00c784@a00c784、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-a8d7eb7@a8d7eb7、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-d672e10@d672e10、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-dd0e8d9@dd0e8d9、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-e493e24@e493e24、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-e7b0501@e7b0501、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-f0473b9@f0473b9、/Users/ze/Downloads/deepseek harness/.worktrees/p211-shard-a@9bf9623、/Users/ze/Downloads/deepseek harness/.worktrees/p211-shard-b@9bf9623、/Users/ze/Downloads/deepseek harness/.worktrees/p211-shard-c@9bf9623、/Users/ze/Downloads/deepseek harness/.worktrees/p211-shard-d@9bf9623、/Users/ze/Downloads/deepseek harness/.worktrees/p211-verify@a00c784）（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）
+  汇总已同步落盘（不靠 stdout 的尾）：/tmp/dsh-head-cert-71165d8/summary.txt
+real 165.04
+user 141.08
+sys 29.36
+cert_exit=0
