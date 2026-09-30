@@ -1,0 +1,21 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-b40909b.lock）
+变异验证：9 条
+✅ docscheck-cred-predicate-computed-but-not-attached — 谓词算出来了却不接进判定（喂一个空集合）⇒ 每条点名的读数都悬空、每一页都红，而『零红』那一半的证人必须在这儿翻过来——只印不接的尺在本仓已咬过两次（规则 230/246）。第 269 页把这句从整块文本换成按文件并集，针脚跟着实现走（规则 229），判定语义没变 ｜本机实测 1.3s／2 拍
+✅ docscheck-cred-weak-identity-comparison-cleared — 把「证人那一趟属不属于本页」的比对换成恒不成立 ⇒ 再也没有弱证，别趟的日志只要数值撞对就能替本页作证（这一格从此永远绿，而它防的就是第 255 页那种错指） ｜本机实测 0.6s／2 拍
+✅ docscheck-cred-weak-no-identity-folded-into-weak — 把「证人没有身份行」并进弱证 ⇒ 帽会被没印 sha 的日志灌满，而真缺陷（身份对不上）反而被淹没——三态混成两态是本仓反复咬过的形状（规则 239/300） ｜本机实测 0.6s／2 拍
+✅ docscheck-cred-weak-cap-comparison-offbyone — 弱证帽的比较从「超出」改成「达到」⇒ 现读那一格永远红，下一位只会去把帽调大或把门关掉 ｜本机实测 0.6s／2 拍
+✅ docscheck-cred-run-sha-tree-form-not-registered — 身份表里删掉 `已核：TREE=` 那一行 ⇒ 只有汇总行没有「目标提交」的工件一律被读成「没有身份行」，弱证那一档当场退化成 0，而这正是第 255 页那类日志的形状 ｜本机实测 0.6s／2 拍
+✅ docscheck-cred-page-shas-derived-but-not-attached — 页侧提交号抽出来却不挂进返回的页对象（给空数组）⇒ 每一页的证人身份都「对不上」，强证那一半永远没有证人，帽会被自己的存量顶穿（派生完不接线＝第二个注入面，规则 330） ｜本机实测 0.6s／2 拍
+✅ docscheck-cred-weak-print-pinned-to-zero — 汇总行把弱证那列印成常数 0 ⇒ 判定还在跑、门照退红，但人读到的那一格永远是「没事」（本仓老事故：汇总行不等于退出码，给人看的那一行也要有证人，规则 206/253） ｜本机实测 0.6s／2 拍
+✅ docscheck-cred-found-check-inverted — 把「在取料面里找到」那个判据反过来 ⇒ 有原文的读数全被报成悬空、没原文的全放过：这条门从此只会喊狼，而红海的下一次反应是把它关掉。所以正相那一半（对得上＝零红）必须有独立用例钉。第 269 页那句从 `if (sourced) continue;` 长成了带弱证分类的块，针脚跟着实现走（规则 229） ｜本机实测 0.6s／2 拍
+✅ docscheck-cred-return-drops-unnamed-pages — 算出来了却不返回（从返回体里丢掉这一格）⇒ 门那一步拿到 undefined，按页那一档当场消失，条数那一档照印不误。第 269 页返回体长出 weak／weakUnjudged 两格，针脚跟着换行（规则 229）；丢 unnamedPages 这一半的坏法不变 ｜本机实测 0.6s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 6.9s · 跑了 9/9 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 18 次／9 条（每条次数分布 2×9）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 docscheck-cred-predicate-computed-but-not-attached 1.3s
+跑法单价：selector 18 拍·中位 0.31s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-b40909b.lock）
+real 7.54
+user 8.35
+sys 1.04
+KILL_EXIT=0
