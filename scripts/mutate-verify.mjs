@@ -9600,6 +9600,44 @@ const MUTATIONS = [
     apply: (s) => s.replace("t.blockedAll++;\n      bump(t.blockedMix, e.blockedBy);", "t.blockedAll++;"),
     expectFail: "被闸拦的红拍按 `blockedBy` 计数",
   },
+
+  /* ── 第 227 页（#32）：D-5 的台账 sha 面。四支各钉一种坏法：不查可达、形状修法没接、0 条读成绿、豁免不报 stale。 ── */
+  {
+    id: "docscheck-ledger-reachability-not-checked",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "可达那一格不查 ⇒ 台账里每一条真 sha 都被报成悬空（红海），而红海的下一站就是「把这条门关掉」。" +
+      "这条面存在的意义正是「几百条引用第一次有证人」，它自己必须先不误伤",
+    apply: (s) => s.replace("    if (map.get(t.sha) === true) continue;\n", ""),
+    expectFail: "可达不报；不可达且没有豁免 ⇒ 红，且 detail 带行号与 sha",
+  },
+  {
+    id: "docscheck-ledger-equals-prefix-shape-dropped",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "`=` 前缀那一格撤掉 ⇒ `--budget-ms=2400000` 这类数字又回到候选里。修法选**形状**而不是往豁免里塞一条：" +
+      "豁免名单是「别的种类的对象」，数字不是（把误伤登记进豁免＝下一位读者以为真有假 sha）",
+    apply: (s) => s.replace("([^0-9a-zA-Z=])", "([^0-9a-zA-Z])"),
+    expectFail: "形状修法：跟在 `=` 后面的数字不算候选",
+  },
+  {
+    id: "docscheck-ledger-empty-face-reads-as-green",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "抽到 0 条候选被读成「这一格没问题」⇒ 正则一坏、台账一改名，整条门就静默消失" +
+      "（规则 261：尺的「读不到」与「没有问题」不许同形）",
+    apply: (s) => s.replace("  if (toks.length === 0) {", "  if (toks.length < 0) {"),
+    expectFail: "抽到 0 条候选同样记未检",
+  },
+  {
+    id: "docscheck-ledger-waiver-stale-unreported",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "不再命中的豁免不报 ⇒ 名单会烂在这儿，而下一位读者拿它当「这里曾有假 sha」的证据。" +
+      "与 LEGACY_WAIVERS 同规矩：豁免**只准调低**，不再命中就该被点名（规则 235）",
+    apply: (s) => s.replace("    if (!found.has(sha)) out.push(", "    if (false) out.push("),
+    expectFail: "豁免只挡名单里那三个",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

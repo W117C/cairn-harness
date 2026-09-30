@@ -109,6 +109,66 @@ export function checkStateRev(text: string, shaExists: (sha: string) => boolean)
   return [];
 }
 
+/**
+ * D-5 的第二张面：台账（`PROGRESS.md`）里的每一句「凭证 @`abc1234`」都该指得到一笔真提交。
+ * 为什么单独一张：`STATE_FILE` 那条面在 `STATE.md` 迁移前**整条不跑**（印的是「未检 ≠ 通过」），
+ * 于是这仓里几百条 sha 引用一个证人都没有——写错一位、压笔后悬空、拿簇内坐标当已落库，全靠人眼。
+ * 现读（第 227 页）：`PROGRESS.md` 抽到 230 个候选 token，其中 227 可达；不可达的 3 个全是
+ * 判卷夹具的 sha256 前缀 ⇒ 带理由登记在下面，而不是放宽判据。
+ */
+export const LEDGER_FILE = "PROGRESS.md";
+
+/** 不是提交的 sha 形 token（逐条带理由；**只准调低**，不再命中即报 stale——与 LEGACY_WAIVERS 同规矩）。 */
+export const LEDGER_NON_REV: Readonly<Record<string, string>> = {
+  "3edc934": "第 2 页「判卷 sha256 三件套与冻结基线逐字一致」里的内容哈希前缀，不是提交",
+  "9179db7": "同上（同一行的第二个哈希）",
+  "e253aae": "同上（同一行的第三个哈希）",
+};
+
+/**
+ * 台账里的短 sha 候选：独立成词的 7 位十六进制。
+ * 前缀排除 `=` 是**形状修法**而不是豁免：`--budget-ms=2400000` 这类数字会假阳（现读到的唯一一例），
+ * 而"某次调用的参数值"永远不可能是一笔提交。
+ */
+export function ledgerRevTokens(text: string): { sha: string; line: number }[] {
+  const seen = new Map<string, number>();
+  const lines = text.split("\n");
+  lines.forEach((l, i) => {
+    for (const m of l.matchAll(/(?:^|[^0-9a-zA-Z=])([0-9a-f]{7})(?![0-9a-zA-Z])/gu)) {
+      const sha = m[1]!.toLowerCase();
+      if (!seen.has(sha)) seen.set(sha, i + 1);
+    }
+  });
+  return [...seen.entries()].map(([sha, line]) => ({ sha, line })).sort((a, b) => (a.sha < b.sha ? -1 : 1));
+}
+
+/** `resolve` 注入（main() 交给一次 `git cat-file --batch-check`）：返回 null 表示"读不到/对不上号"。 */
+export function ledgerRevFace(
+  text: string,
+  resolve: (toks: readonly string[]) => Map<string, boolean> | null,
+): { findings: Finding[]; skipped: string | null; checked: number } {
+  const toks = ledgerRevTokens(text);
+  const found = new Set(toks.map((t) => t.sha));
+  const out: Finding[] = [];
+  // 豁免也要有人看着：不再命中的那条留着，下一位读者就会以为还有假阳要绕。
+  for (const [sha, why] of Object.entries(LEDGER_NON_REV)) {
+    if (!found.has(sha)) out.push({ rule: "D-5", file: LEDGER_FILE, detail: `豁免名单里的 ${sha} 已不再命中，该删（理由曾写：${why}）` });
+  }
+  if (toks.length === 0) {
+    return { findings: out, skipped: `D-5 ${LEDGER_FILE} 一个 sha 候选都没抽到 ⇒ 台账 sha 面未检，不等于通过`, checked: 0 };
+  }
+  const map = resolve(toks.map((t) => t.sha));
+  if (map === null) {
+    return { findings: out, skipped: `D-5 git 读不到可达性（或返回行数对不上 ${String(toks.length)}）⇒ 台账 ${String(toks.length)} 条 sha 引用未检，不等于通过`, checked: toks.length };
+  }
+  for (const t of toks) {
+    if (map.get(t.sha) === true) continue;
+    if (t.sha in LEDGER_NON_REV) continue;
+    out.push({ rule: "D-5", file: LEDGER_FILE, detail: `第 ${String(t.line)} 行引用的 sha 指向不存在的提交：${t.sha}` });
+  }
+  return { findings: out, skipped: null, checked: toks.length };
+}
+
 /* ------------------------------------------------------------------ D-2 / D-4 / D-7 */
 
 /** D-2 与 D-4 的适用面 = 被现行层指向的页。**按可达性定，不按"重不重要"定。** */
@@ -382,7 +442,28 @@ function shaExistsViaGit(sha: string): boolean {
   }
 }
 
-export function runDocsCheck(): { findings: Finding[]; skipped: string[]; waived: number } {
+/** 一次 spawn 解完整批短 sha（230 个 token 实测 <0.05s）。
+ *  为什么不复用上面那只逐个 `rev-parse` 的：那是一笔一 spawn，台账面会把这道**亚秒档门**顶到秒级，
+ *  还会让"门的单价"由取料面条数决定（第 226 页刚把门面买成 20 道，别在这里偷偷加价）。
+ *  行数与入参条数对不上 ⇒ 返回 null（宁缺不编：错位会把可达的读成不可达）。 */
+function resolveRevsViaGit(toks: readonly string[]): Map<string, boolean> | null {
+  if (toks.length === 0) return new Map();
+  let out: string;
+  try {
+    out = execFileSync("git", ["cat-file", "--batch-check=%(objecttype)"], {
+      cwd: ROOT, input: toks.map((t) => t + "^{commit}").join("\n") + "\n", encoding: "utf8",
+    });
+  } catch {
+    return null;
+  }
+  const lines = out.split("\n").filter((l) => l !== "");
+  if (lines.length !== toks.length) return null;
+  const map = new Map<string, boolean>();
+  toks.forEach((t, i) => map.set(t, lines[i]!.trim() === "commit"));
+  return map;
+}
+
+export function runDocsCheck(): { findings: Finding[]; skipped: string[]; waived: number; ledgerChecked: number } {
   const findings: Finding[] = [];
   const skipped: string[] = [];
 
@@ -403,6 +484,18 @@ export function runDocsCheck(): { findings: Finding[]; skipped: string[]; waived
   const stateAbs = join(ROOT, STATE_FILE);
   if (existsSync(stateAbs)) findings.push(...checkStateRev(readFileSync(stateAbs, "utf8"), shaExistsViaGit));
   else skipped.push(`D-5 ${STATE_FILE} 不存在（迁移前属正常）——rev 真伪未检，不等于通过`);
+
+  // D-5 第二张面：台账里的 sha 引用（`STATE.md` 不在的那天，这一格照样有 200+ 条可检）。
+  let ledgerChecked = 0;
+  const ledgerAbs = join(ROOT, LEDGER_FILE);
+  if (existsSync(ledgerAbs)) {
+    const face = ledgerRevFace(readFileSync(ledgerAbs, "utf8"), resolveRevsViaGit);
+    findings.push(...face.findings);
+    ledgerChecked = face.checked;
+    if (face.skipped !== null) skipped.push(face.skipped);
+  } else {
+    skipped.push(`D-5 ${LEDGER_FILE} 不存在 ⇒ 台账 sha 面整条未检，不等于通过`);
+  }
 
   const livePages: SourceFile[] = [];
   for (const path of LIVE_PAGES) {
@@ -427,6 +520,7 @@ export function runDocsCheck(): { findings: Finding[]; skipped: string[]; waived
     ],
     skipped,
     waived: findings.length - kept.length,
+    ledgerChecked,
   };
 }
 
@@ -434,13 +528,15 @@ const invokedDirectly =
   process.argv[1] !== undefined && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
 
 if (invokedDirectly) {
-  const { findings, skipped, waived } = runDocsCheck();
+  const { findings, skipped, waived, ledgerChecked } = runDocsCheck();
   const byRule = new Map<string, number>();
   for (const f of findings) {
     byRule.set(f.rule, (byRule.get(f.rule) ?? 0) + 1);
     console.log(`  ❌ ${f.rule} ${f.file}\n     ${f.detail}`);
   }
   for (const s of skipped) console.log("  ℹ️  跳过 " + s);
+  // 分母要印出来：抽到 0 条与"全绿"不许同形（规则 261），豁免数也不许藏在源码里。
+  console.log(`  台账 sha 面：抽到 ${String(ledgerChecked)} 条候选｜非提交形而带理由豁免 ${String(Object.keys(LEDGER_NON_REV).length)} 条`);
   if (waived > 0) console.log(`  ⚠️  存量豁免 ${String(waived)} 处（LEGACY_WAIVERS，只准调低；spec §8 迁移提交须整条删除）`);
   const summary = [...byRule].map(([r, n]) => `${r}=${String(n)}`).join(" ");
   if (findings.length === 0) {

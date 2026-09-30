@@ -5,8 +5,11 @@
 // 这样每条 D 都能双向断言（红相命中 + 反相不误伤），且不依赖工作树状态。
 // 真实文件读取只发生在该模块的 main()，由 `pnpm docs-check` 承担。
 import { describe, expect, it } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { LEDGER_FILE, ledgerRevFace, ledgerRevTokens, LEDGER_NON_REV } from "../scripts/docs-check";
 import { REPLAY_READINGS, countInlineReplay, type ReplayReading } from "../scripts/replay-readings";
 import {
   checkAppendOnlyCorrections,
@@ -343,6 +346,73 @@ describe("D-8 复跑面登记表与引用对账", () => {
       [],
     );
     expect(waive(findings).kept.map((f) => f.file)).toEqual(["docs/new.md"]);
+  });
+});
+
+/* ── 第 227 页（#32）：D-5 的第二张面——台账里的 sha 引用指不指得到一笔真提交。
+      `STATE.md` 迁移前那条面整条不跑，于是这仓里几百条 sha 引用一个证人都没有。 ── */
+describe("D-5 台账 sha 面：三档分开印（可达／不可达／读不到）", () => {
+  /** 假 git：名单里给了什么就是什么可达——纯函数不许碰子进程，双向断言靠这里喂。 */
+  const resolver = (reachable: readonly string[]) => (toks: readonly string[]): Map<string, boolean> | null =>
+    new Map(toks.map((t) => [t, reachable.includes(t)]));
+
+  it("可达不报；不可达且没有豁免 ⇒ 红，且 detail 带行号与 sha", () => {
+    const text = ["第 1 页 凭证 @aaaa111 已过", "第 2 页 引用 bbb2222 那笔", ""].join("\n");
+    const face = ledgerRevFace(text, resolver(["aaaa111"]));
+    expect(face.checked, "分母＝抽到的候选数（不是 findings 数）").toBe(2);
+    expect(face.skipped, "读得到面就不许报『未检』").toBeNull();
+    // 这份合成台账里没有那三个哈希 ⇒ stale 那三条也在 findings 里，正是下面那条用例专门钉的东西。
+    const reds = face.findings.filter((f) => f.detail.includes("指向不存在的提交"));
+    expect(reds.map((f) => f.detail)).toEqual(["第 2 行引用的 sha 指向不存在的提交：bbb2222"]);
+    expect(reds[0]?.rule).toBe("D-5");
+    expect(reds[0]?.file).toBe(LEDGER_FILE);
+  });
+
+  it("形状修法：跟在 `=` 后面的数字不算候选（`--budget-ms=2400000` 曾被读成假 sha）", () => {
+    const toks = ledgerRevTokens("第一次我写的是 `--budget-ms=2400000`，机器退 2\n").map((t) => t.sha);
+    expect(toks).toEqual([]);
+    // 反向那一半：同一个 7 位串独立成词时必须仍是候选（否则"排除 ="会变成吞掉一切）
+    expect(ledgerRevTokens("凭证 2400000 那笔\n").map((t) => t.sha)).toEqual(["2400000"]);
+  });
+
+  it("豁免只挡名单里那三个；名单里不再命中的那条要报 stale 红（不许静默留着）", () => {
+    expect(Object.keys(LEDGER_NON_REV).length).toBe(3);
+    const text = Object.keys(LEDGER_NON_REV).map((s) => `判卷 sha256 三件套（${s}…）`).join("\n");
+    expect(ledgerRevFace(text, resolver([])).findings).toEqual([]);
+    const stale = ledgerRevFace("第 1 页 凭证 @cccc333\n", resolver(["cccc333"]));
+    expect(stale.findings.map((f) => f.detail).join("\n"), "整张台账里没有这些哈希了，豁免该删").toContain("已不再命中");
+    expect(stale.findings.length).toBe(3);
+  });
+
+  it("git 读不到（或行数对不上）⇒ 记未检并带着分母，不记通过（规则 261）", () => {
+    const face = ledgerRevFace("凭证 @dddd444 与 @eeee555\n", () => null);
+    expect(face.findings.filter((f) => f.detail.includes("指向不存在"))).toEqual([]);
+    expect(face.skipped).toContain("未检，不等于通过");
+    expect(face.skipped).toContain("2");
+    expect(face.checked).toBe(2);
+  });
+
+  it("抽到 0 条候选同样记未检——『一条都没有』与『都没有问题』不许同形", () => {
+    const face = ledgerRevFace("# 台账\n这页没有一个 sha。\n", resolver([]));
+    expect(face.checked).toBe(0);
+    expect(face.skipped).toContain("一个 sha 候选都没抽到");
+  });
+
+  it("真机：吃真 PROGRESS.md 与真 git ⇒ 分母 ≥ 200 且除豁免外零红", () => {
+    const text = readFileSync(fileURLToPath(new URL("../PROGRESS.md", import.meta.url)), "utf8");
+    const face = ledgerRevFace(text, (toks) => {
+      const out = execFileSync("git", ["cat-file", "--batch-check=%(objecttype)"], {
+        cwd: fileURLToPath(new URL("..", import.meta.url)),
+        input: toks.map((t) => t + "^{commit}").join("\n") + "\n",
+        encoding: "utf8",
+      });
+      const lines = out.split("\n").filter((l) => l !== "");
+      if (lines.length !== toks.length) return null;
+      return new Map(toks.map((t, i) => [t, lines[i]!.trim() === "commit"]));
+    });
+    expect(face.checked, `台账只抽到 ${String(face.checked)} 条 ⇒ 取料面或正则坏了`).toBeGreaterThanOrEqual(200);
+    expect(face.skipped).toBeNull();
+    expect(face.findings.map((f) => f.detail)).toEqual([]);
   });
 });
 
