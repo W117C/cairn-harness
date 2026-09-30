@@ -9499,9 +9499,11 @@ const MUTATIONS = [
     src: "scripts/replay/cascade-traffic.ts",
     test: "tests/replay-cascade-traffic.test.ts",
     desc: "占比分子不再看文案线索 ⇒ 「换贵档再红一次」的上界被算低。这条读数是**做决策用的**" +
-      "（它对着一次模型往返的钱），少一类比多一类更坏：多算只是保守，少算会裁掉本该修的那一格",
+      "（它对着一次模型往返的钱），少一类比多一类更坏：多算只是保守，少算会裁掉本该修的那一格。" +
+      "指针第 222 页补⑵ 改过一次：原先指着「反向那一半」那条负控——摘掉判据时负控**照旧绿**（它要的就是不抓），" +
+      "于是这条锚点当场存活（选择子只跑期望那格，别的格红了不算）。真正的 killer 是正向那格",
     apply: (s) => s.replace('|| firstEnvTextCue(String(r.output ?? "")) !== null;', "|| false;"),
-    expectFail: "反向那一半",
+    expectFail: "文案支接的是取料层那一只表",
   },
   {
     id: "replay-exec-pkg-cue-recopied",
