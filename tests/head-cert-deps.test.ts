@@ -1112,6 +1112,9 @@ describe("贴帽读数：suiteRows／budgetFromTestSource／timingNearCapCell／
     expect(matched?.[0]?.file).toBe("tests/a.test.ts");
     expect(suiteRows("{不是 json", "/tree/")).toBeNull();
     expect(suiteRows('{"nothingHere":1}', "/tree/")).toBeNull();
+    // 三条 null 出口各自要有证人：`jsonText === null`（门那一步没拿到文件）与「拿到但解析不动」是两支不同的 return，
+    // 只测后两支的话，前者被改成 `return []` 也照样全绿——第 262 页那支锚点就是这么活下来的（实测 survived 1）。
+    expect(suiteRows(null, "/tree/")).toBeNull();
   });
 
   it("预算四档各自成形：位置式／选项式／没写／取不到，且带转义的标题也要认得（真机 11 条栽在这一格）", () => {
