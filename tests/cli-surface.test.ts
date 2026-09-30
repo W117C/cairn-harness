@@ -312,7 +312,7 @@ describe("m0 CLI：走应用壳（handleAgentRun），不裸调 runAgent", () =>
     expect(src).toContain("automationTools: false");
     // 判据在 agent-runner 那一侧（installed 幂等守卫吃的就是这个槽）。
     const runner = readFileSync(join(ROOT, "src", "main", "agent-runner.ts"), "utf8");
-    expect(runner).toContain("installAppTools({ automation: opts.automationTools })");
+    expect(runner).toMatch(/installAppTools\(\{\s*automation: opts\.automationTools,[\s\S]{0,120}omitTools/);
     expect(runner).toMatch(/if \(opts\.automation !== false\) \{\s*\n\s*\/\/ M4a/);
   });
 });

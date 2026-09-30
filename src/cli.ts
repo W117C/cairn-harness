@@ -720,6 +720,8 @@ async function main(): Promise<number> {
         // 拆成两个槽就是为了不翻转上面那半：沉淀留开，只有续跑停。
         ...(!interactive ? { noAnswerer: true as const } : {}),
         ...(opts.autoVerify ? { autoVerify: true } : {}),
+        // 武装了长任务目标 ⇒ 保留 refine_goal（它在无目标时恒 fail-closed，摘掉省 85 tok/轮）。
+        ...(opts.goal !== null ? { goalArmed: true as const } : {}),
         // --model 自由档只能走这个槽：那一档的模型名按定义不在 DEFAULT_MODEL_TABLE 里，
         // 过不了 validateRunRequestEnvelope 的登记校验（run-request.ts:48）。
         modelSelection: opts.provider,

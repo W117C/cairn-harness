@@ -723,12 +723,14 @@ export interface PluginToolSource {
  *  导出是为了让这条接线有判据：provider 那条分支要真 key 才走得到，接线本身不能因此永远没证据。 */
 export function sessionToolFace(
   rt: { skillDenial(tool: string): string | null } | null,
-  opts: { mode: RunOptions["mode"]; pluginTools?: readonly SessionPluginTool[]; automationTools?: boolean },
+  opts: { mode: RunOptions["mode"]; pluginTools?: readonly SessionPluginTool[]; automationTools?: boolean; omitTools?: readonly string[] },
 ): { tools: GlmToolSpec[]; note: string; skipped: string[]; removed: { name: string; by: string }[]; skillDenial: ((tool: string) => string | null) | undefined } {
   const skillDenial = rt ? (tool: string): string | null => rt.skillDenial(tool) : undefined;
   const face = sessionToolSpecs({
     mode: opts.mode,
     pluginTools: opts.pluginTools ?? [],
+    // 能力没开就不挂说明书（见 OPTIONAL_TOOL_NAMES）：与执行面 installAppTools 同进同退。
+    ...(opts.omitTools !== undefined && opts.omitTools.length > 0 ? { omitTools: opts.omitTools } : {}),
     ...(skillDenial ? { skillDenial } : {}),
   });
   /* 定时五件：**规格面与执行面一起摘**，判据是同一个 `automationTools`。
@@ -937,6 +939,11 @@ let installed = false;
 /** 第一场 run 定的定时五件判据（`true` = 装）。**只读**：它唯一的用途是让后一场的异值当场拒，
  *  不参与任何装/摘决策——真装不装看 `installAppTools` 自己那次调用。 */
 let installedAutomation = true;
+/** 同上的两把：本轮有没有武装长任务目标 / 有没有开自动记忆（决定 refine_goal 与 remember 挂不挂）。 */
+let installedGoal = true;
+let installedMemory = true;
+/** 同上第三把：该工作区有没有配 LSP（决定 lsp 挂不挂）。 */
+let installedLsp = true;
 /** M2d：remember 门语义（可测工厂）：方案门写禁 / 档位表判 deny·ask·allow。
  *  §8.1.4「remember 属写动作走权限门」；无权限 → ok:false 且不落盘。
  *  裁决读 `SIDE_EFFECT_DECISION` 那一列（`sideEffectDecisionTable()`）——旧写法是
@@ -973,18 +980,35 @@ export function createGatedRemember(deps: {
  *  （`faceArgs` 同时喂两处）。两处必须一起翻**：只摘执行面的话模型照样看得见这五把工具、
  *  只吃得到 `unknown tool: automation_create`，比现状那句「调度器未初始化（fail-closed）」更难懂。
  *  调度器与 `Scheduler` 类本身不动（长驻服务时再接）。 */
-export function installAppTools(opts: { automation?: boolean } = {}): void {
+export function installAppTools(opts: { automation?: boolean; omitTools?: readonly string[] } = {}): void {
   // 装/摘的粒度是**进程**（TOOLS 是全局表，守卫只让第一个调用赢），`automationTools` 的粒度是
   // **每场 run**（规格面 faceArgs 每场重算）。两者对不上时——第二场给出与第一场不同的值——
   // 规格面照新值重算、执行面不照做 ⇒ 模型看得见五件、只吃得到 `unknown tool`，正是本仓栽过
   // 多次的那个形状。所以「第一个 run 定终身」这条从散文契约改成硬拒：同值重复（goal 续跑
   // 一轮轮传同一个值）照旧空转，异值当场抛，在那场 run 出门之前就拒。
   const wantAutomation = opts.automation !== false;
+  const omit = new Set(opts.omitTools ?? []);
+  // 「本轮武装了没有」这两个开关决定两把工具要不要挂上去。它们**故意与 automation 同一条纪律**：
+  // 规格面与执行面必须同进同退，所以也走 `installed` 守卫的异值硬拒，不给「模型看得见却调不到」
+  // 那条路留缝。
+  //
+  // 为什么值得为这点字节动结构（2026-09-30 实测读数，`pnpm prompt-cost`）：
+  //   refine_goal      85 tok/轮  没武装目标时该工具**恒 fail-closed**（refine_goal.ts:36）
+  //   remember        269 tok/轮  autoMemory 关掉后没有自动消费者
+  //   ——固定开销共 2286 tok/轮，而它是**每一轮**都重送的静态段。
+  // 「能力没开却一直挂着说明书」是纯浪费：模型读了它、还可能在没开的能力上白花一轮。
+  const wantGoal = !omit.has("refine_goal");
+  const wantMemory = !omit.has("remember");
+  const wantLsp = !omit.has("lsp");
   if (installed) {
-    if (wantAutomation !== installedAutomation) {
+    if (wantAutomation !== installedAutomation || wantGoal !== installedGoal || wantMemory !== installedMemory || wantLsp !== installedLsp) {
       throw new Error(
-        "installAppTools: 同一进程里第二场 run 的 automationTools 与第一场不一致（第一场 " +
-        (installedAutomation ? "装" : "不装") + "定时五件，这一场 " + (wantAutomation ? "装" : "不装") +
+        "installAppTools: 同一进程里第二场 run 的能力开关与第一场不一致（第一场 定时" +
+        (installedAutomation ? "装" : "不装") + "/目标" + (installedGoal ? "装" : "不装") +
+        "/记忆" + (installedMemory ? "装" : "不装") + "/lsp" + (installedLsp ? "装" : "不装") +
+        "，这一场 定时" + (wantAutomation ? "装" : "不装") +
+        "/目标" + (wantGoal ? "装" : "不装") + "/记忆" + (wantMemory ? "装" : "不装") +
+        "/lsp" + (wantLsp ? "装" : "不装") +
         "）。执行面 TOOLS 只装一次、规格面每场重算，异值会让模型看得见却调不到。",
       );
     }
@@ -992,6 +1016,9 @@ export function installAppTools(opts: { automation?: boolean } = {}): void {
   }
   installed = true;
   installedAutomation = wantAutomation;
+  installedGoal = wantGoal;
+  installedMemory = wantMemory;
+  installedLsp = wantLsp;
   TOOLS.write_file = gatedTool("write_file", TOOLS.write_file);
   TOOLS.edit_file = gatedTool("edit_file", TOOLS.edit_file);
   TOOLS.run_shell = gatedTool("run_shell", TOOLS.run_shell);
@@ -1001,7 +1028,9 @@ export function installAppTools(opts: { automation?: boolean } = {}): void {
   // 一次"总是允许"就会把出网永久写成免批）。worker 面不给（worker 出网是无条件 deny）。
   (TOOLS as unknown as Record<string, Tool>).web_fetch = gatedTool("web_fetch", webFetch);
   // M2d：remember 运行时注入（静态注册表冻结为 9 工具，tools-check 判据）
-  (TOOLS as unknown as Record<string, Tool>).remember = createGatedRemember({
+  // `autoMemory` 关掉时不挂：那条路上没有自动消费者，留着它等于每轮白付 269 tok 的说明书。
+  // 代价说清楚——开了这个开关就**真的没有**手动记一笔的入口（重开 settings 即回来）。
+  if (wantMemory) (TOOLS as unknown as Record<string, Tool>).remember = createGatedRemember({
     getMode: () => currentSession()?.autonomy.mode ?? "default",
     isPlanBlocked: () => planGateBlocks(getPlanState()),
     getAsk: () => {
@@ -1014,8 +1043,7 @@ export function installAppTools(opts: { automation?: boolean } = {}): void {
     },
   });
   // M3a：spawn_agent 运行时注入（installAppTools 运行时注入先例；静态注册表 9 工具不动）。
-  // 编排器未接线（headless 直调 loop）= fail-closed 拒绝。
-  // 派生审批**由 orchestrator 按风险分级**出卡（写租约相交 / pipeline / supervise / merge 四处
+  // 编排器未接线（headless 直调 loop）= fail-closed 拒绝。  // 派生审批**由 orchestrator 按风险分级**出卡（写租约相交 / pipeline / supervise / merge 四处
   // approval_requested），此处不再叠一张 blanket 卡：实测那样会让 agents-check C 段 9 条全红
   // （default 档的只读调研 spawn 也被拦，worker 根本派不出来），且与 pipeline 的既有卡重复。
   (TOOLS as unknown as Record<string, Tool>).spawn_agent = {
@@ -1035,17 +1063,21 @@ export function installAppTools(opts: { automation?: boolean } = {}): void {
   (TOOLS as unknown as Record<string, Tool>).cancel_agents = createCancelAgentsTool(() => currentOrchestrator());
   // 长任务锚点的模型侧「改措辞」：落的是与人同一条 goal_set（一份事实源），但带 set_by:"model"，
   // 而投影层不因此挪动窗口锚点/轮次帽 ⇒ 模型能把自己的目标写进每轮提醒，拿不到续跑额度（那两条归人）。
-  (TOOLS as unknown as Record<string, Tool>).refine_goal = createRefineGoalTool(async () => {
-    const s = currentSession();
-    if (!s?.sessionId) return null;
-    const events = await replay(pathOf(requireSessionsDir(), s.sessionId)).catch(() => [] as AgentEvent[]);
-    const view = projectGoal(events);
-    if (!view) return null;
-    return {
-      objective: view.spec.objective, maxTurns: view.spec.maxTurns, maxUsd: view.spec.maxUsd,
-      turn: view.turn, stopped: view.stopped,
-    };
-  });
+  // 本轮没武装目标时不挂：`createRefineGoalTool` 在 view === null 时**必然**返回
+  // 「这个会话没有已武装的长任务目标」⇒ 挂着它只有成本没有能力（85 tok/轮 × 每轮）。
+  if (wantGoal) {
+    (TOOLS as unknown as Record<string, Tool>).refine_goal = createRefineGoalTool(async () => {
+      const s = currentSession();
+      if (!s?.sessionId) return null;
+      const events = await replay(pathOf(requireSessionsDir(), s.sessionId)).catch(() => [] as AgentEvent[]);
+      const view = projectGoal(events);
+      if (!view) return null;
+      return {
+        objective: view.spec.objective, maxTurns: view.spec.maxTurns, maxUsd: view.spec.maxUsd,
+        turn: view.turn, stopped: view.stopped,
+      };
+    });
+  }
   if (opts.automation !== false) {
     // M4a：agent 工具五件（§12.2.5）——automation_create/update/delete/run_now/list。
     // 一切变更走审批卡（§10.4）；prompt 是持久化攻击面：4k 上限（校验拒）+ 审批卡全文展示（args 原样进审批卡）；
@@ -1292,6 +1324,10 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
   /** plan 模式（用户武装）：true ⇒ 本轮无论模型是否自愿提交方案，未获批即写禁。
    *  缺省 false = 逐字同武装前。只有用户侧（RunRequest / settings）能置位，模型无入口。 */
   planRequired?: boolean;
+  /** 这一段会话有没有武装长任务目标（`--goal` / RunRequest.objective / goal 续跑轮）。
+   *  只用于一件事：没武装时把 `refine_goal` 从模型可见面摘掉——那个工具在无目标时
+   *  **恒 fail-closed**（refine_goal.ts），挂着它每轮白付 85 tok 的说明书。 */
+  goalArmed?: boolean;
   /** goal 模式的自动续跑轮：在场 = 这条 user_message 由 harness 代发，origin 落流可审计。
    *  缺省不进 origin 字段 ⇒ 事件字节与从前逐字相同。 */
   goalTurn?: GoalTurnOrigin;
@@ -1404,8 +1440,73 @@ const deletingSessionPaths = new Set<string>();
 export function isSessionLogBusy(logPath: string): boolean {
   return liveRunPaths.has(resolve(logPath)) || deletingSessionPaths.has(resolve(logPath));
 }
+
+/** 该工作区有没有配 LSP（`.agent/lsp.json` 里有真配置）。
+ *  读不到 / 坏 JSON / 显式 false 一律 false = 不挂那把工具——
+ *  这与 `loadLspConfig` 自己的 fail-closed 方向一致（关着时工具必然抛），
+ *  坏 JSON 也不在这里抛：那是工具调用时的错，不该让整轮 run 起不来。 */
+function lspConfigured(workspace: string): boolean {
+  try {
+    const raw = readFileSync(join(workspace, ".agent", "lsp.json"), "utf8");
+    const parsed = JSON.parse(raw) as { lsp?: unknown };
+    return parsed.lsp !== undefined && parsed.lsp !== null && parsed.lsp !== false;
+  } catch {
+    return false;
+  }
+}
+
+/** 进程级「自动记忆」判据：**首次读到的值定终身**，之后不再重读。
+ *
+ *  为什么必须缓存（2026-09-30 实测踩到）：settings 能在同一进程里变（`setSettings` 是 IPC/测试
+ *  的正常用法），而执行面 `TOOLS` 只装一次。不缓存的话第二场 run 按新值算出一个不同的 omit 名单，
+ *  装/摘守卫当场抛——`tests/main-run-routing.test.ts` 与 `tests/session-tools.test.ts` 五条
+ *  正是这么红的（第一场记忆关、第二场记忆开）。那就是守卫在正确工作：**它拦住的是一次真实的
+ *  「两面要分家」**，只是分家的原因在我这边（按 per-run 状态去算进程级的量）。
+ *  口径与 settings 自己的读法一致：缺省 true（见 settings.ts 的 `autoMemory: true`）。 */
+let memoizedAutoMemory: boolean | null = null;
+async function installTimeAutoMemory(): Promise<boolean> {
+  if (memoizedAutoMemory === null) {
+    memoizedAutoMemory = await store().get().then((s) => s.autoMemory).catch(() => true);
+  }
+  return memoizedAutoMemory;
+}
+
+/** 进程级「哪些可选工具真的用不着」：**只累积、不回退**。
+ *  某一场需要某把工具 ⇒ 它永久留在名单外（不再摘）；
+ *  只有从来没有哪一场需要，才真的摘掉。这样执行面第一次装出来的那份就永远是最终形态，
+ *  后续每场的规格面 ⊆ 执行面，不会出现「模型看得见却调不到」。 */
+const omittedForever = new Set<string>();
+function installTimeOmitTools(want: { goal: boolean; memory: boolean; lsp: boolean }): string[] {
+  if (want.goal) omittedForever.delete("refine_goal");
+  else omittedForever.add("refine_goal");
+  if (want.memory) omittedForever.delete("remember");
+  else omittedForever.add("remember");
+  if (want.lsp) omittedForever.delete("lsp");
+  else omittedForever.add("lsp");
+  return [...omittedForever];
+}
 export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
-  installAppTools({ automation: opts.automationTools });
+  // 能力没开的可选工具：从模型可见面摘掉说明书（见 OPTIONAL_TOOL_NAMES）。
+  // 判据取**这一场 run 的真实状态**，不是 settings 里的意图：
+  //  · refine_goal 只在真武装了长任务目标时才有语义（否则该工具恒 fail-closed）；
+  //  · remember 只在自动记忆开着时才有消费者。
+  // 执行面是进程级的（installAppTools 只让第一个调用赢），所以这里算出来的值必须每场一致——
+  // 异值由 installAppTools 的守卫当场拒，不给「模型看得见却调不到」留缝。
+  const memoOn = await installTimeAutoMemory();
+  // lsp 也按「这个工作区到底配没配」判：`.agent/lsp.json` 缺省 = 全局关闭，
+  // 而关着时该工具**必然抛**「未启用」（lsp.ts:602）⇒ 挂在模型面上只有成本（186 tok/轮）。
+  // 判据读的是**盘上配置**而不是「用户想不想用」——配了就自动回来，不需要额外开关。
+  const lspOn = lspConfigured(opts.workspace);
+  // **执行面只让第一个调用赢**，所以送进去的开关必须第一次就是定稿：
+  // 后续几场若算出不同的值（工作区换了、设置改了、目标武装了），执行面保持不变而规格面按新值
+  // 重算 ⇒ 模型看得见却调不到（本仓点名的失败形状）。所以执行面吃的是**累积**判据：
+  // 只要这个进程里**任何一场**需要某把工具，它就留着；只有从来没有哪一场需要，才真的摘。
+  const omitTools = installTimeOmitTools({
+    goal: opts.goalArmed !== true,
+    memory: !memoOn,
+    lsp: !lspOn,
+  });
+  installAppTools({ automation: opts.automationTools, ...(omitTools.length > 0 ? { omitTools } : {}) });
   // H2（A-2）：无人值守 run 的等人门上限——定时触发的 clarify/plan 挂起 60s 后 fail-closed。
   // 交互 run 不限时（等人语义不变，仅随取消信号收束）。
   const UNATTENDED_GATE_WAIT_MS = 60_000;
@@ -1588,6 +1689,8 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       mode: opts.mode,
       // 同一个字段喂给规格面（sessionToolFace）与执行面（installAppTools）——两面必须同时摘。
       automationTools: opts.automationTools,
+      // 能力没开的可选工具：规格面摘说明书，执行面不注入实例。两处同源同一个数组。
+      ...(omitTools.length > 0 ? { omitTools } : {}),
       pluginTools: [...(recall ? [observationRecallSpec] : []), ...(impactTool ? [impactQuerySpec] : []), ...pluginToolSpecsFromRuntime(rt).filter(t => !recall || t.name !== "obs_recall")],
     };
     // run 起点这份只管两件事：出声（同名冲突 / 摘了谁的哪把）+ 给 loop 一份稳定的活闸闭包。
@@ -1796,6 +1899,9 @@ export interface RunOverrides
   actionFusion?: boolean;
   /** 能力 5 收束闸 runtime override（同 actionFusion 口径：settings 与 IPC 开闸另议）。 */
   autoVerify?: boolean;
+  /** 这一段会话有没有武装长任务目标（`--goal` / RunRequest.objective / goal 续跑轮）。
+   *  只喂 `refine_goal` 的挂/摘判据（见 RunOptions.goalArmed）。 */
+  goalArmed?: boolean;
   /** 已解析好的模型选择（CLI `--model` 自由档专用）。
    *
    *  为什么需要这个槽，而 `RunRequest.model` 不够：那一档的模型名**按定义不在 `DEFAULT_MODEL_TABLE` 里**
@@ -1908,6 +2014,9 @@ export async function handleAgentRun(
         ...(over.signal ? { signal: over.signal } : {}),
         actionFusion: over.actionFusion ?? (await store().get()).actionFusion,
         autoVerify: over.autoVerify ?? (await store().get()).autoVerify,
+        // 这一段会话有没有武装长任务目标：CLI 在 `--goal` 时显式传（它在 run 之前就把
+        // `goal_set` 写进日志了），goal 续跑轮由 `goalTurn` 在场推定。只喂 refine_goal 的挂/摘。
+        goalArmed: over.goalArmed ?? goalTurn !== undefined,
         // 这几个键只从 settings 取，**不留 runtime override 槽**：`handleAgentRun` 的两个产品调用者
         // （IPC `agent:run` 只转发 sessionId/workspace；定时执行器只转发 unattended/signal）从不传它们，
         // 界面走的是盘上的持久开关。留着 `over.X ??` 只是看着对称——它给的是**永远不会被走到的左半边**，

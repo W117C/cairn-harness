@@ -409,7 +409,21 @@ function readOnlyDescriptions(specs: GlmToolSpec[]): GlmToolSpec[] {
     return alt === undefined ? s : { ...s, function: { ...s.function, description: alt } };
   });
 }
-
+/** 能力没开时可以摘掉的可选工具（2026-09-30 实测读数，`pnpm prompt-cost`）。
+ *  为什么要有这张表：固定开销 2286 tok/轮，而它是**每一轮**重送的静态段；
+ *  其中 354 tok 属于「这个能力这一轮根本没开、挂着说明书只有成本没有能力」：
+ *   · refine_goal  85 tok —— 没武装长任务目标时该工具**恒 fail-closed**
+ *     （refine_goal.ts：view === null 即返回「这个会话没有已武装的长任务目标」）；
+ *   · remember    269 tok —— `autoMemory` 关掉后没有自动消费者。
+ *  摘除必须**规格面与执行面同时**（`installAppTools` 的同名开关）：
+ *  只摘一头就是本仓点名的两种失败形状（模型看得见却调不到 / 调得到却看不见）。 */
+export const OPTIONAL_TOOL_NAMES = {
+  goalTools: ["refine_goal"],
+  memoryTools: ["remember"],
+  /** `.agent/lsp.json` 没配（或显式 `{"lsp": false}`）时 lsp 工具**必然抛**
+   *  「未启用——工作区 .agent/lsp.json 缺少 lsp 配置」（lsp.ts:602）⇒ 挂着它只有成本没有能力。 */
+  lspTools: ["lsp"],
+} as const;
 /** 运行时注入的工具（插件 skill / MCP server 工具）的模型可见规格。
  *  MCP 侧 parameters 直接是 server 的 inputSchema 原文——不翻译、不裁剪，避免两套 schema 漂移。 */
 export interface SessionPluginTool {
@@ -433,9 +447,13 @@ export function sessionToolSpecs(
     pluginTools?: readonly SessionPluginTool[];
     /** 返回摘除者（skill / command 的调用名）= 该工具本 turn 不可用；null / undefined = 保留。 */
     skillDenial?: (name: string) => string | null;
+    /** 本 run 没开的能力对应的工具名（见 OPTIONAL_TOOL_NAMES）：从模型可见面摘掉，
+     *  与执行面 `installAppTools` 的同名开关必须同进同退。 */
+    omitTools?: readonly string[];
   } = {},
 ): { specs: GlmToolSpec[]; skipped: string[]; removed: { name: string; by: string }[]; note: string } {
-  const specs = gateToolSpecs(opts.mode);
+  const omit = new Set(opts.omitTools ?? []);
+  const specs = gateToolSpecs(opts.mode).filter((s) => !omit.has(s.function.name));
   const seen = new Set(specs.map((s) => s.function.name));
   const skipped: string[] = [];
   for (const tool of opts.pluginTools ?? []) {

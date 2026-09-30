@@ -16,7 +16,7 @@
 //   node --import tsx scripts/prompt-cost.ts --json     # 机器可读（给回归对比用）
 //
 // 退出码恒 0：它是尺子不是门（红了要拦谁也没想清楚）。哪天要拦，登记进 GATES 再谈。
-import { sessionToolSpecs } from "../src/agent/glm-session";
+import { sessionToolSpecs, OPTIONAL_TOOL_NAMES } from "../src/agent/glm-session";
 import { AUTOMATION_TOOL_NAMES } from "../src/agent/automation-surface";
 import { BASE_SYSTEM } from "../src/main/agent-runner";
 import { PERMISSION_MODES, type PermissionMode } from "../src/permissions";
@@ -37,10 +37,15 @@ export interface FaceCost {
   perTool: { name: string; tokens: number }[];
 }
 
-/** 某一档的模型可见工具面成本。`automation: false` = CLI 的取值（定时五件两面同摘）。 */
-export function faceCost(mode: PermissionMode, automation = false): FaceCost {
+/** 某一档的模型可见工具面成本。`automation: false` = CLI 的取值（定时五件两面同摘）。
+ *  `omit` = 这一 run 没开的能力（`RunOptions.goalArmed=false` ⇒ refine_goal，
+ *  `autoMemory=false` ⇒ remember）。缺省按「两个都没开」算 = 最省的那一档。 */
+export function faceCost(mode: PermissionMode, automation = false, omit?: readonly string[]): FaceCost {
   const all = sessionToolSpecs({ mode }).specs;
-  const specs = automation ? all : all.filter((s) => !AUTOMATION_TOOL_NAMES.includes(s.function.name));
+  const omitSet = new Set(omit ?? [...OPTIONAL_TOOL_NAMES.goalTools, ...OPTIONAL_TOOL_NAMES.memoryTools]);
+  const specs = all
+    .filter((s) => automation || !AUTOMATION_TOOL_NAMES.includes(s.function.name))
+    .filter((s) => !omitSet.has(s.function.name));
   const perTool = specs
     .map((s) => ({ name: s.function.name, tokens: estTokens(JSON.stringify(s)) }))
     .sort((a, b) => b.tokens - a.tokens);
@@ -51,22 +56,32 @@ export function faceCost(mode: PermissionMode, automation = false): FaceCost {
 
 function main(): void {
   const asJson = process.argv.includes("--json");
-  const faces = PERMISSION_MODES.map((m) => faceCost(m, false));
+  // full = 两个可选能力都开着（挂满）；lean = 都没开（CLI 常见形状，摘掉 refine_goal/remember）。
+  const faces = PERMISSION_MODES.map((m) => faceCost(m, false, []));
+  const lean = PERMISSION_MODES.map((m) => faceCost(m, false));
   if (asJson) {
-    process.stdout.write(JSON.stringify({ charsPerToken: CHARS_PER_TOKEN, faces }, null, 2) + "\n");
+    process.stdout.write(JSON.stringify({
+      charsPerToken: CHARS_PER_TOKEN,
+      // `full` = 两个可选能力都开着时挂满；`lean` = 都没开时（CLI 的常见形状）。
+      full: faces.map((f) => ({ mode: f.mode, tools: f.tools, totalTokens: f.totalTokens })),
+      lean: lean.map((f) => ({ mode: f.mode, tools: f.tools, totalTokens: f.totalTokens })),
+      faces,
+    }, null, 2) + "\n");
     return;
   }
   console.log("== 每轮固定开销（静态段：工具说明书 + 系统提示词）==");
   console.log("估算口径：字符数 / " + String(CHARS_PER_TOKEN) + "（横向比较用；绝对值看事件流的 usage）");
   console.log("");
   const base = faces.find((f) => f.mode === "default")!;
+  console.log("  档位        挂满（goal+记忆都开）      最省（都没开）");
   for (const f of faces) {
+    const l = lean.find((x) => x.mode === f.mode)!;
     console.log(
       "  " + f.mode.padEnd(10)
-      + String(f.tools).padStart(3) + " 件"
-      + "  工具 " + String(f.toolTokens).padStart(5) + " tok"
-      + "  系统 " + String(f.systemTokens).padStart(4) + " tok"
-      + "  ⇒ 合计 " + String(f.totalTokens).padStart(5) + " tok/轮",
+      + String(f.tools).padStart(2) + " 件 " + String(f.totalTokens).padStart(5) + " tok/轮"
+      + "        "
+      + String(l.tools).padStart(2) + " 件 " + String(l.totalTokens).padStart(5) + " tok/轮"
+      + "   （省 " + String(f.totalTokens - l.totalTokens).padStart(4) + "）",
     );
   }
   console.log("");
@@ -76,25 +91,11 @@ function main(): void {
     console.log("    " + t.name.padEnd(20) + String(t.tokens).padStart(5) + " tok  " + pct.padStart(3) + "%");
   }
   console.log("");
-  // 可选面单独记账：这三组各自有「能力没用上就纯浪费」的判据，是 P1 的裁剪候选。
-  const optional: Record<string, string[]> = {
-    "子代理三件（不派 worker 时纯浪费）": ["spawn_agent", "wait_for_agents", "cancel_agents"],
-    "remember（autoMemory 关掉后无消费者）": ["remember"],
-    "refine_goal（没武装目标时该工具恒 fail-closed）": ["refine_goal"],
-  };
-  for (const [label, names] of Object.entries(optional)) {
-    const hit = base.perTool.filter((t) => names.includes(t.name));
-    const sum = hit.reduce((a, t) => a + t.tokens, 0);
-    if (hit.length === 0) {
-      console.log("  ⚠️ " + label + "：一个都没在面上（名单陈旧？）");
-      continue;
-    }
-    console.log("  " + label.padEnd(48) + " 省 " + String(sum).padStart(5) + " tok/轮"
-      + "（" + ((100 * sum) / base.totalTokens).toFixed(0) + "% 的固定开销）");
-  }
+  console.log("  第一轮实测（跨 4 文件修复那次 3,978 tok）里，静态段占 "
+    + ((100 * base.totalTokens) / 3978).toFixed(0) + "%（挂满）/ "
+    + ((100 * lean.find((x) => x.mode === "default")!.totalTokens) / 3978).toFixed(0) + "%（最省）");
   console.log("");
-  console.log("  静态段占第一轮的比例（实测第一轮 3,978 tok）："
-    + ((100 * base.totalTokens) / 3978).toFixed(0) + "%");
+  console.log("  说明：静态段**每一轮都要重送**，所以省下来的不是一次性的钱，是 × 轮数。");
 }
 
 main();
