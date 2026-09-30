@@ -1970,8 +1970,11 @@ describe("指针接线：enclosingSymbol／testCaseBody／auditPointerWiring（�
   it("接线：门那一行要连着印「可数面／多出口数」，wiringHint 那条守卫的结构不许漂", () => {
     const script = readRel("scripts/mutate-verify.mjs") ?? "";
     expect(script.length).toBeGreaterThan(0);
-    expect(script, "普查行不印这一格＝这把尺开了张却没人读它").toMatch(/｜出口数可数 \$\{String\(countable\.length\)\} 条/du);
-    expect(script, "多出口那一档不印出来，下一次存活还是靠人回想 329").toMatch(/其中针脚长在「≥2 条 return」的函数里 \$\{String\(multiExit\.length\)\} 条/du);
+    // 自-hosted 锚点的**正向**文字断言同样会被这张表喂绿（第 263 页实测：`exits-census-not-spoken` 第一趟存活）——
+    // 那条针脚的字面量本身就是表里某行 apply 的文本 ⇒ 裸串 toMatch 在两处都命中。
+    // 规则 328 那句「只留正向断言」不够，还得**行锚定**：这里钉整条续行的形状（4 空格＋反引号＋行尾 `+`）。
+    expect(script, "普查行不印这一格＝这把尺开了张却没人读它").toMatch(
+      /^ {4}`｜出口数可数 \$\{String\(countable\.length\)\} 条，其中针脚长在「≥2 条 return」的函数里 \$\{String\(multiExit\.length\)\} 条` \+$/mu);
     expect(script, "存活提示的守卫被拆掉（写成 false、或把阈值挪到 0）＝这一格对所有锚点一律喊，或永远不喊").toMatch(
       /^ {2}const exitCell = r !== undefined && typeof r\.returns === "number" && r\.returns >= 2$/mu);
     expect(script, "hint 不接进存活那条红＝算了不印").toMatch(/\+ exitCell;$/mu);

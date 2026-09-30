@@ -1,0 +1,21 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-9a2fe61.lock）
+变异验证：8 条
+✅ wiring-lineend-drops-needle-line — 退回「只切到 needle 起点」⇒ 针脚写在**声明行**上时取到的是上一条函数（本仓第 260 页的探针在真文件上逮到的：`certTreeAbs` 被读成 `mainRootFromCommonDir`）。这一格坏法的后果是双向的：兄弟用例可能被误判 wired，真接线也可能被误判 suspect——而它看起来像尺在正常工作 ｜本机实测 0.9s／2 拍
+✅ wiring-scan-stops-at-local-const — 把函数体里的局部 `const m = …` 当成边界就 return null ⇒ 大量正常锚点全落进「判不了」，这一格从读数退化成空读数（比误喊更隐蔽：汇总行看着像「尺很谨慎」）。只有列 0 的数据声明才是边界 ｜本机实测 0.7s／2 拍
+✅ exits-span-decl-line-length-dropped — 算函数体终点时少加声明行那一段长度 ⇒ 体被切短、数出来的 return 比实际少（第 263 页我自己就这么写错过一次，是判卷把 2 读成 0 才抓住的）；少报出口＝存活提示永远闭嘴 ｜本机实测 0.7s／2 拍
+✅ exits-span-end-boundary-dropped — 体的收尾认不出列 0 的右花括号 ⇒ 范围一路扩到文件末尾，把后面每条函数的 return 都算进这一格 ⇒ 「≥2 条出口」对所有锚点一律成立，提示就变成噪声（第 263 页） ｜本机实测 0.7s／2 拍
+✅ exits-count-replaced-by-constant — return 计数写死成 1 ⇒ 这一格从读数退化成常数（规则 242：一片相同的数不是测量），而它正是「存活要不要补输入」那唯一的信息来源（第 263 页） ｜本机实测 0.7s／2 拍
+✅ exits-null-merged-into-one — 「数不出包围函数」回 1 条而不是 null ⇒ no-symbol 那一档混进「单出口」，读起来像量过了（第 263 页；规则 239/261 三态分开印） ｜本机实测 0.7s／2 拍
+✅ exits-hint-guard-dropped — 存活提示的出口那一半被摘掉（或阈值挪到 0）⇒ 要么对每条锚点都喊、要么永远不喊，而第 262 页那条存活本来能被这句话直接指到成因（规则 329） ｜本机实测 0.7s／2 拍
+❌ exits-census-not-spoken — 普查行把可数面与多出口那两格印成常数 ⇒ 这把尺开了张却没人读得到真数（第 263 页现读 961／533，而 961＋175＋3＝1139 这个同分母等式也就没人核了） ｜本机实测 0.7s／2 拍
+   变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）
+  ↳ 出口计数：函数「multiExit」里有 2 条 return ⇒ 存活时先问「判卷喂到了第几支」，补一条能让那一支走到的输入（规则 329）；**别撤锚点、别改针脚**——撤掉就是把那支出口重新变回没人守
+
+1 条判红（按类别分开数，修法各不同——见上一行起的分类名单）
+  ❌ 判红 1 条，按类别分开（修法各不同，混成一句会把人指错方向）：survived 1
+  ❌ 判红·变异存活（测试仍全绿 ⇒ 该不变量没有观测者）（1 条）：exits-census-not-spoken
+REDKINDS=survived:1,misattributed:0,baseline-red:0,no-effect:0,syntax:0,restore-mismatch:0,vacuous:0
+[mutate-verify] 本次耗时 6.4s · 跑了 8/8 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 16 次／8 条（每条次数分布 2×8）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 wiring-lineend-drops-needle-line 0.9s
+跑法单价：selector 16 拍·中位 0.35s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-9a2fe61.lock）
