@@ -1,0 +1,57 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-bd5ec44[39m
+
+ [32m✓[39m tests/mutate-verify-gates.test.ts [2m([22m[2m150 tests[22m[2m)[22m[33m 15301[2mms[22m[39m
+   [32m✓[39m 改动面派生：一条锚点的两面都要认（被测源 ∪ 判卷文件） [2m(8)[22m
+     [33m[2m✓[22m[39m 派生可以只看名单不真跑：`--list --changed-since=<空树>` ⇒ 每条锚点两面都在跟踪文件里，必须选中整表[33m 641[2mms[22m[39m
+     [33m[2m✓[22m[39m 真跑：`--changed-since` 不给 rev ⇒ exit 2，且一条源文件都不许动[33m 552[2mms[22m[39m
+     [33m[2m✓[22m[39m 派生可以只看名单不真跑：`--list --changed-since=<rev>` 只印选中的那些，且不碰任何源文件[33m 1085[2mms[22m[39m
+     [33m[2m✓[22m[39m 真跑：rev 取不到 ⇒ exit 2 并点名那个 rev（「取料坏」不许退化成「选中 0 条」）[33m 553[2mms[22m[39m
+   [32m✓[39m 被 import 时必须拒绝运行（它会就地改源文件） [2m(2)[22m
+     [33m[2m✓[22m[39m import 进来 ⇒ 退出码 2、点名拒绝，且一条变异都没跑[33m 648[2mms[22m[39m
+     [33m[2m✓[22m[39m 反向一侧：正当入口没被这道闸误伤（--list 仍 exit 0 且列得出条目）[33m 563[2mms[22m[39m
+   [32m✓[39m mutate-verify 也接了这把锁：占不到就不许动盘（那份过程的第二个消费者） [2m(6)[22m
+     [33m[2m✓[22m[39m 活人占着 ⇒ exit 2、点名是谁、拒在开跑之前，并且不替别人删锁[33m 548[2mms[22m[39m
+     [33m[2m✓[22m[39m 反向哨兵：同一入参、没有锁 ⇒ 必须走到「未知 id」，并且占过又放掉（上面那条的红只能来自锁）[33m 540[2mms[22m[39m
+     [33m[2m✓[22m[39m 只读入口不许被这把门锁死：--list 在有人占着时照跑，而 `--check-needles` 与它同一先（按结构钉）[33m 541[2mms[22m[39m
+     [33m[2m✓[22m[39m 空标签不是「默认」：`--lock-tag=` 与 `--lock-tag ""` 一律 exit 2 并说明怎么要默认[33m 1079[2mms[22m[39m
+   [32m✓[39m 印完就退的出口必须同步写：--list 是两把静态尺共同的取料面 [2m(2)[22m
+     [33m[2m✓[22m[39m 真跑：--list 经管道交给读者的行数必须等于表长（少一行＝两把静态尺一起少读一条锚点而不自知）[33m 554[2mms[22m[39m
+   [32m✓[39m 按标题选跑法：选中几条必须被读出来 [2m(11)[22m
+     [33m[2m✓[22m[39m 行为证人：指针以 `-` 开头时两种写法给两个读数——等号写法选中 1 条，空格写法被 CLI 当旗标吞掉[33m 527[2mms[22m[39m
+   [32m✓[39m 树闸接线：真跑本脚本——主检出拒跑且一个字节都没改过盘，linked worktree 放行 [2m(6)[22m
+     [33m[2m✓[22m[39m 主检出里真跑 ⇒ exit 2、说清是主检出、且盘上一个字节都没动[33m 656[2mms[22m[39m
+     [33m[2m✓[22m[39m 同一份代码换进 linked worktree ⇒ 树闸放行，接着被预检按「源文件在飞」停在写盘之前[33m 720[2mms[22m[39m
+     [33m[2m✓[22m[39m 反向哨兵：主检出那支要是靠 `--in-worktree` 逃出去的，这条当场红（隔离必须由树闸保证，不靠调用方记得带参数）[33m 686[2mms[22m[39m
+     [33m[2m✓[22m[39m 语义钉：建出来被量的那棵树是 **HEAD**，主树里未提交的那份改动不进它（AGENTS.md 那条工作规则的可执行面）[33m 1394[2mms[22m[39m
+     [33m[2m✓[22m[39m 软链路径调脚本不许被误判成「被 import」（S2-3）[33m 703[2mms[22m[39m
+     [33m[2m✓[22m[39m 树名的包含判定：解完仍在主检出里就放行，解出去了才拒（S2-4 拆掉的那格假阳性）[33m 2328[2mms[22m[39m
+fatal: not a git repository (or any of the parent directories): .git
+拒跑：/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/mutate-shards-RO8S8V/repo —— 工作树有 1 项在飞
+取料坏：1/2 棵树不合格 ⇒ 一条不跑（这不是「没有红」，是没尺）
+取料坏：--trees 里有重复路径 ⇒ 同树两个进程会互改源文件（.mutbak 会互相踩），一条不跑
+取料坏：认不出的参数 ⇒ 一条不跑：--shardz=2
+用法：node --import tsx scripts/mutate-shards.ts --trees 树1,树2[,…] [--changed-since=<rev> | id…] [--budget-ms N] [--serial-seconds N] [--lock-tag-base …] [--cost-logs 机器原文,…] [--dry-run]（带值的旗标两种写法都收）
+Preparing worktree (detached HEAD bd5ec44)
+取料坏：给了 1 条不在这张表上的 id ⇒ 一条不跑：this-anchor-does-not-exist
+Preparing worktree (detached HEAD bd5ec44)
+Preparing worktree (detached HEAD bd5ec44)
+Preparing worktree (detached HEAD bd5ec44)
+取料坏：1 个判卷宿主被摊到两片以上 ⇒ 会并发真跑同一份判卷，一条不跑：tests/mutate-shards.test.ts
+Preparing worktree (detached HEAD bd5ec44)
+Preparing worktree (detached HEAD bd5ec44)
+ [32m✓[39m tests/mutate-shards.test.ts [2m([22m[2m55 tests[22m[2m)[22m[33m 9616[2mms[22m[39m
+   [32m✓[39m treeProblem 与编排器的前置闸：脏树不许当片用 [2m(8)[22m
+     [33m[2m✓[22m[39m 给了不在表上的 id ⇒ 拒（退 2、点名那几条、一条没跑）[33m 989[2mms[22m[39m
+     [33m[2m✓[22m[39m --dry-run 只出计划：取料走机器自己的 `--list`，证分割与「不拆宿主」都成立，一条没跑[33m 1037[2mms[22m[39m
+     [33m[2m✓[22m[39m 同一宿主被摊到两片 ⇒ 行为上当场拒（默认切法同输入放行）[33m 2355[2mms[22m[39m
+   [32m✓[39m 编排器接线：合并层不是挂在墙上的仪表 [2m(7)[22m
+     [33m[2m✓[22m[39m 真跑一条：片文件里确有机器原文（这条是整个编排器的端到端证人）[33m 2468[2mms[22m[39m
+   [32m✓[39m 编排器的权重取料面 [2m(3)[22m
+     [33m[2m✓[22m[39m 真跑 --dry-run：给了 --cost-logs 就说清权重与来源，不给就说没有来源[33m 2378[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m2 passed[39m[22m[90m (2)[39m
+[2m      Tests [22m [1m[32m205 passed[39m[22m[90m (205)[39m
+[2m   Start at [22m 01:46:30
+[2m   Duration [22m 25.24s[2m (tests 99%, transform 1%)[22m
+

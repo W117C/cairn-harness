@@ -8471,3 +8471,51 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
    锚点 `expectFail` 与用例标题是逐字同串，只改一边就会变成"指针指向不会红的那条"（253 页补⑵ 犯过的形状）。
 9. **刻意未做（写在纸上）**：不修别人的 51 条报错（登记＝承认存量，修＝别人的靶面）；TS2353 那一族立成待办未纳；不进 `CERT_GATES`；
    本目录新加的 `per-file-counts.mts` 自己**0 条危险码**——这一格由门量的（它在 `tsc-raw.log` 的 16 个文件里没出现），不是我自证的。
+
+### 2026-10-01 · 第 259 页补 凭证：本笔（`bd5ec44`）认证 257 文件／3371 条 exit=0、门 20/20 绿·超预算 0；八支新锚点 8/8 全杀；**同一笔第一趟的两条红是 5000ms 超时、隔离复跑 205/205 绿 ⇒ 白得一次同分母的并发对照**
+
+取料：`outputs/evidence-typecheck-gate-2026-10-01/`（`head-cert-bd5ec44-run1.log`／`head-cert-bd5ec44-run2.log`／`head-cert-summary.txt`／`isolated-rerun-two-red-files.log`／`kill-8-anchors-at-48e30a8.log`／`needles-at-48e30a8.log`／`gate-run-at-48e30a8.log`／`gate-run-worktreeread.log`／`per-file-counts.log`／`tsc-raw.log`／`judges.log`／`typecheck.log`／`needles-before-commit.log`／`runner-cwd-trap.log`／`claim-259-transcribed.log`）。
+⚠️ 本笔凭证除台账外还带 **7 份取证 log**（`head-cert-bd5ec44-run1.log`／`head-cert-bd5ec44-run2.log`／`head-cert-summary.txt`／`isolated-rerun-two-red-files.log`／`kill-8-anchors-at-48e30a8.log`／`needles-at-48e30a8.log`／`gate-run-at-48e30a8.log`）
+——**它们是本页读数的原文来源**，留在盘上不入库就成了"凭证里的数没有出处"，与本仓 D-9 要抓的那件事同形；实现文件一个字节没动。
+
+1. **认证对象**：`bd5ec44`（＝`48e30a8` 实现笔 ＋ 一处"三处文字里的旧读数换成现测"的修正笔），用的树是 `.worktrees/head-cert-bd5ec44`（**独立树，不是主检出**）。
+   判卷与锚点都在**新判卷文件**里 ⇒ 树里 `status=0` 项（`DIRTY_JUDGED=0`）。
+2. **`--check-needles` 两份互印**：
+   干净树（`needles-at-48e30a8.log`）＝`针脚体检：1118 条 —— 阻断 0，待复认 0，未覆盖 0，逐行式 5，未入库面 0（被测面 + 判卷两面），钉在飞文本 0，killer 指针失效 0（其中 HEAD 侧 0）`＋`改法语法体检：1118 条改法全部产出合法源文件 ✅`；
+   落库前主树（`needles-before-commit.log`）＝同一行但`阻断 16…未入库面 16`——**那 16 格全是本笔四个新文件尚未入库**，落库后归 0（两份读数的差就是归因，规则 224 要的"守对格"）。
+   表条数核对：`1110 → 1118`＝上一笔留档 1110 ＋ 本笔 8 支。
+3. **八支新锚点逐条真杀**（独立树、显式 id 名单，`kill-8-anchors-at-48e30a8.log`）：8 条全 `✅`、末行`全部变异被正确杀死（断言非恒真）`、`KILL_EXIT=0`。
+   成本两行照机器原文贴：
+   `成本分母：判卷 spawn 16 次／8 条（每条次数分布 2×8）· 单次中位 第1次 0.4s／第2次 0.4s· 最贵一条 evidence-runner-unknown-flag-passed-through 7.1s`
+   `跑法单价：selector 16 拍·中位 0.39s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母`
+   ——**没有把"次数 × 单价"推成比值**（规则 245）；`坏拍 0` 是"选择子真选得中那条 killer 用例"的分母证人。
+4. **证据面门在两侧各读一遍**：HEAD 侧 `✅ evidence-typecheck：证据面危险码 12 条／帽 12 条（登记 8 个文件；全量报错 31 条）（2510ms｜解析 31/31 条）`；
+   主检出工作树 `❌ …16 条／帽 12 条…｜⚠️ 涨了 2 个文件（只准调低）：outputs/selector-uniqueness-2026-09-30/diagnose.mts 3>0、outputs/sequencer-dynamic-2026-10-01/probe-prod.mts 1>0`（`GATE_EXIT=1`）。
+   工作树那份 `tsc-raw.log` 是 51 条／16 个文件，HEAD 侧是 31 条 ⇒ **两个数都报**，只报一个就是拿工作树冒充仓。
+5. **`head-cert` 两趟原文**（退出码一律从日志里的 `HEADCERT_EXIT=` 取，不拿调度器回显，规则 249）：
+   第一趟（`head-cert-bd5ec44-run1.log`）：`Test Files 2 failed | 255 passed (257)｜Tests 2 failed | 3369 passed (3371)｜exit=1（退出码直接取，不接管道）`、
+   `认证门面=20 道（跑到 20）｜绿 20 道｜⚠️ 超预算 5`、`并发判卷=起前 1 套／跑完 2 套（撞窗：本仓判卷有读写共享 /tmp 的用例）`、`HEADCERT_EXIT=1`，
+   机器自己说`判卷有红，且两端采到 2 套判卷并行 ⇒ 先排撞窗再查代码`。两条红的**成因都是 `Error: Test timed out in 5000ms`**（不是断言失败）：
+   `tests/mutate-shards.test.ts:400`（用例体起真 worktree）、`tests/mutate-verify-gates.test.ts:1781`（用例体三连 spawn `mutate-verify.mjs`，每次冷启那张 1 万行的表）。
+   隔离复跑这两份文件（cert 树、`status=0`，`isolated-rerun-two-red-files.log`）＝`Test Files  2 passed (2)`／`Tests  205 passed (205)`／`Duration  25.24s`／`ISO_EXIT=0` ⇒ 红属**容量**，不是本笔代码；已立任务 #8 待裁修法。
+   第二趟（`head-cert-bd5ec44-run2.log`）：`Test Files 257 passed (257)｜Tests 3371 passed (3371)｜exit=0`、
+   `TREE=bd5ec44 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔`、`认证门面=20 道（跑到 20）｜绿 20 道｜⚠️ 超预算 0`、`并发判卷=起前 1 套／跑完 0 套`、`HEADCERT_EXIT=0`。
+   **同分母的免费收获**：同一笔、同一张认证门面，第一趟`超预算 5`（`mutate-needles-check 44221ms`）／第二趟`超预算 0`（同门`13851ms`）
+   ⇒ 253 页那格欠的"超预算归因＝并发"，这一笔不用抬帽、不用改判据就拿到了对照（规则 326 要的正是这种比值来源）。
+   ⚠️ 认证等级要说清：第二趟是**全量绿**，但它**不是两端独占**（起前仍有 1 套隔壁判卷在跑，跑完 0 套）；写「独占」是假的。
+6. **条数核对式**：`3371 ＝ 3357（第 257 页凭证留档，取在 `c195135`）＋ 14（本笔 `tests/evidence-typecheck.test.ts`）`；
+   文件数 `256 → 257` ＝ 本笔新增 1 个判卷文件；`git merge-base --is-ancestor c195135 bd5ec44` 退出 0 ⇒ 留档值取在我的新增**之前**，没有重复计增量。
+7. **归因声明（本笔不动的三处红）**：① 主检出 `evidence-typecheck-check` 红 2 个文件＝隔壁在飞未入库探针（第 4 条）；
+   ② 主检出 `typecheck` 第一趟后读到 `src/agent/impact/index.ts(256,17): error TS2304: Cannot find name 'candidates'`＝隔壁在飞面（该文件在 HEAD 里、改动未入库），
+   同页 `src/agent/impact/persist.ts` 是未跟踪草稿、2 条报错；这三处都不是本笔造成，HEAD 态在独立树里是 `typecheck exit=0`（`typecheck.log`）；
+   ③ 第一趟的两条 5000ms 超时红＝并发容量（第 5 条给了隔离复跑）。
+   另记一条与占号有关的现象（不改别人的历史）：隔壁 `35a163e`（01:22:06）提交信息写「第 259 页（本会话）… 开工回执落 PROGRESS.md」，
+   而那一笔 `--numstat` 只有 `outputs/impact-index-goal-2026-10-01/book.md`（41/0）、**没有 PROGRESS.md**，台账里三个关键词全文 0 命中；
+   号池 `.git/dsh-pages/259` 目录创建于 **01:14:48**＝我占的 ⇒ 258 页裁决⑤「占号池防新增」的前提是**每笔都走池**，这次没走到（这就是任务 #2 要的证人，动 AGENTS.md 仍需用户点头）。
+8. **刻意未做**：墙钟未取（这两条 `head-cert` 命令都没套 `/usr/bin/time`）⇒ 本笔不报 `real`，别拿前一笔的 186.14s 当本笔单价；
+   `evidence-typecheck-check` 未进 `CERT_GATES`（单价 2.06s＞1.5s 那条线，理由在 `scripts/gate-manifest.ts` 注释里）；
+   隔壁在飞那两个探针的危险码没替他们清、也没登记。
+9. **清场结果（未回收，等授权）**：`git worktree list` 现读 23 棵；本会话留下的够格残留＝
+   `.worktrees/verify-48e30a8`、`.worktrees/verify-6aa6e9d`、`.worktrees/verify-a5197eb`、`.worktrees/head-cert-bd5ec44`（`head-cert` 汇总里点名的那 3＋1 棵），
+   另有 `/private/tmp/dsh-foreign-witness-A|B` **不是本仓建的、不许照回收命令删**。
+   `head-cert` 只**打印**回收命令（`scripts/head-cert.ts:294`），删除归人 ⇒ 这里写「未回收，命令=`git worktree remove --force <树>`」，不写「已回收」。

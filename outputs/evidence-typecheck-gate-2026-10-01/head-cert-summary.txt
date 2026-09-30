@@ -1,0 +1,38 @@
+目标提交：bd5ec44（--at=HEAD）
+checkout exit=0
+已核：TREE=bd5ec4496c0f32ad79b194d9e7237faab1067c38｜判卷四面在飞 0 项
+依赖核对：该提交声明 10 项，缺 0 项
+import 面：3033 条边｜悬空 0（其中存量已豁免 0）
+门表：31 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证门面（20 道，名单取自 bd5ec44）==
+  ✅ no-progress-check exit=0 543ms（预算 1100ms）
+  ✅ prune-check exit=0 548ms（预算 1100ms）
+  ✅ fork-check exit=0 553ms（预算 1100ms）
+  ✅ compaction-check exit=0 614ms（预算 1200ms）
+  ✅ docs-check exit=0 715ms（预算 1300ms）
+  ✅ memory-check exit=0 681ms（预算 1300ms）
+  ✅ head-import-check exit=0 710ms（预算 1400ms）
+  ✅ autonomy-check exit=0 815ms（预算 1500ms）
+  ✅ sandbox:check exit=0 927ms（预算 1700ms）
+  ✅ security-check exit=0 760ms（预算 1500ms）
+  ✅ provider:check exit=0 513ms（预算 1300ms）
+  ✅ routing-check exit=0 786ms（预算 1400ms）
+  ✅ model-surface-check exit=0 817ms（预算 1300ms）
+  ✅ prefix-churn-check exit=0 881ms（预算 1500ms）
+  ✅ prompt-surface-check exit=0 828ms（预算 1400ms）
+  ✅ replay-determinism-check exit=0 601ms（预算 1100ms）
+  ✅ cost-per-progress-check exit=0 586ms（预算 1000ms）
+  ✅ gym-check exit=0 1412ms（预算 2400ms）
+  ✅ gate-check exit=0 3143ms（预算 5400ms）
+  ✅ mutate-needles-check exit=0 13851ms（预算 20000ms）
+  认证门面=20 道（跑到 20）｜绿 20 道｜⚠️ 超预算 0
+
+== 认证汇总 ==
+  TREE=bd5ec44 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-bd5ec44.lock）
+  Test Files 257 passed (257)｜Tests 3371 passed (3371)｜exit=0（退出码直接取，不接管道）
+  并发判卷=起前 1 套／跑完 0 套（撞窗：本仓判卷有读写共享 /tmp 的用例）
+  逐条日志：/tmp/dsh-head-cert-bd5ec44
+  回收这棵树（规则 120，别留残留）：git worktree remove --force .worktrees/head-cert-bd5ec44
+  常驻残留树=3（/Users/ze/Downloads/deepseek harness/.worktrees/verify-48e30a8@48e30a8、/Users/ze/Downloads/deepseek harness/.worktrees/verify-6aa6e9d@c195135、/Users/ze/Downloads/deepseek harness/.worktrees/verify-a5197eb@a5197eb）／另有 2 棵不住本仓 scratch 面的残留形树（/private/tmp/dsh-foreign-witness-A、/private/tmp/dsh-foreign-witness-B）＝不是本仓建的，别照上面那条回收命令删它们（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）

@@ -1,0 +1,17 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-48e30a8.lock）
+变异验证：8 条
+✅ evidence-parse-code-group-off-by-one — 把 `code` 取到 `m[3]`（列号）⇒ 危险码一条也匹配不上，门从「拦得住」变成「永远绿」。这一支钉的是写门时**真犯过的**错：上一版把 `(error)` 也括起来占了一组，`m[4]` 就成了常量 "error"；而门自带的「解析 51/51 条」自证完全看不出来——它只数行，不看取错字段（规则 324 的镜像） ｜本机实测 0.7s／2 拍
+✅ evidence-tsc-exit2-read-as-not-run — 只把退出码 1 当「跑过了」⇒ tsc 报出错误时的 2 被归一化成 null，门在**真有料**的那一刻反而出声喊「没跑到」：红被读成没测，且这种输出看起来像谨慎。tsc 的码只有 0（无错）与 2（有错）是给了结论的（本仓 `scripts/typecheck.ts` 原样转发那个 2）——上一版就是这么错的 ｜本机实测 6.5s／2 拍
+✅ evidence-verdict-status-validation-dropped — 判定层不再自证退出码（放过 1）⇒「跑到了没有」完全押在调用方那一份归一化上；判卷与门都会直接喂 `{status:1}`，于是 tsc 用法错/内部崩（我们的取证链就崩过一次）被当成「跑了、0 条危险码」＝干净。规则 261/262：取不到不许读成没问题，而且**每个消费点都要自己认这个取不到** ｜本机实测 0.7s／2 拍
+✅ evidence-danger-code-filter-dropped — 删掉危险码筛选那行 ⇒ TS7006（隐式 any：只欠一个标注、不改变取到什么，现存量 30 条）也进分子：门第一次跑就从「12 条／帽 12 条」变成「51 条」并红一大片，读数失去含义，门会被人关掉。加码要能点名「哪一族会产出假读数」，不能只按「tsc 报了就算」——那是把别人的 30 处算成这一格的债 ｜本机实测 0.7s／2 拍
+✅ evidence-ratchet-equal-counts-as-grew — 把「等于帽」也判成涨 ⇒ 水位门变成常态红：现读 10／帽 10 是**登记存量**的正确状态，红了就没人看第二条（存量水位法的用法是「只准调低」，不是「永远不许等于」）。这一支钉的是比较号方向：改成 `>=` 后，门在自己登记好的仓里也响 ｜本机实测 0.7s／2 拍
+✅ evidence-unregistered-file-cap-default-zero — 未登记文件的默认帽从 0 抬到 1 ⇒ 每加一个新探针都能**白拿一条**危险码，而 `ino` 那一类假读数正好是一条就够（读一个不存在的属性）。登记不是入口：新文件带危险码就该红，逼人要么修要么显式登记（规则 235） ｜本机实测 0.9s／2 拍
+✅ evidence-runner-missing-config-exits-zero — 取不到 `tsconfig.evidence.json` 时退 0 ⇒ 这一格压根没跑被 CI 读成「跑了且干净」；而门自己的取料口径如果只存在于 /tmp 的一条命令里，仓内就没有任何证人能发现它没了。这一支与上面那支的坏法不同：上面是判定算错，这里是**尺没上架** ｜本机实测 1.0s／2 拍
+✅ evidence-runner-unknown-flag-passed-through — 认不出的开关被放行 ⇒ 拿默认口径去量另一件事（本仓 `--budget-ms=` 那一族拒收的同款理由：给了参数却当成没给）。门不收参数是**当前**事实，写成拒收是为了将来加参数时不会静默降级；这一支翻红时说明拒收面漏了 ｜本机实测 7.1s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 19.1s · 跑了 8/8 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 16 次／8 条（每条次数分布 2×8）· 单次中位 第1次 0.4s／第2次 0.4s· 最贵一条 evidence-runner-unknown-flag-passed-through 7.1s
+跑法单价：selector 16 拍·中位 0.39s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-48e30a8.lock）
+KILL_EXIT=0

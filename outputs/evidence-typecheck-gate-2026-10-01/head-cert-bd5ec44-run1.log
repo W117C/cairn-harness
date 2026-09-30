@@ -1,0 +1,48 @@
+目标提交：bd5ec44（--at=HEAD）
+worktree add exit=0
+已核：TREE=bd5ec4496c0f32ad79b194d9e7237faab1067c38｜判卷四面在飞 0 项
+cp -al node_modules exit=0
+依赖核对：该提交声明 10 项，缺 0 项
+  硬链接子仓库依赖 fixtures/todo-app/node_modules ← 主树 exit=0
+import 面：3033 条边｜悬空 0（其中存量已豁免 0）
+门表：31 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证门面（20 道，名单取自 bd5ec44）==
+  ✅ no-progress-check exit=0 1261ms（预算 1100ms）
+  ✅ prune-check exit=0 861ms（预算 1100ms）
+  ✅ fork-check exit=0 1799ms（预算 1100ms）
+  ✅ compaction-check exit=0 877ms（预算 1200ms）
+  ✅ docs-check exit=0 886ms（预算 1300ms）
+  ✅ memory-check exit=0 1272ms（预算 1300ms）
+  ✅ head-import-check exit=0 804ms（预算 1400ms）
+  ✅ autonomy-check exit=0 1345ms（预算 1500ms）
+  ✅ sandbox:check exit=0 2365ms（预算 1700ms）
+  ✅ security-check exit=0 1612ms（预算 1500ms）
+  ✅ provider:check exit=0 698ms（预算 1300ms）
+  ✅ routing-check exit=0 793ms（预算 1400ms）
+  ✅ model-surface-check exit=0 876ms（预算 1300ms）
+  ✅ prefix-churn-check exit=0 949ms（预算 1500ms）
+  ✅ prompt-surface-check exit=0 918ms（预算 1400ms）
+  ✅ replay-determinism-check exit=0 791ms（预算 1100ms）
+  ✅ cost-per-progress-check exit=0 802ms（预算 1000ms）
+  ✅ gym-check exit=0 1979ms（预算 2400ms）
+  ✅ gate-check exit=0 4403ms（预算 5400ms）
+  ✅ mutate-needles-check exit=0 44221ms（预算 20000ms）
+  ⚠️ 超预算（只出声，不判红）：no-progress-check 1261ms > 名单里的 1100ms
+  ⚠️ 超预算（只出声，不判红）：fork-check 1799ms > 名单里的 1100ms
+  ⚠️ 超预算（只出声，不判红）：sandbox:check 2365ms > 名单里的 1700ms
+  ⚠️ 超预算（只出声，不判红）：security-check 1612ms > 名单里的 1500ms
+  ⚠️ 超预算（只出声，不判红）：mutate-needles-check 44221ms > 名单里的 20000ms
+  认证门面=20 道（跑到 20）｜绿 20 道｜⚠️ 超预算 5
+
+== 认证汇总 ==
+  TREE=bd5ec44 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-bd5ec44.lock）
+  Test Files 2 failed | 255 passed (257)｜Tests 2 failed | 3369 passed (3371)｜exit=1（退出码直接取，不接管道）
+  并发判卷=起前 1 套／跑完 2 套（撞窗：本仓判卷有读写共享 /tmp 的用例）
+⚠️ 判卷有红，且两端采到 2 套判卷并行 ⇒ 先排撞窗再查代码（判卷面有写共享 /tmp 的用例，两套并行会互踩出假红；本次读数不是独占跑的）
+  逐条日志：/tmp/dsh-head-cert-bd5ec44
+  回收这棵树（规则 120，别留残留）：git worktree remove --force .worktrees/head-cert-bd5ec44
+  常驻残留树=3（/Users/ze/Downloads/deepseek harness/.worktrees/verify-48e30a8@48e30a8、/Users/ze/Downloads/deepseek harness/.worktrees/verify-6aa6e9d@c195135、/Users/ze/Downloads/deepseek harness/.worktrees/verify-a5197eb@a5197eb）／另有 2 棵不住本仓 scratch 面的残留形树（/private/tmp/dsh-foreign-witness-A、/private/tmp/dsh-foreign-witness-B）＝不是本仓建的，别照上面那条回收命令删它们（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）
+  汇总已同步落盘（不靠 stdout 的尾）：/tmp/dsh-head-cert-bd5ec44/summary.txt
+HEADCERT_EXIT=1
