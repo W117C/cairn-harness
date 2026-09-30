@@ -7653,6 +7653,40 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
    回收前那一格的原文是 `常驻残留树=2（…verify-220c230@220c230、…verify-b521e62@b521e62）`——**两棵都是我自己的**，所以这次"清场"不需要谁点头；
    别人的树（含隔壁那两棵 `.claude/worktrees/…`）一棵没动。回收后 `git worktree list` 现读 23 条。
 
+### 2026-09-30 · 第 234 页 · 补上「取不到主树根」那一格的两支反例（表 1089→1091），并把上一笔被 shell 吃掉的提交消息原文补写在这儿
+
+#### 1. 这一页做两件小事
+
+① 第 231 页 §6 与第 233 页 §7-③ 都登记了同一个空缺：`mainRootFromCommonDir` 的 null 分支与"调用方拿到 null 要出声"那一行**只有用例没有变异证人**。
+本笔补齐：新锚点 `cert-main-root-empty-guesses-cwd`（把空输入那支从 `return null` 改成 `return cwdRoot` ⇒ 判卷「取不到回 null 不猜」红）、
+`cert-scratch-root-unknown-silent`（把 `if (SCRATCH_ROOT === undefined) say(` 改成 `if (false) say(` ⇒ 新写的接线判卷红）。
+判卷侧加 1 条：`接线：主树根取不到时那一格必须出声，不许静默退回「全都算本仓」`（行锚定，防的就是"退化得和什么都没发生一模一样"）。
+
+② **补写上一笔的坏消息**（本仓纪律：消息坏了不 amend，在下一页把原文补出来并声明）。
+第 233 页凭证那一笔（`d9913f5`）的正文第 3 行原本要写的是：
+
+> **`pb-control-arm-always-wired` 出现在 selector 那一批里**就是它自己那处修复的端到端证人：改指针前它只能整文件跑，改后 14 拍全走 `-t`、0 坏拍。
+
+实际落进消息的是"这次跑在 selector 那一批里＝它自己那处改指针的端到端证人（改前只能整文件跑）"——**句首那个锚点名被 zsh 当命令替换执行掉了**
+（终端留下一行 `command not found: pb-control-arm-always-wired`，`git commit` 照样 exit=0）。
+成因不是 `git commit -m`，而是我用 `node -e "…"` 去**生成**消息文件：反引号在写文件之前就被替换掉了。
+⇒ 规矩不是"别用 `-m`"，而是**带反引号/`$`/`(` 的正文，从头到尾不许经过第二层 shell**（这次连"我先写成文件"都仍然被绕过了），
+判据要挪到最容易绕的那一步：写完消息文件后先 `grep -c '\`' 一次再 `-F`。不 amend 的理由是共享树里有两会话在跑，改写历史的风险大于一条坏消息。
+
+#### 2. 过程里另外两处自己咬自己（都记下来，不藏进日志）
+
+1. 我给这两支新锚点的 `desc` 在双引号串里写了裸 ASCII 双引号 ⇒ `node --check` 当场 `SyntaxError: Unexpected identifier '没主树根要出声'`。
+   这道门（`改法语法体检`）本来就会在秒级拒掉它，但我是**先写完再撞**，不是写的时候就避（`desc` 里的引用一律用「」，本仓另一条老规矩）。
+2. 编辑过程中我三次把绝对路径打成 `/Users/ze/ze/Downloads/…`（Edit 直接报 file does not exist，没造成损失）——
+   这条已在记忆里（`no-scripted-splice-edits`），今天在同一会话里连中三次，说明"手打路径"这一步本身就是错的，应该从上一条命令里复制。
+
+#### 3. 读数与自检
+
+- 表 **1091 条**（＋2 支锚点）；工作树 `--check-needles`：`阻断 2 = 钉在飞文本 2`（正是这两支新针脚，落库归零），其余维度 0。
+- `tests/head-cert-deps.test.ts` **88 条全绿**（87 ＋ 本笔 1 条接线判卷）；`node --check scripts/mutate-verify.mjs` 通过；typecheck exit=0。
+- 取料：`outputs/scratch-face-foreign-2026-09-30/`（第 231 页那个目录，本笔的针脚就在它量过的那两处上）。
+- 仍开（不变）：`describe > it` 整条名口径、那条「标题由变量给出」的整文件跑法、`tests/settings.test.ts` 的 2 条多命中。
+
 
 
 

@@ -786,6 +786,12 @@ describe("清场读数：常驻残留的 scratch 树要自己报数（任务 #33
     expect(mainRootFromCommonDir("   ", "/repo"), "空输入＝没尺，不许猜成脚下这棵").toBeNull();
   });
 
+  it("接线：主树根取不到时那一格必须出声，不许静默退回「全都算本仓」", () => {
+    const src = readFileSync(join(repoRoot, "scripts/head-cert.ts"), "utf8");
+    expect(src, "guard 被改成 if (false) ⇒ 没有主树根的场合 foreign 那一格悄悄退化成旧行为，而读数看起来什么都没发生").toMatch(
+      /^if \(SCRATCH_ROOT === undefined\) say\(/mu);
+  });
+
   it("真读现喂：拿本机真的 worktree 清单喂进去不许崩，且绝不点到自己这棵", () => {
     const real = parseWorktreeList(execFileSync("git", ["worktree", "list", "--porcelain"], { cwd: repoRoot, encoding: "utf8" }).trim() === "" ? null : execFileSync("git", ["worktree", "list", "--porcelain"], { cwd: repoRoot, encoding: "utf8" }));
     expect(real, "这台机器上真有 worktree，读到空＝取料坏了").not.toBeNull();

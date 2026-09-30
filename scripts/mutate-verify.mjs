@@ -7879,6 +7879,29 @@ const MUTATIONS = [
     expectFail: "主树根两种 git 形状都认：主检出给相对 .git，linked 树给绝对路径；取不到回 null 不猜",
   },
   {
+    id: "cert-main-root-empty-guesses-cwd",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "`--git-common-dir` 取空时不回 null 而是**猜成脚下这棵** ⇒ 调用方那句「没主树根要出声」永远不响，" +
+      "而 scratch 面悄悄变成「当前树/.worktrees」：在 linked 树里跑的那一趟会把主树的树全判成外域（第 233 页 §6 登记的反例，本笔补上）",
+    apply: (s) => s.replace(
+      'if (common === "") return null;',
+      'if (common === "") return cwdRoot;',
+    ),
+    expectFail: "主树根两种 git 形状都认：主检出给相对 .git，linked 树给绝对路径；取不到回 null 不猜",
+  },
+  {
+    id: "cert-scratch-root-unknown-silent",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "取不到主树根时不出声 ⇒ 这一格退化得和「什么都没发生」一模一样（规则 261/262：尺的取不到与没问题不许同形）",
+    apply: (s) => s.replace(
+      "if (SCRATCH_ROOT === undefined) say(",
+      "if (false) say(",
+    ),
+    expectFail: "接线：主树根取不到时那一格必须出声，不许静默退回「全都算本仓」",
+  },
+  {
     id: "inflight-args-flag-position-wrong",
     src: "scripts/lib/head-cert-deps.ts",
     test: "tests/head-cert-deps.test.ts",
