@@ -127,6 +127,16 @@ export async function runSessionEndDistill(opts: DistillOptions): Promise<Distil
   // 模型不会自动盯着失败看；无失败时 digest 为空串，指令逐字不变（零行为回归）。
   const digest = failureDigestFromEvents(events);
   const instruction = digest.length > 0 ? digest + "\n\n" + DISTILL_INSTRUCTION : DISTILL_INSTRUCTION;
+  /* ⚠️ 已知缺口（2026-09-30 实测，**尚未修**）：这个 `messages` 数组只对**脚本化 provider** 有效。
+   *  走真的 session provider（`createGlmSessionProvider`）时它被整份忽略——那个 provider 的
+   *  `stream(_messages, _tools)` 明确以事件日志为唯一事实源（见 glm-session.ts 的注释）。
+   *  实测那一轮的请求是 `[system, user:"<原任务>", assistant:"…"]`，**instruction 一个字都不在**。
+   *  后果：模型把沉淀轮读成「用户又发了一遍原任务」，不知道四类型纪律、不知道只许调 remember。
+   *  之所以长期没被发现：它照样会答「无」，而那恰好是常见合法终态（`no_content`）。
+   *  判卷现状：`tests/distill.test.ts` 喂的是脚本化 provider，走不到这条路径；
+   *  `tests/session-wiring.test.ts` 里有一条**记录当前（错）行为**的断言，修好后会变红逼人翻面。
+   *  修法方向：给 session provider 开一条「本轮额外追加一条 user 消息」的通道，
+   *  且不能把指令落进日志（否则下一轮投影会把它当用户发言重放）。 */
   const messages: ProviderMessage[] = [...projectContext(events), { role: "user", content: instruction }];
   let asks = 0;
   let writes = 0;

@@ -1814,11 +1814,24 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // 写入即事件：remember 的 tool_call/tool_result 照常落事件流；脚本型 provider 剧本耗尽后产出为空 = 判无。
     try {
       const autoMemory = (await store().get()).autoMemory;
+      // 沉淀轮的 provider 要与主会话**用同一份前缀**（2026-09-30 实测的账）：
+      // 旧写法只传 `(promptText, undefined, modelSelection)`，于是 provider 没有 system、
+      // 没有 requestFace ⇒ 发出去的请求与主会话**在很靠前的地方就分叉**，
+      // 前缀缓存一次也命中不了。实测读数：沉淀轮 input 4,417 tok、cacheRead **181**（几乎全价），
+      // 占整场会话总输入的 7.4%——而它是每一场会话都要付一次的钱。
+      // 传进同一份 sessionOptions 之后，system（BASE_SYSTEM）、工具面（requestFace）、
+      // promptCache 开关三者与主会话逐字一致，前缀才可能命中。
       const outcome = await runSessionEndDistill({
         enabled: autoMemory && opts.mode !== "read-only" && opts.unattended !== true,
         logPath: opts.logPath,
         workspace: opts.workspace,
-        provider: createProvider(promptText, undefined, modelSelection),
+        provider: createProvider(promptText, BASE_SYSTEM, modelSelection, {
+          logPath: opts.logPath,
+          workspace: opts.workspace,
+          emit: pipeline,
+          promptCache: providerSettings.promptCache,
+          requestFace: () => sessionToolFace(rt, faceArgs),
+        }),
         signal,
         rememberTool: remember, // 合并审批即本轮权限门（未加门的工具本体）
         emit: pipeline,
