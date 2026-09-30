@@ -1,0 +1,12 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-4806388.lock）
+变异验证：4 条
+✅ near-cap-threshold-loosened — 贴帽阈值 0.8 改成 0.08 ⇒ 名单里塞进一堆离帽还远的用例，「点名」就失去了意义（同一条判卷里那句 ratio 断言就是拦这个的）。 ｜本机实测 1.0s／2 拍
+✅ timing-slowest-list-dropped — 贴帽名单为空时那一串「离帽余量」不算出来 ⇒ 这一格每趟只印一个「无」，等于开了张却没有读数（第 264 页：两趟认证实测都是 0 条贴帽，写这一档就是为了那个空态） ｜本机实测 0.6s／2 拍
+✅ timing-slowest-tail-not-printed — 算出来却不印（守卫写成恒假）⇒ 与没算同形；而它正是「谁在往帽上爬」唯一被看见的地方（第 264 页） ｜本机实测 0.6s／2 拍
+✅ timing-slowest-unsorted — 余量那一档不按占比排 ⇒ 印出来的三条可能都是轻的，最靠近帽的那条反而看不见；真机整表那条判卷拿独立重数的最大值对账（同分母），排错就红（第 264 页） ｜本机实测 0.8s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 3.3s · 跑了 4/4 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 8 次／4 条（每条次数分布 2×4）· 单次中位 第1次 0.3s／第2次 0.4s· 最贵一条 near-cap-threshold-loosened 1.0s
+跑法单价：selector 8 拍·中位 0.36s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-4806388.lock）
