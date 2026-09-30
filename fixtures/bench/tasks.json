@@ -1,0 +1,26 @@
+[
+  {
+    "id": "B1-bugfix-crossfile",
+    "source": "dsh-bench@local",
+    "instruction": "这个仓库的测试有失败用例。请先跑一遍测试复现，定位根因，改 src/ 下的代码修好它，然后重跑测试证明修好了。注意：金额一律用整数「分」，约定见 README。",
+    "seed": { "kind": "dir", "path": "fixtures/bench/bench-bugfix-crossfile" },
+    "verifier": { "command": "node --test tests/*.test.js" },
+    "expects": ["verifyOk"]
+  },
+  {
+    "id": "B2-feature-export",
+    "source": "dsh-bench@local",
+    "instruction": "tests/fit.test.js 里有两条针对 joinFitted 的失败用例（该函数还不存在）。请在 src/fit.js 里实现 joinFitted，让它满足这两条用例的规格：把多段文本各自按 wrap 的规则折行、段与段之间用空行分隔、空段保留为一个空行。实现后跑测试证明全绿。",
+    "seed": { "kind": "dir", "path": "fixtures/bench/bench-feature-export" },
+    "verifier": { "command": "node --test tests/*.test.js" },
+    "expects": ["verifyOk"]
+  },
+  {
+    "id": "B3-refactor-callsite",
+    "source": "dsh-bench@local",
+    "instruction": "这个仓库的测试全红。根因在共享的格式化函数上：金额渲染没有补足两位小数。请修好根因，并检查所有调用点是否与它保持一致（有历史遗留代码绕过了封装），修完跑测试证明全绿。",
+    "seed": { "kind": "dir", "path": "fixtures/bench/bench-refactor-callsite" },
+    "verifier": { "command": "node --test tests/*.test.js" },
+    "expects": ["verifyOk"]
+  }
+]

@@ -25,6 +25,29 @@ pnpm typecheck        # tsc --noEmit
 pnpm test             # 整跑（core-only 全部测试文件）
 ```
 
+### 量一量：固定开销与任务达成
+
+两个尺子，各自回答一个不同的问题：
+
+```sh
+pnpm prompt-cost      # 每轮固定开销（工具说明书 + 系统提示词），零花费、秒级
+pnpm bench            # 拿真模型跑一套固定任务，出「成功率 / token / 耗时」三读数
+```
+
+`pnpm bench` 用的是**主 CLI 同一套凭据**（`OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`，
+或 `M0_*` 那三个），任务集在 `fixtures/bench/tasks.json`。
+想量化一次改动的效果，就跑它前后各一次——**别拿单次数字当趋势**，模型自身的方差比改动幅度大是常事：
+
+```sh
+# 多跑几轮看分布（reps 越大越可信，代价线性增长）
+node --import tsx scripts/loop-eval.ts --tasks fixtures/bench/tasks.json --reps 3 --max-steps 25
+
+# 只跑其中几条（改完某个子系统时先冒烟）
+node --import tsx scripts/loop-eval.ts --tasks fixtures/bench/tasks.json --only B1-bugfix-crossfile
+```
+
+读数落在 `outputs/bench/readings.json`。
+
 跑一轮：
 
 ```sh

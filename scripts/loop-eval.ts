@@ -49,6 +49,29 @@ const SHORT_SYSTEM = [
 ].join("\n");
 
 /** CNY/百万 token——取自端点自己 /v1/models 的 catalog（中转价，不等于厂商官方价）。 */
+/* 凭据解析（2026-09-30）：M0_* 三个优先；缺了回退到**主 CLI 用的那一套**
+ *  （OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL）。
+ *  为什么要这条回退：度量台的价值在于**随手能跑**。要求用户为评测再配一套凭据，
+ *  结果就是它变成"需要准备才敢跑"的东西，而不会被跑——CLI 已经在用的那份没有理由重配。
+ *  OPENAI_BASE_URL 给的是 base（`…/v1`），这里补 `/chat/completions`：
+ *  与 `providers/openai.ts` 的归一规则同一口径（给全了也认）。 */
+const BENCH_ENDPOINT = process.env.M0_ENDPOINT
+  ?? (() => {
+    const base = (process.env.OPENAI_BASE_URL ?? "").trim().replace(/\/+$/, "");
+    if (base === "") return undefined;
+    return base.endsWith("/chat/completions") ? base : base + "/chat/completions";
+  })();
+const BENCH_API_KEY = process.env.M0_API_KEY ?? process.env.OPENAI_API_KEY;
+const BENCH_MODEL = process.env.M0_MODEL ?? process.env.OPENAI_MODEL;
+/* 回填到装配真正读的那组变量（`streamGlm` 直接读 `M0_API_KEY`，不走参数）：
+ *  不这么做的话，上面那条"回退到 CLI 那套凭据"就只是**看起来**通了——
+ *  实测：用 OPENAI_* 跑，三条任务全部 FAIL，报「M0_API_KEY 未设置」，
+ *  而报错来自 provider 内部、与评测逻辑无关。凭据靠 env 是既有设计（key 不落文件），
+ *  这里只是把同一个值放到装配读得到的那个名字上，不新增存储、不新增路径。
+ *  只在原本为空时回填：显式给了 M0_* 的调用方语义不变。 */
+if (!process.env.M0_API_KEY && BENCH_API_KEY) process.env.M0_API_KEY = BENCH_API_KEY;
+if (!process.env.M0_ENDPOINT && BENCH_ENDPOINT) process.env.M0_ENDPOINT = BENCH_ENDPOINT;
+if (!process.env.M0_MODEL && BENCH_MODEL) process.env.M0_MODEL = BENCH_MODEL;
 const PRICE_IN = Number(process.env.EVAL_PRICE_IN ?? "0.8");
 const PRICE_OUT = Number(process.env.EVAL_PRICE_OUT ?? "2.8");
 
@@ -245,6 +268,10 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
         system,
         workspace: work,
         requestFace: () => ({ tools: face.specs, note: face.note }),
+        // 显式递模型名：provider 不传的话走 `process.env.M0_MODEL ?? "glm-5.2"`，
+        // 而用 OPENAI_MODEL 配的路由（如 OpenRouter 的自由档）在这里就会被静默换成 glm-5.2 ⇒
+        // 请求打到不是你要测的那个模型上。压缩摘要器也吃这个值，两处同源。
+        ...(BENCH_MODEL !== undefined && BENCH_MODEL !== "" ? { model: BENCH_MODEL } : {}),
       }),
       events: driven,
       workspace: work,
@@ -376,7 +403,7 @@ function reportFeasibility(tasks: readonly EvalTask[]): void {
   };
   const probe: EnvProbe = {
     hasRepoSnapshot: (t) => existsSync(resolve(ROOT, t.seed.path)),
-    hasCredentials: () => Boolean(process.env.M0_API_KEY && process.env.M0_ENDPOINT),
+    hasCredentials: () => Boolean(BENCH_API_KEY && BENCH_ENDPOINT),
     canRunVerifier: (t) => t.verifier === undefined || canRunVerifier(t.verifier.command),
   };
   const rows = tasks.map((t) => ({ id: t.id, r: feasibility(specOf(t), probe) }));
@@ -410,8 +437,8 @@ if (tasks.some((t) => t.external)) {
   console.error("[loop-eval] 任务集含外部基准条目 ⇒ 本跑器（GLM 会话装配 + node 靶子）跑不了它；先加 --feasibility 看缺口");
   process.exit(1);
 }
-if (!process.env.M0_API_KEY || !process.env.M0_ENDPOINT) {
-  console.log("[loop-eval] 暗卷缺席（无 M0_API_KEY / M0_ENDPOINT）——显式跳过，不出数（未证 ≠ 通过）");
+if (!BENCH_API_KEY || !BENCH_ENDPOINT) {
+  console.log("[loop-eval] 暗卷缺席（无 M0_API_KEY/M0_ENDPOINT，也没有 OPENAI_API_KEY/OPENAI_BASE_URL）——显式跳过，不出数（未证 ≠ 通过）");
   console.log("[loop-eval] 想知道「现在能不能量、缺什么」：加 --feasibility（零花费，不发模型请求）");
   process.exit(0);
 }

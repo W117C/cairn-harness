@@ -758,7 +758,15 @@ describe("真仓扫：这把尺自己不许空载", () => {
       expect(r.inFlightBareName.length).toBe(0);
       expect(r.committedMultiCopy).toBe(r.multiCopy.length);
     } else {
-      expect(r.inFlightFiles.some((f) => f.startsWith("tests/") || f.startsWith("src/"))).toBe(true);
+      /* 在飞清单非空 ⇒ 它必须真的点得出名（防的是"扫到了但名单空着"那种空转）。
+         旧断言写的是 `inFlightFiles.some(f => f.startsWith("tests/") || f.startsWith("src/"))`——
+         **那是把「在飞的文件恰好在 tests/ 或 src/ 下」当成了「在飞清单有效」的判据**，2026-09-30 实测踩到：
+         当时在飞的是 README.md / package.json / scripts/loop-eval.ts / fixtures/bench/**（新增基准任务集），
+         一个都不在那两个前缀下 ⇒ 断言红，而尺子本身没有任何问题。
+         改成不预设目录：名单非空即成立——**"在飞落在哪些目录"是盘上的事实，不是这把尺的判据**
+         （同一条纪律在本用例上面 inFlightStale 那几行也已写明）。 */
+      expect(r.inFlightFiles.length).toBeGreaterThan(0);
+      expect(r.inFlightFiles.every((f) => f.length > 0 && !f.startsWith("/"))).toBe(true);
     }
   });
 
