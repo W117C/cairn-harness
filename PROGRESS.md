@@ -8233,3 +8233,20 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 2. **这两层不白跑**：a) 「unknown tool」把「探针为什么拿不到动态读数」从「时序猜疑」收窄到「装配缺失」，下一笔的路径从猜测变成确定（走 agent-runner 装配或 loop-eval 搭车）；b) 方案门时序反常独立成格，配 `probe.log` 原句可复现。
 3. **修法路径（下一笔，本页不动源码）**：动态探针改走 `agent-runner` 的工具装配（把 `spawn_agent` 与编排实例接进 runLoop 的 `tools`），或等能力 10 凭据落地后直接在 loop-eval 跑真链搭车取读数。两案都满足 250 页 §四的「驱动 runLoop」要求。
 4. **取料**：`outputs/sequencer-dynamic-2026-10-01/`（`probe.mts`＋`probe.log` 两层实录）。零源码 ⇒ typecheck 不重跑。
+
+### 2026-10-01 · 第 253 页补 更正一条锚点的 killer 指针（它真的存活过一轮；表仍 1109）
+
+取料：`outputs/foreign-witness-2026-10-01/kill-5-anchors-at-6aa6e9d.log`（4/5 杀＋1 存活）、
+`manual-kill-before-pointer-fix.log`（旧指针：变异体下 1 passed｜90 skipped）、`manual-kill-after-pointer-fix.log`（新指针：同变异体 1 failed）。
+
+1. **干净树逐条杀新锚点：4 条 ✅、`cert-tree-abs-args-swapped` ❌ 变异存活**（`判卷 spawn 10 次／5 条…· 最贵一条 1.8s`、`real 6.58`）。
+2. **归因不是「判卷零分辨力」，是我把 killer 指针指错了条**（第 224 页那一族的变体）：这条锚点的 `expectFail` 写的是同文件里那条 canonical 判卷的标题，
+   而**那条判卷根本不调 `certTreeAbs`**——它守的是 `staleScratchTrees` 的排除逻辑。真该红的是 `相对按主树展开，绝对原样采纳，穿越写法先归一`。
+   现场证明（临时树内手工插桩、复原版复原、`status=0`）：把 `resolve(mainRoot, treeArg)` 换成 `resolve(treeArg, mainRoot)` 后，
+   按旧指针跑 `-t`＝**1 passed｜90 skipped**（`expected '/main' to be '/main/.worktrees/wt'` 那条压根没被选中），
+   按新指针跑＝**1 failed**，就是那句 `expected '/main' to be '/main/.worktrees/wt'`。
+3. **为什么秒级尺抓不到它**：`--check-needles` 只验两件事——针脚在被测源里存在、以及 `expectFail` 这条标题**在判卷里解析得出**。
+   两者这里都成立（标题确实存在，只是守的是另一格）⇒ **指针「能解析」与「指向会红的那条」是两格**，只有真跑一遍才知道。
+   本仓这条读数目前无人守（`killer 指针失效 0` 那格量的不是这个），已在 253 页「刻意未做」旁边再记一笔。
+4. 修法：只动 `expectFail` 与 desc（把这次指错写进 desc，免得下一位又按"标题存在"来放心）；**判卷一个字没动**——
+   会红的那条本来就在，是锚点没看着它。表仍 1109 条，针脚体检阻断 0。

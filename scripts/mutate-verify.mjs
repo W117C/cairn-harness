@@ -8545,12 +8545,14 @@ const MUTATIONS = [
     src: "scripts/lib/head-cert-deps.ts",
     test: "tests/head-cert-deps.test.ts",
     desc: "`certTreeAbs(main, tree)` 两个参数写反 ⇒ 绝对 `--tree=` 被算成主树底下（或整串被吃掉），" +
-      "existsSync 读的是不存在的那一面、`node_modules` 硬链进仓内假目录，而判卷只看相对那一条就永远绿（规则 228：等式要配「不等于旧值」）",
+      "existsSync 读的是不存在的那一面、`node_modules` 硬链进仓内假目录。" +
+      "⚠️ killer 指针第一次指错：钉的是同文件里那条 canonical 判卷（它不调这个函数）⇒ 变异**真的存活**过一轮；" +
+      "现指的那条才是吃 `certTreeAbs` 返回值的（规则 224：指针能解析≠它在守这一格，只有跑一遍看得见）",
     apply: (s) => s.replace(
       "  return resolve(mainRoot, treeArg);",
       "  return resolve(treeArg, mainRoot);",
     ),
-    expectFail: "「是不是我自己这棵」要按同一个口径比：`worktree list` 报 `/private/tmp` 而 `--tree=` 给 `/tmp`（第 249 页现读到的）",
+    expectFail: "相对按主树展开，绝对原样采纳，穿越写法先归一",
   },
   {
     id: "stale-self-exclusion-not-canonical",
