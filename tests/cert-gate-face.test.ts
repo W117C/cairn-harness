@@ -16,6 +16,11 @@ const MANIFEST = read("../scripts/gate-manifest.ts");
  *  是认证树 `2becb8e` 上 `gates.ts --only=…` 的原文（13 道、逐道自报 exit 与 ms）。
  *  规则 250：入库的日志是免费取料面——解析器吃真文本，不吃我手写的理想形状。 */
 const GATE_LOG = read("../outputs/gate-cost-for-cert-face-2026-09-30/thirteen-gates-at-2becb8e.log");
+/** 第 273 页的第二本取料：**入库的全表日志**（31 道逐道 `exit`/`ms`，主检出那一趟）。
+ *  规则 250——代价已经付过，读数就在盘上，判卷不必再跑二十分钟去买同一个数。 */
+const ALL_GATES_LOG = read("../outputs/gates-outside-cert-2026-10-01/gates-all.log");
+/** 门面那条「亚秒档全进」的线：它此前只在 `gate-manifest.ts` 的注释里活着，本笔把它变成判据。 */
+const FAST_LINE_MS = 1500;
 
 describe("certGatePlan：名单三态——读不到与「这一笔还没有」不许同形", () => {
   it("从真源文件里抽出整张名单，名字与预算逐个对上（表长不写死：长度归表管，规则 290）", () => {
@@ -131,5 +136,30 @@ describe("名单自己的边界（这条门不能变成一次 20 分钟的认证
     expect(row, "不在门面＝这道门又退化成「交笔时手动跑」那种没人守的承诺").toBeDefined();
     expect(GATES, "门面名单不许变成第二事实源：这道门必须同时在 `GATES` 上").toContain("evidence-typecheck-check");
     expect(row!.budgetMs, "预算写成低于实测两倍＝拿一次读数当上限，负载一动就红").toBeGreaterThanOrEqual(2 * 2644);
+  });
+
+  /* 第 273 页：把门表头上那句「实测 <1.5s 全进」从散文变成判据。
+     动因不是又漏跑了一格，而是这句话**只对部分人成立**：同一趟全表里 `web-fetch-check` 实测 568ms 却在门外——
+     而它当初被挡在外面的理由（「本轮没量过就不占那个位」）已经被那趟跑掉了。
+     取料是入库的那本日志（规则 250）⇒ 判卷不重跑二十分钟。
+     两条各管一半：⑴「线内的必须在门面」防"散文只对熟门生效"；⑵「预算 ≥ 该日志里的实测 ms」防"占位式的预算"。
+     ⚠️ 这条判据用的是**同一本日志里的 ms**，不是别的树的读数（规则 260：单价要连着跑它的那棵树一起记）；
+        日后若某道门在新趟里漂过 1.5s，这一条会自动不再要求它——那是这条线的本意，不是判卷坏了。 */
+  it("实测在这条线内的门不许留在认证门面外（取料＝入库的那趟全表日志）", () => {
+    const rows = parseCertGateRows(ALL_GATES_LOG);
+    expect(rows.length, "31 道一条都不许少（少＝解析器被新形状打败，分母会静默变小）").toBe(31);
+    const fast = [...new Set(rows.filter((r) => r.ms < FAST_LINE_MS).map((r) => r.name))].filter(
+      (n) => !CERT_GATE_EXCLUDED.includes(n),
+    );
+    expect(fast.length, "一把空尺：一个快门都没挑出来＝取料面或这条线读不到东西").toBeGreaterThan(5);
+    const names = CERT_GATES.map((g) => g.name);
+    const budgets = new Map(CERT_GATES.map((g) => [g.name, g.budgetMs]));
+    for (const r of rows.filter((x) => x.ms < FAST_LINE_MS && !CERT_GATE_EXCLUDED.includes(x.name))) {
+      expect(names, r.name + " 实测 " + String(r.ms) + "ms 在这条线内却不在门面 ⇒ 「全进」只对部分门生效").toContain(r.name);
+      expect(budgets.get(r.name) ?? 0, r.name + " 的预算低于它自己那趟的实测 ⇒ 负载一动就红").toBeGreaterThanOrEqual(r.ms);
+    }
+    const bought = CERT_GATES.find((g) => g.name === "web-fetch-check");
+    expect(bought, "这一道是第 273 页按线买进来的，不在门面＝被摘掉了").toBeDefined();
+    expect(bought!.budgetMs, "两倍档：568ms 的实测对应 1200ms 预算").toBeGreaterThanOrEqual(2 * 568);
   });
 });

@@ -9926,6 +9926,26 @@ const MUTATIONS = [
     expectFail: "干净文件的账算我的，在飞文件的账不算我的——但两边都要在清单上",
   },
 
+  /* ── 第 273 页：把「实测 <1.5s 全进」这条线接成判据（取料＝入库的那趟全表日志）。两支各钉一半。 ── */
+  {
+    id: "certface-webfetch-gate-row-dropped",
+    src: "scripts/gate-manifest.ts",
+    test: "tests/cert-gate-face.test.ts",
+    desc: "把这道按线买进来的门摘掉 ⇒ 「线内的全进」又变回只对熟门生效的散文，" +
+      "而它当初被挡在外面的理由（本轮没量过）已经被那趟跑掉了",
+    apply: (s) => s.replace('  { name: "web-fetch-check", budgetMs: 1200 },', "  "),
+    expectFail: "实测在这条线内的门不许留在认证门面外",
+  },
+  {
+    id: "certface-webfetch-budget-under-measured",
+    src: "scripts/gate-manifest.ts",
+    test: "tests/cert-gate-face.test.ts",
+    desc: "这道门的预算被写到实测以下（568ms → 400ms）⇒ 认证门面开始拿一次读数当上限，" +
+      "本机负载一动就冒出「超预算」的假红；这支钉的是买进门面时那个数是**真测的**、预算按两倍档留",
+    apply: (s) => s.replace('"web-fetch-check", budgetMs: 1200', '"web-fetch-check", budgetMs: 400'),
+    expectFail: "实测在这条线内的门不许留在认证门面外",
+  },
+
   /* ── 第 225 页（#40）：六道「执行前就拦下」的硬闸各留一格结构证人。
    *    四支钉的是四种坏法：删一行（两处的头与尾）、条件反过来、枚举与实跑漂移。 ── */
   {

@@ -53,7 +53,10 @@ export const GATES: readonly string[] = [
   "head-import-check",
   // web_fetch 出网门（走明卷：判据是纯函数、传输层打 loopback ⇒ 不需要 key 也不需要出网，
   //  所以它进常跑路径而不是降级成"没 key 就不跑"——缺席当通过比跳过更坏）。
-  // 刻意**不进** `CERT_GATES`：那张表的 `budgetMs` 是实测读数，本轮没量过就不占那个位。
+  // 第 146 页当初写的是「刻意不进 `CERT_GATES`：那张表的 `budgetMs` 是实测读数，本轮没量过就不占那个位」——
+  //   **那个前提在第 273 页没了**：`pnpm gates` 全表那一趟实测它 `exit=0 568ms`（取料 `outputs/gates-outside-cert-2026-10-01/gates-all.log`，
+  //   入库日志＝免费同分母，规则 250）⇒ 按门面那条线（「≤1.5s 全进」，见下面 `CERT_GATES` 头上）买入，预算 1200ms 是两倍档。
+  //   同一趟里门面外 11 道按 ms 排开后**只有这一道**落在线内，所以这一笔只买它，不顺手多买（判卷钉的就是"线内的不许留门外"）。
   "web-fetch-check",
   // 第 149 页登记（任务 #4 结案）：认证**干净 HEAD** 的整棵树（切树→核 rev→补依赖→import 面→门表→typecheck→全量判卷）。
   // 为什么要进默认门表：`"test"` 那道门量的是工作树，而工作树可以替 HEAD 遮红——第 123 页数过：86 笔提交跑在红灯上。
@@ -152,7 +155,10 @@ export const GATES: readonly string[] = [
  *  对认证树判卷 `Duration 121.14s` 是 **+15.4%**——第 223 页那句「≈+13.7%」是买之前的推算，被这个实测替掉（规则 260）；
  *  `tools-check`(8.6s)／`map-check`(4.8s)／`plugins-check`(15.2s)
  *  与那 16 道**没量过的**门都不进——"全吞进来"的性价比要另一笔单独量（第 224 页 §未证）。
- *  ⚠️ 上面这三行数字已被第 226 页的现读替掉一半：另 14 道逐道量完后按「实测 <1.5s 全进」又买十道 ⇒ 那趟是 20 道（**第 272 页按类再买一道 ⇒ 现读 21 道**，见下面那道 `evidence-typecheck-check`）；
+ *  ⚠️ 上面这三行数字已被第 226 页的现读替掉一半：另 14 道逐道量完后按「实测 <1.5s 全进」又买十道 ⇒ 那趟是 20 道；
+ *  第 272 页按**类**买一道＝21 道、第 273 页按**线**买一道＝**现读 22 道**（两道各见下面 `evidence-typecheck-check` 与 `web-fetch-check`）。
+ *  门面预算之和现读 **56500ms**，距判卷那条 60000ms 只剩 3500ms ⇒ **这条线快到头了**：
+ *  再往门面买门之前要先裁"要不要抬 60000"，而那条线是判卷钉着的（`tests/cert-gate-face.test.ts`），抬它＝单独一笔说明＋单独一次认证，不许顺手改。
  *  而 `map-check` 在主树现读是 **53.0s**（这里曾记 4.8s，量的是认证树 @`2becb8e`）——差的十倍来自取料面：
  *  主树刚被本会话写过，影响面要重建；认证树整棵同秒、"按 mtime 取前 N" 那条帽见规则 276。
  *  ⇒ **门的单价要连着"跑它的那棵树"一起记**，否则下一条预算是拿别的机器的账编的（规则 260）。
@@ -185,6 +191,9 @@ export const CERT_GATES: readonly { name: string; budgetMs: number }[] = [
   { name: "prompt-surface-check", budgetMs: 1400 },  // 实测 678ms（文本↔面那把尺，第 174–176 页）
   { name: "replay-determinism-check", budgetMs: 1100 }, // 实测 535ms
   { name: "cost-per-progress-check", budgetMs: 1000 },  // 实测 499ms
+  /* 第 273 页：按门面那条线买进来的（不是按类）。现读 `exit=0 568ms`（`outputs/gates-outside-cert-2026-10-01/gates-all.log`，
+     主检出那一趟全表），预算 1200ms 是两倍档。同一趟里门面外只剩这一道 <1.5s ⇒ 一笔只买一道，剩下四道照旧不进门面。 */
+  { name: "web-fetch-check", budgetMs: 1200 },       // 实测 568ms（web_fetch 出网门，明卷，第 146 页建）
   { name: "gym-check", budgetMs: 2400 },             // 实测 1188ms（这档里最贵的一道，仍 <1.5s 线内）
   { name: "gate-check", budgetMs: 5400 },            // 实测 2659ms
   /* 第 272 页：这道门越过「<1.5s」那条线买进来，动因是一条**被证伪的补偿声称**——
