@@ -1,0 +1,46 @@
+目标提交：cfdb320（--at=cfdb320）
+worktree add exit=0
+已核：TREE=cfdb32050fbc3a35db1e22d60031da285259b12d｜判卷四面在飞 0 项
+cp -al node_modules exit=0
+依赖核对：该提交声明 10 项，缺 0 项
+  硬链接子仓库依赖 fixtures/todo-app/node_modules ← 主树 exit=0
+import 面：3021 条边｜悬空 0（其中存量已豁免 0）
+门表：30 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证门面（20 道，名单取自 cfdb320）==
+  ✅ no-progress-check exit=0 727ms（预算 1100ms）
+  ✅ prune-check exit=0 766ms（预算 1100ms）
+  ✅ fork-check exit=0 736ms（预算 1100ms）
+  ✅ compaction-check exit=0 1000ms（预算 1200ms）
+  ✅ docs-check exit=0 971ms（预算 1300ms）
+  ✅ memory-check exit=0 961ms（预算 1300ms）
+  ✅ head-import-check exit=0 930ms（预算 1400ms）
+  ✅ autonomy-check exit=0 1446ms（预算 1500ms）
+  ✅ sandbox:check exit=0 1648ms（预算 1700ms）
+  ✅ security-check exit=0 1079ms（预算 1500ms）
+  ✅ provider:check exit=0 712ms（预算 1300ms）
+  ✅ routing-check exit=0 949ms（预算 1400ms）
+  ✅ model-surface-check exit=0 1045ms（预算 1300ms）
+  ✅ prefix-churn-check exit=0 1226ms（预算 1500ms）
+  ✅ prompt-surface-check exit=0 1162ms（预算 1400ms）
+  ✅ replay-determinism-check exit=0 770ms（预算 1100ms）
+  ✅ cost-per-progress-check exit=0 725ms（预算 1000ms）
+  ✅ gym-check exit=0 1740ms（预算 2400ms）
+  ✅ gate-check exit=0 5518ms（预算 5400ms）
+  ✅ mutate-needles-check exit=0 18773ms（预算 20000ms）
+  ⚠️ 超预算（只出声，不判红）：gate-check 5518ms > 名单里的 5400ms
+  认证门面=20 道（跑到 20）｜绿 20 道｜⚠️ 超预算 1
+
+== 认证汇总 ==
+  TREE=cfdb320 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-cfdb320.lock）
+  Test Files 256 passed (256)｜Tests 3356 passed (3356)｜exit=0（退出码直接取，不接管道）
+  并发判卷=起前 0 套／跑完 0 套（两端独占）
+  逐条日志：/tmp/dsh-head-cert-cfdb320
+  回收这棵树（规则 120，别留残留）：git worktree remove --force .worktrees/head-cert-cfdb320
+  常驻残留树=7（/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-verify@a5197eb、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-077b13a@077b13a、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-2ee726c@2ee726c、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-3b3d001@3b3d001、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-a5197eb@a5197eb、/Users/ze/Downloads/deepseek harness/.worktrees/verify-6aa6e9d@3b3d001、/Users/ze/Downloads/deepseek harness/.worktrees/verify-a5197eb@a5197eb）／另有 2 棵不住本仓 scratch 面的残留形树（/private/tmp/dsh-foreign-witness-A、/private/tmp/dsh-foreign-witness-B）＝不是本仓建的，别照上面那条回收命令删它们（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）
+  汇总已同步落盘（不靠 stdout 的尾）：/tmp/dsh-head-cert-cfdb320/summary.txt
+real 255.50
+user 191.81
+sys 64.77
+HEADCERT_EXIT=0

@@ -1,0 +1,5 @@
+主树 toplevel = /Users/ze/Downloads/deepseek harness
+主树 realpath   = /Users/ze/Downloads/deepseek harness （同一条：本机主树路径没有符号链接成分）
+⇒ 含义：`canonical` 这一路在主树这一侧是恒等的，本笔不会因此把原先报得出的 `.worktrees` 残留漏掉；
+   它只在 /tmp 那一类路径上起作用：/tmp/dsh-foreign-witness-A → /private/tmp/dsh-foreign-witness-A
+   换到路径含符号链接的机器（macOS 的 /tmp、Linux 的 /mnt 软链、大小写不敏感卷）时，self/cert 两侧仍按同一口径比。

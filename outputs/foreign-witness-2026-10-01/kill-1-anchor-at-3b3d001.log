@@ -1,0 +1,12 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-6aa6e9d.lock）
+变异验证：1 条
+✅ cert-tree-abs-args-swapped — `certTreeAbs(main, tree)` 两个参数写反 ⇒ 绝对 `--tree=` 被算成主树底下（或整串被吃掉），existsSync 读的是不存在的那一面、`node_modules` 硬链进仓内假目录。⚠️ killer 指针第一次指错：钉的是同文件里那条 canonical 判卷（它不调这个函数）⇒ 变异**真的存活**过一轮；现指的那条才是吃 `certTreeAbs` 返回值的（规则 224：指针能解析≠它在守这一格，只有跑一遍看得见） ｜本机实测 1.1s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 1.4s · 跑了 1/1 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 2 次／1 条（每条次数分布 2×1）· 单次中位 第1次 0.6s／第2次 0.5s· 最贵一条 cert-tree-abs-args-swapped 1.1s
+跑法单价：selector 2 拍·中位 0.61s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-6aa6e9d.lock）
+real 2.32
+user 1.95
+sys 0.36

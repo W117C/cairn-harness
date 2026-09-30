@@ -8293,3 +8293,42 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
    那两棵是隔壁按其 240 页 §3 的计划**自造的外域见证树**（detached ∧ 干净 ∧ 已入库，三条件全中）⇒ foreign 格从「用例见证」升到「真机见证」，
    同时 `sandbox:check` 本趟 838ms 回帽内（无并发时包装层不膨胀，234/236/252 页读数第四次互证）。
 4. **清场**：本笔自建认证树核 0 项后回收；别人的树（含隔壁两棵见证树）一棵没动。
+
+### 2026-10-01 · 第 253 页补 凭证：本笔（`cfdb320`）认证 **256 文件／3356 条 exit=0、门 20/20 绿、墙钟 `real 255.50`、两端独占**；五支新锚点 5/5 全杀；一处 `超预算 1` 如实挂着，其归因**没有证人**
+
+取料：`outputs/foreign-witness-2026-10-01/`（`head-cert-cfdb320.log`、`cert-summary-cfdb320.txt`、`kill-5-anchors-at-6aa6e9d.log`、`kill-1-anchor-at-3b3d001.log`、
+`manual-kill-before-pointer-fix.log`／`manual-kill-after-pointer-fix.log`、`needles-at-6aa6e9d.log`、`needles-after-pointer-fix.log`、
+`evidence-tsc-baseline.log`／`evidence-tsc-baseline2.log`、`canonical-portability.log`、三趟半把尺 `cert-skip-test*.log`、`docs-check-before-credential.log`）。
+
+1. **被认证的是 `cfdb320`**（本会话页 253 的三笔簇：`6aa6e9d` 实现＋判卷＋五条锚点、`3b3d001` killer 指针更正、`cfdb320` 证据面复测）。
+   用的是独立树 `.worktrees/head-cert-cfdb320`（`worktree add exit=0`、`cp -al node_modules exit=0`、切完 `rev-parse` 与目标逐字相同）。
+2. **针脚两份互证**：干净树 `针脚体检：1109 条 —— 阻断 0，待复认 0，未覆盖 0，逐行式 5，未入库面 0，钉在飞文本 0，killer 指针失效 0`、
+   `改法语法体检：1109 条改法全部产出合法源文件 ✅`；主树落库前是 `阻断 5＝钉在飞文本 5`（同一把尺两个时刻，243/244/249 页先例第五次应验）。
+3. **五支新锚点逐条真杀**：第一趟 **4 ✅ ＋ 1 ❌ 存活**（`real 6.58`、`成本分母：判卷 spawn 10 次／5 条（每条次数分布 2×5）· 单次中位 第1次 0.4s／第2次 0.4s· 最贵一条 cert-tree-abs-args-swapped 1.8s`）；
+   存活那条按第 253 页补⑵ 归因为**指针指错**（不是判卷零分辨力），改指后单独复杀 **1 ✅**（`real 2.32`、`成本分母：判卷 spawn 2 次／1 条（每条次数分布 2×1）· 单次中位 第1次 0.6s／第2次 0.5s`、
+   `跑法单价：selector 2 拍·中位 0.61s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母`）⇒ **合计 5/5 全杀，且这条经历本身成了规则 325 的证人**。
+   ⚠️ 这一条要留字：`--check-needles` 当时报的是全绿（`killer 指针失效 0`），它验不出"指针指向不会红的那条"——那一格至今没有观测者，已挂任务 #6。
+4. **head-cert 汇总逐格**：`TREE=cfdb320 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有`、
+   `Test Files 256 passed (256)｜Tests 3356 passed (3356)｜exit=0（退出码直接取，不接管道）`、`认证门面=20 道（跑到 20）｜绿 20 道｜⚠️ 超预算 1`、
+   `依赖核对：该提交声明 10 项，缺 0 项`、`import 面：3021 条边｜悬空 0（其中存量已豁免 0）`、`门表：30 道，其中该笔 package.json 没有同名 script 的 0 道`、
+   `typecheck exit=0（0 报错）`、`HEADCERT_EXIT=0`（取自 log 与 `cert-summary-cfdb320.txt` 两处，**不是**后台通知回显的那个 0）。
+   **墙钟本笔量到了**：`real 255.50`（`user 191.81／sys 64.77`）——249 页那格从前是"没量到"，这次按 `time -p` 前缀补上了。
+5. **那一格 `超预算 1` 不解释、不改帽**：`gate-check exit=0 5518ms（预算 5400ms）`，而 `scripts/gate-manifest.ts:180` 那行注的是 `// 实测 2659ms` ⇒ 现值是登记实测的 **2.08×**、是帽的 1.02×。
+   可能成因是门相期间隔壁套件在跑（ps 现场 pid 82129 起于 00:45:13），**但本笔没有证人**：门的并发采样点在判卷相两端（`并发判卷=起前 0 套／跑完 0 套（两端独占）`），
+   门相那一截压根没采 ⇒ 把超预算归给并发是推测。结论：判绿（`exit=0`、只出声不判红），帽不动（只准调低），要重标定得等一次 quiet 独占的单门实测。
+6. **条数核对式（两头互证，不重复计数）**：`3356 ＝ 3353（第 249 页凭证 @`a5197eb` 的留档）＋ 3`——
+   那 3 条是 `tests/head-cert-deps.test.ts` 88→91（`git show` 两侧现读 `^ {2}it\(` 计数），文件数 256 未变（本笔没建新判卷文件）。
+   隔壁第 255 页凭证留档的也是 **3356**（@`10bf910`，它的祖先里已含我的 `6aa6e9d`）⇒ 同一头两个出处对齐；本笔**不再往 3356 上加成**。
+7. **任务 #1 的见证就在本笔之前拿到**（详见 253 页 §6）：`--skip-test --why=…` 半把尺两趟，`HEADCERT_EXIT=0`，
+   改前 `=6 …另有 2 棵`、改后 `=5 …另有 1 棵（/private/tmp/dsh-foreign-witness-A）`。等级要点名：那两趟**只跑 typecheck**，不构成"这棵树全量绿"，
+   全量绿只有本笔这一趟。附带一条边界证明（`canonical-portability.log`）：本机主树 `realpath === toplevel` ⇒ 新加的 `canonical` 在主树这一侧是恒等的，
+   不会把原先报得出的 `.worktrees` 残留读没。
+8. **清场（现读，不写"已回收"）**：本笔认证树 `head-cert-cfdb320` **未删**，命令逐字 `git worktree remove --force .worktrees/head-cert-cfdb320`。
+   门的现读列到 `常驻残留树=7 ／另有 2 棵不住本仓 scratch 面的残留形树`——**9 棵里 8 棵是本会话自建的**（`verify-a5197eb`、`verify-6aa6e9d`、`head-cert-a5197eb`、`head-cert-2ee726c`、
+   `head-cert-077b13a`、`head-cert-cfdb320`、`/private/tmp/dsh-foreign-witness-A`、`B`），逐棵 `status --porcelain`＝0 项，`gate-mutate-verify` 是变异门的常驻树（不动）。
+   ⚠️ **`head-cert-3b3d001` 不是我的**（差点按名字把它算进来）：本会话对 `3b3d001` 那趟认证在 00:38:32 被锁挡回、**一棵树都没建**（`cert-skip-test.log` 之前那趟 exit 2 就是这次），
+   而这棵树的建树时刻是 **00:38:06**——早 26 秒，属隔壁那趟（它随后落的是自己 255 页凭证，用的另一棵 `head-cert-10bf910`）。
+   归属要按"谁在这棵树上做过什么"的现读时刻判，不能按"树名里带我的提交号"判（规则：归属类事实每次现读）。
+   向用户报过并等点头；**没删就是没删**，这里不写"已回收"（第 247 页那句就是这么写错的，249 页已更正）。
+9. **刻意未做（免得被读成已做）**：`--check-needles` 的"未真杀登记"那一维（任务 #6）；证据面水位门（任务 #4，基线 47 条／14 文件、危险族 10 条／6 文件已量）；
+   认证树能否建在仓外这一口径裁决（任务 #5）；`ClaimResult` 判别联集与 exit-2 的机器可读原因键；探针**负载那一臂**（249 页 §4 的读数仍只覆盖静态两态）。

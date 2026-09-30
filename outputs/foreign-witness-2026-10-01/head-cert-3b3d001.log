@@ -1,0 +1,7 @@
+目标提交：3b3d001（--at=3b3d001）
+❌ .worktrees/head-cert-3b3d001 正被占用：pid 70251 正在跑 head-cert（目标 3b3d001，已 18s）⇒ 抢它会替别人改盘
+   占这棵树会替别人把它切走（它随后的读数其实是这一笔的）。等它跑完，或换一个写入位置。
+real 0.26
+user 0.16
+sys 0.05
+HEADCERT_EXIT=2
