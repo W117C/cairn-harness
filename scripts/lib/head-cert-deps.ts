@@ -403,3 +403,189 @@ export function certGatePlan(
     .map((m) => ({ name: m[1]!, budgetMs: Number(m[2]) }));
   return plan.length === 0 ? { state: "broken", plan: [] } : { state: "ok", plan };
 }
+
+/* ── 贴帽读数（第 262 页，任务 #8）。
+ *  动因是实测：认证 `bd5ec44` 第一趟两条用例报 `Test timed out in 5000ms`（`tests/mutate-shards.test.ts:400`、
+ *  `tests/mutate-verify-gates.test.ts:1781`），把它们**隔离复跑**是 205/205 全绿 ⇒ 那是容量红不是代码红，
+ *  而当时没有任何一格能证明这一点——只能再花一次三分钟复跑来归因（第 259 页补 凭证那一格给的就是这次）。
+ *  现读（`outputs/judge-timeout-2026-10-01/suite-quiet.json`，安静态全量 3394 条）：
+ *  最慢那条是 `tests/m3c.test.ts` 的「未获批准 fail-closed…」＝15197ms，它**自带 25000ms 显式预算** ⇒ 61%；
+ *  其余最慢的 `tests/mutate-shards.test.ts` 2770ms 走缺省 5000ms ⇒ 55%。
+ *  ⇒ **安静态这一格读数是 0 条**，这是事实不是缺陷：这一格量的是"隔壁会话在同一台机器上跑起来的那一刻"，
+ *  而那一时刻恰好就是红发生的那一刻。它的价值在于把「谁贴着帽」变成每次认证自动印一行，
+ *  让我下一次不必再靠"红了两条 → 隔离复跑 → 猜是容量"这条两分钟一趟的路归因。刻意**不进门禁**（帽子只准调低，规则 235）。 */
+
+export type SuiteRow = { file: string; title: string; full: string; ms: number };
+
+/** vitest `--reporter=json` 的原文 → 逐条用例。取不到／形状不认识一律 null——null 与"0 条"必须分开：
+ *  后者会被读成「没有用例贴帽」，正是这一格要消灭的那件事。 */
+export function suiteRows(jsonText: string | null, rootPrefix: string): SuiteRow[] | null {
+  if (jsonText === null) return null;
+  let parsed: unknown;
+  try { parsed = JSON.parse(jsonText); } catch { return null; }
+  const p = parsed as { testResults?: { name?: string; assertionResults?: { fullName?: string; title?: string; ancestorTitles?: string[]; duration?: number }[] }[] };
+  if (!Array.isArray(p.testResults)) return null;
+  const out: SuiteRow[] = [];
+  for (const f of p.testResults) {
+    const name = f.name ?? "";
+    // 前缀配上就取相对路径；配不上（树路径被解引用过、或带 `/private` 那一类成分）就退一步按 `/tests/` 取尾。
+    // 不兜这一层的话每条都会掉进 `not-resolved`——那一格会出声，但这一格本来该量到东西（规则 262）。
+    let rel = name.startsWith(rootPrefix) ? name.slice(rootPrefix.length) : name.replace(/^\/+/u, "");
+    if (!rel.startsWith("tests/") && rel.includes("/tests/")) rel = rel.slice(rel.lastIndexOf("/tests/") + 1);
+    for (const a of f.assertionResults ?? []) {
+      const title = a.title ?? "";
+      const full = (a.fullName ?? [...(a.ancestorTitles ?? []), title].filter(Boolean).join(" ")).trim();
+      out.push({ file: rel, title, full, ms: typeof a.duration === "number" ? a.duration : 0 });
+    }
+  }
+  return out;
+}
+
+/** 从判卷源码里取**这一条 `it` 的预算**：两种 vitest 写法都认（位置式 `}, 15_000);`、选项式 `{ timeout: 300_000 }`）。
+ *  三档分开：`explicit`＝那份判卷自己写了；`implicit`＝写了收尾但没写预算 ⇒ 缺省帽说了算（正常态）；
+ *  `not-resolved`＝文件取不到／标题找不到／收尾认不出 ⇒ **这一格没量到**，不能被读成「没写预算」（规则 261/262 那一族：取不到不等于没问题）。
+ *  收尾只认 0/2 空格缩进的那一行：更深的 `});` 属于嵌套回调，认了就等于在中途停下。 */
+export type BudgetLookup =
+  | { kind: "explicit"; ms: number }
+  | { kind: "implicit" }
+  /** 标题**不是逐字字面量**（`it.each` 的 `%s`／反引号插值／`"…" + 变量` 拼接／`it(变量, …)`）⇒ 跑出来的标题必然不在源码里。
+   *  这与"标题真的找不到"是两种成因：前者是已知形状、按缺省帽算是有道理的；后者要单独出声（规则 261/262）。
+   *  同一族的另一面在变异表里叫「松钉」（`looseOnlyPointers`，09-27 现读 10／872）。
+   *  真机三形各有见证（`outputs/judge-timeout-2026-10-01/realdata.log`，第 262 页）：
+   *  `tests/action-fusion.test.ts` 的 `it.each(...)("… %s …")`、`tests/gate-audit.test.ts` 的
+   *  `for (const c of LAYER_CASES) it(\`${c.name} ⇒ layer=${c.expected}\`, …)`、
+   *  `tests/zero-regression-conjunct.test.ts` 的 `it(face.name + "：…", …)`。 */
+  | { kind: "nonliteral"; fileHas: string }
+  | { kind: "not-resolved"; why: string };
+
+/** 「这一份判卷里存在非字面量标题的形状」的判据——取料与读数共用这一份，别在调用方再抄一遍（第十三族）。
+ *  六个备选形状是按**真机读到的**列出来的，不是按想象的写法（`outputs/judge-timeout-2026-10-01/realdata.log`
+ *  逐形状计数：`it.each` 76／`it(\`` 25／`describe.each` 8／`it("…："+` 2／`it(f…` 2／`it("②…="+` 1）：
+ *  `it(` 后面既不是引号也不是反引号 ⇒ 标题是变量。 */
+const NONLITERAL_TITLE = /it\.each|test\.each|describe\.each|it\(\s*`|it\(\s*"[^"]*"\s*\+|it\(\s*[A-Za-z_$]/u;
+
+/** 归因到**这一条自己的**那个形状，而不是文件里第一条命中的形状。
+ *  为什么不能取第一条：实测有一条 `it(\`水位：真表现读松钉只准调低（帽 ${N}…）\`)` 被报成了
+ *  隔壁的 `it("零行为回退：" +`（同一份文件里两种形状都有）——档数没错、成因文字错，
+ *  而这一格存在的理由就是"成因要说得出名字"。做法：拿标题的静态前缀（前 12 字，插值之前必然原样）
+ *  定位到它在自己那条模板上的位置，再取**离它最近且靠前**的那次命中；找不到前缀就退回第一条（并如实标 `?`）。 */
+function nearestNonliteralShape(text: string, title: string): string {
+  const re = new RegExp(NONLITERAL_TITLE.source, "gu");
+  const hits: { m: string; i: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) hits.push({ m: m[0], i: m.index });
+  const first = hits[0];
+  if (first === undefined) return "";
+  const head = title.slice(0, 12);
+  const at = head === "" ? -1 : text.indexOf(head);
+  if (at < 0) return first.m.trim() + "?";
+  let best = first;
+  for (const h of hits) {
+    if (h.i > at) break;
+    best = h;
+  }
+  return best.m.trim();
+}
+
+export function budgetFromTestSource(text: string, title: string): BudgetLookup {
+  // 取料用 `JSON.stringify(title)` 而不是裸拼 `"…"＋标题＋"…"`：判卷里写的是**带转义的字符串字面量**
+  // （`\"`、`\\`、`\n`），跑出来的标题是解了转义的那一份，逐字拼必然对不上（真机 11 条因此被误归，改成 3 条）。
+  // 这与变异表里「松钉指针」（`looseOnlyPointers`）是同一族：能解析 ≠ 能逐字认。
+  const at = text === "" ? -1 : text.indexOf(JSON.stringify(title));
+  if (at < 0) {
+    if (text === "") return { kind: "not-resolved", why: "判卷文件取不到" };
+    const shape = nearestNonliteralShape(text, title);
+    if (shape !== "") return { kind: "nonliteral", fileHas: shape };
+    return { kind: "not-resolved", why: "标题不在那份判卷里" };
+  }
+  const rest = text.slice(at);
+  const withBudget = /^ {0,2}\}, ([0-9_]+)\);/mu.exec(rest);
+  const plain = /^ {0,2}\}\);/mu.exec(rest);
+  if (withBudget === null && plain === null) return { kind: "not-resolved", why: "收尾形状认不出" };
+  // 位置式的收尾更靠前 ⇒ 这一条 `it` 就是带预算收尾的（否则那是下一条的收尾，宁可不判）。
+  if (withBudget !== null && (plain === null || withBudget.index <= plain.index)) {
+    const ms = Number((withBudget[1] ?? "").replace(/_/gu, ""));
+    return Number.isFinite(ms) && ms > 0 ? { kind: "explicit", ms } : { kind: "not-resolved", why: `位置式预算不是正数：${withBudget[1] ?? ""}` };
+  }
+  const closer = plain?.index ?? Number.MAX_SAFE_INTEGER;
+  const opts = /\{\s*timeout:\s*([0-9_]+)\s*\}/u.exec(rest.slice(0, closer));
+  if (opts === null) return { kind: "implicit" };
+  const ms = Number((opts[1] ?? "").replace(/_/gu, ""));
+  return Number.isFinite(ms) && ms > 0 ? { kind: "explicit", ms } : { kind: "not-resolved", why: `选项式预算不是正数：${opts[1] ?? ""}` };
+}
+
+export type TimingCell = {
+  state: "unreadable" | "ok";
+  total: number;
+  /** 缺省帽的**出处**文字：谁说了算（config 里的 `testTimeout` 还是 vitest 默认）。汇总行要印它，否则读数看起来像本仓定的尺。 */
+  defaultSource: string;
+  /** 用时 ≥ 有效预算 80% 的条数（"贴帽"）。缺省预算按 `defaultBudget.ms` 算。 */
+  near: { file: string; full: string; ms: number; budget: number; ratio: number }[];
+  /** 判卷里没写显式预算 ⇒ 按缺省帽算。这是**正常态**（vitest 的设计就是缺省优先），所以它不进名单、只出个数。 */
+  implicit: number;
+  /** 标题不是逐字字面量（`it.each`／插值／拼接）：按缺省帽算，但成因与 `implicit` 不同，分开印（真机读数见第 262 页）。 */
+  nonliteral: number;
+  /** 文件取不到／标题在那份文件里找不到（而那份文件也没有模板拼标题的形状）／预算读成正数以外 ⇒ 这一格**没量到**，
+   *  单独一档，不许并进上面两档（规则 261/262）。健康态应为 0。 */
+  notResolved: number;
+  /** 「没量到」那几条的**成因与文件名**（最多几条，够点名的量）：只给个数字的话，下一次还是得重跑一遍才知道差在哪。 */
+  notResolvedWhy: { file: string; why: string }[];
+};
+
+/** 纯函数：把"每条用时"对上"每条预算"，只挑出贴帽的那几条。`readTest` 由调用方注入（门喂真盘，判卷喂假文字）。 */
+export function timingNearCapCell(
+  rows: SuiteRow[] | null,
+  opts: { defaultBudget: { ms: number; source: string }; readTest: (rel: string) => string | null; limit?: number },
+): TimingCell {
+  if (rows === null) return { state: "unreadable", total: 0, defaultSource: opts.defaultBudget.source, near: [], implicit: 0, nonliteral: 0, notResolved: 0, notResolvedWhy: [] };
+  const cache = new Map<string, string | null>();
+  const near: TimingCell["near"] = [];
+  const notResolvedWhy: TimingCell["notResolvedWhy"] = [];
+  let implicit = 0;
+  let nonliteral = 0;
+  let notResolved = 0;
+  for (const r of rows) {
+    if (!cache.has(r.file)) cache.set(r.file, r.file.endsWith(".test.ts") ? opts.readTest(r.file) : null);
+    const lookup = budgetFromTestSource(cache.get(r.file) ?? "", r.title);
+    if (lookup.kind === "implicit") implicit += 1;
+    if (lookup.kind === "nonliteral") nonliteral += 1;
+    if (lookup.kind === "not-resolved") {
+      notResolved += 1;
+      if (notResolvedWhy.length < 3) notResolvedWhy.push({ file: r.file, why: lookup.why });
+    }
+    const eff = lookup.kind === "explicit" ? lookup.ms : opts.defaultBudget.ms;
+    if (eff <= 0) continue;
+    if (r.ms >= eff * 0.8) near.push({ file: r.file, full: r.full, ms: r.ms, budget: eff, ratio: r.ms / eff });
+  }
+  near.sort((a, b) => b.ratio - a.ratio);
+  return { state: "ok", total: rows.length, defaultSource: opts.defaultBudget.source, near: near.slice(0, opts.limit ?? 8), implicit, nonliteral, notResolved, notResolvedWhy };
+}
+
+/** 从 `tests/vitest.config.ts` 的原文里取**缺省超时**（写了 `testTimeout` 就用它，没写回 null ⇒ 调用方按 vitest 缺省算）。
+ *  为什么要现读而不是在门里写死 5000：写了缺省值就等于造第二条"谁说了算"的口径，
+ *  哪天有人给 config 加了 `testTimeout`，门里那个常数会静默把读数算歪（第十三族：同一谓词只留一份）。 */
+export const VITEST_DEFAULT_TIMEOUT_MS = 5_000;
+
+export function defaultTimeoutFromConfig(configText: string | null): { ms: number; source: string } {
+  const m = configText === null ? null : /testTimeout:\s*([0-9_]+)/u.exec(configText);
+  if (m === null) {
+    return { ms: VITEST_DEFAULT_TIMEOUT_MS, source: `缺省＝vitest 默认 ${String(VITEST_DEFAULT_TIMEOUT_MS)}ms（config 未写 testTimeout${configText === null ? "，config 也取不到" : ""}）` };
+  }
+  const ms = Number((m[1] ?? "").replace(/_/gu, ""));
+  return Number.isFinite(ms) && ms > 0
+    ? { ms, source: `缺省＝config 里的 testTimeout=${String(ms)}ms` }
+    : { ms: VITEST_DEFAULT_TIMEOUT_MS, source: `缺省＝vitest 默认 ${String(VITEST_DEFAULT_TIMEOUT_MS)}ms（config 的 testTimeout 不是正数：${m[1] ?? ""}）` };
+}
+
+/** 汇总行。三态分开印：读不到 json ≠ 没有用例贴帽（规则 261/262）。 */
+export function timingCell(c: TimingCell): string {
+  if (c.state === "unreadable") return "贴帽读数：取不到判卷 json ⇒ 这一格没量到，不等于「没有用例贴帽」";
+  const tail = c.notResolved === 0
+    ? ""
+    : `（这一格没量到，不等于 0）｜成因点名：${c.notResolvedWhy.map((w) => `${w.file}（${w.why}）`).join("；")}`;
+  const head = `贴帽读数（${c.defaultSource}）：${String(c.total)} 条里 ${String(c.near.length)} 条用时 ≥ 有效预算 80%`
+    + `｜无显式预算按缺省算 ${String(c.implicit)} 条｜标题非字面量（it.each／插值／拼接，按缺省算）${String(c.nonliteral)} 条`
+    + `｜预算没落到 ${String(c.notResolved)} 条${tail}`;
+  if (c.near.length === 0) return `${head}｜无`;
+  return `${head}：${c.near.map((n) => `${n.file}·${n.full.slice(0, 34)} ${String(Math.round(n.ms))}ms/${String(n.budget)}ms=${String(Math.round(n.ratio * 100))}%`).join("；")}`;
+}

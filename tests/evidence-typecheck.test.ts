@@ -131,7 +131,7 @@ describe("真环境：这一格得在真仓里跑得出东西（规则 237/320�
     const t = tally((ran?.out ?? "").split("\n"));
     expect(t.parsed, "报错行一条都抽不出来 ⇒ 解析形状与真 tsc 输出对不上").toBe(t.total);
     expect(t.total, "证据面一条报错都没有？那要么门白装，要么取料面空了").toBeGreaterThan(0);
-  });
+  }, 15_000); // 一次真 tsc：安静态实测 2.56s，三套判卷并行时越过缺省 5s（第 262 页）
 
   it("登记表里的文件都还在盘上（删了的登记＝下一笔必须把帽撤到 0，不许留幽灵条目）", () => {
     for (const f of Object.keys(DANGER_BASELINE)) {
@@ -160,7 +160,7 @@ describe("门那一半：runner 的两个拒绝分支各自要出声", () => {
     expect(out).toContain("本门不认参数");
     // 反向证人：同一个脚本不带参数时**不许**退 2（否则上面那条恒真）
     expect(runGate([], repoRoot).status === 2, "不带参数也退 2 ⇒ 拒绝分支写反了，上面那条就没分辨力了").toBe(false);
-  });
+  }, 15_000); // 反向证人那一跑要真把门跑一遍（含一次 tsc）：安静态 2.74s（第 262 页）
 
   it("口径文件取不到 ⇒ 出声且非零，不许读成干净", () => {
     const empty = mkdtempSync(join(tmpdir(), "dsh-evtsf-"));

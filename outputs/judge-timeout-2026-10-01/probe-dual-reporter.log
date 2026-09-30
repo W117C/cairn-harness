@@ -1,0 +1,15 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+ [32m✓[39m tests/evidence-typecheck.test.ts [2m([22m[2m14 tests[22m[2m)[22m[33m 4653[2mms[22m[39m
+   [32m✓[39m 真环境：这一格得在真仓里跑得出东西（规则 237/320） [2m(2)[22m
+     [33m[2m✓[22m[39m 仓内 tsconfig.evidence.json 存在，且 tsc 真跑了（退出码 0 或 2，不是「没跑到」）[33m 2198[2mms[22m[39m
+   [32m✓[39m 门那一半：runner 的两个拒绝分支各自要出声 [2m(2)[22m
+     [33m[2m✓[22m[39m 拼错的开关 ⇒ 退 2 并点名，不许当成「没给参数」拿默认口径跑[33m 2366[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m14 passed[39m[22m[90m (14)[39m
+[2m   Start at [22m 02:38:30
+[2m   Duration [22m 4.79s[2m (tests 99%, transform 1%, import 1%)[22m
+
+JSON report written to /Users/ze/Downloads/deepseek harness/outputs/judge-timeout-2026-10-01/probe-dual-reporter.json

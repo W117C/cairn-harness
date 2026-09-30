@@ -8,7 +8,8 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { certLevel, CERT_FLAGS, CERT_OPTS, certTreeAbs, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, gitInflightArgs, headGateTableIntegrity, installedDeps, mainRootFromCommonDir, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "../scripts/lib/head-cert-deps";
+import { budgetFromTestSource, certLevel, CERT_FLAGS, CERT_OPTS, certTreeAbs, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, defaultTimeoutFromConfig, depDirs, gitInflightArgs, headGateTableIntegrity, installedDeps, mainRootFromCommonDir, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, suiteRows, timingCell, timingNearCapCell, unknownCertArgs, VITEST_DEFAULT_TIMEOUT_MS } from "../scripts/lib/head-cert-deps";
+import type { SuiteRow } from "../scripts/lib/head-cert-deps";
 import { acquireToolLock, decideToolLock, lockAgeCap, parseToolLock, shouldReleaseLock, toolLockPath } from "../scripts/lib/tool-lock";
 
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
@@ -1077,5 +1078,172 @@ describe("临时名只写自己新起的名字：`wx` 与 EEXIST 重写的行为
     } finally {
       rmSync(d, { recursive: true, force: true });
     }
+  });
+});
+
+/* ── 贴帽读数（第 262 页，任务 #8）。动因是实测：认证 `bd5ec44` 第一趟两条用例 `Test timed out in 5000ms`，
+ *  隔离复跑 205/205 全绿 ⇒ 容量红，而当时没有任何一格在跑完之后回答「有多少用例贴着帽」。
+ *  这一族的判据形状与真机读数见 `outputs/judge-timeout-2026-10-01/realdata.mts`／同目录 `realdata.log`。 */
+describe("贴帽读数：suiteRows／budgetFromTestSource／timingNearCapCell／timingCell（第 262 页）", () => {
+  const jsonOf = (files: { name: string; cases: { title: string; ms: number }[] }[]): string =>
+    JSON.stringify({
+      testResults: files.map((f) => ({
+        name: f.name,
+        assertionResults: f.cases.map((c) => ({ title: c.title, fullName: c.title, ancestorTitles: [], duration: c.ms, status: "passed" })),
+      })),
+    });
+  const budget = (ms: number) => ({ ms, source: `缺省＝测试喂的 ${String(ms)}ms` });
+
+  it("取料：json 取不到（null）与「0 条用例」是两件事，两态各印各的话", () => {
+    const noJson = timingNearCapCell(null, { defaultBudget: budget(5000), readTest: () => null });
+    expect(noJson.state).toBe("unreadable");
+    expect(timingCell(noJson)).toContain("这一格没量到");
+    const empty = timingNearCapCell(suiteRows(jsonOf([]), ""), { defaultBudget: budget(5000), readTest: () => null });
+    expect(empty.state).toBe("ok");
+    expect(empty.total).toBe(0);
+    expect(timingCell(empty)).toContain("0 条里 0 条");
+    expect(timingCell(empty), "0 条不是「没量到」——两句话混了就把这一格的警报作废了").not.toContain("没量到");
+  });
+
+  it("取料：树路径配不上前缀时按 tests/ 取尾，不许整表掉进「预算没落到」", () => {
+    const rows = suiteRows(jsonOf([{ name: "/private/var/x/.worktrees/verify-abc123/tests/a.test.ts", cases: [{ title: "甲", ms: 10 }] }]), "/Users/other/root/");
+    expect(rows?.[0]?.file).toBe("tests/a.test.ts");
+    const matched = suiteRows(jsonOf([{ name: "/tree/tests/a.test.ts", cases: [{ title: "甲", ms: 10 }] }]), "/tree/");
+    expect(matched?.[0]?.file).toBe("tests/a.test.ts");
+    expect(suiteRows("{不是 json", "/tree/")).toBeNull();
+    expect(suiteRows('{"nothingHere":1}', "/tree/")).toBeNull();
+  });
+
+  it("预算四档各自成形：位置式／选项式／没写／取不到，且带转义的标题也要认得（真机 11 条栽在这一格）", () => {
+    const src = [
+      '  it("甲", () => {', "  }, 12_000);",
+      '  it("乙", { timeout: 30_000 }, () => {', "  });",
+      '  it("丙", () => {', "  });",
+    ].join("\n") + "\n";
+    expect(budgetFromTestSource(src, "甲")).toEqual({ kind: "explicit", ms: 12000 });
+    expect(budgetFromTestSource(src, "乙")).toEqual({ kind: "explicit", ms: 30000 });
+    expect(budgetFromTestSource(src, "丙")).toEqual({ kind: "implicit" });
+    expect(budgetFromTestSource(src, "没有这一条")).toEqual({ kind: "not-resolved", why: "标题不在那份判卷里" });
+    expect(budgetFromTestSource("", "甲")).toEqual({ kind: "not-resolved", why: "判卷文件取不到" });
+    // 标题里带裸双引号：源码写的是 `\"`，跑出来的是 `"` ⇒ 逐字拼必然对不上（旧写法就在这里读成 not-resolved）。
+    const escaped = '  it("他说\\"停\\"再走", () => {\n  }, 7_500);\n';
+    expect(budgetFromTestSource(escaped, '他说"停"再走')).toEqual({ kind: "explicit", ms: 7500 });
+    // 更深缩进的 `});` 属于嵌套回调，不是这一条的收尾：认了就等于在中途停下、把下一条的预算记到这条头上。
+    const nested = '  it("丁", () => {\n    foo(() => {\n      bar();\n    });\n  }, 9_000);\n';
+    expect(budgetFromTestSource(nested, "丁")).toEqual({ kind: "explicit", ms: 9000 });
+    // 反向：这一条没写预算，而**下一条**写了 ⇒ 不许把下一条的 8_000 记过来。
+    const twoCases = '  it("戊", () => {\n  });\n  it("己", () => {\n  }, 8_000);\n';
+    expect(budgetFromTestSource(twoCases, "戊")).toEqual({ kind: "implicit" });
+    expect(budgetFromTestSource(twoCases, "己")).toEqual({ kind: "explicit", ms: 8000 });
+  });
+
+  it("非字面量标题：归因到自己那一条的形状，不许拿同一文件里第一条命中顶名（真机错过一次）", () => {
+    const src = [
+      '  it("零行为回退：" + label + " → 无 verify_result", async () => {', "  });",
+      '  it(`水位：松钉只准调低（帽 ${N}）`, () => {', "  });",
+    ].join("\n") + "\n";
+    const got = budgetFromTestSource(src, "水位：松钉只准调低（帽 7）");
+    expect(got.kind).toBe("nonliteral");
+    if (got.kind === "nonliteral") {
+      expect(got.fileHas).toContain("`");
+      expect(got.fileHas, "同一份文件里先出现的是拼接式 it(引文 + 变量，拿第一条命中顶名就把反引号那条归错了因").not.toContain("零行为回退");
+    }
+    // 标题的前 12 字也不在源里（`it.each` 把开头也插值了）⇒ 只能退回文件级形状，但必须**带上这个退让的记号**。
+    const eachSrc = '  it.each([1, 2])("%s 会重试", () => {\n  });\n';
+    const fallback = budgetFromTestSource(eachSrc, "99 会重试");
+    expect(fallback.kind).toBe("nonliteral");
+    if (fallback.kind === "nonliteral") expect(fallback.fileHas.endsWith("?")).toBe(true);
+  });
+
+  it("贴帽判定按每条自己的有效预算，不按全局缺省；无预算那条也按缺省进同一张名单", () => {
+    const src = [
+      '  it("甲", () => {', "  }, 15_000);",
+      '  it("乙", () => {', "  });",
+      '  it("丙", () => {', "  });",
+    ].join("\n") + "\n";
+    const rows: SuiteRow[] = [
+      { file: "tests/a.test.ts", title: "甲", full: "甲", ms: 13_000 },
+      { file: "tests/a.test.ts", title: "乙", full: "乙", ms: 4_100 },
+      { file: "tests/a.test.ts", title: "丙", full: "丙", ms: 3_000 },
+    ];
+    const cell = timingNearCapCell(rows, { defaultBudget: budget(5000), readTest: (rel) => (rel === "tests/a.test.ts" ? src : null) });
+    expect(cell.near.map((n) => n.full), "甲 87%／乙 82% 进名单，丙 60% 不进").toEqual(["甲", "乙"]);
+    expect(cell.near.map((n) => n.budget)).toEqual([15000, 5000]);
+    expect(cell.implicit).toBe(2);
+    expect(cell.nonliteral).toBe(0);
+    expect(cell.notResolved).toBe(0);
+    expect(cell.total).toBe(3);
+  });
+
+  it("汇总行：三态分开印、名单要点名，且缺省帽的出处必须印在行里（不印就像本仓定的尺）", () => {
+    const src = '  it("甲", () => {\n  }, 5_000);\n';
+    const rows: SuiteRow[] = [{ file: "tests/a.test.ts", title: "甲", full: "甲 用例", ms: 4_900 }];
+    const line = timingCell(timingNearCapCell(rows, { defaultBudget: budget(5000), readTest: () => src }));
+    expect(line).toContain("缺省＝测试喂的 5000ms");
+    expect(line).toContain("1 条用时 ≥ 有效预算 80%");
+    expect(line).toContain("tests/a.test.ts·甲 用例 4900ms/5000ms=98%");
+    expect(line.endsWith("｜无"), "名单非空却不点名＝这一格白跑；反过来尾缀 `｜无` 是空名单那句话的形状").toBe(false);
+    const withGap = timingNearCapCell([{ file: "tests/b.test.ts", title: "查不到", full: "查不到", ms: 1 }], { defaultBudget: budget(5000), readTest: () => "" });
+    expect(timingCell(withGap)).toContain("预算没落到 1 条（这一格没量到，不等于 0）");
+    expect(timingCell(withGap)).toContain("判卷文件取不到");
+  });
+
+  it("缺省帽是谁说了算：config 写了就用它，没写才是 vitest 的缺省，写了 0 也算没写（三态出处各不相同）", () => {
+    expect(defaultTimeoutFromConfig("export default defineConfig({ test: { include: [] } });"))
+      .toEqual({ ms: VITEST_DEFAULT_TIMEOUT_MS, source: `缺省＝vitest 默认 ${String(VITEST_DEFAULT_TIMEOUT_MS)}ms（config 未写 testTimeout）` });
+    expect(defaultTimeoutFromConfig("  testTimeout: 45_000,")).toEqual({ ms: 45000, source: "缺省＝config 里的 testTimeout=45000ms" });
+    const zero = defaultTimeoutFromConfig("  testTimeout: 0,");
+    expect(zero.ms).toBe(VITEST_DEFAULT_TIMEOUT_MS);
+    expect(zero.source).toContain("不是正数");
+    const noCfg = defaultTimeoutFromConfig(null);
+    expect(noCfg.ms).toBe(VITEST_DEFAULT_TIMEOUT_MS);
+    expect(noCfg.source).toContain("config 也取不到");
+  });
+
+  it("真读现喂：仓里这份 tests/vitest.config.ts 喂进去不许崩，且读数与它自己写的字面量同源", () => {
+    const cfgText = readFileSync(join(repoRoot, "tests/vitest.config.ts"), "utf8");
+    const got = defaultTimeoutFromConfig(cfgText);
+    const declared = /testTimeout:\s*([0-9_]+)/u.exec(cfgText);
+    // 期望值由**那份文件**算出来，不写死 5000：哪天 config 加了 testTimeout，这一条要跟着换而不是变红。
+    expect(got.ms).toBe(declared === null ? VITEST_DEFAULT_TIMEOUT_MS : Number((declared[1] ?? "").replace(/_/gu, "")));
+    expect(got.source.length).toBeGreaterThan(0);
+  });
+
+  it("真机整表：把留档的那一次全量 json 喂进去，档位计数与逐行重数必须同分母", () => {
+    const jsonPath = join(repoRoot, "outputs/judge-timeout-2026-10-01/suite-quiet.json");
+    const rows = suiteRows(readFileSync(jsonPath, "utf8"), repoRoot + "/");
+    expect(rows).not.toBeNull();
+    const all = rows ?? [];
+    expect(all.length).toBeGreaterThan(3000);
+    const cell = timingNearCapCell(all, {
+      defaultBudget: defaultTimeoutFromConfig(readFileSync(join(repoRoot, "tests/vitest.config.ts"), "utf8")),
+      readTest: (rel) => {
+        try { return readFileSync(join(repoRoot, rel), "utf8"); } catch { return null; }
+      },
+    });
+    expect(cell.state).toBe("ok");
+    expect(cell.total).toBe(all.length);
+    const recount = { explicit: 0, implicit: 0, nonliteral: 0, "not-resolved": 0 };
+    const textCache = new Map<string, string>();
+    for (const r of all) {
+      if (!textCache.has(r.file)) textCache.set(r.file, readFileSync(join(repoRoot, r.file), "utf8"));
+      recount[budgetFromTestSource(textCache.get(r.file) ?? "", r.title).kind] += 1;
+    }
+    expect(cell.implicit).toBe(recount.implicit);
+    expect(cell.nonliteral).toBe(recount.nonliteral);
+    expect(cell.notResolved, `取不到成因的条数必须是 0（现读见 realdata.log）；不是 0 就先修取料，别把名单当准`).toBe(0);
+    expect(recount.explicit).toBeGreaterThan(0);
+    for (const n of cell.near) expect(n.ratio).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it("接线：head-cert 真开了 json 出口、真算这一格、真印进汇总，而且取料在被认证的那棵树里", () => {
+    const script = readFileSync(join(repoRoot, "scripts/head-cert.ts"), "utf8");
+    expect(script).toMatch(/"--reporter=json"/u);
+    expect(script).toMatch(/--outputFile\.json=\$\{join\(logDir, "suite\.json"\)\}/u);
+    expect(script).toMatch(/^ {2}timingReading = timingCell\(timingNearCapCell\(suiteRows\(/mu);
+    expect(script).toMatch(/^ {4}defaultBudget: defaultTimeoutFromConfig\(readFile\("tests\/vitest\.config\.ts"\)\),/mu);
+    expect(script).toMatch(/^if \(timingReading !== null\) say\(/mu);
+    // 取料面必须是 TREE：拿脚下的工作树算，读数量的就不是被认证那一笔（第 259 页同一格踩过）。
+    expect(script).toMatch(/^ {4}try \{ return readFileSync\(join\(TREE, rel\), "utf8"\); \} catch \{ return null; \}/mu);
   });
 });

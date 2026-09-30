@@ -415,7 +415,7 @@ describe("treeProblem 与编排器的前置闸：脏树不许当片用", () => {
       one.drop();
       two.drop();
     }
-  });
+  }, 15_000); // 两次真 worktree add ＋ 两次 tsx 冷启：安静态 2.75s，三套判卷并行时越过缺省 5s（第 262 页）
 });
 
 describe("编排器接线：合并层不是挂在墙上的仪表", () => {
@@ -452,7 +452,7 @@ describe("编排器接线：合并层不是挂在墙上的仪表", () => {
 
   it("分片自检的结论**决定跑不跑**：非空即退 2，一条不跑", () => {
     expect(src).toMatch(/const proof = partitionProof\(ids, shards\);[\s\S]{0,600}process\.exitCode = 2;/u);
-  });
+  }, 15_000); // 端到端真跑一条锚点（含建树）：安静态 2.50s（第 262 页）
 
   it("「同一宿主不许跨片」也接在闸上：非空即退 2（这一格是 head-cert 撞窗实测换来的）", () => {
     expect(src).toMatch(/const split = hostsSplitAcrossShards\(rows, shards\);[\s\S]{0,400}process\.exitCode = 2;/u);
@@ -628,5 +628,5 @@ describe("编排器的权重取料面", () => {
     // 顺序证人：默认权重就是「本标签上一轮的片原文」，而这几份文件开跑前会被清空——
     // 先截断后读＝每次都是「没有权重」，而那一格会诚实地说没来源，于是缺陷读起来像首跑。
     expect(src).toMatch(/const cost = costWeights\([\s\S]*\n  for \(const p of logs\) writeFileSync\(p, ""\);/u);
-  });
+  }, 15_000); // 建一棵干净树再跑编排器（含两次 tsx 冷启）：安静态 2.77s（第 262 页）
 });

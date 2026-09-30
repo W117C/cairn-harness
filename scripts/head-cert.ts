@@ -22,7 +22,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-import { certGateCell, certGatePlan, certGateVerdict, certLevel, CERT_FLAGS, CERT_OPTS, certTreeAbs, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, gitInflightArgs, headGateTableIntegrity, mainRootFromCommonDir, missingDeclaredDeps, parseCertGateRows, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "./lib/head-cert-deps";
+import { certGateCell, certGatePlan, certGateVerdict, certLevel, CERT_FLAGS, CERT_OPTS, certTreeAbs, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, defaultTimeoutFromConfig, depDirs, gitInflightArgs, headGateTableIntegrity, mainRootFromCommonDir, missingDeclaredDeps, parseCertGateRows, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, suiteRows, timingCell, timingNearCapCell, unknownCertArgs } from "./lib/head-cert-deps";
 import { acquireToolLock } from "./lib/tool-lock";
 import { checkHeadImportFace, collectHeadEdges, findDanglingImports } from "./head-import-face";
 
@@ -268,6 +268,7 @@ if (face.state === "broken") {
 
 let testStatus: number | null = null;
 let summary = LEVEL.label;
+let timingReading: string | null = null;
 let psBefore = -1;
 let psAfter = -1;
 if (!flag("skip-test")) {
@@ -276,13 +277,27 @@ if (!flag("skip-test")) {
   // 两端各采一次——中间那 90 秒采不到（判卷是阻塞的 spawnSync），所以这格只回答"起前/跑完有没有别人"，
   // 不回答"中途有没有"；红的时候它给的是**归因方向**，不是结论。
   psBefore = countConcurrentSuites(run(MAIN, "ps", ["-eo", "pid,pgid,command"]).out);
-  const t = run(TREE, "node", ["node_modules/vitest/vitest.mjs", "run", "--config", "tests/vitest.config.ts"], join(logDir, "test.log"));
+  const t = run(TREE, "node", ["node_modules/vitest/vitest.mjs", "run", "--config", "tests/vitest.config.ts", "--reporter=default", "--reporter=json", `--outputFile.json=${join(logDir, "suite.json")}`], join(logDir, "test.log"));
   psAfter = countConcurrentSuites(run(MAIN, "ps", ["-eo", "pid,pgid,command"]).out);
   testStatus = t.status;
   const strip = t.out.replace(/\x1b\[[0-9;]*m/g, "");
   const files = /Test Files +(.*)$/m.exec(strip)?.[1] ?? "读不到";
   const tests = /\n *Tests +(.*)$/m.exec(strip)?.[1] ?? "读不到";
   summary = `Test Files ${files}｜Tests ${tests}｜exit=${String(testStatus)}（退出码直接取，不接管道）`;
+  // 贴帽读数（第 262 页，任务 #8）：逐条 duration 由**同一次**判卷顺手产出 ⇒ 零额外 spawn、零额外墙钟。
+  // 只印不判：秒数会被负载挪动（规则 256），把它做成门禁等于造一把会自己变红/变绿的尺。
+  // 取料两头都在**被认证的那棵树**里（判卷文件与 config 都按 `TARGET` 那一笔读，不是脚下的工作树）。
+  const readFile = (rel: string): string | null => {
+    try { return readFileSync(join(TREE, rel), "utf8"); } catch { return null; }
+  };
+  let suiteText: string | null = null;
+  try { suiteText = readFileSync(join(logDir, "suite.json"), "utf8"); } catch { suiteText = null; }
+  let treeRoot = treeAbs;
+  try { treeRoot = realpathSync(treeAbs); } catch { treeRoot = treeAbs; }
+  timingReading = timingCell(timingNearCapCell(suiteRows(suiteText, treeRoot + "/"), {
+    defaultBudget: defaultTimeoutFromConfig(readFile("tests/vitest.config.ts")),
+    readTest: readFile,
+  }));
 }
 say("\n== 认证汇总 ==");
 // 收尾复核：切树时核过一次，但那一次管不到判卷这 90 秒——同一棵认证树可以被别的会话/别的门中途切走，
@@ -293,6 +308,7 @@ if (drift !== null) say(`❌ ${drift}`);
 say(`  TREE=${TARGET.slice(0, 7)} DIRTY_JUDGED=${String(dirtyCount)} 依赖完整=${certifiable ? "是" : "否（缺 " + missing.join("、") + "）"} 收尾复核=${drift === null ? "同一笔" : "作废"} 认证树锁=${lockCell}`);
 say(`  ${summary}`);
 say(`  ${concurrencyReading(psBefore, psAfter, testStatus !== null)}`);
+if (timingReading !== null) say(`  ${timingReading}`);
 const hint = collisionHint(testStatus, psBefore, psAfter);
 if (hint !== null) say(`⚠️ ${hint}`);
 say(`  逐条日志：${logDir}`);

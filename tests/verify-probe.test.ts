@@ -166,5 +166,5 @@ describe("verify 超时是配置项，不是 60s 硬编码", () => {
     expect(r.ok).toBe(false);
     expect(r.output).toContain("verify 命令超时（2s）");
     expect(elapsed).toBeLessThan(4_500); // 到点就杀，不等子进程自己跑完
-  });
+  }, 15_000); // 真起子进程掐表：安静态 2.01s——这条自己的断言就依赖墙钟，缺省 5s 帽在负载下会先把它杀掉（第 262 页）
 });

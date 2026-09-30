@@ -8619,3 +8619,26 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 4. **任务 3（真仓探针固化）**：`accuracy-prod.mts` 沿用 09-30 的 4 符号真值集合与 grep 口径，固化成可重复脚本：噪声前缀两边同滤（`.claude/ .worktrees/ .tmp/ oh-src/`——隔壁会话树随其开关进出，不滤读数漂移）＋豁免表（tests/head-cert-deps.test.ts:995 是 `toContain("staleScratchTrees(wtRows")` 字符串字面量内的形状断言，非调用）。读数：**AGGREGATE precision=1.000 recall=1.000（tp=26 fp=0 fn=0）⇒ GATE 双过**（门：P==1.0、R≥0.9）。同提交热载实测（buildImpact 内部计时，560 文件）：索引命中中位 **73ms**（90/71/73）vs 无索引对照（tags 全热仍要重组 Map＋edges）中位 152ms——省约一半；冷建 ≈1.2s（09-30 独立进程实测）省一个量级。
 5. **门**：两新判卷文件 16 条全绿；全套 **3387 passed (3387) exit=0**（基线 3357＋本笔 16＋隔壁在飞 14）；typecheck 0；`mutate-verify --check-needles` 阻断 0。中途一次阻断 1：`impact-candidates-count-post-cap` 的针脚 `candidates: candidates.length` 被我首版重构改成参数传递——修法是把 `buildGraphFromScan` 改收 candidates 全量数组让字面量原样回来，**不动隔壁在飞的 mutate-verify.mjs**（锚点表在它里面）。**补（占号后复跑归因）**：261 号占下后全套复跑 3394 条里 3 红——红面全在 `tests/mutate-verify-gates.test.ts`「指针接线…（第 260 页）」，隔壁在飞半成品（该文件不在本笔白名单、本会话零触碰）；本笔改动面的精确定义域（impact 域 11 个判卷文件）现读 **151/151 全绿**。
 6. **边界**：`persistIndex` 只接到 `impact_query` 读端（工具三出口）；`fileImpact` 加了第 5 个透传位、`defaultImpactHook`（编辑后回注钩子）与 `affectedFilesOf`（spawn 准入）保持不走索引——热载收益给「模型显式查询」这条最高频路，其余两路每事件全量建图由 tags 缓存增量顶着，是否接索引属下一笔裁决。用户主目录零污染：索引目录由 cacheDir 兄弟派生（测试注入 tmp），vitest 的 M7_IMPACT_TAGS_DIR 兜底机制照旧生效。
+
+### 2026-10-01 · 第 262 页 · 判卷的「容量」第一次有了跑完就点名的读数（9 处显式预算＋贴帽那一格＋表 1123→1133）
+
+1. **这一页管什么**：把「用例是**代码红**还是**容量红**」从一次三分钟的复跑，变成认证结束时自己印出来的那一行；顺带把 9 条容量敏感用例的预算显式写进判卷。动因是实测：认证 `bd5ec44`（第 259 页）第一趟两条红——`tests/mutate-shards.test.ts:400`、`tests/mutate-verify-gates.test.ts:1781`，失败面逐字都是 `Error: Test timed out in 5000ms`（不是断言失败）；把那两份文件**隔离复跑**是 `Test Files 2 passed`／`Tests 205 passed`／`Duration 25.24s`／`ISO_EXIT=0` ⇒ 红属容量。而门表里没有「有多少用例贴着帽跑完」这一格，所以「这是容量不是代码」那句话当时只能靠再花一趟复跑去证明。
+
+2. **施工前的现读**（安静态全量 `--reporter=json`，`outputs/judge-timeout-2026-10-01/suite-quiet.json`，逐条 **3394 条**）：贴帽 **0 条**；最慢那条是 `tests/m3c.test.ts`「未获批准 fail-closed；批准后 stages 变更请求被拒且落流」＝**15197ms**，而它**自带 25000ms 显式预算** ⇒ 61%；其余最慢的一批（2771／2752／2742／2559／2495／2390／2256／2078／2010ms）都走缺省 5000ms ⇒ **40–55%**。⇒ 「安静态没人贴帽」是事实，不是这一格失灵：它量的是**隔壁会话在同一台机器上跑起来的那一刻**，而那一刻恰好就是红发生的那一刻。`bd5ec44` 那两条超时（5000ms 撞帽）在安静态只有缺省帽的 45–55%——这一格不预测并发，它把「谁贴着帽」变成每次认证自动产出的一行，省掉下一次那趟三分钟复跑。
+
+3. **四刀砍在我自己的推断上**（这一页最贵的一段，全部由 `realdata.mts` 的守卫当场否掉，不是我自查出来的）：
+   ⑴ 我先写「128 条预算取不到，全是 `it.each`」⇒ 实测 **89 条 `it.each` ＋ 39 条别的成因**；
+   ⑵ 我改口「第二形是反引号插值」⇒ 读数变 **111／3**；
+   ⑶ 追那 3 条：一条是 `"…" + TRUTH.edgeCount + "…"` 拼接、两条是 `it(face.name + "：…")`，而它们先前**逐字对不上**还叠着第三个成因——**判卷源码里写的是带转义的字面量**（`\"`、`\\`），json 里的标题是解了转义的那一份 ⇒ 取料从裸拼改成 `JSON.stringify(title)`，读数变 **114／0**；
+   ⑷ 形状归因第一版按「该文件里第一条命中的形状」给名字 ⇒ 把 `it(\`水位：…${N}…\`)` 那条报成了隔壁的 `it("零行为回退：" +`（档数对、成因假）。改成拿标题的**静态前缀**定位到离它最近且靠前的那次命中，前缀也找不到就退回第一条**并带 `?` 记号**（现读：63 条按位置点名、51 条带 `?`）。
+   ⇒ 这四刀与规则 325（能解析的指针 ≠ 会守护的指针）、328（自-hosted 锚点喂红同文件负控）是同一族：**按形状猜的归因必须配一条能当场反转它的守卫**，否则「取料成功」这件事本身就会伪装成事实。
+
+4. **施工三件**：⑴ **9 处显式预算** `}, 15_000);`——`tests/mutate-shards.test.ts` 3／`tests/evidence-typecheck.test.ts` 2／`tests/cli-surface.test.ts` 2／`tests/mutate-verify-gates.test.ts` 1／`tests/verify-probe.test.ts` 1（帽给到实测的 5–7 倍：那几条安静态 2010–2771ms，`bd5ec44` 那趟被撞到的值是 5000ms 以上）；`tests/m3c.test.ts` 那条本来就有 25_000，不动。**没动 `tests/vitest.config.ts`**：加全局 `testTimeout` 等于把全部 3144 条缺省帽一起放宽，那是抬帽消红（规则：帽只准调低）。⑵ **四支纯函数**进 `scripts/lib/head-cert-deps.ts`：`suiteRows`（json → 逐条，取不到一律 null 而非空表）、`budgetFromTestSource`（返回 `explicit`／`implicit`／`nonliteral`／`not-resolved` 四档）、`timingNearCapCell`（按**每条自己的**有效预算挑 ≥80% 的那几条）、`defaultTimeoutFromConfig`（缺省帽由 config 现读，出处文字一起带出来，vitest 那个 5000 常数只活在这一份文件里）＋`timingCell` 汇总行。⑶ **接线**进 `scripts/head-cert.ts`：全量判卷那条命令加 `--reporter=default --reporter=json --outputFile.json=<logDir>/suite.json` ⇒ 逐条时长由**同一次**判卷顺手产出，零额外 spawn；取料两头（判卷源码与 config）都读**被认证的那棵树**，不读脚下这份工作树。
+
+5. **裁决：只印不判**。这一格进汇总行、不进 GATES 判定、不进 CERT_GATES、不影响退出码。理由两条：秒数会被负载挪动，拿它当闸等于造一把会自己变红变绿的尺（规则 256）；而「贴帽」在这一格没有存量可登记（现读 0 条），按存量水位法登记一把零读数的尺就是第 165 页那条「数字不再有意义」的反面。同一形状的第 260 页那条接线观测者也是裁成线索——两把都是**给下一次归因指方向的**，不是判决。
+
+6. **判据**：`tests/head-cert-deps.test.ts` **91 → 101 条**（实测 `Tests 101 passed (101)`／exit=0），其中三条是本格的形状证人：null 与「0 条」分开印、四档预算各自成形（含带转义标题那条真机成因）、真机整表按**独立重数**核对档位计数（同分母）；两条「接线」断言钉住 head-cert 真开了 json 出口、真把这一格印出来、且取料指向 `TREE`。变异表 **1123 → 1133**（+10 支），每支针脚在盘上现读 grep=1；`--check-needles` 落库前报「钉在飞文本 10」＝这 10 支钉的都是本页尚未入库的实现（规则 217 的原子簇：判卷、实现、锚点同笔），落库后那一格归零，凭证里给两份读数对照。松钉指针仍 10 条（没涨）。
+
+7. **撞窗与门耗时声明**：起尺前 `ps` 见隔壁一条 vitest（`tests/cli-surface.test.ts`＋`tests/cli-autoverify-default.test.ts`，已跑 2 秒），无 `.mutbak` 残留；本笔的静态自检（`--check-needles` 一次 ≈14s 级）在主树做，**锚点杀死与认证都挪到独立树**。新增判卷 10 条的实测墙钟包含在那 2.19s 里（单文件跑）；head-cert 那一格靠同一次判卷顺手产出，不额外付 spawn。
+
+8. **刻意未做**：⑴ `it.each` 那 114 条的**逐条**预算仍读不到（按缺省算，且 51 条的成因只到文件级）——要精确就得做模板反解＋参数求值，代价大于这一格的用处，改成把不确定性印成 `?`；⑵ 没给「贴帽」设帽值或告警阈值（80% 这个比例是判卷里现读的常数，改它要连带改那条 ratio 断言）；⑶ 没把 `suite.json` 落进 `outputs/`——认证树末尾会被回收，那一格的证据本体在 `summary.txt` 与认证日志里，凭证照贴原文。

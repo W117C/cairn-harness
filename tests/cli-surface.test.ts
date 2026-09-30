@@ -324,7 +324,7 @@ describe("m0 CLI：--goal / --session / --compact 三条真入口在 argv 上", 
     expect(help()).toContain("--goal");
     expect(help()).toContain("--session");
     expect(help()).toContain("--compact");
-  });
+  }, 15_000); // 真起 CLI 子进程读 help：安静态 2.08s（第 262 页，缺省 5s 帽在负载下不够）
 
   it("闸值单独给 ⇒ exit 2（--max-turns 没有 --goal 就是没落在任何东西上）", () => {
     const r = runCli(["--provider", "demo", "--max-turns", "5", "做点事"]);
@@ -342,7 +342,7 @@ describe("m0 CLI：--goal / --session / --compact 三条真入口在 argv 上", 
     const r = runCli(["--provider", "demo", "--goal", "把测试修绿", "--log", "x.jsonl", "做点事"]);
     expect(r.status).toBe(2);
     expect(r.out).toContain("--log 与 --goal 不能同时给");
-  });
+  }, 15_000); // 真起 CLI 子进程：安静态 2.39s（第 262 页）
 
   it("--compact 没指会话 ⇒ exit 2（压缩一条刚编出来的 id 一定报「会话不存在」）", () => {
     const r = runCli(["--provider", "demo", "--compact"]);
