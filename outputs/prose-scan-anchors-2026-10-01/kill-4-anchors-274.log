@@ -1,0 +1,15 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-ff608cc.lock）
+变异验证：4 条
+✅ prose-scan-cap-boundary-ge-not-gt — 把「只准调低」的边界从 `>` 写成 `>=` ⇒ 贴帽那一格当天就红，于是下一次有人为了让它绿而把帽往上调——这条线本来是「不许涨」，写成「不许等于」就变成「必须留余量」，两者对不上账 ｜本机实测 19.1s／2 拍
+✅ prose-scan-cap-total-minus-flight-half — 两半之和写成「已提交减在飞」 ⇒ 总数看着还在，红却不响了：全格子都在飞的那种输入直接归零，帽于是只守已经入库的那一半（第 118 页改的就是这个判据位置） ｜本机实测 18.5s／2 拍
+✅ prose-scan-ceiling-ignores-tree-scope — 帽不按树取、写死 `core-only` 那行 ⇒ 含桌面层那棵树拿窄帽量宽面，同一批格子在两种树上给出不同判决，而报出来的文案还说「树＝含桌面层」（读数说谎比读数缺失更坏） ｜本机实测 18.3s／2 拍
+✅ prose-scan-multi-breach-branch-welded-shut — 把顶包那一支的出声条件焊成 `false` ⇒ CLI 永远不报水位上涨，而判卷剩下的全是合成输入，真仓里涨到几格都没人喊（「两处帽比较收成唯一决策点」这件事只剩散文） ｜本机实测 18.3s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 74.6s · 跑了 4/4 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 8 次／4 条（每条次数分布 2×4）· 单次中位 第1次 9.2s／第2次 9.1s· 最贵一条 prose-scan-cap-boundary-ge-not-gt 19.1s
+跑法单价：selector 8 拍·中位 9.15s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-ff608cc.lock）
+real 75.25
+user 82.34
+sys 1.99

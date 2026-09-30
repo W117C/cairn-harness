@@ -9074,6 +9074,32 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 5. **现读读数**：表长 1173 → **1177**；`--check-needles`（主检出、落库前）`针脚体检：1177 条 —— 阻断 0，待复认 0，未覆盖 0，逐行式 5，未入库面 0，钉在飞文本 0，killer 指针失效 0（其中 HEAD 侧 0）`＋`改法语法体检：1177 条改法全部产出合法源文件 ✅`（取料 `outputs/prose-scan-anchors-2026-10-01/needles-precommit-274.log`，退出码 0）。这一格与第 272/273 页不同：**没有钉在飞文本**，因为四支钉的都是已入库的实现——这正是"给旧尺补证人"与"写新尺"的区别，前者落库那天就该全部可判定。
 6. **刻意未做**：这支尺还有别处没钉——`viaCounts`（三种取料写法各收到几条）、`unresolvedMatcher`、`shadowCleared` 的 `rawCopies`/`copies` 差额、`agedInFlight` 与 `inFlightAgeChecked` 那两半。留在任务 #15 继续，**不一次补齐**：每补一支都要先答"哪条用例为它红"，答不出就是那条格子还没有观测者（本仓那条老判据），硬凑只会造出一批恒绿条目。
 
+### 2026-10-01 · 第 274 页补 凭证：本笔（`ff608cc`）认证 259 文件／3431 条 exit=0、两端独占、本趟墙钟 196.34s；**四支新锚点干净树 4/4 全杀**（本次耗时 74.6s、跑了 4/4、坏拍 0）；本笔不新增用例（判卷条数不变、表 1173→1177）；门 21/22 绿·红 1 道仍属隔壁 `1748ca7` 的 H7 ⇒ 不写成「全量绿」
+
+1. **被认证的提交**：`ff608cc`（页面＋四支锚点同笔；本笔没有实现改动，所以 `git show --numstat` 只有 `14/0 PROGRESS.md` 与 `40/0 scripts/mutate-verify.mjs` ＋ 4 份 dated 日志）。树：杀锚点用 `.worktrees/verify-ff608cc`（`--detach` ＋ `cp -al node_modules`，树内 `status` 核到 0 项），认证用 `.worktrees/head-cert-ff608cc`。取料目录 `outputs/prose-scan-anchors-2026-10-01/`。
+2. **针脚两份**：主检出落库前（`needles-precommit-274.log`，退出码 0）与认证树落库后（`needles-at-ff608cc.log`，退出码 0）都是 `针脚体检：1177 条 —— 阻断 0，待复认 0，未覆盖 0，逐行式 5，未入库面 0，钉在飞文本 0，killer 指针失效 0（其中 HEAD 侧 0）`。**这一对与第 272/273 页不同**：那两笔落库前必红（锚点钉的是当笔新写的实现文字），这一笔钉的是**已入库的实现**，所以两侧同形——这正是"给旧尺补证人"应有的形状（若它也报阻断，说明我改错了被钉的那一行）。
+3. **四支锚点逐条真杀**（`kill-4-anchors-274.log`，退出码 0，四条全 `✅`）：`prose-scan-cap-boundary-ge-not-gt 19.1s／2 拍`、`prose-scan-cap-total-minus-flight-half 18.5s`、`prose-scan-ceiling-ignores-tree-scope 18.3s`、`prose-scan-multi-breach-branch-welded-shut 18.3s`；机器自报原文逐字贴：
+   `本次耗时 74.6s · 跑了 4/4 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）`
+   `成本分母：判卷 spawn 8 次／4 条（每条次数分布 2×4）· 单次中位 第1次 9.2s／第2次 9.1s· 最贵一条 prose-scan-cap-boundary-ge-not-gt 19.1s`
+   `跑法单价：selector 8 拍·中位 9.15s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母`
+   外层 `/usr/bin/time -p` 的 `real 75.25`。**这一批是第 272 页那批（7.3s／9 条）的十倍单价**，机制与第 272 页凭证里那条相同：贵的不是突变，是判卷文件——`tests/prose-needle-scan.test.ts` 的「真仓扫」要扫整仓文本，单拍 9s。这格要说清，否则下一个人会以为是这四支锚点特别贵。
+4. **`head-cert` 汇总逐格原文**（`head-cert-ff608cc.log`，`HEADCERT_EXIT=1`）：
+   `已核：TREE=ff608cc114269f01eb149dc64ac326c8456e25e0｜判卷四面在飞 0 项`
+   `typecheck exit=0（0 报错）`
+   `== 认证门面（22 道，名单取自 ff608cc）==`、`认证门面=22 道（跑到 22）｜❌ 红 1 道｜⚠️ 超预算 0`
+   `TREE=ff608cc DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-ff608cc.lock）`
+   `Test Files 259 passed (259)｜Tests 3431 passed (3431)｜exit=0（退出码直接取，不接管道）`
+   `并发判卷=起前 0 套／跑完 0 套（两端独占）`
+   `本趟墙钟 196.34s（同一进程 hrtime 实测·口径＝起跑→汇总那一行，不含提前退出的那些趟）`
+5. **条数核对式**：判卷 `3431 ＝ 3431 ＋ 0`——**本笔不新增用例**（给旧尺补证人只动表），所以条数不动是预期而不是漏跑；锚点 `1177 ＝ 1173 ＋ 4`。
+6. **归因声明**：唯一的红是 `gate-check exit=1 4471ms（预算 5400ms）`＝任务 #9（隔壁 `1748ca7` 的 H7 未登记 `fixtures/impact/accuracy-repo/*`），HEAD 常驻、本笔不动 ⇒ 等级 **21/22 绿**，不写「全量绿」。
+7. **这把尺自己的现读**（`prose-274.log`，退出码 0）：`顶包候选 10 条（已提交态 10 ＋ 在飞 0）`＝帽 10、`裸名字 2 条`＝帽 2；`docs-check-274.log`：`可比对 214 个读数（红 0）｜未点名页 0 页（帽 0）｜弱证 0 对（帽 0）`；`typecheck-274.log`＝`tsc --noEmit 通过（0 条报错）`。凭证段落笔后重跑一次（`docs-check-with-credential-274.log`）：`可比对 214 → 221 个读数（红 0）`、`未点名页 0`、`弱证 0`、`证人无身份行 110 → 114`（本段引的 needles／kill／head-cert 日志不印提交号＝无从判，不设帽）。
+   ⚠️ 这一格我又**先推后量**了：我落笔写的是 `222`／`116`（按"这段引了几处"推的），现读 `221`／`114`——差 1 与差 2。同一族错误今天第三次（第 273 页凭证里已经自陈过一次 `111`→`110`），所以这条不再写成"下次注意"，而是写成动作：**凭证段里凡分母类读数，必须从刚生成的日志逐字贴，不许由"我引了几处"推算**（规则 245/338⑷）。
+8. **本笔抓到的一条自我更正，落在自己写的任务单上**（不是别人的代码）：任务 #15 的⑴我写成「`levelVsCap` 要先修判卷重实现才能钉」——现读不成立，第 118 页已收成唯一决策点 `ceilingBreaches(r)` 且有接线用例（`tests/prose-needle-scan.test.ts:529`）。我把文件内注释里的**历史病灶**读成了**现状**。⇒ 任务单与页一样是台账：写错要按现读改写，不许将错就错地执行（规则 290 的另一侧）。
+9. **两处工具链自伤，都在落地前被秒级检查拦住**（同族，见记忆 `feedback-edit-quote-mangling`）：四支 `desc` 里三次写了内层 ASCII 双引号 ⇒ `node --check` 报 `SyntaxError: Unexpected identifier '不许涨'`；一条 id 打成 `prose-scap-…`（少一个 n）。第二处更值得记：**拼错的 id 不会让任何尺红**——针脚体检与 `--check-needles` 看的是 needle 能不能命中，id 只是点名用的名字；它要到"下一次有人按 id 复跑这条锚点"时才暴露成"这条锚点不存在"。所以补锚点时，id 也要回读一遍（本笔改成 `prose-scan-cap-total-minus-flight-half` 之后才提交）。
+10. **清场与残留**：本笔两棵树 `verify-ff608cc`、`head-cert-ff608cc` 各核 0 项在飞，**未回收**（等用户点头）；累计 `常驻残留树` 见第 272 页凭证第 10 项。回收不可逆，我不自己做。
+
+
 
 
 
