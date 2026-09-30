@@ -1,0 +1,18 @@
+Already up to date
+Done in 180ms using pnpm v11.21.0
+$ node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify verify-cause-not-run-folded-into-code verify-cause-not-run-not-environmental verify-cause-not-run-note-dropped exec-cause-not-run-note-dropped replay-exec-not-run-out-of-attributable replay-exec-struct-stops-delegating --lock-tag=p221-new
+[mutate-verify] checkout exit=0：.worktrees/gate-mutate-verify → 9f19c84
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p221-new.lock）
+变异验证：6 条
+✅ replay-exec-struct-stops-delegating — 结构栏不再走产品那一只谓词、自己回退成一份表 ⇒ 同一个输入两边各说一个原因，而读数印的是尺那份。第十三族在本尺身上的最后一处残留：判据抄第二份就会各漂宽度 ｜本机实测 0.6s／2 拍
+✅ verify-cause-not-run-folded-into-code — 取消／被信号杀（timedOut:false 而 exitCode:null）重新落到缺省那一格 ⇒ 一次**根本没有跑完**的命令被记成「代码错了」：模型照它改本来正确的代码，还烧掉一次修复额度（第 219 页 #42 普查现读的那一格） ｜本机实测 0.9s／2 拍
+✅ verify-cause-not-run-not-environmental — 从 ENV 集合里摘掉 not-run ⇒ 三处出口（修复额度／升档与 bandit／沉淀）同时开始记模型的账。这一格名字叫 ENV 却进表，是因为消费者要的那句语义是「别照它改代码」，不是「是环境问题」——集合是唯一事实源，写死的第三份表就是本仓点名的形状 ｜本机实测 0.9s／2 拍
+✅ verify-cause-not-run-note-dropped — verify 那一支的正文说明被摘 ⇒ 模型只看到 `[exit code: null]`，读到的是「脚本返回了个怪码」，不是「这条命令没跑完」。红字不点名「这不是代码失败」，归因就只活在字段里而不在模型看得见的地方 ｜本机实测 0.9s／2 拍
+✅ exec-cause-not-run-note-dropped — 同一族的两半之第二半：verify 那支贴了而 shell 这支不贴 = 「同一判据只硬化一支」（第六族）。run_shell／worker 两条出口共用这一句，摘掉条件里那一支就只剩 verify 有证人 ｜本机实测 0.8s／2 拍
+✅ replay-exec-not-run-out-of-attributable — 分子名单少这一类 ⇒ 占比把「取消」算回模型的头上，而读数看着仍然完整。「有正证」的口径是字段**明说**过：exitCode:null + timedOut:false 就是明说，不是「别都不是所以猜它是」 ｜本机实测 0.6s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 5.0s · 跑了 6/6 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 12 次／6 条（每条次数分布 2×6）· 单次中位 第1次 0.4s／第2次 0.4s· 最贵一条 verify-cause-not-run-folded-into-code 0.9s
+跑法单价：selector 12 拍·中位 0.43s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p221-new.lock）
