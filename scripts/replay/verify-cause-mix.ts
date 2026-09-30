@@ -24,6 +24,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SHELL_FAMILY } from "../../src/permissions/risk";
 import { classifyVerifyFailure } from "../../src/agent/verify";
+import { isEnvVerifyCause, type VerifyCause } from "../../src/events";
 
 /** 「带 cause 的红命令 = 0」有两种**相反**的解释：语料比归因落盘还老（数据年龄），
  *  或归因路径根本没落地（缺陷）。旧读数只印一个 0，读者会挑一个信（本仓规则 119：全称否定
@@ -103,22 +104,19 @@ interface ExecEvent {
   timedOut?: boolean;
 }
 
-/** 「有正证」的四类：都由字段**明说**过，不是"别都不是所以猜它是"。 */
-export const EXEC_ATTRIBUTABLE: readonly string[] = ["timeout", "toolchain-missing", "pkg-manager", "code"];
-/** 其中"根本不是模型错了"的那三类：额度、按档升级、沉淀都不该记在模型头上。 */
-export const EXEC_ENVIRONMENTAL: readonly string[] = ["timeout", "toolchain-missing", "pkg-manager"];
+/** 「有正证」的四类：都由字段**明说**过，不是"别都不是所以猜它是"。
+ *  第 221 页（#39）之后 `not-run` 也进了这一列——它以前是本尺比谓词多出来的一格（双向钉的那条用例当场红了），
+ *  现在产品谓词自己认这一态 ⇒ 两边同形，尺退回"只是读者"（规则 302 的收敛那一半）。 */
+export const EXEC_ATTRIBUTABLE: readonly string[] = ["timeout", "toolchain-missing", "pkg-manager", "code", "not-run"];
 
 /** 结构栏：两只字段齐了才准过产品那一只谓词；不齐就**报不齐**，绝不折成 "code"。
- *  `no-exit-code` 是本尺比谓词多出来的一格：`exitCode:null + timedOut:false` 在
- *  `classifyVerifyFailure` 里落到缺省 `"code"`，可它实际是"进程被取消／被信号杀掉"
- *  （`run_shell.ts` 的取消支、以及 spawn `error` 后 `close(null)` 两条路都到这儿）——
- *  把"没有退出码"说成"代码错了"是 over-claim，读数不许跟着它一起撒谎（谓词本身改不改另立任务）。 */
+ *  第 217 页这里曾多印一格 `no-exit-code`（`exitCode:null + timedOut:false` 在旧谓词里落到缺省 `"code"`，
+ *  而它实际是"取消／被信号杀"）；#39 把那一态补进谓词后，本尺不再自己判，直接跟着 `classifyVerifyFailure` 走。 */
 export function execStructKind(e: { exitCode?: number | null; timedOut?: boolean; output?: string }): string {
   const hasCode = e.exitCode !== undefined;
   const hasTimeout = e.timedOut !== undefined;
   if (!hasCode && !hasTimeout) return "no-structure";
   if (hasCode !== hasTimeout) return "half-structure"; // 落盘面成对写；只剩一只 = 装配漂了
-  if (e.timedOut === false && e.exitCode === null) return "no-exit-code";
   return classifyVerifyFailure({ timedOut: e.timedOut === true, exitCode: e.exitCode ?? null, output: e.output ?? "" });
 }
 
@@ -188,7 +186,8 @@ export function execMixOf(raws: readonly unknown[]): ExecMix {
     bump(t.struct, s);
     bump(t.text, execTextKind(e.output ?? ""));
     if (EXEC_ATTRIBUTABLE.includes(s)) t.attributable++;
-    if (EXEC_ENVIRONMENTAL.includes(s)) t.environmental++;
+    // 「不是模型的错」这一格不自己列表：吃产品那只谓词（第十三族——同一判据抄两份就会各漂宽度）
+    if (isEnvVerifyCause(s as VerifyCause)) t.environmental++;
   }
   return t;
 }
@@ -285,10 +284,10 @@ function execFace(raws: readonly unknown[]): boolean {
     return true;
   }
   console.log("带结构字段（exitCode／timedOut）的红拍=", String(t.withStructure), "（>0 表示 #24 那把结构面已在语料里生效）");
-  console.log("结构栏（本尺口径：把 no-exit-code 从缺省 code 里分出来）:", show(t.struct));
+  console.log("结构栏（与产品谓词同形：`not-run`＝没有退出码，第 221 页 #39 之后两边收敛）:", show(t.struct));
   console.log("文案栏（人眼线索，非判据）:", show(t.text));
   console.log(
-    "可机器归因占比（正证四类／红拍）=",
+    "可机器归因占比（正证五类／红拍）=",
     (t.attributable / t.shellRed).toFixed(2) + ` (${String(t.attributable)}/${String(t.shellRed)})`,
     "· 其中环境类=",
     (t.environmental / t.shellRed).toFixed(2) + ` (${String(t.environmental)}/${String(t.shellRed)})`,
@@ -297,7 +296,8 @@ function execFace(raws: readonly unknown[]): boolean {
   if (noStructure > 0) {
     console.log(
       `⚠️ 这一格有三种真成因、本面分不开（no-structure:${String(noStructure)}）：① 语料早于 #24 落盘；` +
-        "② 根本没走到 exec（门拒绝 / unknown tool / 只读静态过滤——这三条落盘时既不带 gate 也不带结构字段）；" +
+        "② 根本没走到 exec（主会话门拒绝与 unknown tool 落盘时连 `gate` 都不带；worker 门拒绝带 `gate.verdict=denied`，" +
+        "但那是另一格判据，本面不读它）；" +
         "③ spawn 的 error 出口自己就不带字段。",
     );
   }

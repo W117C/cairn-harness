@@ -6739,3 +6739,47 @@ typecheck：主树 1 条报错在 `src/cli.ts:709`（本笔没碰 `src/`），�
    这条推论**还没实测**：要一次真会话带 usage 分块（`cacheReadInputTokens`）才量得到"没变的那些轮命中率不掉"，卡在同一把前置上（任务 #17，缺模型凭据）。
 4. **本笔不动代码**：#34 是政策裁决（读端行为），不是缺陷；这里只把裁决需要的两个数交齐（陈旧度＝0，钱＝已量）。
    另有一格仍未量：中途没有地图时模型会不会多花探索步数——那要真会话，同挂 #17。
+
+### 2026-09-30 · 第 221 页 · #39 结案：「没有退出码」从此有自己的名字 `not-run`——谓词补一格，尺收敛成一处（表 1046→1051）
+
+第 217 页那条双向钉的注释原文写着「（谓词本身改不改另立任务）」。本笔就是那个任务做完：**不再由尺替产品兜着**，
+取消／被信号杀这一态在四个出口上各有证人。取料面 `outputs/not-run-cause-2026-09-30/`（readings.md 为索引）。
+
+1. **改了什么**（判据只加在唯一那只谓词上，别处一律跟着走）：
+   - `src/events/index.ts`：`VerifyCause` 第六型之后再加 `not-run`，`ENV_VERIFY_CAUSE_SET` 同步收它——
+     注释里说清为什么「名字叫 ENV 却进表」：三处消费者要的语义是**「别照它改代码」**，不是「是环境问题」；
+     没有一次真实执行结果，就没有可归因给模型的东西。
+   - `src/agent/verify.ts`：`classifyVerifyFailure` 加一行 `if (f.exitCode === null) return "not-run";`，
+     位置在 `timeout` 之后、`127` 之前（超时那一路 `exitCode` 常常也是 null，先认更具体的那条——
+     顺序证人用的是**已有**那条超时用例，没为它再造一条重复的）；
+     正文说明 `NOT_RUN_NOTE` 一只、`withVerifyCauseNote`（verify 出口）与 `annotateExecCause`（shell 出口）共用，
+     不各写一份（第十三族）。
+   - `scripts/replay/verify-cause-mix.ts`：删掉尺自己多出来的那一格 `no-exit-code`、删掉尺自己的
+     `EXEC_ENVIRONMENTAL` 表改吃 `isEnvVerifyCause`、`EXEC_ATTRIBUTABLE` 加 `not-run` ⇒ 结构栏现在**只是 delegate**。
+2. **同分母 A/B 说反了，且这是本笔最要紧的一条读数**：同一份语料在两棵树上各跑一次
+   （改前 `.worktrees/head-cert-70eab48`、改后工作树），`diff` 只有**三行标签**不同，数值零差
+   （`tool_result=40 · join 不上=9 · 红拍=5 · 带结构字段=0 · no-structure:5 · 占比 0.00 (0/5) · 环境类 0.00 (0/5)` 逐字相同）。
+   原因不是「改动没生效」，而是这 5 条红拍**全部**在第一道闸就返回 `no-structure`，走不到我改的那一格
+   （语料 2026-09-20 早于结构字段落盘 9e2f15c / 09-29）。所以这一格的分辨力**只在合成输入上**（七态表＋「两边同形」用例＋锚点），
+   语料面要等一次 #24 之后的真会话才有分子（同挂 #17）。
+   ⇒ 教训按规则 236/246 的形状记：**别拿真仓数据替语义改动背书**，先问这把尺把现读切成几档。
+3. **判卷与门（全部现跑，退出码由命令自己印）**：三个判卷文件 61 passed / `exit=0`；
+   全量 `Test Files 250 passed / Tests 3230 passed / suite_exit=0 / 117.86s`（比第 219 页认证的 3227 条多 3 条，正是本笔新增）；
+   `typecheck: 0 条报错 / exit=0`；`--check-needles` 落库前 `exit=1`：阻断 6＝钉在飞文本 5＋HEAD 侧 expectFail 指针 1
+   （`replay-exec-no-structure-read-as-code` 的指针还写着「正证四类」），这一条**已随本笔改指**「正证五类」。
+4. **锚点：撤一条、加六条（1046→1051，净 +5）**。撤的那条 `replay-exec-no-exit-code-folded-into-code` 针脚已被本笔删除
+   （在飞文本），它守护的行为没有失去证人——改由四条产品侧＋两条尺侧接管：
+   `verify-cause-not-run-folded-into-code`（谓词那一行）、`verify-cause-not-run-not-environmental`（集合里那一项，
+   摘掉＝三处出口同时开始记模型的账）、`verify-cause-not-run-note-dropped` 与 `exec-cause-not-run-note-dropped`
+   （同一句文案的两个出口，少钉一支就是那一支静默不自述）、
+   `replay-exec-not-run-out-of-attributable`（分子名单）、`replay-exec-struct-stops-delegating`（尺必须继续 delegate，
+   回退成私有表就红——这才是「一把尺而不是两把」的证人）。
+5. **本笔抓到并登记的一条新缺口（#44，未动手）**：同一个文件里 exec 面文案栏 09-29 起按行首锚定，
+   而 verify 面文案栏 `textualKind` 仍是 `includes("[exit code: 127]")` 这类无锚匹配＝同一判据两份副本宽度不同
+   （被跑脚本打印一句「见 [exit code: 127] 一节」就算人眼环境红）。不动它是因为 verify 面现读数已被第 217 页引用，
+   改判据要连那张 A/B 一起重做，属另一笔。
+6. **未证**：① 这一格在**真会话**里的量级（多少红拍其实是取消）——缺 #17 的凭据，只有合成证人；
+   ② 本笔 +5 条锚点的实际单价——按惯例在凭证页由机器自己印的分母给；
+   ③ `run_shell` 的取消支刻意**不**贴这句（它自己那行 `[error: … 随会话取消终止]` 已经说了同一件事），
+   这是选择不是遗漏，判卷里那条「超时不重复贴」是同族证人。
+

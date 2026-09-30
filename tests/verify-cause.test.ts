@@ -25,6 +25,13 @@ describe("classifyVerifyFailure：每格挂在一个已有判定上", () => {
     expect(classifyVerifyFailure({ timedOut: false, exitCode: 127, output: "bash: cargo: command not found" })).toBe("toolchain-missing");
   });
 
+  it("没超时、也没有退出码 ⇒ not-run，不许落到缺省那一格（第 221 页 #39）", () => {
+    // 这一格从前就是 `code`：取消或被信号杀的一条命令**根本没有跑完**，没有任何一次真实执行结果
+    // 可归因给模型，却被记成「代码错了」⇒ 照它改本来正确的代码，还烧掉一次修复额度。
+    // 优先级不用在这儿再钉一遍：上面那条「超时那条路 exitCode 也是 null ⇒ 判 timeout」就是顺序证人。
+    expect(classifyVerifyFailure({ timedOut: false, exitCode: null, output: "partial\n[exit code: null]" })).toBe("not-run");
+  });
+
   it("pnpm 自己那一行的命名空间错误码 ⇒ pkg-manager", () => {
     expect(classifyVerifyFailure({ timedOut: false, exitCode: 1, output: "[ERR_PNPM_UNSAFE_MODULES_DIR] Refusing to remove" })).toBe("pkg-manager");
     expect(classifyVerifyFailure({ timedOut: false, exitCode: 1, output: "开头一行别的\n[ERR_PNPM_OUTDATED_LOCKFILE] x" })).toBe("pkg-manager");
@@ -40,12 +47,15 @@ describe("classifyVerifyFailure：每格挂在一个已有判定上", () => {
 });
 
 describe("isEnvVerifyCause：三处出口共用这一只谓词", () => {
-  it("五类环境成因 ⇒ true；code 与字段缺席 ⇒ false（缺席 = 老会话流，按模型的账算）", () => {
+  it("六类不记在模型账上的成因 ⇒ true；code 与字段缺席 ⇒ false（缺席 = 老会话流，按模型的账算）", () => {
     expect(isEnvVerifyCause("timeout")).toBe(true);
     expect(isEnvVerifyCause("toolchain-missing")).toBe(true);
     expect(isEnvVerifyCause("no-surface")).toBe(true);
     expect(isEnvVerifyCause("hook-error")).toBe(true);
     expect(isEnvVerifyCause("pkg-manager")).toBe(true);
+    // 这一类名字叫 ENV 却进表：三处消费者要的那句语义是「别照它改代码」，不是「是环境问题」。
+    // 取消／被信号杀同样没有一次真实执行结果可归因（第 219 页 #42 的第 3 条现读）。
+    expect(isEnvVerifyCause("not-run")).toBe(true);
     expect(isEnvVerifyCause("code")).toBe(false);
     expect(isEnvVerifyCause(undefined)).toBe(false);
   });
@@ -57,6 +67,22 @@ describe("defaultExec 真跑进程：cause/exitCode 得来自进程本身", () =
     expect(r.ok).toBe(false);
     expect(r.cause).toBe("toolchain-missing");
     expect(r.exitCode).toBe(127);
+    // 那句「这不是代码失败」由 defaultExec 自己写在进行中（不经 withVerifyCauseNote）：
+    // 判的是模型看没看到，不是那只函数贴没贴。
+    expect(r.output).toMatch(/不是代码失败/u);
+  });
+
+  it("真机：被信号杀掉的一条命令 ⇒ exitCode:null、cause=not-run，且正文补那句「没有退出码」", async () => {
+    // 可达性实测（2026-09-30 本机）：`bash -o pipefail -c 'kill -9 $$'` 让 close 拿到 code=null——
+    // 这正是「取消／被信号杀」的形状。不补这一格，模型读到的只有 `[exit code: null]`，
+    // 而它按那句决定的是「代码错了去改代码」，不是「这条根本没跑完」。
+    const r = await defaultExec("kill -9 $$", process.cwd());
+    expect(r.ok).toBe(false);
+    expect(r.exitCode).toBeNull();
+    expect(r.cause).toBe("not-run");
+    expect(r.output).toContain("[exit code: null]");
+    expect(r.output).toContain("没有退出码");
+    expect(r.output).toMatch(/不是代码失败/u);
   });
 
   it("pnpm 式错误码行 + 非 0 ⇒ cause=pkg-manager，且正文补那句「别照它改代码」", async () => {
@@ -108,11 +134,21 @@ describe("拍级归因与无面哨兵", () => {
     expect(verifyOutcomeCause({ ok: false, results: [{ command: "t", ok: false, output: "old" }] }, null)).toBeUndefined();
   });
 
-  it("注文案只补一次，且非 pkg-manager 一律原样返回（两条 exec 出口共用一只，别漂成两份文案）", () => {
+  it("注文案只补一次，且没配正文说明的类一律原样返回（两条 exec 出口共用一只，别漂成两份文案）", () => {
     const once = withVerifyCauseNote("head", "pkg-manager");
     expect(once.match(/包管理器自身报错/g)).toHaveLength(1);
     expect(withVerifyCauseNote(once, "pkg-manager")).toBe(once);
-    expect(withVerifyCauseNote("head", "code")).toBe("head");
+    const notRun = withVerifyCauseNote("head", "not-run");
+    expect(notRun).not.toBe("head");
+    expect(notRun.match(/没有退出码/g)).toHaveLength(1);
+    expect(withVerifyCauseNote(notRun, "not-run")).toBe(notRun);
+    expect(notRun).toMatch(/不是代码失败/u); // 这句的存在理由：拦住模型照着「没有跑完」改本来正确的代码
+    for (const cause of ["code", "timeout", "no-surface", "hook-error"] as const) {
+      expect(withVerifyCauseNote("head", cause)).toBe("head");
+    }
+    // toolchain-missing 刻意不在这只函数里：那句 127 说明由 `defaultExec` 自己写在进行中，
+    // 这里再贴就是同一件事两行字。判的是「模型看没看到」，不是「这只函数贴没贴」——上一条用例里那句 toContain 就是它的证人。
+    expect(withVerifyCauseNote("head", "toolchain-missing")).toBe("head");
   });
 });
 

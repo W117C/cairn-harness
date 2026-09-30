@@ -1,0 +1,15 @@
+[verify 面] verify_result 事件=19 红事件=3 红命令=3
+带 cause 字段的红命令= 0 （>0 表示 cause 已落盘）
+钩子异常拍（红且 results 为空）= 0 红事件里 harness 自动拍= 0
+结构栏（产品可用的机制）: unknown:3
+文案栏（人眼线索，非判据）: code-or-unknown:3
+今天可机器归因占比= 0.00 (0/3)
+语料年龄= 2026-09-20 · cause 落盘= 9499a9f / 2026-09-23 ⇒ 语料最新事件早于 cause 落盘（9499a9f）⇒ 这个 0 是**数据年龄**，不是归因失效
+
+[exec 面] shell 家族 tool_result=40（run_shell:26 shell_ro:8 shell_rw:6） · join 不上=9（不计入分母，也不当没有）· 红拍=5
+带结构字段（exitCode／timedOut）的红拍= 0 （>0 表示 #24 那把结构面已在语料里生效）
+结构栏（本尺口径：把 no-exit-code 从缺省 code 里分出来）: no-structure:5
+文案栏（人眼线索，非判据）: code-or-unknown:4 denied-by-readonly-filter:1
+可机器归因占比（正证四类／红拍）= 0.00 (0/5) · 其中环境类= 0.00 (0/5)
+⚠️ 这一格有三种真成因、本面分不开（no-structure:5）：① 语料早于 #24 落盘；② 根本没走到 exec（门拒绝 / unknown tool / 只读静态过滤——这三条落盘时既不带 gate 也不带结构字段）；③ spawn 的 error 出口自己就不带字段。
+语料年龄= 2026-09-20 · 结构字段落盘面= 9e2f15c / 2026-09-29 ⇒ 语料最新事件早于 exitCode/timedOut 结构字段 落盘（9e2f15c）⇒ 这个 0 是**数据年龄**，不是归因失效

@@ -25,7 +25,7 @@ afterAll(async () => {
   await rm(ws, { recursive: true, force: true });
 });
 
-describe("annotateExecCause：三类已有判定各贴各的，代码红一个字都不许多", () => {
+describe("annotateExecCause：该贴的三类各贴各的，代码红与绿拍一个字都不许多", () => {
   it("127 与包管理器错误码两类各贴一句，普通代码红不贴", () => {
     const missing = annotateExecCause({ ok: false, output: "bash: foo: command not found" }, { timedOut: false, exitCode: 127 });
     expect(missing.output).toContain("127");
@@ -46,6 +46,17 @@ describe("annotateExecCause：三类已有判定各贴各的，代码红一个�
     expect(r.output).toBe("partial\n[error: run_shell 超时（60s），已强制终止]");
   });
 
+  it("没有退出码 ⇒ 贴「被取消或被信号杀掉」那一句，且幂等（两条 exec 出口共用同一句）", () => {
+    // 这一格从前什么都得不贴：模型只看到 `[exit code: null]`，读到的是「脚本返回了个怪码」，
+    // 而真因是这条命令**压根没跑完**（第 221 页 #39）。
+    const once = annotateExecCause({ ok: false, output: "partial\n[exit code: null]" }, { timedOut: false, exitCode: null });
+    expect(once.output).toContain("没有退出码");
+    expect(once.output).toMatch(/不是代码失败/u);
+    expect(noteCount(once.output)).toBe(1);
+    const twice = annotateExecCause(once, { timedOut: false, exitCode: null });
+    expect(noteCount(twice.output)).toBe(1);
+  });
+
   it("幂等：同一条结果先后过两层出口（worker 缺省出口就是 run_shell）只贴一遍", () => {
     const once = annotateExecCause({ ok: false, output: "no such binary" }, { timedOut: false, exitCode: 127 });
     const twice = annotateExecCause(once, { timedOut: false, exitCode: 127 });
@@ -56,6 +67,7 @@ describe("annotateExecCause：三类已有判定各贴各的，代码红一个�
     for (const f of [
       { timedOut: false, exitCode: 127 },
       { timedOut: false, exitCode: 1 },
+      { timedOut: false, exitCode: null },
     ]) {
       const out = annotateExecCause({ ok: false, output: f.exitCode === 1 ? PNPM_LINE : "x" }, f).output;
       expect(out).toMatch(/不是代码失败/u);

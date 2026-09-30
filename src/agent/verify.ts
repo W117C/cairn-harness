@@ -15,15 +15,23 @@ const PKG_MANAGER_OWN_ERROR_LINE = /^[ \t]*[│┆└├]?[ \t]*\[?ERR_PNPM_[A-Z
 
 /** 环境类失败必须在**正文里点名**（模型只看 output）：红字不说"这不是代码失败"，它就会去改本来正确的代码。
  *  两条 exec 出口（非沙箱 defaultExec / 沙箱 verifyExec）共用这一只，别各写一份文案。 */
+const PKG_MANAGER_NOTE = "[verify: 包管理器自身报错（安装目录/依赖状态），测试脚本未被执行——这不是代码失败，别照它改代码]";
+/** 「没有退出码」那一类的同一件事：正文里只留 `[exit code: null]` 时，模型读到的是"脚本返回了个怪码"，
+ *  而真因是这条命令**压根没跑完**（取消／被信号杀）。两只出口共用这一句，别各写一份。 */
+const NOT_RUN_NOTE = "[exec: 没有退出码 ⇒ 这条命令被取消或被信号杀掉，没有跑完 —— 这不是代码失败，别照它改代码]";
+
 export function withVerifyCauseNote(output: string, cause: VerifyCause): string {
-  const note = "[verify: 包管理器自身报错（安装目录/依赖状态），测试脚本未被执行——这不是代码失败，别照它改代码]";
-  if (cause !== "pkg-manager" || output.includes(note)) return output;
+  const note = cause === "pkg-manager" ? PKG_MANAGER_NOTE : cause === "not-run" ? NOT_RUN_NOTE : "";
+  if (note === "" || output.includes(note)) return output;
   return output + "\n" + note;
 }
 
-/** 一次失败命令的归因：**全部来自已有判定**（超时布尔 / 退出码 / pnpm 自有错误码行），缺省 `code`。 */
+/** 一次失败命令的归因：**全部来自已有判定**（超时布尔 / 退出码 / pnpm 自有错误码行），缺省 `code`。
+ *  `not-run` 排在 127 与 pnpm 之前、`timeout` 之后：超时那一路 `exitCode` 常常也是 null，
+ *  但"跑不完"比"没跑完"更具体，先认它。 */
 export function classifyVerifyFailure(f: { timedOut: boolean; exitCode: number | null; output: string }): VerifyCause {
   if (f.timedOut) return "timeout";
+  if (f.exitCode === null) return "not-run";
   if (f.exitCode === 127) return "toolchain-missing";
   if (PKG_MANAGER_OWN_ERROR_LINE.test(f.output)) return "pkg-manager";
   return "code";
@@ -53,7 +61,9 @@ export function annotateExecCause<T extends { ok: boolean; output: string }>(
       ? "[exec: 退出码 127 = 这个命令不在 PATH 里 ⇒ 命令根本没跑成，这不是代码失败（先确认二进制名 / 是否安装）]"
       : cause === "pkg-manager"
         ? "[exec: 包管理器自身报错（安装目录/依赖状态），命令本体未被执行 ⇒ 这不是代码失败，别照它改代码]"
-        : "";
+        : cause === "not-run"
+          ? NOT_RUN_NOTE
+          : "";
   if (note === "" || r.output.includes(note)) return stamped;
   return { ...stamped, output: r.output + "\n" + note };
 }

@@ -9373,16 +9373,68 @@ const MUTATIONS = [
     desc: "结构字段两只都不在时不再报「读不到」，而是落到产品谓词的缺省那一格 ⇒ " +
       "「尺读不到」与「量到了、就是代码错」同形（规则 261 的正面），分子当场虚高、占比永远好看",
     apply: (s) => s.replace("if (!hasCode && !hasTimeout)", "if (false)"),
-    expectFail: "占比分子＝正证四类，且环境类是它的子集",
+    expectFail: "占比分子＝正证五类，且环境类是它的子集",
   },
   {
-    id: "replay-exec-no-exit-code-folded-into-code",
+    // 第 221 页（#39）：本尺曾比产品谓词多一格（`exitCode:null + timedOut:false`）。那一态补进谓词后
+    // 尺不再自己判 ⇒ 旧的「本尺多出来的那一格」针脚随之消失，这一条改指**收敛本身**：尺必须继续 delegate。
+    // 摘掉 delegate 就红，且红在那条「两边同形」的用例上——它才是「一把尺而不是两把」的证人（规则 302 的收敛那一半）。
+    id: "replay-exec-struct-stops-delegating",
     src: "scripts/replay/verify-cause-mix.ts",
     test: "tests/replay-verify-cause-exec.test.ts",
-    desc: "本尺比产品谓词多出来的那一格被收回去 ⇒ 取消／被信号杀（没有退出码）重新被说成「代码错了」。" +
-      "针脚同时钉住两边各说什么：谓词哪天补上这一态，这条用例立刻红着提醒收敛成一处（规则 224：归因守对格）",
-    apply: (s) => s.replace("if (e.timedOut === false && e.exitCode === null)", "if (false)"),
-    expectFail: "本尺比谓词多的那一格：同一输入两边各说什么，都要钉住",
+    desc: "结构栏不再走产品那一只谓词、自己回退成一份表 ⇒ 同一个输入两边各说一个原因，" +
+      "而读数印的是尺那份。第十三族在本尺身上的最后一处残留：判据抄第二份就会各漂宽度",
+    apply: (s) => s.replace("return classifyVerifyFailure({ timedOut: e.timedOut === true", "return \"code\" || classifyVerifyFailure({ timedOut: e.timedOut === true"),
+    expectFail: "两边同形",
+  },
+
+  /* ── 第 221 页（#39）：「没有退出码」第一次有自己的名字。四支各有各的证人，
+     因为这是**四个出口**（谓词 / ENV 集合 / verify 正文 / shell 正文），少钉一支就是那一支静默不自述。 ── */
+  {
+    id: "verify-cause-not-run-folded-into-code",
+    src: "src/agent/verify.ts",
+    test: "tests/verify-cause.test.ts",
+    desc: "取消／被信号杀（timedOut:false 而 exitCode:null）重新落到缺省那一格 ⇒ 一次**根本没有跑完**的" +
+      "命令被记成「代码错了」：模型照它改本来正确的代码，还烧掉一次修复额度（第 219 页 #42 普查现读的那一格）",
+    apply: (s) => s.replace("if (f.exitCode === null) return \"not-run\";", "if (f.exitCode === null) return \"code\";"),
+    expectFail: "没超时、也没有退出码",
+  },
+  {
+    id: "verify-cause-not-run-not-environmental",
+    src: "src/events/index.ts",
+    test: "tests/verify-cause.test.ts",
+    desc: "从 ENV 集合里摘掉 not-run ⇒ 三处出口（修复额度／升档与 bandit／沉淀）同时开始记模型的账。" +
+      "这一格名字叫 ENV 却进表，是因为消费者要的那句语义是「别照它改代码」，不是「是环境问题」——" +
+      "集合是唯一事实源，写死的第三份表就是本仓点名的形状",
+    apply: (s) => s.replace("\"pkg-manager\", \"not-run\",", "\"pkg-manager\","),
+    expectFail: "六类不记在模型账上的成因",
+  },
+  {
+    id: "verify-cause-not-run-note-dropped",
+    src: "src/agent/verify.ts",
+    test: "tests/verify-cause.test.ts",
+    desc: "verify 那一支的正文说明被摘 ⇒ 模型只看到 `[exit code: null]`，读到的是「脚本返回了个怪码」，" +
+      "不是「这条命令没跑完」。红字不点名「这不是代码失败」，归因就只活在字段里而不在模型看得见的地方",
+    apply: (s) => s.replace("cause === \"not-run\" ? NOT_RUN_NOTE", "cause === \"not-run\" ? \"\""),
+    expectFail: "注文案只补一次",
+  },
+  {
+    id: "exec-cause-not-run-note-dropped",
+    src: "src/agent/verify.ts",
+    test: "tests/shell-family-cause.test.ts",
+    desc: "同一族的两半之第二半：verify 那支贴了而 shell 这支不贴 = 「同一判据只硬化一支」（第六族）。" +
+      "run_shell／worker 两条出口共用这一句，摘掉条件里那一支就只剩 verify 有证人",
+    apply: (s) => s.replace(": cause === \"not-run\"\n          ? NOT_RUN_NOTE", ": cause === \"cancelled\"\n          ? NOT_RUN_NOTE"),
+    expectFail: "没有退出码 ⇒ 贴",
+  },
+  {
+    id: "replay-exec-not-run-out-of-attributable",
+    src: "scripts/replay/verify-cause-mix.ts",
+    test: "tests/replay-verify-cause-exec.test.ts",
+    desc: "分子名单少这一类 ⇒ 占比把「取消」算回模型的头上，而读数看着仍然完整。" +
+      "「有正证」的口径是字段**明说**过：exitCode:null + timedOut:false 就是明说，不是「别都不是所以猜它是」",
+    apply: (s) => s.replace("\"pkg-manager\", \"code\", \"not-run\"]", "\"pkg-manager\", \"code\"]"),
+    expectFail: "占比分子＝正证五类",
   },
   {
     id: "replay-exec-text-anchor-lost",

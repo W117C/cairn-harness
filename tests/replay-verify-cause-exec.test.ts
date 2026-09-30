@@ -64,7 +64,7 @@ describe("exec 面的分母：只数 shell 家族，join 不上不丢", () => {
   });
 });
 
-describe("exec 面的结构栏：七态分开印，读不到与没问题不许同形", () => {
+describe("exec 面的结构栏：读不到与没问题不许同形", () => {
   it.each([
     ["no-structure", { output: "x" }],
     ["half-structure", { exitCode: 1 }],
@@ -72,7 +72,7 @@ describe("exec 面的结构栏：七态分开印，读不到与没问题不许�
     ["timeout", { exitCode: null, timedOut: true }],
     ["toolchain-missing", { exitCode: 127, timedOut: false }],
     ["code", { exitCode: 1, timedOut: false }],
-    ["no-exit-code", { exitCode: null, timedOut: false }],
+    ["not-run", { exitCode: null, timedOut: false }],
   ] as const)("%s ⇐ 字段 %j", (want, fields) => {
     expect(execStructKind({ output: "x", ...fields })).toBe(want);
   });
@@ -82,30 +82,32 @@ describe("exec 面的结构栏：七态分开印，读不到与没问题不许�
       .toBe("pkg-manager");
   });
 
-  it("本尺比谓词多的那一格：同一输入两边各说什么，都要钉住", () => {
+  it("第 217 页的双向钉兑现了：这一态两边同形（尺不再自己判）", () => {
     const f = { timedOut: false, exitCode: null as number | null, output: "x" };
-    expect(classifyVerifyFailure(f)).toBe("code"); // 产品口径：缺省即「代码错了」
-    expect(execStructKind(f)).toBe("no-exit-code"); // 读数口径：没有退出码 ≠ 代码错
+    expect(classifyVerifyFailure(f)).toBe("not-run"); // 产品谓词（#39 补上的一态）
+    expect(execStructKind(f)).toBe("not-run"); // 读数面跟着走，不再有"本尺多一格"
   });
 
-  it("no-structure 绝不在「可归因」名单里（否则「读不到」被读成「量到了」）", () => {
+  it("读不到的三类绝不在「可归因」名单里（否则「读不到」被读成「量到了」）", () => {
     expect(EXEC_ATTRIBUTABLE).not.toContain("no-structure");
-    expect(EXEC_ATTRIBUTABLE).not.toContain("no-exit-code");
     expect(EXEC_ATTRIBUTABLE).not.toContain("half-structure");
   });
 
-  it("占比分子＝正证四类，且环境类是它的子集", () => {
+  it("占比分子＝正证五类，且环境类是它的子集", () => {
     const raws = [
       call("a", "run_shell"), result("a", { exitCode: 1, timedOut: false }),
       call("b", "run_shell"), result("b", { exitCode: 127, timedOut: false }),
       call("c", "run_shell"), result("c", { exitCode: null, timedOut: true }),
       call("d", "run_shell"), result("d", {}), // 旧日志：读不到
+      // #39 之后 `not-run` 也进分子：它是字段**明说**过的（exitCode:null + timedOut:false），
+      // 不是「别都不是所以猜它是」。这一拍不进分母的话，「取消」就在占比里静默算模型的头。
+      call("e", "run_shell"), result("e", { exitCode: null, timedOut: false }),
     ];
     const t = execMixOf(raws);
-    expect(t.shellRed).toBe(4);
-    expect(t.withStructure).toBe(3);
-    expect(t.attributable).toBe(3);
-    expect(t.environmental).toBe(2); // 127 + 超时
+    expect(t.shellRed).toBe(5);
+    expect(t.withStructure).toBe(4);
+    expect(t.attributable).toBe(4);
+    expect(t.environmental).toBe(3); // 127 ＋ 超时 ＋ not-run（三处出口都按「别照它改代码」记）
   });
 });
 

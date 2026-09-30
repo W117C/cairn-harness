@@ -1,0 +1,58 @@
+# HEAD（b9e4374）侧的原状 —— 由 git 取字节，不是凭记忆
+
+## src/agent/verify.ts：classifyVerifyFailure 里没有 not-run 那一格
+25:export function classifyVerifyFailure(f: { timedOut: boolean; exitCode: number | null; output: string }): VerifyCause {
+26-  if (f.timedOut) return "timeout";
+27-  if (f.exitCode === 127) return "toolchain-missing";
+28-  if (PKG_MANAGER_OWN_ERROR_LINE.test(f.output)) return "pkg-manager";
+29-  return "code";
+30-}
+31-
+32-/** shell 家族的失败归因（`run_shell` ＋ worker 的 `shell_ro`/`shell_rw` ＋ 两条沙箱出口）。
+
+## src/events/index.ts：VerifyCause 六型、ENV 集合五型
+109:export type VerifyCause =
+110-  | "code"
+111-  | "timeout"
+112-  | "toolchain-missing"
+113-  | "no-surface"
+114-  | "hook-error"
+115-  | "pkg-manager";
+116-
+117-/** 环境成因集：这几类红**不是模型的代码错了**，不得记在模型账上（不烧修复额度 / 不喂升档与 bandit / 不进沉淀）。 */
+118:const ENV_VERIFY_CAUSE_SET: ReadonlySet<VerifyCause> = new Set<VerifyCause>([
+119-  "timeout", "toolchain-missing", "no-surface", "hook-error", "pkg-manager",
+120-]);
+
+## scripts/replay/verify-cause-mix.ts：尺自己多出来的那一格（本笔删掉的那段）
+109-export const EXEC_ENVIRONMENTAL: readonly string[] = ["timeout", "toolchain-missing", "pkg-manager"];
+110-
+111-/** 结构栏：两只字段齐了才准过产品那一只谓词；不齐就**报不齐**，绝不折成 "code"。
+112: *  `no-exit-code` 是本尺比谓词多出来的一格：`exitCode:null + timedOut:false` 在
+113- *  `classifyVerifyFailure` 里落到缺省 `"code"`，可它实际是"进程被取消／被信号杀掉"
+114- *  （`run_shell.ts` 的取消支、以及 spawn `error` 后 `close(null)` 两条路都到这儿）——
+115- *  把"没有退出码"说成"代码错了"是 over-claim，读数不许跟着它一起撒谎（谓词本身改不改另立任务）。 */
+--
+118-  const hasTimeout = e.timedOut !== undefined;
+119-  if (!hasCode && !hasTimeout) return "no-structure";
+120-  if (hasCode !== hasTimeout) return "half-structure"; // 落盘面成对写；只剩一只 = 装配漂了
+121:  if (e.timedOut === false && e.exitCode === null) return "no-exit-code";
+122-  return classifyVerifyFailure({ timedOut: e.timedOut === true, exitCode: e.exitCode ?? null, output: e.output ?? "" });
+123-}
+124-
+--
+140-  if (T_CANCELLED.test(output)) return "cancelled";
+141-  if (T_SPAWN_ERROR.test(output)) return "spawn-error";
+142-  if (T_EXIT_127.test(output)) return "toolchain-missing";
+143:  if (T_EXIT_NULL.test(output)) return "killed-no-exit-code";
+144-  if (T_PKG.test(output)) return "pkg-manager";
+145-  return "code-or-unknown";
+146-}
+--
+285-    return true;
+286-  }
+287-  console.log("带结构字段（exitCode／timedOut）的红拍=", String(t.withStructure), "（>0 表示 #24 那把结构面已在语料里生效）");
+288:  console.log("结构栏（本尺口径：把 no-exit-code 从缺省 code 里分出来）:", show(t.struct));
+289-  console.log("文案栏（人眼线索，非判据）:", show(t.text));
+290-  console.log(
+291-    "可机器归因占比（正证四类／红拍）=",
