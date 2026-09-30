@@ -1915,7 +1915,9 @@ const MUTATIONS = [
     src: "src/tools/output-ring.ts",
     test: "tests/shell-tail.test.ts",
     desc: "尾环算好了却在拼装时没接上（模型看到的仍是纯头部）",
-    apply: (s) => s.replace(' + "\\n" + MIDDLE_TRUNCATION_HINT + "\\n" + tail', ' + "\\n" + MIDDLE_TRUNCATION_HINT'),
+    // 第 246 页改指：ff0dc7b（web_fetch）把拼装重排成 hint 局部名 + middleTruncationNotice 的形状，
+    // 旧搜索串（MIDDLE_TRUNCATION_HINT 直拼）在源里已绝迹；只动搜索串与替换值，变异语义不变（尾环没接上）。
+    apply: (s) => s.replace(' + "\\n" + hint + "\\n" + tail', ' + "\\n" + hint'),
     expectFail: "超上限时头部与**结尾**都在（旧实现于源头丢掉了 32KB 之后的一切）",
   },
   {

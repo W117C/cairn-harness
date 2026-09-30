@@ -8061,3 +8061,10 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 4. **仍留两站（登记不装完）**：budget 事件（L490，4 个调用点需穿线 callId，本轮不硬穿）；sequencer 状态事件（L1529，反复落流的 ok 排序与折叠膨胀需单独一页读数）。`m3c:545` 钉的正是 L1529 旧形状——跳它是对的。
 5. **阻断 1 不归本笔**：`shell-tail-assembly-drops-tail`（`src/tools/output-ring.ts`）——检查器自点名被 `ff0dc7b`（web_fetch 新功能）搬走实现，归属那笔作者改指；本笔六站点编辑不碰 output-ring。
 6. **取料**：census 复跑（16 落点／9 自造→7 站点改造后 2 自造：budget＋sequencer）；探针与真值沿用 241/242 页目录。
+
+### 2026-09-30 · 第 246 页（本会话）· 改指一支搬家锚点：ff0dc7b（web_fetch）把尾环拼装重排，`shell-tail-assembly-drops-tail` 旧搜索串在源里绝迹——只动搜索串与替换值（表 1101，源码仅登记表一行）
+
+1. **阻断会传染**：`--check-needles` 从 23:2x 起报 `阻断 1（shell-tail-assembly-drops-tail，src/tools/output-ring.ts）`——mutate-needles-check 门从此对**所有人**的认证都红。web_fetch 作者没有改指，卡了一阵子后本笔代改（登记表是共享基础设施，门是所有人的门）。
+2. **只动搜索串与替换值，变异语义不变**（233 页改指先例）：旧形状 `' + "\n" + MIDDLE_TRUNCATION_HINT + "\n" + tail'` 在源里已绝迹（ff0dc7b 把拼装重排成 hint 局部名＋middleTruncationNotice 的形状，L138）；新搜索串 ` + "\n" + hint + "\n" + tail` 落笔前 `grep -cF`＝1（规则 312）。变异仍删 `tail`：尾环算好了却没接上的那条回归，钉法不变。
+3. **复测**：`--check-needles` 阻断 0（1101 条）；`tests/shell-tail.test.ts` 6/6 绿（行为本体没动）。
+4. **取料**：检查器自点名（「谁搬走的：ff0dc7b web_fetch」那行）＋新搜索串唯一性 grep。**kill 实证留给下一次认证**（本页只保证针脚在源里、变异产出合法源文件）。
