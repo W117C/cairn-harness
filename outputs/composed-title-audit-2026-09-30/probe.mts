@@ -84,7 +84,9 @@ for (const e of rows) {
   // 指针为空／判卷不是 .test.ts（结构钉型）／文件读不到或抽不出标题。把它们当成「唯一命中」＝虚高的分子。
   const face = faceOf(e.test);
   if (e.expectFail === "" || !e.test.endsWith(".test.ts")) { offFace += 1; continue; }
-  if (face === null || face.itTitles.length === 0) { offFace += 1; continue; }
+  // `undefined` 与 `null` 两种都要挡：`faceOf` 走的是 Map，取不到时给的是 `undefined`，
+  // 只写 `=== null` 的话 tsc 会报 TS18048，而运行时是 `face.itTitles` 直接抛——本探针守的正是"别把没料读成 0 条"。
+  if (face === undefined || face === null || face.itTitles.length === 0) { offFace += 1; continue; }
   // 真表与哨兵走同一份 assess()：两支各自算一遍命中宽度就是"同一判据两份副本漂宽"那一族（第十三族）。
   const r = assess(e.expectFail, face.descs, () => readFileSync(join(ROOT, e.test), "utf8"));
   if (r === "off") { offFace += 1; continue; }
