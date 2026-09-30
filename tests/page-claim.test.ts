@@ -100,13 +100,13 @@ describe("claimPage：原子占位", () => {
     expect(pool.has("243"), "占到的号必须真的落进池").toBe(true);
   });
 
-  it("号池建不出来＝那一格取不到，且这一态与「读不到」「超过帽」各有各的名字（三态同形就没人知道该修哪一台）", () => {
+  it("号池建不出来＝那一格取不到，且这一态与「读不到」「让位次数用满」各有各的名字（三态同形就没人知道该修哪一台）", () => {
     const a = fakeOps(new Set(), { ensureThrows: new Error("EACCES: permission denied") });
     const r = claimPage({ dir: "/pool", taken: [], ops: a.ops });
     expect(r.page).toBeNull();
     expect(r.cell, r.cell).toContain("建不出来");
     expect(r.cell, "这一态不许借用另一态的名字").not.toContain("读不到");
-    expect(r.cell, "这一态不许借用另一态的名字").not.toContain("超过帽");
+    expect(r.cell, "这一态不许借用另一态的名字").not.toContain("让位次数用满");
 
     const b = fakeOps(new Set(), { listThrows: true });
     const r2 = claimPage({ dir: "/pool", taken: [], ops: b.ops });
@@ -116,14 +116,14 @@ describe("claimPage：原子占位", () => {
     const c = fakeOps(new Set(), { alwaysExists: true });
     const r3 = claimPage({ dir: "/pool", taken: [], ops: c.ops });
     expect(r3.page).toBeNull();
-    expect(r3.cell, r3.cell).toContain("超过帽");
+    expect(r3.cell, r3.cell).toContain("让位次数用满");
     // 三种坏读数各有一句自己的名字：两两不许同形（同形＝读的人不知道该修哪一台）
     expect(new Set([r.cell, r2.cell, r3.cell]).size, "三态必须三个名字").toBe(3);
     // 负控：占到的那一句不许长得像坏读数
     const ok = claimPage({ dir: "/pool", taken: [], ops: fakeOps(new Set()).ops });
     expect(ok.page).toBe(1);
     expect(ok.cell, ok.cell).not.toContain("取不到");
-    expect(ok.cell, ok.cell).not.toContain("超过帽");
+    expect(ok.cell, ok.cell).not.toContain("让位次数用满");
   });
 
   it("一直让位要撞帽并出声，不许无限重试（帽本身就是读数）", () => {
@@ -131,7 +131,7 @@ describe("claimPage：原子占位", () => {
     const r = claimPage({ dir: "/pool", taken: [], ops });
     expect(r.page).toBeNull();
     expect(tried.length, "尝试次数必须正好等于帽，不是再多跑一轮").toBe(PAGE_CLAIM_MAX_ATTEMPTS);
-    expect(r.cell, r.cell).toContain("超过帽");
+    expect(r.cell, r.cell).toContain("让位次数用满");
   });
 });
 

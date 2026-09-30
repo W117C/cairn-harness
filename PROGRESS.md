@@ -7969,6 +7969,39 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 8. **取料**：`outputs/page-claim-2026-09-30/`（`findings.md`＋三次 dogfood 日志＋判卷原句＋落库前 needles 与两份 typecheck）。
    凭证另起一笔（标题含「凭证」才进 D-9 面）。
 
+### 2026-09-30 · 第 244 页 · 我新写的一句「超过帽」把别人那条断言顶成了两处：顶包水位 11>10，改自己的名（表外判卷外零改动）
+
+页号 `scripts/next-page.ts` 现占：`占号 244（已占面 202 个＋号池 2 个）`。
+
+1. **红是认证喊出来的**：第 243 页那一笔（`48d6f63`）全量认证 `HEADCERT_EXIT=1`——
+   `Test Files 1 failed | 254 passed (255)｜Tests 1 failed | 3319 passed (3320)｜exit=1`。
+   （通知里那个 "exit code 0" 属于我的包装命令，不属于尺——规则 249，这次又踩在同一个坑边上，靠日志里的 `HEADCERT_EXIT=1` 才没读反。）
+2. **红的那一格不是我自己的判卷，是隔壁那把尺**：`tests/prose-needle-scan.test.ts > 真仓读数必须在帽内` 报
+   `水位上涨：顶包候选 11（已提交 11 ＋ 在飞 0）> 登记的 10`。
+   点名取料（`report-at-11.log`）里第 11 条是 `tests/head-cert-deps.test.ts:523 .reason「超过帽」`，
+   两个生产侧副本：`scripts/lib/tool-lock.ts#decideToolLock`（原有）＋ **`scripts/lib/page-claim.ts#claimPage`（我这笔新加的）**。
+   ⇒ 我写新文案时复用了「超过帽」这个词，把**别人那条断言的取料顶成了两处**——那条断言从此分不清自己读的是哪一台的措辞（规则 236/245 那一族换了载体：不是同文件字面量，是跨文件的共享词）。
+3. **修法只改自己的名**：`page-claim.ts` 那句改成「让位次数用满（帽 50）」，判卷 5 处跟着走；
+   **不动 `tool-lock.ts`、不动 `head-cert-deps.test.ts:523` 那条针脚**（那是别人钉的，我把它改窄就等于把我要守的东西废掉）。
+4. **复现与归因链**（都在取料里）：主树单跑那份判卷就红（`vitest-fail-at-11.log`）⇒ 不是认证树特有态、不是隔壁在飞；
+   `ceilingBreaches(r).bare` 一直是空串（红只在 multi 那一半）；修完 `顶包候选 10 条（已提交态 10 ＋ 在飞 0）`、`prose-needle-scan exit=0`、
+   三个受影响文件 `168 passed (168)`。定位用的是 `where.mts`——它**第一版直接 `scanRepo()`**，`root` 传成 undefined 而 TypeError 炸出来
+   （`scanRepo` 的注释早就写了"根要问 git，不做路径算术"，我自己第一次就踩了；炸得响比读成 0 条好）。
+5. **这一格该沉淀成什么**：一把尺（`prose-needle-scan`）在**我没有跑的那份判卷**上喊住了我——这正是"执行-验证-修正"闭环里
+   最值钱的一类：不是我自己写的那 11 条判卷绿了就行，而是全表对**共享词汇表**的影响有人守。
+   我的教训取一个可执行的形状：**新写给用户看的措辞（cell/reason/detail 那类）之前，先 grep 这个词在 `scripts/`＋`src/` 里有没有别的生产者**；
+   有，就换一个只属于我的名字。这条不打算长成新门（`prose-needle-scan` 已经把它当红喊了，再加一门是重复），只登记进记忆。
+6. **帽没有动**：`SCOPE_CEILINGS["core-only"].multiCopy` 仍是 10；我从没抬它，是把多出的那一格收回来了（只准调低）。
+   `SELECTOR_CAP` 也仍 3；锚点表仍 1097 条，本笔零新锚点（改的是措辞，`--check-needles` 现读 `阻断 0`，四支 page-claim 针脚都没受影响）。
+7. **取料**：`outputs/prose-ceiling-2026-09-30/`（`report-at-11.log`＝11 条那份原文、`report-at-10.log`＝修后、
+   `vitest-fail-at-11.log`/`vitest-after-fix.log`、`where.mts`＋`after-fix.log`）。
+   `typecheck exit=0（0 报错）`。凭证与 `48d6f63` 那笔一起写（那一笔单独不构成认证）。
+8. **这把尺的边界也要写在纸上**：台账里现在有**两个「第 242 页」**——我的 `48d6f63`（22:40:45）与隔壁 `940dbb9`（22:40:57，晚 12 秒）。
+   按「先落库保号」我的 242 站着、**他们的页我不替他改号**。为什么占号工具没挡住这一次：
+   对方那一笔的页号是在我 22:40:45 落库**之前**就读好的（读法没换），而号池只对"跑过 `scripts/next-page.ts` 的那一方"生效。
+   ⇒ 这把尺只对**双方都执行**才成立，工具本身不产生约束力；要让另一侧也走它，得把它写进共享的入口约定里
+   （AGENTS.md 那条"跑 `node --import tsx scripts/typecheck.ts` 再交笔"同级的一句话），这属下一笔要裁的事，本笔只登记。
+
 ### 2026-09-30 · 第 240 页（本会话）· 影响面精度只读探针：跨文件调用边 23/23 全对，同文件边是登记在案的设计盲区（能力 1 底账，表外零源码）
 
 1. **方法**：对 4 个真值已知符号（`appendRun`／`staleScratchTrees`／`runInSandbox`／`insideScratchFace`——全是本会话亲手碰过、调用点真值来自工作记忆＋grep 双源的函数）跑 `upward(谁调用我)`，与 grep 真值并排、逐处差异人工归类。探针与原句在取料目录。

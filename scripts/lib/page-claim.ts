@@ -95,5 +95,5 @@ export function claimPage(input: {
     yielded += 1;
     taken.push(candidate);
   }
-  return { page: null, yielded, cell: `让位 ${String(yielded)} 次仍没占到（超过帽 ${String(PAGE_CLAIM_MAX_ATTEMPTS)}）⇒ 这一格取不到，请人工看号池` };
+  return { page: null, yielded, cell: `让位 ${String(yielded)} 次仍没占到（让位次数用满，帽 ${String(PAGE_CLAIM_MAX_ATTEMPTS)}）⇒ 这一格取不到，请人工看号池` };
 }
