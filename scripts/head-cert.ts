@@ -19,10 +19,10 @@
  *   （切树失败 / 取不到 package.json / `--skip-test` 没写 `--why` / **那棵认证树正被别的进程占着**）。
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-import { certGateCell, certGatePlan, certGateVerdict, certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, gitInflightArgs, headGateTableIntegrity, mainRootFromCommonDir, missingDeclaredDeps, parseCertGateRows, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "./lib/head-cert-deps";
+import { certGateCell, certGatePlan, certGateVerdict, certLevel, CERT_FLAGS, CERT_OPTS, certTreeAbs, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, gitInflightArgs, headGateTableIntegrity, mainRootFromCommonDir, missingDeclaredDeps, parseCertGateRows, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "./lib/head-cert-deps";
 import { acquireToolLock } from "./lib/tool-lock";
 import { checkHeadImportFace, collectHeadEdges, findDanglingImports } from "./head-import-face";
 
@@ -108,9 +108,14 @@ const LOCK = acquireToolLock({
 const lockCell = LOCK.cell;
 
 // ① 切树：新建树用 worktree add，已存在的用 checkout；**不许吞输出**，且事后复核 rev-parse。
-const treeAbs = join(MAIN, TREE);
+// 位置只算一次、按 `resolve` 算（`--tree=` 可以是绝对路径；`join` 不认第二段绝对，会把外域树读成「不存在」，
+// 详见 `certTreeAbs` 那段注释。同族的 `mutate-verify.mjs` 早就用 `resolve(mainRoot, treeRel)` 了）。
+const treeAbs = certTreeAbs(MAIN, TREE);
 if (!existsSync(treeAbs)) {
-  mkdirSync(dirname(treeAbs), { recursive: true });
+  // 补父目录只是"省事"，不是判据：**建不动也要往下走**，让 `worktree add` 自己出声。
+  // 上一版这里裸调 `mkdirSync(..., {recursive:true})`——旧口径把它指到仓内的假目录所以从不失败，
+  // 换成真路径后 `--tree=/dev/null/x` 这种哨兵写法就抛 EEXIST 把整道门崩掉（栈里看不出是谁的错，判卷只看到少了 `worktree add exit=`）。
+  try { mkdirSync(dirname(treeAbs), { recursive: true }); } catch { /* 交给下一行的 git：它知道该怎么抱怨 */ }
   const added = run(MAIN, "git", ["worktree", "add", "--detach", TREE, TARGET]);
   say(`worktree add exit=${String(added.status)}`);
   if (added.status !== 0) { console.error(added.out.trim().split("\n").slice(0, 3).join("\n")); process.exit(2); }
@@ -300,8 +305,11 @@ say(`  回收这棵树（规则 120，别留残留）：git worktree remove --fo
 const wtRows = parseWorktreeList(run(MAIN, "git", ["worktree", "list", "--porcelain"]).out);
 const staleCell = staleTreeCell(wtRows, staleScratchTrees(wtRows, {
   selfPath: MAIN,
-  certTree: resolve(MAIN, TREE), // `worktree list` 给绝对路径，`--tree=` 可以是相对的 ⇒ 比之前先归一化
+  certTree: treeAbs, // 与切树那一步**同一个值**（从前这里另算一份 `resolve(MAIN, TREE)`：两个口径一旦分叉，「本次那棵认证树」在排除名单里就不是被切走的那棵）
   scratchRoot: SCRATCH_ROOT, // 主树的 `.worktrees/`；取不到时传 undefined，上面那行警告已经出声
+  // `worktree list` 报的是内核真路径（macOS 把 `/tmp` 回报成 `/private/tmp`），而 `--tree=` 是原始串
+  // ⇒ 「是不是我自己这棵」两边先取真路径再比，否则本次刚认证完的那棵树会被印进 `foreign`（第 249 页实测）。
+  canonical: (p: string): string => { try { return realpathSync(p); } catch { return p; } },
   isAncestor: (shaArg) => run(MAIN, "git", ["merge-base", "--is-ancestor", shaArg, TARGET]).status === 0,
   dirtyCountOf: (p) => {
     const r = run(p, "git", gitInflightArgs());

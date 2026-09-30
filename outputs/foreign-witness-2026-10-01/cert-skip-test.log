@@ -1,0 +1,7 @@
+目标提交：69a7819（--at=HEAD）
+worktree add exit=128
+Preparing worktree (detached HEAD 69a7819)
+fatal: '/tmp/dsh-foreign-witness-B' already exists
+real 0.36
+user 0.15
+sys 0.05

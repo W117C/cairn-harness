@@ -8539,6 +8539,67 @@ const MUTATIONS = [
     ),
     expectFail: "next-page.ts 必须调 claimPage 并在没占到时退 2（只印不占＝号池永远空，撞号照旧）",
   },
+  // ── 第 249 页补⑵ · 任务 #1 的外域树现场撞出来的四处：位置口径／两条排除／建父目录不许崩
+  {
+    id: "cert-tree-abs-args-swapped",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "`certTreeAbs(main, tree)` 两个参数写反 ⇒ 绝对 `--tree=` 被算成主树底下（或整串被吃掉），" +
+      "existsSync 读的是不存在的那一面、`node_modules` 硬链进仓内假目录，而判卷只看相对那一条就永远绿（规则 228：等式要配「不等于旧值」）",
+    apply: (s) => s.replace(
+      "  return resolve(mainRoot, treeArg);",
+      "  return resolve(treeArg, mainRoot);",
+    ),
+    expectFail: "「是不是我自己这棵」要按同一个口径比：`worktree list` 报 `/private/tmp` 而 `--tree=` 给 `/tmp`（第 249 页现读到的）",
+  },
+  {
+    id: "stale-self-exclusion-not-canonical",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "排除自己那棵时不过 canonical ⇒ macOS 上主树/认证树以 `/private/tmp` 回报而参数是 `/tmp`，" +
+      "两条读数说反话：上一行刚印「回收这棵树」，下一行把它喊成「不是本仓建的，别删」",
+    apply: (s) => s.replace(
+      "  const self = canon(opt.selfPath);",
+      "  const self = opt.selfPath;",
+    ),
+    expectFail: "「是不是我自己这棵」要按同一个口径比：`worktree list` 报 `/private/tmp` 而 `--tree=` 给 `/tmp`（第 249 页现读到的）",
+  },
+  {
+    id: "stale-certtree-exclusion-not-canonical",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "同上，另一-half：本次刚认证完那棵没被排除 ⇒ `foreign` 虚高一条。两条分开钉是因为" +
+      "「self 过 canonical、cert 不过」在只测一棵树的输入上完全看不出来（同族：两半要各红一条）",
+    apply: (s) => s.replace(
+      "  const cert = canon(opt.certTree);",
+      "  const cert = opt.certTree;",
+    ),
+    expectFail: "「是不是我自己这棵」要按同一个口径比：`worktree list` 报 `/private/tmp` 而 `--tree=` 给 `/tmp`（第 249 页现读到的）",
+  },
+  {
+    id: "head-cert-wiring-recertifies-other-path",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "排除名单里填 `MAIN` 而不是本次那棵 `treeAbs` ⇒ 判卷全绿而**现读**把认证树报成外域残留：" +
+      "纯函数对、接线错，这是「值交给别人用」那一族的第二个副本（第十三族）",
+    apply: (s) => s.replace(
+      "  certTree: treeAbs,",
+      "  certTree: MAIN,",
+    ),
+    expectFail: "接线：head-cert 用这一个函数，且排除名单里那棵就是被切走的那棵",
+  },
+  {
+    id: "head-cert-mkdir-parent-throws",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "补父目录那一步把 catch 换成抛 ⇒ `--tree=/dev/null/x` 这类哨兵写法直接崩（栈里没有归因），" +
+      "而那两条判卷要的正是「走到了切树那一步、由 git 出声」。旧口径 join 把它指到仓内假目录所以从不失败——修了口径就得补这道容忍",
+    apply: (s) => s.replace(
+      "catch { /* 交给下一行的 git：它知道该怎么抱怨 */ }",
+      'catch { throw new Error("父目录建不动"); }',
+    ),
+    expectFail: "反向哨兵：没有锁文件 ⇒ 不许以「锁面不存在」为由拒跑，照常走到切树那一步",
+  },
   {
     id: "selector-cell-hides-blind-count",
     src: "scripts/lib/mutate-gates.ts",

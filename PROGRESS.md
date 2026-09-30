@@ -8199,3 +8199,28 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
    （09:54 标定 814 → 今天 quiet 独占 1716）⇒ 选项②「维持现帽」的噪声容忍度被进一步压缩，
    选项①（`--direct` 重标定，236 页量出省 31%）的吸引力上升。裁决仍属用户，本笔不动帽。
 4. **清场**：本笔自建认证树 `head-cert-69a7819` 核 0 项后回收；残留树现读以下一次认证为准。
+
+### 2026-10-01 · 第 253 页（本会话）· 任务 #1 的外域树见证上线，先把 head-cert 的「树在哪」两处口径咬正（表 1104→1109）
+
+取料：`outputs/foreign-witness-2026-10-01/`（`add-A.log`／`add-B.log`、三趟认证 `cert-skip-test*.log`、判卷 `judges-*.log`、`needles-before-commit2.log`、`typecheck2.log`、`claim.log`）。
+
+1. **动因**：第 231 页登记的那格 `foreign` 一直**只有假件证人**（规则 320：新读数要拿真环境找一次见证）。做法是在主树 `.worktrees/` **外面**建两棵 detached 干净树（`/tmp/dsh-foreign-witness-A|B`），认证其中一棵、另一棵当外域对象。第一次跑就撞红：`--tree=/tmp/…` 指着一棵**已存在**的树，脚本却走 `worktree add` 那一支，被 git 以 **128** 拒（`cert-skip-test.log`）。
+2. **根因是本会话内同族第二次命中**：`treeAbs = join(MAIN, TREE)`——`join` 不认第二段绝对，只有 `resolve` 认；今天早上刚在 `next-page.ts` 的 `--file=` 上修过同一件事，这次轮到认证入口这个消费者。两种后果现读得到：
+   ⑴（我撞到的）`existsSync` 读成「不存在」⇒ 去 add 一个已存在的路径，**响是运气不是闸**；
+   ⑵（不响的那个才危险）路径若还不存在，`mkdirSync(dirname(treeAbs))` 会在**仓里**开出 `MAIN/tmp/…` 假目录、把 `node_modules` 硬链进去，而真树没有依赖 ⇒ 依赖核对读一面根本不存在的树。
+   同族的 `mutate-verify.mjs:10455` 早就写 `resolve(mainRoot, treeRel)`——**一条谓词的第二个副本**（第十三族）。
+3. **改了什么**：位置只算一次——`certTreeAbs(mainRoot, treeArg)` 落在 `scripts/lib/head-cert-deps.ts`，head-cert 切树那一步与 `staleScratchTrees` 的 `certTree` 都吃同一个值（从前一处 `join`、一处 `resolve`，两口径分叉时「本次那棵认证树」排除的就不是被切走的那棵）。补父目录那一步加 try/catch：**建不动也要往下走**，让 `worktree add` 自己出声。
+4. **同一趟现读到的第二个读数缺陷**：`foreign` 里出现了**本次刚认证完那棵树**。macOS 上 `/tmp` 是 `/private/tmp` 的符号链接，`git worktree list` 回报内核真路径，而排除名单拿原始串比 ⇒ 上一行刚印「回收这棵树」，下一行把它喊成「不是本仓建的，别删」——同一棵树两条读数说反话。
+   修法：`staleScratchTrees` 收一个可选 `canonical`，`selfPath` 与 `certTree` 两边都过它；head-cert 传 `realpathSync`，**取不到就回原值**（那是「没规范化」，不是「两棵不同的树」）。
+5. **判卷 88→91（+3），其中两次红是我自己的尺**，都记下来免得再犯：
+   ① 反面对照（不传 canonical 应得 3 条 `foreign`）第一次跑出 **0** —— `base` 里漏了 `scratchRoot`，那三棵被分进 `stale` 桶；数错了桶看着像「旧口径没问题」（规则 237/322 的镜像：**一片 0 先怀疑尺**）。
+   ② 假 `canon` 用了无锚 `replace("/tmp/", …)`，把 `/private/tmp/x` 二次映射成 `/private/private/tmp/x` ⇒ 排除名单一条不中，红得像是实现坏了，其实是**哨兵坏了**（真 `realpathSync` 天然幂等，替身要显式只认前缀）。
+   ③ 换 `treeAbs` 口径时打红过两条既有判卷（锁那一组，断言 `worktree add exit=`）：归因不是「判卷脆」，是我的裸 `mkdirSync` 在 git 出声之前就抛了；加 try/catch 后两条当场恢复，**它们一句话没动**。
+6. **真机读数（任务 #1 就此关闭）**：改后 `cert-skip-test-canonical.log` 印
+   `常驻残留树=5 … ／另有 1 棵不住本仓 scratch 面的残留形树（/private/tmp/dsh-foreign-witness-A）＝不是本仓建的，别照上面那条回收命令删它们`、`HEADCERT_EXIT=0`；
+   改前那趟（`cert-skip-test-fixed.log`）是 `=6 … 另有 2 棵`，多出来的正是本次认证树。**谓词一个字没放宽**，见证是靠真建一棵外域树拿到的。
+   ⚠️ 等级如实：这两趟都是 `--skip-test --why=…` 的**半把尺**（只跑 typecheck），不构成「这棵树全量绿」；墙钟分别 `real 40.69`／`real 76.81`（机器自印，非同分母对比——第二趟含首次建 `node_modules` 硬链）。
+7. **表 1104→1109**：五条新锚点＝参数写反／self 不过 canonical／cert 不过 canonical／接线把 `certTree` 填成 `MAIN`／建父目录不许崩（后两条各守一个"纯函数对而接线错"的方向）。
+   落库前读数：`针脚体检：1109 条 —— 阻断 5＝钉在飞文本 5`（正是本笔未入库的实现）、待复认 0、未覆盖 0、未入库面 0、killer 指针失效 0、`改法语法体检：1109 条…全部产出合法源文件 ✅`、typecheck exit 0、`tests/head-cert-deps.test.ts` 91 全绿。
+8. **刻意未做（免得被读成已做）**：`head-cert` 允许认证一棵**仓外**的树，而 `mutate-verify --in-worktree` 明确拒绝逃出主检出——两个入口对「树能建在哪」口径不一致，这是**裁决不是笔误**，已另挂待裁；
+   `canonical` 目前只用于「是不是我自己这棵」这一处，`insideScratchFace` 仍按原始串比前缀（`.worktrees` 那侧两边都来自 git，实测一致；改它要另一页量存量）；本会话在 `.worktrees/` 下留的几棵树仍未回收（等点头，命令在 249 页凭证里）。

@@ -262,6 +262,17 @@ export function mainRootFromCommonDir(commonDirOut: string, cwdRoot: string): st
   return dirname(resolve(cwdRoot, common));
 }
 
+/** 认证那棵树在文件系统上的**唯一位置**。`--tree=` 允许是绝对路径（判卷与手工跑法都这么用），
+ *  而 `join(main, "/tmp/x")` 得到的是 `main/tmp/x`——`join` 不认第二段绝对，只有 `resolve` 认。
+ *  2026-10-01 实测：`--tree=/tmp/…` 指着一棵**已存在**的外域树时，`existsSync(join(…))` 读出「不存在」
+ *  ⇒ 脚本转去 `worktree add` 那个真实路径、被 git 以 128 拒绝（这一条响，是运气不是闸）；
+ *  若那棵绝对路径树**还不存在**，就会在仓里 `mkdir main/tmp/…`、把 `node_modules` 硬链进那个假目录，
+ *  而真树没有依赖 ⇒ 依赖核对读的是不存在的那一面（不响的才是危险的）。
+ *  收成一份（第十三族）：`staleScratchTrees` 的 `certTree` 与这里必须同源，否则「本次那棵认证树」在两个地方按两种口径算。 */
+export function certTreeAbs(mainRoot: string, treeArg: string): string {
+  return resolve(mainRoot, treeArg);
+}
+
 /** 哪些算"常驻残留的 scratch 树"。四个条件缺一不可：
  *  ① detached——带分支的树可能是别人正在写的工作支（本仓同时有 doc-layer／goal-plan／r1b 等分支树）；
  *  ② 0 项在飞——有在飞就是别人的活，碰都不能碰（AGENTS：保留别的会话的脏改动）；
@@ -278,15 +289,23 @@ export function mainRootFromCommonDir(commonDirOut: string, cwdRoot: string): st
  *  规则 261/262 那一族），只是要标清"不是本仓建的，别照那条命令删"。 */
 export function staleScratchTrees(
   rows: WorktreeRow[] | null,
-  opt: { selfPath: string; certTree: string; isAncestor: (sha: string) => boolean; dirtyCountOf: (path: string) => number | null; scratchRoot?: string },
+  opt: { selfPath: string; certTree: string; isAncestor: (sha: string) => boolean; dirtyCountOf: (path: string) => number | null; scratchRoot?: string; canonical?: (p: string) => string },
 ): { stale: { path: string; head: string }[]; unmeasured: string[]; foreign: string[] } {
   const stale: { path: string; head: string }[] = [];
   const unmeasured: string[] = [];
   const foreign: string[] = [];
   if (rows === null) return { stale, unmeasured, foreign };
+  /* 「是不是我自己这棵」要按**同一个规范化口径**比（第 249 页实测）：`git worktree list` 给的是内核真路径，
+     macOS 上 `/tmp/…` 会回报成 `/private/tmp/…`，而调用方传进来的 `--tree=` 是原始串 ⇒ 纯字符串相等漏掉，
+     于是**本次刚认证完的那棵树**被印进 `foreign`，还挨着那句「别照上面那条命令删它们」（同一棵树的回收命令就在上一行）。
+     取不到真路径（树还没建）就由 `canonical` 自己回原值——那是"没规范化"，不是"两个不同的树"。 */
+  const canon = opt.canonical ?? ((p: string): string => p);
+  const self = canon(opt.selfPath);
+  const cert = canon(opt.certTree);
   for (const r of rows) {
     if (!r.detached) continue;
-    if (r.path === opt.selfPath || r.path === opt.certTree) continue;
+    const real = canon(r.path);
+    if (real === self || real === cert) continue;
     const dirty = opt.dirtyCountOf(r.path);
     if (dirty === null) { unmeasured.push(r.path); continue; }
     if (dirty !== 0) continue;

@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, gitInflightArgs, headGateTableIntegrity, installedDeps, mainRootFromCommonDir, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "../scripts/lib/head-cert-deps";
+import { certLevel, CERT_FLAGS, CERT_OPTS, certTreeAbs, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, gitInflightArgs, headGateTableIntegrity, installedDeps, mainRootFromCommonDir, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "../scripts/lib/head-cert-deps";
 import { acquireToolLock, decideToolLock, lockAgeCap, parseToolLock, shouldReleaseLock, toolLockPath } from "../scripts/lib/tool-lock";
 
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
@@ -689,6 +689,28 @@ describe("接线：真跑 head-cert——占不到锁就不许动树", () => {
   });
 });
 
+describe("认证树的位置只算一次：`--tree=` 给绝对路径时不许被拼进主检出（第 249 页，任务 #1 的现场撞出来的）", () => {
+  /* 分辨力在**绝对那一条**上：`join("/main", "/tmp/wt")` ＝ `/main/tmp/wt`（join 不认第二段绝对，只有 resolve 认）。
+     2026-10-01 实测形状：指着一棵已存在的外域树跑 `--tree=/tmp/…`，`existsSync` 读出「不存在」⇒ 脚本去 `worktree add`
+     那个真路径，被 git 以 128 拒（响是运气）；而那棵树若还不存在，就会在**仓里**开出一个假目录、把 node_modules 硬链进去，
+     依赖核对于是读着一面根本不存在的树。同族的 `mutate-verify.mjs:10455` 早就用 `resolve(mainRoot, treeRel)`，
+     这里以前是那份谓词的第二个副本（第十三族）。 */
+  it("相对按主树展开，绝对原样采纳，穿越写法先归一", () => {
+    expect(certTreeAbs("/main", ".worktrees/wt")).toBe("/main/.worktrees/wt");
+    expect(certTreeAbs("/main", "/tmp/wt"), "绝对树名被拼到主树底下 ⇒ 真树与读数各在一半").toBe("/tmp/wt");
+    expect(certTreeAbs("/main", "/main/.worktrees/../elsewhere/wt")).toBe("/main/elsewhere/wt");
+    expect(certTreeAbs("/main", ".worktrees/wt/"), "末尾斜杠不该多出一层").toBe("/main/.worktrees/wt");
+  });
+
+  it("接线：head-cert 用这一个函数，且排除名单里那棵就是被切走的那棵", () => {
+    const src = readFileSync(join(repoRoot, "scripts", "head-cert.ts"), "utf8");
+    expect(src, "切树那一步要问 certTreeAbs（另算一份 join/resolve 就是第二份谓词）").toMatch(/^const treeAbs = certTreeAbs\(MAIN, TREE\);$/m);
+    expect(src, "旧的 `join(MAIN, TREE)` 不许回来：它就是把绝对路径读成仓内假目录的那一行").not.toContain("join(MAIN, TREE)");
+    // 排除名单（staleScratchTrees 的 certTree）必须吃同一个值：两处口径分叉时，「本次那棵认证树」排除的就不是被切走的那棵
+    expect(src, "certTree 必须是 treeAbs 本身，不是再一次归一化").toMatch(/^ {2}certTree: treeAbs,/m);
+  });
+});
+
 describe("清场读数：常驻残留的 scratch 树要自己报数（任务 #33）", () => {
   const PORCELAIN = [
     "worktree /repo", "HEAD aaa", "",
@@ -724,6 +746,34 @@ describe("清场读数：常驻残留的 scratch 树要自己报数（任务 #33
     // 条件本身也要能单独被拆：只留「detached」时会把分支树与未入库那笔一起算进来（⇒ 门会喊人去删别人的活）
     const loose = { ...OPT, isAncestor: () => true, dirtyCountOf: () => 0 as number };
     expect(staleScratchTrees(rows, loose).stale.length, "祖先与在飞两项一放宽，branchy/notancestor/dirty 全被算成残留").toBeGreaterThan(3);
+  });
+
+  it("「是不是我自己这棵」要按同一个口径比：`worktree list` 报 `/private/tmp` 而 `--tree=` 给 `/tmp`（第 249 页现读到的）", () => {
+    /* macOS 上 `/tmp` 是 `/private/tmp` 的符号链接，git 回报**内核真路径**；调用方传的 `--tree=`/`MAIN` 是原始串。
+       纯字符串相等 ⇒ 本次刚认证完那棵被印进 `foreign`，而它自己的回收命令就在上一行——读数与命令指着同一棵树却说反话。 */
+    const SYMLINKED = [
+      "worktree /repo", "HEAD aaa", "",
+      "worktree /private/tmp/dsh-cert", "HEAD aaa", "detached", "",
+      "worktree /private/tmp/dsh-self", "HEAD aaa", "detached", "",
+      "worktree /private/tmp/dsh-other", "HEAD aaa", "detached", "",
+    ].join("\n");
+    const r2 = parseWorktreeList(SYMLINKED);
+    /* `scratchRoot` 必须给：**漏了它这三棵会被分进 `stale` 而不是 `foreign`**（第一版就漏了，
+       于是"反面对照"读出 0 条、看着像"旧口径没问题"，实际是数错了桶——规则 237 那一族：一片 0 先怀疑尺）。 */
+    const base = { selfPath: "/tmp/dsh-self", certTree: "/tmp/dsh-cert", scratchRoot: "/repo/.worktrees", isAncestor: (): true => true, dirtyCountOf: (): number => 0 };
+    // 反面对照：不传 canonical 就是旧形状——三棵全被当成外域，其中两棵其实是我自己与刚认证的那棵
+    const naive = staleScratchTrees(r2, base);
+    expect(naive.foreign.length, "没规范化时把自己与本次认证树都喊成「不是本仓建的」⇒ 这条钉的是口径不一致会长什么样").toBe(3);
+    expect(naive.stale.length, "旧口径下主树自己的桶也读不到东西（外域判定先于位置判定）").toBe(0);
+    // 假 canonical 要**只对前缀生效**（真 `realpathSync` 天然幂等）：上一版用无锚的 `replace("/tmp/", …)`，
+    // 把 `/private/tmp/x` 又映射成 `/private/private/tmp/x` ⇒ 排除名单一条不中，红的看着像实现坏了、其实是哨兵坏了。
+    const canon = (p: string): string => (p.startsWith("/tmp/") ? "/private" + p : p);
+    const fixed = staleScratchTrees(r2, { ...base, canonical: canon });
+    expect(fixed.foreign, "selfPath 与 certTree 都过 canonical：只剩真正外域那一棵").toEqual(["/private/tmp/dsh-other"]);
+    expect(fixed.stale.length).toBe(0);
+    // canonical 取不到（树还没建）时由调用方回原值：这里 certTree 指向一棵根本不在表里的树 ⇒ 只排除掉 self，另外两棵照报
+    const noMap = staleScratchTrees(r2, { ...base, certTree: "/nowhere/x", canonical: canon });
+    expect(noMap.foreign, "certTree 不在表里时不许把排除名单读成「全都排除了」——那是把两条读数捏成一条").toEqual(["/private/tmp/dsh-cert", "/private/tmp/dsh-other"]);
   });
 
   it("第四态：在飞数取不到的那棵要单独点名——既不进残留名单，也不许被那个 0 吞掉", () => {
