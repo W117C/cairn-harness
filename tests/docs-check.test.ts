@@ -443,6 +443,21 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
     expect(r.findings).toEqual([]);
   });
 
+  it("取料目录名按 `YYYY-MM-DD` 认，月份不许钉死（第 257 页：跨月那天整类凭证静默失检）", () => {
+    /* 分辨力全在 10 月那一条上：正则从前是 `[A-Za-z0-9._-]+-2026-09-\d{2}`，跨过 9 月之后凡是点名
+       `outputs/<主题>-2026-10-XX/` 的凭证页都抽不到目录 ⇒ 整页被归进「未点名取料目录＝未检」，
+       而门照旧印「红 0」。本仓既有 D-9 判卷清一色喂 `-2026-09-30` 的假件，所以这个盲区是结构上注定的
+       （规则 237/242：计数尺要先喂真机、合成输入要显式跑出两态不同形）。 */
+    const oct = credentialPages(page(["x-2026-10-01"], ["253"]));
+    expect(oct[0]?.dirs, "10 月点名的取料目录抽不到 ⇒ 这一页一个字都不回查，而门不会为此出声").toEqual(["x-2026-10-01"]);
+    expect(checkCredentialSources(oct, face({ "x-2026-10-01": "Test Files 253 passed" }), {}).checked).toBe(1);
+    // 同一句式在 9 月名下也要成立——只把常量从 09 换成 10 的话，这一条当场红
+    expect(credentialPages(page(["x-2026-09-30"], ["253"]))[0]?.dirs).toEqual(["x-2026-09-30"]);
+    // 负控：没有日期后缀的目录**不该**被当取料面（`outputs/notes/` 那类是脚本/说明目录，
+    // 把它算进来会拿不相干内容凑出"找到了"，把真缺原文的读数读成绿）
+    expect(credentialPages(page(["notes"], ["253"]))[0]?.dirs).toEqual([]);
+  });
+
   it("点了名而面里找不到 ⇒ 红，且 detail 带页号、缺的数与点名的目录", () => {
     const r = checkCredentialSources(credentialPages(page(["x-2026-09-30"], ["253"])), face({ "x-2026-09-30": "Test Files 999 passed" }), {});
     expect(r.checked).toBe(1);

@@ -1,0 +1,10 @@
+outputs 下 2026-10-* 目录数：6
+其中被「钉死 9 月」那条正则漏掉的：6
+用通用日期段后不漏：6／6
+逐个：
+  undefinedforeign-witness-2026-10-01   ← 从前抽不到
+  undefinedshell-tail-repoint-kill-2026-10-01   ← 从前抽不到
+  undefinedsequencer-dynamic-2026-10-01   ← 从前抽不到
+  undefinedcert-251-threading-2026-10-01   ← 从前抽不到
+  undefineddocs-check-month-blind-2026-10-01   ← 从前抽不到
+  undefinedsequencer-status-readings-2026-10-01   ← 从前抽不到

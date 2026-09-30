@@ -8602,6 +8602,19 @@ const MUTATIONS = [
     ),
     expectFail: "反向哨兵：没有锁文件 ⇒ 不许以「锁面不存在」为由拒跑，照常走到切树那一步",
   },
+  // ── 第 257 页 · D-9 的取料目录名不许钉死月份（跨月那天整类凭证静默失检，门照印「红 0」）
+  {
+    id: "cred-dir-date-pattern-month-locked",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "把日期段退回钉死月份（`-2026-09-\\d{2}`）⇒ 10 月点名的取料目录抽不到，整页被归进「未点名＝未检」，" +
+      "而汇总行照印「红 0」——**这一格的失检不产生任何红**，所以必须靠一条喂非 9 月输入的断言来钉（规则 237/242）",
+    apply: (s) => s.replace(
+      "[A-Za-z0-9._-]+-\\d{4}-\\d{2}-\\d{2}",
+      "[A-Za-z0-9._-]+-2026-09-\\d{2}",
+    ),
+    expectFail: "取料目录名按 `YYYY-MM-DD` 认，月份不许钉死（第 257 页：跨月那天整类凭证静默失检）",
+  },
   {
     id: "selector-cell-hides-blind-count",
     src: "scripts/lib/mutate-gates.ts",

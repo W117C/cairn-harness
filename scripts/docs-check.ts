@@ -215,7 +215,11 @@ export function credentialPages(text: string): CredPage[] {
     if (!head.includes("凭证")) return;
     const end = n + 1 < heads.length ? heads[n + 1]![1] : lines.length;
     const body = lines.slice(start, end).join("\n");
-    const dirs = [...new Set([...body.matchAll(/outputs\/([A-Za-z0-9._-]+-2026-09-\d{2})/gu)].map((m) => m[1]!))].sort();
+    /* 取料目录名里的日期是 `YYYY-MM-DD`，**不能把月份写死**：
+       这一行从前是 `[A-Za-z0-9._-]+-2026-09-\d{2}` ⇒ 跨过 9 月之后，凡是点名 `outputs/<主题>-2026-10-XX/` 的凭证页
+       都抽不到目录，于是整页被判成「未点名取料目录＝未检」——门照印「红 0」，而它对**新月份的凭证一个字都没查**（第 257 页现读）。
+       既有判卷清一色喂 `-2026-09-30` 的假件，所以这个盲区是结构上注定的（规则 237/242：计数尺要先喂真机、合成输入要显式两态不同形）。 */
+    const dirs = [...new Set([...body.matchAll(/outputs\/([A-Za-z0-9._-]+-\d{4}-\d{2}-\d{2})/gu)].map((m) => m[1]!))].sort();
     const numbers = new Set<string>();
     for (const re of CRED_NUMBER_RES) {
       for (const m of body.matchAll(new RegExp(re.source, "gu"))) numbers.add(m[1]!);
