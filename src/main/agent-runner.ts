@@ -195,6 +195,51 @@ export function mapSandboxTestCommand(command: string, aliases: readonly string[
   return aliases.includes(command.trim()) ? VITEST_DIRECT : command;
 }
 
+/** 该工作区的测试面是不是真跑 vitest（按**它自己声明的 test 脚本**判）。
+ *
+ *  为什么需要这只判据（2026-09-29 实测，一次真模型闭环）：
+ *  `mapSandboxTestCommand` 把 `pnpm test` **无条件**改写成指向本仓 vitest 的直连命令。
+ *  这条改写是为 `fixtures/todo-app` 写的（坑三：Seatbelt 下 pnpm 起不来，而那个靶子的
+ *  test 脚本正是 `vitest run …`），但它是全局生效的 ⇒ **任何**非 vitest 项目的验证拍都被换掉：
+ *  实测靶子 `cart-demo`（`node --test tests/*.test.js`）的 `pnpm test` 被换成 vitest，
+ *  vitest 对着 node:test 文件报 "No test suite found" ⇒ **项目自己 3/3 全过、harness 的 verify 报红**。
+ *  模型无法归因（事件里的 command 报的是原始命令），最后只能停下来问用户——
+ *  「执行-验证-修正」闭环里最贵的一种失败：假红。
+ *
+ *  判据为什么是「读它自己的 test 脚本」而不是「看 node_modules 里有没有 vitest」：
+ *  真实靶子 `fixtures/todo-app` 自己**没有** node_modules（依赖从仓库根解析），
+ *  按「装没装」判会把该改的那一个判成不该改；而重写的意图正是「绕开 pnpm、用仓库根那份 vitest」。
+ *  test 脚本里写的是哪个 runner，才是这个项目要对谁跑的**声明**。
+ *  读不到 package.json / 解析不出 test 脚本 ⇒ **不改写**（保守那一边；「猜它大概是 vitest」
+ *  正是上面那个假红的成因）。 */
+const vitestScriptCache = new Map<string, boolean>();
+export function workspaceDeclaresVitest(workspace: string): boolean {
+  const hit = vitestScriptCache.get(workspace);
+  if (hit !== undefined) return hit;
+  let declares = false;
+  try {
+    const pkg = JSON.parse(readFileSync(join(workspace, "package.json"), "utf8")) as { scripts?: Record<string, unknown> };
+    const test = pkg.scripts?.["test"];
+    declares = typeof test === "string" && test.includes("vitest");
+  } catch {
+    declares = false; // 没有 package.json / 读不到 / 坏 JSON 一律不改写
+  }
+  vitestScriptCache.set(workspace, declares);
+  return declares;
+}
+
+/** 带工作区判据的映射：只有该工作区自己申报用 vitest 时才改写，否则逐字不动。
+ *  `workspace` 缺席 = 调用方没有工作区上下文（单测/旧调用）⇒ 保持旧语义（照改），
+ *  这样这条缝的既有判卷不用为了新判据整体重写。 */
+export function mapSandboxTestCommandForWorkspace(
+  command: string,
+  workspace: string | undefined,
+  aliases: readonly string[] = SANDBOX_TEST_ALIASES,
+): string {
+  if (workspace !== undefined && !workspaceDeclaresVitest(workspace)) return command;
+  return mapSandboxTestCommand(command, aliases);
+}
+
 interface Session {
   mode: PermissionMode;
   askGate: AskGate | null;
@@ -351,7 +396,7 @@ async function orchestratorExtras(sandbox: SandboxStatus | null = null, runModel
 export function workerShellRunnerFor(sandbox: SandboxStatus | null): OrchestratorOptions["workerShell"] {
   if (sandbox === null || !sandbox.available) return undefined;
   return async (command, ctx) => {
-    const mapped = mapSandboxTestCommand(command);
+    const mapped = mapSandboxTestCommandForWorkspace(command, ctx.workspace);
     return await runInSandbox(mapped, { cwd: ctx.workspace, network: "deny" });
   };
 }
@@ -567,7 +612,7 @@ function gatedTool(name: GatedName, original: Tool, beforeExecute?: () => Promis
       }
       if (name === "run_shell" && s.sandbox !== null && s.sandbox.available) {
         const command = typeof args.command === "string" ? args.command : "";
-        const mapped = mapSandboxTestCommand(command, MODEL_SHELL_TEST_ALIASES);
+        const mapped = mapSandboxTestCommandForWorkspace(command, ctx.workspace, MODEL_SHELL_TEST_ALIASES);
         // 缺省 deny：profile 里不写任何 network 规则 ⇒ 闭箱即全断网（sandbox:check ④ 钉着）。
         // allow 支的取用条件全部住在 networkProfileFor（网络放行永不免批）。
         const network = networkProfileFor({ wantsNetwork, asked: d.verdict === "ask", approved: humanApproved });
@@ -1336,7 +1381,7 @@ function createProvider(
 export function verifyExec(sandbox: SandboxStatus | null, run: typeof runInSandbox = runInSandbox): ExecFn {
   if (!sandbox?.available) return defaultExec;
   return async (command, cwd, timeoutMs) => {
-    const mapped = mapSandboxTestCommand(command);
+    const mapped = mapSandboxTestCommandForWorkspace(command, cwd);
     // 超时同样要穿过去：沙箱是发货缺省路径，这里不接就等于语言探测的 300s 白给。
     const res = await run(mapped, { cwd, ...(timeoutMs ? { timeoutMs } : {}) });
     // 归因不能只长在非沙箱那一支：沙箱是发货缺省路径，少这一半就等于"环境红只在降级时才不冤枉模型"。

@@ -7,7 +7,7 @@
 git clone <this-repo> && cd m0-agent-loop
 npm install                       # CLI 走 tsx 通道（devDependency），必须装齐才能跑
 export OPENAI_API_KEY=<你的 key>
-npx m0 "把 tests 里失败的那个用例修好"
+./bin/m0.mjs "把 tests 里失败的那个用例修好"
 ```
 
 > 本包是 `"private": true`，**不经 npm 分发**：没有 `npm install -g m0` 这条路。上面是克隆仓库后的用法——
@@ -37,7 +37,7 @@ pnpm test             # 整跑（core-only 全部测试文件）
 # 接着上一次那条会话跑（不抹掉之前的转录）
 ./bin/m0.mjs --session cli-1756289123456 "接着刚才那个往下做"
 
-# 装成命令（npm link 或发布后）
+# 装成命令（npm link；本包未发布，见上）
 npx m0 --help
 ```
 
@@ -81,7 +81,7 @@ key 从环境变量读，**缺 key 会明确报错退出，不会静默换一家
 | `anthropic` | `ANTHROPIC_API_KEY` |
 | `gemini` | `GEMINI_API_KEY` |
 
-**DeepSeek**（这个仓库叫 deepseek harness，但 `src/` 里 "deepseek" 出现 0 次——它走的是现成的 OpenAI 兼容通道，
+**DeepSeek**（这个仓库叫 deepseek harness，但 `src/providers/` 下**没有** deepseek 专用适配器——它走的是现成的 OpenAI 兼容通道，
 `providers/openai.ts` 的 `baseURL` 本来就可配，`glm.ts` 就是它的预设）：
 
 ```sh
@@ -126,18 +126,32 @@ npx m0 --provider openai --model some/small-model --ctx-window 32768 "..."
 
 模型主动开的两扇门也在终端里问你，没人能答时各自**当场结算**（都不是挂起等超时）：
 
-| 门 | 模型什么时候开 | 交互终端 | 管道 / CI / `--unattended` |
-|---|---|---|---|
-| `propose_plan` | 要写文件前提交方案 | 打出方案（目标 + 每个文件的动作/路径/摘要），问 `[y] 批准 [n] 拒绝` | **拒绝**；写禁不解除，模型须修订后重提 |
-| `clarify` | 任务有歧义 | 逐题问，答选项序号或直接写自由文本 | 提交**空答案** `{}`——如实告诉模型「没人答，自己拿主意」 |
+| 门 | 模型什么时候开 | 交互终端 | 管道 / CI / `--unattended` | `--mode auto` |
+|---|---|---|---|---|
+| `propose_plan` | 要写文件前提交方案 | 打出方案（目标 + 每个文件的动作/路径/摘要），问 `[y] 批准 [n] 拒绝` | **拒绝**；写禁不解除，模型须修订后重提 | **当场批准**（见下） |
+| `clarify` | 任务有歧义 | 逐题问，答选项序号或直接写自由文本 | 提交**空答案** `{}`——如实告诉模型「没人答，自己拿主意」 | 同左 |
 
 两者形状不同是有原因的：`propose_plan` 是**审批**，拒绝即维持写禁；`clarify` 只是**要信息**，
 而 `ClarifyGate` 只有提交、没有拒绝（唯一的负向出口是中止整轮）。
 提交空答案不是批准，也不解除任何门——写禁只由 `propose_plan` 落下。
 **编造答案才是这里唯一真正危险的事**，空 map 恰好是最不编造的那一种。
 
+**`--mode auto` 下方案门当场批准**（2026-09-29 改）：`auto` 是用户在命令行上显式给的授权
+（它不是缺省档），既然整轮写操作都已获授权，方案门再按「没人能答 ⇒ 拒」收束就自相矛盾——
+模型提交方案 → 当场被拒 → 写禁不解除 → 连读工具都进不去，最后什么都没做成。
+实测代价：管道里用 `auto` 建一个文件，两次方案被自动拒、约 32k token 白烧，
+模型还反过来建议用户「去 git 面板点批准」——而 core-only 树里没有那个面板。
+现在 `auto` 档**当场批准**，并把「批准依据是命令行授权、不是有人看过了」印在 stderr 上，
+免得把一次策略放行读成一次人工审阅。`default` / `guided` 一字未改，仍是 fail-closed。
+
 `run_shell` 在 macOS 上走 Seatbelt 沙箱（写收敛到工作区、`.ssh`/`.aws` 等敏感目录拒读、默认断网）。
 沙箱不可用时 CLI 会明说，不假装有。
+
+**沙箱里 `pnpm test` 只在项目自己用 vitest 时才被改写成直连 vitest**（2026-09-29 改）：
+这条改写原本无条件生效（为 `fixtures/todo-app` 写的，坑三：Seatbelt 下 pnpm 起不来），
+于是任何非 vitest 项目（如 `node --test`）的验证拍都被换成 vitest ⇒ **项目自己 3/3 全过、
+harness 的 verify 报红**（假红，且事件里报的是原始命令，模型无法归因，只能停下来问用户）。
+现在按该工作区自己声明的 `scripts.test` 判：写 vitest 才改写，否则逐字不动。
 
 ---
 
