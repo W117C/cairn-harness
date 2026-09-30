@@ -1,0 +1,41 @@
+目标提交：b521e62（--at=HEAD）
+worktree add exit=0
+已核：TREE=b521e62c6324d828facba72732f41d692b318b08｜判卷四面在飞 0 项
+cp -al node_modules exit=0
+依赖核对：该提交声明 10 项，缺 0 项
+  硬链接子仓库依赖 fixtures/todo-app/node_modules ← 主树 exit=0
+import 面：2981 条边｜悬空 0（其中存量已豁免 0）
+门表：29 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证门面（20 道，名单取自 b521e62）==
+  ✅ no-progress-check exit=0 516ms（预算 1100ms）
+  ✅ prune-check exit=0 556ms（预算 1100ms）
+  ✅ fork-check exit=0 509ms（预算 1100ms）
+  ✅ compaction-check exit=0 619ms（预算 1200ms）
+  ✅ docs-check exit=0 681ms（预算 1300ms）
+  ✅ memory-check exit=0 677ms（预算 1300ms）
+  ✅ head-import-check exit=0 674ms（预算 1400ms）
+  ✅ autonomy-check exit=0 850ms（预算 1500ms）
+  ✅ sandbox:check exit=0 1228ms（预算 1700ms）
+  ✅ security-check exit=0 759ms（预算 1500ms）
+  ✅ provider:check exit=0 510ms（预算 1300ms）
+  ✅ routing-check exit=0 697ms（预算 1400ms）
+  ✅ model-surface-check exit=0 700ms（预算 1300ms）
+  ✅ prefix-churn-check exit=0 827ms（预算 1500ms）
+  ✅ prompt-surface-check exit=0 704ms（预算 1400ms）
+  ✅ replay-determinism-check exit=0 555ms（预算 1100ms）
+  ✅ cost-per-progress-check exit=0 510ms（预算 1000ms）
+  ✅ gym-check exit=0 1313ms（预算 2400ms）
+  ✅ gate-check exit=0 4044ms（预算 5400ms）
+  ✅ mutate-needles-check exit=0 10825ms（预算 20000ms）
+  认证门面=20 道（跑到 20）｜绿 20 道｜⚠️ 超预算 0
+
+== 认证汇总 ==
+  TREE=b521e62 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-b521e62.lock）
+  Test Files 254 passed (254)｜Tests 3307 passed (3307)｜exit=0（退出码直接取，不接管道）
+  并发判卷=起前 0 套／跑完 0 套（两端独占）
+  逐条日志：/tmp/dsh-head-cert-b521e62
+  回收这棵树（规则 120，别留残留）：git worktree remove --force .worktrees/head-cert-b521e62
+  常驻残留树=2（/Users/ze/Downloads/deepseek harness/.worktrees/verify-220c230@220c230、/Users/ze/Downloads/deepseek harness/.worktrees/verify-b521e62@b521e62）（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）
+  汇总已同步落盘（不靠 stdout 的尾）：/tmp/dsh-head-cert-b521e62/summary.txt

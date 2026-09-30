@@ -1,0 +1,15 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-b521e62.lock）
+变异验证：7 条
+✅ pb-control-arm-always-wired — 对照臂恒判「旋钮接得上」⇒ PC9 那半边成了装饰，主判据退化成「反正没别的能放行」的恒真式 ｜本机实测 1.0s／2 拍
+✅ selector-ambiguity-never-reports — 命中数不为 1 时不再记录 ⇒ 这一格永远印「全部可选」，真正选不中的那些会在改跑法时被当成能走 -t；而 0 命中不是失败，是 vitest 一条也没跑，基线与突变两拍都白过 ｜本机实测 0.7s／2 拍
+✅ selector-inspected-counts-unreadable-judges — 判卷读不到／指针为空那些条也计入分母 ⇒ 可选率虚高，而「取料坏」被洗成「量过了」（规则 222 的三态：未取 ≠ 空面 ≠ 零命中） ｜本机实测 0.7s／2 拍
+✅ selector-extraction-not-shared — 选择子这一格不走共用的 `vitestTitles` 而是自己给一份标题面 ⇒ 与 `expectFailMatchesTitles` 那把尺说的不是同一件事，「整片读不到标题」重新变成尺的瞎而不是盘上没标题（第 230 页收掉的正是这份私有窄抽取，第十三族） ｜本机实测 0.7s／2 拍
+✅ selector-zero-cause-fed-titles-only — 成因那一格只喂标题面（或不喂文字）⇒ `describe` 与循环变量两种成因永远分不出来，读数只能继续把两条好端端的指针说成「多半是用例改了名」（第 233 页实测：它们运行时分别选中 2 条与 1 条） ｜本机实测 0.7s／2 拍
+✅ selector-zero-cause-hides-empty-rows — 只印非零那几档 ⇒ 「说不清 0」这一档消失，将来多出一条分不出成因的锚点时，这一格看起来和今天一模一样（数量不列印＝那一格没有观测者，规则 210；与「三态分开印」239 同一口径） ｜本机实测 0.7s／2 拍
+✅ selector-describe-face-not-read — 不读 `describe` 标题面 ⇒ 指针写在支上的那类被归到「标题由变量给出」或「文件里没这句话」，而它的真问题是**这条选择子会选中该支全部用例**（修法是把指针收到具体那条用例上，不是改标题） ｜本机实测 0.7s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 5.5s · 跑了 7/7 条 · 预算 480s
+成本分母：判卷 spawn 14 次／7 条（每条次数分布 2×7）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 pb-control-arm-always-wired 1.0s
+跑法单价：selector 14 拍·中位 0.34s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-b521e62.lock）
