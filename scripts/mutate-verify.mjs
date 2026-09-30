@@ -10289,7 +10289,7 @@ const MUTATIONS = [
     src: "scripts/lib/head-cert-deps.ts",
     test: "tests/head-cert-deps.test.ts",
     desc: "贴帽阈值 0.8 改成 0.08 ⇒ 名单里塞进一堆离帽还远的用例，「点名」就失去了意义（同一条判卷里那句 ratio 断言就是拦这个的）。",
-    apply: (s) => s.replace("if (r.ms >= eff * 0.8)", "if (r.ms >= eff * 0.08)"),
+    apply: (s) => s.replace("if (row.ratio >= 0.8) near.push(row);", "if (row.ratio >= 0.08) near.push(row);"),
     expectFail: "真机整表：把留档的那一次全量 json 喂进去，档位计数与逐行重数必须同分母",
   },
   {
@@ -10377,6 +10377,32 @@ const MUTATIONS = [
       "而 961＋175＋3＝1139 这个同分母等式也就没人核了）",
     apply: (s) => s.replace('\n    `｜出口数可数 ${String(countable.length)} 条，其中针脚长在「≥2 条 return」的函数里 ${String(multiExit.length)} 条` +', '\n    `｜出口数可数 0 条` +'),
     expectFail: "接线：门那一行要连着印「可数面／多出口数」，wiringHint 那条守卫的结构不许漂",
+  },
+  {
+    id: "timing-slowest-list-dropped",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "贴帽名单为空时那一串「离帽余量」不算出来 ⇒ 这一格每趟只印一个「无」，等于开了张却没有读数" +
+      "（第 264 页：两趟认证实测都是 0 条贴帽，写这一档就是为了那个空态）",
+    apply: (s) => s.replace("slowest: ratios.slice(0, opts.slowLimit ?? 3),", "slowest: [],"),
+    expectFail: "贴帽名单为空时也要给读数：离帽余量最近的三条要印出来、按占比降序（第 264 页）",
+  },
+  {
+    id: "timing-slowest-tail-not-printed",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "算出来却不印（守卫写成恒假）⇒ 与没算同形；而它正是「谁在往帽上爬」唯一被看见的地方（第 264 页）",
+    apply: (s) => s.replace("const slack = (c.near.length === 0 || c.near.length < c.slowest.length) && c.slowest.length > 0", "const slack = false"),
+    expectFail: "贴帽名单为空时也要给读数：离帽余量最近的三条要印出来、按占比降序（第 264 页）",
+  },
+  {
+    id: "timing-slowest-unsorted",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "余量那一档不按占比排 ⇒ 印出来的三条可能都是轻的，最靠近帽的那条反而看不见；" +
+      "真机整表那条判卷拿独立重数的最大值对账（同分母），排错就红（第 264 页）",
+    apply: (s) => s.replace("ratios.sort(byRatio);", "ratios.sort(() => 0);"),
+    expectFail: "真机整表：把留档的那一次全量 json 喂进去，档位计数与逐行重数必须同分母",
   },
 ];
 

@@ -1,0 +1,19 @@
+逐条用例：3394 条
+预算抽取·位置式：标题「未获批准 fail-closed；批准后 stages 变更请求被拒且落流」⇒ 现读 explicit 25000
+预算抽取·选项式：标题「有 deny write_file 的项目规则 ⇒ worker 那笔写被拒，且」⇒ 源码写的是 300000，抽取现读 explicit 300000
+标题不在那份文件里 ⇒ 现读 not-resolved（应为 not-resolved，不能读成 implicit＝「没写预算」）
+写了收尾但没写预算 ⇒ 现读 implicit（应为 implicit＝缺省帽说了算，正常态）
+缺省帽现读：缺省＝vitest 默认 5000ms（config 未写 testTimeout）
+贴帽读数（缺省＝vitest 默认 5000ms（config 未写 testTimeout））：3394 条里 0 条用时 ≥ 有效预算 80%｜无显式预算按缺省算 3144 条｜标题非字面量（it.each／插值／拼接，按缺省算）114 条｜预算没落到 0 条｜无｜离帽余量最近：tests/m3c.test.ts·M3c pipeline 哑 sequencer（零 LLM） 未获 15198ms/25000ms=61%；tests/gate-kill.test.ts·门禁跑命令的超时支路 子进程赖着不走：宽限到点整组强杀，输出如实写「 1606ms/5000ms=32%；tests/gate-kill.test.ts·门禁跑命令的超时支路 超时后子进程以退出码 0 收场：仍是 124， 1516ms/5000ms=30%
+state=ok total=3394 implicit=3144 nonliteral=114 notResolved=0
+非字面量·形状「it.each」：44 条｜样本 tests/action-fusion.test.ts·「real AskGate decision true gates the configure」
+非字面量·形状「it.each?」：40 条｜样本 tests/http-retry.test.ts·「openai：429 会被重试，随后 400 仍按原文案失败」
+非字面量·形状「it(`」：16 条｜样本 tests/gate-audit.test.ts·「session_kind 记忆放行 ⇒ layer=L3-scope」
+非字面量·形状「it(`?」：11 条｜样本 tests/dead-script-refs.test.ts·「同行带「已删」⇒ 放行（登记式，不许静默）」
+非字面量·形状「it(f」：2 条｜样本 tests/zero-regression-conjunct.test.ts·「projection-neutralize：干净真语料逐字回来（一个字都不许多、不许少、不许」
+非字面量·形状「it("②图边集逐条==真值边集（真值edgeCount="+」：1 条｜样本 tests/impact-accuracy.test.ts·「② 图边集逐条 == 真值边集（真值 edgeCount=16，多一条少一条都点名）」
+抬帽到 600000ms ⇒ 名单 0 条（应为 0）；压到 1500ms ⇒ 名单 5 条（应远大于 0）
+压帽名单里点到那两份红过的文件：1/2（tests/mutate-verify-gates.test.ts）
+  tests/mutate-shards.test.ts：最慢 2771ms·explicit 120000·在压帽名单里=false｜已有显式预算 120000ms ⇒ 它不再按缺省 5000 进名单（这就是本笔补预算的效果）
+  tests/mutate-verify-gates.test.ts：最慢 2256ms·explicit 15000·在压帽名单里=true｜已有显式预算 15000ms ⇒ 它不再按缺省 5000 进名单（这就是本笔补预算的效果）
+✅ 两态证人过；这一趟贴帽名单为空（安静态没有用例贴帽；bd5ec44 那两条超时是并发抬上去的，见文件末注）

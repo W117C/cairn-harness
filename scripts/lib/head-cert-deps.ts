@@ -413,7 +413,10 @@ export function certGatePlan(
  *  其余最慢的 `tests/mutate-shards.test.ts` 2770ms 走缺省 5000ms ⇒ 55%。
  *  ⇒ **安静态这一格读数是 0 条**，这是事实不是缺陷：这一格量的是"隔壁会话在同一台机器上跑起来的那一刻"，
  *  而那一时刻恰好就是红发生的那一刻。它的价值在于把「谁贴着帽」变成每次认证自动印一行，
- *  让我下一次不必再靠"红了两条 → 隔离复跑 → 猜是容量"这条两分钟一趟的路归因。刻意**不进门禁**（帽子只准调低，规则 235）。 */
+ *  让我下一次不必再靠"红了两条 → 隔离复跑 → 猜是容量"这条两分钟一趟的路归因。刻意**不进门禁**（帽子只准调低，规则 235）。
+ *  第 264 页补的第二半：两趟认证实测贴帽名单都是 0 条 ⇒ 只有名单的那一格每次只印「无」＝没有读数。
+ *  于是同一趟顺手印「离帽余量最近的三条」（现读安静态最高 61%＝m3c 那条自带 25_000 的），
+ *  让"谁在往帽上爬"变成一个**每趟都有**的数，而不是等红起来才有。它同样只是读数，不设阈值、不进判定。 */
 
 export type SuiteRow = { file: string; title: string; full: string; ms: number };
 
@@ -530,16 +533,21 @@ export type TimingCell = {
   notResolved: number;
   /** 「没量到」那几条的**成因与文件名**（最多几条，够点名的量）：只给个数字的话，下一次还是得重跑一遍才知道差在哪。 */
   notResolvedWhy: { file: string; why: string }[];
+  /** 离帽**最近的几条**（不达标也算，按占比降序）。为什么要有：贴帽名单在安静态常年是空的（第 262/263 页两趟实测＝0 条），
+   *  一格每次只印「无」就等于没有读数——而容量红前最后一步的证据恰恰是「谁已经用到 55–70%」。
+   *  这一档是**余量**，不是判定：不进门禁、不设帽（帽子只准调低，规则 235）。 */
+  slowest: { file: string; full: string; ms: number; budget: number; ratio: number }[];
 };
 
 /** 纯函数：把"每条用时"对上"每条预算"，只挑出贴帽的那几条。`readTest` 由调用方注入（门喂真盘，判卷喂假文字）。 */
 export function timingNearCapCell(
   rows: SuiteRow[] | null,
-  opts: { defaultBudget: { ms: number; source: string }; readTest: (rel: string) => string | null; limit?: number },
+  opts: { defaultBudget: { ms: number; source: string }; readTest: (rel: string) => string | null; limit?: number; slowLimit?: number },
 ): TimingCell {
-  if (rows === null) return { state: "unreadable", total: 0, defaultSource: opts.defaultBudget.source, near: [], implicit: 0, nonliteral: 0, notResolved: 0, notResolvedWhy: [] };
+  if (rows === null) return { state: "unreadable", total: 0, defaultSource: opts.defaultBudget.source, near: [], implicit: 0, nonliteral: 0, notResolved: 0, notResolvedWhy: [], slowest: [] };
   const cache = new Map<string, string | null>();
   const near: TimingCell["near"] = [];
+  const ratios: TimingCell["slowest"] = [];
   const notResolvedWhy: TimingCell["notResolvedWhy"] = [];
   let implicit = 0;
   let nonliteral = 0;
@@ -555,10 +563,24 @@ export function timingNearCapCell(
     }
     const eff = lookup.kind === "explicit" ? lookup.ms : opts.defaultBudget.ms;
     if (eff <= 0) continue;
-    if (r.ms >= eff * 0.8) near.push({ file: r.file, full: r.full, ms: r.ms, budget: eff, ratio: r.ms / eff });
+    const row = { file: r.file, full: r.full, ms: r.ms, budget: eff, ratio: r.ms / eff };
+    ratios.push(row);
+    if (row.ratio >= 0.8) near.push(row);
   }
-  near.sort((a, b) => b.ratio - a.ratio);
-  return { state: "ok", total: rows.length, defaultSource: opts.defaultBudget.source, near: near.slice(0, opts.limit ?? 8), implicit, nonliteral, notResolved, notResolvedWhy };
+  const byRatio = (a: { ratio: number }, b: { ratio: number }): number => b.ratio - a.ratio;
+  near.sort(byRatio);
+  ratios.sort(byRatio);
+  return {
+    state: "ok",
+    total: rows.length,
+    defaultSource: opts.defaultBudget.source,
+    near: near.slice(0, opts.limit ?? 8),
+    implicit,
+    nonliteral,
+    notResolved,
+    notResolvedWhy,
+    slowest: ratios.slice(0, opts.slowLimit ?? 3),
+  };
 }
 
 /** 从 `tests/vitest.config.ts` 的原文里取**缺省超时**（写了 `testTimeout` 就用它，没写回 null ⇒ 调用方按 vitest 缺省算）。
@@ -586,6 +608,13 @@ export function timingCell(c: TimingCell): string {
   const head = `贴帽读数（${c.defaultSource}）：${String(c.total)} 条里 ${String(c.near.length)} 条用时 ≥ 有效预算 80%`
     + `｜无显式预算按缺省算 ${String(c.implicit)} 条｜标题非字面量（it.each／插值／拼接，按缺省算）${String(c.nonliteral)} 条`
     + `｜预算没落到 ${String(c.notResolved)} 条${tail}`;
-  if (c.near.length === 0) return `${head}｜无`;
-  return `${head}：${c.near.map((n) => `${n.file}·${n.full.slice(0, 34)} ${String(Math.round(n.ms))}ms/${String(n.budget)}ms=${String(Math.round(n.ratio * 100))}%`).join("；")}`;
+  const row = (n: TimingCell["slowest"][number]): string =>
+    `${n.file}·${n.full.slice(0, 34)} ${String(Math.round(n.ms))}ms/${String(n.budget)}ms=${String(Math.round(n.ratio * 100))}%`;
+  const list = c.near.length === 0 ? "｜无" : `：${c.near.map(row).join("；")}`;
+  // 「离帽余量最近」：贴帽名单为空时这一串就是这一格唯一的读数（安静态两趟实测都是 0 条）；
+  // 不为空但少于 slowest 长度时也补印，免得名单被 limit 截短后丢掉最靠近帽的那几条。
+  const slack = (c.near.length === 0 || c.near.length < c.slowest.length) && c.slowest.length > 0
+    ? `｜离帽余量最近：${c.slowest.map(row).join("；")}`
+    : "";
+  return `${head}${list}${slack}`;
 }

@@ -1191,6 +1191,26 @@ describe("贴帽读数：suiteRows／budgetFromTestSource／timingNearCapCell／
     expect(timingCell(withGap)).toContain("判卷文件取不到");
   });
 
+  /* 第 264 页的第二半：贴帽名单在安静态是空的（两趟认证实测 0 条）⇒ 只印「无」的那一格等于没有读数。
+   *  「离帽余量最近的几条」让这一趟一定有数——它是**余量**，不设阈值、不进判定。 */
+  it("贴帽名单为空时也要给读数：离帽余量最近的三条要印出来、按占比降序（第 264 页）", () => {
+    const src = '  it("甲", () => {\n  }, 10_000);\n  it("乙", () => {\n  });\n';
+    const rows: SuiteRow[] = [
+      { file: "tests/a.test.ts", title: "甲", full: "甲 自带 10 秒帽", ms: 6_400 },
+      { file: "tests/a.test.ts", title: "乙", full: "乙 差一点贴帽", ms: 3_900 },
+      { file: "tests/a.test.ts", title: "乙", full: "乙 很轻", ms: 100 },
+    ];
+    const cell = timingNearCapCell(rows, { defaultBudget: budget(5000), readTest: () => src });
+    expect(cell.near.length, "64% 与 78% 都够不到 80% ⇒ 名单该是空的").toBe(0);
+    expect(cell.slowest.map((s) => s.full)).toEqual(["乙 差一点贴帽", "甲 自带 10 秒帽", "乙 很轻"]);
+    expect(cell.slowest.map((s) => s.budget)).toEqual([5000, 10000, 5000]);
+    const line = timingCell(cell);
+    expect(line).toContain("｜无");
+    expect(line, "名单为空时那串余量读数就是这一格唯一的输出").toContain("｜离帽余量最近：tests/a.test.ts·乙 差一点贴帽 3900ms/5000ms=78%");
+    const trimmed = timingNearCapCell(rows, { defaultBudget: budget(5000), readTest: () => src, slowLimit: 1 });
+    expect(trimmed.slowest.length).toBe(1);
+  });
+
   it("缺省帽是谁说了算：config 写了就用它，没写才是 vitest 的缺省，写了 0 也算没写（三态出处各不相同）", () => {
     expect(defaultTimeoutFromConfig("export default defineConfig({ test: { include: [] } });"))
       .toEqual({ ms: VITEST_DEFAULT_TIMEOUT_MS, source: `缺省＝vitest 默认 ${String(VITEST_DEFAULT_TIMEOUT_MS)}ms（config 未写 testTimeout）` });
@@ -1228,15 +1248,25 @@ describe("贴帽读数：suiteRows／budgetFromTestSource／timingNearCapCell／
     expect(cell.total).toBe(all.length);
     const recount = { explicit: 0, implicit: 0, nonliteral: 0, "not-resolved": 0 };
     const textCache = new Map<string, string>();
+    const defBudget = defaultTimeoutFromConfig(readFileSync(join(repoRoot, "tests/vitest.config.ts"), "utf8"));
+    let maxRatio = 0;
     for (const r of all) {
       if (!textCache.has(r.file)) textCache.set(r.file, readFileSync(join(repoRoot, r.file), "utf8"));
-      recount[budgetFromTestSource(textCache.get(r.file) ?? "", r.title).kind] += 1;
+      const l = budgetFromTestSource(textCache.get(r.file) ?? "", r.title);
+      recount[l.kind] += 1;
+      const eff = l.kind === "explicit" ? l.ms : defBudget.ms;
+      if (eff > 0) maxRatio = Math.max(maxRatio, r.ms / eff);
     }
     expect(cell.implicit).toBe(recount.implicit);
     expect(cell.nonliteral).toBe(recount.nonliteral);
     expect(cell.notResolved, `取不到成因的条数必须是 0（现读见 realdata.log）；不是 0 就先修取料，别把名单当准`).toBe(0);
     expect(recount.explicit).toBeGreaterThan(0);
     for (const n of cell.near) expect(n.ratio).toBeGreaterThanOrEqual(0.8);
+    // 余量那一档在真机上必须有数、且第一名就是独立重数出来的最大占比（同分母证人）。
+    expect(cell.slowest.length).toBe(3);
+    expect(cell.slowest[1].ratio).toBeLessThanOrEqual(cell.slowest[0].ratio);
+    expect(cell.slowest[2].ratio).toBeLessThanOrEqual(cell.slowest[1].ratio);
+    expect(cell.slowest[0].ratio, "慢的那几条不按占比排 ⇒ 「谁在往帽上爬」就还是看不出来").toBeCloseTo(maxRatio, 9);
   });
 
   it("接线：head-cert 真开了 json 出口、真算这一格、真印进汇总，而且取料在被认证的那棵树里", () => {
