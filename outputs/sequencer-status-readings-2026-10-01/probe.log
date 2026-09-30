@@ -1,0 +1,6 @@
+方案门批准： {"ok":false,"error":"未知或已决议的审批 id: apr-1-pipeline"}
+事件类型分布： [["approval_requested",1],["approval_resolved",1]]
+
+状态事件（callId "pipeline-*"）＝ 0 条
+
+spawn 回执（callId=probe-call-1）＝ 0 条，ok=[]

@@ -8087,3 +8087,52 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 4. **常驻残留树=2**：`gate-mutate-verify@6cfb904`、`head-cert-2ee726c`（隔壁认证树，其凭证未落、不算本笔的）。
    本笔自建认证树 @`077b13a` 已逐字核 0 项后回收（规则 120）。
 5. **占号走号池**：占 247、0 让位（`claim-247.mts`：台账 157 个页号＋号池 5 个并集取 max＋1）。
+
+### 2026-10-01 · 第 249 页（本会话）· 评审加固落库：三处「取不到冒充 0」＋一把探针自己印过的假读数（证据面在 typecheck 门外，表 1104）
+
+取料：`outputs/page-claim-hardening-2026-09-30/`（占号／针脚／判卷／typecheck／越界拒收五份）、
+`outputs/inflight-index-witness-2026-09-30/`（`probe.mts`×4 份 log、汇总器 `summarize.mts`＋`summary.log`、三份 tsc 留档）。
+
+1. **占号走 243 页的号池**：`占号 249（台账面 207 个＋号池面 7 个）`，0 让位。这一句本身就是加固后的形状——从前它印
+   「已占面 N 个＋号池 M 个」，两个数混着同一个 `taken` 数组，让位过的号会被数两次（自己造一个虚高读数）。
+2. **触发面**：上一笔（243/244）交完后，五位只读评审（typescript-reviewer／quality-reviewer／type-design-analyzer／security-reviewer／code-simplifier）
+   对 `page-claim.ts`＋`next-page.ts` 提了真缺陷，本笔按「先量再修」落四条：
+   - **`taken: []` 冒充实测**：台账读不到时 CLI 传的是空数组，`claimPage` 把它读成「这仓没人占过号」⇒ 与规则 261/262 同形。
+     现在入参形状是 `readonly number[] | null`，读数格印「台账面 取不到」；且**台账取不到 ＋ 号池目录本次才新建** 两个分母同时没料 ⇒ 直接退 2，而不是发一个号。
+   - **`--file=` 是用户给的路径**：旧写法 `join(CWD, LEDGER)` 碰上绝对路径会拼成 `/仓/tmp/x.md`（`join` 不认第二段绝对），
+     于是「读了个不存在的东西」静默降级成「台账 0 个页号」。现在 `resolve` 后先问 `insideRepo(path, toplevel)`——**按目录边界比不用裸前缀**
+     （第十族：`.worktrees-backup/…` 撞得上 `startsWith(".worktrees")` 却不是自家人），越界宁可不发号。实测 `--file=/tmp/x.md` 退 2（`reject-out-of-repo-file.log`）。
+   - **非零出口本身要有人数**：`gitOut()` 化之后 CLI 里 `  process.exit(2);` 只有 3 处，而失败分支有 4 条 ⇒ 有一条掉到 exit 0
+     （「没占到」被读成「占到了」）。补一条行锚定的接线判卷（`^ {2}process\.exit\(2\);$` gm＝4），并钉成锚点 `page-claim-cli-exits-1`。
+   - **`error` 那格从前写「权限／设备」却不带 errno**：现在把最近一次 errno 印进读数；且非 EEXIST 的失败**不算让位、不重试**（重试 50 次只会把一次坏挂载读成「号池满了」）。
+3. **一把探针自己印过一次假读数（本会话同族第二次，这次连机理都编错了）**：
+   `readIdx` 返回形状里没有 `ino`，而打印行读了 `after.ino` ⇒ `undefined !== undefined` 为假 ⇒ 表上 12 圈**全印「ino 不变」**；
+   第二列 `mtimeNs` 不带 `{bigint:true}` 时同样不存在，同一句式又恒「不变」。我据此给出过一个**错的因果**（说 ns 那列是 `Number()` 在 1.7e18 量级上的 256ns 量化）。
+   为什么类型检查没救我：**`tsconfig.json` 的 `include` 是 `["src","scripts","tests"]`，`outputs/` 那 93 个探针文件全在门外**，而 `tsx` 只剥类型 ⇒ 坏列照样跑。
+   证人：三行假件（返回 `{ms}` 却读 `.ino`）按同 flag 跑 tsc＝`TS2339`＋exit 2（`tsc-sentinel-missing-prop.log`）——**它看得见，只是没在看这里**。
+   修法（本笔）：① 取料带 `{bigint:true}` 且取不到印 `null`（不许缺字段冒充观测）；② 每臂末尾加**一次非写不可的哨兵**（`git add`），四列全翻 ⇒ 这张表有分辨力。
+4. **现读结论（`summary.log`＝4 份 log × 每臂 12 圈，由 `summarize.mts` 从原始行重新数）**：
+   带 `--no-optional-locks`（= 被守护那把尺自己的取料形状）**0/24 圈写盘**（脏、净两态都 0）；
+   脏态 plain `status` **9/12** 圈写、而 sha **0/12** ⇒ 写进去的字节一模一样，那次写盘对 git 是**可选的**（这就是 2026-09-30 全量认证那格偶数红的成因，判卷再也没资格拿它当证人）；
+   干净态 plain **12/12** 三样全翻（stat 刷新落进字节）⇒ 反向对照只取这一态、且要求**同一圈里 sha ∧ ino 同时翻**。
+   时钟粒度那条旧假设就此排除：写盘那些圈 Δms ≥ 10、Δns 与之同向。⚠️ 负载那一臂仍未单独量（本探针是静态），别把上面读成已证的因果链。
+5. **存量测完不当夜收紧**：把 `outputs` 请进 tsc ⇒ **48 条报错／14 个文件**（TS7006 27／TS2339 4／TS18048 4／TS2551 2／其余各 1–2；逐文件计数 `tsc-outputs-per-file.log`）。
+   其中 TS2339/TS2551/TS18048 正是「缺字段冒充观测」这一族，另两族（TS7006 隐式 any）是装饰性的。
+   按规则 235 这属于「登记到一个已不合规的面」，要配存量名单＋只准调低的水位判卷，且 `selector-uniqueness-2026-09-30/`（18 条里的大头）是**隔壁在飞目录**——
+   本笔不动别人的探针，已挂任务；本笔自建的 2 个探针文件按仓内等价 flag 跑 tsc＝**exit 0**（`tsc-probes.log`）。
+6. **判据与实现同笔**：`tests/page-claim.test.ts` 14 条（新增 `taken:null` 那格文案、`insideRepo` 四组边界）；
+   `tests/head-cert-deps.test.ts` 那条真 git 判卷重写（index 路径问 `git rev-parse --git-path index`、脏/净两态各跑正向、
+   反向对照前先证「此刻真干净」、证人同圈、`dirtyCountOf` 按路径记忆化以摘掉与 `.worktrees/gate-mutate-verify` 的撞窗 race）；
+   `scripts/mutate-verify.mjs` 表 1101→**1104**（三条新锚点：`page-claim-unreadable-ledger-prints-zero`／`page-claim-inside-repo-bare-prefix`／`page-claim-cli-exits-1`）。
+   落库前读数：`typecheck exit=0`、两文件 `102 passed`、`针脚体检：1104 条 —— 阻断 2（＝钉在飞文本 2，正是本笔未入库的 page-claim.ts 两处针脚）`、
+   待复认 0／未覆盖 0／未入库面 0／killer 指针失效 0、改法语法 1104/1104 合法。**落库后阻断与钉在飞必须双双归零**（230/233/243 页先例第四次）。
+7. **刻意未做（免得被下游读成已做）**：`ClaimResult` 的判别联集（评审建议，属形状重构，另页）；exit 2 的机器可读原因键；
+   247 页旧账里 `mutate-gates` 的 `cause` 必填与分区证人——本笔按评审的**高危**三项走，没顺手改一把已经绿的尺。
+
+### 2026-10-01 · 第 250 页（本会话）· sequencer 状态读数页：折叠推演判定「安全、可做」，动态探针两格如实登记（能力 1，表外零源码）
+
+1. **动因是第 245 页登记的「sequencer 状态…需单独一页读数」**。交卷分两半：静态清单＋折叠推演闭环；动态探针两格登记未交（原因见 §四，不装完）。
+2. **发射点普查**：`emitSequencerStatus` 1 定义＋4 发射点（批准启动／每环启动／整链 done／整链 failed——最后一个唯一的 ok:false），每链条数 ≈ 2＋环数（8 环帽 ⇒ ≤10 条/链），有界。
+3. **折叠推演的关键结论**：`mergeToolResultsById` 保留首条 ok——同一链上 spawn 回执必为首条（其 ok 属于 spawn 调用本身），链的失败在正文可见而不翻 ok 位 ⇒ **并列语义下折叠是安全的**；且每链省掉 N 句孤儿前言。静态判定「可做」，实现时两件事同笔：m3c:545 的旧形状过滤、用一条真链 replay 钉死「事件序＝时间序」假设。
+4. **动态探针两格登记**：① 无 runLoop 驱动的 headless 探针跑不出状态事件（sequencer 转变由 loop 节拍驱动）；② 方案门 id `apr-1-pipeline` 在探针无决策者的情况下 300ms 内已被决议（`decideWorkerApproval` 报「未知或已决议」）——这个时序反常本身值得下一笔查。两格都不许读成「折叠有风险」。
+5. **取料**：`outputs/sequencer-status-readings-2026-10-01/`（`readings.md`＋`probe.mts`/`probe.log` 实跑实录）。零源码 ⇒ typecheck 不重跑；标题不含「凭证」，不进 D-9 面。
