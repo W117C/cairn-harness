@@ -704,37 +704,89 @@ export interface WiringResult {
   kind: WiringKind;
   /** 取到的包围函数名（`no-symbol` 时为 null）。 */
   symbol: string | null;
+  /** 那段函数里有几条 `return` 出口（数不出来＝null，与"1 条"分开）。第 263 页加的这一格只为回答
+   *  「变异存活要不要先补输入」：一条锚点的读数只等于判卷真走到的那几行，函数还有别的出口没人喂时它是零读数，不是通过。 */
+  returns: number | null;
+}
+
+/** 单行分类：`{ name }`＝这一行是函数／方法／箭头常量的声明，`"boundary"`＝出了函数体，`null`＝继续往上找。
+ *  两支消费者（`enclosingSymbol` 与 `enclosingSymbolSpan`）共用这一份判据，不再各抄一遍正则（第十三族）。 */
+function symbolDeclAt(line: string): { name: string } | "boundary" | null {
+  const fn = /^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)/u.exec(line);
+  if (fn !== null) return { name: fn[1] ?? "" };
+  // 变量声明：看**等号右边的形状**判它是不是函数。不写成"跳过类型再匹 `=`"，因为带类型的箭头常量
+  // （`const d: (a: string) => string = (a) => a;`）的类型里就含 `=>`，那种正则会被它打断。
+  const decl = /^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*[:=](.*)$/u.exec(line);
+  if (decl !== null) {
+    const rest = decl[2] ?? "";
+    if (/=>|\bfunction\b|\basync\s*\(/u.test(rest)) return { name: decl[1] ?? "" };
+    // 只有**列 0** 的数据声明才是边界（一张表、一个常量）；函数体内部的局部变量不是——
+    // 把它当边界会让 needle 明明在函数里也报「判不了」（本仓第 260 页判卷当场抓到这一格：`const m = /…/.exec(line)`）。
+    if (/^\S/u.test(line)) return "boundary";
+    return null;
+  }
+  const method = /^\s{2,6}(?:static\s+|private\s+|protected\s+|readonly\s+|async\s+)*([A-Za-z0-9_$]+)\s*\([^)]*\)(?:\s*:\s*[^{]+)?\s*\{/u.exec(line);
+  if (method !== null) return { name: method[1] ?? "" };
+  // 顶到列 0 的其它行（`}`、`class X {`、顶格注释…）＝出了函数体的边界：判不了，别继续往上漂。
+  if (/^\S/u.test(line)) return "boundary";
+  return null;
 }
 
 /** 从 needle 的位置往上找**最近的**声明名：`function NAME` / `const NAME = ( … )` / `const NAME: T = (` / 类方法 `NAME(…) {`。
  *  都不匹配回 null。注意只看needle 之前的文字——函数**调用点**在文件后半段不影响，这里要的是"这段代码长在谁身上"。 */
 export function enclosingSymbol(srcText: string, needleIndex: number): string | null {
+  return enclosingSymbolSpan(srcText, needleIndex)?.name ?? null;
+}
+
+/** 同上，但连带给出**函数体的字节区间** `[from, to)`：`from`＝声明行行首，`to`＝声明行之后第一个列 0 的 `}`／`};`。
+ *  第 263 页要它是因为「变异存活」有一种成因判卷自己说不出口：**针脚落在那段函数的某一条 `return` 上，
+ *  而判卷的输入集从没走到那一支**（`suiteRows` 四支 return、第 262 页只喂到两支 ⇒ 那条锚点永远活）。
+ *  体范围用"列 0 的收尾"来框＝对模块级函数与方法都成立；带嵌套闭包的 return 会被一起数进来，
+ *  这是**刻意的上界**：这一格只回答"存活那条要不要先补输入"，不当门禁、不当任何分母。 */
+export function enclosingSymbolSpan(srcText: string, needleIndex: number): { name: string; from: number; to: number } | null {
   // 含**needle 自己那一行**：needle 就写在声明行上时（`export function certTreeAbs(…)` 这种整行针脚），
   // 只切到 needle 起点会把声明行切掉 ⇒ 取到的是上一条函数（本仓第 260 页的探针实测取成 `mainRootFromCommonDir`，
   // 两态证人当场把它逮住了）。
-  const lineEnd = srcText.indexOf("\n", needleIndex);
-  const before = srcText.slice(0, lineEnd < 0 ? srcText.length : lineEnd).split("\n");
-  for (let i = before.length - 1; i >= 0; i -= 1) {
-    const line = before[i] ?? "";
-    const fn = /^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)/u.exec(line);
-    if (fn !== null) return fn[1] ?? null;
-    // 变量声明：看**等号右边的形状**判它是不是函数。不写成"跳过类型再匹 `=`"，因为带类型的箭头常量
-    // （`const d: (a: string) => string = (a) => a;`）的类型里就含 `=>`，那种正则会被它打断。
-    const decl = /^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*[:=](.*)$/u.exec(line);
-    if (decl !== null) {
-      const rest = decl[2] ?? "";
-      if (/=>|\bfunction\b|\basync\s*\(/u.test(rest)) return decl[1] ?? null;
-      // 只有**列 0** 的数据声明才是边界（一张表、一个常量）；函数体内部的局部变量不是——
-      // 把它当边界会让 needle 明明在函数里也报「判不了」（本仓第 260 页判卷当场抓到这一格：`const m = /…/.exec(line)`）。
-      if (/^\S/u.test(line)) return null;
-      continue;
+  const lines = srcText.split("\n");
+  const needleLine = (() => {
+    let acc = 0;
+    for (let i = 0; i < lines.length; i += 1) {
+      const next = acc + (lines[i] ?? "").length + 1;
+      if (needleIndex < next) return i;
+      acc = next;
     }
-    const method = /^\s{2,6}(?:static\s+|private\s+|protected\s+|readonly\s+|async\s+)*([A-Za-z0-9_$]+)\s*\([^)]*\)(?:\s*:\s*[^{]+)?\s*\{/u.exec(line);
-    if (method !== null) return method[1] ?? null;
-    // 顶到列 0 的其它行（`}`、`class X {`、顶格注释…）＝出了函数体的边界：判不了，别继续往上漂。
-    if (/^\S/u.test(line)) return null;
+    return lines.length - 1;
+  })();
+  let declLine = -1;
+  let name = "";
+  for (let i = needleLine; i >= 0; i -= 1) {
+    const hit = symbolDeclAt(lines[i] ?? "");
+    if (hit === "boundary") return null;
+    if (hit !== null) { declLine = i; name = hit.name; break; }
   }
-  return null;
+  if (declLine < 0) return null;
+  let from = 0;
+  for (let i = 0; i < declLine; i += 1) from += (lines[i] ?? "").length + 1;
+  let to = srcText.length;
+  for (let i = declLine + 1; i < lines.length; i += 1) {
+    if (/^\}/u.test(lines[i] ?? "")) {
+      // 体的**起点是声明行的下一行**：少加声明行那一段长度，`to` 会落到函数中间，
+      // 于是数出来的 return 比实际少（第 263 页判卷当场把这条抓出来了：两出口那段读成 0）。
+      let end = from + (lines[declLine] ?? "").length + 1;
+      for (let k = declLine + 1; k < i; k += 1) end += (lines[k] ?? "").length + 1;
+      to = end;
+      break;
+    }
+  }
+  return { name, from, to };
+}
+
+/** 那段函数体里有几条 `return` 出口（数不出来＝null，与"1 条"分开印）。见 `enclosingSymbolSpan` 的上界说明。 */
+export function returnExitsOf(srcText: string, needleIndex: number): { name: string; returns: number } | null {
+  const span = enclosingSymbolSpan(srcText, needleIndex);
+  if (span === null) return null;
+  const body = srcText.slice(span.from, span.to);
+  return { name: span.name, returns: (body.match(/\breturn\b/gu) ?? []).length };
 }
 
 /** 取那条用例的体：从 `expectFail` 命中处往后，到下一个「缩进两空格的 `});`」为止。
@@ -752,27 +804,31 @@ export function testCaseBody(testText: string, title: string): string | null {
 export function auditPointerWiring(
   entries: readonly WiringEntry[],
   opts: { readSrc: (rel: string) => string | null; readTest: (rel: string) => string | null },
-): { id: string; kind: WiringKind; symbol: string | null; srcRel: string; test: string }[] {
+): { id: string; kind: WiringKind; symbol: string | null; returns: number | null; srcRel: string; test: string }[] {
   const srcCache = new Map<string, string | null>();
   const testCache = new Map<string, string | null>();
   const read = (cache: Map<string, string | null>, get: (rel: string) => string | null, rel: string): string | null => {
     if (!cache.has(rel)) cache.set(rel, get(rel));
     return cache.get(rel) ?? null;
   };
-  const out: { id: string; kind: WiringKind; symbol: string | null; srcRel: string; test: string }[] = [];
+  const out: { id: string; kind: WiringKind; symbol: string | null; returns: number | null; srcRel: string; test: string }[] = [];
   for (const e of entries) {
-    const push = (kind: WiringKind, symbol: string | null): void => { out.push({ id: e.id, kind, symbol, srcRel: e.srcRel, test: e.test }); };
+    const push = (kind: WiringKind, symbol: string | null, returns: number | null = null): void => {
+      out.push({ id: e.id, kind, symbol, returns, srcRel: e.srcRel, test: e.test });
+    };
     if (e.needle === null || e.srcRel === "" || e.test === "" || e.expectFail === "" || !e.test.endsWith(".test.ts")) { push("no-needle", null); continue; }
     const srcText = read(srcCache, opts.readSrc, e.srcRel);
     const testText = read(testCache, opts.readTest, e.test);
     if (srcText === null || testText === null) { push("unreadable", null); continue; }
     const at = srcText.indexOf(e.needle);
     if (at < 0) { push("no-needle", null); continue; }
-    const symbol = enclosingSymbol(srcText, at);
-    if (symbol === null) { push("no-symbol", null); continue; }
+    // 一次扫描同时拿到"长在谁身上"和"那段函数有几条 return"（第 263 页）：
+    // 分成两次扫就是同一谓词抄两份，改其中一份会让接线普查与存活提示各说各话（第十三族）。
+    const exits = returnExitsOf(srcText, at);
+    if (exits === null) { push("no-symbol", null); continue; }
     const body = testCaseBody(testText, e.expectFail);
-    if (body === null) { push("no-title", symbol); continue; }
-    push(new RegExp(`\\b${symbol}\\b`, "u").test(body) ? "wired" : "suspect", symbol);
+    if (body === null) { push("no-title", exits.name, exits.returns); continue; }
+    push(new RegExp(`\\b${exits.name}\\b`, "u").test(body) ? "wired" : "suspect", exits.name, exits.returns);
   }
   return out;
 }

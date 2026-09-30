@@ -7,7 +7,7 @@ import { readFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { anchorFaces, auditExpectFails, auditPointerWiring, enclosingSymbol, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, anchorCostCell, costRollupOf, entryDisposition, escapeTitlePattern, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, judgeWithRetry, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, mutateTreeGuard, needleProblemLine, preflightRefusals, runModeCell, runModeFor, runReadingIsBad, restoreCheck, restoreDiffProblem, redVerdictCell, redKindsLine, selectChangedEntries, selectorAmbiguity, selectorCell, selectedTestCount, splitRunnable, testCaseBody, unverifiedCell, untrackedAnchorLine, untrackedAnchorPaths, vacuousRunLine, wiringCensus, type AnchorCostRow, type HeadState, type RestoreVerdict } from "../scripts/lib/mutate-gates";
+import { anchorFaces, auditExpectFails, auditPointerWiring, enclosingSymbol, enclosingSymbolSpan, returnExitsOf, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, anchorCostCell, costRollupOf, entryDisposition, escapeTitlePattern, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, judgeWithRetry, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, mutateTreeGuard, needleProblemLine, preflightRefusals, runModeCell, runModeFor, runReadingIsBad, restoreCheck, restoreDiffProblem, redVerdictCell, redKindsLine, selectChangedEntries, selectorAmbiguity, selectorCell, selectedTestCount, splitRunnable, testCaseBody, unverifiedCell, untrackedAnchorLine, untrackedAnchorPaths, vacuousRunLine, wiringCensus, type AnchorCostRow, type HeadState, type RestoreVerdict } from "../scripts/lib/mutate-gates";
 import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
 
 /** 从锚点表取 `{id,test,expectFail}`：只走 `--list` 这条**不改源文件**的入口。
@@ -1897,5 +1897,83 @@ describe("指针接线：enclosingSymbol／testCaseBody／auditPointerWiring（�
     expect(script, "汇总那行没接进来＝这一格根本没跑（emoji 不进正则：它的变体选择符在两处文件里容易写成不同的字节）").toMatch(/^ {2}console\.log\(`[^\n]*指针接线/mu);
     expect(script, "存活那条红不接 hint ⇒ 只有全局计数，没人在花了两拍判卷之后给出方向").toMatch(/"变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）" \+ wiringHint\(m\)/u);
     expect(script).toMatch(/^function wiringHint\(m\) \{/mu);
+  });
+
+  /* ── 出口计数（第 263 页）。动因是第 262 页一条**活下来**的锚点：`suiteRows` 有四条 return，
+   *  判卷只喂到两条 ⇒ 第三条上的锚点改与不改全表都绿。当时的提示只会说"指针指错了没"，对这种成因完全没用。 */
+  it("出口计数：一段函数里有几条 return 就报几条；「数不出来」是 null，不许并进 1 条（第 263 页）", () => {
+    const single = "export function one(a: number): number {\n  if (a > 0) return a;\n  return 0;\n}\n";
+    expect(returnExitsOf(single, single.indexOf("return a;"))).toEqual({ name: "one", returns: 2 });
+    const multi = [
+      "export function three(x: string | null): string | null {",
+      "  if (x === null) return null;",
+      "  try {",
+      "    return x.slice(1);",
+      "  } catch {",
+      "    return null;",
+      "  }",
+      "}",
+    ].join("\n") + "\n";
+    expect(returnExitsOf(multi, multi.indexOf("x.slice(1)"))).toEqual({ name: "three", returns: 3 });
+    // 第三态：needle 不在任何函数里（表里的数据行）⇒ null，而不是 0 或 1 —— 与"这条函数只有一条出口"分开。
+    const table = 'const MUT = [\n  { id: "x", apply: (s) => s.replace("y", "z") },\n];\n';
+    expect(returnExitsOf(table, table.indexOf('id: "x"'))).toBeNull();
+    // 空文本这一档要按**索引**喂（第二个参数是 number，不是标题）：写成字符串时它被隐式比进出不了循环，
+    // 判卷照样绿而 tsc 是红的——类型检查比这条判卷先抓到（第 263 页本笔实测 TYPECHECK_EXIT=2 那一次）。
+    expect(returnExitsOf("", 0)).toBeNull();
+  });
+
+  it("出口计数：体范围停在列 0 的收尾——下一条函数的 return 不许算进来（数多了等于这把尺没边界）", () => {
+    const src = [
+      "export function first(a: boolean): number {",
+      "  if (a) return 1;",
+      "  return 0;",
+      "}",
+      "",
+      "export function second(): number {",
+      "  return 10;",
+      "}",
+    ].join("\n") + "\n";
+    const got = returnExitsOf(src, src.indexOf("return 1;"));
+    expect(got).toEqual({ name: "first", returns: 2 });
+    const span = enclosingSymbolSpan(src, src.indexOf("return 10;"));
+    expect(span?.name).toBe("second");
+    expect(span === null ? null : src.slice(span.from, span.to)).toContain("return 10");
+    expect(src.slice(enclosingSymbolSpan(src, src.indexOf("return 1;"))?.to ?? 0)).toContain("export function second");
+  });
+
+  it("出口计数·真机：suiteRows 那一格现在自己说得出「几条出口」——第 262 页那条存活要有能印出来的成因", () => {
+    const src = readRel("scripts/lib/head-cert-deps.ts") ?? "";
+    expect(src.length, "取料面读不到 ⇒ 这一格没量到，不等于出口只有一条").toBeGreaterThan(0);
+    const at = src.indexOf("if (jsonText === null) return null;");
+    expect(at, "针脚不在盘上（那条 return 搬走了就先去改锚点，别改这条判据的期望）").toBeGreaterThanOrEqual(0);
+    const got = returnExitsOf(src, at);
+    expect(got?.name).toBe("suiteRows");
+    expect(got === null ? 0 : got.returns, "这条锚点的函数只剩一条出口时，「判卷没喂到那一支」就不再是成因").toBeGreaterThanOrEqual(2);
+  });
+
+  it("接线普查：rows 里 returns 跟着 kind 走——no-symbol／no-needle 那两档必须是 null 而不是 0", () => {
+    const src = "export function two(a: boolean): number {\n  if (a) return 1;\n  return 0;\n}\n";
+    const test = 'it("甲", () => {\n  expect(two(true)).toBe(1);\n});\n';
+    const table = 'const MUT = [\n  { id: "x", apply: (s) => s.replace("y", "z") },\n];\n';
+    const read = (rel: string): string | null => (rel === "a.ts" ? src : rel === "b.ts" ? table : test);
+    const wired = auditPointerWiring([{ id: "w", srcRel: "a.ts", needle: "if (a) return 1;", test: "t.test.ts", expectFail: "甲" }], { readSrc: read, readTest: read });
+    expect(wired[0]?.kind).toBe("wired");
+    expect(wired[0]?.returns).toBe(2);
+    const noSym = auditPointerWiring([{ id: "n", srcRel: "b.ts", needle: "id: \"x\"", test: "t.test.ts", expectFail: "甲" }], { readSrc: read, readTest: read });
+    expect(noSym[0]?.kind).toBe("no-symbol");
+    expect(noSym[0]?.returns, "数不出包围函数时把 returns 写成 0，会让它混进「单出口那一档」——0 不是「没量到」").toBeNull();
+    const noNeedle = auditPointerWiring([{ id: "x", srcRel: "a.ts", needle: "这段文字不在源文件里", test: "t.test.ts", expectFail: "甲" }], { readSrc: read, readTest: read });
+    expect(noNeedle[0]?.returns).toBeNull();
+  });
+
+  it("接线：门那一行要连着印「可数面／多出口数」，wiringHint 那条守卫的结构不许漂", () => {
+    const script = readRel("scripts/mutate-verify.mjs") ?? "";
+    expect(script.length).toBeGreaterThan(0);
+    expect(script, "普查行不印这一格＝这把尺开了张却没人读它").toMatch(/｜出口数可数 \$\{String\(countable\.length\)\} 条/du);
+    expect(script, "多出口那一档不印出来，下一次存活还是靠人回想 329").toMatch(/其中针脚长在「≥2 条 return」的函数里 \$\{String\(multiExit\.length\)\} 条/du);
+    expect(script, "存活提示的守卫被拆掉（写成 false、或把阈值挪到 0）＝这一格对所有锚点一律喊，或永远不喊").toMatch(
+      /^ {2}const exitCell = r !== undefined && typeof r\.returns === "number" && r\.returns >= 2$/mu);
+    expect(script, "hint 不接进存活那条红＝算了不印").toMatch(/\+ exitCell;$/mu);
   });
 });

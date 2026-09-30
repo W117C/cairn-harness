@@ -10205,7 +10205,7 @@ const MUTATIONS = [
     test: "tests/mutate-verify-gates.test.ts",
     desc: "退回「只切到 needle 起点」⇒ 针脚写在**声明行**上时取到的是上一条函数（本仓第 260 页的探针在真文件上逮到的：`certTreeAbs` 被读成 `mainRootFromCommonDir`）。" +
       "这一格坏法的后果是双向的：兄弟用例可能被误判 wired，真接线也可能被误判 suspect——而它看起来像尺在正常工作",
-    apply: (s) => s.replace(`const lineEnd = srcText.indexOf("\\n", needleIndex);`, "const lineEnd = needleIndex;"),
+    apply: (s) => s.replace("  for (let i = needleLine; i >= 0; i -= 1) {", "  for (let i = needleLine - 1; i >= 0; i -= 1) {"),
     expectFail: "needle 就写在声明行上时取的是**这一行**的函数名（只切到 needle 起点会把声明行切掉）",
   },
   {
@@ -10214,7 +10214,7 @@ const MUTATIONS = [
     test: "tests/mutate-verify-gates.test.ts",
     desc: "把函数体里的局部 `const m = …` 当成边界就 return null ⇒ 大量正常锚点全落进「判不了」，" +
       "这一格从读数退化成空读数（比误喊更隐蔽：汇总行看着像「尺很谨慎」）。只有列 0 的数据声明才是边界",
-    apply: (s) => s.replace("      if (/^\\S/u.test(line)) return null;\n      continue;", "      return null;\n      // eslint-disable-next-line no-unreachable"),
+    apply: (s) => s.replace('    if (/^\\S/u.test(line)) return "boundary";\n    return null;', '    return "boundary";\n    return null;'),
     expectFail: "needle 就写在声明行上时取的是**这一行**的函数名（只切到 needle 起点会把声明行切掉）",
   },
   {
@@ -10324,6 +10324,60 @@ const MUTATIONS = [
     apply: (s) => s.replace("if (timingReading !== null) say(", "if (false && timingReading !== null) say("),
     expectFail: "接线：head-cert 真开了 json 出口、真算这一格、真印进汇总，而且取料在被认证的那棵树里",
   },
+  {
+    id: "exits-span-decl-line-length-dropped",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "算函数体终点时少加声明行那一段长度 ⇒ 体被切短、数出来的 return 比实际少（第 263 页我自己就这么写错过一次，" +
+      "是判卷把 2 读成 0 才抓住的）；少报出口＝存活提示永远闭嘴",
+    apply: (s) => s.replace('let end = from + (lines[declLine] ?? "").length + 1;', "let end = from;"),
+    expectFail: "出口计数：一段函数里有几条 return 就报几条；「数不出来」是 null，不许并进 1 条（第 263 页）",
+  },
+  {
+    id: "exits-span-end-boundary-dropped",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "体的收尾认不出列 0 的右花括号 ⇒ 范围一路扩到文件末尾，把后面每条函数的 return 都算进这一格 ⇒ " +
+      "「≥2 条出口」对所有锚点一律成立，提示就变成噪声（第 263 页）",
+    apply: (s) => s.replace('if (/^\\}/u.test(lines[i] ?? "")) {', 'if (/^\\}\\}\\}/u.test(lines[i] ?? "")) {'),
+    expectFail: "出口计数：体范围停在列 0 的收尾——下一条函数的 return 不许算进来（数多了等于这把尺没边界）",
+  },
+  {
+    id: "exits-count-replaced-by-constant",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "return 计数写死成 1 ⇒ 这一格从读数退化成常数（规则 242：一片相同的数不是测量），" +
+      "而它正是「存活要不要补输入」那唯一的信息来源（第 263 页）",
+    apply: (s) => s.replace("(body.match(/\\breturn\\b/gu) ?? []).length", "1"),
+    expectFail: "出口计数·真机：suiteRows 那一格现在自己说得出「几条出口」——第 262 页那条存活要有能印出来的成因",
+  },
+  {
+    id: "exits-null-merged-into-one",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "「数不出包围函数」回 1 条而不是 null ⇒ no-symbol 那一档混进「单出口」，" +
+      "读起来像量过了（第 263 页；规则 239/261 三态分开印）",
+    apply: (s) => s.replace("if (span === null) return null;", 'if (span === null) return { name: "", returns: 1 };'),
+    expectFail: "接线普查：rows 里 returns 跟着 kind 走——no-symbol／no-needle 那两档必须是 null 而不是 0",
+  },
+  {
+    id: "exits-hint-guard-dropped",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "存活提示的出口那一半被摘掉（或阈值挪到 0）⇒ 要么对每条锚点都喊、要么永远不喊，" +
+      "而第 262 页那条存活本来能被这句话直接指到成因（规则 329）",
+    apply: (s) => s.replace('\n  const exitCell = r !== undefined && typeof r.returns === "number" && r.returns >= 2', '\n  const exitCell = false'),
+    expectFail: "接线：门那一行要连着印「可数面／多出口数」，wiringHint 那条守卫的结构不许漂",
+  },
+  {
+    id: "exits-census-not-spoken",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "普查行把可数面与多出口那两格印成常数 ⇒ 这把尺开了张却没人读得到真数（第 263 页现读 961／533，" +
+      "而 961＋175＋3＝1139 这个同分母等式也就没人核了）",
+    apply: (s) => s.replace('\n    `｜出口数可数 ${String(countable.length)} 条，其中针脚长在「≥2 条 return」的函数里 ${String(multiExit.length)} 条` +', '\n    `｜出口数可数 0 条` +'),
+    expectFail: "接线：门那一行要连着印「可数面／多出口数」，wiringHint 那条守卫的结构不许漂",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
@@ -10347,10 +10401,17 @@ function wiringHint(m) {
     id: m.id, srcRel: m.src ?? "", needle: extractNeedle(m.apply), test: m.test ?? "", expectFail: m.expectFail ?? "",
   }], { readSrc: readAnchorFace, readTest: readAnchorFace });
   const r = rows[0];
-  if (r === undefined || r.kind !== "suspect" || r.symbol === null) return "";
+  // 第二半（第 263 页）：把「针脚那段函数有几条 return」一起报出来。
+  // 动因是第 262 页实测的一条存活——`suiteRows` 有四条 return，判卷只喂到两条，第三条上的锚点**永远活**，
+  // 而当时的提示只讲"指针指错了没"，那句对这一种成因完全没用（它甚至不是 suspect，是 wired）。
+  const exitCell = r !== undefined && typeof r.returns === "number" && r.returns >= 2
+    ? `\n  ↳ 出口计数：函数「${String(r.symbol)}」里有 ${String(r.returns)} 条 return ⇒ 存活时先问「判卷喂到了第几支」，`
+      + "补一条能让那一支走到的输入（规则 329）；**别撤锚点、别改针脚**——撤掉就是把那支出口重新变回没人守"
+    : "";
+  if (r === undefined || r.kind !== "suspect" || r.symbol === null) return exitCell;
   return `\n  ↳ 指针接线预检：针脚长在函数「${r.symbol}」里，而「${m.expectFail}」那条用例体一次没提它` +
     "⇒ 先排「指针指向不会红的那条」（规则 325 那一次就是这个形状），再谈判卷无分辨力；" +
-    "用例若确实从上游入口打进来，这一句忽略即可（静态代理会误喊，实测假疑空 680/1123）";
+    "用例若确实从上游入口打进来，这一句忽略即可（静态代理会误喊，实测假疑空 680/1123）" + exitCell;
 }
 
 /** 针脚体检：blocking = 这条变异是空操作（它在假装守护）；warn = 针脚命中多处，
@@ -10489,10 +10550,16 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
   const wiring = wiringCensus(wiringRows);
   const wiringUnknown = wiring["no-symbol"] + wiring["no-needle"] + wiring["no-title"] + wiring.unreadable;
   const suspectSample = wiringRows.filter((r) => r.kind === "suspect").slice(0, 8).map((r) => r.id);
+  // 第 263 页那一格：能数出 return 出口的那几条里，有多少条落在「多出口」函数上——
+  // 这一档是「存活了但判卷没错」的候选池（成因＝判卷没喂到那一支，修法＝补输入，见规则 329）。
+  const countable = wiringRows.filter((r) => typeof r.returns === "number");
+  const multiExit = countable.filter((r) => (r.returns ?? 0) >= 2);
   console.log(`ℹ️  指针接线（**线索，不进门禁**：静态代理按全表量会误喊，多数判卷从上游入口打进来；它只在「变异存活」那条红后面给方向）：` +
     `接上 ${String(wiring.wired)}／疑空 ${String(wiring.suspect)}／判不了 ${String(wiringUnknown)}` +
     `（疑空＝needle 所在函数名在那条用例体里一次都没出现；判不了的四类：无包围函数 ${String(wiring["no-symbol"])}、抽不出针脚或针脚不在源文件 ${String(wiring["no-needle"])}、` +
-    `标题不在这份判卷 ${String(wiring["no-title"])}、两面任一读不到 ${String(wiring.unreadable)}）${suspectSample.length === 0 ? "" : "｜样本 " + suspectSample.join("、")}`);
+    `标题不在这份判卷 ${String(wiring["no-title"])}、两面任一读不到 ${String(wiring.unreadable)}）${suspectSample.length === 0 ? "" : "｜样本 " + suspectSample.join("、")}` +
+    `｜出口数可数 ${String(countable.length)} 条，其中针脚长在「≥2 条 return」的函数里 ${String(multiExit.length)} 条` +
+    `（存活时先问判卷喂到了第几支，别撤锚点：规则 329）`);
   // 一次求和、两处使用（汇总里印出来的数与 exit 码用的是同一个值；分开算就可能各说各话）。
   const blockingTotal = blockingTotalOf({
     needle: blocking.length, duplicateIds: dup.length, untracked: untracked.length, drift: drift.length,
