@@ -210,6 +210,10 @@ export interface CredPage {
   title: string;
   dirs: string[];
   numbers: string[];
+  /** 这一页**自己提到**的提交号（7 位前缀，取自整段体里出现的 hex token）。
+   *  口径要偏宽：只用来**放行**（证人身份在集合里＝强证），不用来制造红——
+   *  写死几种句式会让「页换了措辞」变成一条假弱证。 */
+  shas: string[];
 }
 
 /** 凭证页＝标题含「凭证」的那几段；`key` 取「第 NNN 页」，比整条标题稳（改措辞不该让豁免失效）。 */
@@ -231,7 +235,9 @@ export function credentialPages(text: string): CredPage[] {
       for (const m of body.matchAll(new RegExp(re.source, "gu"))) numbers.add(m[1]!);
     }
     const key = /第 \d+ 页/u.exec(head)?.[0] ?? head.slice(0, 16);
-    out.push({ key, title: head.replace(/^### /u, ""), dirs, numbers: [...numbers].sort() });
+    // 页提到的提交号：段体内所有 7～40 位 hex token（含 `本笔（\`sha\`）`、`@\`sha\``、`TREE=<sha>` 各种写法）。
+    const shas = [...new Set([...body.matchAll(/\b([0-9a-f]{7,40})\b/gu)].map((m) => m[1]!.slice(0, 7)))].sort();
+    out.push({ key, title: head.replace(/^### /u, ""), dirs, numbers: [...numbers].sort(), shas });
   });
   return out;
 }
@@ -249,6 +255,34 @@ export function sourcedReadings(face: string): Set<string> {
   for (const re of CRED_NUMBER_RES) for (const m of clean.matchAll(new RegExp(re.source, "gu"))) out.add(m[1]!);
   return out;
 }
+
+/** 取料面按**文件**交给这一格（从前只交一整块拼起来的文本）：弱证那一档要问的是「这行原文出自哪个文件」，
+ *  拼完就问不出来了（第 269 页）。 */
+export interface CredFaceFile {
+  name: string;
+  text: string;
+}
+
+/** 一个工件属于**哪一趟**：只认 `head-cert` 自己印的两行结构化形状，不按子串、不认散文里的 sha。
+ *  第 268 页的教训——子串身份判据会被我自己的探针日志（它原样印出台账 sha）冒充证人。 */
+export const CRED_RUN_SHA_RES: readonly RegExp[] = [
+  /目标提交：([0-9a-f]{7,40})/u,
+  /已核：TREE=([0-9a-f]{7,40})/u,
+];
+export function credRunShas(text: string): string[] {
+  const clean = stripAnsi(text);
+  const out = new Set<string>();
+  for (const re of CRED_RUN_SHA_RES) for (const m of clean.matchAll(new RegExp(re.source, "gu"))) out.add(m[1]!.slice(0, 7));
+  return [...out].sort();
+}
+
+/** 弱证＝读数在页点名的面里**确有原文**，但那几行原文所在文件的身份行不属于本页提到的任何一趟。
+ *  现读登记（第 269 页，`identity.mts` 扫全仓 durable 面的第一把读数）：**只准调低**。
+ *  存量两种责任都要在这里说清，否则帽会被读成「全是缺陷」：
+ *  ① 合法跨趟引用（页里明说「上一笔同结构认证」，但没写那一笔的 sha——第 226 页 `real 158.55s`）；
+ *  ② 真错指（页声称认证 `10bf910`，面上唯一的日志写着 `目标提交：3b3d001`——第 255 页的 `256`／`3356`）。
+ *  前者要靠补 sha 把它变强证，后者要么补工件要么更正那一页——都不许靠调大帽解决。 */
+export const CRED_WEAK_WITNESS_CAP = 8;
 /** 未点名取料目录的凭证页，按**页**记名（`第 NNN 页` key，Set 去重——同页有多个 `###` 段时不重复计）。
  *  帽跟着现读走，**只准调低**（计数类不留余量）：再写一笔不点名 `outputs/<主题>-YYYY-MM-DD/` 的凭证页 ⇒ D-9 当场红。
  *  为什么这一档要单独长读数：从前只印条数，没人知道是**哪几页**，于是第 262/263/264 三页凭证（8/6/6 条读数）
@@ -257,18 +291,29 @@ export function sourcedReadings(face: string): Set<string> {
  *  11（第 265 页点名自己三页）→ 9（第 268 页按 `dir-hunt` 的现读把工件其实还在盘上的两页点名：第 167、257 页）。 */
 export const CRED_UNNAMED_PAGE_CAP = 9;
 
+/** 弱证的一行：页 key＋读数＋顶上它的那几个文件（含那些文件自己声明的趟号）。 */
+export interface CredWeakWitness {
+  key: string;
+  num: string;
+  files: string[];
+  runs: string[];
+}
+
 export function checkCredentialSources(
   pages: readonly CredPage[],
-  readFace: (dir: string) => string | null,
+  readFace: (dir: string) => CredFaceFile[] | null,
   waivers: Readonly<Record<string, string>> = UNSOURCED_READINGS,
   cap: number = CRED_UNNAMED_PAGE_CAP,
-): { findings: Finding[]; checked: number; unmatched: number; unnamed: number; unnamedPages: string[] } {
+  weakCap: number = CRED_WEAK_WITNESS_CAP,
+): { findings: Finding[]; checked: number; unmatched: number; unnamed: number; unnamedPages: string[]; weak: CredWeakWitness[]; weakUnjudged: number } {
   const out: Finding[] = [];
   const seenKeys = new Set<string>();
   const unnamedPageKeys = new Set<string>();
+  const weak: CredWeakWitness[] = [];
   let checked = 0;
   let unmatched = 0;
   let unnamed = 0;
+  let weakUnjudged = 0;
   for (const p of pages) {
     if (p.numbers.length === 0) continue;
     if (p.dirs.length === 0) unnamedPageKeys.add(p.key);
@@ -278,8 +323,15 @@ export function checkCredentialSources(
     if (p.dirs.length === 0) { unnamed += p.numbers.length; unverifiable(); continue; }   // 未点名＝未检，不红
     const blobs = p.dirs.map(readFace);
     if (blobs.every((b) => b === null)) { unmatched += p.numbers.length; unverifiable(); continue; }   // 取不到＝未检，也不红
-    const face = blobs.filter((b): b is string => b !== null).join("\n");
-    const found = sourcedReadings(face);
+    /* 按文件算一份"这个文件里有哪些读数、它属于哪一趟"，页内多条数共用。
+       从前这里只拼一整块文本 ⇒ 能问出「数在不在面上」，问不出「是谁替这个数作的证」（第 269 页）。
+       读数集合取各文件的并集，与从前拼块再抽的差别只在**跨文件边界的拼接形状**上：那种匹配本就不算原文。 */
+    const perFile = p.dirs
+      .map((d, i) => ({ dir: d, list: blobs[i] }))
+      .flatMap((x) => (x.list === null
+        ? []
+        : x.list.map((f) => ({ where: `${x.dir}/${f.name}`, nums: sourcedReadings(f.text), runs: credRunShas(f.text) }))));
+    const found = new Set<string>(perFile.flatMap((f) => [...f.nums]));
     for (const num of p.numbers) {
       checked++;
       const waiverKey = `${p.key}|${num}`;
@@ -287,7 +339,19 @@ export function checkCredentialSources(
       const waived = waiverKey in waivers;
       // 取料面已经能顶住的那条，豁免就成了多余登记——留着的代价是"下一位读者以为这数仍查不到"。
       if (waived && sourced) seenKeys.add(waiverKey + "|已入库");
-      if (sourced) continue;
+      if (sourced) {
+        const witnesses = perFile.filter((f) => f.nums.has(num));
+        const identified = witnesses.filter((f) => f.runs.length > 0);
+        if (identified.length === 0) weakUnjudged++;          // 证人里没有身份行 ⇒ 这一格无从判，不冒充读数
+        else if (!identified.some((f) => f.runs.some((r) => p.shas.includes(r)))) {
+          weak.push({
+            key: p.key, num,
+            files: identified.map((f) => f.where),
+            runs: [...new Set(identified.flatMap((f) => f.runs))].sort(),
+          });
+        }
+        continue;
+      }
       if (waived) { seenKeys.add(waiverKey); continue; }
       out.push({ rule: "D-9", file: CREDLEDGER_FILE, detail: `${p.key}（${p.title.slice(0, 28)}）里的读数「${num}」在它点名的取料面里找不到原文：${p.dirs.join("、")}` });
     }
@@ -304,7 +368,14 @@ export function checkCredentialSources(
     out.push({ rule: "D-9", file: CREDLEDGER_FILE,
       detail: `凭证页未点名取料目录 ${String(unnamedPageKeys.size)} 页 > 帽 ${String(cap)}（CRED_UNNAMED_PAGE_CAP，只准调低）⇒ 新写的凭证页必须点名 outputs/<主题>-YYYY-MM-DD/，否则它引用的每个读数都不在对账面里。最近的几页：${[...unnamedPageKeys].slice(-5).join("、")}` });
   }
-  return { findings: out, checked, unmatched, unnamed, unnamedPages: [...unnamedPageKeys] };
+  // 弱证同理：数量超出登记的那一格才红——「数对上了但证人属于别趟」是新账，旧账要么补 sha 要么更正页。
+  if (weak.length > weakCap) {
+    out.push({ rule: "D-9", file: CREDLEDGER_FILE,
+      detail: `弱证 ${String(weak.length)} 对 > 帽 ${String(weakCap)}（CRED_WEAK_WITNESS_CAP，只准调低）⇒ 这些数在页点名的面里确有原文，可那几行出自**别的一趟**：`
+        + weak.slice(0, 5).map((w) => `${w.key}｜读数 ${w.num}←${w.files.join("、")}（那一趟＝${w.runs.join("、")}）`).join("；")
+        + `。修法只有两种：页里把被引用那一趟的提交号写出来，或把本页自己那趟的日志入库。` });
+  }
+  return { findings: out, checked, unmatched, unnamed, unnamedPages: [...unnamedPageKeys], weak, weakUnjudged };
 }
 
 /* ------------------------------------------------------------------ D-2 / D-4 / D-7 */
@@ -648,9 +719,11 @@ export function runDocsCheck(): {
       const abs = join(ROOT, "outputs", dir);
       if (!existsSync(abs)) return null;
       try {
-        return readdirSync(abs).filter((f) => !f.endsWith(".mjs"))
-          .map((f) => { try { return readFileSync(join(abs, f), "utf8"); } catch { return ""; } })
-          .join("\n");
+        return readdirSync(abs).filter((f) => !f.endsWith(".mjs")).map((f) => {
+          let text = "";
+          try { text = readFileSync(join(abs, f), "utf8"); } catch { text = ""; }
+          return { name: f, text };
+        });
       } catch { return null; }
     },
   );
@@ -701,7 +774,8 @@ if (invokedDirectly) {
   // 「未检」要能归到页：只有条数没人知道是哪几页 ⇒ 第 265 页补上按页的第四档与帽。
   console.log(`  凭证对账面：可比对 ${String(cred.checked)} 个读数（红 ${String(cred.findings.length)}）`
     + `｜页未点名取料目录 ${String(cred.unnamed)} 个＝未检｜未点名页 ${String(cred.unnamedPages.length)} 页（帽 ${String(CRED_UNNAMED_PAGE_CAP)}，只准调低）`
-    + `｜点名但目录读不到 ${String(cred.unmatched)} 个＝取不到｜登记不可回查 ${String(Object.keys(UNSOURCED_READINGS).length)} 条`);
+    + `｜点名但目录读不到 ${String(cred.unmatched)} 个＝取不到｜登记不可回查 ${String(Object.keys(UNSOURCED_READINGS).length)} 条`
+    + `｜弱证 ${String(cred.weak.length)} 对（帽 ${String(CRED_WEAK_WITNESS_CAP)}，只准调低）｜证人无身份行 ${String(cred.weakUnjudged)} 对＝这一格无从判`);
   if (waived > 0) console.log(`  ⚠️  存量豁免 ${String(waived)} 处（LEGACY_WAIVERS，只准调低；spec §8 迁移提交须整条删除）`);
   const summary = [...byRule].map(([r, n]) => `${r}=${String(n)}`).join(" ");
   if (findings.length === 0) {

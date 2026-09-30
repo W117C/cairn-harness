@@ -10016,9 +10016,68 @@ const MUTATIONS = [
     src: "scripts/docs-check.ts",
     test: "tests/docs-check.test.ts",
     desc: "谓词算出来了却不接进判定（喂一个空集合）⇒ 每条点名的读数都悬空、每一页都红，" +
-      "而『零红』那一半的证人必须在这儿翻过来——只印不接的尺在本仓已咬过两次（规则 230/246）",
-    apply: (s) => s.replace("  const found = sourcedReadings(face);", "  const found = new Set<string>();"),
+      "而『零红』那一半的证人必须在这儿翻过来——只印不接的尺在本仓已咬过两次（规则 230/246）。" +
+      "第 269 页把这句从整块文本换成按文件并集，针脚跟着实现走（规则 229），判定语义没变",
+    apply: (s) => s.replace("    const found = new Set<string>(perFile.flatMap((f) => [...f.nums]));", "    const found = new Set<string>();"),
     expectFail: "点了名且数在面里 ⇒ 可比对计数涨、零红",
+  },
+
+  /* ── 第 269 页：D-9 的回查端从前只问「数在不在面上」，不问「是谁替它作的证」。
+     现读把这条差别量出来了：179 个可比对读数里 8 对的证人属于**别的一趟**（第 255 页声称认证 `10bf910`，
+     可它点名的目录里唯一的日志印的是 `目标提交：3b3d001`）。六支各钉一种坏法：
+     身份比对被恒真／第三态并进弱证／帽比较 off-by-one／身份表少一种形状／页侧 sha 不接／那列被印成常数。 ── */
+  {
+    id: "docscheck-cred-weak-identity-comparison-cleared",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "把「证人那一趟属不属于本页」的比对换成恒不成立 ⇒ 再也没有弱证，" +
+      "别趟的日志只要数值撞对就能替本页作证（这一格从此永远绿，而它防的就是第 255 页那种错指）",
+    apply: (s) => s.replace("        else if (!identified.some((f) => f.runs.some((r) => p.shas.includes(r)))) {", "        else if (false) {"),
+    expectFail: "弱证三态：证人身份与本页对上＝强证；对不上＝弱证并点名文件与那一趟；证人没有身份行＝第三态",
+  },
+  {
+    id: "docscheck-cred-weak-no-identity-folded-into-weak",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "把「证人没有身份行」并进弱证 ⇒ 帽会被没印 sha 的日志灌满，" +
+      "而真缺陷（身份对不上）反而被淹没——三态混成两态是本仓反复咬过的形状（规则 239/300）",
+    apply: (s) => s.replace("        if (identified.length === 0) weakUnjudged++;", "        if (identified.length === 0) weak.push({ key: p.key, num, files: [], runs: [] });"),
+    expectFail: "弱证三态：证人身份与本页对上＝强证；对不上＝弱证并点名文件与那一趟；证人没有身份行＝第三态",
+  },
+  {
+    id: "docscheck-cred-weak-cap-comparison-offbyone",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "弱证帽的比较从「超出」改成「达到」⇒ 现读那一格永远红，下一位只会去把帽调大或把门关掉",
+    apply: (s) => s.replace("  if (weak.length > weakCap) {", "  if (weak.length >= weakCap) {"),
+    expectFail: "弱证帽只在超出时出声，且 detail 点名是哪一页、哪个数、哪份证人",
+  },
+  {
+    id: "docscheck-cred-run-sha-tree-form-not-registered",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "身份表里删掉 `已核：TREE=` 那一行 ⇒ 只有汇总行没有「目标提交」的工件一律被读成「没有身份行」，" +
+      "弱证那一档当场退化成 0，而这正是第 255 页那类日志的形状",
+    apply: (s) => s.replace("  /已核：TREE=([0-9a-f]{7,40})/u,\n", ""),
+    expectFail: "身份只认门自己印的两行结构化形状（带 ANSI 也要认）；散文里提到 sha 不算身份",
+  },
+  {
+    id: "docscheck-cred-page-shas-derived-but-not-attached",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "页侧提交号抽出来却不挂进返回的页对象（给空数组）⇒ 每一页的证人身份都「对不上」，" +
+      "强证那一半永远没有证人，帽会被自己的存量顶穿（派生完不接线＝第二个注入面，规则 330）",
+    apply: (s) => s.replace("    const shas = [...new Set([...body.matchAll(/\\b([0-9a-f]{7,40})\\b/gu)].map((m) => m[1]!.slice(0, 7)))].sort();", "    const shas: string[] = [];"),
+    expectFail: "页侧提交号从段体抽：本笔那个要进集合，日期与短 token 不算",
+  },
+  {
+    id: "docscheck-cred-weak-print-pinned-to-zero",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "汇总行把弱证那列印成常数 0 ⇒ 判定还在跑、门照退红，但人读到的那一格永远是「没事」" +
+      "（本仓老事故：汇总行不等于退出码，给人看的那一行也要有证人，规则 206/253）",
+    apply: (s) => s.replace("｜弱证 ${String(cred.weak.length)} 对（帽", "｜弱证 ${String(0)} 对（帽"),
+    expectFail: "接线：主段把「未点名页」连同帽一起印出来，且判定真拿帽去比（只算不印＝这格永远没人看）",
   },
 
   /* ── 第 267 页（任务 #12）：认证趟**自己**报墙钟。这一格的动因不是美学——第 265/266 两笔凭证都写着
@@ -10081,8 +10140,9 @@ const MUTATIONS = [
     src: "scripts/docs-check.ts",
     test: "tests/docs-check.test.ts",
     desc: "把「在取料面里找到」那个判据反过来 ⇒ 有原文的读数全被报成悬空、没原文的全放过：这条门从此只会喊狼，" +
-      "而红海的下一次反应是把它关掉。所以正相那一半（对得上＝零红）必须有独立用例钉",
-    apply: (s) => s.replace("      if (sourced) continue;", "      if (!sourced) continue;"),
+      "而红海的下一次反应是把它关掉。所以正相那一半（对得上＝零红）必须有独立用例钉。" +
+      "第 269 页那句从 `if (sourced) continue;` 长成了带弱证分类的块，针脚跟着实现走（规则 229）",
+    apply: (s) => s.replace("      if (sourced) {", "      if (!sourced) {"),
     expectFail: "点了名且数在面里 ⇒ 可比对计数涨、零红",
   },
 
@@ -10129,8 +10189,9 @@ const MUTATIONS = [
     id: "docscheck-cred-return-drops-unnamed-pages",
     src: "scripts/docs-check.ts",
     test: "tests/docs-check.test.ts",
-    desc: "算出来了却不返回（从返回体里丢掉这一格）⇒ 门那一步拿到 undefined，按页那一档当场消失，条数那一档照印不误",
-    apply: (s) => s.replace("return { findings: out, checked, unmatched, unnamed, unnamedPages: [...unnamedPageKeys] };", "return { findings: out, checked, unmatched, unnamed };"),
+    desc: "算出来了却不返回（从返回体里丢掉这一格）⇒ 门那一步拿到 undefined，按页那一档当场消失，条数那一档照印不误。" +
+      "第 269 页返回体长出 weak／weakUnjudged 两格，针脚跟着换行（规则 229）；丢 unnamedPages 这一半的坏法不变",
+    apply: (s) => s.replace("return { findings: out, checked, unmatched, unnamed, unnamedPages: [...unnamedPageKeys], weak, weakUnjudged };", "return { findings: out, checked, unmatched, unnamed, weak, weakUnjudged };"),
     expectFail: "未点名要按页记名：同一页的两个段合成一页，点名的页不许混进这一档",
   },
   {

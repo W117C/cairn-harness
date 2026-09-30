@@ -1,0 +1,15 @@
+身份核对：配到证人 178 对（页已点名目录、且该读数在面上有原文）
+  同一趟（强证）83｜别趟数值撞对（弱证）8｜面上无身份行（无从判）87
+  ⚠️ 弱证：第 226 页|读数 158.55｜证人里没有本页提到的那一趟：hard-gate-block-witness-2026-09-30/head-cert-2735051.log（2735051）
+  ⚠️ 弱证：第 255 页|读数 256｜证人里没有本页提到的那一趟：cert-251-threading-2026-10-01/head-cert-10bf910.log（3b3d001）
+  ⚠️ 弱证：第 255 页|读数 3356｜证人里没有本页提到的那一趟：cert-251-threading-2026-10-01/head-cert-10bf910.log（3b3d001）
+  ⚠️ 弱证：第 265 页|读数 1｜证人里没有本页提到的那一趟：cred-face-coverage-2026-10-01/triage-flips.log（2b3763f）
+  ⚠️ 弱证：第 265 页|读数 102｜证人里没有本页提到的那一趟：cred-face-coverage-2026-10-01/triage-flips.log（2b3763f）
+  ⚠️ 弱证：第 265 页|读数 182.12｜证人里没有本页提到的那一趟：pointer-wiring-observer-2026-10-01/head-cert-dfe2d6c.log（dfe2d6c）
+  ⚠️ 弱证：第 265 页|读数 182.12｜证人里没有本页提到的那一趟：pointer-wiring-observer-2026-10-01/head-cert-dfe2d6c.log（dfe2d6c）
+  ⚠️ 弱证：第 265 页|读数 6｜证人里没有本页提到的那一趟：cred-face-coverage-2026-10-01/triage-flips.log（2b3763f）
+哨兵：本页 sha 集合来自页段体，页里没提到的趟一律算弱证——所以「弱证」的口径是**身份对不上**，不是「数错」
+real 0.67
+user 0.48
+sys 0.10
+IDENTITY_EXIT=0

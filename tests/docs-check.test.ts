@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import {
   checkCredentialSources, CREDLEDGER_FILE, CRED_UNNAMED_PAGE_CAP, credentialPages, LEDGER_FILE, ledgerRevFace, ledgerRevTokens,
+  credRunShas, CRED_WEAK_WITNESS_CAP,
   LEDGER_NON_REV, runDocsCheck, sourcedReadings, UNSOURCED_READINGS,
 } from "../scripts/docs-check";
 import { REPLAY_READINGS, countInlineReplay, type ReplayReading } from "../scripts/replay-readings";
@@ -434,8 +435,13 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
     `### 2026-09-30 · 第 900 页 凭证：测试页\n\n取料：${dirs.map((d) => `outputs/${d}/`).join("、")}\n`
       + nums.map((n) => `Test Files ${n} passed`).join("｜") + "\n";
 
-  /** 假取料面：目录名 → 内容；null 表示"目录读不到"。 */
-  const face = (map: Record<string, string | null>) => (dir: string): string | null => map[dir] ?? null;
+  /** 假取料面：目录名 → 目录里的文件；null／缺失表示"目录读不到"。
+   *  第 269 页起契约是**按文件**交（从前交一整块拼好的文本）——弱证那一档要问「是哪份文件替这个数作的证」，
+   *  拼完就问不出来了。这里的单文件没有身份行 ⇒ 走「证人无身份行＝无从判」那一态。 */
+  const face = (map: Record<string, string | null>) => (dir: string): { name: string; text: string }[] | null => {
+    const text = map[dir];
+    return text === undefined || text === null ? null : [{ name: "face.log", text }];
+  };
 
   it("点了名且数在面里 ⇒ 可比对计数涨、零红", () => {
     const r = checkCredentialSources(credentialPages(page(["x-2026-09-30"], ["253"])), face({ "x-2026-09-30": "Test Files 253 passed" }), {});
@@ -508,8 +514,11 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
     const r = checkCredentialSources(pages, (dir) => {
       const abs = fileURLToPath(new URL(`../outputs/${dir}`, import.meta.url));
       if (!existsSync(abs)) return null;
-      return readdirSync(abs).filter((f) => !f.endsWith(".mjs"))
-        .map((f) => { try { return readFileSync(join(abs, f), "utf8"); } catch { return ""; } }).join("\n");
+      return readdirSync(abs).filter((f) => !f.endsWith(".mjs")).map((f) => {
+        let text = "";
+        try { text = readFileSync(join(abs, f), "utf8"); } catch { text = ""; }
+        return { name: f, text };
+      });
     });
     expect(r.checked, `可比对只有 ${String(r.checked)} 个 ⇒ 取料面塌了`).toBeGreaterThanOrEqual(50);
     expect(r.findings.map((f) => f.detail)).toEqual([]);
@@ -539,6 +548,54 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
     expect(overCap.findings[0]?.detail).toContain("CRED_UNNAMED_PAGE_CAP");
   });
 
+  /* ── 第 269 页：数对上了，还要问「是哪份文件替它作的证、那一趟是不是本页的」。
+        立它的现读：真仓 179 个可比对读数里，8 对的证人属于别趟（第 226 页 `real 158.55s`＝合法跨趟引用没写 sha；
+        第 255 页声称认证 `10bf910`，可面上唯一的日志印的是 `目标提交：3b3d001`）。 ── */
+  it("弱证三态：证人身份与本页对上＝强证；对不上＝弱证并点名文件与那一趟；证人没有身份行＝第三态", () => {
+    const foreign = [{ name: "head-cert-abcdef1.log", text: "目标提交：abcdef1\nTest Files 253 passed" }];
+    const weak = checkCredentialSources(credentialPages(page(["x-2026-09-30"], ["253"])), () => foreign, {}, 99, 8);
+    expect(weak.weak, `数在面上确有原文，但证人那一趟不属于本页 ⇒ 该出声，实际：${JSON.stringify(weak.weak)}`).toHaveLength(1);
+    expect(weak.weak[0]?.files).toEqual(["x-2026-09-30/head-cert-abcdef1.log"]);
+    expect(weak.weak[0]?.runs).toEqual(["abcdef1"]);
+    expect(weak.checked, "弱证照样进可比对分母（这一档问的是证人身份，不是有没有原文）").toBe(1);
+
+    const own = [{ name: "head-cert-abcdef1.log", text: "目标提交：abcdef1\nTest Files 253 passed" }];
+    const strong = checkCredentialSources(
+      credentialPages("### 2026-09-30 · 第 900 页 凭证：本笔（`abcdef1`）认证 253 文件\n\n取料：outputs/x-2026-09-30/\nTest Files 253 passed\n"),
+      () => own, {}, 99, 0);
+    expect(strong.weak, "证人就是本页那一趟 ⇒ 强证，不该占用弱证的帽").toEqual([]);
+
+    const noId = checkCredentialSources(credentialPages(page(["x-2026-09-30"], ["253"])), () => [{ name: "judges.log", text: "Test Files 253 passed" }], {}, 99, 0);
+    expect(noId.weak, "判不出来就当弱证 ⇒ 帽会被没有身份行的日志灌满").toEqual([]);
+    expect(noId.weakUnjudged, "第三态要单独出声，不许被读成『都已核对』").toBe(1);
+  });
+
+  it("弱证帽只在超出时出声，且 detail 点名是哪一页、哪个数、哪份证人", () => {
+    const faceFn = () => [{ name: "head-cert-abcdef1.log", text: "目标提交：abcdef1\nTest Files 253 passed" }];
+    const pages = credentialPages(page(["x-2026-09-30"], ["253"]));
+    expect(checkCredentialSources(pages, faceFn, {}, 99, 1).findings, "帽＝现读；等于现读就红的话这一格永远红，没人能降下来").toEqual([]);
+    const over = checkCredentialSources(pages, faceFn, {}, 99, 0);
+    expect(over.findings).toHaveLength(1);
+    expect(over.findings[0]?.rule).toBe("D-9");
+    expect(over.findings[0]?.detail).toContain("第 900 页");
+    expect(over.findings[0]?.detail).toContain("CRED_WEAK_WITNESS_CAP");
+    expect(over.findings[0]?.detail).toContain("head-cert-abcdef1.log");
+  });
+
+  it("身份只认门自己印的两行结构化形状（带 ANSI 也要认）；散文里提到 sha 不算身份", () => {
+    const ESC = String.fromCharCode(27);
+    expect(credRunShas("目标提交：2068d6c（--at=HEAD）")).toEqual(["2068d6c"]);
+    expect(credRunShas("已核：TREE=" + "d".repeat(40) + "｜判卷四面在飞 0 项")).toEqual(["ddddddd"]);
+    expect(credRunShas(`${ESC}[1m目标提交：${ESC}[0mabcdef1`), "入库日志的转义正好夹在关键词与 sha 之间").toEqual(["abcdef1"]);
+    expect(credRunShas("隔壁那笔 1748ca7 的 H7 没登记"), "散文里的 sha 不能冒充这份工件的身份（第 268 页：我自己的探针日志原样印出台账 sha 过一次）").toEqual([]);
+  });
+
+  it("页侧提交号从段体抽：本笔那个要进集合，日期与短 token 不算", () => {
+    const p = credentialPages("### 2026-10-01 · 第 902 页 凭证：本笔（`12b1931`）认证 259 文件\n\n取料：outputs/x-2026-10-01/\nTest Files 5 passed\n")[0]!;
+    expect(p.shas).toContain("12b1931");
+    expect(p.shas, "日期各段都短于 7 位，不该被当成 sha；否则每个页都自带一堆假身份").toEqual(["12b1931"]);
+  });
+
   it("严格式要认 vitest 的列对齐形状：两个空格与一个空格的汇总行都得抽到数", () => {
     /* 真机上 vitest 印的是 `Test Files  1 passed (1)`（两个空格），从前正则写死一个空格 ⇒
        真读数一条都抽不到，页里那些数只能靠回查端的裸数位边界偶然兜住（第 265 页现读：4 条）。
@@ -560,6 +617,7 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
   it("真仓：未点名页数跟着现读走——涨了要红，凭空把帽调低也要红（只有真把页点名了才允许降）", () => {
     const cred = runDocsCheck().cred;
     expect(cred.unnamedPages.length, `现读 ${String(cred.unnamedPages.length)} 页 ≠ 帽 ${String(CRED_UNNAMED_PAGE_CAP)} ⇒ 帽要跟着现读改，别只改数`).toBe(CRED_UNNAMED_PAGE_CAP);
+    expect(cred.weak.length, `弱证现读 ${String(cred.weak.length)} 对 ≠ 帽 ${String(CRED_WEAK_WITNESS_CAP)} ⇒ 这一格同样只准跟着现读降（补 sha 或补工件），不许凭空调`).toBe(CRED_WEAK_WITNESS_CAP);
     expect(cred.checked, "可比对分母塌了就不是这一格的账").toBeGreaterThanOrEqual(50);
   }, 60_000);
 
@@ -597,8 +655,12 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
 
   it("接线：回查走 sourcedReadings、它内部真剥色（算出谓词却不接进判定＝这一格永远不响）", () => {
     const src = readFileSync(fileURLToPath(new URL("../scripts/docs-check.ts", import.meta.url)), "utf8");
-    expect(src).toMatch(/^ {4}const found = sourcedReadings\(face\);$/mu);
+    /* 第 269 页把面上的读数集合改成**按文件**再并集（弱证要问是哪份文件作的证），所以这里钉的行跟着换：
+       从前那句 `const found = sourcedReadings(face);` 在 HEAD 里已经不在了，钉着它只会永远红。 */
+    expect(src).toMatch(/^ {4}const found = new Set<string>\(perFile\.flatMap\(\(f\) => \[\.\.\.f\.nums\]\)\);$/mu);
     expect(src).toMatch(/^ {6}const sourced = found\.has\(num\);$/mu);
+    expect(src).toMatch(/^ {8}const witnesses = perFile\.filter\(\(f\) => f\.nums\.has\(num\)\);$/mu);
+    expect(src).toMatch(/^ {8}else if \(!identified\.some\(\(f\) => f\.runs\.some\(\(r\) => p\.shas\.includes\(r\)\)\)\) \{$/mu);
     expect(src).toMatch(/^ {2}const clean = stripAnsi\(face\);$/mu);
     expect(src).toMatch(/^import \{ stripAnsi \} from "\.\/lib\/vitest-summary";$/mu);
   });
@@ -609,8 +671,12 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
     expect(src).toMatch(/^ {2}const unnamedPageKeys = new Set<string>\(\);$/mu);
     expect(src).toMatch(/^ {2}if \(unnamedPageKeys\.size > cap\) \{$/mu);
     expect(src).toMatch(/^ {4}\+ `[^`\n]*未点名页 \$\{String\(cred\.unnamedPages\.length\)\} 页（帽 \$\{String\(CRED_UNNAMED_PAGE_CAP\)/mu);
-    // 反向那一半：返回体丢了 unnamedPages ⇒ 上面两条印不到，这一条先红
-    expect(src).toMatch(/^ {2}return \{ findings: out, checked, unmatched, unnamed, unnamedPages: \[\.\.\.unnamedPageKeys\] \};$/mu);
+    // 第 269 页新加的那半：弱证既要比帽、也要印出来，还得真的把按文件的取料面交给判定
+    expect(src).toMatch(/^ {2}if \(weak\.length > weakCap\) \{$/mu);
+    expect(src).toMatch(/^ {10}return \{ name: f, text \};$/mu);
+    expect(src, "汇总行里弱证那一格要真取 cred.weak.length——印成常数就没人看得见").toMatch(/^ {4}\+ `｜弱证 \$\{String\(cred\.weak\.length\)\} 对（帽 \$\{String\(CRED_WEAK_WITNESS_CAP\)/mu);
+    // 反向那一半：返回体丢了 unnamedPages／weak ⇒ 上面那些印不到，这一条先红
+    expect(src).toMatch(/^ {2}return \{ findings: out, checked, unmatched, unnamed, unnamedPages: \[\.\.\.unnamedPageKeys\], weak, weakUnjudged \};$/mu);
   });
 });
 

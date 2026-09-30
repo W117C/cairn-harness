@@ -1,0 +1,27 @@
+取料面：扫 860 个 durable 文件（outputs/ ＋ docs/，PROGRESS.md 自己排除）
+哨兵：正（3422）runner 命中 2 个文件 ⇒ outputs/cred-unnamed-dirs-2026-10-01/head-cert-2068d6c.log、outputs/head-cert-wallclock-2026-10-01/head-cert-12b1931.log｜负（987654）命中 0 个
+在盘上   ｜第 155 页｜读数 241｜runner 1 个：outputs/landing-1c40df7-2026-09-30/head-cert-summary.txt｜弱证（探针/散文，不采信）1 个：outputs/_audit-claims.md
+不可回查｜第 155 页｜读数 2847｜runner 0 个｜弱证（探针/散文，不采信）0 个
+不可回查｜第 155 页｜读数 9.7｜runner 0 个｜弱证（探针/散文，不采信）0 个
+不可回查｜第 158 页｜读数 2367.1｜runner 0 个｜弱证（探针/散文，不采信）0 个
+不可回查｜第 158 页｜读数 879｜runner 0 个｜弱证（探针/散文，不采信）0 个
+在盘上   ｜第 160 页｜读数 241｜runner 1 个：outputs/landing-1c40df7-2026-09-30/head-cert-summary.txt｜弱证（探针/散文，不采信）1 个：outputs/_audit-claims.md
+不可回查｜第 160 页｜读数 2867｜runner 0 个｜弱证（探针/散文，不采信）0 个
+在盘上   ｜第 161 页｜读数 241｜runner 1 个：outputs/landing-1c40df7-2026-09-30/head-cert-summary.txt｜弱证（探针/散文，不采信）1 个：outputs/_audit-claims.md
+不可回查｜第 161 页｜读数 2883｜runner 0 个｜弱证（探针/散文，不采信）0 个
+在盘上   ｜第 163 页｜读数 241｜runner 1 个：outputs/landing-1c40df7-2026-09-30/head-cert-summary.txt｜弱证（探针/散文，不采信）1 个：outputs/_audit-claims.md
+不可回查｜第 163 页｜读数 2904｜runner 0 个｜弱证（探针/散文，不采信）0 个
+在盘上   ｜第 164 页｜读数 241｜runner 1 个：outputs/landing-1c40df7-2026-09-30/head-cert-summary.txt｜弱证（探针/散文，不采信）1 个：outputs/_audit-claims.md
+不可回查｜第 164 页｜读数 2911｜runner 0 个｜弱证（探针/散文，不采信）0 个
+不可回查｜第 165 页｜读数 1054.4｜runner 0 个｜弱证（探针/散文，不采信）0 个
+在盘上   ｜第 165 页｜读数 241｜runner 1 个：outputs/landing-1c40df7-2026-09-30/head-cert-summary.txt｜弱证（探针/散文，不采信）1 个：outputs/_audit-claims.md
+不可回查｜第 165 页｜读数 2912｜runner 0 个｜弱证（探针/散文，不采信）0 个
+不可回查｜第 166 页｜读数 21479.7｜runner 0 个｜弱证（探针/散文，不采信）0 个
+在盘上   ｜第 168 页｜读数 241｜runner 1 个：outputs/landing-1c40df7-2026-09-30/head-cert-summary.txt｜弱证（探针/散文，不采信）1 个：outputs/_audit-claims.md
+不可回查｜第 168 页｜读数 2922｜runner 0 个｜弱证（探针/散文，不采信）0 个
+小计：未点名 9 页／19 条读数 ⇒ runner 类有原文 7 条、真不可回查 12 条
+帽：现读未点名页数 9 对门上登记的 9（相等＝本页没让这一格涨，也不等于降）
+real 0.42
+user 0.18
+sys 0.07
+SWEEP_EXIT=0
