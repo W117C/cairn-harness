@@ -1,0 +1,22 @@
+Already up to date
+Done in 175ms using pnpm v11.21.0
+$ node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify replay-exec-text-anchor-lost replay-textual-kind-drops-shared-table replay-cascade-drops-command-sentinel replay-cascade-drops-cue-table replay-exec-pkg-cue-recopied --lock-tag=p222-new
+[mutate-verify] checkout exit=0：.worktrees/gate-mutate-verify → fcd521d
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p222-new.lock）
+变异验证：5 条
+✅ replay-exec-text-anchor-lost — 把表里那条 127 线索的行首锚摘掉 ⇒ 被跑命令自己的正文成为第二个注入面（它打印一句「见 [exit code: 127] 一节」就算环境红）。规则 264 在这一族的落点：三个读数面共用一只表，锚定也就只有一处可改——改这里，exec 面、verify 面、cascade 占比分子一起红（第 219 页那条锚点的同型，指针随收敛改指） ｜本机实测 0.7s／2 拍
+✅ replay-textual-kind-drops-shared-table — verify 面的文案栏不再吃取料层那只表 ⇒ 三个面里的一支回退成私有判据。本条红在**跨面那条用例**上（一条输入、三个出口），不是红在措辞上（规则 304） ｜本机实测 0.6s／2 拍
+✅ replay-cascade-drops-command-sentinel — 「没有可验面」那一格不再按 command 判 ⇒ 这一面的分子少一类（旧写法只在正文里找 `(none)`，而那串字面量任何命令都可能打印——两头都是错的，本条钉对的那一头） ｜本机实测 0.6s／2 拍
+❌ replay-cascade-drops-cue-table — 占比分子不再看文案线索 ⇒ 「换贵档再红一次」的上界被算低。这条读数是**做决策用的**（它对着一次模型往返的钱），少一类比多一类更坏：多算只是保守，少算会裁掉本该修的那一格 ｜本机实测 0.6s／2 拍
+   变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）
+✅ replay-exec-pkg-cue-recopied — 把包管理器那行的正则**再抄一遍**而不是 import 产品那一只 ⇒ 普查尺的定义位点从 0 变 1。行为完全等价（两条正则同字），所以只能由这把普查尺抓（规则 259 点名的那类「突变不可观察」） ｜本机实测 0.5s／2 拍
+
+1 条判红（按类别分开数，修法各不同——见上一行起的分类名单）
+  ❌ 判红 1 条，按类别分开（修法各不同，混成一句会把人指错方向）：survived 1
+  ❌ 判红·变异存活（测试仍全绿 ⇒ 该不变量没有观测者）（1 条）：replay-cascade-drops-cue-table
+REDKINDS=survived:1,misattributed:0,baseline-red:0,no-effect:0,syntax:0,restore-mismatch:0,vacuous:0
+[mutate-verify] 本次耗时 3.2s · 跑了 5/5 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 10 次／5 条（每条次数分布 2×5）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 replay-exec-text-anchor-lost 0.7s
+跑法单价：selector 10 拍·中位 0.29s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p222-new.lock）
+[ELIFECYCLE] Command failed with exit code 1.

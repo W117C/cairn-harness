@@ -6870,6 +6870,32 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 `--check-needles` 当场印「锚点 id 重复：replay-exec-text-anchor-lost ×2」并解释后果
 （`mutate-verify <id>` 会同时跑两条，报告里两行同 id 不同改法＝读不出哪条活着）⇒ 撤旧条目才对。
 
+### 2026-09-30 · 第 222 页补 凭证：本笔（`2becb8e`）认证 251 文件／3243 条 exit=0 且两端独占，五条锚点 5/5 全杀（3.2s、10 拍、坏拍 0）
+
+取料 `outputs/env-cue-fold-2026-09-30/`（`head-cert-2becb8e.log`／`kill-5-anchors-at-2becb8e.log`／
+`needles-check-at-2becb8e.log`／两份 before-after 读数／`pre-state-sites-at-head.txt`／`readings.md`）。
+
+1. **认证 HEAD `2becb8e`**：`cert_exit=0`、`Test Files 251 passed｜Tests 3243 passed`、`typecheck exit=0（0 报错）`、
+   `DIRTY_JUDGED=0`、`依赖完整=是`、`收尾复核=同一笔`、`并发判卷=起前 0 套／跑完 0 套（两端独占）`、
+   `import 面 2956 条边｜悬空 0`、门表 29 道缺同名 script 0 道。
+2. **五条锚点 5/5 全杀**（判卷树 @`2becb8e`、锁标签 p222-retry）：`跑了 5/5 条 · 本次耗时 3.2s`、
+   `spawn 10 次／5 条（2×5）`、`selector 10 拍·中位 0.29s·坏拍 0`、最贵一条 0.7s ⇒ **每条 ≈0.64s／2 拍**
+   （与第 217/219 页的 0.6s 同量级；"本批判卷不起真进程"这句是按判卷文件名读的，不是量的）。
+   单价记进 `scripts/gate-manifest.ts` 的新行；**上一笔 `fcd521d` 那次 4 杀 1 存活另算**（第 222 页补⑵），两个数不许互相顶替。
+3. **落库后在同一新 HEAD 复跑针脚自检**（认证树里）：`needles_exit=0`、
+   `1055 条——阻断 0、待复认 0、未覆盖 0、逐行式 5、未入库面 0、钉在飞文本 0、killer 指针失效 0（HEAD 侧 0）`
+   ——第 222 页 §4 那 6 条"提交前必红"由此结案（规则 283/284）。
+4. **凭证这笔另带两处纯注释**（不动行为，复跑 `typecheck 0 条报错`）：
+   ⑴ `scripts/replay/corpus.ts` 给共享表补一条**缺席声明**——`hook-error` 那一类今天两个消费者都走不到：
+   钩子抛错那拍 `results` 是空的，而 `[verify] 钩子异常…` 由 `src/agent/loop.ts:254` 拼进**给模型的 digest**，
+   不在 `results[].output` 里；那一格的正账由 beat 级计数（`钩子异常拍（红且 results 为空）`）说话。
+   留着不删是因为这栏口径本就是"人眼在正文里看得到什么"，但**不许被读成"有人在按它归类"**（"留着"≠"已验收"）。
+   ⑵ `scripts/gate-manifest.ts` 的本笔单价行。
+5. **门同轮自报**（`head-cert exit=0` 只覆盖判卷面，门表那格它只数不跑，规则 292）：
+   docs-check `exit=0`（另有 3 项未检，不等于通过）、prose-needle-scan `exit=0`（顶包候选 `已提交态 10 ＋ 在飞 0`＝帽没被顶涨）。
+6. **未证**：⑴ 真会话里这三句文案的量级（同 #17）；⑵ `ENV_TEXT_CUES` 与 exec 面私有五条线索的关系没做成一张全族表，
+   合表要先给每条找消费者；⑶ 残留树由尺读出可回收——**判据不是授权**，等点头。
+
 
 
 

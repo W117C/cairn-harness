@@ -108,6 +108,10 @@ export function callNameIndex(raws: readonly unknown[]): Map<string, string> {
  * 而同一尺的 exec 面 09-29 起已改行首锚定）＝本仓点过名的第十三族。
  * `(none)` 不在这里：那是 `runVerifyOutcome` 的**哨兵命令名**，按 `command` 字段判（见 `NO_SURFACE_COMMAND`），
  * 拿它去 `includes(output)` 会把任何打印过 `(none)` 的正常输出读成「没有可验面」。
+ * **一条要说明的缺席**：`hook-error` 那一格今天两个消费者都走不到——钩子抛错那拍 `results` 是空的，
+ * 而那句话（`[verify] 钩子异常…`）由 `loop.ts` 拼进**给模型的 digest**，不在 `results[].output` 里。
+ * 留着它是因为这栏的口径本来就是"人眼在正文里能看到什么"，digest 也是正文的一种；
+ * 但它**不是被证过的判据**（`钩子异常拍` 那一格由 beat 级计数说话），别把"表里有这一类"读成"有人在按它归类"。
  */
 export const ENV_TEXT_CUES: readonly { kind: string; re: RegExp }[] = [
   // 一支通吃三个出口：`[error: verify 命令超时（Ns）…`、`[error: run_shell 超时（Ns）…`、`[error: glob: rg 超时…`
