@@ -380,8 +380,16 @@ describe("D-5 台账 sha 面：三档分开印（可达／不可达／读不到�
     const text = Object.keys(LEDGER_NON_REV).map((s) => `判卷 sha256 三件套（${s}…）`).join("\n");
     expect(ledgerRevFace(text, resolver([])).findings).toEqual([]);
     const stale = ledgerRevFace("第 1 页 凭证 @cccc333\n", resolver(["cccc333"]));
-    expect(stale.findings.map((f) => f.detail).join("\n"), "整张台账里没有这些哈希了，豁免该删").toContain("已不再命中");
-    expect(stale.findings.length).toBe(3);
+    // 断言**不抄生产那句句子**（规则 302：抄成品句＝判卷与被度量者一起改才响，`prose-needle-scan` 会把这种
+    // 形状数成"顶包候选"——本笔就被它按帽挡过一次）。这里只问结构事实：每个被豁免的 sha 各出一条红、
+    // 且红落在台账面上；措辞归生产端自己钉（本文件里只留一处措辞证人）。
+    for (const sha of Object.keys(LEDGER_NON_REV)) {
+      const hits = stale.findings.filter((f) => f.detail.includes(sha));
+      expect(hits.length, `${sha} 不再在场，该有一条点名它的红`).toBe(1);
+      expect(hits[0]?.rule).toBe("D-5");
+      expect(hits[0]?.file).toBe(LEDGER_FILE);
+    }
+    expect(stale.findings.length, "红数恰等于豁免条数（多一条就是把别的格也算进来了）").toBe(3);
   });
 
   it("git 读不到（或行数对不上）⇒ 记未检并带着分母，不记通过（规则 261）", () => {
