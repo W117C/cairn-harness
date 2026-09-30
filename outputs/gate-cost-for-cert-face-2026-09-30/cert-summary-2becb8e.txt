@@ -1,0 +1,17 @@
+目标提交：2becb8e（--at=2becb8e）
+worktree add exit=0
+已核：TREE=2becb8e9eb9e38b59bf45f81d25b68b259caa3fa｜判卷四面在飞 0 项
+cp -al node_modules exit=0
+依赖核对：该提交声明 10 项，缺 0 项
+  硬链接子仓库依赖 fixtures/todo-app/node_modules ← 主树 exit=0
+import 面：2956 条边｜悬空 0（其中存量已豁免 0）
+门表：29 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证汇总 ==
+  TREE=2becb8e DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-2becb8e.lock）
+  Test Files 251 passed (251)｜Tests 3243 passed (3243)｜exit=0（退出码直接取，不接管道）
+  并发判卷=起前 0 套／跑完 0 套（两端独占）
+  逐条日志：/tmp/dsh-head-cert-2becb8e
+  回收这棵树（规则 120，别留残留）：git worktree remove --force .worktrees/head-cert-2becb8e
+  常驻残留树=21（/Users/ze/Downloads/deepseek harness/.worktrees/cost-rank@27a2459、/Users/ze/Downloads/deepseek harness/.worktrees/gate-head-cert@ae80d6e、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-verify@2becb8e、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-02ddabd@02ddabd、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-03af5f5@03af5f5、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-0513d13@0513d13、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-1c40df7@1c40df7、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-70eab48@70eab48、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-830594b@830594b、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-8a9ce3e@8a9ce3e、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-9f19c84@9f19c84、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-a00c784@a00c784、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-d672e10@d672e10、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-e493e24@e493e24、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-e7b0501@e7b0501、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-f0473b9@f0473b9、/Users/ze/Downloads/deepseek harness/.worktrees/p211-shard-a@9bf9623、/Users/ze/Downloads/deepseek harness/.worktrees/p211-shard-b@9bf9623、/Users/ze/Downloads/deepseek harness/.worktrees/p211-shard-c@9bf9623、/Users/ze/Downloads/deepseek harness/.worktrees/p211-shard-d@9bf9623、/Users/ze/Downloads/deepseek harness/.worktrees/p211-verify@a00c784）（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）

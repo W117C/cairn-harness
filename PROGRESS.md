@@ -6896,6 +6896,37 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 6. **未证**：⑴ 真会话里这三句文案的量级（同 #17）；⑵ `ENV_TEXT_CUES` 与 exec 面私有五条线索的关系没做成一张全族表，
    合表要先给每条找消费者；⑶ 残留树由尺读出可回收——**判据不是授权**，等点头。
 
+### 2026-09-30 · 第 223 页 · #36 的决策输入：认证面今天只数门不跑门——13 道门逐道量完，亚秒档 8 道只要 +3.5%
+
+本笔**不动代码**（`outputs/gate-cost-for-cert-face-2026-09-30/measurements.md` 是产物；这页只交裁决需要的数）。
+
+1. **现读的缺陷形状**：`head-cert.ts:210-217` 只把门表**数一遍**（`git show TARGET:scripts/gate-manifest.ts`
+   ⇒ 印「门表：29 道，缺同名 script 0 道」），跑的叫 `typecheck` 与全量判卷。
+   所以 `cert exit=0` 与「某道门红着」是可以并存的——规则 292 记过这件事，而这三天每笔凭证页都在**人肉自报**
+   另跑的门（docs-check／prose-needle-scan 各一次）。把"靠人记得"换成"认证面自己覆盖"就是 #36。
+2. **量法**（认证树 `2becb8e`、工作树＝HEAD、串行）：
+   `node --import tsx scripts/gates.ts --only=docs-check,gate-check,fork-check,autonomy-check,compaction-check,`
+   `tools-check,map-check,prune-check,memory-check,plugins-check,no-progress-check,head-import-check,mutate-needles-check`
+   ⇒ `绿 13/13，红 0`、`gates_exit=0`、墙钟 `46.7s`；**逐道之和 45.8s**（差 0.9s＝编排 ⇒ 这两个数能互验，
+   也别拿"之和"当墙钟，规则 293 同一条纪律）。
+   逐道秒：`no-progress 0.514 / prune 0.524 / fork 0.545 / compaction 0.574 / docs 0.606 / memory 0.638 /
+   head-import 0.667 / autonomy 0.737 / gate-check 2.659 / map 4.767 / tools 8.628 / needles 9.756 / plugins 15.209`。
+3. **分母**：认证树自己那份逐条日志 `Duration 122.02s`（`/tmp` 易失 ⇒ 已抄进产物 `cert-tree-suite-duration.txt`）。
+   ⇒ 加**亚秒档 8 道**（合计 4.24s）＝ **+3.5%**；加这 13 道＝ **+37.5%**。
+   主树那一趟是 `118.99s`——两棵树的数不许互相顶替，"认证比主树慢 3s"的机制本笔没量。
+   这两个百分比只有一个 pair 的样本，符号稳（同机同树串行）、幅度未复测 ⇒ 别当预算数用（规则 293）。
+4. **两道要说清的**：⑴ `mutate-needles-check` 9.76s 恰好是**每笔交笔本来就要跑**的那道（针脚体检）——
+   它进认证面的代价是秒，收益是把"钉在飞文本／判卷未入库"这两类红从人肉复跑变成机器覆盖；
+   ⑵ `plugins-check` 15.2s 与交笔无关，是这 13 道里最贵的一道（两道合计占 54.6%）⇒ "全吞进来"的性价比要单独量。
+5. **未证／未决**（留给裁决）：⑴ 另 16 道门（`e2e`／`test`／`sandbox:check`／`security-check`／`provider:check`／
+   `routing-check`／`gym-check`／`replay-determinism-check`…）本笔没量——**这 13 道是我按"看着像秒级"挑的，不是随机样本**；
+   ⑵ 进门面后 `cert exit=0` 的语义会变（从"判卷全绿"变成"判卷＋这 N 道全绿"）⇒ 汇总行要并列印每道退出码与秒数，
+   否则读不出是哪一道把整笔判红（规则 211）；⑶ `gates.ts` 自己印「13 道退出码全 0，但有 **7 项未证**——不得宣称全部通过」
+   （逐道：gate-check 1／docs-check 3／autonomy 1／compaction 1／plugins 1）⇒ 认证面吞进来时 `--strict-unverified` 的口径
+   要一起定，否则 cert 会把"未证"读成"通过"（规则 261）。
+6. 等真加判据那一笔时按规则 306 配尺：**"哪道门的秒数掉出预算就红"要有一条尺**，不是靠人记得看这张表。
+
+
 
 
 

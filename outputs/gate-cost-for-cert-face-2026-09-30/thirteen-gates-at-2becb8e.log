@@ -1,0 +1,44 @@
+== pnpm gates ==
+门清单（13 道，清单即事实源）：fork-check gate-check docs-check autonomy-check compaction-check tools-check map-check prune-check memory-check plugins-check no-progress-check head-import-check mutate-needles-check
+执行器：pnpm run
+  清单漂移校验：✅ GATES ↔ package.json scripts 一致（无孤儿验收脚本）
+
+  ▶ fork-check …  ✅ fork-check         exit=0  545ms
+      └ ✅ 越界 eventId 被拒绝（fail loud）
+  ▶ gate-check …  ✅ gate-check         exit=0  2659ms
+      └ ✅ H7 冻结表与判卷区目录双向一致（新增判卷文件不许逃出冻结面；新判卷目录须登记进 src/frozen.ts 的 areas）：{"onDiskNotInTable":[],"inTableNotOnDisk":[],"tableDirsNotSwept":[]}
+  ▶ docs-check …  ✅ docs-check         exit=0  606ms
+      └ UNVERIFIED=3
+  ▶ autonomy-check …  ✅ autonomy-check     exit=0  737ms
+      └ ✅ 收口时判卷文件 sha256 仍与冻结基线逐字一致
+  ▶ compaction-check …  ✅ compaction-check   exit=0  574ms
+      └ [compaction-check] 断言全过，但有 1 项未证（不得宣称全绿）
+  ▶ tools-check …  ✅ tools-check        exit=0  8628ms
+      └ ✅ tools-check 全部通过：grep/glob/read_file/lsp 四工具三项全绿；edit_file ①② 显式 n/a（输出有界），③ 相对路径绿。
+  ▶ map-check …  ✅ map-check          exit=0  4767ms
+      └ ✅ map-check 全部通过
+  ▶ prune-check …  ✅ prune-check        exit=0  524ms
+      └ ✅ prune-check 全部通过
+  ▶ memory-check …  ✅ memory-check       exit=0  638ms
+      └ ✅ memory-check 全部通过（两层布局/remember/注入预算/索引上限/安全/双轨/压缩接缝）
+  ▶ plugins-check …  ✅ plugins-check      exit=0  15209ms
+      └ plugins-check: 42 ✅ / 0 ❌ / 1 未证
+  ▶ no-progress-check …  ✅ no-progress-check  exit=0  514ms
+      └ ✅ NP5-语料 sha256 与冻结表逐字一致 — 语料 7 份｜冻结表核对 7 份：不在表上或哈希对不上 0
+  ▶ head-import-check …  ✅ head-import-check  exit=0  667ms
+      └ head-import-face: ✅ import 面自洽（或在内存量已逐条带理由）
+  ▶ mutate-needles-check …  ✅ mutate-needles-check exit=0  9756ms
+      └ [mutate-needles-check] 全部锚点针脚可判定 ✅
+
+== 断言体检（空断言 / 恒真式 / 暗卷段零断言 / 析取式弱断言）==
+  扫描面：82 个已跟踪且在盘的脚本（未跟踪草稿不判，口径同 tests/assertion-health-scan.test.ts）
+  ✅ 零命中
+
+== 汇总 ==
+  绿 13 / 13，红 0
+  逐道退出码：fork-check=0 gate-check=0 docs-check=0 autonomy-check=0 compaction-check=0 tools-check=0 map-check=0 prune-check=0 memory-check=0 plugins-check=0 no-progress-check=0 head-import-check=0 mutate-needles-check=0
+  认证面：判卷四面与 HEAD 逐字一致（工作树 = HEAD） ⇒ 本表即 HEAD 认证
+  ⚠️  未证 7 项（连网/凭据限制未跑到的断言，或绿而零输出的门——**不等于通过**）
+     逐道：gate-check 1｜docs-check 3｜autonomy-check 1｜compaction-check 1｜plugins-check 1
+     严格模式：DSH_STRICT_UNVERIFIED=1 或 --strict-unverified 可让未证直接判红
+  ⚠️  13 道门退出码全 0，但有 7 项未证——不得宣称「全部通过」
