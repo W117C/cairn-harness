@@ -10,8 +10,8 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import {
-  checkCredentialSources, CREDLEDGER_FILE, credentialPages, LEDGER_FILE, ledgerRevFace, ledgerRevTokens,
-  LEDGER_NON_REV, UNSOURCED_READINGS,
+  checkCredentialSources, CREDLEDGER_FILE, CRED_UNNAMED_PAGE_CAP, credentialPages, LEDGER_FILE, ledgerRevFace, ledgerRevTokens,
+  LEDGER_NON_REV, runDocsCheck, UNSOURCED_READINGS,
 } from "../scripts/docs-check";
 import { REPLAY_READINGS, countInlineReplay, type ReplayReading } from "../scripts/replay-readings";
 import {
@@ -514,6 +514,55 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
     expect(r.checked, `可比对只有 ${String(r.checked)} 个 ⇒ 取料面塌了`).toBeGreaterThanOrEqual(50);
     expect(r.findings.map((f) => f.detail)).toEqual([]);
     expect(Object.keys(UNSOURCED_READINGS).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("未点名要按页记名：同一页的两个段合成一页，点名的页不许混进这一档", () => {
+    const twoSections = "### 2026-10-01 · 第 900 页补 凭证：第一段\n\nTest Files 1 passed\n\n"
+      + "### 2026-10-01 · 第 900 页补 凭证：第二段\n\nTest Files 2 passed\n\n"
+      + "### 2026-10-01 · 第 901 页补 凭证：点名的那页\n\n取料：outputs/y-2026-10-01/\nTest Files 3 passed\n";
+    const pages = credentialPages(twoSections);
+    expect(pages).toHaveLength(3);
+    const r = checkCredentialSources(pages, face({ "y-2026-10-01": "Test Files  3 passed" }), {});
+    expect(r.unnamedPages, "按页＝第 900 页只算一次；按段＝两次 ⇒ 帽要量的是「有几页没点名」，不是「有几段」").toEqual(["第 900 页"]);
+    expect(r.unnamed, "条数那一档口径不动（两页各一条 ⇒ 2）").toBe(2);
+    expect(r.checked, "点名的页照常进体检").toBe(1);
+  });
+
+  it("帽只在超出那一格出声：等于现读不红、多一页就红，且 detail 点名是哪一页", () => {
+    const pages = credentialPages(page([], ["241"]));
+    const atCap = checkCredentialSources(pages, face({}), {}, 1);
+    expect(atCap.findings, "帽登记＝现读；等于现读就红的话这一格永远红，没人能把它降下来").toEqual([]);
+    const overCap = checkCredentialSources(pages, face({}), {}, 0);
+    expect(overCap.findings, "多出一页（写了凭证却没点名取料面）必须让这一格出声，否则它只会安静地长在未检那一档里").toHaveLength(1);
+    expect(overCap.findings[0]?.rule).toBe("D-9");
+    expect(overCap.findings[0]?.detail).toContain("第 900 页");
+    expect(overCap.findings[0]?.detail).toContain("CRED_UNNAMED_PAGE_CAP");
+  });
+
+  it("严格式要认 vitest 的列对齐形状：两个空格与一个空格的汇总行都得抽到数", () => {
+    /* 真机上 vitest 印的是 `Test Files  1 passed (1)`（两个空格），从前正则写死一个空格 ⇒
+       真读数一条都抽不到，页里那些数只能靠回查端的裸数位边界偶然兜住（第 265 页现读：4 条）。
+       反向那一半在下面：一空格形状照样要抽到，否则把 `\s+` 退回一个空格这一条不会红。 */
+    const twoSpace = credentialPages("### 2026-10-01 · 第 902 页 凭证\n\nTest Files  253 passed (253)\nTests  102 passed (102)\n");
+    expect(twoSpace[0]?.numbers).toEqual(["102", "253"]);
+    const oneSpace = credentialPages("### 2026-10-01 · 第 902 页 凭证\n\nTest Files 253 passed\n");
+    expect(oneSpace[0]?.numbers).toEqual(["253"]);
+  });
+
+  it("真仓：未点名页数跟着现读走——涨了要红，凭空把帽调低也要红（只有真把页点名了才允许降）", () => {
+    const cred = runDocsCheck().cred;
+    expect(cred.unnamedPages.length, `现读 ${String(cred.unnamedPages.length)} 页 ≠ 帽 ${String(CRED_UNNAMED_PAGE_CAP)} ⇒ 帽要跟着现读改，别只改数`).toBe(CRED_UNNAMED_PAGE_CAP);
+    expect(cred.checked, "可比对分母塌了就不是这一格的账").toBeGreaterThanOrEqual(50);
+  }, 60_000);
+
+  it("接线：主段把「未点名页」连同帽一起印出来，且判定真拿帽去比（只算不印＝这格永远没人看）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/docs-check.ts", import.meta.url)), "utf8");
+    expect(src.length).toBeGreaterThan(0);
+    expect(src).toMatch(/^ {2}const unnamedPageKeys = new Set<string>\(\);$/mu);
+    expect(src).toMatch(/^ {2}if \(unnamedPageKeys\.size > cap\) \{$/mu);
+    expect(src).toMatch(/^ {4}\+ `[^`\n]*未点名页 \$\{String\(cred\.unnamedPages\.length\)\} 页（帽 \$\{String\(CRED_UNNAMED_PAGE_CAP\)/mu);
+    // 反向那一半：返回体丢了 unnamedPages ⇒ 上面两条印不到，这一条先红
+    expect(src).toMatch(/^ {2}return \{ findings: out, checked, unmatched, unnamed, unnamedPages: \[\.\.\.unnamedPageKeys\] \};$/mu);
   });
 });
 

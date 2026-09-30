@@ -1,0 +1,10 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+ [32m✓[39m tests/docs-check.test.ts [2m([22m[2m63 tests[22m[2m)[22m[33m 357[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m63 passed[39m[22m[90m (63)[39m
+[2m   Start at [22m 04:06:45
+[2m   Duration [22m 492ms[2m (tests 86%, transform 11%, import 3%)[22m
+

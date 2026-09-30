@@ -189,10 +189,13 @@ export const UNSOURCED_READINGS: Readonly<Record<string, string>> = {
 };
 
 /** 只认**严格式**：这三类的原文一定在日志里（`Test Files N passed`／`real Xs`／`针脚体检：N 条`…），
- *  散文里的数字（"17 处"、"帽 10"）不在本面射程内——把它们算进来＝拿语义猜测当判据。 */
-const CRED_NUMBER_RES: readonly RegExp[] = [
-  /Test Files (\d+) passed/u,
-  /Tests (\d+) passed/u,
+ *  散文里的数字（"17 处"、"帽 10"）不在本面射程内——把它们算进来＝拿语义猜测当判据。
+ *  `Test Files`／`Tests` 后面必须是 `\s+` 而不是一个空格：**vitest 的汇总行按列对齐，实测印成
+ *  `Test Files  1 passed (1)`、`Tests  102 passed (102)`（两个空格）**，写死一个空格 ⇒ 真机汇总抽不到数，
+ *  那一格只能靠回查端的裸数位边界偶然兜住（第 265 页现读：已点名面里 4 条读数是这么"找到"的）。 */
+export const CRED_NUMBER_RES: readonly RegExp[] = [
+  /Test Files\s+(\d+) passed/u,
+  /Tests\s+(\d+) passed/u,
   /\breal ([0-9]+(?:\.[0-9]+)?)/u,
   /本次耗时 ([0-9]+(?:\.[0-9]+)?)s/u,
   /针脚体检：(\d+) 条/u,
@@ -233,22 +236,33 @@ export function credentialPages(text: string): CredPage[] {
 /** 数在取料面里"算找到原文"——必须**按数位边界**认，不能 `includes`：
  *  `241` 会命中 `2410`、`9.7` 会命中 `19.75`（第一版就是这么错的：三条本该未寻址的读数被判成"已入库"，
  *  于是豁免被报成 stale，红海方向反了）。小数点两侧都不许再粘数字。 */
-function hasNumber(face: string, num: string): boolean {
+/** 探针与复算共用这一份匹配谓词（规则 236：探针"自己再算一遍"＝假读数）。导出的只是判定，不是第二个消费者。 */
+export function hasNumber(face: string, num: string): boolean {
   const esc = num.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   return new RegExp("(?:^|[^0-9.])" + esc + "(?:[^0-9.]|$)", "mu").test(face);
 }
+/** 未点名取料目录的凭证页，按**页**记名（`第 NNN 页` key，Set 去重——同页有多个 `###` 段时不重复计）。
+ *  帽登记在第 265 页把自己那三页点名之后的现读，**只准调低**（计数类不留余量）：
+ *  再写一笔不点名 `outputs/<主题>-YYYY-MM-DD/` 的凭证页 ⇒ D-9 当场红。
+ *  为什么这一档要单独长读数：从前只印条数，没人知道是**哪几页**，于是第 262/263/264 三页凭证（8/6/6 条读数）
+ *  落笔时只写了裸文件名（`judges-264.log`），一整页没进对账面，页里却引用了「可比对…（红 0）」——那说的是别的面。 */
+export const CRED_UNNAMED_PAGE_CAP = 11;
+
 export function checkCredentialSources(
   pages: readonly CredPage[],
   readFace: (dir: string) => string | null,
   waivers: Readonly<Record<string, string>> = UNSOURCED_READINGS,
-): { findings: Finding[]; checked: number; unmatched: number; unnamed: number } {
+  cap: number = CRED_UNNAMED_PAGE_CAP,
+): { findings: Finding[]; checked: number; unmatched: number; unnamed: number; unnamedPages: string[] } {
   const out: Finding[] = [];
   const seenKeys = new Set<string>();
+  const unnamedPageKeys = new Set<string>();
   let checked = 0;
   let unmatched = 0;
   let unnamed = 0;
   for (const p of pages) {
     if (p.numbers.length === 0) continue;
+    if (p.dirs.length === 0) unnamedPageKeys.add(p.key);
     // 未检的两档（页没点名／点了名但读不到）也要把该页的豁免记成"仍然用得上"——
     // 否则第 155 页那种迁移前的老页会同时落进"未检"和"豁免已不再命中"，两句话互相打脸。
     const unverifiable = (): void => { for (const n of p.numbers) seenKeys.add(`${p.key}|${n}`); };
@@ -275,7 +289,12 @@ export function checkCredentialSources(
     }
     if (!seenKeys.has(k)) out.push({ rule: "D-9", file: CREDLEDGER_FILE, detail: `豁免里的 ${k} 已不再命中，该删（理由曾写：${waivers[k]}）` });
   }
-  return { findings: out, checked, unmatched, unnamed };
+  // 帽只在这一格**超出**时出声：等于现读不算红（登记＝承认存量，涨一格才算新账）。
+  if (unnamedPageKeys.size > cap) {
+    out.push({ rule: "D-9", file: CREDLEDGER_FILE,
+      detail: `凭证页未点名取料目录 ${String(unnamedPageKeys.size)} 页 > 帽 ${String(cap)}（CRED_UNNAMED_PAGE_CAP，只准调低）⇒ 新写的凭证页必须点名 outputs/<主题>-YYYY-MM-DD/，否则它引用的每个读数都不在对账面里。最近的几页：${[...unnamedPageKeys].slice(-5).join("、")}` });
+  }
+  return { findings: out, checked, unmatched, unnamed, unnamedPages: [...unnamedPageKeys] };
 }
 
 /* ------------------------------------------------------------------ D-2 / D-4 / D-7 */
@@ -574,7 +593,9 @@ function resolveRevsViaGit(toks: readonly string[]): Map<string, boolean> | null
 
 export function runDocsCheck(): {
   findings: Finding[]; skipped: string[]; waived: number; ledgerChecked: number;
-  cred: { findings: Finding[]; checked: number; unmatched: number; unnamed: number };
+  // 形状从被调用方派生，不在这儿第二次枚举：第 265 页加 `unnamedPages` 时这里漏改，vitest 全绿而 tsc 红
+  // （`Property 'unnamedPages' does not exist`）——两份字段清单就是两次会漂的账。
+  cred: ReturnType<typeof checkCredentialSources>;
 } {
   const findings: Finding[] = [];
   const skipped: string[] = [];
@@ -666,9 +687,10 @@ if (invokedDirectly) {
   // 分母要印出来：抽到 0 条与"全绿"不许同形（规则 261），豁免数也不许藏在源码里。
   console.log(`  台账 sha 面：抽到 ${String(ledgerChecked)} 条候选｜非提交形而带理由豁免 ${String(Object.keys(LEDGER_NON_REV).length)} 条`);
   // 三个分母各说各的口径（规则 262）：可比对／页没点名（未检）／点了名但目录读不到（取不到）。
+  // 「未检」要能归到页：只有条数没人知道是哪几页 ⇒ 第 265 页补上按页的第四档与帽。
   console.log(`  凭证对账面：可比对 ${String(cred.checked)} 个读数（红 ${String(cred.findings.length)}）`
-    + `｜页未点名取料目录 ${String(cred.unnamed)} 个＝未检｜点名但目录读不到 ${String(cred.unmatched)} 个＝取不到`
-    + `｜登记不可回查 ${String(Object.keys(UNSOURCED_READINGS).length)} 条`);
+    + `｜页未点名取料目录 ${String(cred.unnamed)} 个＝未检｜未点名页 ${String(cred.unnamedPages.length)} 页（帽 ${String(CRED_UNNAMED_PAGE_CAP)}，只准调低）`
+    + `｜点名但目录读不到 ${String(cred.unmatched)} 个＝取不到｜登记不可回查 ${String(Object.keys(UNSOURCED_READINGS).length)} 条`);
   if (waived > 0) console.log(`  ⚠️  存量豁免 ${String(waived)} 处（LEGACY_WAIVERS，只准调低；spec §8 迁移提交须整条删除）`);
   const summary = [...byRule].map(([r, n]) => `${r}=${String(n)}`).join(" ");
   if (findings.length === 0) {

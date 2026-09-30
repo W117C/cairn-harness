@@ -10010,6 +10010,61 @@ const MUTATIONS = [
     expectFail: "点了名且数在面里 ⇒ 可比对计数涨、零红",
   },
 
+  /* ── 第 265 页（D-9 第四档）：凭证页「未点名取料目录」按页记名＋帽；以及严格式认 vitest 的列对齐形状。
+      这一族要防的事故是**凭证页自己没被核过而门照印红 0**：本会话三笔凭证（262/263/264）各带 8/6/6 条读数、
+      落笔只写了裸文件名（`judges-264.log`）⇒ 一整页落在「未检」那一档，页里却引用了「可比对…（红 0）」。
+      另一支防的是抽取端的空格形状：vitest 汇总行按列对齐印两个空格，从前正则写死一个 ⇒ 真读数一条抽不到。
+      `cred: ReturnType<typeof checkCredentialSources>` 那一格**没有锚点**：它是类型面的账，
+      锚点吃不到字节（本笔实现就是这么被 tsc 抓的——vitest 全绿、tsc 报 `unnamedPages` 不存在），观测者＝typecheck 门。 ── */
+  {
+    id: "docscheck-cred-unnamed-pages-not-collected",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "未点名那一档只累加条数、不记页名 ⇒ 「哪几页没点名」永远查不出来，帽也无从比（本笔之前正是这个形状：三页凭证安静地整页失检）",
+    apply: (s) => s.replace("if (p.dirs.length === 0) unnamedPageKeys.add(p.key);", "if (false) unnamedPageKeys.add(p.key);"),
+    expectFail: "未点名要按页记名：同一页的两个段合成一页，点名的页不许混进这一档",
+  },
+  {
+    id: "docscheck-cred-unnamed-cap-comparison-offbyone",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "把「超出帽」写成「达到帽」⇒ 登记那一格当场红，帽再也无法等于现读；于是唯一的反应是把它调大，棘轮反过来涨",
+    apply: (s) => s.replace("if (unnamedPageKeys.size > cap) {", "if (unnamedPageKeys.size >= cap) {"),
+    expectFail: "帽只在超出那一格出声：等于现读不红、多一页就红，且 detail 点名是哪一页",
+  },
+  {
+    id: "docscheck-cred-unnamed-cap-raised-silently",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "把帽从现读调大（11 → 12）而不点名任何一页 ⇒ 读数与帽脱钩，这一格从此可以无限装新失检的凭证页",
+    apply: (s) => s.replace("export const CRED_UNNAMED_PAGE_CAP = 11;", "export const CRED_UNNAMED_PAGE_CAP = 12;"),
+    expectFail: "真仓：未点名页数跟着现读走——涨了要红，凭空把帽调低也要红（只有真把页点名了才允许降）",
+  },
+  {
+    id: "docscheck-cred-strict-space-pinned-to-one",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "严格式把 Test Files 后面的空格写死成一个 ⇒ vitest 真机印的两个空格抽不到数，读数只能靠回查端的裸数位边界偶然兜住（本笔现读：4 条）",
+    apply: (s) => s.replace("/Test Files\\s+(\\d+) passed/u,", "/Test Files (\\d+) passed/u,"),
+    expectFail: "严格式要认 vitest 的列对齐形状：两个空格与一个空格的汇总行都得抽到数",
+  },
+  {
+    id: "docscheck-cred-return-drops-unnamed-pages",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "算出来了却不返回（从返回体里丢掉这一格）⇒ 门那一步拿到 undefined，按页那一档当场消失，条数那一档照印不误",
+    apply: (s) => s.replace("return { findings: out, checked, unmatched, unnamed, unnamedPages: [...unnamedPageKeys] };", "return { findings: out, checked, unmatched, unnamed };"),
+    expectFail: "未点名要按页记名：同一页的两个段合成一页，点名的页不许混进这一档",
+  },
+  {
+    id: "docscheck-cred-print-drops-cap-column",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "汇总行只印页数、不印帽（或整列不印）⇒ 读数没有对照物，「11 页」到底是存量还是新账没人看得出来（规则 262/291）",
+    apply: (s) => s.replace("页（帽 ${String(CRED_UNNAMED_PAGE_CAP)}，只准调低）", "页"),
+    expectFail: "接线：主段把「未点名页」连同帽一起印出来，且判定真拿帽去比（只算不印＝这格永远没人看）",
+  },
+
   /* ── 第 229 页（#45）：编排侧「这一次压根没派发出 worker」的结构列 `hold`。六支各钉一种坏法：
       返回体不盖章、依赖校验那一支不盖章、落流那两处不盖章、传播断在中间、落盘面把这一格丢掉、枚举漂出一格。
       刻意没有「取消／并发帽」两处落点的锚：同一挡位在两个出口上字面完全同形（`hold: "cancelled"` 两处），

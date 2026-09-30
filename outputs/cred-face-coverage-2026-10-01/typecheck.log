@@ -1,0 +1,4 @@
+scripts/docs-check.ts(690,66): error TS2339: Property 'unnamedPages' does not exist on type '{ findings: Finding[]; checked: number; unmatched: number; unnamed: number; }'.
+tests/docs-check.test.ts(554,17): error TS2339: Property 'unnamedPages' does not exist on type '{ findings: Finding[]; checked: number; unmatched: number; unnamed: number; }'.
+tests/docs-check.test.ts(554,56): error TS2339: Property 'unnamedPages' does not exist on type '{ findings: Finding[]; checked: number; unmatched: number; unnamed: number; }'.
+[typecheck] 报错文件归因：HEAD 内 2 个 / 未跟踪草稿 0 个
