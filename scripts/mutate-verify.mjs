@@ -6180,7 +6180,7 @@ const MUTATIONS = [
     test: "tests/prune-batching.test.ts",
     desc: "对照臂恒判「旋钮接得上」⇒ PC9 那半边成了装饰，主判据退化成「反正没别的能放行」的恒真式",
     apply: (s) => s.replace("    ok: stray >= 1,", "    ok: true,"),
-    expectFail: "对照臂判据：门槛旋钮接得上",
+    expectFail: "每轮都落盘 ⇒ 绿；仍然只在压缩轮落盘 ⇒ 红（并说清是对照空了）",
   },
   // ── BYOK 可达性（providers-check ⑦⑧；判据的两半：注入面按清单跑 + 缺口按各自对照面算）
   {
@@ -8289,8 +8289,8 @@ const MUTATIONS = [
     test: "tests/mutate-verify-gates.test.ts",
     desc: "命中数不为 1 时不再记录 ⇒ 这一格永远印「全部可选」，真正选不中的那些会在改跑法时被当成能走 -t；而 0 命中不是失败，是 vitest 一条也没跑，基线与突变两拍都白过",
     apply: (s) => s.replace(
-      "if (hits !== 1) problems.push({ id: e.id, test: e.test, hits });",
-      "if (false) problems.push({ id: e.id, test: e.test, hits });",
+      "if (hits !== 1) {",
+      "if (false) {",
     ),
     expectFail: "可选率的分母是被数过的条数，不是整表条数（拿整表去除＝把选不中的洗成可选）",
   },
@@ -8311,7 +8311,7 @@ const MUTATIONS = [
     test: "tests/mutate-verify-gates.test.ts",
     desc: "判卷读不到／指针为空那些条也计入分母 ⇒ 可选率虚高，而「取料坏」被洗成「量过了」（规则 222 的三态：未取 ≠ 空面 ≠ 零命中）",
     apply: (s) => s.replace(
-      "if (titles === null || titles === undefined) { unreadable.push(e.id); continue; }",
+      "if (face === null || face === undefined) { unreadable.push(e.id); continue; }",
       "inspected += 1;",
     ),
     expectFail: "只数被数过的：判卷读不到／指针为空／不是 vitest 文件都不进 inspected",
@@ -8369,10 +8369,46 @@ const MUTATIONS = [
     desc: "选择子这一格不走共用的 `vitestTitles` 而是自己给一份标题面 ⇒ 与 `expectFailMatchesTitles` 那把尺说的不是同一件事，" +
       "「整片读不到标题」重新变成尺的瞎而不是盘上没标题（第 230 页收掉的正是这份私有窄抽取，第十三族）",
     apply: (s) => s.replace(
-      "cache.set(e.test, text === null ? null : vitestTitles(text));",
-      "cache.set(e.test, text === null ? null : []);",
+      "cache.set(e.test, text === null ? null : { text, titles: vitestTitles(text) });",
+      "cache.set(e.test, text === null ? null : { text, titles: [] });",
     ),
     expectFail: "读得到文件却一条标题都抽不到 ⇒ 第三态要点名（并进「没问题」＝整份判卷被读瞎也无人说）",
+  },
+  {
+    id: "selector-zero-cause-fed-titles-only",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "成因那一格只喂标题面（或不喂文字）⇒ `describe` 与循环变量两种成因永远分不出来，" +
+      "读数只能继续把两条好端端的指针说成「多半是用例改了名」（第 233 页实测：它们运行时分别选中 2 条与 1 条）",
+    apply: (s) => s.replace(
+      "        ? { id: e.id, test: e.test, hits, cause: zeroHitCause(e.expectFail, face.text) }",
+      "        ? { id: e.id, test: e.test, hits, cause: zeroHitCause(e.expectFail, \"\") }",
+    ),
+    expectFail: "零命中分四种成因、各印各的数（0 也印）——从前那句「多半是用例改了名」是在指责任人",
+  },
+  {
+    id: "selector-zero-cause-hides-empty-rows",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "只印非零那几档 ⇒ 「说不清 0」这一档消失，将来多出一条分不出成因的锚点时，这一格看起来和今天一模一样" +
+      "（数量不列印＝那一格没有观测者，规则 210；与「三态分开印」239 同一口径）",
+    apply: (s) => s.replace(
+      'return causes.map((c) => `${ZERO_CAUSE_LABELS[c]} ${String(counts.get(c) ?? 0)}`).join("｜");',
+      'return causes.filter((c) => (counts.get(c) ?? 0) > 0).map((c) => `${ZERO_CAUSE_LABELS[c]} ${String(counts.get(c) ?? 0)}`).join("｜");',
+    ),
+    expectFail: "零命中分四种成因、各印各的数（0 也印）——从前那句「多半是用例改了名」是在指责任人",
+  },
+  {
+    id: "selector-describe-face-not-read",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "不读 `describe` 标题面 ⇒ 指针写在支上的那类被归到「标题由变量给出」或「文件里没这句话」，" +
+      "而它的真问题是**这条选择子会选中该支全部用例**（修法是把指针收到具体那条用例上，不是改标题）",
+    apply: (s) => s.replace(
+      "const descs = describeTitles(sourceText);",
+      "const descs: string[] = [];",
+    ),
+    expectFail: "零命中分四种成因、各印各的数（0 也印）——从前那句「多半是用例改了名」是在指责任人",
   },
   {
     id: "selector-cell-hides-blind-count",

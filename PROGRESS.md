@@ -7557,6 +7557,66 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 6. **取料**：`outputs/sandbox-cap-cause-2026-09-30/`（`timings.log`：本会话 7 次实测＋三份认证日志的机器原句＋标定与门史两行 git 系）。
    门与门表源码零改动 ⇒ typecheck 不重跑（0 沿用第 231 页凭证）；本页不进 D-9 凭证面（标题不含「凭证」，`docs-check.ts:215` 口径）。
 
+### 2026-09-30 · 第 233 页 · 「零命中」拆成四种成因（0 也印），并推翻我第 230 页 §7.1 那句成因判断（表 1086→1089，帽 4→3）
+
+归属现读：分支 `zcode`，HEAD = `71f4e86`。**页号在这期间被隔壁占了 232**（那一页是 `sandbox:check` 超帽的成因排查）⇒ 本页落 233，
+我先前写在我这四份文件里的"第 232 页"9 处已逐处改成 233 并复核归零（隔壁页里的 2 处一个字没动）。
+顺带一句：那一页正好把我上一笔凭证里"待裁"的超帽项用 7 次实测结掉了（变贵的是 pnpm 包装层不是沙箱门）⇒ **本笔不重做它**。
+取料：`outputs/selector-cause-split-2026-09-30/`（`findings.md`＋两份 `-t` 实测日志＋`whole-cost-of-4-degraded.log`＋`needles-after.log`）。
+
+#### 1. 本页推翻的正是我自己上一笔写下的一句话
+
+第 230 页 §7.1 我写「放宽之后还选不中，就只剩『用例改过名或压根没有』这一种成因」——**错的**，
+而错法就是本仓钉过很多次的那一族：**把我这把尺看不见，写成盘上只可能有那两种**。逐条读判卷文件、再拿真 `vitest -t` 各跑一次，
+全表当时那 2 条零命中**没有一条**属于"改了名"：
+
+| 锚点 | 盘上真相 | 真跑 `-t` 的原文 | 该说什么 |
+| --- | --- | --- | --- |
+| `pb-control-arm-always-wired` | 指针写的是一条 `describe` 的名字（`prune-batching.test.ts:132`，其下 2 条 `it`） | `Tests 2 passed \| 16 skipped (18)` | **不唯一**（一次选中该支两条＝并集证人，规则 248/255），不是选不中 |
+| `shape-leading-env-assignment-not-skipped` | 标题由循环变量给出（`for (const cmd of WRAPPED) it(cmd, …)`，`command-shape.test.ts:14-36`） | `Tests 1 passed \| 35 skipped (36)` | **运行时恰好选中 1 条**，静态数不清（要数据流才知道 `cmd` 取哪些值） |
+
+#### 2. 改了什么
+
+`零命中 N 条（多半是用例改了名…）` 换成**四档各印一个数、0 也印**：`指在 describe 上｜标题由变量给出｜文件里没这句话｜说不清`。
+实现是两份新面：`describeTitles`（形状与 `vitestTitles` 同一份，主语换成 `describe/context/suite`）＋`zeroHitCause(pointer, 整份判卷文字)`，
+`SelectorProblem` 多一个只在 `hits===0` 时给的 `cause`。**吃整份文件文字而不是标题面**——不然这两种成因永远分不出来（这条有接线判卷钉着）。
+
+#### 3. 成因说对之后，一条失准当场被修掉
+
+`pb-control-arm-always-wired` 的修法既不是"改判卷标题"也不是"接受选不中"，而是**把指针从支名收到真正会红的那条用例上**
+（`prune-batching.test.ts:133`——摘掉 `ok: stray >= 1` 就是它红）。
+⇒ 选择子 1085/1089 → **1086/1089**、零命中 2 → **1**（其中 `指在 describe 上 0`＝这一格自己前后对照的证人：不是把名字划掉，是那条失准被修好了），
+水位帽 `SELECTOR_CAP` 4 → **3**。剩下那 1 条（循环变量那种）**刻意不修**：它是代价不是缺陷。
+
+#### 4. 为什么不叠一层"运行时反查 selectable"——按钱裁，并留反转条件
+
+同树实测这 4 条失准锚点走整文件跑法：`跑了 4/4 条 · 本次耗时 4.2s`、`whole 8 拍·中位 0.35s·坏拍（没量到或 0 条）0`、最贵一条 1.2s。
+⇒ 为省这点钱再加一层判据（多一次 spawn 反查、缓存、"这条按什么算的"的标注）不划算。
+**第 230 页那 10 条值得改，是因为它们的宿主是 33.7s 那种大判卷**；这批不是。反转条件写在 `findings.md`：
+某条"静态数不清"的锚点整文件**单拍超过 ~5s**，或这样的锚点攒到 5 条以上，再重开这一层。
+
+#### 5. 判据、锚点与自检
+
+- 新锚点 3 支：`selector-zero-cause-fed-titles-only`、`selector-zero-cause-hides-empty-rows`、`selector-describe-face-not-read`；
+  针脚写前各 `grep -cF`＝1，改后读数里三支都在 `selectableIds`（1086/1089 那 3 支新的是 0 失准贡献）。
+- 本笔又弄断 3 支钉在旧行的锚点（`selector-ambiguity-never-reports`、`selector-inspected-counts-unreadable-judges`、
+  **`selector-extraction-not-shared`＝我自己第 230 页写的那支**）：字节面判卷与针脚一样会随实现漂，同笔改指（规则 217/224 本轮第三次撞）。
+- 判卷新增 2 条（四成因分印／接线吃整份文字）⇒ `tests/mutate-verify-gates.test.ts` **149 条全绿**，`prune-batching` 18 条绿；typecheck exit=0。
+- 工作树态 `--check-needles`：`1089 条 —— 阻断 6，钉在飞文本 6`（3 新锚点＋3 改指），其余维度 0，`改法语法体检 1089/1089 合法`。
+
+#### 6. 没有变异证人的那一挡（规则 315）
+
+三支新锚点**共用同一支 killer 用例**（那条四成因用例）。它们各吃一行不同实现（成因参数／非零过滤／`describeTitles` 读取），
+但"那条用例改一次名会同时弄断三支"这个耦合是真的——与第 229 页那两挡不同形（那是"只有行为证人"），登记在这儿。
+
+#### 7. 仍开
+
+1. `多命中 2`（`tests/settings.test.ts` 两个兄弟 `describe` 下 `it` 标题逐字相同）：本页已经把 `describe` 面读进来了，
+   但**还没有组成整条名**（`describe > it`）。做了那一步，这两条就能各指自己那条（指针带支名前缀即可）；
+   代价是全表 1089 条的口径都换成整条名——会把"两条同名 `it`"从"多命中"变成"各自唯一"，属下一笔选路，本笔不动。
+2. 那 1 条「标题由变量给出」维持整文件跑法（§4 的钱已量）。
+3. `mainRootFromCommonDir` null 分支仍无反例锚点（第 231 页 §6 登记的）。
+
 
 
 

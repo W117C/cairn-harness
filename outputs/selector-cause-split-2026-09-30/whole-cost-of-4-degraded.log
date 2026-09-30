@@ -1,0 +1,12 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-220c230.lock）
+变异验证：4 条
+✅ shape-leading-env-assignment-not-skipped — 不跳前导环境赋值 ⇒ `GIT_PAGER=cat git push --force` 的有效二进制看不见（这条是 09-22 建共用件时**自己踩到并被测出来**的一支） ｜本机实测 1.2s／2 拍
+✅ settings-default-on-key-read-by-strict-true — 缺省开的键改用 `=== true` 读 ⇒ 盘上 JSON 没有这个键的老机器静默拿到 false：DEFAULT_SETTINGS 那行改得再对也到不了用户手上，而单测只测对象的话全绿（这正是 promptCache 当年写那条注释的原因，同族第二实例） ｜本机实测 0.7s／2 拍
+✅ settings-auto-verify-default-reverted — 缺省被悄悄改回关 ⇒ §483 的「桌面产品默认开」失效，能力 5 的收束闸退回零真流量（09-19 设计稿 D7 记的就是这串默认关造成的『永远未证』） ｜本机实测 0.6s／2 拍
+✅ pb-control-arm-always-wired — 对照臂恒判「旋钮接得上」⇒ PC9 那半边成了装饰，主判据退化成「反正没别的能放行」的恒真式 ｜本机实测 1.2s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 4.2s · 跑了 4/4 条 · 预算 480s
+成本分母：判卷 spawn 8 次／4 条（每条次数分布 2×4）· 单次中位 第1次 0.5s／第2次 0.3s· 最贵一条 shape-leading-env-assignment-not-skipped 1.2s
+跑法单价：selector 0 拍·这一支本次没有 spawn ⇒ 没有分母 vs whole 8 拍·中位 0.35s·坏拍（没量到或 0 条） 0
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-220c230.lock）

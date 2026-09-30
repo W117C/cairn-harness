@@ -717,12 +717,46 @@ export function baselineRedKind(vitestOut: string): { kind: "unloadable"; module
 // （宽度与运行时一致，见 `selectorHitCount`；第 230 页之前这里数的是逐字 `includes`，比 `-t` 能做的窄）：
 // 0 命中时 vitest 不会失败，它只是**一条也没跑** ⇒ 基线与突变两拍都白过，这把尺会安静地变成假绿（第 166 页那族）。
 // 所以先要有一格读数把「选不中」的条数点名，而不是等 `-t` 上线后才发现名单里混着选不中的。
+/** `describe(...)` 的标题面（第 233 页）。抽取形状与 `vitestTitles` 的四支一一对应，只是主语换成 `describe`／`context`／`suite`。
+ *  为什么单独要一份：`--testNamePattern` 匹配的是**整条名**（describe 前缀＋it 标题），
+ *  所以指针完全可能写的是某一支 `describe` 的名字——运行时它选中的是**那支下面全部用例**，
+ *  而 it 标题面里一个字都找不到它 ⇒ 从前这一格把它报成「多半是用例改了名」，那是**指责任人**（实测：该指针选中 2 条）。 */
+export function describeTitles(sourceText: string): string[] {
+  const MOD = String.raw`(?:\.each|\.skip|\.todo|\.only|\.each\.object|\.concurrent|\.sequential)?`;
+  const SQ = String.raw`"((?:[^"\\]|\\.)*)"`;
+  const BQ = "`((?:[^`\\\\]|\\\\.)*)`";
+  const pats = [
+    new RegExp(String.raw`\b(?:describe|context|suite)` + MOD + String.raw`\s*\(\s*` + SQ, "g"),
+    new RegExp(String.raw`\b(?:describe|context|suite)` + MOD + String.raw`\s*\(\s*` + BQ, "g"),
+  ];
+  const out: string[] = [];
+  for (const re of pats) for (const m of sourceText.matchAll(re)) out.push(m[1]!);
+  return out;
+}
+
+/** 「0 命中」到底是哪一种 0（第 233 页）。这四种修法互不相同，而旧读数把它们并成一句"多半是改了名"。 */
+export type ZeroHitCause = "describe-title" | "variable-title" | "absent" | "unknown";
+
+export function zeroHitCause(pointer: string, sourceText: string): ZeroHitCause {
+  const descs = describeTitles(sourceText);
+  if (descs.some((d) => d.includes(pointer) || unescapeTitle(d).includes(pointer))) return "describe-title";
+  // 指针这句字节在判卷文件里**有**，只是没有一条 `it` 标题含它 ⇒ 标题多半由变量／循环给出
+  // （实测形状：`for (const cmd of WRAPPED) it(cmd, …)`，运行时 `-t "GIT_PAGER=cat git push --force"` 恰好选中 1 条）
+  if (sourceText.includes(pointer) || sourceText.includes(pointer.replace(/["\\]/gu, ""))) return "variable-title";
+  if (!expectFailMatchesTitles(pointer, sourceText)) return "absent"; // 文件里压根没这句话＝真·指不到
+  return "unknown";
+}
+
 export interface SelectorProblem {
   id: string;
   test: string;
-  /** 这份判卷里**运行时会被这条指针选中**的用例条数（`selectorHitCount`）。0＝对不上任何标题（多半是用例改了名）；>1＝选择子不唯一。 */
+  /** 这份判卷里**运行时会被这条指针选中**的用例条数（`selectorHitCount`）。0＝对不上任何 `it` 标题；>1＝选择子不唯一。 */
   hits: number;
+  /** 只在 `hits === 0` 时给出：那句 0 是哪一种 0（第 233 页）。四种成因的修法相反，不许并成一句"多半是改了名"。 */
+  cause?: ZeroHitCause;
 }
+
+
 
 /** 数每条锚点的指针在它自己的判卷文件里能选中几条用例。只回 ≠1 的那些（==1 是能走 -t 的那一批）。
  *  09-30 补（待办 #26）：**"这一条没被数"必须分成三态各自有名**，因为它们的修法相反：
@@ -774,7 +808,7 @@ export function selectorAmbiguity(
   entries: readonly ExpectFailEntry[],
   readTest: (rel: string) => string | null,
 ): SelectorScan {
-  const cache = new Map<string, string[] | null>();
+  const cache = new Map<string, { text: string; titles: string[] } | null>();
   const problems: SelectorProblem[] = [];
   const selectableIds: string[] = [];
   const blindByTest = new Map<string, string[]>();
@@ -785,19 +819,23 @@ export function selectorAmbiguity(
     if (e.expectFail === "" || !e.test.endsWith(".test.ts")) { excluded += 1; continue; }
     if (!cache.has(e.test)) {
       const text = readTest(e.test);
-      cache.set(e.test, text === null ? null : vitestTitles(text));
+      cache.set(e.test, text === null ? null : { text, titles: vitestTitles(text) });
     }
-    const titles = cache.get(e.test);
-    if (titles === null || titles === undefined) { unreadable.push(e.id); continue; }
-    if (titles.length === 0) {
+    const face = cache.get(e.test);
+    if (face === null || face === undefined) { unreadable.push(e.id); continue; }
+    if (face.titles.length === 0) {
       const hit = blindByTest.get(e.test);
       if (hit) hit.push(e.id);
       else blindByTest.set(e.test, [e.id]);
       continue;
     }
     inspected += 1;
-    const hits = selectorHitCount(e.expectFail, titles);
-    if (hits !== 1) problems.push({ id: e.id, test: e.test, hits });
+    const hits = selectorHitCount(e.expectFail, face.titles);
+    if (hits !== 1) {
+      problems.push(hits === 0
+        ? { id: e.id, test: e.test, hits, cause: zeroHitCause(e.expectFail, face.text) }
+        : { id: e.id, test: e.test, hits });
+    }
     else selectableIds.push(e.id);
   }
   return {
@@ -809,6 +847,27 @@ export function selectorAmbiguity(
 
 /** 那一格的措辞：四态分开印，且**不许**把「选不中」「读不到」「整片瞎」并成「没什么问题」。
  *  存量不是 0（现读 13 条），所以这一格走水位法：只准调低，涨了要交代。 */
+/** 「零命中」的四种成因各印一个数，**0 也印**（数量不列印＝那一格没有观测者；并成一句就会指错责任人）。
+ *  动因（第 233 页实测）：这句从前写的是"多半是用例改了名"，而全表那 2 条零命中，
+ *  一条是**指针指在 `describe` 上**（实测 `-t` 选中 2 条＝不唯一，不是选不中），
+ *  一条是**标题由循环变量给出**（`for … it(cmd)`，实测 `-t` 恰好选中 1 条＝运行时选得中，只是静态看不见）。 */
+const ZERO_CAUSE_LABELS: Readonly<Record<ZeroHitCause, string>> = {
+  "describe-title": "指在 describe 上",
+  "variable-title": "标题由变量给出",
+  "absent": "文件里没这句话",
+  "unknown": "说不清",
+};
+
+export function zeroCauseCell(zero: readonly SelectorProblem[]): string {
+  const causes = Object.keys(ZERO_CAUSE_LABELS) as ZeroHitCause[];
+  const counts = new Map<ZeroHitCause, number>(causes.map((c) => [c, 0]));
+  for (const p of zero) {
+    const c = p.cause ?? "unknown";
+    counts.set(c, (counts.get(c) ?? 0) + 1);
+  }
+  return causes.map((c) => `${ZERO_CAUSE_LABELS[c]} ${String(counts.get(c) ?? 0)}`).join("｜");
+}
+
 export function selectorCell(scan: SelectorScan): string {
   const { problems, inspected, blind, unreadable, excluded, total } = scan;
   const zero = problems.filter((p) => p.hits === 0);
@@ -821,7 +880,7 @@ export function selectorCell(scan: SelectorScan): string {
       `**读得到文件却一条标题都抽不到 ${String(blind.reduce((n, b) => n + b.ids.length, 0))}**` +
       (blind.length === 0 ? "" : `（${blind.map((b) => `${b.test}⇒${b.ids.join("、")}`).join("；")}）`) +
       "，那些只能整文件跑，**不算这一格通过**",
-    zero.length === 0 ? "" : `零命中 ${String(zero.length)} 条（指针在那份判卷里对不上任何标题，多半是用例改了名 ⇒ -t 会一条也选不中）`,
+    zero.length === 0 ? "" : `零命中 ${String(zero.length)} 条（按成因点名：${zeroCauseCell(zero)}；共同后果是 -t 一条也选不中 ⇒ 走整文件跑法）`,
     many.length === 0 ? "" : `多命中 ${String(many.length)} 条（选择子不唯一）`,
   ].filter((s) => s !== "");
   return parts.join("·") + (problems.length === 0 ? "" : "：" + problems.map((p) => `${p.id}(${String(p.hits)})`).join("、"));

@@ -1130,8 +1130,11 @@ describe("按标题选跑法：选中几条必须被读出来", () => {
 // 56 条挂在一份宿主上吃掉整批 98.8% 的时间）。要改成「只跑自己那条 killer 用例」，前提是指针能唯一定位那条标题；
 // 选不中时 vitest 不是失败而是**一条也没跑**，基线与突变两拍都白过 ⇒ 先要有读数点名「选不中的是哪些」。
 // 帽的来路：13（09-28 现读 11 零命中＋2 多命中）→ 4（09-30 第 230 页把命中宽度对齐 `-t`：
-// 标题是拼出来的／表里存解码值而那两类运行时选得中的，从前被当成选不中）。
-const SELECTOR_CAP = 4;
+// 标题是拼出来的／表里存解码值而那两类运行时选得中的，从前被当成选不中）
+// → 3（同日第 233 页：那条指在 `describe` 上的指针收到该支真正会红的那条用例上。
+// 剩下的那 1 条零命中是「标题由循环变量给出」——实测 `-t` 恰好选中 1 条，只是静态数不清 ⇒ 它走整文件跑法是**代价**不是缺陷，
+// 实测 whole 8 拍中位 0.35s、最贵一条 1.2s ⇒ 不为它叠一层运行时反查）。
+const SELECTOR_CAP = 3;
 
 describe("选择子唯一性：一条锚点能不能只跑自己那条 killer 用例", () => {
   const judge = (body: string) => body;
@@ -1227,8 +1230,41 @@ describe("选择子唯一性：一条锚点能不能只跑自己那条 killer �
   it("接线：选择子与指针体检共用同一份标题抽取，不再另抄正则（抄一份必然漂宽，第十三族）", () => {
     const lib = readFileSync(fileURLToPath(new URL("../scripts/lib/mutate-gates.ts", import.meta.url)), "utf8");
     expect(lib, "selectorAmbiguity 又回到私有抽取 ⇒ 全表这一格与 expectFail 体检说的是两件事").toMatch(
-      /^ {6}cache\.set\(e\.test, text === null \? null : vitestTitles\(text\)\);$/mu);
+      /^ {6}cache\.set\(e\.test, text === null \? null : \{ text, titles: vitestTitles\(text\) \}\);$/mu);
     expect(lib, "私有那份窄标题正则回来＝第三态重新变成尺的瞎，而不是盘上真没标题").not.toMatch(/const TITLE_RE\s*=/u);
+  });
+
+  it("零命中分四种成因、各印各的数（0 也印）——从前那句「多半是用例改了名」是在指责任人", () => {
+    const src = [
+      'describe("对照臂判据：门槛旋钮接得上", () => {',
+      '  it("每轮都落盘", () => {});',
+      '  it("没活可干不算接上", () => {});',
+      '});',
+      'const WRAPPED = ["GIT_PAGER=cat git push --force"];',
+      "for (const cmd of WRAPPED) { it(cmd, () => {}); }",
+      'it("唯一的那条", () => {});',
+    ].join("\n");
+    const entries = [
+      { id: "on-describe", test: "tests/x.test.ts", expectFail: "对照臂判据：门槛旋钮接得上" },
+      { id: "from-var", test: "tests/x.test.ts", expectFail: "GIT_PAGER=cat git push --force" },
+      { id: "gone", test: "tests/x.test.ts", expectFail: "这句话在这份判卷里压根没有" },
+    ];
+    const r = selectorAmbiguity(entries, () => src);
+    // 三条都是 0 命中，但成因三种各不相同：前两条在真表里今天就存在（第 233 页实测它们都能被 -t 选中，只是选中 2 条与 1 条）
+    expect(r.problems.map((p) => `${p.id}:${String(p.hits)}:${String(p.cause)}`).sort()).toEqual([
+      "from-var:0:variable-title", "gone:0:absent", "on-describe:0:describe-title",
+    ]);
+    const cell = selectorCell(r);
+    expect(cell, cell).toContain("指在 describe 上 1");
+    expect(cell, cell).toContain("标题由变量给出 1");
+    expect(cell, cell).toContain("文件里没这句话 1");
+    expect(cell, "0 那一档不印＝这一格没有观测者（规则 210），下次它悄悄变成 3 也没人看见").toContain("说不清 0");
+  });
+
+  it("接线：0 命中那一格吃的是**整份判卷文字**，不是只有标题面", () => {
+    const lib = readFileSync(fileURLToPath(new URL("../scripts/lib/mutate-gates.ts", import.meta.url)), "utf8");
+    expect(lib, "只吃标题面 ⇒ describe 与变量这两种成因永远分不出来，读数只能继续冤枉「改了名」").toMatch(
+      /^ {8}\? \{ id: e\.id, test: e\.test, hits, cause: zeroHitCause\(e\.expectFail, face\.text\) \}$/mu);
   });
 
   it("两个分母并排印（可判面／表全长）：只印被数过的那个数，少的那几条去哪了没人说", () => {
@@ -1258,7 +1294,7 @@ describe("选择子唯一性：一条锚点能不能只跑自己那条 killer �
       /\n\s*console\.log\("ℹ️  " \+ selectorCell\(selectorScan\)\);/);
   });
 
-  it(`水位：真表现读「选不中＋不唯一」只准调低（帽 ${SELECTOR_CAP}，09-30 第 230 页把宽度对齐 -t 后现读 4＝2 零命中＋2 多命中）——新增一根要写明为什么`, () => {
+  it(`水位：真表现读「选不中＋不唯一」只准调低（帽 ${SELECTOR_CAP}，09-30 第 233 页现读 3＝1 零命中＋2 多命中）——新增一根要写明为什么`, () => {
     const rows = listAnchorRows();
     const r = selectorAmbiguity(rows, (rel) => readRel(rel));
     expect(r.problems.length, "选择子失准：" + r.problems.map((p) => `${p.id}(${String(p.hits)})`).join("、")).toBeLessThanOrEqual(SELECTOR_CAP);
