@@ -1,0 +1,17 @@
+== 第 242 页取料：同文件引用点名分支（实现未入库时现读）==
+
+      Tests  51 passed (51)
+   Start at  22:39:29
+   Duration  737ms (tests 60%, transform 30%, import 10%)
+
+
+typecheck: tsc --noEmit 通过（0 条报错）✅
+
+针脚体检：1097 条 —— 阻断 8，待复认 0，未覆盖 0，逐行式 5，未入库面 8（被测面 + 判卷两面），钉在飞文本 0，killer 指针失效 0（其中 HEAD 侧 0）
+改法语法体检：1097 条改法全部产出合法源文件 ✅
+
+== 修后工具实测（同文件独用符号 main）==
+
+===== impact_query {symbol:"insideScratchFace"} ⇒ ok=true =====
+[impact] insideScratchFace 的定义在 1 个文件：无跨文件调用点；同文件引用在下面点名（跨文件图判据不含同文件边，别读成「没人用」）
+  scripts/lib/head-cert-deps.ts: insideScratchFace(L294)

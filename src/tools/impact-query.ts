@@ -212,7 +212,24 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
       const symHead = `[impact] ${symbol} 的定义在 ${String(defFiles.size)} 个文件` +
         coverageNote(graph.files.length, maxFiles, graph.candidates) +
         unionNote(defFiles.size > 1 ? `${symbol} 有 ${String(defFiles.size)} 份定义` : "");
-      return { ok: true, output: sitesNote(symHead, upward(graph, symbol)) };
+      const cross = upward(graph, symbol);
+      // 同文件调用/引用在 refs 里、被 upward 的跨文件判据滤掉（index.ts:243）——空列表若照抄
+      // 「波及半径为 0」，模型会把私有函数当零风险改掉（第 241 页实测：insideScratchFace 的真调用者
+      // staleScratchTrees:294，其结果直喂 head-cert 的 foreign 分格判据）。跨文件 0 ≠ 总波及 0：
+      // 同文件引用图里就有，点名它不花第二次扫描。refs 全空（跨文件与同文件都 0）才轮到「波及半径为 0」。
+      if (cross.length === 0) {
+        const sameFile = refSites.filter((r) => defFiles.has(r.file));
+        if (sameFile.length > 0) {
+          const lines = sameFile.slice(0, 8).map((s) => `  ${s.file}: ${s.symbol}(L${String(s.line)})`);
+          const tail = sameFile.length > 8 ? `\n  等 ${String(sameFile.length)} 处` : "";
+          return {
+            ok: true,
+            output: symHead + "：无跨文件调用点；同文件引用在下面点名（跨文件图判据不含同文件边，别读成「没人用」）\n" +
+              lines.join("\n") + tail,
+          };
+        }
+      }
+      return { ok: true, output: sitesNote(symHead, cross) };
     },
   };
 }
