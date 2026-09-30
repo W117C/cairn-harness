@@ -9926,6 +9926,46 @@ const MUTATIONS = [
     expectFail: "干净文件的账算我的，在飞文件的账不算我的——但两边都要在清单上",
   },
 
+  /* ── 第 274 页：把 `scripts/prose-needle-scan.ts` 的帽那一族补齐（第 272 页现读：这支 1100 行的尺此前整支零锚点，
+   *    本族四支各钉一种坏法：比较符、加法、按树取帽、把出声那一支焊死）。
+   *    这四支都能买，正因为它们的判卷喂的是**合成输入**（第 272 页第 7 项写的那条：clean 树上两侧同为 0 的配对断言买不了锚点）。 ── */
+  {
+    id: "prose-scan-cap-boundary-ge-not-gt",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "把「只准调低」的边界从 `>` 写成 `>=` ⇒ 贴帽那一格当天就红，于是下一次有人为了让它绿而把帽往上调——" +
+      "这条线本来是「不许涨」，写成「不许等于」就变成「必须留余量」，两者对不上账",
+    apply: (s) => s.replace("return { total, over: total > cap };", "return { total, over: total >= cap };"),
+    expectFail: "两半相加＝比的那个数；等于帽不算涨",
+  },
+  {
+    id: "prose-scan-cap-total-minus-flight-half",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "两半之和写成「已提交减在飞」 ⇒ 总数看着还在，红却不响了：全格子都在飞的那种输入直接归零，" +
+      "帽于是只守已经入库的那一半（第 118 页改的就是这个判据位置）",
+    apply: (s) => s.replace("const total = committed + flying;", "const total = committed - flying;"),
+    expectFail: "在飞那一半必须算账：全格子都在飞文件里",
+  },
+  {
+    id: "prose-scan-ceiling-ignores-tree-scope",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "帽不按树取、写死 `core-only` 那行 ⇒ 含桌面层那棵树拿窄帽量宽面，同一批格子在两种树上给出不同判决，" +
+      "而报出来的文案还说「树＝含桌面层」（读数说谎比读数缺失更坏）",
+    apply: (s) => s.replace("const cap = SCOPE_CEILINGS[r.scope];", 'const cap = SCOPE_CEILINGS["core-only"];'),
+    expectFail: "帽内输入两条都交空串（空串＝没有红，不是缺读数）；帽按 scope 取宽窄两行",
+  },
+  {
+    id: "prose-scan-multi-breach-branch-welded-shut",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "把顶包那一支的出声条件焊成 `false` ⇒ CLI 永远不报水位上涨，而判卷剩下的全是合成输入，" +
+      "真仓里涨到几格都没人喊（「两处帽比较收成唯一决策点」这件事只剩散文）",
+    apply: (s) => s.replace("multi: multi.over", "multi: false"),
+    expectFail: "在飞那一半超帽必须出声，且文案交出两半各自的数",
+  },
+
   /* ── 第 273 页：把「实测 <1.5s 全进」这条线接成判据（取料＝入库的那趟全表日志）。两支各钉一半。 ── */
   {
     id: "certface-webfetch-gate-row-dropped",
