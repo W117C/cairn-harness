@@ -6962,6 +6962,37 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
    另一条未证：`gates.ts` 报的"7 项未证"（docs-check 3／gate-check 1／autonomy 1／compaction 1／plugins 1）
    本格**不吞**：进门面的门若未证，认证那一行仍印绿 ⇒ 要把未证接进门面得先定 `--strict-unverified` 的口径（第 223 页 §5⑶）。
 
+### 2026-09-30 · 第 224 页补 · 本笔（`419a5ef`）凭证：认证面第一次自己跑门就通——10/10 全绿、18.63s，认证 252 文件／3256 条 exit=0 且两端独占
+
+取料 `outputs/cert-gate-face-2026-09-30/`（`head-cert-419a5ef.log`／`kill-4-anchors.log`／`needles-check-at-419a5ef.log`／
+`cert-tree-suite-duration.txt`／`cert-summary-419a5ef.txt`）。
+
+1. **第 224 页 §7 那条未证在此结案**：认证门面**第一次实跑**就是这一趟，逐道自报全绿——
+   `no-progress 524 / prune 533 / fork 905 / compaction 598 / docs 578 / memory 660 / head-import 698 /
+   autonomy 854 / gate-check 2927 / mutate-needles 10351`（ms），`认证门面=10 道（跑到 10）｜绿 10 道｜⚠️ 超预算 0`。
+   **逐道之和 18.63s**；对同一趟认证树的判卷 `Duration 121.14s` 是 **+15.4%**。
+   ⇒ 第 223 页那句「≈+13.7%」是**买之前的推算**，被这个实测替掉（规则 260），已在 `CERT_GATES` 的注释里换成实测数并写明出处。
+   一处诚实的缺口：这趟**没给整条 `head-cert` 掐总墙钟**（跑之前忘了加 `time`）⇒ "一次认证现在总共多少秒"仍只有组件账
+   （121.14 + 18.63 ＋ 切树/补依赖/树核那部分），下一趟认证带 `time` 才量得到；本格不许拿组件相加冒充实测总墙钟。
+2. **本笔四道新锚点 4/4 全杀**（判卷树 @`419a5ef`、锁标签 p224-new）：`跑了 4/4 条 · 本次耗时 2.5s`、
+   `spawn 8 次／4 条（2×4）`、`selector 8 拍·中位 0.27s·坏拍 0`、最贵一条 0.6s ⇒ **每条 ≈0.62s／2 拍**。
+   这四条的判卷宿主同一支（`tests/cert-gate-face.test.ts`），所以 8 拍全落在一支纯函数尺上——不起真进程这件事是**读文件名**得出的，不是量的。
+3. **落库后在认证树里复跑针脚自检**：`needles_exit=0`、`1059 条——阻断 0、待复认 0、未覆盖 0、逐行式 5、
+   未入库面 0、钉在飞文本 0、killer 指针失效 0（HEAD 侧 0）` ⇒ 第 224 页提交前那批"钉在飞文本"归零（规则 283/284）。
+4. **认证本身**：`cert_exit=0`、`Test Files 252 passed｜Tests 3256 passed`、`typecheck exit=0（0 报错）`、
+   `DIRTY_JUDGED=0`、`依赖完整=是`、`收尾复核=同一笔`、`并发判卷=起前 0 套／跑完 0 套（两端独占）`、
+   `import 面 2961 条边｜悬空 0`、门表 29 道缺同名 script 0 道（这一行现在只是**名单完整性**，绿的含义已经变了：
+   门是不是被跑过，看它下面那段 `认证门面`）。
+5. **凭证这笔另带的两处读数更正**（都在 `CERT_GATES` 注释里，不改已落台账页的判断）：
+   「+13.7%」→ 实测 +15.4%；「合计 ≈16.7s」→ 第一次实跑 18.63s（同一台机、不同负载下差 ≈2s，
+   这正是**为什么**超预算不许翻判定）。另加第 224 页的锚点单价行。
+6. **门同轮自报**：docs-check 与 mutate-needles-check 现在都在认证里跑（本笔汇总可见），
+   页面写它们的人肉自报从这一笔起可以退休；prose-needle-scan 不在门面里（第 223 页 §4 说过它没进 GATES 名单），
+   本笔仍自报一次：`顶包候选 已提交态 10 ＋ 在飞 0`。
+7. **未证**：`gates.ts` 自己报的 7 项未证（`docs-check 3／gate-check 1／autonomy 1／compaction 1／plugins 1`）
+   本格**不吞**——它们进门面后认证仍印绿；下一格要不要把未证接进判定，取决于 `--strict-unverified` 的口径（第 223 页 §5⑶）。
+
+
 
 
 

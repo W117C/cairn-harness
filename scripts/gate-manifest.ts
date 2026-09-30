@@ -114,6 +114,10 @@ export const GATES: readonly string[] = [
   //   同一批在**上一笔** `fcd521d` 上先跑出 4 杀 1 存活（`kill_exit=1`、`REDKINDS=survived:1`）：
   //   存活那条不是没观测者，是 `expectFail` 指到了「摘掉判据之后仍然成立」的那一半（负控）——
   //   选择子只跑被点名的那格 ⇒ 改指正向那格后 5/5。这笔账记在第 222 页补⑵，别拿 3.2s 那次替第一次背书。
+  // 第 224 页（#36）表 1055 → **1059 条**（四条新增全钉在 `tests/cert-gate-face.test.ts` 一支上：三条行为格＋一条接线格）。
+  //   实测（判卷树 @`419a5ef`、锁标签 p224-new、取料 `outputs/cert-gate-face-2026-09-30/kill-4-anchors.log`）：
+  //   `跑了 4/4 条 · 本次耗时 2.5s`、`spawn 8 次／4 条（2×4）`、`selector 8 拍·中位 0.27s·坏拍 0`、最贵一条 0.6s
+  //   ⇒ **每条 ≈0.62s／2 拍**。本格真正的成本不在变异表而在**认证那一趟**：+18.63s（`CERT_GATES` 那段写着实测出处）。
 
 
   // 从前挂在这道门上的「整表 20 分钟」这个反对理由，量的其实是整张变异表——两把尺的数不许互借。
@@ -129,7 +133,9 @@ export const GATES: readonly string[] = [
  *  取哪几道由**实测秒**决定，不靠感觉：`outputs/gate-cost-for-cert-face-2026-09-30/measurements.md`
  *  在认证树 `2becb8e` 上逐道量过 13 道（墙钟 46.7s、逐道之和 45.8s；分母＝认证树自报判卷 `Duration 122.02s`）。
  *  名单只收**亚秒档 8 道 ＋ 每笔交笔本来就要跑的两道**（gate-check、mutate-needles-check），
- *  合计实测 ≈16.7s＝一次认证的 +13.7%；`tools-check`(8.6s)／`map-check`(4.8s)／`plugins-check`(15.2s)
+ *  合计**第一次实跑实测 18.63s**（10 道逐道 `ms` 之和，`419a5ef` 那趟认证自报），
+ *  对认证树判卷 `Duration 121.14s` 是 **+15.4%**——第 223 页那句「≈+13.7%」是买之前的推算，被这个实测替掉（规则 260）；
+ *  `tools-check`(8.6s)／`map-check`(4.8s)／`plugins-check`(15.2s)
  *  与那 16 道**没量过的**门都不进——"全吞进来"的性价比要另一笔单独量（第 224 页 §未证）。
  *  `budgetMs` 是**读数不是判决**：超预算只出声，不把认证判红（规则 256，秒数会被本机负载与隔壁会话挪动）。 */
 export const CERT_GATES: readonly { name: string; budgetMs: number }[] = [

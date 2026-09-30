@@ -1,0 +1,16 @@
+Already up to date
+Done in 165ms using pnpm v11.21.0
+$ node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify cert-gate-face-not-spawned cert-gate-absence-only-warns cert-gate-overbudget-turns-red cert-gate-shape-drift-reads-as-absent --lock-tag=p224-new
+[mutate-verify] checkout exit=0：.worktrees/gate-mutate-verify → 419a5ef
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p224-new.lock）
+变异验证：4 条
+✅ cert-gate-face-not-spawned — 把跑门那一行的 spawn 目标换掉 ⇒ 认证只印读数不跑门，`cert exit=0` 退回「只代表判卷」。这一格立起来的理由就是那条并存（规则 292）：门表被**数**过不等于门被**跑**过 ｜本机实测 0.6s／2 拍
+✅ cert-gate-absence-only-warns — 某道门没跑到被降成出声 ⇒ 「跑丢了」与「跑了且绿」同形（规则 261）。gates 的进程被换掉、名单漂了、`--only` 拼错——三种成因今天都会变成绿认证 ｜本机实测 0.5s／2 拍
+✅ cert-gate-overbudget-turns-red — 把「超预算」接进判定 ⇒ 认证这道门开始押在时钟上：本机负载、隔壁在跑、CI 抢核都会把绿判成红。规则 256 在这一格的形状——**秒数只能出声，不能翻判定**（名单里的预算是给人看的成本读数） ｜本机实测 0.5s／2 拍
+✅ cert-gate-shape-drift-reads-as-absent — 名单在而形状变了（排版一改就抽不出条目）被读成「这一笔还没有这一格」⇒ 门面**无声消失**，而这正是本格子要消灭的那件事。三态里 broken 必须与 absent 分开（规则 239/261） ｜本机实测 0.5s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 2.5s · 跑了 4/4 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 8 次／4 条（每条次数分布 2×4）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 cert-gate-face-not-spawned 0.6s
+跑法单价：selector 8 拍·中位 0.27s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p224-new.lock）
