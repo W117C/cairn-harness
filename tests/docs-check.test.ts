@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import {
   checkCredentialSources, CREDLEDGER_FILE, CRED_UNNAMED_PAGE_CAP, credentialPages, LEDGER_FILE, ledgerRevFace, ledgerRevTokens,
-  credRunShas, CRED_WEAK_WITNESS_CAP,
+  credRunShas, CRED_WEAK_WITNESS_CAP, UNSOURCED_CRED_PAGES,
   LEDGER_NON_REV, runDocsCheck, sourcedReadings, UNSOURCED_READINGS,
 } from "../scripts/docs-check";
 import { REPLAY_READINGS, countInlineReplay, type ReplayReading } from "../scripts/replay-readings";
@@ -484,7 +484,8 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
 
   it("页没点名目录＝未检：不红，但要进那一只分母；同页的豁免不许被误报成 stale", () => {
     const pages = credentialPages(page([], ["241"]));
-    const r = checkCredentialSources(pages, face({}), { "第 900 页|241": "迁移前的老页" });
+    // 帽显式给 9：本笔把现读帽降到 0，而这条测的是「未检那一档不红、豁免不误报 stale」，不是帽。
+    const r = checkCredentialSources(pages, face({}), { "第 900 页|241": "迁移前的老页" }, 9);
     expect(r.findings, "未检这一档不该产出红，也不该把仍然用得上的豁免报成该删").toEqual([]);
     expect(r.unnamed).toBe(1);
     expect(r.checked).toBe(0);
@@ -508,22 +509,13 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
   });
 
   it("真仓：可比对分母 ≥ 50、红只剩登记过的那些（三档各有多少要印出来）", () => {
-    const text = readFileSync(fileURLToPath(new URL("../PROGRESS.md", import.meta.url)), "utf8");
-    const pages = credentialPages(text);
-    expect(pages.length, "一张凭证页都没抽到 ⇒ 页的形状或本尺的正则坏了").toBeGreaterThan(10);
-    const r = checkCredentialSources(pages, (dir) => {
-      const abs = fileURLToPath(new URL(`../outputs/${dir}`, import.meta.url));
-      if (!existsSync(abs)) return null;
-      return readdirSync(abs).filter((f) => !f.endsWith(".mjs")).map((f) => {
-        let text = "";
-        try { text = readFileSync(join(abs, f), "utf8"); } catch { text = ""; }
-        return { name: f, text };
-      });
-    });
-    expect(r.checked, `可比对只有 ${String(r.checked)} 个 ⇒ 取料面塌了`).toBeGreaterThanOrEqual(50);
-    expect(r.findings.map((f) => f.detail)).toEqual([]);
+    /* 第 271 页起这条走**生产接线**（`runDocsCheck` 里那一次注入登记表与两张帽）：
+       从前这里自带一个取料器＝判卷多开了一条消费者，登记表加一页它就整体红（第 271 页实测 10 条红全这么来的）。 */
+    const cred = runDocsCheck().cred;
+    expect(cred.checked, `可比对只有 ${String(cred.checked)} 个 ⇒ 取料面塌了`).toBeGreaterThanOrEqual(50);
+    expect(cred.findings.map((f) => f.detail)).toEqual([]);
     expect(Object.keys(UNSOURCED_READINGS).length).toBeGreaterThanOrEqual(1);
-  });
+  }, 30_000);
 
   it("未点名要按页记名：同一页的两个段合成一页，点名的页不许混进这一档", () => {
     const twoSections = "### 2026-10-01 · 第 900 页补 凭证：第一段\n\nTest Files 1 passed\n\n"
@@ -568,6 +560,31 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
     const noId = checkCredentialSources(credentialPages(page(["x-2026-09-30"], ["253"])), () => [{ name: "judges.log", text: "Test Files 253 passed" }], {}, 99, 0);
     expect(noId.weak, "判不出来就当弱证 ⇒ 帽会被没有身份行的日志灌满").toEqual([]);
     expect(noId.weakUnjudged, "第三态要单独出声，不许被读成『都已核对』").toBe(1);
+  });
+
+  it("未点名要拆两态：登记过的页离开『可行动』，没登记的才受帽管", () => {
+    const long = "2026-09-27 那趟汇总只落 /tmp，没随页入库；10-01 扫 814 份 dated 文件零证人。";
+    const pages = credentialPages(page([], ["241"]));
+    const open = checkCredentialSources(pages, face({}), {}, 0, 0, {});
+    expect(open.unnamedPages, "没登记＝可行动，必须留在帽那一档").toEqual(["第 900 页"]);
+    expect(open.unnamed, "条数也跟着只算可行动那一半").toBe(1);
+    const registered = checkCredentialSources(pages, face({}), {}, 0, 0, { "第 900 页": long });
+    expect(registered.unnamedPages, "登记之后不许再占可行动那一档，否则这一格永远降不到 0").toEqual([]);
+    expect(registered.registeredPages).toEqual(["第 900 页"]);
+    expect(registered.registeredReadings, "登记页的读数要单列报数，不许静默消失").toBe(1);
+    expect(registered.findings, "理由够长、登记有效 ⇒ 不该红").toEqual([]);
+  });
+
+  it("页级登记的两半 stale 都要出声：这页真点名了目录、或整段没了；理由太短也算没登记", () => {
+    const short = "理由太短";
+    const long = "当轮日志只落 /tmp；2026-10-01 用 sweep 扫全仓 dated 面零证人，故登记不可回查。";
+    const named = credentialPages("### 2026-09-30 · 第 900 页 凭证：测试页\n\n取料：outputs/x-2026-09-30/\nTest Files 241 passed\n");
+    const stillNamed = checkCredentialSources(named, face({ "x-2026-09-30": "Test Files 241 passed" }), {}, 0, 0, { "第 900 页": long });
+    expect(stillNamed.findings.map((f) => f.detail).join("\n"), "登记页后来真的点名了 ⇒ 登记该删（双向棘轮，规则 302）").toContain("已被它自己点名的取料目录顶住");
+    const gone = checkCredentialSources(credentialPages(page([], ["241"])), face({}), {}, 0, 0, { "第 901 页": long });
+    expect(gone.findings.map((f) => f.detail).join("\n"), "登记的页在台账里已经不命中 ⇒ 不许静默留着").toContain("在台账里已不再命中（没有读数或整段没了），该删");
+    const thin = checkCredentialSources(credentialPages(page([], ["241"])), face({}), {}, 0, 0, { "第 900 页": short });
+    expect(thin.findings.map((f) => f.detail).join("\n"), "空话式登记等于没登记").toContain("理由只有");
   });
 
   it("弱证不许过度主张：面上既有别趟的原文、也有没印身份行的原文 ⇒ 这一格算『无从判』", () => {
@@ -630,6 +647,8 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
   it("真仓：未点名页数跟着现读走——涨了要红，凭空把帽调低也要红（只有真把页点名了才允许降）", () => {
     const cred = runDocsCheck().cred;
     expect(cred.unnamedPages.length, `现读 ${String(cred.unnamedPages.length)} 页 ≠ 帽 ${String(CRED_UNNAMED_PAGE_CAP)} ⇒ 帽要跟着现读改，别只改数`).toBe(CRED_UNNAMED_PAGE_CAP);
+    expect(cred.registeredPages.length, `登记表 ${String(Object.keys(UNSOURCED_CRED_PAGES).length)} 页，可现读『已登记』只有 ${String(cred.registeredPages.length)} 页 ⇒ 有一页既没点名也没登记，或登记表里的 key 认不出页`).toBe(Object.keys(UNSOURCED_CRED_PAGES).length);
+    expect(cred.registeredReadings, "登记页的读数条数要真从台账里抽出来（第 271 页现读＝19 条）").toBe(19);
     expect(cred.weak.length, `弱证现读 ${String(cred.weak.length)} 对 ≠ 帽 ${String(CRED_WEAK_WITNESS_CAP)} ⇒ 这一格同样只准跟着现读降（补 sha 或补工件），不许凭空调`).toBe(CRED_WEAK_WITNESS_CAP);
     expect(cred.checked, "可比对分母塌了就不是这一格的账").toBeGreaterThanOrEqual(50);
   }, 60_000);
@@ -688,8 +707,12 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
     expect(src).toMatch(/^ {2}if \(weak\.length > weakCap\) \{$/mu);
     expect(src).toMatch(/^ {10}return \{ name: f, text \};$/mu);
     expect(src, "汇总行里弱证那一格要真取 cred.weak.length——印成常数就没人看得见").toMatch(/^ {4}\+ `｜弱证 \$\{String\(cred\.weak\.length\)\} 对（帽 \$\{String\(CRED_WEAK_WITNESS_CAP\)/mu);
+    // 第 271 页的两态：登记要把页从『可行动』挪走，stale 检查与那列印数都得真接上
+    expect(src).toMatch(/^ {6}if \(p\.key in pageWaivers\) \{$/mu);
+    expect(src).toMatch(/^ {4}if \(namedKeys\.has\(key\)\) \{$/mu);
+    expect(src).toMatch(/^ {4}\+ `｜已登记不可回查 \$\{String\(cred\.registeredPages\.length\)\} 页／\$\{String\(cred\.registeredReadings\)\} 条`\);$/mu);
     // 反向那一半：返回体丢了 unnamedPages／weak ⇒ 上面那些印不到，这一条先红
-    expect(src).toMatch(/^ {2}return \{ findings: out, checked, unmatched, unnamed, unnamedPages: \[\.\.\.unnamedPageKeys\], weak, weakUnjudged \};$/mu);
+    expect(src).toMatch(/^ {2}return \{ findings: out, checked, unmatched, unnamed, unnamedPages: \[\.\.\.unnamedPageKeys\], registeredPages: \[\.\.\.registeredPageKeys\], registeredReadings, weak, weakUnjudged \};$/mu);
   });
 });
 

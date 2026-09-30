@@ -1,0 +1,13 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+ [32m✓[39m tests/docs-check.test.ts [2m([22m[2m74 tests[22m[2m)[22m[33m 600[2mms[22m[39m
+   [32m✓[39m D-9 凭证对账：三档（可比对／未点名＝未检／取不到＝未检）不许同形 [2m(24)[22m
+     [33m[2m✓[22m[39m 真仓：可比对分母 ≥ 50、红只剩登记过的那些（三档各有多少要印出来）[33m 333[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m74 passed[39m[22m[90m (74)[39m
+[2m   Start at [22m 06:13:25
+[2m   Duration [22m 761ms[2m (tests 89%, transform 9%, import 2%)[22m
+
+JUDGES_EXIT=0

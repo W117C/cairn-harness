@@ -10056,6 +10056,51 @@ const MUTATIONS = [
     apply: (s) => s.replace("export const CRED_WEAK_WITNESS_CAP = 0;", "export const CRED_WEAK_WITNESS_CAP = 1;"),
     expectFail: "真仓：未点名页数跟着现读走——涨了要红，凭空把帽调低也要红（只有真把页点名了才允许降）",
   },
+
+  /* ── 第 271 页：D-9 的「未点名」那一档拆成两态——可行动（没点名也没登记，受帽管）与已登记（工件当年没入库，逐页带理由）。
+     混着一个数写了几十笔，代价是"未检"永远降不到 0：谁都不知道剩下的到底是能补的还是补不了的。
+     五支各钉一种坏法：登记没把页挪走／stale 两半之一不查／理由长度不执法／返回体丢格子／那列印成常数。 ── */
+  {
+    id: "docscheck-cred-page-registration-not-splitting",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "登记表读到了却不分叉（恒走『可行动』那一支）⇒ 9 页登记永远算在未点名帽上，这一格清零之后再也降不回来，" +
+      "而下一位只会去把帽调大",
+    apply: (s) => s.replace("      if (p.key in pageWaivers) {", "      if (false) {"),
+    expectFail: "未点名要拆两态：登记过的页离开『可行动』，没登记的才受帽管",
+  },
+  {
+    id: "docscheck-cred-page-stale-named-not-checked",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "登记页后来自己点名了目录，这条 stale 不查 ⇒ 登记表只进不出，日后变成第二本没人对的旧账（规则 302 双向钉）",
+    apply: (s) => s.replace("    if (namedKeys.has(key)) {", "    if (false) {"),
+    expectFail: "页级登记的两半 stale 都要出声：这页真点名了目录、或整段没了；理由太短也算没登记",
+  },
+  {
+    id: "docscheck-cred-page-reason-length-not-enforced",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "理由长度不执法 ⇒ 『逐页带理由』退化成『逐页写个词』，登记就能拿来躲红而不是承认失检",
+    apply: (s) => s.replace("    if (reason.trim().length < CRED_PAGE_WAIVER_MIN_REASON_CHARS) {", "    if (false) {"),
+    expectFail: "页级登记的两半 stale 都要出声：这页真点名了目录、或整段没了；理由太短也算没登记",
+  },
+  {
+    id: "docscheck-cred-registered-not-returned",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "算出来了却不返回（给空数组与 0）⇒ 门那一步印不到这一格，两态重新混成一个数",
+    apply: (s) => s.replace("registeredPages: [...registeredPageKeys], registeredReadings,", "registeredPages: [], registeredReadings: 0,"),
+    expectFail: "未点名要拆两态：登记过的页离开『可行动』，没登记的才受帽管",
+  },
+  {
+    id: "docscheck-cred-registered-print-pinned-to-zero",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "汇总行把『已登记不可回查』那列印成常数 0 ⇒ 判定还在跑、登记表烂掉也没人看见（给人看的那一行也要有证人，规则 206/253）",
+    apply: (s) => s.replace("｜已登记不可回查 ${String(cred.registeredPages.length)} 页／", "｜已登记不可回查 ${String(0)} 页／"),
+    expectFail: "接线：主段把「未点名页」连同帽一起印出来，且判定真拿帽去比（只算不印＝这格永远没人看）",
+  },
   {
     id: "docscheck-cred-weak-cap-comparison-offbyone",
     src: "scripts/docs-check.ts",
@@ -10143,8 +10188,9 @@ const MUTATIONS = [
     src: "scripts/docs-check.ts",
     test: "tests/docs-check.test.ts",
     desc: "未点名那一档跳过页却不忘记豁免 ⇒ 迁移前的老页同时落进「未检」与「豁免已不再命中」，" +
-      "两句话互相打脸：一边说「这格没看」，一边说「你登记的东西没用了」（规则 239/261）",
-    apply: (s) => s.replace("unnamed += p.numbers.length; unverifiable(); continue;", "unnamed += p.numbers.length; continue;"),
+      "两句话互相打脸：一边说「这格没看」，一边说「你登记的东西没用了」（规则 239/261）。" +
+      "第 271 页那一支从行内长成了带两态分叉的块，`unverifiable()` 单独成行 ⇒ 针脚跟着走（规则 229）",
+    apply: (s) => s.replace("      unverifiable();", "      void 0;"),
     expectFail: "页没点名目录＝未检",
   },
   {
@@ -10169,7 +10215,7 @@ const MUTATIONS = [
     src: "scripts/docs-check.ts",
     test: "tests/docs-check.test.ts",
     desc: "未点名那一档只累加条数、不记页名 ⇒ 「哪几页没点名」永远查不出来，帽也无从比（本笔之前正是这个形状：三页凭证安静地整页失检）",
-    apply: (s) => s.replace("if (p.dirs.length === 0) unnamedPageKeys.add(p.key);", "if (false) unnamedPageKeys.add(p.key);"),
+    apply: (s) => s.replace("unnamedPageKeys.add(p.key);", "if (false) unnamedPageKeys.add(p.key);"),
     expectFail: "未点名要按页记名：同一页的两个段合成一页，点名的页不许混进这一档",
   },
   {
@@ -10186,7 +10232,7 @@ const MUTATIONS = [
     test: "tests/docs-check.test.ts",
     desc: "把帽从现读调大（9 → 10）而不点名任何一页 ⇒ 读数与帽脱钩，这一格从此可以无限装新失检的凭证页。" +
       "第 268 页降帽（11 → 9，两页真点名了）时这条针脚同笔跟着走：这一格刻意不允许悄悄降——降帽必须同时动这条锚点（规则 229）。",
-    apply: (s) => s.replace("export const CRED_UNNAMED_PAGE_CAP = 9;", "export const CRED_UNNAMED_PAGE_CAP = 10;"),
+    apply: (s) => s.replace("export const CRED_UNNAMED_PAGE_CAP = 0;", "export const CRED_UNNAMED_PAGE_CAP = 1;"),
     expectFail: "真仓：未点名页数跟着现读走——涨了要红，凭空把帽调低也要红（只有真把页点名了才允许降）",
   },
   {
@@ -10202,8 +10248,9 @@ const MUTATIONS = [
     src: "scripts/docs-check.ts",
     test: "tests/docs-check.test.ts",
     desc: "算出来了却不返回（从返回体里丢掉这一格）⇒ 门那一步拿到 undefined，按页那一档当场消失，条数那一档照印不误。" +
-      "第 269 页返回体长出 weak／weakUnjudged 两格，针脚跟着换行（规则 229）；丢 unnamedPages 这一半的坏法不变",
-    apply: (s) => s.replace("return { findings: out, checked, unmatched, unnamed, unnamedPages: [...unnamedPageKeys], weak, weakUnjudged };", "return { findings: out, checked, unmatched, unnamed, weak, weakUnjudged };"),
+      "第 269 页返回体长出 weak／weakUnjudged、第 271 页又长出 registeredPages／registeredReadings，" +
+      "针脚跟着换行（规则 229）；丢 unnamedPages 这一半的坏法不变",
+    apply: (s) => s.replace("return { findings: out, checked, unmatched, unnamed, unnamedPages: [...unnamedPageKeys], registeredPages: [...registeredPageKeys], registeredReadings, weak, weakUnjudged };", "return { findings: out, checked, unmatched, unnamed, registeredPages: [...registeredPageKeys], registeredReadings, weak, weakUnjudged };"),
     expectFail: "未点名要按页记名：同一页的两个段合成一页，点名的页不许混进这一档",
   },
   {

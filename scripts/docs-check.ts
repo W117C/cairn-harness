@@ -287,13 +287,32 @@ export function credRunShas(text: string): string[] {
  *  弱证清零）。同页还把判据收紧了一格：「面上既有别趟原文、也有没印身份的原文」改判为**无从判**——
  *  那 3 对本来就不该算缺陷（判卷日志与 needles 日志压根不印提交号）。 */
 export const CRED_WEAK_WITNESS_CAP = 0;
-/** 未点名取料目录的凭证页，按**页**记名（`第 NNN 页` key，Set 去重——同页有多个 `###` 段时不重复计）。
- *  帽跟着现读走，**只准调低**（计数类不留余量）：再写一笔不点名 `outputs/<主题>-YYYY-MM-DD/` 的凭证页 ⇒ D-9 当场红。
- *  为什么这一档要单独长读数：从前只印条数，没人知道是**哪几页**，于是第 262/263/264 三页凭证（8/6/6 条读数）
- *  落笔时只写了裸文件名（`judges-264.log`），一整页没进对账面，页里却引用了「可比对…（红 0）」——那说的是别的面。
- *  历次降帽（每一次都要同笔改那支钉着本行数字的锚点，规则 229——这一格故意不能悄悄降）：
- *  11（第 265 页点名自己三页）→ 9（第 268 页按 `dir-hunt` 的现读把工件其实还在盘上的两页点名：第 167、257 页）。 */
-export const CRED_UNNAMED_PAGE_CAP = 9;
+/** 「写了凭证却没点名取料目录」这一档从前是一个混数：里面既有**还能补点名**的页（工件其实还在盘上），
+ *  也有**当年工件就没入库**的页（今天补不了，只能登记）。两样的责任不同，混在一个数里就既不能行动也不能结案
+ *  （规则 239/300：三态分开印；第 268 页 `sweep.mts` 现读证实：未点名 9 页／19 条读数在 814 份 dated 文件里 0 证人）。
+ *  所以这里拆两态：
+ *  ⑴ **可行动**＝既没点名、又没登记 ⇒ 进 `unnamedPages`，受 `CRED_UNNAMED_PAGE_CAP` 管，超出即红；
+ *  ⑵ **已登记**＝在 `UNSOURCED_CRED_PAGES` 里 ⇒ 离开帽那一档，但每页必须带理由，且一旦这页真的点名的目录就报 stale。
+ *  历次降帽（每一次都要同笔改那支钉着本行数字的锚点，规则 229）：11（第 265 页点名自己三页）→ 9（第 268 页点名第 167、257 页）
+ *  → **0**（第 271 页：剩下 9 页逐页登记不可回查，可行动那一态清零）。 */
+export const CRED_UNNAMED_PAGE_CAP = 0;
+
+/** 已登记「工件当年没随页入库、今天无法回查」的凭证页。**按页**记（key＝`第 NNN 页`），逐页带理由，只准调低：
+ *  每登记一页都要有现读撑着（`outputs/cred-unrecoverable-sweep-2026-10-01/sweep.log`），不是拿来躲红的。
+ *  登记只声明"这一页的回查不成立"，**不声明**页里那些数是错的——它们是当轮实测，只是没了来源。 */
+export const UNSOURCED_CRED_PAGES: Readonly<Record<string, string>> = {
+  "第 155 页": "2026-09-27 那趟（`241`／`2847`／`9.7`）：汇总与墙钟只落 /tmp，没随页入库。2026-10-01 `sweep.mts` 扫 814 份 dated 文件 ⇒ `2847`、`9.7` 零证人；`241` 只在别趟（`1c40df7`）的汇总里同值出现，不算本页原文。",
+  "第 158 页": "2026-09-27 那趟（`2367.1`／`879`）：同上，两条在 dated 面里 0 证人。登记只声明无来源，不声明数错。",
+  "第 160 页": "2026-09-27 那趟（`241`／`2867`）：`2867` 0 证人；`241` 只有别趟同值。认证树锁那一笔的汇总日志没入库。",
+  "第 161 页": "2026-09-28 那趟（`241`／`2883`）：`2883` 0 证人；`241` 只有别趟同值。",
+  "第 163 页": "2026-09-28 那趟（`241`／`2904`）：`2904` 0 证人；`241` 只有别趟同值。",
+  "第 164 页": "2026-09-28 那趟（`241`／`2911`）：`2911` 0 证人；`241` 只有别趟同值。清场读数那一笔的日志未入库。",
+  "第 165 页": "2026-09-28 那趟（`1054.4`／`241`／`2912`）：`1054.4`、`2912` 0 证人；`241` 只有别趟同值。判卷提速那一笔只留了会话时间戳。",
+  "第 166 页": "2026-09-28 那趟（`21479.7`）：一条 `real`，0 证人——`--no-optional-locks` 那把尺的跑批日志当年没入库。",
+  "第 168 页": "2026-09-28 那趟（`241`／`2922`）：本笔认证 `03af5f5`，而盘上唯一同值的汇总属 `1c40df7`（第 268 页 `dir-hunt` 曾把它当候选，正是数值巧合）。",
+};
+/** 登记页的理由最低长度——空串或一句话敷衍（「没了」）等于没登记；这条是登记表自己的棘轮。 */
+export const CRED_PAGE_WAIVER_MIN_REASON_CHARS = 24;
 
 /** 弱证的一行：页 key＋读数＋顶上它的那几个文件（含那些文件自己声明的趟号）。 */
 export interface CredWeakWitness {
@@ -309,22 +328,38 @@ export function checkCredentialSources(
   waivers: Readonly<Record<string, string>> = UNSOURCED_READINGS,
   cap: number = CRED_UNNAMED_PAGE_CAP,
   weakCap: number = CRED_WEAK_WITNESS_CAP,
-): { findings: Finding[]; checked: number; unmatched: number; unnamed: number; unnamedPages: string[]; weak: CredWeakWitness[]; weakUnjudged: number } {
+  /** 登记表在**调用点**注入（不在这里给默认值）：单元测试要能拿空表跑，否则每加一页登记都会给所有合成面报一轮"该删"。 */
+  pageWaivers: Readonly<Record<string, string>> = {},
+): { findings: Finding[]; checked: number; unmatched: number; unnamed: number; unnamedPages: string[]; registeredPages: string[]; registeredReadings: number; weak: CredWeakWitness[]; weakUnjudged: number } {
   const out: Finding[] = [];
   const seenKeys = new Set<string>();
   const unnamedPageKeys = new Set<string>();
+  const registeredPageKeys = new Set<string>();
   const weak: CredWeakWitness[] = [];
   let checked = 0;
   let unmatched = 0;
   let unnamed = 0;
+  let registeredReadings = 0;
   let weakUnjudged = 0;
+  const namedKeys = new Set<string>();
   for (const p of pages) {
     if (p.numbers.length === 0) continue;
-    if (p.dirs.length === 0) unnamedPageKeys.add(p.key);
+    if (p.dirs.length > 0) namedKeys.add(p.key);
     // 未检的两档（页没点名／点了名但读不到）也要把该页的豁免记成"仍然用得上"——
     // 否则第 155 页那种迁移前的老页会同时落进"未检"和"豁免已不再命中"，两句话互相打脸。
     const unverifiable = (): void => { for (const n of p.numbers) seenKeys.add(`${p.key}|${n}`); };
-    if (p.dirs.length === 0) { unnamed += p.numbers.length; unverifiable(); continue; }   // 未点名＝未检，不红
+    if (p.dirs.length === 0) {
+      // 两态分开：登记过的进『已登记』，没登记的才是"能补而没补"，只有后者受帽管。
+      if (p.key in pageWaivers) {
+        registeredPageKeys.add(p.key);
+        registeredReadings += p.numbers.length;
+      } else {
+        unnamedPageKeys.add(p.key);
+        unnamed += p.numbers.length;
+      }
+      unverifiable();
+      continue;
+    }
     const blobs = p.dirs.map(readFace);
     if (blobs.every((b) => b === null)) { unmatched += p.numbers.length; unverifiable(); continue; }   // 取不到＝未检，也不红
     /* 按文件算一份"这个文件里有哪些读数、它属于哪一趟"，页内多条数共用。
@@ -373,10 +408,25 @@ export function checkCredentialSources(
     }
     if (!seenKeys.has(k)) out.push({ rule: "D-9", file: CREDLEDGER_FILE, detail: `豁免里的 ${k} 已不再命中，该删（理由曾写：${waivers[k]}）` });
   }
+  // 页级登记的两半：登记要真带来"这页不用回查了"，也要真退回——登记页一旦点名了目录，登记就该删。
+  for (const [key, reason] of Object.entries(pageWaivers)) {
+    if (namedKeys.has(key)) {
+      out.push({ rule: "D-9", file: CREDLEDGER_FILE, detail: `登记 ${key} 已被它自己点名的取料目录顶住，该删（理由曾写：${reason.slice(0, 40)}）` });
+      continue;
+    }
+    if (!registeredPageKeys.has(key)) {
+      out.push({ rule: "D-9", file: CREDLEDGER_FILE, detail: `登记的 ${key} 在台账里已不再命中（没有读数或整段没了），该删` });
+      continue;
+    }
+    if (reason.trim().length < CRED_PAGE_WAIVER_MIN_REASON_CHARS) {
+      out.push({ rule: "D-9", file: CREDLEDGER_FILE, detail: `登记的 ${key} 理由只有 ${String(reason.trim().length)} 字（< ${String(CRED_PAGE_WAIVER_MIN_REASON_CHARS)}）⇒ 登记必须写清"当年为什么查不到"，空话等于没登记` });
+    }
+  }
   // 帽只在这一格**超出**时出声：等于现读不算红（登记＝承认存量，涨一格才算新账）。
   if (unnamedPageKeys.size > cap) {
     out.push({ rule: "D-9", file: CREDLEDGER_FILE,
-      detail: `凭证页未点名取料目录 ${String(unnamedPageKeys.size)} 页 > 帽 ${String(cap)}（CRED_UNNAMED_PAGE_CAP，只准调低）⇒ 新写的凭证页必须点名 outputs/<主题>-YYYY-MM-DD/，否则它引用的每个读数都不在对账面里。最近的几页：${[...unnamedPageKeys].slice(-5).join("、")}` });
+      detail: `凭证页未点名取料目录 ${String(unnamedPageKeys.size)} 页 > 帽 ${String(cap)}（CRED_UNNAMED_PAGE_CAP，只准调低）⇒ 这是**可行动**那一态：既没点名 ` +
+        `outputs/<主题>-YYYY-MM-DD/、又没进 UNSOURCED_CRED_PAGES 登记。新写的凭证页必须点名，工件确实没入库的要在登记表里写理由。最近的几页：${[...unnamedPageKeys].slice(-5).join("、")}` });
   }
   // 弱证同理：数量超出登记的那一格才红——「数对上了但证人属于别趟」是新账，旧账要么补 sha 要么更正页。
   if (weak.length > weakCap) {
@@ -385,7 +435,7 @@ export function checkCredentialSources(
         + weak.slice(0, 5).map((w) => `${w.key}｜读数 ${w.num}←${w.files.join("、")}（那一趟＝${w.runs.join("、")}）`).join("；")
         + `。修法只有两种：页里把被引用那一趟的提交号写出来，或把本页自己那趟的日志入库。` });
   }
-  return { findings: out, checked, unmatched, unnamed, unnamedPages: [...unnamedPageKeys], weak, weakUnjudged };
+  return { findings: out, checked, unmatched, unnamed, unnamedPages: [...unnamedPageKeys], registeredPages: [...registeredPageKeys], registeredReadings, weak, weakUnjudged };
 }
 
 /* ------------------------------------------------------------------ D-2 / D-4 / D-7 */
@@ -736,6 +786,10 @@ export function runDocsCheck(): {
         });
       } catch { return null; }
     },
+    UNSOURCED_READINGS,
+    CRED_UNNAMED_PAGE_CAP,
+    CRED_WEAK_WITNESS_CAP,
+    UNSOURCED_CRED_PAGES,
   );
   findings.push(...cred.findings);
 
@@ -785,7 +839,8 @@ if (invokedDirectly) {
   console.log(`  凭证对账面：可比对 ${String(cred.checked)} 个读数（红 ${String(cred.findings.length)}）`
     + `｜页未点名取料目录 ${String(cred.unnamed)} 个＝未检｜未点名页 ${String(cred.unnamedPages.length)} 页（帽 ${String(CRED_UNNAMED_PAGE_CAP)}，只准调低）`
     + `｜点名但目录读不到 ${String(cred.unmatched)} 个＝取不到｜登记不可回查 ${String(Object.keys(UNSOURCED_READINGS).length)} 条`
-    + `｜弱证 ${String(cred.weak.length)} 对（帽 ${String(CRED_WEAK_WITNESS_CAP)}，只准调低）｜证人无身份行 ${String(cred.weakUnjudged)} 对＝这一格无从判`);
+    + `｜弱证 ${String(cred.weak.length)} 对（帽 ${String(CRED_WEAK_WITNESS_CAP)}，只准调低）｜证人无身份行 ${String(cred.weakUnjudged)} 对＝这一格无从判`
+    + `｜已登记不可回查 ${String(cred.registeredPages.length)} 页／${String(cred.registeredReadings)} 条`);
   if (waived > 0) console.log(`  ⚠️  存量豁免 ${String(waived)} 处（LEGACY_WAIVERS，只准调低；spec §8 迁移提交须整条删除）`);
   const summary = [...byRule].map(([r, n]) => `${r}=${String(n)}`).join(" ");
   if (findings.length === 0) {
