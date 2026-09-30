@@ -1,0 +1,41 @@
+目标提交：e9d3155（--at=HEAD）
+worktree add exit=0
+已核：TREE=e9d31551b3e9a46ba1175f80fb0de47244f8ec11｜判卷四面在飞 0 项
+cp -al node_modules exit=0
+依赖核对：该提交声明 10 项，缺 0 项
+  硬链接子仓库依赖 fixtures/todo-app/node_modules ← 主树 exit=0
+import 面：2981 条边｜悬空 0（其中存量已豁免 0）
+门表：29 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证门面（20 道，名单取自 e9d3155）==
+  ✅ no-progress-check exit=0 513ms（预算 1100ms）
+  ✅ prune-check exit=0 554ms（预算 1100ms）
+  ✅ fork-check exit=0 511ms（预算 1100ms）
+  ✅ compaction-check exit=0 614ms（预算 1200ms）
+  ✅ docs-check exit=0 675ms（预算 1300ms）
+  ✅ memory-check exit=0 670ms（预算 1300ms）
+  ✅ head-import-check exit=0 759ms（预算 1400ms）
+  ✅ autonomy-check exit=0 853ms（预算 1500ms）
+  ✅ sandbox:check exit=0 1249ms（预算 1700ms）
+  ✅ security-check exit=0 754ms（预算 1500ms）
+  ✅ provider:check exit=0 514ms（预算 1300ms）
+  ✅ routing-check exit=0 694ms（预算 1400ms）
+  ✅ model-surface-check exit=0 696ms（预算 1300ms）
+  ✅ prefix-churn-check exit=0 801ms（预算 1500ms）
+  ✅ prompt-surface-check exit=0 692ms（预算 1400ms）
+  ✅ replay-determinism-check exit=0 554ms（预算 1100ms）
+  ✅ cost-per-progress-check exit=0 524ms（预算 1000ms）
+  ✅ gym-check exit=0 1294ms（预算 2400ms）
+  ✅ gate-check exit=0 3013ms（预算 5400ms）
+  ✅ mutate-needles-check exit=0 11008ms（预算 20000ms）
+  认证门面=20 道（跑到 20）｜绿 20 道｜⚠️ 超预算 0
+
+== 认证汇总 ==
+  TREE=e9d3155 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-e9d3155.lock）
+  Test Files 254 passed (254)｜Tests 3308 passed (3308)｜exit=0（退出码直接取，不接管道）
+  并发判卷=起前 0 套／跑完 0 套（两端独占）
+  逐条日志：/tmp/dsh-head-cert-e9d3155
+  回收这棵树（规则 120，别留残留）：git worktree remove --force .worktrees/head-cert-e9d3155
+  常驻残留树=1（/Users/ze/Downloads/deepseek harness/.worktrees/verify-e9d3155@e9d3155）（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）
+  汇总已同步落盘（不靠 stdout 的尾）：/tmp/dsh-head-cert-e9d3155/summary.txt
