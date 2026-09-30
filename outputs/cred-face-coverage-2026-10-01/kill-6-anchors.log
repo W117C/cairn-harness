@@ -1,0 +1,17 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-2cd6e79.lock）
+变异验证：6 条
+✅ docscheck-cred-unnamed-pages-not-collected — 未点名那一档只累加条数、不记页名 ⇒ 「哪几页没点名」永远查不出来，帽也无从比（本笔之前正是这个形状：三页凭证安静地整页失检） ｜本机实测 0.8s／2 拍
+✅ docscheck-cred-unnamed-cap-comparison-offbyone — 把「超出帽」写成「达到帽」⇒ 登记那一格当场红，帽再也无法等于现读；于是唯一的反应是把它调大，棘轮反过来涨 ｜本机实测 0.6s／2 拍
+✅ docscheck-cred-unnamed-cap-raised-silently — 把帽从现读调大（11 → 12）而不点名任何一页 ⇒ 读数与帽脱钩，这一格从此可以无限装新失检的凭证页 ｜本机实测 1.0s／2 拍
+✅ docscheck-cred-strict-space-pinned-to-one — 严格式把 Test Files 后面的空格写死成一个 ⇒ vitest 真机印的两个空格抽不到数，读数只能靠回查端的裸数位边界偶然兜住（本笔现读：4 条） ｜本机实测 0.6s／2 拍
+✅ docscheck-cred-return-drops-unnamed-pages — 算出来了却不返回（从返回体里丢掉这一格）⇒ 门那一步拿到 undefined，按页那一档当场消失，条数那一档照印不误 ｜本机实测 0.6s／2 拍
+✅ docscheck-cred-print-drops-cap-column — 汇总行只印页数、不印帽（或整列不印）⇒ 读数没有对照物，「11 页」到底是存量还是新账没人看得出来（规则 262/291） ｜本机实测 0.6s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 4.6s · 跑了 6/6 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 12 次／6 条（每条次数分布 2×6）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 docscheck-cred-unnamed-cap-raised-silently 1.0s
+跑法单价：selector 12 拍·中位 0.30s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-2cd6e79.lock）
+real 5.25
+user 5.89
+sys 0.77
