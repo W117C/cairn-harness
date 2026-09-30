@@ -333,6 +333,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
           callId: output.id,
           ok: false,
           output: `[tool table] ${output.name} 不在本会话工具表（只读白名单摘除）`,
+          blockedBy: "tool-table",
         });
         continue;
       }
@@ -346,6 +347,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
           callId: output.id,
           ok: false,
           output: `[skill] ${output.name} 已被 ${sk} 的 disallowed-tools 摘除（本 turn 内不可用）`,
+          blockedBy: "skill-denial",
         });
         continue;
       }
@@ -358,6 +360,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
             callId: output.id,
             ok: false,
             output: "verify: 未接线验证门（fail-closed）",
+            blockedBy: "verify-unwired",
           });
           continue;
         }
@@ -383,6 +386,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
               callId: output.id,
               ok: false,
               output: "[hook blocked] " + (pre.blockReason ?? "PreToolUse hook 阻断"),
+              blockedBy: "hook",
             });
             continue;
           }
@@ -411,6 +415,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
           callId: output.id,
           ok: false,
           output: `[permission denied] ${output.name} ${where}被门拒绝（${decision}${reason ? `：${reason}` : ""}）`,
+          blockedBy: "permission",
         });
         continue;
       }
@@ -481,6 +486,9 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         callId: output.id,
         ok: result.ok,
         output: redactSecrets(result.output + postContext + repeatNote).text,
+        // 执行面没有这把工具：上面 `if (!tool)` 只造了 `result`，落盘在这一格 ⇒ 原因也在这里补，
+        // 而不是在分支里改 `result`（那是工具的返回体，不是闸的留痕）。
+        ...(tool === undefined ? { blockedBy: "unknown-tool" } : {}),
         ...(gateMeta ? { gate: gateMeta } : {}),
         ...(audit ? { auto: audit } : {}),
         ...(snapshotId !== undefined ? { snapshotId } : {}),

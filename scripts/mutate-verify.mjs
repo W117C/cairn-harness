@@ -9552,6 +9552,54 @@ const MUTATIONS = [
     apply: (s) => s.replace("!/export const CERT_GATES\\b/.test(manifestSrc)", "!/export const NEVER_MATCHES\\b/.test(manifestSrc)"),
     expectFail: "格子在而形状变了",
   },
+
+  /* ── 第 225 页（#40）：六道「执行前就拦下」的硬闸各留一格结构证人。
+   *    四支钉的是四种坏法：删一行（两处的头与尾）、条件反过来、枚举与实跑漂移。 ── */
+  {
+    id: "loop-block-permission-reason-dropped",
+    src: "src/agent/loop.ts",
+    test: "tests/tool-block-witness.test.ts",
+    desc: "权限门那一格只留散文不留结构 ⇒ 「被哪道闸拦」与「旧日志」「工具自己失败」再次同形（规则 300 的缺席三因）。" +
+      "这一族的从来不是改文案，而是让落盘面自己说得出是谁拦的",
+    apply: (s) => s.replace("\n          blockedBy: \"permission\",", ""),
+    expectFail: "权限门拒绝：这一闸拦下的那次调用带 blockedBy",
+  },
+  {
+    id: "loop-block-first-gate-reason-dropped",
+    src: "src/agent/loop.ts",
+    test: "tests/tool-block-witness.test.ts",
+    desc: "六道里最靠前的那道（只读白名单摘除）没落 ⇒ 它与档位拒绝在事件流里同形。次序上排在 verify 系统门之前，" +
+      "少了这一格，「表里没有却被执行」那条权限旁路在读盘面上看不出来",
+    apply: (s) => s.replace("\n          blockedBy: \"tool-table\",", ""),
+    expectFail: "工具表白名单摘除：这一闸拦下的那次调用带 blockedBy",
+  },
+  {
+    id: "loop-block-unknown-tool-condition-inverted",
+    src: "src/agent/loop.ts",
+    test: "tests/tool-block-witness.test.ts",
+    desc: "把「执行面没有这把工具」那个条件反过来 ⇒ 每一笔真跑过的工具都被标成闸拦：比没有这一列更坏，因为它骗得过读者。" +
+      "所以证人不是「有没有这一列」而是「不该有的时候没有」（规则 298 的负控那一半）",
+    apply: (s) => s.replace("...(tool === undefined ? { blockedBy: \"unknown-tool\" } : {}),", "...(tool !== undefined ? { blockedBy: \"unknown-tool\" } : {}),"),
+    expectFail: "反面：真的工具失败不许带这一列",
+  },
+  {
+    id: "events-block-reason-enum-drift",
+    src: "src/events/index.ts",
+    test: "tests/tool-block-witness.test.ts",
+    desc: "枚举少一格而出口一个没少 ⇒ 那一列照样印得出来，只有分母证人知道名单和实跑不是一套。" +
+      "少一个成员在类型上才叫得醒，而判卷跑 tsx 不做类型检查（规则 259「突变不可观察」那一族的新入口）",
+    apply: (s) => s.replace("\"verify-unwired\", \"hook\", \"permission\"", "\"verify-unwired\", \"permission\""),
+    expectFail: "分母证人：出口名单与",
+  },
+  {
+    id: "replay-exec-blocked-column-not-counted",
+    src: "scripts/replay/verify-cause-mix.ts",
+    test: "tests/replay-verify-cause-exec.test.ts",
+    desc: "尺不吃生产端那一列 ⇒ ⚠️ 那格的成因② 退回「三种成因分不开」，而 0 条会被读成「这趟没有闸拦」。" +
+      "新字段落地时只接生产端不接读数面，本仓已数过两次（规则 298 的 consumer 那一半）",
+    apply: (s) => s.replace("t.blockedAll++;\n      bump(t.blockedMix, e.blockedBy);", "t.blockedAll++;"),
+    expectFail: "被闸拦的红拍按 `blockedBy` 计数",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

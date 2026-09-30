@@ -158,3 +158,31 @@ describe("落盘日期读不到时必须报「没尺」", () => {
     expect(execFieldShipDate("/nonexistent-dsh-repo-root")).toEqual({ sha: "", ms: 0 });
   });
 });
+
+/* ── 第 225 页（#40）：「根本没走到 exec」从此是一列。真料里那一列恒 0（语料 2026-09-20，早于该列上线），
+      所以分辨力只能由合成输入钉——这与规则 307 同一课：改动在前置闸之后时，真料 A/B 必然零差。 ── */
+describe("硬闸那一列的读数：两只分母各数各的", () => {
+  it("被闸拦的红拍按 `blockedBy` 计数，非 shell 家族的那条只进全量口径", () => {
+    const t = execMixOf([
+      call("a", "run_shell"), result("a", { blockedBy: "permission" }),
+      call("b", "run_shell"), result("b", { output: "boom" }),
+      call("c", "write_file"), result("c", { blockedBy: "tool-table" }),
+    ]);
+    expect(t.blockedAll).toBe(2);
+    expect(t.blockedShellNoStruct).toBe(1); // 只数 shell 家族且无结构字段的那条：⚠️ 那格的成因②
+    expect([...t.blockedMix.entries()].sort()).toEqual([["permission", 1], ["tool-table", 1]]);
+  });
+
+  it("带着结构字段的那条不算「没走到 exec」——有退出码就是真跑过，哪怕它同时印了闸", () => {
+    const t = execMixOf([call("a", "run_shell"), result("a", { blockedBy: "permission", exitCode: 1, timedOut: false })]);
+    expect(t.blockedAll).toBe(1);
+    expect(t.blockedShellNoStruct).toBe(0);
+  });
+
+  it("没有这一列的旧事件读成 0 而不是 undefined（缺席要能印出来，规则 261）", () => {
+    const t = execMixOf([call("a", "run_shell"), result("a")]);
+    expect(t.blockedAll).toBe(0);
+    expect(t.blockedShellNoStruct).toBe(0);
+    expect(t.blockedMix.size).toBe(0);
+  });
+});

@@ -1,0 +1,784 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+ [32m✓[39m tests/cert-gate-face.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+[90mstderr[2m | tests/m3c.test.ts[2m > [22m[2mM3c 工具面裁剪与成本闸[2m > [22m[2m成本闸：缺省零行为 / 单价 0 无效化 / 超限拒绝新 spawn 并落流警告
+[22m[39m[budget] 会话成本上限 $1 设了，但既没填单价、价表里也查不到模型 "" ⇒ 这道闸本次不生效（不拿 $0 冒充实付）
+
+ [32m✓[39m tests/m3c.test.ts [2m([22m[2m25 tests[22m[2m)[22m[33m 17238[2mms[22m[39m
+   [32m✓[39m M3c pipeline 哑 sequencer（零 LLM） [2m(3)[22m
+     [33m[2m✓[22m[39m 未获批准 fail-closed；批准后 stages 变更请求被拒且落流[33m 15163[2mms[22m[39m
+ [31m❯[39m tests/mutate-verify-gates.test.ts [2m([22m[2m144 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[33m 13070[2mms[22m[39m
+   [32m✓[39m budgetMsOf + classifyArgs 的值位（自我预算这条手段本身要有判卷） [2m(4)[22m
+     [32m✓[39m flag 优先于 env；两者都缺 ⇒ 不限且不吭声[32m 1[2mms[22m[39m
+     [32m✓[39m 非法预算不许静默退化成「没设」（写的人以为给了预算）[32m 0[2mms[22m[39m
+     [32m✓[39m `--budget-ms 600000` 的值不是锚点 id（旧分流会报「未知 id 600000」，等于没人能设预算）[32m 0[2mms[22m[39m
+     [32m✓[39m 未知 flag 照旧当场拒（新认的两个 flag 不放宽这条）[32m 0[2mms[22m[39m
+   [32m✓[39m 改动面派生：一条锚点的两面都要认（被测源 ∪ 判卷文件） [2m(8)[22m
+     [32m✓[39m 改被测源 ⇒ 选中；改判卷文件 ⇒ 也要选中（只认一头＝另一半搬家没人知道）[32m 0[2mms[22m[39m
+     [32m✓[39m 两面都不在改动面 ⇒ 一条不选，但把「表多大／面多大」一起交回去（0 条要能被分诊）[32m 0[2mms[22m[39m
+     [32m✓[39m git 输出的尾换行不算一个文件；同一锚点两面都改也只选一次[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：派生出来的 id 真的并进 targets（只写纯函数不接＝名单还是人手抄的）[32m 2[2mms[22m[39m
+     [33m[2m✓[22m[39m 派生可以只看名单不真跑：`--list --changed-since=<空树>` ⇒ 每条锚点两面都在跟踪文件里，必须选中整表[33m 603[2mms[22m[39m
+     [33m[2m✓[22m[39m 真跑：`--changed-since` 不给 rev ⇒ exit 2，且一条源文件都不许动[33m 509[2mms[22m[39m
+     [33m[2m✓[22m[39m 派生可以只看名单不真跑：`--list --changed-since=<rev>` 只印选中的那些，且不碰任何源文件[33m 943[2mms[22m[39m
+     [33m[2m✓[22m[39m 真跑：rev 取不到 ⇒ exit 2 并点名那个 rev（「取料坏」不许退化成「选中 0 条」）[33m 472[2mms[22m[39m
+   [32m✓[39m --changed-since 的参数形状：放行连写，但不放宽「未知即拒」 [2m(4)[22m
+     [32m✓[39m `--changed-since=HEAD~1` 认，那个值也不被当成锚点 id[32m 0[2mms[22m[39m
+     [32m✓[39m 空格写法同样认：rev 不进 targets，位置参数照旧是 id[32m 0[2mms[22m[39m
+     [32m✓[39m 两条反向哨兵：不带值的 flag 硬塞值照样拒；`--budget-ms=600000` 刻意**不**放行[32m 0[2mms[22m[39m
+     [32m✓[39m `--lock-tag` 两种写法都认、值不进 targets，而隔壁拼错的 `--lock-tx=` 照拒[32m 0[2mms[22m[39m
+   [32m✓[39m entryDisposition（变异条目开跑前的可判性判定） [2m(6)[22m
+     [32m✓[39m 两者都相对 HEAD 干净 → run（正常判定）[32m 0[2mms[22m[39m
+     [32m✓[39m 被测源文件在飞 → refused，理由说清是回滚兜底问题[32m 0[2mms[22m[39m
+     [32m✓[39m 被测源文件未跟踪 → 同样 refused，但理由区分于在飞（未跟踪无 HEAD 可回滚）[32m 0[2mms[22m[39m
+     [32m✓[39m 源文件干净、**判卷测试文件在飞** → unverified（不得冒充变异存活或基线红）[32m 0[2mms[22m[39m
+     [32m✓[39m 未跟踪的判卷文件同样走 unverified，不静默开跑[32m 0[2mms[22m[39m
+     [32m✓[39m 源文件优先：两个都在飞时报 refused 不报 unverified（前者是崩溃风险，后者只是噪声）[32m 0[2mms[22m[39m
+   [32m✓[39m 整跑前预检 preflightRefusals [2m(3)[22m
+     [32m✓[39m 全干净 ⇒ 空列表（预检本身不许无脑拦停）[32m 0[2mms[22m[39m
+     [32m✓[39m 未跟踪与在飞的源文件都进名单，并带上是哪一条与为什么[32m 0[2mms[22m[39m
+     [32m✓[39m 判卷文件在飞/未跟踪 ⇒ 不进拒绝名单（那是 unverified，不是崩溃风险）[32m 0[2mms[22m[39m
+   [32m✓[39m splitRunnable（预检逐条跳过，其余照跑） [2m(4)[22m
+     [32m✓[39m 一条在飞 ⇒ 只它被跳过，**其余条目必须在 runnable 里**（旧写法这里给空表）[32m 0[2mms[22m[39m
+     [32m✓[39m 不安全的一条都不许进 runnable（跳过要真跳过，别只看名单照样跑）[32m 0[2mms[22m[39m
+     [32m✓[39m 全干净 ⇒ 全可跑、零拒绝；判卷在飞不算拒绝（照常进 runnable，由跑到时记 unverified）[32m 0[2mms[22m[39m
+     [32m✓[39m 全不安全 ⇒ runnable 为空（调用方据此判红，而不是把「没跑」读成「都杀了」）[32m 0[2mms[22m[39m
+   [32m✓[39m 残留备份 leftoverBackupPaths [2m(2)[22m
+     [32m✓[39m 路径 = 源文件 + .mutbak，且只报盘上真在的那几个[32m 0[2mms[22m[39m
+     [32m✓[39m 多条锚点共用一个源文件 ⇒ 只报一次；全无残留 ⇒ 空（不许把「没查到」报成一堆）[32m 0[2mms[22m[39m
+   [32m✓[39m 残留处置决策 leftoverActionOf [2m(5)[22m
+     [32m✓[39m 备份 == HEAD、盘上是本表锚点留下的突变体 ⇒ restore[32m 0[2mms[22m[39m
+     [32m✓[39m 反面对手：同样三份内容，但当前那份对不上任何锚点 ⇒ 绝不自动盖（可能是别人的在飞改动）[32m 0[2mms[22m[39m
+     [32m✓[39m 备份 == HEAD、源文件已经 == HEAD ⇒ 只删过期备份，不动源文件[32m 0[2mms[22m[39m
+     [32m✓[39m 备份 != HEAD ⇒ manual（备份里可能是别人未提交的原件，即便当前内容对得上锚点也不许盖）[32m 0[2mms[22m[39m
+     [32m✓[39m 没有可比基线一律 manual：文件不在 HEAD 里 / 备份读不到 / 源文件不见了[32m 0[2mms[22m[39m
+   [32m✓[39m untrackedAnchorPaths：锚点入库、被测码/判卷从未入库必须当场红 [2m(5)[22m
+     [32m✓[39m 盘上有、HEAD 里没有 ⇒ 点出来（含 id、路径与是哪一面，能直接照着补提交）[32m 0[2mms[22m[39m
+     [32m✓[39m 反面对手：两面都已入库的表 ⇒ 一条都不报（这条判据不许把正常锚点报成红）[32m 0[2mms[22m[39m
+     [32m✓[39m 混合表只报未入库的那几条，且按喂入顺序（整张表 ×2 面要能一眼定位）[32m 0[2mms[22m[39m
+     [32m✓[39m 判卷面缺文件说「连基线都跑不出来」并指向判卷文件，不写「源文件读不到」（两面修法指不同文件）[32m 0[2mms[22m[39m
+     [32m✓[39m 两种红的文案不混：「从未入库」不写「改指针脚」，反之亦然（修法相反，混了就误导）[32m 0[2mms[22m[39m
+   [32m✓[39m headOnlyNeedleProblems：锚点钉在在飞文本上必须点名（否则主树绿洗 HEAD） [2m(5)[22m
+     [32m✓[39m 盘上没问题、HEAD 里 0 处 ⇒ 报这一类[32m 0[2mms[22m[39m
+     [32m✓[39m 盘上已经报过的同一条不重复报（一行红只有一个成因，读的人不必对两行）[32m 0[2mms[22m[39m
+     [32m✓[39m HEAD 里读不到、且该路径已由「未入库」判据报过 ⇒ 不重复报（同一件事两栏都记 = 数被抬高）[32m 0[2mms[22m[39m
+     [32m✓[39m 反面对手：盘上与 HEAD 两份都判得通过 ⇒ 一条都不报[32m 0[2mms[22m[39m
+     [32m✓[39m 三种红的文案互不串（修法各不相同：等实现入库 / 提交那文件 / 改指针脚）[32m 0[2mms[22m[39m
+   [32m✓[39m anchorFaces + blockingTotalOf：接线缺件必须当场崩，不许静默少看一维 [2m(5)[22m
+     [32m✓[39m 每条锚点产出两支面（被测面 + 判卷），且两面各一次（少喂一支 = 那一面静默失效）[32m 0[2mms[22m[39m
+     [32m✓[39m 反面对手：空表 ⇒ 空数组（这条判据不许凭空造出锚点面）[32m 0[2mms[22m[39m
+     [32m✓[39m 六支数都给 ⇒ 求和（0 也算数，不许被当成缺项丢掉）[32m 0[2mms[22m[39m
+     [32m✓[39m 缺一支 ⇒ 抛并点名缺哪支（门报红却少算一维 = 这条门唯一的产出被废）[32m 1[2mms[22m[39m
+     [32m✓[39m 非有限数（NaN / Infinity）也算缺项： typeof 是 number，但读数本身不可信[32m 0[2mms[22m[39m
+   [32m✓[39m headPointerProblems：锚点行入库了、判卷里那条标题没入库 [2m(4)[22m
+     [32m✓[39m 判卷在飞且 HEAD 那份指不到 ⇒ 点名（三态里这是「HEAD 侧失效」，不是「没问题」）[32m 0[2mms[22m[39m
+     [32m✓[39m 本笔同时改表与改判卷的那条**不判**（那格归同笔规矩）；判卷没动过的也不重复判[32m 0[2mms[22m[39m
+     [32m✓[39m HEAD 里根本没有那份判卷 ⇒ unreadable，不等于没问题[32m 0[2mms[22m[39m
+     [32m✓[39m 空指针条目不在这里判（那是「没声明 killer」另一档，归盘上那把尺）[32m 0[2mms[22m[39m
+   [32m✓[39m 被 import 时必须拒绝运行（它会就地改源文件） [2m(2)[22m
+     [33m[2m✓[22m[39m import 进来 ⇒ 退出码 2、点名拒绝，且一条变异都没跑[33m 456[2mms[22m[39m
+     [33m[2m✓[22m[39m 反向一侧：正当入口没被这道闸误伤（--list 仍 exit 0 且列得出条目）[33m 463[2mms[22m[39m
+   [31m❯[39m auditExpectFails：killer 指针必须指得到活用例 [2m(18)[22m
+     [32m✓[39m 齐的读空；真改过名的按 not-found 报出来[32m 0[2mms[22m[39m
+     [32m✓[39m 拼出来的标题（盘上没有整句，跑起来才有）不许报红——这条是校准出来的，不是推的[32m 0[2mms[22m[39m
+     [32m✓[39m 带转义引号的标题不许误报（表里存解码值，盘上是源码文字）[32m 0[2mms[22m[39m
+     [32m✓[39m 生成式标题不许把整份判卷的体检缴械：指向不存在用例的指针仍要报 not-found[32m 0[2mms[22m[39m
+     [32m✓[39m 变体：标题里除了占位符只剩空白 ⇒ 同样缴械，也要丢（不 trim 就漏这一格）[32m 0[2mms[22m[39m
+     [32m✓[39m 过修的反面：带字面残迹的标题要**留着**通配（参数化标题仍然认得渲染后的样子）[32m 0[2mms[22m[39m
+     [32m✓[39m 本文件自己就是案发现场：那串 fixture 生成器里的 it 不是真标题，收紧后假指针必须报出来[32m 2[2mms[22m[39m
+     [32m✓[39m 判卷文件读不到 ⇒ unreadable，不许当「指针没问题」（规则 92/210 那一族）[32m 0[2mms[22m[39m
+     [32m✓[39m 空 expectFail / 空 test 跳过：那是「没声明 killer」，与指针断裂分两档[32m 0[2mms[22m[39m
+     [32m✓[39m 两把尺同宽（同一判据只许有一份）：新尺与 `mutate-anchor-titles` 对同一批判卷判定必须一致[32m 0[2mms[22m[39m
+     [32m✓[39m 非 vitest 面不判（test 指向 .ts/.md 之类）：那一格归 `mutate-anchor-titles` 单独点名，不造第三把尺[32m 0[2mms[22m[39m
+[31m     [31m×[31m 真表自证：整张表的 killer 指针必须 0 失效（新增一条断指针＝当场红）[39m[32m 275[2mms[22m[39m
+     [32m✓[39m 松钉要单独点名：拼接标题与带转义引号两类算松钉，逐字命中的不算，真断的也不算（那是 not-found）[32m 0[2mms[22m[39m
+     [32m✓[39m 判卷文件读不到 ⇒ 不进松钉（那一格归 unreadable，松钉计数不许把它吞了）[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：门自己那一步要真拿整张表去数松钉（只印不数＝这一格永远 0，且永远不红）[32m 2[2mms[22m[39m
+     [32m✓[39m 水位：真表现读松钉只准调低（帽 10，09-27 现读 10）——新增一根要写明为什么[32m 218[2mms[22m[39m
+     [32m✓[39m 求和那一行必须把第 5 维喂进去（钉接线：少喂一支＝门照跑、汇总照印绿）[32m 2[2mms[22m[39m
+     [32m✓[39m 第 6 维（HEAD 侧指针失效）也要喂进求和，且 runner 真去调那把尺[32m 2[2mms[22m[39m
+   [32m✓[39m killerAttributionOk：归因只认失败面（通过的用例那一行不算） [2m(4)[22m
+     [32m✓[39m 声明的那条只是**通过**了 ⇒ 不算归因（旧判据在这里报真）[32m 0[2mms[22m[39m
+     [32m✓[39m 红的那条正是声明的那条 ⇒ 认；`FAIL … > 标题` 与 `×` 两种失败面都要认[32m 0[2mms[22m[39m
+     [32m✓[39m 没声明 killer（空指针）不在这里判——那是静态那把尺点名的另一档[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：runner 归因那一步真调这把尺，且旧的整串 includes 已经不在[32m 2[2mms[22m[39m
+   [32m✓[39m baselineRedKind：基线红要分「载不动」与「真的不绿」 [2m(3)[22m
+     [32m✓[39m 判卷载不动 ⇒ 未证，且点名是哪个模块[32m 0[2mms[22m[39m
+     [32m✓[39m 别的原因让基线红（真缺陷）⇒ 仍按阻断，不许把表退化洗成未证[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：基线那一步真调这把分诊尺（不然是拿着读数当结论）[32m 2[2mms[22m[39m
+   [32m✓[39m mutate-verify 也接了这把锁：占不到就不许动盘（那份过程的第二个消费者） [2m(6)[22m
+     [33m[2m✓[22m[39m 活人占着 ⇒ exit 2、点名是谁、拒在开跑之前，并且不替别人删锁[33m 480[2mms[22m[39m
+     [33m[2m✓[22m[39m 反向哨兵：同一入参、没有锁 ⇒ 必须走到「未知 id」，并且占过又放掉（上面那条的红只能来自锁）[33m 470[2mms[22m[39m
+     [33m[2m✓[22m[39m 只读入口不许被这把门锁死：--list 在有人占着时照跑，而 `--check-needles` 与它同一先（按结构钉）[33m 454[2mms[22m[39m
+     [32m✓[39m 成本钉：本文件的判卷不许再 spawn 只读体检（挂在本文件上的锚点每条要跑三遍）[32m 1[2mms[22m[39m
+     [32m✓[39m 接线形状：占锁排在自愈与开跑之前，消费者侧不留第二份三态判断[32m 2[2mms[22m[39m
+     [33m[2m✓[22m[39m 空标签不是「默认」：`--lock-tag=` 与 `--lock-tag ""` 一律 exit 2 并说明怎么要默认[33m 906[2mms[22m[39m
+   [32m✓[39m 印完就退的出口必须同步写：--list 是两把静态尺共同的取料面 [2m(2)[22m
+     [32m✓[39m helper 本体按字节写满、四个出口都经它（一次 writeSync 只交得进内核缓冲那一截）[32m 1[2mms[22m[39m
+     [33m[2m✓[22m[39m 真跑：--list 经管道交给读者的行数必须等于表长（少一行＝两把静态尺一起少读一条锚点而不自知）[33m 456[2mms[22m[39m
+   [32m✓[39m 成本分母：每条锚点实际 spawn 了几次判卷 [2m(8)[22m
+     [32m✓[39m 早退路径按实际 spawn 次数分桶，且第 1 次与第 2、3 次的中位分开求（第一拍付 vite 冷启动）[32m 0[2mms[22m[39m
+     [32m✓[39m 一次判卷都没 spawn ⇒ 那一格印「没有分母」，不许长得像「每条 0 秒」[32m 0[2mms[22m[39m
+     [32m✓[39m 没跑的条要单列在句尾（并进平均值就是把「没量到」读成「跑得很快」）[32m 0[2mms[22m[39m
+     [32m✓[39m 账本里缺 runsMs 的行当场崩并点名第几行（接线漏计在 .mjs 里没有编译期信号）[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：汇总那一行吃的是 runner 自己那份 runsMs，且每个出口都带账本（表与实现同文件 ⇒ 钉跨行正则，规则 236）[32m 2[2mms[22m[39m
+     [32m✓[39m 逐条那一格：跑了印「N.Ns／K 拍」，一次没跑印「没有分母」，两态不许同形[32m 0[2mms[22m[39m
+     [32m✓[39m 取料形状：有分母那一支固定成 秒／拍 两段（#28 的装箱按它读，改形状要同轮换读者）[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：逐条结果那一行真把账本印出去了（表与实现同文件 ⇒ 行锚定，规则 236/247）[32m 3[2mms[22m[39m
+   [32m✓[39m 按标题选跑法：选中几条必须被读出来 [2m(11)[22m
+     [32m✓[39m 选中条数只从 vitest 真实的收尾行读，两种实测形状给两个数；读不到那行是 null 不是 0[32m 0[2mms[22m[39m
+     [32m✓[39m 标题当正则喂给 -t ⇒ 元字符必须转义（现读真标题里有 ( ) [ ] . * + 与全角括号）[32m 0[2mms[22m[39m
+     [32m✓[39m 两种跑法共存：只有能唯一定位自己用例的那批走 -t，其余照旧整文件[32m 0[2mms[22m[39m
+     [32m✓[39m 两种跑法定长列印：这一趟只拍到一种，另一种也要印出没有分母而不是整支消失[32m 0[2mms[22m[39m
+     [32m✓[39m 跑法单价那一格分开印两种跑法，并把两种跑法各自的「坏拍」数出来——省了多少由它说，不许推算[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：testNamePattern 这一支要经转义，不许把标题当通配符拼进命令（表与实现同文件 ⇒ 必须行锚定，规则 236）[32m 2[2mms[22m[39m
+     [33m[2m✓[22m[39m 行为证人：指针以 `-` 开头时两种写法给两个读数——等号写法选中 1 条，空格写法被 CLI 当旗标吞掉[33m 445[2mms[22m[39m
+     [32m✓[39m 接线：只有 selector 模式才塞 -t，其余必须走整文件（两种跑法共存是刻意的）[32m 2[2mms[22m[39m
+     [32m✓[39m 接线：每一拍都过共用的那道读数闸，闸的拍数与 runTest 调用点相对相等（选不中、选多条都不许读成绿）[32m 3[2mms[22m[39m
+     [32m✓[39m 读数闸的判据只有一份：selector 那一拍恰好选中 1 条才算合格，0 条／多条／没读到三种都判坏[32m 0[2mms[22m[39m
+     [32m✓[39m 三种坏读数印三种不同措辞：取料坏／一条没选中／选中多条，两两不许相同[32m 0[2mms[22m[39m
+   [31m❯[39m 选择子唯一性：一条锚点能不能只跑自己那条 killer 用例 [2m(7)[22m
+     [32m✓[39m 只数被数过的：判卷读不到／指针为空／不是 vitest 文件都不进 inspected[32m 0[2mms[22m[39m
+     [32m✓[39m 零命中与多命中分开印，并点名是哪几条（0 命中＝-t 会一条也没跑）[32m 0[2mms[22m[39m
+     [32m✓[39m 可选率的分母是被数过的条数，不是整表条数（拿整表去除＝把选不中的洗成可选）[32m 0[2mms[22m[39m
+     [32m✓[39m 读得到文件却一条标题都抽不到 ⇒ 第三态要点名（并进「没问题」＝整份判卷被读瞎也无人说）[32m 0[2mms[22m[39m
+     [32m✓[39m 两个分母并排印（可判面／表全长）：只印被数过的那个数，少的那几条去哪了没人说[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：门自己那一步真拿整张表去数选择子，并把两份数一起交给措辞（只印不数＝这一格永远 0）[32m 2[2mms[22m[39m
+[31m     [31m×[31m 水位：真表现读「选不中＋不唯一」只准调低（帽 13，09-28 现读 13＝11 零命中＋2 多命中）——新增一根要写明为什么[39m[32m 226[2mms[22m[39m
+   [32m✓[39m 还原那一拍换成字节比对（第 171 页⑩，任务 #10） [2m(2)[22m
+     [32m✓[39m 字节相同＝到位；长度不同与等长不同要各点名自己的那一格[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：每条锚点只付两拍，还原那一拍不再 spawn 判卷[32m 2[2mms[22m[39m
+   [32m✓[39m 判红按类别分开（第 172 页⑪，任务 #12） [2m(3)[22m
+     [32m✓[39m 判红的总数等于名单长度之和，只印非零的类别[32m 0[2mms[22m[39m
+     [32m✓[39m 判红缺类别／认不出的类别当场崩并点名第几条[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：runner 在出口就定类别，汇总与机器行都从同一份取料来[32m 2[2mms[22m[39m
+   [32m✓[39m 未证那一态的名单与补跑（第 171 页，任务 #14） [2m(4)[22m
+     [32m✓[39m 未证四类各印各的名单，总数等于名单长度之和[32m 0[2mms[22m[39m
+     [32m✓[39m 认不出的未证类别当场崩并点名第几条，不许从总数里消失[32m 0[2mms[22m[39m
+     [32m✓[39m 补跑命令只收预算用尽那一类，那一类为空就不许印命令[32m 0[2mms[22m[39m
+     [32m✓[39m 接线：未证名单走同步写满的那条出口，UNVERIFIED 标记只印一次[32m 2[2mms[22m[39m
+   [32m✓[39m 判卷重试原语：瞬时红放过、持续红仍红（V-1/V-2） [2m(4)[22m
+     [32m✓[39m 第一次就绿 ⇒ 只跑一格，不多付那一拍[32m 0[2mms[22m[39m
+     [32m✓[39m 第一次红、重试绿 ⇒ 最终交回的是**重试那拍**（V-1 那一格：基线偶发红不许读成真红）[32m 0[2mms[22m[39m
+     [32m✓[39m 两次都红 ⇒ 最终交回红（持续红不许被放过：还原/基线真坏掉时这道保证不许松）[32m 0[2mms[22m[39m
+     [32m✓[39m 反向：把重试删掉（第一次红就交回）这条判卷当场红——否则基线/还原两格对偶发红没有牙[32m 0[2mms[22m[39m
+   [32m✓[39m 还原后那格（V-2）：重试原语在壳上翻成 ok/why [2m(5)[22m
+     [32m✓[39m 还原后第一次就绿 ⇒ 只跑一格，不多付那一拍[32m 0[2mms[22m[39m
+     [32m✓[39m 第一次红、重试绿 ⇒ 放过（判卷里与本条无关的偶发红不许把已杀死的锚点记成存活）[32m 0[2mms[22m[39m
+     [32m✓[39m 重试仍红 ⇒ 判失败，且措辞点名「重试仍红」（还原真坏掉时这道保证不许松）[32m 0[2mms[22m[39m
+     [32m✓[39m 反向：把重试删掉（第一次红就判失败）这条判卷当场红——否则「放过瞬时红」没有牙[32m 0[2mms[22m[39m
+     [32m✓[39m 反向：把「重试仍红也放过」写死（恒真）这条判卷当场红——持续红的保证不许被放宽[32m 0[2mms[22m[39m
+   [32m✓[39m 树闸：就地改源文件这件事只许发生在一棵一次性 worktree 里 [2m(4)[22m
+     [32m✓[39m 主检出拒跑、linked worktree 放行——两支只差一个维度，结论换人[32m 0[2mms[22m[39m
+     [32m✓[39m 相对 `.git` 与绝对路径按 root 解析后再比（格式差不许被读成「两棵树」）[32m 0[2mms[22m[39m
+     [32m✓[39m 读不出 git 的答案按主检出处置（fail-closed：证明不了自己是一次性的，就不许动盘）[32m 0[2mms[22m[39m
+     [32m✓[39m 行为证人：这对入参交给**真 git**——同一台机器上主检出同指、linked worktree 分指，两支各自过闸[32m 78[2mms[22m[39m
+   [32m✓[39m 树闸接线：真跑本脚本——主检出拒跑且一个字节都没改过盘，linked worktree 放行 [2m(6)[22m
+     [33m[2m✓[22m[39m 主检出里真跑 ⇒ exit 2、说清是主检出、且盘上一个字节都没动[33m 584[2mms[22m[39m
+     [33m[2m✓[22m[39m 同一份代码换进 linked worktree ⇒ 树闸放行，接着被预检按「源文件在飞」停在写盘之前[33m 603[2mms[22m[39m
+     [33m[2m✓[22m[39m 反向哨兵：主检出那支要是靠 `--in-worktree` 逃出去的，这条当场红（隔离必须由树闸保证，不靠调用方记得带参数）[33m 582[2mms[22m[39m
+     [33m[2m✓[22m[39m 语义钉：建出来被量的那棵树是 **HEAD**，主树里未提交的那份改动不进它（AGENTS.md 那条工作规则的可执行面）[33m 1136[2mms[22m[39m
+     [33m[2m✓[22m[39m 软链路径调脚本不许被误判成「被 import」（S2-3）[33m 576[2mms[22m[39m
+     [33m[2m✓[22m[39m 树名的包含判定：解完仍在主检出里就放行，解出去了才拒（S2-4 拆掉的那格假阳性）[33m 2082[2mms[22m[39m
+fatal: not a git repository (or any of the parent directories): .git
+拒跑：/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/mutate-shards-AqZYUC/repo —— 工作树有 1 项在飞
+拒跑：/Users/ze/Downloads/deepseek harness —— 工作树有 13 项在飞
+取料坏：2/2 棵树不合格 ⇒ 一条不跑（这不是「没有红」，是没尺）
+取料坏：--trees 里有重复路径 ⇒ 同树两个进程会互改源文件（.mutbak 会互相踩），一条不跑
+取料坏：认不出的参数 ⇒ 一条不跑：--shardz=2
+用法：node --import tsx scripts/mutate-shards.ts --trees 树1,树2[,…] [--changed-since=<rev> | id…] [--budget-ms N] [--serial-seconds N] [--lock-tag-base …] [--cost-logs 机器原文,…] [--dry-run]（带值的旗标两种写法都收）
+Preparing worktree (detached HEAD 0dbe7d5)
+取料坏：给了 1 条不在这张表上的 id ⇒ 一条不跑：this-anchor-does-not-exist
+Preparing worktree (detached HEAD 0dbe7d5)
+Preparing worktree (detached HEAD 0dbe7d5)
+Preparing worktree (detached HEAD 0dbe7d5)
+取料坏：1 个判卷宿主被摊到两片以上 ⇒ 会并发真跑同一份判卷，一条不跑：tests/mutate-shards.test.ts
+Preparing worktree (detached HEAD 0dbe7d5)
+Preparing worktree (detached HEAD 0dbe7d5)
+ [32m✓[39m tests/mutate-shards.test.ts [2m([22m[2m55 tests[22m[2m)[22m[33m 7789[2mms[22m[39m
+   [32m✓[39m treeProblem 与编排器的前置闸：脏树不许当片用 [2m(8)[22m
+     [33m[2m✓[22m[39m 给了不在表上的 id ⇒ 拒（退 2、点名那几条、一条没跑）[33m 887[2mms[22m[39m
+     [33m[2m✓[22m[39m --dry-run 只出计划：取料走机器自己的 `--list`，证分割与「不拆宿主」都成立，一条没跑[33m 830[2mms[22m[39m
+     [33m[2m✓[22m[39m 同一宿主被摊到两片 ⇒ 行为上当场拒（默认切法同输入放行）[33m 1790[2mms[22m[39m
+   [32m✓[39m 编排器接线：合并层不是挂在墙上的仪表 [2m(7)[22m
+     [33m[2m✓[22m[39m 真跑一条：片文件里确有机器原文（这条是整个编排器的端到端证人）[33m 2024[2mms[22m[39m
+   [32m✓[39m 编排器的权重取料面 [2m(3)[22m
+     [33m[2m✓[22m[39m 真跑 --dry-run：给了 --cost-logs 就说清权重与来源，不给就说没有来源[33m 1939[2mms[22m[39m
+[m0] 需要一个任务描述：m0 <任务>（或 --message <任务>；只有 --compact 不用给）
+[m0] 用法：m0 <任务描述>（-h 看全部选项）
+ [32m✓[39m tests/cli-surface.test.ts [2m([22m[2m61 tests[22m[2m)[22m[33m 7897[2mms[22m[39m
+   [32m✓[39m m0 CLI：产品面存在且可执行 [2m(3)[22m
+     [33m[2m✓[22m[39m 真跑：--help 打印用法并 exit 0（走真 bin shim，不是 import src）[33m 343[2mms[22m[39m
+   [32m✓[39m m0 CLI：--ctx-window（只配 --model，申报自由档位的真实窗口） [2m(4)[22m
+     [33m[2m✓[22m[39m 非正整数 ⇒ exit 2（窗口是 token 数，0/负数/小数都不成）[33m 840[2mms[22m[39m
+   [32m✓[39m m0 CLI：--goal / --session / --compact 三条真入口在 argv 上 [2m(6)[22m
+     [33m[2m✓[22m[39m 三个 flag 都进了 help（没进 help 的选项等于不存在）[33m 656[2mms[22m[39m
+ [32m✓[39m tests/gate-kill.test.ts [2m([22m[2m11 tests[22m[2m)[22m[33m 6146[2mms[22m[39m
+   [32m✓[39m 门禁超时终止阶梯 [2m(7)[22m
+     [33m[2m✓[22m[39m 忽略 SIGTERM 的子进程：宽限到点升级到整组 SIGKILL，且确实先收到过 SIGTERM[33m 455[2mms[22m[39m
+     [33m[2m✓[22m[39m 信号与强杀都按进程组：孙进程既收到过 SIGTERM，也随强杀一起没[33m 621[2mms[22m[39m
+   [32m✓[39m 门禁跑命令的超时支路 [2m(4)[22m
+     [33m[2m✓[22m[39m 子进程超时后自己退出：判红 124、输出写明阶梯走到了哪一步，且还原动作真发生[33m 1515[2mms[22m[39m
+     [33m[2m✓[22m[39m 超时后子进程以退出码 0 收场：仍是 124，不被自己的退出码翻绿（宽限带来的口子）[33m 1514[2mms[22m[39m
+     [33m[2m✓[22m[39m 子进程赖着不走：宽限到点整组强杀，输出如实写「已 SIGKILL」[33m 1614[2mms[22m[39m
+ [32m✓[39m tests/head-cert-deps.test.ts [2m([22m[2m83 tests[22m[2m)[22m[33m 1967[2mms[22m[39m
+   [32m✓[39m 清场读数：常驻残留的 scratch 树要自己报数（任务 #33） [2m(9)[22m
+     [33m[2m✓[22m[39m 真读现喂：拿本机真的 worktree 清单喂进去不许崩，且绝不点到自己这棵[33m 1283[2mms[22m[39m
+ [32m✓[39m tests/verify-probe.test.ts [2m([22m[2m18 tests[22m[2m)[22m[33m 2034[2mms[22m[39m
+   [32m✓[39m verify 超时是配置项，不是 60s 硬编码 [2m(5)[22m
+     [33m[2m✓[22m[39m defaultExec 真按传入上限掐表，消息里的秒数跟着配置走[33m 2006[2mms[22m[39m
+[90mstderr[2m | tests/cascade-wiring.test.ts[2m > [22m[2m级联升级接进产品路径（sequencer 环）[2m > [22m[2m只开 cascadeUpgrade、没开 routing ⇒ 不级联：阶梯起点与升档都靠路由，缺了就等于花两遍钱跑同一模型
+[22m[39m[cascade] 需要 routing=true（阶梯起点与升档都走路由）；本次会话不级联
+
+ [32m✓[39m tests/cascade-wiring.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 1551[2mms[22m[39m
+[90mstdout[2m | tests/impact-runner-wiring.test.ts[2m > [22m[2m影响面第三环：settings ⇒ 构造点 ⇒ 事件流（走真实 runAgent，不手搭 ctx）[2m > [22m[2m开：写盘后事件流里真有 impact_report，且摘要回进了 tool_result
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstdout[2m | tests/impact-runner-wiring.test.ts[2m > [22m[2m影响面第三环：settings ⇒ 构造点 ⇒ 事件流（走真实 runAgent，不手搭 ctx）[2m > [22m[2m关（缺省）：一条 impact_report 都不许出现，但同一条写盘仍成功
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ [32m✓[39m tests/impact-runner-wiring.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 1338[2mms[22m[39m
+   [32m✓[39m 影响面第三环：settings ⇒ 构造点 ⇒ 事件流（走真实 runAgent，不手搭 ctx） [2m(2)[22m
+     [33m[2m✓[22m[39m 开：写盘后事件流里真有 impact_report，且摘要回进了 tool_result[33m 930[2mms[22m[39m
+     [33m[2m✓[22m[39m 关（缺省）：一条 impact_report 都不许出现，但同一条写盘仍成功[33m 375[2mms[22m[39m
+ [32m✓[39m tests/plugins-hooks.test.ts [2m([22m[2m17 tests[22m[2m)[22m[33m 1290[2mms[22m[39m
+   [32m✓[39m M2e hook 引擎：输出上限与超时（任务 5） [2m(3)[22m
+     [33m[2m✓[22m[39m 超时被强杀（SIGKILL，1s timeout vs 3s 睡眠）[33m 1003[2mms[22m[39m
+ [32m✓[39m tests/net.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 1159[2mms[22m[39m
+[90mstderr[2m | tests/chain-lease-held.test.ts[2m > [22m[2m链的环 worker 真持有申报的写租约[2m > [22m[2msupervise：受限循环的环同样持有（真轨迹那次就是这么申报的）
+[22m[39m[orchestrator] worker 收尾中途失败，按 failed 放行等待方：worker-1 ENOENT: no such file or directory, open '/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/chain-lease-PWVWqj/events.jsonl'
+
+[90mstderr[2m | tests/chain-lease-held.test.ts[2m > [22m[2m链的环 worker 真持有申报的写租约[2m > [22m[2m反向那一格：没申报 resources ⇒ 环不落 resources 字段、不凭空占租约（零申报零行为）
+[22m[39m[orchestrator] worker 收尾中途失败，按 failed 放行等待方：worker-4 ENOENT: no such file or directory, open '/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/chain-lease-WMVLnD/events.jsonl'
+
+[90mstderr[2m | tests/chain-lease-held.test.ts[2m > [22m[2m链的环 worker 真持有申报的写租约[2m > [22m[2mresources 从此是 supervise 读的键 ⇒ 单独申报它不再被拒（第 40 页那格的反向侧）
+[22m[39m[orchestrator] worker 收尾中途失败，按 failed 放行等待方：worker-5 ENOENT: no such file or directory, open '/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/chain-lease-Fu854d/events.jsonl'
+
+ [32m✓[39m tests/chain-lease-held.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 1045[2mms[22m[39m
+   [32m✓[39m 链的环 worker 真持有申报的写租约 [2m(6)[22m
+     [33m[2m✓[22m[39m resources 从此是 supervise 读的键 ⇒ 单独申报它不再被拒（第 40 页那格的反向侧）[33m 359[2mms[22m[39m
+ [32m✓[39m tests/process.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 1044[2mms[22m[39m
+   [32m✓[39m spawnTracked / killGroup（P1-2） [2m(3)[22m
+     [33m[2m✓[22m[39m 超时主动收束，不等 'close'（孙进程持有 stdout 也不挂起）[33m 505[2mms[22m[39m
+     [33m[2m✓[22m[39m 超时后整棵进程树被杀（孙进程不留孤儿、不泄漏）[33m 419[2mms[22m[39m
+ [32m✓[39m tests/head-import-face.test.ts [2m([22m[2m32 tests[22m[2m)[22m[33m 966[2mms[22m[39m
+[90mstdout[2m | tests/gated-tools.test.ts[2m > [22m[2m工具门接线（runAgent + AskGate）[2m > [22m[2mdefault 档 + 批准 → write_file 与 run_shell 真实执行，靶子修复
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstdout[2m | tests/gated-tools.test.ts[2m > [22m[2m工具门接线（runAgent + AskGate）[2m > [22m[2mdefault 档 + 拒绝 → 工具不执行，靶子保持带 bug 状态
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstdout[2m | tests/gated-tools.test.ts[2m > [22m[2m工具门接线（runAgent + AskGate）[2m > [22m[2m沙箱不可用（降级）→ 写工具强制审批：auto 档无交互也按拒绝（fail-closed）
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ [32m✓[39m tests/gated-tools.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 786[2mms[22m[39m
+   [32m✓[39m 工具门接线（runAgent + AskGate） [2m(3)[22m
+     [33m[2m✓[22m[39m default 档 + 批准 → write_file 与 run_shell 真实执行，靶子修复[33m 778[2mms[22m[39m
+ [32m✓[39m tests/ledger.test.ts [2m([22m[2m26 tests[22m[2m)[22m[33m 814[2mms[22m[39m
+ [32m✓[39m tests/assertion-health-scan.test.ts [2m([22m[2m17 tests[22m[2m)[22m[33m 857[2mms[22m[39m
+   [32m✓[39m 判卷面断言体检（快路，与 pnpm gates 同一把尺） [2m(4)[22m
+     [33m[2m✓[22m[39m 已跟踪的 scripts/ 里没有空断言、恒真式、暗卷段零断言、未豁免的析取式[33m 362[2mms[22m[39m
+[90mstdout[2m | tests/runner-gates.test.ts[2m > [22m[2m三门 IPC 接线（runAgent + card_action 处理函数）[2m > [22m[2mclarify_requested → handleClarifySubmit → tool_result 与提交值逐字一致且挂回原 tool_use id；plan 批准后写放行
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ [32m✓[39m tests/runner-gates.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 712[2mms[22m[39m
+   [32m✓[39m 三门 IPC 接线（runAgent + card_action 处理函数） [2m(1)[22m
+     [33m[2m✓[22m[39m clarify_requested → handleClarifySubmit → tool_result 与提交值逐字一致且挂回原 tool_use id；plan 批准后写放行[33m 711[2mms[22m[39m
+[90mstderr[2m | tests/worker-hooks.test.ts[2m > [22m[2mworker 接插件钩子[2m > [22m[2mPreToolUse 阻断真的挡住 worker 的写：worktree 里不落盘，tool_result 带钩子理由
+[22m[39m[hooks] SubagentStart 返回阻断（exit 2 的「再多要一轮」未裁，已忽略）：禁改 src/secret.ts
+
+[90mstderr[2m | tests/worker-hooks.test.ts[2m > [22m[2mworker 接插件钩子[2m > [22m[2mPreToolUse 阻断真的挡住 worker 的写：worktree 里不落盘，tool_result 带钩子理由
+[22m[39m[hooks] SubagentStop 返回阻断（exit 2 的「再多要一轮」未裁，已忽略）：禁改 src/secret.ts
+
+ [32m✓[39m tests/worker-hooks.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 679[2mms[22m[39m
+ [32m✓[39m tests/schedule.test.ts [2m([22m[2m37 tests[22m[2m)[22m[33m 674[2mms[22m[39m
+[90mstderr[2m | tests/terminal-sync-window.test.ts[2m > [22m[2m终态收尾窗口：已收敛的判据是 terminalResolved[2m > [22m[2m收尾中途 emit 抛 ⇒ 等待方照旧被放行（宁可这环红，不许整链永挂）
+[22m[39m[orchestrator] worker 收尾中途失败，按 failed 放行等待方：worker-2 simulated append failure
+
+ [32m✓[39m tests/terminal-sync-window.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 676[2mms[22m[39m
+   [32m✓[39m 终态收尾窗口：已收敛的判据是 terminalResolved [2m(3)[22m
+     [33m[2m✓[22m[39m join 落在窗口内 ⇒ 回执说 running + timedOut 点名；不说 done + 空报告[33m 305[2mms[22m[39m
+ [32m✓[39m tests/http-retry.test.ts [2m([22m[2m12 tests[22m[2m)[22m[33m 455[2mms[22m[39m
+ [32m✓[39m tests/prompt-cost.test.ts [2m([22m[2m17 tests[22m[2m)[22m[33m 573[2mms[22m[39m
+   [32m✓[39m 复跑面接线：这条尺会当场报出自己系数不成立 [2m(2)[22m
+     [33m[2m✓[22m[39m 输出里有逐档面、少看百分之几、系数自检三条[33m 322[2mms[22m[39m
+ [32m✓[39m tests/prompt-cache-breakpoints.test.ts [2m([22m[2m15 tests[22m[2m)[22m[33m 630[2mms[22m[39m
+   [32m✓[39m 端到端接线：开关 → 编排器 → 分派 → worker 真实请求体 [2m(2)[22m
+     [33m[2m✓[22m[39m 开 promptCache ⇒ worker 出网的请求体里确有 cache_control（能力真可达，不是纸面开关）[33m 310[2mms[22m[39m
+     [33m[2m✓[22m[39m 不开 ⇒ 同一 spawn 路径的请求体逐字不含 cache_control（缺省零行为）[33m 308[2mms[22m[39m
+ [32m✓[39m tests/mcp-grade-gate.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 585[2mms[22m[39m
+ [32m✓[39m tests/impact-cap-policy.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 556[2mms[22m[39m
+ [32m✓[39m tests/worker-evidence-parent-context.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 445[2mms[22m[39m
+ [32m✓[39m tests/orchestrator-wait.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 400[2mms[22m[39m
+   [32m✓[39m waitForAgents [2m(5)[22m
+     [33m[2m✓[22m[39m 超时：未收敛的 id 进 timedOut，已收敛的照常带 summary（超时不算失败）[33m 333[2mms[22m[39m
+ [32m✓[39m tests/utf8-text-safety.test.ts [2m([22m[2m13 tests[22m[2m)[22m[33m 385[2mms[22m[39m
+ [32m✓[39m tests/plugins-mcp.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 355[2mms[22m[39m
+ [32m✓[39m tests/impact-query.test.ts [2m([22m[2m50 tests[22m[2m)[22m[33m 353[2mms[22m[39m
+ [32m✓[39m tests/supervise-evidence.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 328[2mms[22m[39m
+ [32m✓[39m tests/lsp.test.ts [2m([22m[2m11 tests[22m[2m)[22m[33m 315[2mms[22m[39m
+ [32m✓[39m tests/impact.test.ts [2m([22m[2m31 tests[22m[2m)[22m[33m 306[2mms[22m[39m
+[90mstdout[2m | tests/map-build.test.ts[2m > [22m[2mmap build（任务 4+5）[2m > [22m[2m坏 grammar（wasm 加载失败）→ 不抛异常、返回空地图（静默降级）
+[22m[39m[map] 构建失败，静默降级为无地图: tree-sitter grammar 不可用: python：bad wasm
+
+[90mstdout[2m | tests/map-build.test.ts[2m > [22m[2mmap build（任务 4+5）[2m > [22m[2mrg 不可用（工作区不存在）→ 空地图不抛；defaultTagsCacheDir 不在用户仓库
+[22m[39m[map] 构建失败，静默降级为无地图: spawn /Users/ze/Downloads/deepseek harness/node_modules/.pnpm/@vscode+ripgrep-darwin-arm64@1.18.0/node_modules/@vscode/ripgrep-darwin-arm64/bin/rg ENOENT
+
+ [32m✓[39m tests/map-build.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 283[2mms[22m[39m
+ [32m✓[39m tests/session-tools.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 210[2mms[22m[39m
+ [32m✓[39m tests/worker-project-rules.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 279[2mms[22m[39m
+ [32m✓[39m tests/map-parse.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 261[2mms[22m[39m
+ [32m✓[39m tests/shell-tail.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 220[2mms[22m[39m
+ [32m✓[39m tests/gym-rounds-e2e.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 210[2mms[22m[39m
+[90mstdout[2m | tests/prune-batching.test.ts[2m > [22m[2m分批裁剪：接上真装配（复用门的 PC8）[2m > [22m[2mPC8 那条 A/B 判据真能跑通（= pruneBatching 这个选项确实接到了装配链上）
+[22m[39m[prune] 分批推迟: 先不断前缀（可省 19948 < 门槛 40000，且头寸不紧：估算 15196 / 可用 119808）
+
+[90mstdout[2m | tests/prune-batching.test.ts[2m > [22m[2m分批裁剪：接上真装配（复用门的 PC8）[2m > [22m[2mPC8 那条 A/B 判据真能跑通（= pruneBatching 这个选项确实接到了装配链上）
+[22m[39m[prune] 分批推迟: 先不断前缀（可省 39896 < 门槛 40000，且头寸不紧：估算 20262 / 可用 119808）
+
+[90mstdout[2m | tests/prune-batching.test.ts[2m > [22m[2m分批裁剪：接上真装配（复用门的 PC8）[2m > [22m[2mPC8 那条 A/B 判据真能跑通（= pruneBatching 这个选项确实接到了装配链上）
+[22m[39m[prune] 分批推迟: 先不断前缀（可省 19948 < 门槛 40000，且头寸不紧：估算 30396 / 可用 119808）
+
+[90mstdout[2m | tests/prune-batching.test.ts[2m > [22m[2m分批裁剪：接上真装配（复用门的 PC8）[2m > [22m[2mPC8 那条 A/B 判据真能跑通（= pruneBatching 这个选项确实接到了装配链上）
+[22m[39m[prune] 分批推迟: 先不断前缀（可省 39896 < 门槛 40000，且头寸不紧：估算 35463 / 可用 119808）
+
+[90mstdout[2m | tests/prune-batching.test.ts[2m > [22m[2m分批裁剪：接上真装配（复用门的 PC8）[2m > [22m[2mPC9 那条集合相等判据真能跑通（= 压缩后置位、取用即清零都接在装配链上）
+[22m[39m[prune] 分批推迟: 先不断前缀（可省 19948 < 门槛 1000000000，且头寸不紧：估算 15196 / 可用 59600）
+
+[90mstdout[2m | tests/prune-batching.test.ts[2m > [22m[2m分批裁剪：接上真装配（复用门的 PC8）[2m > [22m[2mPC9 那条集合相等判据真能跑通（= 压缩后置位、取用即清零都接在装配链上）
+[22m[39m[prune] 分批推迟: 先不断前缀（可省 39896 < 门槛 1000000000，且头寸不紧：估算 20262 / 可用 59600）
+
+[90mstdout[2m | tests/prune-batching.test.ts[2m > [22m[2m分批裁剪：接上真装配（复用门的 PC8）[2m > [22m[2mPC9 那条集合相等判据真能跑通（= 压缩后置位、取用即清零都接在装配链上）
+[22m[39m[prune] 分批推迟: 先不断前缀（可省 19948 < 门槛 1000000000，且头寸不紧：估算 15358 / 可用 59600）
+
+[90mstdout[2m | tests/prune-batching.test.ts[2m > [22m[2m分批裁剪：接上真装配（复用门的 PC8）[2m > [22m[2mPC9 那条集合相等判据真能跑通（= 压缩后置位、取用即清零都接在装配链上）
+[22m[39m[prune] 分批推迟: 先不断前缀（可省 39896 < 门槛 1000000000，且头寸不紧：估算 20425 / 可用 59600）
+
+[90mstdout[2m | tests/prune-batching.test.ts[2m > [22m[2m分批裁剪：接上真装配（复用门的 PC8）[2m > [22m[2mPC9 那条集合相等判据真能跑通（= 压缩后置位、取用即清零都接在装配链上）
+[22m[39m[prune] 分批推迟: 先不断前缀（可省 19948 < 门槛 1000000000，且头寸不紧：估算 15375 / 可用 59600）
+
+[90mstdout[2m | tests/prune-batching.test.ts[2m > [22m[2m分批裁剪：接上真装配（复用门的 PC8）[2m > [22m[2mPC9 那条集合相等判据真能跑通（= 压缩后置位、取用即清零都接在装配链上）
+[22m[39m[prune] 分批推迟: 先不断前缀（可省 39896 < 门槛 1000000000，且头寸不紧：估算 20442 / 可用 59600）
+
+[90mstdout[2m | tests/prune-batching.test.ts[2m > [22m[2m分批裁剪：接上真装配（复用门的 PC8）[2m > [22m[2mPC9 那条集合相等判据真能跑通（= 压缩后置位、取用即清零都接在装配链上）
+[22m[39m[prune] 分批推迟: 先不断前缀（可省 19948 < 门槛 1000000000，且头寸不紧：估算 15391 / 可用 59600）
+
+ [32m✓[39m tests/prune-batching.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 178[2mms[22m[39m
+ [32m✓[39m tests/action-fusion.test.ts [2m([22m[2m22 tests[22m[2m)[22m[32m 183[2mms[22m[39m
+[90mstdout[2m | tests/judge-frozen-gate.test.ts[2m > [22m[2m判卷面硬闸端到端（runAgent → gatedTool → evaluate → 不执行）[2m > [22m[2m⑨ 写判卷路径 ⇒ tool_result 出「判卷文件冻结」且文件逐字未变；同一 run 里写非判卷路径照常放行
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ [32m✓[39m tests/judge-frozen-gate.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 179[2mms[22m[39m
+ [32m✓[39m tests/worker-role.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 177[2mms[22m[39m
+ [32m✓[39m tests/plugin-lsp-activation.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 166[2mms[22m[39m
+ [32m✓[39m tests/repair-loop-real-verify.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 167[2mms[22m[39m
+ [32m✓[39m tests/impact-admission.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 154[2mms[22m[39m
+ [32m✓[39m tests/promise-recall-inventory.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 163[2mms[22m[39m
+ [32m✓[39m tests/session-spend-ruler.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 151[2mms[22m[39m
+ [32m✓[39m tests/grep-glob-edit.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 142[2mms[22m[39m
+ [32m✓[39m tests/automation-tool-surface.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 166[2mms[22m[39m
+[90mstderr[2m | tests/impact-wiring.test.ts[2m > [22m[2m影响面·写工具接线（ToolContext.impact）[2m > [22m[2m钩子抛错不影响已成功的写入（best-effort：输出正常、事件为空）
+[22m[39m[impact] 影响面计算失败，跳过事件（写入已成功，不受影响）: simulated grammar failure
+
+ [32m✓[39m tests/impact-wiring.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 146[2mms[22m[39m
+ [32m✓[39m tests/hook-session-end.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 129[2mms[22m[39m
+ [32m✓[39m tests/gym-probe.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 136[2mms[22m[39m
+ [32m✓[39m tests/bandit-runtime.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 130[2mms[22m[39m
+ [32m✓[39m tests/tags-extract-version.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 133[2mms[22m[39m
+ [32m✓[39m tests/auto-verify-repair-runner.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 112[2mms[22m[39m
+[90mstderr[2m | tests/solpi-receipt-integration.test.ts[2m > [22m[2mprune then validated evidence projection[2m > [22m[2mrestores genuine receipts after two sends and full source on invalidation (observationPack=false)
+[22m[39m[solpi] ledger unavailable (ESTALE); full redacted source retained
+
+[90mstderr[2m | tests/solpi-receipt-integration.test.ts[2m > [22m[2mprune then validated evidence projection[2m > [22m[2mrestores genuine receipts after two sends and full source on invalidation (observationPack=true)
+[22m[39m[solpi] ledger unavailable (ESTALE); full redacted source retained
+
+ [32m✓[39m tests/solpi-receipt-integration.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 123[2mms[22m[39m
+[90mstdout[2m | tests/main-run-routing.test.ts[2m > [22m[2mnon-session transport reuse[2m > [22m[2msession-end distillation uses the same selected real adapter rather than falling back to GLM/demo
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ [32m✓[39m tests/main-run-routing.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 112[2mms[22m[39m
+ [32m✓[39m tests/prune.test.ts [2m([22m[2m24 tests[22m[2m)[22m[32m 116[2mms[22m[39m
+[90mstdout[2m | tests/plugin-user-config.test.ts[2m > [22m[2mreadPluginUserConfig（读侧）[2m > [22m[2m明文值走配置文件、敏感值走密钥后端；文件里那条只有占位符
+[22m[39m[plugin] userConfig 写入完成：{"plugin":"p1","secretKeys":["TOKEN"],"plaintextKeys":["PROFILE"],"file":"/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/dsh-usercfg-52IPcX/plugin-userconfig.json"}
+
+[90mstdout[2m | tests/plugin-user-config.test.ts[2m > [22m[2mreadPluginUserConfig（读侧）[2m > [22m[2m配置文件里的 plugin 与请求不一致 ⇒ 那份值一个都不采用（不把 A 插件的配置套到 B 插件上）
+[22m[39m[plugin] userConfig 写入完成：{"plugin":"other","secretKeys":[],"plaintextKeys":["PROFILE"],"file":"/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/dsh-usercfg-FnWR8w/plugin-userconfig.json"}
+
+[90mstdout[2m | tests/plugin-user-config.test.ts[2m > [22m[2muserConfig 进激活面（§9.5 的三条通道）[2m > [22m[2mexec form 的 ${user_config.TOKEN} 被展开，且 PLUGIN_OPTION_TOKEN 真的进了子进程 env
+[22m[39m[plugin] userConfig 写入完成：{"plugin":"cfg","secretKeys":["TOKEN"],"plaintextKeys":[],"file":"/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/dsh-usercfg-live-3FJZ3J/plugin-data/cfg/plugin-userconfig.json"}
+
+[90mstdout[2m | tests/plugin-user-config.test.ts[2m > [22m[2muserConfig 进激活面（§9.5 的三条通道）[2m > [22m[2m装载期就把值解析好（生产里没有任何人再调一次 resolveUserConfigs）
+[22m[39m[plugin] userConfig 写入完成：{"plugin":"cfg","secretKeys":["TOKEN"],"plaintextKeys":[],"file":"/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/dsh-usercfg-live-qp4n1h/plugin-data/cfg/plugin-userconfig.json"}
+
+[90mstdout[2m | tests/plugin-user-config.test.ts[2m > [22m[2muserConfig 进激活面（§9.5 的三条通道）[2m > [22m[2m第二激活面 MCP：connectMcp 真的把 userConfig 递给 connect（远程 key 就写在 headers 里）
+[22m[39m[plugin] userConfig 写入完成：{"plugin":"cfg","secretKeys":["TOKEN"],"plaintextKeys":[],"file":"/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/dsh-usercfg-live-lPNL7M/plugin-data/cfg/plugin-userconfig.json"}
+
+[90mstdout[2m | tests/plugin-user-config.test.ts[2m > [22m[2muserConfig 进激活面（§9.5 的三条通道）[2m > [22m[2m第三激活面 LSP：注册前就展开，面板同源读路径看到的是展开后的
+[22m[39m[plugin] userConfig 写入完成：{"plugin":"cfg","secretKeys":["TOKEN"],"plaintextKeys":[],"file":"/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/dsh-usercfg-live-n1iBsP/plugin-data/cfg/plugin-userconfig.json"}
+
+[90mstdout[2m | tests/plugin-user-config.test.ts[2m > [22m[2muserConfig 进激活面（§9.5 的三条通道）[2m > [22m[2mgetPluginSecret 不再零调用者：读侧确实经过它取敏感值（后端被拿掉 → 进 missing）
+[22m[39m[plugin] userConfig 写入完成：{"plugin":"cfg","secretKeys":["TOKEN"],"plaintextKeys":[],"file":"/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/dsh-usercfg-live-SUO8sI/plugin-data/cfg/plugin-userconfig.json"}
+
+ [32m✓[39m tests/plugin-user-config.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 104[2mms[22m[39m
+ [32m✓[39m tests/subprocess-env-face.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 102[2mms[22m[39m
+[90mstdout[2m | tests/map-self-report.test.ts[2m > [22m[2m地图的覆盖面自述（与影响面共用一把尺）[2m > [22m[2m地图降级要出声，并且不许被读成「仓库没有结构」
+[22m[39m[map] 构建失败，静默降级为无地图: spawn /Users/ze/Downloads/deepseek harness/node_modules/.pnpm/@vscode+ripgrep-darwin-arm64@1.18.0/node_modules/@vscode/ripgrep-darwin-arm64/bin/rg ENOENT
+
+[90mstdout[2m | tests/map-self-report.test.ts[2m > [22m[2m接线：那两句要真的发出去[2m > [22m[2m会话首请求里带着地图的自述行与降级行（装配面有观察者）
+[22m[39m[map] 注入失败: boom-map-face
+
+ [32m✓[39m tests/map-self-report.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 102[2mms[22m[39m
+ [32m✓[39m tests/spawn-arg-surface.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 96[2mms[22m[39m
+ [32m✓[39m tests/worker-sandbox-wiring.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 99[2mms[22m[39m
+ [32m✓[39m tests/gym-real-provider-wiring.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 84[2mms[22m[39m
+ [32m✓[39m tests/verify-cause.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 78[2mms[22m[39m
+ [32m✓[39m tests/session-provider.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 73[2mms[22m[39m
+[90mstdout[2m | tests/session-wiring.test.ts[2m > [22m[2mUI cancellation settles the distillation approval immediately without writing memory
+[22m[39m[memory] 会话结束沉淀: {"kind":"failed","why":"This operation was aborted"}
+
+[90mstdout[2m | tests/session-wiring.test.ts[2m > [22m[2mdistillation consumes session history and its instruction with only remember exposed
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ [32m✓[39m tests/session-wiring.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 73[2mms[22m[39m
+[90mstderr[2m | tests/worker-spent-usd.test.ts[2m > [22m[2mW3② 花费折算（priceOf/costUsd 是唯一价源）[2m > [22m[2musage 里冒出非有限数 ⇒ null（NaN 进 JSON 会变成 null，整批合计也会被带成 NaN）
+[22m[39m[pricing] 档位 "glm-standard" 的花算出非有限值 Infinity ⇒ 按价格未知处理
+
+ [32m✓[39m tests/worker-spent-usd.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 65[2mms[22m[39m
+ [32m✓[39m tests/cancel-agents-tool.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 66[2mms[22m[39m
+ [32m✓[39m tests/grep-context.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 65[2mms[22m[39m
+ [32m✓[39m tests/solpi-runtime.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 63[2mms[22m[39m
+[90mstderr[2m | tests/skill-tool-policy.test.ts[2m > [22m[2mrunAgent 真入口：用户敲一条带申报的 /skill，工具面确实改了[2m > [22m[2m派发即登记：面板（agent:state）读到的就是这条 skill 的账
+[22m[39m[skill] 规格面摘除（disallowed-tools）: grep←/pol:sec
+
+ [32m✓[39m tests/skill-tool-policy.test.ts [2m([22m[2m27 tests[22m[2m)[22m[32m 56[2mms[22m[39m
+ [32m✓[39m tests/cap-notice-unit.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 57[2mms[22m[39m
+ [32m✓[39m tests/verify.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 59[2mms[22m[39m
+ [32m✓[39m tests/solpi-review-regression.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 58[2mms[22m[39m
+ [32m✓[39m tests/auto-verify-wiring.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 55[2mms[22m[39m
+ [32m✓[39m tests/skill-user-invocation.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 60[2mms[22m[39m
+ [31m❯[39m tests/mutate-anchor-titles.test.ts [2m([22m[2m23 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 59[2mms[22m[39m
+   [32m✓[39m parseAnchors：取料面自己要先可信 [2m(2)[22m
+     [32m✓[39m 按 id 边界切块；三条就是三条（整块切错会读出『总数 1』这种恒真读数）[32m 1[2mms[22m[39m
+     [32m✓[39m 表里的转义态按 JS 语义解出来（\" 是真引号）[32m 0[2mms[22m[39m
+   [32m✓[39m checkAnchorTitles：漂移与误报的分界 [2m(7)[22m
+     [32m✓[39m 标题逐字在场 ⇒ 无 finding[32m 0[2mms[22m[39m
+     [32m✓[39m 改了标题没同步 expectFail ⇒ 红并点名 id（这就是本闸存在的全部理由）[32m 0[2mms[22m[39m
+     [32m✓[39m 参数化标题不误判：%s 与 ${} 渲染后的实参算命中[32m 0[2mms[22m[39m
+     [32m✓[39m expectFail 只写长标题的一段也算命中（runner 比的是输出里含不含这段）[32m 0[2mms[22m[39m
+     [32m✓[39m 柯里形式的 it.each([...])("标题") 也要抽到（真表里 4 条就栽在这一格）[32m 0[2mms[22m[39m
+     [32m✓[39m vitest 的 $插值标题（`$label`）按通配处理[32m 0[2mms[22m[39m
+     [32m✓[39m 非 vitest 面的锚点单列 unverified，不算漂移也不静默消失[32m 0[2mms[22m[39m
+   [31m❯[39m 真表：新漂移必须红，存量必须逐条点名 [2m(6)[22m
+     [32m✓[39m 表本身读得到（读不到＝没尺，不许把 0 条当结论）[32m 0[2mms[22m[39m
+[31m     [31m×[31m 真表：漂移必须为 0，且存量名单一旦不再命中就该被点名（不许静默豁免）[39m[32m 35[2mms[22m[39m
+     [32m✓[39m 真表：「判卷文件读不到」必须逐个命中在途删除（HEAD 里有、盘上没有）[32m 11[2mms[22m[39m
+     [32m✓[39m 「在途删除」登记表：文件必须仍在 HEAD（那笔删除一入库就得删名），理由必须写怎么撤[32m 0[2mms[22m[39m
+     [32m✓[39m 豁免机制自己是活的：同一行标题，登记则免、不登记则红（两侧都要有）[32m 0[2mms[22m[39m
+     [32m✓[39m 存量名单若有条目，每条必须带理由（空理由＝无声放行，本仓不接受）[32m 0[2mms[22m[39m
+   [32m✓[39m checkAnchorFace：表只能被「摘得对」地缩小 [2m(8)[22m
+     [32m✓[39m 行数跌破下限即红，并且报出**差了几条**（只说「少了」逼人自己数）[32m 0[2mms[22m[39m
+     [32m✓[39m 反向配对：多于下限不许红（否则这条尺会惩罚正在加锚点的人）[32m 0[2mms[22m[39m
+     [32m✓[39m src 指向面上不存在的文件 ⇒ 点名那条锚点（这条变异在空转）[32m 0[2mms[22m[39m
+     [32m✓[39m 欠条：文件在面上且零锚点 ⇒ 不红；补回一条 或 文件消失 ⇒ 都要人来销账[32m 0[2mms[22m[39m
+     [32m✓[39m 取料面自己要先可信：抽取漏了 src 栏 ⇒ 「零锚点」会被虚报，所以每一行都必须抽出 src[32m 0[2mms[22m[39m
+     [32m✓[39m 真表现读：零发现，且解析到的行数与表里 id 行数一致（不许拿漏计当结论）[32m 5[2mms[22m[39m
+     [32m✓[39m 真表的下限不许是手抄的旧数：帽必须 ≤ 现表行数（否则本闸一落地就红在帽上）[32m 2[2mms[22m[39m
+     [32m✓[39m 欠条逐条带理由，且理由必须点名是哪一页判的（销账时要能找到出处）[32m 0[2mms[22m[39m
+ [32m✓[39m tests/skill-body-cap.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 52[2mms[22m[39m
+ [32m✓[39m tests/gym-long-replay.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 54[2mms[22m[39m
+ [32m✓[39m tests/hardening2.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 49[2mms[22m[39m
+ [32m✓[39m tests/hooks-input-contract.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 48[2mms[22m[39m
+ [32m✓[39m tests/plugins-skills.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 48[2mms[22m[39m
+ [32m✓[39m tests/session-prune-attachments.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 47[2mms[22m[39m
+ [32m✓[39m tests/tools.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 46[2mms[22m[39m
+ [32m✓[39m tests/supervise-contract.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 46[2mms[22m[39m
+ [32m✓[39m tests/provider-keys.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 45[2mms[22m[39m
+ [32m✓[39m tests/hook-precompact-producer.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 42[2mms[22m[39m
+ [32m✓[39m tests/plugins-discover.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 41[2mms[22m[39m
+ [32m✓[39m tests/path-boundary.test.ts [2m([22m[2m23 tests[22m[2m)[22m[32m 42[2mms[22m[39m
+ [32m✓[39m tests/projection-invariant.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 79[2mms[22m[39m
+[90mstdout[2m | tests/goal-continue.test.ts[2m > [22m[2mgoal 模式端到端（真入口，缺省零行为）[2m > [22m[2m设了目标但这一轮没写盘也没验证 ⇒ 立刻停，并落一条写明理由的 goal_stopped（读答型目标不烧钱）
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstdout[2m | tests/goal-continue.test.ts[2m > [22m[2mgoal 模式端到端（真入口，缺省零行为）[2m > [22m[2m没人应答（管道/CI）同样不续跑：与「定时任务」分成两支，判据是**同一句停机理由**
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstdout[2m | tests/goal-continue.test.ts[2m > [22m[2mgoal 模式端到端（真入口，缺省零行为）[2m > [22m[2m没人应答（管道/CI）同样不续跑：与「定时任务」分成两支，判据是**同一句停机理由**
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstdout[2m | tests/goal-continue.test.ts[2m > [22m[2mgoal 模式端到端（真入口，缺省零行为）[2m > [22m[2m停过的目标不会因用户再发一条而自动复活：停止是终态，要再跑得改设目标
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstdout[2m | tests/goal-continue.test.ts[2m > [22m[2mgoal 模式端到端（真入口，缺省零行为）[2m > [22m[2m停过的目标不会因用户再发一条而自动复活：停止是终态，要再跑得改设目标
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstdout[2m | tests/goal-continue.test.ts[2m > [22m[2mgoal 模式端到端（真入口，缺省零行为）[2m > [22m[2m轮次上限到点必停：只跑到 maxTurns 轮，且最后一轮仍是 goal 代发的（origin 记着是谁发的）
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+[90mstdout[2m | tests/goal-continue.test.ts[2m > [22m[2mgoal 美元闸端到端：模型名也算得出钱，并且真的拦下续跑[2m > [22m[2m设 $0.05 上限 × 一轮 200k/20k 用量 ⇒ goal_stopped 点名美元上限（不被轮次/无产出理由顶包）
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ [32m✓[39m tests/goal-continue.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 41[2mms[22m[39m
+ [32m✓[39m tests/permissions.test.ts [2m([22m[2m31 tests[22m[2m)[22m[32m 39[2mms[22m[39m
+[90mstderr[2m | tests/events.test.ts[2m > [22m[2mreplay 坏行容错边界（S1-4 回归）[2m > [22m[2m尾部半写行可容：前缀完整、untilEventId 仍按行号成立
+[22m[39m[events] replay 跳过尾部 1 条坏行（降级容错）: /var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/m0-tailbad-gLTcAa/events.jsonl
+
+[90mstderr[2m | tests/events.test.ts[2m > [22m[2mreplay 坏行容错边界（S1-4 回归）[2m > [22m[2m尾部半写行可容：前缀完整、untilEventId 仍按行号成立
+[22m[39m[events] replay 跳过尾部 1 条坏行（降级容错）: /var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/m0-tailbad-gLTcAa/events.jsonl
+
+[90mstderr[2m | tests/events.test.ts[2m > [22m[2mreplay 坏行容错边界（S1-4 回归）[2m > [22m[2m尾部半写行可容：前缀完整、untilEventId 仍按行号成立
+[22m[39m[events] replay 跳过尾部 1 条坏行（降级容错）: /var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/m0-tailbad-gLTcAa/events.jsonl
+
+[90mstderr[2m | tests/events.test.ts[2m > [22m[2mreplayIncremental 与 replay 同判（P1-2 契约分叉回归）[2m > [22m[2m尾坏当时可容、其后一旦追加新事件即转非尾部 → 两入口同判必炸
+[22m[39m[events] replayIncremental 跳过尾部 1 条坏行（降级容错）: /var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/m0-inc-tail-i5Ry1o/events.jsonl
+
+[90mstderr[2m | tests/events.test.ts[2m > [22m[2mreplayIncremental 与 replay 同判（P1-2 契约分叉回归）[2m > [22m[2m尾坏当时可容、其后一旦追加新事件即转非尾部 → 两入口同判必炸
+[22m[39m[events] replay 跳过尾部 1 条坏行（降级容错）: /var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/m0-inc-tail-i5Ry1o/events.jsonl
+
+[90mstderr[2m | tests/events.test.ts[2m > [22m[2mreplayIncremental 与 replay 同判（P1-2 契约分叉回归）[2m > [22m[2m坏行始终在尾部（无后续事件）→ 两入口一致降级，不误判成损坏
+[22m[39m[events] replayIncremental 跳过尾部 1 条坏行（降级容错）: /var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/m0-inc-puretail-IUvLAJ/events.jsonl
+
+[90mstderr[2m | tests/events.test.ts[2m > [22m[2mreplayIncremental 与 replay 同判（P1-2 契约分叉回归）[2m > [22m[2m坏行始终在尾部（无后续事件）→ 两入口一致降级，不误判成损坏
+[22m[39m[events] replay 跳过尾部 1 条坏行（降级容错）: /var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/m0-inc-puretail-IUvLAJ/events.jsonl
+
+ [32m✓[39m tests/events.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 39[2mms[22m[39m
+[90mstderr[2m | tests/worker-budget.test.ts[2m > [22m[2mspawn 处的窗口接线[2m > [22m[2m注入模型（modelFor）⇒ handle 不带窗口，worker 预算逐字旧行为
+[22m[39m[orchestrator] worker 收尾中途失败，按 failed 放行等待方：worker-1 ENOENT: no such file or directory, open '/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/worker-budget-SAT6Fc/events.jsonl'
+
+ [32m✓[39m tests/worker-budget.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 37[2mms[22m[39m
+ [32m✓[39m tests/plugin-commands-dispatch.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 36[2mms[22m[39m
+ [32m✓[39m tests/skill-invocation-faces.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 35[2mms[22m[39m
+ [32m✓[39m tests/plan-required.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 31[2mms[22m[39m
+[90mstdout[2m | tests/runscope.test.ts[2m > [22m[2mRunScope：并发 run 隔离（D-2 验收）[2m > [22m[2m交互 run 的审批不被并发 unattended run 抢走/清场
+[22m[39m[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ [32m✓[39m tests/runscope.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 31[2mms[22m[39m
+ [32m✓[39m tests/user-agent-roles.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 31[2mms[22m[39m
+ [32m✓[39m tests/mutate-needles-check.test.ts [2m([22m[2m24 tests[22m[2m)[22m[32m 33[2mms[22m[39m
+ [32m✓[39m tests/edge-cases.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 30[2mms[22m[39m
+ [32m✓[39m tests/model-surface.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 30[2mms[22m[39m
+ [32m✓[39m tests/compaction-cost.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 28[2mms[22m[39m
+ [32m✓[39m tests/skill-recall-address.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 27[2mms[22m[39m
+ [32m✓[39m tests/memory.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 26[2mms[22m[39m
+ [32m✓[39m tests/prose-needle-scan.test.ts [2m([22m[2m69 tests[22m[2m)[22m[32m 26[2mms[22m[39m
+ [32m✓[39m tests/remember.test.ts [2m([22m[2m23 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m tests/turn-truncated.test.ts [2m([22m[2m45 tests[22m[2m)[22m[32m 27[2mms[22m[39m
+ [32m✓[39m tests/providers.test.ts [2m([22m[2m39 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m tests/prompt-surface-check.test.ts [2m([22m[2m32 tests[22m[2m)[22m[32m 25[2mms[22m[39m
+ [32m✓[39m tests/sidechat-core.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m tests/session-organization.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m tests/sessions.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m tests/orchestrator-construction-sites.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+ [32m✓[39m tests/plugin-role-discoverability.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+ [32m✓[39m tests/read-shape.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+ [32m✓[39m tests/dead-script-refs.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m tests/compaction.test.ts [2m([22m[2m27 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m tests/write-line-delta.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m tests/memory-runner.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m tests/project-registry.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m tests/settings.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m tests/shell-family-cause.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m tests/trust-fingerprint.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m tests/remember-secret-hygiene.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m tests/edit-file-hint.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m tests/blocked-citation-face.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m tests/exec-outcome-face.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m tests/worker-role-budget.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m tests/session-metadata.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m tests/usage-attribution.test.ts [2m([22m[2m26 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m tests/provider-cache-usage.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+[90mstderr[2m | tests/snapshot-d7.test.ts[2m > [22m[2mD7 覆盖前快照[2m > [22m[2m快照自身失败不得改写盘结果（护栏缺位不能把成功变成失败）
+[22m[39m[snapshot] 覆盖前快照失败（写入照常进行）: ENOTDIR: not a directory, mkdir '/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/dsh-d7-TI8Xjb/.agent/snapshots/1790731715282--call-5'
+
+ [32m✓[39m tests/snapshot-d7.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m tests/plan-gate.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m tests/goal-price.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m tests/reproducibility.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/compact-wiring.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/context-auto-verify-note.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m tests/no-progress.test.ts [2m([22m[2m25 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/glm.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m tests/timeout-text-single-source.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/updater-safety-core.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m tests/shell-bypass-composition.test.ts [2m([22m[2m38 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/glm-tool-stream-switch.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/recovery-parent-mode.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m tests/gates-scan.test.ts [2m([22m[2m37 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/event-log-redaction.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m tests/tool-surface-parity.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/memory-inject-token-budget.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/routing-events.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+[90mstdout[2m | tests/secrets.test.ts[2m > [22m[2m插件敏感值（safeStorage）[2m > [22m[2mwritePluginUserConfig：非敏感明文落盘 + 敏感只留占位符，扫描无明文
+[22m[39m[plugin] userConfig 写入完成：{"plugin":"tres-finance","secretKeys":["apiKey"],"plaintextKeys":["baseUrl"],"file":"/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/m2g-secrets-6SiJ4s/plugin-userconfig.json"}
+
+ [32m✓[39m tests/secrets.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/gate-audit.test.ts [2m([22m[2m33 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/frozen-drift.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/evidence.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+[90mstderr[2m | tests/loop.test.ts[2m > [22m[2mauto-verify on completion (harness 补拍，证据 only)[2m > [22m[2m可验面探测炸（config 存在但 JSON 坏）⇒ 不炸 run、不补拍
+[22m[39m[verify] 可验面探测失败，跳过自动验证拍: Unexpected token 'I'
+
+ [32m✓[39m tests/loop.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/instruction-provenance.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/distill.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/license.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/final-budget.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/autonomy.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/map-turn-gate.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/auto-verify-repair.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/replay-corpus-inventory.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/fork.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/prefix-churn.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/memory-eviction-notice.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/run-attachments.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/cost-per-progress.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/docs-check.test.ts [2m([22m[2m44 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/clarify.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/write-face.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/replay-corpus.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/hooks-context-budget.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/goal-stop-decision.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/map-render.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/loop-error-event.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/wiring-coverage.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/verify-attribution-exits.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/loop-repeat-nudge.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/text-budget-cjk.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/redact.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/replay-run-scorecard.test.ts [2m([22m[2m29 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/tool-block-witness.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/recovery-restart-current-session.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/src-execution-path.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/gym-draft.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/metering.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/ask-gate.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/output-ring.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/command-shape.test.ts [2m([22m[2m36 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/stream-redaction.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/memory-arch-outline-cap.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/mock-provider-rounds.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/refine-goal-tool.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/replay-verify-cause-exec.test.ts [2m([22m[2m30 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/gym-script.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/main-provider-runtime.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/economics.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/mcp-bounds.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/env-cue-single-source.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/line-delta.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/eval-arms.test.ts [2m([22m[2m26 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/tool-choice.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/gate-failure-log.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/eval-task-set.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/worker-impact-query.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/worker-report-clip.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/cascade.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/mutation-rerun-triage.test.ts [2m([22m[2m25 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/facts.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/replay-gate-outcomes.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/orchestrator-join.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/budget-price-key.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/prune-token-weight.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/replay-latency.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/judge-input-face.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/replay-join-lapse.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/judge-verdict-diff.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/provider-capabilities.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/map-rank.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/gate-manifest.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/worker-attribution.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/routing-pricing.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/sandbox.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/wait-for-agents-tool.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/zero-regression-conjunct.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/goal-trace.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/hardening3.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/replay-readings-registry.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/routing-policy.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/worker-result-wire.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/replay-prune-promise.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/replay-cascade-traffic.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/worker-evidence.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/measure-impact-cap-divergence.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/mock.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/context-dangling-tool-call.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/permission-mode-single-source.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/observation-capture.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/verify-exec-sandbox.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/registry-rung.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/onboarding-groups.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/worker-tool-specs.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/supervise-ring-verdict.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/base-system-discipline.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/typecheck-triage.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/impact-note-bounds.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/shape-doc-cap.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/replay-verify-cause-dating.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 3 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/mutate-anchor-titles.test.ts[2m > [22m真表：新漂移必须红，存量必须逐条点名[2m > [22m真表：漂移必须为 0，且存量名单一旦不再命中就该被点名（不许静默豁免）
+[31m[1mAssertionError[22m: expected [ …(2) ] to deeply equal [][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   "drift:loop-block-permission-reason-dropped",[39m
+[31m+   "drift:loop-block-first-gate-reason-dropped",[39m
+[31m+ ][39m
+
+[36m [2m❯[22m tests/mutate-anchor-titles.test.ts:[2m137:117[22m[39m
+    [90m135|[39m     // 两条一起断言：漂移=有锚点指不到标题；stale=名单里躺着已经不再命中的豁免。
+    [90m136|[39m     // 只断言前一条，就等于允许"把已知红登记成存量后 forever 不回看"。
+    [90m137|[39m     expect(findings.filter((f) => f.kind === "drift" || f.kind === "st…
+    [90m   |[39m                                                                                                                     [31m^[39m
+    [90m138|[39m   });
+    [90m139|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/mutate-verify-gates.test.ts[2m > [22mauditExpectFails：killer 指针必须指得到活用例[2m > [22m真表自证：整张表的 killer 指针必须 0 失效（新增一条断指针＝当场红）
+[31m[1mAssertionError[22m: expected [ …(2) ] to deeply equal [][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   "loop-block-permission-reason-dropped/not-found",[39m
+[31m+   "loop-block-first-gate-reason-dropped/not-found",[39m
+[31m+ ][39m
+
+[36m [2m❯[22m tests/mutate-verify-gates.test.ts:[2m650:40[22m[39m
+    [90m648|[39m     expect(auditExpectFails(rows, (rel) => {
+    [90m649|[39m       try { return readFileSync(join(root, rel), "utf8"); } catch { re…
+    [90m650|[39m     }).map((p) => `${p.id}/${p.why}`)).toEqual([]);
+    [90m   |[39m                                        [31m^[39m
+    [90m651|[39m   }, 60_000);
+    [90m652|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/mutate-verify-gates.test.ts[2m > [22m选择子唯一性：一条锚点能不能只跑自己那条 killer 用例[2m > [22m水位：真表现读「选不中＋不唯一」只准调低（帽 13，09-28 现读 13＝11 零命中＋2 多命中）——新增一根要写明为什么
+[31m[1mAssertionError[22m: 选择子失准：auto-verify-default-on(0)、worker-impact-spec-not-appended(0)、worker-impact-whitelist-not-appended(0)、hook-matcher-exact-list-degrades-to-substring-regex(0)、read-worker-inherits-wide-hook-mode(0)、redaction-stops-recursing-into-containers(0)、worker-git-newline-not-a-separator(0)、shape-leading-env-assignment-not-skipped(0)、settings-default-on-key-read-by-strict-true(2)、settings-auto-verify-default-reverted(2)、pb-control-arm-always-wired(0)、g-b-injection-face-ignores-table-form(0)、loose-pointer-counts-literal(0)、loop-block-permission-reason-dropped(0)、loop-block-first-gate-reason-dropped(0): expected 15 to be less than or equal to 13[39m
+[36m [2m❯[22m tests/mutate-verify-gates.test.ts:[2m1233:105[22m[39m
+    [90m1231|[39m     const rows = listAnchorRows();
+    [90m1232|[39m     const r = selectorAmbiguity(rows, (rel) => readRel(rel));
+    [90m1233|[39m     expect(r.problems.length, "选择子失准：" + r.problems.map((p) => `${p.id…
+    [90m   |[39m                                                                                                         [31m^[39m
+    [90m1234|[39m     expect(SELECTOR_CAP - r.problems.length).toBeLessThan(5);
+    [90m1235|[39m     expect(r.inspected, "取料面塌了＝inspected 归零，这一格又不能印错只能印 0").toBeGreate…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m251 passed[39m[22m[90m (253)[39m
+[2m      Tests [22m [1m[31m3 failed[39m[22m[2m | [22m[1m[32m3267 passed[39m[22m[90m (3270)[39m
+[2m   Start at [22m 09:26:47
+[2m   Duration [22m 118.40s[2m (tests 80%, import 18%, transform 2%)[22m
+
+[2m    Isolate [22m [33m253 workers spawned[39m[2m · ~52ms startup each (spawn + environment, per file)[22m
+[2m            [22m [2mat least ~13.14s faster with [22m[33misolate: false[39m[2m — reuses workers across files instead of one per file[22m
+

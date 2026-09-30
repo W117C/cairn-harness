@@ -39,6 +39,14 @@ export interface AssistantDeltaEvent { type: "assistant_delta"; callId: string; 
 /** M3a：worker 子流的工具调用（§4.4.9 落主流口径）——agent_id 在场 = 该事件属于该 worker 子流，
  *  主上下文投影（projectContext）跳过带 agent_id 的事件（父上下文唯一接收物 = agent_result，§4.4.4）。 */
 export interface ToolCallEvent { type: "tool_call"; id: string; name: string; args: Record<string, unknown>; agent_id?: string }
+/** 执行前就被拦下的工具调用：哪道闸拦的（唯一事实源；下面六处出口共用，别各写一份字符串）。
+ *  为什么不塞进 `gate: GateMeta`——这六道闸都不在档位机里，没有 layer/risk/mode 可言，
+ *  编一个就会污染 `gate-outcomes` 的 layer×verdict 免批率（`GateMeta.mode` 那句「宁缺不编」是纪律不是注释）。
+ *  为什么现在才落：这六处从前只有 `ok:false` ＋一句方括号开头的散文 ⇒ 「被哪道闸拦」与「旧日志」在事件流里
+ *  同形（缺席三因），下游要归因只能回去匹配文案，而文案刚被证明是第二个注入面。
+ *  与 `GATE_VERDICTS` 同形状（运行时数组）：复跑面按它铺矩阵，新增一挡而少配一处会被点名。 */
+export const TOOL_BLOCK_REASONS = ["tool-table", "skill-denial", "verify-unwired", "hook", "permission", "unknown-tool"] as const;
+export type ToolBlockReason = (typeof TOOL_BLOCK_REASONS)[number];
 /** M1c 自动放行来源审计（§11.7.5）：仅自动放行的 tool_result 携带，零新事件类型。
  *  类型不自家再定义一份——它的真身在权限层，且由 `autoOf(gate)` 派生（两份同形定义迟早漂）。 */
 export interface ToolResultEvent { type: "tool_result"; callId: string; ok: boolean; output: string; auto?: AutoMeta; /** 权限判定留痕：谁判的（layer）、怎么判的（verdict）、当时风险与档位 */ gate?: GateMeta; agent_id?: string; /** D7 覆盖前快照（§10.4）：被覆盖原件在 `.agent/snapshots/` 下的路径。
@@ -50,7 +58,9 @@ export interface ToolResultEvent { type: "tool_result"; callId: string; ok: bool
    *  任何下游读者（额度、按档升级、沉淀、评估失败轨迹）只能去匹配 `[exit code: 127]` 那句文案，
    *  而文案面刚被证明是不可靠判据（judgment-layer §9.1）。 */
   exitCode?: number | null; /** 是否因墙钟上限被强杀（与退出码分开的两态：超时后 code 常为 null）。 */
-  timedOut?: boolean }
+  timedOut?: boolean; /** 未执行的原因（见 `TOOL_BLOCK_REASONS`）。**缺席 = 这一笔走到了执行面**（或旧日志），
+   *  与 `exitCode` 的「缺席 ≠ 0」同一口径：这一格宁可没有，不许编。 */
+  blockedBy?: ToolBlockReason }
 export interface UsageEvent { type: "usage"; inputTokens: number; outputTokens: number; /** 缓存分列（可选）：**缺字段 = 该 provider 没上报，不等于 0**。约定 `inputTokens` 是含缓存的总输入，
    *  下面两个是其中的分块——不得再与 inputTokens 相加（metering 的 MeterUsage 要互斥桶，适配器换算后再交）。
    *  写侧断点（Anthropic cache_control / 稳定前缀排布）尚未接线：先把「命中没有」测出来，再谈制造命中。 */

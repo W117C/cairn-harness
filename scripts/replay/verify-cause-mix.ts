@@ -100,6 +100,8 @@ interface ExecEvent {
   output?: string;
   exitCode?: number | null;
   timedOut?: boolean;
+  /** 六道「执行前就拦下」的硬闸留的那一列（第 225 页 #40）；缺席＝这一笔走到了执行面。 */
+  blockedBy?: string;
 }
 
 /** 「有正证」的四类：都由字段**明说**过，不是"别都不是所以猜它是"。
@@ -154,6 +156,12 @@ export interface ExecMix {
   unmatched: number;
   /** 结构字段（任一）在场的红拍数——年龄判定的分子。 */
   withStructure: number;
+  /** 红拍里「从未 exec」的计数，两只分母不同（规则 262：并列印就要说口径）：
+   *  `blockedShellNoStruct` 只数 shell 家族且无结构字段的那批——下面 ⚠️ 那格的成因② 就是它；
+   *  `blockedAll` 数全部工具的红拍（被拦的 write_file 在本面家族过滤之外）。 */
+  blockedShellNoStruct: number;
+  blockedAll: number;
+  blockedMix: Map<string, number>;
   struct: Map<string, number>;
   text: Map<string, number>;
   attributable: number;
@@ -165,12 +173,18 @@ export function execMixOf(raws: readonly unknown[]): ExecMix {
   const nameByCall = callNameIndex(raws);
   const t: ExecMix = {
     shellBeats: 0, byTool: new Map<string, number>(), shellRed: 0, unmatched: 0, withStructure: 0,
+    blockedShellNoStruct: 0, blockedAll: 0, blockedMix: new Map<string, number>(),
     struct: new Map<string, number>(), text: new Map<string, number>(),
     attributable: 0, environmental: 0,
   };
   for (const raw of raws) {
     const e = raw as ExecEvent;
     if (e.type !== "tool_result" || typeof e.callId !== "string") continue;
+    // 「没走到 exec」从今天起是一列，不是一句推断：先在家族过滤之前数，才看得见被拦的非 shell 调用。
+    if (typeof e.blockedBy === "string") {
+      t.blockedAll++;
+      bump(t.blockedMix, e.blockedBy);
+    }
     const tool = nameByCall.get(e.callId);
     if (tool === undefined) {
       t.unmatched++; // 含 harness 自己注入的那几拍（diff / worktree 清理 / worker 回传）：不是 shell 红，但也不许丢
@@ -182,6 +196,8 @@ export function execMixOf(raws: readonly unknown[]): ExecMix {
     if (e.ok !== false) continue;
     t.shellRed++;
     if (e.exitCode !== undefined || e.timedOut !== undefined) t.withStructure++;
+    // 下面 ⚠️ 那格的成因② 从此有数：既没有结构字段、又明写着「被哪道闸拦」的那批，不必再靠猜。
+    if (typeof e.blockedBy === "string" && e.exitCode === undefined && e.timedOut === undefined) t.blockedShellNoStruct++;
     const s = execStructKind(e);
     bump(t.struct, s);
     bump(t.text, execTextKind(e.output ?? ""));
@@ -294,13 +310,23 @@ function execFace(raws: readonly unknown[]): boolean {
   );
   const noStructure = t.struct.get("no-structure") ?? 0;
   if (noStructure > 0) {
+    const byGate = t.blockedShellNoStruct;
+    // 从前这一格只能把三个成因并列说「分不开」；#40 之后 ② 有了一列可读 ⇒ 分得出多少就报多少，
+    // 抽到 0 条也要说清那是「料早于列」而不是「这趟没有闸拦」（规则 270 的 ③）。
+    const cause2 = byGate > 0
+      ? `② 根本没走到 exec = ${String(byGate)} 条（照 \`blockedBy\` 那一列数出来的，不再靠猜）；`
+      : "② 根本没走到 exec——这一因自第 225 页起有 `blockedBy` 一列可读，本份语料抽到 0 条 ⇒ " +
+        "只能说「料早于该列上线」，不能说「这趟没有闸拦」；";
     console.log(
-      `⚠️ 这一格有三种真成因、本面分不开（no-structure:${String(noStructure)}）：① 语料早于 #24 落盘；` +
-        "② 根本没走到 exec（主会话门拒绝与 unknown tool 落盘时连 `gate` 都不带；worker 门拒绝带 `gate.verdict=denied`，" +
-        "但那是另一格判据，本面不读它）；" +
-        "③ spawn 的 error 出口自己就不带字段。",
+      `⚠️ 这一格有三种真成因（no-structure:${String(noStructure)}）：① 语料早于 #24 落盘；${cause2}` +
+        "③ spawn 的 error 出口自己就不带字段。worker 门拒绝带 `gate.verdict=denied`，那是另一格判据，本面不读它。",
     );
   }
+  console.log(
+    "硬闸红拍（从未 exec，全部工具口径）=", String(t.blockedAll),
+    "· 逐闸=", t.blockedAll === 0 ? "没有一条（≠这趟没有闸拦，见上面 ⚠️）" : show(t.blockedMix),
+    "· 本面 shell 家族里的那部分=", String(t.blockedShellNoStruct),
+  );
   const ship = execFieldShipDate(resolve(import.meta.dirname, "../.."));
   const d = datingVerdict(t.withStructure, age, ship, t.shellRed, "exitCode/timedOut 结构字段");
   console.log(
