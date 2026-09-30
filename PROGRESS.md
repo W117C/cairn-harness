@@ -7905,6 +7905,30 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 7. **取料**：`outputs/composed-title-audit-2026-09-30/`（`findings.md` 汇总＋`probe.mts`＋`probe.log`＋`tp-arm-1.log`/`tp-arm-2.log`/`tp-arm-3.log`）。
    零源码 ⇒ typecheck 不重跑；标题不含「凭证」⇒ 不进 D-9 面（`docs-check.ts:215` 口径）。
 
+### 2026-09-30 · 第 240 页 · 两条裁否都带同分母读数：整条名口径省不到钱（0.32s vs 0.33s，同树同窗），`foreign` 那格没响是群体为空不是尺瞎（表外零源码）
+
+页号现读：台账最大 239 ⇒ 本页 240。零源码改动。
+
+1. **第 239 页 §6 把"下一笔做整条名"写成了计划，这一笔把它裁掉**——裁它的不是印象，是同树同窗的两臂实测（`.worktrees/verify-307ceb2`，硬链接 node_modules，`status` 0 项）：
+   - 那 2 条多命中锚点（现走整文件跑法）：`跑法单价：selector 0 拍·这一支本次没有 spawn ⇒ 没有分母 vs whole 4 拍·中位 0.32s·坏拍（没量到或 0 条） 0`，整趟 `本次耗时 1.6s · 跑了 2/2 条`；
+   - 本会话第 237 页那 2 条 selector 锚点（同一棵树、隔一条命令）：`跑法单价：selector 4 拍·中位 0.33s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母`，整趟 `本次耗时 1.5s · 跑了 2/2 条`。
+   ⇒ **0.32s 与 0.33s 是同一件事**：`-t` 那支照样要加载整份判卷，宿主文件小（`tests/settings.test.ts` 17 条）时两种跑法没有可测差。
+   这条与第 168/170 页不矛盾——那两页量的是**大宿主**（23.1s/条 vs 1.1s/条）；这一页量的是小宿主，
+   而全表那 3 条选不中的恰好都落在小宿主上 ⇒ **为了这 3 条去给尺学整条名，收益按本页读数是 0**。
+2. **还有一个形状错误被这次裁否顺手挡掉了**：`" > "` 不能当"这条指针是整条名"的判据。现读全表含 `" > "` 的指针 3 条
+   （`attribution-fail-face-drops-x-marker`、`usage-name-of-skips-callable-check`、`usage-name-of-accepts-non-string`），
+   **三条都是标题文字里本来就有 `" > "`**（`FAIL … > 标题`、`自述名 > 路由 spec > 缺省档`），没有一条是 describe 前缀。
+   ⇒ 将来若真要学整条名，必须**按位置抽 describe 链**，不许拿连接符切字符串——切了会把这 3 条读成整条名，
+   而它们运行时选中的是别的用例。反转条件：出现「宿主文件时长 ≫ 单条用例时长」的锚点落进选不中那一桶，或有人真按位置抽了链。
+3. **`foreign` 那格为什么一直没响**（第 231 页建、第 235/237 页两笔凭证都登记"缺生产见证"）：现读那两棵不是本会话的树——
+   `.claude/worktrees/goofy-satoshi-0edc69` **dirty=0 但在分支上**（`claude/goofy-satoshi-0edc69`），
+   嵌套的 `.claude/worktrees/goofy-satoshi-0edc69/.claude/worktrees/audit-zcode` 是 detached 但 **dirty=22**（在飞）。
+   规则 120 的三个条件（detached ∧ 0 项在飞 ∧ 那一笔已入库）它们各缺一条 ⇒ **不进残留、也不进外域，是群体为空**。
+   那一格的"没印"因此不是尺瞎，而是没有合格对象；两笔的提交可达性也现读过（`3a6d63c`、`d2d44a6` 都 `merge-base --is-ancestor … zcode` ＝ yes，缺的是另两条）。
+   ⇒ 这一格要从"用例见证"升到"真机见证"，得自己造一棵**外域、detached、干净**的树再收掉（下一页做），而不是把判据放宽去凑一次输出。
+4. **本笔不做**：不动 `selectorHitCount`、不动帽 `SELECTOR_CAP`（仍 3，理由见 §1 的钱）、不给指针文字加 `" > "` 特例。
+5. **取料**：`outputs/composed-title-audit-2026-09-30/ab-arms.md`（两臂机器原句＋第 2、3 节现读清单）。零源码 ⇒ typecheck 不重跑；标题不含「凭证」⇒ 不进 D-9 面。
+
 ### 2026-09-30 · 第 240 页（本会话）· 影响面精度只读探针：跨文件调用边 23/23 全对，同文件边是登记在案的设计盲区（能力 1 底账，表外零源码）
 
 1. **方法**：对 4 个真值已知符号（`appendRun`／`staleScratchTrees`／`runInSandbox`／`insideScratchFace`——全是本会话亲手碰过、调用点真值来自工作记忆＋grep 双源的函数）跑 `upward(谁调用我)`，与 grep 真值并排、逐处差异人工归类。探针与原句在取料目录。
