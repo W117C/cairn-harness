@@ -42,7 +42,13 @@ export interface FaceCost {
  *  `autoMemory=false` ⇒ remember）。缺省按「两个都没开」算 = 最省的那一档。 */
 export function faceCost(mode: PermissionMode, automation = false, omit?: readonly string[]): FaceCost {
   const all = sessionToolSpecs({ mode }).specs;
-  const omitSet = new Set(omit ?? [...OPTIONAL_TOOL_NAMES.goalTools, ...OPTIONAL_TOOL_NAMES.memoryTools]);
+  const omitSet = new Set(
+    omit ?? [
+      ...OPTIONAL_TOOL_NAMES.goalTools,
+      ...OPTIONAL_TOOL_NAMES.memoryTools,
+      ...OPTIONAL_TOOL_NAMES.lspTools,
+    ],
+  );
   const specs = all
     .filter((s) => automation || !AUTOMATION_TOOL_NAMES.includes(s.function.name))
     .filter((s) => !omitSet.has(s.function.name));
