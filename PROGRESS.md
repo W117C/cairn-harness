@@ -8035,3 +8035,20 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
    `针脚体检：1097 条 —— 阻断 8＝未入库面 8`（本笔实现未入库，落库即归零，230/233 页同款）、钉在飞 0、改法语法 1097/1097 合法。
 5. **取料**：`outputs/impact-samefile-fix-2026-09-30/`（`judge-needles.log`：判卷/typecheck/针脚三行＋修后工具逐字输出）；探针与真值沿用 `outputs/impact-accuracy-2026-09-30/`。
    认证与实杀读数在下一页凭证；锚点是否补（工具输出措辞变了，旧措辞锚点 `gym-check` 之外有没有钉在 sitesNote 空分支的）由 `--check-needles` 落库后自证。
+
+### 2026-09-30 · 第 242 页补 凭证：本笔（`940dbb9`）认证 **exit=1——唯一一红是 243 页新字面量第一次过秤**（顶包 11 > 登记的 10，判卷真值在两棵树上双源互证），不归本笔源码；本笔自己的面全绿：针脚 1097 阻断 0 归零、判卷 51、typecheck 0、门 20/20
+
+取料：`outputs/impact-samefile-fix-2026-09-30/`（`head-cert-940dbb9.log`＋`summary.txt`＋`suite-test.log`＋`judge-needles.log`）。
+
+1. **本笔的关键读数先说**：`针脚体检：1097 条 —— 阻断 0＝未入库面 0`——落库前阻断 8＝未入库面 8（`judge-needles.log` 留档），落库即归零，230/233 页先例第三次应验；钉在飞 0、killer 指针失效 0、改法语法 1097/1097 合法；typecheck 0；工具判卷 51 全绿。
+2. **认证（干净 detached 树 @`940dbb9`）**：`认证门面=20 道（跑到 20）｜绿 20 道｜⚠️ 超预算 0`、`并发判卷=起前 0 套／跑完 0 套（两端独占）`、
+   `Test Files 1 failed | 254 passed (255)｜Tests 1 failed | 3320 passed (3321)｜exit=1（退出码直接取，不接管道）`。
+   `sandbox:check` 本趟 388ms 口径回到帽内（无并发 suite 时包装层不膨胀——234/236 页两笔的读数第三次互相印证）。
+3. **那条红的双源互证**：`tests/prose-needle-scan.test.ts > 真仓读数必须在帽内`——`顶包候选 11（已提交 11）> 登记的 10`。
+   在认证树内复跑复现（1 failed | 68 passed），主树同刻 69 全绿。两棵树同一提交、读数不同，差的来源已用两份 CLI 全量输出 diff 钉死：
+   认证树多出一桶 `tests/head-cert-deps.test.ts:523 .reason「超过帽」`（引用 `page-claim.ts#claimPage`／`tool-lock.ts#decideToolLock` 的字面量，
+   **243 页（48d6f63）新增**）；主树那桶暂时消失是因为隔壁**未提交**的 page-claim.ts 在飞改动恰好改掉了那串字面量——
+   两边读数都对，读的时刻不同（第 241 页方法论：归属类事实只在读的那一刻有效）。
+4. **归因**：48d6f63 落库后本笔认证是第一次全套跑 ⇒ 第一次过秤就红。红属 243 页的工作，不属本笔源码（本笔只动了 `impact-query.ts` 与其判卷）。
+   修法循 227-补⑶ 先例（判卷不抄生产句子：:523 改派生断言）——但 `page-claim.ts` 此刻有隔壁的在飞改动，地盘是它的，本笔不动。
+5. **清场**：本笔自建的认证树 `head-cert-940dbb9` 逐字 `status --porcelain`＝0 后回收（exit=0）；别人的树一棵没动。
