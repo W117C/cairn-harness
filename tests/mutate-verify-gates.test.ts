@@ -1127,9 +1127,11 @@ describe("按标题选跑法：选中几条必须被读出来", () => {
 
 // ---- 第 169 页前置闸：选择子唯一性 ----
 // 动因（09-28 第 168 页的读数）：一条锚点的单价＝判卷宿主时长的 3 倍（实测 23.1s/条 vs 1.1s/条＝20.6×，
-// 56 条挂在一份宿主上吃掉整批 98.8% 的时间）。要改成「只跑自己那条 killer 用例」，前提是指针能逐字唯一定位那条标题；
+// 56 条挂在一份宿主上吃掉整批 98.8% 的时间）。要改成「只跑自己那条 killer 用例」，前提是指针能唯一定位那条标题；
 // 选不中时 vitest 不是失败而是**一条也没跑**，基线与突变两拍都白过 ⇒ 先要有读数点名「选不中的是哪些」。
-const SELECTOR_CAP = 13;
+// 帽的来路：13（09-28 现读 11 零命中＋2 多命中）→ 4（09-30 第 230 页把命中宽度对齐 `-t`：
+// 标题是拼出来的／表里存解码值而那两类运行时选得中的，从前被当成选不中）。
+const SELECTOR_CAP = 4;
 
 describe("选择子唯一性：一条锚点能不能只跑自己那条 killer 用例", () => {
   const judge = (body: string) => body;
@@ -1183,21 +1185,50 @@ describe("选择子唯一性：一条锚点能不能只跑自己那条 killer �
   });
 
   it("读得到文件却一条标题都抽不到 ⇒ 第三态要点名（并进「没问题」＝整份判卷被读瞎也无人说）", () => {
-    const blindEntry = { id: "each", test: "tests/each.test.ts", expectFail: "参数化那条" };
+    const blindEntry = { id: "notitle", test: "tests/each.test.ts", expectFail: "参数化那条" };
     const okEntry = { id: "u", test: "tests/x.test.ts", expectFail: "唯一命中的一条 的事" };
+    // 这一态从第 230 页起只该是「这份判卷压根没有 it 标题面」。从前这里喂的是 it.each，
+    // 而那条不是盘上没标题，是这一格自己另抄的窄抽取看不见它（现在它进 selectableIds，见下面那条用例）。
     const read = (rel: string): string | null =>
       rel === "tests/each.test.ts"
-        ? 'it.each([false, true])("参数化那条（observationPack=%s）", () => {});\n' // 真仓成因：TITLE_RE 只认引号开头
+        ? 'describe("参数化那条", () => {});\n'
         : 'it("唯一命中的一条 的事", () => {});\n';
     const r = selectorAmbiguity([blindEntry, okEntry], read);
     expect(r.inspected, "整片读不到标题的那份判卷不许进分母").toBe(1);
-    expect(r.blind.map((b) => `${b.test}⇒${b.ids.join("、")}`)).toEqual(["tests/each.test.ts⇒each"]);
+    expect(r.blind.map((b) => `${b.test}⇒${b.ids.join("、")}`)).toEqual(["tests/each.test.ts⇒notitle"]);
     const cell = selectorCell(r);
     expect(cell, cell).toContain("读得到文件却一条标题都抽不到 1");
     expect(cell, cell).toContain("tests/each.test.ts");
     expect(cell, cell).toContain("不算这一格通过");
     // 反向对照：文件读得到标题时这一格不许出现（第三态不许变成常驻噪声）
     expect(selectorCell(selectorAmbiguity([okEntry], read))).not.toContain("抽不到");
+  });
+
+  it("标题是拼出来的（it.each 的 %s）不算选不中：-t 拿渲染后的整条恰好选中一条（第 230 页）", () => {
+    const expanded = { id: "each-expanded", test: "tests/each.test.ts", expectFail: "参数化那条（observationPack=true）" };
+    const bare = { id: "each-bare", test: "tests/each.test.ts", expectFail: "参数化那条" };
+    const src = 'it.each([false, true])("参数化那条（observationPack=%s）", () => {});\n';
+    const r = selectorAmbiguity([expanded, bare], () => src);
+    expect(r.blind, "it.each 的标题在抽取面上存在 ⇒ 不许再算「整片读不到」").toEqual([]);
+    expect(r.selectableIds, "指针等于渲染后的那条 ⇒ 与 runner 的 --testNamePattern 同宽，能走 -t").toEqual(["each-expanded"]);
+    expect(r.problems.map((p) => `${p.id}:${String(p.hits)}`), "指针只落在模板的字面段 ⇒ 每一行参数都被 -t 选中，这一格是不唯一而不是选不中").toEqual(["each-bare:2"]);
+  });
+
+  it("放宽宽度不放过重名：模板那条与字面那条都在同一份判卷里 ⇒ 仍报多命中（并集证人不算守护）", () => {
+    const src = 'it.each([false, true])("参数化那条（observationPack=%s）", () => {});\nit("参数化那条（observationPack=true）", () => {});\n';
+    const r = selectorAmbiguity(
+      [{ id: "dup", test: "tests/dup.test.ts", expectFail: "参数化那条（observationPack=true）" }],
+      () => src,
+    );
+    expect(r.selectableIds, "两条都会被 -t 选中 ⇒ 这条锚点不能领「唯一」的身份").toEqual([]);
+    expect(r.problems.map((p) => `${p.id}:${String(p.hits)}`)).toEqual(["dup:2"]);
+  });
+
+  it("接线：选择子与指针体检共用同一份标题抽取，不再另抄正则（抄一份必然漂宽，第十三族）", () => {
+    const lib = readFileSync(fileURLToPath(new URL("../scripts/lib/mutate-gates.ts", import.meta.url)), "utf8");
+    expect(lib, "selectorAmbiguity 又回到私有抽取 ⇒ 全表这一格与 expectFail 体检说的是两件事").toMatch(
+      /^ {6}cache\.set\(e\.test, text === null \? null : vitestTitles\(text\)\);$/mu);
+    expect(lib, "私有那份窄标题正则回来＝第三态重新变成尺的瞎，而不是盘上真没标题").not.toMatch(/const TITLE_RE\s*=/u);
   });
 
   it("两个分母并排印（可判面／表全长）：只印被数过的那个数，少的那几条去哪了没人说", () => {
@@ -1227,18 +1258,19 @@ describe("选择子唯一性：一条锚点能不能只跑自己那条 killer �
       /\n\s*console\.log\("ℹ️  " \+ selectorCell\(selectorScan\)\);/);
   });
 
-  it(`水位：真表现读「选不中＋不唯一」只准调低（帽 ${SELECTOR_CAP}，09-28 现读 13＝11 零命中＋2 多命中）——新增一根要写明为什么`, () => {
+  it(`水位：真表现读「选不中＋不唯一」只准调低（帽 ${SELECTOR_CAP}，09-30 第 230 页把宽度对齐 -t 后现读 4＝2 零命中＋2 多命中）——新增一根要写明为什么`, () => {
     const rows = listAnchorRows();
     const r = selectorAmbiguity(rows, (rel) => readRel(rel));
     expect(r.problems.length, "选择子失准：" + r.problems.map((p) => `${p.id}(${String(p.hits)})`).join("、")).toBeLessThanOrEqual(SELECTOR_CAP);
     expect(SELECTOR_CAP - r.problems.length).toBeLessThan(5);
     expect(r.inspected, "取料面塌了＝inspected 归零，这一格又不能印错只能印 0").toBeGreaterThan(500);
-    // 第三态的水位（计数类**不留余量**）：现读 1 个文件被解析器整片读瞎（`tests/solpi-receipt-integration.test.ts`
-    // 的 `it.each`）。涨了要么是新加了 it.each 判卷（那就得给 TITLE_RE 补形状并处理 %s 展开），
-    // 要么是取料又静默丢条——两种都要写明，不许默默抬帽（第 209 页那条「读不到」与「没问题」同形的复发信号）。
-    expect(r.blind.length, "整片读不到标题的判卷文件：" + r.blind.map((b) => b.test).join("、")).toBeLessThanOrEqual(1);
+    // 第三态的水位（计数类**不留余量**）：第 230 页起这一格是 0。从前那 1 个「整片读不到标题」的文件
+    // （`tests/solpi-receipt-integration.test.ts` 的 `it.each`）不是判卷没有标题，是这一格另抄的那份窄抽取看不见它。
+    // 涨了就是真有新文件抽不出标题 ⇒ 先查抽取器，不许抬帽（抬帽＝把尺的瞎写成盘的事实，第 209 页那一族）。
+    expect(r.blind.length, "整片读不到标题的判卷文件：" + r.blind.map((b) => b.test).join("、")).toBe(0);
     // 分母按**同一趟取料**对账（不写死表长：写死就变成"邻居加一条锚点⇒我这里常驻红"，规则 273/283 那一族）
-    expect(selectorCell(r), selectorCell(r)).toContain(`可判面 ${String(r.inspected)}／表 ${String(rows.length)}`);
+    // 印出来的比值必须是同一趟算出来的那两个数（写死「可判面 X／表 Y」会红：inspected 追平 total 时那半截根本不再印）
+    expect(selectorCell(r), selectorCell(r)).toContain(`选择子：${String(r.inspected - r.problems.length)}/${String(r.inspected)} 条`);
     expect(r.total, "total 必须就是表全长，否则那一格是在自说自话").toBe(rows.length);
   });
 });

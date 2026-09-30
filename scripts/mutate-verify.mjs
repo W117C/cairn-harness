@@ -7280,7 +7280,7 @@ const MUTATIONS = [
       "真盘现场：241 个判卷文件里 2 个含这种标题（其中一个的成因是它自己的 fixture 生成器里那段「it( 双引号 美元花括号 t 花括号 」的文字，" +
       "正则取料分不清真标题与字符串里长得像标题的东西），上面 33 条锚点因此缴械；" +
       "本轮那条「四支／六支」死指针正是靠这个洞活到 21 分钟实跑才喊（修法见第 152 页）",
-    apply: (s) => s.replace('if (literalOf(body) === "") return [];', "if (false) return [];"),
+    apply: (s) => s.replace('if (literalOf(body) === "") return null;', "if (false) return null;"),
     expectFail: "生成式标题不许把整份判卷的体检缴械：指向不存在用例的指针仍要报 not-found",
   },
   {
@@ -7299,7 +7299,7 @@ const MUTATIONS = [
     test: "tests/mutate-verify-gates.test.ts",
     desc: "过修那一侧：把**任何**含占位符的标题都丢掉 ⇒ 参数化标题再也指不到（渲染后的文字盘上本来就没有），" +
       "第 138 页校准出来的那两条（拼出来的标题／带转义引号的标题）一起变假红——假红一多，人关的是门不是修尺",
-    apply: (s) => s.replace('if (literalOf(body) === "") return [];', "if (PLACEHOLDER.test(un)) return [];"),
+    apply: (s) => s.replace('if (literalOf(body) === "") return null;', "if (PLACEHOLDER.test(un)) return null;"),
     expectFail: "过修的反面：带字面残迹的标题要**留着**通配（参数化标题仍然认得渲染后的样子）",
   },
   {
@@ -8267,10 +8267,56 @@ const MUTATIONS = [
     src: "scripts/lib/mutate-gates.ts",
     test: "tests/mutate-verify-gates.test.ts",
     desc: "「文件读得到、却一条标题都抽不到」这一态不记账（回到旧实现：与「这文件没锚点问题」同形）⇒ "+
-      "解析器对整份判卷瞎（真仓成因：it.each 的标题不在 TITLE_RE 面上）时，普查少一条而读数一个字不说（规则 261/262）",
+      "抽取器对整份判卷瞎时，普查少一条而读数一个字不说（第 230 页的真仓成因：这一格曾另抄一份只认 it 紧跟引号的窄正则，" +
+      "it.each 的标题在它眼里不存在；规则 261/262）",
     apply: (s) => s.replace(
       "      const hit = blindByTest.get(e.test);\n      if (hit) hit.push(e.id);\n      else blindByTest.set(e.test, [e.id]);\n      continue;",
       "      continue;",
+    ),
+    expectFail: "读得到文件却一条标题都抽不到 ⇒ 第三态要点名（并进「没问题」＝整份判卷被读瞎也无人说）",
+  },
+  {
+    id: "selector-hits-rendered-title-selectable",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "把占位符标题的展开态当「选不中」⇒ 指针本来就等于渲染后那一条、`-t` 恰好选中它，却被判去走整文件跑法" +
+      "（单价是 `-t` 的几十倍，第 168/170 页实测）。第 230 页这一格的宽度对齐的是 runner，不是盘上的字节",
+    apply: (s) => s.replace("if (re !== null && re.test(pointer)) n += 1;", "if (false) n += 1;"),
+    expectFail: "标题是拼出来的（it.each 的 %s）不算选不中：-t 拿渲染后的整条恰好选中一条（第 230 页）",
+  },
+  {
+    id: "selector-hits-template-prefix-not-unique",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "指针只落在模板标题的字面段里就记 1 条 ⇒ 发「唯一命中」的身份给一条会选中全部参数行的选择子" +
+      "（`it.each` 的一条标题代表 N 条渲染；并集读数不能当「每一处都成立」的证人，规则 248/255）",
+    apply: (s) => s.replace(
+      "else if (t.includes(pointer) || unescapeTitle(t).includes(pointer)) n += 2;",
+      "else if (t.includes(pointer) || unescapeTitle(t).includes(pointer)) n += 1;",
+    ),
+    expectFail: "标题是拼出来的（it.each 的 %s）不算选不中：-t 拿渲染后的整条恰好选中一条（第 230 页）",
+  },
+  {
+    id: "selector-hits-plain-title-dropped",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "不带占位符的那一支不计数 ⇒ 模板那条与字面那条同名的判卷只剩 1 条命中，重名这条锚点重新领到「唯一」——" +
+      "而 `-t` 那时一次选中两条，红的是哪条说不清",
+    apply: (s) => s.replace(
+      "if (t.includes(pointer) || unescapeTitle(t).includes(pointer)) n += 1;",
+      "if (false) n += 1;",
+    ),
+    expectFail: "放宽宽度不放过重名：模板那条与字面那条都在同一份判卷里 ⇒ 仍报多命中（并集证人不算守护）",
+  },
+  {
+    id: "selector-extraction-not-shared",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "选择子这一格不走共用的 `vitestTitles` 而是自己给一份标题面 ⇒ 与 `expectFailMatchesTitles` 那把尺说的不是同一件事，" +
+      "「整片读不到标题」重新变成尺的瞎而不是盘上没标题（第 230 页收掉的正是这份私有窄抽取，第十三族）",
+    apply: (s) => s.replace(
+      "cache.set(e.test, text === null ? null : vitestTitles(text));",
+      "cache.set(e.test, text === null ? null : []);",
     ),
     expectFail: "读得到文件却一条标题都抽不到 ⇒ 第三态要点名（并进「没问题」＝整份判卷被读瞎也无人说）",
   },
