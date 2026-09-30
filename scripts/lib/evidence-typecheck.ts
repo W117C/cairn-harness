@@ -1,11 +1,12 @@
 /** 证据面（`outputs` 下的 .mts 探针）的类型检查那一格（第 259 页；任务 #4）。
  *
- *  为什么要有这一格：`tsconfig.json` 的 `include` 是 `["src","scripts","tests"]` ⇒ 仓里 90 多个探针/取料脚本
+ *  为什么要有这一格：`tsconfig.json` 的 `include` 是 `["src","scripts","tests"]` ⇒ 仓里 97 个探针/取料脚本
  *  **全在 typecheck 门外**，而 `node --import tsx` 只剥类型不查类型。第 249 页就是这么糊过去的：
  *  一把探针的 `readIdx` 返回形状里没有 `ino`，打印行照读 `after.ino`，`undefined !== undefined` 为假
  *  ⇒ 12 圈全印「ino 不变」，与"真的没变"同一个字，而 tsc 只要看过一眼就会报 TS2339。
  *
- *  为什么不直接把 `outputs` 加进主 tsconfig：现读存量 51 条报错／16 个文件（`outputs/evidence-typecheck-gate-2026-10-01/tsc-raw.log`），
+ *  为什么不直接把 `outputs` 加进主 tsconfig：存量报错 **HEAD 侧 31 条**、主检出工作树 51 条／16 个文件
+ *  （`outputs/evidence-typecheck-gate-2026-10-01/tsc-raw.log` 是工作树那一份；差的 20 条全在隔壁未入库的探针里——两个数都要报，只报一个就是拿工作树冒充仓），
  *  里头 30 条是 TS7006（隐式 any，纯标注缺失、不改变取到什么），只有**会产出假读数那一族**值得当闸：
  *  TS2339/TS2551（读不存在的属性，正是 `ino` 那一案）、TS18048（可能 undefined 却直接吃）、TS2304（名字不存在）、
  *  TS2305/TS2459（import 了模块里没有的名字）、TS7053（按字符串下标取不存在的键）。

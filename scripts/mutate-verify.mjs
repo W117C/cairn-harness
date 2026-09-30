@@ -10121,7 +10121,7 @@ const MUTATIONS = [
     test: "tests/evidence-typecheck.test.ts",
     desc: "把 `code` 取到 `m[3]`（列号）⇒ 危险码一条也匹配不上，门从「拦得住」变成「永远绿」。" +
       "这一支钉的是写门时**真犯过的**错：上一版把 `(error)` 也括起来占了一组，`m[4]` 就成了常量 \"error\"；" +
-      "而门自带的「解析 51/51 条」自证完全看不出来——它只数行，不看取错字段（规则 324 的镜像）",
+      "而门自带的「解析 N/N 条」自证完全看不出来——它只数行，不看取错字段（规则 324 的镜像）",
     apply: (s) => s.replace("return { file: m[1]!, code: m[4]! };", "return { file: m[1]!, code: m[3]! };"),
     expectFail: "真报错行 ⇒ file 与 code 都取对（code 必须是 TS 码，不是 'error'）",
   },
@@ -10159,7 +10159,7 @@ const MUTATIONS = [
     id: "evidence-ratchet-equal-counts-as-grew",
     src: "scripts/lib/evidence-typecheck.ts",
     test: "tests/evidence-typecheck.test.ts",
-    desc: "把「等于帽」也判成涨 ⇒ 水位门变成常态红：现读 10／帽 10 是**登记存量**的正确状态，" +
+    desc: "把「等于帽」也判成涨 ⇒ 水位门变成常态红：现读 12／帽 12 是**登记存量**的正确状态，" +
       "红了就没人看第二条（存量水位法的用法是「只准调低」，不是「永远不许等于」）。" +
       "这一支钉的是比较号方向：改成 `>=` 后，门在自己登记好的仓里也响",
     apply: (s) => s.replace("if (now > cap) grew.push({ file, now, cap });", "if (now >= cap) grew.push({ file, now, cap });"),
