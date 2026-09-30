@@ -34,16 +34,26 @@ pnpm prompt-cost      # 每轮固定开销（工具说明书 + 系统提示词�
 pnpm bench            # 拿真模型跑一套固定任务，出「成功率 / token / 耗时」三读数
 ```
 
-`pnpm bench` 用的是**主 CLI 同一套凭据**（`OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`，
-或 `M0_*` 那三个），任务集在 `fixtures/bench/tasks.json`。
-想量化一次改动的效果，就跑它前后各一次——**别拿单次数字当趋势**，模型自身的方差比改动幅度大是常事：
+`pnpm bench` 用的是**主 CLI 同一套凭据**：`OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`，
+或 `M0_API_KEY` / `M0_ENDPOINT` / `M0_MODEL`（前者优先）。凭据一律走环境变量，不落文件——
+和主 CLI 同一条规矩：
+
+```sh
+export OPENAI_BASE_URL=https://openrouter.ai/api/v1
+export OPENAI_API_KEY=<你的 key>
+export OPENAI_MODEL=<模型名>
+pnpm bench
+```
+
+任务集在 `fixtures/bench/tasks.json`。想量化一次改动的效果，就跑它前后各一次——
+**别拿单次数字当趋势**，模型自身的方差比改动幅度大是常事：
 
 ```sh
 # 多跑几轮看分布（reps 越大越可信，代价线性增长）
-node --import tsx scripts/loop-eval.ts --tasks fixtures/bench/tasks.json --reps 3 --max-steps 25
+pnpm bench -- --reps 3
 
 # 只跑其中几条（改完某个子系统时先冒烟）
-node --import tsx scripts/loop-eval.ts --tasks fixtures/bench/tasks.json --only B1-bugfix-crossfile
+pnpm bench -- --only B1-bugfix-crossfile
 ```
 
 读数落在 `outputs/bench/readings.json`。
