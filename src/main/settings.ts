@@ -38,6 +38,12 @@ export interface AppSettings {
   currentSession: string | null;
   /** M2d：会话结束自动沉淀开关（记忆面板/设置页可关，默认开，§8.1.4 双轨）。 */
   autoMemory: boolean;
+  /** 子代理三件套（spawn_agent / wait_for_agents / cancel_agents）挂不挂到模型面上。
+   *  **缺省开**（能力 4「长程规划与任务分解」的正面）。关掉省 611 tok/轮——
+   *  那是固定开销里最大的一块，且是**每一轮**都要重送的静态段。
+   *  什么时候该关：这一轮根本不需要派 worker（单人小改动、只想省钱的短任务）。
+   *  关掉之后模型连看都看不见这三把工具，也就不会去尝试派一个本来就派不出来的 worker。 */
+  subagentTools: boolean;
   /** M3c §4.4.8：会话级成本闸上限（USD）；0 = off（缺省零行为，不破坏既有门）。 */
   maxBudgetUsd: number;
   /** M3c：每百万 token 单价（USD）；0 = 闸无效化（缺省零行为）。 */
@@ -98,6 +104,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   theme: "system",
   currentSession: null,
   autoMemory: true,
+  subagentTools: true,
   maxBudgetUsd: 0,
   budgetPricePerMTok: 0,
   scheduleConcurrencyCap: 2,
@@ -181,6 +188,7 @@ export function validateSettings(raw: unknown): AppSettings {
     theme: THEMES.includes(r.theme as ThemeSetting) ? (r.theme as ThemeSetting) : d.theme,
     currentSession: typeof r.currentSession === "string" && r.currentSession.length > 0 ? r.currentSession : null,
     autoMemory: typeof r.autoMemory === "boolean" ? r.autoMemory : d.autoMemory,
+    subagentTools: typeof r.subagentTools === "boolean" ? r.subagentTools : d.subagentTools,
     maxBudgetUsd: nonNegNumber(r.maxBudgetUsd) ?? d.maxBudgetUsd,
     budgetPricePerMTok: nonNegNumber(r.budgetPricePerMTok) ?? d.budgetPricePerMTok,
     scheduleConcurrencyCap: capRaw !== null && capRaw >= 1 && capRaw <= 8 ? capRaw : d.scheduleConcurrencyCap,

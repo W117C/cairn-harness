@@ -420,6 +420,11 @@ function readOnlyDescriptions(specs: GlmToolSpec[]): GlmToolSpec[] {
 export const OPTIONAL_TOOL_NAMES = {
   goalTools: ["refine_goal"],
   memoryTools: ["remember"],
+  /** 子代理三件套：**固定开销里最大的一块（611 tok/轮）**，且它是每一轮重送的静态段。
+   *  缺省挂（能力 4 的正面）；`settings.subagentTools: false` 时整族从模型面摘掉。
+   *  关掉它不是为了省钱省到抠——是给「这一轮根本不派 worker」的任务一个诚实的开关：
+   *  看不见的工具不会被尝试，模型也就不会把一轮花在派一个派不出来的 worker 上。 */
+  subagentTools: ["spawn_agent", "wait_for_agents", "cancel_agents"],
   /** `.agent/lsp.json` 没配（或显式 `{"lsp": false}`）时 lsp 工具**必然抛**
    *  「未启用——工作区 .agent/lsp.json 缺少 lsp 配置」（lsp.ts:602）⇒ 挂着它只有成本没有能力。 */
   lspTools: ["lsp"],

@@ -944,6 +944,8 @@ let installedGoal = true;
 let installedMemory = true;
 /** 同上第三把：该工作区有没有配 LSP（决定 lsp 挂不挂）。 */
 let installedLsp = true;
+/** 同上第四把：子代理三件套挂不挂（固定开销里最大的一块，611 tok/轮）。 */
+let installedSubagents = true;
 /** M2d：remember 门语义（可测工厂）：方案门写禁 / 档位表判 deny·ask·allow。
  *  §8.1.4「remember 属写动作走权限门」；无权限 → ok:false 且不落盘。
  *  裁决读 `SIDE_EFFECT_DECISION` 那一列（`sideEffectDecisionTable()`）——旧写法是
@@ -1000,15 +1002,17 @@ export function installAppTools(opts: { automation?: boolean; omitTools?: readon
   const wantGoal = !omit.has("refine_goal");
   const wantMemory = !omit.has("remember");
   const wantLsp = !omit.has("lsp");
+  const wantSubagents = !omit.has("spawn_agent");
   if (installed) {
-    if (wantAutomation !== installedAutomation || wantGoal !== installedGoal || wantMemory !== installedMemory || wantLsp !== installedLsp) {
+    if (wantAutomation !== installedAutomation || wantGoal !== installedGoal || wantMemory !== installedMemory
+        || wantLsp !== installedLsp || wantSubagents !== installedSubagents) {
       throw new Error(
         "installAppTools: 同一进程里第二场 run 的能力开关与第一场不一致（第一场 定时" +
         (installedAutomation ? "装" : "不装") + "/目标" + (installedGoal ? "装" : "不装") +
-        "/记忆" + (installedMemory ? "装" : "不装") + "/lsp" + (installedLsp ? "装" : "不装") +
+        "/记忆" + (installedMemory ? "装" : "不装") + "/lsp" + (installedLsp ? "装" : "不装") + "/子代理" + (installedSubagents ? "装" : "不装") +
         "，这一场 定时" + (wantAutomation ? "装" : "不装") +
         "/目标" + (wantGoal ? "装" : "不装") + "/记忆" + (wantMemory ? "装" : "不装") +
-        "/lsp" + (wantLsp ? "装" : "不装") +
+        "/lsp" + (wantLsp ? "装" : "不装") + "/子代理" + (wantSubagents ? "装" : "不装") +
         "）。执行面 TOOLS 只装一次、规格面每场重算，异值会让模型看得见却调不到。",
       );
     }
@@ -1019,6 +1023,7 @@ export function installAppTools(opts: { automation?: boolean; omitTools?: readon
   installedGoal = wantGoal;
   installedMemory = wantMemory;
   installedLsp = wantLsp;
+  installedSubagents = wantSubagents;
   TOOLS.write_file = gatedTool("write_file", TOOLS.write_file);
   TOOLS.edit_file = gatedTool("edit_file", TOOLS.edit_file);
   TOOLS.run_shell = gatedTool("run_shell", TOOLS.run_shell);
@@ -1043,24 +1048,31 @@ export function installAppTools(opts: { automation?: boolean; omitTools?: readon
     },
   });
   // M3a：spawn_agent 运行时注入（installAppTools 运行时注入先例；静态注册表 9 工具不动）。
-  // 编排器未接线（headless 直调 loop）= fail-closed 拒绝。  // 派生审批**由 orchestrator 按风险分级**出卡（写租约相交 / pipeline / supervise / merge 四处
+  // 编排器未接线（headless 直调 loop）= fail-closed 拒绝。
+  // 派生审批**由 orchestrator 按风险分级**出卡（写租约相交 / pipeline / supervise / merge 四处
   // approval_requested），此处不再叠一张 blanket 卡：实测那样会让 agents-check C 段 9 条全红
   // （default 档的只读调研 spawn 也被拦，worker 根本派不出来），且与 pipeline 的既有卡重复。
-  (TOOLS as unknown as Record<string, Tool>).spawn_agent = {
-    name: "spawn_agent",
-    async run(args, ctx) {
-      const orch = currentOrchestrator();
-      if (!orch) return { ok: false, output: "spawn_agent: 编排器未接线（fail-closed）" };
-      return await orch.spawn(args as SpawnArgs, { callId: ctx.callId });
-    },
-  };
-  // W1a：收队工具（与 spawn_agent 同一注入面、同一「编排器未接线即 fail-closed」口径）。
-  // 走 currentOrchestrator() 而不是直接读 activeOrchestrator：H3-P3 的 RunScope 并发隔离靠它，
-  // 绕过去会让并发的 unattended run 抢到交互面的编排器（那是 D-2 立项专门修掉的洞）。
-  (TOOLS as unknown as Record<string, Tool>).wait_for_agents = createWaitForAgentsTool(() => currentOrchestrator());
-  // 动态调整的另一半：模型自己撤自己派出的 worker（同一注入面、同一 fail-closed 口径）。
-  // 缺它时 join 文案里那句"可再取消"就是一扇不存在的门，而"派错了只能干等它跑完"是能力 4 的反面。
-  (TOOLS as unknown as Record<string, Tool>).cancel_agents = createCancelAgentsTool(() => currentOrchestrator());
+  //
+  // `settings.subagentTools: false` 时整族不挂（省 611 tok/轮，固定开销里最大的一块）。
+  // **规格面与执行面必须同进同退**（同一个 `omit` 名单驱动两处）：
+  // 只摘执行面 = 模型看得见却只吃得到 `unknown tool`；只摘规格面 = 模型看不见却调得到。
+  if (wantSubagents) {
+    (TOOLS as unknown as Record<string, Tool>).spawn_agent = {
+      name: "spawn_agent",
+      async run(args, ctx) {
+        const orch = currentOrchestrator();
+        if (!orch) return { ok: false, output: "spawn_agent: 编排器未接线（fail-closed）" };
+        return await orch.spawn(args as SpawnArgs, { callId: ctx.callId });
+      },
+    };
+    // W1a：收队工具（与 spawn_agent 同一注入面、同一「编排器未接线即 fail-closed」口径）。
+    // 走 currentOrchestrator() 而不是直接读 activeOrchestrator：H3-P3 的 RunScope 并发隔离靠它，
+    // 绕过去会让并发的 unattended run 抢到交互面的编排器（那是 D-2 立项专门修掉的洞）。
+    (TOOLS as unknown as Record<string, Tool>).wait_for_agents = createWaitForAgentsTool(() => currentOrchestrator());
+    // 动态调整的另一半：模型自己撤自己派出的 worker（同一注入面、同一 fail-closed 口径）。
+    // 缺它时 join 文案里那句"可再取消"就是一扇不存在的门，而"派错了只能干等它跑完"是能力 4 的反面。
+    (TOOLS as unknown as Record<string, Tool>).cancel_agents = createCancelAgentsTool(() => currentOrchestrator());
+  }
   // 长任务锚点的模型侧「改措辞」：落的是与人同一条 goal_set（一份事实源），但带 set_by:"model"，
   // 而投影层不因此挪动窗口锚点/轮次帽 ⇒ 模型能把自己的目标写进每轮提醒，拿不到续跑额度（那两条归人）。
   // 本轮没武装目标时不挂：`createRefineGoalTool` 在 view === null 时**必然**返回
@@ -1474,18 +1486,35 @@ async function installTimeAutoMemory(): Promise<boolean> {
   return memoizedAutoMemory;
 }
 
+/** 子代理三件套的进程级判据：同 autoMemory 的口径（首次读到的值定终身）。
+ *  为什么也要缓存：它同样来自能在同一进程里变的 settings，而执行面只装一次——
+ *  不缓存就会撞上装/摘守卫（那守卫拦的是真问题，见上一个函数的注释）。缺省 true。 */
+let memoizedSubagents: boolean | null = null;
+async function installTimeSubagents(): Promise<boolean> {
+  if (memoizedSubagents === null) {
+    memoizedSubagents = await store().get().then((s) => s.subagentTools).catch(() => true);
+  }
+  return memoizedSubagents;
+}
+
 /** 进程级「哪些可选工具真的用不着」：**只累积、不回退**。
  *  某一场需要某把工具 ⇒ 它永久留在名单外（不再摘）；
  *  只有从来没有哪一场需要，才真的摘掉。这样执行面第一次装出来的那份就永远是最终形态，
  *  后续每场的规格面 ⊆ 执行面，不会出现「模型看得见却调不到」。 */
 const omittedForever = new Set<string>();
-function installTimeOmitTools(want: { goal: boolean; memory: boolean; lsp: boolean }): string[] {
+function installTimeOmitTools(want: { goal: boolean; memory: boolean; lsp: boolean; subagents: boolean }): string[] {
   if (want.goal) omittedForever.delete("refine_goal");
   else omittedForever.add("refine_goal");
   if (want.memory) omittedForever.delete("remember");
   else omittedForever.add("remember");
   if (want.lsp) omittedForever.delete("lsp");
   else omittedForever.add("lsp");
+  // 子代理三件套同进同退：任一在场就从 omitted 里删掉全部三个（判据以 spawn_agent 为代表，
+  // 因为执行面那边读的就是它；`wantSubagents` 也是同一个谓词）。
+  for (const n of ["spawn_agent", "wait_for_agents", "cancel_agents"]) {
+    if (want.subagents) omittedForever.delete(n);
+    else omittedForever.add(n);
+  }
   return [...omittedForever];
 }
 export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
@@ -1508,6 +1537,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     goal: opts.goalArmed !== true,
     memory: !memoOn,
     lsp: !lspOn,
+    subagents: await installTimeSubagents(),
   });
   installAppTools({ automation: opts.automationTools, ...(omitTools.length > 0 ? { omitTools } : {}) });
   // H2（A-2）：无人值守 run 的等人门上限——定时触发的 clarify/plan 挂起 60s 后 fail-closed。
