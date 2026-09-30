@@ -47,6 +47,24 @@ export interface ToolCallEvent { type: "tool_call"; id: string; name: string; ar
  *  与 `GATE_VERDICTS` 同形状（运行时数组）：复跑面按它铺矩阵，新增一挡而少配一处会被点名。 */
 export const TOOL_BLOCK_REASONS = ["tool-table", "skill-denial", "verify-unwired", "hook", "permission", "unknown-tool"] as const;
 export type ToolBlockReason = (typeof TOOL_BLOCK_REASONS)[number];
+/** 编排侧「这一次扩张从未派发出 worker」的结构原因（唯一事实源，五处落点共用，别各写一份字符串）。
+ *  为什么不并进 `blockedBy`：两列的读者问的是不同问题——那一列问「哪道闸拦下了一次工具调用」（主 loop 的
+ *  六道执行前闸），这一列问「harness 自己按住了哪一次编排扩张」（成本闸／并发帽／取消／依赖链）。
+ *  折成一列就再也不能单独读出「因钱不起 worker」与「因人手不起 worker」。
+ *  为什么现在才落：这五处从前只有一句方括号开头的散文（`[budget]`／「并发已达上限」／「主会话已取消」），
+ *  其中 `triggerDeferredSpawn` 还要**回去匹配**另一处写的文案才说得出原因——文案是第二个注入面，
+ *  把自己的结论押在被度量者的嘴上（第 229 页：这一格改读结构列，散文由映射派生，两处不再各判一次）。 */
+export const HARNESS_HOLD_REASONS = ["budget", "concurrency-limit", "cancelled", "dependency-failed", "chain-failed"] as const;
+export type HarnessHoldReason = (typeof HARNESS_HOLD_REASONS)[number];
+/** 结构原因 → 模型可见散文里那个 `reason=` 记号。刻意与枚举贴在同一处：新增一挡而漏配记号会直接编译不过
+ *  （`Record<HarnessHoldReason, string>` 的穷尽性），不必等下游把 undefined 拼进正文。 */
+export const HARNESS_HOLD_PROSE_TOKEN: Readonly<Record<HarnessHoldReason, string>> = {
+  budget: "budget_exceeded",
+  "concurrency-limit": "concurrency_limit",
+  cancelled: "cancelled",
+  "dependency-failed": "dependency_failed",
+  "chain-failed": "chain_failed",
+};
 /** M1c 自动放行来源审计（§11.7.5）：仅自动放行的 tool_result 携带，零新事件类型。
  *  类型不自家再定义一份——它的真身在权限层，且由 `autoOf(gate)` 派生（两份同形定义迟早漂）。 */
 export interface ToolResultEvent { type: "tool_result"; callId: string; ok: boolean; output: string; auto?: AutoMeta; /** 权限判定留痕：谁判的（layer）、怎么判的（verdict）、当时风险与档位 */ gate?: GateMeta; agent_id?: string; /** D7 覆盖前快照（§10.4）：被覆盖原件在 `.agent/snapshots/` 下的路径。
@@ -60,7 +78,10 @@ export interface ToolResultEvent { type: "tool_result"; callId: string; ok: bool
   exitCode?: number | null; /** 是否因墙钟上限被强杀（与退出码分开的两态：超时后 code 常为 null）。 */
   timedOut?: boolean; /** 未执行的原因（见 `TOOL_BLOCK_REASONS`）。**缺席 = 这一笔走到了执行面**（或旧日志），
    *  与 `exitCode` 的「缺席 ≠ 0」同一口径：这一格宁可没有，不许编。 */
-  blockedBy?: ToolBlockReason }
+  blockedBy?: ToolBlockReason; /** 编排按住了这一次扩张（见 `HARNESS_HOLD_REASONS`）。**缺席 = 没人按住**
+   *  （已派发出 worker，或结局来自 worker 自己）；与 `ok:false` 刻意不同款：worker 跑挂的回执也是 ok:false，
+   *  那一格没有 hold——「失败」与「压根没起」在两列里必须长得不一样。 */
+  hold?: HarnessHoldReason }
 export interface UsageEvent { type: "usage"; inputTokens: number; outputTokens: number; /** 缓存分列（可选）：**缺字段 = 该 provider 没上报，不等于 0**。约定 `inputTokens` 是含缓存的总输入，
    *  下面两个是其中的分块——不得再与 inputTokens 相加（metering 的 MeterUsage 要互斥桶，适配器换算后再交）。
    *  写侧断点（Anthropic cache_control / 稳定前缀排布）尚未接线：先把「命中没有」测出来，再谈制造命中。 */

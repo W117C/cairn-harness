@@ -1,0 +1,89 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+ [31m❯[39m tests/orchestrator-hold.test.ts [2m([22m[2m15 tests[22m[2m | [22m[31m4 failed[39m[2m)[22m[33m 10392[2mms[22m[39m
+   [31m❯[39m 编排按住的这一次扩张：每挡各有行为证人 [2m(10)[22m
+[31m     [31m×[31m 成本闸拒绝的 spawn 回执与出声事件都带 hold=budget[39m[32m 3[2mms[22m[39m
+[31m     [31m×[31m 并发帽拒绝的 spawn 回执带 hold=concurrency-limit[39m[33m 5003[2mms[22m[39m
+[31m     [31m×[31m 竞速并发预算不足的回执带 hold=concurrency-limit（同族另一处出口）[39m[33m 5006[2mms[22m[39m
+     [32m✓[39m 主会话已取消后的 spawn 回执带 hold=cancelled[32m 2[2mms[22m[39m
+     [32m✓[39m cancelAll 撤销未触发的后环：落流的 tool_result 带 hold=cancelled[32m 58[2mms[22m[39m
+     [32m✓[39m 前环倒下后的 spawn 回执带 hold=dependency-failed（参数写错的那两支不算按住）[32m 55[2mms[22m[39m
+     [32m✓[39m 后环因前环终态被标记 failed：落流带 hold=dependency-failed[32m 54[2mms[22m[39m
+     [32m✓[39m 整链 failed 的落流带 hold=chain-failed[32m 55[2mms[22m[39m
+     [32m✓[39m 后环被成本闸拒绝：落流的 hold 与散文里的 reason= 由同一处派生[32m 56[2mms[22m[39m
+     [32m✓[39m 反面⑵：worker 自己跑完但没有命中判据，不算被按住[32m 28[2mms[22m[39m
+   [31m❯[39m 取值只有一个事实源 [2m(3)[22m
+     [32m✓[39m 编排里印出的每个取值都在枚举里，且枚举里没有白写的成员[32m 2[2mms[22m[39m
+     [32m✓[39m 抽取得不成立时尺要能读到副本形状（负控：判卷不是恒真）[32m 1[2mms[22m[39m
+[31m     [31m×[31m 普查的盲区自己讲出来：传播式的 `{ hold: v.hold }` 它数不到（规则 261）[39m[32m 4[2mms[22m[39m
+   [32m✓[39m 落盘面接线：返回体上的 hold 要活到 tool_result [2m(2)[22m
+     [32m✓[39m 工具返回体带 hold ⇒ 落盘的 tool_result 也带（否则这一列只活在内存里）[32m 1[2mms[22m[39m
+     [32m✓[39m 工具返回体不带 hold ⇒ 落盘面也不许多出这一格[32m 1[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 4 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/orchestrator-hold.test.ts[2m > [22m编排按住的这一次扩张：每挡各有行为证人[2m > [22m成本闸拒绝的 spawn 回执与出声事件都带 hold=budget
+[31m[1mAssertionError[22m: 这一路没落 tool_result ⇒ 判卷走的是别的出口: expected undefined to be defined[39m
+[36m [2m❯[22m tests/orchestrator-hold.test.ts:[2m143:49[22m[39m
+    [90m141|[39m     expect(r.hold, "返回体没有这一列 ⇒ 落盘面也不会有").toBe("budget");
+    [90m142|[39m     const ev = resultsFor(events, "c-budget")[0];
+    [90m143|[39m     expect(ev, "这一路没落 tool_result ⇒ 判卷走的是别的出口").toBeDefined();
+    [90m   |[39m                                                 [31m^[39m
+    [90m144|[39m     await expectHold(ev!, "budget", "会话成本超限");
+    [90m145|[39m     const side = events.filter((e): e is ToolResultEvent => e.type ===…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/orchestrator-hold.test.ts[2m > [22m编排按住的这一次扩张：每挡各有行为证人[2m > [22m并发帽拒绝的 spawn 回执带 hold=concurrency-limit
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m tests/orchestrator-hold.test.ts:[2m150:3[22m[39m
+    [90m148|[39m   });
+    [90m149|[39m
+    [90m150|[39m   it("并发帽拒绝的 spawn 回执带 hold=concurrency-limit", async () => {
+    [90m   |[39m   [31m^[39m
+    [90m151|[39m     const hang = new Map<string, () => void>();
+    [90m152|[39m     const { orch } = makeOrch({ model: makeHangModel(hang) });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/orchestrator-hold.test.ts[2m > [22m编排按住的这一次扩张：每挡各有行为证人[2m > [22m竞速并发预算不足的回执带 hold=concurrency-limit（同族另一处出口）
+[31m[1mError[22m: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".[39m
+[36m [2m❯[22m tests/orchestrator-hold.test.ts:[2m165:3[22m[39m
+    [90m163|[39m   });
+    [90m164|[39m
+    [90m165|[39m   it("竞速并发预算不足的回执带 hold=concurrency-limit（同族另一处出口）", async () => {
+    [90m   |[39m   [31m^[39m
+    [90m166|[39m     const hang = new Map<string, () => void>();
+    [90m167|[39m     const { orch } = makeOrch({ model: makeHangModel(hang) });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/orchestrator-hold.test.ts[2m > [22m取值只有一个事实源[2m > [22m普查的盲区自己讲出来：传播式的 `{ hold: v.hold }` 它数不到（规则 261）
+[31m[1mAssertionError[22m: 第三支的字面盖章要在分母里: expected [ 'dependency-failed', …(1) ] to have a length of 1 but got 2[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 1[39m
+[31m+ 2[39m
+
+[36m [2m❯[22m tests/orchestrator-hold.test.ts:[2m310:94[22m[39m
+    [90m308|[39m   it("普查的盲区自己讲出来：传播式的 `{ hold: v.hold }` 它数不到（规则 261）", () => {
+    [90m309|[39m     // 那一处的证人是行为面上的用例（前环倒下 → 回执带 dependency-failed），不在这把尺的分母里。
+    [90m310|[39m     expect(holdLiterals(ORCH_SRC).filter((v) => v === "dependency-fail…
+    [90m   |[39m                                                                                              [31m^[39m
+    [90m311|[39m     expect([...ORCH_SRC.matchAll(/\{ hold: v\.hold \}/gu)].length, "两处…
+    [90m312|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m4 failed[39m[22m[2m | [22m[1m[32m11 passed[39m[22m[90m (15)[39m
+[2m   Start at [22m 11:20:09
+[2m   Duration [22m 10.80s[2m (tests 97%, transform 2%, import 1%)[22m
+
+node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts   0.94s user 0.21s system 10% cpu 11.054 total

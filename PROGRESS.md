@@ -7223,6 +7223,49 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 5. **待收的手（等用户点头，判据不是授权）**：门里印 `常驻残留树=24`（上一笔是 23，本笔的认证树又加一棵），
    回收命令就在日志的 `回收这棵树（规则 120）` 那一行——**没有授权，不动**。
 
+### 2026-09-30 · 第 229 页 · #45 的安全那一半落地：编排「压根没起 worker」长出结构列 `hold`（表 1071→1077）
+
+归属现读（每次现读，不靠上面的快照）：检出分支 = **`zcode`**，HEAD = `d5d63a3`（我上一笔凭证那一支）。
+会话开始时台账里记的是 `codex/dsh-security-product`，而它现读指向 `15fad7b`（别人 F-1 那条线）⇒ 共享树在这期间被切了支。
+**我没切支、也没动别人的支**，本笔就落在当前检出的 `zcode` 上；这个分歧写在这里，不留在口头。
+
+现读分母（探针 `outputs/orchestrator-hold-column-2026-09-30/`，尺上线前口径先写在这里）：
+`src/agent/orchestrator.ts` 里 `type: "tool_result"` 落点 **16 处**；callId 是**自造或派生**的 9 处
+（`budget-<ts>`、`pipeline-<ctx.callId>`、`pipeline-<chain.callId>`、`diff-<agent>`、`wt-cleanup-<agent>`、`merge-<agent>`×4）；
+挂回真 callId 的 **7 处**（后环撤销／整链 done／整链 failed／后环标记 failed／后环被拒×2／worker 回传的合成回执）——
+本笔盖了其中 5 处，**没盖的两处是刻意的**：整链 done 是绿拍（压根不是「按住」），`emitSyntheticResult` 是 worker 自己跑回来的结局；
+表 16 处落点里剩下的 9 处自造／派生 callId 一处没动（属裁决，见本页 §8）；本笔落 `hold` 的行数 **13**（含两处传播）。
+第 225 页给了主 loop 六道闸的 `blockedBy`，这一页补的是**编排侧那一列**：五挡原因（`budget`／`concurrency-limit`／`cancelled`／`dependency-failed`／`chain-failed`）。
+
+1. **两列为什么不折成一列**：`blockedBy` 回答「哪道执行前闸拦了一次工具调用」，`hold` 回答「harness 自己按住了哪一次编排扩张」。
+   折起来就读不出「因钱不起 worker」与「因人手不起 worker」的分别是哪一挡（与 `GATE_VERDICTS` 分档同一口径）。
+2. **盖章位点**：`rejectOnBudget` 的返回体＋它那句自造 callId 的出声事件；`spawnInternal` 的取消与并发帽两支；
+   `spawnRace` 的并发预算那一支（同族另一处出口，不因为它没接线就漏盖）；`validateDependsOn` **只有第三支**（前环已倒下＝按住；
+   不存在／成环＝参数写错，不盖）并由 `spawn()` 与 `spawnReserved()` 两处兄弟出口传播；后环的四处落流（撤销／标记 failed／整链 failed／被拒后环）。
+3. **退役掉的那只嗅探**：`triggerDeferredSpawn` 从前对 `r.output` 做 `includes("并发")`／`includes("[budget]")` 反推原因，
+   兜底一律 `dependency_failed` ⇒ **生产端拿自己的文案当判据**（规则 264 那句「文案是第二个注入面」在生产端自己也成立）。
+   现在正文里那个 `reason=` 记号由 `hold` 经 `HARNESS_HOLD_PROSE_TOKEN` 派生，结构面与散文面只剩一个决策点；
+   表与枚举贴在同一处，新增一挡而漏配记号会直接编译不过。
+4. **新面的功能，当场咬到三口**（都修在我这一侧，规则 314）：
+   ⑴ 类型门抓住我拿 `agent_result.status` 当等待条件——那一列只有 `done|failed`，**取消在它的形状里长成 failed**；
+      要等「真取消完了」只能读 `agent_status`。用例已改成等后者，并把这一句写在旁边。
+   ⑵ 并发帽那两条用例第一版超时：`activeCount()` 不含「刚 spawn 但子流还没走到第一轮」的那一个
+      （探针连发 5 次 `spawn`，峰值只数到 2）。判卷不许押在这种调度差上（规则 256）⇒ 先等 worker 真挂起、再断言计数。
+   ⑶ 那只嗅探的兜底格把「主会话已取消」读成 `dependency_failed`——一个从来没被任何用例钉过的错格（规则 224）。
+5. **判卷**：`tests/orchestrator-hold.test.ts` 新建 15 条（**逐条字面标题**，不用 `it.each`，规则 310）——
+   五挡各有行为证人（含真 `Orchestrator`、真 sequencer 环、真成本闸）、两条反面（参数写错不盖章；worker 跑完但 judge 没命中不盖章）、
+   落盘面接线两条（走真 `runLoop`：有 `hold` 要搬、没有就不许多出这一格）、取值普查 3 条（含分母证人＋负控＋**自报盲区**）。
+   实测：本文件 15 条 **575ms**；兄弟判卷 48 条 20.56s（`m3c` 25 条 17.2s、`cascade-wiring` 9 条 1.55s、
+   `terminal-sync-window` 3 条 0.675s、`tool-block-witness` 11 条 7ms）；四份元判卷 260 条 20.0s 全绿；`typecheck` 0。表 1071 → **1077**（+6 支）。
+6. **刻意没写的锚点（要说出来，否则读者以为五挡全覆盖）**：取消与并发帽各有两处落点，且**字面完全同形**
+   （`hold: "cancelled"` 两处、`hold: "concurrency-limit"` 两处）⇒ `replace` 只改第一处，第二处的证人照样绿，
+   给它们写锚点就是假装守护（规则 259）。这两挡的行为证人在，变异证人只在另外六处上。
+7. **门同轮自报**：本笔不新增门，只给 `mutate-verify` 那一趟加 6 条 ⇒ 单价沿用第 225 页实测（≈0.9s／条、2 拍），
+   整表量级 +约 5.4s；**实测秒在下一页凭证里印，这里不预报**。`cert face`（`CERT_GATES` 20 道）不含 mutate-verify，本笔不动认证面。
+8. **未证／仍开**：① 六支新锚点的实杀读数与整趟认证在下一页；② `hold` 目前**不进模型可见投影**（与 `blockedBy` 同一格，
+   「要不要回注给模型」属裁决）；③ 那 9 处自造／派生 callId 一处没动——把 `budget-<ts>` 换成真 callId 要先裁
+   `mergeToolResultsById` 会不会把同一 callId 的两条拒绝折成一条模型可见消息，那是 #45 剩下的、属用户裁决的那一半。
+
 
 
 

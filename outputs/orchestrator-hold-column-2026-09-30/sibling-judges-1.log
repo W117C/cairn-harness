@@ -1,0 +1,27 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+[90mstderr[2m | tests/m3c.test.ts[2m > [22m[2mM3c 工具面裁剪与成本闸[2m > [22m[2m成本闸：缺省零行为 / 单价 0 无效化 / 超限拒绝新 spawn 并落流警告
+[22m[39m[budget] 会话成本上限 $1 设了，但既没填单价、价表里也查不到模型 "" ⇒ 这道闸本次不生效（不拿 $0 冒充实付）
+
+ [32m✓[39m tests/m3c.test.ts [2m([22m[2m25 tests[22m[2m)[22m[33m 17199[2mms[22m[39m
+   [32m✓[39m M3c pipeline 哑 sequencer（零 LLM） [2m(3)[22m
+     [33m[2m✓[22m[39m 未获批准 fail-closed；批准后 stages 变更请求被拒且落流[33m 15174[2mms[22m[39m
+[90mstderr[2m | tests/cascade-wiring.test.ts[2m > [22m[2m级联升级接进产品路径（sequencer 环）[2m > [22m[2m只开 cascadeUpgrade、没开 routing ⇒ 不级联：阶梯起点与升档都靠路由，缺了就等于花两遍钱跑同一模型
+[22m[39m[cascade] 需要 routing=true（阶梯起点与升档都走路由）；本次会话不级联
+
+ [32m✓[39m tests/cascade-wiring.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 1554[2mms[22m[39m
+[90mstderr[2m | tests/terminal-sync-window.test.ts[2m > [22m[2m终态收尾窗口：已收敛的判据是 terminalResolved[2m > [22m[2m收尾中途 emit 抛 ⇒ 等待方照旧被放行（宁可这环红，不许整链永挂）
+[22m[39m[orchestrator] worker 收尾中途失败，按 failed 放行等待方：worker-2 simulated append failure
+
+ [32m✓[39m tests/terminal-sync-window.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 675[2mms[22m[39m
+   [32m✓[39m 终态收尾窗口：已收敛的判据是 terminalResolved [2m(3)[22m
+     [33m[2m✓[22m[39m join 落在窗口内 ⇒ 回执说 running + timedOut 点名；不说 done + 空报告[33m 302[2mms[22m[39m
+ [32m✓[39m tests/tool-block-witness.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m4 passed[39m[22m[90m (4)[39m
+[2m      Tests [22m [1m[32m48 passed[39m[22m[90m (48)[39m
+[2m   Start at [22m 11:28:41
+[2m   Duration [22m 20.56s[2m (tests 96%, transform 2%, import 2%)[22m
+
+node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts      3.25s user 1.83s system 24% cpu 20.798 total

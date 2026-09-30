@@ -6,8 +6,8 @@
 // tool_call/tool_result/usage），agent_spawned 携 parent_event_id 建立血缘树；重放主流后投影一致。
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { AgentEvent, SecurityFinding } from "../events";
-import { replay } from "../events";
+import type { AgentEvent, HarnessHoldReason, SecurityFinding } from "../events";
+import { HARNESS_HOLD_PROSE_TOKEN, replay } from "../events";
 import type { ModelOutput, Provider } from "../providers";
 import { glmDefaultModelName, type GlmMessage, type GlmToolSpec } from "../providers/glm";
 import { DEFAULT_MODEL_TABLE, findSpecByNameOrId, resolveModel, toWorkerModel, type ModelTier } from "../providers/registry";
@@ -326,7 +326,7 @@ export class Orchestrator {
     const dependsOn = parseStringList(args.depends_on);
     if (dependsOn.length > 0) {
       const v = this.validateDependsOn(dependsOn);
-      if (!v.ok) return { ok: false, output: "spawn_agent: " + v.why };
+      if (!v.ok) return { ok: false, ...(v.hold === undefined ? {} : { hold: v.hold }), output: "spawn_agent: " + v.why };
       if (v.waiting.length > 0) {
         // 前环未收敛：登记延迟 spawn（事件驱动——前环 done 触发真正 spawn，无轮询调度器）
         if (ctx.callId === undefined || ctx.callId === "") {
@@ -387,6 +387,7 @@ export class Orchestrator {
     if (this.activeCount() + this.spawnReserve + k >= MAX_CONCURRENT_WORKERS) {
       return {
         ok: false,
+        hold: "concurrency-limit",
         output: `spawn_agent(race): 并发预算不足（${String(k)} 候选 + 1 余量 > ${String(MAX_CONCURRENT_WORKERS)}），不排队`,
       };
     }
@@ -450,8 +451,9 @@ export class Orchestrator {
     };
   }
 
-  /** depends_on 校验（共享）：存在性（跨会话拒绝）→ 环（DFS）→ 前环终态裁决。waiting = 尚未 done 的依赖。 */
-  private validateDependsOn(dependsOn: string[]): { ok: true; waiting: string[] } | { ok: false; why: string } {
+  /** depends_on 校验（共享）：存在性（跨会话拒绝）→ 环（DFS）→ 前环终态裁决。waiting = 尚未 done 的依赖。
+   *  `hold` 只挂在第三支：前两支是模型把参数写错了（不存在／成环），第三支才是 harness 按住了这次扩张。 */
+  private validateDependsOn(dependsOn: string[]): { ok: true; waiting: string[] } | { ok: false; why: string; hold?: HarnessHoldReason } {
     for (const dep of dependsOn) {
       if (!this.workers.has(dep)) {
         return { ok: false, why: "depends_on 引用不存在或不在本会话的 agent: " + dep + "（跨会话依赖拒绝）" };
@@ -467,7 +469,7 @@ export class Orchestrator {
     for (const dep of dependsOn) {
       const st = this.workers.get(dep)?.terminalStatus;
       if (st === "failed" || st === "cancelled") {
-        return { ok: false, why: "前环 " + dep + " " + st + " → 后环标记 failed（reason=dependency_failed，不静默跳过 §2.1）" };
+        return { ok: false, hold: "dependency-failed", why: "前环 " + dep + " " + st + " → 后环标记 failed（reason=dependency_failed，不静默跳过 §2.1）" };
       }
     }
     // 「等不等前环」看的是**取不取到它的产出**（terminalResolved），不是它有没有被判终态：
@@ -476,7 +478,11 @@ export class Orchestrator {
     return { ok: true, waiting: dependsOn.filter((dep) => this.workers.get(dep)?.terminalResolved !== true) };
   }
 
-  /** 成本闸拒绝（落流警告 + tool_result 拒绝，§2.4）。 */
+  /** 成本闸拒绝（落流警告 + tool_result 拒绝，§2.4）。
+   *  注意这一笔有**两个读者面**：下面那条自造 callId 的事件（`budget-<ts>`，流里没有对应的 tool_call，
+   *  只出声）＋真正挂回模型那一次 `spawn_agent` 的返回体。`hold` 两处都盖：那一列描述的是「这一笔是
+   *  harness 按住的」，与 callId 真不真无关。自造 callId 要不要换成真 callId（换成后两条会不会被
+   *  `mergeToolResultsById` 折成一条模型可见消息）属裁决，不属这一笔——第 229 页登记为仍开的一半。 */
   private async rejectOnBudget(): Promise<ToolResult> {
     const estimate = this.budgetEstimateUsd().toFixed(4);
     const cap = String(this.budget?.maxUsd ?? 0);
@@ -484,9 +490,10 @@ export class Orchestrator {
       type: "tool_result",
       callId: "budget-" + String(Date.now()),
       ok: false,
+      hold: "budget",
       output: "[budget] 会话成本超限：估价 $" + estimate + " ≥ maxBudgetUsd $" + cap + "（编排扩张被拒；主 loop 不受闸）",
     } as AgentEvent).catch(() => {});
-    return { ok: false, output: "spawn_agent: [budget] 会话成本超限（估价 $" + estimate + " ≥ maxBudgetUsd $" + cap + "），新 spawn 被拒" };
+    return { ok: false, hold: "budget", output: "spawn_agent: [budget] 会话成本超限（估价 $" + estimate + " ≥ maxBudgetUsd $" + cap + "），新 spawn 被拒" };
   }
 
   /** B4（审查）：并发上限 check-then-act 旁路面——判定与 workers.set 之间隔着审批/worktree/emit
@@ -500,11 +507,12 @@ export class Orchestrator {
     // H2（审查 B-3）：入口 fail-closed——主会话已取消时不再派发任何 worker
     //（addEventListener 对已 abort 的 signal 不会触发，靠入口检查补上取消窗口）。
     if (this.root.signal.aborted) {
-      return { ok: false, output: "spawn_agent: 主会话已取消（fail-closed，不再派发 worker）" };
+      return { ok: false, hold: "cancelled", output: "spawn_agent: 主会话已取消（fail-closed，不再派发 worker）" };
     }
     if (this.activeCount() + this.spawnReserve >= MAX_CONCURRENT_WORKERS) {
       return {
         ok: false,
+        hold: "concurrency-limit",
         output: `spawn_agent: 并发已达上限（${String(MAX_CONCURRENT_WORKERS)}），不排队——请等现有 worker 收敛或取消后再试`,
       };
     }
@@ -528,7 +536,7 @@ export class Orchestrator {
     const dependsOn = parseStringList(args.depends_on);
     if (dependsOn.length > 0) {
       const v = this.validateDependsOn(dependsOn);
-      if (!v.ok) return { ok: false, output: "spawn_agent: " + v.why };
+      if (!v.ok) return { ok: false, ...(v.hold === undefined ? {} : { hold: v.hold }), output: "spawn_agent: " + v.why };
       if (v.waiting.length > 0 && ctx.callId !== undefined && ctx.callId !== "") {
         this.deferredSpawns.set(ctx.callId, { callId: ctx.callId, args, dependsOn });
         return { ok: true, output: JSON.stringify({ deferred: true, depends_on: dependsOn, waiting_on: v.waiting }) };
@@ -943,6 +951,7 @@ export class Orchestrator {
         type: "tool_result",
         callId,
         ok: false,
+        hold: "cancelled",
         output: "[harness] 后环 spawn 撤销（主会话已取消）",
       } as AgentEvent).catch(() => {});
     }
@@ -1456,6 +1465,7 @@ export class Orchestrator {
       type: "tool_result",
       callId: chain.callId,
       ok: false,
+      hold: "chain-failed",
       output: "[harness] pipeline 整链 failed（各环报告可见）：\n" + chainTable(chain) + "\n原因：" + reason,
     } as AgentEvent);
   }
@@ -1558,6 +1568,7 @@ export class Orchestrator {
           type: "tool_result",
           callId,
           ok: false,
+          hold: "dependency-failed",
           output: "[harness] 后环 spawn 标记 failed（reason=dependency_failed）：前环 " + agentId + " " + status,
         } as AgentEvent).catch(() => {});
         continue;
@@ -1575,17 +1586,25 @@ export class Orchestrator {
         type: "tool_result",
         callId: d.callId,
         ok: false,
+        hold: "cancelled",
         output: "[harness] 后环 spawn 撤销（主会话已取消）",
       } as AgentEvent).catch(() => {});
       return;
     }
     const r = await this.spawn(d.args, { callId: d.callId });
     if (!r.ok) {
-      const reason = r.output.includes("并发") ? "concurrency_limit" : r.output.includes("[budget]") ? "budget_exceeded" : "dependency_failed";
+      // 原因改读**结构列**。从前这一行是对 `r.output` 做 `includes("并发")`／`includes("[budget]")` 的散文嗅探：
+      // 生产端拿自己的文案当判据，文案一改判读就静默换档（而「主会话已取消」那条嗅不出任何因，
+      // 会被兜底成 dependency_failed——一个从来没被任何用例钉过的错格）。
+      // 现在 `reason=` 记号由 `hold` 经 `HARNESS_HOLD_PROSE_TOKEN` 派生 ⇒ 结构面与散文面只有一个决策点。
+      // 缺列时仍写从前那句兜底（`spawn()` 的参数校验类拒绝本就不是按住），但这一格从此是可数的：
+      // 新增一条按住却不盖 `hold` 的出口，判卷面那条「五挡各有行为证人」会少一格而红。
+      const reason = r.hold === undefined ? "dependency_failed" : HARNESS_HOLD_PROSE_TOKEN[r.hold];
       await this.opts.emit({
         type: "tool_result",
         callId: d.callId,
         ok: false,
+        ...(r.hold === undefined ? {} : { hold: r.hold }),
         output: "[harness] 后环 spawn 失败（reason=" + reason + "）：" + r.output,
       } as AgentEvent).catch(() => {});
     }

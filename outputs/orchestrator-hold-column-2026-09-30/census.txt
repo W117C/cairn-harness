@@ -1,0 +1,20 @@
+orchestrator.ts 里 type: "tool_result" 落点 = 16
+  自造/派生 = 9
+  真 callId  = 7
+  L318  自造/派生     "pipeline-" + ctx.callId
+  L490  自造/派生     "budget-" + String(Date.now())
+  L951  真 callId  (简写 callId，真值在上下文里)
+  L1449 真 callId  chain.callId
+  L1465 真 callId  chain.callId
+  L1529 自造/派生     "pipeline-" + chain.callId
+  L1568 真 callId  (简写 callId，真值在上下文里)
+  L1586 真 callId  d.callId
+  L1604 真 callId  d.callId
+  L2067 自造/派生     "diff-" + w.agentId
+  L2268 自造/派生     "wt-cleanup-" + w.agentId
+  L2297 自造/派生     "merge-" + agentId
+  L2308 自造/派生     "merge-" + agentId
+  L2324 自造/派生     "merge-" + agentId
+  L2344 自造/派生     "merge-" + agentId
+  L2389 真 callId  w.spawnCallId
+本笔盖了 hold 的行数（含传播）= 13

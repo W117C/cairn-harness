@@ -1,7 +1,7 @@
 import { lstat, readlink, realpath } from "node:fs/promises";
 import type { Stats } from "node:fs";
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
-import type { AgentEvent, ClarifyAnswerMap, ImpactReportEvent } from "../events";
+import type { AgentEvent, ClarifyAnswerMap, HarnessHoldReason, ImpactReportEvent } from "../events";
 
 /** 工具可预期失败的统一错误类型：loop 捕获后转成 ok:false 的 tool_result。 */
 export class ToolError extends Error {}
@@ -58,6 +58,11 @@ export interface ToolResult {
   exitCode?: number | null;
   /** 是否因墙钟上限被强杀（与退出码分开：超时后 code 往往是 null）。 */
   timedOut?: boolean;
+  /** 编排侧按住了这一次扩张（`spawn_agent` 的四条拒绝出口之一：钱／并发帽／已取消）。
+   *  为什么放在返回体上而不是只写在 output 里：这一句 output 会既给模型看、又被 `triggerDeferredSpawn`
+   *  拿去 `includes("并发")` 反推原因——生产端用自己的文案当判据，是同一族的老形状。
+   *  缺席 = 这次失败不是「被按住」（例如候选没有 judge 命中）。 */
+  hold?: HarnessHoldReason;
 }
 
 /** 本仓静态工具名的唯一事实源：联合类型与名字表同源（加一个工具只改这一行）。 */

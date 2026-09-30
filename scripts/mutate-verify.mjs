@@ -9668,6 +9668,64 @@ const MUTATIONS = [
     apply: (s) => s.replace("      if (sourced) continue;", "      if (!sourced) continue;"),
     expectFail: "点了名且数在面里 ⇒ 可比对计数涨、零红",
   },
+
+  /* ── 第 229 页（#45）：编排侧「这一次压根没派发出 worker」的结构列 `hold`。六支各钉一种坏法：
+      返回体不盖章、依赖校验那一支不盖章、落流那两处不盖章、传播断在中间、落盘面把这一格丢掉、枚举漂出一格。
+      刻意没有「取消／并发帽」两处落点的锚：同一挡位在两个出口上字面完全同形（`hold: "cancelled"` 两处），
+      replace 只改第一处 ⇒ 第二处的证人照样绿，写了也是假装守护（规则 259/261）。 ── */
+  {
+    id: "orchestrator-hold-budget-return-not-stamped",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/orchestrator-hold.test.ts",
+    desc: "成本闸那条拒绝只留散文、不留结构列 ⇒ 模型看得见「被拒」，下游看不见是被哪一挡拒的：" +
+      "钱与人手与取消在这一列上又长成同一个人。钉的是**返回体**那一半（落流那一半另有证人）",
+    apply: (s) => s.replace('return { ok: false, hold: "budget", output:', 'return { ok: false, output:'),
+    expectFail: "成本闸拒绝的 spawn 回执与出声事件都带 hold=budget",
+  },
+  {
+    id: "orchestrator-hold-dependency-return-not-stamped",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/orchestrator-hold.test.ts",
+    desc: "把依赖校验第三支的盖章摘掉 ⇒ 「前环已经倒下」与「参数写错了」重新长成同一种红，" +
+      "而这一格的正证恰好是**只有第三支**该有这一列：同用例里的负控（ghost 那条不盖章）会一起失去意义",
+    apply: (s) => s.replace('return { ok: false, hold: "dependency-failed", why:', 'return { ok: false, why:'),
+    expectFail: "前环倒下后的 spawn 回执带 hold=dependency-failed",
+  },
+  {
+    id: "orchestrator-hold-chain-outlet-not-stamped",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/orchestrator-hold.test.ts",
+    desc: "整链 failed 的落流不盖章 ⇒ 五挡里只有这一挡的读者回到零：链级「后面的环压根没起」在事件流上又不可读",
+    apply: (s) => s.replace('      hold: "chain-failed",', ""),
+    expectFail: "整链 failed 的落流带 hold=chain-failed",
+  },
+  {
+    id: "orchestrator-hold-deferred-propagation-dropped",
+    src: "src/agent/orchestrator.ts",
+    test: "tests/orchestrator-hold.test.ts",
+    desc: "后环那一处只把因写进正文、不把结构列传下去 ⇒ 生产端与投影面对同一个因各判一次，" +
+      "而这条用例同时钉着两半：结构那一格与正文里那个记号（两者要一起断才算这张网在）",
+    apply: (s) => s.replace("        ...(r.hold === undefined ? {} : { hold: r.hold }),", ""),
+    expectFail: "后环被成本闸拒绝：落流的 hold 与散文里的 reason= 由同一处派生",
+  },
+  {
+    id: "loop-hold-copy-through-dropped",
+    src: "src/agent/loop.ts",
+    test: "tests/orchestrator-hold.test.ts",
+    desc: "落盘那一步不搬这一格 ⇒ 结构列只活在内存里的返回体上，事件流与任何离线读者永远看不见；" +
+      "这一支的证人是跨面的（判卷在 tests、被改的是 src），不是同文件文字对表",
+    apply: (s) => s.replace("        ...(result.hold !== undefined ? { hold: result.hold } : {}),", ""),
+    expectFail: "工具返回体带 hold ⇒ 落盘的 tool_result 也带",
+  },
+  {
+    id: "events-hold-reason-enum-drift",
+    src: "src/events/index.ts",
+    test: "tests/orchestrator-hold.test.ts",
+    desc: "枚举少一格而落点一个没少 ⇒ 那一列照样印得出来，只有名单对账知道实跑与事实源不是一套。" +
+      "少成员在类型上叫得醒，但判卷跑 tsx 不做类型检查（与 `events-block-reason-enum-drift` 同族同因）",
+    apply: (s) => s.replace('"cancelled", "dependency-failed"', '"dependency-failed"'),
+    expectFail: "编排里印出的每个取值都在枚举里，且枚举里没有白写的成员",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

@@ -498,6 +498,9 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         // 下游（额度、按档升级、沉淀、失败轨迹评估）只能回去匹配文案。缺席＝这一笔不是跑进程的工具。
         ...(result.exitCode !== undefined ? { exitCode: result.exitCode } : {}),
         ...(result.timedOut !== undefined ? { timedOut: result.timedOut } : {}),
+        // 编排侧「这一次压根没派发出 worker」的原因也得结构地活到落盘面：从前它只在 `output` 那一句里，
+        // 于是「因钱不起」与「worker 跑挂了」在事件流上长得一模一样（`spawn_agent` 的拒绝返回体自带 `hold`）。
+        ...(result.hold !== undefined ? { hold: result.hold } : {}),
       });
       if (result.ok && mayHaveWrittenDisk(name, output.args ?? {})) {
         wroteThisRun = true;
