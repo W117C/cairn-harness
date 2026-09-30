@@ -7,6 +7,8 @@
 // 有流量必须判"该量"并给出占比、结构栏必须吃**仓内唯一谓词**而不是本地抄一份集合。
 import { describe, expect, it } from "vitest";
 import { scanStreamTraffic, selfCheck, trafficVerdict, type StreamTraffic } from "../scripts/replay/cascade-traffic";
+import { textualKind } from "../scripts/replay/verify-cause-mix";
+import { firstEnvTextCue, NO_SURFACE_COMMAND } from "../scripts/replay/corpus";
 
 const ZERO: StreamTraffic = {
   decisions: 0, upgradeReasons: 0, cascadeBroadcasts: 0,
@@ -51,6 +53,44 @@ describe("replay:cascade-traffic 的判据", () => {
     ]);
     expect(unattr.redBeats).toBe(1);
     expect(unattr.envRedBeats, "未归因不得并进环境").toBe(0);
+  });
+
+  it("文案支接的是取料层那一只表：同一条行首线索，三个读数面给同一个答案", () => {
+    // 第 222 页（#44）折的是**第三份副本**：`textualKind`（verify 面）、本面（cascade）、`firstEnvTextCue`（表本身）。
+    // 证人只有一条输入、三个出口——分开钉的话，改一份另外两份不会红（规则 304：证人要加在跨面那一格）。
+    const lineStart = "npm ERR 前面一行\n[exit code: 127]";
+    const t = scanStreamTraffic([
+      { type: "verify_result", ok: false, results: [{ command: "pnpm test", ok: false, output: lineStart }] },
+    ]);
+    expect(t.redBeats).toBe(1);
+    expect(t.envRedBeats, "本面必须把行首那句算环境（分子来自取料层那只表）").toBe(1);
+    expect(textualKind({ command: "pnpm test", output: lineStart })).toBe("toolchain-missing");
+    expect(firstEnvTextCue(lineStart)).toBe("toolchain-missing");
+  });
+
+  it("反向那一半：同一串只出现在正文中间 ⇒ 三个面都不许抓", () => {
+    const midLine = "AssertionError: 断言里写着「见 [exit code: 127] 一节」";
+    const t = scanStreamTraffic([
+      { type: "verify_result", ok: false, results: [{ command: "pnpm test", ok: false, output: midLine }] },
+    ]);
+    expect(t.redBeats).toBe(1);
+    expect(t.envRedBeats, "被度量者的正文是第二个注入面（规则 264）⇒ 不许抬占比分子").toBe(0);
+    expect(textualKind({ command: "pnpm test", output: midLine })).toBe("code-or-unknown");
+    expect(firstEnvTextCue(midLine)).toBeNull();
+    // 缩进也不算行首：harness 那几句永远拼在换行之后、顶格写
+    expect(textualKind({ command: "pnpm test", output: "  [exit code: 127]" })).toBe("code-or-unknown");
+  });
+
+  it("哨兵那一格按 command 判：command 是那条哨兵才算「没有可验面」，正文里出现同样的字不算", () => {
+    const byCommand = scanStreamTraffic([
+      { type: "verify_result", ok: false, results: [{ command: NO_SURFACE_COMMAND, ok: false, output: "" }] },
+    ]);
+    expect(byCommand.envRedBeats, "command 命中哨兵 ⇒ 环境因（这一格本来就没有代码参与）").toBe(1);
+    const inOutput = scanStreamTraffic([
+      { type: "verify_result", ok: false, results: [{ command: "pnpm test", ok: false, output: "config printed: (none)" }] },
+    ]);
+    expect(inOutput.redBeats).toBe(1);
+    expect(inOutput.envRedBeats, "正文里的 (none) 不是那条命令名 ⇒ 从前那份手抄表会把它读成「没有可验面」").toBe(0);
   });
 
   it("播报面单独成立：路由表没开时，[cascade] 那条 agent_message 仍是观察着", () => {

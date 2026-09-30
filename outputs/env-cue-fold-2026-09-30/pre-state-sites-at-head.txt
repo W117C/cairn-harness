@@ -1,0 +1,13 @@
+# 折层前的定义位点（HEAD 那份），尺的形状与 tests/env-cue-single-source.test.ts 一致：const X = / 或 re: /
+ask-density.ts 127=0 超时=0 ERR_PNPM=0
+cascade-traffic.ts 127=0 超时=0 ERR_PNPM=0
+corpus-inventory.ts 127=0 超时=0 ERR_PNPM=0
+corpus.ts 127=0 超时=0 ERR_PNPM=0
+gate-outcomes.ts 127=0 超时=0 ERR_PNPM=0
+join-lapse.ts 127=0 超时=0 ERR_PNPM=0
+latency.ts 127=0 超时=0 ERR_PNPM=0
+prompt-fixed-cost.ts 127=0 超时=0 ERR_PNPM=0
+prune-promise.ts 127=0 超时=0 ERR_PNPM=0
+run-scorecard.ts 127=0 超时=0 ERR_PNPM=0
+stagnation-burn.ts 127=0 超时=0 ERR_PNPM=0
+verify-cause-mix.ts 127=1 超时=1 ERR_PNPM=1

@@ -98,6 +98,43 @@ export function callNameIndex(raws: readonly unknown[]): Map<string, string> {
   return byCall;
 }
 
+/**
+ * 环境红的**人眼线索**只有这一处定义，且**全部行首锚定**：这几句都由 harness 自己拼在换行之后，
+ * 被跑的那条命令再怎么说同样的话（它的正文里出现「[exit code: 127]」）也不算它发生过
+ * ——规则 264：被度量者自己的正文是第二个注入面。
+ *
+ * 折进取料层的理由与 `callNameIndex` 一条：同一判据从前在两个读数脚本里各抄一份、**宽度还不同**
+ * （`verify-cause-mix` 的 `textualKind` 与 `cascade-traffic` 的 `ENV_TEXTUAL` 都用无锚 `includes`，
+ * 而同一尺的 exec 面 09-29 起已改行首锚定）＝本仓点过名的第十三族。
+ * `(none)` 不在这里：那是 `runVerifyOutcome` 的**哨兵命令名**，按 `command` 字段判（见 `NO_SURFACE_COMMAND`），
+ * 拿它去 `includes(output)` 会把任何打印过 `(none)` 的正常输出读成「没有可验面」。
+ */
+export const ENV_TEXT_CUES: readonly { kind: string; re: RegExp }[] = [
+  // 一支通吃三个出口：`[error: verify 命令超时（Ns）…`、`[error: run_shell 超时（Ns）…`、`[error: glob: rg 超时…`
+  // ——中间那段是工具名＋各自的说法，所以只锚「行首 + `[error: ` 起头 + 同一行里出现"超时"」。
+  // 写成 `^\[error: \S+ 超时` 会当场漏掉 verify 那一支（它的 `\S+` 后面还有一个词），这条就是被下面那组用例钉住的教训。
+  { kind: "timeout", re: /^\[error: [^\n]*超时/mu },
+  { kind: "toolchain-missing", re: /^\[exit code: 127\]/mu },
+  { kind: "hook-error", re: /^\[verify\] 钩子异常/mu },
+];
+
+/** 同一行首线索在**别的栏**里也要用（exec 面的文案栏就是它的超集），所以取这一份而不是再写一遍正则。
+ *  认不出那个 kind 就抛——静默给一条新写的正则，正是本函数要消灭的东西。 */
+export function envTextRe(kind: string): RegExp {
+  const cue = ENV_TEXT_CUES.find((c) => c.kind === kind);
+  if (cue === undefined) throw new Error("ENV_TEXT_CUES 里没有这一类：" + kind);
+  return cue.re;
+}
+
+/** 「根本没有可验面」那一格的落盘形状：命令名是哨兵串，不是正文里的一个字。 */
+export const NO_SURFACE_COMMAND = "(none)";
+
+/** 命中的第一个线索类别（顺序即表序：超时最具体先认）；都不在 ⇒ `null`，调用方自己决定叫什么。 */
+export function firstEnvTextCue(output: string): string | null {
+  for (const cue of ENV_TEXT_CUES) if (cue.re.test(output)) return cue.kind;
+  return null;
+}
+
 /** 第一格：一个 `.jsonl` 也没扫到。单独可调用——有的读数只关心"有没有料"，不关心料里认不认得事件。 */
 export function zeroCorpusProblem(scan: CorpusScan): string | null {
   if (scan.files.length === 0) {

@@ -10,8 +10,9 @@ import type { VerifyCause, VerifyCommandResult } from "../events";
 /** 包管理器**自己那一行**的命名空间错误码（pnpm 打成 `[ERR_PNPM_XXX] msg`）。
  *  锚在行首：这串必须由 pnpm 自己打印才算环境判定——被被测脚本*引用*在正文里的同样文字不算。
  *  这条是 judgment-layer §9.1「零文案匹配」口径的唯一加宽，理由与边界见
- *  `outputs/verify-cause-denominator-2026-09-23.md`（语料里 3/3 环境红都是这一类，且它不是任意输出串）。 */
-const PKG_MANAGER_OWN_ERROR_LINE = /^[ \t]*[│┆└├]?[ \t]*\[?ERR_PNPM_[A-Z0-9_]+\]?/m;
+ *  `outputs/verify-cause-denominator-2026-09-23.md`（语料里 3/3 环境红都是这一类，且它不是任意输出串）。
+ *  导出给复跑面（`scripts/replay/verify-cause-mix.ts` 的 exec 文案栏）：同一行线索写两份正则＝一份改了另一份不跟着（第十三族）。 */
+export const PKG_MANAGER_OWN_ERROR_LINE = /^[ \t]*[│┆└├]?[ \t]*\[?ERR_PNPM_[A-Z0-9_]+\]?/m;
 
 /** 环境类失败必须在**正文里点名**（模型只看 output）：红字不说"这不是代码失败"，它就会去改本来正确的代码。
  *  两条 exec 出口（非沙箱 defaultExec / 沙箱 verifyExec）共用这一只，别各写一份文案。 */

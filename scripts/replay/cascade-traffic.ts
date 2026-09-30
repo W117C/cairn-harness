@@ -12,7 +12,7 @@
 //     文本含 "[cascade]" —— 这是**通道缺表达法时的兜底观察着**：路由表若没开，播报仍在流里）；
 //   红拍里环境因占比：结构栏（`cause` 字段）+ 文案栏（人眼线索，只作证据）。
 // 三条全 0 ⇒ 报 **unmeasurable**，不报"环境红没有触发过升档"（G7 口径：没上场就是没尺）。
-import { readJsonl, scanCorpus, zeroCorpusProblem } from "./corpus";
+import { firstEnvTextCue, NO_SURFACE_COMMAND, readJsonl, scanCorpus, zeroCorpusProblem } from "./corpus";
 import { isEnvVerifyCause, type VerifyCause } from "../../src/events";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -49,7 +49,9 @@ export interface StreamTraffic {
 }
 
 // 文案栏：人眼线索，只作**证据**不作判据（跨域串不可分类，judgment-layer §9.1 已裁）。
-const ENV_TEXTUAL = ["[exit code: 127]", "verify 命令超时", "(none)", "[verify] 钩子异常"];
+// 名单不抄在这里（取料层的 `ENV_TEXT_CUES` 是唯一一份，理由与全部行首锚定都在那边写着）：
+// 从前这里是第四处手写副本、且与同一尺的 exec 面宽度不同——它算的又是**占比的分子**，
+// 一条被跑命令打印过「[exit code: 127]」就能把「换贵档再红一次」的上界抬高。
 
 /** 结构栏**直接吃仓内那只唯一谓词**（`isEnvVerifyCause`）：
  *  读数面自己抄一份 `=== "timeout" || …` 的表 = 第二事实源，产品的枚举一改就静默分叉
@@ -75,7 +77,7 @@ export function scanStreamTraffic(lines: Iterable<unknown>): StreamTraffic {
         if (r.ok) continue;
         t.redBeats++;
         if (typeof r.cause === "string") t.causeFieldRedBeats++;
-        const textEnv = ENV_TEXTUAL.some((m) => String(r.output ?? "").includes(m));
+        const textEnv = r.command === NO_SURFACE_COMMAND || firstEnvTextCue(String(r.output ?? "")) !== null;
         if (isEnvCauseStruct(typeof r.cause === "string" ? r.cause : undefined) || textEnv) t.envRedBeats++;
       }
     }
@@ -111,12 +113,29 @@ export function selfCheck(): string[] {
   };
   const redCode = { type: "verify_result", ok: false, results: [{ command: "pnpm test", ok: false, output: "FAIL: 1 failed" }] };
   const green = { type: "verify_result", ok: true, results: [{ command: "pnpm test", ok: true, output: "all green" }] };
+  // 文案栏的两条对照（第 222 页 #44 把名单收成取料层那一只之后，这两条才分得出宽度）：
+  // ⑴ harness 自己拼在换行之后的那句 ⇒ 必须被抓；⑵ 同一串挤在被跑命令的正文中间 ⇒ 不许被抓（规则 264）。
+  // 两条都**不带 cause**：带的结构那条红走的是另一支，会把这里要证的文案支顶掉（第 259 页那条纪律）。
+  const redTextEnv = { type: "verify_result", ok: false, results: [{ command: "pnpm test", ok: false, output: "npm ERR 前面一行\n[exit code: 127]" }] };
+  const redTextMid = { type: "verify_result", ok: false, results: [{ command: "pnpm test", ok: false, output: "AssertionError: 断言里写着「见 [exit code: 127] 一节」" }] };
+  // 哨兵那一格按 command 判：正文里出现 `(none)` 不算「没有可验面」。
+  const noSurface = { type: "verify_result", ok: false, results: [{ command: NO_SURFACE_COMMAND, ok: false, output: "" }] };
+  const parenInOutput = { type: "verify_result", ok: false, results: [{ command: "pnpm test", ok: false, output: "config printed: (none)" }] };
 
   const caught = scanStreamTraffic([up, cast, redEnv, redCode, green]);
   if (caught.decisions !== 1 || caught.upgradeReasons !== 1) problems.push("① 升档计数没分对（应 1 条决策且它含 cascade）");
   if (caught.cascadeBroadcasts !== 1) problems.push("② 播报没抓到（通道缺 routing 事件时的唯一观察着）");
   if (caught.redBeats !== 2 || caught.envRedBeats !== 1) problems.push("③ 环境/代码红没分对（应 2 红 / 1 环境）");
   if (caught.causeFieldRedBeats !== 1) problems.push("④ cause 字段在场率没数到（判「没落盘」要用它）");
+  // 文案支自己要有证人：只有行首那句被抓、只有正文里那句不被抓，两个数各判一次
+  const textPair = scanStreamTraffic([redTextEnv, redTextMid]);
+  if (textPair.redBeats !== 2 || textPair.envRedBeats !== 1) {
+    problems.push(`⑧ 文案支没按行首锚定分对（应 2 红 / 1 环境，实读 ${String(textPair.redBeats)} / ${String(textPair.envRedBeats)}）`);
+  }
+  const surfacePair = scanStreamTraffic([noSurface, parenInOutput]);
+  if (surfacePair.redBeats !== 2 || surfacePair.envRedBeats !== 1) {
+    problems.push(`⑨ 哨兵那一格没按 command 判（应 command="(none)" 被抓、正文里的 (none) 不被抓，实读 ${String(surfacePair.redBeats)} / ${String(surfacePair.envRedBeats)}）`);
+  }
   // 反向格：全是绿拍与 tier-default ⇒ 三个计数面都必须安静
   const quiet = scanStreamTraffic([other, green]);
   if (quiet.upgradeReasons !== 0 || quiet.cascadeBroadcasts !== 0 || quiet.redBeats !== 0) {

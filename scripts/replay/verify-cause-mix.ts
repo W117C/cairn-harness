@@ -18,12 +18,12 @@
 //   文案栏 = 人眼现在能从 output 里读出来的线索（`[exit code: 127]`、超时那句、`(none)`、"钩子异常"）——
 //            它是**证据**不是**判据**：跨域串（如 "Cannot find module"）已实测不可分类，见 §9.1。
 //            两栏都**只认行首**（规则 264：被度量者自己的正文是第二个注入面）。
-import { readJsonl, scanCorpus, callNameIndex, zeroCorpusProblem } from "./corpus";
+import { readJsonl, scanCorpus, callNameIndex, envTextRe, firstEnvTextCue, NO_SURFACE_COMMAND, zeroCorpusProblem } from "./corpus";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SHELL_FAMILY } from "../../src/permissions/risk";
-import { classifyVerifyFailure } from "../../src/agent/verify";
+import { classifyVerifyFailure, PKG_MANAGER_OWN_ERROR_LINE } from "../../src/agent/verify";
 import { isEnvVerifyCause, type VerifyCause } from "../../src/events";
 
 /** 「带 cause 的红命令 = 0」有两种**相反**的解释：语料比归因落盘还老（数据年龄），
@@ -75,18 +75,16 @@ interface VerifyResultEvent {
 
 /** 结构栏：今天（无 `cause`、无 `exitCode`）能判出的只有两类——它们靠**形状**而非文字。 */
 function structuralKind(r: { command: string; output?: string }): string {
-  if (r.command === "(none)") return "no-surface"; // 哨兵命令名，verify.ts 里就是它
+  if (r.command === NO_SURFACE_COMMAND) return "no-surface"; // 哨兵命令名，verify.ts 里就是它
   return "unknown"; // 其余（timeout / toolchain-missing / code）今天全在 output 文案里
 }
 
-/** 文案栏：人眼线索，仅供量"有多少红其实一眼能看出不是代码错"。 */
-function textualKind(r: { command: string; output?: string }): string {
-  const out = r.output ?? "";
-  if (r.command === "(none)") return "no-surface";
-  if (out.includes("verify 命令超时")) return "timeout";
-  if (out.includes("[exit code: 127]")) return "toolchain-missing";
-  if (out.includes("[verify] 钩子异常")) return "hook-error";
-  return "code-or-unknown";
+/** 文案栏：人眼线索，仅供量"有多少红其实一眼能看出不是代码错"。
+ *  线索表在取料层（`ENV_TEXT_CUES`）——同一份判据不许在这里再抄一遍，`cascade-traffic` 吃的是同一只
+ *  （第 222 页 #44：从前两面各抄一份、都是无锚 `includes`，而 exec 面已改行首锚定＝第十三族）。 */
+export function textualKind(r: { command: string; output?: string }): string {
+  if (r.command === NO_SURFACE_COMMAND) return "no-surface";
+  return firstEnvTextCue(r.output ?? "") ?? "code-or-unknown";
 }
 
 const bump = (m: Map<string, number>, k: string): void => { m.set(k, (m.get(k) ?? 0) + 1); };
@@ -120,15 +118,17 @@ export function execStructKind(e: { exitCode?: number | null; timedOut?: boolean
   return classifyVerifyFailure({ timedOut: e.timedOut === true, exitCode: e.exitCode ?? null, output: e.output ?? "" });
 }
 
-/** 只有**行首**才算：这几句都由 harness 自己拼在换行之后；被跑的命令再怎么说同样的话，也不算它发生过。 */
+/** 只有**行首**才算：这几句都由 harness 自己拼在换行之后；被跑的命令再怎么说同样的话，也不算它发生过。
+ *  三条不是本面独有的（超时／127／包管理器那三句在 verify 面与产品谓词里本来就有）⇒ 从那一处取，不在这再写一遍
+ *  正则；`env-cue-single-source` 那把普查尺钉的就是「整族只有一份」。 */
 const T_DENIED_BY_GATE = /^\[permission denied\]/m;
 const T_DENIED_BY_READONLY = /^\[read-only\] 只读 bash 静态过滤拒绝/m;
 const T_CANCELLED = /^\[error: \S+ 随会话取消终止\]/m;
-const T_TIMEOUT = /^\[error: \S+ 超时/m;
+const T_TIMEOUT = envTextRe("timeout");
 const T_EXIT_NULL = /^\[exit code: null\]/m;
-const T_EXIT_127 = /^\[exit code: 127\]/m;
+const T_EXIT_127 = envTextRe("toolchain-missing");
 const T_SPAWN_ERROR = /^run_shell: /m;
-const T_PKG = /^[ \t]*[│┆└├]?[ \t]*\[?ERR_PNPM_[A-Z0-9_]+\]?/m;
+const T_PKG = PKG_MANAGER_OWN_ERROR_LINE;
 
 /** 文案栏：exec 面今天**唯一**看得见"这不是代码失败"的地方（取消／被拒／spawn 炸都只有这一栏有证人）。 */
 export function execTextKind(output: string): string {

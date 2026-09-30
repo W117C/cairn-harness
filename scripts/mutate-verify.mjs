@@ -9437,15 +9437,6 @@ const MUTATIONS = [
     expectFail: "占比分子＝正证五类",
   },
   {
-    id: "replay-exec-text-anchor-lost",
-    src: "scripts/replay/verify-cause-mix.ts",
-    test: "tests/replay-verify-cause-exec.test.ts",
-    desc: "文案栏丢掉行首锚定 ⇒ 被跑的那条命令自己的正文成为第二个注入面（它打印一句 " +
-      "「[exit code: 127]」就算环境红）。规则 264 在 exec 面的同型：散文判据只准认行首",
-    apply: (s) => s.replace("T_EXIT_127 = /^", "T_EXIT_127 = /"),
-    expectFail: "同一段文字缩进／引用在正文中间 ⇒ 不许算线索（被度量者的正文是第二个注入面）",
-  },
-  {
     id: "replay-call-index-type-check-dropped",
     src: "scripts/replay/corpus.ts",
     test: "tests/replay-verify-cause-exec.test.ts",
@@ -9471,6 +9462,55 @@ const MUTATIONS = [
       "本条与上一条同尺（普查面按 `src/**/*.ts` 现走，新增站点自动进分母）",
     apply: (s) => s.replace("超时（${String(GLOB_RG_TIMEOUT_MS / 1000)}s", "超时（60s"),
     expectFail: "现读普查：没有任何一支把秒数写死在正文里",
+  },
+
+  /* ── 第 222 页（#44）：环境线索的匹配器从三处收成一份。每条锚点各盯一处「又能各写一遍」的退路。 ── */
+  {
+    // 原针脚 `T_EXIT_127 = /^` 随收敛一起消失（那一行现在从取料层取），本条改指**表本身**的锚定。
+    id: "replay-exec-text-anchor-lost",
+    src: "scripts/replay/corpus.ts",
+    test: "tests/replay-verify-cause-exec.test.ts",
+    desc: "把表里那条 127 线索的行首锚摘掉 ⇒ 被跑命令自己的正文成为第二个注入面（它打印一句" +
+      "「见 [exit code: 127] 一节」就算环境红）。规则 264 在这一族的落点：三个读数面共用一只表，" +
+      "锚定也就只有一处可改——改这里，exec 面、verify 面、cascade 占比分子一起红（第 219 页那条锚点的同型，指针随收敛改指）",
+    apply: (s) => s.replace("re: /^\\[exit code: 127\\]/mu }", "re: /\\[exit code: 127\\]/mu }"),
+    expectFail: "同一段文字缩进／引用在正文中间 ⇒ 不许算线索",
+  },
+  {
+    id: "replay-textual-kind-drops-shared-table",
+    src: "scripts/replay/verify-cause-mix.ts",
+    test: "tests/replay-cascade-traffic.test.ts",
+    desc: "verify 面的文案栏不再吃取料层那只表 ⇒ 三个面里的一支回退成私有判据。" +
+      "本条红在**跨面那条用例**上（一条输入、三个出口），不是红在措辞上（规则 304）",
+    apply: (s) => s.replace('return firstEnvTextCue(r.output ?? "") ?? "code-or-unknown";', 'return "code-or-unknown";'),
+    expectFail: "文案支接的是取料层那一只表",
+  },
+  {
+    id: "replay-cascade-drops-command-sentinel",
+    src: "scripts/replay/cascade-traffic.ts",
+    test: "tests/replay-cascade-traffic.test.ts",
+    desc: "「没有可验面」那一格不再按 command 判 ⇒ 这一面的分子少一类（旧写法只在正文里找 `(none)`，" +
+      "而那串字面量任何命令都可能打印——两头都是错的，本条钉对的那一头）",
+    apply: (s) => s.replace("r.command === NO_SURFACE_COMMAND || firstEnvTextCue(", "firstEnvTextCue("),
+    expectFail: "哨兵那一格按 command 判",
+  },
+  {
+    id: "replay-cascade-drops-cue-table",
+    src: "scripts/replay/cascade-traffic.ts",
+    test: "tests/replay-cascade-traffic.test.ts",
+    desc: "占比分子不再看文案线索 ⇒ 「换贵档再红一次」的上界被算低。这条读数是**做决策用的**" +
+      "（它对着一次模型往返的钱），少一类比多一类更坏：多算只是保守，少算会裁掉本该修的那一格",
+    apply: (s) => s.replace('|| firstEnvTextCue(String(r.output ?? "")) !== null;', "|| false;"),
+    expectFail: "反向那一半",
+  },
+  {
+    id: "replay-exec-pkg-cue-recopied",
+    src: "scripts/replay/verify-cause-mix.ts",
+    test: "tests/env-cue-single-source.test.ts",
+    desc: "把包管理器那行的正则**再抄一遍**而不是 import 产品那一只 ⇒ 普查尺的定义位点从 0 变 1。" +
+      "行为完全等价（两条正则同字），所以只能由这把普查尺抓（规则 259 点名的那类「突变不可观察」）",
+    apply: (s) => s.replace("const T_PKG = PKG_MANAGER_OWN_ERROR_LINE;", "const T_PKG = /^[ \\t]*\\[?ERR_PNPM_[A-Z0-9_]+\\]?/m;"),
+    expectFail: "包管理器那一行由产品谓词说话",
   },
 ];
 

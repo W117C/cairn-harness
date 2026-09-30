@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { corpusProblem, corpusRoots, GATED_TOOLS, isGatedTool, readJsonl, scanCorpus } from "../scripts/replay/corpus";
+import { corpusProblem, corpusRoots, ENV_TEXT_CUES, envTextRe, firstEnvTextCue, GATED_TOOLS, isGatedTool, NO_SURFACE_COMMAND, readJsonl, scanCorpus } from "../scripts/replay/corpus";
 
 describe("零语料体检：读到 0 不是读数，是没尺", () => {
   it("一个 .jsonl 也没扫到 ⇒ 报，且那句话点名扫描根与不存在的那一支", () => {
@@ -97,5 +97,38 @@ describe("真会话根的字面形状：`Application Support` 是一个目录名
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
+  });
+});
+
+describe("ENV_TEXT_CUES：环境红的人眼线索只有一份，且只认行首", () => {
+  it("三支真出口的那一句都认得出（形状取自各出口自己拼的那一行，不是凭记忆写的）", () => {
+    expect(firstEnvTextCue("x\n[error: verify 命令超时（2s），已强制终止——命令确实跑完过吗？]")).toBe("timeout");
+    expect(firstEnvTextCue("out\n[error: run_shell 超时（60s），已强制终止]")).toBe("timeout");
+    expect(firstEnvTextCue("no matches\n[error: glob: rg 超时（60s，已终止——查询面过大）]")).toBe("timeout");
+    expect(firstEnvTextCue("npm ERR\n[exit code: 127]")).toBe("toolchain-missing");
+    expect(firstEnvTextCue("[verify] 钩子异常（harness 侧原因，不占修复额度）：boom")).toBe("hook-error");
+  });
+
+  it("同一串在正文中间或缩进行 ⇒ 一律不算（被度量者自己的正文是第二个注入面）", () => {
+    expect(firstEnvTextCue("正文里说：见 [error: run_shell 超时 一节")).toBeNull();
+    expect(firstEnvTextCue("  [exit code: 127]")).toBeNull();
+    expect(firstEnvTextCue("FAIL: 1 failed")).toBeNull();
+  });
+
+  it("表里那条超时要通吃三支出口：只认「工具名紧跟超时」的写法会漏掉 verify 那一句", () => {
+    // 收成一份之后最坏的错不是宽一点，而是**表里那条只认识自家出口**：三条真句子里有一条读不到，
+    // 剩下的面就各自漂（本条先用现成反例把宽度钉死，正则本身怎么写不在这里复述）。
+    expect(/^\[error: \S+ 超时/mu.test("[error: verify 命令超时（2s）")).toBe(false);
+    expect(envTextRe("timeout").test("[error: verify 命令超时（2s）")).toBe(true);
+  });
+
+  it("哨兵那一格不在表里：它按 command 判，正文里出现同样的字不算它", () => {
+    expect(NO_SURFACE_COMMAND).toBe("(none)");
+    expect(ENV_TEXT_CUES.map((c) => c.kind)).toEqual(["timeout", "toolchain-missing", "hook-error"]);
+    expect(firstEnvTextCue("config printed: (none)")).toBeNull();
+  });
+
+  it("envTextRe 认不出的那一类要出声（静默造一条新正则＝又写了一份副本）", () => {
+    expect(() => envTextRe("denied-by-gate")).toThrow();
   });
 });
