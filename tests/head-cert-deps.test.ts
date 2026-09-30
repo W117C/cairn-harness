@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { budgetFromTestSource, certLevel, CERT_FLAGS, CERT_OPTS, certTreeAbs, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, defaultTimeoutFromConfig, depDirs, gitInflightArgs, headGateTableIntegrity, installedDeps, mainRootFromCommonDir, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, suiteRows, timingCell, timingNearCapCell, unknownCertArgs, VITEST_DEFAULT_TIMEOUT_MS } from "../scripts/lib/head-cert-deps";
+import { budgetFromTestSource, certLevel, CERT_FLAGS, CERT_OPTS, certTreeAbs, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, defaultTimeoutFromConfig, depDirs, gitInflightArgs, headGateTableIntegrity, installedDeps, mainRootFromCommonDir, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, suiteRows, timingCell, timingNearCapCell, unknownCertArgs, VITEST_DEFAULT_TIMEOUT_MS, wallClockCell } from "../scripts/lib/head-cert-deps";
 import type { SuiteRow } from "../scripts/lib/head-cert-deps";
 import { acquireToolLock, decideToolLock, lockAgeCap, parseToolLock, shouldReleaseLock, toolLockPath } from "../scripts/lib/tool-lock";
 
@@ -1278,5 +1278,29 @@ describe("贴帽读数：suiteRows／budgetFromTestSource／timingNearCapCell／
     expect(script).toMatch(/^if \(timingReading !== null\) say\(/mu);
     // 取料面必须是 TREE：拿脚下的工作树算，读数量的就不是被认证那一笔（第 259 页同一格踩过）。
     expect(script).toMatch(/^ {4}try \{ return readFileSync\(join\(TREE, rel\), "utf8"\); \} catch \{ return null; \}/mu);
+  });
+});
+
+describe("本趟墙钟：认证趟自己记的那一格（第 267 页，任务 #12）", () => {
+  it("读数只由两头之差给出，且亚秒不许被抹平", () => {
+    expect(wallClockCell(0n, 1_500_000_000n)).toContain("1.50s");
+    // 「A＝B」型判据必须再配一条「A≠只看 B」：只取收尾那半＝把起跑之前也算进我这趟（规则 228）。
+    expect(wallClockCell(1_000_000_000n, 3_000_000_000n), "差值那一半没被钉住 ⇒ 摘掉减法这一格照绿").toContain("2.00s");
+    expect(wallClockCell(500_000_000n, 500_000_000n), "同一个时刻＝0.00s，不许读成「没测到」").toContain("0.00s");
+    expect(wallClockCell(0n, 510_000_000n), "精度退化成整数秒时这条会印 1s 或 0s ⇒ 短趟看起来比实际快一整秒").toContain("0.51s");
+  });
+  it("口径印在串里：这一段是「起跑→汇总」，不覆盖提前退出那些趟（规则 262）", () => {
+    const cell = wallClockCell(0n, 1_000_000_000n);
+    expect(cell).toContain("起跑→汇总那一行");
+    expect(cell, "没跑到那一行＝这一格没有读数，不是 0 秒；不写破就会被下游读成后者").toContain("不含提前退出");
+  });
+  it("接线：起跑真取 hrtime、汇总真印、退出码真不读它（只出声不判，规则 256/309）", () => {
+    const script = readFileSync(join(repoRoot, "scripts/head-cert.ts"), "utf8");
+    expect(script.length).toBeGreaterThan(0);
+    expect(script).toMatch(/^const CERT_STARTED_AT_NS = process\.hrtime\.bigint\(\);$/mu);
+    expect(script).toMatch(/^say\(`  \$\{wallClockCell\(CERT_STARTED_AT_NS, process\.hrtime\.bigint\(\)\)\}`\);$/mu);
+    const codeLine = /^const code = .*$/mu.exec(script)?.[0] ?? "";
+    expect(codeLine, "取不到退出码那一行＝它的形状变了，这一格要重新看过").not.toHaveLength(0);
+    expect(codeLine).not.toMatch(/wallClock/u);
   });
 });

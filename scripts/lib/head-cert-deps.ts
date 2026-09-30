@@ -618,3 +618,15 @@ export function timingCell(c: TimingCell): string {
     : "";
   return `${head}${list}${slack}`;
 }
+
+/** 认证趟**自己**的墙钟（第 267 页，任务 #12）。为什么这一格要长在门里而不是靠我外面包一层
+ *  `/usr/bin/time -p`：第 265/266 两笔凭证都写着「整趟墙钟没实测」——因为我两次都忘了包。
+ *  靠人记住的修法不是修法：**被度量者没把那格记下来，读数就永远缺一只来源**（规则 245/250）。
+ *  取 `hrtime.bigint()` 而不是 `Date.now()`：读数与判决都不许押在时钟粒度或系统时钟上（规则 256）。
+ *  口径要印出来（规则 262）：这一段是「本脚本起跑 → 汇总那一行」——不含进程收尾的落盘尾，
+ *  也**不覆盖提前退出那几条路**（未知旗标／锁被占／切树失败：那些趟根本没跑到这一行，所以这一格没有读数，
+ *  不是读数为 0）。 */
+export function wallClockCell(startedNs: bigint, finishedNs: bigint): string {
+  const ms = Number((finishedNs - startedNs) / BigInt(1_000_000));
+  return `本趟墙钟 ${(ms / 1000).toFixed(2)}s（同一进程 hrtime 实测·口径＝起跑→汇总那一行，不含提前退出的那些趟）`;
+}

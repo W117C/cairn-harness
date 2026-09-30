@@ -10020,6 +10020,53 @@ const MUTATIONS = [
     apply: (s) => s.replace("  const found = sourcedReadings(face);", "  const found = new Set<string>();"),
     expectFail: "点了名且数在面里 ⇒ 可比对计数涨、零红",
   },
+
+  /* ── 第 267 页（任务 #12）：认证趟**自己**报墙钟。这一格的动因不是美学——第 265/266 两笔凭证都写着
+     「整趟墙钟没实测」，因为我两次都在后台命令里忘了包 `/usr/bin/time`：靠人记住的修法不是修法，
+     被度量者没记下来，那一格就永远缺一只来源（规则 245/250）。四支各钉一种坏法：
+     只取收尾那半／精度抹成整秒／算出来不印／起跑那步被钉成常数。第五支接第 266 页那一族：
+     新严格式没登记进抽取表 ⇒ 门报的这格进不了对账面，凭证里那句还是手抄。 ── */
+  {
+    id: "wallclock-drops-the-start-operand",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "只取收尾那半 ⇒ 把进程之前的时间也算进我这趟，读数与这趟干了多少活无关（恒真那一族的另一张脸）",
+    apply: (s) => s.replace("const ms = Number((finishedNs - startedNs) / BigInt(1_000_000));", "const ms = Number(finishedNs / BigInt(1_000_000));"),
+    expectFail: "读数只由两头之差给出，且亚秒不许被抹平",
+  },
+  {
+    id: "wallclock-precision-rounded-to-whole-seconds",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "精度退化成整秒 ⇒ 短趟被印成 0s 或 2s：这一格第一次上账就撒谎，而 0 与「快得可以忽略」同形（规则 242）",
+    apply: (s) => s.replace(".toFixed(2)", ".toFixed(0)"),
+    expectFail: "读数只由两头之差给出，且亚秒不许被抹平",
+  },
+  {
+    id: "wallclock-cell-computed-but-never-spoken",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "汇总那一行不再印它（换成一句「未实测」）⇒ 函数、判卷、接线全在，读数却从门脸上消失；" +
+      "这一族我记过两次「只算不印／只印不接」，这次是第三种：印了一句假话",
+    apply: (s) => s.replace("say(`  ${wallClockCell(CERT_STARTED_AT_NS, process.hrtime.bigint())}`);", 'say("  本趟墙钟（未实测）");'),
+    expectFail: "接线：起跑真取 hrtime、汇总真印、退出码真不读它（只出声不判，规则 256/309）",
+  },
+  {
+    id: "wallclock-start-marker-pinned-to-zero",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "起跑那步钉成 BigInt(0) ⇒ 报出来的是进程自己的单调时钟总量，不是这趟的时长：数看着像读数，实际什么都不是",
+    apply: (s) => s.replace("const CERT_STARTED_AT_NS = process.hrtime.bigint();", "const CERT_STARTED_AT_NS = BigInt(0);"),
+    expectFail: "接线：起跑真取 hrtime、汇总真印、退出码真不读它（只出声不判，规则 256/309）",
+  },
+  {
+    id: "docscheck-cred-wallclock-form-not-registered",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "新形状没登记进抽取表 ⇒ 门自己报的那一格永远进不了「可比对」，凭证里那句墙钟还是手抄的（第 266 页那支严格式同族）",
+    apply: (s) => s.replace("  /本趟墙钟 ([0-9]+(?:\\.[0-9]+)?)s/u,\n", ""),
+    expectFail: "严格式认「本趟墙钟」那一档：门自己报的那一格要能进对账面，散文里说墙钟不算（第 267 页）",
+  },
   {
     id: "docscheck-cred-unnamed-face-forgets-waivers",
     src: "scripts/docs-check.ts",

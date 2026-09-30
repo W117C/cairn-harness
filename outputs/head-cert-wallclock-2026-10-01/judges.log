@@ -1,0 +1,13 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+ [32m✓[39m tests/head-cert-deps.test.ts [2m([22m[2m105 tests[22m[2m)[22m[33m 2607[2mms[22m[39m
+   [32m✓[39m 清场读数：常驻残留的 scratch 树要自己报数（任务 #33） [2m(15)[22m
+     [33m[2m✓[22m[39m 真读现喂：拿本机真的 worktree 清单喂进去不许崩，且绝不点到自己这棵[33m 1600[2mms[22m[39m
+ [32m✓[39m tests/docs-check.test.ts [2m([22m[2m67 tests[22m[2m)[22m[33m 415[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m2 passed[39m[22m[90m (2)[39m
+[2m      Tests [22m [1m[32m172 passed[39m[22m[90m (172)[39m
+[2m   Start at [22m 04:44:28
+[2m   Duration [22m 3.29s[2m (tests 96%, transform 3%, import 1%)[22m
+

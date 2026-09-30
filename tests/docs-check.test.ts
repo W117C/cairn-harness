@@ -549,6 +549,14 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
     expect(oneSpace[0]?.numbers).toEqual(["253"]);
   });
 
+  it("严格式认「本趟墙钟」那一档：门自己报的那一格要能进对账面，散文里说墙钟不算（第 267 页）", () => {
+    const got = credentialPages("### 2026-10-01 · 第 903 页 凭证\n\n本趟墙钟 182.57s（同一进程 hrtime 实测）\n");
+    expect(got[0]?.numbers).toEqual(["182.57"]);
+    // 负控：同一支数换个说法就不算——把抽取端放宽成"看到秒就当读数"会把叙述顶成证据（规则 265）
+    const prose = credentialPages("### 2026-10-01 · 第 903 页 凭证\n\n上次墙钟 182.57s 是别人那趟的\n");
+    expect(prose[0]?.numbers).toEqual([]);
+  });
+
   it("真仓：未点名页数跟着现读走——涨了要红，凭空把帽调低也要红（只有真把页点名了才允许降）", () => {
     const cred = runDocsCheck().cred;
     expect(cred.unnamedPages.length, `现读 ${String(cred.unnamedPages.length)} 页 ≠ 帽 ${String(CRED_UNNAMED_PAGE_CAP)} ⇒ 帽要跟着现读改，别只改数`).toBe(CRED_UNNAMED_PAGE_CAP);

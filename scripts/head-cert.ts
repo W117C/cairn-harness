@@ -22,7 +22,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-import { certGateCell, certGatePlan, certGateVerdict, certLevel, CERT_FLAGS, CERT_OPTS, certTreeAbs, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, defaultTimeoutFromConfig, depDirs, gitInflightArgs, headGateTableIntegrity, mainRootFromCommonDir, missingDeclaredDeps, parseCertGateRows, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, suiteRows, timingCell, timingNearCapCell, unknownCertArgs } from "./lib/head-cert-deps";
+import { certGateCell, certGatePlan, certGateVerdict, certLevel, CERT_FLAGS, CERT_OPTS, certTreeAbs, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, defaultTimeoutFromConfig, depDirs, gitInflightArgs, headGateTableIntegrity, mainRootFromCommonDir, missingDeclaredDeps, parseCertGateRows, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, suiteRows, timingCell, timingNearCapCell, unknownCertArgs, wallClockCell } from "./lib/head-cert-deps";
 import { acquireToolLock } from "./lib/tool-lock";
 import { checkHeadImportFace, collectHeadEdges, findDanglingImports } from "./head-import-face";
 
@@ -75,6 +75,8 @@ function run(cwd: string, cmd: string, args: string[], logPath?: string): { stat
  *  规则 214：门禁可以截展示，不可以截证据。 */
 const spoken: string[] = [];
 const say = (line: string): void => { console.log(line); spoken.push(line); };
+
+const CERT_STARTED_AT_NS = process.hrtime.bigint();
 
 const sha = run(MAIN, "git", ["rev-parse", AT]);
 if (sha.status !== 0 || sha.out.trim() === "") {
@@ -308,6 +310,9 @@ if (drift !== null) say(`❌ ${drift}`);
 say(`  TREE=${TARGET.slice(0, 7)} DIRTY_JUDGED=${String(dirtyCount)} 依赖完整=${certifiable ? "是" : "否（缺 " + missing.join("、") + "）"} 收尾复核=${drift === null ? "同一笔" : "作废"} 认证树锁=${lockCell}`);
 say(`  ${summary}`);
 say(`  ${concurrencyReading(psBefore, psAfter, testStatus !== null)}`);
+// 墙钟由这一步自己报（第 267 页）：从前只有我在命令外面包 `/usr/bin/time -p` 才有这一格，忘了包就整格缺失。
+// 只出声不进下面那个退出码——秒数会被负载挪动，接进判决等于造一把会自己变红变绿的尺（规则 256/309）。
+say(`  ${wallClockCell(CERT_STARTED_AT_NS, process.hrtime.bigint())}`);
 if (timingReading !== null) say(`  ${timingReading}`);
 const hint = collisionHint(testStatus, psBefore, psAfter);
 if (hint !== null) say(`⚠️ ${hint}`);
