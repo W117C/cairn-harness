@@ -73,13 +73,18 @@ it("distillation consumes session history and its instruction with only remember
   expect(requests).toHaveLength(2);
   expect(requests[1].messages).toContainEqual({ role: "user", content: "USER_TASK" });
   expect(requests[1].messages).toContainEqual({ role: "assistant", content: "TASK_COMPLETED" });
-  /* 沉淀轮的请求形状（2026-09-30 P2 改口径后）：它是**主会话前缀 + 沉淀指令**。
-     改前这格断的是 `messages.at(-1) === DISTILL_INSTRUCTION` —— 那时 provider 没有 system、
-     没有 requestFace，请求里只有这一条指令；改成同前缀之后，最后一条是投影历史的尾部，
-     指令**不在其中**。
-     这条断言顺带把一个更早的问题钉住了（见下面那条 it 的说明）：走**真** session provider 时，
-     指令根本到不了模型——provider 以事件日志为唯一事实源，而指令只在内存 messages 里。 */
-  expect(requests[1].messages.at(-1)).toEqual({ role: "assistant", content: "TASK_COMPLETED" });
+  /* 沉淀轮的请求形状（2026-09-30 P2 定稿）：**主会话前缀 + 末尾一条沉淀指令**。
+     历史沿革——这格被改过两次，两次都是因为现实变了而不是为了让测试变绿：
+     ① 最初：`messages.at(-1) === DISTILL_INSTRUCTION`。那时 provider 既没 system 也没 requestFace，
+        请求里就只有这一条指令——**而那条指令其实到不了模型**（脚本化通道才读 messages）。
+     ② P2 修缓存：provider 与主会话同前缀 ⇒ 末条变成投影历史尾部，指令不在其中；
+        这一格当时如实断成 `{role:"assistant"}`，并在注释里记下「指令到不了模型」这个缺口。
+     ③ P2 修缺口（本格现状）：指令经 `ephemeralUserTurn` 送到**末尾** ⇒ 末条又是指令，
+        但**前缀同时与主会话同形**（下面两条断的就是这个）。三者互不矛盾：
+        追加在尾部不影响前缀缓存，这也是沉淀轮能拿到 98.8% 命中的原因。 */
+  const last = requests[1].messages.at(-1);
+  expect(last?.role).toBe("user");
+  expect(String(last?.content)).toContain(DISTILL_INSTRUCTION.slice(0, 20));
   // 前缀同形：system 与工具面都与主会话一致（缓存能不能命中就看这两格）
   expect(requests[1].messages[0]).toEqual(requests[0].messages[0]);
   expect(requests[1].tools.map((tool) => tool.function.name)).toEqual(requests[0].tools.map((tool) => tool.function.name));
@@ -87,22 +92,17 @@ it("distillation consumes session history and its instruction with only remember
   expect(result.some((event) => event.type === "user_message" && event.content === DISTILL_INSTRUCTION)).toBe(false);
 });
 
-/* ⚠️ 已知缺口（2026-09-30 实测发现，**尚未修**）：沉淀指令到不了真模型。
-   走**真** session provider 时，provider 以事件日志为唯一事实源（`glm-session.ts` 的
-   `stream(_messages, _tools)` 明确忽略入参），而 `runSessionEndDistill` 把指令放在**内存的
-   messages 数组**里（`distill.ts` 的 `[...projectContext(events), { role: "user", content: instruction }]`）
-   ⇒ 实测那一轮的请求是 `[system, user:"USER_TASK", assistant:"TASK_COMPLETED"]`，
-   **指令一个字都不在里面**。
-   影响：模型收到的是「用户又发了一遍原任务」，不知道这是在沉淀（不知道四类型纪律、不知道
-   只许调 remember），于是它答「无」——那恰好是常见终态，所以这个洞一直没被人看见。
-   现有的 `tests/distill.test.ts` 全绿是因为它喂的是**脚本化 provider**（直接 yield 预设输出），
-   走的不是真 provider 的取历史路径。
-   为什么先记在这里而不是当场改（判据见 goal 的纪律：先量再改）：
-   修它要给 session provider 开一条「本轮额外追加一条 user 消息」的通道，
-   涉及 context 投影与压缩边界（指令落进日志就会被下一轮重放）。
-   本测试**断言的是当前（错）行为**，它绿不代表对——修好之后这一条必须翻成
-   `expect(instructionDelivered).toBe(true)`，那时它会红，逼人把注释一起改掉。 */
-it("⚠️ 缺口记录：沉淀指令当前到不了真模型（修好后本断言要翻面）", async () => {
+/* 沉淀指令**必须**到达真模型（2026-09-30 修复）。
+   缺口原状：真 session provider 以事件日志为唯一事实源（`stream(_messages,_tools)` 明确忽略入参），
+   而 `runSessionEndDistill` 把指令放在**内存的 messages 数组**里 ⇒ 实测那一轮请求是
+   `[system, user:"USER_TASK", assistant:"TASK_COMPLETED"]`，**指令一个字都不在里面**。
+   后果：模型把沉淀轮读成「用户又发了一遍原任务」，不知道四类型纪律、不知道只许调 remember；
+   它照样答「无」，而那恰是常见合法终态，所以这个洞长期没被发现
+   （旧的 tests/distill.test.ts 全绿是因为它喂脚本化 provider，走不到这条路径）。
+   修法：给 session provider 开一条 `ephemeralUserTurn` 通道，指令进**请求末尾**——
+   既不落日志（落日志会被下一轮 context 投影当用户发言重放），又不打掉前缀缓存（追加在尾部）。
+   这条同时钉住两个性质：**送达** 与 **不落日志**（后者由上面那条 user_message 断言守）。 */
+it("沉淀指令真的进到请求里（走真 session provider 这条路）", async () => {
   dir = await mkdtemp(join(tmpdir(), "session-distill-instruction-"));
   initSettingsStore(join(dir, "settings.json"));
   vi.stubEnv("M0A_PROVIDER", "glm");
@@ -115,12 +115,13 @@ it("⚠️ 缺口记录：沉淀指令当前到不了真模型（修好后本断
       headers: { "content-type": "text/event-stream" },
     });
   }));
-  await runAgent({ workspace: dir, message: "USER_TASK", mode: "auto", logPath: join(dir, "session.jsonl") });
+  const result = await runAgent({ workspace: dir, message: "USER_TASK", mode: "auto", logPath: join(dir, "session.jsonl") });
   expect(requests).toHaveLength(2);
-  const instructionDelivered = requests[1]!.messages.some(
-    (m) => typeof m.content === "string" && m.content.includes(DISTILL_INSTRUCTION.slice(0, 20)),
-  );
-  expect(instructionDelivered).toBe(false); // ← 当前行为；修好后改成 true
+  const last = requests[1]!.messages.at(-1)!;
+  expect(last.role).toBe("user");
+  expect(String(last.content)).toContain(DISTILL_INSTRUCTION.slice(0, 20));
+  // 送达但不落日志：会话事件流里不许出现这条指令（否则下一轮会被当用户发言重放）
+  expect(result.some((e) => e.type === "user_message" && e.content === DISTILL_INSTRUCTION)).toBe(false);
 });
 
 /* P2（2026-09-30）：沉淀轮的 provider 必须与主会话同前缀，否则前缀缓存一次也命中不了。

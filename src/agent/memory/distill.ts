@@ -41,8 +41,24 @@ export interface DistillOptions {
   enabled: boolean;
   logPath: string;
   workspace: string;
-  /** 沉淀轮 provider（与会话同源；脚本耗尽后产出为空 = 判无）。 */
+  /** 沉淀轮 provider（与会话同源；脚本耗尽后产出为空 = 判无）。
+   *  脚本化 provider 走这条；真 session provider 走下面的 `providerFor`（二选一，后者优先）。 */
   provider: Provider;
+  /** 真 provider 的**惰性构造口**：拿到已算好的指令（末尾临时 user 消息）再建 provider。
+   *
+   *  为什么需要它（2026-09-30 实测的缺口）：真 session provider 以事件日志为唯一事实源，
+   *  构造时就把 system / 工具面 / 历史全定了，`stream()` 收到的 messages 参数被整份忽略。
+   *  于是旧写法 `[...projectContext(events), {role:"user", content: instruction}]` 里的指令
+   *  **一个字都到不了模型**——实测那一轮请求是 `[system, user:"<原任务>", assistant:"…"]`。
+   *  后果：模型把沉淀轮读成「用户又发了一遍原任务」，不知道四类型纪律、不知道只许调 remember；
+   *  它照样答「无」，而那恰好是常见合法终态，所以这个洞长期没被发现。
+   *
+   *  指令的两个约束决定了它既不能只放内存、也不能进日志：
+   *  · 只放内存 ⇒ 真 provider 发不出去（上面这条）；
+   *  · 写进日志 ⇒ 下一轮 context 投影会把它当成用户的真实发言重放。
+   *  所以单开一条「只在本次请求里存在」的通道（`ephemeralUserTurn`），并且放在**末尾**：
+   *  前缀缓存按前缀匹配，追加在尾部不动前面任何一段——沉淀轮能拿到 98.8% 命中就是靠这个。 */
+  providerFor?: (instruction: string) => Provider;
   signal?: AbortSignal;
   /** 未加门的 remember 工具（合并审批本身就是本轮的权限门）。 */
   rememberTool: Tool;
@@ -127,16 +143,14 @@ export async function runSessionEndDistill(opts: DistillOptions): Promise<Distil
   // 模型不会自动盯着失败看；无失败时 digest 为空串，指令逐字不变（零行为回归）。
   const digest = failureDigestFromEvents(events);
   const instruction = digest.length > 0 ? digest + "\n\n" + DISTILL_INSTRUCTION : DISTILL_INSTRUCTION;
-  /* ⚠️ 已知缺口（2026-09-30 实测，**尚未修**）：这个 `messages` 数组只对**脚本化 provider** 有效。
-   *  走真的 session provider（`createGlmSessionProvider`）时它被整份忽略——那个 provider 的
-   *  `stream(_messages, _tools)` 明确以事件日志为唯一事实源（见 glm-session.ts 的注释）。
-   *  实测那一轮的请求是 `[system, user:"<原任务>", assistant:"…"]`，**instruction 一个字都不在**。
-   *  后果：模型把沉淀轮读成「用户又发了一遍原任务」，不知道四类型纪律、不知道只许调 remember。
-   *  之所以长期没被发现：它照样会答「无」，而那恰好是常见合法终态（`no_content`）。
-   *  判卷现状：`tests/distill.test.ts` 喂的是脚本化 provider，走不到这条路径；
-   *  `tests/session-wiring.test.ts` 里有一条**记录当前（错）行为**的断言，修好后会变红逼人翻面。
-   *  修法方向：给 session provider 开一条「本轮额外追加一条 user 消息」的通道，
-   *  且不能把指令落进日志（否则下一轮投影会把它当用户发言重放）。 */
+  /* 真 session provider 以事件日志为唯一事实源（`stream(_messages,_tools)` 明确忽略入参），
+   * 所以「只在内存塞一条指令」是发不出去的——那正是本模块长期存在的缺口（见 DistillOptions
+   * 上 `providerFor` 的注释）。`providerFor` 在场时按**已算好的指令**现建 provider：
+   * 指令经 `ephemeralUserTurn` 进请求**末尾**（前缀缓存靠前面逐字不动才命中，
+   * 且它不进日志——落日志会让下一轮 context 投影把它当用户发言重放）。 */
+  const provider = opts.providerFor !== undefined ? opts.providerFor(instruction) : opts.provider;
+  /* 保留给脚本化 provider 的旧路径：那份 messages 数组对真 provider 无效，但
+   * 对直接 yield 预设输出的脚本 provider 仍是它读的东西（tests/distill.test.ts 走这条）。 */
   const messages: ProviderMessage[] = [...projectContext(events), { role: "user", content: instruction }];
   let asks = 0;
   let writes = 0;
@@ -145,7 +159,7 @@ export async function runSessionEndDistill(opts: DistillOptions): Promise<Distil
   const ctx: ToolContext = { workspace: opts.workspace, signal: opts.signal };
   try {
     opts.signal?.throwIfAborted();
-    for await (const out of opts.provider.stream(messages, [], { signal: opts.signal })) {
+    for await (const out of provider.stream(messages, [], { signal: opts.signal })) {
       opts.signal?.throwIfAborted();
       if (out.type === "assistant_delta" || out.type === "assistant_message" || out.type === "usage") {
         await opts.emit(out as AgentEvent);

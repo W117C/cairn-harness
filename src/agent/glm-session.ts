@@ -575,6 +575,17 @@ export function composeTurnMessages(opts: {
   surfaceNote?: string;
   /** Validated local attachment paths. Never contains file contents. */
   attachmentContext?: string;
+  /** 本请求末尾额外追加的一条 user 消息，**不进事件日志**（2026-09-30 P2）。
+   *
+   *  为什么需要这条通道：真 session provider 以事件日志为唯一事实源（`stream(_messages,_tools)`
+   *  明确忽略入参），所以「只在内存 messages 里塞一条指令」是发不出去的——
+   *  会话末沉淀轮就踩在这个洞上：指令一个字都没到模型，模型把那一轮读成「用户又发了一遍原任务」。
+   *  而把指令写进日志也不行：下一轮 context 投影会把它当成用户的真实发言重放。
+   *  两者都不是，所以单开一条「只在本次请求里存在」的通道。
+   *
+   *  位置在**末尾**：前缀缓存按前缀匹配，追加在尾部不动前面任何一段，
+   *  所以这一条不会把主会话已经攒下的缓存打掉（沉淀轮能拿到 98.8% 命中就是靠这个）。 */
+  ephemeralUserTurn?: string;
 }): GlmMessage[] {
   const msgs: GlmMessage[] = [];
   if (opts.system) msgs.push({ role: "system", content: opts.system });
@@ -590,6 +601,10 @@ export function composeTurnMessages(opts: {
   if (opts.surfaceNote) msgs.push({ role: "system", content: opts.surfaceNote });
   if (opts.attachmentContext) msgs.push({ role: "system", content: opts.attachmentContext });
   for (const m of opts.history) msgs.push(m);
+  // 末尾那条临时 user 消息：位置在最后，前面一段逐字不动（前缀缓存靠这个才不被打掉）。
+  if (opts.ephemeralUserTurn !== undefined && opts.ephemeralUserTurn !== "") {
+    msgs.push({ role: "user", content: opts.ephemeralUserTurn });
+  }
   return msgs;
 }
 
@@ -634,6 +649,10 @@ export function createGlmSessionProvider(
     attachmentContext?: string;
     /** Provider label used in summarizer failures when transport is not GLM. */
     transportLabel?: string;
+    /** 本 provider 每次请求末尾追加的临时 user 消息（不进日志）。见 `composeTurnMessages` 上那条注释：
+     *  会话末沉淀轮用它把指令送进请求——既不落日志（否则下一轮会被当用户发言重放），
+     *  又能真正到达模型。缺省 undefined = 零行为。 */
+    ephemeralUserTurn?: string;
     solpi?: SolpiRuntime;
   } = {},
 ): Provider {
@@ -879,6 +898,7 @@ export function createGlmSessionProvider(
         ...(skillsBlock ? { skills: skillsBlock } : {}),
         ...(surfaceNoteText ? { surfaceNote: surfaceNoteText } : {}),
         ...(opts.attachmentContext ? { attachmentContext: opts.attachmentContext } : {}),
+        ...(opts.ephemeralUserTurn !== undefined ? { ephemeralUserTurn: opts.ephemeralUserTurn } : {}),
       });
       // 压缩重写代价的**实测**（不是估算）：本轮装配与上一轮比，头部仍然逐字相同的那段占多少。
       // 只有本轮真的压过才记账——prune/skill 重挂造成的抖动不归这条策略管（它们各有判据）。

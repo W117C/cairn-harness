@@ -1360,6 +1360,8 @@ function createProvider(
     solpi?: SolpiRuntime;
     promptCache?: boolean;
     onPreCompact?: (trigger: "manual" | "auto") => Promise<void>;
+    /** 本 provider 每次请求末尾追加的临时 user 消息（不进日志）：会话末沉淀轮送指令用。 */
+    ephemeralUserTurn?: string;
   },
 ): Provider {
   const scripted = scriptedMainModelPath();
@@ -1399,6 +1401,7 @@ function createProvider(
       ...(selection.modelExplicit ? { ctxWindow: selection.spec.ctxWindow } : {}),
       transport,
       transportLabel: label,
+      ...(sessionOptions.ephemeralUserTurn !== undefined ? { ephemeralUserTurn: sessionOptions.ephemeralUserTurn } : {}),
       ...(attachmentContext ? { attachmentContext } : {}),
     });
   }
@@ -1825,6 +1828,19 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
         enabled: autoMemory && opts.mode !== "read-only" && opts.unattended !== true,
         logPath: opts.logPath,
         workspace: opts.workspace,
+        // 指令走惰性构造口：distill 内部算好指令（含失败轨迹摘要）再建 provider，
+        // 经 `ephemeralUserTurn` 送到**请求末尾**——既不落日志（否则下一轮当用户发言重放），
+        // 又真能到达模型（真 provider 忽略传入的 messages，只认事件日志）。
+        providerFor: (instruction) => createProvider(promptText, BASE_SYSTEM, modelSelection, {
+          logPath: opts.logPath,
+          workspace: opts.workspace,
+          emit: pipeline,
+          promptCache: providerSettings.promptCache,
+          requestFace: () => sessionToolFace(rt, faceArgs),
+          ephemeralUserTurn: instruction,
+        }),
+        // 脚本化通道（M0A_MOCK_DELTA 之外的暗卷路径）仍要一份 provider：它读 messages 入参，
+        // 与 providerFor 二选一——`providerFor` 优先，这条只是不破坏既有脚本路径。
         provider: createProvider(promptText, BASE_SYSTEM, modelSelection, {
           logPath: opts.logPath,
           workspace: opts.workspace,
