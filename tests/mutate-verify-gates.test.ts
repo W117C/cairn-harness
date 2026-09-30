@@ -1890,7 +1890,10 @@ describe("指针接线：enclosingSymbol／testCaseBody／auditPointerWiring（�
     const script = readRel("scripts/mutate-verify.mjs") ?? "";
     expect(script.length).toBeGreaterThan(0);
     expect(script).toMatch(/^ {2}const wiringRows = auditPointerWiring\(entries\.map\(/mu);
-    expect(script, "喂空表＝这一格永远数出 0（第 165 页那条同款锚点钉的就是这个形状）").not.toMatch(/auditPointerWiring\(\[\]/u);
+    /* 这里**不写** `.not.toMatch(/auditPointerWiring\(\[\]/)` 那种负控：本锚点的 `src` 就是这个文件（自-hosted），
+     *  表里那条锚点自带替换文本 `auditPointerWiring([].map(` ⇒ 负控在**基线**上就被自己的锚点喂红（第 260 页实测：
+     *  「基线就不是全绿」，整条判不了）。上面那条正向行锚已经足够——喂空表之后那行不再匹配，锚点自然红。
+     *  规则：自-hosted 锚点的判卷里，凡"这份文件不许出现 X"式断言都要行锚定，否则 X 由这张表自己提供。 */
     expect(script, "汇总那行没接进来＝这一格根本没跑（emoji 不进正则：它的变体选择符在两处文件里容易写成不同的字节）").toMatch(/^ {2}console\.log\(`[^\n]*指针接线/mu);
     expect(script, "存活那条红不接 hint ⇒ 只有全局计数，没人在花了两拍判卷之后给出方向").toMatch(/"变异存活：测试全绿 = 对该逻辑无分辨力（恒真等价）" \+ wiringHint\(m\)/u);
     expect(script).toMatch(/^function wiringHint\(m\) \{/mu);
