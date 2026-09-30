@@ -45,17 +45,16 @@ describe("可选工具面：能力没开就不挂说明书", () => {
     expect(names(OPTIONAL_TOOL_NAMES.subagentTools)).toContain("remember");
   });
 
-  /* 子代理三件套是固定开销里**最大的一块**（611 tok/轮），也是本组唯一一个
-     由用户设置开关（settings.subagentTools）驱动的：缺省挂，关掉省 611。
+  /* 子代理三件套是固定开销里**最大的一块**（611 tok/轮按说明书估算；实测整轮省 857），
+     也是本组唯一一个由用户设置开关（settings.subagentTools）驱动的：缺省挂、关掉就整族摘。
      与另外三组的区别：那三组是「能力没开就必然失败」，这一组是「这一轮不需要派 worker」。 */
-  it("子代理三件套整组进出：关掉省的是实打实的 611 tok/轮，且三把一起走", () => {
+  it("子代理三件套整组进出：关掉省的是实打实的一大块，且三把一起走", () => {
     const full = names();
     const lean = names(OPTIONAL_TOOL_NAMES.subagentTools);
-    const tokOf = (list: string[]): number => {
-      const specs = sessionToolSpecs({ mode: "auto", omitTools: list === [] ? [] : list }).specs;
-      return Math.round(JSON.stringify(specs).length / 3.6);
-    };
-    const saved = tokOf([]) - tokOf(OPTIONAL_TOOL_NAMES.subagentTools);
+    const tokOf = (specs: readonly { function: { name: string } }[]): number =>
+      Math.round(JSON.stringify(specs).length / 3.6);
+    const saved = tokOf(sessionToolSpecs({ mode: "auto" }).specs)
+      - tokOf(sessionToolSpecs({ mode: "auto", omitTools: OPTIONAL_TOOL_NAMES.subagentTools }).specs);
     expect(saved).toBeGreaterThan(500); // 实测 611；写 500 留出估算系数漂移的余量
     expect(lean.length).toBe(full.length - OPTIONAL_TOOL_NAMES.subagentTools.length);
   });

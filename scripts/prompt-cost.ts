@@ -42,11 +42,14 @@ export interface FaceCost {
  *  `autoMemory=false` ⇒ remember）。缺省按「两个都没开」算 = 最省的那一档。 */
 export function faceCost(mode: PermissionMode, automation = false, omit?: readonly string[]): FaceCost {
   const all = sessionToolSpecs({ mode }).specs;
+  // 「最省」= 四组可选面全摘（goal / memory / lsp / 子代理），与 runAgent 实际会摘的名单对齐。
+  // 漏一组的后果不是少算，是**误导**：尺子会显示「还有 X 可省」，而 X 早就省掉了。
   const omitSet = new Set(
     omit ?? [
       ...OPTIONAL_TOOL_NAMES.goalTools,
       ...OPTIONAL_TOOL_NAMES.memoryTools,
       ...OPTIONAL_TOOL_NAMES.lspTools,
+      ...OPTIONAL_TOOL_NAMES.subagentTools,
     ],
   );
   const specs = all
