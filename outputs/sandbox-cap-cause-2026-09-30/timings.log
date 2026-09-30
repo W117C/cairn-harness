@@ -1,0 +1,17 @@
+== sandbox:check 超帽成因取料（2026-09-30 22:0x，主树 @220c230）==
+
+-- 本会话实测（直跑 node --import tsx scripts/sandbox-check.ts）--
+主树 4 次：459ms / 400ms / 350ms / 350ms
+老认证树 .worktrees/verify-f31e89e（node_modules 硬链接齐全）2 次：500ms / 440ms
+主树 pnpm run 包装层（pnpm run sandbox:check）：910ms
+（本机负载：load avg 4.94/5.80/5.70，audit 会话在跑 suite）
+
+-- 认证侧机器原句（同一道门在认证里的读数）--
+[27ffb30 认证 11:38] sandbox:check exit=0 1371ms（预算 1700ms）
+[b4919e3 认证 ~21:0x] sandbox:check exit=0 2771ms（预算 1700ms）
+[3c9becf 认证 ~21:4x] sandbox:check exit=0 1947ms（预算 1700ms）
+
+-- 标定与门史 --
+帽 1700ms 标定：a8d7eb7 2026-09-30 09:54 +0800（第 226 页买门，注释'实测 814ms'）
+门本体最后改动：095f753 2026-09-23 16:52:18 +0800（095f753，9 月 23 日 ⇒ 认证读数漂移期门零改动）
+执行器证据：scripts/gates.ts 缺省 pnpm run（:78-82 注释），head-cert.ts 跑门不传 --direct（:248）
