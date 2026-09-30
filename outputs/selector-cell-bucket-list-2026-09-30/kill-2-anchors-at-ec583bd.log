@@ -1,0 +1,10 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-ec583bd.lock）
+变异验证：2 条
+✅ selector-bucket-list-not-appended — 多命中那一段不挂自己的名单 ⇒ 名单只剩零命中那半，读的人永远看不到「哪两条重名」。这一格从前是有名单的（两个桶并排印在行末），所以本条钉的是退化：把两种坏读数当成一种 ｜本机实测 1.4s／2 拍
+✅ selector-bucket-lists-swapped — 零命中那一段挂上多命中的名单 ⇒ 名单还在、责任人换了：读的人会把「-t 一条也选不中」那两条去改用例名，而真该改的是那条重名指针（两种坏读数修法相反，所以桶名与名单必须一起挂，规则 261/262） ｜本机实测 0.7s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 2.3s · 跑了 2/2 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 4 次／2 条（每条次数分布 2×2）· 单次中位 第1次 0.7s／第2次 0.3s· 最贵一条 selector-bucket-list-not-appended 1.4s
+跑法单价：selector 4 拍·中位 0.34s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-ec583bd.lock）
