@@ -1,0 +1,41 @@
+目标提交：dfe2d6c（--at=HEAD）
+worktree add exit=0
+已核：TREE=dfe2d6c7e5cc39bbd32ff7efdd49453a6bfb6a63｜判卷四面在飞 0 项
+cp -al node_modules exit=0
+依赖核对：该提交声明 10 项，缺 0 项
+  硬链接子仓库依赖 fixtures/todo-app/node_modules ← 主树 exit=0
+import 面：3058 条边｜悬空 0（其中存量已豁免 0）
+门表：31 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证门面（20 道，名单取自 dfe2d6c）==
+  ✅ no-progress-check exit=0 531ms（预算 1100ms）
+  ✅ prune-check exit=0 595ms（预算 1100ms）
+  ✅ fork-check exit=0 551ms（预算 1100ms）
+  ✅ compaction-check exit=0 657ms（预算 1200ms）
+  ✅ docs-check exit=0 792ms（预算 1300ms）
+  ✅ memory-check exit=0 706ms（预算 1300ms）
+  ✅ head-import-check exit=0 743ms（预算 1400ms）
+  ✅ autonomy-check exit=0 954ms（预算 1500ms）
+  ✅ sandbox:check exit=0 1320ms（预算 1700ms）
+  ✅ security-check exit=0 885ms（预算 1500ms）
+  ✅ provider:check exit=0 543ms（预算 1300ms）
+  ✅ routing-check exit=0 719ms（预算 1400ms）
+  ✅ model-surface-check exit=0 760ms（预算 1300ms）
+  ✅ prefix-churn-check exit=0 865ms（预算 1500ms）
+  ✅ prompt-surface-check exit=0 748ms（预算 1400ms）
+  ✅ replay-determinism-check exit=0 590ms（预算 1100ms）
+  ✅ cost-per-progress-check exit=0 526ms（预算 1000ms）
+  ✅ gym-check exit=0 1371ms（预算 2400ms）
+  ❌ gate-check exit=1 4003ms（预算 5400ms）
+  ✅ mutate-needles-check exit=0 12002ms（预算 20000ms）
+  认证门面=20 道（跑到 20）｜❌ 红 1 道｜⚠️ 超预算 0
+  ❌ gate-check exit=1（4003ms）
+
+== 认证汇总 ==
+  TREE=dfe2d6c DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-dfe2d6c.lock）
+  Test Files 259 passed (259)｜Tests 3394 passed (3394)｜exit=0（退出码直接取，不接管道）
+  并发判卷=起前 0 套／跑完 0 套（两端独占）
+  逐条日志：/tmp/dsh-head-cert-dfe2d6c
+  回收这棵树（规则 120，别留残留）：git worktree remove --force .worktrees/head-cert-dfe2d6c
+  常驻残留树=6（/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-bd5ec44@bd5ec44、/Users/ze/Downloads/deepseek harness/.worktrees/verify-451f4be@451f4be、/Users/ze/Downloads/deepseek harness/.worktrees/verify-48e30a8@48e30a8、/Users/ze/Downloads/deepseek harness/.worktrees/verify-6aa6e9d@c195135、/Users/ze/Downloads/deepseek harness/.worktrees/verify-a5197eb@a5197eb、/Users/ze/Downloads/deepseek harness/.worktrees/verify-dfe2d6c@dfe2d6c）／另有 2 棵不住本仓 scratch 面的残留形树（/private/tmp/dsh-foreign-witness-A、/private/tmp/dsh-foreign-witness-B）＝不是本仓建的，别照上面那条回收命令删它们（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）

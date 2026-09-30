@@ -8570,6 +8570,45 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 3. **门自己的分诊是对的**：第 172 页那套"判红按类别分开数"把这一格报成「基线红」而不是「存活/误伤」——三种坏法修法相反，混在一起就会让人去补一个根本不缺的观测者。
 4. **读数**：删负控后 `tests/mutate-verify-gates.test.ts` **157/157 绿**（`J_EXIT=0`）；这条补笔只动判卷与台账，实现面零改动。
 
+### 2026-10-01 · 第 260 页补 凭证：本笔（`dfe2d6c`）认证 **259 文件／3394 条 exit=0、两端独占、墙钟 `real 182.12`**；五支新锚点 5/5 全杀（4.1s）；门 **19/20 绿·红 1 道属隔壁 `1748ca7` 的 H7 冻结登记** ⇒ 本笔不能写成「全量绿」
+
+取料：`outputs/pointer-wiring-observer-2026-10-01/`（`head-cert-dfe2d6c.log`／`head-cert-summary.txt`／`gate-check-h7-red.log`／`needles-at-dfe2d6c.log`／`needles-with-wiring.log`／`needles-baseline-at-bd5ec44.log`＋`-run1.log`／`kill-5-anchors-at-dfe2d6c.log`／`kill-5-anchors-first-run-baseline-red.log`／`judges-first-run-red.log`／`judges-second-run-red.log`／`judges-green.log`／`judges-after-negative-control-removal.log`／`probe.mts`＋`probe.log`／`claim.log`）。
+本笔凭证带 **5 份新的**取证 log（`head-cert-dfe2d6c.log`／`head-cert-summary.txt`／`gate-check-h7-red.log`／`needles-at-dfe2d6c.log`／`kill-5-anchors-at-dfe2d6c.log`；
+第 6 份 `judges-after-negative-control-removal.log` 已随补⑴那一笔入库），它们是本页每个数的原文来源；实现文件零改动。
+
+1. **认证对象与树**：`dfe2d6c`（＝`451f4be` 实现笔 ＋ 补⑴），树 `.worktrees/head-cert-dfe2d6c`（独立树）；
+   `TREE=dfe2d6c DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔`。退出码取的是日志里的 `HEADCERT_EXIT=1`（不是调度器回显，规则 249）。
+2. **判卷面（这一格是绿的）**：`Test Files 259 passed (259)｜Tests 3394 passed (3394)｜exit=0（退出码直接取，不接管道）`、
+   `并发判卷=起前 0 套／跑完 0 套（两端独占）`、墙钟 `real 182.12`／`user 165.26`／`sys 33.57`（这一趟命令套了 `/usr/bin/time -p`，
+   上一笔那格"墙钟未取"不是同一把尺的常数，别把两笔的秒数互相引用）。
+3. **条数核对式（先预测、后被机器那行证实）**：`3394 ＝ 3371（第 259 页凭证留档，取在 `bd5ec44`）＋ 7（本笔判卷）＋ 16（隔壁 `1748ca7` 两个新判卷文件）`；
+   文件数 `257 → 259` ＝ 隔壁 +2，本笔没新增判卷文件（改的是既有 `tests/mutate-verify-gates.test.ts`）。
+   `git merge-base --is-ancestor bd5ec44 dfe2d6c` 退出 0 ⇒ 留档值在我的新增之前，不重复计增量（规则 ⑭）。
+4. **门那一格：19/20 绿、红 1，且红不在本笔**：`认证门面=20 道（跑到 20）｜❌ 红 1 道｜⚠️ 超预算 0`、`❌ gate-check exit=1 4003ms（预算 5400ms）`。
+   明细（`gate-check-h7-red.log`）：`H7 冻结表与判卷区目录双向一致…{"onDiskNotInTable":["fixtures/impact/accuracy-repo/api.js", …共 10 个文件]}`。
+   归因两条现读：① `git log --diff-filter=A --oneline -1 -- fixtures/impact/accuracy-repo` ＝ `1748ca7 第 261 页（本会话）…`；
+   ② `src/frozen.ts:59` 的 `areas` 里**已有** `join("fixtures","impact")` ⇒ 缺的不是目录被扫到，而是**把 10 个新文件登记进冻结表**那一步。
+   那一笔的提交信息报了「全套 3387 绿／typecheck 0／needles 阻断 0」，**没报 gate-check** ——共享 HEAD 从此带一格常驻红（任务 #9）。
+   ⇒ **认证等级要说清**：本笔的判卷／依赖／并发／收尾四格齐绿，门那一格因隔壁未登记而红 ⇒ 不能写「全量绿」，也不能因此说本笔没被认证：
+   `✅ mutate-needles-check exit=0 12002ms（预算 20000ms）` 这一道门（覆盖本笔全部锚点与判卷）是绿的。
+5. **针脚体检（两份互印）**：干净树 `针脚体检：1123 条 —— 阻断 0，待复认 0，未覆盖 0，逐行式 5，未入库面 0（被测面 + 判卷两面），钉在飞文本 0，killer 指针失效 0（其中 HEAD 侧 0）`＋`改法语法体检：1123 条改法全部产出合法源文件 ✅`；
+   落库前主树那份是 `阻断 5…钉在飞文本 5`（＝本笔五个新针脚钉在实现改动上，落库后归 0，见 `needles-with-wiring.log`）。
+   表条数核对：`1118 → 1123` ＝ 上一笔留档 1118 ＋ 本笔 5 支。
+6. **五支新锚点逐条真杀**（`kill-5-anchors-at-dfe2d6c.log`，独立树、显式 id 名单）：5 条全 `✅`、`全部变异被正确杀死（断言非恒真）`、`KILL_EXIT=0`。
+   成本两行照原文贴：`成本分母：判卷 spawn 10 次／5 条（每条次数分布 2×5）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 wiring-lineend-drops-needle-line 0.9s`、
+   `跑法单价：selector 10 拍·中位 0.34s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母`。
+   ⚠️ 同一条名单在 `451f4be` 上**第一次跑是 4✅／1❌**（`kill-5-anchors-first-run-baseline-red.log`），那格 ❌ 的类别是「基线就不是全绿」而不是"存活"——
+   成因与修法见本页补⑴，这条对照留在这里是因为：**它证明了门那套"判红按类别分开数"确实能区分三种坏法**（存活／基线红／未归因，修法相反）。
+7. **本笔新增那一格自己的读数**（`needles-at-dfe2d6c.log` 里那行）：`指针接线…接上 256／疑空 680／判不了 187`（合计 1123 ⇒ 配平）。
+   这一行**不进退出码**（`阻断 0` 与它无关），它的用途写在文案里：只作为「变异存活」那条红后面的方向。
+   成本侧另有同分母 A/B（`needles-baseline-at-bd5ec44*.log` 三读 11.48/11.02/10.77 vs 加格三读 12.94/11.17/11.10）⇒ 中位差 +0.15s、单臂极差 0.71s ⇒ 结论是"净成本低于本机噪声底"。
+8. **归因声明**：`gate-check` 的那一格红属 `1748ca7`，本笔不动别人的冻结表与夹具（AGENTS.md「Do not modify frozen judge files or fixtures as a workaround」＋归属规则）；
+   主检出工作树另有隔壁两个未入库探针让 `evidence-typecheck-check` 报 16 条／帽 12 条（第 259 页第 4/5 条已记，本笔不重复处置）。
+9. **刻意未做**：不替隔壁补 H7 登记（要么他们补，要么用户裁决谁补——已写进任务 #9）；不给「疑空」建水位帽；
+   `wiringHint` 的可达性只做 1 跳（needle 所在函数名），2 跳（用例调的入口是否间接到达被改符号）没做，因为要先有分辨力实测才值得（任务 #6 的后续）。
+10. **清场结果（未回收，等授权）**：本会话累计够格残留 7 棵——`head-cert-bd5ec44`、`head-cert-dfe2d6c`、`verify-451f4be`、`verify-48e30a8`、`verify-6aa6e9d`、`verify-a5197eb`、`verify-dfe2d6c`
+    （`head-cert` 汇总那行点名的 6 棵 ＋ 它自己那棵）；命令形如 `git worktree remove --force <树>`。**未执行**——脚本只打印命令，删除归人。
+
 ### 2026-10-01 · 第 261 页（本会话）· 影响面持久化索引＋准确率基准三任务交付（259 页开工那个 goal 的任务 1/2/3）：索引 artifact 落盘＋同提交热载（560 文件 73ms）、冻结夹具精度基准 16/16、真仓探针 P=1.000/R=1.000 双过；新判卷 16 条全绿、全套 3387 绿
 
 取料：`outputs/impact-index-2026-10-01/`（`readings.md` 全读数＋`accuracy-probe.mts` 夹具核对探针＋`accuracy-prod.mts` 固化真仓探针＋`accuracy-prod.log`）。

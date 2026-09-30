@@ -1,0 +1,13 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-dfe2d6c.lock）
+变异验证：5 条
+✅ wiring-lineend-drops-needle-line — 退回「只切到 needle 起点」⇒ 针脚写在**声明行**上时取到的是上一条函数（本仓第 260 页的探针在真文件上逮到的：`certTreeAbs` 被读成 `mainRootFromCommonDir`）。这一格坏法的后果是双向的：兄弟用例可能被误判 wired，真接线也可能被误判 suspect——而它看起来像尺在正常工作 ｜本机实测 0.9s／2 拍
+✅ wiring-scan-stops-at-local-const — 把函数体里的局部 `const m = …` 当成边界就 return null ⇒ 大量正常锚点全落进「判不了」，这一格从读数退化成空读数（比误喊更隐蔽：汇总行看着像「尺很谨慎」）。只有列 0 的数据声明才是边界 ｜本机实测 0.7s／2 拍
+✅ wiring-unreadable-counts-as-wired — 源文件或判卷读不到时被算成 wired ⇒ 「两面之一压根没上架」读成「接线正确」（规则 261/262 的正是这一格）。这一族在本仓的红法一直是「取不到与没问题同形」，写新分时最容易被顺手并进绿的那一侧 ｜本机实测 0.7s／2 拍
+✅ wiring-census-merges-all-kinds — 分格计数并成一锅 ⇒ 汇总行三个数照样印得出、加总也等于条数（配平那条判卷看的是**和**），但「疑空」这一格失去含义：再没人能从数字里看出有多少锚点是真的接上过 ｜本机实测 0.7s／2 拍
+✅ wiring-gate-fed-empty-table — 门这一步被喂空表 ⇒ 那一行照印「接上 0／疑空 0／判不了 0」，看起来比不印更干净（第 165 页那条「只印不数＝永远 0」的同款形状）。针脚带真换行是自-hosted 的硬性写法：不带就会先改到这张表自己那一行 ｜本机实测 0.7s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 4.1s · 跑了 5/5 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 10 次／5 条（每条次数分布 2×5）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 wiring-lineend-drops-needle-line 0.9s
+跑法单价：selector 10 拍·中位 0.34s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-dfe2d6c.lock）
