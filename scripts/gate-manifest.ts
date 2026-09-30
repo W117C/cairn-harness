@@ -142,6 +142,12 @@ export const GATES: readonly string[] = [
  *  对认证树判卷 `Duration 121.14s` 是 **+15.4%**——第 223 页那句「≈+13.7%」是买之前的推算，被这个实测替掉（规则 260）；
  *  `tools-check`(8.6s)／`map-check`(4.8s)／`plugins-check`(15.2s)
  *  与那 16 道**没量过的**门都不进——"全吞进来"的性价比要另一笔单独量（第 224 页 §未证）。
+ *  ⚠️ 上面这三行数字已被第 226 页的现读替掉一半：另 14 道逐道量完后按「实测 <1.5s 全进」又买十道 ⇒ 现在 20 道；
+ *  而 `map-check` 在主树现读是 **53.0s**（这里曾记 4.8s，量的是认证树 @`2becb8e`）——差的十倍来自取料面：
+ *  主树刚被本会话写过，影响面要重建；认证树整棵同秒、"按 mtime 取前 N" 那条帽见规则 276。
+ *  ⇒ **门的单价要连着"跑它的那棵树"一起记**，否则下一条预算是拿别的机器的账编的（规则 260）。
+ *  仍不进门面的四道（全超这条线）：`tools-check` 8.6s／`supervisor-check` 8.0s／`plugins-check` 15.4s／`map-check` 53.0s；
+ *  要不要为它们单独花一次认证，属第 223 页 §5⑶ 那一格裁决。
  *  `budgetMs` 是**读数不是判决**：超预算只出声，不把认证判红（规则 256，秒数会被本机负载与隔壁会话挪动）。 */
 export const CERT_GATES: readonly { name: string; budgetMs: number }[] = [
   { name: "no-progress-check", budgetMs: 1100 },     // 实测 514ms
@@ -152,6 +158,21 @@ export const CERT_GATES: readonly { name: string; budgetMs: number }[] = [
   { name: "memory-check", budgetMs: 1300 },          // 实测 638ms
   { name: "head-import-check", budgetMs: 1400 },     // 实测 667ms
   { name: "autonomy-check", budgetMs: 1500 },        // 实测 737ms
+  /* 第 226 页：另外 14 道**没量过的**门逐道量完（主树现读、@`8966310`，取料
+     `outputs/hard-gate-block-witness-2026-09-30/gates-14-unmeasured.log`），按「实测 <1.5s 全进」这条线买十道：
+     10 道实测之和 7.13s ⇒ 门面从 19.69s 到 ≈26.8s（对认证那趟 158.55s 是 +4.5%）。
+     ≥4s 的四道不进（`tools-check` 8.6s／`supervisor-check` 8.0s／`plugins-check` 15.4s／`map-check` 53.0s），
+     理由与 `map-check` 那个 10 倍差在 `#36` 头上那段：门的单价要按**跑它的那棵树**记。 */
+  { name: "sandbox:check", budgetMs: 1700 },         // 实测 814ms（沙箱面：能力 7 的直接证人）
+  { name: "security-check", budgetMs: 1500 },        // 实测 741ms
+  { name: "provider:check", budgetMs: 1300 },        // 实测 629ms
+  { name: "routing-check", budgetMs: 1400 },         // 实测 673ms
+  { name: "model-surface-check", budgetMs: 1300 },   // 实测 650ms
+  { name: "prefix-churn-check", budgetMs: 1500 },    // 实测 727ms
+  { name: "prompt-surface-check", budgetMs: 1400 },  // 实测 678ms（文本↔面那把尺，第 174–176 页）
+  { name: "replay-determinism-check", budgetMs: 1100 }, // 实测 535ms
+  { name: "cost-per-progress-check", budgetMs: 1000 },  // 实测 499ms
+  { name: "gym-check", budgetMs: 2400 },             // 实测 1188ms（这档里最贵的一道，仍 <1.5s 线内）
   { name: "gate-check", budgetMs: 5400 },            // 实测 2659ms
   { name: "mutate-needles-check", budgetMs: 20000 }, // 实测 9756ms（针脚体检：钉在飞文本／判卷未入库都靠它）
 ];

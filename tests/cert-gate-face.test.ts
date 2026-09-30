@@ -18,11 +18,13 @@ const MANIFEST = read("../scripts/gate-manifest.ts");
 const GATE_LOG = read("../outputs/gate-cost-for-cert-face-2026-09-30/thirteen-gates-at-2becb8e.log");
 
 describe("certGatePlan：名单三态——读不到与「这一笔还没有」不许同形", () => {
-  it("从真源文件里抽出全部十道，名字与预算逐个对上", () => {
+  it("从真源文件里抽出整张名单，名字与预算逐个对上（表长不写死：长度归表管，规则 290）", () => {
     const face = certGatePlan(MANIFEST);
     expect(face.state).toBe("ok");
-    expect(face.plan.map((g) => g.name)).toEqual(CERT_GATES.map((g) => g.name));
-    expect(face.plan.length).toBe(10);
+    expect(face.plan.map((g) => `${g.name}:${String(g.budgetMs)}`)).toEqual(
+      CERT_GATES.map((g) => `${g.name}:${String(g.budgetMs)}`),
+    );
+    expect(face.plan.length, "一条都不许少（少＝被度量者改了形状而解析器静默漏读）").toBe(CERT_GATES.length);
     for (const g of face.plan) expect(g.budgetMs).toBeGreaterThan(0);
   });
 
