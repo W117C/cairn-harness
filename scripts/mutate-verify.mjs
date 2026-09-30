@@ -7825,6 +7825,60 @@ const MUTATIONS = [
     expectFail: "四个条件缺一不可：带分支／有在飞／未入库／是本次那棵认证树，各一条反向（把别人正在用的树喊成垃圾是最坏的读法）",
   },
   {
+    id: "stale-tree-no-location-split",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "分格那一位不发作 ⇒ 外域树重新混进「可以去收」的名单（第 231 页的现读成因：本机有一棵住在 `.claude/worktrees/…` 的隔壁会话树，" +
+      "而那句回收命令就印在它旁边——判卷早就按位置钉过，谓词却没看位置）",
+    apply: (s) => s.replace(
+      "if (!insideScratchFace(r.path, opt.scratchRoot)) { foreign.push(r.path); continue; }",
+      "if (false) { foreign.push(r.path); continue; }",
+    ),
+    expectFail: "外域那棵进 foreign 而不是 stale，且照样在句子里点名（报成「不存在」＝尺把它吞了）",
+  },
+  {
+    id: "stale-tree-scratch-face-bare-prefix",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "目录归属用裸前缀比 ⇒ `/repo/.worktrees-backup/…` 被当自家人，「可以去收」印到别人的树旁边" +
+      "（前缀匹配要按位置枚举变体，第十族同一枪）",
+    apply: (s) => s.replace(
+      'return path === root || path.startsWith(root + "/") || path.startsWith(root + "\\\\");',
+      "return path.startsWith(root);",
+    ),
+    expectFail: "同前缀不是同一面：`.worktrees-backup` 算外域（裸 startsWith 会把别人的树标成可回收）",
+  },
+  {
+    id: "stale-tree-scratch-root-not-wired",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "调用方不传那一面 ⇒ 纯函数与措辞都写对了但这一格永远是空的：分格成了死代码，读数照旧把外域树算进残留" +
+      "（规则 230/254：只写纯函数不接＝没有读数）",
+    apply: (s) => s.replace("scratchRoot: SCRATCH_ROOT,", "scratchRoot: undefined,"),
+    expectFail: "没给 scratchRoot 才退回旧行为（全算本仓）——而调用方必须把它接上，否则分格是死代码",
+  },
+  {
+    id: "stale-tree-foreign-not-printed",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "分格算了却不印 ⇒ 那一串路径从读数里消失，下一次没人知道还有这么棵树；" +
+      "「尺读不到」与「没有问题」不许同形（规则 261/262），这一格同理：分错了也不许静默",
+    apply: (s) => s.replace("const foreignTail = foreign.length === 0", "const foreignTail = foreign.length >= 0"),
+    expectFail: "外域那棵进 foreign 而不是 stale，且照样在句子里点名（报成「不存在」＝尺把它吞了）",
+  },
+  {
+    id: "stale-tree-main-root-joined-not-resolved",
+    src: "scripts/lib/head-cert-deps.ts",
+    test: "tests/head-cert-deps.test.ts",
+    desc: "主树根用 `join` 拼而不是 `resolve` ⇒ `--git-common-dir` 给绝对路径时接出 `<树>//Users/…/.git` 这种假路径，" +
+      "于是 linked 树里跑的那一趟把主树的 scratch 面算错、全部判成外域（与 `toolLockPath` 同一课：两份取料会漂）",
+    apply: (s) => s.replace(
+      "return dirname(resolve(cwdRoot, common));",
+      "return join(cwdRoot, common);",
+    ),
+    expectFail: "主树根两种 git 形状都认：主检出给相对 .git，linked 树给绝对路径；取不到回 null 不猜",
+  },
+  {
     id: "inflight-args-flag-position-wrong",
     src: "scripts/lib/head-cert-deps.ts",
     test: "tests/head-cert-deps.test.ts",

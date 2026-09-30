@@ -22,7 +22,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-import { certGateCell, certGatePlan, certGateVerdict, certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, gitInflightArgs, headGateTableIntegrity, missingDeclaredDeps, parseCertGateRows, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "./lib/head-cert-deps";
+import { certGateCell, certGatePlan, certGateVerdict, certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, gitInflightArgs, headGateTableIntegrity, mainRootFromCommonDir, missingDeclaredDeps, parseCertGateRows, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "./lib/head-cert-deps";
 import { acquireToolLock } from "./lib/tool-lock";
 import { checkHeadImportFace, collectHeadEdges, findDanglingImports } from "./head-import-face";
 
@@ -90,12 +90,18 @@ say(`目标提交：${TARGET.slice(0, 7)}（--at=${AT}）`);
  *  所以顺序是：**先占到锁，再动树**。占不到就 exit 2——它不是"我这笔代码红"，是"这次根本没认证任何东西"，
  *  与 `--skip-test` 缺 `--why` 同档（前置不成立）。
  *  锁放在 git 的 common dir 下：worktree 之间共享（这正是需要的），且不会出现在 `git status` 里被误提交。 */
+/** `--git-common-dir` 的原样输出只取一次：锁面与 scratch 面问的是同一件事（主树在哪），两份取料会漂。 */
+const COMMON_DIR_OUT = run(MAIN, "git", ["rev-parse", "--git-common-dir"]).out;
+const MAIN_ROOT = mainRootFromCommonDir(COMMON_DIR_OUT, MAIN);
+/** 本仓 scratch 面＝主树的 `.worktrees/`。取不到主树要**出声**：静默退回"全都算本仓的树"＝把别人的树标成可回收。 */
+const SCRATCH_ROOT = MAIN_ROOT === null ? undefined : join(MAIN_ROOT, ".worktrees");
+if (SCRATCH_ROOT === undefined) say("  ⚠️ 主树根取不到（`git-common-dir` 空）⇒ 残留那一格不分外域：所有残留形树都算本仓 scratch，foreign 这一趟没有读数");
 const LOCK = acquireToolLock({
   tool: "head-cert",
   root: MAIN,
   tree: TREE,
   target: TARGET,
-  commonDirOut: run(MAIN, "git", ["rev-parse", "--git-common-dir"]).out,
+  commonDirOut: COMMON_DIR_OUT,
   harm: "占这棵树会替别人把它切走（它随后的读数其实是这一笔的）",
   say,
 });
@@ -295,6 +301,7 @@ const wtRows = parseWorktreeList(run(MAIN, "git", ["worktree", "list", "--porcel
 const staleCell = staleTreeCell(wtRows, staleScratchTrees(wtRows, {
   selfPath: MAIN,
   certTree: resolve(MAIN, TREE), // `worktree list` 给绝对路径，`--tree=` 可以是相对的 ⇒ 比之前先归一化
+  scratchRoot: SCRATCH_ROOT, // 主树的 `.worktrees/`；取不到时传 undefined，上面那行警告已经出声
   isAncestor: (shaArg) => run(MAIN, "git", ["merge-base", "--is-ancestor", shaArg, TARGET]).status === 0,
   dirtyCountOf: (p) => {
     const r = run(p, "git", gitInflightArgs());

@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, gitInflightArgs, headGateTableIntegrity, installedDeps, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "../scripts/lib/head-cert-deps";
+import { certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, gitInflightArgs, headGateTableIntegrity, installedDeps, mainRootFromCommonDir, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "../scripts/lib/head-cert-deps";
 import { acquireToolLock, decideToolLock, lockAgeCap, parseToolLock, shouldReleaseLock, toolLockPath } from "../scripts/lib/tool-lock";
 
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
@@ -702,6 +702,7 @@ describe("清场读数：常驻残留的 scratch 树要自己报数（任务 #33
   const OPT = {
     selfPath: "/repo",
     certTree: "/repo/.worktrees/head-cert-aaa",
+    scratchRoot: "/repo/.worktrees",
     isAncestor: (sha: string): boolean => sha !== "eee",
     dirtyCountOf: (p: string): number | null => (p.endsWith("dirty") ? 2 : p.endsWith("unreadable") ? null : 0),
   };
@@ -718,7 +719,7 @@ describe("清场读数：常驻残留的 scratch 树要自己报数（任务 #33
 
   it("四个条件缺一不可：带分支／有在飞／未入库／是本次那棵认证树，各一条反向（把别人正在用的树喊成垃圾是最坏的读法）", () => {
     expect(staleScratchTrees(rows, OPT).stale.map((s) => s.path)).toEqual(["/repo/.worktrees/stale"]);
-    expect(staleScratchTrees(null, OPT)).toEqual({ stale: [], unmeasured: [] });
+    expect(staleScratchTrees(null, OPT)).toEqual({ stale: [], unmeasured: [], foreign: [] });
     // 条件本身也要能单独被拆：只留「detached」时会把分支树与未入库那笔一起算进来（⇒ 门会喊人去删别人的活）
     const loose = { ...OPT, isAncestor: () => true, dirtyCountOf: () => 0 as number };
     expect(staleScratchTrees(rows, loose).stale.length, "祖先与在飞两项一放宽，branchy/notancestor/dirty 全被算成残留").toBeGreaterThan(3);
@@ -744,6 +745,47 @@ describe("清场读数：常驻残留的 scratch 树要自己报数（任务 #33
     expect(one, "不点名路径，读的人不知道该去收哪一棵").toContain("/repo/.worktrees/stale");
   });
 
+  // ---- 第 231 页：不住本仓 scratch 面的那些另列一格——既不许领"可以去收"，也不许静默消失 ----
+  const FOREIGN = [
+    "worktree /repo", "HEAD aaa", "",
+    "worktree /repo/.worktrees/stale", "HEAD ddd", "detached", "",
+    "worktree /other/tool/.claude/worktrees/audit", "HEAD ggg", "detached", "",
+    "worktree /repo/.worktrees-backup/lookalike", "HEAD hhh", "detached", "",
+  ].join("\n");
+  const allClean = { ...OPT, isAncestor: (): boolean => true, dirtyCountOf: (): number => 0 };
+
+  it("外域那棵进 foreign 而不是 stale，且照样在句子里点名（报成「不存在」＝尺把它吞了）", () => {
+    const rows2 = parseWorktreeList(FOREIGN);
+    const res = staleScratchTrees(rows2, allClean);
+    expect(res.stale.map((s) => s.path), "只有主树 .worktrees 下那棵配「可以去收」").toEqual(["/repo/.worktrees/stale"]);
+    expect(res.foreign.sort()).toEqual(["/other/tool/.claude/worktrees/audit", "/repo/.worktrees-backup/lookalike"]);
+    const cell = staleTreeCell(rows2, res);
+    expect(cell).toContain("常驻残留树=1");
+    expect(cell, "外域那棵不印出来＝下一次没人知道它还在那儿").toContain("/other/tool/.claude/worktrees/audit");
+    expect(cell, "不写清「别照那条命令删」，这一串路径就是给回收命令看的").toContain("别照上面那条回收命令删");
+  });
+
+  it("同前缀不是同一面：`.worktrees-backup` 算外域（裸 startsWith 会把别人的树标成可回收）", () => {
+    const res = staleScratchTrees(parseWorktreeList(FOREIGN), allClean);
+    expect(res.stale.map((s) => s.path), "目录名前缀撞车不等于住在那一面里").not.toContain("/repo/.worktrees-backup/lookalike");
+  });
+
+  it("没给 scratchRoot 才退回旧行为（全算本仓）——而调用方必须把它接上，否则分格是死代码", () => {
+    const noRoot = { ...allClean, scratchRoot: undefined };
+    const res = staleScratchTrees(parseWorktreeList(FOREIGN), noRoot);
+    expect(res.foreign, "没给那一面＝不分格（调用方要为此出声，见 head-cert 里那行警告）").toEqual([]);
+    expect(res.stale.length).toBe(3);
+    const src = readFileSync(join(repoRoot, "scripts/head-cert.ts"), "utf8");
+    expect(src, "调用方没传主树的 .worktrees ⇒ 这一格永远是空的").toContain("scratchRoot: SCRATCH_ROOT,");
+    expect(src, "主树根必须问 git：拿脚下这棵树当根，在链接树里跑就全盘错位").toContain("mainRootFromCommonDir(COMMON_DIR_OUT, MAIN)");
+  });
+
+  it("主树根两种 git 形状都认：主检出给相对 .git，linked 树给绝对路径；取不到回 null 不猜", () => {
+    expect(mainRootFromCommonDir(".git\n", "/repo")).toBe("/repo");
+    expect(mainRootFromCommonDir("/repo/.git", "/repo/.worktrees/x")).toBe("/repo");
+    expect(mainRootFromCommonDir("   ", "/repo"), "空输入＝没尺，不许猜成脚下这棵").toBeNull();
+  });
+
   it("真读现喂：拿本机真的 worktree 清单喂进去不许崩，且绝不点到自己这棵", () => {
     const real = parseWorktreeList(execFileSync("git", ["worktree", "list", "--porcelain"], { cwd: repoRoot, encoding: "utf8" }).trim() === "" ? null : execFileSync("git", ["worktree", "list", "--porcelain"], { cwd: repoRoot, encoding: "utf8" }));
     expect(real, "这台机器上真有 worktree，读到空＝取料坏了").not.toBeNull();
@@ -756,25 +798,33 @@ describe("清场读数：常驻残留的 scratch 树要自己报数（任务 #33
     expect(existsSync(join(mainRoot, ".git")), "算出来的主树不存在：" + mainRoot).toBe(true);
     expect(statSync(join(mainRoot, ".git")).isDirectory(), "主树的 .git 必须是目录（链接树的那个是文件）⇒ 根算错了：" + mainRoot).toBe(true);
     const candidates = (real ?? []).filter((r) => r.detached && r.path !== repoRoot).length;
-    const res = staleScratchTrees(real, {
+    const OPTS = {
       selfPath: repoRoot,
       certTree: resolve(repoRoot, ".worktrees/none-such"),
-      isAncestor: (sha) => {
+      isAncestor: (sha: string) => {
         try { execFileSync("git", ["merge-base", "--is-ancestor", sha, "HEAD"], { cwd: repoRoot, encoding: "utf8", stdio: "ignore" }); return true; }
         catch { return false; } // 非零退出＝不是祖先；**不许**让它抛（抛出去这格就变成"没量到"）
       },
-      dirtyCountOf: (p) => {
+      dirtyCountOf: (p: string) => {
         // 用**被测那对参数**跑，并读退出码：旧写法在这里自己拼了一份后置形状的命令，
         // 又被 `catch { return null; }` 把 129 咽掉 ⇒ 名单恒空、断言在空表上循环 ⇒ 这条判卷恒真（规则 224 的又一记）。
         const r = spawnSync("git", gitInflightArgs(), { cwd: p, encoding: "utf8" });
         if (r.status !== 0) return null;
         return (r.stdout ?? "").split("\n").filter((l) => l.trim() !== "").length;
       },
-    });
+    };
+    const res = staleScratchTrees(real, { ...OPTS, scratchRoot: join(mainRoot, ".worktrees") });
     for (const s of res.stale) {
       expect(s.path).not.toBe(repoRoot);
-      expect(s.path.startsWith(join(mainRoot, ".worktrees")), "报出来的必须是主树 .worktrees 下的 scratch 树：" + s.path).toBe(true);
+      // 目录**边界**，不是裸前缀：`.worktrees-backup/…` 撞得上句断言就永远过不了（第十族那一枪）
+      expect(s.path.startsWith(join(mainRoot, ".worktrees") + "/"), "报「可以去收」的必须是主树 .worktrees 下的 scratch 树：" + s.path).toBe(true);
     }
+    // 分格必须是**划分**而不是筛子：拿同一对参数不按位置分一次，两格并起来要等于那份名单
+    // （只断言"外域的不进 stale"是不够的——把外域那条整个丢掉照样过，而那就是一把会吞条目的尺）
+    const byLocationBlind = staleScratchTrees(real, OPTS);
+    expect([...res.stale.map((s) => s.path), ...res.foreign].sort(), "stale ∪ foreign 必须等于不按位置分的那份名单").toEqual(
+      byLocationBlind.stale.map((s) => s.path).sort(),
+    );
     if (candidates > 0) {
       expect(res.unmeasured.length, `本机 ${String(candidates)} 棵候选树**全部**取不到在飞数＝git 那条命令本身跑不通（参数形状坏了），这格就又变成恒 0`).toBeLessThan(candidates);
     }

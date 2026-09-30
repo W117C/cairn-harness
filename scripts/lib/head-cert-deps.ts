@@ -7,6 +7,8 @@
  * 这是**环境假红**，很容易被读成"HEAD 本来就红"（与规则 87/103 同族：软链树对 `run_shell` 面造假红、
  * 新装树没有 `electron/dist` 的 ENOENT 不是代码红）。所以认证的第一步是核依赖集，不是跑门。 */
 
+import { dirname, resolve } from "node:path";
+
 /** HEAD（或任意 rev）里声明的依赖名：`dependencies` + `devDependencies` + `optionalDependencies`。
  *  `peerDependencies` 不算：npm/pnpm 对它可以真的不装，报出来是噪声。 */
 export function declaredDeps(pkgJsonText: string): string[] {
@@ -243,20 +245,45 @@ export function gitInflightArgs(): string[] {
   return ["--no-optional-locks", "status", "--porcelain"];
 }
 
+/** 这棵树住不住本仓的 scratch 面（主树的 `.worktrees/`）？**按目录边界**比，不许用裸前缀：
+ *  `"/repo/.worktrees-backup/x"` 带着同一个前缀，却不是那一面里的树——裸 `startsWith(root)` 会把它当自家人，
+ *  于是"可以去收"这句话就印在别人的树旁边（前缀匹配要按位置枚举变体，第十族同一枪）。 */
+function insideScratchFace(path: string, root: string | undefined): boolean {
+  if (root === undefined || root === "") return true; // 没给那一面＝按旧行为全部算 scratch（调用方要为这一格出声）
+  return path === root || path.startsWith(root + "/") || path.startsWith(root + "\\");
+}
+
+/** 主树根＝scratch 面的父目录，**问 git** 而不是拿"我脚下这棵树"当根
+ *  （`toolLockPath` 与判卷 `tests/head-cert-deps.test.ts` 那处同一个口径：`--git-common-dir` 在主检出给相对 `.git`、
+ *  在 linked 树给绝对路径 ⇒ 必须走 resolve；取不到回 null，调用方要出声，不许静默退回旧行为）。 */
+export function mainRootFromCommonDir(commonDirOut: string, cwdRoot: string): string | null {
+  const common = commonDirOut.trim();
+  if (common === "") return null;
+  return dirname(resolve(cwdRoot, common));
+}
+
 /** 哪些算"常驻残留的 scratch 树"。四个条件缺一不可：
  *  ① detached——带分支的树可能是别人正在写的工作支（本仓同时有 doc-layer／goal-plan／r1b 等分支树）；
  *  ② 0 项在飞——有在飞就是别人的活，碰都不能碰（AGENTS：保留别的会话的脏改动）；
  *  ③ 那一笔已是当前认证目标的祖先——未入库的 commit 可能正是隔壁会话在验的那笔；
  *  ④ 不是我自己这棵，也不是本次刚用的那棵认证树（那棵由汇总行末尾的回收命令单独点名，报成残留是噪声）。
  *  `dirtyCountOf` 回 null（取不到）＝**既不进残留名单，也不算干净**：它进 `unmeasured` 由 `staleTreeCell` 单独列印。
- *  旧写法直接 `continue` 掉，于是「一把坏掉的尺」永远报「收干净了」——第 165 页撞到的正是这个。 */
+ *  旧写法直接 `continue` 掉，于是「一把坏掉的尺」永远报「收干净了」——第 165 页撞到的正是这个。
+ *
+ *  第五格（第 231 页）：以上四条都满足、但**不住本仓 scratch 面**（`scratchRoot`，即主树的 `.worktrees/`）的那些，
+ *  进 `foreign` 而不是 `stale`。动因是现读的一处不一致：判卷 `tests/head-cert-deps.test.ts` 早就按位置钉过
+ *  「报出来的必须是 `.worktrees` 下的树」，而这里的谓词压根不看位置——本机一出现别的工具建的 worktree
+ *  （实测：隔壁审计会话那棵 `.claude/worktrees/…/audit-zcode`）判卷就红，而那棵树的"回收"命令会被印在**它**旁边。
+ *  两半的用处不同，所以要的是**分格**而不是放宽：`stale` 才配那句"可以去收"，`foreign` 照样**报出来**（不许静默丢条，
+ *  规则 261/262 那一族），只是要标清"不是本仓建的，别照那条命令删"。 */
 export function staleScratchTrees(
   rows: WorktreeRow[] | null,
-  opt: { selfPath: string; certTree: string; isAncestor: (sha: string) => boolean; dirtyCountOf: (path: string) => number | null },
-): { stale: { path: string; head: string }[]; unmeasured: string[] } {
+  opt: { selfPath: string; certTree: string; isAncestor: (sha: string) => boolean; dirtyCountOf: (path: string) => number | null; scratchRoot?: string },
+): { stale: { path: string; head: string }[]; unmeasured: string[]; foreign: string[] } {
   const stale: { path: string; head: string }[] = [];
   const unmeasured: string[] = [];
-  if (rows === null) return { stale, unmeasured };
+  const foreign: string[] = [];
+  if (rows === null) return { stale, unmeasured, foreign };
   for (const r of rows) {
     if (!r.detached) continue;
     if (r.path === opt.selfPath || r.path === opt.certTree) continue;
@@ -264,23 +291,29 @@ export function staleScratchTrees(
     if (dirty === null) { unmeasured.push(r.path); continue; }
     if (dirty !== 0) continue;
     if (!opt.isAncestor(r.head)) continue;
+    if (!insideScratchFace(r.path, opt.scratchRoot)) { foreign.push(r.path); continue; }
     stale.push({ path: r.path, head: r.head });
   }
-  return { stale, unmeasured };
+  return { stale, unmeasured, foreign };
 }
 
 /** 那一格要怎么说话：未取／0 棵／N 棵三种形态分开，且**永不**把"没量到"写成 0；
- *  「在飞数取不到」是第四种形态，单独点名——并进 0 就等于让一把坏掉的尺报「收干净了」。 */
+ *  「在飞数取不到」是第四种形态，单独点名——并进 0 就等于让一把坏掉的尺报「收干净了」。
+ *  第五种（第 231 页）＝「像残留但不住本仓 scratch 面」：照样报出来、照样点名，只是不配那句"可以去收"。 */
 export function staleTreeCell(
   rows: WorktreeRow[] | null,
-  res: { stale: { path: string; head: string }[]; unmeasured: string[] },
+  res: { stale: { path: string; head: string }[]; unmeasured: string[]; foreign?: string[] },
 ): string {
   if (rows === null) return "常驻残留树=未取（git 读不到 worktree 清单 ⇒ 不等于没有残留）";
+  const foreign = res.foreign ?? [];
+  const foreignTail = foreign.length === 0
+    ? ""
+    : `／另有 ${String(foreign.length)} 棵不住本仓 scratch 面的残留形树（${foreign.join("、")}）＝不是本仓建的，别照上面那条回收命令删它们`;
   const tail = res.unmeasured.length === 0
     ? ""
     : `／在飞数取不到 ${String(res.unmeasured.length)} 棵（${res.unmeasured.join("、")}）＝这几棵没量过，不等于干净`;
-  if (res.stale.length === 0) return `常驻残留树=0${tail}`;
-  return `常驻残留树=${String(res.stale.length)}（${res.stale.map((s) => `${s.path}@${s.head.slice(0, 7)}`).join("、")}）${tail}`;
+  if (res.stale.length === 0) return `常驻残留树=0${foreignTail}${tail}`;
+  return `常驻残留树=${String(res.stale.length)}（${res.stale.map((s) => `${s.path}@${s.head.slice(0, 7)}`).join("、")}）${foreignTail}${tail}`;
 }
 
 /* ── 认证面的「门」那一格（第 224 页 #36）。
