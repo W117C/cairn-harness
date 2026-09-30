@@ -1,0 +1,21 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-e02b87f.lock）
+变异验证：9 条
+✅ docscheck-cred-page-registration-not-splitting — 登记表读到了却不分叉（恒走『可行动』那一支）⇒ 9 页登记永远算在未点名帽上，这一格清零之后再也降不回来，而下一位只会去把帽调大 ｜本机实测 0.9s／2 拍
+✅ docscheck-cred-page-stale-named-not-checked — 登记页后来自己点名了目录，这条 stale 不查 ⇒ 登记表只进不出，日后变成第二本没人对的旧账（规则 302 双向钉） ｜本机实测 0.7s／2 拍
+✅ docscheck-cred-page-reason-length-not-enforced — 理由长度不执法 ⇒ 『逐页带理由』退化成『逐页写个词』，登记就能拿来躲红而不是承认失检 ｜本机实测 0.7s／2 拍
+✅ docscheck-cred-registered-not-returned — 算出来了却不返回（给空数组与 0）⇒ 门那一步印不到这一格，两态重新混成一个数 ｜本机实测 0.7s／2 拍
+✅ docscheck-cred-registered-print-pinned-to-zero — 汇总行把『已登记不可回查』那列印成常数 0 ⇒ 判定还在跑、登记表烂掉也没人看见（给人看的那一行也要有证人，规则 206/253） ｜本机实测 0.7s／2 拍
+✅ docscheck-cred-unnamed-face-forgets-waivers — 未点名那一档跳过页却不忘记豁免 ⇒ 迁移前的老页同时落进「未检」与「豁免已不再命中」，两句话互相打脸：一边说「这格没看」，一边说「你登记的东西没用了」（规则 239/261）。第 271 页那一支从行内长成了带两态分叉的块，`unverifiable()` 单独成行 ⇒ 针脚跟着走（规则 229） ｜本机实测 0.7s／2 拍
+✅ docscheck-cred-unnamed-pages-not-collected — 未点名那一档只累加条数、不记页名 ⇒ 「哪几页没点名」永远查不出来，帽也无从比（本笔之前正是这个形状：三页凭证安静地整页失检） ｜本机实测 0.7s／2 拍
+✅ docscheck-cred-unnamed-cap-raised-silently — 把帽从现读调大（9 → 10）而不点名任何一页 ⇒ 读数与帽脱钩，这一格从此可以无限装新失检的凭证页。第 268 页降帽（11 → 9，两页真点名了）时这条针脚同笔跟着走：这一格刻意不允许悄悄降——降帽必须同时动这条锚点（规则 229）。 ｜本机实测 1.1s／2 拍
+✅ docscheck-cred-return-drops-unnamed-pages — 算出来了却不返回（从返回体里丢掉这一格）⇒ 门那一步拿到 undefined，按页那一档当场消失，条数那一档照印不误。第 269 页返回体长出 weak／weakUnjudged、第 271 页又长出 registeredPages／registeredReadings，针脚跟着换行（规则 229）；丢 unnamedPages 这一半的坏法不变 ｜本机实测 0.7s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 7.3s · 跑了 9/9 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 18 次／9 条（每条次数分布 2×9）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 docscheck-cred-unnamed-cap-raised-silently 1.1s
+跑法单价：selector 18 拍·中位 0.33s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-e02b87f.lock）
+real 7.90
+user 9.01
+sys 1.25
+KILL_EXIT=0
