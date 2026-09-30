@@ -1,0 +1,18 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-2b3763f.lock）
+变异验证：10 条
+✅ timing-rows-unparseable-read-as-zero-rows — 判卷 json 坏了／形状不认识 ⇒ 返回空表而不是 null ⇒ 汇总行会印成「0 条里 0 条」，把「这一格压根没量到」报成「没有用例贴帽」（第 262 页；规则 261/262 那一族）。 ｜本机实测 0.8s／2 拍
+✅ timing-rows-unreadable-wording-dropped — 汇总行里「没量到」那一支被摘掉 ⇒ 三态塌成两态，红的时候没人知道是量不了还是没问题（第 262 页）。 ｜本机实测 0.7s／2 拍
+✅ budget-title-escape-lookup-dropped — 「取标题时改回逐字拼引号＋标题＋引号」⇒ 判卷里写的是带转义的字面量（反斜杠转义的双引号、反斜杠本身），跑出来的标题是解了转义的那一份 ⇒ 真机因此误归 11 条（第 262 页；与变异表「松钉指针」同族）。 ｜本机实测 0.6s／2 拍
+✅ budget-nonliteral-merged-into-implicit — 非字面量标题那一档被并进「没写预算」⇒ 114 条的成因说不出名字，下一次改判卷的人就找不到自己那条为什么读不到（第 262 页）。 ｜本机实测 0.6s／2 拍
+✅ near-cap-ignores-per-case-budget — 有效预算改成一律用缺省 ⇒ 自带 15_000 的那几条被按 5000 判，名单会把「本来就慢的用例」和「撞帽的用例」混成一堆（第 262 页动因那一格）。 ｜本机实测 0.6s／2 拍
+✅ near-cap-threshold-loosened — 贴帽阈值 0.8 改成 0.08 ⇒ 名单里塞进一堆离帽还远的用例，「点名」就失去了意义（同一条判卷里那句 ratio 断言就是拦这个的）。 ｜本机实测 0.8s／2 拍
+✅ not-resolved-counted-as-implicit — 「预算没落到」的计数并进「按缺省算」⇒ 取料坏了与正常态同形，那一格再也不会响（第 262 页；规则 239 三态分开印）。 ｜本机实测 0.6s／2 拍
+✅ default-budget-config-zero-accepted — config 里 `testTimeout: 0` 被当成有效缺省 ⇒ 每条用例的分母变 0，这一格整片读成 0 条（第六型「一片 0 先怀疑量法」）。 ｜本机实测 0.6s／2 拍
+✅ cert-timing-reads-main-checkout-not-tree — 贴帽读数的取料从被认证的那棵树改回脚下这份工作树 ⇒ 量的就不是那一笔（第 259 页同一格踩过，规则 244/254）。 ｜本机实测 0.6s／2 拍
+✅ cert-timing-cell-not-spoken — 算出来了但不印 ⇒ 这一格永远听不到，下次容量红还是靠人再花三分钟复跑归因（第 262 页的动因本体）。 ｜本机实测 0.6s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 7.3s · 跑了 10/10 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 20 次／10 条（每条次数分布 2×10）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 timing-rows-unparseable-read-as-zero-rows 0.8s
+跑法单价：selector 20 拍·中位 0.32s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-2b3763f.lock）

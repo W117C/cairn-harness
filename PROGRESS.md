@@ -8642,3 +8642,35 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 7. **撞窗与门耗时声明**：起尺前 `ps` 见隔壁一条 vitest（`tests/cli-surface.test.ts`＋`tests/cli-autoverify-default.test.ts`，已跑 2 秒），无 `.mutbak` 残留；本笔的静态自检（`--check-needles` 一次 ≈14s 级）在主树做，**锚点杀死与认证都挪到独立树**。新增判卷 10 条的实测墙钟包含在那 2.19s 里（单文件跑）；head-cert 那一格靠同一次判卷顺手产出，不额外付 spawn。
 
 8. **刻意未做**：⑴ `it.each` 那 114 条的**逐条**预算仍读不到（按缺省算，且 51 条的成因只到文件级）——要精确就得做模板反解＋参数求值，代价大于这一格的用处，改成把不确定性印成 `?`；⑵ 没给「贴帽」设帽值或告警阈值（80% 这个比例是判卷里现读的常数，改它要连带改那条 ratio 断言）；⑶ 没把 `suite.json` 落进 `outputs/`——认证树末尾会被回收，那一格的证据本体在 `summary.txt` 与认证日志里，凭证照贴原文。
+
+### 2026-10-01 · 第 262 页补 凭证：本笔（`2b3763f`＝实现簇 `43ace9e`＋判卷补钉）认证 259 文件／3404 条 exit=0、两端独占；十支新锚点**第一趟 9 杀 1 存活**、补钉后 10/10 全杀（7.3s）；「贴帽读数」第一次在认证趟里自己出声＝**0 条**（安静态）；门 19/20 绿·红 1 道仍属隔壁 `1748ca7` 的 H7 ⇒ 本笔不写成「全量绿」
+
+1. **被认证的对象**：`2b3763f`（两笔：`43ace9e` 实现簇＝9 处预算＋四支纯函数＋head-cert 接线＋10 支锚点；`2b3763f`＝判卷补钉）。用的树＝`scripts/head-cert.ts` 自建的 `.worktrees/head-cert-2b3763f`（detached、`DIRTY_JUDGED=0`、`收尾复核=同一笔`、认证树锁＝本进程持有）；锚点杀死另用两棵自建树 `verify-43ace9e`／`verify-2b3763f`（各自 `git status --porcelain` 空）。认证等级＝**全量**（没带 `--skip-test`）。
+
+2. **针脚体检两份读数互相印证归因**：主树**落库前** `阻断 10／钉在飞文本 10`、exit=1（`needles-before-commit.log`）——那 10 条钉的就是本页尚未入库的实现；干净树 `43ace9e` 上同一条尺报 `阻断 0，待复认 0，未覆盖 0，逐行式 5，未入库面 0，钉在飞文本 0，killer 指针失效 0（其中 HEAD 侧 0）`、exit=0（`needles-at-43ace9e.log`），松钉仍 10 条（没涨）、选择子 `1130/1133`、指针接线 `接上 262／疑空 683／判不了 188`。认证趟里那道 `✅ mutate-needles-check exit=0 11780ms（预算 20000ms）` 是第三份见证。
+
+3. **十支新锚点：第一趟活了一条，而且洞在判卷不在实现**（原文照贴）：`❌ 判红·变异存活（测试仍全绿 ⇒ 该不变量没有观测者）（1 条）：timing-rows-unparseable-read-as-zero-rows`／`REDKINDS=survived:1,misattributed:0,baseline-red:0,no-effect:0,syntax:0,restore-mismatch:0,vacuous:0`。
+   成因（读实过，不是猜）：那条判卷只喂了 `"{不是 json"`（走 `JSON.parse` 的 catch return）与 `'{"nothingHere":1}'`（走 `!Array.isArray` return），**`jsonText === null` 那一支 return 在整个判卷面里从没被调用过** ⇒ 把它改成 `return []` 全表照绿。⇒ 一条函数有几条出口就要有几条输入；少一条不是"覆盖率低一点"，而是那条出口上的锚点**永远活下来**，而我会以为自己钉住了。修法＝补 `expect(suiteRows(null, …)).toBeNull()`（`2b3763f`），**没撤锚点、没改针脚**。复跑 10/10（`kill-10-anchors-at-2b3763f.log`，第一趟那份是 `kill-10-anchors-at-43ace9e-first-run.log`）：
+   `全部变异被正确杀死（断言非恒真）`
+   `[mutate-verify] 本次耗时 7.3s · 跑了 10/10 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）`
+   `成本分母：判卷 spawn 20 次／10 条（每条次数分布 2×10）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 timing-rows-unparseable-read-as-zero-rows 0.8s`
+   `跑法单价：selector 20 拍·中位 0.32s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母`
+
+4. **认证读数（`head-cert-2b3763f.log` 原文照贴，`HEADCERT_EXIT=1`）**：
+   `TREE=2b3763f DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-2b3763f.lock）`
+   `Test Files 259 passed (259)｜Tests 3404 passed (3404)｜exit=0（退出码直接取，不接管道）`（同一次 `test.log` 里 `Duration 133.86s`，`Errors` 行不存在＝没有未处理的 rejection）
+   `并发判卷=起前 0 套／跑完 0 套（两端独占）`
+   **`贴帽读数（缺省＝vitest 默认 5000ms（config 未写 testTimeout））：3404 条里 0 条用时 ≥ 有效预算 80%｜无显式预算按缺省算 3153 条｜标题非字面量（it.each／插值／拼接，按缺省算）114 条｜预算没落到 0 条｜无`**
+   `typecheck exit=0（0 报错）`／`认证门面=20 道（跑到 20）｜❌ 红 1 道｜⚠️ 超预算 0`
+
+5. **这一格第一次自己出声，读数是 0——照贴 0**。本页的用处不是"我现在证明了容量红"，而是下一次红的时候这行会自己给名单；安静态＋两端独占给不出名单是**设计内**的结果（第 262 页第 2 段现读：最慢那条 61%，其余 40–55%）。补预算那 9 处在这一趟里的位置可以算出来：`无显式预算按缺省算` 从施工前取料的 3144 变到 3153（＋9）＝本页新增的 9 条判卷自身没写预算，而那 9 处 `}, 15_000);` 把老用例从缺省档挪走了 ⇒ 两向相抵后由新增条数主导；`预算没落到` 两趟都是 0（同形＝取料没退化）。
+
+6. **条数核对式**：`3404 ＝ 3394 ＋ 10`。右端 `3394` 取自在 `dfe2d6c` 上做的第 260 页认证；`git log dfe2d6c..HEAD` 现读只有三笔（`4cb2f29`／`43ace9e`／`2b3763f`），其中 `4cb2f29` 的 numstat 只动 `PROGRESS.md` 与 `outputs/*.log`、**没有任何 `tests/` 文件** ⇒ 增量不重复计。同一判卷文件自己的端点：`tests/head-cert-deps.test.ts` 91 → 101（`judges-after-null-witness.log`＝`Tests 101 passed (101)`）。六个受影响判卷文件合跑：`Test Files 6 passed (6)`／`Tests 406 passed (406)`／exit=0（`judges-before-commit.log`，40.67s）。
+
+7. **归因声明**：唯一那道红是 `❌ gate-check exit=1 4344ms（预算 5400ms）`，失败面逐字是 `H7 冻结表与判卷区目录双向一致…{"onDiskNotInTable":["fixtures/impact/accuracy-repo/api.js", …]}`——那 10 个夹具由隔壁那笔 `1748ca7`（第 261 页）带上盘而没登记进 `src/frozen.ts` 的 areas，属**台账任务 #9**，且在 `dfe2d6c` 那一趟就已红着（第 260 页凭证同一格）。本笔不动冻结面、不改 `src/frozen.ts`、不放宽 H7 ⇒ 措辞只能是「除隔壁那一门外全绿」。
+
+8. **墙钟与门耗时声明**：`HEADCERT_EXIT=1` 是直接取的（命令未接管道）；**整趟墙钟本笔没实测**（那条命令我没包 `/usr/bin/time`），只有会话时间戳推得的 ≈190s——那是推算不是读数，下一笔要按第 260 页 `real 182.12` 那种形式实测。新增那一格的单价维度：`suite.json` 由**同一次**判卷顺手产出 ⇒ 零额外 spawn；`--reporter=json` 自身开销**没做同温 A/B**（两趟不同提交、不同负载）⇒ 本笔不给比值，只说"没多起一次进程"。
+
+9. **刻意未做／边界**：⑴ 这一格不进 `GATES` 判定、不进 `CERT_GATES`、不改任何帽与退出码；⑵ `it.each` 那 114 条仍按缺省算（其中 51 条的成因只到文件级，印成 `?`）；⑶ `suite.json` 不入库——它在 `/tmp/dsh-head-cert-2b3763f/`，是公共可写面，所以本页要用的读数已逐字抄进来，不靠下游再去读那个路径。
+
+10. **清场结果（现读，未动手）**：门自己报的读数是「常驻残留树=9」——`head-cert-bd5ec44`、`head-cert-dfe2d6c`、`verify-2b3763f`、`verify-43ace9e`、`verify-451f4be`、`verify-48e30a8`、`verify-6aa6e9d`、`verify-a5197eb`、`verify-dfe2d6c`；另有 2 棵不住本仓 scratch 面的 `/private/tmp/dsh-foreign-witness-A|B` **不是本仓建的，不许照回收命令删**。本笔**未回收任何一棵**（回收是破坏性操作，归人；等一句明确点头）——要收就逐棵 `git -C <tree> status --porcelain` 核到 0 项，再回仓根 `git worktree remove --force <tree>`。
