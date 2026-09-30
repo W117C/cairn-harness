@@ -9638,6 +9638,36 @@ const MUTATIONS = [
     apply: (s) => s.replace("    if (!found.has(sha)) out.push(", "    if (false) out.push("),
     expectFail: "豁免只挡名单里那三个",
   },
+
+  /* ── 第 228 页（#46）：D-9 凭证页 ↔ 取料面对账。三支各钉一种坏法：数位边界退化成 includes、未检那档被当成"没有豁免要用"、
+      「找到」那个判据反过来。 ── */
+  {
+    id: "docscheck-cred-number-boundary-degrades-to-includes",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "数位边界退化成 `includes` ⇒ 「241」在「2410」里也算找到：本笔第一版就踩了这一格，" +
+      "三条本该登记为不可回查的读数被判成「已入库」，于是豁免反被报成 stale——**假红指错了方向**。",
+    apply: (s) => s.replace('return new RegExp("(?:^|[^0-9.])" + esc + "(?:[^0-9.]|$)", "mu").test(face);', "return face.includes(num);"),
+    expectFail: "数位边界：面里只有 2410 时",
+  },
+  {
+    id: "docscheck-cred-unnamed-face-forgets-waivers",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "未点名那一档跳过页却不忘记豁免 ⇒ 迁移前的老页同时落进「未检」与「豁免已不再命中」，" +
+      "两句话互相打脸：一边说「这格没看」，一边说「你登记的东西没用了」（规则 239/261）",
+    apply: (s) => s.replace("unnamed += p.numbers.length; unverifiable(); continue;", "unnamed += p.numbers.length; continue;"),
+    expectFail: "页没点名目录＝未检",
+  },
+  {
+    id: "docscheck-cred-found-check-inverted",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "把「在取料面里找到」那个判据反过来 ⇒ 有原文的读数全被报成悬空、没原文的全放过：这条门从此只会喊狼，" +
+      "而红海的下一次反应是把它关掉。所以正相那一半（对得上＝零红）必须有独立用例钉",
+    apply: (s) => s.replace("      if (sourced) continue;", "      if (!sourced) continue;"),
+    expectFail: "点了名且数在面里 ⇒ 可比对计数涨、零红",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

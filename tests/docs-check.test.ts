@@ -5,11 +5,14 @@
 // 这样每条 D 都能双向断言（红相命中 + 反相不误伤），且不依赖工作树状态。
 // 真实文件读取只发生在该模块的 main()，由 `pnpm docs-check` 承担。
 import { describe, expect, it } from "vitest";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { LEDGER_FILE, ledgerRevFace, ledgerRevTokens, LEDGER_NON_REV } from "../scripts/docs-check";
+import {
+  checkCredentialSources, CREDLEDGER_FILE, credentialPages, LEDGER_FILE, ledgerRevFace, ledgerRevTokens,
+  LEDGER_NON_REV, UNSOURCED_READINGS,
+} from "../scripts/docs-check";
 import { REPLAY_READINGS, countInlineReplay, type ReplayReading } from "../scripts/replay-readings";
 import {
   checkAppendOnlyCorrections,
@@ -421,6 +424,81 @@ describe("D-5 台账 sha 面：三档分开印（可达／不可达／读不到�
     expect(face.checked, `台账只抽到 ${String(face.checked)} 条 ⇒ 取料面或正则坏了`).toBeGreaterThanOrEqual(200);
     expect(face.skipped).toBeNull();
     expect(face.findings.map((f) => f.detail)).toEqual([]);
+  });
+});
+
+/* ── 第 228 页（#46）：D-9 凭证页 ↔ 取料面对账。立它的现读：26 张能对上目录的凭证页里，严格式抽到 59 个读数，
+      其中 4 个（第 155 页 3 个、第 207 页 1 个）在页自己点名的目录里找不到原文 ⇒ 凭证回查不了就等于没凭证。 ── */
+describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到＝未检）不许同形", () => {
+  const page = (dirs: string[], nums: string[]): string =>
+    `### 2026-09-30 · 第 900 页 凭证：测试页\n\n取料：${dirs.map((d) => `outputs/${d}/`).join("、")}\n`
+      + nums.map((n) => `Test Files ${n} passed`).join("｜") + "\n";
+
+  /** 假取料面：目录名 → 内容；null 表示"目录读不到"。 */
+  const face = (map: Record<string, string | null>) => (dir: string): string | null => map[dir] ?? null;
+
+  it("点了名且数在面里 ⇒ 可比对计数涨、零红", () => {
+    const r = checkCredentialSources(credentialPages(page(["x-2026-09-30"], ["253"])), face({ "x-2026-09-30": "Test Files 253 passed" }), {});
+    expect(r.checked).toBe(1);
+    expect(r.findings).toEqual([]);
+  });
+
+  it("点了名而面里找不到 ⇒ 红，且 detail 带页号、缺的数与点名的目录", () => {
+    const r = checkCredentialSources(credentialPages(page(["x-2026-09-30"], ["253"])), face({ "x-2026-09-30": "Test Files 999 passed" }), {});
+    expect(r.checked).toBe(1);
+    expect(r.findings).toHaveLength(1);
+    expect(r.findings[0]?.rule).toBe("D-9");
+    expect(r.findings[0]?.file).toBe(CREDLEDGER_FILE);
+    expect(r.findings[0]?.detail).toContain("253");
+    expect(r.findings[0]?.detail).toContain("x-2026-09-30");
+  });
+
+  it("数位边界：面里只有 2410 时，读数 241 不算找到（本笔第一版就是拿 `includes` 比的，三条误判成「已入库」）", () => {
+    const r = checkCredentialSources(credentialPages(page(["x-2026-09-30"], ["241"])), face({ "x-2026-09-30": "Test Files 2410 passed" }), {});
+    expect(r.findings).toHaveLength(1);
+    // 反向那一半：位数一样的真原文必须算找到（否则这条边界会把整面判成红海）
+    const ok = checkCredentialSources(credentialPages(page(["x-2026-09-30"], ["241"])), face({ "x-2026-09-30": "Test Files 241 passed" }), {});
+    expect(ok.findings).toEqual([]);
+  });
+
+  it("页没点名目录＝未检：不红，但要进那一只分母；同页的豁免不许被误报成 stale", () => {
+    const pages = credentialPages(page([], ["241"]));
+    const r = checkCredentialSources(pages, face({}), { "第 900 页|241": "迁移前的老页" });
+    expect(r.findings, "未检这一档不该产出红，也不该把仍然用得上的豁免报成该删").toEqual([]);
+    expect(r.unnamed).toBe(1);
+    expect(r.checked).toBe(0);
+  });
+
+  it("点了名但目录读不到＝取不到：同样不红、同样进分母（与「没有对不上」分开）", () => {
+    const r = checkCredentialSources(credentialPages(page(["gone-2026-09-30"], ["7"])), face({}), {});
+    expect(r.findings).toEqual([]);
+    expect(r.unmatched).toBe(1);
+    expect(r.checked).toBe(0);
+  });
+
+  it("豁免只挡它自己那一条；同页另一个没登记的数照样红；已被取料面顶住的那条要报该删", () => {
+    const pages = credentialPages(page(["x-2026-09-30"], ["241", "999"]));
+    const r = checkCredentialSources(pages, face({ "x-2026-09-30": "nothing here" }), { "第 900 页|241": "登记过的不可回查" });
+    expect(r.checked).toBe(2);
+    expect(r.findings.map((f) => f.detail)).toEqual([expect.stringContaining("999")]);
+    const sourced = checkCredentialSources(pages, face({ "x-2026-09-30": "Test Files 241 passed" }), { "第 900 页|241": "已经入库了" });
+    expect(sourced.findings.map((f) => f.detail).join("\n")).toContain("已被取料面顶住");
+    expect(sourced.findings).toHaveLength(2);   // 一条"该删"＋一条 999 的真红
+  });
+
+  it("真仓：可比对分母 ≥ 50、红只剩登记过的那些（三档各有多少要印出来）", () => {
+    const text = readFileSync(fileURLToPath(new URL("../PROGRESS.md", import.meta.url)), "utf8");
+    const pages = credentialPages(text);
+    expect(pages.length, "一张凭证页都没抽到 ⇒ 页的形状或本尺的正则坏了").toBeGreaterThan(10);
+    const r = checkCredentialSources(pages, (dir) => {
+      const abs = fileURLToPath(new URL(`../outputs/${dir}`, import.meta.url));
+      if (!existsSync(abs)) return null;
+      return readdirSync(abs).filter((f) => !f.endsWith(".mjs"))
+        .map((f) => { try { return readFileSync(join(abs, f), "utf8"); } catch { return ""; } }).join("\n");
+    });
+    expect(r.checked, `可比对只有 ${String(r.checked)} 个 ⇒ 取料面塌了`).toBeGreaterThanOrEqual(50);
+    expect(r.findings.map((f) => f.detail)).toEqual([]);
+    expect(Object.keys(UNSOURCED_READINGS).length).toBeGreaterThanOrEqual(1);
   });
 });
 

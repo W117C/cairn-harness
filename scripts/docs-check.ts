@@ -8,7 +8,7 @@
 // 水位**只准调低**，不再被命中的条目会报成 stale 红，故豁免不会静默烂在这儿）。
 
 export interface Finding {
-  rule: "D-1" | "D-2" | "D-3" | "D-4" | "D-5" | "D-7" | "D-8" | "W";
+  rule: "D-1" | "D-2" | "D-3" | "D-4" | "D-5" | "D-7" | "D-8" | "D-9" | "W";
   file: string;
   detail: string;
   /** 该判据的实测量纲值（D-1 = 字节，D-7 = 文件数）。有值时水位按"量"豁免；无值时按"条数"豁免。 */
@@ -167,6 +167,111 @@ export function ledgerRevFace(
     out.push({ rule: "D-5", file: LEDGER_FILE, detail: `第 ${String(t.line)} 行引用的 sha 指向不存在的提交：${t.sha}` });
   }
   return { findings: out, skipped: null, checked: toks.length };
+}
+
+/* ------------------------------------------------------------------ D-9 凭证页 ↔ 取料面 */
+
+/**
+ * D-9：凭证页里那些"认证了多少条、墙钟多少秒"的读数，必须能在**该页自己点名的取料面**里找到原文。
+ * 立这条的现读（第 228 页）：26 张能对上目录的凭证页里，严格式共抽到 93 个读数，
+ * 4 个在它点名的目录里找不到原文（第 155 页 3 个、第 207 页 1 个）。
+ * 三档不许同形：页没点名目录＝**未检**（迁移前的约定，不红）；点了名但目录/文件读不到＝**取不到**（也不红，但要说）；
+ * 读得到而数对不上＝**红**（规则 249/211：凭证的等级取决于它能不能被回查）。
+ */
+export const CREDLEDGER_FILE = "PROGRESS.md";
+
+/** 页里登记过、但取料面已无法回查的读数（逐条带理由，**只准调低**；不再命中即报 stale）。 */
+export const UNSOURCED_READINGS: Readonly<Record<string, string>> = {
+  "第 155 页|241": "2026-09-27 那趟 head-cert 的 `Test Files 241`；日志当时只落在 /tmp，没随页入库 ⇒ 数不必撤（它是当轮实测），但今天无法回查",
+  "第 155 页|2847": "同上（`Tests 2847`）",
+  "第 155 页|9.7": "同上（并行分片那一跑的墙钟）",
+  "第 207 页|7.0": "第 207 页那句 `real 7.0` 出自当轮 stdout，未归档成 dated 工件",
+};
+
+/** 只认**严格式**：这三类的原文一定在日志里（`Test Files N passed`／`real Xs`／`针脚体检：N 条`…），
+ *  散文里的数字（"17 处"、"帽 10"）不在本面射程内——把它们算进来＝拿语义猜测当判据。 */
+const CRED_NUMBER_RES: readonly RegExp[] = [
+  /Test Files (\d+) passed/u,
+  /Tests (\d+) passed/u,
+  /\breal ([0-9]+(?:\.[0-9]+)?)/u,
+  /本次耗时 ([0-9]+(?:\.[0-9]+)?)s/u,
+  /针脚体检：(\d+) 条/u,
+  /跑了 (\d+)\/\d+ 条/u,
+];
+
+export interface CredPage {
+  key: string;
+  title: string;
+  dirs: string[];
+  numbers: string[];
+}
+
+/** 凭证页＝标题含「凭证」的那几段；`key` 取「第 NNN 页」，比整条标题稳（改措辞不该让豁免失效）。 */
+export function credentialPages(text: string): CredPage[] {
+  const lines = text.split("\n");
+  const heads = lines.map((l, i) => [l, i] as const).filter(([l]) => /^### /u.test(l));
+  const out: CredPage[] = [];
+  heads.forEach(([head, start], n) => {
+    if (!head.includes("凭证")) return;
+    const end = n + 1 < heads.length ? heads[n + 1]![1] : lines.length;
+    const body = lines.slice(start, end).join("\n");
+    const dirs = [...new Set([...body.matchAll(/outputs\/([A-Za-z0-9._-]+-2026-09-\d{2})/gu)].map((m) => m[1]!))].sort();
+    const numbers = new Set<string>();
+    for (const re of CRED_NUMBER_RES) {
+      for (const m of body.matchAll(new RegExp(re.source, "gu"))) numbers.add(m[1]!);
+    }
+    const key = /第 \d+ 页/u.exec(head)?.[0] ?? head.slice(0, 16);
+    out.push({ key, title: head.replace(/^### /u, ""), dirs, numbers: [...numbers].sort() });
+  });
+  return out;
+}
+
+/** 数在取料面里"算找到原文"——必须**按数位边界**认，不能 `includes`：
+ *  `241` 会命中 `2410`、`9.7` 会命中 `19.75`（第一版就是这么错的：三条本该未寻址的读数被判成"已入库"，
+ *  于是豁免被报成 stale，红海方向反了）。小数点两侧都不许再粘数字。 */
+function hasNumber(face: string, num: string): boolean {
+  const esc = num.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return new RegExp("(?:^|[^0-9.])" + esc + "(?:[^0-9.]|$)", "mu").test(face);
+}
+export function checkCredentialSources(
+  pages: readonly CredPage[],
+  readFace: (dir: string) => string | null,
+  waivers: Readonly<Record<string, string>> = UNSOURCED_READINGS,
+): { findings: Finding[]; checked: number; unmatched: number; unnamed: number } {
+  const out: Finding[] = [];
+  const seenKeys = new Set<string>();
+  let checked = 0;
+  let unmatched = 0;
+  let unnamed = 0;
+  for (const p of pages) {
+    if (p.numbers.length === 0) continue;
+    // 未检的两档（页没点名／点了名但读不到）也要把该页的豁免记成"仍然用得上"——
+    // 否则第 155 页那种迁移前的老页会同时落进"未检"和"豁免已不再命中"，两句话互相打脸。
+    const unverifiable = (): void => { for (const n of p.numbers) seenKeys.add(`${p.key}|${n}`); };
+    if (p.dirs.length === 0) { unnamed += p.numbers.length; unverifiable(); continue; }   // 未点名＝未检，不红
+    const blobs = p.dirs.map(readFace);
+    if (blobs.every((b) => b === null)) { unmatched += p.numbers.length; unverifiable(); continue; }   // 取不到＝未检，也不红
+    const face = blobs.filter((b): b is string => b !== null).join("\n");
+    for (const num of p.numbers) {
+      checked++;
+      const waiverKey = `${p.key}|${num}`;
+      const sourced = hasNumber(face, num);
+      const waived = waiverKey in waivers;
+      // 取料面已经能顶住的那条，豁免就成了多余登记——留着的代价是"下一位读者以为这数仍查不到"。
+      if (waived && sourced) seenKeys.add(waiverKey + "|已入库");
+      if (sourced) continue;
+      if (waived) { seenKeys.add(waiverKey); continue; }
+      out.push({ rule: "D-9", file: CREDLEDGER_FILE, detail: `${p.key}（${p.title.slice(0, 28)}）里的读数「${num}」在它点名的取料面里找不到原文：${p.dirs.join("、")}` });
+    }
+  }
+  for (const k of Object.keys(waivers)) {
+    if (seenKeys.has(k + "|已入库")) {
+      out.push({ rule: "D-9", file: CREDLEDGER_FILE, detail: `豁免 ${k} 已被取料面顶住，该删（理由曾写：${waivers[k]}）` });
+      continue;
+    }
+    if (!seenKeys.has(k)) out.push({ rule: "D-9", file: CREDLEDGER_FILE, detail: `豁免里的 ${k} 已不再命中，该删（理由曾写：${waivers[k]}）` });
+  }
+  return { findings: out, checked, unmatched, unnamed };
 }
 
 /* ------------------------------------------------------------------ D-2 / D-4 / D-7 */
@@ -463,7 +568,10 @@ function resolveRevsViaGit(toks: readonly string[]): Map<string, boolean> | null
   return map;
 }
 
-export function runDocsCheck(): { findings: Finding[]; skipped: string[]; waived: number; ledgerChecked: number } {
+export function runDocsCheck(): {
+  findings: Finding[]; skipped: string[]; waived: number; ledgerChecked: number;
+  cred: { findings: Finding[]; checked: number; unmatched: number; unnamed: number };
+} {
   const findings: Finding[] = [];
   const skipped: string[] = [];
 
@@ -497,6 +605,21 @@ export function runDocsCheck(): { findings: Finding[]; skipped: string[]; waived
     skipped.push(`D-5 ${LEDGER_FILE} 不存在 ⇒ 台账 sha 面整条未检，不等于通过`);
   }
 
+  // D-9：凭证页的读数 ↔ 它自己点名的取料面（`outputs/<主题>-日期/` 里除脚本外的全部文件）。
+  const cred = checkCredentialSources(
+    existsSync(ledgerAbs) ? credentialPages(readFileSync(ledgerAbs, "utf8")) : [],
+    (dir) => {
+      const abs = join(ROOT, "outputs", dir);
+      if (!existsSync(abs)) return null;
+      try {
+        return readdirSync(abs).filter((f) => !f.endsWith(".mjs"))
+          .map((f) => { try { return readFileSync(join(abs, f), "utf8"); } catch { return ""; } })
+          .join("\n");
+      } catch { return null; }
+    },
+  );
+  findings.push(...cred.findings);
+
   const livePages: SourceFile[] = [];
   for (const path of LIVE_PAGES) {
     const abs = join(ROOT, path);
@@ -521,6 +644,7 @@ export function runDocsCheck(): { findings: Finding[]; skipped: string[]; waived
     skipped,
     waived: findings.length - kept.length,
     ledgerChecked,
+    cred,
   };
 }
 
@@ -528,7 +652,7 @@ const invokedDirectly =
   process.argv[1] !== undefined && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
 
 if (invokedDirectly) {
-  const { findings, skipped, waived, ledgerChecked } = runDocsCheck();
+  const { findings, skipped, waived, ledgerChecked, cred } = runDocsCheck();
   const byRule = new Map<string, number>();
   for (const f of findings) {
     byRule.set(f.rule, (byRule.get(f.rule) ?? 0) + 1);
@@ -537,6 +661,10 @@ if (invokedDirectly) {
   for (const s of skipped) console.log("  ℹ️  跳过 " + s);
   // 分母要印出来：抽到 0 条与"全绿"不许同形（规则 261），豁免数也不许藏在源码里。
   console.log(`  台账 sha 面：抽到 ${String(ledgerChecked)} 条候选｜非提交形而带理由豁免 ${String(Object.keys(LEDGER_NON_REV).length)} 条`);
+  // 三个分母各说各的口径（规则 262）：可比对／页没点名（未检）／点了名但目录读不到（取不到）。
+  console.log(`  凭证对账面：可比对 ${String(cred.checked)} 个读数（红 ${String(cred.findings.length)}）`
+    + `｜页未点名取料目录 ${String(cred.unnamed)} 个＝未检｜点名但目录读不到 ${String(cred.unmatched)} 个＝取不到`
+    + `｜登记不可回查 ${String(Object.keys(UNSOURCED_READINGS).length)} 条`);
   if (waived > 0) console.log(`  ⚠️  存量豁免 ${String(waived)} 处（LEGACY_WAIVERS，只准调低；spec §8 迁移提交须整条删除）`);
   const summary = [...byRule].map(([r, n]) => `${r}=${String(n)}`).join(" ");
   if (findings.length === 0) {
