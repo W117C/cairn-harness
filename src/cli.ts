@@ -47,8 +47,56 @@ import {
   type ClarifyAnswerMap,
   type ClarifyQuestion,
   type PlanProposal,
+  type ToolResultEvent,
 } from "./events";
-import type { PermissionMode } from "./permissions";
+import { GATE_VERDICTS, type PermissionMode } from "./permissions";
+
+/** 权限层的负向结果：门直接拦（未执行）、被问过但没批成、无人值守拒。 */
+const BLOCKING_VERDICTS: ReadonlySet<string> = new Set(
+  GATE_VERDICTS.filter((v) => v === "denied" || v === "rejected" || v === "timeout" || v === "unattended"),
+);
+
+/** 会话末的沉淀轮（`X-` 层）**不算**本轮任务的失败：它是收尾的记账，
+ *  在管道/CI 里本来就会被合并审批拒掉（`[distill] 沉淀轮只允许 remember 工具`）。
+ *  把它计进退出码，等于让每一次成功的无人值守 run 都返回 1。
+ *  `X-` 前缀的语义（见 permissions/autonomy.ts 的 GATE_LAYERS 注）就是「判定发生在 evaluate 之外」，
+ *  所以这里按前缀排除，而不是拿 X-distill 这**一个**名字硬编码。 */
+function isSessionEndBookkeeping(e: ToolResultEvent): boolean {
+  return e.gate?.layer.startsWith("X-") === true;
+}
+
+/** 门拒绝的留痕：`gate` 存在**且** verdict 是负向的，且不属于会话末记账。
+ *  方案门那条挂起被拒不带 gate（`propose_plan.ts` 在 markPlanProposed 之后 await，
+ *  返回值不走 gate 包装）⇒ 它由 `plan_approved{approved:false}` 单独计数。 */
+function gateDenied(e: ToolResultEvent): boolean {
+  if (isSessionEndBookkeeping(e)) return false;
+  return e.gate !== undefined && BLOCKING_VERDICTS.has(e.gate.verdict);
+}
+
+/** 本轮退出码的判据（纯函数，可单测）。
+ *
+ *  为什么要把「门拒了」算成失败：README 把退出码 1 定义成「跑完了但有失败
+ *  （工具失败 / 验证红 / provider 报错）」，而此前只有 `error` 事件与 verify 红会置 1——
+ *  **写盘被门拒掉时退出码仍是 0**。2026-09-29 实测两例：`--mode default` 在管道里
+ *  写盘被拒、工作区一个字节没动、退出码 0，终端台词还是「任务完成」；demo 通道里
+ *  `read_file`/`run_shell` 都 ok=false，退出码同样 0。把它接进脚本或 CI，失败会被当成成功。
+ *
+ *  两个信号都来自**事件流**，不是猜模型有没有说「完成」：
+ *  ① 门拒绝：`plan_proposed` 之后结算成 rejected（那一轮的写禁没解除），或 tool_result 带负向 gate；
+ *  ② 真失败：`error` 事件 / verify 红 / 非记账类 tool_result ok=false。 */
+export function runFailed(input: {
+  errorEvents: number;
+  verifyRed: boolean;
+  gateBlocks: number;
+  deniedPlans: number;
+  plainToolFailures: number;
+}): boolean {
+  return input.errorEvents > 0
+    || input.verifyRed
+    || input.gateBlocks > 0
+    || input.deniedPlans > 0
+    || input.plainToolFailures > 0;
+}
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -419,17 +467,49 @@ function decidePlan(approved: boolean, callId: string): void {
   });
 }
 
+/** 方案门在 CLI 上该给出什么决议（纯函数，可单测）。
+ *
+ *  为什么把这一格抽成纯函数：缺陷原本埋在 `promptForPlan` 的分支里，而那个函数要真的起一次
+ *  provider、模型真的提方案才走得到——离线判卷跑不到，于是它一直没被测过。
+ *  抽出来之后判据可以逐格穷举；**装配**仍由真模型实测背书
+ *  （2026-10-01：12 个 bug 的长任务靶子，修复前 0 次写／9 轮退出／12 个 bug 全废，
+ *   修复后 12 次写／方案 1 次批准／12-12 全修 + verify 通过／35 秒）。
+ *
+ *  三档语义：
+ *   · `auto` —— 命令行显式授权（README：auto 必须点名，不是缺省）⇒ 当场批准；
+ *   · 交互终端 —— 问人（"ask"，调用方走 rl.question）；
+ *   · 管道/CI 且非 auto —— fail-closed 拒绝（"reject"）。 */
+export function planDecisionFor(input: { mode: PermissionMode; ask: boolean }): "approve" | "ask" | "reject" {
+  if (input.mode === "auto") return "approve";
+  return input.ask ? "ask" : "reject";
+}
+
 function promptForPlan(
   rl: ReturnType<typeof createInterface>,
   isClosed: () => boolean,
   plan: PlanProposal,
   callId: string,
   ask: boolean,
+  mode: PermissionMode,
 ): void {
   const files = plan.files.map((f) => `    ${f.action}  ${f.path}  ${f.summary}`).join("\n");
   const header = `\n${color ? YELLOW : ""}方案待批${color ? RESET : ""}：${plan.goal}\n${files}\n`;
-  if (!ask) {
-    process.stderr.write(paint(YELLOW, `${header}  stdin 非交互（管道 / CI / --unattended）——按 fail-closed 拒绝，模型可修订后重新提交\n`));
+  const decision = planDecisionFor({ mode, ask });
+  if (decision === "approve") {
+    /* `--mode auto` 是用户在命令行上**显式给的**授权。既然整轮写操作都已获授权，
+     *  方案门再按「没人能答 ⇒ 拒」收束就自相矛盾：模型提交方案 → 当场被拒 → 写禁不解除
+     *  → 连读工具都进不去，最后什么都没做成。
+     *  2026-09-29 实测：管道里 `--mode auto` 建一个 hello.txt，两次方案被自动拒、约 32k token 白烧，
+     *  模型还反过来建议用户「去 git 面板点批准」——而 core-only 树里没有那个面板。
+     *  2026-10-01 复现（12 个独立 bug 的长任务靶子）：auto 档下 **写操作 0 次**、9 轮退出、
+     *  12 个 bug 一个都没修。这条不是"体验问题"，是**任务直接做不成**。
+     *  批准时把「依据是命令行授权、不是有人看过了」印出来，免得把策略放行读成人工审阅。 */
+    process.stderr.write(paint(YELLOW, `${header}  --mode auto：按命令行授权自动批准方案（无人审阅，写禁即解除）\n`));
+    decidePlan(true, callId);
+    return;
+  }
+  if (decision === "reject") {
+    process.stderr.write(paint(YELLOW, `${header}  stdin 非交互（管道 / CI / --unattended）——按 fail-closed 拒绝，模型可修订后重新提交；全自动请显式 --mode auto\n`));
     decidePlan(false, callId);
     return;
   }
@@ -608,7 +688,9 @@ async function main(): Promise<number> {
 
   // 事件流是唯一的事实出口：goal 事件（handleGoalSet 走 emitGoalEvent）、worker 事件、
   // diff 借道的那条 tool_result 全都从这里上来，所以渲染只接一次。
-  let failed = false;
+  // 退出码的五个计数器全从事件流取（判据是纯函数 runFailed）——不猜模型说了什么。
+  const tally = { errorEvents: 0, verifyRed: false, gateBlocks: 0, deniedPlans: 0, plainToolFailures: 0 };
+  const pendingPlanIds = new Set<string>();
   // 真实 provider 的一轮只发 assistant_delta，聚合的 assistant_message 是 mock/demo 通道才有的东西
   //（见 agent-runner 里那几处脚本化 emit）。renderEvent 只认后者 ⇒ 不在这里攒起来的话，
   // 用任何真实 provider 跑都是**终端上一个字都看不到**。按到达顺序攒，在第一个非 delta 边界事件
@@ -630,8 +712,15 @@ async function main(): Promise<number> {
     }
     flushAssistantText();
     if (e.type === "plan_proposed") {
+      // 记下这一次提交，等 plan_approved 结算——被拒的方案意味着写禁没解除，
+      // 那一轮**没有真正开工**，退出码要认这个（见 runFailed）。
+      pendingPlanIds.add(e.callId);
       // 门不等 renderEvent：它要的是一次决策，不是一行摘要。
-      promptForPlan(rl, () => rlClosed, e.plan, e.callId, !unattended);
+      promptForPlan(rl, () => rlClosed, e.plan, e.callId, !unattended, opts.mode);
+      return;
+    }
+    if (e.type === "plan_approved") {
+      if (!e.approved && pendingPlanIds.delete(e.callId)) tally.deniedPlans += 1;
       return;
     }
     if (e.type === "clarify_requested") {
@@ -640,8 +729,13 @@ async function main(): Promise<number> {
     }
     const line = renderEvent(e);
     if (line !== null) process.stdout.write(line + "\n");
-    if (e.type === "error") failed = true;
-    if (e.type === "verify_result" && !e.ok) failed = true;
+    if (e.type === "error") tally.errorEvents += 1;
+    if (e.type === "verify_result" && !e.ok) tally.verifyRed = true;
+    if (e.type === "tool_result") {
+      if (gateDenied(e)) tally.gateBlocks += 1;
+      // 会话末记账轮的失败不算本轮的（X- 层），其余 ok=false 一律算。
+      else if (!e.ok && !isSessionEndBookkeeping(e)) tally.plainToolFailures += 1;
+    }
   };
 
   setAppHooks({
@@ -732,7 +826,7 @@ async function main(): Promise<number> {
     );
     if (!r.ok) {
       process.stderr.write(paint(RED, `[m0] 运行失败：${r.error ?? "未知原因"}\n`));
-      failed = true;
+      tally.errorEvents += 1;
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -748,7 +842,7 @@ async function main(): Promise<number> {
   }
 
   process.stdout.write(paint(DIM, `\n事件日志：${opts.logPath}\n`));
-  return failed ? EXIT_FAILED : EXIT_OK;
+  return runFailed(tally) ? EXIT_FAILED : EXIT_OK;
 }
 
 // Ctrl-C：先让 run 自己收束（handleRunCancel 触达 interactiveRunAbort ⇒ 轮界收束、门等待按拒结算、
