@@ -1,0 +1,27 @@
+Done in 171ms using pnpm v11.21.0
+$ node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify --check-needles
+ℹ️ 逐行式 apply 5 条（多处命中即设计，不核针脚）：prune-verify-card-exempt、prune-attachment-safesegment、sessions-name-charset、sessions-rename-clash、worker-shell-cause-layer-unwired
+ℹ️  松钉指针 10 条（逐字认不出、只靠占位符展开的标题模式过关——拼接标题与带转义引号那两类必然如此）：auto-verify-default-on、worker-impact-spec-not-appended、worker-impact-whitelist-not-appended、hook-matcher-exact-list-degrades-to-substring-regex、read-worker-inherits-wide-hook-mode、evidence-receipt-reports-known-completeness-as-unknown、redaction-stops-recursing-into-containers、worker-git-newline-not-a-separator、g-b-injection-face-ignores-table-form、loose-pointer-counts-literal
+ℹ️  选择子：1050/1063 条能逐字唯一定位自己的 killer 用例（其余走整文件跑法）·可判面 1063／表 1064：不数的 1 条＝按设计不数 0、判卷读不到 0、**读得到文件却一条标题都抽不到 1**（tests/solpi-receipt-integration.test.ts⇒evidence-receipt-reports-known-completeness-as-unknown），那些只能整文件跑，**不算这一格通过**·零命中 11 条（标题是拼出来的或已改名 ⇒ -t 会一条也选不中）·多命中 2 条（选择子不唯一）：auto-verify-default-on(0)、worker-impact-spec-not-appended(0)、worker-impact-whitelist-not-appended(0)、hook-matcher-exact-list-degrades-to-substring-regex(0)、read-worker-inherits-wide-hook-mode(0)、redaction-stops-recursing-into-containers(0)、worker-git-newline-not-a-separator(0)、shape-leading-env-assignment-not-skipped(0)、settings-default-on-key-read-by-strict-true(2)、settings-auto-verify-default-reverted(2)、pb-control-arm-always-wired(0)、g-b-injection-face-ignores-table-form(0)、loose-pointer-counts-literal(0)
+针脚体检：1064 条 —— 阻断 0，待复认 0，未覆盖 0，逐行式 5，未入库面 0（被测面 + 判卷两面），钉在飞文本 0，killer 指针失效 0（其中 HEAD 侧 0）
+改法语法体检：1064 条改法全部产出合法源文件 ✅
+[mutate-needles-check] 全部锚点针脚可判定 ✅
+needles_exit=0
+Already up to date
+Done in 160ms using pnpm v11.21.0
+$ node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify loop-block-permission-reason-dropped loop-block-first-gate-reason-dropped loop-block-unknown-tool-condition-inverted events-block-reason-enum-drift replay-exec-blocked-column-not-counted --lock-tag p225-new
+[mutate-verify] checkout exit=0：.worktrees/gate-mutate-verify → 2735051
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p225-new.lock）
+变异验证：5 条
+✅ loop-block-permission-reason-dropped — 权限门那一格只留散文不留结构 ⇒ 「被哪道闸拦」与「旧日志」「工具自己失败」再次同形（规则 300 的缺席三因）。这一族的从来不是改文案，而是让落盘面自己说得出是谁拦的 ｜本机实测 1.0s／2 拍
+✅ loop-block-first-gate-reason-dropped — 六道里最靠前的那道（只读白名单摘除）没落 ⇒ 它与档位拒绝在事件流里同形。次序上排在 verify 系统门之前，少了这一格，「表里没有却被执行」那条权限旁路在读盘面上看不出来 ｜本机实测 0.9s／2 拍
+✅ loop-block-unknown-tool-condition-inverted — 把「执行面没有这把工具」那个条件反过来 ⇒ 每一笔真跑过的工具都被标成闸拦：比没有这一列更坏，因为它骗得过读者。所以证人不是「有没有这一列」而是「不该有的时候没有」（规则 298 的负控那一半） ｜本机实测 0.9s／2 拍
+✅ events-block-reason-enum-drift — 枚举少一格而出口一个没少 ⇒ 那一列照样印得出来，只有分母证人知道名单和实跑不是一套。少一个成员在类型上才叫得醒，而判卷跑 tsx 不做类型检查（规则 259「突变不可观察」那一族的新入口） ｜本机实测 0.9s／2 拍
+✅ replay-exec-blocked-column-not-counted — 尺不吃生产端那一列 ⇒ ⚠️ 那格的成因② 退回「三种成因分不开」，而 0 条会被读成「这趟没有闸拦」。新字段落地时只接生产端不接读数面，本仓已数过两次（规则 298 的 consumer 那一半） ｜本机实测 0.6s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 4.5s · 跑了 5/5 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 10 次／5 条（每条次数分布 2×5）· 单次中位 第1次 0.4s／第2次 0.4s· 最贵一条 loop-block-permission-reason-dropped 1.0s
+跑法单价：selector 10 拍·中位 0.44s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-p225-new.lock）
+kill_exit=0
