@@ -10064,6 +10064,80 @@ const MUTATIONS = [
     expectFail: "点名该删",
   },
 
+  /* ── 第 281 页：证据面门的归因分面（未跟踪＝不在 HEAD 的危险码只点名、不进棘轮）。
+   *    七支各钉一种坏法：豁免根本不生效 / 豁免写过头 / 面取不到被当成"没有" / 口径没印进读数 /
+   *    取料前缀不按 include 现读 / 分面时凭空少一条 / runner 那行接线掉。判卷全部喂合成夹具，
+   *    所以这七支都买得起（真仓那一趟两侧同值时配不了锚点，见第 272 页第 7 项）。 ── */
+  {
+    id: "evidence-fly-exempt-never-fires",
+    src: "scripts/lib/evidence-typecheck.ts",
+    test: "tests/evidence-typecheck.test.ts",
+    desc: "分面条件里的 `flySet.has(file)` 被写成恒假 ⇒ 未跟踪清单白取了，隔壁的草稿照样推动我的棘轮" +
+      "（第 281 页要修的就是这一格：主树 `16 条／帽 12` 的红全在两支未入库探针里）",
+    apply: (s) => s.replace('flyFace === "ok" && flySet.has(file)', 'flyFace === "ok" && false'),
+    expectFail: "隔壁未入库的草稿 ⇒ 不红、点名",
+  },
+  {
+    id: "evidence-fly-exempt-widened-to-all",
+    src: "scripts/lib/evidence-typecheck.ts",
+    test: "tests/evidence-typecheck.test.ts",
+    desc: "分面条件从「在这份未跟踪清单里」放宽成「只要面可取就放行」⇒ 已跟踪的新探针也被当成在飞，" +
+      "棘轮从此挡不住任何东西（豁免写成万能豁免＝假绿，与第 279 页那支 legacy 万能豁免同形）",
+    apply: (s) => s.replace('flyFace === "ok" && flySet.has(file)', "true"),
+    expectFail: "同目录的已跟踪新件照样红",
+  },
+  {
+    id: "evidence-fly-face-unavailable-reads-as-ok",
+    src: "scripts/lib/evidence-typecheck.ts",
+    test: "tests/evidence-typecheck.test.ts",
+    desc: "「面取不到」被当成「面可取且为空」⇒ 空清单配上 ok 态，别人的探针就凭空免了账（三态里的「取不到」" +
+      "在本仓第 109/118 页反复出现过：没有 与 取不到 是两个意思，混着说就是把 fail-open 写进文案）",
+    apply: (s) => s.replace(
+      'input.untracked.unavailable === false ? "ok" : "unavailable"',
+      'input.untracked.unavailable === false ? "ok" : "ok"',
+    ),
+    expectFail: "不许读成「没有未跟踪件」",
+  },
+  {
+    id: "evidence-fly-cell-drops-caliber",
+    src: "scripts/lib/evidence-typecheck.ts",
+    test: "tests/evidence-typecheck.test.ts",
+    desc: "读数里的「HEAD 口径」那半句被去掉 ⇒ 同一个「12 条」再也读不出是仓里的还是整棵树上的" +
+      "（第 259 页就是为这两个数吵过：HEAD 31 条／工作树 51 条；口径不进读数，下一个读者只能猜）",
+    apply: (s) => s.replace("? `HEAD 口径｜在飞未入库", "? `｜在飞未入库"),
+    expectFail: "两种口径不许同数",
+  },
+  {
+    id: "evidence-others-prefix-glob-not-cut",
+    src: "scripts/lib/evidence-typecheck.ts",
+    test: "tests/evidence-typecheck.test.ts",
+    desc: "include 条目不再按通配截到目录为止，原样当 pathspec 交给 git ⇒ 哪天有人把 include 写成 " +
+      "`outputs/**` 那种形状，取料面就与 tsc 扫的面不同宽，豁免名单静默失真",
+    apply: (s) => s.replace("const seg = (cut === -1 ? e : e.slice(0, cut)).replace", "const seg = e.replace"),
+    expectFail: "带通配的取到目录为止",
+  },
+  {
+    id: "evidence-fly-rows-swallowed",
+    src: "scripts/lib/evidence-typecheck.ts",
+    test: "tests/evidence-typecheck.test.ts",
+    desc: "分到「不在我的账」那一半的条数被清成 0（既不留在 HEAD 口径里、也没进 flying）⇒ " +
+      "分面变成筛子，读数比真值小而没有任何一格出声（守恒式就是钉这个的）",
+    apply: (s) => s.replace("    else trackedFile[file] = now;", "    else trackedFile[file] = 0;"),
+    expectFail: "分出去的不许凭空少一条",
+  },
+  {
+    id: "evidence-runner-prefix-line-hardcoded",
+    src: "scripts/evidence-typecheck-check.ts",
+    test: "tests/evidence-typecheck.test.ts",
+    desc: "门那一半把取料前缀写死成「没取到」的形状（接线断）⇒ 归因那行还在、但再也没人说清这豁免是按哪个面取的；" +
+      "判卷从上游读 tsconfig 的 include 对一遍，断的就是这条",
+    apply: (s) => s.replace(
+      'fly.prefixes.length === 0 ? "（清单未取到）" : fly.prefixes.join("、")',
+      '"（清单未取到）"',
+    ),
+    expectFail: "前缀与 tsc 的 include 同源",
+  },
+
   /* ── 第 274 页：把 `scripts/prose-needle-scan.ts` 的帽那一族补齐（第 272 页现读：这支 1100 行的尺此前整支零锚点，
    *    本族四支各钉一种坏法：比较符、加法、按树取帽、把出声那一支焊死）。
    *    这四支都能买，正因为它们的判卷喂的是**合成输入**（第 272 页第 7 项写的那条：clean 树上两侧同为 0 的配对断言买不了锚点）。 ── */

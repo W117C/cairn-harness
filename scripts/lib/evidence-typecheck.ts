@@ -11,10 +11,12 @@
  *  TS2339/TS2551（读不存在的属性，正是 `ino` 那一案）、TS18048（可能 undefined 却直接吃）、TS2304（名字不存在）、
  *  TS2305/TS2459（import 了模块里没有的名字）、TS7053（按字符串下标取不存在的键）。
  *  帽 12 条／8 个文件（只登记**在 HEAD 里**的文件），按「新增门的存量水位法」逐文件登记、**只准调低**；涨一条就红。
- *  ⚠️ 主检出工作树会多读 4 条（16 条／10 个文件）：来自两个**隔壁在飞、尚未入库**的探针
+ *  ⚠️ 主检出工作树从前会多读 4 条（16 条／10 个文件）：来自两个**隔壁在飞、尚未入库**的探针
  *  ——`outputs/selector-uniqueness-2026-09-30/diagnose.mts`（3 条）与 `outputs/sequencer-dynamic-2026-10-01/probe-prod.mts`（1 条）。
  *  它们不进登记表：登记一个不在 HEAD 的文件＝干净树上那条登记变成幽灵，而本门的判卷里就有一条「不许留幽灵条目」，
  *  `head-cert` 会被自己这边的登记判红（253 页凭证里我已把 diagnose.mts 归为隔壁在用、不替他们改）。
+ *  第 281 页把这层归因**做进判定**：`verdict` 收未跟踪清单，未跟踪那几个文件的危险码只点名、不进棘轮
+ *  （`flying`／`flyFace`）；清单取不到时退回工作树口径并出声，宁可真红不假绿。
  *  装饰性那一族刻意不纳（纳了就得替别人改 30 处，且它不会产出假读数）——理由写在门里，不靠沉默。
  *
  *  ⚠️ 解析形状（同页第二次踩到）：`^([^(]+)\(` 这类"到第一个左括号为止"的写法**会把 tsc 的续行**（缩进的说明行）
@@ -76,6 +78,24 @@ export function tally(rows: readonly string[]): { perFile: Record<string, number
   return { perFile, parsed, total };
 }
 
+/** 取料面的**前缀**从 `tsconfig.evidence.json` 的 `include` 现读，不写死目录名。
+ *  为什么（第 281 页）：未跟踪清单要跟 tsc 扫的面**同宽**，否则哪天 include 加了 `tools/`，
+ *  那里的草稿探针就会重新算进我的账（假红）。两个方向的坏法都安全：前缀取宽了只会多认几个未跟踪文件
+ *  （`git ls-files --others` 不可能把已跟踪文件列进来 ⇒ 造不出假绿），取窄了是假红。
+ *  通配开头的条目（例如以双星号起头那种）代表"整棵树"，交成 `.`；空 include 在 tsc 里也是"整棵树"。 */
+export function evidenceOthersPrefixes(include: readonly string[]): string[] {
+  if (include.length === 0) return ["."];
+  const out: string[] = [];
+  for (const raw of include) {
+    const e = raw.trim();
+    if (e.length === 0) continue;
+    const cut = e.search(/[*?{[]/u);
+    const seg = (cut === -1 ? e : e.slice(0, cut)).replace(/\/+$/u, "");
+    out.push(seg.length === 0 ? "." : seg);
+  }
+  return out.length === 0 ? ["."] : [...new Set(out)];
+}
+
 export type EvidenceVerdict = {
   ok: boolean;
   /** 三态要分开印（规则 239）：没跑到／跑完没料／跑完有涨。 */
@@ -84,40 +104,64 @@ export type EvidenceVerdict = {
   grew: { file: string; now: number; cap: number }[];
   /** 现存量低于登记帽的文件——门只报数，撤不撤由人决定（只准调低是规矩，自动调低等于没有读数）。 */
   lowered: string[];
+  /** 未跟踪（不在 HEAD）那几个文件里的危险码：只点名、不进棘轮。
+   *  为什么必须分出来（第 281 页）：本门的口径从第 259 页起就写在文件头——「只登记**在 HEAD 里**的文件」，
+   *  而判定面从前把所有报错一视同仁，于是隔壁一支未入库的探针就能让这一格 `exit 1`。
+   *  共享工作树里「别人的草稿」与「我的涨」被读成同一个红，交笔自检就只能靠人肉归因。 */
+  flying: { file: string; now: number }[];
+  /** 未跟踪面的三态：`ok`＝清单可取（哪怕为空），`unavailable`＝取不到 ⇒ **不许**读成"没有未跟踪件"，
+   *  此时退回工作树口径判（最坏是假红，不会造出假绿）。 */
+  flyFace: "ok" | "unavailable";
 };
 
-/** 判定：把现读对上登记帽。**只准调低**——新文件带危险码、或老文件多一条，都是红。 */
+/** 判定：把现读对上登记帽。**只准调低**——新文件带危险码、或老文件多一条，都是红。
+ *  `untracked` 缺省＝面取不到（判卷里那些不关心归属的用例保持原语义），此时按整棵工作树判并出声。 */
 export function verdict(input: {
   tsc: { status: number | null; out: string } | null;
   baseline: Readonly<Record<string, number>>;
+  untracked?: { files: readonly string[]; unavailable: boolean };
 }): EvidenceVerdict {
   /* 「跑到了没有」在判定这一层也要自证：只信调用方把 status 归一化成 null 是不可靠的（门与判卷都会直接喂 {status:1}）。
      tsc 只有 0（无错）与 2（有错）是"跑过了并给了结论"；其余（含 1＝用法/内部错、null＝没起来）一律「没量到」。 */
   if (input.tsc === null || input.tsc.status === null || (input.tsc.status !== 0 && input.tsc.status !== 2)) {
-    return { ok: false, state: "unreadable", cell: "证据面 tsc 没跑到（取不到）⇒ 这一格没量到，不等于干净", grew: [], lowered: [] };
+    return { ok: false, state: "unreadable", cell: "证据面 tsc 没跑到（取不到）⇒ 这一格没量到，不等于干净", grew: [], lowered: [], flying: [], flyFace: "unavailable" };
   }
   const lines = input.tsc.out.split("\n");
   const t = tally(lines);
   if (t.total !== t.parsed) {
     // 解析器漏行＝分母会静默变小，比"没跑到"更坏（它看着像绿）。宁可不判。
-    return { ok: false, state: "unreadable", cell: `证据面 tsc 输出解析不完整（报错 ${String(t.total)} 行、抽出 ${String(t.parsed)} 行）⇒ 这一格没量到`, grew: [], lowered: [] };
+    return { ok: false, state: "unreadable", cell: `证据面 tsc 输出解析不完整（报错 ${String(t.total)} 行、抽出 ${String(t.parsed)} 行）⇒ 这一格没量到`, grew: [], lowered: [], flying: [], flyFace: "unavailable" };
   }
+  const flyFace: "ok" | "unavailable" = input.untracked !== undefined && input.untracked.unavailable === false ? "ok" : "unavailable";
+  const flySet = new Set(input.untracked?.files ?? []);
+  const trackedFile: Record<string, number> = {};
+  const flying: { file: string; now: number }[] = [];
+  for (const [file, now] of Object.entries(t.perFile)) {
+    if (flyFace === "ok" && flySet.has(file)) flying.push({ file, now });
+    else trackedFile[file] = now;
+  }
+  flying.sort((a, b) => (a.file < b.file ? -1 : 1));
   const grew: { file: string; now: number; cap: number }[] = [];
   const lowered: string[] = [];
   for (const [file, cap] of Object.entries(input.baseline)) {
-    const now = t.perFile[file] ?? 0;
+    const now = trackedFile[file] ?? 0;
     if (now > cap) grew.push({ file, now, cap });
     else if (now < cap) lowered.push(file);
   }
-  for (const [file, now] of Object.entries(t.perFile)) {
+  for (const [file, now] of Object.entries(trackedFile)) {
     if (!(file in input.baseline) && now > 0) grew.push({ file, now, cap: 0 });
   }
   grew.sort((a, b) => (a.file < b.file ? -1 : 1));
-  const nowTotal = Object.values(t.perFile).reduce((a, b) => a + b, 0);
+  const nowTotal = Object.values(trackedFile).reduce((a, b) => a + b, 0);
   const capTotal = Object.values(input.baseline).reduce((a, b) => a + b, 0);
-  const head = `证据面危险码 ${String(nowTotal)} 条／帽 ${String(capTotal)} 条（登记 ${String(Object.keys(input.baseline).length)} 个文件；全量报错 ${String(t.total)} 条）`;
+  /* 口径必须写在读数里：同一个「12 条」在 HEAD 口径与工作树口径下是两件事（第 259 页就为这两个数吵过一次）。 */
+  const flyTotal = flying.reduce((a, f) => a + f.now, 0);
+  const scope = flyFace === "ok"
+    ? `HEAD 口径｜在飞未入库 ${String(flyTotal)} 条／${String(flying.length)} 个文件（只点名，不计我的账${flying.length === 0 ? "" : `：${flying.map((f) => `${f.file}(${String(f.now)})`).join("、")}`}）`
+    : "工作树口径（未跟踪面取不到，不等于没有 ⇒ 隔壁的草稿也会被算进我的账，最坏是假红）";
+  const head = `证据面危险码 ${String(nowTotal)} 条／帽 ${String(capTotal)} 条（${scope}；登记 ${String(Object.keys(input.baseline).length)} 个文件；全量报错 ${String(t.total)} 条）`;
   if (grew.length > 0) {
-    return { ok: false, state: "grew", cell: `${head}｜⚠️ 涨了 ${String(grew.length)} 个文件（只准调低）：${grew.map((g) => `${g.file} ${String(g.now)}>${String(g.cap)}`).join("、")}`, grew, lowered };
+    return { ok: false, state: "grew", cell: `${head}｜⚠️ 涨了 ${String(grew.length)} 个文件（只准调低）：${grew.map((g) => `${g.file} ${String(g.now)}>${String(g.cap)}`).join("、")}`, grew, lowered, flying, flyFace };
   }
   return {
     ok: true,
@@ -125,6 +169,8 @@ export function verdict(input: {
     cell: `${head}${lowered.length === 0 ? "" : `｜${String(lowered.length)} 个文件已清到帽下（把登记值调低即可）：${lowered.join("、")}`}`,
     grew,
     lowered,
+    flying,
+    flyFace,
   };
 }
 

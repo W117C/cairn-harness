@@ -2,7 +2,7 @@
  *  本文件的存在理由：门自己也要有分辨力证人——写它的时候我自己犯过两个"看着绿其实是空转"的错
  *  （tsc 退出码当成 1 而不是 2；`(error)` 白占一个捕获组导致 code 恒为 "error"），两个都不会让解析自证红。 */
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
@@ -10,11 +10,13 @@ import { describe, expect, it } from "vitest";
 import {
   DANGER_BASELINE,
   DANGER_CODES,
+  evidenceOthersPrefixes,
   parseTscLine,
   runEvidenceTsc,
   tally,
   verdict,
 } from "../scripts/lib/evidence-typecheck";
+import { gitOthersArgs } from "../scripts/prose-needle-scan";
 
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 
@@ -122,6 +124,76 @@ describe("verdict：三态分开印，水位只准调低", () => {
   });
 });
 
+/* ── 第 281 页：归因分面。第 259 页的口径一直写在注释里（「只登记在 HEAD 里的文件」），
+   但判定面把隔壁未入库的草稿一视同仁 ⇒ 共享工作树里「别人的草稿」= 我的红，交笔自检只能靠人肉归因。
+   这四条各钉一种坏法：豁免写过头（把已跟踪的也放走）、豁免写反（一个都不放）、
+   面取不到被读成"没有未跟踪件"（fail-open）、口径没印进读数（同一个 12 条在两种口径下是两件事）。 ── */
+describe("归因分面：未跟踪（不在 HEAD）的危险码只点名、不进棘轮", () => {
+  const outMine = "outputs/a.mts(1,2): error TS2339: x";
+  const outFly1 = "outputs/neighbor-fly.mts(9,9): error TS2339: y";
+  const outFly2 = "outputs/neighbor-fly.mts(8,8): error TS2551: z";
+  const out = [outMine, outFly1, outFly2].join("\n");
+
+  it("隔壁未入库的草稿 ⇒ 不红、点名，且 HEAD 口径的数字真的比工作树口径小（两种口径不许同数）", () => {
+    const v = verdict({ tsc: { status: 2, out }, baseline: { "outputs/a.mts": 1 }, untracked: { files: ["outputs/neighbor-fly.mts"], unavailable: false } });
+    expect(v.ok, `隔壁的草稿推动了棘轮：${v.cell}`).toBe(true);
+    expect(v.state).toBe("clean");
+    expect(v.flying).toEqual([{ file: "outputs/neighbor-fly.mts", now: 2 }]);
+    expect(v.grew).toEqual([]);
+    // 口径必须印出来，否则下一个读者分不清这 1 条是"仓里的"还是"整棵树的"
+    expect(v.cell).toContain("HEAD 口径");
+    expect(v.cell).toContain("不计我的账");
+    expect(v.cell).toContain("outputs/neighbor-fly.mts(2)");
+    // 同一份输入、不喂面 ⇒ 那条草稿就落回我的账（1 条帽 vs 3 条现读 ⇒ 红）。两种口径必须读得出差别。
+    const bare = verdict({ tsc: { status: 2, out }, baseline: { "outputs/a.mts": 1 } });
+    expect(bare.state, "喂面与不喂面同为 clean ⇒ 分面根本没生效").toBe("grew");
+    expect(bare.grew).toEqual([{ file: "outputs/neighbor-fly.mts", now: 2, cap: 0 }]);
+  });
+
+  it("豁免只认「清单里那一个文件」：同目录的已跟踪新件照样红（豁免不许按前缀放行）", () => {
+    const v = verdict({
+      tsc: { status: 2, out: [outMine, "outputs/same-dir-new.mts(1,2): error TS2339: x"].join("\n") },
+      baseline: { "outputs/a.mts": 1 },
+      untracked: { files: ["outputs/neighbor-fly.mts"], unavailable: false },
+    });
+    expect(v.ok, "已跟踪的新探针被当成在飞放走了 ⇒ 这就是假绿").toBe(false);
+    expect(v.grew).toEqual([{ file: "outputs/same-dir-new.mts", now: 1, cap: 0 }]);
+  });
+
+  it("面取不到 ⇒ 不许读成「没有未跟踪件」：退回工作树口径判（最坏假红）并把话说明白", () => {
+    const v = verdict({ tsc: { status: 2, out }, baseline: { "outputs/a.mts": 1 }, untracked: { files: [], unavailable: true } });
+    expect(v.flyFace).toBe("unavailable");
+    expect(v.cell).toContain("工作树口径");
+    expect(v.cell).toContain("取不到");
+    expect(v.state).toBe("grew");
+    expect(v.flying).toEqual([]);
+    // 空清单且面可取，与"取不到"必须是两句不同的话
+    const empty = verdict({ tsc: { status: 2, out }, baseline: { "outputs/a.mts": 1 }, untracked: { files: [], unavailable: false } });
+    expect(empty.cell).toContain("HEAD 口径");
+    expect(empty.flyFace).toBe("ok");
+  });
+
+  it("守恒式：HEAD 那一半 ＋ 在飞那一半 ＝ tally 的全部（分出去的不许凭空少一条）", () => {
+    const v = verdict({ tsc: { status: 2, out }, baseline: { "outputs/a.mts": 1 }, untracked: { files: ["outputs/neighbor-fly.mts"], unavailable: false } });
+    const all = Object.values(tally(out.split("\n")).perFile).reduce((a, b) => a + b, 0);
+    const flySum = v.flying.reduce((a, f) => a + f.now, 0);
+    const cellNum = Number(/危险码 (\d+) 条/u.exec(v.cell)?.[1]);
+    expect(cellNum + flySum, `cell 的 ${String(cellNum)} ＋ 在飞 ${String(flySum)} ≠ 全部 ${String(all)}`).toBe(all);
+  });
+});
+
+describe("evidenceOthersPrefixes：取料面与 tsc 的 include 同宽（不写死目录名）", () => {
+  it("普通目录原样、带通配的取到目录为止、整树写法与空 include 都交 \".\"", () => {
+    expect(evidenceOthersPrefixes(["outputs"])).toEqual(["outputs"]);
+    expect(evidenceOthersPrefixes(["outputs/**/*.mts"])).toEqual(["outputs"]);
+    expect(evidenceOthersPrefixes(["outputs/", "outputs"])).toEqual(["outputs"]); // 去重去尾斜杠
+    expect(evidenceOthersPrefixes(["**/*.mts"])).toEqual(["."]);
+    expect(evidenceOthersPrefixes([])).toEqual(["."]);
+    // 反向证人：写死成常量时，include 加一个目录就读不出差别
+    expect(evidenceOthersPrefixes(["outputs", "tools"])).toEqual(["outputs", "tools"]);
+  });
+});
+
 describe("真环境：这一格得在真仓里跑得出东西（规则 237/320）", () => {
   it("仓内 tsconfig.evidence.json 存在，且 tsc 真跑了（退出码 0 或 2，不是「没跑到」）", () => {
     expect(existsSync(join(repoRoot, "tsconfig.evidence.json")), "口径必须落在仓内文件里，不能留在 /tmp").toBe(true);
@@ -139,6 +211,28 @@ describe("真环境：这一格得在真仓里跑得出东西（规则 237/320�
       expect(DANGER_BASELINE[f]!, "登记值必须 ≥1（0 就不该占一行，走删除）").toBeGreaterThanOrEqual(1);
     }
   });
+
+  it("真仓那一趟：被豁免的每一支都必须真的不在 HEAD，且 HEAD 那一半与独立重数同值", () => {
+    const ran = runEvidenceTsc(repoRoot);
+    expect(ran, "取料面跑不起来 ⇒ 这一格没量到，不能拿它当豁免的证人").not.toBeNull();
+    const raw = execFileSync("git", gitOthersArgs(evidenceOthersPrefixes(["outputs"])), { cwd: repoRoot, encoding: "utf8" });
+    const fly = raw.split("\0").filter((s) => s.length > 0);
+    const v = verdict({ tsc: ran, baseline: DANGER_BASELINE, untracked: { files: fly, unavailable: false } });
+    const tracked = new Set(execFileSync("git", ["ls-tree", "-r", "--name-only", "HEAD"], { cwd: repoRoot, encoding: "utf8" }).trim().split("\n"));
+    for (const f of v.flying) {
+      // 豁免面的合法性判据：它豁免的是"HEAD 里没有的东西"。哪天有已跟踪文件混进未跟踪清单，
+      // 这条就红——那正是把假绿写进归因的那一格。
+      expect(tracked.has(f.file), `被算成在飞的 ${f.file} 其实在 HEAD 里 ⇒ 豁免面写宽了`).toBe(false);
+      expect(existsSync(join(repoRoot, f.file)), `${f.file} 盘上都没有，却在 flying 名单里`).toBe(true);
+    }
+    // 独立重数（不走 verdict 的分面代码路）：tsc 原文里"文件不在未跟踪清单"的那些危险码，该等于 cell 的 HEAD 口径
+    const flySet = new Set(fly);
+    const independent = (ran?.out ?? "").split("\n").reduce((acc, line) => {
+      const h = parseTscLine(line);
+      return h !== null && DANGER_CODES.includes(h.code) && !flySet.has(h.file) ? acc + 1 : acc;
+    }, 0);
+    expect(Number(/危险码 (\d+) 条/u.exec(v.cell)?.[1]), "cell 的 HEAD 口径与独立重数不等 ⇒ 分面数错了").toBe(independent);
+  }, 15_000); // 一次真 tsc ＋ 两次 git：与上面那条约量级（安静态 2.3s）
 });
 
 /* 门那一半（进程编排）的两个拒绝分支。判定全在 lib，但「拒绝」只长在 runner 里：
@@ -161,6 +255,16 @@ describe("门那一半：runner 的两个拒绝分支各自要出声", () => {
     // 反向证人：同一个脚本不带参数时**不许**退 2（否则上面那条恒真）
     expect(runGate([], repoRoot).status === 2, "不带参数也退 2 ⇒ 拒绝分支写反了，上面那条就没分辨力了").toBe(false);
   }, 15_000); // 反向证人那一跑要真把门跑一遍（含一次 tsc）：安静态 2.74s（第 262 页）
+
+  it("归属面取料那一行必须印出来，且前缀与 tsc 的 include 同源（接线证人：这行掉了，豁免就没人看得见）", () => {
+    const { status, out } = runGate([], repoRoot);
+    // 不断言 0/1：现读是几取决于 HEAD 里有没有新危险码（那是棘轮的事），这里只钉"门跑到了并交代了取料面"
+    expect(status === 0 || status === 1, `门只能退 0（不涨）或 1（涨/没量到），现读 ${String(status)}`).toBe(true);
+    const cfg = JSON.parse(readFileSync(join(repoRoot, "tsconfig.evidence.json"), "utf8")) as { include?: unknown };
+    const inc = Array.isArray(cfg.include) ? cfg.include.filter((x): x is string => typeof x === "string") : [];
+    expect(out).toContain(`归属面取料：前缀 ${evidenceOthersPrefixes(inc).join("、")}`);
+    expect(out, "未跟踪那一半没印条数 ⇒ 「豁免了几支」读不出来").toMatch(/未跟踪 \d+ 支/u);
+  }, 15_000); // 又一次真门（含一次 tsc）：安静态 2.3s（第 281 页现读）
 
   it("口径文件取不到 ⇒ 出声且非零，不许读成干净", () => {
     const empty = mkdtempSync(join(tmpdir(), "dsh-evtsf-"));

@@ -2,9 +2,11 @@
  *  退出码：0＝现读不高于登记帽；1＝**涨了**或**没量到**（两种都出声，但归因句不同——见 `verdict` 的三态）；
  *  2＝用法错（本门不收参数，多给的按"没量到"处理前先把话说清）。
  *  判定与解析都在 `scripts/lib/evidence-typecheck.ts`（可单测的那一份），这里只做进程编排——与本仓「门的判定面可测」的分法一致。 */
-import { existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { DANGER_BASELINE, DANGER_CODES, parseTscLine, runEvidenceTsc, tally, verdict } from "./lib/evidence-typecheck";
+import { DANGER_BASELINE, DANGER_CODES, evidenceOthersPrefixes, parseTscLine, runEvidenceTsc, tally, verdict } from "./lib/evidence-typecheck";
+import { gitOthersArgs } from "./prose-needle-scan";
 
 const CWD = process.cwd();
 const extra = process.argv.slice(2).filter((a) => !a.startsWith("--help"));
@@ -19,7 +21,22 @@ if (existsSync(join(CWD, "tsconfig.evidence.json")) === false) {
 
 const started = Date.now();
 const tsc = runEvidenceTsc(CWD);
-const v = verdict({ tsc, baseline: DANGER_BASELINE });
+/* 未跟踪面（第 281 页）：前缀按 `tsconfig.evidence.json` 的 include 现读，命令形状复用 prose 面那一份
+   `gitOthersArgs`（同一条"怎么问 git"的决策只长在一处）。取不到时**不许**当成"没有未跟踪文件"——
+   `unavailable` 一路交给 `verdict`，那里退回工作树口径并出声。 */
+function untrackedFace(): { files: string[]; unavailable: boolean; prefixes: string[] } {
+  try {
+    const cfg = JSON.parse(readFileSync(join(CWD, "tsconfig.evidence.json"), "utf8")) as { include?: unknown };
+    const include = Array.isArray(cfg.include) ? cfg.include.filter((x): x is string => typeof x === "string") : [];
+    const prefixes = evidenceOthersPrefixes(include);
+    const raw = execFileSync("git", gitOthersArgs(prefixes), { cwd: CWD, encoding: "utf8" });
+    return { files: raw.split("\0").filter((s) => s.length > 0), unavailable: false, prefixes };
+  } catch {
+    return { files: [], unavailable: true, prefixes: [] };
+  }
+}
+const fly = untrackedFace();
+const v = verdict({ tsc, baseline: DANGER_BASELINE, untracked: { files: fly.files, unavailable: fly.unavailable } });
 const ms = Date.now() - started;
 
 // 自证一行：解析出的条数与总报错条数配成对（分母漂了就当场可见，不用等人去 grep tsc 输出）
@@ -32,6 +49,7 @@ const firstDangerLine = tsc === null ? "" : (tsc.out.split("\n").find((l) => {
 }) ?? "");
 
 console.log(`${v.ok ? "✅" : "❌"} evidence-typecheck：${v.cell}（${String(ms)}ms${sample}）`);
+console.log(`   归属面取料：前缀 ${fly.prefixes.length === 0 ? "（清单未取到）" : fly.prefixes.join("、")}｜未跟踪 ${String(fly.files.length)} 支${fly.unavailable ? "（面取不到 ⇒ 按工作树口径判，见上）" : ""}`);
 if (firstDangerLine !== "") {
   console.log(`   被算进危险码的第一行（原文照贴，判卷钉的就是这个形状）：${firstDangerLine.slice(0, 140)}`);
 }
