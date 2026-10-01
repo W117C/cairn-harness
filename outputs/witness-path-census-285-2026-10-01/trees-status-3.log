@@ -1,0 +1,10 @@
+verify-791c621 status=0
+head-cert-791c621 status=0
+head-cert-b61cb41 status=0
+本会话累计树=12（前 9 棵见 outputs/danger-codes-shape-284-2026-10-01/trees-status.log 与那份凭证）
+mutbak（.worktrees 全扫，不带 -maxdepth）:
+/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-verify/scripts/lib/shard-plan.ts.mutbak
+mutbak（主树 src/＋scripts/）:
+       0
+worktree 总列举数:
+      82

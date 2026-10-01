@@ -1,0 +1,14 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-791c621.lock）
+变异验证：5 条
+✅ evidence-witness-pattern-ref-read-as-concrete-file — 把「带 `*?{}` 的是模式、不是路径」那一支焊死 ⇒ 台账里 `outputs/_audit-*.md` 这种写法被当成一个具体文件去追，门为一堆根本不存在的证人喊红。⚠️ 同族另一形状（字符集限成 ASCII ⇒ 带中文的真文件名在第一个汉字处被截断，第 285 页普查第一版真犯过）由取料面判卷钉着、这条锚点**没买到**：改成派生正则后针脚要写四层转义才贴得住，为它拼一条脆弱针脚不如把形状写在页上（规则 341：注释与散文都不许被读成已闭） ｜本机实测 0.9s／2 拍
+✅ evidence-witness-dir-ref-always-resolves — 目录点名（以 `/` 结尾）那一半改成恒追得到 ⇒ 「整个 dated 目录没随页入库」读成绿：这正是第 281 页的形状，而文件那一半照旧——只红目录这一支，说明判据的两半得各买一支 ｜本机实测 0.7s／2 拍
+✅ evidence-witness-file-ref-always-resolves — 文件点名那一半改成恒追得到 ⇒ 页点名的证人不存在也不出声，D-11 退化成「只查目录」；反向一侧（同一条从清单里去掉要红一条）当场抓住 ｜本机实测 0.7s／2 拍
+✅ evidence-witness-stale-registry-silent — 登记位的「不再命中就该删」那一半焊死 ⇒ 登记表只会越积越多、没人知道自己留的是假存量（第 279 页 D-10 同族：只印不判的那一半也要出声） ｜本机实测 0.7s／2 拍
+✅ evidence-witness-unavailable-reads-as-empty-face — 把「取不到 HEAD 清单 ⇒ 未检」改成「拿空集合当判据」⇒ 三态被抹平：门会喊 73 条红（假红淹真信号），而下一次真取不到清单时它又可能被人顺手改成 `?? new Set()` 的反方向——接线形状要有钉子 ｜本机实测 0.7s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 4.1s · 跑了 5/5 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 10 次／5 条（每条次数分布 2×5）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 evidence-witness-pattern-ref-read-as-concrete-file 0.9s
+跑法单价：selector 10 拍·中位 0.34s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-791c621.lock）
+FULL_EXIT=0

@@ -1,0 +1,43 @@
+(eval):1: bad substitution
+fatal: ambiguous argument 'ec004fcests/docs-check.test.ts': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+fatal: ambiguous argument 'ec004fcheck.ts': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+fatal: ambiguous argument 'ec004fcheck.ts': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+fatal: ambiguous argument 'ec004fcheck.ts': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+ec004fc anchors=0 it_docs=0 base_files=0 base_sum= codes=0
+(eval):1: bad substitution
+fatal: ambiguous argument '791c621ests/docs-check.test.ts': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+fatal: ambiguous argument '791c621heck.ts': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+fatal: ambiguous argument '791c621heck.ts': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+fatal: ambiguous argument '791c621heck.ts': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+791c621 anchors=0 it_docs=0 base_files=0 base_sum= codes=0
+(eval):1: bad substitution
+fatal: ambiguous argument 'b61cb41ests/docs-check.test.ts': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+fatal: ambiguous argument 'b61cb41heck.ts': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+fatal: ambiguous argument 'b61cb41heck.ts': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+fatal: ambiguous argument 'b61cb41heck.ts': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+b61cb41 anchors=0 it_docs=0 base_files=0 base_sum= codes=0
+AUDIT_EXIT=0

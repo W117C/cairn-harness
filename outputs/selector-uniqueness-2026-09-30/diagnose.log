@@ -1,0 +1,121 @@
+取料哨兵：parseAnchors 抽到 1077 行｜带 expectFail 1077 条｜判卷标题抽得到的 1077 条（这三格任一为 0 ＝ 本探针瞎了，别把它的 0 当读数）
+退化：共 14 条 —— zero 12｜multi 2
+
+────────────────────────────────────────
+id        auto-verify-default-on
+判卷      tests/loop.test.ts   （命中 0 条标题）
+成因      zero
+现指针    "零行为回退：缺省不开闸（未给 autoVerify） → 无 verify_result、请求数与旧行为同形"
+最像标题  "零行为回退：$label → 无 verify_result、请求数与旧行为同形"
+最像标题  "模型自调过 verify ⇒ harness 让位，且手动拍事件形态零变化（连 auto 键都不出现）"
+最像标题  "表内没有 verify ⇒ 钩子一次都不执行，按工具表摘除拒绝"
+
+────────────────────────────────────────
+id        worker-impact-spec-not-appended
+判卷      tests/worker-impact-query.test.ts   （命中 0 条标题）
+成因      zero（该文件确有模板标题：运行时名 != 字面名）
+现指针    "read 档：开关开启时规格与实例同名同时出现，白名单同步"
+最像标题  "%s 档：开关开启时规格与实例同名同时出现，白名单同步"
+最像标题  "开关开启时执行面真的挂着 impact_query 实例（不是只有规格——「模型看得见、一调就 unknown tool」）"
+最像标题  "%s 档：开关关着时三处一处都不加（模型面零字节）"
+
+────────────────────────────────────────
+id        worker-impact-whitelist-not-appended
+判卷      tests/worker-impact-query.test.ts   （命中 0 条标题）
+成因      zero（该文件确有模板标题：运行时名 != 字面名）
+现指针    "read 档：开关开启时规格与实例同名同时出现，白名单同步"
+最像标题  "%s 档：开关开启时规格与实例同名同时出现，白名单同步"
+最像标题  "开关开启时执行面真的挂着 impact_query 实例（不是只有规格——「模型看得见、一调就 unknown tool」）"
+最像标题  "%s 档：开关关着时三处一处都不加（模型面零字节）"
+
+────────────────────────────────────────
+id        hook-matcher-exact-list-degrades-to-substring-regex
+判卷      tests/hooks-input-contract.test.ts   （命中 0 条标题）
+成因      zero
+现指针    "纯精确名不做子串：matcher \"Edit\" 不得命中 NotebookEdit"
+最像标题  "纯精确名不做子串：matcher \\\"Edit\\\" 不得命中 NotebookEdit"
+最像标题  "matcher \"*\" 全配：CC hooks.json 最常见写法，不得因 RegExp(\"*\") 抛错而回落成精确比较"
+最像标题  "空串 matcher 同样全配"
+
+────────────────────────────────────────
+id        read-worker-inherits-wide-hook-mode
+判卷      tests/worker-hooks.test.ts   （命中 0 条标题）
+成因      zero
+现指针    "forWorkerMode(\"read\") 把引擎降成只读档：中等风险的钩子命令拒跑；\"write\" 沿用原档"
+最像标题  "forWorkerMode(\\\"read\\\") 把引擎降成只读档：中等风险的钩子命令拒跑；\\\"write\\\" 沿用原档"
+最像标题  "PreToolUse 阻断真的挡住 worker 的写：worktree 里不落盘，tool_result 带钩子理由"
+最像标题  "钩子拿到 agent_id = 该 worker 的 id 与模型实下的参数（§4.4 归因）"
+
+────────────────────────────────────────
+id        evidence-receipt-reports-known-completeness-as-unknown
+判卷      tests/solpi-receipt-integration.test.ts   （命中 0 条标题）
+成因      zero（该文件确有模板标题：运行时名 != 字面名）
+现指针    "restores genuine receipts after two sends and full source on invalidation (observationPack=true)"
+最像标题  "restores genuine receipts after two sends and full source on invalidation (observationPack=%s)"
+
+────────────────────────────────────────
+id        redaction-stops-recursing-into-containers
+判卷      tests/stream-redaction.test.ts   （命中 0 条标题）
+成因      zero（该文件确有模板标题：运行时名 != 字面名）
+现指针    "verify_result 的声明路径种得进密钥、也擦得掉"
+最像标题  "%s 的声明路径种得进密钥、也擦得掉"
+
+────────────────────────────────────────
+id        worker-git-newline-not-a-separator
+判卷      tests/shell-bypass-composition.test.ts   （命中 0 条标题）
+成因      zero
+现指针    "换行是命令分隔符：`echo hi\\ngit push --force` 不得因为整段首词是 echo 而漏判"
+最像标题  "换行是命令分隔符：`echo hi\\\\ngit push --force` 不得因为整段首词是 echo 而漏判"
+最像标题  "代价要看得见：`echo xargs git push --force` 这类文本参数被牵连，但牵连成 ask 不是 deny"
+最像标题  "过覆盖侧已修：`git push --force-with-lease` 不再被这条 deny 命中"
+
+────────────────────────────────────────
+id        shape-leading-env-assignment-not-skipped
+判卷      tests/command-shape.test.ts   （命中 0 条标题）
+成因      zero
+现指针    "GIT_PAGER=cat git push --force"
+最像标题  "五类写法都产得出「git push --force」那一形"
+最像标题  "只读 git 只产它自己那一形（多余候选=审批卡变多的那条路）"
+
+────────────────────────────────────────
+id        settings-default-on-key-read-by-strict-true
+判卷      tests/settings.test.ts   （命中 2 条标题）
+成因      multi
+现指针    "旧机器（JSON 里压根没这个键）读回来必须是 true"
+最像标题  "旧机器（JSON 里压根没这个键）读回来必须是 true"
+最像标题  "旧机器（JSON 里压根没这个键）读回来必须是 true"
+可切到    "e"
+可切到    "e"
+
+────────────────────────────────────────
+id        settings-auto-verify-default-reverted
+判卷      tests/settings.test.ts   （命中 2 条标题）
+成因      multi
+现指针    "DEFAULT_SETTINGS 与读盘回退同向（翻一处忘另一处 = 老用户永远拿不到新默认）"
+最像标题  "DEFAULT_SETTINGS 与读盘回退同向（翻一处忘另一处 = 老用户永远拿不到新默认）"
+最像标题  "DEFAULT_SETTINGS 与读盘回退同向（翻一处忘另一处 = 老用户永远拿不到新默认）"
+可切到    "）"
+可切到    "）"
+
+────────────────────────────────────────
+id        pb-control-arm-always-wired
+判卷      tests/prune-batching.test.ts   （命中 0 条标题）
+成因      zero
+现指针    "对照臂判据：门槛旋钮接得上"
+
+────────────────────────────────────────
+id        g-b-injection-face-ignores-table-form
+判卷      tests/tool-surface-parity.test.ts   （命中 0 条标题）
+成因      zero
+现指针    "扩形后的分母自证：table[\"name\"] = 那一形确实被算进来了（解析器静默 0 命中比不扩更坏）"
+最像标题  "扩形后的分母自证：table[\\\"name\\\"] = 那一形确实被算进来了（解析器静默 0 命中比不扩更坏）"
+
+────────────────────────────────────────
+id        loose-pointer-counts-literal
+判卷      tests/mutate-verify-gates.test.ts   （命中 0 条标题）
+成因      zero（该文件确有模板标题：运行时名 != 字面名）
+现指针    "水位：真表现读松钉只准调低（帽 10，09-27 现读 10）——新增一根要写明为什么"
+最像标题  "水位：真表现读松钉只准调低（帽 ${String(LOOSE_CAP)}，09-27 现读 10）——新增一根要写明为什么"
+最像标题  "水位：真表现读「选不中＋不唯一」只准调低（帽 ${SELECTOR_CAP}，09-28 现读 13＝11 零命中＋2 多命中）——新增一根要写明为什么"
+
+（本探针不改表；改法与实跑验证记在同目录 findings.md）

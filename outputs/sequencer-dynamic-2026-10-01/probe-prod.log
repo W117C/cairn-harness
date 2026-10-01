@@ -1,0 +1,15 @@
+方案门抢答： {"id":"apr-1-pipeline","outcome":"{\"ok\":true}"}
+事件类型分布： [["user_message",1],["tool_call",1],["approval_requested",1],["approval_resolved",1],["tool_result",9],["assistant_message",3],["agent_spawned",2],["agent_status",4],["agent_message",5],["security_report",1],["agent_result",2]]
+
+状态事件（callId "pipeline-*"）＝ 4 条
+  · callId=pipeline-pc1 ok=true [sequencer] （只读状态·模型不可改 §4.4.7）链已批准启动：2 环（implement → review）
+  · callId=pipeline-pc1 ok=true [sequencer] （只读状态·模型不可改 §4.4.7）stage 1/2（implement）启动
+  · callId=pipeline-pc1 ok=true [sequencer] （只读状态·模型不可改 §4.4.7）stage 2/2（review）启动
+  · callId=pipeline-pc1 ok=true [sequencer] （只读状态·模型不可改 §4.4.7）整链 done：
+#1 implement worker-1 done｜stage done（探针
+
+spawn 回执（callId=pc1）＝ 2 条，ok=[true,true]
+  回执正文： {"pipeline":true,"chain_id":"pc1","stages":2,"stage_roles":["implement","review"]}
+  回执正文： [harness] pipeline 整链 done（sequencer 零 LLM 展开）：
+#1 implement worker-1 done｜stage done（探针假模型，一步收工）
+#2 review worker-2 done verdict=unspecified｜stage done（探针假模型，一
