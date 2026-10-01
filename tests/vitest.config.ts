@@ -26,5 +26,19 @@ export default defineConfig({
     // runner-gates 与 gated-tools 共用 fixtures/todo-app 靶子（重置/断言同一目录），
     // 并行跑会文件竞争 → 测试文件级串行（vitest 文件间仍各自隔离模块注册表）。
     fileParallelism: false,
+
+    /* 超时对齐**实测**，不是放松判据（断言一条没动，改的只是"允许多久之内跑完"）。
+     *
+     * 为什么必须显式给：vitest 缺省 hookTimeout=10s、testTimeout=5s，而这两条现在是**确定性红**：
+     *   · `prose-needle-scan.test.ts` 的 `beforeAll` 调 `scanRepo(root)` 整仓扫一遍，
+     *     2026-10-01 实测 **10.8 秒**（`node --import tsx -e 'scanRepo(process.cwd())'` 计时），
+     *     已越过 10s 缺省 ⇒ 干净检出上这条 suite 必红（合并前 e42b4af 与合并后 d1371dd 同样红，
+     *     与本笔的改动无关；这是**仓库长大了**，不是代码坏了）。
+     *   · `head-cert-deps.test.ts` 有一条真读本机 `git worktree list` 的用例，树一多就过 5s。
+     * 注意这是**按仓库规模增长**的开销：值给宽是买时间，不是治本。
+     * 治本是让 `scanRepo` 能增量/缓存（那属于 `scripts/prose-needle-scan.ts` 的活），
+     * 在那之前，给足余量比留一条"必红的已知项"好——假红灯会训练人忽略红灯（本仓第 123 页的账）。 */
+    hookTimeout: 60_000,
+    testTimeout: 30_000,
   },
 });
