@@ -1,7 +1,7 @@
 # m0 桌面端（驾驶舱）设计
 
 - 日期：2026-10-02
-- 状态：需求逐题澄清（13 项决定）＋设计 §1–§6 逐节过审＋视觉/布局 mockup 确认，本文为定稿
+- 状态：需求逐题澄清（13 项决定）＋设计 §1–§6 逐节过审＋视觉/布局 mockup 确认＋审阅轮增补（运行态动效/时间戳/模型选择），本文为定稿
 - 范围：v1（macOS 内测版）
 - 配套物料：视觉方向与布局稿在 `.superpowers/brainstorm/93811-1790876920/content/`（visual-style-v2.html、layout.html）
 
@@ -72,6 +72,14 @@ apps/desktop/
 - **UI 状态 ＝ `AgentEvent[]` 的纯投影**（吸收旧版 `projections.ts` 的正确直觉并强化）：投影函数全部纯函数、vitest 直测不挂 DOM。历史会话 `openSession` 全量读 JSONL 走同一投影；运行中会话经 `onEvent` 增量累加后进同一投影。
 - 明暗两态用同一组语义 token（§6.1），`prefers-color-scheme` 跟随系统。
 
+### 3.5 唯一的 core 侧增量：事件级时间戳
+
+m0 是事件溯源，但 `AgentEvent` 今天没有行级时间字段——没有它，"对话内时间戳"就只能渲染假数据。本次设计对内核的唯一增量：**事件落盘时写入可选 `ts` 字段（Date.now 毫秒）**。约束：
+
+- 向后兼容：旧会话 JSONL 无 `ts`，投影容忍缺失（对应 UI 显示"–"或不显示），replay/判卷语义不因缺省字段改变；
+- 冻结判卷文件与夹具不碰，新增字段走新增测试；
+- 除此之外，本设计零 core 源码改动。
+
 ## 4. 数据面
 
 ### 4.1 会话库共享
@@ -99,7 +107,7 @@ sessionsRoot = <workspace>/.agent/sessions
 
 | 内容 | 载体 |
 |------|------|
-| 应用设置（主题跟随/语言/默认权限档/更新通道） | settings.json（`src/main/settings.ts` 服务不动） |
+| 应用设置（主题跟随/语言/默认权限档/默认模型/更新通道） | settings.json（`src/main/settings.ts` 服务不动） |
 | 最近工作区列表 | project-registry（`src/main/project-registry.ts`） |
 | BYOK key | safeStorage→Keychain（`providerKeySet` 已 fail-closed，不可用即拒绝、不落明文） |
 | license 状态 | license.ts（呈现层保留） |
@@ -138,12 +146,19 @@ sessionsRoot = <workspace>/.agent/sessions
 ### 6.2 布局（方案 A：按工作区分组的会话列表，已 mockup 确认）
 
 - **左栏**：顶部"m0 ＋ 新任务"；主体为**按工作区分组**的会话列表——分组标题即工作区名（点击展开/收起），组内会话行带状态圆点（灰呼吸=运行中/完成/红=出错），所有工作区的并行会话同列；左下角"工作区管理 · 设置"入口。
-- **主区**：顶部会话条（标题＋状态＋tokens·cost 安静次级文字）；中部事件流时间线（用户消息、折叠工具行、内联 diff、审批/澄清/方案卡）；底部常驻 **composer**（大圆角输入框，⏎ 派活）。
+- **主区**：顶部会话条（标题＋状态＋**模型选择器**＋tokens·cost 安静次级文字）；中部事件流时间线（用户消息、折叠工具行、内联 diff、审批/澄清/方案卡，每条消息卡带时间戳）；底部常驻 **composer**（大圆角输入框，⏎ 派活）。
+- **时间戳**（真值来自 §3.5 的 `ts` 增量）：事件流内按消息卡安静呈现（精确时间 hover 可见），会话列表显示相对时间（"3 分钟前"）；旧会话无 `ts` 时退化显示行号或留空，不造假。
 - **不做第二栏**：v1 主区永远只有一条时间线，diff 点 ⌄ 内联展开。
 
 ### 6.3 交互规则
 
 - **多会话并行**：后台会话事件落盘不丢，列表圆点呼吸，点回即接上；不需要 tab。
+- **运行态动效**（全部由事件投影推导，不是装饰性动画）：
+  - **思考/生成中**：`assistant_delta` 流式逐字渲染（事件通道现成）；当前轮无工具行时，会话条圆点呈呼吸态＋"思考中"微光（shimmer），模型文本区不闪、只滚动；
+  - **工具执行中**：该工具行进入待定态（图标脉冲＋省略号），完成后折算为静态行；
+  - **后台会话**：左栏会话行圆点同规则呼吸，主区切走不影响动效语义。
+- **工具行折叠规格**：每个工具调用一行——类型图标＋工具名＋参数摘要（单色等宽）＋结果摘要（行数或 +/− 计数），右侧 ⌄ 展开完整参数与结果；diff 行带 add/remove 计数着色。多步同类工具不合并，一行就是一次真实调用。
+- **模型选择**：会话条选择器消费 `getProviderInfo()` 目录（同 worker 注册表一源），选择即 `RunRequest.model`（registry id）透传；设置页可选默认模型；新会话用默认，进行中会话下一轮生效。
 - **审批卡**：事件流中唯一的"重"元素——risk 左竖条＋工具名＋命令＋三键（允许/拒绝/总是允许）；"总是允许"展开 scope 选择（session_kind/always）。
 - **composer 运行中**：输入变为"排队追加指令"，随下一轮进流。
 - **打断**：会话条上的"打断"动作（运行中可见）。
@@ -153,6 +168,11 @@ sessionsRoot = <workspace>/.agent/sessions
 ### 6.4 v1 明确不做（挂点已备）
 
 回放/分叉 UI、时间线回放器、自动化/scheduler 面板、sidechat、记忆/插件面板、七组新手引导向导、Windows/Linux、autoUpdater 自动更新、崩溃上传、license 发放。对应数据面（schedule/sidechat/memory/plugins/onboarding 通道）已在 AgentApi 桥面类型里活着，后置只补 UI。
+
+**审阅轮判定后置的两项**：
+
+- **思考程度选择器**：`ThinkingEffort` 类型与 `RunRequest.thinking` 通道现成，但内核 capabilities 明示四个 adapter 均未把 reasoning/thinking 接入请求体（现阶段只接受 off）——现在做 UI 是假 UI。挂点：选择器跟随 `getProviderInfo()` 能力门渲染（`thinking.values` 只有 off 时整体隐藏），内核接线后零桌面架构改动自动出现。
+- **会话内容搜索/跳转**：时间戳（§3.5）是它的地基，v1 先落真值时间戳，搜索后置。
 
 ## 7. 产品化外围（内测先发、挂点预留）
 
@@ -167,8 +187,8 @@ sessionsRoot = <workspace>/.agent/sessions
 
 ## 8. 测试与验收
 
-- **core 门全不动**：typecheck / test / gates / docs-check 原样；冻结判卷文件与夹具不碰。
-- **renderer 判卷**：投影纯函数 vitest 直测（事件流→UI 状态映射），基线形状取自旧版判过的测试素材（审批卡、截断标注、会话筛选）；组件测试按需轻量。
+- **core 门全不动**：typecheck / test / gates / docs-check 原样；冻结判卷文件与夹具不碰。§3.5 的 `ts` 增量以新增测试验收（落盘写入＋旧日志缺字段兼容投影），不动任何既有判卷。
+- **renderer 判卷**：投影纯函数 vitest 直测（事件流→UI 状态映射），基线形状取自旧版判过的测试素材（审批卡、截断标注、会话筛选），另含运行态投影（delta 聚合、思考中/工具待定态推导）与时间戳投影；组件测试按需轻量。
 - **桌面 e2e 不经 UI**：验收脚本直调 `handleAgentRun`（既有 ipc:check 模式），mock provider（`createMockProvider`）全链路判卷。
 - **单向依赖钉死**：docs-check 扩展——`apps/desktop → src` 允许；`src → apps/desktop` 或 src 内出现 UI/Electron import 即红。vitest config 声明门范围：core 测试不扫 apps/。
 
@@ -194,7 +214,7 @@ sessionsRoot = <workspace>/.agent/sessions
 | 里程碑 | 内容 | 验收锚 |
 |--------|------|--------|
 | M1 壳与桥面 | apps/desktop 骨架、preload 全通道桥接、kernel-host 装配点、mock provider 打通 run | AgentApi 全表 typecheck 红；handleAgentRun 直调判卷绿 |
-| M2 驾驶舱主区 | 事件流投影纯函数、审批/澄清/方案卡、composer、runCancel、tokens·cost | 投影判卷绿；mock 全链路审批→执行→打断 |
+| M2 驾驶舱主区 | 事件流投影纯函数、审批/澄清/方案卡、composer、runCancel、tokens·cost、运行态动效（delta 流式/呼吸态/工具待定态）、时间戳呈现、模型选择器 | 投影判卷绿（含缺 `ts` 旧日志兼容）；mock 全链路审批→执行→打断 |
 | M3 会话库与多工作区 | sessionsRoot 同根接线、工作区注册表、并行多会话状态点、漂移检测 | CLI 建会话桌面可见；并行两会话互不串流 |
 | M4 BYOK 与首启 | 服务商预设＋Keychain、两步首启、设置页默认权限档 | BYOK fail-closed 路径判卷绿 |
 | M5 内测打包 | dmg universal、自签、崩溃日志、checkUpdate 接线、内测分发文档 | 裸机安装可跑通首启两步＋一次真会话 |
