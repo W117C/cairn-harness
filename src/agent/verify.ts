@@ -1,7 +1,8 @@
 // 验证门执行器：按目标仓库的 verify 配置跑 lint/test。
 // 配置来源（规格 §5.4）：①目标仓库 .agent/config.json 的 verify 字段；②缺省探测 package.json 的
 // scripts（lint/test 存在才收）。两者皆无 → fail-closed（ok:false，验证门不空转放行）。
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
+import { constants } from "node:fs";
 import { join } from "node:path";
 import { createOutputRing } from "../tools/output-ring";
 import { sanitizedEnv, spawnTracked } from "../tools/process";
@@ -72,6 +73,11 @@ export function annotateExecCause<T extends { ok: boolean; output: string }>(
 export interface VerifyConfig {
   lint?: string[];
   test?: string[];
+  /** 类型面（M5）：仓库根有 tsconfig 且装了本地 tsc 时探测出的一条命令。
+   *  排最前跑：类型错会让 lint/test 的报错变成噪音，先报类型面省一轮。
+   *  **刻意只探测 typecheck、不探测 lint** —— `action-fusion.ts` 每次 write_file 后都跑 `config.lint`
+   *  并把红了的那次写判成 failed；凭空造 lint 面会把干净改动报成失败（本仓已裁决，见 probeLanguageTestCommands）。 */
+  typecheck?: string[];
   /** 单条 verify 命令的墙钟上限（毫秒）；缺省见 DEFAULT_VERIFY_TIMEOUT_MS。 */
   timeoutMs?: number;
 }
@@ -92,6 +98,8 @@ export const DEFAULT_VERIFY_TIMEOUT_MS = 60_000;
 export const PROBED_LANG_TIMEOUT_MS = 300_000;
 const MIN_VERIFY_TIMEOUT_MS = 1_000;
 const MAX_VERIFY_TIMEOUT_MS = 900_000;
+/** 从第几拍起，「重复」提示升级为「换策略」（第 2 拍只说重复，逐字不变——见 repeatDigestNote）。 */
+export const ESCALATE_REPEAT_ATTEMPT = 3;
 
 /** 缺省执行器：bash -c，语义与 run_shell 对齐（32KB 截断 / 60s 强杀 / 退出码）。
  *  env 走 sanitizedEnv、进程走 spawnTracked（进程组 + 超时强制收束）——verify 命令来自目标仓库的
@@ -179,6 +187,34 @@ export async function probeLanguageTestCommands(repoDir: string): Promise<string
   return [];
 }
 
+/** 类型面探测（M5）：仓库根有 tsconfig.json **且**装了本地 tsc ⇒ 产出类型检查面。
+ *
+ *  两条判据缺一不可，少一条都更坏：
+ *  · 只看 tsconfig 不看二进制 ⇒ 给一条必然红的命令（这正是 `verify-lang-timeout-same-as-npm`
+ *    那条锚点说的「探出来却让它必然超时，比探不出来更坏」）。
+ *  · 命令选 `./node_modules/.bin/tsc` 而不是 `npx --no-install tsc`，是**归因**决定的：
+ *    实测（2026-10-01）本地二进制缺失时 bash 退出 **127** ⇒ `classifyVerifyFailure` 落进既有的
+ *    `toolchain-missing`（环境类，**不扣模型修复额度**）；而 `npx --no-install tsc` 缺失时退出
+ *    **1** 且输出不匹配 `PKG_MANAGER_OWN_ERROR_LINE` ⇒ 被判成 `code`，等于拿 harness 的环境问题
+ *    扣模型的钱、改本来正确的代码。故用相对路径二进制（cwd=repoDir，相对路径照常解析）。 */
+const TSC_BIN = "./node_modules/.bin/tsc";
+export async function probeTypecheckCommands(repoDir: string): Promise<string[]> {
+  let hasTsconfig = false;
+  try {
+    await access(join(repoDir, "tsconfig.json"), constants.F_OK);
+    hasTsconfig = true;
+  } catch {
+    return [];
+  }
+  if (!hasTsconfig) return [];
+  try {
+    await access(join(repoDir, "node_modules", ".bin", "tsc"), constants.X_OK);
+  } catch {
+    return []; // 没装 tsc ⇒ 不产出这一面（不是产出一条必红的命令）
+  }
+  return [TSC_BIN + " --noEmit -p tsconfig.json"];
+}
+
 /** 读 verify 配置：① .agent/config.json 优先；② package.json scripts；③ 非 npm 工具链探测。 */
 export async function loadVerifyConfig(
   repoDir: string,
@@ -191,7 +227,9 @@ export async function loadVerifyConfig(
     if (typeof v === "object" && v !== null) {
       const config: VerifyConfig = {};
       const vo = v as Record<string, unknown>;
-      for (const key of ["lint", "test"] as const) {
+      // `typecheck` 进这张表（M5）：手配的 verify.typecheck 不能被静默丢弃——探测档已经产出这一面，
+      // 配置档却不收，两档口径不一致就是「配了没生效」。顺序与执行顺序一致（typecheck → lint → test）。
+      for (const key of ["typecheck", "lint", "test"] as const) {
         const arr = vo[key];
         if (arr !== undefined) {
           if (!Array.isArray(arr) || arr.some((c) => typeof c !== "string")) {
@@ -232,13 +270,23 @@ export async function loadVerifyConfig(
   const lang = await probeLanguageTestCommands(repoDir);
   // 探测档自带超时：这条命令不是用户写的，超时预期由我们这一侧负责说清楚。
   if (lang.length > 0) return { config: { test: lang, timeoutMs: PROBED_LANG_TIMEOUT_MS }, source: "probed" };
+  // 类型面（M5）走**独立的一行 return**，不碰上面那行——`scripts/mutate-verify.mjs` 有两条锚点
+  // 逐字钉着它（`probe-invents-lint-commands` / `verify-lang-timeout-same-as-npm`）。
+  // 与语言面互斥：语言面命中就整段返回，所以这条只在「没有 go/cargo/pytest/make 测试面」时才会走到。
+  const tc = await probeTypecheckCommands(repoDir);
+  if (tc.length > 0) return { config: { typecheck: tc, timeoutMs: PROBED_LANG_TIMEOUT_MS }, source: "probed" };
   return { config: {}, source: "none" };
+}
+
+/** 一条 verify 序列 = 类型面 → lint 面 → 测试面（顺序即优先级：类型错会让 lint/test 的报错变成噪音）。 */
+export function verifyCommands(config: VerifyConfig): string[] {
+  return [...(config.typecheck ?? []), ...(config.lint ?? []), ...(config.test ?? [])];
 }
 
 /** 执行一轮 verify：逐条跑 lint/test 命令，全绿才 ok。 */
 export async function runVerifyOutcome(repoDir: string, exec: ExecFn = defaultExec): Promise<VerifyOutcome> {
   const { config, source } = await loadVerifyConfig(repoDir);
-  const commands = [...(config.lint ?? []), ...(config.test ?? [])];
+  const commands = verifyCommands(config);
   if (commands.length === 0) {
     return {
       ok: false,
@@ -279,7 +327,9 @@ export function createVerifyHook(repoDir: string, opts: { maxAttempts?: number; 
     maxAttempts: opts.maxAttempts,
     surface: async () => {
       const { config } = await loadVerifyConfig(repoDir);
-      return [...(config.lint ?? []), ...(config.test ?? [])].length > 0;
+      // 类型面也算「有可验面」：只有 tsconfig 的仓库此前被判成没面 ⇒ harness 整段跳过 verify，
+      // 而它其实能验（M5 交付物 1 的另一半：补上的面要真的被跑到，不能只躺在配置里）。
+      return verifyCommands(config).length > 0;
     },
     run: () => runVerifyOutcome(repoDir, opts.exec),
   };
@@ -306,7 +356,16 @@ export function failureDigest(outcome: VerifyOutcome): string {
  *  既贵又零增益，而它缺的那句「你白改了」恰恰才是可执行信息。 */
 export function repeatDigestNote(outcome: VerifyOutcome, attempt: number): string {
   const cmds = outcome.results.filter((r) => !r.ok).map((r) => r.command).join(", ");
-  return "[verify] 第 " + String(attempt) + " 拍结果与上一拍**逐字相同**（失败命令不变：" + (cmds === "" ? "（无）" : cmds)
+  const base = "[verify] 第 " + String(attempt) + " 拍结果与上一拍**逐字相同**（失败命令不变：" + (cmds === "" ? "（无）" : cmds)
     + "）⇒ 这一拍的改动没落到被验的面上。上一拍的完整输出已在上下文里，不再重复注入。"
     + "下一步二选一：把范围收窄到具体文件/单条测试再跑（看清是哪一条在红），或直接 read 那个文件确认改动是否真的写进去了。";
+  // 升级处置（M5 交付物 2）：第 2 拍只说「重复」（逐字不变，tests/verify.test.ts 逐字钉着它）；
+  // 第 3 拍起同一句话已经是第二遍噪音——那时模型已经听过一次「换策略」，还在原地打转，
+  // 说明**换策略本身**没被当真。这拍因此升级：明说「别再改同一处」，并把「这条红到底可不可修」
+  // 摆上台面（真失败越修越有进展，配置/依赖/环境这类红改多少遍都不会绿）。
+  if (attempt < ESCALATE_REPEAT_ATTEMPT) return base;
+  return base + "\n[verify] 升级处置：这是**第 " + String(attempt) + " 拍**同一处红。别再改同一处了——"
+    + "先判这条红可不可修：真失败（测试断言/类型错）才有修的意义；若是配置、依赖缺失或环境问题，"
+    + "改多少遍代码都不会绿（那类红归因会写成 cause=toolchain-missing/pkg-manager/timeout，别照它改代码）。"
+    + "确定要继续修的话，换一条**不同**的路：收窄到单个文件或单条用例先跑通，再决定要不要动大面。";
 }
