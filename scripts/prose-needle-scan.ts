@@ -695,6 +695,27 @@ export function agedInFlight(
   return entries.filter((e) => nowMs - e.mtimeMs >= thresholdMs).map((e) => e.file);
 }
 
+/** 把「在飞清单」切成两半：**盘上真有 mtime** 的那一半进年龄分母，读不到的单列点名。
+ *  为什么要有这个函数（第 278 页）：这段逻辑从前长在 `scanRepo` 里，而 `inFlightAgeChecked`
+ *  今天与 `inFlightFiles.length` 同值（真仓里一个"盘上不存在"都没有）⇒ 任何等式或 `≤` 断言在此刻
+ *  都不分辨，那一格谁也钉不住（规则 340 第三格）。抽成纯函数＋把 mtime 的取法注进来，
+ *  判卷与 CLI 才吃同一个决策：合成夹具能造出"有一个读不到"的那一态。
+ *  静默丢弃不许是一种出口——被删的那一半没有 mtime，也就没有年龄，必须留在 `missing` 里报出来。 */
+export function splitAged(
+  files: readonly string[],
+  mtimeOf: (file: string) => number | null,
+  nowMs: number,
+): { stale: string[]; checked: number; missing: string[] } {
+  const aged: { file: string; mtimeMs: number }[] = [];
+  const missing: string[] = [];
+  for (const f of files) {
+    const m = mtimeOf(f);
+    if (m === null) { missing.push(f); continue; }
+    aged.push({ file: f, mtimeMs: m });
+  }
+  return { stale: agedInFlight(aged, nowMs), checked: aged.length, missing };
+}
+
 /** 顶包候选的水位（**只准下调**，同 `docs-check` 的 `DOC_BUDGETS`）。
  *  登记的是**已提交态**那个数（在飞文件不计入 ⇒ 别人并发改动推不动我的棘轮）。
  *  历史：35（第 92 页登记）→ 31（第 93 页摘 4 格）→ 29（第 94 页把两种"不可测"拆成 `cause` 字段，摘 2 格）
@@ -964,15 +985,20 @@ export function scanRepo(root: string): ScanReport {
   for (const r of rows) counts[r.kind] += 1;
   const fly = inFlightPaths(root);
   // 在飞年龄：只算盘上真有的——被删的那一半没有 mtime ⇒ 分母单列成 `inFlightAgeChecked`，不混进 `inFlightFiles.length`。
-  const aged: { file: string; mtimeMs: number }[] = [];
-  for (const f of fly) {
-    try {
-      aged.push({ file: f, mtimeMs: statSync(resolve(root, f)).mtimeMs });
-    } catch {
-      // 盘上不存在：本面算不出年龄，`missingOnDisk` 那一格已经点过名——这里不静默补一个"很旧"的值。
-    }
-  }
-  const inFlightStale = agedInFlight(aged, Date.now());
+  // 这段切法在第 278 页抽进 `splitAged`（判卷与 CLI 共用同一个决策），这里只回答"mtime 怎么取"。
+  const age = splitAged(
+    [...fly],
+    (f) => {
+      try {
+        return statSync(resolve(root, f)).mtimeMs;
+      } catch {
+        // 盘上不存在：本面算不出年龄，`missingOnDisk` 那一格已经点过名——这里不静默补一个"很旧"的值。
+        return null;
+      }
+    },
+    Date.now(),
+  );
+  const inFlightStale = age.stale;
   // 树的形状：桌面层在不在（`src/renderer` 是最直接的判据，AGENTS.md  declares 本 checkout 没有它）。
   const scope = treeScopeOf(existsSync(resolve(root, "src/renderer")));
   const allDrift = rows.filter((r) => r.kind === "drift" && !r.waived);
@@ -1007,7 +1033,7 @@ export function scanRepo(root: string): ScanReport {
     flyingMultiCopy: copySplit.flying,
     inFlightFiles: [...fly],
     inFlightStale,
-    inFlightAgeChecked: aged.length,
+    inFlightAgeChecked: age.checked,
     scope,
     maskedSameSentence,
     maskedSharedWord: rows.filter((x) => x.copies > 1).length - maskedSameSentence,

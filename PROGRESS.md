@@ -9247,3 +9247,21 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 8. **刻意未做**：① 年龄那一格（`inFlightAgeChecked`）没钉——今天它与 `inFlightFiles.length` 同值（本趟扫描印「另有 0 个盘上不存在」），任何等式／`≤` 断言此刻都不分辨，要先把它抽成生产端与判卷共用的函数（规则 236）；② `proseHeldBack` 有现成 `> 0` 判据、可直接钉，本笔没做；③ 不替隔壁补那 11 条冻结登记（属别人交付面）；④ 没把「哪条用例为它红」做成 `--check-needles` 的静态闸（第 260 页：静态代理按全表量会误喊）。
 9. **清场**：本笔两棵树逐棵核过，`cleanup-277.log` 原文 `.worktrees/verify-7c8dc06 在飞项=       0`、`.worktrees/head-cert-7c8dc06 在飞项=       0`、`worktree 总条数（--porcelain 的 worktree 行）=64`；尺自己那行残留清单照贴 `常驻残留树=42`。**两棵都没回收**：`git worktree remove` 是破坏性动作，等用户点头；本会话创建的树全部逐棵核过 0 项、一律未删（"已回收"这句话必须跟着一次 `git worktree list` 的现读，见记忆里"收尾类动作"那条）。
 
+### 2026-10-01 · 第 278 页 · 把「在飞年龄分母」抽成 `splitAged`，抽的同一笔给它两支证人（这一格从前买不了锚点：真仓里它与在飞总数同值；表 1186→1188，判卷 70→72）
+
+1. **为什么这一格从前钉不住**（第 277 页页尾登记、规则 340 的第三格）：`inFlightAgeChecked` 取的是"有 mtime 的那一半"，而真仓现读**这一半等于整个在飞清单**——本趟扫描印 `在飞分诊：5 / 20 个 ≥24h 没被碰过（只是读数；另有 0 个盘上不存在⇒没有 mtime，不在分母里）`，那个"另有 0"就是原因。⇒ 任何等式或 `≤` 断言在此刻都不分辨：把分母改成整个清单，读数码字不动。判卷里唯一碰它的那格（现读 `tests/prose-needle-scan.test.ts:810` 的 `toBeLessThanOrEqual`）恰好是这种永不说话的写法。
+2. **抽取的形状**：新增导出纯函数 `splitAged(files, mtimeOf, nowMs) → {stale, checked, missing}`（`scripts/prose-needle-scan.ts`，紧跟 `agedInFlight`）。`scanRepo` 只回答"mtime 怎么取"（`statSync(...).mtimeMs`，读不到交 `null`），切两半的逻辑与年龄计算都在函数里；判卷注入假 mtime 表，于是**"有一个读不到 mtime"这一态第一次造得出来**。两支新锚点：① `prose-scan-age-missing-silently-dropped`（`if (m === null) { missing.push(f); continue; }` → 去掉 `push`＝静默丢弃）；② `prose-scan-age-checked-uses-whole-list`（`checked: aged.length` → `checked: files.length`＝分子分母不同口径）。
+3. **两个证人各自隔离**（第 277 页"两格不许焊成一格"的延续）：①那条用例只钉 `missing`（②的改法不会让它红），②那条只钉 `checked` 加空清单的反向侧（①的改法不会让它红）。反向侧各留一格的理由：`splitAged([], …)` 必须交全空，否则"没有在飞文件"会被读成"全都在飞但都很新"。
+4. **抽取过程中 tsc 抓到一处真形状错（不是繁文缛节）**：`inFlightPaths(root)` 交的是 **`Set<string>`**，老代码 `for (const f of fly)` 对此毫无怨言，所以这个事实从没被我看见过；我把参数声明成 `readonly string[]` 之后当场 TS2345——`typecheck-278.log` 原文：`scripts/prose-needle-scan.ts(990,5): error TS2345: Argument of type 'Set<string>' is not assignable to parameter of type 'readonly string[]'`。修法选了调用点 `[...fly]` 而**不是**把参数放宽成 `Iterable<string>`，理由要写清：②那支锚点的改法是 `checked: files.length`，参数若允许 Set，`files.length` 就是 `undefined`——断言照样红，但那次红说的是"类型不合法"，不是"分母口径错了"，等于把两支不同的坏法混成一个信号（规则 236 的反面：判据红的时候要能说出是哪一格坏）。
+5. **等价性自证（改前／改后同一棵树各跑一遍）**：`scan-278.log`（`[...fly]` 之前那份）与 `scan-278b.log`（之后）对同一棵树交同一行 `在飞分诊：5 / 20 个 ≥24h 没被碰过（只是读数；另有 0 个盘上不存在⇒没有 mtime，不在分母里）`，`顶包候选…：10 条（已提交态 10 ＋ 在飞 0）…针脚是个裸名字…2 条` 同值 ⇒ 这次抽取没改读数。
+6. **落笔前现读**（逐字贴自刚生成的日志，目录 `outputs/split-aged-face-278-2026-10-01/`；取名前 `ls` 与 `git ls-files` 都核过＝0，这次顺序对了）：
+   - `needles-278-precommit.log`（`NEEDLES_EXIT=1`）：`针脚体检：1188 条 —— 阻断 2，待复认 0，未覆盖 0，逐行式 5，未入库面 0（被测面 + 判卷两面），钉在飞文本 2，killer 指针失效 0（其中 HEAD 侧 0）`｜`改法语法体检：1188 条改法全部产出合法源文件 ✅`。**这一格的归因要写死**：`阻断 2` 全部由 `钉在飞文本 2` 构成（本笔两支针脚长在**我正在改的** `scripts/prose-needle-scan.ts` 里），落库后必须归 0——这一笔与前两笔不同（前两笔的针脚都在已入库文件里，所以落库前就是 0）。其余各维落库前已是 0。
+   - `typecheck-278b.log`：`typecheck: tsc --noEmit 通过（0 条报错）✅`、`TYPECHECK_EXIT=0`
+   - `vitest-278b.log`：`Test Files  1 passed (1)`｜`Tests  72 passed (72)`｜`VITEST_EXIT=0`（70→72＝本笔新增那两条用例）
+   - `scan-278b.log`：`prose-needle-scan：收料断言 132 条（扫 258 个 test 文件）｜生产侧 247 个文件｜树＝core-only（帽 顶包 10 ＋ 裸名字 2）`、`SCAN_EXIT=0`
+7. **水位**：顶包候选 10＝帽 10、裸名字 2＝帽 2，本笔没推高（`在飞 0`）；帽仍贴边 ⇒ 下一支同族锚点只能先降存量（规则 235／291）。
+8. **刻意未做**：① `proseHeldBack` **不钉**：它唯一的证人是现读 `:851` 那句 `toBeGreaterThan(0)`，而那条用例已经被第 277 页的 `prose-scan-shadow-cleared-predicate-loosened` 占用——再钉第三支就是把两个决策焊到同一标题上（要么先给它自己那条用例，要么放弃；本笔选放弃并登记）。② `inFlightAgeChecked: age.checked` 这行**接线**在真仓仍不可分辨（同值），现在只有合成分母那一格守着 `splitAged` 本体；接线坏了（例如改成 `fly.length`）此刻没有证人，这条留任务 #15。③ `operandInsideParens` 的文本式回走（串里的括号也计入深度）没动——第 277 页第 3 项已把它记成天花板读数。
+9. **归因声明**：本笔动 `scripts/prose-needle-scan.ts`（抽取＋调用点）、`tests/prose-needle-scan.test.ts`（两条新用例＋一处 import）、`scripts/mutate-verify.mjs`（两支锚点）＋本页与 dated 工件；交笔前 `git status --porcelain` 现读，其余在飞项不是我的。门里那道常驻红仍属隔壁 `1748ca7` 的 H7（第 276 页现读 `onDiskNotInTable=11`），本笔不动、不写成"全量绿"。
+10. **页内 file:line 的时效（一条已知缺口，顺手登记）**：本页与第 276、277 页都引用判卷文件的行号，而行号会随下一次往同一文件插入用例而漂——本笔就把第 277 页引用的那一格往后推了（`:667` 现在不是那句话了）。仓里没有校验「文档里的行号还能不能指到那句话」的尺（D-3 只管源码里的 `.md:行号`），所以我引用时**连带写出那句的原文**，让行号漂了也还能按文字找回。要让这一格不再靠自觉，得新立一把尺（读页里的 `文件:行` 候选、去指认位置核那句原文），代价与收益都在第 9 页那批"文档↔面"尺的形状里，留待裁。
+11. **清场**：本笔两棵独立树逐棵核 `status --porcelain` 后写读数，**不回收**（破坏性动作等用户点头）。
+

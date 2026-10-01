@@ -10004,6 +10004,36 @@ const MUTATIONS = [
     expectFail: "verbatim 那几格还留着生产者",
   },
 
+  /* ── 第 278 页：把「在飞年龄分母」从 `scanRepo` 抽成 `splitAged`，抽出来的同一笔就给它两支证人。
+   *    从前这一格买不了锚点——真仓里 `inFlightAgeChecked` 与 `inFlightFiles.length` 同值，
+   *    改坏了也没有任何用例能红（规则 340 第三格）；合成夹具能造出"有一个读不到 mtime"那一态之后才谈得上。 ── */
+  {
+    id: "prose-scan-age-missing-silently-dropped",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "读不到 mtime 的那一半从『单列点名』退化成『静默丢弃』⇒ 报告里那句" +
+      "「另有 N 个盘上不存在」永远读 0，邻居删掉的在飞文件与从没存在过的文件同形" +
+      "（分母那一格不动，所以这条必须有自己的证人，不能靠分母那条用例代答）",
+    apply: (s) => s.replace(
+      "    if (m === null) { missing.push(f); continue; }",
+      "    if (m === null) continue;",
+    ),
+    expectFail: "不许静默丢弃（混合与全读不到两态）",
+  },
+  {
+    id: "prose-scan-age-checked-uses-whole-list",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "年龄分母从『有 mtime 的那一半』改成『整个在飞清单』⇒ `在飞分诊：5 / 19` 那种读数会把" +
+      "没有 mtime 的文件也算进分母，而 `stale` 是在另一半里挑的——分子分母不同口径，" +
+      "比值从此没有意义（第 113 页立的『只作读数』要读得出它是哪一半）",
+    apply: (s) => s.replace(
+      "  return { stale: agedInFlight(aged, nowMs), checked: aged.length, missing };",
+      "  return { stale: agedInFlight(aged, nowMs), checked: files.length, missing };",
+    ),
+    expectFail: "分母只数有 mtime 的那一半",
+  },
+
   /* ── 第 274 页：把 `scripts/prose-needle-scan.ts` 的帽那一族补齐（第 272 页现读：这支 1100 行的尺此前整支零锚点，
    *    本族四支各钉一种坏法：比较符、加法、按树取帽、把出声那一支焊死）。
    *    这四支都能买，正因为它们的判卷喂的是**合成输入**（第 272 页第 7 项写的那条：clean 树上两侧同为 0 的配对断言买不了锚点）。 ── */

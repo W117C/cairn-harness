@@ -1,0 +1,4 @@
+scripts/prose-needle-scan.ts(990,5): error TS2345: Argument of type 'Set<string>' is not assignable to parameter of type 'readonly string[]'.
+  Type 'Set<string>' is missing the following properties from type 'readonly string[]': length, concat, join, slice, and 15 more.
+[typecheck] 报错文件归因：HEAD 内 1 个 / 未跟踪草稿 0 个
+TYPECHECK_EXIT=2

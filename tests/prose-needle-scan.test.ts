@@ -28,6 +28,7 @@ import {
   SELF_EXCLUDED_TESTS,
   sharesOneSentence,
   shadowFilesOf,
+  splitAged,
   splitByInFlight,
   STALE_IN_FLIGHT_MS,
   staticRuns,
@@ -627,6 +628,39 @@ describe("agedInFlight：「在飞」有两种，年龄只作读数不作判据�
     const now = 1_700_000_000_000;
     expect(agedInFlight([{ file: "a", mtimeMs: now - 3 * H }], now)).toEqual([]);
     expect(agedInFlight([{ file: "a", mtimeMs: now - 3 * H }], now, 2 * H)).toEqual(["a"]);
+  });
+});
+
+// 第 278 页：这段切法从前长在 `scanRepo` 里，而真仓现读 `inFlightAgeChecked` ＝ `inFlightFiles.length`
+// （一个"盘上不存在"都没有）⇒ 任何等式／`≤` 断言在此刻都不分辨（规则 340 的第三格）。
+// 抽成 `splitAged` 之后，"有一个读不到 mtime"这一态才造得出来，两支锚点才各有自己的证人。
+describe("splitAged：年龄分母只算盘上真有的那一半（判卷与 CLI 吃同一个决策）", () => {
+  const H = 3_600_000;
+  const now = 1_700_000_000_000;
+  const mixed = (mt: Map<string, number | null>) =>
+    splitAged(["新鲜的那一个", "过期的那一个", "盘上没有的那一个"], (f) => mt.get(f) ?? null, now);
+  const full = new Map<string, number | null>([
+    ["新鲜的那一个", now - H],
+    ["过期的那一个", now - 100 * H],
+    ["盘上没有的那一个", null],
+  ]);
+
+  it("读不到 mtime 的那一半要单列点名，不许静默丢弃（混合与全读不到两态）", () => {
+    // 这一条只钉 `missing` 那一半：把它改成 `continue`（丢弃）就红，而分母那一格不动——
+    // 两支锚点各有各的证人，别焊成一条（第 277 页同一族）。
+    expect(mixed(full).missing).toEqual(["盘上没有的那一个"]);
+    // 全读不到的那一态：三个都要点名，否则"邻居把文件删了"与"清单本来空"同形。
+    const gone = splitAged(["a", "b", "c"], () => null, now);
+    expect(gone.missing).toEqual(["a", "b", "c"]);
+  });
+
+  it("分母只数有 mtime 的那一半，过期也只在这一半里挑（空清单不许冒格）", () => {
+    const r = mixed(full);
+    expect(r.checked).toBe(2);
+    expect(r.stale).toEqual(["过期的那一个"]);
+    // 反向一侧：空清单交全空——不许把"没有在飞文件"读成"全都在飞但都很新"。
+    const e = splitAged([], () => null, now);
+    expect([e.checked, e.stale.length, e.missing.length]).toEqual([0, 0, 0]);
   });
 });
 
