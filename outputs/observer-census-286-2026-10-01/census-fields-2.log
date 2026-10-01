@@ -1,0 +1,36 @@
+字段 30 个｜等式 28｜只在安全值一侧 1｜零断言 1｜形状认不出 0
+哨兵 sourceFiles → 等式
+哨兵 proseHeldBack → 等式
+哨兵 inFlightStale → 等式
+--- 逐格（先列两种可疑档，再列全表）---
+只在安全值一侧｜viaCounts｜2 处｜expect(r.viaCounts["本地 helper"] + r.viaCounts["字段别名"]).toBeGreaterThan(0);
+零断言｜across｜0 处｜
+等式｜needles｜6 处
+等式｜unresolvedMatcher｜1 处
+等式｜testFiles｜3 处
+等式｜sourceFiles｜3 处
+等式｜missingOnDisk｜3 处
+等式｜untrackedHeldOut｜4 处
+等式｜untrackedListUnavailable｜1 处
+等式｜counts｜2 处
+等式｜drift｜4 处
+等式｜inFlightDrift｜2 处
+等式｜echo｜1 处
+等式｜multiCopy｜10 处
+等式｜stale｜5 处
+等式｜anchorTables｜4 处
+等式｜shadowCleared｜1 处
+等式｜proseHeldBack｜2 处
+等式｜selfExcluded｜3 处
+等式｜committedMultiCopy｜4 处
+等式｜inFlightMultiCopy｜4 处
+等式｜maskedSameSentence｜2 处
+等式｜maskedSharedWord｜2 处
+等式｜bareName｜4 处
+等式｜inFlightBareName｜5 处
+等式｜flyingMultiCopy｜2 处
+等式｜inFlightFiles｜8 处
+等式｜inFlightStale｜5 处
+等式｜inFlightAgeChecked｜3 处
+等式｜scope｜3 处
+CENSUS2_EXIT=0

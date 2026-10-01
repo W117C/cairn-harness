@@ -1,0 +1,15 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-p286.lock）
+变异验证：6 条
+✅ prose-scan-source-files-field-welded-zero — `sourceFiles` 不接 `sources.length` 而焊成 0 —— 这一支真仓那条 `> 50` 也拦得住，所以它不是新力量；留着的理由是合成树上那个**确切 3**：面少收一侧（把 `scripts` 那一档摘掉 ⇒ 3 变 1）在真仓里仍是几百条、在等式上立刻红。阈值挡大事故，等式挡小漂移（规则 241：写满为止） ｜本机实测 20.6s／2 拍
+✅ prose-scan-production-face-includes-tests — 生产侧收料目录多收 `tests` ⇒ 「诊断文案 ↔ 断言收料」这把尺开始把测试自己当生产者，顶包候选会莫名变多而 `testFiles` 那格照旧——只有合成树上的等式（3 不是 4）能立刻发现 ｜本机实测 20.8s／2 拍
+✅ prose-scan-heldback-not-limited-to-registry — 散文栏的排除面不再只看「登记表」那一半（把用例表也算进去）⇒ `proseHeldBack` 从 60 变 61：用例表的字面量是喂给被测函数的输入，不是任何字段的出处（第 98 页把它分成两族的理由就在这个数上） ｜本机实测 19.7s／2 拍
+✅ prose-scan-heldback-counts-every-literal — 「只数 `desc:` 那一栏」被放宽成「这张表里所有字面量」⇒ 散文栏读数从 60 涨到几百，而它本来要表达的只是『这些被挡在门外的是给人读的』——数量级一漂，第 98 页那条『散文不许替生产文案作证』就再也数不清 ｜本机实测 19.4s／2 拍
+✅ prose-scan-stale-list-welded-empty — `inFlightStale` 不接 `splitAged` 的输出而焊成 `[]` ⇒ 真仓干净树（在飞为空）里那条子集断言恒真、完全无声；合成树里 3 天前那一支必须出现在这一格（第 278 页抽了纯函数，这一支钉的是「输出接没接到字段上」） ｜本机实测 19.6s／2 拍
+✅ prose-scan-age-denominator-is-missing-half — 年龄分母从「盘上真有的那一半」改成「盘上没有的那一半」⇒ 打印出来的 `N / M` 里 M 变成 0，于是「有 2 支在飞、2 支算得出年龄」被读成「有 2 支在飞、0 支算得出」——分母写错不等于没跑，但会被读成没跑 ｜本机实测 19.3s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 120.0s · 跑了 6/6 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 12 次／6 条（每条次数分布 2×6）· 单次中位 第1次 9.8s／第2次 9.7s· 最贵一条 prose-scan-production-face-includes-tests 20.8s
+跑法单价：selector 12 拍·中位 9.73s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-p286.lock）
+FULL_EXIT=0

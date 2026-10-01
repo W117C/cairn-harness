@@ -1,0 +1,47 @@
+目标提交：88bcb7a（--at=HEAD）
+worktree add exit=0
+已核：TREE=88bcb7a8db5a6407d760a6a8f5c67c1c98998226｜判卷四面在飞 0 项
+cp -al node_modules exit=0
+依赖核对：该提交声明 10 项，缺 0 项
+  硬链接子仓库依赖 fixtures/todo-app/node_modules ← 主树 exit=0
+import 面：3065 条边｜悬空 0（其中存量已豁免 0）
+门表：31 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证门面（22 道，名单取自 88bcb7a）==
+  ✅ no-progress-check exit=0 547ms（预算 1100ms）
+  ✅ prune-check exit=0 598ms（预算 1100ms）
+  ✅ fork-check exit=0 574ms（预算 1100ms）
+  ✅ compaction-check exit=0 688ms（预算 1200ms）
+  ✅ docs-check exit=0 950ms（预算 1300ms）
+  ✅ memory-check exit=0 736ms（预算 1300ms）
+  ✅ head-import-check exit=0 877ms（预算 1400ms）
+  ✅ autonomy-check exit=0 979ms（预算 1500ms）
+  ✅ sandbox:check exit=0 1345ms（预算 1700ms）
+  ✅ security-check exit=0 829ms（预算 1500ms）
+  ✅ provider:check exit=0 570ms（预算 1300ms）
+  ✅ routing-check exit=0 778ms（预算 1400ms）
+  ✅ model-surface-check exit=0 759ms（预算 1300ms）
+  ✅ prefix-churn-check exit=0 872ms（预算 1500ms）
+  ✅ prompt-surface-check exit=0 761ms（预算 1400ms）
+  ✅ replay-determinism-check exit=0 597ms（预算 1100ms）
+  ✅ cost-per-progress-check exit=0 555ms（预算 1000ms）
+  ✅ web-fetch-check exit=0 601ms（预算 1200ms）
+  ✅ gym-check exit=0 1423ms（预算 2400ms）
+  ❌ gate-check exit=1 4225ms（预算 5400ms）
+  ✅ evidence-typecheck-check exit=0 3270ms（预算 5300ms）
+  ✅ mutate-needles-check exit=0 14287ms（预算 20000ms）
+  认证门面=22 道（跑到 22）｜❌ 红 1 道｜⚠️ 超预算 0
+  ❌ gate-check exit=1（4225ms）
+
+== 认证汇总 ==
+  TREE=88bcb7a DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-88bcb7a.lock）
+  Test Files 259 passed (259)｜Tests 3462 passed (3462)｜exit=0（退出码直接取，不接管道）
+  并发判卷=起前 0 套／跑完 0 套（两端独占）
+  本趟墙钟 210.29s（同一进程 hrtime 实测·口径＝起跑→汇总那一行，不含提前退出的那些趟）
+  贴帽读数（缺省＝vitest 默认 5000ms（config 未写 testTimeout））：3462 条里 1 条用时 ≥ 有效预算 80%｜无显式预算按缺省算 3207 条｜标题非字面量（it.each／插值／拼接，按缺省算）114 条｜预算没落到 0 条：tests/head-cert-deps.test.ts·清场读数：常驻残留的 scratch 树要自己报数（任务 #33）  4342ms/5000ms=87%｜离帽余量最近：tests/head-cert-deps.test.ts·清场读数：常驻残留的 scratch 树要自己报数（任务 #33）  4342ms/5000ms=87%；tests/m3c.test.ts·M3c pipeline 哑 sequencer（零 LLM） 未获 15199ms/25000ms=61%；tests/gate-kill.test.ts·门禁跑命令的超时支路 子进程赖着不走：宽限到点整组强杀，输出如实写「 1610ms/5000ms=32%
+  逐条日志：/tmp/dsh-head-cert-88bcb7a
+  回收这棵树（规则 120，别留残留）：git worktree remove --force .worktrees/head-cert-88bcb7a
+  常驻残留树=62（/Users/ze/Downloads/deepseek harness/.worktrees/gate-head-cert@48071b8、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-verify@48071b8、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-10debc9@10debc9、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-12b1931@12b1931、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-16d891b@16d891b、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-1b4893e@1b4893e、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-2068d6c@2068d6c、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-2b3763f@2b3763f、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-2cd6e79@2cd6e79、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-4806388@4806388、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-56effe2@56effe2、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-791c621@791c621、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-7c8dc06@7c8dc06、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-8689734@8689734、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-869cf73@869cf73、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-89b0ca0@89b0ca0、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-89e2f20@89e2f20、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-9e44bba@9e44bba、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-b3e3abf@b3e3abf、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-b40909b@b40909b、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-b61cb41@b61cb41、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-bcf346d@bcf346d、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-bd5ec44@bd5ec44、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-cd10632@cd10632、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-dfe2d6c@dfe2d6c、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-e384b65@e384b65、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-ec004fc@ec004fc、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-efd3097@efd3097、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-efdc300@efdc300、/Users/ze/Downloads/deepseek harness/.worktrees/head-cert-ff608cc@ff608cc、/Users/ze/Downloads/deepseek harness/.worktrees/verify-10debc9@10debc9、/Users/ze/Downloads/deepseek harness/.worktrees/verify-12b1931@12b1931、/Users/ze/Downloads/deepseek harness/.worktrees/verify-16d891b@16d891b、/Users/ze/Downloads/deepseek harness/.worktrees/verify-1b4893e@1b4893e、/Users/ze/Downloads/deepseek harness/.worktrees/verify-2068d6c@2068d6c、/Users/ze/Downloads/deepseek harness/.worktrees/verify-2b3763f@2b3763f、/Users/ze/Downloads/deepseek harness/.worktrees/verify-2cd6e79@2cd6e79、/Users/ze/Downloads/deepseek harness/.worktrees/verify-43ace9e@43ace9e、/Users/ze/Downloads/deepseek harness/.worktrees/verify-451f4be@451f4be、/Users/ze/Downloads/deepseek harness/.worktrees/verify-4806388@4806388、/Users/ze/Downloads/deepseek harness/.worktrees/verify-48e30a8@48e30a8、/Users/ze/Downloads/deepseek harness/.worktrees/verify-6aa6e9d@c195135、/Users/ze/Downloads/deepseek harness/.worktrees/verify-791c621@791c621、/Users/ze/Downloads/deepseek harness/.worktrees/verify-7c8dc06@7c8dc06、/Users/ze/Downloads/deepseek harness/.worktrees/verify-8689734@8689734、/Users/ze/Downloads/deepseek harness/.worktrees/verify-869cf73@869cf73、/Users/ze/Downloads/deepseek harness/.worktrees/verify-89b0ca0@89b0ca0、/Users/ze/Downloads/deepseek harness/.worktrees/verify-89e2f20@89e2f20、/Users/ze/Downloads/deepseek harness/.worktrees/verify-9a2fe61@9a2fe61、/Users/ze/Downloads/deepseek harness/.worktrees/verify-9e44bba@9e44bba、/Users/ze/Downloads/deepseek harness/.worktrees/verify-a5197eb@a5197eb、/Users/ze/Downloads/deepseek harness/.worktrees/verify-b3e3abf@b3e3abf、/Users/ze/Downloads/deepseek harness/.worktrees/verify-b40909b@b40909b、/Users/ze/Downloads/deepseek harness/.worktrees/verify-bcf346d@bcf346d、/Users/ze/Downloads/deepseek harness/.worktrees/verify-dfe2d6c@dfe2d6c、/Users/ze/Downloads/deepseek harness/.worktrees/verify-e02b87f@e02b87f、/Users/ze/Downloads/deepseek harness/.worktrees/verify-e384b65@e384b65、/Users/ze/Downloads/deepseek harness/.worktrees/verify-ec004fc@ec004fc、/Users/ze/Downloads/deepseek harness/.worktrees/verify-efd3097@efd3097、/Users/ze/Downloads/deepseek harness/.worktrees/verify-efdc300@efdc300、/Users/ze/Downloads/deepseek harness/.worktrees/verify-ff608cc@ff608cc、/Users/ze/Downloads/deepseek harness/.worktrees/verify-p286@88bcb7a）／另有 3 棵不住本仓 scratch 面的残留形树（/private/tmp/dsh-foreign-witness-A、/private/tmp/dsh-foreign-witness-B、/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/mutate-shards-wt-djfDDj/wt）＝不是本仓建的，别照上面那条回收命令删它们（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）
+  汇总已同步落盘（不靠 stdout 的尾）：/tmp/dsh-head-cert-88bcb7a/summary.txt
+HEADCERT_EXIT=1

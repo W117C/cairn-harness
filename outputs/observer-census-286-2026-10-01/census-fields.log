@@ -1,0 +1,36 @@
+字段 30 个｜等式 2｜只在安全值一侧 0｜零断言 28｜形状认不出 0
+哨兵 sourceFiles → 零断言
+哨兵 proseHeldBack → 零断言
+哨兵 inFlightStale → 零断言
+--- 逐格（先列两种可疑档，再列全表）---
+零断言｜needles｜0 处｜
+零断言｜viaCounts｜0 处｜
+零断言｜unresolvedMatcher｜0 处｜
+零断言｜testFiles｜0 处｜
+零断言｜sourceFiles｜0 处｜
+零断言｜untrackedListUnavailable｜0 处｜
+零断言｜counts｜0 处｜
+零断言｜drift｜0 处｜
+零断言｜inFlightDrift｜0 处｜
+零断言｜across｜0 处｜
+零断言｜echo｜0 处｜
+零断言｜multiCopy｜0 处｜
+零断言｜stale｜0 处｜
+零断言｜anchorTables｜0 处｜
+零断言｜shadowCleared｜0 处｜
+零断言｜proseHeldBack｜0 处｜
+零断言｜selfExcluded｜0 处｜
+零断言｜committedMultiCopy｜0 处｜
+零断言｜inFlightMultiCopy｜0 处｜
+零断言｜maskedSameSentence｜0 处｜
+零断言｜maskedSharedWord｜0 处｜
+零断言｜bareName｜0 处｜
+零断言｜inFlightBareName｜0 处｜
+零断言｜flyingMultiCopy｜0 处｜
+零断言｜inFlightFiles｜0 处｜
+零断言｜inFlightStale｜0 处｜
+零断言｜inFlightAgeChecked｜0 处｜
+零断言｜scope｜0 处｜
+等式｜missingOnDisk｜1 处
+等式｜untrackedHeldOut｜1 处
+CENSUS_EXIT=0
