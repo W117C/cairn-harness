@@ -9699,3 +9699,38 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
    ⚠️ 这一把**不是**独占读数，也不许写成「带负载绿」：起跑前一把 `ps` 见隔壁 `--reporter=dot` 那套全量已跑 `etime 02:21`，跑完立刻 `pgrep -fl "vitest.mjs run"` 为空——两次采样之间有没有真重叠，当场没有读数。所以这一格只证明「83 条在隔壁退场前后那一段里全绿」；本笔两支锚点的杀死要等一次确认独占的窗，随凭证落，不在本笔宣称。
 
 9. **刻意不做**：⑴ 不调 `tests/vitest.config.ts` 的缺省时限（理由见第 2 项）；⑵ 不给 `afterAll` 配预算；⑶ 不修第 7 项那 4 条别人的死锚点；⑷ 不回收任何 worktree（`git worktree list` 今天 93 行、认证自报 `常驻残留树=69`，其中含本会话建的验证树——「可回收」是判据不是授权，等一句点头；`/private/tmp/dsh-foreign-witness-A|B`、`/private/tmp/mtest-now`、`.worktrees/gate-mutate-verify` 一律不在我的名单里）。
+
+
+### 2026-10-01 · 第 291 页凭证（1/1）：`73ed49d` 在等到独占窗之后复跑——本笔两支锚点 `2/2` 全杀（`本次耗时 12.2s`、`单次中位 第1次 0.6s／第2次 5.3s`、最贵一条正是被搬回急切写法的那支 `10.7s`）、干净树 `Tests 83 passed (83)`、门 `211 页点名 265 条｜红 0`；全量认证仍是**半把尺**（`并发判卷=起前 1 套`），2 道门红＋1 条判卷红逐条归因，各带一份独占复跑证人
+
+取料面（全名逐支）：`outputs/hook-budget-291-2026-10-01/needles-certtree-1.log`、`outputs/hook-budget-291-2026-10-01/docs-check-certtree-1.log`、`outputs/hook-budget-291-2026-10-01/wait-and-verify.log`、`outputs/hook-budget-291-2026-10-01/map-self-report-solo.log`。
+
+1. **被认证的对象与树**：提交 `73ed49d`（父＝`dfcb0de`——**不是我上一笔**；见第 6 项的分支形状）。验证树 `.worktrees/verify-e42b4af`（本会话自己的 `--detach` 树，进场前 `git status --porcelain`＝0 项，逐次 `checkout --detach` 到 `37e3c81`→`73ed49d`，不新建树是为了不再加 `常驻残留树`），认证树 `.worktrees/head-cert-73ed49d`（head-cert 自建，树名带 sha）。
+
+2. **等窗器的形状要说清（规则 357）**：三把尺串在一个**脚本文件**里执行（不是 `bash -c` 内联），先轮询 `pgrep -fl "vitest.mjs run|mutate-verify.mjs|head-cert.ts"`，等到空闲才起尺。日志第一行读数：`IDLE_AFTER=30s 08:43:40Z`、`TREE_SHA=73ed49d DIRTY=0`。为什么必须写成文件：内联时**我自己的命令行就带着那个 pattern**，`pgrep -f` 若自抓，这把尺就永远读成「别人在跑」。这一条今天实测过：`pgrep -fl "…|SELFMATCH_PROBE_marker"` 得 `PGREP_EXIT=1`（本 harness 不自抓），所以第 290 页补⑴ 凭证里那句「180 秒没等到窗」是**真忙**，不是尺骗自己。
+
+3. **本笔两支锚点各咬各的（逐字，`wait-and-verify.log`）**：
+   - `✅ prose-scan-real-repo-scan-back-at-collection-time …｜本机实测 10.7s／2 拍`
+   - `✅ prose-scan-heavy-hook-left-on-default-timeout …｜本机实测 1.2s／2 拍`
+   - `全部变异被正确杀死（断言非恒真）`、`[mutate-verify] 本次耗时 12.2s · 跑了 2/2 条`、`KILL_EXIT=0`
+   - `成本分母：判卷 spawn 4 次／2 条（每条次数分布 2×2）· 单次中位 第1次 0.6s／第2次 5.3s· 最贵一条 prose-scan-real-repo-scan-back-at-collection-time 10.7s`
+   - `跑法单价：selector 4 拍·中位 0.63s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母`
+   ⇒ 这两条单价自己就是第 291 页那条规律的**反面证据**：把真仓扫搬回 describe 体（第一支的改法）⇒ 每次 spawn 都付那趟扫 ⇒ 10.7s；只摘钩子时限（第二支的改法）⇒ 形状判卷当场红、活的成本没变 ⇒ 1.2s。**同一对账、两种改法、单价差 9 倍**，这是「成本结论要同分母 A/B」（用户记忆）而不是推算。
+
+4. **干净树上的门与判卷**：`docs-check-certtree-1.log` ＝ `证人点名面（整本台账）：211 页点名 265 条 dated 工件（红 0）｜登记 12 条（帽，只准调低）`、`docs-check: 受检项全绿（另有 3 项未检，见上）`、`DOCS_CHECK_EXIT=0`（⇒ 第 291 页页里那句「提交后期望红 0」兑现，且**不是我自己给自己发的**：这一把读的是 `73ed49d` 那棵树）。`needles-certtree-1.log` ＝ `针脚体检：1223 条 —— 阻断 4，待复认 0，未覆盖 0，逐行式 5，未入库面 0（被测面 + 判卷两面），钉在飞文本 0，killer 指针失效 0（其中 HEAD 侧 0）`、`NEEDLES_EXIT=1` ⇒ 本笔的 2 条「钉在飞文本」按预期归零；剩下 4 条是第 7 项那笔账。判卷单跑（同棵树、独占）＝ `Test Files 1 passed (1)`、`Tests 83 passed (83)`、`Duration 10.25s`、`VITEST_EXIT=0`。
+
+5. **全量认证：等级＝半把尺**（`HEADCERT_EXIT=1`，逐格照贴）：结构格全在——`依赖核对：该提交声明 10 项，缺 0 项`、`import 面：3091 条边｜悬空 0`、`门表：31 道，缺 script 0 道`、`typecheck exit=0（0 报错）`、`认证门面=22 道（跑到 22）｜❌ 红 2 道｜⚠️ 超预算 0`、`TREE=73ed49d DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有`；判卷 `Test Files 1 failed | 262 passed (263)｜Tests 1 failed | 3511 passed (3512)｜exit=1`；`本趟墙钟 308.75s`；贴帽那格换了口径也照贴：`贴帽读数（缺省＝config 里的 testTimeout=30000ms）：3512 条里 0 条用时 ≥ 有效预算 80%`。**不独占的证据就在它自己那一格**：`并发判卷=起前 1 套／跑完 0 套` ＋ `⚠️ 判卷有红，且两端采到 1 套判卷并行 ⇒ 先排撞窗再查代码`。收尾时 `并发判卷=收尾 0 套`——所以这趟是**开头**撞窗、结尾独占，与第 290 页补⑴ 那趟（结尾撞窗）正好相反，两趟合起来说明：撞窗是这台机器的常态而非例外，「一次认证拿到独占」要按**两端的采样**判，不能只看跑完那一刻。
+
+6. **三条红的逐条归因（每条都有独占复跑或门自己的点名）**：
+   - `❌ gate-check exit=1（4520ms／预算 5400ms）`——`gates.log` 点名 `H7 冻结表与判卷区目录双向一致`，`onDiskNotInTable` 全在 `fixtures/impact/accuracy-repo/*`（任务 #9，属隔壁 `1748ca7`）。本笔 7 支文件没碰 `fixtures/`。顺带把并发那条尾巴收掉：同一道门这次 `4520ms` 在帽内，而 `e42b4af` 那趟撞窗时读到 `5252ms`——**空闲/半独占下不超帽**，与规则 354 的预测一致。
+   - `❌ mutate-needles-check exit=1（15329ms）`——这是**新入门的红**，正文见第 7 项。
+   - `× tests/map-self-report.test.ts > 地图降级要出声，并且不许被读成「仓库没有结构」`，`AssertionError: 原因要带出来，否则模型无从判断该等还是该换工具: expected '[map] 仓库地图本次不可用（原因：spawn /Users/ze/Do…' to contain 'rg'`。处置＝**先复跑再归因**：同一棵树（`73ed49d`）、机器空闲（起尺前 `pgrep` 为空）单独跑这支文件 ⇒ `Tests 4 passed (4)`／`VITEST_EXIT=0`（`map-self-report-solo.log`）。⇒ 这一条认证里读到的降级原因文案在并发下换了来源（那支用例是靠**真起 `rg` 失败**来造降级态的，见它自己的注释「工作区不存在 ⇒ rg 以退出码 2 失败 ⇒ buildMap 走内部 catch（不是 mock）」），本笔未碰 map 面，不动别人的判卷。但要留一句给下游：这一族的**形状**是「靠 OS 侧真失败来造降级」，并发一高就可能换成另一条错误来源、让"带出原因"这条断言读成别的工具名——这正是它自己要防的那类「文案与原因不符」。已挂任务，等授权或由作者处理。
+   - 分支形状（不是红，但必须说）：`git log` 现读 `e42b4af parent=cfa91e1`、`37e3c81 parent=d1371dd`、`73ed49d parent=dfcb0de` ⇒ 我三笔之间，隔壁落了 `d1371dd 合并 port2…` 与 `dfcb0de 修掉两处"套件在干净检出上必红"…`，我的笔**叠在它们之上**（不是并行分支）。这条直接解释第 7 项那 4 条死锚点为什么在 08:08 读 0、08:38 读 4，也解释套件条数从 `3470` 涨到 `3512`（第 8 项）。
+
+7. **`mutate-needles-check` 入门红的出处**：4 条「针脚已不在源文件里」的锚点（`worker-budget-window-ignored`、`worker-budget-clamp-removed`、`sandbox-mapping-copy-reintroduced`、`openai-never-reads-finish-reason`）由 `d1371dd` 那趟合并把实现搬了形状，门自己逐条点了搬走它的提交（`4c10272`／`404249c`／`e76ed13`，现读三笔都已是 HEAD 祖先）。两份读数当分母：`e42b4af` 那趟认证 `✅ mutate-needles-check exit=0 18302ms`（红 2 道里没有它）→ 本趟 `exit=1`（红 2 道里是它）⇒ **不是我的两笔引入的**，也不是尺变严了。后果照贴在任务 #23：那四支锚点今天等价于空操作。本笔不改别人的判卷。
+
+8. **条数核对（哪一侧是实测、哪一侧是留档，分开写）**：判卷文件粒度 `tests/prose-needle-scan.test.ts 83 ＝ 81 ＋ 2`——**改后那侧有两次实测**（主树 `outputs/hook-budget-291-2026-10-01/vitest-under-load.log` 与干净树 `outputs/hook-budget-291-2026-10-01/wait-and-verify.log`，各一次 `Tests 83 passed (83)`）；**改前那侧今天没有复跑**，`81` 取第 287 页那一笔的留档值（同一文件）⇒ 这一式是「单侧实测＋另一侧留档」，我不把它写成两侧都实测过，`＋2` 的依据是本笔确实往那支文件写进了两条用例（第 4 项的形状判卷）。锚点表 `1223 ＝ 1222 ＋ 1` 两侧都有实测（`needles-check-1.log` 1223、`needles-at-37e3c81.log` 1222）。套件粒度 `3512` 不给等式：`3470 → 3512` 中间隔着 `d1371dd`／`dfcb0de` 两笔别人的合并（第 6 项末条），拿 `3470` 当"上一笔的值"会把别人的增量算到我头上（用户记忆：引用上一笔留档值前先问它取在哪个 sha、我的改动是否已是它的祖先）。
+
+9. **一笔跨会话去重，值得留在台账里（这是被验证过的做法，不是我的谦虚）**：`274f165 去掉重复机制：config 不再设全局 hookTimeout，只留 testTimeout`——隔壁为同一个钩子超时问题加了 `hookTimeout: 60_000`，看到本簇后**自己撤了那半边**，理由原文是「他们（`73ed49d`，第 291 页）在那两个重钩子上显式声明 `HOOK_BUDGET_MS = 30_000`，并配了形状判卷＋变异锚点——比全局默认更精确，而且有判卷钉着」，并给了反向实测：「`prose-needle-scan` 在**没有** config hookTimeout 的情况下靠 `HOOK_BUDGET_MS` 照样绿（实测 11.2s 通过）」。同一问题两套机制＝本仓反复点名的「抄第二份迟早漂」，这次在**没等我开口**的情况下合到一份上；留下的 `testTimeout: 30_000` 治的是另一格（`head-cert-deps` 那条真读 `git worktree list` 的用例在负载下越过缺省 5s），也是带证据的。⇒ 规律：**修法要配判卷**，因为它在跨会话协商时就是可让位的那一半。
+
+10. **刻意未做／仍欠的格子**：⑴ **一次两端都独占的全量认证**——两趟各缺一端（`e42b4af` 缺尾、`73ed49d` 缺头）。`e42b4af` 与 `37e3c81` 都已是 HEAD 祖先（`git merge-base --is-ancestor e42b4af HEAD` 现读通过），所以覆盖关系成立，但**它们的套件终态数仍没有独占读数**，这一格不许被第 6 项那句「祖先」读成已结。⑵ 不回收任何 worktree（认证自报 `常驻残留树=69`；它给的回收命令我**没执行**，等点头）。⑶ 不动任务 #9／#23 里那些别人的判卷与锚点。⑷ 不给 `map-self-report` 那条并发降级改判据——先给作者或等授权。⑸ `outputs/_audit*.md`、`hold-callid-ruling`、`shell-tail-repoint-kill`、`port2-merge-handoff` 等仍是别人的在飞工件，一支未动、也未点名（第 290 页补⑴ 第 10 项那条写法约束在这一笔继续生效）。

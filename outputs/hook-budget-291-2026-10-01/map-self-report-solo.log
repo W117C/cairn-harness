@@ -1,0 +1,18 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness/.worktrees/verify-e42b4af[39m
+
+[90mstdout[2m | tests/map-self-report.test.ts[2m > [22m[2m地图的覆盖面自述（与影响面共用一把尺）[2m > [22m[2m地图降级要出声，并且不许被读成「仓库没有结构」
+[22m[39m[map] 构建失败，静默降级为无地图: spawn /Users/ze/Downloads/deepseek harness/.worktrees/verify-e42b4af/node_modules/.pnpm/@vscode+ripgrep-darwin-arm64@1.18.0/node_modules/@vscode/ripgrep-darwin-arm64/bin/rg ENOENT
+
+[90mstdout[2m | tests/map-self-report.test.ts[2m > [22m[2m接线：那两句要真的发出去[2m > [22m[2m会话首请求里带着地图的自述行与降级行（装配面有观察者）
+[22m[39m[map] 注入失败: boom-map-face
+
+ [32m✓[39m tests/map-self-report.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 840[2mms[22m[39m
+   [32m✓[39m 地图的覆盖面自述（与影响面共用一把尺） [2m(3)[22m
+     [33m[2m✓[22m[39m 地图非全量时正文带同一句覆盖面自述[33m 810[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m4 passed[39m[22m[90m (4)[39m
+[2m   Start at [22m 16:51:08
+[2m   Duration [22m 1.25s[2m (tests 75%, transform 21%, import 4%)[22m
+
