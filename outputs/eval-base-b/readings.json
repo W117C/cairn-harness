@@ -1,0 +1,545 @@
+[
+ {
+  "r": {
+   "id": "B1-bugfix-crossfile",
+   "name": "B1-bugfix-crossfile",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 46.359,
+   "requests": 13,
+   "tokensIn": 76349,
+   "tokensOut": 2586,
+   "cny": 0,
+   "toolCalls": 15,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 26,
+   "readsBeforeFirstWrite": 8,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/checkout.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 243,
+    "procPeak": 7,
+    "cpuMs": 1788,
+    "samples": 93
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B2-feature-export",
+   "name": "B2-feature-export",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 64.888,
+   "requests": 11,
+   "tokensIn": 66692,
+   "tokensOut": 3821,
+   "cny": 0,
+   "toolCalls": 13,
+   "toolFailures": 0,
+   "repeatedSameAction": 1,
+   "firstWriterIndex": 23,
+   "readsBeforeFirstWrite": 4,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/fit.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 124,
+    "procPeak": 5,
+    "cpuMs": 2477,
+    "samples": 130
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B3-refactor-callsite",
+   "name": "B3-refactor-callsite",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 116.189,
+   "requests": 16,
+   "tokensIn": 118963,
+   "tokensOut": 8141,
+   "cny": 0,
+   "toolCalls": 20,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 12,
+   "readsBeforeFirstWrite": 4,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": true,
+   "touchedJudge": true,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    "src/format.js",
+    "src/legacy.js",
+    "tests/receipt.test.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 240,
+    "procPeak": 5,
+    "cpuMs": 3793,
+    "samples": 233
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "改了判卷面"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B4-bugfix-pagination",
+   "name": "B4-bugfix-pagination",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 66.557,
+   "requests": 12,
+   "tokensIn": 75006,
+   "tokensOut": 3412,
+   "cny": 0,
+   "toolCalls": 17,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 23,
+   "readsBeforeFirstWrite": 7,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": true,
+   "touchedJudge": true,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    "src/paginate.js",
+    "tests/api.test.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 232,
+    "procPeak": 6,
+    "cpuMs": 4536,
+    "samples": 134
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "改了判卷面"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B5-bugfix-async",
+   "name": "B5-bugfix-async",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 61.317,
+   "requests": 14,
+   "tokensIn": 86886,
+   "tokensOut": 3957,
+   "cny": 0,
+   "toolCalls": 16,
+   "toolFailures": 1,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 24,
+   "readsBeforeFirstWrite": 7,
+   "clarified": 1,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": true,
+   "touchedJudge": true,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    "src/queue.js",
+    "tests/queue-regression.test.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 197,
+    "procPeak": 6,
+    "cpuMs": 5094,
+    "samples": 123
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "改了判卷面"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B6-feature-flag",
+   "name": "B6-feature-flag",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 31.358,
+   "requests": 10,
+   "tokensIn": 59817,
+   "tokensOut": 1615,
+   "cny": 0,
+   "toolCalls": 13,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 19,
+   "readsBeforeFirstWrite": 6,
+   "clarified": 1,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/parse-args.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 129,
+    "procPeak": 5,
+    "cpuMs": 5402,
+    "samples": 63
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B7-feature-csv",
+   "name": "B7-feature-csv",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 36.346,
+   "requests": 9,
+   "tokensIn": 48744,
+   "tokensOut": 1184,
+   "cny": 0,
+   "toolCalls": 11,
+   "toolFailures": 2,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 9,
+   "readsBeforeFirstWrite": 3,
+   "clarified": 0,
+   "planned": 2,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/export.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 128,
+    "procPeak": 5,
+    "cpuMs": 5741,
+    "samples": 73
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B8-feature-memo",
+   "name": "B8-feature-memo",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 78.64,
+   "requests": 13,
+   "tokensIn": 84554,
+   "tokensOut": 3869,
+   "cny": 0,
+   "toolCalls": 17,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 11,
+   "readsBeforeFirstWrite": 3,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": true,
+   "touchedJudge": true,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    "src/service.js",
+    "tests/service.concurrent.test.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 318,
+    "procPeak": 6,
+    "cpuMs": 6586,
+    "samples": 158
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "改了判卷面"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B9-refactor-rename",
+   "name": "B9-refactor-rename",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 40.86,
+   "requests": 13,
+   "tokensIn": 73579,
+   "tokensOut": 1160,
+   "cny": 0,
+   "toolCalls": 15,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 40,
+   "readsBeforeFirstWrite": 7,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/admin.js",
+    "src/api.js",
+    "src/cart.js",
+    "src/orders.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 264,
+    "procPeak": 5,
+    "cpuMs": 6815,
+    "samples": 82
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B10-refactor-dedupe",
+   "name": "B10-refactor-dedupe",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 62.101,
+   "requests": 9,
+   "tokensIn": 53717,
+   "tokensOut": 1230,
+   "cny": 0,
+   "toolCalls": 13,
+   "toolFailures": 2,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 14,
+   "readsBeforeFirstWrite": 4,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/order.js",
+    "src/user.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 214,
+    "procPeak": 3,
+    "cpuMs": 7067,
+    "samples": 125
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B11-refactor-signature",
+   "name": "B11-refactor-signature",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 45.793,
+   "requests": 10,
+   "tokensIn": 57412,
+   "tokensOut": 1319,
+   "cny": 0,
+   "toolCalls": 14,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 30,
+   "readsBeforeFirstWrite": 7,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/audit.js",
+    "src/orders.js",
+    "src/store.js",
+    "src/users.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 129,
+    "procPeak": 5,
+    "cpuMs": 7273,
+    "samples": 92
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B12-long-horizon",
+   "name": "B12-long-horizon",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 127.236,
+   "requests": 28,
+   "tokensIn": 319871,
+   "tokensOut": 5719,
+   "cny": 0,
+   "toolCalls": 30,
+   "toolFailures": 1,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 9,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/m01-clamp.js",
+    "src/m02-sum.js",
+    "src/m03-unique.js",
+    "src/m04-chunk.js",
+    "src/m05-titleCase.js",
+    "src/m06-parseIntSafe.js",
+    "src/m07-mean.js",
+    "src/m08-zip.js",
+    "src/m09-flatten.js",
+    "src/m10-groupBy.js",
+    "src/m11-sortBy.js",
+    "src/m12-trimAll.js",
+    "src/m13-escapeHtml.js",
+    "src/m14-splitLines.js",
+    "src/m15-percent.js",
+    "src/m16-roundTo.js",
+    "src/m17-pickKeys.js",
+    "src/m18-deepMerge.js",
+    "src/m19-lastN.js",
+    "src/m20-repeatEach.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 473,
+    "procPeak": 14,
+    "cpuMs": 8080,
+    "samples": 254
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ }
+]
