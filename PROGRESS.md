@@ -9562,3 +9562,18 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 5. **白捡的一个新读数（全套收集底）**：把同一条"选不中"的技巧用到整张套件上——`node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts -t "__no_such_test_zz__"` ⇒ `Test Files 259 skipped (259)`、`Tests 3466 skipped (3466)`、`Duration 40.44s (import 84%, transform 13%, worker 3%)`、`FULL_FILTERED_EXIT=0 WALL_S=41`（`filtered-full-run.log`）。**口径**：一条用例都没执行时全套仍要 40.4 秒，这就是 `pnpm test`／head-cert 判卷那 ~86–165s 里的**固定成本**（import＋收集），与任何单条断言无关。它的用处有两个方向：① 以后比"两次判卷谁快"要先看这 40s 有没有被摊薄（复用同一棵树、冷缓存与否都会动它——规则 245 那条"同温"的另一种形态）；② 想再省全量判卷的钱，能动的只剩**收集期**与**依赖图**，不是断言。
 6. **不接线、不建门**：这一族不需要常驻尺——第 287 页已经给"收集期不许扫真仓"那**一处**装了形状锚点（`prose-scan-real-repo-scan-back-at-collection-time`，本轮已 1/1 杀死）。要不要给别的文件也装锚点，判据是"那条重活会不会悄悄回来"：`cli-surface`／`usage-attribution` 那两处收集期花的是 `transform＋import`，不是盘上的扫描，回来也没有代价可言 ⇒ 不配。反转条件：若哪天有判卷在 describe 体里做**全仓**级读取（>1s），先给它配一条同款形状锚点，再谈搬钩子。
 7. **本笔自检**：`docs-check` 与 `typecheck` 各跑一次（读数与结果随本串的 dated 目录入库），台账面全绿；表 1220 条未动、判卷 81 条未动、帽一格未动。
+
+### 2026-10-01 · 第 289 页 · 任务 #19 的宽分面重测：整本台账点名 240 条 dated 工件、追不回 59 条（**47 条在盘上、12 条盘上也没有**）——旧账是 216／61／49／12（第 285 页），三个数都变了；本笔把选项摆齐交裁决，不动别人的在飞工件、也不替 D-11 扩面
+
+取料面：`outputs/witness-wide-face-census-289-2026-10-01/`（复用第 285 页那支 `classify.mts`，不另抽一份实现——同一把尺只有一个决策点，规则 348 那一族）。本笔**零代码改动**，所以不构成认证、不跑 head-cert。
+
+1. **为什么必须现读**：任务 #19 挂着的是 2026-09-30 的分面（`refsTotal=216｜missTotal=61｜49 在盘｜12 无盘`）。中间落了 D-11、两串证人补档、以及 3 页新账——按旧数行动会同时漏掉新增的和多补掉已入库的。现读逐字（`classify-current.log`）：`"headTrackedFiles": 1871`、`"refsTotal": 240`、`"fileRefs": 132`、`"dirRefs": 108`、`"missTotal": 59`、`"miss且盘上还在": 47`、`"miss且盘上也没有": 12`。哨兵三条也照贴：`"哨兵_空清单下点名全红": 240`、`"哨兵_与refsTotal同值": true`、`"哨兵_凭证页分面条数": 92`——最后一行正好等于门里那一格今天的 `证人点名面：61 页点名 92 条`，即**窄分面（凭证页）自己也在涨**——这一格在本串的三次现读是 `59 页点名 88 条`（`outputs/prose-face-observers-286-2026-10-01/docs-check-at-48c21b5.log`）→ `60 页点名 90 条`（同目录 `docs-check-before-cred-286b.log`）→ `61 页点名 92 条`（`outputs/anchor-unit-price-attribution-287-2026-10-01/docs-check-287-cred.log`；第 288 页那两把自检再读仍是这一对数），这说明漏检面不会自己缩小，只会越攒越多。
+2. **47 条在盘 = 一次可逆的补档**，代价先量出来（`backfill-size.txt`）：`"refs": 47, "其中目录形": 17, "会进HEAD的文件数": 50, "字节": 318849, "行数里盘上其实没有": []`；再扫了一遍密钥形状（`secret-scan.txt`）：`"扫过文件数": 50, "命中密钥形状": 0`。**注意这 50 份不是我这一轮写的**——它们属于 2026-09-25～09-30 那几页（`anchor-no-ruler-face`、`bare-name-needles`、`detached-spawn-drain`、`cost-attribution-join`… 见 `classify-current.log` 的逐条清单），是别的工作会话留下的在飞工件。往 HEAD 里搬别人未提交的东西＝共享状态写入，我不自己做（AGENTS.md 那条「Preserve unrelated dirty changes from other sessions」在这里的正面含义是：不替别人决定它们的半成品要不要发货）。
+3. **12 条无盘是真取不到**（`gone-12.txt`）：日期都在 2026-09-12～09-23（`agent-review-2026-09-15`、`code-review-report-2026-09-12`、`fix-log-2026-09-12`、`permission-guided-mode-2026-09-23`、`replay-face-gate-2026-09-23`、`verify-cause-denominator-2026-09-23` 等 12 个目录整目录不在盘上）。这一半**没有任何修法**能追回原件，只能：改页（不许——台账只追加）、登记成不可回查的存量（`LEGACY_WITNESS_REFS` 那条路），或者明确承认宽分面不归 D-11 管。
+4. **三个选项与我的推荐**（等裁决，不行动）：
+   - **A 补档＋登记窄存量**：把这 50 份按文件名逐份入库（311 KB），宽分面 miss 从 59 降到 12；再把那 12 条写进 `LEGACY_WITNESS_REFS`（帽从 0 涨到 12，只准调低），同时把 D-11 的分面从「凭证页」扩到「整本台账」。代价：一次 50 文件的入库＋一把尺扩面＋判卷要补「扩面后仍红 0」的等式；好处：台账里每一句「原件见 X」从此刻起都能追。
+   - **B 只登记不扩面**：承认 D-11 只管凭证页（第 285 页就是这么裁的），任务 #19 结案为「宽分面刻意不收」，理由写在这里。代价最小；风险：普通页引的证人依旧无人守，而第 1 项那行 `92` 说明这个面一直在涨。
+   - **C 只补档不扩面**：搬那 50 份，12 条无盘的继续留在"没尺管"的状态。我不推荐——它把最贵的一步（入库别人在飞的东西）做了，却没换来任何判据。
+   **我推荐 A，但 A 的后半（扩面）与 B 的差别只是判卷要不要多管一面，而 A 的前半（搬别人 50 份在飞工件）是唯一不可由我自己批准的动作**——所以先要一句明文授权；如果只批前半不批后半，就落进 C。
+5. **本轮不动的东西**：`LEGACY_WITNESS_REFS`（仍 `[]`、帽 0）、`SCOPE_CEILINGS`、任何判卷与锚点（表仍 1220 条）、任何 worktree（本会话 19 棵，全部 `status=0` 等点头）。
+6. **自检**：`typecheck: tsc --noEmit 通过（0 条报错）✅`／`TSC_EXIT=0`；`docs-check: 受检项全绿（另有 3 项未检，见上）`／`DOCS_EXIT=0`；证据面 `危险码 12 条／帽 12 条`／`EVD_EXIT=0`（本笔新增两份 `.log`＋两份 `.txt`＋不新增脚本，复用第 285 页那支）。

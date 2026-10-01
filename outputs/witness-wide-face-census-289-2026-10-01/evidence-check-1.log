@@ -1,0 +1,4 @@
+✅ evidence-typecheck：证据面危险码 12 条／帽 12 条（HEAD 口径｜在飞未入库 0 条／0 个文件（只点名，不计我的账）；登记 8 个文件；全量报错 45 条）（2895ms｜解析 45/45 条）
+   归属面取料：前缀 outputs｜未跟踪 22 支
+   被算进危险码的第一行（原文照贴，判卷钉的就是这个形状）：outputs/anchor-resolvability-2026-09-23/measure-anchor.mts(110,14): error TS2551: Property 'line' does not exist on type '{ kind: "path" | "
+EVD_EXIT=0
