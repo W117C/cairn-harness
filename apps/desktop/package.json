@@ -3,12 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "dist-electron/index.js",
+  "main": "src/main/entry.cjs",
   "scripts": {
     "dev": "vite & sleep 2 && electron .",
-    "build:main": "esbuild src/main/index.ts --bundle --platform=node --format=cjs --external:electron --define:import.meta.url=__dshImportMetaUrl --banner:js='var __dshImportMetaUrl = require(\"node:url\").pathToFileURL(__filename).href;' --outfile=dist-electron/index.js",
-    "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.js",
-    "build": "pnpm run build:main && pnpm run build:preload && vite build && tsc -p tsconfig.json --noEmit",
+    "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.cjs",
+    "build": "pnpm run build:preload && vite build && tsc -p tsconfig.json --noEmit",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
