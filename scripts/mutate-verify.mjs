@@ -9965,6 +9965,45 @@ const MUTATIONS = [
     expectFail: "三族各收一条",
   },
 
+  /* ── 第 277 页：取料面剩下三格里能钉的都钉上，其中一格是先给它补正向证人再钉的。
+   *    规矩是第 276 页那条：落笔前先答「哪条用例为它红」——`unresolved` 从前只被断言为 0，
+   *    所以它的锚点必须连着新用例一起交，否则钉上去是一支必存活的假锚点。 ── */
+  {
+    id: "prose-scan-unresolved-counter-dead",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "括号回走走不通那一格不再累加 ⇒ `unresolvedMatcher` 永远读 0，" +
+      "「这些断言本面看不见」静默消失（从前这条计数器只被断言为 0，两侧都没证人；" +
+      "第 277 页先补三侧合成夹具——收料／走不通／认不出族——再钉这一支）",
+    apply: (s) => s.replace("unresolved += 1;", "unresolved += 0;"),
+    expectFail: "单列进 unresolved（三侧",
+  },
+  {
+    id: "prose-scan-self-excluded-filter-off",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "自排除面不再列出自己的夹具 ⇒ 这把尺重新开始量它自己写的字符串（第 95 页那次假绿的原罪），" +
+      "而报告上『排除了哪些』那一格变成空——排除动作还在生效，只是没人能核对它排了谁",
+    apply: (s) => s.replace(
+      "  const selfExcluded = allTests.filter((p) => SELF_EXCLUDED_TESTS.includes(p));",
+      "  const selfExcluded = allTests.filter(() => false);",
+    ),
+    expectFail: "且排除必须列出来",
+  },
+  {
+    id: "prose-scan-shadow-cleared-predicate-loosened",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "影子免计那一格的谓词从『真少了一份副本』放宽成『副本数不大于原数』⇒ " +
+      "`shadowCleared` 把**什么都没免计**的行也列进来，读者会把这张长名单读成" +
+      "『排除面很有用』，而每一行的差额其实是 0（规则 101 那条『关小判据要能说出差额』的反向）",
+    apply: (s) => s.replace(
+      "  const shadowCleared = rows.filter((r) => r.rawCopies > 1 && r.copies < r.rawCopies);",
+      "  const shadowCleared = rows.filter((r) => r.rawCopies >= 1 && r.copies <= r.rawCopies);",
+    ),
+    expectFail: "verbatim 那几格还留着生产者",
+  },
+
   /* ── 第 274 页：把 `scripts/prose-needle-scan.ts` 的帽那一族补齐（第 272 页现读：这支 1100 行的尺此前整支零锚点，
    *    本族四支各钉一种坏法：比较符、加法、按树取帽、把出声那一支焊死）。
    *    这四支都能买，正因为它们的判卷喂的是**合成输入**（第 272 页第 7 项写的那条：clean 树上两侧同为 0 的配对断言买不了锚点）。 ── */

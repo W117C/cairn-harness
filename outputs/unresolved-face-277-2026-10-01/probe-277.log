@@ -1,0 +1,6 @@
+基准（走得通） ⇒ 收到 1 条（基准那条料）｜unresolved=0
+无诊断字段的 operand ⇒ 收到 0 条（无）｜unresolved=0
+裸右括号开头（前面没有左括号） ⇒ 收到 0 条（无）｜unresolved=1
+前面一个字符串里有右括号 ⇒ 收到 1 条（串里有括号那条料）｜unresolved=0
+三层右括号只有一层左 ⇒ 收到 0 条（无）｜unresolved=1
+PROBE_EXIT=0

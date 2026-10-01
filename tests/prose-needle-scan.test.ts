@@ -120,6 +120,20 @@ describe("collectNeedles 加宽：认「取料来源」而不是认写法", () =
     const rows = collectNeedles("e.test.ts", echoFile).needles;
     expect(rows.map((r) => [r.needle, r.suppliedInTest])).toEqual([["测试调用", true], ["停滞超时", false]]);
   });
+
+  // 第 277 页：这条计数器从前**只被断言为 0**（`:65`、`:667` 两格都是 0），所以把 `unresolved += 1;`
+  // 改成永不累加照样全绿——"看不见"这一格没有正向证人。三个形状各自实测过（探针见本页凭证引用的
+  // `outputs/unresolved-face-277-2026-10-01/probe-277.log`）：走得通＝收料且不涨；括号回走撞不到
+  // 左括号＝一条不收但必须点名；看得到调用却认不出取料族＝既不收也不点名（把后两格焊在一起，
+  // 读数照样是 0，而这正是本面最该说"我看不见"的地方）。
+  it("括号回走走不通的那一条要单列进 unresolved（三侧：收到料／走不通／认不出族）", () => {
+    const ok = collectNeedles("u1.test.ts", `expect(String(g.reason)).toContain("基准那条料");`);
+    expect([ok.needles.length, ok.unresolved]).toEqual([1, 0]);
+    const dead = collectNeedles("u2.test.ts", `probeArg).toContain("裸括号那条料");`);
+    expect([dead.needles.length, dead.unresolved]).toEqual([0, 1]);
+    const unknown = collectNeedles("u3.test.ts", `expect(w).toContain("没有字段那条料");`);
+    expect([unknown.needles.length, unknown.unresolved]).toEqual([0, 0]);
+  });
 });
 
 describe("classifyNeedles：五态各自点名，一条不许静默归进『没问题』", () => {
