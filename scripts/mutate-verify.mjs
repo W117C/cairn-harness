@@ -10403,6 +10403,22 @@ const MUTATIONS = [
     expectFail: "同一对账在真仓上跑一遍",
   },
 
+  /* ── 第 287 页：spawn 单价的杠杆——真仓那一次扫（本机实测 8.9s）从 describe 体搬进 beforeAll。
+   *    这一条的 `src` 就是判卷自己：钉的是「收集期不许扫真仓」这个形状——形状回去后 81 条用例照样全绿、
+   *    没有任何断言为此喊，但表里 26 条锚点的每条 spawn 都要重新付那 8.9s。 ── */
+  {
+    id: "prose-scan-real-repo-scan-back-at-collection-time",
+    src: "tests/prose-needle-scan.test.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "把这一次真仓扫从 `beforeAll` 搬回 describe 体 ⇒ 判卷照旧全绿，差别只在 vitest 打印的 `import` 那一格：" +
+      "「-t 只选中合成面那条」也要付整趟扫（本机实测 9.54s→0.644s）。能挡它的只有形状，秒数本身写成断言就是抖动",
+    apply: (s) => s.replace(
+      "  let r: ScanReport;\n  beforeAll(() => {\n    r = scanRepo(root);\n  });",
+      "  const r = scanRepo(root);"
+    ),
+    expectFail: "收集期不再扫真仓：那种写法恰好一条",
+  },
+
   /* ── 第 273 页：把「实测 <1.5s 全进」这条线接成判据（取料＝入库的那趟全表日志）。两支各钉一半。 ── */
   {
     id: "certface-webfetch-gate-row-dropped",

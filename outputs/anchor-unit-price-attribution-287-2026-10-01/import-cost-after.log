@@ -1,0 +1,9 @@
+===== 改造后（lazy beforeAll）同形状复测 =====
+ Test Files  1 passed (1)
+      Tests  5 passed | 74 skipped (79)
+   Duration  644ms (import 59%, tests 20%, transform 20%)
+SPEC=tests/prose-needle-scan.test.ts PAT=合成树那一面 WALL_S=1 EXIT=0
+ Test Files  1 passed (1)
+      Tests  13 passed | 66 skipped (79)
+   Duration  9.43s (tests 96%, import 3%, transform 1%)
+SPEC=tests/prose-needle-scan.test.ts PAT=真仓扫 WALL_S=10 EXIT=0

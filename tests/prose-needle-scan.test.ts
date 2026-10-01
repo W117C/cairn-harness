@@ -5,7 +5,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { fileURLToPath } from "node:url";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   applyWaivers,
@@ -39,6 +40,7 @@ import {
   untrackedHeldOutOf,
   type CopySite,
   type ProseNeedle,
+  type ScanReport,
 } from "../scripts/prose-needle-scan";
 
 const src = (path: string, text: string) => ({ path, text });
@@ -690,7 +692,13 @@ describe("applyWaivers：豁免要带理由，且不许静默烂在这儿", () =
 
 describe("真仓扫：这把尺自己不许空载", () => {
   const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
-  const r = scanRepo(root);
+  // 现读：这一趟扫真仓要 8.9s（`outputs/anchor-unit-price-attribution-287-2026-10-01/probe-scan-cost.log`）。
+  // 写在 describe 体里＝它属于**收集期**（vitest 打印的 `import 98%`），于是 `-t` 只选中合成面那条时也得付一遍；
+  // 放进 beforeAll ⇒ 本 suite 一条没被选中就不跑（第 287 页把锚点 spawn 单价从 9.7s 打到合成面的量级）。
+  let r: ScanReport;
+  beforeAll(() => {
+    r = scanRepo(root);
+  });
   // 帽不再在这里手抄：真仓那条直接调 `ceilingBreaches(r)`（判卷与 CLI 同一份），
   // 自己 `SCOPE_CEILINGS[r.scope]` 取一次＝把判据抄第二遍，第 108 页那族错误的正身。
 
@@ -939,9 +947,16 @@ describe("合成树那一面：sourceFiles／proseHeldBack／inFlightStale 三�
     utimesSync(join(root, "src", "old.ts"), three, three);
     return root;
   };
-  const root = buildTree();
-  afterAll(() => { rmSync(root, { recursive: true, force: true }); });
-  const r = scanRepo(root);
+  let root: string;
+  let r: ScanReport;
+  beforeAll(() => {
+    root = buildTree();
+    r = scanRepo(root);
+  });
+  afterAll(() => {
+    // 本 suite 一条没被 `-t` 选中时 beforeAll 不跑，`root` 还是 undefined ⇒ 没有目录要收
+    if (root !== undefined) rmSync(root, { recursive: true, force: true });
+  });
 
   it("生产侧只吃已跟踪那一半：恰好 5 支（tests/ 不算、两支未跟踪也不算）", () => {
     expect(r.scope).toBe("core-only");
@@ -994,5 +1009,21 @@ describe("合成树那一面：sourceFiles／proseHeldBack／inFlightStale 三�
     } finally {
       rmSync(empty, { recursive: true, force: true });
     }
+  });
+});
+
+describe("spawn 单价的形状：真仓那一次扫住在 beforeAll 里，不在 describe 体里（第 287 页）", () => {
+  // 判卷读的是**自己这一支文件**的文字，所以两条都用行锚定＋转义写法：搜索式在判卷里只以正则字面量出现，
+  // 不会被自己撞上（规则 236/348 那一族：同文件文字判卷一旦写成 toContain 就恒真）。
+  const self = readFileSync(fileURLToPath(import.meta.url), "utf8");
+  const LAZY = /^ {2}beforeAll\(\(\) => \{\n {4}r = scanRepo\(root\);\n {2}\}\);/gm;
+  const EAGER = /^ {2}const r = scanRepo\(root\);$/gm;
+
+  it("收集期不再扫真仓：那种写法恰好一条", () => {
+    expect(self.match(LAZY) ?? []).toHaveLength(1);
+  });
+
+  it("负控：回到 describe 体的急切写法必须不存在（否则每条锚点 spawn 都付 8.9s）", () => {
+    expect(self.match(EAGER) ?? []).toHaveLength(0);
   });
 });
