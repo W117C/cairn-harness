@@ -9224,3 +9224,26 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 8. **归因声明**：本笔只动 `scripts/mutate-verify.mjs` 与 `tests/prose-needle-scan.test.ts` 两个文件＋本页与 dated 工件；交笔前 `git status --porcelain` 现读，其余在飞项都不是我的。门里那道常驻红仍属隔壁 `1748ca7` 的 H7（第 276 页凭证现读 11 条未登记夹具），本笔不动、认证结论不写成"全量绿"。
 9. **清场**：本笔要建的两棵独立树逐棵核 `status --porcelain` 后再写读数，**不回收**（破坏性动作等用户点头）。
 
+### 2026-10-01 · 第 277 页补 凭证：本笔（`7c8dc06`）认证 259 文件／3434 条 exit=0、两端独占、本趟墙钟 201.02s；三支新锚点干净树 3/3 全杀（55.8s、坏拍 0、判卷 spawn 6 次／3 条·单次中位 9.2s）；条数核对式 `3434 ＝ 3433 ＋ 1` 成立；`HEADCERT_EXIT=1` 仍只来自隔壁那 11 条未登记的 H7；本笔两棵树各核 0 项、未回收
+
+取料：outputs/unresolved-face-277-2026-10-01/
+
+1. **被认证对象与等级**：提交 `7c8dc06`（第 277 页实现簇：`scripts/mutate-verify.mjs` 39/0、`tests/prose-needle-scan.test.ts` 14/0、`PROGRESS.md` 24/0，加 9 份 dated 工件；`git show --numstat --format= 7c8dc06 | wc -l` ＝ **12** 个文件，与我自列清单逐行相符）；认证树＝`.worktrees/head-cert-7c8dc06`（独立树，非主树）；等级＝**全量**（`--at=HEAD`，无 `--skip-test`，所以这一把是整把尺而不是半把）。日志两行照贴：`目标提交：7c8dc06（--at=HEAD）`、`已核：TREE=7c8dc06559e968e46a9558233d34d94cbe74ddc9｜判卷四面在飞 0 项`。（本凭证这一笔另外带 4 份新工件：认证日志、跑批日志、认证树针脚日志、清场日志——落笔前我把这两个"几个文件"重测了一遍，第一版草稿里写的是 10／13，那是我从上一笔的形状推的。）
+2. **三支新锚点在干净树逐条杀死**（`kill-3-anchors-277.log`，`KILL_EXIT=0`；先跑秒级尺再烧跑批）：
+   - `变异验证：3 条` ⇒ 三行 `✅`（`prose-scan-unresolved-counter-dead`／`prose-scan-self-excluded-filter-off`／`prose-scan-shadow-cleared-predicate-loosened`），末行 `全部变异被正确杀死（断言非恒真）`
+   - 耗时与分母照机器自己印的那几行贴，不做换算：`[mutate-verify] 本次耗时 55.8s · 跑了 3/3 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）`｜`成本分母：判卷 spawn 6 次／3 条（每条次数分布 2×3）· 单次中位 第1次 9.2s／第2次 9.2s· 最贵一条 prose-scan-unresolved-counter-dead 18.6s`｜`跑法单价：selector 6 拍·中位 9.21s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母`
+   - 两端互印：`needles-277-certtree.log`（`NEEDLES_EXIT=0`，认证树内跑）与主树 `needles-277-precommit.log` 同值——`针脚体检：1186 条 —— 阻断 0，待复认 0，未覆盖 0，逐行式 5，未入库面 0（被测面 + 判卷两面），钉在飞文本 0，killer 指针失效 0（其中 HEAD 侧 0）`＋`改法语法体检：1186 条改法全部产出合法源文件 ✅`；表长 1183→1186 恰是本笔三支。
+3. **这一笔的实质是流程纪律第一次落地**（第 276 页立的规矩：写锚点前先答"哪条用例为它红"）。`unresolved` 那格答不出——两处判据（`tests/prose-needle-scan.test.ts:65`、`:667`）**都只断言 0** ⇒ 把 `unresolved += 1;` 改成 `+= 0;` 两条照样绿，直接登记就是一支必存活的假锚点。动作顺序＝先补三侧合成用例（`收料／走不通／认不出族`，三个形状由 `probe-277.log` 实测选出，`PROBE_EXIT=0`：`基准（走得通） ⇒ 收到 1 条（基准那条料）｜unresolved=0`、`裸右括号开头（前面没有左括号） ⇒ 收到 0 条（无）｜unresolved=1`、`无诊断字段的 operand ⇒ 收到 0 条（无）｜unresolved=0`）→ 判卷与锚点同笔落库 → 干净树逐条杀死。第三格钉的是 `via === null ⇒ continue` 那条**另一出口**：「本面看不见」与「写法不合规」不许焊成一格。另外两支（`selfExcluded`／`shadowCleared`）不需要新用例，因为判卷读的就是被改那一行产出的字段（共用决策点，规则 236）——这正是第 276 页第 4 形态的反面。
+4. **门与认证汇总**（逐格照 `head-cert-7c8dc06.log` 原文贴）：
+   - `依赖核对：该提交声明 10 项，缺 0 项`｜`import 面：3060 条边｜悬空 0（其中存量已豁免 0）`｜`门表：31 道，其中该笔 package.json 没有同名 script 的 0 道`｜`typecheck exit=0（0 报错）`
+   - `认证门面=22 道（跑到 22）｜❌ 红 1 道｜⚠️ 超预算 0`，红的那道 `❌ gate-check exit=1 4799ms（预算 5400ms）`
+   - `Test Files 259 passed (259)｜Tests 3434 passed (3434)｜exit=0（退出码直接取，不接管道）`
+   - `TREE=7c8dc06 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-7c8dc06.lock）`｜`并发判卷=起前 0 套／跑完 0 套（两端独占）`｜`本趟墙钟 201.02s（同一进程 hrtime 实测·口径＝起跑→汇总那一行，不含提前退出的那些趟）`
+   - 贴帽那一格：`3434 条里 0 条用时 ≥ 有效预算 80%｜无显式预算按缺省算 3181 条｜标题非字面量（it.each／插值／拼接，按缺省算）114 条｜预算没落到 0 条`，离帽最近 `3165ms/5000ms=63%` 与 `1607ms/5000ms=32%` ⇒ 本笔新增那条用例没把任何一格推向缺省帽。
+   - 退出码取法又有一次活证：外层调度器的通知写「exit code 0」，尺自己打印的是 `HEADCERT_EXIT=1`；`real 203.22` 是 `/usr/bin/time` 的，不算任何一把尺的码（规则 206／249）。
+5. **条数核对式**：`3434 ＝ 3433 ＋ 1`——上一笔（`720f713`，第 276 页凭证）留档 3433，本笔新增用例 1 条（第 277 页第 3 项那三侧夹具），认证日志现读 `Tests 3434 passed (3434)` ⇒ 等式成立、没有虚增也没少计。
+6. **红道归因（沿用第 276 页的现读，不重复推断）**：那一道仍是 `gate-check` 的 H7；判据取被度量方自己的函数：`frozenCoverageDrift(ROOT)` 报 `onDiskNotInTable=11`（全部 `fixtures/impact/accuracy-repo/*`）、`inTableNotOnDisk=0`、`tableDirsNotSwept=0`，那 11 条夹具由隔壁 `1748ca7` 加入而未登记进 `scripts/frozen-sha256.json`（证人：`outputs/prose-scan-feed-276-2026-10-01/h7-drift-head-276.log`）。本会话不动别人的冻结面，所以这一笔也**不写成「全量绿」**。
+7. **D-9 那一格**：`docs-check-277c.log`（`DOCS_EXIT=0`）落笔前读到 `可比对 280 个读数（红 0）`、`未点名页 0 页（帽 0，只准调低）`、`弱证 0 对（帽 0）`、`登记不可回查 8 条`、`证人无身份行 162 对＝这一格无从判`。本笔凭证入库后分母还会涨（引文自己进分母，第 275 页立的口径）⇒ 定稿判据是**红 0 ＋ 两格可行动帽 0**，分母只当量级并写明日志文件名。
+8. **刻意未做**：① 年龄那一格（`inFlightAgeChecked`）没钉——今天它与 `inFlightFiles.length` 同值（本趟扫描印「另有 0 个盘上不存在」），任何等式／`≤` 断言此刻都不分辨，要先把它抽成生产端与判卷共用的函数（规则 236）；② `proseHeldBack` 有现成 `> 0` 判据、可直接钉，本笔没做；③ 不替隔壁补那 11 条冻结登记（属别人交付面）；④ 没把「哪条用例为它红」做成 `--check-needles` 的静态闸（第 260 页：静态代理按全表量会误喊）。
+9. **清场**：本笔两棵树逐棵核过，`cleanup-277.log` 原文 `.worktrees/verify-7c8dc06 在飞项=       0`、`.worktrees/head-cert-7c8dc06 在飞项=       0`、`worktree 总条数（--porcelain 的 worktree 行）=64`；尺自己那行残留清单照贴 `常驻残留树=42`。**两棵都没回收**：`git worktree remove` 是破坏性动作，等用户点头；本会话创建的树全部逐棵核过 0 项、一律未删（"已回收"这句话必须跟着一次 `git worktree list` 的现读，见记忆里"收尾类动作"那条）。
+

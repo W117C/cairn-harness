@@ -1,0 +1,15 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-7c8dc06.lock）
+变异验证：3 条
+✅ prose-scan-unresolved-counter-dead — 括号回走走不通那一格不再累加 ⇒ `unresolvedMatcher` 永远读 0，「这些断言本面看不见」静默消失（从前这条计数器只被断言为 0，两侧都没证人；第 277 页先补三侧合成夹具——收料／走不通／认不出族——再钉这一支） ｜本机实测 18.6s／2 拍
+✅ prose-scan-self-excluded-filter-off — 自排除面不再列出自己的夹具 ⇒ 这把尺重新开始量它自己写的字符串（第 95 页那次假绿的原罪），而报告上『排除了哪些』那一格变成空——排除动作还在生效，只是没人能核对它排了谁 ｜本机实测 18.4s／2 拍
+✅ prose-scan-shadow-cleared-predicate-loosened — 影子免计那一格的谓词从『真少了一份副本』放宽成『副本数不大于原数』⇒ `shadowCleared` 把**什么都没免计**的行也列进来，读者会把这张长名单读成『排除面很有用』，而每一行的差额其实是 0（规则 101 那条『关小判据要能说出差额』的反向） ｜本机实测 18.5s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 55.8s · 跑了 3/3 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 6 次／3 条（每条次数分布 2×3）· 单次中位 第1次 9.2s／第2次 9.2s· 最贵一条 prose-scan-unresolved-counter-dead 18.6s
+跑法单价：selector 6 拍·中位 9.21s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-7c8dc06.lock）
+real 56.48
+user 62.41
+sys 1.48
+KILL_EXIT=0
