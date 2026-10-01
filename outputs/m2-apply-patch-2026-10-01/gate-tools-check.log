@@ -1,0 +1,17 @@
+== pnpm gates ==
+门清单（1 道，清单即事实源）：tools-check
+执行器：pnpm run
+  清单漂移校验：✅ GATES ↔ package.json scripts 一致（无孤儿验收脚本）
+
+  ▶ tools-check …  ✅ tools-check        exit=0  8960ms
+      └ ✅ tools-check 全部通过：grep/glob/read_file/lsp 四工具三项全绿；edit_file ①② 显式 n/a（输出有界），③ 相对路径绿。
+
+== 断言体检（空断言 / 恒真式 / 暗卷段零断言 / 析取式弱断言）==
+  扫描面：90 个已跟踪且在盘的脚本（未跟踪草稿不判，口径同 tests/assertion-health-scan.test.ts）
+  ✅ 零命中
+
+== 汇总 ==
+  绿 1 / 1，红 0
+  逐道退出码：tools-check=0
+  认证面 = **工作树，不是 HEAD**：判卷四面（src/scripts/tests/fixtures）在飞 11 项｜全仓在飞 26 项 ⇒ 本表全 0 **不等于 HEAD 全 0**；要 HEAD 认证请在 HEAD 的隔离 worktree 里跑整表（`git worktree add --detach <tmp> HEAD`；注意 `pnpm gates --direct` 只换执行器〔`pnpm run X` → `/bin/sh -c <script>`〕，**不改取料树**）
+  ✅ pnpm gates 全部通过 （子集 1/31 道门——非全量运行，不等于全量全绿）

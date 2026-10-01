@@ -13,9 +13,11 @@
 //      即将合并的代码不是被验过的那份 —— 这是能力 5 最忌的**假绿**，比漏拍更贵。
 // 修法不另立第五张表：写向那半边复用权限门的 `isWriteCall`（MCP 走注解、fail-closed），
 // shell 那半边复用执行面已在用的 `isReadOnlyShellCommand`（同一份白名单 + 写面元字符一票否决）。
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { mayHaveWrittenDisk } from "../src/agent/write-face";
 import { hasSessionWrites, workerVerificationEvidence } from "../src/agent/worker-report";
@@ -24,6 +26,8 @@ import { TOOLS } from "../src/tools";
 import { shell_ro } from "../src/agent/worker-shell-tools";
 import type { AgentEvent } from "../src/events";
 import type { ProviderMessage } from "../src/providers";
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 const shellCall = (id: string, name: string, command: string): AgentEvent => ({
   type: "tool_call",
@@ -101,6 +105,27 @@ describe("mayHaveWrittenDisk：写向判据的唯一事实源", () => {
       // 反向一侧：只读名单里不许藏着「其实会被判成改盘」的名字（名单与判据分叉即红）
       const mislisted = READ_ONLY_SURFACE.filter((n) => mayHaveWrittenDisk(n, {}));
       expect(mislisted, "只读名单里有名字被判成改盘 ⇒ 名单已过期：" + mislisted.join("、")).toEqual([]);
+    },
+  );
+
+  it(
+    "接线棘轮：TOOLS 里每个写向工具都必须在 installAppTools 里被 gatedTool 包装（不包装＝权限门对它整条缺席）",
+    () => {
+      // 为什么钉源文本而不是跑 installAppTools：那函数会拉起 AskGate / 调度器，单测里起它等于
+      // 起半个主进程（口径同 tool-surface-parity 的实例面）。文本对账的失效方向是**假绿**，
+      // 所以末尾配一条反向对照——「全都包了」与「检查器瞎了」必须分得开。
+      const runner = readFileSync(join(ROOT, "src", "main", "agent-runner.ts"), "utf8");
+      const unwrappedIn = (src: string, names: readonly string[]): string[] =>
+        names.filter((n) => !src.includes(`TOOLS.${n} = gatedTool("${n}", TOOLS.${n})`));
+      const writeNames = Object.keys(TOOLS).filter((n) => mayHaveWrittenDisk(n, {}));
+      expect(writeNames.length, "一个写向工具都没数出来 ⇒ 取料坏了，不是没问题").toBeGreaterThan(0);
+      const unwrapped = unwrappedIn(runner, writeNames);
+      expect(
+        unwrapped,
+        "写向工具没被门包装 ⇒ 它直连 TOOLS 执行，权限门/只读摘除/方案门整条缺席：" + unwrapped.join("、"),
+      ).toEqual([]);
+      const fake = 'TOOLS.write_file = gatedTool("write_file", TOOLS.write_file);';
+      expect(unwrappedIn(fake, ["write_file", "ghost_write"]), "检查器在假源文本上认不出缺的那把＝它自己瞎了").toEqual(["ghost_write"]);
     },
   );
 });

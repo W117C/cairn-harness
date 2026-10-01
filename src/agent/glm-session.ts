@@ -149,6 +149,21 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         ),
       },
     },
+    // M2：补丁级输入。存在的理由按基线读数排（outputs/m2-apply-patch-2026-10-01/readings.md）：
+    // 本仓真实提交「一笔 = 中位 3–10 处 hunk」，逐处替换的形状是一处一次调用，且跨文件没有原子性。
+    {
+      type: "function",
+      function: {
+        name: "apply_patch",
+        description:
+          "补丁级编辑：接受一段统一 diff（git diff 的格式），逐 hunk 应用、一笔可跨多个文件原子落地——" +
+          "任何一处对不上整笔不落盘；上下文对不上时报出第几行、期望与实际。只应用内容改动，删除/改名/二进制请显式逐笔做。",
+        parameters: obj(
+          { patch: { type: "string", description: "统一 diff 全文（含 diff --git / --- / +++ / @@ 行）" } },
+          ["patch"],
+        ),
+      },
+    },
     {
       type: "function",
       function: {

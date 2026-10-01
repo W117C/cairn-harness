@@ -530,10 +530,10 @@ export function withSkillAllowNote(tool: string, reason: string): string {
     : reason + "（" + invo + " 的 allowed-tools 申报过 " + tool + "，但申报不放行：当前档位仍需确认）";
 }
 
-/** `web_fetch` 在这个字面量联合里而不在 `TOOL_NAMES` 里：静态注册表冻结为 9 工具
- *  （`tools-check.ts` 判据），M2a 起的运行时注入先例不碰它。`name as ToolName` 与
+/** `web_fetch` 在这个字面量联合里而不在 `TOOL_NAMES` 里：静态注册表（M2 起 10 工具，
+ *  `tools-check.ts` 判据）不含它，M2a 起的运行时注入先例不碰它。`name as ToolName` 与
  *  `staticRisk` 里 `(tool as string) === "web_fetch"` 是同一处类型缝的两面。 */
-type GatedName = "write_file" | "edit_file" | "run_shell" | "web_fetch";
+type GatedName = "write_file" | "edit_file" | "apply_patch" | "run_shell" | "web_fetch";
 
 function gatedTool(name: GatedName, original: Tool, beforeExecute?: () => Promise<ToolResult | null>): Tool {
   return {
@@ -1026,13 +1026,17 @@ export function installAppTools(opts: { automation?: boolean; omitTools?: readon
   installedSubagents = wantSubagents;
   TOOLS.write_file = gatedTool("write_file", TOOLS.write_file);
   TOOLS.edit_file = gatedTool("edit_file", TOOLS.edit_file);
+  // M2 补丁工具同罪同罚：它是批量形态的 edit（跨文件、一笔可覆盖多份），必须走同一道门。
+  // 不包装 = 直连 TOOLS 的写工具 ⇒ 权限门对它整条缺席（只读档只剩规格面摘除这一层，
+  // 模型一旦发出这个名字就会真落盘）——这正是 M7 审计点名的「新工具族静默绕过写禁」形状。
+  TOOLS.apply_patch = gatedTool("apply_patch", TOOLS.apply_patch);
   TOOLS.run_shell = gatedTool("run_shell", TOOLS.run_shell);
   // web_fetch：出网取内容。**走 gatedTool 而不是裸挂**——SSRF 判据在工具内，但"要不要问人"
   // 在权限层，两处都要有：`gatedTool` 负责四档出审批卡 + 非交互 fail-closed，并把 scope
   // 钉成 `once`（`wantsNetwork` 那一条，见 `isNetworkCommandCall` 的注释：没有它，
   // 一次"总是允许"就会把出网永久写成免批）。worker 面不给（worker 出网是无条件 deny）。
   (TOOLS as unknown as Record<string, Tool>).web_fetch = gatedTool("web_fetch", webFetch);
-  // M2d：remember 运行时注入（静态注册表冻结为 9 工具，tools-check 判据）
+  // M2d：remember 运行时注入（静态注册表 10 工具，tools-check 判据）
   // `autoMemory` 关掉时不挂：那条路上没有自动消费者，留着它等于每轮白付 269 tok 的说明书。
   // 代价说清楚——开了这个开关就**真的没有**手动记一笔的入口（重开 settings 即回来）。
   if (wantMemory) (TOOLS as unknown as Record<string, Tool>).remember = createGatedRemember({
@@ -1047,7 +1051,7 @@ export function installAppTools(opts: { automation?: boolean; omitTools?: readon
       };
     },
   });
-  // M3a：spawn_agent 运行时注入（installAppTools 运行时注入先例；静态注册表 9 工具不动）。
+  // M3a：spawn_agent 运行时注入（installAppTools 运行时注入先例；静态注册表 10 工具不动）。
   // 编排器未接线（headless 直调 loop）= fail-closed 拒绝。
   // 派生审批**由 orchestrator 按风险分级**出卡（写租约相交 / pipeline / supervise / merge 四处
   // approval_requested），此处不再叠一张 blanket 卡：实测那样会让 agents-check C 段 9 条全红

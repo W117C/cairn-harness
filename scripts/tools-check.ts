@@ -1,5 +1,5 @@
 // M2a 任务 7 / M2g 任务 5：pnpm tools-check —— 逐工具实测输出三项清单（输出上限 / 截断提示 / 相对路径）
-// + 断言工具注册表含 9 个工具。全部真实调用（临时工作区），不做静态扫描。
+// + 断言工具注册表含 10 个工具（9 + M2 的 apply_patch）。全部真实调用（临时工作区），不做静态扫描。
 //
 // M2g 修正（闭合 §1.4-4「空断言 + 言过其实的结语」）：
 //   - 删掉 `check(..., true)` 形式的空断言；
@@ -52,7 +52,7 @@ function assertNoAbsPath(output: string, ws: string): boolean {
 console.log("== 工具注册表 ==");
 const names = Object.keys(TOOLS).sort();
 console.log("  注册工具:", names.join(", "));
-check("注册表含 9 个工具", names.length === 9, "实际 " + String(names.length));
+check("注册表含 10 个工具", names.length === 10, "实际 " + String(names.length));
 
 console.log("\n== grep ==");
 {

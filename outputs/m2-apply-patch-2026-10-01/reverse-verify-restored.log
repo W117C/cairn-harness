@@ -1,0 +1,13 @@
+# 反向验证复原：原实现（sha256 35b1672… 与改前逐字节相同）下，同一条命令复绿
+# 命令：node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/apply-patch.test.ts
+
+ RUN  v5.0.0 /Users/ze/Downloads/deepseek harness
+
+ ✓ tests/apply-patch.test.ts (28 tests) 74ms
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  18:43:49
+   Duration  285ms (transform 40%, tests 36%, import 23%, worker 1%)
+
+EXIT=0

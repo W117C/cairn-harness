@@ -1,0 +1,652 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/deepseek harness
+
+stderr | tests/m3c.test.ts > M3c 工具面裁剪与成本闸 > 成本闸：缺省零行为 / 单价 0 无效化 / 超限拒绝新 spawn 并落流警告
+[budget] 会话成本上限 $1 设了，但既没填单价、价表里也查不到模型 "" ⇒ 这道闸本次不生效（不拿 $0 冒充实付）
+
+ ✓ tests/m3c.test.ts (25 tests) 18037ms
+   ✓ M3c 依赖链（depends_on 事件驱动） (3)
+     ✓ 前环未收敛 → 延迟登记；前环 done → 后环自动 spawn（agent_spawned 记 depends_on） 345ms
+   ✓ M3c pipeline 哑 sequencer（零 LLM） (3)
+     ✓ 未获批准 fail-closed；批准后 stages 变更请求被拒且落流 15212ms
+ ✓ tests/mutate-verify-gates.test.ts (162 tests) 17115ms
+   ✓ 改动面派生：一条锚点的两面都要认（被测源 ∪ 判卷文件） (8)
+     ✓ 派生可以只看名单不真跑：`--list --changed-since=<空树>` ⇒ 每条锚点两面都在跟踪文件里，必须选中整表 684ms
+     ✓ 真跑：`--changed-since` 不给 rev ⇒ exit 2，且一条源文件都不许动 595ms
+     ✓ 派生可以只看名单不真跑：`--list --changed-since=<rev>` 只印选中的那些，且不碰任何源文件 1222ms
+     ✓ 真跑：rev 取不到 ⇒ exit 2 并点名那个 rev（「取料坏」不许退化成「选中 0 条」） 614ms
+   ✓ 被 import 时必须拒绝运行（它会就地改源文件） (2)
+     ✓ import 进来 ⇒ 退出码 2、点名拒绝，且一条变异都没跑 579ms
+     ✓ 反向一侧：正当入口没被这道闸误伤（--list 仍 exit 0 且列得出条目） 565ms
+   ✓ mutate-verify 也接了这把锁：占不到就不许动盘（那份过程的第二个消费者） (6)
+     ✓ 活人占着 ⇒ exit 2、点名是谁、拒在开跑之前，并且不替别人删锁 685ms
+     ✓ 反向哨兵：同一入参、没有锁 ⇒ 必须走到「未知 id」，并且占过又放掉（上面那条的红只能来自锁） 620ms
+     ✓ 只读入口不许被这把门锁死：--list 在有人占着时照跑，而 `--check-needles` 与它同一先（按结构钉） 703ms
+     ✓ 空标签不是「默认」：`--lock-tag=` 与 `--lock-tag ""` 一律 exit 2 并说明怎么要默认 1171ms
+   ✓ 印完就退的出口必须同步写：--list 是两把静态尺共同的取料面 (2)
+     ✓ 真跑：--list 经管道交给读者的行数必须等于表长（少一行＝两把静态尺一起少读一条锚点而不自知） 598ms
+   ✓ 按标题选跑法：选中几条必须被读出来 (11)
+     ✓ 行为证人：指针以 `-` 开头时两种写法给两个读数——等号写法选中 1 条，空格写法被 CLI 当旗标吞掉 717ms
+   ✓ 选择子唯一性：一条锚点能不能只跑自己那条 killer 用例 (13)
+     ✓ 水位：真表现读「选不中＋不唯一」只准调低（帽 3，09-30 第 233 页现读 3＝1 零命中＋2 多命中）——新增一根要写明为什么 304ms
+   ✓ 树闸接线：真跑本脚本——主检出拒跑且一个字节都没改过盘，linked worktree 放行 (6)
+     ✓ 主检出里真跑 ⇒ exit 2、说清是主检出、且盘上一个字节都没动 808ms
+     ✓ 同一份代码换进 linked worktree ⇒ 树闸放行，接着被预检按「源文件在飞」停在写盘之前 846ms
+     ✓ 反向哨兵：主检出那支要是靠 `--in-worktree` 逃出去的，这条当场红（隔离必须由树闸保证，不靠调用方记得带参数） 797ms
+     ✓ 语义钉：建出来被量的那棵树是 **HEAD**，主树里未提交的那份改动不进它（AGENTS.md 那条工作规则的可执行面） 1480ms
+     ✓ 软链路径调脚本不许被误判成「被 import」（S2-3） 759ms
+     ✓ 树名的包含判定：解完仍在主检出里就放行，解出去了才拒（S2-4 拆掉的那格假阳性） 2576ms
+ ✓ tests/evidence-typecheck.test.ts (22 tests) 17089ms
+   ✓ 真环境：这一格得在真仓里跑得出东西（规则 237/320） (3)
+     ✓ 仓内 tsconfig.evidence.json 存在，且 tsc 真跑了（退出码 0 或 2，不是「没跑到」） 2976ms
+     ✓ 真仓那一趟：被豁免的每一支都必须真的不在 HEAD，且 HEAD 那一半与独立重数同值 2976ms
+   ✓ 门那一半：runner 的两个拒绝分支各自要出声 (3)
+     ✓ 拼错的开关 ⇒ 退 2 并点名，不许当成「没给参数」拿默认口径跑 5484ms
+     ✓ 归属面取料那一行必须印出来，且前缀与 tsc 的 include 同源（接线证人：这行掉了，豁免就没人看得见） 4936ms
+     ✓ 口径文件取不到 ⇒ 出声且非零，不许读成干净 709ms
+[m0] 需要一个任务描述：m0 <任务>（或 --message <任务>；只有 --compact 不用给）
+[m0] 用法：m0 <任务描述>（-h 看全部选项）
+ ✓ tests/cli-surface.test.ts (61 tests) 10576ms
+   ✓ m0 CLI：产品面存在且可执行 (3)
+     ✓ 真跑：--help 打印用法并 exit 0（走真 bin shim，不是 import src） 458ms
+   ✓ m0 CLI：退出码 0 / 1 / 2（照 scripts/gym-run.ts 的口径） (4)
+     ✓ 缺任务描述 ⇒ exit 2 且说清怎么用 318ms
+     ✓ flag 给了却没带值 ⇒ exit 2（静默按缺省跑会让打错的 flag 假装生效） 302ms
+     ✓ 未知 --mode ⇒ exit 2 且列出合法档位 333ms
+     ✓ 位置参数超过两个 ⇒ exit 2（不猜哪个是工作区） 368ms
+   ✓ m0 CLI：--model 自由档位 (4)
+     ✓ --help 里列出这个 flag（没进 help 的选项等于不存在） 316ms
+     ✓ 给了 flag 没给值 ⇒ exit 2（与 --mode 同一条口径） 433ms
+     ✓ 模型名是取值不是位置参数：不会被当成工作区或任务（漏登记进 VALUE_FLAGS 的后果） 304ms
+   ✓ m0 CLI：--ctx-window（只配 --model，申报自由档位的真实窗口） (4)
+     ✓ --help 里列出这个 flag（没进 help 的选项等于不存在） 323ms
+     ✓ 没有 --model 却给了 --ctx-window ⇒ exit 2（表内档位的窗口由档位表说了算，不接受申报） 374ms
+     ✓ 非正整数 ⇒ exit 2（窗口是 token 数，0/负数/小数都不成） 1235ms
+   ✓ m0 CLI：--goal / --session / --compact 三条真入口在 argv 上 (6)
+     ✓ 三个 flag 都进了 help（没进 help 的选项等于不存在） 729ms
+   ✓ m0 CLI：--compact 要摘要模型，没它就 fail-closed（不许静默截断） (4)
+     ✓ 支一：没有可用摘要器 ⇒ exit 1 + 点名 M0_API_KEY，且会话日志一个字节没动 302ms
+     ✓ --compact 缺 --session ⇒ exit 2（不编一个会话 id 出来再报「不存在」） 304ms
+fatal: not a git repository (or any of the parent directories): .git
+拒跑：/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/mutate-shards-DmAxSi/repo —— 工作树有 1 项在飞
+拒跑：/Users/ze/Downloads/deepseek harness —— 工作树有 27 项在飞
+取料坏：2/2 棵树不合格 ⇒ 一条不跑（这不是「没有红」，是没尺）
+取料坏：--trees 里有重复路径 ⇒ 同树两个进程会互改源文件（.mutbak 会互相踩），一条不跑
+取料坏：认不出的参数 ⇒ 一条不跑：--shardz=2
+用法：node --import tsx scripts/mutate-shards.ts --trees 树1,树2[,…] [--changed-since=<rev> | id…] [--budget-ms N] [--serial-seconds N] [--lock-tag-base …] [--cost-logs 机器原文,…] [--dry-run]（带值的旗标两种写法都收）
+Preparing worktree (detached HEAD 4518981)
+取料坏：给了 1 条不在这张表上的 id ⇒ 一条不跑：this-anchor-does-not-exist
+Preparing worktree (detached HEAD 4518981)
+Preparing worktree (detached HEAD 4518981)
+Preparing worktree (detached HEAD 4518981)
+取料坏：1 个判卷宿主被摊到两片以上 ⇒ 会并发真跑同一份判卷，一条不跑：tests/mutate-shards.test.ts
+Preparing worktree (detached HEAD 4518981)
+Preparing worktree (detached HEAD 4518981)
+ ✓ tests/mutate-shards.test.ts (55 tests) 11311ms
+   ✓ treeProblem 与编排器的前置闸：脏树不许当片用 (8)
+     ✓ 给了不在表上的 id ⇒ 拒（退 2、点名那几条、一条没跑） 1273ms
+     ✓ --dry-run 只出计划：取料走机器自己的 `--list`，证分割与「不拆宿主」都成立，一条没跑 1283ms
+     ✓ 同一宿主被摊到两片 ⇒ 行为上当场拒（默认切法同输入放行） 2625ms
+   ✓ 编排器接线：合并层不是挂在墙上的仪表 (7)
+     ✓ 真跑一条：片文件里确有机器原文（这条是整个编排器的端到端证人） 3078ms
+   ✓ 编排器的权重取料面 (3)
+     ✓ 真跑 --dry-run：给了 --cost-logs 就说清权重与来源，不给就说没有来源 2647ms
+stdout | tests/prose-needle-scan.test.ts > 真仓扫：这把尺自己不许空载 > 同一对账在真仓上跑一遍，且 `across` 那一格今天到底有没有数——读数当场印出来
+  ｜真仓门面自报：across＝6｜viaCounts 三档＝{"字段直取":124,"本地 helper":6,"字段别名":6}
+
+ ✓ tests/prose-needle-scan.test.ts (83 tests) 10434ms
+ ✓ tests/head-cert-deps.test.ts (105 tests) 5184ms
+   ✓ 清场读数：常驻残留的 scratch 树要自己报数（任务 #33） (15)
+     ✓ 真读现喂：拿本机真的 worktree 清单喂进去不许崩，且绝不点到自己这棵 4192ms
+ ✓ tests/gate-kill.test.ts (11 tests) 6134ms
+   ✓ 门禁超时终止阶梯 (7)
+     ✓ 忽略 SIGTERM 的子进程：宽限到点升级到整组 SIGKILL，且确实先收到过 SIGTERM 470ms
+     ✓ 信号与强杀都按进程组：孙进程既收到过 SIGTERM，也随强杀一起没 619ms
+   ✓ 门禁跑命令的超时支路 (4)
+     ✓ 子进程超时后自己退出：判红 124、输出写明阶梯走到了哪一步，且还原动作真发生 1511ms
+     ✓ 超时后子进程以退出码 0 收场：仍是 124，不被自己的退出码翻绿（宽限带来的口子） 1512ms
+     ✓ 子进程赖着不走：宽限到点整组强杀，输出如实写「已 SIGKILL」 1608ms
+[m0] 需要一个任务描述：m0 <任务>（或 --message <任务>；只有 --compact 不用给）
+[m0] 用法：m0 <任务描述>（-h 看全部选项）
+ ✓ tests/cli-plan-auto.test.ts (6 tests) 2154ms
+   ✓ CLI 端到端反向哨兵：写盘被拒必须反映在退出码上 (2)
+     ✓ ★ `--mode default` 在管道里：写盘被拒 ⇒ 退出码 1（旧实现会以 0 退出，把失败报成成功） 346ms
+     ✓ 同一条路在 auto 档下退出码不受影响（反向哨兵不能把成功也判红） 1806ms
+stderr | tests/cascade-wiring.test.ts > 级联升级接进产品路径（sequencer 环） > 只开 cascadeUpgrade、没开 routing ⇒ 不级联：阶梯起点与升档都靠路由，缺了就等于花两遍钱跑同一模型
+[cascade] 需要 routing=true（阶梯起点与升档都走路由）；本次会话不级联
+
+ ✓ tests/cascade-wiring.test.ts (9 tests) 1941ms
+   ✓ 级联升级接进产品路径（sequencer 环） (9)
+     ✓ 升上来的那一档没跑过 verify（absent）⇒ 不算收敛：不花真钱买回一份比触发时更弱的证据 343ms
+ ✓ tests/verify-probe.test.ts (18 tests) 2031ms
+   ✓ verify 超时是配置项，不是 60s 硬编码 (5)
+     ✓ defaultExec 真按传入上限掐表，消息里的秒数跟着配置走 2007ms
+stdout | tests/gated-tools.test.ts > 工具门接线（runAgent + AskGate） > default 档 + 批准 → write_file 与 run_shell 真实执行，靶子修复
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/gated-tools.test.ts > 工具门接线（runAgent + AskGate） > default 档 + 拒绝 → 工具不执行，靶子保持带 bug 状态
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/gated-tools.test.ts > 工具门接线（runAgent + AskGate） > 沙箱不可用（降级）→ 写工具强制审批：auto 档无交互也按拒绝（fail-closed）
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/gated-tools.test.ts > 出网工具门接线（web_fetch + AskGate） > default 档 + 批准 → 出审批卡，且抓回来的正文真的进事件流
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/gated-tools.test.ts > 出网工具门接线（web_fetch + AskGate） > default 档 + 拒绝 → 一个字节都不发出去（且这条与 write_file 逐字同权）
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/gated-tools.test.ts > 出网工具门接线（web_fetch + AskGate） > 点了「总是允许」也不落永久规则：下一轮新会话照样要问
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/gated-tools.test.ts > 出网工具门接线（web_fetch + AskGate） > 点了「总是允许」也不落永久规则：下一轮新会话照样要问
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ ✓ tests/gated-tools.test.ts (6 tests) 1774ms
+   ✓ 工具门接线（runAgent + AskGate） (3)
+     ✓ default 档 + 批准 → write_file 与 run_shell 真实执行，靶子修复 901ms
+   ✓ 出网工具门接线（web_fetch + AskGate） (3)
+     ✓ default 档 + 批准 → 出审批卡，且抓回来的正文真的进事件流 407ms
+     ✓ 点了「总是允许」也不落永久规则：下一轮新会话照样要问 446ms
+stderr | tests/chain-lease-held.test.ts > 链的环 worker 真持有申报的写租约 > supervise：受限循环的环同样持有（真轨迹那次就是这么申报的）
+[orchestrator] worker 收尾中途失败，按 failed 放行等待方：worker-1 ENOENT: no such file or directory, open '/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/chain-lease-UFvZ8B/events.jsonl'
+
+stderr | tests/chain-lease-held.test.ts > 链的环 worker 真持有申报的写租约 > 反向那一格：没申报 resources ⇒ 环不落 resources 字段、不凭空占租约（零申报零行为）
+[orchestrator] worker 收尾中途失败，按 failed 放行等待方：worker-4 ENOENT: no such file or directory, open '/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/chain-lease-w7v7hr/events.jsonl'
+
+stderr | tests/chain-lease-held.test.ts > 链的环 worker 真持有申报的写租约 > resources 从此是 supervise 读的键 ⇒ 单独申报它不再被拒（第 40 页那格的反向侧）
+[orchestrator] worker 收尾中途失败，按 failed 放行等待方：worker-5 ENOENT: no such file or directory, open '/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/chain-lease-h1qlfB/events.jsonl'
+
+ ✓ tests/chain-lease-held.test.ts (8 tests) 1303ms
+   ✓ 链的环 worker 真持有申报的写租约 (6)
+     ✓ resources 从此是 supervise 读的键 ⇒ 单独申报它不再被拒（第 40 页那格的反向侧） 378ms
+ ✓ tests/head-import-face.test.ts (32 tests) 1104ms
+[m0] 需要一个任务描述：m0 <任务>（或 --message <任务>；只有 --compact 不用给）
+[m0] 用法：m0 <任务描述>（-h 看全部选项）
+ ✓ tests/cli-exit-code.test.ts (8 tests) 1030ms
+   ✓ 真跑 bin：demo 通道的退出码（零凭据、离线、确定性） (1)
+     ✓ 剧本里有失败的工具调用 ⇒ exit 1，不再报成成功 1028ms
+ ✓ tests/docs-check.test.ts (93 tests) 1295ms
+   ✓ D-9 凭证对账：三档（可比对／未点名＝未检／取不到＝未检）不许同形 (26)
+     ✓ 真仓：可比对分母 ≥ 50、红只剩登记过的那些（三档各有多少要印出来） 374ms
+ ✓ tests/plugins-hooks.test.ts (17 tests) 1284ms
+   ✓ M2e hook 引擎：输出上限与超时（任务 5） (3)
+     ✓ 超时被强杀（SIGKILL，1s timeout vs 3s 睡眠） 1002ms
+ ✓ tests/impact-persistence.test.ts (10 tests) 939ms
+ ✓ tests/net.test.ts (10 tests) 1137ms
+ ✓ tests/assertion-health-scan.test.ts (17 tests) 1168ms
+   ✓ 判卷面断言体检（快路，与 pnpm gates 同一把尺） (4)
+     ✓ 已跟踪的 scripts/ 里没有空断言、恒真式、暗卷段零断言、未豁免的析取式 454ms
+   ✓ 切片判卷的边界标记棘轮（改注释 = 改判卷取料面，这条要闸住） (2)
+     ✓ 反面对手：清单里已不再命中的条目必须删掉（豁免名单不许自己烂着） 401ms
+ ✓ tests/process.test.ts (6 tests) 1094ms
+   ✓ spawnTracked / killGroup（P1-2） (3)
+     ✓ 超时主动收束，不等 'close'（孙进程持有 stdout 也不挂起） 504ms
+     ✓ 超时后整棵进程树被杀（孙进程不留孤儿、不泄漏） 453ms
+stderr | tests/worker-hooks.test.ts > worker 接插件钩子 > PreToolUse 阻断真的挡住 worker 的写：worktree 里不落盘，tool_result 带钩子理由
+[hooks] SubagentStart 返回阻断（exit 2 的「再多要一轮」未裁，已忽略）：禁改 src/secret.ts
+
+stderr | tests/worker-hooks.test.ts > worker 接插件钩子 > PreToolUse 阻断真的挡住 worker 的写：worktree 里不落盘，tool_result 带钩子理由
+[hooks] SubagentStop 返回阻断（exit 2 的「再多要一轮」未裁，已忽略）：禁改 src/secret.ts
+
+ ✓ tests/worker-hooks.test.ts (9 tests) 972ms
+stdout | tests/runner-gates.test.ts > 三门 IPC 接线（runAgent + card_action 处理函数） > clarify_requested → handleClarifySubmit → tool_result 与提交值逐字一致且挂回原 tool_use id；plan 批准后写放行
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ ✓ tests/runner-gates.test.ts (1 test) 1021ms
+   ✓ 三门 IPC 接线（runAgent + card_action 处理函数） (1)
+     ✓ clarify_requested → handleClarifySubmit → tool_result 与提交值逐字一致且挂回原 tool_use id；plan 批准后写放行 1020ms
+stdout | tests/impact-runner-wiring.test.ts > 影响面第三环：settings ⇒ 构造点 ⇒ 事件流（走真实 runAgent，不手搭 ctx） > 开：写盘后事件流里真有 impact_report，且摘要回进了 tool_result
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/impact-runner-wiring.test.ts > 影响面第三环：settings ⇒ 构造点 ⇒ 事件流（走真实 runAgent，不手搭 ctx） > 关（缺省）：一条 impact_report 都不许出现，但同一条写盘仍成功
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ ✓ tests/impact-runner-wiring.test.ts (5 tests) 767ms
+   ✓ 影响面第三环：settings ⇒ 构造点 ⇒ 事件流（走真实 runAgent，不手搭 ctx） (2)
+     ✓ 开：写盘后事件流里真有 impact_report，且摘要回进了 tool_result 446ms
+ ✓ tests/schedule.test.ts (37 tests) 759ms
+ ✓ tests/ledger.test.ts (26 tests) 877ms
+ ✓ tests/mcp-grade-gate.test.ts (3 tests) 692ms
+   ✓ MCP 注解抵达权限门（runAgent 真入口 + 真 stub server） (3)
+     ✓ 只读档：带 readOnlyHint 的照常放行，无注解的按白名单依据拒 343ms
+ ✓ tests/impact-query.test.ts (51 tests) 739ms
+stderr | tests/providers.test.ts > openai 适配器 fixture 回放（任务2/3/4/5 验收） > ③错误事件：fixture 回放抛可读错误
+[OpenAI] 流内失败（第 1 次，尚未产出任何输出）⇒ 49ms 后重试：OpenAI 流错误 server_error: The server had an error while processing your request.
+
+stderr | tests/providers.test.ts > openai 适配器 fixture 回放（任务2/3/4/5 验收） > ③错误事件：fixture 回放抛可读错误
+[OpenAI] 流内失败（第 2 次，尚未产出任何输出）⇒ 594ms 后重试：OpenAI 流错误 server_error: The server had an error while processing your request.
+
+stderr | tests/providers.test.ts > streamOpenAI：流内失败的重试边界 > 首帧就是流内 502（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完
+[OpenAI] 流内失败（第 1 次，尚未产出任何输出）⇒ 207ms 后重试：OpenAI 流错误 502: Provider returned an empty response
+
+stderr | tests/providers.test.ts > streamOpenAI：流内失败的重试边界 > 重试次数有上限：连续失败不会无限打转
+[OpenAI] 流内失败（第 1 次，尚未产出任何输出）⇒ 96ms 后重试：OpenAI 流错误 502: always down
+
+stderr | tests/providers.test.ts > streamOpenAI：流内失败的重试边界 > 重试次数有上限：连续失败不会无限打转
+[OpenAI] 流内失败（第 2 次，尚未产出任何输出）⇒ 497ms 后重试：OpenAI 流错误 502: always down
+
+ ✓ tests/providers.test.ts (43 tests) 1496ms
+   ✓ openai 适配器 fixture 回放（任务2/3/4/5 验收） (6)
+     ✓ ③错误事件：fixture 回放抛可读错误 648ms
+   ✓ streamOpenAI：流内失败的重试边界 (4)
+     ✓ 重试次数有上限：连续失败不会无限打转 598ms
+ ✓ tests/impact-cap-policy.test.ts (10 tests) 638ms
+ ✓ tests/prompt-cost.test.ts (17 tests) 676ms
+   ✓ 复跑面接线：这条尺会当场报出自己系数不成立 (2)
+     ✓ 输出里有逐档面、少看百分之几、系数自检三条 370ms
+     ✓ 自证一致性：逐流行里的「固定≈」必须等于「面÷系数 × 请求数」——分子被换掉就破 302ms
+stderr | tests/terminal-sync-window.test.ts > 终态收尾窗口：已收敛的判据是 terminalResolved > 收尾中途 emit 抛 ⇒ 等待方照旧被放行（宁可这环红，不许整链永挂）
+[orchestrator] worker 收尾中途失败，按 failed 放行等待方：worker-2 simulated append failure
+
+ ✓ tests/terminal-sync-window.test.ts (3 tests) 695ms
+   ✓ 终态收尾窗口：已收敛的判据是 terminalResolved (3)
+     ✓ join 落在窗口内 ⇒ 回执说 running + timedOut 点名；不说 done + 空报告 305ms
+ ✓ tests/worker-evidence-parent-context.test.ts (3 tests) 567ms
+ ✓ tests/prompt-cache-breakpoints.test.ts (15 tests) 625ms
+   ✓ 端到端接线：开关 → 编排器 → 分派 → worker 真实请求体 (2)
+     ✓ 开 promptCache ⇒ worker 出网的请求体里确有 cache_control（能力真可达，不是纸面开关） 307ms
+     ✓ 不开 ⇒ 同一 spawn 路径的请求体逐字不含 cache_control（缺省零行为） 305ms
+ ✓ tests/utf8-text-safety.test.ts (13 tests) 452ms
+ ✓ tests/orchestrator-hold.test.ts (18 tests) 569ms
+ ✓ tests/impact.test.ts (31 tests) 402ms
+ ✓ tests/supervise-evidence.test.ts (2 tests) 466ms
+   ✓ supervise 判据取料面：caller 真读 artifacts.verified，升级时现场还在 (2)
+     ✓ 绿凭据 + 报告没有 verdict 行 ⇒ accept 并合并落盘（判据来自 caller 读到的凭据，不是散文） 305ms
+ ✓ tests/lsp.test.ts (11 tests) 368ms
+ ✓ tests/map-parse.test.ts (10 tests) 315ms
+ ✓ tests/plugins-mcp.test.ts (9 tests) 391ms
+ ✓ tests/worker-project-rules.test.ts (2 tests) 313ms
+ ✓ tests/orchestrator-wait.test.ts (5 tests) 398ms
+   ✓ waitForAgents (5)
+     ✓ 超时：未收敛的 id 进 timedOut，已收敛的照常带 summary（超时不算失败） 332ms
+stdout | tests/map-build.test.ts > map build（任务 4+5） > 坏 grammar（wasm 加载失败）→ 不抛异常、返回空地图（静默降级）
+[map] 构建失败，静默降级为无地图: tree-sitter grammar 不可用: python：bad wasm
+
+stdout | tests/map-build.test.ts > map build（任务 4+5） > rg 不可用（工作区不存在）→ 空地图不抛；defaultTagsCacheDir 不在用户仓库
+[map] 构建失败，静默降级为无地图: spawn /Users/ze/Downloads/deepseek harness/node_modules/.pnpm/@vscode+ripgrep-darwin-arm64@1.18.0/node_modules/@vscode/ripgrep-darwin-arm64/bin/rg ENOENT
+
+ ✓ tests/map-build.test.ts (7 tests) 321ms
+ ✓ tests/http-retry.test.ts (12 tests) 841ms
+   ✓ provider 接线（openai / anthropic / gemini 共用同一重试链） (3)
+     ✓ anthropic：429 会被重试，随后 400 仍按原文案失败 417ms
+ ✓ tests/hooks-input-contract.test.ts (14 tests) 56ms
+stderr | tests/impact-wiring.test.ts > 影响面·写工具接线（ToolContext.impact） > 钩子抛错不影响已成功的写入（best-effort：输出正常、事件为空）
+[impact] 影响面计算失败，跳过事件（写入已成功，不受影响）: simulated grammar failure
+
+ ✓ tests/impact-wiring.test.ts (6 tests) 168ms
+ ✓ tests/session-tools.test.ts (18 tests) 237ms
+ ✓ tests/shell-tail.test.ts (6 tests) 243ms
+ ✓ tests/action-fusion.test.ts (22 tests) 307ms
+ ✓ tests/gym-rounds-e2e.test.ts (3 tests) 246ms
+ ✓ tests/impact-accuracy.test.ts (6 tests) 232ms
+stdout | tests/judge-frozen-gate.test.ts > 判卷面硬闸端到端（runAgent → gatedTool → evaluate → 不执行） > ⑨ 写判卷路径 ⇒ tool_result 出「判卷文件冻结」且文件逐字未变；同一 run 里写非判卷路径照常放行
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ ✓ tests/judge-frozen-gate.test.ts (10 tests) 209ms
+stdout | tests/prune-batching.test.ts > 分批裁剪：接上真装配（复用门的 PC8） > PC8 那条 A/B 判据真能跑通（= pruneBatching 这个选项确实接到了装配链上）
+[prune] 分批推迟: 先不断前缀（可省 19948 < 门槛 40000，且头寸不紧：估算 15196 / 可用 119808）
+
+stdout | tests/prune-batching.test.ts > 分批裁剪：接上真装配（复用门的 PC8） > PC8 那条 A/B 判据真能跑通（= pruneBatching 这个选项确实接到了装配链上）
+[prune] 分批推迟: 先不断前缀（可省 39896 < 门槛 40000，且头寸不紧：估算 20262 / 可用 119808）
+
+stdout | tests/prune-batching.test.ts > 分批裁剪：接上真装配（复用门的 PC8） > PC8 那条 A/B 判据真能跑通（= pruneBatching 这个选项确实接到了装配链上）
+[prune] 分批推迟: 先不断前缀（可省 19948 < 门槛 40000，且头寸不紧：估算 30396 / 可用 119808）
+
+stdout | tests/prune-batching.test.ts > 分批裁剪：接上真装配（复用门的 PC8） > PC8 那条 A/B 判据真能跑通（= pruneBatching 这个选项确实接到了装配链上）
+[prune] 分批推迟: 先不断前缀（可省 39896 < 门槛 40000，且头寸不紧：估算 35463 / 可用 119808）
+
+stdout | tests/prune-batching.test.ts > 分批裁剪：接上真装配（复用门的 PC8） > PC9 那条集合相等判据真能跑通（= 压缩后置位、取用即清零都接在装配链上）
+[prune] 分批推迟: 先不断前缀（可省 19948 < 门槛 1000000000，且头寸不紧：估算 15196 / 可用 59600）
+
+stdout | tests/prune-batching.test.ts > 分批裁剪：接上真装配（复用门的 PC8） > PC9 那条集合相等判据真能跑通（= 压缩后置位、取用即清零都接在装配链上）
+[prune] 分批推迟: 先不断前缀（可省 39896 < 门槛 1000000000，且头寸不紧：估算 20262 / 可用 59600）
+
+stdout | tests/prune-batching.test.ts > 分批裁剪：接上真装配（复用门的 PC8） > PC9 那条集合相等判据真能跑通（= 压缩后置位、取用即清零都接在装配链上）
+[prune] 分批推迟: 先不断前缀（可省 19948 < 门槛 1000000000，且头寸不紧：估算 15358 / 可用 59600）
+
+stdout | tests/prune-batching.test.ts > 分批裁剪：接上真装配（复用门的 PC8） > PC9 那条集合相等判据真能跑通（= 压缩后置位、取用即清零都接在装配链上）
+[prune] 分批推迟: 先不断前缀（可省 39896 < 门槛 1000000000，且头寸不紧：估算 20425 / 可用 59600）
+
+stdout | tests/prune-batching.test.ts > 分批裁剪：接上真装配（复用门的 PC8） > PC9 那条集合相等判据真能跑通（= 压缩后置位、取用即清零都接在装配链上）
+[prune] 分批推迟: 先不断前缀（可省 19948 < 门槛 1000000000，且头寸不紧：估算 15375 / 可用 59600）
+
+stdout | tests/prune-batching.test.ts > 分批裁剪：接上真装配（复用门的 PC8） > PC9 那条集合相等判据真能跑通（= 压缩后置位、取用即清零都接在装配链上）
+[prune] 分批推迟: 先不断前缀（可省 39896 < 门槛 1000000000，且头寸不紧：估算 20442 / 可用 59600）
+
+stdout | tests/prune-batching.test.ts > 分批裁剪：接上真装配（复用门的 PC8） > PC9 那条集合相等判据真能跑通（= 压缩后置位、取用即清零都接在装配链上）
+[prune] 分批推迟: 先不断前缀（可省 19948 < 门槛 1000000000，且头寸不紧：估算 15391 / 可用 59600）
+
+ ✓ tests/prune-batching.test.ts (18 tests) 212ms
+ ✓ tests/repair-loop-real-verify.test.ts (4 tests) 198ms
+ ✓ tests/plugin-lsp-activation.test.ts (8 tests) 205ms
+ ✓ tests/impact-admission.test.ts (10 tests) 176ms
+ ✓ tests/promise-recall-inventory.test.ts (17 tests) 175ms
+ ✓ tests/gym-probe.test.ts (11 tests) 152ms
+ ✓ tests/automation-tool-surface.test.ts (19 tests) 178ms
+ ✓ tests/grep-glob-edit.test.ts (15 tests) 173ms
+ ✓ tests/hook-session-end.test.ts (4 tests) 158ms
+ ✓ tests/tags-extract-version.test.ts (5 tests) 147ms
+stdout | tests/main-run-routing.test.ts > non-session transport reuse > session-end distillation uses the same selected real adapter rather than falling back to GLM/demo
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ ✓ tests/main-run-routing.test.ts (17 tests) 149ms
+ ✓ tests/worker-role.test.ts (8 tests) 171ms
+stderr | tests/solpi-receipt-integration.test.ts > prune then validated evidence projection > restores genuine receipts after two sends and full source on invalidation (observationPack=false)
+[solpi] ledger unavailable (ESTALE); full redacted source retained
+
+stderr | tests/solpi-receipt-integration.test.ts > prune then validated evidence projection > restores genuine receipts after two sends and full source on invalidation (observationPack=true)
+[solpi] ledger unavailable (ESTALE); full redacted source retained
+
+ ✓ tests/solpi-receipt-integration.test.ts (2 tests) 112ms
+ ✓ tests/projection-invariant.test.ts (7 tests) 130ms
+ ✓ tests/session-spend-ruler.test.ts (9 tests) 147ms
+ ✓ tests/cap-notice-unit.test.ts (12 tests) 67ms
+ ✓ tests/solpi-runtime.test.ts (9 tests) 71ms
+stdout | tests/session-wiring.test.ts > UI cancellation settles the distillation approval immediately without writing memory
+[memory] 会话结束沉淀: {"kind":"failed","why":"This operation was aborted"}
+
+stdout | tests/session-wiring.test.ts > distillation consumes session history and its instruction with only remember exposed
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/session-wiring.test.ts > 沉淀指令真的进到请求里（走真 session provider 这条路）
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/session-wiring.test.ts > 沉淀轮的请求与主会话共享同一个前缀（system 同形 + 工具面同形）
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ ✓ tests/session-wiring.test.ts (8 tests) 139ms
+stdout | tests/plugin-user-config.test.ts > readPluginUserConfig（读侧） > 明文值走配置文件、敏感值走密钥后端；文件里那条只有占位符
+[plugin] userConfig 写入完成：{"plugin":"p1","secretKeys":["TOKEN"],"plaintextKeys":["PROFILE"],"file":"/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/dsh-usercfg-s3qSs7/plugin-userconfig.json"}
+
+stdout | tests/plugin-user-config.test.ts > readPluginUserConfig（读侧） > 配置文件里的 plugin 与请求不一致 ⇒ 那份值一个都不采用（不把 A 插件的配置套到 B 插件上）
+[plugin] userConfig 写入完成：{"plugin":"other","secretKeys":[],"plaintextKeys":["PROFILE"],"file":"/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/dsh-usercfg-AFg9bZ/plugin-userconfig.json"}
+
+stdout | tests/plugin-user-config.test.ts > userConfig 进激活面（§9.5 的三条通道） > exec form 的 ${user_config.TOKEN} 被展开，且 PLUGIN_OPTION_TOKEN 真的进了子进程 env
+[plugin] userConfig 写入完成：{"plugin":"cfg","secretKeys":["TOKEN"],"plaintextKeys":[],"file":"/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/dsh-usercfg-live-V1UiZD/plugin-data/cfg/plugin-userconfig.json"}
+
+stdout | tests/plugin-user-config.test.ts > userConfig 进激活面（§9.5 的三条通道） > 装载期就把值解析好（生产里没有任何人再调一次 resolveUserConfigs）
+[plugin] userConfig 写入完成：{"plugin":"cfg","secretKeys":["TOKEN"],"plaintextKeys":[],"file":"/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/dsh-usercfg-live-osPkhQ/plugin-data/cfg/plugin-userconfig.json"}
+
+stdout | tests/plugin-user-config.test.ts > userConfig 进激活面（§9.5 的三条通道） > 第二激活面 MCP：connectMcp 真的把 userConfig 递给 connect（远程 key 就写在 headers 里）
+[plugin] userConfig 写入完成：{"plugin":"cfg","secretKeys":["TOKEN"],"plaintextKeys":[],"file":"/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/dsh-usercfg-live-vUsBmo/plugin-data/cfg/plugin-userconfig.json"}
+
+stdout | tests/plugin-user-config.test.ts > userConfig 进激活面（§9.5 的三条通道） > 第三激活面 LSP：注册前就展开，面板同源读路径看到的是展开后的
+[plugin] userConfig 写入完成：{"plugin":"cfg","secretKeys":["TOKEN"],"plaintextKeys":[],"file":"/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/dsh-usercfg-live-boIgwQ/plugin-data/cfg/plugin-userconfig.json"}
+
+stdout | tests/plugin-user-config.test.ts > userConfig 进激活面（§9.5 的三条通道） > getPluginSecret 不再零调用者：读侧确实经过它取敏感值（后端被拿掉 → 进 missing）
+[plugin] userConfig 写入完成：{"plugin":"cfg","secretKeys":["TOKEN"],"plaintextKeys":[],"file":"/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/dsh-usercfg-live-mi2Zsq/plugin-data/cfg/plugin-userconfig.json"}
+
+ ✓ tests/plugin-user-config.test.ts (10 tests) 120ms
+stdout | tests/map-self-report.test.ts > 地图的覆盖面自述（与影响面共用一把尺） > 地图降级要出声，并且不许被读成「仓库没有结构」
+[map] 构建失败，静默降级为无地图: spawn /Users/ze/Downloads/deepseek harness/node_modules/.pnpm/@vscode+ripgrep-darwin-arm64@1.18.0/node_modules/@vscode/ripgrep-darwin-arm64/bin/rg ENOENT
+
+stdout | tests/map-self-report.test.ts > 接线：那两句要真的发出去 > 会话首请求里带着地图的自述行与降级行（装配面有观察者）
+[map] 注入失败: boom-map-face
+
+ ✓ tests/map-self-report.test.ts (4 tests) 108ms
+ ✓ tests/auto-verify-repair-runner.test.ts (2 tests) 128ms
+ ✓ tests/worker-sandbox-wiring.test.ts (8 tests) 112ms
+ ✓ tests/prune.test.ts (24 tests) 122ms
+ ✓ tests/grep-context.test.ts (8 tests) 65ms
+ ✓ tests/bandit-runtime.test.ts (5 tests) 124ms
+ ✓ tests/gym-real-provider-wiring.test.ts (4 tests) 102ms
+ ✓ tests/subprocess-env-face.test.ts (5 tests) 111ms
+ ✓ tests/spawn-arg-surface.test.ts (13 tests) 97ms
+ ✓ tests/session-provider.test.ts (10 tests) 83ms
+stderr | tests/skill-tool-policy.test.ts > runAgent 真入口：用户敲一条带申报的 /skill，工具面确实改了 > 派发即登记：面板（agent:state）读到的就是这条 skill 的账
+[skill] 规格面摘除（disallowed-tools）: grep←/pol:sec
+
+ ✓ tests/skill-tool-policy.test.ts (27 tests) 67ms
+ ✓ tests/plan-required.test.ts (11 tests) 39ms
+ ✓ tests/skill-user-invocation.test.ts (11 tests) 67ms
+stderr | tests/worker-spent-usd.test.ts > W3② 花费折算（priceOf/costUsd 是唯一价源） > usage 里冒出非有限数 ⇒ null（NaN 进 JSON 会变成 null，整批合计也会被带成 NaN）
+[pricing] 档位 "glm-standard" 的花算出非有限值 Infinity ⇒ 按价格未知处理
+
+ ✓ tests/worker-spent-usd.test.ts (14 tests) 69ms
+ ✓ tests/verify-cause.test.ts (19 tests) 82ms
+ ✓ tests/verify.test.ts (18 tests) 65ms
+ ✓ tests/mutate-anchor-titles.test.ts (23 tests) 68ms
+ ✓ tests/auto-verify-wiring.test.ts (6 tests) 67ms
+ ✓ tests/solpi-review-regression.test.ts (5 tests) 66ms
+ ✓ tests/skill-body-cap.test.ts (4 tests) 76ms
+ ✓ tests/cancel-agents-tool.test.ts (8 tests) 69ms
+ ✓ tests/tools.test.ts (10 tests) 58ms
+ ✓ tests/session-prune-attachments.test.ts (3 tests) 74ms
+ ✓ tests/gym-long-replay.test.ts (6 tests) 64ms
+ ✓ tests/plugins-discover.test.ts (10 tests) 95ms
+ ✓ tests/mutate-needles-check.test.ts (24 tests) 55ms
+ ✓ tests/plugins-skills.test.ts (14 tests) 75ms
+ ✓ tests/hardening2.test.ts (13 tests) 49ms
+ ✓ tests/hook-precompact-producer.test.ts (7 tests) 52ms
+ ✓ tests/apply-patch.test.ts (28 tests) 62ms
+ ✓ tests/path-boundary.test.ts (23 tests) 59ms
+stdout | tests/goal-continue.test.ts > goal 模式端到端（真入口，缺省零行为） > 设了目标但这一轮没写盘也没验证 ⇒ 立刻停，并落一条写明理由的 goal_stopped（读答型目标不烧钱）
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/goal-continue.test.ts > goal 模式端到端（真入口，缺省零行为） > 没人应答（管道/CI）同样不续跑：与「定时任务」分成两支，判据是**同一句停机理由**
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/goal-continue.test.ts > goal 模式端到端（真入口，缺省零行为） > 没人应答（管道/CI）同样不续跑：与「定时任务」分成两支，判据是**同一句停机理由**
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/goal-continue.test.ts > goal 模式端到端（真入口，缺省零行为） > 停过的目标不会因用户再发一条而自动复活：停止是终态，要再跑得改设目标
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/goal-continue.test.ts > goal 模式端到端（真入口，缺省零行为） > 停过的目标不会因用户再发一条而自动复活：停止是终态，要再跑得改设目标
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/goal-continue.test.ts > goal 模式端到端（真入口，缺省零行为） > 轮次上限到点必停：只跑到 maxTurns 轮，且最后一轮仍是 goal 代发的（origin 记着是谁发的）
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/goal-continue.test.ts > goal 美元闸端到端：模型名也算得出钱，并且真的拦下续跑 > 设 $0.05 上限 × 一轮 200k/20k 用量 ⇒ goal_stopped 点名美元上限（不被轮次/无产出理由顶包）
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ ✓ tests/goal-continue.test.ts (16 tests) 61ms
+ ✓ tests/supervise-contract.test.ts (10 tests) 46ms
+stderr | tests/events.test.ts > replay 坏行容错边界（S1-4 回归） > 尾部半写行可容：前缀完整、untilEventId 仍按行号成立
+[events] replay 跳过尾部 1 条坏行（降级容错）: /var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/m0-tailbad-FMWXQ1/events.jsonl
+
+stderr | tests/events.test.ts > replay 坏行容错边界（S1-4 回归） > 尾部半写行可容：前缀完整、untilEventId 仍按行号成立
+[events] replay 跳过尾部 1 条坏行（降级容错）: /var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/m0-tailbad-FMWXQ1/events.jsonl
+
+stderr | tests/events.test.ts > replay 坏行容错边界（S1-4 回归） > 尾部半写行可容：前缀完整、untilEventId 仍按行号成立
+[events] replay 跳过尾部 1 条坏行（降级容错）: /var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/m0-tailbad-FMWXQ1/events.jsonl
+
+stderr | tests/events.test.ts > replayIncremental 与 replay 同判（P1-2 契约分叉回归） > 尾坏当时可容、其后一旦追加新事件即转非尾部 → 两入口同判必炸
+[events] replayIncremental 跳过尾部 1 条坏行（降级容错）: /var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/m0-inc-tail-d7OVzx/events.jsonl
+
+stderr | tests/events.test.ts > replayIncremental 与 replay 同判（P1-2 契约分叉回归） > 尾坏当时可容、其后一旦追加新事件即转非尾部 → 两入口同判必炸
+[events] replay 跳过尾部 1 条坏行（降级容错）: /var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/m0-inc-tail-d7OVzx/events.jsonl
+
+stderr | tests/events.test.ts > replayIncremental 与 replay 同判（P1-2 契约分叉回归） > 坏行始终在尾部（无后续事件）→ 两入口一致降级，不误判成损坏
+[events] replayIncremental 跳过尾部 1 条坏行（降级容错）: /var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/m0-inc-puretail-vOyOrn/events.jsonl
+
+stderr | tests/events.test.ts > replayIncremental 与 replay 同判（P1-2 契约分叉回归） > 坏行始终在尾部（无后续事件）→ 两入口一致降级，不误判成损坏
+[events] replay 跳过尾部 1 条坏行（降级容错）: /var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/m0-inc-puretail-vOyOrn/events.jsonl
+
+ ✓ tests/events.test.ts (21 tests) 43ms
+ ✓ tests/provider-keys.test.ts (11 tests) 35ms
+ ✓ tests/plugin-commands-dispatch.test.ts (10 tests) 40ms
+ ✓ tests/permissions.test.ts (31 tests) 39ms
+stderr | tests/worker-budget.test.ts > spawn 处的窗口接线 > 注入模型（modelFor）⇒ handle 不带窗口，worker 预算逐字旧行为
+[orchestrator] worker 收尾中途失败，按 failed 放行等待方：worker-1 ENOENT: no such file or directory, open '/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/worker-budget-GN53C6/events.jsonl'
+
+ ✓ tests/worker-budget.test.ts (8 tests) 38ms
+ ✓ tests/user-agent-roles.test.ts (11 tests) 34ms
+ ✓ tests/skill-invocation-faces.test.ts (11 tests) 36ms
+ ✓ tests/model-surface.test.ts (11 tests) 35ms
+stdout | tests/runscope.test.ts > RunScope：并发 run 隔离（D-2 验收） > 交互 run 的审批不被并发 unattended run 抢走/清场
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ ✓ tests/runscope.test.ts (1 test) 32ms
+ ✓ tests/edge-cases.test.ts (6 tests) 33ms
+ ✓ tests/compaction-cost.test.ts (9 tests) 36ms
+ ✓ tests/skill-recall-address.test.ts (9 tests) 31ms
+ ✓ tests/timeout-text-single-source.test.ts (4 tests) 12ms
+ ✓ tests/plan-gate.test.ts (10 tests) 15ms
+ ✓ tests/turn-truncated.test.ts (45 tests) 28ms
+ ✓ tests/remember.test.ts (23 tests) 29ms
+ ✓ tests/memory.test.ts (15 tests) 29ms
+ ✓ tests/prompt-surface-check.test.ts (32 tests) 27ms
+ ✓ tests/web-fetch.test.ts (23 tests) 26ms
+ ✓ tests/sidechat-core.test.ts (15 tests) 25ms
+ ✓ tests/orchestrator-construction-sites.test.ts (3 tests) 24ms
+ ✓ tests/gates-scan.test.ts (37 tests) 12ms
+ ✓ tests/sessions.test.ts (19 tests) 23ms
+ ✓ tests/session-organization.test.ts (6 tests) 23ms
+ ✓ tests/memory-inject-token-budget.test.ts (5 tests) 10ms
+ ✓ tests/glm.test.ts (3 tests) 13ms
+ ✓ tests/read-shape.test.ts (8 tests) 21ms
+ ✓ tests/plugin-role-discoverability.test.ts (11 tests) 21ms
+ ✓ tests/compaction.test.ts (30 tests) 19ms
+ ✓ tests/write-line-delta.test.ts (6 tests) 18ms
+ ✓ tests/dead-script-refs.test.ts (12 tests) 19ms
+ ✓ tests/shell-family-cause.test.ts (15 tests) 18ms
+ ✓ tests/memory-runner.test.ts (8 tests) 17ms
+ ✓ tests/project-registry.test.ts (4 tests) 18ms
+ ✓ tests/trust-fingerprint.test.ts (6 tests) 17ms
+ ✓ tests/settings.test.ts (17 tests) 17ms
+ ✓ tests/blocked-citation-face.test.ts (11 tests) 16ms
+ ✓ tests/worker-role-budget.test.ts (6 tests) 17ms
+ ✓ tests/glm-tool-stream-switch.test.ts (4 tests) 12ms
+ ✓ tests/compact-wiring.test.ts (4 tests) 13ms
+ ✓ tests/exec-outcome-face.test.ts (5 tests) 14ms
+ ✓ tests/session-metadata.test.ts (6 tests) 15ms
+ ✓ tests/remember-secret-hygiene.test.ts (8 tests) 15ms
+ ✓ tests/updater-safety-core.test.ts (7 tests) 12ms
+ ✓ tests/goal-price.test.ts (13 tests) 14ms
+ ✓ tests/distill.test.ts (15 tests) 9ms
+ ✓ tests/provider-cache-usage.test.ts (7 tests) 14ms
+ ✓ tests/usage-attribution.test.ts (26 tests) 14ms
+stderr | tests/loop.test.ts > auto-verify on completion (harness 补拍，证据 only) > 可验面探测炸（config 存在但 JSON 坏）⇒ 不炸 run、不补拍
+[verify] 可验面探测失败，跳过自动验证拍: Unexpected token 'I'
+
+ ✓ tests/loop.test.ts (21 tests) 9ms
+ ✓ tests/license.test.ts (8 tests) 9ms
+ ✓ tests/tool-surface-parity.test.ts (5 tests) 11ms
+stderr | tests/snapshot-d7.test.ts > D7 覆盖前快照 > 快照自身失败不得改写盘结果（护栏缺位不能把成功变成失败）
+[snapshot] 覆盖前快照失败（写入照常进行）: ENOTDIR: not a directory, mkdir '/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/dsh-d7-zUFkB1/.agent/snapshots/1790851971372--call-5'
+
+ ✓ tests/snapshot-d7.test.ts (7 tests) 14ms
+ ✓ tests/edit-file-hint.test.ts (8 tests) 14ms
+ ✓ tests/context-auto-verify-note.test.ts (11 tests) 13ms
+ ✓ tests/recovery-parent-mode.test.ts (7 tests) 12ms
+ ✓ tests/no-progress.test.ts (25 tests) 11ms
+ ✓ tests/shell-bypass-composition.test.ts (38 tests) 12ms
+ ✓ tests/replay-corpus-inventory.test.ts (11 tests) 8ms
+ ✓ tests/clarify.test.ts (6 tests) 8ms
+ ✓ tests/gate-audit.test.ts (33 tests) 9ms
+ ✓ tests/memory-eviction-notice.test.ts (3 tests) 8ms
+ ✓ tests/reproducibility.test.ts (10 tests) 11ms
+ ✓ tests/final-budget.test.ts (1 test) 8ms
+ ✓ tests/evidence.test.ts (7 tests) 9ms
+ ✓ tests/map-render.test.ts (5 tests) 7ms
+ ✓ tests/run-attachments.test.ts (6 tests) 7ms
+stdout | tests/secrets.test.ts > 插件敏感值（safeStorage） > writePluginUserConfig：非敏感明文落盘 + 敏感只留占位符，扫描无明文
+[plugin] userConfig 写入完成：{"plugin":"tres-finance","secretKeys":["apiKey"],"plaintextKeys":["baseUrl"],"file":"/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/m2g-secrets-Og0KQK/plugin-userconfig.json"}
+
+ ✓ tests/secrets.test.ts (7 tests) 10ms
+ ✓ tests/event-log-redaction.test.ts (6 tests) 12ms
+ ✓ tests/instruction-provenance.test.ts (10 tests) 7ms
+ ✓ tests/frozen-drift.test.ts (7 tests) 10ms
+ ✓ tests/prefix-churn.test.ts (17 tests) 8ms
+ ✓ tests/auto-verify-repair.test.ts (7 tests) 9ms
+ ✓ tests/goal-stop-decision.test.ts (21 tests) 7ms
+ ✓ tests/cost-per-progress.test.ts (11 tests) 8ms
+ ✓ tests/ask-gate.test.ts (10 tests) 6ms
+ ✓ tests/routing-events.test.ts (4 tests) 8ms
+ ✓ tests/verify-attribution-exits.test.ts (9 tests) 7ms
+ ✓ tests/loop-repeat-nudge.test.ts (7 tests) 6ms
+ ✓ tests/write-face.test.ts (14 tests) 7ms
+ ✓ tests/autonomy.test.ts (17 tests) 8ms
+ ✓ tests/fork.test.ts (3 tests) 8ms
+ ✓ tests/memory-arch-outline-cap.test.ts (3 tests) 6ms
+ ✓ tests/hooks-context-budget.test.ts (6 tests) 6ms
+ ✓ tests/env-cue-single-source.test.ts (5 tests) 5ms
+ ✓ tests/redact.test.ts (19 tests) 7ms
+ ✓ tests/cert-gate-face.test.ts (15 tests) 6ms
+ ✓ tests/text-budget-cjk.test.ts (14 tests) 7ms
+ ✓ tests/stream-redaction.test.ts (21 tests) 6ms
+ ✓ tests/gym-draft.test.ts (21 tests) 6ms
+ ✓ tests/map-turn-gate.test.ts (2 tests) 8ms
+ ✓ tests/tool-block-witness.test.ts (11 tests) 7ms
+ ✓ tests/replay-run-scorecard.test.ts (29 tests) 6ms
+ ✓ tests/replay-corpus.test.ts (14 tests) 7ms
+ ✓ tests/command-shape.test.ts (36 tests) 6ms
+ ✓ tests/metering.test.ts (8 tests) 6ms
+ ✓ tests/worker-report-clip.test.ts (4 tests) 5ms
+ ✓ tests/wiring-coverage.test.ts (19 tests) 6ms
+ ✓ tests/loop-error-event.test.ts (5 tests) 6ms
+ ✓ tests/economics.test.ts (12 tests) 5ms
+ ✓ tests/gate-failure-log.test.ts (13 tests) 5ms
+ ✓ tests/output-ring.test.ts (10 tests) 6ms
+ ✓ tests/mcp-bounds.test.ts (13 tests) 5ms
+ ✓ tests/eval-arms.test.ts (26 tests) 5ms
+ ✓ tests/eval-report.test.ts (22 tests) 5ms
+ ✓ tests/refine-goal-tool.test.ts (12 tests) 5ms
+ ✓ tests/recovery-restart-current-session.test.ts (1 test) 5ms
+ ✓ tests/map-rank.test.ts (6 tests) 4ms
+ ✓ tests/prune-token-weight.test.ts (3 tests) 4ms
+ ✓ tests/src-execution-path.test.ts (7 tests) 5ms
+ ✓ tests/budget-price-key.test.ts (7 tests) 4ms
+ ✓ tests/gym-script.test.ts (5 tests) 5ms
+ ✓ tests/facts.test.ts (17 tests) 4ms
+ ✓ tests/judge-input-face.test.ts (11 tests) 4ms
+ ✓ tests/provider-capabilities.test.ts (10 tests) 4ms
+ ✓ tests/main-provider-runtime.test.ts (11 tests) 5ms
+ ✓ tests/mock-provider-rounds.test.ts (4 tests) 5ms
+ ✓ tests/replay-verify-cause-exec.test.ts (30 tests) 6ms
+ ✓ tests/replay-join-lapse.test.ts (17 tests) 4ms
+ ✓ tests/worker-attribution.test.ts (8 tests) 3ms
+ ✓ tests/tool-choice.test.ts (13 tests) 5ms
+ ✓ tests/optional-tool-surface.test.ts (5 tests) 4ms
+ ✓ tests/orchestrator-join.test.ts (6 tests) 4ms
+ ✓ tests/page-claim.test.ts (14 tests) 4ms
+ ✓ tests/zero-regression-conjunct.test.ts (4 tests) 3ms
+ ✓ tests/judge-verdict-diff.test.ts (16 tests) 4ms
+ ✓ tests/eval-task-set.test.ts (21 tests) 4ms
+ ✓ tests/verify-exec-sandbox.test.ts (11 tests) 4ms
+ ✓ tests/mutation-rerun-triage.test.ts (25 tests) 4ms
+ ✓ tests/worker-impact-query.test.ts (8 tests) 4ms
+ ✓ tests/wait-for-agents-tool.test.ts (6 tests) 3ms
+ ✓ tests/cascade.test.ts (13 tests) 4ms
+ ✓ tests/replay-gate-outcomes.test.ts (6 tests) 4ms
+ ✓ tests/replay-latency.test.ts (16 tests) 4ms
+ ✓ tests/session-cost.test.ts (7 tests) 3ms
+ ✓ tests/permission-mode-single-source.test.ts (8 tests) 3ms
+ ✓ tests/sandbox.test.ts (9 tests) 3ms
+ ✓ tests/onboarding-groups.test.ts (5 tests) 3ms
+ ✓ tests/replay-cascade-traffic.test.ts (9 tests) 3ms
+ ✓ tests/routing-policy.test.ts (9 tests) 3ms
+ ✓ tests/line-delta.test.ts (10 tests) 3ms
+ ✓ tests/worker-result-wire.test.ts (5 tests) 3ms
+ ✓ tests/measure-impact-cap-divergence.test.ts (10 tests) 3ms
+ ✓ tests/routing-pricing.test.ts (5 tests) 3ms
+ ✓ tests/hardening3.test.ts (5 tests) 3ms
+ ✓ tests/goal-trace.test.ts (5 tests) 3ms
+ ✓ tests/gate-manifest.test.ts (9 tests) 3ms
+ ✓ tests/mock.test.ts (3 tests) 3ms
+ ✓ tests/replay-readings-registry.test.ts (4 tests) 4ms
+ ✓ tests/worker-tool-specs.test.ts (3 tests) 3ms
+ ✓ tests/supervise-ring-verdict.test.ts (9 tests) 2ms
+ ✓ tests/observation-capture.test.ts (8 tests) 3ms
+ ✓ tests/replay-prune-promise.test.ts (10 tests) 3ms
+ ✓ tests/context-dangling-tool-call.test.ts (6 tests) 3ms
+ ✓ tests/worker-evidence.test.ts (9 tests) 3ms
+ ✓ tests/registry-rung.test.ts (1 test) 3ms
+ ✓ tests/replay-verify-cause-dating.test.ts (6 tests) 2ms
+ ✓ tests/impact-note-bounds.test.ts (4 tests) 2ms
+ ✓ tests/typecheck-triage.test.ts (4 tests) 2ms
+ ✓ tests/shape-doc-cap.test.ts (4 tests) 2ms
+ ✓ tests/base-system-discipline.test.ts (7 tests) 2ms
+
+ Test Files  265 passed (265)
+      Tests  3563 passed (3563)
+   Start at  18:50:10
+   Duration  171.32s (tests 89%, import 9%, transform 1%)
+
+    Isolate  265 workers spawned · ~56ms startup each (spawn + environment, per file)
+             at least ~14.72s faster with isolate: false — reuses workers across files instead of one per file
+
+EXIT=0

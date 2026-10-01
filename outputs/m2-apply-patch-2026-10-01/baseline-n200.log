@@ -1,0 +1,30 @@
+哨兵 OK｜2 文件（含 binary 1）｜路径/逐 hunk +/-/上下文 计数与两侧字符模型全对
+取料：非 merge 提交 200 笔（HEAD 往回）
+—— 表达代价 A/B（同一批 hunk；全量语料）——
+统一 diff：10664807 字符 / 200 次调用（一笔一次）
+edit_file：10731322 字符 / 2035 次调用（一处一次）
+逐笔 edit/patch 字符比：中位 1.00×
+每笔调用数：patch 恒 1｜edit 中位 7｜最大 122
+—— 只看源码文件（.ts/.tsx/.js/…，剔掉本仓提交里占大头的 .md 台账）——
+有源码改动的提交 132 / 200
+统一 diff：1608337 字符 / 132 次调用
+edit_file：1809663 字符 / 979 次调用
+每源码 hunk 归一：patch 1643 字符 vs edit 1848 字符
+逐笔（仅源码）edit/patch 字符比：中位 1.16×｜每笔 edit 调用数中位 3
+—— 行数口径分歧（现 lineDelta＝多重集差 vs git hunk 计数）——
+路径解析失败 1（非 0 则本段作废）｜可比文件 546（跳过新建/删除/改名 973）｜分歧 15 处（2.7%）
+  73ed49d tests/prose-needle-scan.test.ts｜git +22 −3 vs 多重集 +20 −1
+  e42b4af scripts/docs-check.ts｜git +43 −10 vs 多重集 +42 −9
+  e384b65 scripts/lib/evidence-typecheck.ts｜git +55 −9 vs 多重集 +54 −8
+  8689734 scripts/prose-needle-scan.ts｜git +36 −10 vs 多重集 +34 −8
+  e02b87f tests/docs-check.test.ts｜git +41 −18 vs 多重集 +40 −17
+  9a2fe61 scripts/lib/mutate-gates.ts｜git +84 −28 vs 多重集 +83 −27
+  e76ed13 src/providers/openai.ts｜git +167 −110 vs 多重集 +163 −106
+  e76ed13 tests/providers.test.ts｜git +76 −3 vs 多重集 +75 −2
+  9e9323e src/main/agent-runner.ts｜git +129 −20 vs 多重集 +128 −19
+  fcd521d scripts/mutate-verify.mjs｜git +49 −9 vs 多重集 +44 −4
+  8a9ce3e scripts/replay/verify-cause-mix.ts｜git +226 −42 vs 多重集 +217 −33
+  cce4aa7 scripts/mutate-verify.mjs｜git +41 −1 vs 多重集 +40 −0
+  1c40df7 src/cli.ts｜git +492 −57 vs 多重集 +490 −55
+  1c40df7 tests/cli-surface.test.ts｜git +510 −12 vs 多重集 +509 −11
+  1c40df7 tests/impact-runner-wiring.test.ts｜git +31 −3 vs 多重集 +30 −2

@@ -1,0 +1,168 @@
+# 反向验证（mutant：locate() 的上下文逐字校验摘掉）：期望「上下文漂移」等判卷必红
+# 命令：node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/apply-patch.test.ts
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+ [31m❯[39m tests/apply-patch.test.ts [2m([22m[2m28 tests[22m[2m | [22m[31m6 failed[39m[2m)[22m[32m 73[2mms[22m[39m
+   [32m✓[39m patch-parse：统一 diff → 逐文件逐 hunk 计划 [2m(10)[22m
+     [32m✓[39m 一个 update 段解析出路径、行号区间与带标记的行[32m 2[2mms[22m[39m
+     [32m✓[39m `--- /dev/null` 是新建，路径取 `+++ b/` 那一侧[32m 0[2mms[22m[39m
+     [32m✓[39m `+++ /dev/null` 是删除（本工具会拒，但必须认出它是删除而不是当成空补丁）[32m 0[2mms[22m[39m
+     [32m✓[39m 二进制段从 `Binary files a/… and b/… differ` 取路径（该段没有 +++ 行）[32m 0[2mms[22m[39m
+     [32m✓[39m 仅模式变更的段没有内容 hunk ⇒ 标成 mode，不报错也不当成空补丁[32m 0[2mms[22m[39m
+     [32m✓[39m 改名段标成 rename（本工具会拒：它只应用内容改动）[32m 0[2mms[22m[39m
+     [32m✓[39m `\ No newline at end of file` 归到它前面那一行所在的那一侧[32m 0[2mms[22m[39m
+     [32m✓[39m hunk 声明的行数与正文对不上（补丁被截断）⇒ 报错，不收满就当成完整 hunk 应用[32m 0[2mms[22m[39m
+     [32m✓[39m 补丁末尾的空行不会被当成多出来的一行上下文（收满即停手）[32m 0[2mms[22m[39m
+     [32m✓[39m 没有 `diff --git` 打头的 @@ 行 ⇒ 报错（不静默产出一个空计划）[32m 0[2mms[22m[39m
+   [31m❯[39m apply_patch：把计划落到盘上 [2m(18)[22m
+     [32m✓[39m 正常应用：三处改动一次落地，内容与预期逐字相同[32m 7[2mms[22m[39m
+     [32m✓[39m 行数读数取自 hunk 声明（与 git 同口径），并逐文件点名[32m 3[2mms[22m[39m
+[31m     [31m×[31m 上下文漂移：报出是哪一段、第几行、期望什么、实际是什么[39m[32m 10[2mms[22m[39m
+[31m     [31m×[31m 部分 hunk 失败 ⇒ 整笔不落盘（另一个文件也没被改，不是改到一半）[39m[32m 3[2mms[22m[39m
+[31m     [31m×[31m 多处失败一次全报出来（一轮修完，不是修一处再撞下一处）[39m[32m 5[2mms[22m[39m
+     [32m✓[39m 空补丁与纯空白都是拒收，不是「成功应用了 0 个文件」[32m 2[2mms[22m[39m
+     [32m✓[39m 二进制段：明确拒绝并点名是哪个文件，整笔不落盘[32m 3[2mms[22m[39m
+     [32m✓[39m 删除与改名段：认得出来并拒绝（本工具只应用内容改动），不许静默跳过当成就没这一段[32m 2[2mms[22m[39m
+     [32m✓[39m 仅模式变更的段：不算失败，跳过并在回执里点名[32m 1[2mms[22m[39m
+     [32m✓[39m 路径越界与绝对路径一律拒绝（复用四道闸，不另立第二套）[32m 1[2mms[22m[39m
+     [32m✓[39m 新建文件成功；补丁说新建但盘上已有 ⇒ 拒绝（那是补丁过期，不是覆盖授权）[32m 2[2mms[22m[39m
+[31m     [31m×[31m 行号漂移但内容唯一：照样落地，并在回执里报出偏差[39m[32m 4[2mms[22m[39m
+[31m     [31m×[31m 上下文在窗口内匹配到多处 ⇒ 不猜，直接拒[39m[32m 2[2mms[22m[39m
+     [32m✓[39m `\ No newline at end of file` 打到文件末时真的不留换行[32m 2[2mms[22m[39m
+     [32m✓[39m 报错正文有界：几十处失败也不会把上下文面撑爆（与 edit_file 同纪律）[32m 14[2mms[22m[39m
+     [32m✓[39m 新建文件的父目录不存在 ⇒ 建目录后落地（真数据探针在 138 笔上撞到的就是这一条）[32m 2[2mms[22m[39m
+     [32m✓[39m 补丁正文超上限 ⇒ 拒收（入参无界就是上下文面无界）[32m 1[2mms[22m[39m
+[31m     [31m×[31m 覆盖前快照排在「不可应用」那道拒绝之后：失败一笔都不留，成功才留原件[39m[32m 5[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 6 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/apply-patch.test.ts[2m > [22mapply_patch：把计划落到盘上[2m > [22m上下文漂移：报出是哪一段、第几行、期望什么、实际是什么
+[31m[1mAssertionError[22m: expected '' to contain 'src/a.ts 第 1 个 hunk'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- src/a.ts 第 1 个 hunk[39m
+
+[36m [2m❯[22m tests/apply-patch.test.ts:[2m233:17[22m[39m
+    [90m231|[39m     await writeFile(join(dir, "src", "a.ts"), A_ORIG.replace("line1", …
+    [90m232|[39m     const msg = await err(TWO_FILE_PATCH);
+    [90m233|[39m     expect(msg).toContain("src/a.ts 第 1 个 hunk");
+    [90m   |[39m                 [31m^[39m
+    [90m234|[39m     expect(msg).toContain("补丁第 4 行"); // TWO_FILE_PATCH 里 @@ 就在第 4 行
+    [90m235|[39m     expect(msg).toContain("声明旧侧第 1 行");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/apply-patch.test.ts[2m > [22mapply_patch：把计划落到盘上[2m > [22m部分 hunk 失败 ⇒ 整笔不落盘（另一个文件也没被改，不是改到一半）
+[31m[1mAssertionError[22m: expected '' to contain '整笔未写盘'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 整笔未写盘[39m
+
+[36m [2m❯[22m tests/apply-patch.test.ts:[2m244:17[22m[39m
+    [90m242|[39m     const before = await snapshotDisk();
+    [90m243|[39m     const msg = await err(TWO_FILE_PATCH);
+    [90m244|[39m     expect(msg).toContain("整笔未写盘");
+    [90m   |[39m                 [31m^[39m
+    [90m245|[39m     expect(msg).toContain("1 处不可应用");
+    [90m246|[39m     expect(await snapshotDisk()).toEqual(before); // b.ts 那处本可落地，也不许单独落
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/apply-patch.test.ts[2m > [22mapply_patch：把计划落到盘上[2m > [22m多处失败一次全报出来（一轮修完，不是修一处再撞下一处）
+[31m[1mAssertionError[22m: expected '' to contain '2 处不可应用'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2 处不可应用[39m
+
+[36m [2m❯[22m tests/apply-patch.test.ts:[2m253:17[22m[39m
+    [90m251|[39m     await writeFile(join(dir, "src", "b.ts"), B_ORIG.replace("beta", "…
+    [90m252|[39m     const msg = await err(TWO_FILE_PATCH);
+    [90m253|[39m     expect(msg).toContain("2 处不可应用");
+    [90m   |[39m                 [31m^[39m
+    [90m254|[39m     expect(msg).toContain("src/a.ts 第 1 个 hunk");
+    [90m255|[39m     expect(msg).toContain("src/b.ts 第 1 个 hunk");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/apply-patch.test.ts[2m > [22mapply_patch：把计划落到盘上[2m > [22m行号漂移但内容唯一：照样落地，并在回执里报出偏差
+[31m[1mAssertionError[22m: expected 'line1\nLINE2\nline3\nline3\nLINE5\nli…' to be 'inserted\nline1\nLINE2\nline3\nline4\…' // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- inserted[39m
+[2m  line1[22m
+[2m  LINE2[22m
+[2m  line3[22m
+[32m- line[7m4[27m[39m
+[31m+ line[7m3[27m[39m
+[2m  LINE5[22m
+[32m- line6[39m
+[31m+ line6[39m
+[31m+ line6[39m
+
+
+[36m [2m❯[22m tests/apply-patch.test.ts:[2m361:62[22m[39m
+    [90m359|[39m     const r = await apply_patch.run({ patch: TWO_FILE_PATCH }, ctx());
+    [90m360|[39m     expect(r.ok).toBe(true);
+    [90m361|[39m     expect(await readFile(join(dir, "src", "a.ts"), "utf8")).toBe(
+    [90m   |[39m                                                              [31m^[39m
+    [90m362|[39m       ["inserted", "line1", "LINE2", "line3", "line4", "LINE5", "line6…
+    [90m363|[39m     );
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/apply-patch.test.ts[2m > [22mapply_patch：把计划落到盘上[2m > [22m上下文在窗口内匹配到多处 ⇒ 不猜，直接拒
+[31m[1mAssertionError[22m: expected '' to contain '无法唯一定位'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 无法唯一定位[39m
+
+[36m [2m❯[22m tests/apply-patch.test.ts:[2m379:17[22m[39m
+    [90m377|[39m     ].join("\n");
+    [90m378|[39m     const msg = await err(dup);
+    [90m379|[39m     expect(msg).toContain("无法唯一定位");
+    [90m   |[39m                 [31m^[39m
+    [90m380|[39m     expect(await readFile(join(dir, "src", "dup.ts"), "utf8")).toBe(DU…
+    [90m381|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/apply-patch.test.ts[2m > [22mapply_patch：把计划落到盘上[2m > [22m覆盖前快照排在「不可应用」那道拒绝之后：失败一笔都不留，成功才留原件
+[31m[1mAssertionError[22m: expected [ '1790851420525--call-1', …(1) ] to deeply equal [][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   "1790851420525--call-1",[39m
+[31m+   "1790851420526--call-1",[39m
+[31m+ ][39m
+
+[36m [2m❯[22m tests/apply-patch.test.ts:[2m456:89[22m[39m
+    [90m454|[39m     await writeFile(join(dir, "src", "a.ts"), A_ORIG.replace("line1", …
+    [90m455|[39m     await apply_patch.run({ patch: TWO_FILE_PATCH }, snapCtx()).catch(…
+    [90m456|[39m     expect(await readdir(join(dir, ".agent", "snapshots")).catch(() =>…
+    [90m   |[39m                                                                                         [31m^[39m
+    [90m457|[39m
+    [90m458|[39m     await writeFile(join(dir, "src", "a.ts"), A_ORIG, "utf8");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m6 failed[39m[22m[2m | [22m[1m[32m22 passed[39m[22m[90m (28)[39m
+[2m   Start at [22m 18:43:40
+[2m   Duration [22m 273ms[2m (tests 37%, transform 36%, import 25%, worker 1%)[22m
+
+EXIT=1

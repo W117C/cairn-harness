@@ -1,0 +1,54 @@
+# 反向验证（mutant：installAppTools 里 apply_patch 的 gatedTool 包装被拆掉）：期望「接线棘轮」判卷必红
+# 命令：node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/write-face.test.ts
+
+ RUN  v5.0.0 /Users/ze/Downloads/deepseek harness
+
+ ❯ tests/write-face.test.ts (14 tests | 1 failed) 15ms
+   ❯ mayHaveWrittenDisk：写向判据的唯一事实源 (9)
+     ✓ 两个显式写工具 ⇒ 算改盘 1ms
+     ✓ shell 落盘算改盘：`shell_rw` 跑 `printf … >> note.txt` ⇒ true（旧的两名字清单在这一格判 false ⇒ 收束闸与 stale 双双漏） 0ms
+     ✓ 反向一侧（不这么钉，看一次目录就要跑一遍全量测试）：`run_shell` 跑 `ls -la` 与 `git status` ⇒ false 0ms
+     ✓ shell 里的写动作不许靠「首词是 git」蒙过去：`git commit` ⇒ true 0ms
+     ✓ `shell_ro` 恒 false，且这不是命名照顾而是执行面事实：写到一半的命令会被同一份静态过滤拒掉（ok:false ⇒ 根本没执行） 0ms
+     ✓ 只读工具（读文件/搜索/地图/等待/方案）⇒ false；`remember` 只写记忆区，不改被验的代码 ⇒ false 0ms
+     ✓ 派生 worker 本身不改盘（它写的是自己那块 worktree）⇒ false 0ms
+     ✓ 覆盖性棘轮：工具表里每个名字都必须被显式归类（算改盘 或 在只读名单里）⇒ 新增工具没登记就红 0ms
+     × 接线棘轮：TOOLS 里每个写向工具都必须在 installAppTools 里被 gatedTool 包装（不包装＝权限门对它整条缺席） 4ms
+   ✓ 凭据面（B 那条假绿）：shell 改盘必须能推翻绿拍 (3)
+     ✓ 绿拍之后经 shell 改盘 ⇒ stale（旧实现 lastWrite 看不见 shell，证据停在 verified） 0ms
+     ✓ 反向一侧：绿拍之后只跑了只读命令 ⇒ 仍算 verified（不许把每次 ls 都判成过期） 0ms
+     ✓ 只经 shell 改过盘 ⇒ hasSessionWrites 为真（goal 模式据此区分「还没验」与「压根不产出」） 0ms
+   ✓ 收束闸（A 那条漏拍）：shell 写盘也要补一拍 (2)
+     ✓ 只经 shell 落盘 + 纯文本收束 ⇒ 补一拍（零额外模型请求），证据落流 6ms
+     ✓ 反向一侧：只跑只读命令收束 ⇒ 一拍都不补（否则「看一眼目录」也要跑全量测试） 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/write-face.test.ts > mayHaveWrittenDisk：写向判据的唯一事实源 > 接线棘轮：TOOLS 里每个写向工具都必须在 installAppTools 里被 gatedTool 包装（不包装＝权限门对它整条缺席）
+AssertionError: 写向工具没被门包装 ⇒ 它直连 TOOLS 执行，权限门/只读摘除/方案门整条缺席：apply_patch: expected [ 'apply_patch' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "apply_patch",
++ ]
+
+ ❯ tests/write-face.test.ts:126:9
+    124|         unwrapped,
+    125|         "写向工具没被门包装 ⇒ 它直连 TOOLS 执行，权限门/只读摘除/方案门整条缺席：" + unwrapped.join(…
+    126|       ).toEqual([]);
+       |         ^
+    127|       const fake = 'TOOLS.write_file = gatedTool("write_file", TOOLS.w…
+    128|       expect(unwrappedIn(fake, ["write_file", "ghost_write"]), "检查器在假源…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 passed (14)
+   Start at  18:50:01
+   Duration  529ms (transform 76%, import 20%, tests 3%, worker 1%)
+
+EXIT=1

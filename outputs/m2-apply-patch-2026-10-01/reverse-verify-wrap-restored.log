@@ -1,0 +1,13 @@
+# 反向验证复原：包装行恢复后，同一条命令复绿
+# 命令：node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/write-face.test.ts
+
+ RUN  v5.0.0 /Users/ze/Downloads/deepseek harness
+
+ ✓ tests/write-face.test.ts (14 tests) 10ms
+
+ Test Files  1 passed (1)
+      Tests  14 passed (14)
+   Start at  18:50:04
+   Duration  577ms (transform 76%, import 21%, tests 2%, worker 1%)
+
+EXIT=0

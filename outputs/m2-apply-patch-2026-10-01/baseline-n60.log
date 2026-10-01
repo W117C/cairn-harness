@@ -1,0 +1,20 @@
+哨兵 OK｜2 文件（含 binary 1）｜路径/逐 hunk +/-/上下文 计数与两侧字符模型全对
+取料：非 merge 提交 60 笔（HEAD 往回）
+—— 表达代价 A/B（同一批 hunk；全量语料）——
+统一 diff：3522659 字符 / 60 次调用（一笔一次）
+edit_file：3531492 字符 / 680 次调用（一处一次）
+逐笔 edit/patch 字符比：中位 0.99×
+每笔调用数：patch 恒 1｜edit 中位 10｜最大 38
+—— 只看源码文件（.ts/.tsx/.js/…，剔掉本仓提交里占大头的 .md 台账）——
+有源码改动的提交 40 / 60
+统一 diff：297179 字符 / 40 次调用
+edit_file：338918 字符 / 219 次调用
+每源码 hunk 归一：patch 1357 字符 vs edit 1548 字符
+逐笔（仅源码）edit/patch 字符比：中位 1.11×｜每笔 edit 调用数中位 3
+—— 行数口径分歧（现 lineDelta＝多重集差 vs git hunk 计数）——
+路径解析失败 0（非 0 则本段作废）｜可比文件 140（跳过新建/删除/改名 428）｜分歧 5 处（3.6%）
+  73ed49d tests/prose-needle-scan.test.ts｜git +22 −3 vs 多重集 +20 −1
+  e42b4af scripts/docs-check.ts｜git +43 −10 vs 多重集 +42 −9
+  e384b65 scripts/lib/evidence-typecheck.ts｜git +55 −9 vs 多重集 +54 −8
+  8689734 scripts/prose-needle-scan.ts｜git +36 −10 vs 多重集 +34 −8
+  e02b87f tests/docs-check.test.ts｜git +41 −18 vs 多重集 +40 −17

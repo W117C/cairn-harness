@@ -212,6 +212,9 @@ export function newAutonomySession(
 const SIDE_EFFECT_TOOLS: ReadonlySet<string> = new Set([
   "write_file",
   "edit_file",
+  // M2 补丁工具：批量形态的 edit（跨文件、一次可覆盖多份），写向判定必须与 edit_file 同判。
+  // 漏登的后果三处同时发生：只读档不摘除、方案门不挡、沙箱通道对它失效。
+  "apply_patch",
   "run_shell",
   "shell_rw",
   // 派生 worker 会写盘且花真钱（并发预算 + token 代价）：计入写向 ⇒ 只读档从模型面一并摘除。
