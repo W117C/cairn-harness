@@ -9,13 +9,22 @@
 //   ② 任务集不一致 ⇒ 逐指标结论全部作废（分母变了，横比无意义）。
 //
 // ── 反向验证（本仓要求：关键机制必须能被"拆掉后判卷变红"证明）──
-// 把 `compare()` 里这一行
-//     const verdict = b === null ? "unknown" : Math.abs(delta) > b ? "beyond-noise" : "within-noise";
-// 改成永真（`"within-noise"`），下面这几条必须变红：
-//     · "超出噪声带的改善要判 beyond-noise"
-//     · "超出噪声带的退化要判 beyond-noise"
-//     · "声带不可得时必须判 unknown"
-// 反之，把 `sameTaskSet` 的比较改成永远 true，"任务集不一致必须作废"那条必须红。
+// **2026-10-01 实跑过，不是照本宣科**：
+//
+//  ① 把 `compare()` 里这一行
+//         const verdict = b === null ? "unknown" : Math.abs(delta) > b ? "beyond-noise" : "within-noise";
+//     改成恒 `"within-noise"`（即"永不判超出"）⇒ **6 条判卷立刻红**：
+//         × 超出噪声带的改善要判 beyond-noise + better
+//         × 超出噪声带的退化要判 beyond-noise + worse
+//         × 声带不可得时必须判 unknown，不许退化成带内
+//         × 成功率方向：变高是改善
+//         × 声带不可得 ⇒ 印「判不出」，不许印成带内
+//         × 有超出项 ⇒ 印出改善/退化各几项
+//     还原后 22/22 绿。
+//  ② 把 `sameTaskSet` 改成恒 `true`（拆掉"分母一致"护栏）⇒ **2 条判卷红**：
+//         × 任务集不一致 ⇒ sameTaskSet=false（分母变了，横比无意义）
+//         × 任务集不一致 ⇒ 明确印「结论全部作废」
+//     还原后 22/22 绿，`git diff` 确认与提交版逐字一致（没留下改坏的东西）。
 import { describe, expect, it } from "vitest";
 import {
   compare,
