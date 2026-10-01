@@ -29,6 +29,14 @@ export const INJECTED_TOOLS: readonly InjectedToolSurface[] = [
   { name: "impact_query", specFace: "runtime", workerReachable: "both", reachableWhenReadOnly: true, mainSessionSideEffect: false },
   // 与 impact_query 同族：运行期按开关（solpiEnabled）注入，worker 面不开放
   { name: "obs_recall", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  // M3 诊断工具：按「本工作区真有可诊断面」（配了 lint/test 命令）运行期注入，口径同 lsp。
+  // 写向类＝true（它执行进程；测试会写缓存/产物）：只读档从模型面与执行面一起拒（gatedTool 包装），
+  // 方案门挡它，沙箱降级时沙箱通道强制审批。worker 面不给：worker 已有 shell，诊断是主会话的省上下文件。
+  { name: "diagnose", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: true },
+  // M3 检索：按用户配置的搜索端点（`.agent/config.json` 的 `search.endpoint`）运行期注入，口径同 lsp：
+  // 没配就不挂。网络类（staticRisk=high + isNetworkCommandCall）⇒ 四档一律审批、scope 钉 once；
+  // 只读档保留（查文档是最正当的只读用法之一，与 web_fetch 同判）；worker 面不给（worker 出网无条件 deny）。
+  { name: "web_search", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
   // 插件 skill：实例面在 agent-runner 里 `table["skill"] =`，规格走运行期（插件装载了才有）
   { name: "skill", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
   // 定时任务五件（§12.2.5）：实现一直有，规格第 42 页才补上 ⇒ 登记进表，让 G-B 从此盯着这一族。

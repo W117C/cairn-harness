@@ -28,10 +28,12 @@ import { SolpiRuntime, privateSessionDirectory, removePrivateSessionData, observ
 import { createUsageAttributor } from "../agent/usage-attribution";
 import { affectedFilesOf, defaultImpactHook } from "../agent/impact/index.js";
 import { createImpactQueryTool, impactQuerySpec } from "../tools/impact-query";
+import { createDiagnoseTool, diagnoseSpec, diagnoseSurface } from "../tools/diagnose";
 import { createWaitForAgentsTool } from "../tools/wait_for_agents";
 import { createCancelAgentsTool } from "../tools/cancel_agents";
 import { createRefineGoalTool } from "../tools/refine_goal";
 import { webFetch } from "../tools/web_fetch";
+import { loadSearchConfig, makeWebSearch, webSearchSpec } from "../tools/web-search";
 import { AUTOMATION_TOOL_NAMES } from "../agent/automation-surface";
 import { run_shell } from "../tools/run_shell";
 import type { AgentEvent, ClarifyAnswerMap, EventLog, GoalTurnOrigin } from "../events";
@@ -533,7 +535,7 @@ export function withSkillAllowNote(tool: string, reason: string): string {
 /** `web_fetch` 在这个字面量联合里而不在 `TOOL_NAMES` 里：静态注册表（M2 起 10 工具，
  *  `tools-check.ts` 判据）不含它，M2a 起的运行时注入先例不碰它。`name as ToolName` 与
  *  `staticRisk` 里 `(tool as string) === "web_fetch"` 是同一处类型缝的两面。 */
-type GatedName = "write_file" | "edit_file" | "apply_patch" | "run_shell" | "web_fetch";
+type GatedName = "write_file" | "edit_file" | "apply_patch" | "run_shell" | "web_fetch" | "web_search" | "diagnose";
 
 function gatedTool(name: GatedName, original: Tool, beforeExecute?: () => Promise<ToolResult | null>): Tool {
   return {
@@ -1474,6 +1476,16 @@ function lspConfigured(workspace: string): boolean {
   }
 }
 
+/** 该工作区有没有配搜索端点（`.agent/config.json` 的 `search.endpoint` 且含 {query}）。
+ *  判据与工具本体同源（`loadSearchConfig`）；坏 JSON 按「没配」处理——口径同 lspConfigured。 */
+function searchConfigured(workspace: string): boolean {
+  try {
+    return loadSearchConfig(workspace) !== null;
+  } catch {
+    return false;
+  }
+}
+
 /** 进程级「自动记忆」判据：**首次读到的值定终身**，之后不再重读。
  *
  *  为什么必须缓存（2026-09-30 实测踩到）：settings 能在同一进程里变（`setSettings` 是 IPC/测试
@@ -1722,13 +1734,22 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // 影响面**读端**：同一个开关下才注入（关着 = 工具面一个字节都不付）。写后回注只解决
     // 「改完才知道波及谁」，这条让模型能在动手前问「谁在调用它」——能力 1 的事前一跳。
     const impactTool = opts.impactAnalysis === true ? createImpactQueryTool() : undefined;
+    // M3 诊断工具：按「本工作区真有可诊断面」注入（口径同 lsp 的按盘上配置摘除）——没配命令时
+    // 挂着它只有成本。执行器与 verify 同源（`verifyExec(sandbox)`）：沙箱可用走 Seatbelt，
+    // 降级时同一条 defaultExec；**写向类**由 gatedTool 包装（只读档摘除/方案门/沙箱降级强制审批）。
+    const diagnoseTool = (await diagnoseSurface(opts.workspace))
+      ? createDiagnoseTool({ exec: verifyExec(opts.sandbox ?? null) })
+      : undefined;
+    // M3 检索工具：配了搜索端点才注入（口径同 lsp）。网络类 ⇒ gatedTool 包装 + staticRisk=high
+    // （四档一律审批）+ isNetworkCommandCall 钉 once（一次"总是允许"不会把出网永久免批）。
+    const searchTool = searchConfigured(opts.workspace) ? makeWebSearch() : undefined;
     const faceArgs = {
       mode: opts.mode,
       // 同一个字段喂给规格面（sessionToolFace）与执行面（installAppTools）——两面必须同时摘。
       automationTools: opts.automationTools,
       // 能力没开的可选工具：规格面摘说明书，执行面不注入实例。两处同源同一个数组。
       ...(omitTools.length > 0 ? { omitTools } : {}),
-      pluginTools: [...(recall ? [observationRecallSpec] : []), ...(impactTool ? [impactQuerySpec] : []), ...pluginToolSpecsFromRuntime(rt).filter(t => !recall || t.name !== "obs_recall")],
+      pluginTools: [...(recall ? [observationRecallSpec] : []), ...(impactTool ? [impactQuerySpec] : []), ...(diagnoseTool ? [diagnoseSpec] : []), ...(searchTool ? [webSearchSpec] : []), ...pluginToolSpecsFromRuntime(rt).filter(t => !recall || t.name !== "obs_recall")],
     };
     // run 起点这份只管两件事：出声（同名冲突 / 摘了谁的哪把）+ 给 loop 一份稳定的活闸闭包。
     // 模型可见清单本身走 requestFace 逐请求重算 —— 模型在 run 中途点起的 skill，下一轮就不该再看见那把。
@@ -1760,8 +1781,8 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
         } } : {}),
       }),
       events: { append: pipeline },
-      ...(recall || impactTool
-        ? { tools: { ...TOOLS, ...(recall ? { obs_recall: recall } : {}), ...(impactTool ? { impact_query: impactTool } : {}) } }
+      ...(recall || impactTool || diagnoseTool || searchTool
+        ? { tools: { ...TOOLS, ...(recall ? { obs_recall: recall } : {}), ...(impactTool ? { impact_query: impactTool } : {}), ...(diagnoseTool ? { diagnose: gatedTool("diagnose", diagnoseTool) } : {}), ...(searchTool ? { web_search: gatedTool("web_search", searchTool) } : {}) } }
         : {}),
       workspace: opts.workspace,
       mode: "auto", // 冻结 loop 对 ask 一律拒绝；真实门在 gatedTool（复用 checkPermission）

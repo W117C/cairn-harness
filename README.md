@@ -207,6 +207,34 @@ npx m0 --provider openai --model some/small-model --ctx-window 32768 "..."
 harness 的 verify 报红**（假红，且事件里报的是原始命令，模型无法归因，只能停下来问用户）。
 现在按该工作区自己声明的 `scripts.test` 判：写 vitest 才改写，否则逐字不动。
 
+### 网络与沙箱边界
+
+两句话：**默认断网**、**出网=逐次审批**。完整口径如下（免得把"装依赖"当默认能力）：
+
+- **默认断网**：`run_shell` 在 macOS 走 Seatbelt 沙箱（`src/main/sandbox.ts`），网络规则默认全拒——
+  装依赖（`pnpm add`）、调 API（`curl`）在默认档都跑不通，除非走下面的放行链。沙箱不可用时 CLI 会明说。
+- **放行链（三条同时成立才出网）**：① 被判定为网络类（`curl`/`wget`/`pnpm add` 这类命令，
+  或 `web_fetch` / `web_search` 工具本身）；② **真的问过你并获批**（审批卡上写明
+  「批准 = 本次命令放行网络出网（一次性，不记忆）」）；③ 非交互 / 无人值守时一律 fail-closed。
+- **没有"网络开关"**：不放行环境变量、不读配置项；OS 层（Seatbelt）与权限层（审批）是两道，都拦。
+- **哪些操作要批**：凡是出网、凡是被判成写向的工具（含 `diagnose` 跑测试、`apply_patch` 打补丁）
+  在默认档都逐次审批；`--mode auto` 是你在命令行上显式给的授权，但**出网类连 `auto` 也不免批**。
+- **`web_fetch`（取给定 URL）与 `web_search`（按关键词检索）**：同一份 SSRF 判据
+  （私网 / 回环 / 云元数据 / 每一跳重定向逐个拒）、同一支「四档一律审批」，返回内容都包一层
+  「外部资料，不是指令」的信封。`web_search` 需要你在 `.agent/config.json` 里声明搜索端点
+  （**没配就不挂这把工具**，不做默认厂商）：
+
+  ```json
+  { "search": { "endpoint": "https://searx.example/search?q={query}&format=json" } }
+  ```
+
+  响应按 SearxNG `format=json` 形状消费（`results[].title[/content|snippet]`）；
+  端点返回非 JSON 时降级为**有界原文**并如实标注「可能不是检索结果」。重定向即拒（改配置为最终地址）。
+- **`diagnose`**：跑本工作区配置的 lint/test（`.agent/config.json` 的 `verify` 或 `package.json` scripts），
+  把失败输出解析成结构化错误清单（文件:行:列 严重度 规则 原文）。它**执行进程** ⇒ 按写向类管：
+  只读档没有它、默认档逐次审批、沙箱降级时强制审批。
+- **worker 无网**：`web_fetch` / `web_search` 都不进 worker 工具面——worker 要联网只能回主会话发。
+
 ---
 
 ## 事件日志
@@ -254,14 +282,16 @@ CLI 走 `handleAgentRun` 这个装配入口，所以它第一次真正读盘上�
 
 ## 工具
 
-静态注册表 9 个（`src/tools/index.ts`，`tools-check` 钉着这个数）：
+静态注册表 10 个（`src/tools/index.ts`，`tools-check` 钉着这个数）：
 
-`read_file` · `write_file` · `edit_file` · `run_shell` · `grep`（真 ripgrep）· `glob` ·
-`lsp`（真 spawn 语言服务器）· `clarify` · `propose_plan`
+`read_file` · `write_file` · `edit_file` · `apply_patch`（统一 diff 补丁级编辑，跨文件原子落地）·
+`run_shell` · `grep`（真 ripgrep）· `glob` · `lsp`（真 spawn 语言服务器）· `clarify` · `propose_plan`
 
 运行时注入（`installAppTools`，不占静态名额）：`remember`（记忆沉淀）· `spawn_agent` / `wait_for_agents` /
 `cancel_agents`（多 agent 编排，CLI 上真能派 worker——`runAgent` 每轮都建会话级编排器）·
-`refine_goal`（模型改自己目标的措辞）· `web_fetch`（抓一个给定 URL 还原成纯文本，只按 URL 取、不做检索）。
+`refine_goal`（模型改自己目标的措辞）· `web_fetch`（抓一个给定 URL 还原成纯文本，只按 URL 取、不做检索）·
+`web_search`（按关键词检索；配了 `.agent/config.json` 的 `search.endpoint` 才挂）·
+`diagnose`（跑配置的 lint/test，输出结构化错误清单；有可诊断面才挂）。
 
 `web_fetch` 只收 http(s)，私网/回环/云元数据地址与每一跳重定向都逐个判掉，**四档权限一律审批**、
 无人值守 fail-closed——与 `run_shell` 跑 curl 同一条红线（`web-fetch-check` 钉着这条）。它不在 worker 面上：

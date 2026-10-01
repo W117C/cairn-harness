@@ -215,6 +215,10 @@ const SIDE_EFFECT_TOOLS: ReadonlySet<string> = new Set([
   // M2 补丁工具：批量形态的 edit（跨文件、一次可覆盖多份），写向判定必须与 edit_file 同判。
   // 漏登的后果三处同时发生：只读档不摘除、方案门不挡、沙箱通道对它失效。
   "apply_patch",
+  // M3 诊断工具：执行进程（跑配置的 lint/test；测试会写缓存/产物）。写向类不等于"改仓库"，
+  // 而是本仓对**任意非白名单执行**的一贯口径（`mayHaveWrittenDisk` 同一纪律）——
+  // 沙箱降级时正是靠这一格把它抬成强制审批。
+  "diagnose",
   "run_shell",
   "shell_rw",
   // 派生 worker 会写盘且花真钱（并发预算 + token 代价）：计入写向 ⇒ 只读档从模型面一并摘除。
@@ -245,7 +249,8 @@ export function isNetworkCommandCall(tool: ToolName, args: Record<string, unknow
   // 之后每次出网都在 `L3-rule` 直接 approve（那一层只豁免 critical）⇒ "出网永不免批"
   // 退化成"出网点一次就永久免批"。与 `run_shell` 跑 curl 同口径：**网络类不放行 scope 记忆**。
   // `as string` 的理由同 `staticRisk` 里那一支：web_fetch 是运行时注入，不在 TOOL_NAMES。
-  if ((tool as string) === "web_fetch") return true;
+  // web_search 同族：检索也是出网、返回的也是外部不可信文本 ⇒ 同一条口径（scope 钉 once + 卡面措辞）。
+  if ((tool as string) === "web_fetch" || (tool as string) === "web_search") return true;
   if (!isShellFamily(tool)) return false;
   return isNetworkCommand(typeof args.command === "string" ? args.command : undefined);
 }

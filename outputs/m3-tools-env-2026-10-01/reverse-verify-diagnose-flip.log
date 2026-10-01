@@ -1,0 +1,43 @@
+# 反向验证①（mutant：diagnose 的 mainSessionSideEffect true→false）：期望 G-B 对账必红
+# 命令：node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/tool-surface-parity.test.ts
+
+ RUN  v5.0.0 /Users/ze/Downloads/deepseek harness
+
+ ❯ tests/tool-surface-parity.test.ts (5 tests | 1 failed) 13ms
+   ❯ G-B 注入工具三面对账 (5)
+     × 每个声明项在应有的一面全部在场（缺哪面报哪面，不整体红） 10ms
+     ✓ 只读档的摘除面与声明一致（只查静态表：运行期注入项由各自的开关管） 1ms
+     ✓ 声明表本身不可漏项：源文本里出现的注入名必须登记（不登记 = 新工具绕过这道门） 0ms
+     ✓ 扩形后的分母自证：table["name"] = 那一形确实被算进来了（解析器静默 0 命中比不扩更坏） 1ms
+     ✓ 对账本身有分辨力（反向对照：没这条的静态门等于没立） 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/tool-surface-parity.test.ts > G-B 注入工具三面对账 > 每个声明项在应有的一面全部在场（缺哪面报哪面，不整体红）
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "diagnose :: diagnose 的写向判定漂移（表 false vs permissions true）",
++ ]
+
+ ❯ tests/tool-surface-parity.test.ts:85:17
+     83|   it("每个声明项在应有的一面全部在场（缺哪面报哪面，不整体红）", () => {
+     84|     const bad = INJECTED_TOOLS.flatMap((s) => report(s).map((p) => s.n…
+     85|     expect(bad).toEqual([]);
+       |                 ^
+     86|   });
+     87|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  19:02:02
+   Duration  318ms (transform 78%, import 16%, tests 5%, worker 1%)
+
+EXIT=1

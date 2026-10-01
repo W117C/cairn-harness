@@ -1,0 +1,10 @@
+料：outputs/m2-apply-patch-2026-10-01/reverse-verify-guard-off.log（真实 vitest 失败输出全文 10567 字节 = run_shell 会整块丢回的量）
+结构化：命中 6 条（列 6 条）→ 渲染 960 字节
+两侧比：0.091×（结构化 / 原文；<1 = 省）
+—— 逐条内核（证明条目不是编的）——
+  tests/apply-patch.test.ts:233:17 error: apply_patch：把计划落到盘上 > 上下文漂移：报出是哪一段、第几行、期望什么、实际是什么
+  tests/apply-patch.test.ts:244:17 error: apply_patch：把计划落到盘上 > 部分 hunk 失败 ⇒ 整笔不落盘（另一个文件也没被改，不是改到一半）
+  tests/apply-patch.test.ts:253:17 error: apply_patch：把计划落到盘上 > 多处失败一次全报出来（一轮修完，不是修一处再撞下一处）
+  tests/apply-patch.test.ts:361:62 error: apply_patch：把计划落到盘上 > 行号漂移但内容唯一：照样落地，并在回执里报出偏差
+  tests/apply-patch.test.ts:379:17 error: apply_patch：把计划落到盘上 > 上下文在窗口内匹配到多处 ⇒ 不猜，直接拒
+  tests/apply-patch.test.ts:456:89 error: apply_patch：把计划落到盘上 > 覆盖前快照排在「不可应用」那道拒绝之后：失败一笔都不留，成功才留原件

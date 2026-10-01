@@ -1,0 +1,13 @@
+# 反向验证复原：两处翻反都恢复后，同一条命令复绿
+# 命令：node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/tool-surface-parity.test.ts
+
+ RUN  v5.0.0 /Users/ze/Downloads/deepseek harness
+
+ ✓ tests/tool-surface-parity.test.ts (5 tests) 40ms
+
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  19:02:16
+   Duration  667ms (transform 75%, import 17%, tests 7%)
+
+EXIT=0
