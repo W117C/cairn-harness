@@ -195,7 +195,11 @@ export function distillLessons(events: AgentEvent[], logPath: string): Lesson[] 
   const bySig = new Map<string, { name: string; ids: string[] }>();
   for (const c of calls) {
     if (!mayHaveWrittenDisk(c.name, (c.args ?? {}) as Record<string, unknown>)) continue;
-    const sig = c.name + " " + JSON.stringify(c.args);
+    // 分隔符用**转义**写，不写裸 NUL 字节（2026-10-02 实测的后果）：裸 0x00 会让 `file` 把本文件
+    // 判成 data、**ripgrep 整份跳过** ⇒ harness 自己的 grep 工具（`src/tools/grep.ts` 走 rg）就
+    // 搜不到这个文件的内容（`rg "const sig = c\.name" src/` 报 No matches，而它就在下行）。
+    // 语义一字不变：`\u0000` 与裸字节是同一个字符。
+    const sig = c.name + "\u0000" + JSON.stringify(c.args);
     const g = bySig.get(sig) ?? { name: c.name, ids: [] };
     g.ids.push(c.id);
     bySig.set(sig, g);
