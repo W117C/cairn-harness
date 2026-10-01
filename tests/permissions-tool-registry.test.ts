@@ -82,6 +82,16 @@ const GOLDEN: Readonly<Record<string, Golden>> = {
   // edit_file 在引导档走**风险线**（编辑是 medium，guided 的线是 medium）⇒ 与上面四个不同行。
   // 这格是本段存在的理由：归纳成「写向 ⇒ 其余档全放行」会正好写错它。
   edit_file: ["deny/L0-hard", "ask/L3-mode", "ask/L4-risk", "approve/L4-pass"],
+  // apply_patch 是**合并期**点名的（zcode 的 M2 补丁工具 `8d267bb` 在本表写死之后才进来）。
+  // 值是合并后现跑出来的，不是推的：只读档 L0 摘除 / 默认档逐次审批 / 引导与自主档放行
+  // —— 与上面四个写向逐字同形，正是 autonomy.ts 把它登记进 `SIDE_EFFECT_TOOLS` 的结果。
+  // 这条点名本身就是本表存在的理由：不点名它，B1 会红并把「新增工具必须点名」这条规矩变成摆设。
+  apply_patch: ["deny/L0-hard", "ask/L3-mode", "approve/L4-pass", "approve/L4-pass"],
+  // diagnose 同属合并期（zcode 的 M3 诊断工具 `0b37ad2`）：执行进程、写入缓存/产物 ⇒ 计写向，
+  // 逐字同形于上面四个。与 web_search 一并补，是因为「缺口一次列全」比一次撞一个便宜。
+  diagnose: ["deny/L0-hard", "ask/L3-mode", "approve/L4-pass", "approve/L4-pass"],
+  // web_search：出网 ⇒ 四档一律走风险线送审，逐字同形于 web_fetch。非交互四档全放行。
+  web_search: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk"],
   // 出网：四档一律走风险线送审（web_fetch 的既有判定，与本笔无关但一并钉住防漂移）。
   web_fetch: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk"],
 };
@@ -116,6 +126,9 @@ describe("M7 · 工具名登记册", () => {
       run_shell: { "read-only": "deny", default: "deny", guided: "allow", auto: "allow" },
       shell_rw: { "read-only": "deny", default: "deny", guided: "allow", auto: "allow" },
       spawn_agent: { "read-only": "deny", default: "deny", guided: "allow", auto: "allow" },
+      // 同 B1：合并期点名的 zcode M2 工具，缺了这一格会被 `?? "allow"` 兜成放行。
+      apply_patch: { "read-only": "deny", default: "deny", guided: "allow", auto: "allow" },
+      diagnose: { "read-only": "deny", default: "deny", guided: "allow", auto: "allow" },
     };
     for (const name of ALL_NAMES) {
       for (const mode of PERMISSION_MODES) {
