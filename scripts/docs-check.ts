@@ -209,8 +209,27 @@ export function ledgerWitnessRefs(text: string): string[] {
 /** 上线时的现读存量＝2 条（证人 `outputs/witness-path-census-285-2026-10-01/classify2.log`：
  *  第 259 页点名的 `selector-uniqueness-2026-09-30/diagnose.mts` 与 `sequencer-dynamic-2026-10-01/probe-prod.mts`，
  *  两支都在盘上、只是从没随页入库）⇒ 修法取**补档**而不是登记：表交空，帽天然就是 0。
- *  这张表仍留着（并配双向判卷），因为「一条真补不了的旧账」迟早会出现——没有登记位就会退化成拆闸。 */
-export const LEGACY_WITNESS_REFS: readonly string[] = [];
+ *  这张表仍留着（并配双向判卷），因为「一条真补不了的旧账」迟早会出现——没有登记位就会退化成拆闸。
+ *
+ *  第 290 页补⑴：D-11 的取值域换成整本台账，于是把**整目录已不在盘上**的 12 条老账登记进来
+ *  （名单不是手抄的：`outputs/witness-wide-face-census-289-2026-10-01/classify-current.log` 修 `-z` 之后那一段，
+ *  逐条标着「无盘」；日期全在 2026-09-12～09-23，是那阵子清 scratch 目录时一起没的）。
+ *  这 12 条**没有补档的可能**（原件不在盘上，也不在任何一个提交里），所以登记是唯一诚实的处置；
+ *  帽只准调低——一旦哪份原件被找回并入库，这条就必须从表里删掉（判卷里有 stale 那一格守着）。 */
+export const LEGACY_WITNESS_REFS: readonly string[] = [
+  "outputs/agent-landscape-gap-analysis-2026-09-18/",
+  "outputs/agent-review-2026-09-15/",
+  "outputs/code-review-report-2026-09-12/",
+  "outputs/code-review-worktree-2026-09-14/",
+  "outputs/fix-brief-2026-09-14/",
+  "outputs/fix-log-2026-09-12/",
+  "outputs/m7-closure-constraints-2026-09-18/",
+  "outputs/mimosa-triage-2026-09-13/",
+  "outputs/optimization-log-2026-09-12/",
+  "outputs/permission-guided-mode-2026-09-23/",
+  "outputs/replay-face-gate-2026-09-23/",
+  "outputs/verify-cause-denominator-2026-09-23/",
+];
 export const LEGACY_WITNESS_REF_REASON =
   "补不了的证人点名才登记（页已入库且工件确实拿不到）；只准调低，不再命中即报 stale";
 
@@ -410,13 +429,19 @@ export interface CredPage {
   refs: string[];
 }
 
-/** 凭证页＝标题含「凭证」的那几段；`key` 取「第 NNN 页」，比整条标题稳（改措辞不该让豁免失效）。 */
-export function credentialPages(text: string): CredPage[] {
+/** 凭证页＝标题含「凭证」的那几段；`key` 取「第 NNN 页」，比整条标题稳（改措辞不该让豁免失效）。
+ *  第 290 页补⑴：标题谓词做成参数——D-11 的取值域从「凭证页」换成**整本台账**，而段落的切法与抽法必须还是同一份
+ *  （规则 348：同一形状写第二遍，就是两个会各自漂的决策点；规则 345：分面宽度按判据选，这里判据变成
+ *  「台账任何一页点名的证人都要追得到」，所以宽度跟着换，实现不换）。 */
+export const CREDENTIAL_HEAD = (head: string): boolean => head.includes("凭证");
+export const ANY_PAGE_HEAD = (): boolean => true;
+
+export function ledgerPages(text: string, headFilter: (head: string) => boolean = CREDENTIAL_HEAD): CredPage[] {
   const lines = text.split("\n");
   const heads = lines.map((l, i) => [l, i] as const).filter(([l]) => /^### /u.test(l));
   const out: CredPage[] = [];
   heads.forEach(([head, start], n) => {
-    if (!head.includes("凭证")) return;
+    if (!headFilter(head)) return;
     const end = n + 1 < heads.length ? heads[n + 1]![1] : lines.length;
     const body = lines.slice(start, end).join("\n");
     /* 取料目录名里的日期是 `YYYY-MM-DD`，**不能把月份写死**：
@@ -434,6 +459,11 @@ export function credentialPages(text: string): CredPage[] {
     out.push({ key, title: head.replace(/^### /u, ""), dirs, numbers: [...numbers].sort(), shas, refs: ledgerWitnessRefs(body) });
   });
   return out;
+}
+
+/** D-9 的老取值域：只看凭证页（读数是终态，只有凭证页承诺逐字可回查）。 */
+export function credentialPages(text: string): CredPage[] {
+  return ledgerPages(text, CREDENTIAL_HEAD);
 }
 
 /** 回查端与抽取端共用**同一把谓词**（第 266 页，替换从前那支只按裸数位边界的 `hasNumber`）：
@@ -996,6 +1026,7 @@ export function runDocsCheck(): {
   let ledgerChecked = 0;
   let ledgerTracked: Set<string> | null = null;
   let credPages: CredPage[] = [];
+  let witnessPages: CredPage[] = [];
   const ledgerAbs = join(ROOT, LEDGER_FILE);
   if (existsSync(ledgerAbs)) {
     const ledgerText = readFileSync(ledgerAbs, "utf8");
@@ -1003,8 +1034,9 @@ export function runDocsCheck(): {
     findings.push(...face.findings);
     ledgerChecked = face.checked;
     if (face.skipped !== null) skipped.push(face.skipped);
-    // 凭证页只构造一次，D-9 与 D-11 吃同一份（第 284 页那条教训：构造器只能有一份，规则 345）。
+    // 凭证页只构造一次给 D-9；D-11 从第 290 页补⑴ 起吃**整本台账**（同一份 `ledgerPages`，只是标题谓词不同）。
     credPages = credentialPages(ledgerText);
+    witnessPages = ledgerPages(ledgerText, ANY_PAGE_HEAD);
     // D-10（第 279 页）：台账里的源码行号引用要**追得到东西**。取不到 HEAD 清单时报"未检"，
     // 不许拿空集合当判据（那会把每一条引用都读成死指针——假红的量足以淹掉真信号）。
     // 第 285 页：同一份清单也喂 D-11 ⇒ 这一笔**没有新增子进程**，门还是那一次 `git ls-tree`。
@@ -1026,8 +1058,9 @@ export function runDocsCheck(): {
   );
   findings.push(...cred.findings);
 
-  // D-11（第 285 页）：凭证页点名的 dated 证人必须追得到 HEAD——同一次 `git ls-tree`，与 D-10 共用取料面。
-  const witness = ledgerTracked === null ? null : checkWitnessPaths(credPages, ledgerTracked);
+  // D-11（第 285 页上线，第 290 页补⑴ 把取值域换成整本台账）：台账点名的 dated 证人必须追得到 HEAD——
+  // 同一次 `git ls-tree`，与 D-10 共用取料面，不新增子进程。
+  const witness = ledgerTracked === null ? null : checkWitnessPaths(witnessPages, ledgerTracked);
   if (witness !== null) findings.push(...witness.findings);
 
   const livePages: SourceFile[] = [];
@@ -1081,8 +1114,8 @@ if (invokedDirectly) {
     + `｜已登记不可回查 ${String(cred.registeredPages.length)} 页／${String(cred.registeredReadings)} 条`);
   // D-11 的三态（规则 239）：未检（取不到 HEAD 清单）／点名条数／红。红 0 与「压根没点名」也不同形。
   console.log(witness === null
-    ? "  证人点名面：未检（取不到 HEAD 跟踪清单），不等于通过"
-    : `  证人点名面：${String(witness.pages)} 页点名 ${String(witness.refs)} 条 dated 工件（红 ${String(witness.findings.length)}）`
+    ? "  证人点名面（整本台账）：未检（取不到 HEAD 跟踪清单），不等于通过"
+    : `  证人点名面（整本台账）：${String(witness.pages)} 页点名 ${String(witness.refs)} 条 dated 工件（红 ${String(witness.findings.length)}）`
       + `｜登记 ${String(LEGACY_WITNESS_REFS.length)} 条（帽，只准调低）`);
   if (waived > 0) console.log(`  ⚠️  存量豁免 ${String(waived)} 处（LEGACY_WAIVERS，只准调低；spec §8 迁移提交须整条删除）`);
   const summary = [...byRule].map(([r, n]) => `${r}=${String(n)}`).join(" ");

@@ -1,0 +1,39 @@
+# 登记位那 12 条：逐条证明「补档不可能」（第 290 页补⑴）
+
+命令（2026-10-01 07:56 UTC，主检出 `/Users/ze/Downloads/deepseek harness`，分支 `zcode`，HEAD `cfa91e1`）：
+
+    for d in <那 12 个目录名>; do
+      n=$(git log --all --oneline --diff-filter=A -- "outputs/$d/" | wc -l)   # 任何提交里**加过**它的次数
+      onp=$(git log --all --oneline -- "outputs/$d" | wc -l)                  # 目录形态也查一遍（老提交可能写成不带斜杠）
+      disk=$([ -e "outputs/$d" ] && echo yes || echo no)                      # 今天还在盘上吗
+    done
+
+逐条原始输出（`--all` ＝ 全部 ref 都算过，不只是当前分支）：
+
+    agent-landscape-gap-analysis-2026-09-18 adds_commits=0 any_commits=0 disk=no
+    agent-review-2026-09-15 adds_commits=0 any_commits=0 disk=no
+    code-review-report-2026-09-12 adds_commits=0 any_commits=0 disk=no
+    code-review-worktree-2026-09-14 adds_commits=0 any_commits=0 disk=no
+    fix-brief-2026-09-14 adds_commits=0 any_commits=0 disk=no
+    fix-log-2026-09-12 adds_commits=0 any_commits=0 disk=no
+    m7-closure-constraints-2026-09-18 adds_commits=0 any_commits=0 disk=no
+    mimosa-triage-2026-09-13 adds_commits=0 any_commits=0 disk=no
+    optimization-log-2026-09-12 adds_commits=0 any_commits=0 disk=no
+    permission-guided-mode-2026-09-23 adds_commits=0 any_commits=0 disk=no
+    replay-face-gate-2026-09-23 adds_commits=0 any_commits=0 disk=no
+    verify-cause-denominator-2026-09-23 adds_commits=0 any_commits=0 disk=no
+
+## 这一格证明了什么、没证明什么
+
+- **证明了**：这 12 条既不在盘上，也没在任何 ref 的任何提交里出现过 ⇒ `LEGACY_WITNESS_REFS` 里那句「没有补档的可能」不是印象，是现读。
+  所以「补档」这条路对它们不成立，登记是唯一诚实的处置（裁决 A 里「不可追回的那部分」＝ 这 12 条）。
+- **没证明**：它们曾经存在过什么内容。台账页里的引文是唯一残存的描述——这也是这类老账的真实形态，
+  登记位把它标成「不可回查」而不是「不存在」。
+- 反向的哨兵：`tests/docs-check.test.ts` 里那条 `LEGACY_WITNESS_REFS.length).toBe(12)` 是**恰好**不是下限，
+  所以将来任何一份原件被找回并入库，这一格会红着要求把它从表里删掉（帽只准调低，规则 241/248）。
+
+## 与「可补档的那部分」的分界
+
+同一趟普查（修 `-z` 之后，见 `outputs/witness-wide-face-census-289-2026-10-01/classify-current.log` 追加的那一段）把追不回的分成两半：
+12 条无盘（本文件）＋ 3 条在盘未入库（挂在 `outputs/impact-accuracy-probe-2026-09-29/`、`outputs/landing-1c40df7-2026-09-30/`、
+`outputs/scratch-scope-census-2026-09-30/` 三个目录下，按**页点名的文件粒度**是 6 支，随本笔入库）。

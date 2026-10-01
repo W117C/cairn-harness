@@ -10267,7 +10267,7 @@ const MUTATIONS = [
     test: "tests/docs-check.test.ts",
     desc: "把「取不到 HEAD 清单 ⇒ 未检」改成「拿空集合当判据」⇒ 三态被抹平：门会喊 73 条红（假红淹真信号），" +
       "而下一次真取不到清单时它又可能被人顺手改成 `?? new Set()` 的反方向——接线形状要有钉子",
-    apply: (s) => s.replace("const witness = ledgerTracked === null ? null : checkWitnessPaths(credPages, ledgerTracked);", "const witness = checkWitnessPaths(credPages, ledgerTracked ?? new Set<string>());"),
+    apply: (s) => s.replace("const witness = ledgerTracked === null ? null : checkWitnessPaths(witnessPages, ledgerTracked);", "const witness = checkWitnessPaths(witnessPages, ledgerTracked ?? new Set<string>());"),
     expectFail: "接线：门真的调这条判据",
   },
 
@@ -10431,6 +10431,15 @@ const MUTATIONS = [
       "这条只能靠真机哨兵抓：合成输入里的文件名一律 ASCII，怎么改都是绿的",
     apply: (s) => s.replace('"ls-tree", "-r", "--name-only", "-z", "HEAD"', '"ls-tree", "-r", "--name-only", "HEAD"'),
     expectFail: "哨兵：盘上真有、HEAD 真有 ⇒ 清单里必须真有（这条不可能靠空面变绿）",
+  },
+  {
+    id: "witness-face-narrowed-back-to-credential-pages",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "把 D-11 的取值域从整本台账退回凭证页 ⇒ 判卷自己那两条（整本 2 条红／凭证面 1 条红）与门里那条分母等式当场红；" +
+      "普通页点名的证人从此又没人守——这正是第 289 页宽分面那 15 条老账的来源",
+    apply: (s) => s.replace("witnessPages = ledgerPages(ledgerText, ANY_PAGE_HEAD);", "witnessPages = credentialPages(ledgerText);"),
+    expectFail: "接线：门真的调这条判据",
   },
 
   /* ── 第 273 页：把「实测 <1.5s 全进」这条线接成判据（取料＝入库的那趟全表日志）。两支各钉一半。 ── */

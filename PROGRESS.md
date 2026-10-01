@@ -9589,3 +9589,40 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 5. **锚点 ＋1＝1220→1221**：`head-face-ls-tree-without-z-escapes-cjk-paths` 摘掉那个 `-z`。落库前 `--check-needles` 现读 `针脚体检：1221 条 —— 阻断 1，待复认 0，未覆盖 0，逐行式 5，未入库面 0（被测面 + 判卷两面），钉在飞文本 1，killer 指针失效 0`、`改法语法体检：1221 条改法全部产出合法源文件 ✅`、`NEEDLES_EXIT=1`——这一格的红只允许是「钉在飞文本」（针脚钉在本笔未入库的实现上），落库后在干净树归零（第 287 页同一形状已验过一次）。`typecheck 0 条报错`、`docs-check 受检项全绿（红 0／登记 0 条帽）`。
 6. **一处刻意未证（不是漏）**：`mutate-verify.mjs` 那一处 `-z` 我**没配锚点**。原因是配不出来：它喂的 `untrackedAnchorPaths` 判卷吃的是合成清单，摘掉 `-z` 后没有任何用例会红（本仓 `src／scripts／tests` 的文件名全 ASCII，唯一会带中文名的是 `outputs/`，而那一格不吃 `outputs/`）。所以这里的状态是「改对了形状、没有观测者」，反转条件是**当锚点表出现非 ASCII 路径的 `src`**（例如给某支 `outputs/` 下的探针配锚点）——那时这条必须有判卷＋锚点，现在就先把这一句留在页里，别等出事再补（第 236 页「两头断」那一族的前置形状）。
 7. **A 案剩下的两步按更正后的数走**（下一条补⑴ 落）：真正要补档的是 3 条（`outputs/impact-accuracy-probe-2026-09-29/` 整目录、`outputs/landing-1c40df7-2026-09-30/head-cert-summary.txt`），不是 50 份；登记存量给那 12 条**目录整目录已不在盘上**的老账（09-12～09-23）；扩面＝把 D-11 的取值域从凭证页换成整本台账，同一份抽法（`ledgerWitnessRefs`）与同一份清单（`trackedFilesAtHead`），不新增子进程。
+
+
+### 2026-10-01 · 第 290 页补⑴ · 裁决 A 三步一次落完：D-11 的取值域从「凭证页」换成**整本台账**（今天现读 208 页点名 245 条／红 6 全由本笔未入库造成），登记位 0→**12**（帽只准调低、且配「恰好 12」的反向哨兵），补档 6 支文件 203 行／15,866 字节入库——顺带更正第 290 页第 7 项那句「3 条」只点名了两个对象
+
+取料面：`outputs/witness-face-widen-290b-2026-10-01/`（本笔新串），另加第 290 页那串里落盘后一直没入库的 `outputs/head-face-cjk-290-2026-10-01/needles-check-2.log`（落库前的针脚体检）。
+
+1. **裁决与授权范围**：用户在第 289 页摆的三个选项里选 **A（补档＋登记＋扩面）**，并明文批准「把别的工作会话留在盘上的在飞工件搬进 HEAD」这一个动作——那是 A 里唯一我不能自批的前半。本笔就是那三步一次落完；除这 6 支之外**没有**搬别人的任何其他文件（逐支点名与重量见 `secret-scan-6-files.txt` 末尾的 `wc` 行）。
+
+2. **扩面怎么做的（关键：不写第二份抽法）**：把 `credentialPages()` 里那个「标题含凭证」的谓词做成参数 ⇒ `ledgerPages(text, headFilter)`（缺省仍是凭证谓词），`credentialPages` 退化成 `ledgerPages(text, CREDENTIAL_HEAD)` 的薄包装，`ANY_PAGE_HEAD = () => true` 才是 D-11 现在吃的取值域。段落切法、取料目录名抽取、`key` 取「第 NNN 页」这些一律共用同一份。扩面这一刻是最容易违反第 285 页那条教训（构造器只能有一份，规则 345/348）的时候：如果新写一个「整本台账」的解析器，它和凭证面那个会各自漂，于是「宽面 ⊇ 窄面」这件事从此没人能判。
+
+3. **门自己的三态读数（逐字，工作树口径）**：`证人点名面（整本台账）：208 页点名 245 条 dated 工件（红 6）｜登记 12 条（帽，只准调低）`、`docs-check: ❌ 6 项违规 D-11=6（预算常量在本文件 DOC_BUDGETS，只准下调）`、`DOCS_CHECK_EXIT=1`。⚠️ 那个 **1 是本笔未入库造成的，不是新缺陷**：6 条红的原文逐字在 `docs-check-working-tree.log`，按**点名对象**折叠只有 3 个——`outputs/impact-accuracy-probe-2026-09-29/`（第 198／217／290 页点名，目录形）、`outputs/scratch-scope-census-2026-09-30/readings.md`（第 258 页）、`outputs/landing-1c40df7-2026-09-30/head-cert-summary.txt`（第 269／290 页），三支补档的对象全随本笔进 HEAD ⇒ 干净树上的期望是红 0。这一句在本笔**不构成读数**，由凭证那一笔的复跑来证。
+
+4. **更正第 290 页第 7 项**：那一行写「真正要补档的是 3 条」，括号里却只点了两个对象——漏的是 `outputs/scratch-scope-census-2026-09-30/readings.md`（第 258 页点名）。数目对、点名不全；按台账只追加的规矩，这里补这一句而不涂改那一页。
+
+5. **登记位 0→12 的诚实性证人**：`legacy-12-never-committed.log` 把那 12 个目录逐条跑 `git log --all --diff-filter=A`（**全部 ref**，不只当前分支）与不带尾斜杠的目录形态各一遍，再加盘上是否存在：12 条全是 `adds_commits=0 any_commits=0 disk=no`。⇒ 代码注释里那句「没有任何补档的可能」是现读不是印象，所以「登记」而不是「补档」是这一半唯一诚实的处置。
+   **帽涨法要交代**：`LEGACY_WITNESS_REFS` 从 `[]` 涨到 12 条，不是"把帽调高让门绿"——它守的是「这些页点名过、原件永远追不回」这个事实。配的反向哨兵是判卷里那条**恰好 12**的等式（`expect(LEGACY_WITNESS_REFS.length).toBe(12)`，不是下限）：将来任何一份原件被找回并入库，这一格会红着要求把它从表里删掉（规则 241 写满为止／248 恰好一条）。
+
+6. **补档的真实重量按更正后的数交**：6 支 `203 行／15,866 字节`（逐支 `wc` 在 `secret-scan-6-files.txt`）；密钥形状扫描两半都要——逐支计数 `TOTAL_HITS=0` **＋** 内容级 grep `GREP_EXIT=1`（一片 0 必须先证明尺在转，规则 245 那一族）。⚠️ 对照：第 289 页那句「50 份／318,849 字节」是修 `-z` **之前**的假量，本笔真实重量约它是 1/20。
+
+7. **窄分面今天的数没单独印，所以交给守恒**：门里只留宽分面那一格（`凭证对账面` 那行是 D-9 的读数，不是证人分母），所以「扩面没有把窄面丢掉」不靠我口头保证，靠判卷那条守恒：`face.witness!.refs >= credRefs.size`，其中 `credRefs` 由 `credentialPages(PROGRESS.md)` 当场现算，并配 `credRefs.size > 0` 防它靠空面成立（规则 351 第 2 条：守恒不等于力量，两侧今天是否为 0 要自报）。真仓那趟今天 `refs` ＝ 245；判卷里那条 `≥200` 是**下限不是等式**——台账每天涨，写等式就把判卷变成日抛件。
+
+8. **锚点 ＋1＝1221→1222，并让第 285 页那支针脚跟着实现走**：新增 `witness-face-narrowed-back-to-credential-pages`（把 `ANY_PAGE_HEAD` 摘掉 ⇒ 取值域退回凭证页）；同时把第 285 页的 `evidence-witness-unavailable-reads-as-empty-face` 的针脚从 `checkWitnessPaths(credPages, ledgerTracked)` 改指 `witnessPages`——变量名是本笔改的，针脚不改就等于钉在一份已经不存在的写法上（规则 217：尺与针脚同笔）。两支的 `expectFail` 都指「接线：门真的调这条判据」那一格，而该用例今天钉**两行**：退面打红第二行（`witnessPages = ledgerPages(...)` 失配），抹平三态打红第一行（`checkWitnessPaths(witnessPages, ...)` 失配）——两支突变各咬不同的一行，不是同一件事数两遍。
+   落库前的针脚体检逐字（`needles-check-2.log`，2026-10-01 06:13 UTC）：`针脚体检：1222 条 —— 阻断 2，待复认 0，未覆盖 0，逐行式 5，未入库面 0（被测面 + 判卷两面），钉在飞文本 2，killer 指针失效 0（其中 HEAD 侧 0）`。两条阻断的原文同一句：`盘上判得通过，而 HEAD 那份里针脚 0 处 ⇒ 这条锚点钉的是**在飞文本**`——这是允许的形态（除钉在飞文本外其余维度必须 0），落库后在干净树归零（第 287 页同形状已验过一次）。
+   **这一份日志没有退出码行**：产生它的那条命令在下一条尺之前被打断，只有 stdout 落盘。我不给它补一个记忆里的 `NEEDLES_EXIT`（用户记忆：退出码也算数，而接了管道的 `$?` 是 `tail` 的）。带退出码的那一把留到干净树重跑，进凭证。
+
+9. **撞窗声明（规则 354）**：本笔自检期间主树先有隔壁的全量判卷（pid 15633，`vitest.mjs run --config tests/vitest.config.ts`，07:53–07:58 UTC），隔壁的整张变异表也在同一时段继续（pid 92064／92122，`--in-worktree=.worktrees/gate-mutate-verify`，07:46 起、到 12:40 仍在跑）。⇒ 我在主树**没有**起任何会 spawn vitest 的尺，也没有起 `--check-needles`（那一把会吃到隔壁树里的突变体，是借来的红）；本笔三把全是静态尺（起的子进程只有 `tsc` 与 `git ls-tree`），且先 grep 过 `scripts/typecheck.ts` 里没有任何 timeout/budget 常量，才允许它的退出码在负载下被采信。
+   代价写在纸上：**读数不能当成本比**——`evidence-typecheck` 那 `8094ms` 是带负载读数，不许与第 287 页那把同分母比（规则 245/354）。
+   静态尺读数逐字：`typecheck: tsc --noEmit 通过（0 条报错）✅`／`TYPECHECK_EXIT=0`；`✅ evidence-typecheck：证据面危险码 12 条／帽 12 条（HEAD 口径｜在飞未入库 0 条／0 个文件（只点名，不计我的账）；登记 8 个文件；全量报错 45 条）（8094ms｜解析 45/45 条）`／`EVIDENCE_CHECK_EXIT=0`——帽一格未动就是这一格的证据（规则 353：本笔新写的证人全是 `.log`/`.txt`，没有新探针，所以它本来就该不动）。
+
+10. **判卷 ＋1＝92→93**：新用例「取值域换成整本台账」给的是**分面两侧的分辨力**：合成台账两页（普通页第 950 页／凭证页第 951 页），空清单下宽面红 2、窄面红 1；再把普通页那份证人补进清单 ⇒ 宽面只剩 1 条红、且点名的正是 951——方向相反那一侧也红一次（规则 254 那一族的「两头钉」）。取值域本身还钉在门里的源码形状上（`^ {4}witnessPages = ledgerPages(ledgerText, ANY_PAGE_HEAD);$`），不只靠行为判卷。
+    改前的证人是 `outputs/head-face-cjk-290-2026-10-01/vitest-docs-check-1.log`：`Tests 92 passed (92)`、`Duration 1.85s (tests 93%, transform 5%, import 1%)`——那是第 290 页那串的终态，不含本笔新用例。本笔改后的 `93 passed` 要在干净树上跑，进凭证；我在这一页**不**声称它已经绿。
+
+11. **刻意不做（免得被下游读成已做）**：⑴ 不给 `credentialPages` 那层薄包装单配锚点——它没有独立决策，摘掉它只会把 D-9 的取料面变空，而那一格已有判卷；⑵ 不新增子进程（门里仍是第 285 页那**一次** `git ls-tree`，宽窄两面吃同一份清单）；⑶ 不动 `SCOPE_CEILINGS`、不动隔壁的 `.worktrees/gate-mutate-verify`、不回收本会话任何 worktree（等点头）；⑷ 本笔不跑 head-cert——认证要在干净树，而隔壁变异窗里跑全量判卷会撞共享 `/tmp` 状态（第 287 页那次的教训是假红不是假绿，但归因要花一整把尺）。凭证紧跟本笔另开一笔。
+
+12. **本笔入库清单（逐个点名，无目录级 add）**：实现簇 `scripts/docs-check.ts`＋`tests/docs-check.test.ts`＋`scripts/mutate-verify.mjs`＋`PROGRESS.md`；补档 6 支 `outputs/impact-accuracy-probe-2026-09-29/impact-accuracy.mts`、`.../impact-edges.mts`、`.../impact-fixtures.mts`、`.../readings-2026-09-29.md`、`outputs/landing-1c40df7-2026-09-30/head-cert-summary.txt`、`outputs/scratch-scope-census-2026-09-30/readings.md`；证人 6 支 `outputs/witness-face-widen-290b-2026-10-01/legacy-12-never-committed.log`、`.../docs-check-working-tree.log`、`.../typecheck-290b.log`、`.../evidence-check-290b.log`、`.../secret-scan-6-files.txt`、`outputs/head-face-cjk-290-2026-10-01/needles-check-2.log`。共 16 支。
+   补一行全名（同笔追加，不涂改上面那段）：上面用 `.../` 省略写法点的证人，取料面解析不到——省略号不是路径，这条我自己踩的形状与第 236 页那一族同源。全名逐支：`outputs/witness-face-widen-290b-2026-10-01/typecheck-290b.log`、`outputs/witness-face-widen-290b-2026-10-01/evidence-check-290b.log`、`outputs/witness-face-widen-290b-2026-10-01/docs-check-after-page.log`（本页追加后重跑的那一把，读数是 `209 页点名 250 条（红 13）`——比改页前多 7 条红，全部由本页自己点名的证人构成，提交即归零）。
+   计数更正（同笔追加，不涂改上面那段）：加上面那行新点的 `outputs/witness-face-widen-290b-2026-10-01/docs-check-after-page.log`，本笔入库实际 **17 支**，上面那句「共 16 支」作废——这一寸之差正是「先写结论、后加证人」的形状，所以按老规矩往下一行补，不回头改。

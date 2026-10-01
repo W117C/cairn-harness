@@ -1,0 +1,14 @@
+import { buildImpact } from "/Users/ze/Downloads/deepseek harness/.worktrees/verify-dd3af4e/src/agent/impact/index";
+const ROOT = "/Users/ze/Downloads/deepseek harness/.worktrees/verify-dd3af4e";
+const g = await buildImpact({ workspace: ROOT, cacheDir: "/tmp/impact-probe-cache", maxFiles: 5000 });
+const edges = g.edges as unknown;
+const kind = edges instanceof Map ? "Map" : Array.isArray(edges) ? "Array" : typeof edges;
+const size = kind === "Map" ? (edges as Map<unknown, unknown>).size : Array.isArray(edges) ? edges.length : -1;
+console.log("edges 类型=" + kind + "  条目=" + String(size) + "  parsed=" + String(g.parsed) + "  fromTagsCache=" + String(g.fromTagsCache));
+const sample = kind === "Map" ? [...(edges as Map<unknown, unknown>).entries()].slice(0, 2) : (Array.isArray(edges) ? edges.slice(0, 2) : []);
+for (const s of sample) console.log("  样本: " + JSON.stringify(s).slice(0, 240));
+const dump = kind === "Map" ? [...(edges as Map<unknown, unknown>).entries()].map(([k, v]) => JSON.stringify([k, v])) : (Array.isArray(edges) ? edges.map((e) => JSON.stringify(e)) : []);
+console.log("出现 permissions/index 的边=" + String(dump.filter((s) => s.includes("permissions/index")).length));
+console.log("出现 evaluate 的边=" + String(dump.filter((s) => s.includes("evaluate")).length));
+const ev = dump.filter((s) => s.includes("evaluate")).slice(0, 3);
+for (const s of ev) console.log("  evaluate 样本: " + s.slice(0, 240));

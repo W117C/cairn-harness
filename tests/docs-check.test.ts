@@ -31,6 +31,8 @@ import {
   LEGACY_WAIVERS,
   LEGACY_WITNESS_REFS,
   ledgerWitnessRefs,
+  ledgerPages,
+  ANY_PAGE_HEAD,
   trackedFilesAtHead,
   STATE_FILE,
   waive,
@@ -919,20 +921,47 @@ describe("D-11 证人点名面：文件与目录两半都要追得到，登记�
   it("真仓那一趟：分母非零、红 0，且「未检」与「红 0」不同形（这条走的是门自己的接线）", () => {
     const face = runDocsCheck();
     expect(face.witness, "未检（取不到 HEAD 跟踪清单）⇒ 这一趟不构成读数").not.toBeNull();
-    expect(face.witness!.refs, "分母为 0 的绿不算绿").toBeGreaterThanOrEqual(50);
+    expect(face.witness!.refs, "分母为 0 的绿不算绿").toBeGreaterThanOrEqual(200);
     expect(face.witness!.pages).toBeGreaterThan(0);
     expect(hit(face.findings, "D-11").map((x) => x.detail)).toEqual([]);
-    // 上线时的存量是**现读**的 2 条，修法取补档而不是登记 ⇒ 登记位交空（证人 outputs/witness-path-census-285-2026-10-01/）
-    expect(LEGACY_WITNESS_REFS.length).toBe(0);
+    // 第 290 页补⑴：取值域换成整本台账，登记位从 0 涨到**现读的 12 条**（整目录已不在盘上的老账，09-12～09-23）。
+    // 这条是**恰好 12 的等式**，不是下限：多一条要交代、少一条（原件被找回并入库）就必须删（规则 241/248）。
+    expect(LEGACY_WITNESS_REFS.length).toBe(12);
+    // 守恒那一半（规则 351）：整本台账点名的条数必须 ≥ 凭证页自己点名的条数——分面变窄时这条会响
+    const credRefs = new Set(credentialPages(readFileSync(join(fileURLToPath(new URL(".", import.meta.url)), "..", "PROGRESS.md"), "utf8")).flatMap((p) => p.refs));
+    expect(face.witness!.refs).toBeGreaterThanOrEqual(credRefs.size);
+    expect(credRefs.size).toBeGreaterThan(0);
   });
 
   it("接线：门真的调这条判据；「取不到清单」走未检而不是拿空集合当判据", () => {
     const src = readFileSync(join(fileURLToPath(new URL(".", import.meta.url)), "..", "scripts", "docs-check.ts"), "utf8");
-    expect(/^ {2}const witness = ledgerTracked === null \? null : checkWitnessPaths\(credPages, ledgerTracked\);$/mu.test(src),
+    expect(/^ {2}const witness = ledgerTracked === null \? null : checkWitnessPaths\(witnessPages, ledgerTracked\);$/mu.test(src),
       "判据写了没接进门 ⇒ 只有单测在跑").toBe(true);
     expect(/^ {4}ledgerTracked = trackedFilesAtHead\(\);$/mu.test(src)).toBe(true);
-    // 凭证页只构造一次（D-9 与 D-11 吃同一份）：老写法在调用点里现造，如今那一行该没了
+    // 取值域那一半也必须钉在门里：D-11 吃 `witnessPages`（整本台账），不是 `credPages`
+    expect(/^ {4}witnessPages = ledgerPages\(ledgerText, ANY_PAGE_HEAD\);$/mu.test(src)).toBe(true);
+    // 凭证页只构造一次（D-9 吃它）：老写法在调用点里现造，如今那一行该没了
     expect(src.includes("existsSync(ledgerAbs) ? credentialPages(readFileSync(ledgerAbs, \"utf8\")) : []")).toBe(false);
+  });
+
+  it("取值域换成整本台账：非凭证页点名的证人也要红一条，且 `ANY_PAGE_HEAD` 与凭证面是同一份抽法", () => {
+    const text = [
+      "### 2026-09-30 · 第 950 页 · 普通页：原件见 outputs/plain-2026-09-30/witness.log",
+      "",
+      "### 2026-09-30 · 第 951 页 凭证：原件见 outputs/cred-2026-09-30/witness.log",
+      "",
+    ].join("\n");
+    const all = ledgerPages(text, ANY_PAGE_HEAD);
+    expect(all.map((p) => p.key)).toEqual(["第 950 页", "第 951 页"]);
+    const credOnly = credentialPages(text);
+    expect(credOnly.map((p) => p.key)).toEqual(["第 951 页"]);
+    // 两页的证人都不在清单里 ⇒ 整本台账报 2 条，凭证面只报 1 条（这一格从前是漏的：普通页引的证人没人守）
+    expect(checkWitnessPaths(all, new Set<string>(), []).findings.length).toBe(2);
+    expect(checkWitnessPaths(credOnly, new Set<string>(), []).findings.length).toBe(1);
+    // 反向一侧：把普通页那份证人补进清单 ⇒ 只剩凭证页那条红（证明 2 条不是把同一件事数了两遍）
+    const backed = new Set<string>(["outputs/plain-2026-09-30/witness.log"]);
+    expect(checkWitnessPaths(all, backed, []).findings.map((f) => f.detail).join()).toContain("第 951 页");
+    expect(checkWitnessPaths(all, backed, []).findings.length).toBe(1);
   });
 });
 

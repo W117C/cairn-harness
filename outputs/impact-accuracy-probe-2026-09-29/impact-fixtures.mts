@@ -1,0 +1,15 @@
+import { buildImpact } from "/Users/ze/Downloads/deepseek harness/.worktrees/verify-dd3af4e/src/agent/impact/index";
+const ROOT = "/Users/ze/Downloads/deepseek harness/.worktrees/verify-dd3af4e";
+const full = await buildImpact({ workspace: ROOT, cacheDir: "/tmp/impact-probe-cache", maxFiles: 5000 });
+const files = (full.files as string[]);
+const fix = files.filter((f) => f.startsWith("fixtures/"));
+const proj = files.filter((f) => !f.startsWith("fixtures/"));
+console.log("图内文件=" + String(files.length) + "  其中 fixtures/ 下的夹具仓库=" + String(fix.length) + "  真项目文件=" + String(proj.length));
+let fixEdges = 0;
+for (const e of full.edges as { from: string; to: string }[]) if (e.from.startsWith("fixtures/") || e.to.startsWith("fixtures/")) fixEdges += 1;
+console.log("边总数=" + String((full.edges as unknown[]).length) + "  触及 fixtures 的边=" + String(fixEdges));
+const capped = await buildImpact({ workspace: ROOT, cacheDir: "/tmp/impact-probe-cache" });
+const cf = capped.files as string[];
+console.log("默认帽(400) 图内：fixtures=" + String(cf.filter((f) => f.startsWith("fixtures/")).length) + "  真项目=" + String(cf.filter((f) => !f.startsWith("fixtures/")).length));
+console.log("⇒ 默认帽下被夹具挤掉的项目文件数=" + String(proj.length - cf.filter((f) => !f.startsWith("fixtures/")).length));
+console.log("fixtures 样本: " + fix.slice(0, 4).join(", "));
