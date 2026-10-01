@@ -1,0 +1,2 @@
+typecheck: tsc --noEmit 通过（0 条报错）✅
+TC_EXIT=0

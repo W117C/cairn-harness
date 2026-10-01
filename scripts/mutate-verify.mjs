@@ -10138,6 +10138,48 @@ const MUTATIONS = [
     expectFail: "前缀与 tsc 的 include 同源",
   },
 
+  /* ── 第 282 页：`ScanReport` 的观测者普查（`outputs/observer-census-282-2026-10-01/census2.log`）读到
+   *    `testFiles` 印在报告第一行、判卷里却零次提及——收料面的**分母**没有证人。补的那条用例用另一把原语
+   *    （判卷自己 `git ls-files -- tests` 再挑 `.test.ts`）对账。三支锚点各钉一种坏法，并**标明死在哪条等式上**：
+   *    前两支掉在"三者之和＝清单全量"，第三支特意构造给第二条等式（自排除数量）当证人——
+   *    否则第二条等式就是一格"两侧同真"的恒真断言（第 272 页第 7 项那条）。 ── */
+  {
+    id: "prose-scan-self-exclusion-filter-dropped",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "收料面把「自己的判卷文件」排除掉的那一支过滤器被焊成恒真 ⇒ 本尺开始量自己写进去的字符串" +
+      "（第 105 页实测就是这么多算 3 条顶包候选的），而 `selfExcluded` 那一格照旧非空、看着一切正常。" +
+      "掉在第一条等式：多收一支自己的判卷文件，三者之和就比独立枚举大 1",
+    apply: (s) => s.replace("allTests.filter((p) => !SELF_EXCLUDED_TESTS.includes(p))", "allTests.filter(() => true)"),
+    expectFail: "收料＋自排除＋盘上缺失＝清单全量",
+  },
+  {
+    id: "prose-scan-test-face-extension-widened",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "tests 面的扩展名从 `.test.ts` 写成 `.ts` ⇒ 4 支夹具/辅助文件混进收料面" +
+      "（现读 `git ls-files -- tests` 里非 `.test.ts` 的 `.ts` 有 4 个），报告第一行那句「扫 N 个 test 文件」的 N 当场虚高。" +
+      "判卷那侧按**声明的形状**（`.test.ts`）独立枚举，所以这条差值只能由等式抓到——从前它谁也不是",
+    apply: (s) => s.replace(
+      'const allTests = trackedFiles(["tests"], [".test.ts"], root);',
+      'const allTests = trackedFiles(["tests"], [".ts"], root);',
+    ),
+    expectFail: "收料＋自排除＋盘上缺失＝清单全量",
+  },
+  {
+    id: "prose-scan-self-excluded-list-reported-empty",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "`selfExcluded` 那格被交回空数组（**面没变、只是不再点名**了）⇒ 排除面从『读数』退化成『没有』。" +
+      "两条等式都会红：第一条因为『少报的那一支其实没进分母』、第二条就是量这个的。" +
+      "留这条锚点是为了让第二等式不当恒真证人（第 272 页第 7 项：两侧同真的配对断言买不了锚点）",
+    apply: (s) => s.replace(
+      "const selfExcluded = allTests.filter((p) => SELF_EXCLUDED_TESTS.includes(p));",
+      "const selfExcluded: string[] = [];",
+    ),
+    expectFail: "自排除名单要数得着",
+  },
+
   /* ── 第 274 页：把 `scripts/prose-needle-scan.ts` 的帽那一族补齐（第 272 页现读：这支 1100 行的尺此前整支零锚点，
    *    本族四支各钉一种坏法：比较符、加法、按树取帽、把出声那一支焊死）。
    *    这四支都能买，正因为它们的判卷喂的是**合成输入**（第 272 页第 7 项写的那条：clean 树上两侧同为 0 的配对断言买不了锚点）。 ── */

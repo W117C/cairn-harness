@@ -698,6 +698,23 @@ describe("真仓扫：这把尺自己不许空载", () => {
     expect(r.sourceFiles).toBeGreaterThan(50);
   });
 
+  /* 第 282 页：`testFiles` 这个数印在报告第一行（`扫 N 个 test 文件`），而第 282 页的观测者普查读到的
+     是**判卷里零次提及**——收料面的分母此前没有证人。这里不写"非空就行"，写两条等式，
+     左边用**另一把原语**（判卷自己调 `git ls-files`，不借尺的 `trackedFiles`）枚举。
+     为什么要两条：只把"排除过滤器"焊死，第一条照样成立（两边一起涨），第二条才红；
+     只把"扩展名写宽"，第二条可能仍成立而第一条红——两种坏法各掉在不同那条上。 */
+  it("取料面的分母与 `git ls-files` 独立枚举对账：收料＋自排除＋盘上缺失＝清单全量，且自排除名单要数得着", () => {
+    const listed = execFileSync("git", ["ls-files", "--", "tests"], { cwd: root, encoding: "utf8" })
+      .split("\n").filter((l) => l.endsWith(".test.ts"));
+    const missingTests = r.missingOnDisk.filter((p) => listed.includes(p)).length;
+    expect(r.testFiles + r.selfExcluded.length + missingTests, "三者之和 ≠ 独立枚举 ⇒ 面漂了（少读、多读或静默跳过）").toBe(listed.length);
+    expect([...r.selfExcluded].sort(), "自排除点名的名单与那份常量对不上（光看数量不够，要看是哪几支）")
+      .toEqual(SELF_EXCLUDED_TESTS.filter((p) => listed.includes(p)).sort());
+    // 反向证人：等式在两侧同为 0 时会恒真，所以这里配一条"面非空"的下界（本仓 259 支 test 文件，现读）。
+    expect(listed.length, "独立枚举读到 0 支 ⇒ 这条用例自己就是空的").toBeGreaterThan(50);
+    expect(r.testFiles).toBeGreaterThan(50);
+  });
+
   it("报告那行「树＝」必须真是这棵树的形状（换一把原语互检接线）", () => {
     // 纯函数用例只钉得住谓词，钉不住"接线读的是哪个路径"：`src/renderer` 写成 `src/renderers`
     // 时谓词依旧正确，只是恒假 ⇒ 帽永远取窄的那行，HEAD 验跑红在别人的账上（第 108 页那 4 格就是这个形状）。

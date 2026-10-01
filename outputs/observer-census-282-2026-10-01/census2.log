@@ -1,0 +1,10 @@
+字段 30 个｜本尺锚点条目 13 支（全表 934 支解析出搜索串）
+  testFiles｜判卷 0｜印出 true｜锚点搜索串 0
+  inFlightStale｜判卷 1｜印出 true｜锚点搜索串 0
+  proseHeldBack｜判卷 1｜印出 true｜锚点搜索串 0
+  selfExcluded｜判卷 1｜印出 true｜锚点搜索串 1
+  sourceFiles｜判卷 1｜印出 true｜锚点搜索串 0
+  untrackedListUnavailable｜判卷 1｜印出 true｜锚点搜索串 0
+汇总：判卷零次 1 个｜只判过一次 5 个｜其中"印出来却没人判" 1 个
+哨兵：multiCopy 判卷 15 次（该 ≥5）⇒ 连接键可用
+PROBE_EXIT=0
