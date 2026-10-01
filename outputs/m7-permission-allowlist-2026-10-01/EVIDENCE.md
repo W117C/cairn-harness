@@ -156,29 +156,52 @@ mcp__ 豁免生效: true
 `tool-surface-parity.test.ts` +2 条（三面对账扩成四面 + 分母自证）。
 逐文件实测增量 9 + 1 + 1 = **+11**，与套件读数吻合。
 
-### 权限相关门禁（`gates.ts --only=`，跑在 HEAD 上）
+### 门禁全表（31 道，`scripts/gates.ts` 清单即事实源）
 
-| 门 | 退出码 | |
+**绿 26 ／ 红 5**，逐道退出码都实测过：
+
+| 结果 | 门 | 退出码 |
 |---|---|---|
-| `autonomy-check` | 0 | ✅ |
-| `security-check` | 0 | ✅ 43 ✅ / 0 ❌ |
-| `tools-check` | 0 | ✅ |
-| `no-progress-check` | 0 | ✅ 语料 sha256 逐字一致 |
-| `gate-check` | **1** | ❌ **非本轮引入**，见下 |
+| ✅ | `typecheck` `test` `e2e` `sandbox:check` `fork-check` `autonomy-check` `docs-check` `compaction-check` `tools-check` `map-check` `prune-check` `provider:check` `memory-check` `plugins-check` `security-check` `gym-check` `routing-check` `supervisor-check` `model-surface-check` `prefix-churn-check` `prompt-surface-check` `replay-determinism-check` `no-progress-check` `cost-per-progress-check` `head-import-check` `evidence-typecheck-check` | 0 |
+| ❌ | `head-cert-check` | 1 |
+| ❌ | `gate-check` | 1 |
+| ❌ | `mutate-needles-check` | 1 |
+| ❌ | `mutate-verify` | **124（超时，非内容红）** |
+| ❌ | `mutate-needles-check`（已列） | — |
 
-**`gate-check` 的红不是我的，也不是新长出来的**（归因照贴，不写成"全绿"）：
-唯一失败断言是 H7「冻结表与判卷区目录双向一致」，
-报 `fixtures/impact/accuracy-repo/*` 十个文件 `onDiskNotInTable`。
+**五道红逐条归因，没有一条是本轮引入**（证明方式写在括号里，不是推断）：
 
-- 我的提交**零**触及 `src/frozen.ts` / `scripts/frozen-sha256.json` / `fixtures/`：
-  `git show --stat HEAD -- src/frozen.ts scripts/frozen-sha256.json fixtures/` 输出为空。
-- 那十个文件是**已跟踪**的（`git ls-files` = 11 个，磁盘 11 个），由 **`1748ca7`** 引入。
-- 父提交 `5e0c859` 的提交信息**自己就记着这道门红**，并归因给同一笔：
-  「红 2 道…`gate-check`（H7 与 `fixtures/impact/accuracy-repo`，任务 #9，属 `1748ca7`）」。
+1. **`gate-check`** — H7「冻结表与判卷区目录双向一致」报 `fixtures/impact/accuracy-repo/*`
+   十个文件 `onDiskNotInTable`。
+   （我的提交零触及 `src/frozen.ts` / `scripts/frozen-sha256.json` / `fixtures/`：
+   `git show --stat HEAD -- src/frozen.ts scripts/frozen-sha256.json fixtures/` 输出为空；
+   那十个文件由 **`1748ca7`** 引入；父提交 `5e0c859` 的提交信息**自己就记着这道门红**并归因给同一笔。）
 
-⇒ 修它要往 `src/frozen.ts` 的 areas 里登记新判卷目录，属路线图 §5.1 划给**集成 owner** 的共享面，本轮不越界。
+2. **`mutate-needles-check`** — 4 条锚点针脚失效，分布在
+   `src/agent/orchestrator-config.ts`（×2）、`src/main/agent-runner.ts`、`src/providers/openai.ts`。
+   （门自己印出了「谁搬走的」：`4c10272` / `404249c` / `e76ed13`。实测这三笔
+   **都是父提交 `5e0c859` 的祖先**⇒ 都在我开工前就存在；我的提交文件列表里没有这四个文件。）
 
-未跑其余 26 道门（与权限无关）；全量 `pnpm gates` 未跑完 31 道，只跑了这 5 道。
+3. **`head-cert-check`** — 它内层重跑 22 道门，把上面 1、2 两条红**继承**进来；
+   它自己的读数是全绿：`Test Files 264 passed (264)｜Tests 3523 passed (3523)｜exit=0`，
+   `认证门面=22 道（跑到 22）｜❌ 红 2 道｜⚠️ 超预算 0`。⇒ **不是新红，是转述。**
+
+4. **`mutate-verify`** — `exit=124` = **超时**（预算 1200s，实测 1215021ms），
+   不是内容红：日志里所有可见断言都是 ✅，超时信息自己写着
+   「超时：SIGTERM 宽限 15s 内未退出，已整组 SIGKILL」。
+   全表 5 条 ❌ 全部是上面那批**同一批失效锚点**（`worker-budget-window-ignored` /
+   `worker-budget-clamp-removed` / `sandbox-mapping-copy-reintroduced` /
+   `openai-never-reads-finish-reason` / `selector-scan-fed-empty-table`），
+   **没有一条涉及我的文件**（`grep -cE "permissions|tool-registry|evaluate|checkPermission"` = 0）。
+
+5. ⚠️ **超时留下了一个突变（已清理）**：`SIGKILL` 那条消息明写「子进程未自还原」。
+   实测 `.worktrees/gate-mutate-verify/src/agent/prompt-surface.ts` 确实被改了一半
+   （`if (allModes.length === 0) throw …` 被摘成 `return []`——把一条 fail-closed 弄成静默空数组），
+   并留下 `.mutbak`。已用该 `.mutbak` 原样还原，复核 `git status` 为空、
+   全树零 `.mutbak`。**发生在门自己的临时工作树，不在本分支**；本分支全程 `git status` 干净。
+
+> 记忆里那条「`pnpm gates` 超时会留下 `src/` 里的突变」这次又应验了——
+> 与其相信日志里那句「未自还原」的说明，不如直接查那棵树有没有 `.mutbak`。
 
 ---
 
@@ -190,9 +213,11 @@ mcp__ 豁免生效: true
 2. **不改 `SIDE_EFFECT_TOOLS` 写向判定本身**（另有 4 个消费者 + 各自变异锚点）。
    `shell_ro` 刻意不计入写向是既有设计（靠执行期静态白名单），新表只答「认得吗」不答「危不危险」。
 3. **`L4-mcp-unannotated` 层读数不再单一**：见 §5.3 的代价，已知并接受。
-4. **`gate-check` 红的 H7 项**：见 §8 的归因——`fixtures/impact/accuracy-repo` 未登记进 `src/frozen.ts`
-   的 areas，属 `1748ca7` 遗留、集成 owner 面。本轮不越界修，也不写成"全绿"。
-5. **未跑 `pnpm mutate-verify`**：该门判 HEAD 而非工作树，须先提交才有效；本轮已提交（`dd52aaf`），
-   但它是全量变异面、且与另两道已知红缠在一起，未在本轮单独跑。
-   §6 的 6 个变异是手工做的、逐个记录了杀掉的断言数，等价覆盖但未进仓。
-6. **未跑全部 31 道门禁**：只跑了 5 道权限相关门（§8），加全量套件 + typecheck。
+4. **五道红的归属**：见 §8 的逐条归因——全部在我开工前就存在（`gate-check` H7 属 `1748ca7`；
+   `mutate-needles-check` 四条锚点属 `4c10272`/`404249c`/`e76ed13`；
+   `head-cert-check` 转述前两者；`mutate-verify` 是超时而非内容红）。
+   修它们要改 `src/frozen.ts` 的 areas 与四条变异锚点的落点，属路线图 §5.1 划给**集成 owner** 的共享面，
+   本轮不越界修，也不写成"全绿"。
+5. **`mutate-verify` 只跑到超时**：预算 1200s，本机 1215021ms 被 SIGKILL。
+   全表 5 条 ❌ 均为上述同批失效锚点，无一条属我的文件，但**这不等于它跑完了**——
+   它没有跑完这件事本身照贴。
