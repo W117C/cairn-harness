@@ -1,0 +1,52 @@
+{
+  "headTrackedFiles": 1761,
+  "datedRefsDistinct": 217,
+  "fileRefs": 113,
+  "dirRefs": 104,
+  "missTotal": 62,
+  "miss且同目录没有同前缀文件": 62,
+  "miss且能对上同前缀_即疑似截断": 0,
+  "哨兵在缺失名单里": true
+}
+--- 同目录里找不到同前缀文件的 miss（这些才是真候选）---
+dir outputs/agent-landscape-gap-analysis-2026-09-18/
+dir outputs/agent-review-2026-09-15/
+file outputs/anchor-loss-shipped-face-2026-09-27/02-把上一笔账变成尺-锚点表只能被摘得对地缩小.md
+dir outputs/anchor-no-ruler-face-2026-09-26/
+file outputs/anchor-removal-pairing-2026-09-26/01-一次摘160条锚点19条的被测面还在发货.md
+file outputs/bare-name-needles-2026-09-26/01-针脚收的是一个名字时那35处副本没有一处能替它作证.md
+file outputs/blocked-queue-deleted-2026-09-26/01-裁决台账被整簇删空-127023B到296B-13处按编号引用同时变死.md
+dir outputs/cap-notice-unit-2026-09-26/
+file outputs/cluster-landing-dryrun-2026-09-26/01-试算整簇落库修掉2红新出4红其中2红是尺自己的语义问题.md
+dir outputs/code-review-report-2026-09-12/
+dir outputs/code-review-worktree-2026-09-14/
+file outputs/cost-attribution-join-2026-09-27/01-归因落地与前后读数.md
+file outputs/cost-price-key-2026-09-27/01-读数.md
+file outputs/d9-registry-reason-field-2026-09-26/01-登记面今天真值其实是1且那一格永久缺.md
+file outputs/dead-anchors-workorder-2026-09-26/01-门禁今天红11条阻断分成现在能修6等入库5.md
+file outputs/dead-script-pointers-2026-09-26/01-源码散文点名了4个不存在的脚本-3处是现在时祈使句-现在有条尺管着.md
+file outputs/definitely-not-a-real-dir-2026-01-01/witness.log
+file outputs/deny-domain-model-face-2026-09-26/01-一条禁用一切的skill禁不掉任何注入工具申报域修成整张模型面.md
+file outputs/detached-spawn-drain-2026-09-26/01-2567条全绿而门以exit1退出游离链必须删盘前落地.md
+dir outputs/fix-brief-2026-09-14/
+dir outputs/fix-log-2026-09-12/
+file outputs/gate-red-not-diagnosable-2026-09-26/01-红门不可定位-gates把失败输出截到12行且不落盘-一次整表跑丢7条明细.md
+file outputs/half-ruler-not-certification-2026-09-26/01-半把尺不许冒充认证skip-test必须交理由.md
+file outputs/head-full-census-2026-09-27/01-HEAD首次全量读数.md
+file outputs/head-state-2026-09-26/01-HEAD现态两盏红骑了94与88笔-落库还会让3个模块的直接测试归零.md
+dir outputs/impact-accuracy-probe-2026-09-29/
+file outputs/in-flight-age-2026-09-26/01-在飞有两种107比114已24小时没被碰过.md
+file outputs/l0-rule-carry-proposal-2026-09-26/01-落库前15条核心规矩的逐条去向含可粘贴L0.md
+file outputs/landing-1c40df7-2026-09-30/head-cert-summary.txt
+dir outputs/lsp-output-cap-bytes-2026-09-26/
+dir outputs/m7-closure-constraints-2026-09-18/
+file outputs/masking-sweep-clean-producers-2026-09-26/01-等热文件是归因不是读数五格里三格根本没人挡着.md
+dir outputs/mimosa-triage-2026-09-13/
+dir outputs/needle-spelling-widening-2026-09-26/
+dir outputs/optimization-log-2026-09-12/
+dir outputs/pc7-amortize-tradeoff-2026-09-26/
+file outputs/pc7-criterion-case-a-2026-09-26/01-案A落地判据断的是值不值不是次数.md
+file outputs/pc7-priced-in-characters-2026-09-26/01-多付一次摘要第一次被量成字符临界比值94.md
+dir outputs/permission-guided-mode-2026-09-23/
+dir outputs/promise-inventory-gate-2026-09-26/
+CENSUS2_EXIT=0

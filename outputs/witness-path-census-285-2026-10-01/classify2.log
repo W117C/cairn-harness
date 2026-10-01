@@ -1,0 +1,16 @@
+{
+  "credPages": 70,
+  "pagesNamingRefs": 56,
+  "refsTotal": 73,
+  "missTotal": 2,
+  "miss且盘上还在": 2,
+  "miss且盘上也没有": 0,
+  "受影响页数": 1,
+  "受影响页": [
+    "第 259 页"
+  ]
+}
+--- 逐条 miss（带在盘分类）---
+在盘 outputs/selector-uniqueness-2026-09-30/diagnose.mts
+在盘 outputs/sequencer-dynamic-2026-10-01/probe-prod.mts
+CLASSIFY2_EXIT=0

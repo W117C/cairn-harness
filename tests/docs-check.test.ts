@@ -25,9 +25,12 @@ import {
   checkObservedValues,
   checkReplay,
   checkStateRev,
+  checkWitnessPaths,
   DOC_BUDGETS,
   LEGACY_SOURCE_CITATIONS,
   LEGACY_WAIVERS,
+  LEGACY_WITNESS_REFS,
+  ledgerWitnessRefs,
   STATE_FILE,
   waive,
   waiverKey,
@@ -847,5 +850,87 @@ describe("credFaceFiles：门与探针共用同一份取料面（第 284 页）"
     expect(/^ {4}\(dir\) => credFaceFiles\(ROOT, dir\),$/mu.test(src), "CLI 没接进共用构造器 ⇒ 形状还会再漂一次").toBe(true);
     // 行锚定的正向断言（规则 247）：老写法是 readdirSync(...).map(...).join("\n") 直接返回字符串
     expect(/^ {4}return readdirSync\(abs\)\.filter\(\(f\) => !f\.endsWith\("\.mjs"\)\)\.map\(\(f\) => \{$/mu.test(src)).toBe(true);
+  });
+});
+
+/* ── 第 285 页：D-11「凭证页点名的 dated 证人必须追得到 HEAD」。
+    立它的两起现读事故：① 第 281 页凭证引的三份日志没随页入库 ⇒ 主树 docs-check 绿、干净树判卷红，
+    这条洞唯一的检测器是一次 210s 的全量认证；② 第 284 页声称「第一版 `needles-before.log` 的原文留着」，
+    而那份日志已被同名覆盖 ⇒ D-9 只抽目录、看不见文件名（证人 `outputs/witness-filename-blindspot-2026-10-01/probe.log`）。
+    这六条各钉一种坏法：点名到不存在的文件／整个目录没入库／登记位漂了／取料面把中文文件名截断（第一版普查真犯过）／
+    接线掉／未检与红 0 同形。 ── */
+describe("D-11 证人点名面：文件与目录两半都要追得到，登记位双向出声", () => {
+  const cred = (key: string, body: string): string => `### 2026-09-30 · ${key} 凭证：测试页\n\n${body}\n`;
+
+  it("文件点名：在清单里不红；同一条从清单里去掉就红一条，且点名到页", () => {
+    const pages = credentialPages(cred("第 900 页", "取料 `outputs/x-2026-09-30/witness.log`｜另一份 `outputs/y-2026-09-30/other.md`"));
+    expect(pages[0]?.refs).toEqual(["outputs/x-2026-09-30/witness.log", "outputs/y-2026-09-30/other.md"]);
+    const both = new Set(["outputs/x-2026-09-30/witness.log", "outputs/y-2026-09-30/other.md"]);
+    const ok = checkWitnessPaths(pages, both, []);
+    expect(ok.findings).toEqual([]);
+    expect(ok.refs).toBe(2);
+    // 反向一侧（规则 272 说「A＝B」必配「A≠旧值」）：把其中一份证人从清单里抽掉 ⇒ 恰好红一条
+    const lost = checkWitnessPaths(pages, new Set(["outputs/y-2026-09-30/other.md"]), []);
+    expect(lost.findings.length).toBe(1);
+    expect(lost.findings[0]?.rule).toBe("D-11");
+    expect(lost.findings[0]?.detail).toContain("第 900 页");
+    expect(lost.findings[0]?.detail).toContain("outputs/x-2026-09-30/witness.log");
+  });
+
+  it("目录点名（以 / 结尾）：目录里有任一工件就不红，整个目录没入库才红", () => {
+    const pages = credentialPages(cred("第 901 页", "取料：outputs/x-2026-09-30/"));
+    expect(pages[0]?.refs).toEqual(["outputs/x-2026-09-30/"]);
+    expect(checkWitnessPaths(pages, new Set(["outputs/x-2026-09-30/a.log"]), []).findings).toEqual([]);
+    const gone = checkWitnessPaths(pages, new Set(["outputs/z-2026-09-30/a.log"]), []).findings;
+    expect(gone.length).toBe(1);
+    expect(gone[0]?.detail).toContain("那个 dated 目录一件工件都没入库");
+  });
+
+  it("登记位两半：仍命中的登记安静，不再命中的登记报 stale；净零交换报两条", () => {
+    const named = credentialPages(cred("第 902 页", "取料 `outputs/x-2026-09-30/gone.log`"));
+    // 登记仍命中 ⇒ 不许出声（否则登记表自己变红，逼人去删真登记）
+    expect(checkWitnessPaths(named, new Set(), ["outputs/x-2026-09-30/gone.log"]).findings).toEqual([]);
+    // 那条点名被换掉了，同时新写了一条没入库的：一老一新各一条
+    const swapped = credentialPages(cred("第 902 页", "取料 `outputs/x-2026-09-30/renamed.log`"));
+    const f = checkWitnessPaths(swapped, new Set(), ["outputs/x-2026-09-30/gone.log"]).findings;
+    expect(f.length).toBe(2);
+    expect(f.some((x) => x.detail.includes("已不再被任何凭证页点名"))).toBe(true);
+    expect(f.some((x) => x.detail.includes("renamed.log"))).toBe(true);
+  });
+
+  it("取料面的形状：中文文件名不许被截断、模式串跳过、裸目录算目录、非 dated 目录不管", () => {
+    const text = [
+      "点名 `outputs/x-2026-09-30/01-针脚收的是一个名字时那35处副本没有一处能替它作证.md`，后面紧跟中文。",
+      "模式不算：outputs/_audit-*.md 与 outputs/a-2026-09-30/{b,c}.log",
+      "裸目录：outputs/y-2026-09-30/ 里的东西",
+      "非 dated 不管：outputs/plain-dir/file.log",
+    ].join("\n");
+    const refs = ledgerWitnessRefs(text);
+    expect(refs).toContain("outputs/x-2026-09-30/01-针脚收的是一个名字时那35处副本没有一处能替它作证.md");
+    expect(refs).toContain("outputs/y-2026-09-30/");
+    expect(refs.some((r) => /[*{}]/u.test(r))).toBe(false);
+    expect(refs.some((r) => r.includes("plain-dir"))).toBe(false);
+    // 反向哨兵（规则 237 那一族）：第一版普查把字符集限成 ASCII，中文名会在第一个汉字处截断成 `…/01-`
+    // 那条假红形状今天没回来——断言它回来的形状：任何一条点名都不许以 `-` 结尾
+    expect(refs.some((r) => /-/u.test(r.slice(-1)) && !r.endsWith("/"))).toBe(false);
+  });
+
+  it("真仓那一趟：分母非零、红 0，且「未检」与「红 0」不同形（这条走的是门自己的接线）", () => {
+    const face = runDocsCheck();
+    expect(face.witness, "未检（取不到 HEAD 跟踪清单）⇒ 这一趟不构成读数").not.toBeNull();
+    expect(face.witness!.refs, "分母为 0 的绿不算绿").toBeGreaterThanOrEqual(50);
+    expect(face.witness!.pages).toBeGreaterThan(0);
+    expect(hit(face.findings, "D-11").map((x) => x.detail)).toEqual([]);
+    // 上线时的存量是**现读**的 2 条，修法取补档而不是登记 ⇒ 登记位交空（证人 outputs/witness-path-census-285-2026-10-01/）
+    expect(LEGACY_WITNESS_REFS.length).toBe(0);
+  });
+
+  it("接线：门真的调这条判据；「取不到清单」走未检而不是拿空集合当判据", () => {
+    const src = readFileSync(join(fileURLToPath(new URL(".", import.meta.url)), "..", "scripts", "docs-check.ts"), "utf8");
+    expect(/^ {2}const witness = ledgerTracked === null \? null : checkWitnessPaths\(credPages, ledgerTracked\);$/mu.test(src),
+      "判据写了没接进门 ⇒ 只有单测在跑").toBe(true);
+    expect(/^ {4}ledgerTracked = trackedFilesAtHead\(\);$/mu.test(src)).toBe(true);
+    // 凭证页只构造一次（D-9 与 D-11 吃同一份）：老写法在调用点里现造，如今那一行该没了
+    expect(src.includes("existsSync(ledgerAbs) ? credentialPages(readFileSync(ledgerAbs, \"utf8\")) : []")).toBe(false);
   });
 });

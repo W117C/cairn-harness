@@ -1,0 +1,86 @@
+{
+  "refsTotal": 216,
+  "fileRefs": 112,
+  "dirRefs": 104,
+  "missTotal": 61,
+  "miss且盘上还在": 49,
+  "miss且盘上也没有": 12,
+  "哨兵_空清单下全部点名都算miss": 216,
+  "哨兵_与refs同值": true
+}
+--- 盘上也没有（真死指针）---
+outputs/agent-landscape-gap-analysis-2026-09-18/
+outputs/agent-review-2026-09-15/
+outputs/code-review-report-2026-09-12/
+outputs/code-review-worktree-2026-09-14/
+outputs/fix-brief-2026-09-14/
+outputs/fix-log-2026-09-12/
+outputs/m7-closure-constraints-2026-09-18/
+outputs/mimosa-triage-2026-09-13/
+outputs/optimization-log-2026-09-12/
+outputs/permission-guided-mode-2026-09-23/
+outputs/replay-face-gate-2026-09-23/
+outputs/verify-cause-denominator-2026-09-23/
+--- LEGACY_WITNESS_REFS 数组字面量（按尺的第一次输出，逐条）---
+  "outputs/agent-landscape-gap-analysis-2026-09-18/",
+  "outputs/agent-review-2026-09-15/",
+  "outputs/anchor-loss-shipped-face-2026-09-27/02-把上一笔账变成尺-锚点表只能被摘得对地缩小.md",
+  "outputs/anchor-no-ruler-face-2026-09-26/",
+  "outputs/anchor-removal-pairing-2026-09-26/01-一次摘160条锚点19条的被测面还在发货.md",
+  "outputs/bare-name-needles-2026-09-26/01-针脚收的是一个名字时那35处副本没有一处能替它作证.md",
+  "outputs/blocked-queue-deleted-2026-09-26/01-裁决台账被整簇删空-127023B到296B-13处按编号引用同时变死.md",
+  "outputs/cap-notice-unit-2026-09-26/",
+  "outputs/cluster-landing-dryrun-2026-09-26/01-试算整簇落库修掉2红新出4红其中2红是尺自己的语义问题.md",
+  "outputs/code-review-report-2026-09-12/",
+  "outputs/code-review-worktree-2026-09-14/",
+  "outputs/cost-attribution-join-2026-09-27/01-归因落地与前后读数.md",
+  "outputs/cost-price-key-2026-09-27/01-读数.md",
+  "outputs/d9-registry-reason-field-2026-09-26/01-登记面今天真值其实是1且那一格永久缺.md",
+  "outputs/dead-anchors-workorder-2026-09-26/01-门禁今天红11条阻断分成现在能修6等入库5.md",
+  "outputs/dead-script-pointers-2026-09-26/01-源码散文点名了4个不存在的脚本-3处是现在时祈使句-现在有条尺管着.md",
+  "outputs/deny-domain-model-face-2026-09-26/01-一条禁用一切的skill禁不掉任何注入工具申报域修成整张模型面.md",
+  "outputs/detached-spawn-drain-2026-09-26/01-2567条全绿而门以exit1退出游离链必须删盘前落地.md",
+  "outputs/fix-brief-2026-09-14/",
+  "outputs/fix-log-2026-09-12/",
+  "outputs/gate-red-not-diagnosable-2026-09-26/01-红门不可定位-gates把失败输出截到12行且不落盘-一次整表跑丢7条明细.md",
+  "outputs/half-ruler-not-certification-2026-09-26/01-半把尺不许冒充认证skip-test必须交理由.md",
+  "outputs/head-full-census-2026-09-27/01-HEAD首次全量读数.md",
+  "outputs/head-state-2026-09-26/01-HEAD现态两盏红骑了94与88笔-落库还会让3个模块的直接测试归零.md",
+  "outputs/impact-accuracy-probe-2026-09-29/",
+  "outputs/in-flight-age-2026-09-26/01-在飞有两种107比114已24小时没被碰过.md",
+  "outputs/l0-rule-carry-proposal-2026-09-26/01-落库前15条核心规矩的逐条去向含可粘贴L0.md",
+  "outputs/landing-1c40df7-2026-09-30/head-cert-summary.txt",
+  "outputs/lsp-output-cap-bytes-2026-09-26/",
+  "outputs/m7-closure-constraints-2026-09-18/",
+  "outputs/masking-sweep-clean-producers-2026-09-26/01-等热文件是归因不是读数五格里三格根本没人挡着.md",
+  "outputs/mimosa-triage-2026-09-13/",
+  "outputs/needle-spelling-widening-2026-09-26/",
+  "outputs/optimization-log-2026-09-12/",
+  "outputs/pc7-amortize-tradeoff-2026-09-26/",
+  "outputs/pc7-criterion-case-a-2026-09-26/01-案A落地判据断的是值不值不是次数.md",
+  "outputs/pc7-priced-in-characters-2026-09-26/01-多付一次摘要第一次被量成字符临界比值94.md",
+  "outputs/permission-guided-mode-2026-09-23/",
+  "outputs/promise-inventory-gate-2026-09-26/",
+  "outputs/promise-net-wording-gap-2026-09-26/",
+  "outputs/promise-structure-net-2026-09-26/",
+  "outputs/prune-recall-fail-closed-2026-09-26/",
+  "outputs/ratchet-not-index-state-2026-09-26/01-棘轮比的必须是盘上有算而不是已入库多少.md",
+  "outputs/recoverability-promise-fixes-2026-09-26/",
+  "outputs/recoverability-promise-inventory-2026-09-26/",
+  "outputs/replay-face-gate-2026-09-23/",
+  "outputs/replay-registry-fifth-criterion-2026-09-25/",
+  "outputs/rerun-surface-two-tree-2026-09-26/01-跑一棵树不等于跑那把尺.md",
+  "outputs/scan-scope-one-face-2026-09-26/01-已跟踪与盘上有是两件事缺席那一半必须有名字.md",
+  "outputs/scan-third-state-2026-09-26/01-取料面的第三种态未跟踪且盘上有.md",
+  "outputs/scratch-scope-census-2026-09-30/readings.md",
+  "outputs/selector-uniqueness-2026-09-30/diagnose.mts",
+  "outputs/sequencer-dynamic-2026-10-01/probe-prod.mts",
+  "outputs/shell-overflow-next-step-2026-09-26/",
+  "outputs/tree-scope-ceilings-2026-09-26/01-同一把尺量两棵树帽要按树的形状登记.md",
+  "outputs/truncated-notice-omission-2026-09-26/",
+  "outputs/untested-core-2026-09-26/03-mock掉的边不算执行.md",
+  "outputs/unverified-must-name-2026-09-26/01-未证总数以前只能逐道复跑去数是谁现在它交名字.md",
+  "outputs/utf8-half-char-in-model-text-2026-09-26/",
+  "outputs/verify-cause-denominator-2026-09-23/",
+  "outputs/worker-evidence-parent-context-2026-09-25/",
+CLASSIFY_EXIT=0

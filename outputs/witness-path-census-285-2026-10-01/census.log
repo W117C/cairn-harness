@@ -1,0 +1,46 @@
+{
+  "headTrackedFiles": 1761,
+  "refsDistinct": 219,
+  "fileRefs": 127,
+  "dirRefs": 92,
+  "missingFilesCount": 35,
+  "missingDirsCount": 18,
+  "哨兵在缺失名单里": true
+}
+--- missing files（前 60 条）---
+outputs/_audit
+outputs/anchor-loss-shipped-face-2026-09-27/02
+outputs/anchor-removal-pairing-2026-09-26/01
+outputs/bare-name-needles-2026-09-26/01
+outputs/blocked-queue-deleted-2026-09-26/01
+outputs/cluster-landing-dryrun-2026-09-26/01
+outputs/cost-attribution-join-2026-09-27/01
+outputs/cost-price-key-2026-09-27/01
+outputs/d9-registry-reason-field-2026-09-26/01
+outputs/dead-anchors-workorder-2026-09-26/01
+outputs/dead-script-pointers-2026-09-26/01
+outputs/definitely-not-a-real-dir-2026-01-01/witness.log
+outputs/deny-domain-model-face-2026-09-26/01
+outputs/detached-spawn-drain-2026-09-26/01-2567
+outputs/ga-strategy-2026-09-20
+outputs/gate-red-not-diagnosable-2026-09-26/01
+outputs/half-ruler-not-certification-2026-09-26/01
+outputs/head-full-census-2026-09-27/01-HEAD
+outputs/head-state-2026-09-26/01-HEAD
+outputs/in-flight-age-2026-09-26/01
+outputs/l0-rule-carry-proposal-2026-09-26/01
+outputs/landing-1c40df7-2026-09-30/head-cert-summary.txt
+outputs/masking-sweep-clean-producers-2026-09-26/01
+outputs/pc7-criterion-case-a-2026-09-26/01
+outputs/pc7-priced-in-characters-2026-09-26/01
+outputs/ratchet-not-index-state-2026-09-26/01
+outputs/rerun-surface-two-tree-2026-09-26/01
+outputs/scan-scope-one-face-2026-09-26/01
+outputs/scan-third-state-2026-09-26/01
+outputs/scratch-scope-census-2026-09-30/readings.md
+outputs/selector-uniqueness-2026-09-30/diagnose.mts
+outputs/sequencer-dynamic-2026-10-01/probe-prod.mts
+outputs/tree-scope-ceilings-2026-09-26/01
+outputs/untested-core-2026-09-26/03-mock
+outputs/unverified-must-name-2026-09-26/01
+CENSUS_EXIT=0

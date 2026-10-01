@@ -8,7 +8,7 @@
 // 水位**只准调低**，不再被命中的条目会报成 stale 红，故豁免不会静默烂在这儿）。
 
 export interface Finding {
-  rule: "D-1" | "D-2" | "D-3" | "D-4" | "D-5" | "D-7" | "D-8" | "D-9" | "D-10" | "W";
+  rule: "D-1" | "D-2" | "D-3" | "D-4" | "D-5" | "D-7" | "D-8" | "D-9" | "D-10" | "D-11" | "W";
   file: string;
   detail: string;
   /** 该判据的实测量纲值（D-1 = 字节，D-7 = 文件数）。有值时水位按"量"豁免；无值时按"条数"豁免。 */
@@ -151,8 +151,10 @@ export function checkSourceLineCitations(
 }
 
 /** HEAD 跟踪清单取不到时**交 null**，不交空集合（第 279 页：空集合会让每一条引用都被读成死指针，
- *  假红淹没真信号）；调用方把 null 记成"未检"。 */
-function trackedFilesAtHead(): Set<string> | null {
+ *  假红淹没真信号）；调用方把 null 记成"未检"。
+ *  第 285 页把它导出：普查「台账点名的证人文件在不在 HEAD 里」的探针要用**同一份取料面**——
+ *  从前 `cred-face.mts` 自己抄了一份读面，接口一改就静默烂掉（规则 345），这次不再犯第二遍。 */
+export function trackedFilesAtHead(): Set<string> | null {
   try {
     const out = execFileSync("git", ["ls-tree", "-r", "--name-only", "HEAD"], { cwd: ROOT, encoding: "utf8" });
     const lines = out.trim().split("\n").filter((l) => l !== "");
@@ -160,6 +162,92 @@ function trackedFilesAtHead(): Set<string> | null {
   } catch {
     return null;
   }
+}
+
+/** D-11（第 285 页）：台账点名的 **dated 证人工件**必须在 HEAD 里追得到。
+ *  动因是同一天两起同族事故：
+ *  ① 第 281 页凭证引的三份日志没随页入库 ⇒ 主树 docs-check 绿、干净树判卷红（规则 346），
+ *     也就是这条洞的**唯一现存检测器是一次 210s 的全量认证**；
+ *  ② 第 284 页声称「第一版 `needles-before.log` 的原文留着」，而那份日志早被同名跑批覆盖 ⇒ D-9 只抽**目录**、
+ *     文件名根本不进它的取料面（现跑证人 `outputs/witness-filename-blindspot-2026-10-01/probe.log`：
+ *     假读数被咬 1、真读数没被误咬 0、点名的不存在文件名被咬 0）。
+ *  ⇒ 这一条把检测成本从一趟认证降到 docs-check 的秒级，且**不新增子进程**：与 D-10 共用同一次 `trackedFilesAtHead()`。
+ *  取值域按真机形状量（规则 237）：dated 目录里的文件名**带中文**，普查第一版把字符集限成 ASCII，
+ *  于是那 35 条「缺失」几乎全是我自己截断出来的假红——所以这里的切断判据是「标点与空白」，不是字符白名单。 */
+/** dated 目录名（`<主题>-YYYY-MM-DD`）的**唯一一份**形状。第 285 页：`ledgerWitnessRefs` 刚写出来时自己抄了一遍
+ *  这个正则，于是锚点 `cred-dir-date-pattern-month-locked` 的针脚从 1 处变 2 处（`--check-needles` 当场报『待复认』），
+ *  而 `replace` 只改第一处 ⇒ 那条锚点会咬到新写的这一支上、把 D-9 那一支放过去（规则 217/255：针脚跟着实现走，
+ *  两处同字面量就是两处会各自漂的决策点）。取值域只在一处决定，两个消费者共用同一支正则。 */
+const DATED_DIR_RE = /outputs\/([A-Za-z0-9._-]+-\d{4}-\d{2}-\d{2})/gu;
+/** 在 dated 目录之外再吃一层「目录里的文件名」；形状从 `DATED_DIR_RE` 派生，不在这里第二次写日期。 */
+const WITNESS_REF = new RegExp(DATED_DIR_RE.source + "(\\/[^\\s`]*)?", "g");
+/** 中文散文里点名之后紧跟的标点要把路径切断（真机形状：`…/01-xxx.md`后面直接跟。」）。 */
+const REF_BOUNDARY = /[\s、，。（）()【】[\]「」『』《》｜;；:：!！?？,]+/u;
+
+/** 台账里所有 dated 工件点名：目录以 `/` 结尾，文件是完整相对路径；去重、排序，模式串（含 `*?{}`）跳过。
+ *  导出是因为普查与判卷都要吃**同一份**抽法——第 284 页那条教训（规则 345）说的就是「探针自己抄一份构造器」。 */
+export function ledgerWitnessRefs(text: string): string[] {
+  const out = new Set<string>();
+  for (const m of text.matchAll(WITNESS_REF)) {
+    const dir = m[1]!;
+    const tail = m[2] ?? "";
+    if (tail === "") { out.add(`outputs/${dir}/`); continue; }
+    const name = (tail.slice(1).split(REF_BOUNDARY)[0] ?? "").replace(/[.,_:-]+$/gu, "");
+    if (name === "") { out.add(`outputs/${dir}/`); continue; }
+    if (/[*?{}]/u.test(name)) continue;
+    out.add(`outputs/${dir}/${name}`);
+  }
+  return [...out].sort();
+}
+
+/** 第 285 页普查登记的存量（名单不是手抄的：由 `ledgerWitnessRefs` 第一次跑出来的 miss 集合生成，
+ *  证人 `outputs/witness-path-census-285-2026-10-01/classify.log`，逐条带「在盘否／同目录有没有别的文件」的分类）。 */
+/** 上线时的现读存量＝2 条（证人 `outputs/witness-path-census-285-2026-10-01/classify2.log`：
+ *  第 259 页点名的 `selector-uniqueness-2026-09-30/diagnose.mts` 与 `sequencer-dynamic-2026-10-01/probe-prod.mts`，
+ *  两支都在盘上、只是从没随页入库）⇒ 修法取**补档**而不是登记：表交空，帽天然就是 0。
+ *  这张表仍留着（并配双向判卷），因为「一条真补不了的旧账」迟早会出现——没有登记位就会退化成拆闸。 */
+export const LEGACY_WITNESS_REFS: readonly string[] = [];
+export const LEGACY_WITNESS_REF_REASON =
+  "补不了的证人点名才登记（页已入库且工件确实拿不到）；只准调低，不再命中即报 stale";
+
+/** D-11：凭证页点名的每一条 dated 工件，必须能在 HEAD 里追到。
+ *  取值域＝凭证页（不是整本台账）：判据讲的是「凭证页引的证人随没随页落库」，铺宽到整本会把我自己
+ *  那条 09-26 时代的老账（现读 61 条 miss）算进来——那是另一件事，别混进这一笔（规则 345 的分面宽度）。 */
+export function checkWitnessPaths(
+  pages: readonly CredPage[],
+  tracked: ReadonlySet<string>,
+  legacy: readonly string[] = LEGACY_WITNESS_REFS,
+): { findings: Finding[]; refs: number; pages: number } {
+  const out: Finding[] = [];
+  // 目录点名判「HEAD 里有没有这个 dated 目录的任何一件工件」——先把清单折成目录集合，别每条点名线性扫全表。
+  const dirs = new Set<string>();
+  for (const p of tracked) {
+    const m = /^outputs\/([^/]+)\/.*/u.exec(p);
+    if (m) dirs.add(`outputs/${m[1]}/`);
+  }
+  const seenRefs = new Set<string>();
+  let namingPages = 0;
+  for (const p of pages) {
+    if (p.refs.length > 0) namingPages++;
+    for (const ref of p.refs) {
+      seenRefs.add(ref);
+      if (legacy.includes(ref)) continue;
+      if (ref.endsWith("/") ? dirs.has(ref) : tracked.has(ref)) continue;
+      out.push({
+        rule: "D-11",
+        file: LEDGER_FILE,
+        detail: `${p.key} 点名 ${ref}，但 HEAD 里追不到` +
+          (ref.endsWith("/") ? "（那个 dated 目录一件工件都没入库）" : "") +
+          "——证人要与页同笔落库；这一格若由本笔未提交的工件造成，提交即归零，别当成旧账登记掉",
+      });
+    }
+  }
+  for (const k of legacy) {
+    if (!seenRefs.has(k)) {
+      out.push({ rule: "D-11", file: LEDGER_FILE, detail: `存量登记的 ${k} 已不再被任何凭证页点名（那段点名被改了或删了），该删——登记不删就是假存量` });
+    }
+  }
+  return { findings: out, refs: seenRefs.size, pages: namingPages };
 }
 
 /** rev 行：`rev: <7~40 位十六进制>`，允许反引号包裹与行尾空白。 */
@@ -311,6 +399,11 @@ export interface CredPage {
    *  口径要偏宽：只用来**放行**（证人身份在集合里＝强证），不用来制造红——
    *  写死几种句式会让「页换了措辞」变成一条假弱证。 */
   shas: string[];
+  /** 这一页正文里点名的 dated 工件（目录以 `/` 结尾、文件为完整相对路径）。
+   *  第 285 页 D-11 的取值域：**判据是「凭证页引的证人随没随页落库」⇒ 分面就按凭证页取**，
+   *  不铺到整本台账（规则 345 的另一半：分面宽度按判据选，铺宽了存量代价是别人的旧账，不是我的）。
+   *  抽法共用 `ledgerWitnessRefs`——同一条正则只有一份实现。 */
+  refs: string[];
 }
 
 /** 凭证页＝标题含「凭证」的那几段；`key` 取「第 NNN 页」，比整条标题稳（改措辞不该让豁免失效）。 */
@@ -326,7 +419,7 @@ export function credentialPages(text: string): CredPage[] {
        这一行从前是 `[A-Za-z0-9._-]+-2026-09-\d{2}` ⇒ 跨过 9 月之后，凡是点名 `outputs/<主题>-2026-10-XX/` 的凭证页
        都抽不到目录，于是整页被判成「未点名取料目录＝未检」——门照印「红 0」，而它对**新月份的凭证一个字都没查**（第 257 页现读）。
        既有判卷清一色喂 `-2026-09-30` 的假件，所以这个盲区是结构上注定的（规则 237/242：计数尺要先喂真机、合成输入要显式两态不同形）。 */
-    const dirs = [...new Set([...body.matchAll(/outputs\/([A-Za-z0-9._-]+-\d{4}-\d{2}-\d{2})/gu)].map((m) => m[1]!))].sort();
+    const dirs = [...new Set([...body.matchAll(DATED_DIR_RE)].map((m) => m[1]!))].sort();
     const numbers = new Set<string>();
     for (const re of CRED_NUMBER_RES) {
       for (const m of body.matchAll(new RegExp(re.source, "gu"))) numbers.add(m[1]!);
@@ -334,7 +427,7 @@ export function credentialPages(text: string): CredPage[] {
     const key = /第 \d+ 页/u.exec(head)?.[0] ?? head.slice(0, 16);
     // 页提到的提交号：段体内所有 7～40 位 hex token（含 `本笔（\`sha\`）`、`@\`sha\``、`TREE=<sha>` 各种写法）。
     const shas = [...new Set([...body.matchAll(/\b([0-9a-f]{7,40})\b/gu)].map((m) => m[1]!.slice(0, 7)))].sort();
-    out.push({ key, title: head.replace(/^### /u, ""), dirs, numbers: [...numbers].sort(), shas });
+    out.push({ key, title: head.replace(/^### /u, ""), dirs, numbers: [...numbers].sort(), shas, refs: ledgerWitnessRefs(body) });
   });
   return out;
 }
@@ -871,6 +964,8 @@ export function runDocsCheck(): {
   // 形状从被调用方派生，不在这儿第二次枚举：第 265 页加 `unnamedPages` 时这里漏改，vitest 全绿而 tsc 红
   // （`Property 'unnamedPages' does not exist`）——两份字段清单就是两次会漂的账。
   cred: ReturnType<typeof checkCredentialSources>;
+  // 第 285 页 D-11：`null` ＝ 取不到 HEAD 跟踪清单（未检）。它跟「点名 0 条」是两件事，别混成一种绿。
+  witness: ReturnType<typeof checkWitnessPaths> | null;
 } {
   const findings: Finding[] = [];
   const skipped: string[] = [];
@@ -895,6 +990,8 @@ export function runDocsCheck(): {
 
   // D-5 第二张面：台账里的 sha 引用（`STATE.md` 不在的那天，这一格照样有 200+ 条可检）。
   let ledgerChecked = 0;
+  let ledgerTracked: Set<string> | null = null;
+  let credPages: CredPage[] = [];
   const ledgerAbs = join(ROOT, LEDGER_FILE);
   if (existsSync(ledgerAbs)) {
     const ledgerText = readFileSync(ledgerAbs, "utf8");
@@ -902,18 +999,21 @@ export function runDocsCheck(): {
     findings.push(...face.findings);
     ledgerChecked = face.checked;
     if (face.skipped !== null) skipped.push(face.skipped);
+    // 凭证页只构造一次，D-9 与 D-11 吃同一份（第 284 页那条教训：构造器只能有一份，规则 345）。
+    credPages = credentialPages(ledgerText);
     // D-10（第 279 页）：台账里的源码行号引用要**追得到东西**。取不到 HEAD 清单时报"未检"，
     // 不许拿空集合当判据（那会把每一条引用都读成死指针——假红的量足以淹掉真信号）。
-    const tracked = trackedFilesAtHead();
-    if (tracked === null) skipped.push("D-10 " + LEDGER_FILE + " 的源码引用面未检（取不到 HEAD 跟踪清单），不等于通过");
-    else findings.push(...checkSourceLineCitations(ledgerText, tracked));
+    // 第 285 页：同一份清单也喂 D-11 ⇒ 这一笔**没有新增子进程**，门还是那一次 `git ls-tree`。
+    ledgerTracked = trackedFilesAtHead();
+    if (ledgerTracked === null) skipped.push("D-10/D-11 " + LEDGER_FILE + " 的引用面未检（取不到 HEAD 跟踪清单），不等于通过");
+    else findings.push(...checkSourceLineCitations(ledgerText, ledgerTracked));
   } else {
     skipped.push(`D-5 ${LEDGER_FILE} 不存在 ⇒ 台账 sha 面整条未检，不等于通过`);
   }
 
   // D-9：凭证页的读数 ↔ 它自己点名的取料面（`outputs/<主题>-日期/` 里除脚本外的全部文件）。
   const cred = checkCredentialSources(
-    existsSync(ledgerAbs) ? credentialPages(readFileSync(ledgerAbs, "utf8")) : [],
+    credPages,
     (dir) => credFaceFiles(ROOT, dir),
     UNSOURCED_READINGS,
     CRED_UNNAMED_PAGE_CAP,
@@ -921,6 +1021,10 @@ export function runDocsCheck(): {
     UNSOURCED_CRED_PAGES,
   );
   findings.push(...cred.findings);
+
+  // D-11（第 285 页）：凭证页点名的 dated 证人必须追得到 HEAD——同一次 `git ls-tree`，与 D-10 共用取料面。
+  const witness = ledgerTracked === null ? null : checkWitnessPaths(credPages, ledgerTracked);
+  if (witness !== null) findings.push(...witness.findings);
 
   const livePages: SourceFile[] = [];
   for (const path of LIVE_PAGES) {
@@ -947,6 +1051,7 @@ export function runDocsCheck(): {
     waived: findings.length - kept.length,
     ledgerChecked,
     cred,
+    witness,
   };
 }
 
@@ -954,7 +1059,7 @@ const invokedDirectly =
   process.argv[1] !== undefined && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
 
 if (invokedDirectly) {
-  const { findings, skipped, waived, ledgerChecked, cred } = runDocsCheck();
+  const { findings, skipped, waived, ledgerChecked, cred, witness } = runDocsCheck();
   const byRule = new Map<string, number>();
   for (const f of findings) {
     byRule.set(f.rule, (byRule.get(f.rule) ?? 0) + 1);
@@ -970,6 +1075,11 @@ if (invokedDirectly) {
     + `｜点名但目录读不到 ${String(cred.unmatched)} 个＝取不到｜登记不可回查 ${String(Object.keys(UNSOURCED_READINGS).length)} 条`
     + `｜弱证 ${String(cred.weak.length)} 对（帽 ${String(CRED_WEAK_WITNESS_CAP)}，只准调低）｜证人无身份行 ${String(cred.weakUnjudged)} 对＝这一格无从判`
     + `｜已登记不可回查 ${String(cred.registeredPages.length)} 页／${String(cred.registeredReadings)} 条`);
+  // D-11 的三态（规则 239）：未检（取不到 HEAD 清单）／点名条数／红。红 0 与「压根没点名」也不同形。
+  console.log(witness === null
+    ? "  证人点名面：未检（取不到 HEAD 跟踪清单），不等于通过"
+    : `  证人点名面：${String(witness.pages)} 页点名 ${String(witness.refs)} 条 dated 工件（红 ${String(witness.findings.length)}）`
+      + `｜登记 ${String(LEGACY_WITNESS_REFS.length)} 条（帽，只准调低）`);
   if (waived > 0) console.log(`  ⚠️  存量豁免 ${String(waived)} 处（LEGACY_WAIVERS，只准调低；spec §8 迁移提交须整条删除）`);
   const summary = [...byRule].map(([r, n]) => `${r}=${String(n)}`).join(" ");
   if (findings.length === 0) {

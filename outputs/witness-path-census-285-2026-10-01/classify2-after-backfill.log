@@ -1,0 +1,12 @@
+{
+  "credPages": 70,
+  "pagesNamingRefs": 56,
+  "refsTotal": 73,
+  "missTotal": 0,
+  "miss且盘上还在": 0,
+  "miss且盘上也没有": 0,
+  "受影响页数": 0,
+  "受影响页": []
+}
+--- 逐条 miss（带在盘分类）---
+C2_EXIT=0

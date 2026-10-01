@@ -10220,6 +10220,57 @@ const MUTATIONS = [
     expectFail: "门那半真的调这个构造器",
   },
 
+  /* ── 第 285 页：D-11「凭证页点名的 dated 证人必须追得到 HEAD」。立它的两起事故写在 `scripts/docs-check.ts`
+   *    那条注释里（第 281 页的日志没随页入库 ⇒ 只有 210s 的认证跑抓得到；第 284 页声称留档的第一版日志被同名覆盖
+   *    ⇒ D-9 只抽目录、看不见文件名）。五支各钉一个分支：取料面截断、目录那一半、文件那一半、登记位漂了、接线掉。
+   *    判卷全吃**合成输入**（第 272 页第 7 项：两侧同真的配对断言买不了锚点），真仓那一条只当存量哨兵。 ── */
+  {
+    id: "evidence-witness-pattern-ref-read-as-concrete-file",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "把「带 `*?{}` 的是模式、不是路径」那一支焊死 ⇒ 台账里 `outputs/_audit-*.md` 这种写法被当成一个具体文件去追，" +
+      "门为一堆根本不存在的证人喊红。⚠️ 同族另一形状（字符集限成 ASCII ⇒ 带中文的真文件名在第一个汉字处被截断，" +
+      "第 285 页普查第一版真犯过）由取料面判卷钉着、这条锚点**没买到**：改成派生正则后针脚要写四层转义才贴得住，" +
+      "为它拼一条脆弱针脚不如把形状写在页上（规则 341：注释与散文都不许被读成已闭）",
+    apply: (s) => s.replace("if (/[*?{}]/u.test(name)) continue;", "if (false) continue;"),
+    expectFail: "模式串跳过",
+  },
+  {
+    id: "evidence-witness-dir-ref-always-resolves",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "目录点名（以 `/` 结尾）那一半改成恒追得到 ⇒ 「整个 dated 目录没随页入库」读成绿：这正是第 281 页的形状，" +
+      "而文件那一半照旧——只红目录这一支，说明判据的两半得各买一支",
+    apply: (s) => s.replace('if (ref.endsWith("/") ? dirs.has(ref) : tracked.has(ref)) continue;', 'if (ref.endsWith("/") ? true : tracked.has(ref)) continue;'),
+    expectFail: "整个目录没入库才红",
+  },
+  {
+    id: "evidence-witness-file-ref-always-resolves",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "文件点名那一半改成恒追得到 ⇒ 页点名的证人不存在也不出声，D-11 退化成「只查目录」；" +
+      "反向一侧（同一条从清单里去掉要红一条）当场抓住",
+    apply: (s) => s.replace('if (ref.endsWith("/") ? dirs.has(ref) : tracked.has(ref)) continue;', 'if (ref.endsWith("/") ? dirs.has(ref) : true) continue;'),
+    expectFail: "同一条从清单里去掉就红一条",
+  },
+  {
+    id: "evidence-witness-stale-registry-silent",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "登记位的「不再命中就该删」那一半焊死 ⇒ 登记表只会越积越多、没人知道自己留的是假存量（第 279 页 D-10 同族：只印不判的那一半也要出声）",
+    apply: (s) => s.replace("if (!seenRefs.has(k)) {", "if (!seenRefs.has(k) && false) {"),
+    expectFail: "不再命中的登记报 stale",
+  },
+  {
+    id: "evidence-witness-unavailable-reads-as-empty-face",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "把「取不到 HEAD 清单 ⇒ 未检」改成「拿空集合当判据」⇒ 三态被抹平：门会喊 73 条红（假红淹真信号），" +
+      "而下一次真取不到清单时它又可能被人顺手改成 `?? new Set()` 的反方向——接线形状要有钉子",
+    apply: (s) => s.replace("const witness = ledgerTracked === null ? null : checkWitnessPaths(credPages, ledgerTracked);", "const witness = checkWitnessPaths(credPages, ledgerTracked ?? new Set<string>());"),
+    expectFail: "接线：门真的调这条判据",
+  },
+
   /* ── 第 274 页：把 `scripts/prose-needle-scan.ts` 的帽那一族补齐（第 272 页现读：这支 1100 行的尺此前整支零锚点，
    *    本族四支各钉一种坏法：比较符、加法、按树取帽、把出声那一支焊死）。
    *    这四支都能买，正因为它们的判卷喂的是**合成输入**（第 272 页第 7 项写的那条：clean 树上两侧同为 0 的配对断言买不了锚点）。 ── */
