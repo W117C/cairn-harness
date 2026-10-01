@@ -27,18 +27,17 @@ export default defineConfig({
     // 并行跑会文件竞争 → 测试文件级串行（vitest 文件间仍各自隔离模块注册表）。
     fileParallelism: false,
 
-    /* 超时对齐**实测**，不是放松判据（断言一条没动，改的只是"允许多久之内跑完"）。
+    /* `testTimeout` 对齐**实测**，不是放松判据（断言一条没动，改的只是"允许多久之内跑完"）。
      *
-     * 为什么必须显式给：vitest 缺省 hookTimeout=10s、testTimeout=5s，而这两条现在是**确定性红**：
-     *   · `prose-needle-scan.test.ts` 的 `beforeAll` 调 `scanRepo(root)` 整仓扫一遍，
-     *     2026-10-01 实测 **10.8 秒**（`node --import tsx -e 'scanRepo(process.cwd())'` 计时），
-     *     已越过 10s 缺省 ⇒ 干净检出上这条 suite 必红（合并前 e42b4af 与合并后 d1371dd 同样红，
-     *     与本笔的改动无关；这是**仓库长大了**，不是代码坏了）。
-     *   · `head-cert-deps.test.ts` 有一条真读本机 `git worktree list` 的用例，树一多就过 5s。
-     * 注意这是**按仓库规模增长**的开销：值给宽是买时间，不是治本。
-     * 治本是让 `scanRepo` 能增量/缓存（那属于 `scripts/prose-needle-scan.ts` 的活），
-     * 在那之前，给足余量比留一条"必红的已知项"好——假红灯会训练人忽略红灯（本仓第 123 页的账）。 */
-    hookTimeout: 60_000,
+     * 为什么给：`head-cert-deps.test.ts` 有一条**真读本机 `git worktree list`** 的用例
+     * （"真读现喂：…不许崩，且绝不点到自己这棵"），树一多在**有并发负载**时就会越过 vitest 缺省
+     * 的 5 秒。2026-10-01 实测：单独跑绿，整表并发跑时红成 `Test timed out in 5000ms.`
+     * ——那是**假红灯**，而假红灯会训练人忽略红灯（本仓第 123 页的账）。
+     *
+     * **这里刻意不设 `hookTimeout`**：钩子那半边（`prose-needle-scan` 的整仓扫 10.8s > 缺省 10s）
+     * 已由第 291 页在**那两个重钩子**上显式声明 `HOOK_BUDGET_MS = 30_000` 解决，并配了
+     * "恰好两支钩子声明了预算"的形状判卷与变异锚点。在 config 里再给一个全局默认
+     * ＝同一个问题两套机制（本仓反复点名的"抄第二份迟早漂"），所以那半边不在这重复落地。 */
     testTimeout: 30_000,
   },
 });
