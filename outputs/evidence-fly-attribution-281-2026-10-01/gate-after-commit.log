@@ -1,0 +1,4 @@
+✅ evidence-typecheck：证据面危险码 12 条／帽 12 条（HEAD 口径｜在飞未入库 4 条／2 个文件（只点名，不计我的账：outputs/selector-uniqueness-2026-09-30/diagnose.mts(3)、outputs/sequencer-dynamic-2026-10-01/probe-prod.mts(1)）；登记 8 个文件；全量报错 52 条）（2341ms｜解析 52/52 条）
+   归属面取料：前缀 outputs｜未跟踪 26 支
+   被算进危险码的第一行（原文照贴，判卷钉的就是这个形状）：outputs/anchor-resolvability-2026-09-23/measure-anchor.mts(110,14): error TS2551: Property 'line' does not exist on type '{ kind: "path" | "
+EXIT=0
