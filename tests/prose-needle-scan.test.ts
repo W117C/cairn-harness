@@ -284,6 +284,17 @@ describe("blankComments：等长涂白，行号与偏移一律不漂", () => {
     expect(blanked.split("\n").length).toBe(t.split("\n").length);
     expect(blanked.slice(t.indexOf("const b")).includes("真文案")).toBe(true);
     expect(extractLiterals("x.ts", t).map((c) => c.chunk)).toEqual(["真文案 测试调用"]);
+    // 上面四格都不经过真正的消费者：`extractLiterals` 自己直接 `lex`，所以把 `blankComments`
+    // 改成原样返回时它们照样绿（第 276 页写锚点时实测存活）。涂白唯一被读到的地方是
+    // `collectNeedles` 的取料面 ⇒ 判据钉在那儿，两侧同夹具：注释里那条被划掉的不算料、
+    // 没注释的那条才算——只留后一半的话，谓词写反了也照样绿。
+    const both = [
+      `expect(String(g.reason)).toContain("涂白前后都该收到的料");`,
+      `// expect(String(g.why)).toContain("注释里划掉的那条料");`,
+    ].join("\n");
+    expect(collectNeedles("z.test.ts", both).needles.map((v) => [v.field, v.needle])).toEqual([
+      ["reason", "涂白前后都该收到的料"],
+    ]);
   });
 
   it("反向一侧：字符串里的 `//` 与引号不许被当成注释（涂过头会把真字面量抹掉⇒ 尺变瞎）", () => {

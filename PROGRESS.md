@@ -9155,3 +9155,26 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 
 
 
+### 2026-10-01 · 第 276 页 · 给取料面补四格锚点，其中一格先咬到我自己的判卷：用例标题写着「注释内容读不到」，正文四格断言却不经过消费者（表 1179→1183，判卷条数不变）
+
+1. **这一页做什么**：任务 #15 剩下的那一族——`scripts/prose-needle-scan.ts` 里除「帽」以外没人守的格子（第 274 页补齐的是帽，本笔补的是"读数怎么算出来的"）。四支锚点各钉一格、四条 `expectFail` 互不相同：① 裸名字谓词的长度上限 12（`prose-scan-bare-name-length-cap-loosened`）② 注释等长涂白（`prose-scan-blank-comments-passthrough`）③ 影子排除的原始副本数 `rawCopies`（`prose-scan-raw-copies-not-reported`）④ 取料写法 `via` 的三族分布（`prose-scan-via-collapses-to-direct-only`）。
+2. **本笔真正值得记的一条，是写锚点时测出来的**：第②支的 killer 用例标题就叫「长度不变、**注释内容读不到**、真字面量还在」，但正文四格里没有一格经过真正的消费者——`blankComments` 全仓只有两个调用点（`scripts/prose-needle-scan.ts:179` 的 `collectNeedles` 与判卷自己），而 `extractLiterals:324` 是**自己直接 `lex(text)`**，不经过 `blankComments`。⇒ 把 `return lex(text).code;` 换成 `return text;` 之后：等长、行数、`真文案` 三格照绿，第四格也照绿（它压根没走被改的那条路）⇒ **这条锚点会存活**，而它存活不是因为"实现没人守"，是因为**判卷标题承诺了、正文没断言**。这是第 236 页那条「判据要与生产端共用决策点」在我自己这把尺上的镜像，也是「grep 命中≠缺陷」的反向：**用例存在≠用例在判这件事**。
+3. **这一条不靠读码下结论**：`outputs/prose-scan-feed-276-2026-10-01/probe-276.log`（`PROBE_EXIT=0`）现读两问，逐字如下——
+   - `extractLiterals(原文)=[真文案 测试调用]`
+   - `extractLiterals(涂白)=[真文案 测试调用]`
+   - `第四格分辨力＝无（两态同输出⇒那一格钉不住这条改法）`
+   - `涂白确实抹掉了注释：true｜等长：true`
+   - `collectNeedles 两侧夹具收到 1 条：[["reason","涂白前后都该收到的料"]]`
+   - `哨兵（没注释的那一行该收到 1 条）＝1`
+   前两行就是"存活"的证据：同一份夹具在原文与涂白两态下输出**逐字相同**，所以那一格在两态里都绿。
+4. **修的是判卷不是针脚**（第 4 步那条规矩：一条存活分两种成因，实现搬家跟着针脚走、判卷零分辨力补输入与断言；这里是后者）。在同一格 `it` 的正文里补两侧，判据打在真正的消费者 `collectNeedles` 上：同一份夹具两行，一行真 `expect(String(g.reason)).toContain(...)`、一行是**注释里被划掉的** `// expect(String(g.why)).toContain(...)`，只该收到前者（`toEqual([["reason", "涂白前后都该收到的料"]])`）。留两侧而不是只留"收了"那一半，是因为只留一半时把谓词写反（只收注释、不收正文）也照样绿。没有新建 `it`：新建会多一条用例（判卷条数要跟着对账），而本笔的缺陷恰好是"标题已经承诺了这件事"⇒ 补进正文才是对账，另开一条是掩盖。
+5. **落笔前的现读（全部逐字贴自刚生成的日志，目录 `outputs/prose-scan-feed-276-2026-10-01/`；本目录是本笔新建，取名前 `ls` ＋ `git ls-files` 都核过为空）**：
+   - `needles-276-precommit.log`／`needles-276-precommit-postedit.log`（`NEEDLES_EXIT=0`，两份同一批读数，第二份是补完判卷之后重跑的）：`针脚体检：1183 条 —— 阻断 0，待复认 0，未覆盖 0，逐行式 5，未入库面 0（被测面 + 判卷两面），钉在飞文本 0，killer 指针失效 0（其中 HEAD 侧 0）`｜`改法语法体检：1183 条改法全部产出合法源文件 ✅`｜`选择子：1180/1183 条能只跑自己那条 killer 用例`（表长 1179→1183 正好是本笔四支；四支都不落进「钉在飞文本」那一格，因为针脚长在已入库的 `prose-needle-scan.ts` 里）。
+   - `typecheck-276.log`：`TYPECHECK_EXIT=0`。
+   - `vitest-prose-scan-276.log`（补判卷前）与 `vitest-prose-scan-276b.log`（补判卷后）都是 `Test Files  1 passed (1)` ＋ `Tests  69 passed (69)`、`VITEST_EXIT=0` ⇒ 本笔**不新增用例**，判卷条数不变。
+   - `scan-276-worktree.log`／`scan-276-worktree-postedit.log`（`SCAN_EXIT=0`）。两份我引的每一格逐字相同，唯一差异是**在飞分母**那一行：`在飞分诊：5 / 18 个 ≥24h 没被碰过` → `5 / 19`，多出的那 1 个就是我为补判卷而改的 `tests/prose-needle-scan.test.ts`（两份日志 `diff` 只出这一行，`SCAN_DIFF_EXIT=1` 是这一行造成的，不是读数漂）。其余：`prose-needle-scan：收料断言 132 条（扫 258 个 test 文件）｜生产侧 247 个文件｜树＝core-only（帽 顶包 10 ＋ 裸名字 2）`｜`顶包候选（收料那段在 ≥2 处字面量里 ⇒ 改一处不会响）：10 条（已提交态 10 ＋ 在飞 0）｜同一句抄 ≥2 处（改代码）5 条｜只是共享一个词（改针脚）5 条｜针脚是个裸名字（改成派生断言，红）2 条`｜`影子池：认出 2 张（用例表 scripts/lib/shell-bypass-cases.ts 14 条、登记表 scripts/mutate-verify.mjs 1192 条），因引用/输入而免计的格子 18 格`｜`点名豁免挡下的散文栏：1582 条字面量`。
+6. **水位与帽**：顶包候选 10 ＝ 帽 10、裸名字 2 ＝ 帽 2，**两格都在帽上、余量 0**。本笔四支没把候选推高（在飞 0），但这意味着下一支钉同族文字的锚点**只能先降存量**，涨帽不是选项（规则 235／291：帽只准调低）。这一点写在页面里而不是留给下一次现场发现。
+7. **归因声明**：本笔只动 `scripts/mutate-verify.mjs`（登记表追加 39 行／0 删）与 `tests/prose-needle-scan.test.ts`（一格里补两侧），没有碰任何邻居在飞文件；主树里其余在飞项都不是我的（交笔前 `git status --porcelain` 现读）。认证门里那道常驻红（`gate-check` 的 H7，缺 10 个 fixtures/impact/accuracy-repo 冻结登记）属隔壁 `1748ca7`，本笔不动它、也不写成「全量绿」。
+8. **刻意未做**：① 没给「证人无身份行」和「取不到＝未检」设帽（沿第 275 页）；② 取料面还剩四格没人守——`unresolvedMatcher`、`shadowCleared`、`agedInFlight`／`inFlightAgeChecked`、`selfExcluded`／`proseHeldBack`，留在任务 #15，**不一次补齐**：每补一支都要先答"哪条用例为它红"，本笔第 2 项就是这条规矩的价值证明；③ 没把第②支的改法换成"直接改 `lex`"（那会同时打脏 `extractLiterals`，一格改两件事，杀死时分不清是谁红的）。
+9. **清场**：本笔要建的两棵独立树（验锚点、认证 HEAD）跑完逐棵 `git -C <树> status --porcelain` 核 0 项，**不回收**（回收是破坏性动作，等用户点头）；累计清单见第 272 页凭证第 10 项。
+

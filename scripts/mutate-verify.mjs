@@ -9926,6 +9926,45 @@ const MUTATIONS = [
     expectFail: "干净文件的账算我的，在飞文件的账不算我的——但两边都要在清单上",
   },
 
+  /* ── 第 276 页：同一把尺再补四格（每格都有**自己的** killer 用例，四条 expectFail 各不相同——
+   *    第 275 页刚踩过"两支钉同一条用例"被顶包水位帽抓，这次按格分好再写）。 ── */
+  {
+    id: "prose-scan-bare-name-length-cap-loosened",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "裸名字谓词的长度上限从 12 放宽一格 ⇒ 一句人话开始落进这一族；" +
+      "上限是这条谓词唯一的软处（判卷把 12/13 两侧各钉了一格），放宽一格在真仓里也许仍不红，但那条边界从此没人守",
+    apply: (s) => s.replace("t.length <= 12 &&", "t.length <= 13 &&"),
+    expectFail: "一个名字 ⇒ 是；句子里的一个词 ⇒ 不是（两侧）",
+  },
+  {
+    id: "prose-scan-blank-comments-passthrough",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "注释涂白退化成原样返回 ⇒ 注释里的旧文案开始冒充生产者（第 118 页那条『注释不是文案』的判据作废），" +
+      "而`drift` 会因此少报——少报比崩更坏：它看起来是干净",
+    apply: (s) => s.replace("  return lex(text).code;", "  return text;"),
+    expectFail: "长度不变、注释内容读不到、真字面量还在",
+  },
+  {
+    id: "prose-scan-raw-copies-not-reported",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "`copies` 交了而 `rawCopies` 交 0 ⇒ 影子排除只留下一个变小了的数，" +
+      "『因登记表副本而免计』那几格再没人点数（把判据关小还不说，规则 101 的反向一侧）",
+    apply: (s) => s.replace("rawCopies: copyCount(chunks, sought),", "rawCopies: 0,"),
+    expectFail: "而 rawCopies=2 一并交出",
+  },
+  {
+    id: "prose-scan-via-collapses-to-direct-only",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "本地 helper 那一支的 `via` 被并回『字段直取』⇒ 取料写法分布读数说谎" +
+      "（第 95 页以前只认直取、其余整族静默绕过，这三格就是为那时留的形）；料还收着，但『怎么收到的』已经错了",
+    apply: (s) => s.replace('via = "本地 helper";', 'via = "字段直取";'),
+    expectFail: "三族各收一条",
+  },
+
   /* ── 第 274 页：把 `scripts/prose-needle-scan.ts` 的帽那一族补齐（第 272 页现读：这支 1100 行的尺此前整支零锚点，
    *    本族四支各钉一种坏法：比较符、加法、按树取帽、把出声那一支焊死）。
    *    这四支都能买，正因为它们的判卷喂的是**合成输入**（第 272 页第 7 项写的那条：clean 树上两侧同为 0 的配对断言买不了锚点）。 ── */
