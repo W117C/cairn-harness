@@ -1,0 +1,41 @@
+=== 口径声明 ===
+冻结剧本 fixtures/mock/todo-fix.jsonl 是**一次成功**的回合 ⇒ 0 红 ⇒ 按硬门提炼 0 条。
+轮 A 改用同形状的**失败**剧本（就地生成，不碰冻结 fixture）。
+「模型读懂教训并改了动作」在 mock 靶上不可达（provider 忽略 messages，runLoop 无注入口）——本面只测可达的一半。
+
+=== 轮 A（失败剧本，空记忆）===
+[A] 事件 10 条｜provider 请求 2 次｜verify_result=0｜tool_result 红=1
+[A] 注入块 project=null｜tokens=0｜教训行 0 条（基线应为 0）
+
+=== 从轮 A 真实轨迹提炼 ===
+提炼出 0 条：
+  轮 A 确有红：1 条 tool_result{ok:false}，但**没有一拍的失败能撑起一条教训**：
+    callId=c3 工具=run_shell —— 工具只败 1 拍（TOOL_STREAK_MIN=2），且它跑在 verify 反射**之外** ⇒ loop 不发 verify_result ⇒ 三类来源一条都够不着。
+  这是**正确的零**：单拍偶发失败不该被提炼成教训（那是噪音，见 lessons.ts 来源③ 的收窄理由）。
+  代价是：本靶子上 M6 的产出口径**测不到非零那一支**——真实会话语料那一面（replay:lessons-offline）才是非零读数。
+
+=== 轮 B（工作区已写入轮 A 的教训）===
+[B] 已写入 0 条 → <ROOT>/fixtures/todo-app/.agent/memory
+[B] 事件 10 条｜provider 请求 2 次｜verify_result=0｜tool_result 红=1
+[B] 注入块 project=null｜tokens=0｜教训行 0 条
+
+=== 两轮对照 ===
+  A 投影 = user:27,assistant:25,assistant:0,tool:638,assistant:14,assistant:0,tool:86,assistant:4,assistant:0,tool:1073
+  B 投影 = user:27,assistant:25,assistant:0,tool:638,assistant:14,assistant:0,tool:86,assistant:4,assistant:0,tool:1072
+  事件流条数 A=10 B=10
+  注入块是 runLoop 外的另一条路（glm-session 启动时读）⇒ 投影逐字相同是**预期的**，不是注入失败。
+
+=== 盘上正文 ↔ 回注行 逐字对照 ===
+
+=== 冻结 fixture 未被动 ===
+  fixtures/mock/todo-fix.jsonl sha256 = e253aae90285ecd4…（该文件本轮只读）
+
+=== 诚实声明 ===
+本面证到的：真失败轨迹 ⇒ **正确的零**（单拍偶发失败不成教训），两轮事件流逐字同形。
+本面**没**证到的：非零产出的端到端那一跳。这轮 A 的失败脚本造不出够格的一拍（见上），
+所以「提炼 ⇒ 写盘 ⇒ 回注逐字含出处」那一支在本靶子上是空的——它由 tests/memory-lessons.test.ts
+（20 条，含真写盘往返与注入逐字断言）与 replay:lessons-offline（真语料非零读数）承担。
+业主定的验收形态「冻结 mock 两轮对比同类失败率」在此**结构不可达**：
+  · 冻结剧本是一次成功回合 ⇒ 0 红 ⇒ 0 教训（硬门正确地挡下）；
+  · createMockProvider 忽略 messages，且记忆注入在 glm-session 启动时读盘、不在 runLoop 里。
+要真量「同类失败率下降」，需要换真模型 + 真靶子的独立实验，不在本轮写范围。未测即未证。

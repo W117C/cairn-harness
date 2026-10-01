@@ -1,0 +1,38 @@
+[lessons-offline] 日志数 = 21
+  outputs/eval-benchmark-adapter-2026-09-24/swebench-sample.jsonl events=    2 坏行= 0 verify拍=  0 代码红=  0 环境红=  0 工具红=  0 无归属红=  0 ⇒ 教训=0
+  outputs/ga-strategy-2026-09-20/fanout.events.jsonl         events= 5381 坏行= 0 verify拍=  1 代码红=  0 环境红=  0 工具红=  0 无归属红=  0 ⇒ 教训=0
+  outputs/ga-strategy-2026-09-20/solo.events.jsonl           events=   33 坏行= 0 verify拍=  1 代码红=  0 环境红=  0 工具红=  0 无归属红=  0 ⇒ 教训=0
+  outputs/ga-strategy-2026-09-20/supervise.events.jsonl      events=  700 坏行= 0 verify拍=  1 代码红=  0 环境红=  0 工具红=  2 无归属红=  0 ⇒ 教训=0
+  outputs/ga-strategy-2026-09-20-rep2/fanout.events.jsonl    events= 4709 坏行= 0 verify拍=  1 代码红=  0 环境红=  0 工具红=  0 无归属红=  0 ⇒ 教训=0
+  outputs/ga-strategy-2026-09-20-rep2/solo.events.jsonl      events=   78 坏行= 0 verify拍=  1 代码红=  0 环境红=  0 工具红=  0 无归属红=  0 ⇒ 教训=0
+  outputs/ga-strategy-2026-09-20-rep2/supervise.events.jsonl events=  773 坏行= 0 verify拍=  0 代码红=  0 环境红=  0 工具红=  1 无归属红=  0 ⇒ 教训=3
+      · [repeat-action] lesson-repeat-action-1 ← supervise.events#call_0f4f429e09954d8ebc930592
+      · [repeat-action] lesson-repeat-action-2 ← supervise.events#call_1b0f6715ffa948439c257c95
+      · [repeat-action] lesson-repeat-action-3 ← supervise.events#call_7635b067ab914fcf8c24a668
+  outputs/ga-strategy-2026-09-20-rep3/fanout.events.jsonl    events=  951 坏行= 0 verify拍=  1 代码红=  0 环境红=  0 工具红=  4 无归属红=  0 ⇒ 教训=1
+      · [tool-streak] lesson-tool-streak-spawn_agent ← fanout.events#call_4e7725d39b4f45b29d872ee8
+  outputs/ga-strategy-2026-09-20-rep3/solo.events.jsonl      events=  174 坏行= 0 verify拍=  1 代码红=  0 环境红=  0 工具红=  0 无归属红=  0 ⇒ 教训=0
+  outputs/ga-strategy-2026-09-20-rep3/supervise.events.jsonl events=  904 坏行= 0 verify拍=  1 代码红=  0 环境红=  0 工具红=  1 无归属红=  0 ⇒ 教训=2
+      · [repeat-action] lesson-repeat-action-1 ← supervise.events#chatcmpl-tool-a6d978781888f44c
+      · [repeat-action] lesson-repeat-action-2 ← supervise.events#chatcmpl-tool-ac6a5c1739a41c08
+  outputs/loop-eval-2026-09-20-base/I2-rep1-base.events.jsonl events=  332 坏行= 0 verify拍=  2 代码红=  2 环境红=  0 工具红=  2 无归属红=  0 ⇒ 教训=3
+      · [verify-red] lesson-verify-red-1 ← I2-rep1-base.events#call_4ade2d344c344ee2b22f4c7f
+      · [verify-red] lesson-verify-red-2 ← I2-rep1-base.events#call_272bbc7b842348ea80e927bb
+      · [tool-streak] lesson-tool-streak-run_shell ← I2-rep1-base.events#call_c4157b50e27d49128ee29ede
+  outputs/loop-eval-2026-09-20-short/I2-rep1-short.events.jsonl events=  290 坏行= 0 verify拍=  1 代码红=  1 环境红=  0 工具红=  0 无归属红=  0 ⇒ 教训=1
+      · [verify-red] lesson-verify-red-1 ← I2-rep1-short.events#call_6e6c5735010c4a4a93f9d627
+  outputs/loop-eval-v2-base/I1-rep1-base.events.jsonl        events=  299 坏行= 0 verify拍=  1 代码红=  0 环境红=  0 工具红=  0 无归属红=  0 ⇒ 教训=0
+  outputs/loop-eval-v2-base/I2-rep1-base.events.jsonl        events=   48 坏行= 0 verify拍=  1 代码红=  0 环境红=  0 工具红=  0 无归属红=  0 ⇒ 教训=0
+  outputs/loop-eval-v2-base/I3-rep1-base.events.jsonl        events=   43 坏行= 0 verify拍=  1 代码红=  0 环境红=  0 工具红=  1 无归属红=  0 ⇒ 教训=0
+  outputs/loop-eval-v2-base/I4-rep1-base.events.jsonl        events=  107 坏行= 0 verify拍=  1 代码红=  0 环境红=  0 工具红=  0 无归属红=  0 ⇒ 教训=0
+  outputs/loop-eval-v2-short/I1-rep1-short.events.jsonl      events=  288 坏行= 0 verify拍=  1 代码红=  0 环境红=  0 工具红=  0 无归属红=  0 ⇒ 教训=0
+  outputs/loop-eval-v2-short/I2-rep1-short.events.jsonl      events=   59 坏行= 0 verify拍=  1 代码红=  0 环境红=  0 工具红=  0 无归属红=  0 ⇒ 教训=0
+  outputs/loop-eval-v2-short/I3-rep1-short.events.jsonl      events=   62 坏行= 0 verify拍=  1 代码红=  0 环境红=  0 工具红=  1 无归属红=  0 ⇒ 教训=0
+  outputs/loop-eval-v2-short/I4-rep1-short.events.jsonl      events=   43 坏行= 0 verify拍=  1 代码红=  0 环境红=  0 工具红=  0 无归属红=  0 ⇒ 教训=0
+  /Users/ze/Library/Application Support/m0-agent-loop/sessions/会话 2026-09-10 03:13.jsonl events=    9 坏行= 0 verify拍=  0 代码红=  0 环境红=  0 工具红=  1 无归属红=  0 ⇒ 教训=0
+[lessons-offline] 合计：产出教训 10 条，覆盖 5/21 份日志
+[lessons-offline] 按类：{"repeat-action":5,"tool-streak":2,"verify-red":3}
+[lessons-offline] 分母侧（不依赖提炼器）：{"codeRed":3,"envRed":0,"toolFail":13,"orphanFail":0,"verifyBeats":19}
+[lessons-offline] verify 工具名常量 = "verify"
+[lessons-offline] 说明：'无归属红' 是 tool_result 查不到 tool_call 的那些——它们**不**进教训（无证据指针），
+[lessons-offline]       这一列的数就是硬门真在拦的量，不是 bug。

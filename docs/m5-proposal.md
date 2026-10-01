@@ -6,6 +6,14 @@
 > 本文是**待批准的实施提案**，不是验收对表；批准后再补 `docs/m5-acceptance.md`。
 > 复跑口径一律 `TERM=dumb`（`TERM=xterm-256color` 会让 vitest 输出 ANSI 序列，摘要正则假红）。
 > 纪律沿用：判据冻结、三态（已证/未证/不做）、每道核心断言配一条反向验证、未在本文列的项不偷做。
+>
+> **读数归属提示**：本文标题里的「M5」指 2026-09-13 那份「结果信号回流」的 M5，与路线图
+> `outputs/agent-capability-roadmap-2026-10-01/PLAN.md` 里 2026-10-01 的 M5/M6 **不是同一格**
+> （后者 = 验证闭环加固 + 记忆跨会话学习，实现在 `src/agent/verify.ts` 与 `src/agent/memory/lessons.ts`，
+> 判卷 `tests/verify-multiface.test.ts` / `tests/memory-lessons.test.ts`）。
+> 那一组的口径面登记为 `replay:lessons-offline`（跑法 `node --import tsx scripts/replay/lessons-offline.ts`）
+> 与 `replay:lessons-round-ab`（两轮 A/B 的可达面 + 不可达面的诚实声明）；
+> 本仓另有 `replay:verify-cause-mix` 量 verify 红拍的归因构成；引用这一份时别把它们当同一个 M5。
 
 ---
 

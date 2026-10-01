@@ -74,6 +74,16 @@ export const REPLAY_READINGS: readonly ReplayReading[] = [
     script: "scripts/replay/prune-promise.ts",
     answers: "任务 #33 的优先级尺：压缩摘要里承诺「用 tool_result:index 回取」的条目，在语料里真被回取过几次（0 次 ⇒ §7.4 那条承诺是空头支票）",
   },
+  {
+    id: "lessons-offline",
+    script: "scripts/replay/lessons-offline.ts",
+    answers: "M6 跨会话教训的**产出口径**：三类来源在真语料里各产出几条、覆盖几份日志，以及分母侧独立算出的红拍数——两栏对不上就说明硬门在悄悄丢东西（见 docs/m5-proposal.md 头部「读数归属提示」）",
+  },
+  {
+    id: "lessons-round-ab",
+    script: "scripts/replay/lessons-round-ab.ts",
+    answers: "M6 两轮 A/B 的**可达面**：冻结剧本跑一轮后真失败轨迹 ⇒ 提炼出几条、注入块形状、两轮事件流除剧本外哪处字节变了。同一支同时把「同类失败率下降」为何在本仓结构不可达写进输出（诚实声明面）",
+  },
 ];
 
 export interface ReplayFacts {

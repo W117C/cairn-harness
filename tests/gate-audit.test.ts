@@ -59,6 +59,10 @@ const LAYER_CASES: readonly { name: string; expected: GateLayer; run: () => unkn
   { name: "自主档 risk≥high 送审", expected: "L4-risk", run: () => evaluate("run_shell", { command: "rm -rf build" }, session({ mode: "auto" })) },
   { name: "非自主档 risk≥high 送审", expected: "L4-risk", run: () => evaluate("read_file", { path: "a.ts", requires_approval: true }, session({ mode: "default" })) },
   { name: "MCP 无注解按写 fail-closed", expected: "L4-mcp-unannotated", run: () => evaluate("mcp__srv__do" as never, {}, session({ mode: "auto" })) },
+  // M7：未登记工具名与上面那条**同层同裁决**——都属「工具面没为自己作证」，所以复用该层而不是新增一层
+  // （新增会在 layer×verdict 矩阵里多出一列，而它在任何真实语料里都恒为 0）。
+  // 代价已知：`L4-mcp-unannotated` 的读数此后不再只关于 MCP，两种情形在复跑面上并进同一格。
+  { name: "未登记工具名按写 fail-closed（M7）", expected: "L4-mcp-unannotated", run: () => evaluate("never_registered_tool" as never, {}, session({ mode: "auto" })) },
   { name: "自主档网络类 risk≥medium 送审", expected: "L4-network", run: () => evaluate("run_shell", { command: "curl http://api.example.com" }, session({ mode: "auto" })) },
   { name: "自主档末行放行（今天零痕迹的那条）", expected: "L4-pass", run: () => evaluate("run_shell", { command: "echo hi" }, session({ mode: "auto" })) },
   // `X-distill`：沉淀轮那三类判定不在 `evaluate` 里发生，因此这里钉的是**它的登记形状**（层名单列、

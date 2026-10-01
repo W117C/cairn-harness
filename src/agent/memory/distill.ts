@@ -8,6 +8,8 @@ import { projectContext } from "../context";
 import type { Provider, ProviderMessage } from "../../providers";
 import type { Tool, ToolContext } from "../../tools/base";
 import type { GateMeta } from "../../permissions/autonomy";
+import { LESSON_MEMORY_TYPE, distillLessons } from "./lessons";
+import { projectMemoryDir, writeTopic } from "./store";
 
 /** 沉淀指令（§6.5 雏形：四类型检查 + skip 纪律 + 唯一写入口）。 */
 export const DISTILL_INSTRUCTION = [
@@ -127,6 +129,58 @@ export function failureDigestFromEvents(events: AgentEvent[]): string {
   );
 }
 
+/** M6 · 把失败轨迹写成**带证据指针**的教训条目（确定性、不经模型）。
+ *
+ *  与本文件上面那条 `failureDigestFromEvents` 的分工：digest 是喂给模型的**计数**摘要（凭据不足、
+ *  结论自由）；这里是**落盘**的条目（每条指回哪条会话、哪个 callId），下一轮回注。
+ *
+ *  两处设计取舍照写不藏：
+ *  · **不过合并审批**（业主已定）。写入内容是提炼出来的原文摘录 + 事件指针，不是模型自由文本；
+ *    但它确实绕过了 remember 的审批面——若日后要求人工把关，把这里的 writeTopic 挪到
+ *    `mergedApproval` 之后即可，形状不用改。
+ *  · **失败不许连累沉淀结局**。`writeTopic` 在索引超上限时会抛 `index_overflow`，那是
+ *    「记忆写满了」，不是「本轮该判 failed」——两类混起来会凭空吃掉一整轮沉淀。 */
+export interface LessonWriteResult {
+  written: string[];
+  failed: { topic: string; why: string }[];
+}
+
+export async function writeLessons(opts: {
+  events: AgentEvent[];
+  logPath: string;
+  workspace: string;
+  emit: (e: AgentEvent) => Promise<void>;
+  nowISO?: string;
+}): Promise<LessonWriteResult> {
+  const out: LessonWriteResult = { written: [], failed: [] };
+  let lessons;
+  try {
+    lessons = distillLessons(opts.events, opts.logPath);
+  } catch (err) {
+    // 提炼是纯函数，抛错只可能是事件形状变了。整轮跳过但**留痕**——静默吞掉等于
+    // 「教训功能悄悄不产出了」而没人知道。
+    await opts.emit({ type: "tool_result", callId: "", ok: false, output: "[memory] 教训提炼失败: " + (err instanceof Error ? err.message : String(err)) });
+    return out;
+  }
+  const dir = projectMemoryDir(opts.workspace);
+  for (const l of lessons) {
+    try {
+      await writeTopic(dir, l.topic, LESSON_MEMORY_TYPE, l.body, opts.nowISO ?? new Date().toISOString());
+      out.written.push(l.topic);
+    } catch (err) {
+      out.failed.push({ topic: l.topic, why: err instanceof Error ? err.message : String(err) });
+      // fail-visible：落盘失败必须能在事件流里看到，否则「记忆没写进去」是无人知晓的静默失败。
+      await opts.emit({
+        type: "tool_result",
+        callId: l.evidence[0]?.callId ?? "",
+        ok: false,
+        output: "[memory] 教训条目 " + l.topic + " 写入失败（其余条目照常继续）: " + (err instanceof Error ? err.message : String(err)),
+      });
+    }
+  }
+  return out;
+}
+
 export async function runSessionEndDistill(opts: DistillOptions): Promise<DistillOutcome> {
   if (!opts.enabled) return { kind: "disabled" };
   let events: Awaited<ReturnType<typeof replay>>;
@@ -142,6 +196,10 @@ export async function runSessionEndDistill(opts: DistillOptions): Promise<Distil
   // 失败轨迹引导（能力 6/10）：把失败聚成显式证据并入指令——回放本身不含注意力引导，
   // 模型不会自动盯着失败看；无失败时 digest 为空串，指令逐字不变（零行为回归）。
   const digest = failureDigestFromEvents(events);
+  /* M6 教训落盘：放在调 provider **之前**——此刻事件已在手，写入不依赖任何模型判断，
+     正是「不许凭空总结」要的那一支。放在之后的话，一轮 provider 异常（failed 结局）就会
+     把已经算好的证据一起带走。失败不改变下面的结局（见 writeLessons 的取舍注释）。 */
+  await writeLessons({ events, logPath: opts.logPath, workspace: opts.workspace, emit: opts.emit });
   const instruction = digest.length > 0 ? digest + "\n\n" + DISTILL_INSTRUCTION : DISTILL_INSTRUCTION;
   /* 真 session provider 以事件日志为唯一事实源（`stream(_messages,_tools)` 明确忽略入参），
    * 所以「只在内存塞一条指令」是发不出去的——那正是本模块长期存在的缺口（见 DistillOptions

@@ -10,14 +10,17 @@ import { isAbsolute, relative, resolve } from "node:path";
 import { weightText } from "../text-budget.js";
 import { escapeControlTags } from "../control-tags.js";
 import { shapeDoc } from "../shape.js";
+import { LESSON_TOPIC_PREFIX, lessonLine, parseLessonDigest } from "./lessons.js";
 import {
   loadExternalRefState,
   globalMemoryDir,
   projectMemoryDir,
   recentDecisionEntries,
   readTextOrNull,
+  readTopicBody,
   saveExternalRefDecision,
   rootFilePath,
+  listTopics,
   type ExternalRefState,
 } from "./store.js";
 
@@ -28,6 +31,8 @@ export const ARCH_OUTLINE_THRESHOLD_BYTES = 4 * 1024;
 /** 大纲帽的上限（字符）。真正的帽取 `min(此值, 原文字符数/2)`——见 archSection。 */
 export const ARCH_OUTLINE_MAX_CHARS = 4_096;
 export const DECISIONS_RECENT_DEFAULT = 20;
+/** 教训段注入条数上限（M6）。教训是"下次别这么做"，过了这个数量就该沉到索引里而不是每轮占预算。 */
+export const LESSONS_RECENT_DEFAULT = 10;
 
 /** 块首立场声明（OpenViking 立场，§8.1.5/§8.1.8）。 */
 export const STANCE_LINE =
@@ -127,12 +132,40 @@ async function indexSection(header: string, dir: string): Promise<Section | null
   return { header, lines: raw.trimEnd().split("\n") };
 }
 
+/** 教训段（M6）：每条一行，**出处逐字可见**。
+ *
+ *  两处刻意的形状：
+ *  · **按 modified 倒序 + 取最近 N 条**——教训是"下次别这么做"，上一轮刚犯的比三个月前的有用。
+ *    排序键读的是 topic 文件 frontmatter 的 modified（不是文件名，那不是时间）。
+ *  · **出处从盘上正文解析**（`^evidence-line:`），解析不出 ⇒ 这条不进注入 ⇒
+ *    "无出处不注入"与 lessons 侧"无出处不写盘"是同一道门的两端，不靠调用方自觉。 */
+async function lessonsSection(dir: string, limit: number): Promise<Section | null> {
+  const topics = (await listTopics(dir)).filter((t) => t.topic.startsWith(LESSON_TOPIC_PREFIX));
+  if (topics.length === 0) return null;
+  topics.sort((a, b) => (a.modified < b.modified ? 1 : a.modified > b.modified ? -1 : a.topic.localeCompare(b.topic)));
+  const lines: string[] = [];
+  for (const t of topics.slice(0, limit)) {
+    const body = await readTopicBody(dir, t.topic);
+    if (body === null) continue;
+    const d = parseLessonDigest(body);
+    if (d === null) continue; // 无证据指针 ⇒ 不注入
+    lines.push(lessonLine(t.topic, d));
+  }
+  if (lines.length === 0) return null;
+  return {
+    header: "[LESSONS 最近 " + lines.length + " 条（每条自带证据指针：哪条会话、哪个 callId；无出处的条目不会出现在这里）]",
+    lines,
+  };
+}
+
 export interface MemoryInjectionOptions {
   workspace: string;
   /** 缺省 globalMemoryDir()。 */
   globalRoot?: string;
   /** 缺省 20。 */
   decisionsLimit?: number;
+  /** 教训段注入条数（M6），缺省 LESSONS_RECENT_DEFAULT。 */
+  lessonsLimit?: number;
   /** 总预算 token，缺省 6000。 */
   tokenBudget?: number;
   /** 外部引用审批状态；缺省从全局记忆目录读。 */
@@ -184,7 +217,9 @@ export async function buildMemoryInjection(opts: MemoryInjectionOptions): Promis
   const globIndex = await indexSection("[MEMORY.md 索引（全局）]", opts.globalRoot ?? globalMemoryDir());
 
   const projectSections: Section[] = [];
-  for (const s of [arch, decisions, projIndex]) {
+  // 教训段放**最后**：预算治理是从各段**首部**整行丢弃、保尾部（下面那个循环），放最后 ⇒
+  // 它是项目段里最后被丢的那一段。加在中间会让预算紧张时先被吃掉教训而留下架构大纲。
+  for (const s of [arch, decisions, projIndex, await lessonsSection(projectMemoryDir(opts.workspace), opts.lessonsLimit ?? LESSONS_RECENT_DEFAULT)]) {
     if (!s) continue;
     projectSections.push({ header: s.header, lines: escapeControlTags(await sanitize(s.lines.join("\n"))).split("\n") });
   }

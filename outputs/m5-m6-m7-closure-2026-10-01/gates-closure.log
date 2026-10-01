@@ -1,0 +1,13 @@
+  清单漂移校验：✅ GATES ↔ package.json scripts 一致（无孤儿验收脚本）
+  ▶ typecheck …  ✅ typecheck          exit=0  4543ms
+      └ typecheck: tsc --noEmit 通过（0 条报错）✅
+  ▶ test …  ✅ test               exit=0  160660ms
+      └ Tests  3561 passed (3561)
+  ▶ docs-check …  ✅ docs-check         exit=0  831ms
+  ▶ memory-check …  ✅ memory-check       exit=0  682ms
+      └ ✅ memory-check 全部通过（两层布局/remember/注入预算/索引上限/安全/双轨/压缩接缝）
+  ✅ 零命中
+== 汇总 ==
+  绿 4 / 4，红 0
+
+[exited with code 0]

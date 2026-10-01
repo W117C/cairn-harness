@@ -91,6 +91,9 @@ export {
   type PlanState,
 } from "./plan-state";
 
+// ---- 工具名登记册（M7）：判据从四张既有表派生（不手抄），消费者见 autonomy.ts 的未知名分支 ----
+export { KNOWN_TOOL_NAMES, isKnownToolName, isMcpScopedName, MCP_SCOPED_PREFIX } from "./tool-registry";
+
 function planBlocks(): boolean {
   return planGateBlocks(currentPlanState());
 }
@@ -103,6 +106,16 @@ function planBlocks(): boolean {
 //     guided   ：粗档不拦——它拆掉的正是"每写必问"，问不问由风险线判（autonomy 的 MODE_POLICY）
 //     auto     ：全放行
 export function checkPermission(mode: PermissionMode, tool: ToolName): Decision {
+  // M7 曾在此加「未登记工具名 ⇒ deny」守卫，**已撤回**（理由留在原地，免得有人再加回来）：
+  // ① 本函数在生产里只经 `gate()` 到达 loop.ts:401，而它的下一站（loop.ts:423）**已经**是那道闸——
+  //    `const tool = (opts.tools ?? TOOLS)[name]` → `unknown tool: <name>` + `blockedBy:"unknown-tool"`。
+  //    在这里先拒等于把同一件事判两遍，还让后者的输出永远见不到（实测：`tests/loop.test.ts` 与
+  //    `tests/tool-block-witness.test.ts` 各因此红了 1 条，分母证人少印一种 blockedBy）。
+  // ② 更硬的约束：`tests/registry-rung.test.ts` 明写「注册表判定只看**本会话**工具表
+  //    `opts.tools ?? TOOLS`，不许拿静态 TOOLS 当唯一源」。本函数收不到会话工具表，
+  //    在这里做任何 KNOWN_TOOL_NAMES 判断都必然误拒运行期注入的工具（该测试实测红）。
+  // 真正的主刀因此在 `evaluate()`（autonomy.ts）：它答「这个名字危不危险」，
+  // 不答「这次会话有没有这把工具」。两件事是两种问题，判据与数据源都不同。
   if (!isSideEffectTool(tool)) return "allow";
   if (planBlocks()) return "deny";
   // 未列出的档位值只可能来自未升级的持久化/外部构造者（类型内三档都已列表）。
