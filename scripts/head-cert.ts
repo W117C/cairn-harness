@@ -8,8 +8,10 @@
  *     ⇒ 拿它认证仍含桌面层的 HEAD 会得到 `TS2307: Cannot find module 'electron'` 这种**环境假红**（规则 87/103 同族）。
  *     本脚本先比"这棵树声明了什么 vs 装了什么"，缺的从本机其它 worktree 硬链接补上，补不齐就在汇总里写明"不可归因于代码"。
  *
- * 用法：`node --import tsx scripts/head-cert.ts [--at=HEAD] [--tree=.worktrees/head-cert] [--skip-test --why=<文本>] [--no-borrow]`
+ * 用法：`node --import tsx scripts/head-cert.ts [--at=HEAD] [--tree=.worktrees/head-cert] [--skip-test --why=<文本>] [--no-borrow] [--keep-tree]`
  *   · `--skip-test` 必须配 `--why`，否则 exit 2：它只跑 typecheck，**不构成"这棵树全量绿"**（见 `certLevel` 的理由）。
+ *   · `--keep-tree` 让本次**新建**的认证树留在盘上（默认收掉：默认树名带 sha，每跑一次留一棵，一个月堆 95 棵）。
+ *     只有 `--tree=` 指定的树会被复用而不动——那棵不是本次新建的，判据①就挡住了。
  * 退出码：0＝所跑的每条门都绿**且**跑完之后那棵树还在同一笔上（等级见汇总里的「认证等级」）；
  *   1＝有红，或收尾复核发现树被切走（后者是"读数作废"，不是"HEAD 红"——汇总里会点名）；
  *   2＝连认证的前置都不成立
@@ -19,7 +21,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-import { certLevel, CERT_FLAGS, CERT_OPTS, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, gitInflightArgs, headGateTableIntegrity, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "./lib/head-cert-deps";
+import { certLevel, CERT_FLAGS, CERT_OPTS, certTreeReclaim, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, depDirs, gitInflightArgs, headGateTableIntegrity, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, unknownCertArgs } from "./lib/head-cert-deps";
 import { acquireToolLock } from "./lib/tool-lock";
 import { checkHeadImportFace, collectHeadEdges, findDanglingImports } from "./head-import-face";
 
@@ -99,12 +101,19 @@ const LOCK = acquireToolLock({
 const lockCell = LOCK.cell;
 
 // ① 切树：新建树用 worktree add，已存在的用 checkout；**不许吞输出**，且事后复核 rev-parse。
+// 回收判据①：只有本次 `worktree add` **真的成功**的那棵才归本进程收。
+// 为什么不能只看"路径原先不存在"：10-02 实测踩过——`--tree=` 指到一棵别人（或自己）正在用的树时，
+// 若那个路径相对 MAIN 解析不到，`existsSync` 为 false 就被判成"本次新建"，于是把这棵**不是本次建的**树收掉。
+// 绑在 add 的退出码上才是同一个事实：add 成功 ⇒ 这棵就是本次建的；add 失败已 exit 2，走不到回收。
 const treeAbs = join(MAIN, TREE);
-if (!existsSync(treeAbs)) {
+const treePreexisted = existsSync(treeAbs);
+let createdHere = false;
+if (!treePreexisted) {
   mkdirSync(dirname(treeAbs), { recursive: true });
   const added = run(MAIN, "git", ["worktree", "add", "--detach", TREE, TARGET]);
   say(`worktree add exit=${String(added.status)}`);
   if (added.status !== 0) { console.error(added.out.trim().split("\n").slice(0, 3).join("\n")); process.exit(2); }
+  createdHere = true;
 } else {
   const checked = run(MAIN, "git", ["-C", TREE, "checkout", "--detach", TARGET]);
   say(`checkout exit=${String(checked.status)}`);
@@ -252,7 +261,24 @@ say(`  ${concurrencyReading(psBefore, psAfter, testStatus !== null)}`);
 const hint = collisionHint(testStatus, psBefore, psAfter);
 if (hint !== null) say(`⚠️ ${hint}`);
 say(`  逐条日志：${logDir}`);
-say(`  回收这棵树（规则 120，别留残留）：git worktree remove --force ${TREE}`);
+// 回收认证树（10-02 实测修的洞）：原来这里只**印**一行回收命令就退出——命令印在 stdout 上没人敲，
+// 一个月堆了 95 棵 / 3.6 GB。改成真收，但四条判据缺一不可（见 `certTreeReclaim`），任何一条不成立就只报不删。
+const reclaim = certTreeReclaim({
+  createdHere,
+  keepFlag: flag("keep-tree"),
+  stillThere: existsSync(treeAbs),
+  // 回收前重新量一次在飞数（判卷跑完那 90 秒里可能有人往这棵树上写了东西，那时删就是删别人的活）。
+  dirtyCount: (() => {
+    const r = run(TREE, "git", gitInflightArgs());
+    return r.status === 0 ? r.out.split("\n").filter((l) => l.trim() !== "").length : null;
+  })(),
+});
+if (reclaim.remove) {
+  const rm = run(MAIN, "git", ["worktree", "remove", "--force", TREE]);
+  say(`  已回收认证树 ${TREE}（exit=${String(rm.status)}）`);
+} else {
+  say(`  未回收认证树 ${TREE}：${reclaim.why}`);
+}
 /* 清场读数（任务 #33）：别的 scratch 树收没收，门只报数、不动手（`git worktree remove` 是破坏性操作，归人）。
  * 取在飞项的参数形状在 `gitInflightArgs()`（判卷与生产共用同一份）：`--no-optional-locks` 是 git 的**全局**选项，
  * 位置必须在子命令**前面**——写在 `status` 后面 git 报 unknown option 退出 129，于是每棵树都「取不到」（第 165 页实测）。

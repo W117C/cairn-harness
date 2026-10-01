@@ -184,7 +184,9 @@ export function concurrencyReading(before: number, after: number, judged: boolea
 
 /** 本脚本认的开关（`--x=v` 形式）与裸 flag。**只此一表**：新增开关不在这儿登记，就等于给自己留一条"拼错也照跑"的路。 */
 export const CERT_OPTS: readonly string[] = ["at", "tree", "why"];
-export const CERT_FLAGS: readonly string[] = ["skip-test", "no-borrow"];
+/** `--keep-tree` 治的是 10-02 实测的那个洞：本脚本每跑一次就在 `.worktrees/` 留一棵 sha 名的 detached 树，
+ *  而汇总行末尾只**印**回收命令、不执行——一个月堆到 95 棵、3.6 GB。默认收，opt-out 明写。 */
+export const CERT_FLAGS: readonly string[] = ["skip-test", "no-borrow", "keep-tree"];
 
 /** 不认识的 `--…` 参数。为什么要拒绝而不是忽略：09-27 实测 `--tre=.worktrees/nope` 被静默丢掉，
  *  脚本转而去**建默认那棵共享树**并跑完 typecheck——操作者以为在认证自己指定的那棵，读数是另一棵的。
@@ -281,4 +283,29 @@ export function staleTreeCell(
     : `／在飞数取不到 ${String(res.unmeasured.length)} 棵（${res.unmeasured.join("、")}）＝这几棵没量过，不等于干净`;
   if (res.stale.length === 0) return `常驻残留树=0${tail}`;
   return `常驻残留树=${String(res.stale.length)}（${res.stale.map((s) => `${s.path}@${s.head.slice(0, 7)}`).join("、")}）${tail}`;
+}
+
+/** 这一轮跑完，那棵认证树该不该由本进程收掉。**回收是破坏性操作**，所以判定与执行分开：
+ *  这里只回答"能不能收"，`head-cert.ts` 才去动 `git worktree remove`。
+ *
+ *  为什么需要它（10-02 实测）：默认树名带提交号（`.worktrees/head-cert-<sha7>`），每跑一次新建一棵，
+ *  而收尾只**印**一行 `git worktree remove --force <树>` 就退出——命令印在 stdout 上，没人会照着敲 95 次。
+ *  一个月下来 95 棵 / 3.6 GB，而 `git worktree list` 正是本脚本自己要读的表。
+ *
+ *  四条判据缺一不可，任一不成立就**不收**（宁可留，不可误删）：
+ *  ① `createdHere`——只有本进程 `worktree add` 出来的那棵才归它收。`--tree=` 指定的是操作者的树
+ *    （`package.json` 那道门固定复用 `.worktrees/gate-head-cert`），收它等于删掉下一轮要用的共享树。
+ *  ② 树还在——`worktree remove` 一个已被别处删掉的目录只会报红，回收读数不该因此变成 exit 1。
+ *  ③ 在飞数**取得到且为 0**——取不到（`null`）与"有在飞"同样按不收处理：坏掉的尺不许顺手删东西（规则 129/196 那一族）。
+ *  ④ 调用方没传 `--keep-tree`。
+ */
+export function certTreeReclaim(
+  opt: { createdHere: boolean; keepFlag: boolean; stillThere: boolean; dirtyCount: number | null },
+): { remove: boolean; why: string } {
+  if (!opt.createdHere) return { remove: false, why: "不是本次新建的树（--tree= 指定或复用）⇒ 不收" };
+  if (opt.keepFlag) return { remove: false, why: "--keep-tree ⇒ 明写保留" };
+  if (!opt.stillThere) return { remove: false, why: "树已被别处删掉 ⇒ 无可回收（不把空目录报成失败）" };
+  if (opt.dirtyCount === null) return { remove: false, why: "在飞数这把尺量不出来 ⇒ 按不收处理（量不出的树不碰）" };
+  if (opt.dirtyCount !== 0) return { remove: false, why: `树上有 ${String(opt.dirtyCount)} 项在飞 ⇒ 不收（那是别人的活）` };
+  return { remove: true, why: "本次新建 ∧ 无在飞 ∧ 未要求保留 ⇒ 收" };
 }
