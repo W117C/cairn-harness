@@ -1,0 +1,5 @@
+形状A（24 字窗口）：可核 23 条｜其中文件本身追不到 10 条（D-10 已管）｜符号不在文件里 1 条
+   ↳ tests/schedule.test.ts:175 邻近符号 `findSessionIdByKey`｜上下文：…rrence_key` 去重不变量冲突，`tests/schedule.test.ts:175` 钉住同 key 只 1 条）。投影侧已有补偿：`findSessionIdByKey`（846 行）按 occurrenc…
+形状B（同小句内）：可核 15 条｜其中文件本身追不到 6 条（D-10 已管）｜符号不在文件里 0 条
+阳性对照：collectNeedles 在 scripts/prose-needle-scan.ts＝true｜在 tests/schedule.test.ts＝false（前者该 true、后者该 false）
+PROBE_EXIT=0
