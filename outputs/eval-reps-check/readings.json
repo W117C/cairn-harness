@@ -1,0 +1,175 @@
+[
+ {
+  "r": {
+   "id": "B1-bugfix-crossfile",
+   "name": "B1-bugfix-crossfile",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 53.24,
+   "requests": 14,
+   "tokensIn": 85931,
+   "tokensOut": 3269,
+   "cny": 0,
+   "toolCalls": 16,
+   "toolFailures": 0,
+   "repeatedSameAction": 1,
+   "firstWriterIndex": 3,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/checkout.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 219,
+    "procPeak": 5,
+    "cpuMs": 1468,
+    "samples": 107
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B6-feature-flag",
+   "name": "B6-feature-flag",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 35.283,
+   "requests": 10,
+   "tokensIn": 62358,
+   "tokensOut": 2165,
+   "cny": 0,
+   "toolCalls": 15,
+   "toolFailures": 1,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 20,
+   "readsBeforeFirstWrite": 7,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    "README.md",
+    "src/parse-args.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 166,
+    "procPeak": 3,
+    "cpuMs": 1681,
+    "samples": 71
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B1-bugfix-crossfile",
+   "name": "B1-bugfix-crossfile",
+   "rep": 2,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 48.711,
+   "requests": 12,
+   "tokensIn": 72110,
+   "tokensOut": 3439,
+   "cny": 0,
+   "toolCalls": 15,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 34,
+   "readsBeforeFirstWrite": 8,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": true,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": true,
+   "touchedJudge": true,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    "src/checkout.js",
+    "tests/discount-shipping.test.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 187,
+    "procPeak": 5,
+    "cpuMs": 1947,
+    "samples": 98
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "改了判卷面"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B6-feature-flag",
+   "name": "B6-feature-flag",
+   "rep": 2,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 27.202,
+   "requests": 8,
+   "tokensIn": 45815,
+   "tokensOut": 1516,
+   "cny": 0,
+   "toolCalls": 12,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 22,
+   "readsBeforeFirstWrite": 7,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    "README.md",
+    "src/parse-args.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 202,
+    "procPeak": 6,
+    "cpuMs": 2117,
+    "samples": 55
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ }
+]
