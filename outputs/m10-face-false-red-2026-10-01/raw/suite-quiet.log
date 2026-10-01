@@ -1,0 +1,364 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/deepseek harness
+
+stderr | tests/m3c.test.ts > M3c 工具面裁剪与成本闸 > 成本闸：缺省零行为 / 单价 0 无效化 / 超限拒绝新 spawn 并落流警告
+[budget] 会话成本上限 $1 设了，但既没填单价、价表里也查不到模型 "" ⇒ 这道闸本次不生效（不拿 $0 冒充实付）
+
+ ✓ tests/m3c.test.ts (25 tests) 18649ms
+   ✓ M3c 依赖链（depends_on 事件驱动） (3)
+     ✓ 前环未收敛 → 延迟登记；前环 done → 后环自动 spawn（agent_spawned 记 depends_on） 338ms
+   ✓ M3c pipeline 哑 sequencer（零 LLM） (3)
+     ✓ 未获批准 fail-closed；批准后 stages 变更请求被拒且落流 15220ms
+   ✓ M3c 卡死检测集成 (2)
+     ✓ 静默超时 → stuck（silenceMs 短阈值）；取消出口（cancelAgent）解除挂起 worker 303ms
+fatal: not a git repository (or any of the parent directories): .git
+拒跑：/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/mutate-shards-NAMzBc/repo —— 工作树有 1 项在飞
+拒跑：/Users/ze/Downloads/deepseek harness —— 工作树有 22 项在飞
+取料坏：2/2 棵树不合格 ⇒ 一条不跑（这不是「没有红」，是没尺）
+取料坏：--trees 里有重复路径 ⇒ 同树两个进程会互改源文件（.mutbak 会互相踩），一条不跑
+取料坏：认不出的参数 ⇒ 一条不跑：--shardz=2
+用法：node --import tsx scripts/mutate-shards.ts --trees 树1,树2[,…] [--changed-since=<rev> | id…] [--budget-ms N] [--serial-seconds N] [--lock-tag-base …] [--cost-logs 机器原文,…] [--dry-run]（带值的旗标两种写法都收）
+Preparing worktree (detached HEAD 0e4ecd5)
+取料坏：给了 1 条不在这张表上的 id ⇒ 一条不跑：this-anchor-does-not-exist
+Preparing worktree (detached HEAD 0e4ecd5)
+Preparing worktree (detached HEAD 0e4ecd5)
+Preparing worktree (detached HEAD 0e4ecd5)
+取料坏：1 个判卷宿主被摊到两片以上 ⇒ 会并发真跑同一份判卷，一条不跑：tests/mutate-shards.test.ts
+Preparing worktree (detached HEAD 0e4ecd5)
+Preparing worktree (detached HEAD 0e4ecd5)
+ ✓ tests/mutate-shards.test.ts (55 tests) 16643ms
+   ✓ treeProblem 与编排器的前置闸：脏树不许当片用 (8)
+     ✓ 编排器遇到脏树**一条不跑**：退 2、点名那棵树、且输出里没有「变异验证：」 592ms
+     ✓ 给了不在表上的 id ⇒ 拒（退 2、点名那几条、一条没跑） 1774ms
+     ✓ --dry-run 只出计划：取料走机器自己的 `--list`，证分割与「不拆宿主」都成立，一条没跑 1600ms
+     ✓ 同一宿主被摊到两片 ⇒ 行为上当场拒（默认切法同输入放行） 3664ms
+   ✓ 编排器接线：合并层不是挂在墙上的仪表 (7)
+     ✓ 真跑一条：片文件里确有机器原文（这条是整个编排器的端到端证人） 4956ms
+   ✓ 编排器的权重取料面 (3)
+     ✓ 真跑 --dry-run：给了 --cost-logs 就说清权重与来源，不给就说没有来源 3642ms
+ ✓ tests/mutate-verify-gates.test.ts (162 tests) 24697ms
+   ✓ 改动面派生：一条锚点的两面都要认（被测源 ∪ 判卷文件） (8)
+     ✓ 派生可以只看名单不真跑：`--list --changed-since=<空树>` ⇒ 每条锚点两面都在跟踪文件里，必须选中整表 844ms
+     ✓ 真跑：`--changed-since` 不给 rev ⇒ exit 2，且一条源文件都不许动 631ms
+     ✓ 派生可以只看名单不真跑：`--list --changed-since=<rev>` 只印选中的那些，且不碰任何源文件 1427ms
+     ✓ 真跑：rev 取不到 ⇒ exit 2 并点名那个 rev（「取料坏」不许退化成「选中 0 条」） 693ms
+   ✓ 被 import 时必须拒绝运行（它会就地改源文件） (2)
+     ✓ import 进来 ⇒ 退出码 2、点名拒绝，且一条变异都没跑 711ms
+     ✓ 反向一侧：正当入口没被这道闸误伤（--list 仍 exit 0 且列得出条目） 923ms
+   ✓ auditExpectFails：killer 指针必须指得到活用例 (18)
+     ✓ 真表自证：整张表的 killer 指针必须 0 失效（新增一条断指针＝当场红） 378ms
+     ✓ 水位：真表现读松钉只准调低（帽 10，09-27 现读 10）——新增一根要写明为什么 336ms
+   ✓ mutate-verify 也接了这把锁：占不到就不许动盘（那份过程的第二个消费者） (6)
+     ✓ 活人占着 ⇒ exit 2、点名是谁、拒在开跑之前，并且不替别人删锁 770ms
+     ✓ 反向哨兵：同一入参、没有锁 ⇒ 必须走到「未知 id」，并且占过又放掉（上面那条的红只能来自锁） 886ms
+     ✓ 只读入口不许被这把门锁死：--list 在有人占着时照跑，而 `--check-needles` 与它同一先（按结构钉） 774ms
+     ✓ 空标签不是「默认」：`--lock-tag=` 与 `--lock-tag ""` 一律 exit 2 并说明怎么要默认 1613ms
+   ✓ 印完就退的出口必须同步写：--list 是两把静态尺共同的取料面 (2)
+     ✓ 真跑：--list 经管道交给读者的行数必须等于表长（少一行＝两把静态尺一起少读一条锚点而不自知） 750ms
+   ✓ 按标题选跑法：选中几条必须被读出来 (11)
+     ✓ 行为证人：指针以 `-` 开头时两种写法给两个读数——等号写法选中 1 条，空格写法被 CLI 当旗标吞掉 855ms
+   ✓ 选择子唯一性：一条锚点能不能只跑自己那条 killer 用例 (13)
+     ✓ 水位：真表现读「选不中＋不唯一」只准调低（帽 3，09-30 第 233 页现读 3＝1 零命中＋2 多命中）——新增一根要写明为什么 349ms
+   ✓ 树闸接线：真跑本脚本——主检出拒跑且一个字节都没改过盘，linked worktree 放行 (6)
+     ✓ 主检出里真跑 ⇒ exit 2、说清是主检出、且盘上一个字节都没动 938ms
+     ✓ 同一份代码换进 linked worktree ⇒ 树闸放行，接着被预检按「源文件在飞」停在写盘之前 1138ms
+     ✓ 反向哨兵：主检出那支要是靠 `--in-worktree` 逃出去的，这条当场红（隔离必须由树闸保证，不靠调用方记得带参数） 1207ms
+     ✓ 语义钉：建出来被量的那棵树是 **HEAD**，主树里未提交的那份改动不进它（AGENTS.md 那条工作规则的可执行面） 2054ms
+     ✓ 软链路径调脚本不许被误判成「被 import」（S2-3） 985ms
+     ✓ 树名的包含判定：解完仍在主检出里就放行，解出去了才拒（S2-4 拆掉的那格假阳性） 6158ms
+stdout | tests/prose-needle-scan.test.ts > 真仓扫：这把尺自己不许空载 > 同一对账在真仓上跑一遍，且 `across` 那一格今天到底有没有数——读数当场印出来
+  ｜真仓门面自报：across＝6｜viaCounts 三档＝{"字段直取":124,"本地 helper":6,"字段别名":6}
+
+ ✓ tests/prose-needle-scan.test.ts (83 tests) 19802ms
+ ✓ tests/evidence-typecheck.test.ts (22 tests) 28247ms
+   ✓ 真环境：这一格得在真仓里跑得出东西（规则 237/320） (3)
+     ✓ 仓内 tsconfig.evidence.json 存在，且 tsc 真跑了（退出码 0 或 2，不是「没跑到」） 6944ms
+     ✓ 真仓那一趟：被豁免的每一支都必须真的不在 HEAD，且 HEAD 那一半与独立重数同值 7409ms
+   ✓ 门那一半：runner 的两个拒绝分支各自要出声 (3)
+     ✓ 拼错的开关 ⇒ 退 2 并点名，不许当成「没给参数」拿默认口径跑 7597ms
+     ✓ 归属面取料那一行必须印出来，且前缀与 tsc 的 include 同源（接线证人：这行掉了，豁免就没人看得见） 5420ms
+     ✓ 口径文件取不到 ⇒ 出声且非零，不许读成干净 854ms
+[m0] 需要一个任务描述：m0 <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[m0] 用法：m0 <任务描述>（-h 看全部选项）
+ ✓ tests/cli-surface.test.ts (62 tests) 14167ms
+   ✓ m0 CLI：产品面存在且可执行 (3)
+     ✓ 真跑：--help 打印用法并 exit 0（走真 bin shim，不是 import src） 707ms
+   ✓ m0 CLI：退出码 0 / 1 / 2（照 scripts/gym-run.ts 的口径） (4)
+     ✓ 缺任务描述 ⇒ exit 2 且说清怎么用 374ms
+     ✓ flag 给了却没带值 ⇒ exit 2（静默按缺省跑会让打错的 flag 假装生效） 328ms
+     ✓ 未知 --mode ⇒ exit 2 且列出合法档位 382ms
+     ✓ 位置参数超过两个 ⇒ exit 2（不猜哪个是工作区） 373ms
+   ✓ m0 CLI：--model 自由档位 (4)
+     ✓ --help 里列出这个 flag（没进 help 的选项等于不存在） 345ms
+     ✓ 给了 flag 没给值 ⇒ exit 2（与 --mode 同一条口径） 338ms
+     ✓ 模型名是取值不是位置参数：不会被当成工作区或任务（漏登记进 VALUE_FLAGS 的后果） 366ms
+     ✓ --provider demo 下点名模型 ⇒ exit 2（demo 不拨号，静默忽略等于换掉用户意图） 451ms
+   ✓ m0 CLI：--ctx-window（只配 --model，申报自由档位的真实窗口） (4)
+     ✓ --help 里列出这个 flag（没进 help 的选项等于不存在） 423ms
+     ✓ 没有 --model 却给了 --ctx-window ⇒ exit 2（表内档位的窗口由档位表说了算，不接受申报） 334ms
+     ✓ 非正整数 ⇒ exit 2（窗口是 token 数，0/负数/小数都不成） 1453ms
+     ✓ 取值型 flag：窗口值不会被当成位置参数（漏登记进 VALUE_FLAGS 的后果） 403ms
+   ✓ m0 CLI：缺 key 时 fail-closed，不静默换一家也不落 demo (3)
+     ✓ 一个 key 都没配 ⇒ exit 2，且**没有**默默跑 demo 377ms
+     ✓ 提示里点名了要设哪个环境变量，含 DeepSeek 那条 OpenAI 兼容通道 369ms
+     ✓ 配置错不打「用法」行（那行会把人引到 argv 上去，而该配的是环境变量） 325ms
+   ✓ m0 CLI：默认档位是 fail-closed 的那一档 (4)
+     ✓ 支一：不给 --mode ⇒ 写工具被门拒（auto 必须显式 opt-in，不是缺省） 425ms
+     ✓ 支二：只多给一个 --mode auto ⇒ 同一拍写得下去（否则支一钉的是「CLI 根本不会写」） 539ms
+   ✓ m0 CLI：走应用壳（handleAgentRun），不裸调 runAgent (4)
+     ✓ 支一：盘上 planRequiredByDefault=true ⇒ 写禁真的挡住了写（只可能来自 handleAgentRun 那一层） 356ms
+     ✓ 支二：只把那一个键去掉 ⇒ 同一拍同一份剧本写下去了（否则支一钉的是「CLI 什么也不干」） 381ms
+   ✓ m0 CLI：--goal / --session / --compact 三条真入口在 argv 上 (6)
+     ✓ 三个 flag 都进了 help（没进 help 的选项等于不存在） 1132ms
+     ✓ 闸值单独给 ⇒ exit 2（--max-turns 没有 --goal 就是没落在任何东西上） 346ms
+     ✓ --max-turns 非正整数 ⇒ exit 2（静默忽略 = 上限假装生效） 412ms
+     ✓ --goal 与 --log 互斥（两份日志分叉 = 设了但不生效的目标） 380ms
+     ✓ --compact 没指会话 ⇒ exit 2（压缩一条刚编出来的 id 一定报「会话不存在」） 354ms
+     ✓ 非法会话名 ⇒ exit 2（会话名会拼成文件路径） 401ms
+   ✓ m0 CLI：clarify / propose_plan 两扇门在真跑里都收得住（不悬挂） (5)
+     ✓ 非交互真跑一遍门流程：进程正常收束（status 不是 null），不是被 timeout 杀掉的 428ms
+   ✓ m0 CLI：--compact 要摘要模型，没它就 fail-closed（不许静默截断） (4)
+     ✓ 支一：没有可用摘要器 ⇒ exit 1 + 点名 M0_API_KEY，且会话日志一个字节没动 408ms
+     ✓ 支二：摘要器在（演示档）⇒ exit 0，会话末尾多一条 compaction 335ms
+     ✓ help 不再承诺「不跑模型」，改说清要哪把 key（缺陷本体就是这句假话） 397ms
+     ✓ --compact 缺 --session ⇒ exit 2（不编一个会话 id 出来再报「不存在」） 508ms
+ ✓ tests/gate-kill.test.ts (11 tests) 6165ms
+   ✓ 门禁超时终止阶梯 (7)
+     ✓ 忽略 SIGTERM 的子进程：宽限到点升级到整组 SIGKILL，且确实先收到过 SIGTERM 472ms
+     ✓ 信号与强杀都按进程组：孙进程既收到过 SIGTERM，也随强杀一起没 617ms
+   ✓ 门禁跑命令的超时支路 (4)
+     ✓ 子进程超时后自己退出：判红 124、输出写明阶梯走到了哪一步，且还原动作真发生 1516ms
+     ✓ 超时后子进程以退出码 0 收场：仍是 124，不被自己的退出码翻绿（宽限带来的口子） 1508ms
+     ✓ 子进程赖着不走：宽限到点整组强杀，输出如实写「已 SIGKILL」 1610ms
+ ✓ tests/head-cert-deps.test.ts (105 tests) 10546ms
+   ✓ certLevel：半把尺不许冒充认证（第 119 页，起因是第 116/117 页我自己踩的那盏假灯） (6)
+     ✓ 真跑：`--skip-test` 不带 `--why` ⇒ 脚本 exit 2，且不建 worktree 373ms
+   ✓ 接线：真跑 head-cert——占不到锁就不许动树 (7)
+     ✓ 反向哨兵：没有锁文件 ⇒ 不许以「锁面不存在」为由拒跑，照常走到切树那一步 307ms
+   ✓ 清场读数：常驻残留的 scratch 树要自己报数（任务 #33） (15)
+     ✓ 真读现喂：拿本机真的 worktree 清单喂进去不许崩，且绝不点到自己这棵 8633ms
+     ✓ 行为证人：这对参数交给真 git——跑得出 0、脏树量得出 1 而干净树是 0，并且不碰那棵树的 index 320ms
+ ✓ tests/cli-fork-replay.test.ts (13 tests) 15362ms
+   ✓ 真跑 bin：--replay 只读 / --fork 不污染原历史 / 中断后可续（离线 demo） (5)
+     ✓ --replay：打决策链（#N 序号 + 任务行），退出 0，日志 sha256 不变 840ms
+     ✓ --replay 不存在的会话 ⇒ exit 1 且点名（不当成用法错，也不静默 0） 449ms
+     ✓ --fork：前缀逐字节一致 + session_meta.branch_of + 源会话 sha256 不变 + 新会话继续追加 5886ms
+     ✓ --fork 的用法闸：轮次越界 exit 2；目标已存在 exit 2（不覆盖既有转录） 5001ms
+     ✓ 中断后完整可续：SIGINT 收束后，同一条会话继续追加、重放读得到 3133ms
+stderr | tests/cascade-wiring.test.ts > 级联升级接进产品路径（sequencer 环） > 只开 cascadeUpgrade、没开 routing ⇒ 不级联：阶梯起点与升档都靠路由，缺了就等于花两遍钱跑同一模型
+[cascade] 需要 routing=true（阶梯起点与升档都走路由）；本次会话不级联
+
+ ✓ tests/cascade-wiring.test.ts (9 tests) 3709ms
+   ✓ 级联升级接进产品路径（sequencer 环） (9)
+     ✓ verify 红 ⇒ 同 provider 升一档重跑，链的终态由最后一档负责，被淘汰那档的 worktree 回收 526ms
+     ✓ 升档升到预算用尽仍红 ⇒ 整链 failed（不静默接受「升过了」），且只多花预算内那几次 454ms
+     ✓ 升上来的那一档没跑过 verify（absent）⇒ 不算收敛：不花真钱买回一份比触发时更弱的证据 675ms
+     ✓ 只开 cascadeUpgrade、没开 routing ⇒ 不级联：阶梯起点与升档都靠路由，缺了就等于花两遍钱跑同一模型 371ms
+     ✓ 升上来的那档直接崩（终态 failed）⇒ 立刻停止爬升：同一环境换一档只会再花一遍钱 554ms
+[m0] 需要一个任务描述：m0 <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[m0] 用法：m0 <任务描述>（-h 看全部选项）
+ ✓ tests/cli-plan-auto.test.ts (6 tests) 3289ms
+   ✓ CLI 端到端反向哨兵：写盘被拒必须反映在退出码上 (2)
+     ✓ ★ `--mode default` 在管道里：写盘被拒 ⇒ 退出码 1（旧实现会以 0 退出，把失败报成成功） 494ms
+     ✓ 同一条路在 auto 档下退出码不受影响（反向哨兵不能把成功也判红） 2790ms
+stdout | tests/gated-tools.test.ts > 工具门接线（runAgent + AskGate） > default 档 + 批准 → write_file 与 run_shell 真实执行，靶子修复
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/gated-tools.test.ts > 工具门接线（runAgent + AskGate） > default 档 + 拒绝 → 工具不执行，靶子保持带 bug 状态
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/gated-tools.test.ts > 工具门接线（runAgent + AskGate） > 沙箱不可用（降级）→ 写工具强制审批：auto 档无交互也按拒绝（fail-closed）
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/gated-tools.test.ts > 出网工具门接线（web_fetch + AskGate） > default 档 + 批准 → 出审批卡，且抓回来的正文真的进事件流
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/gated-tools.test.ts > 出网工具门接线（web_fetch + AskGate） > default 档 + 拒绝 → 一个字节都不发出去（且这条与 write_file 逐字同权）
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/gated-tools.test.ts > 出网工具门接线（web_fetch + AskGate） > 点了「总是允许」也不落永久规则：下一轮新会话照样要问
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/gated-tools.test.ts > 出网工具门接线（web_fetch + AskGate） > 点了「总是允许」也不落永久规则：下一轮新会话照样要问
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ ✓ tests/gated-tools.test.ts (6 tests) 2373ms
+   ✓ 工具门接线（runAgent + AskGate） (3)
+     ✓ default 档 + 批准 → write_file 与 run_shell 真实执行，靶子修复 1580ms
+   ✓ 出网工具门接线（web_fetch + AskGate） (3)
+     ✓ default 档 + 批准 → 出审批卡，且抓回来的正文真的进事件流 414ms
+     ✓ 点了「总是允许」也不落永久规则：下一轮新会话照样要问 349ms
+ ✓ tests/verify-probe.test.ts (18 tests) 2066ms
+   ✓ verify 超时是配置项，不是 60s 硬编码 (5)
+     ✓ defaultExec 真按传入上限掐表，消息里的秒数跟着配置走 2010ms
+ ✓ tests/head-import-face.test.ts (32 tests) 2002ms
+   ✓ 真表自证：这把尺不许是空载的，也不许对事故那笔失明 (8)
+     ✓ 取料面自证：HEAD 里文件数与 import 边数都在量级上（读空＝没尺，不判） 335ms
+     ✓ 换 rev 也能跑（`--at` 的用面）：上一笔的取料结果与 HEAD 不是同一份常量 551ms
+ ✓ tests/docs-check.test.ts (93 tests) 2410ms
+   ✓ D-9 凭证对账：三档（可比对／未点名＝未检／取不到＝未检）不许同形 (26)
+     ✓ 真仓：可比对分母 ≥ 50、红只剩登记过的那些（三档各有多少要印出来） 750ms
+     ✓ 真仓：未点名页数跟着现读走——涨了要红，凭空把帽调低也要红（只有真把页点名了才允许降） 507ms
+   ✓ D-10 源码行号引用面：两半都钉，存量按集合登记 (4)
+     ✓ 真仓那一趟：74 条存量今天仍全部命中，所以 D-10 现在是绿的（登记不是凭空写的） 495ms
+   ✓ D-11 证人点名面：文件与目录两半都要追得到，登记位双向出声 (7)
+     ✓ 真仓那一趟：分母非零、红 0，且「未检」与「红 0」不同形（这条走的是门自己的接线） 439ms
+stderr | tests/chain-lease-held.test.ts > 链的环 worker 真持有申报的写租约 > supervise：受限循环的环同样持有（真轨迹那次就是这么申报的）
+[orchestrator] worker 收尾中途失败，按 failed 放行等待方：worker-1 ENOENT: no such file or directory, open '/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/chain-lease-KORT3H/events.jsonl'
+
+stderr | tests/chain-lease-held.test.ts > 链的环 worker 真持有申报的写租约 > 反向那一格：没申报 resources ⇒ 环不落 resources 字段、不凭空占租约（零申报零行为）
+[orchestrator] worker 收尾中途失败，按 failed 放行等待方：worker-4 ENOENT: no such file or directory, open '/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/chain-lease-lSkmaK/events.jsonl'
+
+stderr | tests/chain-lease-held.test.ts > 链的环 worker 真持有申报的写租约 > resources 从此是 supervise 读的键 ⇒ 单独申报它不再被拒（第 40 页那格的反向侧）
+[orchestrator] worker 收尾中途失败，按 failed 放行等待方：worker-5 ENOENT: no such file or directory, open '/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/chain-lease-g4KJys/events.jsonl'
+
+ ✓ tests/chain-lease-held.test.ts (8 tests) 2160ms
+   ✓ 链的环 worker 真持有申报的写租约 (6)
+     ✓ supervise：受限循环的环同样持有（真轨迹那次就是这么申报的） 308ms
+     ✓ 约束的另一侧：环活着时，另派一个相交的 write worker 会撞到租约审批卡（不是默默并发放行） 334ms
+     ✓ 反向那一格：没申报 resources ⇒ 环不落 resources 字段、不凭空占租约（零申报零行为） 324ms
+     ✓ resources 从此是 supervise 读的键 ⇒ 单独申报它不再被拒（第 40 页那格的反向侧） 435ms
+ ✓ tests/plugins-hooks.test.ts (17 tests) 1533ms
+   ✓ M2e hook 引擎：输出上限与超时（任务 5） (3)
+     ✓ 超时被强杀（SIGKILL，1s timeout vs 3s 睡眠） 1002ms
+ ✓ tests/impact-persistence.test.ts (10 tests) 1774ms
+   ✓ 影响面·索引持久化 (10)
+     ✓ ① round-trip：build→落盘→载入，canonical 与全部符号 upward 逐字一致 467ms
+ ✓ tests/prompt-cost.test.ts (17 tests) 1272ms
+   ✓ 复跑面接线：这条尺会当场报出自己系数不成立 (2)
+     ✓ 输出里有逐档面、少看百分之几、系数自检三条 616ms
+     ✓ 自证一致性：逐流行里的「固定≈」必须等于「面÷系数 × 请求数」——分子被换掉就破 646ms
+ ✓ tests/net.test.ts (10 tests) 1129ms
+ ✓ tests/process.test.ts (6 tests) 1033ms
+   ✓ spawnTracked / killGroup（P1-2） (3)
+     ✓ 超时主动收束，不等 'close'（孙进程持有 stdout 也不挂起） 505ms
+     ✓ 超时后整棵进程树被杀（孙进程不留孤儿、不泄漏） 411ms
+stdout | tests/impact-runner-wiring.test.ts > 影响面第三环：settings ⇒ 构造点 ⇒ 事件流（走真实 runAgent，不手搭 ctx） > 开：写盘后事件流里真有 impact_report，且摘要回进了 tool_result
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+stdout | tests/impact-runner-wiring.test.ts > 影响面第三环：settings ⇒ 构造点 ⇒ 事件流（走真实 runAgent，不手搭 ctx） > 关（缺省）：一条 impact_report 都不许出现，但同一条写盘仍成功
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ ✓ tests/impact-runner-wiring.test.ts (5 tests) 1174ms
+   ✓ 影响面第三环：settings ⇒ 构造点 ⇒ 事件流（走真实 runAgent，不手搭 ctx） (2)
+     ✓ 开：写盘后事件流里真有 impact_report，且摘要回进了 tool_result 676ms
+     ✓ 关（缺省）：一条 impact_report 都不许出现，但同一条写盘仍成功 408ms
+stderr | tests/providers.test.ts > openai 适配器 fixture 回放（任务2/3/4/5 验收） > ③错误事件：fixture 回放抛可读错误
+[OpenAI] 流内失败（第 1 次，尚未产出任何输出）⇒ 236ms 后重试：OpenAI 流错误 server_error: The server had an error while processing your request.
+
+stderr | tests/providers.test.ts > openai 适配器 fixture 回放（任务2/3/4/5 验收） > ③错误事件：fixture 回放抛可读错误
+[OpenAI] 流内失败（第 2 次，尚未产出任何输出）⇒ 349ms 后重试：OpenAI 流错误 server_error: The server had an error while processing your request.
+
+stderr | tests/providers.test.ts > streamOpenAI：流内失败的重试边界 > 首帧就是流内 502（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完
+[OpenAI] 流内失败（第 1 次，尚未产出任何输出）⇒ 78ms 后重试：OpenAI 流错误 502: Provider returned an empty response
+
+stderr | tests/providers.test.ts > streamOpenAI：流内失败的重试边界 > 重试次数有上限：连续失败不会无限打转
+[OpenAI] 流内失败（第 1 次，尚未产出任何输出）⇒ 147ms 后重试：OpenAI 流错误 502: always down
+
+stderr | tests/providers.test.ts > streamOpenAI：流内失败的重试边界 > 重试次数有上限：连续失败不会无限打转
+[OpenAI] 流内失败（第 2 次，尚未产出任何输出）⇒ 72ms 后重试：OpenAI 流错误 502: always down
+
+ ✓ tests/providers.test.ts (43 tests) 963ms
+   ✓ openai 适配器 fixture 回放（任务2/3/4/5 验收） (6)
+     ✓ ③错误事件：fixture 回放抛可读错误 592ms
+ ✓ tests/assertion-health-scan.test.ts (17 tests) 2279ms
+   ✓ 判卷面断言体检（快路，与 pnpm gates 同一把尺） (4)
+     ✓ 已跟踪的 scripts/ 里没有空断言、恒真式、暗卷段零断言、未豁免的析取式 1005ms
+   ✓ 切片判卷的边界标记棘轮（改注释 = 改判卷取料面，这条要闸住） (2)
+     ✓ 已跟踪的 tests/ 里不许新增注释文字当边界（边界一律用代码标识） 587ms
+     ✓ 反面对手：清单里已不再命中的条目必须删掉（豁免名单不许自己烂着） 529ms
+[m0] 需要一个任务描述：m0 <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[m0] 用法：m0 <任务描述>（-h 看全部选项）
+ ✓ tests/cli-exit-code.test.ts (8 tests) 1505ms
+   ✓ 真跑 bin：demo 通道的退出码（零凭据、离线、确定性） (1)
+     ✓ 剧本里有失败的工具调用 ⇒ exit 1，不再报成成功 1503ms
+ ✓ tests/mcp-grade-gate.test.ts (3 tests) 1139ms
+   ✓ MCP 注解抵达权限门（runAgent 真入口 + 真 stub server） (3)
+     ✓ 带 readOnlyHint 的工具体在自主档自动执行（注解真抵达了门） 313ms
+     ✓ 无注解的工具体在自主档不自动执行，且拒绝原因指明依据（stub 未被调用） 300ms
+     ✓ 只读档：带 readOnlyHint 的照常放行，无注解的按白名单依据拒 506ms
+stdout | tests/runner-gates.test.ts > 三门 IPC 接线（runAgent + card_action 处理函数） > clarify_requested → handleClarifySubmit → tool_result 与提交值逐字一致且挂回原 tool_use id；plan 批准后写放行
+[memory] 会话结束沉淀: {"kind":"no_content"}
+
+ ✓ tests/runner-gates.test.ts (1 test) 1394ms
+   ✓ 三门 IPC 接线（runAgent + card_action 处理函数） (1)
+     ✓ clarify_requested → handleClarifySubmit → tool_result 与提交值逐字一致且挂回原 tool_use id；plan 批准后写放行 1392ms
+ ✓ tests/ledger.test.ts (26 tests) 1345ms
+ ✓ tests/impact-cap-policy.test.ts (10 tests) 1319ms
+   ✓ 缺省帽＝成本安全阀，不再是覆盖面政策 (3)
+     ✓ 缺省帽不再按机器状态切覆盖面：405 个候选全进图 592ms
+stderr | tests/terminal-sync-window.test.ts > 终态收尾窗口：已收敛的判据是 terminalResolved > 收尾中途 emit 抛 ⇒ 等待方照旧被放行（宁可这环红，不许整链永挂）
+[orchestrator] worker 收尾中途失败，按 failed 放行等待方：worker-2 simulated append failure
+
+ ✓ tests/terminal-sync-window.test.ts (3 tests) 927ms
+   ✓ 终态收尾窗口：已收敛的判据是 terminalResolved (3)
+     ✓ join 落在窗口内 ⇒ 回执说 running + timedOut 点名；不说 done + 空报告 388ms
+     ✓ 收尾窗口里叫合并 ⇒ 拒绝：窗口内 lastFindings 还空着，gate 档会被「无 findings」假通过 392ms
+(node:14734) Warning: Closing file descriptor 14 on garbage collection
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:14734) [DEP0137] DeprecationWarning: Closing a FileHandle object on garbage collection is deprecated. Please close FileHandle objects explicitly using FileHandle.prototype.close(). In the future, an error will be thrown if a file descriptor is closed during garbage collection.
+(node:14734) Warning: Closing file descriptor 15 on garbage collection
+(node:14734) Warning: Closing file descriptor 14 on garbage collection
+ ❯ tests/schedule.test.ts (37 tests | 2 failed) 1724ms
+   ✓ M4a 任务模型（automations.ts） (6)
+     ✓ ulid：格式合法 / 唯一 / 时间有序 5ms
+     ✓ ulid 随机位不依赖 Math.random（密码学安全，不可预测） 1ms
+     ✓ 表单四 kind 全过；hourly/monthly/custom 数据模型收、表单面拒 35ms
+     ✓ 未知字段拒绝（顶层 + schedule 内）；interval ≥5；prompt 非空 ≤4k 1ms
+     ✓ IANA 时区规范化（非法拒绝）；name 会话名安全；默认值收窄 3ms
+     ✓ weekly/monthly/custom 字段范围与档位映射 3ms
+   ❯ M4a 双轨存储 (5)
+     ✓ automations.json 原子写往返 + 无 .tmp 残留 2ms
+     ✓ 加载迁移容忍：坏 JSON / 坏条目跳过 + 警告 5ms
+     ✓ journal append-only + 坏行跳过 + occurrenceKey 去重查询 2ms
+     × journal 压缩与并发追加同链：追加条目不被 rename 抹掉 565ms
+     × journal 收敛后旧句柄失效：后写的条目一条不丢（X2 回归） 760ms
+   ✓ M4a next-run 计算（croner + 锚点步进） (6)
+     ✓ once：未来即该时刻，过去为 null 1ms
+     ✓ interval 保持创建锚点对齐（everyMinutes=60） 1ms
+     ✓ daily/weekly/hourly 按 timeZone 墙钟（croner） 7ms
+     ✓ monthly 短月跳过（cron 语义）与 last 1ms
+     ✓ custom 锚点 = 创建日；occurrencesBetween 有界枚举 1ms
+     ✓ formatLocal 输出任务时区墙钟 7ms
+   ✓ M4a 准入管线（三闸顺序短路 + 去重 + 补跑） (12)
+     ✓ atomic admission: manual/manual sameTask=false cap=1 27ms
+     ✓ atomic admission: tick/manual sameTask=false cap=1 23ms
+     ✓ atomic admission: manual/manual sameTask=true cap=4 7ms
+     ✓ atomic admission: tick/manual sameTask=true cap=4 2ms
+     ✓ admission IO failure releases the lock without rolling back the decided journal 8ms
+     ✓ 并发闸：cap=2 三任务同时到期 → 第三 skipped(concurrency-cap)；inflight 独立计数 8ms
+     ✓ 重叠闸：同任务 queued/running 期间再次到期/run_now → skipped(overlap) 6ms
+     ✓ occurrenceKey 去重：同 dueAt 双触发只建一个会话（崩溃/重启双触发免疫） 7ms
+     ✓ 补跑闸：catchUp=latest 取最近一次错过（decision=catchup），更旧记 too-old 4ms
+     ✓ 补跑闸：catchUp=skip 档不补跑（skipped=catch-up-skip），7 天窗外直接丢弃 13ms
+     ✓ 运行期补记账有上限：20 条逐条 + 一条聚合账 4ms
+     ✓ 常规 tick：now ≥ nextRunAt 即进管线（不依赖 tick 命中）；跳过后水位推进不重试 7ms
+   ✓ M4a 触发执行与完成回写 (6)
+     ✓ executor 成功 → 终态 automation_completed 落会话 + snapshot succeeded；会话带 origin/automation_name 6ms
+     ✓ 超时双闸（短阈值）：闸一 abort 后 loop 收束；宿主不响应 → settlesWithin 二道退出 failed(timeout) 161ms
+     ✓ summarizeRun：最后 assistant 截断 + tool_stats + usage；完成卡 payload 复用 report 形状 1ms
+     ✓ upsert：name 唯一拒绝 / 更新保留 createdAt；删除落盘 7ms
+     ✓ run_now 走准入管线（并发闸同样生效）；automation_completed 失败路径带 reason 8ms
+     ✓ snapshot(状态) 真按状态筛：面板的「只看失败」读的是全量里最近的失败，而不是本地 12 条再过滤 3ms
+   ✓ tick 拒绝护栏（P1 回归） (2)
+     ✓ tickGuarded 就地捕获 tick 拒绝并走 onWarn（vitest 对 unhandled rejection 直接判红） 22ms
+     ✓ 手动 tick 仍保留原拒绝语义（await 方可见错误） 1ms
+stderr | tests/worker-hooks.test.ts > worker 接插件钩子 > PreToolUse 阻断真的挡住 worker 的写：worktree 里不落盘，tool_result 带钩子理由
+[hooks] SubagentStart 返回阻断（exit 2 的「再多要一轮」未裁，已忽略）：禁改 src/secret.ts
+
+stderr | tests/worker-hooks.test.ts > worker 接插件钩子 > PreToolUse 阻断真的挡住 worker 的写：worktree 里不落盘，tool_result 带钩子理由
+[hooks] SubagentStop 返回阻断（exit 2 的「再多要一轮」未裁，已忽略）：禁改 src/secret.ts
+
+ ✓ tests/worker-hooks.test.ts (9 tests) 1460ms
+   ✓ worker 接插件钩子 (5)
+     ✓ PreToolUse 阻断真的挡住 worker 的写：worktree 里不落盘，tool_result 带钩子理由 309ms
+ ✓ tests/http-retry.test.ts (12 tests) 836ms
+   ✓ provider 接线（openai / anthropic / gemini 共用同一重试链） (3)
+     ✓ openai：429 会被重试，随后 400 仍按原文案失败 303ms
+     ✓ gemini：429 会被重试，随后 400 仍按原文案失败 480ms
+ ✓ tests/impact-query.test.ts (51 tests) 1395ms
+   ✓ impact_query：改之前问波及谁 (17)
+     ✓ 图里没有它的定义 ⇒ 不许报「波及 N 个文件」，要明说这一问不适用（外部/全局符号） 327ms
+stderr | tests/worker-evidence-parent-context.test.ts > worker 的验证证据落到主模型看得见的那条正文（能力 5 并行面） > worker 写了盘、verify 在 worktree 里真过 ⇒ 正文带 `"verified": "verified"`，且它是配对好的 tool 消息
+[orchestrator] worker 收尾中途失败，按 failed 放行等待方：worker-1 EBADF: bad file descriptor, read
+

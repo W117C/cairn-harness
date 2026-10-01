@@ -1,0 +1,22 @@
+ M scripts/docs-check.ts
+ M src/agent/map/parse.ts
+ M src/events/index.ts
+?? .vitest/
+?? fixtures/impact/accuracy-repo-multilang/
+?? outputs/_audit-claims.md
+?? outputs/_audit-quality.md
+?? outputs/_audit-usability.md
+?? outputs/_audit2-capability.md
+?? outputs/_audit2-quality.md
+?? outputs/agent-capability-roadmap-2026-10-01/
+?? outputs/eval-b4-diag/
+?? outputs/eval-baseline-1/readings.json
+?? outputs/hold-callid-ruling-2026-09-30/
+?? outputs/impact-index-2026-10-01/idx-timing.mts
+?? outputs/landing-1c40df7-2026-09-30/mutate-verify-229.log
+?? outputs/landing-1c40df7-2026-09-30/readings.md
+?? outputs/m10-face-false-red-2026-10-01/
+?? outputs/shell-tail-repoint-kill-2026-10-01/
+?? outputs/witness-face-widen-290b-2026-10-01/docs-check-post-credential.log
+?? tests/events-tail-repair.test.ts
+?? tests/impact-multilang.test.ts

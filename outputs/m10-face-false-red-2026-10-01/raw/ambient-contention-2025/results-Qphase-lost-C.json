@@ -1,0 +1,893 @@
+{
+ "phases": [
+  "arms=Q;reps=2;suites=2"
+ ],
+ "phase": "arms=Q;reps=2;suites=2",
+ "reps": 2,
+ "arms": [
+  "Q"
+ ],
+ "suites": 2,
+ "shutter": [
+  "no-progress-check",
+  "prune-check",
+  "fork-check",
+  "compaction-check",
+  "docs-check",
+  "memory-check",
+  "head-import-check",
+  "autonomy-check",
+  "sandbox:check",
+  "security-check",
+  "provider:check",
+  "routing-check",
+  "model-surface-check",
+  "prefix-churn-check",
+  "prompt-surface-check",
+  "replay-determinism-check",
+  "cost-per-progress-check",
+  "web-fetch-check",
+  "gym-check",
+  "evidence-typecheck-check"
+ ],
+ "runs": [
+  {
+   "face": "typecheck",
+   "arm": "Q",
+   "rep": 1,
+   "exit": 0,
+   "ms": 5521,
+   "cmd": "node --import tsx scripts/typecheck.ts"
+  },
+  {
+   "face": "test-a",
+   "arm": "Q",
+   "rep": 1,
+   "exit": 0,
+   "ms": 176083,
+   "cmd": "node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts --reporter=default --reporter=json --outputFile.json=/Users/ze/Downloads/deepseek harness/outputs/m10-face-false-red-2026-10-01/raw/suite-quiet.json"
+  },
+  {
+   "face": "gates",
+   "arm": "Q",
+   "rep": 1,
+   "exit": 0,
+   "ms": 18914,
+   "cmd": "node --import tsx scripts/gates.ts --only=no-progress-check,prune-check,fork-check,compaction-check,docs-check,memory-check,head-import-check,autonomy-check,sandbox:check,security-check,provider:check,routing-check,model-surface-check,prefix-churn-check,prompt-surface-check,replay-determinism-check,cost-per-progress-check,web-fetch-check,gym-check,evidence-typecheck-check"
+  }
+ ],
+ "samples": [
+  {
+   "tag": "start",
+   "ms": 90007266,
+   "load1": "4.05",
+   "nodeProcs": 8,
+   "rssMb": 83,
+   "suites": 0
+  },
+  {
+   "tag": "start",
+   "ms": 90007298,
+   "load1": "4.05",
+   "nodeProcs": 8,
+   "rssMb": 83,
+   "suites": 0
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90009462,
+   "load1": "4.05",
+   "nodeProcs": 10,
+   "rssMb": 529,
+   "suites": 0
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90011458,
+   "load1": "4.21",
+   "nodeProcs": 10,
+   "rssMb": 380,
+   "suites": 0
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90013453,
+   "load1": "4.21",
+   "nodeProcs": 10,
+   "rssMb": 233,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90015448,
+   "load1": "4.19",
+   "nodeProcs": 10,
+   "rssMb": 375,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90017469,
+   "load1": "4.19",
+   "nodeProcs": 10,
+   "rssMb": 385,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90019464,
+   "load1": "4.19",
+   "nodeProcs": 10,
+   "rssMb": 345,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90021460,
+   "load1": "4.01",
+   "nodeProcs": 10,
+   "rssMb": 316,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90023457,
+   "load1": "4.01",
+   "nodeProcs": 10,
+   "rssMb": 286,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90025466,
+   "load1": "3.93",
+   "nodeProcs": 10,
+   "rssMb": 287,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90027468,
+   "load1": "3.93",
+   "nodeProcs": 10,
+   "rssMb": 278,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90029491,
+   "load1": "3.93",
+   "nodeProcs": 10,
+   "rssMb": 276,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90031461,
+   "load1": "3.86",
+   "nodeProcs": 10,
+   "rssMb": 233,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90033467,
+   "load1": "3.86",
+   "nodeProcs": 11,
+   "rssMb": 263,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90035460,
+   "load1": "3.87",
+   "nodeProcs": 11,
+   "rssMb": 413,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90037465,
+   "load1": "3.87",
+   "nodeProcs": 11,
+   "rssMb": 262,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90039461,
+   "load1": "3.87",
+   "nodeProcs": 11,
+   "rssMb": 338,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90041464,
+   "load1": "4.12",
+   "nodeProcs": 10,
+   "rssMb": 218,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90043462,
+   "load1": "4.12",
+   "nodeProcs": 11,
+   "rssMb": 393,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90045466,
+   "load1": "4.19",
+   "nodeProcs": 12,
+   "rssMb": 369,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90047463,
+   "load1": "4.19",
+   "nodeProcs": 11,
+   "rssMb": 402,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90049465,
+   "load1": "4.19",
+   "nodeProcs": 12,
+   "rssMb": 379,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90051466,
+   "load1": "4.57",
+   "nodeProcs": 10,
+   "rssMb": 187,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90053465,
+   "load1": "4.57",
+   "nodeProcs": 12,
+   "rssMb": 457,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90055466,
+   "load1": "4.61",
+   "nodeProcs": 12,
+   "rssMb": 467,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90057469,
+   "load1": "4.61",
+   "nodeProcs": 12,
+   "rssMb": 422,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90059467,
+   "load1": "4.61",
+   "nodeProcs": 10,
+   "rssMb": 308,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90061473,
+   "load1": "4.64",
+   "nodeProcs": 11,
+   "rssMb": 658,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90063486,
+   "load1": "4.64",
+   "nodeProcs": 11,
+   "rssMb": 509,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90065476,
+   "load1": "5.31",
+   "nodeProcs": 11,
+   "rssMb": 246,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90067483,
+   "load1": "5.31",
+   "nodeProcs": 12,
+   "rssMb": 641,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90069477,
+   "load1": "5.31",
+   "nodeProcs": 12,
+   "rssMb": 505,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90071486,
+   "load1": "5.36",
+   "nodeProcs": 12,
+   "rssMb": 562,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90073477,
+   "load1": "5.36",
+   "nodeProcs": 10,
+   "rssMb": 323,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90075476,
+   "load1": "5.25",
+   "nodeProcs": 10,
+   "rssMb": 354,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90077477,
+   "load1": "5.25",
+   "nodeProcs": 10,
+   "rssMb": 355,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90079485,
+   "load1": "5.25",
+   "nodeProcs": 10,
+   "rssMb": 357,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90081480,
+   "load1": "5.15",
+   "nodeProcs": 10,
+   "rssMb": 364,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90083479,
+   "load1": "5.15",
+   "nodeProcs": 10,
+   "rssMb": 306,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90085483,
+   "load1": "5.38",
+   "nodeProcs": 11,
+   "rssMb": 418,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90087484,
+   "load1": "5.38",
+   "nodeProcs": 11,
+   "rssMb": 389,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90089489,
+   "load1": "5.38",
+   "nodeProcs": 11,
+   "rssMb": 399,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90091485,
+   "load1": "5.99",
+   "nodeProcs": 11,
+   "rssMb": 419,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90093486,
+   "load1": "5.99",
+   "nodeProcs": 10,
+   "rssMb": 211,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90095502,
+   "load1": "5.75",
+   "nodeProcs": 11,
+   "rssMb": 262,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90097506,
+   "load1": "5.75",
+   "nodeProcs": 11,
+   "rssMb": 263,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90099504,
+   "load1": "5.75",
+   "nodeProcs": 11,
+   "rssMb": 263,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90101493,
+   "load1": "5.53",
+   "nodeProcs": 10,
+   "rssMb": 216,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90103491,
+   "load1": "5.53",
+   "nodeProcs": 10,
+   "rssMb": 214,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90105492,
+   "load1": "6.05",
+   "nodeProcs": 10,
+   "rssMb": 217,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90107496,
+   "load1": "6.05",
+   "nodeProcs": 11,
+   "rssMb": 339,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90109495,
+   "load1": "6.05",
+   "nodeProcs": 11,
+   "rssMb": 198,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90111497,
+   "load1": "6.20",
+   "nodeProcs": 12,
+   "rssMb": 567,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90113513,
+   "load1": "6.20",
+   "nodeProcs": 10,
+   "rssMb": 216,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90115497,
+   "load1": "6.11",
+   "nodeProcs": 11,
+   "rssMb": 393,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90117498,
+   "load1": "6.11",
+   "nodeProcs": 10,
+   "rssMb": 226,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90119499,
+   "load1": "6.11",
+   "nodeProcs": 10,
+   "rssMb": 198,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90121508,
+   "load1": "6.02",
+   "nodeProcs": 10,
+   "rssMb": 227,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90123500,
+   "load1": "6.02",
+   "nodeProcs": 10,
+   "rssMb": 262,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90125524,
+   "load1": "6.02",
+   "nodeProcs": 11,
+   "rssMb": 310,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90127513,
+   "load1": "6.02",
+   "nodeProcs": 10,
+   "rssMb": 239,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90129507,
+   "load1": "6.02",
+   "nodeProcs": 10,
+   "rssMb": 335,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90131513,
+   "load1": "6.02",
+   "nodeProcs": 10,
+   "rssMb": 364,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90133508,
+   "load1": "6.02",
+   "nodeProcs": 10,
+   "rssMb": 148,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90135507,
+   "load1": "5.69",
+   "nodeProcs": 10,
+   "rssMb": 187,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90137515,
+   "load1": "5.69",
+   "nodeProcs": 10,
+   "rssMb": 163,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90139514,
+   "load1": "5.69",
+   "nodeProcs": 10,
+   "rssMb": 272,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90141521,
+   "load1": "5.56",
+   "nodeProcs": 10,
+   "rssMb": 228,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90143510,
+   "load1": "5.56",
+   "nodeProcs": 10,
+   "rssMb": 366,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90145510,
+   "load1": "5.35",
+   "nodeProcs": 10,
+   "rssMb": 297,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90147529,
+   "load1": "5.35",
+   "nodeProcs": 10,
+   "rssMb": 246,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90149521,
+   "load1": "5.35",
+   "nodeProcs": 10,
+   "rssMb": 244,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90151514,
+   "load1": "5.48",
+   "nodeProcs": 10,
+   "rssMb": 234,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90153514,
+   "load1": "5.48",
+   "nodeProcs": 10,
+   "rssMb": 325,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90155515,
+   "load1": "5.21",
+   "nodeProcs": 10,
+   "rssMb": 232,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90157518,
+   "load1": "5.21",
+   "nodeProcs": 10,
+   "rssMb": 323,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90159517,
+   "load1": "5.21",
+   "nodeProcs": 10,
+   "rssMb": 338,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90161517,
+   "load1": "5.03",
+   "nodeProcs": 10,
+   "rssMb": 254,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90163519,
+   "load1": "5.03",
+   "nodeProcs": 10,
+   "rssMb": 278,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90165521,
+   "load1": "5.27",
+   "nodeProcs": 10,
+   "rssMb": 281,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90167519,
+   "load1": "5.27",
+   "nodeProcs": 10,
+   "rssMb": 278,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90169520,
+   "load1": "5.27",
+   "nodeProcs": 10,
+   "rssMb": 231,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90171522,
+   "load1": "5.41",
+   "nodeProcs": 10,
+   "rssMb": 277,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90173523,
+   "load1": "5.41",
+   "nodeProcs": 10,
+   "rssMb": 267,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90175523,
+   "load1": "5.45",
+   "nodeProcs": 10,
+   "rssMb": 245,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90177524,
+   "load1": "5.45",
+   "nodeProcs": 10,
+   "rssMb": 258,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90179524,
+   "load1": "5.45",
+   "nodeProcs": 10,
+   "rssMb": 263,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90181526,
+   "load1": "5.18",
+   "nodeProcs": 10,
+   "rssMb": 265,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90183526,
+   "load1": "5.18",
+   "nodeProcs": 9,
+   "rssMb": 213,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90185526,
+   "load1": "5.48",
+   "nodeProcs": 9,
+   "rssMb": 212,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90187527,
+   "load1": "5.48",
+   "nodeProcs": 10,
+   "rssMb": 249,
+   "suites": 1
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90189527,
+   "load1": "5.48",
+   "nodeProcs": 10,
+   "rssMb": 257,
+   "suites": 0
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90191535,
+   "load1": "5.44",
+   "nodeProcs": 11,
+   "rssMb": 424,
+   "suites": 0
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90193529,
+   "load1": "5.44",
+   "nodeProcs": 11,
+   "rssMb": 340,
+   "suites": 0
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90195529,
+   "load1": "5.41",
+   "nodeProcs": 10,
+   "rssMb": 148,
+   "suites": 0
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90197529,
+   "load1": "5.41",
+   "nodeProcs": 11,
+   "rssMb": 367,
+   "suites": 0
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90199531,
+   "load1": "5.41",
+   "nodeProcs": 10,
+   "rssMb": 266,
+   "suites": 0
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90201531,
+   "load1": "5.29",
+   "nodeProcs": 9,
+   "rssMb": 122,
+   "suites": 0
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90203531,
+   "load1": "5.29",
+   "nodeProcs": 10,
+   "rssMb": 261,
+   "suites": 0
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90205540,
+   "load1": "5.43",
+   "nodeProcs": 12,
+   "rssMb": 594,
+   "suites": 0
+  },
+  {
+   "tag": "Q-r1",
+   "ms": 90207540,
+   "load1": "5.43",
+   "nodeProcs": 9,
+   "rssMb": 105,
+   "suites": 0
+  },
+  {
+   "tag": "end",
+   "ms": 90208125,
+   "load1": "5.43",
+   "nodeProcs": 8,
+   "rssMb": 84,
+   "suites": 0
+  }
+ ],
+ "notes": [
+  "起跑时环境判卷套数=0（-1=取不到；0=真独占）"
+ ],
+ "nearCap": {
+  "quiet": "3632 条｜贴帽 0 条｜无显式预算 3372 条｜离帽最近：m3c.test.ts·M3c pipeline 哑 sequencer（零 15207/25000ms=61%；evidence-typecheck.test.ts·门那一半：runner 的两个拒绝分支各自要出声 拼 3449/15000ms=23%；evidence-typecheck.test.ts·真环境：这一格得在真仓里跑得出东西（规则 237/3 3133/15000ms=21%（缺省＝config 里的 testTimeout=30000ms）",
+  "a": "3632 条｜贴帽 0 条｜无显式预算 3372 条｜离帽最近：m3c.test.ts·M3c pipeline 哑 sequencer（零 15192/25000ms=61%；evidence-typecheck.test.ts·门那一半：runner 的两个拒绝分支各自要出声 拼 3361/15000ms=22%；mutate-shards.test.ts·treeProblem 与编排器的前置闸：脏树不许当 2866/15000ms=19%（缺省＝config 里的 testTimeout=30000ms）",
+  "b": "/Users/ze/Downloads/deepseek harness/outputs/m10-face-false-red-2026-10-01/raw/suite-b.json 不存在 ⇒ 这一格没量到（不等于「0 条贴帽」）"
+ }
+}
