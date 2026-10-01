@@ -1,0 +1,49 @@
+prose-needle-scan：收料断言 132 条（扫 258 个 test 文件）｜生产侧 247 个文件｜树＝core-only（帽 顶包 10 ＋ 裸名字 2）
+  取料写法：字段直取 120 ＋ 本地 helper 6 ＋ 字段别名 6 ｜括号回走走不通（＝这些断言本面看不见，不是没有）0
+  verbatim 99 ｜ across-interpolation 6 ｜ non-prose 20 ｜ echo（测试自备标签回显）7 ｜ drift（未登记）0
+  · echo tests/docs-check.test.ts:168 .detail「水位 30000」
+  · echo tests/docs-check.test.ts:291 .detail「no-such」
+  · echo tests/docs-check.test.ts:476 .detail「x-2026-09-30」
+  · echo tests/docs-check.test.ts:614 .detail「head-cert-abcdef1.log」
+  · echo tests/mutation-rerun-triage.test.ts:202 .note「some-new-kind」
+  · echo tests/net.test.ts:55 .reason「测试调用」
+  · echo tests/shell-bypass-composition.test.ts:352 .reason「setsid」
+  ⚠️ across tests/mutate-anchor-titles.test.ts:203 .detail ⇒ scripts/mutate-anchor-titles.ts（整串「摘掉 2 条」）
+  ⚠️ across tests/mutate-anchor-titles.test.ts:224 .detail ⇒ scripts/mutate-anchor-titles.ts（整串「已补回 1 条锚点」）
+  ⚠️ across tests/replay-corpus-inventory.test.ts:96 .why ⇒ scripts/replay/corpus-inventory.ts（整串「最深连败 run=2」）
+  ⚠️ across tests/replay-prune-promise.test.ts:128 .why ⇒ scripts/replay/prune-promise.ts（整串「诚实句=1」）
+  ⚠️ across tests/replay-prune-promise.test.ts:140 .why ⇒ scripts/replay/prune-promise.ts（整串「诚实句=1」）
+  ⚠️ across tests/replay-verify-cause-exec.test.ts:146 .reason ⇒ scripts/replay/verify-cause-mix.ts（整串「语料最新事件早于 cause 落盘」）
+  顶包候选（收料那段在 ≥2 处字面量里 ⇒ 改一处不会响）：10 条（已提交态 10 ＋ 在飞 0）｜同一句抄 ≥2 处（改代码）5 条｜只是共享一个词（改针脚）5 条｜针脚是个裸名字（改成派生断言，红）2 条
+    ⚠️ 2 处 · tests/compaction.test.ts:273 .why「膨胀」＝scripts/compaction-check.ts#main ▸ 【反向验证钩子】质量闸②：膨胀拒绝（tokens_after ≥ tokens_ ｜ src/agent/compaction.ts#runCompaction ▸ 膨胀拒绝（tokens_after
+    ⚠️ 28 处 · tests/docs-check.test.ts:135 .detail「rev」 ⚑同一句抄了两遍 ⚑裸名字（副本里那些 import 路径/标识符喂不进被断言的字段）＝scripts/compaction-check.ts#main ▸ summaryPreview ｜ scripts/docs-check.ts#checkStateRev ▸ rev 行形状非法： ｜ scripts/docs-check.ts#shaExistsViaGit ▸ rev-parse ｜ scripts/docs-check.ts#runDocsCheck ▸ 不存在（迁移前属正常）——rev 真伪未检，不等于通过 ｜ scripts/head-cert.ts#shaShortForDefault ▸ rev-parse ｜ scripts/head-cert.ts#say ▸ rev-parse ｜ scripts/head-cert.ts#readFile ▸ rev-parse ｜ scripts/lib/mutate-gates.ts#mutateTreeGuard ▸ 取不到这棵树的 git 归属（`git rev-parse --git-dir/ ｜ scripts/mutate-anchor-titles.ts#(top) ▸ stale-zero-anchor-review ｜ scripts/mutate-anchor-titles.ts#checkAnchorTitles ▸ src/agent/security/llm-review.ts ｜ scripts/mutate-anchor-titles.ts#checkAnchorFace ▸ stale-zero-anchor-review ｜ scripts/mutate-shards.ts#treeProblem ▸ rev-parse ｜ scripts/mutate-shards.ts#main ▸ 用法：node --import tsx scripts/mutate-shar ｜ scripts/next-page.ts#out ▸ rev-parse ｜ scripts/prose-needle-scan.ts#main ▸ rev-parse ｜ src/agent/glm-session.ts#obj ▸ 按已注册角色跑这张 worker（内置 implement|review|tes ｜ src/agent/impact/persist.ts#currentCommitSha ▸ rev-parse ｜ src/agent/orchestrator.ts#(top) ▸ ./security/llm-review ｜ src/agent/orchestrator.ts#converged ▸ （内置 implement|review|test，或 plugin-name: ｜ src/agent/orchestrator.ts#n ▸ [review] 收到行级评审意见： ｜ src/agent/security/llm-review.ts#parseLlmFindings ▸ llm_review ｜ src/agent/security/scan.ts#isSecurityConfidence ▸ llm_review ｜ src/agent/sequencer.ts#parseStages ▸ 你是 pipeline 的评审环（review）：只读审查前环产出，输出结构化报 ｜ src/agent/worker-shell-tools.ts#(top) ▸ rev-parse ｜ src/agent/worker-shell-tools.ts#workerToolSpecs ▸ worktree 内 shell：git 子命令仅放行只读集（status/lo ｜ src/agent/worktree.ts#baseCommit ▸ rev-parse ｜ src/agent/worktree.ts#mergeCommit ▸ rev-parse ｜ src/events/index.ts#isEnvVerifyCause ▸ llm_review
+    ⚠️ 2 处 · tests/docs-check.test.ts:213 .detail「pnpm facts」＝scripts/docs-check.ts#checkObservedValues ▸ 」——它会随宿主与负载漂；写「见 pnpm facts」指针， ｜ scripts/facts.ts#formatFacts ▸ （耗时随宿主负载漂，所以值只活在账本里，文档只写「见 pnpm facts」。）
+    ⚠️ 3 处 · tests/docs-check.test.ts:246 .detail「STATE.md」 ⚑同一句抄了两遍 ⚑裸名字（副本里那些 import 路径/标识符喂不进被断言的字段）＝scripts/docs-check.ts#(top) ▸ STATE.md ｜ scripts/docs-check.ts#checkStateRev ▸ 缺 rev 行——STATE.md 首部必须写 `rev: <sha>` ｜ scripts/docs-check.ts#checkDocBinaries ▸ STATE.md
+    ⚠️ 4 处 · tests/mutate-anchor-titles.test.ts:203 .detail「摘掉 2 条」＝scripts/mutate-anchor-titles.ts#checkAnchorFace ▸ 条 ⇒ 有人在一次改动里摘掉 ｜ scripts/prefix-churn-check.ts#drive ▸ 轮工具面变了，摘掉 ｜ scripts/prefix-churn-check.ts#sched ▸ 断点位置 = 第一个被摘除的消息，与这次摘掉多少**无关** ⇒ 既然横竖要断一 ｜ scripts/mutate-verify.mjs#(top) ▸ 借名软链：`.agent -> staging` 时写 `.agent/x.js
+    ⚠️ 5 处 · tests/plan-required.test.ts:124 .reason「方案门」 ⚑同一句抄了两遍＝scripts/gate-check.ts#makeDriver ▸ 方案门 ｜ src/cli.ts#opts ▸ stdin 非交互（管道 / CI / --unattended）——提交空答案 ｜ src/main/agent-runner.ts#createGatedRemember ▸ 方案门：先批后写（当前没有已批准的方案） ｜ src/permissions/autonomy.ts#evaluate ▸ 方案门：先批后写（当前没有已批准的方案） ｜ src/permissions/index.ts#denyReason ▸ 方案门：先批后写（当前没有已批准的方案）
+    ⚠️ 5 处 · tests/plan-required.test.ts:139 .reason「方案门」 ⚑同一句抄了两遍＝scripts/gate-check.ts#makeDriver ▸ 方案门 ｜ src/cli.ts#opts ▸ stdin 非交互（管道 / CI / --unattended）——提交空答案 ｜ src/main/agent-runner.ts#createGatedRemember ▸ 方案门：先批后写（当前没有已批准的方案） ｜ src/permissions/autonomy.ts#evaluate ▸ 方案门：先批后写（当前没有已批准的方案） ｜ src/permissions/index.ts#denyReason ▸ 方案门：先批后写（当前没有已批准的方案）
+    ⚠️ 5 处 · tests/plugins-mcp.test.ts:115 .reason「方案门」 ⚑同一句抄了两遍＝scripts/gate-check.ts#makeDriver ▸ 方案门 ｜ src/cli.ts#opts ▸ stdin 非交互（管道 / CI / --unattended）——提交空答案 ｜ src/main/agent-runner.ts#createGatedRemember ▸ 方案门：先批后写（当前没有已批准的方案） ｜ src/permissions/autonomy.ts#evaluate ▸ 方案门：先批后写（当前没有已批准的方案） ｜ src/permissions/index.ts#denyReason ▸ 方案门：先批后写（当前没有已批准的方案）
+    ⚠️ 5 处 · tests/prompt-cost.test.ts:55 .note「未记」＝scripts/facts.ts#runScopeLabel ▸ 范围未记（旧账本没这个字段） ｜ scripts/lib/judge-input-face.ts#attributeInputs ▸ ；未记原因： ｜ scripts/lib/prompt-cost.ts#promptCostRows ▸ 该流没有可读的 inputTokens（usage 缺报）⇒ 占比未记，不算 0 ｜ scripts/replay/prompt-fixed-cost.ts#main ▸ 未记 ｜ src/agent/map/build.ts#mapInjectText ▸ 未记原因
+    ⚠️ 2 处 · tests/supervise-ring-verdict.test.ts:80 .why「无判据」＝src/agent/orchestrator.ts#effectiveReport ▸ 无判据 ｜ src/agent/supervisor.ts#decideSupervisor ▸ 无判据（verdict 缺位或不在取值域：既没有机器验证凭据，报告也没有 ver
+  影子池：认出 2 张（用例表 scripts/lib/shell-bypass-cases.ts 14 条、登记表 scripts/mutate-verify.mjs 1200 条），因引用/输入而免计的格子 18 格
+    · 免计 tests/autonomy.test.ts:190 .reason「断路器」原 2 处 → 1 处
+    · 免计 tests/compaction.test.ts:273 .why「膨胀」原 3 处 → 2 处
+    · 免计 tests/docs-check.test.ts:135 .detail「rev」原 35 处 → 28 处
+    · 免计 tests/docs-check.test.ts:213 .detail「pnpm facts」原 3 处 → 2 处
+    · 免计 tests/docs-check.test.ts:542 .detail「CRED_UNNAMED_PAGE_CAP」原 2 处 → 1 处
+    · 免计 tests/docs-check.test.ts:613 .detail「CRED_WEAK_WITNESS_CAP」原 2 处 → 1 处
+    · 免计 tests/goal-stop-decision.test.ts:112 .note「美元闸本次不生效」原 2 处 → 1 处
+    · 免计 tests/head-import-face.test.ts:190 .detail「盘上也没有」原 2 处 → 1 处
+    · 免计 tests/mutate-verify-gates.test.ts:1587 .why「git-dir 与 git-common-dir 同指」原 2 处 → 1 处
+    · 免计 tests/net.test.ts:54 .reason「ms 内无任何数据（对端挂起或网络黑洞）」原 2 处 → 1 处
+    · 免计 tests/plan-required.test.ts:124 .reason「方案门」原 6 处 → 5 处
+    · 免计 tests/plan-required.test.ts:139 .reason「方案门」原 6 处 → 5 处
+    · 免计 tests/plugins-mcp.test.ts:115 .reason「方案门」原 6 处 → 5 处
+    · 免计 tests/prompt-cost.test.ts:55 .note「未记」原 6 处 → 5 处
+    · 免计 tests/replay-corpus-inventory.test.ts:80 .why「无卡死证据」原 2 处 → 1 处
+    · 免计 tests/shell-bypass-composition.test.ts:352 .reason「setsid」原 2 处 → 0 处
+    · 免计 tests/skill-tool-policy.test.ts:376 .note「撤不回来」原 2 处 → 1 处
+    · 免计 tests/supervise-ring-verdict.test.ts:80 .why「无判据」原 3 处 → 2 处
+  点名豁免挡下的散文栏：1602 条字面量（登记表 `desc:` 那类给人读的说明——它不流进任何输出，所以不许替生产文案作证）
+  自排除（本面自己的夹具）：tests/prose-needle-scan.test.ts
+SCAN_EXIT=0

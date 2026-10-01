@@ -1,0 +1,15 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-1b4893e.lock）
+变异验证：3 条
+✅ docscheck-source-cite-existence-welded-shut — 『路径在 HEAD 跟踪清单里就放行』这一支被换成恒真 ⇒ D-10 从此对任何引用都不出声，而第 279 页普查到的那 74 条死指针恰好是最需要它说话的东西（门还在跑、还是绿的、什么都看不见） ｜本机实测 1.3s／2 拍
+✅ docscheck-source-cite-legacy-exempts-everything — 存量豁免从『这条引用在登记表里』放宽成『登记表非空就豁免』⇒ 只要还留着一条存量，新写的死引用就全都被放行（登记面反过来变成万能豁免，这正是第 335 页那条『能消除红的那个动作要自带反向闸』的形状） ｜本机实测 0.7s／2 拍
+✅ docscheck-source-cite-stale-branch-dead — 存量『不再命中就报该删』那一支焊死 ⇒ 登记表只增不减、静默烂在这儿，而下一个人读到的是『74 条历史引用』这样一张早已不真实的名单 ｜本机实测 0.7s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 3.0s · 跑了 3/3 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 6 次／3 条（每条次数分布 2×3）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 docscheck-source-cite-existence-welded-shut 1.3s
+跑法单价：selector 6 拍·中位 0.34s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-1b4893e.lock）
+real 3.63
+user 3.67
+sys 0.49
+KILL_EXIT=0
