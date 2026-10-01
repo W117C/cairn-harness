@@ -10034,6 +10034,36 @@ const MUTATIONS = [
     expectFail: "分母只数有 mtime 的那一半",
   },
 
+  /* ── 第 279 页：D-10（台账里的源码行号引用要追得到东西）刚立，三支各焊一刀。
+   *    判据是纯函数＋注入 tracked 集合，所以三侧证人全是合成夹具（真仓那条只当"今天不红"的兜底）。 ── */
+  {
+    id: "docscheck-source-cite-existence-welded-shut",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "『路径在 HEAD 跟踪清单里就放行』这一支被换成恒真 ⇒ D-10 从此对任何引用都不出声，" +
+      "而第 279 页普查到的那 74 条死指针恰好是最需要它说话的东西（门还在跑、还是绿的、什么都看不见）",
+    apply: (s) => s.replace("    if (tracked.has(path)) continue;", "    if (path.length >= 0) continue;"),
+    expectFail: "各红一条，同一条只算一次",
+  },
+  {
+    id: "docscheck-source-cite-legacy-exempts-everything",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "存量豁免从『这条引用在登记表里』放宽成『登记表非空就豁免』⇒ 只要还留着一条存量，" +
+      "新写的死引用就全都被放行（登记面反过来变成万能豁免，这正是第 335 页那条『能消除红的那个动作要自带反向闸』的形状）",
+    apply: (s) => s.replace("    if (legacy.includes(cite)) continue;", "    if (legacy.length > 0) continue;"),
+    expectFail: "净零交换（销掉一条存量＋新添一条坏引用）要报两条",
+  },
+  {
+    id: "docscheck-source-cite-stale-branch-dead",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "存量『不再命中就报该删』那一支焊死 ⇒ 登记表只增不减、静默烂在这儿，" +
+      "而下一个人读到的是『74 条历史引用』这样一张早已不真实的名单",
+    apply: (s) => s.replace("    if (!seen.has(k)) {", "    if (false) {"),
+    expectFail: "点名该删",
+  },
+
   /* ── 第 274 页：把 `scripts/prose-needle-scan.ts` 的帽那一族补齐（第 272 页现读：这支 1100 行的尺此前整支零锚点，
    *    本族四支各钉一种坏法：比较符、加法、按树取帽、把出声那一支焊死）。
    *    这四支都能买，正因为它们的判卷喂的是**合成输入**（第 272 页第 7 项写的那条：clean 树上两侧同为 0 的配对断言买不了锚点）。 ── */

@@ -1,0 +1,155 @@
+  ❌ D-10 PROGRESS.md
+     引用 scheduler.ts:599 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 tests/m3b.test.ts:276 追不到：HEAD 里没有这个文件（改名或删掉了）——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 replay-determinism-check.ts:65 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 agent-runner.ts:1563 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 agent-runner.ts:1570 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 src/main/index.ts:198 追不到：HEAD 里没有这个文件（改名或删掉了）——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 solpi-runtime.ts:111 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 agent-runner.ts:852 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 agent-runner.ts:1488 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 ripgrep.ts:91 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 glm-session.ts:638 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 net.test.ts:53 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 mutate-verify.mjs:5317 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 permissions/index.ts:127 追不到：HEAD 里没有这个文件（改名或删掉了）——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 permissions/autonomy.ts:345 追不到：HEAD 里没有这个文件（改名或删掉了）——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 main/agent-runner.ts:782 追不到：HEAD 里没有这个文件（改名或删掉了）——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 plan-state.ts:18 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 mutate-verify.mjs:382 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 tests/permission-mode-guided.test.ts:103 追不到：HEAD 里没有这个文件（改名或删掉了）——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 docs-check.test.ts:156 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 orchestrator.ts:184 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 gate-manifest.ts:39 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 glm-session.ts:429 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 docs-check.ts:136 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 docs-check.ts:115 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 judge-input-face.ts:21 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 replay-determinism-check.ts:99 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 settings.ts:124 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 loop.ts:462 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 settings.ts:123 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 model-surface-check.ts:307 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 prefix-churn-check.ts:708 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 settings-handlers.ts:78 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 agent-runner.ts:94 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 agent-runner.ts:1379 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 gate-manifest.ts:12 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 impact-query.ts:188 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 impact/index.ts:356 追不到：HEAD 里没有这个文件（改名或删掉了）——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 orchestrator.ts:627 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 lease-conflicts.ts:25 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 orchestrator.ts:630 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 settings.ts:122 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 impact/index.ts:64 追不到：HEAD 里没有这个文件（改名或删掉了）——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 supervise-contract.ts:71 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 evidence.ts:142 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 orchestrator-join.ts:234 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 glm-session.ts:630 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 agent-runner.ts:1572 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 model-surface.ts:84 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 ledger.ts:321 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 glm-session.ts:549 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 glm-session.ts:834 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 loop.ts:421 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 loop.ts:397 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 index.ts:105 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 agent-runner.ts:41 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 head-cert.ts:210 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 orchestrator.ts:318 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 economics.ts:165 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 loop.ts:233 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 mutate-verify.mjs:9882 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 head-cert.ts:248 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 docs-check.ts:215 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 prune-batching.test.ts:132 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 command-shape.test.ts:14 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 prune-batching.test.ts:133 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 gates.ts:163 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 mutate-gates.ts:720 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 head-cert-deps.test.ts:523 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 sandbox.ts:170 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 index.ts:243 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 app.js:4 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 mutate-verify.mjs:10455 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ❌ D-10 PROGRESS.md
+     引用 agent-runner.ts:976 追不到：只写裸文件名、没有目录，读者无从定位——改成 HEAD 里真存在的路径（更好的写法是 `path#符号`，行号会随重排漂）
+  ℹ️  跳过 D-1 STATE.md 不存在（迁移前属正常）——该文件未受检，不等于通过
+  ℹ️  跳过 D-5 STATE.md 不存在（迁移前属正常）——rev 真伪未检，不等于通过
+  ℹ️  跳过 D-2/D-4 STATE.md 不存在（迁移前属正常）——该页未受检，不等于通过
+  台账 sha 面：抽到 305 条候选｜非提交形而带理由豁免 3 条
+  凭证对账面：可比对 299 个读数（红 0）｜页未点名取料目录 0 个＝未检｜未点名页 0 页（帽 0，只准调低）｜点名但目录读不到 0 个＝取不到｜登记不可回查 8 条｜弱证 0 对（帽 0，只准调低）｜证人无身份行 173 对＝这一格无从判｜已登记不可回查 10 页／20 条
+docs-check: ❌ 74 项违规 D-10=74（预算常量在本文件 DOC_BUDGETS，只准下调）
+DOCS_EXIT=1

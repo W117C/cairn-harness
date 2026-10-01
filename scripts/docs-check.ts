@@ -8,7 +8,7 @@
 // 水位**只准调低**，不再被命中的条目会报成 stale 红，故豁免不会静默烂在这儿）。
 
 export interface Finding {
-  rule: "D-1" | "D-2" | "D-3" | "D-4" | "D-5" | "D-7" | "D-8" | "D-9" | "W";
+  rule: "D-1" | "D-2" | "D-3" | "D-4" | "D-5" | "D-7" | "D-8" | "D-9" | "D-10" | "W";
   file: string;
   detail: string;
   /** 该判据的实测量纲值（D-1 = 字节，D-7 = 文件数）。有值时水位按"量"豁免；无值时按"条数"豁免。 */
@@ -84,6 +84,82 @@ export function checkLineCitations(sources: readonly SourceFile[]): Finding[] {
     }
   }
   return out;
+}
+
+/** D-10（第 279 页）：台账里的**源码**行号引用必须追得到一个存在的东西。
+ *  动因是普查：PROGRESS.md 里 167 条去重引用中 74 条追不到——66 条只写了裸文件名（`agent-runner.ts:1563`），
+ *  8 条路径在 HEAD 里根本没有（`src/main/index.ts:198` 属桌面层删除后的残留）。D-3 只管 `.md` 的行号指针，
+ *  源码侧此前无人看。**"行号还在总行数范围内"不算证人**（文件只会长），所以这条只判一件事：追不追得到。
+ *  存量按**集合**登记（不是数量）——数量水位拦不住"修一条又添一条"的净零交换。 */
+const SOURCE_LINE_CITATION = /[A-Za-z0-9_./-]+\.(?:ts|mts|mjs|js|json):[0-9]+/g;
+
+/** 第 279 页普查快照（写于行号约定之前的存量；理由共用一条，见下）。
+ *  名单不是手抄的：由本条判据第一次跑出来的 74 项 D-10 输出去重后生成（证人
+ *  `outputs/doc-line-citations-2026-10-01/docs-check-279-census.log`），且与独立探针数的 74 同值。 */
+export const LEGACY_SOURCE_CITATIONS: readonly string[] = [
+  "agent-runner.ts:1379", "agent-runner.ts:1488", "agent-runner.ts:1563", "agent-runner.ts:1570",
+  "agent-runner.ts:1572", "agent-runner.ts:41", "agent-runner.ts:852", "agent-runner.ts:94",
+  "agent-runner.ts:976", "app.js:4", "command-shape.test.ts:14", "docs-check.test.ts:156",
+  "docs-check.ts:115", "docs-check.ts:136", "docs-check.ts:215", "economics.ts:165",
+  "evidence.ts:142", "gate-manifest.ts:12", "gate-manifest.ts:39", "gates.ts:163",
+  "glm-session.ts:429", "glm-session.ts:549", "glm-session.ts:630", "glm-session.ts:638",
+  "glm-session.ts:834", "head-cert-deps.test.ts:523", "head-cert.ts:210", "head-cert.ts:248",
+  "impact-query.ts:188", "impact/index.ts:356", "impact/index.ts:64", "index.ts:105",
+  "index.ts:243", "judge-input-face.ts:21", "lease-conflicts.ts:25", "ledger.ts:321",
+  "loop.ts:233", "loop.ts:397", "loop.ts:421", "loop.ts:462",
+  "main/agent-runner.ts:782", "model-surface-check.ts:307", "model-surface.ts:84", "mutate-gates.ts:720",
+  "mutate-verify.mjs:10455", "mutate-verify.mjs:382", "mutate-verify.mjs:5317", "mutate-verify.mjs:9882",
+  "net.test.ts:53", "orchestrator-join.ts:234", "orchestrator.ts:184", "orchestrator.ts:318",
+  "orchestrator.ts:627", "orchestrator.ts:630", "permissions/autonomy.ts:345", "permissions/index.ts:127",
+  "plan-state.ts:18", "prefix-churn-check.ts:708", "prune-batching.test.ts:132", "prune-batching.test.ts:133",
+  "replay-determinism-check.ts:65", "replay-determinism-check.ts:99", "ripgrep.ts:91", "sandbox.ts:170",
+  "scheduler.ts:599", "settings-handlers.ts:78", "settings.ts:122", "settings.ts:123",
+  "settings.ts:124", "solpi-runtime.ts:111", "src/main/index.ts:198", "supervise-contract.ts:71",
+  "tests/m3b.test.ts:276", "tests/permission-mode-guided.test.ts:103",
+];
+export const LEGACY_SOURCE_CITATION_REASON =
+  "第 279 页普查时台账里已存在的引用（写于行号约定之前）；只准调低，不再命中即报 stale";
+
+export function checkSourceLineCitations(
+  ledgerText: string,
+  tracked: ReadonlySet<string>,
+  legacy: readonly string[] = LEGACY_SOURCE_CITATIONS,
+): Finding[] {
+  const out: Finding[] = [];
+  const seen = new Set<string>();
+  for (const m of ledgerText.matchAll(SOURCE_LINE_CITATION)) {
+    const cite = m[0];
+    if (seen.has(cite)) continue;
+    seen.add(cite);
+    const path = cite.slice(0, cite.lastIndexOf(":"));
+    if (tracked.has(path)) continue;
+    if (legacy.includes(cite)) continue;
+    out.push({
+      rule: "D-10",
+      file: LEDGER_FILE,
+      detail: `引用 ${cite} 追不到：` +
+        (path.includes("/") ? "HEAD 里没有这个文件（改名或删掉了）" : "只写裸文件名、没有目录，读者无从定位") +
+        `——改成 HEAD 里真存在的路径（更好的写法是 ` + "`path#符号`" + `，行号会随重排漂）`,
+    });
+  }
+  for (const k of legacy) {
+    if (!seen.has(k)) {
+      out.push({ rule: "D-10", file: LEDGER_FILE, detail: `存量登记的 ${k} 在台账里已不再命中（那行引用被改了或那段没了），该删——登记不删就是假存量（理由曾写：${LEGACY_SOURCE_CITATION_REASON.slice(0, 24)}）` });
+    }
+  }
+  return out;
+}
+
+/** HEAD 跟踪清单取不到时**交 null**，不交空集合（第 279 页：空集合会让每一条引用都被读成死指针，
+ *  假红淹没真信号）；调用方把 null 记成"未检"。 */
+function trackedFilesAtHead(): Set<string> | null {
+  try {
+    const out = execFileSync("git", ["ls-tree", "-r", "--name-only", "HEAD"], { cwd: ROOT, encoding: "utf8" });
+    const lines = out.trim().split("\n").filter((l) => l !== "");
+    return lines.length === 0 ? null : new Set(lines);
+  } catch {
+    return null;
+  }
 }
 
 /** rev 行：`rev: <7~40 位十六进制>`，允许反引号包裹与行尾空白。 */
@@ -803,10 +879,16 @@ export function runDocsCheck(): {
   let ledgerChecked = 0;
   const ledgerAbs = join(ROOT, LEDGER_FILE);
   if (existsSync(ledgerAbs)) {
-    const face = ledgerRevFace(readFileSync(ledgerAbs, "utf8"), resolveRevsViaGit);
+    const ledgerText = readFileSync(ledgerAbs, "utf8");
+    const face = ledgerRevFace(ledgerText, resolveRevsViaGit);
     findings.push(...face.findings);
     ledgerChecked = face.checked;
     if (face.skipped !== null) skipped.push(face.skipped);
+    // D-10（第 279 页）：台账里的源码行号引用要**追得到东西**。取不到 HEAD 清单时报"未检"，
+    // 不许拿空集合当判据（那会把每一条引用都读成死指针——假红的量足以淹掉真信号）。
+    const tracked = trackedFilesAtHead();
+    if (tracked === null) skipped.push("D-10 " + LEDGER_FILE + " 的源码引用面未检（取不到 HEAD 跟踪清单），不等于通过");
+    else findings.push(...checkSourceLineCitations(ledgerText, tracked));
   } else {
     skipped.push(`D-5 ${LEDGER_FILE} 不存在 ⇒ 台账 sha 面整条未检，不等于通过`);
   }

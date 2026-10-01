@@ -1,0 +1,6 @@
+去重候选 167 条｜HEAD 里存在 92｜追不到 75
+  拆成因：只写裸文件名 67｜含路径但 HEAD 没有 8｜只在盘上（未入库／隔壁在飞） 0
+死路径名单：tests/m3b.test.ts:276 src/main/index.ts:198 permissions/index.ts:127 permissions/autonomy.ts:345 main/agent-runner.ts:782 tests/permission-mode-guided.test.ts:103 impact/index.ts:356 impact/index.ts:64
+样本 裸名：scheduler.ts:599 replay-determinism-check.ts:65 agent-runner.ts:1563 agent-runner.ts:1570 solpi-runtime.ts:111 agent-runner.ts:852
+哨兵：候选数 > 0 ＝ true｜样本里含 mutate-verify.mjs 的条数 ＝ 7
+CENSUS_EXIT=0

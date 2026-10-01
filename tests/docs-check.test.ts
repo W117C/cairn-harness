@@ -20,10 +20,12 @@ import {
   checkBudget,
   checkDocBinaries,
   checkLineCitations,
+  checkSourceLineCitations,
   checkObservedValues,
   checkReplay,
   checkStateRev,
   DOC_BUDGETS,
+  LEGACY_SOURCE_CITATIONS,
   LEGACY_WAIVERS,
   STATE_FILE,
   waive,
@@ -757,3 +759,48 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
   });
 });
 
+
+// 第 279 页：D-10——台账里的**源码**行号引用要追得到东西。
+// 判据只问"追不追得到"（可解析路径 ∧ HEAD 里存在），因为"行号还在总行数范围内"不是证人：
+// 文件只会变长，旧行号通常还在范围内，指的内容却已经换了。存量按**集合**登记，不按数量——
+// 数量水位拦不住"修掉一条又添一条"的净零交换。
+describe("D-10 源码行号引用面：两半都钉，存量按集合登记", () => {
+  const tracked = new Set(["src/a.ts", "scripts/b.mts"]);
+
+  it("可解析的引用不红；裸文件名与 HEAD 里没有的路径各红一条，同一条只算一次", () => {
+    const ledger = [
+      "`src/a.ts:12` 与 `src/a.ts:12` 同一条只算一次",
+      "`agent.ts:7` 只写了裸文件名",
+      "`src/gone.ts:9` 这个文件在 HEAD 里没有",
+      "`scripts/b.mts:1` 也追得到",
+    ].join("\n");
+    const f = checkSourceLineCitations(ledger, tracked, []);
+    expect(f.map((x) => x.rule)).toEqual(["D-10", "D-10"]);
+    expect(f.every((x) => x.file === LEDGER_FILE)).toBe(true);
+    // 反向一侧（别把追得到的也喊红）：同一份台账把两条坏引用换成好路径 ⇒ 一条不红
+    const clean = "`src/a.ts:12`\n`scripts/b.mts:1`\n";
+    expect(checkSourceLineCitations(clean, tracked, [])).toEqual([]);
+  });
+
+  it("登记是集合不是数量：净零交换（销掉一条存量＋新添一条坏引用）要报两条", () => {
+    // 台账里 `agent.ts:7` 被改好了（存量那条不再命中），同时新写了一条 `src/gone.ts:9`
+    const ledger = "`src/a.ts:1`\n`src/gone.ts:9`\n";
+    const f = checkSourceLineCitations(ledger, tracked, ["agent.ts:7"]);
+    expect(f.length).toBe(2);
+    expect(f.map((x) => x.rule)).toEqual(["D-10", "D-10"]);
+    // 同一条存量仍命中时不该出声（否则登记会自己变红，逼人去删真登记）
+    expect(checkSourceLineCitations("`agent.ts:7`\n", tracked, ["agent.ts:7"])).toEqual([]);
+  });
+
+  it("登记不再命中时要点名该删——只印不判的那一半也要出声（否则存量会静默烂在这儿）", () => {
+    // 台账里一条坏引用都没有，但登记表里那条已经追不到了：这必须红，且不依赖"有没有新增坏引用"。
+    const f = checkSourceLineCitations("`src/a.ts:1`\n", tracked, ["gone.ts:1"]);
+    expect(f.map((x) => x.rule)).toEqual(["D-10"]);
+  });
+
+  it("真仓那一趟：74 条存量今天仍全部命中，所以 D-10 现在是绿的（登记不是凭空写的）", () => {
+    expect(LEGACY_SOURCE_CITATIONS.length).toBeGreaterThan(0);
+    const face = runDocsCheck();
+    expect(hit(face.findings, "D-10").length).toBe(0);
+  });
+});
