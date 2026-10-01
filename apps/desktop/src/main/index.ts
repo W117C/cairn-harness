@@ -18,6 +18,11 @@ const workspace = process.env.M0_DESKTOP_WORKSPACE ?? app.getPath("home");
 // M0_SMOKE 机器冒烟（GUI 交互留给人）：先 seed settings 再装配 host——
 // initSettingsStore 在 createKernelHost 里挂存储，seed 必须赶在它前面。
 if (process.env.M0_SMOKE === "1") {
+  if (!process.env.M0_DESKTOP_WORKSPACE) {
+    // 回落 $HOME 会把冒烟会话/事件写进真实家目录——冒烟必须显式给临时工作区
+    console.error("[m0-smoke] FAIL: M0_DESKTOP_WORKSPACE 未设置（冒烟拒绝回落 $HOME，请显式给临时工作区）");
+    app.exit(1);
+  }
   mkdirSync(userData, { recursive: true });
   const settingsPath = join(userData, "settings.json");
   let alreadyDemo = false;
@@ -107,7 +112,17 @@ const createWindow = () => {
           }
           const asks = (await win.webContents.executeJavaScript("window.__m0.asks")) as number;
           console.log("[m0-smoke] events:", events, "asks auto-approved:", asks);
-          console.log("[m0-smoke] done in", Date.now() - t0, "ms");
+          // 退出码编码判据：M0_SMOKE 是可重跑门——判据不过必须非零退（CI 可判）
+          const failed: string[] = [];
+          if (!run.ok) failed.push(`run ok:false${run.error ? `（${run.error}）` : ""}`);
+          if (events < 1) failed.push(`事件计数 ${events} < 1`);
+          if (failed.length > 0) {
+            console.error("[m0-smoke] FAIL:", failed.join("；"));
+            clearTimeout(watchdog);
+            app.exit(1);
+            return;
+          }
+          console.log("[m0-smoke] PASS in", Date.now() - t0, "ms");
           clearTimeout(watchdog);
           app.quit();
         })
