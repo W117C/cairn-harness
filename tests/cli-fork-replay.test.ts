@@ -3,8 +3,9 @@
 //   · `--replay` 只读：打决策链（含 gate 判定），原日志 sha256 不变；
 //   · `--fork`：前缀**逐字节**一致 + `session_meta.branch_of` + 源会话 sha256 不变 + 新会话可续跑；
 //   · 「中断后完整可续」的确定性切面：SIGINT 收束（优雅路径）之后，同一条会话继续追加、重放读得到。
-// 边界（如实写在判卷里，不假装覆盖）：硬杀（SIGKILL）在 write 半途可能留半写尾行，append 侧
-// 没有"补换行"修复（`src/events` 的既有行为，不在本模块写范围）——那属于 events 层的事，见 LEDGER 开放项。
+// 边界（如实写在判卷里，不假装覆盖）：硬杀（SIGKILL）在 write 半途可能留半写尾行。
+// （2026-10-01 晚收口：append 侧已修——`src/events` 的 repairPartialTail 在新开句柄时裁剪半写尾段
+// 并响亮告警；本文件的 SIGINT 用例覆盖的是优雅路径，硬杀路径的判卷见 tests/events-tail-repair.test.ts。）
 import { spawn, spawnSync } from "node:child_process";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";

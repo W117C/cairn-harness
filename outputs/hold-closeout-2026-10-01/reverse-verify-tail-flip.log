@@ -1,0 +1,39 @@
+# 反向验证（mutant：repairPartialTail 首行直接 return —— 修复被拆掉）
+# 命令：node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/events-tail-repair.test.ts
+
+ RUN  v5.0.0 /Users/ze/Downloads/deepseek harness
+
+ ❯ tests/events-tail-repair.test.ts (4 tests | 1 failed) 150ms
+   ❯ repairPartialTail：硬杀后的续写 (4)
+     × 半写尾行被裁掉并响亮告警；下一条事件独立成行，重放读得到（不修的话它会被拼成坏行而消失） 35ms
+     ✓ 正常文件（以换行收尾）零打扰：不告警、旧字节逐字不动、追加只加不改 31ms
+     ✓ 中间坏行**不动**：这条修只管尾部——重放仍会对中间坏行当场抛（不许被修安静地抹掉） 72ms
+     ✓ 空文件 / 新建文件：无告警、正常写入 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/events-tail-repair.test.ts > repairPartialTail：硬杀后的续写 > 半写尾行被裁掉并响亮告警；下一条事件独立成行，重放读得到（不修的话它会被拼成坏行而消失）
+AssertionError: expected '' to contain '半写尾行'
+
+- Expected
++ Received
+
+- 半写尾行
+
+ ❯ tests/events-tail-repair.test.ts:37:24
+     35|       await log.append(EV(3));
+     36|       const warnText = warn.mock.calls.map((c) => String(c[0])).join("…
+     37|       expect(warnText).toContain("半写尾行");
+       |                        ^
+     38|       expect(warnText).toContain(`已丢弃未成行的 ${String(Buffer.byteLength(p…
+     39|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  20:20:23
+   Duration  426ms (tests 51%, transform 36%, import 11%, worker 1%, environment 1%)
+
+EXIT=1

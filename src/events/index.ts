@@ -633,6 +633,53 @@ const logHandles = new Map<string, CachedHandle>();
 /** 按 path 串行化句柄解析（照抄 replayChain 写法）：并发 append 在 await 间隙不得各开一次句柄。 */
 const logHandleChain = new Map<string, Promise<FileHandle>>();
 
+/** 半写尾行的扫描上限：尾段超过它仍无换行就**不猜边界**（见 `repairPartialTail` 的分支二）。 */
+const TAIL_SCAN_CAP = 1 << 20;
+
+/** 半写尾行修复（只在新开句柄时做，= 跨进程续写的唯一入口）：
+ *  进程被硬杀在单次 `write` 中途时，文件尾可能留下**半条 JSON**。读者侧一直按「尾部半写可丢」
+ *  容错（`replay`/`replayIncremental`），但写入侧此前没人补这一步——下一次 append 会把它和
+ *  下一条事件拼成**一条**坏行，于是**新事件静默不可见**（2026-10-01 M8 侧发现并登记的边界，
+ *  本笔收口）。这里把没成行的尾段裁掉并响亮告警：丢的是从未成行的字节，而读者本来就看不见它们。
+ *  **只在尾部修**：文件中间的坏行不动——那是另一类事故，重放会当场抛；不许被这条修安静地抹掉。 */
+async function repairPartialTail(path: string, fh: FileHandle): Promise<void> {
+  const size = (await fh.stat()).size;
+  if (size === 0) return;
+  const last = Buffer.allocUnsafe(1);
+  await fh.read(last, 0, 1, size - 1);
+  if (last[0] === 0x0a) return; // 以换行收尾：没有半写尾行
+  let pos = size;
+  let scanned = 0;
+  const chunk = 64 * 1024;
+  let cut: number | null = null;
+  while (pos > 0 && scanned < TAIL_SCAN_CAP) {
+    const start = Math.max(0, pos - chunk);
+    const len = pos - start;
+    const buf = Buffer.allocUnsafe(len);
+    await fh.read(buf, 0, len, start);
+    const idx = buf.lastIndexOf(0x0a);
+    if (idx >= 0) {
+      cut = start + idx + 1; // 指向最后一个换行符之后
+      break;
+    }
+    pos = start;
+    scanned += len;
+  }
+  if (cut !== null) {
+    await fh.truncate(cut);
+    console.warn(
+      `[events] 检测到半写尾行（上次写入未完成，多半是被硬杀在写中途）：已丢弃未成行的 ${String(size - cut)} 字节并续写：${path}`,
+    );
+    return;
+  }
+  // >1MB 却一个换行都没有：不猜边界。补一个换行把劣质尾段隔离——下一条事件落在干净的新行上，
+  // 而重放会对那条坏行**大声抛**（可见胜于静默：这条路径不允许修成"悄悄少几条"）。
+  await fh.write("\n");
+  console.warn(
+    `[events] 尾部超过 ${String(TAIL_SCAN_CAP / 1024 / 1024)}MB 无换行，放弃自动裁剪：已补换行隔离，重放会点名该坏行：${path}`,
+  );
+}
+
 /** 解析（必要时新建）path 的常驻句柄。inode 校验是必须的：agent-runner 会先 rm(logPath) 再
  *  createEventLog——不校验会把事件写进已 unlink 的旧 inode（静默丢数据）。 */
 async function resolveHandleInner(path: string): Promise<FileHandle> {
@@ -644,7 +691,10 @@ async function resolveHandleInner(path: string): Promise<FileHandle> {
     logHandles.delete(path);
     await cached.fh.close().catch(() => undefined);
   }
-  const fh = await open(path, "a");
+  // `a+` 而不是 `a`：半写尾行修复要在**同一句柄**上回读文件尾（`a` 是只写 fd，read 报 EBADF）。
+  // 追加语义逐字不变（O_APPEND：写永远落在末尾），只多一个可读位。
+  const fh = await open(path, "a+");
+  await repairPartialTail(path, fh);
   const ino = (await fh.stat()).ino;
   if (logHandles.size >= LOG_HANDLE_MAX) {
     // 有界：淘汰最早插入的一条并关闭其句柄（照抄 replayCache 的淘汰写法；Map 插入序即 LRU-ish，

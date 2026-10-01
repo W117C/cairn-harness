@@ -1,0 +1,13 @@
+# 反向验证复原：原实现（sha256 496ebe3… 与改前逐字节相同）下，同一条命令复绿
+# 命令：node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/events-tail-repair.test.ts
+
+ RUN  v5.0.0 /Users/ze/Downloads/deepseek harness
+
+ ✓ tests/events-tail-repair.test.ts (4 tests) 14ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  20:20:28
+   Duration  186ms (transform 59%, import 20%, tests 18%, worker 3%)
+
+EXIT=0
