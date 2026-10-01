@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { budgetFromTestSource, certLevel, CERT_FLAGS, CERT_OPTS, certTreeAbs, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, defaultTimeoutFromConfig, depDirs, gitInflightArgs, headGateTableIntegrity, installedDeps, mainRootFromCommonDir, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, suiteRows, timingCell, timingNearCapCell, unknownCertArgs, VITEST_DEFAULT_TIMEOUT_MS, wallClockCell } from "../scripts/lib/head-cert-deps";
+import { budgetFromTestSource, certLevel, CERT_FLAGS, CERT_OPTS, certTreeAbs, certTreeReclaim, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, defaultTimeoutFromConfig, depDirs, gitInflightArgs, headGateTableIntegrity, installedDeps, mainRootFromCommonDir, missingDeclaredDeps, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, suiteRows, timingCell, timingNearCapCell, unknownCertArgs, VITEST_DEFAULT_TIMEOUT_MS, wallClockCell } from "../scripts/lib/head-cert-deps";
 import type { SuiteRow } from "../scripts/lib/head-cert-deps";
 import { acquireToolLock, decideToolLock, lockAgeCap, parseToolLock, shouldReleaseLock, toolLockPath } from "../scripts/lib/tool-lock";
 
@@ -1302,5 +1302,93 @@ describe("本趟墙钟：认证趟自己记的那一格（第 267 页，任务 #
     const codeLine = /^const code = .*$/mu.exec(script)?.[0] ?? "";
     expect(codeLine, "取不到退出码那一行＝它的形状变了，这一格要重新看过").not.toHaveLength(0);
     expect(codeLine).not.toMatch(/wallClock/u);
+  });
+});
+
+/* 10-02 实测修的洞：认证树每跑一次留一棵。默认树名带 sha（`.worktrees/head-cert-<sha7>`），
+ * 收尾只**印**一行 `git worktree remove --force <树>` 就退出——命令印在 stdout 上没人敲，
+ * 一个月堆到 95 棵 / 3.6 GB。这一组钉住"判据与执行分开"：判定是纯函数，破坏性动作在 head-cert.ts 里。 */
+describe("认证树回收：判据与执行分开（10-02）", () => {
+  const OK = { createdHere: true, keepFlag: false, stillThere: true, dirtyCount: 0 };
+
+  it("本次新建 ∧ 无在飞 ⇒ 收", () => {
+    expect(certTreeReclaim(OK).remove).toBe(true);
+  });
+
+  it("不是本次新建的 ⇒ 不收：--tree= 指定的共享树（package.json 固定复用 gate-head-cert）删了下一轮就没树可用", () => {
+    const r = certTreeReclaim({ ...OK, createdHere: false });
+    expect(r.remove).toBe(false);
+    expect(r.why).toContain("复用来的共享树");
+  });
+
+  it("--keep-tree ⇒ 不收（opt-out 明写）", () => {
+    expect(certTreeReclaim({ ...OK, keepFlag: true }).remove).toBe(false);
+  });
+
+  it("在飞数取不到（null）⇒ 按不收处理，不许把坏尺当 0 读", () => {
+    const r = certTreeReclaim({ ...OK, dirtyCount: null });
+    expect(r.remove, "取不到 ≠ 干净：并进 0 就是顺手删别人的东西").toBe(false);
+    expect(r.why).toContain("量不出来");
+  });
+
+  it("树上有在飞项 ⇒ 不收（那是别人的活）", () => {
+    const r = certTreeReclaim({ ...OK, dirtyCount: 3 });
+    expect(r.remove).toBe(false);
+    expect(r.why).toContain("3");
+  });
+
+  it("树已被别处删掉 ⇒ 不收，也不该报失败（worktree remove 一个没了的目录只会报红）", () => {
+    const r = certTreeReclaim({ ...OK, stillThere: false });
+    expect(r.remove).toBe(false);
+    expect(r.why).toContain("已被别处删掉");
+  });
+
+  it("四条判据一条都不能少：去掉任一条都变成「默认收」——用全排列量一遍", () => {
+    // 只有四条同时成立才收；其余 15 种组合必须全部不收。
+    let combos = 0;
+    for (let mask = 0; mask < 16; mask++) {
+      const opt = {
+        createdHere: (mask & 1) !== 0,
+        keepFlag: (mask & 2) !== 0,
+        stillThere: (mask & 4) !== 0,
+        dirtyCount: (mask & 8) !== 0 ? 0 : 2,
+      };
+      combos++;
+      const should = opt.createdHere && !opt.keepFlag && opt.stillThere && opt.dirtyCount === 0;
+      expect(certTreeReclaim(opt).remove, JSON.stringify(opt)).toBe(should);
+    }
+    expect(combos).toBe(16);
+  });
+
+  it("接线：head-cert 真调它、真执行 worktree remove——只写纯函数不接＝没修（规则 230）", () => {
+    const src = readFileSync(join(repoRoot, "scripts", "head-cert.ts"), "utf8");
+    expect(src, "判据没接线").toContain("certTreeReclaim(");
+    expect(src, "判据①：createdHere 必须来自「本次 worktree add 是否真的成功」，不能是常量 true").toContain("let createdHere = false;");
+    expect(src, "绑在 add 的退出码上：只看路径原先存不存在，会把 --tree= 指的别人的树判成「本次新建」⇒ 收掉别人的树").toContain("createdHere = true;");
+    expect(src, "只判不执行＝还是印一行命令就退出").toContain('"worktree", "remove", "--force"');
+    expect(src, "回收前要重新量在飞数：判卷那 90 秒里可能有人写了东西").toContain("gitInflightArgs()");
+    expect(src, "删完/不删都要说话，不能静默").toContain("未回收认证树");
+  });
+
+  it("判据①的行为证人：add 成功才叫「本次新建」，且复用树全程不回收", () => {
+    const src = readFileSync(join(repoRoot, "scripts", "head-cert.ts"), "utf8");
+    // 行为形状：createdHere 的赋值点必须落在 `worktree add` 成功的那一支里。
+    const addAt = src.indexOf('"worktree", "add"');
+    const setAt = src.indexOf("createdHere = true;");
+    expect(addAt, "找不到 worktree add 调用点").toBeGreaterThan(-1);
+    expect(setAt, "找不到 createdHere 赋值点").toBeGreaterThan(-1);
+    expect(setAt, "createdHere=true 必须排在 add 之后（add 失败已 exit 2，走不到回收）").toBeGreaterThan(addAt);
+    // 反向对照：复用那一支（else）里不得出现赋值，否则「路径原先不存在」又会决定判据。
+    const elseAt = src.indexOf("} else {", addAt);
+    const setAll = [...src.matchAll(/createdHere = true;/g)].map((m) => m.index);
+    expect(setAll.length, "createdHere=true 只该有一个赋值点").toBe(1);
+    expect(elseAt, "找不到复用那一支").toBeGreaterThan(-1);
+  });
+
+  it("退出码那一行与回收无关：把 reclaim 插进去会让共享树上的回收失败变成随机红", () => {
+    const src = readFileSync(join(repoRoot, "scripts", "head-cert.ts"), "utf8");
+    const exitLine = src.split("\n").find((l) => l.startsWith("const code = "));
+    expect(exitLine).not.toContain("reclaim");
+    expect(exitLine).not.toContain("remove");
   });
 });
