@@ -11,7 +11,11 @@ there is no Electron entry, preload, renderer, or desktop build configuration in
 
 ## Working rules
 
-- Do not reintroduce Electron, `src/renderer/`, `src/preload/`, or desktop-only gates without a new explicit request.
+- Desktop layer lives in `apps/desktop/` only. It may import from `src/` (typed via
+  `src/main/ipc-protocol.ts`); `src/` must never import from `apps/desktop/`, Electron, or any UI
+  module. `scripts/desktop-boundary-check.ts` enforces this.
+- Run desktop tests with `pnpm --filter m0-desktop test` (own vitest config); root gates never
+  scan `apps/`.
 - Keep core modules free of UI and Electron imports.
 - Run `node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts` for the full core suite.
 - Run `node --import tsx scripts/typecheck.ts` before handing off changes.
