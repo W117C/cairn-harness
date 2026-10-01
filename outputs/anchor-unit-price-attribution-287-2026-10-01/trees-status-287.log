@@ -1,0 +1,13 @@
+本会话新建树逐棵核 status（现读）:
+verify-p286 status=0
+head-cert-88bcb7a status=0
+head-cert-48c21b5 status=0
+verify-48c21b5 status=0
+verify-c6ead5e status=0
+head-cert-c6ead5e status=0
+git worktree list 总棵数=88
+本会话累计建树=18
+主树 src/＋scripts/＋tests/ 的 mutbak:
+       0
+.worktrees 全扫 mutbak:
+.worktrees/gate-mutate-verify/scripts/lib/shard-plan.ts.mutbak

@@ -23,3 +23,8 @@ Node.js v22.23.2
 真仓 scanRepo：8.93s｜needles=undefined
 真仓 scanRepo 第二次：8.65s
 PROBE_EXIT=0
+
+===== 第三次跑（证据门抓到危险码之后修探针：needles 是 number 不是数组）=====
+真仓 scanRepo：9.05s｜needles=135
+真仓 scanRepo 第二次：8.74s｜needles=135
+PROBE_EXIT=0
