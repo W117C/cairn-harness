@@ -1,0 +1,11 @@
+凭证清场现读：本会话新建树逐棵 status
+verify-p286 status=0
+head-cert-88bcb7a status=0
+head-cert-48c21b5 status=0
+verify-48c21b5 status=0
+verify-c6ead5e status=0
+head-cert-c6ead5e status=0
+head-cert-bf01a44 status=0
+本会话累计建树=19
+主树 src/＋scripts/＋tests/ 的 mutbak:
+       0

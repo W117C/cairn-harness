@@ -1,0 +1,70 @@
+[gate-check] 前置校验：判卷文件 sha256 与冻结基线一致
+  ✅ 判卷文件 sha256 = 冻结基线
+  ✅ 演示区剧本 sha256 = 冻结基线
+[gate-check] 任务 2 写禁三断言（临时工作区）
+  ✅ ①未批准时 write_file 返回拒绝（权限层）
+  ✅ ①拒绝原因指明方案门（存在未批准 plan）
+  ✅ ①未批准时文件确实没有写入
+  ✅ ②批准后同一 write_file 调用放行
+  ✅ ②批准后文件真实写入
+  ✅ ③只读工具（read_file）在未批准阶段照常执行
+  ✅ ③只读工具在批准后照常执行
+[gate-check] 任务 5 全链明卷（fixtures/gate/gate-flow.jsonl）
+[gate-check] 靶子开工基线: 1 failed | 2 passed
+  ✅ 靶子开工状态 = 1 failed（含歧义任务的真实改进空间）
+  ✅ 事件序列依次含 clarify_requested → plan_proposed → tool_call(write_file) → verify_result(ok)
+  ✅ 写发生在方案批准之后（先批后写）
+  ✅ 批准后 write_file 真实执行（写禁解锁）
+  ✅ verify 第 1 次即通过
+  ✅ clarify_requested 携带问题清单
+  ✅ clarify 表单提交值逐字挂回原 tool_use id
+[gate-check] 靶子修复后: 0 failed | 3 passed
+  ✅ 靶子 1 失败 → 0 失败（verify 真实跑通测试）
+[gate-check] 暗卷跳过（无 M0_API_KEY）
+UNVERIFIED=1
+  ✅ 收口时判卷文件 sha256 仍与冻结基线逐字一致
+  ❌ H7 冻结表与判卷区目录双向一致（新增判卷文件不许逃出冻结面；新判卷目录须登记进 src/frozen.ts 的 areas）：{"onDiskNotInTable":["fixtures/impact/accuracy-repo/api.js","fixtures/impact/accuracy-repo/ground-truth.json","fixtures/impact/accuracy-repo/helpers.js","fixtures/impact/accuracy-repo/index.ts","fixtures/impact/accuracy-repo/legacy-math.ts","fixtures/impact/accuracy-repo/logger.ts","fixtures/impact/
+[gate-check] 失败: 1 项断言未通过
+GATE_EXIT=1
+[gate-check] 前置校验：判卷文件 sha256 与冻结基线一致
+  ✅ 判卷文件 sha256 = 冻结基线
+  ✅ 演示区剧本 sha256 = 冻结基线
+[gate-check] 任务 2 写禁三断言（临时工作区）
+  ✅ ①未批准时 write_file 返回拒绝（权限层）
+  ✅ ①拒绝原因指明方案门（存在未批准 plan）
+  ✅ ①未批准时文件确实没有写入
+  ✅ ②批准后同一 write_file 调用放行
+  ✅ ②批准后文件真实写入
+  ✅ ③只读工具（read_file）在未批准阶段照常执行
+  ✅ ③只读工具在批准后照常执行
+[gate-check] 任务 5 全链明卷（fixtures/gate/gate-flow.jsonl）
+[gate-check] 靶子开工基线: 1 failed | 2 passed
+  ✅ 靶子开工状态 = 1 failed（含歧义任务的真实改进空间）
+  ✅ 事件序列依次含 clarify_requested → plan_proposed → tool_call(write_file) → verify_result(ok)
+  ✅ 写发生在方案批准之后（先批后写）
+  ✅ 批准后 write_file 真实执行（写禁解锁）
+  ✅ verify 第 1 次即通过
+  ✅ clarify_requested 携带问题清单
+  ✅ clarify 表单提交值逐字挂回原 tool_use id
+[gate-check] 靶子修复后: 0 failed | 3 passed
+  ✅ 靶子 1 失败 → 0 失败（verify 真实跑通测试）
+[gate-check] 暗卷跳过（无 M0_API_KEY）
+UNVERIFIED=1
+  ✅ 收口时判卷文件 sha256 仍与冻结基线逐字一致
+  ❌ H7 冻结表与判卷区目录双向一致（新增判卷文件不许逃出冻结面；新判卷目录须登记进 src/frozen.ts 的 areas）：{"onDiskNotInTable":["fixtures/impact/accuracy-repo/api.js","fixtures/impact/accuracy-repo/ground-truth.json","fixtures/impact/accuracy-repo/helpers.js","fixtures/impact/accuracy-repo/index.ts","fixtures/impact/accuracy-repo/legacy-math.ts","fixtures/impact/accuracy-repo/logger.ts","fixtures/impact/
+[gate-check] 失败: 1 项断言未通过
+GATE_EXIT_2=1
+空闲复测（同一棵树、同一条命令形状）:
+run1 exit=1（不计时，只当暖机）
+run2:
+  ❌ H7 冻结表与判卷区目录双向一致（新增判卷文件不许逃出冻结面；新判卷目录须登记进 src/frozen.ts 的 areas）：{"onDiskNotInTable":["fixtures/impact/accuracy-repo/api.js","fixtures/impact/accuracy-repo/ground-truth.json","fixtures/impact/accuracy-repo/helpers.js","fixtures/impact/accuracy-repo/index.ts","fixtures/impact/accuracy-repo/legacy-math.ts","fixtures/impact/accuracy-repo/logger.ts","fixtures/impact/
+[gate-check] 失败: 1 项断言未通过
+real 2.34
+user 2.39
+sys 0.32
+run3:
+  ❌ H7 冻结表与判卷区目录双向一致（新增判卷文件不许逃出冻结面；新判卷目录须登记进 src/frozen.ts 的 areas）：{"onDiskNotInTable":["fixtures/impact/accuracy-repo/api.js","fixtures/impact/accuracy-repo/ground-truth.json","fixtures/impact/accuracy-repo/helpers.js","fixtures/impact/accuracy-repo/index.ts","fixtures/impact/accuracy-repo/legacy-math.ts","fixtures/impact/accuracy-repo/logger.ts","fixtures/impact/
+[gate-check] 失败: 1 项断言未通过
+real 2.39
+user 2.43
+sys 0.34
