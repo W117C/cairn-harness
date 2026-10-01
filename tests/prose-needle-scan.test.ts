@@ -699,6 +699,15 @@ describe("真仓扫：这把尺自己不许空载", () => {
     expect(r.sourceFiles).toBeGreaterThan(50);
   });
 
+  it("同一对账在真仓上跑一遍，且 `across` 那一格今天到底有没有数——读数当场印出来", () => {
+    // 合成树那两条守恒在这里必须**非恒真**地成立：真仓 `needles` 是几百条，某一族归类漏了就会在这里露。
+    expect(Object.values(r.viaCounts).reduce((a, n) => a + n, 0)).toBe(r.needles);
+    expect(r.counts["across-interpolation"]).toBe(r.across.length);
+    // 这一条不是判据、是**自报门面的读数**：等式两侧同为 0 时那一格分不出东西（规则 340），
+    // 所以把它印出来，谁改坏了 `across` 的接线会在上一行红，而"今天它本来就有几格"由这一行说话。
+    console.log(`  ｜真仓门面自报：across＝${String(r.across.length)}｜viaCounts 三档＝${JSON.stringify(r.viaCounts)}`);
+  });
+
   /* 第 282 页：`testFiles` 这个数印在报告第一行（`扫 N 个 test 文件`），而第 282 页的观测者普查读到的
      是**判卷里零次提及**——收料面的分母此前没有证人。这里不写"非空就行"，写两条等式，
      左边用**另一把原语**（判卷自己调 `git ls-files`，不借尺的 `trackedFiles`）枚举。
@@ -954,6 +963,14 @@ describe("合成树那一面：sourceFiles／proseHeldBack／inFlightStale 三�
     // 焊死成 `[]` 与焊死成「全部在飞」在这一格里都要红（两侧都不是这个确切集合）
     expect(r.inFlightStale).not.toEqual(r.inFlightFiles);
     expect(r.inFlightStale.length).toBeGreaterThan(0);
+  });
+
+  it("两本账必须对得上：`viaCounts` 三档之和＝`needles`，`counts` 的 across 档＝`across` 清单长度", () => {
+    // 这两条是**守恒**而不是阈值：合成树这一面里 `needles` 恰好 0，所以「某一档被凭空 ＋1」这种坏法当场出声
+    // （阈值断言在这种面上永远绿）。第 286 页的普查（任务 #20）点的就是这两格只在安全值一侧。
+    const via = Object.values(r.viaCounts).reduce((a, n) => a + n, 0);
+    expect(via, "三档分类不划分整个收料面＝有一族的归类在悄悄漏").toBe(r.needles);
+    expect(r.counts["across-interpolation"], "直方图与清单是同一件事的两本账，不许各数一遍").toBe(r.across.length);
   });
 
   it("空面不许被读成全绿：同一棵树上把在飞清空，stale 与分母必须同时归零", () => {

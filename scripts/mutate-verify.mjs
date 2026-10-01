@@ -10372,6 +10372,37 @@ const MUTATIONS = [
     expectFail: "新鲜那支不进，分母恰好 2",
   },
 
+  /* ── 第 286 页补⑴（任务 #20）：普查剩下的两格——`viaCounts` 与 `across`。这两格没法在合成树上造出非零数
+    *    （那要重造整套收料夹具），所以改成钉**守恒**：三档分类之和必须等于收料总条数、直方图那一档必须等于清单长度。
+    *    守恒在合成树上是「0 ＝ 0」也照样挡得住"某一档被凭空 ＋1"；非恒真那一半在真仓那格（现读 123＋6＋6＝135）。 ── */
+  {
+    id: "prose-scan-via-counts-bucket-inflated",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "三档归类里有一档被凭空 ＋1（从前这一族真的漂过：本地 helper 与字段别名两族写法整族看不见）⇒ " +
+      "分类不再划分整个收料面，而**总条数**没变、阈值断言全都绿；只有「三档之和＝`needles`」这条守恒会响",
+    apply: (s) => s.replace('"本地 helper": needles.filter((n) => n.via === "本地 helper").length,', '"本地 helper": needles.filter((n) => n.via === "本地 helper").length + 1,'),
+    expectFail: "两本账必须对得上",
+  },
+  {
+    id: "prose-scan-across-list-detached",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "`across` 清单不再从 rows 里筛（交回空表）⇒ 直方图那一档仍有数、清单是空的：" +
+      "打印「跨插值 N 条」的那句与「它到底是哪几条」从此各说各话（真仓现读 6 条，这条守恒在非零面上才谈得上分辨）",
+    apply: (s) => s.replace('across: rows.filter((r) => r.kind === "across-interpolation"),', "across: [],"),
+    expectFail: "同一对账在真仓上跑一遍",
+  },
+  {
+    id: "prose-scan-histogram-skips-across-kind",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "直方图少记一类（把 `across-interpolation` 从计数里跳过）⇒ 清单还在、汇总数变小，" +
+      "于是「五态各几格」的和不再等于分母，而没人会去加一遍。与上一条正好相反方向：那一支拆清单、这一支拆直方图",
+    apply: (s) => s.replace("for (const r of rows) counts[r.kind] += 1;", 'for (const r of rows) if (r.kind !== "across-interpolation") counts[r.kind] += 1;'),
+    expectFail: "同一对账在真仓上跑一遍",
+  },
+
   /* ── 第 273 页：把「实测 <1.5s 全进」这条线接成判据（取料＝入库的那趟全表日志）。两支各钉一半。 ── */
   {
     id: "certface-webfetch-gate-row-dropped",
