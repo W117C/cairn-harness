@@ -9856,3 +9856,11 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
    - **本次落笔本身的一处纪律执行**：三页里凡引证「未测即未证」的地方（M6 的 A/B 不可达面、`mutate-verify` 超时、跨会话回归跟踪不在本轮）都写成**声明**而不是读数；凡本轮没跑的门（`mutate-verify` 整门、`head-cert-check` 全量认证）都**不写成「全绿」**。
 
 8. **刻意未做**：⑴ 不跑全量 31 道门认证（`head-cert-check` 那一趟）——本笔只改文档，判卷面 `test exit=0` ＋ 四道门面已足以覆盖「文档落笔有没有砸到判卷」；真要全量认证留给下一次带实现的提交；⑵ 不动 `scripts/gate-manifest.ts`（本笔零新增门，第 3 项那条清单漂移校验即其证据）；⑶ 不改任何 `fixtures/**`（本笔零触及，`git status` 只有 `PROGRESS.md` 与证据文件两处）；⑷ 不回收任何 worktree。
+
+### 2026-10-01 · 第 262 页（本会话）· M1 路线图交付：go/java 进影响面图（六语言），多语言夹具判卷 5/5 首跑全绿——precision/recall 双 1.0、反向验证红→绿、索引热载 11.8x
+
+1. **交付物（路线图 M1「扩展项」全项）**：`parse.ts` LANG_BY_EXT +`go`/`java`（wasm 在 tree-sitter-wasms 包里现成，零新依赖）＋四条新模式（go 方法/类型声明、java 无受体方法调用 `!object` 排除、java new 类名引用）——属性/选择器纪律与 js 同款（pkg.F()、obj.method() 不进图，登记的设计边界）。真值夹具 `fixtures/impact/accuracy-repo-multilang/`（go 同包跨文件＋java new 类名，ground-truth 2 条真值边＋边界/预期无边/零引用三栏）。判卷 `tests/impact-multilang.test.ts` 5 条。
+2. **读数**：判卷 5/5 **首跑全绿**（precision=1.0、recall=1.0——夹具内可捕获形状全数捕获）；既有三判卷回归 67/67（51＋10＋6）；typecheck 0。**反向验证**：摘 `go` 一行 ⇒ 3 条判卷红（文件集错＋Calc 真边丢）⇒ 恢复 ⇒ 5/5 绿（红绿两段输出都在会话记录里）。**索引命中 29ms vs 冷建 341ms＝11.8x**（`outputs/impact-index-2026-10-01/idx-timing.mts`，persistIndex 路径首用）。
+3. **失败链动态形状一次尝试未构成失败**（空脚本 worker 优雅收工）已登记（3003edd）；M4 的调度器入口线未开工（归属本会话的下一批）。
+4. **阻断 5 不归本笔**：全部是其他会话提交搬走自家实现所致（检查器逐条点名搬走提交：4c10272/404249c/e76ed13/0b37ad2），归属各自作者改指；本笔六站点编辑不碰那四个文件。
+5. **取料**：`fixtures/impact/accuracy-repo-multilang/`（4 文件＋ground-truth）、`tests/impact-multilang.test.ts`、`src/agent/map/parse.ts`（LANG_BY_EXT＋PATTERNS）。

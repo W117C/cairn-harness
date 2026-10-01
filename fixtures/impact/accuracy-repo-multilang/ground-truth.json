@@ -1,0 +1,20 @@
+{
+  "note": "多语言夹具真值（2026-10-01，逐条对照源码与图合同人工核对）。口径与 accuracy-repo/ground-truth.json 同源三条设计边界，另加多语言两条：①go 的跨包调用 pkg.F() 是 selector_expression——属性/选择器纪律排除（本夹具的真边全部走同包免限定名）；②java 的 obj.method() 与 System.out.println 同理排除，跨文件真边走 new X() 的类名引用。行号逐条人工数过（defLine=定义行、refLine=引用行）。",
+  "edgeCount": 2,
+  "edges": [
+    { "from": "calc.go", "refLine": 5, "symbol": "Calc", "to": "mathutil.go", "defLine": 15 },
+    { "from": "Main.java", "refLine": 3, "symbol": "Helper", "to": "Helper.java", "defLine": 1 }
+  ],
+  "boundary": [
+    { "symbol": "Clamp", "file": "mathutil.go", "refLine": 16, "defLine": 4, "reason": "同文件调用（Calc 内用 Clamp）——跨文件判据不入图，登记的设计边界" },
+    { "symbol": "decorate", "file": "Main.java", "refLine": 4, "reason": "有受体的方法调用（h.decorate）——属性/选择器纪律排除，与 js 的 obj.prop() 同族" }
+  ],
+  "expectedNonEdges": [
+    { "file": "mathutil.go", "line": 1, "symbol": "mathutil", "reason": "package 子句不是定义" },
+    { "file": "Main.java", "line": 4, "symbol": "println", "reason": "System.out.println 选择器链——受体判不了归属，不进图" },
+    { "file": "calc.go", "line": 5, "symbol": "mathutil", "reason": "go 无 import 本夹具未用到；此行是 Calc 调用不是包名引用" }
+  ],
+  "zeroRefSymbols": ["UnusedGo", "RunCalc", "main"],
+  "upwardQueries": ["Calc", "Helper", "RunCalc", "Clamp", "main", "decorate", "UnusedGo"],
+  "downwardQueries": ["mathutil.go", "calc.go", "Helper.java", "Main.java"]
+}

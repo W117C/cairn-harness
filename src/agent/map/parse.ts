@@ -30,7 +30,9 @@ async function initParser(): Promise<void> {
   }
 }
 
-// ---- 四语言 grammar（懒加载 + 缓存；扩展名 → 语言键）----
+// ---- 六语言 grammar（懒加载 + 缓存；扩展名 → 语言键）----
+// go/java（第 261 页 M1 路线图）：wasm 在 tree-sitter-wasms 包里现成（零新依赖）；
+// 抽取纪律与 js 同款——属性/选择器访问（obj.Method()、pkg.F()）不进图（名字图判不了对象归属，假边同族）。
 const LANG_BY_EXT: Record<string, string> = {
   ts: "typescript",
   tsx: "tsx",
@@ -39,6 +41,8 @@ const LANG_BY_EXT: Record<string, string> = {
   cjs: "javascript",
   jsx: "javascript", // js grammar 吃 jsx（tree-sitter-javascript 内建）
   py: "python",
+  go: "go",
+  java: "java",
 };
 export const SUPPORTED_EXTS = Object.keys(LANG_BY_EXT);
 
@@ -109,6 +113,13 @@ const PATTERNS = [
   "(assignment_expression left: (identifier) right: (identifier) @ref)",
   "(call function: (identifier) @ref)",
   "(assignment left: (identifier) right: (identifier) @ref)",
+  // go/java（第 261 页 M1 路线图）。纪律同 js：属性/选择器访问不进图——
+  // go 的 pkg.F() 与 java 的 obj.method() 是 selector_expression/method_invocation 带受体，
+  // 名字图判不了受体归属（假边同族，2026-09-23 用户裁决）。go 跨包调用因此不进图（登记的设计边界）。
+  "(method_declaration name: (field_identifier) @def)", // go 方法
+  "(type_spec name: (type_identifier) @def)", // go 类型声明（type_declaration 包一层 type_spec）
+  "(method_invocation name: (identifier) @ref !object)", // java 无受体方法调用（有受体=属性访问，排除）
+  "(object_creation_expression type: (type_identifier) @ref)", // java new X() ⇒ 引用类 X
 ];
 
 /** 抽取**逻辑本体**的版本（谁算一个符号、谁算一次引用的那段代码）。pattern 文本已自动进哈希，
