@@ -1,0 +1,37 @@
+{
+  "repoStable": true,
+  "cold": {
+    "chars": 3971,
+    "fromTagsCache": 0,
+    "parsed": 560,
+    "ok": true,
+    "cap": 5000,
+    "graphFiles": 560,
+    "candidates": 560,
+    "fp": "55a055655c6f"
+  },
+  "warm": {
+    "chars": 3971,
+    "fromTagsCache": 560,
+    "parsed": 0,
+    "ok": true,
+    "cap": 5000,
+    "graphFiles": 560,
+    "candidates": 560,
+    "fp": "55a055655c6f"
+  },
+  "hotRef": {
+    "chars": 3971,
+    "fromTagsCache": 560,
+    "parsed": 0,
+    "ok": true,
+    "cap": 5000,
+    "graphFiles": 560,
+    "candidates": 560,
+    "fp": "55a055655c6f"
+  },
+  "coldEqualsWarm": true,
+  "firstDiff": -1,
+  "knobMoved": true
+}
+PROBE_EXIT=0
