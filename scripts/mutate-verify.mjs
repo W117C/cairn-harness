@@ -10311,6 +10311,67 @@ const MUTATIONS = [
     expectFail: "在飞那一半超帽必须出声，且文案交出两半各自的数",
   },
 
+  /* ── 第 286 页（任务 #15）：三格「只在安全值那一侧被断言」的读数改成**合成树上的确切等式**。
+    *    真仓的干净树里在飞那一面是空的 ⇒ `stale ⊆ files` 恒真、`sourceFiles > 50` 对任何正数都绿、
+    *    `proseHeldBack > 0` 对放宽排除面只会更大——把字段焊死成 0 在这棵树上完全无声（规则 340 的第三种形状）。
+    *    六支各钉一个站点：字段接线、收料目录、登记表那一半、`desc:` 那一栏、stale 的接线、年龄分母。
+    *    判卷喂的是自己造的树（`mkdtemp` ＋ `git init` ＋ `utimesSync` 把一支拨到 3 天前），所以两侧都能出声。 ── */
+  {
+    id: "prose-scan-source-files-field-welded-zero",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "`sourceFiles` 不接 `sources.length` 而焊成 0 —— 这一支真仓那条 `> 50` 也拦得住，所以它不是新力量；" +
+      "留着的理由是合成树上那个**确切 3**：面少收一侧（把 `scripts` 那一档摘掉 ⇒ 3 变 1）在真仓里仍是几百条、" +
+      "在等式上立刻红。阈值挡大事故，等式挡小漂移（规则 241：写满为止）",
+    apply: (s) => s.replace("sourceFiles: sources.length,", "sourceFiles: 0,"),
+    expectFail: "恰好 5 支",
+  },
+  {
+    id: "prose-scan-production-face-includes-tests",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "生产侧收料目录多收 `tests` ⇒ 「诊断文案 ↔ 断言收料」这把尺开始把测试自己当生产者，" +
+      "顶包候选会莫名变多而 `testFiles` 那格照旧——只有合成树上的等式（3 不是 4）能立刻发现",
+    apply: (s) => s.replace('const allSources = trackedFiles(["src", "scripts"], [".ts", ".mts", ".mjs"], root);', 'const allSources = trackedFiles(["src", "scripts", "tests"], [".ts", ".mts", ".mjs"], root);'),
+    expectFail: "恰好 5 支",
+  },
+  {
+    id: "prose-scan-heldback-not-limited-to-registry",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "散文栏的排除面不再只看「登记表」那一半（把用例表也算进去）⇒ `proseHeldBack` 从 60 变 61：" +
+      "用例表的字面量是喂给被测函数的输入，不是任何字段的出处（第 98 页把它分成两族的理由就在这个数上）",
+    apply: (s) => s.replace('anchorTables.filter((t) => t.kind === "登记表")', "anchorTables.filter(() => true)"),
+    expectFail: "恰好 60 条",
+  },
+  {
+    id: "prose-scan-heldback-counts-every-literal",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "「只数 `desc:` 那一栏」被放宽成「这张表里所有字面量」⇒ 散文栏读数从 60 涨到几百，" +
+      "而它本来要表达的只是『这些被挡在门外的是给人读的』——数量级一漂，第 98 页那条『散文不许替生产文案作证』就再也数不清",
+    apply: (s) => s.replace('extractLiterals(s.path, s.text).filter((c) => DOC_PROSE_KEYS.includes(c.key)).length', "extractLiterals(s.path, s.text).length"),
+    expectFail: "恰好 60 条",
+  },
+  {
+    id: "prose-scan-stale-list-welded-empty",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "`inFlightStale` 不接 `splitAged` 的输出而焊成 `[]` ⇒ 真仓干净树（在飞为空）里那条子集断言恒真、完全无声；" +
+      "合成树里 3 天前那一支必须出现在这一格（第 278 页抽了纯函数，这一支钉的是「输出接没接到字段上」）",
+    apply: (s) => s.replace("const inFlightStale = age.stale;", "const inFlightStale: string[] = [];"),
+    expectFail: "新鲜那支不进，分母恰好 2",
+  },
+  {
+    id: "prose-scan-age-denominator-is-missing-half",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "年龄分母从「盘上真有的那一半」改成「盘上没有的那一半」⇒ 打印出来的 `N / M` 里 M 变成 0，" +
+      "于是「有 2 支在飞、2 支算得出年龄」被读成「有 2 支在飞、0 支算得出」——分母写错不等于没跑，但会被读成没跑",
+    apply: (s) => s.replace("inFlightAgeChecked: age.checked,", "inFlightAgeChecked: age.missing.length,"),
+    expectFail: "新鲜那支不进，分母恰好 2",
+  },
+
   /* ── 第 273 页：把「实测 <1.5s 全进」这条线接成判据（取料＝入库的那趟全表日志）。两支各钉一半。 ── */
   {
     id: "certface-webfetch-gate-row-dropped",

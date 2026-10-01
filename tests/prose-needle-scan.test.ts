@@ -2,9 +2,10 @@
  *  分两层：纯函数用合成夹具（每条判态各钉一格，含两格反控）；最后一条打**真仓**——
  *  它同时是本面的"不许空载"自检（挑不到料就是尺坏了，不是全绿）。 */
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
 
 import {
   applyWaivers,
@@ -877,5 +878,104 @@ describe("真仓扫：这把尺自己不许空载", () => {
     for (const p of r.missingOnDisk) expect(p.startsWith("tests/") || p.startsWith("src/") || p.startsWith("scripts/")).toBe(true);
     // 此刻真实形状：桌面层那笔删除未入库 ⇒ 非空是本面的**已知状态**，不是 bug；空了也不许当成改善来庆祝
     expect(r.missingOnDisk.length).toBeGreaterThanOrEqual(0);
+  });
+});
+
+/* ── 第 286 页（任务 #15）：把三格「只在安全值那一侧被断言」的读数变成**确切期望值**。
+    为什么真仓钉不住这三格（规则 340）：
+    ① `sourceFiles` 从前只有 `> 50`——把它焊死成任何正数都绿；
+    ② `proseHeldBack` 只有 `> 0`——把排除面放宽（连用例表的散文一起数）它只会更大，不会红；
+    ③ `inFlightStale` 只有「是 `inFlightFiles` 的子集」——**干净树里在飞那一面是空的**，
+       空集合对任何断言都恒真，把这一格改成 `[]` 在这棵树上完全无声（第 278 页给 `splitAged` 配过合成夹具，
+       但 `scanRepo` 把 helper 的输出接到字段上那一截仍然没人守）。
+    ⇒ 一棵自己造的树能把三面同时变成等式：生产侧恰好 5 支、登记表恰好 60 条 `desc:`、
+       在飞恰好 2 支其中只有 3 天前那支算旧。先导证人：
+       `outputs/prose-face-observers-286-2026-10-01/probe-synthetic-tree.log`（`三格命中: true`）。 ── */
+describe("合成树那一面：sourceFiles／proseHeldBack／inFlightStale 三格各有确切", () => {
+  const buildTree = (): string => {
+    const root = mkdtempSync(join(tmpdir(), "dsh-prose-face-"));
+    const g = (...args: string[]) => execFileSync("git", args, { cwd: root, encoding: "utf8" });
+    g("init", "-q");
+    g("config", "user.email", "probe@test.local");
+    g("config", "user.name", "Probe");
+    mkdirSync(join(root, "src"), { recursive: true });
+    mkdirSync(join(root, "scripts"), { recursive: true });
+    mkdirSync(join(root, "tests"), { recursive: true });
+    writeFileSync(join(root, "src", "a.ts"), 'export const sentence = "不在 HEAD 里";\n');
+    // 另两档扩展名各一支：摘掉 `.mts` 或 `.mjs` 那一档 ⇒ 等式当场少一支（真仓那条阈值对小漂移不分辨）
+    writeFileSync(join(root, "src", "b.mts"), 'export const b = "另一档的一面";\n');
+    writeFileSync(join(root, "scripts", "c.mjs"), 'export const c = "第三档的一面";\n');
+    // 登记表形状：≥50 条 `expectFail:`（`ANCHOR_TABLE_MIN`），每条配一句只给人读的 `desc:` ⇒ 散文栏恰好 60
+    const rows = Array.from({ length: 60 }, (_, i) =>
+      `  { id: "probe-${String(i)}", desc: "第 ${String(i)} 条散文：这一栏不流进任何输出", expectFail: "不在 HEAD 里" },`).join("\n");
+    writeFileSync(join(root, "scripts", "table.ts"), `export const MUTATIONS = [\n${rows}\n];\n`);
+    // 用例表形状：5 张导出的字符串数组、0 个导出函数；里面**也**有一句 `desc:`——
+    // 它必须留在散文栏之外（放宽排除面时这一格会从 60 变 61，等式当场红）
+    writeFileSync(join(root, "scripts", "cases.ts"),
+      "export const A_CASES: readonly string[] = [\"alpha\"];\n"
+      + "export const B_CASES: readonly string[] = [\"beta\"];\n"
+      + "export const C_CASES: readonly string[] = [\"gamma\"];\n"
+      + "export const D_CASES: readonly string[] = [\"delta\"];\n"
+      + "export const E_CASES: readonly string[] = [\"epsilon\"];\n"
+      + "function proseHolder() { return [{ desc: \"别把这张用例表的散文算进登记表那一半\" }]; }\n"
+      + "proseHolder();\n");
+    writeFileSync(join(root, "tests", "a.test.ts"),
+      'import { expect, it } from "vitest";\nit("点名那句生产文案", () => { expect(1).toBe(1); });\n');
+    g("add", "src/a.ts", "src/b.mts", "scripts/table.ts", "scripts/cases.ts", "scripts/c.mjs", "tests/a.test.ts");
+    g("commit", "-q", "-m", "fixture");
+    // 在飞两面：一支把 mtime 拨到 3 天前（跨过 `STALE_IN_FLIGHT_MS`＝24h），一支新鲜
+    writeFileSync(join(root, "src", "old.ts"), 'export const oldFace = "老的一面";\n');
+    writeFileSync(join(root, "src", "fresh.ts"), 'export const freshFace = "新的一面";\n');
+    const three = new Date(Date.now() - 3 * STALE_IN_FLIGHT_MS);
+    utimesSync(join(root, "src", "old.ts"), three, three);
+    return root;
+  };
+  const root = buildTree();
+  afterAll(() => { rmSync(root, { recursive: true, force: true }); });
+  const r = scanRepo(root);
+
+  it("生产侧只吃已跟踪那一半：恰好 5 支（tests/ 不算、两支未跟踪也不算）", () => {
+    expect(r.scope).toBe("core-only");
+    expect(r.sourceFiles).toBe(5);
+    expect(r.testFiles).toBe(1);
+    // 反向一侧：未跟踪的那两支在面里出现＝口径漂了（这条等式同时挡「加宽到工作树」与「把 tests/ 算进生产侧」）
+    expect(r.inFlightFiles.slice().sort()).toEqual(["src/fresh.ts", "src/old.ts"]);
+    expect(r.untrackedHeldOut).toEqual(["src/fresh.ts", "src/old.ts"]);
+  });
+
+  it("散文栏只数登记表那一半：恰好 60 条，用例表里那句 `desc:` 不许进来", () => {
+    expect(r.anchorTables.map((t) => `${t.kind}:${t.path}`).sort()).toEqual(["用例表:scripts/cases.ts", "登记表:scripts/table.ts"]);
+    expect(r.proseHeldBack).toBe(60);
+  });
+
+  it("在飞年龄：3 天前那支进 `inFlightStale`、新鲜那支不进，分母恰好 2", () => {
+    expect(r.inFlightStale).toEqual(["src/old.ts"]);
+    expect(r.inFlightAgeChecked).toBe(2);
+    // 焊死成 `[]` 与焊死成「全部在飞」在这一格里都要红（两侧都不是这个确切集合）
+    expect(r.inFlightStale).not.toEqual(r.inFlightFiles);
+    expect(r.inFlightStale.length).toBeGreaterThan(0);
+  });
+
+  it("空面不许被读成全绿：同一棵树上把在飞清空，stale 与分母必须同时归零", () => {
+    // 这一格专挡「把子集断言当成观测者」：干净树里 `inFlightFiles` 就是空的，
+    // 所以 `stale ⊆ files` 恒真——改吃一棵**有**在飞的树才谈得上分辨（上面那条等式），
+    // 这里再把另一态钉住：没有未跟踪文件时两格一起是 0，不许 stale 有数而分母为 0。
+    const empty = mkdtempSync(join(tmpdir(), "dsh-prose-empty-"));
+    try {
+      const gg = (...args: string[]) => execFileSync("git", args, { cwd: empty, encoding: "utf8" });
+      gg("init", "-q");
+      gg("config", "user.email", "probe@test.local");
+      gg("config", "user.name", "Probe");
+      mkdirSync(join(empty, "src"), { recursive: true });
+      writeFileSync(join(empty, "src", "only.ts"), 'export const only = "只有一支";\n');
+      gg("add", "src/only.ts");
+      gg("commit", "-q", "-m", "fixture");
+      const e = scanRepo(empty);
+      expect(e.inFlightFiles.slice().sort()).toEqual([]);
+      expect([e.inFlightStale, e.inFlightAgeChecked]).toEqual([[], 0]);
+      expect(e.sourceFiles).toBe(1);
+    } finally {
+      rmSync(empty, { recursive: true, force: true });
+    }
   });
 });

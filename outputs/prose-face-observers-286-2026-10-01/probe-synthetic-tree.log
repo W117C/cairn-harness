@@ -1,0 +1,28 @@
+{
+  "scope": "core-only",
+  "sourceFiles": 2,
+  "testFiles": 1,
+  "needles": 0,
+  "anchorTables": [
+    "登记表:scripts/table.ts:60"
+  ],
+  "proseHeldBack": 60,
+  "inFlightFiles": [
+    "src/new.ts",
+    "src/old.ts"
+  ],
+  "inFlightStale": [
+    "src/old.ts"
+  ],
+  "inFlightAgeChecked": 2,
+  "三格期望": {
+    "sourceFiles": 2,
+    "proseHeldBack": 60,
+    "inFlightStale": [
+      "src/old.ts"
+    ],
+    "inFlightAgeChecked": 2
+  },
+  "三格命中": true
+}
+PROBE_EXIT=0
