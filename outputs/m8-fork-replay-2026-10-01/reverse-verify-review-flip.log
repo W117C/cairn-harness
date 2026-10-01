@@ -1,0 +1,89 @@
+# 反向验证（mutant：revertPlan 把「新增⇒删文件」错分成「checkout 还原」）：期望真 git 夹具判卷必红
+# 命令：node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/diff-review.test.ts
+
+ RUN  v5.0.0 /Users/ze/Downloads/deepseek harness
+
+ ❯ tests/diff-review.test.ts (14 tests | 2 failed) 174ms
+   ✓ isWorkerDiffReceipt：两侧讲同一个标记（含生产端源头钉） (4)
+     ✓ 真实形状（spawn callId + `[diff] v` 头）认出；老兜底形状（diff- 前缀）也认出 1ms
+     ✓ 负控：普通 tool_result 不整块打（否则整个渲染面变刷屏） 0ms
+     ✓ 跨文件棘轮：orchestrator 的 emit 仍在写 `[diff] v` 头（改了标记就必须同步两边） 0ms
+     ✓ formatReplay 也按同一判定把 diff 压成形状行（真形状喂进去，不看 callId 前缀） 1ms
+   ✓ reviewCandidates：待审阅 = write ∧ done ∧ 未决 (2)
+     ✓ write∧done∧未决才进榜：read 排除、未 done 排除、已 merge/reject 的排除 1ms
+     ✓ reject 过的同样不再进榜（已决就是已决） 0ms
+   ❯ parsePorcelainZ / revertPlan：还原动作按状态分类 (2)
+     ✓ -z 解析：改名条目带上来源路径（下一段必须被吃掉，不许变成幽灵文件） 0ms
+     × 还原计划：新增⇒删文件；改/删⇒checkout；改名⇒manual（不猜两步操作）；不在清单⇒manual 4ms
+   ✓ parseSelection：三种快捷与编号列表，非法不静默回落 (4)
+     ✓ 回车=跳过；a/r 两头；编号（含顿号/空格/重复）折算成两集合 1ms
+     ✓ 越界/非数字/空列表外的一切都给 error（绝不静默当成全接受） 0ms
+     ✓ reviewActionFor：全拒 ⇒ reject 卡；其余（含部分）⇒ merge 卡 0ms
+     ✓ patchSectionOf：取 `## patch` 之后的补丁段；老形状（无分节头）整段返回 0ms
+   ❯ applyReverts：真 git 夹具（还原被拒、保住被收） (2)
+     × 被拒的改回原样、被拒的新档删掉；被接受的改动与删除原样保留 100ms
+     ✓ 越界路径拒绝执行（包含性检查；防 plan 被改成 ../x 之类的注入面） 65ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/diff-review.test.ts > parsePorcelainZ / revertPlan：还原动作按状态分类 > 还原计划：新增⇒删文件；改/删⇒checkout；改名⇒manual（不猜两步操作）；不在清单⇒manual
+AssertionError: expected [ …(5) ] to deeply equal [ …(5) ]
+
+- Expected
++ Received
+
+@@ -3,11 +3,11 @@
+      "path": "a.ts",
+      "undo": "checkout",
+    },
+    {
+      "path": "b.ts",
+-     "undo": "delete",
++     "undo": "checkout",
+    },
+    {
+      "path": "c.ts",
+      "undo": "checkout",
+    },
+
+ ❯ tests/diff-review.test.ts:105:18
+    103|     const files = parsePorcelainZ(" M a.ts\0?? b.ts\0 D c.ts\0R  new.t…
+    104|     const plan = revertPlan(files, ["a.ts", "b.ts", "c.ts", "new.ts", …
+    105|     expect(plan).toEqual([
+       |                  ^
+    106|       { path: "a.ts", undo: "checkout" },
+    107|       { path: "b.ts", undo: "delete" },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/diff-review.test.ts > applyReverts：真 git 夹具（还原被拒、保住被收） > 被拒的改回原样、被拒的新档删掉；被接受的改动与删除原样保留
+AssertionError: expected [ { path: 'drop-new.txt', …(1) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "error": "error: pathspec 'drop-new.txt' did not match any file(s) known to git",
++     "path": "drop-new.txt",
++   },
++ ]
+
+ ❯ tests/diff-review.test.ts:177:22
+    175|     const plan = revertPlan(files, ["drop-mod.txt", "drop-new.txt"]);
+    176|     const r = applyReverts(repo, plan);
+    177|     expect(r.failed).toEqual([]);
+       |                      ^
+    178|     expect(r.manual).toEqual([]);
+    179|     expect(r.done.sort()).toEqual(["drop-mod.txt", "drop-new.txt"]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 12 passed (14)
+   Start at  20:02:01
+   Duration  294ms (tests 77%, transform 15%, import 8%, worker 1%)
+
+EXIT=1

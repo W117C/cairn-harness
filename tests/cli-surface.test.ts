@@ -507,17 +507,23 @@ describe("renderEvent：事件 → stdout（全仓第一份渲染器）", () => 
   });
 });
 
-/* worker 的 diff 借一条 `callId: "diff-" + agentId` 的 tool_result 落地（events 层没有承载
-   diff 本体的事件类型，orchestrator.ts:2044），output 是 `[diff] vN vs <sha>\n## stat\n## patch`。
-   从前它跟别的 tool_result 一起被 firstLine() 压成一行——stat 和 patch 全丢，而看不见的 diff
-   等于没有审查面。 */
+/* worker 的 diff 借一条 tool_result 落地（events 层没有承载 diff 本体的事件类型），output 是
+   `[diff] vN vs <sha>\n## stat\n## patch` 整块。从前它跟别的 tool_result 一起被 firstLine()
+   压成一行——stat 和 patch 全丢，而看不见的 diff 等于没有审查面。
+   ⚠️ 2026-10-01 同步（M8 增量）：第 245 页起收据 callId 走 **spawnCallId**（回执合并语义，
+   orchestrator-hold 有判卷钉着），旧的 `startsWith("diff-")` 判定在主干路径上**从来匹配不到**——
+   这个夹具当年喂的是恒真的老形状，所以一直绿。现在按生产端有意埋的 `[diff] v` 头判（两侧同标记
+   有 tests/diff-review.test.ts 的棘轮钉着），夹具换回真形状；老兜底形状单独留一条证人。
+   ⚠️ 本组用例**标题**是留档 `outputs/judge-timeout-2026-10-01/suite-quiet.json` 的重数键
+   （head-cert-deps 的「真机整表」按标题在现源码里重找成因；2026-10-01 实测：改一个标题
+   ⇒ `notResolved` 0→1 当场红）——**改名要同时重产那份留档 json**，别只改源码。 */
 describe("renderEvent：worker diff 整块落地，不被首行压缩吃掉", () => {
   const ev = (e: Partial<AgentEvent>): AgentEvent => e as AgentEvent;
 
   const diff = (patch: string) =>
     ev({
       type: "tool_result",
-      callId: "diff-ag-1",
+      callId: "call_8f66c40e573e47478b3b64d5", // spawn 的真实 callId（非 "diff-" 前缀）
       agent_id: "ag-1",
       ok: true,
       output: "[diff] v1 vs 0a1b2c3d4e5f（worktree .agents/wt-ag-1，含未提交改动）\n## stat\n src/a.ts | 2 +-\n## patch\n" + patch,
@@ -531,6 +537,12 @@ describe("renderEvent：worker diff 整块落地，不被首行压缩吃掉", ()
     expect(line).toContain("+  const x = 2;");
   });
 
+  it("老兜底形状（callId 是 `diff-<agent>`，无 spawn id 的内部 worker）同样整块打", () => {
+    const line = renderEvent(ev({ ...(diff("-  const x = 1;") as object), callId: "diff-ag-1" } as AgentEvent));
+    expect(line).toContain("## patch");
+  });
+
+  // 标题逐字保持与留档 json 一致（见上 ⚠️）：它是重数键，不是可以随手润色的文案。
   it("普通的 tool_result 仍然压首行（这条豁免只对 diff-* 生效，否则整个渲染面就成刷屏了）", () => {
     const line = renderEvent(ev({ type: "tool_result", callId: "c1", ok: true, output: "## patch\n不该整块打" }));
     expect(line).toContain("## patch");

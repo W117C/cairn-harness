@@ -28,13 +28,59 @@
 | 全量判卷绿 | `full-suite.log` | `Test Files 269 passed (269)｜Tests 3613 passed (3613)｜exit=0`（基线 3563 ⇒ 只增不减） |
 | 反向验证：fork 的新会话 id 改成复用原 id → 判卷红 | `reverse-verify-id-reuse-flip.log`：**3 条红**（命名单测 + 两条 fork e2e），exit=1；复原 sha256 `a2d95a6…` 逐字节同 ⇒ 13 绿（`reverse-verify-restored.log`） |
 
+## 增量（commit 2 · 本目录下半部分证据）：worker diff 的逐文件接受/拒绝
+
+**一句话**：跑完后在交互终端里对每个 write worker 的 diff **逐文件审阅**（`a` 全合并 / `r` 全拒绝 /
+`1,3` 或 `1、3` 编号子集 / 回车跳过）；子集＝先把被拒文件在 worktree 里还原再发 merge 卡；
+**顺带修掉一个实测断口**——diff 收据的整块渲染判定在主干路径上**从未匹配到**（见下）。
+
+### 交付（增量）
+
+| 文件 | 动作 | 说明 |
+|---|---|---|
+| `src/agent/diff-review.ts` | 新 | 纯逻辑 + 真 git 还原：`isWorkerDiffReceipt`（`[diff] v` 头 / `diff-` 老兜底两支）、`reviewCandidates`（write∧done∧未决）、`parseSelection`（回车跳过 / a / r / 编号列表；非法给 error 不静默全收）、`parsePorcelainZ`（-z 解析，改名条目新前源后）、`revertPlan` / `applyReverts`（新增⇒删、改删⇒checkout、改名⇒manual；路径包含性检查）、`patchSectionOf` |
+| `src/cli.ts` | 改 | `reviewWorkerDiffs` 流程（TTY 才弹；还原失败/需人工时**不发合并卡**——拒绝的绝不混进合并；跳过/非交互打"现场 + 手工命令"）；`renderEvent` 的 diff 判定改为 `isWorkerDiffReceipt` |
+| `src/agent/fork-cli.ts` | 改 | `formatReplay` 同一判定；diff 摘要从 `## patch` 段解析 |
+| `tests/diff-review.test.ts` | 新 | 14 条：判定（含生产端源头棘轮）/候选/选择/porcelain/还原计划 + **真 git 夹具**（被拒改回原样、新档删掉、被接受保留、越界拒执行） |
+| `tests/cli-surface.test.ts` | 改 | diff 夹具**同步成真形状**（spawn callId + `[diff] v` 头，老兜底形状留证人）——旧夹具喂老形状所以一直绿，见下 |
+
+### 实测断口（本增量修）
+
+第 245 页起收据 callId 走 **spawnCallId**（回执合并语义；`orchestrator-hold` 有判卷钉着），
+而 cli/fork-cli 的判定还写着 `callId.startsWith("diff-")` ⇒ **主干路径上"diff 整块打出来"从未生效**
+（一直被压成首行；`cli-surface` 的夹具当年喂的是老形状，所以测试一直绿——判卷与被测现实分家）。
+修法：按生产端有意埋的 `[diff] v` 头判定（老兜底支保留）；`diff-review.test.ts` 里配跨文件棘轮
+（orchestrator 源码仍在写 `[diff] v`），两侧标记再分家会当场红。
+
+### 增量证据
+
+| 证据 | 文件 | 读数 |
+|---|---|---|
+| 判卷（含真 git 夹具） | `tests/diff-review.test.ts` | 14 条全绿；夹具在 tmp 仓库真跑 `git checkout --` / `rm` |
+| 反向验证（还原分类 mutant） | `reverse-verify-review-flip.log` | 把「新增⇒删文件」错分成「checkout」⇒ **2 条红**（计划单测 + 真 git 夹具），exit=1 |
+| 复原 | `reverse-verify-review-hash-{before,after}.txt` + `reverse-verify-review-restored.log` | sha256 `c3fa6c9…` 逐字节同 ⇒ 14 绿 exit=0 |
+| 全量判卷 | `full-suite.log` | `Test Files 270 passed (270)｜Tests 3628 passed (3628)｜exit=0`（较 M8 主笔 3613 ⇒ 只增不减，+15＝本增量 14 条＋过渡版 1 条） |
+| typecheck | `typecheck-inc.log` | ✅ `tsc --noEmit 通过（0 条报错）` |
+
+### 实测踩坑（值得留档）
+
+**用例标题是留档 json 的重数键**：本增量把 `cli-surface` 里一条 `it` 标题润色后，全量判卷在
+`head-cert-deps` 的「真机整表」红了一条——它按**标题**在现源码里重找成因，而留档
+`outputs/judge-timeout-2026-10-01/suite-quiet.json`（已入库的判定输入）里存的是旧标题 ⇒
+`notResolved` 0→1。处置：标题**逐字恢复**（准确的新描述放进块注释），并把「改名要同时重产那份
+留档 json」的警告写进该测试块头。教训与 `cfa91e1`/M2 探针同族：**判定输入的键漂了，红的是覆盖它的每一笔**。
+
+### 增量边界（如实记）
+
+1. **未做真 TTY 的端到端**：交互流在 `cli.ts`（提问/打印），决策逻辑全在可离线判卷的 helpers 里；
+   合并/拒绝动作本身由既有 `m3c`/orchestrator 判卷覆盖（本增量不碰 orchestrator 一行）。
+2. **改名/复制条目不自动还原**（标 `manual` 且**不发合并卡**，提示人工两步操作）——不猜语义。
+3. **合并塔随进程退出失效**：跳过/非交互时把 worktree 与分支与手工命令打出来（"保留了"必须可执行）。
+4. 全拒 ⇒ `reject` 卡（worktree 清理，未提交改动一并消失，prompt 已明写）；本次不提供"留分支"开关。
+
 ## 开放项
 
-1. **diff 审查增强（逐文件接受/拒绝）未随本笔交付**。已侦查清底：合并出口在核心里是有的
-   （`handleCardAction` 的 diff 卡协议 → `mergeWorker`/`rejectWorker`），且 worker 改动在 merge 前
-   **未提交地留在 worktree**（`commitAndMerge` 才 `git add -A && commit`）⇒ 逐文件拒绝可落为
-   "先把被拒文件在 worktree 里 `git checkout --` 还原，再走 merge 卡"。这是一笔独立的增量
-   （cli.ts 交互 + 真 git 夹具判卷），不在本笔塞进来。
+1. ~~**diff 审查增强（逐文件接受/拒绝）未随本笔交付**~~ → **已交付**（本目录"增量"一节；同笔提交）。
 2. **硬杀（SIGKILL）半写尾行的边界**：`createEventLog.append` 是"整行+换行一次写"，`replay` 对**尾部**
    坏行降级容错（本笔 SIGINT e2e 覆盖的是优雅路径）；但**硬杀**在 write 半途留下的半行，其后的
    append 会与其拼成一条坏行（事件不可见）——这是 `src/events` 的既有行为、不在本模块写范围，

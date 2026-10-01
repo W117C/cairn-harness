@@ -16,16 +16,28 @@
 // 目录名叫 deepseek harness，但 `src/` 里 "deepseek" 出现 0 次——DeepSeek 走
 // OPENAI_BASE_URL 就通（见 README）。
 
+import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { existsSync } from "node:fs";
 import { mkdir, rename, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { argsDigest, firstLine, forkPointOf, forkSessionName, formatReplay } from "./agent/fork-cli";
+import {
+  applyReverts,
+  isWorkerDiffReceipt,
+  parsePorcelainZ,
+  parseSelection,
+  reviewActionFor,
+  reviewCandidates,
+  revertPlan,
+  type Selection,
+} from "./agent/diff-review";
 import { fileURLToPath } from "node:url";
 import type { AskRequest } from "./main/ask-gate";
 import {
   handleAgentDecide,
   handleAgentRun,
+  handleCardAction,
   handleClarifySubmit,
   handleCompact,
   handleGoalSet,
@@ -395,11 +407,13 @@ export function renderEvent(e: AgentEvent): string | null {
     case "tool_call":
       return paint(DIM, `  ⚙ ${e.name} ${argsDigest(e.args)}`);
     case "tool_result": {
-      // diff 借 tool_result 落地（events 层没有承载 diff 本体的事件类型，orchestrator.ts:2044
-      // 借 `callId: "diff-" + agentId` 这一个名号），它的 output 是 stat + patch **整块**。
-      // 走首行压缩的话 patch 一行都不剩——worker 改了什么就彻底看不见了，而看不见的 diff
-      // 等于没有审查面。patch 上游已截断在 32KB 且 redactSecrets 脱敏过，这里整块打是安全的。
-      if (e.callId.startsWith("diff-")) return e.output;
+      // worker diff 借 tool_result 落地，output 是 `[diff] vN …## stat ## patch` **整块**。
+      // 走首行压缩的话 patch 一行都不剩——看不见的 diff 等于没有审查面。
+      // 判定：第 245 页起收据 callId 走 spawnCallId（回执合并语义），旧的 `diff-` 前缀只在
+      // 兜底支成立 ⇒ 曾经的 `startsWith("diff-")` 在主干路径上**从来匹配不到**（2026-10-01
+      // M8 增量实测）。现在用生产端有意埋的 `[diff] v` 标记（两侧同标记有棘轮钉着）。
+      // patch 上游已截断在 32KB 且 redactSecrets 脱敏过，这里整块打是安全的。
+      if (isWorkerDiffReceipt(e)) return e.output;
       const head = e.ok ? paint(GREEN, "  ✓") : paint(RED, "  ✗");
       const gate = e.gate === undefined ? "" : paint(DIM, ` [${e.gate.verdict}]`);
       return `${head}${gate} ${firstLine(e.output)}`;
@@ -649,6 +663,125 @@ function promptForClarify(
     }
   };
   askNext();
+}
+
+/** 一行问答（promise 化的 rl.question；rl 已关时返回 null——与既有 prompt 同一条守卫口径）。 */
+function askLine(rl: ReturnType<typeof createInterface>, isClosed: () => boolean, prompt: string): Promise<string | null> {
+  return new Promise((settle) => {
+    if (isClosed()) {
+      settle(null);
+      return;
+    }
+    try {
+      rl.question(prompt, (answer) => settle(answer));
+    } catch {
+      settle(null);
+    }
+  });
+}
+
+/** M8 增量：跑完后的 worker diff **逐文件审阅**（只在交互 TTY 里弹——合并永远是人决定的事，
+ *  无人值守里不自动发生）。三个决策落点都走既有协议：全要 → merge 卡；全拒 → reject 卡；
+ *  子集 → 先把被拒文件在 worktree 里还原（`applyReverts`），再发 merge 卡（payload 记下两侧清单，
+ *  进事件流审计）。**还原失败/需人工时不发卡**——绝不把用户明确拒绝的文件混进合并。
+ *  合并不成/跳过时把现场（worktree、分支）与手工命令打出来：合并塔随本进程退出失效，
+ *  这句话不说，"保留了"就只是一个动词。 */
+async function reviewWorkerDiffs(
+  rl: ReturnType<typeof createInterface>,
+  isClosed: () => boolean,
+  opts: Options,
+): Promise<void> {
+  const events = await replay(opts.logPath).catch(() => [] as AgentEvent[]);
+  const cands = reviewCandidates(events);
+  if (cands.length === 0) return;
+  const tty = process.stdin.isTTY === true;
+  for (const c of cands) {
+    const st = spawnSync("git", ["-C", c.worktree, "status", "--porcelain", "-z"], { encoding: "utf8" });
+    if (st.status !== 0) {
+      process.stdout.write(paint(DIM, `\n[m0] worker ${c.agentId}：worktree 已不在（${c.worktree}）——跳过审阅\n`));
+      continue;
+    }
+    const files = parsePorcelainZ(st.stdout ?? "");
+    if (files.length === 0) continue;
+    const manualHint = (): void => {
+      const branch = spawnSync("git", ["-C", c.worktree, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).stdout?.trim() ?? "?";
+      process.stdout.write(
+        paint(
+          DIM,
+          `  现场保留：worktree ${c.worktree}（未提交改动在里面）、分支 ${branch}；\n` +
+            `  人工合并：git -C "${c.worktree}" add -A && git -C "${c.worktree}" commit -m "worker ${c.agentId}" && git merge --no-ff ${branch}\n`,
+        ),
+      );
+    };
+    if (!tty) {
+      process.stdout.write(
+        paint(YELLOW, `\n[m0] 有 1 份待合并的 worker diff（${c.agentId}，${String(files.length)} 个文件）——非交互不弹审阅（合并永远是人决定的事）。\n`),
+      );
+      manualHint();
+      continue;
+    }
+    const ns = spawnSync("git", ["-C", c.worktree, "diff", "--numstat"], { encoding: "utf8" });
+    const counts = new Map<string, string>();
+    for (const line of (ns.stdout ?? "").split("\n")) {
+      const [a, r, ...rest] = line.split("\t");
+      const p = rest.join("\t");
+      if (p !== "") counts.set(p, ` +${a ?? "?"} −${r ?? "?"}`);
+    }
+    process.stdout.write(`\n[m0] 待审阅：worker ${c.agentId}（${firstLine(c.task, 80)}）\n`);
+    files.forEach((f, i) => {
+      const label = f.code.includes("?") || f.code.startsWith("A") ? "新增" : f.code.includes("D") ? "删除" : "修改";
+      const from = f.from !== undefined ? `（改名自 ${f.from}）` : "";
+      process.stdout.write(paint(DIM, `  ${String(i + 1)}) ${label} ${f.path}${counts.get(f.path) ?? ""}${from}\n`));
+    });
+    let sel: Selection | null = null;
+    for (let attempt = 0; attempt < 3 && sel === null; attempt += 1) {
+      const answer = await askLine(
+        rl,
+        isClosed,
+        "怎么处理？[a] 全部合并 / [r] 全部拒绝（worktree 删除，未提交改动一并消失）/ [1,3,…] 只合并这些（其余在 worktree 还原）/ 回车跳过 > ",
+      );
+      if (answer === null) return;
+      const parsed = parseSelection(answer, files.length);
+      if (parsed === null) {
+        process.stdout.write(paint(DIM, `  跳过 ${c.agentId}：\n`));
+        manualHint();
+        break;
+      }
+      if ("error" in parsed) {
+        process.stdout.write(paint(YELLOW, `  ${parsed.error}\n`));
+        continue;
+      }
+      sel = parsed;
+    }
+    if (sel === null) continue;
+    const rejectedPaths = sel.rejected.map((n) => files[n - 1]!.path);
+    const acceptedPaths = sel.accepted.map((n) => files[n - 1]!.path);
+    if (rejectedPaths.length > 0) {
+      const r = applyReverts(c.worktree, revertPlan(files, rejectedPaths));
+      for (const f of r.failed) process.stderr.write(paint(RED, `  [还原失败] ${f.path}：${f.error}\n`));
+      for (const m of r.manual) process.stderr.write(paint(YELLOW, `  [需人工] ${m.path}：${m.why}\n`));
+      if (r.failed.length > 0 || r.manual.length > 0) {
+        process.stdout.write(paint(RED, `  未发合并卡：被拒文件没能全部还原（拒绝的绝不混进合并）。\n`));
+        manualHint();
+        continue;
+      }
+      process.stdout.write(paint(DIM, `  已还原被拒文件 ${String(r.done.length)} 个：${r.done.join("、")}\n`));
+    }
+    const action = reviewActionFor(sel);
+    const res = await handleCardAction({
+      cardId: "cli-review-" + c.agentId,
+      sourceEventId: c.resultEventIndex,
+      cardType: "diff",
+      action,
+      targetAgentId: c.agentId,
+      payload: { via: "cli-review", accepted_files: acceptedPaths, rejected_files: rejectedPaths },
+    });
+    process.stdout.write(
+      res.ok
+        ? paint(GREEN, `  ✓ ${action === "merge" ? "已合并" : "已拒绝"} ${c.agentId}（accepted ${String(acceptedPaths.length)} / rejected ${String(rejectedPaths.length)}）\n`)
+        : paint(RED, `  ✗ ${action} 失败：${res.error ?? "未知"}\n`),
+    );
+  }
 }
 
 // ---- 主流程 ----
@@ -955,6 +1088,14 @@ async function main(): Promise<number> {
     if (!r.ok) {
       process.stderr.write(paint(RED, `[m0] 运行失败：${r.error ?? "未知原因"}\n`));
       tally.errorEvents += 1;
+    }
+    // M8 增量：跑完后的 worker diff 逐文件审阅（TTY 才弹；被 Ctrl-C 取消的轮次不弹）
+    if (!cancelling) {
+      try {
+        await reviewWorkerDiffs(rl, () => rlClosed, opts);
+      } catch (err) {
+        process.stderr.write(paint(YELLOW, `[m0] diff 审阅出错（不影响已跑完的这一轮）：${err instanceof Error ? err.message : String(err)}\n`));
+      }
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

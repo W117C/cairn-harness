@@ -6,6 +6,7 @@
 // `--from <轮次>` 的口径（help 与判卷都按这句）：**保留前 N 轮（含）**，新任务作为第 N+1 轮
 // 跑在新会话上。「轮」以 `user_message` 为界——那是"一次用户交付"的唯一边界事件。
 import { parsePatch } from "../tools/patch-parse";
+import { isWorkerDiffReceipt, patchSectionOf } from "./diff-review";
 import type { AgentEvent } from "../events";
 
 /** 首行摘要（长文本压一行；live 渲染与 replay 共用同一份）。 */
@@ -56,7 +57,7 @@ const clip = (s: string, max: number): string => (s.length > max ? s.slice(0, ma
  *  `parsePatch` 解析不了时退回首行，不编数字）。 */
 function diffSummary(output: string): string {
   try {
-    const files = parsePatch(output);
+    const files = parsePatch(patchSectionOf(output));
     let add = 0;
     let rem = 0;
     let hunks = 0;
@@ -105,7 +106,7 @@ export function formatReplay(events: readonly AgentEvent[]): string {
         detail = `${e.name} ${clip(argsDigest(e.args), 140)}`;
         break;
       case "tool_result": {
-        if (e.callId.startsWith("diff-")) {
+        if (isWorkerDiffReceipt(e)) {
           detail = (e.ok ? "✓ " : "✗ ") + diffSummary(e.output);
           break;
         }
