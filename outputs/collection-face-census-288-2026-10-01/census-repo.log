@@ -1,0 +1,25 @@
+普查文件=259 支｜收集期重活命中=23 处
+tests/assertion-health-scan.test.ts:92  execFileSync("mkdir", ["-p", join(dir, "scripts")], { stdio: "ignore" });
+tests/assertion-health-scan.test.ts:141  const files = (trackedScriptFiles(ROOT, "tests") ?? []).filter((rel) => existsSync(join(ROOT, rel)));
+tests/budget-price-key.test.ts:71  const src = () => readFileSync(fileURLToPath(new URL("../src/main/agent-runner.ts", import.meta.url)), "utf8")
+tests/cli-surface.test.ts:168  writeFileSync(
+tests/cli-surface.test.ts:187  const ws = mkdtempSync(join(tmpdir(), "m0-shell-"));
+tests/cli-surface.test.ts:191  writeFileSync(
+tests/cli-surface.test.ts:201  return { out: r.out, ws, written: existsSync(join(ws, "payload.txt")), logInWorkspace: r.out.includes(join(ws,
+tests/compaction-cost.test.ts:109  const dir = mkdtempSync(join(tmpdir(), "compaction-cost-"));
+tests/gate-failure-log.test.ts:101  const gatesSrc = readFileSync(join(__dirname, "..", "scripts", "gates.ts"), "utf8");
+tests/mutate-shards.test.ts:252  const base = mkdtempSync(join(tmpdir(), "mutate-shards-wt-"));
+tests/mutate-shards.test.ts:254  execFileSync("git", ["-C", ROOT, "worktree", "add", "--detach", path, "HEAD"], { encoding: "utf8" });
+tests/mutate-shards.test.ts:422  const src = readFileSync(ENTRY, "utf8");
+tests/orchestrator-construction-sites.test.ts:32  const src = readFileSync(SRC, "utf8");
+tests/page-claim.test.ts:162  const src = readFileSync(fileURLToPath(new URL("../scripts/next-page.ts", import.meta.url)), "utf8");
+tests/prose-needle-scan.test.ts:415  const namedTable = new Map([["tests/e.test.ts", 'spawnSync("node", ["scripts/mutate-verify.mjs"])']]);
+tests/prose-needle-scan.test.ts:694  const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
+tests/prose-needle-scan.test.ts:1018  const self = readFileSync(fileURLToPath(import.meta.url), "utf8");
+tests/usage-attribution.test.ts:313  const runner = () => readFileSync(fileURLToPath(new URL("../src/main/agent-runner.ts", import.meta.url)), "utf
+tests/usage-attribution.test.ts:314  const orch = () => readFileSync(fileURLToPath(new URL("../src/agent/orchestrator.ts", import.meta.url)), "utf8
+tests/verify-cause.test.ts:188  return fs.mkdtempSync(path.join(os.tmpdir(), "dsh-verify-empty-"));
+tests/verify-exec-sandbox.test.ts:61  const src = readFileSync(fileURLToPath(new URL("../src/main/agent-runner.ts", import.meta.url)), "utf8");
+tests/wiring-coverage.test.ts:175  const runner = readFileSync(join(ROOT, "src/main/agent-runner.ts"), "utf8");
+tests/wiring-coverage.test.ts:176  const table = readFileSync(join(ROOT, "scripts/mutate-verify.mjs"), "utf8");
+REPO_EXIT=0

@@ -1,0 +1,6 @@
+普查文件=1 支｜收集期重活命中=4 处
+/tmp/old-prose-face.test.ts:413  const namedTable = new Map([["tests/e.test.ts", 'spawnSync("node", ["scripts/mutate-verify.mjs"])']]);
+/tmp/old-prose-face.test.ts:692  const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
+/tmp/old-prose-face.test.ts:693  const r = scanRepo(root);
+/tmp/old-prose-face.test.ts:944  const r = scanRepo(root);
+SENTINEL_EXIT=0

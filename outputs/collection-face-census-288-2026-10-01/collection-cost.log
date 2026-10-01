@@ -1,0 +1,12 @@
+FILE=tests/mutate-shards.test.ts EXIT=0    Duration  173ms (transform 79%, import 17%, worker 3%) |       Tests  55 skipped (55)
+FILE=tests/cli-surface.test.ts EXIT=0    Duration  833ms (transform 61%, import 39%) |       Tests  61 skipped (61)
+FILE=tests/compaction-cost.test.ts EXIT=0    Duration  260ms (transform 82%, import 17%, worker 1%) |       Tests  9 skipped (9)
+FILE=tests/assertion-health-scan.test.ts EXIT=0    Duration  304ms (import 71%, transform 29%, worker 1%) |       Tests  17 skipped (17)
+FILE=tests/gate-failure-log.test.ts EXIT=0    Duration  96ms (transform 71%, import 24%, worker 5%) |       Tests  13 skipped (13)
+FILE=tests/orchestrator-construction-sites.test.ts EXIT=0    Duration  325ms (import 82%, transform 17%, worker 1%) |       Tests  3 skipped (3)
+FILE=tests/page-claim.test.ts EXIT=0    Duration  97ms (transform 70%, import 24%, worker 6%) |       Tests  14 skipped (14)
+FILE=tests/usage-attribution.test.ts EXIT=0    Duration  673ms (transform 73%, import 27%) |       Tests  26 skipped (26)
+FILE=tests/budget-price-key.test.ts EXIT=0    Duration  638ms (transform 73%, import 26%) |       Tests  7 skipped (7)
+FILE=tests/prose-needle-scan.test.ts EXIT=0    Duration  365ms (import 70%, transform 29%, worker 1%) |       Tests  81 skipped (81)
+FILE=tests/docs-check.test.ts EXIT=0    Duration  137ms (transform 82%, import 16%, worker 2%) |       Tests  89 skipped (89)
+FILE=tests/loop-eval-snapshot.test.ts EXIT=1  | 
