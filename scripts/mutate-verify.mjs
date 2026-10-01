@@ -10180,6 +10180,46 @@ const MUTATIONS = [
     expectFail: "自排除名单要数得着",
   },
 
+  /* ── 第 284 页：把 D-9 的取料面收成共用构造器，并把 TS2353（键被静默丢掉）纳进危险码。
+   *    四支各钉一种坏法：新纳的那支码被摘掉 / 排除面写宽（探针脚本给自己作证）/
+   *    三态被抹平（"取不到"交成"空面"）/ 接线掉（门不走共用构造器 ⇒ 形状还会再漂一次）。 ── */
+  {
+    id: "evidence-danger-codes-without-ts2353",
+    src: "scripts/lib/evidence-typecheck.ts",
+    test: "tests/evidence-typecheck.test.ts",
+    desc: "刚纳进来的 `TS2353` 从表尾被摘掉 ⇒ 第 283 页那整条事故（`cacheDir` 被静默丢掉、两支探针量的不是它们承诺的事）" +
+      "重新变成没人看的一类形状——码在注释里被讲过、表上却没有它，下一次同样写错键不会红",
+    apply: (s) => s.replace('"TS7053", "TS2353"]', '"TS7053"]'),
+    expectFail: "TS2353（多给的键被静默丢掉）",
+  },
+  {
+    id: "evidence-cred-face-mjs-exemption-dropped",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "取料面把 `.mjs`（探针脚本自己）排除掉这一支被写成恒真 ⇒ 探针里那些**为演示而写**的数字给自己作证，" +
+      "D-9 的「原文找到了」从此可以是自供（第 268 页那条『子串身份判据会被自己的探针日志冒充』同形）",
+    apply: (s) => s.replace('filter((f) => !f.endsWith(".mjs"))', "filter(() => true)"),
+    expectFail: "读不到的文件不许被丢掉",
+  },
+  {
+    id: "evidence-cred-face-missing-dir-returns-empty-face",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "目录不存在时交回空数组而不是 null ⇒ 「取不到」被读成「面可取且为空」：门那边那一档从『未检』变成" +
+      "『检了且没找到』，凭证页的读数就能在没有任何证人的情况下过关（规则 239 的三态在本面上的复刻）",
+    apply: (s) => s.replace("  if (!existsSync(abs)) return null;", "  if (!existsSync(abs)) return [];"),
+    expectFail: "交 null（取不到），不是空数组",
+  },
+  {
+    id: "evidence-cred-face-wiring-not-through-shared-constructor",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "CLI 不走共用构造器（这里换成恒 null）⇒ 函数还活着、单测还绿，但**生产端**的 D-9 再也读不到面；" +
+      "这正是这一页立它的理由：形状漂了要红在真门跑的那一侧，而不是红在只有判卷看见的地方",
+    apply: (s) => s.replace("(dir) => credFaceFiles(ROOT, dir),", "(dir) => (void dir, null),"),
+    expectFail: "门那半真的调这个构造器",
+  },
+
   /* ── 第 274 页：把 `scripts/prose-needle-scan.ts` 的帽那一族补齐（第 272 页现读：这支 1100 行的尺此前整支零锚点，
    *    本族四支各钉一种坏法：比较符、加法、按树取帽、把出声那一支焊死）。
    *    这四支都能买，正因为它们的判卷喂的是**合成输入**（第 272 页第 7 项写的那条：clean 树上两侧同为 0 的配对断言买不了锚点）。 ── */

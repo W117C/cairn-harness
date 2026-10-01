@@ -425,6 +425,24 @@ export interface CredWeakWitness {
   runs: string[];
 }
 
+/** D-9 取料面的**唯一构造器**（第 284 页）。
+ *  为什么必须存在：`outputs/cred-face-coverage-2026-10-01/cred-face.mts` 从前自己抄了一份"读面"的写法
+ *  （返回拼好的整块字符串），第 269 页把面改成按文件之后，那份副本**静默烂掉**——本仓没人重跑它，
+ *  直到第 284 页现跑才炸（`x.list.map is not a function`）。
+ *  ⇒ 接口漂移只有"共用构造器"拦得住；在探针头上写一句"与门一致"不算（同族教训：注释不是实现）。
+ *  口径与从前逐字相同：非递归、排除 `.mjs`（那是探针脚本自己，不进面）、读不到的文件交空文本而不是把文件丢掉。 */
+export function credFaceFiles(root: string, dir: string): CredFaceFile[] | null {
+  const abs = join(root, "outputs", dir);
+  if (!existsSync(abs)) return null;
+  try {
+    return readdirSync(abs).filter((f) => !f.endsWith(".mjs")).map((f) => {
+      let text = "";
+      try { text = readFileSync(join(abs, f), "utf8"); } catch { text = ""; }
+      return { name: f, text };
+    });
+  } catch { return null; }
+}
+
 export function checkCredentialSources(
   pages: readonly CredPage[],
   readFace: (dir: string) => CredFaceFile[] | null,
@@ -896,17 +914,7 @@ export function runDocsCheck(): {
   // D-9：凭证页的读数 ↔ 它自己点名的取料面（`outputs/<主题>-日期/` 里除脚本外的全部文件）。
   const cred = checkCredentialSources(
     existsSync(ledgerAbs) ? credentialPages(readFileSync(ledgerAbs, "utf8")) : [],
-    (dir) => {
-      const abs = join(ROOT, "outputs", dir);
-      if (!existsSync(abs)) return null;
-      try {
-        return readdirSync(abs).filter((f) => !f.endsWith(".mjs")).map((f) => {
-          let text = "";
-          try { text = readFileSync(join(abs, f), "utf8"); } catch { text = ""; }
-          return { name: f, text };
-        });
-      } catch { return null; }
-    },
+    (dir) => credFaceFiles(ROOT, dir),
     UNSOURCED_READINGS,
     CRED_UNNAMED_PAGE_CAP,
     CRED_WEAK_WITNESS_CAP,

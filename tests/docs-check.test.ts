@@ -5,12 +5,13 @@
 // 这样每条 D 都能双向断言（红相命中 + 反相不误伤），且不依赖工作树状态。
 // 真实文件读取只发生在该模块的 main()，由 `pnpm docs-check` 承担。
 import { describe, expect, it } from "vitest";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import {
-  checkCredentialSources, CREDLEDGER_FILE, CRED_UNNAMED_PAGE_CAP, credentialPages, LEDGER_FILE, ledgerRevFace, ledgerRevTokens,
+  checkCredentialSources, CREDLEDGER_FILE, CRED_UNNAMED_PAGE_CAP, credentialPages, credFaceFiles, LEDGER_FILE, ledgerRevFace, ledgerRevTokens,
   credRunShas, CRED_WEAK_WITNESS_CAP, UNSOURCED_CRED_PAGES,
   LEDGER_NON_REV, runDocsCheck, sourcedReadings, UNSOURCED_READINGS,
 } from "../scripts/docs-check";
@@ -744,7 +745,9 @@ describe("D-9 凭证对账：三档（可比对／未点名＝未检／取不到
     expect(src).toMatch(/^ {4}\+ `[^`\n]*未点名页 \$\{String\(cred\.unnamedPages\.length\)\} 页（帽 \$\{String\(CRED_UNNAMED_PAGE_CAP\)/mu);
     // 第 269 页新加的那半：弱证既要比帽、也要印出来，还得真的把按文件的取料面交给判定
     expect(src).toMatch(/^ {2}if \(weak\.length > weakCap\) \{$/mu);
-    expect(src).toMatch(/^ {10}return \{ name: f, text \};$/mu);
+    // 第 284 页改指：按文件的取料面从 CLI 里的内联闭包搬进导出函数 `credFaceFiles`（探针要与门共用同一份构造器），
+    // 所以这一行锚定的缩进从 10 空格变成 4——针脚跟着实现走，不是把断言删掉（规则 217/255）。
+    expect(src).toMatch(/^ {6}return \{ name: f, text \};$/mu);
     expect(src, "汇总行里弱证那一格要真取 cred.weak.length——印成常数就没人看得见").toMatch(/^ {4}\+ `｜弱证 \$\{String\(cred\.weak\.length\)\} 对（帽 \$\{String\(CRED_WEAK_WITNESS_CAP\)/mu);
     // 第 271 页的两态：登记要把页从『可行动』挪走，stale 检查与那列印数都得真接上
     expect(src).toMatch(/^ {6}if \(p\.key in pageWaivers\) \{$/mu);
@@ -802,5 +805,47 @@ describe("D-10 源码行号引用面：两半都钉，存量按集合登记", ()
     expect(LEGACY_SOURCE_CITATIONS.length).toBeGreaterThan(0);
     const face = runDocsCheck();
     expect(hit(face.findings, "D-10").length).toBe(0);
+  });
+});
+
+/* ── 第 284 页：D-9 的取料面收成**一个导出的构造器**，门与复现它的探针共用。
+    动因是一条已入库探针抄了门的旧形状（一整块字符串），第 269 页把面改成按文件之后它静默烂掉——
+    没人重跑就没人知道，直到本笔现跑才抛 `x.list.map is not a function`。
+    这三条各钉一种坏法：三态被抹平（`null` 换成 `[]`＝"没有"与"取不到"同形）、排除面写宽（`.mjs` 进了面）、
+    接线掉（门不再调用这个构造器，探针与门又分成两份形状）。 ── */
+describe("credFaceFiles：门与探针共用同一份取料面（第 284 页）", () => {
+  const makeFace = (): { root: string; cleanup: () => void } => {
+    const root = mkdtempSync(join(tmpdir(), "dsh-credface-"));
+    mkdirSync(join(root, "outputs", "d"), { recursive: true });
+    writeFileSync(join(root, "outputs", "d", "a.log"), "可比对 318 个读数（红 0）");
+    writeFileSync(join(root, "outputs", "d", "b.txt"), "第二份证人：208.12s");
+    writeFileSync(join(root, "outputs", "d", "probe.mjs"), "脚本自己不算证人 318");
+    return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  };
+
+  it("目录不存在 ⇒ 交 null（取不到），不是空数组（面可取且为空）——三态不许被抹平", () => {
+    const { root, cleanup } = makeFace();
+    try {
+      expect(credFaceFiles(root, "no-such-dir"), "交 [] 会让门把「取不到」读成「没有证人」⇒ 假绿").toBeNull();
+      expect(credFaceFiles(root, "d"), "目录在时要交出文件").not.toBeNull();
+    } finally { cleanup(); }
+  });
+
+  it("排除 `.mjs`（那是探针脚本自己），其余逐文件交回 {name,text}；读不到的文件不许被丢掉", () => {
+    const { root, cleanup } = makeFace();
+    try {
+      const files = credFaceFiles(root, "d") ?? [];
+      expect(files.map((f) => f.name).sort()).toEqual(["a.log", "b.txt"]);
+      expect(files.reduce((a, f) => a + f.text.length, 0), "两份证人的文本都要进面（少一份＝分母悄悄变小）").toBeGreaterThan(10);
+      // 反向证人：把 `.mjs` 也收进来的那份实现会让这一格多出一个名字
+      expect(files.some((f) => f.name.endsWith(".mjs")), "探针脚本进了面 ⇒ 它自己写下的数字给自己作证").toBe(false);
+    } finally { cleanup(); }
+  });
+
+  it("接线：门那半真的调这个构造器，且「拼一整块字符串」的老写法在取料面这一段里不再存在", () => {
+    const src = readFileSync(join(fileURLToPath(new URL(".", import.meta.url)), "..", "scripts", "docs-check.ts"), "utf8");
+    expect(/^ {4}\(dir\) => credFaceFiles\(ROOT, dir\),$/mu.test(src), "CLI 没接进共用构造器 ⇒ 形状还会再漂一次").toBe(true);
+    // 行锚定的正向断言（规则 247）：老写法是 readdirSync(...).map(...).join("\n") 直接返回字符串
+    expect(/^ {4}return readdirSync\(abs\)\.filter\(\(f\) => !f\.endsWith\("\.mjs"\)\)\.map\(\(f\) => \{$/mu.test(src)).toBe(true);
   });
 });

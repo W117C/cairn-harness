@@ -24,6 +24,10 @@ const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encodin
 const LINE_2551 = `outputs/anchor-resolvability-2026-09-23/measure-anchor.mts(110,14): error TS2551: Property 'line' does not exist on type '{ kind: "path" }'. Did you mean 'lines'?`;
 const LINE_18048 = "outputs/composed-title-audit-2026-09-30/probe.mts(87,24): error TS18048: 'face' is possibly 'undefined'.";
 const LINE_7006 = "outputs/sequencer-status-readings-2026-10-01/probe-fail.mts(82,26): error TS7006: Parameter 'e' implicitly has an 'any' type.";
+/** 第 284 页纳进来的那一支：真仓原文（键写错名字 ⇒ 那个键被静默丢掉，不崩、只是读数是假的）。 */
+const LINE_2353 = "outputs/map-inject-cost-2026-09-30/probe-cold-vs-warm.mts(6,92): error TS2353: Object literal may only specify known properties, and 'cacheDir' does not exist in type 'Partial<BuildMapOptions>'.";
+/** 刻意**不纳**的两支（各有逐条理由，见 lib 的头注释）：实参形状不符、隐式 any。 */
+const LINE_2345 = "outputs/cred-face-coverage-2026-10-01/cred-face.mts(26,43): error TS2345: Argument of type '(dir: string) => string | null' is not assignable to parameter of type '(dir: string) => CredFaceFile[] | null'.";
 const LINE_CONT = "  No index signature with a parameter of type 'string' was found on type '{}'.";
 const LINE_TSCSUMMARY = "Found 51 errors in 14 files.";
 
@@ -55,6 +59,17 @@ describe("tally：计数要能自证，装饰性码不许混进危险码", () =>
       "outputs/anchor-resolvability-2026-09-23/measure-anchor.mts": 1,
       "outputs/composed-title-audit-2026-09-30/probe.mts": 1,
     });
+  });
+
+  it("第 284 页：TS2353（多给的键被静默丢掉）算危险码，而 TS7006/TS2345 各按逐条理由不纳——两半都要钉", () => {
+    expect(DANGER_CODES, "纳进来的那一支不在表上 ⇒ 这一格等于没纳").toContain("TS2353");
+    expect(DANGER_CODES).not.toContain("TS7006");
+    expect(DANGER_CODES).not.toContain("TS2345");
+    const t = tally([LINE_2353, LINE_7006, LINE_2345]);
+    // 只有 TS2353 那一支进 perFile；两条"不纳"的若不进，这一格才是两半都有证人
+    expect(t.perFile).toEqual({ "outputs/map-inject-cost-2026-09-30/probe-cold-vs-warm.mts": 1 });
+    expect(t.total).toBe(3);
+    expect(t.parsed).toBe(3);
   });
 
   it("解析不完整时不许静默少算：parsed 与 total 的差由 verdict 读成「没量到」（这里先证分母形状）", () => {
