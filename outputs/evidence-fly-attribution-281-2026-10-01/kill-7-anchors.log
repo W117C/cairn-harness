@@ -1,0 +1,16 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-e384b65.lock）
+变异验证：7 条
+✅ evidence-fly-exempt-never-fires — 分面条件里的 `flySet.has(file)` 被写成恒假 ⇒ 未跟踪清单白取了，隔壁的草稿照样推动我的棘轮（第 281 页要修的就是这一格：主树 `16 条／帽 12` 的红全在两支未入库探针里） ｜本机实测 1.2s／2 拍
+✅ evidence-fly-exempt-widened-to-all — 分面条件从「在这份未跟踪清单里」放宽成「只要面可取就放行」⇒ 已跟踪的新探针也被当成在飞，棘轮从此挡不住任何东西（豁免写成万能豁免＝假绿，与第 279 页那支 legacy 万能豁免同形） ｜本机实测 1.0s／2 拍
+✅ evidence-fly-face-unavailable-reads-as-ok — 「面取不到」被当成「面可取且为空」⇒ 空清单配上 ok 态，别人的探针就凭空免了账（三态里的「取不到」在本仓第 109/118 页反复出现过：没有 与 取不到 是两个意思，混着说就是把 fail-open 写进文案） ｜本机实测 1.1s／2 拍
+✅ evidence-fly-cell-drops-caliber — 读数里的「HEAD 口径」那半句被去掉 ⇒ 同一个「12 条」再也读不出是仓里的还是整棵树上的（第 259 页就是为这两个数吵过：HEAD 31 条／工作树 51 条；口径不进读数，下一个读者只能猜） ｜本机实测 1.0s／2 拍
+✅ evidence-others-prefix-glob-not-cut — include 条目不再按通配截到目录为止，原样当 pathspec 交给 git ⇒ 哪天有人把 include 写成 `outputs/**` 那种形状，取料面就与 tsc 扫的面不同宽，豁免名单静默失真 ｜本机实测 1.0s／2 拍
+✅ evidence-fly-rows-swallowed — 分到「不在我的账」那一半的条数被清成 0（既不留在 HEAD 口径里、也没进 flying）⇒ 分面变成筛子，读数比真值小而没有任何一格出声（守恒式就是钉这个的） ｜本机实测 1.0s／2 拍
+✅ evidence-runner-prefix-line-hardcoded — 门那一半把取料前缀写死成「没取到」的形状（接线断）⇒ 归因那行还在、但再也没人说清这豁免是按哪个面取的；判卷从上游读 tsconfig 的 include 对一遍，断的就是这条 ｜本机实测 6.5s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 13.4s · 跑了 7/7 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 14 次／7 条（每条次数分布 2×7）· 单次中位 第1次 0.5s／第2次 0.5s· 最贵一条 evidence-runner-prefix-line-hardcoded 6.5s
+跑法单价：selector 14 拍·中位 0.51s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-e384b65.lock）
+FULL_EXIT=0
