@@ -9486,3 +9486,29 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 3. **锚点 ＋3（表 1216→1219），三支各钉一个方向**：某一档被凭空 ＋1（`本地 helper` 那条 filter 加 1）、`across` 清单被拆下来（交回 `[]`，直方图仍有数）、直方图少记一类（跳过 `across-interpolation`，清单仍有数）。后两支方向相反，都需要——只钉一支的话"两本账任一为空"仍绿。落库前秒级尺读 `针脚体检：1219 条 —— 阻断 0，待复认 0，未覆盖 0，…killer 指针失效 0`、`改法语法体检：1219 条改法全部产出合法源文件 ✅`、`NEEDLES_EXIT=0`（`needles-check-5.log`）；`typecheck` 仍 `0 条报错`（`typecheck-3.log`）。
 4. **本笔另有一次自己的错必须写下来（不是虚构的自我批评）**：写第 2 格时我用 `Edit` 去改一处**已入库**的用例体，把那里两条有意义的断言换成了两行垃圾（`checkWitnessPaths(r.inFlightFiles.slice(1), ...)`——那函数根本不在这张判卷的语义里，是我从第 285 页的形状串过来的），而 `Edit` 回的是"1 replacements 成功"。抓住它的唯一原因是**改完立刻 `git diff --numstat`**：那个文件本该只有新增，出现删除行就是信号 ⇒ 当场复原（复原到 `git status` 对该文件为空，再确认文件＝HEAD），这一笔的判卷改动重新只用"插入"完成。⇒ 记进记忆那条「Edit 成功既不代表位置对、也不代表没吞行」的第 N 次实证：**改判卷只加不改，改完必现读 diff**。
 5. **任务 #20 就此清账**：同一支普查脚本复跑（`outputs/observer-census-286-2026-10-01/census-fields-3.log`）逐字 `字段 30 个｜等式 30｜只在安全值一侧 0｜零断言 0｜形状认不出 0`，三格哨兵仍读 `等式`。⚠️ 这张表的口径要说清楚，别让它被读成"30 格都有力了"：它问的只是**这一格有没有等式/守恒**，不问"等式两侧今天是否都非零"——后者要靠第 2 条那种自报读数或再一轮普查（脚本已留在仓里，`census-fields.mts`，一句话可复跑）。**没动任何帽**（`SCOPE_CEILINGS` 与 `LEGACY_*` 一格未改）。
+
+### 2026-10-01 · 第 286 页补⑴ 凭证：`48c21b5` 认证读数（判卷 `3464＝3462＋2`、表 1216→1219、帽一格未动）；三支守恒锚点在干净树 3/3 全杀，`本次耗时 59.4s`、`单次中位 第1次 9.7s／第2次 9.7s`；门里红 1 道＝隔壁 H7 ⇒ `HEADCERT_EXIT=1`，不写成全量绿
+
+取料面（本串读数都在这两个目录里，证人随这一笔逐文件名入库）：`outputs/prose-face-observers-286-2026-10-01/`、`outputs/observer-census-286-2026-10-01/`。
+
+1. **认证对象与用的哪棵树**：被认证的是 `48c21b5aaf2c40ae8196aff15a8f63c2a36475b4`（第 286 页补⑴ 那一笔，判卷＋锚点同笔），跑在**独立干净树** `.worktrees/head-cert-48c21b5`，不在主树。树干净是现读的，不是推的：`已核：TREE=48c21b5aaf2c40ae8196aff15a8f63c2a36475b4｜判卷四面在飞 0 项`（`head-cert-48c21b5.log`）。
+
+2. **落库前后的秒级尺，两份互相印证归因**：针脚体检在**落库前主树**（`needles-check-5.log`）、**落库后主树**（`needles-check-6.log`）、**认证树**（`needles-certtree-48c21b5.log`）三处同读数——`针脚体检：1219 条 —— 阻断 0，待复认 0，未覆盖 0，逐行式 5，未入库面 0（被测面 + 判卷两面），钉在飞文本 0，killer 指针失效 0（其中 HEAD 侧 0）`，`改法语法体检：1219 条改法全部产出合法源文件 ✅`，`[mutate-needles-check] 全部锚点针脚可判定 ✅`，`NEEDLES_EXIT=0`。三处都是 1219 ⇒ 本笔那 3 条已入库、没有一条还钉在飞文本上（`钉在飞文本 0`）。`typecheck` 落库前后都 `typecheck: tsc --noEmit 通过（0 条报错）✅`／`TSC_EXIT=0`（`typecheck-3.log`、`typecheck-4.log`）。`docs-check` 现读（`docs-check-at-48c21b5.log`）：`证人点名面：59 页点名 88 条 dated 工件（红 0）｜登记 0 条（帽，只准调低）`、`凭证对账面：可比对 355 个读数（红 0）｜页未点名取料目录 0 个＝未检｜未点名页 0 页（帽 0，只准调低）`、`docs-check: 受检项全绿（另有 3 项未检，见上）`、`DOCS_EXIT=0`。⚠️ 这一格要说清口径：D-11 量的是**已入库台账**（`trackedFilesAtHead`），所以它此刻证明的是"本笔之前的凭证页没有欠证人"，**不能**拿来证明"这一页的证人齐了"——后者靠这一笔自己（证人 7 份与页同笔，规则 346 第四次命中，用的还是我自己）。
+
+3. **三支新锚点：干净树 3/3 全杀**（`kill-3-anchors-conservation.log`，在 `48c21b5` 的独立树里跑，一次带上三条 id）：
+   - `✅ prose-scan-via-counts-bucket-inflated — … ｜本机实测 20.3s／2 拍`
+   - `✅ prose-scan-across-list-detached — … ｜本机实测 19.3s／2 拍`
+   - `✅ prose-scan-histogram-skips-across-kind — … ｜本机实测 19.4s／2 拍`
+   - `全部变异被正确杀死（断言非恒真）`
+   成本两行照机器原文逐字贴（不自己推比值，规则 245）：`[mutate-verify] 本次耗时 59.4s · 跑了 3/3 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）`；`成本分母：判卷 spawn 6 次／3 条（每条次数分布 2×3）· 单次中位 第1次 9.7s／第2次 9.7s· 最贵一条 prose-scan-via-counts-bucket-inflated 20.3s`；`跑法单价：selector 6 拍·中位 9.72s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母`——这半句「没有分母」照贴别补零。`FULL_EXIT=0`（从日志尾行直接取，不是后台通知的回显，规则 249）。
+   单价再次印证规则 350：本批 `9.7s／9.7s`（3 条／6 spawn＝59.4s）与第 285 页那批 `0.3s／0.3s`（5 条＝4.1s）差约 30 倍，两边**判卷文件都是 `tests/prose-needle-scan.test.ts`**（真仓全扫住在同一个文件里），断言复杂度完全不相干 ⇒ 拆文件的杠杆仍是任务 #21。
+
+4. **head-cert 汇总逐格**（`head-cert-48c21b5.log` 原文）：`依赖核对：该提交声明 10 项，缺 0 项`；`import 面：3065 条边｜悬空 0（其中存量已豁免 0）`；`门表：31 道，其中该笔 package.json 没有同名 script 的 0 道`；`typecheck exit=0（0 报错）`；`认证门面=22 道（跑到 22）｜❌ 红 1 道｜⚠️ 超预算 0`；`TREE=48c21b5 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-48c21b5.lock）`；`Test Files 259 passed (259)｜Tests 3464 passed (3464)｜exit=0（退出码直接取，不接管道）`；`并发判卷=起前 0 套／跑完 0 套（两端独占）`；`本趟墙钟 210.38s（同一进程 hrtime 实测·口径＝起跑→汇总那一行，不含提前退出的那些趟）`；贴帽读数 `3464 条里 1 条用时 ≥ 有效预算 80%`（那条是 `tests/head-cert-deps.test.ts` 的清场读数用例，4391ms/5000ms＝88%，与本笔无关）。`HEADCERT_EXIT=1`。
+
+5. **条数核对式**：`3464 ＝ 3462 ＋ 2`——3462 是第 286 页补 凭证（`0a7242e`）留档值，本笔新增 2 条守恒用例（`tests/prose-needle-scan.test.ts` 77→79，单测文件里也现读：`✓ tests/prose-needle-scan.test.ts (79 tests)`＋`Tests 79 passed (79)`，`vitest-prose-5.log`、`VITEST_EXIT=0`）。锚点表 `1216→1219` 与页面声明一致；`SCOPE_CEILINGS` 与 `LEGACY_*` 一格未动（帽只准调低，本笔连调低都没要）。
+
+6. **归因声明**：唯一那道红是 `❌ gate-check exit=1 4278ms（预算 5400ms）`，HEAD 常驻、属隔壁 `1748ca7` 的 H7（任务 #9），本笔不去动它。所以这一趟**只能写成**「判卷四面 259 文件／3464 条 exit=0 ＋ 门里红 1 道（常驻，非本笔引入）」，写成「全量绿」是假话（规则 211：等级要印出来）。
+
+7. **刻意未做（写纸上，免得下游读成已做）**：① 没把守恒等式的「两侧是否都非零」做成判据——`viaCounts`/`across` 在合成树上天生为 0，靠第 2 页补⑴ 那条自报读数兜（口径已在页面第 5 项声明，`census-fields-3.log` 复跑逐字 `字段 30 个｜等式 30｜只在安全值一侧 0｜零断言 0｜形状认不出 0`，三格哨兵仍 `等式`）；② 没拆判卷文件（任务 #21）；③ 没回收任何 worktree——本会话累计 16 棵全部 `status=0` 待用户点头；④ 没动 `PROGRESS.md` 任何历史页（纯追加，`git diff --numstat -- PROGRESS.md` 必须是「N 0」）；⑤ 没给 `--check-needles`／门加新闸，本笔只加判卷与锚点。
+
+8. **清场结果**（`trees-status-286b.log` 现读）：`verify-p286 status=0`、`head-cert-88bcb7a status=0`、`head-cert-48c21b5 status=0`、`verify-48c21b5 status=0`；`主树 src/＋scripts/ 的 mutbak: 0`；`.worktrees` 全扫只有一颗——`.worktrees/gate-mutate-verify/scripts/lib/shard-plan.ts.mutbak`，那**不是本会话的窗**（规则：别人的 `.mutbak` 不删、不等它跑完前不起尺），原样留着。**回收命令未执行**，等用户明确点头。

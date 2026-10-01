@@ -1,0 +1,12 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-48c21b5.lock）
+变异验证：3 条
+✅ prose-scan-via-counts-bucket-inflated — 三档归类里有一档被凭空 ＋1（从前这一族真的漂过：本地 helper 与字段别名两族写法整族看不见）⇒ 分类不再划分整个收料面，而**总条数**没变、阈值断言全都绿；只有「三档之和＝`needles`」这条守恒会响 ｜本机实测 20.3s／2 拍
+✅ prose-scan-across-list-detached — `across` 清单不再从 rows 里筛（交回空表）⇒ 直方图那一档仍有数、清单是空的：打印「跨插值 N 条」的那句与「它到底是哪几条」从此各说各话（真仓现读 6 条，这条守恒在非零面上才谈得上分辨） ｜本机实测 19.3s／2 拍
+✅ prose-scan-histogram-skips-across-kind — 直方图少记一类（把 `across-interpolation` 从计数里跳过）⇒ 清单还在、汇总数变小，于是「五态各几格」的和不再等于分母，而没人会去加一遍。与上一条正好相反方向：那一支拆清单、这一支拆直方图 ｜本机实测 19.4s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 59.4s · 跑了 3/3 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 6 次／3 条（每条次数分布 2×3）· 单次中位 第1次 9.7s／第2次 9.7s· 最贵一条 prose-scan-via-counts-bucket-inflated 20.3s
+跑法单价：selector 6 拍·中位 9.72s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-48c21b5.lock）
+FULL_EXIT=0

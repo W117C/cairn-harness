@@ -1,0 +1,9 @@
+verify-p286 status=0
+head-cert-88bcb7a status=0
+head-cert-48c21b5 status=0
+verify-48c21b5 status=0
+本会话累计建树=16
+主树 src/＋scripts/ 的 mutbak:
+       0
+.worktrees 全扫 mutbak:
+.worktrees/gate-mutate-verify/scripts/lib/shard-plan.ts.mutbak
