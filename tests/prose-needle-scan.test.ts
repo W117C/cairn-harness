@@ -45,6 +45,13 @@ import {
 
 const src = (path: string, text: string) => ({ path, text });
 
+/** 两支重钩子共用的预算（第 291 页）。为什么这一格要写在代码里而不是靠缺省：
+ *  第 287 页把真仓那趟全扫从 describe 体搬进 `beforeAll`，省下的是**每条锚点 spawn** 的 8.9s，
+ *  换来的是一次「文件级、且吃 vitest 缺省 10s 钩子时限」的活——`scanRepo(真仓)` 冷缓存实测 8.9～9.5s，
+ *  空闲刚好过、隔壁起一套判卷就炸（`e42b4af` 那趟认证就是这一形状：`Hook timed out in 10000ms.`）。
+ *  只给这两支声明，**不调 config 的缺省**：那会把 `tests/` 里全部 210 支钩子一起放宽。 */
+const HOOK_BUDGET_MS = 30_000;
+
 describe("collectNeedles：只收『按诊断字段收字面量』那一类", () => {
   const t = [
     `expect(m.reason).toContain("不足两次同配置重复");`,
@@ -698,7 +705,7 @@ describe("真仓扫：这把尺自己不许空载", () => {
   let r: ScanReport;
   beforeAll(() => {
     r = scanRepo(root);
-  });
+  }, HOOK_BUDGET_MS);
   // 帽不再在这里手抄：真仓那条直接调 `ceilingBreaches(r)`（判卷与 CLI 同一份），
   // 自己 `SCOPE_CEILINGS[r.scope]` 取一次＝把判据抄第二遍，第 108 页那族错误的正身。
 
@@ -952,7 +959,9 @@ describe("合成树那一面：sourceFiles／proseHeldBack／inFlightStale 三�
   beforeAll(() => {
     root = buildTree();
     r = scanRepo(root);
-  });
+  }, HOOK_BUDGET_MS);
+  // `afterAll` 不声明预算：它只做一次 `rmSync` 递归删那棵 7 支文件的合成树（毫秒级），
+  // 缺省 10s 对它够用；真要放宽它就得先有读数说它不够——别给没量过的格子配预算（规则 241）。
   afterAll(() => {
     // 本 suite 一条没被 `-t` 选中时 beforeAll 不跑，`root` 还是 undefined ⇒ 没有目录要收
     if (root !== undefined) rmSync(root, { recursive: true, force: true });
@@ -1016,8 +1025,10 @@ describe("spawn 单价的形状：真仓那一次扫住在 beforeAll 里，不�
   // 判卷读的是**自己这一支文件**的文字，所以两条都用行锚定＋转义写法：搜索式在判卷里只以正则字面量出现，
   // 不会被自己撞上（规则 236/348 那一族：同文件文字判卷一旦写成 toContain 就恒真）。
   const self = readFileSync(fileURLToPath(import.meta.url), "utf8");
-  const LAZY = /^ {2}beforeAll\(\(\) => \{\n {4}r = scanRepo\(root\);\n {2}\}\);/gm;
+  const LAZY = /^ {2}beforeAll\(\(\) => \{\n {4}r = scanRepo\(root\);\n {2}\}, HOOK_BUDGET_MS\);/gm;
   const EAGER = /^ {2}const r = scanRepo\(root\);$/gm;
+  const DECLARED = /^ {2}beforeAll\(\(\) => \{[\s\S]{0,300}?\n {2}\}, HOOK_BUDGET_MS\);/gm;
+  const BUDGETLESS = /^ {2}beforeAll\(\(\) => \{\n {4}r = scanRepo\(root\);\n {2}\}\);/gm;
 
   it("收集期不再扫真仓：那种写法恰好一条", () => {
     expect(self.match(LAZY) ?? []).toHaveLength(1);
@@ -1025,5 +1036,13 @@ describe("spawn 单价的形状：真仓那一次扫住在 beforeAll 里，不�
 
   it("负控：回到 describe 体的急切写法必须不存在（否则每条锚点 spawn 都付 8.9s）", () => {
     expect(self.match(EAGER) ?? []).toHaveLength(0);
+  });
+
+  it("两支重钩子都声明了预算（第 291 页：钩子吃缺省 10s，而冷扫实测 8.9～9.5s）", () => {
+    expect(self.match(DECLARED) ?? []).toHaveLength(2);
+  });
+
+  it("负控：第 287 页落下来那种「搬进钩子但没声明时限」的形状必须已经没了", () => {
+    expect(self.match(BUDGETLESS) ?? []).toHaveLength(0);
   });
 });

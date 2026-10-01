@@ -10413,10 +10413,22 @@ const MUTATIONS = [
     desc: "把这一次真仓扫从 `beforeAll` 搬回 describe 体 ⇒ 判卷照旧全绿，差别只在 vitest 打印的 `import` 那一格：" +
       "「-t 只选中合成面那条」也要付整趟扫（本机实测 9.54s→0.644s）。能挡它的只有形状，秒数本身写成断言就是抖动",
     apply: (s) => s.replace(
-      "  let r: ScanReport;\n  beforeAll(() => {\n    r = scanRepo(root);\n  });",
+      "  let r: ScanReport;\n  beforeAll(() => {\n    r = scanRepo(root);\n  }, HOOK_BUDGET_MS);",
       "  const r = scanRepo(root);"
     ),
     expectFail: "收集期不再扫真仓：那种写法恰好一条",
+  },
+  {
+    id: "prose-scan-heavy-hook-left-on-default-timeout",
+    src: "tests/prose-needle-scan.test.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "把真仓那支 `beforeAll` 的显式时限摘掉（回到第 287 页落下来的形状）⇒ 钩子改吃 vitest 缺省 10s，而 `scanRepo(真仓)` 冷缓存实测 8.9～9.5s：" +
+      "空闲刚好过、隔壁起一套判卷就炸（`e42b4af` 那趟认证就是这条：`Error: Hook timed out in 10000ms.`）。判卷两条各红一次：声明数 2→1、旧形状 0→1",
+    apply: (s) => s.replace(
+      "  beforeAll(() => {\n    r = scanRepo(root);\n  }, HOOK_BUDGET_MS);",
+      "  beforeAll(() => {\n    r = scanRepo(root);\n  });"
+    ),
+    expectFail: "两支重钩子都声明了预算（第 291 页：钩子吃缺省 10s，而冷扫实测 8.9～9.5s）",
   },
 
   /* ── 第 290 页：HEAD 取料面的中文文件名。`git ls-tree --name-only` 默认把非 ASCII 路径转义成带引号的八进制，
