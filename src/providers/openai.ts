@@ -3,10 +3,27 @@
 // 解码规则与迁移前逐字一致：增量在 choices[0].delta.content；tool_calls 按 index 跨块累积
 //（id 首块、name 非空即记、arguments 拼接）；末 chunk 带 usage（后到覆盖）；data: [DONE] 结束。
 import { DEFAULT_STALL_MS, type StallGuard } from "../net";
-import { establishStream } from "./retry";
+import { backoffMs, establishStream, retryableStatus } from "./retry";
 import { turnTruncatedEvent } from "./stop-reason";
 import type { ModelOutput, ProviderMessage, ProviderToolSpec } from "./index";
 import type { RequestMeter, RequestCategory, MeterUsage, RequestOutcome } from "../agent/metering";
+
+/** 流内失败的分类（2026-09-30）：重试与否由**抛出处**决定，不由 catch 处猜字符串。
+ *  理由：判断「这个错能不能重放」需要的信息（是 5xx 还是协议错、是帧坏还是对端挂了）
+ *  只在抛出的那一刻是确定的；拿到 catch 里再靠 message 正则反推，迟早在某个新错误形状上猜错。
+ *  `retryable` 只表示「重放是安全的」——调用方仍要另外确认「本次尝试还没吐过输出」。 */
+export class StreamFailure extends Error {
+  readonly retryable: boolean;
+  constructor(message: string, retryable: boolean) {
+    super(message);
+    this.name = "StreamFailure";
+    this.retryable = retryable;
+  }
+}
+
+/** 流内 error 帧的类型名 → 是否可重放。数值状态码走 `retryableStatus`（唯一事实源）；
+ *  这里的名字是 OpenRouter / 各家网关把 5xx 塞进 body 时用的形状（实测 `server_error` 即 502）。 */
+const RETRYABLE_ERROR_TYPES = new Set(["server_error", "overloaded_error", "rate_limit_exceeded", "timeout"]);
 
 export type OpenAiMessage = ProviderMessage;
 export type OpenAiToolSpec = ProviderToolSpec;
@@ -154,28 +171,33 @@ export async function* streamOpenAI(
       outputTokens: tokenCount(u.completion_tokens), cacheReadInputTokens: read, cacheWriteInputTokens: write };
   };
   try {
-  // 建连段：停滞守卫 + 429/5xx/网络抖动的指数退避重试都在 establishStream 里。
-  // 不变量：一旦 res.ok 就交回本函数，**绝不重放**（流已开始产出后重放会把同一轮 delta 吐两遍）；
-  // 调用方取消与停滞都不重试（前者是用户意图，后者重试等于白挂三分钟）。
-  const est = await establishStream({
-    label,
-    url: endpoint,
-    init: {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: serializedBody,
-    },
-    fetchImpl: doFetch,
-    stallMs: opts.stallTimeoutMs ?? DEFAULT_STALL_MS,
-    ...(call?.signal !== undefined ? { callerSignal: call.signal } : {}),
-  });
-  res = est.res;
-  guard = est.guard;
-
+  /* 流内重试（2026-09-30 实测动因）：`establishStream` 只管到「响应体尚未被消费」那一段，
+   * 而对端把 5xx **塞进 SSE 体里**（HTTP 200 + 一帧 `{"error":{"type":"502",…}}`）时它管不着。
+   * 实测 OpenRouter 的 `502 Provider returned an empty response` 正是这个形状：
+   * 简单请求 200，多轮工具调用一到第 3~9 轮必挂，连续 7 次把整轮任务打死。
+   *
+   * **安全边界**：只有本次尝试「一个输出都还没吐出去」时才允许重放。
+   * 一旦吐过 delta/tool_call，重放会把同一轮内容吐两遍——那比失败更糟（模型看到重复内容），
+   * 建连段那条不变量（上面写着「绝不重放」）正是为这个立的。
+   * 判据三件缺一不可：① 没吐过输出；② 还有次数；③ 不是调用方取消。 */
+  // 非流式分支（摘要器 / 反向验证用）：整段回复转成同一条事件管线，delta 只有 1 个。
+  // 它**不参与流内重试**：没有 delta 边界可言，失败即整轮失败，重放语义归调用方定。
   if (!stream) {
-    // 非流式分支（摘要器/反向验证用）：整段回复转成同一条事件管线，delta 只有 1 个
+    const estNs = await establishStream({
+      label,
+      url: endpoint,
+      init: {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: serializedBody,
+      },
+      fetchImpl: doFetch,
+      stallMs: opts.stallTimeoutMs ?? DEFAULT_STALL_MS,
+      ...(call?.signal !== undefined ? { callerSignal: call.signal } : {}),
+    });
+    const resNs = estNs.res;
     try {
-      const data = (await res.json()) as ChatChunk;
+      const data = (await resNs.json()) as ChatChunk;
       if (data.usage) observeUsage(data.usage);
       const callId = data.id ?? "a-0";
       const msg = data.choices?.[0]?.message;
@@ -196,104 +218,139 @@ export async function* streamOpenAI(
       if (truncated) yield truncated;
       meterOutcome = "ok";
     } finally {
-      guard?.dispose();
+      estNs.guard.dispose();
     }
     return;
   }
 
-  if (!res.body) {
-    guard?.dispose();
-    throw new Error(`${label} 流式响应缺少 body`);
-  }
   const decoder = new TextDecoder();
-  const reader = res.body.getReader();
-  let buf = "";
-  let finished = false;
-  let callId = "a-0";
-  // 跨块累积的工具调用：index → { id, name, arguments }
-  const pending = new Map<number, { id?: string; name: string; args: string }>();
-  let usage: (ModelOutput & { type: "usage" }) | null = null;
-  // finish_reason 只在末 chunk 带（非末 chunk 是 null）：记最后一个非空的，别让 null 覆盖掉读数。
-  let finishReason: string | null | undefined;
-
-  try {
-    while (!finished) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      guard?.bump(); // 有分片 → 续期（只有完全静默才会到点）
-      buf += decoder.decode(value, { stream: true });
-      let nl: number;
-      while ((nl = buf.indexOf("\n")) >= 0) {
-        const line = buf.slice(0, nl).trim();
-        buf = buf.slice(nl + 1);
-        if (!line.startsWith("data:")) continue;
-        const payload = line.slice(5).trim();
-        if (!payload) continue;
-        if (payload === "[DONE]") {
-          finished = true;
-          break;
-        }
-        // C7（审查 P2）容错边界修正（审查 S1-6）：只对「不是帧的行」容错——注释心跳、
-        // 网关塞进来的非 JSON 文本。以 { 开头的真帧 parse 失败不得静默 continue：那意味着
-        // 上游把一帧截断了，跳过 = 少一截正文/少一个 tool_call 分片，而流随后正常收尾会让
-        // 本轮以「不完整输出」成功收束（loop 无从得知）。同文件 parseArgs 的口径就是协议级
-        // 异常 fail loud，这里与之对齐。
-        let chunk: ChatChunk;
-        try {
-          chunk = JSON.parse(payload) as ChatChunk;
-        } catch {
-          if (!payload.startsWith("{")) continue; // 心跳/注释/网关杂帧：容忍
-          throw new Error(`${label} SSE 帧损坏（半帧截断？）：JSON 解析失败，拒绝静默丢字`);
-        }
-        if (chunk.error) {
-          const e = chunk.error;
-          throw new Error(`${label} 流错误 ${e.type ?? e.code ?? "unknown"}: ${e.message ?? ""}`);
-        }
-        if (chunk.id) callId = chunk.id;
-        if (chunk.usage) { usage = toUsage(chunk.usage); observeUsage(chunk.usage); }
-        const fr = chunk.choices?.[0]?.finish_reason;
-        if (fr) finishReason = fr;
-        const delta = chunk.choices?.[0]?.delta;
-        if (delta?.content) {
-          yield { type: "assistant_delta", callId, text: delta.content };
-        }
-        if (delta?.tool_calls) {
-          for (const tc of delta.tool_calls) {
-            const acc = pending.get(tc.index) ?? { id: undefined, name: "", args: "" };
-            if (tc.id) acc.id = tc.id;
-            if (tc.function?.name) acc.name = tc.function.name; // name 只在首块出现
-            if (tc.function?.arguments) acc.args += tc.function.arguments; // arguments 跨块拼接
-            pending.set(tc.index, acc);
+  const STREAM_ATTEMPTS = 3;
+  const streamOnce = async function* (): AsyncGenerator<ModelOutput, void, undefined> {
+    let attempt = 0;
+    let emitted = false;
+    for (;;) {
+      attempt += 1;
+      const est = await establishStream({
+        label,
+        url: endpoint,
+        init: {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+          body: serializedBody,
+        },
+        fetchImpl: doFetch,
+        stallMs: opts.stallTimeoutMs ?? DEFAULT_STALL_MS,
+        ...(call?.signal !== undefined ? { callerSignal: call.signal } : {}),
+        ...(attempt > 1 ? { attempts: 1 } : {}), // 建连段那一层重试上一轮已付过
+      });
+      const res2 = est.res;
+      if (!res2.body) {
+        est.guard.dispose();
+        throw new Error(`${label} 流式响应缺少 body`);
+      }
+      const reader2 = res2.body.getReader();
+      // 每次尝试都从干净状态起：半截 buf 与累积的 tool_call 分片都不能带进下一轮
+      let buf2 = "";
+      let finished2 = false;
+      let callId2 = "a-0";
+      const pending2 = new Map<number, { id?: string; name: string; args: string }>();
+      let usage2: (ModelOutput & { type: "usage" }) | null = null;
+      let finishReason2: string | null | undefined;
+      try {
+        while (!finished2) {
+          const { done, value } = await reader2.read();
+          if (done) break;
+          est.guard.bump();
+          buf2 += decoder.decode(value, { stream: true });
+          let nl: number;
+          while ((nl = buf2.indexOf("\n")) >= 0) {
+            const line = buf2.slice(0, nl).trim();
+            buf2 = buf2.slice(nl + 1);
+            if (!line.startsWith("data:")) continue;
+            const payload = line.slice(5).trim();
+            if (!payload) continue;
+            if (payload === "[DONE]") { finished2 = true; break; }
+            let chunk: ChatChunk;
+            try {
+              chunk = JSON.parse(payload) as ChatChunk;
+            } catch {
+              if (!payload.startsWith("{")) continue; // 心跳/注释/网关杂帧：容忍
+              throw new StreamFailure(`${label} SSE 帧损坏（半帧截断？）：JSON 解析失败，拒绝静默丢字`, false);
+            }
+            if (chunk.error) {
+              const e = chunk.error;
+              const named = typeof e.type === "string" ? e.type : undefined;
+              // 数值可能落在 `type` 也可能落在 `code`，且可能是字符串形式：
+              // OpenRouter 实测用 `"type": "502"`（字符串），官方文档用 `"type":"server_error"`。
+              // 两处都取、都转数，否则「5xx 塞进 body」这个形状会被判成不可重放而继续打死任务。
+              const numeric = [e.type, e.code]
+                .map((v) => (typeof v === "number" ? v : Number(v)))
+                .find((n) => Number.isFinite(n));
+              const retryable = (numeric !== undefined && retryableStatus(numeric))
+                || (named !== undefined && RETRYABLE_ERROR_TYPES.has(named));
+              throw new StreamFailure(
+                `${label} 流错误 ${named ?? e.code ?? "unknown"}: ${e.message ?? ""}`, retryable,
+              );
+            }
+            if (chunk.id) callId2 = chunk.id;
+            if (chunk.usage) { usage2 = toUsage(chunk.usage); observeUsage(chunk.usage); }
+            const fr = chunk.choices?.[0]?.finish_reason;
+            if (fr) finishReason2 = fr;
+            const delta = chunk.choices?.[0]?.delta;
+            if (delta?.content) {
+              emitted = true;
+              yield { type: "assistant_delta", callId: callId2, text: delta.content };
+            }
+            if (delta?.tool_calls) {
+              emitted = true;
+              for (const tc of delta.tool_calls) {
+                const acc = pending2.get(tc.index) ?? { id: undefined, name: "", args: "" };
+                if (tc.id) acc.id = tc.id;
+                if (tc.function?.name) acc.name = tc.function.name;
+                if (tc.function?.arguments) acc.args += tc.function.arguments;
+                pending2.set(tc.index, acc);
+              }
+            }
           }
         }
+        // 收尾三件，顺序与原实现逐字一致：
+        // ① truncated 必须在 tool_call 冲刷**之前**（被截断的 write_file 参数会让 parseArgs 抛，
+        //    排在其后这条记录就永远发不出去——而那恰是最常见的截断形状）；
+        // ② 累积的 tool_call 按 index 稳定排序后吐出；
+        // ③ usage 最后。
+        const truncated = turnTruncatedEvent(callId2, finishReason2, usage2?.outputTokens ?? null);
+        if (truncated) yield truncated;
+        const ordered = [...pending2.entries()].sort((a, b) => a[0] - b[0]);
+        for (const [index, acc] of ordered) {
+          yield {
+            type: "tool_call",
+            id: acc.id ?? `call-${String(index)}`,
+            name: acc.name,
+            args: parseArgs(acc.args, label),
+          };
+        }
+        if (usage2) yield usage2;
+        est.guard.dispose();
+        void reader2.cancel().catch(() => {});
+        return;
+      } catch (err) {
+        est.guard.dispose();
+        void reader2.cancel().catch(() => {});
+        const cancelled = call?.signal?.aborted === true;
+        // 不可重放的失败（协议级：帧损坏 / 非 5xx 的 error 帧）立刻抛，不拿它去打转。
+        const retryable = err instanceof StreamFailure ? err.retryable : true; // 未知形状按可重放（网络抖动那一类）
+        if (emitted || attempt >= STREAM_ATTEMPTS || cancelled || !retryable) throw err;
+        const delay = backoffMs(attempt, 300, 2_000, Math.random);
+        console.warn(
+          `[${label}] 流内失败（第 ${String(attempt)} 次，尚未产出任何输出）⇒ ${String(delay)}ms 后重试：`
+          + (err instanceof Error ? err.message : String(err)),
+        );
+        await new Promise((r) => setTimeout(r, delay));
       }
     }
-
-    // 流正常收尾，但 finish_reason 说这一轮没说完（length＝输出预算到点 / content_filter＝被拦）。
-    // 上面 C7 那条守的是「半帧被截断」，这里守的是「帧到齐、篇幅没给够」——同一句注释点名的
-    // 危害（loop 无从得知），另一支一直没管。
-    // **位置在 tool_call 冲刷之前**：被截断的 write_file 参数会让 parseArgs 抛（同文件既有口径 =
-    // 协议级异常 fail loud），排在其后这条记录就永远发不出去——而那恰好是最常见的截断形状。
-    const truncated = turnTruncatedEvent(callId, finishReason, usage?.outputTokens ?? null);
-    if (truncated) yield truncated;
-
-    // 流结束：吐出累积完成的 tool_call（按 index 稳定排序），再吐 usage
-    const ordered = [...pending.entries()].sort((a, b) => a[0] - b[0]);
-    for (const [index, acc] of ordered) {
-      yield {
-        type: "tool_call",
-        id: acc.id ?? `call-${String(index)}`,
-        name: acc.name,
-        args: parseArgs(acc.args, label),
-      };
-    }
-    if (usage) yield usage;
-    meterOutcome = "ok";
-  } finally {
-    guard?.dispose();
-    // 消费者提前 break / 出错退出时主动取消 body，否则连接与对端资源一直挂着。
-    void reader.cancel().catch(() => {});
-  }
+  };
+  // 流式分支的全部产出（含流内重试与收尾三件）都在 streamOnce 里，这里只负责调用。
+  yield* streamOnce();
   } finally {
     guard?.dispose();
     if (requestId !== undefined) opts.metering!.meter.finishRequest(requestId, call?.signal?.aborted ? "cancelled" : meterOutcome, meterUsage);

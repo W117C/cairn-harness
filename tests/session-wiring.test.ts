@@ -73,10 +73,86 @@ it("distillation consumes session history and its instruction with only remember
   expect(requests).toHaveLength(2);
   expect(requests[1].messages).toContainEqual({ role: "user", content: "USER_TASK" });
   expect(requests[1].messages).toContainEqual({ role: "assistant", content: "TASK_COMPLETED" });
-  expect(requests[1].messages.at(-1)).toEqual({ role: "user", content: DISTILL_INSTRUCTION });
-  expect(requests[1].tools.map((tool) => tool.function.name)).toEqual(["remember"]);
+  /* 沉淀轮的请求形状（2026-09-30 P2 定稿）：**主会话前缀 + 末尾一条沉淀指令**。
+     历史沿革——这格被改过两次，两次都是因为现实变了而不是为了让测试变绿：
+     ① 最初：`messages.at(-1) === DISTILL_INSTRUCTION`。那时 provider 既没 system 也没 requestFace，
+        请求里就只有这一条指令——**而那条指令其实到不了模型**（脚本化通道才读 messages）。
+     ② P2 修缓存：provider 与主会话同前缀 ⇒ 末条变成投影历史尾部，指令不在其中；
+        这一格当时如实断成 `{role:"assistant"}`，并在注释里记下「指令到不了模型」这个缺口。
+     ③ P2 修缺口（本格现状）：指令经 `ephemeralUserTurn` 送到**末尾** ⇒ 末条又是指令，
+        但**前缀同时与主会话同形**（下面两条断的就是这个）。三者互不矛盾：
+        追加在尾部不影响前缀缓存，这也是沉淀轮能拿到 98.8% 命中的原因。 */
+  const last = requests[1].messages.at(-1);
+  expect(last?.role).toBe("user");
+  expect(String(last?.content)).toContain(DISTILL_INSTRUCTION.slice(0, 20));
+  // 前缀同形：system 与工具面都与主会话一致（缓存能不能命中就看这两格）
+  expect(requests[1].messages[0]).toEqual(requests[0].messages[0]);
+  expect(requests[1].tools.map((tool) => tool.function.name)).toEqual(requests[0].tools.map((tool) => tool.function.name));
   expect(signals.every((signal) => signal instanceof AbortSignal)).toBe(true);
   expect(result.some((event) => event.type === "user_message" && event.content === DISTILL_INSTRUCTION)).toBe(false);
+});
+
+/* 沉淀指令**必须**到达真模型（2026-09-30 修复）。
+   缺口原状：真 session provider 以事件日志为唯一事实源（`stream(_messages,_tools)` 明确忽略入参），
+   而 `runSessionEndDistill` 把指令放在**内存的 messages 数组**里 ⇒ 实测那一轮请求是
+   `[system, user:"USER_TASK", assistant:"TASK_COMPLETED"]`，**指令一个字都不在里面**。
+   后果：模型把沉淀轮读成「用户又发了一遍原任务」，不知道四类型纪律、不知道只许调 remember；
+   它照样答「无」，而那恰是常见合法终态，所以这个洞长期没被发现
+   （旧的 tests/distill.test.ts 全绿是因为它喂脚本化 provider，走不到这条路径）。
+   修法：给 session provider 开一条 `ephemeralUserTurn` 通道，指令进**请求末尾**——
+   既不落日志（落日志会被下一轮 context 投影当用户发言重放），又不打掉前缀缓存（追加在尾部）。
+   这条同时钉住两个性质：**送达** 与 **不落日志**（后者由上面那条 user_message 断言守）。 */
+it("沉淀指令真的进到请求里（走真 session provider 这条路）", async () => {
+  dir = await mkdtemp(join(tmpdir(), "session-distill-instruction-"));
+  initSettingsStore(join(dir, "settings.json"));
+  vi.stubEnv("M0A_PROVIDER", "glm");
+  vi.stubEnv("M0_API_KEY", "offline-test-key");
+  const requests: Array<{ messages: Array<{ role: string; content: unknown }> }> = [];
+  vi.stubGlobal("fetch", vi.fn(async (_url, init: RequestInit) => {
+    requests.push(JSON.parse(String(init.body)) as { messages: Array<{ role: string; content: unknown }> });
+    const content = requests.length === 1 ? "TASK_COMPLETED" : "无";
+    return new Response("data: " + JSON.stringify({ choices: [{ delta: { content }, finish_reason: "stop" }] }) + "\n\ndata: [DONE]\n\n", {
+      headers: { "content-type": "text/event-stream" },
+    });
+  }));
+  const result = await runAgent({ workspace: dir, message: "USER_TASK", mode: "auto", logPath: join(dir, "session.jsonl") });
+  expect(requests).toHaveLength(2);
+  const last = requests[1]!.messages.at(-1)!;
+  expect(last.role).toBe("user");
+  expect(String(last.content)).toContain(DISTILL_INSTRUCTION.slice(0, 20));
+  // 送达但不落日志：会话事件流里不许出现这条指令（否则下一轮会被当用户发言重放）
+  expect(result.some((e) => e.type === "user_message" && e.content === DISTILL_INSTRUCTION)).toBe(false);
+});
+
+/* P2（2026-09-30）：沉淀轮的 provider 必须与主会话同前缀，否则前缀缓存一次也命中不了。
+   动因是实测：改前沉淀轮 input 4,417 tok、cacheRead **181**（几乎全价），占整场有效代价 27.4%；
+   改后 cacheRead 8,010/8,116（98.8%），占 5.8%——4,254 → 907 有效 tok。
+   根因：旧写法 `createProvider(promptText, undefined, modelSelection)` 没传 sessionOptions ⇒
+   provider 拿不到 system、也拿不到 requestFace，发出去的请求在很靠前的地方就与主会话分叉。
+   这条钉的就是那两样：**system 载荷与主会话逐字一致**、工具面走同一个 requestFace。 */
+it("沉淀轮的请求与主会话共享同一个前缀（system 同形 + 工具面同形）", async () => {
+  dir = await mkdtemp(join(tmpdir(), "session-distill-prefix-"));
+  initSettingsStore(join(dir, "settings.json"));
+  vi.stubEnv("M0A_PROVIDER", "glm");
+  vi.stubEnv("M0_API_KEY", "offline-test-key");
+  const requests: Array<Record<string, unknown>> = [];
+  vi.stubGlobal("fetch", vi.fn(async (_url, init: RequestInit) => {
+    requests.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+    const content = requests.length === 1 ? "done" : "无";
+    return new Response("data: " + JSON.stringify({ choices: [{ delta: { content }, finish_reason: "stop" }] }) + "\n\ndata: [DONE]\n\n", {
+      headers: { "content-type": "text/event-stream" },
+    });
+  }));
+  await runAgent({ workspace: dir, message: "T", mode: "auto", logPath: join(dir, "session.jsonl") });
+  expect(requests).toHaveLength(2);
+  type Msg = { role: string; content: unknown };
+  const sys = (r: Record<string, unknown>): unknown => (r["messages"] as Msg[])[0]?.content;
+  // system 必须同形：旧写法这一格是 undefined（provider 根本没有 system）
+  expect(sys(requests[1]!)).toBeDefined();
+  expect(sys(requests[1]!)).toEqual(sys(requests[0]!));
+  const names = (r: Record<string, unknown>): string[] =>
+    ((r["tools"] as Array<{ function: { name: string } }> | undefined) ?? []).map((t) => t.function.name);
+  expect(names(requests[1]!)).toEqual(names(requests[0]!));
 });
 
 it("production GLM run restores history and sends tool feedback in a fresh request", async () => {

@@ -14,6 +14,7 @@
     "mutate-needles-check": "node --import tsx scripts/mutate-verify.mjs --check-needles",
     "evidence-typecheck-check": "node --import tsx scripts/evidence-typecheck-check.ts",
     "facts": "node --import tsx scripts/facts.ts",
+    "prompt-cost": "node --import tsx scripts/prompt-cost.ts",
     "tool-choice": "node --import tsx scripts/tool-choice.ts",
     "typecheck": "node --import tsx scripts/typecheck.ts",
     "test": "vitest run --config tests/vitest.config.ts",
@@ -44,7 +45,8 @@
     "cost-per-progress-check": "node --import tsx scripts/cost-per-progress-check.ts",
     "head-import-check": "node --import tsx scripts/head-import-face.ts",
     "head-cert-check": "node --import tsx scripts/head-cert.ts --tree=.worktrees/gate-head-cert",
-    "mutate-verify": "node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify"
+    "mutate-verify": "node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify",
+    "bench": "node --import tsx scripts/loop-eval.ts --tasks fixtures/bench/tasks.json --reps 1 --max-steps 25 --out outputs/bench"
   },
   "devDependencies": {
     "@types/node": "^26.5.0",

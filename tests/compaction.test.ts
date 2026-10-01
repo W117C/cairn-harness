@@ -497,12 +497,35 @@ describe("withModelBudget（inputLimit 换成模型真实窗口）", () => {
     expect(withModelBudget(DEFAULT_COMPACTION_CONFIG, 200_000).inputLimit).toBe(200_000);
     expect(withModelBudget(DEFAULT_COMPACTION_CONFIG, 32_000).inputLimit).toBe(32_000);
   });
-  it("窗口不可得 / 非有限 / 放不下输出预留 → 原样返回（保守回落，不放大也不炸）", () => {
+  it("窗口不可得 / 非有限 / 非正 → 原样返回（保守回落，不放大也不炸）", () => {
     for (const w of [undefined, Number.NaN, Number.POSITIVE_INFINITY, 0, -1]) {
       expect(withModelBudget(DEFAULT_COMPACTION_CONFIG, w)).toBe(DEFAULT_COMPACTION_CONFIG);
     }
-    expect(withModelBudget(DEFAULT_COMPACTION_CONFIG, DEFAULT_COMPACTION_CONFIG.maxOutputReserve))
-      .toBe(DEFAULT_COMPACTION_CONFIG);
+  });
+  /* 输出预留要跟着窗口缩（2026-09-30 实测的缺口）。
+     旧口径：预留恒 8192，与窗口无关。于是 `--ctx-window 12000` 时可用输入只剩 3808，
+     而工具面 + 系统提示词的固定开销 ~3500 ⇒ **连第一轮都发不出去**：
+     实测 `[context_budget_exceeded] final estimated input 4471; available 3808`，
+     且紧急截断已经跑过（compaction 事件在场）仍塞不下——因为占大头的是工具面，
+     压缩历史对它结构性无效。修后同一命令 exit=0、verify ok、4 次压缩、maxInput 6102 < 9000。
+     这一格同时废掉了旧断言「窗口 == 预留 ⇒ 原样返回」：那个行为正是缺口本身
+     （窗口等于预留时可用输入为 0，不缩放就没有任何可用输入）。 */
+  it("★ 小窗口下预留按窗口缩，可用输入必须容得下工具面+系统提示词的固定开销", () => {
+    const FLOOR = 3_500; // 实测的固定开销（15 件工具说明书 + 系统提示词）
+    for (const w of [8_000, 12_000, 16_000, 32_000]) {
+      const c = withModelBudget(DEFAULT_COMPACTION_CONFIG, w);
+      expect(c.inputLimit).toBe(w);
+      expect(c.maxOutputReserve).toBeLessThanOrEqual(Math.floor(w / 4));
+      expect(c.inputLimit - c.maxOutputReserve, `窗口 ${String(w)} 下可用输入要装得下固定开销`).toBeGreaterThan(FLOOR);
+    }
+  });
+  it("大窗口保持缺省预留（不为大窗口白白压小输出空间）", () => {
+    expect(withModelBudget(DEFAULT_COMPACTION_CONFIG, 128_000).maxOutputReserve).toBe(8_192);
+    expect(withModelBudget(DEFAULT_COMPACTION_CONFIG, 1_000_000).maxOutputReserve).toBe(8_192);
+  });
+  it("预留有下限 1024：极窄窗口也不给 0（0 预留 = 输出必被砍，那是静默降质）", () => {
+    expect(withModelBudget(DEFAULT_COMPACTION_CONFIG, 2_000).maxOutputReserve).toBe(1_024);
+    expect(withModelBudget(DEFAULT_COMPACTION_CONFIG, 100).maxOutputReserve).toBe(1_024);
   });
 });
 

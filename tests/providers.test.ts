@@ -34,13 +34,14 @@ async function loadLines(rel: string): Promise<string[]> {
 
 function stubFetch(lines: string[]): typeof fetch {
   const encoder = new TextEncoder();
-  const stream = new ReadableStream<Uint8Array>({
+  // 每次调用现造一条流与一个 Response：Response.body 是一次性的，
+  // 复用同一个实例在重试路径上会抛 "body object should not be disturbed or locked"。
+  return (async () => new Response(new ReadableStream<Uint8Array>({
     start(controller) {
       for (const l of lines) controller.enqueue(encoder.encode(l + "\n"));
       controller.close();
     },
-  });
-  return (async () => new Response(stream, { status: 200, headers: { "content-type": "text/event-stream" } })) as unknown as typeof fetch;
+  }), { status: 200, headers: { "content-type": "text/event-stream" } })) as unknown as typeof fetch;
 }
 
 async function collect(iter: AsyncIterable<AgentEvent>): Promise<AgentEvent[]> {
@@ -350,3 +351,75 @@ describe("BYOK 可达性（env 名映射 + byokGapsOf 逐格）", () => {
   });
 });
 
+
+/* 流内 5xx 的重试（2026-09-30 实测动因）。
+ *
+ * 现象：OpenRouter 把上游失败**塞进 SSE 体**（HTTP 200 + 一帧 `{"error":{"type":"502",…}}`），
+ * 而 `establishStream` 只覆盖「响应体尚未被消费」那一段 ⇒ 这种错误直接打死整轮任务。
+ * 实测代价：连续 7 次真模型跑，全部在第 3~9 轮挂在这个 502 上（简单请求 200，多轮工具调用必挂）。
+ *
+ * 安全边界（本组要钉的核心）：**只有在本次尝试一个输出都没吐出去时**才允许重放。
+ * 吐过 delta/tool_call 再重放会把同一轮内容吐两遍——那比失败更糟（模型看到重复内容），
+ * 建连段那条不变量（openai.ts 里写着「绝不重放」）正是为这个立的。
+ */
+describe("streamOpenAI：流内失败的重试边界", () => {
+  const enc = new TextEncoder();
+  // 每次调用都要**新造**一个 Response：Response 的 body 是一次性的（读过即 locked），
+  // 重试路径上复用同一个实例会拿到 "body object should not be disturbed or locked"
+  // —— 那条错会盖住真正要验的重试语义。
+  const sse = (frames: string[]): Response =>
+    new Response(new ReadableStream<Uint8Array>({
+      start(c) { for (const f of frames) c.enqueue(enc.encode(f + "\n")); c.close(); },
+    }), { status: 200, headers: { "content-type": "text/event-stream" } });
+  const delta = (text: string): string => "data: " + JSON.stringify({ choices: [{ delta: { content: text } }] });
+  const errFrame = (type: string, msg: string): string => "data: " + JSON.stringify({ error: { type, message: msg } });
+  const DONE = "data: [DONE]";
+
+  it("首帧就是流内 502（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完", async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls += 1;
+      return calls === 1
+        ? sse([errFrame("502", "Provider returned an empty response")])
+        : sse([delta("ok"), DONE]);
+    }) as unknown as typeof fetch;
+    const events = await collect(streamOpenAI(USER, { apiKey: "test", baseURL: "https://x.test/v1", fetchImpl }, [SPEC]));
+    expect(calls).toBe(2); // 真的重试了
+    expect(mergeAssistantDeltas(deltasOf(events))).toBe("ok"); // 且拿到的是第二次的内容
+  });
+
+  it("★ 反向哨兵：已经吐过 delta 之后再失败 ⇒ **不许重放**（重放会把同一轮吐两遍）", async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls += 1;
+      // 第一次：先吐半句正文，再报 502 —— 这时已经有输出出去了
+      return sse([delta("半"), errFrame("502", "boom")]);
+    }) as unknown as typeof fetch;
+    await expect(collect(streamOpenAI(USER, { apiKey: "test", baseURL: "https://x.test/v1", fetchImpl }, [SPEC])))
+      .rejects.toThrow(/流错误 502/);
+    expect(calls).toBe(1); // 一次就够：没有重放
+  });
+
+  it("非 5xx 的流内错误不重试（协议级异常重放只会再错一次并白烧预算）", async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls += 1;
+      return sse([errFrame("invalid_request_error", "bad tool schema")]);
+    }) as unknown as typeof fetch;
+    await expect(collect(streamOpenAI(USER, { apiKey: "test", baseURL: "https://x.test/v1", fetchImpl }, [SPEC])))
+      .rejects.toThrow(/流错误/);
+    expect(calls).toBe(1);
+  });
+
+  it("重试次数有上限：连续失败不会无限打转", async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls += 1;
+      return sse([errFrame("502", "always down")]);
+    }) as unknown as typeof fetch;
+    await expect(collect(streamOpenAI(USER, { apiKey: "test", baseURL: "https://x.test/v1", fetchImpl }, [SPEC])))
+      .rejects.toThrow(/流错误 502/);
+    expect(calls).toBeGreaterThan(1); // 确实重试过
+    expect(calls).toBeLessThanOrEqual(3); // 但没有无限重试
+  });
+});

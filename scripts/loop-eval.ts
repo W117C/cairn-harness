@@ -49,6 +49,29 @@ const SHORT_SYSTEM = [
 ].join("\n");
 
 /** CNY/百万 token——取自端点自己 /v1/models 的 catalog（中转价，不等于厂商官方价）。 */
+/* 凭据解析（2026-09-30）：M0_* 三个优先；缺了回退到**主 CLI 用的那一套**
+ *  （OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL）。
+ *  为什么要这条回退：度量台的价值在于**随手能跑**。要求用户为评测再配一套凭据，
+ *  结果就是它变成"需要准备才敢跑"的东西，而不会被跑——CLI 已经在用的那份没有理由重配。
+ *  OPENAI_BASE_URL 给的是 base（`…/v1`），这里补 `/chat/completions`：
+ *  与 `providers/openai.ts` 的归一规则同一口径（给全了也认）。 */
+const BENCH_ENDPOINT = process.env.M0_ENDPOINT
+  ?? (() => {
+    const base = (process.env.OPENAI_BASE_URL ?? "").trim().replace(/\/+$/, "");
+    if (base === "") return undefined;
+    return base.endsWith("/chat/completions") ? base : base + "/chat/completions";
+  })();
+const BENCH_API_KEY = process.env.M0_API_KEY ?? process.env.OPENAI_API_KEY;
+const BENCH_MODEL = process.env.M0_MODEL ?? process.env.OPENAI_MODEL;
+/* 回填到装配真正读的那组变量（`streamGlm` 直接读 `M0_API_KEY`，不走参数）：
+ *  不这么做的话，上面那条"回退到 CLI 那套凭据"就只是**看起来**通了——
+ *  实测：用 OPENAI_* 跑，三条任务全部 FAIL，报「M0_API_KEY 未设置」，
+ *  而报错来自 provider 内部、与评测逻辑无关。凭据靠 env 是既有设计（key 不落文件），
+ *  这里只是把同一个值放到装配读得到的那个名字上，不新增存储、不新增路径。
+ *  只在原本为空时回填：显式给了 M0_* 的调用方语义不变。 */
+if (!process.env.M0_API_KEY && BENCH_API_KEY) process.env.M0_API_KEY = BENCH_API_KEY;
+if (!process.env.M0_ENDPOINT && BENCH_ENDPOINT) process.env.M0_ENDPOINT = BENCH_ENDPOINT;
+if (!process.env.M0_MODEL && BENCH_MODEL) process.env.M0_MODEL = BENCH_MODEL;
 const PRICE_IN = Number(process.env.EVAL_PRICE_IN ?? "0.8");
 const PRICE_OUT = Number(process.env.EVAL_PRICE_OUT ?? "2.8");
 
@@ -169,6 +192,62 @@ function isWriter(name: string): boolean {
   return WRITERS.has(name);
 }
 
+/* 资源采样（2026-09-30 P4 补的那一格）：objective 里写着「CPU/内存占用低（单人 + 多 agent 开发机）」，
+ *  但在这之前**没有任何读数落盘**——只有我聊天里报过一次 185MB。
+ *  没有读数的目标等于没有目标，所以补成读数的一部分：
+ *    · rssPeakMb —— 本次会话（含它 spawn 的子进程）的**峰值**常驻内存；
+ *    · procPeak   —— 同刻的 node 进程数峰值；
+ *    · cpuMs      —— 会话自身的 CPU 时间（user+system，us 转 ms）。
+ *  为什么用 `ps` 而不是别的手段：零依赖（本仓依赖面刻意小），且它能一并数到子进程——
+ *  而 agent 的内存压力**主要来自子进程**（沙箱里跑的测试、LSP、worker），只量自己会严重低估。
+ *  口径说清楚：这是**一台机器上的相对读数**，不是厂商级剖析；
+ *  它的用途是「这次改动有没有把占用搞上去」，不是给绝对性能下结论。 */
+interface ResourceSample { rssPeakMb: number; procPeak: number; cpuMs: number; samples: number }
+
+function startResourceSampler(): () => ResourceSample {
+  const pid = process.pid;
+  let rssPeakKb = 0;
+  let procPeak = 0;
+  let samples = 0;
+  const tick = (): void => {
+    try {
+      // 自身 + 后代：ps 的 %cpu/rss 是瞬时的，这里只取 rss 与进程数
+      const r = spawnSync("ps", ["-eo", "pid,ppid,rss,comm"], { encoding: "utf8", timeout: 2_000 });
+      const out = r.stdout ?? "";
+      const lines = out.trim().split("\n").slice(1);
+      const rows = lines.map((l) => l.trim().split(/\s+/)).filter((c) => c.length >= 4);
+      const kids = new Set<number>([pid]);
+      // 一轮传播即可覆盖「本进程 → 直接子进程」；沙箱/子 shell 再深一层靠 comm 含 node 兜住
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const c of rows) {
+          const p0 = Number(c[0]);
+          const pp = Number(c[1]);
+          if (kids.has(pp) && !kids.has(p0)) { kids.add(p0); grew = true; }
+        }
+      }
+      let rss = 0;
+      for (const c of rows) {
+        if (!kids.has(Number(c[0]))) continue;
+        const kb = Number(c[2]);
+        if (Number.isFinite(kb)) rss += kb;
+      }
+      if (rss > rssPeakKb) rssPeakKb = rss;
+      if (kids.size > procPeak) procPeak = kids.size;
+      samples += 1;
+    } catch { /* 采样失败不影响评测：它只是读数，不是判据 */ }
+  };
+  tick();
+  const timer = setInterval(tick, 500);
+  return () => {
+    clearInterval(timer);
+    tick();
+    const cpu = process.cpuUsage();
+    return { rssPeakMb: Math.round(rssPeakKb / 1024), procPeak, cpuMs: Math.round((cpu.user + cpu.system) / 1000), samples };
+  };
+}
+
 interface Reading {
   id: string; name: string; rep: number; system: string;
   seedVerifyOk: boolean;
@@ -179,6 +258,8 @@ interface Reading {
   verified: number; verifyOkLast: boolean | null; autoVerifyBeat: boolean;
   wroteTests: boolean; touchedJudge: boolean; onlySrcChanged: boolean;
   changedFiles: string[]; exitError: string | null;
+  /** 本次会话的资源占用（见 startResourceSampler 的口径说明）。 */
+  resources: ResourceSample;
 }
 
 async function listFiles(dir: string, base: string = dir, acc: string[] = []): Promise<string[]> {
@@ -238,6 +319,7 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
   // 一次 e2e/agent/gate 就地重置 ⇒ 不能拿它当全局 gate，但必须逐格记进读数：
   // 「模型把红修到绿」与「模型从绿开始又弄红了」是两个完全不同的结论。
   const seedVerifyOk = (await runVerifyOutcome(work, EVAL_EXEC)).ok;
+  const stopSampler = startResourceSampler();
   let exitError: string | null = null;
   try {
     await runLoop({
@@ -245,6 +327,10 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
         system,
         workspace: work,
         requestFace: () => ({ tools: face.specs, note: face.note }),
+        // 显式递模型名：provider 不传的话走 `process.env.M0_MODEL ?? "glm-5.2"`，
+        // 而用 OPENAI_MODEL 配的路由（如 OpenRouter 的自由档）在这里就会被静默换成 glm-5.2 ⇒
+        // 请求打到不是你要测的那个模型上。压缩摘要器也吃这个值，两处同源。
+        ...(BENCH_MODEL !== undefined && BENCH_MODEL !== "" ? { model: BENCH_MODEL } : {}),
       }),
       events: driven,
       workspace: work,
@@ -260,6 +346,7 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
     exitError = err instanceof Error ? err.message : String(err);
   }
   const seconds = (Date.now() - started) / 1000;
+  const resources = stopSampler();
 
   const ev = await replay(eventsPath);
   const calls = ev.filter((e) => e.type === "tool_call") as Extract<AgentEvent, { type: "tool_call" }>[];
@@ -329,7 +416,7 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
     verified: calls.filter((c) => c.name === "verify").length,
     verifyOkLast: verifies.length > 0 ? verifies[verifies.length - 1]!.ok : null,
     autoVerifyBeat: verifies.some((v) => (v as { auto?: boolean }).auto === true),
-    wroteTests, touchedJudge, onlySrcChanged, changedFiles: changed, exitError,
+    wroteTests, touchedJudge, onlySrcChanged, changedFiles: changed, exitError, resources,
   };
 }
 
@@ -376,7 +463,7 @@ function reportFeasibility(tasks: readonly EvalTask[]): void {
   };
   const probe: EnvProbe = {
     hasRepoSnapshot: (t) => existsSync(resolve(ROOT, t.seed.path)),
-    hasCredentials: () => Boolean(process.env.M0_API_KEY && process.env.M0_ENDPOINT),
+    hasCredentials: () => Boolean(BENCH_API_KEY && BENCH_ENDPOINT),
     canRunVerifier: (t) => t.verifier === undefined || canRunVerifier(t.verifier.command),
   };
   const rows = tasks.map((t) => ({ id: t.id, r: feasibility(specOf(t), probe) }));
@@ -410,8 +497,8 @@ if (tasks.some((t) => t.external)) {
   console.error("[loop-eval] 任务集含外部基准条目 ⇒ 本跑器（GLM 会话装配 + node 靶子）跑不了它；先加 --feasibility 看缺口");
   process.exit(1);
 }
-if (!process.env.M0_API_KEY || !process.env.M0_ENDPOINT) {
-  console.log("[loop-eval] 暗卷缺席（无 M0_API_KEY / M0_ENDPOINT）——显式跳过，不出数（未证 ≠ 通过）");
+if (!BENCH_API_KEY || !BENCH_ENDPOINT) {
+  console.log("[loop-eval] 暗卷缺席（无 M0_API_KEY/M0_ENDPOINT，也没有 OPENAI_API_KEY/OPENAI_BASE_URL）——显式跳过，不出数（未证 ≠ 通过）");
   console.log("[loop-eval] 想知道「现在能不能量、缺什么」：加 --feasibility（零花费，不发模型请求）");
   process.exit(0);
 }
@@ -429,7 +516,7 @@ for (let rep = 1; rep <= REPS; rep++) {
       + `读先于写=${r.readsBeforeFirstWrite} clarify=${String(r.clarified)} 先批后写=${r.plannedBeforeWrite ? "Y" : "N"} `
       + `verify=${String(r.verified)}→${String(r.verifyOkLast)} 工具=${String(r.toolCalls)}/${String(r.toolFailures)}败 `
       + `重复=${String(r.repeatedSameAction)} 请求=${String(r.requests)} tok=${String(r.tokensIn)}/${String(r.tokensOut)} `
-      + `¥${r.cny.toFixed(4)} ${String(Math.round(r.seconds))}s`
+      + `¥${r.cny.toFixed(4)} ${String(Math.round(r.seconds))}s 内存峰=${String(r.resources.rssPeakMb)}MB/${String(r.resources.procPeak)}进程 cpu=${String(r.resources.cpuMs)}ms`
       + (g.fails.length > 0 ? " 〔" + g.fails.join("；") + "〕" : ""),
     );
   }

@@ -45,8 +45,26 @@ export const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
  *  （多烧一次摘要调用 + 白丢冷细节），小窗口模型上又会超预算 400。双向都错。
  *  窗口不可得 / 非有限 / 连输出预留都放不下 ⇒ 原样返回（保守回落，不放大也不炸）。 */
 export function withModelBudget(config: CompactionConfig, ctxWindow: number | undefined): CompactionConfig {
-  if (typeof ctxWindow !== "number" || !Number.isFinite(ctxWindow) || ctxWindow <= config.maxOutputReserve) return config;
-  return { ...config, inputLimit: ctxWindow };
+  if (typeof ctxWindow !== "number" || !Number.isFinite(ctxWindow) || ctxWindow <= 0) return config;
+  return { ...config, inputLimit: ctxWindow, maxOutputReserve: scaledOutputReserve(ctxWindow, config.maxOutputReserve) };
+}
+
+/** 输出预留按窗口缩放（2026-09-30 实测的缺口）。
+ *
+ *  缺省预留 8192 是按 128k 窗口定的；窗口一小就**吃掉大半预算**。实测：
+ *  `--ctx-window 12000` 时可用输入只剩 12000 − 8192 = **3808**，而工具面 + 系统提示词
+ *  的固定开销就有 ~3,500，再加一句用户消息 —— 连第一轮都发不出去：
+ *  实测报了 `[context_budget_exceeded] final estimated input 4471; available 3808`，
+ *  而且**紧急截断已经跑过了**（compaction 事件在场、摘了 4 条最旧事件）仍然塞不下：
+ *  因为占大头的是工具面，不是历史，压缩历史对这块**结构性无效**。
+ *  这等于「小窗口模型 + 默认配置」是开箱即坏的，而它本该是能跑的。
+ *
+ *  口径：预留不超过窗口的 1/4，也不超过缺省的 8192。
+ *  取 1/4 而不是更小，是因为输出被截断（finish_reason=length）是**静默降质**：
+ *  它不报错、只是把答案砍半，比「多发几轮」隐蔽得多，所以不给太小的预留。 */
+export function scaledOutputReserve(ctxWindow: number, defaultReserve = DEFAULT_COMPACTION_CONFIG.maxOutputReserve): number {
+  if (!Number.isFinite(ctxWindow) || ctxWindow <= 0) return defaultReserve;
+  return Math.max(1_024, Math.min(defaultReserve, Math.floor(ctxWindow / 4)));
 }
 
 // ---- token 估算：chars/4 + usage 事件校准（零 tokenizer 依赖，§7.7）----

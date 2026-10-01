@@ -127,8 +127,10 @@ describe("automationTools:false —— 规格面与执行面一起摘（同一�
 
   it("执行面读的是同一个字段（改一面忘另一面 = 本文件开头那条失败形状）", () => {
     const runner = readFileSync(join(ROOT, "src", "main", "agent-runner.ts"), "utf8");
-    // 执行面：installAppTools 的 opt-out 吃 opts.automationTools
-    expect(runner).toContain("installAppTools({ automation: opts.automationTools })");
+    // 执行面：installAppTools 的 opt-out 吃 opts.automationTools。
+    // 2026-09-30 起同一行还带可选工具的摘除名单（omitTools）——两个开关同源同一个调用，
+    // 所以判据从「逐字相等」放宽成「这一句里两个字段都在」，而不是把新的那半截删掉不判。
+    expect(runner).toMatch(/installAppTools\(\{\s*automation: opts\.automationTools,[\s\S]{0,120}omitTools/);
     // 规格面：同一个字段经 faceArgs 进 sessionToolFace
     expect(runner).toContain("automationTools: opts.automationTools,");
     // 两面在同一个函数里汇到一处：漏了任一条拼接，下面那条 specFace 摘除就没人喂
@@ -184,14 +186,14 @@ describe("执行面的进程级守卫：同值空转、异值当场拒（M-2）"
   it("异值当场拒：先 false 后装 ⇒ 抛，且点名两面（否则模型看得见却调不到）", async () => {
     const { install, present } = await freshInstall();
     install({ automation: false });
-    expect(() => install()).toThrow(/automationTools 与第一场不一致/);
+    expect(() => install()).toThrow(/能力开关与第一场不一致/);
     expect(present(), "抛了也不许偷偷补装——那正是让两面分家的那一步").toEqual([]);
   });
 
   it("反方向同样拒：先装后 false ⇒ 抛（只堵一个方向等于把另一半留给下一个人）", async () => {
     const { install, present } = await freshInstall();
     install();
-    expect(() => install({ automation: false })).toThrow(/automationTools 与第一场不一致/);
+    expect(() => install({ automation: false })).toThrow(/能力开关与第一场不一致/);
     expect(present()).toEqual([...AUTOMATION_TOOL_NAMES]);
   });
 });

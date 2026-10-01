@@ -409,7 +409,26 @@ function readOnlyDescriptions(specs: GlmToolSpec[]): GlmToolSpec[] {
     return alt === undefined ? s : { ...s, function: { ...s.function, description: alt } };
   });
 }
-
+/** 能力没开时可以摘掉的可选工具（2026-09-30 实测读数，`pnpm prompt-cost`）。
+ *  为什么要有这张表：固定开销 2286 tok/轮，而它是**每一轮**重送的静态段；
+ *  其中 354 tok 属于「这个能力这一轮根本没开、挂着说明书只有成本没有能力」：
+ *   · refine_goal  85 tok —— 没武装长任务目标时该工具**恒 fail-closed**
+ *     （refine_goal.ts：view === null 即返回「这个会话没有已武装的长任务目标」）；
+ *   · remember    269 tok —— `autoMemory` 关掉后没有自动消费者。
+ *  摘除必须**规格面与执行面同时**（`installAppTools` 的同名开关）：
+ *  只摘一头就是本仓点名的两种失败形状（模型看得见却调不到 / 调得到却看不见）。 */
+export const OPTIONAL_TOOL_NAMES = {
+  goalTools: ["refine_goal"],
+  memoryTools: ["remember"],
+  /** 子代理三件套：**固定开销里最大的一块（611 tok/轮）**，且它是每一轮重送的静态段。
+   *  缺省挂（能力 4 的正面）；`settings.subagentTools: false` 时整族从模型面摘掉。
+   *  关掉它不是为了省钱省到抠——是给「这一轮根本不派 worker」的任务一个诚实的开关：
+   *  看不见的工具不会被尝试，模型也就不会把一轮花在派一个派不出来的 worker 上。 */
+  subagentTools: ["spawn_agent", "wait_for_agents", "cancel_agents"],
+  /** `.agent/lsp.json` 没配（或显式 `{"lsp": false}`）时 lsp 工具**必然抛**
+   *  「未启用——工作区 .agent/lsp.json 缺少 lsp 配置」（lsp.ts:602）⇒ 挂着它只有成本没有能力。 */
+  lspTools: ["lsp"],
+} as const;
 /** 运行时注入的工具（插件 skill / MCP server 工具）的模型可见规格。
  *  MCP 侧 parameters 直接是 server 的 inputSchema 原文——不翻译、不裁剪，避免两套 schema 漂移。 */
 export interface SessionPluginTool {
@@ -433,9 +452,13 @@ export function sessionToolSpecs(
     pluginTools?: readonly SessionPluginTool[];
     /** 返回摘除者（skill / command 的调用名）= 该工具本 turn 不可用；null / undefined = 保留。 */
     skillDenial?: (name: string) => string | null;
+    /** 本 run 没开的能力对应的工具名（见 OPTIONAL_TOOL_NAMES）：从模型可见面摘掉，
+     *  与执行面 `installAppTools` 的同名开关必须同进同退。 */
+    omitTools?: readonly string[];
   } = {},
 ): { specs: GlmToolSpec[]; skipped: string[]; removed: { name: string; by: string }[]; note: string } {
-  const specs = gateToolSpecs(opts.mode);
+  const omit = new Set(opts.omitTools ?? []);
+  const specs = gateToolSpecs(opts.mode).filter((s) => !omit.has(s.function.name));
   const seen = new Set(specs.map((s) => s.function.name));
   const skipped: string[] = [];
   for (const tool of opts.pluginTools ?? []) {
@@ -557,6 +580,17 @@ export function composeTurnMessages(opts: {
   surfaceNote?: string;
   /** Validated local attachment paths. Never contains file contents. */
   attachmentContext?: string;
+  /** 本请求末尾额外追加的一条 user 消息，**不进事件日志**（2026-09-30 P2）。
+   *
+   *  为什么需要这条通道：真 session provider 以事件日志为唯一事实源（`stream(_messages,_tools)`
+   *  明确忽略入参），所以「只在内存 messages 里塞一条指令」是发不出去的——
+   *  会话末沉淀轮就踩在这个洞上：指令一个字都没到模型，模型把那一轮读成「用户又发了一遍原任务」。
+   *  而把指令写进日志也不行：下一轮 context 投影会把它当成用户的真实发言重放。
+   *  两者都不是，所以单开一条「只在本次请求里存在」的通道。
+   *
+   *  位置在**末尾**：前缀缓存按前缀匹配，追加在尾部不动前面任何一段，
+   *  所以这一条不会把主会话已经攒下的缓存打掉（沉淀轮能拿到 98.8% 命中就是靠这个）。 */
+  ephemeralUserTurn?: string;
 }): GlmMessage[] {
   const msgs: GlmMessage[] = [];
   if (opts.system) msgs.push({ role: "system", content: opts.system });
@@ -572,6 +606,10 @@ export function composeTurnMessages(opts: {
   if (opts.surfaceNote) msgs.push({ role: "system", content: opts.surfaceNote });
   if (opts.attachmentContext) msgs.push({ role: "system", content: opts.attachmentContext });
   for (const m of opts.history) msgs.push(m);
+  // 末尾那条临时 user 消息：位置在最后，前面一段逐字不动（前缀缓存靠这个才不被打掉）。
+  if (opts.ephemeralUserTurn !== undefined && opts.ephemeralUserTurn !== "") {
+    msgs.push({ role: "user", content: opts.ephemeralUserTurn });
+  }
   return msgs;
 }
 
@@ -616,6 +654,10 @@ export function createGlmSessionProvider(
     attachmentContext?: string;
     /** Provider label used in summarizer failures when transport is not GLM. */
     transportLabel?: string;
+    /** 本 provider 每次请求末尾追加的临时 user 消息（不进日志）。见 `composeTurnMessages` 上那条注释：
+     *  会话末沉淀轮用它把指令送进请求——既不落日志（否则下一轮会被当用户发言重放），
+     *  又能真正到达模型。缺省 undefined = 零行为。 */
+    ephemeralUserTurn?: string;
     solpi?: SolpiRuntime;
   } = {},
 ): Provider {
@@ -861,6 +903,7 @@ export function createGlmSessionProvider(
         ...(skillsBlock ? { skills: skillsBlock } : {}),
         ...(surfaceNoteText ? { surfaceNote: surfaceNoteText } : {}),
         ...(opts.attachmentContext ? { attachmentContext: opts.attachmentContext } : {}),
+        ...(opts.ephemeralUserTurn !== undefined ? { ephemeralUserTurn: opts.ephemeralUserTurn } : {}),
       });
       // 压缩重写代价的**实测**（不是估算）：本轮装配与上一轮比，头部仍然逐字相同的那段占多少。
       // 只有本轮真的压过才记账——prune/skill 重挂造成的抖动不归这条策略管（它们各有判据）。
