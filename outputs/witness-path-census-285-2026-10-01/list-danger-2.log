@@ -1,0 +1,51 @@
+{
+  "total": 49,
+  "parsed": 49,
+  "dangerTotal": 16,
+  "baselineFiles": 8,
+  "baselineSum": 12,
+  "新补档那两支": [
+    {
+      "file": "outputs/selector-uniqueness-2026-09-30/diagnose.mts",
+      "code": "TS7053",
+      "line": "outputs/selector-uniqueness-2026-09-30/diagnose.mts(78,27): error TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index "
+    },
+    {
+      "file": "outputs/selector-uniqueness-2026-09-30/diagnose.mts",
+      "code": "TS7053",
+      "line": "outputs/selector-uniqueness-2026-09-30/diagnose.mts(78,45): error TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index "
+    },
+    {
+      "file": "outputs/selector-uniqueness-2026-09-30/diagnose.mts",
+      "code": "TS2339",
+      "line": "outputs/selector-uniqueness-2026-09-30/diagnose.mts(86,37): error TS2339: Property 'templated' does not exist on type '{ kind: string; hits: number; titles: never[]; id: "
+    },
+    {
+      "file": "outputs/sequencer-dynamic-2026-10-01/probe-prod.mts",
+      "code": "TS2459",
+      "line": "outputs/sequencer-dynamic-2026-10-01/probe-prod.mts(11,75): error TS2459: Module '\"../../src/agent/orchestrator.js\"' declares 'AgentEvent' locally, but it is not exported"
+    },
+    {
+      "file": "outputs/sequencer-dynamic-2026-10-01/probe.mts",
+      "code": "TS2305",
+      "line": "outputs/sequencer-dynamic-2026-10-01/probe.mts(13,27): error TS2305: Module '\"../../src/events/index.js\"' has no exported member 'ProviderMessage'."
+    }
+  ]
+}
+outputs/anchor-resolvability-2026-09-23/measure-anchor.mts TS2551｜outputs/anchor-resolvability-2026-09-23/measure-anchor.mts(110,14): error TS2551: Property 'line' does not exist on type '{ kind: "path" | "basename-unique" | "basename-a
+outputs/anchor-resolvability-2026-09-23/measure-anchor.mts TS2551｜outputs/anchor-resolvability-2026-09-23/measure-anchor.mts(110,41): error TS2551: Property 'line' does not exist on type '{ kind: "path" | "basename-unique" | "basename-a
+outputs/head-cert-drift-witness-2026-09-27/witness.mts TS2339｜outputs/head-cert-drift-witness-2026-09-27/witness.mts(46,7): error TS2339: Property 'stdout' does not exist on type 'never'.
+outputs/head-cert-drift-witness-2026-09-27/witness.mts TS2339｜outputs/head-cert-drift-witness-2026-09-27/witness.mts(54,7): error TS2339: Property 'stderr' does not exist on type 'never'.
+outputs/head-cert-drift-witness-2026-09-27/witness.mts TS2339｜outputs/head-cert-drift-witness-2026-09-27/witness.mts(56,7): error TS2339: Property 'on' does not exist on type 'never'.
+outputs/midrun-steering-2026-09-23/measure-steering.mts TS18048｜outputs/midrun-steering-2026-09-23/measure-steering.mts(73,98): error TS18048: 'm.tool_calls' is possibly 'undefined'.
+outputs/sandbox-degrade-face-2026-09-24/measure-degrade.mts TS2459｜outputs/sandbox-degrade-face-2026-09-24/measure-degrade.mts(8,31): error TS2459: Module '"../../src/permissions"' declares 'ToolName' locally, but it is not exported.
+outputs/selector-uniqueness-2026-09-30/diagnose.mts TS7053｜outputs/selector-uniqueness-2026-09-30/diagnose.mts(78,27): error TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index 
+outputs/selector-uniqueness-2026-09-30/diagnose.mts TS7053｜outputs/selector-uniqueness-2026-09-30/diagnose.mts(78,45): error TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index 
+outputs/selector-uniqueness-2026-09-30/diagnose.mts TS2339｜outputs/selector-uniqueness-2026-09-30/diagnose.mts(86,37): error TS2339: Property 'templated' does not exist on type '{ kind: string; hits: number; titles: never[]; id: 
+outputs/sequencer-dynamic-2026-10-01/probe-prod.mts TS2459｜outputs/sequencer-dynamic-2026-10-01/probe-prod.mts(11,75): error TS2459: Module '"../../src/agent/orchestrator.js"' declares 'AgentEvent' locally, but it is not exported
+outputs/sequencer-dynamic-2026-10-01/probe.mts TS2305｜outputs/sequencer-dynamic-2026-10-01/probe.mts(13,27): error TS2305: Module '"../../src/events/index.js"' has no exported member 'ProviderMessage'.
+outputs/sequencer-status-readings-2026-10-01/probe-fail.mts TS2459｜outputs/sequencer-status-readings-2026-10-01/probe-fail.mts(10,75): error TS2459: Module '"../../src/agent/orchestrator.js"' declares 'AgentEvent' locally, but it is not 
+outputs/sequencer-status-readings-2026-10-01/probe.mts TS2459｜outputs/sequencer-status-readings-2026-10-01/probe.mts(13,50): error TS2459: Module '"../../src/agent/orchestrator.js"' declares 'AgentEvent' locally, but it is not expor
+outputs/stagnation-detection-2026-09-23/measure-local-base-rate.mts TS2304｜outputs/stagnation-detection-2026-09-23/measure-local-base-rate.mts(93,20): error TS2304: Cannot find name 'maxRepeat'.
+outputs/stagnation-detection-2026-09-23/measure-local-base-rate.mts TS2304｜outputs/stagnation-detection-2026-09-23/measure-local-base-rate.mts(93,40): error TS2304: Cannot find name 'maxRepeatSig'.
+LIST2_EXIT=0

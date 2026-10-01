@@ -61,8 +61,8 @@ const problems = [];
 for (const r of withPointer) {
   if (!r.test || !r.test.endsWith(".test.ts")) continue;
   const titles = titlesOf(r.test);
-  if (titles === null) { problems.push({ ...r, kind: "unreadable", hits: -1, titles: [] }); continue; }
-  if (titles.length === 0) { problems.push({ ...r, kind: "blind-file", hits: -1, titles: [] }); continue; }
+  if (titles === null) { problems.push({ ...r, kind: "unreadable", hits: -1, titles: [], templated: false }); continue; }
+  if (titles.length === 0) { problems.push({ ...r, kind: "blind-file", hits: -1, titles: [], templated: false }); continue; }
   const hits = titles.filter((t) => t.includes(r.expectFail));
   if (hits.length === 1) continue;
   problems.push({
@@ -74,7 +74,7 @@ for (const r of withPointer) {
   });
 }
 
-const byKind = {};
+const byKind: Record<string, number> = {};
 for (const p of problems) byKind[p.kind] = (byKind[p.kind] ?? 0) + 1;
 console.log(`退化：共 ${String(problems.length)} 条 —— ${
   Object.entries(byKind).map(([k, n]) => `${k} ${String(n)}`).join("｜")}`);

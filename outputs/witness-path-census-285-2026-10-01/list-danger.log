@@ -1,0 +1,14 @@
+/Users/ze/Downloads/deepseek harness/outputs/witness-path-census-285-2026-10-01/list-danger.mts:14
+  return { file: p.file, code: p.code, msg: p.message.slice(0, 110) };
+                                                      ^
+
+TypeError: Cannot read properties of undefined (reading 'slice')
+    at <anonymous> (/Users/ze/Downloads/deepseek harness/outputs/witness-path-census-285-2026-10-01/list-danger.mts:14:55)
+    at Array.map (<anonymous>)
+    at <anonymous> (/Users/ze/Downloads/deepseek harness/outputs/witness-path-census-285-2026-10-01/list-danger.mts:12:4)
+    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:681:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+
+Node.js v22.23.2
+LIST_EXIT=1

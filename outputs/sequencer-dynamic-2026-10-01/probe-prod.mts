@@ -8,7 +8,8 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 const exec = promisify(execFile);
 
-import { Orchestrator, scriptedWorkerModel, orchestratorForApproval, type AgentEvent, type SpawnArgs } from "../../src/agent/orchestrator.js";
+import { Orchestrator, scriptedWorkerModel, orchestratorForApproval, type SpawnArgs } from "../../src/agent/orchestrator.js";
+import type { AgentEvent } from "../../src/events/index.js";
 import { runLoop } from "../../src/agent/loop.js";
 
 const work = await mkdtemp(join(tmpdir(), "seq-prod-"));
