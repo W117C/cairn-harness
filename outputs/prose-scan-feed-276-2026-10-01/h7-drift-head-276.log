@@ -1,0 +1,9 @@
+onDiskNotInTable=11 :: fixtures/impact/accuracy-repo/api.js ｜ fixtures/impact/accuracy-repo/ground-truth.json ｜ fixtures/impact/accuracy-repo/helpers.js ｜ fixtures/impact/accuracy-repo/index.ts ｜ fixtures/impact/accuracy-repo/legacy-math.ts ｜ fixtures/impact/accuracy-repo/logger.ts ｜ fixtures/impact/accuracy-repo/math.ts ｜ fixtures/impact/accuracy-repo/order-service.ts ｜ fixtures/impact/accuracy-repo/report.ts ｜ fixtures/impact/accuracy-repo/strings.ts ｜ fixtures/impact/accuracy-repo/user-service.ts
+inTableNotOnDisk=0 :: 
+tableDirsNotSwept=0 :: 
+
+--- 补测（第 276 页凭证第 6 项归因，同一棵树现取）---
+1748ca7 该目录 numstat 文件数=11
+HEAD 该目录跟踪文件数=      11
+1748ca7..HEAD 动过该目录的提交数=       0
+merge-base --is-ancestor 1748ca7 HEAD exit=0

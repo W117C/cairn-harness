@@ -1,0 +1,16 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-89e2f20.lock）
+变异验证：4 条
+✅ prose-scan-bare-name-length-cap-loosened — 裸名字谓词的长度上限从 12 放宽一格 ⇒ 一句人话开始落进这一族；上限是这条谓词唯一的软处（判卷把 12/13 两侧各钉了一格），放宽一格在真仓里也许仍不红，但那条边界从此没人守 ｜本机实测 19.0s／2 拍
+✅ prose-scan-blank-comments-passthrough — 注释涂白退化成原样返回 ⇒ 注释里的旧文案开始冒充生产者（第 118 页那条『注释不是文案』的判据作废），而`drift` 会因此少报——少报比崩更坏：它看起来是干净 ｜本机实测 18.1s／2 拍
+✅ prose-scan-raw-copies-not-reported — `copies` 交了而 `rawCopies` 交 0 ⇒ 影子排除只留下一个变小了的数，『因登记表副本而免计』那几格再没人点数（把判据关小还不说，规则 101 的反向一侧） ｜本机实测 18.1s／2 拍
+✅ prose-scan-via-collapses-to-direct-only — 本地 helper 那一支的 `via` 被并回『字段直取』⇒ 取料写法分布读数说谎（第 95 页以前只认直取、其余整族静默绕过，这三格就是为那时留的形）；料还收着，但『怎么收到的』已经错了 ｜本机实测 18.3s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 73.9s · 跑了 4/4 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 8 次／4 条（每条次数分布 2×4）· 单次中位 第1次 9.1s／第2次 9.1s· 最贵一条 prose-scan-bare-name-length-cap-loosened 19.0s
+跑法单价：selector 8 拍·中位 9.11s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-89e2f20.lock）
+real 74.52
+user 82.06
+sys 1.83
+KILL_EXIT=0
