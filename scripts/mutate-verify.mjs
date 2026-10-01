@@ -1153,7 +1153,11 @@ const MUTATIONS = [
     src: "src/agent/orchestrator-config.ts",
     test: "tests/worker-budget.test.ts",
     desc: "worker 预算不再采信模型窗口（256k/1M 档仍按硬编码 128k 提前压缩 = 多烧一次摘要 + 白丢冷细节）",
-    apply: (s) => s.replace("const budgeted = withModelBudget(base, window);", "const budgeted = base;"),
+    // 针脚改指（2026-10-02 修）：`4c10272`（P3 输出预留跟着窗口缩）把"窗口是否采信"从
+    // `budgeted !== base` 这条**推断**改成了显式谓词 `windowUsable`（那边注释记着理由：
+    // `withModelBudget` 现在对任何正窗口都返回新对象 ⇒ 同一性推断失效）。
+    // 意图一字不变：不采信窗口 ⇒ 退回 `base`。
+    apply: (s) => s.replace("const budgeted = windowUsable ? withModelBudget(base, window) : base;", "const budgeted = base;"),
     expectFail: "窗口比基线大 ⇒ 抬到真实窗口（256k 档不再按 128k 提前压缩），worker 专属 ratio 保留",
   },
   {
@@ -1161,7 +1165,9 @@ const MUTATIONS = [
     src: "src/agent/orchestrator-config.ts",
     test: "tests/worker-budget.test.ts",
     desc: "去掉「显式覆盖绝不超出模型窗口」的钳制（超窗请求发给远端吃 400，本地 fail-closed 失效）",
-    apply: (s) => s.replace("return budgeted !== base ? { ...merged, inputLimit: Math.min(merged.inputLimit, budgeted.inputLimit) } : merged;", "return merged;"),
+    // 针脚改指（2026-10-02 修）：同上一支，判据由 `budgeted !== base` 换成显式谓词 `windowUsable`；
+    // 意图不变：拿掉钳制 ⇒ 原样返回 `merged`。
+    apply: (s) => s.replace("return windowUsable ? { ...merged, inputLimit: Math.min(merged.inputLimit, budgeted.inputLimit) } : merged;", "return merged;"),
     expectFail: "显式覆盖超出模型窗口 ⇒ 本地钳到窗口（超窗必吃远端 400，fail-closed 不留给远端）",
   },
   {
@@ -2171,8 +2177,13 @@ const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/verify-exec-sandbox.test.ts",
     desc: "worker 那一支退回内联三元 ⇒ 同一谓词 again 两份副本，下一轮改动只会漂其中一份（第十三族；第 141 页复认针脚歧义时就是被这三行逐字相同的副本坑到的）",
+    // 针脚改指（2026-10-02 修）：`404249c`（修 verify 假红）把 `mapSandboxTestCommand(command)` 扩成
+    // 工作区感知的 `mapSandboxTestCommandForWorkspace(command, ctx.workspace)` ⇒ 旧针脚失针。
+    // 谓词的**副本判定**没变（判卷数的是 `? VITEST_DIRECT : command` 的出现次数必须是 1），
+    // 所以变异体逐字照旧，只把针脚跟上新调用。
+    // 注释必须留在 `apply:` **外面**：写在调用里会让静态取针读不出字面量（体检当场报「未覆盖」，实测）。
     apply: (s) => s.replace(
-      "  return async (command, ctx) => {\n    const mapped = mapSandboxTestCommand(command);",
+      "  return async (command, ctx) => {\n    const mapped = mapSandboxTestCommandForWorkspace(command, ctx.workspace);",
       '  return async (command, ctx) => {\n    const mapped = command.trim() === "pnpm test" || command.trim() === "pnpm run test" ? VITEST_DIRECT : command;',
     ),
     expectFail: "消费者不再各自内联那句三元：`? VITEST_DIRECT : command` 全文件只剩映射器里那一处",
@@ -4467,7 +4478,10 @@ const MUTATIONS = [
     src: "src/providers/openai.ts",
     test: "tests/turn-truncated.test.ts",
     desc: "摘掉 finish_reason 的记值 ⇒ GLM 跟着失明（它整文件委托本适配器，没有自己的读取点）",
-    apply: (s) => s.replace('        if (fr) finishReason = fr;\n', ''),
+    // 针脚改指（2026-10-02 修）：`e76ed13`（P2 流内 5xx 可重试）重写了流式解析 ⇒
+    // 记值点从 `if (fr) finishReason = fr;` 搬到 `openai.ts:298` 的 `finishReason2`（同名变量也改了）。
+    // 意图一字不变：摘掉记值 ⇒ `turnTruncatedEvent` 拿不到 finish_reason ⇒ turn_truncated 不落。
+    apply: (s) => s.replace('            if (fr) finishReason2 = fr;\n', '            if (fr) { /* 锚点：摘掉记值 */ }\n'),
     expectFail: "openai（glm 即其预设）：finish_reason=length ⇒ turn_truncated",
   },
   {
@@ -10961,7 +10975,9 @@ const MUTATIONS = [
       "⇒「出网永不免批」退化成「出网点一次就永久免批」。**实测过这条洞是真的**：反向对照里把这一支翻成 false，" +
       "第二轮会话的审批次数读数是 0（一次都没问就直接出网了）。判卷是跨会话的——规则库在 runAgent 开头只 load 一次，" +
       "同一轮里测不出来（那样写是空绿，本轮踩过一次）",
-    apply: (s) => s.replace('  if ((tool as string) === "web_fetch") return true;', '  if ((tool as string) === "web_fetch") return false;'),
+    // 针脚改指（2026-10-02 修）：`0b37ad2`（M3 加 web_search）把这一支**加宽**成两个名字同一条口径 ⇒
+    // 旧针脚（只 web_fetch）失针。改法逐字照旧（把整支翻成 false），只是针脚跟上新条件。
+    apply: (s) => s.replace('  if ((tool as string) === "web_fetch" || (tool as string) === "web_search") return true;', '  if ((tool as string) === "web_fetch" || (tool as string) === "web_search") return false;'),
     expectFail: "点了「总是允许」也不落永久规则",
   },
 
