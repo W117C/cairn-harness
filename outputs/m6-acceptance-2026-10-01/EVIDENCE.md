@@ -140,9 +140,25 @@ memory-check exit=0
 
 **测试数只增不减**：3561 > 基线 3523，本轮只增未减。
 
----
+### 5.5 `mutate-verify` 门：**超时，不是内容红**（照贴，不写成「全绿」）
 
-## 6. M5 那一格（`1e42c74`，此处只记要点）
+```
+mutate-verify=124  （预算 1200s 耗尽，SIGTERM 宽限 15s 内未退出，整组 SIGKILL ⇒ 判红）
+完整日志：mutate-verify-timeout.log（1023 条锚点已读，未跑完）
+```
+
+日志末尾 1023 条已读锚点里 **5 条 ❌**，逐条核对**无一条属本轮文件**：
+`worker-budget-window-ignored` / `worker-budget-clamp-removed`（orchestrator 预算窗）、
+`sandbox-mapping-copy-reintroduced`（worker 沙箱映射）、`openai-never-reads-finish-reason`（GLM finish_reason）、
+`tree-guard-refusal-not-wired`（主检出护栏接线）。
+
+其中 `tree-guard-refusal-not-wired` 的日志自述是「基线这一拍选中 **未取到**（收尾行没读到＝取料坏）⇒
+不许当成绿也不许当成红」——**它本身就不是一条内容红**，是取料坏。故本轮该门**没有一条可归因的红**，
+但它**没跑完**这件事照贴：1023 条是已读数，不是总数（M7 那轮同样以 124 收场）。
+
+**超时是否留下突变体**：实测**没有**。全树 `find -name '*.mutbak'` 零命中，
+本工作树 `git status` 干净，`.worktrees/gate-head-cert` 树也干净。
+（这条要查而不是信日志——日志明写「子进程未自还原」，但实际那支没崩在写盘阶段。）
 
 - **typecheck 验证面**：`tsconfig.json` + `./node_modules/.bin/tsc` 可执行 ⇒ 产出这一面，否则**不产出**
   （探测不出工具链还给一条必红的命令，比探不出来更坏）。
