@@ -1,0 +1,37 @@
+$ 两次 docs-check（凭证页写完后·工作树口径）
+--- 第 1 次 08:26 UTC：凭证页刚追加、别人的在飞目录被我点了名 ---
+DOCS_EXIT=1
+  证人点名面（整本台账）：210 页点名 263 条 dated 工件（红 9）｜登记 12 条（帽，只准调低）
+docs-check: ❌ 9 项违规 D-11=9（预算常量在本文件 DOC_BUDGETS，只准下调）
+红 9 条逐字（按点名对象折叠）：
+   1 第 290 页 点名 outputs/hold-callid-ruling-2026-09-30/
+   1 第 290 页 点名 outputs/port2-merge-handoff-2026-10-01/
+   1 第 290 页 点名 outputs/shell-tail-repoint-kill-2026-10-01/
+   1 第 290 页 点名 outputs/witness-face-widen-290b-2026-10-01/docs-check-certtree-290b.log
+   1 第 290 页 点名 outputs/witness-face-widen-290b-2026-10-01/head-cert-e42b4af-idle-retry.log
+   1 第 290 页 点名 outputs/witness-face-widen-290b-2026-10-01/head-cert-e42b4af.log
+   1 第 290 页 点名 outputs/witness-face-widen-290b-2026-10-01/kill-2-anchors-290b.log
+   1 第 290 页 点名 outputs/witness-face-widen-290b-2026-10-01/needles-certtree-290b.log
+   1 第 290 页 点名 outputs/witness-face-widen-290b-2026-10-01/vitest-docs-check-290b.log
+
+--- 把第 1 项里那 3 个别人的路径名改掉后，第 2 次 08:29 UTC ---
+  ❌ D-11 PROGRESS.md
+     第 290 页 点名 outputs/witness-face-widen-290b-2026-10-01/docs-check-certtree-290b.log，但 HEAD 里追不到——证人要与页同笔落库；这一格若由本笔未提交的工件造成，提交即归零，别当成旧账登记掉
+  ❌ D-11 PROGRESS.md
+     第 290 页 点名 outputs/witness-face-widen-290b-2026-10-01/head-cert-e42b4af-idle-retry.log，但 HEAD 里追不到——证人要与页同笔落库；这一格若由本笔未提交的工件造成，提交即归零，别当成旧账登记掉
+  ❌ D-11 PROGRESS.md
+     第 290 页 点名 outputs/witness-face-widen-290b-2026-10-01/head-cert-e42b4af.log，但 HEAD 里追不到——证人要与页同笔落库；这一格若由本笔未提交的工件造成，提交即归零，别当成旧账登记掉
+  ❌ D-11 PROGRESS.md
+     第 290 页 点名 outputs/witness-face-widen-290b-2026-10-01/kill-2-anchors-290b.log，但 HEAD 里追不到——证人要与页同笔落库；这一格若由本笔未提交的工件造成，提交即归零，别当成旧账登记掉
+  ❌ D-11 PROGRESS.md
+     第 290 页 点名 outputs/witness-face-widen-290b-2026-10-01/needles-certtree-290b.log，但 HEAD 里追不到——证人要与页同笔落库；这一格若由本笔未提交的工件造成，提交即归零，别当成旧账登记掉
+  ❌ D-11 PROGRESS.md
+     第 290 页 点名 outputs/witness-face-widen-290b-2026-10-01/vitest-docs-check-290b.log，但 HEAD 里追不到——证人要与页同笔落库；这一格若由本笔未提交的工件造成，提交即归零，别当成旧账登记掉
+  ℹ️  跳过 D-1 STATE.md 不存在（迁移前属正常）——该文件未受检，不等于通过
+  ℹ️  跳过 D-5 STATE.md 不存在（迁移前属正常）——rev 真伪未检，不等于通过
+  ℹ️  跳过 D-2/D-4 STATE.md 不存在（迁移前属正常）——该页未受检，不等于通过
+  台账 sha 面：抽到 322 条候选｜非提交形而带理由豁免 3 条
+  凭证对账面：可比对 384 个读数（红 0）｜页未点名取料目录 0 个＝未检｜未点名页 0 页（帽 0，只准调低）｜点名但目录读不到 0 个＝取不到｜登记不可回查 8 条｜弱证 0 对（帽 0，只准调低）｜证人无身份行 228 对＝这一格无从判｜已登记不可回查 10 页／20 条
+  证人点名面（整本台账）：210 页点名 260 条 dated 工件（红 6）｜登记 12 条（帽，只准调低）
+docs-check: ❌ 6 项违规 D-11=6（预算常量在本文件 DOC_BUDGETS，只准下调）
+DOCS_CHECK_EXIT=1

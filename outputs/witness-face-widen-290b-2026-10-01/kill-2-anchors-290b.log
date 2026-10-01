@@ -1,0 +1,12 @@
+$ node --import tsx scripts/mutate-verify.mjs evidence-witness-unavailable-reads-as-empty-face witness-face-narrowed-back-to-credential-pages  # 08:09 UTC·干净树 e42b4af
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-e42b4af.lock）
+变异验证：2 条
+✅ evidence-witness-unavailable-reads-as-empty-face — 把「取不到 HEAD 清单 ⇒ 未检」改成「拿空集合当判据」⇒ 三态被抹平：门会喊 73 条红（假红淹真信号），而下一次真取不到清单时它又可能被人顺手改成 `?? new Set()` 的反方向——接线形状要有钉子 ｜本机实测 0.9s／2 拍
+✅ witness-face-narrowed-back-to-credential-pages — 把 D-11 的取值域从整本台账退回凭证页 ⇒ 判卷自己那两条（整本 2 条红／凭证面 1 条红）与门里那条分母等式当场红；普通页点名的证人从此又没人守——这正是第 289 页宽分面那 15 条老账的来源 ｜本机实测 0.8s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 2.0s · 跑了 2/2 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 4 次／2 条（每条次数分布 2×2）· 单次中位 第1次 0.4s／第2次 0.4s· 最贵一条 evidence-witness-unavailable-reads-as-empty-face 0.9s
+跑法单价：selector 4 拍·中位 0.45s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-e42b4af.lock）
+KILL_EXIT=0

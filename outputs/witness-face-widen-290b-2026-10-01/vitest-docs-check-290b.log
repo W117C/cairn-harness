@@ -1,0 +1,19 @@
+$ node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/docs-check.test.ts  # 08:09 UTC·干净树（期望 93 passed）
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness/.worktrees/verify-e42b4af[39m
+
+ [32m✓[39m tests/docs-check.test.ts [2m([22m[2m93 tests[22m[2m)[22m[33m 1583[2mms[22m[39m
+   [32m✓[39m D-9 凭证对账：三档（可比对／未点名＝未检／取不到＝未检）不许同形 [2m(26)[22m
+     [33m[2m✓[22m[39m 真仓：可比对分母 ≥ 50、红只剩登记过的那些（三档各有多少要印出来）[33m 460[2mms[22m[39m
+     [33m[2m✓[22m[39m 真仓：未点名页数跟着现读走——涨了要红，凭空把帽调低也要红（只有真把页点名了才允许降）[33m 315[2mms[22m[39m
+   [32m✓[39m D-10 源码行号引用面：两半都钉，存量按集合登记 [2m(4)[22m
+     [33m[2m✓[22m[39m 真仓那一趟：74 条存量今天仍全部命中，所以 D-10 现在是绿的（登记不是凭空写的）[33m 310[2mms[22m[39m
+   [32m✓[39m D-11 证人点名面：文件与目录两半都要追得到，登记位双向出声 [2m(7)[22m
+     [33m[2m✓[22m[39m 真仓那一趟：分母非零、红 0，且「未检」与「红 0」不同形（这条走的是门自己的接线）[33m 381[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m93 passed[39m[22m[90m (93)[39m
+[2m   Start at [22m 16:09:34
+[2m   Duration [22m 1.81s[2m (tests 93%, transform 6%, import 1%)[22m
+
+VITEST_EXIT=0

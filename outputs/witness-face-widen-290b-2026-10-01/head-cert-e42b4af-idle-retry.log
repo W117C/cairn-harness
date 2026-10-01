@@ -1,0 +1,2 @@
+$ (等窗≤180s) then node --import tsx scripts/head-cert.ts --at=e42b4af  # 认证 e42b4af·第二次·争取独占
+STILL_BUSY_AFTER_180s  # 没起尺，这一趟不构成认证

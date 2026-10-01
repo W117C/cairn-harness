@@ -9626,3 +9626,46 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 12. **本笔入库清单（逐个点名，无目录级 add）**：实现簇 `scripts/docs-check.ts`＋`tests/docs-check.test.ts`＋`scripts/mutate-verify.mjs`＋`PROGRESS.md`；补档 6 支 `outputs/impact-accuracy-probe-2026-09-29/impact-accuracy.mts`、`.../impact-edges.mts`、`.../impact-fixtures.mts`、`.../readings-2026-09-29.md`、`outputs/landing-1c40df7-2026-09-30/head-cert-summary.txt`、`outputs/scratch-scope-census-2026-09-30/readings.md`；证人 6 支 `outputs/witness-face-widen-290b-2026-10-01/legacy-12-never-committed.log`、`.../docs-check-working-tree.log`、`.../typecheck-290b.log`、`.../evidence-check-290b.log`、`.../secret-scan-6-files.txt`、`outputs/head-face-cjk-290-2026-10-01/needles-check-2.log`。共 16 支。
    补一行全名（同笔追加，不涂改上面那段）：上面用 `.../` 省略写法点的证人，取料面解析不到——省略号不是路径，这条我自己踩的形状与第 236 页那一族同源。全名逐支：`outputs/witness-face-widen-290b-2026-10-01/typecheck-290b.log`、`outputs/witness-face-widen-290b-2026-10-01/evidence-check-290b.log`、`outputs/witness-face-widen-290b-2026-10-01/docs-check-after-page.log`（本页追加后重跑的那一把，读数是 `209 页点名 250 条（红 13）`——比改页前多 7 条红，全部由本页自己点名的证人构成，提交即归零）。
    计数更正（同笔追加，不涂改上面那段）：加上面那行新点的 `outputs/witness-face-widen-290b-2026-10-01/docs-check-after-page.log`，本笔入库实际 **17 支**，上面那句「共 16 支」作废——这一寸之差正是「先写结论、后加证人」的形状，所以按老规矩往下一行补，不回头改。
+
+
+### 2026-10-01 · 第 290 页补⑴ 凭证（1/1）：`e42b4af` 的干净树逐格——`--check-needles 阻断 0`、门 `209 页点名 253 条｜红 0｜登记 12`、判卷 `93 passed`、本笔两支锚点 `2/2` 全杀（`单次中位 0.4s／0.4s`）；**全量认证这一趟是撞窗趟 ⇒ 等级＝半把尺**，两条超时红逐条归因而非解释
+
+取料面（全名逐支，见规则 356）：`outputs/witness-face-widen-290b-2026-10-01/needles-certtree-290b.log`、`outputs/witness-face-widen-290b-2026-10-01/docs-check-certtree-290b.log`、`outputs/witness-face-widen-290b-2026-10-01/vitest-docs-check-290b.log`、`outputs/witness-face-widen-290b-2026-10-01/kill-2-anchors-290b.log`、`outputs/witness-face-widen-290b-2026-10-01/head-cert-e42b4af.log`、`outputs/witness-face-widen-290b-2026-10-01/head-cert-e42b4af-idle-retry.log`，另加实现那一笔已入库的 `outputs/witness-face-widen-290b-2026-10-01/legacy-12-never-committed.log` 等 5 支与 `outputs/head-face-cjk-290-2026-10-01/needles-check-2.log`。
+
+1. **被认证的对象**：提交 `e42b4af`（＝`e42b4afa025302e4fcef17722ce4bd06e88ccdf9`，第 290 页补⑴ 实现簇，17 支文件）。验证树两棵，都是新建的独立树：`.worktrees/verify-e42b4af`（`git worktree add --detach`＋`cp -al node_modules`，进场 `git -C … status --porcelain | wc -l` ＝ **0**）与 head-cert 自己的 `.worktrees/head-cert-e42b4af`。**不在主树读数**——主树此刻另有隔壁的在飞工件（`outputs/` 下 2026-09-30～10-01 那几个 dated 目录与 `_audit*.md` 一批；**路径故意不点名**：D-11 的取值域从这一笔起是整本台账，点了别人的名就替别人报一条不归我清的红，改页前后那 9 条红里有 3 条正是这么来的，见本页第 10 项）。
+
+2. **`--check-needles` 两份互相印证归因**：
+   - 主树·实现未入库时（`outputs/head-face-cjk-290-2026-10-01/needles-check-2.log`，06:13 UTC，完整汇总行在、**没有退出码行**——产生它那条命令被我打断在下一把尺之前，我不给它补记忆里的数）：`针脚体检：1222 条 —— 阻断 2，待复认 0，未覆盖 0，逐行式 5，未入库面 0（被测面 + 判卷两面），钉在飞文本 2，killer 指针失效 0（其中 HEAD 侧 0）`。
+   - 干净树·实现已入库（`outputs/witness-face-widen-290b-2026-10-01/needles-certtree-290b.log`，08:08 UTC）：`针脚体检：1222 条 —— 阻断 0，待复认 0，未覆盖 0，逐行式 5，未入库面 0（被测面 + 判卷两面），钉在飞文本 0，killer 指针失效 0（其中 HEAD 侧 0）`、`改法语法体检：1222 条改法全部产出合法源文件 ✅`、`NEEDLES_EXIT=0`。
+   ⇒ 那 2 条阻断**只**由「钉在飞文本」构成、落库后按预期归零——这正是第 287 页同一形状的第二次独立验证，不是我把期望值往实际读数上调。
+
+3. **门（`docs-check`）在干净树上**（`outputs/witness-face-widen-290b-2026-10-01/docs-check-certtree-290b.log`）：`证人点名面（整本台账）：209 页点名 253 条 dated 工件（红 0）｜登记 12 条（帽，只准调低）`、`docs-check: 受检项全绿（另有 3 项未检，见上）`、`DOCS_CHECK_EXIT=0`。**扩面这一格被门自己咬过一次**：改页前后 `refs` 从 250→253，差的 3 条正是我把 `.../` 省略写法改成全名那 3 支（`typecheck-290b.log`、`evidence-check-290b.log`、`docs-check-after-page.log`）——省略号不是路径，取料面读不到（规则 356）。
+
+4. **判卷**（`outputs/witness-face-widen-290b-2026-10-01/vitest-docs-check-290b.log`，08:09 UTC）：`Test Files 1 passed (1)`、`Tests 93 passed (93)`、`Duration 1.81s (tests 93%, transform 6%, import 1%)`、`VITEST_EXIT=0`。改前同文件同树的对照取第 290 页那串的证人 `outputs/head-face-cjk-290-2026-10-01/vitest-docs-check-1.log`：`Tests 92 passed (92)`／`Duration 1.85s` ⇒ **＋1 有两侧读数**，不是推的。
+
+5. **本笔两支锚点各杀各的**（`outputs/witness-face-widen-290b-2026-10-01/kill-2-anchors-290b.log`，08:09 UTC）：`evidence-witness-unavailable-reads-as-empty-face`（改指 `witnessPages` 那一支）与 `witness-face-narrowed-back-to-credential-pages`（新增那一支）——`✅` 两条、`全部变异被正确杀死（断言非恒真）`、`KILL_EXIT=0`。成本两行照机器原文贴，不做推算（规则 245）：
+   `[mutate-verify] 本次耗时 2.0s · 跑了 2/2 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）`
+   `成本分母：判卷 spawn 4 次／2 条（每条次数分布 2×2）· 单次中位 第1次 0.4s／第2次 0.4s· 最贵一条 evidence-witness-unavailable-reads-as-empty-face 0.9s`
+   `跑法单价：selector 4 拍·中位 0.45s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母`
+   这一格顺带把第 287 页那条规律**反过来看了一次**：`tests/docs-check.test.ts` 里住的是纯函数＋合成输入 ⇒ 单次 0.4s。对照值是第 286 页那批住在 `prose-needle-scan.test.ts` 的锚点 `单次中位 第1次 9.8s／第2次 9.7s`——**不同跑批、不同 sha，只作形状对照，不许拿来算比值**（规则 245）。而本笔这两支的 0.4s 也说明：把真仓扫搬进 `beforeAll` 之后，`prose-needle-scan` 那一族的锚点单价不再被那趟全扫定价格（钩子按文件付一次），代价见第 7 项那条钩子红。
+
+6. **全量认证（`head-cert --at=HEAD`）——这一趟不构成认证，等级要印出来（规则 211）**。原文取 `outputs/witness-face-widen-290b-2026-10-01/head-cert-e42b4af.log`，08:10–08:15 UTC：
+   - 结构格逐条在：`目标提交：e42b4af（--at=HEAD）`、`依赖核对：该提交声明 10 项，缺 0 项`、`import 面：3066 条边｜悬空 0（其中存量已豁免 0）`、`门表：31 道，其中该笔 package.json 没有同名 script 的 0 道`、`typecheck exit=0（0 报错）`、`认证门面=22 道（跑到 22）｜❌ 红 1 道｜⚠️ 超预算 4`、`TREE=e42b4af DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有`。
+   - 判卷：`Test Files 2 failed | 257 passed (259)｜Tests 1 failed | 3456 passed | 13 skipped (3470)｜exit=1（退出码直接取，不接管道）`，`HEADCERT_EXIT=1`。
+   - **并发那一格自己喊了**：`并发判卷=起前 0 套／跑完 1 套（撞窗：本仓判卷有读写共享 /tmp 的用例）` ＋ `⚠️ 判卷有红，且两端采到 1 套判卷并行 ⇒ 先排撞窗再查代码`。
+   ⇒ 等级＝**半把尺**：22 道门跑到且只 1 道红（第 7 项归因），判卷四面干净、结构格齐，但**套件终态数不是独占读数**，所以这一趟不许写成「全量绿」。
+   我随后想补一次独占复跑：`outputs/witness-face-widen-290b-2026-10-01/head-cert-e42b4af-idle-retry.log` 记的是 `STILL_BUSY_AFTER_180s  # 没起尺，这一趟不构成认证`——等窗器在 180 秒内没等到空闲就**主动不起尺**（宁欠一趟认证，不采一条借来的红，规则 354）。
+
+7. **两条红的逐条归因（都不许由我改成"应该是并发"，要有出处）**：
+   - `❌ gate-check exit=1 5252ms（预算 5400ms）`——`gates.log` 第 21 行点名的是 `H7 冻结表与判卷区目录双向一致`，`onDiskNotInTable` 全在 `fixtures/impact/accuracy-repo/*`。本笔 17 支文件**一支没碰 `fixtures/`**（逐行见 `git show --numstat e42b4af`）⇒ 属隔壁 `1748ca7` 那笔带来的 HEAD 常驻红（任务 #9），本笔不动它。
+   - `FAIL tests/prose-needle-scan.test.ts > 真仓扫：这把尺自己不许空载`＋`Error: Hook timed out in 10000ms.`；`FAIL tests/head-cert-deps.test.ts > 清场读数：常驻残留的 scratch 树要自己报数（任务 #33） > 真读现喂…`＋`Error: Test timed out in 5000ms`。两条都是**时限到点**，不是断言不符（后者还被贴帽那格当场点名：`7855ms/5000ms=157%`）。并发时刻有出处：两个 `ps` 样本（08:16:37 `etime 01:04`／08:17:50 `etime 02:17`）反推隔壁那套全量判卷起于 **08:15:33**，而我这趟认证 08:10 起跑、墙钟 `286.38s` ⇒ 尾部正好重叠，与「跑完 1 套」的自报一致。
+   - **但这一族不止是噪声**：钩子那一条暴露的是我第 287 页留下的真缺陷——把那趟 8.9～9.5s 的真仓扫搬进 `beforeAll` 省了每条 spawn 的钱，却没给钩子声明时限（缺省 10s），而 head-cert 的贴帽读数**只按用例算预算、不吃钩子** ⇒ 那一格从来没有观测者。全仓数过：`tests/` 里钩子调用共 **210** 支（`grep -rEn "^\s*(beforeAll|afterAll|beforeEach|afterEach)\("`），其中**声明了时限的 0 支**，且 `tests/vitest.config.ts`／`package.json` 里 `hookTimeout` 出现 **0** 次——那个 210 就是"尺在转"的哨兵，否则「0 支声明」只是正则没电（规则 237）。已挂任务 #22（修法两半：给钩子预算＋把钩子时限接进被度量者自己报数的那一格），本笔不夹带。
+   - 顺带一条要交代的读数：门里 `docs-check 1235ms（预算 1300ms）`＝帽的 95%，且这 1235ms 是**带并发**的（同一趟认证）。空闲那一次我在实现簇里量到的是秒级（`outputs/witness-face-widen-290b-2026-10-01/docs-check-working-tree.log` 那趟没印毫秒，所以我没有同分母的空闲数可比）⇒ 这一格今天的状态是「贴帽、没超」，等 #22 那笔落库后按同形状复测再判要不要出声。
+
+8. **条数核对（诚实版）**：本笔的净增量用**文件粒度等式**：`tests/docs-check.test.ts 93 ＝ 92 ＋ 1`（两侧都有日志：改前 `outputs/head-face-cjk-290-2026-10-01/vitest-docs-check-1.log`，改后 `outputs/witness-face-widen-290b-2026-10-01/vitest-docs-check-290b.log`；锚点表 `1222 ＝ 1221 ＋ 1`，两侧见第 2 项两份日志）。套件粒度 `3470` 我**不配等式**：上一笔留档的 `3466` 取在 `bf01a44` 之前，中间还落了第 288／289／290 页的新用例与隔壁的提交——拿它当"上一笔的值"会把两次增量算一遍（用户记忆里那条「引用上一笔留档值前先问它取在哪个 sha」）。等一次独占认证落在这个 sha（或其后代）上时，再给套件粒度的等式。
+
+9. **刻意未做（写在纸上，免得被下游读成已做）**：⑴ **独占全量认证**——见第 6 项，等窗器主动放弃了一次；这一格留给「包含 `e42b4af` 为祖先的下一次 head-cert」，届时先 `git merge-base --is-ancestor e42b4af HEAD` 自证覆盖关系，别把后代那趟的绿当成本笔的绿；⑵ 不给 #22 的钩子缺陷夹带修法（本笔只交裁决 A 那三步，判卷与实现同笔的边界要守住）；⑶ **不回收任何 worktree**——`git worktree list` 今天 93 行、认证自报 `常驻残留树=69`，其中本会话建的 `verify-*`／`head-cert-*` 全部逐棵核过 `status --porcelain` 为 0 项，但「可回收」是判据不是授权，等一句点头；`/private/tmp/dsh-foreign-witness-A|B`、`/private/tmp/mtest-now`、`.worktrees/gate-mutate-verify`（内有别人的 `.mutbak`）都不在我的回收名单里。
+10. **这一格是扩面换来的第一条我自己的红，也是它值得扩的证据**：凭证页追加后先跑了一次门（`outputs/witness-face-widen-290b-2026-10-01/docs-check-name-fix.log` 记两次读数）——第 1 次 `证人点名面（整本台账）：210 页点名 263 条 dated 工件（红 9）`／`DOCS_EXIT=1`，其中 **3 条是我在第 1 项里点了别人的在飞目录名**（`hold-callid-ruling`、`port2-merge-handoff`、`shell-tail-repoint-kill` 那三个 dated 形），另 6 条是本笔待入库的证人。把三个路径名改成不点名的说法后第 2 次：`210 页点名 260 条（红 6）`／`DOCS_CHECK_EXIT=1`——剩下这 6 条正是随本笔入库的那 6 支证人，**提交即归零**（门自己给的提示语就是这一句：「这一格若由本笔未提交的工件造成，提交即归零，别当成旧账登记掉」）。
+    形状要说清：取值域换成整本台账之后，「页里点了谁的名」从此是一格会响的面——这既是我想要的（谁被承诺了就要追得到），也是新出现的失误形状（**点别人在飞工件的名字＝替别人报一条不归我清的红**）。法定写法两条：不点名，或等那份工件入库再点。这一条不在实现里加闸（那是判卷的位置，而且加不进——门分辨不了"这个名字该不该点"），所以留在页里当写法约束，反转条件：若这一族红在两个不同会话里各出现一次，就该把「dated 目录名必须能追到 ∨ 该页不属于同一提交」做成 D-11 的一格分面读数。
+    另记一条同时出现的读数：`凭证对账面：可比对 384 个读数（红 0）｜证人无身份行 228 对＝这一格无从判｜已登记不可回查 10 页／20 条`——`228 对` 这一格今天仍是「无从判」，不是「通过」（规则 239 的三态），我没动它。
+    再补一次读数把上面那句焊正（同笔追加，不涂改）：写完那一段之后同一把门是 `证人点名面（整本台账）：210 页点名 261 条 dated 工件（红 7）`／`D-11=7`——多的那 1 条正是那一段自己点名的 `outputs/witness-face-widen-290b-2026-10-01/docs-check-name-fix.log`。**页里的计数会被「写页」这个动作改动**，所以上面那句「6 支」不含它自己（用户记忆：改完被测面要重算自己刚写进页面的那个数）。⇒ 本笔凭证实际入库证人 **7** 支，提交后期望 `红 0`，由下一笔（任务 #22 那簇）在干净树上的复跑兑现——本笔不自己给自己发这个绿。
