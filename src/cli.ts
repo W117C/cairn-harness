@@ -622,6 +622,9 @@ function printHelp(): void {
 选项：
   --mode <档>          read-only | default | guided | auto（默认 default = 逐次审批）
   --provider <哪家>    glm | openai | anthropic | gemini | demo（默认：按已配置的 key 推断）
+                       demo = 预录剧本：零凭据、不拨号，但与你给的任务无关
+                       （固定演「读→写 src/todo.ts→跑测试」），台词「任务完成」也是剧本的一部分，
+                       结论请看退出码。想量能力用 pnpm bench，别用 demo。
   --model <模型名>     自由档位：直接点名线上模型（如 stealth/space-bunny-alpha），不进档位表
   --ctx-window <n>     只配 --model：申报该模型的真实上下文窗口（token 数）。
                        缺省取档位表里最小的那个，对更小的模型是高估 ⇒ 撞远端 400。
