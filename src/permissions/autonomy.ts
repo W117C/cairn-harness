@@ -8,6 +8,7 @@
 import { FROZEN_TABLE_REL } from "../frozen";
 import { TOOL_NAMES, type ToolName } from "../tools/base";
 import type { PermissionMode } from "./index";
+import { isKnownToolName, isMcpScopedName } from "./tool-registry";
 // 方案门的活判据。直接从 plan-state 拿（不能拿 ./index——index 正 re-export 本文件的符号）。
 import { planGateLive } from "./plan-state";
 import { judgeChain, normalizeCommand, type ChainVerdict, type PermissionRule } from "./rules";
@@ -267,10 +268,9 @@ export function annotationRisk(mcp?: McpGrade): RiskFinding | null {
   return mcp?.destructive === true ? { level: "high", reason: "MCP destructiveHint=true（注解通道）" } : null;
 }
 
-/** MCP scoped 注册名（`mcp__plugin_<p>_<s>__<t>` 与 `mcp__<server>__<t>` 两种形态都算）。 */
-export function isMcpScopedName(name: string): boolean {
-  return name.startsWith("mcp__");
-}
+/** MCP scoped 注册名（`mcp__plugin_<p>_<s>__<t>` 与 `mcp__<server>__<t>` 两种形态都算）。
+ *  实现搬到 ./tool-registry（那边要 import 本模块的依赖链）：本文件从那儿 re-export，导出面逐字不变。 */
+export { isMcpScopedName };
 
 /** 这次调用算不算写向：MCP 只有 server 自己标了 readOnlyHint 才算读（fail-closed），
  *  其余（写注解 / 无注解 / 注解里根本没有 readOnly 字段）都按写管；非 MCP 走静态写向表。
@@ -412,6 +412,29 @@ export function evaluate(
     return { verdict: "approve", layer: "L3-rule", risk, auto: { source: "rule", ruleId: chain.ruleId } };
   }
   const policy = policyOf(s.mode);
+  // ---- 未登记工具名（M7）：默认方向曾经是反的 ----
+  // 走到这里的名字，规则库（L1/L2/L3-rule）与 MCP 注解**都没对它说过一句话**。旧实现对此一律放行
+  //  （`isWriteCall` → `isSideEffectTool` 是黑名单 ⇒ 未登记即非写向 ⇒ 一路 L4-pass），
+  //  于是「新增一族工具却忘了登 SIDE_EFFECT_TOOLS」会静默绕过只读档与方案门。
+  //  与同一个函数里「未列出的**档位**取 ask」的方向相反：未知档位保守、未知工具激进，标准不一。
+  //
+  //  位置：L1/L2/L3-rule **之后**——用户在权限文件里对某个名字写了 allow/deny/ask，
+  //  那就是对这个名字**做过决定**，通用规则不该覆盖它（否则一条 allow 规则会被这条守卫吃掉）。
+  //  裁决取 **ask** 而不是 deny：ask 在这里会真的出审批卡（agent-runner 的 gatedTool/gatedMcpTool），
+  //  交互时人看得见；无人值守时 askGate 缺席自动降 unattended-deny。
+  //  刻意**不**在 checkPermission 那侧也加一条：那边收不到会话工具表，加了必然误拒运行期注入的
+  //  工具，且会把 loop.ts:423 那道 blockedBy:"unknown-tool" 的会话闸顶掉（撤回理由见 index.ts）。
+  if (!isKnownToolName(tool)) {
+    return {
+      verdict: "ask",
+      layer: "L4-mcp-unannotated",
+      reason:
+        `未登记工具名「${tool}」：按写处理并逐次审批` +
+        "（新增工具族未登 KNOWN_TOOL_NAMES / SIDE_EFFECT_TOOLS——规则库与注解都没判过它，没人判过不等于没人有害）",
+      risk,
+      riskReasons: channels.reasons,
+    };
+  }
   // 断路器：凡吃 scope 记忆的档位，触发后一律退回逐次审批（§11.7.6「直至会话重开」）。
   // auto 不吃记忆 ⇒ 那条计数在 auto 永远不涨，本式对 auto 恒等于 policy.writeAsk。
   const askEachWrite = policy.writeAsk || (policy.scopeMemory && s.breakerTripped);

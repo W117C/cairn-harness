@@ -12,7 +12,7 @@ import { INJECTED_TOOLS, missingFromFace, type InjectedToolSurface } from "../sr
 import { gateToolSpecs } from "../src/agent/glm-session";
 import { workerToolSpecs } from "../src/agent/worker-shell-tools";
 import { workerToolTable } from "../src/agent/orchestrator-config";
-import { isSideEffectTool } from "../src/permissions";
+import { isKnownToolName, isSideEffectTool } from "../src/permissions";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const RUNNER = readFileSync(join(ROOT, "src/main/agent-runner.ts"), "utf8");
@@ -76,6 +76,11 @@ function report(surface: InjectedToolSurface): string[] {
   if (isSideEffectTool(surface.name) !== surface.mainSessionSideEffect) {
     problems.push(`${surface.name} 的写向判定漂移（表 ${String(surface.mainSessionSideEffect)} vs permissions ${String(isSideEffectTool(surface.name))}）`);
   }
+  // 第四面（M7）：未登记工具名按写处理并逐次审批（fail-closed）。漏登不会静默放行，
+  // 但会让一个正常工具每次调用都多出一张审批卡——「安全但没法用」同样是缺陷，所以照样钉住。
+  if (!isKnownToolName(surface.name)) {
+    problems.push(`${surface.name} 未登记进 KNOWN_TOOL_NAMES（会被未知名守卫逐次审批）`);
+  }
   return problems;
 }
 
@@ -97,8 +102,14 @@ describe("G-B 注入工具三面对账", () => {
     expect(injected.filter((n) => !declared.has(n))).toEqual([]);
   });
 
-  it("扩形后的分母自证：table[\"name\"] = 那一形确实被算进来了（解析器静默 0 命中比不扩更坏）", () => {
-    const tableForm = tableInjectedNames();
+  it("第四面（M7）：每个声明项都登记进了 KNOWN_TOOL_NAMES，漏登会被逐次审批", () => {
+    const unregistered = INJECTED_TOOLS.map((s) => s.name).filter((n) => !isKnownToolName(n));
+    expect(unregistered).toEqual([]);
+    // 反向对照：这张面对「未登记」有分辨力（否则上面前三面全绿时它是道空门）。
+    expect(isKnownToolName("ghost_tool")).toBe(false);
+  });
+
+  it("扩形后的分母自证：table[\"name\"] = 那一形确实被算进来了（解析器静默 0 命中比不扩更坏）", () => {    const tableForm = tableInjectedNames();
     for (const n of ["automation_create", "automation_update", "automation_delete", "automation_run_now", "automation_list", "skill"]) {
       expect(tableForm, n + " 走的是 table[\"…\"] = 这一形，解析器退回旧形状就会漏它").toContain(n);
     }

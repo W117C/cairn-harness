@@ -1,0 +1,197 @@
+{
+ "known": 26,
+ "rows": [
+  {
+   "tool": "brand_new_write_tool",
+   "mode": "read-only",
+   "verdict": "ask",
+   "layer": "L4-mcp-unannotated"
+  },
+  {
+   "tool": "brand_new_write_tool",
+   "mode": "default",
+   "verdict": "ask",
+   "layer": "L4-mcp-unannotated"
+  },
+  {
+   "tool": "brand_new_write_tool",
+   "mode": "guided",
+   "verdict": "ask",
+   "layer": "L4-mcp-unannotated"
+  },
+  {
+   "tool": "brand_new_write_tool",
+   "mode": "auto",
+   "verdict": "ask",
+   "layer": "L4-mcp-unannotated"
+  },
+  {
+   "tool": "ghost_tool",
+   "mode": "read-only",
+   "verdict": "ask",
+   "layer": "L4-mcp-unannotated"
+  },
+  {
+   "tool": "ghost_tool",
+   "mode": "default",
+   "verdict": "ask",
+   "layer": "L4-mcp-unannotated"
+  },
+  {
+   "tool": "ghost_tool",
+   "mode": "guided",
+   "verdict": "ask",
+   "layer": "L4-mcp-unannotated"
+  },
+  {
+   "tool": "ghost_tool",
+   "mode": "auto",
+   "verdict": "ask",
+   "layer": "L4-mcp-unannotated"
+  },
+  {
+   "tool": "totally_made_up",
+   "mode": "read-only",
+   "verdict": "ask",
+   "layer": "L4-mcp-unannotated"
+  },
+  {
+   "tool": "totally_made_up",
+   "mode": "default",
+   "verdict": "ask",
+   "layer": "L4-mcp-unannotated"
+  },
+  {
+   "tool": "totally_made_up",
+   "mode": "guided",
+   "verdict": "ask",
+   "layer": "L4-mcp-unannotated"
+  },
+  {
+   "tool": "totally_made_up",
+   "mode": "auto",
+   "verdict": "ask",
+   "layer": "L4-mcp-unannotated"
+  },
+  {
+   "tool": "totally_made_up",
+   "mode": "read-only",
+   "verdict": "ask",
+   "layer": "L4-mcp-unannotated"
+  },
+  {
+   "tool": "totally_made_up",
+   "mode": "default",
+   "verdict": "ask",
+   "layer": "L4-mcp-unannotated"
+  },
+  {
+   "tool": "totally_made_up",
+   "mode": "guided",
+   "verdict": "ask",
+   "layer": "L4-mcp-unannotated"
+  },
+  {
+   "tool": "totally_made_up",
+   "mode": "auto",
+   "verdict": "ask",
+   "layer": "L4-mcp-unannotated"
+  },
+  {
+   "tool": "shell_ro",
+   "mode": "read-only",
+   "verdict": "approve",
+   "layer": "L4-pass"
+  },
+  {
+   "tool": "shell_ro",
+   "mode": "default",
+   "verdict": "approve",
+   "layer": "L4-pass"
+  },
+  {
+   "tool": "shell_ro",
+   "mode": "guided",
+   "verdict": "approve",
+   "layer": "L4-pass"
+  },
+  {
+   "tool": "shell_ro",
+   "mode": "auto",
+   "verdict": "approve",
+   "layer": "L4-pass"
+  },
+  {
+   "tool": "automation_list",
+   "mode": "read-only",
+   "verdict": "approve",
+   "layer": "L4-pass"
+  },
+  {
+   "tool": "automation_list",
+   "mode": "default",
+   "verdict": "approve",
+   "layer": "L4-pass"
+  },
+  {
+   "tool": "automation_list",
+   "mode": "guided",
+   "verdict": "approve",
+   "layer": "L4-pass"
+  },
+  {
+   "tool": "automation_list",
+   "mode": "auto",
+   "verdict": "approve",
+   "layer": "L4-pass"
+  },
+  {
+   "tool": "impact_query",
+   "mode": "read-only",
+   "verdict": "approve",
+   "layer": "L4-pass"
+  },
+  {
+   "tool": "impact_query",
+   "mode": "default",
+   "verdict": "approve",
+   "layer": "L4-pass"
+  },
+  {
+   "tool": "impact_query",
+   "mode": "guided",
+   "verdict": "approve",
+   "layer": "L4-pass"
+  },
+  {
+   "tool": "impact_query",
+   "mode": "auto",
+   "verdict": "approve",
+   "layer": "L4-pass"
+  },
+  {
+   "tool": "mcp__srv__x",
+   "mode": "read-only",
+   "verdict": "deny",
+   "layer": "L0-hard"
+  },
+  {
+   "tool": "mcp__srv__x",
+   "mode": "default",
+   "verdict": "ask",
+   "layer": "L3-mode"
+  },
+  {
+   "tool": "mcp__srv__x",
+   "mode": "guided",
+   "verdict": "ask",
+   "layer": "L4-mcp-unannotated"
+  },
+  {
+   "tool": "mcp__srv__x",
+   "mode": "auto",
+   "verdict": "ask",
+   "layer": "L4-mcp-unannotated"
+  }
+ ]
+}
