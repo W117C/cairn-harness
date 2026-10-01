@@ -3,24 +3,192 @@
     "id": "B1-bugfix-crossfile",
     "source": "dsh-bench@local",
     "instruction": "这个仓库的测试有失败用例。请先跑一遍测试复现，定位根因，改 src/ 下的代码修好它，然后重跑测试证明修好了。注意：金额一律用整数「分」，约定见 README。",
-    "seed": { "kind": "dir", "path": "fixtures/bench/bench-bugfix-crossfile" },
-    "verifier": { "command": "node --test tests/*.test.js" },
-    "expects": ["verifyOk"]
+    "seed": {
+      "kind": "dir",
+      "path": "fixtures/bench/bench-bugfix-crossfile"
+    },
+    "verifier": {
+      "command": "node --test tests/*.test.js"
+    },
+    "expects": [
+      "verifyOk",
+      "judgeUntouched"
+    ]
   },
   {
     "id": "B2-feature-export",
     "source": "dsh-bench@local",
     "instruction": "tests/fit.test.js 里有两条针对 joinFitted 的失败用例（该函数还不存在）。请在 src/fit.js 里实现 joinFitted，让它满足这两条用例的规格：把多段文本各自按 wrap 的规则折行、段与段之间用空行分隔、空段保留为一个空行。实现后跑测试证明全绿。",
-    "seed": { "kind": "dir", "path": "fixtures/bench/bench-feature-export" },
-    "verifier": { "command": "node --test tests/*.test.js" },
-    "expects": ["verifyOk"]
+    "seed": {
+      "kind": "dir",
+      "path": "fixtures/bench/bench-feature-export"
+    },
+    "verifier": {
+      "command": "node --test tests/*.test.js"
+    },
+    "expects": [
+      "verifyOk",
+      "judgeUntouched"
+    ]
   },
   {
     "id": "B3-refactor-callsite",
     "source": "dsh-bench@local",
     "instruction": "这个仓库的测试全红。根因在共享的格式化函数上：金额渲染没有补足两位小数。请修好根因，并检查所有调用点是否与它保持一致（有历史遗留代码绕过了封装），修完跑测试证明全绿。",
-    "seed": { "kind": "dir", "path": "fixtures/bench/bench-refactor-callsite" },
-    "verifier": { "command": "node --test tests/*.test.js" },
-    "expects": ["verifyOk"]
+    "seed": {
+      "kind": "dir",
+      "path": "fixtures/bench/bench-refactor-callsite"
+    },
+    "verifier": {
+      "command": "node --test tests/*.test.js"
+    },
+    "expects": [
+      "verifyOk",
+      "judgeUntouched"
+    ]
+  },
+  {
+    "id": "B4-bugfix-pagination",
+    "source": "dsh-bench@local",
+    "instruction": "这个仓库的测试有失败用例。约定写在 README 里（每页含 size 条，页码从 0 开始），根因在 src/ 的分页实现里，但 API 那一层也要能验证。请修好并跑测试证明全绿。",
+    "seed": {
+      "kind": "dir",
+      "path": "fixtures/bench/bench-bugfix-pagination"
+    },
+    "verifier": {
+      "command": "node --test tests/*.test.js"
+    },
+    "expects": [
+      "verifyOk",
+      "judgeUntouched"
+    ]
+  },
+  {
+    "id": "B5-bugfix-async",
+    "source": "dsh-bench@local",
+    "instruction": "这个仓库的测试有失败用例。队列语义见 README：drain 必须等所有任务跑完才返回，且保持提交顺序；handler 是异步的。请修好根因并跑测试证明全绿。",
+    "seed": {
+      "kind": "dir",
+      "path": "fixtures/bench/bench-bugfix-async"
+    },
+    "verifier": {
+      "command": "node --test tests/*.test.js"
+    },
+    "expects": [
+      "verifyOk",
+      "judgeUntouched"
+    ]
+  },
+  {
+    "id": "B6-feature-flag",
+    "source": "dsh-bench@local",
+    "instruction": "tests/ 里有针对 --verbose 的失败用例（该开关还没实现）。请在参数解析里支持它：置位 verbose 标志、且不进 rest；并且让解析结果能直接喂给 logger.setVerbose。实现后跑测试证明全绿。",
+    "seed": {
+      "kind": "dir",
+      "path": "fixtures/bench/bench-feature-flag"
+    },
+    "verifier": {
+      "command": "node --test tests/*.test.js"
+    },
+    "expects": [
+      "verifyOk",
+      "judgeUntouched"
+    ]
+  },
+  {
+    "id": "B7-feature-csv",
+    "source": "dsh-bench@local",
+    "instruction": "src/export.js 的 toCsv 只做了「用逗号连起来」，还没做转义。请按 README 的规格补全 RFC 4180 转义（含逗号/双引号/换行的字段用双引号包住，内部双引号写成两个），行尾用换行符、不留尾随换行；report.js 的导出要跟着正确。跑测试证明全绿。",
+    "seed": {
+      "kind": "dir",
+      "path": "fixtures/bench/bench-feature-csv"
+    },
+    "verifier": {
+      "command": "node --test tests/*.test.js"
+    },
+    "expects": [
+      "verifyOk",
+      "judgeUntouched"
+    ]
+  },
+  {
+    "id": "B8-feature-memo",
+    "source": "dsh-bench@local",
+    "instruction": "src/service.js 的 getUser 每次都真的去取。请加记忆化：同一个 id 只真取一次、不同 id 互不影响、resetCache() 之后重新取。真取次数由 loader 的 loadCount() 观测，测试据此断言。跑测试证明全绿。",
+    "seed": {
+      "kind": "dir",
+      "path": "fixtures/bench/bench-feature-memo"
+    },
+    "verifier": {
+      "command": "node --test tests/*.test.js"
+    },
+    "expects": [
+      "verifyOk",
+      "judgeUntouched"
+    ]
+  },
+  {
+    "id": "B9-refactor-rename",
+    "source": "dsh-bench@local",
+    "instruction": "请把 api 对象上的 getUser 改名为 fetchUser，并更新所有调用点（cart.js / orders.js / admin.js）。改名后旧名字不要再保留。跑测试证明全绿。",
+    "seed": {
+      "kind": "dir",
+      "path": "fixtures/bench/bench-refactor-rename"
+    },
+    "verifier": {
+      "command": "node --test tests/*.test.js"
+    },
+    "expects": [
+      "verifyOk",
+      "judgeUntouched"
+    ]
+  },
+  {
+    "id": "B10-refactor-dedupe",
+    "source": "dsh-bench@local",
+    "instruction": "邮箱规范化在 user.js 与 order.js 里各写了一份，而且已经漂了（一份忘 trim、一份忘小写）。请抽成一份共享实现（src/validate-email.js 里已有正确口径）并让两处都走它，保证两处行为逐例一致。跑测试证明全绿。",
+    "seed": {
+      "kind": "dir",
+      "path": "fixtures/bench/bench-refactor-dedupe"
+    },
+    "verifier": {
+      "command": "node --test tests/*.test.js"
+    },
+    "expects": [
+      "verifyOk",
+      "judgeUntouched"
+    ]
+  },
+  {
+    "id": "B11-refactor-signature",
+    "source": "dsh-bench@local",
+    "instruction": "请把 store.js 里 put 的位置参数改成选项对象：put({ table, key, value })，返回形状不变；并更新三个调用点（users.js / orders.js / audit.js）。跑测试证明全绿。",
+    "seed": {
+      "kind": "dir",
+      "path": "fixtures/bench/bench-refactor-signature"
+    },
+    "verifier": {
+      "command": "node --test tests/*.test.js"
+    },
+    "expects": [
+      "verifyOk",
+      "judgeUntouched"
+    ]
+  },
+  {
+    "id": "B12-long-horizon",
+    "source": "dsh-bench@local",
+    "instruction": "这个仓库有 20 个互不相关的小工具，每个都有一处 bug（每个文件顶部注释写了它该做什么，tests/ 是规格）。没有共同根因，请逐个读测试、逐个修好，最后跑一遍测试证明 20 条全绿。注意：这是长任务，请保持推进，不要只修一部分就收工。",
+    "seed": {
+      "kind": "dir",
+      "path": "fixtures/bench/bench-long-horizon"
+    },
+    "verifier": {
+      "command": "node --test tests/*.test.js"
+    },
+    "expects": [
+      "verifyOk",
+      "judgeUntouched"
+    ]
   }
 ]

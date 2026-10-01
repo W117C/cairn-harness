@@ -294,10 +294,22 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
   const log = createEventLog(eventsPath);
   const clarify = new ClarifyGate();
   const plan = new PlanGate();
-  const answers: Record<string, string> = {
-    "开关加在哪里？": "addTodo 增加默认完成参数",
-    "开关的默认行为？": "默认未完成（done=false）",
-  };
+  /* 澄清答案**只能给内建 I1 那一道题**（它的题面就是"给待办应用加个开关"）。
+   *
+   * 为什么必须按题目限定：`ClarifyGate.submit` 是**原样透传**的
+   * （`src/agent/gates.ts:70`：`resolve(answers)`，不按问题文本过滤）⇒
+   * 别的任务一提问，拿到的就是这张"开关"表。
+   * 2026-10-01 实测：B4（分页 off-by-one）的模型收到「addTodo 增加默认完成参数」后，
+   * 直接在下一轮反问「**上一轮你答的是「addTodo / done 开关」，但本仓库里没有任何 todo**」——
+   * 一次无关答案烧掉一整轮，而且把它带向错误方向（那一轮它去改了判卷面）。
+   * 这是"尺子喂假信号"，会让所有任务的分数不可信。
+   *
+   * 外部任务集没有这份表 ⇒ 交**空答案**，与 CLI 无人值守档同一语义
+   * （`src/cli.ts`：'提交空答案，模型须自行拿主意'）。真要给答案，应当写进任务书，
+   * 而不是在这里替所有任务猜。 */
+  const answers: Record<string, string> = t.id === "I1"
+    ? { "开关加在哪里？": "addTodo 增加默认完成参数", "开关的默认行为？": "默认未完成（done=false）" }
+    : {};
   const driven = {
     append: async (e: AgentEvent) => {
       await log.append(e);
@@ -372,8 +384,21 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
   //  · `.tmp/` / `.agents/`：运行产物。
   // 「判卷面被动过」**不看目录差异**——那只说明有字节变了；要看的是**模型自己发起的写**
   // （write_file / edit_file 的路径参数），否则 pnpm 的副作用会冒充成模型的越界。
+  /* harness **自己写**的工作区状态不算"模型改的盘"，否则读数会误导。
+   *
+   * 为什么必须排除：`changed` 是「靶子目录 vs 跑完的工作目录」逐字节比，
+   * 而 harness 自己会往工作区写两支——`.agent/sessions/`（事件流）与
+   * `.agent/snapshots/`（写前快照）。它们一进来，`onlySrcChanged` 就**恒 false**、
+   * `changedFiles` 的头几项永远是快照路径，读的人会以为模型到处乱改。
+   * 2026-10-01 实测（12 条任务的真模型基线）：**12 条 onlySrcChanged 全 false**，
+   * 而逐条看 changedFiles，模型其实只动了 `src/` 与 `tests/`。
+   *
+   * 只排除这两支、**不排除整个 `.agent/`**：模型若真去改 `.agent/config.json`
+   * 这类配置面，那属于越界，必须看得见。
+   * （原先只写了 `.agents/`——复数。harness 用的是单数 `.agent/`，等于没排除。） */
   const NOISE = (f: string): boolean =>
-    f === "pnpm-lock.yaml" || f.startsWith(".tmp/") || f.startsWith(".agents/") || f === ".DS_Store";
+    f === "pnpm-lock.yaml" || f.startsWith(".tmp/") || f.startsWith(".agents/") ||
+    f.startsWith(".agent/sessions/") || f.startsWith(".agent/snapshots/") || f === ".DS_Store";
   const orig = (await listFiles(appDir)).filter((f) => !NOISE(f));
   const now = (await listFiles(work)).filter((f) => !NOISE(f));
   const changed: string[] = [];
