@@ -1,0 +1,36 @@
+# L1 自动兜底（M9）：typecheck + 全量判卷 + 快门面。推上去才生效，本地零影响。
+# 取舍、成本、以及"为什么这里排除了两道门"见 scripts/ci/README.md（L2 pre-commit 属业主拍板项，本文件不做）。
+#
+# runner 选 macos-latest 的理由（诚实标注）：本仓开发环境是 macOS，沙箱与平台分支的判卷按它写；
+# ubuntu 迁移是另一件事，换 runner 之前要先在真实 CI 上验证一轮（本机无法验证 Linux 行为，
+# 所以这里不假装 ubuntu 也行——见 README「换 runner 前先做什么」）。
+name: verify
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: typecheck
+        run: pnpm typecheck
+      - name: full test suite
+        run: pnpm test
+      # 快门面 = CERT_GATES 减两道**已知红**（gate-check 的 H7 属任务 #9、mutate-needles-check 的
+      # 4 支锚点属任务 #23——都不是本仓库当前可绿的账，进 CI 只会训练人忽略红灯）。
+      # 两道修好后加回这一行：pnpm gates --only=gate-check,mutate-needles-check
+      - name: fast gates (cert face minus two known-red)
+        run: >-
+          pnpm gates
+          --only=no-progress-check,prune-check,fork-check,compaction-check,docs-check,memory-check,head-import-check,autonomy-check,sandbox:check,security-check,provider:check,routing-check,model-surface-check,prefix-churn-check,prompt-surface-check,replay-determinism-check,cost-per-progress-check,web-fetch-check,gym-check,evidence-typecheck-check

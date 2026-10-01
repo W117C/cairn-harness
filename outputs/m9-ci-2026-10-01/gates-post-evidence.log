@@ -1,0 +1,27 @@
+# 证据面门复跑（m8/m9 的 LEDGER/PROGRESS 写完之后的新内容旧门保险）
+Already up to date
+Done in 187ms using pnpm v11.21.0
+$ node --import tsx scripts/gates.ts --only=evidence-typecheck-check,docs-check
+== pnpm gates ==
+门清单（2 道，清单即事实源）：docs-check evidence-typecheck-check
+执行器：pnpm run
+  清单漂移校验：✅ GATES ↔ package.json scripts 一致（无孤儿验收脚本）
+
+  ▶ docs-check …  ✅ docs-check         exit=0  806ms
+      └ UNVERIFIED=3
+  ▶ evidence-typecheck-check …  ✅ evidence-typecheck-check exit=0  3001ms
+      └ ✅ evidence-typecheck：证据面危险码 12 条／帽 12 条（HEAD 口径｜在飞未入库 0 条／0 个文件（只点名，不计我的账）；登记 8 个文件；全量报错 45 条）（2319ms｜解析 45/45 条）
+
+== 断言体检（空断言 / 恒真式 / 暗卷段零断言 / 析取式弱断言）==
+  扫描面：90 个已跟踪且在盘的脚本（未跟踪草稿不判，口径同 tests/assertion-health-scan.test.ts）
+  ✅ 零命中
+
+== 汇总 ==
+  绿 2 / 2，红 0
+  逐道退出码：docs-check=0 evidence-typecheck-check=0
+  认证面 = **工作树，不是 HEAD**：判卷四面（src/scripts/tests/fixtures）在飞 9 项｜全仓在飞 27 项 ⇒ 本表全 0 **不等于 HEAD 全 0**；要 HEAD 认证请在 HEAD 的隔离 worktree 里跑整表（`git worktree add --detach <tmp> HEAD`；注意 `pnpm gates --direct` 只换执行器〔`pnpm run X` → `/bin/sh -c <script>`〕，**不改取料树**）
+  ⚠️  未证 3 项（连网/凭据限制未跑到的断言，或绿而零输出的门——**不等于通过**）
+     逐道：docs-check 3
+     严格模式：DSH_STRICT_UNVERIFIED=1 或 --strict-unverified 可让未证直接判红
+  ⚠️  2 道门退出码全 0，但有 3 项未证——不得宣称「全部通过」
+EXIT=0

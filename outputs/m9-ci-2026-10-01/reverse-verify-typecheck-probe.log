@@ -1,0 +1,11 @@
+# 反向验证：故意放一个类型错文件，跑 CI 同款命令（pnpm typecheck），必须抓到
+# 命令：pnpm typecheck
+Already up to date
+Done in 212ms using pnpm v11.21.0
+$ node --import tsx scripts/typecheck.ts
+src/__ci-typecheck-probe.ts(1,7): error TS2322: Type 'string' is not assignable to type 'number'.
+[typecheck] 报错文件归因：HEAD 内 0 个 / 未跟踪草稿 1 个
+[typecheck] ⚠️ 未跟踪草稿（不属 HEAD 回归，属在飞改动）: src/__ci-typecheck-probe.ts
+[typecheck] 全部报错都在未跟踪草稿里 ⇒ HEAD 态类型干净（同 HEAD 开 worktree 跑 tsc 可复核）
+[ELIFECYCLE] Command failed with exit code 2.
+EXIT=2
