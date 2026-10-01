@@ -10419,6 +10419,20 @@ const MUTATIONS = [
     expectFail: "收集期不再扫真仓：那种写法恰好一条",
   },
 
+  /* ── 第 290 页：HEAD 取料面的中文文件名。`git ls-tree --name-only` 默认把非 ASCII 路径转义成带引号的八进制，
+   *    于是本仓那 164 条中文证人**一条都不在清单里**——D-10/D-11 把已入库的工件读成追不到（假红 44 条，
+   *    连我自己上一笔的普查都是它给的数）。修法只有一个字：`-z`。 ── */
+  {
+    id: "head-face-ls-tree-without-z-escapes-cjk-paths",
+    src: "scripts/docs-check.ts",
+    test: "tests/docs-check.test.ts",
+    desc: "摘掉 `ls-tree` 的 `-z` ⇒ 非 ASCII 路径全变成带引号的八进制串：中文证人从清单里消失，" +
+      "D-11 把「已入库」读成「追不到」（假红），而目录折成的 `dirs` 也因行首那个引号整条落空。" +
+      "这条只能靠真机哨兵抓：合成输入里的文件名一律 ASCII，怎么改都是绿的",
+    apply: (s) => s.replace('"ls-tree", "-r", "--name-only", "-z", "HEAD"', '"ls-tree", "-r", "--name-only", "HEAD"'),
+    expectFail: "哨兵：盘上真有、HEAD 真有 ⇒ 清单里必须真有（这条不可能靠空面变绿）",
+  },
+
   /* ── 第 273 页：把「实测 <1.5s 全进」这条线接成判据（取料＝入库的那趟全表日志）。两支各钉一半。 ── */
   {
     id: "certface-webfetch-gate-row-dropped",
@@ -11306,8 +11320,8 @@ function reportNeedles(entries, { showUnparsed = true } = {}) {
   let inHead = null;
   let headUnchecked = 0;
   try {
-    inHead = new Set(execFileSync("git", ["ls-tree", "-r", "--name-only", "HEAD"],
-      { cwd: ROOT, encoding: "utf8", maxBuffer: 128 * 1024 * 1024 }).split("\n").filter(Boolean));
+    inHead = new Set(execFileSync("git", ["ls-tree", "-r", "--name-only", "-z", "HEAD"],
+      { cwd: ROOT, encoding: "utf8", maxBuffer: 128 * 1024 * 1024 }).split(String.fromCharCode(0)).filter(Boolean));
     untracked.push(...untrackedAnchorPaths(anchorFaces(entries), (rel) => inHead.has(rel)));
   } catch (err) {
     headUnchecked = 1;

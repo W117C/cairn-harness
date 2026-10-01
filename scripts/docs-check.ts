@@ -156,8 +156,12 @@ export function checkSourceLineCitations(
  *  从前 `cred-face.mts` 自己抄了一份读面，接口一改就静默烂掉（规则 345），这次不再犯第二遍。 */
 export function trackedFilesAtHead(): Set<string> | null {
   try {
-    const out = execFileSync("git", ["ls-tree", "-r", "--name-only", "HEAD"], { cwd: ROOT, encoding: "utf8" });
-    const lines = out.trim().split("\n").filter((l) => l !== "");
+    // ⚠️ 必须 `-z`：默认的 `ls-tree --name-only` 会把**非 ASCII 路径**转义成一串带引号的八进制
+    // （现读：本仓 HEAD 里 164 条这样，全在 `outputs/<主题>-日期/01-中文标题.md` 那一族）。
+    // 从前这里按 `\n` 切，于是每一条中文证人都不在集合里 ⇒ D-10/D-11 把**已入库的**工件读成追不到（假红），
+    // 而目录点名那条折 `dirs` 的正则也因为行首多了个引号而整条落空。取料面的形状要按真机量（规则 237）。
+    const out = execFileSync("git", ["ls-tree", "-r", "--name-only", "-z", "HEAD"], { cwd: ROOT, encoding: "utf8" });
+    const lines = out.split(String.fromCharCode(0)).filter((l) => l !== "");
     return lines.length === 0 ? null : new Set(lines);
   } catch {
     return null;

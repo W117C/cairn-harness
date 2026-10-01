@@ -31,6 +31,7 @@ import {
   LEGACY_WAIVERS,
   LEGACY_WITNESS_REFS,
   ledgerWitnessRefs,
+  trackedFilesAtHead,
   STATE_FILE,
   waive,
   waiverKey,
@@ -932,5 +933,44 @@ describe("D-11 证人点名面：文件与目录两半都要追得到，登记�
     expect(/^ {4}ledgerTracked = trackedFilesAtHead\(\);$/mu.test(src)).toBe(true);
     // 凭证页只构造一次（D-9 与 D-11 吃同一份）：老写法在调用点里现造，如今那一行该没了
     expect(src.includes("existsSync(ledgerAbs) ? credentialPages(readFileSync(ledgerAbs, \"utf8\")) : []")).toBe(false);
+  });
+});
+
+describe("HEAD 取料面必须吃得到中文文件名（第 290 页：`git ls-tree --name-only` 默认把非 ASCII 路径转义）", () => {
+  // 真机哨兵：这条不是合成输入——本仓 HEAD 里那 164 条中文证人只有 `-z` 才进得来。
+  // 从前 `trackedFilesAtHead()` 按 `\n` 切默认输出，于是每一条中文证人都「不在清单里」⇒ D-10/D-11 假红，
+  // 而 `dirs` 那道折目录的正则也因行首多了引号一起落空（规则 237：取值域要按真机形状量，不按「大概都是 ASCII」量）。
+  const CJK_PROBE = "没尺这一态";
+  const CJK_PATH = "outputs/anchor-no-ruler-face-2026-09-26/01-没尺这一态被算出来又扔掉.md";
+
+  it("哨兵：盘上真有、HEAD 真有 ⇒ 清单里必须真有（这条不可能靠空面变绿）", () => {
+    const tracked = trackedFilesAtHead();
+    expect(tracked).not.toBeNull();
+    const set = tracked as Set<string>;
+    expect(set.has(CJK_PATH)).toBe(true);
+    // 反向一侧：拿一条确实不在 HEAD 里的中文名当负控，别让它因为「集合里有引号形状的邻居」而误绿
+    expect(set.has("outputs/anchor-no-ruler-face-2026-09-26/01-这一条不存在.md")).toBe(false);
+  });
+
+  it("清单里不许出现 git 的转义形状（行首引号，或反斜杠加三位八进制）", () => {
+    const tracked = trackedFilesAtHead();
+    const set = tracked as Set<string>;
+    const escaped = [...set].filter((p) => p.startsWith(String.fromCharCode(34)) || /\\\d{3}/u.test(p));
+    expect(escaped).toEqual([]);
+    expect(set.size).toBeGreaterThan(1000);
+  });
+
+  it("目录点名那一半也认中文：整个目录只有中文工件时不红，抽掉才红", () => {
+    const pages = credentialPages(
+      "### 2026-09-30 · 第 977 页 凭证：测试页\n\n取料：outputs/anchor-no-ruler-face-2026-09-26/\n",
+    );
+    expect(pages[0]?.refs).toEqual(["outputs/anchor-no-ruler-face-2026-09-26/"]);
+    const tracked = trackedFilesAtHead() as Set<string>;
+    expect(checkWitnessPaths(pages, tracked, []).findings).toEqual([]);
+    // 同一页喂一份「只有转义形状」的清单（＝修之前的取料面）⇒ 必须报红，证明这条判卷量的就是那一格
+    const escapedOnly = new Set<string>([
+      '"outputs/anchor-no-ruler-face-2026-09-26/01-\\346\\262\\241.md"',
+    ]);
+    expect(checkWitnessPaths(pages, escapedOnly, []).findings.length).toBe(1);
   });
 });

@@ -71,3 +71,34 @@
 无盘 outputs/verify-cause-denominator-2026-09-23/
 在盘 outputs/worker-evidence-parent-context-2026-09-25/
 CLASSIFY_EXIT=0
+
+===== 修 trackedFilesAtHead 的 ls-tree 转义之后复跑（前一份 47/12 的读数是带 bug 的取料面给的，原文留着）=====
+{
+  "headTrackedFiles": 1878,
+  "refsTotal": 243,
+  "fileRefs": 134,
+  "dirRefs": 109,
+  "missTotal": 15,
+  "miss且盘上还在": 3,
+  "miss且盘上也没有": 12,
+  "哨兵_空清单下点名全红": 243,
+  "哨兵_与refsTotal同值": true,
+  "哨兵_凭证页分面条数": 92
+}
+--- 逐条 miss（带在盘分类）---
+无盘 outputs/agent-landscape-gap-analysis-2026-09-18/
+无盘 outputs/agent-review-2026-09-15/
+无盘 outputs/code-review-report-2026-09-12/
+无盘 outputs/code-review-worktree-2026-09-14/
+无盘 outputs/fix-brief-2026-09-14/
+无盘 outputs/fix-log-2026-09-12/
+在盘 outputs/impact-accuracy-probe-2026-09-29/
+在盘 outputs/landing-1c40df7-2026-09-30/head-cert-summary.txt
+无盘 outputs/m7-closure-constraints-2026-09-18/
+无盘 outputs/mimosa-triage-2026-09-13/
+无盘 outputs/optimization-log-2026-09-12/
+无盘 outputs/permission-guided-mode-2026-09-23/
+无盘 outputs/replay-face-gate-2026-09-23/
+在盘 outputs/scratch-scope-census-2026-09-30/readings.md
+无盘 outputs/verify-cause-denominator-2026-09-23/
+RECLASSIFY_EXIT=0
