@@ -1,0 +1,14 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-efdc300.lock）
+变异验证：3 条
+✅ docscheck-cred-page-stale-named-not-checked — 登记页后来自己点名了目录，这条 stale 不查 ⇒ 登记表只进不出，日后变成第二本没人对的旧账（规则 302 双向钉）。第 275 页跟着实现改了指针：那一行从 `namedKeys.has(key)` 换成两个计数的等式（同号两页时 Set 会替另一页说话） ｜本机实测 0.9s／2 拍
+✅ docscheck-cred-face-drops-the-two-new-patterns — 把新纳的两式之一摘掉 ⇒ 我在凭证里写「可比对 214 → 222 个读数」这类**推出来的分母**又没人查了（本笔的动因就是我自己两天里三次把这行的数写成推的：111／222／116，现读 110／221／114） ｜本机实测 0.7s／2 拍
+✅ docscheck-cred-collision-stale-uses-any-named — 把 stale 条件写成『该 key 下任意一页点了名』⇒ 同号两页时，真凭证页一点名就把落地页那条登记判死，而那页压根没点名任何目录——这条登记被删之后，那一页就直接落进受帽管的『未点名页』 ｜本机实测 0.7s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 2.6s · 跑了 3/3 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 6 次／3 条（每条次数分布 2×3）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 docscheck-cred-page-stale-named-not-checked 0.9s
+跑法单价：selector 6 拍·中位 0.34s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-efdc300.lock）
+real 3.22
+user 3.69
+sys 0.48
