@@ -156,18 +156,25 @@ mcp__ 豁免生效: true
 `tool-surface-parity.test.ts` +2 条（三面对账扩成四面 + 分母自证）。
 逐文件实测增量 9 + 1 + 1 = **+11**，与套件读数吻合。
 
-### 门禁全表（31 道，`scripts/gates.ts` 清单即事实源）
+### 门禁全表（31 道，`scripts/gate-manifest.ts` 清单即事实源）
 
 **绿 26 ／ 红 5**，逐道退出码都实测过：
 
 | 结果 | 门 | 退出码 |
 |---|---|---|
-| ✅ | `typecheck` `test` `e2e` `sandbox:check` `fork-check` `autonomy-check` `docs-check` `compaction-check` `tools-check` `map-check` `prune-check` `provider:check` `memory-check` `plugins-check` `security-check` `gym-check` `routing-check` `supervisor-check` `model-surface-check` `prefix-churn-check` `prompt-surface-check` `replay-determinism-check` `no-progress-check` `cost-per-progress-check` `head-import-check` `evidence-typecheck-check` | 0 |
+| ✅ | `typecheck` `test` `e2e` `sandbox:check` `fork-check` `autonomy-check` `docs-check` `compaction-check` `tools-check` `map-check` `prune-check` `provider:check` `memory-check` `plugins-check` `security-check` `gym-check` `routing-check` `supervisor-check` `model-surface-check` `prefix-churn-check` `prompt-surface-check` `replay-determinism-check` `no-progress-check` `cost-per-progress-check` `head-import-check` `web-fetch-check` `evidence-typecheck-check` | 0 |
 | ❌ | `head-cert-check` | 1 |
 | ❌ | `gate-check` | 1 |
 | ❌ | `mutate-needles-check` | 1 |
 | ❌ | `mutate-verify` | **124（超时，非内容红）** |
-| ❌ | `mutate-needles-check`（已列） | — |
+
+> **2026-10-01 补正（收口时逐条对清单核出来的，不是重跑）**：本表初版有两处自身的记账错——
+> ① 绿那一行**漏点名了 `web-fetch-check`**（它由 `b3e3abf` 第 273 页买进，`git show 5e0c859:scripts/gate-manifest.ts`
+> 现读确认它在 M7 开工时就已在册，所以是漏点名、不是后来才加的门）；② 红那一行把
+> `mutate-needles-check` **重复列了两次**（末行「（已列）｜—」是重复行，凑数用的）。
+> 绿 26／红 5 的**读数本身不变**（重复行那格本就没有退出码），变的是点名面：绿行补齐后 27 个名字
+> ＋ 红行 4 个不同名字 ＝ 31，与清单同数。**这一格改的是点名面，不是读数**——照贴出来是因为
+> 「重复行凑数」正是本仓反复判死的形态（本页自己第 4 项那条「重复判卷行」就是同族）。
 
 **五道红逐条归因，没有一条是本轮引入**（证明方式写在括号里，不是推断）：
 

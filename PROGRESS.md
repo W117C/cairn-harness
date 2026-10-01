@@ -9749,3 +9749,110 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
    两道都在帽内、都带原文，所以等级照贴（规则 211）：**判卷面全量绿、门面 20/22 绿**，`HEADCERT_EXIT=1` 由这两道决定，不写成"全量绿"。
 4. **贴帽那一格换了口径也要照贴**（它替隔壁那笔 `testTimeout: 30_000` 说话）：本趟原文 `贴帽读数（缺省＝config 里的 testTimeout=30000ms）：3512 条里 0 条用时 ≥ 有效预算 80%｜无显式预算按缺省算 3254 条｜标题非字面量（it.each／插值／拼接，按缺省算）114 条｜预算没落到 0 条`。对照要有出处：**`e42b4af` 那趟**（config 还没有 `testTimeout`）读的是 `缺省＝vitest 默认 5000ms`、`3470 条里 1 条用时 ≥ 有效预算 80%`，而那条正是 `head-cert-deps` 的 `7855ms/5000ms=157%`（证人 `outputs/witness-face-widen-290b-2026-10-01/head-cert-e42b4af.log`）；从 `73ed49d` 那趟起口径已是 `testTimeout=30000ms`，同一格变成 `0 条`。归因说白：**这一格的变化属隔壁 `274f165`（用例面）**，本簇动的是**钩子面**（`HOOK_BUDGET_MS`）——两格互不替代，第 291 页第 6 项那句「贴帽读数不吃钩子」依然成立。顺带把任务 #8 那格收了：贴帽读数今天有，撞缺省那两条里的 `head-cert-deps` 由他们的 `testTimeout` 治掉并留了实测。
 5. **刻意未做**：⑴ 不回收任何 worktree（这趟认证自报 `常驻残留树=69`，含本会话建的验证树；回收要点头）；⑵ 不动任务 #9／#23 里别人的判卷与锚点；⑶ 主树此刻仍有别人的在飞工件（含几个 dated 目录），本页**不点名**它们——第 290 页补⑴ 第 10 项那条写法约束（点了别人的名＝替别人报一条不归我清的红）在这里继续生效。
+
+
+### 2026-10-01 · 第 292 页 · 路线图 M7 收口：未登记工具名从「默认放行」翻成 fail-closed——方向反了的默认值（`f55f52e` ＋ 证据补全 `ee7e12c`）
+
+取料面（全名逐支）：`outputs/m7-permission-allowlist-2026-10-01/EVIDENCE.md`、`outputs/m7-permission-allowlist-2026-10-01/before.json`、`outputs/m7-permission-allowlist-2026-10-01/after.json`。证据目录已随页入库（`git ls-tree` 现读逐字命中三支）。
+
+1. **改前的读数是实测的，不是照抄审计**：`evaluate()` 里「未知**档位** → 取问」（保守）与「未知**工具** → 放行」（激进）方向相反。实测 `brand_new_write_tool` 在 `read-only`／`default`／`guided`／`auto` **四档全放行**（`approve/L4-pass`）。说清不夸大：**今天没有可利用的洞**——26 个在册工具名逐个核对过都登了记；这是**默认值**问题（以后新增一族工具忘了登记 `SIDE_EFFECT_TOOLS`，就会静默绕过只读档与方案门），不是当前漏洞。
+
+2. **计划书指错了主犯（核查结论）**：把 `checkPermission` 当主犯，而它**近乎死代码**——全仓唯一生产调用点是 `src/agent/loop.ts:401` 那一行 `gate(mode, name, interactive)`，而 `src/main/agent-runner.ts` import 了 `checkPermission` 却**零调用**。真正的门是 `evaluate()`（`src/permissions/autonomy.ts` 的四层管线），守卫落在 `src/permissions/autonomy.ts:427`。
+
+3. **实施中撤回的一处（本轮最值得记的结论）**：第一版在 `checkPermission` 两侧也加了守卫，**全量套件红了 4 条**（`loop.test.ts` ×1、`registry-rung.test.ts` ×1、`tool-block-witness.test.ts` ×2）。根因是它顶掉了本仓**已经存在**的未知工具闸：`src/agent/loop.ts:426` 已有 `unknown tool: <name>` 那道会话闸（配 `blockedBy:"unknown-tool"`，`TOOL_BLOCK_REASONS` 第 6 个成员就是它），而 `tests/registry-rung.test.ts` 开宗明义「注册表判定只看**本会话**工具表，不许拿静态 `TOOLS` 当唯一源」——`checkPermission` 收不到会话工具表，在那里做任何 `KNOWN_TOOL_NAMES` 判断都必然误拒运行期注入的工具。⇒ 撤回理由**留在源码原地**（`src/permissions/index.ts` 的注释），并由判卷 **C3** 组钉住「别被加回来」。教训：**「本仓没有的东西」与「本仓已经有、但你翻错了地方」是两回事**；判卷比人的记忆可靠（当时只跑我自己那 9 条新测试，这 4 条红不出来）。
+
+4. **改后逐格读数**：32 格 = 8 个工具名 × 4 档，**变化 16 格，全部且仅是未登记名**（`brand_new_write_tool`／`ghost_tool`／`totally_made_up` 各 4 档 → `ask/L4-mcp-unannotated`）。**在册 26 名逐格零回归**：104 格 `verdict`/`layer` 逐字不变，判卷用 **B1 金标准表**（逐格点名期望值，不是通则——通则会跟被改对象一起漂）。
+
+5. **关键设计决定**：⑴ **派生而非手抄**（`src/permissions/tool-registry.ts`，46 行）：「写向」这个事实本仓已有三处所有者，再抄第四份就是本仓反复判死的「第二个事实源」；新表只做**并集，一个名字都不新增**。⑵ 裁决 `ask` 而非 `deny`（业主确认）：交互时人看得见，无人值守 askGate 缺席自动降 unattended-deny。⑶ **复用 `L4-mcp-unannotated` 层，不新增层**——两件事同源（「工具面没为自己作证」）；代价是该层读数此后不再只关于 MCP，照贴。⑷ **`mcp__` 前缀豁免**：未知名答的是「从没听说过这个工具」，MCP scoped 名答的是「server 主动报备过」；套用会**摧毁 `readOnlyHint` 白名单**。⑸ 位置在 L1/L2/L3-rule **之后**、L4 风险层**之前**，且在 `!policy.writeAsk` 块**之外**（否则 read-only/default 档收不到）。
+
+6. **反向验证（6 个变异，每个都杀掉它该杀的那几条）**：M1 `evaluate` 守卫 → `if (false && …)` 杀 **3** 条；M3 派生集漏掉两张 worker 表 → **3** 条；M4 漏掉 `INJECTED_TOOLS` → **5** 条；M5 去掉 `mcp__` 豁免 → **1** 条；**M6 把撤回的 `checkPermission` 守卫加回来 → 5 条／4 个文件**（红的不只是新写的 C3，还有三份既有判卷）。M2 随该守卫一并作废，由 M6 取代——M6 证明**撤回这件事本身被钉住了**。全部变异后逐个还原，还原后残留扫描为 0。
+
+7. **计划书担心的语料漂移，实测结构性不可能**：`scripts/replay/ask-density.ts` 用历史语料里的工具名过 `evaluate`，若语料含旧名字，改动后 ask 密度会漂。实测不会——复跑面在喂给 `evaluate` 之前先过 `isGatedTool`（`scripts/replay/corpus.ts`），受管面是 `SHELL_FAMILY ∪ {write_file, edit_file} ∪ mcp__*`，**全部已在 `KNOWN_TOOL_NAMES` 内**：复跑面 gated 名字数 5、其中未登记 0、`mcp__` 豁免生效 true。同一条结论覆盖 `gate-outcomes`／`corpus-inventory` 三个复跑面。
+
+8. **认证（逐格实测）**：基线 `5e0c859` = Test Files 263／Tests 3512／exit=0；改后 = **Test Files 264／Tests 3523／exit=0**（**+11，只增不减**）。逐文件增量 9（新判卷 `tests/permissions-tool-registry.test.ts`）+ 1（`gate-audit.test.ts` 的 `LAYER_CASES`，不加则该文件穷尽断言必红）+ 1（`tool-surface-parity.test.ts` 三面对账扩四面）= 11，与套件读数吻合。typecheck 0 报错。
+
+9. **门禁 31 道逐道跑完（`ee7e12c`）：绿 26 ／ 红 5，五道红逐条归因，没有一条是本轮引入**：
+   - ⚠️ **本笔落笔时更正了这张表自身的一处记账错（读数没变，点名面变了）**：`ee7e12c` 那版绿行**漏点名了 `web-fetch-check`**（`git show 5e0c859:scripts/gate-manifest.ts` 现读 3 处命中 ⇒ 它由 `b3e3abf` 第 273 页买进、M7 开工时就已在册，不是后来才加的门），红行则把 `mutate-needles-check` **重复列了两次**（末行「（已列）｜—」是凑数行、没有退出码）。**绿 26／红 5 的读数本身不变**，变的是点名面：绿行补齐后 27 个名字 ＋ 红行 4 个不同名字 ＝ 31，与 `scripts/gate-manifest.ts` 同数。补正在证据文件原地（`outputs/m7-permission-allowlist-2026-10-01/EVIDENCE.md` 第 8 节表格下的补正块），**这里照贴而不是悄悄改**——「重复行凑数」正是本仓反复判死的形态，本页自己第 4 项那条「重复判卷行」就是同族。
+   - `gate-check exit=1`＝H7 报 `fixtures/impact/accuracy-repo/*` 十个文件 `onDiskNotInTable`（本笔零触及 `fixtures/`、`src/frozen.ts`、`scripts/frozen-sha256.json`：`git show --stat HEAD -- src/frozen.ts scripts/frozen-sha256.json fixtures/` 输出为空；那十个文件由 `1748ca7` 引入，父提交 `5e0c859` 的提交信息自己就记着这道门红并归因给同一笔）。
+   - `mutate-needles-check exit=1`＝4 条锚点针脚失效（`src/agent/orchestrator-config.ts` ×2、`src/main/agent-runner.ts`、`src/providers/openai.ts`）；门自己印出「谁搬走的」`4c10272`／`404249c`／`e76ed13`，实测三笔**都是父提交 `5e0c859` 的祖先**⇒ 都在开工前就存在。
+   - `head-cert-check exit=1`＝**转述**，它内层重跑 22 道门把上面两条红继承进来；它自己的读数是全绿。
+   - `mutate-verify exit=124`＝**超时**（预算 1200s，实测 1215021ms），**不是内容红**：超时信息自己写着「SIGTERM 宽限 15s 内未退出，已整组 SIGKILL」，日志里所有可见断言都是 ✅；已读 5 条 ❌ 全是上面那批同一批失效锚点，`grep -cE "permissions|tool-registry|evaluate|checkPermission"` = **0**（没有一条涉及本轮文件）。
+   - ⚠️ **超时留下了一个突变（已清理）**：`SIGKILL` 那条消息明写「子进程未自还原」，实测 `.worktrees/gate-mutate-verify/src/agent/prompt-surface.ts` 确实被改了一半（`if (allModes.length === 0) throw …` 被摘成 `return []`——把一条 fail-closed 弄成静默空数组）并留下 `.mutbak`。已用该 `.mutbak` 原样还原，复核 `git status` 为空、零 `.mutbak`。⇒ **超时这件事本身照贴，不写成「全绿」；而残留要查不能信日志**（信日志会漏掉这一处）。
+
+10. **刻意未做／仍欠**：⑴ 不动任务 #9／#23 里别人的判卷与锚点；⑵ 不回收任何 worktree（认证自报常驻残留树 69，回收要点头）；⑶ M7 三个产物侧的取舍照贴：`L4-mcp-unannotated` 层被复用于「未登记工具」，这是**一个层两种情形**，日后读该层读数要记得；⑷ 「MCP／插件动态注入工具的归类决定」按路线图要求已写进源码注释与本文第 5 项，但要等业主复核措辞。
+
+
+### 2026-10-01 · 第 293 页 · 路线图 M5 收口：补 typecheck 验证面 + 重复失败升级处置（`1e42c74`）——**禁区一条没碰**，写范围实测缩到 `verify.ts`
+
+取料面：本页的读数来自该笔提交信息与判卷 `tests/verify-multiface.test.ts`（新建 18 条）；`tests/verify-multiface.test.ts` 与 `src/agent/verify.ts` 已入库。**本笔没有 dated 证据目录**——M5 的读数全部写进了提交信息与 `28cbe9c` 那笔的 `outputs/m6-acceptance-2026-10-01/EVIDENCE.md` §5.3／§6（那两处逐字复述了本页的三条变异与真靶子实测）。
+
+1. **禁区逐字核对（路线图原文「不许削弱既有验证」＝不许把 `autoVerify` 改默认关、不许减少归因类别）**：`autoVerify` 默认**未动**；`VerifyCause` 七个类别**一个没减**；零新增归因类别（下面第 4 项是这条的实测依据）。已有的第 2 拍重复失败文案**逐字不动**（`tests/verify.test.ts` 逐字钉着它），只新增第 3 拍行为 ⇒ 既有判卷零回归（既有 8 个 verify 判卷文件 92 passed）。
+
+2. **交付物 1 · 多面验证**：`VerifyConfig` 加 `typecheck?`（`src/agent/verify.ts:80`）；`probeTypecheckCommands`（`src/agent/verify.ts:201`）在仓库根有 `tsconfig.json` **且** `./node_modules/.bin/tsc` 可执行时才产出这一面（`src/agent/verify.ts:200`）——少任一条判据都**不产出**，理由是「探测不出工具链还给一条必红的命令，比探不出来更坏」。执行顺序 typecheck → lint → test（`verifyCommands`）；`createVerifyHook.surface()` 也认这一面 ⇒ **只有 tsconfig 的仓库**此前被判成「没可验面」、harness 整段跳过 verify，这条修好了。
+
+3. **变异锚点的硬约束与写法**：`scripts/mutate-verify.mjs` 有 24 处钉在 `verify.ts` 上，两条正面相关——`probe-invents-lint-commands` 与 `verify-lang-timeout-same-as-npm` 逐字钉着语言探测档那一行 `return`。⇒ 类型面走**独立的一行 return**（`src/agent/verify.ts:277`），放在语言档之后、`source:"none"` 之前，不碰上面两个串。**lint 面刻意不做**：本仓已裁决（`src/agent/verify.ts:78` 的注释 + 那条锚点），根因实测——`action-fusion.ts` 每次 `write_file` 后都跑 `config.lint`，凭空造 lint 面会把正常的写判成 failed。业主已确认。
+
+4. **命令选 `./node_modules/.bin/tsc` 而不是 `npx --no-install tsc`，是**归因**决定的（实测）**：本地二进制缺失 ⇒ bash 退出 **127** ⇒ 落进**既有**的 `toolchain-missing`（环境类，**不扣模型修复额度**）；`npx --no-install tsc` 缺失 ⇒ 退出 **1** 且不匹配 `PKG_MANAGER_OWN_ERROR_LINE` ⇒ 被判 `code` ⇒ **拿 harness 的环境问题扣模型的钱**，让模型去改本来正确的代码。⇒ **零新增归因类别**（禁区第 2 条的直接兑现）。
+
+5. **真靶子实测（贴命令与输出，路线图验收第 1 条）**：靶子 `/tmp/m5real`。探测到 `source=probed config={"typecheck":["./node_modules/.bin/tsc --noEmit -p tsconfig.json"],"timeoutMs":300000}`；`tsc` 退出 2（类型错）⇒ `ok=false cause=code exit=2`（代码红，扣额度）；把 `node_modules` 整个删掉 ⇒ 探测**不产出该面** ⇒ `source=none`（不给必红的命令）。
+
+6. **交付物 2 · 重复失败升级处置**：`repeatDigestNote` 按 attempt 分档，`ESCALATE_REPEAT_ATTEMPT=3`（`src/agent/verify.ts:102`）起追加「别再改同一处 + **先判这条红可不可修**」（真失败才有修的意义；配置/依赖/环境这类红改多少遍代码都不会绿）——升级分支在 `src/agent/verify.ts:366` 之后。理由：第 3 拍时模型已听过一次「换策略」还在原地打转，说明**换策略本身没被当真**。第 2 拍逐字不变 ⇒ 既有判卷零回归。
+
+7. **为什么不动 `loop.ts`（路线图写范围含它，这是实测结论不是偷工）**：`runVerifyOutcome` 本就返回多 result 数组，`verifyOutcomeCause` 取首个失败的 cause，新增一面只是多一个 result、**不改拍数记账**。`verify-attribution-exits` 钉的「env 红 2 拍／attempt 不推进、code 红 3 拍／计数」由 `classifyVerifyFailure` 原样保证——新增用例对着 loop 真口径跑，仍是 2 拍 + `attempt [1,1]`。⇒ 写范围缩到 `verify.ts`，写在这里以免下一轮又去改 loop。
+
+8. **反向验证三条（`28cbe9c` 补跑，逐条读数）**：类型面探测摘掉（`const tc = []`）→ **2 红**（探测面／surface 认这一面）；命令换成 `npx --no-install tsc` → **1 红**（命令必须是本地二进制）；第 3 拍升级段摘掉半句 → **1 红**（「先判这条红可不可修」那句）。还原后 `verify-multiface` / `verify` / `verify-probe` 三支 **54/54 绿**。
+
+9. ⚠️ **本轮记进台账的一次自我纠错（值得留）**：第一次跑第 3 条变异时**变异本身写错了**——在 `if` 后面加了一个恒假的 `return base`，恒假分支不可达 ⇒ 死代码 ⇒ 全绿（36/36）。这正是本仓记忆里那条纪律的又一次应验：**变异没生效时，不能把「绿」当成「判卷抓得住」**。改成真删掉那半句后才拿到预期的红。本页第 8 项的三条红是改正之后的读数。
+
+10. **刻意未做／仍欠**：⑴ 路线图**差距 2**（长任务中途没有周期性自检）与**差距 3 里的跨会话回归跟踪**不在本笔——那是 `src/agent/loop.ts` 的节拍问题，需与集成 owner 对齐后单独排期；⑵ 「静态分析／lint／类型检查的统一收口」只落了 typecheck 一面（lint 因上文第 3 项的实测根因刻意不做）；⑶ `mutate-verify` 那两条锚点的**整门实证**在本轮以 `exit=124` 超时收场，见第 294 页——**照贴为超时，不写成全绿**。
+
+
+### 2026-10-01 · 第 294 页 · 路线图 M6 收口：把失败轨迹确定性提炼成**带证据指针**的教训（`28cbe9c` ＋ mutate-verify 超时补证 `1d1969d`）——「无证据不产出」在判卷里被反向验证钉住
+
+取料面（全名逐支）：`outputs/m6-acceptance-2026-10-01/EVIDENCE.md`、`outputs/m6-acceptance-2026-10-01/lessons-offline.log`、`outputs/m6-acceptance-2026-10-01/round-ab.log`、`outputs/m6-acceptance-2026-10-01/mutate-verify-timeout.log`。四支已随页入库（`git ls-tree` 现读逐字命中）。判定用两个登记在案的复跑面：`replay:lessons-offline`、`replay:lessons-round-ab`。
+
+1. **业主那条硬要求和它为什么不是「加个总结」**：路线图 M6 原文「**必须带证据指针**（哪条会话、哪个 callId），**不许凭空总结**」。既有 `src/agent/memory/distill.ts` 的 `failureDigestFromEvents` 做的正是**凭空总结**那一支：产出的是计数摘要（`verify×2（工具失败）、write_file×1`），**不带 callId、不带会话**，结论交给模型自由写。⇒ M6 不是「加功能」，是**补一条对位**：`distill.ts` 的 digest 是喂模型的提示词（擅长「把失败摆到眼前」），M6 的 `src/agent/memory/lessons.ts` 是写进项目记忆的条目（擅长「把结论钉死」）。两者都留着。
+
+2. **三个实测发现，改变了路线图的写法**：⑴ **会话 id 不在事件里**，它是日志文件名（事件只有 `agent_id`，那是 worker 归属）——`sessionOf` 是「哪条会话」的**唯一**来源。第一版把「末尾分隔符」的判断写在 `basename` **之后**，而 `basename("/logs/")` 已经把斜杠吃掉、返回目录名 `"logs"` ⇒ 凭空编出「来自会话 logs 的教训」，正是本模块要禁的那件事；修法是判**入参**的 `logPath.endsWith("/")`。⑵ `tool_result` 事件**不带工具名**（只有 callId），不预扫 `tool_call` 建 `callId→工具名` 表，每一条连败都会被记成 `unknown`——那是噪音不是教训。⑶ verify 那一拍的 `tool_result` 回声**与 `verify_result` 共享同一个 callId**，第一版只把「成了条目的那几拍」加进 `verifyCallIds` ⇒ 环境红的回声被来源②重新捞回、变成一条**假的「verify 连败」**教训；修法是 `verify_result` 的 callId **不论成不成为条目都回灌**。
+
+3. **硬门与它的反向验证（路线图点名的核心）**：三类来源**先把证据指针造出来**，指针造不出（callId 缺失/空、session 为空、`tool_result` 查不到归属工具）就**直接不进列表** ⇒ 「无证据」与「无条目」是**同一条路径**，不是「先产出再过滤」。注入侧从盘上正文 `^evidence-line:` 解析，指针不落在正文里就**读不出这一条** ⇒ 「无出处不注入」与「无出处不写盘」是同一道门的两端。**反向验证实跑**：把每一处证据门摘掉（session 门、callId 门、tool 归属门、verify 回声过滤、注入侧跳过、`parseLessonDigest` 返 null）⇒ **19 条里 9 条变红**；还原后 19 条全绿。
+
+4. **一个设计问题被实测数据改了（不是拍的）**：来源③「同一 `(工具, 参数)` 重复调用」最初不限工具。对 tracked 的日志离线提炼：**40 条里 35 条来自这一源，逐条打开看全是 `read_file` 读同一个文件**。re-read 是「确认改动真的写进去了」的**正常**动作（`repeatDigestNote` 本身就明写让模型这么干）⇒ 写成教训＝每轮回注都在教「别再读文件了」，纯噪音还挤掉真教训的预算。⇒ 来源③ 收窄为**只收写向工具**，复用 `mayHaveWrittenDisk`（`src/agent/write-face.ts`，本仓唯一那一份、多处消费，不另抄工具表）。同批日志 **40 条 → 10 条**，剩下 5 条重复逐条看过是真的写向动作。
+
+5. **验收读数之一 · 真语料离线提炼（`replay:lessons-offline`，原始输出 `lessons-offline.log`）**：日志数 21（20 份 tracked `outputs/**` + 1 条本机真会话）⇒ **产出教训 10 条，覆盖 5/21 份日志**；按类 `{"repeat-action":5,"tool-streak":2,"verify-red":3}`；**分母侧独立算**（不依赖提炼器）`{"codeRed":3,"envRed":0,"toolFail":13,"orphanFail":0,"verifyBeats":19}`。两栏对不上就说明硬门在悄悄丢东西——今天 `orphanFail = 0` ⇒ **硬门这一轮没有静默丢任何东西**。另：真语料里 `envRed = 0` ⇒ 本轮**没有环境红进教训**这一格今天未被真语料覆盖，只有单测覆盖（照贴）。
+
+6. **验收读数之二 · 两轮 A/B，**含一条不可达声明**（`replay:lessons-round-ab`，原始输出 `round-ab.log`）**：业主定的形态是「冻结 mock 剧本跑两轮，前后对比」。**实测那条路在本仓结构不可达**，理由两条（不是绕开）：⑴ `fixtures/mock/todo-fix.jsonl` 是**一次成功**的回合（read → write → 跑测试绿），事件流里 **0 个 `verify_result`、0 个 `tool_result{ok:false}`** ⇒ 按硬门提炼 **0 条**——没有失败就没有教训；⑵ 即便把剧本改成失败的，`createMockProvider` **忽略 messages**（照 `tool_call` 念剧本），而记忆块是**会话启动时**由 `glm-session` 读盘的，`runLoop` 唯一的消息出口是 `src/agent/loop.ts:316` 的 `projectContext(seen)` ⇒ **「模型读到教训并改了动作」在 mock 靶上没有承载路径**。本轮改测**真能测的那一半**（造一条真失败轨迹，就地生成、**不碰冻结 fixture**）⇒ 读出来的是**一个正确的零**：轮 A 确有 1 条 `tool_result{ok:false}`（callId=c3 工具=run_shell），但只败 1 拍（`TOOL_STREAK_MIN=2`）且跑在 verify 反射之外 ⇒ 三类来源一条都够不着。单拍偶发失败不成教训，**这正是设计要的**。**代价照贴：非零产出的端到端那一跳在 mock 靶上测不到**，由 `tests/memory-lessons.test.ts`（20 条，含真写盘往返与注入逐字断言）与本页第 5 项的真语料读数承担。冻结 fixture 未被动（只读）。
+
+7. **门禁与全量（`TERM=dumb`）**：typecheck exit=0（0 报错）；test **266 files / 3561 passed / 0 skipped**（基线 264／3523 ⇒ **+38**：M5 的 18 + M6 的 20，**测试数只增不减**）；docs-check exit=0（UNVERIFIED=3）；memory-check exit=0；断言体检零命中。本页落笔前另跑了一次覆盖 `PROGRESS.md` 的门面基线：`test exit=0 150706ms｜Tests 3561 passed (3561)`、`docs-check exit=0 873ms`——**这条基线是改台账之前跑的**，改完再跑同一组才认（见第 9 项）。
+
+8. **`mutate-verify` 门：超时，不是内容红（照贴，不写成「全绿」）**：`exit=124`（预算 1200s 耗尽，SIGTERM 宽限 15s 内未退出，整组 SIGKILL）。完整日志 `mutate-verify-timeout.log`：**1023 条锚点已读、未跑完**。末尾已读锚点里 **5 条 ❌**，逐条核对**无一条属本轮文件**：`worker-budget-window-ignored`／`worker-budget-clamp-removed`（orchestrator 预算窗）、`sandbox-mapping-copy-reintroduced`（worker 沙箱映射）、`openai-never-reads-finish-reason`（GLM finish_reason）、`tree-guard-refusal-not-wired`（主检出护栏接线）。其中 `tree-guard-refusal-not-wired` 的日志自述是「基线这一拍选中**未取到**（收尾行没读到＝取料坏）⇒ 不许当成绿也不许当成红」——**它本身就不是一条内容红**，是取料坏。故本轮该门**没有一条可归因的红**，但它**没跑完**这件事照贴：1023 是已读数、不是总数（M7 那轮同样以 124 收场，见第 292 页第 9 项）。**超时是否留下突变体：实测没有**——全树 `find -name '*.mutbak'` 零命中，本工作树 `git status` 干净。⇒ 这一条要**查**不能信日志：M7 那轮日志明写「子进程未自还原」而实际确实留了突变，本轮日志同样这么说、实际没有（M7 那次的残留在门自己的临时树里，本笔另查了两棵树均为空）。
+
+9. **本笔落笔时对台账判据的两处自查（D-5／D-10／D-11）**：本页每个 7 位 sha 都过 `git cat-file --batch-check`（`f55f52e`／`ee7e12c`／`1e42c74`／`28cbe9c`／`1d1969d` 全部 resolve 成 commit）；每处 `*.ts:NNN` 源码行号引用都对着 HEAD 里**真在盘上**的文件（D-10 只判追不追得到、行号会随重排漂）；每个 dated 工件点名都随页入库（D-11）。**这三格是我自己动手前先查的，不是门替我查的**——门只会在我写完之后才判。
+
+10. **刻意未做／仍欠（不偷做）**：⑴ M6 的教训写入**不过人工批准**（业主已定）——写入内容是证据指针 + 原文摘录、不是模型自由文本，但它确实绕过了 `remember` 的合并审批；取舍照贴，日后要把 `writeTopic` 挪到 `mergedApproval` 之后即可、**形状不用改**。⑵ 「命中率可观测」只做到「注入行自带出处」这一层；真正的命中率统计需要事件侧埋点，超本轮写范围。⑶ 回注**限量**已做（项目段放最后、预算治理保尾部、每行带出处）但**没有做「教训被注入后是否真改变了行为」的测量**——那需要真模型 + 真靶子的独立实验，本页第 6 项已说明它在 mock 靶上结构性不可达。⑷ 归集成 owner 的**热文件接线请求**（本轮只提不改）：`scripts/gate-manifest.ts` 未加新门（M6 的判卷走既有 `test` 门，**故意不新增 `*-check` 脚本**——新脚本会触发孤儿护栏并迫使改热文件）。
+
+
+### 2026-10-01 · 第 294 页补 凭证（1/1）：本笔（`1d1969d`）之后那一格——M5/M6/M7 三页收口落笔的**改台账前后两次门面读数**，四道门绿 4/4；`docs-check` 的证人点名面从 211 页／265 条涨到 216 页／277 条而**红 0**
+
+取料面（全名逐支）：`outputs/m5-m6-m7-closure-2026-10-01/gates-closure.log`。这一笔只交读数与两处更正，**不动实现、不动任何冻结判据**。
+
+1. **为什么要有这一页**：第 292／293／294 三页是一次落笔（改的是台账），而台账正是 `docs-check` 五条判据（D-5 台账 sha 面／D-9 凭证对账／D-10 源码行号／D-11 证人点名／D-8 复跑引用）的受检对象。⇒ **落笔那一刻起，这几格的分母就变了**；不把改前改后两次读数摆出来，读者无从判断这三页是「加了内容所以分母涨」还是「加了内容顺带放过了什么」。这一笔只做两件事：把改前基线与改后读数逐格贴出来，把落笔过程中查出的两处自身记账错更正掉并写清出处。
+
+2. **改前基线（落笔之前跑的，同一组门）**：`test exit=0 150706ms｜Tests 3561 passed (3561)`、`docs-check exit=0 873ms`。**这一侧只有实测、没有推算**，且它跑在 `PROGRESS.md` 未被本笔改动之前——所以「第 7 项那个 266 files／3561」在本轮没有被本笔影响（那一格是 `28cbe9c` 的读数，与本页这一格同值、互不替代）。
+
+3. **改后读数（`gates-closure.log` 逐字，四道门绿 4／4 红 0）**：`typecheck exit=0 4543ms`（0 条报错）／`test exit=0 160660ms`（`Tests  3561 passed (3561)`）／`docs-check exit=0 831ms`／`memory-check exit=0 682ms`；断言体检**零命中**；`清单漂移校验：✅ GATES ↔ package.json scripts 一致（无孤儿验收脚本）`——**这一格特别该贴**，因为本笔刻意**不新增 `*-check` 脚本**（理由见第 294 页第 10 项），而这条校验正是「有没有人偷偷加了个没进清单的门」的唯一检测器。
+   **测试数未变**（3561 ＝ 3561）：本笔只改 `PROGRESS.md` 与证据文件，**一条用例都没动**——这是「台账落笔」该有的形状，若读数动了反而说明有人在同一笔里顺手改了判卷。
+
+4. **D-9 凭证对账面：本笔新增的页全部**不参与**那一格，这一格的分母一字未动**——现读与落笔前**逐字相同**（红 0、页未点名取料目录 0、未点名页 0＝帽 0、弱证 0＝帽 0）。**为什么**（这一条不写清，下一位读者会以为本笔把这一格也带跑了）：D-9 的取值域是**标题含「凭证」的页**（`CREDENTIAL_HEAD`），第 292／293／294 三页的标题里没有「凭证」二字 ⇒ 它们天然不进入这一格；而**本页标题里有**，所以本页落在取值域内、必须自备回查。⇒ 这三页的读数**不受 D-9 回查**，它们受 D-5／D-10／D-11 三格受检（下一项逐格贴）。这是本仓的既有形状（第 275 页那条「页没点名目录＝未检，不等于通过」的反面：这里是**页不在取值域**，两件事不许混读）。
+   **本笔为什么不把那一行的原文抄进本页**（这是被门教的一次，属实）：抄了它，D-9 就把那些读数当成「本页的断言」并要求它们出现在本页点名的面里——而它们来自 `docs-check` 的 stdout，本页点名的 `outputs/m5-m6-m7-closure-2026-10-01/` 里没有那份 stdout。⇒ 抄＝凭空多出一条回查义务（第一次落笔正是这样红的 3 条）。处置不是登记豁免，而是**把数留在它本来的地方**：那份 stdout 已落盘为 `outputs/m5-m6-m7-closure-2026-10-01/docs-check-closure.log`，本页只给指针。**这正是 D-9 想逼出来的形状**——读数要能回到它被测出来的那份面上。
+
+5. **D-11 证人点名面：分母真的涨了，红 0**——现读 `216 页点名 277 条 dated 工件（红 0）｜登记 12 条（帽，只准调低）`，改前是 `211 页／265 条`。**差值核对式**：`277 ＝ 265 ＋ 12`、`216 ＝ 211 ＋ 5`。那 12 条逐条可点：三页各点自己那一支 M7 证据目录（`outputs/m7-permission-allowlist-2026-10-01/EVIDENCE.md`／`before.json`／`after.json` 三件，M7 那页已明写「全名逐支」）、M6 那页四件（`EVIDENCE.md`／`lessons-offline.log`／`round-ab.log`／`mutate-verify-timeout.log`）、M5 那页点名 `tests/verify-multiface.test.ts` 与 `src/agent/verify.ts`，本凭证页点名本目录那一支。**D-11 的红正是它该做的（不是要登记的老账）**：`本笔新增的页全部不参与那一格` 这半句第一次写完时，门报 `第 294 页 点名 outputs/m5-m6-m7-closure-2026-10-01/gates-closure.log，但 HEAD 里追不到`——**对**，那份日志是本笔**未提交**的工件。D-11 的 detail 自己就写了处置：「若由本笔未提交的工件造成，**提交即归零**，别当成旧账登记掉」。⇒ 不登记、不改判据，提交即可；提交后这一格归 0 已在第 5 项的分母核对式里预留（`278 ＝ 277 ＋ 1`）。
+
+6. **D-5 台账 sha 面与 D-10 源码行号面：本笔新增的引用逐条自查过（不是门替我查的）**。D-5 现读 `抽到 337 条候选｜非提交形而带理由豁免 3 条`、红 0；本笔正文引用的每一笔 7 位 sha 都在落笔前过 `git cat-file --batch-check` 逐条 resolve 成 commit（`f55f52e`／`ee7e12c`／`1e42c74`／`28cbe9c`／`1d1969d`）。D-10 侧：本笔正文里的 11 处 `*.ts:NNN` 引用**逐处对着盘上文件核过行内容**（不只核「文件在不在」——D-10 判据只判后者，而行号漂了读者照样被坑）：核出**一处错的已改**：第 292 页第 3 项原先引的那一行其实是个空行、真正那道闸在 `src/agent/loop.ts:426`（`unknown tool: <name>`），已按真行号改写。⇒ **D-10 判据在这一格是欠的**（它判「追不追得到」不判「行内容对不对」），这条欠账照贴给下一位：引用行号的页要自己核行内容，门不会替你核。
+   ⚠️ **同一处错误在本笔里栽了两次，两次形态不同（这是本笔最值得记的一格）**：第一次是**行内容错**（引的那行是空行）；改完之后我在本页写「那处引用**已改**」——**这句话本身又引了一次那个旧行号**，当场被 D-10 咬住（裸文件名、没有目录，读者无从定位）。⇒ 连「提一句旧行号写错了」都会**重新把它造出来**。修法不是给判据加豁免，是**让这一格只有一种形状**：只重述正确的 `src/agent/loop.ts:426`，不再复述错误的那个。判据一个字没改——它是把两种真错误（追不到的行、无路径的裸名）都咬住了的那个；错的是写法，两次。
+
+7. ⚠️ **本笔落笔过程中更正的两处自身记账错（两处都是查出来的，不是跑出来的）**：
+   - **M7 证据文件的门禁表**（`outputs/m7-permission-allowlist-2026-10-01/EVIDENCE.md` §8）：绿行**漏点名 `web-fetch-check`**（`git show 5e0c859:scripts/gate-manifest.ts` 现读 3 处命中 ⇒ 它由 `b3e3abf` 第 273 页买进、M7 开工时就已在册，不是后来才加的门），红行把 `mutate-needles-check` **重复列了两次**（末行「（已列）｜—」是凑数行、没有退出码）。**绿 26／红 5 的读数本身不变**，变的是点名面：绿行补齐后 27 个名字 ＋ 红行 4 个不同名字 ＝ 31，与 `scripts/gate-manifest.ts` 现读 31 道同数。补正写在证据文件原地，**不是悄悄改**——「重复行凑数」正是本仓反复判死的形态。
+   - **本次落笔本身的一处纪律执行**：三页里凡引证「未测即未证」的地方（M6 的 A/B 不可达面、`mutate-verify` 超时、跨会话回归跟踪不在本轮）都写成**声明**而不是读数；凡本轮没跑的门（`mutate-verify` 整门、`head-cert-check` 全量认证）都**不写成「全绿」**。
+
+8. **刻意未做**：⑴ 不跑全量 31 道门认证（`head-cert-check` 那一趟）——本笔只改文档，判卷面 `test exit=0` ＋ 四道门面已足以覆盖「文档落笔有没有砸到判卷」；真要全量认证留给下一次带实现的提交；⑵ 不动 `scripts/gate-manifest.ts`（本笔零新增门，第 3 项那条清单漂移校验即其证据）；⑶ 不改任何 `fixtures/**`（本笔零触及，`git status` 只有 `PROGRESS.md` 与证据文件两处）；⑷ 不回收任何 worktree。
