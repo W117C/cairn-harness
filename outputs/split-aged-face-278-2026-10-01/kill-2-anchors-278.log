@@ -1,0 +1,14 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-8689734.lock）
+变异验证：2 条
+✅ prose-scan-age-missing-silently-dropped — 读不到 mtime 的那一半从『单列点名』退化成『静默丢弃』⇒ 报告里那句「另有 N 个盘上不存在」永远读 0，邻居删掉的在飞文件与从没存在过的文件同形（分母那一格不动，所以这条必须有自己的证人，不能靠分母那条用例代答） ｜本机实测 18.6s／2 拍
+✅ prose-scan-age-checked-uses-whole-list — 年龄分母从『有 mtime 的那一半』改成『整个在飞清单』⇒ `在飞分诊：5 / 19` 那种读数会把没有 mtime 的文件也算进分母，而 `stale` 是在另一半里挑的——分子分母不同口径，比值从此没有意义（第 113 页立的『只作读数』要读得出它是哪一半） ｜本机实测 18.4s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 37.2s · 跑了 2/2 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 4 次／2 条（每条次数分布 2×2）· 单次中位 第1次 9.3s／第2次 9.2s· 最贵一条 prose-scan-age-missing-silently-dropped 18.6s
+跑法单价：selector 4 拍·中位 9.18s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-8689734.lock）
+real 37.90
+user 41.91
+sys 0.98
+KILL_EXIT=0

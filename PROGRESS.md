@@ -9265,3 +9265,24 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 10. **页内 file:line 的时效（一条已知缺口，顺手登记）**：本页与第 276、277 页都引用判卷文件的行号，而行号会随下一次往同一文件插入用例而漂——本笔就把第 277 页引用的那一格往后推了（`:667` 现在不是那句话了）。仓里没有校验「文档里的行号还能不能指到那句话」的尺（D-3 只管源码里的 `.md:行号`），所以我引用时**连带写出那句的原文**，让行号漂了也还能按文字找回。要让这一格不再靠自觉，得新立一把尺（读页里的 `文件:行` 候选、去指认位置核那句原文），代价与收益都在第 9 页那批"文档↔面"尺的形状里，留待裁。
 11. **清场**：本笔两棵独立树逐棵核 `status --porcelain` 后写读数，**不回收**（破坏性动作等用户点头）。
 
+### 2026-10-01 · 第 278 页补 凭证：本笔（`8689734`）认证 259 文件／3436 条 exit=0、两端独占、本趟墙钟 199.63s；两支新锚点干净树 2/2 全杀（37.2s、坏拍 0、判卷 spawn 4 次／2 条·单次中位 9.3s／9.2s）；条数核对式 `3436 ＝ 3434 ＋ 2` 现读成立；落库前 `阻断 2`＝`钉在飞文本 2`、落库后同维归 0（这是"页里那句预期"被自己测掉的一次）；`HEADCERT_EXIT=1` 仍只来自隔壁 `1748ca7` 那 11 条未登记的 H7；本笔两棵树各核 0 项、未回收
+
+取料：outputs/split-aged-face-278-2026-10-01/
+
+1. **被认证对象与等级**：提交 `8689734`（第 278 页：`scripts/prose-needle-scan.ts` 36/10、`scripts/mutate-verify.mjs` 30/0、`tests/prose-needle-scan.test.ts` 34/0、`PROGRESS.md` 18/0 ＋ 8 份 dated 工件；`git show --numstat --format= HEAD | wc -l` ＝ 12 个文件）；认证树＝`.worktrees/head-cert-8689734`（独立树，非主树）；等级＝**全量**（`--at=HEAD`，无 `--skip-test`）。日志两行原文：`目标提交：8689734（--at=HEAD）`、`已核：TREE=8689734d7c9c777b32d0268a791428f6e878056e｜判卷四面在飞 0 项`。
+2. **那 10 行删除的归属**（本会话第一次在同一簇里删自己的代码，所以单独作证）：`git diff` 里 `^-` 逐行 10 条，全部是被 `splitAged` 取代的旧内联块——`const aged: { file: string; mtimeMs: number }[] = [];`、`for (const f of fly) {`、`try {`、`aged.push({ file: f, mtimeMs: statSync(resolve(root, f)).mtimeMs });`、`} catch {`、那行注释、`}`、`}`、`const inFlightStale = agedInFlight(aged, Date.now());`、`inFlightAgeChecked: aged.length,`。没有一行属于邻居；逐行读过，不是按行数"对上了"就结案。
+3. **两支新锚点在干净树逐条杀死**（`kill-2-anchors-278.log`，`KILL_EXIT=0`）：`变异验证：2 条` ⇒ `prose-scan-age-missing-silently-dropped` 与 `prose-scan-age-checked-uses-whole-list` 两行 `✅` ＋ `全部变异被正确杀死（断言非恒真）`；成本两行照机器原文贴：`[mutate-verify] 本次耗时 37.2s · 跑了 2/2 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）`｜`成本分母：判卷 spawn 4 次／2 条（每条次数分布 2×2）· 单次中位 第1次 9.3s／第2次 9.2s· 最贵一条 prose-scan-age-missing-silently-dropped 18.6s`｜`跑法单价：selector 4 拍·中位 9.18s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母`。
+4. **「阻断」那一格的前后对照（本笔特有，也是页面第 6 项那句预期的验收）**：落库前 `needles-278-precommit.log`（`NEEDLES_EXIT=1`）`针脚体检：1188 条 —— 阻断 2 … 钉在飞文本 2 …`；落库后干净树 `needles-278-certtree.log`（`NEEDLES_EXIT=0`）`针脚体检：1188 条 —— 阻断 0，待复认 0，未覆盖 0，逐行式 5，未入库面 0（被测面 + 判卷两面），钉在飞文本 0，killer 指针失效 0（其中 HEAD 侧 0）`＋`改法语法体检：1188 条改法全部产出合法源文件 ✅`。前两笔（276／277）的针脚长在已入库文件里，所以落库前就是 0；这一笔的针脚长在我自己正在改的 `prose-needle-scan.ts` 里，"落库后归 0"第一次成为需要测的命题而不是默认。
+5. **门与认证汇总**（逐格照 `head-cert-8689734.log` 原文贴）：
+   - `依赖核对：该提交声明 10 项，缺 0 项`｜`import 面：3060 条边｜悬空 0（其中存量已豁免 0）`｜`门表：31 道，其中该笔 package.json 没有同名 script 的 0 道`｜`typecheck exit=0（0 报错）`
+   - `认证门面=22 道（跑到 22）｜❌ 红 1 道｜⚠️ 超预算 0`；红的那道 `❌ gate-check exit=1 4443ms（预算 5400ms）`；本笔相关的两道都出声：`✅ evidence-typecheck-check exit=0 2623ms（预算 5300ms）`、`✅ mutate-needles-check exit=0 14145ms（预算 20000ms）`
+   - `Test Files 259 passed (259)｜Tests 3436 passed (3436)｜exit=0（退出码直接取，不接管道）`
+   - `TREE=8689734 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-8689734.lock）`｜`并发判卷=起前 0 套／跑完 0 套（两端独占）`｜`本趟墙钟 199.63s（同一进程 hrtime 实测·口径＝起跑→汇总那一行，不含提前退出的那些趟）`
+   - 贴帽那一格：`3436 条里 0 条用时 ≥ 有效预算 80%｜无显式预算按缺省算 3183 条｜标题非字面量（it.each／插值／拼接，按缺省算）114 条｜预算没落到 0 条`，离帽最近 `3273ms/5000ms=65%`（`tests/head-cert-deps.test.ts` 那一条）与 `1610ms/5000ms=32%` ⇒ 本笔两条新用例都是合成夹具、没靠近缺省帽。
+   - 退出码取法第四次同形：调度器通知写「exit code 0」，尺自己打印的是 `HEADCERT_EXIT=1`；`real 201.87` 属于 `/usr/bin/time`，不算任何一把尺的码。
+6. **条数核对式**：`3436 ＝ 3434 ＋ 2`——上一笔（`1dd14a7`，第 277 页凭证）留档 3434，本笔新增 2 条用例（`splitAged` 那两条合成证人），认证日志现读 `Tests 3436 passed (3436)` ⇒ 等式成立。
+7. **红道归因**：仍是 `gate-check` 的 H7，判据取门自己的函数（`frozenCoverageDrift(ROOT)`）：`onDiskNotInTable=11`（全在 `fixtures/impact/accuracy-repo/`）、`inTableNotOnDisk=0`、`tableDirsNotSwept=0`；证人 `outputs/prose-scan-feed-276-2026-10-01/h7-drift-head-276.log`。这批夹具属隔壁 `1748ca7`（HEAD 祖先，`merge-base --is-ancestor` 退 0），本会话不动别人的冻结面，也不把这一笔写成「全量绿」。
+8. **D-9 那一格**：`docs-check-278.log`（`DOCS_EXIT=0`）`可比对 290 个读数（红 0）｜页未点名取料目录 0 个＝未检｜未点名页 0 页（帽 0，只准调低）｜点名但目录读不到 0 个＝取不到｜登记不可回查 8 条｜弱证 0 对（帽 0，只准调低）`。本笔凭证入库后分母还会涨（引文进分母，第 275 页口径）⇒ 定稿判据仍是红 0 ＋ 两格可行动帽 0。
+9. **刻意未做**：① `proseHeldBack` 不钉（它唯一的证人那句 `toBeGreaterThan(0)` 所在用例已被第 277 页 `prose-scan-shadow-cleared-predicate-loosened` 占用；再钉第三支＝把两个决策焊到同一标题）；② 接线那行 `inFlightAgeChecked: age.checked` 在真仓仍不可分辨（与 `inFlightFiles.length` 同值），只有 `splitAged` 本体有合成证人；③ 第 278 页第 10 项那条「页里 file:line 会漂」的缺口已立成任务 #18 待裁，本笔没为它写尺；④ 不替隔壁补那 11 条冻结登记。
+10. **清场**：本笔两棵树逐棵核过，`cleanup-278.log` 原文 `.worktrees/verify-8689734 在飞项=       0`、`.worktrees/head-cert-8689734 在飞项=       0`、`worktree 总条数（--porcelain 的 worktree 行）=66`；尺自己那行 `常驻残留树=44` 照贴。**两棵都没回收**（`git worktree remove` 是破坏性动作，等用户点头）；本会话创建的树累计全部逐棵核过 0 项、一律未删。
+
