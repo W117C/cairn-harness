@@ -1165,6 +1165,25 @@ export function stopScheduler(): void {
   scheduler?.stop();
 }
 
+/** serve 常驻入口（M4 路线图：调度器真落地——此前 initScheduler 全树零生产调用者，审计点名的那格）。
+ *  装自动化工具面（automation 五件在常驻进程里才有意义）＋初始化＋启动调度器；
+ *  触发执行器已在 initScheduler 内接 `makeScheduledExecutor`（触发 = 全新会话的真实代码路径）。
+ *  停止交给 CLI 的 SIGINT 处理（返回的 stop 即 stopScheduler）。 */
+export async function serveScheduler(opts: { workspace: string }): Promise<{ stop: () => void }> {
+  installAppTools({ automation: true });
+  initScheduler({
+    dataDir: join(opts.workspace, ".agent", "schedules"),
+    sessionsDir: join(opts.workspace, ".agent", "sessions"),
+    workspace: opts.workspace,
+  });
+  await startScheduler();
+  return { stop: () => stopScheduler() };
+}
+
+export function schedulerRunning(): boolean {
+  return scheduler?.running ?? false;
+}
+
 /** 设置页并发上限变更 → 调度器即时生效（setSettings 转发）。 */
 export function updateScheduleCap(cap: number): void {
   if (Number.isInteger(cap) && cap >= 1 && cap <= 8) scheduleCapCache = cap;

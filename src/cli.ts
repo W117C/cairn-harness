@@ -44,6 +44,7 @@ import {
   handlePlanDecide,
   handleRunCancel,
   initSandbox,
+  serveScheduler,
   setAppHooks,
 } from "./main/agent-runner";
 import { initSessionsDir } from "./main/session-handlers";
@@ -170,6 +171,8 @@ interface Options {
   goal: GoalSpec | null;
   unattended: boolean;
   autoVerify: boolean;
+  /** M4 路线图：`--serve` 常驻调度模式（调度器真入口；不跑单次会话）。 */
+  serve: boolean;
 }
 
 function parseArgs(): Options | "help" {
@@ -277,6 +280,26 @@ function parseArgs(): Options | "help" {
     throw new UsageError("--log 与 --goal 不能同时给：目标只能挂在会话上（去掉 --log，日志落在 <ws>/.agent/sessions/）");
   }
 
+  // ---- M4 路线图：--serve 常驻调度（调度器真入口；二选一取常驻而非 goal 内 cron，
+  // 理由与代价在台账 258 页：Scheduler 本就是常驻语义——tick 60s/补跑 7 天/并发闸，
+  // goal 轮内塞 cron 会把 wall-clock 语义塞进模型驱动的节拍里）----
+  const serve = argv.includes("--serve");
+  if (serve) {
+    const conflicts: [string, boolean][] = [
+      ["--goal", goal !== null],
+      ["--session", flagSession !== null],
+      ["--compact", compact],
+      ["--replay", replayId !== null],
+      ["--fork", forkSource !== null],
+      ["--message", (message ?? "") !== ""],
+      ["--log", flagLog !== null],
+    ];
+    const hit = conflicts.filter(([, bad]) => bad).map(([f]) => f);
+    if (hit.length > 0) {
+      throw new UsageError(`--serve 是常驻调度模式（不跑单次会话），与 ${hit.join(" / ")} 互斥`);
+    }
+  }
+
   // 会话 id 一次就定死：--session 续跑既有会话，缺省新开一条 `cli-<ts>`（与从前默认日志名一致）。
   // 一律走会话模式而不是「裸 runAgent + 一个 logPath」——那样 goal / compact / refine_goal 三个入口
   // 全都没有落脚点，而 `runAgent` 收到 sessionId 时也就不再 rm 日志（既有会话不能被抹掉）。
@@ -303,6 +326,7 @@ function parseArgs(): Options | "help" {
     goal,
     unattended,
     autoVerify: argv.includes("--auto-verify"),
+    serve: argv.includes("--serve"),
   };
 }
 
@@ -812,6 +836,7 @@ function printHelp(): void {
   --from <n>           保留前 n 轮（含）再分叉；「轮」以 user_message 为界
   --replay <id>        回放决策链（每行一条事件、带 gate 判定与验证结果）后退出，不跑模型、不改日志
   --goal "<目标>"       给这条会话设目标：一轮收束后按判据自动续跑，不达标就再来一轮
+  --serve               常驻调度模式：启动定时任务调度器（tick 60s，补跑 7 天），不跑单次会话
   --max-turns <n>      目标轮次上限（配 --goal）
   --max-usd <n>        目标花费上限 USD（配 --goal；表里查不到价的模型上这道闸会明写自己没生效）
   --compact            用摘要模型压缩 --session 那条会话后退出（需 M0_API_KEY：不配就 fail-closed 拒，不静默截断）
@@ -885,6 +910,20 @@ async function main(): Promise<number> {
   const sandbox: SandboxStatus = await initSandbox();
   if (!sandbox.available) {
     process.stderr.write(paint(YELLOW, `[m0] 沙箱不可用（${sandbox.reason ?? "未自检通过"}）——run_shell 将不过 Seatbelt\n`));
+  }
+
+  // ---- M4 路线图：`--serve` 常驻调度（调度器真入口；第 258 页记录的二选一决策与理由）----
+  // 放在应用壳之后：触发的会话（handleAgentRun）依赖 settings/sessions/沙箱这三样先就位。
+  if (opts.serve) {
+    const handle = await serveScheduler({ workspace: opts.workspace });
+    process.stdout.write(paint(GREEN, `[m0] 调度器已启动（workspace ${opts.workspace}；tick 60s，补跑 7 天，并发闸 ≤2；Ctrl-C 退出）\n`));
+    process.on("SIGINT", () => {
+      handle.stop();
+      process.stdout.write("\n[m0] 调度器已停止\n");
+      process.exit(0);
+    });
+    await new Promise<never>(() => {}); // 常驻：调度器的 interval 持有事件循环，此处显式挂起
+    return EXIT_OK; // 不可达
   }
 
   await mkdir(dirname(opts.logPath), { recursive: true });

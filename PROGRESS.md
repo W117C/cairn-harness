@@ -9864,3 +9864,11 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 3. **失败链动态形状一次尝试未构成失败**（空脚本 worker 优雅收工）已登记（3003edd）；M4 的调度器入口线未开工（归属本会话的下一批）。
 4. **阻断 5 不归本笔**：全部是其他会话提交搬走自家实现所致（检查器逐条点名搬走提交：4c10272/404249c/e76ed13/0b37ad2），归属各自作者改指；本笔六站点编辑不碰那四个文件。
 5. **取料**：`fixtures/impact/accuracy-repo-multilang/`（4 文件＋ground-truth）、`tests/impact-multilang.test.ts`、`src/agent/map/parse.ts`（LANG_BY_EXT＋PATTERNS）。
+
+### 2026-10-01 · 第 296 页（本会话）· M4 路线图交付：调度器真入口 `m0 --serve`（initScheduler 首个生产调用者）＋接线判卷 3/3——「摘掉入口 ⇒ 判卷红」反向验证到位（源码 +50 行）
+
+1. **交付物（M4 任务书核心格：调度器真入口，二选一取常驻）**：`agent-runner.ts` 新增 `serveScheduler({workspace})`（装自动化工具面 `installAppTools({automation:true})` → `initScheduler`（dataDir=<ws>/.agent/schedules、sessions 同区）→ `startScheduler()`）＋ `schedulerRunning()` 只读观测；`cli.ts` `--serve` 旗标（与 --goal/--session/--compact/--replay/--fork/--message/--log 互斥守卫）＋ SIGINT 停机＋帮助行。**选常驻弃 goal 内 cron 的理由**：Scheduler 本就是常驻语义（tick 60s/补跑 7 天/并发闸 ≤2），goal 轮内塞 wall-clock cron 是把两种节拍缝死在一起；代价＝常驻进程的 CPU/内存画像（本笔未实测常驻画像，登记下一批）。触发执行器 `makeScheduledExecutor` 此前已接（initScheduler 内），触发＝全新会话的真实代码路径。
+2. **判卷（`tests/scheduler-wiring.test.ts` 3 条全绿）**：① serve 后 `schedulerRunning()` 翻真＋`automation_create` 工具面在场＋upsert 真值落 `<ws>/.agent/schedules/automations.json`；② stop 后翻假、重启翻回真（停得下来也启得回来）；③ 反向证人——cli.ts 的 `serveScheduler(` 接线必须以非注释形态存在。**反向验证红→绿已贴**：注释 cli 入口行 ⇒ ③ 红；恢复 ⇒ 3/3 绿。
+3. **实现注意**：`Scheduler` 补公开只读 getter `running`（`started` 私有，agent-runner 隔着模块边界要观测启停）；`automation_create` 的工具运行面走权限门（currentSession fail-closed），判卷收任务走 `getScheduler().upsert`（调度器自身入口）——工具运行面归会话判卷，本页只钉接线。
+4. **门**：typecheck 0；judges 现读 scheduler-wiring 3/3＋impact 族 67/67（改动未涉 impact，回归确认）；全量 3681+ 判卷由下一次认证覆盖。
+5. **取料**：`outputs/sequencer-dynamic-2026-10-01/`（serve 相关探针与本页判卷同区）；源码 diff 三文件（scheduler.ts/agent-runner.ts/cli.ts）。

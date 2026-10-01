@@ -532,6 +532,11 @@ export class Scheduler {
     this.started = false;
   }
 
+  /** 只读运行态（M4 路线图）：serve 接线的判卷用「start 后 true、stop 后 false」钉住启停。 */
+  get running(): boolean {
+    return this.started;
+  }
+
   private ingestJournal(entries: JournalEntry[]): void {
     for (const e of entries) this.addJournalEntry(e);
   }
