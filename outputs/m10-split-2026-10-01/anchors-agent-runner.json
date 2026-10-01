@@ -1,0 +1,464 @@
+{
+ "total": 1213,
+ "bySrc": {
+  "src/routing/cascade.ts": 3,
+  "src/frozen.ts": 1,
+  "src/agent/plugins/secrets.ts": 4,
+  "src/atomic-write.ts": 4,
+  "src/main/ask-gate.ts": 2,
+  "src/agent/gates.ts": 1,
+  "src/main/provider-keys.ts": 1,
+  "src/tools/lsp.ts": 9,
+  "src/agent/verify.ts": 24,
+  "src/tools/process.ts": 4,
+  "src/agent/plugins/hooks.ts": 22,
+  "src/tools/base.ts": 5,
+  "src/agent/plugins/manifest.ts": 2,
+  "src/agent/eval/task-set.ts": 3,
+  "src/agent/plugins/index.ts": 21,
+  "src/agent/roles/user-agents.ts": 1,
+  "src/agent/glm-session.ts": 33,
+  "src/agent/orchestrator.ts": 51,
+  "src/permissions/plan-state.ts": 6,
+  "src/permissions/index.ts": 3,
+  "src/tools/propose_plan.ts": 1,
+  "src/net.ts": 4,
+  "src/providers/retry.ts": 4,
+  "src/tools/edit_file.ts": 7,
+  "src/agent/prune.ts": 20,
+  "src/tools/read_file.ts": 1,
+  "src/agent/loop.ts": 26,
+  "src/agent/economics.ts": 6,
+  "src/agent/plugins/skills.ts": 12,
+  "src/tools/cancel_agents.ts": 1,
+  "src/agent/orchestrator-join.ts": 14,
+  "src/agent/goal-trace.ts": 3,
+  "src/tools/refine_goal.ts": 3,
+  "src/agent/supervise-contract.ts": 3,
+  "src/permissions/autonomy.ts": 16,
+  "src/main/license.ts": 6,
+  "src/main/sandbox.ts": 7,
+  "src/tools/remember.ts": 13,
+  "src/main/sessions.ts": 9,
+  "src/agent/lease-conflicts.ts": 2,
+  "src/agent/impact/index.ts": 8,
+  "src/agent/orchestrator-config.ts": 3,
+  "src/main/agent-runner.ts": 70,
+  "src/agent/goal.ts": 18,
+  "src/providers/anthropic.ts": 8,
+  "src/providers/openai.ts": 4,
+  "src/routing/pricing.ts": 4,
+  "src/agent/gym/probe.ts": 12,
+  "src/agent/gym/script.ts": 3,
+  "src/agent/gym/runner.ts": 1,
+  "src/main/settings.ts": 8,
+  "src/tools/impact-query.ts": 13,
+  "scripts/docs-check.ts": 59,
+  "scripts/facts.ts": 3,
+  "scripts/lib/mutate-gates.ts": 86,
+  "src/tools/write_file.ts": 3,
+  "src/tools/line-delta.ts": 4,
+  "src/agent/worker-shell-tools.ts": 8,
+  "src/agent/worker-tool-table.ts": 1,
+  "src/tools/output-ring.ts": 6,
+  "src/tools/grep.ts": 7,
+  "src/agent/plugins/mcp.ts": 12,
+  "src/agent/text-budget.ts": 7,
+  "src/agent/worker-prompt.ts": 2,
+  "src/agent/worker-report.ts": 5,
+  "src/tools/wait_for_agents.ts": 1,
+  "src/agent/tool-surface.ts": 4,
+  "src/agent/memory/inject.ts": 9,
+  "src/agent/shape.ts": 2,
+  "scripts/lib/typecheck-triage.ts": 3,
+  "src/agent/context.ts": 18,
+  "scripts/assertion-health.ts": 9,
+  "src/agent/worker-model.ts": 3,
+  "src/providers/glm.ts": 4,
+  "src/agent/plugins/discover.ts": 2,
+  "src/agent/compaction.ts": 9,
+  "src/agent/worker-projection.ts": 8,
+  "src/agent/tool-choice.ts": 1,
+  "src/agent/solpi-runtime.ts": 3,
+  "src/tools/glob.ts": 2,
+  "src/agent/plugins/types.ts": 1,
+  "src/providers/stop-reason.ts": 5,
+  "src/providers/gemini.ts": 2,
+  "src/providers/mock.ts": 2,
+  "src/tools/snapshot.ts": 1,
+  "src/agent/sequencer.ts": 2,
+  "src/agent/security/scan.ts": 2,
+  "src/permissions/command-shape.ts": 9,
+  "src/permissions/rules.ts": 8,
+  "src/permissions/risk.ts": 6,
+  "src/agent/model-surface.ts": 4,
+  "scripts/lib/scan-scope.ts": 1,
+  "scripts/lib/gate-verdict.ts": 2,
+  "src/agent/map/build.ts": 5,
+  "src/agent/map/parse.ts": 9,
+  "src/agent/gym/draft.ts": 12,
+  "src/agent/gym/case.ts": 1,
+  "src/agent/prefix-churn.ts": 8,
+  "src/agent/compaction-cost.ts": 4,
+  "src/agent/reproducibility.ts": 4,
+  "src/agent/prune-batching.ts": 6,
+  "src/agent/cost-per-progress.ts": 6,
+  "scripts/mutate-verify.mjs": 32,
+  "src/agent/no-progress.ts": 5,
+  "scripts/no-progress-check.ts": 2,
+  "src/main/provider-key-inject.ts": 2,
+  "src/providers/byok.ts": 2,
+  "scripts/replay-readings.ts": 2,
+  "scripts/replay/corpus.ts": 4,
+  "src/agent/memory/distill.ts": 2,
+  "src/events/index.ts": 6,
+  "scripts/replay/gate-outcomes.ts": 3,
+  "scripts/replay/join-lapse.ts": 4,
+  "scripts/replay/latency.ts": 5,
+  "src/agent/control-tags.ts": 1,
+  "scripts/replay/corpus-inventory.ts": 5,
+  "src/agent/recovery.ts": 1,
+  "src/agent/supervisor.ts": 4,
+  "src/agent/write-face.ts": 5,
+  "scripts/replay/run-scorecard.ts": 6,
+  "src/agent/spawn-surface.ts": 3,
+  "src/agent/automation-surface.ts": 1,
+  "tests/tool-surface-parity.test.ts": 1,
+  "scripts/mutate-anchor-titles.ts": 4,
+  "scripts/head-import-face.ts": 10,
+  "scripts/head-cert.ts": 22,
+  "scripts/lib/head-cert-deps.ts": 48,
+  "scripts/gate-manifest.ts": 7,
+  "src/agent/usage-attribution.ts": 3,
+  "src/providers/registry.ts": 1,
+  "scripts/lib/tool-lock.ts": 10,
+  "scripts/lib/blocked-citations.ts": 5,
+  "scripts/lib/page-claim.ts": 5,
+  "scripts/next-page.ts": 2,
+  "scripts/lib/mutation-rerun-triage.ts": 5,
+  "src/agent/prompt-surface.ts": 6,
+  "scripts/prompt-surface-check.ts": 6,
+  "src/agent/impact/coverage.ts": 3,
+  "src/agent/map/cap.ts": 1,
+  "src/agent/map/rank.ts": 1,
+  "scripts/lib/shard-plan.ts": 12,
+  "scripts/mutate-shards.ts": 11,
+  "src/tools/run_shell.ts": 2,
+  "scripts/lib/prompt-cost.ts": 5,
+  "scripts/replay/prompt-fixed-cost.ts": 1,
+  "scripts/replay/verify-cause-mix.ts": 8,
+  "scripts/replay/cascade-traffic.ts": 2,
+  "scripts/prose-needle-scan.ts": 26,
+  "scripts/lib/evidence-typecheck.ts": 13,
+  "scripts/evidence-typecheck-check.ts": 3,
+  "tests/prose-needle-scan.test.ts": 2,
+  "src/tools/web-fetch-policy.ts": 1,
+  "src/tools/web_fetch.ts": 1
+ },
+ "agentRunner": [
+  {
+   "id": "session-budget-key-from-settings-field",
+   "line": 361,
+   "needle": "priceModel: budgetPriceKeyOf(runModel ?? resolveRunModel(s))"
+  },
+  {
+   "id": "goal-budget-key-from-settings-field",
+   "line": 2184,
+   "needle": "  const model = budgetPriceKeyOf(args.runModel);"
+  },
+  {
+   "id": "run-model-resolution-drops-request-model",
+   "line": 310,
+   "needle": "    ...(requestModel !== undefined ? { requestModel } : {}),\n"
+  },
+  {
+   "id": "goal-gate-call-site-bypassed",
+   "line": 2193,
+   "needle": "goalWindowSpend(view.window, model)"
+  },
+  {
+   "id": "goal-lag-count-not-passed-at-call-site",
+   "line": 2211,
+   "needle": "goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint, unbookedWorkers)"
+  },
+  {
+   "id": "base-system-test-first-rule-removed",
+   "line": 150,
+   "needle": "  \"4) 修 bug 先写一条能复现它的测试并跑到红，再改代码到绿；没有红过的复现就不要宣称已修复；\",\n"
+  },
+  {
+   "id": "base-system-patch-first-rule-removed",
+   "line": 149,
+   "needle": "  \"3) 改已有文件用 edit_file 打补丁，write_file 只用于新建文件（整份重抄既费 output 又容易漏抄未改的行）；\",\n"
+  },
+  {
+   "id": "base-system-judging-file-conflict-restored",
+   "line": 152,
+   "needle": "  \"6) 只改任务需要的文件；既有测试与判卷文件不得改写（第 4 条是**新增**用例，不是改判卷面）。\",\n"
+  },
+  {
+   "id": "verify-exec-timeout-not-forwarded",
+   "line": 1443,
+   "needle": "const res = await run(mapped, { cwd, ...(timeoutMs ? { timeoutMs } : {}) });"
+  },
+  {
+   "id": "verify-exec-sandbox-bypassed",
+   "line": 1439,
+   "needle": "  if (!sandbox?.available) return defaultExec;"
+  },
+  {
+   "id": "verify-exec-pnpm-mapping-lost",
+   "line": 197,
+   "needle": "  return aliases.includes(command.trim()) ? VITEST_DIRECT : command;"
+  },
+  {
+   "id": "verify-exec-reports-internal-command",
+   "line": 1447,
+   "needle": "      command,\n      ok: res.ok,"
+  },
+  {
+   "id": "orchestration-rule-dropped",
+   "line": 156,
+   "needle": "  \"编排（派子代理时）：能各自独立验收才拆，单一改动别拆；任务书必须自包含——目标 / 涉及文件 / 验收口径，worker 看不到本会话历史；派完先调 wait_for_agents 收队，未拿到回执不得转述 worker 的结论。\","
+  },
+  {
+   "id": "orchestration-collect-duty-removed",
+   "line": 156,
+   "needle": "派完先调 wait_for_agents 收队，未拿到回执不得转述 worker 的结论。"
+  },
+  {
+   "id": "orchestration-taskbook-removed",
+   "line": 156,
+   "needle": "任务书必须自包含——目标 / 涉及文件 / 验收口径，worker 看不到本会话历史；"
+  },
+  {
+   "id": "orchestration-rule-renumbered",
+   "line": 156,
+   "needle": "\"编排（派子代理时）："
+  },
+  {
+   "id": "prompt-command-dispatch-never-runs",
+   "line": 1670,
+   "needle": "    const expanded = expandPromptCommand(rt?.commands() ?? [], opts.message, (c) => rt?.substitutionFor(c) ?? {});"
+  },
+  {
+   "id": "prompt-command-refused-silent",
+   "line": 1671,
+   "needle": "    if (expanded.refused !== null) {"
+  },
+  {
+   "id": "plugin-lsp-never-activated",
+   "line": 1661,
+   "needle": "      rt.activateLsp();"
+  },
+  {
+   "id": "user-skill-face-never-dispatched",
+   "line": 1679,
+   "needle": "      ? expandSkillInvocation(rt?.skills() ?? [], expanded.text, (s) => rt?.substitutionFor(s) ?? {})"
+  },
+  {
+   "id": "user-skill-substitution-context-dropped",
+   "line": 1679,
+   "needle": "      ? expandSkillInvocation(rt?.skills() ?? [], expanded.text, (s) => rt?.substitutionFor(s) ?? {})"
+  },
+  {
+   "id": "user-skill-hit-not-threaded-to-loop",
+   "line": 1791,
+   "needle": "      ...(skillFace.hit ? { userMessageSkill: skillFace.hit } : {}),"
+  },
+  {
+   "id": "skill-policy-not-granted-on-user-slash",
+   "line": 1690,
+   "needle": "      if (sk) rt?.grantSkillScope(scopeHit.invoke, sk.frontmatter);"
+  },
+  {
+   "id": "skill-policy-not-granted-on-command",
+   "line": 1687,
+   "needle": "      if (cmd) rt?.grantSkillScope(expanded.invoked, cmd.frontmatter);"
+  },
+  {
+   "id": "skill-allow-note-silent",
+   "line": 530,
+   "needle": "  const invo = currentPluginRuntime()?.skillAllowNote(tool) ?? null;"
+  },
+  {
+   "id": "spec-face-predicate-not-wired",
+   "line": 736,
+   "needle": "    ...(skillDenial ? { skillDenial } : {}),"
+  },
+  {
+   "id": "mcp-grade-arg-dropped-at-gate",
+   "line": 654,
+   "needle": "      const d = evaluate(name as ToolName, args, s.autonomy, info.grade);"
+  },
+  {
+   "id": "mcp-noninteractive-denial-unexplained",
+   "line": 654,
+   "needle": "      const d = evaluate(name as ToolName, args, s.autonomy, info.grade); // MCP scoped 名进同一管线（规则/风险/档位全生效）\n      const "
+  },
+  {
+   "id": "mcp-spec-carrier-drops-grade",
+   "line": 779,
+   "needle": "    out.push({ name: scoped, description: info.description, parameters: info.inputSchema, grade: info.grade });"
+  },
+  {
+   "id": "goal-continuation-hook-skipped",
+   "line": 2125,
+   "needle": "const next = await goalNextTurn({ logPath, sessionId, unattended: over.unattended === true || over.noAnswerer === true, "
+  },
+  {
+   "id": "goal-continuation-unattended-guard-dropped",
+   "line": 2172,
+   "needle": "  if (args.unattended) {"
+  },
+  {
+   "id": "goal-stopped-flag-ignored",
+   "line": 2167,
+   "needle": "if (view === null || view.stopped !== null) return null;"
+  },
+  {
+   "id": "goal-clear-branch-removed",
+   "line": 2233,
+   "needle": "if (req.clear === true) {"
+  },
+  {
+   "id": "goal-clear-not-idempotent",
+   "line": 2241,
+   "needle": "if (view.stopped !== null) return { ok: true };"
+  },
+  {
+   "id": "plan-required-run-override-ignored",
+   "line": 2090,
+   "needle": "planRequired: over.planRequired ?? (await store().get()).planRequiredByDefault,"
+  },
+  {
+   "id": "plan-gate-armed-for-every-run",
+   "line": 1597,
+   "needle": "enterPlanRunScope(opts.planRequired === true);"
+  },
+  {
+   "id": "manual-compacts-last-run-instead-of-open-session",
+   "line": 922,
+   "needle": "if (over.sessionId !== undefined) {"
+  },
+  {
+   "id": "goal-hint-lost-at-callsite",
+   "line": 2211,
+   "needle": "goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint, unbookedWorkers)"
+  },
+  {
+   "id": "runner-impact-hook-never-constructed",
+   "line": 1733,
+   "needle": "const impactHook = opts.impactAnalysis === true ? defaultImpactHook(opts.workspace) : undefined;"
+  },
+  {
+   "id": "runner-impact-hook-always-constructed",
+   "line": 1733,
+   "needle": "const impactHook = opts.impactAnalysis === true ? defaultImpactHook(opts.workspace) : undefined;"
+  },
+  {
+   "id": "autoverify-ipc-settings-fallback-dropped",
+   "line": 2100,
+   "needle": "autoVerify: over.autoVerify ?? (await store().get()).autoVerify,"
+  },
+  {
+   "id": "autoverify-ipc-override-ignored",
+   "line": 2100,
+   "needle": "autoVerify: over.autoVerify ?? (await store().get()).autoVerify,"
+  },
+  {
+   "id": "impact-analysis-settings-fallback-dropped",
+   "line": 2109,
+   "needle": "impactAnalysis: (await store().get()).impactAnalysis,"
+  },
+  {
+   "id": "request-metering-settings-fallback-dropped",
+   "line": 2110,
+   "needle": "requestMetering: (await store().get()).requestMetering,"
+  },
+  {
+   "id": "evidence-receipts-settings-fallback-dropped",
+   "line": 2112,
+   "needle": "evidenceReceipts: (await store().get()).evidenceReceipts,"
+  },
+  {
+   "id": "economic-compaction-settings-fallback-dropped",
+   "line": 2113,
+   "needle": "economicCompaction: (await store().get()).economicCompaction,"
+  },
+  {
+   "id": "action-fusion-settings-fallback-dropped",
+   "line": 2099,
+   "needle": "actionFusion: over.actionFusion ?? (await store().get()).actionFusion,"
+  },
+  {
+   "id": "plan-required-settings-fallback-dropped",
+   "line": 2090,
+   "needle": "planRequired: over.planRequired ?? (await store().get()).planRequiredByDefault,"
+  },
+  {
+   "id": "plan-required-override-ignored",
+   "line": 2090,
+   "needle": "planRequired: over.planRequired ?? (await store().get()).planRequiredByDefault,"
+  },
+  {
+   "id": "action-fusion-override-ignored",
+   "line": 2099,
+   "needle": "actionFusion: over.actionFusion ?? (await store().get()).actionFusion,"
+  },
+  {
+   "id": "observation-pack-settings-fallback-dropped",
+   "line": 2111,
+   "needle": "observationPack: (await store().get()).observationPack,"
+  },
+  {
+   "id": "judge-frozen-wiring-dropped",
+   "line": 1585,
+   "needle": "      frozenJudgePaths: frozenJudgePathSet(opts.workspace),\n"
+  },
+  {
+   "id": "auto-verify-repair-settings-fallback-dropped",
+   "line": 2114,
+   "needle": "autoVerifyRepair: (await store().get()).autoVerifyRepair,"
+  },
+  {
+   "id": "recovery-orchestrator-unreachable-after-restart",
+   "line": 2318,
+   "needle": "    (req.action === \"respawn\" && req.cardType === \"agent_result\" ? await ensureSessionOrchestrator() : null);\n"
+  },
+  {
+   "id": "recovery-parent-mode-from-settings",
+   "line": 463,
+   "needle": "    parentMode: recoveryParentMode(await replay(logPath).catch(() => []), (await store().get()).mode),\n"
+  },
+  {
+   "id": "recovery-log-path-only-from-memory",
+   "line": 456,
+   "needle": "  const logPath = sessionId ? pathOf(requireSessionsDir(), sessionId) : lastLogPath;\n"
+  },
+  {
+   "id": "orchestrator-project-rules-not-passed",
+   "line": 433,
+   "needle": "    rules: a.rules,\n"
+  },
+  {
+   "id": "usage-stamp-call-dropped",
+   "line": 1626,
+   "needle": "        usageAttribution.stamp(e); // 落盘前先盖：live 与盘必须是同一个对象（同 events 盖 ts 的口径）\n        await log!.append(e);"
+  },
+  {
+   "id": "usage-stamp-after-append",
+   "line": 1626,
+   "needle": "        usageAttribution.stamp(e); // 落盘前先盖：live 与盘必须是同一个对象（同 events 盖 ts 的口径）\n        await log!.append(e);"
+  },
+  {
+   "id": "runner-sandbox-exit-cause-unwired",
+   "line": 635,
+   "needle": "annotateExecCause(sand, { timedOut: sand.timedOut === true, exitCode: sand.exitCode ?? null })"
+  }
+ ],
+ "lost": [
+  "sandbox-mapping-copy-reintroduced"
+ ],
+ "noNeedle": 9
+}
