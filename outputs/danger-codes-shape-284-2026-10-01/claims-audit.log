@@ -1,0 +1,9 @@
+sha anchors base_files base_sum codes it_docs it_ev it_pns
+1b4893e 1191 8 12 7 80 14 72
+dd864bf 1191 8 12 7 80 14 72
+e384b65 1198 8 12 7 80 21 72
+bcf346d 1201 8 12 7 80 21 73
+efd3097 1201 8 12 7 80 21 73
+89b0ca0 1201 8 12 7 80 21 73
+ec004fc 1205 8 12 8 83 22 73
+AUDIT_EXIT=0

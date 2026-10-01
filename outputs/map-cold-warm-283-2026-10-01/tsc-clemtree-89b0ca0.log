@@ -1,0 +1,40 @@
+outputs/anchor-resolvability-2026-09-23/measure-anchor.mts(110,14): error TS2551: Property 'line' does not exist on type '{ kind: "path" | "basename-unique" | "basename-ambiguous" | "dead"; lines: string[] | null; howMany: number; }'. Did you mean 'lines'?
+outputs/anchor-resolvability-2026-09-23/measure-anchor.mts(110,41): error TS2551: Property 'line' does not exist on type '{ kind: "path" | "basename-unique" | "basename-ambiguous" | "dead"; lines: string[] | null; howMany: number; }'. Did you mean 'lines'?
+outputs/cred-face-coverage-2026-10-01/cred-face.mts(26,43): error TS2345: Argument of type '(dir: string) => string | null' is not assignable to parameter of type '(dir: string) => CredFaceFile[] | null'.
+  Type 'string | null' is not assignable to type 'CredFaceFile[] | null'.
+    Type 'string' is not assignable to type 'CredFaceFile[]'.
+outputs/head-cert-drift-witness-2026-09-27/witness.mts(42,17): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Object literal may only specify known properties, and 'encoding' does not exist in type 'SpawnOptions'.
+outputs/head-cert-drift-witness-2026-09-27/witness.mts(46,7): error TS2339: Property 'stdout' does not exist on type 'never'.
+  The intersection 'ChildProcessWithoutNullStreams & ChildProcessByStdio<Writable, Readable, Readable> & ... 7 more ... & ChildProcess' was reduced to 'never' because property 'stdin' has conflicting types in some constituents.
+outputs/head-cert-drift-witness-2026-09-27/witness.mts(54,7): error TS2339: Property 'stderr' does not exist on type 'never'.
+  The intersection 'ChildProcessWithoutNullStreams & ChildProcessByStdio<Writable, Readable, Readable> & ... 7 more ... & ChildProcess' was reduced to 'never' because property 'stdin' has conflicting types in some constituents.
+outputs/head-cert-drift-witness-2026-09-27/witness.mts(56,7): error TS2339: Property 'on' does not exist on type 'never'.
+  The intersection 'ChildProcessWithoutNullStreams & ChildProcessByStdio<Writable, Readable, Readable> & ... 7 more ... & ChildProcess' was reduced to 'never' because property 'stdin' has conflicting types in some constituents.
+outputs/head-cert-drift-witness-2026-09-27/witness.mts(56,20): error TS7006: Parameter 'code' implicitly has an 'any' type.
+outputs/midrun-steering-2026-09-23/measure-steering.mts(73,98): error TS18048: 'm.tool_calls' is possibly 'undefined'.
+outputs/mutation-selector-scan-2026-09-28/cluster-commit-map.mts(16,12): error TS7006: Parameter 'args' implicitly has an 'any' type.
+outputs/mutation-selector-scan-2026-09-28/cluster-commit-map.mts(54,19): error TS7006: Parameter 'sha' implicitly has an 'any' type.
+outputs/sandbox-degrade-face-2026-09-24/measure-degrade.mts(8,31): error TS2459: Module '"../../src/permissions"' declares 'ToolName' locally, but it is not exported.
+outputs/scratch-face-foreign-2026-09-30/probe.mts(11,26): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'.
+outputs/selector-uniqueness-2026-09-30/extractor-divergence.mts(15,15): error TS7006: Parameter 'rel' implicitly has an 'any' type.
+outputs/selector-uniqueness-2026-09-30/extractor-divergence.mts(42,34): error TS7006: Parameter 't' implicitly has an 'any' type.
+outputs/selector-uniqueness-2026-09-30/extractor-divergence.mts(43,32): error TS7006: Parameter 't' implicitly has an 'any' type.
+outputs/selector-uniqueness-2026-09-30/width-delta.mts(13,20): error TS7006: Parameter 'body' implicitly has an 'any' type.
+outputs/selector-uniqueness-2026-09-30/width-delta.mts(16,25): error TS7006: Parameter 'lit' implicitly has an 'any' type.
+outputs/selector-uniqueness-2026-09-30/width-delta.mts(20,11): error TS7006: Parameter 'piece' implicitly has an 'any' type.
+outputs/selector-uniqueness-2026-09-30/width-delta.mts(29,19): error TS7006: Parameter 'rel' implicitly has an 'any' type.
+outputs/selector-uniqueness-2026-09-30/width-delta.mts(46,34): error TS7006: Parameter 't' implicitly has an 'any' type.
+outputs/selector-uniqueness-2026-09-30/width-delta.mts(47,34): error TS7006: Parameter 't' implicitly has an 'any' type.
+outputs/selector-uniqueness-2026-09-30/width-delta.mts(50,35): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'.
+outputs/sequencer-dynamic-2026-10-01/probe.mts(13,27): error TS2305: Module '"../../src/events/index.js"' has no exported member 'ProviderMessage'.
+outputs/sequencer-dynamic-2026-10-01/probe.mts(36,26): error TS7006: Parameter 'e' implicitly has an 'any' type.
+outputs/sequencer-status-readings-2026-10-01/probe-fail.mts(10,75): error TS2459: Module '"../../src/agent/orchestrator.js"' declares 'AgentEvent' locally, but it is not exported.
+outputs/sequencer-status-readings-2026-10-01/probe-fail.mts(82,26): error TS7006: Parameter 'e' implicitly has an 'any' type.
+outputs/sequencer-status-readings-2026-10-01/probe.mts(13,50): error TS2459: Module '"../../src/agent/orchestrator.js"' declares 'AgentEvent' locally, but it is not exported.
+outputs/stagnation-detection-2026-09-23/measure-local-base-rate.mts(93,20): error TS2304: Cannot find name 'maxRepeat'.
+outputs/stagnation-detection-2026-09-23/measure-local-base-rate.mts(93,40): error TS2304: Cannot find name 'maxRepeatSig'.
+TSC_EXIT=2

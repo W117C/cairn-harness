@@ -1,0 +1,18 @@
+{
+  "pagesReceived": 1,
+  "numbersExtracted": [
+    "209.91",
+    "99999.99"
+  ],
+  "dirsExtracted": [
+    "danger-codes-shape-284-2026-10-01"
+  ],
+  "faceFiles": 13,
+  "findings": [
+    "D-9｜第 900 页（2026-10-01 · 第 900 页补 凭证：合成页）里的读数「99999.99」在它点名的取料面里找不到原文：danger-codes-shape-284-2026-10-01"
+  ],
+  "哨兵_假读数被咬住": 1,
+  "真读数没被误咬": 0,
+  "点名过的不存在文件名被咬住": 0
+}
+PROBE_EXIT=0

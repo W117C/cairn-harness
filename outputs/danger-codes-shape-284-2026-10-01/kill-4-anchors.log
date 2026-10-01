@@ -1,0 +1,13 @@
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-ec004fc.lock）
+变异验证：4 条
+✅ evidence-danger-codes-without-ts2353 — 刚纳进来的 `TS2353` 从表尾被摘掉 ⇒ 第 283 页那整条事故（`cacheDir` 被静默丢掉、两支探针量的不是它们承诺的事）重新变成没人看的一类形状——码在注释里被讲过、表上却没有它，下一次同样写错键不会红 ｜本机实测 1.2s／2 拍
+✅ evidence-cred-face-mjs-exemption-dropped — 取料面把 `.mjs`（探针脚本自己）排除掉这一支被写成恒真 ⇒ 探针里那些**为演示而写**的数字给自己作证，D-9 的「原文找到了」从此可以是自供（第 268 页那条『子串身份判据会被自己的探针日志冒充』同形） ｜本机实测 0.7s／2 拍
+✅ evidence-cred-face-missing-dir-returns-empty-face — 目录不存在时交回空数组而不是 null ⇒ 「取不到」被读成「面可取且为空」：门那边那一档从『未检』变成『检了且没找到』，凭证页的读数就能在没有任何证人的情况下过关（规则 239 的三态在本面上的复刻） ｜本机实测 0.7s／2 拍
+✅ evidence-cred-face-wiring-not-through-shared-constructor — CLI 不走共用构造器（这里换成恒 null）⇒ 函数还活着、单测还绿，但**生产端**的 D-9 再也读不到面；这正是这一页立它的理由：形状漂了要红在真门跑的那一侧，而不是红在只有判卷看见的地方 ｜本机实测 0.7s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 3.7s · 跑了 4/4 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 8 次／4 条（每条次数分布 2×4）· 单次中位 第1次 0.4s／第2次 0.3s· 最贵一条 evidence-danger-codes-without-ts2353 1.2s
+跑法单价：selector 8 拍·中位 0.36s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-verify-ec004fc.lock）
+FULL_EXIT=0
