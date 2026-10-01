@@ -1,0 +1,19 @@
+# 反向验证复原：原实现（sha256 a2d95a6… 与改前逐字节相同）下，同一条命令复绿
+# 命令：node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/cli-fork-replay.test.ts
+
+ RUN  v5.0.0 /Users/ze/Downloads/deepseek harness
+
+ ✓ tests/cli-fork-replay.test.ts (13 tests) 7337ms
+   ✓ 真跑 bin：--replay 只读 / --fork 不污染原历史 / 中断后可续（离线 demo） (5)
+     ✓ --replay：打决策链（#N 序号 + 任务行），退出 0，日志 sha256 不变 321ms
+     ✓ --replay 不存在的会话 ⇒ exit 1 且点名（不当成用法错，也不静默 0） 336ms
+     ✓ --fork：前缀逐字节一致 + session_meta.branch_of + 源会话 sha256 不变 + 新会话继续追加 2349ms
+     ✓ --fork 的用法闸：轮次越界 exit 2；目标已存在 exit 2（不覆盖既有转录） 2425ms
+     ✓ 中断后完整可续：SIGINT 收束后，同一条会话继续追加、重放读得到 1901ms
+
+ Test Files  1 passed (1)
+      Tests  13 passed (13)
+   Start at  19:21:52
+   Duration  7.55s (tests 98%, transform 1%)
+
+EXIT=0

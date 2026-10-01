@@ -1,0 +1,72 @@
+# 反向验证（mutant：forkSessionName 复用原 id —— 分叉点会写回源会话）：期望 --fork 判卷必红
+# 命令：node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts tests/cli-fork-replay.test.ts
+
+ RUN  v5.0.0 /Users/ze/Downloads/deepseek harness
+
+ ❯ tests/cli-fork-replay.test.ts (13 tests | 3 failed) 3176ms
+   ❯ forkPointOf / forkSessionName：分叉点算术与命名（纯函数） (4)
+     ✓ 三轮会话：--from 1/2/3 的分叉点 = 第 4/8/12 条（保留前 N 轮含整轮） 1ms
+     ✓ 末轮被中断（轮内只落了半截）⇒ 仍按 user_message 边界算，取到日志尾 0ms
+     ✓ 轮次越界 / 非正整数 / 空会话：各自点名报错（不静默回落） 1ms
+     × 新会话名 = <源>-f<轮次>，且必须是合法会话名（同一份校验） 4ms
+   ✓ formatReplay：决策链渲染（gate 判定/验证/审批/worker diff 各有行） (4)
+     ✓ delta 合并成一行（真 provider 只发 delta——不合并则正文丢失），且只在首次出现处打 1ms
+     ✓ tool_result 带 gate 判定；verify 带 cause；审批对出两行 0ms
+     ✓ worker diff 压成形状行（文件数/hunk/± 行），整块 patch 不进回放 0ms
+     ✓ 未知类型不静默丢（回放里看不见 = 没有） 0ms
+   ❯ 真跑 bin：--replay 只读 / --fork 不污染原历史 / 中断后可续（离线 demo） (5)
+     ✓ --replay：打决策链（#N 序号 + 任务行），退出 0，日志 sha256 不变 382ms
+     ✓ --replay 不存在的会话 ⇒ exit 1 且点名（不当成用法错，也不静默 0） 252ms
+     × --fork：前缀逐字节一致 + session_meta.branch_of + 源会话 sha256 不变 + 新会话继续追加 266ms
+     × --fork 的用法闸：轮次越界 exit 2；目标已存在 exit 2（不覆盖既有转录） 520ms
+     ✓ 中断后完整可续：SIGINT 收束后，同一条会话继续追加、重放读得到 1748ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/cli-fork-replay.test.ts > forkPointOf / forkSessionName：分叉点算术与命名（纯函数） > 新会话名 = <源>-f<轮次>，且必须是合法会话名（同一份校验）
+AssertionError: expected 'cli-1' to be 'cli-1-f2' // Object.is equality
+
+Expected: "cli-1-f2"
+Received: "cli-1"
+
+ ❯ tests/cli-fork-replay.test.ts:103:41
+    101|
+    102|   it("新会话名 = <源>-f<轮次>，且必须是合法会话名（同一份校验）", () => {
+    103|     expect(forkSessionName("cli-1", 2)).toBe("cli-1-f2");
+       |                                         ^
+    104|     expect(isValidSessionName(forkSessionName("cli-1", 2))).toBe(true);
+    105|     expect(isValidSessionName(forkSessionName("a".repeat(80), 1)), "80…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/cli-fork-replay.test.ts > 真跑 bin：--replay 只读 / --fork 不污染原历史 / 中断后可续（离线 demo） > --fork：前缀逐字节一致 + session_meta.branch_of + 源会话 sha256 不变 + 新会话继续追加
+AssertionError: demo 剧本里有失败工具调用 ⇒ 允许 exit 1；2 是用法错，不许: expected [ +0, 1 ] to include 2
+ ❯ tests/cli-fork-replay.test.ts:182:61
+    180|     const point = forkPointOf(await replay(src), 1) as { lastIncluded:…
+    181|     const r = cli(ws, ["--provider", "demo", "--mode", "auto", "--fork…
+    182|     expect([0, 1], "demo 剧本里有失败工具调用 ⇒ 允许 exit 1；2 是用法错，不许").toContain(…
+       |                                                             ^
+    183|     expect(r.stderr).toContain("已分叉：seed2 前 1 轮");
+    184|     const target = join(ws, ".agent", "sessions", "seed2-f1.jsonl");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/cli-fork-replay.test.ts > 真跑 bin：--replay 只读 / --fork 不污染原历史 / 中断后可续（离线 demo） > --fork 的用法闸：轮次越界 exit 2；目标已存在 exit 2（不覆盖既有转录）
+AssertionError: expected [ +0, 1 ] to include 2
+ ❯ tests/cli-fork-replay.test.ts:209:20
+    207|     expect(bad.stderr).toContain("超出会话轮数");
+    208|     const first = cli(ws, ["--provider", "demo", "--mode", "auto", "--…
+    209|     expect([0, 1]).toContain(first.status);
+       |                    ^
+    210|     const again = cli(ws, ["--provider", "demo", "--mode", "auto", "--…
+    211|     expect(again.status).toBe(2);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 10 passed (13)
+   Start at  19:21:44
+   Duration  3.32s (tests 98%, transform 2%, import 1%)
+
+EXIT=1

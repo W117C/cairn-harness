@@ -17,8 +17,10 @@
 // OPENAI_BASE_URL 就通（见 README）。
 
 import { createInterface } from "node:readline";
-import { mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, rename, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { argsDigest, firstLine, forkPointOf, forkSessionName, formatReplay } from "./agent/fork-cli";
 import { fileURLToPath } from "node:url";
 import type { AskRequest } from "./main/ask-gate";
 import {
@@ -41,7 +43,9 @@ import type { ProviderKind } from "./main/settings";
 import { envKeyOf } from "./providers/env-keys";
 import { killAllTrackedChildren } from "./tools/process";
 import {
+  forkSession,
   mergeAssistantDeltas,
+  replay,
   type AgentEvent,
   type AssistantDeltaEvent,
   type ClarifyAnswerMap,
@@ -133,11 +137,18 @@ interface GoalSpec {
 
 interface Options {
   workspace: string;
-  /** 空串只在 `--compact` 下出现（那条路不跑目标轮，只把一条已有会话压成摘要）。 */
+  /** 空串只在 `--compact` / `--replay` 下出现（那两条路不跑目标轮）。 */
   message: string;
   compact: boolean;
+  /** `--replay <会话>`：只读日志打决策链后退出（不跑模型）。 */
+  replayId: string | null;
+  /** `--fork <会话> --from <轮次>`：保留前 N 轮、新任务作为第 N+1 轮跑在**新会话**上。 */
+  fork: { source: string; round: number } | null;
   mode: PermissionMode;
-  provider: MainModelSelection;
+  /** provider 相关的三个原始 flag（解析推迟到 main() 的 replay 分支之后，见那里注释）。 */
+  providerFlag: string | null;
+  modelFlag: string | null;
+  ctxWindowFlag: string | null;
   /** 会话 id。`handleGoalSet` / `refine_goal` / `--compact` 都按它定位日志，缺了就没法接那三个入口。 */
   sessionId: string;
   /** 这一轮**是不是**一条会话。`--log` 那条路不是（它只写一个文件，且落跑前照旧 rm）。 */
@@ -162,7 +173,7 @@ function parseArgs(): Options | "help" {
   // flag 的值不算位置参数（`--mode` 的 "auto" 不是工作区）——按「前一个 token 是取值型 flag」剔除。
   const VALUE_FLAGS = [
     "--mode", "--provider", "--model", "--ctx-window", "--workspace", "--message", "--log",
-    "--session", "--goal", "--max-turns", "--max-usd",
+    "--session", "--goal", "--max-turns", "--max-usd", "--replay", "--fork", "--from",
   ];
   const positional = argv.filter((a, i) => !a.startsWith("--") && !VALUE_FLAGS.includes(argv[i - 1] ?? ""));
   if (positional.length > 2) {
@@ -175,17 +186,20 @@ function parseArgs(): Options | "help" {
   const workspaceArg = flagWorkspace ?? (positional.length === 2 ? positional[0]! : process.cwd());
   const compact = argv.includes("--compact");
   const message = pick("--message") ?? (positional.length === 2 ? positional[1] : positional[0]);
-  if ((message === undefined || message === "") && !compact) {
-    throw new UsageError("需要一个任务描述：m0 <任务>（或 --message <任务>；只有 --compact 不用给）");
+  // `--replay` 也免给任务（它只读日志）——但复用它自己的 pick 会让「--replay 缺值」在这里
+  // 先撞成一句含混的用法错；用 argv.includes 放行、把缺值留给下面那处 pick 去点名。
+  if ((message === undefined || message === "") && !compact && !argv.includes("--replay")) {
+    throw new UsageError("需要一个任务描述：m0 <任务>（或 --message <任务>；只有 --compact / --replay 不用给）");
   }
 
-  // provider：M0A_PROVIDER 显式覆盖优先，其次 settings，最后按已配置的 key 推断。
-  // 推断顺序写死在这里而不是「挑第一个有的」——否则加一个 provider 就静默改默认。
-  //
-  // `--compact` 也在这一行解析，看着别扭但是对的：它**真的要调模型**（摘要器是
-  // `createGlmSummarizer`/`createMockSummarizer`，不是字符串截断），所以「用户得有一把 key」
-  // 对这条命令同样成立。help 里原先写「不跑模型」是假的，见 printHelp 那行。
-  const selection = resolveProviderSelection(pick("--provider") ?? undefined, pick("--model") ?? undefined, pick("--ctx-window") ?? undefined);
+  // provider 的三个原始 flag **只收不解析**：解析推迟到 main() 里 replay 分支之后。
+  // 为什么不能在这里解析（2026-10-01 实测）：`--replay` 是纯只读回放、根本不碰 provider，
+  // 而解析会在没配 key 的机器上直接 ConfigError ⇒ 「看一条已有会话的决策链」被一把它不需要的
+  // 钥匙拦下（正是本仓点名的「读路径被无关闸门挡住」形状）。`--compact` 与目标轮仍需主模型：
+  // 它们不走 replay 分支，解析照旧发生在起跑之前。
+  const providerFlag = pick("--provider");
+  const modelFlag = pick("--model");
+  const ctxWindowFlag = pick("--ctx-window");
 
   const unattended = argv.includes("--unattended");
   const workspace = resolve(ROOT, workspaceArg);
@@ -201,6 +215,46 @@ function parseArgs(): Options | "help" {
   if (compact && flagSession === null) {
     // 压缩一条刚编出来的会话 id 一定报「会话不存在」——那不是运行失败，是 argv 少给了东西。
     throw new UsageError("--compact 要指一条已有会话：加 --session <id>");
+  }
+  // ---- M8：--replay / --fork 的用法闸（两扇新门前置校验；都只读日志，不猜）----
+  const replayId = pick("--replay");
+  if (replayId !== null) {
+    const conflicts: [string, boolean][] = [
+      ["--fork", pick("--fork") !== null],
+      ["--compact", compact],
+      ["--log", flagLog !== null],
+      ["--session", flagSession !== null],
+      ["--goal", goal !== null],
+    ];
+    for (const [flag, on] of conflicts) {
+      if (on) throw new UsageError(`--replay 只读日志、不跑模型：与 ${flag} 不能同时给`);
+    }
+    if (!isValidSessionName(replayId)) {
+      throw new UsageError(`--replay 非法会话名：${replayId}（不得含 / \\ . 或控制字符，≤80）`);
+    }
+    if (message !== undefined && message !== "") {
+      throw new UsageError("--replay 只读日志、不跑模型：不用给任务描述");
+    }
+  }
+  const forkSource = pick("--fork");
+  const forkRoundRaw = pick("--from");
+  if (forkSource !== null && forkRoundRaw === null) {
+    throw new UsageError("--fork 要与 --from <轮次> 一起给：保留前几轮、从第几轮起换路");
+  }
+  if (forkRoundRaw !== null && forkSource === null) {
+    throw new UsageError("--from 只在 --fork 下有意义：加上 --fork <会话>");
+  }
+  if (forkSource !== null) {
+    if (!isValidSessionName(forkSource)) {
+      throw new UsageError(`--fork 非法会话名：${forkSource}（不得含 / \\ . 或控制字符，≤80）`);
+    }
+    if (flagSession !== null) throw new UsageError("--fork 自带会话来源，与 --session 重复");
+    if (flagLog !== null) throw new UsageError("--fork 落新会话（<ws>/.agent/sessions/），与 --log 不能同时给");
+    if (compact) throw new UsageError("--fork 跑一轮新任务，与只压缩的 --compact 不能同时给");
+  }
+  const forkRound = forkRoundRaw === null ? null : Number(forkRoundRaw);
+  if (forkRound !== null && (!Number.isInteger(forkRound) || forkRound < 1)) {
+    throw new UsageError(`--from 要正整数轮次，收到：${forkRoundRaw ?? ""}`);
   }
   if (flagLog !== null && flagSession !== null) {
     throw new UsageError("--log 与 --session 重复给日志位置：--session 自己就决定落在哪");
@@ -225,8 +279,12 @@ function parseArgs(): Options | "help" {
     workspace,
     message: message ?? "",
     compact,
+    replayId,
+    fork: forkSource !== null ? { source: forkSource, round: forkRound as number } : null,
     mode,
-    provider: selection,
+    providerFlag,
+    modelFlag,
+    ctxWindowFlag,
     sessionId,
     wireSession: flagLog === null,
     logPath,
@@ -326,23 +384,8 @@ const YELLOW = "\x1b[33m";
 const RESET = "\x1b[0m";
 const color = process.stdout.isTTY === true && process.env.NO_COLOR === undefined;
 
-/** 单行摘要：把多行 tool 输出压到首行 + 长度，长输出整块刷屏反而看不见发生了什么。 */
-function firstLine(text: string, max = 100): string {
-  const line = text.split("\n").find((l) => l.trim() !== "") ?? "";
-  return line.length > max ? line.slice(0, max) + "…" : line;
-}
-
 function paint(code: string, text: string): string {
   return color ? code + text + RESET : text;
-}
-
-/** args 摘要：write_file 那种大 payload 只报键名与路径，不把正文刷到终端。 */
-function argsDigest(args: Record<string, unknown>): string {
-  const path = args.path ?? args.file_path;
-  if (typeof path === "string") return path;
-  if (typeof args.command === "string") return firstLine(args.command);
-  const keys = Object.keys(args);
-  return keys.length === 0 ? "" : `（${keys.join(", ")}）`;
 }
 
 export function renderEvent(e: AgentEvent): string | null {
@@ -618,6 +661,8 @@ function printHelp(): void {
   m0 --workspace <目录> <任务>   在指定工作区跑一轮
   m0 --session <id> <任务>       接着已有会话跑（不抹掉之前的转录）
   m0 --session <id> --compact    手动压缩那条会话后退出
+  m0 --fork <id> --from <n> <任务>  分叉：保留前 n 轮（含），新任务作为第 n+1 轮跑在**新会话** <id>-f<n> 上
+  m0 --replay <id>               只读回放这条会话的决策链（不跑模型）
 
 选项：
   --mode <档>          read-only | default | guided | auto（默认 default = 逐次审批）
@@ -630,6 +675,9 @@ function printHelp(): void {
                        缺省取档位表里最小的那个，对更小的模型是高估 ⇒ 撞远端 400。
                        指向小窗/网关模型时请显式给。
   --session <id>       接着这条会话跑（缺省新开一条 cli-<时间戳>）
+  --fork <id>          分叉源会话（配合 --from）：原会话只读、新会话 <id>-f<n>，事件溯源本来就是这么设计的
+  --from <n>           保留前 n 轮（含）再分叉；「轮」以 user_message 为界
+  --replay <id>        回放决策链（每行一条事件、带 gate 判定与验证结果）后退出，不跑模型、不改日志
   --goal "<目标>"       给这条会话设目标：一轮收束后按判据自动续跑，不达标就再来一轮
   --max-turns <n>      目标轮次上限（配 --goal）
   --max-usd <n>        目标花费上限 USD（配 --goal；表里查不到价的模型上这道闸会明写自己没生效）
@@ -664,6 +712,38 @@ async function main(): Promise<number> {
     return EXIT_OK;
   }
 
+  // ---- M8：`--replay` 只读日志打决策链（不搭壳、不起沙箱、不跑模型）----
+  if (opts.replayId !== null) {
+    const path = pathOf(join(opts.workspace, ".agent", "sessions"), opts.replayId);
+    let events: AgentEvent[];
+    try {
+      events = await replay(path);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        process.stderr.write(paint(RED, `[m0] 会话不存在：${opts.replayId}（看了 ${path}）\n`));
+        return EXIT_FAILED;
+      }
+      process.stderr.write(paint(RED, `[m0] 读日志失败：${err instanceof Error ? err.message : String(err)}\n`));
+      return EXIT_FAILED;
+    }
+    process.stdout.write(formatReplay(events) + "\n");
+    process.stdout.write(paint(DIM, `\n会话日志：${path}（${String(events.length)} 条事件）\n`));
+    return EXIT_OK;
+  }
+
+  // provider 解析：M0A_PROVIDER 显式覆盖优先，其次 settings，最后按已配置的 key 推断。
+  // 推断顺序写死在这里而不是「挑第一个有的」——否则加一个 provider 就静默改默认。
+  // 门的位置也在这一行说话：**放在 replay 之后**（回放不碰 provider，没 key 也得能看日志）；
+  // `--compact` 与目标轮要主模型，解析照旧发生在起跑前。ConfigError 同样 exit 2，但不打「用法」行。
+  let provider: MainModelSelection;
+  try {
+    provider = resolveProviderSelection(opts.providerFlag ?? undefined, opts.modelFlag ?? undefined, opts.ctxWindowFlag ?? undefined);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(paint(RED, `[m0] ${msg}\n`));
+    return EXIT_USAGE;
+  }
+
   // ---- 应用壳（§1）：这三行是 CLI 从「直接调 runAgent」变成「走装配入口」的全部前提 ----
   // 顺序有讲究：settings 与 sessions 必须先于任何 handler（它们各自在未初始化时抛或回落
   // 到 /tmp 假档），沙箱自检的最后一份结果正好是 `handleAgentRun` 读的那份（只自检一次）。
@@ -675,6 +755,51 @@ async function main(): Promise<number> {
   }
 
   await mkdir(dirname(opts.logPath), { recursive: true });
+
+  // ---- M8：`--fork` 的落点动作（读源日志 → 算分叉点 → 写新会话；源会话只读，字节不变）----
+  if (opts.fork !== null) {
+    const sessionsDir = join(opts.workspace, ".agent", "sessions");
+    const srcPath = pathOf(sessionsDir, opts.fork.source);
+    let srcEvents: AgentEvent[];
+    try {
+      srcEvents = await replay(srcPath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        process.stderr.write(paint(RED, `[m0] 源会话不存在：${opts.fork.source}（看了 ${srcPath}）\n`));
+        return EXIT_FAILED;
+      }
+      process.stderr.write(paint(RED, `[m0] 读源会话失败：${err instanceof Error ? err.message : String(err)}\n`));
+      return EXIT_FAILED;
+    }
+    const point = forkPointOf(srcEvents, opts.fork.round);
+    if ("error" in point) {
+      process.stderr.write(paint(RED, `[m0] 分叉点非法：${point.error}\n`));
+      return EXIT_USAGE;
+    }
+    const newId = forkSessionName(opts.fork.source, opts.fork.round);
+    if (!isValidSessionName(newId)) {
+      process.stderr.write(paint(RED, `[m0] 分叉出的会话名非法（多半过长）：${newId}\n`));
+      return EXIT_USAGE;
+    }
+    const target = pathOf(sessionsDir, newId);
+    if (existsSync(target)) {
+      process.stderr.write(paint(RED, `[m0] 目标会话已存在：${newId}（换 --from 或先删掉它；**不覆盖**既有转录）\n`));
+      return EXIT_USAGE;
+    }
+    // forkSession 写的一定是 `<dir>/events.jsonl`，而 CLI 的会话文件命名是 `<id>.jsonl`——
+    // 先写 scrub 目录再 rename：两边各守各的命名纪律，也不给 sessions 目录留半成品。
+    const scratch = join(sessionsDir, ".fork-" + newId);
+    const made = await forkSession(srcPath, String(point.lastIncluded), scratch);
+    await rename(made.eventsPath, target);
+    await rm(scratch, { recursive: true, force: true });
+    process.stderr.write(
+      paint(
+        DIM,
+        `[m0] 已分叉：${opts.fork.source} 前 ${String(opts.fork.round)} 轮（共 ${String(point.totalRounds)} 轮）→ 新会话 ${newId}；原会话只读未动\n`,
+      ),
+    );
+    opts = { ...opts, sessionId: newId, logPath: target };
+  }
 
   // 交互面能不能真的接上人：stdin 不是 TTY（管道 / CI / 重定向）时没人能答审批。
   // 这时**门按 fail-closed 收束**（当场拒绝），而不是挂一个永远等不到的 60s 超时。
@@ -821,7 +946,7 @@ async function main(): Promise<number> {
         ...(opts.goal !== null ? { goalArmed: true as const } : {}),
         // --model 自由档只能走这个槽：那一档的模型名按定义不在 DEFAULT_MODEL_TABLE 里，
         // 过不了 validateRunRequestEnvelope 的登记校验（run-request.ts:48）。
-        modelSelection: opts.provider,
+        modelSelection: provider,
         // 定时任务是长驻进程语义（tick 60s / 补跑 7 天 / 并发闸 ≤2），CLI 是一次性进程。
         // 装上那五个工具，模型看得见就会去建，然后每次都撞「调度器未初始化」白烧一轮审批。
         automationTools: false,

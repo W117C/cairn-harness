@@ -1,0 +1,7 @@
+# 无凭据环境的回放（修掉「被 provider key 拦下」之后的现状）——四个 key 全部从 env 删除
+# 命令：env -u M0_API_KEY -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u GEMINI_API_KEY NO_COLOR=1 node bin/m0.mjs --workspace <ws> --replay s1
+#1 user_message 任务：无凭据回放
+#2 tool_result ✓ [auto-approved·L3-rule] ok
+
+会话日志：/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/tmp.NkyMjdC8oQ/.agent/sessions/s1.jsonl（2 条事件）
+EXIT=0

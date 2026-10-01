@@ -305,7 +305,10 @@ describe("m0 CLI：走应用壳（handleAgentRun），不裸调 runAgent", () =>
   });
 
   it("--model 自由档走 modelSelection 槽：那一档不在档位表里，过不了信封校验", () => {
-    expect(src).toContain("modelSelection: opts.provider");
+    // 2026-10-01 M8：provider 解析从 parseArgs 推迟到 main()（`--replay` 只读日志、没 key 也得能跑），
+    // 槽里交给的还是同一个解析结果，只是从 `opts.provider` 换成 main 里的局部 `provider`。
+    expect(src).toContain("modelSelection: provider");
+    expect(src, "解析仍然只做一次、且发生在起跑前（replay 分支之后）").toContain("provider = resolveProviderSelection(");
   });
 
   it("automation_* 五个工具不装：定时任务是长驻进程语义，CLI 是一次性进程", () => {
