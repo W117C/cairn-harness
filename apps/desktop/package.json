@@ -5,7 +5,8 @@
   "type": "module",
   "main": "src/main/entry.cjs",
   "scripts": {
-    "dev": "vite & sleep 2 && electron .",
+    "predev": "pnpm run build:preload",
+    "dev": "vite & sleep 2 && VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
     "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.cjs",
     "build": "pnpm run build:preload && vite build && tsc -p tsconfig.json --noEmit",
     "test": "vitest run --config vitest.config.ts && node --import tsx ../../scripts/desktop-boundary-check.ts",

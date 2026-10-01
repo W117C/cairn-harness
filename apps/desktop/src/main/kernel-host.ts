@@ -1,6 +1,8 @@
 // kernel-host：内核装配单点（spec §3.2 预留 C 缝）。electron-free——
 // headless 判卷直接 import；Electron main / 未来 utilityProcess 宿主都只消费本文件出口。
 // 只装配、不实现：全部能力都是 src/main 既有出口的直调/小包装，缺的缝就地补一行。
+// 装配出口是进程级单例：二次 createKernelHost 会静默覆盖前一次的装配
+// （setAppHooks/initSettingsStore 等进程级出口「最后一个赢」），v0.1 契约是每进程只建一次。
 import { join } from "node:path";
 import type { AgentEvent } from "../../../../src/events";
 import type { RunRequest, RunResponse, SessionInfoPayload } from "../../../../src/main/ipc-protocol";

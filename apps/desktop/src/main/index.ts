@@ -2,8 +2,9 @@
 // 装载通道：entry.cjs 注册 repo 根 tsx 后 require 本 TS 源——core 链零打包零漂移
 // （esbuild 打包会把 agent-runner 的 ROOT 漂进 <repo>/apps，fixtures 运行时静默落空）。
 import { app, BrowserWindow, ipcMain, webContents } from "electron";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { INVOKE_CHANNELS, PUSH_CHANNELS } from "./channels";
 import type { InvokeChannel, PushChannel } from "./channels";
@@ -12,17 +13,25 @@ import { createKernelHost } from "./kernel-host";
 const here = fileURLToPath(new URL(".", import.meta.url));
 const distElectron = join(here, "..", "..", "dist-electron");
 
-const userData = app.getPath("userData");
-const workspace = process.env.M0_DESKTOP_WORKSPACE ?? app.getPath("home");
-
-// M0_SMOKE 机器冒烟（GUI 交互留给人）：先 seed settings 再装配 host——
-// initSettingsStore 在 createKernelHost 里挂存储，seed 必须赶在它前面。
+// M0_SMOKE userData 隔离（终审 #3，data-loss 防线）：冒烟会 seed settings.json，落真实 userData
+// 就是覆写用户数据——先把 userData 指到 mkdtemp 临时目录，seed 与 Electron 存储全部落隔离面。
+// setPath 必须先于一切 getPath("userData")：Electron 按当时的路径惰性建目录/落盘，晚了就写进真处。
 if (process.env.M0_SMOKE === "1") {
   if (!process.env.M0_DESKTOP_WORKSPACE) {
     // 回落 $HOME 会把冒烟会话/事件写进真实家目录——冒烟必须显式给临时工作区
     console.error("[m0-smoke] FAIL: M0_DESKTOP_WORKSPACE 未设置（冒烟拒绝回落 $HOME，请显式给临时工作区）");
     app.exit(1);
   }
+  app.setPath("userData", mkdtempSync(join(tmpdir(), "m0-smoke-userdata-")));
+}
+
+const userData = app.getPath("userData");
+const workspace = process.env.M0_DESKTOP_WORKSPACE ?? app.getPath("home");
+
+// M0_SMOKE 机器冒烟（GUI 交互留给人）：先 seed settings 再装配 host——
+// initSettingsStore 在 createKernelHost 里挂存储，seed 必须赶在它前面。
+// （settings 路径已随上面的 mkdtemp 与真实 userData 隔离：隔离目录恒无文件，等价每次重 seed。）
+if (process.env.M0_SMOKE === "1") {
   mkdirSync(userData, { recursive: true });
   const settingsPath = join(userData, "settings.json");
   let alreadyDemo = false;

@@ -14,6 +14,9 @@ describe("通道名表完整性", () => {
   });
 
   it("invoke 通道表非空且每行通道名非空", () => {
+    // 运行时计数钉（终审顺手项）：类型侧红线靠 tsconfig include 含 tests/ 才生效，
+    // include 一收窄就哑火——表长在运行时也咬得住，漂移（AgentApi 增删方法）当场红。
+    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(39);
     const keys = Object.keys(INVOKE_CHANNELS) as (keyof typeof INVOKE_CHANNELS)[];
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) expect(INVOKE_CHANNELS[key]).toBeTruthy();

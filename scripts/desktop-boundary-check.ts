@@ -20,7 +20,9 @@ function walk(dir: string, visit: (file: string) => void): void {
 walk(join(ROOT, "src"), (file) => {
   const text = readFileSync(file, "utf8");
   // 说明符「包含」apps/desktop 或 electron 即红（brief 原正则要求 specifier 恰好以其结尾，
-  // 抓不住 import "../../apps/desktop/src/main/channels" 这类真实路径，经探针实测修正）。
+  // 抓不住 import 语句里指向 ../../apps/desktop/src/main/channels 的真实路径，经探针实测修正）。
+  // 注释里刻意不写「import + 引号 specifier」的逐字形状：head-import-face 的 BARE_IMPORT
+  // 会把注释当真 import 提取 ⇒ 悬空假红（M1-7 落库实测踩中：head-import-check 与其自测双红）。
   if (/(from\s+["']|import\s*\(?\s*["'])[^"']*(apps\/desktop|electron)/.test(text)) {
     violations.push(`${relative(ROOT, file)}: src 不得 import apps/desktop 或 electron`);
   }

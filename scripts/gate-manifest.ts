@@ -143,6 +143,10 @@ export const GATES: readonly string[] = [
   //   **那句补偿在 4 笔之后被证伪**（我在 268/269/270/271 都没手动跑，于是自己入库的探针带着 TS7053 落了库）。
   //   第 272 页按「每笔交笔都要成立的判据」这一类把它买进 `CERT_GATES`（单价与预算的现读出处都在那张表里那道门旁边）。
   "evidence-typecheck-check",
+  // 桌面端单向依赖红线（AGENTS.md 分层规则的机器面）：src → apps/desktop 或 electron 即红。
+  // 原先只挂在 apps/desktop test 链尾——core-only 会话跑根门永远不触发；注册进默认门表补上这个洞
+  // （终审 #4）。快尺：纯文本扫 src/，亚秒档；不进 CERT_GATES——门面预算线快到头（见那张表头），不再顺手多买。
+  "desktop-boundary-check",
 ];
 
 /** 认证面**替它跑**的那几道门（第 224 页 #36）。

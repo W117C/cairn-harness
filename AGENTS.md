@@ -1,7 +1,7 @@
-# DSH core-only repository
+# DSH repository
 
-This checkout intentionally contains the agent/core only. The desktop layer has been removed:
-there is no Electron entry, preload, renderer, or desktop build configuration in this tree.
+The agent/core lives in `src/` (electron-free). The desktop layer lives in `apps/desktop/`
+(Electron main, preload, renderer, build chain) and depends one-way on `src/` — never the reverse.
 
 ## Scope kept
 
