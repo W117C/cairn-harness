@@ -1,0 +1,20 @@
+[miss] 候选=587 节点=15789 importStats={"refs":6761,"edges":3347,"external":3185,"resolvedNoDef":229,"typeOnlySkipped":1159}
+L01	src/permissions/autonomy.ts	在图	最好节点名次=11	在渲染面
+L02	src/agent/verify.ts	在图	最好节点名次=45	在渲染面
+L03	src/agent/no-progress.ts	在图	最好节点名次=1078	不在渲染面
+L04	src/agent/usage-attribution.ts	在图	最好节点名次=1388	不在渲染面
+L05	src/agent/tool-surface.ts	在图	最好节点名次=1387	不在渲染面
+L06	src/tools/snapshot.ts	在图	最好节点名次=1949	不在渲染面
+L07	src/tools/apply_patch.ts	在图	最好节点名次=1851	不在渲染面
+L08	src/main/scheduler.ts	在图	最好节点名次=1636	不在渲染面
+L09	src/agent/memory/inject.ts	在图	最好节点名次=33	在渲染面
+L10	src/agent/map/rank.ts	在图	最好节点名次=1013	不在渲染面
+L11	src/agent/no-progress.ts	在图	最好节点名次=1078	不在渲染面
+L12	src/main/settings.ts	在图	最好节点名次=47	在渲染面
+L13	src/main/sandbox.ts	在图	最好节点名次=1628	不在渲染面
+L14	src/agent/model-surface.ts	在图	最好节点名次=1072	不在渲染面
+[miss] 真值文件共 14 条，其中不在 4096 渲染面＝0   ← 这行是**错的**，见下面更正
+EXIT=0
+
+[更正 12:51] 上一行用了 includes("在渲染面") 当筛子，而"不在渲染面"里也含这三个字 ⇒ 数成 0。
+  按制表符字段重算：14 行真值（去重 13 个文件）＝在面 4 行（L01 autonomy #11／L02 verify #45／L09 memory-inject #33／L12 settings #47＝哨兵）＋不在面 10 行（去重 9 个文件，名次 1013–1949）。
