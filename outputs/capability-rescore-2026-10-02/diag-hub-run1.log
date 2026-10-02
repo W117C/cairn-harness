@@ -1,0 +1,11 @@
+解析文件数=762 / 候选=762
+src/main/settings.ts defs=19 按名入边(不同引用方文件数,同名匹配)=12 top=[{"name":"validateSettings","fanInFiles":4},{"name":"SettingsStore","fanInFiles":4},{"name":"get","fanInFiles":4}]
+src/main/sandbox.ts defs=16 按名入边(不同引用方文件数,同名匹配)=13 top=[{"name":"buildSandboxProfile","fanInFiles":3},{"name":"networkProfileFor","fanInFiles":2},{"name":"annotateNetworkDenial","fanInFiles":2}]
+src/tools/snapshot.ts defs=5 按名入边(不同引用方文件数,同名匹配)=7 top=[{"name":"snapshotBeforeOverwrite","fanInFiles":3},{"name":"snapshotNote","fanInFiles":3},{"name":"snapshotIdOf","fanInFiles":1}]
+src/agent/no-progress.ts defs=13 按名入边(不同引用方文件数,同名匹配)=17 top=[{"name":"detectVerifyStagnation","fanInFiles":4},{"name":"noProgressLadder","fanInFiles":3},{"name":"judgeNoProgressEvents","fanInFiles":3}]
+src/agent/tool-surface.ts defs=6 按名入边(不同引用方文件数,同名匹配)=2 top=[{"name":"missingFromFace","fanInFiles":1},{"name":"strandsWorkersOnSpawn","fanInFiles":1},{"name":"InjectedToolSurface","fanInFiles":0}]
+src/agent/ledger.ts defs=45 按名入边(不同引用方文件数,同名匹配)=124 top=[{"name":"readFile","fanInFiles":107},{"name":"sha","fanInFiles":3},{"name":"createObservationLedger","fanInFiles":3}]
+src/agent/verify.ts defs=27 按名入边(不同引用方文件数,同名匹配)=47 top=[{"name":"runVerifyOutcome","fanInFiles":7},{"name":"classifyVerifyFailure","fanInFiles":6},{"name":"defaultExec","fanInFiles":6}]
+src/tools/grep.ts defs=11 按名入边(不同引用方文件数,同名匹配)=24 top=[{"name":"run","fanInFiles":23},{"name":"clipLine","fanInFiles":1},{"name":"MAX_MATCHES","fanInFiles":0}]
+src/agent/memory/inject.ts defs=21 按名入边(不同引用方文件数,同名匹配)=14 top=[{"name":"buildMemoryInjection","fanInFiles":10},{"name":"extractExternalRefs","fanInFiles":3},{"name":"isExternalRef","fanInFiles":1}]
+按名入边总量前 12： fixtures/gym/cases/todo-completed-count/repo/tests/run.mjs=286, fixtures/gym/cases/order-pricing-triple-fix/repo/tests/run.mjs=284, fixtures/gym/cases/config-default/repo/tests/run.mjs=284, fixtures/gym/cases/sum-clamp/repo/tests/run.mjs=284, src/events/index.ts=154, tests/secrets.test.ts=140, src/agent/ledger.ts=124, scripts/compaction-check.ts=108, src/main/agent-runner.ts=107, scripts/lib/mutate-gates.ts=101, scripts/plugins-check.ts=87, tests/memory-runner.test.ts=84

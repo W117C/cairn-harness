@@ -1,0 +1,28 @@
+eval-base-a/B1-bugfix-crossfile requests=7 toolCalls=13 ended=PASS verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-a/B10-refactor-dedupe requests=12 toolCalls=16 ended=PASS verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-a/B11-refactor-signature requests=12 toolCalls=17 ended=PASS verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-a/B12-long-horizon requests=27 toolCalls=29 ended=PASS verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-a/B2-feature-export requests=10 toolCalls=12 ended=PASS verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-a/B3-refactor-callsite requests=8 toolCalls=12 ended=PASS verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-a/B4-bugfix-pagination requests=7 toolCalls=12 ended=FAIL verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-a/B5-bugfix-async requests=10 toolCalls=15 ended=FAIL verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-a/B6-feature-flag requests=9 toolCalls=11 ended=PASS verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-a/B7-feature-csv requests=12 toolCalls=15 ended=FAIL verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-a/B8-feature-memo requests=4 toolCalls=7 ended=PASS verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-a/B9-refactor-rename requests=12 toolCalls=18 ended=PASS verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-b/B1-bugfix-crossfile requests=13 toolCalls=15 ended=PASS verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-b/B10-refactor-dedupe requests=9 toolCalls=13 ended=PASS verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-b/B11-refactor-signature requests=10 toolCalls=14 ended=PASS verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-b/B12-long-horizon requests=28 toolCalls=30 ended=PASS verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-b/B2-feature-export requests=11 toolCalls=13 ended=PASS verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-b/B3-refactor-callsite requests=16 toolCalls=20 ended=FAIL verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-b/B4-bugfix-pagination requests=12 toolCalls=17 ended=FAIL verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-b/B5-bugfix-async requests=14 toolCalls=16 ended=FAIL verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-b/B6-feature-flag requests=10 toolCalls=13 ended=PASS verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-b/B7-feature-csv requests=9 toolCalls=11 ended=PASS verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-b/B8-feature-memo requests=13 toolCalls=17 ended=FAIL verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+eval-base-b/B9-refactor-rename requests=13 toolCalls=15 ended=PASS verifyBeats=1 ladder=silent rules=- targetKept=n/a(<2拍)
+
+[longrun-ladder] 扫描=24 条 · 阶梯开口=0 条 · 整条流判据与生产端共用 judgeNoProgressEvents
+[longrun-ladder] verify 拍数分布 [[1,24]]（R1 需要 ≥2 拍才可达）
+[longrun-ladder] requests 极值 最小=4 最大=28（max 取自逐笔原始行，不是第一行）

@@ -1,0 +1,24 @@
+L01 shape=nl idents=0 ctx=0 target=src/permissions/autonomy.ts | 1024:A=第14,B=第14[A文件=58/tok=911 B文件=58/tok=911] | 2048:A=第14,B=第14[A文件=97/tok=1887 B文件=97/tok=1887] | 4096:A=第14,B=第14[A文件=130/tok=3731 B文件=130/tok=3731]
+L02 shape=nl idents=0 ctx=0 target=src/agent/verify.ts | 1024:A=第35,B=第35[A文件=58/tok=911 B文件=58/tok=911] | 2048:A=第35,B=第35[A文件=97/tok=1887 B文件=97/tok=1887] | 4096:A=第35,B=第35[A文件=130/tok=3731 B文件=130/tok=3731]
+L03 shape=nl idents=0 ctx=0 target=src/agent/no-progress.ts | 1024:A=MISS,B=MISS[A文件=58/tok=911 B文件=58/tok=911] | 2048:A=MISS,B=MISS[A文件=97/tok=1887 B文件=97/tok=1887] | 4096:A=MISS,B=MISS[A文件=130/tok=3731 B文件=130/tok=3731]
+L04 shape=nl idents=0 ctx=0 target=src/agent/usage-attribution.ts | 1024:A=MISS,B=MISS[A文件=58/tok=911 B文件=58/tok=911] | 2048:A=MISS,B=MISS[A文件=97/tok=1887 B文件=97/tok=1887] | 4096:A=MISS,B=MISS[A文件=130/tok=3731 B文件=130/tok=3731]
+L05 shape=nl idents=0 ctx=0 target=src/agent/tool-surface.ts | 1024:A=MISS,B=MISS[A文件=58/tok=911 B文件=58/tok=911] | 2048:A=MISS,B=MISS[A文件=97/tok=1887 B文件=97/tok=1887] | 4096:A=MISS,B=MISS[A文件=130/tok=3731 B文件=130/tok=3731]
+L06 shape=nl idents=0 ctx=0 target=src/tools/snapshot.ts | 1024:A=MISS,B=MISS[A文件=58/tok=911 B文件=58/tok=911] | 2048:A=MISS,B=MISS[A文件=97/tok=1887 B文件=97/tok=1887] | 4096:A=MISS,B=MISS[A文件=130/tok=3731 B文件=130/tok=3731]
+L07 shape=nl idents=0 ctx=0 target=src/tools/apply_patch.ts | 1024:A=MISS,B=MISS[A文件=58/tok=911 B文件=58/tok=911] | 2048:A=MISS,B=MISS[A文件=97/tok=1887 B文件=97/tok=1887] | 4096:A=MISS,B=MISS[A文件=130/tok=3731 B文件=130/tok=3731]
+L08 shape=nl idents=0 ctx=0 target=src/main/scheduler.ts | 1024:A=MISS,B=MISS[A文件=58/tok=911 B文件=58/tok=911] | 2048:A=MISS,B=MISS[A文件=97/tok=1887 B文件=97/tok=1887] | 4096:A=MISS,B=MISS[A文件=130/tok=3731 B文件=130/tok=3731]
+L09 shape=nl idents=1 ctx=0 target=src/agent/memory/inject.ts | 1024:A=第26,B=第25[A文件=59/tok=918 B文件=58/tok=911] | 2048:A=第26,B=第25[A文件=97/tok=1887 B文件=97/tok=1887] | 4096:A=第26,B=第25[A文件=130/tok=3731 B文件=130/tok=3731]
+L10 shape=nl idents=0 ctx=0 target=src/agent/map/rank.ts | 1024:A=MISS,B=MISS[A文件=58/tok=911 B文件=58/tok=911] | 2048:A=MISS,B=MISS[A文件=97/tok=1887 B文件=97/tok=1887] | 4096:A=MISS,B=MISS[A文件=130/tok=3731 B文件=130/tok=3731]
+L11 shape=ident idents=1 ctx=0 target=src/agent/no-progress.ts | 1024:A=第8,B=MISS[A文件=58/tok=913 B文件=58/tok=911] | 2048:A=第8,B=MISS[A文件=99/tok=1905 B文件=97/tok=1887] | 4096:A=第8,B=MISS[A文件=132/tok=3747 B文件=130/tok=3731]
+L12 shape=ident idents=2 ctx=1 target=src/main/settings.ts | 1024:A=MISS,B=MISS[A文件=58/tok=911 B文件=58/tok=911] | 2048:A=MISS,B=MISS[A文件=98/tok=1894 B文件=97/tok=1887] | 4096:A=MISS,B=MISS[A文件=131/tok=3735 B文件=130/tok=3731]
+L13 shape=ident idents=3 ctx=1 target=src/main/sandbox.ts | 1024:A=MISS,B=MISS[A文件=58/tok=911 B文件=58/tok=911] | 2048:A=MISS,B=MISS[A文件=97/tok=1887 B文件=97/tok=1887] | 4096:A=MISS,B=MISS[A文件=130/tok=3731 B文件=130/tok=3731]
+L14 shape=ident idents=1 ctx=0 target=src/agent/model-surface.ts | 1024:A=MISS,B=MISS[A文件=58/tok=911 B文件=58/tok=911] | 2048:A=MISS,B=MISS[A文件=97/tok=1887 B文件=97/tok=1887] | 4096:A=MISS,B=MISS[A文件=130/tok=3731 B文件=130/tok=3731]
+L-POS shape=sentinel idents=0 ctx=0 target=src/main/settings.ts | 1024:A=MISS,B=MISS[A文件=58/tok=911 B文件=58/tok=911] | 2048:A=MISS,B=MISS[A文件=97/tok=1887 B文件=97/tok=1887] | 4096:A=MISS,B=MISS[A文件=130/tok=3731 B文件=130/tok=3731]
+L-NEG shape=control idents=1 ctx=0 target=src/agent/definitely-not-a-real-file.ts | 1024:A=MISS,B=MISS[A文件=58/tok=913 B文件=58/tok=911] | 2048:A=MISS,B=MISS[A文件=99/tok=1905 B文件=97/tok=1887] | 4096:A=MISS,B=MISS[A文件=132/tok=3747 B文件=130/tok=3731]
+
+[locate-recall] 题数=16（其中真值题 14 条＋哨兵 1＋负控 1）· 题型分布 {"nl":10,"ident":4,"sentinel":1,"control":1}
+[locate-recall] 预算 1024 tok ⇒ A 臂（条件化）4/16 · B 臂（不条件化）3/16
+[locate-recall] 预算 2048 tok ⇒ A 臂（条件化）4/16 · B 臂（不条件化）3/16
+[locate-recall] 预算 4096 tok ⇒ A 臂（条件化）4/16 · B 臂（不条件化）3/16
+[locate-recall] 负控 L-NEG 期望始终 MISS；正哨兵 L-POS 期望至少在 4096 命中（否则=图里真没有它）
+[locate-recall] 条件化输入为空的题=10/16 ⇒ 这些题两臂按构造同图，A/B 差值不许归因给条件化
+[locate-recall] 覆盖面自述（1024 那一档）候选文件=762 进图=762 渲染进地图=58 tokens=911

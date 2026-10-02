@@ -1,0 +1,20 @@
+L01 shape=nl idents=0 ctx=0 A臂=第14个文件 B臂=第14个文件 差=同位 图内文件 A=58/B=58 tokens=911 target=src/permissions/autonomy.ts
+L02 shape=nl idents=0 ctx=0 A臂=第34个文件 B臂=第34个文件 差=同位 图内文件 A=58/B=58 tokens=911 target=src/agent/verify.ts
+L03 shape=nl idents=0 ctx=0 A臂=MISS B臂=MISS 差=两臂皆无 图内文件 A=58/B=58 tokens=911 target=src/agent/no-progress.ts
+L04 shape=nl idents=0 ctx=0 A臂=MISS B臂=MISS 差=两臂皆无 图内文件 A=58/B=58 tokens=911 target=src/agent/usage-attribution.ts
+L05 shape=nl idents=0 ctx=0 A臂=MISS B臂=MISS 差=两臂皆无 图内文件 A=58/B=58 tokens=911 target=src/agent/tool-surface.ts
+L06 shape=nl idents=0 ctx=0 A臂=MISS B臂=MISS 差=两臂皆无 图内文件 A=58/B=58 tokens=911 target=src/tools/snapshot.ts
+L07 shape=nl idents=0 ctx=0 A臂=MISS B臂=MISS 差=两臂皆无 图内文件 A=58/B=58 tokens=911 target=src/tools/apply_patch.ts
+L08 shape=nl idents=0 ctx=0 A臂=MISS B臂=MISS 差=两臂皆无 图内文件 A=58/B=58 tokens=911 target=src/main/scheduler.ts
+L09 shape=nl idents=1 ctx=0 A臂=第27个文件 B臂=第25个文件 差=A更后 图内文件 A=59/B=58 tokens=918 target=src/agent/memory/inject.ts
+L10 shape=nl idents=0 ctx=0 A臂=MISS B臂=MISS 差=两臂皆无 图内文件 A=58/B=58 tokens=911 target=src/agent/map/rank.ts
+L11 shape=ident idents=1 ctx=0 A臂=第8个文件 B臂=MISS 差=仅A中 图内文件 A=58/B=58 tokens=913 target=src/agent/no-progress.ts
+L12 shape=ident idents=2 ctx=1 A臂=MISS B臂=MISS 差=两臂皆无 图内文件 A=58/B=58 tokens=911 target=src/main/settings.ts
+L13 shape=ident idents=3 ctx=1 A臂=MISS B臂=MISS 差=两臂皆无 图内文件 A=58/B=58 tokens=911 target=src/main/sandbox.ts
+L14 shape=ident idents=1 ctx=0 A臂=MISS B臂=MISS 差=两臂皆无 图内文件 A=58/B=58 tokens=911 target=src/agent/model-surface.ts
+L-POS shape=sentinel idents=0 ctx=0 A臂=MISS B臂=MISS 差=两臂皆无 图内文件 A=58/B=58 tokens=911 target=src/main/settings.ts
+L-NEG shape=control idents=1 ctx=0 A臂=MISS B臂=MISS 差=两臂皆无 图内文件 A=58/B=58 tokens=913 target=src/agent/definitely-not-a-real-file.ts
+
+[locate-recall] 首轮地图含真值文件：中文问句 3/10 · 带标识符问句 1/4
+[locate-recall] 正哨兵 0/1（期望 1/1） · 负控 0/1（期望 0/1）
+[locate-recall] 条件化输入为空的题=10/16 ⇒ 这些题两臂按构造同图，A/B 差值不许归因给条件化

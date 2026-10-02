@@ -1,0 +1,25 @@
+文件  现状名次  平分票数名次  平分+IDF名次   (总数 762)
+fixtures/gym/cases/todo-completed-count/repo/tests/run.mjs  4  23  132
+src/agent/ledger.ts  2  2  12
+src/events/index.ts  8  4  6
+src/main/agent-runner.ts  9  5  3
+src/main/settings.ts  105  97  122
+src/agent/verify.ts  14  11  13
+src/agent/no-progress.ts  45  43  44
+src/tools/grep.ts  275  297  302
+
+[current] 前 8：tests/secrets.test.ts=2248, src/agent/ledger.ts=1671, scripts/lib/mutate-gates.ts=1635, fixtures/gym/cases/todo-completed-count/repo/tests/run.mjs=1560, fixtures/gym/cases/order-pricing-triple-fix/repo/tests/run.mjs=1558, fixtures/gym/cases/config-default/repo/tests/run.mjs=1558, fixtures/gym/cases/sum-clamp/repo/tests/run.mjs=1558, src/events/index.ts=1396
+
+[split] 前 8：tests/secrets.test.ts=2220, src/agent/ledger.ts=1643, scripts/lib/mutate-gates.ts=1635, src/events/index.ts=1359, src/main/agent-runner.ts=1229, src/permissions/autonomy.ts=1089, scripts/lib/head-cert-deps.ts=909, src/agent/glm-session.ts=813
+
+[splitIdf] 前 8：scripts/lib/mutate-gates.ts=1455, scripts/lib/head-cert-deps.ts=821, src/main/agent-runner.ts=813, src/permissions/autonomy.ts=516, tests/secrets.test.ts=472, src/events/index.ts=471, scripts/docs-check.ts=470, src/agent/memory/store.ts=452
+
+制造全连接质量最多的名字（name / 同名 def 数 / 引用方文件数）：
+  describe: defs=0 refFiles=276  ← 吃 ×10 长度加成、又不触发 >5 阻尼
+  writeFile: defs=1 refFiles=133  ← 吃 ×10 长度加成、又不触发 >5 阻尼
+  readFile: defs=1 refFiles=107  ← 吃 ×10 长度加成、又不触发 >5 阻尼
+  afterEach: defs=0 refFiles=101  ← 吃 ×10 长度加成、又不触发 >5 阻尼
+  readFileSync: defs=0 refFiles=80  ← 吃 ×10 长度加成、又不触发 >5 阻尼
+  fileURLToPath: defs=0 refFiles=72  ← 吃 ×10 长度加成、又不触发 >5 阻尼
+  createEventLog: defs=1 refFiles=71  ← 吃 ×10 长度加成、又不触发 >5 阻尼
+  beforeEach: defs=0 refFiles=60  ← 吃 ×10 长度加成、又不触发 >5 阻尼
