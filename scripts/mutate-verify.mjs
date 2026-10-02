@@ -7622,9 +7622,12 @@ const MUTATIONS = [
     src: "scripts/lib/head-cert-deps.ts",
     test: "tests/head-cert-deps.test.ts",
     desc: "名单与实际读取漂开（这里是撤掉 `no-borrow`）⇒ 传一条**合法**的开关会被自己的闸拒掉。这类「表与代码各说各话」只有双向对照能同时抓住两头（规则 208）",
+    // 针脚改指（2026-10-02 修）：`508538a`（head-cert 回收自己建的认证树，移植到 zcode）
+    // 往名单里加了 `keep-tree` ⇒ 旧针脚（第二个元素后就是 `]`）失针。
+    // 变异体仍是"撤掉 no-borrow"（desc 说的就是它），只是针脚跟上现在这一行。
     apply: (s) => s.replace(
-      'export const CERT_FLAGS: readonly string[] = ["skip-test", "no-borrow"];',
-      'export const CERT_FLAGS: readonly string[] = ["skip-test"];',
+      'export const CERT_FLAGS: readonly string[] = ["skip-test", "no-borrow", "keep-tree"];',
+      'export const CERT_FLAGS: readonly string[] = ["skip-test", "keep-tree"];',
     ),
     expectFail: "名单与脚本真正读的开关双向对得上：漏登记＝自拒，多登记＝那张表是假的",
   },
