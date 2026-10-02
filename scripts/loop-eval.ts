@@ -34,6 +34,11 @@ import { retryVerdict, withProviderRetry } from "./lib/eval-retry";
 // held-out 验收面：可见测试是任务书明写着要复现的那些 ⇒ 「哄绿它们」与「修对根因」同分。
 // 隐藏测试在**改动清单算完之后**才装进副本，跑一次，判卷口径在那边（三种"量不出来"各给各的措辞）。
 import { heldOutFailReasons, installHeldOut, judgeHeldOut, runHeldOut, type HeldOutRun, type HeldOutState } from "./lib/eval-heldout";
+// 装配面登记：产品缺省开的每一枚开关，跑器这边必须说一句「装／不装／这格对我无意义」。
+// 这张表存在的理由：`autoVerify`（能力 5 的收束闸）产品缺省开、基准不接，
+// 于是盘上 49 趟跑批的 `autoVerifyBeat` 全 false——被读成「模型不自己验证」，其实是跑器没装这一环。
+import { assemblyOverrides, assemblyRows, renderAssemblyFace, runLoopKnobsFromAssembly, undeclaredKnobs } from "./lib/eval-assembly";
+import { DEFAULT_SETTINGS } from "../src/main/settings";
 
 const sleep = (ms: number): Promise<void> => new Promise((res) => setTimeout(res, ms));
 import { createVerifyHook, defaultExec, runVerifyOutcome, type ExecFn } from "../src/agent/verify";
@@ -61,6 +66,19 @@ const MAX_STEPS = Number(pick("--max-steps", "20"));
 const REPS = Number(pick("--reps", "1"));
 const SYSTEM_MODE = pick("--system", "base");
 const ONLY = pick("--only", "").split(",").map((s) => s.trim()).filter(Boolean);
+
+/* 装配面：产品缺省开的每一枚开关，这边都要有表态。
+ *  `--auto-verify` 是把收束闸接上的那一步——**缺省关**，今日行为逐字不动，因为开了它
+ *  每趟可能多真跑一遍 lint/test（钱），而 `loop.ts` 头上那句「准确率 vs `$/成功任务` 的实测口径仍未裁」
+ *  今天仍然成立：那道裁决要一次带凭据的真跑，属用户裁，不由这把尺替用户翻。
+ *  递进 `runLoop` 的键由**这张表投影**（`runLoopKnobsFromAssembly`），不另起一条 if：
+ *  表和参数各算一次，表就成了注释——那正是 `autoVerifyBeat` 49 趟全 false 没被看见的原因。
+ *  有未表态的缺省开键 ⇒ **拒绝出数**（分母不完整时任何分数都是假的，与 `--tasks` 解析报错同一口径）。 */
+const AUTO_VERIFY = argv.includes("--auto-verify");
+const ASSEMBLY = assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(AUTO_VERIFY));
+const ASSEMBLY_UNDECLARED = undeclaredKnobs(ASSEMBLY);
+const ASSEMBLY_FACE = renderAssemblyFace(ASSEMBLY);
+const BENCH_RUNLOOP_KNOBS = runLoopKnobsFromAssembly(ASSEMBLY);
 /** 对照臂的短提示 = gate-check 暗卷当年那句（用来证明"提示词差异"不是读数的解释变量）。 */
 const SHORT_SYSTEM = [
   "你是桌面编程 agent，workspace 根是当前工作区（所有路径相对它）。",
@@ -291,6 +309,10 @@ interface Reading {
    *  `heldOutRun` 为 undefined = 这一格没跑（任务集没给隐藏面，或文件没装齐）。
    *  判卷口径全在 `lib/eval-heldout`：这里只存观测，不自己再算一遍「过没过」。 */
   heldOutInstallErrs: string[]; heldOutRun: HeldOutRun | undefined;
+  /** 这一格是哪副装配跑出来的（`autoVerify:off-here …` 这样的短串，事实源 `lib/eval-assembly`）。
+   *  为什么进读数而不是只看日志那一行：读数会被事后拿去做 A/B，日志那行不在同一个文件里；
+   *  `autoVerifyBeat:false` 脱离装配面就没有解释——它既可能是「模型不验」，也可能是「跑器没装」。 */
+  assembly: string;
   changedFiles: string[]; exitError: string | null;
   /** 本次会话的资源占用（见 startResourceSampler 的口径说明）。 */
   resources: ResourceSample;
@@ -372,6 +394,7 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
   let exitError: string | null = null;
   try {
     await runLoop({
+      ...BENCH_RUNLOOP_KNOBS,
       provider: createGlmSessionProvider(eventsPath, {
         system,
         workspace: work,
@@ -508,6 +531,7 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
     autoVerifyBeat: verifies.some((v) => (v as { auto?: boolean }).auto === true),
     wroteTests, touchedJudge, onlySrcChanged, changedFiles: changed, exitError, resources,
     heldOutInstallErrs, heldOutRun,
+    assembly: ASSEMBLY_FACE,
   };
 }
 
@@ -585,6 +609,9 @@ function reportFeasibility(tasks: readonly EvalTask[]): void {
   }
   const agg = aggregateFeasibility(rows.map((x) => x.r));
   console.log(`[feasibility] 可跑 ${String(agg.runnable)} / 分母 ${String(agg.total)}（未发任何模型请求 ⇒ 零花费）`);
+  // 装配面在这条零花费路上也要出声：这行回答的是「就算可跑，跑出来的读数能不能当产品行为引用」。
+  // 上面那行只说「有没有得量」，不说「量的是哪副装配」——`autoVerify:off-here` 那一格正是这样漏掉的。
+  console.log("[feasibility] 装配面（产品缺省开的键 ↔ 本跑器）：" + ASSEMBLY_FACE);
   console.log(agg.measurable
     ? "⇒ 有得量：去掉 --feasibility 就按这批任务出数（要真钱）。"
     : "⇒ " + agg.reason);
@@ -609,6 +636,15 @@ if (!BENCH_API_KEY || !BENCH_ENDPOINT) {
   process.exit(0);
 }
 await judgeSelfCheck(); // 判卷器不落定就不出数
+/* 装配面在**花钱之前**出声：这行说的是"这一批读数是哪副装配跑出来的"。
+ * 有未表态的缺省开键 ⇒ 拒绝出数（不是警告）：那意味着产品默认在线的一环被基准静默少装，
+ * 而跑出来的分数会被引用成产品行为——`autoVerifyBeat` 49 趟全 false 那次就是这么错的。 */
+console.log("[loop-eval] 装配面（产品缺省开的键 ↔ 本跑器）：" + ASSEMBLY_FACE);
+if (ASSEMBLY_UNDECLARED.length > 0) {
+  for (const u of ASSEMBLY_UNDECLARED) console.error(`[loop-eval] 缺省开但没表态：${u.key} ⇒ ${u.why}`);
+  console.error(`[loop-eval] ${String(ASSEMBLY_UNDECLARED.length)} 枚键没表态 ⇒ 拒绝出数（在 scripts/lib/eval-assembly.ts 的 BENCH_KNOBS 里写明装／不装／无意义）`);
+  process.exit(1);
+}
 console.log(`[loop-eval] 任务=${tasks.map((t) => t.id).join(",")} reps=${REPS} system=${SYSTEM_MODE} maxSteps=${MAX_STEPS} 模型=${glmDefaultModelName()} 价=${PRICE.known ? `¥${PRICE.inPerM}/¥${PRICE.outPerM}每M（手给）` : `${PRICE_UNKNOWN}〔${PRICE.why}〕`}`);
 await mkdir(ROOT + "/" + OUT, { recursive: true });
 const rows: { r: Reading; g: { ok: boolean; fails: string[] } }[] = [];

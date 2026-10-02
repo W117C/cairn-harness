@@ -1,0 +1,8 @@
+[feasibility] I1                         不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] I2                         不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] I3                         不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] I4                         不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] 工具链自检 ✅ pnpm --version
+[feasibility] 可跑 0 / 分母 4（未发任何模型请求 ⇒ 零花费）
+[feasibility] 装配面（产品缺省开的键 ↔ 本跑器）：autoMemory:off-here autoVerify:off-here impactAnalysis:off-here promptCache:off-here subagentTools:same
+⇒ 4 条任务全部不可跑 ⇒ 基准读数无从谈起，先看 blockers 里缺什么

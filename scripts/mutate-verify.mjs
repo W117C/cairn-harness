@@ -11594,6 +11594,122 @@ const MUTATIONS = [
     ),
     expectFail: "导出一半也不认模板里的假源码（那一侧的后果是假绿：缺失符号被读成存在）",
   },
+  /* ---- 基准装配面（2026-10-02，能力 5 那一格的**测量有效性**）----
+   * 动因：`scripts/loop-eval.ts` 自称「装配 = 生产同款」，实际递给 runLoop 的参数里
+   * 一枚产品缺省开的开关都没有 ⇒ 盘上 49 趟跑批的 `autoVerifyBeat` 全是 false，
+   * 被读成「模型从不自己验证」。这 11 条钉的是**表态表与真参数不许分叉**：
+   * 表说装了 ⇒ 参数里得真装着；表没表态 ⇒ 不许出数。 */
+  {
+    id: "asm-projection-always-on",
+    src: "scripts/lib/eval-assembly.ts",
+    test: "tests/eval-assembly.test.ts",
+    desc: "投影不看 face 只要键名对就装 ⇒ 缺省那副也会给 runLoop 塞 autoVerify，" +
+      "「基准今天少装了」这一格被抹平，而它正是本表存在的理由",
+    apply: (s) => s.replace('r.key === "autoVerify" && r.face === "same"', 'r.key === "autoVerify"'),
+    expectFail: "缺省那副：表说没装 ⇒ runLoop 收不到 autoVerify（今日行为逐字不动）",
+  },
+  {
+    id: "asm-projection-never-on",
+    src: "scripts/lib/eval-assembly.ts",
+    test: "tests/eval-assembly.test.ts",
+    desc: "投影恒返回空对象 ⇒ 表说装了、参数里却什么都没有，读数与装配第二次分叉" +
+      "（本案原始形状的反向：从前是表不存在，现在是表说谎而参数照旧）",
+    apply: (s) => s.replace('? { autoVerify: true } : {};', '? {} : {};'),
+    expectFail: "带 --auto-verify 那副：表改口成 same ⇒ 递出去的参数里真装着 autoVerify",
+  },
+  {
+    id: "asm-default-filter-widened",
+    src: "scripts/lib/eval-assembly.ts",
+    test: "tests/eval-assembly.test.ts",
+    desc: "筛选从「缺省为真」放宽成「键在场」⇒ 表格混进 provider/model/帽值这些根本不该表态的东西，" +
+      "少装计数虚高，而缺省关的键被当成缺陷登记",
+    apply: (s) => s.replace("filter(([, v]) => v === true)", "filter(([, v]) => v !== undefined)"),
+    expectFail: "缺省关的键不进这张表",
+  },
+  {
+    id: "asm-undeclared-detector-neutered",
+    src: "scripts/lib/eval-assembly.ts",
+    test: "tests/eval-assembly.test.ts",
+    desc: "查无表态的探测器恒返空 ⇒ 谁翻一枚缺省而没写表，装配面照样印得整整齐齐，" +
+      "登记表自己烂掉而读数照印（本仓对登记表一律要求 stale 也要红）",
+    apply: (s) => s.replace(
+      'export function undeclaredKnobs(rows: readonly AssemblyRow[]): AssemblyRow[] {\n  return rows.filter((r) => r.face === "undeclared");',
+      'export function undeclaredKnobs(rows: readonly AssemblyRow[]): AssemblyRow[] {\n  return rows.filter(() => false);',
+    ),
+    expectFail: "缺省新开一枚键而表里查无 ⇒ 判成 undeclared 并指回登记处",
+  },
+  {
+    id: "asm-override-flag-ignored",
+    src: "scripts/lib/eval-assembly.ts",
+    test: "tests/eval-assembly.test.ts",
+    desc: "`--auto-verify` 进了命令行却不改口 ⇒ 旗标成了装饰，带它跑出来的读数与不带它一模一样，" +
+      "而下一次裁决「准确率 vs 每成功任务花多少」要的就是这两副对照",
+    apply: (s) => s.replace("  if (!autoVerify) return {};", "  if (true) return {};"),
+    expectFail: "少装计数：缺省四枚、带旗标三枚，且差的就是 autoVerify 那一枚",
+  },
+  {
+    id: "asm-face-render-dropped",
+    src: "scripts/lib/eval-assembly.ts",
+    test: "tests/eval-assembly.test.ts",
+    desc: "渲染串整个返空 ⇒ 读数行、日志、feasibility 三处的装配面同时变成空白，" +
+      "`autoVerifyBeat:false` 又回到没有解释的那种形状",
+    apply: (s) => s.replace(
+      '  return rows.map((r) => `${r.key}:${r.face}`).join(" ");',
+      '  return "";',
+    ),
+    expectFail: "渲染串逐枚带 key:face，顺序稳定（同一副装配两次要一模一样）",
+  },
+  {
+    id: "asm-eval-override-not-passed",
+    src: "scripts/loop-eval.ts",
+    test: "tests/eval-assembly.test.ts",
+    desc: "算了 overrides 却没递进 assemblyRows（第三个实参写没）⇒ 旗标改了口而表没跟上；" +
+      "本仓「算出来不接」那一族在这里的形状是少一个入参",
+    apply: (s) => s.replace(
+      "assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(AUTO_VERIFY))",
+      "assemblyRows(DEFAULT_SETTINGS)",
+    ),
+    expectFail: "缺省表与旗标改口是同一条调用算出来的",
+  },
+  {
+    id: "asm-eval-runloop-knob-not-spread",
+    src: "scripts/loop-eval.ts",
+    test: "tests/eval-assembly.test.ts",
+    desc: "投影算出来了、`runLoop({...})` 里却没摊开它 ⇒ 能力 5 的收束闸依旧不装，" +
+      "读数行上一句「装了」变成纯文案（正是 49 趟那批读数的成因）",
+    apply: (s) => s.replace("      ...BENCH_RUNLOOP_KNOBS,\n      provider:", "      provider:"),
+    expectFail: "递给 runLoop 的是投影结果，不是第二个 if",
+  },
+  {
+    id: "asm-eval-guard-disabled",
+    src: "scripts/loop-eval.ts",
+    test: "tests/eval-assembly.test.ts",
+    desc: "未表态的键只印不拦 ⇒ 分母不完整照样出数，而每一行读数都带着一个没人解释过的 false；" +
+      "拒绝出数这一条与 `--tasks` 解析报错同一口径",
+    apply: (s) => s.replace("if (ASSEMBLY_UNDECLARED.length > 0) {", "if (false) {"),
+    expectFail: "未表态 ⇒ 在第一趟跑批之前退，且退出码是 1",
+  },
+  {
+    id: "asm-eval-feasibility-print-dropped",
+    src: "scripts/loop-eval.ts",
+    test: "tests/eval-assembly.test.ts",
+    desc: "零花费那条路不印装配面 ⇒ 决定「要不要花钱跑」的人只看得到可跑几条，" +
+      "看不到跑出来的是哪副装配，钱花完了才发现这一格",
+    apply: (s) => s.replace(
+      '  console.log("[feasibility] 装配面（产品缺省开的键 ↔ 本跑器）：" + ASSEMBLY_FACE);',
+      "  // 这行没接",
+    ),
+    expectFail: "零花费那条路（--feasibility）也印装配面，且印在退出之前",
+  },
+  {
+    id: "asm-eval-reading-face-dropped",
+    src: "scripts/loop-eval.ts",
+    test: "tests/eval-assembly.test.ts",
+    desc: "读数格里的装配面写成空串 ⇒ 日志那一行不在 readings.json 里，" +
+      "事后拿 JSON 做 A/B 的人只剩一个孤零零的 `autoVerifyBeat:false`（归因面与读数面分家那一族）",
+    apply: (s) => s.replace("    assembly: ASSEMBLY_FACE,", "    assembly: \"\","),
+    expectFail: "读数每一格自带装配面：JSON 里不许只剩 autoVerifyBeat 一个孤零零的 false",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
