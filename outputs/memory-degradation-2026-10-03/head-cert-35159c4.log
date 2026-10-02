@@ -1,0 +1,48 @@
+目标提交：35159c4（--at=35159c4d0e20d01feb8da272cfff4bd1c4c3c73f）
+checkout exit=0
+已核：TREE=35159c4d0e20d01feb8da272cfff4bd1c4c3c73f｜判卷四面在飞 0 项
+依赖核对：该提交声明 10 项，缺 0 项
+  子仓库 fixtures/bench/bench-bugfix-async/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-bugfix-crossfile/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-bugfix-pagination/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-feature-csv/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-feature-export/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-feature-flag/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-feature-memo/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-long-chain-32/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-long-chain-48/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-long-horizon/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-long-horizon-30/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-refactor-callsite/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-refactor-dedupe/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-refactor-rename/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-refactor-signature/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+⚠️ 这些靶子仓库的依赖补不齐：fixtures/bench/bench-bugfix-async、fixtures/bench/bench-bugfix-crossfile、fixtures/bench/bench-bugfix-pagination、fixtures/bench/bench-feature-csv、fixtures/bench/bench-feature-export、fixtures/bench/bench-feature-flag、fixtures/bench/bench-feature-memo、fixtures/bench/bench-long-chain-32、fixtures/bench/bench-long-chain-48、fixtures/bench/bench-long-horizon、fixtures/bench/bench-long-horizon-30、fixtures/bench/bench-refactor-callsite、fixtures/bench/bench-refactor-dedupe、fixtures/bench/bench-refactor-rename、fixtures/bench/bench-refactor-signature ⇒ 在其中真跑命令的判卷红**不可归因于代码**
+import 面：3413 条边｜悬空 0（其中存量已豁免 0）
+门表：32 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证门面（22 道，名单取自 35159c4）==
+  ✅ no-progress-check exit=0 256ms（预算 1100ms）
+  ✅ prune-check exit=0 298ms（预算 1100ms）
+  ✅ fork-check exit=0 253ms（预算 1100ms）
+  ✅ compaction-check exit=0 356ms（预算 1200ms）
+  ✅ docs-check exit=0 688ms（预算 1300ms）
+  ✅ memory-check exit=0 415ms（预算 1300ms）
+  ✅ head-import-check exit=0 1375ms（预算 2400ms）
+  ✅ autonomy-check exit=0 568ms（预算 1500ms）
+  ✅ sandbox:check exit=0 586ms（预算 1700ms）
+  ✅ security-check exit=0 502ms（预算 1500ms）
+  ✅ provider:check exit=0 250ms（预算 1300ms）
+  ✅ routing-check exit=0 441ms（预算 1400ms）
+  ✅ model-surface-check exit=0 449ms（预算 1300ms）
+  ✅ prefix-churn-check exit=0 512ms（预算 1500ms）
+  ✅ prompt-surface-check exit=0 311ms（预算 1400ms）
+  ✅ replay-determinism-check exit=0 295ms（预算 1100ms）
+  ✅ cost-per-progress-check exit=0 253ms（预算 1000ms）
+  ✅ web-fetch-check exit=0 296ms（预算 1200ms）
+  ✅ gym-check exit=0 999ms（预算 2400ms）
+  ✅ gate-check exit=0 1890ms（预算 5400ms）
+  ✅ evidence-typecheck-check exit=0 2711ms（预算 5300ms）
+  ✅ mutate-needles-check exit=0 12777ms（预算 20000ms）
+  认证门面=22 道（跑到 22）｜绿 22 道｜⚠️ 超预算 0
