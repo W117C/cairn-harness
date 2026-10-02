@@ -84,7 +84,7 @@ export function assemblyRows(
       return {
         key,
         face: "undeclared" as const,
-        why: "BENCH_KNOBS 里查无此键 ⇒ 基准没说装没装，读数无法解释",
+        why: "装配表里查不到这一枚 ⇒ 基准没说装没装，读数无法解释",
       };
     }
     return { key, ...base };

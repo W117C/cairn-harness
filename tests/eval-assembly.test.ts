@@ -55,7 +55,7 @@ describe("装配表：产品缺省开的键必须逐枚表态", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.face).toBe("undeclared");
     expect(undeclaredKnobs(rows).map((r) => r.key)).toEqual(["brandNewKnob"]);
-    expect(rows[0]!.why).toContain("BENCH_KNOBS");
+    expect(rows[0]!.why).toContain("装配表里查不到");
   });
 
   /* 这张表只管「缺省为真」的东西：缺省关的键基准不装是正常的（装了我反而要问为什么）。
