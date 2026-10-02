@@ -11560,6 +11560,40 @@ const MUTATIONS = [
     },
     expectFail: "installHeldOut 的位置在 touchedJudge / onlySrcChanged 之后、副本删除之前",
   },
+  /* ---- head-import-face 的「模板字面量是数据」那一半（2026-10-02 我自己被它假红过一次）----
+   * 两个方向都要钉：涂白没了 ⇒ 判卷里嵌的源码片段变成假悬空（假红，认证树红一道门）；
+   * 涂白过头 ⇒ 真边/真导出被一起涂掉（**假绿**，比假红坏得多——第一版用裸 scanner 就真炸出过这一侧，
+   * 它把正则字面量里的引号读成字符串起点，缺失符号从 1 条炸成 300+ 条）。 */
+  {
+    id: "hif-blank-spans-noop",
+    src: "scripts/head-import-face.ts",
+    test: "tests/head-import-face.test.ts",
+    desc: "涂白整个失效 ⇒ `String.raw` 里那段假源码重新算成真边，" +
+      "判卷自己写的靶子内容把 HEAD 判成悬空（假红：认证树红一道门，而没人改错任何东西）",
+    apply: (s) => s.replace("  if (ranges.length === 0) return text;", "  if (true) return text;"),
+    expectFail: "模板字面量里的源码不算边，字面量外的真语句照旧算",
+  },
+  {
+    id: "hif-imports-read-raw-text",
+    src: "scripts/head-import-face.ts",
+    test: "tests/head-import-face.test.ts",
+    desc: "只把 `parseImportStatements` 的一半改回读原文（另一半还涂着）⇒ 同一判据两份副本、宽度不同" +
+      "（本仓第十三族）：模块那一半重新假红，符号那一半安静如常，读的人只会看到一个莫名其妙的悬空",
+    apply: (s) => s.replace("  for (const m of code.matchAll(STATEMENT)) {", "  for (const m of text.matchAll(STATEMENT)) {"),
+    expectFail: "模板字面量里的源码不算边，字面量外的真语句照旧算",
+  },
+  {
+    id: "hif-exports-read-raw-text",
+    src: "scripts/head-import-face.ts",
+    test: "tests/head-import-face.test.ts",
+    desc: "导出那一半不涂白 ⇒ 模板字面量里那句 `export function cheat() {}` 被当成这份文件真导出了它，" +
+      "缺失符号于是被读成存在（**假绿**——第 131 页那笔事故剩下的正是符号那一半）",
+    apply: (s) => s.replace(
+      "  // 不涂就会把这个名字当成这份文件真导出了它 ⇒ 缺失符号被读成存在（**假绿**，比假红坏）。\n  const code = blankDataSpans(text);",
+      "  // 不涂就会把这个名字当成这份文件真导出了它 ⇒ 缺失符号被读成存在（**假绿**，比假红坏）。\n  const code = text;",
+    ),
+    expectFail: "导出一半也不认模板里的假源码（那一侧的后果是假绿：缺失符号被读成存在）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

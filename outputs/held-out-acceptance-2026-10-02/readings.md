@@ -69,6 +69,17 @@ B1 哄绿那一行的具体失配（隐藏日志原文）：`4200 !== 4800`—�
   （被测面 + 判卷面 12 条、钉在飞文本 4 条）⇒ 落库后在干净树复跑，读数追加在凭证那一笔。
 - 针脚标题自检（`tests/mutate-anchor-titles.test.ts`）：23 passed，秒级。
 
+## 落库后的复跑（追加，`ed8a444`）
+
+- `--check-needles` 在干净 HEAD 上：**1249 条，阻断 0**（未入库面 0、钉在飞文本 0）；
+  待复认 1／未覆盖 1／逐行式 5 与上一笔同值，都不是这一簇带来的。
+- 10 条新锚点在自己那一笔的树上**逐条杀死**：6.1s／20 拍 spawn／全部「2 拍」形状，
+  含那条把安装块**真的搬回改动清单之前**的位置探针（`heldout-install-before-change-list` ✅）。
+- **认证未通过**：22 道门面里 `head-import-check` 红（exit=1），全量判卷 `1 failed / 3781 passed (3782)`。
+  红因不是判卷写坏，也不是隐藏测试写坏，而是这把 import 面尺把我新判卷里那些
+  `String.raw` 包着的 JS 源码片段读成了两条真 import（`tests/cart.js.ts`／`tests/discount.js.ts`）
+  ⇒ **本笔记为「未认证」**，修复与它的 A/B 读数在 `outputs/head-import-template-data-2026-10-02/`。
+
 ## 这一格现在还没有的读数（不许当已有）
 
 - **真模型分数**：本轮全部是「尺本身有没有牙」的读数。B1/B2 在 `loop-eval` 里带 `heldOutPass`

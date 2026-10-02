@@ -179,7 +179,7 @@ export const CERT_GATES: readonly { name: string; budgetMs: number }[] = [
   { name: "compaction-check", budgetMs: 1200 },      // 实测 574ms
   { name: "docs-check", budgetMs: 1300 },            // 实测 606ms
   { name: "memory-check", budgetMs: 1300 },          // 实测 638ms
-  { name: "head-import-check", budgetMs: 1400 },     // 实测 667ms
+  { name: "head-import-check", budgetMs: 2400 },     // 实测 1180ms（2026-10-02 本机现读，中位；三趟 1.17/1.18/1.33）
   { name: "autonomy-check", budgetMs: 1500 },        // 实测 737ms
   /* 第 226 页：另外 14 道**没量过的**门逐道量完（主树现读、@`8966310`，取料
      `outputs/hard-gate-block-witness-2026-09-30/gates-14-unmeasured.log`），按「实测 <1.5s 全进」这条线买十道：

@@ -163,3 +163,42 @@ describe("名单自己的边界（这条门不能变成一次 20 分钟的认证
     expect(bought!.budgetMs, "两倍档：568ms 的实测对应 1200ms 预算").toBeGreaterThanOrEqual(2 * 568);
   });
 });
+
+/* 预算与它旁边那句实测**必须成对**（2026-10-02 加）。
+ * 动因不是又有人把预算写小了，而是我自己这一笔把 `head-import-check` 的单价**抬上去**了：
+ * 给 import 面加「模板字面量是数据」的涂白，要多建一遍 AST ⇒ 同一棵树上 A/B 实测
+ * 0.70s（涂白关，两趟 0.63/0.77）→ 1.18s（涂白开，三趟 1.17/1.18/1.33），旧预算 1400ms
+ * 只剩 18% 余量 ⇒ 负载一动就红，而红的是一道上下一致性都没问题的门。
+ * 这条判据钉的是那一格最容易烂的形状：**注释里的读数与表里的预算各漂各的**。
+ * 取料＝门表自己那一行（不是别的树的读数，规则 260）。 */
+describe("预算与注释实测成对：改单价必须同时改两处", () => {
+  /** 从门表那一行的注释里把「实测 NNNNm'」读出来——与预算同一个事实源。 */
+  const recordedMs = (name: string): number | null => {
+    const line = MANIFEST.split("\n").find((l) => l.includes(`name: "${name}"`));
+    if (line === undefined) return null;
+    const m = /实测 (\d+)ms/.exec(line);
+    return m === null ? null : Number(m[1]);
+  };
+
+  it("head-import-check：注释里的实测与预算是两倍档，且涂白这一次涨价已同时记账", () => {
+    const row = CERT_GATES.find((g) => g.name === "head-import-check");
+    expect(row, "这道门不在门面＝import 面自洽又退化成「交笔时手动跑」").toBeDefined();
+    const ms = recordedMs("head-import-check");
+    expect(ms, "注释里那句实测读数读不出来＝涨价只改了预算没改读数").not.toBeNull();
+    expect(row!.budgetMs, "预算低于两倍档＝拿一次读数当上限，负载一动就红").toBeGreaterThanOrEqual(2 * (ms as number));
+    // 反向哨兵：这道门的单价确实因为涂白涨过一档。写死旧值（667）会让"把预算改回 1400"蒙过去。
+    expect(ms as number, "单价已从 667ms 涨到 ≈1180ms：读数停在旧值＝涨价没被记下来").toBeGreaterThan(1000);
+  });
+
+  it("成对判据自己有牙：每道门那一行都得带实测读数（现读 0 条例外 ⇒ 帽就钉 0，只准下调）", () => {
+    // 先量分母本身：22 道门在门表里各有一行，解析不出行＝判卷自己在空转（规则 248：恰好 1 条那一族）
+    const lines = CERT_GATES.map((g) => MANIFEST.split("\n").find((l) => l.includes(`name: "${g.name}"`)) ?? "");
+    expect(lines.filter((l) => l !== "").length, "有一道门在表里找不到自己那一行＝解析被打败，分母会静默变小").toBe(CERT_GATES.length);
+
+    const withBudgetNoReading = lines.filter((l) => !/实测 \d+ms/.test(l)).map((_, i) => CERT_GATES[i]!.name);
+    /* 现读：**0 条例外**（22 道全带实测读数）。第一版我把这条帽写成 ≤6，理由是「今天真有几道没写读数」——
+       那是我从旧页面上记来的话，现读一量就是 0；留个 6 等于给这条判卷预先开了 6 个空位。
+       计数类不留余量（新闸门存量水位法那条），所以帽钉 0，涨了就是有人新买入一道没量单价的门。 */
+    expect(withBudgetNoReading.length, "没配实测读数的预算：" + withBudgetNoReading.join("、")).toBeLessThanOrEqual(0);
+  });
+});

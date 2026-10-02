@@ -27,6 +27,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import ts from "typescript";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const FACES = ["src", "scripts", "tests"] as const;
@@ -136,17 +137,61 @@ const DYNAMIC_IMPORT = /(?:^|(?<=[ \t;([]))import[ \t]*\([ \t]*["']([^"']+)["'][
 
 const NO_NAMES: ImportClause = { names: [], namespace: false, opaque: false };
 
+/** 把「是数据、不是代码」的区段**等长涂白**：模板字面量整段（含 `${…}`）。
+ *
+ *  为什么必须有（2026-10-02 实测，我自己踩的）：`tests/eval-heldout.test.ts` 里那些 `String.raw` 包着的
+ *  JS 源码是**判卷要写进临时靶子的数据**，而 `import { subtotal } from "./cart.js";` 正好落在模板首行行首，
+ *  于是上面那道「语句边界」判不出来（它本来就是一条合法形状的语句），这把尺给我那笔提交报了两条假悬空
+ *  （`tests/cart.js.ts`／`tests/discount.js.ts`）⇒ 认证树红一道 `head-import-check`。
+ *  这正是文件开头「47 条假红那一族」的下一个变体：上一版靠要求语句边界挡住**单行**假串，
+ *  而多行源码片段自带边界，挡不住。
+ *
+ *  为什么只涂模板字面量、**不涂普通字符串**：动态导入与副作用导入的 specifier 本身就是字符串
+ *  （`import("./x")`／`import "./x.css"`），全涂会把**真边**涂掉——那是假绿，比假红坏。
+ *  等长涂白（非换行字符换空格）⇒ 偏移与行号一律不漂，报告里那句「第几行」还指得对。
+ *
+ *  ⚠️ 取区间走**解析器**而不是 `ts.createScanner`：这一条是实测出来的——第一版用裸词法器扫，
+ *  而本文件（以及几乎所有被扫的文件）满是正则字面量，裸 scanner 把 `/.../ ` 当除号，
+ *  正则里的引号于是把后续整段读成字符串 ⇒ 涂白吞掉真代码，`834ba3a` 那笔的缺失符号从 1 条炸成 300+ 条
+ *  （**方向是假绿**，比它要修的假红坏得多）。解析器认得正则字面量，位置才准。 */
+export function blankDataSpans(text: string): string {
+  if (text === "") return text;
+  // 快路：没有反引号就不可能有模板字面量。这一条不是微优化而是**门预算**——
+  // 全仓 552 个文件逐个建 AST 把这道门从 ≈0.7s 抬到 ≈1.5s（超 1400ms 预算），
+  // 而绝大多数文件本来就一个模板都没有（缺省值、注释、纯逻辑）。
+  if (!text.includes("`")) return text;
+  const source = ts.createSourceFile("probe.ts", text, ts.ScriptTarget.Latest, true);
+  // 只有这两种「整段是数据」的字面量；`TemplateHead/Middle/Tail` 不作为独立节点出现（它们只在
+  // TemplateExpression 的 token 流里），所以按节点判就够——按 token 判就要回到裸 scanner，那条已实测会崩。
+  const ranges: [number, number][] = [];
+  const visit = (node: ts.Node): void => {
+    if (node.kind === ts.SyntaxKind.NoSubstitutionTemplateLiteral || node.kind === ts.SyntaxKind.TemplateExpression) {
+      ranges.push([node.getStart(source), node.end]);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  if (ranges.length === 0) return text;
+  // split("") 走 UTF-16 单元，与节点的 pos 同一套坐标系（Array.from 会合并代理对 ⇒ 偏移全漂）
+  const chars = text.split("");
+  for (const [from, to] of ranges) {
+    for (let i = from; i < to && i < chars.length; i++) if (chars[i] !== "\n") chars[i] = " ";
+  }
+  return chars.join("");
+}
+
 export function parseImportStatements(text: string): ImportStatement[] {
+  const code = blankDataSpans(text);
   const out: ImportStatement[] = [];
-  for (const m of text.matchAll(STATEMENT)) {
+  for (const m of code.matchAll(STATEMENT)) {
     const kind = m[1]!;
     const raw = m[2]!.trim();
     // `export * from` / `export * as ns from`：这条**给**名字、不**要**名字 ⇒ 只留模块边，不点名。
     const clause = kind === "export" && raw.startsWith("*") ? { ...NO_NAMES, namespace: true } : clauseNames(raw);
     out.push({ spec: m[3]!, reexport: kind === "export", clause });
   }
-  for (const m of text.matchAll(BARE_IMPORT)) out.push({ spec: m[1]!, reexport: false, clause: NO_NAMES });
-  for (const m of text.matchAll(DYNAMIC_IMPORT)) out.push({ spec: m[1]!, reexport: false, clause: NO_NAMES });
+  for (const m of code.matchAll(BARE_IMPORT)) out.push({ spec: m[1]!, reexport: false, clause: NO_NAMES });
+  for (const m of code.matchAll(DYNAMIC_IMPORT)) out.push({ spec: m[1]!, reexport: false, clause: NO_NAMES });
   return out;
 }
 
@@ -155,19 +200,22 @@ export function parseImportStatements(text: string): ImportStatement[] {
 export function exportedNames(text: string): { names: Set<string>; opaque: boolean } {
   const names = new Set<string>();
   let opaque = false;
-  for (const m of text.matchAll(/\bexport\s+(?:default\s+)?(?:declare\s+)?(?:async\s+)?(?!from)(?:const|let|var|function\*?|class|interface|type|enum|abstract\s+class)\s+([A-Za-z_$][\w$]*)/g)) {
+  // 同一只涂白：模板字面量里那段假源码写的是 `export function foo(){}` 时，
+  // 不涂就会把这个名字当成这份文件真导出了它 ⇒ 缺失符号被读成存在（**假绿**，比假红坏）。
+  const code = blankDataSpans(text);
+  for (const m of code.matchAll(/\bexport\s+(?:default\s+)?(?:declare\s+)?(?:async\s+)?(?!from)(?:const|let|var|function\*?|class|interface|type|enum|abstract\s+class)\s+([A-Za-z_$][\w$]*)/g)) {
     names.add(m[1]!);
   }
   // `export { a, b as c }` / `export type { T }` / `export { x } from "./y"`：报出去的名字是 `as` 右边那个。
-  for (const m of text.matchAll(/(?:^|[;\n])[ \t]*export[ \t]+(?:type[ \t]+)?\{([\s\S]*?)\}/g)) {
+  for (const m of code.matchAll(/(?:^|[;\n])[ \t]*export[ \t]+(?:type[ \t]+)?\{([\s\S]*?)\}/g)) {
     for (const n of specifiers(m[1]!, "export").names) names.add(n);
   }
   // `export * from` 把整面挡住；`export * as ns from` 只贡献 `ns` 一个名字，不算看不全。
-  for (const m of text.matchAll(/(?:^|[;\n])[ \t]*export[ \t]+\*(?:[ \t]+as[ \t]+([A-Za-z_$][\w$]*))?[ \t]+from/g)) {
+  for (const m of code.matchAll(/(?:^|[;\n])[ \t]*export[ \t]+\*(?:[ \t]+as[ \t]+([A-Za-z_$][\w$]*))?[ \t]+from/g)) {
     if (m[1] !== undefined) names.add(m[1]);
     else opaque = true;
   }
-  if (/(?:^|[;\n])[ \t]*export[ \t]+default\b/.test(text)) names.add("default");
+  if (/(?:^|[;\n])[ \t]*export[ \t]+default\b/.test(code)) names.add("default");
   return { names, opaque };
 }
 

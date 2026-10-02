@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import {
   HEAD_DANGLING_WAIVERS, HEAD_MISSING_SYMBOL_WAIVERS, checkHeadImportFace, checkMissingSymbols,
-  clauseNames, collectHeadEdges, exportedNames, findDanglingImports, findMissingExports,
+  blankDataSpans, clauseNames, collectHeadEdges, exportedNames, findDanglingImports, findMissingExports,
   parseBatchResponse, parseImportStatements, readHeadBlobs, resolveRelativeSpec, type HeadEdge,
 } from "../scripts/head-import-face";
 
@@ -268,5 +268,66 @@ describe("真表自证：这把尺不许是空载的，也不许对事故那笔�
       expect(why.trim(), `${t} 缺理由`).not.toBe("");
       expect(why, `${t} 理由里没写出处`).toMatch(/第 [\d/]+ 页/);
     }
+  });
+});
+
+/* 模板字面量里的「源码形状的数据」不算边。
+ * 立尺的实测（2026-10-02）：`tests/eval-heldout.test.ts` 把三份 JS 源文件内容写成 `String.raw` 片段
+ * （那是判卷要写进临时靶子的**数据**），其中一行正好是行首的 `import { subtotal } from "./cart.js";`
+ * ⇒ 语句边界那一道拦不住（它本来就长得像一条合法语句），这把尺给我刚提交的那笔报了
+ * 两条假悬空，认证树当场红一道 `head-import-check`。
+ * 这一族的方向是**假红**；而把它做过头（连真边一起涂掉）就是**假绿**——所以每一半都配了用例。 */
+describe("blankDataSpans：模板字面量是数据，普通字符串与真语句仍是边", () => {
+  /** 一个「行首 import 藏在模板字面量里」的宿主文件——先证明它真的长得像一条语句。 */
+  const host = [
+    "const FIXTURE = `",
+    "import { subtotal } from \"./cart.js\";",
+    "export function checkoutTotal() { return 1; }",
+    "`;",
+    "import { keep } from \"./keep.js\";",
+    "const dyn = await import(\"./dyn.js\");",
+    "const bare = \"import { fake } from \\\"./fake.js\\\";\";",
+  ].join("\n");
+
+  it("前提成立：那句假 import 确实在行首（不然这条判卷是在测不存在的东西）", () => {
+    expect(host.split("\n").some((l) => /^import \{ subtotal \} from "/.test(l))).toBe(true);
+  });
+
+  it("模板字面量里的源码不算边，字面量外的真语句照旧算", () => {
+    const specs = parseImportStatements(host).map((s) => s.spec).sort();
+    expect(specs).toEqual(["./dyn.js", "./keep.js"]);
+    expect(specs).not.toContain("./cart.js");
+  });
+
+  it("导出一半也不认模板里的假源码（那一侧的后果是假绿：缺失符号被读成存在）", () => {
+    const inTemplate = exportedNames("const SRC = `\nexport function cheat() {}\n`;\n");
+    expect(inTemplate.names.has("cheat")).toBe(false);
+    // 反向哨兵：真 export 必须还认（四种写法都验，涂白过头会静默把导出面涂没）
+    const real = exportedNames([
+      "export function fn() {}",
+      "export const c = 1;",
+      "export class K {}",
+      "export interface I {}",
+      "export { a, b as renamed };",
+      "export type { T };",
+      "export default 1;",
+    ].join("\n"));
+    for (const n of ["fn", "c", "K", "I", "a", "renamed", "T", "default"]) expect(real.names.has(n)).toBe(true);
+  });
+
+  it("等长涂白：长度与行数都不许变（报告里那句「第几行」要还指得对）", () => {
+    const blanked = blankDataSpans(host);
+    expect(blanked.length).toBe(host.length);
+    expect(blanked.split("\n").length).toBe(host.split("\n").length);
+    expect(blanked).not.toContain("./cart.js");
+  });
+
+  it("真表自证：带着源码片段的那份判卷今天贡献 0 条边", () => {
+    const got = collectHeadEdges();
+    if (got === null) return; // 取料本身坏了由上面几条红，这里不重复
+    const fromJudge = (got.edges as HeadEdge[]).filter((e) => e.from === "tests/eval-heldout.test.ts");
+    // 它真有几条边（scripts/lib/…、src/…），但绝不能有 cart/discount 那两条假悬空
+    expect(fromJudge.length).toBeGreaterThan(0);
+    expect(fromJudge.map((e) => e.spec)).not.toContain("./cart.js");
   });
 });
