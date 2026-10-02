@@ -8,6 +8,8 @@
 //   ① 环境打断（未起步 / provider 报错）⇒ 判**无效**、不进分母；
 //   ② **模型自己干坏事**（改了判卷面、verify 没过）⇒ 照旧**算数**、必须计入分母。
 //      ②若被误伤，这个修正就变成了"把红跑藏起来"——那正是本仓最忌的形状。
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { costSplit, runValidity, tally, WHY_INTERRUPTED_PREFIX, WHY_NOT_STARTED } from "../scripts/lib/eval-validity";
 
@@ -78,5 +80,20 @@ describe("判卷分母：环境打断不算数，模型失败照旧算数", () =
     const c = costSplit([crow(7, 0.1, true), crow(8, 0.2, false, ["改了判卷面"])]);
     expect([c.wastedSpend, c.wastedRuns]).toEqual([0, 0]);
     expect(c.validSpend).toBeCloseTo(c.paidAll, 8);
+  });
+
+  // ↓↓ 接线那半边。纯函数有了判据不等于消费者在用它——本仓这条同族已经第 12 次：
+  //    把 `costSplit` 写得再对，只要汇总行仍除以全量，读数就是错的，而全表不会红。
+  //    断言只钉**标识符**（不抄生产文案）：改回旧写法即红，重新措辞不伤。
+  const evalSrc = () => readFileSync(fileURLToPath(new URL("../scripts/loop-eval.ts", import.meta.url)), "utf8");
+
+  it("★接线① 汇总那行的分子取的是被留下那些趟的钱，旧的全量写法不许回来", () => {
+    const src = evalSrc();
+    expect(src).toContain("money.validSpend / t0.pass");
+    expect(src).not.toContain("cny / t0.pass");
+  });
+
+  it("★接线② 被剔掉那些趟花的钱要单独印出来（是真钱，修正不等于把它藏起来）", () => {
+    expect(evalSrc()).toContain("money.wastedSpend.toFixed(");
   });
 });

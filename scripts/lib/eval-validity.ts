@@ -67,7 +67,8 @@ export interface CostRow { r: { requests: number; cny: number }; g: { ok: boolea
  * `tally` 已经只数算数的趟次，而汇总那行从前用**全量** `cny` 除以算数的达标数 ⇒
  * 被剔掉的趟次花的钱仍留在分子里。2026-10-02 那次 36 趟实测就是活的：
  * 合计 ¥0.2774，其中 1 趟起步后被 429 打断、独自占 **¥0.0789 = 28%**，
- * 而它已经不在分母里了 ⇒ 「每达标任务 ¥X」被高估 28%。
+ * 而它已经不在分母里了 ⇒ 「每达标任务」印成 ¥0.1387 而真值是 ¥0.0993 ⇒ **比值被高估 39.7%**。
+ * （28% 是白花占全量实付：0.0789/0.2774。两个数分母不同，别混用——10-02 复算逐笔见 c438529。）
  * 被打断的趟次花的钱是真钱，所以**单列、不藏**；只是不许混进那个比值。
  */
 export function costSplit(rows: readonly CostRow[]): { paidAll: number; validSpend: number; wastedSpend: number; wastedRuns: number } {

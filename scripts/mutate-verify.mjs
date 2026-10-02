@@ -11276,6 +11276,36 @@ const MUTATIONS = [
     apply: (s) => s.replace("ratios.sort(byRatio);", "ratios.sort(() => 0);"),
     expectFail: "真机整表：把留档的那一次全量 json 喂进去，档位计数与逐行重数必须同分母",
   },
+  {
+    // c438529 的钱轴三条锚点（规则 217：尺与针脚同笔——前两笔把机制和判卷落了就走了）。
+    // A 是语义半：costSplit 里那道分流；B/C 是接线半：消费者 loop-eval.ts 用不用它、单列那格印不印。
+    // 分开的理由（本仓第 12 次同族）：纯函数有判据 ≠ 汇总行在用它。
+    id: "cost-split-face-collapsed",
+    src: "scripts/lib/eval-validity.ts",
+    test: "tests/eval-validity.test.ts",
+    desc: "钱不再按「这趟算不算数」分流（恒真）⇒ validSpend 退化成 paidAll、wasted 恒 0，" +
+      "而分母只数算数的趟次 ⇒ 比值又被没算数的趟次撑高（28% 白花／比值高估 39.7%，36 趟实测）",
+    apply: (s) => s.replace("    if (runValidity(x.r, x.g.fails).valid) validSpend += cny;", "    if (true) validSpend += cny;"),
+    expectFail: "钱也要与分母同面：没算数的趟次花的钱单列，不进「每达标任务」的分子",
+  },
+  {
+    id: "loop-eval-money-numerator",
+    src: "scripts/loop-eval.ts",
+    test: "tests/eval-validity.test.ts",
+    desc: "汇总那行的分子改回全量实付（旧写法）⇒ 机制还在、判卷表里纯函数那条照旧绿，" +
+      "而印出来的「每达标任务」重新被没算数的趟次撑高——这条锚点钉的就是这个接缝",
+    apply: (s) => s.replace("(money.validSpend / t0.pass).toFixed(4)", "(cny / t0.pass).toFixed(4)"),
+    expectFail: "★接线① 汇总那行的分子取的是被留下那些趟的钱，旧的全量写法不许回来",
+  },
+  {
+    id: "loop-eval-wasted-cell-constant",
+    src: "scripts/loop-eval.ts",
+    test: "tests/eval-validity.test.ts",
+    desc: "白花那格印成常数 0 ⇒ 「单列、不藏」变成「单列、藏了」：分面还在但读数永远是 0，" +
+      "没人能看见被剔掉的趟次到底花掉多少",
+    apply: (s) => s.replace('¥${money.wastedSpend.toFixed(4)}）', '¥0.0000）'),
+    expectFail: "★接线② 被剔掉那些趟花的钱要单独印出来（是真钱，修正不等于把它藏起来）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
