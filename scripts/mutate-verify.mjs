@@ -7364,7 +7364,7 @@ const MUTATIONS = [
       "        usageAttribution.stamp(e); // 落盘前先盖：live 与盘必须是同一个对象（同 events 盖 ts 的口径）\n        await log!.append(e);",
       "        await log!.append(e);",
     ),
-    expectFail: "pipeline 里 stamp 在 append **之前**（live 与盘必须同一个对象），且全仓只有这一处盖章",
+    expectFail: "pipeline 里 stamp 在 append **之前**（live 与盘必须同一个对象），且这一份文件里只有这一处盖章",
   },
   {
     id: "usage-stamp-after-append",
@@ -7375,7 +7375,7 @@ const MUTATIONS = [
       "        usageAttribution.stamp(e); // 落盘前先盖：live 与盘必须是同一个对象（同 events 盖 ts 的口径）\n        await log!.append(e);",
       "        await log!.append(e);\n        usageAttribution.stamp(e);",
     ),
-    expectFail: "pipeline 里 stamp 在 append **之前**（live 与盘必须同一个对象），且全仓只有这一处盖章",
+    expectFail: "pipeline 里 stamp 在 append **之前**（live 与盘必须同一个对象），且这一份文件里只有这一处盖章",
   },
   {
     id: "main-usage-model-ignores-scripted-channel",
@@ -11305,6 +11305,48 @@ const MUTATIONS = [
       "没人能看见被剔掉的趟次到底花掉多少",
     apply: (s) => s.replace('¥${money.wastedSpend.toFixed(4)}）', '¥0.0000）'),
     expectFail: "★接线② 被剔掉那些趟花的钱要单独印出来（是真钱，修正不等于把它藏起来）",
+  },
+  {
+    // ↓ 归因键这一族（10-02 第二笔）：基准跑器从前不建盖章器 ⇒ 整条评估链的 usage 没有模型名。
+    id: "bench-usage-stamp-dropped",
+    src: "scripts/loop-eval.ts",
+    test: "tests/usage-attribution.test.ts",
+    desc: "跑器不再给 usage 盖模型名 ⇒ readings 里的钱永远定不了「属于哪一档」，" +
+      "跨模型 A/B 的差值就被当成提示词的效果（普查那条也会一起红：盖章面少了一个消费者）",
+    apply: (s) => s.replace("      usageAttribution.stamp(e);\n      await log.append(e);", "      await log.append(e);"),
+    expectFail: "基准跑器：stamp 也在 append 之前，且模型名取 glmDefaultModelName（不许多一份 glm-5.2 副本）",
+  },
+  {
+    id: "model-face-unknown-degrades-to-same",
+    src: "scripts/eval/report.ts",
+    test: "tests/eval-report.test.ts",
+    desc: "缺归因键时退化成「算同面」（fail-open）⇒ 存量语料与未盖章的跑次全被读成同一档，" +
+      "这正是本仓点名的「取不到当成通过」那一族",
+    apply: (s) => s.replace(
+      'if ([...b, ...c].includes("")) return { state: "unknown", baseline: b, candidate: c };',
+      'if (false) return { state: "unknown", baseline: b, candidate: c };',
+    ),
+    expectFail: "★缺归因键 ⇒ unknown，不许退化成 same（取不到＝未证，不是通过）",
+  },
+  {
+    id: "model-face-mixed-arm-blind",
+    src: "scripts/eval/report.ts",
+    test: "tests/eval-report.test.ts",
+    desc: "只看「两臂第一个名字是否相等」⇒ 同一臂内混了档看不见，而那连噪声带的「同配置两次」前提都不成立" +
+      "（09-26 跨九条臂池化读数的教训，这一格就是它欠的那道闸）",
+    apply: (s) => s.replace(
+      'if (b.length !== 1 || c.length !== 1) return { state: "differs", baseline: b, candidate: c };',
+      'if (false) return { state: "differs", baseline: b, candidate: c };',
+    ),
+    expectFail: "同一臂内混了档 ⇒ 也是 differs（那连「同配置两次」这个噪声带前提都不成立）",
+  },
+  {
+    id: "model-face-not-printed",
+    src: "scripts/eval/report.ts",
+    test: "tests/eval-report.test.ts",
+    desc: "算出归因面却不印 ⇒ 对账表照常出数，没人看得见两臂其实不同档（与没算同形）",
+    apply: (s) => s.replace('  process.stdout.write(renderModelFace(face) + "\\n\\n");\n', ""),
+    expectFail: "接线：CLI 把归因面打在表之前，且吃的是**全部**基线文件而不是第一份",
   },
 ];
 

@@ -27,6 +27,12 @@ import { ClarifyGate, PlanGate } from "../src/agent/gates";
 // **未起步 / 被 provider 打断的趟次不许进分母**（限流打断不能记成"模型没做到"）。
 import { costSplit, runValidity, tally } from "./lib/eval-validity";
 import { createVerifyHook, defaultExec, runVerifyOutcome, type ExecFn } from "../src/agent/verify";
+// 用量归因走**生产那一份盖章器**（`createUsageAttributor` 的唯一调用点从前只有 agent-runner ⇒
+// 基准路径绕过它，整条链上没有一笔 usage 带模型名，钱轴跨模型就无从分面）。
+// 模型名取 `glmDefaultModelName()`：本跑器启动时已把 M0_MODEL 归一成真正要拨的那一档，
+// 所以这是同一个事实源，不是第三份 glm-5.2 字面量副本（同族出口那一族，规则里点过名）。
+import { createUsageAttributor } from "../src/agent/usage-attribution";
+import { glmDefaultModelName } from "../src/providers/glm";
 import { createGlmSessionProvider, sessionToolSpecs } from "../src/agent/glm-session";
 import { createEventLog, replay, type AgentEvent } from "../src/events";
 import { BASE_SYSTEM } from "../src/main/agent-runner";
@@ -253,6 +259,9 @@ function startResourceSampler(): () => ResourceSample {
 
 interface Reading {
   id: string; name: string; rep: number; system: string;
+  /** 这一趟真拨的模型名 = 归因键（`scripts/eval/report.ts` 的 `modelFace` 用它挡跨模型 A/B）。
+   *  与 usage 事件上的 `model` 同源：都取 `glmDefaultModelName()`，不在这里再算一份缺省。 */
+  model: string;
   seedVerifyOk: boolean;
   seconds: number; requests: number; tokensIn: number; tokensOut: number; cny: number;
   toolCalls: number; toolFailures: number; repeatedSameAction: number;
@@ -295,6 +304,8 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
   if (bug !== null) await cp(bug, join(work, "src", "todo.ts"));
   const eventsPath = join(dir, "events.jsonl");
   const log = createEventLog(eventsPath);
+  // 落盘前盖章（生产同一条纪律：盖在**事件本身上**，live 与盘是同一个对象）。
+  const usageAttribution = createUsageAttributor(glmDefaultModelName);
   const clarify = new ClarifyGate();
   const plan = new PlanGate();
   /* 澄清答案**只能给内建 I1 那一道题**（它的题面就是"给待办应用加个开关"）。
@@ -315,6 +326,7 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
     : {};
   const driven = {
     append: async (e: AgentEvent) => {
+      usageAttribution.stamp(e);
       await log.append(e);
       if (e.type === "clarify_requested") {
         queueMicrotask(() => clarify.submit(e.callId, answers as never));
@@ -445,6 +457,7 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
   await rm(dir, { recursive: true, force: true }).catch(() => {});
   return {
     id: t.id, name: t.name, rep, system: SYSTEM_MODE, seedVerifyOk,
+    model: glmDefaultModelName(),
     seconds, requests: usage.length, tokensIn, tokensOut,
     cny: (tokensIn * PRICE_IN + tokensOut * PRICE_OUT) / 1e6,
     toolCalls: calls.length,
@@ -544,7 +557,7 @@ if (!BENCH_API_KEY || !BENCH_ENDPOINT) {
   process.exit(0);
 }
 await judgeSelfCheck(); // 判卷器不落定就不出数
-console.log(`[loop-eval] 任务=${tasks.map((t) => t.id).join(",")} reps=${REPS} system=${SYSTEM_MODE} maxSteps=${MAX_STEPS} 价=¥${PRICE_IN}/¥${PRICE_OUT}每M`);
+console.log(`[loop-eval] 任务=${tasks.map((t) => t.id).join(",")} reps=${REPS} system=${SYSTEM_MODE} maxSteps=${MAX_STEPS} 模型=${glmDefaultModelName()} 价=¥${PRICE_IN}/¥${PRICE_OUT}每M`);
 await mkdir(ROOT + "/" + OUT, { recursive: true });
 const rows: { r: Reading; g: { ok: boolean; fails: string[] } }[] = [];
 for (let rep = 1; rep <= REPS; rep++) {

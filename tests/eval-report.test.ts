@@ -25,12 +25,16 @@
 //         × 任务集不一致 ⇒ sameTaskSet=false（分母变了，横比无意义）
 //         × 任务集不一致 ⇒ 明确印「结论全部作废」
 //     还原后 22/22 绿，`git diff` 确认与提交版逐字一致（没留下改坏的东西）。
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   compare,
   meanTotals,
+  modelFace,
   noiseBand,
   parseReadings,
+  renderModelFace,
   renderReport,
   taskIds,
   totalsOf,
@@ -44,6 +48,7 @@ function readings(rows: Array<Partial<Row> & { id: string }>): string {
     rows.map((r) => ({
       r: {
         id: r.id,
+        ...(r.model !== undefined ? { model: r.model } : {}),
         tokensIn: r.tokensIn ?? 1000,
         tokensOut: r.tokensOut ?? 100,
         seconds: r.seconds ?? 10,
@@ -228,5 +233,62 @@ describe("meanTotals：多份基线取均值", () => {
   });
   it("空数组 ⇒ 抛", () => {
     expect(() => meanTotals([])).toThrow(/空数组/);
+  });
+});
+
+// 归因面（2026-10-02 补）。为什么这条比"再一个字段"要紧：基准跑器从前绕过 `createUsageAttributor`，
+// 行内没有模型名 ⇒ 拿"换了档位的两次跑"当"同一档位下改了提示词"来读，差值整个归错对象。
+// 本仓 09-26 已有一次跨臂池化的教训（九条臂的读数不能横着比），那条是散文，这一条是闸。
+describe("模型归因面：跨模型的差值不许当改动的效果", () => {
+  const r = (model: string, over: Partial<Row> = {}): Row => ({
+    id: "A", model, tokensIn: 1000, tokensOut: 100, seconds: 10,
+    rssPeakMb: 100, toolFailures: 0, repeats: 0, ok: true, ...over,
+  });
+
+  it("两臂同一档 ⇒ same（没有东西被挡时也要印出是哪一档）", () => {
+    const f = modelFace([r("glm-5.2"), r("glm-5.2")], [r("glm-5.2")]);
+    expect(f.state).toBe("same");
+    expect(renderModelFace(f)).toContain("glm-5.2");
+  });
+
+  it("两臂不同档 ⇒ differs，且渲染里点名两侧各自的档", () => {
+    const f = modelFace([r("glm-5.2")], [r("glm-5.3-flash")]);
+    expect(f.state).toBe("differs");
+    const txt = renderModelFace(f);
+    expect(txt).toContain("glm-5.2");
+    expect(txt).toContain("glm-5.3-flash");
+    expect(txt).not.toContain("同一档");
+  });
+
+  it("同一臂内混了档 ⇒ 也是 differs（那连「同配置两次」这个噪声带前提都不成立）", () => {
+    expect(modelFace([r("glm-5.2"), r("glm-5.3-flash")], [r("glm-5.2")]).state).toBe("differs");
+  });
+
+  it("★缺归因键 ⇒ unknown，不许退化成 same（取不到＝未证，不是通过）", () => {
+    const f = modelFace([r("")], [r("glm-5.2")]);
+    expect(f.state).toBe("unknown");
+    expect(f.state).not.toBe("same");
+    expect(renderModelFace(f)).toContain("判不出");
+    // 两侧都缺也还是 unknown，不是"大家一样 ⇒ 算同面"
+    expect(modelFace([r("")], [r("")]).state).toBe("unknown");
+  });
+
+  it("parseReadings：行内没有 model 键 ⇒ 空串而不是抛（存量语料仍然读得动）", () => {
+    const rows = parseReadings(readings([{ id: "A" }]));
+    expect(rows[0]?.model).toBe("");
+    expect(modelFace(rows, rows).state).toBe("unknown");
+    // 同一份文本带上键之后就换档：证明这条走的是真解析，不是写死的空串
+    const withModel = parseReadings(readings([{ id: "A", model: "glm-5.2" }]));
+    expect(withModel[0]?.model).toBe("glm-5.2");
+    expect(modelFace(withModel, withModel).state).toBe("same");
+  });
+
+  it("接线：CLI 把归因面打在表之前，且吃的是**全部**基线文件而不是第一份", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/eval/report.ts", import.meta.url)), "utf8");
+    // 先钉"印出来了"：只比先后顺序的话，把这一行整个删掉反而仍成立（-1 < X）＝空尺
+    expect(src, "算出来却不印 ⇒ 与没算同形").toContain("process.stdout.write(renderModelFace(face)");
+    const face = src.indexOf("modelFace(baseRows.flat(), candRows.flat())");
+    expect(face, "跑器没把两侧所有行交给归因面 ⇒ 同一臂内混档就看不见").toBeGreaterThan(-1);
+    expect(src.indexOf("renderModelFace(face)")).toBeLessThan(src.indexOf("renderReport(cmp, bandSource)"));
   });
 });

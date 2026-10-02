@@ -6,9 +6,9 @@
 // 缺的是生产端那一半。本面钉住补齐后的三条纪律：只有真拨号才盖章、worker 不许借主会话那一档、
 // 盖在事件本身上（live ≡ 盘）。
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AgentEvent } from "../src/events";
@@ -309,11 +309,11 @@ describe("真编排器：agent_spawned 上的归因键随「拨不拨号」分�
   });
 });
 
-describe("接线：盖章点只有一个，且不许再抄第二份剧本枚举", () => {
+describe("接线：盖章点=主会话＋基准跑器两处，且不许再抄第二份剧本枚举", () => {
   const runner = () => readFileSync(fileURLToPath(new URL("../src/main/agent-runner.ts", import.meta.url)), "utf8");
   const orch = () => readFileSync(fileURLToPath(new URL("../src/agent/orchestrator.ts", import.meta.url)), "utf8");
 
-  it("pipeline 里 stamp 在 append **之前**（live 与盘必须同一个对象），且全仓只有这一处盖章", () => {
+  it("pipeline 里 stamp 在 append **之前**（live 与盘必须同一个对象），且这一份文件里只有这一处盖章", () => {
     const t = runner();
     const stamp = t.indexOf("usageAttribution.stamp(e);");
     expect(stamp).toBeGreaterThan(-1);
@@ -346,6 +346,55 @@ describe("接线：盖章点只有一个，且不许再抄第二份剧本枚举"
     expect(t, "spawned 不带归因键 ⇒ worker 的钱永远定不了价").toMatch(
       /\.\.\.\(usageModel !== "" \? \{ usage_model: usageModel \} : \{\}\)/);
     expect(t, "归因键回到剧本通道 ⇒ 没花的钱会被当真钱").toMatch(/let usageModel = "";\n    if \(!isScriptedModel\(model\)\) \{/);
+  });
+
+  // ↓ 从「每份文件各自数一遍」升级成**全仓普查**。原写法挡得住"多抄一处"，挡不住"少一个消费者"：
+  //   基准跑器从前根本不走这条层，而按文件计的那条断言在 agent-runner 里永远自洽 ⇒ 全绿。
+  //   （本仓第 11 次同族的正解：producer 有判据、consumer 零观测 ⇒ 让被度量面自己交出调用点清单。）
+  const ROOTDIR = fileURLToPath(new URL("..", import.meta.url));
+  const sourceFilesUnder = (relDir: string): string[] => {
+    const acc: string[] = [];
+    const walk = (dir: string): void => {
+      for (const ent of readdirSync(dir, { withFileTypes: true })) {
+        if (ent.name === "node_modules" || ent.name.startsWith(".")) continue;
+        const p = join(dir, ent.name);
+        if (ent.isDirectory()) { walk(p); continue; }
+        if (ent.name.endsWith(".ts")) acc.push(relative(ROOTDIR, p));
+      }
+    };
+    walk(join(ROOTDIR, relDir));
+    return acc;
+  };
+
+  /** 定义文件自己不算调用点（它 export 这个函数）。 */
+  const DEFINITION = join("src", "agent", "usage-attribution.ts");
+  const callingFiles = (needle: RegExp): string[] =>
+    [...sourceFilesUnder("src"), ...sourceFilesUnder("scripts")]
+      .filter((rel) => rel !== DEFINITION)
+      .filter((rel) => needle.test(readFileSync(join(ROOTDIR, rel), "utf8")))
+      .sort();
+
+  it("普查：建盖章器的只有两处（主会话 + 基准跑器），多一处＝再抄一份归因，少一处＝又有人绕过这条层", () => {
+    expect(callingFiles(/createUsageAttributor\(/).sort())
+      .toEqual([join("scripts", "loop-eval.ts"), join("src", "main", "agent-runner.ts")]);
+    expect(callingFiles(/usageAttribution\.stamp\(/))
+      .toEqual([join("scripts", "loop-eval.ts"), join("src", "main", "agent-runner.ts")]);
+  });
+
+  it("基准跑器：stamp 也在 append 之前，且模型名取 glmDefaultModelName（不许多一份 glm-5.2 副本）", () => {
+    const rel = join("scripts", "loop-eval.ts");
+    const t = readFileSync(join(ROOTDIR, rel), "utf8");
+    const stamp = t.indexOf("usageAttribution.stamp(e);");
+    expect(stamp, "跑器没盖章 ⇒ 基准语料的 usage 永远没有归因键").toBeGreaterThan(-1);
+    expect(t.indexOf("await log.append(e);", stamp)).toBeGreaterThan(stamp);
+    expect(t).toMatch(/createUsageAttributor\(glmDefaultModelName\)/);
+    // 行内也要带上这个键：跑器把每趟的 events.jsonl 删掉（临时目录），盘上唯一留得住的是 readings.json
+    expect(t).toMatch(/model: glmDefaultModelName\(\)/);
+  });
+
+  it("反面哨兵：普查这条不是空尺——同一套走法能数得出 src/agent 下的文件数（>10）", () => {
+    expect(sourceFilesUnder("src/agent").length).toBeGreaterThan(10);
+    expect(callingFiles(/createUsageAttributor\(/).length).toBe(2);
   });
 });
 

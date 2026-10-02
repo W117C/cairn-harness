@@ -20,6 +20,8 @@ import { readFileSync } from "node:fs";
 /** 跑器写出的单条读数。只取对账需要的字段——跑器加字段不会打崩本模块。 */
 export interface Row {
   id: string;
+  /** 这一趟真拨的模型名（归因键）。缺省空串＝读数来自没有这个键的存量语料 ⇒ 判不出，不是判成同面。 */
+  model: string;
   tokensIn: number;
   tokensOut: number;
   seconds: number;
@@ -114,6 +116,7 @@ export function parseReadings(text: string, label = "readings"): Row[] {
     const res = (rr["resources"] ?? {}) as Record<string, unknown>;
     return {
       id,
+      model: typeof rr["model"] === "string" ? rr["model"] : "",
       tokensIn: num(rr["tokensIn"], `${label}[${String(i)}].r.tokensIn`),
       tokensOut: num(rr["tokensOut"], `${label}[${String(i)}].r.tokensOut`),
       seconds: num(rr["seconds"], `${label}[${String(i)}].r.seconds`),
@@ -144,6 +147,43 @@ export function totalsOf(rows: readonly Row[]): Totals {
 /** 一份读数里的任务集合（去重排序）。用于"分母是否同一个"这条护栏。 */
 export function taskIds(rows: readonly Row[]): string[] {
   return [...new Set(rows.map((r) => r.id))].sort();
+}
+
+export type ModelFaceState = "same" | "differs" | "unknown";
+
+/** 两臂的**模型归因面**：钱与 token 的差值能不能归因给"改动"，前提是两个臂拨的是同一个模型。 */
+export interface ModelFace {
+  state: ModelFaceState;
+  baseline: string[];
+  candidate: string[];
+}
+
+/**
+ * 三态，**没有第四态**（这一格 2026-10-02 之前根本不存在：基准路径绕过 `createUsageAttributor`，
+ * 行内没有归因键 ⇒ 跨模型 A/B 的差值被当成提示词的效果，见 outputs/capability-rescore-2026-10-02）。
+ *  - `same`：两臂各自只有**一个**非空模型名且相同；
+ *  - `differs`：任何一侧出现两个以上名字（**含同一臂内混档**——那连噪声带的前提都不是同配置），或两臂名字不同；
+ *  - `unknown`：有任何一行缺键（空串）。缺键**不许**判成 same：存量语料就是这一档，
+ *    取不到＝未证，不是通过（本仓「没有静默出口」那条数据层规矩）。
+ */
+export function modelFace(baseline: readonly Row[], candidate: readonly Row[]): ModelFace {
+  const names = (rows: readonly Row[]): string[] => [...new Set(rows.map((r) => r.model))];
+  const b = names(baseline);
+  const c = names(candidate);
+  if ([...b, ...c].includes("")) return { state: "unknown", baseline: b, candidate: c };
+  if (b.length !== 1 || c.length !== 1) return { state: "differs", baseline: b, candidate: c };
+  return b[0] === c[0] ? { state: "same", baseline: b, candidate: c } : { state: "differs", baseline: b, candidate: c };
+}
+
+/** 把归因面渲染成对账表最上面的那一行出声。`same` 也要印——"没人被挡"这件事得看得见。 */
+export function renderModelFace(f: ModelFace): string {
+  if (f.state === "same") return `模型归因面：同一档（${f.baseline.join("/")}）✅`;
+  if (f.state === "unknown") {
+    return "模型归因面：⚠ **判不出**——读数里有行没有归因键（存量语料 / 跑器未盖章）。" +
+      "跨模型的差值不能归因给改动；这一格按「取不到＝未证」处理，不按同面处理。";
+  }
+  return `模型归因面：❌ **不同面**——基线 ${f.baseline.join("/") || "（空）"} ↔ 改动 ${f.candidate.join("/") || "（空）"}。` +
+    "两臂拨的不是同一个模型（或同一臂内混了档）⇒ 逐指标差值里混着模型本身的差，不许当改动效果。";
 }
 
 /** **噪声带**：同配置两次运行的逐指标绝对差。
@@ -317,5 +357,8 @@ if (process.argv[1] !== undefined && process.argv[1].endsWith("report.ts")) {
     taskIds(baseRows[0]!),
     taskIds(candRows[0]!),
   );
+  // 归因面打在表**之前**：两臂不同档时，下面那张表的差值里没有一行能归因给改动。
+  const face = modelFace(baseRows.flat(), candRows.flat());
+  process.stdout.write(renderModelFace(face) + "\n\n");
   process.stdout.write(renderReport(cmp, bandSource) + "\n");
 }
