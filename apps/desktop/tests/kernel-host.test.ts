@@ -50,6 +50,12 @@ describe("kernel-host 纵向装配", () => {
       expect(res.ok, JSON.stringify(res)).toBe(true);
       const events = outbox.filter(([ch]) => ch === "onEvent");
       expect(events.length).toBeGreaterThan(0);
+      // worker 面（M1 账本 T3）：demo 剧本派两个 worker，事件流里应见 spawn 与至少一份终态回执。
+      // 断言事件类型在场而非内容形状（worker 报告内容不钉死）。实测（2026-10-03）：
+      // agent_spawned ×2；agent_result ×1——read-worker 在 run 窗口内收敛，slow-worker 仍
+      // running（剧本末条不调 wait_for_agents，父 run 结束即止）⇒ 断言 ≥1，不钉 ×2。
+      expect(outbox.some(([c, p]) => c === "onEvent" && (p as { type?: string }).type === "agent_spawned")).toBe(true);
+      expect(outbox.some(([c, p]) => c === "onEvent" && (p as { type?: string }).type === "agent_result")).toBe(true);
       expect(existsSync(join(workspace, ".agent", "sessions", `${created.id}.jsonl`))).toBe(true);
     },
     60_000,
