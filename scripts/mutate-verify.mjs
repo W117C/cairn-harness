@@ -11430,10 +11430,20 @@ const MUTATIONS = [
     desc: "跑器把判据换成恒不重拨 ⇒ 机制与判卷全绿，而真跑一次都没重试过" +
       "（第 12 次同族：判据在、接线这头零观测）",
     apply: (s) => s.replace(
-      "      (res, n) => retryVerdict(grade(res, t).fails, n, { nowMs: Date.now() }),",
-      '      () => ({ retry: false as const, why: "探针" }),',
+      '      (res, n) => retryVerdict([...grade(res, t).fails, res.exitError ?? ""], n, { nowMs: Date.now() }),',
+      '      (res, n) => retryVerdict(grade(res, t).fails, n, { nowMs: Date.now() }),',
     ),
-    expectFail: "接线：跑器真的走 withProviderRetry，判据真的吃 grade 出来的那份 fails（不自己再算一遍）",
+    expectFail: "接线：跑器真的走 withProviderRetry，判据吃的除了那份 fails 还要带上全文 exitError",
+  },
+  {
+    id: "retry-reset-read-from-truncated-face",
+    src: "scripts/lib/eval-retry.ts",
+    test: "tests/eval-retry.test.ts",
+    desc: "reset 只从「打断那一条」里找 ⇒ 而判卷那条被 `grade` 截到 60 字、reset 在 150 字往后" +
+      "（36 趟实测：fails 里带 reset 0 条，exitError 里 33 条）⇒ 等不起就不等那一档变成死代码，" +
+      "跑器照样为日配额坐等两轮",
+    apply: (s) => s.replace("const reset = resetEpochMs(fails.join(\" \"));", "const reset = resetEpochMs(interrupt);"),
+    expectFail: "★真语料的形状：打断那条被截到 60 字，reset 只在另一条全文里 ⇒ 仍然判不重拨",
   },
 ];
 

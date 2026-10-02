@@ -25,6 +25,8 @@ const DAY_QUOTA = ['runLoop 抛错:GLM 请求失败 HTTP 429: {"error":{"message
 const MODEL_BAD = ["改了判卷面"];
 const VERIFY_BAD = ["verify 未通过/未跑"];
 const NOW = 1_700_000_000_000;
+/** 从常量的 reset 减出来的分钟数（判卷**自己算**，不抄生产那句话里的单位词；生产若改了算法这里就红） */
+const QUOTA_WAIT_MIN = String(Math.round((1_790_985_600_000 - NOW) / 60_000));
 
 describe("retryVerdict：只有 provider 侧打断值得再拨，且等待要有帽", () => {
   it("打断但端点没给 reset ⇒ 按基础等待再拨（分钟级抖动）", () => {
@@ -44,9 +46,21 @@ describe("retryVerdict：只有 provider 侧打断值得再拨，且等待要有
     const v = retryVerdict(DAY_QUOTA, 1, { nowMs: NOW });
     expect(v.retry).toBe(false);
     if (!v.retry) {
-      expect(v.why).toContain("分钟");
+      expect(v.why).toContain(QUOTA_WAIT_MIN);
       expect(v.why).not.toContain("试第"); // 不许一边说「不重拨」一边给出重拨计划
     }
+  });
+
+  it("★真语料的形状：打断那条被截到 60 字，reset 只在另一条全文里 ⇒ 仍然判不重拨", () => {
+    // `loop-eval.grade` 把 exitError 只留 60 字 ⇒ 若只读判卷那一条，帽这一档永远是死代码。
+    // 实测：36 趟里 `g.fails` 带 reset 的 0 条，而 `r.exitError` 带 reset 的 33 条。
+    const truncated = "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:";
+    const full = 'GLM 请求失败 HTTP 429: {"error":{"message":"Rate limit exceeded: free-models-per-day-stealth.",'
+      + '"metadata":{"headers":{"X-RateLimit-Reset":"1790985600000"}}}}';
+    expect(retryVerdict([truncated], 1, { nowMs: NOW }).retry).toBe(true);        // 只看截断那条 ⇒ 会去等
+    const v = retryVerdict([truncated, full], 1, { nowMs: NOW });
+    expect(v.retry).toBe(false);
+    if (!v.retry) expect(v.why).toContain(QUOTA_WAIT_MIN);
   });
 
   it("reset 已经过去 ⇒ 不等，直接再拨", () => {
@@ -115,7 +129,7 @@ describe("withProviderRetry：次数与等待都是读数，不是说法", () =>
     );
     expect(out.attempts).toBe(1);
     expect(slept).toEqual([]);
-    expect(out.stoppedWhy).toContain("分钟");
+    expect(out.stoppedWhy).toContain(QUOTA_WAIT_MIN);
   });
 
   it("一直被打断 ⇒ 到帽就停，attempts 等于帽（不静默加试）", async () => {
@@ -155,10 +169,12 @@ describe("共用决策点与接线", () => {
 
   const evalSrc = () => readFileSync(fileURLToPath(new URL("../scripts/loop-eval.ts", import.meta.url)), "utf8");
 
-  it("接线：跑器真的走 withProviderRetry，判据真的吃 grade 出来的那份 fails（不自己再算一遍）", () => {
+  it("接线：跑器真的走 withProviderRetry，判据吃的除了那份 fails 还要带上全文 exitError", () => {
     const src = evalSrc();
     expect(src).toContain("withProviderRetry(");
-    expect(src).toContain("retryVerdict(grade(res, t).fails");
+    // 判据吃的是 grade 出来的那份 fails（不自己再算一遍），**并且**补上没截断的 exitError：
+    // 少了后半，reset 永远读不到 ⇒ 「等不起就别等」那一档变成死代码（实测 33/33 只在 exitError 里）。
+    expect(src).toContain("retryVerdict([...grade(res, t).fails, res.exitError ?? \"\"]");
     // 读数面上要有这几趟的账：拨数与重拨原因都必须印出来
     expect(src).toContain("拨数=${String(r.attempts)}");
     expect(src).toContain("重拨账：拨 ");

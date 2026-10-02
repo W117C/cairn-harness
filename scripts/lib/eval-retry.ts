@@ -53,7 +53,10 @@ export function retryVerdict(
   if (attempt >= maxAttempts) {
     return { retry: false, why: `已拨到第 ${String(attempt)} 趟（帽 ${String(maxAttempts)}）⇒ 停，剩下的记为「跑不成」而不是「没做到」` };
   }
-  const reset = resetEpochMs(interrupt);
+  // reset 从**整份 fails**里找，不从 `providerInterruptOf` 返回的那一条里找：
+  // 判卷给的那条是被截断的（`loop-eval.grade` 把 exitError 只留 60 字），
+  // 而 `X-RateLimit-Reset` 在 150 字往后 ⇒ 只认那一条的话，帽这一档永远是死代码（10-02 实测 0/36 命中）。
+  const reset = resetEpochMs(fails.join(" "));
   if (reset === null) {
     return { retry: true, waitMs: baseMs, why: `端点没给 reset ⇒ 按基础等待 ${String(baseMs)}ms 试第 ${String(attempt + 1)} 趟` };
   }
@@ -64,7 +67,7 @@ export function retryVerdict(
   if (waitMs > waitCapMs) {
     return {
       retry: false,
-      why: `端点要等 ${String(Math.round(waitMs / 60000))} 分钟才放行，超过帽 ${String(Math.round(waitCapMs / 60000))} 分钟 ⇒ 不重拨（那是日配额，不是抖动）`,
+      why: `端点要等 ${String(Math.round(waitMs / 60000))} 分钟才放行，超出可等待上限 ${String(Math.round(waitCapMs / 60000))} 分钟 ⇒ 不重拨（那是日配额，不是抖动）`,
     };
   }
   return { retry: true, waitMs, why: `按端点给的 reset 等 ${String(waitMs)}ms 后试第 ${String(attempt + 1)} 趟` };

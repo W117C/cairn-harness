@@ -583,7 +583,7 @@ for (let rep = 1; rep <= REPS; rep++) {
     // 那一趟仍会被 `runValidity` 判成「无效、不进分母」，不会污染分数。
     const retried = await withProviderRetry(
       () => runOnce(t, rep),
-      (res, n) => retryVerdict(grade(res, t).fails, n, { nowMs: Date.now() }),
+      (res, n) => retryVerdict([...grade(res, t).fails, res.exitError ?? ""], n, { nowMs: Date.now() }),
       (ms) => sleep(ms),
     );
     const r = { ...retried.value, attempts: retried.attempts, retryWaitMs: retried.waitedMs, retryWhy: retried.stoppedWhy };
