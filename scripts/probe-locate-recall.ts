@@ -11,11 +11,9 @@
 //   预算取 [1024, 2048, 4096]：1024 = 缺省，4096 = `map/cap.ts` 的钳制上限。
 //     ⚠️ 加这一维是**被自己的正哨兵逼出来的**：第一版只跑 1024，枢纽文件 `src/main/settings.ts` 报了 MISS，
 //     而哨兵失败时先怀疑尺——所以要分清楚"这一格真不在图里"与"1024 token 的窗口装不下它"。
-//   正则逐字取自生产端：`src/agent/glm-session.ts:793` 的 /[A-Za-z_][A-Za-z0-9_]{3,}/g（最后一个
-//   user_message）与 `:784` 的 /[\w./-]+\.[a-z]{1,5}/（路径形状）。
-//   ⚠️ 它们是**镜像**不是 import——生产端那两只是 `createGlmSessionProvider` 内的局部闭包
-//     （`glm-session.ts:776,789`，都是 events 的纯函数）没导出。"改成模块级导出＋本尺 import"是这把尺的
-//     接线尾巴；在那之前**改了那两行正则而不改这里，A 臂就撒谎**，故出处钉死在注释里。
+//   正则出处：`src/agent/context-signals.ts`（路径形状与标识符形状各一只）。生产端 `glm-session.ts` 与本尺
+//     **共用同一支源串**——从前这里是逐字镜像，页上写着「改了那两行正则而不改这里，A 臂就撒谎」，
+//     那是靠注释守的不变量；接线尾巴已在本笔收掉，尺的 A 臂输入现在结构上就等于生产端算出来的。
 //
 // 负控与正哨兵（尺自己不恒真）：
 //   `L-POS` 真值 = `src/main/settings.ts`；`L-NEG` 真值 = 不存在的路径（必须 MISS）。
@@ -23,11 +21,15 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { buildMap } from "../src/agent/map/build";
+import { makeMentionedRe, makePathishRe } from "../src/agent/context-signals";
 import { rulerSelfCheck } from "./lib/probe-self-check";
 
 const REPO = resolve(import.meta.dirname, "..");
-const MENTIONED_RE = /[A-Za-z_][A-Za-z0-9_]{3,}/g;   // 逐字 = glm-session.ts:793
-const PATHISH_RE = /[\w./-]+\.[a-z]{1,5}/g;          // 逐字 = glm-session.ts:784
+// 与生产端同一支源串（`context-signals.ts`）⇒ A 臂的输入不是"照着生产端抄的一份"。
+// 模块级实例在这里安全只因为两处都用 `.match()`（全局正则的 match 会自己复位 lastIndex）；
+// 哪天改成 exec 循环就得换 `makePathishRe()` 现取现用。
+const MENTIONED_RE = makeMentionedRe();
+const PATHISH_RE = makePathishRe();
 const BUDGETS = [1024, 2048, 4096];
 
 interface Truth { file: string; evidence: string }

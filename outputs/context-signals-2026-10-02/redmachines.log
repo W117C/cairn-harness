@@ -1,0 +1,28 @@
+### context-signals-provider-keeps-own-literal
+  src=src/agent/glm-session.ts test=tests/context-signals.test.ts
+  期望红：provider 那半：从 context-signals 取，且源串里不再留路径字面量（镜像回来就红）
+  实际红：× provider 那半：从 context-signals 取，且源串里不再留路径字面量（镜像回来就红）
+  汇总：Tests  1 failed | 6 passed (7)
+  复原逐字节一致=true
+
+### context-signals-probe-mirror-returns
+  src=scripts/probe-locate-recall.ts test=tests/context-signals.test.ts
+  期望红：尺那半：从 context-signals 取，且不再自带标识符字面量
+  实际红：× 尺那半：从 context-signals 取，且不再自带标识符字面量
+  汇总：Tests  1 failed | 6 passed (7)
+  复原逐字节一致=true
+
+### context-signals-pathish-extension-drift
+  src=src/agent/context-signals.ts test=tests/context-signals.test.ts
+  期望红：路径形状：扩展名最长 5 个字母 ⇒ 六字母后缀只吃到第五个（这一档能区分 {1,5} 与 {1,6}）
+  实际红：× 路径形状：扩展名最长 5 个字母 ⇒ 六字母后缀只吃到第五个（这一档能区分 {1,5} 与 {1,6}）
+  汇总：Tests  1 failed | 6 passed (7)
+  复原逐字节一致=true
+
+### context-signals-flag-not-global
+  src=src/agent/context-signals.ts test=tests/context-signals.test.ts
+  期望红：两只 builder 出的都是全局正则（掉了 /g 时 .match 只回第一个，而「两次结果相同」那条抓不到）
+  实际红：× 路径形状：扩展名最长 5 个字母 ⇒ 六字母后缀只吃到第五个（这一档能区分 {1,5} 与 {1,6}） ／ × 两只 builder 出的都是全局正则（掉了 /g 时 .match 只回第一个，而「两次结果相同」那条抓不到） ／ × 同一实例连用两次结果相同（模块级实例之所以安全，前提就在这条）
+  汇总：Tests  3 failed | 4 passed (7)
+  复原逐字节一致=true
+RM_EXIT=0

@@ -1,0 +1,26 @@
+L01 shape=nl idents=0 ctx=0 target=src/permissions/autonomy.ts | 1024:A=第10,B=第10[A文件=61/tok=904 B文件=61/tok=904] | 2048:A=第10,B=第10[A文件=79/tok=1788 B文件=79/tok=1788] | 4096:A=第10,B=第10[A文件=124/tok=3952 B文件=124/tok=3952]
+L02 shape=nl idents=0 ctx=0 target=src/agent/verify.ts | 1024:A=第32,B=第32[A文件=61/tok=904 B文件=61/tok=904] | 2048:A=第32,B=第32[A文件=79/tok=1788 B文件=79/tok=1788] | 4096:A=第32,B=第32[A文件=124/tok=3952 B文件=124/tok=3952]
+L03 shape=nl idents=0 ctx=0 target=src/agent/no-progress.ts | 1024:A=MISS,B=MISS[A文件=61/tok=904 B文件=61/tok=904] | 2048:A=MISS,B=MISS[A文件=79/tok=1788 B文件=79/tok=1788] | 4096:A=MISS,B=MISS[A文件=124/tok=3952 B文件=124/tok=3952]
+L04 shape=nl idents=0 ctx=0 target=src/agent/usage-attribution.ts | 1024:A=MISS,B=MISS[A文件=61/tok=904 B文件=61/tok=904] | 2048:A=MISS,B=MISS[A文件=79/tok=1788 B文件=79/tok=1788] | 4096:A=MISS,B=MISS[A文件=124/tok=3952 B文件=124/tok=3952]
+L05 shape=nl idents=0 ctx=0 target=src/agent/tool-surface.ts | 1024:A=MISS,B=MISS[A文件=61/tok=904 B文件=61/tok=904] | 2048:A=MISS,B=MISS[A文件=79/tok=1788 B文件=79/tok=1788] | 4096:A=MISS,B=MISS[A文件=124/tok=3952 B文件=124/tok=3952]
+L06 shape=nl idents=0 ctx=0 target=src/tools/snapshot.ts | 1024:A=MISS,B=MISS[A文件=61/tok=904 B文件=61/tok=904] | 2048:A=MISS,B=MISS[A文件=79/tok=1788 B文件=79/tok=1788] | 4096:A=MISS,B=MISS[A文件=124/tok=3952 B文件=124/tok=3952]
+L07 shape=nl idents=0 ctx=0 target=src/tools/apply_patch.ts | 1024:A=MISS,B=MISS[A文件=61/tok=904 B文件=61/tok=904] | 2048:A=MISS,B=MISS[A文件=79/tok=1788 B文件=79/tok=1788] | 4096:A=MISS,B=MISS[A文件=124/tok=3952 B文件=124/tok=3952]
+L08 shape=nl idents=0 ctx=0 target=src/main/scheduler.ts | 1024:A=MISS,B=MISS[A文件=61/tok=904 B文件=61/tok=904] | 2048:A=MISS,B=MISS[A文件=79/tok=1788 B文件=79/tok=1788] | 4096:A=MISS,B=MISS[A文件=124/tok=3952 B文件=124/tok=3952]
+L09 shape=nl idents=1 ctx=0 target=src/agent/memory/inject.ts | 1024:A=第25,B=第25[A文件=61/tok=904 B文件=61/tok=904] | 2048:A=第25,B=第25[A文件=79/tok=1788 B文件=79/tok=1788] | 4096:A=第25,B=第25[A文件=124/tok=3952 B文件=124/tok=3952]
+L10 shape=nl idents=0 ctx=0 target=src/agent/map/rank.ts | 1024:A=MISS,B=MISS[A文件=61/tok=904 B文件=61/tok=904] | 2048:A=MISS,B=MISS[A文件=79/tok=1788 B文件=79/tok=1788] | 4096:A=MISS,B=MISS[A文件=124/tok=3952 B文件=124/tok=3952]
+L11 shape=ident idents=1 ctx=0 target=src/agent/no-progress.ts | 1024:A=第4,B=MISS[A文件=62/tok=917 B文件=61/tok=904] | 2048:A=第4,B=MISS[A文件=81/tok=1808 B文件=79/tok=1788] | 4096:A=第4,B=MISS[A文件=126/tok=3977 B文件=124/tok=3952]
+L12 shape=ident idents=2 ctx=1 target=src/main/settings.ts | 1024:A=第34,B=第34[A文件=61/tok=905 B文件=61/tok=904] | 2048:A=第34,B=第34[A文件=79/tok=1787 B文件=79/tok=1788] | 4096:A=第34,B=第34[A文件=125/tok=3961 B文件=124/tok=3952]
+L13 shape=ident idents=3 ctx=1 target=src/main/sandbox.ts | 1024:A=MISS,B=MISS[A文件=61/tok=904 B文件=61/tok=904] | 2048:A=MISS,B=MISS[A文件=79/tok=1788 B文件=79/tok=1788] | 4096:A=MISS,B=MISS[A文件=124/tok=3952 B文件=124/tok=3952]
+L14 shape=ident idents=1 ctx=0 target=src/agent/model-surface.ts | 1024:A=MISS,B=MISS[A文件=61/tok=904 B文件=61/tok=904] | 2048:A=MISS,B=MISS[A文件=79/tok=1788 B文件=79/tok=1788] | 4096:A=MISS,B=MISS[A文件=124/tok=3952 B文件=124/tok=3952]
+L-POS shape=sentinel idents=0 ctx=0 target=src/main/settings.ts | 1024:A=第34,B=第34[A文件=61/tok=904 B文件=61/tok=904] | 2048:A=第34,B=第34[A文件=79/tok=1788 B文件=79/tok=1788] | 4096:A=第34,B=第34[A文件=124/tok=3952 B文件=124/tok=3952]
+L-NEG shape=control idents=1 ctx=0 target=src/agent/definitely-not-a-real-file.ts | 1024:A=MISS,B=MISS[A文件=62/tok=917 B文件=61/tok=904] | 2048:A=MISS,B=MISS[A文件=81/tok=1808 B文件=79/tok=1788] | 4096:A=MISS,B=MISS[A文件=126/tok=3977 B文件=124/tok=3952]
+
+[locate-recall] 题数=16（其中真值题 14 条＋哨兵 1＋负控 1）· 题型分布 {"nl":10,"ident":4,"sentinel":1,"control":1}
+[locate-recall] 预算 1024 tok ⇒ A 臂（条件化）6/16 · B 臂（不条件化）5/16
+[locate-recall] 预算 2048 tok ⇒ A 臂（条件化）6/16 · B 臂（不条件化）5/16
+[locate-recall] 预算 4096 tok ⇒ A 臂（条件化）6/16 · B 臂（不条件化）5/16
+[locate-recall] 负控 L-NEG 期望始终 MISS；正哨兵 L-POS 期望至少在 4096 命中（否则=图里真没有它）
+[locate-recall] 条件化输入为空的题=10/16 ⇒ 这些题两臂按构造同图，A/B 差值不许归因给条件化
+[locate-recall] 覆盖面自述（1024 那一档）候选文件=587 进图=587 渲染进地图=61 tokens=904
+[locate-recall] 自检 ✅ 正哨兵命中、负控未命中 ⇒ 上面的命中率可以引用
+PROBE_EXIT=0

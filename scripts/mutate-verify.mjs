@@ -11911,6 +11911,55 @@ const MUTATIONS = [
     apply: (s) => s.replace("typeOnly: stmtType || specType,", "typeOnly: specType,"),
     expectFail: "五档形状各判一次：语句级 type 与行内 type 都要认（缺一个就漏一类）",
   },
+  /* ---- 两只信号正则收成唯一出处（第 301 页，任务 #8③ 的接线尾巴）----
+   *  四条各钉一面：provider 那半、尺那半、源串语义（长度档）、以及「是不是全局」。
+   *  「每次新建实例」那条判卷刻意不配锚点——要模拟缓存复用得先往实现里插一个模块级变量，
+   *  那已经是往判卷里搬实现，而不是改一个既有写法（理由同第 291 页那条「变异方向要与不变量同向」）。 */
+  {
+    id: "context-signals-provider-keeps-own-literal",
+    src: "src/agent/glm-session.ts",
+    test: "tests/context-signals.test.ts",
+    desc: "provider 那半退回自带字面量 ⇒ 两端各漂各的，而尺的 A 臂继续声称「输入＝生产端算出来的」：" +
+      "这正是从前写在注释里的那句「改了那两行而不改这里，A 臂就撒谎」的现行形状",
+    apply: (s) => s.replace(
+      "e.content.match(makePathishRe())",
+      'e.content.match(/[\\w./-]+\\.[a-z]{1,6}/g)',
+    ),
+    expectFail: "provider 那半：从 context-signals 取，且源串里不再留路径字面量（镜像回来就红）",
+  },
+  {
+    id: "context-signals-probe-mirror-returns",
+    src: "scripts/probe-locate-recall.ts",
+    test: "tests/context-signals.test.ts",
+    desc: "尺那一侧把标识符正则改回自带字面量并把长度档挪一格（{3,}→{4,}）⇒ 镜像复活，" +
+      "命中率量的是「尺愿意认的那些词」而不是产品递给地图的那些词",
+    apply: (s) => s.replace(
+      "const MENTIONED_RE = makeMentionedRe();",
+      "const MENTIONED_RE = /[A-Za-z_][A-Za-z0-9_]{4,}/g;",
+    ),
+    expectFail: "尺那半：从 context-signals 取，且不再自带标识符字面量",
+  },
+  {
+    id: "context-signals-pathish-extension-drift",
+    src: "src/agent/context-signals.ts",
+    test: "tests/context-signals.test.ts",
+    desc: "把扩展名上限从 5 个字母放宽到 6 ⇒ 路径 token 会多吞一个字符（`notes.yamlxy` 整条进集合），" +
+      "而 contextFiles 是靠这些 token 去匹配 workspace 相对路径的——读端看不出「匹配不上」是格式变了",
+    apply: (s) => s.replace("[a-z]{1,5}", "[a-z]{1,6}"),
+    expectFail: "路径形状：扩展名最长 5 个字母 ⇒ 六字母后缀只吃到第五个（这一档能区分 {1,5} 与 {1,6}）",
+  },
+  {
+    id: "context-signals-flag-not-global",
+    src: "src/agent/context-signals.ts",
+    test: "tests/context-signals.test.ts",
+    desc: "builder 掉了 `g` ⇒ `String.match(非全局)` 只回**第一个** token，注入面静默少一半输入；" +
+      "而「同一实例连用两次结果相同」那条判卷照样绿（非全局时它本来就不动 lastIndex）——两半得分开设",
+    apply: (s) => s.replace(
+      "return new RegExp(PATHISH_SOURCE, \"g\");",
+      "return new RegExp(PATHISH_SOURCE);",
+    ),
+    expectFail: "两只 builder 出的都是全局正则（掉了 /g 时 .match 只回第一个，而「两次结果相同」那条抓不到）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

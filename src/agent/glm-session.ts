@@ -15,6 +15,7 @@ import { basename, dirname, join } from "node:path";
 import { createMapBuilder, mapInjectText, mapUnavailableText, type MapBuilder } from "./map/build";
 import { AUTOMATION_TOOL_NAMES, automationToolSpecs } from "./automation-surface";
 import { strandsWorkersOnSpawn } from "./tool-surface";
+import { makeMentionedRe, makePathishRe } from "./context-signals";
 import {
   DEFAULT_COMPACTION_CONFIG,
   CompactionCoordinator,
@@ -781,7 +782,7 @@ export function createGlmSessionProvider(
         const p = e.args.path;
         if (typeof p === "string") out.add(p);
       } else if (e.type === "user_message") {
-        for (const m of e.content.match(/[\w./-]+\.[a-z]{1,5}/g) ?? []) out.add(m);
+        for (const m of e.content.match(makePathishRe()) ?? []) out.add(m);
       }
     }
     return [...out];
@@ -790,7 +791,7 @@ export function createGlmSessionProvider(
     const lastUser = [...events].reverse().find((e) => e.type === "user_message");
     if (!lastUser || lastUser.type !== "user_message") return [];
     const idents = new Set<string>();
-    for (const m of lastUser.content.match(/[A-Za-z_][A-Za-z0-9_]{3,}/g) ?? []) idents.add(m);
+    for (const m of lastUser.content.match(makeMentionedRe()) ?? []) idents.add(m);
     return [...idents];
   };
   // stream(messages, tools)：一次调用 = 一轮模型输出。messages/tools 由 loop 传入，但本会话型
