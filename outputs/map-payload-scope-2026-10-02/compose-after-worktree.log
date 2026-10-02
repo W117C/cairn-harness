@@ -1,0 +1,9 @@
+[compose] 候选面（生产端 scanSourceFilesAll 那一支）总数=583
+[compose] 候选面按根目录：tests=293 src=170 scripts=102 apps=17 bin=1
+[compose] 预算 1024：渲染文件=57 载荷=0 载荷占比=0.0% tokens=873 ／ 自述：候选=583 进图=583 帽=5000
+[compose]   渲染面按根目录：src=39 apps=12 scripts=4 tests=2
+[compose] 预算 2048：渲染文件=77 载荷=0 载荷占比=0.0% tokens=2011 ／ 自述：候选=583 进图=583 帽=5000
+[compose]   渲染面按根目录：src=39 scripts=23 apps=13 tests=2
+[compose] 预算 4096：渲染文件=109 载荷=0 载荷占比=0.0% tokens=3825 ／ 自述：候选=583 进图=583 帽=5000
+[compose]   渲染面按根目录：scripts=55 src=39 apps=13 tests=2
+EXIT=0

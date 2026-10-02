@@ -6,7 +6,7 @@ import { mkdtemp, rm, mkdir, writeFile, utimes, readdir, access } from "node:fs/
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyFileCap, createMapBuilder, defaultTagsCacheDir, scanSourceFiles, scanSourceFilesAll } from "../src/agent/map/build.js";
+import { applyFileCap, createMapBuilder, defaultTagsCacheDir, isPayloadPath, scanSourceFiles, scanSourceFilesAll } from "../src/agent/map/build.js";
 import { __resetLangCache, __resetQueryCache } from "../src/agent/map/parse.js";
 
 let ws = "";
@@ -167,5 +167,58 @@ describe("候选集的两道静默排除（待办 #36 的成因探针）", () =>
     await expect(access(join(ws, "gen", "hidden.ts"))).resolves.toBeUndefined();
     expect(rels).toContain("src/kept.ts");
     expect(rels).not.toContain("gen/hidden.ts");
+  });
+});
+
+/* 载荷目录（fixtures/ 与 outputs/）不进候选面。
+ * 动因是本仓现读（10-02，直调 buildMap、预算 4096 tok）：渲染进地图的 190 个文件名里
+ * fixtures 112 ＋ outputs 16 ＝ 67% 的预算花在证据与靶子上。
+ * 三态必须各钉一次：① 仓库根视角要排掉；② **拿夹具当工作区**时不能把它自己掏空
+ * （这正是"把模式塞进 rg 的绝对路径 glob"那种错法的可观察后果）；③ 谓词只认第一段。 */
+describe("候选面的载荷目录排除（能力 1：地图预算别花在靶子上）", () => {
+  it("纯谓词只看 workspace 相对路径的第一段", () => {
+    expect(isPayloadPath("fixtures/a.ts")).toBe(true);
+    expect(isPayloadPath("outputs/probe.ts")).toBe(true);
+    // 同名的**深层**目录不算载荷：用户项目里 a/fixtures/ 可能就是被测代码
+    expect(isPayloadPath("a/fixtures/x.ts")).toBe(false);
+    // 同名的根级**文件**也不算：outputs.ts 是一个正常源文件
+    expect(isPayloadPath("outputs.ts")).toBe(false);
+    expect(isPayloadPath("src/agent/map/build.ts")).toBe(false);
+  });
+
+  it("仓库根视角：fixtures 与 outputs 被排掉，src 与同名深层目录留下", async () => {
+    await mkdir(join(ws, "fixtures", "mini"), { recursive: true });
+    await writeFile(join(ws, "fixtures", "mini", "app.ts"), "export function app(): number { return 1; }\n", "utf8");
+    await mkdir(join(ws, "outputs", "run-1"), { recursive: true });
+    await writeFile(join(ws, "outputs", "run-1", "probe.ts"), "export function probe(): number { return 2; }\n", "utf8");
+    await mkdir(join(ws, "src", "fixtures"), { recursive: true });
+    await writeFile(join(ws, "src", "fixtures", "truth.ts"), "export function truth(): number { return 3; }\n", "utf8");
+    const rels = (await scanSourceFiles(ws)).map((f) => f.rel).sort();
+    // 靶子目录里 beforeEach 还种了别的文件 ⇒ 这里只钉"该在的在、该没的没有"，不钉整张清单
+    expect(rels.filter((r) => r.startsWith("fixtures/") || r.startsWith("outputs/")), "两个载荷目录一条都不该出现").toEqual([]);
+    expect(rels, "src/fixtures/ 这种深层同名目录必须留下").toContain("src/fixtures/truth.ts");
+    // 成对判：被排掉的那两条确实在盘上、后缀受支持 ⇒ 它们不在结果里是**政策**而不是扫描漏了
+    await expect(access(join(ws, "fixtures", "mini", "app.ts"))).resolves.toBeUndefined();
+    await expect(access(join(ws, "outputs", "run-1", "probe.ts"))).resolves.toBeUndefined();
+  });
+
+  it("反向那一半：把夹具自己当工作区时，它不被掏空（绝对路径 glob 那种错法在这里红）", async () => {
+    const fixtureWs = join(ws, "fixtures", "mini");
+    await mkdir(fixtureWs, { recursive: true });
+    await writeFile(join(fixtureWs, "app.ts"), "export function app(): number { return 1; }\n", "utf8");
+    await writeFile(join(fixtureWs, "helper.ts"), "export function helper(): number { return 2; }\n", "utf8");
+    const rels = (await scanSourceFiles(fixtureWs)).map((f) => f.rel).sort();
+    expect(rels, "工作区就是夹具目录时，rels 是 app.ts/helper.ts ⇒ 第一段不是 fixtures ⇒ 全量在图里").toEqual(["app.ts", "helper.ts"]);
+  });
+
+  it("真仓现读：候选面里没有任何载荷目录文件，而 src/tests/scripts 仍在（分母自证）", async () => {
+    const root = join(import.meta.dirname, "..");
+    const all = await scanSourceFilesAll(root);
+    expect(all.length, "本仓候选面是几百个文件，读到 0 就是取料坏了").toBeGreaterThan(200);
+    expect(all.some((f) => f.rel.startsWith("fixtures/")), "夹具不进候选面").toBe(false);
+    expect(all.some((f) => f.rel.startsWith("outputs/")), "证据目录不进候选面").toBe(false);
+    for (const keep of ["src/", "tests/", "scripts/", "apps/"]) {
+      expect(all.some((f) => f.rel.startsWith(keep)), `${keep} 必须仍在候选面里`).toBe(true);
+    }
   });
 });

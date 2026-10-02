@@ -1,0 +1,14 @@
+[diag] 节点=14998 文件=583 边=13147
+[diag] src/main/settings.ts 节点数=28，最高名次（全节点序）=1932
+  · 名次 1932 rank=1.96e-4 def AppSettings @32
+  · 名次 1933 rank=1.96e-4 def LayoutState @15
+  · 名次 1934 rank=1.96e-4 def PANEL_IDS @12
+  · 名次 1935 rank=1.96e-4 def PROVIDER_KINDS @142
+  · 名次 1936 rank=1.96e-4 def PanelId @13
+  · 名次 1937 rank=1.96e-4 def ProviderKind @30
+[diag] 文件级（按最好节点）：src/main/settings.ts 排第 233 / 583
+[diag] 前 20 个文件：tests/secrets.test.ts(#1) src/agent/ledger.ts(#2) src/events/index.ts(#3) src/agent/loop.ts(#4) src/agent/context.ts(#5) scripts/gym-long.ts(#6) src/agent/orchestrator.ts(#8) src/agent/glm-session.ts(#9) src/main/agent-runner.ts(#10) src/permissions/autonomy.ts(#13) src/agent/worker-model.ts(#14) src/main/settings-handlers.ts(#15) src/tools/base.ts(#17) scripts/replay/corpus.ts(#19) src/agent/text-budget.ts(#20) src/tools/process.ts(#22) src/agent/prune.ts(#23) src/providers/mock.ts(#25) src/agent/compaction.ts(#26) src/agent/memory/inject.ts(#27)
+[diag] src/main/settings.ts 的可引用名=19（前 12：PANEL_IDS, PanelId, LayoutState, SafeMode, ThemeSetting, ProviderKind, AppSettings, DEFAULT_SETTINGS, SAFE_MODES, THEMES, PROVIDER_KINDS, isPanelId）
+[diag] 按裸名匹配到 ref 节点的文件数=9（前 10：tests/settings.test.ts×2 scripts/routing-check.ts×2 src/main/scheduler.ts×1 scripts/lib/mutate-gates.ts×1 tests/main-provider-runtime.test.ts×1 scripts/gym-check.ts×1 tests/session-tools.test.ts×1 src/main/settings-handlers.ts×1 tests/plan-required.test.ts×1）
+[diag] 其中在图里真接成边（adj 有权重）的 (文件,名) 对=11
+EXIT=0

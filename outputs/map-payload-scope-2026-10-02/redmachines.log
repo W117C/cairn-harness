@@ -1,0 +1,36 @@
+### map-payload-first-segment-lost  （src src/agent/map/build.ts ／ test tests/map-build.test.ts）
+  期望红：纯谓词只看 workspace 相对路径的第一段
+  实际红：× 纯谓词只看 workspace 相对路径的第一段 ／ × 仓库根视角：fixtures 与 outputs 被排掉，src 与同名深层目录留下 ／ × 真仓现读：候选面里没有任何载荷目录文件，而 src/tests/scripts 仍在（分母自证）
+  汇总：Tests  3 failed | 8 passed (11)
+  复原逐字节一致=true
+
+### map-payload-filter-not-wired  （src src/agent/map/build.ts ／ test tests/map-build.test.ts）
+  期望红：仓库根视角：fixtures 与 outputs 被排掉，src 与同名深层目录留下
+  实际红：× 仓库根视角：fixtures 与 outputs 被排掉，src 与同名深层目录留下 ／ × 真仓现读：候选面里没有任何载荷目录文件，而 src/tests/scripts 仍在（分母自证）
+  汇总：Tests  2 failed | 9 passed (11)
+  复原逐字节一致=true
+
+### map-payload-exclusion-as-abs-glob  （src src/agent/map/build.ts ／ test tests/map-build.test.ts）
+  期望红：反向那一半：把夹具自己当工作区时，它不被掏空（绝对路径 glob 那种错法在这里红）
+  实际红：× 仓库根视角：fixtures 与 outputs 被排掉，src 与同名深层目录留下 ／ × 反向那一半：把夹具自己当工作区时，它不被掏空（绝对路径 glob 那种错法在这里红）
+  汇总：Tests  2 failed | 9 passed (11)
+  复原逐字节一致=true
+
+### map-ruler-selfcheck-always-ok  （src scripts/lib/probe-self-check.ts ／ test tests/locate-recall-ruler.test.ts）
+  期望红：正哨兵从没命中过 ⇒ 不 ok，且明说这一列不可引用
+  实际红：× 正哨兵从没命中过 ⇒ 不 ok，且明说这一列不可引用
+  汇总：Tests  1 failed | 5 passed (6)
+  复原逐字节一致=true
+
+### map-ruler-exit-not-wired  （src scripts/probe-locate-recall.ts ／ test tests/locate-recall-ruler.test.ts）
+  期望红：尺吃 lib 里那一份判据，且自检不过就退非零
+  实际红：× 尺吃 lib 里那一份判据，且自检不过就退非零
+  汇总：Tests  1 failed | 5 passed (6)
+  复原逐字节一致=true
+
+### map-ruler-only-last-budget  （src scripts/probe-locate-recall.ts ／ test tests/locate-recall-ruler.test.ts）
+  期望红：每题的命中记录喂的是 hitAnyBudget，不是某单一档
+  实际红：× 每题的命中记录喂的是 hitAnyBudget，不是某单一档
+  汇总：Tests  1 failed | 5 passed (6)
+  复原逐字节一致=true
+RM_EXIT=0

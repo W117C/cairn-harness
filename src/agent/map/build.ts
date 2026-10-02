@@ -16,6 +16,26 @@ import { MAX_FILES_DEFAULT } from "./cap.js";
 import { coverageNote } from "../impact/coverage.js";
 
 const NOISE_GLOBS = ["**/.git/**", "**/node_modules/**", "**/dist/**", "**/out/**"];
+
+/** 载荷目录（**workspace 相对路径的第一段**）：里面的文件是证据或靶子，不是"你正在改的代码"。
+ *
+ *  动因是本仓现读（10-02 直调 `buildMap`，无个人化输入、预算 4096 tok）：渲染进地图的 190 个文件名里
+ *  `fixtures/` 112 个＋`outputs/` 16 个 ＝ **67% 的地图预算给了载荷**，`src/` 只剩 39 个；
+ *  枢纽文件 `src/main/settings.ts`（按相对 import 算入度排第 25／519）因此三档预算全都挤不进地图，
+ *  而 `scripts/probe-locate-recall.ts` 的正哨兵自己喊 MISS（那把尺的读数此前不可引用）。
+ *
+ *  为什么按"workspace 相对的第一段"判，而不是往 `NOISE_GLOBS` 里塞绝对路径模式：
+ *  rg 拿的是绝对路径、glob 也按绝对路径匹配，一条"任意层 fixtures 目录"的模式会把
+ *  **拿夹具当工作区**的那些靶子（`fixtures/gym/cases` 下的案例、`fixtures/impact/accuracy` 系列）
+ *  整个掏空——那正是边集真值判卷的取料面。
+ *  这里在 rel 已相对化之后判，夹具自己当 workspace 时 rels 是 `src/...`，照旧全量入图。 */
+export const PAYLOAD_ROOT_DIRS: readonly string[] = ["fixtures", "outputs"];
+
+/** 纯谓词（不碰盘）：`rel` 是 workspace 相对路径。 */
+export function isPayloadPath(rel: string): boolean {
+  const slash = rel.indexOf("/");
+  return PAYLOAD_ROOT_DIRS.includes(slash === -1 ? rel : rel.slice(0, slash));
+}
 // 文件数帽那两个数住在 `./cap.js`（唯一事实源）。为什么不在这里：`impact/coverage.ts` 的文案
 // 要吃同一个上限，而文案模块被地图这一侧复用 ⇒ 常量留在本文件就会成环（说明见 cap.ts 头注）。
 const RECOMPUTE_EVERY_DEFAULT = 10;
@@ -65,6 +85,7 @@ export async function scanSourceFilesAll(workspace: string): Promise<ScannedFile
     .filter(Boolean)
     .map((p) => relative(resolve(workspace), resolve(p)).split(sep).join("/")) // rg 给绝对路径 → workspace 相对（glob 同口径）
     .filter((rel) => {
+      if (isPayloadPath(rel)) return false; // 载荷目录：地图与影响面都只该看"在改的代码"（出处见上面注释）
       const ext = rel.includes(".") ? rel.slice(rel.lastIndexOf(".") + 1).toLowerCase() : "";
       return SUPPORTED_EXTS.includes(ext);
     });

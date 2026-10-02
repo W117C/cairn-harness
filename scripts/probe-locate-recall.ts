@@ -23,6 +23,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { buildMap } from "../src/agent/map/build";
+import { rulerSelfCheck } from "./lib/probe-self-check";
 
 const REPO = resolve(import.meta.dirname, "..");
 const MENTIONED_RE = /[A-Za-z_][A-Za-z0-9_]{3,}/g;   // 逐字 = glm-session.ts:793
@@ -71,6 +72,8 @@ async function arm(question: string, conditioned: boolean, budget: number) {
 
 const report: string[] = [];
 const hitAt = { A: BUDGETS.map(() => 0), B: BUDGETS.map(() => 0) };
+/** 每题"在任一预算档里命中过"——只喂给尺的自检（正哨兵必须至少命中一次、负控必须一次都不命中）。 */
+const hitAnyBudget = new Map<string, boolean>();
 const denomByShape: Record<string, number> = {};
 let condEmpty = 0;
 let cov: { c: number; g: number; f: number; t: number } | null = null;
@@ -89,6 +92,7 @@ for (const q of rows) {
     const rB = rankOf(B.files, target);
     if (rA > 0) hitAt.A[bi]!++;
     if (rB > 0) hitAt.B[bi]++;
+    if (rA > 0 || rB > 0) hitAnyBudget.set(q.id, true);
     cells.push(`${String(budget)}:A=${rA > 0 ? "第" + String(rA) : "MISS"},B=${rB > 0 ? "第" + String(rB) : "MISS"}[A文件=${String(A.files.length)}/tok=${String(A.built.tokens)} B文件=${String(B.files.length)}/tok=${String(B.built.tokens)}]`);
   }
   report.push(`${q.id} shape=${q.shape} idents=${String(a0.idents)} ctx=${String(a0.ctx)} target=${target} | ${cells.join(" | ")}`
@@ -104,3 +108,9 @@ for (const [bi, budget] of BUDGETS.entries()) {
 console.log(`[locate-recall] 负控 L-NEG 期望始终 MISS；正哨兵 L-POS 期望至少在 4096 命中（否则=图里真没有它）`);
 console.log(`[locate-recall] 条件化输入为空的题=${String(condEmpty)}/${String(rows.length)} ⇒ 这些题两臂按构造同图，A/B 差值不许归因给条件化`);
 console.log(`[locate-recall] 覆盖面自述（1024 那一档）候选文件=${String(cov?.c ?? "?")} 进图=${String(cov?.g ?? "?")} 渲染进地图=${String(cov?.f ?? "?")} tokens=${String(cov?.t ?? "?")}`);
+
+const selfCheck = rulerSelfCheck(hitAnyBudget.get("L-POS") === true, hitAnyBudget.get("L-NEG") === true);
+console.log(selfCheck.ok
+  ? "[locate-recall] 自检 ✅ 正哨兵命中、负控未命中 ⇒ 上面的命中率可以引用"
+  : "[locate-recall] 自检 ❌ " + selfCheck.why);
+if (!selfCheck.ok) process.exit(1);

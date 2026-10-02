@@ -11765,6 +11765,76 @@ const MUTATIONS = [
     apply: (s) => s.replace("const harnessBeats = autoVerifyBeats(verifies);", "const harnessBeats = verifies.some((v) => v.auto === true) ? 1 : 0;"),
     expectFail: "旧的那份 some(auto) 判定不许回来：同一谓词两份副本迟早宽度不同",
   },
+  /* ---- 候选面的载荷目录排除（10-02 第三簇，任务 #14 的前半）----
+   * 三条各钉一态：谓词形状、接线在不在、以及"用绝对路径 glob 去做同一件事"这种错法。
+   * 第三条最要紧：它证明这把排除没有把**拿夹具当工作区**的靶子掏空——那是边集真值判卷的取料面。 */
+  {
+    id: "map-payload-first-segment-lost",
+    src: "src/agent/map/build.ts",
+    test: "tests/map-build.test.ts",
+    desc: "谓词拿整条相对路径去比第一段名单 ⇒ 只有 `fixtures/x.ts` 这种一级命中，" +
+      "`fixtures/mini/app.ts` 安静放行——真仓里载荷全是深层的，等于排除整个失效而不报错",
+    apply: (s) => s.replace(
+      "return PAYLOAD_ROOT_DIRS.includes(slash === -1 ? rel : rel.slice(0, slash));",
+      "return PAYLOAD_ROOT_DIRS.includes(rel);",
+    ),
+    expectFail: "纯谓词只看 workspace 相对路径的第一段",
+  },
+  {
+    id: "map-payload-filter-not-wired",
+    src: "src/agent/map/build.ts",
+    test: "tests/map-build.test.ts",
+    desc: "谓词写好了却没接进候选面的 filter ⇒ 地图预算照旧被靶子与证据目录吃掉 67%，" +
+      "而尺的读数一格都没变——本仓「算出来不接」那一族在地图这一侧的现行样本",
+    apply: (s) => s.replace(
+      "      if (isPayloadPath(rel)) return false; // 载荷目录：地图与影响面都只该看\"在改的代码\"（出处见上面注释）\n",
+      "",
+    ),
+    expectFail: "仓库根视角：fixtures 与 outputs 被排掉，src 与同名深层目录留下",
+  },
+  {
+    id: "map-payload-exclusion-as-abs-glob",
+    src: "src/agent/map/build.ts",
+    test: "tests/map-build.test.ts",
+    desc: "把同一件事改成往 rg 的 glob 里塞 fixtures 模式（看起来更省事）⇒ rg 拿绝对路径、按绝对路径匹配，" +
+      "于是**把夹具当工作区**的那些靶子被整个掏空：边集真值判卷从此在空图上打分（假绿，比红坏）",
+    apply: (s) => s.replace(
+      'const NOISE_GLOBS = ["**/.git/**"',
+      'const NOISE_GLOBS = ["**/.git/**", "**/fixtures/**",',
+    ),
+    expectFail: "反向那一半：把夹具自己当工作区时，它不被掏空（绝对路径 glob 那种错法在这里红）",
+  },
+  /* ---- 尺自己的哨兵必须能拦住退出码（10-02 第三簇：正哨兵连着 MISS 而脚本一直退 0）---- */
+  {
+    id: "map-ruler-selfcheck-always-ok",
+    src: "scripts/lib/probe-self-check.ts",
+    test: "tests/locate-recall-ruler.test.ts",
+    desc: "哨兵那一半不拦 ⇒ 整张表的命中率照样退 0 出数，而「图里真没有它」这句话只躺在日志里；" +
+      "本仓第 N 次同一形状：判据在场、出口不在",
+    apply: (s) => s.replace("  if (!posHit) return { ok: false,", "  if (false) return { ok: false,"),
+    expectFail: "正哨兵从没命中过 ⇒ 不 ok，且明说这一列不可引用",
+  },
+  {
+    id: "map-ruler-exit-not-wired",
+    src: "scripts/probe-locate-recall.ts",
+    test: "tests/locate-recall-ruler.test.ts",
+    desc: "自检算出来了却不接退出码 ⇒ CI 与人都看不见这条红，"
+      + "下一次能力复测又会把不可引用的读数写进报告（正是本簇立案时的现行状态）",
+    apply: (s) => s.replace("if (!selfCheck.ok) process.exit(1);", "void selfCheck;"),
+    expectFail: "尺吃 lib 里那一份判据，且自检不过就退非零",
+  },
+  {
+    id: "map-ruler-only-last-budget",
+    src: "scripts/probe-locate-recall.ts",
+    test: "tests/locate-recall-ruler.test.ts",
+    desc: "命中记录只留最后一档 ⇒ 负控只要在中间某档命中过就采不到（自检对最坏的那种松手视而不见），" +
+      "而「任一档命中过」这条口径悄悄变成了「最大档命中过」",
+    apply: (s) => s.replace(
+      "if (rA > 0 || rB > 0) hitAnyBudget.set(q.id, true);",
+      "if (bi === BUDGETS.length - 1 && (rA > 0 || rB > 0)) hitAnyBudget.set(q.id, true);",
+    ),
+    expectFail: "每题的命中记录喂的是 hitAnyBudget，不是某单一档",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
