@@ -1,0 +1,17 @@
+[summary-coverage] 候选面=590 个文件（取料面＝地图那一支 scanSourceFilesAll，含载荷目录排除；帽前全量，不是 400 那一切片）
+  有摘要·未截顶＝153（25.9%） 例：tests/locate-recall-ruler.test.ts、src/agent/glm-session.ts、src/agent/map/build.ts
+  有摘要·截在帽上（信息尾被切掉那一格）＝348（59.0%） 例：scripts/probe-summary-coverage.ts、tests/context-signals.test.ts、src/agent/map/retrieve.ts
+  没有顶部注释（词面通道对它完全看不见）＝89（15.1%） 例：src/agent/ledger.ts、src/agent/loop.ts、apps/desktop/tests/channels.test.ts
+  读不到（单独一格，绝不并进「没有注释」）＝0（0.0%） 例：（无）
+  ⇒ 词面通道可见的文件＝501/590（84.9%）
+  按顶层目录（有自述＝summarized＋truncated）：
+    tests        文件  296 有自述  252（85%） 其中截顶 153｜无注释   44｜读不到 0
+    src          文件  173 有自述  139（80%） 其中截顶 102｜无注释   34｜读不到 0
+    scripts      文件  103 有自述  102（99%） 其中截顶  90｜无注释    1｜读不到 0
+    apps         文件   17 有自述    7（41%） 其中截顶   3｜无注释   10｜读不到 0
+    bin          文件    1 有自述    1（100%） 其中截顶   0｜无注释    0｜读不到 0
+[summary-coverage] 题集真值文件（去重 13 个）按同一把尺分格：
+  有摘要·未截顶＝3：src/agent/verify.ts、src/agent/map/rank.ts、src/main/settings.ts
+  有摘要·截在帽上（信息尾被切掉那一格）＝10：src/permissions/autonomy.ts、src/agent/no-progress.ts、src/agent/usage-attribution.ts、src/agent/tool-surface.ts、src/tools/snapshot.ts、src/tools/apply_patch.ts、src/main/scheduler.ts、src/agent/memory/inject.ts、src/main/sandbox.ts、src/agent/model-surface.ts
+[summary-coverage] 自检 ✅ 三个形状都数到了、哨兵落在 summarized ⇒ 上面的覆盖率可以引用
+PROBE_EXIT=0

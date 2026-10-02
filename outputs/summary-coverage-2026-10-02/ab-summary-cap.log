@@ -1,0 +1,10 @@
+# 单变量 A/B：SUMMARY_MAX_CODEPOINTS 220（本笔现值）vs 1200
+# 两臂各用**全新的 tags 缓存目录**（M2B_TAGS_DIR），否则热缓存会把上一臂的旧摘要端回来＝假读数
+# 臂 1（220）：M2B_TAGS_DIR=/tmp/dsh-cov-ab-220 node --import tsx scripts/probe-locate-recall.ts
+ARM220_EXIT=0
+PATCHED ok
+# 臂 2（1200）：M2B_TAGS_DIR=/tmp/dsh-cov-ab-1200 node --import tsx scripts/probe-locate-recall.ts
+ARM1200_EXIT=0
+RESTORE_CMP=identical
+# 残骸：
+       0
