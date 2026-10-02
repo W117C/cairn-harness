@@ -1,0 +1,18 @@
+[
+ {
+  "id": "L48-long-chain",
+  "source": "dsh-bench@local",
+  "instruction": "这个仓库是一条 48 级流水线：src/s01.js … src/s48.js 顺序相接，tests/expected.json 是每一级应有的输出。跑 tests/run.mjs 会逐级比对，遇到第一个不对的级就停（所以一次只告诉你一级的问题）。请修到 48 级全绿。注意：这是长任务，请保持推进，不要只修一部分就收工。",
+  "seed": {
+   "kind": "dir",
+   "path": "fixtures/bench/bench-long-chain-48"
+  },
+  "verifier": {
+   "command": "node tests/run.mjs"
+  },
+  "expects": [
+   "verifyOk",
+   "judgeUntouched"
+  ]
+ }
+]
