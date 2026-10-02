@@ -18,12 +18,14 @@
 //  - 本模块**不打开任何东西**：它只把差值印出来。要不要按产品的样子跑，是 `--auto-verify` 那一步，
 //    而那一步花真钱、且 `loop.ts` 注释里那句「准确率 vs `$/成功任务` 的实测口径仍未裁」至今成立 ⇒ 归用户裁。
 
-/** 跑器对一枚「产品缺省开」的键的表态。四个取值是**互斥**的，不许并成"大概差不多"：
+/** 跑器对一枚键的表态。五个取值是**互斥**的，不许并成"大概差不多"：
  *  - `same`           基准也装着这一环（读数可与生产行为对齐引用）；
  *  - `off-here`       生产装、基准**没装**（读数不许被引用成"产品行为"，本表存在的理由就是数这一列）；
+ *  - `on-here`        生产**缺省关**、这一趟靠旗标装了（反方向的那一格：读数同样不是产品缺省态，
+ *                     装它只为拿对照臂——`autoVerifyRepair` 就是这么用的）；
  *  - `not-applicable` 这一环对基准靶子在语义上不存在（例：只作用于 UI/沙箱外部的配置）；
  *  - `undeclared`     表里查无此键 ⇒ 判卷红，不是警告。 */
-export type KnobFace = "same" | "off-here" | "not-applicable" | "undeclared";
+export type KnobFace = "same" | "off-here" | "on-here" | "not-applicable" | "undeclared";
 
 export interface BenchDeclaration {
   face: Exclude<KnobFace, "undeclared">;
@@ -66,8 +68,9 @@ export const BENCH_KNOBS: Readonly<Record<string, BenchDeclaration>> = {
 /** 跑器可以按命令行**改口**的键（只有真接了的才许改口，见 loop-eval 的 `--auto-verify`）。 */
 export type KnobOverrides = Readonly<Record<string, BenchDeclaration>>;
 
-/** 只看**缺省为真**的键：这张表管的是"产品默认在线的东西，基准装没装"，
- *  缺省关的东西基准不装是正常（装了我反而要问为什么）。
+/** 行集＝**缺省为真的键 ∪ 被旗标改过口的键**。
+ *  前半是"产品默认在线的东西，基准装没装"；后半为什么也要在：缺省关的东西基准**装了**同样改变了读数
+ *  （`--auto-verify-repair` 就是这一类），漏了它这张表只会朝一个方向说实话。
  *  形参收成 `object` 而不是 `Record<string, unknown>`：事实源是 `DEFAULT_SETTINGS`，
  *  那是 interface 实例、没有字符串索引签名，硬套要调用方写 cast（cast 一写，读的就是被掰过的类型）。 */
 export function assemblyRows(
@@ -76,6 +79,7 @@ export function assemblyRows(
   overrides: KnobOverrides = {},
 ): AssemblyRow[] {
   const on = new Set(Object.entries(defaults).filter(([, v]) => v === true).map(([k]) => k));
+  for (const k of Object.keys(overrides)) on.add(k);
   return [...on].sort().map((key) => {
     const over = overrides[key];
     const base = declared[key];
@@ -107,20 +111,36 @@ export function renderAssemblyFace(rows: readonly AssemblyRow[]): string {
   return rows.map((r) => `${r.key}:${r.face}`).join(" ");
 }
 
-/** 命令行 → 表态。今天只有 `--auto-verify` 一枚能改口。
- *  为什么单独成函数（而不是跑器里内联一个三元）：这样「带不带这个旗标 ⇒ 表怎么说」能在**零花费**下判；
- *  真跑一趟量收益要花真钱，而那一步归用户裁。 */
-export function assemblyOverrides(autoVerify: boolean): KnobOverrides {
-  if (!autoVerify) return {};
-  return { autoVerify: { face: "same", why: "本趟带 --auto-verify ⇒ 收束闸与产品同档" } };
+/** 命令行 → 表态。今天有两枚能改口：`--auto-verify`（收束闸）与 `--auto-verify-repair`（红了一拍之后再要一轮）。
+ *  为什么单独成函数（而不是跑器里内联三元）：这样「带不带旗标 ⇒ 表怎么说」能在**零花费**下判；
+ *  真跑一趟量收益要花真钱，而那一步归用户裁。
+ *  配对规则只在这里判一次：返修那一枚**没有收束闸就没有对象**（产品同形——`agent-runner.ts:1764` 要两个都为真才递），
+ *  所以只带 `--auto-verify-repair` 时它不进表，跑器那边只负责把"被忽略"说出来，不再自己判一遍。 */
+export function assemblyOverrides(autoVerify: boolean, autoVerifyRepair: boolean = false): KnobOverrides {
+  const out: Record<string, BenchDeclaration> = {};
+  if (autoVerify) out.autoVerify = { face: "same", why: "本趟带 --auto-verify ⇒ 收束闸与产品同档" };
+  if (autoVerify && autoVerifyRepair) {
+    out.autoVerifyRepair = {
+      face: "on-here",
+      why: "产品缺省关（settings 的 autoVerifyRepair=false），本趟带 --auto-verify-repair ⇒ 这副读数是对照臂，不是产品缺省态",
+    };
+  }
+  return out;
 }
 
-/** 由装配表**投影**出递给 `runLoop` 的键：只有表里说 `same` 的才真装进跑器。
+/** 由装配表**投影**出递给 `runLoop` 的键：只有表里说 `same`/`on-here` 的才真装进跑器。
  *
  *  方向必须是「表 → 参数」，不能反过来。如果读数行里的表态和真正递出去的参数各算一次，
  *  表就退化成注释——`autoVerifyBeat` 在盘上 49 趟全是 false，缺的正是"表说装了、参数里得真装着"这一层。
- *  今天只投影 `autoVerify`：其余四枚（见 `BENCH_KNOBS`）在本跑器上根本没有对应的 `runLoop` 形参，
- *  投影出来就是凭空造一个没人读的键。 */
-export function runLoopKnobsFromAssembly(rows: readonly AssemblyRow[]): { autoVerify?: true } {
-  return rows.some((r) => r.key === "autoVerify" && r.face === "same") ? { autoVerify: true } : {};
+ *  今天只投影这两枚：其余表里的键（`impactAnalysis`/`promptCache`/`autoMemory`/`subagentTools`）
+ *  在本跑器上没有对应的 `runLoop` 形参，投影出来就是凭空造一个没人读的键。 */
+export function runLoopKnobsFromAssembly(rows: readonly AssemblyRow[]): { autoVerify?: true; autoVerifyRepair?: true } {
+  const installed = (key: string): boolean =>
+    rows.some((r) => r.key === key && (r.face === "same" || r.face === "on-here"));
+  const autoVerify = installed("autoVerify");
+  return {
+    ...(autoVerify ? { autoVerify: true as const } : {}),
+    // 第二道配对保护：表如果说 `autoVerifyRepair` 装了而闸没装，那是表的输入自相矛盾 ⇒ 宁可不装（fail-closed）。
+    ...(autoVerify && installed("autoVerifyRepair") ? { autoVerifyRepair: true as const } : {}),
+  };
 }

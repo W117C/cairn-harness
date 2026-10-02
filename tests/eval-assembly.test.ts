@@ -99,6 +99,36 @@ describe("表 → 递进 runLoop 的参数：不许各算一次", () => {
     }
   });
 
+  /* 反方向那一格：产品缺省**关**的键被旗标装上时，也必须进表，记成 `on-here`。
+   * 只数 off-here 的表会对这个方向沉默——而「对照臂被读成产品缺省态」是同一枚硬币的反面。 */
+  it("缺省关而这一趟装了 ⇒ 进表记 on-here（两枚旗标都在时才成立）", () => {
+    const both = assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(true, true));
+    expect(faceOf(both, "autoVerifyRepair")).toBe("on-here");
+    expect(renderAssemblyFace(both)).toContain("autoVerifyRepair:on-here");
+    // 只带返修、不带闸 ⇒ 它没有对象，不进表（配对规则只在 assemblyOverrides 判一次）
+    expect(assemblyOverrides(false, true)).toEqual({});
+    expect(faceOf(assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(false, true)), "autoVerifyRepair")).toBeUndefined();
+  });
+
+  /* 投影也吃这条配对：表自相矛盾（说有返修、没有闸）时宁可不装（fail-closed），
+   * 而不是把一个永远不会被 loop 读到的键递出去——那正是「算出来不接」的形状。 */
+  it("投影不给没闸的返修：只有闸也装着时才递 autoVerifyRepair", () => {
+    const contradictory: AssemblyRow[] = [{ key: "autoVerifyRepair", face: "on-here", why: "表自己矛盾" }];
+    expect(runLoopKnobsFromAssembly(contradictory)).toEqual({});
+    const paired: AssemblyRow[] = [
+      { key: "autoVerify", face: "same", why: "" },
+      { key: "autoVerifyRepair", face: "on-here", why: "" },
+    ];
+    expect(runLoopKnobsFromAssembly(paired)).toEqual({ autoVerify: true, autoVerifyRepair: true });
+  });
+
+  it("两枚旗标都带 ⇒ 投影出的参数两枚都装着（对照臂的真实形状）", () => {
+    const both = assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(true, true));
+    expect(runLoopKnobsFromAssembly(both)).toEqual({ autoVerify: true, autoVerifyRepair: true });
+    // 只带闸那一副必须**没有**返修：否则"缺省那副"与"对照臂"在读数上分不开
+    expect(runLoopKnobsFromAssembly(FLAGGED)).toEqual({ autoVerify: true });
+  });
+
   /* 少装的那一列是**数出来的**：这格的存在理由就是「基准比产品少装了 N 枚」要能印出来。
    * 4 → 3 这一格差值同时钉住「表里的缺省态」和「改口只影响一枚」——
    * 把 `BENCH_KNOBS.autoVerify.face` 从 off-here 抄成 same，这里立刻红。 */
@@ -133,7 +163,7 @@ describe("loop-eval 的装配接线", () => {
   /* 钉整条调用连入参，不钉函数名：只写 `assemblyRows` 的话，
    * 「算了但没把 overrides 递进去」这一变异会存活——那恰好是本案的原始形状。 */
   it("缺省表与旗标改口是同一条调用算出来的", () => {
-    expect(evalSrc).toContain("assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(AUTO_VERIFY))");
+    expect(evalSrc).toContain("assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(AUTO_VERIFY, AUTO_VERIFY_REPAIR))");
   });
 
   it("递给 runLoop 的是投影结果，不是第二个 if", () => {
@@ -166,5 +196,34 @@ describe("loop-eval 的装配接线", () => {
   it("读数每一格自带装配面：JSON 里不许只剩 autoVerifyBeat 一个孤零零的 false", () => {
     expect(evalSrc).toContain("assembly: ASSEMBLY_FACE");
     expect(evalSrc).toContain("assembly: string;");
+  });
+
+  /* 闸补的拍数：口径在 `lib/eval-validity` 的 `autoVerifyBeats`，跑器只许吃它算出来的那个值。
+   * 三条各钉一位，是因为这三种坏形状互不相同：不调 lib（第二份生产者）、布尔与计数分家、
+   * 以及旧写法被悄悄请回来。 */
+  it("闸拍口径只在 lib 里算一次：跑器必须调 autoVerifyBeats(verifies)", () => {
+    expect(evalSrc).toContain("const harnessBeats = autoVerifyBeats(verifies);");
+  });
+
+  it("Reading 两格都从同一个值来：布尔位与计数不许各读各的", () => {
+    expect(evalSrc).toContain("autoVerifyBeat: harnessBeats > 0, autoVerifyBeats: harnessBeats,");
+  });
+
+  it("旧的那份 some(auto) 判定不许回来：同一谓词两份副本迟早宽度不同", () => {
+    expect(evalSrc).not.toContain("verifies.some(");
+  });
+
+  it("读数行上印单趟闸拍：闸补了几拍不许只在 JSON 里", () => {
+    expect(evalSrc).toContain("闸拍=${String(r.autoVerifyBeats)}");
+  });
+
+  it("批次行上印 ≥2 拍那一格：返修链路走没走通要当场看得见", () => {
+    expect(evalSrc).toContain("≥2 拍的趟次");
+  });
+
+  it("返修旗标走同一条投影，配对规则不在跑器里判第二次", () => {
+    // 跑器只出声（warn），不许自己再拼一枚 `autoVerifyRepair: true` 塞进调用
+    expect(evalSrc.includes("autoVerifyRepair: true")).toBe(false);
+    expect(evalSrc).toContain("--auto-verify-repair 被忽略");
   });
 });

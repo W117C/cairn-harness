@@ -11605,16 +11605,16 @@ const MUTATIONS = [
     test: "tests/eval-assembly.test.ts",
     desc: "投影不看 face 只要键名对就装 ⇒ 缺省那副也会给 runLoop 塞 autoVerify，" +
       "「基准今天少装了」这一格被抹平，而它正是本表存在的理由",
-    apply: (s) => s.replace('r.key === "autoVerify" && r.face === "same"', 'r.key === "autoVerify"'),
+    apply: (s) => s.replace('r.key === key && (r.face === "same" || r.face === "on-here")', 'r.key === key'),
     expectFail: "缺省那副：表说没装 ⇒ runLoop 收不到 autoVerify（今日行为逐字不动）",
   },
   {
     id: "asm-projection-never-on",
     src: "scripts/lib/eval-assembly.ts",
     test: "tests/eval-assembly.test.ts",
-    desc: "投影恒返回空对象 ⇒ 表说装了、参数里却什么都没有，读数与装配第二次分叉" +
+    desc: "投影恒返空对象 ⇒ 表说装了、参数里却什么都没有，读数与装配第二次分叉" +
       "（本案原始形状的反向：从前是表不存在，现在是表说谎而参数照旧）",
-    apply: (s) => s.replace('? { autoVerify: true } : {};', '? {} : {};'),
+    apply: (s) => s.replace("...(autoVerify ? { autoVerify: true as const } : {}),", "...(false ? { autoVerify: true as const } : {}),"),
     expectFail: "带 --auto-verify 那副：表改口成 same ⇒ 递出去的参数里真装着 autoVerify",
   },
   {
@@ -11644,7 +11644,7 @@ const MUTATIONS = [
     test: "tests/eval-assembly.test.ts",
     desc: "`--auto-verify` 进了命令行却不改口 ⇒ 旗标成了装饰，带它跑出来的读数与不带它一模一样，" +
       "而下一次裁决「准确率 vs 每成功任务花多少」要的就是这两副对照",
-    apply: (s) => s.replace("  if (!autoVerify) return {};", "  if (true) return {};"),
+    apply: (s) => s.replace("  if (autoVerify) out.autoVerify =", "  if (false) out.autoVerify ="),
     expectFail: "少装计数：缺省四枚、带旗标三枚，且差的就是 autoVerify 那一枚",
   },
   {
@@ -11666,7 +11666,7 @@ const MUTATIONS = [
     desc: "算了 overrides 却没递进 assemblyRows（第三个实参写没）⇒ 旗标改了口而表没跟上；" +
       "本仓「算出来不接」那一族在这里的形状是少一个入参",
     apply: (s) => s.replace(
-      "assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(AUTO_VERIFY))",
+      "assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(AUTO_VERIFY, AUTO_VERIFY_REPAIR))",
       "assemblyRows(DEFAULT_SETTINGS)",
     ),
     expectFail: "缺省表与旗标改口是同一条调用算出来的",
@@ -11709,6 +11709,61 @@ const MUTATIONS = [
       "事后拿 JSON 做 A/B 的人只剩一个孤零零的 `autoVerifyBeat:false`（归因面与读数面分家那一族）",
     apply: (s) => s.replace("    assembly: ASSEMBLY_FACE,", "    assembly: \"\","),
     expectFail: "读数每一格自带装配面：JSON 里不许只剩 autoVerifyBeat 一个孤零零的 false",
+  },
+  /* ---- 第二拍（返修）与闸补拍的计数（10-02 第二簇，任务 #12）---- */
+  {
+    id: "asm-pairing-rule-dropped",
+    src: "scripts/lib/eval-assembly.ts",
+    test: "tests/eval-assembly.test.ts",
+    desc: "只带返修旗标也把它写进表 ⇒ 读数行上一枚没人承诺过的 `on-here`，而闸根本没装——" +
+      "产品那条配对（两个都为真才递）在这里被单方面放宽",
+    apply: (s) => s.replace("  if (autoVerify && autoVerifyRepair) {", "  if (autoVerifyRepair) {"),
+    expectFail: "缺省关而这一趟装了 ⇒ 进表记 on-here（两枚旗标都在时才成立）",
+  },
+  {
+    id: "asm-projection-pairing-failopen",
+    src: "scripts/lib/eval-assembly.ts",
+    test: "tests/eval-assembly.test.ts",
+    desc: "投影这一头的配对保护摘掉 ⇒ 表自相矛盾（有返修、没闸）时照样把 `autoVerifyRepair` 递进 runLoop，" +
+      "而 loop 那一边那一拍永远走不到（递了一个没对象的键）",
+    apply: (s) => s.replace('...(autoVerify && installed("autoVerifyRepair") ?', '...(installed("autoVerifyRepair") ?'),
+    expectFail: "投影不给没闸的返修：只有闸也装着时才递 autoVerifyRepair",
+  },
+  {
+    id: "asm-on-here-not-counted-as-installed",
+    src: "scripts/lib/eval-assembly.ts",
+    test: "tests/eval-assembly.test.ts",
+    desc: "投影只认 `same` ⇒ `on-here` 那一枚（对照臂）永远装不上：表上写着装了、参数里没有，" +
+      "而读数会被当成对照臂引用——方向与本簇第一格相反的分叉",
+    apply: (s) => s.replace('(r.face === "same" || r.face === "on-here")', '(r.face === "same")'),
+    expectFail: "两枚旗标都带 ⇒ 投影出的参数两枚都装着（对照臂的真实形状）",
+  },
+  {
+    id: "asm-beats-count-truthy",
+    src: "scripts/lib/eval-validity.ts",
+    test: "tests/eval-validity.test.ts",
+    desc: "计数从 `=== true` 放宽成 truthy ⇒ 脏值（1、「true」这类）被算成闸补的一拍，" +
+      "而生产者只会写 `true`——这一格多出来的分子没有对应的事件",
+    apply: (s) => s.replace("n + (r.auto === true ? 1 : 0)", "n + (r.auto ? 1 : 0)"),
+    expectFail: "脏值不算一拍：生产者只会写 true，truthy 判定会把 1／「true」收进分子",
+  },
+  {
+    id: "asm-beats-count-not-wired",
+    src: "scripts/loop-eval.ts",
+    test: "tests/eval-assembly.test.ts",
+    desc: "计数算出来却把读数那位写成常数 0 ⇒ 「算出来没出口」原样复发（规则 245 那一族）：" +
+      "JSON 里那一格永远 0，≥2 拍这条链路有没有走通再一次变成说法",
+    apply: (s) => s.replace("autoVerifyBeat: harnessBeats > 0, autoVerifyBeats: harnessBeats,", "autoVerifyBeat: harnessBeats > 0, autoVerifyBeats: 0,"),
+    expectFail: "Reading 两格都从同一个值来：布尔位与计数不许各读各的",
+  },
+  {
+    id: "asm-beats-second-producer",
+    src: "scripts/loop-eval.ts",
+    test: "tests/eval-assembly.test.ts",
+    desc: "跑器里请回旧的那份 `some(auto===true)` 自己折算 ⇒ 同一谓词两份副本、宽度不同（第十三族）：" +
+      "lib 改了口径而跑器照旧，读数和判卷各说各话",
+    apply: (s) => s.replace("const harnessBeats = autoVerifyBeats(verifies);", "const harnessBeats = verifies.some((v) => v.auto === true) ? 1 : 0;"),
+    expectFail: "旧的那份 some(auto) 判定不许回来：同一谓词两份副本迟早宽度不同",
   },
 ];
 

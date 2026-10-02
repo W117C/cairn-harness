@@ -1,0 +1,20 @@
+### M1 scripts/lib/eval-assembly.ts
+  红：× 投影不给没闸的返修：只有闸也装着时才递 autoVerifyRepair ／ × 两枚旗标都带 ⇒ 投影出的参数两枚都装着（对照臂的真实形状）
+  汇总：Tests  2 failed | 38 passed (40)
+  复原逐字节一致=true
+### M2 scripts/lib/eval-assembly.ts
+  红：× 缺省关而这一趟装了 ⇒ 进表记 on-here（两枚旗标都在时才成立）
+  汇总：Tests  1 failed | 39 passed (40)
+  复原逐字节一致=true
+### M3 scripts/lib/eval-validity.ts
+  红：× 脏值不算一拍：生产者只会写 true，truthy 判定会把 1／「true」收进分子
+  汇总：Tests  1 failed | 39 passed (40)
+  复原逐字节一致=true
+### M4 scripts/loop-eval.ts
+  红：× 递给 runLoop 的是投影结果，不是第二个 if
+  汇总：Tests  1 failed | 39 passed (40)
+  复原逐字节一致=true
+### M5 scripts/loop-eval.ts
+  红：× Reading 两格都从同一个值来：布尔位与计数不许各读各的
+  汇总：Tests  1 failed | 39 passed (40)
+  复原逐字节一致=true

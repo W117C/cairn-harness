@@ -28,7 +28,7 @@ import { aggregateFeasibility, deriveVerifierProbe, feasibility, fromSweBenchJso
 import { ClarifyGate, PlanGate } from "../src/agent/gates";
 // 「这趟跑算不算数」——纯函数、可单测。分母口径见那边的模块头：
 // **未起步 / 被 provider 打断的趟次不许进分母**（限流打断不能记成"模型没做到"）。
-import { costSplit, moneyText, PRICE_UNKNOWN, priceFace, runValidity, tally } from "./lib/eval-validity";
+import { autoVerifyBeats, costSplit, moneyText, PRICE_UNKNOWN, priceFace, runValidity, tally } from "./lib/eval-validity";
 // 重拨那一格：判据与分母共用同一个白名单（`providerInterruptOf`），等待有帽、帽外明说不重拨。
 import { retryVerdict, withProviderRetry } from "./lib/eval-retry";
 // held-out 验收面：可见测试是任务书明写着要复现的那些 ⇒ 「哄绿它们」与「修对根因」同分。
@@ -73,9 +73,18 @@ const ONLY = pick("--only", "").split(",").map((s) => s.trim()).filter(Boolean);
  *  今天仍然成立：那道裁决要一次带凭据的真跑，属用户裁，不由这把尺替用户翻。
  *  递进 `runLoop` 的键由**这张表投影**（`runLoopKnobsFromAssembly`），不另起一条 if：
  *  表和参数各算一次，表就成了注释——那正是 `autoVerifyBeat` 49 趟全 false 没被看见的原因。
+ *  `--auto-verify-repair` 是第二拍（第一拍代码红且模型真改过盘 ⇒ 再验一次）：产品缺省关，
+ *  所以它进表时记的是 `on-here`（"这副读数是对照臂"），而且**只有配上收束闸才生效**——
+ *  配对规则判一次就够（在 `assemblyOverrides` 里），这边只负责把"带了但被忽略"说出来。
  *  有未表态的缺省开键 ⇒ **拒绝出数**（分母不完整时任何分数都是假的，与 `--tasks` 解析报错同一口径）。 */
 const AUTO_VERIFY = argv.includes("--auto-verify");
-const ASSEMBLY = assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(AUTO_VERIFY));
+const AUTO_VERIFY_REPAIR = argv.includes("--auto-verify-repair");
+// 配对规则只在 `assemblyOverrides` 判一次，这里负责**出声**：带了返修旗标却没带闸 ⇒ 它没有对象，
+// 安静吞掉会让人以为对照臂真的两枚都开着。排在旗标解析这一行旁边，是为了 `--feasibility` 那条路也听得到。
+if (AUTO_VERIFY_REPAIR && !AUTO_VERIFY) {
+  console.warn("[loop-eval] --auto-verify-repair 被忽略：返修那一拍接在收束闸之后，没装闸就没有对象（要它请同时带 --auto-verify）");
+}
+const ASSEMBLY = assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(AUTO_VERIFY, AUTO_VERIFY_REPAIR));
 const ASSEMBLY_UNDECLARED = undeclaredKnobs(ASSEMBLY);
 const ASSEMBLY_FACE = renderAssemblyFace(ASSEMBLY);
 const BENCH_RUNLOOP_KNOBS = runLoopKnobsFromAssembly(ASSEMBLY);
@@ -303,7 +312,11 @@ interface Reading {
   toolCalls: number; toolFailures: number; repeatedSameAction: number;
   firstWriterIndex: number; readsBeforeFirstWrite: number;
   clarified: number; planned: number; plannedBeforeWrite: boolean;
-  verified: number; verifyOkLast: boolean | null; autoVerifyBeat: boolean;
+  verified: number; verifyOkLast: boolean | null;
+  /** 收束闸补了几拍（口径在 `lib/eval-validity.ts` 的 `autoVerifyBeats`，布尔位从它派生）。
+   *  为什么要数出来：布尔把「1 拍」与「2 拍（红了一拍、模型真改过盘之后重验）」压成同一个 true，
+   *  而返修那一环正是能力 5 要量的那一格——没有计数，`--auto-verify-repair` 跑出来的对照臂与不带它长得一样。 */
+  autoVerifyBeats: number; autoVerifyBeat: boolean;
   wroteTests: boolean; touchedJudge: boolean; onlySrcChanged: boolean;
   /** held-out（隐藏验收）观测：装不上的错误清单 + 跑出来的结果。
    *  `heldOutRun` 为 undefined = 这一格没跑（任务集没给隐藏面，或文件没装齐）。
@@ -425,6 +438,8 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
   const results = new Map(ev.filter((e) => e.type === "tool_result").map((e) => [e.callId, e as Extract<AgentEvent, { type: "tool_result" }>]));
   const usage = ev.filter((e) => e.type === "usage") as Extract<AgentEvent, { type: "usage" }>[];
   const verifies = ev.filter((e) => e.type === "verify_result") as Extract<AgentEvent, { type: "verify_result" }>[];
+  // 闸补的拍数：口径只在这里算一次，下面布尔位与读数行都吃这个值（同一谓词抄两份是本仓反复点名的那一族）。
+  const harnessBeats = autoVerifyBeats(verifies);
   const writers = ev.map((e, i) => ({ e, i })).filter(({ e }) => e.type === "tool_call" && isWriter((e as Extract<AgentEvent, { type: "tool_call" }>).name));
   const firstWriterIndex = writers.length > 0 ? writers[0]!.i : -1;
   const readsBeforeFirstWrite = firstWriterIndex < 0 ? 0
@@ -528,7 +543,7 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
     plannedBeforeWrite: firstPlanIdx >= 0 && (firstWriterIndex < 0 || firstPlanIdx < firstWriterIndex),
     verified: calls.filter((c) => c.name === "verify").length,
     verifyOkLast: verifies.length > 0 ? verifies[verifies.length - 1]!.ok : null,
-    autoVerifyBeat: verifies.some((v) => (v as { auto?: boolean }).auto === true),
+    autoVerifyBeat: harnessBeats > 0, autoVerifyBeats: harnessBeats,
     wroteTests, touchedJudge, onlySrcChanged, changedFiles: changed, exitError, resources,
     heldOutInstallErrs, heldOutRun,
     assembly: ASSEMBLY_FACE,
@@ -668,7 +683,7 @@ for (let rep = 1; rep <= REPS; rep++) {
     console.log(
       `[loop-eval] ${t.id} rep${String(rep)} ${verdict} 起点=${r.seedVerifyOk ? "绿" : "红"} `
       + `读先于写=${r.readsBeforeFirstWrite} clarify=${String(r.clarified)} 先批后写=${r.plannedBeforeWrite ? "Y" : "N"} `
-      + `verify=${String(r.verified)}→${String(r.verifyOkLast)} 隐藏=${HELD_OUT_TOKEN[judgeHeldOut(t.spec?.heldOut, r.heldOutRun, r.heldOutInstallErrs).state]} `
+      + `verify=${String(r.verified)}→${String(r.verifyOkLast)} 闸拍=${String(r.autoVerifyBeats)} 隐藏=${HELD_OUT_TOKEN[judgeHeldOut(t.spec?.heldOut, r.heldOutRun, r.heldOutInstallErrs).state]} `
       + `工具=${String(r.toolCalls)}/${String(r.toolFailures)}败 `
       + `重复=${String(r.repeatedSameAction)} 请求=${String(r.requests)} 拨数=${String(r.attempts)} tok=${String(r.tokensIn)}/${String(r.tokensOut)} `
       + `${moneyText(r.cny)} ${String(Math.round(r.seconds))}s 内存峰=${String(r.resources.rssPeakMb)}MB/${String(r.resources.procPeak)}进程 cpu=${String(r.resources.cpuMs)}ms`
@@ -700,4 +715,10 @@ if (t0.refuse) {
     + `〔按算数趟次 ¥${money.validSpend.toFixed(4)} ÷ 达标 ${String(t0.pass)} 算〕`);
 }
 await writeFile(join(ROOT, OUT, "readings.json"), JSON.stringify(rows, null, 1), "utf8");
+/* 返修那一环的可读出口：`≥2 拍` 才是「第一拍代码红 ⇒ 模型真改过盘 ⇒ 再验一次」那条链路走通的样子。
+ *  全 0 时先看装配面那一行——是闸没装（off-here），还是装了而没触发（模型自己验过了）。 */
+const beatCounts = rows.map((x) => x.r.autoVerifyBeats);
+console.log(`[loop-eval] 闸补拍：合计 ${String(beatCounts.reduce((a, b) => a + b, 0))}`
+  + `／单趟最多 ${String(beatCounts.length > 0 ? Math.max(...beatCounts) : 0)}`
+  + `／≥2 拍的趟次 ${String(beatCounts.filter((n) => n >= 2).length)}（共 ${String(beatCounts.length)} 趟）`);
 console.log("[loop-eval] 读数写出 " + OUT + "/readings.json");

@@ -1,0 +1,29 @@
+# 零花费三态对照（2026-10-02 11:12 本机现读，命令：node --import tsx scripts/loop-eval.ts --feasibility <flags>）
+
+### flags=[--auto-verify --auto-verify-repair]
+[feasibility] I1                         不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] I2                         不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] I3                         不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] I4                         不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] 可跑 0 / 分母 4（未发任何模型请求 ⇒ 零花费）
+[feasibility] 装配面（产品缺省开的键 ↔ 本跑器）：autoMemory:off-here autoVerify:same autoVerifyRepair:on-here impactAnalysis:off-here promptCache:off-here subagentTools:same
+⇒ 4 条任务全部不可跑 ⇒ 基准读数无从谈起，先看 blockers 里缺什么
+
+### flags=[--auto-verify-repair]
+[loop-eval] --auto-verify-repair 被忽略：返修那一拍接在收束闸之后，没装闸就没有对象（要它请同时带 --auto-verify）
+[feasibility] I1                         不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] I2                         不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] I3                         不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] I4                         不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] 可跑 0 / 分母 4（未发任何模型请求 ⇒ 零花费）
+[feasibility] 装配面（产品缺省开的键 ↔ 本跑器）：autoMemory:off-here autoVerify:off-here impactAnalysis:off-here promptCache:off-here subagentTools:same
+⇒ 4 条任务全部不可跑 ⇒ 基准读数无从谈起，先看 blockers 里缺什么
+
+### flags=[]
+[feasibility] I1                         不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] I2                         不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] I3                         不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] I4                         不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+[feasibility] 可跑 0 / 分母 4（未发任何模型请求 ⇒ 零花费）
+[feasibility] 装配面（产品缺省开的键 ↔ 本跑器）：autoMemory:off-here autoVerify:off-here impactAnalysis:off-here promptCache:off-here subagentTools:same
+⇒ 4 条任务全部不可跑 ⇒ 基准读数无从谈起，先看 blockers 里缺什么

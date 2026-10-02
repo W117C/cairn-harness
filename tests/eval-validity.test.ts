@@ -11,7 +11,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { costSplit, moneyText, PRICE_UNKNOWN, priceFace, runValidity, tally, WHY_INTERRUPTED_PREFIX, WHY_NOT_STARTED } from "../scripts/lib/eval-validity";
+import { autoVerifyBeats, costSplit, moneyText, PRICE_UNKNOWN, priceFace, runValidity, tally, WHY_INTERRUPTED_PREFIX, WHY_NOT_STARTED } from "../scripts/lib/eval-validity";
 
 const row = (requests: number, ok: boolean, fails: string[] = []) =>
   ({ r: { requests }, g: { ok, fails } });
@@ -145,5 +145,25 @@ describe("判卷分母：环境打断不算数，模型失败照旧算数", () =
     // 反向：那两位缺省价一旦被删掉的路径走回来（env 缺席就吃常数），这一条要红
     expect(src).not.toContain('EVAL_PRICE_IN ?? "0.8"');
     expect(src).toContain("实付=\${PRICE_UNKNOWN}");
+  });
+});
+
+/* 能力 5 的返修那一拍：从前只有一个布尔位（`some(auto===true)`），1 拍与 2 拍长得一模一样，
+ * 于是「红了一拍 ⇒ 模型真改过盘 ⇒ 再验一次」这条链路在读数里没有出口。
+ * 这里钉的是计数本身：只数生产者写下的 `auto:true`（`src/agent/loop.ts` 的 verifyBeat 是唯一落点）。 */
+describe("闸补拍的计数（autoVerifyBeats）", () => {
+  it("空表读成 0：这一格要进直方图，缺值会被读成「没有这一列」", () => {
+    expect(autoVerifyBeats([])).toBe(0);
+  });
+
+  it("只数带 auto:true 的那几拍（缺席与 false 都是模型自调，不算闸的账）", () => {
+    expect(autoVerifyBeats([{ auto: undefined }, { auto: false }, { auto: true }, { auto: true }])).toBe(2);
+    // 两态必须给不同的数：1 拍与 2 拍压成同一个值就是这格存在的理由
+    expect(autoVerifyBeats([{ auto: true }])).toBe(1);
+  });
+
+  it("脏值不算一拍：生产者只会写 true，truthy 判定会把 1／「true」收进分子", () => {
+    const dirty = [{ auto: 1 as unknown as boolean }, { auto: "true" as unknown as boolean }, { auto: null as unknown as boolean }];
+    expect(autoVerifyBeats(dirty)).toBe(0);
   });
 });

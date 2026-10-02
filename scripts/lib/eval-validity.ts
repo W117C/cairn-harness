@@ -52,6 +52,17 @@ export function runValidity(run: RunFace, fails: readonly string[]): Validity {
   return { valid: true };
 }
 
+/** 收束闸**真的补了几拍**：只数带 `auto:true` 的 `verify_result`（生产者＝`src/agent/loop.ts` 的 `verifyBeat`，
+ *  它把 auto 摊进事件那一句是唯一的落点）。
+ *
+ *  为什么要有计数而不是布尔：布尔把「1 拍」与「2 拍（第一拍代码红 ⇒ 模型真改过盘之后重验）」压成同一个 `true`，
+ *  而**返修那一环正是能力 5 要量的东西**——盘上 49 趟读数的 `verified` 直方图里，2 次以上只有 2 趟，
+ *  全靠模型自调；闸补的拍数从来没有可数的出口（本仓「算出来没出口」那一族，规则 245 同形）。
+ *  口径交给这里一处：跑器那边的布尔位从这里派生，不另写一遍 `some(...)`（同一谓词两份副本宽度不同＝第十三族）。 */
+export function autoVerifyBeats(rows: readonly { auto?: boolean }[]): number {
+  return rows.reduce((n, r) => n + (r.auto === true ? 1 : 0), 0);
+}
+
 /** 汇总口径：分母只数**算数**的趟次；一趟都不算数时**拒绝出数**（不许印 0/0 或 0/N）。 */
 export function tally(
   rows: readonly { r: RunFace; g: { ok: boolean; fails: string[] } }[],
