@@ -1086,8 +1086,9 @@ const MUTATIONS = [
     id: "impact-closure-glob-broken",
     src: "src/agent/impact/index.ts",
     test: "tests/impact-admission.test.ts",
-    desc: "波及闭包的入面从 glob 匹配退化成整串相等（目录型 resources 声明\n 再也算不出波及）",
-    apply: (x) => x.replace("if (!globs.some((g) => globMatchesPath(g, file))) continue;", "if (!globs.includes(file)) continue;"),
+    desc: "波及闭包的入面从 glob 匹配退化成整串相等（目录型 resources 声明\n 再也算不出波及）。第 306 页把这段循环抽成 " +
+      "`closureFilesOf` 之后，针脚跟着搬到 `affectedFilesOf` 的入面那一行（**不是**退回旧写法讨好门）",
+    apply: (x) => x.replace("graph.files.filter((file) => globs.some((g) => globMatchesPath(g, file)))", "graph.files.filter((file) => globs.includes(file))"),
     expectFail: "目录 glob 把整个子树的波及并进来",
   },
   {
@@ -12210,6 +12211,19 @@ const MUTATIONS = [
       "if (false) return null;",
     ),
     expectFail: "版本号不符的 artifact 即使字段齐全也按 miss（只加字段不认号＝老图整层复活）",
+  },
+  {
+    id: "impact-lease-closure-bypasses-attribution",
+    src: "src/agent/impact/index.ts",
+    test: "tests/impact-attribution.test.ts",
+    desc: "波及闭包（＝spawn 准入那把语义租约的冲突预测器）绕过 `upward` 直接吃名字图 ⇒ " +
+      "读端与注入面已经按归属收窄，租约那条支继续把 `node:fs` 的同名调用方算成冲突源：" +
+      "同一张图在三个消费者身上给出三种宽窄（第十三族「只硬化一支」的第四个实例）",
+    apply: (s) => s.replace(
+      "for (const site of upward(graph, sym)) out.add(site.file);",
+      "for (const site of graph.refs.get(sym) ?? []) out.add(site.file);",
+    ),
+    expectFail: "闭包只算归得到的引用方：绑到外部包的那一处掉出，真 import 与没有任何绑定的都留着（宽窄两臂同一张图）",
   },
 ];
 

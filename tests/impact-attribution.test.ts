@@ -22,7 +22,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import {
   attributionNote, attributeRefToDef, bindingSourceKey, emptyAttributionStats,
 } from "../src/agent/impact/attribution.js";
-import { buildImpact, contextNoteFor, downward, ImpactUnavailableError, upward, type ImpactGraph } from "../src/agent/impact/index.js";
+import { buildImpact, closureFilesOf, contextNoteFor, downward, ImpactUnavailableError, upward, type ImpactGraph } from "../src/agent/impact/index.js";
 import { loadImpactIndex, saveImpactIndex, IMPACT_INDEX_SCHEMA_VERSION } from "../src/agent/impact/persist.js";
 import { __resetLangCache, __resetQueryCache } from "../src/agent/map/parse.js";
 import { TAGS_EXTRACT_VERSION } from "../src/agent/map/parse.js";
@@ -247,6 +247,35 @@ describe("tags 缓存与持久化索引都不许只带一个出口", () => {
 });
 
 // ---- 读端文案与接线 ----
+
+describe("语义租约的波及闭包（这条判据的第三个消费者，第 306 页）", () => {
+  it("闭包只算归得到的引用方：绑到外部包的那一处掉出，真 import 与没有任何绑定的都留着（宽窄两臂同一张图）", async () => {
+    const g = await buildFour();
+    const bare: ImpactGraph = { ...g, nameSources: new Map() };
+    const narrow = closureFilesOf(g, ["src/ledger.ts"]);
+    const wide = closureFilesOf(bare, ["src/ledger.ts"]);
+    // 阳性对照：真的从这份定义 import 过来的 ⇒ 窄闭包里必须有它（窄过头＝把真冲突放过去）
+    expect(narrow, "consumer.ts 的 readFile 就是从 ledger.ts 绑进来的").toContain("src/consumer.ts");
+    // 全局脚本形状（没有任何 import 绑这个名字）＝没有反证 ⇒ 照旧算波及
+    expect(narrow, "legacy.js 拿不出反证 ⇒ 保守计入").toContain("src/legacy.js");
+    // 阴性对照：那处用的是 node:fs/promises 的同名函数 ⇒ 不该再被当成冲突源
+    expect(narrow, "反证成立：nodeuser.ts 那处与图上任何一份定义都归不上").not.toContain("src/nodeuser.ts");
+    // 已登记的口径＝**任一定义命中即留**的并集：otherdef.ts 那处归得到 third.ts 那份定义，
+    // 所以它仍算 ledger.ts 的冲突源。这一格是任务 #19 要收的口子（按 def 逐条筛），
+    // 今天把它钉在这里，是为了让"改窄"那天有一个人能红——不是把它当正确行为藏起来。
+    expect(narrow, "并集口径（第 306 页现状）：它归得到另一份定义 ⇒ 仍进闭包").toContain("src/otherdef.ts");
+    // 两态必须不同输出（宽＝接第 305 页之前的行为，走的是同一个函数，不是探针另算一遍）
+    expect(wide.length, "同一张图抹掉落料面 ⇒ 闭包回到全宽").toBeGreaterThan(narrow.length);
+    for (const f of narrow) expect(wide).toContain(f);
+  });
+
+  it("闭包只有一支：affectedFilesOf 走 closureFilesOf，不内联第二份循环", () => {
+    const idx = readFileSync(fileURLToPath(new URL("../src/agent/impact/index.ts", import.meta.url)), "utf8");
+    expect(idx).toMatch(/return closureFilesOf\(graph, declared\);/);
+    // 结构钉：并入闭包那一行只许出现一次。再抄一份（哪怕带判据）就是"两份同源循环各自漂"
+    expect((idx.match(/out\.add\(site\.file\)/gu) ?? []).length, "波及闭包的并入行只有一处").toBe(1);
+  });
+});
 
 describe("回注文案：三态与同名歧义各说各的", () => {
   const base = {

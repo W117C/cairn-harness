@@ -540,6 +540,22 @@ export function globMatchesPath(glob: string, path: string): boolean {
   return new RegExp("^" + re + "$").test(p);
 }
 
+/** 一批（已在图内的）文件 ⇒ 它们的波及闭包（含自身，排序去重）。
+ *  抽出来的理由：租约那条支以前把这段循环写在 `affectedFilesOf` 体内，判卷与探针要量它只能**自己再算一遍**
+ *  ——第 305 页的归属判据接进 `upward` 之后，闭包跟着变窄，而当时没有任何一个观测者走的是生产那一条
+ *  （第十三族③：同一位置双向偏差）。收成一处，两臂（宽/窄）与真仓读数都从这一个函数取。 */
+export function closureFilesOf(graph: ImpactGraph, files: readonly string[]): string[] {
+  const out = new Set<string>();
+  for (const file of files) {
+    out.add(file);
+    for (const sym of graph.defs.keys()) {
+      if (!(graph.defs.get(sym) ?? []).some((d) => d.file === file)) continue;
+      for (const site of upward(graph, sym)) out.add(site.file);
+    }
+  }
+  return [...out].sort();
+}
+
 /** 声明「要写这些 glob」⇒ 实际会波及哪些文件（含被声明文件自身，排序去重）。
  *  grammar/索引不可用 ⇒ 抛 ImpactUnavailableError（调用方按降级处理，不静默返回空集）。
  *
@@ -563,14 +579,6 @@ export async function affectedFilesOf(
         "⇒ 下面的波及闭包可能不完整，**空波及不等于无冲突**",
     );
   }
-  const out = new Set<string>();
-  for (const file of graph.files) {
-    if (!globs.some((g) => globMatchesPath(g, file))) continue;
-    out.add(file);
-    for (const sym of graph.defs.keys()) {
-      if (!(graph.defs.get(sym) ?? []).some((d) => d.file === file)) continue;
-      for (const site of upward(graph, sym)) out.add(site.file);
-    }
-  }
-  return [...out].sort();
+  const declared = graph.files.filter((file) => globs.some((g) => globMatchesPath(g, file)));
+  return closureFilesOf(graph, declared);
 }
