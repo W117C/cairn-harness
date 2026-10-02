@@ -94,6 +94,12 @@ const IDS = [
   "lesson-skip-note-dropped",
   "lesson-skip-note-name-whitespace-unfolded",
   "topic-compliance-predicate-decoupled-from-validator",
+  // 第 317 页：绑定通道从三件加到五件（③点名用例标题／⑤符号区分度），加上一格真分支的证人。
+  // `claim-binding-accepts-symbol-unreferenced-by-judge` 是**重指过针脚**的老锚点（文件级 ⇒ 用例体内），
+  // 它本来就在这张名单里，会跟着重新杀一次。
+  "claim-binding-accepts-title-not-a-case",
+  "claim-binding-symbol-specificity-guard-dropped",
+  "eval-feasibility-no-verifier-branch-silent",
 ];
 
 // 一个 JS 字符串字面量的正则形状（双引号、单引号两支）。本笔 14 条改法都不含反引号写法，

@@ -25,6 +25,7 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 import { trackedExistingFiles } from "./lib/scan-scope.js";
+import { testCaseBody, vitestTitlePatterns, vitestTitles } from "./lib/mutate-gates.js";
 import { discoverPlugins } from "../src/agent/plugins/discover.js";
 import { expandSkillInvocation, skillInvokeName } from "../src/agent/plugins/skills.js";
 import { computePrune } from "../src/agent/prune.js";
@@ -209,16 +210,18 @@ export const CLAIM_MARKS: readonly string[] = [
 ];
 
 /** 欠证人的能力断言＝**存量帽**（只准调低）。
- *  现读 23 条（绑定通道之后）。帽只往下走过四档，每一档都留了取料面：
+ *  现读 18 条（四条件绑定通道之后）。帽只往下走过五档，每一档都留了取料面：
  *    29 第 311 页开张现读 → `outputs/terminal-audience-2026-10-03/measure-claims.log`
  *    28 第 312 页补 LESSONS 那句的证人 → `outputs/lesson-empty-evidence-2026-10-03/claims-recheck.log`
  *    25 第 313 页补换路提示两支文案 + no-progress 那句 → `outputs/repeat-nudge-honesty-2026-10-03/claims-recheck.log`
  *    23 第 314 页开绑定通道，sidechat 那两句按执行端符号配对 → `outputs/claim-binding-2026-10-03/measure.log`
- *  最新一档的五个数：面 45、模型可见 43、原句证人 13、绑定 2、挑不出段 5（四态相加＝分母）。
+ *    18 第 317 页绑定通道加"点名用例＋符号区分度"，四格按新通道配对、一格补了原句证人 →
+ *       `outputs/claim-binding-tighten-2026-10-03/claims-after.log`
+ *  最新一档的五个数：面 45、模型可见 43、原句证人 14、绑定 6、挑不出段 5（四态相加＝分母）。
  *  计数类不留余量；补了证人不跟着把帽调下来同样要红。
  *  注意这一格的取料含 `tests/**` 全文——**判卷自己抄的那句生产原文也会当证人**，
  *  所以本文件的夹具一律用「探针假句……」这种对不上任何生产文案的串（第 311 页实测：照抄原句会让分母从 29 掉到 26）。 */
-export const CLAIM_UNWITNESSED_CAP = 23;
+export const CLAIM_UNWITNESSED_CAP = 18;
 
 /** 证人候选段：句里**所有**够长的连续中文（先把 `${…}` 插值挖掉，再按非中文断开），门槛 6 字。
  *  为什么交"每一段"而不是"最长那一段"：一句能力断言往往分好几层，判卷通常只点其中一层
@@ -295,25 +298,43 @@ export function claimWitnessFindings(
  * 判卷也真在用它——可证人写的是「三个写向工具不在 sidechat 工具表里」，与作者那串中文一个字都不重合
  * ⇒ 上面那张网只能报「欠证人」。这张表就是把"这句话背后那个开关"变成可机器核的配对。
  *
- * 它**不许**用「把原句抄进测试」来降数：那只会骗过匹配、什么都不证明。这里成立的条件是三件事同时为真
+ * 它**不许**用「把原句抄进测试」来降数：那只会骗过匹配、什么都不证明。这里成立的条件是四件事同时为真
  *   ① 那一格还在现读的欠证人清单里（那句话改名/被删 ⇒ 绑定是白登记，出声）；
  *   ② `symbol` 真出现在那句话所在的那个源文件里（句子背后确有这么个开关，不是凭印象）；
- *   ③ `symbol` 真出现在被指认的那份判卷里（那条判卷确实在用这个开关，散文不算）。
- * 缺任何一件 ⇒ 这一格**仍算欠证人**，且这条绑定自己上报原因。`why` 给人复核，尺不判它。 */
+ *   ③ `testCase` 是 `testFile` 里**一条用例的标题**（取 body 用的是 `mutate-gates` 那份共用抽取，不另抄口径）；
+ *   ④ 那条用例的**体内**引用了 `symbol`（它确实在按这个开关判，不是同文件里另一条顺手提到）。
+ * 缺任何一件 ⇒ 这一格**仍算欠证人**，且这条绑定自己上报原因。`why` 给人复核，尺不判它。
+ *
+ * ③④ 是第 317 页补上去的。原来只有"文件级"那两件（符号在这个判卷文件里出现过），而**面的符号名越通用就越空**：
+ * `src/tools/write_file.ts#run`、`src/agent/glm-session.ts#specs` 这种格，任何一条调过工具入口的判卷都能满足它 ⇒
+ * 那张表成了"随便填个两边都存在的词就能降帽"的空头支票。指到用例那一层，登记就必须说得出"哪一条判它"。
+ * ⑤ 同页补：光指到用例还不够——`run` 在 295 份判卷里有 130 份提到它，符号本身没有区分度时，
+ * ③④ 只是把蒙混的成本降低，没有取消 ⇒ 用一个"提到它的判卷文件数"帽把这类符号直接拒掉（见 `BINDING_SYMBOL_MAX_JUDGE_FILES`）。 */
 export interface ClaimBinding {
   /** 面的单位与 `claimWitnessFindings` 一致：`file#fn｜needle`。 */
   face: string;
   symbol: string;
   testFile: string;
+  /** 那份判卷里**具体一条用例的标题**（与 `mutate-verify` 的 `expectFail` 同形，允许带占位符的标题）。 */
+  testCase: string;
   why: string;
 }
 
 export interface BindingMaterial {
   /** 源文件路径 → 正文（只有 face 所属那一支会被查）。 */
   src: ReadonlyMap<string, string>;
-  /** 判卷文件路径 → 正文。 */
+  /** 判卷文件路径 → 正文。真仓那一趟交的是**全部** `trackedExistingFiles(ROOT,"tests")` ⇒ 符号区分度这一格有分母。 */
   tests: ReadonlyMap<string, string>;
 }
+
+/** 符号的**区分度帽**：提到这个符号的判卷文件数超过它 ⇒ 这条绑定拒收。
+ *  为什么要有这一格：绑定靠"两边都有这个符号名"配对，而 `run`／`note`／`event`／`specs`／`evaluate`
+ *  这种名字满屏都是 ⇒ 拿它配对等于没配对（第 317 页现读：`run` 在 295 份判卷里出现在 130 份里）。
+ *  2026-10-03 现读的那道空档：真能当配对的符号停在 **0—3 份**（`unionNote` 1、`promoteToMain` 1、
+ *  `SIDECHAT_FORBIDDEN_TOOLS` 2、`feasibility` 2、`clampTier` 2、`parseArgs` 3），
+ *  下一档直接跳到 14（`evaluate`）／18（`specs`）／35（`event`）／38（`note`）／130（`run`）。
+ *  帽取 5＝空档内侧的整数（不贴着现读钉死，也不放到 14 那一档——那一档已经说明不了任何一格）。 */
+export const BINDING_SYMBOL_MAX_JUDGE_FILES = 5;
 
 const hasSymbol = (text: string, symbol: string): boolean =>
   new RegExp("(^|[^A-Za-z0-9_])" + symbol + "([^A-Za-z0-9_]|$)", "u").test(text);
@@ -325,9 +346,25 @@ export function claimBindingDefects(b: ClaimBinding, m: BindingMaterial): string
   const srcText = m.src.get(file);
   if (srcText === undefined) out.push(`取料里没有 ${file}`);
   else if (!hasSymbol(srcText, b.symbol)) out.push(`${file} 里没有 ${b.symbol} 这个符号（那句背后没有你说的开关）`);
+  // 区分度按**取料里那一批判卷**算（不是另找一份语料）：真仓那一趟交的就是全部 tests ⇒ 有分母。
+  const colliding = [...m.tests.values()].filter((t) => hasSymbol(t, b.symbol)).length;
+  if (colliding > BINDING_SYMBOL_MAX_JUDGE_FILES) {
+    out.push(`${b.symbol} 在 ${String(colliding)} 份判卷里出现过（帽 ${String(BINDING_SYMBOL_MAX_JUDGE_FILES)}）⇒ 这个词没有区分度，拿它配对等于没配对`);
+  }
   const testText = m.tests.get(b.testFile);
   if (testText === undefined) out.push(`判卷文件 ${b.testFile} 不在取料面里`);
-  else if (!hasSymbol(testText, b.symbol)) out.push(`${b.testFile} 没引用 ${b.symbol}（它判的不是这件事）`);
+  else {
+    // ③ 先要它**是**一条用例标题（四支抽取与锚点指针同一把尺），再④要那条用例体内用到这个开关。
+    //    只查"文件里出现过这个词"会漏：`testCaseBody` 用的是 indexOf，注释里写一句就能把后面 4000 字算成体。
+    const isTitle = vitestTitles(testText).some((t) => t === b.testCase)
+      || vitestTitlePatterns(testText).some((re) => re.test(b.testCase));
+    if (!isTitle) out.push(`${b.testFile} 里没有「${b.testCase.slice(0, 40)}」这条**用例标题** ⇒ 绑定只能指到文件，指不到判它的那一格`);
+    else {
+      const body = testCaseBody(testText, b.testCase);
+      if (body === null) out.push(`${b.testFile} 那条标题取不到用例体（写法超出四支抽取的形状，静态验不了 ⇒ 别当已验）`);
+      else if (!hasSymbol(body, b.symbol)) out.push(`${b.testFile} 那条用例体内没引用 ${b.symbol}（它判的不是这件事）`);
+    }
+  }
   return out;
 }
 
@@ -357,22 +394,61 @@ export function bindClaimFaces(
   };
 }
 
-/** 已甄别的绑定登记表。每条都要能过 `claimBindingDefects` 那三件事，过不了就红在判卷里——
- *  这张表不是"我说它真"，是"它背后那个符号两边都在"。逐条附**为什么这句被它兜住**。 */
+/** 已甄别的绑定登记表。每条都要能过 `claimBindingDefects` 那四件事，过不了就红在判卷里——
+ *  这张表不是"我说它真"，是"它背后那个开关真在被指认的那条用例里被用着"。逐条附**为什么这句被它兜住**。 */
 export const CLAIM_BINDINGS: readonly ClaimBinding[] = [
   {
     face: "src/agent/sidechat.ts#SIDECHAT_SYSTEM｜写向工具已从你的工具表摘除",
     symbol: "SIDECHAT_FORBIDDEN_TOOLS",
     testFile: "tests/sidechat-core.test.ts",
-    why: "那句话的范围由这份名单兜：判卷逐个断言名单里的工具不在 `sidechatToolSpecs()` 给的表内；"
+    testCase: "三个写向工具不在 sidechat 工具表里",
+    why: "那句话的范围由这份名单兜：那条用例逐个断言名单里的工具不在 `sidechatToolSpecs()` 给的表内；"
       + "而表本身是按 `SIDECHAT_TOOL_WHITELIST` 过滤出来的（allow-list，不是黑名单加补丁）",
   },
   {
     face: "src/agent/sidechat.ts#SIDECHAT_SYSTEM｜你的结论不会自动进入主会话",
     symbol: "promoteToMain",
     testFile: "tests/sidechat-core.test.ts",
-    why: "旁路进主流只有这一个入口；同一份判卷钉的是「旁路事件落自己的 JSONL，主会话文件字节不变」，"
-      + "⇒ 没人显式调它的时候，主转录确实一个字都不多",
+    testCase: "source_event_ids 为空 → 拒绝（结论须可追溯）",
+    why: "旁路进主流只有 `promoteToMain` 这一个显式入口，那条用例钉的是「没有可追溯的源事件号 ⇒ 整条拒绝」，"
+      + "⇒ 不调它（或调了但缺三件事）主会话一个字节都不写。"
+      + "这句的另一半（旁路事件落在自己的 JSONL、主文件字节不变）由同文件那条 JSONL 用例守着，"
+      + "而那条不引用这个符号 ⇒ 本条登记说的是**入口这一半**，不冒充整句都被它兜住。",
+  },
+  /* 第 317 页：拿新的四条件把「其实早就有人判，只是证人用了另一套词」那几格捞回来。
+     每条都是先跑候选名单（`outputs/claim-binding-tighten-2026-10-03/find-candidates.mts`）、
+     再逐条读那条用例的体确认"它判的就是这句话"才登记的——不是符号两边都在就填。 */
+  {
+    face: "src/tools/output-ring.ts#WEB_CONTENT_TRUNCATION_HINT｜锚点不会改变取回的内容",
+    symbol: "WEB_CONTENT_TRUNCATION_HINT",
+    testFile: "tests/web-fetch.test.ts",
+    testCase: "要么不说，要说就说清片段不上线：那句解释必须写在模型读到的这一句里",
+    why: "那条用例直接对这个常量断言 `toMatch(/锚点[^，。；)]{0,18}不会改变取回/u)` ⇒ 这句话本身是判据，"
+      + "不是注释；同文件另一条还钉「这句要真从 web_fetch 那一支交出去」，所以常量改了出口不接也会红",
+  },
+  {
+    face: "src/tools/output-ring.ts#WEB_CONTENT_TRUNCATION_HINT｜本工具不会替你翻页",
+    symbol: "WEB_CONTENT_TRUNCATION_HINT",
+    testFile: "tests/web-fetch.test.ts",
+    testCase: "要么不说，要说就说清片段不上线：那句解释必须写在模型读到的这一句里",
+    why: "同一条用例的第二半：`expect(WEB_CONTENT_TRUNCATION_HINT).toContain(\"不会替你翻页\")` 是**反向哨兵**——"
+      + "这条否定式事实本来就在句子里，不许被后续改动顺手删掉（写它的那一页实测过它是 0 证人）",
+  },
+  {
+    face: "src/tools/impact-query.ts#unionNote｜清单仍是各份同名定义的并集",
+    symbol: "unionNote",
+    testFile: "tests/impact-query.test.ts",
+    testCase: "并集那句不许再承诺做不到的事，也不许夸成已经做到（文案的两半各钉一次）",
+    why: "那条用例两头都钉：`toContain(\"并集\")`（这件事仍然成立，不许藏）＋ `not.toMatch(/已按定义逐条(筛|收窄|判)/)`"
+      + "（做不到的一律不许写进模型可见文案）⇒ 这句「仍是并集」既有正向证人，也有防它说反话的哨兵",
+  },
+  {
+    face: "src/agent/prune-batching.ts#thresholdKnobIsWired｜门槛拨到多低都不会多出落盘",
+    symbol: "thresholdKnobIsWired",
+    testFile: "tests/prune-batching.test.ts",
+    testCase: "每轮都落盘 ⇒ 绿；仍然只在压缩轮落盘 ⇒ 红（并说清是对照空了）",
+    why: "那句话只在 `stray === 0` 那一支拼进 detail，而这条用例喂的正是「没活可干」的形状：`expect(red.detail).toContain(\"对照是空的\")`"
+      + " ⇒ 这句点名话有观测者（红的那一支就是它要说的事），不是写了没人读",
   },
 ];
 
@@ -1026,11 +1102,12 @@ async function main(): Promise<void> {
       const testPaths = trackedExistingFiles(ROOT, "tests").files;
       const corpus = testPaths.map((p) => readFileSync(join(ROOT, p), "utf8"));
       const cf = claimWitnessFindings(claimSites, corpus);
-      // 绑定通道（第 314 页）：证人用了另一套词的那些格，靠「执行端符号两边都在」配对。
-      // 取料交**带文件名的**两份正文——判定要问的是"这个符号在那支文件里"，只交一坨拼接文本就答不了。
+      // 绑定通道（第 314 页，四条件版见第 317 页）：证人用了另一套词的那些格，靠「执行端符号 + 点名用例」配对。
+      // 取料交**带文件名的**两份正文——判定要问的是"这个符号在那支文件里"，只交一坨拼接文本就答不了；
+      // 符号区分度也读这一份（`tests` 交的就是全部判卷 ⇒ 分母是真盘，不是被谁挑小过的）。
       const material: BindingMaterial = {
         src: new Map(files.map((f) => [f.path, f.text])),
-        tests: new Map(testPaths.map((p) => [p, readFileSync(join(ROOT, p), "utf8")])),
+        tests: new Map(testPaths.map((p, i) => [p, corpus[i] ?? ""])),
       };
       const bind = bindClaimFaces(cf, CLAIM_BINDINGS, material);
       const capped = { ...cf, unwitnessed: bind.unwitnessed };

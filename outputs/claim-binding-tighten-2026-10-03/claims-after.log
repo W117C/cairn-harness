@@ -1,0 +1,33 @@
+能力断言：全量 45 处｜受众 {"model":43,"operator":2,"ui":0}｜盘上缺料 0
+模型可见 43 格 ⇒ 有证人(原句) 14｜绑定 6｜欠证人 18（帽 23 ⇒ 低于帽）｜挑不出针脚 5
+守恒：四态相加 43 对分母 43
+== 绑定生效逐条 ==
+  src/agent/prune-batching.ts#thresholdKnobIsWired｜门槛拨到多低都不会多出落盘
+  src/agent/sidechat.ts#SIDECHAT_SYSTEM｜写向工具已从你的工具表摘除
+  src/agent/sidechat.ts#SIDECHAT_SYSTEM｜你的结论不会自动进入主会话
+  src/tools/impact-query.ts#unionNote｜清单仍是各份同名定义的并集
+  src/tools/output-ring.ts#WEB_CONTENT_TRUNCATION_HINT｜锚点不会改变取回的内容
+  src/tools/output-ring.ts#WEB_CONTENT_TRUNCATION_HINT｜本工具不会替你翻页
+== 登记表自己的病（应当为 0 条）==
+== 仍欠证人逐条 ==
+  src/agent/compaction.ts#event｜已按半分截断摘除
+  src/agent/glm-session.ts#specs｜正文太长会被截断并提示换更精确的地址
+  src/agent/glm-session.ts#note｜派活前请把它当成不可撤销的开销
+  src/agent/goal-drift.ts#RULES｜单方面缩小交付面
+  src/agent/impact/coverage.ts#capWayOut｜或按目录拆仓
+  src/agent/impact/coverage.ts#capCauseNote｜后缀不支持仍然成立
+  src/agent/sequencer.ts#resolvePluginRole｜安全约束照抄
+  src/agent/supervise-contract.ts#parseSuperviseContract｜拼错的键不会生效
+  src/agent/worker-report.ts#clampTier｜已按父档裁剪
+  src/cli.ts#parseArgs｜与位置参数重复给工作区
+  src/cli.ts#parseArgs｜目标只能挂在会话上
+  src/main/provider-runtime.ts#assertProviderKeyConfigured｜不会静默回落其他
+  src/permissions/autonomy.ts#evaluate｜不覆盖这条命令的载荷
+  src/tools/impact-query.ts#resolveMaxFiles｜这一位只能往小调
+  src/tools/impact-query.ts#impactQuerySpec｜建图文件数帽
+  src/tools/remember.ts#run｜为追加式日志
+  src/tools/web-search.ts#run｜本工具不做默认厂商
+  src/tools/write_file.ts#run｜也不会漏抄未改的行
+== 受众改判的回归对照（承诺那一把网应当一字不动）==
+承诺网：面 {"model":9,"operator":1,"ui":0}｜unjudged 0｜stale 0
+EXIT=0

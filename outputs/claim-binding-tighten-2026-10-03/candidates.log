@@ -1,0 +1,224 @@
+现读欠证人（已扣掉登记表里那些绑定）：23 格
+
+■ src/agent/compaction.ts#event｜已按半分截断摘除（符号 event）
+  候选 83 条（只列前 3，登记前要人读一遍它判的是不是这句话）：
+    tests/compaction.test.ts ▸ 最近 typed 用户消息永不吞 + keep-first 永不进压缩与摘要输入
+        expect(ids).not.toContain(1); // 固定回注（用户目标）
+        expect(ids).not.toContain(7); // 最近 typed user 消息
+    tests/compaction.test.ts ▸ 不调摘要器；整单元丢最旧一半；keep-first 与最近 user 消息保留
+        expect(outcome && outcome.ok).toBe(true);
+        expect(summarizerCalls).toBe(0); // 紧急路径不调摘要器
+    tests/compaction.test.ts ▸ 手动触发产生 trigger=manual + reason=user_request；卡 payload 字段齐全
+        expect(outcome.ok).toBe(true);
+        expect(outcome.event.trigger).toBe("manual");
+
+■ src/agent/eval/task-set.ts#feasibility｜没有判卷命令（符号 feasibility）
+  候选 9 条（只列前 3，登记前要人读一遍它判的是不是这句话）：
+    tests/eval-assembly.test.ts ▸ 零花费那条路（--feasibility）也印装配面，且印在退出之前
+        expect(print).toBeGreaterThan(-1);
+        expect(print).toBeLessThan(evalSrc.indexOf("process.exit(0)", print));
+    tests/eval-task-set.test.ts ▸ 快照 + 凭据都在 ⇒ runnable
+        expect(feasibility(task, probe({})).runnable).toBe(true);
+    tests/eval-task-set.test.ts ▸ 判卷命令跑不起来 ⇒ 不可跑，blocker 点名工具链（不许被读成模型 0 分）
+        expect(f.runnable).toBe(false);
+        expect(f.blockers.join(" ")).toMatch(/工具链|判卷命令/u);
+
+■ src/agent/glm-session.ts#specs｜正文太长会被截断并提示换更精确的地址（符号 specs）
+  候选 43 条（只列前 3，登记前要人读一遍它判的是不是这句话）：
+    tests/diagnose.test.ts ▸ 三面对账（与生产同一份谓词）：写向类=true；只读档从模型面摘除，可写档在面上
+        expect(isSideEffectTool("diagnose"), "autonomy 写向表：漏登=只读档不摘除、方案门不挡、沙箱通道失效").toBe(true);
+        expect(ro.specs.some((s) => s.function.name === "diagnose")).toBe(false);
+    tests/docs-check.test.ts ▸ 只有受管现行页参与判定：archive/ 与 specs/ 与源码都不判
+        expect(checkObservedValues([p("archive/progress.md", obs)])).toHaveLength(0);
+        expect(checkObservedValues([p("docs/superpowers/specs/2026-09-19-x.md", obs)])).toHaveLength(0);
+    tests/head-import-face.test.ts ▸ 模板字面量里的源码不算边，字面量外的真语句照旧算
+        expect(specs).toEqual(["./dyn.js", "./keep.js"]);
+        expect(specs).not.toContain("./cart.js");
+
+■ src/agent/glm-session.ts#note｜派活前请把它当成不可撤销的开销（符号 note）
+  候选 67 条（只列前 3，登记前要人读一遍它判的是不是这句话）：
+    tests/autonomy.test.ts ▸ 模型通道：requires_approval 标记 → 任何档位审批（含读类工具）
+        expect(evaluate("read_file", { path: "x", requires_approval: true }, s)).toMatchObject({
+        expect(
+    tests/context-auto-verify-note.test.ts ▸ 两次自动补拍：旧拍只留计数，不递地址，只指做得到的动作
+        expect(text, "第二拍必须带着计数出现").toContain("此前另有 1 次"); // 计数如实保留，不假装只红过一次
+        expect(text).not.toMatch(/全文见|取回/); // 不递模型够不着的地址
+    tests/diagnose.test.ts ▸ unix 族：severity 词与尾随 [RULE] 各归各位；note 不是可执行条目
+        expect(d.total, "note 不该进条目；其余三条进").toBe(3);
+        expect(d.entries[0]).toMatchObject({ file: "src/util.c", line: 12, col: 5, severity: "error" });
+
+■ src/agent/goal-drift.ts#RULES｜单方面缩小交付面（符号 RULES）
+  候选 8 条（只列前 3，登记前要人读一遍它判的是不是这句话）：
+    tests/shell-bypass-composition.test.ts ▸ 同一批命令在纯规则层也判 deny（档位与风险层摘掉后不改变结论）
+        expect(judgeChain(RULES, "run_shell", cmd).verdict, cmd).toBe("deny");
+    tests/shell-bypass-composition.test.ts ▸ 规则层判 deny 的，自主档必须由 L1-deny 决定——风险层与档位都不得抢先或降级
+        expect(chain, cmd).toBe("deny");
+        expect(at(evaluate("run_shell", { command: cmd }, session())), cmd).toBe("deny@L1-deny");
+    tests/shell-bypass-composition.test.ts ▸ 只读 git 在四道面上都是放行侧（防「为绿而全拦」把安全面板一起锁死）
+        expect(interceptDestructiveGit(cmd).ok).toBe(true);
+        expect(evaluate("run_shell", { command: cmd }, session([])).verdict).toBe("approve");
+
+■ src/agent/impact/coverage.ts#capWayOut｜或按目录拆仓（符号 capWayOut）
+  候选 0 条 ⇒ 没有任何一条用例的**体内**用到这个符号（文件级提到不算）
+
+■ src/agent/impact/coverage.ts#capCauseNote｜后缀不支持仍然成立（符号 capCauseNote）
+  候选 2 条（只列前 3，登记前要人读一遍它判的是不是这句话）：
+    tests/impact-cap-policy.test.ts ▸ 租约与摘要共用一把尺：graphIsPartial 是「图非全量」唯一判据
+        expect(graphIsPartial(400, 405)).toBe(true);
+        expect(graphIsPartial(405, 405)).toBe(false);
+    tests/impact-query.test.ts ▸ capCauseNote 与它同判据：一处说漏了、另一处不许说没漏
+        expect(capCauseNote(400, 400, 508)).toContain("另有 108 个候选没进这张图");
+        expect(capCauseNote(398, 400, 400)).toContain("另有 2 个候选没进这张图");
+
+■ src/agent/prune-batching.ts#thresholdKnobIsWired｜门槛拨到多低都不会多出落盘（符号 thresholdKnobIsWired）
+  候选 2 条（只列前 3，登记前要人读一遍它判的是不是这句话）：
+    tests/prune-batching.test.ts ▸ 每轮都落盘 ⇒ 绿；仍然只在压缩轮落盘 ⇒ 红（并说清是对照空了）
+        expect(green.ok).toBe(true);
+        expect(red.ok).toBe(false);
+    tests/prune-batching.test.ts ▸ 没活可干的链不算接上（prunable 全 0 时 stray 必然是 0）
+        expect(thresholdKnobIsWired([{ prunableAtDecision: 0, compactions: 0, attachments: 0 }]).ok).toB
+
+■ src/agent/sequencer.ts#resolvePluginRole｜安全约束照抄（符号 resolvePluginRole）
+  候选 6 条（只列前 3，登记前要人读一遍它判的是不是这句话）：
+    tests/m3c.test.ts ▸ BUILTIN_ROLES：implement=write、review/test=read+gate；resolvePluginRole 映射 frontmatter + 不
+        expect(BUILTIN_ROLES["implement"]!.mode).toBe("write");
+        expect(BUILTIN_ROLES["review"]!.mode).toBe("read");
+    tests/plugin-role-discoverability.test.ts ▸ 只写合法键 ⇒ 零警告（反控：不许用「什么都警告」蒙过这条）
+        expect(r.warnings).toEqual([]);
+        expect(r.mode).toBe("write"); // isolation:worktree → write（§4.4.5 同构）
+    tests/plugin-role-discoverability.test.ts ▸ CC 有、执行端没有面的字段：警告说清「采纳未落地」
+        expect(r.warnings, key + " 不该静默被吃").toHaveLength(1);
+        expect(r.warnings[0]).toContain(key);
+
+■ src/agent/supervise-contract.ts#parseSuperviseContract｜拼错的键不会生效（符号 parseSuperviseContract）
+  候选 6 条（只列前 3，登记前要人读一遍它判的是不是这句话）：
+    tests/supervise-contract.test.ts ▸ 不申报 ⇒ 缺省契约（默认环数 + 无禁改面），不是错误
+        expect(r.error, JSON.stringify(raw)).toBeNull();
+        expect(r.contract).toEqual({ maxStages: SUPERVISE_MAX_STAGES_DEFAULT, forbidden: [] });
+    tests/supervise-contract.test.ts ▸ 环数越界 / 非整数 ⇒ 拒并把合法区间写进话里（不静默钳制，也不静默回落缺省）
+        expect(r.contract, String(bad)).toBeNull();
+        expect(r.error).toContain(String(SUPERVISE_MAX_STAGES_MIN));
+    tests/supervise-contract.test.ts ▸ 合法键集内都能过（反控：不许把「什么都拒」当严格）
+        expect(r.error).toBeNull();
+        expect(r.contract).toEqual({ maxStages: 3, forbidden: ["src/generated/**"] });
+
+■ src/agent/worker-report.ts#clampTier｜已按父档裁剪（符号 clampTier）
+  候选 0 条 ⇒ 没有任何一条用例的**体内**用到这个符号（文件级提到不算）
+
+■ src/cli.ts#parseArgs｜与位置参数重复给工作区（符号 parseArgs）
+  候选 8 条（只列前 3，登记前要人读一遍它判的是不是这句话）：
+    tests/cli-surface.test.ts ▸ --model 自由档走 modelSelection 槽：那一档不在档位表里，过不了信封校验
+        expect(src).toContain("modelSelection: provider");
+        expect(src, "解析仍然只做一次、且发生在起跑前（replay 分支之后）").toContain("provider = resolveProviderSelection(");
+    tests/mutate-shards.test.ts ▸ 认不出的 flag 进 unknown，flags 为空（不许静默降级成「跑全表」）
+        expect(p.flags).toBeNull();
+        expect(p.unknown).toEqual(["--shardz=2"]);
+    tests/mutate-shards.test.ts ▸ 缺 --trees 是「值坏」不是「拼错 flag」⇒ 两格分开
+        expect(p.flags).toBeNull();
+        expect(p.unknown).toEqual([]);
+
+■ src/cli.ts#parseArgs｜目标只能挂在会话上（符号 parseArgs）
+  候选 8 条（只列前 3，登记前要人读一遍它判的是不是这句话）：
+    tests/cli-surface.test.ts ▸ --model 自由档走 modelSelection 槽：那一档不在档位表里，过不了信封校验
+        expect(src).toContain("modelSelection: provider");
+        expect(src, "解析仍然只做一次、且发生在起跑前（replay 分支之后）").toContain("provider = resolveProviderSelection(");
+    tests/mutate-shards.test.ts ▸ 认不出的 flag 进 unknown，flags 为空（不许静默降级成「跑全表」）
+        expect(p.flags).toBeNull();
+        expect(p.unknown).toEqual(["--shardz=2"]);
+    tests/mutate-shards.test.ts ▸ 缺 --trees 是「值坏」不是「拼错 flag」⇒ 两格分开
+        expect(p.flags).toBeNull();
+        expect(p.unknown).toEqual([]);
+
+■ src/main/provider-runtime.ts#assertProviderKeyConfigured｜不会静默回落其他（符号 assertProviderKeyConfigured）
+  候选 0 条 ⇒ 没有任何一条用例的**体内**用到这个符号（文件级提到不算）
+
+■ src/permissions/autonomy.ts#evaluate｜不覆盖这条命令的载荷（符号 evaluate）
+  候选 68 条（只列前 3，登记前要人读一遍它判的是不是这句话）：
+    tests/autonomy.test.ts ▸ L1 deny 规则短路：auto 档也拦
+        expect(evaluate("run_shell", { command: "rm x.txt" }, s)).toMatchObject({ verdict: "deny" });
+    tests/autonomy.test.ts ▸ L2 ask 规则短路：auto 档也送审
+        expect(evaluate("run_shell", { command: "git push origin" }, s)).toMatchObject({ verdict: "ask" 
+    tests/autonomy.test.ts ▸ L3 档位短路：default 档副作用送审 / read-only 档拒绝
+        expect(evaluate("write_file", { path: "a.txt", content: "x" }, d)).toMatchObject({ verdict: "ask
+        expect(evaluate("write_file", { path: "a.txt", content: "x" }, ro)).toMatchObject({ verdict: "de
+
+■ src/tools/impact-query.ts#resolveMaxFiles｜这一位只能往小调（符号 resolveMaxFiles）
+  候选 0 条 ⇒ 没有任何一条用例的**体内**用到这个符号（文件级提到不算）
+
+■ src/tools/impact-query.ts#unionNote｜清单仍是各份同名定义的并集（符号 unionNote）
+  候选 1 条（只列前 3，登记前要人读一遍它判的是不是这句话）：
+    tests/impact-query.test.ts ▸ 并集那句不许再承诺做不到的事，也不许夸成已经做到（文案的两半各钉一次）
+        expect(n, "图已经按 import 反证摘边了，这句还在说反话").not.toContain("不认 import");
+        expect(n).toContain("import 反证");
+
+■ src/tools/impact-query.ts#impactQuerySpec｜建图文件数帽（符号 impactQuerySpec）
+  候选 5 条（只列前 3，登记前要人读一遍它判的是不是这句话）：
+    tests/impact-query.test.ts ▸ 规格与实例一一对应，且名字一致
+        expect(impactQuerySpec.name).toBe("impact_query");
+        expect(tool().name).toBe(impactQuerySpec.name);
+    tests/impact-query.test.ts ▸ 规格体积有上限（工具面是按轮重送的固定成本，膨胀要当场红）
+        expect(bytes, "impact_query 规格 " + String(bytes) + "B").toBeLessThan(600);
+    tests/impact-query.test.ts ▸ 文案里点名的参数必须真的在规格上；顶到上限时那句出路要换成拧得动的
+        expect(named.length, "帽外这一支必须仍给出「调帽」这条出路").toBeGreaterThan(0);
+        for (const key of named) expect(declared.has(key), `文案点名 ${String(key)}，规格里却没有它`).toBe(true);
+
+■ src/tools/output-ring.ts#WEB_CONTENT_TRUNCATION_HINT｜锚点不会改变取回的内容（符号 WEB_CONTENT_TRUNCATION_HINT）
+  候选 3 条（只列前 3，登记前要人读一遍它判的是不是这句话）：
+    tests/web-fetch.test.ts ▸ 下一步的括号里不许列做不到的事：锚点不是「更精确的 URL」
+        expect(options, "括号里只许列真的换得了内容的地址形状：" + options).not.toContain("锚点");
+        expect(options).toContain("目录页");
+    tests/web-fetch.test.ts ▸ 要么不说，要说就说清片段不上线：那句解释必须写在模型读到的这一句里
+        expect(WEB_CONTENT_TRUNCATION_HINT, "模型会照『换锚点』再跑一轮 ⇒ 文案要自己否定这条路").toMatch(/锚点[^，。；)]{0,18}不会改变取回
+        expect(WEB_CONTENT_TRUNCATION_HINT).toMatch(/片段[^，。；)]{0,12}(不发|不上|不往)/u);
+    tests/web-fetch.test.ts ▸ 这句要真从 web_fetch 那一支交出去（改了常量而出口不接＝模型读到的还是旧的）
+        expect(r.ok).toBe(true);
+        expect(String(r.output), "整句原样出现＝这条出口真接着").toContain(WEB_CONTENT_TRUNCATION_HINT);
+
+■ src/tools/output-ring.ts#WEB_CONTENT_TRUNCATION_HINT｜本工具不会替你翻页（符号 WEB_CONTENT_TRUNCATION_HINT）
+  候选 3 条（只列前 3，登记前要人读一遍它判的是不是这句话）：
+    tests/web-fetch.test.ts ▸ 下一步的括号里不许列做不到的事：锚点不是「更精确的 URL」
+        expect(options, "括号里只许列真的换得了内容的地址形状：" + options).not.toContain("锚点");
+        expect(options).toContain("目录页");
+    tests/web-fetch.test.ts ▸ 要么不说，要说就说清片段不上线：那句解释必须写在模型读到的这一句里
+        expect(WEB_CONTENT_TRUNCATION_HINT, "模型会照『换锚点』再跑一轮 ⇒ 文案要自己否定这条路").toMatch(/锚点[^，。；)]{0,18}不会改变取回
+        expect(WEB_CONTENT_TRUNCATION_HINT).toMatch(/片段[^，。；)]{0,12}(不发|不上|不往)/u);
+    tests/web-fetch.test.ts ▸ 这句要真从 web_fetch 那一支交出去（改了常量而出口不接＝模型读到的还是旧的）
+        expect(r.ok).toBe(true);
+        expect(String(r.output), "整句原样出现＝这条出口真接着").toContain(WEB_CONTENT_TRUNCATION_HINT);
+
+■ src/tools/remember.ts#run｜为追加式日志（符号 run）
+  候选 500 条（只列前 3，登记前要人读一遍它判的是不是这句话）：
+    tests/action-fusion.test.ts ▸ default/off is byte-identical and never reads invalid lint config
+        expect(JSON.stringify(stripTs(disabled))).toBe(JSON.stringify(stripTs(baseline)));
+        expect(toolResults(baseline)[0]?.output).toBe("已写入 target.txt（3 字节，新建 +1 行）");
+    tests/action-fusion.test.ts ▸ write and edit preserve separate receipts, run only configured lint, no extra tool calls
+        expect(stripTs(events.filter(e => e.type === "tool_call"))).toEqual(calls);
+        expect(results).toHaveLength(2);
+    tests/action-fusion.test.ts ▸ lint failure is not all-success and never rolls back the successful write
+        expect(result?.ok).toBe(false);
+        expect(result?.output).toContain("已写入 target.txt");
+
+■ src/tools/web-search.ts#run｜本工具不做默认厂商（符号 run）
+  候选 500 条（只列前 3，登记前要人读一遍它判的是不是这句话）：
+    tests/action-fusion.test.ts ▸ default/off is byte-identical and never reads invalid lint config
+        expect(JSON.stringify(stripTs(disabled))).toBe(JSON.stringify(stripTs(baseline)));
+        expect(toolResults(baseline)[0]?.output).toBe("已写入 target.txt（3 字节，新建 +1 行）");
+    tests/action-fusion.test.ts ▸ write and edit preserve separate receipts, run only configured lint, no extra tool calls
+        expect(stripTs(events.filter(e => e.type === "tool_call"))).toEqual(calls);
+        expect(results).toHaveLength(2);
+    tests/action-fusion.test.ts ▸ lint failure is not all-success and never rolls back the successful write
+        expect(result?.ok).toBe(false);
+        expect(result?.output).toContain("已写入 target.txt");
+
+■ src/tools/write_file.ts#run｜也不会漏抄未改的行（符号 run）
+  候选 500 条（只列前 3，登记前要人读一遍它判的是不是这句话）：
+    tests/action-fusion.test.ts ▸ default/off is byte-identical and never reads invalid lint config
+        expect(JSON.stringify(stripTs(disabled))).toBe(JSON.stringify(stripTs(baseline)));
+        expect(toolResults(baseline)[0]?.output).toBe("已写入 target.txt（3 字节，新建 +1 行）");
+    tests/action-fusion.test.ts ▸ write and edit preserve separate receipts, run only configured lint, no extra tool calls
+        expect(stripTs(events.filter(e => e.type === "tool_call"))).toEqual(calls);
+        expect(results).toHaveLength(2);
+    tests/action-fusion.test.ts ▸ lint failure is not all-success and never rolls back the successful write
+        expect(result?.ok).toBe(false);
+        expect(result?.output).toContain("已写入 target.txt");
+FC=0

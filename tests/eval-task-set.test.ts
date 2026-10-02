@@ -116,6 +116,18 @@ describe("feasibility：能不能跑，缺什么要说名字", () => {
     expect(f.blockers.join(" ")).toMatch(/工具链|判卷命令/u);
   });
 
+  // 上面那条走的是 `verifier` **在而跑不起来**那一支；`task.verifier === undefined` 这一支此前 0 观测者，
+  // 而那句「没有判卷命令 ⇒ 只能当演示，不许进分母」正是给读数的操作者看的（第 317 页核承诺网时抓到）。
+  it("压根没有判卷命令那一支也要出声：blocker 说的是「没有判卷命令」，不许与工具链缺失混成一句", () => {
+    const bare = { ...task };
+    delete bare.verifier;
+    const f = feasibility(bare, probe({}));
+    expect(f.runnable).toBe(false);
+    expect(f.blockers.join(" ")).toContain("没有判卷命令");
+    // 两支话要说清各自的原因：把"没尺"写成"工具链缺失"，读数的人就会去装 pytest，而缺的是判卷本身。
+    expect(f.blockers.join(" ")).not.toMatch(/工具链/u);
+  });
+
   it("反向：自检通过时这一格**不许新增 blocker**（否则这条检查是恒红，量不到任何东西）", () => {
     expect(feasibility(task, probe({ canRunVerifier: () => true })).blockers).toHaveLength(0);
   });

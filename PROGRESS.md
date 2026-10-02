@@ -11030,3 +11030,68 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 7. **清场判据不是授权**（只报数，不动手）：认证脚本自己那一读 `常驻残留树=2`——`gate-mutate-import@8bafa7b`（本会话的击杀/造红树）、
    `gate-mutate-verify@204f017`；`gate-head-cert@8bafa7b` 是复用来的共享树（脚本明写"不是本次新建的树 ⇒ 不收"）。
    `.claude/worktrees/` 四棵、`doc-layer`、`locate-weights`、`opt`/`port`/`port2` 带分支或不是本会话建的 ⇒ 按规则 120 都不算残留。回收等用户点头。
+
+
+
+## 2026-10-03 · 第 317 页：绑定通道能"随便填个两边都存在的词"就把一格销账——三件加到五件，帽 23→18
+
+1. **这一页只做一件事：把那条降帽通道从"能说"变成"说得出哪一条"**。第 314 页开的绑定通道只有三件条件：
+   那一格还在欠证人清单里、符号在那句所在的**源文件**里、符号在被指认的那份**判卷文件**里出现过。
+   第三件的问题是**面的符号名越通用越空**：23 格里 `src/tools/write_file.ts#run`、`src/tools/remember.ts#run`、
+   `src/tools/web-search.ts#run` 三格，用 `run` 配对时各有 **500 条**候选判卷用例——
+   "文件里出现过这个词"根本不是证据（取料：`outputs/claim-binding-tighten-2026-10-03/candidates.log`，
+   跑法 `find-candidates.mts`；候选数分布：`0×4｜1×1｜2×2｜3×2｜5×1｜6×2｜8×3｜9×1｜43｜67｜68｜83｜500×3`）。
+
+2. **加的两件都是"指到具体那一格"**：③ 被指的东西必须是那份判卷里**一条用例的标题**
+   （抽取沿用 `scripts/lib/mutate-gates.ts#vitestTitles`/`vitestTitlePatterns` 那四支，不另抄口径——
+   注释里写一句生产原文就能骗过"整文件包含"，这一格实测过）；④ **那条用例的体内**要引用这个符号
+   （`testCaseBody` 同库共用）。另加 ⑤ **符号区分度帽** `BINDING_SYMBOL_MAX_JUDGE_FILES = 5`：
+   提到该符号的判卷文件数超过 5 ⇒ 直接拒收。帽不是拍的——2026-10-03 现读（295 份判卷）：
+   真能配对的都停在 **0—3 份**（`unionNote` 1、`promoteToMain` 1、`SIDECHAT_FORBIDDEN_TOOLS` 2、`feasibility` 2、`parseArgs` 3），
+   下一档直接跳 **14**（`evaluate`）／18（`specs`）／35（`event`）／38（`note`）／130（`run`）；取 5 是那道空档里的整数。
+
+3. **④ 的反例必须是旧口径"看得见"的形状**（这是本页最费的一格）：第一版我拿 `SIDECHAT_TOOL_WHITELIST` 做反例，
+   造红台当场报**存活**——那份判卷对这个常量是 0 引用 ⇒ "文件级"与"体内"两级判据**在那条反例下同答**，
+   锚点钉的是空气。换成 `promoteToMain`：它在 `tests/sidechat-core.test.ts` 里出现多次（文件级放行），
+   而我点名的那条工具表用例根本不调它 ⇒ 两级判据第一次分出胜负，锚点才有牙齿。
+   **规则**：造新判据的反例时，要挑"旧口径会放过、新口径会拒"的那个输入，不是挑"看起来相关"的那个。
+
+4. **同一条判据把写判据的人抓了一次**：我第一版的 ④ 用例里 `expect(...).find(k => k.includes("你的结论不会自动进入主会话"))`
+   把**生产原句抄进了判卷** ⇒ 那一格当场"拿到原句证人"、从欠证人清单里消失 ⇒ 登记表报"白登记"、反例找不到对象，三条判卷一起红。
+   这正是第 311 页写进注释的那件事（取料含 `tests/**` 全文，抄一次就是自己给自己当证人），**我这一轮又踩了一遍**——
+   尺是对的，我的写法不对；判卷里只准出现 `startsWith("src/agent/sidechat.ts")` 这种取法。
+
+5. **捞回来的四格（每条都点着一条具体用例，`why` 写清它兜住的是哪一半）**：
+   `WEB_CONTENT_TRUNCATION_HINT｜锚点不会改变取回的内容` 与 `…｜本工具不会替你翻页`
+   （`tests/web-fetch.test.ts` ▸「要么不说，要说就说清片段不上线…」里两条 `toMatch`/`toContain` 各钉一句）、
+   `impact-query.ts#unionNote｜清单仍是各份同名定义的并集`（▸「并集那句不许再承诺做不到的事…」同时钉"仍成立不许藏"与"不许夸成已做到"）、
+   `prune-batching.ts#thresholdKnobIsWired｜门槛拨到多低都不会多出落盘`（▸「每轮都落盘 ⇒ 绿；…」喂的正是 `stray === 0` 那一支）。
+   sidechat 那句「结论不会自动进入主会话」的登记**改了位点**：从"整份判卷提到过"改成点名「source_event_ids 为空 → 拒绝…」，
+   并在 `why` 里写明它只兜"入口这一半"，不冒充整句。
+
+6. **顺手抓到一格真的没人判**（不是登记问题，是行为问题）：`eval/task-set.ts` 的 `task.verifier === undefined` 那一支
+   此前 0 观测者——已有用例只走"verifier 在而本机跑不起来"（工具链缺失）那一支。两句的出路完全不同：
+   缺的是**尺**（该补判卷命令），缺的是 pytest（装依赖就行）；混成一句会把读数的人指去修错的那一格。
+   补判卷（含反向：不许把这句写成工具链那一支的话）＋锚点 `eval-feasibility-no-verifier-branch-silent`。
+   ⇒ 这一格是**原句证人**（+14），不是绑定；帽的算术见 §8。
+
+7. **剩下的 18 格是什么形状**（现读分类，别再被当成"再捞一轮就完了"）：`run` 那一族 3 格（区分度帽拒收 ⇒ 只能等原句证人或更具体的符号）、
+   `evaluate`／`specs`／`note`／`event` 那一族 4 格（同因）、`parseArgs` 2 格与 `RULES` 等 9 格（≤9 候选但没有一条用例判的是**这句话**——
+   候选列表在 `candidates.log`，逐格可读）；另有 4 格连候选都是 0（`clampTier`、`capWayOut`、`resolveMaxFiles`、`assertProviderKeyConfigured`）
+   ⇒ 这四格要么补判卷要么改文案，绑定通道对它们**无能为力**，这正是该帽不许被读成"能力断言都验过了"的原因。
+
+8. **帽与守恒**（`claims-after.log`）：`面 45｜模型可见 43＝原句证人 14＋绑定 6＋欠证人 18＋挑不出段 5`，
+   帽 `23 → 18`（五档历史 29/28/25/23/18，每档都留了取料文件；只准调低，`stale` 也要红）。
+   算术：23 − 4（新绑定）− 1（feasibility 那格补了原句证人）＝ 18 ⇒ 每一格降得都有名字。
+
+9. **读数**：`red-machines-61.log` **61 台｜杀手命中 61｜存活 0｜残骸 0**（`MACHINE_EXIT=0`；含重指过针脚的
+   `claim-binding-accepts-symbol-unreferenced-by-judge` 与 `memory-degraded-exit-swallows-again`——
+   `--check-needles` 只答"针脚在不在源文件里"，答不出"还咬不咬得住那条用例"，所以每次重指都要重杀）；
+   落库前针脚尺 `1355 条 —— 阻断 6（钉在飞文本 3／HEAD 侧 killer 指针失效 3）`＝尺与锚点同笔的预期读数（`needles-precommit.log`）；
+   typecheck 0 报错；判卷 `promise-recall-inventory` 33 ＋ `eval-task-set` 33 全绿。
+
+10. **这一笔里没有的东西**：没有把 18 格"清完"——其中 7 格按现读**不可能**靠绑定通道清；
+    没有把 `testCaseBody` 的宽松面（`indexOf` 命中注释即取体）收紧成 AST——③ 已经把"是不是标题"这一刀补在调用侧，
+    改公共库要另开一笔并核它现有的两个消费者（规则 235/255）；没有动 `CLAIM_MARKS` 的标记词表（第 315/316 页那两句新写的话仍 0 命中，账记在 §第 316 页 10）。
+    手上的账：#25 从"23 条待核"变成"18 条待补证人或改文案，7 条通道无能为力"（任务书改写）；#20/#30/#27 已结案；
+    继续挂 #23 等 `src/main/agent-runner.ts` 让出、#24 段边界只认 `###`、#26 待现读、#28 负载下的显式 timeout。

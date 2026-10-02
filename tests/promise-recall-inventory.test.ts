@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
-  CLAIM_BINDINGS, CLAIM_UNWITNESSED_CAP, PROMISE_MARKS, RUNNERS, UI_ROOTS, bindClaimFaces,
+  CLAIM_BINDINGS, CLAIM_UNWITNESSED_CAP, PROMISE_MARKS, RUNNERS, UI_ROOTS, BINDING_SYMBOL_MAX_JUDGE_FILES, bindClaimFaces,
   builderCoverage, claimWitnessCeiling,
   claimWitnessFindings, claimWitnessRuns, isKnownRunner, promiseInventoryFindings, runnerVerdict,
   scanBuilderCallSites, scanCapNoticeCalls, scanClaimSites, scanPromiseSites,
@@ -311,16 +311,23 @@ describe("能力断言的证人面：一句都不曾被点过才算欠（第 311
     expect(f.witnessed.length, "一条都没被判过＝这条尺没在工作").toBeGreaterThan(0);
   });
 
-  describe("绑定通道：证人用了另一套词时，靠**执行端符号**配对（第 314 页）", () => {
-    // 三件成立条件各配一条**独立**用例：合在一条里，三枚锚点会全红在同一条上＝其中两枚没有分辨力。
+  describe("绑定通道：证人用了另一套词时，靠**执行端符号 + 点名用例**配对（第 314/317 页）", () => {
+    // 四件成立条件各配一条**独立**用例：合在一条里，四枚锚点会全红在同一条上＝其中三枚没有分辨力。
     const face = "src/__probe.ts#say｜探针假句永远不覆盖既有转录记录";
     const srcText = 'function say(): string { return "探针假句永远不覆盖既有转录记录"; } const GATE_LAYERS = [];';
-    const testText = "// …… GATE_LAYERS 的逐型表 ……";
-    const material = { src: new Map([["src/__probe.ts", srcText]]), tests: new Map([["tests/__probe.test.ts", testText]]) };
+    // 夹具也得长成**真判卷的形状**：第 317 页起，"文件里某处出现过这个符号"不再算（注释里提一句不算判）。
+    const testText = 'it("GATE_LAYERS 的逐型表：每一层都要有判定归属", () => {\n  expect(GATE_LAYERS.length).toBeGreaterThan(0);\n});\n';
+    const material = {
+      src: new Map([["src/__probe.ts", srcText]]),
+      tests: new Map([["tests/__probe.test.ts", testText]]),
+    };
     const owed: Pick<ClaimWitnessFindings, "unwitnessed"> = { unwitnessed: [face] };
-    const b = { face, symbol: "GATE_LAYERS", testFile: "tests/__probe.test.ts", why: "夹具：符号两边都在" };
+    const b = {
+      face, symbol: "GATE_LAYERS", testFile: "tests/__probe.test.ts",
+      testCase: "GATE_LAYERS 的逐型表：每一层都要有判定归属", why: "夹具：符号两边都在，且点得出那一条用例",
+    };
 
-    it("三件事都成立 ⇒ 那一格从欠证人移到绑定，条数一增一减（不是凭空多出来的）", () => {
+    it("四件事都成立 ⇒ 那一格从欠证人移到绑定，条数一增一减（不是凭空多出来的）", () => {
       const r = bindClaimFaces(owed, [b], material);
       expect(r.bound, "三件齐了还不认＝这条通道没在工作").toEqual([face]);
       expect(r.unwitnessed, "移过去的那一格不许仍留在欠证人清单里（双记＝帽可以靠它骗数）").toEqual([]);
@@ -328,16 +335,18 @@ describe("能力断言的证人面：一句都不曾被点过才算欠（第 311
       expect(r.bound.length + r.unwitnessed.length, "守恒：绑定的总数只能等于进来的条数").toBe(owed.unwitnessed.length);
     });
 
-    it("缺第一件：那句所在的源文件里没有那个符号 ⇒ 仍算欠证人，并点名是这一件没成", () => {
+    it("缺第二件：那句所在的源文件里没有那个符号 ⇒ 仍算欠证人，并点名是这一件没成", () => {
       const r = bindClaimFaces(owed, [{ ...b, symbol: "NOT_A_REAL_SYMBOL" }], material);
       expect(r.bound, "句子背后没有这个开关，就不许把这一格销账").toEqual([]);
       expect(r.unwitnessed).toEqual([face]);
       expect(r.bad.join("\n")).toContain("没有 NOT_A_REAL_SYMBOL 这个符号");
     });
 
-    it("缺第二件：被指认的判卷没引用那个符号 ⇒ 仍算欠证人（真材实料的反例：白名单常量在那份判卷里 0 引用）", () => {
+    it("缺第四件：符号在那份判卷里**有**、但不在被点名的那条用例**体内** ⇒ 仍算欠证人（旧口径放得过的形状）", () => {
       // face **从现读里取**，不在这里抄那句生产文案：本文件的正文就在证人语料里（`tests/**` 全文），
       // 抄一次就等于自己给自己当证人——第 311 页实测过同一件事（照抄原句会让分母从 29 掉到 26）。
+      // 这一条写第一版时我把那句话原文抄进了 expect(...)，结果那一格当场"有了原句证人"、
+      // 从欠证人清单里消失（⇒ 绑定报"白登记"、这条反例找不到对象）。**这就是我写的这条判据抓到的**，见第 317 页。
       const srcScope = trackedExistingFiles(ROOT, "src");
       const files = srcScope.files.map((p) => ({ path: p, text: readFileSync(join(ROOT, p), "utf8") }));
       const testPaths = trackedExistingFiles(ROOT, "tests").files;
@@ -346,21 +355,60 @@ describe("能力断言的证人面：一句都不曾被点过才算欠（第 311
       const realFace = f.unwitnessed.find((k) => k.startsWith("src/agent/sidechat.ts"));
       expect(realFace, "现读的 sidechat 那一格应当还欠证人，否则这条反例没有对象：" + JSON.stringify(f.unwitnessed))
         .toBeTruthy();
+      // 这条反例专挑**旧口径分辨不出**的形状：`promoteToMain` 在那份判卷里出现多次（文件级判据因此放行），
+      // 但我点名的这条用例只查工具表，不调它 ⇒ 判据收到**用例体内**才会拒收。
+      const judge = testPaths.map((p, i) => [p, corpus[i] ?? ""] as const).find(([p]) => p.endsWith("sidechat-core.test.ts"));
+      expect(judge, "取料里该有那份判卷").toBeTruthy();
+      expect((judge?.[1] ?? "").split("promoteToMain").length - 1, "这条反例的前提：那份判卷**整文件**确实提到这个符号")
+        .toBeGreaterThan(0);
       const r = bindClaimFaces({ unwitnessed: [realFace!] }, [{
-        face: realFace!, symbol: "SIDECHAT_TOOL_WHITELIST", testFile: "tests/sidechat-core.test.ts", why: "夹具：拿另一个常量冒充",
+        face: realFace!, symbol: "promoteToMain", testFile: judge![0],
+        testCase: "三个写向工具不在 sidechat 工具表里", why: "夹具：挑一条同文件里不相关、听起来却很像的用例",
       }], {
         src: new Map(files.map((x) => [x.path, x.text])),
         tests: new Map(testPaths.map((p, i) => [p, corpus[i] ?? ""])),
       });
-      // 这条不是编的：那份判卷逐条断言的是 `SIDECHAT_FORBIDDEN_TOOLS`（补集那一面），没引用 allow-list 那个常量。
-      // ⇒ 若登记时说"我用白名单兜住了这句话"，尺必须拒收，否则绑定通道就是张随便填符号就能降帽的空头支票。
       expect(r.bound).toEqual([]);
-      expect(r.bad.join("\n"), "符号在源文件里（第一件过），但那份判卷没用它（第二件不过）：" + r.bad.join(" | "))
-        .toContain("没引用 SIDECHAT_TOOL_WHITELIST");
+      expect(r.bad.join("\n"), "符号在源文件里（第二件过），但那条用例体内没用它（第四件不过）：" + r.bad.join(" | "))
+        .toContain("那条用例体内没引用 promoteToMain");
       expect(r.unwitnessed).toEqual([realFace]);
     });
 
-    it("缺第三件：登记的那一格根本不在欠证人清单里 ⇒ 报成登记表自己的病，而不是悄悄多绑上一格", () => {
+    it("缺第三件：指的那个「用例」在那份判卷里根本不存在 ⇒ 报的是标题找不到，不是符号找不到", () => {
+      const r = bindClaimFaces(owed, [{ ...b, testCase: "这一条标题在夹具那份判卷里不存在" }], material);
+      expect(r.bound, "标题都不存在就不许把这一格销账").toEqual([]);
+      expect(r.unwitnessed).toEqual([face]);
+      expect(r.bad.join("\n"), "登记表自己的病要点名到是哪一件：" + r.bad.join(" | "))
+        .toContain("这条**用例标题**");
+    });
+
+    it("缺第五件（区分度）：符号在太多份判卷里出现过 ⇒ 直接拒收，哪怕其余四件都成立", () => {
+      // 现读的真反例：`src/tools/write_file.ts#run` 这一格，符号 `run` 在 295 份判卷里被 130 份提到。
+      // 「文件里出现过这个词」在过去两版里都能满足；⑤ 把这条路关掉 ⇒ 通用符号只能等**原句证人**。
+      const srcScope = trackedExistingFiles(ROOT, "src");
+      const files = srcScope.files.map((p) => ({ path: p, text: readFileSync(join(ROOT, p), "utf8") }));
+      const testPaths = trackedExistingFiles(ROOT, "tests").files;
+      const corpus = testPaths.map((p) => readFileSync(join(ROOT, p), "utf8"));
+      const f = claimWitnessFindings(scanClaimSites(files), corpus);
+      const genericFace = f.unwitnessed.find((k) => k.includes("#run｜"));
+      expect(genericFace, "现读里没有 #run 那一格 ⇒ 这条反例没有对象（那格可能被别的改动收了）").toBeTruthy();
+      const m = {
+        src: new Map(files.map((x) => [x.path, x.text])),
+        tests: new Map(testPaths.map((p, i) => [p, corpus[i] ?? ""])),
+      };
+      const colliding = corpus.filter((t) => /(^|[^A-Za-z0-9_])run([^A-Za-z0-9_]|$)/u.test(t)).length;
+      expect(colliding, "反例的前提就是这个符号满屏都是：" + String(colliding))
+        .toBeGreaterThan(BINDING_SYMBOL_MAX_JUDGE_FILES);
+      const r = bindClaimFaces({ unwitnessed: [genericFace!] }, [{
+        face: genericFace!, symbol: "run", testFile: "tests/action-fusion.test.ts",
+        testCase: "write and edit preserve separate receipts, run only configured lint, no extra tool calls",
+        why: "夹具：②③④ 都拿现读的真材料满足（那条用例体内确实用到 run），只看区分度这一件能不能拦住",
+      }], m);
+      expect(r.bound, "没有区分度的符号能配上的话，绑定通道就是一张随便填的空头支票").toEqual([]);
+      expect(r.bad.join("\n"), "要点名到「没有区分度」这一件：" + r.bad.join(" | ")).toContain("没有区分度");
+    });
+
+    it("缺第一件：登记的那一格根本不在欠证人清单里 ⇒ 报成登记表自己的病，而不是悄悄多绑上一格", () => {
       const r = bindClaimFaces(owed, [{ ...b, face: "src/__probe.ts#say｜那句话早就有原句证人了" }], material);
       expect(r.bound, "清单里没有这一格 ⇒ 没有东西可以移").toEqual([]);
       expect(r.unwitnessed).toEqual([face]);
@@ -380,6 +428,7 @@ describe("能力断言的证人面：一句都不曾被点过才算欠（第 311
       const off = bindClaimFaces(f, [], m);
       const on = bindClaimFaces(f, CLAIM_BINDINGS, m);
       expect(on.bound.length, "通道开着却一条都没绑上＝没在工作").toBeGreaterThan(0);
+      expect(on.bad, "登记表里每条绑定都要过得了四件事，过了就别再报自己的病：" + on.bad.join(" | ")).toEqual([]);
       expect(off.unwitnessed.length - on.unwitnessed.length, "绑上的条数必须正好等于欠证人少掉的条数").toBe(on.bound.length);
     });
   });

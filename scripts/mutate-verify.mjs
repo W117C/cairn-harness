@@ -12606,8 +12606,8 @@ const MUTATIONS = [
     ),
     expectFail: "印面与边界名单按窗口说话，不许再写「逐字」（读这些数的人据此判断重复率准不准）",
   },
-  // 第 314 页：绑定通道的三件成立条件，一件一枚——三枚必须红在**不同**用例上，
-  // 合在一条用例里就是两条没有分辨力的锚点（造红台的 killer 独占性那一格会当场点名）。
+  // 第 314 页开的是三件成立条件，第 317 页加到五件（③点名用例标题、④那条体内用符号、⑤符号区分度）。
+  // 一枚一件、各红不同用例——合在一条用例里就是几条没有分辨力的锚点（造红台的 killer 独占性那一格会当场点名）。
   {
     id: "claim-binding-accepts-symbol-absent-from-source",
     src: "scripts/probe-promise-recall.ts",
@@ -12618,19 +12618,20 @@ const MUTATIONS = [
       "!hasSymbol(srcText, b.symbol)",
       "false",
     ),
-    expectFail: "缺第一件：那句所在的源文件里没有那个符号 ⇒ 仍算欠证人，并点名是这一件没成",
+    expectFail: "缺第二件：那句所在的源文件里没有那个符号 ⇒ 仍算欠证人，并点名是这一件没成",
   },
   {
     id: "claim-binding-accepts-symbol-unreferenced-by-judge",
     src: "scripts/probe-promise-recall.ts",
     test: "tests/promise-recall-inventory.test.ts",
-    desc: "摘掉「那份判卷真引用了这个符号」这一件 ⇒ 散文式指认（\"我认为它兜住了\"）也能销账。"
-      + "这一件有真材实料的反例：`SIDECHAT_TOOL_WHITELIST` 在源文件里在，但那份判卷逐条用的是它的补集",
+    desc: "把「那条用例体内真引用了这个符号」退回**文件级**（旧口径：整份判卷里出现过这个词就算）⇒ "
+      + "散文式指认也能销账。反例挑的是旧口径分辨不出的形状：`promoteToMain` 在那份判卷里出现多次（文件级放行），"
+      + "而我点名的那条工具表用例根本不调它 ⇒ 判据收到用例体内才会拒收",
     apply: (s) => s.replace(
+      "!hasSymbol(body, b.symbol)",
       "!hasSymbol(testText, b.symbol)",
-      "false",
     ),
-    expectFail: "缺第二件：被指认的判卷没引用那个符号 ⇒ 仍算欠证人（真材实料的反例：白名单常量在那份判卷里 0 引用）",
+    expectFail: "缺第四件：符号在那份判卷里**有**、但不在被点名的那条用例**体内** ⇒ 仍算欠证人（旧口径放得过的形状）",
   },
   {
     id: "claim-binding-binds-faces-not-on-the-owed-list",
@@ -12642,7 +12643,45 @@ const MUTATIONS = [
       "!owed.has(b.face)",
       "false",
     ),
-    expectFail: "缺第三件：登记的那一格根本不在欠证人清单里 ⇒ 报成登记表自己的病，而不是悄悄多绑上一格",
+    expectFail: "缺第一件：登记的那一格根本不在欠证人清单里 ⇒ 报成登记表自己的病，而不是悄悄多绑上一格",
+  },
+  /* 第 317 页新加的三件，各配一枚。这一族的病不是"绑不上"，而是"绑得太宽"：
+     宽到文件级、宽到不是一条用例、宽到符号谁都提得到——三种各有一枚，摘掉哪一枚就红在哪一条。 */
+  {
+    id: "claim-binding-accepts-title-not-a-case",
+    src: "scripts/probe-promise-recall.ts",
+    test: "tests/promise-recall-inventory.test.ts",
+    desc: "把「指的东西必须是一条**用例标题**」这一件放宽成恒真 ⇒ 任何一句注释、任何一个字符串都能充当证人；"
+      + "而那条不存在标题的反例照旧放行（它报的会是别的原因，不是这一件）",
+    apply: (s) => s.replace(
+      "const isTitle = vitestTitles(testText).some((t) => t === b.testCase)\n      || vitestTitlePatterns(testText).some((re) => re.test(b.testCase));",
+      "const isTitle = true;",
+    ),
+    expectFail: "缺第三件：指的那个「用例」在那份判卷里根本不存在 ⇒ 报的是标题找不到，不是符号找不到",
+  },
+  {
+    id: "claim-binding-symbol-specificity-guard-dropped",
+    src: "scripts/probe-promise-recall.ts",
+    test: "tests/promise-recall-inventory.test.ts",
+    desc: "摘掉符号区分度那一件 ⇒ `run`／`note`／`specs` 这类满屏都是的词又能用来配对（现读：run 在 295 份判卷里被 130 份提到）。"
+      + "③④ 只是把蒙混的成本降低，⑤ 才把这条路关掉",
+    apply: (s) => s.replace(
+      "if (colliding > BINDING_SYMBOL_MAX_JUDGE_FILES) {",
+      "if (false) {",
+    ),
+    expectFail: "缺第五件（区分度）：符号在太多份判卷里出现过 ⇒ 直接拒收，哪怕其余四件都成立",
+  },
+  {
+    id: "eval-feasibility-no-verifier-branch-silent",
+    src: "src/agent/eval/task-set.ts",
+    test: "tests/eval-task-set.test.ts",
+    desc: "把「压根没有判卷命令」那一支摘掉 ⇒ 只剩「有判卷命令但本机跑不起来」那一句，"
+      + "而这两件事的出路完全不同：缺的是尺（该补判卷），不是缺 pytest（装依赖就行）——读数会被指去修错的那一格",
+    apply: (s) => s.replace(
+      "if (task.verifier === undefined) {",
+      "if (false) {",
+    ),
+    expectFail: "没有判卷命令那一支也要出声：blocker 说的是「没有判卷命令」，不许与工具链缺失混成一句",
   },
   // 第 315 页：记忆注入的降级面。三个消费者各一枚 ＋ 共用出口本身一枚（四枚各红不同用例）。
   {
