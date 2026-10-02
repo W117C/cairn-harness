@@ -1233,12 +1233,14 @@ describe("贴帽读数：suiteRows／budgetFromTestSource／timingNearCapCell／
   });
 
   it("真机整表：把留档的那一次全量 json 喂进去，档位计数与逐行重数必须同分母", () => {
-    // 取料=安静态全量 json（2026-10-02 那趟：树＝188b7e3、独占、278 文件／3721 条）。
-    // 为什么换了一份：上一份留档（judge-timeout-2026-10-01）里的标题是**旧**的——`tests/usage-attribution.test.ts`
-    // 有一条用例改了名（"全仓只有这一处盖章"→"这一份文件里只有这一处盖章"），而这一格是按标题回源码取预算的，
-    // 改名 ⇒ 那一条查不到 ⇒ `notResolved=1`。留档不许改（它是 10-01 的证据），所以**换取料**而不是削判据。
-    // 这份新语料里仍带着当时那一条红（就是这个判卷自己），红不影响时长读数。
-    const jsonPath = join(repoRoot, "outputs/judge-timeout-2026-10-02/suite-quiet.json");
+    // 取料=安静态全量 json（2026-10-03 那趟：树＝9dd1e8a、独占（起跑前 `pgrep -f vitest`=0）、286 文件／3952 条、162.45s）。
+    // 为什么又换了一份：上一份（judge-timeout-2026-10-02，树 188b7e3）里的标题是**旧**的——第 313 页把
+    // `tests/tool-choice.test.ts` 那条「重复探测只按…逐字相同结果判」改成了「…结果前 200 字相同…」（标题写着逐字而正文从不判窗口），
+    // 而这一格是**按标题回源码取显式预算**的 ⇒ 改名 ⇒ 那一条查不到 ⇒ `notResolved=1`。
+    // 留档不许改（它是那一天的证据），所以照同一个先例：**换取料**而不是削判据——这格红的存在理由就是"标题漂移必须响"。
+    // 语料里的这一条红仍是本判卷自己（那天的红不影响时长读数）。⚠️ 刷新必须等独占窗口：
+    // 隔壁在连发单文件击杀时跑出来的时长是脏的，那份 json 一旦当"quiet"入档，此后每次认证都在读一个假基准。
+    const jsonPath = join(repoRoot, "outputs/judge-timeout-2026-10-03/suite-quiet.json");
     const rows = suiteRows(readFileSync(jsonPath, "utf8"), repoRoot + "/");
     expect(rows).not.toBeNull();
     const all = rows ?? [];
