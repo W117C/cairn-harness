@@ -1,6 +1,6 @@
 // 影响面层（M7）：对目标仓库 js/ts/jsx 抽跨文件调用边（def/ref 双端点），
 // 支持向上（谁调用我）/向下（我调用谁）查询。复用 map 层的 grammar 初始化与
-// tags 模式（fileTags + {mtime,size} 磁盘缓存），不重写 tree-sitter。
+// tags 模式（`fileSymbols`：tags＋imports 两个出口 + {mtime,size} 磁盘缓存），不重写 tree-sitter。
 // 缓存只写应用数据目录（~/.m0-agent-loop/impact-tags），绝不写进用户仓库。
 // 与 map 的差异：map 静默降级（ok:false）；影响面是「改代码护栏」，grammar
 // 环境级失败必须 fail-loud（ImpactUnavailableError，文案含 unavailable）。
@@ -8,9 +8,11 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { fileTags, TAGS_EXTRACT_VERSION, TreeSitterUnavailableError, type SymbolTag } from "../map/parse.js";
+import { fileSymbols, TAGS_EXTRACT_VERSION, TreeSitterUnavailableError, type ImportRef, type SymbolTag } from "../map/parse.js";
+import { resolveModuleSpecifier } from "../map/import-edge.js";
 import { applyFileCap, scanSourceFilesAll, type ScannedFile } from "../map/build.js";
 import { MAX_FILES_CEILING, MAX_FILES_DEFAULT } from "../map/cap.js";
+import { attributionNote, attributeRefToDef, bindingSourceKey, emptyAttributionStats, type AttributionStats } from "./attribution.js";
 import { coverageNote, graphIsPartial } from "./coverage.js";
 import { currentCommitSha, impactIndexDirFor, loadImpactIndex, saveImpactIndex } from "./persist.js";
 
@@ -53,6 +55,12 @@ export interface ImpactGraph {
   refs: Map<string, ImpactSite[]>;
   /** 跨文件调用边（from ≠ to，确定性排序）。 */
   edges: ImpactEdge[];
+  /** 引用方文件 → 名字 → 该名字被绑到的来源（仓内 rel，或 `external:<说明符>`）。
+   *  归属判据（`attribution.ts`）的取料面。**这一张表与 tags 同源同批**：另建一份就是
+   *  第二套取料面（同族），持久化那一支漏带它 ⇒ 热载入的图会给出「无证据」满格的另一张图。 */
+  nameSources: Map<string, Map<string, string[]>>;
+  /** 边构造时的三态计数（kept／dropped／no-evidence）。读端要说「排除了几处」就得靠它带分母。 */
+  attribution: AttributionStats;
   /** 本次实际重解析文件数（缓存未命中）。 */
   parsed: number;
   /** 本次命中 tags 缓存文件数。 */
@@ -106,24 +114,29 @@ interface ImpactTagsCacheEntry {
   mtimeMs: number;
   size: number;
   tags: SymbolTag[];
+  /** 跨文件依赖（`fileSymbols` 的第二个出口）。与 tags **同判同写**：只存 tags 的那一支
+   *  会让归属判据永远拿不到证据（现象＝"改了实现，波及面一点没变"），与地图侧同一格病。 */
+  imports: ImportRef[];
 }
 
-async function readTagsCache(dir: string, f: ScannedFile): Promise<SymbolTag[] | null> {
+async function readTagsCache(dir: string, f: ScannedFile): Promise<{ tags: SymbolTag[]; imports: ImportRef[] } | null> {
   try {
     const raw = await readFile(cacheFileFor(dir, f.abs), "utf8");
     const e = JSON.parse(raw) as ImpactTagsCacheEntry;
     if (e.v !== TAGS_EXTRACT_VERSION) return null; // 判据换过（含旧条目无 v 字段）→ 作废
-    if (e.mtimeMs === f.mtimeMs && e.size === f.size && Array.isArray(e.tags)) return e.tags;
+    if (e.mtimeMs === f.mtimeMs && e.size === f.size && Array.isArray(e.tags) && Array.isArray(e.imports)) {
+      return { tags: e.tags, imports: e.imports };
+    }
     return null; // 指纹变化 → miss（文件被改过）
   } catch {
     return null; // 无缓存/缓存损坏 → miss（下次覆写，不抛）
   }
 }
 
-async function writeTagsCache(dir: string, f: ScannedFile, tags: SymbolTag[]): Promise<void> {
+async function writeTagsCache(dir: string, f: ScannedFile, tags: SymbolTag[], imports: ImportRef[]): Promise<void> {
   try {
     await mkdir(dir, { recursive: true });
-    const entry: ImpactTagsCacheEntry = { v: TAGS_EXTRACT_VERSION, mtimeMs: f.mtimeMs, size: f.size, tags };
+    const entry: ImpactTagsCacheEntry = { v: TAGS_EXTRACT_VERSION, mtimeMs: f.mtimeMs, size: f.size, tags, imports };
     await writeFile(cacheFileFor(dir, f.abs), JSON.stringify(entry), "utf8");
   } catch (err) {
     // 缓存写失败不影响本次建图（下次全量重解析），与 map 同口径
@@ -180,14 +193,20 @@ async function buildGraphFromScan(
 ): Promise<ImpactGraph> {
   const defs = new Map<string, ImpactSite[]>();
   const refs = new Map<string, ImpactSite[]>();
+  /** 引用方文件 → 名字 → 该名字被 import 绑到的来源（rel 或 `external:<说明符>`）。 */
+  const nameSources = new Map<string, Map<string, string[]>>();
+  const attribution = emptyAttributionStats();
   let parsed = 0;
   let fromTagsCache = 0;
+  const knownFiles = new Set(files.map((f) => f.rel));
 
   for (const f of files) {
-    let tags: SymbolTag[] | null;
+    let tags: SymbolTag[];
+    let imports: ImportRef[];
     const hit = await readTagsCache(dir, f);
     if (hit) {
-      tags = hit;
+      tags = hit.tags;
+      imports = hit.imports;
       fromTagsCache++;
     } else {
       let src: string;
@@ -199,9 +218,11 @@ async function buildGraphFromScan(
       }
       try {
         const ext = f.rel.slice(f.rel.lastIndexOf(".") + 1).toLowerCase();
-        tags = await fileTags(src, ext);
+        const sym = await fileSymbols(src, ext);
+        tags = sym.tags;
+        imports = sym.imports;
         parsed++;
-        await writeTagsCache(dir, f, tags);
+        await writeTagsCache(dir, f, tags, imports);
       } catch (err) {
         if (err instanceof TreeSitterUnavailableError) {
           throw new ImpactUnavailableError(
@@ -218,17 +239,36 @@ async function buildGraphFromScan(
       if (t.kind === "def") addSites(defs, t.name, { symbol: t.name, file: f.rel, line: t.line });
       else addSites(refs, t.name, { symbol: t.name, file: f.rel, line: t.line });
     }
+    // 归属取料：这一份文件把每个名字 import 绑到了哪儿。**外部包也算**（`node:fs` 的那个
+    // `readFile` 正是"另有出处"的反证），键的构造只在 `bindingSourceKey` 一处。
+    const perFile = new Map<string, string[]>();
+    for (const ir of imports) {
+      const key = bindingSourceKey(resolveModuleSpecifier(f.rel, ir.spec, knownFiles), ir.spec);
+      const arr = perFile.get(ir.name);
+      if (arr) {
+        if (!arr.includes(key)) arr.push(key);
+      } else perFile.set(ir.name, [key]);
+    }
+    nameSources.set(f.rel, perFile);
   }
 
-  // 跨文件调用边：ref 点所在文件 ≠ def 点所在文件（同文件自调用不是「影响面」）
+  /** 边构造 + 归属判据一起过：反证（同名但另有出处）才摘，没证据照名字图连——
+   *  三态计数只在这一处发生（`upward`/`downward` 复用同一个谓词但不重复计数，
+   *  否则同一件事会被两条支各数一遍，读数就成了两倍）。 */
   const seen = new Set<string>();
   const edges: ImpactEdge[] = [];
   for (const [sym, refSites] of refs) {
     const defSites = defs.get(sym);
     if (!defSites) continue;
     for (const r of refSites) {
+      const binding = { known: nameSources.has(r.file), sources: nameSources.get(r.file)?.get(sym) ?? [] };
       for (const d of defSites) {
         if (d.file === r.file) continue;
+        const verdict = attributeRefToDef(binding, d.file);
+        if (verdict === "kept") attribution.kept++;
+        else if (verdict === "dropped") attribution.dropped++;
+        else attribution.noEvidence++;
+        if (verdict === "dropped") continue;
         const key = [r.file, d.file, sym, r.line, d.line].join("\u241F");
         if (seen.has(key)) continue;
         seen.add(key);
@@ -259,6 +299,8 @@ async function buildGraphFromScan(
     defs,
     refs,
     edges,
+    nameSources,
+    attribution,
     parsed,
     fromTagsCache,
   };
@@ -275,11 +317,25 @@ function sortedSites(sites: ImpactSite[]): ImpactSite[] {
   return [...sites].sort(siteOrder);
 }
 
+/** 这一处 (引用方文件, 名字) 能不能归给图里这些同名定义之一。
+ *  与边构造吃**同一个**判据（`attributeRefToDef`）——两处各写一份就会漂（第十三族）。
+ *  定义集合里没有任何"别处的"定义时不摘：那既不是假阳性也不是真阳性，今天的口径就这样。 */
+function attributableSomewhere(graph: ImpactGraph, refFile: string, symbol: string, defFiles: ReadonlySet<string>): boolean {
+  const binding = { known: graph.nameSources.has(refFile), sources: graph.nameSources.get(refFile)?.get(symbol) ?? [] };
+  let candidates = 0;
+  for (const defFile of defFiles) {
+    if (defFile === refFile) continue;
+    candidates++;
+    if (attributeRefToDef(binding, defFile) !== "dropped") return true;
+  }
+  return candidates === 0;
+}
+
 /** 向上：跨文件调用 symbol 的位置清单（排除定义所在文件自身——「谁还在用我」）。 */
 export function upward(graph: ImpactGraph, symbol: string): ImpactSite[] {
   const refSites = graph.refs.get(symbol) ?? [];
   const defFiles = new Set((graph.defs.get(symbol) ?? []).map((d) => d.file));
-  return sortedSites(refSites.filter((r) => !defFiles.has(r.file)));
+  return sortedSites(refSites.filter((r) => !defFiles.has(r.file) && attributableSomewhere(graph, r.file, symbol, defFiles)));
 }
 
 /** 向下：file 里引用到的、且定义在别的文件里的 symbol 的定义点清单（「我在调用谁」）。 */
@@ -289,8 +345,12 @@ export function downward(graph: ImpactGraph, file: string): ImpactSite[] {
   for (const [sym, refList] of graph.refs) {
     const mine = refList.filter((r) => r.file === file);
     if (mine.length === 0) continue;
+    const binding = { known: graph.nameSources.has(file), sources: graph.nameSources.get(file)?.get(sym) ?? [] };
     for (const d of graph.defs.get(sym) ?? []) {
       if (d.file === file) continue;
+      // 与 `upward` 同一把判据，但这里是"我对面那一份定义"——按 def 逐条判，
+      // 不能像 upward 那样"任一命中即留"，否则会把反证成立的那份定义也带回来。
+      if (attributeRefToDef(binding, d.file) === "dropped") continue;
       const key = d.file + "\u241F" + String(d.line) + "\u241F" + d.symbol;
       if (!out.has(key)) {
         out.add(key);
@@ -331,9 +391,11 @@ export interface FileImpactReport {
    *  少带这一位，回注那一侧要出声只能自己再解析一遍缺省（同族「两处各写一个数字」）。 */
   graphCap: number;
   /** 本文件的定义符号里，哪些**在别的文件也有一份同名定义**（按名字顺序）。
-   *  符号图只按名字连边、不采 import ⇒ 这些符号的向上清单是**各份定义的并集**，
-   *  里面混着"另一份定义的调用方"（假阳性）。读端不点名，模型就无从知道该收窄。 */
+   *  符号图按名字连边 ⇒ 这些符号的向上清单是**各份定义的并集**，
+   *  里面可能混着"另一份定义的调用方"。读端不点名，模型就无从知道该收窄。 */
   ambiguousSymbols: string[];
+  /** 建这张图时边构造的三态归属计数（读端要说"排除了几处／几处没证据可判"就靠它带分母）。 */
+  attribution: AttributionStats;
 }
 
 /** 计算单个被编辑文件的影响面。文件不在图内（未扫描/不支持后缀/不存在）→ null（不发事件）。
@@ -370,6 +432,7 @@ export async function fileImpact(
     graphCandidates: graph.candidates,
     graphCap: graph.cap,
     ambiguousSymbols,
+    attribution: graph.attribution,
   };
 }
 
@@ -412,9 +475,11 @@ export function contextNoteFor(r: FileImpactReport): string {
   // **缺省开**的写后回注（`settings.ts` 的 `impactAnalysis: true`）⇒ 模型只读到「波及 M 个文件」就会照着去动那 M 个文件，
   // 而 M 里可能混着"别处同名"的调用方（真仓读数：一个 `private readFile` 吸进 107 个文件的同名 ref）。
   // 同一份事实只在一个消费者嘴里说，是本仓反复判死的"只硬化一支"形状。
-  const ambiguity = r.ambiguousSymbols.length > 0
+  // 归属计数（`attributionNote`）接在这句**之后**：那句是"有同名定义"的结构事实，这句是"这一张图判掉了多少"的
+  // 度量事实——两者独立出现，摘掉任一都不许让另一句跟着变（判卷按两态各钉一条）。
+  const ambiguity = (r.ambiguousSymbols.length > 0
     ? `；其中 ${String(r.ambiguousSymbols.length)} 个符号在别的文件也有同名定义，波及数按名字图算 ⇒ 清单里可能混有无关文件`
-    : "";
+    : "") + attributionNote(r.attribution);
   const lines: string[] = [
     `[impact] ${r.file} 定义符号的跨文件调用点（上 ${r.up.length}${r.truncated ? "+" : ""}，波及 ${files.length} 个文件${ambiguity}；完整清单见 impact_report 事件）：`,
   ];

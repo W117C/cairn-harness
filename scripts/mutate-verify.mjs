@@ -12071,6 +12071,146 @@ const MUTATIONS = [
     ),
     expectFail: "df 门槛就是 max(3, floor(N×ratio))：df=4 在 N=10 时被滤，df=3 时留着",
   },
+  /* 波及面的**归属判据**（第 305 页，任务 #9）。14 枚针脚＝判据三态各一枚、措辞两格各两枚、
+     三个消费点（边构造/upward/downward）各一枚、回注接线一枚、取料与两层缓存各一枚、版本号一枚——
+     没有两枚红在同一条用例上（ killer 全部指向 tests/impact-attribution.test.ts 的不同标题）。
+     刻意不钉的那一格见同页 readings.md：`IMPACT_INDEX_SCHEMA_VERSION` 从 2 退回 1 没有任何可观察差别
+     （老 artifact 缺新字段，fail-closed 那支已经拦死），给它配针脚就是造一条恒真尺。 */
+  {
+    id: "impact-attribution-no-evidence-read-as-kept",
+    src: "src/agent/impact/attribution.ts",
+    test: "tests/impact-attribution.test.ts",
+    desc: "「没有 import 面可判」被读成「正证成立」⇒ 全局脚本仓库与老缓存条目一起被算成" +
+      "**已核实无归属**，措辞里那句「保守计入」失去意义（本仓反复判死的那件事：读不到与没有同形）",
+    apply: (s) => s.replace('if (!binding.known) return "no-evidence";', 'if (!binding.known) return "kept";'),
+    expectFail: "「无证据」优先于任何 sources：不能因为带了名字表就把没判的文件算成排除",
+  },
+  {
+    id: "impact-attribution-positive-proof-ignored",
+    src: "src/agent/impact/attribution.ts",
+    test: "tests/impact-attribution.test.ts",
+    desc: "正证那一支被摘掉 ⇒ 只要这个名字被任何 import 绑过，连「恰好就从定义那份文件来的」也一起判死，" +
+      "清单从此**只剩没 import 面的文件**（真枢纽全被自己排除）",
+    apply: (s) => s.replace('if (binding.sources.includes(defFile)) return "kept";', ""),
+    expectFail: "四种输入各给一个答案：无 import 面／没有绑定证据／正证在此／反证在别处",
+  },
+  {
+    id: "impact-attribution-only-first-source-counted",
+    src: "src/agent/impact/attribution.ts",
+    test: "tests/impact-attribution.test.ts",
+    desc: "一个名字从两份文件绑进来时只看第一份 ⇒ 第二份定义的调用点被当成假阳性摘掉，" +
+      "而多来源恰恰是最常见的形状（同一文件 re-export 两个模块）",
+    apply: (s) => s.replace("binding.sources.includes(defFile)", "binding.sources[0] === defFile"),
+    expectFail: "多来源里有 defFile 就留（一个名字从两份文件绑进来的形状不许整条判死）",
+  },
+  {
+    id: "impact-attribution-reverse-proof-never-drops",
+    src: "src/agent/impact/attribution.ts",
+    test: "tests/impact-attribution.test.ts",
+    desc: "反证那一支回落到 kept ⇒ 整条规则变成只数不删，第 304 页那两个大户（`writeFile` 140／`readFile` 114）" +
+      "一个调用点都不掉，而三态读数里的 dropped 还在动（读着像在工作）",
+    apply: (s) => s.replace('  return "dropped";', '  return "kept";'),
+    expectFail: "四个引用方各归各位：真 import 的留、外部包与第三方绑定的摘、不 import 的留",
+  },
+  {
+    id: "impact-attribution-note-dropped-only-gauge",
+    src: "src/agent/impact/attribution.ts",
+    test: "tests/impact-attribution.test.ts",
+    desc: "空串闸门只核 dropped ⇒ noEvidence 单独非零时整句闭嘴，「这张图有 M 处压根没判」这个事实消失，" +
+      "模型把保守计入的清单当成已收紧的清单",
+    apply: (s) => s.replace('if (stats.dropped === 0 && stats.noEvidence === 0) return "";', 'if (stats.dropped === 0) return "";'),
+    expectFail: "两格分别出声：dropped 说「另有出处」，noEvidence 说「保守计入」，各不带对方那句话",
+  },
+  {
+    id: "impact-attribution-note-prints-zeros",
+    src: "src/agent/impact/attribution.ts",
+    test: "tests/impact-attribution.test.ts",
+    desc: "闸门整条拆掉 ⇒ 每次写入的回注都多一截「；归属判定：」（parts 全空时只留个冒号），" +
+      "零回归哨兵那一格（接这维之前逐字相同）当场作废——字节省在没人看的地方就不是省的",
+    apply: (s) => s.replace('if (stats.dropped === 0 && stats.noEvidence === 0) return "";', 'if (false) return "";'),
+    expectFail: "全 0 ⇒ 空串（不许印「排除 0 处」这种噪声）",
+  },
+  {
+    id: "impact-edges-not-filtered-by-attribution",
+    src: "src/agent/impact/index.ts",
+    test: "tests/impact-attribution.test.ts",
+    desc: "判据算了、三态也数了，唯独边没摘（本仓「算出来不接」那一族的正形）⇒ 事件流里的 impact_report " +
+      "与语义租约看到的仍是按名字连的满图，只有读端文案里的 dropped 在动",
+    apply: (s) => s.replace('if (verdict === "dropped") continue;', ""),
+    expectFail: "边构造吃判据：三态计数各有一行，且摘边只看 verdict",
+  },
+  {
+    id: "impact-upward-attribution-not-applied",
+    src: "src/agent/impact/index.ts",
+    test: "tests/impact-attribution.test.ts",
+    desc: "只硬化边构造、`upward` 不吃判据 ⇒ `impact_query` 的符号支继续给出 140 处的满清单，" +
+      "而同一张图的边集已经缩了（三支共用一把判据是这条政策的形状，第十三族）",
+    apply: (s) => s.replace(
+      "!defFiles.has(r.file) && attributableSomewhere(graph, r.file, symbol, defFiles)",
+      "!defFiles.has(r.file)",
+    ),
+    expectFail: "无证据那一支：手工把 nameSources 抹掉 ⇒ 清单回到按名字图（一条不摘，且计数进 noEvidence）",
+  },
+  {
+    id: "impact-downward-attribution-not-applied",
+    src: "src/agent/impact/index.ts",
+    test: "tests/impact-attribution.test.ts",
+    desc: "`downward` 不回落到同一把判据 ⇒「我在调用谁」把 node:fs 的那个同名函数报成仓内的定义，" +
+      "模型顺着这条边跳去改仓内文件（与 upward 两个方向各错一次，修法相反）",
+    apply: (s) => s.replace('if (attributeRefToDef(binding, d.file) === "dropped") continue;', ""),
+    expectFail: "downward 按 def 逐条判：otherdef.ts 看不到 ledger.ts 那份，consumer.ts 看得到",
+  },
+  {
+    id: "impact-attribution-note-not-wired",
+    src: "src/agent/impact/index.ts",
+    test: "tests/impact-attribution.test.ts",
+    desc: "判据接进了图而回注摘要没接 ⇒ 摘了多少没人说（模型看到「波及 73 个文件」不知道那 73 已经是判过的），" +
+      "读端工具与注入面又各说各的（同族「只硬化一支」）",
+    apply: (s) => s.replace("+ attributionNote(r.attribution)", '+ ""'),
+    expectFail: "歧义句与归属句彼此独立：只有归属计数没有歧义时，归属句照样出",
+  },
+  {
+    id: "impact-tags-cache-imports-guard-dropped",
+    src: "src/agent/impact/index.ts",
+    test: "tests/impact-attribution.test.ts",
+    desc: "读缓存只核 tags ⇒ 老条目命中后 imports 是 undefined，归属判据整层拿不到取料，" +
+      "现象＝「加了规则，在自己机器上一点没变」（第十族：缓存那一支不生效）",
+    apply: (s) => s.replace("Array.isArray(e.tags) && Array.isArray(e.imports)", "Array.isArray(e.tags)"),
+    expectFail: "tags 条目同时带 tags 与 imports；把 imports 抠掉的老条目按 miss 重解析",
+  },
+  {
+    id: "impact-imports-exit-not-eaten",
+    src: "src/agent/impact/index.ts",
+    test: "tests/impact-attribution.test.ts",
+    desc: "`fileSymbols` 的第二个出口算出来没接（回空数组）⇒ 每个文件都「有 import 面、一条绑定都没有」，" +
+      "于是**处处判 kept**，规则看着接上了却处处不摘，且读数不是 noEvidence 而是 kept",
+    apply: (s) => s.replace("imports = sym.imports;", "imports = [];"),
+    expectFail: "解析走 fileSymbols（第三个出口），不回退到 fileTags 薄壳",
+  },
+  {
+    id: "impact-index-artifact-namesources-not-saved",
+    src: "src/agent/impact/persist.ts",
+    test: "tests/impact-attribution.test.ts",
+    desc: "取料面只在内存图里，落盘 artifact 没带 ⇒ 命中索引的那一次建图判据**整层失忆**，" +
+      "同一份代码在「有索引」与「没索引」两种仓上给出不同清单（缓存层与建图分层各抄一份的那族）",
+    apply: (s) => s.replace(
+      "nameSources: [...graph.nameSources.entries()]",
+      "nameSources: ([] as [string, Map<string, string[]>][])",
+    ),
+    expectFail: "索引 artifact 带上 nameSources 与 attribution；缺任何一格或版本不对都按 miss",
+  },
+  {
+    id: "impact-index-artifact-version-not-checked",
+    src: "src/agent/impact/persist.ts",
+    test: "tests/impact-attribution.test.ts",
+    desc: "字段齐全但版本号不符的 artifact 被照吃 ⇒ 判据换过时老图整层复活，" +
+      "而字段完整性检查看不出任何异常（它只答「有没有这一格」，答不出「哪一版写的」）",
+    apply: (s) => s.replace(
+      "if (a.schemaVersion !== IMPACT_INDEX_SCHEMA_VERSION) return null;",
+      "if (false) return null;",
+    ),
+    expectFail: "版本号不符的 artifact 即使字段齐全也按 miss（只加字段不认号＝老图整层复活）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

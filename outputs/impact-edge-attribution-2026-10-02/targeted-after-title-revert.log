@@ -1,0 +1,21 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+ [32m✓[39m tests/head-cert-deps.test.ts [2m([22m[2m115 tests[22m[2m)[22m[33m 3630[2mms[22m[39m
+   [32m✓[39m certLevel：半把尺不许冒充认证（第 119 页，起因是第 116/117 页我自己踩的那盏假灯） [2m(6)[22m
+     [33m[2m✓[22m[39m 真跑：`--skip-test` 不带 `--why` ⇒ 脚本 exit 2，且不建 worktree[33m 638[2mms[22m[39m
+   [32m✓[39m 接线：真跑 head-cert——占不到锁就不许动树 [2m(7)[22m
+     [33m[2m✓[22m[39m 锁被活人占着 ⇒ exit 2、点名是谁、**没走到切树**，并且不替别人删锁[33m 550[2mms[22m[39m
+     [33m[2m✓[22m[39m 反向哨兵：没有锁文件 ⇒ 不许以「锁面不存在」为由拒跑，照常走到切树那一步[33m 593[2mms[22m[39m
+     [33m[2m✓[22m[39m 陈旧锁（pid 已死）⇒ 出声回收并**继续**：不先摘旧锁，抢占那次 link 必 EEXIST＝陈旧锁永远回收不了[33m 565[2mms[22m[39m
+     [33m[2m✓[22m[39m 锁文件读不出 ⇒ exit 2、点名是哪把锁，也不许冒领「被别人占走」那一支的措辞[33m 549[2mms[22m[39m
+   [32m✓[39m 清场读数：常驻残留的 scratch 树要自己报数（任务 #33） [2m(15)[22m
+     [33m[2m✓[22m[39m 真读现喂：拿本机真的 worktree 清单喂进去不许崩，且绝不点到自己这棵[33m 337[2mms[22m[39m
+ [32m✓[39m tests/impact-persistence.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 1098[2mms[22m[39m
+ [32m✓[39m tests/impact-attribution.test.ts [2m([22m[2m22 tests[22m[2m)[22m[32m 298[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[32m147 passed[39m[22m[90m (147)[39m
+[2m   Start at [22m 22:50:43
+[2m   Duration [22m 5.52s[2m (tests 95%, transform 3%, import 2%)[22m
+

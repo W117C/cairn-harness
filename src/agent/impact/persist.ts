@@ -11,12 +11,16 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import type { ScannedFile } from "../map/build.js";
+import type { AttributionStats } from "./attribution.js";
 import type { ImpactEdge, ImpactGraph, ImpactSite } from "./index.js";
 
 const execFileP = promisify(execFile);
 
-/** artifact 格式版本：载入时对不上就按 miss 重建（含旧条目没有此字段的情况）。 */
-export const IMPACT_INDEX_SCHEMA_VERSION = 1;
+/** artifact 格式版本：载入时对不上就按 miss 重建（含旧条目没有此字段的情况）。
+ *  1→2（任务 #9）：多了归属取料面 `nameSources` 与三态计数 `attribution`。**整层作废**是有意的——
+ *  只加字段而不升版本 ⇒ 老 artifact 载入后 `nameSources` 全缺，整张图读成"处处都没证据可判"，
+ *  现象就是"波及面一夜之间退回按名字图"（与地图侧「缓存那一支不生效」同族）。 */
+export const IMPACT_INDEX_SCHEMA_VERSION = 2;
 
 export interface ImpactIndexFingerprint {
   rel: string;
@@ -38,6 +42,22 @@ export interface ImpactIndexArtifact {
   defs: { symbol: string; sites: ImpactSite[] }[];
   refs: { symbol: string; sites: ImpactSite[] }[];
   edges: ImpactEdge[];
+  /** 引用方文件 → 名字 → 绑定来源（`external:<说明符>` 前缀＝外部包）。
+   *  与 tags 同批产出 ⇒ **同存同取**：少了它，从索引载入的那张图会把每个文件都读成
+   *  "没有 import 面可判"，归属判据整层失效（现象＝波及面退回按名字图，且没有任何报错）。 */
+  nameSources: ImpactNameSource[];
+  /** 边构造的三态计数。原样带回——丢了它，读端说不出"排除了几处／几处没证据"。 */
+  attribution: AttributionStats;
+}
+
+/** 落盘形状：Map → 按名排序的数组（JSON 没有有序 Map，且要能逐字 diff）。 */
+export interface ImpactNameBinding {
+  symbol: string;
+  sources: string[];
+}
+export interface ImpactNameSource {
+  file: string;
+  bindings: ImpactNameBinding[];
 }
 
 /** 索引目录：cacheDir 的兄弟目录（生产 = ~/.m0-agent-loop/impact-tags → ~/.m0-agent-loop/impact-index，
@@ -82,8 +102,12 @@ export async function loadImpactIndex(
     if (a.schemaVersion !== IMPACT_INDEX_SCHEMA_VERSION) return null;
     if (a.commitSha !== sha) return null;
     if (!Array.isArray(a.files) || !Array.isArray(a.fingerprints) || !Array.isArray(a.defs) ||
-        !Array.isArray(a.refs) || !Array.isArray(a.edges)) {
+        !Array.isArray(a.refs) || !Array.isArray(a.edges) || !Array.isArray(a.nameSources)) {
       return null;
+    }
+    const at = a.attribution as AttributionStats | undefined;
+    if (at === undefined || typeof at.kept !== "number" || typeof at.dropped !== "number" || typeof at.noEvidence !== "number") {
+      return null; // 三态计数缺失 ⇒ 读端会说不出"排除了几处"，宁miss重建
     }
     // 全量文件指纹逐项核对（「同 sha＋全量文件 hash 命中」）：文件集同序比对，任一
     // rel/mtime/size 不符即 miss——文件被改过、增删过、换了帽都不许吃旧图。
@@ -100,6 +124,12 @@ export async function loadImpactIndex(
     for (const e of a.defs) defs.set(e.symbol, e.sites);
     const refs = new Map<string, ImpactSite[]>();
     for (const e of a.refs) refs.set(e.symbol, e.sites);
+    const nameSources = new Map<string, Map<string, string[]>>();
+    for (const ns of a.nameSources) {
+      const m = new Map<string, string[]>();
+      for (const b of ns.bindings) m.set(b.symbol, b.sources);
+      nameSources.set(ns.file, m);
+    }
     return {
       files: [...a.files],
       candidates: a.candidates,
@@ -107,6 +137,8 @@ export async function loadImpactIndex(
       defs,
       refs,
       edges: a.edges,
+      nameSources,
+      attribution: { kept: at.kept, dropped: at.dropped, noEvidence: at.noEvidence },
       parsed: 0,
       fromTagsCache: 0,
       fromIndex: true,
@@ -142,6 +174,15 @@ export async function saveImpactIndex(
         .map(([symbol, sites]) => ({ symbol, sites }))
         .sort((a, b) => a.symbol.localeCompare(b.symbol)),
       edges: graph.edges,
+      nameSources: [...graph.nameSources.entries()]
+        .map(([file, m]) => ({
+          file,
+          bindings: [...m.entries()]
+            .map(([symbol, sources]) => ({ symbol, sources: [...sources].sort() }))
+            .sort((a, b) => a.symbol.localeCompare(b.symbol)),
+        }))
+        .sort((a, b) => a.file.localeCompare(b.file)),
+      attribution: { ...graph.attribution },
     };
     await writeFile(indexFileFor(indexDir, sha, wsAbs), JSON.stringify(artifact), "utf8");
   } catch (err) {

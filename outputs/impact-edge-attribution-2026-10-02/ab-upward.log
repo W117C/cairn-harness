@@ -1,0 +1,47 @@
+[impact-provenance] 真仓：解析 593 个文件（取料面＝地图那一支 scanSourceFilesAll，帽前全量）
+  A 名字图（今天 impact 的算法）(ref→def) 对数 = 8792
+  B 文件级 import 成立 = 2696（30.7%）⇒ 这种切法摘掉 6096 对（69.3%）
+  C 名字级 import 成立 = 2622（29.8%）⇒ 摘掉 6170 对（70.2%）
+  D 「ref 文件自己没有同名定义」 = 4516（51.4%）⇒ 负面证据切法摘掉 4276 对（48.6%）
+  E 「名字没被绑到第三方」 = 8214（93.4%）⇒ 摘掉 578 对（6.6%）
+  同名大户（单一定义点且名图 ≥8；selfDef＝引用方自己也 def 了这名字；elsewhere＝引用方把这名字从别处 import 进来）：
+    writeFile                定义=tests/secrets.test.ts              名图= 141 文件级=   0 自带同名=   0 另有归属= 138
+    readFile                 定义=src/agent/ledger.ts                名图= 115 文件级=   2 自带同名=   0 另有归属= 110
+    createEventLog           定义=src/events/index.ts                名图=  71 文件级=  71 自带同名=   0 另有归属=   0
+    runLoop                  定义=src/agent/loop.ts                  名图=  33 文件级=  33 自带同名=   0 另有归属=   0
+    projectContext           定义=src/agent/context.ts               名图=  28 文件级=  27 自带同名=   0 另有归属=   0
+    Orchestrator             定义=src/agent/orchestrator.ts          名图=  23 文件级=  23 自带同名=   0 另有归属=   0
+    gateToolSpecs            定义=src/agent/glm-session.ts           名图=  19 文件级=  19 自带同名=   0 另有归属=   0
+    createGlmSessionProvider 定义=src/agent/glm-session.ts           名图=  19 文件级=  19 自带同名=   0 另有归属=   0
+    sessionToolSpecs         定义=src/agent/glm-session.ts           名图=  18 文件级=  18 自带同名=   0 另有归属=   0
+    runAgent                 定义=src/main/agent-runner.ts           名图=  18 文件级=  18 自带同名=   0 另有归属=   0
+    newAutonomySession       定义=src/permissions/autonomy.ts        名图=  18 文件级=   8 自带同名=   0 另有归属=   9
+    evaluate                 定义=src/permissions/autonomy.ts        名图=  17 文件级=   8 自带同名=   0 另有归属=   8
+[impact-provenance] 冻结夹具 accuracy-repo（真值 16 条边，note 自己写着「按名字连边、不采 import」）：
+  B 文件级 import 存活 1/16；C 名字级存活 1/16
+  D 「引用方自带同名定义才摘」存活 16/16 ⇒ 一条不掉
+  E 「名字被绑到第三方才摘」存活 16/16 ⇒ 一条不掉
+[impact-provenance] 生产面（buildImpact 直调，帽＝生产缺省 5000 → 图内 593 文件／帽前候选 593）：
+  图上三态计数 kept=45231 dropped=1687 noEvidence=0
+  同名大户清单（A＝接判据后，B＝同一张图抹掉取料面＝接之前的名字图行为）：
+    writeFile        定义点=  1  A   3 处／  3 文件  ←  B 461 处／141 文件  ⇒ 掉 138 个文件
+    readFile         定义点=  1  A   8 处／  5 文件  ←  B 286 处／115 文件  ⇒ 掉 110 个文件
+    createEventLog   定义点=  1  A 142 处／ 71 文件  ←  B 142 处／ 71 文件  ⇒ 掉 0 个文件
+    runLoop          定义点=  1  A  51 处／ 33 文件  ←  B  51 处／ 33 文件  ⇒ 掉 0 个文件
+  注入句（编辑 src/agent/ledger.ts）：[impact] src/agent/ledger.ts 定义符号的跨文件调用点（上 43，波及 17 个文件；其中 11 个符号在别的文件也有同名定义，波及数按名字图算 ⇒ 清单里可能混有无关文件；归属判定：1687 处已按「同名但另有出处」排除；完整清单见 impact_report 事件）：
+  tests/hook-session-end.test.ts: capture(L127), capture(L130)
+  tests/mutate-verify-gates.test.ts: clear(L819), clear(L829), clear(L834), clear(L844) 等 5 处
+  scripts/probe-promise-recall.ts: createObservationLedger(L457)
+  src/agent/solpi-runtime.ts: createObservationLedger(L52), createObservationLedger(L72)
+  tests/solpi-runtime.test.ts: createObservationLedger(L181), createObservationLedger(L186)
+  src/main/session-handlers.ts: deleteSession(L120)
+  …另有 11 个文件未列出（完整调用点清单在 impact_report 事件里）
+  注入句（编辑 src/agent/impact/index.ts）：[impact] src/agent/impact/index.ts 定义符号的跨文件调用点（上 104，波及 14 个文件；其中 4 个符号在别的文件也有同名定义，波及数按名字图算 ⇒ 清单里可能混有无关文件；归属判定：1687 处已按「同名但另有出处」排除；完整清单见 impact_report 事件）：
+  src/main/agent-runner.ts: affectedFilesOf(L414), defaultImpactHook(L1727)
+  tests/impact-admission.test.ts: affectedFilesOf(L37), affectedFilesOf(L41), affectedFilesOf(L42), affectedFilesOf(L43) 等 13 处
+  tests/impact-cap-policy.test.ts: affectedFilesOf(L115), affectedFilesOf(L125), affectedFilesOf(L183), buildImpact(L55) 等 13 处
+  scripts/measure-impact-cap-divergence.ts: buildImpact(L99), upward(L79), upward(L88)
+  scripts/probe-impact-provenance.ts: buildImpact(L185), contextNoteFor(L204), fileImpact(L203), upward(L194) 等 5 处
+  src/tools/impact-query.ts: buildImpact(L166), buildImpact(L187), defaultImpactCacheDir(L142), downward(L170) 等 8 处
+  …另有 8 个文件未列出（完整调用点清单在 impact_report 事件里）
+[impact-provenance] 自检 ✅ 真仓取到数、数到同名大户、夹具真值面也跑到了 ⇒ 上面所有数可以引用

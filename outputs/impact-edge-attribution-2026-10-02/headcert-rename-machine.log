@@ -1,0 +1,10 @@
+# 备份：/tmp/dsh-305-rename-machine-impact-persistence.test.ts.bak（复原一律用它，不用 git checkout）
+# 针脚（HEAD 那行标题）命中=1 处 —— 要求恰好 1
+# 改成"新标题"之后跑 §6② 那支探针：
+  改法落地 ✅
+  语料条数=3721｜取不到成因=1
+    tests/impact-persistence.test.ts :: ⑨ artifact 字段齐全：schemaVersion=1、commitSha=真 sha、files/defs/refs/edges/fingerprints 与图对得上
+  # 复原：与备份逐字节一致 ✅
+# 退回原状后再跑同一支探针：
+  语料条数=3721｜取不到成因=0
+  # 备份已清（残骸=0）

@@ -1,0 +1,31 @@
+[impact-provenance] 真仓：解析 593 个文件（取料面＝地图那一支 scanSourceFilesAll，帽前全量）
+  A 名字图（今天 impact 的算法）(ref→def) 对数 = 8790
+  B 文件级 import 成立 = 2694（30.6%）⇒ 这种切法摘掉 6096 对（69.4%）
+  C 名字级 import 成立 = 2620（29.8%）⇒ 摘掉 6170 对（70.2%）
+  D 「ref 文件自己没有同名定义」 = 4514（51.4%）⇒ 负面证据切法摘掉 4276 对（48.6%）
+  E 「名字没被绑到第三方」 = 8212（93.4%）⇒ 摘掉 578 对（6.6%）
+  同名大户（单一定义点且名图 ≥8；selfDef＝引用方自己也 def 了这名字；elsewhere＝引用方把这名字从别处 import 进来）：
+    writeFile                定义=tests/secrets.test.ts              名图= 141 文件级=   0 自带同名=   0 另有归属= 138
+    readFile                 定义=src/agent/ledger.ts                名图= 115 文件级=   2 自带同名=   0 另有归属= 110
+    createEventLog           定义=src/events/index.ts                名图=  71 文件级=  71 自带同名=   0 另有归属=   0
+    runLoop                  定义=src/agent/loop.ts                  名图=  33 文件级=  33 自带同名=   0 另有归属=   0
+    projectContext           定义=src/agent/context.ts               名图=  28 文件级=  27 自带同名=   0 另有归属=   0
+    Orchestrator             定义=src/agent/orchestrator.ts          名图=  23 文件级=  23 自带同名=   0 另有归属=   0
+    gateToolSpecs            定义=src/agent/glm-session.ts           名图=  19 文件级=  19 自带同名=   0 另有归属=   0
+    createGlmSessionProvider 定义=src/agent/glm-session.ts           名图=  19 文件级=  19 自带同名=   0 另有归属=   0
+    sessionToolSpecs         定义=src/agent/glm-session.ts           名图=  18 文件级=  18 自带同名=   0 另有归属=   0
+    runAgent                 定义=src/main/agent-runner.ts           名图=  18 文件级=  18 自带同名=   0 另有归属=   0
+    newAutonomySession       定义=src/permissions/autonomy.ts        名图=  18 文件级=   8 自带同名=   0 另有归属=   9
+    evaluate                 定义=src/permissions/autonomy.ts        名图=  17 文件级=   8 自带同名=   0 另有归属=   8
+[impact-provenance] 冻结夹具 accuracy-repo（真值 16 条边，note 自己写着「按名字连边、不采 import」）：
+  B 文件级 import 存活 1/16；C 名字级存活 1/16
+  D 「引用方自带同名定义才摘」存活 16/16 ⇒ 一条不掉
+  E 「名字被绑到第三方才摘」存活 16/16 ⇒ 一条不掉
+[impact-provenance] 生产面（buildImpact 直调；帽 400 → 图内 400 文件／帽前候选 593）：
+  图上三态计数 kept=13826 dropped=606 noEvidence=0
+  upward("writeFile") = 243 处调用点／73 个文件
+  upward("readFile") = 8 处调用点／5 个文件
+  upward("createEventLog") = 69 处调用点／34 个文件
+  upward("runLoop") = 30 处调用点／19 个文件
+[impact-provenance] 自检 ✅ 真仓取到数、数到同名大户、夹具真值面也跑到了 ⇒ 上面所有数可以引用
+PROBE_EXIT=0

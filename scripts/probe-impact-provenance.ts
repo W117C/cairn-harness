@@ -24,6 +24,7 @@ import { join, relative, resolve, sep } from "node:path";
 import { scanSourceFilesAll } from "../src/agent/map/build";
 import { fileSymbols } from "../src/agent/map/parse";
 import { resolveModuleSpecifier } from "../src/agent/map/import-edge";
+import { buildImpact, contextNoteFor, fileImpact, upward } from "../src/agent/impact/index";
 
 const REPO = resolve(import.meta.dirname, "..");
 
@@ -174,7 +175,37 @@ console.log(`  D 「引用方自带同名定义才摘」存活 ${String(keepD)}/
 console.log(`  E 「名字被绑到第三方才摘」存活 ${String(keepE)}/${String(tN)}${lostE.length ? ` ⇒ 摘掉：${lostE.slice(0, 6).join("、")}` : " ⇒ 一条不掉"}`);
 
 const problems: string[] = [];
-if (n.A === 0) problems.push("真仓 A=0 ⇒ 取料面没吃到东西，所有比例不可引用");
+// ---- ③ 生产面自证：判据接上没有？（读 `buildImpact` 自己带的三态计数，不是探针再算一遍）----
+// 这一格是"生产者与消费者同一决策点"的证据：探针算的 E 与图上带的计数必须都能非零，
+// 否则说明生产那条支根本没吃到判据（本仓反复判死的「算出来不接」）。
+// 帽＝**生产缺省**（`IMPACT_MAX_FILES_DEFAULT`＝5000，本仓 593 个候选 ⇒ 实际全量）。
+// 为什么不能用小帽量这一格：第一版这里写的是 `maxFiles: 400`，于是 `writeFile` 的那份定义
+// （`tests/secrets.test.ts`，mtime 排在 400 名之外）根本不在图里 ⇒ 定义点=0 ⇒ 规则**看着**一处没摘，
+// 读数把"图里没有这个名字的定义"错读成"这条规则对这个名字无效"（一片 0 先怀疑量法）。
+const prod = await buildImpact({ workspace: REPO });
+console.log(`[impact-provenance] 生产面（buildImpact 直调，帽＝生产缺省 ${String(prod.cap)} → 图内 ${String(prod.files.length)} 文件／帽前候选 ${String(prod.candidates)}）：`);
+console.log(`  图上三态计数 kept=${String(prod.attribution.kept)} dropped=${String(prod.attribution.dropped)} noEvidence=${String(prod.attribution.noEvidence)}`);
+// 同分母 A/B（本仓规矩：收益结论必须有「同一张图、只换一个输入」的两臂，不然「次数×单位时长」只是模型）：
+// B 臂＝把 `nameSources` 换成空表后**再走同一个 `upward`**——那正是接这一维之前的行为
+// （无证据 ⇒ 一律保守计入），不是探针按老算法另算一遍。
+const bare = { ...prod, nameSources: new Map<string, Map<string, string[]>>() };
+console.log(`  同名大户清单（A＝接判据后，B＝同一张图抹掉取料面＝接之前的名字图行为）：`);
+for (const sym of ["writeFile", "readFile", "createEventLog", "runLoop"]) {
+  const a = upward(prod, sym);
+  const b = upward(bare, sym);
+  const fa = new Set(a.map((s) => s.file)).size;
+  const fb = new Set(b.map((s) => s.file)).size;
+  const defs = new Set((prod.defs.get(sym) ?? []).map((d) => d.file)).size;
+  console.log(`    ${sym.padEnd(16)} 定义点=${String(defs).padStart(3)}  A ${String(a.length).padStart(3)} 处／${String(fa).padStart(3)} 文件  ←  B ${String(b.length).padStart(3)} 处／${String(fb).padStart(3)} 文件  ⇒ 掉 ${String(fb - fa)} 个文件`);
+}
+// 模型实际看见的那一句（读端 `fileImpact` → `contextNoteFor`，不抄文案、直接调生产函数）。
+for (const rel of ["src/agent/ledger.ts", "src/agent/impact/index.ts"]) {
+  const rep = await fileImpact(REPO, rel);
+  console.log(`  注入句（编辑 ${rel}）：${rep === null ? "（图外，不发事件）" : contextNoteFor(rep)}`);
+}
+if (prod.attribution.kept === 0) problems.push("生产面 kept=0 ⇒ 边构造根本没走判据（接线断了），上面的读数全部作废");
+if (prod.attribution.dropped === 0) problems.push("生产面 dropped=0 ⇒ 判据算出来没接（探针自己数到反证），「算出来不接」那一族");
+if (problems.length === 0 && n.A === 0) problems.push("真仓 A=0 ⇒ 取料面没吃到东西，所有比例不可引用");
 if (hubs.length === 0) problems.push("一个「同名吸 ≥8」的定义点都数不到 ⇒ 与页面既有读数（readFile 吸 107 个文件）矛盾，先怀疑量法");
 if (tN === 0) problems.push("夹具真值边数为 0 ⇒ 夹具校验没跑起来");
 if (!(n.B <= n.A && n.C <= n.B)) problems.push(`单调性破了：A=${String(n.A)} B=${String(n.B)} C=${String(n.C)}`);

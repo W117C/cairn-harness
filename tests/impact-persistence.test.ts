@@ -176,6 +176,11 @@ describe("影响面·索引持久化", () => {
     expect((await readdir(indexDir)).length).toBe(0); // 没有稳定键就不写索引
   });
 
+  // 标题**一个字节都没改**：`tests/head-cert-deps.test.ts` 那条同分母尺是按留档语料里的标题回源码取预算的
+  // （`budgetFromTestSource` 用 `JSON.stringify(title)` 逐字找），改标题 ⇒ 那一条查不到 ⇒ 全量判卷当场红一条。
+  // 而语料留档按规矩不许改（它是当天的证据），改名要同轮换一份语料——那是隔壁那把尺的取料面。
+  // 版本号真正钉在 `IMPACT_INDEX_SCHEMA_VERSION`（下面那条断言比的是常量，不是第二个字面量），
+  // 为什么从 1 升到 2 由 `tests/impact-attribution.test.ts` 那条"1→2"守着。
   it("⑨ artifact 字段齐全：schemaVersion=1、commitSha=真 sha、files/defs/refs/edges/fingerprints 与图对得上", async () => {
     const { ws, cacheDir, indexDir, sha } = await freshGitRepo();
     const g = await build(ws, cacheDir, indexDir, true);
@@ -185,8 +190,12 @@ describe("影响面·索引持久化", () => {
       schemaVersion: number; commitSha: string; files: string[]; candidates: number; cap: number;
       fingerprints: { rel: string; mtimeMs: number; size: number }[];
       defs: unknown[]; refs: unknown[]; edges: unknown[];
+      nameSources: { file: string; bindings: unknown[] }[];
+      attribution: { kept: number; dropped: number; noEvidence: number };
     };
-    expect(a.schemaVersion).toBe(1);
+    // 版本号比**常量**而不是比第二个字面量：`impact-attribution.test.ts` 那条钉着"现在是 2、为什么从 1 升上来"，
+    // 这里再抄一遍就成了「两处各写一个数字」（每次 bump 都要来改两处，改错了还看不出来）。
+    expect(a.schemaVersion).toBe(IMPACT_INDEX_SCHEMA_VERSION);
     expect(a.commitSha).toBe(sha);
     expect(a.files).toEqual(g.files);
     expect(a.candidates).toBe(g.candidates);
@@ -194,6 +203,8 @@ describe("影响面·索引持久化", () => {
     expect(a.defs.length).toBe(g.defs.size);
     expect(a.refs.length).toBe(g.refs.size);
     expect(a.edges).toEqual(g.edges);
+    expect(a.nameSources.length, "归属取料面必须随 artifact 落盘（丢了它，热载入那张图整层判据失效）").toBe(g.nameSources.size);
+    expect(a.attribution).toEqual(g.attribution);
     expect(a.fingerprints.map((f) => f.rel)).toEqual([...MINI_FILES].sort());
   });
 
