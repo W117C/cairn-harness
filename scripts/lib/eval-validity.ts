@@ -22,14 +22,22 @@ const PROVIDER_ERROR = /HTTP (?:429|5\d\d)\b|请求失败|rate limit|fetch faile
 
 export type Validity = { valid: true } | { valid: false; why: string };
 
+/** 两条"无效"措辞提成常量：**判卷引用它们，不许把原话抄进测试**。
+ *  为什么（2026-10-02 被 `tests/prose-needle-scan.test.ts` 当场抓住）：我在判卷里抄了
+ *  `未起步` 三个字 ⇒ 同一段话出现在**两处**（生产 + 测试）⇒ 顶包候选从 10 涨到 11，
+ *  越过那条"只准下调"的水位。那把尺的治法原文就是「**改成派生断言**」——
+ *  措辞只留一个源头、判卷引用常量 ⇒ 改一处仍然会响。 */
+export const WHY_NOT_STARTED = "未起步（0 次模型请求：provider 报错 / 限流 / 鉴权失败）";
+export const WHY_INTERRUPTED_PREFIX = "中途被打断（provider 侧错误）：";
+
 /** 判一趟跑算不算数。`fails` 传判卷给出的失败原因列表。 */
 export function runValidity(run: RunFace, fails: readonly string[]): Validity {
   if (run.requests <= 0) {
-    return { valid: false, why: "未起步（0 次模型请求：provider 报错 / 限流 / 鉴权失败）" };
+    return { valid: false, why: WHY_NOT_STARTED };
   }
   for (const f of fails) {
     if (f.includes("runLoop 抛错") && PROVIDER_ERROR.test(f)) {
-      return { valid: false, why: "中途被打断（provider 侧错误）：" + f.slice(0, 120) };
+      return { valid: false, why: WHY_INTERRUPTED_PREFIX + f.slice(0, 120) };
     }
   }
   return { valid: true };
@@ -49,4 +57,32 @@ export function tally(
     if (x.g.ok) pass += 1;
   }
   return { pass, total, invalid: invalidWhy.length, refuse: total === 0, invalidWhy };
+}
+
+/** 钱的那一面：`cny` 由调用方从 `Reading` 里取来（这里不复制结构）。 */
+export interface CostRow { r: { requests: number; cny: number }; g: { ok: boolean; fails: readonly string[] } }
+
+/**
+ * **分子与分母必须同面**（本仓 `cost-per-progress` 的老纪律，这里是它的镜像）。
+ * `tally` 已经只数算数的趟次，而汇总那行从前用**全量** `cny` 除以算数的达标数 ⇒
+ * 被剔掉的趟次花的钱仍留在分子里。2026-10-02 那次 36 趟实测就是活的：
+ * 合计 ¥0.2774，其中 1 趟起步后被 429 打断、独自占 **¥0.0789 = 28%**，
+ * 而它已经不在分母里了 ⇒ 「每达标任务 ¥X」被高估 28%。
+ * 被打断的趟次花的钱是真钱，所以**单列、不藏**；只是不许混进那个比值。
+ */
+export function costSplit(rows: readonly CostRow[]): { paidAll: number; validSpend: number; wastedSpend: number; wastedRuns: number } {
+  let paidAll = 0;
+  let validSpend = 0;
+  let wastedSpend = 0;
+  let wastedRuns = 0;
+  for (const x of rows) {
+    const cny = Number.isFinite(x.r.cny) ? x.r.cny : 0;
+    paidAll += cny;
+    if (runValidity(x.r, x.g.fails).valid) validSpend += cny;
+    else {
+      wastedSpend += cny;
+      wastedRuns += 1;
+    }
+  }
+  return { paidAll, validSpend, wastedSpend, wastedRuns };
 }

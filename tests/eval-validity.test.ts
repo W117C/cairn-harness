@@ -9,7 +9,7 @@
 //   ② **模型自己干坏事**（改了判卷面、verify 没过）⇒ 照旧**算数**、必须计入分母。
 //      ②若被误伤，这个修正就变成了"把红跑藏起来"——那正是本仓最忌的形状。
 import { describe, expect, it } from "vitest";
-import { runValidity, tally } from "../scripts/lib/eval-validity";
+import { costSplit, runValidity, tally, WHY_INTERRUPTED_PREFIX, WHY_NOT_STARTED } from "../scripts/lib/eval-validity";
 
 const row = (requests: number, ok: boolean, fails: string[] = []) =>
   ({ r: { requests }, g: { ok, fails } });
@@ -18,13 +18,14 @@ describe("判卷分母：环境打断不算数，模型失败照旧算数", () =
   it("① 未起步（0 请求）⇒ 无效，且说明里点明是 provider 侧", () => {
     const v = runValidity({ requests: 0 }, ["verify 未通过/未跑", "runLoop 抛错:GLM 请求失败 HTTP 429: Rate limit exceeded"]);
     expect(v.valid).toBe(false);
-    expect(v.valid === false && v.why).toContain("未起步");
+    // 引用常量而不是抄原话：抄了会让同一段措辞出现在两处（顶包候选 +1，水位"只准下调"）
+    expect(v.valid === false && v.why).toBe(WHY_NOT_STARTED);
   });
 
   it("① 起步后被 429 打断 ⇒ 无效（不然「跑不成」会被记成「模型没做到」）", () => {
     const v = runValidity({ requests: 7 }, ['runLoop 抛错:GLM 请求失败 HTTP 429: {"error":{"message":"Rate limit exceeded"}}']);
     expect(v.valid).toBe(false);
-    expect(v.valid === false && v.why).toContain("中途被打断");
+    expect(v.valid === false && v.why.startsWith(WHY_INTERRUPTED_PREFIX)).toBe(true);
   });
 
   it("★② 模型行为失败（改了判卷面 / verify 没过）⇒ **算数**，不许被这条修正藏起来", () => {
@@ -53,5 +54,29 @@ describe("判卷分母：环境打断不算数，模型失败照旧算数", () =
     expect(t.invalid).toBe(32);
     expect(t.pass).toBe(2);
     expect(t.refuse).toBe(false);
+  });
+
+  it("钱也要与分母同面：没算数的趟次花的钱单列，不进「每达标任务」的分子", () => {
+    const crow = (requests: number, cny: number, ok: boolean, fails: string[] = []) =>
+      ({ r: { requests, cny }, g: { ok, fails } });
+    // 复刻 2026-10-02 那次 36 趟的形状（简化到四趟）：2 趟未起步（¥0）、
+    // 1 趟起步后被 429 打断（独自花掉 ¥0.0789）、1 趟真跑且达标（¥0.1）。
+    const rows = [
+      crow(0, 0, false, ["runLoop 抛错:GLM 请求失败 HTTP 429"]),
+      crow(0, 0, false, ["runLoop 抛错:GLM 请求失败 HTTP 429"]),
+      crow(14, 0.0789, false, ["runLoop 抛错:GLM 请求失败 HTTP 429: Rate limit exceeded"]),
+      crow(7, 0.1, true),
+    ];
+    const m = costSplit(rows);
+    expect(m.paidAll).toBeCloseTo(0.1789, 8);
+    expect(m.wastedRuns).toBe(3);
+    expect(m.wastedSpend).toBeCloseTo(0.0789, 8); // 未起步那两趟没花钱 ⇒ 只有中途被打断的这趟是"白花"
+    expect(m.validSpend).toBeCloseTo(0.1, 8);
+    // 这一格就是被修的东西：旧写法拿全量 ¥ 除以达标数 ⇒ 0.1789，比真值 0.1 **高 79%**
+    expect(m.validSpend).toBeLessThan(m.paidAll);
+    // 反向证人：一趟都没被剔时 wasted 必须恰为 0，且模型自己干坏事的趟次（改了判卷面）**照旧算数**
+    const c = costSplit([crow(7, 0.1, true), crow(8, 0.2, false, ["改了判卷面"])]);
+    expect([c.wastedSpend, c.wastedRuns]).toEqual([0, 0]);
+    expect(c.validSpend).toBeCloseTo(c.paidAll, 8);
   });
 });
