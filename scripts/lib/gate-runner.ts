@@ -12,6 +12,23 @@ import { terminateGroup } from "./gate-kill";
  *  20 分钟 = 当时最慢门（test）的 10 倍以上余量；超时判红（exit 124）。 */
 export const GATE_TIMEOUT_MS = 20 * 60_000;
 
+/** **按门覆盖**的单门预算。为什么要有这一层（2026-10-02 业主裁决）：
+ *  缺省 20 分钟是按"当时最慢门 test 的 10 倍"定的，而 `mutate-verify` 要**18–25 分钟**
+ *  （1223 条锚点逐条起判卷）⇒ 缺省档下它**必然以 exit=124 收场**，读起来像"这道门红了"，
+ *  实际是"预算不够"。实测两次都是 124（M6 的凭证里如实照贴为"超时，非内容红"）。
+ *
+ *  40 分钟 ＝ 实测上界（25 分钟）的 1.6 倍余量。**这是预算不是判据**：一条断言都没放松，
+ *  超时仍然判红，只是给这道已知最慢的门足够的时间跑完。
+ *  加新条目必须贴实测耗时——"我猜它慢"不算理由（同族：缺省值也带着 10 倍余量的实测出处）。 */
+export const GATE_TIMEOUT_OVERRIDES: Readonly<Record<string, number>> = {
+  "mutate-verify": 40 * 60_000,
+};
+
+/** 这道门该拿多少预算：覆盖表优先，缺省回 `GATE_TIMEOUT_MS`。 */
+export function gateTimeoutOf(name: string): number {
+  return GATE_TIMEOUT_OVERRIDES[name] ?? GATE_TIMEOUT_MS;
+}
+
 export interface GateResult {
   name: string;
   code: number;

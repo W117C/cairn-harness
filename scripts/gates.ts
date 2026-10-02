@@ -19,7 +19,7 @@ import { certifiedFace, porcelainStatus } from "./lib/certified-face";
 import { FAILURE_TAIL_LINES, failureFooter, writeFailureLog } from "./lib/gate-failure-log";
 // 跑一条命令 + 超时终止阶梯（同族：判据在 ./lib/gate-runner.ts 与 ./lib/gate-kill.ts，那边可单测；
 // 本文件只组命令）。旧实现把 spawn 与「超时直接整组 SIGKILL」写在这里，测不到也换不掉。
-import { runCommand, type GateResult } from "./lib/gate-runner";
+import { gateTimeoutOf, runCommand, type GateResult } from "./lib/gate-runner";
 import { checkGateManifest, EXEMPT_SCRIPTS, GATES, gateCommand } from "./gate-manifest";
 // 耗时账本（同族：判据在 ./facts.ts，那边可单测；本文件只负责「跑完顺手记一笔」）。
 import { appendRun, currentHost, type GateRun } from "./facts";
@@ -90,7 +90,9 @@ function runGate(name: string, opts: { direct: boolean; scripts: Record<string, 
   if (plan.pathPrepend !== undefined) {
     env = { ...env, PATH: plan.pathPrepend + ":" + (process.env.PATH ?? "") };
   }
-  return runCommand(name, { cmd: plan.cmd, args: plan.args, cwd: ROOT, env });
+  // 预算按门取（`gateTimeoutOf`：覆盖表优先，缺省 20 分钟）。见那边的注释：
+  // `mutate-verify` 实测要 18–25 分钟，缺省档下必然 124 ⇒ 读起来像"门红了"，实际是预算不够。
+  return runCommand(name, { cmd: plan.cmd, args: plan.args, cwd: ROOT, env, timeoutMs: gateTimeoutOf(name) });
 }
 
 async function main(): Promise<void> {
