@@ -12,9 +12,11 @@ import {
   attachmentPathFor,
   isPruneExempt,
   buildPruneIndex,
+  pruneRecallSuffix,
   DEFAULT_PRUNE_CONFIG,
   PRUNED_PLACEHOLDER,
 } from "../src/agent/prune.js";
+import { classifyPruneStub, hopMapDemo, pruneStubMatrix } from "../scripts/probe-promise-recall";
 import type { AgentEvent } from "../src/events";
 import { read_file } from "../src/tools/read_file.js";
 import type { ToolContext } from "../src/tools/base.js";
@@ -447,5 +449,65 @@ describe("修剪量的是「将要发给模型的那一段」——worker 子流
     // 同一条去掉归因 ⇒ 不再免剪（判的是字段，不是类型）
     const parentOnly = events.map((e, i) => (i === 2 ? ({ ...e, agent_id: undefined } as AgentEvent) : e));
     expect(isPruneExempt(parentOnly, 2, config, buildPruneIndex(parentOnly, config))).toBe(false);
+  });
+});
+
+// 第 310 页：`agent-runner` map 演示那句「原文可从附件目录回取」被 `probe-promise-recall` 判红，
+// 而"附件写出=0"这一个数分不清是"承诺为假"还是"我的量法没触发落盘"。这里把那三种实参形状
+// 的差别变成有尺的现状：分类函数（判据住一份）＋探针那一格的三栏读数。
+describe("被裁占位串的三种语义：一格的 0 要能自己说清是哪一种（第 310 页）", () => {
+  // 输入由 **producer 现生成**（`pruneRecallSuffix` 的两个分支），不是我手抄的串：
+  // 措辞改了这两条就红，而不是继续绿着判一个已经不存在的句子（规则 236 那一族）。
+  // 工作区要用**真在盘上**的路径——`workspaceUsablePath` 是 fail-closed 的（它 realpath 工作区），
+  // 我第一版写死 "/ws" 于是"带可取路径"那一支永远走不到，判卷红在我自己的取料上。
+  const ws = tmpdir();
+  const usable = pruneRecallSuffix(join(ws, ".agent", "sessions", "s", "att-1.txt"), ws);
+  // "工作区之外"要挑一个**真在 ws 之外**的路径：我第一版写的是 `join(tmpdir(), "dsh-outside-of-any-workspace", ...)`，
+  // 它其实还在 tmpdir 里面 ⇒ 那条判卷把"读不到"这一类测成了"可取"（自己造的反例不反）。
+  const unreadable = pruneRecallSuffix(join(resolve(ws, ".."), "dsh-outside-of-any-workspace-att.txt"), ws);
+  const bare = PRUNED_PLACEHOLDER;
+
+  it("三类各占一字且互不相同；认不出的串 fail-closed 落到『裸占位』", () => {
+    expect(classifyPruneStub(usable), "工作区内的附件路径＝可取").toBe("带可取路径");
+    expect(classifyPruneStub(unreadable), "工作区外/不可证明＝明说读不到").toBe("读不到声明");
+    expect(classifyPruneStub(bare), "没给目录＝一个通道都没给").toBe("裸占位");
+    const kinds = new Set([usable, unreadable, bare].map(classifyPruneStub));
+    expect(kinds.size, "三类塌成一类＝这把尺没有分辨力").toBe(3);
+    // 认不出的串**不许**算成"有路"：宁可低报通道，也不许让模型以为能取回。
+    expect(classifyPruneStub("[Old tool result content cleared] 某天真加进来的第四种措辞"), "未标注的措辞必须 fail-closed").toBe("裸占位");
+  });
+
+  it("探针那一格必须交得出三栏，且三栏彼此可分辨（一栏空转＝分母是假的）", () => {
+    // 吃 `pruneStubMatrix` 的结构，不吃我印的那句话：判卷用正则读自己的报告＝读数一改判卷就瞎。
+    const cols = pruneStubMatrix();
+    expect(cols.map((c) => c.label), "少一栏就是没量").toEqual([
+      "栏一（调用点形状）", "栏二（只给目录）", "栏三（目录在工作区内）",
+    ]);
+    expect(cols.map((c) => c.kind), "三栏塌成同一种＝这一格的 0 分不出成因").toEqual([
+      "裸占位", "读不到声明", "带可取路径",
+    ]);
+    expect(cols[0].wrote, "栏一（调用点的真实形状）不该交出任何附件地址").toBe(0);
+    expect(cols[2].wrote, "栏三交不出地址＝取料坏了，另两栏的对比没有意义").toBeGreaterThan(0);
+  });
+
+  it("反向对照：只补 attachmentsDir 仍拿不到可取路径 ⇒ 那句承诺的修法确有两件事", () => {
+    // 这条钉的是**结论**（不是今天的缺陷）：`workspaceUsablePath` 是 fail-closed 的，
+    // 没有可证明的工作区时，producer 交的是"模型侧读不到"而不是地址。
+    // ⇒ 修调用点时必须同时给 workspace，只补目录等于把假话换成另一句实话。
+    const [two, three] = pruneStubMatrix().slice(1);
+    // 两栏交出的地址**同样多** ⇒ 唯一变量是 workspace：差的不是"落没落盘"，是"模型读不读得到"。
+    expect(two.wrote, "栏二一个地址都没交出＝它压根没走到落盘那一步，这条结论不成立").toBeGreaterThan(0);
+    expect(three.wrote, "两栏分母不同 ⇒ 对比的是别的变量，这条判卷失效").toBe(two.wrote);
+    expect(three.kind, "补上 workspace 就换出可取路径 ⇒ 缺的确实是第二件事").not.toBe(two.kind);
+    expect(two.kind).toBe("读不到声明");
+  });
+
+  it("报告要把三栏都印出来（藏一栏＝读数看着更干净，其实那一格没量）", () => {
+    const v = hopMapDemo();
+    for (const c of pruneStubMatrix()) {
+      expect(v.detail, `缺 ${c.label}：${v.detail}`).toContain(`${c.label}附件=${String(c.wrote)} 条、占位=${c.kind}`);
+    }
+    // 假话那一半也要印出来：探针判红时结论得跟着红，不许只交三栏数字。
+    expect(v.detail).toContain("那句「原文可从附件目录回取」在此刻");
   });
 });

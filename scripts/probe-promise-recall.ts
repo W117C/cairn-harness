@@ -401,24 +401,77 @@ function hopJoinPayload(): Verdict {
   };
 }
 
-/** `agent-runner.ts:1488` map 演示那句「原文可从附件目录回取」：那一支调用真写了附件吗。 */
-function hopMapDemo(): Verdict {
+/** 占位串的三种语义（第 310 页给那一格 0 加分母列时抽出来的）。
+ *  同一个 `computePrune` 出口，实参形状不同交的东西完全不同 ⇒ 单看「附件=0 条」分不了成因：
+ *  - 裸占位：没给 `attachmentsDir` ⇒ 只有一句 cleared，**没有任何回取通道**；
+ *  - 读不到声明：给了目录但工作区不可证明（`workspaceUsablePath` 是 fail-closed 的）⇒ 明说"模型侧读不到"；
+ *  - 带可取路径：给了目录且目录在工作区内 ⇒ 附相对路径并让模型 `read_file` 取回。
+ *  判据只认 producer 自己那两句措辞（`pruneRecallSuffix` 的两个分支），不认"像不像有路径"。 */
+export type RecallStubKind = "裸占位" | "读不到声明" | "带可取路径";
+
+export function classifyPruneStub(stub: string): RecallStubKind {
+  if (stub.includes("原文已存附件")) return "带可取路径";
+  if (stub.includes("模型侧读不到")) return "读不到声明";
+  return "裸占位";
+}
+
+/** 一栏读数。`wrote` 是 **`computePrune` 交回的附件路径条数**（落盘由调用方那支异步函数做，
+ *  这一层只到"给了地址"），判卷要说的是"有没有地址"，不是"盘上有没有文件"。 */
+export interface PruneStubColumn {
+  label: string;
+  why: string;
+  wrote: number;
+  kind: RecallStubKind;
+}
+
+/** 尺本体：同一份事件 fixture，唯一变量是**传给 `computePrune` 的实参形状** ⇒ 栏与栏之差
+ *  只能是那一格 0 的成因，不可能是别的东西。抽成纯函数是为了让判卷吃结构、不吃我印的那句话
+ *  （规则 371：判卷不许替被验对象做那个动作，也不许靠正则读我的报告才看得见结论）。 */
+export function pruneStubMatrix(): PruneStubColumn[] {
   const events: AgentEvent[] = [];
   for (let r = 0; r < 6; r++) {
     events.push({ type: "user_message", content: "round " + String(r) } as AgentEvent);
     events.push({ type: "tool_call", id: "c" + String(r), name: "read_file", args: { path: "a.ts" } } as AgentEvent);
     events.push({ type: "tool_result", callId: "c" + String(r), ok: true, output: "R".repeat(100 * 1024) } as AgentEvent);
   }
-  // 与那个调用点**同一实参形状**：只给 events，不给 attachmentsDir/sessionId（源码那一行逐字如此）。
-  const pruned = computePrune({ events });
-  const wrote = pruned.attachments.length;
-  const saidSaved = pruned.why === "saved";
+  const kindOf = (replacements: Map<number, string>): RecallStubKind =>
+    replacements.size === 0 ? "裸占位" : classifyPruneStub(String([...replacements.values()][0]));
+  const column = (label: string, res: ReturnType<typeof computePrune>): PruneStubColumn =>
+    ({ label, why: res.why, wrote: res.attachments.length, kind: kindOf(res.replacements) });
+  // 栏一＝与那个调用点**同一实参形状**：只给 events（源码那一行逐字如此）。
+  // 栏二＝反事实甲：补目录，但不给工作区。栏三＝反事实乙：目录就在工作区内。
+  return [
+    column("栏一（调用点形状）", computePrune({ events })),
+    column("栏二（只给目录）", computePrune({ events, attachmentsDir: "/tmp/dsh-hop-attachments", sessionId: "s1" })),
+    column("栏三（目录在工作区内）", computePrune({
+      events, attachmentsDir: join(ROOT, ".dsh-hop-attachments"), sessionId: "s1", workspace: ROOT,
+    })),
+  ];
+}
+
+/** `agent-runner.ts` map 演示那句「原文可从附件目录回取」：那一支调用真交出过地址吗。
+ *
+ *  第 310 页把这一格的 0 拆成能行动的读数。老读数只有「附件=0 条」，而 0 至少两种成因：
+ *  ① 那句承诺真为假；② 是我这一趟的取料没触发落盘那一支。三栏各跑一次自答（`pruneStubMatrix`）。
+ *  栏一 vs 栏二 ⇒ 缺的是那一个实参；栏二 vs 栏三 ⇒ **还缺工作区**，只补目录会换成"读不到"那句。
+ *  ⇒ 修法因此是两件事，不是一件；这也是为什么这里不满足于"跑两栏"。
+ *  （第一版这里只断言 `原文已存` 一个标记，而它有两个分支，于是栏三差点被读成"路不通"——
+ *  标记选窄了＝量法缺陷本身，`classifyPruneStub` 就是为修它而抽出来的。） */
+export function hopMapDemo(): Verdict {
+  const [asCalled, dirOnly, inWorkspace] = pruneStubMatrix();
+  const lied = asCalled.why === "saved" && asCalled.wrote === 0;
   return {
-    ok: !(saidSaved && wrote === 0),
-    how: "computePrune（照那个调用点的实参形状跑一遍）",
+    ok: !lied,
+    how: "computePrune 三栏：照调用点实参形状／只给目录／给目录且目录在工作区内——三栏之差就是那一格 0 的成因",
     detail:
-      `why=${pruned.why} 附件写出=${String(wrote)} 条｜替换文本里的附件路径=${pruned.replacements.size > 0 && String([...pruned.replacements.values()][0]).includes("原文已存") ? "有" : "无"}` +
-      ` ⇒ 那句「原文可从附件目录回取」在此刻${saidSaved && wrote === 0 ? "**为假**（既没落盘也没给地址）" : "成立"}`,
+      `why=${asCalled.why}｜${asCalled.label}附件=${String(asCalled.wrote)} 条、占位=${asCalled.kind}`
+      + `｜${dirOnly.label}附件=${String(dirOnly.wrote)} 条、占位=${dirOnly.kind}`
+      + `｜${inWorkspace.label}附件=${String(inWorkspace.wrote)} 条、占位=${inWorkspace.kind}`
+      + ` ⇒ 那句「原文可从附件目录回取」在此刻${lied
+        ? " **为假**：那一趟交的是裸占位，既没给地址也没给通道。假话在调用方那句括号里，不在 `computePrune`"
+          + "（它不给目录时交裸占位、目录不可证明时明说读不到，两种都不假装给通道）"
+          + "｜修法有两件：调用点要传 attachmentsDir，且要让工作区可证明——只补前者只会换成『读不到』那句"
+        : " 成立"}`,
   };
 }
 

@@ -12403,6 +12403,52 @@ const MUTATIONS = [
     ),
     expectFail: "未知判定名不 exec、直接红在这一格（不许拿别的 hop 的结果顶替）",
   },
+  /* 第 310 页：把「附件=0 条」这一格拆成三栏分母（调用点形状／只给目录／目录在工作区内）。
+     这一组钉的是拆法本身还活着：分类函数一旦 fail-open、第三栏一旦丢掉 workspace、
+     报告一旦藏掉一栏、或者那一面一旦没人登记——读数都会变得**比现状好看**。 */
+  {
+    id: "prune-stub-classifier-fails-open",
+    src: "scripts/probe-promise-recall.ts",
+    test: "tests/prune.test.ts",
+    desc: "把「认不出的措辞」默认判成「带可取路径」 ⇒ 通道从宽报告：一句没登记过的第四种说法会被当成有路，"
+      + "而那一格真正的缺陷（没给地址）就此藏住。默认值必须是最低那一档（宁可低报通道）",
+    apply: (s) => s.replace('  return "裸占位";', '  return "带可取路径";'),
+    expectFail: "三类各占一字且互不相同；认不出的串 fail-closed 落到『裸占位』",
+  },
+  {
+    id: "prune-stub-third-column-drops-workspace",
+    src: "scripts/probe-promise-recall.ts",
+    test: "tests/prune.test.ts",
+    desc: "第三栏丢掉 `workspace` ⇒ 它退化成第二栏的副本，于是「还缺工作区」那一半结论再没人看得见："
+      + "三栏看着齐、其实只有两栏，页上那条「修法有两件事」会被读成一件",
+    apply: (s) => s.replace(
+      'events, attachmentsDir: join(ROOT, ".dsh-hop-attachments"), sessionId: "s1", workspace: ROOT,',
+      'events, attachmentsDir: join(ROOT, ".dsh-hop-attachments"), sessionId: "s1",',
+    ),
+    expectFail: "反向对照：只补 attachmentsDir 仍拿不到可取路径 ⇒ 那句承诺的修法确有两件事",
+  },
+  {
+    id: "prune-stub-report-hides-a-column",
+    src: "scripts/probe-promise-recall.ts",
+    test: "tests/prune.test.ts",
+    desc: "从报告里抽掉一栏 ⇒ 判卷吃结构所以照旧绿，而**人读的那句读数**少了一栏却不多说话。"
+      + "这条钉的是「报告与结构同源」：印出去的栏数必须等于量出来的栏数",
+    apply: (s) => s.replace(
+      '`｜${inWorkspace.label}附件=${String(inWorkspace.wrote)} 条、占位=${inWorkspace.kind}`',
+      '""',
+    ),
+    expectFail: "报告要把三栏都印出来（藏一栏＝读数看着更干净，其实那一格没量）",
+  },
+  {
+    id: "prune-stub-face-left-unregistered",
+    src: "scripts/probe-promise-recall.ts",
+    test: "tests/promise-recall-inventory.test.ts",
+    desc: "撤掉 `agent-runner.ts#body` 这一面的登记 ⇒ 清单完整性判据必须红。"
+      + "落这条前先量过前置（`outputs/prune-stub-kinds-2026-10-03/audience-check.mts`）："
+      + "那一面受众=model、撤登记后 unjudged 由 0 变 1 ⇒ 针脚命中之外**确有判卷跟着红**（否则就是空操作锚点）",
+    apply: (s) => s.replace('  "src/main/agent-runner.ts#body": "hopMapDemo",\n', ""),
+    expectFail: "每一处模型可见的承诺面都有判定归属（新加一句『全文见 X』而不登记 ⇒ 这条先红）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

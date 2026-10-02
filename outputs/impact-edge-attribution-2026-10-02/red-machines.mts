@@ -58,6 +58,11 @@ const IDS = [
   // 第 309 页后半簇：判定归属的登记与"登记名打错＝顶包"那一格。
   "promise-web-face-left-unregistered",
   "promise-runner-name-typo-gets-anothers-verdict",
+  // 第 310 页那一簇：把「附件=0 条」拆成三栏分母的那把尺（分类函数／第三栏／报告／登记四面）。
+  "prune-stub-classifier-fails-open",
+  "prune-stub-third-column-drops-workspace",
+  "prune-stub-report-hides-a-column",
+  "prune-stub-face-left-unregistered",
 ];
 
 // 一个 JS 字符串字面量的正则形状（双引号、单引号两支）。本笔 14 条改法都不含反引号写法，
