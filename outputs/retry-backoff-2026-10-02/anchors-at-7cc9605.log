@@ -1,0 +1,15 @@
+$ node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify retry-retries-model-failure retry-wait-cap-dropped retry-max-attempts-blind bench-retry-not-wired retry-reset-read-from-truncated-face
+[mutate-verify] checkout exit=0：.worktrees/gate-mutate-verify → 7cc9605
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）
+变异验证：5 条
+✅ retry-retries-model-failure — 非 provider 打断也重拨 ⇒ 模型自己干坏事（改了判卷面、verify 没过）拿到第二次机会刷分，而分母那一头仍然判它「算数」⇒ 同一趟在两处得到相反处理（本仓最忌的形状） ｜本机实测 0.7s／2 拍
+✅ retry-wait-cap-dropped — 去掉等待帽 ⇒ 日配额那种「要等到明天」也被当成抖动，跑器真的坐在那里等，外层超时把它杀掉时读数一条都不剩（比不重拨更坏） ｜本机实测 0.6s／2 拍
+✅ retry-max-attempts-blind — 判据不看帽（只剩执行壳那一道闸）⇒ 纯函数这一头永远说「再拨」，而「拨了几趟」的账要由跑器自己数——两处不同面时就没人知道试到了第几趟 ｜本机实测 0.6s／2 拍
+✅ bench-retry-not-wired — 跑器把判据换成恒不重拨 ⇒ 机制与判卷全绿，而真跑一次都没重试过（第 12 次同族：判据在、接线这头零观测） ｜本机实测 0.6s／2 拍
+✅ retry-reset-read-from-truncated-face — reset 只从「打断那一条」里找 ⇒ 而判卷那条被 `grade` 截到 60 字、reset 在 150 字往后（36 趟实测：fails 里带 reset 0 条，exitError 里 33 条）⇒ 等不起就不等那一档变成死代码，跑器照样为日配额坐等两轮 ｜本机实测 0.7s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 3.6s · 跑了 5/5 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 10 次／5 条（每条次数分布 2×5）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 retry-reset-read-from-truncated-face 0.7s
+跑法单价：selector 10 拍·中位 0.32s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）

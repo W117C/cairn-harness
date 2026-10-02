@@ -28,10 +28,13 @@ jobs:
         run: pnpm typecheck
       - name: full test suite
         run: pnpm test
-      # 快门面 = CERT_GATES 减两道**已知红**（gate-check 的 H7 属任务 #9、mutate-needles-check 的
-      # 4 支锚点属任务 #23——都不是本仓库当前可绿的账，进 CI 只会训练人忽略红灯）。
-      # 两道修好后加回这一行：pnpm gates --only=gate-check,mutate-needles-check
-      - name: fast gates (cert face minus two known-red)
+      # 快门面 = CERT_GATES 那 22 道，逐字点名（`pnpm gates` 不加参数跑的是 GATES 全集，比认证面慢、面也不同）。
+      # 这一行从前**排除**过两道已知红：gate-check 的 H7 与 mutate-needles-check 的 4 支失针锚点。
+      # 两条理由到 10-02 都已结案 ⇒ 名单补回来。现读凭证：认证树 `认证门面=22 道（跑到 22）｜绿 22 道`
+      # （`outputs/retry-backoff-2026-10-02/head-cert-7cc9605.log`，TREE=7cc9605、DIRTY_JUDGED=0）。
+      # ⚠️ 但**本仓没有 git remote** ⇒ 这份 workflow 至今一次也没真跑过：它的正确性目前只由 head-cert 保证。
+      #    "接不接远端"是业主裁决项（取舍见 scripts/ci/README.md），这条改动只是让名单不再谎报红灯。
+      - name: fast gates (cert face, 22)
         run: >-
           pnpm gates
-          --only=no-progress-check,prune-check,fork-check,compaction-check,docs-check,memory-check,head-import-check,autonomy-check,sandbox:check,security-check,provider:check,routing-check,model-surface-check,prefix-churn-check,prompt-surface-check,replay-determinism-check,cost-per-progress-check,web-fetch-check,gym-check,evidence-typecheck-check
+          --only=no-progress-check,prune-check,fork-check,compaction-check,docs-check,memory-check,head-import-check,autonomy-check,sandbox:check,security-check,provider:check,routing-check,model-surface-check,prefix-churn-check,prompt-surface-check,replay-determinism-check,cost-per-progress-check,web-fetch-check,gym-check,evidence-typecheck-check,gate-check,mutate-needles-check

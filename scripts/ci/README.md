@@ -7,7 +7,7 @@
 ## L1（已落地，零打扰）：`.github/workflows/verify.yml`
 
 - **覆盖**：`pnpm install --frozen-lockfile` → `pnpm typecheck` → `pnpm test`（全量判卷）→
-  **快门面** `pnpm gates --only=…`（= `CERT_GATES` 减两道已知红，逐道点名在 workflow 里）。
+  **快门面** `pnpm gates --only=…`（= `CERT_GATES` 那 22 道，逐道点名在 workflow 里；10-02 起不再减门，见下一节）。
 - **触发**：`push` / `pull_request` / `workflow_dispatch`（手动）。
 - **本地零影响**：不装钩子、不改任何本地行为；只有推上去才跑。
 - **本地复现一模一样的一串**（首次跑通前，CI 里的任何结论都以下面这串的实测为准）：
@@ -23,15 +23,16 @@
   那一串命令在本机按同序跑过（读数见 `outputs/m9-ci-2026-10-01/`）。
   **但"GitHub 上的首次真实运行"本机无法验证** ⇒ 首次推上去视作一次联调，不预先宣称 CI 已绿。
 
-### 两道被排除的门（不是遗漏，是登记）
+### 两道曾被排除的门：10-02 已结案并加回（这一段留作登记，不是现状）
 
-| 门 | 现读 | 归属 |
+| 门 | 当初为什么排除（10-01 现读） | 结案证据 |
 |---|---|---|
-| `gate-check` | 红：H7 冻结表与 `fixtures/impact/accuracy-repo/*` 双向不一致 | 任务 #9（`1748ca7`） |
-| `mutate-needles-check` | 红：4 条锚点的针脚被 `d1371dd` 搬走实现（门自己点了 `4c10272`/`404249c`/`e76ed13`） | 任务 #23 |
+| `gate-check` | 红：H7 冻结表与 `fixtures/impact/accuracy-repo/*` 双向不一致 | 认证树 `认证门面=22 道（跑到 22）｜绿 22 道`（`outputs/retry-backoff-2026-10-02/head-cert-7cc9605.log`） |
+| `mutate-needles-check` | 红：4 条锚点的针脚被 `d1371dd` 搬走实现 | 同一趟里这道门 `✅ mutate-needles-check exit=0`；条数与阻断数取自主树那份 `needles.log`（`针脚体检：1238 条 —— 阻断 0`） |
 
-两道都**不进** L1：把已知红放进 CI 只会训练人忽略红灯（那正是要治的病）。修好后各加回一行
-（workflow 里留了那行注释）。
+原则没变：**已知红不进 CI**（把红灯接进流水线只会训练人忽略它）。这两道修好了就加回——
+就是 workflow 里那句注释预留的动作，10-02 兑现。名单与 `CERT_GATES` 的**集合相等**由脚本核过
+（两边各 22 道、双向差集为空；顺序不要求一致）。
 
 ### 更重的门为什么也不进 L1
 
