@@ -403,8 +403,8 @@ deps-before-run / lockfile 预检那一类，碰不到 `UNSAFE_MODULES_DIR`；�
 
 ### 9.2 先落 mitigation：那个 pnpm 环境态评测侧已消除、生产侧还活着
 
-评测侧 `EVAL_EXEC`（`scripts/loop-eval.ts:87`）带 `pnpm_config_verify_deps_before_run=false` 前缀，
-它就是为了绕开 pnpm 的 deps-before-run 预检；**生产侧没有**——`verifyExec`（`agent-runner.ts:1078`）在
+评测侧 `EVAL_EXEC`（`scripts/loop-eval.ts` 里那个常量）带 `pnpm_config_verify_deps_before_run=false` 前缀，
+它就是为了绕开 pnpm 的 deps-before-run 预检；**生产侧没有**——`verifyExec`（`src/main/agent-runner.ts` 的导出函数）在
 沙箱不可用时整段退回 `defaultExec`，既无前缀也无 `pnpm run test → VITEST_DIRECT` 映射，
 而 `VITEST_DIRECT` 本身指向**本 app 自己的** `node_modules/vitest`（`:151-152`），对用户仓并不适用。
 ⇒ 用户仓里 `node_modules` 由别的 pnpm/lockfile 装过时，`ERR_PNPM_UNSAFE_MODULES_DIR` 会原样复发，
