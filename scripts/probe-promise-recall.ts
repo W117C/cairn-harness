@@ -436,6 +436,22 @@ function hopPruneStub(): Verdict {
   };
 }
 
+/** 第 309 页那一面的判定归属：`WEB_CONTENT_TRUNCATION_HINT` 里那句「换一个更精确的 URL」到底做不做得到。
+ *  与 prune 那格同一个形状——**判据住在复现器里**（`scripts/probe-web-anchor-claim.ts`），
+ *  这一支只 exec 它；判卷 `tests/web-fetch.test.ts` exec 的也是同一支，不各抄一份。 */
+function hopWebAnchorClaim(): Verdict {
+  const r = spawnSync(process.execPath, ["--import", "tsx", join(ROOT, "scripts", "probe-web-anchor-claim.ts")], {
+    cwd: ROOT,
+    encoding: "utf8",
+  });
+  const tail = String(r.stdout ?? "").trim().split("\n").slice(-3).join(" / ");
+  return {
+    ok: r.status === 0,
+    how: "spawn scripts/probe-web-anchor-claim.ts（真起 loopback＋真 fetch：片段上不上线由服务器报，正文相同由三次请求比，换 path 必须不同当正控）",
+    detail: `exit=${String(r.status)}｜${tail.slice(0, 190)}`,
+  };
+}
+
 const RECALL_HOW = "把句子里点名的 id 真拿去调 obs_recall（shipped：ObservationLedger + createObservationRecallTool），看回来的页里有没有原文凭证";
 
 /** 造一份"够归档"的授权输出（>10KB 且含失败信号行，收据支要拿它做引文）。 */
@@ -529,7 +545,40 @@ export const RUNNERS: Readonly<Record<string, string>> = {
   "src/main/agent-runner.ts#body": "hopMapDemo",
   "src/agent/ledger.ts#project": "hopLedgerRecall",
   "src/agent/solpi-runtime.ts#candidate": "hopSolpiReceipt",
+  // 第 309 页：`web_fetch`/`web-search` 共用的那句截断提示（措辞含「取回」⇒ 被本清单收成一个面）。
+  // 这一面欠的判定不是"能不能回取"，而是**它给的出路做不做得到**——由复现器三件事量。
+  "src/tools/output-ring.ts#WEB_CONTENT_TRUNCATION_HINT": "hopWebAnchorClaim",
 };
+
+/** 判定名的花名册：**登记一个不存在的名字，等于这一面没人判过**。
+ *  此前 `runOnce` 是"落到最后一支"的 ternary——把名字打错会得到 `hopPruneStub` 的结论，
+ *  登记表看着齐全、实际顶包（规则 366 那一族：指针失效比缺指针更难发现）。
+ *  现在名字表在这里列一次，`isKnownRunner` 与判卷 `tests/promise-recall-inventory.test.ts` 共用它。 */
+const RUNNER_NAMES: readonly string[] = [
+  "hopSkill", "hopJoinPayload", "hopMapDemo", "hopLedgerRecall", "hopSolpiReceipt", "hopWebAnchorClaim", "hopPruneStub",
+];
+
+export function isKnownRunner(name: string): boolean {
+  return RUNNER_NAMES.includes(name);
+}
+
+/** 名字 → 真去跑那一次判定。未知名字**不 exec**，直接红在这一格（不许拿别的 hop 的结果顶替）。 */
+export function runnerVerdict(name: string, workspace: string): Promise<Verdict> {
+  if (!isKnownRunner(name)) {
+    return Promise.resolve({
+      ok: false,
+      how: "不 exec——这一格没有对应的判定函数，不许拿别的 hop 的结果顶替",
+      detail: `RUNNERS 里的判定名「${name}」在本探针没有实现 ⇒ 登记等于空写`,
+    });
+  }
+  return name === "hopSkill" ? hopSkill(workspace)
+    : name === "hopJoinPayload" ? Promise.resolve(hopJoinPayload())
+      : name === "hopMapDemo" ? Promise.resolve(hopMapDemo())
+        : name === "hopLedgerRecall" ? hopLedgerRecall()
+          : name === "hopSolpiReceipt" ? hopSolpiReceipt()
+            : name === "hopWebAnchorClaim" ? Promise.resolve(hopWebAnchorClaim())
+              : Promise.resolve(hopPruneStub());
+}
 
 function loadSrcFiles(): { files: { path: string; text: string }[]; missingOnDisk: string[] } {
   // 「git 跟踪」与「盘上有这个文件」在桌面层迁移在飞时不是一件事（实测 src/main/index.ts 已删未提交）。
@@ -579,13 +628,7 @@ async function main(): Promise<void> {
   const runOnce = (name: string): Promise<Verdict> => {
     const hit = verdictCache.get(name);
     if (hit) return hit;
-    const next: Promise<Verdict> =
-      name === "hopSkill" ? hopSkill(workspace)
-        : name === "hopJoinPayload" ? Promise.resolve(hopJoinPayload())
-          : name === "hopMapDemo" ? Promise.resolve(hopMapDemo())
-            : name === "hopLedgerRecall" ? hopLedgerRecall()
-              : name === "hopSolpiReceipt" ? hopSolpiReceipt()
-                : Promise.resolve(hopPruneStub());
+    const next = runnerVerdict(name, workspace);
     verdictCache.set(name, next);
     return next;
   };

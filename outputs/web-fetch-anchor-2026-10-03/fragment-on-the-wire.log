@@ -1,0 +1,8 @@
+我交给 fetch 的 URL 路径   →  服务器在报文里看见的 req.url
+  /page             →  /page          片段还在吗=false
+  /page#api         →  /page          片段还在吗=false
+  /page#install     →  /page          片段还在吗=false
+  /page?q=1#api     →  /page?q=1      片段还在吗=false
+
+结论：四种写法在服务器上落成 4/4 个无片段请求行
+     ⇒ 若 req.url 里都没有 `#`，那『换锚点会取到不同正文』就是不成立的出路（正文由 pathname 决定）。

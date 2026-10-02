@@ -1,0 +1,45 @@
+取料：src 文件 174 个｜tests 语料 297 份
+候选断言字面量=44 条｜其中"判卷 0 次"=32 条｜无可比对片段=5 条
+
+== 判卷点过 0 次的那 32 条（逐条要把原句读一遍才叫判定）==
+  src/agent/compaction.ts:572 [已按] [overflow 紧急截断] 已按半分截断摘除 
+  src/agent/eval/task-set.ts:296 [只能] 没有判卷命令 ⇒ 只能当演示，不许进分母
+  src/agent/glm-session.ts:366 [不做] 只按 URL 取，不做检索、不会翻页、没有站内搜索——正文太长会被截断并提示换更精确的地址。
+  src/agent/glm-session.ts:512 [只能] （只能等它自己收敛，或由人在面板上撤）。派活前请把它当成不可撤销的开销。
+  src/agent/goal-drift.ts:52 [不做] 量词收窄（只修 X 就够 / 其余不做）⇒ 单方面缩小交付面
+  src/agent/impact/coverage.ts:28 [只能] 帽 ${String(cap)} 已是上限、maxFiles 调不上去 ⇒ 只能直读（grep/lsp）或按目录拆仓
+  src/agent/impact/coverage.ts:59 [不支持] （被忽略规则/噪声目录排除、后缀不支持仍然成立）
+  src/agent/loop.ts:310 [不会] \n[no-progress] ${which}——同一条路再走一遍不会改变结论：换一个探针（改命令 / 换靶子 / 先 read 那个一直在报错的文件）或说明卡点。
+  src/agent/loop.ts:513 [不会] \n[repeat] 同一个 ${output.name} 调用已连续 ${String(verdict.repeats)} 次失败——原样重试不会改变结果：换一个探针（改命令 / 换路径 / 直接 read 那个文件）或说明卡点。
+  src/agent/loop.ts:514 [不会] \n[repeat] 同一个 ${output.name} 调用已连续 ${String(verdict.repeats)} 次拿到逐字相同的结果——再问一次不会有新信息：换一个探针或说明为何仍需重复。
+  src/agent/memory/inject.ts:156 [不会]  条（每条自带证据指针：哪条会话、哪个 callId；无出处的条目不会出现在这里）]
+  src/agent/plugins/skills.ts:363 [已按]  [正文已按预算截断；完整文件在插件目录，模型侧读不到，要通读请由用户打开]
+  src/agent/plugins/skills.ts:364 [已按]  [正文已按预算截断；完整文件在工作区之外或不可解析，模型侧读不到，要通读请由用户打开]
+  src/agent/prune-batching.ts:143 [不会] （门槛拨到多低都不会多出落盘 ⇒ 主判据的对照是空的）
+  src/agent/sequencer.ts:123 [不支持]  不支持（CC 安全约束照抄 §9.6），已忽略
+  src/agent/sidechat.ts:236 [只能] 纪律：1) 只读：你只能读文件/搜索/查符号，不能写文件、不能执行命令（写向工具已从你的工具表摘除）。
+  src/agent/sidechat.ts:239 [不会] 4) 你的结论不会自动进入主会话——由用户显式 /promote 提升（提升前会过输出扫描）。
+  src/agent/supervise-contract.ts:62 [不会] （拼错的键不会生效，故直接拒）
+  src/agent/verify.ts:369 [不会] 改多少遍代码都不会绿（那类红归因会写成 cause=toolchain-missing/pkg-manager/timeout，别照它改代码）。
+  src/agent/worker-report.ts:38 [已按] worker 档位 ${requested} 越界（父会话 ${parent}）——已按父档裁剪（§11.7.6 单调继承，worker 不可提权）
+  src/cli.ts:199 [只能] --workspace 与位置参数重复给工作区，二者只能取一
+  src/cli.ts:280 [只能] --log 与 --goal 不能同时给：目标只能挂在会话上（去掉 --log，日志落在 <ws>/.agent/sessions/）
+  src/cli.ts:814 [不会] m0 —— 可重放的 agent harness（core-only） 用法： m0 <任务描述> 在当前工作区跑一轮 m0 --workspace <目录> <任务> 在指定工作区跑一轮 m0 --session <id> <任务> 接着
+  src/main/provider-runtime.ts:179 [不会] 请配置该 provider 的 key，或显式切换到 demo。不会静默回落其他 provider/demo。
+  src/permissions/autonomy.ts:399 [不覆盖] 「总是允许」不覆盖这条命令的载荷（原规则 ${chain.ruleId}）
+  src/tools/impact-query.ts:86 [只能] （收到 ${typeof raw} ${String(raw)}）——缺省已是上限 ${String(MAX_FILES_DEFAULT)}，这一位只能往小调
+  src/tools/impact-query.ts:121 [已按] （同名歧义：${subject} ⇒ 清单仍是各份同名定义的并集：图已按 import 反证摘过一轮，但归得上任一定义的都留着；
+  src/tools/impact-query.ts:268 [只能] 建图文件数帽（缺省＝上限 ${String(MAX_FILES_DEFAULT)}，只能调小）
+  src/tools/output-ring.ts:27 [不会] 本工具不会替你翻页，也没有站内搜索——查不到就换源。]
+  src/tools/remember.ts:98 [不支持] remember: DECISIONS 为追加式日志（修订=新条目开头写「取代 <旧条引用>」，旧条保留），不支持 replace
+  src/tools/web-search.ts:135 [不做] （例如 https://searx.example/search?q={query}&format=json）。本工具不做默认厂商，没配即 fail-closed。
+  src/tools/write_file.ts:56 [不会] ｜提示：这是对已有 ${oldCount} 行文件的整份重写，实际只动 ${d.added + d.removed} 行——同类改动用 edit_file 更省 output，也不会漏抄未改的行。
+
+== 对照：判卷点过的那几条里最密的 8 条 ==
+  w=1 src/agent/fork-cli.ts:178 本行不做摘要
+  w=1 src/agent/orchestrator.ts:1151 禁改面被触碰
+  w=1 src/agent/plugins/index.ts:440 只能由用户触发
+  w=1 src/cli.ts:958 目标会话已存在
+  w=1 src/tools/impact-query.ts:42 重新建图也不会收它
+  w=2 src/agent/glm-session.ts:508 从可见工具表摘除
+  w=2 src/agent/impact/attribution.ts:67 同名但另有出处

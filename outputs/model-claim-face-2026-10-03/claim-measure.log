@@ -1,0 +1,107 @@
+取料：src 文件 174 个｜tests 语料 297 份
+候选断言字面量=189 条｜其中"判卷 0 次"=93 条｜无可比对片段=57 条
+
+== 判卷点过 0 次的那 93 条（逐条要把原句读一遍才叫判定）==
+  src/agent/compaction.ts:572 [已按] [overflow 紧急截断] 已按半分截断摘除 
+  src/agent/context.ts:117 [不能]  ⇒ 那不是完整结论；能换个说法继续就换，不能就明说卡在哪，别把半句当结论交出去。
+  src/agent/eval/task-set.ts:71 [必须] ${at}：heldOut.command 必须是非空字符串（没有验收命令的隐藏测试等于没有验收）
+  src/agent/eval/task-set.ts:75 [必须] ${at}：heldOut.files 必须是非空数组（一条隐藏文件都没有 ⇒ 这一格无从验收，不许静默当过）
+  src/agent/eval/task-set.ts:88 [必须] ${fat}：dest 必须是非空字符串（隐藏文件在副本里的落点）
+  src/agent/eval/task-set.ts:95 [必须] ${fat}：src 落在本任务靶子里（${f.src}）⇒ 隐藏测试会被拷进副本给模型看见，必须放在靶子目录之外
+  src/agent/eval/task-set.ts:107 [必须] ${at}：任务必须是对象
+  src/agent/eval/task-set.ts:116 [必须] ${at}：instruction 必须是非空字符串（空的或纯空白都算没有指令）
+  src/agent/eval/task-set.ts:117 [必须] ${at}：source 必须写明出处（本仓标签或 repo@commit）
+  src/agent/eval/task-set.ts:129 [必须] ${at}：verifier 给了就必须带非空 command（没有判卷的条目不许进分母）
+  src/agent/eval/task-set.ts:138 [必须] ${at}：expects 必须是非空字符串数组
+  src/agent/eval/task-set.ts:177 [必须] 任务集顶层必须是数组（收到 
+  src/agent/eval/task-set.ts:296 [只能] 没有判卷命令 ⇒ 只能当演示，不许进分母
+  src/agent/fork-cli.ts:43 [没有任何] 这条会话还没有任何一轮（0 条 user_message），没有可分叉的点
+  src/agent/glm-session.ts:145 [必须] 要被替换的原文（必须唯一）
+  src/agent/glm-session.ts:272 [必须] 派生子 agent 分担任务：read=只读调研，write=写盘实现（声明写租约），pipeline=多阶段依赖链，supervise=受限自环。worker 看不到本会话历史，task 必须自包含。
+  src/agent/glm-session.ts:366 [不会] 只按 URL 取，不做检索、不会翻页、没有站内搜索——正文太长会被截断并提示换更精确的地址。
+  src/agent/glm-session.ts:512 [只能] （只能等它自己收敛，或由人在面板上撤）。派活前请把它当成不可撤销的开销。
+  src/agent/goal.ts:72 [必须] goal 必须是一个对象（objective / maxTurns / maxUsd）
+  src/agent/goal.ts:76 [必须] objective 必须是非空字符串（给了空目标就等于让 agent 自己猜要干什么）
+  src/agent/goal.ts:184 [没有任何] 这个目标至今没有任何验证记录 ⇒ 本轮先把验证跑起来拿到证据，别在没跑过测试的情况下继续加东西
+  src/agent/gym/case.ts:83 [必须] expect.maxTurns 必须为正整数
+  src/agent/gym/draft.ts:99 [必须] repo/：pristine 靶子不在事件流里（会话跑在真工作区上；D7 快照只覆盖非空覆写那一格）⇒ 必须人给一份最小仓库
+  src/agent/impact/coverage.ts:28 [只能] 帽 ${String(cap)} 已是上限、maxFiles 调不上去 ⇒ 只能直读（grep/lsp）或按目录拆仓
+  src/agent/impact/coverage.ts:59 [不支持] （被忽略规则/噪声目录排除、后缀不支持仍然成立）
+  src/agent/loop.ts:307 [没有任何] 同一条验证结论已连红 ${String(stagnation.repeats)} 次且中间没有任何写入
+  src/agent/loop.ts:310 [不会] \n[no-progress] ${which}——同一条路再走一遍不会改变结论：换一个探针（改命令 / 换靶子 / 先 read 那个一直在报错的文件）或说明卡点。
+  src/agent/loop.ts:513 [不会] \n[repeat] 同一个 ${output.name} 调用已连续 ${String(verdict.repeats)} 次失败——原样重试不会改变结果：换一个探针（改命令 / 换路径 / 直接 read 那个文件）或说明卡点。
+  src/agent/loop.ts:514 [不会] \n[repeat] 同一个 ${output.name} 调用已连续 ${String(verdict.repeats)} 次拿到逐字相同的结果——再问一次不会有新信息：换一个探针或说明为何仍需重复。
+  src/agent/memory/inject.ts:156 [不会]  条（每条自带证据指针：哪条会话、哪个 callId；无出处的条目不会出现在这里）]
+  src/agent/no-progress.ts:134 [没有任何] 同一条验证结论连红 ${String(run)} 次且中间没有任何写入：
+  src/agent/plugins/skills.ts:363 [已按]  [正文已按预算截断；完整文件在插件目录，模型侧读不到，要通读请由用户打开]
+  src/agent/plugins/skills.ts:364 [已按]  [正文已按预算截断；完整文件在工作区之外或不可解析，模型侧读不到，要通读请由用户打开]
+  src/agent/prompt-surface.ts:53 [不能] 工具面一格都没取到 ⇒ 不能把「没读到」读成「没有可达性问题」
+  src/agent/prompt-surface.ts:55 [不能] 所有档的工具面都是空的 ⇒ 取料坏了，这一格不能印 0
+  src/agent/prompt-surface.ts:63 [必须] 文本面 ${face.name} 声明了不存在的档 ⇒ 取料坏了（覆盖档必须来自工具面那张表）
+  src/agent/prune-batching.ts:129 [没有任何] （没有任何一轮「本可剪而没剪」⇒ 这条判据无分辨力）
+  src/agent/prune-batching.ts:143 [不会] （门槛拨到多低都不会多出落盘 ⇒ 主判据的对照是空的）
+  src/agent/sequencer.ts:30 [必须] stages 必须是非空数组（pipeline = 预置链，至少一环）
+  src/agent/sequencer.ts:72 [必须] 报告必须带 verdict 行（verdict: pass 或 verdict: fail）给出整体结论；fail 时列出必须修复项。
+  src/agent/sequencer.ts:80 [必须] 报告必须带 verdict 行（verdict: pass 或 verdict: fail）给出整体结论；fail 时列出缺口。
+  src/agent/sequencer.ts:123 [不支持]  不支持（CC 安全约束照抄 §9.6），已忽略
+  src/agent/sidechat.ts:236 [不能] 纪律：1) 只读：你只能读文件/搜索/查符号，不能写文件、不能执行命令（写向工具已从你的工具表摘除）。
+  src/agent/sidechat.ts:239 [不会] 4) 你的结论不会自动进入主会话——由用户显式 /promote 提升（提升前会过输出扫描）。
+  src/agent/supervise-contract.ts:50 [必须] supervise 必须是一个对象（可申报 
+  src/agent/supervise-contract.ts:57 [不能] ；其中 budget 归人（会话成本闸），模型不能给自己批预算
+  src/agent/supervise-contract.ts:62 [不会] （拼错的键不会生效，故直接拒）
+  src/agent/tool-choice.ts:98 [不看] 参数质量：不看 args 语义，重复探测只按逐字相同判
+  src/agent/tool-choice.ts:273 [没有任何]  → 其中没有任何一次通过的 
+  src/agent/verify.ts:301 [没有任何] verify 配置为空（.agent/config.json 的 verify 字段没有任何命令）
+  src/agent/verify.ts:369 [不会] 改多少遍代码都不会绿（那类红归因会写成 cause=toolchain-missing/pkg-manager/timeout，别照它改代码）。
+  src/agent/worker-prompt.ts:70 [不能] 你是主会话派生的只读 worker（read mode，深度 1）：不能再 spawn_agent（工具表已摘除），不能写任何文件。
+  src/agent/worker-prompt.ts:74 [必须] 2) 结论必须可追溯：给出文件路径与行号依据；不确定就写进「未决问题」。
+  src/agent/worker-prompt.ts:87 [不能] 4) remember 的项目层记忆恒指主 checkout（记忆属于项目不属于 worktree）；只沉淀不能从代码推导的结论。
+  src/agent/worker-report.ts:38 [已按] worker 档位 ${requested} 越界（父会话 ${parent}）——已按父档裁剪（§11.7.6 单调继承，worker 不可提权）
+  src/cli.ts:199 [只能] --workspace 与位置参数重复给工作区，二者只能取一
+  src/cli.ts:268 [不能] --fork 跑一轮新任务，与只压缩的 --compact 不能同时给
+  src/cli.ts:280 [不能] --log 与 --goal 不能同时给：目标只能挂在会话上（去掉 --log，日志落在 <ws>/.agent/sessions/）
+  src/cli.ts:814 [不会] m0 —— 可重放的 agent harness（core-only） 用法： m0 <任务描述> 在当前工作区跑一轮 m0 --workspace <目录> <任务> 在指定工作区跑一轮 m0 --session <id> <任务> 接着
+  src/main/automations.ts:163 [必须] schedule.at 必须是可解析的 ISO 时间串
+  src/main/automations.ts:203 [必须] schedule.weekdays 必须是 0-6（0=周日）非空去重数组
+  src/main/automations.ts:247 [必须] 定时任务定义必须是对象
+  src/main/automations.ts:255 [必须] name 必须是 1-${String(MAX_NAME_CHARS)} 字符的字符串
+  src/main/project-registry.ts:154 [必须] 项目 add 参数必须是对象
+  src/main/provider-runtime.ts:179 [不会] 请配置该 provider 的 key，或显式切换到 demo。不会静默回落其他 provider/demo。
+  src/main/run-attachments.ts:36 [必须] 附件必须是对象
+  src/main/run-attachments.ts:120 [不能] 附件数量不能超过 ${MAX_ATTACHMENTS}
+  src/main/run-attachments.ts:131 [不能] 附件路径总长度不能超过 ${MAX_TOTAL_PATH_CHARS} 字符
+  src/main/run-request.ts:46 [必须] RunRequest.model 必须是非空稳定 registry id（≤128 字符）
+  src/main/updater.ts:64 [必须] 更新源必须为 https（拒绝 
+  src/permissions/rules.ts:48 [必须] 权限库条目不合法，拒载（${origin}）：rules[${String(i)}].behavior 必须是 allow|ask|deny
+  src/permissions/rules.ts:51 [必须] 权限库条目不合法，拒载（${origin}）：rules[${String(i)}].tool 必须是非空字符串
+  src/permissions/rules.ts:54 [必须] 权限库条目不合法，拒载（${origin}）：rules[${String(i)}].scope 必须是 "always"
+  src/permissions/rules.ts:57 [必须] 权限库条目不合法，拒载（${origin}）：rules[${String(i)}].pattern 必须是非空字符串或缺省
+  src/tools/apply_patch.ts:170 [没有任何] apply_patch: 补丁为空，没有任何内容改动
+  src/tools/apply_patch.ts:183 [没有任何] apply_patch: 补丁里找不到任何 `diff --git` 段，没有任何内容改动
+  src/tools/cancel_agents.ts:40 [必须] cancel_agents: agent_ids 必须是非空字符串数组（要停哪一个请点名，不给"全停"的隐含语义）
+  src/tools/clarify.ts:14 [必须] clarify: questions 必须是 1–${String(MAX_QUESTIONS)} 个问题的数组
+  src/tools/clarify.ts:18 [必须] clarify: 第 ${String(i + 1)} 个问题必须是对象
+  src/tools/clarify.ts:41 [必须] clarify: 第 ${String(i + 1)} 个问题的第 ${String(j + 1)} 个选项必须是对象
+  src/tools/impact-query.ts:86 [只能] （收到 ${typeof raw} ${String(raw)}）——缺省已是上限 ${String(MAX_FILES_DEFAULT)}，这一位只能往小调
+  src/tools/impact-query.ts:121 [已按] （同名歧义：${subject} ⇒ 清单仍是各份同名定义的并集：图已按 import 反证摘过一轮，但归得上任一定义的都留着；
+  src/tools/impact-query.ts:220 [没有任何] [impact] ${symbol}：这张图里没有任何文件**定义**它 ⇒ 它是外部或全局符号
+  src/tools/impact-query.ts:268 [只能] 建图文件数帽（缺省＝上限 ${String(MAX_FILES_DEFAULT)}，只能调小）
+  src/tools/lsp.ts:121 [必须] lsp: .agent/lsp.json 的 "lsp" 字段必须是对象或 false
+  src/tools/output-ring.ts:27 [不会] 本工具不会替你翻页，也没有站内搜索——查不到就换源。]
+  src/tools/propose_plan.ts:16 [必须] propose_plan: files 必须是非空数组
+  src/tools/refine_goal.ts:30 [必须] refine_goal: 无落流通道（fail-closed：目标锚点必须可审计）
+  src/tools/remember.ts:80 [必须] remember: scope 必须是顶层参数 project|global
+  src/tools/remember.ts:98 [不支持] remember: DECISIONS 为追加式日志（修订=新条目开头写「取代 <旧条引用>」，旧条保留），不支持 replace
+  src/tools/remember.ts:103 [必须] remember: content 参数必须是字符串
+  src/tools/write_file.ts:19 [必须] write_file: content 参数必须是字符串
+  src/tools/write_file.ts:56 [不会] ｜提示：这是对已有 ${oldCount} 行文件的整份重写，实际只动 ${d.added + d.removed} 行——同类改动用 edit_file 更省 output，也不会漏抄未改的行。
+
+== 对照：判卷点过的那几条里最密的 8 条 ==
+  w=2 src/tools/edit_file.ts:47 必须是非空字符串
+  w=2 src/tools/edit_file.ts:50 必须是字符串
+  w=2 src/tools/propose_plan.ts:13 必须是非空字符串
+  w=2 src/tools/propose_plan.ts:24 必须是非空字符串
+  w=2 src/tools/propose_plan.ts:30 必须是非空字符串
+  w=2 src/tools/propose_plan.ts:36 必须是字符串
+  w=2 src/tools/refine_goal.ts:37 必须是非空字符串
+  w=2 src/tools/wait_for_agents.ts:34 必须是非空字符串

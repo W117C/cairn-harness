@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
-  PROMISE_MARKS, RUNNERS, UI_ROOTS, builderCoverage, promiseInventoryFindings,
+  PROMISE_MARKS, RUNNERS, UI_ROOTS, builderCoverage, isKnownRunner, promiseInventoryFindings, runnerVerdict,
   scanBuilderCallSites, scanCapNoticeCalls, scanPromiseSites,
   type PromiseSite,
 } from "../scripts/probe-promise-recall";
@@ -45,6 +45,21 @@ describe("回取承诺清单：每一面都得有判定归属，登记表不许�
 
   it("每一处模型可见的承诺面都有判定归属（新加一句『全文见 X』而不登记 ⇒ 这条先红）", () => {
     expect(findings.unjudged, "没有判定归属的面：" + findings.unjudged.join(" | ")).toEqual([]);
+  });
+
+  // 第 309 页补的那半格：登记表**有键**不等于**有人判**。此前 `runOnce` 是"落到最后一支"的 ternary，
+  // 于是把判定名打错会得到 `hopPruneStub` 的结论——清单看着齐全，那一面其实一次都没判过。
+  it("登记了的判定名必须真有一个实现（打错名字＝顶包，比缺登记更难发现）", () => {
+    const bad = Object.entries(RUNNERS).filter(([_k, v]) => !isKnownRunner(v));
+    expect(bad, "指向不存在判定的登记：" + bad.map(([k, v]) => `${k}→${v}`).join(" | ")).toEqual([]);
+    expect(isKnownRunner("hopWebAnchorClaim"), "第 309 页那一面的判定名要真在花名册里").toBe(true);
+  });
+
+  it("未知判定名不 exec、直接红在这一格（不许拿别的 hop 的结果顶替）", async () => {
+    const v = await runnerVerdict("hopNoSuchThing", "/tmp");
+    expect(v.ok, "未知名字居然返回了绿 ⇒ 它顶的是别人的结论").toBe(false);
+    expect(v.detail).toContain("hopNoSuchThing");
+    expect(v.how).toContain("不 exec");
   });
 
   it("判定归属表里没有陈旧键（那一面已不在盘上发射，登记表必须跟着撤）", () => {

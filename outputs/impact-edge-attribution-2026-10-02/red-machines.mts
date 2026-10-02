@@ -51,6 +51,13 @@ const IDS = [
   "impact-query-notes-land-before-the-count",
   "impact-query-empty-list-loses-notes",
   "impact-mixed-note-prints-zeros",
+  // 第 309 页那三枚（`web_fetch` 截断提示里的假出路）：同一台机器跑到底，别再开一份新台账。
+  "web-hint-offers-anchor-as-a-way-to-narrow",
+  "web-hint-drops-fragment-explanation",
+  "web-fetch-hint-computed-not-wired",
+  // 第 309 页后半簇：判定归属的登记与"登记名打错＝顶包"那一格。
+  "promise-web-face-left-unregistered",
+  "promise-runner-name-typo-gets-anothers-verdict",
 ];
 
 // 一个 JS 字符串字面量的正则形状（双引号、单引号两支）。本笔 14 条改法都不含反引号写法，

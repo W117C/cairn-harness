@@ -12332,6 +12332,77 @@ const MUTATIONS = [
     apply: (s) => s.replace("if (count <= 0) return \"\";", "if (false) return \"\";"),
     expectFail: "那句分母只有一处文字：混进 0 就空串；两处各写一遍的话改一处忘一处会静默说谎",
   },
+  /* 第 309 页：`web_fetch` 截断提示里那条「换锚点」是假出路（片段不发往服务器，取回正文逐字相同）。
+     同一句文案的两半又是一处不对称——HEAD 判卷点过「换一个更精确的 URL」1 次，而「锚点」在 tests/ 里
+     只作「变异锚点」义出现、URL 片段义 0 次 ⇒ 第 308 页那一族的第二次命中，这次由那张 44 条的候选表捞出来。
+     刻意不锚的那一格同第 308 页：「句子被抄成第二份」要的是凭空多一份拷贝，本表只能删/换，由判卷里的结构钉守。 */
+  {
+    id: "web-hint-offers-anchor-as-a-way-to-narrow",
+    src: "src/tools/output-ring.ts",
+    test: "tests/web-fetch.test.ts",
+    desc: "把「锚点」重新列进「换一个更精确的 URL（…）」那个括号 ⇒ 模型照做再跑一轮，" +
+      "取回的是逐字相同的一屏（判卷里三次请求在服务器上落在同一个 pathname，正控换 path 才真的不同）。" +
+      "这一枚钉的是「出路里不许列做不到的事」，与下面那枚（说明句）分开的理由：两句各管一件事，" +
+      "合成一条钉就会被「只改一句」的变异蒙混过去",
+    apply: (s) => s.replace(
+      '"要找特定段落就换一个更精确的 URL（目录页/专门章节页/API 文档页）；"',
+      '"要找特定段落就换一个更精确的 URL（锚点/目录页/API 文档页）；"',
+    ),
+    expectFail: "下一步的括号里不许列做不到的事：锚点不是「更精确的 URL」",
+  },
+  {
+    id: "web-hint-drops-fragment-explanation",
+    src: "src/tools/output-ring.ts",
+    test: "tests/web-fetch.test.ts",
+    desc: "把「片段不发往服务器，正文按同一位置截断」那句解释摘掉 ⇒ 括号里虽然没列锚点，" +
+      "但模型仍会凭浏览器的直觉去试 #章节（它在浏览器里真会跳）。" +
+      "否定式事实要么不说，要说就说进模型实际读到的那一句里（同一句话在注释里说一遍不算）",
+    apply: (s) => s.replace(
+      '"[下一步：这是页面正文，不是整站。#锚点不会改变取回的内容（片段不发往服务器，正文按同一位置截断）；"',
+      '"[下一步：这是页面正文，不是整站。"',
+    ),
+    expectFail: "要么不说，要说就说清片段不上线：那句解释必须写在模型读到的这一句里",
+  },
+  {
+    id: "web-fetch-hint-computed-not-wired",
+    src: "src/tools/web_fetch.ts",
+    test: "tests/web-fetch.test.ts",
+    desc: "文案改了但出口不接 ⇒ 模型读到的还是旧那句（本仓「算出来不接」那一族）。" +
+      "改法把第二个实参换成空串，等价于环不再交出任何下一步——针脚钉整条调用连入参，不钉常量名",
+    apply: (s) => s.replace(
+      "createOutputRing(MODEL_TEXT_BYTES, WEB_CONTENT_TRUNCATION_HINT)",
+      "createOutputRing(MODEL_TEXT_BYTES, WEB_CONTENT_TRUNCATION_HINT.slice(0, 0))",
+    ),
+    expectFail: "这句要真从 web_fetch 那一支交出去（改了常量而出口不接＝模型读到的还是旧的）",
+  },
+  /* 第 309 页后半簇：那句提示被 `probe-promise-recall` 的措辞网收成一个**面**（字面里含「取回」），
+     于是本仓既有的那条纪律把我拦下了——「新加一面必须给判定归属」。这一组钉的是我怎么还这笔账，
+     以及我还账时顺手补上的那个洞：登记名打错以前会拿到别人的结论（顶包）。 */
+  {
+    id: "promise-web-face-left-unregistered",
+    src: "scripts/probe-promise-recall.ts",
+    test: "tests/promise-recall-inventory.test.ts",
+    desc: "撤掉这一面的登记 ⇒ 清单完整性判据必须红（它红才是尺在工作）。" +
+      "反过来说明我这次不是「绕过登记表改文案」，而是按它的规矩把判定挂上",
+    apply: (s) => s.replace(
+      '  "src/tools/output-ring.ts#WEB_CONTENT_TRUNCATION_HINT": "hopWebAnchorClaim",\n',
+      "",
+    ),
+    expectFail: "每一处模型可见的承诺面都有判定归属（新加一句『全文见 X』而不登记 ⇒ 这条先红）",
+  },
+  {
+    id: "promise-runner-name-typo-gets-anothers-verdict",
+    src: "scripts/probe-promise-recall.ts",
+    test: "tests/promise-recall-inventory.test.ts",
+    desc: "把名字核对短路成「永远认识」 ⇒ 未知判定名会 exec 到 ternary 的最后一支，" +
+      "于是**别人的**结论被贴到这一面上：登记表看着齐全，那一格其实一次都没判过" +
+      "（规则 366 那一族：指针失效比缺指针难发现，这次是顶包）",
+    apply: (s) => s.replace(
+      "  return RUNNER_NAMES.includes(name);",
+      "  return true;",
+    ),
+    expectFail: "未知判定名不 exec、直接红在这一格（不许拿别的 hop 的结果顶替）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

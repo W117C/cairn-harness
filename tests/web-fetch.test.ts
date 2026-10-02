@@ -8,9 +8,12 @@
 
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { assertPublicUrl, blockedHostReason, blockedReason } from "../src/tools/web-fetch-policy.js";
+import { WEB_CONTENT_TRUNCATION_HINT } from "../src/tools/output-ring.js";
 import { htmlToText, makeWebFetch } from "../src/tools/web_fetch.js";
 import { evaluate, newAutonomySession } from "../src/permissions/autonomy.js";
 import { PERMISSION_MODES } from "../src/permissions/index.js";
@@ -304,5 +307,71 @@ describe("web_fetch 传输层（注入 fetchImpl / resolveHost）", () => {
     // 网页不许带 shell 那句建议（对模型说胡话），也不许没带任何下一步。
     expect(r.output).not.toContain("grep -n");
     expect(r.output).toContain("换一个更精确的 URL");
+  });
+});
+
+describe("截断提示里的「锚点」是假出路（第 309 页：句子有证人，半句没有）", () => {
+  // 与第 308 页同族的可观测性不对称：HEAD 判卷里「换一个更精确的 URL」被点过 **1** 次，
+  // 而它括号里那三个候选出路中的「锚点」——`grep -rn 锚点 tests/` 命中的每一条都是**变异锚点**义，
+  // URL 片段义 0 次。于是这句教模型"换 #api 再取一次"，而片段根本不发往服务器 ⇒ 白跑一轮，没人喊。
+  //
+  // 证据由**复现器**给（`scripts/probe-web-anchor-claim.ts`）：它起一个 loopback 服务、把带片段的 URL
+  // 原样交给真 fetch，让服务器自己报它在报文里看见什么——不是我在测试里替传输层剥掉片段。
+  const longBody = "<html><body>" +
+    Array.from({ length: 700 }, (_unused, i) => `<p>第 ${String(i)} 行正文，够长才会走到截断那一支。</p>`).join("") +
+    "</body></html>";
+
+  // 判据只住一份：那条断言（换锚点能不能收窄）由 `scripts/probe-web-anchor-claim.ts` 量，
+  // 这里 exec 它并读它的三行结论——与 `hopPruneStub` 同一个形状（复现器归复现器，判卷不许重抄判据，
+  // 否则两处副本迟早漂成两种答法，本仓第十三族）。
+  it("换锚点不改变取回的内容：三件事由复现器量（片段不上线／正文相同／换 path 必须不同）", () => {
+    const r = spawnSync(process.execPath, ["--import", "tsx", "scripts/probe-web-anchor-claim.ts"], {
+      cwd: fileURLToPath(new URL("..", import.meta.url)), encoding: "utf8", timeout: 60_000,
+    });
+    const out = String(r.stdout ?? "").replace(/\x1b\[[0-9;]*m/gu, "");
+    expect(r.status, `复现器退 ${String(r.status)}：${out}\n${String(r.stderr ?? "").slice(0, 400)}`).toBe(0);
+    // 三行都要在：少一行就是那一格没量（退 0 也可能是复现器自己短路了）。
+    expect(out).toContain("四种写法上线的请求行里都没有 `#`");
+    expect(out).toContain("三次换锚点取回的正文与基准");
+    expect(out).toContain("换 path 取回不同正文");
+  });
+
+  it("下一步的括号里不许列做不到的事：锚点不是「更精确的 URL」", () => {
+    const options = /URL（([^）]*)）/u.exec(WEB_CONTENT_TRUNCATION_HINT)?.[1] ?? "";
+    expect(options, "括号里只许列真的换得了内容的地址形状：" + options).not.toContain("锚点");
+    // 真做得到的两条要留着——把整条出路删空同样是对模型说胡话（截断了却不给下一步）。
+    expect(options).toContain("目录页");
+    expect(options).toContain("API 文档页");
+  });
+
+  it("要么不说，要说就说清片段不上线：那句解释必须写在模型读到的这一句里", () => {
+    expect(WEB_CONTENT_TRUNCATION_HINT, "模型会照『换锚点』再跑一轮 ⇒ 文案要自己否定这条路").toMatch(/锚点[^，。；)]{0,18}不会改变取回/u);
+    expect(WEB_CONTENT_TRUNCATION_HINT).toMatch(/片段[^，。；)]{0,12}(不发|不上|不往)/u);
+    // 反向哨兵：这两条否定式事实本来就在句子里，不许被我这次改动顺手删掉（它们此前也是 0 证人）。
+    expect(WEB_CONTENT_TRUNCATION_HINT).toContain("不会替你翻页");
+    expect(WEB_CONTENT_TRUNCATION_HINT).toContain("站内搜索");
+  });
+
+  it("这句要真从 web_fetch 那一支交出去（改了常量而出口不接＝模型读到的还是旧的）", async () => {
+    const addr = await serve(() => ({ body: longBody }));
+    const tool = makeWebFetch({
+      fetchImpl: (async (u: string) => {
+        const parsed = new URL(u);
+        return fetch(`http://${addr}${parsed.pathname}${parsed.search}`);
+      }) as unknown as typeof fetch,
+      resolveHost: publicResolver,
+    });
+    const r = await tool.run({ url: "http://example.com/page#a" }, CTX);
+    expect(r.ok).toBe(true);
+    expect(String(r.output), "整句原样出现＝这条出口真接着").toContain(WEB_CONTENT_TRUNCATION_HINT);
+  });
+
+  it("那句话只住在一处：两个消费者各抄一份的话，修好一面另一面还在说胡话", async () => {
+    const { readFileSync } = await import("node:fs");
+    let hits = 0;
+    for (const rel of ["src/tools/output-ring.ts", "src/tools/web_fetch.ts", "src/tools/web-search.ts"]) {
+      hits += (readFileSync(new URL("../" + rel, import.meta.url), "utf8").match(/不会替你翻页/gu) ?? []).length;
+    }
+    expect(hits, "句子住在 output-ring.ts 一处；第二个文件再出现字面量＝抄了第二份").toBe(1);
   });
 });
