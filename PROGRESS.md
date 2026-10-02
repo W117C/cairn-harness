@@ -10125,5 +10125,27 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
    `killer 指针失效 0`｜改法全部合法；租约 A/B 探针单跑一次读数，不入门表。
 7. **取料**：`outputs/impact-lease-closure-2026-10-02/`（readings＋lease-ab＋targeted-tests＋red-machines-16＋needles-precommit＋suite-full）。
 
+### 2026-10-02 · 第 306 页补 凭证（1/1）：`c0c60da` 认证通过——22/22 门绿、干净树 286 文件 3911 条绿、收尾复核＝同一笔；本笔 55 条锚点在干净树逐条被杀，重指的那条落库后 `阻断 0`
+
+1. **认证读数**（`outputs/impact-lease-closure-2026-10-02/head-cert-c0c60da.log`，`CERT_EXIT=0`）：
+   `认证门面=22 道（跑到 22）｜绿 22 道｜⚠️ 超预算 0`；`TREE=c0c60da DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有`；
+   干净树判卷 `Test Files 286 passed｜Tests 3911 passed｜exit=0（退出码直接取，不接管道）`；本趟墙钟 220.05s。
+2. **同分母自洽（三处数字互相对得上才算"这笔没漏也没多"）**：
+   ① 干净树 3911 条＝上一笔认证（`1183500`）的 3909 **＋ 2**，那 2 条正是本笔新增的两条用例（`闭包只算归得到的引用方…`＋`闭包只有一支…`）；
+   ② 主树全量 4056 条 vs 认证树 3911＝差 145 条，与上一笔的差额同一批（隔壁在飞的 7 个判卷文件，未入库、不与我重叠）；
+   ③ 落库前后针脚尺自己那条账闭合：落库前 `阻断 1`（＝重指过的 `impact-closure-glob-broken` 钉在飞文本）
+   ⇒ 落库后 `针脚体检：1310 条 —— 阻断 0，未入库面 0，钉在飞文本 0，killer 指针失效 0`（`postcommit-needles.log`，`NEEDLES_EXIT=0`）。
+3. **干净树逐条击杀**（`mutate-kill-c0c60da.log`，`KILL_EXIT=0`）：`rev=HEAD~1 → 变更文件 11 个 ⇒ 选中锚点 55/1310 条`，
+   `全部变异被正确杀死（断言非恒真）`，本次耗时 68.2s；本笔两条各红自己那条
+   （`impact-lease-closure-bypasses-attribution`、重指后的 `impact-closure-glob-broken`）⇒ "搬完没人验证"那一格这次有证人。
+4. **清场判据不是授权**（照旧只报数）：`常驻残留树=2`＝`.worktrees/gate-mutate-import@c0c60da`（本会话这趟 repoint 的）＋
+   `.worktrees/gate-mutate-verify@4e0a7de`（隔壁会话的树）。回收要用户点头；`gate-head-cert` 是复用来的共享树 ⇒ 脚本自己不收。
+5. **下一格**（#19 后半）：并集口径收成按 def 逐条筛。落库前要先有真轨迹分母——
+   本仓 `mode=pipeline`／逐环租约在真语料里是 **0 次**（第 300 页前后量过），
+   所以"冲突判定翻转条数"这一半大概率取不到数；取不到数时的正确形状**不是**改窄判据，
+   而是把已算得出的那一半先发货：把「其中 N 个符号在别的文件也有同名定义」升级成带分母的
+   「这 M 个文件里 X 个只归到别处那份定义」——读端多给信息，安全面不动。
+
+
 
 

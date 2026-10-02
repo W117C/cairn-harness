@@ -88,7 +88,9 @@ export async function affectedFilesOf(...)  // 入面（glob 过滤）+ 委派�
 
 ## 8 · 落库前后逐条读数
 
-- 落库前（本笔全部入库）：`readings.md`＋`lease-ab.log`＋`targeted-tests.log`＋`red-machines-16.log`（造红脚本沿用第 305 页那一份，
-  它按 id 从锚点表解改法，加两条 id 就自动多两台）＋`needles-precommit.log`＋`suite-full.log`。
-- 落库后（击杀＋认证）记在「页补 凭证」那一笔。
+- 落库前（第 306 页那一笔 `c0c60da` 同笔入库）：`readings.md`＋`lease-ab.log`＋`targeted-tests.log`＋`red-machines-16.log`＋`needles-precommit.log`＋`suite-full.log`。
+  （造红脚本沿用 `../impact-edge-attribution-2026-10-02/red-machines.mts`——它按 id 从锚点表解改法，加 id 就自动多一台，且每台跑**自己那条判卷文件**。）
+- 落库后（凭证那一笔入库）：`postcommit-needles.log`（`阻断 0`）、`mutate-kill-c0c60da.log`（55/55 全杀、68.2s）、
+  `head-cert-c0c60da.log`（22/22 门绿、干净树 286 文件／3911 条、收尾复核＝同一笔、220.05s）。读数与三处同分母自洽见 PROGRESS 第 306 页补凭证那一段。
+
 
