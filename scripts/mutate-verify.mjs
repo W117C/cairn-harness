@@ -12540,6 +12540,72 @@ const MUTATIONS = [
     ),
     expectFail: "一条坏数据不许吃掉整段 LESSONS（注入侧那句「无出处的条目不会出现在这里」的真正内容）",
   },
+  /* 第 313 页：换路提示那句「原样重试不会改变结果」是**预测**，而检测器比的是历史
+     （错误分支只看 action＋全失败，压根没看 observation）。三枚各钉一处：
+     检测器交回的事实、文案里的比对窗口、观察分支不再说"逐字"。 */
+  {
+    id: "repeat-error-branch-asserts-determinism-again",
+    src: "src/agent/stuck.ts",
+    test: "tests/loop-repeat-nudge.test.ts",
+    desc: "把 `sameObservation` 写死成 true ⇒ 检测器不再交「比过什么」，而是交「希望是什么」："
+      + "连败三次而错误各不相同（flaky／超时／竞态）也会被说成「原样重试不会改变结果」，"
+      + "而那句话恰好会把该再看一次的那次重试劝掉——能力 5 里最贵的一种错",
+    apply: (s) => s.replace(
+      "      const sameObservation = window.every((t) => t.observation === first.observation);",
+      "      const sameObservation = true;",
+    ),
+    expectFail: "连败三次而每次错误不同 ⇒ 提示不再断言重试无效，改说最新那条本身就是新信息",
+  },
+  {
+    id: "repeat-note-hides-the-comparison-window",
+    src: "src/agent/loop.ts",
+    test: "tests/loop-repeat-nudge.test.ts",
+    desc: "从文案里删掉「比对取前 200 字」⇒ 模型读到的是「错误相同」，而实际比的是截断摘要"
+      + "（`stuckObservationOf`）。差第 201 字的两次错误会被说成相同——范围要说清，不然是替检测器背书",
+    apply: (s) => s.replace(
+      "次失败且错误相同（比对取前 200 字）——原样重试不会改变结果",
+      "次失败且错误相同——原样重试不会改变结果",
+    ),
+    expectFail: "连败三次且错误相同 ⇒ 才说得出「原样重试不会改变结果」，并写明比对窗口",
+  },
+  {
+    id: "repeat-obs-note-reverts-to-verbatim-claim",
+    src: "src/agent/loop.ts",
+    test: "tests/loop-repeat-nudge.test.ts",
+    desc: "观察分支退回「逐字相同的结果」⇒ 又是越界措辞（比的是前 200 字）。"
+      + "这条的 killer 是既有那条阈值用例：它现在两头钉——既要说明窗口，也不许再出现「逐字」",
+    apply: (s) => s.replace(
+      "次拿到相同结果（比对取前 200 字）——再问一次不会有新信息",
+      "次拿到逐字相同的结果——再问一次不会有新信息",
+    ),
+    expectFail: "成功但逐字相同：第 3 次不提示、第 4 次才提示（阈值取自 detectStuck，不自己造数）",
+  },
+  {
+    id: "tool-choice-repeat-window-not-truncated",
+    src: "src/agent/tool-choice.ts",
+    test: "tests/tool-choice.test.ts",
+    desc: "把重复键里的 `stuckObservationOf(e.output)` 换成全串 ⇒ 读数口径变了而印面照旧："
+      + "「差在第 201 字」的两次结果不再算一次重复探测，重复探测率被系统性低估。"
+      + "这条钉的是**量法**（窗口归谁定），与下面那条钉措辞的各红不同用例（规则 375 不适用：两个观测面）",
+    apply: (s) => s.replace(
+      'const key = stuckActionOf(call.name, call.args) + "\\n" + stuckObservationOf(e.output);',
+      'const key = stuckActionOf(call.name, call.args) + "\\n" + e.output;',
+    ),
+    expectFail: "窗口边界：两条结果只差在第 201 字 ⇒ 仍算一次重复探测（这就是「前 200 字」的准确含义）",
+  },
+  {
+    id: "tool-choice-printed-label-reverts-to-verbatim",
+    src: "src/agent/tool-choice.ts",
+    test: "tests/tool-choice.test.ts",
+    desc: "打印面退回「逐字相同结果」⇒ 读这屏数的人以为窗口是全文，"
+      + "实际两支串都截 200 字（`stuckActionOf` 截参数、`stuckObservationOf` 截结果）。"
+      + "与 loop 那句同一种错，只是受众是看读数的人而不是模型，所以修法是同一句话：只声称真比过的那件事",
+    apply: (s) => s.replace(
+      "（同 action + 结果前 200 字相同，两支都截断）",
+      "（同 action + 逐字相同结果）",
+    ),
+    expectFail: "印面与边界名单按窗口说话，不许再写「逐字」（读这些数的人据此判断重复率准不准）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

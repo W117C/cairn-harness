@@ -72,6 +72,13 @@ const IDS = [
   // 第 312 页那一簇：`evidence-line:` 空指针这一支（解析层那道闸 + 注入层不许现造 digest）。
   "lesson-empty-evidence-gate-dropped",
   "lesson-inject-fabricates-empty-digest",
+  // 第 313 页那一簇：换路提示只声称检测器真比过的那件事（三个位点各一枚）。
+  "repeat-error-branch-asserts-determinism-again",
+  "repeat-note-hides-the-comparison-window",
+  "repeat-obs-note-reverts-to-verbatim-claim",
+  // 同一句不变量的第二个受众：`tool-choice` 那屏读数（量法一枚＋印面一枚，各红不同用例）。
+  "tool-choice-repeat-window-not-truncated",
+  "tool-choice-printed-label-reverts-to-verbatim",
 ];
 
 // 一个 JS 字符串字面量的正则形状（双引号、单引号两支）。本笔 14 条改法都不含反引号写法，

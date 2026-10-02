@@ -32,7 +32,9 @@ export interface SessionCounts {
   userTurns: number;
   toolCalls: number;
   workerCalls: number;
-  /** 同 action + 同 observation 与更早一次逐字相同（复用 stuck.ts 摘要，不另造检测器） */
+  /** 同 action + 同结果、与更早一次撞上（复用 stuck.ts 摘要，不另造检测器）。
+   *  **两支串都取前 200 字**（`stuckActionOf` 截参数、`stuckObservationOf` 截结果）⇒
+   *  这里能说的只有"比对窗口内相同"，不能说"逐字"（第 313 页；口径见 `tests/tool-choice.test.ts`）。 */
   repeats: number;
   repeatOver: number;
   spawns: number;
@@ -62,7 +64,7 @@ export interface ToolChoiceReadings {
   byTool: Record<string, ToolStat>;
   /** 子代理侧发起的调用（tool_call 带 agent_id）：主会话与 worker 混看会把"谁在用"糊掉 */
   workerCalls: number;
-  /** 同 action + 同 observation 与更早一次逐字相同（复用 stuck.ts 摘要，不另造检测器） */
+  /** 同 action + 同结果（前 200 字窗口，同上）与更早一次撞上 */
   repeat: Rate;
   orchestration: {
     spawns: number;
@@ -95,7 +97,7 @@ export interface ToolChoiceReadings {
 export const UNMEASURABLE: readonly string[] = [
   "选对率：事件流里没有「本该调哪个工具/skill」的判据，要 W5a 靶场的分叉回放当 ground truth",
   "skill/MCP 在场但未用：日志不记当时有哪些可用（session_meta 无此字段），只数得到调了的",
-  "参数质量：不看 args 语义，重复探测只按逐字相同判",
+  "参数质量：不看 args 语义，重复探测只按「action 串与结果串各取前 200 字」相同判",
   "单次调用耗时：主流事件类型上没有时间戳字段",
 ];
 
@@ -262,7 +264,7 @@ export function formatToolChoice(r: ToolChoiceReadings): string {
   for (const [name, s] of rows) {
     lines.push("  " + name.padEnd(width) + "  调用 " + String(s.calls).padStart(4) + "  失败 " + String(s.failures).padStart(3) + "  " + pct(s.failRate));
   }
-  lines.push("  重复探测        " + String(r.repeat.n) + "/" + String(r.repeat.over) + " = " + pct(r.repeat.value) + "（同 action + 逐字相同结果）");
+  lines.push("  重复探测        " + String(r.repeat.n) + "/" + String(r.repeat.over) + " = " + pct(r.repeat.value) + "（同 action + 结果前 200 字相同，两支都截断）");
   const o = r.orchestration;
   lines.push("  编排            spawn " + String(o.spawns) + " · 终态 " + String(o.results) + " · 未收敛 " + String(o.orphans) +
     " · 收队调用 " + String(o.waitCalls) + " · 派过 worker 的会话 " + String(o.spawnSessions) +

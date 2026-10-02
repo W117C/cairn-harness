@@ -178,7 +178,7 @@ export function readLadderSignals(): LadderRanks {
   const none = { thrashing: false as const };
   return {
     both: noProgressLadder({ stuck: { stuck: false }, stagnation, thrash }).action,
-    onlyStuck: noProgressLadder({ stuck: { stuck: true, rule: "same_action_obs_x4", repeats: 4 }, stagnation: { stagnant: false }, thrash: none }).action,
+    onlyStuck: noProgressLadder({ stuck: { stuck: true, rule: "same_action_obs_x4", repeats: 4, sameObservation: true }, stagnation: { stagnant: false }, thrash: none }).action,
     onlyThrash: noProgressLadder({ stuck: { stuck: false }, stagnation: { stagnant: false }, thrash }).action,
     nothing: noProgressLadder({ stuck: { stuck: false }, stagnation: { stagnant: false }, thrash: none }).action,
   };

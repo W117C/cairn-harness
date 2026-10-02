@@ -32,11 +32,34 @@ describe("tool-choice 投影", () => {
     expect(r.byTool["grep"]).toEqual({ calls: 2, failures: 1, failRate: 0.5 });
   });
 
-  it("重复探测只按「同 action + 逐字相同结果」判；换参数就不算", () => {
+  it("重复探测只按「同 action + 结果前 200 字相同」判；换参数就不算", () => {
     const ev = [call("1", "read_file", { path: "a.ts" }), res("1"), call("2", "read_file", { path: "a.ts" }), res("2"),
       call("3", "read_file", { path: "b.ts" }), res("3", true, "别的")];
     const r = one(ev);
     expect(r.repeat).toEqual({ n: 1, over: 3, value: 1 / 3 });
+  });
+
+  // 第 313 页：这条读数从前在标题与两处印面里都写作「逐字相同」，而它的键吃的是
+  // `stuckObservationOf`（截前 200 字）。用例只证过"换参数不算"，**没证过窗口在哪**——
+  // 标题承诺了 ≠ 正文在判。下面两条把窗口钉住，并各配一条反向（差在第 200 字以内就不该算重复）。
+  it("窗口边界：两条结果只差在第 201 字 ⇒ 仍算一次重复探测（这就是「前 200 字」的准确含义）", () => {
+    const head = "x".repeat(200);
+    const r = one([call("1", "read_file", { path: "a.ts" }), res("1", true, head + "｜第一次的尾巴"),
+      call("2", "read_file", { path: "a.ts" }), res("2", true, head + "｜第二次的尾巴")]);
+    expect(r.repeat.n, "截断窗口外的差异不该让这一笔逃过重复计数").toBe(1);
+  });
+
+  it("反向：差异落在第 200 字以内 ⇒ 不算重复（否则上一条是「什么都算重复」的恒真判据）", () => {
+    const r = one([call("1", "read_file", { path: "a.ts" }), res("1", true, "x".repeat(199) + "A"),
+      call("2", "read_file", { path: "a.ts" }), res("2", true, "x".repeat(199) + "B")]);
+    expect(r.repeat.n).toBe(0);
+  });
+
+  it("印面与边界名单按窗口说话，不许再写「逐字」（读这些数的人据此判断重复率准不准）", () => {
+    const text = formatToolChoice(one([call("1", "read_file", { path: "a.ts" }), res("1")]));
+    expect(text).toContain("结果前 200 字相同");
+    expect(text).not.toContain("逐字");
+    expect(text).toContain("action 串与结果串各取前 200 字");   // unmeasurable 那条也在同一屏
   });
 
   it("收队读数：派了 worker 但没调 wait_for_agents 要被点名；调过就不点名", () => {

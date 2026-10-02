@@ -509,9 +509,15 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         const verdict = detectStuck(stuckTurns);
         if (verdict.stuck && !nudgedActions.has(action)) {
           nudgedActions.add(action);
+          // 每句只声称检测器真比过的那件事（第 313 页）。旧文案两处越界：
+          //  ① 错误分支只看 action＋全失败就断言「原样重试不会改变结果」——三次连败而错误各不同时，
+          //     这句话把"该再看一次"的那次重试劝掉了（flaky 测试/超时/竞态正是这一类）；
+          //  ② 观察分支说「逐字相同」，而比的是 `stuckObservationOf` 截出来的前 200 字。
           repeatNote = verdict.rule === "same_action_error_x3"
-            ? `\n[repeat] 同一个 ${output.name} 调用已连续 ${String(verdict.repeats)} 次失败——原样重试不会改变结果：换一个探针（改命令 / 换路径 / 直接 read 那个文件）或说明卡点。`
-            : `\n[repeat] 同一个 ${output.name} 调用已连续 ${String(verdict.repeats)} 次拿到逐字相同的结果——再问一次不会有新信息：换一个探针或说明为何仍需重复。`;
+            ? verdict.sameObservation
+              ? `\n[repeat] 同一个 ${output.name} 调用已连续 ${String(verdict.repeats)} 次失败且错误相同（比对取前 200 字）——原样重试不会改变结果：换一个探针（改命令 / 换路径 / 直接 read 那个文件）或说明卡点。`
+              : `\n[repeat] 同一个 ${output.name} 调用已连续 ${String(verdict.repeats)} 次失败，但每次错误不同——最新那条本身就是新信息：先读它，再决定换探针还是先修环境。`
+            : `\n[repeat] 同一个 ${output.name} 调用已连续 ${String(verdict.repeats)} 次拿到相同结果（比对取前 200 字）——再问一次不会有新信息：换一个探针或说明为何仍需重复。`;
         }
       }
       // M2e：PostToolUse（成功）/ PostToolUseFailure（失败）——additionalContext 回注 tool_result 尾部

@@ -113,14 +113,14 @@ describe("阶梯：分级是量出来的，不是感觉出来的", () => {
 
   it("停滞 ⇒ escalate；action-shaped ⇒ directive；只有往返 ⇒ note；全静 ⇒ silent", () => {
     expect(noProgressLadder({ stuck: { stuck: false }, stagnation: detectVerifyStagnation([beat(0, "a", false), beat(1, "a", false)]), thrash: miss }).action).toBe("escalate");
-    expect(noProgressLadder({ stuck: { stuck: true, rule: "same_action_error_x3", repeats: 3 }, stagnation: { stagnant: false }, thrash: miss }).action).toBe("directive");
+    expect(noProgressLadder({ stuck: { stuck: true, rule: "same_action_error_x3", repeats: 3, sameObservation: false }, stagnation: { stagnant: false }, thrash: miss }).action).toBe("directive");
     expect(noProgressLadder({ stuck: { stuck: false }, stagnation: { stagnant: false }, thrash: thrashHit }).action).toBe("note");
     expect(noProgressLadder({ stuck: { stuck: false }, stagnation: { stagnant: false }, thrash: miss }).action).toBe("silent");
   });
 
   it("rules 里三条都在（合并而非互相覆盖），evidence 里各留了自己的名", () => {
     const v = noProgressLadder({
-      stuck: { stuck: true, rule: "same_action_obs_x4", repeats: 4 },
+      stuck: { stuck: true, rule: "same_action_obs_x4", repeats: 4, sameObservation: true },
       stagnation: detectVerifyStagnation([beat(0, "a", false), beat(1, "a", false)]),
       thrash: thrashHit,
     });
@@ -132,7 +132,7 @@ describe("阶梯：分级是量出来的，不是感觉出来的", () => {
   it("本模块绝不主动终止：action-shaped 再多次也只到 directive，最高的词只是 escalate", () => {
     // 终止权留在既有 verify 上限与 maxSteps 手上——检测器只出声，不掐。
     const ladderActions = new Set(["silent", "note", "directive", "escalate"]);
-    for (const stuck of [{ stuck: false } as const, { stuck: true, rule: "same_action_obs_x4", repeats: 9 } as const]) {
+    for (const stuck of [{ stuck: false } as const, { stuck: true, rule: "same_action_obs_x4", repeats: 9, sameObservation: true } as const]) {
       for (const stagnation of [{ stagnant: false } as const, detectVerifyStagnation([beat(0, "a", false), beat(1, "a", false)])]) {
         for (const thrash of [miss, thrashHit]) {
           const v = noProgressLadder({ stuck, stagnation, thrash });
@@ -141,7 +141,7 @@ describe("阶梯：分级是量出来的，不是感觉出来的", () => {
       }
     }
     // 单靠 action-shaped 永不 escalate（它没被真实语料证明零误报）
-    expect(noProgressLadder({ stuck: { stuck: true, rule: "same_action_obs_x4", repeats: 9 }, stagnation: { stagnant: false }, thrash: miss }).action).toBe("directive");
+    expect(noProgressLadder({ stuck: { stuck: true, rule: "same_action_obs_x4", repeats: 9, sameObservation: true }, stagnation: { stagnant: false }, thrash: miss }).action).toBe("directive");
   });
 });
 
