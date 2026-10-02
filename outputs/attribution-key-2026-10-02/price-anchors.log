@@ -1,0 +1,14 @@
+$ node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify price-face-missing-blind price-face-negative-ok money-text-unknown-degrades bench-price-face-bypassed
+[mutate-verify] checkout exit=0：.worktrees/gate-mutate-verify → 155b151
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）
+变异验证：4 条
+✅ price-face-missing-blind — 不再记录缺的是哪一边 ⇒ 「不给价」这条路重新被走成「看起来能算」，而操作者拿到的一句笼统的不可知没法修（判卷按 why 里必须点到的那两个名字来红） ｜本机实测 0.7s／2 拍
+✅ price-face-negative-ok — 只查是不是数、不查非负 ⇒ 负单价算出负「实付」，比值与白花两格一起变成负数（那已经不是读数，是噪声） ｜本机实测 0.6s／2 拍
+✅ money-text-unknown-degrades — 不可知也照印 ¥0.0000 ⇒ 正是复测登记的那条「0 而不是不可知」：读者会把「这轮免费」当成实测结论 ｜本机实测 0.6s／2 拍
+✅ bench-price-face-bypassed — 跑器绕开 priceFace、把那两个缺省价写回常量 ⇒ 任何档位的 token 都会被印成同一把 ¥，而 readings 里的 model 明明说这不是同一档（接线判卷按「真的调了 priceFace」这一句红） ｜本机实测 0.6s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 2.8s · 跑了 4/4 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 8 次／4 条（每条次数分布 2×4）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 price-face-missing-blind 0.7s
+跑法单价：selector 8 拍·中位 0.31s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）

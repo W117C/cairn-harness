@@ -1,0 +1,14 @@
+$ node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify bench-usage-stamp-dropped model-face-unknown-degrades-to-same model-face-mixed-arm-blind model-face-not-printed
+[mutate-verify] checkout exit=0：.worktrees/gate-mutate-verify → 188b7e3
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）
+变异验证：4 条
+✅ bench-usage-stamp-dropped — 跑器不再给 usage 盖模型名 ⇒ readings 里的钱永远定不了「属于哪一档」，跨模型 A/B 的差值就被当成提示词的效果（普查那条也会一起红：盖章面少了一个消费者） ｜本机实测 2.1s／2 拍
+✅ model-face-unknown-degrades-to-same — 缺归因键时退化成「算同面」（fail-open）⇒ 存量语料与未盖章的跑次全被读成同一档，这正是本仓点名的「取不到当成通过」那一族 ｜本机实测 0.7s／2 拍
+✅ model-face-mixed-arm-blind — 只看「两臂第一个名字是否相等」⇒ 同一臂内混了档看不见，而那连噪声带的「同配置两次」前提都不成立（09-26 跨九条臂池化读数的教训，这一格就是它欠的那道闸） ｜本机实测 0.7s／2 拍
+✅ model-face-not-printed — 算出归因面却不印 ⇒ 对账表照常出数，没人看得见两臂其实不同档（与没算同形） ｜本机实测 0.6s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 4.4s · 跑了 4/4 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 8 次／4 条（每条次数分布 2×4）· 单次中位 第1次 0.3s／第2次 0.3s· 最贵一条 bench-usage-stamp-dropped 2.1s
+跑法单价：selector 8 拍·中位 0.33s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）
