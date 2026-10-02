@@ -29,3 +29,9 @@ body { margin: 0; font: 13px/1.6 -apple-system, "PingFang SC", sans-serif; color
 .card-approval .actions { display: flex; gap: 8px; align-items: center; }
 .btn-primary { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 7px; padding: 3px 12px; font: inherit; cursor: pointer; }
 .btn-ghost { background: transparent; color: var(--text-3); border: 0; font: inherit; cursor: pointer; }
+/* M2-3 渲染升级三件套（颜色全用既有变量）：live 行尾呼吸光标（手法同 .dot.breathe）、
+   工具未决图标的脉冲、行右侧安静时间戳（hover 精确时间的 title 由组件给）。 */
+.cursor-breathe { animation: breathe 1.6s ease-in-out infinite; margin-left: 3px; }
+.tool-pending { animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+.row-time { margin-left: auto; flex-shrink: 0; white-space: nowrap; font-size: 10px; color: var(--text-3); }
