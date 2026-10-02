@@ -303,6 +303,43 @@ describe("M6 · E 回注：限量、带出处、无出处不注入", () => {
     expect(parseLessonDigest("编出来的教训抬头\n编出来的教训正文：这里什么都没有")).toBeNull();
   });
 
+  // 第 312 页：`evidence-line:` **在而行内为空**是上面那支的兄弟支，此前没人判。
+  // 修之前它一路走到 `lessonLine` 才抛，而三个生产调用点（glm-session / sidechat / worker-prompt）
+  // 都把注入异常**静默吞掉** ⇒ 一句坏数据让整段跨会话教训消失，且没有任何人知道。
+  it("指针行在、内容为空 ⇒ 与「没有那行」走同一道门（不合格，不是半合格）", () => {
+    expect(parseLessonDigest("空指针抬头\nevidence-line:")).toBeNull();
+    expect(parseLessonDigest("空指针抬头\nevidence-line:    \n")).toBeNull();
+    // 反向一侧（规则 60）：正常指针照常合格，别把"收紧"做成"什么都不收"。
+    const ok = parseLessonDigest("好抬头\nevidence-line:[验证红] sess-x#c1");
+    expect(ok).not.toBeNull();
+    expect(ok!.evidence).toBe("[验证红] sess-x#c1");
+  });
+
+  it("一条坏数据不许吃掉整段 LESSONS（注入侧那句「无出处的条目不会出现在这里」的真正内容）", async () => {
+    const workspace = await ws();
+    const g = await GLOBAL();
+    const iso = new Date().toISOString();
+    await writeTopic(projectMemoryDir(workspace), "lesson-good-1", "feedback",
+      "合格教训抬头\nevidence-line:[验证红] sess-good#c1", iso);
+    await writeTopic(projectMemoryDir(workspace), "lesson-empty-1", "feedback",
+      "空指针教训抬头\nevidence-line:", iso);
+    let inj;
+    try {
+      inj = await buildMemoryInjection({ workspace, globalRoot: g });
+    } catch (e) {
+      throw new Error("整段 LESSONS 被一条空指针炸掉了（调用点还会静默吞掉它）：" + String((e as Error).message));
+    }
+    const lessonLines = (inj.project ?? "").split("\n").filter((l) => l.startsWith("- ") && l.includes("证据:"));
+    // 合格那条连同指针逐字可见（正控：证明"没炸"不是因为"整段都没了"）。
+    expect(lessonLines, JSON.stringify(lessonLines)).toEqual(["- 合格教训抬头　〔证据: [验证红] sess-good#c1〕"]);
+    // 不合格那条**不占一行**，也不留下 `〔证据: 〕` 这种半截形状。
+    expect(inj.project ?? "").not.toContain("〔证据: 〕");
+    expect(inj.project ?? "").not.toContain("空指针教训抬头　");
+    // 抬头自己要说得出交了几条：段里几行就写几条（"最近 N 条"不许是候选数或心里想的数）。
+    const header = ((inj.project ?? "").split("\n").find((l) => l.includes("[LESSONS 最近")) ?? "");
+    expect(header, header).toContain("最近 " + String(lessonLines.length) + " 条");
+  });
+
   it("lessonLine 遇到空出处抛错，不静默降级成一条无出处的行", () => {
     expect(() => lessonLine("t", { headline: "x", evidence: "", session: "s" })).toThrow(/证据/u);
     expect(lessonLine("t", { headline: "x", evidence: "[验证红] s#c1", session: "s" })).toContain("#c1");

@@ -10576,3 +10576,46 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
    「无出处不收」有结构保证、「哪条会话、哪个 callId」只是生产者约定，注入侧不验形状）；
    #26 共享 witness 锁；#23 修复位仍等隔壁让出 `src/main/agent-runner.ts`；#20 那对同树读数（14.4s／16.7s／本趟 17.8s）
    仍只是原始点，不配斜率。
+
+## 2026-10-03 · 第 312 页：#25 第一条就抓到一条**假话**——「无出处的条目不会出现在这里」在空指针那一支做不到，代价是整段记忆静默消失
+
+1. **这是第 311 页那张表第一次改变现状**：那张表交出的 29 条欠证人里，我先核的是唯一一条
+   "模型会拿它当依据"的——`src/agent/memory/inject.ts#lessonsSection` 那句
+   「每条自带证据指针：哪条会话、哪个 callId；**无出处的条目不会出现在这里**」。
+   其余 28 条多半是效率提示（"不翻页""不覆盖"），而这条是**记忆可信度**：它假的，代价是模型照无据的经验办事。
+   现读结论：这句话**在兄弟支上为假**——既有判卷（E 组）钉的是「正文里没有 `evidence-line:`」那支；
+   行**在、内容为空**这一支此前没人判（复现与两栏读数在 `outputs/lesson-empty-evidence-2026-10-03/readings.md`＋`repro-postfix.log`）。
+
+2. **真正的代价不是"这一条不注入"**：空指针会带着 `evidence: ""` 从 `parseLessonDigest` 走出来，撞到 `lessonLine` 的抛；
+   而三个生产调用点（`src/agent/glm-session.ts#body`、`src/agent/sidechat.ts#body`、`src/agent/worker-prompt.ts#body`）
+   都把注入异常**静默吞掉**（两处空 catch、一处 `console.debug`）⇒ 一个手写/半截的 lesson 文件
+   让**整段 LESSONS（含同批合格条目）消失，且没有任何人知道**。这类"降级面没有信号"的形状另挂 #27，本笔不动它。
+
+3. **修法落在唯一那道共用门**：`parseLessonDigest` 取出 evidence 后先 `trim()`，空串 ⇒ `return null`
+   （与"没有那行"同一条路径）。注入侧的 `if (d === null) continue` 从此真的等于"无出处不收"；
+   `lessonLine` 的抛留着当纵深防御。判卷因此能吃结构：段级筛 `- ` 开头且含 `证据:` 的行。
+
+4. **那句承诺的范围比它读起来窄，这一点也写下来**：`[MEMORY.md 索引]` 那一段列的是 topic 文件（既有 §8.1.5 固定回注名单的一环），
+   与"有没有证据指针"无关 ⇒ 「不会出现在这里」只对 LESSONS 段成立。所以判卷**同时断言索引行照常存在**——
+   否则这条修就变成"顺手削弱既有机制"（规则 60 的反向那一侧）。
+
+5. **判卷 2 条＋锚点 2 枚**（`red-machines-41.log`：41 台｜杀手命中 41｜存活 0｜残骸 0）：
+   `lesson-empty-evidence-gate-dropped`（摘掉共用门那道空串判定）红在解析层那条，
+   `lesson-inject-fabricates-empty-digest`（注入侧现造一份 digest、只按抬头筛）红在段级那条。
+   两台各自连带把另一条判卷也做红：同一句话的两个消费者（解析层／注入层）——不是重复守卫（规则 226），
+   declared killer 不同（规则 375 那格另说）。段级那条还钉三个方向：混批不抛、合格那条连同指针逐字可见（正控）、
+   不出现 `〔证据: 〕` 半截形状、段首「最近 N 条」的 N 等于真实行数。
+   复现器只留**可复现的**读数：修前那一趟没单独存档（只有会话内记录），要复现它请用锚点 A——
+   历史读数不该靠回忆，这条我写在页上而不是藏在心里。
+
+6. **帽跟着动**：`CLAIM_UNWITNESSED_CAP` 29 → **28**（这一页给那句承诺补上了证人，是第 311 页那条尺的第一次"改变现状"）。
+   现读出处 `outputs/lesson-empty-evidence-2026-10-03/claims-recheck.log`（面 45、模型可见 43、有证人 10、不可知 5），
+   两档出处都在 `scripts/probe-promise-recall.ts#CLAIM_UNWITNESSED_CAP` 的注释里。
+
+7. **同轮声明与环境噪声**：秒级 `tests/memory-lessons.test.ts` 22 条 40–66ms；typecheck 0 报错；
+   针脚尺落库前 `1335 条 —— 阻断 1（本笔在飞文本）／killer 指针失效 0`。
+   主树全量那趟 `293 文件｜4085 条｜1 failed`，唯一红是 `tests/cli-fork-replay.test.ts > --fork 的用法闸…`
+   报 `Test timed out in 30000ms`，而整趟墙钟 685.68s（平日 150s 上下，当时场上 2–3 套 vitest）；
+   **单独复跑同一文件 13 条全绿、60.26s** ⇒ 判归并发负载，不是本笔回归。
+   顺带现读到一处形状：该文件只给**一条**用例设了 `timeout: 120_000`，同为"真跑 bin"的第 203 行走缺省 30s
+   ——负载下必爆。已挂 #28（不在这笔里顺手抬帽：抬之前要先量独跑分布，规则 372/248）。

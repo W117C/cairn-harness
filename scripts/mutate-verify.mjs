@@ -12515,6 +12515,31 @@ const MUTATIONS = [
     ),
     expectFail: "整句收下后不许再按片段重复计数——共用 walker 时虚高会串到对面",
   },
+  /* 第 312 页：`evidence-line:` 在而行内**为空**是「没有那行」的兄弟支，此前没人判。
+     修之前它一路走到 `lessonLine` 才抛，而三个生产调用点都把注入异常静默吞掉
+     ⇒ 一句坏数据让整段跨会话教训消失且无人知道。这两枚各钉一道闸的一侧。 */
+  {
+    id: "lesson-empty-evidence-gate-dropped",
+    src: "src/agent/memory/lessons.ts",
+    test: "tests/memory-lessons.test.ts",
+    desc: "把「空指针也不合格」那道闸摘掉 ⇒ 解析层又交回 evidence 为空串 的半合格条目，"
+      + "注入侧要么抛（整段消失）要么得自己再判一次——同一道门在两处各判一遍正是本仓最忌的形状",
+    apply: (s) => s.replace('  if (evidence === "") return null;\n', ""),
+    expectFail: "指针行在、内容为空 ⇒ 与「没有那行」走同一道门（不合格，不是半合格）",
+  },
+  {
+    id: "lesson-inject-fabricates-empty-digest",
+    src: "src/agent/memory/inject.ts",
+    test: "tests/memory-lessons.test.ts",
+    desc: "注入侧给解析不出来的条目**现造**一份 digest（只按抬头筛）⇒ 空指针被拼成「〔证据: 〕」那一行，"
+      + "那句「无出处的条目不会出现在这里」当场成假话；这条 killer 钉的是**行为**（段还在不在、形状对不对），"
+      + "不是文案形状",
+    apply: (s) => s.replace(
+      '    const d = parseLessonDigest(body);\n    if (d === null) continue; // 无证据指针 ⇒ 不注入',
+      '    const d = parseLessonDigest(body) ?? { headline: (body.split("\\n")[0] ?? "").trim(), evidence: "", session: "" };\n    if (!d.headline) continue; // 只看抬头',
+    ),
+    expectFail: "一条坏数据不许吃掉整段 LESSONS（注入侧那句「无出处的条目不会出现在这里」的真正内容）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

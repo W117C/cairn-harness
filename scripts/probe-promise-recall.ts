@@ -209,11 +209,13 @@ export const CLAIM_MARKS: readonly string[] = [
 ];
 
 /** 欠证人的能力断言＝**存量帽**（只准调低）。
- *  现读 29 条，出处 `outputs/terminal-audience-2026-10-03/measure-claims.log`（同一趟：面 45、模型可见 43、
- *  有证人 9、挑不出段 5）。计数类不留余量；补了证人不跟着把帽调下来同样要红。
+ *  现读 28 条（第 312 页补了第 10 个证人后从 29 调下来；上一档 29 的出处
+ *  `outputs/terminal-audience-2026-10-03/measure-claims.log`，本次
+ *  `outputs/lesson-empty-evidence-2026-10-03/claims-recheck.log`：面 45、模型可见 43、有证人 10、挑不出段 5）。
+ *  计数类不留余量；补了证人不跟着把帽调下来同样要红。
  *  注意这一格的取料含 `tests/**` 全文——**判卷自己抄的那句生产原文也会当证人**，
  *  所以本文件的夹具一律用「探针假句……」这种对不上任何生产文案的串（第 311 页实测：照抄原句会让分母从 29 掉到 26）。 */
-export const CLAIM_UNWITNESSED_CAP = 29;
+export const CLAIM_UNWITNESSED_CAP = 28;
 
 /** 证人候选段：句里**所有**够长的连续中文（先把 `${…}` 插值挖掉，再按非中文断开），门槛 6 字。
  *  为什么交"每一段"而不是"最长那一段"：一句能力断言往往分好几层，判卷通常只点其中一层

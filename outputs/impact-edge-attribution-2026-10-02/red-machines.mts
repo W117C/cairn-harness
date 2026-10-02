@@ -69,6 +69,9 @@ const IDS = [
   "claim-cap-stale-branch-dropped",
   "claim-cap-over-branch-dropped",
   "claim-whole-sentence-piece-double-count",
+  // 第 312 页那一簇：`evidence-line:` 空指针这一支（解析层那道闸 + 注入层不许现造 digest）。
+  "lesson-empty-evidence-gate-dropped",
+  "lesson-inject-fabricates-empty-digest",
 ];
 
 // 一个 JS 字符串字面量的正则形状（双引号、单引号两支）。本笔 14 条改法都不含反引号写法，

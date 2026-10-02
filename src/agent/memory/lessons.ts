@@ -235,10 +235,16 @@ export interface LessonDigest {
 export function parseLessonDigest(body: string): LessonDigest | null {
   const ev = new RegExp("^" + EVIDENCE_LINE_PREFIX + "(.*)$", "mu").exec(body);
   if (ev === null) return null; // 无证据指针 ⇒ 这条不合格，注入侧直接不收
+  const evidence = (ev[1] ?? "").trim();
+  // 指针**在而行内为空**（手写/半截落盘的 `evidence-line:`）同样是"无出处"。
+  // 从前这一支只按"有没有那行"判，空串会带着 `evidence: ""` 往下走，直到 `lessonLine` 抛——
+  // 而三个生产调用点都把注入异常**静默吞掉**，后果不是"这一条不注入"，是整段 LESSONS（含同批合格条目）消失。
+  // 不合格的形状在这道**共用门**里一次判掉，注入侧的 `continue` 才真的等于"无出处不收"。
+  if (evidence === "") return null;
   const se = new RegExp("^" + SESSION_LINE_PREFIX + "(.*)$", "mu").exec(body);
   const headline = (body.split("\n")[0] ?? "").trim();
   if (headline === "") return null;
-  return { headline, evidence: (ev[1] ?? "").trim(), session: (se?.[1] ?? "").trim() };
+  return { headline, evidence, session: (se?.[1] ?? "").trim() };
 }
 
 /** 回注用的一行：抬头 + **出处**，出处必须逐字可见（"这条凭什么这么说"是 M6 的硬要求，
