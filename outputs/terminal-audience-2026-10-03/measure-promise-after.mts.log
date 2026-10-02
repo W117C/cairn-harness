@@ -1,0 +1,3 @@
+扫到面 10 处｜受众分布 {"model":9,"operator":1,"ui":0}｜modelKeys 7 条
+住在 src/cli.ts 的面：0 处（受众=）
+按文件：src/agent/prune.ts=3 ｜ src/agent/plugins/skills.ts=2 ｜ src/agent/ledger.ts=1 ｜ src/agent/orchestrator-join.ts=1 ｜ src/agent/solpi-runtime.ts=1 ｜ src/main/agent-runner.ts=1 ｜ src/tools/output-ring.ts=1

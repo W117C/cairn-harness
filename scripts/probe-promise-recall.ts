@@ -57,7 +57,8 @@ export const PROMISE_MARKS: readonly string[] = [
   "取全文",
 ];
 
-export interface PromiseSite {
+/** 一把措辞网收出来的一个面（两把网共用这个形状：承诺网与能力断言网只差标记表）。 */
+export interface MarkedSite {
   /** 相对仓库根。 */
   file: string;
   /** 所在函数名（顶层 = "<module>"）——判定按它挂，行号会漂而函数名不漂（规则 79）。 */
@@ -68,13 +69,17 @@ export interface PromiseSite {
   line: number;
   /**
    * 受众三态，全部由**结构**判而不是措辞判：
-   * - `model`：在模型可见根内，且不挂在 `console.*` 实参位 ⇒ 欠一次"照那句做一遍"；
-   * - `operator`：`console.*` 实参位 ⇒ 给运维看；
+   * - `model`：在模型可见根内，且不挂在终端写入（`console.*`／`process.stdout|stderr.write`）的实参链上
+   *   ⇒ 欠一次"照那句做一遍"（或"那句话有证人"）；
+   * - `operator`：字面量往上整条 parent 链里遇到终端写入调用 ⇒ 给运维/使用者看；
    * - `ui`：落在 `UI_ROOTS` 里 ⇒ 给人看（HEAD-only 验跑会扫到桌面层，见那条注释）。
    * 后两态仍进清单（不许静默消失），只是不判可达性。
    */
   audience: "model" | "operator" | "ui";
 }
+
+/** 历史名字：承诺网收出来的面。 */
+export type PromiseSite = MarkedSite;
 
 /**
  * 「给人看」的那两面：AGENTS.md 的 scope 段点名为桌面层（本仓 core-only 迁 removing 的就是它们），
@@ -94,22 +99,31 @@ function enclosingFnName(node: ts.Node): string {
   }
 }
 
-/** 受众：先判落位（UI 根＝给人看），再沿 parent 链找最近的 CallExpression 是否 `console.*`。 */
+/** 结构判据：这个调用是不是「把字交给终端」。
+ *  两类 claim（回取承诺／能力断言）共用这**一个**决策点——从前这里只认 `console.*`，
+ *  而本仓 CLI 清一色走 `process.stdout/stderr.write`（`src/cli.ts` 实测 55 处），
+ *  于是 usage／审批提示这些**只会打在终端上**的句子被算成模型可见面，欠了一次根本不该欠的判定。 */
+const TERMINAL_SINKS: readonly string[] = ["console", "process.stdout.write", "process.stderr.write"];
+
+function isTerminalSinkCall(node: ts.Node): boolean {
+  if (!ts.isCallExpression(node)) return false;
+  const e = node.expression;
+  if (!ts.isPropertyAccessExpression(e)) return false;
+  const dotted = e.getText().replace(/\s+/gu, "");
+  if (TERMINAL_SINKS.includes(dotted)) return true;
+  // `console.log` / `console.warn`：前缀是 `console` 的任意方法都算。
+  return dotted.startsWith("console.");
+}
+
+/** 受众：先判落位（UI 根＝给人看），再从字面量往上走**整条 parent 链**——
+ *  只要途中遇到一个终端写入调用就认成 operator。
+ *  为什么不能只看最近的那个 CallExpression：`process.stdout.write(paint(YELLOW, "…"))` 里
+ *  最近的一层是 `paint(…)`，浅走一步就把终端文案判成模型可见（第 311 页现读：`src/cli.ts` 有 55 处这种写法）。 */
 function audienceOf(node: ts.Node, relFile: string): "model" | "operator" | "ui" {
   if (UI_ROOTS.some((root) => relFile.startsWith(root))) return "ui";
   let cur: ts.Node = node;
   for (;;) {
-    if (ts.isCallExpression(cur)) {
-      const e = cur.expression;
-      if (
-        ts.isPropertyAccessExpression(e) &&
-        ts.isIdentifier(e.expression) &&
-        e.expression.text === "console"
-      ) {
-        return "operator";
-      }
-      return "model";
-    }
+    if (isTerminalSinkCall(cur)) return "operator";
     if (ts.isSourceFile(cur)) return "model";
     cur = cur.parent;
   }
@@ -129,16 +143,32 @@ function literalText(node: ts.Node): string | null {
 const WEAK_MARKS: readonly string[] = [" available"];
 const CALLABLE_NAMES: readonly string[] = [...TOOL_NAMES, ...INJECTED_TOOLS.map((t) => t.name)];
 
-export function scanPromiseSites(files: readonly { path: string; text: string }[]): PromiseSite[] {
-  const out: PromiseSite[] = [];
+/** 两把 claim 网共用的 AST 收料：同一棵树、同一个受众判定（规则 100：取料各抄一遍迟早漂）。
+ *  `weak` 是承诺网那条「弱标记要点一个可调用的名字才算数」的规矩，能力断言网不需要，交 null 即跳过。
+ *  `wholeTemplates` 只给能力断言那一把：它要拿**整句**挑证人针脚，按片段收会把句子切碎（假红）。
+ *  整句收下后必须压掉它自己的组成片段——第一版我没压，同一句既按整句进清单、又按 head/tail 片段各进一次
+ *  ⇒ 承诺网（根本没用这个开关）的分母从 10 处涨到 13 处。共用 walker 时这种虚高会串到对面去。 */
+function scanMarkedSites(
+  files: readonly { path: string; text: string }[],
+  marks: readonly string[],
+  weak: ((text: string, mark: string) => boolean) | null,
+  wholeTemplates: boolean,
+): MarkedSite[] {
+  const out: MarkedSite[] = [];
+  // 「模板结构」：整句收下后这些节点自带的字面量就是那句的碎片，不再单列。
+  const isTemplatePart = (n: ts.Node): boolean =>
+    ts.isTemplateHead(n) || ts.isTemplateMiddle(n) || ts.isTemplateTail(n) ||
+    ts.isTemplateSpan(n) || ts.isNoSubstitutionTemplateLiteral(n);
   for (const f of files) {
     const sf = ts.createSourceFile(f.path, f.text, ts.ScriptTarget.ESNext, true, ts.ScriptKind.TS);
-    const visit = (node: ts.Node): void => {
-      const text = literalText(node);
+    const walk = (node: ts.Node, suppress: boolean): void => {
+      const whole = wholeTemplates && ts.isTemplateExpression(node);
+      const text = whole ? node.getText().slice(1, -1) : suppress ? null : literalText(node);
+      let matched = false;
       if (text !== null) {
-        for (const mark of PROMISE_MARKS) {
+        for (const mark of marks) {
           if (!text.includes(mark)) continue;
-          if (WEAK_MARKS.includes(mark) && !CALLABLE_NAMES.some((n) => text.includes(n))) continue;
+          if (weak && !weak(text, mark)) continue;
           out.push({
             file: f.path,
             fn: enclosingFnName(node),
@@ -147,14 +177,121 @@ export function scanPromiseSites(files: readonly { path: string; text: string }[
             line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1,
             audience: audienceOf(node, f.path),
           });
+          matched = true;
           break;
         }
       }
-      ts.forEachChild(node, visit);
+      // 抑制只沿模板结构往下传；一走进普通表达式就恢复收料——
+      // 否则 `${cond ? "全文见事件流" : "另起一句"}` 里那支独立的句子会被无声吞掉。
+      ts.forEachChild(node, (c) => walk(c, (matched || suppress) && isTemplatePart(c)));
     };
-    visit(sf);
+    walk(sf, false);
   }
   return out;
+}
+
+export function scanPromiseSites(files: readonly { path: string; text: string }[]): PromiseSite[] {
+  return scanMarkedSites(files, PROMISE_MARKS, (text, mark) =>
+    !(WEAK_MARKS.includes(mark) && !CALLABLE_NAMES.some((n) => text.includes(n))), false);
+}
+
+/* ---------------- 第二个 claim 类：模型可见的「能力断言」有没有证人（第 311 页） ----------------
+ *
+ * 起因是第 308 页那一格：`unionNote` 那句「本图只按名字连边、不认 import」从第 305 页起就是假话，
+ * 而**同一句里真话那半**（`并集`）被点过 11 次、假话那半 0 次 ⇒ 「这句文案有人判」这个印象是真的，
+ * 被绕开的正是"按分句配证人"。要判断那是孤例还是一张表，先得有分母（量法见
+ * `outputs/model-claim-face-2026-10-03/claim-measure.mts`，那一支是一次性的，本面才是尺）。
+ *
+ * 与承诺网的分工：承诺网问的是「那句话给的**路**走不走得通」（可达性，要 exec）；
+ * 本面问的是「那句**能力边界**有没有用例点过」（证人，静态即可判）。两把网共用同一套取料与受众判定。 */
+export const CLAIM_MARKS: readonly string[] = [
+  "不认", "不支持", "不采", "不做", "不会", "只能", "已按", "永远不", "做不到", "不翻页", "不覆盖",
+];
+
+/** 欠证人的能力断言＝**存量帽**（只准调低）。
+ *  现读 29 条，出处 `outputs/terminal-audience-2026-10-03/measure-claims.log`（同一趟：面 45、模型可见 43、
+ *  有证人 9、挑不出段 5）。计数类不留余量；补了证人不跟着把帽调下来同样要红。
+ *  注意这一格的取料含 `tests/**` 全文——**判卷自己抄的那句生产原文也会当证人**，
+ *  所以本文件的夹具一律用「探针假句……」这种对不上任何生产文案的串（第 311 页实测：照抄原句会让分母从 29 掉到 26）。 */
+export const CLAIM_UNWITNESSED_CAP = 29;
+
+/** 证人候选段：句里**所有**够长的连续中文（先把 `${…}` 插值挖掉，再按非中文断开），门槛 6 字。
+ *  为什么交"每一段"而不是"最长那一段"：一句能力断言往往分好几层，判卷通常只点其中一层
+ *  （第 308 页那条就是——`并集` 那半被点 11 次、`不认 import` 那半 0 次）。
+ *  只拿最长那段去比，会把"有人点过别的分句"读成"整句没人判"＝把真证人做成假红。
+ *  本面因此只声称一件更弱的事：**一段都不曾被点过**才算欠证人。6 字门槛是"碎片顶不了证人"
+ *  （`不会`／`只能这样`这种短词在任何测试里都会撞上，等于没有判据）。 */
+export function claimWitnessRuns(text: string, min = 6): string[] {
+  const stripped = text.replace(/\$\{[^}]*\}/gu, "◆");
+  return [...new Set(stripped.split(/[^一-龥]+/u).filter((r) => r.length >= min))];
+}
+
+export interface ClaimSite extends MarkedSite {
+  /** 可当证人的候选段；空数组＝这句里挑不出可判的连续中文 ⇒ **不可知**，单列，不许混进"有人判过"。 */
+  runs: string[];
+  /** 展示用的那一段（候选里最长者；`runs` 为空时是空串）。 */
+  needle: string;
+}
+
+export function scanClaimSites(files: readonly { path: string; text: string }[]): ClaimSite[] {
+  return scanMarkedSites(files, CLAIM_MARKS, null, true).map((s) => {
+    const runs = claimWitnessRuns(s.text);
+    return { ...s, runs, needle: runs.reduce((best, r) => (r.length > best.length ? r : best), "") };
+  });
+}
+
+/** 证人核对：判卷把 `tests/**` 的正文交进来（取料在调用方，本函数不碰盘）。
+ *  单位是**面**（`file#fn｜最长段` 去重），三态各自出声且**相加＝分母**（守恒律）：
+ *    witnessed   至少一段被点过；
+ *    unwitnessed 有候选段而 tests 里**一段都没出现** ⇒ 这一格欠证人；
+ *    noNeedle    句子里挑不出可判的连续中文 ⇒ **不可知**（多半是被 `${…}` 插值切碎的短句），
+ *                单独出声，不算有人判过，也不许被并进前两个态。 */
+export interface ClaimWitnessFindings {
+  modelSites: number;
+  witnessed: string[];
+  unwitnessed: string[];
+  noNeedle: string[];
+  byAudience: { model: number; operator: number; ui: number };
+}
+
+export function claimWitnessFindings(
+  sites: readonly ClaimSite[],
+  testCorpus: readonly string[],
+): ClaimWitnessFindings {
+  const faceRuns = new Map<string, string[]>();
+  for (const s of sites) {
+    if (s.audience !== "model") continue;
+    const k = `${s.file}#${s.fn}｜${s.needle}`;
+    // 同一个面上多段并存：取并集，别让后到的覆盖先到的。
+    faceRuns.set(k, [...new Set([...(faceRuns.get(k) ?? []), ...s.runs])]);
+  }
+  const witnessed: string[] = [];
+  const unwitnessed: string[] = [];
+  const noNeedle: string[] = [];
+  for (const [k, runs] of faceRuns) {
+    if (runs.length === 0) { noNeedle.push(k); continue; }
+    if (runs.some((r) => testCorpus.some((t) => t.includes(r)))) witnessed.push(k);
+    else unwitnessed.push(k);
+  }
+  const count = (a: "model" | "operator" | "ui"): number => sites.filter((s) => s.audience === a).length;
+  return {
+    modelSites: faceRuns.size,
+    witnessed,
+    unwitnessed,
+    noNeedle,
+    byAudience: { model: count("model"), operator: count("operator"), ui: count("ui") },
+  };
+}
+
+/** 存量帽（计数类**不留余量**，同 `prose-needle-scan` 那族）。三态各自出声：
+ *  `over`＝现读超过帽（新加的无人判能力断言）；`stale`＝现读低于帽（有人补了证人却没把帽调下来，
+ *  登记表自己烂掉也要红）；`margin` 只是给读数用，不参与判定。 */
+export function claimWitnessCeiling(
+  findings: Pick<ClaimWitnessFindings, "unwitnessed">,
+  cap: number,
+): { over: boolean; stale: boolean; read: number; cap: number; margin: number } {
+  const read = findings.unwitnessed.length;
+  return { over: read > cap, stale: read < cap, read, cap, margin: cap - read };
 }
 
 const siteKey = (s: { file: string; fn: string }): string => s.file + "#" + s.fn;
@@ -787,6 +924,26 @@ async function main(): Promise<void> {
     ]).some((s) => s.audience === "ui");
     line(owedNew && uiExempt ? "✅" : "❌",
       `反向：同形状进模型可见根 ⇒ 仍欠判定（${owedNew ? "是" : "否"}）；进 UI_ROOTS ⇒ 认成 UI 面（${uiExempt ? "是" : "否"}）`);
+
+    /* 第二个 claim 类（第 311 页）：模型可见的**能力断言**有多少条从来没被测试点过。
+       这一格只印不拦是有意为之——拦在判卷（`tests/promise-recall-inventory.test.ts` 真仓那一趟），
+       探针这边给人看的是名单本身：帽是 29，而帽只准调低。 */
+    {
+      const claimSites = scanClaimSites(files);
+      const corpus = trackedExistingFiles(ROOT, "tests").files
+        .map((p) => readFileSync(join(ROOT, p), "utf8"));
+      const cf = claimWitnessFindings(claimSites, corpus);
+      const ceil = claimWitnessCeiling(cf, CLAIM_UNWITNESSED_CAP);
+      console.log("  ⚪ 能力断言证人面：面 " + String(claimSites.length) + " 处｜受众 " + JSON.stringify(cf.byAudience) +
+        "｜模型可见 " + String(cf.modelSites) + " 格 ⇒ 有证人 " + String(cf.witnessed.length) +
+        "／欠证人 " + String(cf.unwitnessed.length) + "（帽 " + String(CLAIM_UNWITNESSED_CAP) +
+        (ceil.over ? " ⇒ **超帽**" : ceil.stale ? " ⇒ **现读低于帽，把帽调下来**" : "，正贴线") + "）" +
+        "／挑不出段 " + String(cf.noNeedle.length));
+      for (const k of cf.unwitnessed) console.log("      欠证人：" + k);
+      for (const k of cf.noNeedle) console.log("      不可知（句里挑不出 ≥6 字连续中文，多半被插值切碎）：" + k);
+      line(!ceil.over && !ceil.stale ? "✅" : "❌",
+        `能力断言的帽：现读 ${String(ceil.read)} 对帽 ${String(ceil.cap)}（超出＝新加的无人判句子；低于＝补了证人没调帽）`);
+    }
   } finally {
     await rm(workspace, { recursive: true, force: true });
   }

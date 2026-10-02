@@ -15,9 +15,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
-  PROMISE_MARKS, RUNNERS, UI_ROOTS, builderCoverage, isKnownRunner, promiseInventoryFindings, runnerVerdict,
-  scanBuilderCallSites, scanCapNoticeCalls, scanPromiseSites,
-  type PromiseSite,
+  CLAIM_UNWITNESSED_CAP, PROMISE_MARKS, RUNNERS, UI_ROOTS, builderCoverage, claimWitnessCeiling,
+  claimWitnessFindings, claimWitnessRuns, isKnownRunner, promiseInventoryFindings, runnerVerdict,
+  scanBuilderCallSites, scanCapNoticeCalls, scanClaimSites, scanPromiseSites,
+  type ClaimSite, type ClaimWitnessFindings, type PromiseSite,
 } from "../scripts/probe-promise-recall";
 import { trackedExistingFiles } from "../scripts/lib/scan-scope";
 
@@ -219,5 +220,118 @@ describe("trackedExistingFiles：「已跟踪」与「盘上有」是两件事�
     const r = trackedExistingFiles(tmpdir());
     expect(r.trackedUnavailable).toBe(true);
     expect(r.files).toEqual([]); // 空**不是**"干净"，调用方必须据此退回磁盘遍历并出声
+  });
+});
+
+/* ================= 第 311 页：第二个 claim 类——模型可见的「能力断言」有没有证人 =================
+ *
+ * 第 308 页抓到的那格不是"文案说错了"，是**同一句里真话那半被点过 11 次、假话那半 0 次**：
+ * 「这句有人判」这个印象是真的，被绕开的正是"按分句配证人"。本面把这件事收成一张表：
+ * 凡是 harness 对模型说"我不会/只能/已按 X"的句子，测试里至少得有一段真点过它。
+ *
+ * 判卷吃的是**探针导出的同一份纯函数**（取料与受众判定都不在此重算，规则 100/236）。 */
+describe("能力断言的证人面：一句都不曾被点过才算欠（第 311 页）", () => {
+  it("受众判定沿整条 parent 链认终端写入——`paint(…)` 包一层也是给运维看的", () => {
+    // 这四支是唯一变量为"怎么把字交给终端"的同形输入。旧写法只看**最近**那个 CallExpression，
+    // 于是 `process.stdout.write(paint(YELLOW, "…"))` 判成 model（最近一层是 paint），
+    // usage 文案被要求"照那句做一遍"＝断言越界（规则 60 那一族）。
+    const src = [
+      'function a(): void { console.warn("探针假句不覆盖既有转录记录"); }',
+      'function b(): void { process.stdout.write(paint(YELLOW, "探针假句不覆盖既有转录记录")); }',
+      'function c(): void { process.stderr.write("探针假句不覆盖既有转录记录"); }',
+      'function d(): void { noteForModel("探针假句不覆盖既有转录记录"); }',
+    ].join("\n");
+    const sites = scanClaimSites([{ path: "src/__probe.ts", text: src }]);
+    const byFn = new Map(sites.map((s) => [s.fn, s.audience]));
+    expect([...byFn.keys()], "四支都该收到料：" + JSON.stringify(sites.map((s) => s.fn))).toEqual(["a", "b", "c", "d"]);
+    expect([byFn.get("a"), byFn.get("b"), byFn.get("c")], "终端写入的三种写法都得认成 operator").toEqual([
+      "operator", "operator", "operator",
+    ]);
+    expect(byFn.get("d"), "不挂终端的那一支仍是 model（不许把收窄写成放行）").toBe("model");
+  });
+
+  it("证人候选段：插值挖掉、按非中文断开、6 字门槛、去重", () => {
+    const runs = claimWitnessRuns("假意歧义：${subject} ⇒ 清单仍是各份探针定义的并集，上限 ${String(n)} 条");
+    expect(runs, JSON.stringify(runs)).toContain("清单仍是各份探针定义的并集");
+    expect(runs.every((r) => r.length >= 6), "门槛之下的碎片顶不了证人：" + JSON.stringify(runs)).toBe(true);
+    expect(new Set(runs).size, "同段重复会让分母虚高").toBe(runs.length);
+    // 整句没有中文（纯英文/纯变量）⇒ 空数组＝**不可知**，不许由"命中 0"冒充"有人判过"
+    expect(claimWitnessRuns("obs_recall available again later"), "纯英文句子挑不出中文段").toEqual([]);
+  });
+
+  it("三态各占一格：witnessed／unwitnessed／noNeedle，一条都不许静默归进『没问题』", () => {
+    const fake: ClaimSite[] = [
+      { file: "src/x.ts", fn: "f1", mark: "不会", text: "探针假句不会替你翻页", line: 1, audience: "model", runs: ["探针假句不会替你翻页"], needle: "探针假句不会替你翻页" },
+      { file: "src/x.ts", fn: "f2", mark: "只能", text: "探针假句只能往小调", line: 2, audience: "model", runs: ["探针假句只能往小调"], needle: "探针假句只能往小调" },
+      { file: "src/x.ts", fn: "f3", mark: "不会", text: "obs_recall available", line: 3, audience: "model", runs: [], needle: "" },
+      { file: "src/x.ts", fn: "f4", mark: "不覆盖", text: "探针假句在终端里才看得见的不覆盖", line: 4, audience: "operator", runs: ["探针假句在终端里才看得见的不覆盖"], needle: "探针假句在终端里才看得见的不覆盖" },
+    ];
+    const f = claimWitnessFindings(fake, ["……探针假句不会替你翻页……"]);
+    expect(f.witnessed.length, "被点过的那段要落进 witnessed").toBe(1);
+    expect(f.unwitnessed, "只有第二段没人点过 ⇒ 欠证人恰好一条：" + f.unwitnessed.join(" | ")).toHaveLength(1);
+    expect(f.unwitnessed[0]).toContain("f2");
+    expect(f.noNeedle, "挑不出段的那条是**不可知**，不是有证人").toEqual(["src/x.ts#f3｜"]);
+    expect(f.modelSites, "operator 那一面不进分母").toBe(3);
+    // 「对全部输入同答」那一格：判据不许把三种态读成同一个数
+    expect([f.witnessed.length, f.unwitnessed.length, f.noNeedle.length], JSON.stringify(f)).toEqual([1, 1, 1]);
+  });
+
+  it("帽三态各自出声：超帽红、低于帽也红（登记表自己烂掉不许静默）", () => {
+    const mk = (n: number): ClaimWitnessFindings => ({
+      modelSites: n, witnessed: [], unwitnessed: Array.from({ length: n }, (_u, i) => "k" + String(i)),
+      noNeedle: [], byAudience: { model: n, operator: 0, ui: 0 },
+    });
+    expect(claimWitnessCeiling(mk(3), 3)).toMatchObject({ over: false, stale: false, margin: 0 });
+    expect(claimWitnessCeiling(mk(4), 3), "新加一条无人判 ⇒ 必须红").toMatchObject({ over: true, stale: false });
+    expect(claimWitnessCeiling(mk(2), 3), "有人补了证人而帽没跟着调低 ⇒ 也要红").toMatchObject({ over: false, stale: true });
+  });
+
+  it("真仓那一趟：分母非零、存量在帽内、三态相加＝分母（这条尺不许恒红也不许空载）", () => {
+    const srcScope = trackedExistingFiles(ROOT, "src");
+    const files = srcScope.files.map((p) => ({ path: p, text: readFileSync(join(ROOT, p), "utf8") }));
+    const corpus = trackedExistingFiles(ROOT, "tests").files.map((p) => readFileSync(join(ROOT, p), "utf8"));
+    const sites = scanClaimSites(files);
+    const f = claimWitnessFindings(sites, corpus);
+    expect(sites.length, "一个面都没扫到＝没有尺，不读成干净（规则 74）").toBeGreaterThan(0);
+    expect(f.modelSites, JSON.stringify(f.byAudience)).toBeGreaterThan(0);
+    // 守恒律：任何一格都不许从清单里静默消失——"不可知"必须显式存在，而不是并进别的态。
+    expect(f.witnessed.length + f.unwitnessed.length + f.noNeedle.length, JSON.stringify(f)).toBe(f.modelSites);
+    const ceil = claimWitnessCeiling(f, CLAIM_UNWITNESSED_CAP);
+    expect(ceil.over, `欠证人的能力断言超出帽：\n${f.unwitnessed.join("\n")}`).toBe(false);
+    expect(ceil.stale, `现读 ${String(ceil.read)} 低于帽 ${String(ceil.cap)} ⇒ 把帽调下来（只准调低）`).toBe(false);
+    expect(f.witnessed.length, "一条都没被判过＝这条尺没在工作").toBeGreaterThan(0);
+  });
+
+    it("整句收下后不许再按片段重复计数——共用 walker 时虚高会串到对面", () => {
+    const src = "function t(v: string): string { return `本探针不会抄 " + "${v} 也不会替你翻页`; }";
+    const claim = scanClaimSites([{ path: "src/__probe.ts", text: src }]);
+    expect(claim.length, "一句话记成两条＝分母虚高：" + JSON.stringify(claim.map((c) => c.text))).toBe(1);
+    expect(claim[0]!.runs, "同一句里的两处能力断言都要能各配证人：" + JSON.stringify(claim[0]!.runs))
+      .toEqual(["本探针不会抄", "也不会替你翻页"]);
+    // 对面那把网（承诺网）必须维持**按片段**收：整句开关只对能力断言开。
+    const promise = scanPromiseSites([
+      { path: "src/__probe.ts", text: "function p(v: string): string { return `原文已存 " + "${v}，可回取`; }" },
+    ]);
+    expect(promise.length, "承诺网按片段收，两处措辞各一条：" + JSON.stringify(promise.map((c) => c.text))).toBe(2);
+    expect(promise.every((c) => !c.text.includes("${")), "整句原文不许漏进承诺网的读数").toBe(true);
+  });
+
+  it("反向对照：往真仓那份源码里凭空加一句无人判的能力断言 ⇒ 帽当场被顶破（证明上一条不是恒真）", () => {
+    const srcScope = trackedExistingFiles(ROOT, "src");
+    const files = srcScope.files.map((p) => ({ path: p, text: readFileSync(join(ROOT, p), "utf8") }));
+    const corpus = trackedExistingFiles(ROOT, "tests").files.map((p) => readFileSync(join(ROOT, p), "utf8"));
+    const one = files.find((f) => f.path === "src/tools/web-search.ts") ?? files[0]!;
+    // 那句**新加的**能力断言不能在本案正文里连成一段：判卷自己就是证人语料的一部分，
+    // 整句逐字写在这儿 ⇒ 它会给自己造的那条断言作证（第一次跑就是这么"没顶破帽"的）。
+    const addedSentence = ["探针假句永远不会", "把密钥写进日志"].join("");
+    const withExtra = files.map((f) => (f.path === one.path
+      ? { path: f.path, text: `${f.text}\nfunction __addedClaim(): string { return "${addedSentence}"; }\n` }
+      : f));
+    const base = claimWitnessFindings(scanClaimSites(files), corpus);
+    const added = claimWitnessFindings(scanClaimSites(withExtra), corpus);
+    const ceil = claimWitnessCeiling(added, CLAIM_UNWITNESSED_CAP);
+    expect(ceil.over, "加了新面而帽没被顶破 ⇒ 这条判据恒真").toBe(true);
+    expect(added.unwitnessed.length, `现读该恰好多一条（基线 ${String(base.unwitnessed.length)}）`).toBe(base.unwitnessed.length + 1);
+    expect(added.unwitnessed.join("\n"), "新加的那条必须被点名").toContain("__addedClaim");
   });
 });

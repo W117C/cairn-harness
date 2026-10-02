@@ -12449,6 +12449,72 @@ const MUTATIONS = [
     apply: (s) => s.replace('  "src/main/agent-runner.ts#body": "hopMapDemo",\n', ""),
     expectFail: "每一处模型可见的承诺面都有判定归属（新加一句『全文见 X』而不登记 ⇒ 这条先红）",
   },
+  /* 第 311 页那一簇：模型可见的**能力断言**有没有证人（`scanClaimSites` / `claimWitnessRuns` /
+     `claimWitnessCeiling` / 共用 walker 的整句收料 / 受众判定的终端写入那一支）。
+     这五枚各自红在不同用例上——其中 A、E 两枚钉的是**本笔自己踩过的两个坑**：
+     受众只看最近一层调用（usage 文案被判成模型可见）、整句收下后片段重复计数（分母从 10 涨到 13）。 */
+  {
+    id: "claim-audience-nearest-call-only",
+    src: "scripts/probe-promise-recall.ts",
+    test: "tests/promise-recall-inventory.test.ts",
+    desc: "把受众判定退回「只看最近那一层调用」⇒ `process.stdout.write(paint(YELLOW, 「…」))` 里最近的一层是 "
+      + "`paint(…)`，终端文案被判成模型可见：给人看的一句话开始欠「照那句做一遍」的判定（断言越界）。"
+      + "针脚钉整条 parent 链那一步，不钉函数名",
+    apply: (s) => s.replace(
+      '    if (isTerminalSinkCall(cur)) return "operator";',
+      '    if (ts.isCallExpression(cur)) return isTerminalSinkCall(cur) ? "operator" : "model";',
+    ),
+    expectFail: "受众判定沿整条 parent 链认终端写入——`paint(…)` 包一层也是给运维看的",
+  },
+  {
+    id: "claim-witness-run-threshold-collapsed",
+    src: "scripts/probe-promise-recall.ts",
+    test: "tests/promise-recall-inventory.test.ts",
+    desc: "证人候选段的门槛从 6 字挪到 2 字 ⇒ 「不会」「只能」这类碎片在任何测试里都能撞上，"
+      + "欠证人的那格被虚假填平（分母从 29 掉向 0，而这条尺一次都没更严）",
+    apply: (s) => s.replace(
+      "export function claimWitnessRuns(text: string, min = 6): string[] {",
+      "export function claimWitnessRuns(text: string, min = 2): string[] {",
+    ),
+    expectFail: "证人候选段：插值挖掉、按非中文断开、6 字门槛、去重",
+  },
+  {
+    id: "claim-cap-stale-branch-dropped",
+    src: "scripts/probe-promise-recall.ts",
+    test: "tests/promise-recall-inventory.test.ts",
+    desc: "只留「超帽红」这一半 ⇒ 现读低于帽（有人补了证人却没把帽调下来）不再出声，"
+      + "登记表自己烂在这儿。帽的两半要各配一条用例（规则 227/248：收紧与放宽各有一支哨兵）",
+    apply: (s) => s.replace(
+      "  return { over: read > cap, stale: read < cap, read, cap, margin: cap - read };",
+      "  return { over: read > cap, stale: false, read, cap, margin: cap - read };",
+    ),
+    expectFail: "帽三态各自出声：超帽红、低于帽也红（登记表自己烂掉不许静默）",
+  },
+  {
+    id: "claim-cap-over-branch-dropped",
+    src: "scripts/probe-promise-recall.ts",
+    test: "tests/promise-recall-inventory.test.ts",
+    desc: "另一半：摘掉「超帽红」⇒ 新写一句没人判的能力断言照样绿，而印出来的读数与帽一字不差地骗人。"
+      + "它的 killer 是那条**反向对照**（现读 29＝帽 29 正贴线，只有加一条才测得出这一半）",
+    apply: (s) => s.replace(
+      "  return { over: read > cap, stale: read < cap, read, cap, margin: cap - read };",
+      "  return { over: false, stale: read < cap, read, cap, margin: cap - read };",
+    ),
+    expectFail: "反向对照：往真仓那份源码里凭空加一句无人判的能力断言 ⇒ 帽当场被顶破（证明上一条不是恒真）",
+  },
+  {
+    id: "claim-whole-sentence-piece-double-count",
+    src: "scripts/probe-promise-recall.ts",
+    test: "tests/promise-recall-inventory.test.ts",
+    desc: "整句收下后不再压掉它自己的 head/tail 片段 ⇒ 同一句话按整句＋每个片段各进一次清单，"
+      + "分母虚高（本笔实测：共用 walker 后承诺网从 10 处涨到 13 处，而那句话一个字都没多）。"
+      + "这条针脚钉的就是那一步抑制",
+    apply: (s) => s.replace(
+      "walk(c, (matched || suppress) && isTemplatePart(c))",
+      "walk(c, false)",
+    ),
+    expectFail: "整句收下后不许再按片段重复计数——共用 walker 时虚高会串到对面",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

@@ -63,6 +63,12 @@ const IDS = [
   "prune-stub-third-column-drops-workspace",
   "prune-stub-report-hides-a-column",
   "prune-stub-face-left-unregistered",
+  // 第 311 页那一簇：能力断言的证人面（受众判定／候选段门槛／帽两半／整句收料不重复计数）。
+  "claim-audience-nearest-call-only",
+  "claim-witness-run-threshold-collapsed",
+  "claim-cap-stale-branch-dropped",
+  "claim-cap-over-branch-dropped",
+  "claim-whole-sentence-piece-double-count",
 ];
 
 // 一个 JS 字符串字面量的正则形状（双引号、单引号两支）。本笔 14 条改法都不含反引号写法，
