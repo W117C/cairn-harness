@@ -279,3 +279,29 @@ export async function buildMemoryInjection(opts: MemoryInjectionOptions): Promis
     truncated,
   };
 }
+
+/** 一次注入都没有时的空壳（`buildMemoryInjectionSafe` 的降级支用它，别在三处调用点各造一份字面量）。 */
+export const EMPTY_MEMORY_INJECTION: MemoryInjection = { project: null, global: null, charsCurrent: 0, charsLimit: 0, tokens: 0, truncated: false };
+
+/** 「这轮没有记忆」与「这个工作区没写过记忆」从前同形：三处调用点各自 `try/catch`，异常只走
+ *  `console.debug`（两处甚至是空 catch）就返回空壳 ⇒ 模型据"没有 LESSONS"决定要不要自己翻历史，
+ *  而它翻不翻、信不信，取决于它有没有猜到这中间断了一次。措辞沿 `mapUnavailableText` 那一支：
+ *  先说本次不可用与原因，再明写这句话**不代表**什么。
+ *  这里**不给**"那你自己去读某个路径"的出路——一句承诺就得配一支真跑过的探针，那条路这次没验。 */
+export function memoryUnavailableText(why: string): string {
+  return "[memory] 本次记忆注入不可用（原因：" + why.slice(0, 200) + "）⇒ 这**不代表这个工作区没有沉淀的约定或教训**，"
+    + "也不要把它当成「没有历史决策」；本轮的结论请只按你实际看到的材料给。";
+}
+
+export type MemoryInjectionOutcome = { injection: MemoryInjection; unavailable: string | null };
+
+/** 三处消费者（主会话 / worker 任务书 / 旁路问答）**共用这一道出口**：
+ *  判定在这里做一次，措辞在这里有一份；调用点只决定"要不要把那句话拼进去"。
+ *  `unavailable` 非 null ⇒ 这一轮真的什么都没注入，消费者必须出声，不许静默换空壳。 */
+export async function buildMemoryInjectionSafe(opts: MemoryInjectionOptions): Promise<MemoryInjectionOutcome> {
+  try {
+    return { injection: await buildMemoryInjection(opts), unavailable: null };
+  } catch (err) {
+    return { injection: EMPTY_MEMORY_INJECTION, unavailable: memoryUnavailableText(err instanceof Error ? err.message : String(err)) };
+  }
+}

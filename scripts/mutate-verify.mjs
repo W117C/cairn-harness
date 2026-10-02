@@ -12644,6 +12644,56 @@ const MUTATIONS = [
     ),
     expectFail: "缺第三件：登记的那一格根本不在欠证人清单里 ⇒ 报成登记表自己的病，而不是悄悄多绑上一格",
   },
+  // 第 315 页：记忆注入的降级面。三个消费者各一枚 ＋ 共用出口本身一枚（四枚各红不同用例）。
+  {
+    id: "memory-degraded-worker-silent-again",
+    src: "src/agent/worker-prompt.ts",
+    test: "tests/memory-degradation.test.ts",
+    desc: "worker 侧不再拼那句降级说明 ⇒ 回到空 catch 的行为：一份坏 lesson 文件让整段记忆消失，"
+      + "而 worker 读到的「没有记忆」与「这仓库没写过教训」同形——它会据此决定要不要相信自己的经验",
+    apply: (s) => s.replace(
+      'if (mem.unavailable) messages.push({ role: "system", content: mem.unavailable });',
+      'if (false) messages.push({ role: "system", content: mem.unavailable });',
+    ),
+    expectFail: "消费者① worker 任务书：同一个触发下，那句说明出现在 system 块里（从前那里是空 catch）",
+  },
+  {
+    id: "memory-degraded-sidechat-silent-again",
+    src: "src/agent/sidechat.ts",
+    test: "tests/memory-degradation.test.ts",
+    desc: "旁路问答侧不再拼那句 ⇒ 同一件事在第二个消费者身上复活。这一枚与上一枚必须是两个位点："
+      + "共用出口只保证「判定只有一份」，出声是每个消费者自己的动作（入口收敛≠出口收敛）",
+    apply: (s) => s.replace(
+      'if (mem.unavailable) messages.push({ role: "system", content: mem.unavailable });',
+      'if (false) messages.push({ role: "system", content: mem.unavailable });',
+    ),
+    expectFail: "消费者② 旁路问答：同一形状（此前那里是 catch 里一句注释就算跳过）",
+  },
+  {
+    id: "memory-degraded-composer-note-not-pushed",
+    src: "src/agent/glm-session.ts",
+    test: "tests/memory-degradation.test.ts",
+    desc: "装配口收了 memoryNote 却不落位 ⇒ 主会话仍然无痕；这条同时钉住落点（在 skills 之前）："
+      + "挪到尾部会把已经攒下的前缀缓存自己抖掉，那正是这套装配花钱省的地方",
+    apply: (s) => s.replace(
+      'if (opts.memoryNote) msgs.push({ role: "system", content: opts.memoryNote });',
+      'if (false) msgs.push({ role: "system", content: opts.memoryNote });',
+    ),
+    expectFail: "落位纪律：那句说明排在『记忆该出现的位置』，不许挪到尾部（前缀缓存按前缀匹配，尾部追加才不动前面几段）",
+  },
+  {
+    id: "memory-degraded-exit-swallows-again",
+    src: "src/agent/memory/inject.ts",
+    test: "tests/memory-degradation.test.ts",
+    desc: "把出口退回静默（unavailable 恒 null）⇒ 三个消费者拿到的都是空壳且无人吭声，"
+      + "而这份批里那条**合规**教训也一起没了（实测：一份 lesson-中文命名.md 拖垮整段）。"
+      + "这一枚验的是「点名叫出是哪个文件」——只说「注入失败」等于让人再去 grep 一遍",
+    apply: (s) => s.replace(
+      "unavailable: memoryUnavailableText(err instanceof Error ? err.message : String(err))",
+      "unavailable: null",
+    ),
+    expectFail: "真触发：一份不合规矩的 lesson 文件名 ⇒ 交回 unavailable，并点名是哪一份（不再只说『注入失败』）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

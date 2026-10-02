@@ -83,6 +83,11 @@ const IDS = [
   "claim-binding-accepts-symbol-absent-from-source",
   "claim-binding-accepts-symbol-unreferenced-by-judge",
   "claim-binding-binds-faces-not-on-the-owed-list",
+  // 第 315 页：记忆注入的降级面（三个消费者各一枚 ＋ 共用出口一枚）。
+  "memory-degraded-worker-silent-again",
+  "memory-degraded-sidechat-silent-again",
+  "memory-degraded-composer-note-not-pushed",
+  "memory-degraded-exit-swallows-again",
 ];
 
 // 一个 JS 字符串字面量的正则形状（双引号、单引号两支）。本笔 14 条改法都不含反引号写法，

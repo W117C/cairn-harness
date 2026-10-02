@@ -22,7 +22,7 @@ import {
   type Summarizer,
 } from "./compaction";
 import { gateToolSpecs } from "./glm-session";
-import { buildMemoryInjection } from "./memory/inject";
+import { buildMemoryInjectionSafe } from "./memory/inject";
 import { scanModelOutput } from "./worker-report";
 
 /** sidechat 只读白名单：工具表里只有这四个。 */
@@ -265,14 +265,10 @@ export async function buildSidechatContext(opts: {
     mainEvents = [];
   }
   const mainProjection = buildMainProjection(mainEvents, opts.rounds ?? SIDECHAT_PROJECTION_ROUNDS);
-  // 两层记忆（固定回注，每轮重注）
-  let memory = { project: null as string | null, global: null as string | null };
-  try {
-    const m = await buildMemoryInjection({ workspace: opts.workspace });
-    memory = { project: m.project, global: m.global };
-  } catch {
-    /* 记忆注入失败静默跳过（与主会话同族降级面） */
-  }
+  // 两层记忆（固定回注，每轮重注）。出口共用 `buildMemoryInjectionSafe`（第 315 页）：
+  // 从前这里是空 catch ⇒ 一次异常把整段记忆变成无痕丢失，旁路模型读到的"没有记忆"与"这仓库没写过记忆"同形。
+  const mem = await buildMemoryInjectionSafe({ workspace: opts.workspace });
+  const memory = { project: mem.injection.project, global: mem.injection.global };
   // @ 引用（取最近一条 user_message）
   const lastUser = [...own].reverse().find((e) => e.type === "user_message");
   const refs =
@@ -285,6 +281,8 @@ export async function buildSidechatContext(opts: {
   const messages: GlmMessage[] = [{ role: "system", content: SIDECHAT_SYSTEM }];
   if (memory.project) messages.push({ role: "system", content: memory.project });
   if (memory.global) messages.push({ role: "system", content: memory.global });
+  // 一段都没有但有那句说明 ⇒ 出声一次（与主会话那一支同形，措辞只有一份）。
+  if (mem.unavailable) messages.push({ role: "system", content: mem.unavailable });
   if (mainProjection.text !== "") {
     messages.push({
       role: "system",

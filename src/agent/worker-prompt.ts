@@ -1,7 +1,7 @@
 import type { AgentEvent } from "../events";
 import type { GlmMessage } from "../providers/glm";
 import { clampToTokenBudget } from "./text-budget";
-import { buildMemoryInjection } from "./memory/inject";
+import { buildMemoryInjectionSafe } from "./memory/inject";
 import type { WorkerContext } from "./orchestrator-types";
 
 /** 角色块预算（token）。§7.5 明写「任务书与角色定义永不进摘要输入」⇒ 这一块的代价是
@@ -54,13 +54,12 @@ export async function buildWorkerSystemMessages(
     messages.push({ role: "system", content: "[role] " + role });
   }
   messages.push({ role: "system", content: w.mode === "write" ? WORKER_WRITE_SYSTEM : WORKER_SYSTEM });
-  try {
-    const mem = await buildMemoryInjection({ workspace });
-    if (mem.project) messages.push({ role: "system", content: mem.project });
-    if (mem.global) messages.push({ role: "system", content: mem.global });
-  } catch {
-    /* 记忆注入失败静默跳过（与主会话同族降级面） */
-  }
+  // 两层记忆固定回注。出口与主会话/旁路共用一支 `buildMemoryInjectionSafe`（第 315 页）：
+  // 从前这里是**空 catch** ⇒ worker 拿到的是"这仓库没有记忆"，而断在哪一行没人知道。
+  const mem = await buildMemoryInjectionSafe({ workspace });
+  if (mem.injection.project) messages.push({ role: "system", content: mem.injection.project });
+  if (mem.injection.global) messages.push({ role: "system", content: mem.injection.global });
+  if (mem.unavailable) messages.push({ role: "system", content: mem.unavailable });
   if (hookContext !== "") messages.push({ role: "system", content: "[SubagentStart hook] " + hookContext });
   messages.push({ role: "user", content: lines.join("\n") });
   return messages;

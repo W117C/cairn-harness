@@ -8,7 +8,7 @@ import { SUPERVISE_MODEL_FIELDS } from "./supervise-contract";
 import { DEFAULT_MODEL_TABLE, findSpecByNameOrId } from "../providers/registry";
 import type { ModelOutput, Provider, ProviderCall } from "../providers";
 import { projectContext, type ContextMessage } from "./context";
-import { buildMemoryInjection, type MemoryInjection } from "./memory/inject";
+import { buildMemoryInjectionSafe, type MemoryInjection } from "./memory/inject";
 import { REMEMBER_DESCRIPTION } from "../tools/remember";
 import { computePrune, writePruneAttachments } from "./prune";
 import { basename, dirname, join } from "node:path";
@@ -587,6 +587,9 @@ export function composeTurnMessages(opts: {
   system?: string;
   mapText?: string | null;
   memory?: Pick<MemoryInjection, "project" | "global">;
+  /** 本次记忆**什么都没注入**时的如实说明（`memoryUnavailableText` 出品）。缺省零行为。
+   *  与 `mapText` 那一支同形：缺了它，模型读到的"没有 LESSONS"与"这个工作区没写过教训"就同形（第 315 页）。 */
+  memoryNote?: string;
   history: ContextMessage[];
   /** M2e：插件注入面（skill 路由清单 + SessionStart/重挂上下文），缺省零行为。 */
   skills?: string;
@@ -612,6 +615,8 @@ export function composeTurnMessages(opts: {
   if (opts.system) msgs.push({ role: "system", content: opts.system });
   if (opts.memory?.project) msgs.push({ role: "system", content: opts.memory.project });
   if (opts.memory?.global) msgs.push({ role: "system", content: opts.memory.global });
+  // 两段都没有、但有那句说明 ⇒ 出声一次（顺序紧跟记忆该出现的位置，别挪到尾部去当装饰）。
+  if (opts.memoryNote) msgs.push({ role: "system", content: opts.memoryNote });
   if (opts.skills) msgs.push({ role: "system", content: opts.skills });
   if (opts.mapText) {
     msgs.push({
@@ -833,13 +838,12 @@ export function createGlmSessionProvider(
       // 而没有插件/技能的会话根本没有那一块——接在那儿就是「生产者在、消费者不在」。
       const surfaceNoteText = surface?.note ?? "";
 
-      // M2d 固定回注（§8.1.5/§8.1.9）：每轮组装重读两层记忆并重注（压缩后自然重注）；异常静默跳过
-      let memory: MemoryInjection = { project: null, global: null, charsCurrent: 0, charsLimit: 0, tokens: 0, truncated: false };
-      try {
-        memory = await buildMemoryInjection({ workspace });
-      } catch (err) {
-        console.debug("[memory] 注入失败，静默跳过:", err instanceof Error ? err.message : String(err));
-      }
+      // M2d 固定回注（§8.1.5/§8.1.9）：每轮组装重读两层记忆并重注（压缩后自然重注）。
+      // 出口在 `buildMemoryInjectionSafe` 那一道（第 315 页）：这里从前是自己的 catch ＋ `console.debug`
+      // ⇒ 一次异常把整段 LESSONS/索引变成**无痕**丢失，而模型读到的"没有记忆"与"这仓库没写过记忆"同形。
+      const mem = await buildMemoryInjectionSafe({ workspace });
+      const memory = mem.injection;
+      const memoryNote = mem.unavailable;
       const memoryChars = (memory.project?.length ?? 0) + (memory.global?.length ?? 0);
       let skillsBlock = pluginContext(events, liveNote);
       // M2b 符号地图：仅首轮（历史尚短）注入；异常静默跳过（§6.4 失败降级）。
@@ -922,6 +926,7 @@ export function createGlmSessionProvider(
         mapText,
         memory,
         history,
+        ...(memoryNote ? { memoryNote } : {}),
         ...(skillsBlock ? { skills: skillsBlock } : {}),
         ...(surfaceNoteText ? { surfaceNote: surfaceNoteText } : {}),
         ...(opts.attachmentContext ? { attachmentContext: opts.attachmentContext } : {}),
