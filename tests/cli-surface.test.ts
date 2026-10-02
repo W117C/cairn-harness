@@ -360,12 +360,44 @@ describe("m0 CLI：--goal / --session / --compact 三条真入口在 argv 上", 
   });
 });
 
+/** 把注释剥掉再按次序比（**这里踩过，2026-10-02**）。
+ *
+ *  这一格量的是**控制流次序**，而 `indexOf` 是一把文本尺：`src/cli.ts:1157` 那句注释写的正是
+ *  「**不要**直接 process.exit(130)」——它是句**警告**，却让 `indexOf("process.exit(130)")`
+ *  先命中注释 ⇒ 读出「硬退排在守卫之前」⇒ **把正确的实现判成错的**。
+ *  实测：`hardExit=9751` 落在注释那一行、`guard=9892` 落在 `if (cancelling)`；
+ *  带分号的针脚（`process.exit(130);`）才读到 1164 行那句真语句。
+ *
+ *  为什么**不改注释**绕开：那等于「为了迁就一把文本尺，不许在代码里写这句警告」，方向反了。
+ *  该修的是尺。字符串也要一起剥——否则 `"//"` 这种字面量会把状态机带偏。 */
+function stripComments(s: string): string {
+  let out = "";
+  let quote: string | null = null;
+  for (let i = 0; i < s.length; i += 1) {
+    const c = s[i]!;
+    const n = s[i + 1];
+    if (quote !== null) {
+      if (c === "\\") { out += c + (n ?? ""); i += 1; continue; }
+      if (c === quote) quote = null;
+      out += c;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") { quote = c; out += c; continue; }
+    if (c === "/" && n === "/") { while (i < s.length && s[i] !== "\n") i += 1; out += "\n"; continue; }
+    if (c === "/" && n === "*") { i += 2; while (i < s.length && !(s[i] === "*" && s[i + 1] === "/")) i += 1; i += 1; continue; }
+    out += c;
+  }
+  return out;
+}
+
 describe("m0 CLI：Ctrl-C 走 handleRunCancel（截断事件流 = 转录对不上账）", () => {
   it("第一次请 run 收束、第二次才硬退——硬退那一支必须整个在 `cancelling` 守卫里", () => {
     const src = readFileSync(join(ROOT, "src", "cli.ts"), "utf8");
     const from = src.indexOf('process.on("SIGINT"');
     expect(from).toBeGreaterThanOrEqual(0);
-    const fn = src.slice(from);
+    // 注释剥掉再比（理由见 `stripComments`）：否则那句"不要直接 process.exit(130)"的**警告**
+    // 会被读成"硬退在守卫之前"。剥注释只改文本位置、不改四件事的相对次序。
+    const fn = stripComments(src.slice(from));
     expect(fn).toContain("handleRunCancel()");
     expect(fn).toContain("process.exit(130)");
     // **判据是控制流，不是文本先后**：硬退写在 `if (cancelling)` 那一支的**开头**，
