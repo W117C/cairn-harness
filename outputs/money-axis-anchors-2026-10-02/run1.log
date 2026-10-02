@@ -1,0 +1,13 @@
+$ node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify cost-split-face-collapsed loop-eval-money-numerator loop-eval-wasted-cell-constant
+[mutate-verify] checkout exit=0：.worktrees/gate-mutate-verify → b44976a
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）
+变异验证：3 条
+✅ cost-split-face-collapsed — 钱不再按「这趟算不算数」分流（恒真）⇒ validSpend 退化成 paidAll、wasted 恒 0，而分母只数算数的趟次 ⇒ 比值又被没算数的趟次撑高（28% 白花／比值高估 39.7%，36 趟实测） ｜本机实测 0.7s／2 拍
+✅ loop-eval-money-numerator — 汇总那行的分子改回全量实付（旧写法）⇒ 机制还在、判卷表里纯函数那条照旧绿，而印出来的「每达标任务」重新被没算数的趟次撑高——这条锚点钉的就是这个接缝 ｜本机实测 0.8s／2 拍
+✅ loop-eval-wasted-cell-constant — 白花那格印成常数 0 ⇒ 「单列、不藏」变成「单列、藏了」：分面还在但读数永远是 0，没人能看见被剔掉的趟次到底花掉多少 ｜本机实测 1.0s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 2.9s · 跑了 3/3 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 6 次／3 条（每条次数分布 2×3）· 单次中位 第1次 0.4s／第2次 0.5s· 最贵一条 loop-eval-wasted-cell-constant 1.0s
+跑法单价：selector 6 拍·中位 0.45s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）
