@@ -5,14 +5,15 @@ import { describe, expect, it } from "vitest";
 import { contextNoteFor, IMPACT_CONTEXT_SYMBOLS_PER_FILE, type FileImpactReport } from "../src/agent/impact";
 import { emptyAttributionStats, type AttributionStats } from "../src/agent/impact/attribution";
 
-function report(symbols: string[], up: FileImpactReport["up"] = [], face?: { files: number; cap: number; candidates: number }, ambiguous: string[] = [], attribution: AttributionStats = emptyAttributionStats()): FileImpactReport {
+function report(symbols: string[], up: FileImpactReport["up"] = [], face?: { files: number; cap: number; candidates: number }, ambiguous: string[] = [], attribution: AttributionStats = emptyAttributionStats(), mixed: number = 0): FileImpactReport {
   // ambiguousSymbols 从 10-02 起**两个消费者都读**：查询端那句早就有，注入端此前不说 ⇒
   // 缺省开的写后回注会把"波及 M 个文件"讲得比事实硬（下面那条反向证人钉住两态必须不同输出）。
   // graphFiles / graphCap / graphCandidates **被摘要读**（09-30 起）：图非全量时那句覆盖面自述
   // 要进回注，缺省给"收全"的一组 ⇒ 其余用例逐字不受影响（反向对照另有专条）。
   // attribution 缺省全 0 ⇒ 归属那一句今天不出（它的三态各自有专条，在 tests/impact-attribution.test.ts）。
+  // mixed（`sitesOnlyToOtherDef`）缺省 0 ⇒ 第 307 页那句分母今天也不出（专条在同一份判卷里）。
   const face2 = face ?? { files: 1, cap: 1, candidates: 1 };
-  return { file: "src/a.ts", symbols, up, truncated: false, graphFiles: face2.files, graphCap: face2.cap, graphCandidates: face2.candidates, ambiguousSymbols: ambiguous, attribution };
+  return { file: "src/a.ts", symbols, up, truncated: false, graphFiles: face2.files, graphCap: face2.cap, graphCandidates: face2.candidates, ambiguousSymbols: ambiguous, attribution, sitesOnlyToOtherDef: mixed };
 }
 
 describe("无跨文件调用点分支的符号清单有界", () => {

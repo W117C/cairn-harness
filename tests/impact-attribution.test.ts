@@ -22,7 +22,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import {
   attributionNote, attributeRefToDef, bindingSourceKey, emptyAttributionStats,
 } from "../src/agent/impact/attribution.js";
-import { buildImpact, closureFilesOf, contextNoteFor, downward, ImpactUnavailableError, upward, type ImpactGraph } from "../src/agent/impact/index.js";
+import { buildImpact, closureFilesOf, contextNoteFor, downward, fileImpact, ImpactUnavailableError, upward, type ImpactGraph } from "../src/agent/impact/index.js";
 import { loadImpactIndex, saveImpactIndex, IMPACT_INDEX_SCHEMA_VERSION } from "../src/agent/impact/persist.js";
 import { __resetLangCache, __resetQueryCache } from "../src/agent/map/parse.js";
 import { TAGS_EXTRACT_VERSION } from "../src/agent/map/parse.js";
@@ -280,7 +280,7 @@ describe("语义租约的波及闭包（这条判据的第三个消费者，第 
 describe("回注文案：三态与同名歧义各说各的", () => {
   const base = {
     file: "src/a.ts", symbols: ["readFile"], truncated: false,
-    graphFiles: 1, graphCap: 1, graphCandidates: 1,
+    graphFiles: 1, graphCap: 1, graphCandidates: 1, sitesOnlyToOtherDef: 0,
   };
   it("歧义句与归属句彼此独立：只有归属计数没有歧义时，归属句照样出", () => {
     const onlyAttrib = contextNoteFor({
@@ -296,6 +296,39 @@ describe("回注文案：三态与同名歧义各说各的", () => {
     const up = [{ file: "src/b.ts", symbol: "readFile", line: 3 }];
     const before = contextNoteFor({ ...base, up, ambiguousSymbols: [], attribution: emptyAttributionStats() });
     expect(before).not.toContain("归属判定");
+  });
+});
+
+describe("读端分母（第 307 页：把「可能混有无关文件」升级成可核对的数）", () => {
+  const shape = {
+    file: "src/a.ts", symbols: ["readFile"], truncated: false,
+    graphFiles: 1, graphCap: 1, graphCandidates: 1,
+  };
+  it("fileImpact 数得出「有几处只归得到别处那份定义」：正证的与拿不出反证的都不许算进来", async () => {
+    const ws = await wsWith(FOUR_FILE_REPO);
+    const cache = await mkdtemp(join(tmpdir(), "dsh-attrib-mix-"));
+    TMP.push(cache);
+    const rep = await fileImpact(ws, "src/ledger.ts", cache, 50);
+    expect(rep, "文件在图内就该有报告").not.toBeNull();
+    const r = rep!;
+    // 这份清单里的三处各自的身份是定死的：consumer 正证（归 ledger.ts）、legacy 拿不出反证（保守计入）、
+    // otherdef 只有 third.ts 那份反证 ⇒ 只有它算"混进来"。nodeuser 连清单都进不去（两处定义都归不上）。
+    expect(r.up.map((s) => s.file).sort(), "并集口径下这三处都还在清单里").toEqual(["src/consumer.ts", "src/legacy.js", "src/otherdef.ts"]);
+    expect(r.sitesOnlyToOtherDef, "只有 otherdef.ts 那一处**只**归得到别处那份定义").toBe(1);
+    const note = contextNoteFor(r);
+    expect(note).toContain("本次清单里 1 处只归得到别处那份同名定义（按 import 反证判定）");
+    // 那句"可能混有"的结构话不许被这句顶掉（两句说的是不同的事：一个讲有同名定义，一个讲混进几处）
+    expect(note).toContain("清单里可能混有无关文件");
+  });
+
+  it("分母句只在真混进时出，且出来时只多那一句（其余字节一字不动）", () => {
+    const up = [{ file: "src/b.ts", symbol: "readFile", line: 3 }];
+    const shared = { ...shape, up, ambiguousSymbols: ["readFile"], attribution: emptyAttributionStats() };
+    const none = contextNoteFor({ ...shared, sitesOnlyToOtherDef: 0 });
+    const three = contextNoteFor({ ...shared, sitesOnlyToOtherDef: 3 });
+    expect(none, "0 处就闭嘴——印「0 处只归得到别处」是噪声，也会让模型以为清单里全是别处的").not.toContain("只归得到别处");
+    expect(three).toContain("本次清单里 3 处只归得到别处那份同名定义（按 import 反证判定）");
+    expect(three.replace("；本次清单里 3 处只归得到别处那份同名定义（按 import 反证判定）", "")).toBe(none);
   });
 });
 

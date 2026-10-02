@@ -19,10 +19,12 @@ import { pathToFileURL } from "node:url";
 const ROOT = resolve(import.meta.dirname, "..", "..");
 const { vitestSummary } = await import(pathToFileURL(resolve(ROOT, "scripts/lib/vitest-summary.ts")).href);
 
-const TEST_FILE = "tests/impact-attribution.test.ts";
 const TABLE = readFileSync(resolve(ROOT, "scripts/mutate-verify.mjs"), "utf8");
 
-/** 本笔那 14 条（按 id 点名，不按"表尾几条"这种位置取——位置会被隔壁的插入挪走）。 */
+/** 这三笔（305/306/307）那 18 条按 id 点名（不按"表尾几条"这种位置取——位置会被隔壁的插入挪走）。
+ *  第 15 条＝第 306 页新加的租约闭包锚点；第 16 条是**重指过针脚的老锚点**
+ *  （`impact-closure-glob-broken`：那段循环抽成 `closureFilesOf`，针脚跟着搬到入面那一行）。
+ *  重指过的针脚必须重新杀一次：`--check-needles` 只答"针脚在不在源文件里"，答不出"还咬不咬得住那条用例"。 */
 const IDS = [
   "impact-attribution-no-evidence-read-as-kept",
   "impact-attribution-positive-proof-ignored",
@@ -38,6 +40,10 @@ const IDS = [
   "impact-imports-exit-not-eaten",
   "impact-index-artifact-namesources-not-saved",
   "impact-index-artifact-version-not-checked",
+  "impact-lease-closure-bypasses-attribution",
+  "impact-closure-glob-broken",
+  "impact-mixed-sites-not-counted",
+  "impact-mixed-sites-not-in-note",
 ];
 
 // 一个 JS 字符串字面量的正则形状（双引号、单引号两支）。本笔 14 条改法都不含反引号写法，
@@ -67,12 +73,12 @@ for (const e of ENTRIES) {
   console.log(`    针脚=${JSON.stringify(e.old)} → 改后=${JSON.stringify(e.next)}`);
 }
 
-function runVitest() {
+function runVitest(testFile: string) {
   let out = "";
   let code = 0;
   try {
     out = execFileSync("node", [
-      "node_modules/vitest/vitest.mjs", "run", "--config", "tests/vitest.config.ts", TEST_FILE,
+      "node_modules/vitest/vitest.mjs", "run", "--config", "tests/vitest.config.ts", testFile,
     ], { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 300_000 });
   } catch (err) {
     out = String(err.stdout ?? "") + String(err.stderr ?? "");
@@ -88,16 +94,16 @@ function runVitest() {
   };
 }
 
-console.log(`\n# 基准（未改任何文件）`);
-{
-  const base = runVitest();
-  console.log(`  exit=${String(base.code)} tests=${JSON.stringify(base.summary)} 用时=${base.duration}`);
+console.log(`\n# 基准（未改任何文件；每台跑自己那条判卷文件，所以逐个文件都要先绿）`);
+for (const tf of [...new Set(ENTRIES.map((e) => e.test))]) {
+  const base = runVitest(tf);
+  console.log(`  ${tf}：exit=${String(base.code)} tests=${JSON.stringify(base.summary)} 用时=${base.duration}`);
   if (base.code !== 0 || base.summary.found === false || base.summary.failed !== 0) {
-    console.log("  ❌ 基准不绿 ⇒ 后面每台红都说明不了任何事，先修基准");
+    console.log(`  ❌ ${tf} 基准不绿 ⇒ 落在它上面的每台红都说明不了任何事，先修基准`);
     process.exit(1);
   }
-  console.log("  ✅ 基准全绿");
 }
+console.log("  ✅ 全部基准绿");
 
 const BAKDIR = `/tmp/dsh-impact-attrib-red-${String(process.pid)}`;
 mkdirSync(BAKDIR, { recursive: true });
@@ -116,7 +122,7 @@ for (const e of ENTRIES) {
     continue;
   }
   writeFileSync(path, src.replace(e.old, e.next), "utf8");
-  const run = runVitest();
+  const run = runVitest(e.test);
   copyFileSync(resolve(BAKDIR, e.src.replace(/\//gu, "_") + ".bak"), path);
   const restoredOk = readFileSync(path, "utf8") === readFileSync(resolve(BAKDIR, e.src.replace(/\//gu, "_") + ".bak"), "utf8");
   const killed = run.failed.some((t) => t.includes(e.killer));

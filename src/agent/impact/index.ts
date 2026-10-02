@@ -396,6 +396,10 @@ export interface FileImpactReport {
   ambiguousSymbols: string[];
   /** 建这张图时边构造的三态归属计数（读端要说"排除了几处／几处没证据可判"就靠它带分母）。 */
   attribution: AttributionStats;
+  /** 这份 `up` 清单里，有多少处**只**归得到别处那份同名定义（对本文件拿得出"另有出处"的反证）。
+   *  有了它，那句「清单里可能混有无关文件」才从一句猜测变成可核对的数：模型知道混进几处、
+   *  也就知道自己该把这份清单往哪一边收。不带这一位，读端只能继续说"可能"——而"可能"没有观测者。 */
+  sitesOnlyToOtherDef: number;
 }
 
 /** 计算单个被编辑文件的影响面。文件不在图内（未扫描/不支持后缀/不存在）→ null（不发事件）。
@@ -421,6 +425,14 @@ export async function fileImpact(
   const ambiguousSymbols = symbols.filter(
     (sym) => new Set((graph.defs.get(sym) ?? []).map((d) => d.file)).size > 1,
   );
+  // 「清单里可能混有无关文件」今天可以从猜测升级成计数：`upward` 是**各份同名定义的并集**
+  // （任一 def 归得上就留），所以这一处若**只**归得到别处那份定义，对本次编辑就不是后果。
+  // 判据仍只有 `attributeRefToDef` 一把（这里只是把 defFile 换成被编辑的那个文件）——另写一份就漂。
+  let sitesOnlyToOtherDef = 0;
+  for (const s of all) {
+    const binding = { known: graph.nameSources.has(s.file), sources: graph.nameSources.get(s.file)?.get(s.symbol) ?? [] };
+    if (attributeRefToDef(binding, normalized) === "dropped") sitesOnlyToOtherDef++;
+  }
   const up = sortedSites(all);
   const truncated = up.length > IMPACT_SITE_LIMIT;
   return {
@@ -433,6 +445,7 @@ export async function fileImpact(
     graphCap: graph.cap,
     ambiguousSymbols,
     attribution: graph.attribution,
+    sitesOnlyToOtherDef,
   };
 }
 
@@ -477,9 +490,12 @@ export function contextNoteFor(r: FileImpactReport): string {
   // 同一份事实只在一个消费者嘴里说，是本仓反复判死的"只硬化一支"形状。
   // 归属计数（`attributionNote`）接在这句**之后**：那句是"有同名定义"的结构事实，这句是"这一张图判掉了多少"的
   // 度量事实——两者独立出现，摘掉任一都不许让另一句跟着变（判卷按两态各钉一条）。
+  const mixed = r.sitesOnlyToOtherDef > 0
+    ? `；本次清单里 ${String(r.sitesOnlyToOtherDef)} 处只归得到别处那份同名定义（按 import 反证判定）`
+    : "";
   const ambiguity = (r.ambiguousSymbols.length > 0
     ? `；其中 ${String(r.ambiguousSymbols.length)} 个符号在别的文件也有同名定义，波及数按名字图算 ⇒ 清单里可能混有无关文件`
-    : "") + attributionNote(r.attribution);
+    : "") + mixed + attributionNote(r.attribution);
   const lines: string[] = [
     `[impact] ${r.file} 定义符号的跨文件调用点（上 ${r.up.length}${r.truncated ? "+" : ""}，波及 ${files.length} 个文件${ambiguity}；完整清单见 impact_report 事件）：`,
   ];

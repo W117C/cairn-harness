@@ -12225,6 +12225,24 @@ const MUTATIONS = [
     ),
     expectFail: "闭包只算归得到的引用方：绑到外部包的那一处掉出，真 import 与没有任何绑定的都留着（宽窄两臂同一张图）",
   },
+  {
+    id: "impact-mixed-sites-not-counted",
+    src: "src/agent/impact/index.ts",
+    test: "tests/impact-attribution.test.ts",
+    desc: "读端不再数「这一处只归得到别处那份定义」⇒ 那句「清单里可能混有无关文件」永远只能停在猜测，" +
+      "而判据明明就在同一层手里（模型于是继续照着整份清单去动那些与本次编辑无关的文件）",
+    apply: (s) => s.replace('if (attributeRefToDef(binding, normalized) === "dropped") sitesOnlyToOtherDef++;', ""),
+    expectFail: "fileImpact 数得出「有几处只归得到别处那份定义」：正证的与拿不出反证的都不许算进来",
+  },
+  {
+    id: "impact-mixed-sites-not-in-note",
+    src: "src/agent/impact/index.ts",
+    test: "tests/impact-attribution.test.ts",
+    desc: "分母算出来了却没进注入那一句（本仓「算出来不接」那一族的最新一例）⇒ 报告字段看着完整、" +
+      '判卷读字段也全绿，只有模型实际读到的那句话仍在说「可能混有」——字段与文案分家',
+    apply: (s) => s.replace('+ mixed + attributionNote(r.attribution);', "+ attributionNote(r.attribution);"),
+    expectFail: "分母句只在真混进时出，且出来时只多那一句（其余字节一字不动）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
