@@ -23,6 +23,9 @@ import { spawnSync } from "node:child_process";
 import { runLoop } from "../src/agent/loop";
 import { aggregateFeasibility, deriveVerifierProbe, feasibility, fromSweBenchJsonl, parseTaskSetJson, type EnvProbe, type TaskSpec } from "../src/agent/eval/task-set";
 import { ClarifyGate, PlanGate } from "../src/agent/gates";
+// 「这趟跑算不算数」——纯函数、可单测。分母口径见那边的模块头：
+// **未起步 / 被 provider 打断的趟次不许进分母**（限流打断不能记成"模型没做到"）。
+import { runValidity, tally } from "./lib/eval-validity";
 import { createVerifyHook, defaultExec, runVerifyOutcome, type ExecFn } from "../src/agent/verify";
 import { createGlmSessionProvider, sessionToolSpecs } from "../src/agent/glm-session";
 import { createEventLog, replay, type AgentEvent } from "../src/events";
@@ -549,18 +552,31 @@ for (let rep = 1; rep <= REPS; rep++) {
     const r = await runOnce(t, rep);
     const g = grade(r, t);
     rows.push({ r, g });
+    // 未起步 / 被 provider 打断的趟次**不叫 FAIL**：那会把"跑不成"记成"模型没做到"。
+    // 判据在 `lib/eval-validity.ts`（纯函数、可单测）；分母口径同见那边。
+    const v = runValidity(r, g.fails);
+    const verdict = v.valid ? (g.ok ? "PASS" : "FAIL") : "无效";
     console.log(
-      `[loop-eval] ${t.id} rep${String(rep)} ${g.ok ? "PASS" : "FAIL"} 起点=${r.seedVerifyOk ? "绿" : "红"} `
+      `[loop-eval] ${t.id} rep${String(rep)} ${verdict} 起点=${r.seedVerifyOk ? "绿" : "红"} `
       + `读先于写=${r.readsBeforeFirstWrite} clarify=${String(r.clarified)} 先批后写=${r.plannedBeforeWrite ? "Y" : "N"} `
       + `verify=${String(r.verified)}→${String(r.verifyOkLast)} 工具=${String(r.toolCalls)}/${String(r.toolFailures)}败 `
       + `重复=${String(r.repeatedSameAction)} 请求=${String(r.requests)} tok=${String(r.tokensIn)}/${String(r.tokensOut)} `
       + `¥${r.cny.toFixed(4)} ${String(Math.round(r.seconds))}s 内存峰=${String(r.resources.rssPeakMb)}MB/${String(r.resources.procPeak)}进程 cpu=${String(r.resources.cpuMs)}ms`
-      + (g.fails.length > 0 ? " 〔" + g.fails.join("；") + "〕" : ""),
+      + (g.fails.length > 0 ? " 〔" + g.fails.join("；") + "〕" : "")
+      + (v.valid ? "" : " 《" + v.why + "》"),
     );
   }
 }
-const pass = rows.filter((x) => x.g.ok).length;
+const t0 = tally(rows);
 const cny = rows.reduce((s, x) => s + x.r.cny, 0);
-console.log(`[loop-eval] 合计 ${String(pass)}/${String(rows.length)} 达标 · 实付≈¥${cny.toFixed(3)} · 每达标任务 ¥${pass > 0 ? (cny / pass).toFixed(4) : "∞"}`);
+if (t0.refuse) {
+  // 与"任务集解析报错"同一条纪律：**分母不完整时任何分数都是假的** ⇒ 拒绝出数，只留证据。
+  console.error(`[loop-eval] 一趟都不算数（${String(t0.invalid)} 趟全部未起步/被打断）⇒ **拒绝出数**：`
+    + `分母为空时印出来的成功率只会误导（原文："分母不完整时任何分数都是假的"）`);
+} else {
+  console.log(`[loop-eval] 合计 ${String(t0.pass)}/${String(t0.total)} 达标`
+    + (t0.invalid > 0 ? ` · **${String(t0.invalid)} 趟无效未计入分母**（未起步/被 provider 打断）` : "")
+    + ` · 实付≈¥${cny.toFixed(3)} · 每达标任务 ¥${t0.pass > 0 ? (cny / t0.pass).toFixed(4) : "∞"}`);
+}
 await writeFile(join(ROOT, OUT, "readings.json"), JSON.stringify(rows, null, 1), "utf8");
 console.log("[loop-eval] 读数写出 " + OUT + "/readings.json");
