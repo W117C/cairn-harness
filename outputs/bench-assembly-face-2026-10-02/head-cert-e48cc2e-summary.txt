@@ -1,0 +1,58 @@
+目标提交：e48cc2e（--at=HEAD）
+checkout exit=0
+已核：TREE=e48cc2ed6857ef6ec60d461e2b1d8ae1cece95c1｜判卷四面在飞 0 项
+依赖核对：该提交声明 10 项，缺 0 项
+  子仓库 fixtures/bench/bench-bugfix-async/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-bugfix-crossfile/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-bugfix-pagination/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-feature-csv/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-feature-export/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-feature-flag/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-feature-memo/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-long-chain-32/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-long-chain-48/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-long-horizon/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-long-horizon-30/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-refactor-callsite/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-refactor-dedupe/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-refactor-rename/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-refactor-signature/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+⚠️ 这些靶子仓库的依赖补不齐：fixtures/bench/bench-bugfix-async、fixtures/bench/bench-bugfix-crossfile、fixtures/bench/bench-bugfix-pagination、fixtures/bench/bench-feature-csv、fixtures/bench/bench-feature-export、fixtures/bench/bench-feature-flag、fixtures/bench/bench-feature-memo、fixtures/bench/bench-long-chain-32、fixtures/bench/bench-long-chain-48、fixtures/bench/bench-long-horizon、fixtures/bench/bench-long-horizon-30、fixtures/bench/bench-refactor-callsite、fixtures/bench/bench-refactor-dedupe、fixtures/bench/bench-refactor-rename、fixtures/bench/bench-refactor-signature ⇒ 在其中真跑命令的判卷红**不可归因于代码**
+import 面：3311 条边｜悬空 0（其中存量已豁免 0）
+门表：32 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证门面（22 道，名单取自 e48cc2e）==
+  ✅ no-progress-check exit=0 290ms（预算 1100ms）
+  ✅ prune-check exit=0 341ms（预算 1100ms）
+  ✅ fork-check exit=0 301ms（预算 1100ms）
+  ✅ compaction-check exit=0 400ms（预算 1200ms）
+  ✅ docs-check exit=0 696ms（预算 1300ms）
+  ✅ memory-check exit=0 555ms（预算 1300ms）
+  ✅ head-import-check exit=0 1531ms（预算 2400ms）
+  ✅ autonomy-check exit=0 613ms（预算 1500ms）
+  ✅ sandbox:check exit=0 687ms（预算 1700ms）
+  ✅ security-check exit=0 577ms（预算 1500ms）
+  ✅ provider:check exit=0 284ms（预算 1300ms）
+  ✅ routing-check exit=0 490ms（预算 1400ms）
+  ✅ model-surface-check exit=0 593ms（预算 1300ms）
+  ✅ prefix-churn-check exit=0 650ms（预算 1500ms）
+  ✅ prompt-surface-check exit=0 407ms（预算 1400ms）
+  ✅ replay-determinism-check exit=0 335ms（预算 1100ms）
+  ✅ cost-per-progress-check exit=0 283ms（预算 1000ms）
+  ✅ web-fetch-check exit=0 347ms（预算 1200ms）
+  ✅ gym-check exit=0 1225ms（预算 2400ms）
+  ✅ gate-check exit=0 2175ms（预算 5400ms）
+  ✅ evidence-typecheck-check exit=0 3343ms（预算 5300ms）
+  ✅ mutate-needles-check exit=0 15985ms（预算 20000ms）
+  认证门面=22 道（跑到 22）｜绿 22 道｜⚠️ 超预算 0
+
+== 认证汇总 ==
+  TREE=e48cc2e DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-gate-head-cert.lock）
+  Test Files 281 passed (281)｜Tests 3805 passed (3805)｜exit=0（退出码直接取，不接管道）
+  并发判卷=起前 0 套／跑完 1 套（撞窗：本仓判卷有读写共享 /tmp 的用例）
+  本趟墙钟 250.57s（同一进程 hrtime 实测·口径＝起跑→汇总那一行，不含提前退出的那些趟）
+  贴帽读数（缺省＝config 里的 testTimeout=30000ms）：3805 条里 0 条用时 ≥ 有效预算 80%｜无显式预算按缺省算 3544 条｜标题非字面量（it.each／插值／拼接，按缺省算）116 条｜预算没落到 0 条｜无｜离帽余量最近：tests/m3c.test.ts·M3c pipeline 哑 sequencer（零 LLM） 未获 15172ms/25000ms=61%；tests/evidence-typecheck.test.ts·门那一半：runner 的两个拒绝分支各自要出声 拼错的开关 ⇒ 退 5012ms/15000ms=33%；tests/mutate-shards.test.ts·treeProblem 与编排器的前置闸：脏树不许当片用 同一宿主被 3343ms/15000ms=22%
+  逐条日志：/tmp/dsh-head-cert-e48cc2e
+  未回收认证树 .worktrees/gate-head-cert：不是本次新建的树（复用来的共享树）⇒ 不收
+  常驻残留树=1（/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-verify@d8d6167）（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）

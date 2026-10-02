@@ -9887,3 +9887,9 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 2. **成因（本笔自己带的，不是旧账）**：新增判卷字段 `.why「BENCH_KNOBS」` 同时命中两处生产字面量（`scripts/lib/eval-assembly.ts` 未表态原因串 ＋ `scripts/loop-eval.ts` 拒绝出数文案）⇒ 顶包候选 10 → 11 而帽 10。第 297 页第 4 条当时写的是「水位未涨」——那个读数取在**提交之前**的树态，而这把尺按已提交态算，我那笔正是往里加东西的那一笔：同一会话里「改动前量到的水位」不能给「改动后」背书，落库后要重量。
 3. **修法**：把 lib 那句改成「装配表里查不到这一枚…」，判卷字段随之改钉这句 ⇒ 共享字面量拆成一处，水位回 **10 条（帽 10）**、`prose-needle-scan` 退 0；`tests/eval-assembly.test.ts`＋`tests/prose-needle-scan.test.ts` 99 条全绿。没抬帽、没豁免、没动别的文件。锚点针脚逐条复核未被这两行改动波及（`killer 指针失效 0` 在改动前已量）。
 4. **证据**：`outputs/bench-assembly-face-2026-10-02/`（新增 `head-cert-d8d6167.log`＋`-summary.txt`＋`mutate-verify-50.log`；readings §6–§7 改成两态各一条）。锚点复验：干净树 `--changed-since=HEAD~1` 选中 **50/1263**、全部变异被正确杀死、60.9s（本簇 11 条逐条 ✅，单条 0.7–0.8s）。
+
+### 2026-10-02 · 第 297 页补 凭证（1/1）：`e48cc2e` 认证通过——门面 22 道绿／全量 281 文件 3805 条绿／收尾复核=同一笔；`d8d6167` 那笔不算（同一页上一条已点名）
+
+1. **读数**（`outputs/bench-assembly-face-2026-10-02/head-cert-e48cc2e.log`＋`-summary.txt`）：`认证门面=22 道（跑到 22）｜绿 22 道｜超预算 0`；`Test Files 281 passed (281)｜Tests 3805 passed (3805)｜exit=0`（这一行的退出码是日志自己打的，不是包装层给的——本次两者一致）；`TREE=e48cc2e DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔`；墙钟 250.57s；贴帽读数 3805 条里 0 条 ≥ 有效预算 80%，离帽最近 61%。
+2. **两条不粉饰的话**：`并发判卷=起前 0 套／跑完 1 套` ⇒ 收尾时场上多了一套别人的判卷，两态全绿且树仍在同一笔，所以不改判，但不许写成全程独占；`常驻残留树=1`（`.worktrees/gate-mutate-verify@d8d6167`，detached∧0 项在飞∧那一笔已入库）＝命中回收判据，**判据不是授权**，那棵是我这簇用过的树，等点头再收，没就地删。
+3. **锚点与尺**：本簇 11 条锚点在干净树逐条 ✅（`mutate-verify-50.log`，选中 50/1263、60.9s、判卷 spawn 100 次）；判卷 16 条 162ms；`针脚体检 1263 条——阻断 0、未入库面 0、钉在飞文本 0、killer 指针失效 0`（`needle-audit-postcommit.log`）。
