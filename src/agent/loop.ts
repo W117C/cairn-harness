@@ -8,6 +8,9 @@ import type { LegacyNextProvider, ModelOutput, Provider } from "../providers";
 import { streamFromNextSource } from "../providers";
 import { failureDigest, repeatDigestNote, verifyOutcomeCause, type VerifyHook, type VerifyOutcome } from "./verify";
 import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckTurn } from "./stuck";
+// M10②：无进展阶梯接进运行循环（此前 `no-progress.ts` 全树零生产消费者，只在门里跑）。
+// 取的全是纯判据：`no-progress.ts` 只做判断，出声与措辞在本文件（判据别抄第二份）。
+import { detectAlternatingThrash, detectVerifyStagnation, noProgressLadder, verifySignature, type VerifyBeat } from "./no-progress";
 import { mayHaveWrittenDisk } from "./write-face";
 import { TOOLS, type ClarifyChannel, type PlanChannel, type ToolContext, type ToolName } from "../tools";
 
@@ -182,6 +185,13 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
   // 只提示一次：第 5、6 次再叠同一句话本身就是新的 token 开销，而忽略提示的模型不会被复读说服。
   const stuckTurns: StuckTurn[] = [];
   const nudgedActions = new Set<string>();
+  /** M10②：本 run 的验证拍（无进展判据 R1「同一条验证结论连红且中间无写」的唯一取料口）。
+   *  **只留最近 8 拍**：判据要的是"当前还在不在原地打转"，更老的拍与结论无关，也不随轮数增长。
+   *  与 `judgeNoProgressEvents` 同源：签名取自**刚落进事件流的那份（已脱敏）结果**，
+   *  免得"循环这条路的判据"与"门／语料那条路的判据"各看一份数据（第十三族：同一谓词两份）。 */
+  const verifyBeats: VerifyBeat[] = [];
+  let wroteSinceVerifyBeat = false;
+  const nudgedNoProgress = new Set<string>();
   /** 跑一拍 verify 系统门。两种形态：
    *  - manual（模型自调）：有配对的 tool_call ⇒ 失败原文注入同轮继续修，返回 "continue"。
    *  - auto（harness 收束前补拍）：**没有**配对的 tool_call，也就没有合法的**同轮**注入通道
@@ -211,17 +221,32 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
     if (!outcome.ok && !envBeat) chargedAttempts += 1;
     const attempt = outcome.ok || envBeat ? chargedAttempts + 1 : chargedAttempts;
     if (envBeat) envVerifyBeats++;
+    // M10②：把这一拍记进无进展判据的窗口。签名取**刚落进事件流的那份（已脱敏）结果**——
+    // 与 `judgeNoProgressEvents` 看的是同一份数据，不另算一份（同一谓词只留一份）。
+    // `wroteSinceLast` 是判据的关键位：两次同签名红之间**有过成功的写**就算"在换路子试"，
+    // 不算停滞（见 `detectVerifyStagnation` 的注释：那是 verify 上限该管的事）。
+    const beatResults = redactVerifyResults(outcome.results);
     await events.append({
       type: "verify_result",
       callId,
       ok: outcome.ok,
       attempt,
       maxAttempts: maxVerify,
-      results: redactVerifyResults(outcome.results),
+      results: beatResults,
       // 归因落进事件流（审计面）；下面三处出口据此决定"这一拍算谁的账"。
       ...(cause === undefined ? {} : { cause }),
       ...(auto ? { auto: true } : {}),
     });
+    {
+      const { signature, named } = verifySignature(beatResults);
+      verifyBeats.push({
+        index: verifyAttempts, attempt, maxAttempts: maxVerify, ok: outcome.ok,
+        signature: outcome.ok ? "ok" : signature, named,
+        wroteSinceLast: wroteSinceVerifyBeat, userSpokeSinceLast: false,
+      });
+      if (verifyBeats.length > 8) verifyBeats.shift();
+      wroteSinceVerifyBeat = false;
+    }
     if (outcome.ok) return "stop"; // 验证通过 → 立即停止，不再调用模型
     // 自动拍：**同轮**不外注（没有合法通道），但红不是到此为止——下一轮的投影会把它
     // 回流成一条 user 消息（context.ts 的 autoVerifyNote）。缺省仍不收第二意见：直接收束。
@@ -260,6 +285,31 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       : "";
     const repeat = digest === lastVerifyDigest;
     lastVerifyDigest = digest;
+    // M10②：无进展阶梯——**`no-progress.ts` 的唯一生产消费者**（此前它全树零消费者，只在门里跑；
+    // 判据写好了没人用，等于模型的"原地打转"没有任何观察者）。
+    // 接**在这里**（verify 的手动拍）而不是通用工具块：verify 调用在本文件上面就被拦下并 `continue`，
+    // 通用块对它**根本不执行** ⇒ 接在那儿对"只调 verify 的跑"是死路（我先接错一次，判卷当场抓住）。
+    // 判据全是纯函数，本文件只负责出声与措辞（同一谓词不抄第二份）。
+    // 只补**新信号**那一支（验证停滞 R1 / 往返抖动 R3）：`stuck` 那一支的模型可见措辞是上面通用块里的
+    // `[repeat]`（有判卷逐字钉着），不许在这里出第二个同义出口。`silent` 时一个字都不加。
+    const stagnation = detectVerifyStagnation(verifyBeats);
+    const thrash = detectAlternatingThrash(stuckTurns);
+    const np = noProgressLadder({ stuck: detectStuck(stuckTurns), stagnation, thrash });
+    const npKey = np.rules.join("|");
+    const freshSignal = np.rules.some((r) => r === "verify_stagnation" || r === "alternating_thrash");
+    // 每个 rules 组合只出一次：复读同一句话本身就是新的 token 开销，而忽略提示的模型不会被复读说服。
+    //
+    // **措辞刻意不复述失败正文**：第 2 拍与上一拍逐字相同时，本函数上面已经改用 `repeatDigestNote`
+    // 只注一行（`tests/verify.test.ts` 钉着"不重发正文"这条省 token 的语义）。若这里把 `np.evidence`
+    // 整段带上，等于把刚省下的正文又塞回去——实测：那条判卷当场红。
+    // 所以只报「卡在哪一件 + 第几次」：**指名不等于抄原文**，那一拍的原文本来就在模型手里。
+    const which = stagnation.stagnant
+      ? `同一条验证结论已连红 ${String(stagnation.repeats)} 次且中间没有任何写入`
+      : `同一对动作往返 ${String(thrash.thrashing ? thrash.cycles : 0)} 个来回且观察也回到原值`;
+    const noProgressNote = freshSignal && !nudgedNoProgress.has(npKey)
+      ? `\n[no-progress] ${which}——同一条路再走一遍不会改变结论：换一个探针（改命令 / 换靶子 / 先 read 那个一直在报错的文件）或说明卡点。`
+      : "";
+    if (noProgressNote !== "") nudgedNoProgress.add(npKey);
     await events.append({
       type: "tool_result",
       callId,
@@ -268,7 +318,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       // verify_result 那份脱敏了而这份不脱敏，等于掩码留在门里、钥匙落在门口。
       // 脱敏只发生在落盘面：`lastVerifyDigest` 的「逐字相同」比的是内存里的原值，
       // 重复注入的判定不受影响；模型同轮看到的也还是原值（同 runAgent 工具面那条口径）。
-      output: redactSecrets(envPreface + (repeat ? repeatDigestNote(outcome, attempt) : digest)).text,
+      output: redactSecrets(envPreface + (repeat ? repeatDigestNote(outcome, attempt) : digest) + noProgressNote).text,
     });
     return "continue";
   };
@@ -505,6 +555,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       if (result.ok && mayHaveWrittenDisk(name, output.args ?? {})) {
         wroteThisRun = true;
         wroteSinceAutoBeat = true; // 返修是否算「真去修了」只看这一位；没改盘就不配再验一遍
+        wroteSinceVerifyBeat = true; // M10②：判据的另一位——两拍同签名红之间**有过成功的写**就算在换路子试
       }
     }
     if (!sawToolCall) {
