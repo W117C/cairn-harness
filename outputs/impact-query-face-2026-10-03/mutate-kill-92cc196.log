@@ -1,0 +1,90 @@
+[mutate-verify] checkout exit=0：.worktrees/gate-mutate-import → 92cc196
+改动面派生：rev=HEAD~1 → 变更文件 18 个 ⇒ 选中锚点 79/1319 条
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-import.lock）
+变异验证：79 条
+✅ impact-closure-glob-broken — 波及闭包的入面从 glob 匹配退化成整串相等（目录型 resources 声明
+ 再也算不出波及）。第 306 页把这段循环抽成 `closureFilesOf` 之后，针脚跟着搬到 `affectedFilesOf` 的入面那一行（**不是**退回旧写法讨好门） ｜本机实测 3.0s／2 拍
+✅ impact-query-param-whitelist-removed — 参数「恰好给一个」的校验摘掉（两个都给时 file 分支先返回、symbol 被静默忽略；都不给时拿 undefined 去查空图 = 假答案） ｜本机实测 2.1s／2 拍
+✅ impact-query-unknown-symbol-silent — 图里没有的符号不再说明原因（改名后的符号会被报成「波及半径为 0」——模型据此判定没人用，直接删掉它） ｜本机实测 1.3s／2 拍
+✅ impact-query-spec-name-drift — 模型可见规格与可执行实例改名分叉（模型调 impact_query、工具表只有 impact ⇒ 「执行面有、模型面没有」的原罪复发） ｜本机实测 1.6s／2 拍
+✅ impact-query-file-mode-lists-local-symbols — file 模式改回照抄 fileImpact.symbols（局部变量 base/boosted 混进摘要：一屏无关名字，token 白花还不给可执行信息） ｜本机实测 1.4s／2 拍
+✅ impact-query-deps-mode-ignored — deps 分支不进入（参数收了、规格也写了，结果仍只给「谁在调用我」⇒ 反向依赖理解重新变成够不着的能力） ｜本机实测 1.4s／2 拍
+✅ impact-query-deps-combination-unguarded — deps 配 symbol 时不再报错（被静默忽略 ⇒ 模型以为拿到了依赖清单，实际拿到的是波及清单） ｜本机实测 1.3s／2 拍
+✅ impact-query-deps-noun-leaks-into-up — up 方向改用语义标签（措辞串门）⇒ 不带 deps 的既有调用输出不再逐字不变，「谁在调用我」被说成「我在调用谁」 ｜本机实测 1.5s／2 拍
+✅ impact-query-deps-ghost-file-silent — deps 分支不查图内成员（路径写错/后缀不支持时报「依赖面为 0」）⇒ 模型把「没扫到」读成「这个文件不依赖任何东西」 ｜本机实测 1.3s／2 拍
+✅ impact-note-symbols-uncapped — 无调用点分支的符号清单取消每文件帽 ⇒ 这条是**最常见**分支，大文件上百个定义（含局部名）整串进每次写入的 tool_result ｜本机实测 0.8s／2 拍
+✅ impact-note-count-lies — 计数尾写死帽值 ⇒ 「等 4 个」与只列 4 个自相矛盾，模型据此以为文件里就这几个定义（少字节的前提是如实报数） ｜本机实测 1.1s／2 拍
+✅ impact-cause-existence-collapsed — 「不在图内」的成因分诊退回一句话：不再分辨「路径下根本没有这个文件」⇒ 模型对一条写错的路径收到的是「图外、未知 ≠ 0」，于是它去换查法而不是去 glob，白跑一轮（旧文案就是这个形状） ｜本机实测 1.6s／2 拍
+✅ impact-cause-outside-graph-collapsed — 第三种成因（文件在盘上、后缀支持、却在图外——实测支配本仓 36 个图外源码文件的那一类）被并回「没有文件」那句 ⇒ 真缺席重新变回一句假指引，「未知 ≠ 0」这句也不再出现在模型面前 ｜本机实测 2.1s／2 拍
+✅ impact-cause-cap-position-collapsed — 帽外那一支被并回「快照滞后」那句 ⇒ 模型收到「再问一次即可进图」，而事实是再问一万次它也在帽外（本仓实测 36 个文件就是这么消失的）——指错下一步比不说更费轮次 ｜本机实测 1.9s／2 拍
+✅ impact-cause-unknown-note-lost — 丢掉「分辨不出」那一支 ⇒ 重扫失败也去走「永久排除」/「快照滞后」的具名结论。注意这一支的判据在**纯函数**上（把 rg 弄失败又能让文件在盘上的代价不划算）：存活的第一版锚点钉的是 .catch 那格，而 .catch 没有任何观测者——换钉法，不撤判据 ｜本机实测 1.5s／2 拍
+✅ impact-cause-rescan-failure-claims-permanent — 把「扫不动」交回的值从 null 改成 -1 ⇒ 「不确定」在证据上被冒充成「被 .gitignore 永久排除」，模型就此放弃等建图、直接换查法。第一版锚点钉在旧的内联 .catch 上当场存活（那格没有观测者），所以先把 seam 拆成 graphCandidatePosition 并补正反用例，再回来钉这一格 ｜本机实测 1.5s／2 拍
+✅ tags-version-impact-face-dead — impact 这张图独立于 map 抄了一份缓存读取面 ⇒ 只修 map 那一支时，影响面照旧吃旧 tags。两支同值才成立的不变量，变异必须各自废一次（上一支锚点测不到这一支） ｜本机实测 1.4s／2 拍
+✅ impact-query-defless-claims-impact — 「图里没有它的定义」这一格被删 ⇒ `upward` 把全部同名引用点原样吐出，于是外部/全局符号（`describe`、`expect`）得到「波及 179 个文件」——把「谁提到这个名字」冒充「改它会波及谁」，比回答不了更坏 ｜本机实测 1.6s／2 拍
+✅ list-rows-not-flattened — `--list` 不再把字段压成一行 ⇒ desc 里带换行的那条被拆成两行，行数列数都不对，而吃这份取料面的两把静态尺只是**少读一条**（不报错）。第 141 页实测：表里 833 条，尺只读到 832 条。（第 163 页补⑵：这一支的写法从「逐行 console.log」改成「整块 writeSync」，针脚跟着实现走——旧针脚 `].map(oneLine).join(\t));` 当场 0 命中，是门喊的，不是我看出来的。） ｜本机实测 2.0s／2 拍
+✅ head-pointer-dimension-not-summed — 第 6 维算出来了却没喂进求和 ⇒ 门照跑、汇总照印绿（接线没有编译期信号）。针脚取两行：这条锚点自己的 apply 字面量里也写着那两行文字（同一个文件）。 ｜本机实测 0.9s／2 拍
+✅ baseline-red-triage-call-removed — 分诊算出来了但基线那一支不接 ⇒ lib 单测全绿、门照旧把环境红报成阻断（接线没有编译期信号）。针脚取两行避开本条自指。 ｜本机实测 1.2s／2 拍
+✅ runner-attribution-call-removed — runner 不调这把尺（归因那一步摘掉）⇒ lib 的单测全绿而门照旧印 ✅：接线没有编译期信号。针脚取两行——本条 apply 的字面量里也写着那句调用（同一个文件），单行判据会连「被摘掉那次」也读成还在。 ｜本机实测 1.0s／2 拍
+✅ loose-pointer-computed-not-wired — 尺接在门上但喂空表 ⇒ 印出来的永远是「松钉指针 0 条」（规则 230 的接线课：钉调用点连同它的入参，只钉函数名则「算出来不接」存活）。针脚取两行是为绕开自指：单行的话这条 apply 自己就含那句文字，本文件命中 2 处会落进「待复认」 ｜本机实测 1.0s／2 拍
+✅ pointer-block-dimension-not-summed — 新维算出来了却没喂进求和 ⇒ 门照跑、汇总照印绿。针脚取两行是为绕开自指：这条锚点自己的 apply 里也写着那句文字（单行 needle 会在本文件命中 2 处，落进「待复认」那一档） ｜本机实测 1.1s／2 拍
+✅ mutate-lock-not-acquired — 占锁那一步换成「自己拼一个空结果」＝算出锁面却不占 ⇒ 同树两个 mutate-verify 照旧并发抢 .mutbak，而 tool-lock 变成第二份没人调的 lib（规则 230 的「算出来不接」同格）。针脚带真换行：这张表就写在同一个文件里，不带换行的针脚会被表里那段转义文字命中，改了表、实现没动（规则 236） ｜本机实测 2.3s／2 拍
+✅ mutate-lock-read-only-face-locked — 把只读的 `--list` 也接去占锁 ⇒ 两条并发 --list 互相拒跑，而吃 `--list` 的那两把静态尺（anchor-titles／gates）会在别人跑表时集体红——这道门不许把**不改盘**的那一半也关死（收紧必须配反向对照，规则 227）。**第 186 页重铸**：这条从第 163 页起一直存活，原因不是「场上没人占锁」而是「占错了锁」——旧改法写死 `tree: ROOT`，而判卷与变异机都带 `--lock-tag` ⇒ 探针种下的那把锁叫 `mutate-verify-judge-<pid>.lock`，突变体去占的却是 `mutate-verify-<树名>.lock`（没人）⇒ 拿到锁照常跑，行为零差异（等价突变，规则 260 的第二形态：不是判据没有观测者，是**突变挑错了资源**）。现在改法与真实占锁那一支用同一个身份表达式（`lockTagRaw.given ? lockTagRaw.value : ROOT`），于是被判卷那颗活人锁当场拦住 ⇒ exit 2 ≠ 0。`--check-needles` 那一支仍只由位置比较钉（真跑它一次 ≈7.7s，而挂在本文件的锚点几十条、每条两拍 ⇒ 实测把本判卷抬到 19 分钟，故意不换） ｜本机实测 2.3s／2 拍
+✅ mutate-lock-cell-not-printed — 占到没占到锁不进读数 ⇒ 凭证里分不清这次是独占、是没占、还是占锁那一步根本没接（规则 211：半把尺与没尺要各自看得见） ｜本机实测 2.3s／2 拍
+✅ mutate-lock-tag-ignored — 算出标签却不接进锁身份（`tree` 仍然写死 ROOT）⇒ 判卷带标签也没用，它 plant 的那把与子进程读的那把不是同一文件：三条锁判卷全绿，而机器一跑表它们就集体判「基线不绿」（09-28 实测 46 条，规则 230「算出来不接」第六次） ｜本机实测 2.2s／2 拍
+✅ mutate-flush-helper-back-to-async-write — 把「写满为止」那一圈拆掉（`while`→`if`）＝一次 `writeSync` 只交得进内核缓冲那一截，剩下的直接丢：09-28 实测第一版就这么把 920 行的名单砍到几百行，三条吃 `--list` 的判卷一起红。四个出口共用这一圈，所以这一针同时守着名单／残留提示／针脚汇总／本次耗时（规则 214/225） ｜本机实测 1.6s／2 拍
+✅ mutate-flush-one-site-bypasses-helper — 只把 `--list` 这一处绕开 helper（其余三处照旧）⇒ 四个同步出口数变 3，而表照样印得出来、退出码照样 0：这正是「一处的例外长期活着」的形状。计数按行首语句核，绕开＝少一处 ｜本机实测 0.8s／2 拍
+✅ changed-since-list-mode-always-filters — 把「筛过的名单」当默认：没给 `--changed-since` 时「选中 0 条」是**未筛**，一律 filter 会让 `--list` 印 0 行，而吃这条取料的两把静态尺会把整张表读成「表空了」（空面与没取到是两个数，规则 129/196/222） ｜本机实测 3.2s／2 拍
+✅ changed-since-derived-not-unioned-into-targets — 算出派生名单却不并进 targets ⇒ 门照跑人手抄那几条，而输出里那句「选中 N/M」仍然印得出来的样子最骗人（规则 230「算出来不接」第四次命中，这次的接线在参数分流处）。第一版判卷写成 `toContain(那行文字)` ⇒ **存活过一次**：表里那份针脚字面替实现背了书（规则 236 第五次），现已改钉带真换行的跨行正则 ｜本机实测 0.8s／2 拍
+✅ changed-since-face-passed-as-empty — 把改动面传成空表（这里是最容易写错的一种：变量名打错成字面量）⇒ 派生恒 0 条，而派生行照样印得整整齐齐 ⇒ 「今天没东西要验」被读成「今天改动无关」。第一版**也存活过一次**：那条接线判卷是文字钉，被同文件里表自己的针脚字面满足 ⇒ 现改由 `--list --changed-since=<空树>` 那条行为判卷抓（与空树比＝全部文件都变了 ⇒ 选中必须等于整表） ｜本机实测 0.8s／2 拍
+✅ changed-since-bad-rev-exits-zero — git 取不到改动面时退 0（把「取料坏」当成「没有要跑的锚点」）⇒ 一次拼错的 rev 长得像一次全绿；文本尺的三态在这里是 exit 码这一格（规则 222/227） ｜本机实测 2.0s／2 拍
+✅ cost-rollup-not-fed-by-runner — 汇总吃的是写死的空账本而不是 runner 自己那份 runsMs ⇒ 这一格永远印「spawn 0 次／没有分母」，读起来像「本次没跑」而实际跑了几百条。表与实现同文件，所以判卷钉跨行正则而不是 toContain（规则 236） ｜本机实测 0.8s／2 拍
+✅ cost-run-test-uninstrumented — runTest 不再记这一次的时间 ⇒ 每个位置的中位整个消失，#37 的分母退回到「拿文件时长乘次数」那种推（这条咬的是取料源头，上一条咬的是接线出口） ｜本机实测 0.8s／2 拍
+✅ selector-scan-fed-empty-table — 门那一步喂空表而不是整张锚点表 ⇒ 这一格永远 0/0 且永不红。表与实现同文件，所以判卷钉跨行正则而不是 toContain（规则 236） ｜本机实测 0.8s／2 拍
+✅ run-mode-pattern-not-escaped — 标题原文直接当 `-t` 的正则拼进去 ⇒ 真标题里的 ( ) [ ] . * + 变成通配与量词，选中的可能根本不是那条 killer 用例，而单价读数照旧好看 ｜本机实测 0.9s／2 拍
+✅ run-mode-dash-value-back-to-space-form — 选择子换回 `-t <值>` 的空格写法 ⇒ 凡指针以 `-` 开头就被 CLI 当成旗标：实测那条 `--self-test …` 的基线一拍根本没跑（收尾行读不到），却退 1——旧读数只会喊「基线不绿」，把「取料坏」伪装成「判卷坏了」。这一条的 killer 必须挂**接线判卷**：第一版挂的是那条行为证人，而它自己同时跑两种写法 ⇒ 改生产行改不到它 ⇒ 实测「变异存活：测试全绿」（规则 236 又一次命中：判卷自己再算一遍＝对生产零分辨力） ｜本机实测 0.9s／2 拍
+✅ run-mode-selector-check-dropped — 不分模式一律塞 -t ⇒ 那 13 条「选不中／不唯一」的锚点从此只跑不存在的用例，等于整条保护被换成空转（两种跑法共存是刻意的，见第 169 页未证②） ｜本机实测 0.8s／2 拍
+✅ vacuous-run-guard-dropped — 「选中几条」这道闸整个摘掉 ⇒ 这条闸正是 `-t` 上线唯一的安全带：摘掉后一次改名就能让整条锚点永远绿着跑完（vitest 对无匹配的 -t 退 0） ｜本机实测 0.8s／2 拍
+✅ selector-guard-ignores-multi-hit — 闸退回「只有 0 条／没读到才判坏」⇒ 选中 2 条以上的那一拍被读成测过了，可红的未必是本锚点那条 killer 用例：vitest 的 `-t` 匹配整条标题（describe 前缀也算），而体检数的是 it 字面量——两个分母本来就不是一回事 ｜本机实测 1.0s／2 拍
+✅ unverified-list-not-routed-through-exit — 名单不进那条同步写满的出口 ⇒ 几百条 id（几 KB）交给异步队列后就 `process.exit()`，只剩内核缓冲那一截，而汇总行照样印「未证 N 条」——读者以为名单发全了，按残缺的名单补跑（规则 241 实测砍过 920 行的 --list） ｜本机实测 0.8s／2 拍
+✅ unverified-class-read-from-prose — 按 `why` 的措辞认未证的类别 ⇒ 改一句文案就分错类，「等别人落库」被印成「现在就能补跑」，读者白跑一趟还把那条读成已验；分类必须认字段（stopped／unloadable／refused 名单） ｜本机实测 0.8s／2 拍
+✅ restore-byte-check-neutered — 把还原那一格的判据摘掉（换成恒不成立）⇒ 盘上留着半个突变、或被写成别的内容，这条照样算绿；而收尾那句 `git diff HEAD --quiet` 只在**整轮跑完**时看总账，看不出「第 517 条还原时写歪了」这一格。这一拍换成字节比对本来就是拿「更强的证据」换掉「更贵的一拍」，换弱了就得有人喊 ｜本机实测 0.8s／2 拍
+✅ impact-candidates-count-post-cap — 图自报的候选数取成**切片后**的长度 ⇒ 分母恒等于收录数，覆盖面自述在任何仓上都闭嘴（`candidates <= files` 永真）——比旧的「非全量但不说几个」更坏：那句子至少还在 ｜本机实测 2.2s／2 拍
+✅ impact-graph-candidates-not-carried-through-report — 分母没穿过 fileImpact ⇒ 只有 symbol 支带数、file 支回到旧句子（三支各组装一次覆盖面，少接一层就是那一支静默不一致，规则 239） ｜本机实测 2.0s／2 拍
+✅ impact-coverage-denominator-constant-zero — 覆盖面句里的漏报数写死 0 ⇒ 句子形状还在、数永远假（「另有 0 个候选没进图」），模型据此认为图基本全量（09-30：这两把纯函数从 tools 挪到 impact/coverage.ts，因为回注摘要与语义租约要说同一句 ⇒ 针脚坐标跟着挪） ｜本机实测 1.4s／2 拍
+✅ impact-coverage-trigger-reverts-to-cap-compare — 阳性一侧不接共用判据、退回旧的 `files < cap` ⇒ 两个方向同时错：候选正好等于帽时**误报**非全量（模型白重问一次），而有文件被读/解析失败跳过时（files < cap 但候选更多）**漏报**（模型以为问全了） ｜本机实测 1.9s／2 拍
+✅ impact-cap-cause-judgement-diverges-from-coverage — 阴性一侧的成因判据不接共用判据、与阳性一侧分家 ⇒ 同一张图一边说「另有 N 个没进图」、另一边说「与帽无关」，两句话互相拆台（共用同一判据是这条政策的形状） ｜本机实测 1.3s／2 拍
+✅ tree-guard-refusal-not-wired — 判据还在、结论不接 ⇒ 拒跑那句话再也不印（五处接线断言都认这个句子，但它们只在真跑那支里跑，机器证人缺位时这一格就是「尺与针脚不同笔」的现行样本）。本条同时回答 #8 的前置疑问：变异机吃不吃 `scripts/*.mjs` 这一面——它杀得动就是吃得下 ｜本机实测 2.5s／2 拍
+✅ impact-lease-partial-graph-silent — 语义租约在图非全量时不出声 ⇒ orchestrator 拿到空波及就当「无冲突」，连审批卡都不发；对照：钩子抛错那一支会 warn＝故障出声、缺料不出声（第 201 页两面实测：缺省臂冲突 0 条＝放行） ｜本机实测 1.4s／2 拍
+✅ impact-hook-note-loses-coverage — write/edit 后那句回注不再带覆盖面自述 ⇒「波及 2 个文件」与「图只扫了 3 个文件」同形，模型以为问全了（读端工具早自述、注入面从不自述＝同族只硬化一支） ｜本机实测 1.6s／2 拍
+✅ verify-per-anchor-cost-not-printed — 逐条结果行不带那一格 ⇒ 整表汇总仍然印「最贵一条」，但「这条锚点值几秒」回到只能推。第 190 页实测按条数装箱：四片各 252 条跑出 323.6／391.1／419.9／443.0s（极差 +37%）⇒ 条数不是重量，而 #28 要的取料面就是这一格（账本 `runsMs` 一直在记，只是没有出口＝规则 245 那一族）。针脚含真换行：表与实现在同一份文件里，单行搜索串会先撞上这张表自己那份引文（规则 247） ｜本机实测 0.9s／2 拍
+✅ wiring-gate-fed-empty-table — 门这一步被喂空表 ⇒ 那一行照印「接上 0／疑空 0／判不了 0」，看起来比不印更干净（第 165 页那条「只印不数＝永远 0」的同款形状）。针脚带真换行是自-hosted 的硬性写法：不带就会先改到这张表自己那一行 ｜本机实测 0.9s／2 拍
+✅ exits-hint-guard-dropped — 存活提示的出口那一半被摘掉（或阈值挪到 0）⇒ 要么对每条锚点都喊、要么永远不喊，而第 262 页那条存活本来能被这句话直接指到成因（规则 329） ｜本机实测 0.8s／2 拍
+✅ exits-census-not-spoken — 普查行把可数面与多出口那两格印成常数 ⇒ 这把尺开了张却没人读得到真数（第 263 页现读 961／533，而 961＋175＋3＝1139 这个同分母等式也就没人核了） ｜本机实测 0.9s／2 拍
+✅ impact-attribution-no-evidence-read-as-kept — 「没有 import 面可判」被读成「正证成立」⇒ 全局脚本仓库与老缓存条目一起被算成**已核实无归属**，措辞里那句「保守计入」失去意义（本仓反复判死的那件事：读不到与没有同形） ｜本机实测 0.9s／2 拍
+✅ impact-attribution-positive-proof-ignored — 正证那一支被摘掉 ⇒ 只要这个名字被任何 import 绑过，连「恰好就从定义那份文件来的」也一起判死，清单从此**只剩没 import 面的文件**（真枢纽全被自己排除） ｜本机实测 1.0s／2 拍
+✅ impact-attribution-only-first-source-counted — 一个名字从两份文件绑进来时只看第一份 ⇒ 第二份定义的调用点被当成假阳性摘掉，而多来源恰恰是最常见的形状（同一文件 re-export 两个模块） ｜本机实测 1.1s／2 拍
+✅ impact-attribution-reverse-proof-never-drops — 反证那一支回落到 kept ⇒ 整条规则变成只数不删，第 304 页那两个大户（`writeFile` 140／`readFile` 114）一个调用点都不掉，而三态读数里的 dropped 还在动（读着像在工作） ｜本机实测 1.7s／2 拍
+✅ impact-attribution-note-dropped-only-gauge — 空串闸门只核 dropped ⇒ noEvidence 单独非零时整句闭嘴，「这张图有 M 处压根没判」这个事实消失，模型把保守计入的清单当成已收紧的清单 ｜本机实测 0.9s／2 拍
+✅ impact-attribution-note-prints-zeros — 闸门整条拆掉 ⇒ 每次写入的回注都多一截「；归属判定：」（parts 全空时只留个冒号），零回归哨兵那一格（接这维之前逐字相同）当场作废——字节省在没人看的地方就不是省的 ｜本机实测 0.9s／2 拍
+✅ impact-edges-not-filtered-by-attribution — 判据算了、三态也数了，唯独边没摘（本仓「算出来不接」那一族的正形）⇒ 事件流里的 impact_report 与语义租约看到的仍是按名字连的满图，只有读端文案里的 dropped 在动 ｜本机实测 0.9s／2 拍
+✅ impact-upward-attribution-not-applied — 只硬化边构造、`upward` 不吃判据 ⇒ `impact_query` 的符号支继续给出 140 处的满清单，而同一张图的边集已经缩了（三支共用一把判据是这条政策的形状，第十三族） ｜本机实测 1.6s／2 拍
+✅ impact-downward-attribution-not-applied — `downward` 不回落到同一把判据 ⇒「我在调用谁」把 node:fs 的那个同名函数报成仓内的定义，模型顺着这条边跳去改仓内文件（与 upward 两个方向各错一次，修法相反） ｜本机实测 1.6s／2 拍
+✅ impact-attribution-note-not-wired — 判据接进了图而回注摘要没接 ⇒ 摘了多少没人说（模型看到「波及 73 个文件」不知道那 73 已经是判过的），读端工具与注入面又各说各的（同族「只硬化一支」） ｜本机实测 0.9s／2 拍
+✅ impact-tags-cache-imports-guard-dropped — 读缓存只核 tags ⇒ 老条目命中后 imports 是 undefined，归属判据整层拿不到取料，现象＝「加了规则，在自己机器上一点没变」（第十族：缓存那一支不生效） ｜本机实测 1.6s／2 拍
+✅ impact-imports-exit-not-eaten — `fileSymbols` 的第二个出口算出来没接（回空数组）⇒ 每个文件都「有 import 面、一条绑定都没有」，于是**处处判 kept**，规则看着接上了却处处不摘，且读数不是 noEvidence 而是 kept ｜本机实测 0.9s／2 拍
+✅ impact-lease-closure-bypasses-attribution — 波及闭包（＝spawn 准入那把语义租约的冲突预测器）绕过 `upward` 直接吃名字图 ⇒ 读端与注入面已经按归属收窄，租约那条支继续把 `node:fs` 的同名调用方算成冲突源：同一张图在三个消费者身上给出三种宽窄（第十三族「只硬化一支」的第四个实例） ｜本机实测 1.5s／2 拍
+✅ impact-mixed-sites-not-counted — 读端不再数「这一处只归得到别处那份定义」⇒ 那句「清单里可能混有无关文件」永远只能停在猜测，而判据明明就在同一层手里（模型于是继续照着整份清单去动那些与本次编辑无关的文件） ｜本机实测 1.4s／2 拍
+✅ impact-mixed-sites-not-in-note — 分母算出来了却没进注入那一句（本仓「算出来不接」那一族的最新一例）⇒ 报告字段看着完整、判卷读字段也全绿，只有模型实际读到的那句话仍在说「可能混有」——字段与文案分家 ｜本机实测 0.8s／2 拍
+✅ impact-query-union-note-denies-imports — 并集那句回退成「本图只按名字连边、不认 import」⇒ 模型听见一句**假话**就不再去查归属，而第 305 页起图是带 import 落料面的。这句文案此前零观测者（判卷里一句都没钉），所以它烂了没人喊——本仓「模型可见文本的承诺」那一族的老形状，这次配一条正反两半的钉 ｜本机实测 1.4s／2 拍
+✅ impact-query-deps-arm-loses-attribution — deps 那一支（「我在调用谁」）不回落到归属句 ⇒ 三支查询里有一支的清单被收窄过却不说，模型对同一张图拿到三种口径的自述（同族「只硬化一支」） ｜本机实测 2.0s／2 拍
+✅ impact-query-symbol-arm-loses-attribution — symbol 那一支丢掉归属句 ⇒ 最常问的一句「谁在调用它」的答复里，被摘掉的数量不见了；模型把收窄后的清单当成全量，回头就多改几处 ｜本机实测 1.9s／2 拍
+✅ impact-query-file-arm-loses-denominator — file 那一支丢掉分母句与归属句 ⇒ 同一件事实（混进几处、摘掉几处）只在回注摘要里说、查询端不说——模型主动问的时候反而拿得比被动推送更少（读端与注入面各写一份的那族） ｜本机实测 1.9s／2 拍
+✅ impact-query-notes-land-before-the-count — 自述尾巴拼回计数句**之前**（就是 10-03 真仓读数那个形状）⇒ 那一行变成「…（我在调用谁）；归属判定：1689 处已按…排除：引用的外部定义 15 处」——冒号接冒号，读数最要紧的那个数被挤到句子末尾，而「排除：」看着像在解释判据。三条 toContain 判卷对这个顺序全盲，所以这一格只由那条钉同行次序的判卷守（本仓第 4 形态：用例在、标题承诺了，正文却没在判这件事） ｜本机实测 1.9s／2 拍
+✅ impact-query-empty-list-loses-notes — 空清单那一支（「波及半径为 0」/「依赖面为 0」）不接尾巴 ⇒ 只在真给了清单时才自述。而空清单恰是模型最容易照着下单的一格（「没人调用它 ⇒ 可以放心改」），此时更要说这张图判过多少，否则空列表看着像全量（同族「两头断」：有数的那支说了，没数的那支没说） ｜本机实测 1.9s／2 拍
+✅ impact-mixed-note-prints-zeros — 分母句的 0 闸门拆掉 ⇒ 每次查询/回注都多一句「本次清单里 0 处只归得到别处」，而「0 处」在两处文案里读起来像「这份清单全是别处的」——噪声还会挤掉真正有信息的那一句 ｜本机实测 1.4s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 119.0s · 跑了 79/79 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 158 次／79 条（每条次数分布 2×79）· 单次中位 第1次 0.7s／第2次 0.7s· 最贵一条 changed-since-list-mode-always-filters 3.2s
+跑法单价：selector 158 拍·中位 0.67s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-import.lock）

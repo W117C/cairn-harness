@@ -10243,6 +10243,44 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
     `red-machines-25.log`、`needles-precommit.log`、`typecheck.log`、`suite-full.log`＋`suite-full-postfix.log`、`readings.md`）；
     造红台本体在 `outputs/impact-edge-attribution-2026-10-02/red-machines.mts`（IDS 23→25）。
 
+## 2026-10-03 · 第 308 页补 凭证（1/1）：`92cc196` 认证通过——22/22 门绿、干净树 286 文件 3920 条绿、收尾复核＝同一笔；79 条锚点在干净树逐条被杀
+
+1. **认证读数**（`outputs/impact-query-face-2026-10-03/head-cert-92cc196.log`，`CERT_EXIT=0`）：
+   `认证门面=22 道（跑到 22）｜绿 22 道｜⚠️ 超预算 2`；
+   `TREE=92cc196 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有`；
+   干净树判卷 `Test Files 286 passed｜Tests 3920 passed｜exit=0（退出码直接取，不接管道）`；本趟墙钟 288.75s。
+   干净树 typecheck `exit=0（0 报错）`、`import 面：3389 条边｜悬空 0（其中存量已豁免 0）`。
+2. **超预算 2 道是一格新账，已挂任务不藏进"绿 22"**：`mutate-needles-check 23701ms > 20000ms`、
+   `head-import-check 2423ms > 2400ms`（后者边际）。表上写的 needles 实测是 **9756ms**（`scripts/gate-manifest.ts:220`，HEAD 态），
+   第 307 页声明 16.98s／1312 条，现在 1319 条读到 23.7s。
+   **同温提醒**：同一趟里 `evidence-typecheck-check` 在两趟之间从 5188ms 跳到 6773ms ⇒ 认证趟里有隔壁并发判卷，
+   单价会被顶上去，所以 23.7s 不能直接当这把门的本征耗时用；结案要先单独跑三趟取中位（任务 #20，
+   `scripts/gate-manifest.ts`／`package.json` 现由隔壁持有 ⇒ 抬预算那一笔要等它们落库）。
+3. **同分母自洽**：干净树 **3920** ＝ 上一笔认证（`b1b4b51`）的 3913 **＋ 7**，那 7 条正是本页新增的 7 条用例
+   （文案两半、三支出口、分母纯函数、同行次序、两个空清单分支）；
+   主树 `294 文件｜4065 条` vs 认证树 `286｜3920` ⇒ 条数差 **145**（与上三笔同一批），文件差 **8** 已逐条对上号：
+   未跟踪 5（`apply-patch-lf-shapes`／`bandit-primitives`／`ledger-manifest`／`memory-store-pure`／`worktree-pure`）
+   ＋ `git add -N` 意图条目 2（`repo-hygiene-check`／`security-merge-gate`——盘上有内容、判卷会跑，而 `git diff --cached` 不列它们）
+   ＋ 1 那趟里存在、跑完被隔壁删掉的草稿（`event-log-timestamps`，就是页 §7 那条装载失败）。
+   **取料方法**：从主树那趟日志抽出 294 个判卷文件名，与 `git ls-tree -r 92cc196` 的 `tests/**.test.ts` 求差 ⇒ 8 条全点得出名；
+   并集读数（"差 145 条"）不能当"每一处都对上了"的证人（规则 255），所以这里给的是逐条名单而不是总数。
+4. **认证目标先漂了一次（撞窗的新形状）**：我提交后 HEAD 已被隔壁推走一笔 `ae32ae1`（桌面端 M2-1，类型增量），
+   所以默认认证 HEAD 的那趟**认证的不是我这一笔**——发现于日志首行 `已核：TREE=ae32ae1…｜名单取自 ae32ae1`。
+   处置：叫停那一趟，改用 `--at=92cc196` 重跑。被我叫停的那趟留下一把陈旧锁（`pid 26040` 已退出），
+   重跑那趟自己按证据回收并出声（`♻️ 回收一把不能用的锁…崩溃残留，按证据回收`）⇒ **杀认证趟的残骸有主人、会被接住**，
+   这一格不用手工删锁（也不该删）。教训写死：共享树上「HEAD 还是我的」是**假设**，认证前先读 `TREE=` 那一行。
+5. **干净树逐条击杀**（`mutate-kill-92cc196.log`，`KILL_EXIT=0`）：`rev=HEAD~1 → 变更文件 18 个 ⇒ 选中锚点 79/1319 条`，
+   `全部变异被正确杀死（断言非恒真）`，本次 119.0s、成本分母 `判卷 spawn 158 次／79 条（每条 2 拍）`；
+   本页 7 枚锚点逐条点名被杀（含那枚新加的次序锚点 `impact-query-notes-land-before-the-count`）。
+   落库后针脚尺归零：`1319 条 —— 阻断 0／未入库面 0／钉在飞文本 0／killer 指针失效 0`
+   （`needles-postcommit.log`，`NEEDLES_EXIT=0`），与提交前那 7 条"钉在飞文本"凑成同一笔的两面。
+6. **一处要更正的账不在页上、在提交信息里**：`92cc196` 的正文写「锚点表 7 枚＝新增 2、重指 4、沿用 1」——**拆法错了**。
+   正解见本页 §6：7 枚全是本笔新增（其中 3 枚出口锚点的针脚在同页内跟着尾巴搬家重指过一次），
+   另有 1 枚**既有**锚点（`impact-query-deps-noun-leaks-into-up`）被重指。
+   没有 amend 那笔提交（未推送可以改，但本仓纪律是"新笔覆盖旧账"），更正留在页上并在这里点名。
+7. **清场判据不是授权**（照旧只报数）：`常驻残留树=2`＝`.worktrees/gate-mutate-import@92cc196`（本会话造红/击杀用的树）＋
+   `.worktrees/gate-mutate-verify@4e0a7de`（隔壁会话的树）。回收要用户点头；`gate-head-cert` 是共享复用树 ⇒ 脚本自己不收。
+
 
 
 
