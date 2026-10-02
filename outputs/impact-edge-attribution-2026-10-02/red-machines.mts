@@ -88,6 +88,12 @@ const IDS = [
   "memory-degraded-sidechat-silent-again",
   "memory-degraded-composer-note-not-pushed",
   "memory-degraded-exit-swallows-again",
+  // 第 316 页：一份读不动的 lesson 文件只丢那一份（隔离／槽位／点名／点名的有界性／谓词与抛出同源）。
+  "lesson-unreadable-name-sinks-whole-batch",
+  "lesson-slot-eaten-by-unreadable-name",
+  "lesson-skip-note-dropped",
+  "lesson-skip-note-name-whitespace-unfolded",
+  "topic-compliance-predicate-decoupled-from-validator",
 ];
 
 // 一个 JS 字符串字面量的正则形状（双引号、单引号两支）。本笔 14 条改法都不含反引号写法，

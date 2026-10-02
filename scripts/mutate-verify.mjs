@@ -12649,8 +12649,8 @@ const MUTATIONS = [
     id: "memory-degraded-worker-silent-again",
     src: "src/agent/worker-prompt.ts",
     test: "tests/memory-degradation.test.ts",
-    desc: "worker 侧不再拼那句降级说明 ⇒ 回到空 catch 的行为：一份坏 lesson 文件让整段记忆消失，"
-      + "而 worker 读到的「没有记忆」与「这仓库没写过教训」同形——它会据此决定要不要相信自己的经验",
+    desc: "worker 侧不再拼那句降级说明 ⇒ 回到空 catch 的行为：整次注入断掉时 worker 读到的"
+      + "「没有记忆」与「这仓库没写过教训」同形——它会据此决定要不要相信自己的经验",
     apply: (s) => s.replace(
       'if (mem.unavailable) messages.push({ role: "system", content: mem.unavailable });',
       'if (false) messages.push({ role: "system", content: mem.unavailable });',
@@ -12685,14 +12685,75 @@ const MUTATIONS = [
     id: "memory-degraded-exit-swallows-again",
     src: "src/agent/memory/inject.ts",
     test: "tests/memory-degradation.test.ts",
-    desc: "把出口退回静默（unavailable 恒 null）⇒ 三个消费者拿到的都是空壳且无人吭声，"
-      + "而这份批里那条**合规**教训也一起没了（实测：一份 lesson-中文命名.md 拖垮整段）。"
-      + "这一枚验的是「点名叫出是哪个文件」——只说「注入失败」等于让人再去 grep 一遍",
+    desc: "把出口退回静默（unavailable 恒 null）⇒ 三个消费者拿到的都是空壳且无人吭声。"
+      + "触发点第 316 页换过一次（坏 lesson 文件名现在只丢那一份，见 lesson-*-isolation 那几枚），"
+      + "这一枚咬的是「@引用决议写不进全局目录」那条**真抛出**的路；验的是「点名到能查的位置」"
+      + "——只说「注入失败」等于让人再去 grep 一遍",
     apply: (s) => s.replace(
       "unavailable: memoryUnavailableText(err instanceof Error ? err.message : String(err))",
       "unavailable: null",
     ),
-    expectFail: "真触发：一份不合规矩的 lesson 文件名 ⇒ 交回 unavailable，并点名是哪一份（不再只说『注入失败』）",
+    expectFail: "真触发：外部引用的决议写不进全局目录 ⇒ 交回 unavailable，原因里带着失败的那条路径",
+  },
+  /* 第 316 页：一份读不动的 lesson 文件该丢那一份，不该丢整段。五枚各钉一格：
+     隔离本身、槽位（先筛后切）、点名行、点名的有界性、谓词与抛出共用同一个决策点。 */
+  {
+    id: "lesson-unreadable-name-sinks-whole-batch",
+    src: "src/agent/memory/inject.ts",
+    test: "tests/memory-lesson-isolation.test.ts",
+    desc: "退回「不筛，直接把整批交给 readTopicBody」⇒ 一个 lesson-中文命名.md 又让同批三条好教训一起消失"
+      + "（第 315 页只是把这件事变得可见，这一枚钉的是它别再发生）",
+    apply: (s) => s.replace(
+      "const { keep, skipped } = splitLessonCandidates(topics, limit, isCompliantTopic);",
+      "const keep = topics.slice(0, limit);\n    const skipped: string[] = [];",
+    ),
+    expectFail: "真触发：一份坏名字 ＋ 三条好教训 ⇒ 好教训全在、unavailable 为 null，点名行说出那一份坏文件",
+  },
+  {
+    id: "lesson-slot-eaten-by-unreadable-name",
+    src: "src/agent/memory/inject.ts",
+    test: "tests/memory-lesson-isolation.test.ts",
+    desc: "先切后筛（topics.slice 在 canRead 之前）⇒ 读不动的那一份占掉一个 limit 槽位，"
+      + "最近 N 条静默少一条；这条只有槽位用例分辨得出来（同批条数少时点名行照样绿）",
+    apply: (s) => s.replace(
+      "return { keep: readable.slice(0, Math.max(0, limit)), skipped };",
+      "return { keep: topics.slice(0, Math.max(0, limit)).filter((t) => canRead(t.topic)), skipped };",
+    ),
+    expectFail: "槽位：坏文件排在最新（modified 最大）时也不许吃掉 limit 的槽位 ⇒ limit=3 仍交回三条好教训",
+  },
+  {
+    id: "lesson-skip-note-dropped",
+    src: "src/agent/memory/inject.ts",
+    test: "tests/memory-lesson-isolation.test.ts",
+    desc: "隔离了却不点名 ⇒ 一份坏文件从此彻底看不见（比第 315 页那一格更静：连「断过」都不再有人知道）；"
+      + "批里只剩坏名字时段还会整个消失（返回 null），所以这一枚同时钉住「条数 0 也要出声」",
+    apply: (s) => s.replace(
+      "const note = lessonSkipNote(skipped);",
+      "const note: string | null = null;",
+    ),
+    expectFail: "整批只有坏名字 ⇒ 段还在、条数 0、点名行说话（旧写法在这里整段返回 null）",
+  },
+  {
+    id: "lesson-skip-note-name-whitespace-unfolded",
+    src: "src/agent/memory/inject.ts",
+    test: "tests/memory-lesson-isolation.test.ts",
+    desc: "点名前不折空白 ⇒ 一个带换行的文件名把一行点名撑成多行——本块按行做预算与丢弃，"
+      + "行结构被外界文件名改掉就等于让它冒充一行段落（indexLine 那支早就折过同样的东西）",
+    apply: (s) => s.replace('n.replace(/\\s+/gu, " ")', "n"),
+    expectFail: "点名有帽：名字里的空白折成单空格、每条截到帽内，整行长度有上限（文件名是外界文本）",
+  },
+  {
+    id: "topic-compliance-predicate-decoupled-from-validator",
+    src: "src/agent/memory/store.ts",
+    test: "tests/memory-lesson-isolation.test.ts",
+    desc: "把写入口的判定换成另一份内联正则（本仓最常见的那件事：同一规矩抄两份、各自漂）⇒ 注入器按谓词筛、"
+      + "写入口按那份正则抛，两份口径在 with/slash 与 65 个 l 上分家。反例读数：放宽**谓词**这一支杀不动这条用例——"
+      + "两边共用一支时它们永远同答（放宽后红的是那四条真盘用例：坏名字变成读得动，整条 lesson 被当教训注入）",
+    apply: (s) => s.replace(
+      "if (!isCompliantTopic(topic)) {",
+      "if (!/^[A-Za-z0-9]/u.test(String(topic))) {",
+    ),
+    expectFail: "同一个决策点：topic 谓词与 validateTopic 的抛出对同一批输入必须同答（注入器筛的就是谓词，抄两份迟早漂）",
   },
 ];
 

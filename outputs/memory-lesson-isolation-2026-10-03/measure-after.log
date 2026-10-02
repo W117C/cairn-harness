@@ -1,0 +1,8 @@
+SRC=/Users/ze/Downloads/deepseek harness/src
+A 一份坏＋三份好 ｜ unavailable=null ｜ 抬头条数=3 ｜ 实际教训=3 ｜ 点名行=有 ｜ 留下的=["教训正文 lesson-a　〔证据: sessi","教训正文 lesson-b　〔证据: sessi","教训正文 lesson-c　〔证据: sessi"] ｜ 点名原文="[lessons] 有 1 个 lesson 文件本轮没读进来（topic 名不合注入器的规矩）：lesson-中文命名"
+B limit=3 四好一坏 ｜ unavailable=null ｜ 抬头条数=3 ｜ 实际教训=3 ｜ 点名行=有 ｜ 留下的=["教训正文 lesson-a　〔证据: sessi","教训正文 lesson-b　〔证据: sessi","教训正文 lesson-c　〔证据: sessi"] ｜ 点名原文="[lessons] 有 1 个 lesson 文件本轮没读进来（topic 名不合注入器的规矩）：lesson-坏 名字"
+C 整批四个坏名 ｜ unavailable=null ｜ 抬头条数=0 ｜ 实际教训=0 ｜ 点名行=有 ｜ 留下的=[] ｜ 点名原文="[lessons] 有 4 个 lesson 文件本轮没读进来（topic 名不合注入器的规矩）：lesson-一、lesson-三、lesson-二（其余 1 个未点名）"
+D 全合规 ｜ unavailable=null ｜ 抬头条数=1 ｜ 实际教训=1 ｜ 点名行=无 ｜ 留下的=["教训正文 lesson-a　〔证据: sessi"] ｜ 点名原文=""
+E 决议写不进去 ｜ unavailable=有（[memory] 本次记忆注入不可用（原因：ENOTDIR: not a directory…） ｜ 抬头条数=无段 ｜ 实际教训=0 ｜ 点名行=无 ｜ 留下的=[] ｜ 点名原文=""
+F 同一个触发、家目录可写 ｜ unavailable=null ｜ 抬头条数=1 ｜ 实际教训=1 ｜ 点名行=无 ｜ 留下的=["教训正文 lesson-a　〔证据: sessi"] ｜ 点名原文=""
+AFTER_EXIT=0

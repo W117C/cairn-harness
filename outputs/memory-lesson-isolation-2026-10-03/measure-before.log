@@ -1,0 +1,8 @@
+SRC=/Users/ze/Downloads/deepseek harness/.worktrees/probe-mem-iso/src
+A 一份坏＋三份好 ｜ unavailable=有（[memory] 本次记忆注入不可用（原因：remember: topic 必须是 1-64…） ｜ 抬头条数=无段 ｜ 实际教训=0 ｜ 点名行=无 ｜ 留下的=[] ｜ 点名原文=""
+B limit=3 四好一坏 ｜ unavailable=有（[memory] 本次记忆注入不可用（原因：remember: topic 必须是 1-64…） ｜ 抬头条数=无段 ｜ 实际教训=0 ｜ 点名行=无 ｜ 留下的=[] ｜ 点名原文=""
+C 整批四个坏名 ｜ unavailable=有（[memory] 本次记忆注入不可用（原因：remember: topic 必须是 1-64…） ｜ 抬头条数=无段 ｜ 实际教训=0 ｜ 点名行=无 ｜ 留下的=[] ｜ 点名原文=""
+D 全合规 ｜ unavailable=null ｜ 抬头条数=1 ｜ 实际教训=1 ｜ 点名行=无 ｜ 留下的=["教训正文 lesson-a　〔证据: sessi"] ｜ 点名原文=""
+E 决议写不进去 ｜ unavailable=有（[memory] 本次记忆注入不可用（原因：ENOTDIR: not a directory…） ｜ 抬头条数=无段 ｜ 实际教训=0 ｜ 点名行=无 ｜ 留下的=[] ｜ 点名原文=""
+F 同一个触发、家目录可写 ｜ unavailable=null ｜ 抬头条数=1 ｜ 实际教训=1 ｜ 点名行=无 ｜ 留下的=["教训正文 lesson-a　〔证据: sessi"] ｜ 点名原文=""
+BEFORE_EXIT=0

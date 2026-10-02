@@ -21,6 +21,7 @@ import {
   saveExternalRefDecision,
   rootFilePath,
   listTopics,
+  isCompliantTopic,
   type ExternalRefState,
 } from "./store.js";
 
@@ -134,28 +135,72 @@ async function indexSection(header: string, dir: string): Promise<Section | null
 
 /** 教训段（M6）：每条一行，**出处逐字可见**。
  *
- *  两处刻意的形状：
+ *  三处刻意的形状：
  *  · **按 modified 倒序 + 取最近 N 条**——教训是"下次别这么做"，上一轮刚犯的比三个月前的有用。
  *    排序键读的是 topic 文件 frontmatter 的 modified（不是文件名，那不是时间）。
  *  · **出处从盘上正文解析**（`^evidence-line:`），解析不出 ⇒ 这条不进注入 ⇒
- *    "无出处不注入"与 lessons 侧"无出处不写盘"是同一道门的两端，不靠调用方自觉。 */
+ *    "无出处不注入"与 lessons 侧"无出处不写盘"是同一道门的两端，不靠调用方自觉。
+ *  · **读不动的那一份只丢那一份**（`splitLessonCandidates`）——第 315 页把"整段消失但有人吭声"
+ *    修成了降级可见，这一格修的是前半：**没有理由让一份名字不合规矩的文件吃掉整段记忆**，
+ *    也没有理由让它占掉 `limit` 的一个槽位。 */
 async function lessonsSection(dir: string, limit: number): Promise<Section | null> {
   const topics = (await listTopics(dir)).filter((t) => t.topic.startsWith(LESSON_TOPIC_PREFIX));
   if (topics.length === 0) return null;
   topics.sort((a, b) => (a.modified < b.modified ? 1 : a.modified > b.modified ? -1 : a.topic.localeCompare(b.topic)));
+  const { keep, skipped } = splitLessonCandidates(topics, limit, isCompliantTopic);
   const lines: string[] = [];
-  for (const t of topics.slice(0, limit)) {
+  for (const t of keep) {
     const body = await readTopicBody(dir, t.topic);
     if (body === null) continue;
     const d = parseLessonDigest(body);
     if (d === null) continue; // 无证据指针 ⇒ 不注入
     lines.push(lessonLine(t.topic, d));
   }
-  if (lines.length === 0) return null;
-  return {
-    header: "[LESSONS 最近 " + lines.length + " 条（每条自带证据指针：哪条会话、哪个 callId；无出处的条目不会出现在这里）]",
-    lines,
-  };
+  const note = lessonSkipNote(skipped);
+  const injected = lines.length;
+  // 一条都没留下、但有文件被跳过 ⇒ 段还得在，且只带那句点名。丢掉它＝回到"整段无痕消失"那一格，
+  // 只是这次连"断过"都没人知道（实测：批里只剩坏名字文件时，旧写法整段返回 null）。
+  if (injected === 0) return note === null ? null : { header: lessonsHeader(0), lines: [note] };
+  // 抬头那句「最近 N 条」数的是**真教训**，不把点名行算进去（算进去＝那句承诺自己先说错数）。
+  if (note !== null) lines.push(note);
+  return { header: lessonsHeader(injected), lines };
+}
+
+/** 抬头那句承诺只有一个来源：注入了几条就写几条，后半句（"无出处不注入"）在两支里同字。 */
+function lessonsHeader(count: number): string {
+  return "[LESSONS 最近 " + count + " 条（每条自带证据指针：哪条会话、哪个 callId；无出处的条目不会出现在这里）]";
+}
+
+/** 点名帽：文件名是**外界文本**（这条线也管我们自己写进块里的话），所以既数个数也截长度。
+ *  超出的只报数不报名——那句"另有 K 个"里的 K 必须是真总数，不然读数就把规模读小了。 */
+export const LESSON_SKIP_NOTE_MAX_NAMES = 3;
+export const LESSON_SKIP_NAME_MAX_CHARS = 64;
+
+/** 一份坏数据不许吃掉整段：先按**能不能读**筛，再切 `limit`。
+ *  顺序反了（先切后筛）就等于让读不动的那一份占掉一个槽位——最近 N 条里少一条，而读数看不出来。
+ *  纯函数：不碰盘，存在性判断由 `canRead` 注入（生产给 `isCompliantTopic`）。 */
+export function splitLessonCandidates<T extends { topic: string }>(
+  topics: readonly T[], limit: number, canRead: (topic: string) => boolean,
+): { keep: T[]; skipped: string[] } {
+  const readable: T[] = [];
+  const skipped: string[] = [];
+  for (const t of topics) {
+    if (canRead(t.topic)) readable.push(t);
+    else skipped.push(t.topic);
+  }
+  return { keep: readable.slice(0, Math.max(0, limit)), skipped };
+}
+
+/** 跳过那几份的点名行；没有跳过 ⇒ null（缺省零行为：正常那批一个字都不许多）。 */
+export function lessonSkipNote(skipped: readonly string[]): string | null {
+  if (skipped.length === 0) return null;
+  // 名字里的空白折成单空格：文件名可以带换行，而本块按行做预算与丢弃，一行名字冒充一行段落在读起来
+  // 与真教训同形（`indexLine` 那支早就折过同样的东西，这里沿它，不另立口径）。
+  const named = skipped.slice(0, LESSON_SKIP_NOTE_MAX_NAMES)
+    .map((n) => n.replace(/\s+/gu, " ").trim().slice(0, LESSON_SKIP_NAME_MAX_CHARS));
+  const rest = skipped.length - named.length;
+  return "[lessons] 有 " + skipped.length + " 个 lesson 文件本轮没读进来（topic 名不合注入器的规矩）："
+    + named.join("、") + (rest > 0 ? "（其余 " + rest + " 个未点名）" : "");
 }
 
 export interface MemoryInjectionOptions {

@@ -94,8 +94,17 @@ export function topicDocRoundtrip(meta: TopicMeta, body: string): { meta: Partia
 }
 
 // ---- topic 校验（文件名信任边界：拒绝路径穿越/绝对路径/非法字符）----
+/** topic 名的规矩**只有这一支**：`validateTopic` 抛之前问的就是它。
+ *  注入器要「跳过读不动的那一份，而不是让整段注入抛」，靠的是同一个谓词——
+ *  在那边再抄一遍正则就是本仓反复判死的第二个事实源。 */
+export const TOPIC_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/u;
+
+export function isCompliantTopic(topic: string): boolean {
+  return typeof topic === "string" && TOPIC_NAME.test(topic);
+}
+
 export function validateTopic(topic: string): string {
-  if (typeof topic !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(topic)) {
+  if (!isCompliantTopic(topic)) {
     throw new MemoryError("call_failed", "remember: topic 必须是 1-64 位字母/数字/连字符/下划线（不含路径分隔符），收到: " + JSON.stringify(topic));
   }
   return topic;
