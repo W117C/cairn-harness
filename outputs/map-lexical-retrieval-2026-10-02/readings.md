@@ -73,13 +73,26 @@ M3/M4/M6 各只红一条＝那三格**只有**这条尺看得见（尤其 M6：�
   （日志里只有 `PROBE_EXIT=0`）⇒ 不给一个我没量过的秒数。
 - 全量判卷与认证是另两个量纲，见下面第 5 节实测。
 
-## 5. 落库前后读数
+## 5. 落库前后读数（本笔＝`ba65849`）
 
-- 落库前（工作树）：`node --import tsx scripts/typecheck.ts` → 0 条报错（`typecheck.log`，`TYPECHECK_EXIT=0`）。
-- 全量判卷：`suite-full.log`（`SUITE_EXIT=?`）——见下节填写。
-- docs 门：`docs-check.log`；顶包候选：`prose-needle-scan.log`。
-- 落库前的针脚体检读数是**预期形状**：`未入库面 11`（`retrieve.ts`＋新判卷两面）＋`钉在飞文本 10`
-  ＝尺与针脚同笔（规则 217）。落库后这两维必须归零；不归零就是拆了笔。
+- 落库前（工作树）：`node --import tsx scripts/typecheck.ts` → 0 条报错（`typecheck.log`，`TYPECHECK_EXIT=0`）；
+  主树全量判卷 `suite-full.log` ＝ **292 文件／4032 条全绿／155.82s**，`SUITE_EXIT=0`（含隔壁在飞的未跟踪判卷面）。
+- 落库前针脚体检（`precommit-selfcheck.log`，退出码单独取：`NEEDLES_EXIT_PROPER=1`）：
+  阻断 21 ＝ 未入库面 11（`retrieve.ts`＋新判卷两面）＋钉在飞文本 10。
+  这是尺与针脚同笔（规则 217）的**预期形状**；落库后必须归零——归零了：见下。
+- 锚点击杀（干净树 `.worktrees/gate-mutate-import` @ `ba65849`，`mutate-kill-ba65849.log`）：
+  改动面派生 24 个文件 ⇒ 选中 **106/1295** 条，末行「全部变异被正确杀死（断言非恒真）」，`MUTATE_EXIT=0`；
+  本笔 9 条 `map-retrieve-*` 逐条 ✅；selector 跑法 212 拍·中位 0.42s·坏拍（选中≠1）0。
+- 认证（`head-cert-ba65849.log`）：`认证门面=22 道（跑到 22）｜绿 22 道｜超预算 0`；
+  `TREE=ba65849 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有`；
+  干净树全量 **285 文件／3887 条全绿／exit=0**；墙钟 194.38s；3887 条里 0 条 ≥ 有效预算 80%（离帽最近 61%）；
+  `并发判卷=起前 0 套／跑完 0 套（两端独占）` ⇒ 第 301 页那两格超预算（evidence-typecheck、mutate-needles）
+  这次没有复现，印证了「先归因于负载」那句。
+- 落库后重量（`post-landing-gates.log`）：针脚体检 1295 条、**阻断 0／未入库面 0／钉在飞文本 0／killer 指针失效 0**、
+  `全部锚点针脚可判定 ✅`；docs-check 受检项全绿（`DOCSCHECK_EXIT=0`，`UNVERIFIED=3` 同前）；
+  顶包候选 **10 条＝帽 10 未涨**（在飞 0，`PROSE_EXIT=0`）——本笔的新判卷钉的是行为与结构式，没抄生产散文。
+- 残留树（判据不是授权，等人点头）：认证脚本自己报 `常驻残留树=2`
+  ＝`.worktrees/gate-mutate-import@ba65849`（本会话复用两趟）＋`.worktrees/gate-mutate-verify@4e0a7de`（隔壁会话的）。
 - 隔壁在飞的一面（只记不修）：`scripts/lib/eval-heldout.ts`／`tests/eval-heldout.test.ts` 未提交，
   第一次跑针脚体检时 `heldout-*` 五条锚点报「改法致语法错」，几分钟后同一条命令报「1295 条改法全部产出合法源文件」
   ⇒ 那是隔壁会话正在写那两个文件，不是本笔的残骸。另：`verify-lang-timeout-same-as-npm` 的「针脚命中 2 处·待复认」
