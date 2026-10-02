@@ -408,8 +408,15 @@ export function contextNoteFor(r: FileImpactReport): string {
   }
   const files = [...byFile.keys()];
   const shown = files.slice(0, IMPACT_CONTEXT_FILES);
+  // 同名歧义要说在**这句旁边**。此前它只在查询端（`tools/impact-query.ts`）那句里出现，而这条是
+  // **缺省开**的写后回注（`settings.ts` 的 `impactAnalysis: true`）⇒ 模型只读到「波及 M 个文件」就会照着去动那 M 个文件，
+  // 而 M 里可能混着"别处同名"的调用方（真仓读数：一个 `private readFile` 吸进 107 个文件的同名 ref）。
+  // 同一份事实只在一个消费者嘴里说，是本仓反复判死的"只硬化一支"形状。
+  const ambiguity = r.ambiguousSymbols.length > 0
+    ? `；其中 ${String(r.ambiguousSymbols.length)} 个符号在别的文件也有同名定义，波及数按名字图算 ⇒ 清单里可能混有无关文件`
+    : "";
   const lines: string[] = [
-    `[impact] ${r.file} 定义符号的跨文件调用点（上 ${r.up.length}${r.truncated ? "+" : ""}，波及 ${files.length} 个文件；完整清单见 impact_report 事件）：`,
+    `[impact] ${r.file} 定义符号的跨文件调用点（上 ${r.up.length}${r.truncated ? "+" : ""}，波及 ${files.length} 个文件${ambiguity}；完整清单见 impact_report 事件）：`,
   ];
   for (const f of shown) {
     const arr = byFile.get(f)!;

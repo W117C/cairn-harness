@@ -1,0 +1,1554 @@
+[
+ {
+  "r": {
+   "id": "B1-bugfix-crossfile",
+   "name": "B1-bugfix-crossfile",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 61.855,
+   "requests": 10,
+   "tokensIn": 65199,
+   "tokensOut": 2067,
+   "cny": 0.0579468,
+   "toolCalls": 15,
+   "toolFailures": 0,
+   "repeatedSameAction": 1,
+   "firstWriterIndex": 5,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/checkout.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 192,
+    "procPeak": 5,
+    "cpuMs": 1719,
+    "samples": 124
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B2-feature-export",
+   "name": "B2-feature-export",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 64.736,
+   "requests": 12,
+   "tokensIn": 74624,
+   "tokensOut": 6179,
+   "cny": 0.0770004,
+   "toolCalls": 14,
+   "toolFailures": 4,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 30,
+   "readsBeforeFirstWrite": 6,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": true,
+   "verified": 3,
+   "verifyOkLast": false,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/fit.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 221,
+    "procPeak": 4,
+    "cpuMs": 2137,
+    "samples": 130
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B3-refactor-callsite",
+   "name": "B3-refactor-callsite",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 44.454,
+   "requests": 11,
+   "tokensIn": 68845,
+   "tokensOut": 3049,
+   "cny": 0.0636132,
+   "toolCalls": 15,
+   "toolFailures": 1,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 45,
+   "readsBeforeFirstWrite": 8,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": true,
+   "verified": 1,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/format.js",
+    "src/legacy.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 128,
+    "procPeak": 5,
+    "cpuMs": 2429,
+    "samples": 89
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ },
+ {
+  "r": {
+   "id": "B4-bugfix-pagination",
+   "name": "B4-bugfix-pagination",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 65.163,
+   "requests": 14,
+   "tokensIn": 85917,
+   "tokensOut": 3622,
+   "cny": 0.0788752,
+   "toolCalls": 16,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 27,
+   "readsBeforeFirstWrite": 7,
+   "clarified": 1,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": true,
+   "touchedJudge": true,
+   "onlySrcChanged": false,
+   "changedFiles": [
+    "src/paginate.js",
+    "tests/api.test.js"
+   ],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 264,
+    "procPeak": 8,
+    "cpuMs": 2910,
+    "samples": 131
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "改了判卷面",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B5-bugfix-async",
+   "name": "B5-bugfix-async",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.495,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 81,
+    "procPeak": 2,
+    "cpuMs": 2942,
+    "samples": 4
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B6-feature-flag",
+   "name": "B6-feature-flag",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.295,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 82,
+    "procPeak": 2,
+    "cpuMs": 2972,
+    "samples": 3
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B7-feature-csv",
+   "name": "B7-feature-csv",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.888,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 83,
+    "procPeak": 2,
+    "cpuMs": 3003,
+    "samples": 5
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B8-feature-memo",
+   "name": "B8-feature-memo",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.002,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 84,
+    "procPeak": 2,
+    "cpuMs": 3027,
+    "samples": 3
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B9-refactor-rename",
+   "name": "B9-refactor-rename",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.914,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 86,
+    "procPeak": 2,
+    "cpuMs": 3062,
+    "samples": 5
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B10-refactor-dedupe",
+   "name": "B10-refactor-dedupe",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 2.15,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 87,
+    "procPeak": 2,
+    "cpuMs": 3094,
+    "samples": 5
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B11-refactor-signature",
+   "name": "B11-refactor-signature",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 2.422,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 88,
+    "procPeak": 2,
+    "cpuMs": 3127,
+    "samples": 6
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B12-long-horizon",
+   "name": "B12-long-horizon",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.954,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 89,
+    "procPeak": 2,
+    "cpuMs": 3189,
+    "samples": 4
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B1-bugfix-crossfile",
+   "name": "B1-bugfix-crossfile",
+   "rep": 2,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.406,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 89,
+    "procPeak": 2,
+    "cpuMs": 3219,
+    "samples": 4
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B2-feature-export",
+   "name": "B2-feature-export",
+   "rep": 2,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.17,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 88,
+    "procPeak": 2,
+    "cpuMs": 3236,
+    "samples": 3
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B3-refactor-callsite",
+   "name": "B3-refactor-callsite",
+   "rep": 2,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.383,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 87,
+    "procPeak": 2,
+    "cpuMs": 3258,
+    "samples": 4
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B4-bugfix-pagination",
+   "name": "B4-bugfix-pagination",
+   "rep": 2,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.432,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 87,
+    "procPeak": 2,
+    "cpuMs": 3286,
+    "samples": 4
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B5-bugfix-async",
+   "name": "B5-bugfix-async",
+   "rep": 2,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.51,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 88,
+    "procPeak": 2,
+    "cpuMs": 3316,
+    "samples": 4
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B6-feature-flag",
+   "name": "B6-feature-flag",
+   "rep": 2,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.813,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 102,
+    "procPeak": 2,
+    "cpuMs": 3387,
+    "samples": 4
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B7-feature-csv",
+   "name": "B7-feature-csv",
+   "rep": 2,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.155,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 102,
+    "procPeak": 2,
+    "cpuMs": 3411,
+    "samples": 3
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B8-feature-memo",
+   "name": "B8-feature-memo",
+   "rep": 2,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 2.296,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 99,
+    "procPeak": 2,
+    "cpuMs": 3446,
+    "samples": 5
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B9-refactor-rename",
+   "name": "B9-refactor-rename",
+   "rep": 2,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.758,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 89,
+    "procPeak": 2,
+    "cpuMs": 3475,
+    "samples": 4
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B10-refactor-dedupe",
+   "name": "B10-refactor-dedupe",
+   "rep": 2,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.563,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 92,
+    "procPeak": 2,
+    "cpuMs": 3504,
+    "samples": 4
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B11-refactor-signature",
+   "name": "B11-refactor-signature",
+   "rep": 2,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.439,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 92,
+    "procPeak": 2,
+    "cpuMs": 3530,
+    "samples": 4
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B12-long-horizon",
+   "name": "B12-long-horizon",
+   "rep": 2,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.759,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 92,
+    "procPeak": 2,
+    "cpuMs": 3595,
+    "samples": 4
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B1-bugfix-crossfile",
+   "name": "B1-bugfix-crossfile",
+   "rep": 3,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.564,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 95,
+    "procPeak": 2,
+    "cpuMs": 3632,
+    "samples": 4
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B2-feature-export",
+   "name": "B2-feature-export",
+   "rep": 3,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.542,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 95,
+    "procPeak": 2,
+    "cpuMs": 3656,
+    "samples": 4
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B3-refactor-callsite",
+   "name": "B3-refactor-callsite",
+   "rep": 3,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.548,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 96,
+    "procPeak": 2,
+    "cpuMs": 3684,
+    "samples": 4
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B4-bugfix-pagination",
+   "name": "B4-bugfix-pagination",
+   "rep": 3,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.574,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 96,
+    "procPeak": 2,
+    "cpuMs": 3708,
+    "samples": 4
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B5-bugfix-async",
+   "name": "B5-bugfix-async",
+   "rep": 3,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.094,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 95,
+    "procPeak": 2,
+    "cpuMs": 3737,
+    "samples": 3
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B6-feature-flag",
+   "name": "B6-feature-flag",
+   "rep": 3,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 2.277,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 95,
+    "procPeak": 2,
+    "cpuMs": 3770,
+    "samples": 5
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B7-feature-csv",
+   "name": "B7-feature-csv",
+   "rep": 3,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.627,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 96,
+    "procPeak": 2,
+    "cpuMs": 3796,
+    "samples": 4
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B8-feature-memo",
+   "name": "B8-feature-memo",
+   "rep": 3,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 2.02,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 96,
+    "procPeak": 2,
+    "cpuMs": 3825,
+    "samples": 5
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B9-refactor-rename",
+   "name": "B9-refactor-rename",
+   "rep": 3,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 2.121,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 95,
+    "procPeak": 2,
+    "cpuMs": 3852,
+    "samples": 5
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B10-refactor-dedupe",
+   "name": "B10-refactor-dedupe",
+   "rep": 3,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.902,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 94,
+    "procPeak": 2,
+    "cpuMs": 3878,
+    "samples": 5
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B11-refactor-signature",
+   "name": "B11-refactor-signature",
+   "rep": 3,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.377,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 107,
+    "procPeak": 2,
+    "cpuMs": 3934,
+    "samples": 4
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ },
+ {
+  "r": {
+   "id": "B12-long-horizon",
+   "name": "B12-long-horizon",
+   "rep": 3,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 1.701,
+   "requests": 0,
+   "tokensIn": 0,
+   "tokensOut": 0,
+   "cny": 0,
+   "toolCalls": 0,
+   "toolFailures": 0,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": -1,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 0,
+   "plannedBeforeWrite": false,
+   "verified": 0,
+   "verifyOkLast": null,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": false,
+   "changedFiles": [],
+   "exitError": "GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded: free-models-per-day-stealth. \",\"code\":429,\"metadata\":{\"headers\":{\"X-RateLimit-Limit\":\"1000\",\"X-RateLimit-Remaining\":\"0\",\"X-RateLimit-Reset\":\"1790985600000\"},\"limit_source\":\"openrouter_free_tier_daily\",\"remedy_hint\":\"Wait for the daily reset (see X-RateLimit-",
+   "resources": {
+    "rssPeakMb": 107,
+    "procPeak": 2,
+    "cpuMs": 3981,
+    "samples": 4
+   }
+  },
+  "g": {
+   "ok": false,
+   "fails": [
+    "verify 未通过/未跑",
+    "runLoop 抛错:GLM 请求失败 HTTP 429: {\"error\":{\"message\":\"Rate limit exceeded:"
+   ]
+  }
+ }
+]

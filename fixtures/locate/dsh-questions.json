@@ -1,0 +1,20 @@
+{
+  "_about": "能力 1 缺的那把尺的题面与真值：一问 → 答它需要落在哪个文件。取料面是本仓真实代码，每条真值都带 `file:line` 与一句「为什么是它」，读者可自行复核（不必信本文件）。",
+  "_why_two_shapes": "问句刻意分两种形状：`nl` = 不含任何拉丁标识符的中文请求（本仓用户最常发的形态）；`ident` = 句子里带代码标识符/文件名。分开的理由：生产端的地图条件化只有两个入口——`src/agent/glm-session.ts:789` 的 `/[A-Za-z_][A-Za-z0-9_]{3,}/g`（取最后一个 user_message）与 `:776` 的 `/[\\w./-]+\\.[a-z]{1,5}/`（路径形状），两者都只认拉丁字符 ⇒ 纯中文问句按构造**取不到任何条件化输入**，两种形状必须分开量，混在一起量出来的是平均数而不是事实。",
+  "questions": [
+    { "id": "L01", "shape": "nl", "question": "权限门遇到一个从没登记过的工具名，现在是放行还是拦？该改哪个文件？", "truth": [{ "file": "src/permissions/autonomy.ts", "evidence": "src/permissions/autonomy.ts:435 `if (!isKnownToolName(tool))` ⇒ verdict ask / layer L4-mcp-unannotated" }] },
+    { "id": "L02", "shape": "nl", "question": "测试跑失败之后，系统要把『环境没装工具链』和『代码真的写错了』分开归因，判据住在哪？", "truth": [{ "file": "src/agent/verify.ts", "evidence": "src/agent/verify.ts:101 ESCALATE_REPEAT_ATTEMPT 与 classifyVerifyFailure 一族；类别枚举在 src/events/index.ts:141-149" }] },
+    { "id": "L03", "shape": "nl", "question": "我想让模型别再原地重复同一个动作，连续几次没进展就出声——这条阶梯实现在哪个文件？", "truth": [{ "file": "src/agent/no-progress.ts", "evidence": "src/agent/no-progress.ts:179 noProgressLadder；生产调用点 src/agent/loop.ts:297" }] },
+    { "id": "L04", "shape": "nl", "question": "事件日志里那笔用量到底属于哪个模型，是在哪一层补上模型名的？", "truth": [{ "file": "src/agent/usage-attribution.ts", "evidence": "src/agent/usage-attribution.ts:25 createUsageAttributor；唯一调用点 src/main/agent-runner.ts:1599" }] },
+    { "id": "L05", "shape": "nl", "question": "只读档位要从模型面上摘掉哪些工具，这份名单的唯一事实源在哪？", "truth": [{ "file": "src/agent/tool-surface.ts", "evidence": "src/agent/tool-surface.ts:20-53 INJECTED_TOOLS（含 reachableWhenReadOnly）；静态面在 src/tools/index.ts" }] },
+    { "id": "L06", "shape": "nl", "question": "覆盖一个已存在的文件之前，原件被存到哪里、事后怎么回滚？", "truth": [{ "file": "src/tools/snapshot.ts", "evidence": "src/tools/snapshot.ts:28（写前快照目录 .agent/snapshots/<ts>--<callId>）" }] },
+    { "id": "L07", "shape": "nl", "question": "补丁是一层层往应用还是整块替换？上下文对不上时要报第几段失败，实现在哪？", "truth": [{ "file": "src/tools/apply_patch.ts", "evidence": "src/tools/apply_patch.ts:198-200（拒 rename/move/delete hunk 的分支即逐 hunk 应用面）" }] },
+    { "id": "L08", "shape": "nl", "question": "常驻的定时任务是谁启动的、怎么停？", "truth": [{ "file": "src/main/scheduler.ts", "evidence": "src/main/scheduler.ts:42 DEFAULT_CONCURRENCY_CAP；入口 src/main/agent-runner.ts:1143 serveScheduler" }] },
+    { "id": "L09", "shape": "nl", "question": "回注给模型的记忆块有个 token 预算，超限怎么裁、在哪一行？", "truth": [{ "file": "src/agent/memory/inject.ts", "evidence": "src/agent/memory/inject.ts:27 MEMORY_TOKEN_BUDGET_DEFAULT = 6_000" }] },
+    { "id": "L10", "shape": "nl", "question": "仓库地图的排序权重（提到×10、被引用×50）写在哪段代码里？", "truth": [{ "file": "src/agent/map/rank.ts", "evidence": "src/agent/map/rank.ts:52 buildGraph / :164 personalizedPageRank（personalizationBoost 缺省 10）" }] },
+    { "id": "L11", "shape": "ident", "question": "noProgressLadder 这个函数在哪个文件里定义？它被谁调用？", "truth": [{ "file": "src/agent/no-progress.ts", "evidence": "src/agent/no-progress.ts:179；调用者 src/agent/loop.ts:297" }] },
+    { "id": "L12", "shape": "ident", "question": "settings.ts 里 autoVerify 的默认值是谁在读？改默认会影响哪些消费者？", "truth": [{ "file": "src/main/settings.ts", "evidence": "src/main/settings.ts:134 autoVerify: true；消费者 src/agent/loop.ts:573" }] },
+    { "id": "L13", "shape": "ident", "question": "sandbox.ts 里那条默认断网的 Seatbelt profile 是怎么写的？", "truth": [{ "file": "src/main/sandbox.ts", "evidence": "src/main/sandbox.ts:49 \"(deny default)\"；网络放行 :93-94" }] },
+    { "id": "L14", "shape": "ident", "question": "工具面太大导致固定开销超限时，降配阶梯在哪一层做、core 为什么不会被砍？", "truth": [{ "file": "src/agent/model-surface.ts", "evidence": "src/agent/model-surface.ts:17-145 planSurfaceBudget（core 永不被自动砍）" }] }
+  ]
+}

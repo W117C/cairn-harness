@@ -20,6 +20,11 @@ export interface ReplayReading {
 /** 现役复跑面。新增一条 = 同提交里既要有脚本，也要有引用它的那句文档（缺一侧即红）。 */
 export const REPLAY_READINGS: readonly ReplayReading[] = [
   {
+    id: "longrun-ladder",
+    script: "scripts/replay/longrun-ladder.ts",
+    answers: "十条能力复测（10-02）附一：昨天接线的无进展阶梯在 24 条真模型长轨迹上到底开不开口——verify 拍数分布给出 R1 的可达性，判据逐字共用生产端 judgeNoProgressEvents",
+  },
+  {
     id: "ask-density",
     script: "scripts/replay/ask-density.ts",
     answers: "judgment-layer §3.2 两档 ask 密度 + §3.3 risk 分布（§7 第 1 步的判卷读数）",
