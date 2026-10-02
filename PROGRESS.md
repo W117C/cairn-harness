@@ -10855,3 +10855,14 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 9. **刻意留给下一格的**：#30——一份坏文件仍该只丢那一份（逐份隔离）。这是**裁决**不是遗漏：
    第 312 页已选过"不合格的那条不注入、同批照常"，推到这里同样该隔离；但"跳过了几条"写进块首就是一句对外承诺，
    得配探针＋判卷＋锚点，不混在这一笔里。针脚尺落库前 `1347 条 —— 阻断 8（本笔 4 枚 × 两条维）／killer 指针失效 0`。
+
+10. **本笔落库后立刻被干净树击杀抓回来一处（记下来，别只记成功）**：第 315 页提交 `35159c4` 后跑击杀，
+    `survived:0`（我那 4 枚都被杀）但 **`baseline-red 8`**——`tests/session-provider.test.ts` 等 5 份判卷把
+    `../src/agent/memory/inject` 整模块 mock 成只有 `buildMemoryInjection`，消费者改走 `buildMemoryInjectionSafe` 之后
+    mock 里没这个出口 ⇒ provider 直接起不来（报错原文：`No "buildMemoryInjectionSafe" export is defined on the mock`）。
+    **两处教训**：① 我在 §5 写的"回归 76 条全绿"是真的跑了、但**不足以**说"没回归"——被我挑中的四个文件恰好都不 mock 这个模块；
+    全量判卷才是回归证据，秒级子集不是（这条本仓早有规则，这次是我自己没照做）。
+    ② 抓回它的正是干净树击杀这一步：**基线不绿**被单独分类计数（`REDKINDS=…,baseline-red:8,…`），
+    没有混成"变异存活"——分类那一格救了一次误判（否则会以为要改实现）。
+    修法：五份 mock 收成一份工厂 `tests/helpers/memory-inject-mock.ts`（两个出口都在），下次再改出口名只动一处。
+    这条也进记忆（规则 395：换出口名要同轮换 mock；判"没回归"要有全量那一次）。

@@ -15,9 +15,8 @@ import type { GlmMessage } from "../src/providers/glm";
 import type { AgentEvent } from "../src/events";
 
 // 记忆注入不是本测要验的面，且它会去读宿主主目录 ⇒ 打桩（与 session-provider.test.ts 同法）
-vi.mock("../src/agent/memory/inject", () => ({
-  buildMemoryInjection: async () => ({ project: null, global: null }),
-}));
+vi.mock("../src/agent/memory/inject", async () =>
+  (await import("./helpers/memory-inject-mock")).memoryInjectMock({ project: null, global: null }));
 
 const autoFail = (cmd: string, output: string, callId = "harness-auto-verify"): AgentEvent => ({
   type: "verify_result",

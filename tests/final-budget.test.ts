@@ -2,7 +2,8 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { createGlmSessionProvider } from "../src/agent/glm-session";
-vi.mock("../src/agent/memory/inject", () => ({ buildMemoryInjection: async () => ({ project: null, global: null }) }));
+vi.mock("../src/agent/memory/inject", async () =>
+  (await import("./helpers/memory-inject-mock")).memoryInjectMock({ project: null, global: null }));
 let dir: string;
 afterEach(async () => { if (dir) await rm(dir, { recursive: true, force: true }); });
 it("checks final remounted request before transport and preserves complete log", async () => {

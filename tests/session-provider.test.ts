@@ -7,9 +7,8 @@ import { createEventLog, type EventLog } from "../src/events";
 import type { ModelOutput } from "../src/providers";
 import type { GlmMessage } from "../src/providers/glm";
 
-vi.mock("../src/agent/memory/inject", () => ({
-  buildMemoryInjection: async () => ({ project: null, global: null }),
-}));
+vi.mock("../src/agent/memory/inject", async () =>
+  (await import("./helpers/memory-inject-mock")).memoryInjectMock({ project: null, global: null }));
 
 let dir: string;
 let log: EventLog;

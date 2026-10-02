@@ -13,9 +13,9 @@ import {
 import { gateToolSpecs, sessionToolSpecs } from "../src/agent/glm-session";
 import type { GlmToolSpec } from "../src/providers/glm";
 
-vi.mock("../src/agent/memory/inject", () => ({
-  buildMemoryInjection: async () => ({ project: null, global: null, charsCurrent: 0, charsLimit: 0, tokens: 0, truncated: false }),
-}));
+vi.mock("../src/agent/memory/inject", async () =>
+  (await import("./helpers/memory-inject-mock")).memoryInjectMock(
+    { project: null, global: null, charsCurrent: 0, charsLimit: 0, tokens: 0, truncated: false }));
 
 const CORE: ReadonlySet<string> = new Set(gateToolSpecs().map((s) => s.function.name));
 const SYSTEM_CHARS = 670;

@@ -12,9 +12,8 @@ import { createGlmSessionProvider } from "../src/agent/glm-session";
 import { PRUNED_PLACEHOLDER } from "../src/agent/prune";
 import type { GlmMessage } from "../src/providers/glm";
 
-vi.mock("../src/agent/memory/inject", () => ({
-  buildMemoryInjection: async () => ({ project: null, global: null }),
-}));
+vi.mock("../src/agent/memory/inject", async () =>
+  (await import("./helpers/memory-inject-mock")).memoryInjectMock({ project: null, global: null }));
 
 const KB = 1024;
 let dir = "";
