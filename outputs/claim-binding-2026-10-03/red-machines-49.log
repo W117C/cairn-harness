@@ -1,0 +1,470 @@
+# 解表：49 条，全部取自 scripts/mutate-verify.mjs（本机未手抄任何改法）
+  impact-attribution-no-evidence-read-as-kept
+    src=src/agent/impact/attribution.ts test=tests/impact-attribution.test.ts
+    针脚="if (!binding.known) return \"no-evidence\";" → 改后="if (!binding.known) return \"kept\";"
+  impact-attribution-positive-proof-ignored
+    src=src/agent/impact/attribution.ts test=tests/impact-attribution.test.ts
+    针脚="if (binding.sources.includes(defFile)) return \"kept\";" → 改后=""
+  impact-attribution-only-first-source-counted
+    src=src/agent/impact/attribution.ts test=tests/impact-attribution.test.ts
+    针脚="binding.sources.includes(defFile)" → 改后="binding.sources[0] === defFile"
+  impact-attribution-reverse-proof-never-drops
+    src=src/agent/impact/attribution.ts test=tests/impact-attribution.test.ts
+    针脚="  return \"dropped\";" → 改后="  return \"kept\";"
+  impact-attribution-note-dropped-only-gauge
+    src=src/agent/impact/attribution.ts test=tests/impact-attribution.test.ts
+    针脚="if (stats.dropped === 0 && stats.noEvidence === 0) return \"\";" → 改后="if (stats.dropped === 0) return \"\";"
+  impact-attribution-note-prints-zeros
+    src=src/agent/impact/attribution.ts test=tests/impact-attribution.test.ts
+    针脚="if (stats.dropped === 0 && stats.noEvidence === 0) return \"\";" → 改后="if (false) return \"\";"
+  impact-edges-not-filtered-by-attribution
+    src=src/agent/impact/index.ts test=tests/impact-attribution.test.ts
+    针脚="if (verdict === \"dropped\") continue;" → 改后=""
+  impact-upward-attribution-not-applied
+    src=src/agent/impact/index.ts test=tests/impact-attribution.test.ts
+    针脚="!defFiles.has(r.file) && attributableSomewhere(graph, r.file, symbol, defFiles)" → 改后="!defFiles.has(r.file)"
+  impact-downward-attribution-not-applied
+    src=src/agent/impact/index.ts test=tests/impact-attribution.test.ts
+    针脚="if (attributeRefToDef(binding, d.file) === \"dropped\") continue;" → 改后=""
+  impact-attribution-note-not-wired
+    src=src/agent/impact/index.ts test=tests/impact-attribution.test.ts
+    针脚="+ attributionNote(r.attribution)" → 改后="+ \"\""
+  impact-tags-cache-imports-guard-dropped
+    src=src/agent/impact/index.ts test=tests/impact-attribution.test.ts
+    针脚="Array.isArray(e.tags) && Array.isArray(e.imports)" → 改后="Array.isArray(e.tags)"
+  impact-imports-exit-not-eaten
+    src=src/agent/impact/index.ts test=tests/impact-attribution.test.ts
+    针脚="imports = sym.imports;" → 改后="imports = [];"
+  impact-index-artifact-namesources-not-saved
+    src=src/agent/impact/persist.ts test=tests/impact-attribution.test.ts
+    针脚="nameSources: [...graph.nameSources.entries()]" → 改后="nameSources: ([] as [string, Map<string, string[]>][])"
+  impact-index-artifact-version-not-checked
+    src=src/agent/impact/persist.ts test=tests/impact-attribution.test.ts
+    针脚="if (a.schemaVersion !== IMPACT_INDEX_SCHEMA_VERSION) return null;" → 改后="if (false) return null;"
+  impact-lease-closure-bypasses-attribution
+    src=src/agent/impact/index.ts test=tests/impact-attribution.test.ts
+    针脚="for (const site of upward(graph, sym)) out.add(site.file);" → 改后="for (const site of graph.refs.get(sym) ?? []) out.add(site.file);"
+  impact-closure-glob-broken
+    src=src/agent/impact/index.ts test=tests/impact-admission.test.ts
+    针脚="graph.files.filter((file) => globs.some((g) => globMatchesPath(g, file)))" → 改后="graph.files.filter((file) => globs.includes(file))"
+  impact-mixed-sites-not-counted
+    src=src/agent/impact/index.ts test=tests/impact-attribution.test.ts
+    针脚="if (attributeRefToDef(binding, normalized) === \"dropped\") sitesOnlyToOtherDef++;" → 改后=""
+  impact-mixed-sites-not-in-note
+    src=src/agent/impact/index.ts test=tests/impact-attribution.test.ts
+    针脚="+ mixed + attributionNote(r.attribution);" → 改后="+ attributionNote(r.attribution);"
+  impact-query-union-note-denies-imports
+    src=src/tools/impact-query.ts test=tests/impact-query.test.ts
+    针脚="图已按 import 反证摘过一轮，" → 改后="本图只按名字连边、不认 import，"
+  impact-query-deps-arm-loses-attribution
+    src=src/tools/impact-query.ts test=tests/impact-query.test.ts
+    针脚="sitesNote(depHead, downward(graph, rel), DEP_NOUN, attributionNote(graph.attribution))" → 改后="sitesNote(depHead, downward(graph, rel), DEP_NOUN)"
+  impact-query-symbol-arm-loses-attribution
+    src=src/tools/impact-query.ts test=tests/impact-query.test.ts
+    针脚="return { ok: true, output: sitesNote(symHead, cross, UP_NOUN, symAttrib) };" → 改后="return { ok: true, output: sitesNote(symHead, cross, UP_NOUN, \"\") };"
+  impact-query-file-arm-loses-denominator
+    src=src/tools/impact-query.ts test=tests/impact-query.test.ts
+    针脚="sitesNote(head, r.up, UP_NOUN, mixedSitesNote(r.sitesOnlyToOtherDef) + attributionNote(r.attribution))" → 改后="sitesNote(head, r.up, UP_NOUN, \"\")"
+  impact-query-notes-land-before-the-count
+    src=src/tools/impact-query.ts test=tests/impact-query.test.ts
+    针脚="const lines = [head + \"：\" + noun.item" → 改后="const lines = [head + tail + \"：\" + noun.item"
+  impact-query-empty-list-loses-notes
+    src=src/tools/impact-query.ts test=tests/impact-query.test.ts
+    针脚="if (sites.length === 0) return head + noun.none + tail;" → 改后="if (sites.length === 0) return head + noun.none;"
+  impact-mixed-note-prints-zeros
+    src=src/agent/impact/attribution.ts test=tests/impact-query.test.ts
+    针脚="if (count <= 0) return \"\";" → 改后="if (false) return \"\";"
+  web-hint-offers-anchor-as-a-way-to-narrow
+    src=src/tools/output-ring.ts test=tests/web-fetch.test.ts
+    针脚="\"要找特定段落就换一个更精确的 URL（目录页/专门章节页/API 文档页）；\"" → 改后="\"要找特定段落就换一个更精确的 URL（锚点/目录页/API 文档页）；\""
+  web-hint-drops-fragment-explanation
+    src=src/tools/output-ring.ts test=tests/web-fetch.test.ts
+    针脚="\"[下一步：这是页面正文，不是整站。#锚点不会改变取回的内容（片段不发往服务器，正文按同一位置截断）；\"" → 改后="\"[下一步：这是页面正文，不是整站。\""
+  web-fetch-hint-computed-not-wired
+    src=src/tools/web_fetch.ts test=tests/web-fetch.test.ts
+    针脚="createOutputRing(MODEL_TEXT_BYTES, WEB_CONTENT_TRUNCATION_HINT)" → 改后="createOutputRing(MODEL_TEXT_BYTES, WEB_CONTENT_TRUNCATION_HINT.slice(0, 0))"
+  promise-web-face-left-unregistered
+    src=scripts/probe-promise-recall.ts test=tests/promise-recall-inventory.test.ts
+    针脚="  \"src/tools/output-ring.ts#WEB_CONTENT_TRUNCATION_HINT\": \"hopWebAnchorClaim\",\n" → 改后=""
+  promise-runner-name-typo-gets-anothers-verdict
+    src=scripts/probe-promise-recall.ts test=tests/promise-recall-inventory.test.ts
+    针脚="  return RUNNER_NAMES.includes(name);" → 改后="  return true;"
+  prune-stub-classifier-fails-open
+    src=scripts/probe-promise-recall.ts test=tests/prune.test.ts
+    针脚="  return \"裸占位\";" → 改后="  return \"带可取路径\";"
+  prune-stub-third-column-drops-workspace
+    src=scripts/probe-promise-recall.ts test=tests/prune.test.ts
+    针脚="events, attachmentsDir: join(ROOT, \".dsh-hop-attachments\"), sessionId: \"s1\", workspace: ROOT," → 改后="events, attachmentsDir: join(ROOT, \".dsh-hop-attachments\"), sessionId: \"s1\","
+  prune-stub-report-hides-a-column
+    src=scripts/probe-promise-recall.ts test=tests/prune.test.ts
+    针脚="`｜${inWorkspace.label}附件=${String(inWorkspace.wrote)} 条、占位=${inWorkspace.kind}`" → 改后="\"\""
+  prune-stub-face-left-unregistered
+    src=scripts/probe-promise-recall.ts test=tests/promise-recall-inventory.test.ts
+    针脚="  \"src/main/agent-runner.ts#body\": \"hopMapDemo\",\n" → 改后=""
+  claim-audience-nearest-call-only
+    src=scripts/probe-promise-recall.ts test=tests/promise-recall-inventory.test.ts
+    针脚="    if (isTerminalSinkCall(cur)) return \"operator\";" → 改后="    if (ts.isCallExpression(cur)) return isTerminalSinkCall(cur) ? \"operator\" : \"model\";"
+  claim-witness-run-threshold-collapsed
+    src=scripts/probe-promise-recall.ts test=tests/promise-recall-inventory.test.ts
+    针脚="export function claimWitnessRuns(text: string, min = 6): string[] {" → 改后="export function claimWitnessRuns(text: string, min = 2): string[] {"
+  claim-cap-stale-branch-dropped
+    src=scripts/probe-promise-recall.ts test=tests/promise-recall-inventory.test.ts
+    针脚="  return { over: read > cap, stale: read < cap, read, cap, margin: cap - read };" → 改后="  return { over: read > cap, stale: false, read, cap, margin: cap - read };"
+  claim-cap-over-branch-dropped
+    src=scripts/probe-promise-recall.ts test=tests/promise-recall-inventory.test.ts
+    针脚="  return { over: read > cap, stale: read < cap, read, cap, margin: cap - read };" → 改后="  return { over: false, stale: read < cap, read, cap, margin: cap - read };"
+  claim-whole-sentence-piece-double-count
+    src=scripts/probe-promise-recall.ts test=tests/promise-recall-inventory.test.ts
+    针脚="walk(c, (matched || suppress) && isTemplatePart(c))" → 改后="walk(c, false)"
+  lesson-empty-evidence-gate-dropped
+    src=src/agent/memory/lessons.ts test=tests/memory-lessons.test.ts
+    针脚="  if (evidence === \"\") return null;\n" → 改后=""
+  lesson-inject-fabricates-empty-digest
+    src=src/agent/memory/inject.ts test=tests/memory-lessons.test.ts
+    针脚="    const d = parseLessonDigest(body);\n    if (d === null) continue; // 无证据指针 ⇒ 不注入" → 改后="    const d = parseLessonDigest(body) ?? { headline: (body.split(\"\\n\")[0] ?? \"\").trim(), evidence: \"\", session: \"\" };\n    if (!d.headline) continue; // 只看抬头"
+  repeat-error-branch-asserts-determinism-again
+    src=src/agent/stuck.ts test=tests/loop-repeat-nudge.test.ts
+    针脚="      const sameObservation = window.every((t) => t.observation === first.observation);" → 改后="      const sameObservation = true;"
+  repeat-note-hides-the-comparison-window
+    src=src/agent/loop.ts test=tests/loop-repeat-nudge.test.ts
+    针脚="次失败且错误相同（比对取前 200 字）——原样重试不会改变结果" → 改后="次失败且错误相同——原样重试不会改变结果"
+  repeat-obs-note-reverts-to-verbatim-claim
+    src=src/agent/loop.ts test=tests/loop-repeat-nudge.test.ts
+    针脚="次拿到相同结果（比对取前 200 字）——再问一次不会有新信息" → 改后="次拿到逐字相同的结果——再问一次不会有新信息"
+  tool-choice-repeat-window-not-truncated
+    src=src/agent/tool-choice.ts test=tests/tool-choice.test.ts
+    针脚="const key = stuckActionOf(call.name, call.args) + \"\\n\" + stuckObservationOf(e.output);" → 改后="const key = stuckActionOf(call.name, call.args) + \"\\n\" + e.output;"
+  tool-choice-printed-label-reverts-to-verbatim
+    src=src/agent/tool-choice.ts test=tests/tool-choice.test.ts
+    针脚="（同 action + 结果前 200 字相同，两支都截断）" → 改后="（同 action + 逐字相同结果）"
+  claim-binding-accepts-symbol-absent-from-source
+    src=scripts/probe-promise-recall.ts test=tests/promise-recall-inventory.test.ts
+    针脚="!hasSymbol(srcText, b.symbol)" → 改后="false"
+  claim-binding-accepts-symbol-unreferenced-by-judge
+    src=scripts/probe-promise-recall.ts test=tests/promise-recall-inventory.test.ts
+    针脚="!hasSymbol(testText, b.symbol)" → 改后="false"
+  claim-binding-binds-faces-not-on-the-owed-list
+    src=scripts/probe-promise-recall.ts test=tests/promise-recall-inventory.test.ts
+    针脚="!owed.has(b.face)" → 改后="false"
+
+# 基准（未改任何文件；每台跑自己那条判卷文件，所以逐个文件都要先绿）
+  tests/impact-attribution.test.ts：exit=0 tests={"found":true,"failed":0,"passed":26} 用时=1.34s
+  tests/impact-admission.test.ts：exit=0 tests={"found":true,"failed":0,"passed":10} 用时=1.61s
+  tests/impact-query.test.ts：exit=0 tests={"found":true,"failed":0,"passed":58} 用时=1.37s
+  tests/web-fetch.test.ts：exit=0 tests={"found":true,"failed":0,"passed":28} 用时=366ms
+  tests/promise-recall-inventory.test.ts：exit=0 tests={"found":true,"failed":0,"passed":31} 用时=2.27s
+  tests/prune.test.ts：exit=0 tests={"found":true,"failed":0,"passed":28} 用时=827ms
+  tests/memory-lessons.test.ts：exit=0 tests={"found":true,"failed":0,"passed":22} 用时=346ms
+  tests/loop-repeat-nudge.test.ts：exit=0 tests={"found":true,"failed":0,"passed":11} 用时=374ms
+  tests/tool-choice.test.ts：exit=0 tests={"found":true,"failed":0,"passed":16} 用时=406ms
+  ✅ 全部基准绿
+
+# impact-attribution-no-evidence-read-as-kept  src/agent/impact/attribution.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「「无证据」优先于任何 sources：不能因为带了名字表就把没判的文件算成排除…」红在它自己那条 ✅
+    × 四种输入各给一个答案：无 import 面／没有绑定证据／正证在此／反证在别处 4ms
+    × 「无证据」优先于任何 sources：不能因为带了名字表就把没判的文件算成排除 1ms
+
+# impact-attribution-positive-proof-ignored  src/agent/impact/attribution.ts  针脚命中=1 处
+  exit=1 failed=7 复原=逐字节一致 ✅
+  killer「四种输入各给一个答案：无 import 面／没有绑定证据／正证在此／反证在别处…」红在它自己那条 ✅
+    × 四种输入各给一个答案：无 import 面／没有绑定证据／正证在此／反证在别处 4ms
+    × 多来源里有 defFile 就留（一个名字从两份文件绑进来的形状不许整条判死） 0ms
+    × 四个引用方各归各位：真 import 的留、外部包与第三方绑定的摘、不 import 的留 119ms
+    × downward 按 def 逐条判：otherdef.ts 看不到 ledger.ts 那份，consumer.ts 看得到 20ms
+    × 冻结夹具一条不许掉：边集 == 真值 16 条、dropped=0（这一档买得起的前提，不是副作用） 17ms
+    × 闭包只算归得到的引用方：绑到外部包的那一处掉出，真 import 与没有任何绑定的都留着（宽窄两臂同一张图） 11ms
+    × fileImpact 数得出「有几处只归得到别处那份定义」：正证的与拿不出反证的都不许算进来 11ms
+
+# impact-attribution-only-first-source-counted  src/agent/impact/attribution.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「多来源里有 defFile 就留（一个名字从两份文件绑进来的形状不许整条判死）…」红在它自己那条 ✅
+    × 多来源里有 defFile 就留（一个名字从两份文件绑进来的形状不许整条判死） 3ms
+
+# impact-attribution-reverse-proof-never-drops  src/agent/impact/attribution.ts  针脚命中=1 处
+  exit=1 failed=6 复原=逐字节一致 ✅
+  killer「四个引用方各归各位：真 import 的留、外部包与第三方绑定的摘、不 impo…」红在它自己那条 ✅
+    × 四种输入各给一个答案：无 import 面／没有绑定证据／正证在此／反证在别处 4ms
+    × 四个引用方各归各位：真 import 的留、外部包与第三方绑定的摘、不 import 的留 121ms
+    × downward 按 def 逐条判：otherdef.ts 看不到 ledger.ts 那份，consumer.ts 看得到 16ms
+    × 无证据那一支：手工把 nameSources 抹掉 ⇒ 清单回到按名字图（一条不摘，且计数进 noEvidence） 11ms
+    × 闭包只算归得到的引用方：绑到外部包的那一处掉出，真 import 与没有任何绑定的都留着（宽窄两臂同一张图） 10ms
+    × fileImpact 数得出「有几处只归得到别处那份定义」：正证的与拿不出反证的都不许算进来 13ms
+
+# impact-attribution-note-dropped-only-gauge  src/agent/impact/attribution.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「两格分别出声：dropped 说「另有出处」，noEvidence 说「保守计入…」红在它自己那条 ✅
+    × 两格分别出声：dropped 说「另有出处」，noEvidence 说「保守计入」，各不带对方那句话 3ms
+
+# impact-attribution-note-prints-zeros  src/agent/impact/attribution.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「全 0 ⇒ 空串（不许印「排除 0 处」这种噪声）…」红在它自己那条 ✅
+    × 全 0 ⇒ 空串（不许印「排除 0 处」这种噪声） 3ms
+    × 全 0 时注入文本与接这一维之前逐字相同（零回归哨兵） 1ms
+
+# impact-edges-not-filtered-by-attribution  src/agent/impact/index.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「边构造吃判据：三态计数各有一行，且摘边只看 verdict…」红在它自己那条 ✅
+    × 四个引用方各归各位：真 import 的留、外部包与第三方绑定的摘、不 import 的留 125ms
+    × 边构造吃判据：三态计数各有一行，且摘边只看 verdict 1ms
+
+# impact-upward-attribution-not-applied  src/agent/impact/index.ts  针脚命中=1 处
+  exit=1 failed=5 复原=逐字节一致 ✅
+  killer「无证据那一支：手工把 nameSources 抹掉 ⇒ 清单回到按名字图（一条不…」红在它自己那条 ✅
+    × 四个引用方各归各位：真 import 的留、外部包与第三方绑定的摘、不 import 的留 121ms
+    × 无证据那一支：手工把 nameSources 抹掉 ⇒ 清单回到按名字图（一条不摘，且计数进 noEvidence） 14ms
+    × 闭包只算归得到的引用方：绑到外部包的那一处掉出，真 import 与没有任何绑定的都留着（宽窄两臂同一张图） 9ms
+    × fileImpact 数得出「有几处只归得到别处那份定义」：正证的与拿不出反证的都不许算进来 11ms
+    × upward 与 downward 都过同一把判据（只硬化一支＝另一支的清单继续撒谎） 0ms
+
+# impact-downward-attribution-not-applied  src/agent/impact/index.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「downward 按 def 逐条判：otherdef.ts 看不到 ledge…」红在它自己那条 ✅
+    × downward 按 def 逐条判：otherdef.ts 看不到 ledger.ts 那份，consumer.ts 看得到 18ms
+    × upward 与 downward 都过同一把判据（只硬化一支＝另一支的清单继续撒谎） 1ms
+
+# impact-attribution-note-not-wired  src/agent/impact/index.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「歧义句与归属句彼此独立：只有归属计数没有歧义时，归属句照样出…」红在它自己那条 ✅
+    × 歧义句与归属句彼此独立：只有归属计数没有歧义时，归属句照样出 4ms
+
+# impact-tags-cache-imports-guard-dropped  src/agent/impact/index.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「tags 条目同时带 tags 与 imports；把 imports 抠掉的老…」红在它自己那条 ✅
+    × tags 条目同时带 tags 与 imports；把 imports 抠掉的老条目按 miss 重解析 37ms
+    × 取料两出口同进缓存与索引 2ms
+
+# impact-imports-exit-not-eaten  src/agent/impact/index.ts  针脚命中=1 处
+  exit=1 failed=6 复原=逐字节一致 ✅
+  killer「解析走 fileSymbols（第三个出口），不回退到 fileTags 薄壳…」红在它自己那条 ✅
+    × 四个引用方各归各位：真 import 的留、外部包与第三方绑定的摘、不 import 的留 134ms
+    × downward 按 def 逐条判：otherdef.ts 看不到 ledger.ts 那份，consumer.ts 看得到 36ms
+    × 无证据那一支：手工把 nameSources 抹掉 ⇒ 清单回到按名字图（一条不摘，且计数进 noEvidence） 16ms
+    × 闭包只算归得到的引用方：绑到外部包的那一处掉出，真 import 与没有任何绑定的都留着（宽窄两臂同一张图） 9ms
+    × fileImpact 数得出「有几处只归得到别处那份定义」：正证的与拿不出反证的都不许算进来 11ms
+    × 解析走 fileSymbols（第三个出口），不回退到 fileTags 薄壳 0ms
+
+# impact-index-artifact-namesources-not-saved  src/agent/impact/persist.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「索引 artifact 带上 nameSources 与 attribution…」红在它自己那条 ✅
+    × 索引 artifact 带上 nameSources 与 attribution；缺任何一格或版本不对都按 miss 15ms
+    × 取料两出口同进缓存与索引 1ms
+
+# impact-index-artifact-version-not-checked  src/agent/impact/persist.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「版本号不符的 artifact 即使字段齐全也按 miss（只加字段不认号＝老图…」红在它自己那条 ✅
+    × 版本号不符的 artifact 即使字段齐全也按 miss（只加字段不认号＝老图整层复活） 17ms
+
+# impact-lease-closure-bypasses-attribution  src/agent/impact/index.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「闭包只算归得到的引用方：绑到外部包的那一处掉出，真 import 与没有任何绑定…」红在它自己那条 ✅
+    × 闭包只算归得到的引用方：绑到外部包的那一处掉出，真 import 与没有任何绑定的都留着（宽窄两臂同一张图） 17ms
+
+# impact-closure-glob-broken  src/agent/impact/index.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「目录 glob 把整个子树的波及并进来…」红在它自己那条 ✅
+    × 目录 glob 把整个子树的波及并进来 11ms
+
+# impact-mixed-sites-not-counted  src/agent/impact/index.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「fileImpact 数得出「有几处只归得到别处那份定义」：正证的与拿不出反证的…」红在它自己那条 ✅
+    × fileImpact 数得出「有几处只归得到别处那份定义」：正证的与拿不出反证的都不许算进来 13ms
+
+# impact-mixed-sites-not-in-note  src/agent/impact/index.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「分母句只在真混进时出，且出来时只多那一句（其余字节一字不动）…」红在它自己那条 ✅
+    × fileImpact 数得出「有几处只归得到别处那份定义」：正证的与拿不出反证的都不许算进来 12ms
+    × 分母句只在真混进时出，且出来时只多那一句（其余字节一字不动） 1ms
+
+# impact-query-union-note-denies-imports  src/tools/impact-query.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「并集那句不许再承诺做不到的事，也不许夸成已经做到（文案的两半各钉一次）…」红在它自己那条 ✅
+    × 并集那句不许再承诺做不到的事，也不许夸成已经做到（文案的两半各钉一次） 4ms
+
+# impact-query-deps-arm-loses-attribution  src/tools/impact-query.ts  针脚命中=1 处
+  exit=1 failed=3 复原=逐字节一致 ✅
+  killer「deps 支（第三个消费者）也带同一句：只给两支报数＝剩下那支的清单没人交代被收…」红在它自己那条 ✅
+    × deps 支（第三个消费者）也带同一句：只给两支报数＝剩下那支的清单没人交代被收窄过 20ms
+    × 自述句落在计数句**之后**：拼进 head 会把最关键的数挤到句子末尾（10-03 真仓读数就是这个形状） 34ms
+    × 零清单那两支也带自述：「半径为 0／依赖面为 0」时更要说这张图判过多少，不然空列表看着像全量 30ms
+
+# impact-query-symbol-arm-loses-attribution  src/tools/impact-query.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「symbol 支：清单已经被判据收窄过，就要说出收了多少…」红在它自己那条 ✅
+    × symbol 支：清单已经被判据收窄过，就要说出收了多少 20ms
+    × 自述句落在计数句**之后**：拼进 head 会把最关键的数挤到句子末尾（10-03 真仓读数就是这个形状） 43ms
+
+# impact-query-file-arm-loses-denominator  src/tools/impact-query.ts  针脚命中=1 处
+  exit=1 failed=3 复原=逐字节一致 ✅
+  killer「file 支：数得出「几处只归得到别处」，且与回注摘要共用同一句出处…」红在它自己那条 ✅
+    × file 支：数得出「几处只归得到别处」，且与回注摘要共用同一句出处 20ms
+    × 自述句落在计数句**之后**：拼进 head 会把最关键的数挤到句子末尾（10-03 真仓读数就是这个形状） 17ms
+    × 零清单那两支也带自述：「半径为 0／依赖面为 0」时更要说这张图判过多少，不然空列表看着像全量 18ms
+
+# impact-query-notes-land-before-the-count  src/tools/impact-query.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「自述句落在计数句**之后**：拼进 head 会把最关键的数挤到句子末尾（10-…」红在它自己那条 ✅
+    × 自述句落在计数句**之后**：拼进 head 会把最关键的数挤到句子末尾（10-03 真仓读数就是这个形状） 25ms
+
+# impact-query-empty-list-loses-notes  src/tools/impact-query.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「零清单那两支也带自述：「半径为 0／依赖面为 0」时更要说这张图判过多少，不然空…」红在它自己那条 ✅
+    × 零清单那两支也带自述：「半径为 0／依赖面为 0」时更要说这张图判过多少，不然空列表看着像全量 20ms
+
+# impact-mixed-note-prints-zeros  src/agent/impact/attribution.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「那句分母只有一处文字：混进 0 就空串；两处各写一遍的话改一处忘一处会静默说谎…」红在它自己那条 ✅
+    × file 支：数得出「几处只归得到别处」，且与回注摘要共用同一句出处 55ms
+    × 那句分母只有一处文字：混进 0 就空串；两处各写一遍的话改一处忘一处会静默说谎 1ms
+
+# web-hint-offers-anchor-as-a-way-to-narrow  src/tools/output-ring.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「下一步的括号里不许列做不到的事：锚点不是「更精确的 URL」…」红在它自己那条 ✅
+    × 下一步的括号里不许列做不到的事：锚点不是「更精确的 URL」 8ms
+
+# web-hint-drops-fragment-explanation  src/tools/output-ring.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「要么不说，要说就说清片段不上线：那句解释必须写在模型读到的这一句里…」红在它自己那条 ✅
+    × 要么不说，要说就说清片段不上线：那句解释必须写在模型读到的这一句里 3ms
+
+# web-fetch-hint-computed-not-wired  src/tools/web_fetch.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「这句要真从 web_fetch 那一支交出去（改了常量而出口不接＝模型读到的还是…」红在它自己那条 ✅
+    × 真 loopback 服务：分块中文不乱码、体积帽截断后仍交出正文 26ms
+    × 这句要真从 web_fetch 那一支交出去（改了常量而出口不接＝模型读到的还是旧的） 34ms
+
+# promise-web-face-left-unregistered  scripts/probe-promise-recall.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「每一处模型可见的承诺面都有判定归属（新加一句『全文见 X』而不登记 ⇒ 这条先红…」红在它自己那条 ✅
+    × 每一处模型可见的承诺面都有判定归属（新加一句『全文见 X』而不登记 ⇒ 这条先红） 4ms
+
+# promise-runner-name-typo-gets-anothers-verdict  scripts/probe-promise-recall.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「未知判定名不 exec、直接红在这一格（不许拿别的 hop 的结果顶替）…」红在它自己那条 ✅
+    × 未知判定名不 exec、直接红在这一格（不许拿别的 hop 的结果顶替） 112ms
+
+# prune-stub-classifier-fails-open  scripts/probe-promise-recall.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「三类各占一字且互不相同；认不出的串 fail-closed 落到『裸占位』…」红在它自己那条 ✅
+    × 三类各占一字且互不相同；认不出的串 fail-closed 落到『裸占位』 4ms
+    × 探针那一格必须交得出三栏，且三栏彼此可分辨（一栏空转＝分母是假的） 27ms
+
+# prune-stub-third-column-drops-workspace  scripts/probe-promise-recall.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「反向对照：只补 attachmentsDir 仍拿不到可取路径 ⇒ 那句承诺的修…」红在它自己那条 ✅
+    × 探针那一格必须交得出三栏，且三栏彼此可分辨（一栏空转＝分母是假的） 31ms
+    × 反向对照：只补 attachmentsDir 仍拿不到可取路径 ⇒ 那句承诺的修法确有两件事 28ms
+
+# prune-stub-report-hides-a-column  scripts/probe-promise-recall.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「报告要把三栏都印出来（藏一栏＝读数看着更干净，其实那一格没量）…」红在它自己那条 ✅
+    × 报告要把三栏都印出来（藏一栏＝读数看着更干净，其实那一格没量） 56ms
+
+# prune-stub-face-left-unregistered  scripts/probe-promise-recall.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「每一处模型可见的承诺面都有判定归属（新加一句『全文见 X』而不登记 ⇒ 这条先红…」红在它自己那条 ✅
+    × 每一处模型可见的承诺面都有判定归属（新加一句『全文见 X』而不登记 ⇒ 这条先红） 4ms
+
+# claim-audience-nearest-call-only  scripts/probe-promise-recall.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「受众判定沿整条 parent 链认终端写入——`paint(…)` 包一层也是给…」红在它自己那条 ✅
+    × 受众判定沿整条 parent 链认终端写入——`paint(…)` 包一层也是给运维看的 4ms
+
+# claim-witness-run-threshold-collapsed  scripts/probe-promise-recall.ts  针脚命中=1 处
+  exit=1 failed=5 复原=逐字节一致 ✅
+  killer「证人候选段：插值挖掉、按非中文断开、6 字门槛、去重…」红在它自己那条 ✅
+    × 证人候选段：插值挖掉、按非中文断开、6 字门槛、去重 6ms
+    × 真仓那一趟：分母非零、存量在帽内、四态相加＝分母（这条尺不许恒红也不许空载） 244ms
+    × 缺第二件：被指认的判卷没引用那个符号 ⇒ 仍算欠证人（真材实料的反例：白名单常量在那份判卷里 0 引用） 242ms
+    × 反向对照：把通道关掉（空表），现读那两条就得回到欠证人 ⇒ 上一条不是恒真 233ms
+    × 反向对照：往真仓那份源码里凭空加一句无人判的能力断言 ⇒ 帽当场被顶破（证明上一条不是恒真） 441ms
+
+# claim-cap-stale-branch-dropped  scripts/probe-promise-recall.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「帽三态各自出声：超帽红、低于帽也红（登记表自己烂掉不许静默）…」红在它自己那条 ✅
+    × 帽三态各自出声：超帽红、低于帽也红（登记表自己烂掉不许静默） 5ms
+
+# claim-cap-over-branch-dropped  scripts/probe-promise-recall.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「反向对照：往真仓那份源码里凭空加一句无人判的能力断言 ⇒ 帽当场被顶破（证明上一…」红在它自己那条 ✅
+    × 帽三态各自出声：超帽红、低于帽也红（登记表自己烂掉不许静默） 5ms
+    × 反向对照：往真仓那份源码里凭空加一句无人判的能力断言 ⇒ 帽当场被顶破（证明上一条不是恒真） 450ms
+
+# claim-whole-sentence-piece-double-count  scripts/probe-promise-recall.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「整句收下后不许再按片段重复计数——共用 walker 时虚高会串到对面…」红在它自己那条 ✅
+    × 整句收下后不许再按片段重复计数——共用 walker 时虚高会串到对面 4ms
+
+# lesson-empty-evidence-gate-dropped  src/agent/memory/lessons.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「指针行在、内容为空 ⇒ 与「没有那行」走同一道门（不合格，不是半合格）…」红在它自己那条 ✅
+    × 指针行在、内容为空 ⇒ 与「没有那行」走同一道门（不合格，不是半合格） 3ms
+    × 一条坏数据不许吃掉整段 LESSONS（注入侧那句「无出处的条目不会出现在这里」的真正内容） 3ms
+
+# lesson-inject-fabricates-empty-digest  src/agent/memory/inject.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「一条坏数据不许吃掉整段 LESSONS（注入侧那句「无出处的条目不会出现在这里」…」红在它自己那条 ✅
+    × **无证据指针的教训正文不会被注入**（与 lessons 侧「无证据不写盘」同一道门） 5ms
+    × 一条坏数据不许吃掉整段 LESSONS（注入侧那句「无出处的条目不会出现在这里」的真正内容） 2ms
+
+# repeat-error-branch-asserts-determinism-again  src/agent/stuck.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「连败三次而每次错误不同 ⇒ 提示不再断言重试无效，改说最新那条本身就是新信息…」红在它自己那条 ✅
+    × 连败三次而每次错误不同 ⇒ 提示不再断言重试无效，改说最新那条本身就是新信息 3ms
+    × detector 层：`sameObservation` 交的是比过的事，不是推测（阈值走配置，不自己造数） 1ms
+
+# repeat-note-hides-the-comparison-window  src/agent/loop.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「连败三次且错误相同 ⇒ 才说得出「原样重试不会改变结果」，并写明比对窗口…」红在它自己那条 ✅
+    × 连败三次且错误相同 ⇒ 才说得出「原样重试不会改变结果」，并写明比对窗口 4ms
+    × 两次错误只差在第 201 字 ⇒ 仍算'错误相同'（这是截断比较的准确含义，文案不越过它说话） 1ms
+
+# repeat-obs-note-reverts-to-verbatim-claim  src/agent/loop.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「成功但逐字相同：第 3 次不提示、第 4 次才提示（阈值取自 detectStu…」红在它自己那条 ✅
+    × 成功但逐字相同：第 3 次不提示、第 4 次才提示（阈值取自 detectStuck，不自己造数） 3ms
+
+# tool-choice-repeat-window-not-truncated  src/agent/tool-choice.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「窗口边界：两条结果只差在第 201 字 ⇒ 仍算一次重复探测（这就是「前 200…」红在它自己那条 ✅
+    × 窗口边界：两条结果只差在第 201 字 ⇒ 仍算一次重复探测（这就是「前 200 字」的准确含义） 3ms
+
+# tool-choice-printed-label-reverts-to-verbatim  src/agent/tool-choice.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「印面与边界名单按窗口说话，不许再写「逐字」（读这些数的人据此判断重复率准不准）…」红在它自己那条 ✅
+    × 印面与边界名单按窗口说话，不许再写「逐字」（读这些数的人据此判断重复率准不准） 4ms
+
+# claim-binding-accepts-symbol-absent-from-source  scripts/probe-promise-recall.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「缺第一件：那句所在的源文件里没有那个符号 ⇒ 仍算欠证人，并点名是这一件没成…」红在它自己那条 ✅
+    × 缺第一件：那句所在的源文件里没有那个符号 ⇒ 仍算欠证人，并点名是这一件没成 4ms
+
+# claim-binding-accepts-symbol-unreferenced-by-judge  scripts/probe-promise-recall.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「缺第二件：被指认的判卷没引用那个符号 ⇒ 仍算欠证人（真材实料的反例：白名单常量…」红在它自己那条 ✅
+    × 缺第二件：被指认的判卷没引用那个符号 ⇒ 仍算欠证人（真材实料的反例：白名单常量在那份判卷里 0 引用） 251ms
+
+# claim-binding-binds-faces-not-on-the-owed-list  scripts/probe-promise-recall.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「缺第三件：登记的那一格根本不在欠证人清单里 ⇒ 报成登记表自己的病，而不是悄悄多…」红在它自己那条 ✅
+    × 缺第三件：登记的那一格根本不在欠证人清单里 ⇒ 报成登记表自己的病，而不是悄悄多绑上一格 3ms
+
+# killer 独占性（两台红在同一条＝其中一条没分辨力）
+  49 台 → 48 个不同 killer；重复声明：每一处模型可见的承诺面都有判定归属（新加一句『全文见 X』而不登记 ⇒ 这条先红）×2
+  存活台：0 ✅
+
+# 残骸复查（复原后三个被测面必须与备份逐字节相同）
+  src/agent/impact/attribution.ts: 与备份一致 ✅
+  src/agent/impact/index.ts: 与备份一致 ✅
+  src/agent/impact/persist.ts: 与备份一致 ✅
+  src/tools/impact-query.ts: 与备份一致 ✅
+  src/tools/output-ring.ts: 与备份一致 ✅
+  src/tools/web_fetch.ts: 与备份一致 ✅
+  scripts/probe-promise-recall.ts: 与备份一致 ✅
+  src/agent/memory/lessons.ts: 与备份一致 ✅
+  src/agent/memory/inject.ts: 与备份一致 ✅
+  src/agent/stuck.ts: 与备份一致 ✅
+  src/agent/loop.ts: 与备份一致 ✅
+  src/agent/tool-choice.ts: 与备份一致 ✅
+
+# 汇总：49 台｜杀手命中 49｜存活 0｜残骸 0

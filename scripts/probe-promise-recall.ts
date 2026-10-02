@@ -209,15 +209,16 @@ export const CLAIM_MARKS: readonly string[] = [
 ];
 
 /** 欠证人的能力断言＝**存量帽**（只准调低）。
- *  现读 25 条。帽只往下走过三步，每一档都留了取料面：
+ *  现读 23 条（绑定通道之后）。帽只往下走过四档，每一档都留了取料面：
  *    29 第 311 页开张现读 → `outputs/terminal-audience-2026-10-03/measure-claims.log`
  *    28 第 312 页补 LESSONS 那句的证人 → `outputs/lesson-empty-evidence-2026-10-03/claims-recheck.log`
  *    25 第 313 页补换路提示两支文案 + no-progress 那句 → `outputs/repeat-nudge-honesty-2026-10-03/claims-recheck.log`
- *  最新一档的四个数：面 45、模型可见 43、有证人 13、挑不出段 5（三态相加＝分母）。
+ *    23 第 314 页开绑定通道，sidechat 那两句按执行端符号配对 → `outputs/claim-binding-2026-10-03/measure.log`
+ *  最新一档的五个数：面 45、模型可见 43、原句证人 13、绑定 2、挑不出段 5（四态相加＝分母）。
  *  计数类不留余量；补了证人不跟着把帽调下来同样要红。
  *  注意这一格的取料含 `tests/**` 全文——**判卷自己抄的那句生产原文也会当证人**，
  *  所以本文件的夹具一律用「探针假句……」这种对不上任何生产文案的串（第 311 页实测：照抄原句会让分母从 29 掉到 26）。 */
-export const CLAIM_UNWITNESSED_CAP = 25;
+export const CLAIM_UNWITNESSED_CAP = 23;
 
 /** 证人候选段：句里**所有**够长的连续中文（先把 `${…}` 插值挖掉，再按非中文断开），门槛 6 字。
  *  为什么交"每一段"而不是"最长那一段"：一句能力断言往往分好几层，判卷通常只点其中一层
@@ -286,6 +287,94 @@ export function claimWitnessFindings(
     byAudience: { model: count("model"), operator: count("operator"), ui: count("ui") },
   };
 }
+
+/* ---------------- 绑定通道：证人用了另一套词时，靠**执行端符号**配对（第 314 页） ----------------
+ *
+ * 起因是第 313 页复核 `src/agent/sidechat.ts#SIDECHAT_SYSTEM` 那两句：执行端有符号
+ * （`SIDECHAT_FORBIDDEN_TOOLS` 是那份 allow-list 的补集、`promoteToMain` 是旁路进主流的唯一入口），
+ * 判卷也真在用它——可证人写的是「三个写向工具不在 sidechat 工具表里」，与作者那串中文一个字都不重合
+ * ⇒ 上面那张网只能报「欠证人」。这张表就是把"这句话背后那个开关"变成可机器核的配对。
+ *
+ * 它**不许**用「把原句抄进测试」来降数：那只会骗过匹配、什么都不证明。这里成立的条件是三件事同时为真
+ *   ① 那一格还在现读的欠证人清单里（那句话改名/被删 ⇒ 绑定是白登记，出声）；
+ *   ② `symbol` 真出现在那句话所在的那个源文件里（句子背后确有这么个开关，不是凭印象）；
+ *   ③ `symbol` 真出现在被指认的那份判卷里（那条判卷确实在用这个开关，散文不算）。
+ * 缺任何一件 ⇒ 这一格**仍算欠证人**，且这条绑定自己上报原因。`why` 给人复核，尺不判它。 */
+export interface ClaimBinding {
+  /** 面的单位与 `claimWitnessFindings` 一致：`file#fn｜needle`。 */
+  face: string;
+  symbol: string;
+  testFile: string;
+  why: string;
+}
+
+export interface BindingMaterial {
+  /** 源文件路径 → 正文（只有 face 所属那一支会被查）。 */
+  src: ReadonlyMap<string, string>;
+  /** 判卷文件路径 → 正文。 */
+  tests: ReadonlyMap<string, string>;
+}
+
+const hasSymbol = (text: string, symbol: string): boolean =>
+  new RegExp("(^|[^A-Za-z0-9_])" + symbol + "([^A-Za-z0-9_]|$)", "u").test(text);
+
+/** 一条绑定缺了哪几件事（空数组＝成立）。原因逐条印出来：只答"不成立"等于让人再去 grep 一遍。 */
+export function claimBindingDefects(b: ClaimBinding, m: BindingMaterial): string[] {
+  const out: string[] = [];
+  const file = b.face.split("｜")[0]?.split("#")[0] ?? b.face;
+  const srcText = m.src.get(file);
+  if (srcText === undefined) out.push(`取料里没有 ${file}`);
+  else if (!hasSymbol(srcText, b.symbol)) out.push(`${file} 里没有 ${b.symbol} 这个符号（那句背后没有你说的开关）`);
+  const testText = m.tests.get(b.testFile);
+  if (testText === undefined) out.push(`判卷文件 ${b.testFile} 不在取料面里`);
+  else if (!hasSymbol(testText, b.symbol)) out.push(`${b.testFile} 没引用 ${b.symbol}（它判的不是这件事）`);
+  return out;
+}
+
+/** 绑定生效的那些格从「欠证人」移到「绑定」；**守恒律**：`bound + unwitnessed` 必须等于进来的
+ *  `findings.unwitnessed` 条数（判卷里钉着）。`bad` 不占这个等式——它是登记表自己的病，单独红。 */
+export function bindClaimFaces(
+  findings: Pick<ClaimWitnessFindings, "unwitnessed">,
+  bindings: readonly ClaimBinding[],
+  m: BindingMaterial,
+): { bound: string[]; unwitnessed: string[]; bad: string[] } {
+  const owed = new Set(findings.unwitnessed);
+  const moved = new Set<string>();
+  const bad: string[] = [];
+  for (const b of bindings) {
+    if (!owed.has(b.face)) {
+      bad.push(b.face + "：欠证人清单里没有这一格（那句话改了名、被删，或它已经拿到原句证人 ⇒ 这条是白登记）");
+      continue;
+    }
+    const defects = claimBindingDefects(b, m);
+    if (defects.length > 0) { bad.push(b.face + "：" + defects.join("；")); continue; }
+    moved.add(b.face);
+  }
+  return {
+    bound: findings.unwitnessed.filter((k) => moved.has(k)),
+    unwitnessed: findings.unwitnessed.filter((k) => !moved.has(k)),
+    bad,
+  };
+}
+
+/** 已甄别的绑定登记表。每条都要能过 `claimBindingDefects` 那三件事，过不了就红在判卷里——
+ *  这张表不是"我说它真"，是"它背后那个符号两边都在"。逐条附**为什么这句被它兜住**。 */
+export const CLAIM_BINDINGS: readonly ClaimBinding[] = [
+  {
+    face: "src/agent/sidechat.ts#SIDECHAT_SYSTEM｜写向工具已从你的工具表摘除",
+    symbol: "SIDECHAT_FORBIDDEN_TOOLS",
+    testFile: "tests/sidechat-core.test.ts",
+    why: "那句话的范围由这份名单兜：判卷逐个断言名单里的工具不在 `sidechatToolSpecs()` 给的表内；"
+      + "而表本身是按 `SIDECHAT_TOOL_WHITELIST` 过滤出来的（allow-list，不是黑名单加补丁）",
+  },
+  {
+    face: "src/agent/sidechat.ts#SIDECHAT_SYSTEM｜你的结论不会自动进入主会话",
+    symbol: "promoteToMain",
+    testFile: "tests/sidechat-core.test.ts",
+    why: "旁路进主流只有这一个入口；同一份判卷钉的是「旁路事件落自己的 JSONL，主会话文件字节不变」，"
+      + "⇒ 没人显式调它的时候，主转录确实一个字都不多",
+  },
+];
 
 /** 存量帽（计数类**不留余量**，同 `prose-needle-scan` 那族）。三态各自出声：
  *  `over`＝现读超过帽（新加的无人判能力断言）；`stale`＝现读低于帽（有人补了证人却没把帽调下来，
@@ -934,17 +1023,31 @@ async function main(): Promise<void> {
        探针这边给人看的是名单本身：帽是 29，而帽只准调低。 */
     {
       const claimSites = scanClaimSites(files);
-      const corpus = trackedExistingFiles(ROOT, "tests").files
-        .map((p) => readFileSync(join(ROOT, p), "utf8"));
+      const testPaths = trackedExistingFiles(ROOT, "tests").files;
+      const corpus = testPaths.map((p) => readFileSync(join(ROOT, p), "utf8"));
       const cf = claimWitnessFindings(claimSites, corpus);
-      const ceil = claimWitnessCeiling(cf, CLAIM_UNWITNESSED_CAP);
+      // 绑定通道（第 314 页）：证人用了另一套词的那些格，靠「执行端符号两边都在」配对。
+      // 取料交**带文件名的**两份正文——判定要问的是"这个符号在那支文件里"，只交一坨拼接文本就答不了。
+      const material: BindingMaterial = {
+        src: new Map(files.map((f) => [f.path, f.text])),
+        tests: new Map(testPaths.map((p) => [p, readFileSync(join(ROOT, p), "utf8")])),
+      };
+      const bind = bindClaimFaces(cf, CLAIM_BINDINGS, material);
+      const capped = { ...cf, unwitnessed: bind.unwitnessed };
+      const ceil = claimWitnessCeiling(capped, CLAIM_UNWITNESSED_CAP);
       console.log("  ⚪ 能力断言证人面：面 " + String(claimSites.length) + " 处｜受众 " + JSON.stringify(cf.byAudience) +
         "｜模型可见 " + String(cf.modelSites) + " 格 ⇒ 有证人 " + String(cf.witnessed.length) +
-        "／欠证人 " + String(cf.unwitnessed.length) + "（帽 " + String(CLAIM_UNWITNESSED_CAP) +
+        "／绑定 " + String(bind.bound.length) +
+        "／欠证人 " + String(bind.unwitnessed.length) + "（帽 " + String(CLAIM_UNWITNESSED_CAP) +
         (ceil.over ? " ⇒ **超帽**" : ceil.stale ? " ⇒ **现读低于帽，把帽调下来**" : "，正贴线") + "）" +
-        "／挑不出段 " + String(cf.noNeedle.length));
-      for (const k of cf.unwitnessed) console.log("      欠证人：" + k);
+        "／挑不出段 " + String(cf.noNeedle.length) +
+        "（四态相加＝" + String(cf.witnessed.length + bind.bound.length + bind.unwitnessed.length + cf.noNeedle.length) + "）");
+      for (const k of bind.bound) console.log("      绑定：" + k);
+      for (const k of bind.bad) console.log("      ❌ 登记表自己有病：" + k);
+      for (const k of bind.unwitnessed) console.log("      欠证人：" + k);
       for (const k of cf.noNeedle) console.log("      不可知（句里挑不出 ≥6 字连续中文，多半被插值切碎）：" + k);
+      line(bind.bad.length === 0 ? "✅" : "❌",
+        `绑定表逐条过三件事（那一格在欠证人清单里、符号在那句所在源文件里、符号在被指认判卷里）：坏 ${String(bind.bad.length)} 条`);
       line(!ceil.over && !ceil.stale ? "✅" : "❌",
         `能力断言的帽：现读 ${String(ceil.read)} 对帽 ${String(ceil.cap)}（超出＝新加的无人判句子；低于＝补了证人没调帽）`);
     }

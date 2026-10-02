@@ -79,6 +79,10 @@ const IDS = [
   // 同一句不变量的第二个受众：`tool-choice` 那屏读数（量法一枚＋印面一枚，各红不同用例）。
   "tool-choice-repeat-window-not-truncated",
   "tool-choice-printed-label-reverts-to-verbatim",
+  // 第 314 页：绑定通道的三件成立条件，一件一枚（各红不同用例）。
+  "claim-binding-accepts-symbol-absent-from-source",
+  "claim-binding-accepts-symbol-unreferenced-by-judge",
+  "claim-binding-binds-faces-not-on-the-owed-list",
 ];
 
 // 一个 JS 字符串字面量的正则形状（双引号、单引号两支）。本笔 14 条改法都不含反引号写法，

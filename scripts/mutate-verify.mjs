@@ -12606,6 +12606,44 @@ const MUTATIONS = [
     ),
     expectFail: "印面与边界名单按窗口说话，不许再写「逐字」（读这些数的人据此判断重复率准不准）",
   },
+  // 第 314 页：绑定通道的三件成立条件，一件一枚——三枚必须红在**不同**用例上，
+  // 合在一条用例里就是两条没有分辨力的锚点（造红台的 killer 独占性那一格会当场点名）。
+  {
+    id: "claim-binding-accepts-symbol-absent-from-source",
+    src: "scripts/probe-promise-recall.ts",
+    test: "tests/promise-recall-inventory.test.ts",
+    desc: "摘掉「符号在那句所在源文件里」这一件 ⇒ 随便指一个仓库里存在的常量就能把一格从欠证人移走，"
+      + "绑定通道退化成空头支票：帽子降了，而那句话背后其实没有那个开关",
+    apply: (s) => s.replace(
+      "!hasSymbol(srcText, b.symbol)",
+      "false",
+    ),
+    expectFail: "缺第一件：那句所在的源文件里没有那个符号 ⇒ 仍算欠证人，并点名是这一件没成",
+  },
+  {
+    id: "claim-binding-accepts-symbol-unreferenced-by-judge",
+    src: "scripts/probe-promise-recall.ts",
+    test: "tests/promise-recall-inventory.test.ts",
+    desc: "摘掉「那份判卷真引用了这个符号」这一件 ⇒ 散文式指认（\"我认为它兜住了\"）也能销账。"
+      + "这一件有真材实料的反例：`SIDECHAT_TOOL_WHITELIST` 在源文件里在，但那份判卷逐条用的是它的补集",
+    apply: (s) => s.replace(
+      "!hasSymbol(testText, b.symbol)",
+      "false",
+    ),
+    expectFail: "缺第二件：被指认的判卷没引用那个符号 ⇒ 仍算欠证人（真材实料的反例：白名单常量在那份判卷里 0 引用）",
+  },
+  {
+    id: "claim-binding-binds-faces-not-on-the-owed-list",
+    src: "scripts/probe-promise-recall.ts",
+    test: "tests/promise-recall-inventory.test.ts",
+    desc: "摘掉「那一格还在欠证人清单里」这一件 ⇒ 改名、删句、或那格早已拿到原句证人之后，"
+      + "登记照样\"生效\"，而绑定数是从空气里多出来的（守恒律被破，帽可以一路降却不解释任何一格）",
+    apply: (s) => s.replace(
+      "!owed.has(b.face)",
+      "false",
+    ),
+    expectFail: "缺第三件：登记的那一格根本不在欠证人清单里 ⇒ 报成登记表自己的病，而不是悄悄多绑上一格",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

@@ -15,7 +15,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
-  CLAIM_UNWITNESSED_CAP, PROMISE_MARKS, RUNNERS, UI_ROOTS, builderCoverage, claimWitnessCeiling,
+  CLAIM_BINDINGS, CLAIM_UNWITNESSED_CAP, PROMISE_MARKS, RUNNERS, UI_ROOTS, bindClaimFaces,
+  builderCoverage, claimWitnessCeiling,
   claimWitnessFindings, claimWitnessRuns, isKnownRunner, promiseInventoryFindings, runnerVerdict,
   scanBuilderCallSites, scanCapNoticeCalls, scanClaimSites, scanPromiseSites,
   type ClaimSite, type ClaimWitnessFindings, type PromiseSite,
@@ -286,20 +287,101 @@ describe("能力断言的证人面：一句都不曾被点过才算欠（第 311
     expect(claimWitnessCeiling(mk(2), 3), "有人补了证人而帽没跟着调低 ⇒ 也要红").toMatchObject({ over: false, stale: true });
   });
 
-  it("真仓那一趟：分母非零、存量在帽内、三态相加＝分母（这条尺不许恒红也不许空载）", () => {
+  it("真仓那一趟：分母非零、存量在帽内、四态相加＝分母（这条尺不许恒红也不许空载）", () => {
     const srcScope = trackedExistingFiles(ROOT, "src");
     const files = srcScope.files.map((p) => ({ path: p, text: readFileSync(join(ROOT, p), "utf8") }));
-    const corpus = trackedExistingFiles(ROOT, "tests").files.map((p) => readFileSync(join(ROOT, p), "utf8"));
+    const testPaths = trackedExistingFiles(ROOT, "tests").files;
+    const corpus = testPaths.map((p) => readFileSync(join(ROOT, p), "utf8"));
     const sites = scanClaimSites(files);
     const f = claimWitnessFindings(sites, corpus);
+    const bind = bindClaimFaces(f, CLAIM_BINDINGS, {
+      src: new Map(files.map((x) => [x.path, x.text])),
+      tests: new Map(testPaths.map((p, i) => [p, corpus[i] ?? ""])),
+    });
     expect(sites.length, "一个面都没扫到＝没有尺，不读成干净（规则 74）").toBeGreaterThan(0);
     expect(f.modelSites, JSON.stringify(f.byAudience)).toBeGreaterThan(0);
     // 守恒律：任何一格都不许从清单里静默消失——"不可知"必须显式存在，而不是并进别的态。
-    expect(f.witnessed.length + f.unwitnessed.length + f.noNeedle.length, JSON.stringify(f)).toBe(f.modelSites);
-    const ceil = claimWitnessCeiling(f, CLAIM_UNWITNESSED_CAP);
-    expect(ceil.over, `欠证人的能力断言超出帽：\n${f.unwitnessed.join("\n")}`).toBe(false);
+    // 第 314 页起分母拆成**四态**（原句证人／绑定／欠证人／挑不出段）；绑定那一态不许偷偷吞掉一格。
+    expect(f.witnessed.length + bind.bound.length + bind.unwitnessed.length + f.noNeedle.length, JSON.stringify(f))
+      .toBe(f.modelSites);
+    expect(bind.bad, "登记表自己有病就不许接着数：" + bind.bad.join(" | ")).toEqual([]);
+    const ceil = claimWitnessCeiling({ unwitnessed: bind.unwitnessed }, CLAIM_UNWITNESSED_CAP);
+    expect(ceil.over, `欠证人的能力断言超出帽：\n${bind.unwitnessed.join("\n")}`).toBe(false);
     expect(ceil.stale, `现读 ${String(ceil.read)} 低于帽 ${String(ceil.cap)} ⇒ 把帽调下来（只准调低）`).toBe(false);
     expect(f.witnessed.length, "一条都没被判过＝这条尺没在工作").toBeGreaterThan(0);
+  });
+
+  describe("绑定通道：证人用了另一套词时，靠**执行端符号**配对（第 314 页）", () => {
+    // 三件成立条件各配一条**独立**用例：合在一条里，三枚锚点会全红在同一条上＝其中两枚没有分辨力。
+    const face = "src/__probe.ts#say｜探针假句永远不覆盖既有转录记录";
+    const srcText = 'function say(): string { return "探针假句永远不覆盖既有转录记录"; } const GATE_LAYERS = [];';
+    const testText = "// …… GATE_LAYERS 的逐型表 ……";
+    const material = { src: new Map([["src/__probe.ts", srcText]]), tests: new Map([["tests/__probe.test.ts", testText]]) };
+    const owed: Pick<ClaimWitnessFindings, "unwitnessed"> = { unwitnessed: [face] };
+    const b = { face, symbol: "GATE_LAYERS", testFile: "tests/__probe.test.ts", why: "夹具：符号两边都在" };
+
+    it("三件事都成立 ⇒ 那一格从欠证人移到绑定，条数一增一减（不是凭空多出来的）", () => {
+      const r = bindClaimFaces(owed, [b], material);
+      expect(r.bound, "三件齐了还不认＝这条通道没在工作").toEqual([face]);
+      expect(r.unwitnessed, "移过去的那一格不许仍留在欠证人清单里（双记＝帽可以靠它骗数）").toEqual([]);
+      expect(r.bad, "成立的绑定不该上报病：" + r.bad.join(" | ")).toEqual([]);
+      expect(r.bound.length + r.unwitnessed.length, "守恒：绑定的总数只能等于进来的条数").toBe(owed.unwitnessed.length);
+    });
+
+    it("缺第一件：那句所在的源文件里没有那个符号 ⇒ 仍算欠证人，并点名是这一件没成", () => {
+      const r = bindClaimFaces(owed, [{ ...b, symbol: "NOT_A_REAL_SYMBOL" }], material);
+      expect(r.bound, "句子背后没有这个开关，就不许把这一格销账").toEqual([]);
+      expect(r.unwitnessed).toEqual([face]);
+      expect(r.bad.join("\n")).toContain("没有 NOT_A_REAL_SYMBOL 这个符号");
+    });
+
+    it("缺第二件：被指认的判卷没引用那个符号 ⇒ 仍算欠证人（真材实料的反例：白名单常量在那份判卷里 0 引用）", () => {
+      // face **从现读里取**，不在这里抄那句生产文案：本文件的正文就在证人语料里（`tests/**` 全文），
+      // 抄一次就等于自己给自己当证人——第 311 页实测过同一件事（照抄原句会让分母从 29 掉到 26）。
+      const srcScope = trackedExistingFiles(ROOT, "src");
+      const files = srcScope.files.map((p) => ({ path: p, text: readFileSync(join(ROOT, p), "utf8") }));
+      const testPaths = trackedExistingFiles(ROOT, "tests").files;
+      const corpus = testPaths.map((p) => readFileSync(join(ROOT, p), "utf8"));
+      const f = claimWitnessFindings(scanClaimSites(files), corpus);
+      const realFace = f.unwitnessed.find((k) => k.startsWith("src/agent/sidechat.ts"));
+      expect(realFace, "现读的 sidechat 那一格应当还欠证人，否则这条反例没有对象：" + JSON.stringify(f.unwitnessed))
+        .toBeTruthy();
+      const r = bindClaimFaces({ unwitnessed: [realFace!] }, [{
+        face: realFace!, symbol: "SIDECHAT_TOOL_WHITELIST", testFile: "tests/sidechat-core.test.ts", why: "夹具：拿另一个常量冒充",
+      }], {
+        src: new Map(files.map((x) => [x.path, x.text])),
+        tests: new Map(testPaths.map((p, i) => [p, corpus[i] ?? ""])),
+      });
+      // 这条不是编的：那份判卷逐条断言的是 `SIDECHAT_FORBIDDEN_TOOLS`（补集那一面），没引用 allow-list 那个常量。
+      // ⇒ 若登记时说"我用白名单兜住了这句话"，尺必须拒收，否则绑定通道就是张随便填符号就能降帽的空头支票。
+      expect(r.bound).toEqual([]);
+      expect(r.bad.join("\n"), "符号在源文件里（第一件过），但那份判卷没用它（第二件不过）：" + r.bad.join(" | "))
+        .toContain("没引用 SIDECHAT_TOOL_WHITELIST");
+      expect(r.unwitnessed).toEqual([realFace]);
+    });
+
+    it("缺第三件：登记的那一格根本不在欠证人清单里 ⇒ 报成登记表自己的病，而不是悄悄多绑上一格", () => {
+      const r = bindClaimFaces(owed, [{ ...b, face: "src/__probe.ts#say｜那句话早就有原句证人了" }], material);
+      expect(r.bound, "清单里没有这一格 ⇒ 没有东西可以移").toEqual([]);
+      expect(r.unwitnessed).toEqual([face]);
+      expect(r.bad.join("\n"), "登记表烂了要出声：" + r.bad.join(" | ")).toContain("欠证人清单里没有这一格");
+    });
+
+    it("反向对照：把通道关掉（空表），现读那两条就得回到欠证人 ⇒ 上一条不是恒真", () => {
+      const srcScope = trackedExistingFiles(ROOT, "src");
+      const files = srcScope.files.map((p) => ({ path: p, text: readFileSync(join(ROOT, p), "utf8") }));
+      const testPaths = trackedExistingFiles(ROOT, "tests").files;
+      const corpus = testPaths.map((p) => readFileSync(join(ROOT, p), "utf8"));
+      const f = claimWitnessFindings(scanClaimSites(files), corpus);
+      const m = {
+        src: new Map(files.map((x) => [x.path, x.text])),
+        tests: new Map(testPaths.map((p, i) => [p, corpus[i] ?? ""])),
+      };
+      const off = bindClaimFaces(f, [], m);
+      const on = bindClaimFaces(f, CLAIM_BINDINGS, m);
+      expect(on.bound.length, "通道开着却一条都没绑上＝没在工作").toBeGreaterThan(0);
+      expect(off.unwitnessed.length - on.unwitnessed.length, "绑上的条数必须正好等于欠证人少掉的条数").toBe(on.bound.length);
+    });
   });
 
     it("整句收下后不许再按片段重复计数——共用 walker 时虚高会串到对面", () => {
