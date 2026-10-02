@@ -30,15 +30,24 @@ export type Validity = { valid: true } | { valid: false; why: string };
 export const WHY_NOT_STARTED = "未起步（0 次模型请求：provider 报错 / 限流 / 鉴权失败）";
 export const WHY_INTERRUPTED_PREFIX = "中途被打断（provider 侧错误）：";
 
+/** 找出那条 provider 侧打断的**原文**；没有 ⇒ null。
+ *  「这一趟算不算数」（下面 runValidity）与「要不要再拨一次」（`eval-retry.retryVerdict`）
+ *  都从这里取判断 ⇒ 一条白名单只有一份。抄两份迟早漂成两把尺（本仓同族第十几次）。 */
+export function providerInterruptOf(fails: readonly string[]): string | null {
+  for (const f of fails) {
+    if (f.includes("runLoop 抛错") && PROVIDER_ERROR.test(f)) return f;
+  }
+  return null;
+}
+
 /** 判一趟跑算不算数。`fails` 传判卷给出的失败原因列表。 */
 export function runValidity(run: RunFace, fails: readonly string[]): Validity {
   if (run.requests <= 0) {
     return { valid: false, why: WHY_NOT_STARTED };
   }
-  for (const f of fails) {
-    if (f.includes("runLoop 抛错") && PROVIDER_ERROR.test(f)) {
-      return { valid: false, why: WHY_INTERRUPTED_PREFIX + f.slice(0, 120) };
-    }
+  const interrupt = providerInterruptOf(fails);
+  if (interrupt !== null) {
+    return { valid: false, why: WHY_INTERRUPTED_PREFIX + interrupt.slice(0, 120) };
   }
   return { valid: true };
 }

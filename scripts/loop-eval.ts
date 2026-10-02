@@ -29,6 +29,10 @@ import { ClarifyGate, PlanGate } from "../src/agent/gates";
 // 「这趟跑算不算数」——纯函数、可单测。分母口径见那边的模块头：
 // **未起步 / 被 provider 打断的趟次不许进分母**（限流打断不能记成"模型没做到"）。
 import { costSplit, moneyText, PRICE_UNKNOWN, priceFace, runValidity, tally } from "./lib/eval-validity";
+// 重拨那一格：判据与分母共用同一个白名单（`providerInterruptOf`），等待有帽、帽外明说不重拨。
+import { retryVerdict, withProviderRetry } from "./lib/eval-retry";
+
+const sleep = (ms: number): Promise<void> => new Promise((res) => setTimeout(res, ms));
 import { createVerifyHook, defaultExec, runVerifyOutcome, type ExecFn } from "../src/agent/verify";
 // 用量归因走**生产那一份盖章器**（`createUsageAttributor` 的唯一调用点从前只有 agent-runner ⇒
 // 基准路径绕过它，整条链上没有一笔 usage 带模型名，钱轴跨模型就无从分面）。
@@ -271,6 +275,8 @@ interface Reading {
   /** 这一趟真拨的模型名 = 归因键（`scripts/eval/report.ts` 的 `modelFace` 用它挡跨模型 A/B）。
    *  与 usage 事件上的 `model` 同源：都取 `glmDefaultModelName()`，不在这里再算一份缺省。 */
   model: string;
+  /** 这一格实际拨了几趟（1 = 首趟就过去了）。重试次数不印出来的话，「退避有效」就永远是说法。 */
+  attempts: number; retryWaitMs: number; retryWhy: string;
   seedVerifyOk: boolean;
   seconds: number; requests: number; tokensIn: number; tokensOut: number; cny: number;
   toolCalls: number; toolFailures: number; repeatedSameAction: number;
@@ -467,6 +473,7 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
   return {
     id: t.id, name: t.name, rep, system: SYSTEM_MODE, seedVerifyOk,
     model: glmDefaultModelName(),
+    attempts: 1, retryWaitMs: 0, retryWhy: "首趟未重拨",
     seconds, requests: usage.length, tokensIn, tokensOut,
     cny: cnyOf(tokensIn, tokensOut),
     toolCalls: calls.length,
@@ -571,7 +578,15 @@ await mkdir(ROOT + "/" + OUT, { recursive: true });
 const rows: { r: Reading; g: { ok: boolean; fails: string[] } }[] = [];
 for (let rep = 1; rep <= REPS; rep++) {
   for (const t of tasks) {
-    const r = await runOnce(t, rep);
+    // 被 provider 打断 ⇒ 再拨一次（判据与分母共用同一个白名单，见 lib/eval-retry）。
+    // 帽内的等待（分钟级抖动）才等；日配额那种要等到明天的 ⇒ 明确不重拨并印出原因——
+    // 那一趟仍会被 `runValidity` 判成「无效、不进分母」，不会污染分数。
+    const retried = await withProviderRetry(
+      () => runOnce(t, rep),
+      (res, n) => retryVerdict(grade(res, t).fails, n, { nowMs: Date.now() }),
+      (ms) => sleep(ms),
+    );
+    const r = { ...retried.value, attempts: retried.attempts, retryWaitMs: retried.waitedMs, retryWhy: retried.stoppedWhy };
     const g = grade(r, t);
     rows.push({ r, g });
     // 未起步 / 被 provider 打断的趟次**不叫 FAIL**：那会把"跑不成"记成"模型没做到"。
@@ -582,9 +597,10 @@ for (let rep = 1; rep <= REPS; rep++) {
       `[loop-eval] ${t.id} rep${String(rep)} ${verdict} 起点=${r.seedVerifyOk ? "绿" : "红"} `
       + `读先于写=${r.readsBeforeFirstWrite} clarify=${String(r.clarified)} 先批后写=${r.plannedBeforeWrite ? "Y" : "N"} `
       + `verify=${String(r.verified)}→${String(r.verifyOkLast)} 工具=${String(r.toolCalls)}/${String(r.toolFailures)}败 `
-      + `重复=${String(r.repeatedSameAction)} 请求=${String(r.requests)} tok=${String(r.tokensIn)}/${String(r.tokensOut)} `
+      + `重复=${String(r.repeatedSameAction)} 请求=${String(r.requests)} 拨数=${String(r.attempts)} tok=${String(r.tokensIn)}/${String(r.tokensOut)} `
       + `${moneyText(r.cny)} ${String(Math.round(r.seconds))}s 内存峰=${String(r.resources.rssPeakMb)}MB/${String(r.resources.procPeak)}进程 cpu=${String(r.resources.cpuMs)}ms`
       + (g.fails.length > 0 ? " 〔" + g.fails.join("；") + "〕" : "")
+      + (r.attempts > 1 || !v.valid ? " 〔重拨账：拨 " + String(r.attempts) + " 趟／共等 " + String(r.retryWaitMs) + "ms／" + r.retryWhy + "〕" : "")
       + (v.valid ? "" : " 《" + v.why + "》"),
     );
   }

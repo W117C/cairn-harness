@@ -11392,6 +11392,49 @@ const MUTATIONS = [
     ),
     expectFail: "★接线③ 跑器真的用 priceFace，旧的缺省价写法不许回来",
   },
+  {
+    // ↓ 重拨那一格（10-02，能力 4「失败能重试、换路径，而不是卡死」落在度量台上的那一半）。
+    id: "retry-retries-model-failure",
+    src: "scripts/lib/eval-retry.ts",
+    test: "tests/eval-retry.test.ts",
+    desc: "非 provider 打断也重拨 ⇒ 模型自己干坏事（改了判卷面、verify 没过）拿到第二次机会刷分，" +
+      "而分母那一头仍然判它「算数」⇒ 同一趟在两处得到相反处理（本仓最忌的形状）",
+    apply: (s) => s.replace(
+      '    return { retry: false, why: "不是 provider 侧打断 ⇒ 那是被度量的行为，重拨等于给它第二次机会刷分" };',
+      '    return { retry: true, waitMs: RETRY_BASE_MS, why: "探针：坏行为也再拨" };',
+    ),
+    expectFail: "★模型自己干坏事 ⇒ 不重拨（这是被度量的行为，不是故障）",
+  },
+  {
+    id: "retry-wait-cap-dropped",
+    src: "scripts/lib/eval-retry.ts",
+    test: "tests/eval-retry.test.ts",
+    desc: "去掉等待帽 ⇒ 日配额那种「要等到明天」也被当成抖动，跑器真的坐在那里等，" +
+      "外层超时把它杀掉时读数一条都不剩（比不重拨更坏）",
+    apply: (s) => s.replace("  if (waitMs > waitCapMs) {", "  if (false) {"),
+    expectFail: "★日配额（reset 在明天）⇒ 判不重拨，并把要等多久说出口",
+  },
+  {
+    id: "retry-max-attempts-blind",
+    src: "scripts/lib/eval-retry.ts",
+    test: "tests/eval-retry.test.ts",
+    desc: "判据不看帽（只剩执行壳那一道闸）⇒ 纯函数这一头永远说「再拨」，" +
+      "而「拨了几趟」的账要由跑器自己数——两处不同面时就没人知道试到了第几趟",
+    apply: (s) => s.replace("  if (attempt >= maxAttempts) {", "  if (false) {"),
+    expectFail: "到帽就停，并把帽印出来（不靠永远试下去把跑器挂死）",
+  },
+  {
+    id: "bench-retry-not-wired",
+    src: "scripts/loop-eval.ts",
+    test: "tests/eval-retry.test.ts",
+    desc: "跑器把判据换成恒不重拨 ⇒ 机制与判卷全绿，而真跑一次都没重试过" +
+      "（第 12 次同族：判据在、接线这头零观测）",
+    apply: (s) => s.replace(
+      "      (res, n) => retryVerdict(grade(res, t).fails, n, { nowMs: Date.now() }),",
+      '      () => ({ retry: false as const, why: "探针" }),',
+    ),
+    expectFail: "接线：跑器真的走 withProviderRetry，判据真的吃 grade 出来的那份 fails（不自己再算一遍）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
