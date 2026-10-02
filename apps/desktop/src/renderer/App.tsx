@@ -5,6 +5,8 @@ import { Sidebar } from "./components/Sidebar";
 import { Stream } from "./components/Stream";
 import { Composer } from "./components/Composer";
 import { ApprovalCard } from "./components/ApprovalCard";
+import { ClarifyCard } from "./components/ClarifyCard";
+import { PlanCard } from "./components/PlanCard";
 import { ModelPicker } from "./components/ModelPicker";
 import { TokenPanel } from "./components/TokenPanel";
 
@@ -30,7 +32,7 @@ export function App() {
     void window.agent.getProviderInfo().then(setProviderInfo);
     const offEvent = window.agent.onEvent((e) => {
       // 事件分桶过滤：非活跃会话的事件只更新侧栏 running 集合，不进当前流
-      //（agent:event 是全局通道，goal/定时 run 的事件带 session_id，按当前会话分流）。
+      //（agent:event 是全局通道，带 sessionId 的 run——含普通交互 run——事件恒带 session_id，按当前会话分流）。
       const sid = (e as { session_id?: string }).session_id;
       if (sid && sid !== activeIdRef.current) {
         runningSet.current.add(sid);
@@ -64,7 +66,7 @@ export function App() {
     finally { runningSet.current.delete(id); setRunning(false); force((n) => n + 1); }
   }, [activeId, activate]);
 
-  // 澄清/方案门的未决投影提到渲染体：供 deriveRunPhase 四参判相位 + 占位卡（M2-5 换真卡）。
+  // 澄清/方案门的未决投影提到渲染体：供 deriveRunPhase 四参判相位 + 真卡渲染（M2-5 三卡同位互斥）。
   const pendingClarify = pendingClarifyOf(events);
   const pendingPlan = pendingPlanOf(events);
   // carry-forward（M2-2 审查）：必须四参全接——缺省 false 会让 clarify/plan 相位静默点不亮。
@@ -102,20 +104,27 @@ export function App() {
           <TokenPanel inputTokens={usage.inputTokens} outputTokens={usage.outputTokens} />
         </div>
         <Stream rows={projectStream(events)} />
-        {ask && <div style={{ padding: "0 16px" }}><ApprovalCard ask={ask} onDecide={(approved, scope) => { void window.agent.decide(ask.askId, approved, scope); }} /></div>}
-        {/* 占位空态（M2-5 直接填真卡）：澄清表单卡 / 方案批准卡 */}
-        {pendingClarify && (
-          <div style={{ padding: "0 16px 0" }}>
-            <div className="card-approval" style={{ borderLeftColor: "var(--text-3)" }}>
-              澄清待答（{pendingClarify.questions.length} 问）——表单卡 M2-5 接入
-            </div>
-          </div>
-        )}
-        {pendingPlan && (
-          <div style={{ padding: "0 16px 0" }}>
-            <div className="card-approval" style={{ borderLeftColor: "var(--text-3)" }}>
-              方案待批：{pendingPlan.plan.goal}——批准卡 M2-5 接入
-            </div>
+        {/* M2-5 三卡同位互斥（ask > clarify > plan，一个三元链）：审批走 onAsk 状态，
+            澄清/方案走事件选择器；提交/决议后由事件收口（tool_result / plan_approved）自然消卡。 */}
+        {(ask || pendingClarify || pendingPlan) && (
+          <div style={{ padding: "0 16px" }}>
+            {ask ? (
+              <ApprovalCard ask={ask} onDecide={(approved, scope) => { void window.agent.decide(ask.askId, approved, scope); }} />
+            ) : pendingClarify ? (
+              <ClarifyCard
+                key={pendingClarify.callId}
+                callId={pendingClarify.callId}
+                questions={pendingClarify.questions}
+                onSubmit={(callId, answers) => { void window.agent.submitClarify(callId, answers); }}
+              />
+            ) : pendingPlan ? (
+              <PlanCard
+                key={pendingPlan.callId}
+                callId={pendingPlan.callId}
+                plan={pendingPlan.plan}
+                onDecide={(approved, callId) => { void window.agent.decidePlan(approved, callId); }}
+              />
+            ) : null}
           </div>
         )}
         <Composer onSend={(t) => void send(t)} disabled={running} />

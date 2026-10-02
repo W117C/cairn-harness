@@ -35,3 +35,13 @@ body { margin: 0; font: 13px/1.6 -apple-system, "PingFang SC", sans-serif; color
 .tool-pending { animation: pulse 1s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .25; } }
 .row-time { margin-left: auto; flex-shrink: 0; white-space: nowrap; font-size: 10px; color: var(--text-3); }
+/* M2-5 三卡：澄清/方案卡沿用 .card-approval 骨架（组件上覆写 borderLeftColor 为中性色）；
+   澄清表单用系统原生控件，只补布局——颜色全用既有变量，不新加色。 */
+.card-clarify .q { margin: 6px 0; }
+.card-clarify .q-header { font-size: 11px; color: var(--text-3); }
+.card-clarify .q label { display: inline-flex; align-items: center; gap: 4px; margin: 2px 12px 2px 0; cursor: pointer; }
+.card-clarify .q input[type="text"] {
+  width: 100%; margin-top: 2px; border: 1px solid var(--hairline); border-radius: 6px;
+  padding: 2px 8px; font: inherit; color: var(--text-1); background: transparent; outline: 0;
+}
+.form-error { color: var(--risk); font-size: 11px; margin-top: 4px; }
