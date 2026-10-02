@@ -5,7 +5,7 @@
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { createKernelHost, type KernelHost } from "../src/main/kernel-host";
 
 const dir = mkdtempSync(join(tmpdir(), "m0-host-"));
@@ -54,8 +54,12 @@ describe("kernel-host 纵向装配", () => {
       // 断言事件类型在场而非内容形状（worker 报告内容不钉死）。实测（2026-10-03）：
       // agent_spawned ×2；agent_result ×1——read-worker 在 run 窗口内收敛，slow-worker 仍
       // running（剧本末条不调 wait_for_agents，父 run 结束即止）⇒ 断言 ≥1，不钉 ×2。
+      // agent_result 晚于 run 收束到达（剧本不 wait_for_agents），故 waitFor 收口。
       expect(outbox.some(([c, p]) => c === "onEvent" && (p as { type?: string }).type === "agent_spawned")).toBe(true);
-      expect(outbox.some(([c, p]) => c === "onEvent" && (p as { type?: string }).type === "agent_result")).toBe(true);
+      await vi.waitFor(
+        () => expect(outbox.some(([c, p]) => c === "onEvent" && (p as { type?: string }).type === "agent_result")).toBe(true),
+        { timeout: 10_000, interval: 200 },
+      );
       expect(existsSync(join(workspace, ".agent", "sessions", `${created.id}.jsonl`))).toBe(true);
     },
     60_000,
