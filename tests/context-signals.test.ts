@@ -52,7 +52,7 @@ describe("两端确实共用这一支（镜像那一格不能回来）", () => {
   it("provider 那半：从 context-signals 取，且源串里不再留路径字面量（镜像回来就红）", () => {
     expect(sessionSrc).toContain('import { makeMentionedRe, makePathishRe } from "./context-signals";');
     expect(sessionSrc).toContain("e.content.match(makePathishRe())");
-    expect(sessionSrc).toContain("lastUser.content.match(makeMentionedRe())");
+    expect(sessionSrc).toContain("lastUserContent(events).match(makeMentionedRe())");
     expect(sessionSrc, "provider 里又出现路径形状字面量 ⇒ 镜像复活，两端会各自漂").not.toContain("/[\\w./-]+\\.[a-z]{1,5}/g");
   });
 

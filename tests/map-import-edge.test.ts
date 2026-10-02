@@ -195,11 +195,14 @@ describe("接线（算出来不接＝本仓那一族）", () => {
   const buildSrc = readFileSync(fileURLToPath(new URL("../src/agent/map/build.ts", import.meta.url)), "utf8");
   const parseSrc = readFileSync(fileURLToPath(new URL("../src/agent/map/parse.ts", import.meta.url)), "utf8");
 
+  /** 针脚形状：钉「同一条 `inputs.push({...})` 里带着 imports」，不钉整串字面量。
+   *  10-02 加第三个出口 `summary` 时，字面量针脚红成了「接线没了」——那是假阳性；
+   *  结构式针脚以后加字段不动。**「算出来不接」仍然红**：`imports:` 不在那个对象里就选不中。 */
   it("冷建与热缓存两支都把 imports 递给图（只接其中一支＝同族只硬化一支）", () => {
-    expect(buildSrc).toContain("inputs.push({ file: f.rel, tags: hit.tags, imports: hit.imports });");
-    expect(buildSrc).toContain("inputs.push({ file: s.f.rel, tags: sym.tags, imports: sym.imports });");
-    // 两个出口也必须同进缓存：写的时候丢掉 imports，下一次读就给出没边的图
-    expect(buildSrc).toContain("const entry: TagsCacheEntry = { v: TAGS_EXTRACT_VERSION, mtimeMs: f.mtimeMs, size: f.size, tags, imports };");
+    expect(buildSrc).toMatch(/inputs\.push\(\{[^}]*file: f\.rel[^}]*imports: hit\.imports[^}]*\}\)/);
+    expect(buildSrc).toMatch(/inputs\.push\(\{[^}]*file: s\.f\.rel[^}]*imports: sym\.imports[^}]*\}\)/);
+    // 三个出口也必须同进缓存：写的时候丢掉任何一个，下一次读就给出另一张图
+    expect(buildSrc).toMatch(/const entry: TagsCacheEntry = \{[^}]*tags, imports, summary \};/);
   });
 
   it("import 与 export 两档图案都在（re-export 也是一种跨文件依赖）", () => {

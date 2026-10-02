@@ -11,7 +11,8 @@ import { rgBinary } from "../../tools/ripgrep.js";
 import { sanitizedEnv } from "../../tools/process.js";
 import { fileSymbols, SUPPORTED_EXTS, TAGS_EXTRACT_VERSION, TreeSitterUnavailableError, type ImportRef, type SymbolTag } from "./parse.js";
 import { buildGraph, personalizedPageRank, type FileTagsInput } from "./rank.js";
-import { clampBudget, renderMapBudget } from "./render.js";
+import { clampBudget, mapTokensOf, renderMapBudget } from "./render.js";
+import { renderRetrievalLine, retrieveByQuery, type RetrievalEntry } from "./retrieve.js";
 import { MAX_FILES_DEFAULT } from "./cap.js";
 import { coverageNote } from "../impact/coverage.js";
 
@@ -52,6 +53,9 @@ export interface TagsCacheEntry {
    *  而现象是「第二次问就不一样了」（本仓「缓存那一支不生效」同族）。
    *  缺 `imports` 字段的旧条目由 `v` 失配挡掉（EXTRACT_LOGIC_REV 4 ⇒ 一次全量重解析）。 */
   imports: ImportRef[];
+  /** 头注释摘要（词面检索的语料）。与 tags/imports 同判：三个出口缺任何一个都算 miss，
+   *  否则热缓存那支会给出"问什么都不命中"的第三种地图。 */
+  summary: string;
 }
 
 export interface ScannedFile {
@@ -137,14 +141,14 @@ function cacheFileFor(dir: string, abs: string): string {
   return join(dir, key + ".json");
 }
 
-async function readTagsCache(dir: string, f: ScannedFile): Promise<{ tags: SymbolTag[]; imports: ImportRef[] } | null> {
+async function readTagsCache(dir: string, f: ScannedFile): Promise<{ tags: SymbolTag[]; imports: ImportRef[]; summary: string } | null> {
   try {
     const raw = await readFile(cacheFileFor(dir, f.abs), "utf8");
     const e = JSON.parse(raw) as TagsCacheEntry;
     if (e.v !== TAGS_EXTRACT_VERSION) return null; // 抽取判据换过 → 旧 tags 一律作废（缺 v 字段同此支）
-    // 两个出口缺任何一个都算 miss：只回 tags 的条目会让热缓存那支建出「没有 import 边」的另一张图。
-    if (e.mtimeMs === f.mtimeMs && e.size === f.size && Array.isArray(e.tags) && Array.isArray(e.imports)) {
-      return { tags: e.tags, imports: e.imports };
+    // 三个出口缺任何一个都算 miss：只回 tags 的条目会让热缓存那支建出「没有 import 边、也没有摘要」的图。
+    if (e.mtimeMs === f.mtimeMs && e.size === f.size && Array.isArray(e.tags) && Array.isArray(e.imports) && typeof e.summary === "string") {
+      return { tags: e.tags, imports: e.imports, summary: e.summary };
     }
     return null; // {mtime,size} 指纹变化 → miss
   } catch {
@@ -152,10 +156,10 @@ async function readTagsCache(dir: string, f: ScannedFile): Promise<{ tags: Symbo
   }
 }
 
-async function writeTagsCache(dir: string, f: ScannedFile, tags: SymbolTag[], imports: ImportRef[]): Promise<void> {
+async function writeTagsCache(dir: string, f: ScannedFile, tags: SymbolTag[], imports: ImportRef[], summary: string): Promise<void> {
   try {
     await mkdir(dir, { recursive: true });
-    const entry: TagsCacheEntry = { v: TAGS_EXTRACT_VERSION, mtimeMs: f.mtimeMs, size: f.size, tags, imports };
+    const entry: TagsCacheEntry = { v: TAGS_EXTRACT_VERSION, mtimeMs: f.mtimeMs, size: f.size, tags, imports, summary };
     await writeFile(cacheFileFor(dir, f.abs), JSON.stringify(entry), "utf8");
   } catch (err) {
     console.debug("[map] tags 缓存写失败（忽略）:", err instanceof Error ? err.message : String(err));
@@ -168,6 +172,7 @@ interface RenderCacheEntry {
   text: string;
   tokens: number;
   included: number;
+  retrievedFiles: number;
   round: number;
 }
 
@@ -177,6 +182,10 @@ export interface BuildMapOptions {
   mentionedIdents?: string[];
   /** 上下文文件（workspace 相对；×50 + personalization）。 */
   contextFiles?: string[];
+  /** 本轮提问原文（词面检索的查询）。缺席 ⇒ 不算检索行，地图正文逐字不变（零回归哨兵）。
+   *  为什么单独一个入参而不复用 `mentionedIdents`：那个是标识符切片（专名×10 加权），
+   *  这一把尺要的是**自然语言词面**（头注释与提问的重叠），两者命中形状不同。 */
+  queryText?: string;
   /** 预算 token（归一后夹 [1024, 4096]）。 */
   budgetTokens?: number;
   /** 模型输入上限（预算上限 = /8）。 */
@@ -209,6 +218,9 @@ export interface MapBuildResult {
   cap: number;
   graphFiles: number;
   candidates: number;
+  /** 词面检索那一行的命中数（0 = 没给问句、或一个都没命中 ⇒ 正文里没有那一行）。
+   *  单独带出来是因为它与「地图正文非空」是两件事：排名封顶时正文照旧、那一行才是唯一入口。 */
+  retrievedFiles: number;
   /** 降级原因（ok=false 时有值）。09-30 起**会**进上下文（一句有界说明，见 `mapInjectText`）——
    *  从前它只走 `console.debug`，模型读到的是"没有地图"，与"这仓库没结构"同形。 */
   error?: string;
@@ -231,14 +243,25 @@ export function mapInjectText(built: MapBuildResult): string | null {
   return built.text + coverageNote(built.graphFiles, built.cap, built.candidates);
 }
 
-/** 上下文文件签名：文件集 {rel,mtime,size} + mentioned_idents + context_files + 预算 → sha1。
+/** 检索行的预算扣减（纯函数）：地图那一半拿 `budget - 前缀的 token`，**总注入量不超帽**。
+ *  `prefix` 要按**最终注入的那段文本**传（含分隔换行）：估算取 ceil(chars/4)，
+ *  `ceil((a+b)/4) ≤ ceil(a/4)+ceil(b/4)` ⇒ 少扣一个字符就可能让总读出帽一格。
+ *  下限 0：`renderMapBudget` 对 0 预算返回空正文（它第一位就验 `tokensOf(1) > budget`），
+ *  所以这里不需要"至少留多少"——留不出预算就只剩检索行，那是设计内的降级形状。 */
+export function budgetAfterRetrievalLine(budget: number, prefix: string): number {
+  return Math.max(0, budget - mapTokensOf(prefix));
+}
+
+/** 上下文文件签名：文件集 {rel,mtime,size} + mentioned_idents + context_files + 预算 + 问句 → sha1。
  *  E6（审查 P2）：contextFiles 影响边权（×50）与 personalization——不入指纹则指纹不变时
- *  复用陈旧地图（最长滞后 recomputeEvery 轮）。 */
+ *  复用陈旧地图（最长滞后 recomputeEvery 轮）。
+ *  09-23 同理由补 `queryText`：检索行随问句变，不进货就变成"换一个问题地图照旧"。 */
 export function mapFingerprint(
   files: ScannedFile[],
   mentionedIdents: string[] | undefined,
   budget: number,
   contextFiles?: string[],
+  queryText?: string,
 ): string {
   return createHash("sha1")
     .update(
@@ -247,6 +270,7 @@ export function mapFingerprint(
         m: [...(mentionedIdents ?? [])].sort(),
         c: [...(contextFiles ?? [])].sort(),
         b: budget,
+        q: queryText ?? "",
       }),
     )
     .digest("hex");
@@ -277,7 +301,7 @@ export function createMapBuilder(defaults: Partial<BuildMapOptions> = {}): MapBu
         const cap = merged.maxFiles ?? MAX_FILES_DEFAULT;
         const candidates = await scanSourceFilesAll(merged.workspace);
         const files = applyFileCap(candidates, cap);
-        const fingerprint = mapFingerprint(files, merged.mentionedIdents, budget, merged.contextFiles);
+        const fingerprint = mapFingerprint(files, merged.mentionedIdents, budget, merged.contextFiles, merged.queryText);
         const cached = cache.get(merged.workspace);
         const round = merged.nowRound ?? 0;
         const every = merged.recomputeEvery ?? RECOMPUTE_EVERY_DEFAULT;
@@ -293,6 +317,7 @@ export function createMapBuilder(defaults: Partial<BuildMapOptions> = {}): MapBu
             cap,
             graphFiles: files.length,
             candidates: candidates.length,
+            retrievedFiles: cached.retrievedFiles,
           };
         }
 
@@ -309,7 +334,7 @@ export function createMapBuilder(defaults: Partial<BuildMapOptions> = {}): MapBu
           const hit = await readTagsCache(dir, f);
           if (hit) {
             hits++;
-            inputs.push({ file: f.rel, tags: hit.tags, imports: hit.imports });
+            inputs.push({ file: f.rel, tags: hit.tags, imports: hit.imports, summary: hit.summary });
           } else {
             misses.push(f);
           }
@@ -330,8 +355,8 @@ export function createMapBuilder(defaults: Partial<BuildMapOptions> = {}): MapBu
           try {
             const ext = s.f.rel.slice(s.f.rel.lastIndexOf(".") + 1).toLowerCase();
             const sym = await fileSymbols(s.src, ext);
-            inputs.push({ file: s.f.rel, tags: sym.tags, imports: sym.imports });
-            cacheWrites.push(writeTagsCache(dir, s.f, sym.tags, sym.imports).catch(() => {})); // 竞态修复：收集，返回前统一 await（见循环后）
+            inputs.push({ file: s.f.rel, tags: sym.tags, imports: sym.imports, summary: sym.summary });
+            cacheWrites.push(writeTagsCache(dir, s.f, sym.tags, sym.imports, sym.summary).catch(() => {})); // 竞态修复：收集，返回前统一 await（见循环后）
           } catch (err) {
             if (err instanceof TreeSitterUnavailableError) throw err; // 环境级：整图降级
             console.debug(`[map] 单文件解析失败（跳过）: ${s.f.rel}`, err instanceof Error ? err.message : String(err));
@@ -344,17 +369,27 @@ export function createMapBuilder(defaults: Partial<BuildMapOptions> = {}): MapBu
           contextFiles: merged.contextFiles,
         });
         const ranks = personalizedPageRank(graph);
-        const rendered = renderMapBudget(graph, ranks, budget);
+        // 词面检索的语料**就是图谱那份 inputs**（同一取料面 ⇒ 不会出现「图里有它、检索看不见它」）。
+        // queryText 缺席 ⇒ 前缀为空串，正文与 token 与接上这一路之前逐字相同（零回归哨兵有判卷钉着）。
+        const query = merged.queryText?.trim() ?? "";
+        const retrieved = query === "" ? [] : retrieveByQuery(query, inputs.map((i): RetrievalEntry => ({ file: i.file, summary: i.summary ?? "" })));
+        const retrievalLine = renderRetrievalLine(retrieved);
+        // 前缀含那个换行：扣减按**最终注入的那段文本**算，二分渲染才拿得到真余额（少扣一个字符
+        // 就是"总 token 悄悄超帽"，这正是要防的那件事）。
+        const prefix = retrievalLine === "" ? "" : retrievalLine + "\n";
+        const rendered = renderMapBudget(graph, ranks, budgetAfterRetrievalLine(budget, prefix));
+        const text = prefix + rendered.text;
         cache.set(merged.workspace, {
           fingerprint,
-          text: rendered.text,
-          tokens: rendered.tokens,
+          text,
+          tokens: mapTokensOf(text),
           included: rendered.included,
+          retrievedFiles: retrieved.length,
           round,
         });
         return {
-          text: rendered.text,
-          tokens: rendered.tokens,
+          text,
+          tokens: mapTokensOf(text),
           ok: true,
           fromTagsCache: hits,
           parsed: files.length - hits,
@@ -363,6 +398,7 @@ export function createMapBuilder(defaults: Partial<BuildMapOptions> = {}): MapBu
           cap,
           graphFiles: files.length,
           candidates: candidates.length,
+          retrievedFiles: retrieved.length,
         };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -371,7 +407,7 @@ export function createMapBuilder(defaults: Partial<BuildMapOptions> = {}): MapBu
         // 不走覆盖面那句（拿 0/0 去说"另有 0 个没进图"会把失败读成"收全了"）。
         return {
           text: "", tokens: 0, ok: false, fromTagsCache: 0, parsed: 0, fromRenderCache: false, fingerprint: "",
-          cap: merged.maxFiles ?? MAX_FILES_DEFAULT, graphFiles: 0, candidates: 0, error: msg,
+          cap: merged.maxFiles ?? MAX_FILES_DEFAULT, graphFiles: 0, candidates: 0, retrievedFiles: 0, error: msg,
         };
       }
     },

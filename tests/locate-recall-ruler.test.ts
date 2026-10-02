@@ -45,9 +45,17 @@ describe("自检真的接在尺上（不是只写了一个函数）", () => {
   });
 
   /* 哨兵/负控的取样必须**跨全部预算档**取"任一档命中过"：
-   * 从前只比最大档也行，但把 Map 写成只记最后一档，负控就永远采不到——那条变异由上面那条钉不住。 */
+   * 从前只比最大档也行，但把 Map 写成只记最后一档，负控就永远采不到——那条变异由上面那条钉不住。
+   * 针脚形状（10-02 改）：这行原来钉的是整串字面量 `rA > 0 || rB > 0`，本支加出第三臂（C＝只条件化）
+   * 之后它判 0 命中——字面量针脚把「臂变多了」读成「接线没了」。改成**按臂枚举**的结构式判据：
+   * 每一臂都得在取样条件里出现，且那一格不许只挑一档。 */
   it("每题的命中记录喂的是 hitAnyBudget，不是某单一档", () => {
-    expect(src).toContain("if (rA > 0 || rB > 0) hitAnyBudget.set(q.id, true);");
+    const guard = /if \(([^)]*)\)\s*hitAnyBudget\.set\(q\.id, true\);/u.exec(src)?.[1] ?? "";
+    expect(guard, "取样那一行读不到（`hitAnyBudget.set` 的守卫形状变了）").not.toBe("");
+    for (const arm of ["rA", "rC", "rB"]) {
+      expect(guard.includes(arm), `取样条件里少了 ${arm} 这一臂 ⇒ 那一臂的命中采不到`).toBe(true);
+    }
+    expect(guard, "不许把取样收成「只看最大档」").not.toMatch(/bi === BUDGETS\.length - 1/);
     expect(src).toContain('rulerSelfCheck(hitAnyBudget.get("L-POS") === true, hitAnyBudget.get("L-NEG") === true)');
   });
 });

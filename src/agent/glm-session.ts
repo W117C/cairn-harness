@@ -787,11 +787,15 @@ export function createGlmSessionProvider(
     }
     return [...out];
   };
-  const mentionedFromEvents = (events: AgentEvent[]): string[] => {
+  /** 最近一条 user_message 原文。问句的两个消费者共用这一个取料点：切片进 `mentionedIdents`、
+   *  整句进 `queryText`（各找各的就是「同一件事两份副本」那一族，副本会漂）。 */
+  const lastUserContent = (events: AgentEvent[]): string => {
     const lastUser = [...events].reverse().find((e) => e.type === "user_message");
-    if (!lastUser || lastUser.type !== "user_message") return [];
+    return lastUser && lastUser.type === "user_message" ? lastUser.content : "";
+  };
+  const mentionedFromEvents = (events: AgentEvent[]): string[] => {
     const idents = new Set<string>();
-    for (const m of lastUser.content.match(makeMentionedRe()) ?? []) idents.add(m);
+    for (const m of lastUserContent(events).match(makeMentionedRe()) ?? []) idents.add(m);
     return [...idents];
   };
   // stream(messages, tools)：一次调用 = 一轮模型输出。messages/tools 由 loop 传入，但本会话型
@@ -848,6 +852,8 @@ export function createGlmSessionProvider(
             workspace,
             mentionedIdents: mentionedFromEvents(events),
             contextFiles: contextFilesFromEvents(events),
+            // 整句问话进地图：词面检索吃的是自然语言，`mentionedIdents` 那份标识符切片接不上中文。
+            queryText: lastUserContent(events),
             maxInputTokens: 128_000,
             nowRound: round++,
           });

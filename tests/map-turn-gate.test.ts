@@ -22,7 +22,7 @@ function countingBuilder(result: Partial<MapBuildResult> = {}): { builder: MapBu
   let n = 0;
   const full: MapBuildResult = {
     text: "MAP-BODY", tokens: 8, ok: true, fromTagsCache: 0, parsed: 0, fromRenderCache: false,
-    fingerprint: "fp", cap: MAX_FILES_DEFAULT, graphFiles: 10, candidates: 10, ...result,
+    fingerprint: "fp", cap: MAX_FILES_DEFAULT, graphFiles: 10, candidates: 10, retrievedFiles: 0, ...result,
   };
   return { calls: () => n, builder: { build: async () => { n += 1; return full; } } };
 }

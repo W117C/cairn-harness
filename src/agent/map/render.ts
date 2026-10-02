@@ -13,6 +13,13 @@ const LINE_CHAR_CAP = 100;
 /** 预算参数归一：先夹进 [1024, 4096]，再与上限 = maxInput/8 取小（**取小后不回弹**）。
  *  E10（审查 P3）：旧实现先 /8 收紧再 max(MIN, b) 回弹——输入上限 < 8192 时实际预算
  *  突破声明的 /8 帽。冲突时 /8 帽优先（显式语义）。 */
+/** 一段文本在**地图这一侧**值多少 token：与二分渲染用的是同一支估算（chars/4）。
+ *  为什么要导出：检索行那类"地图之外、注入之内"的文本也要从同一个帽里扣，
+ *  自己再写一份估算就是第二把尺（同族：两处同族判据宽度不同）。 */
+export function mapTokensOf(text: string): number {
+  return text === "" ? 0 : estimateTokens(text.length);
+}
+
 export function clampBudget(requested: number | undefined, maxInputTokens?: number): number {
   let b = requested ?? MAP_TOKENS_DEFAULT;
   b = Math.min(MAP_TOKENS_MAX, Math.max(MAP_TOKENS_MIN, b));

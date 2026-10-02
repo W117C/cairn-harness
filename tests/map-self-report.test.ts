@@ -34,7 +34,7 @@ async function mkChain(n: number): Promise<string> {
 function fakeBuilder(result: Partial<MapBuildResult>): MapBuilder {
   const full: MapBuildResult = {
     text: "", tokens: 0, ok: true, fromTagsCache: 0, parsed: 0, fromRenderCache: false, fingerprint: "fp",
-    cap: MAX_FILES_DEFAULT, graphFiles: 10, candidates: 10, ...result,
+    cap: MAX_FILES_DEFAULT, graphFiles: 10, candidates: 10, retrievedFiles: 0, ...result,
   };
   return { build: async () => full };
 }

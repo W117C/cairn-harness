@@ -2,6 +2,7 @@
 // def/ref captures，产出单文件 tags（名字/种类/行号，1-based）。任何异常由调用方降级
 // （buildMap 静默跳过），本模块只负责单文件 tags 的确定性产出：语法错误文件不抛、返回空 tags。
 import { createRequire } from "node:module";
+import { commentSummary } from "./retrieve.js";
 import { createHash } from "node:crypto";
 
 // web-tree-sitter 会被 electron-vite 打进 main bundle：wasm/grammar 路径必须运行时从真实
@@ -128,8 +129,10 @@ const PATTERNS = [
  *  rev 2（2026-09-23）：变量声明名要在模块作用域才计入（`isLocalVariableBinding`）。
  *  rev 3（2026-09-23）：语法错误文件从「整文件一票否决」改成「ERROR 子树之外部分回收」。
  *  rev 4（2026-10-02）：跨文件依赖多出一个**独立出口**（`fileSymbols` 的 `imports`）——
- *  老条目里没有 import 面，缓存命中那支就会给出「有 tags、没边」的另一张图 ⇒ 必须整体重解析一次。 */
-const EXTRACT_LOGIC_REV = 4;
+ *  老条目里没有 import 面，缓存命中那支就会给出「有 tags、没边」的另一张图 ⇒ 必须整体重解析一次。
+ *  rev 5（2026-10-02）：再加第三个出口 `summary`（头注释摘要＝词面检索的语料）。同一族理由：
+ *  只核 tags/imports 而让 summary 缺席，热缓存那支的地图会突然"问什么都不命中"。 */
+const EXTRACT_LOGIC_REV = 5;
 /** 版本号的算法单独成一个纯函数：判卷可以直接拿「改一行 pattern ⇒ 版本必须变」这条不变量打它。 */
 export function tagsExtractVersion(patterns: readonly string[]): string {
   return createHash("sha1").update(EXTRACT_LOGIC_REV + "\n" + patterns.join("\n")).digest("hex").slice(0, 12);
@@ -280,10 +283,13 @@ export interface ImportRef {
   line: number;
 }
 
-/** `fileSymbols` 的完整出口：tags（名字图）＋ imports（跨文件依赖）。 */
+/** `fileSymbols` 的完整出口：tags（名字图）＋ imports（跨文件依赖）＋ summary（词面检索的语料）。 */
 export interface FileSymbols {
   tags: SymbolTag[];
   imports: ImportRef[];
+  /** 文件顶部那段注释（按码点有界）。地图的词面检索只吃这一行——中段注释是解释分支的，
+   *  当"这个文件是干什么的"会指错方向（形状见 `retrieve.ts` 的 `commentSummary`）。 */
+  summary: string;
 }
 
 /** 嵌套执行作用域的容器节点：从捕获节点向上到 `program` 的路上遇到任意一个，就说明这个声明
@@ -343,7 +349,7 @@ export async function fileTags(src: string, ext: string): Promise<SymbolTag[]> {
  *  `imports` 必须与 tags **同一次解析**产出并一起进缓存：分两次解析就是两份取料面，
  *  而只进其中一支会给出「有 tags、没边」的另一张图（冷/热缓存两支不同形，本仓老坑）。 */
 export async function fileSymbols(src: string, ext: string): Promise<FileSymbols> {
-  const empty = (): FileSymbols => ({ tags: [], imports: [] });
+  const empty = (): FileSymbols => ({ tags: [], imports: [], summary: "" });
   const lang = LANG_BY_EXT[ext];
   if (!lang) return empty(); // 不认识的后缀：两个出口都空（不抛）
   const loaded = await loadLanguage(lang);
@@ -387,7 +393,7 @@ export async function fileSymbols(src: string, ext: string): Promise<FileSymbols
         for (const c of m.captures) imports.push(...collectImportRefs(c.node));
       }
     }
-    return { tags, imports };
+    return { tags, imports, summary: commentSummary(src) };
   } catch {
     return empty(); // query 抛错 = 语法错误/不兼容模式：空，不抛
   } finally {

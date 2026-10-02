@@ -9206,8 +9206,9 @@ const MUTATIONS = [
     desc: "分母退回「切片之后的文件数」⇒ graphFiles 与 candidates 恒等 ⇒ 自述永远不会开口，而帽子那一刀照咬"+
       "（句子形状还在、数永远假，与 impact-coverage-denominator-constant-zero 同方向）。"+
       "针脚带 10 格缩进＋行尾换行 ⇒ 只咬**新构建那一支**（缓存命中那一支缩进 12 格，不在此面）——"+
-      "不这么写会命中 2 处、给针脚体检留一条常驻「待复认」",
-    apply: (s) => s.replace("          candidates: candidates.length,\n        };", "          candidates: files.length,\n        };"),
+      "不这么写会命中 2 处、给针脚体检留一条常驻「待复认」。10-02 起这一支多了一行 `retrievedFiles`，"+
+      "针脚跟着长一行：只钉到 `candidates` 那行的写法会被它自己的换行判 0 命中（空操作）。",
+    apply: (s) => s.replace("          candidates: candidates.length,\n          retrievedFiles: retrieved.length,\n        };", "          candidates: files.length,\n          retrievedFiles: retrieved.length,\n        };"),
     expectFail: "地图非全量时正文带同一句覆盖面自述",
   },
   {
@@ -11830,8 +11831,8 @@ const MUTATIONS = [
     desc: "命中记录只留最后一档 ⇒ 负控只要在中间某档命中过就采不到（自检对最坏的那种松手视而不见），" +
       "而「任一档命中过」这条口径悄悄变成了「最大档命中过」",
     apply: (s) => s.replace(
-      "if (rA > 0 || rB > 0) hitAnyBudget.set(q.id, true);",
-      "if (bi === BUDGETS.length - 1 && (rA > 0 || rB > 0)) hitAnyBudget.set(q.id, true);",
+      "if (rA > 0 || rC > 0 || rB > 0) hitAnyBudget.set(q.id, true);",
+      "if (bi === BUDGETS.length - 1 && (rA > 0 || rC > 0 || rB > 0)) hitAnyBudget.set(q.id, true);",
     ),
     expectFail: "每题的命中记录喂的是 hitAnyBudget，不是某单一档",
   },
@@ -11873,8 +11874,8 @@ const MUTATIONS = [
     desc: "读缓存只核 tags 不核 imports ⇒ 老仓里那些「版本号恰好没变、条目里没有 imports」的条目继续命中，" +
       "热缓存那支给出**没有 import 边的另一张图**，现象是「同样的代码两台机器两张地图」",
     apply: (s) => s.replace(
-      "if (e.mtimeMs === f.mtimeMs && e.size === f.size && Array.isArray(e.tags) && Array.isArray(e.imports)) {",
-      "if (e.mtimeMs === f.mtimeMs && e.size === f.size && Array.isArray(e.tags)) {",
+      " && Array.isArray(e.imports)",
+      "",
     ),
     expectFail: "缺 imports 字段的旧条目按 miss 处理（版本没变也要重解析，否则老仓永远没边）",
   },
@@ -11884,9 +11885,11 @@ const MUTATIONS = [
     test: "tests/map-import-edge.test.ts",
     desc: "冷建那一支解析出了 imports 却没递给图（只接了热缓存那一支）⇒ 首次建图与后续建图不同形，" +
       "而「首轮注入地图」恰恰是冷的那一次",
+    // 针脚只拔 `imports` 那一格，不钉整行字面量：10-02 那行加了第三个出口（summary），
+    // 钉整行的针脚当场变成 0 命中的空操作——而它红不起来的样子恰恰是「接线还在」。
     apply: (s) => s.replace(
-      "inputs.push({ file: s.f.rel, tags: sym.tags, imports: sym.imports });",
-      "inputs.push({ file: s.f.rel, tags: sym.tags });",
+      "imports: sym.imports, ",
+      "",
     ),
     expectFail: "冷建与热缓存两支都把 imports 递给图（只接其中一支＝同族只硬化一支）",
   },
@@ -11959,6 +11962,114 @@ const MUTATIONS = [
       "return new RegExp(PATHISH_SOURCE);",
     ),
     expectFail: "两只 builder 出的都是全局正则（掉了 /g 时 .match 只回第一个，而「两次结果相同」那条抓不到）",
+  },
+  {
+    id: "map-retrieve-javadoc-only-first-line",
+    src: "src/agent/map/retrieve.ts",
+    test: "tests/map-retrieval.test.ts",
+    desc: "跨行块注释只吃首行（`inBlock` 不置真）⇒ 全仓那些 JSDoc 风格（星号续行）写的文件摘要恒空，" +
+      "词面检索对这些文件永远「问什么都不命中」，而症状与「这文件没写注释」同形（读数一片 0 那一族）",
+    apply: (s) => s.replace(
+      "inBlock = true;",
+      "inBlock = false;",
+    ),
+    expectFail: "跨行的 JSDoc 块**整段吃完**——只读首行的话，这类文件的摘要恒空，与「没写注释」同形",
+  },
+  {
+    id: "map-retrieve-summary-not-returned",
+    src: "src/agent/map/parse.ts",
+    test: "tests/map-retrieval.test.ts",
+    desc: "第三个出口算出来却没交（`fileSymbols` 回空 summary）⇒ 冷建与热缓存两支同时「检索面为空」，" +
+      "而地图正文照旧、typecheck 照绿——只有命中率那条尺会红",
+    apply: (s) => s.replace(
+      "summary: commentSummary(src)",
+      'summary: ""',
+    ),
+    expectFail: "带问句 ⇒ 检索行在正文**最前**且 retrievedFiles>0；不带 ⇒ 正文与 tokens 逐字不变（零回归哨兵）",
+  },
+  {
+    id: "map-retrieve-corpus-not-from-inputs",
+    src: "src/agent/map/build.ts",
+    test: "tests/map-retrieval.test.ts",
+    desc: "检索语料接成空串（图谱那份 inputs 里的 summary 被绕开）⇒ 地图建得起来、检索一行都不出，" +
+      "现象是「加了这一维没有任何可观察差别」——算出来不接的本形",
+    apply: (s) => s.replace(
+      'summary: i.summary ?? ""',
+      'summary: ""',
+    ),
+    expectFail: "检索语料取自**图谱那份 inputs**（另建一份摘要表就是第二套取料面）",
+  },
+  {
+    id: "map-retrieve-budget-not-deducted",
+    src: "src/agent/map/build.ts",
+    test: "tests/map-retrieval.test.ts",
+    desc: "把检索行加进注入而不从预算里扣 ⇒ 总注入量**悄悄超帽**（帽是承诺过的：模型输入上限/8），" +
+      "而正文看起来一切正常，只有把两态放在一起比才看得出多出来那一截",
+    apply: (s) => s.replace(
+      "budgetAfterRetrievalLine(budget, prefix)",
+      "budget",
+    ),
+    expectFail: "渲染那一半吃的是**扣减后的余额**（总注入量不许靠扣减之外的默契）",
+  },
+  {
+    id: "map-retrieve-line-not-prepended",
+    src: "src/agent/map/build.ts",
+    test: "tests/map-retrieval.test.ts",
+    desc: "算出了检索行也扣了预算，但拼接那一步把它丢了 ⇒ 白花预算、模型一个字都看不见，" +
+      "而 `retrievedFiles` 读数照旧好看（两个出口分家的形状）",
+    apply: (s) => s.replace(
+      "const text = prefix + rendered.text;",
+      "const text = rendered.text;",
+    ),
+    expectFail: "注入正文＝**前缀＋排名正文**（检索行不许被算出来就丢掉）",
+  },
+  {
+    id: "map-retrieve-query-not-in-fingerprint",
+    src: "src/agent/map/build.ts",
+    test: "tests/map-retrieval.test.ts",
+    desc: "问句不入指纹 ⇒ 渲染缓存那一格按「同一张图」复用，换一个问题命中的还是上一题的候选，" +
+      "最长滞后 recomputeEvery(10) 轮（E6 那格同一个洞的第二条来路）",
+    apply: (s) => s.replace(
+      "merged.contextFiles, merged.queryText)",
+      "merged.contextFiles)",
+    ),
+    expectFail: "换一个问句 ⇒ 指纹与正文都跟着变（不进货就变成「问什么都是同一张图」）",
+  },
+  {
+    id: "map-retrieve-cache-summary-guard-dropped",
+    src: "src/agent/map/build.ts",
+    test: "tests/map-retrieval.test.ts",
+    desc: "读缓存只核 tags/imports、不核 summary ⇒ 老条目命中后给出一张「有边、没语料」的图，" +
+      "现象是同一份代码在两台机器上一个有检索行一个没有（本仓第十族：只硬化一支）",
+    apply: (s) => s.replace(
+      ' && typeof e.summary === "string"',
+      "",
+    ),
+    expectFail: "缓存条目缺 summary ⇒ 整条按 miss 重解析（只核 tags/imports 的话，热缓存那支「问什么都不命中」）",
+  },
+  {
+    id: "map-retrieve-session-query-not-passed",
+    src: "src/agent/glm-session.ts",
+    test: "tests/map-retrieval.test.ts",
+    desc: "生产入口没把整句问话交给构建器（只有纯函数与地图内部接了）⇒ 首轮注入永远不带检索行，" +
+      "而全部判卷与探针照样绿——因为它们都是直接调 `buildMap`，不看装配面",
+    apply: (s) => s.replace(
+      "queryText: lastUserContent(events),",
+      "",
+    ),
+    expectFail: "会话把**整句问话**交给构建器，且与 mentioned 切片共用一个取料点",
+  },
+  {
+    id: "map-retrieve-stopword-gate-never-drops",
+    src: "src/agent/map/retrieve.ts",
+    test: "tests/map-retrieval.test.ts",
+    desc: "停用词门槛退化成 `n`（谁都不滤）⇒ 「模型」「文件」这种到处都有的词也开始给分，" +
+      "检索行从「这题相关的文件」变成「仓库里最吵的文件」，命中读数看着更满却更没信息",
+    apply: (s) => s.replace(
+      "Math.max(3, Math.floor(n * ratio))",
+      "Math.max(3, n)",
+    ),
+    expectFail: "df 门槛就是 max(3, floor(N×ratio))：df=4 在 N=10 时被滤，df=3 时留着",
   },
 ];
 

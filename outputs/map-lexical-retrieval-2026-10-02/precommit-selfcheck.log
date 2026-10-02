@@ -1,0 +1,28 @@
+typecheck: tsc --noEmit 通过（0 条报错）✅
+TYPECHECK_EXIT=0
+❌ map-retrieve-javadoc-only-first-line — 被测面 src/agent/map/retrieve.ts — 不在 HEAD 的树里（盘上有；未跟踪或只 staged 未提交）⇒ 干净 HEAD 上这条锚点必然「源文件读不到」：它守护的代码从未入库。修法是**把那份源文件提交**（或撤这条锚点），不是改针脚。
+❌ map-retrieve-javadoc-only-first-line — 判卷 tests/map-retrieval.test.ts — 不在 HEAD 的树里（盘上有；未跟踪或只 staged 未提交）⇒ 干净 HEAD 上这条锚点连基线都跑不出来，报告却写成「基线就不是全绿（不应发生）」。修法是**把那份判卷文件提交**（或撤这条锚点），不是改针脚。
+❌ map-retrieve-summary-not-returned — 判卷 tests/map-retrieval.test.ts — 不在 HEAD 的树里（盘上有；未跟踪或只 staged 未提交）⇒ 干净 HEAD 上这条锚点连基线都跑不出来，报告却写成「基线就不是全绿（不应发生）」。修法是**把那份判卷文件提交**（或撤这条锚点），不是改针脚。
+❌ map-retrieve-corpus-not-from-inputs — 判卷 tests/map-retrieval.test.ts — 不在 HEAD 的树里（盘上有；未跟踪或只 staged 未提交）⇒ 干净 HEAD 上这条锚点连基线都跑不出来，报告却写成「基线就不是全绿（不应发生）」。修法是**把那份判卷文件提交**（或撤这条锚点），不是改针脚。
+❌ map-retrieve-budget-not-deducted — 判卷 tests/map-retrieval.test.ts — 不在 HEAD 的树里（盘上有；未跟踪或只 staged 未提交）⇒ 干净 HEAD 上这条锚点连基线都跑不出来，报告却写成「基线就不是全绿（不应发生）」。修法是**把那份判卷文件提交**（或撤这条锚点），不是改针脚。
+❌ map-retrieve-line-not-prepended — 判卷 tests/map-retrieval.test.ts — 不在 HEAD 的树里（盘上有；未跟踪或只 staged 未提交）⇒ 干净 HEAD 上这条锚点连基线都跑不出来，报告却写成「基线就不是全绿（不应发生）」。修法是**把那份判卷文件提交**（或撤这条锚点），不是改针脚。
+❌ map-retrieve-query-not-in-fingerprint — 判卷 tests/map-retrieval.test.ts — 不在 HEAD 的树里（盘上有；未跟踪或只 staged 未提交）⇒ 干净 HEAD 上这条锚点连基线都跑不出来，报告却写成「基线就不是全绿（不应发生）」。修法是**把那份判卷文件提交**（或撤这条锚点），不是改针脚。
+❌ map-retrieve-cache-summary-guard-dropped — 判卷 tests/map-retrieval.test.ts — 不在 HEAD 的树里（盘上有；未跟踪或只 staged 未提交）⇒ 干净 HEAD 上这条锚点连基线都跑不出来，报告却写成「基线就不是全绿（不应发生）」。修法是**把那份判卷文件提交**（或撤这条锚点），不是改针脚。
+❌ map-retrieve-session-query-not-passed — 判卷 tests/map-retrieval.test.ts — 不在 HEAD 的树里（盘上有；未跟踪或只 staged 未提交）⇒ 干净 HEAD 上这条锚点连基线都跑不出来，报告却写成「基线就不是全绿（不应发生）」。修法是**把那份判卷文件提交**（或撤这条锚点），不是改针脚。
+❌ map-retrieve-stopword-gate-never-drops — 被测面 src/agent/map/retrieve.ts — 不在 HEAD 的树里（盘上有；未跟踪或只 staged 未提交）⇒ 干净 HEAD 上这条锚点必然「源文件读不到」：它守护的代码从未入库。修法是**把那份源文件提交**（或撤这条锚点），不是改针脚。
+❌ map-retrieve-stopword-gate-never-drops — 判卷 tests/map-retrieval.test.ts — 不在 HEAD 的树里（盘上有；未跟踪或只 staged 未提交）⇒ 干净 HEAD 上这条锚点连基线都跑不出来，报告却写成「基线就不是全绿（不应发生）」。修法是**把那份判卷文件提交**（或撤这条锚点），不是改针脚。
+❌ map-candidates-denominator-lost — src/agent/map/build.ts — 盘上判得通过，而 HEAD 那份里针脚 0 处 ⇒ 这条锚点钉的是**在飞文本**（锚点行已入库、被锚定的实现改动还没）⇒ 干净 HEAD 上它等价于空操作。修法：等那次实现入库（或撤这条锚点），**不要**把针脚改成 HEAD 里的旧写法——那等于把这条锚点要守护的东西废掉。
+❌ map-ruler-only-last-budget — scripts/probe-locate-recall.ts — 盘上判得通过，而 HEAD 那份里针脚 0 处 ⇒ 这条锚点钉的是**在飞文本**（锚点行已入库、被锚定的实现改动还没）⇒ 干净 HEAD 上它等价于空操作。修法：等那次实现入库（或撤这条锚点），**不要**把针脚改成 HEAD 里的旧写法——那等于把这条锚点要守护的东西废掉。
+❌ map-import-cold-path-not-wired — src/agent/map/build.ts — 盘上判得通过，而 HEAD 那份里针脚 0 处 ⇒ 这条锚点钉的是**在飞文本**（锚点行已入库、被锚定的实现改动还没）⇒ 干净 HEAD 上它等价于空操作。修法：等那次实现入库（或撤这条锚点），**不要**把针脚改成 HEAD 里的旧写法——那等于把这条锚点要守护的东西废掉。
+❌ map-retrieve-summary-not-returned — src/agent/map/parse.ts — 盘上判得通过，而 HEAD 那份里针脚 0 处 ⇒ 这条锚点钉的是**在飞文本**（锚点行已入库、被锚定的实现改动还没）⇒ 干净 HEAD 上它等价于空操作。修法：等那次实现入库（或撤这条锚点），**不要**把针脚改成 HEAD 里的旧写法——那等于把这条锚点要守护的东西废掉。
+❌ map-retrieve-corpus-not-from-inputs — src/agent/map/build.ts — 盘上判得通过，而 HEAD 那份里针脚 0 处 ⇒ 这条锚点钉的是**在飞文本**（锚点行已入库、被锚定的实现改动还没）⇒ 干净 HEAD 上它等价于空操作。修法：等那次实现入库（或撤这条锚点），**不要**把针脚改成 HEAD 里的旧写法——那等于把这条锚点要守护的东西废掉。
+❌ map-retrieve-budget-not-deducted — src/agent/map/build.ts — 盘上判得通过，而 HEAD 那份里针脚 0 处 ⇒ 这条锚点钉的是**在飞文本**（锚点行已入库、被锚定的实现改动还没）⇒ 干净 HEAD 上它等价于空操作。修法：等那次实现入库（或撤这条锚点），**不要**把针脚改成 HEAD 里的旧写法——那等于把这条锚点要守护的东西废掉。
+❌ map-retrieve-line-not-prepended — src/agent/map/build.ts — 盘上判得通过，而 HEAD 那份里针脚 0 处 ⇒ 这条锚点钉的是**在飞文本**（锚点行已入库、被锚定的实现改动还没）⇒ 干净 HEAD 上它等价于空操作。修法：等那次实现入库（或撤这条锚点），**不要**把针脚改成 HEAD 里的旧写法——那等于把这条锚点要守护的东西废掉。
+❌ map-retrieve-query-not-in-fingerprint — src/agent/map/build.ts — 盘上判得通过，而 HEAD 那份里针脚 0 处 ⇒ 这条锚点钉的是**在飞文本**（锚点行已入库、被锚定的实现改动还没）⇒ 干净 HEAD 上它等价于空操作。修法：等那次实现入库（或撤这条锚点），**不要**把针脚改成 HEAD 里的旧写法——那等于把这条锚点要守护的东西废掉。
+❌ map-retrieve-cache-summary-guard-dropped — src/agent/map/build.ts — 盘上判得通过，而 HEAD 那份里针脚 0 处 ⇒ 这条锚点钉的是**在飞文本**（锚点行已入库、被锚定的实现改动还没）⇒ 干净 HEAD 上它等价于空操作。修法：等那次实现入库（或撤这条锚点），**不要**把针脚改成 HEAD 里的旧写法——那等于把这条锚点要守护的东西废掉。
+❌ map-retrieve-session-query-not-passed — src/agent/glm-session.ts — 盘上判得通过，而 HEAD 那份里针脚 0 处 ⇒ 这条锚点钉的是**在飞文本**（锚点行已入库、被锚定的实现改动还没）⇒ 干净 HEAD 上它等价于空操作。修法：等那次实现入库（或撤这条锚点），**不要**把针脚改成 HEAD 里的旧写法——那等于把这条锚点要守护的东西废掉。
+针脚体检：1295 条 —— 阻断 21，待复认 1，未覆盖 1，逐行式 5，未入库面 11（被测面 + 判卷两面），钉在飞文本 10，killer 指针失效 0（其中 HEAD 侧 0）
+改法语法体检：1295 条改法全部产出合法源文件 ✅
+[mutate-needles-check] 21 条锚点针脚/改法失效 ❌
+NEEDLES_EXIT=0
+NEEDLES_EXIT_PROPER=1
