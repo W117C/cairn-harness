@@ -26,6 +26,9 @@ export function App() {
   // null = 该会话显式选 demo；缺项 = 未选（run 不透传 model，走 main 侧 settings 缺省）。
   const selections = useRef(new Map<string, string | null>());
   const [providerInfo, setProviderInfo] = useState<ProviderInfo | null>(null);
+  // M2 终审修复（spec §6.3 打断动作）：桌面侧最小已停态——cancel 调用点本地置态，按 sessionId 键控，
+  // 切换会话互不影响。RunResponse 无 aborted 位前，标签「■ 已停止」覆盖至该会话下次 send。
+  const [stoppedIds, setStoppedIds] = useState<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
     void window.agent.listSessions().then(setSessions);
@@ -56,6 +59,13 @@ export function App() {
   const send = useCallback(async (text: string) => {
     const id = activeId ?? (await window.agent.createSession()).id;
     activate(id);
+    // 新任务开始即清除该会话的已停标记（上次「打断」的本地置态就此收口）。
+    setStoppedIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
     setRunning(true);
     try {
       // M2-4：selected 为该会话 registryId；null/未选 ⇒ 不传（?? undefined），走 settings 缺省＝demo。
@@ -71,7 +81,11 @@ export function App() {
   const pendingPlan = pendingPlanOf(events);
   // carry-forward（M2-2 审查）：必须四参全接——缺省 false 会让 clarify/plan 相位静默点不亮。
   const phase = deriveRunPhase(events, ask !== null, pendingClarify !== null, pendingPlan !== null);
-  const phaseLabel = phase === "ask" ? "● 等待审批"
+  // 已停态覆盖（终审 Recommendation 2 第一步）：该会话被打断且 run 已收束时，标签「■ 已停止」
+  // 覆盖 deriveRunPhase 的「○ 就绪」——否则 cancel 后与正常完成不可分辨。其余相位逻辑不动。
+  const stopped = activeId !== null && stoppedIds.has(activeId) && !running;
+  const phaseLabel = stopped ? "■ 已停止"
+    : phase === "ask" ? "● 等待审批"
     : phase === "clarify" ? "● 等待澄清"
     : phase === "plan" ? "● 等待方案"
     : phase === "thinking" ? "● 思考中"
@@ -101,6 +115,17 @@ export function App() {
             />
           )}
           <span style={{ fontSize: 11, color: "var(--text-3)" }}>{phaseLabel}</span>
+          {/* spec §6.3：打断动作，运行中可见（桥 M1 已通，此为 runCancel 首接 UI）。
+              不 confirm——误触代价是本轮 run 收束（fail-closed），不是数据损失。 */}
+          {running && (
+            <button
+              className="btn-ghost"
+              onClick={() => {
+                if (activeId !== null) setStoppedIds((prev) => new Set(prev).add(activeId));
+                void window.agent.runCancel();
+              }}
+            >打断</button>
+          )}
           <TokenPanel inputTokens={usage.inputTokens} outputTokens={usage.outputTokens} />
         </div>
         <Stream rows={projectStream(events)} />
