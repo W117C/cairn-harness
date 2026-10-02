@@ -1,0 +1,62 @@
+目标提交：ed8a444（--at=HEAD）
+checkout exit=0
+已核：TREE=ed8a444ea07d5a3da890eb5754f1e7fbc8c7783a｜判卷四面在飞 0 项
+依赖核对：该提交声明 10 项，缺 0 项
+  子仓库 fixtures/bench/bench-bugfix-async/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-bugfix-crossfile/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-bugfix-pagination/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-feature-csv/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-feature-export/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-feature-flag/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-feature-memo/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-long-chain-32/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-long-chain-48/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-long-horizon/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-long-horizon-30/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-refactor-callsite/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-refactor-dedupe/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-refactor-rename/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-refactor-signature/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+⚠️ 这些靶子仓库的依赖补不齐：fixtures/bench/bench-bugfix-async、fixtures/bench/bench-bugfix-crossfile、fixtures/bench/bench-bugfix-pagination、fixtures/bench/bench-feature-csv、fixtures/bench/bench-feature-export、fixtures/bench/bench-feature-flag、fixtures/bench/bench-feature-memo、fixtures/bench/bench-long-chain-32、fixtures/bench/bench-long-chain-48、fixtures/bench/bench-long-horizon、fixtures/bench/bench-long-horizon-30、fixtures/bench/bench-refactor-callsite、fixtures/bench/bench-refactor-dedupe、fixtures/bench/bench-refactor-rename、fixtures/bench/bench-refactor-signature ⇒ 在其中真跑命令的判卷红**不可归因于代码**
+import 面：3307 条边｜悬空 2（其中存量已豁免 0）
+  ❌ tests/cart.js.ts — 这一版里 tests/eval-heldout.test.ts import 了它，而它不在这一版 ⇒ **盘上也没有**（引用写错，或模块被删而引用没跟着改）
+  ❌ tests/discount.js.ts — 这一版里 tests/eval-heldout.test.ts import 了它，而它不在这一版 ⇒ **盘上也没有**（引用写错，或模块被删而引用没跟着改）
+门表：32 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证门面（22 道，名单取自 ed8a444）==
+  ✅ no-progress-check exit=0 244ms（预算 1100ms）
+  ✅ prune-check exit=0 285ms（预算 1100ms）
+  ✅ fork-check exit=0 245ms（预算 1100ms）
+  ✅ compaction-check exit=0 344ms（预算 1200ms）
+  ✅ docs-check exit=0 603ms（预算 1300ms）
+  ✅ memory-check exit=0 411ms（预算 1300ms）
+  ❌ head-import-check exit=1 433ms（预算 1400ms）
+  ✅ autonomy-check exit=0 509ms（预算 1500ms）
+  ✅ sandbox:check exit=0 578ms（预算 1700ms）
+  ✅ security-check exit=0 495ms（预算 1500ms）
+  ✅ provider:check exit=0 240ms（预算 1300ms）
+  ✅ routing-check exit=0 435ms（预算 1400ms）
+  ✅ model-surface-check exit=0 425ms（预算 1300ms）
+  ✅ prefix-churn-check exit=0 493ms（预算 1500ms）
+  ✅ prompt-surface-check exit=0 297ms（预算 1400ms）
+  ✅ replay-determinism-check exit=0 294ms（预算 1100ms）
+  ✅ cost-per-progress-check exit=0 246ms（预算 1000ms）
+  ✅ web-fetch-check exit=0 285ms（预算 1200ms）
+  ✅ gym-check exit=0 962ms（预算 2400ms）
+  ✅ gate-check exit=0 1762ms（预算 5400ms）
+  ✅ evidence-typecheck-check exit=0 2522ms（预算 5300ms）
+  ✅ mutate-needles-check exit=0 11802ms（预算 20000ms）
+  认证门面=22 道（跑到 22）｜❌ 红 1 道｜⚠️ 超预算 0
+  ❌ head-import-check exit=1（433ms）
+
+== 认证汇总 ==
+  TREE=ed8a444 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-gate-head-cert.lock）
+  Test Files 1 failed | 279 passed (280)｜Tests 1 failed | 3781 passed (3782)｜exit=1（退出码直接取，不接管道）
+  并发判卷=起前 0 套／跑完 0 套（两端独占）
+  本趟墙钟 175.34s（同一进程 hrtime 实测·口径＝起跑→汇总那一行，不含提前退出的那些趟）
+  贴帽读数（缺省＝config 里的 testTimeout=30000ms）：3782 条里 0 条用时 ≥ 有效预算 80%｜无显式预算按缺省算 3521 条｜标题非字面量（it.each／插值／拼接，按缺省算）116 条｜预算没落到 0 条｜无｜离帽余量最近：tests/m3c.test.ts·M3c pipeline 哑 sequencer（零 LLM） 未获 15178ms/25000ms=61%；tests/evidence-typecheck.test.ts·门那一半：runner 的两个拒绝分支各自要出声 拼错的开关 ⇒ 退 2726ms/15000ms=18%；tests/evidence-typecheck.test.ts·门那一半：runner 的两个拒绝分支各自要出声 归属面取料那一行必 2260ms/15000ms=15%
+  逐条日志：/tmp/dsh-head-cert-ed8a444
+  未回收认证树 .worktrees/gate-head-cert：不是本次新建的树（复用来的共享树）⇒ 不收
+  常驻残留树=1（/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-verify@ed8a444）（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）
+  汇总已同步落盘（不靠 stdout 的尾）：/tmp/dsh-head-cert-ed8a444/summary.txt
