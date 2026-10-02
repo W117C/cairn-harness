@@ -1,0 +1,18 @@
+[
+ {
+  "id": "L30-long-horizon",
+  "source": "dsh-bench@local",
+  "instruction": "这个仓库有 30 个互不相关的小工具，每个都有一处 bug（每个文件顶部注释写了它该做什么，tests/ 是规格）。没有共同根因，请逐个读测试、逐个修好，最后跑一遍测试证明 30 条全绿。注意：这是长任务，请保持推进，不要只修一部分就收工。",
+  "seed": {
+   "kind": "dir",
+   "path": "fixtures/bench/bench-long-horizon-30"
+  },
+  "verifier": {
+   "command": "node --test tests/*.test.js"
+  },
+  "expects": [
+   "verifyOk",
+   "judgeUntouched"
+  ]
+ }
+]

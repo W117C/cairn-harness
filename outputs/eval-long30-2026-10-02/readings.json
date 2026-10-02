@@ -1,0 +1,73 @@
+[
+ {
+  "r": {
+   "id": "L30-long-horizon",
+   "name": "L30-long-horizon",
+   "rep": 1,
+   "system": "base",
+   "seedVerifyOk": false,
+   "seconds": 108.27,
+   "requests": 11,
+   "tokensIn": 132961,
+   "tokensOut": 11368,
+   "cny": 0,
+   "toolCalls": 13,
+   "toolFailures": 1,
+   "repeatedSameAction": 0,
+   "firstWriterIndex": 7,
+   "readsBeforeFirstWrite": 0,
+   "clarified": 0,
+   "planned": 1,
+   "plannedBeforeWrite": false,
+   "verified": 2,
+   "verifyOkLast": true,
+   "autoVerifyBeat": false,
+   "wroteTests": false,
+   "touchedJudge": false,
+   "onlySrcChanged": true,
+   "changedFiles": [
+    "src/m01-clamp.js",
+    "src/m02-sum.js",
+    "src/m03-unique.js",
+    "src/m04-chunk.js",
+    "src/m05-titleCase.js",
+    "src/m06-parseIntSafe.js",
+    "src/m07-mean.js",
+    "src/m08-zip.js",
+    "src/m09-flatten.js",
+    "src/m10-groupBy.js",
+    "src/m11-sortBy.js",
+    "src/m12-trimAll.js",
+    "src/m13-escapeHtml.js",
+    "src/m14-splitLines.js",
+    "src/m15-percent.js",
+    "src/m16-roundTo.js",
+    "src/m17-pickKeys.js",
+    "src/m18-deepMerge.js",
+    "src/m19-lastN.js",
+    "src/m20-repeatEach.js",
+    "src/m21-last.js",
+    "src/m22-count.js",
+    "src/m23-maxnum.js",
+    "src/m24-revwords.js",
+    "src/m25-capfirst.js",
+    "src/m26-pairs.js",
+    "src/m27-palindrome.js",
+    "src/m28-sumdigits.js",
+    "src/m29-range.js",
+    "src/m30-uniqsorted.js"
+   ],
+   "exitError": null,
+   "resources": {
+    "rssPeakMb": 548,
+    "procPeak": 11,
+    "cpuMs": 1856,
+    "samples": 216
+   }
+  },
+  "g": {
+   "ok": true,
+   "fails": []
+  }
+ }
+]
