@@ -10537,3 +10537,42 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 6. **这张表里最该先核的一条**：`src/agent/memory/inject.ts#lessonsSection｜无出处的条目不会出现在这里`——
    这是**对模型承诺记忆面的可信度**，假的比慢更糟（模型会照一句没保证的话去信注入的经验）。
    尺只负责让它可见，真假要逐条读：已开 #25 拿这 29 条做候选，按"承诺的是不是模型能验证的事"排序核。
+
+## 2026-10-03 · 第 311 页补 凭证（1/1）：`9281f67` 认证通过——22/22 门绿、超预算 0、干净树 286 文件 3938 条绿；43 条锚点在干净树逐条被杀；**认证第一趟作废**（三条红＝并发清掉共享 witness 锁）
+
+1. **认证**（`outputs/terminal-audience-2026-10-03/head-cert-9281f67.log`，逐字取自行）：
+   `TREE=9281f6749c3a1122c0d9f65dc2acb4d66ae38fa7｜判卷四面在飞 0 项`、
+   `DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有`、
+   `认证门面=22 道（跑到 22）｜绿 22 道｜⚠️ 超预算 0`、
+   `Test Files 286 passed (286)｜Tests 3938 passed (3938)｜exit=0（退出码直接取，不接管道）`、
+   `并发判卷=起前 1 套／跑完 1 套`；本趟墙钟 262.80s；`import 面：3400 条边｜悬空 0（其中存量已豁免 0）`。
+2. **认证第一趟作废，原因不是本笔代码**（`head-cert-9281f67.attempt1-void.log` 原文留着）：那一趟
+   `Test Files 1 failed｜Tests 3 failed`，三条全在 `tests/head-cert-deps.test.ts > 接线：真跑 head-cert——占不到锁就不许动树`
+   那一族；同趟印 `并发判卷=起前 0 套／跑完 2 套`（中途多起来一套判卷）。
+   成因现读得出来：那族用例把 witness 锁写在 **git common dir** 下的
+   `dsh-tool-locks/head-cert-dsh-lock-witness.lock`（`LOCK_AT` 由 `git rev-parse --git-common-dir` 取位），
+   而多棵 worktree 共享同一个 common dir ⇒ 锁名全局唯一，两趟同时在跑时一方的 `clearLock()` 会删掉
+   另一方刚种下的锁，head-cert 看不见锁就照常 `worktree add`（三条红里两条的期望文字还**错位一格**，
+   正是"你种的锁被我清、我种的锁被你清"的形状）。
+   处置＝**不作废读数、改判取料**：第一趟整体作废（不参与认证结论），第二趟（本笔唯一有效认证）在
+   `并发判卷=1/1` 下 286 文件全绿。根因与修法候选挂在 #26；本页只写到"与并发同现"这一步，
+   不写具体交错顺序（那需要重放两次真跑，我没有那份读数）。
+3. **同分母自洽**：干净树 **3938** ＝ 上一笔（`2e3a392`）的 3931 **＋ 7**（本笔新增判卷 7 条）。
+   主树两趟：落库前 293 文件 4083 条全绿、落库后同一份判卷照绿（`suite-postcommit.log`）。
+   针脚尺落库前 `1333 条 —— 阻断 5／钉在飞文本 5`（本笔 5 枚钉在自己的在飞文本上，预期读数），
+   落库后归零：`阻断 0／未入库面 0／钉在飞文本 0／killer 指针失效 0`（`needles-postcommit.log`，`NE=0`）；
+   `docs-check: 受检项全绿`、`DC=0`（`docs-check-postcommit.log`）——预提交那两条 D-11 红（证人未入库）提交即转绿。
+4. **干净树逐条击杀**（`mutate-kill-9281f67.log`，`KILL_EXIT=0`）：
+   `checkout exit=0：.worktrees/gate-mutate-import → 9281f67`、
+   `改动面派生：rev=HEAD~1 → 变更文件 15 个 ⇒ 选中锚点 43/1333 条`、`跑了 43/43 条`、
+   `全部变异被正确杀死（断言非恒真）`、本次耗时 61.1s。本笔 5 枚逐条点名被杀
+   （`claim-audience-nearest-call-only`／`claim-witness-run-threshold-collapsed`／
+   `claim-cap-stale-branch-dropped`／`claim-cap-over-branch-dropped`／`claim-whole-sentence-piece-double-count`）。
+5. **帽的现读在落库后又量了一次**（`measure-claims.log` 与入库版逐字节相同，`git diff` 无输出）：
+   面 45｜模型可见 43｜有证人 9／欠证人 **29**／不可知 5 ⇒ 帽 29 仍是正贴线，没有"补了证人没调帽"那种 stale。
+6. **清场判据不是授权**（照旧只报数）：`常驻残留树=2`＝`.worktrees/gate-mutate-import@9281f67`（本会话造红/击杀用）＋
+   `.worktrees/gate-mutate-verify@9281f67`（隔壁会话的树，此刻与我的同号）。回收要用户点头；`gate-head-cert` 是共享复用树 ⇒ 脚本自己不收。
+7. **本页之后手上的账**：#25 逐条核那 29 句（首条已现读：`memory/inject` 那句是**两半的**——
+   「无出处不收」有结构保证、「哪条会话、哪个 callId」只是生产者约定，注入侧不验形状）；
+   #26 共享 witness 锁；#23 修复位仍等隔壁让出 `src/main/agent-runner.ts`；#20 那对同树读数（14.4s／16.7s／本趟 17.8s）
+   仍只是原始点，不配斜率。
