@@ -25,7 +25,7 @@ import { aggregateFeasibility, deriveVerifierProbe, feasibility, fromSweBenchJso
 import { ClarifyGate, PlanGate } from "../src/agent/gates";
 // 「这趟跑算不算数」——纯函数、可单测。分母口径见那边的模块头：
 // **未起步 / 被 provider 打断的趟次不许进分母**（限流打断不能记成"模型没做到"）。
-import { runValidity, tally } from "./lib/eval-validity";
+import { costSplit, runValidity, tally } from "./lib/eval-validity";
 import { createVerifyHook, defaultExec, runVerifyOutcome, type ExecFn } from "../src/agent/verify";
 import { createGlmSessionProvider, sessionToolSpecs } from "../src/agent/glm-session";
 import { createEventLog, replay, type AgentEvent } from "../src/events";
@@ -568,7 +568,9 @@ for (let rep = 1; rep <= REPS; rep++) {
   }
 }
 const t0 = tally(rows);
-const cny = rows.reduce((s, x) => s + x.r.cny, 0);
+// 钱与分母同面：被剔掉的趟次花的钱**单列**（那是真钱），但不许混进"每达标任务"的分子。
+const money = costSplit(rows);
+const cny = money.paidAll;
 if (t0.refuse) {
   // 与"任务集解析报错"同一条纪律：**分母不完整时任何分数都是假的** ⇒ 拒绝出数，只留证据。
   console.error(`[loop-eval] 一趟都不算数（${String(t0.invalid)} 趟全部未起步/被打断）⇒ **拒绝出数**：`
@@ -576,7 +578,10 @@ if (t0.refuse) {
 } else {
   console.log(`[loop-eval] 合计 ${String(t0.pass)}/${String(t0.total)} 达标`
     + (t0.invalid > 0 ? ` · **${String(t0.invalid)} 趟无效未计入分母**（未起步/被 provider 打断）` : "")
-    + ` · 实付≈¥${cny.toFixed(3)} · 每达标任务 ¥${t0.pass > 0 ? (cny / t0.pass).toFixed(4) : "∞"}`);
+    // 分子只用**算数趟次**花的钱（与分母 t0.total 同面）；没算数的趟次花的钱单列——那是真钱，不许藏。
+    + ` · 实付≈¥${cny.toFixed(3)}（其中没算数的趟次花 ¥${money.wastedSpend.toFixed(4)}）`
+    + ` · 每达标任务 ¥${t0.pass > 0 ? (money.validSpend / t0.pass).toFixed(4) : "∞"}`
+    + `〔按算数趟次 ¥${money.validSpend.toFixed(4)} ÷ 达标 ${String(t0.pass)} 算〕`);
 }
 await writeFile(join(ROOT, OUT, "readings.json"), JSON.stringify(rows, null, 1), "utf8");
 console.log("[loop-eval] 读数写出 " + OUT + "/readings.json");
