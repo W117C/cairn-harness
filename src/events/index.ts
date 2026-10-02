@@ -554,7 +554,7 @@ export interface TurnTruncatedEvent {
   agent_id?: string;
 }
 
-export type AgentEvent =
+export type AgentEvent = (
   | UserMessageEvent
   | AssistantMessageEvent
   | AssistantDeltaEvent
@@ -584,7 +584,8 @@ export type AgentEvent =
   | GoalSetEvent
   | GoalStoppedEvent
   | TurnTruncatedEvent
-  | RunErrorEvent;
+  | RunErrorEvent
+) & { /** M2 §3.5：事件真值时间戳（毫秒）。core 自 8361657 起在落盘处统一盖戳——写调用方同一对象，live 与盘同式（tests/events.test.ts 三用例钉死），新事件恒在场；旧 JSONL 缺席，读侧按可选兼容（投影留空不造假）。 */ ts?: number };
 
 const KNOWN_TYPES = new Set([
   "user_message",
