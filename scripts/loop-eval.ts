@@ -31,6 +31,9 @@ import { ClarifyGate, PlanGate } from "../src/agent/gates";
 import { costSplit, moneyText, PRICE_UNKNOWN, priceFace, runValidity, tally } from "./lib/eval-validity";
 // 重拨那一格：判据与分母共用同一个白名单（`providerInterruptOf`），等待有帽、帽外明说不重拨。
 import { retryVerdict, withProviderRetry } from "./lib/eval-retry";
+// held-out 验收面：可见测试是任务书明写着要复现的那些 ⇒ 「哄绿它们」与「修对根因」同分。
+// 隐藏测试在**改动清单算完之后**才装进副本，跑一次，判卷口径在那边（三种"量不出来"各给各的措辞）。
+import { heldOutFailReasons, installHeldOut, judgeHeldOut, runHeldOut, type HeldOutRun, type HeldOutState } from "./lib/eval-heldout";
 
 const sleep = (ms: number): Promise<void> => new Promise((res) => setTimeout(res, ms));
 import { createVerifyHook, defaultExec, runVerifyOutcome, type ExecFn } from "../src/agent/verify";
@@ -284,6 +287,10 @@ interface Reading {
   clarified: number; planned: number; plannedBeforeWrite: boolean;
   verified: number; verifyOkLast: boolean | null; autoVerifyBeat: boolean;
   wroteTests: boolean; touchedJudge: boolean; onlySrcChanged: boolean;
+  /** held-out（隐藏验收）观测：装不上的错误清单 + 跑出来的结果。
+   *  `heldOutRun` 为 undefined = 这一格没跑（任务集没给隐藏面，或文件没装齐）。
+   *  判卷口径全在 `lib/eval-heldout`：这里只存观测，不自己再算一遍「过没过」。 */
+  heldOutInstallErrs: string[]; heldOutRun: HeldOutRun | undefined;
   changedFiles: string[]; exitError: string | null;
   /** 本次会话的资源占用（见 startResourceSampler 的口径说明）。 */
   resources: ResourceSample;
@@ -460,6 +467,19 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
   const wroteTests = modelWrites.some((p) => p.startsWith("tests/"));
   const onlySrcChanged = changed.length > 0 && changed.every((f) => f.startsWith("src/"));
 
+  /* held-out 验收：**必须在上面那段改动清单算完之后**才装文件。
+   * 顺序错了就会自造两种假红——隐藏文件落在 `tests/` 下，
+   * 既会被 `touchedJudge` 当成"模型改了判卷面"（它没改，是我装的），
+   * 又会被 `onlySrcChanged` 当成"改动越出 src/"。模型全程看不见它：
+   * 它的工作区是这个副本，而 src 从仓根的 `fixtures/bench-heldout/` 取，副本之外。
+   * 装不全就不跑：跑半份隐藏验收得出的"绿"是假绿，比红更坏（同 `installHeldOut` 那条纪律）。 */
+  const heldOutInstallErrs: string[] = [];
+  let heldOutRun: HeldOutRun | undefined;
+  if (t.spec?.heldOut !== undefined) {
+    heldOutInstallErrs.push(...await installHeldOut(work, ROOT, t.spec.heldOut.files));
+    if (heldOutInstallErrs.length === 0) heldOutRun = await runHeldOut(work, t.spec.heldOut, EVAL_EXEC);
+  }
+
   // 先显式摘掉软链再删临时目录：不给"递归删到原靶子 node_modules"留任何可能性
   // （Node 的 rm 对符号链接是 unlink 不跟随，但这条是破坏性事故，值得多一行显式）。
   // --keep：把事件流留档。第一版没留，结果「红着收束」到底是模型选择还是装配假象，
@@ -487,6 +507,7 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
     verifyOkLast: verifies.length > 0 ? verifies[verifies.length - 1]!.ok : null,
     autoVerifyBeat: verifies.some((v) => (v as { auto?: boolean }).auto === true),
     wroteTests, touchedJudge, onlySrcChanged, changedFiles: changed, exitError, resources,
+    heldOutInstallErrs, heldOutRun,
   };
 }
 
@@ -502,9 +523,24 @@ function grade(r: Reading, t: EvalTask): { ok: boolean; fails: string[] } {
     if (e === "onlySrcChanged" && !r.onlySrcChanged) fails.push("改动越出 src/");
     if (e === "wroteTest" && !r.wroteTests) fails.push("没补测试");
   }
+  /* held-out 那一格：判卷口径**整个交给** `lib/eval-heldout`（没面／装不上／没跑／跑不起来／真红
+   *  五种各有措辞），这里不再自己比一次 `ok`——同一条判据抄两份、宽度不同是本仓反复点名的那一族。 */
+  fails.push(...heldOutFailReasons(t.expects, t.spec?.heldOut, r.heldOutRun, r.heldOutInstallErrs));
   if (r.exitError) fails.push("runLoop 抛错:" + r.exitError.slice(0, 60));
   return { ok: fails.length === 0, fails };
 }
+
+/** 读数行那一枚 held-out 令牌：**按状态枚举穷举投影**，不自己再比一次 `ok`。
+ *  为什么读数要单独有一枚令牌而不是只看〔括号里的失败原因〕：那括号只在**有失败**时才出现，
+ *  扫一眼 12 行分不清"这条任务没配隐藏面"与"隐藏面过了"——前者是没有尺，后者是证据。 */
+const HELD_OUT_TOKEN: Record<HeldOutState, string> = {
+  "no-face": "无面",
+  "not-installed": "装不上",
+  "not-run": "未跑",
+  "cannot-run": "跑不起",
+  red: "红",
+  green: "绿",
+};
 
 /** 内建条目的数据层视图（文件加载的条目自带 spec）。verifier 与 runVerifyOutcome 的缺省同形。 */
 const specOf = (t: EvalTask): TaskSpec => t.spec ?? {
@@ -596,7 +632,8 @@ for (let rep = 1; rep <= REPS; rep++) {
     console.log(
       `[loop-eval] ${t.id} rep${String(rep)} ${verdict} 起点=${r.seedVerifyOk ? "绿" : "红"} `
       + `读先于写=${r.readsBeforeFirstWrite} clarify=${String(r.clarified)} 先批后写=${r.plannedBeforeWrite ? "Y" : "N"} `
-      + `verify=${String(r.verified)}→${String(r.verifyOkLast)} 工具=${String(r.toolCalls)}/${String(r.toolFailures)}败 `
+      + `verify=${String(r.verified)}→${String(r.verifyOkLast)} 隐藏=${HELD_OUT_TOKEN[judgeHeldOut(t.spec?.heldOut, r.heldOutRun, r.heldOutInstallErrs).state]} `
+      + `工具=${String(r.toolCalls)}/${String(r.toolFailures)}败 `
       + `重复=${String(r.repeatedSameAction)} 请求=${String(r.requests)} 拨数=${String(r.attempts)} tok=${String(r.tokensIn)}/${String(r.tokensOut)} `
       + `${moneyText(r.cny)} ${String(Math.round(r.seconds))}s 内存峰=${String(r.resources.rssPeakMb)}MB/${String(r.resources.procPeak)}进程 cpu=${String(r.resources.cpuMs)}ms`
       + (g.fails.length > 0 ? " 〔" + g.fails.join("；") + "〕" : "")

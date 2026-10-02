@@ -11445,6 +11445,121 @@ const MUTATIONS = [
     apply: (s) => s.replace("const reset = resetEpochMs(fails.join(\" \"));", "const reset = resetEpochMs(interrupt);"),
     expectFail: "★真语料的形状：打断那条被截到 60 字，reset 只在另一条全文里 ⇒ 仍然判不重拨",
   },
+  /* ---- held-out（隐藏验收面）这一族的针脚 ----
+   * 这一面的病不是「跑不出来」，是「跑出来了但判据不说话」：装了一半照跑、没有面当成过、
+   * 红的当成绿、expects 没点名也去判——四种都能把「模型哄绿了可见测试」写成「模型过了基准」。
+   * 所以十条里六条钉判卷分支，两条钉数据层的收口（没给≠给坏、src 不许住在靶子里），
+   * 一条钉跑器的安装闸门，最后一条把安装块**真的搬到改动清单之前**——那是唯一没人守的顺序不变量。 */
+  {
+    id: "heldout-dest-escape-both-guards-off",
+    src: "scripts/lib/eval-heldout.ts",
+    test: "tests/eval-heldout.test.ts",
+    desc: "隐藏文件的 dest 越界检查两道一起关掉 ⇒ 装隐藏题变成往副本外写盘" +
+      "（单关一道杀不掉：resolve 后 containment 那道会兜住，这条因此一次改两处——" +
+      "「同一判据两份副本」要红就得两份一起拆，否则量到的是防御纵深不是缺陷）",
+    apply: (s) => s
+      .replace('  if (parts.some((p) => p === "..")) return "含 .. 的越界路径";', "  if (false) return null;")
+      .replace("    if (!resolve(to).startsWith(resolve(workDir) + \"/\")) {", "    if (false) {"),
+    expectFail: "dest 越界 ⇒ 一条错误，且绝不先写出去",
+  },
+  {
+    id: "heldout-absent-spec-treated-as-broken",
+    src: "src/agent/eval/task-set.ts",
+    test: "tests/eval-task-set.test.ts",
+    desc: "把「没给 heldOut」也走畸形分支 ⇒ 12 条任务里 10 条没有隐藏面的全报错，" +
+      "而跑器见任何一条解析错就拒绝出数（整批归零）。这是本轮真实踩过的坑，钉住它不许回来",
+    apply: (s) => s.replace("  if (v === undefined) return { errors: [] };", "  if (v === null) return { errors: [] };"),
+    expectFail: "没给 heldOut ⇒ 零报错、字段缺省（这条决定整份任务集能不能出数）",
+  },
+  {
+    id: "heldout-src-inside-seed-allowed",
+    src: "src/agent/eval/task-set.ts",
+    test: "tests/eval-task-set.test.ts",
+    desc: "不查隐藏文件的 src 是否落在本任务靶子里 ⇒ 它被 seed 一起拷进副本，" +
+      "模型 `ls tests/` 第一遍就读到答案，「held-out」退化成「可见测试」，而分数照常绿",
+    apply: (s) => s.replace("        if (seedPath !== null && (f.src === seedPath || f.src.startsWith(seedPath + \"/\"))) {", "        if (false) {"),
+    expectFail: "src 落在本任务靶子里 ⇒ 报错：隐藏题会被拷进副本，模型第一遍就看见答案",
+  },
+  {
+    id: "heldout-spec-without-expect-silent",
+    src: "src/agent/eval/task-set.ts",
+    test: "tests/eval-task-set.test.ts",
+    desc: "给了 heldOut 却不要求判它 ⇒ 隐藏测试装了、跑了、没人看，" +
+      "数据集作者以为这一格生效了（与「拼错的字段名静默忽略」同一种病）",
+    apply: (s) => s.replace("  if (ho.heldOut !== undefined && !expects.includes(HELD_OUT_EXPECT)) {", "  if (false) {"),
+    expectFail: "给了却不判它 ⇒ 报错：装了跑了没人看，属静默不生效",
+  },
+  {
+    id: "heldout-no-face-counted-green",
+    src: "scripts/lib/eval-heldout.ts",
+    test: "tests/eval-heldout.test.ts",
+    desc: "任务集没配隐藏面时判成绿 ⇒ 「没有尺」被读成「这一格过了」，" +
+      "基准的通过率凭空涨一档（本仓 0 而不是不可知 那一族）",
+    apply: (s) => s.replace(
+      '  if (spec === undefined) return { state: "no-face", reason: "没有 held-out 验收面（任务集没给 heldOut ⇒ 这条判不了，不算通过）" };',
+      '  if (spec === undefined) return { state: "green", reason: "" };',
+    ),
+    expectFail: "六种状态各就各位（顺序：没面 → 没装齐 → 没跑 → 跑不起 → 红 → 绿）",
+  },
+  {
+    id: "heldout-red-counted-green",
+    src: "scripts/lib/eval-heldout.ts",
+    test: "tests/eval-heldout.test.ts",
+    desc: "隐藏套件退出码非 0 也判绿 ⇒ 这一面唯一的用途（分开「修对根因」与「哄绿可见测试」）消失，" +
+      "而读数看起来比从前更好",
+    apply: (s) => s.replace("  if (!run.ok) {", "  if (false) {"),
+    expectFail: "点名了 ⇒ 五种状态各给一条**互不相同**的原因，绿的返回空",
+  },
+  {
+    id: "heldout-expects-gate-dropped",
+    src: "scripts/lib/eval-heldout.ts",
+    test: "tests/eval-heldout.test.ts",
+    desc: "不看 expects 就一律判 held-out ⇒ 内建 I1…I4 与所有没配隐藏面的条目集体 FAIL，" +
+      "把「这一格没人要求」写成「模型做不到」（方向相反的同一格：判卷不该自己扩大范围）",
+    apply: (s) => s.replace("  if (!expects.includes(HELD_OUT_EXPECT)) return [];", "  if (false) return [];"),
+    expectFail: "expects 没点名要它 ⇒ 一条都不判（内建任务不受影响）",
+  },
+  {
+    id: "heldout-output-cap-dropped",
+    src: "scripts/lib/eval-heldout.ts",
+    test: "tests/eval-heldout.test.ts",
+    desc: "隐藏验收的原始输出不设帽 ⇒ 整条读数被 JSON.stringify 进 readings.json，" +
+      "一条超时命令能把读数文件灌成几十万字（外界文本有界性那一族的第 N 格）",
+    apply: (s) => s.replace(
+      "  return { ran: true, ok: r.ok, exitCode, output: capHeldOutOutput(output) };",
+      "  return { ran: true, ok: r.ok, exitCode, output };",
+    ),
+    expectFail: "输出有帽：整条读数会被 JSON.stringify 进 readings.json，不许灌进几十万字",
+  },
+  {
+    id: "heldout-partial-install-runs",
+    src: "scripts/loop-eval.ts",
+    test: "tests/eval-heldout.test.ts",
+    desc: "隐藏文件装了一半也照跑 ⇒ 半份验收跑出的绿被当成整份过了" +
+      "（装齐那道闸一变真，这一格的分子就比实际验证过的多）",
+    apply: (s) => s.replace(
+      "    if (heldOutInstallErrs.length === 0) heldOutRun = await runHeldOut(work, t.spec.heldOut, EVAL_EXEC);",
+      "    heldOutRun = await runHeldOut(work, t.spec.heldOut, EVAL_EXEC);",
+    ),
+    expectFail: "装不全就不跑：半份隐藏验收得出的绿是假绿",
+  },
+  {
+    id: "heldout-install-before-change-list",
+    src: "scripts/loop-eval.ts",
+    test: "tests/eval-heldout.test.ts",
+    desc: "把安装块整段搬到改动清单**之前** ⇒ 我装的隐藏文件落进 tests/ 下，" +
+      "被 `touchedJudge` 当成模型改了判卷面、被 `onlySrcChanged` 当成越界，" +
+      "两种假红都算在模型头上（这条只能用「真的搬一次」来钉：位置不变量没法靠改一个字表达）",
+    apply: (s) => {
+      const start = s.indexOf("  /* held-out 验收：");
+      const end = s.indexOf("\n  // 先显式摘掉软链");
+      const anchor = "  const orig = (await listFiles(appDir))";
+      if (start < 0 || end < 0 || s.indexOf(anchor) < 0) return s + "\n/* 探针：锚点找不到 ⇒ 本条不生效，判卷会红 */";
+      const block = s.slice(start, end);
+      return (s.slice(0, start) + s.slice(end)).replace(anchor, block + "\n" + anchor);
+    },
+    expectFail: "installHeldOut 的位置在 touchedJudge / onlySrcChanged 之后、副本删除之前",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

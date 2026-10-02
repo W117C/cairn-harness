@@ -10,9 +10,19 @@
     "verifier": {
       "command": "node --test tests/*.test.js"
     },
+    "heldOut": {
+      "files": [
+        {
+          "src": "fixtures/bench-heldout/B1/checkout.held.test.js",
+          "dest": "tests/checkout.held.test.js"
+        }
+      ],
+      "command": "node --test tests/checkout.held.test.js"
+    },
     "expects": [
       "verifyOk",
-      "judgeUntouched"
+      "judgeUntouched",
+      "heldOutPass"
     ]
   },
   {
@@ -26,9 +36,19 @@
     "verifier": {
       "command": "node --test tests/*.test.js"
     },
+    "heldOut": {
+      "files": [
+        {
+          "src": "fixtures/bench-heldout/B2/fit.held.test.js",
+          "dest": "tests/fit.held.test.js"
+        }
+      ],
+      "command": "node --test tests/fit.held.test.js"
+    },
     "expects": [
       "verifyOk",
-      "judgeUntouched"
+      "judgeUntouched",
+      "heldOutPass"
     ]
   },
   {

@@ -3,7 +3,7 @@
 // 解析必须**不静默丢**（少一条任务就少一分母，而没人会去数），可行性必须说清**缺什么**
 // （缺快照/缺凭据是"没有尺"，不许读成"成功率 0"）。
 import { describe, expect, it } from "vitest";
-import { aggregateFeasibility, deriveVerifierProbe, feasibility, fromSweBenchJsonl, parseTaskSetJson, type EnvProbe } from "../src/agent/eval/task-set";
+import { aggregateFeasibility, deriveVerifierProbe, feasibility, fromSweBenchJsonl, parseTaskSetJson, HELD_OUT_EXPECT, type EnvProbe } from "../src/agent/eval/task-set";
 
 const goodTask = {
   id: "I9",
@@ -178,5 +178,82 @@ describe("deriveVerifierProbe：从判卷命令推一条自检命令（认不出
 
   it("-m 后面没有模块名（python -m）⇒ 也算认不出，不许编一条自检", () => {
     expect(deriveVerifierProbe("python -m")).toBeNull();
+  });
+});
+
+/* held-out（隐藏验收面）的解析。规矩与 verifier 同一条：给坏了就点名，没给就什么都不说。
+ * 「没给」必须与「给坏了」分得开——第一版就是把它俩并成了一类，于是 B3…B12 十条没有隐藏面的
+ * 任务全被判成畸形，而跑器遇到任何一条解析错就**拒绝出数**（整批归零）。 */
+describe("parseTaskSetJson：heldOut 隐藏验收面", () => {
+  const held = {
+    files: [{ src: "fixtures/bench-heldout/B1/checkout.held.test.js", dest: "tests/checkout.held.test.js" }],
+    command: "node --test tests/checkout.held.test.js",
+  };
+  const withHeld = { ...goodTask, heldOut: held, expects: ["verifyOk", HELD_OUT_EXPECT] };
+
+  it("合法一条：files/dest/command 逐字段落地", () => {
+    const r = parseTaskSetJson(JSON.stringify([withHeld]));
+    expect(r.errors).toEqual([]);
+    expect(r.tasks[0]!.heldOut?.command).toBe(held.command);
+    expect(r.tasks[0]!.heldOut?.files[0]!.dest).toBe(held.files[0]!.dest);
+  });
+
+  it("没给 heldOut ⇒ 零报错、字段缺省（这条决定整份任务集能不能出数）", () => {
+    const r = parseTaskSetJson(JSON.stringify([goodTask]));
+    expect(r.errors).toEqual([]);
+    expect(r.tasks[0]!.heldOut).toBeUndefined();
+  });
+
+  it("给了却不判它 ⇒ 报错：装了跑了没人看，属静默不生效", () => {
+    const r = parseTaskSetJson(JSON.stringify([{ ...withHeld, expects: ["verifyOk"] }]));
+    expect(r.tasks).toHaveLength(0);
+    expect(r.errors.join(" ")).toContain("heldOut");
+  });
+
+  it("显式 null 不是「没给」：它是写坏了，必须点名", () => {
+    const r = parseTaskSetJson(JSON.stringify([{ ...withHeld, heldOut: null }]));
+    expect(r.errors).toHaveLength(1);
+  });
+
+  it("files 为空数组 ⇒ 报错（没有隐藏文件的 held-out 就是没有这一面）", () => {
+    const r = parseTaskSetJson(JSON.stringify([{ ...withHeld, heldOut: { ...held, files: [] } }]));
+    expect(r.errors.join(" ")).toContain("files");
+  });
+
+  it("command 空白 ⇒ 报错（验收命令缺失时不许默认当过）", () => {
+    const r = parseTaskSetJson(JSON.stringify([{ ...withHeld, heldOut: { ...held, command: "  " } }]));
+    expect(r.errors.join(" ")).toContain("command");
+  });
+
+  it("src 落在本任务靶子里 ⇒ 报错：隐藏题会被拷进副本，模型第一遍就看见答案", () => {
+    const r = parseTaskSetJson(JSON.stringify([{
+      ...withHeld,
+      heldOut: { ...held, files: [{ src: `${goodTask.seed.path}/tests/sneaky.test.js`, dest: "tests/sneaky.test.js" }] },
+    }]));
+    expect(r.errors.join(" ")).toContain("靶子");
+  });
+
+  it("靶子路径是另一条任务的前缀串（同名不同目录）⇒ 不误伤", () => {
+    const r = parseTaskSetJson(JSON.stringify([{
+      ...withHeld,
+      heldOut: { ...held, files: [{ src: "fixtures/bench-heldout/x.js", dest: "tests/x.js" }] },
+    }]));
+    expect(r.errors).toEqual([]);
+  });
+
+  it("file 型 seed 也给得出 src 检查：dest 与 src 缺一个就点名缺哪个", () => {
+    const r = parseTaskSetJson(JSON.stringify([{ ...withHeld, heldOut: { files: [{ src: "" } as never], command: held.command } }]));
+    expect(r.errors.join(" ")).toContain("src");
+  });
+
+  it("heldOut 里的未知字段（把 files 拼成 flle）⇒ 报错，不许静默忽略", () => {
+    const r = parseTaskSetJson(JSON.stringify([{ ...withHeld, heldOut: { flles: held.files, command: held.command } }]));
+    expect(r.errors.join(" ")).toContain("flles");
+  });
+
+  it("判卷用的那枚 expects 名字与常量同源：抄错一枚字母就不判了", () => {
+    const r = parseTaskSetJson(JSON.stringify([{ ...withHeld, expects: ["verifyOk", "heldOutPas"] }]));
+    expect(r.tasks).toHaveLength(0);
+    expect(r.errors.join(" ")).toContain(HELD_OUT_EXPECT);
   });
 });
