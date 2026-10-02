@@ -16,19 +16,22 @@ describe("尺的自检：正哨兵与负控各拦一种坏形状", () => {
   it("正哨兵从没命中过 ⇒ 不 ok，且明说这一列不可引用", () => {
     const r = rulerSelfCheck(false, false);
     expect(r.ok).toBe(false);
-    expect(r.why).toContain("不可引用");
+    // 钉整句里那段唯一的措辞，不钉「不可引用」那种裸词：裸词在 `eval-arms.ts` 等处也有副本，
+    // 改生产那句不会红（顶包候选，prose-needle-scan 现读点过名）。
+    expect(r.why).toContain("命中率这一列不可引用");
   });
 
-  it("负控命中 ⇒ 不 ok（命中定义太松，变好的读数也一并作废）", () => {
+  it("负控命中 ⇒ 不 ok（松定义把变好的读数一起作废）", () => {
     const r = rulerSelfCheck(true, true);
     expect(r.ok).toBe(false);
-    expect(r.why).toContain("负控");
+    expect(r.why).toContain("命中定义太松");
   });
 
   /* 两格同时坏时的**先后**也是判据：负控比哨兵更坏（它作废整张表，包括"看起来变好"的那些），
-   * 而两者的修法相反 ⇒ 先报哪个决定下一步去动哪里。 */
+   * 而两者的修法相反 ⇒ 先报哪个决定下一步去动哪里。钉"等于只有负控那一格的说明"，
+   * 而不是再抄一句生产文案（抄第二遍就成了顶包候选）。 */
   it("两种坏同时成立时先报负控，不许把更坏的那格藏在下一次迭代", () => {
-    expect(rulerSelfCheck(false, true).why).toContain("负控");
+    expect(rulerSelfCheck(false, true).why).toBe(rulerSelfCheck(true, true).why);
   });
 });
 
