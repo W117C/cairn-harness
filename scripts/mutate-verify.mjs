@@ -11348,6 +11348,50 @@ const MUTATIONS = [
     apply: (s) => s.replace('  process.stdout.write(renderModelFace(face) + "\\n\\n");\n', ""),
     expectFail: "接线：CLI 把归因面打在表之前，且吃的是**全部**基线文件而不是第一份",
   },
+  {
+    // ↓ 钱的**出处**（10-02 第二族第三次命中：09-23 闸与回执分叉、09-27 usage 无归因键、这次是缺省价替所有人猜）。
+    id: "price-face-missing-blind",
+    src: "scripts/lib/eval-validity.ts",
+    test: "tests/eval-validity.test.ts",
+    desc: "不再记录缺的是哪一边 ⇒ 「不给价」这条路重新被走成「看起来能算」，" +
+      "而操作者拿到的一句笼统的不可知没法修（判卷按 why 里必须点到的那两个名字来红）",
+    apply: (s) => s.replace(
+      '  if (!rawIn) missing.push("EVAL_PRICE_IN");\n  if (!rawOut) missing.push("EVAL_PRICE_OUT");',
+      "  void missing;",
+    ),
+    expectFail: "价目只认操作者给全的那两个：缺一边＝不可知，而不是拿缺省凑",
+  },
+  {
+    id: "price-face-negative-ok",
+    src: "scripts/lib/eval-validity.ts",
+    test: "tests/eval-validity.test.ts",
+    desc: "只查是不是数、不查非负 ⇒ 负单价算出负「实付」，比值与白花两格一起变成负数（那已经不是读数，是噪声）",
+    apply: (s) => s.replace(
+      "if (!Number.isFinite(inPerM) || !Number.isFinite(outPerM) || inPerM < 0 || outPerM < 0) {",
+      "if (!Number.isFinite(inPerM) || !Number.isFinite(outPerM)) {",
+    ),
+    expectFail: "坏价目也判不可知：非数、负数、空串（0 是合法价——免费档就该报得出 ¥0）",
+  },
+  {
+    id: "money-text-unknown-degrades",
+    src: "scripts/lib/eval-validity.ts",
+    test: "tests/eval-validity.test.ts",
+    desc: "不可知也照印 ¥0.0000 ⇒ 正是复测登记的那条「0 而不是不可知」：读者会把「这轮免费」当成实测结论",
+    apply: (s) => s.replace("return Number.isFinite(v) ? `¥${v.toFixed(4)}` : PRICE_UNKNOWN;", "return `¥${v.toFixed(4)}`;"),
+    expectFail: "★不可知的钱印成「价不可知」那一档，不许印成 ¥0.0000（0 是最容易被读成「没花钱」的形状）",
+  },
+  {
+    id: "bench-price-face-bypassed",
+    src: "scripts/loop-eval.ts",
+    test: "tests/eval-validity.test.ts",
+    desc: "跑器绕开 priceFace、把那两个缺省价写回常量 ⇒ 任何档位的 token 都会被印成同一把 ¥，" +
+      "而 readings 里的 model 明明说这不是同一档（接线判卷按「真的调了 priceFace」这一句红）",
+    apply: (s) => s.replace(
+      "const PRICE = priceFace(process.env.EVAL_PRICE_IN, process.env.EVAL_PRICE_OUT);",
+      'const PRICE = { known: true, inPerM: 0.8, outPerM: 2.8, caveat: "" };',
+    ),
+    expectFail: "★接线③ 跑器真的用 priceFace，旧的缺省价写法不许回来",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

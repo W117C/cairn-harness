@@ -69,6 +69,10 @@ export interface CostRow { r: { requests: number; cny: number }; g: { ok: boolea
  * 合计 ¥0.2774，其中 1 趟起步后被 429 打断、独自占 **¥0.0789 = 28%**，
  * 而它已经不在分母里了 ⇒ 「每达标任务」印成 ¥0.1387 而真值是 ¥0.0993 ⇒ **比值被高估 39.7%**。
  * （28% 是白花占全量实付：0.0789/0.2774。两个数分母不同，别混用——10-02 复算逐笔见 c438529。）
+ * ⚠️ 上面那些 ¥ 是**按缺省价 0.8/2.8 算出来的名义值**，而那 36 趟拨的是 OpenRouter 免费档
+ *   （`limit_source=openrouter_free_tier_daily`，见 outputs/bench-reps3-2026-10-02/README.md）⇒
+ *   「实付」两个字当时是不成立的。39.7% 这个**比值**不受影响（分子分母同乘一个常数）。
+ *   这条正是下面 `priceFace` 存在的原因：价目没绑定所拨模型时，钱只能报「不可知」。
  * 被打断的趟次花的钱是真钱，所以**单列、不藏**；只是不许混进那个比值。
  */
 export function costSplit(rows: readonly CostRow[]): { paidAll: number; validSpend: number; wastedSpend: number; wastedRuns: number } {
@@ -86,4 +90,48 @@ export function costSplit(rows: readonly CostRow[]): { paidAll: number; validSpe
     }
   }
   return { paidAll, validSpend, wastedSpend, wastedRuns };
+}
+
+export type PriceFace =
+  | { known: true; inPerM: number; outPerM: number; caveat: string }
+  | { known: false; why: string };
+
+/**
+ * 钱这把尺**有没有资格存在**。只认操作者当场给全的两个价（每百万 token）。
+ *
+ * 为什么不许留缺省（2026-10-02 现读）：`loop-eval` 从前写的是
+ * 「env 没给就吃 0.8 / 2.8」，而那两位是某个中转端点对**它自己那一档**的目录价；
+ * 同一句里拨的却是 OpenRouter 免费档（token 照记、钱应为 0）⇒
+ * 印出来的「实付≈¥0.2774」是**用别人的价给自己的模型定价**，没人看得出。
+ * 与 09-23 那条「价表键=档位 id，模型名必须经 priceForModel 反查」同族，第三次命中。
+ *
+ * 三态里没有「半把尺」那一档：只给 in 不给 out（或反之）也算不可知——
+ * 单边价算出来的比值看着像数，实际是噪声。
+ */
+export function priceFace(rawIn: string | undefined, rawOut: string | undefined): PriceFace {
+  const missing: string[] = [];
+  if (!rawIn) missing.push("EVAL_PRICE_IN");
+  if (!rawOut) missing.push("EVAL_PRICE_OUT");
+  if (missing.length > 0) {
+    return { known: false, why: "没给 " + missing.join(" / ") + " ⇒ 钱按「不可知」处理（不再静默吃缺省价）" };
+  }
+  const inPerM = Number(rawIn);
+  const outPerM = Number(rawOut);
+  if (!Number.isFinite(inPerM) || !Number.isFinite(outPerM) || inPerM < 0 || outPerM < 0) {
+    return { known: false, why: "给的价不是非负有限数（in=「" + String(rawIn) + "」 out=「" + String(rawOut) + "」）" };
+  }
+  return {
+    known: true,
+    inPerM,
+    outPerM,
+    caveat: "手给价：跑器不核对它与所拨档位是否同源——那一半拿 readings 里的 model 去对",
+  };
+}
+
+/** 「这一格量不出来」的唯一措辞（判卷引用它，不许把原话抄进测试——同 WHY_NOT_STARTED 那条纪律）。 */
+export const PRICE_UNKNOWN = "价不可知";
+
+/** 钱的读数写法：不可知**不许**退化成 `¥0.0000`（那正是 2026-10-02 登记的那条「0 而不是不可知」）。 */
+export function moneyText(v: number): string {
+  return Number.isFinite(v) ? `¥${v.toFixed(4)}` : PRICE_UNKNOWN;
 }

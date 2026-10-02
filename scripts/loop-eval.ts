@@ -14,7 +14,10 @@
 //
 // 用法（凭据只走 env，不落文件）：
 //   M0_API_KEY=… M0_ENDPOINT=https://…/chat/completions M0_MODEL=… M0_GLM_TOOL_STREAM=0 \
+//   EVAL_PRICE_IN=<¥每百万输入> EVAL_PRICE_OUT=<¥每百万输出> \
 //   node --import tsx scripts/loop-eval.ts [--only I1,I2] [--reps 1] [--max-steps 20] [--system base|short]
+//   ↑ 那两个价**必须自己给、且必须是自己所拨档位的价**（端点目录价即可）。不给 ⇒ 钱这一格出「量不出来」，
+//     跑器不再替任何人猜价（10-02 那次 36 趟拨的是免费档却按 0.8/2.8 印了「实付」，见 lib/eval-validity 的 priceFace）。
 import { cp, mkdir, mkdtemp, readdir, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -25,7 +28,7 @@ import { aggregateFeasibility, deriveVerifierProbe, feasibility, fromSweBenchJso
 import { ClarifyGate, PlanGate } from "../src/agent/gates";
 // 「这趟跑算不算数」——纯函数、可单测。分母口径见那边的模块头：
 // **未起步 / 被 provider 打断的趟次不许进分母**（限流打断不能记成"模型没做到"）。
-import { costSplit, runValidity, tally } from "./lib/eval-validity";
+import { costSplit, moneyText, PRICE_UNKNOWN, priceFace, runValidity, tally } from "./lib/eval-validity";
 import { createVerifyHook, defaultExec, runVerifyOutcome, type ExecFn } from "../src/agent/verify";
 // 用量归因走**生产那一份盖章器**（`createUsageAttributor` 的唯一调用点从前只有 agent-runner ⇒
 // 基准路径绕过它，整条链上没有一笔 usage 带模型名，钱轴跨模型就无从分面）。
@@ -81,8 +84,14 @@ const BENCH_MODEL = process.env.M0_MODEL ?? process.env.OPENAI_MODEL;
 if (!process.env.M0_API_KEY && BENCH_API_KEY) process.env.M0_API_KEY = BENCH_API_KEY;
 if (!process.env.M0_ENDPOINT && BENCH_ENDPOINT) process.env.M0_ENDPOINT = BENCH_ENDPOINT;
 if (!process.env.M0_MODEL && BENCH_MODEL) process.env.M0_MODEL = BENCH_MODEL;
-const PRICE_IN = Number(process.env.EVAL_PRICE_IN ?? "0.8");
-const PRICE_OUT = Number(process.env.EVAL_PRICE_OUT ?? "2.8");
+/* 钱的尺要有出处（2026-10-02）：从前这里写的是「env 没给就吃 0.8 / 2.8」，
+ * 而那两位是某个中转端点对**它自己那一档**的目录价（本文件头注释同源）。同一趟跑的若是别的档位
+ * （实测那 36 拨的是 OpenRouter 免费档），印出来的「实付≈¥0.2774」就是拿别人的价给自己定价。
+ * 现在：EVAL_PRICE_IN 与 EVAL_PRICE_OUT **两个都给**才算得出钱；缺任何一个 ⇒ cny=NaN ⇒
+ * 汇总那一格印的是「量不出来」（PRICE_UNKNOWN 那个名字），而不是 ¥0.000（token/耗时/内存照出，那一半不依赖价目）。 */
+const PRICE = priceFace(process.env.EVAL_PRICE_IN, process.env.EVAL_PRICE_OUT);
+const cnyOf = (tokensIn: number, tokensOut: number): number =>
+  PRICE.known ? (tokensIn * PRICE.inPerM + tokensOut * PRICE.outPerM) / 1e6 : Number.NaN;
 
 interface EvalTask {
   id: string;
@@ -459,7 +468,7 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
     id: t.id, name: t.name, rep, system: SYSTEM_MODE, seedVerifyOk,
     model: glmDefaultModelName(),
     seconds, requests: usage.length, tokensIn, tokensOut,
-    cny: (tokensIn * PRICE_IN + tokensOut * PRICE_OUT) / 1e6,
+    cny: cnyOf(tokensIn, tokensOut),
     toolCalls: calls.length,
     toolFailures: calls.filter((c) => results.get(c.id)?.ok === false).length,
     repeatedSameAction,
@@ -557,7 +566,7 @@ if (!BENCH_API_KEY || !BENCH_ENDPOINT) {
   process.exit(0);
 }
 await judgeSelfCheck(); // 判卷器不落定就不出数
-console.log(`[loop-eval] 任务=${tasks.map((t) => t.id).join(",")} reps=${REPS} system=${SYSTEM_MODE} maxSteps=${MAX_STEPS} 模型=${glmDefaultModelName()} 价=¥${PRICE_IN}/¥${PRICE_OUT}每M`);
+console.log(`[loop-eval] 任务=${tasks.map((t) => t.id).join(",")} reps=${REPS} system=${SYSTEM_MODE} maxSteps=${MAX_STEPS} 模型=${glmDefaultModelName()} 价=${PRICE.known ? `¥${PRICE.inPerM}/¥${PRICE.outPerM}每M（手给）` : `${PRICE_UNKNOWN}〔${PRICE.why}〕`}`);
 await mkdir(ROOT + "/" + OUT, { recursive: true });
 const rows: { r: Reading; g: { ok: boolean; fails: string[] } }[] = [];
 for (let rep = 1; rep <= REPS; rep++) {
@@ -574,7 +583,7 @@ for (let rep = 1; rep <= REPS; rep++) {
       + `读先于写=${r.readsBeforeFirstWrite} clarify=${String(r.clarified)} 先批后写=${r.plannedBeforeWrite ? "Y" : "N"} `
       + `verify=${String(r.verified)}→${String(r.verifyOkLast)} 工具=${String(r.toolCalls)}/${String(r.toolFailures)}败 `
       + `重复=${String(r.repeatedSameAction)} 请求=${String(r.requests)} tok=${String(r.tokensIn)}/${String(r.tokensOut)} `
-      + `¥${r.cny.toFixed(4)} ${String(Math.round(r.seconds))}s 内存峰=${String(r.resources.rssPeakMb)}MB/${String(r.resources.procPeak)}进程 cpu=${String(r.resources.cpuMs)}ms`
+      + `${moneyText(r.cny)} ${String(Math.round(r.seconds))}s 内存峰=${String(r.resources.rssPeakMb)}MB/${String(r.resources.procPeak)}进程 cpu=${String(r.resources.cpuMs)}ms`
       + (g.fails.length > 0 ? " 〔" + g.fails.join("；") + "〕" : "")
       + (v.valid ? "" : " 《" + v.why + "》"),
     );
@@ -588,6 +597,11 @@ if (t0.refuse) {
   // 与"任务集解析报错"同一条纪律：**分母不完整时任何分数都是假的** ⇒ 拒绝出数，只留证据。
   console.error(`[loop-eval] 一趟都不算数（${String(t0.invalid)} 趟全部未起步/被打断）⇒ **拒绝出数**：`
     + `分母为空时印出来的成功率只会误导（原文："分母不完整时任何分数都是假的"）`);
+} else if (!PRICE.known) {
+  // 量不出来 ⇒ 钱这一格**空着出声**，不许印 ¥0.000（那是最容易被读成"没花钱"的形状）。
+  console.log(`[loop-eval] 合计 ${String(t0.pass)}/${String(t0.total)} 达标`
+    + (t0.invalid > 0 ? ` · **${String(t0.invalid)} 趟无效未计入分母**（未起步/被 provider 打断）` : "")
+    + ` · 实付=${PRICE_UNKNOWN} · 每达标任务=${PRICE_UNKNOWN} 〔${PRICE.why}；token/耗时/内存不受影响〕`);
 } else {
   console.log(`[loop-eval] 合计 ${String(t0.pass)}/${String(t0.total)} 达标`
     + (t0.invalid > 0 ? ` · **${String(t0.invalid)} 趟无效未计入分母**（未起步/被 provider 打断）` : "")

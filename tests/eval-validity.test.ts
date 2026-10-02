@@ -11,7 +11,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { costSplit, runValidity, tally, WHY_INTERRUPTED_PREFIX, WHY_NOT_STARTED } from "../scripts/lib/eval-validity";
+import { costSplit, moneyText, PRICE_UNKNOWN, priceFace, runValidity, tally, WHY_INTERRUPTED_PREFIX, WHY_NOT_STARTED } from "../scripts/lib/eval-validity";
 
 const row = (requests: number, ok: boolean, fails: string[] = []) =>
   ({ r: { requests }, g: { ok, fails } });
@@ -95,5 +95,55 @@ describe("判卷分母：环境打断不算数，模型失败照旧算数", () =
 
   it("★接线② 被剔掉那些趟花的钱要单独印出来（是真钱，修正不等于把它藏起来）", () => {
     expect(evalSrc()).toContain("money.wastedSpend.toFixed(");
+  });
+
+  // ↓↓ 钱的**出处**。缺省价 0.8/2.8 是某个中转端点对它自己那一档的目录价，
+  //    而实测那 36 趟拨的是 OpenRouter 免费档 ⇒ 「实付≈¥0.2774」是拿别人的价给自己定价。
+  //    所以这里钉的不是数字，是「有没有资格报数」：价目没绑定所拨档位 ⇒ 钱这一格必须空着出声。
+  it("价目只认操作者给全的那两个：缺一边＝不可知，而不是拿缺省凑", () => {
+    const both = priceFace("0.5", "1.5");
+    expect(both.known).toBe(true);
+    if (both.known) expect([both.inPerM, both.outPerM]).toEqual([0.5, 1.5]);
+    // 两个都不给 ⇒ 不可知，而且**点名缺哪一个**（只报"不可知"不报缺谁，操作者没法修）
+    const none = priceFace(undefined, undefined);
+    expect(none.known).toBe(false);
+    if (!none.known) {
+      expect(none.why).toContain("EVAL_PRICE_IN");
+      expect(none.why).toContain("EVAL_PRICE_OUT");
+    }
+    // 半把尺：只给 in ⇒ 仍然不可知，且 why 只点 out（不许把给过的那边也说成缺）
+    const half = priceFace("0.5", undefined);
+    expect(half.known).toBe(false);
+    if (!half.known) {
+      expect(half.why).toContain("EVAL_PRICE_OUT");
+      expect(half.why).not.toContain("EVAL_PRICE_IN");
+    }
+  });
+
+  it("坏价目也判不可知：非数、负数、空串（0 是合法价——免费档就该报得出 ¥0）", () => {
+    expect(priceFace("abc", "1").known).toBe(false);
+    expect(priceFace("-1", "1").known).toBe(false);
+    expect(priceFace("1", "-0.2").known).toBe(false);
+    expect(priceFace("", "1").known).toBe(false);
+    // 0/0 是**真数**：免费档跑出来的钱就是 0，不许被当成"没给"而误判成不可知
+    const zero = priceFace("0", "0");
+    expect(zero.known).toBe(true);
+    if (zero.known) expect([zero.inPerM, zero.outPerM]).toEqual([0, 0]);
+  });
+
+  it("★不可知的钱印成「价不可知」那一档，不许印成 ¥0.0000（0 是最容易被读成「没花钱」的形状）", () => {
+    expect(moneyText(0.1234)).toBe("¥0.1234");
+    expect(moneyText(0)).toBe("¥0.0000");   // 真的 0 照实印
+    expect(moneyText(Number.NaN)).toBe(PRICE_UNKNOWN);
+    expect(moneyText(Number.POSITIVE_INFINITY)).toBe(PRICE_UNKNOWN);
+  });
+
+  it("★接线③ 跑器真的用 priceFace，旧的缺省价写法不许回来", () => {
+    const src = evalSrc();
+    expect(src).toContain("priceFace(process.env.EVAL_PRICE_IN, process.env.EVAL_PRICE_OUT)");
+    expect(src).toContain("cny: cnyOf(tokensIn, tokensOut),");
+    // 反向：那两位缺省价一旦被删掉的路径走回来（env 缺席就吃常数），这一条要红
+    expect(src).not.toContain('EVAL_PRICE_IN ?? "0.8"');
+    expect(src).toContain("实付=\${PRICE_UNKNOWN}");
   });
 });
