@@ -13,6 +13,7 @@ import { access } from "node:fs/promises";
 import { scanSourceFilesAll } from "../agent/map/build.js";
 import { MAX_FILES_DEFAULT } from "../agent/map/cap.js";
 import { capAtCeiling, capCauseNote, capWayOut, coverageNote } from "../agent/impact/coverage.js";
+import { attributionNote, mixedSitesNote } from "../agent/impact/attribution.js";
 import { SUPPORTED_EXTS } from "../agent/map/parse.js";
 import { assertNotAgentArea, assertRealContainment, resolveInWorkspace, ToolError, type Tool, type ToolResult } from "./base.js";
 
@@ -107,19 +108,29 @@ export async function graphCandidatePosition(workspace: string, rel: string): Pr
  *  （第十四族）。本工具只是它的读端之一，直接 import。 */
 
 /** 并集自述（纯函数）：同名符号在多个文件各有一份定义时，`upward` 给的是**各份的并集**——
- *  图只按名字连边（`map/parse.ts` 的 tag 只有 def|ref，不采 import），所以里面一定混着
- *  "另一份定义的调用方"。这一句是把**假阳性**摆到台面上：不问自答的"波及 N 个文件"
+ *  里面仍可能留着"另一份定义的调用方"。这一句是把**假阳性**摆到台面上：不问自答的"波及 N 个文件"
  *  会让模型去改与本次编辑无关的调用方（与覆盖面自述相反的一侧：那边怕漏报，这边怕多报）。
- *  出路只给真做得到的两件：grep 它的 import 确认归属；或按文件查（那一支会点名哪些符号有歧义）。 */
+ *
+ *  ⚠️ 这句文案在第 308 页之前写的是「本图只按名字连边、**不认 import**」——那句话从第 305 页起就是**假话**
+ *  （图已带 import 落料面，会按"这名字另有出处"的反证摘边），而它当时**没有任何观测者**：
+ *  判卷里一条关于这句的断言都没有 ⇒ 承诺烂在文案里也没人喊（本仓「模型可见文本的承诺」那一族）。
+ *  现在它由 `tests/impact-query.test.ts` 里那组"文案要说自己做得到且做不到的事"钉住：
+ *  不许再出现"不认 import"，也不许说成"已按定义逐条筛过"（后者仍做不到）。 */
 export function unionNote(subject: string): string {
   if (subject === "") return "";
-  return `（同名歧义：${subject} ⇒ 下面波及清单是**各份定义的并集**，本图只按名字连边、不认 import；` +
-    "要收窄就先 grep 它的 import 确认归属，或按文件查 {file:…}）";
+  return `（同名歧义：${subject} ⇒ 清单仍是各份同名定义的并集：图已按 import 反证摘过一轮，但归得上任一定义的都留着；` +
+    "要再收就 grep 它的 import 确认，或按文件查 {file:…} 拿「几处只归得到别处」那个数）";
 }
 
-/** 调用点按文件汇聚的紧凑清单（与 contextNoteFor 同一套帽：宁少不炸上下文）。 */
-function sitesNote(head: string, sites: ImpactSite[], noun: SiteNoun = UP_NOUN): string {
-  if (sites.length === 0) return head + noun.none;
+/** 调用点按文件汇聚的紧凑清单（与 contextNoteFor 同一套帽：宁少不炸上下文）。
+ *  `tail`＝这条读数的**自述尾巴**（同名歧义分母、归属计数）。它落在第一行**末尾**而不是 head 里，
+ *  因为这一行是 `head + "：" + 计数句` 连起来的：自述句拼进 head 会把计数句挤到句子后面，
+ *  真仓读数就成了「…（我在调用谁）；归属判定：1689 处已按…排除：引用的外部定义 15 处」——
+ *  那个「排除：」读起来像在解释归属判据，其实后面是另一个数。注入端（`contextNoteFor`）的顺序是
+ *  先给数、再交代这数被谁筛过 ⇒ 两端同序，模型在两条路上读到的是同一句话的形状。
+ *  空清单那一支也接尾巴：「波及半径为 0」时那句自述同样要说（只在有清单时报数＝缺省那一格没人交代）。 */
+function sitesNote(head: string, sites: ImpactSite[], noun: SiteNoun = UP_NOUN, tail = ""): string {
+  if (sites.length === 0) return head + noun.none + tail;
   const byFile = new Map<string, ImpactSite[]>();
   for (const s of sites) {
     const arr = byFile.get(s.file);
@@ -128,7 +139,7 @@ function sitesNote(head: string, sites: ImpactSite[], noun: SiteNoun = UP_NOUN):
   }
   const files = [...byFile.keys()];
   const shown = files.slice(0, FILES_CAP);
-  const lines = [head + "：" + noun.item + " " + String(sites.length) + " 处，" + noun.group + " " + String(files.length) + " 个文件"];
+  const lines = [head + "：" + noun.item + " " + String(sites.length) + " 处，" + noun.group + " " + String(files.length) + " 个文件" + tail];
   for (const f of shown) {
     const arr = byFile.get(f)!;
     const syms = arr.slice(0, SYMS_CAP).map((s) => `${s.symbol}(L${String(s.line)})`).join(", ");
@@ -166,8 +177,10 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
           const graph = await buildImpact({ workspace: ctx.workspace, cacheDir: dir, maxFiles, persistIndex: true });
           const rel = fileArg.replace(/\\/g, "/");
           if (!graph.files.includes(rel)) return { ok: false, output: await notInGraphNote(ctx.workspace, rel, abs, maxFiles) };
+          // 三支（deps / file / symbol）都带归属句：`downward` 与 `upward` 吃同一把判据，
+          // 只给一支报数是同族「只硬化一支」——另两支读到的清单就没人交代它已经被收窄过。
           const depHead = "[impact] " + rel + " 引用的外部定义（我在调用谁）" + coverageNote(graph.files.length, maxFiles, graph.candidates);
-          return { ok: true, output: sitesNote(depHead, downward(graph, rel), DEP_NOUN) };
+          return { ok: true, output: sitesNote(depHead, downward(graph, rel), DEP_NOUN, attributionNote(graph.attribution)) };
         }
         const r = await fileImpact(ctx.workspace, fileArg, dir, maxFiles, true);
         if (r === null) return { ok: false, output: await notInGraphNote(ctx.workspace, fileArg.replace(/\\/g, "/"), abs, maxFiles) };
@@ -182,7 +195,9 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
             ? r.ambiguousSymbols.slice(0, SYMS_CAP).join(", ") +
               ` 在别处也有同名定义${r.ambiguousSymbols.length > SYMS_CAP ? " 等 " + String(r.ambiguousSymbols.length) + " 个符号" : ""}`
             : "");
-        return { ok: true, output: sitesNote(head, r.up) };
+        // 与 write/edit 回注摘要同一句话、同一个出处（`mixedSitesNote`/`attributionNote`）：
+        // 两支各写一遍就是"两处各写一个数字"，改一处忘一处时另一支会静默说谎。
+        return { ok: true, output: sitesNote(head, r.up, UP_NOUN, mixedSitesNote(r.sitesOnlyToOtherDef) + attributionNote(r.attribution)) };
       }
       const graph = await buildImpact({ workspace: ctx.workspace, cacheDir: dir, maxFiles, persistIndex: true });
       const defined = graph.defs.get(symbol) ?? [];
@@ -210,6 +225,7 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
         };
       }
       const defFiles = new Set(defined.map((d) => d.file));
+      const symAttrib = attributionNote(graph.attribution);
       const symHead = `[impact] ${symbol} 的定义在 ${String(defFiles.size)} 个文件` +
         coverageNote(graph.files.length, maxFiles, graph.candidates) +
         unionNote(defFiles.size > 1 ? `${symbol} 有 ${String(defFiles.size)} 份定义` : "");
@@ -225,12 +241,12 @@ export function createImpactQueryTool(cacheDir?: string): Tool {
           const tail = sameFile.length > 8 ? `\n  等 ${String(sameFile.length)} 处` : "";
           return {
             ok: true,
-            output: symHead + "：无跨文件调用点；同文件引用在下面点名（跨文件图判据不含同文件边，别读成「没人用」）\n" +
+            output: symHead + "：无跨文件调用点；同文件引用在下面点名（跨文件图判据不含同文件边，别读成「没人用」）" + symAttrib + "\n" +
               lines.join("\n") + tail,
           };
         }
       }
-      return { ok: true, output: sitesNote(symHead, cross) };
+      return { ok: true, output: sitesNote(symHead, cross, UP_NOUN, symAttrib) };
     },
   };
 }

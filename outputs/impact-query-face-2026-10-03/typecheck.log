@@ -1,0 +1,6 @@
+tests/event-log-timestamps.test.ts(19,35): error TS2554: Expected 1 arguments, but got 2.
+tests/event-log-timestamps.test.ts(36,31): error TS2554: Expected 1 arguments, but got 2.
+[typecheck] 报错文件归因：HEAD 内 0 个 / 未跟踪草稿 1 个
+[typecheck] ⚠️ 未跟踪草稿（不属 HEAD 回归，属在飞改动）: tests/event-log-timestamps.test.ts
+[typecheck] 全部报错都在未跟踪草稿里 ⇒ HEAD 态类型干净（同 HEAD 开 worktree 跑 tsc 可复核）
+TYPECHECK_EXIT=2

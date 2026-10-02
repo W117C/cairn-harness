@@ -1,0 +1,231 @@
+# 解表：23 条，全部取自 scripts/mutate-verify.mjs（本机未手抄任何改法）
+  impact-attribution-no-evidence-read-as-kept
+    src=src/agent/impact/attribution.ts test=tests/impact-attribution.test.ts
+    针脚="if (!binding.known) return \"no-evidence\";" → 改后="if (!binding.known) return \"kept\";"
+  impact-attribution-positive-proof-ignored
+    src=src/agent/impact/attribution.ts test=tests/impact-attribution.test.ts
+    针脚="if (binding.sources.includes(defFile)) return \"kept\";" → 改后=""
+  impact-attribution-only-first-source-counted
+    src=src/agent/impact/attribution.ts test=tests/impact-attribution.test.ts
+    针脚="binding.sources.includes(defFile)" → 改后="binding.sources[0] === defFile"
+  impact-attribution-reverse-proof-never-drops
+    src=src/agent/impact/attribution.ts test=tests/impact-attribution.test.ts
+    针脚="  return \"dropped\";" → 改后="  return \"kept\";"
+  impact-attribution-note-dropped-only-gauge
+    src=src/agent/impact/attribution.ts test=tests/impact-attribution.test.ts
+    针脚="if (stats.dropped === 0 && stats.noEvidence === 0) return \"\";" → 改后="if (stats.dropped === 0) return \"\";"
+  impact-attribution-note-prints-zeros
+    src=src/agent/impact/attribution.ts test=tests/impact-attribution.test.ts
+    针脚="if (stats.dropped === 0 && stats.noEvidence === 0) return \"\";" → 改后="if (false) return \"\";"
+  impact-edges-not-filtered-by-attribution
+    src=src/agent/impact/index.ts test=tests/impact-attribution.test.ts
+    针脚="if (verdict === \"dropped\") continue;" → 改后=""
+  impact-upward-attribution-not-applied
+    src=src/agent/impact/index.ts test=tests/impact-attribution.test.ts
+    针脚="!defFiles.has(r.file) && attributableSomewhere(graph, r.file, symbol, defFiles)" → 改后="!defFiles.has(r.file)"
+  impact-downward-attribution-not-applied
+    src=src/agent/impact/index.ts test=tests/impact-attribution.test.ts
+    针脚="if (attributeRefToDef(binding, d.file) === \"dropped\") continue;" → 改后=""
+  impact-attribution-note-not-wired
+    src=src/agent/impact/index.ts test=tests/impact-attribution.test.ts
+    针脚="+ attributionNote(r.attribution)" → 改后="+ \"\""
+  impact-tags-cache-imports-guard-dropped
+    src=src/agent/impact/index.ts test=tests/impact-attribution.test.ts
+    针脚="Array.isArray(e.tags) && Array.isArray(e.imports)" → 改后="Array.isArray(e.tags)"
+  impact-imports-exit-not-eaten
+    src=src/agent/impact/index.ts test=tests/impact-attribution.test.ts
+    针脚="imports = sym.imports;" → 改后="imports = [];"
+  impact-index-artifact-namesources-not-saved
+    src=src/agent/impact/persist.ts test=tests/impact-attribution.test.ts
+    针脚="nameSources: [...graph.nameSources.entries()]" → 改后="nameSources: ([] as [string, Map<string, string[]>][])"
+  impact-index-artifact-version-not-checked
+    src=src/agent/impact/persist.ts test=tests/impact-attribution.test.ts
+    针脚="if (a.schemaVersion !== IMPACT_INDEX_SCHEMA_VERSION) return null;" → 改后="if (false) return null;"
+  impact-lease-closure-bypasses-attribution
+    src=src/agent/impact/index.ts test=tests/impact-attribution.test.ts
+    针脚="for (const site of upward(graph, sym)) out.add(site.file);" → 改后="for (const site of graph.refs.get(sym) ?? []) out.add(site.file);"
+  impact-closure-glob-broken
+    src=src/agent/impact/index.ts test=tests/impact-admission.test.ts
+    针脚="graph.files.filter((file) => globs.some((g) => globMatchesPath(g, file)))" → 改后="graph.files.filter((file) => globs.includes(file))"
+  impact-mixed-sites-not-counted
+    src=src/agent/impact/index.ts test=tests/impact-attribution.test.ts
+    针脚="if (attributeRefToDef(binding, normalized) === \"dropped\") sitesOnlyToOtherDef++;" → 改后=""
+  impact-mixed-sites-not-in-note
+    src=src/agent/impact/index.ts test=tests/impact-attribution.test.ts
+    针脚="+ mixed + attributionNote(r.attribution);" → 改后="+ attributionNote(r.attribution);"
+  impact-query-union-note-denies-imports
+    src=src/tools/impact-query.ts test=tests/impact-query.test.ts
+    针脚="图已按 import 反证摘过一轮，" → 改后="本图只按名字连边、不认 import，"
+  impact-query-deps-arm-loses-attribution
+    src=src/tools/impact-query.ts test=tests/impact-query.test.ts
+    针脚="coverageNote(graph.files.length, maxFiles, graph.candidates) + attributionNote(graph.attribution);\n          return { ok: true, output: sitesNote(depHead" → 改后="coverageNote(graph.files.length, maxFiles, graph.candidates);\n          return { ok: true, output: sitesNote(depHead"
+  impact-query-symbol-arm-loses-attribution
+    src=src/tools/impact-query.ts test=tests/impact-query.test.ts
+    针脚="份定义` : \"\") + attributionNote(graph.attribution);" → 改后="份定义` : \"\");"
+  impact-query-file-arm-loses-denominator
+    src=src/tools/impact-query.ts test=tests/impact-query.test.ts
+    针脚="mixedSitesNote(r.sitesOnlyToOtherDef) + attributionNote(r.attribution);" → 改后="\"\";"
+  impact-mixed-note-prints-zeros
+    src=src/agent/impact/attribution.ts test=tests/impact-query.test.ts
+    针脚="if (count <= 0) return \"\";" → 改后="if (false) return \"\";"
+
+# 基准（未改任何文件；每台跑自己那条判卷文件，所以逐个文件都要先绿）
+  tests/impact-attribution.test.ts：exit=0 tests={"found":true,"failed":0,"passed":26} 用时=622ms
+  tests/impact-admission.test.ts：exit=0 tests={"found":true,"failed":0,"passed":10} 用时=774ms
+  tests/impact-query.test.ts：exit=0 tests={"found":true,"failed":0,"passed":56} 用时=1.41s
+  ✅ 全部基准绿
+
+# impact-attribution-no-evidence-read-as-kept  src/agent/impact/attribution.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「「无证据」优先于任何 sources：不能因为带了名字表就把没判的文件算成排除…」红在它自己那条 ✅
+    × 四种输入各给一个答案：无 import 面／没有绑定证据／正证在此／反证在别处 5ms
+    × 「无证据」优先于任何 sources：不能因为带了名字表就把没判的文件算成排除 1ms
+
+# impact-attribution-positive-proof-ignored  src/agent/impact/attribution.ts  针脚命中=1 处
+  exit=1 failed=7 复原=逐字节一致 ✅
+  killer「四种输入各给一个答案：无 import 面／没有绑定证据／正证在此／反证在别处…」红在它自己那条 ✅
+    × 四种输入各给一个答案：无 import 面／没有绑定证据／正证在此／反证在别处 4ms
+    × 多来源里有 defFile 就留（一个名字从两份文件绑进来的形状不许整条判死） 1ms
+    × 四个引用方各归各位：真 import 的留、外部包与第三方绑定的摘、不 import 的留 150ms
+    × downward 按 def 逐条判：otherdef.ts 看不到 ledger.ts 那份，consumer.ts 看得到 25ms
+    × 冻结夹具一条不许掉：边集 == 真值 16 条、dropped=0（这一档买得起的前提，不是副作用） 22ms
+    × 闭包只算归得到的引用方：绑到外部包的那一处掉出，真 import 与没有任何绑定的都留着（宽窄两臂同一张图） 19ms
+    × fileImpact 数得出「有几处只归得到别处那份定义」：正证的与拿不出反证的都不许算进来 13ms
+
+# impact-attribution-only-first-source-counted  src/agent/impact/attribution.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「多来源里有 defFile 就留（一个名字从两份文件绑进来的形状不许整条判死）…」红在它自己那条 ✅
+    × 多来源里有 defFile 就留（一个名字从两份文件绑进来的形状不许整条判死） 5ms
+
+# impact-attribution-reverse-proof-never-drops  src/agent/impact/attribution.ts  针脚命中=1 处
+  exit=1 failed=6 复原=逐字节一致 ✅
+  killer「四个引用方各归各位：真 import 的留、外部包与第三方绑定的摘、不 impo…」红在它自己那条 ✅
+    × 四种输入各给一个答案：无 import 面／没有绑定证据／正证在此／反证在别处 4ms
+    × 四个引用方各归各位：真 import 的留、外部包与第三方绑定的摘、不 import 的留 149ms
+    × downward 按 def 逐条判：otherdef.ts 看不到 ledger.ts 那份，consumer.ts 看得到 27ms
+    × 无证据那一支：手工把 nameSources 抹掉 ⇒ 清单回到按名字图（一条不摘，且计数进 noEvidence） 17ms
+    × 闭包只算归得到的引用方：绑到外部包的那一处掉出，真 import 与没有任何绑定的都留着（宽窄两臂同一张图） 15ms
+    × fileImpact 数得出「有几处只归得到别处那份定义」：正证的与拿不出反证的都不许算进来 11ms
+
+# impact-attribution-note-dropped-only-gauge  src/agent/impact/attribution.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「两格分别出声：dropped 说「另有出处」，noEvidence 说「保守计入…」红在它自己那条 ✅
+    × 两格分别出声：dropped 说「另有出处」，noEvidence 说「保守计入」，各不带对方那句话 4ms
+
+# impact-attribution-note-prints-zeros  src/agent/impact/attribution.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「全 0 ⇒ 空串（不许印「排除 0 处」这种噪声）…」红在它自己那条 ✅
+    × 全 0 ⇒ 空串（不许印「排除 0 处」这种噪声） 4ms
+    × 全 0 时注入文本与接这一维之前逐字相同（零回归哨兵） 1ms
+
+# impact-edges-not-filtered-by-attribution  src/agent/impact/index.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「边构造吃判据：三态计数各有一行，且摘边只看 verdict…」红在它自己那条 ✅
+    × 四个引用方各归各位：真 import 的留、外部包与第三方绑定的摘、不 import 的留 164ms
+    × 边构造吃判据：三态计数各有一行，且摘边只看 verdict 2ms
+
+# impact-upward-attribution-not-applied  src/agent/impact/index.ts  针脚命中=1 处
+  exit=1 failed=5 复原=逐字节一致 ✅
+  killer「无证据那一支：手工把 nameSources 抹掉 ⇒ 清单回到按名字图（一条不…」红在它自己那条 ✅
+    × 四个引用方各归各位：真 import 的留、外部包与第三方绑定的摘、不 import 的留 160ms
+    × 无证据那一支：手工把 nameSources 抹掉 ⇒ 清单回到按名字图（一条不摘，且计数进 noEvidence） 18ms
+    × 闭包只算归得到的引用方：绑到外部包的那一处掉出，真 import 与没有任何绑定的都留着（宽窄两臂同一张图） 11ms
+    × fileImpact 数得出「有几处只归得到别处那份定义」：正证的与拿不出反证的都不许算进来 14ms
+    × upward 与 downward 都过同一把判据（只硬化一支＝另一支的清单继续撒谎） 0ms
+
+# impact-downward-attribution-not-applied  src/agent/impact/index.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「downward 按 def 逐条判：otherdef.ts 看不到 ledge…」红在它自己那条 ✅
+    × downward 按 def 逐条判：otherdef.ts 看不到 ledger.ts 那份，consumer.ts 看得到 26ms
+    × upward 与 downward 都过同一把判据（只硬化一支＝另一支的清单继续撒谎） 1ms
+
+# impact-attribution-note-not-wired  src/agent/impact/index.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「歧义句与归属句彼此独立：只有归属计数没有歧义时，归属句照样出…」红在它自己那条 ✅
+    × 歧义句与归属句彼此独立：只有归属计数没有歧义时，归属句照样出 6ms
+
+# impact-tags-cache-imports-guard-dropped  src/agent/impact/index.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「tags 条目同时带 tags 与 imports；把 imports 抠掉的老…」红在它自己那条 ✅
+    × tags 条目同时带 tags 与 imports；把 imports 抠掉的老条目按 miss 重解析 30ms
+    × 取料两出口同进缓存与索引 1ms
+
+# impact-imports-exit-not-eaten  src/agent/impact/index.ts  针脚命中=1 处
+  exit=1 failed=6 复原=逐字节一致 ✅
+  killer「解析走 fileSymbols（第三个出口），不回退到 fileTags 薄壳…」红在它自己那条 ✅
+    × 四个引用方各归各位：真 import 的留、外部包与第三方绑定的摘、不 import 的留 161ms
+    × downward 按 def 逐条判：otherdef.ts 看不到 ledger.ts 那份，consumer.ts 看得到 26ms
+    × 无证据那一支：手工把 nameSources 抹掉 ⇒ 清单回到按名字图（一条不摘，且计数进 noEvidence） 16ms
+    × 闭包只算归得到的引用方：绑到外部包的那一处掉出，真 import 与没有任何绑定的都留着（宽窄两臂同一张图） 14ms
+    × fileImpact 数得出「有几处只归得到别处那份定义」：正证的与拿不出反证的都不许算进来 12ms
+    × 解析走 fileSymbols（第三个出口），不回退到 fileTags 薄壳 0ms
+
+# impact-index-artifact-namesources-not-saved  src/agent/impact/persist.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「索引 artifact 带上 nameSources 与 attribution…」红在它自己那条 ✅
+    × 索引 artifact 带上 nameSources 与 attribution；缺任何一格或版本不对都按 miss 19ms
+    × 取料两出口同进缓存与索引 1ms
+
+# impact-index-artifact-version-not-checked  src/agent/impact/persist.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「版本号不符的 artifact 即使字段齐全也按 miss（只加字段不认号＝老图…」红在它自己那条 ✅
+    × 版本号不符的 artifact 即使字段齐全也按 miss（只加字段不认号＝老图整层复活） 21ms
+
+# impact-lease-closure-bypasses-attribution  src/agent/impact/index.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「闭包只算归得到的引用方：绑到外部包的那一处掉出，真 import 与没有任何绑定…」红在它自己那条 ✅
+    × 闭包只算归得到的引用方：绑到外部包的那一处掉出，真 import 与没有任何绑定的都留着（宽窄两臂同一张图） 15ms
+
+# impact-closure-glob-broken  src/agent/impact/index.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「目录 glob 把整个子树的波及并进来…」红在它自己那条 ✅
+    × 目录 glob 把整个子树的波及并进来 14ms
+
+# impact-mixed-sites-not-counted  src/agent/impact/index.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「fileImpact 数得出「有几处只归得到别处那份定义」：正证的与拿不出反证的…」红在它自己那条 ✅
+    × fileImpact 数得出「有几处只归得到别处那份定义」：正证的与拿不出反证的都不许算进来 17ms
+
+# impact-mixed-sites-not-in-note  src/agent/impact/index.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「分母句只在真混进时出，且出来时只多那一句（其余字节一字不动）…」红在它自己那条 ✅
+    × fileImpact 数得出「有几处只归得到别处那份定义」：正证的与拿不出反证的都不许算进来 17ms
+    × 分母句只在真混进时出，且出来时只多那一句（其余字节一字不动） 1ms
+
+# impact-query-union-note-denies-imports  src/tools/impact-query.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「并集那句不许再承诺做不到的事，也不许夸成已经做到（文案的两半各钉一次）…」红在它自己那条 ✅
+    × 并集那句不许再承诺做不到的事，也不许夸成已经做到（文案的两半各钉一次） 5ms
+
+# impact-query-deps-arm-loses-attribution  src/tools/impact-query.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「deps 支（第三个消费者）也带同一句：只给两支报数＝剩下那支的清单没人交代被收…」红在它自己那条 ✅
+    × deps 支（第三个消费者）也带同一句：只给两支报数＝剩下那支的清单没人交代被收窄过 23ms
+
+# impact-query-symbol-arm-loses-attribution  src/tools/impact-query.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「symbol 支：清单已经被判据收窄过，就要说出收了多少…」红在它自己那条 ✅
+    × symbol 支：清单已经被判据收窄过，就要说出收了多少 31ms
+
+# impact-query-file-arm-loses-denominator  src/tools/impact-query.ts  针脚命中=1 处
+  exit=1 failed=1 复原=逐字节一致 ✅
+  killer「file 支：数得出「几处只归得到别处」，且与回注摘要共用同一句出处…」红在它自己那条 ✅
+    × file 支：数得出「几处只归得到别处」，且与回注摘要共用同一句出处 30ms
+
+# impact-mixed-note-prints-zeros  src/agent/impact/attribution.ts  针脚命中=1 处
+  exit=1 failed=2 复原=逐字节一致 ✅
+  killer「那句分母只有一处文字：混进 0 就空串；两处各写一遍的话改一处忘一处会静默说谎…」红在它自己那条 ✅
+    × file 支：数得出「几处只归得到别处」，且与回注摘要共用同一句出处 43ms
+    × 那句分母只有一处文字：混进 0 就空串；两处各写一遍的话改一处忘一处会静默说谎 1ms
+
+# killer 独占性（两台红在同一条＝其中一条没分辨力）
+  23 台 → 23 个不同 killer；重复声明：0 ✅
+  存活台：0 ✅
+
+# 残骸复查（复原后三个被测面必须与备份逐字节相同）
+  src/agent/impact/attribution.ts: 与备份一致 ✅
+  src/agent/impact/index.ts: 与备份一致 ✅
+  src/agent/impact/persist.ts: 与备份一致 ✅
+  src/tools/impact-query.ts: 与备份一致 ✅
+
+# 汇总：23 台｜杀手命中 23｜存活 0｜残骸 0

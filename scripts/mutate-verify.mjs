@@ -1898,7 +1898,7 @@ const MUTATIONS = [
     src: "src/tools/impact-query.ts",
     test: "tests/impact-query.test.ts",
     desc: "up 方向改用语义标签（措辞串门）⇒ 不带 deps 的既有调用输出不再逐字不变，「谁在调用我」被说成「我在调用谁」",
-    apply: (s) => s.replace("        return { ok: true, output: sitesNote(head, r.up) };\n", "        return { ok: true, output: sitesNote(head, r.up, DEP_NOUN) };\n"),
+    apply: (s) => s.replace("        return { ok: true, output: sitesNote(head, r.up, UP_NOUN,", "        return { ok: true, output: sitesNote(head, r.up, DEP_NOUN,"),
     expectFail: "不带 deps 时 file 模式输出逐字不变（新增方向不得改动既有字节）",
   },
   {
@@ -12242,6 +12242,95 @@ const MUTATIONS = [
       '判卷读字段也全绿，只有模型实际读到的那句话仍在说「可能混有」——字段与文案分家',
     apply: (s) => s.replace('+ mixed + attributionNote(r.attribution);', "+ attributionNote(r.attribution);"),
     expectFail: "分母句只在真混进时出，且出来时只多那一句（其余字节一字不动）",
+  },
+  /* 第 308 页：查询端（`impact_query`）与注入端同口径。七枚针脚＝文案两半各一枚、三个建图出口各一枚、
+     尾巴落点（顺序＋空清单）各一枚。
+     刻意不锚的那一格：「句子被抄成第二份」这个形状要的是"再加一份拷贝"，本表的改法只能删/换、不能凭空多抄一份，
+     所以那一格由判卷里的结构钉（三处文件里字面量计数＝1）单独守。 */
+  {
+    id: "impact-query-union-note-denies-imports",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "并集那句回退成「本图只按名字连边、不认 import」⇒ 模型听见一句**假话**就不再去查归属，" +
+      "而第 305 页起图是带 import 落料面的。这句文案此前零观测者（判卷里一句都没钉），所以它烂了没人喊——" +
+      "本仓「模型可见文本的承诺」那一族的老形状，这次配一条正反两半的钉",
+    apply: (s) => s.replace(
+      "图已按 import 反证摘过一轮，",
+      "本图只按名字连边、不认 import，",
+    ),
+    expectFail: "并集那句不许再承诺做不到的事，也不许夸成已经做到（文案的两半各钉一次）",
+  },
+  {
+    id: "impact-query-deps-arm-loses-attribution",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "deps 那一支（「我在调用谁」）不回落到归属句 ⇒ 三支查询里有一支的清单被收窄过却不说，" +
+      "模型对同一张图拿到三种口径的自述（同族「只硬化一支」）",
+    apply: (s) => s.replace(
+      'sitesNote(depHead, downward(graph, rel), DEP_NOUN, attributionNote(graph.attribution))',
+      'sitesNote(depHead, downward(graph, rel), DEP_NOUN)',
+    ),
+    expectFail: "deps 支（第三个消费者）也带同一句：只给两支报数＝剩下那支的清单没人交代被收窄过",
+  },
+  {
+    id: "impact-query-symbol-arm-loses-attribution",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "symbol 那一支丢掉归属句 ⇒ 最常问的一句「谁在调用它」的答复里，被摘掉的数量不见了；" +
+      "模型把收窄后的清单当成全量，回头就多改几处",
+    apply: (s) => s.replace(
+      'return { ok: true, output: sitesNote(symHead, cross, UP_NOUN, symAttrib) };',
+      'return { ok: true, output: sitesNote(symHead, cross, UP_NOUN, "") };',
+    ),
+    expectFail: "symbol 支：清单已经被判据收窄过，就要说出收了多少",
+  },
+  {
+    id: "impact-query-file-arm-loses-denominator",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "file 那一支丢掉分母句与归属句 ⇒ 同一件事实（混进几处、摘掉几处）只在回注摘要里说、" +
+      "查询端不说——模型主动问的时候反而拿得比被动推送更少（读端与注入面各写一份的那族）",
+    apply: (s) => s.replace(
+      "sitesNote(head, r.up, UP_NOUN, mixedSitesNote(r.sitesOnlyToOtherDef) + attributionNote(r.attribution))",
+      'sitesNote(head, r.up, UP_NOUN, "")',
+    ),
+    expectFail: "file 支：数得出「几处只归得到别处」，且与回注摘要共用同一句出处",
+  },
+  {
+    id: "impact-query-notes-land-before-the-count",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "自述尾巴拼回计数句**之前**（就是 10-03 真仓读数那个形状）⇒ 那一行变成" +
+      "「…（我在调用谁）；归属判定：1689 处已按…排除：引用的外部定义 15 处」——冒号接冒号，" +
+      "读数最要紧的那个数被挤到句子末尾，而「排除：」看着像在解释判据。三条 toContain 判卷对这个顺序全盲，" +
+      "所以这一格只由那条钉同行次序的判卷守（本仓第 4 形态：用例在、标题承诺了，正文却没在判这件事）",
+    apply: (s) => s.replace(
+      'const lines = [head + "：" + noun.item',
+      'const lines = [head + tail + "：" + noun.item',
+    ),
+    expectFail: "自述句落在计数句**之后**：拼进 head 会把最关键的数挤到句子末尾（10-03 真仓读数就是这个形状）",
+  },
+  {
+    id: "impact-query-empty-list-loses-notes",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "空清单那一支（「波及半径为 0」/「依赖面为 0」）不接尾巴 ⇒ 只在真给了清单时才自述。" +
+      "而空清单恰是模型最容易照着下单的一格（「没人调用它 ⇒ 可以放心改」），" +
+      "此时更要说这张图判过多少，否则空列表看着像全量（同族「两头断」：有数的那支说了，没数的那支没说）",
+    apply: (s) => s.replace(
+      "if (sites.length === 0) return head + noun.none + tail;",
+      "if (sites.length === 0) return head + noun.none;",
+    ),
+    expectFail: "零清单那两支也带自述：「半径为 0／依赖面为 0」时更要说这张图判过多少，不然空列表看着像全量",
+  },
+  {
+    id: "impact-mixed-note-prints-zeros",
+    src: "src/agent/impact/attribution.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "分母句的 0 闸门拆掉 ⇒ 每次查询/回注都多一句「本次清单里 0 处只归得到别处」，" +
+      "而「0 处」在两处文案里读起来像「这份清单全是别处的」——噪声还会挤掉真正有信息的那一句",
+    apply: (s) => s.replace("if (count <= 0) return \"\";", "if (false) return \"\";"),
+    expectFail: "那句分母只有一处文字：混进 0 就空串；两处各写一遍的话改一处忘一处会静默说谎",
   },
 ];
 

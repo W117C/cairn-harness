@@ -1,0 +1,23 @@
+
+== symbol=readFile（谁在调用它；图内那份定义在 src/agent/ledger.ts）  ok=true
+[impact] readFile 的定义在 1 个文件；归属判定：1689 处已按「同名但另有出处」排除：跨文件调用点 8 处，波及 5 个文件
+  scripts/head-cert.ts: readFile(L309)
+  src/agent/gym/probe.ts: readFile(L328)
+  src/agent/worktree.ts: readFile(L169)
+
+== file=src/agent/ledger.ts（该文件的波及面）  ok=true
+[impact] src/agent/ledger.ts（被跨文件引用的符号 9 个：ObservationLedger, capture, clear, createObservationLedger 等）（同名歧义：ID, capture, constructor, delete 在别处也有同名定义 等 11 个符号 ⇒ 清单仍是各份同名定义的并集：图已按 import 反证摘过一轮，但归得上任一定义的都留着；要再收就 grep 它的 import 确认，或按文件查 {file:…} 拿「几处只归得到别处」那个数）；本次清单里 4 处只归得到别处那份同名定义（按 import 反证判定）；归属判定：1689 处已按「同名但另有出处」排除：跨文件调用点 43 处，波及 17 个文件
+  tests/hook-session-end.test.ts: capture(L127), capture(L130)
+  tests/mutate-verify-gates.test.ts: clear(L819), clear(L829), clear(L834), clear(L844) 等 5 处
+  scripts/probe-promise-recall.ts: createObservationLedger(L457)
+
+== file=src/agent/ledger.ts + deps（我在调用谁）  ok=true
+[impact] src/agent/ledger.ts 引用的外部定义（我在调用谁）；归属判定：1689 处已按「同名但另有出处」排除：引用的外部定义 15 处，分布在 12 个文件
+  tests/gate-kill.test.ts: linesOf(L59), start(L35)
+  scripts/head-cert.ts: sha(L83)
+  tests/cli-fork-replay.test.ts: sha(L34)
+
+== 三态与清单：kept=45269 dropped=1689 noEvidence=0
+   upward(readFile)=8 处；报告里 sitesOnlyToOtherDef=4，up=43 处
+
+[query-face] 自检：三个出口都读到输出 ⇒ 上面那些句子就是模型真看见的那一句

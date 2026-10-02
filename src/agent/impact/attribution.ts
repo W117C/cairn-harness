@@ -41,6 +41,14 @@ export function attributeRefToDef(binding: RefBinding, defFile: string): Attribu
   return "dropped";
 }
 
+/** 「这份清单里有几处只归得到别处那份同名定义」——同一句话写给两个消费者（write/edit 回注摘要、`impact_query`）。
+ *  句子只有这一处：两处各写一遍就是"两处各写一个数字"的文案版，改一个忘一个时另一支会静默说谎。
+ *  0 ⇒ 空串（与 `attributionNote` 同口径：没有那一格就不占字节）。 */
+export function mixedSitesNote(count: number): string {
+  if (count <= 0) return "";
+  return `；本次清单里 ${String(count)} 处只归得到别处那份同名定义（按 import 反证判定）`;
+}
+
 export interface AttributionStats {
   kept: number;
   dropped: number;

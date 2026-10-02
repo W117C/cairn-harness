@@ -1,12 +1,13 @@
 // 影响面**读端**工具（能力 1 的事前一跳）：查询正确性 + 参数白名单 + 越权路径 + 可达性/成本不变量。
 // 靶子 = fixtures/impact/mini-repo（冻结判卷面，只读不改；已知调用图见 expect-edges.json）。
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { createImpactQueryTool, graphAbsenceNote, graphCandidatePosition, impactQuerySpec } from "../src/tools/impact-query";
+import { createImpactQueryTool, graphAbsenceNote, graphCandidatePosition, impactQuerySpec, unionNote } from "../src/tools/impact-query";
+import { mixedSitesNote } from "../src/agent/impact/attribution";
 // 覆盖面两把纯函数 09-30 挪进 `src/agent/impact/coverage.ts`：同一张图的四个消费者要说同一句话，
 // 判据留在读端工具里就会被别处再抄一遍（第十四族）。
 import { capCauseNote, coverageNote } from "../src/agent/impact/coverage";
@@ -625,5 +626,112 @@ describe("多份同名定义：波及清单必须自述是并集，不能当成�
     expect(r.output).toContain("波及 2 个文件");
     expect(r.output).toMatch(/并集/u);
     expect(r.output, "要点名是哪个符号有歧义，否则模型还得自己比对").toContain("同名歧义：run");
+  });
+});
+
+describe("查询端与注入端同口径（第 308 页：那句承诺从前没人守）", () => {
+  const dirs: string[] = [];
+  const qcache = join(tmpdir(), "impact-query-face-cache");
+  async function mkRepo(spec: readonly [string, string][]): Promise<ToolContext> {
+    const ws = await mkdtemp(join(tmpdir(), "impact-query-face-"));
+    dirs.push(ws);
+    for (const [name, text] of spec) await writeFile(join(ws, name), text, "utf8");
+    return { workspace: ws, emit: async () => {} };
+  }
+  afterAll(async () => {
+    for (const d of dirs) await rm(d, { recursive: true, force: true }).catch(() => {});
+    await rm(qcache, { recursive: true, force: true }).catch(() => {});
+  });
+
+  /** 一份 run 有两条定义、两个调用方各绑一条，再加一个绑到外部包的同名调用方。 */
+  const faceRepo = (): Promise<ToolContext> => mkRepo([
+    ["one.ts", "export function run() { return 1; }\n"],
+    ["two.ts", "export function run() { return 2; }\n"],
+    ["useOne.ts", "import { run } from \"./one\";\nexport const a = run();\n"],
+    ["useTwo.ts", "import { run } from \"./two\";\nexport const b = run();\n"],
+    ["nodeUse.ts", "import { readFile } from \"node:fs/promises\";\nexport const c = readFile;\n"],
+    ["fsShim.ts", "export function readFile(p: string) { return p; }\n"],
+  ]);
+
+  it("并集那句不许再承诺做不到的事，也不许夸成已经做到（文案的两半各钉一次）", () => {
+    const n = unionNote("run");
+    // 半边一：第 305 页起图带 import 落料面 ⇒ 「不认 import」是假话，而它此前零观测者
+    expect(n, "图已经按 import 反证摘边了，这句还在说反话").not.toContain("不认 import");
+    expect(n).toContain("import 反证");
+    expect(n, "并集这件事仍然成立，不许藏").toContain("并集");
+    // 半边二：也不许写反方向的大话——按 def 逐条筛今天还没做
+    expect(n, "做不到的一律不许写进模型可见文案").not.toMatch(/已按定义逐条(筛|收窄|判)/u);
+    expect(n, "出路要留着：按文件查会另给分母").toContain("{file:…}");
+    expect(unionNote(""), "没有歧义就一个字都不占").toBe("");
+  });
+
+  it("file 支：数得出「几处只归得到别处」，且与回注摘要共用同一句出处", async () => {
+    const c = await faceRepo();
+    const r = await createImpactQueryTool(qcache).run({ file: "one.ts" }, c);
+    expect(r.ok).toBe(true);
+    expect(r.output, "useTwo 那份归 two.ts ⇒ 对 one.ts 而言就是混进来的 1 处").toContain("1 处只归得到别处那份同名定义");
+    expect(r.output).toContain("归属判定");
+    const quiet = await createImpactQueryTool(qcache).run({ file: "math.js" }, ctx());
+    expect(quiet.output, "这份夹具没有反证可判 ⇒ 分母句整句不出（不许印 0 处）").not.toContain("只归得到别处");
+  });
+
+  it("symbol 支：清单已经被判据收窄过，就要说出收了多少", async () => {
+    const c = await faceRepo();
+    const r = await createImpactQueryTool(qcache).run({ symbol: "run" }, c);
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("处已按「同名但另有出处」排除");
+  });
+
+  it("deps 支（第三个消费者）也带同一句：只给两支报数＝剩下那支的清单没人交代被收窄过", async () => {
+    const c = await faceRepo();
+    const r = await createImpactQueryTool(qcache).run({ file: "useTwo.ts", deps: true }, c);
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("归属判定");
+  });
+
+  it("自述句落在计数句**之后**：拼进 head 会把最关键的数挤到句子末尾（10-03 真仓读数就是这个形状）", async () => {
+    // 上面三条都只问「有没有这句」⇒ 顺序错了它们全绿。这一条问的是**同一行里的次序**：
+    // `sitesNote` 用「head + "：" + 计数句」拼行，自述句若拼进 head 就变成
+    // 「…（我在调用谁）；归属判定：1689 处已按…排除：引用的外部定义 15 处」——
+    // 「排除：」后面跟的是另一个数，读起来像在解释归属判据；而注入端（contextNoteFor）是先数后自述。
+    const c = await faceRepo();
+    const t = createImpactQueryTool(qcache);
+    for (const args of [{ file: "one.ts" }, { file: "useTwo.ts", deps: true }, { symbol: "run" }]) {
+      const r = await t.run(args, c);
+      expect(r.ok, JSON.stringify(args)).toBe(true);
+      const first = String(r.output).split("\n")[0];
+      expect(first, "冒号接冒号＝自述句插在中句：" + first).not.toMatch(/排除：|判定）：/u);
+      expect(first, "先给数、再交代这数被谁筛过（与注入端同序）：" + first).toMatch(/，(?:波及|分布在) \d+ 个文件；/u);
+    }
+  });
+
+  it("零清单那两支也带自述：「半径为 0／依赖面为 0」时更要说这张图判过多少，不然空列表看着像全量", async () => {
+    const c = await faceRepo();
+    const t = createImpactQueryTool(qcache);
+    // 两个方向各有自己的空分支（`noun.none` 不同措辞），尾巴在两条上都得接上——
+    // 只在有清单时报数＝「没人调用它」那一格恰好没有自述，而那正是模型最容易照着下单的一格。
+    const noUp = await t.run({ file: "fsShim.ts" }, c);
+    expect(noUp.ok).toBe(true);
+    const upLine = String(noUp.output).split("\n")[0];
+    expect(upLine).toContain("无跨文件调用点（波及半径为 0）");
+    expect(upLine, "空清单不等于没人判过这张图：" + upLine).toContain("归属判定");
+    const noDown = await t.run({ file: "one.ts", deps: true }, c);
+    expect(noDown.ok).toBe(true);
+    const downLine = String(noDown.output).split("\n")[0];
+    expect(downLine).toContain("依赖面为 0");
+    expect(downLine, "反向那一支同格：" + downLine).toContain("归属判定");
+  });
+
+  it("那句分母只有一处文字：混进 0 就空串；两处各写一遍的话改一处忘一处会静默说谎", async () => {
+    expect(mixedSitesNote(0)).toBe("");
+    expect(mixedSitesNote(3)).toBe("；本次清单里 3 处只归得到别处那份同名定义（按 import 反证判定）");
+    const faces = ["src/agent/impact/attribution.ts", "src/agent/impact/index.ts", "src/tools/impact-query.ts"];
+    let hits = 0;
+    for (const rel of faces) {
+      const src = await readFile(fileURLToPath(new URL("../" + rel, import.meta.url)), "utf8");
+      // 数的是**句子的开头那一截**（`;本次清单里`）：注释里提到这件事不算抄，抄一份文案才会留下第二个开头。
+      hits += (src.match(/；本次清单里/gu) ?? []).length;
+    }
+    expect(hits, "句子住在 attribution.ts 一处；第二个文件再出现字面量＝抄了第二份").toBe(1);
   });
 });

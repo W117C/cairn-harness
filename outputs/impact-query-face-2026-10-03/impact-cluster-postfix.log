@@ -1,0 +1,15 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+ [32m✓[39m tests/impact-persistence.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 1558[2mms[22m[39m
+   [32m✓[39m 影响面·索引持久化 [2m(10)[22m
+     [33m[2m✓[22m[39m ① round-trip：build→落盘→载入，canonical 与全部符号 upward 逐字一致[33m 379[2mms[22m[39m
+ [32m✓[39m tests/impact-query.test.ts [2m([22m[2m58 tests[22m[2m)[22m[33m 1198[2mms[22m[39m
+ [32m✓[39m tests/impact-attribution.test.ts [2m([22m[2m26 tests[22m[2m)[22m[33m 412[2mms[22m[39m
+ [32m✓[39m tests/impact-note-bounds.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m4 passed[39m[22m[90m (4)[39m
+[2m      Tests [22m [1m[32m99 passed[39m[22m[90m (99)[39m
+[2m   Start at [22m 00:26:18
+[2m   Duration [22m 4.10s[2m (tests 84%, transform 11%, import 5%)[22m
+

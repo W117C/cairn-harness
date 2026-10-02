@@ -12,7 +12,7 @@ import { fileSymbols, TAGS_EXTRACT_VERSION, TreeSitterUnavailableError, type Imp
 import { resolveModuleSpecifier } from "../map/import-edge.js";
 import { applyFileCap, scanSourceFilesAll, type ScannedFile } from "../map/build.js";
 import { MAX_FILES_CEILING, MAX_FILES_DEFAULT } from "../map/cap.js";
-import { attributionNote, attributeRefToDef, bindingSourceKey, emptyAttributionStats, type AttributionStats } from "./attribution.js";
+import { attributionNote, attributeRefToDef, bindingSourceKey, emptyAttributionStats, mixedSitesNote, type AttributionStats } from "./attribution.js";
 import { coverageNote, graphIsPartial } from "./coverage.js";
 import { currentCommitSha, impactIndexDirFor, loadImpactIndex, saveImpactIndex } from "./persist.js";
 
@@ -490,9 +490,7 @@ export function contextNoteFor(r: FileImpactReport): string {
   // 同一份事实只在一个消费者嘴里说，是本仓反复判死的"只硬化一支"形状。
   // 归属计数（`attributionNote`）接在这句**之后**：那句是"有同名定义"的结构事实，这句是"这一张图判掉了多少"的
   // 度量事实——两者独立出现，摘掉任一都不许让另一句跟着变（判卷按两态各钉一条）。
-  const mixed = r.sitesOnlyToOtherDef > 0
-    ? `；本次清单里 ${String(r.sitesOnlyToOtherDef)} 处只归得到别处那份同名定义（按 import 反证判定）`
-    : "";
+  const mixed = mixedSitesNote(r.sitesOnlyToOtherDef);
   const ambiguity = (r.ambiguousSymbols.length > 0
     ? `；其中 ${String(r.ambiguousSymbols.length)} 个符号在别的文件也有同名定义，波及数按名字图算 ⇒ 清单里可能混有无关文件`
     : "") + mixed + attributionNote(r.attribution);
