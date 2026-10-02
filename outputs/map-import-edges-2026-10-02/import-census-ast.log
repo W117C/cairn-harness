@@ -1,0 +1,15 @@
+=== 普查（候选面 583 个文件，AST 计数）===
+{"specTotal":7875,"valueNamed":6721,"typeNamed":1154,"defaultNs":15,"bare":3,"starReexport":0,"relMiss":0,"external":3165,"resolvedValue":3556,"unresolvedValue":3165}
+值导入命中率=52.9%
+未解析样本（前 8）：
+  tests/locate-recall-ruler.test.ts ▸ "node:fs" (readFileSync)
+  tests/locate-recall-ruler.test.ts ▸ "node:url" (fileURLToPath)
+  tests/locate-recall-ruler.test.ts ▸ "vitest" (describe)
+  tests/locate-recall-ruler.test.ts ▸ "vitest" (expect)
+  tests/locate-recall-ruler.test.ts ▸ "vitest" (it)
+  scripts/probe-map-compose.ts ▸ "node:path" (resolve)
+  scripts/probe-locate-recall.ts ▸ "node:fs" (readFileSync)
+  scripts/probe-locate-recall.ts ▸ "node:path" (resolve)
+按文件收到「值导入精确入边」最多的 12 个：
+  src/events/index.ts×158  src/permissions/index.ts×114  src/main/agent-runner.ts×105  scripts/lib/mutate-gates.ts×104  src/agent/plugins/index.ts×80  src/agent/memory/store.ts×78  src/agent/compaction.ts×69  src/agent/glm-session.ts×63  src/agent/orchestrator.ts×60  scripts/lib/head-cert-deps.ts×59  scripts/replay/corpus.ts×58  src/agent/verify.ts×57
+settings.ts 收到的值导入入边=19

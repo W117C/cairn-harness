@@ -1,6 +1,7 @@
 // 符号地图·图与排名（§6.4）：自实现邻接表 + aider 边权规则（mul·√num_refs）+
 // 个性化 PageRank 幂迭代。graphology 不支持 personalization → 自实现（§6.4 选型决议）。
-import type { SymbolTag } from "./parse.js";
+import type { ImportRef, SymbolTag } from "./parse.js";
+import { resolveModuleSpecifier } from "./import-edge.js";
 
 // ---- 数据结构 ----
 /** 图节点：(文件, 标识符) 对——aider 同构。 */
@@ -23,6 +24,23 @@ export type Adj = Map<string, Map<string, number>>;
 export interface FileTagsInput {
   file: string;
   tags: SymbolTag[];
+  /** 该文件的跨文件依赖（`fileSymbols` 的第二个出口）。缺席 = 老取料面没给 ⇒ 只走同名全连，
+   *  绝不因为「没带 imports」就少边（不许把新维度做成新的失效来源）。 */
+  imports?: ImportRef[];
+}
+
+/** import 面的计数——每个数都得有人看，否则「接上了」与「接上但一条没吃到」在读端同形。 */
+export interface ImportEdgeStats {
+  /** 非类型的具名导入条数。 */
+  refs: number;
+  /** 吃成精确边的条数。 */
+  edges: number;
+  /** 说明符指向外部包（`node:`/pkg）⇒ 不该入图。 */
+  external: number;
+  /** 解析到了仓内文件，但那个文件里没有这个名字的 def（re-export 链、或对面是别名导出）。 */
+  resolvedNoDef: number;
+  /** `import type { … }`：本轮不入图（2026-09-23 裁决要求先分类型边/运行边）。 */
+  typeOnlySkipped: number;
 }
 
 export interface GraphBuildOptions {
@@ -42,6 +60,8 @@ export interface BuiltGraph {
   numRefs: Map<string, number>; // refKey → 该 ref 节点里标识符的出现次数（√num_refs 用）
   mentioned: Set<string>;
   contextFiles: Set<string>;
+  /** import 面的五个计数（见 `ImportEdgeStats`）。 */
+  importStats: ImportEdgeStats;
 }
 
 /**
@@ -97,6 +117,41 @@ export function buildGraph(files: FileTagsInput[], opts: GraphBuildOptions = {})
     }
   }
 
+  // ---- import 面：把「本文件从对面取走了哪个名字」做成**精确边** ----
+  // 三条设计决定，各钉一态：
+  // ⑴ 只吃**解析得到且对面真有同名 def**的那一条 ⇒ 精确。解析不到（外部包）或对面没这个名字
+  //    （re-export 链）时**不动**，让下面那支同名全连继续兜——新维度绝不让现有的边变少。
+  // ⑵ 精确边一旦成立就把这个 ref 节点「钉住」，同名全连那支跳过它 ⇒ 这才了结 #9 的歧义：
+  //    `import { execute } from "./a.js"` 不该顺手连到任何别处叫 `execute` 的定义。
+  // ⑶ 类型导入不入图（`typeOnly`）。2026-09-23 的裁决要求先把类型边/运行边分开、并在读端分开呈现；
+  //    在那之前把它们并进同一张名字图，等于把刚清出去的「同名不同实体假边」再请回来。
+  const knownFiles = new Set(files.map((f) => f.file));
+  const pinned = new Map<string, string>(); // refKey → 唯一正确的 defKey
+  const importStats: ImportEdgeStats = { refs: 0, edges: 0, external: 0, resolvedNoDef: 0, typeOnlySkipped: 0 };
+  for (const f of files) {
+    for (const ir of f.imports ?? []) {
+      if (ir.typeOnly) {
+        importStats.typeOnlySkipped++;
+        continue;
+      }
+      importStats.refs++;
+      const target = resolveModuleSpecifier(f.file, ir.spec, knownFiles);
+      if (!target) {
+        importStats.external++;
+        continue; // 外部包：不给它造节点，否则 `describe`/`expect` 这种名字会污染整张图
+      }
+      const defKey = nodeKey(target, ir.name, "def");
+      if (!index.has(defKey)) {
+        importStats.resolvedNoDef++;
+        continue; // 对面没这个名字（re-export 链等）：留给你原来的样子，别把真依赖换成假精确
+      }
+      const refKey = nodeKey(f.file, ir.name, "ref");
+      ensure(f.file, ir.name, "ref", ir.line); // 只用不用（re-export）的导入也要有节点，PageRank 才有可流的边
+      pinned.set(refKey, defKey);
+      importStats.edges++;
+    }
+  }
+
   // 名字级索引：def 计数与「同名 def 清单」一次建好。
   // 原实现「每个 ref 遍历全部节点找同名 def」与「每个 def 遍历全部节点找入边」
   // 是两处 O(N²)（400 文件规模下 ~10^8 次比较），这里各降为一次线性扫描。
@@ -123,6 +178,13 @@ export function buildGraph(files: FileTagsInput[], opts: GraphBuildOptions = {})
     if (n.name.startsWith("_")) mul *= 0.1;
     if ((defCount.get(n.name) ?? 0) > 5) mul *= 0.1;
     const w = mul * Math.sqrt(numRefs.get(k) ?? 1);
+    const pinnedTo = pinned.get(k);
+    if (pinnedTo !== undefined) {
+      // 这条 ref 由 import 说明符钉住了目标 ⇒ 只连那一个（歧义面见上面第 ⑵ 条）
+      addEdge(k, pinnedTo, w);
+      referencedDefs.add(pinnedTo);
+      continue;
+    }
     for (const defKey of defsByName.get(n.name) ?? []) {
       addEdge(k, defKey, w);
       referencedDefs.add(defKey);
@@ -136,7 +198,7 @@ export function buildGraph(files: FileTagsInput[], opts: GraphBuildOptions = {})
     if (!referencedDefs.has(k)) addEdge(k, k, 0.1);
   }
 
-  return { nodes, index, adj, numRefs, mentioned, contextFiles };
+  return { nodes, index, adj, numRefs, mentioned, contextFiles, importStats };
 }
 
 /** 边权单边查询（单测「边权随 num_refs 单调」用）。 */

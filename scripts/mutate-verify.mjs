@@ -11835,6 +11835,82 @@ const MUTATIONS = [
     ),
     expectFail: "每题的命中记录喂的是 hitAnyBudget，不是某单一档",
   },
+  /* ---- import 面 → 精确边（10-02 第四簇，任务 #14 后半；与 #8②／#9 同根）----
+   *  七条各钉一格：解析算了不接／类型边被并进来／只用不 import 的节点／缓存两支的口径／
+   *  取料面接没接 imports／export 那档图案／语句级 type 的判据。
+   *  这一簇的收益是可引用的：locate-recall 的正哨兵从「三档全 MISS」变成第 34 位命中，A 臂 4/16 → 6/16。 */
+  {
+    id: "map-import-precise-edge-not-consulted",
+    src: "src/agent/map/rank.ts",
+    test: "tests/map-import-edge.test.ts",
+    desc: "解析器跑了、pinned 也填了，但成边那一支不查它 ⇒ 图照旧同名全连，" +
+      "枢纽文件依旧拿不到 rank mass，而「不连 decoy」这一格永远无人拦（本仓「算出来不接」的现行样本）",
+    apply: (s) => s.replace("    const pinnedTo = pinned.get(k);", "    const pinnedTo = undefined as string | undefined;"),
+    expectFail: "A 从 b 取 Thing 而 decoy c 也定义 Thing ⇒ 只连 b，不连 c（#9 歧义在这一格闭合）",
+  },
+  {
+    id: "map-import-type-edge-pooled",
+    src: "src/agent/map/rank.ts",
+    test: "tests/map-import-edge.test.ts",
+    desc: "把 `import type` 当运行边使 ⇒ 2026-09-23 那条裁决（先分类型边／运行边并在读端分开呈现）被绕过，" +
+      "刚清出去的「同名不同实体假边」以另一副面孔回来；且 typeOnlySkipped 归零，读数再也看不出吞了多少",
+    apply: (s) => s.replace("      if (ir.typeOnly) {", "      if (false && ir.typeOnly) {"),
+    expectFail: "类型导入不入图：没有边，且它在计数里单独可见（不许静默吞掉）",
+  },
+  {
+    id: "map-import-unused-ref-node-dropped",
+    src: "src/agent/map/rank.ts",
+    test: "tests/map-import-edge.test.ts",
+    desc: "只建边不建节点 ⇒ 那条边在 nodes 里没有端点，幂迭代扫的是 nodes，于是「import 了但没用」这一整类" +
+      "依赖对排名完全不起作用（adj 里看得见、单测里 edgeWeight 也查得到，偏偏差距一格）",
+    apply: (s) => s.replace("      ensure(f.file, ir.name, \"ref\", ir.line);", "      void ir;"),
+    expectFail: "import 了但本地没用 ⇒ 仍建出 ref 节点，PageRank 才有可流的边",
+  },
+  {
+    id: "map-import-cache-imports-guard-dropped",
+    src: "src/agent/map/build.ts",
+    test: "tests/map-import-edge.test.ts",
+    desc: "读缓存只核 tags 不核 imports ⇒ 老仓里那些「版本号恰好没变、条目里没有 imports」的条目继续命中，" +
+      "热缓存那支给出**没有 import 边的另一张图**，现象是「同样的代码两台机器两张地图」",
+    apply: (s) => s.replace(
+      "if (e.mtimeMs === f.mtimeMs && e.size === f.size && Array.isArray(e.tags) && Array.isArray(e.imports)) {",
+      "if (e.mtimeMs === f.mtimeMs && e.size === f.size && Array.isArray(e.tags)) {",
+    ),
+    expectFail: "缺 imports 字段的旧条目按 miss 处理（版本没变也要重解析，否则老仓永远没边）",
+  },
+  {
+    id: "map-import-cold-path-not-wired",
+    src: "src/agent/map/build.ts",
+    test: "tests/map-import-edge.test.ts",
+    desc: "冷建那一支解析出了 imports 却没递给图（只接了热缓存那一支）⇒ 首次建图与后续建图不同形，" +
+      "而「首轮注入地图」恰恰是冷的那一次",
+    apply: (s) => s.replace(
+      "inputs.push({ file: s.f.rel, tags: sym.tags, imports: sym.imports });",
+      "inputs.push({ file: s.f.rel, tags: sym.tags });",
+    ),
+    expectFail: "冷建与热缓存两支都把 imports 递给图（只接其中一支＝同族只硬化一支）",
+  },
+  {
+    id: "map-import-export-pattern-dropped",
+    src: "src/agent/map/parse.ts",
+    test: "tests/map-import-edge.test.ts",
+    desc: "只捕 import_statement、不捕 export_statement ⇒ re-export 那一整档依赖静默消失" +
+      "（`export { X } from \"./y\"` 在索引层文件里很常见），而图案列表少一行没有任何别的症状",
+    apply: (s) => s.replace(
+      'const IMPORT_PATTERNS = ["(import_statement) @imp", "(export_statement) @exp"];',
+      'const IMPORT_PATTERNS = ["(import_statement) @imp"];',
+    ),
+    expectFail: "import 与 export 两档图案都在（re-export 也是一种跨文件依赖）",
+  },
+  {
+    id: "map-import-statement-level-type-ignored",
+    src: "src/agent/map/parse.ts",
+    test: "tests/map-import-edge.test.ts",
+    desc: "只看 specifier 自己的 `type` 令牌、不看语句级那个 ⇒ `import type { T }` 与 `export type { T } from` " +
+      "整类被当运行边（第一版探针就在 export type 那档漏了，靠这条判据才抓到）",
+    apply: (s) => s.replace("typeOnly: stmtType || specType,", "typeOnly: specType,"),
+    expectFail: "五档形状各判一次：语句级 type 与行内 type 都要认（缺一个就漏一类）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

@@ -1,0 +1,4 @@
+[gain] 预算 1024：tokens=894 候选=584 进图=584 渲染里有 src/main/settings.ts=true｜建图用时 1890ms
+[gain] 预算 2048：tokens=1778 候选=584 进图=584 渲染里有 src/main/settings.ts=true｜建图用时 215ms
+[gain] 预算 4096：tokens=3936 候选=584 进图=584 渲染里有 src/main/settings.ts=true｜建图用时 209ms
+EXIT=0

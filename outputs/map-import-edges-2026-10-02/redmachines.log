@@ -1,0 +1,49 @@
+### map-import-precise-edge-not-consulted
+  src=src/agent/map/rank.ts test=tests/map-import-edge.test.ts
+  期望红：A 从 b 取 Thing 而 decoy c 也定义 Thing ⇒ 只连 b，不连 c（#9 歧义在这一格闭合）
+  实际红：× A 从 b 取 Thing 而 decoy c 也定义 Thing ⇒ 只连 b，不连 c（#9 歧义在这一格闭合）
+  汇总：Tests  1 failed | 19 passed (20)
+  复原逐字节一致=true
+
+### map-import-type-edge-pooled
+  src=src/agent/map/rank.ts test=tests/map-import-edge.test.ts
+  期望红：类型导入不入图：没有边，且它在计数里单独可见（不许静默吞掉）
+  实际红：× 类型导入不入图：没有边，且它在计数里单独可见（不许静默吞掉） ／ × 四个计数合起来等于喂进去的运行边条数（分母自证，缺格就红）
+  汇总：Tests  2 failed | 18 passed (20)
+  复原逐字节一致=true
+
+### map-import-unused-ref-node-dropped
+  src=src/agent/map/rank.ts test=tests/map-import-edge.test.ts
+  期望红：import 了但本地没用 ⇒ 仍建出 ref 节点，PageRank 才有可流的边
+  实际红：× A 从 b 取 Thing 而 decoy c 也定义 Thing ⇒ 只连 b，不连 c（#9 歧义在这一格闭合） ／ × import 了但本地没用 ⇒ 仍建出 ref 节点，PageRank 才有可流的边
+  汇总：Tests  2 failed | 18 passed (20)
+  复原逐字节一致=true
+
+### map-import-cache-imports-guard-dropped
+  src=src/agent/map/build.ts test=tests/map-import-edge.test.ts
+  期望红：缺 imports 字段的旧条目按 miss 处理（版本没变也要重解析，否则老仓永远没边）
+  实际红：× 缺 imports 字段的旧条目按 miss 处理（版本没变也要重解析，否则老仓永远没边）
+  汇总：Tests  1 failed | 19 passed (20)
+  复原逐字节一致=true
+
+### map-import-cold-path-not-wired
+  src=src/agent/map/build.ts test=tests/map-import-edge.test.ts
+  期望红：冷建与热缓存两支都把 imports 递给图（只接其中一支＝同族只硬化一支）
+  实际红：× 冷建与热缓存两支都把 imports 递给图（只接其中一支＝同族只硬化一支）
+  汇总：Tests  1 failed | 19 passed (20)
+  复原逐字节一致=true
+
+### map-import-export-pattern-dropped
+  src=src/agent/map/parse.ts test=tests/map-import-edge.test.ts
+  期望红：import 与 export 两档图案都在（re-export 也是一种跨文件依赖）
+  实际红：× 五档形状各判一次：语句级 type 与行内 type 都要认（缺一个就漏一类） ／ × import 与 export 两档图案都在（re-export 也是一种跨文件依赖）
+  汇总：Tests  2 failed | 18 passed (20)
+  复原逐字节一致=true
+
+### map-import-statement-level-type-ignored
+  src=src/agent/map/parse.ts test=tests/map-import-edge.test.ts
+  期望红：五档形状各判一次：语句级 type 与行内 type 都要认（缺一个就漏一类）
+  实际红：× 五档形状各判一次：语句级 type 与行内 type 都要认（缺一个就漏一类）
+  汇总：Tests  1 failed | 19 passed (20)
+  复原逐字节一致=true
+RM_EXIT=0

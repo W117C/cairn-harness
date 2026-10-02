@@ -1,0 +1,13 @@
+=== (import_statement) @imp
+  行=1 source="\"../main/settings.js\"" 名字=[{"name":"DEFAULT_SETTINGS","isType":false}] 语句级 type=false
+  行=2 source="\"../main/settings.js\"" 名字=[{"name":"AppSettings","isType":false}] 语句级 type=true
+  行=3 source="\"../main/settings.js\"" 名字=[{"name":"isPanelId","isType":false},{"name":"PanelId","isType":true}] 语句级 type=false
+  行=4 source="\"../main/settings.js\"" 名字=[] 语句级 type=false
+  行=5 source="\"../main/settings.js\"" 名字=[] 语句级 type=false
+  行=6 source="\"./side-effect.js\"" 名字=[] 语句级 type=false
+  行=7 source="\"node:path\"" 名字=[{"name":"a","isType":false}] 语句级 type=false
+=== (export_statement) @exp
+  行=8 source="\"../main/settings.js\"" 名字=[{"name":"PROVIDER_KINDS","isType":false}] 语句级 type=false
+  行=9 source="\"../main/settings.js\"" 名字=[] 语句级 type=false
+  行=10 source="\"../main/settings.js\"" 名字=[{"name":"ThemeSetting","isType":false}] 语句级 type=true
+EXIT=0

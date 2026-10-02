@@ -126,8 +126,10 @@ const PATTERNS = [
  *  这一条只兜住「文本一字没动而判断变了」——改 `isLocalVariableBinding`/`NESTED_SCOPES`/属性式取舍时手工 +1。
  *  ⚠️ 必须先于 `TAGS_EXTRACT_VERSION` 声明：后者在模块求值期就要读它（放后面是 TDZ 崩）。
  *  rev 2（2026-09-23）：变量声明名要在模块作用域才计入（`isLocalVariableBinding`）。
- *  rev 3（2026-09-23）：语法错误文件从「整文件一票否决」改成「ERROR 子树之外部分回收」。 */
-const EXTRACT_LOGIC_REV = 3;
+ *  rev 3（2026-09-23）：语法错误文件从「整文件一票否决」改成「ERROR 子树之外部分回收」。
+ *  rev 4（2026-10-02）：跨文件依赖多出一个**独立出口**（`fileSymbols` 的 `imports`）——
+ *  老条目里没有 import 面，缓存命中那支就会给出「有 tags、没边」的另一张图 ⇒ 必须整体重解析一次。 */
+const EXTRACT_LOGIC_REV = 4;
 /** 版本号的算法单独成一个纯函数：判卷可以直接拿「改一行 pattern ⇒ 版本必须变」这条不变量打它。 */
 export function tagsExtractVersion(patterns: readonly string[]): string {
   return createHash("sha1").update(EXTRACT_LOGIC_REV + "\n" + patterns.join("\n")).digest("hex").slice(0, 12);
@@ -178,13 +180,110 @@ async function queryFor(lang: string, language: Lang): Promise<import("web-tree-
 /** 测试口：清空 query 缓存（配 __resetLangCache 用）。 */
 export function __resetQueryCache(): void {
   queryCache.clear();
+  importQueryCache.clear();
 }
+
+// ---- import 面（跨文件依赖）：单独一把 Query，不与 def/ref 并表 ----
+// 为什么捕整条语句而不是深嵌的 specifier 模式：`source:` 字段与嵌套组在同一个 pattern 里
+// 报「Bad pattern structure」（10-02 实测三种写法全被 Query 拒），而把结构判断放到代码里走 AST
+// 只需要 `childForFieldName`，且 js/ts/tsx 与 python/go 的差异能在这里逐条判，不靠 pattern 猜。
+const IMPORT_PATTERNS = ["(import_statement) @imp", "(export_statement) @exp"];
+const importQueryCache = new Map<string, import("web-tree-sitter").Query | null>();
+
+async function importQueryFor(lang: string, language: Lang): Promise<import("web-tree-sitter").Query | null> {
+  const hit = importQueryCache.get(lang);
+  if (hit !== undefined) return hit;
+  const w = await getWts();
+  const valid: string[] = [];
+  for (const p of IMPORT_PATTERNS) {
+    try {
+      new w.Query(language as never, p);
+      valid.push(p);
+    } catch {
+      // 该语言没这个节点：跳过（跳过≠通过：python/go 的 import 形状不同，本轮不接，出声在任务 #14）
+    }
+  }
+  if (valid.length === 0) {
+    importQueryCache.set(lang, null);
+    return null;
+  }
+  try {
+    const q = new w.Query(language as never, valid.join("\n"));
+    importQueryCache.set(lang, q);
+    return q;
+  } catch {
+    importQueryCache.set(lang, null);
+    return null;
+  }
+}
+
+/** 语句级 `import type { … }` / `export type { … }` 的那个 `type` 令牌。
+ *  实测（10-02 一次性 AST 探针，读数在 `outputs/map-import-edges-2026-10-02/ast-shapes.log`）：
+ *  specifier 自己的 `type` 只在 `import { type T }` 那一档出现，语句级那档必须看语句的 children
+ *  ⇒ 两档各查一次，缺一个就漏一类（`export type { T } from "…"` 探针第一版就是这么漏的）。 */
+function statementIsTypeOnly(stmt: import("web-tree-sitter").Node): boolean {
+  const kids = (stmt.children ?? []).filter((c): c is NonNullable<typeof c> => c !== null);
+  return kids.some((c) => c.type === "type" && /^(import|export)$/.test(String(c.previousSibling?.type)));
+}
+
+/** 从一条 import/export 语句里取出「本文件从对面取走了哪些名字」。 */
+function collectImportRefs(stmt: import("web-tree-sitter").Node): ImportRef[] {
+  const sourceNode = stmt.childForFieldName("source");
+  if (!sourceNode) return []; // `export const x = 1`：本文件的定义，不是跨文件依赖
+  const spec = sourceNode.text.replace(/^["'`]|["'`]$/g, "");
+  if (!spec) return [];
+  const stmtType = statementIsTypeOnly(stmt);
+  const out: ImportRef[] = [];
+  const walk = (n: import("web-tree-sitter").Node | null): void => {
+    if (!n) return;
+    if (n.type === "import_specifier" || n.type === "export_specifier") {
+      const nameNode = n.childForFieldName("name");
+      if (nameNode?.text) {
+        const specType = (n.children ?? []).some((c) => c !== null && c.type === "type");
+        out.push({
+          name: nameNode.text,
+          spec,
+          typeOnly: stmtType || specType,
+          line: n.startPosition.row + 1,
+        });
+      }
+      return; // specifier 里面没有别的 specifier
+    }
+    for (const c of n.children ?? []) walk(c);
+  };
+  walk(stmt);
+  return out;
+}
+
 
 export interface SymbolTag {
   name: string;
   kind: "def" | "ref";
   /** 1-based 行号（对外口径，与工具 schema 一致；内部 graph 索引照用）。 */
   line: number;
+}
+
+/** 一条跨文件依赖：本文件从 `spec` 里取走名字 `name`。
+ *  与 `SymbolTag` 分两个出口（而不是往 tags 里塞 `via` 字段）的理由：
+ *  · tags 是**名字图**的输入，波及面（`impact/index.ts`）也吃它——混进去会静默改掉波及面的边集精度，
+ *    而那边按「同名全连」建边，一条 `import { execute } from "./a.js"` 会顺手连到任何叫 `execute` 的定义；
+ *  · 缓存里存的正是 tags ⇒ 新字段若只在热缓存里缺席（老条目没写过），冷/热两支会给出两张图。
+ *    分两个出口、`imports` 一起进缓存，两支的图才是同一份。 */
+export interface ImportRef {
+  /** 被取走的名字（`import { a as b }` 取 `a`——那才是对面的 def 名）。 */
+  name: string;
+  /** 说明符原文（已剥引号），交给 `resolveModuleSpecifier` 解析。 */
+  spec: string;
+  /** `import type { T }` 或 `import { type T }` ⇒ true。类型边**不入运行边图**
+   *  （2026-09-23 用户裁决：先分类型边／运行边并在读端分开呈现，在那之前不许并进同一张名字图）。 */
+  typeOnly: boolean;
+  line: number;
+}
+
+/** `fileSymbols` 的完整出口：tags（名字图）＋ imports（跨文件依赖）。 */
+export interface FileSymbols {
+  tags: SymbolTag[];
+  imports: ImportRef[];
 }
 
 /** 嵌套执行作用域的容器节点：从捕获节点向上到 `program` 的路上遇到任意一个，就说明这个声明
@@ -233,21 +332,31 @@ function isLocalVariableBinding(nameNode: import("web-tree-sitter").Node): boole
  *  重开条件：哪天 pattern 扩到能吃下属性式/解构式定义（§三 主动收掉的那两类），
  *  就得回头测这批新图案在 ERROR 子树里会不会产假名——那条锚点届时才有对象。 */
 
-/** 抛错版单文件 tags：语法错误文件不抛；见下方 `recovering` 一支的口径。 */
+/** 抛错版单文件 tags：语法错误文件不抛；见下方 `fileSymbols` 里 `recovering` 一支的口径。
+ *  只是 `fileSymbols` 的薄壳 ⇒ 解析实现全仓只有一份（两份副本迟早宽度不同，本仓第十三族）。
+ *  波及面（`impact/index.ts`）继续吃这一支：它按「同名全连」建边，本轮不让 import 面静默改掉它的精度。 */
 export async function fileTags(src: string, ext: string): Promise<SymbolTag[]> {
+  return (await fileSymbols(src, ext)).tags;
+}
+
+/** 一次解析给出两个出口：名字图用的 tags ＋ 跨文件依赖用的 imports。
+ *  `imports` 必须与 tags **同一次解析**产出并一起进缓存：分两次解析就是两份取料面，
+ *  而只进其中一支会给出「有 tags、没边」的另一张图（冷/热缓存两支不同形，本仓老坑）。 */
+export async function fileSymbols(src: string, ext: string): Promise<FileSymbols> {
+  const empty = (): FileSymbols => ({ tags: [], imports: [] });
   const lang = LANG_BY_EXT[ext];
-  if (!lang) return []; // 不认识的后缀：空 tags（不抛）
+  if (!lang) return empty(); // 不认识的后缀：两个出口都空（不抛）
   const loaded = await loadLanguage(lang);
-  if (!loaded) return [];
+  if (!loaded) return empty();
   const w = await getWts();
   const parser = new w.Parser();
   parser.setLanguage(loaded as never);
   let tree: import("web-tree-sitter").Tree | null = null;
   try {
     tree = parser.parse(src);
-    if (!tree) return [];
+    if (!tree) return empty();
   } catch {
-    return []; // parse 抛错 = 语法错误文件：空 tags，不抛
+    return empty(); // parse 抛错 = 语法错误文件：空，不抛
   }
   // 语法错误文件：以前整文件一票否决（`hasError ⇒ []`）。实测代价：本仓 4 个**合法** TS 文件
   // 因此在图里完全不存在（类型位置里的 `import("pkg").T`、`vi.mock` 的
@@ -256,21 +365,31 @@ export async function fileTags(src: string, ext: string): Promise<SymbolTag[]> {
   // 现在直接跑 query：错误恢复留下的正常子树照常出 tags；整文件都是错的（`function {{{ nope`）
   // 本来就抽不出具名节点 ⇒ 老契约用例仍绿（为何不再加一道 ERROR 子树过滤，见上方那段测量记录）。
   try {
-    const query = await queryFor(lang, loaded);
-    if (!query) return [];
     const tags: SymbolTag[] = [];
-    for (const m of query.matches(tree.rootNode)) {
-      for (const c of m.captures) {
-        if (c.name !== "def" && c.name !== "ref") continue;
-        const name = c.node.text;
-        if (!name) continue;
-        if (c.name === "def" && isLocalVariableBinding(c.node)) continue; // 函数体里的变量不是跨文件符号
-        tags.push({ name, kind: c.name as "def" | "ref", line: c.node.startPosition.row + 1 });
+    const query = await queryFor(lang, loaded);
+    if (query) {
+      for (const m of query.matches(tree.rootNode)) {
+        for (const c of m.captures) {
+          if (c.name !== "def" && c.name !== "ref") continue;
+          const name = c.node.text;
+          if (!name) continue;
+          if (c.name === "def" && isLocalVariableBinding(c.node)) continue; // 函数体里的变量不是跨文件符号
+          tags.push({ name, kind: c.name as "def" | "ref", line: c.node.startPosition.row + 1 });
+        }
       }
     }
-    return tags;
+    // import 面单独一把 query：主 query 在某语言编译失败时，这一把仍可能有结果——
+    // 两支各自出声，不共用一个「编译失败」的结论。
+    const imports: ImportRef[] = [];
+    const iq = await importQueryFor(lang, loaded);
+    if (iq) {
+      for (const m of iq.matches(tree.rootNode)) {
+        for (const c of m.captures) imports.push(...collectImportRefs(c.node));
+      }
+    }
+    return { tags, imports };
   } catch {
-    return []; // query 抛错 = 语法错误/不兼容模式：空 tags，不抛
+    return empty(); // query 抛错 = 语法错误/不兼容模式：空，不抛
   } finally {
     tree?.delete();
     parser.delete();

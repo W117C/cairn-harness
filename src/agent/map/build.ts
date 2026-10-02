@@ -9,7 +9,7 @@ import { join, relative, resolve, sep } from "node:path";
 import { spawn } from "node:child_process";
 import { rgBinary } from "../../tools/ripgrep.js";
 import { sanitizedEnv } from "../../tools/process.js";
-import { fileTags, SUPPORTED_EXTS, TAGS_EXTRACT_VERSION, TreeSitterUnavailableError, type SymbolTag } from "./parse.js";
+import { fileSymbols, SUPPORTED_EXTS, TAGS_EXTRACT_VERSION, TreeSitterUnavailableError, type ImportRef, type SymbolTag } from "./parse.js";
 import { buildGraph, personalizedPageRank, type FileTagsInput } from "./rank.js";
 import { clampBudget, renderMapBudget } from "./render.js";
 import { MAX_FILES_DEFAULT } from "./cap.js";
@@ -47,6 +47,11 @@ export interface TagsCacheEntry {
   mtimeMs: number;
   size: number;
   tags: SymbolTag[];
+  /** 跨文件依赖（`fileSymbols` 的第二个出口）。它**必须**与 tags 同进同出：
+   *  只缓存 tags ⇒ 热缓存那支建出来的图没有 import 边，冷缓存那支有 ⇒ 同一份代码两张图，
+   *  而现象是「第二次问就不一样了」（本仓「缓存那一支不生效」同族）。
+   *  缺 `imports` 字段的旧条目由 `v` 失配挡掉（EXTRACT_LOGIC_REV 4 ⇒ 一次全量重解析）。 */
+  imports: ImportRef[];
 }
 
 export interface ScannedFile {
@@ -132,22 +137,25 @@ function cacheFileFor(dir: string, abs: string): string {
   return join(dir, key + ".json");
 }
 
-async function readTagsCache(dir: string, f: ScannedFile): Promise<SymbolTag[] | null> {
+async function readTagsCache(dir: string, f: ScannedFile): Promise<{ tags: SymbolTag[]; imports: ImportRef[] } | null> {
   try {
     const raw = await readFile(cacheFileFor(dir, f.abs), "utf8");
     const e = JSON.parse(raw) as TagsCacheEntry;
     if (e.v !== TAGS_EXTRACT_VERSION) return null; // 抽取判据换过 → 旧 tags 一律作废（缺 v 字段同此支）
-    if (e.mtimeMs === f.mtimeMs && e.size === f.size && Array.isArray(e.tags)) return e.tags;
+    // 两个出口缺任何一个都算 miss：只回 tags 的条目会让热缓存那支建出「没有 import 边」的另一张图。
+    if (e.mtimeMs === f.mtimeMs && e.size === f.size && Array.isArray(e.tags) && Array.isArray(e.imports)) {
+      return { tags: e.tags, imports: e.imports };
+    }
     return null; // {mtime,size} 指纹变化 → miss
   } catch {
     return null; // 无缓存/缓存损坏 → miss（损坏条目下次被覆写，不抛）
   }
 }
 
-async function writeTagsCache(dir: string, f: ScannedFile, tags: SymbolTag[]): Promise<void> {
+async function writeTagsCache(dir: string, f: ScannedFile, tags: SymbolTag[], imports: ImportRef[]): Promise<void> {
   try {
     await mkdir(dir, { recursive: true });
-    const entry: TagsCacheEntry = { v: TAGS_EXTRACT_VERSION, mtimeMs: f.mtimeMs, size: f.size, tags };
+    const entry: TagsCacheEntry = { v: TAGS_EXTRACT_VERSION, mtimeMs: f.mtimeMs, size: f.size, tags, imports };
     await writeFile(cacheFileFor(dir, f.abs), JSON.stringify(entry), "utf8");
   } catch (err) {
     console.debug("[map] tags 缓存写失败（忽略）:", err instanceof Error ? err.message : String(err));
@@ -301,7 +309,7 @@ export function createMapBuilder(defaults: Partial<BuildMapOptions> = {}): MapBu
           const hit = await readTagsCache(dir, f);
           if (hit) {
             hits++;
-            inputs.push({ file: f.rel, tags: hit });
+            inputs.push({ file: f.rel, tags: hit.tags, imports: hit.imports });
           } else {
             misses.push(f);
           }
@@ -321,9 +329,9 @@ export function createMapBuilder(defaults: Partial<BuildMapOptions> = {}): MapBu
           if (s === null) continue;
           try {
             const ext = s.f.rel.slice(s.f.rel.lastIndexOf(".") + 1).toLowerCase();
-            const tags = await fileTags(s.src, ext);
-            inputs.push({ file: s.f.rel, tags });
-            cacheWrites.push(writeTagsCache(dir, s.f, tags).catch(() => {})); // 竞态修复：收集，返回前统一 await（见循环后）
+            const sym = await fileSymbols(s.src, ext);
+            inputs.push({ file: s.f.rel, tags: sym.tags, imports: sym.imports });
+            cacheWrites.push(writeTagsCache(dir, s.f, sym.tags, sym.imports).catch(() => {})); // 竞态修复：收集，返回前统一 await（见循环后）
           } catch (err) {
             if (err instanceof TreeSitterUnavailableError) throw err; // 环境级：整图降级
             console.debug(`[map] 单文件解析失败（跳过）: ${s.f.rel}`, err instanceof Error ? err.message : String(err));
