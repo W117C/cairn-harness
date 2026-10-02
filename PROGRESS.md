@@ -10172,6 +10172,25 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
    （＝两枚新锚点钉在飞文本，同笔未落库的预期读数，提交即归零）、`killer 指针失效 0`、改法全部合法；全量核心判卷见凭证。
 8. **取料**：`outputs/impact-readout-denominator-2026-10-02/`（readings＋red-machines-18＋needles-precommit＋injected-note＋suite-full）。
 
+### 2026-10-02 · 第 307 页补 凭证（1/1）：`39dca66` 认证通过——22/22 门绿、干净树 286 文件 3913 条绿、收尾复核＝同一笔；57 条锚点逐条被杀，D-11 那条"预提交红"提交后当场转绿
+
+1. **认证读数**（`outputs/impact-readout-denominator-2026-10-02/head-cert-39dca66.log`，`CERT_EXIT=0`）：
+   `认证门面=22 道（跑到 22）｜绿 22 道｜⚠️ 超预算 0`；`TREE=39dca66 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有`；
+   干净树判卷 `Test Files 286 passed｜Tests 3913 passed｜exit=0（退出码直接取，不接管道）`；本趟墙钟 226.24s。
+2. **同分母自洽**：干净树 3913 条＝上一笔认证（`c0c60da`）的 3911 **＋ 2**，那 2 条正是本页新增的两条用例；
+   主树 4058 vs 认证树 3913＝差 145 条，与上两笔同一批（隔壁在飞、未入库的 7 个判卷文件）。
+3. **一条"预提交红"没有被当成旧账登记掉**：落库前那趟全量判卷红 1 条——`tests/docs-check.test.ts > D-11 … 真仓那一趟：分母非零、红 0`，
+   成因是本页点名的 dated 工件还没进 HEAD（同笔未落库的形状，正是 `docs-check` 自己给的解释）。
+   处置不是放宽判据也不是"记成本仓已知红"：**提交后重跑同一份判卷** ⇒ `1 个文件／93 条全绿`（`docs-check-test-postcommit.log`，`T_EXIT=0`）。
+   落库后针脚尺同样归零：`1312 条 —— 阻断 0／未入库面 0／钉在飞文本 0／killer 指针失效 0`（`postcommit-needles.log`，`NE=0`）。
+4. **干净树逐条击杀**（`mutate-kill-39dca66.log`，`KILL_EXIT=0`）：`rev=HEAD~1 → 变更文件 11 个 ⇒ 选中锚点 57/1312 条`，
+   `全部变异被正确杀死（断言非恒真）`，本次耗时 75.9s；本笔两枚新锚点各红自己那条（造红台的 18 台读数见页内 §3-4）。
+5. **清场判据不是授权**（照旧只报数）：`常驻残留树=2`＝`.worktrees/gate-mutate-import@39dca66`（本会话 repoint）＋
+   `.worktrees/gate-mutate-verify@4e0a7de`（隔壁会话的树）。回收要用户点头；`gate-head-cert` 是复用来的共享树 ⇒ 脚本自己不收。
+6. **本页之后 #19 的状态**：读端"分母"已发货（安全面口径未动）；剩下的"按 def 逐条筛"仍等真轨迹分母——
+   真语料里 pipeline／逐环租约 0 次，冲突翻转条数取不到，所以那一格保持待裁，不拿"能实现"当"该实现"。
+
+
 
 
 

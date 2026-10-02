@@ -63,4 +63,10 @@
 
 ## 7 · 落库前后逐条读数
 
-（全量判卷、击杀、认证在凭证那一笔点名。）
+- 落库前（同一笔 `39dca66` 入库）：`readings.md`＋`red-machines-18.log`＋`needles-precommit.log`＋`injected-note.log`＋`suite-full.log`。
+  全量核心判卷那一趟是 **293 文件／4058 条，红 1 条**（`SUITE_EXIT=1`）：红的是
+  `tests/docs-check.test.ts > D-11 … 真仓那一趟：分母非零、红 0`——成因正是本页点名的 dated 工件还没进 HEAD（同笔未落库的形状），
+  **不是**判据问题。这条不许靠"记成旧账"过掉：提交后重跑同一份判卷 ⇒ `1 个文件／93 条全绿`（`docs-check-test-postcommit.log`，`T_EXIT=0`）。
+- 落库后：`postcommit-needles.log`（`1312 条 —— 阻断 0／未入库面 0／钉在飞文本 0／killer 指针失效 0`，`NE=0`）、
+  `mutate-kill-39dca66.log`（干净树逐条杀）、`head-cert-39dca66.log`（22 道门认证）。击杀与认证的读数在 PROGRESS「第 307 页补 凭证」那一段点名。
+
