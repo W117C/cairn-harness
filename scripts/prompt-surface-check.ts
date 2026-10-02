@@ -6,7 +6,9 @@
  */
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { systemPromptFor } from "../src/main/agent-runner";
+// M10 拆分：`systemPromptFor` 已搬去 `src/agent/system-prompt.ts`（本门是它的**生产消费方**，
+// 取的是"按档取面"那一步的输出）⇒ 直接指到新模块，不再经由 2,738 行的 runner。
+import { systemPromptFor } from "../src/agent/system-prompt";
 import { TOOL_NAMES } from "../src/tools/base";
 import { PERMISSION_MODES } from "../src/permissions/modes";
 import { sessionToolSpecs } from "../src/agent/glm-session";

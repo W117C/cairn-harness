@@ -1854,7 +1854,7 @@ const MUTATIONS = [
   },
   {
     id: "base-system-test-first-rule-removed",
-    src: "src/main/agent-runner.ts",
+    src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "「先写复现测试跑到红」这条纪律被删（提示词回到「改完就说修好了」，能力 5 最关键那条失去唯一的字面抓手）",
     apply: (s) => s.replace("  \"4) 修 bug 先写一条能复现它的测试并跑到红，再改代码到绿；没有红过的复现就不要宣称已修复；\",\n", ""),
@@ -1862,7 +1862,7 @@ const MUTATIONS = [
   },
   {
     id: "base-system-patch-first-rule-removed",
-    src: "src/main/agent-runner.ts",
+    src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "「改已有文件用 edit_file 打补丁」被删 ⇒ 模型继续整文件重抄（write_file 的行数提示只在事后，事前预防更省一轮）",
     apply: (s) => s.replace("  \"3) 改已有文件用 edit_file 打补丁，write_file 只用于新建文件（整份重抄既费 output 又容易漏抄未改的行）；\",\n", ""),
@@ -1870,7 +1870,7 @@ const MUTATIONS = [
   },
   {
     id: "base-system-judging-file-conflict-restored",
-    src: "src/main/agent-runner.ts",
+    src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "去掉「第 4 条是新增用例，不是改判卷面」的消歧 ⇒ 两条纪律互相矛盾，模型只能二选一（要么不写复现，要么去改判卷文件）",
     apply: (s) => s.replace("  \"6) 只改任务需要的文件；既有测试与判卷文件不得改写（第 4 条是**新增**用例，不是改判卷面）。\",\n", "  \"6) 只改任务需要的文件，不改测试与判卷文件。\",\n"),
@@ -2678,7 +2678,7 @@ const MUTATIONS = [
   // ---- W3 第一段调度纪律（BASE_SYSTEM 的「编排」段）：三句各一条 + 编号不侵占一条 ----
   {
     id: "orchestration-rule-dropped",
-    src: "src/main/agent-runner.ts",
+    src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "整段编排纪律删掉 ⇒ 模型面重新没人教「何时拆 / 怎么派 / 派完收队」，而 W1a 的工具照样在线（能力已发货、指令面缺席）",
     apply: (s) => s.replace("  \"编排（派子代理时）：能各自独立验收才拆，单一改动别拆；任务书必须自包含——目标 / 涉及文件 / 验收口径，worker 看不到本会话历史；派完先调 wait_for_agents 收队，未拿到回执不得转述 worker 的结论。\",\n", ""),
@@ -2686,7 +2686,7 @@ const MUTATIONS = [
   },
   {
     id: "orchestration-collect-duty-removed",
-    src: "src/main/agent-runner.ts",
+    src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "只删收队那半句 ⇒ 派完仍会凭想象转述 worker 结论，D1 的失败模式重新敞开（工具在、没人叫它）",
     apply: (s) => s.replace("派完先调 wait_for_agents 收队，未拿到回执不得转述 worker 的结论。", ""),
@@ -2694,7 +2694,7 @@ const MUTATIONS = [
   },
   {
     id: "orchestration-taskbook-removed",
-    src: "src/main/agent-runner.ts",
+    src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "删「任务书自包含」半句 ⇒ worker 拿不到验收口径就要返工（它看不到父会话历史，这条是 worker 质量的上游）",
     apply: (s) => s.replace("任务书必须自包含——目标 / 涉及文件 / 验收口径，worker 看不到本会话历史；", ""),
@@ -2702,7 +2702,7 @@ const MUTATIONS = [
   },
   {
     id: "orchestration-rule-renumbered",
-    src: "src/main/agent-runner.ts",
+    src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "把编排段改成「7) …」⇒ 条件段混进动作序列编号，纪律 1–6 的连续性断号（模型会以为后面的约束可省）",
     apply: (s) => s.replace("\"编排（派子代理时）：", "\"7) 编排（派子代理时）："),
@@ -8911,7 +8911,7 @@ const MUTATIONS = [
   },
   {
     id: "prompt-surface-readonly-text-not-applied",
-    src: "src/main/agent-runner.ts",
+    src: "src/agent/system-prompt.ts",
     test: "tests/prompt-surface-check.test.ts",
     desc: "装配点不再按档取文本（四档都拿共用文本）⇒ read-only 的模型继续读到 edit_file／wait_for_agents 这些它拿不到的承诺，" +
       "而门仍然绿：门读的是 systemPromptFor 的输出，读不到「生产有没有真的调它」（规则 236：接线要单独钉）",

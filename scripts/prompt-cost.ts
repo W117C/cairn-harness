@@ -18,7 +18,10 @@
 // 退出码恒 0：它是尺子不是门（红了要拦谁也没想清楚）。哪天要拦，登记进 GATES 再谈。
 import { sessionToolSpecs, OPTIONAL_TOOL_NAMES } from "../src/agent/glm-session";
 import { AUTOMATION_TOOL_NAMES } from "../src/agent/automation-surface";
-import { BASE_SYSTEM } from "../src/main/agent-runner";
+// M10 拆分：`BASE_SYSTEM` 已搬去 `src/agent/system-prompt.ts`。**从这里直接取它，而不是走 agent-runner**——
+// 本脚本只要一段常量文本，没有理由把 2,738 行的 runner 及其整条依赖链拉进来（扇入读数见
+// outputs/m10-split-2026-10-01/）。`agent-runner` 侧仍保留再导出，别的消费方无需改。
+import { BASE_SYSTEM } from "../src/agent/system-prompt";
 import { PERMISSION_MODES, type PermissionMode } from "../src/permissions";
 
 /** 估算 token：不引第三方分词器（本仓依赖面刻意小），按字符数 /3.6 折算。
