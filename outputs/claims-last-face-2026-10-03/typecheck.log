@@ -1,0 +1,3 @@
+tests/skill-tool-policy.test.ts(411,1): error TS1128: Declaration or statement expected.
+tests/skill-tool-policy.test.ts(411,2): error TS1128: Declaration or statement expected.
+[typecheck] 报错文件归因：HEAD 内 1 个 / 未跟踪草稿 0 个

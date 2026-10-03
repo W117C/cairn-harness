@@ -1,0 +1,13 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+[90mstderr[2m | tests/skill-tool-policy.test.ts[2m > [22m[2mrunAgent 真入口：用户敲一条带申报的 /skill，工具面确实改了[2m > [22m[2m派发即登记：面板（agent:state）读到的就是这条 skill 的账
+[22m[39m[skill] 规格面摘除（disallowed-tools）: grep←/pol:sec
+
+ [32m✓[39m tests/skill-tool-policy.test.ts [2m([22m[2m28 tests[22m[2m)[22m[32m 87[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m28 passed[39m[22m[90m (28)[39m
+[2m   Start at [22m 14:36:58
+[2m   Duration [22m 1.64s[2m (transform 68%, import 25%, tests 7%)[22m
+

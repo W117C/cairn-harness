@@ -1,0 +1,44 @@
+M1-glm-note-loses-cost-framing 基线：passed=1 failed=0 found=true（1397ms）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/skill-tool-policy.test.ts[2m > [22m能派不可撤：这一格要在派活之前说出口（任务 #5）[2m > [22m注脚里那句「不可撤销的开销」要跟着后果一起给（只说撤不回＝模型没有可权衡的量）
+[31m[1mAssertionError[22m: expected '[skill 工具面] 本 turn 已按 disallowed-tool…' to contain '不可撤销的开销'[39m
+
+Expected: [32m"不可撤销的开销"[39m
+Received: [31m"[skill 工具面] 本 turn 已按 disallowed-tools 从可见工具表摘除：cancel_agents（由 pol:strict）。另有一格后果要提前说：`spawn_agent` 还在面内而 `cancel_agents` 已被摘 ⇒ **这一轮派出去的 worker 撤不回来**（只能等它自己收敛，或由人在面板上撤）。派活前请谨慎权衡。"[39m
+
+[36m [2m❯[22m tests/skill-tool-policy.test.ts:[2m384:27[22m[39m
+    [90m382|[39m   it("注脚里那句「不可撤销的开销」要跟着后果一起给（只说撤不回＝模型没有可权衡的量）", () => {
+    [90m383|[39m     const stranded = face([CANCEL_AGENTS_NAME]);
+    [90m384|[39m     expect(stranded.note).toContain("不可撤销的开销");
+    [90m   |[39m                           [31m^[39m
+    [90m385|[39m     expect(stranded.note, "说了收不回，就要说清剩下那两条路的第一条").toContain("只能等它自己收敛"…
+    [90m386|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M1-glm-note-loses-cost-framing 红在「注脚里那句「不可撤销的开销」要跟着后果一起给（只说撤不回＝模型没有可权衡的量）」（failed=1，1144ms，退 1）
+M2-glm-note-cost-gate-widened 基线：passed=1 failed=0 found=true（1102ms）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/skill-tool-policy.test.ts[2m > [22m能派不可撤：这一格要在派活之前说出口（任务 #5）[2m > [22m那句成本话不许逃出这道门：派活也被摘时根本没有这笔开销
+[31m[1mAssertionError[22m: 派活也被摘 ⇒ 不许再留这句吓人的话（没东西可派就没有这笔钱）: expected '[skill 工具面] 本 turn 已按 disallowed-tool…' not to contain '不可撤销的开销'[39m
+
+Expected: [32m"不可撤销的开销"[39m
+Received: [31m"[7m[skill 工具面] 本 turn 已按 disallowed-tools 从可见工具表摘除：spawn_agent（由 pol:strict）、cancel_agents（由 pol:strict）。另有一格后果要提前说：`spawn_agent` 还在面内而 `cancel_agents` 已被摘 ⇒ **这一轮派出去的 worker 撤不回来**（只能等它自己收敛，或由人在面板上撤）。派活前请把它当成[27m不可撤销的开销[7m。[27m"[39m
+
+[36m [2m❯[22m tests/skill-tool-policy.test.ts:[2m392:62[22m[39m
+    [90m390|[39m   it("那句成本话不许逃出这道门：派活也被摘时根本没有这笔开销", () => {
+    [90m391|[39m     const gone = face([CANCEL_AGENTS_NAME, SPAWN_AGENT_NAME]);
+    [90m392|[39m     expect(gone.note, "派活也被摘 ⇒ 不许再留这句吓人的话（没东西可派就没有这笔钱）").not.toContain…
+    [90m   |[39m                                                              [31m^[39m
+    [90m393|[39m   });
+    [90m394|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M2-glm-note-cost-gate-widened 红在「那句成本话不许逃出这道门：派活也被摘时根本没有这笔开销」（failed=1，1101ms，退 1）
+残骸校验：被测文件与开跑前逐字节一致 ✅（对照面＝开跑前的工作树，两台共用同一份备份）
+RED_MACHINES=OK

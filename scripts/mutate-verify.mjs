@@ -13063,6 +13063,26 @@ const MUTATIONS = [
     apply: (s) => s.replace('why: "量词收窄（只修 X 就够 / 其余不做）⇒ 单方面缩小交付面"', 'why: "量词收窄（一种写法）"'),
     expectFail: "B 族命中：读数行里要点名「单方面缩小交付面」，不能只留一个族 id",
   },
+  // 第 324 页：#25 的最后一格。「撤不回来」是可达性，「不可撤销的开销」才是模型能拿来权衡的量。
+  {
+    id: "glm-note-loses-irreversible-cost-framing",
+    src: "src/agent/glm-session.ts",
+    test: "tests/skill-tool-policy.test.ts",
+    desc: "摘掉注脚里那句成本框架（只留「撤不回来」）⇒ 模型知道这个动作不可达，却不知道这笔钱收不回；"
+      + "本仓 ⑨ 的口径是成本要可观测，而「派不派」恰恰是钱决定的。既有那条判卷已被表里两根锚点指着 ⇒ 代价这一半另开一条",
+    apply: (s) => s.replace("派活前请把它当成不可撤销的开销。", "派活前请谨慎权衡。"),
+    expectFail: "注脚里那句「不可撤销的开销」要跟着后果一起给（只说撤不回＝模型没有可权衡的量）",
+  },
+  // 同一条注脚的**第二种**病：句子还在、门却宽了（谁被摘都喊一声开销）。上一根锚点对它全不分辨。
+  {
+    id: "glm-note-cost-clause-gate-widened-to-any-removal",
+    src: "src/agent/glm-session.ts",
+    test: "tests/skill-tool-policy.test.ts",
+    desc: "把 `stranded` 那一档门改成「有摘除就出声」⇒ 连派活一起摘时仍承诺一笔根本不存在的开销（那一轮没东西可派）；"
+      + "这是第 322 页 M2 那族「守卫放宽」的第三个形状，而正向断言（stranded 态句子照在）分辨不出，只有反向那一格会红",
+    apply: (s) => s.replace("    (stranded", "    (stranded || removed.length > 0"),
+    expectFail: "那句成本话不许逃出这道门：派活也被摘时根本没有这笔开销",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

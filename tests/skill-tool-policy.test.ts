@@ -377,6 +377,21 @@ describe("能派不可撤：这一格要在派活之前说出口（任务 #5）"
     expect(f.note, "光说「撤不回来」不给出路：模型要知道剩下两条路是什么").toContain("人在面板上撤");
   });
 
+  // 上面那条已被表里两根锚点指着（规则 402：一根锚点一个唯一指向），所以**代价那一半**另开一条。
+  // 「派活前请把它当成不可撤销的开销」是这一格里模型唯一能拿来权衡的量：可达性说完，钱才是决定派不派的。
+  it("注脚里那句「不可撤销的开销」要跟着后果一起给（只说撤不回＝模型没有可权衡的量）", () => {
+    const stranded = face([CANCEL_AGENTS_NAME]);
+    expect(stranded.note).toContain("不可撤销的开销");
+    expect(stranded.note, "说了收不回，就要说清剩下那两条路的第一条").toContain("只能等它自己收敛");
+  });
+
+  // 这一条单独成立，是因为它咬的是**另一种**病：句子被搬出那道门（谁被摘都喊一声开销）。
+  // 上面那条正向断言对这种病全不分辨（stranded 态里句子照在）⇒ 只有反向那一格会红。
+  it("那句成本话不许逃出这道门：派活也被摘时根本没有这笔开销", () => {
+    const gone = face([CANCEL_AGENTS_NAME, SPAWN_AGENT_NAME]);
+    expect(gone.note, "派活也被摘 ⇒ 不许再留这句吓人的话（没东西可派就没有这笔钱）").not.toContain("不可撤销的开销");
+  });
+
   it("反向哨兵：连派活一起摘 ⇒ 不许再喊撤不回（没东西可派，就不该有这句吓人的话）", () => {
     const f = face([CANCEL_AGENTS_NAME, SPAWN_AGENT_NAME]);
     expect(visible(f, SPAWN_AGENT_NAME)).toBe(false);

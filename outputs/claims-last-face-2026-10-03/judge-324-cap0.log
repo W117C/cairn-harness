@@ -1,0 +1,16 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+[90mstderr[2m | tests/skill-tool-policy.test.ts[2m > [22m[2mrunAgent 真入口：用户敲一条带申报的 /skill，工具面确实改了[2m > [22m[2m派发即登记：面板（agent:state）读到的就是这条 skill 的账
+[22m[39m[skill] 规格面摘除（disallowed-tools）: grep←/pol:sec
+
+ [32m✓[39m tests/skill-tool-policy.test.ts [2m([22m[2m28 tests[22m[2m)[22m[32m 112[2mms[22m[39m
+ [32m✓[39m tests/promise-recall-inventory.test.ts [2m([22m[2m33 tests[22m[2m)[22m[33m 1257[2mms[22m[39m
+   [32m✓[39m 能力断言的证人面：一句都不曾被点过才算欠（第 311 页） [2m(14)[22m
+     [33m[2m✓[22m[39m 反向对照：往真仓那份源码里凭空加一句无人判的能力断言 ⇒ 帽当场被顶破（证明上一条不是恒真）[33m 447[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m2 passed[39m[22m[90m (2)[39m
+[2m      Tests [22m [1m[32m61 passed[39m[22m[90m (61)[39m
+[2m   Start at [22m 14:42:15
+[2m   Duration [22m 2.96s[2m (tests 49%, import 29%, transform 23%)[22m
+

@@ -11551,3 +11551,43 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 5. **账**：#25 剩 5 格（`compaction#event`／`glm-session#specs`／`glm-session#note`／`goal-drift#RULES`／`sequencer#resolvePluginRole`），
    第 323 页在飞（四格已写判卷与锚点，未提交）；#23 那条探针红照挂（唯一红）；#24/#26/#28/#32/#33 照挂。
    验证树又加一棵 `.worktrees/gate-mutate-322`（本笔起改用 `.worktrees/` 下的树名，不再往仓根丢），与之前四棵一起等用户点头回收。
+
+## 2026-10-03 · 第 324 页：#25 的最后一格收口——欠证人 1→0（帽第十一档，这一维从此**零容忍**）；两台造红各咬一种对方看不见的病
+
+1. **那一格是 `src/agent/glm-session.ts#note` 里那句「派活前请把它当成不可撤销的开销」**。既有那条判卷（「只摘撤活时注脚必须点出后果：派出去的 worker 这一轮撤不回来」）
+   钉的是**可达性＋出路**（撤不回来／人在面板上撤），成本那一半没人读——而「派不派」恰恰是钱决定的（⑨ 的口径：成本要可观测）。
+   **本笔没写生产代码**：那句话本来就在，缺的是读者。既有那条已被表里两根锚点指着
+   （`strands-predicate-sides-swapped`／`stranded-clause-computed-not-appended`）⇒ 按规则 402「一根锚点一个唯一指向」，代价这一半另开用例。
+
+2. **拆成两条用例不是洁癖，是第二台造红逼出来的**：第一版把两态合在一条里（stranded 态要给这句／派活也被摘时不许留这句）。
+   写第二根锚点时才发现：两条断言同住一条用例 ⇒ M1（摘句）与 M2（放宽那道门）会**红在同一条上**＝其中一根没有分辨力（第 317 页同族）。
+   拆开后实测确实互补：
+   - **M1** `派活前请把它当成不可撤销的开销。` → `派活前请谨慎权衡。` ⇒ 只红正向那条（反向那条反而"更干净"，全不分辨）；
+   - **M2** `    (stranded` → `    (stranded || removed.length > 0`（谁被摘都喊一声开销）⇒ **只红反向那条**，正向那条句子照在。
+   锚点：`glm-note-loses-irreversible-cost-framing`／`glm-note-cost-clause-gate-widened-to-any-removal`。
+   这是第 322 页那族「守卫放宽」的第三个形状，且它的**正向断言分辨不出来——只有反向那一格看得见**（规则 404 的口径：探针要站在被放宽那道门的下游）。
+
+3. **自己把判卷写坏了一次，被三道尺各拦一遍**（记成因，不写"下次注意"）：拆用例那次 Edit 吞掉了上一条用例结尾的 `});`。
+   症状链：vitest 报 `Test Files 1 failed` ＋ `Tests  no tests`（收集期就断，一条用例都没跑）⇒ `typecheck` 退 2 ⇒
+   造红驱动器报 `❌ 选择子基线不对 ⇒ 这台没跑`。三道独立闸同拦，最后一道是驱动器里那句**"未变异先跑一次基线"**：
+   它把一份语法坏掉的判卷读成"这台没跑"而不是"这台绿了"。当初写它只当是防选择子打偏，这次才知道它顺带兜住了半张判卷。
+
+4. **现读**：模型可见 43 格不变、原句证人 `31 → 32`、欠证人 **`1 → 0`**（帽第十一档，正贴线；四态 32／6／0／5）。
+   **帽到 0 ⇒ 这一维从"存量登记"变成"硬约束"**：以后任何一句新的模型可见能力断言，只要既没有原句证人也没有绑定配对，
+   `probe-promise-recall` 与 `tests/promise-recall-inventory.test.ts` 当场红，且帽不许调回去（唯一真出口是给那一格配行为观测者）——这句已经写进帽注，免得下次有人把它抬回 1。
+   **但"清零"不等于"这 43 格都验过了"**：另有 **5 格「挑不出段」**（句子里凑不出 ≥6 字连续中文，多半被插值切碎）——尺对它们是"读不出针脚"，不是"有证人"。逐格点名：
+   `plugins/hooks.ts#run`、`sequencer.ts#resolvePluginRole`、`main/agent-runner.ts#handleAgentRun`、`main/scheduler.ts#scheduleTimeZoneNotes`、
+   `providers/capabilities.ts#validateThinkingEffort`。其中 sequencer 那一格第 323 页已补了行为判卷却仍留在"不可知"里 ⇒ **那是尺的形状问题（针脚取不到段），不是漏做**，
+   留给下一次动 `scanClaimSites` 时一并裁。
+
+5. **门面读数**：`node --check scripts/mutate-verify.mjs` 动表前后各一次 → OK；表 1381→**1382**（两根锚点，第二根是拆完用例才补的）；
+   `--check-needles` **阻断 0／待复认 1／未覆盖 1／逐行式 5／未入库面 0／钉在飞文本 0／killer 指针失效 0**——
+   四个非零水位与第 323 页**落库后**那次逐维相同（`verify-lang-timeout-same-as-npm`／`heldout-install-before-change-list`／那五行式），本笔一格都没抬；
+   `typecheck` 0 条；`tests/skill-tool-policy.test.ts` 28→**29** 条全绿（1.6s 那一趟 87ms）；`prose-needle-scan` 顶包候选 **10 条＝帽线未动、在飞 0**。
+   两台造红（`outputs/claims-last-face-2026-10-03/red-machines.mts`，读数 `red-machines-run3.log`）：基线 passed=1／failed=0 各 1397ms／1102ms，
+   变异各 1144ms／1101ms、`failed=1`、红在不同用例，残骸与**开跑前工作树**逐字节一致。
+
+6. **账**：**#25 结案**（11 档走完：29→28→25→23→18→14→11→8→5→1→0）。这条探针现在唯一的红是隔壁在飞的 `src/main/agent-runner.ts#body`（#23），
+   **本笔不是成因**——现读自证：`grep` 到 **16 份留档**（第 319 页起，含本笔改前改后两次）红文字**逐字同一行、连行号都是 23**，跨那 6 页改动没变过一个字。
+   #24／#26／#28／#32／#33 照挂；下一张纸回 #7（基准题形要能产出 ≥2 拍 verify ＋ held-out 验收面）。
+   验证树：`.worktrees/gate-mutate-324`（连同 322／323 与仓根那五棵一起等用户点头回收）。
