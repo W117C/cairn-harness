@@ -6,11 +6,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { createImpactQueryTool, graphAbsenceNote, graphCandidatePosition, impactQuerySpec, unionNote } from "../src/tools/impact-query";
+import { createImpactQueryTool, graphAbsenceNote, graphCandidatePosition, impactQuerySpec, resolveMaxFiles, unionNote } from "../src/tools/impact-query";
 import { mixedSitesNote } from "../src/agent/impact/attribution";
 // 覆盖面两把纯函数 09-30 挪进 `src/agent/impact/coverage.ts`：同一张图的四个消费者要说同一句话，
 // 判据留在读端工具里就会被别处再抄一遍（第十四族）。
-import { capCauseNote, coverageNote } from "../src/agent/impact/coverage";
+import { capCauseNote, capWayOut, coverageNote } from "../src/agent/impact/coverage";
 import { MAX_FILES_CEILING, MAX_FILES_DEFAULT } from "../src/agent/map/cap";
 import { TOOLS } from "../src/tools";
 import type { ToolContext } from "../src/tools/base";
@@ -356,6 +356,24 @@ describe("maxFiles：说明里那句出路必须真够得着（三个建图出�
     const desc = impactQuerySpec.parameters.properties.maxFiles.description;
     expect(desc).not.toMatch(/调大/u);
     expect(desc).toContain("只能调小");
+  });
+
+  // 上面那条经由 `graphAbsenceNote` 间接喂到顶那一支；这里把两支**句子本身**钉住（纯函数，零建图）——
+  // 它是模型缺省调用真正读到的那一句，第 319 页现读时这句没有原句证人。
+  it("出路那支纯函数两侧都钉：未到顶给「调大 maxFiles 后重问」，顶到上限给「调不上去⇒直读或拆仓」", () => {
+    expect(capWayOut(1)).toContain("调大 maxFiles 后重问");
+    expect(capWayOut(MAX_FILES_CEILING)).toContain(
+      "帽 " + String(MAX_FILES_CEILING) + " 已是上限、maxFiles 调不上去 ⇒ 只能直读（grep/lsp）或按目录拆仓",
+    );
+    expect(capWayOut(MAX_FILES_CEILING), "顶到上限还在教模型拧旋钮＝死参数式文案").not.toContain("调大 maxFiles");
+  });
+
+  // 拒绝句里的「只能往小调」是这一位唯一的余地说明：缺省＝上限（上面第 352 行已经钉过这个等式），
+  // 所以模型传一个更大的数时，必须被告知这条路走不通——而不是被静默夹到上限（那是假生效）。
+  it("越界那句拒绝文案点名「只能往小调」，而顶格本身是可传的（拒的是越界，不是上限）", () => {
+    expect(() => resolveMaxFiles(MAX_FILES_CEILING + 1)).toThrow(/缺省已是上限 \d+，这一位只能往小调/u);
+    expect(resolveMaxFiles(MAX_FILES_CEILING), "上限本身是可传的——把它一起拒就成了调不动的死参数").toBe(MAX_FILES_CEILING);
+    expect(resolveMaxFiles(undefined)).toBe(MAX_FILES_DEFAULT);
   });
 });
 

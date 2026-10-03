@@ -1,0 +1,21 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+ [32m✓[39m tests/impact-query.test.ts [2m([22m[2m59 tests[22m[2m)[22m[33m 6757[2mms[22m[39m
+   [32m✓[39m impact_query：改之前问波及谁 [2m(17)[22m
+     [33m[2m✓[22m[39m 图里没有它的定义 ⇒ 不许报「波及 N 个文件」，要明说这一问不适用（外部/全局符号）[33m 1278[2mms[22m[39m
+     [33m[2m✓[22m[39m 「不在图内」要说清是哪一种：后缀不支持 / 路径没有这个文件，是两条不同的下一步[33m 1346[2mms[22m[39m
+     [33m[2m✓[22m[39m 文件在盘上、后缀支持、却在图外（噪声目录/帽/忽略规则）⇒ 明说「波及半径未知」而不是「没有调用点」[33m 483[2mms[22m[39m
+   [32m✓[39m 查询端与注入端同口径（第 308 页：那句承诺从前没人守） [2m(7)[22m
+     [33m[2m✓[22m[39m 自述句落在计数句**之后**：拼进 head 会把最关键的数挤到句子末尾（10-03 真仓读数就是这个形状）[33m 306[2mms[22m[39m
+ [32m✓[39m tests/permissions.test.ts [2m([22m[2m31 tests[22m[2m)[22m[32m 58[2mms[22m[39m
+ [32m✓[39m tests/web-search.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 203[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[32m106 passed[39m[22m[90m (106)[39m
+[2m   Start at [22m 12:56:56
+[2m   Duration [22m 10.57s[2m (tests 73%, transform 18%, import 9%)[22m
+
+[2m    Isolate [22m [33m3 workers spawned[39m[2m · ~276ms startup each (spawn + environment, per file)[22m
+[2m            [22m [2mat least ~552ms faster with [22m[33misolate: false[39m[2m — reuses workers across files instead of one per file[22m
+

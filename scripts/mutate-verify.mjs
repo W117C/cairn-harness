@@ -12870,6 +12870,45 @@ const MUTATIONS = [
     ),
     expectFail: "豁免只到行、不到文件：含配对行的那份文件不许整份进影子池（同文件里的真文案还在面内）",
   },
+  // 第 319 页：四格「模型读到的那句承诺」补真探针。四根锚点每台红在自己那条用例上
+  // （红集合见 outputs/claims-4faces-2026-10-03/red-machines.log）。
+  {
+    id: "web-search-unconfigured-falls-through-to-fetch",
+    src: "src/tools/web-search.ts",
+    test: "tests/web-search.test.ts",
+    desc: "摘掉「没配端点就早退」那一支 ⇒ 工具带着 null 继续往下走（回落厂商／崩在 cfg.endpoint），"
+      + "而旧那条用例只核对 ok:false 与文案——它看不见「一次请求都没发」这件事，"
+      + "所以那句「本工具不做默认厂商，没配即 fail-closed」此前没有行为观测者",
+    apply: (s) => s.replace("if (cfg === null) {", "if (false) {"),
+    expectFail: "没配端点时一次出网都没有：那句「本工具不做默认厂商」由请求计数钉住，不只由文案钉住",
+  },
+  {
+    id: "autonomy-consent-gap-reason-arm-inverted",
+    src: "src/permissions/autonomy.ts",
+    test: "tests/permissions.test.ts",
+    desc: "把 consentGap 那一支的判断翻过来 ⇒ 载荷剩下了却报「ask 规则命中」，"
+      + "操作者看到的是「本来就要问」，而真原因是「你批的范围没盖住这段载荷」——同意范围这格的可审计前提没了",
+    apply: (s) => s.replace("chain.consentGap === true", "chain.consentGap === false"),
+    expectFail: "自主档真出卡，且理由说的是「同意范围」不是「ask 规则命中」",
+  },
+  {
+    id: "cap-way-out-arms-swapped-at-ceiling",
+    src: "src/agent/impact/coverage.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "把「是否顶到上限」的两支对调 ⇒ 缺省调用（缺省＝上限）反而教模型去调大 maxFiles，"
+      + "拧不动的旋钮又被指了一遍（第 51 页那族死参数式文案）；间接经 graphAbsenceNote 的那条用例只看片段，认不出整句",
+    apply: (s) => s.replace("return capAtCeiling(cap)", "return !capAtCeiling(cap)"),
+    expectFail: "出路那支纯函数两侧都钉：未到顶给「调大 maxFiles 后重问」，顶到上限给「调不上去⇒直读或拆仓」",
+  },
+  {
+    id: "resolve-max-files-ceiling-check-dropped",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "摘掉上限那一边的比较 ⇒ 越界值被静默收下、按那个数建图（模型以为自己的取值生效了），"
+      + "而「这一位只能往小调」那句永远不再出现——这一根同时钉住「顶格本身仍可传」（拒的是越界不是上限）",
+    apply: (s) => s.replace("raw > IMPACT_MAX_FILES_CEILING", "raw > Number.MAX_SAFE_INTEGER"),
+    expectFail: "越界那句拒绝文案点名「只能往小调」，而顶格本身是可传的（拒的是越界，不是上限）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

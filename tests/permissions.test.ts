@@ -244,7 +244,11 @@ describe("「总是允许」的同意范围不覆盖载荷", () => {
     expect(d.verdict).toBe("ask");
     if (d.verdict !== "ask") return; // reason 只在 ask/deny 两支上（联合类型要显式收窄）
     expect(d.layer).toBe("L2-ask-rule");
-    expect(d.reason).toContain("「总是允许」不覆盖");
+    // 原来只钉到「不覆盖」四个字：后半句「这条命令的载荷」才是模型/操作者读得懂"为什么还要问我"的那一半，
+    // 把它删掉或换成别的原因，这一格今天不会响——所以钉整句，并钉它真的把规则号带出来了。
+    expect(d.reason).toContain("「总是允许」不覆盖这条命令的载荷");
+    expect(d.reason, "点名规则号是这张卡可审计的前提").toContain("a1");
+    expect(d.reason).not.toContain("ask 规则命中");
   });
 
   it("代价写明：引号里的重定向字符也会多问一次（选安全侧的过问，不选漏问）", () => {

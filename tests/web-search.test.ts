@@ -177,6 +177,24 @@ describe("web_search 传输层（注入 fetchImpl / resolveHost）", () => {
     expect(r.output).toContain("未配置搜索端点");
     expect(r.output).toContain("{query}");
   });
+
+  // 上一条的标题写着「不做默认厂商」，正文却只核对文案——回落一个厂商这个动作本身没人看得见
+  // （ok:false 挡不住"照样发一次请求、再把失败原样报出来"那一支）。这一条钉的是那次请求没发生。
+  it("没配端点时一次出网都没有：那句「本工具不做默认厂商」由请求计数钉住，不只由文案钉住", async () => {
+    await rm(join(dir, ".agent", "config.json"));
+    const seen: string[] = [];
+    const tool = makeWebSearch({
+      resolveHost: publicResolver,
+      fetchImpl: (async (input: unknown) => {
+        seen.push(String(input));
+        return new Response("{}");
+      }) as unknown as typeof fetch,
+    });
+    const r = await tool.run({ query: "x" }, ctx());
+    expect(seen, "任何回落厂商的写法都会在这里留下一条 URL").toEqual([]);
+    expect(r.ok).toBe(false);
+    expect(r.output).toContain("本工具不做默认厂商，没配即 fail-closed");
+  });
 });
 
 describe("网络类对账（与生产同一份谓词；三个都是判据层的事实）", () => {

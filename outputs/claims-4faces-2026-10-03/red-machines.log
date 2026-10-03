@@ -1,0 +1,152 @@
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/web-search.test.ts[2m > [22mweb_search 传输层（注入 fetchImpl / resolveHost）[2m > [22m没配端点（文件被删）⇒ ok:false 如实报缺，fail-closed 不做默认厂商
+[31m[1mTypeError[22m: Cannot read properties of null (reading 'endpoint')[39m
+[36m [2m❯[22m Object.run src/tools/web-search.ts:[2m139:26[22m[39m
+    [90m137|[39m       }
+    [90m138|[39m       const query = raw.trim();
+    [90m139|[39m       const target = cfg.endpoint.replaceAll("{query}", encodeURICompo…
+    [90m   |[39m                          [31m^[39m
+    [90m140|[39m       const guard = stallGuard(STALL_MS, "web_search");
+    [90m141|[39m       try {
+[90m [2m❯[22m tests/web-search.test.ts:[2m175:26[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/web-search.test.ts[2m > [22mweb_search 传输层（注入 fetchImpl / resolveHost）[2m > [22m没配端点时一次出网都没有：那句「本工具不做默认厂商」由请求计数钉住，不只由文案钉住
+[31m[1mTypeError[22m: Cannot read properties of null (reading 'endpoint')[39m
+[36m [2m❯[22m Object.run src/tools/web-search.ts:[2m139:26[22m[39m
+    [90m137|[39m       }
+    [90m138|[39m       const query = raw.trim();
+    [90m139|[39m       const target = cfg.endpoint.replaceAll("{query}", encodeURICompo…
+    [90m   |[39m                          [31m^[39m
+    [90m140|[39m       const guard = stallGuard(STALL_MS, "web_search");
+    [90m141|[39m       try {
+[90m [2m❯[22m tests/web-search.test.ts:[2m193:26[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+✅ M1-web-search-early-return-dropped 红在「没配端点时一次出网都没有：那句「本工具不做默认厂商」由请求计数钉住，不只由文案钉住」（failed=2，1941ms，退 1）
+   其余红：没配端点（文件被删）⇒ ok:false 如实报缺，fail-closed 不做默认厂商
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/permissions.test.ts[2m > [22m「总是允许」的同意范围不覆盖载荷[2m > [22m自主档真出卡，且理由说的是「同意范围」不是「ask 规则命中」
+[31m[1mAssertionError[22m: expected 'ask 规则命中（a1）——匹配按完整 token 为界' to contain '「总是允许」不覆盖这条命令的载荷'[39m
+
+Expected: [32m"「总是允许」不覆盖这条命令的载荷"[39m
+Received: [31m"ask 规则命中（a1）——匹配按完整 token 为界"[39m
+
+[36m [2m❯[22m tests/permissions.test.ts:[2m249:22[22m[39m
+    [90m247|[39m     // 原来只钉到「不覆盖」四个字：后半句「这条命令的载荷」才是模型/操作者读得懂"为什么还要问我"的那一半，
+    [90m248|[39m     // 把它删掉或换成别的原因，这一格今天不会响——所以钉整句，并钉它真的把规则号带出来了。
+    [90m249|[39m     expect(d.reason).toContain("「总是允许」不覆盖这条命令的载荷");
+    [90m   |[39m                      [31m^[39m
+    [90m250|[39m     expect(d.reason, "点名规则号是这张卡可审计的前提").toContain("a1");
+    [90m251|[39m     expect(d.reason).not.toContain("ask 规则命中");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M2-autonomy-consent-gap-arm-inverted 红在「自主档真出卡，且理由说的是「同意范围」不是「ask 规则命中」」（failed=1，4203ms，退 1）
+   其余红：（无）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 3 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/impact-query.test.ts[2m > [22mmaxFiles：说明里那句出路必须真够得着（三个建图出口 + 反向缺省 + 非法值）[2m > [22mfile 出口：maxFiles 同时到得了建图与那句说明（报的是**实发**的帽，不是缺省 400）
+[31m[1mAssertionError[22m: expected 'impact_query: old.js 在候选集第 3 位，而本次图只收…' to contain '调大 maxFiles'[39m
+
+Expected: [32m"调大 maxFiles"[39m
+Received: [31m"impact_query: old.js 在候选集第 3 位，而本次图只收录 1 个（帽按最近改动取）⇒ 被文件数帽挤掉，波及半径未知（**不等于 0**）；要么直读该文件与其引用方（grep/lsp），要么帽 1 已是上限、maxFiles 调不上去 ⇒ 只能直读（grep/lsp）或按目录拆仓"[39m
+
+[36m [2m❯[22m tests/impact-query.test.ts:[2m294:22[22m[39m
+    [90m292|[39m     expect(r.output).toContain("本次图只收录 " + String(CAPPED) + " 个"); // …
+    [90m293|[39m     expect(r.output).toContain("被文件数帽挤掉");
+    [90m294|[39m     expect(r.output).toContain("调大 maxFiles");
+    [90m   |[39m                      [31m^[39m
+    [90m295|[39m     expect(r.output).not.toContain("本次图只收录 " + String(MAX_FILES_DEFAUL…
+    [90m296|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/impact-query.test.ts[2m > [22mmaxFiles：说明里那句出路必须真够得着（三个建图出口 + 反向缺省 + 非法值）[2m > [22m文案里点名的参数必须真的在规格上；顶到上限时那句出路要换成拧得动的
+[31m[1mAssertionError[22m: 帽外这一支必须仍给出「调帽」这条出路: expected 0 to be greater than 0[39m
+[36m [2m❯[22m tests/impact-query.test.ts:[2m344:50[22m[39m
+    [90m342|[39m       const note = graphAbsenceNote("src/x.ts", c, c + 3); // 帽外那一支
+    [90m343|[39m       const named = [...note.matchAll(/调大 ([A-Za-z_][A-Za-z0-9_]*)/gu)…
+    [90m344|[39m       expect(named.length, "帽外这一支必须仍给出「调帽」这条出路").toBeGreaterThan(0);
+    [90m   |[39m                                                  [31m^[39m
+    [90m345|[39m       for (const key of named) expect(declared.has(key), `文案点名 ${Strin…
+    [90m346|[39m     }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/impact-query.test.ts[2m > [22mmaxFiles：说明里那句出路必须真够得着（三个建图出口 + 反向缺省 + 非法值）[2m > [22m出路那支纯函数两侧都钉：未到顶给「调大 maxFiles 后重问」，顶到上限给「调不上去⇒直读或拆仓」
+[31m[1mAssertionError[22m: expected '帽 1 已是上限、maxFiles 调不上去 ⇒ 只能直读（grep/ls…' to contain '调大 maxFiles 后重问'[39m
+
+Expected: [32m"调大 maxFiles 后重问"[39m
+Received: [31m"帽 1 已是上限、maxFiles 调不上去 ⇒ 只能直读（grep/lsp）或按目录拆仓"[39m
+
+[36m [2m❯[22m tests/impact-query.test.ts:[2m364:26[22m[39m
+    [90m362|[39m   // 它是模型缺省调用真正读到的那一句，第 319 页现读时这句没有原句证人。
+    [90m363|[39m   it("出路那支纯函数两侧都钉：未到顶给「调大 maxFiles 后重问」，顶到上限给「调不上去⇒直读或拆仓」", () => {
+    [90m364|[39m     expect(capWayOut(1)).toContain("调大 maxFiles 后重问");
+    [90m   |[39m                          [31m^[39m
+    [90m365|[39m     expect(capWayOut(MAX_FILES_CEILING)).toContain(
+    [90m366|[39m       "帽 " + String(MAX_FILES_CEILING) + " 已是上限、maxFiles 调不上去 ⇒ 只能直读（g…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯[22m[39m
+
+✅ M3-cap-way-out-arms-swapped 红在「出路那支纯函数两侧都钉：未到顶给「调大 maxFiles 后重问」，顶到上限给「调不上去⇒直读或拆仓」」（failed=3，5648ms，退 1）
+   其余红：file 出口：maxFiles 同时到得了建图与那句说明（报的是**实发**的帽，不是缺省 400） / 文案里点名的参数必须真的在规格上；顶到上限时那句出路要换成拧得动的
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/impact-query.test.ts[2m > [22mmaxFiles：说明里那句出路必须真够得着（三个建图出口 + 反向缺省 + 非法值）[2m > [22m非法 maxFiles 点名拒绝（0/负/小数/字符串/超上限），不静默回落成缺省
+[31m[1mAssertionError[22m: promise resolved "{ ok: true, …(1) }" instead of rejecting[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- Error {[39m
+[32m-   "message": "rejected promise",[39m
+[31m+ {[39m
+[31m+   "ok": true,[39m
+[31m+   "output": "[impact] old.js（被跨文件引用的符号 1 个：legacyHelper）：跨文件调用点 2 处，波及 2 个文件[39m
+[31m+   mid.js: legacyHelper(L2)[39m
+[31m+   new.js: legacyHelper(L2)",[39m
+[2m  }[22m
+
+[36m [2m❯[22m tests/impact-query.test.ts:[2m328:102[22m[39m
+    [90m326|[39m     const t = createImpactQueryTool(cacheDir);
+    [90m327|[39m     for (const bad of [0, -3, 2.5, "5", 1e9, Number.NaN]) {
+    [90m328|[39m       await expect(t.run({ file: "old.js", maxFiles: bad }, c), "给了 " …
+    [90m   |[39m                                                                                                      [31m^[39m
+    [90m329|[39m         .rejects.toThrow(/maxFiles/u);
+    [90m330|[39m     }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/impact-query.test.ts[2m > [22mmaxFiles：说明里那句出路必须真够得着（三个建图出口 + 反向缺省 + 非法值）[2m > [22m越界那句拒绝文案点名「只能往小调」，而顶格本身是可传的（拒的是越界，不是上限）
+[31m[1mAssertionError[22m: expected [Function] to throw an error[39m
+
+[32m- Expected:[39m
+null
+
+[31m+ Received:[39m
+undefined
+
+[36m [2m❯[22m tests/impact-query.test.ts:[2m374:58[22m[39m
+    [90m372|[39m   // 所以模型传一个更大的数时，必须被告知这条路走不通——而不是被静默夹到上限（那是假生效）。
+    [90m373|[39m   it("越界那句拒绝文案点名「只能往小调」，而顶格本身是可传的（拒的是越界，不是上限）", () => {
+    [90m374|[39m     expect(() => resolveMaxFiles(MAX_FILES_CEILING + 1)).toThrow(/缺省已是…
+    [90m   |[39m                                                          [31m^[39m
+    [90m375|[39m     expect(resolveMaxFiles(MAX_FILES_CEILING), "上限本身是可传的——把它一起拒就成了调不动的…
+    [90m376|[39m     expect(resolveMaxFiles(undefined)).toBe(MAX_FILES_DEFAULT);
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+✅ M4-ceiling-comparison-widened 红在「越界那句拒绝文案点名「只能往小调」，而顶格本身是可传的（拒的是越界，不是上限）」（failed=2，4951ms，退 1）
+   其余红：非法 maxFiles 点名拒绝（0/负/小数/字符串/超上限），不静默回落成缺省
+残骸校验：四支被测文件零 diff ✅
+RED_MACHINES=OK

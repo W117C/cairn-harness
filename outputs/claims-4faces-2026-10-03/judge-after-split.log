@@ -1,0 +1,15 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+ [32m✓[39m tests/impact-query.test.ts [2m([22m[2m60 tests[22m[2m)[22m[33m 1732[2mms[22m[39m
+ [32m✓[39m tests/permissions.test.ts [2m([22m[2m31 tests[22m[2m)[22m[32m 45[2mms[22m[39m
+ [32m✓[39m tests/web-search.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 134[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[32m107 passed[39m[22m[90m (107)[39m
+[2m   Start at [22m 13:02:22
+[2m   Duration [22m 3.38s[2m (tests 65%, transform 24%, import 11%)[22m
+
+[2m    Isolate [22m [33m3 workers spawned[39m[2m · ~125ms startup each (spawn + environment, per file)[22m
+[2m            [22m [2mat least ~250ms faster with [22m[33misolate: false[39m[2m — reuses workers across files instead of one per file[22m
+
