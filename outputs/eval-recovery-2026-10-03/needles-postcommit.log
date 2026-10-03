@@ -1,0 +1,9 @@
+⚠️ verify-lang-timeout-same-as-npm — src/agent/verify.ts — 针脚命中 2 处（replace 只改第一处，需人工复认改到的是哪一处）："timeoutMs: PROBED_LANG_TIMEOUT_MS }"
+ℹ️ 静态检未覆盖 1 条（apply 非通行写法）：heldout-install-before-change-list
+ℹ️ 逐行式 apply 5 条（多处命中即设计，不核针脚）：prune-verify-card-exempt、prune-attachment-safesegment、sessions-name-charset、sessions-rename-clash、worker-shell-cause-layer-unwired
+ℹ️  松钉指针 10 条（逐字认不出、只靠占位符展开的标题模式过关——拼接标题与带转义引号那两类必然如此）：auto-verify-default-on、worker-impact-spec-not-appended、worker-impact-whitelist-not-appended、hook-matcher-exact-list-degrades-to-substring-regex、read-worker-inherits-wide-hook-mode、evidence-receipt-reports-known-completeness-as-unknown、redaction-stops-recursing-into-containers、worker-git-newline-not-a-separator、g-b-injection-face-ignores-table-form、loose-pointer-counts-literal
+ℹ️  选择子：1384/1387 条能只跑自己那条 killer 用例（宽度与 runner 的 --testNamePattern 一致；其余走整文件跑法）·零命中 1 条（按成因点名：指在 describe 上 0｜标题由变量给出 1｜文件里没这句话 0｜说不清 0；共同后果是 -t 一条也选不中 ⇒ 走整文件跑法）：shape-leading-env-assignment-not-skipped(0)·多命中 2 条（选择子不唯一）：settings-default-on-key-read-by-strict-true(2)、settings-auto-verify-default-reverted(2)
+ℹ️  指针接线（**线索，不进门禁**：静态代理按全表量会误喊，多数判卷从上游入口打进来；它只在「变异存活」那条红后面给方向）：接上 314／疑空 837／判不了 236（疑空＝needle 所在函数名在那条用例体里一次都没出现；判不了的四类：无包围函数 222、抽不出针脚或针脚不在源文件 4、标题不在这份判卷 10、两面任一读不到 0）｜样本 cascade-fail-closed、cascade-max-rungs、frozen-s3-9、atomic-rename-dropped、atomic-direct-write-no-tmp、ask-gate-unattended-fail-closed、ask-gate-unattended-notify、lsp-diag-severity｜出口数可数 1161 条，其中针脚长在「≥2 条 return」的函数里 621 条（存活时先问判卷喂到了第几支，别撤锚点：规则 329）
+针脚体检：1387 条 —— 阻断 0，待复认 1，未覆盖 1，逐行式 5，未入库面 0（被测面 + 判卷两面），钉在飞文本 0，killer 指针失效 0（其中 HEAD 侧 0）
+改法语法体检：1387 条改法全部产出合法源文件 ✅
+[mutate-needles-check] 全部锚点针脚可判定 ✅

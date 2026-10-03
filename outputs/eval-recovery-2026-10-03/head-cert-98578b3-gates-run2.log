@@ -1,0 +1,62 @@
+== pnpm gates ==
+门清单（22 道，清单即事实源）：sandbox:check fork-check gate-check docs-check autonomy-check compaction-check prune-check provider:check memory-check security-check gym-check routing-check model-surface-check prefix-churn-check prompt-surface-check replay-determinism-check no-progress-check cost-per-progress-check head-import-check web-fetch-check mutate-needles-check evidence-typecheck-check
+执行器：pnpm run
+  清单漂移校验：✅ GATES ↔ package.json scripts 一致（无孤儿验收脚本）
+
+  ▶ sandbox:check …  ✅ sandbox:check      exit=0  701ms
+      └ ✅ ⑤ 尾部结论留住（只留头部时这条必红）
+  ▶ fork-check …  ✅ fork-check         exit=0  300ms
+      └ ✅ 越界 eventId 被拒绝（fail loud）
+  ▶ gate-check …  ✅ gate-check         exit=0  2144ms
+      └ ✅ H7 冻结表与判卷区目录双向一致（新增判卷文件不许逃出冻结面；新判卷目录须登记进 src/frozen.ts 的 areas）：{"onDiskNotInTable":[],"inTableNotOnDisk":[],"tableDirsNotSwept":[]}
+  ▶ docs-check …  ✅ docs-check         exit=0  835ms
+      └ UNVERIFIED=3
+  ▶ autonomy-check …  ✅ autonomy-check     exit=0  642ms
+      └ ✅ 收口时判卷文件 sha256 仍与冻结基线逐字一致
+  ▶ compaction-check …  ✅ compaction-check   exit=0  414ms
+      └ [compaction-check] 断言全过，但有 1 项未证（不得宣称全绿）
+  ▶ prune-check …  ✅ prune-check        exit=0  362ms
+      └ ✅ prune-check 全部通过
+  ▶ provider:check …  ✅ provider:check     exit=0  302ms
+      └ [provider:check] 断言全过，但有 1 项未证（不得宣称全绿）
+  ▶ memory-check …  ✅ memory-check       exit=0  518ms
+      └ ✅ memory-check 全部通过（两层布局/remember/注入预算/索引上限/安全/双轨/压缩接缝）
+  ▶ security-check …  ✅ security-check     exit=0  764ms
+      └ [security-check] 全部断言通过 ✅（43 ✅ / 0 ❌）
+  ▶ gym-check …  ✅ gym-check          exit=0  1395ms
+      └ [gym-check] 全部断言通过 ✅（33 ✅ / 0 ❌）
+  ▶ routing-check …  ✅ routing-check      exit=0  534ms
+      └ [routing-check] 全部断言通过 ✅（39 ✅ / 0 ❌）
+  ▶ model-surface-check …  ✅ model-surface-check exit=0  597ms
+      └ ✅ MS6-core 不得被自动砍 — unresolvable=true，core 全在=true（丢 30 把，仍超 51048 字符）
+  ▶ prefix-churn-check …  ✅ prefix-churn-check exit=0  663ms
+      └ ✅ PC9-免费车只在断过头的那一轮放行 — 门槛不可达（10^9）下 8 轮：落盘轮=[2,4,6] 压缩轮=[2,4,6] 有量却推迟的轮=4｜对照臂 门槛=1 时：没压缩却落盘的轮 7、有可剪量的轮 7
+  ▶ prompt-surface-check …  ✅ prompt-surface-check exit=0  386ms
+      └ [prompt-surface] 全部通过 ✅
+  ▶ replay-determinism-check …  ✅ replay-determinism-check exit=0  381ms
+      └ ✅ RD4-每条登记的债都必须真能吸收同形差异（分类器复查） — 登记 2 条债，逐条构造同形差异都能吸收
+  ▶ no-progress-check …  ✅ no-progress-check  exit=0  322ms
+      └ ✅ NP5-语料 sha256 与冻结表逐字一致 — 语料 7 份｜冻结表核对 7 份：不在表上或哈希对不上 0
+  ▶ cost-per-progress-check …  ✅ cost-per-progress-check exit=0  328ms
+      └ ✅ CP4-均值只从可测样本取且点名跳过 — 均值=22979（期望 22979）用了 4 条、跳过 2 条[real-red-verify-stagnation:no-progress-boundary,synth-no-usage:no-usage]｜成功跑 4 条：带 verified 边界 4 条、取不到边界…
+  ▶ head-import-check …  ✅ head-import-check  exit=0  1773ms
+      └ head-import-face: ✅ import 面自洽（或在内存量已逐条带理由）
+  ▶ web-fetch-check …  ✅ web-fetch-check    exit=0  366ms
+      └ ✅ WF7-没有能关掉红线的开关 — 放行开关扫描：命中 0
+  ▶ mutate-needles-check …  ✅ mutate-needles-check exit=0  17171ms
+      └ [mutate-needles-check] 全部锚点针脚可判定 ✅
+  ▶ evidence-typecheck-check …  ✅ evidence-typecheck-check exit=0  3704ms
+      └ ✅ evidence-typecheck：证据面危险码 12 条／帽 12 条（HEAD 口径｜在飞未入库 0 条／0 个文件（只点名，不计我的账）；登记 8 个文件；全量报错 64 条）（2880ms｜解析 64/64 条）
+
+== 断言体检（空断言 / 恒真式 / 暗卷段零断言 / 析取式弱断言）==
+  扫描面：105 个已跟踪且在盘的脚本（未跟踪草稿不判，口径同 tests/assertion-health-scan.test.ts）
+  ✅ 零命中
+
+== 汇总 ==
+  绿 22 / 22，红 0
+  逐道退出码：sandbox:check=0 fork-check=0 gate-check=0 docs-check=0 autonomy-check=0 compaction-check=0 prune-check=0 provider:check=0 memory-check=0 security-check=0 gym-check=0 routing-check=0 model-surface-check=0 prefix-churn-check=0 prompt-surface-check=0 replay-determinism-check=0 no-progress-check=0 cost-per-progress-check=0 head-import-check=0 web-fetch-check=0 mutate-needles-check=0 evidence-typecheck-check=0
+  认证面：判卷四面与 HEAD 逐字一致（工作树 = HEAD） ⇒ 本表即 HEAD 认证
+  ⚠️  未证 8 项（连网/凭据限制未跑到的断言，或绿而零输出的门——**不等于通过**）
+     逐道：gate-check 1｜docs-check 3｜autonomy-check 1｜compaction-check 1｜provider:check 1｜gym-check 1
+     严格模式：DSH_STRICT_UNVERIFIED=1 或 --strict-unverified 可让未证直接判红
+  ⚠️  22 道门退出码全 0，但有 8 项未证——不得宣称「全部通过」
