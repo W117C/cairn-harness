@@ -1,7 +1,7 @@
 // Electron main 装配根（M1-6）：kernel-host 单点装配 + IPC 薄映射。
 // 装载通道：entry.cjs 注册 repo 根 tsx 后 require 本 TS 源——core 链零打包零漂移
 // （esbuild 打包会把 agent-runner 的 ROOT 漂进 <repo>/apps，fixtures 运行时静默落空）。
-import { app, BrowserWindow, ipcMain, webContents } from "electron";
+import { app, BrowserWindow, ipcMain, safeStorage, webContents } from "electron";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -14,6 +14,8 @@ import type { AddProjectInput } from "../../../../src/main/ipc-protocol";
 // 不经 kernel-host 转手（两出口本就是为 IPC 处理函数而生的单例缝，见 agent-runner 各自头注）。
 import { handleClarifySubmit, handlePlanDecide } from "../../../../src/main/agent-runner";
 import type { ClarifyAnswerMap } from "../../../../src/events";
+import { installProviderKeyBackend } from "../../../../src/main/provider-keys";
+import { injectStoredProviderKey } from "../../../../src/main/provider-key-inject";
 import { createKernelHost } from "./kernel-host";
 import { ProjectRegistry } from "../../../../src/main/project-registry";
 import { providerInfo } from "../../../../src/main/settings-handlers";
@@ -205,5 +207,31 @@ const createWindow = () => {
     });
   }
 };
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  // M4-1 BYOK 启动注入接线（存了 key 而无人读的最后一环）：provider key 密文后端由 electron 壳装配
+  // （settings-handlers BYOK 段头注定死「装配由 electron 壳（index.ts）注入」——勘定实测全仓此前零调用点，
+  // 不装配则 providerKeySet 恒 fail-closed 拒存、启动注入恒空转）。safeStorage 走平台原生加密，密文
+  // base64 落 <userData>/provider-keys.json（明文零落盘）；safeStorage 不可用 ⇒ install 返回 false 不注入
+  // 后端 ⇒ 存/取双面保持 fail-closed 拒绝，绝不静默退回明文。
+  // ★ 装配点必须在 ready 之后：Electron 文档钉死 Windows/Linux 的 isEncryptionAvailable() 以 ready 事件
+  // 为前提（Linux 未 ready 恒 false）——顶层装配会让后端在那些平台**永不注入**（BYOK 静默全灭）。
+  // 首场 run 只可能晚于 renderer 加载（whenReady → createWindow），注入先于一切 run 的语义不受影响。
+  installProviderKeyBackend(
+    {
+      isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+      encryptString: (plain) => safeStorage.encryptString(plain),
+      decryptString: (payload) => safeStorage.decryptString(payload),
+    },
+    join(userData, "provider-keys.json"),
+  );
+  // 存过的 key 启动即解密注入各自 provider 的 env（env 优先：该家 env 已在 = 那一家零行为，注入面自带）。
+  // fire-and-forget：注入不阻启动；结果 console 一行留痕（boolean 文案，**不含任何 key 值**——
+  // 明文零落盘三处纪律的日志面），失败也留痕不被 void 吞掉。CAIRN_SMOKE 的 userData 已隔离成
+  // 临时目录（恒无已存 key）⇒ 冒烟路径注入恒空转，零行为。
+  void injectStoredProviderKey().then(
+    (injected) => console.log(`[byok-inject] 启动注入${injected ? "：有已存 key 注入 provider env" : "：无可注入 key（未存或 env 优先）"}`),
+    (error) => console.error("[byok-inject] 启动注入失败（不阻启动）:", error),
+  );
+  createWindow();
+});
 app.on("window-all-closed", () => app.quit());
