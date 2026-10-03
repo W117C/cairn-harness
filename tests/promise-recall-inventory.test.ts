@@ -343,26 +343,24 @@ describe("能力断言的证人面：一句都不曾被点过才算欠（第 311
     });
 
     it("缺第四件：符号在那份判卷里**有**、但不在被点名的那条用例**体内** ⇒ 仍算欠证人（旧口径放得过的形状）", () => {
-      // face **从现读里取**，不在这里抄那句生产文案：本文件的正文就在证人语料里（`tests/**` 全文），
-      // 抄一次就等于自己给自己当证人——第 311 页实测过同一件事（照抄原句会让分母从 29 掉到 26）。
-      // 这一条写第一版时我把那句话原文抄进了 expect(...)，结果那一格当场"有了原句证人"、
-      // 从欠证人清单里消失（⇒ 绑定报"白登记"、这条反例找不到对象）。**这就是我写的这条判据抓到的**，见第 317 页。
+      // 与下面那条「缺第五件」同一形状，取料面同样**不从现读清单里 find**（第 322 页一并改掉）：
+      // 这一格的句子被人补上原句证人时，反例就会失去对象——红的是哨兵、判据本身没坏。
+      // 句子那一半照本文件的惯例用「探针假句……」：抄真句＝自己给自己当证人（第 311/317 页实测）。
       const srcScope = trackedExistingFiles(ROOT, "src");
       const files = srcScope.files.map((p) => ({ path: p, text: readFileSync(join(ROOT, p), "utf8") }));
       const testPaths = trackedExistingFiles(ROOT, "tests").files;
       const corpus = testPaths.map((p) => readFileSync(join(ROOT, p), "utf8"));
-      const f = claimWitnessFindings(scanClaimSites(files), corpus);
-      const realFace = f.unwitnessed.find((k) => k.startsWith("src/agent/sidechat.ts"));
-      expect(realFace, "现读的 sidechat 那一格应当还欠证人，否则这条反例没有对象：" + JSON.stringify(f.unwitnessed))
-        .toBeTruthy();
+      const realFace = "src/agent/sidechat.ts#SIDECHAT_SYSTEM｜探针假句：只测体内引用这一件";
       // 这条反例专挑**旧口径分辨不出**的形状：`promoteToMain` 在那份判卷里出现多次（文件级判据因此放行），
       // 但我点名的这条用例只查工具表，不调它 ⇒ 判据收到**用例体内**才会拒收。
       const judge = testPaths.map((p, i) => [p, corpus[i] ?? ""] as const).find(([p]) => p.endsWith("sidechat-core.test.ts"));
       expect(judge, "取料里该有那份判卷").toBeTruthy();
       expect((judge?.[1] ?? "").split("promoteToMain").length - 1, "这条反例的前提：那份判卷**整文件**确实提到这个符号")
         .toBeGreaterThan(0);
-      const r = bindClaimFaces({ unwitnessed: [realFace!] }, [{
-        face: realFace!, symbol: "promoteToMain", testFile: judge![0],
+      expect(files.some((x) => x.path === "src/agent/sidechat.ts"), "反例那份源文件不在取料面里 ⇒ 先换反例别改判据")
+        .toBe(true);
+      const r = bindClaimFaces({ unwitnessed: [realFace] }, [{
+        face: realFace, symbol: "promoteToMain", testFile: judge![0],
         testCase: "三个写向工具不在 sidechat 工具表里", why: "夹具：挑一条同文件里不相关、听起来却很像的用例",
       }], {
         src: new Map(files.map((x) => [x.path, x.text])),
@@ -383,26 +381,32 @@ describe("能力断言的证人面：一句都不曾被点过才算欠（第 311
     });
 
     it("缺第五件（区分度）：符号在太多份判卷里出现过 ⇒ 直接拒收，哪怕其余四件都成立", () => {
-      // 现读的真反例：`src/tools/write_file.ts#run` 这一格，符号 `run` 在 295 份判卷里被 130 份提到。
-      // 「文件里出现过这个词」在过去两版里都能满足；⑤ 把这条路关掉 ⇒ 通用符号只能等**原句证人**。
+      // 这一格的取料方式在第 321 页换过一次：**不再从现读的欠证人清单里 `find` 一个 `#run`**。
+      // 那一页给 `remember.ts#run` 与 `write_file.ts#run` 补了原句证人 ⇒ 两格离开清单 ⇒ 反例当场失去对象，
+      // 红的是这条哨兵（它当时报「现读里没有 #run 那一格」）、不是绑定通道——认证 7bb95b7 那趟就是这么炸的。
+      // 一句会随补证人漂移的清单不能当判据的输入面（同族教训见规则 398「耦合要在耦合处修尺」）。
+      // ①由合成清单满足；②③④仍拿真材料（符号确在那份源文件里、那条用例真存在且体内用了它），只有⑤该拒。
+      // 句子那一半用本文件惯用的「探针假句……」——`claimBindingDefects` 只按 `｜` 前的路径取源文件，
+      // 抄真句反而会让这一格自己给自己当证人（第 311/317 页实测），还会把顶包候选抬高一条。
       const srcScope = trackedExistingFiles(ROOT, "src");
       const files = srcScope.files.map((p) => ({ path: p, text: readFileSync(join(ROOT, p), "utf8") }));
       const testPaths = trackedExistingFiles(ROOT, "tests").files;
       const corpus = testPaths.map((p) => readFileSync(join(ROOT, p), "utf8"));
-      const f = claimWitnessFindings(scanClaimSites(files), corpus);
-      const genericFace = f.unwitnessed.find((k) => k.includes("#run｜"));
-      expect(genericFace, "现读里没有 #run 那一格 ⇒ 这条反例没有对象（那格可能被别的改动收了）").toBeTruthy();
+      const genericFace = "src/tools/write_file.ts#run｜探针假句：这一格只用来测区分度这一件";
       const m = {
         src: new Map(files.map((x) => [x.path, x.text])),
         tests: new Map(testPaths.map((p, i) => [p, corpus[i] ?? ""])),
       };
+      expect(m.src.get("src/tools/write_file.ts"), "反例那份源文件不在取料面里 ⇒ 面搬家了，先换反例别改判据")
+        .toBeTruthy();
+      // 反例的前提要出声：`run` 这个符号确实满屏都是（否则⑤拦不住任何东西）
       const colliding = corpus.filter((t) => /(^|[^A-Za-z0-9_])run([^A-Za-z0-9_]|$)/u.test(t)).length;
       expect(colliding, "反例的前提就是这个符号满屏都是：" + String(colliding))
         .toBeGreaterThan(BINDING_SYMBOL_MAX_JUDGE_FILES);
-      const r = bindClaimFaces({ unwitnessed: [genericFace!] }, [{
-        face: genericFace!, symbol: "run", testFile: "tests/action-fusion.test.ts",
+      const r = bindClaimFaces({ unwitnessed: [genericFace] }, [{
+        face: genericFace, symbol: "run", testFile: "tests/action-fusion.test.ts",
         testCase: "write and edit preserve separate receipts, run only configured lint, no extra tool calls",
-        why: "夹具：②③④ 都拿现读的真材料满足（那条用例体内确实用到 run），只看区分度这一件能不能拦住",
+        why: "夹具：②③④ 都拿真材料满足（那条用例体内确实用到 run），只看区分度这一件能不能拦住",
       }], m);
       expect(r.bound, "没有区分度的符号能配上的话，绑定通道就是一张随便填的空头支票").toEqual([]);
       expect(r.bad.join("\n"), "要点名到「没有区分度」这一件：" + r.bad.join(" | ")).toContain("没有区分度");

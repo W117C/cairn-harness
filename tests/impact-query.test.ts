@@ -356,6 +356,10 @@ describe("maxFiles：说明里那句出路必须真够得着（三个建图出�
     const desc = impactQuerySpec.parameters.properties.maxFiles.description;
     expect(desc).not.toMatch(/调大/u);
     expect(desc).toContain("只能调小");
+    // 第 322 页补另外两半：这句得先说清**它是什么**，再把数字绑回常量。
+    // 数字写死就是本仓点过名的那一族「文案与开关分家」——帽改了、说明还指着旧数，模型照着传就被拒。
+    expect(desc).toContain("建图文件数帽");
+    expect(desc, "缺省数必须由 MAX_FILES_DEFAULT 投影，不许另抄一份").toContain("缺省＝上限 " + String(MAX_FILES_DEFAULT));
   });
 
   // 上面那条经由 `graphAbsenceNote` 间接喂到顶那一支；这里把两支**句子本身**钉住（纯函数，零建图）——

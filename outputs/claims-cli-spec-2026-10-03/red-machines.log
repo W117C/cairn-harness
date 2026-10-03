@@ -1,0 +1,145 @@
+[m0] 需要一个任务描述：m0 <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[m0] 用法：m0 <任务描述>（-h 看全部选项）
+   M1-cli-goal-log-remedy-dropped 基线：选择子选到 1 条、绿（3717ms）
+[m0] 需要一个任务描述：m0 <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[m0] 用法：m0 <任务描述>（-h 看全部选项）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--goal / --session / --compact 三条真入口在 argv 上[2m > [22m拒 --goal 与 --log 同行时，理由与出路要跟着拒一起给（后半句是给模型的下一步）
+[31m[1mAssertionError[22m: expected '[m0] --log 与 --goal 不能同时给！\n[m0] 用法：m…' to contain '目标只能挂在会话上'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 目标只能挂在会话上[39m
+[31m+ [m0] --log 与 --goal 不能同时给！[39m
+[31m+ [m0] 用法：m0 <任务描述>（-h 看全部选项）[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m355:22[22m[39m
+    [90m353|[39m     const both = runCli(["--provider", "demo", "--goal", "把测试修绿", "--l…
+    [90m354|[39m     expect(both.status).toBe(2);
+    [90m355|[39m     expect(both.out).toContain("目标只能挂在会话上");
+    [90m   |[39m                      [31m^[39m
+    [90m356|[39m     expect(both.out, "拒因必须给出路，否则模型只剩试错").toContain("去掉 --log");
+    [90m357|[39m   }, 15_000); // 一次 spawn：安静态 ~0.7s（第 322 页现量）
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M1-cli-goal-log-remedy-dropped 红在「拒 --goal 与 --log 同行时，理由与出路要跟着拒一起给（后半句是给模型的下一步）」（4019ms，退 1）
+[m0] 需要一个任务描述：m0 <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[m0] 用法：m0 <任务描述>（-h 看全部选项）
+   M2-cli-goal-log-guard-widened 基线：选择子选到 1 条、绿（5268ms）
+[m0] 需要一个任务描述：m0 <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[m0] 用法：m0 <任务描述>（-h 看全部选项）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--goal / --session / --compact 三条真入口在 argv 上[2m > [22m那道 goal/log 闸不许吃掉单边写法：只给 --goal 或只给 --log 都要放行到后面那道闸
+[31m[1mAssertionError[22m: 只给 --goal 也被拦＝这道闸把 goal 这一档整个吃掉了: expected '[m0] --log 与 --goal 不能同时给：目标只能挂在会话上（去…' not to contain '目标只能挂在会话上'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 目标只能挂在会话上[39m
+[31m+ [m0] --log 与 --goal 不能同时给：目标只能挂在会话上（去掉 --log，日志落在 <ws>/.agent/sessions/）[39m
+[31m+ [m0] 用法：m0 <任务描述>（-h 看全部选项）[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m364:66[22m[39m
+    [90m362|[39m     const goalOnly = runCli(["--goal", "把测试修绿", "--serve", "做点事"]);
+    [90m363|[39m     expect(goalOnly.status).toBe(2);
+    [90m364|[39m     expect(goalOnly.out, "只给 --goal 也被拦＝这道闸把 goal 这一档整个吃掉了").not.toCon…
+    [90m   |[39m                                                                  [31m^[39m
+    [90m365|[39m     expect(goalOnly.out).toContain("--serve 是常驻调度模式");
+    [90m366|[39m     const logOnly = runCli(["--log", "x.jsonl", "--serve", "做点事"]);
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M2-cli-goal-log-guard-widened 红在「那道 goal/log 闸不许吃掉单边写法：只给 --goal 或只给 --log 都要放行到后面那道闸」（2454ms，退 1）
+[m0] 需要一个任务描述：m0 <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[m0] 用法：m0 <任务描述>（-h 看全部选项）
+   M3-cli-workspace-dup-guard-dropped 基线：选择子选到 1 条、绿（1929ms）
+[m0] 需要一个任务描述：m0 <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[m0] 用法：m0 <任务描述>（-h 看全部选项）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--goal / --session / --compact 三条真入口在 argv 上[2m > [22m--workspace 与位置参数同时给 ⇒ 拒，拒因说清「二者只能取一」
+[31m[1mAssertionError[22m: expected '[m0] 没有配置任何 provider 的 API key（查过：M0_…' to contain '--workspace 与位置参数重复给工作区，二者只能取一'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- --workspace 与位置参数重复给工作区，二者只能取一[39m
+[31m+ [m0] 没有配置任何 provider 的 API key（查过：M0_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY）。[39m
+[31m+   设一个再跑，例如：export M0_API_KEY=<你的 key>[39m
+[31m+   DeepSeek 走 OpenAI 兼容通道：export OPENAI_BASE_URL=https://api.deepseek.com/v1[39m
+[31m+   只想看演示（预录剧本，不调真模型）：加 --provider demo[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m376:22[22m[39m
+    [90m374|[39m     const both = runCli(["--workspace", "wsA", "wsB", "做点事"]);
+    [90m375|[39m     expect(both.status).toBe(2);
+    [90m376|[39m     expect(both.out).toContain("--workspace 与位置参数重复给工作区，二者只能取一");
+    [90m   |[39m                      [31m^[39m
+    [90m377|[39m   }, 15_000); // 一次 spawn
+    [90m378|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M3-cli-workspace-dup-guard-dropped 红在「--workspace 与位置参数同时给 ⇒ 拒，拒因说清「二者只能取一」」（2825ms，退 1）
+[m0] 需要一个任务描述：m0 <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[m0] 用法：m0 <任务描述>（-h 看全部选项）
+   M4-cli-workspace-dup-guard-widened 基线：选择子选到 1 条、绿（2462ms）
+[m0] 需要一个任务描述：m0 <任务>（或 --message <任务>；只有 --compact / --replay 不用给）
+[m0] 用法：m0 <任务描述>（-h 看全部选项）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/cli-surface.test.ts[2m > [22mm0 CLI：--goal / --session / --compact 三条真入口在 argv 上[2m > [22m工作区的两种合法形状各自放行（无条件拒会把 `m0 <目录> <任务>` 这条主路杀掉）
+[31m[1mAssertionError[22m: 只给两个位置参数也被拒＝主路没了: expected '[m0] --workspace 与位置参数重复给工作区，二者只能取一\n…' not to contain '二者只能取一'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 二者只能取一[39m
+[31m+ [m0] --workspace 与位置参数重复给工作区，二者只能取一[39m
+[31m+ [m0] 用法：m0 <任务描述>（-h 看全部选项）[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/cli-surface.test.ts:[2m384:56[22m[39m
+    [90m382|[39m     expect(flagOnly.out).toContain("--max-turns 需要一个 --goal");
+    [90m383|[39m     const positionalOnly = runCli(["wsA", "做点事", "--max-turns", "0"]);
+    [90m384|[39m     expect(positionalOnly.out, "只给两个位置参数也被拒＝主路没了").not.toContain("二者只能…
+    [90m   |[39m                                                        [31m^[39m
+    [90m385|[39m     expect(positionalOnly.out).toContain("--max-turns 需要一个 --goal");
+    [90m386|[39m   }, 20_000); // 两次 spawn
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+❌ M4-cli-workspace-dup-guard-widened 没红在该当的那条用例上：failed=undefined｜红的是 <任务>` 这条主路杀掉） 537ms / <任务>` 这条主路杀掉）
+   M5-impact-spec-cap-number-hardcoded 基线：选择子选到 1 条、绿（597ms）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/impact-query.test.ts[2m > [22mmaxFiles：说明里那句出路必须真够得着（三个建图出口 + 反向缺省 + 非法值）[2m > [22m规格里那句 maxFiles 说明也不许承诺一条拧不动的出路（规格每轮重送，比文案更贵）
+[31m[1mAssertionError[22m: 缺省数必须由 MAX_FILES_DEFAULT 投影，不许另抄一份: expected '建图文件数帽（缺省＝上限 5007，只能调小）' to contain '缺省＝上限 5000'[39m
+
+Expected: [32m"缺省＝上限 500[7m0[27m"[39m
+Received: [31m"[7m建图文件数帽（[27m缺省＝上限 500[7m7，只能调小）[27m"[39m
+
+[36m [2m❯[22m tests/impact-query.test.ts:[2m362:56[22m[39m
+    [90m360|[39m     // 数字写死就是本仓点过名的那一族「文案与开关分家」——帽改了、说明还指着旧数，模型照着传就被拒。
+    [90m361|[39m     expect(desc).toContain("建图文件数帽");
+    [90m362|[39m     expect(desc, "缺省数必须由 MAX_FILES_DEFAULT 投影，不许另抄一份").toContain("缺省＝上…
+    [90m   |[39m                                                        [31m^[39m
+    [90m363|[39m   });
+    [90m364|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M5-impact-spec-cap-number-hardcoded 红在「规格里那句 maxFiles 说明也不许承诺一条拧不动的出路（规格每轮重送，比文案更贵）」（614ms，退 1）
+残骸校验：两支被测文件零 diff ✅
+RED_MACHINES=BAD(1)

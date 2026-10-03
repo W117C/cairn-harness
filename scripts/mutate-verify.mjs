@@ -12975,6 +12975,54 @@ const MUTATIONS = [
     apply: (s) => s.replace("也不会漏抄未改的行", "省一些字"),
     expectFail: "那句「也不会漏抄未改的行」与它承诺的事一起钉：补丁改一行就只有一行不同",
   },
+  // 第 322 页：CLI 的两道用法闸（goal/log 互斥、workspace 重复）与规格里那句文件数帽。
+  // 一道闸的两半各有各的锚点：拒因（理由＋出路）与「不许吃掉合法形状」是两件事，摘掉任何一件都只红一条用例。
+  {
+    id: "cli-goal-log-reject-loses-remedy",
+    src: "src/cli.ts",
+    test: "tests/cli-surface.test.ts",
+    desc: "摘掉拒因里的理由与出路（只剩「不能同时给」）⇒ 模型不知道两份日志为什么分叉、也不知道该去掉哪一个；"
+      + "「设了但不生效的目标」这一形状就回来了——goal_set 写在会话日志里，而 --log 让 run 落到别处",
+    apply: (s) => s.replace("：目标只能挂在会话上（去掉 --log，日志落在 <ws>/.agent/sessions/）", "！"),
+    expectFail: "拒 --goal 与 --log 同行时，理由与出路要跟着拒一起给（后半句是给模型的下一步）",
+  },
+  {
+    id: "cli-goal-log-guard-widened-to-any-goal",
+    src: "src/cli.ts",
+    test: "tests/cli-surface.test.ts",
+    desc: "条件从「两个都给」放宽成「给了 goal 就拒」⇒ goal 这一档整个不可用，"
+      + "而只钉「同时给要拒」的那条用例照旧绿（它从不喂单边形状）——这条闸的反面没有观测者时，收紧它是无声的",
+    apply: (s) => s.replace("if (flagLog !== null && goal !== null) {", "if (goal !== null) {"),
+    expectFail: "那道 goal/log 闸不许吃掉单边写法：只给 --goal 或只给 --log 都要放行到后面那道闸",
+  },
+  {
+    id: "cli-workspace-dup-guard-dropped",
+    src: "src/cli.ts",
+    test: "tests/cli-surface.test.ts",
+    desc: "摘掉工作区重复闸 ⇒ --workspace 与位置参数各指一处时静默取 flag 那个值："
+      + "模型以为在 A 目录改代码，实际写进了 B（本仓点名的「申报了却没生效」在入口那一侧的形状）",
+    apply: (s) => s.replace("if (flagWorkspace !== null && positional.length === 2) {", "if (false) {"),
+    expectFail: "--workspace 与位置参数同时给 ⇒ 拒，拒因说清「二者只能取一」",
+  },
+  {
+    id: "cli-workspace-dup-guard-eats-legal-shapes",
+    src: "src/cli.ts",
+    test: "tests/cli-surface.test.ts",
+    desc: "条件从「flag 与位置参数都给了」放宽成「只要两个位置参数就拒」⇒ help 首行那条主路 "
+      + "`m0 <目录> <任务>` 直接不能用，而只钉「同时给要拒」那条照旧绿。放行臂读的是「哪道闸先喊」，"
+      + "所以两条合法形状各跑一次真进程，而不是比文案",
+    apply: (s) => s.replace("if (flagWorkspace !== null && positional.length === 2) {", "if (positional.length === 2) {"),
+    expectFail: "工作区的两种合法形状各自放行（无条件拒会把 `m0 <目录> <任务>` 这条主路杀掉）",
+  },
+  {
+    id: "impact-spec-cap-number-not-derived",
+    src: "src/tools/impact-query.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "把规格里的缺省数从常量投影改成写死 ⇒ 帽一改，那句每轮重送的说明就指着旧数（模型按旧数传被拒），"
+      + "而「上限」两个字还留在句子里骗人。判卷比的是「由 MAX_FILES_DEFAULT 投影出来的那一串」，改死就露馅",
+    apply: (s) => s.replace("缺省＝上限 ${String(MAX_FILES_DEFAULT)}", "缺省＝上限 5007"),
+    expectFail: "规格里那句 maxFiles 说明也不许承诺一条拧不动的出路（规格每轮重送，比文案更贵）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

@@ -1,0 +1,12 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+ [32m✓[39m tests/promise-recall-inventory.test.ts [2m([22m[2m33 tests[22m[2m)[22m[33m 1212[2mms[22m[39m
+   [32m✓[39m 能力断言的证人面：一句都不曾被点过才算欠（第 311 页） [2m(14)[22m
+     [33m[2m✓[22m[39m 反向对照：往真仓那份源码里凭空加一句无人判的能力断言 ⇒ 帽当场被顶破（证明上一条不是恒真）[33m 424[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m33 passed[39m[22m[90m (33)[39m
+[2m   Start at [22m 13:59:17
+[2m   Duration [22m 2.10s[2m (tests 60%, import 25%, transform 15%)[22m
+

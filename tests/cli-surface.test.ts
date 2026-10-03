@@ -347,6 +347,44 @@ describe("m0 CLI：--goal / --session / --compact 三条真入口在 argv 上", 
     expect(r.out).toContain("--log 与 --goal 不能同时给");
   }, 15_000); // 真起 CLI 子进程：安静态 2.39s（第 262 页）
 
+  // 上面那条只钉到「不能同时给」，而这句话真正的信息在后半句：为什么不行（目标只能挂在会话上）
+  // 与怎么改（去掉 --log）。理由/出路与「不许吃掉单边写法」各钉一条用例——两根锚点要有唯一指向。
+  it("拒 --goal 与 --log 同行时，理由与出路要跟着拒一起给（后半句是给模型的下一步）", () => {
+    const both = runCli(["--provider", "demo", "--goal", "把测试修绿", "--log", "x.jsonl", "做点事"]);
+    expect(both.status).toBe(2);
+    expect(both.out).toContain("目标只能挂在会话上");
+    expect(both.out, "拒因必须给出路，否则模型只剩试错").toContain("去掉 --log");
+  }, 15_000); // 一次 spawn：安静态 ~0.7s（第 322 页现量）
+
+  it("那道 goal/log 闸不许吃掉单边写法：只给 --goal 或只给 --log 都要放行到后面那道闸", () => {
+    // 放行臂用一个**更靠后的**用法闸当探针（--serve 的互斥表）：goal/log 那道闸在 parseArgs 里排在它前面，
+    // 所以「喊出来的是 serve 那句」就等于「goal/log 这句没拦住」。缺省任务描述那一支会更早喊，别用。
+    const goalOnly = runCli(["--goal", "把测试修绿", "--serve", "做点事"]);
+    expect(goalOnly.status).toBe(2);
+    expect(goalOnly.out, "只给 --goal 也被拦＝这道闸把 goal 这一档整个吃掉了").not.toContain("目标只能挂在会话上");
+    expect(goalOnly.out).toContain("--serve 是常驻调度模式");
+    const logOnly = runCli(["--log", "x.jsonl", "--serve", "做点事"]);
+    expect(logOnly.status).toBe(2);
+    expect(logOnly.out, "只给 --log 同理").not.toContain("目标只能挂在会话上");
+    expect(logOnly.out).toContain("--serve 是常驻调度模式");
+  }, 20_000); // 两次 spawn：放行臂读的是「哪道闸先喊」，所以各自都要一个真进程
+
+  // 工作区的两种合法形状（`--workspace <目录> <任务>` 与 `<目录> <任务>`）都放行，只有同时给才拒。
+  it("--workspace 与位置参数同时给 ⇒ 拒，拒因说清「二者只能取一」", () => {
+    const both = runCli(["--workspace", "wsA", "wsB", "做点事"]);
+    expect(both.status).toBe(2);
+    expect(both.out).toContain("--workspace 与位置参数重复给工作区，二者只能取一");
+  }, 15_000); // 一次 spawn
+
+  it("工作区的两种合法形状各自放行（无条件拒会把 `m0 <目录> <任务>` 这条主路杀掉）", () => {
+    const flagOnly = runCli(["--workspace", "wsA", "做点事", "--max-turns", "0"]);
+    expect(flagOnly.out, "只给 --workspace 也被拒＝flag 形状没了").not.toContain("二者只能取一");
+    expect(flagOnly.out).toContain("--max-turns 需要一个 --goal");
+    const positionalOnly = runCli(["wsA", "做点事", "--max-turns", "0"]);
+    expect(positionalOnly.out, "只给两个位置参数也被拒＝主路没了").not.toContain("二者只能取一");
+    expect(positionalOnly.out).toContain("--max-turns 需要一个 --goal");
+  }, 20_000); // 两次 spawn
+
   it("--compact 没指会话 ⇒ exit 2（压缩一条刚编出来的 id 一定报「会话不存在」）", () => {
     const r = runCli(["--provider", "demo", "--compact"]);
     expect(r.status).toBe(2);
