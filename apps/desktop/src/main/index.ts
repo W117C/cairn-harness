@@ -71,6 +71,21 @@ const host = createKernelHost({
 // M0_SMOKE 的 userData 已隔离到 mkdtemp，不碰真实数据。
 const projectRegistry = new ProjectRegistry(join(userData, "projects.json"));
 
+// M3 收口（重审照亮）：projects.json 存量项目启动 rehydrate。addProject 只在本次进程内
+// host.addWorkspace——重启后 host.workspaces 退回装配单元素，已注册工作区的会话不经
+// listSessions 出现，点该分组发消息即 createSession 白名单 throw（T3「添加工作区」跨重启断点）。
+// 启动即按注册表回灌：addWorkspace 去重幂等（与装配 workspace 重叠安全）；软删除记录
+// list() 默认不返回，不复活。fail-soft：ProjectRegistry 构造不抛（纯字段存储），损坏在
+// 异步 load() 显式抛 ProjectRegistryCorruptError——在此捕获 console.error 不阻启动
+// （projects.json 损坏时 listProjects/addProject 通道仍 fail-visible，rehydrate 缺席只影响旧分组）。
+void (async () => {
+  try {
+    for (const p of await projectRegistry.list()) host.addWorkspace(p.path);
+  } catch (error) {
+    console.error("[m3-rehydrate] 存量项目回灌失败（不阻启动）:", error);
+  }
+})();
+
 // M1 切片：这六个通道接真；其余 invoke 通道 M2+ 逐个接线（channels 表已钉死清单）。
 // M3-3 修复轮：补上 CX-01 三通道——M1 起 AgentApi/channels 表/preload 只有类型桥，wired 表从没这三行
 // ⇒ renderer 调用即 reject「No handler registered」。listProjects/removeProject 返回值直接透传；
