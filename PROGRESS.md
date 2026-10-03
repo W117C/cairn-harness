@@ -11293,3 +11293,27 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 
 7. **账**：#25 还剩 14 格（其中 7 格是通用符号名被区分度帽拒收 ⇒ 只能补判卷或改文案，第 317 页已写）；
    #33（新，typecheck 归因）、#23/#24/#26/#28/#32 照挂。清场判据仍只是判据：本会话累积三棵用完的树（`gate-mutate-318`、`suite-refresh-318` 与认证树已自收），回收等用户点头。
+
+## 2026-10-03 · 第 319 页补 凭证（1/1）：`07641c0` 认证通过——22/22 门绿、干净树 288 文件 3983 条全绿、两端独占；四格新判卷的条数账当场对上
+
+1. **认证读数**（`outputs/claims-4faces-2026-10-03/head-cert-07641c0.log`，`CERT_EXIT=0`）：
+   认证门面=22 道（跑到 22）｜绿 22｜⚠️ 超预算 1（`sandbox:check 1793ms > 1700ms`，与本簇无关）；
+   `Test Files 288 passed (288)｜Tests 3983 passed (3983)｜exit=0`（退出码直接取）；并发判卷＝起前 0／跑完 0；
+   `TREE=07641c0 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔`；认证树已回收。
+
+2. **条数账当场对上**：3983 ＝ 上一笔凭证（`e27d001`，3980）＋ 3，而 3 正好是第 319 页新增的用例数
+   （`web-search` ＋1、`impact-query` ＋2；`permissions` 那一格是**延长既有断言**、不加条数）。
+   这类"增量自己解释自己"的等式是认证之外第二道自查：对不上就说明有人在动同一面，或我的归因写错了。
+
+3. **#20 那条结论又拿到一个数据点**：`mutate-needles-check` 这一趟 18684ms（上一笔认证同一名门是 20520ms），
+   同一个表（1365 条）在两趟里跨了预算线上下 ⇒ 这是负载，不是水位。按 #20 的裁决**不抬帽也不改快尺**；
+   超预算那一维今天只剩 `sandbox:check` 一格。
+
+4. **本笔锚点面**：表 1365 条，`--changed-since=e27d001` 在干净树选中 **85 条**、`全部变异被正确杀死`、214.2s、坏拍 0
+   （`mutate-kill-319.log`）——我这四根都在里面（`web-search-unconfigured-falls-through-to-fetch`／
+   `autonomy-consent-gap-reason-arm-inverted`／`cap-way-out-arms-swapped-at-ceiling`／`resolve-max-files-ceiling-check-dropped`）。
+   85 条这个数也说明派生是对的：判卷文件（`tests/impact-query.test.ts` 等）改动会把它名下所有锚点一起收进名单。
+
+5. **账**：第 320 页在飞（`clampTier`／`supervise 契约`／`provider key` 三格已写判卷与锚点，未提交）；
+   #25 剩 14→（本页结算后重算）；#33（typecheck 归因缺第三档）与 #23/#24/#26/#28/#32 照挂。
+   本会话累积的验证树 `gate-mutate-318`／`suite-refresh-318`/`gate-mutate-319` 已用完，回收仍等用户点头。
