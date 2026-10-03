@@ -135,3 +135,38 @@ describe("投影 v2 补钉（钉死条款里任务书用例未直接覆盖的面
     expect(usageAggregate([ev({ type: "usage" })])).toEqual({ inputTokens: 0, outputTokens: 0, usageCount: 1 });
   });
 });
+
+describe("M3-4 agent 子流过滤（任务书裁定：带 agent_id 不进主流/相位，agent_spawned 保留为父流行）", () => {
+  const workerCall = { type: "tool_call", id: "w1", name: "run_shell", args: { command: "ls" }, agent_id: "a1" };
+  const workerResult = { type: "tool_result", callId: "w1", ok: true, output: "", agent_id: "a1" };
+
+  it("主流无 worker 子流行：带 agent_id 的 tool_call/tool_result 不成行；agent_message/status/result 不成行", () => {
+    const rows = projectStream([
+      ev({ type: "user_message", content: "派活" }),
+      ev(workerCall),
+      ev(workerResult),
+      ev({ type: "agent_message", agent_id: "a1", kind: "progress", text: "进行中" }),
+      ev({ type: "agent_status", agent_id: "a1", status: "running" }),
+      ev({ type: "agent_result", agent_id: "a1", status: "done", summary: "完", artifacts: {}, usage: { inputTokens: 1, outputTokens: 1 }, tool_stats: {} }),
+      ev({ type: "assistant_message", content: "完成" }),
+    ]);
+    expect(rows.map((r) => r.kind)).toEqual(["user", "assistant"]);
+  });
+
+  it("agent_spawned 保留为父流 tool 行（tool=spawn_agent，summary=task 截断 80）", () => {
+    const rows = projectStream([
+      ev({ type: "user_message", content: "派活" }),
+      ev({ type: "agent_spawned", agent_id: "a1", parent_event_id: 1, mode: "read", task: "查".repeat(100) }),
+    ]);
+    expect(rows.map((r) => r.kind)).toEqual(["user", "tool"]);
+    expect(rows[1]).toMatchObject({ kind: "tool", tool: "spawn_agent", summary: "查".repeat(80) });
+  });
+
+  it("相位不被 worker 收口：未决 worker tool_call 不亮 tool；worker result 不吃父 delta 的 thinking 判据；父 tool 不被 worker result 收口", () => {
+    expect(deriveRunPhase([ev(workerCall)], false, false, false)).toBe("idle");
+    // worker 事件晚于父 delta：worker result 先把 seenResults 占上 ⇒ 无过滤时 thinking 判据被吃掉
+    expect(deriveRunPhase([ev({ type: "assistant_delta", callId: "c", text: "x" }), ev(workerCall), ev(workerResult)], false, false, false)).toBe("thinking");
+    expect(deriveRunPhase([ev(workerCall), ev(workerResult), ev({ type: "assistant_delta", callId: "c", text: "x" })], false, false, false)).toBe("thinking");
+    expect(deriveRunPhase([ev({ type: "tool_call", id: "t", name: "x", args: {} }), ev(workerResult)], false, false, false)).toBe("tool");
+  });
+});

@@ -15,6 +15,18 @@ export type StreamRow =
 
 type ToolRow = Extract<StreamRow, { kind: "tool" }>;
 
+// M3-4 过滤裁定（任务书）：带 agent_id 的事件 = worker 子流（tool_call/tool_result/usage/… 的归因
+// 字段，src/events/index.ts M3a §4.4.9），不进主流行、不进相位判据——主线只讲父会话的事
+// （M3 不做 worker 子视图，账本留 M4+）。勘定：agent_spawned 类型上带**必填** agent_id（worker 的
+// id，血缘另靠 parent_event_id），但它是父流事实（「派出了哪个 worker」）⇒ 按类型特判保留，
+// 不按字段缺席判定——按字段判会把 spawn 行也滤掉。agent_status/agent_message/agent_result 属
+// 必带 agent_id 的子流事件族，恒滤。
+function isWorkerSubflowEvent(e: AgentEvent): boolean {
+  if (e.type === "agent_spawned") return false;
+  const id = (e as { agent_id?: unknown }).agent_id;
+  return typeof id === "string";
+}
+
 const summarize = (args: Record<string, unknown>): string => {
   const first = args.command ?? args.path ?? args.file ?? "";
   return typeof first === "string" && first ? first : JSON.stringify(args).slice(0, 80);
@@ -30,6 +42,9 @@ export function projectStream(events: readonly AgentEvent[]): StreamRow[] {
   const toolRows = new Map<string, ToolRow>();
   for (let seq = 0; seq < events.length; seq++) {
     const e = events[seq]!;
+    // M3-4 裁定：worker 子流事件不进主流行（过滤判据见 isWorkerSubflowEvent）；seq 仍按事件
+    // 全序编号，行序与流序一致，不因过滤错位。
+    if (isWorkerSubflowEvent(e)) continue;
     switch (e.type) {
       case "user_message": rows.push({ kind: "user", text: e.content, ts: e.ts, seq }); break;
       case "assistant_message":
@@ -56,6 +71,12 @@ export function projectStream(events: readonly AgentEvent[]): StreamRow[] {
         if (row) { row.pending = false; row.ok = e.ok; }
         break;
       }
+      // M3-4 裁定：agent_spawned 是父流事实，保留为 tool 类行——summary=task 截断（与 summarize
+      // 的 80 字符口径一致），tool 名取 core 的 spawn 工具名。行不带 pending：spawn 本身无收口对
+      // （worker 的终态走 agent_status/agent_result 子流，本就不进主流）。
+      case "agent_spawned":
+        rows.push({ kind: "tool", tool: "spawn_agent", summary: e.task.slice(0, 80), ts: e.ts, seq });
+        break;
       // RunErrorEvent 勘定（src/events/index.ts）：失败原因原文在 message（渲染侧负责转义）。
       case "error": rows.push({ kind: "error", text: e.message, ts: e.ts, seq }); break;
       default: break; // 其余事件类型不成行：clarify/plan 走卡片选择器（pendingClarifyOf/pendingPlanOf）
@@ -90,6 +111,9 @@ export function deriveRunPhase(
   const seenResults = new Set<string>(); // 尾扫途中已见的 result callId（都晚于当前扫描位）
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i]!;
+    // M3-4 裁定：worker 子流不进相位判据——未决 worker tool_call 不亮「tool」，worker
+    // tool_result 也不占用 seenResults（否则它会把「delta 晚于最后 result = thinking」的判据吃掉）。
+    if (isWorkerSubflowEvent(e)) continue;
     if (e.type === "tool_result") { seenResults.add(e.callId); continue; }
     if (e.type === "tool_call" && !seenResults.has(e.id)) return "tool";
     if (e.type === "assistant_delta" && seenResults.size === 0) return "thinking";

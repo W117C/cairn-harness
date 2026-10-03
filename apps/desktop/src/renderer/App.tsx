@@ -7,6 +7,7 @@ import { Composer } from "./components/Composer";
 import { ApprovalCard } from "./components/ApprovalCard";
 import { ClarifyCard } from "./components/ClarifyCard";
 import { PlanCard } from "./components/PlanCard";
+import { ErrorStrip } from "./components/ErrorStrip";
 import { ModelPicker } from "./components/ModelPicker";
 import { TokenPanel } from "./components/TokenPanel";
 
@@ -35,6 +36,9 @@ export function App() {
   // M1 T3 deferred 收口（onOpen 竞态守卫）：openSession 前 snapshot 递增 seq，回调时
   // seq !== latest ⇒ 慢开的旧响应丢弃——快速切换两个会话不再错流（B 的迟到事件盖掉 A 的流）。
   const openSeq = useRef(0);
+  // M3-4 失败反馈（M2 T5 deferred 收口）：统一错误条的单一事实源。run !ok 与 clarify/plan
+  // 提交失败同面提示；× 清除（渲染处），切换会话也清（activate 内——错误贴会话，不串屏）。
+  const [lastError, setLastError] = useState<string | null>(null);
   // M2 终审修复（spec §6.3 打断动作）→ M3-5 升级为真值驱动：置态有两条来源——
   // ① 点击打断时的本地上态（即时反馈：host cancel 的 round-trip 收束前先亮标签）；② run 收束响应的
   // aborted 真值（kernel-host 扩展字段）。收束后 aborted 为假且标记在场 ⇒ 清除——「点了打断但 run
@@ -75,9 +79,11 @@ export function App() {
   }, [refreshSessions]);
 
   // activeId 的 ref/state 同点双写（ref 同步生效零竞态，state 驱动渲染）。
+  // M3-4：切会话顺带清错误条——错误条画在当前会话条下方，跨会话残留会被误读成新会话的失败。
   const activate = useCallback((id: string | null) => {
     activeIdRef.current = id;
     setActiveId(id);
+    setLastError(null);
   }, []);
 
   // 打开会话（守卫版）：seq 先递增，慢响应回来时 seq 已被更新 ⇒ 丢弃（M1 T3 deferred 收口）。
@@ -134,6 +140,14 @@ export function App() {
         if (want) next.add(id); else next.delete(id);
         return next;
       });
+      // M3-4 失败反馈：run !ok ⇒ 统一错误条。用户打断（aborted=true）不算失败——已停态有专门的
+      // 「■ 已停止」标签，不再叠报错（kernel-host：当且仅当本会话 controller 被 abort 才带 aborted）。
+      if (!res.ok && res.aborted !== true) setLastError(res.error ?? "本轮运行失败");
+    }
+    catch (err) {
+      // run 的常规失败走 !ok 响应（handleAgentRun 顶层全捕获）；这里是 IPC 层意外 reject 的兜底
+      // ——同面提示，不静默（否则 void send 的 rejection 无人接）。
+      setLastError(`本轮运行失败：${err instanceof Error ? err.message : String(err)}`);
     }
     finally { runningSet.current.delete(id); setRunning(false); force((n) => n + 1); }
   }, [activeId, activeWorkspace, activate, refreshSessions]);
@@ -202,6 +216,9 @@ export function App() {
           )}
           <TokenPanel inputTokens={usage.inputTokens} outputTokens={usage.outputTokens} />
         </div>
+        {/* M3-4 统一错误条：会话条下方，可关闭（× 清 lastError）；切会话即清（activate 内）。
+            三个来源同面：run !ok（error 文案）、澄清提交失败、方案决议失败。 */}
+        {lastError !== null && <ErrorStrip message={lastError} onDismiss={() => setLastError(null)} />}
         <Stream rows={projectStream(events)} />
         {/* M2-5 三卡同位互斥（ask > clarify > plan，一个三元链）：审批走 onAsk 状态，
             澄清/方案走事件选择器；提交/决议后由事件收口（tool_result / plan_approved）自然消卡。 */}
@@ -214,14 +231,29 @@ export function App() {
                 key={pendingClarify.callId}
                 callId={pendingClarify.callId}
                 questions={pendingClarify.questions}
-                onSubmit={(callId, answers) => { void window.agent.submitClarify(callId, answers); }}
+                onSubmit={(callId, answers) => {
+                  // M3-4：澄清提交失败（返回 false 或 reject）同面提示——fire-and-forget 不再静默
+                  // （M2 T5 deferred 收口）。
+                  void window.agent.submitClarify(callId, answers).then((ok) => {
+                    if (!ok) setLastError("澄清提交失败");
+                  }).catch((err: unknown) => {
+                    setLastError(`澄清提交失败：${err instanceof Error ? err.message : String(err)}`);
+                  });
+                }}
               />
             ) : pendingPlan ? (
               <PlanCard
                 key={pendingPlan.callId}
                 callId={pendingPlan.callId}
                 plan={pendingPlan.plan}
-                onDecide={(approved, callId) => { void window.agent.decidePlan(approved, callId); }}
+                onDecide={(approved, callId) => {
+                  // M3-4：方案决议失败（返回 false 或 reject）同面提示（同上）。
+                  void window.agent.decidePlan(approved, callId).then((ok) => {
+                    if (!ok) setLastError("方案决议失败");
+                  }).catch((err: unknown) => {
+                    setLastError(`方案决议失败：${err instanceof Error ? err.message : String(err)}`);
+                  });
+                }}
               />
             ) : null}
           </div>

@@ -57,3 +57,12 @@ body { margin: 0; font: 13px/1.6 -apple-system, "PingFang SC", sans-serif; color
 .ws-form { display: flex; flex-direction: column; gap: 6px; padding: 4px 7px 6px; }
 .ws-form input { border: 1px solid var(--hairline); border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 11px; color: var(--text-1); background: transparent; outline: 0; }
 .ws-form-actions { display: flex; gap: 6px; align-items: center; }
+/* M3-4 统一错误条：run !ok 与 clarify/plan 提交失败同面提示（会话条下方，可关闭）。
+   颜色全用既有变量：--risk 竖条（手法同 .card-approval 的 border-left）、中性面与文字色，不新加色。 */
+.error-strip {
+  display: flex; align-items: center; gap: 8px; margin: 8px 16px 0;
+  padding: 6px 10px; border: 1px solid var(--hairline); border-left: 3px solid var(--risk);
+  border-radius: 9px; background: var(--surface);
+}
+.error-strip .msg { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--text-1); }
+.error-strip .btn-ghost { flex-shrink: 0; padding: 0 4px; font-size: 14px; line-height: 1; }
