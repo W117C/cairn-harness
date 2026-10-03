@@ -1,0 +1,67 @@
+目标提交：e06b04f（--at=e06b04f）
+worktree add exit=0
+已核：TREE=e06b04fb3ec23c6b9722a15e2177388f03d0c63a｜判卷四面在飞 0 项
+cp -al node_modules exit=0
+依赖核对：该提交声明 10 项，缺 0 项
+  硬链接子仓库依赖 apps/desktop/node_modules ← 主树 exit=0
+  子仓库 fixtures/bench/bench-bugfix-async/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-bugfix-crossfile/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-bugfix-pagination/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-feature-csv/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-feature-export/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-feature-flag/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-feature-memo/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-long-chain-32/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-long-chain-48/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-long-horizon/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-long-horizon-30/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-refactor-callsite/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-refactor-dedupe/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-refactor-rename/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-refactor-signature/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  硬链接子仓库依赖 fixtures/todo-app/node_modules ← 主树 exit=0
+⚠️ 这些靶子仓库的依赖补不齐：fixtures/bench/bench-bugfix-async、fixtures/bench/bench-bugfix-crossfile、fixtures/bench/bench-bugfix-pagination、fixtures/bench/bench-feature-csv、fixtures/bench/bench-feature-export、fixtures/bench/bench-feature-flag、fixtures/bench/bench-feature-memo、fixtures/bench/bench-long-chain-32、fixtures/bench/bench-long-chain-48、fixtures/bench/bench-long-horizon、fixtures/bench/bench-long-horizon-30、fixtures/bench/bench-refactor-callsite、fixtures/bench/bench-refactor-dedupe、fixtures/bench/bench-refactor-rename、fixtures/bench/bench-refactor-signature ⇒ 在其中真跑命令的判卷红**不可归因于代码**
+import 面：3429 条边｜悬空 0（其中存量已豁免 0）
+门表：32 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证门面（22 道，名单取自 e06b04f）==
+  ✅ no-progress-check exit=0 394ms（预算 1100ms）
+  ✅ prune-check exit=0 502ms（预算 1100ms）
+  ✅ fork-check exit=0 524ms（预算 1100ms）
+  ✅ compaction-check exit=0 672ms（预算 1200ms）
+  ✅ docs-check exit=0 1068ms（预算 1300ms）
+  ✅ memory-check exit=0 688ms（预算 1300ms）
+  ✅ head-import-check exit=0 2431ms（预算 2400ms）
+  ✅ autonomy-check exit=0 1186ms（预算 1500ms）
+  ✅ sandbox:check exit=0 7661ms（预算 1700ms）
+  ✅ security-check exit=0 800ms（预算 1500ms）
+  ✅ provider:check exit=0 433ms（预算 1300ms）
+  ✅ routing-check exit=0 831ms（预算 1400ms）
+  ✅ model-surface-check exit=0 750ms（预算 1300ms）
+  ✅ prefix-churn-check exit=0 942ms（预算 1500ms）
+  ✅ prompt-surface-check exit=0 504ms（预算 1400ms）
+  ✅ replay-determinism-check exit=0 505ms（预算 1100ms）
+  ✅ cost-per-progress-check exit=0 406ms（预算 1000ms）
+  ✅ web-fetch-check exit=0 503ms（预算 1200ms）
+  ✅ gym-check exit=0 1802ms（预算 2400ms）
+  ✅ gate-check exit=0 3818ms（预算 5400ms）
+  ✅ evidence-typecheck-check exit=0 5724ms（预算 5300ms）
+  ✅ mutate-needles-check exit=0 21177ms（预算 20000ms）
+  ⚠️ 超预算（只出声，不判红）：head-import-check 2431ms > 名单里的 2400ms
+  ⚠️ 超预算（只出声，不判红）：sandbox:check 7661ms > 名单里的 1700ms
+  ⚠️ 超预算（只出声，不判红）：evidence-typecheck-check 5724ms > 名单里的 5300ms
+  ⚠️ 超预算（只出声，不判红）：mutate-needles-check 21177ms > 名单里的 20000ms
+  认证门面=22 道（跑到 22）｜绿 22 道｜⚠️ 超预算 4
+
+== 认证汇总 ==
+  TREE=e06b04f DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-gate-head-cert-322.lock）
+  Test Files 288 passed (288)｜Tests 3995 passed (3995)｜exit=0（退出码直接取，不接管道）
+  并发判卷=起前 0 套／跑完 0 套（两端独占）
+  本趟墙钟 434.34s（同一进程 hrtime 实测·口径＝起跑→汇总那一行，不含提前退出的那些趟）
+  贴帽读数（缺省＝config 里的 testTimeout=30000ms）：3995 条里 0 条用时 ≥ 有效预算 80%｜无显式预算按缺省算 3730 条｜标题非字面量（it.each／插值／拼接，按缺省算）116 条｜预算没落到 0 条｜无｜离帽余量最近：tests/m3c.test.ts·M3c pipeline 哑 sequencer（零 LLM） 未获 15190ms/25000ms=61%；tests/mutate-verify-gates.test.ts·树闸接线：真跑本脚本——主检出拒跑且一个字节都没改过盘，linked 8641ms/15000ms=58%；tests/evidence-typecheck.test.ts·门那一半：runner 的两个拒绝分支各自要出声 拼错的开关 ⇒ 退 3776ms/15000ms=25%
+  逐条日志：/tmp/dsh-head-cert-e06b04f
+  已回收认证树 .worktrees/gate-head-cert-322（exit=0）
+  常驻残留树=3（/Users/ze/Downloads/deepseek harness/.worktrees/gate-head-cert@b4b4db3、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-322@e06b04f、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-verify@204f017）（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）
+  汇总已同步落盘（不靠 stdout 的尾）：/tmp/dsh-head-cert-e06b04f/summary.txt
+CERT_EXIT=0

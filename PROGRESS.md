@@ -11459,3 +11459,28 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 6. **账**：#25 剩 5 格（`compaction#event`／`glm-session#specs`（走绑定）／`glm-session#note`／`goal-drift#RULES`／`sequencer#resolvePluginRole`）；
    探针还剩那一条已知红＝#23（`agent-runner#body`，被测文件归隔壁）；#24/#26/#28/#32/#33 照挂。
    验证树累积待回收：`gate-mutate-318`／`319`／`320`／`321` 与 `suite-refresh-318`（判据成立，**等用户点头**）。
+
+## 2026-10-03 · 第 322 页补 凭证（1/1）：`e06b04f` 认证通过——22/22 门绿、干净树 288 文件 3995 条全绿、两端独占；这一笔同时把第 321 页那格红修掉了，所以两页共用一份凭证
+
+1. **认证读数**（`outputs/claims-cli-spec-2026-10-03/head-cert-e06b04f.log`，页上数字取自 cert 自己落盘的 `summary.txt`）：
+   认证门面=22 道（跑到 22）｜绿 22 道｜⚠️ 超预算 4；`Test Files 288 passed (288)｜Tests 3995 passed (3995)｜exit=0`；
+   并发判卷＝起前 0 套／跑完 0 套（两端独占）；`TREE=e06b04f DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔`；
+   本趟墙钟 434.34s；认证树 `.worktrees/gate-head-cert-322` 已自收（exit=0）。
+
+2. **这一份凭证覆盖两页**：`7bb95b7`（第 321 页）单独认证不通过（门 22/22 绿、判卷 1 红），修复就在本页 ⇒ 本棵树里 321 与 322 的改动一起被全量判卷验过。
+   条数账：3995 ＝ `7bb95b7` 那趟的 3991 ＋ 4（本页 `cli-surface` 新增四条；`impact-query` 与 `promise-recall-inventory` 那两处是**延长/改写既有断言**，不加条数）。
+   两笔合并成一份凭证不是省事——321 页至今没有凭证页这件事，第 322 页 §3 已经写明是事实而非遗漏。
+   交笔前 docs-check 有 1 条 D-11 红：本页点名的 `head-cert-e06b04f.log` 此刻还没入库（预期读数，随本笔归零），留档 `docs-check-322cred.log`。
+
+3. **本笔锚点面**（`mutate-kill-322.log`）：表 1376 条，干净树按 `--changed-since=05be8f9` 派生 **19 个变更文件 ⇒ 选中 82 条**，
+   `全部变异被正确杀死`、161.0s、判卷 spawn 164 次／82 条（每条 2 拍）、**坏拍 0**、单次中位 0.7s。
+   五根新针脚各自实测：`cli-goal-log-reject-loses-remedy` 4.5s／`cli-goal-log-guard-widened-to-any-goal` 3.7s／
+   `cli-workspace-dup-guard-dropped` 3.7s／`cli-workspace-dup-guard-eats-legal-shapes` 4.0s／`impact-spec-cap-number-not-derived` 1.5s。
+
+4. **#20 的数据点这次是反向的**：同一趟里 `sandbox:check` 7661ms（预算 1700ms，4.5×）、`mutate-needles-check` 21177ms（预算 20000ms），
+   而上一趟同表（1371 条）是 18845ms。表只涨了 5 条却跨线 ⇒ 仍是负载不是水位：**不抬帽、不改快尺**；
+   贴帽读数也印证温度——`m3c` 那格 15190ms/25000ms＝61%，与安静态一致。
+
+5. **账**：#25 剩 5 格（`compaction#event`／`glm-session#specs`／`glm-session#note`／`goal-drift#RULES`／`sequencer#resolvePluginRole`），
+   第 323 页在飞（四格已写判卷与锚点，未提交）；#23 那条探针红照挂（唯一红）；#24/#26/#28/#32/#33 照挂。
+   验证树又加一棵 `.worktrees/gate-mutate-322`（本笔起改用 `.worktrees/` 下的树名，不再往仓根丢），与之前四棵一起等用户点头回收。
