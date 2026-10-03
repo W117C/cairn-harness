@@ -1,0 +1,77 @@
+[mutate-verify] worktree add exit=0：gate-mutate-318 @ e8a8ed5
+[mutate-verify] cp -al node_modules exit=0
+改动面派生：rev=3306fd0 → 变更文件 13 个 ⇒ 选中锚点 66/1361 条
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-318.lock）
+变异验证：66 条
+✅ list-rows-not-flattened — `--list` 不再把字段压成一行 ⇒ desc 里带换行的那条被拆成两行，行数列数都不对，而吃这份取料面的两把静态尺只是**少读一条**（不报错）。第 141 页实测：表里 833 条，尺只读到 832 条。（第 163 页补⑵：这一支的写法从「逐行 console.log」改成「整块 writeSync」，针脚跟着实现走——旧针脚 `].map(oneLine).join(\t));` 当场 0 命中，是门喊的，不是我看出来的。） ｜本机实测 2.0s／2 拍
+✅ head-pointer-dimension-not-summed — 第 6 维算出来了却没喂进求和 ⇒ 门照跑、汇总照印绿（接线没有编译期信号）。针脚取两行：这条锚点自己的 apply 字面量里也写着那两行文字（同一个文件）。 ｜本机实测 0.7s／2 拍
+✅ baseline-red-triage-call-removed — 分诊算出来了但基线那一支不接 ⇒ lib 单测全绿、门照旧把环境红报成阻断（接线没有编译期信号）。针脚取两行避开本条自指。 ｜本机实测 0.7s／2 拍
+✅ runner-attribution-call-removed — runner 不调这把尺（归因那一步摘掉）⇒ lib 的单测全绿而门照旧印 ✅：接线没有编译期信号。针脚取两行——本条 apply 的字面量里也写着那句调用（同一个文件），单行判据会连「被摘掉那次」也读成还在。 ｜本机实测 0.7s／2 拍
+✅ loose-pointer-computed-not-wired — 尺接在门上但喂空表 ⇒ 印出来的永远是「松钉指针 0 条」（规则 230 的接线课：钉调用点连同它的入参，只钉函数名则「算出来不接」存活）。针脚取两行是为绕开自指：单行的话这条 apply 自己就含那句文字，本文件命中 2 处会落进「待复认」 ｜本机实测 0.7s／2 拍
+✅ pointer-block-dimension-not-summed — 新维算出来了却没喂进求和 ⇒ 门照跑、汇总照印绿。针脚取两行是为绕开自指：这条锚点自己的 apply 里也写着那句文字（单行 needle 会在本文件命中 2 处，落进「待复认」那一档） ｜本机实测 0.7s／2 拍
+✅ mutate-lock-not-acquired — 占锁那一步换成「自己拼一个空结果」＝算出锁面却不占 ⇒ 同树两个 mutate-verify 照旧并发抢 .mutbak，而 tool-lock 变成第二份没人调的 lib（规则 230 的「算出来不接」同格）。针脚带真换行：这张表就写在同一个文件里，不带换行的针脚会被表里那段转义文字命中，改了表、实现没动（规则 236） ｜本机实测 1.8s／2 拍
+✅ mutate-lock-read-only-face-locked — 把只读的 `--list` 也接去占锁 ⇒ 两条并发 --list 互相拒跑，而吃 `--list` 的那两把静态尺（anchor-titles／gates）会在别人跑表时集体红——这道门不许把**不改盘**的那一半也关死（收紧必须配反向对照，规则 227）。**第 186 页重铸**：这条从第 163 页起一直存活，原因不是「场上没人占锁」而是「占错了锁」——旧改法写死 `tree: ROOT`，而判卷与变异机都带 `--lock-tag` ⇒ 探针种下的那把锁叫 `mutate-verify-judge-<pid>.lock`，突变体去占的却是 `mutate-verify-<树名>.lock`（没人）⇒ 拿到锁照常跑，行为零差异（等价突变，规则 260 的第二形态：不是判据没有观测者，是**突变挑错了资源**）。现在改法与真实占锁那一支用同一个身份表达式（`lockTagRaw.given ? lockTagRaw.value : ROOT`），于是被判卷那颗活人锁当场拦住 ⇒ exit 2 ≠ 0。`--check-needles` 那一支仍只由位置比较钉（真跑它一次 ≈7.7s，而挂在本文件的锚点几十条、每条两拍 ⇒ 实测把本判卷抬到 19 分钟，故意不换） ｜本机实测 1.7s／2 拍
+✅ mutate-lock-cell-not-printed — 占到没占到锁不进读数 ⇒ 凭证里分不清这次是独占、是没占、还是占锁那一步根本没接（规则 211：半把尺与没尺要各自看得见） ｜本机实测 1.7s／2 拍
+✅ mutate-lock-tag-ignored — 算出标签却不接进锁身份（`tree` 仍然写死 ROOT）⇒ 判卷带标签也没用，它 plant 的那把与子进程读的那把不是同一文件：三条锁判卷全绿，而机器一跑表它们就集体判「基线不绿」（09-28 实测 46 条，规则 230「算出来不接」第六次） ｜本机实测 1.9s／2 拍
+✅ mutate-flush-helper-back-to-async-write — 把「写满为止」那一圈拆掉（`while`→`if`）＝一次 `writeSync` 只交得进内核缓冲那一截，剩下的直接丢：09-28 实测第一版就这么把 920 行的名单砍到几百行，三条吃 `--list` 的判卷一起红。四个出口共用这一圈，所以这一针同时守着名单／残留提示／针脚汇总／本次耗时（规则 214/225） ｜本机实测 1.4s／2 拍
+✅ mutate-flush-one-site-bypasses-helper — 只把 `--list` 这一处绕开 helper（其余三处照旧）⇒ 四个同步出口数变 3，而表照样印得出来、退出码照样 0：这正是「一处的例外长期活着」的形状。计数按行首语句核，绕开＝少一处 ｜本机实测 0.7s／2 拍
+✅ changed-since-list-mode-always-filters — 把「筛过的名单」当默认：没给 `--changed-since` 时「选中 0 条」是**未筛**，一律 filter 会让 `--list` 印 0 行，而吃这条取料的两把静态尺会把整张表读成「表空了」（空面与没取到是两个数，规则 129/196/222） ｜本机实测 3.2s／2 拍
+✅ changed-since-derived-not-unioned-into-targets — 算出派生名单却不并进 targets ⇒ 门照跑人手抄那几条，而输出里那句「选中 N/M」仍然印得出来的样子最骗人（规则 230「算出来不接」第四次命中，这次的接线在参数分流处）。第一版判卷写成 `toContain(那行文字)` ⇒ **存活过一次**：表里那份针脚字面替实现背了书（规则 236 第五次），现已改钉带真换行的跨行正则 ｜本机实测 0.7s／2 拍
+✅ changed-since-face-passed-as-empty — 把改动面传成空表（这里是最容易写错的一种：变量名打错成字面量）⇒ 派生恒 0 条，而派生行照样印得整整齐齐 ⇒ 「今天没东西要验」被读成「今天改动无关」。第一版**也存活过一次**：那条接线判卷是文字钉，被同文件里表自己的针脚字面满足 ⇒ 现改由 `--list --changed-since=<空树>` 那条行为判卷抓（与空树比＝全部文件都变了 ⇒ 选中必须等于整表） ｜本机实测 0.7s／2 拍
+✅ changed-since-bad-rev-exits-zero — git 取不到改动面时退 0（把「取料坏」当成「没有要跑的锚点」）⇒ 一次拼错的 rev 长得像一次全绿；文本尺的三态在这里是 exit 码这一格（规则 222/227） ｜本机实测 1.7s／2 拍
+✅ cost-rollup-not-fed-by-runner — 汇总吃的是写死的空账本而不是 runner 自己那份 runsMs ⇒ 这一格永远印「spawn 0 次／没有分母」，读起来像「本次没跑」而实际跑了几百条。表与实现同文件，所以判卷钉跨行正则而不是 toContain（规则 236） ｜本机实测 0.7s／2 拍
+✅ cost-run-test-uninstrumented — runTest 不再记这一次的时间 ⇒ 每个位置的中位整个消失，#37 的分母退回到「拿文件时长乘次数」那种推（这条咬的是取料源头，上一条咬的是接线出口） ｜本机实测 0.7s／2 拍
+✅ selector-scan-fed-empty-table — 门那一步喂空表而不是整张锚点表 ⇒ 这一格永远 0/0 且永不红。表与实现同文件，所以判卷钉跨行正则而不是 toContain（规则 236） ｜本机实测 0.7s／2 拍
+✅ run-mode-pattern-not-escaped — 标题原文直接当 `-t` 的正则拼进去 ⇒ 真标题里的 ( ) [ ] . * + 变成通配与量词，选中的可能根本不是那条 killer 用例，而单价读数照旧好看 ｜本机实测 0.7s／2 拍
+✅ run-mode-dash-value-back-to-space-form — 选择子换回 `-t <值>` 的空格写法 ⇒ 凡指针以 `-` 开头就被 CLI 当成旗标：实测那条 `--self-test …` 的基线一拍根本没跑（收尾行读不到），却退 1——旧读数只会喊「基线不绿」，把「取料坏」伪装成「判卷坏了」。这一条的 killer 必须挂**接线判卷**：第一版挂的是那条行为证人，而它自己同时跑两种写法 ⇒ 改生产行改不到它 ⇒ 实测「变异存活：测试全绿」（规则 236 又一次命中：判卷自己再算一遍＝对生产零分辨力） ｜本机实测 0.7s／2 拍
+✅ run-mode-selector-check-dropped — 不分模式一律塞 -t ⇒ 那 13 条「选不中／不唯一」的锚点从此只跑不存在的用例，等于整条保护被换成空转（两种跑法共存是刻意的，见第 169 页未证②） ｜本机实测 0.7s／2 拍
+✅ vacuous-run-guard-dropped — 「选中几条」这道闸整个摘掉 ⇒ 这条闸正是 `-t` 上线唯一的安全带：摘掉后一次改名就能让整条锚点永远绿着跑完（vitest 对无匹配的 -t 退 0） ｜本机实测 0.7s／2 拍
+✅ selector-guard-ignores-multi-hit — 闸退回「只有 0 条／没读到才判坏」⇒ 选中 2 条以上的那一拍被读成测过了，可红的未必是本锚点那条 killer 用例：vitest 的 `-t` 匹配整条标题（describe 前缀也算），而体检数的是 it 字面量——两个分母本来就不是一回事 ｜本机实测 0.8s／2 拍
+✅ unverified-list-not-routed-through-exit — 名单不进那条同步写满的出口 ⇒ 几百条 id（几 KB）交给异步队列后就 `process.exit()`，只剩内核缓冲那一截，而汇总行照样印「未证 N 条」——读者以为名单发全了，按残缺的名单补跑（规则 241 实测砍过 920 行的 --list） ｜本机实测 0.7s／2 拍
+✅ unverified-class-read-from-prose — 按 `why` 的措辞认未证的类别 ⇒ 改一句文案就分错类，「等别人落库」被印成「现在就能补跑」，读者白跑一趟还把那条读成已验；分类必须认字段（stopped／unloadable／refused 名单） ｜本机实测 0.7s／2 拍
+✅ restore-byte-check-neutered — 把还原那一格的判据摘掉（换成恒不成立）⇒ 盘上留着半个突变、或被写成别的内容，这条照样算绿；而收尾那句 `git diff HEAD --quiet` 只在**整轮跑完**时看总账，看不出「第 517 条还原时写歪了」这一格。这一拍换成字节比对本来就是拿「更强的证据」换掉「更贵的一拍」，换弱了就得有人喊 ｜本机实测 0.7s／2 拍
+✅ tree-guard-refusal-not-wired — 判据还在、结论不接 ⇒ 拒跑那句话再也不印（五处接线断言都认这个句子，但它们只在真跑那支里跑，机器证人缺位时这一格就是「尺与针脚不同笔」的现行样本）。本条同时回答 #8 的前置疑问：变异机吃不吃 `scripts/*.mjs` 这一面——它杀得动就是吃得下 ｜本机实测 2.0s／2 拍
+✅ verify-per-anchor-cost-not-printed — 逐条结果行不带那一格 ⇒ 整表汇总仍然印「最贵一条」，但「这条锚点值几秒」回到只能推。第 190 页实测按条数装箱：四片各 252 条跑出 323.6／391.1／419.9／443.0s（极差 +37%）⇒ 条数不是重量，而 #28 要的取料面就是这一格（账本 `runsMs` 一直在记，只是没有出口＝规则 245 那一族）。针脚含真换行：表与实现在同一份文件里，单行搜索串会先撞上这张表自己那份引文（规则 247） ｜本机实测 0.7s／2 拍
+✅ prose-scan-inflight-split-swapped — 把「在飞」与「已提交」两半对调 ⇒ 顶包候选的水位帽开始拿别人的在飞文本判我这一笔，而「排除在飞」那套归因话术全部反过来指（第 272 页实测：这一支尺此前在变异表里零条目） ｜本机实测 1.1s／2 拍
+✅ prose-scan-bare-name-length-cap-loosened — 裸名字谓词的长度上限从 12 放宽一格 ⇒ 一句人话开始落进这一族；上限是这条谓词唯一的软处（判卷把 12/13 两侧各钉了一格），放宽一格在真仓里也许仍不红，但那条边界从此没人守 ｜本机实测 1.0s／2 拍
+✅ prose-scan-blank-comments-passthrough — 注释涂白退化成原样返回 ⇒ 注释里的旧文案开始冒充生产者（第 118 页那条『注释不是文案』的判据作废），而`drift` 会因此少报——少报比崩更坏：它看起来是干净 ｜本机实测 1.1s／2 拍
+✅ prose-scan-raw-copies-not-reported — `copies` 交了而 `rawCopies` 交 0 ⇒ 影子排除只留下一个变小了的数，『因登记表副本而免计』那几格再没人点数（把判据关小还不说，规则 101 的反向一侧） ｜本机实测 1.0s／2 拍
+✅ prose-scan-via-collapses-to-direct-only — 本地 helper 那一支的 `via` 被并回『字段直取』⇒ 取料写法分布读数说谎（第 95 页以前只认直取、其余整族静默绕过，这三格就是为那时留的形）；料还收着，但『怎么收到的』已经错了 ｜本机实测 1.0s／2 拍
+✅ prose-scan-unresolved-counter-dead — 括号回走走不通那一格不再累加 ⇒ `unresolvedMatcher` 永远读 0，「这些断言本面看不见」静默消失（从前这条计数器只被断言为 0，两侧都没证人；第 277 页先补三侧合成夹具——收料／走不通／认不出族——再钉这一支） ｜本机实测 1.0s／2 拍
+✅ prose-scan-self-excluded-filter-off — 自排除面不再列出自己的夹具 ⇒ 这把尺重新开始量它自己写的字符串（第 95 页那次假绿的原罪），而报告上『排除了哪些』那一格变成空——排除动作还在生效，只是没人能核对它排了谁 ｜本机实测 23.9s／2 拍
+✅ prose-scan-shadow-cleared-predicate-loosened — 影子免计那一格的谓词从『真少了一份副本』放宽成『副本数不大于原数』⇒ `shadowCleared` 把**什么都没免计**的行也列进来，读者会把这张长名单读成『排除面很有用』，而每一行的差额其实是 0（规则 101 那条『关小判据要能说出差额』的反向） ｜本机实测 23.9s／2 拍
+✅ prose-scan-age-missing-silently-dropped — 读不到 mtime 的那一半从『单列点名』退化成『静默丢弃』⇒ 报告里那句「另有 N 个盘上不存在」永远读 0，邻居删掉的在飞文件与从没存在过的文件同形（分母那一格不动，所以这条必须有自己的证人，不能靠分母那条用例代答） ｜本机实测 1.1s／2 拍
+✅ prose-scan-age-checked-uses-whole-list — 年龄分母从『有 mtime 的那一半』改成『整个在飞清单』⇒ `在飞分诊：5 / 19` 那种读数会把没有 mtime 的文件也算进分母，而 `stale` 是在另一半里挑的——分子分母不同口径，比值从此没有意义（第 113 页立的『只作读数』要读得出它是哪一半） ｜本机实测 1.0s／2 拍
+✅ prose-scan-self-exclusion-filter-dropped — 收料面把「自己的判卷文件」排除掉的那一支过滤器被焊成恒真 ⇒ 本尺开始量自己写进去的字符串（第 105 页实测就是这么多算 3 条顶包候选的），而 `selfExcluded` 那一格照旧非空、看着一切正常。掉在第一条等式：多收一支自己的判卷文件，三者之和就比独立枚举大 1 ｜本机实测 24.4s／2 拍
+✅ prose-scan-test-face-extension-widened — tests 面的扩展名从 `.test.ts` 写成 `.ts` ⇒ 4 支夹具/辅助文件混进收料面（现读 `git ls-files -- tests` 里非 `.test.ts` 的 `.ts` 有 4 个），报告第一行那句「扫 N 个 test 文件」的 N 当场虚高。判卷那侧按**声明的形状**（`.test.ts`）独立枚举，所以这条差值只能由等式抓到——从前它谁也不是 ｜本机实测 24.1s／2 拍
+✅ prose-scan-self-excluded-list-reported-empty — `selfExcluded` 那格被交回空数组（**面没变、只是不再点名**了）⇒ 排除面从『读数』退化成『没有』。两条等式都会红：第一条因为『少报的那一支其实没进分母』、第二条就是量这个的。留这条锚点是为了让第二等式不当恒真证人（第 272 页第 7 项：两侧同真的配对断言买不了锚点） ｜本机实测 24.2s／2 拍
+✅ prose-scan-cap-boundary-ge-not-gt — 把「只准调低」的边界从 `>` 写成 `>=` ⇒ 贴帽那一格当天就红，于是下一次有人为了让它绿而把帽往上调——这条线本来是「不许涨」，写成「不许等于」就变成「必须留余量」，两者对不上账 ｜本机实测 1.0s／2 拍
+✅ prose-scan-cap-total-minus-flight-half — 两半之和写成「已提交减在飞」 ⇒ 总数看着还在，红却不响了：全格子都在飞的那种输入直接归零，帽于是只守已经入库的那一半（第 118 页改的就是这个判据位置） ｜本机实测 1.0s／2 拍
+✅ prose-scan-ceiling-ignores-tree-scope — 帽不按树取、写死 `core-only` 那行 ⇒ 含桌面层那棵树拿窄帽量宽面，同一批格子在两种树上给出不同判决，而报出来的文案还说「树＝含桌面层」（读数说谎比读数缺失更坏） ｜本机实测 1.0s／2 拍
+✅ prose-scan-multi-breach-branch-welded-shut — 把顶包那一支的出声条件焊成 `false` ⇒ CLI 永远不报水位上涨，而判卷剩下的全是合成输入，真仓里涨到几格都没人喊（「两处帽比较收成唯一决策点」这件事只剩散文） ｜本机实测 1.0s／2 拍
+✅ prose-scan-source-files-field-welded-zero — `sourceFiles` 不接 `sources.length` 而焊成 0 —— 这一支真仓那条 `> 50` 也拦得住，所以它不是新力量；留着的理由是合成树上那个**确切 3**：面少收一侧（把 `scripts` 那一档摘掉 ⇒ 3 变 1）在真仓里仍是几百条、在等式上立刻红。阈值挡大事故，等式挡小漂移（规则 241：写满为止） ｜本机实测 1.2s／2 拍
+✅ prose-scan-production-face-includes-tests — 生产侧收料目录多收 `tests` ⇒ 「诊断文案 ↔ 断言收料」这把尺开始把测试自己当生产者，顶包候选会莫名变多而 `testFiles` 那格照旧——只有合成树上的等式（3 不是 4）能立刻发现 ｜本机实测 1.2s／2 拍
+✅ prose-scan-heldback-not-limited-to-registry — 散文栏的排除面不再只看「登记表」那一半（把用例表也算进去）⇒ `proseHeldBack` 从 60 变 61：用例表的字面量是喂给被测函数的输入，不是任何字段的出处（第 98 页把它分成两族的理由就在这个数上） ｜本机实测 1.2s／2 拍
+✅ prose-scan-heldback-counts-every-literal — 「只数 `desc:` 那一栏」被放宽成「这张表里所有字面量」⇒ 散文栏读数从 60 涨到几百，而它本来要表达的只是『这些被挡在门外的是给人读的』——数量级一漂，第 98 页那条『散文不许替生产文案作证』就再也数不清 ｜本机实测 1.2s／2 拍
+✅ prose-scan-stale-list-welded-empty — `inFlightStale` 不接 `splitAged` 的输出而焊成 `[]` ⇒ 真仓干净树（在飞为空）里那条子集断言恒真、完全无声；合成树里 3 天前那一支必须出现在这一格（第 278 页抽了纯函数，这一支钉的是「输出接没接到字段上」） ｜本机实测 1.2s／2 拍
+✅ prose-scan-age-denominator-is-missing-half — 年龄分母从「盘上真有的那一半」改成「盘上没有的那一半」⇒ 打印出来的 `N / M` 里 M 变成 0，于是「有 2 支在飞、2 支算得出年龄」被读成「有 2 支在飞、0 支算得出」——分母写错不等于没跑，但会被读成没跑 ｜本机实测 1.2s／2 拍
+✅ prose-scan-via-counts-bucket-inflated — 三档归类里有一档被凭空 ＋1（从前这一族真的漂过：本地 helper 与字段别名两族写法整族看不见）⇒ 分类不再划分整个收料面，而**总条数**没变、阈值断言全都绿；只有「三档之和＝`needles`」这条守恒会响 ｜本机实测 1.3s／2 拍
+✅ prose-scan-across-list-detached — `across` 清单不再从 rows 里筛（交回空表）⇒ 直方图那一档仍有数、清单是空的：打印「跨插值 N 条」的那句与「它到底是哪几条」从此各说各话（真仓现读 6 条，这条守恒在非零面上才谈得上分辨） ｜本机实测 23.8s／2 拍
+✅ prose-scan-histogram-skips-across-kind — 直方图少记一类（把 `across-interpolation` 从计数里跳过）⇒ 清单还在、汇总数变小，于是「五态各几格」的和不再等于分母，而没人会去加一遍。与上一条正好相反方向：那一支拆清单、这一支拆直方图 ｜本机实测 24.0s／2 拍
+✅ prose-scan-real-repo-scan-back-at-collection-time — 把这一次真仓扫从 `beforeAll` 搬回 describe 体 ⇒ 判卷照旧全绿，差别只在 vitest 打印的 `import` 那一格：「-t 只选中合成面那条」也要付整趟扫（本机实测 9.54s→0.644s）。能挡它的只有形状，秒数本身写成断言就是抖动 ｜本机实测 12.5s／2 拍
+✅ prose-scan-heavy-hook-left-on-default-timeout — 把真仓那支 `beforeAll` 的显式时限摘掉（回到第 287 页落下来的形状）⇒ 钩子改吃 vitest 缺省 10s，而 `scanRepo(真仓)` 冷缓存实测 8.9～9.5s：空闲刚好过、隔壁起一套判卷就炸（`e42b4af` 那趟认证就是这条：`Error: Hook timed out in 10000ms.`）。判卷两条各红一次：声明数 2→1、旧形状 0→1 ｜本机实测 2.9s／2 拍
+✅ wiring-gate-fed-empty-table — 门这一步被喂空表 ⇒ 那一行照印「接上 0／疑空 0／判不了 0」，看起来比不印更干净（第 165 页那条「只印不数＝永远 0」的同款形状）。针脚带真换行是自-hosted 的硬性写法：不带就会先改到这张表自己那一行 ｜本机实测 1.2s／2 拍
+✅ exits-hint-guard-dropped — 存活提示的出口那一半被摘掉（或阈值挪到 0）⇒ 要么对每条锚点都喊、要么永远不喊，而第 262 页那条存活本来能被这句话直接指到成因（规则 329） ｜本机实测 1.1s／2 拍
+✅ exits-census-not-spoken — 普查行把可数面与多出口那两格印成常数 ⇒ 这把尺开了张却没人读得到真数（第 263 页现读 961／533，而 961＋175＋3＝1139 这个同分母等式也就没人核了） ｜本机实测 0.9s／2 拍
+✅ pair-row-exemption-removed-from-producer-pool — 把配对行豁免从生产者池里摘掉 ⇒ 另一把尺的登记表自己替生产文案作证，唯一的真生产者被垫成「2 处副本＝顶包」（第 317 页实测：登记 6 条绑定，顶包候选 10→11，把「只准下调」顶红） ｜本机实测 1.4s／2 拍
+✅ pair-row-face-shape-check-dropped — 形状检查放宽成「叫 face 的字符串都是配对键」⇒ 枚举值那一族被误当登记表。现读反例两处：`scripts/lib/eval-assembly.ts` 的 `face: "off-here"`、`src/tools/diagnose.ts` 的 `picked.push({ face: "lint", command: c })`（后者那一行旁边就是发出去的文案）——实测 M2 那台同时红在这条用例与真仓那条上 ｜本机实测 1.5s／2 拍
+✅ pair-row-face-value-kind-unchecked — 连「值必须是字符串」这一层一起摘掉 ⇒ 工具规格里 `face: {…}` 那行被认成配对行，同一物体里那句 `description`（模型读到的工具说明）就此从副本计数里消失——豁免吃的是真生产者 ｜本机实测 1.6s／2 拍
+✅ pair-row-exemption-marked-only-on-face-key — 豁免只落在 `face` 那一格、不落到整行 ⇒ 同一行里给人读的 `why` 仍替生产文案作证。这一格是第 317 页那笔红②的真凶（`why` 抄了「对照是空的」那句），只挡 face 等于没修 ｜本机实测 1.3s／2 拍
+✅ prose-why-key-joined-doc-prose-keys — 图省事按**键名**放宽（把 why 塞进给人读的散文栏名单）⇒ `src/agent/worker-shell-tools.ts:188` 与 `scripts/lib/eval-retry.ts:70` 两处真会发出去的 why 一起失去观测。这一台只有那半句名单断言看得见（`why` 不在生产者筛选路径上，copies 那一位同答两态 ⇒ 观测者是 `DOC_PROSE_KEYS` 那条 not.toContain） ｜本机实测 1.5s／2 拍
+✅ pair-row-exemption-widened-to-whole-file — 把豁免从「行」放宽到「文件」（含 `face:` 的文件整个进影子池）⇒ 同一份 probe 里真给受众看的句子被一起放走。第 96 页那笔账的形状（「27 比应有的低 1 格」＝豁免开太宽留下的账），所以这条必须有自己的针脚 ｜本机实测 1.6s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 254.4s · 跑了 66/66 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 132 次／66 条（每条次数分布 2×66）· 单次中位 第1次 0.6s／第2次 0.5s· 最贵一条 prose-scan-self-exclusion-filter-dropped 24.4s
+跑法单价：selector 132 拍·中位 0.56s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-318.lock）
