@@ -1,0 +1,82 @@
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/remember.test.ts[2m > [22mremember：操作集与分型（任务3）[2m > [22mDECISIONS 追加式：replace 被拒（修订=新条目「取代」）
+[31m[1mAssertionError[22m: expected 'remember: old_content 与 .agent/DECISI…' to contain '追加式'[39m
+
+Expected: [32m"追加式"[39m
+Received: [31m"remember: old_content 与 .agent/DECISIONS.md 当前内容不精确匹配（replace 报错重试语义）"[39m
+
+[36m [2m❯[22m tests/remember.test.ts:[2m132:34[22m[39m
+    [90m130|[39m   it("DECISIONS 追加式：replace 被拒（修订=新条目「取代」）", async () => {
+    [90m131|[39m     const e = await remember.run({ scope: "project", kind: "decision",…
+    [90m132|[39m     expect((e as Error).message).toContain("追加式");
+    [90m   |[39m                                  [31m^[39m
+    [90m133|[39m   });
+    [90m134|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/remember.test.ts[2m > [22mremember：操作集与分型（任务3）[2m > [22mDECISIONS 的拒因要带出路：光说「追加式」，模型不知道下一次该怎么写
+[31m[1mAssertionError[22m: expected 'remember: old_content 与 .agent/DECISI…' to contain 'DECISIONS 为追加式日志'[39m
+
+Expected: [32m"DECISIONS 为追加式日志"[39m
+Received: [31m"remember: old_content 与 .agent/DECISIONS.md 当前内容不精确匹配（replace 报错重试语义）"[39m
+
+[36m [2m❯[22m tests/remember.test.ts:[2m140:17[22m[39m
+    [90m138|[39m     const e = await remember.run({ scope: "project", kind: "decision",…
+    [90m139|[39m     const msg = (e as Error).message;
+    [90m140|[39m     expect(msg).toContain("DECISIONS 为追加式日志");
+    [90m   |[39m                 [31m^[39m
+    [90m141|[39m     expect(msg, "拒因必须给出出路，不然模型只剩试错").toContain("取代 <旧条引用>");
+    [90m142|[39m     expect(msg).toContain("旧条保留");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+✅ M1-remember-decision-reject-dropped 红在「DECISIONS 的拒因要带出路：光说「追加式」，模型不知道下一次该怎么写」（failed=2，2899ms，退 1）
+   其余红：DECISIONS 追加式：replace 被拒（修订=新条目「取代」）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/impact-query.test.ts[2m > [22mmaxFiles：说明里那句出路必须真够得着（三个建图出口 + 反向缺省 + 非法值）[2m > [22m覆盖面自述的阴性臂也要出声：与帽无关时点名其余成因，且不许留一句「调大」的假出路
+[31m[1mAssertionError[22m: expected '与帽无关：本图收录 10 个文件，全仓候选 10 个 ⇒ 没有文件是被帽切…' to contain '后缀不支持仍然成立'[39m
+
+Expected: [32m"后缀不支持仍然成立"[39m
+Received: [31m"与帽无关：本图收录 10 个文件，全仓候选 10 个 ⇒ 没有文件是被帽切掉的。"[39m
+
+[36m [2m❯[22m tests/impact-query.test.ts:[2m384:18[22m[39m
+    [90m382|[39m     const none = capCauseNote(10, MAX_FILES_CEILING, 10);
+    [90m383|[39m     expect(none).toContain("与帽无关");
+    [90m384|[39m     expect(none).toContain("后缀不支持仍然成立");
+    [90m   |[39m                  [31m^[39m
+    [90m385|[39m     expect(none, "图是全量时还在教人拧帽＝第 51 页那族死参数式文案").not.toContain("调大 maxFi…
+    [90m386|[39m     const partial = capCauseNote(10, MAX_FILES_CEILING, 12);
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M2-cap-cause-note-negative-cause-list-dropped 红在「覆盖面自述的阴性臂也要出声：与帽无关时点名其余成因，且不许留一句「调大」的假出路」（failed=1，3083ms，退 1）
+   其余红：（无）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/write-line-delta.test.ts[2m > [22m写盘摘要报行增减[2m > [22m那句「也不会漏抄未改的行」与它承诺的事一起钉：补丁改一行就只有一行不同
+[31m[1mAssertionError[22m: 整份重写那一支必须把这句理由带到: expected '已写入 a.ts（651 字节，+1 −1 行）｜提示：这是对已有 60 …' to contain '也不会漏抄未改的行'[39m
+
+Expected: [32m"也不会漏抄未改的行"[39m
+Received: [31m"已写入 a.ts（651 字节，+1 −1 行）｜提示：这是对已有 60 行文件的整份重写，实际只动 2 行——同类改动用 edit_file 更省 output，省一些字。｜覆盖前原件已存 .agent/snapshots/1791005884389--run/a.ts"[39m
+
+[36m [2m❯[22m tests/write-line-delta.test.ts:[2m66:37[22m[39m
+    [90m 64|[39m     await writeFile(join(dir, "b.ts"), pad(60), "utf8");
+    [90m 65|[39m     const out = await run(write_file, { path: "a.ts", content: pad(60,…
+    [90m 66|[39m     expect(out, "整份重写那一支必须把这句理由带到").toContain("也不会漏抄未改的行");
+    [90m   |[39m                                     [31m^[39m
+    [90m 67|[39m     const patched = await edit_file.run({ path: "b.ts", old_string: "/…
+    [90m 68|[39m     expect(patched.ok).toBe(true);
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M3-write-file-hint-tail-promise-swapped 红在「那句「也不会漏抄未改的行」与它承诺的事一起钉：补丁改一行就只有一行不同」（failed=1，701ms，退 1）
+   其余红：（无）
+残骸校验：三支被测文件零 diff ✅
+RED_MACHINES=OK
+RED_EXIT=0

@@ -375,6 +375,18 @@ describe("maxFiles：说明里那句出路必须真够得着（三个建图出�
     expect(resolveMaxFiles(MAX_FILES_CEILING), "上限本身是可传的——把它一起拒就成了调不动的死参数").toBe(MAX_FILES_CEILING);
     expect(resolveMaxFiles(undefined)).toBe(MAX_FILES_DEFAULT);
   });
+
+  // 拒因的另一半：`capCauseNote` 的**阴性臂**（图没被帽切过）此前只被间接判过。
+  // 这一支要说清"还有别的原因会让文件不进图"，否则模型会把"没在图里"读成"仓库里没有"（本仓政策的后半句）。
+  it("覆盖面自述的阴性臂也要出声：与帽无关时点名其余成因，且不许留一句「调大」的假出路", () => {
+    const none = capCauseNote(10, MAX_FILES_CEILING, 10);
+    expect(none).toContain("与帽无关");
+    expect(none).toContain("后缀不支持仍然成立");
+    expect(none, "图是全量时还在教人拧帽＝第 51 页那族死参数式文案").not.toContain("调大 maxFiles");
+    const partial = capCauseNote(10, MAX_FILES_CEILING, 12);
+    expect(partial).toContain("另有 2 个候选没进这张图");
+    expect(partial).not.toContain("后缀不支持仍然成立");
+  });
 });
 
 async function fetchDirListing(): Promise<string[]> {

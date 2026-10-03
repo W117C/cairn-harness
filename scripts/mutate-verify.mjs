@@ -12947,6 +12947,34 @@ const MUTATIONS = [
     ),
     expectFail: "反向：key 在场就放行——只有全空/纯空白算缺（一律拒会把这条闸变成装饰）",
   },
+  // 第 321 页：三格"半句没人钉"的模型可见文案（remember 的拒因出路／capCauseNote 的阴性臂／write_file 提示尾句的理由）。
+  {
+    id: "remember-decision-reject-loses-remedy",
+    src: "src/tools/remember.ts",
+    test: "tests/remember.test.ts",
+    desc: "摘掉「DECISIONS 不支持 replace」那一支 ⇒ 模型以为能就地改写一条决策，"
+      + "而这套记忆的唯一修订路径是新条目开头写「取代 <旧条引用>」（旧条保留、可 grep）——拒因里那半句出路是它唯一的指引",
+    apply: (s) => s.replace('if (k === "decision" && op === "replace") {', "if (false) {"),
+    expectFail: "DECISIONS 的拒因要带出路：光说「追加式」，模型不知道下一次该怎么写",
+  },
+  {
+    id: "cap-cause-note-negative-arm-drops-other-causes",
+    src: "src/agent/impact/coverage.ts",
+    test: "tests/impact-query.test.ts",
+    desc: "阴性臂只说「与帽无关」不说其余成因 ⇒ 模型把「没在图里」读成「仓库里没有」，"
+      + "而真实成因可能是后缀不支持/被忽略规则挡掉（本仓政策的后半句：图里没有 ≠ 仓库里没有）",
+    apply: (s) => s.replace("（被忽略规则/噪声目录排除、后缀不支持仍然成立）", "。"),
+    expectFail: "覆盖面自述的阴性臂也要出声：与帽无关时点名其余成因，且不许留一句「调大」的假出路",
+  },
+  {
+    id: "write-file-hint-drops-unchanged-line-promise",
+    src: "src/tools/write_file.ts",
+    test: "tests/write-line-delta.test.ts",
+    desc: "把提示尾句「也不会漏抄未改的行」删掉 ⇒ 建议只剩「更省 output」这一半理由，"
+      + "而模型真正该权衡的是**正确性**（整份重抄会漏行、补丁不会）；同一台机器还钉住 edit_file 改一行时其余行逐字节不动",
+    apply: (s) => s.replace("也不会漏抄未改的行", "省一些字"),
+    expectFail: "那句「也不会漏抄未改的行」与它承诺的事一起钉：补丁改一行就只有一行不同",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

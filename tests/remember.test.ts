@@ -131,6 +131,16 @@ describe("remember：操作集与分型（任务3）", () => {
     const e = await remember.run({ scope: "project", kind: "decision", op: "replace", old_content: "x", content: "y" }, ctx()).catch((e: unknown) => e);
     expect((e as Error).message).toContain("追加式");
   });
+
+  // 上面那条只钉到「追加式」三个字，而表里已有一根锚点指着它（第 320 页规则 402：一根锚点一个唯一指向），
+  // 所以这里另开一条，钉**拒因里的出路**——模型只有知道"修订=新条目写取代、旧条保留"才知道下一步该怎么写。
+  it("DECISIONS 的拒因要带出路：光说「追加式」，模型不知道下一次该怎么写", async () => {
+    const e = await remember.run({ scope: "project", kind: "decision", op: "replace", old_content: "x", content: "y" }, ctx()).catch((e: unknown) => e);
+    const msg = (e as Error).message;
+    expect(msg).toContain("DECISIONS 为追加式日志");
+    expect(msg, "拒因必须给出出路，不然模型只剩试错").toContain("取代 <旧条引用>");
+    expect(msg).toContain("旧条保留");
+  });
 });
 
 describe("remember：生命周期与删除权（任务7）", () => {

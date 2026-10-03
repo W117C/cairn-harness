@@ -1,0 +1,13 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+ [32m✓[39m tests/impact-query.test.ts [2m([22m[2m61 tests[22m[2m)[22m[33m 1364[2mms[22m[39m
+ [32m✓[39m tests/remember.test.ts [2m([22m[2m24 tests[22m[2m)[22m[32m 70[2mms[22m[39m
+ [32m✓[39m tests/write-line-delta.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 41[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[32m92 passed[39m[22m[90m (92)[39m
+[2m   Start at [22m 13:35:19
+[2m   Duration [22m 3.14s[2m (tests 52%, transform 31%, import 17%)[22m
+
+JUDGE_EXIT=0

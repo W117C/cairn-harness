@@ -1,6 +1,6 @@
 // 写盘摘要里的行增减（能力 2「改动范围最小 / 补丁级 diff」的可度量面）。
 // 旧口径只报字节数与处数：整份重写丢掉 20 行，输出上看不出来——要等测试炸。
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -54,6 +54,23 @@ describe("写盘摘要报行增减", () => {
     const out = await run(write_file, { path: "small.ts", content: pad(12, 3) });
     expect(out).toContain("+1 −1 行");
     expect(out).not.toContain("提示");
+  });
+
+  // 提示的尾半句「也不会漏抄未改的行」是这句建议的全部理由，此前只钉到"提示"两字为止（第 321 页现读）。
+  // 两半各钉一次：① 这句承诺真的出现在整份重写那一支；② 同一份 60 行文件交给 edit_file 改一行，其余行逐字节不动。
+  // 只钉①＝文案换个说法就静默；只钉②＝产品话说了但没做也看不见。
+  it("那句「也不会漏抄未改的行」与它承诺的事一起钉：补丁改一行就只有一行不同", async () => {
+    await writeFile(join(dir, "a.ts"), pad(60), "utf8");
+    await writeFile(join(dir, "b.ts"), pad(60), "utf8");
+    const out = await run(write_file, { path: "a.ts", content: pad(60, 9) });
+    expect(out, "整份重写那一支必须把这句理由带到").toContain("也不会漏抄未改的行");
+    const patched = await edit_file.run({ path: "b.ts", old_string: "// line 9", new_string: "// line 9 touched" }, ctx());
+    expect(patched.ok).toBe(true);
+    const before = pad(60).split("\n");
+    const after = (await readFile(join(dir, "b.ts"), "utf8")).split("\n");
+    expect(after.length, "补丁不该顺手改行数").toBe(before.length);
+    const changed = after.filter((l, i) => l !== before[i]).length;
+    expect(changed, "未改的行被漏抄/顺手改写都会在这里露出来").toBe(1);
   });
 
   it("既有文件大到不统计时，退回旧口径而不是假装是新建（不拿「不知道」当「新建」）", async () => {
