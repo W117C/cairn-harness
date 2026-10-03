@@ -1,0 +1,30 @@
+=== 2ce4a0c 里 scripts/mutate-verify.mjs 的 numstat（我的自觉改动是 +48/−0）:
+2ce4a0c
+
+56	8	scripts/mutate-verify.mjs
+
+=== 各份 mutate-verify.mjs 里含 CAIRN 的行数（同一把尺、三个 sha＋工作树）:
+dfaa2d1 = 0
+2ce4a0c = 6
+f1ee0cf = 0
+工作树（隔壁在飞的整仓改名，未提交） = 6
+
+=== 逐字节证明：f1ee0cf 那份 ＝ dfaa2d1 那份 ＋ 我的 48 行（0 删）:
+只增 = 48
+只删 = 0
+node --check f1ee0cf 那份 = OK
+
+=== HEAD 侧指针失效：2ce4a0c 与 f1ee0cf 两趟汇总行（同把尺、同一份工作树表）:
+针脚体检：1421 条 —— 阻断 7，待复认 1，未覆盖 1，逐行式 5，未入库面 0（被测面 + 判卷两面），钉在飞文本 1，killer 指针失效 0（其中 HEAD 侧 3）
+针脚体检：1421 条 —— 阻断 7，待复认 1，未覆盖 1，逐行式 5，未入库面 0（被测面 + 判卷两面），钉在飞文本 1，killer 指针失效 0（其中 HEAD 侧 3）
+
+=== 那 3 条 HEAD 侧读数的取料口径（表取盘上 entries、判卷取 HEAD）⇒ 隔壁改名半入库时必报；f1ee0cf 那份表里已无 CAIRN:
+f1ee0cf 表里 CAIRN 行数 = 0
+
+=== 隔壁在飞面（我没动它们）:
+15	0	apps/desktop/src/main/index.ts
+0	0	bin/{m0.mjs => cairn.mjs}
+8	8	scripts/mutate-verify.mjs
+R  bin/m0.mjs -> bin/cairn.mjs
+ M src/cli.ts
+ M src/providers/glm.ts

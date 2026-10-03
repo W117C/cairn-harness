@@ -1,0 +1,2 @@
+[zcode f1ee0cf] 第 334 页补 更正：把隔壁整仓改名（M0_→CAIRN_）的 8 行从 `2ce4a0c` 里退回去——pathspec 提交取的是「工作树整份」，而共享 index 里那 8 行早就是隔壁的版本，我的归属检查比的是 worktree-vs-index，看不见
+ 1 file changed, 8 insertions(+), 8 deletions(-)

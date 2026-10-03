@@ -1,0 +1,7 @@
+第 334 页补：把隔壁整仓改名（`M0_`→`CAIRN_`）卷进 HEAD 的 8 行逐字节退回去，并记下这件事的取料口径与一条 zsh 假读数
+
+抓到它的只有条数读数：提交前我量的自觉改动 `scripts/mutate-verify.mjs +48/−0` 是真的，但它比的是 worktree-vs-**index**，而那 8 行早已在他们的 index 版本里；落库后 `git show --numstat` 报 `56/8` ⇒ 3 枚别人锚点的 desc/apply/expectFail 被换成 `CAIRN_*`。代价不是"多了几行"而是 HEAD 自相矛盾：那 3 枚的针脚与标题写 `CAIRN_*`，HEAD 的 `src/providers/glm.ts`、`src/main/provider-key-inject.ts` 与三份判卷标题仍是 `M0_*` ⇒ 干净 HEAD 树里它们是空操作。同一把尺三个 sha 的现读：含 `CAIRN` 行数 `dfaa2d1`=0／`2ce4a0c`=6／`f1ee0cf`=0，工作树仍 6（隔壁在飞面一字未动，`R bin/m0.mjs -> bin/cairn.mjs` 与 ` M src/cli.ts`、` M src/providers/glm.ts` 都在）。
+
+退回方式也换：不走 `git commit -- <path>`（`--only` 取工作树整份，正是它带进来的），改走「临时 index ＝ `read-tree HEAD` ＋ 只 `update-index --cacheinfo` 那一份 blob」；证明是 `f1ee0cf` 那份 ＝ `dfaa2d1` 那份 ＋ 我的 48 行锚点（`diff` 只增 48／只删 0，`node --check` OK）。
+
+另记两条读数事故与一个新任务：①第一版证据脚本写 `git show "$r:scripts/…"`，zsh 把 `${r:…}` 当子串替换 ⇒ `bad substitution` ＋ `grep -c` 收到空输入 ⇒ 三个 sha 全读成 0，那一版我准备直接写进页里（改 `"${r}:…"` 后真值才出来）——计数探针的每个 0 都要问「这一格可能不是 0 吗」，取料命令自己必须先退 0；②开 **#42**：`killer 指针失效（其中 HEAD 侧 N）` 这一维取料混了两边（指针清单取盘上 `entries`、标题取 `readAtHead`），所以隔壁半入库改名期间它报在任何人的树上——本笔提交前与退回后两趟读数一字不差都是 `HEAD 侧 3`，而 `f1ee0cf` 那份表里 `CAIRN` 已实测 0；③#24 由这次顺手量准：`ledgerPages` 段头只认 `###` ⇒ 第 308～334 页共 27 页、1969 行并成「第 307 页」一个段，D-9 退化成并集对并集（假绿方向，不只是页号记错）。#33 结案（第三档这已是第三次真实用到），凭证与 #34／#32／#40／#41 一起等 #39 前置。
