@@ -1,8 +1,11 @@
 // M0_SMOKE 一键冒烟（M2-8）：把 M1-6 固化的命令行咒语收进脚本——
 //   M0_SMOKE=1 M0_DESKTOP_WORKSPACE=$(mktemp -d) pnpm --filter m0-desktop exec electron .
 // 判据单点在 apps/desktop/src/main/index.ts 的退出码编码里（PASS exit 0 / FAIL exit 1，
-// 30s watchdog 强制自退）；本脚本只做三件事：临时工作区生成、环境注入、退出码透传，
-// 不复制判据（判据抄第二份就会漂）。
+// 30s watchdog 强制自退）；本脚本只做四件事：临时工作区生成、环境注入、外圈超时兜底、
+// 退出码透传，不复制判据（判据抄第二份就会漂）。
+// 外圈超时（M3-7，M2 终审 triage 收口）：watchdog 要到 main load 之后才武装，load 前挂死
+// 它管不着——没有外圈超时，pnpm smoke 会无限阻塞。45s = 30s 自退窗口 + 15s 余量；
+// 超时 Node 发 killSignal（SIGTERM）并置 error.code="ETIMEDOUT"，下方按 FAIL 处理。
 import { spawnSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -23,11 +26,25 @@ const result = spawnSync("pnpm", ["--filter", "m0-desktop", "exec", "electron", 
   cwd: repoRoot,
   stdio: "inherit",
   env: { ...process.env, M0_SMOKE: "1", M0_DESKTOP_WORKSPACE: workspace },
+  timeout: 45_000,
 });
 
 if (result.error) {
-  console.error("[m0-smoke] spawn 失败：", result.error.message);
+  // 超时形态（error.code === "ETIMEDOUT"，signal 同步置为 killSignal）与 spawn 本身失败
+  // （ENOENT 等）分开报：诊断行要点名"load 前挂死"这个形态，别让调用方去猜 45s 是谁定的。
+  if (result.error.code === "ETIMEDOUT") {
+    console.error(
+      "[m0-smoke] 超时：45s 内 electron 未自退（load 前挂死形态，M2 终审 triage 收口），" +
+        "killSignal 已发，按 FAIL 处理；冒烟工作区留存待查：",
+      workspace,
+    );
+  } else {
+    console.error("[m0-smoke] spawn 失败：", result.error.message);
+  }
   process.exit(1);
 }
-// 透传退出码；被信号打死时 status 为 null，按 FAIL 处理（exit 1）。
+// 透传退出码；被信号打死时 status 为 null，按 FAIL 处理（exit 1），信号名透出留诊断。
+if (result.signal) {
+  console.error("[m0-smoke] 子进程被信号终止：", result.signal, "——按 FAIL 处理。");
+}
 process.exit(result.status ?? 1);
