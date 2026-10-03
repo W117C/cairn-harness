@@ -40,11 +40,12 @@ export function App() {
   // M3-4 失败反馈（M2 T5 deferred 收口）→ M4-4 会话键控（M3 T4 deferred 收口）：错误条单一
   // 事实源从全局单值改为 Map<sessionId, message>——错误贴会话，切会话各看各的（activate 不再
   // 整条清除），点 × 只清当前会话（渲染处）。无活跃会话（新任务 createSession 拒绝）落 ""
-  // 哨兵键，仅在主区未选会话时显示。写入面收在稳定回调：键取 activeIdRef 当前值（ref 同步
-  // 生效，send/三卡回调里不读过期 state）。
+  // 哨兵键，仅在主区未选会话时显示。写入面收在稳定回调，键二态：缺省取 activeIdRef 当前值
+  // （ref 同步生效，三卡回调不读过期 state——卡片就画在当前视图）；send 显式传所属 sid
+  // （M4-4 修复 round 1：run 在途切会话，错误跟会话走，不跟收束时刻的活跃会话）。
   const [sessionErrors, setSessionErrors] = useState<ReadonlyMap<string, string>>(new Map());
-  const setLastError = useCallback((message: string) => {
-    setSessionErrors((prev) => new Map(prev).set(activeIdRef.current ?? "", message));
+  const setLastError = useCallback((message: string, sessionId?: string) => {
+    setSessionErrors((prev) => new Map(prev).set(sessionId ?? activeIdRef.current ?? "", message));
   }, []);
   const clearLastError = useCallback(() => {
     setSessionErrors((prev) => {
@@ -61,6 +62,10 @@ export function App() {
   // **无 "plan" 档**（plan 门语义由 planRequiredByDefault/plan 门独立承载），RunRequest.mode
   // 即 PermissionMode，如实透传即可。
   const [mode, setMode] = useState<PermissionMode>("default");
+  // M4-4 修复（审查 round 1，Minor 顺收）：isNew 路径 createSession 往返期间运行态尚无真值
+  // （sid 未落地、runningSet 无键可挂）——pendingSend 顶住这段窗口，新任务 composer 禁用防双发；
+  // 仅在主区未选会话面生效（切到既有会话不受在途新建影响），finally 释放。
+  const [pendingSend, setPendingSend] = useState(false);
   // M2 终审修复（spec §6.3 打断动作）→ M3-5 升级为真值驱动：置态有两条来源——
   // ① 点击打断时的本地上态（即时反馈：host cancel 的 round-trip 收束前先亮标签）；② run 收束响应的
   // aborted 真值（kernel-host 扩展字段）。收束后 aborted 为假且标记在场 ⇒ 清除——「点了打断但 run
@@ -163,6 +168,7 @@ export function App() {
   const send = useCallback(async (text: string) => {
     // M3-3：新任务落当前选中的工作区（未切换＝缺省参 → host activeWorkspace）。
     const isNew = activeId === null;
+    if (isNew) setPendingSend(true); // 新建往返窗口即禁新任务 composer（防双发；finally 释放）
     let id: string | undefined;
     try {
       // M4-4（M3 修复波照亮项收口）：createSession await 挪进 try——工作区白名单拒绝等
@@ -202,18 +208,19 @@ export function App() {
         if (want) next.add(sid); else next.delete(sid);
         return next;
       });
-      // M3-4 失败反馈：run !ok ⇒ 统一错误条（M4-4 起按会话键控）。用户打断（aborted=true）不算
-      // 失败——已停态有专门的「■ 已停止」标签，不再叠报错（kernel-host：当且仅当本会话
-      // controller 被 abort 才带 aborted）。
-      if (!res.ok && res.aborted !== true) setLastError(res.error ?? "本轮运行失败");
+      // M3-4 失败反馈：run !ok ⇒ 统一错误条。用户打断（aborted=true）不算失败——已停态有专门
+      // 的「■ 已停止」标签，不再叠报错（kernel-host：当且仅当本会话 controller 被 abort 才带
+      // aborted）。M4-4 修复（审查 round 1）：显式键挂所属 sid——run 在途切会话不串。
+      if (!res.ok && res.aborted !== true) setLastError(res.error ?? "本轮运行失败", sid);
     }
     catch (err) {
       // run 的常规失败走 !ok 响应（handleAgentRun 顶层全捕获）；这里是 IPC 层意外 reject 的兜底
-      // ——同面提示，不静默（否则 void send 的 rejection 无人接）。M4-4：createSession 拒绝也落此
-      // （此时无活跃会话，错误条落 "" 哨兵键）。
-      setLastError(`本轮运行失败：${err instanceof Error ? err.message : String(err)}`);
+      // ——同面提示，不静默（否则 void send 的 rejection 无人接）。M4-4：createSession 拒绝也落此。
+      // M4-4 修复（审查 round 1）：键挂所属会话（状态机二态）——id 有值＝run 失败，挂 sid；
+      // id 空＝createSession 拒绝、新任务尚不存在 ⇒ 显式 "" 哨兵（不挂到此刻正看着的别的会话名下）。
+      setLastError(`本轮运行失败：${err instanceof Error ? err.message : String(err)}`, id ?? "");
     }
-    finally { if (id !== undefined) runningSet.current.delete(id); force((n) => n + 1); }
+    finally { setPendingSend(false); if (id !== undefined) runningSet.current.delete(id); force((n) => n + 1); }
   }, [activeId, activeWorkspace, activate, refreshSessions, mode]);
 
   // M4-4 派生值（原全局 running 布尔的替代）：当前会话的错误条消息按 activeId 键取（无活跃
@@ -367,7 +374,9 @@ export function App() {
                 ) : null}
               </div>
             )}
-            <Composer onSend={(t) => void send(t)} disabled={runningActive} />
+            {/* M4-4 修复（审查 round 1）：新建往返窗口（pendingSend 且未选会话）同样禁用——
+                createSession 在途时运行态还没有真值可挂，这段窗口是双发缺口。 */}
+            <Composer onSend={(t) => void send(t)} disabled={runningActive || (pendingSend && activeId === null)} />
           </>
         )}
       </div>
