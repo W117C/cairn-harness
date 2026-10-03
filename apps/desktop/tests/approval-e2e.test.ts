@@ -36,8 +36,11 @@ for (const k of ambientKeys) delete process.env[k];
 process.env.M3A_MAIN_SCRIPT = script; // 脚本化主模型第一优先通道；不带 M3A_AGENTS_DEMO（显式只设一个更干净）
 
 const outbox: (readonly [string, unknown])[] = [];
+// M3 T1 多工作区装配式：每场 run 的工作区由「会话→工作区归属」给出（createSession 指工作区），
+// 不再走 RunRequest.workspace 产品位——审批/打断两场各落各的工作区，隔离语义不变。
 const host: KernelHost = createKernelHost({
-  workspace: root, // 会话根 = <root>/.agent/sessions；每场 run 的工作区走 RunRequest.workspace 产品位
+  workspaces: [wsApprove, wsCancel],
+  activeWorkspace: wsApprove,
   userDataDir: userData,
   outbox: (channel, payload) => {
     outbox.push([channel, payload]);
@@ -76,8 +79,8 @@ describe("审批→执行→打断 全链路（M3A_MAIN_SCRIPT 剧本 + default 
     "审批→执行：ask 到达 → decide(approved) → run ok 且 marker 落工作区",
     async () => {
       outbox.length = 0;
-      const created = await host.createSession();
-      const runP = host.run({ message: "建标记", mode: "default", sessionId: created.id, workspace: wsApprove });
+      const created = await host.createSession(wsApprove);
+      const runP = host.run({ message: "建标记", mode: "default", sessionId: created.id });
       const ask = await awaitRunShellAsk();
       expect(ask.tool).toBe("run_shell");
       expect(host.decide(ask.askId, true)).toBe(true);
@@ -99,10 +102,10 @@ describe("审批→执行→打断 全链路（M3A_MAIN_SCRIPT 剧本 + default 
     "打断：ask 等待期 runCancel → run 收束（无 marker；onAskDone reason ∈ user|timeout|unattended）",
     async () => {
       outbox.length = 0;
-      const created = await host.createSession();
-      const runP = host.run({ message: "建标记（随即打断）", mode: "default", sessionId: created.id, workspace: wsCancel });
+      const created = await host.createSession(wsCancel);
+      const runP = host.run({ message: "建标记（随即打断）", mode: "default", sessionId: created.id });
       const ask = await awaitRunShellAsk();
-      expect((await host.cancel()).ok).toBe(true);
+      expect((await host.cancel(created.id)).ok).toBe(true);
       // 硬判据一：run 收束（promise settle；20s 兜底防悬挂）。返回形状按真实取消语义不钉死
       // （task-7 勘误窗口 1：ok:false+error 或 ok:true+aborted 均可能），只要求是 RunResponse 形。
       const res = await settleWithin(runP, 20_000, "cancel 场 run");

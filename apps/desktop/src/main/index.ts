@@ -47,8 +47,11 @@ if (process.env.M0_SMOKE === "1") {
   process.env.M3A_AGENTS_DEMO = "1";
 }
 
+// M3 T1 多工作区装配面：当前产品仍是单工作区运行（T3 才接工作区注册/切换 UI），
+// 装配为 { workspaces: [workspace], activeWorkspace: workspace } 的单元素形态。
 const host = createKernelHost({
-  workspace,
+  workspaces: [workspace],
+  activeWorkspace: workspace,
   userDataDir: userData,
   outbox: (channel: PushChannel, payload: unknown) => {
     for (const win of BrowserWindow.getAllWindows()) win.webContents.send(PUSH_CHANNELS[channel], payload);
@@ -59,10 +62,13 @@ const host = createKernelHost({
 const wired: Partial<Record<InvokeChannel, (...args: unknown[]) => unknown>> = {
   run: (req) => host.run(req as never),
   decide: (askId, approved, scope) => host.decide(askId as string, approved as boolean, scope as never),
-  // channels 表（T2）钉的键是 runCancel；KernelHost 方法名是 cancel（brief 快照里写 cancel 与表不符——映射类型红线拦下）
-  runCancel: () => host.cancel(),
+  // channels 表（T2）钉的键是 runCancel；KernelHost 方法名是 cancel（brief 快照里写 cancel 与表不符——映射类型红线拦下）。
+  // renderer 侧会话级 runCancel(sessionId) 由 T5 接线（ipc-protocol 可选参）——现渲染层不传 id，
+  // host.cancel 的 T1 语义仍是 M2 取消缝（取消当前交互 run），T2 落 per-session controller。
+  runCancel: (sessionId) => host.cancel(sessionId as string),
   listSessions: () => host.listSessions(),
-  createSession: (name) => host.createSession(name as string | undefined),
+  // createSession 首参 M3 起是工作区（原 name 槽位被 M3 接口接管）；渲染层现不传 ⇒ 缺省 activeWorkspace
+  createSession: (workspace) => host.createSession(workspace as string | undefined),
   openSession: (id) => host.openSession(id as string),
 };
 for (const [key, channel] of Object.entries(INVOKE_CHANNELS) as [InvokeChannel, string][]) {
