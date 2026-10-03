@@ -1,0 +1,7 @@
+7d6
+<   省略式点名面：7 处（帽 7，只准调低；少一处也要出声）
+=== 在飞门文件（HEAD ↔ 盘上）
+47	5	scripts/docs-check.ts
+=== HEAD 里那条段边界（#24 的病根，现读行号）
+441:  const heads = lines.map((l, i) => [l, i] as const).filter(([l]) => /^### /u.test(l));
+459:    out.push({ key, title: head.replace(/^### /u, ""), dirs, numbers: [...numbers].sort(), shas, refs: ledgerWitnessRefs(body) });

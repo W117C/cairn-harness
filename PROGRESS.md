@@ -12276,4 +12276,13 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 7. **门与量纲**：零花费、零模型、零新依赖；本笔是**实验笔**，不产判据、不产锚点、不动帽（`SUMMARY_MAX_CODEPOINTS`／`STOPWORD_DF_RATIO` 在 HEAD 里一字未改）。三臂 `probe-locate-recall` 各 ≈60–70s、df 对照 ≈2s——都是「一次读数」的量纲，不与门耗时互借。**`typecheck` 本笔没跑**（没改实现：实验树已 `git checkout -- src/agent/map/retrieve.ts` 复原，`git diff HEAD --numstat` 读数 **0 行**）——把没跑过的东西记成"验过"是错的，所以这里只写它没跑。取证 `outputs/lexical-corpus-46-2026-10-04/`（三臂 log＋逐题对照＋df 对照＋对照器＋B1 改动 diff）。
 8. **清场与账**：`.worktrees/p336-corp` 已回收（回收前 `git diff HEAD --numstat`＝0 行；实验改动只以 `arm-B1-vs-HEAD.diff` 这份文本留档）。任务账：**#46 裁否**（本页结案），新开 **#48**（承重词距停用词闸的距离分布）；#45/#47/#43 照旧。**认证仍未做**（#39 前置未解）⇒ 这一页继续不宣布「绿了」。
 
+## 2026-10-04 · 第 337 页补：我去动 #24 之前先现读，结果抓到一件比 #24 更该记的事——**盘上那道 `docs-check` 比 HEAD 那道多一条规则**（D-12 从没进过 HEAD：`git log -S D-12` 空、HEAD 全仓 grep `checkAbbrevRefs`＝0），而我前三页引的「docs-check 全绿」全部取在这道**脏门**上
+
+1. **干净树重跑（`.worktrees/p338-headgate`，`git status --porcelain`＝0 行）**：`docs-check` 退 **0**、`UNVERIFIED=3`（STATE.md 那三项既有未检）、`证人点名面（整本台账）239 页点名 401 条 dated 工件（红 0）`，而打印面里**没有**「省略式点名面」这一行；同一棵树 `typecheck` **0 报错** ⇒ **HEAD 是自洽的**，缺那条规则不是坏了，是**从来没有**。
+2. **主树同一道门的差值只有一行**（`face-diff.log` 全文＝`7d6 < 省略式点名面：7 处（帽 7，只准调低；少一处也要出声）`）：成因是隔壁在飞的 `scripts/docs-check.ts`（对 HEAD **47/5**）新增 D-12（`ABBREV_REF_RE`＋`checkAbbrevRefs`＋`LEGACY_ABBREV_REF_CAP=7`），其注释自己写着「D-12（第 292 页）」——但 **HEAD 的台账里 `省略式` 与 `D-12` 都 0 命中**，且 `git log -S "D-12" -- scripts/docs-check.ts` **空** ⇒ 这不是「落了又被退掉」（第 334 页补那格是另一种形状），是**规则与页都还在飞**。
+3. **对我自己前三页的后果，按最坏的说法写**：第 336／336 补／337 页里那句「`docs-check` 受检项全绿」**取料树是脏主树**，也就是"绿"是在一把比 HEAD 多一条规则的门上取的。本笔在干净 HEAD 树重跑同一道门：同样退 0、红 0 ⇒ **结论不翻案**，但**口径缺了一句话**——引门的读数要写明取在哪棵树（盘上／认证树）。这一格归规则 **429** 那一族（读数先声明量法与取料面），也归 **#41** 那张账（贴帽取料要带 rev＋温度）：**门本体在飞时，门的打印面就不是同一个东西**。
+4. **#24 为什么还不能动**：病根那两行在 HEAD 的 `scripts/docs-check.ts:441`（`filter(([l]) => /^### /u.test(l))`）与 `:459`（`head.replace(/^### /u, "")`），而这段代码**此刻就在隔壁那支在补 D-12 的文件里**（47/5）。按 #44 立过的规矩：**等让出，且动之前先现读**——若隔壁顺手把段边界一起改了，#24 就算被别人解决，我不 fork 第二份实现。台账里那条误归属（第 336 页补二第 2 项：红报成「第 307 页」）已经把这格的实际代价记过了。
+5. **新开 #49（门面对账，形状要便宜）**：出声口径＝「盘上的门与 HEAD 的门差 N 条规则」，两档取法任选——①静态：`git diff HEAD --name-only` 命中门本体文件清单（`scripts/docs-check.ts`、`scripts/gates.ts`、`scripts/mutate-verify.mjs`、`scripts/repo-hygiene-check.ts` 等）就报「盘上含未落库的门改动」；②动态：在干净 HEAD 树重跑一次门，与盘上打印面 diff 出行数（本笔就是这么量出来的）。今天这格是它的**第一个实例**（差 1 行）。要不要进 `GATES`／`CERT_GATES` 属裁决——进门表就得同轮声明耗时，并同步 workflow 与 `scripts/ci/README.md` 那两份手抄件（第 317 页三面闸那一族）。
+6. **门与量纲＋清场**：本笔不产判据不产锚点；两次 `docs-check` 各约 1–2s（同一次读数的量纲，不与门表互借）、干净树 `typecheck` 0 条。`.worktrees/p338-headgate` 是自造读数树（回收前 `git status`＝0 行，无独有内容），页与三份取证入库后当场回收；等用户点头的清单照旧。**认证仍未做**（#39 前置未解）。
+
 
