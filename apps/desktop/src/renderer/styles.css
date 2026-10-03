@@ -45,3 +45,15 @@ body { margin: 0; font: 13px/1.6 -apple-system, "PingFang SC", sans-serif; color
   padding: 2px 8px; font: inherit; color: var(--text-1); background: transparent; outline: 0;
 }
 .form-error { color: var(--risk); font-size: 11px; margin-top: 4px; }
+/* M3-3 分组侧栏：分组标题＝路径末段、点击切换 activeWorkspace（新任务归属，不扰在跑会话）；
+   「其他」组（未注册工作区兜底）不可点；计数右沉；添加工作区最小表单。颜色全用既有变量。 */
+.ws-notice { margin: 4px 6px; padding: 4px 7px; border-radius: 6px; font-size: 10px; color: var(--risk); background: var(--surface); }
+.ws-header { display: flex; align-items: center; gap: 6px; padding: 4px 7px; margin-top: 6px; border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--text-2); }
+.ws-header.switchable { cursor: pointer; }
+.ws-header.switchable:hover { background: var(--hairline); }
+.ws-header.active { background: var(--hairline); color: var(--text-1); }
+.ws-header .ws-count { margin-left: auto; font-weight: 400; font-size: 10px; color: var(--text-3); }
+.ws-add { margin-top: auto; padding: 5px 7px; text-align: left; font-size: 11px; }
+.ws-form { display: flex; flex-direction: column; gap: 6px; padding: 4px 7px 6px; }
+.ws-form input { border: 1px solid var(--hairline); border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 11px; color: var(--text-1); background: transparent; outline: 0; }
+.ws-form-actions { display: flex; gap: 6px; align-items: center; }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AgentEvent, AskPayload, ProviderInfo, RunResponse, SessionInfoPayload } from "../../../../src/main/ipc-protocol";
+import type { AgentEvent, AskPayload, ProjectRecord, ProviderInfo, RunResponse } from "../../../../src/main/ipc-protocol";
 import { deriveRunPhase, pendingClarifyOf, pendingPlanOf, projectStream, usageAggregate } from "./projections";
-import { Sidebar } from "./components/Sidebar";
+import { Sidebar, type WorkspaceSession } from "./components/Sidebar";
 import { Stream } from "./components/Stream";
 import { Composer } from "./components/Composer";
 import { ApprovalCard } from "./components/ApprovalCard";
@@ -13,7 +13,8 @@ import { TokenPanel } from "./components/TokenPanel";
 declare global { interface Window { agent: import("../../../../src/main/ipc-protocol").AgentApi } }
 
 export function App() {
-  const [sessions, setSessions] = useState<SessionInfoPayload[]>([]);
+  // M3-3：会话清单带归属工作区（host.listSessions 的 desktop 扩展字段，交叉类型收窄——同 aborted 先例）。
+  const [sessions, setSessions] = useState<WorkspaceSession[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [ask, setAsk] = useState<AskPayload | null>(null);
@@ -26,15 +27,36 @@ export function App() {
   // null = 该会话显式选 demo；缺项 = 未选（run 不透传 model，走 main 侧 settings 缺省）。
   const selections = useRef(new Map<string, string | null>());
   const [providerInfo, setProviderInfo] = useState<ProviderInfo | null>(null);
+  // M3-3 工作区面：注册清单（ProjectRecord.path 即工作区）＋新任务归属（null＝host 缺省，
+  // 未显式切换）。切换纯渲染态：send 经 createSession(workspace) 显式带参，不动 host 装配。
+  const [projects, setProjects] = useState<ProjectRecord[]>([]);
+  const [registryNotice, setRegistryNotice] = useState<string | null>(null);
+  const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null);
+  // M1 T3 deferred 收口（onOpen 竞态守卫）：openSession 前 snapshot 递增 seq，回调时
+  // seq !== latest ⇒ 慢开的旧响应丢弃——快速切换两个会话不再错流（B 的迟到事件盖掉 A 的流）。
+  const openSeq = useRef(0);
   // M2 终审修复（spec §6.3 打断动作）→ M3-5 升级为真值驱动：置态有两条来源——
   // ① 点击打断时的本地上态（即时反馈：host cancel 的 round-trip 收束前先亮标签）；② run 收束响应的
   // aborted 真值（kernel-host 扩展字段）。收束后 aborted 为假且标记在场 ⇒ 清除——「点了打断但 run
   // 其实没被打断」的假标记就此收口，不再覆盖到下次 send。
   const [stoppedIds, setStoppedIds] = useState<ReadonlySet<string>>(new Set());
 
+  // 会话清单刷新：挂载一次 ＋ 新建会话后（新会话即刻进侧栏、落到归属工作区组）。
+  const refreshSessions = useCallback(() => {
+    void (window.agent.listSessions() as Promise<WorkspaceSession[]>).then(setSessions);
+  }, []);
+
   useEffect(() => {
-    void window.agent.listSessions().then(setSessions);
+    refreshSessions();
     void window.agent.getProviderInfo().then(setProviderInfo);
+    // 注册清单（M1 全桥三通道首接 UI）：失败 fail-visible——侧栏提示行＋全部会话垫「其他」组，
+    // 不静默吞（分组纯函数对空注册表的语义就是零丢失）。
+    void window.agent.listProjects().then((registered) => {
+      setProjects(registered);
+      setRegistryNotice(null);
+    }).catch((err: unknown) => {
+      setRegistryNotice(`项目注册表不可用：${err instanceof Error ? err.message : String(err)}`);
+    });
     const offEvent = window.agent.onEvent((e) => {
       // 事件分桶过滤：非活跃会话的事件只更新侧栏 running 集合，不进当前流
       //（agent:event 是全局通道，带 sessionId 的 run——含普通交互 run——事件恒带 session_id，按当前会话分流）。
@@ -50,7 +72,7 @@ export function App() {
     const offAsk = window.agent.onAsk((p) => setAsk(p));
     const offDone = window.agent.onAskDone(() => setAsk(null));
     return () => { offEvent(); offAsk(); offDone(); };
-  }, []);
+  }, [refreshSessions]);
 
   // activeId 的 ref/state 同点双写（ref 同步生效零竞态，state 驱动渲染）。
   const activate = useCallback((id: string | null) => {
@@ -58,9 +80,31 @@ export function App() {
     setActiveId(id);
   }, []);
 
-  const send = useCallback(async (text: string) => {
-    const id = activeId ?? (await window.agent.createSession()).id;
+  // 打开会话（守卫版）：seq 先递增，慢响应回来时 seq 已被更新 ⇒ 丢弃（M1 T3 deferred 收口）。
+  const openSession = useCallback((id: string) => {
     activate(id);
+    const seq = ++openSeq.current;
+    void window.agent.openSession(id).then((r) => {
+      if (seq !== openSeq.current) return; // 期间又点了别的会话：本响应过期，不覆盖现流
+      setEvents(r.events);
+    });
+  }, [activate]);
+
+  // 添加工作区（M3-3 最小表单 → addProject 桥）：AddProjectInput 只填 path——名称缺省取路径末段、
+  // defaultLocation 缺省同 path（project-registry canonical 化并查重）。成功后刷新注册清单。
+  const addWorkspace = useCallback(async (path: string) => {
+    await window.agent.addProject({ path });
+    const registered = await window.agent.listProjects();
+    setProjects(registered);
+    setRegistryNotice(null);
+  }, []);
+
+  const send = useCallback(async (text: string) => {
+    // M3-3：新任务落当前选中的工作区（未切换＝缺省参 → host activeWorkspace）。
+    const isNew = activeId === null;
+    const id = activeId ?? (await window.agent.createSession(activeWorkspace ?? undefined)).id;
+    activate(id);
+    if (isNew) refreshSessions();
     // 新任务开始即清除该会话的已停标记（上轮标记就此收口；本轮是否「已停止」由收束响应重新裁决）。
     setStoppedIds((prev) => {
       if (!prev.has(id)) return prev;
@@ -89,7 +133,7 @@ export function App() {
       });
     }
     finally { runningSet.current.delete(id); setRunning(false); force((n) => n + 1); }
-  }, [activeId, activate]);
+  }, [activeId, activeWorkspace, activate, refreshSessions]);
 
   // 澄清/方案门的未决投影提到渲染体：供 deriveRunPhase 四参判相位 + 真卡渲染（M2-5 三卡同位互斥）。
   const pendingClarify = pendingClarifyOf(events);
@@ -114,10 +158,19 @@ export function App() {
 
   return (
     <div className="shell">
-      <Sidebar sessions={sessions} activeId={activeId} running={runningSet.current} onOpen={(id) => {
-        activate(id);
-        void window.agent.openSession(id).then((r) => setEvents(r.events));
-      }} />
+      {/* M3-3 分组侧栏：分组点击只切 activeWorkspace（新任务归属），不 openSession、不扰在跑会话；
+          会话行点击走守卫版 openSession（seq 竞态守卫）。 */}
+      <Sidebar
+        sessions={sessions}
+        workspaces={projects.map((p) => p.path)}
+        activeId={activeId}
+        activeWorkspace={activeWorkspace}
+        running={runningSet.current}
+        notice={registryNotice}
+        onOpen={openSession}
+        onSwitchWorkspace={setActiveWorkspace}
+        onAddWorkspace={addWorkspace}
+      />
       <div className="main">
         <div className="sessionbar">
           <span style={{ fontWeight: 600 }}>{activeId ?? "m0"}</span>

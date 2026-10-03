@@ -56,7 +56,8 @@ export interface KernelHost {
   cancel(sessionId: string): Promise<{ ok: boolean; error?: string }>;
   /** 全工作区合并的会话清单，每条带 workspace 归组标记（T3 分组侧栏的数据源）。 */
   listSessions(): Promise<(SessionInfoPayload & { workspace: string })[]>;
-  /** 新建会话；缺省落 activeWorkspace。参数是工作区不是会话名（M3 起 id 恒为时间戳名，命名走 rename）。 */
+  /** 新建会话；缺省落 activeWorkspace。参数是工作区不是会话名
+   *  （M3 起 id 恒为时间戳名——秒级粒度、host 级唯一，命名走 rename）。 */
   createSession(workspace?: string): Promise<{ id: string }>;
   /** 读回会话事件并登记归属/漂移基线；workspace 缺省时按归属表 → 全工作区扫描解析。 */
   openSession(id: string, workspace?: string): Promise<{ events: AgentEvent[] }>;
@@ -235,9 +236,31 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
     },
     createSession: async (workspace) => {
       const ws = workspace ?? deps.activeWorkspace;
-      const id = await createSessionInRoot(wsRoot(ws));
-      owner.set(id, ws);
-      return { id };
+      // ---- host 级 id 唯一（T1 审查强制前置，T3 收口）----
+      // core createSession 缺省名到分钟、撞名规避只在各自根内（stat 同根文件）⇒ 同分钟跨工作区
+      // 两建返回同名 id，归属表「后建覆盖先建」，先建会话的 run/open 被路由到后建工作区
+      // （task-1-report Concern 2；核验结论：T1 的「create 返回后立即 owner.set」不解歧——
+      // id 本身同名时覆盖照旧发生）。修法（T1 审查建议：name 参传自定义名避开分钟粒度）：
+      // 秒级时间戳名 ＋ 归属表查重换名；「查重→占位」是同步段（无 await 夹缝），并发同秒
+      // 两建也必分先手；core 若因盘上残留同名走根内序号避让（返回 id ≠ 请求名），以返回 id 重登记。
+      const p2 = (n: number) => String(n).padStart(2, "0");
+      const now = new Date();
+      const stamp = `会话 ${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())} `
+        + `${p2(now.getHours())}:${p2(now.getMinutes())}:${p2(now.getSeconds())}`;
+      let name = stamp;
+      for (let n = 2; owner.has(name); n++) name = `${stamp} (${n})`;
+      owner.set(name, ws); // 占位：键先于盘上文件在场，键面即保证 host 级唯一
+      try {
+        const id = await createSessionInRoot(wsRoot(ws), name);
+        if (id !== name) {
+          owner.delete(name); // 根内序号避让改写了名（盘上残留撞名）：以返回 id 为准
+          owner.set(id, ws);
+        }
+        return { id };
+      } catch (error) {
+        owner.delete(name); // 建失败不留幽灵占位
+        throw error;
+      }
     },
     openSession: async (id, workspace) => {
       const ws = await resolveSessionWs(id, workspace);
