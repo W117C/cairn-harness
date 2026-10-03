@@ -16,6 +16,7 @@ import {
   toWorkerModel,
 } from "../src/providers/registry";
 import { ENV_KEYED_PROVIDERS, envKeyOf } from "../src/providers/env-keys";
+import { assertProviderKeyConfigured, providerKeyConfigured } from "../src/main/provider-runtime";
 import { byokGapsOf, sameSet } from "../src/providers/byok";
 
 const ROOT = join(import.meta.dirname, "..");
@@ -348,6 +349,49 @@ describe("BYOK 可达性（env 名映射 + byokGapsOf 逐格）", () => {
     expect(byokGapsOf({ ...cleanFacts, storable: ["glm"], offered: ["demo", "glm", "openai"] }).offeredNotStorable).toEqual(["openai"]);
     // demo 是冻结剧本通道、不需要 key，故不占 offeredNotStorable
     expect(byokGapsOf({ ...cleanFacts, offered: ["demo"] }).offeredNotStorable).toEqual([]);
+  });
+});
+
+// 第 320 页：`assertProviderKeyConfigured` 此前**全仓零测试引用**，而它是真实通道唯一的
+// "缺凭据就停"闸门——那句「不会静默回落其他 provider/demo」是这个动作对模型/操作者的说明。
+// 三格各钉一次：缺 key 抛并点名变量名、有 key 放行（反向：不许一律拒）、抛出的文本里只有名没有值。
+describe("缺凭据时 fail-closed：点名要配哪一个环境变量，且不把 key 值带进错误文本", () => {
+  it("每一家 env-keyed provider 缺 key 都抛，报错里有 env 变量名与「不会静默回落其他」", () => {
+    for (const kind of ENV_KEYED_PROVIDERS) {
+      const name = envKeyOf(kind);
+      expect(name, `${kind} 该有 env 名映射`).toBeTruthy();
+      let message = "";
+      try {
+        assertProviderKeyConfigured(kind, {});
+      } catch (e) {
+        message = (e as Error).message;
+      }
+      expect(message, kind + " 缺 key 必须抛（静默换一家＝用户以为在跑 A 实际在跑 B）").toContain(name!);
+      expect(message).toContain("不会静默回落其他");
+    }
+  });
+
+  it("反向：key 在场就放行——只有全空/纯空白算缺（一律拒会把这条闸变成装饰）", () => {
+    for (const kind of ENV_KEYED_PROVIDERS) {
+      const name = envKeyOf(kind)!;
+      expect(() => assertProviderKeyConfigured(kind, { [name]: "sk-real-looking-value" })).not.toThrow();
+      expect(providerKeyConfigured(kind, { [name]: "   " }), `${kind} 的空白串不能当已配置`).toBe(false);
+      expect(() => assertProviderKeyConfigured(kind, { [name]: "   " })).toThrow();
+    }
+  });
+
+  it("抛出的那句里只有变量名，没有另一家的 key 值（错误文本会进日志、也会给模型看）", () => {
+    const [first, second] = ENV_KEYED_PROVIDERS;
+    const secret = "sk-DO-NOT-LEAK-1234567890";
+    const env: Record<string, string> = { [envKeyOf(first) as string]: secret };
+    let message = "";
+    try {
+      assertProviderKeyConfigured(second, env as NodeJS.ProcessEnv);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toContain(envKeyOf(second));
+    expect(message, "报错文本里出现任何一家的 key 值就是泄漏").not.toContain(secret);
   });
 });
 

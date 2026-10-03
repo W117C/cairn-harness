@@ -51,6 +51,14 @@ describe("parseSuperviseContract", () => {
     for (const k of fieldNames) expect(r.error, "提示要给出对照的合法键 " + k).toContain(k);
   });
 
+  // 第 320 页：这一格单独钉「理由」那一半。上面那条判的是"拒了、点名了、给了合法清单"，
+  // 而「拼错的键不会生效，故直接拒」是模型唯一能据此改下次申报的依据——删掉这句话，前面三件事一件都不变。
+  it("拒因里那句「拼错的键不会生效」跟着拒一起走：删掉它行为一件不变、模型少知道一件事", () => {
+    const r = parseSuperviseContract({ forbiden: ["a"] });
+    expect(r.contract).toBeNull();
+    expect(r.error, "这一句是申报面与生效面之间唯一的说明").toContain("拼错的键不会生效，故直接拒");
+  });
+
   it("申报 budget ⇒ 拒，并说清这条闸归人（模型不能给自己开预算）", () => {
     const r = parseSuperviseContract({ budget: 99 });
     expect(r.contract).toBeNull();

@@ -9,7 +9,7 @@ import { AGENT_PERMISSION_MODES } from "../src/events";
 import { PERMISSION_MODES, isPermissionMode, permissionModeRank, type PermissionMode } from "../src/permissions/modes";
 import { checkPermission, gate, sideEffectDecisionTable } from "../src/permissions";
 import { PERMISSION_MODES as SETTINGS_PERMISSION_MODES } from "../src/main/settings";
-import { isPermissionMode as workerIsPermissionMode } from "../src/agent/worker-report";
+import { isPermissionMode as workerIsPermissionMode, clampTier } from "../src/agent/worker-report";
 
 describe("档位集合只有一个事实源", () => {
   it("events 的抄本与 permissions 的事实源逐位相同（顺序=松紧序，clampTier 依赖它）", () => {
@@ -26,6 +26,20 @@ describe("档位集合只有一个事实源", () => {
 
   it("名次：read-only < default < guided < auto，且每档的名次都非负（-1 会被 clampTier 当成最松侧）", () => {
     expect(PERMISSION_MODES.map(permissionModeRank)).toEqual([0, 1, 2, 3]);
+  });
+
+  // 上面两条的**标题**都点了 clampTier，正文却一次都没调用它——「已按父档裁剪」那句 worker 看得见的
+  // 话此前没有观测者（本仓记过的第 4 形态：用例存在、标题承诺了，正文判的不是这件事）。
+  // 两支各钉一次：越界要夹回父档并说清是单调继承；不越界必须原样放过——只钉前一支的话「一律裁剪」也照样绿。
+  it("clampTier 两支都钉：越界回父档并给出整句警告，不越界原样放过且不给警告", () => {
+    const clamped = clampTier("auto", "guided");
+    expect([clamped.mode, clamped.clamped]).toEqual(["guided", true]);
+    expect(clamped.warning).toContain("worker 档位 auto 越界（父会话 guided）——已按父档裁剪");
+    expect(clamped.warning, "警告得说清为什么夹：单调继承、worker 不可提权").toContain("worker 不可提权");
+    for (const [requested, parent] of [["guided", "auto"], ["read-only", "default"], ["default", "default"]] as const) {
+      const kept = clampTier(requested, parent);
+      expect([kept.mode, kept.clamped, kept.warning], requested + " 派在父 " + parent + " 之内，不该被动过").toEqual([requested, false, undefined]);
+    }
   });
 });
 

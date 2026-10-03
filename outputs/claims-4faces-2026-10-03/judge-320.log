@@ -1,0 +1,34 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+[90mstderr[2m | tests/providers.test.ts[2m > [22m[2mopenai 适配器 fixture 回放（任务2/3/4/5 验收）[2m > [22m[2m③错误事件：fixture 回放抛可读错误
+[22m[39m[OpenAI] 流内失败（第 1 次，尚未产出任何输出）⇒ 294ms 后重试：OpenAI 流错误 server_error: The server had an error while processing your request.
+
+[90mstderr[2m | tests/providers.test.ts[2m > [22m[2mopenai 适配器 fixture 回放（任务2/3/4/5 验收）[2m > [22m[2m③错误事件：fixture 回放抛可读错误
+[22m[39m[OpenAI] 流内失败（第 2 次，尚未产出任何输出）⇒ 149ms 后重试：OpenAI 流错误 server_error: The server had an error while processing your request.
+
+[90mstderr[2m | tests/providers.test.ts[2m > [22m[2mstreamOpenAI：流内失败的重试边界[2m > [22m[2m首帧就是流内 502（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完
+[22m[39m[OpenAI] 流内失败（第 1 次，尚未产出任何输出）⇒ 264ms 后重试：OpenAI 流错误 502: Provider returned an empty response
+
+[90mstderr[2m | tests/providers.test.ts[2m > [22m[2mstreamOpenAI：流内失败的重试边界[2m > [22m[2m重试次数有上限：连续失败不会无限打转
+[22m[39m[OpenAI] 流内失败（第 1 次，尚未产出任何输出）⇒ 95ms 后重试：OpenAI 流错误 502: always down
+
+[90mstderr[2m | tests/providers.test.ts[2m > [22m[2mstreamOpenAI：流内失败的重试边界[2m > [22m[2m重试次数有上限：连续失败不会无限打转
+[22m[39m[OpenAI] 流内失败（第 2 次，尚未产出任何输出）⇒ 451ms 后重试：OpenAI 流错误 502: always down
+
+ [32m✓[39m tests/providers.test.ts [2m([22m[2m46 tests[22m[2m)[22m[33m 1312[2mms[22m[39m
+   [32m✓[39m openai 适配器 fixture 回放（任务2/3/4/5 验收） [2m(6)[22m
+     [33m[2m✓[22m[39m ③错误事件：fixture 回放抛可读错误[33m 450[2mms[22m[39m
+   [32m✓[39m streamOpenAI：流内失败的重试边界 [2m(4)[22m
+     [33m[2m✓[22m[39m 重试次数有上限：连续失败不会无限打转[33m 549[2mms[22m[39m
+ [32m✓[39m tests/supervise-contract.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 49[2mms[22m[39m
+ [32m✓[39m tests/permission-mode-single-source.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[32m66 passed[39m[22m[90m (66)[39m
+[2m   Start at [22m 13:21:21
+[2m   Duration [22m 2.94s[2m (tests 56%, transform 31%, import 12%, worker 1%)[22m
+
+[2m    Isolate [22m [33m3 workers spawned[39m[2m · ~160ms startup each (spawn + environment, per file)[22m
+[2m            [22m [2mat least ~320ms faster with [22m[33misolate: false[39m[2m — reuses workers across files instead of one per file[22m
+

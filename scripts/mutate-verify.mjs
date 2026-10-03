@@ -12909,6 +12909,44 @@ const MUTATIONS = [
     apply: (s) => s.replace("raw > IMPACT_MAX_FILES_CEILING", "raw > Number.MAX_SAFE_INTEGER"),
     expectFail: "越界那句拒绝文案点名「只能往小调」，而顶格本身是可传的（拒的是越界，不是上限）",
   },
+  // 第 320 页：三格无人判的模型可见断言（clampTier／supervise 契约／provider key 闸）。
+  // 三根针脚都钉在 HEAD 已有的生产行上 ⇒ 这一轮「钉在飞文本」也应是 0（同数不同因，见第 319 页第 5 条）。
+  {
+    id: "clamp-tier-equal-rank-now-clamps",
+    src: "src/agent/worker-report.ts",
+    test: "tests/permission-mode-single-source.test.ts",
+    desc: "把「不越界」那支的 `<=` 收紧成 `<` ⇒ 同档（default 派 default）也被当成越界并夹一遍，"
+      + "worker 拿到 warning 说它「越界」——不越界那一支没有观测者时，这类收紧是无声的（第 320 页现读：全仓零测试调用 clampTier）",
+    apply: (s) => s.replace(
+      "if (permissionModeRank(requested) <= permissionModeRank(parent)) return { mode: requested, clamped: false };",
+      "if (permissionModeRank(requested) < permissionModeRank(parent)) return { mode: requested, clamped: false };",
+    ),
+    expectFail: "clampTier 两支都钉：越界回父档并给出整句警告，不越界原样放过且不给警告",
+  },
+  {
+    id: "supervise-unknown-keys-silently-accepted",
+    src: "src/agent/supervise-contract.ts",
+    test: "tests/supervise-contract.test.ts",
+    desc: "把未知键那一步筛空 ⇒ 笔误键被静默收下、契约照建：模型以为 `forbiden` 禁住了某一面，实际什么都没禁，"
+      + "而那句「拼错的键不会生效，故直接拒」永远不再出现（申报面与生效面分家＝本仓点过名的最坏形状）",
+    apply: (s) => s.replace(
+      "const unknown = Object.keys(o).filter((k) => !legal.includes(k));",
+      "const unknown: string[] = [];",
+    ),
+    expectFail: "拒因里那句「拼错的键不会生效」跟着拒一起走：删掉它行为一件不变、模型少知道一件事",
+  },
+  {
+    id: "provider-key-blank-value-counts-as-configured",
+    src: "src/main/provider-runtime.ts",
+    test: "tests/providers.test.ts",
+    desc: "去掉「非空白」那一半条件 ⇒ 一个空白字符串就算「已配置」：真实通道拿着空 key 去请求，"
+      + "失败点在远端 401，而不是这里那句「请配置该 provider 的 key」——缺凭据该在这里停的那一半没人守了",
+    apply: (s) => s.replace(
+      'return typeof value === "string" && value.trim() !== "";',
+      'return typeof value === "string";',
+    ),
+    expectFail: "反向：key 在场就放行——只有全空/纯空白算缺（一律拒会把这条闸变成装饰）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

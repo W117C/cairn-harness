@@ -1,0 +1,134 @@
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/permission-mode-single-source.test.ts[2m > [22m档位集合只有一个事实源[2m > [22mclampTier 两支都钉：越界回父档并给出整句警告，不越界原样放过且不给警告
+[31m[1mAssertionError[22m: default 派在父 default 之内，不该被动过: expected [ 'default', true, …(1) ] to deeply equal [ 'default', false, undefined ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  [[22m
+[2m    "default",[22m
+[32m-   false,[39m
+[32m-   undefined,[39m
+[31m+   true,[39m
+[31m+   "worker 档位 default 越界（父会话 default）——已按父档裁剪（§11.7.6 单调继承，worker 不可提权）",[39m
+[2m  ][22m
+
+[36m [2m❯[22m tests/permission-mode-single-source.test.ts:[2m41:99[22m[39m
+    [90m 39|[39m     for (const [requested, parent] of [["guided", "auto"], ["read-only…
+    [90m 40|[39m       const kept = clampTier(requested, parent);
+    [90m 41|[39m       expect([kept.mode, kept.clamped, kept.warning], requested + " 派在…
+    [90m   |[39m                                                                                                   [31m^[39m
+    [90m 42|[39m     }
+    [90m 43|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M1-clamp-tier-equal-rank-clamps 红在「clampTier 两支都钉：越界回父档并给出整句警告，不越界原样放过且不给警告」（failed=1，863ms，退 1）
+   其余红：（无）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 3 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/supervise-contract.test.ts[2m > [22mparseSuperviseContract[2m > [22m笔误键必须点名并列出资格上的合法键 —— 静默吃掉 = 申报了却没生效
+[31m[1mAssertionError[22m: expected { maxStages: 3, forbidden: [] } to be null[39m
+
+[32m- Expected:[39m
+null
+
+[31m+ Received:[39m
+{
+  "forbidden": [],
+  "maxStages": 3,
+}
+
+[36m [2m❯[22m tests/supervise-contract.test.ts:[2m49:24[22m[39m
+    [90m 47|[39m   it("笔误键必须点名并列出资格上的合法键 —— 静默吃掉 = 申报了却没生效", () => {
+    [90m 48|[39m     const r = parseSuperviseContract({ maxStages: 3, forbiden: ["a"] }…
+    [90m 49|[39m     expect(r.contract).toBeNull();
+    [90m   |[39m                        [31m^[39m
+    [90m 50|[39m     expect(r.error).toContain("forbiden");
+    [90m 51|[39m     for (const k of fieldNames) expect(r.error, "提示要给出对照的合法键 " + k).to…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/supervise-contract.test.ts[2m > [22mparseSuperviseContract[2m > [22m申报 budget ⇒ 拒，并说清这条闸归人（模型不能给自己开预算）
+[31m[1mAssertionError[22m: expected { maxStages: 6, forbidden: [] } to be null[39m
+
+[32m- Expected:[39m
+null
+
+[31m+ Received:[39m
+{
+  "forbidden": [],
+  "maxStages": 6,
+}
+
+[36m [2m❯[22m tests/supervise-contract.test.ts:[2m59:24[22m[39m
+    [90m 57|[39m   it("申报 budget ⇒ 拒，并说清这条闸归人（模型不能给自己开预算）", () => {
+    [90m 58|[39m     const r = parseSuperviseContract({ budget: 99 });
+    [90m 59|[39m     expect(r.contract).toBeNull();
+    [90m   |[39m                        [31m^[39m
+    [90m 60|[39m     expect(r.error).toContain("budget");
+    [90m 61|[39m     expect(r.error).toContain("归人");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/supervise-contract.test.ts[2m > [22mspawn_agent(supervise) 真走这份契约解析[2m > [22m笔误键 forbiden：拒因点名这个键，且没走到审批（不是一张卡后再静默失效）
+[31m[1mAssertionError[22m: expected 'spawn_agent(supervise): 未获批准（受限循环授权，f…' to contain 'forbiden'[39m
+
+Expected: [32m"forbiden"[39m
+Received: [31m"spawn_agent(supervise): 未获批准（受限循环授权，fail-closed）"[39m
+
+[36m [2m❯[22m tests/supervise-contract.test.ts:[2m111:17[22m[39m
+    [90m109|[39m   it("笔误键 forbiden：拒因点名这个键，且没走到审批（不是一张卡后再静默失效）", async () => {
+    [90m110|[39m     const out = await spawnSupervise({ forbiden: ["a"] });
+    [90m111|[39m     expect(out).toContain("forbiden");
+    [90m   |[39m                 [31m^[39m
+    [90m112|[39m     expect(out).not.toContain("未获批准");
+    [90m113|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯[22m[39m
+
+❌ M2-supervise-unknown-keys-accepted 没红在该当的那条用例上：failed=3｜红的是 笔误键必须点名并列出资格上的合法键 —— 静默吃掉 = 申报了却没生效 / 申报 budget ⇒ 拒，并说清这条闸归人（模型不能给自己开预算） / 笔误键 forbiden：拒因点名这个键，且没走到审批（不是一张卡后再静默失效）
+[90mstderr[2m | tests/providers.test.ts[2m > [22m[2mopenai 适配器 fixture 回放（任务2/3/4/5 验收）[2m > [22m[2m③错误事件：fixture 回放抛可读错误
+[22m[39m[OpenAI] 流内失败（第 1 次，尚未产出任何输出）⇒ 115ms 后重试：OpenAI 流错误 server_error: The server had an error while processing your request.
+
+[90mstderr[2m | tests/providers.test.ts[2m > [22m[2mopenai 适配器 fixture 回放（任务2/3/4/5 验收）[2m > [22m[2m③错误事件：fixture 回放抛可读错误
+[22m[39m[OpenAI] 流内失败（第 2 次，尚未产出任何输出）⇒ 496ms 后重试：OpenAI 流错误 server_error: The server had an error while processing your request.
+
+[90mstderr[2m | tests/providers.test.ts[2m > [22m[2mstreamOpenAI：流内失败的重试边界[2m > [22m[2m首帧就是流内 502（一个输出都没吐）⇒ 重试一次并把这一轮正常跑完
+[22m[39m[OpenAI] 流内失败（第 1 次，尚未产出任何输出）⇒ 187ms 后重试：OpenAI 流错误 502: Provider returned an empty response
+
+[90mstderr[2m | tests/providers.test.ts[2m > [22m[2mstreamOpenAI：流内失败的重试边界[2m > [22m[2m重试次数有上限：连续失败不会无限打转
+[22m[39m[OpenAI] 流内失败（第 1 次，尚未产出任何输出）⇒ 194ms 后重试：OpenAI 流错误 502: always down
+
+[90mstderr[2m | tests/providers.test.ts[2m > [22m[2mstreamOpenAI：流内失败的重试边界[2m > [22m[2m重试次数有上限：连续失败不会无限打转
+[22m[39m[OpenAI] 流内失败（第 2 次，尚未产出任何输出）⇒ 370ms 后重试：OpenAI 流错误 502: always down
+
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/providers.test.ts[2m > [22m缺凭据时 fail-closed：点名要配哪一个环境变量，且不把 key 值带进错误文本[2m > [22m反向：key 在场就放行——只有全空/纯空白算缺（一律拒会把这条闸变成装饰）
+[31m[1mAssertionError[22m: glm 的空白串不能当已配置: expected true to be false // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- false[39m
+[31m+ true[39m
+
+[36m [2m❯[22m tests/providers.test.ts:[2m378:84[22m[39m
+    [90m376|[39m       const name = envKeyOf(kind)!;
+    [90m377|[39m       expect(() => assertProviderKeyConfigured(kind, { [name]: "sk-rea…
+    [90m378|[39m       expect(providerKeyConfigured(kind, { [name]: "   " }), `${kind} …
+    [90m   |[39m                                                                                    [31m^[39m
+    [90m379|[39m       expect(() => assertProviderKeyConfigured(kind, { [name]: "   " }…
+    [90m380|[39m     }
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M3-provider-key-blank-counts-configured 红在「反向：key 在场就放行——只有全空/纯空白算缺（一律拒会把这条闸变成装饰）」（failed=1，1893ms，退 1）
+   其余红：（无）
+残骸校验：三支被测文件零 diff ✅
+RED_MACHINES=BAD(1)
