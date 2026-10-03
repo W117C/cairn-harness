@@ -3008,8 +3008,8 @@ const MUTATIONS = [
     id: "glm-default-name-ignores-env",
     src: "src/providers/glm.ts",
     test: "tests/worker-spent-usd.test.ts",
-    desc: "glmDefaultModelName 不读 M0_MODEL ⇒ 与实际拨号名各算一份（本仓点名的「与 X 对齐」只是注释）",
-    apply: (s) => s.replace("  return process.env.M0_MODEL ?? GLM_DEFAULT_MODEL;", "  return GLM_DEFAULT_MODEL;"),
+    desc: "glmDefaultModelName 不读 CAIRN_MODEL ⇒ 与实际拨号名各算一份（本仓点名的「与 X 对齐」只是注释）",
+    apply: (s) => s.replace("  return process.env.CAIRN_MODEL ?? GLM_DEFAULT_MODEL;", "  return GLM_DEFAULT_MODEL;"),
     expectFail: "glmDefaultModelName 与 streamGlm 真实拨号用的模型名逐字相等（防第四份 env 副本漂移）",
   },
   // ---- 门的执行计划（scripts/gate-manifest.gateCommand，tests/gate-manifest.test.ts）----
@@ -3824,7 +3824,7 @@ const MUTATIONS = [
     test: "tests/glm-tool-stream-switch.test.ts",
     desc: "关位被无视、永远发 tool_stream ⇒ 严格代理上 provider:check 与每个 worker spawn 第一跳 400（能力有、路径堵）",
     apply: (s) => s.replace("  return off ? undefined : { tool_stream: true };", "  return { tool_stream: true };"),
-    expectFail: "M0_GLM_TOOL_STREAM=0：body 不再带该字段，其余字段逐字不变",
+    expectFail: "CAIRN_GLM_TOOL_STREAM=0：body 不再带该字段，其余字段逐字不变",
   },
   {
     id: "glm-tool-stream-default-flipped-off",
@@ -6238,8 +6238,8 @@ const MUTATIONS = [
     id: "byok-injector-missing-envmap-falls-back",
     src: "src/main/provider-key-inject.ts",
     test: "tests/provider-keys.test.ts",
-    desc: "未登记 env 名的 provider 不崩、静默借用 glm 的变量名 ⇒ 白名单加一家而忘了登记映射时，用户以为「存了 key 就生效」，实际拿 M0_API_KEY 去拨别家",
-    apply: (s) => s.replace("    const envName = envKeyOf(provider);", '    const envName = envKeyOf(provider) ?? "M0_API_KEY";'),
+    desc: "未登记 env 名的 provider 不崩、静默借用 glm 的变量名 ⇒ 白名单加一家而忘了登记映射时，用户以为「存了 key 就生效」，实际拿 CAIRN_API_KEY 去拨别家",
+    apply: (s) => s.replace("    const envName = envKeyOf(provider);", '    const envName = envKeyOf(provider) ?? "CAIRN_API_KEY";'),
     expectFail: "未登记 env 名映射的 provider：崩，不许静默跳过那一家",
   },
   {
@@ -7495,7 +7495,7 @@ const MUTATIONS = [
       '      ...(usageModel !== "" ? { usage_model: usageModel } : {}),\n',
       "",
     ),
-    expectFail: "注入真拨模型 ⇒ 落 glmDefaultModelName 那一档，且跟着 M0_MODEL 走（不是写死的名字）",
+    expectFail: "注入真拨模型 ⇒ 落 glmDefaultModelName 那一档，且跟着 CAIRN_MODEL 走（不是写死的名字）",
   },
 
   // ── 第 149 页 · head-cert 进默认门表：共享树上多一个写点，收尾复核是它的前提
@@ -12593,6 +12593,54 @@ const MUTATIONS = [
     apply: (s) => s.replace("  if (files.every(isLedger)) {", "  if (files.some(isLedger)) {"),
     expectFail: "三态分开出声：同一笔／纯台账／含一个真面要闭嘴（混合清单不许被 `some` 读成必然空）",
   },
+  /* ── 第 334 页 · #41：认证那一趟的「温度」要落进工件（四枚各钉一侧）──────────────── */
+  {
+    id: "cert-provenance-unknown-branch-dropped",
+    src: "scripts/lib/head-cert-provenance.ts",
+    test: "tests/head-cert-provenance.test.ts",
+    desc: "摘掉 `measured` 那一半 ⇒ `--skip-test` 那趟并发面根本没采，却被读成「起前 0／跑完 0 ⇒ 独占 ⇒ 可引用」。"
+      + "「没取到」与「取到 0」是两个数（规则 196/239），这一格错了就是把负载态的秒数盖了章",
+    apply: (s) => s.replace("  if (!measured || before < 0 || after < 0) return \"unknown\";", "  if (before < 0 || after < 0) return \"unknown\";"),
+    expectFail: "三态各自出声：两端独占／有别人在跑／取不到（不可知不许由 0 顶成独占）",
+  },
+  {
+    id: "cert-provenance-doc-temperature-line-dropped",
+    src: "scripts/lib/head-cert-provenance.ts",
+    test: "tests/head-cert-provenance.test.ts",
+    desc: "把头部那行温度摘掉 ⇒ 文件照样落盘、读数照样原样，但它回答不了唯一要回答的问题"
+      + "（「这趟的秒数能不能引用」），于是又回到靠人记——这一格存在的全部理由就是那一行",
+    apply: (s) => s.replace("    `- ${citableLine(o.citable)}`,", "    ``,"),
+    expectFail: "正文是**原样交回**那些行：不吞行、不摘要、顺序不动；出处两格（rev 与收尾复核）都在头部",
+  },
+  {
+    id: "cert-provenance-wiring-hardcoded",
+    src: "scripts/head-cert.ts",
+    test: "tests/head-cert-provenance.test.ts",
+    desc: "温度写死成 citable（算出来不接＝规则 230 那一格）⇒ 每一次负载态认证都留下一份"
+      + "「看起来被背书」的读数文件，而凭证页最爱引的恰恰是这些秒数",
+    apply: (s) => s.replace("  const citable = citableOf(psBefore, psAfter, testStatus !== null);", "  const citable = \"citable\" as const; void citableOf;"),
+    expectFail: "★接线：认证真把这份文档写出去，而且写在 `process.exit` 之前；失败要出声",
+  },
+  {
+    id: "cert-provenance-stamp-colon-back",
+    src: "scripts/lib/head-cert-provenance.ts",
+    test: "tests/head-cert-provenance.test.ts",
+    desc: "把冒号放回目录名 ⇒ 又造出 `head-cert-…-15:55/` 这种路径（不同平台/后续 grep 都要引号兜着）。"
+      + "这一枚钉的是**本页真跑抓到的那个缺陷**：判卷喂格式良好的串看不见调用方怎么拼时间戳，"
+      + "只有端到端那一趟露头——所以把它抽成纯函数之后，还要留一条「不许含冒号」的断言钉住形状",
+    apply: (s) => s.replace("return m === null ? \"未知时刻\" : `${m[1]}-${m[2]}${m[3]}`;", "return m === null ? \"未知时刻\" : `${m[1]}-${m[2]}:${m[3]}`;"),
+    expectFail: "时间戳：分钟精度、结果里不许有冒号（第一版把这段写在调用方，冒号漏进目录名，只有真跑一次才看得见）",
+  },
+  {
+    id: "cert-provenance-head-stamp-line-dropped",
+    src: "scripts/lib/head-cert-provenance.ts",
+    test: "tests/head-cert-provenance.test.ts",
+    desc: "摘掉头部的生成时刻那一行 ⇒ 时刻只剩目录名里那一串，而它到底是 UTC 还是本地没人说（本笔冒烟实测：目录名写 "
+      + "`2026-10-03-1614`，台账页的本地日期已经是次日凌晨）。这份工件存在的理由就是「出处」，"
+      + "时刻没有口径＝页上引它的人只能靠猜",
+    apply: (s) => s.replace("`- 生成时刻=${o.stamp}（UTC", "`（UTC"),
+    expectFail: "头部自带生成时刻与时区口径（那串数字从前只长在目录名里，打开文件也要读得到它是 UTC）",
+  },
   {
     id: "claim-whole-sentence-piece-double-count",
     src: "scripts/probe-promise-recall.ts",
@@ -13100,10 +13148,10 @@ const MUTATIONS = [
     src: "src/cli.ts",
     test: "tests/cli-surface.test.ts",
     desc: "条件从「flag 与位置参数都给了」放宽成「只要两个位置参数就拒」⇒ help 首行那条主路 "
-      + "`m0 <目录> <任务>` 直接不能用，而只钉「同时给要拒」那条照旧绿。放行臂读的是「哪道闸先喊」，"
+      + "`cairn <目录> <任务>` 直接不能用，而只钉「同时给要拒」那条照旧绿。放行臂读的是「哪道闸先喊」，"
       + "所以两条合法形状各跑一次真进程，而不是比文案",
     apply: (s) => s.replace("if (flagWorkspace !== null && positional.length === 2) {", "if (positional.length === 2) {"),
-    expectFail: "工作区的两种合法形状各自放行（无条件拒会把 `m0 <目录> <任务>` 这条主路杀掉）",
+    expectFail: "工作区的两种合法形状各自放行（无条件拒会把 `cairn <目录> <任务>` 这条主路杀掉）",
   },
   {
     id: "impact-spec-cap-number-not-derived",

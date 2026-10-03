@@ -1,0 +1,52 @@
+
+### M1 摘掉 measured 那一半（scripts/lib/head-cert-provenance.ts）（锚点 cert-provenance-unknown-branch-dropped）
+退出码 1｜用例级红 1 条
+  × 三态各自出声：两端独占／有别人在跑／取不到（不可知不许由 0 顶成独占）
+  | Test Files  1 failed (1)
+  | Tests  1 failed | 6 passed (7)
+  | ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+  复原逐字节一致 = true
+
+### M2 摘掉头部温度那一行（scripts/lib/head-cert-provenance.ts）（锚点 cert-provenance-doc-temperature-line-dropped）
+退出码 1｜用例级红 2 条
+  × 正文是**原样交回**那些行：不吞行、不摘要、顺序不动；出处两格（rev 与收尾复核）都在头部
+  × 头部自带生成时刻与时区口径（那串数字从前只长在目录名里，打开文件也要读得到它是 UTC）
+  | Test Files  1 failed (1)
+  | Tests  2 failed | 5 passed (7)
+  | ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+  复原逐字节一致 = true
+
+### M3 温度写死成 citable（scripts/head-cert.ts）（锚点 cert-provenance-wiring-hardcoded）
+退出码 1｜用例级红 1 条
+  × ★接线：认证真把这份文档写出去，而且写在 `process.exit` 之前；失败要出声
+  | Test Files  1 failed (1)
+  | Tests  1 failed | 6 passed (7)
+  | ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+  | const files = /Test Files +(.*)$/m.exec(strip)?.[1] ?? \"读不到\";
+  | const tests = /\\n *Tests +(.*)$/m.exec(strip)?.[1] ?? \"读不到\";
+  | summary = `Test Files ${files}｜Tests ${tests}｜exit=${String(testStatus)}（退出码直接取，不接管道）`;
+  复原逐字节一致 = true
+
+### M4 把冒号放回时间戳（scripts/lib/head-cert-provenance.ts）（锚点 cert-provenance-stamp-colon-back）
+退出码 1｜用例级红 1 条
+  × 时间戳：分钟精度、结果里不许有冒号（第一版把这段写在调用方，冒号漏进目录名，只有真跑一次才看得见）
+  | Test Files  1 failed (1)
+  | Tests  1 failed | 6 passed (7)
+  | ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+  复原逐字节一致 = true
+
+### M5 摘掉头部生成时刻那一行（scripts/lib/head-cert-provenance.ts）（锚点 cert-provenance-head-stamp-line-dropped）
+退出码 1｜用例级红 1 条
+  × 头部自带生成时刻与时区口径（那串数字从前只长在目录名里，打开文件也要读得到它是 UTC）
+  | Test Files  1 failed (1)
+  | Tests  1 failed | 6 passed (7)
+  | ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+  复原逐字节一致 = true
+
+=== 汇总（每台应有自己那条红，两台同条＝其中一条没分辨力）===
+M1 摘掉 measured 那一半（scripts/lib/head-cert-provenance.ts） ⇒ 红 1 条：三态各自出声：两端独占／有别人在跑／取不到（不可知不许由 0 顶成独占）
+M2 摘掉头部温度那一行（scripts/lib/head-cert-provenance.ts） ⇒ 红 2 条：正文是**原样交回**那些行：不吞行、不摘要、顺序不动；出处两格（rev 与收尾 ／ 头部自带生成时刻与时区口径（那串数字从前只长在目录名里，打开文件也要读得到它是 
+M3 温度写死成 citable（scripts/head-cert.ts） ⇒ 红 1 条：★接线：认证真把这份文档写出去，而且写在 `process.exit` 之前；失
+M4 把冒号放回时间戳（scripts/lib/head-cert-provenance.ts） ⇒ 红 1 条：时间戳：分钟精度、结果里不许有冒号（第一版把这段写在调用方，冒号漏进目录名，只有
+M5 摘掉头部生成时刻那一行（scripts/lib/head-cert-provenance.ts） ⇒ 红 1 条：头部自带生成时刻与时区口径（那串数字从前只长在目录名里，打开文件也要读得到它是 
+❌ 有 1 条用例被两台同时打红：头部自带生成时刻与时区口径（那串数字从前只长在目录名里，打开文件也要读得到它是 ←M2+M5

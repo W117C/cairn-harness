@@ -1,0 +1,71 @@
+# 认证读数 · rev dfaa2d1
+- 生成时刻=2026-10-03-1619（UTC。台账页按本地日期，跨零点时页号与这里差一天，不是写错了）
+- 温度＝不可知（判卷没跑，或并发面取不到）⇒ 不许由 0 顶成「独占」，时间量一律不引用
+- 收尾复核=同一笔
+- 判据：两端独占＝「起前 0 且跑完 0 且这一趟真跑了全量判卷」；本页引用时间量前先回看这一行
+
+## 认证打出来的读数（原样，未改写）
+
+```text
+目标提交：dfaa2d1（--at=HEAD）
+worktree add exit=0
+已核：TREE=dfaa2d10193822707d8ce2cd1ce2df38e383caf0｜判卷四面在飞 0 项
+cp -al node_modules exit=0
+依赖核对：该提交声明 10 项，缺 0 项
+  硬链接子仓库依赖 apps/desktop/node_modules ← 主树 exit=0
+  子仓库 fixtures/bench/bench-bugfix-async/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-bugfix-crossfile/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-bugfix-pagination/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-feature-csv/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-feature-export/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-feature-flag/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-feature-memo/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-long-chain-32/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-long-chain-48/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-long-horizon/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-long-horizon-30/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-refactor-callsite/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-refactor-dedupe/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-refactor-rename/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  子仓库 fixtures/bench/bench-refactor-signature/node_modules 缺，而主树也没有 ⇒ 这棵树跑不了它里面的命令
+  硬链接子仓库依赖 fixtures/todo-app/node_modules ← 主树 exit=0
+⚠️ 这些靶子仓库的依赖补不齐：fixtures/bench/bench-bugfix-async、fixtures/bench/bench-bugfix-crossfile、fixtures/bench/bench-bugfix-pagination、fixtures/bench/bench-feature-csv、fixtures/bench/bench-feature-export、fixtures/bench/bench-feature-flag、fixtures/bench/bench-feature-memo、fixtures/bench/bench-long-chain-32、fixtures/bench/bench-long-chain-48、fixtures/bench/bench-long-horizon、fixtures/bench/bench-long-horizon-30、fixtures/bench/bench-refactor-callsite、fixtures/bench/bench-refactor-dedupe、fixtures/bench/bench-refactor-rename、fixtures/bench/bench-refactor-signature ⇒ 在其中真跑命令的判卷红**不可归因于代码**
+import 面：3452 条边｜悬空 0（其中存量已豁免 0）
+门表：32 道，其中该笔 package.json 没有同名 script 的 0 道
+typecheck exit=0（0 报错）
+
+== 认证门面（22 道，名单取自 dfaa2d1）==
+  ✅ no-progress-check exit=0 328ms（预算 1100ms）
+  ✅ prune-check exit=0 375ms（预算 1100ms）
+  ✅ fork-check exit=0 278ms（预算 1100ms）
+  ✅ compaction-check exit=0 427ms（预算 1200ms）
+  ✅ docs-check exit=0 973ms（预算 1300ms）
+  ✅ memory-check exit=0 543ms（预算 1300ms）
+  ✅ head-import-check exit=0 1550ms（预算 2400ms）
+  ✅ autonomy-check exit=0 592ms（预算 1500ms）
+  ✅ sandbox:check exit=0 1350ms（预算 1700ms）
+  ✅ security-check exit=0 624ms（预算 1500ms）
+  ✅ provider:check exit=0 328ms（预算 1300ms）
+  ✅ routing-check exit=0 475ms（预算 1400ms）
+  ✅ model-surface-check exit=0 542ms（预算 1300ms）
+  ✅ prefix-churn-check exit=0 563ms（预算 1500ms）
+  ✅ prompt-surface-check exit=0 354ms（预算 1400ms）
+  ✅ replay-determinism-check exit=0 337ms（预算 1100ms）
+  ✅ cost-per-progress-check exit=0 281ms（预算 1000ms）
+  ✅ web-fetch-check exit=0 341ms（预算 1200ms）
+  ✅ gym-check exit=0 1167ms（预算 2400ms）
+  ✅ gate-check exit=0 2311ms（预算 5400ms）
+  ✅ evidence-typecheck-check exit=0 3594ms（预算 5300ms）
+  ✅ mutate-needles-check exit=0 16072ms（预算 20000ms）
+  认证门面=22 道（跑到 22）｜绿 22 道｜⚠️ 超预算 0
+
+== 认证汇总 ==
+  TREE=dfaa2d1 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔 认证树锁=本进程持有（.git/dsh-tool-locks/head-cert-head-cert-dfaa2d1.lock）
+  半把尺：只 typecheck ⇒ **不构成这棵树的全量绿**｜原因：第 334 页端到端第二趟：证明头部生成时刻那一行真的落进工件（半尺：判卷不跑）
+  并发判卷=未采（本次没跑全量判卷，撞窗与否无从谈起）
+  本趟墙钟 50.42s（同一进程 hrtime 实测·口径＝起跑→汇总那一行，不含提前退出的那些趟）
+  逐条日志：/tmp/dsh-head-cert-dfaa2d1
+  已回收认证树 .worktrees/head-cert-dfaa2d1（exit=0）
+  常驻残留树=15（/Users/ze/Downloads/deepseek harness/.worktrees/gate-head-cert@ebee005、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-322@e06b04f、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-323@cd4df98、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-324@a2b2bb3、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-325@98578b3、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-326@ebee005、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-327@5bdaf78、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-328@4254a84、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-329@2501848、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-330@324e28d、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-331@c6a61eb、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-332@517ed95、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-333@fb2931d、/Users/ze/Downloads/deepseek harness/.worktrees/gate-mutate-verify@fa1c30b、/Users/ze/Downloads/deepseek harness/.worktrees/suite-base-330@2abe0f7）（规则 120：detached ∧ 0 项在飞 ∧ 那一笔已入库 才算残留；带分支的树与隔壁会话正在验的笔都不算）
+  汇总已同步落盘（不靠 stdout 的尾）：/tmp/dsh-head-cert-dfaa2d1/summary.txt
+```

@@ -26,6 +26,7 @@ import { dirname, join, resolve } from "node:path";
 
 import { certGateCell, certGatePlan, certGateVerdict, certLevel, CERT_FLAGS, CERT_OPTS, certTreeAbs, certTreeReclaim, collisionHint, concurrencyReading, countConcurrentSuites, declaredDeps, defaultTimeoutFromConfig, depDirs, gitInflightArgs, headGateTableIntegrity, mainRootFromCommonDir, missingDeclaredDeps, parseCertGateRows, parseWorktreeList, readInvalidated, staleScratchTrees, staleTreeCell, suiteRows, timingCell, timingNearCapCell, unknownCertArgs, wallClockCell } from "./lib/head-cert-deps";
 import { acquireToolLock } from "./lib/tool-lock";
+import { citableOf, provenanceDoc, provenancePath, provenanceStamp } from "./lib/head-cert-provenance";
 import { checkHeadImportFace, collectHeadEdges, findDanglingImports } from "./head-import-face";
 
 const argv = process.argv.slice(2);
@@ -374,5 +375,19 @@ try {
   say(`  汇总已同步落盘（不靠 stdout 的尾）：${join(logDir, "summary.txt")}`);
 } catch (e) {
   say(`⚠️ 汇总落盘失败（${String((e as NodeJS.ErrnoException).code)}) ⇒ 这次的完整读数只在 stdout 上，可能被截`);
+}
+/* 第 334 页 · #41：把「这一趟的温度 ＋ 它自己打出来的读数」落成**可入库**的工件。
+   动因不是设计洁癖：同一会话里我手工从 `/tmp` 抄了三次 test.log／summary.txt 才敢在页上引用时间量，
+   其中一次忘了抄 ⇒ `docs-check` D-9 把那一格判红（「读数在点名的取料面里找不到原文」）。
+   而凭证页最爱引用的恰恰是时间量，它只在两端独占时成立——这件事从前全靠人记住。 */
+try {
+  const citable = citableOf(psBefore, psAfter, testStatus !== null);
+  const stamp = provenanceStamp(new Date().toISOString());
+  const p = provenancePath(MAIN, TARGET, stamp);
+  mkdirSync(dirname(p), { recursive: true });
+  writeFileSync(p, provenanceDoc({ rev: TARGET, citable, drift, stamp, lines: spoken }), "utf8");
+  say(`  可引用读数已落盘（引用墙钟/门耗时前先读它）：${p.startsWith(MAIN + "/") ? p.slice(MAIN.length + 1) : p}`);
+} catch (e) {
+  say(`⚠️ provenance 落盘失败（${String((e as NodeJS.ErrnoException).code)}）⇒ 这一趟的温度只在 stdout 上；页要引时间量就先重跑一次，别拿记忆当出处`);
 }
 process.exit(code);
