@@ -307,6 +307,10 @@ export interface LiteralChunk {
   /** 它作值为哪个属性键（不是属性赋值＝`""`）。点名豁免要靠它分清
    *  一张表**产出的**字段与**给人读的散文**栏（见 `emittedChunks`）。 */
   key: string;
+  /** 这一格住在**配对行**对象里（同物体有一个 `face` 键的值是「`file#fn｜那句文案`」形）。
+   *  整行都是登记表数据：配对键、判卷文件名、给人读的 `why`——按定义流不到任何受众面前。
+   *  可选字段（不是必填）：夹具与旧留档脚本手搓的 chunk 不必知道它，缺省＝不是配对行。 */
+  pairRow?: true;
 }
 
 /** 字面量起点往前最近的函数头＝它所在的函数。只用来分副本，不是完整作用域分析（上限见页里写明）。 */
@@ -320,34 +324,80 @@ function enclosingFn(text: string, at: number): string {
 
 /** 抽字面量的静态段：词法树上取 `StringLiteral` / 模板的 head·middle·tail，
  *  `${…}` 天然就是段与段的边界，所以不再需要按正则切；每段共享所在函数的 `fn`。 */
+/** 「配对行」标记（第三族影子，**按结构判**、不是按键名放宽）：
+ *  能力断言的绑定登记表（`CLAIM_BINDINGS`）每行长这样——
+ *  `{ face: "src/…#fn｜那句生产文案", symbol, testFile, testCase, why }`。
+ *  整行的字面量都是**登记表数据**：`face` 是另一把尺产出的匹配键，`why` 给人读，
+ *  两者按定义流不到任何受众面前。数成"顶包候选"＝把两把尺的耦合误读成文案漂移
+ *  （第 317 页实测：登记 6 条绑定，顶包候选从 10 涨到 11，把那把尺的"只准下调"顶红）。
+ *  为什么不能整文件豁免：同一份 probe 里 `memoryUnavailableText` 那种真给模型看的句子照旧算生产者
+ *  （第 96 页那条「27 比应有的低 1 格」就是豁免开太宽留下的账）。
+ *  为什么不能按 `why:` 这个**键名**豁免（`DOC_PROSE_KEYS` 那一族）：仓里 `why` 是**会发出去的字段**
+ *  ——`src/agent/worker-shell-tools.ts:188`、`scripts/lib/eval-retry.ts:70` 的 `why` 直接进受众文案，
+ *  按名豁免会把这两处真生产者一起放走。
+ *  所以标记问的是结构：这个物体里有没有一个 `face` 键、它的值是「`file#fn｜…`」形的**字符串字面量**。
+ *  实测两个近似物因此**不**被豁免：`src/tools/diagnose.ts:57` 的 `face:` 值是对象（里面那句
+ *  `description` 是模型可见的工具规格），`scripts/lib/eval-assembly.ts` 的 `face: "off-here"` 没有 `#…｜`。 */
+export const FACE_REF_KEY = "face";
+export const FACE_REF_SHAPE = /^src\/[^\s]+#[^\s]+｜\S/u;
+
+export function isFaceRefChunk(c: Pick<LiteralChunk, "chunk">): boolean {
+  return FACE_REF_SHAPE.test(c.chunk);
+}
+
+/** 这个物体字面量是不是配对行（判据见上）。 */
+function hasPairFaceKey(obj: ts.ObjectLiteralExpression, source: ts.SourceFile): boolean {
+  return obj.properties.some((p) => {
+    if (p.kind !== ts.SyntaxKind.PropertyAssignment) return false;
+    const pa = p as ts.PropertyAssignment;
+    const name = pa.name.getText(source).replace(/^["']|["']$/g, "");
+    if (name !== FACE_REF_KEY) return false;
+    const k = pa.initializer.kind;
+    if (k !== ts.SyntaxKind.StringLiteral && k !== ts.SyntaxKind.NoSubstitutionTemplateLiteral) return false;
+    return isFaceRefChunk({ chunk: decodeJs(pa.initializer.getText(source).slice(1, -1)) });
+  });
+}
+
 export function extractLiterals(path: string, text: string): LiteralChunk[] {
   const { code, source } = lex(text);
   const out: LiteralChunk[] = [];
   const K = ts.SyntaxKind;
-  const push = (node: ts.Node, raw: string, key: string): void => {
+  const push = (node: ts.Node, raw: string, key: string, pairRow: boolean): void => {
     const chunk = decodeJs(raw);
-    if (chunk.trim() !== "") out.push({ path, fn: enclosingFn(code, node.getStart(source)), key, chunk });
+    if (chunk.trim() === "") return;
+    const fn = enclosingFn(code, node.getStart(source));
+    out.push(pairRow ? { path, fn, key, chunk, pairRow: true } : { path, fn, key, chunk });
   };
-  const walk = (node: ts.Node, key: string): void => {
+  const walk = (node: ts.Node, key: string, pairRow: boolean): void => {
     const t = node.getText(source);
     if (node.kind === K.StringLiteral || node.kind === K.NoSubstitutionTemplateLiteral || node.kind === K.TemplateTail) {
-      push(node, t.slice(1, -1), key);
+      push(node, t.slice(1, -1), key, pairRow);
       return;
     }
     if (node.kind === K.TemplateHead || node.kind === K.TemplateMiddle) {
-      push(node, t.slice(1, -2), key);
+      push(node, t.slice(1, -2), key, pairRow);
       return;
     }
     // 属性赋值：只把键名带给 initializer；遍历形状与原来逐字相同（键名自己仍按"无键"收，不增不减口径）
     if (node.kind === K.PropertyAssignment) {
       const pa = node as ts.PropertyAssignment;
       const k = pa.name.getText(source).replace(/^["']|["']$/g, "");
-      node.forEachChild((c) => walk(c, c === pa.initializer ? k : key));
+      node.forEachChild((c) => walk(c, c === pa.initializer ? k : key, pairRow));
       return;
     }
-    node.forEachChild((c) => walk(c, key));
+    // 配对行整行豁免：进入带 `face` 匹配键的物体后，行内所有字面量都标记为登记表数据（嵌套物体继承）
+    if (node.kind === K.ObjectLiteralExpression) {
+      const inRow = pairRow || hasPairFaceKey(node as ts.ObjectLiteralExpression, source);
+      if (inRow === pairRow) {
+        node.forEachChild((c) => walk(c, key, pairRow));
+        return;
+      }
+      node.forEachChild((c) => walk(c, key, true));
+      return;
+    }
+    node.forEachChild((c) => walk(c, key, pairRow));
   };
-  source.statements.forEach((s) => walk(s, ""));
+  source.statements.forEach((s) => walk(s, "", false));
   return out;
 }
 
@@ -456,7 +506,7 @@ export interface ShadowFile {
   entries: number;
 }
 
-/** 影子池 = 登记表 ∪ 用例表（都用内容谓词认，不写文件名清单）。 */
+/** 影子池 = 登记表 ∪ 用例表（都用内容谓词认，不写文件名清单）；配对行是第三种粒度（逐 chunk，见 `extractLiterals`）。 */
 export function shadowFilesOf(sources: readonly { path: string; text: string }[]): ShadowFile[] {
   const out: ShadowFile[] = [];
   for (const s of sources) {
@@ -489,7 +539,7 @@ export function classifyNeedles(
   const anchorPaths = new Set(kinds.filter((s) => s.kind === "登记表").map((s) => s.path));
   const chunksOf = new Map<string, LiteralChunk[]>();
   for (const c of chunks) chunksOf.set(c.path, [...(chunksOf.get(c.path) ?? []), c]);
-  const producerChunks = chunks.filter((c) => !shadowPaths.has(c.path));
+  const producerChunks = chunks.filter((c) => !shadowPaths.has(c.path) && c.pairRow !== true);
   const producerByPath = new Map<string, string>();
   for (const c of producerChunks) producerByPath.set(c.path, (producerByPath.get(c.path) ?? "") + c.chunk);
   // 点名豁免只回灌表**产出的**字面量（`desc:` 那类给人读的散文栏不算，见 `emittedChunks`）

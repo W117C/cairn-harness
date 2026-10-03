@@ -1,0 +1,15 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+[90mstdout[2m | tests/prose-needle-scan.test.ts[2m > [22m[2m真仓扫：这把尺自己不许空载[2m > [22m[2m同一对账在真仓上跑一遍，且 `across` 那一格今天到底有没有数——读数当场印出来
+[22m[39m  ｜真仓门面自报：across＝6｜viaCounts 三档＝{"字段直取":138,"本地 helper":6,"字段别名":6}
+
+ [32m✓[39m tests/prose-needle-scan.test.ts [2m([22m[2m91 tests[22m[2m)[22m[33m 22230[2mms[22m[39m
+   [32m✓[39m 配对行豁免：绑定登记表整行是数据，不是文案的生产者 [2m(8)[22m
+     [33m[2m✓[22m[39m 真仓现读：登记表那些行确实被认出来（且不是整文件豁免），两个近似物一个都没被误伤[33m 337[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m91 passed[39m[22m[90m (91)[39m
+[2m   Start at [22m 12:15:46
+[2m   Duration [22m 22.95s[2m (tests 98%, import 2%, transform 1%)[22m
+

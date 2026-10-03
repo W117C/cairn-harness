@@ -16,11 +16,13 @@ import {
   collectNeedles,
   copyCount,
   copySites,
+  DOC_PROSE_KEYS,
   emittedChunks,
   extractLiterals,
   isAnchorTable,
   ceilingBreaches,
   isBareNameNeedle,
+  isFaceRefChunk,
   isInputRegistry,
   KNOWN_NON_DRIFT,
   levelVsCap,
@@ -433,6 +435,120 @@ describe("影子池：登记表的引用与用例表的输入都不算生产者"
     const got = extractLiterals("t.ts", 'const T = [{ note: "甲", desc: "乙" }];\nconst top = "丙";');
     expect(got.map((c) => [c.key, c.chunk])).toEqual([["note", "甲"], ["desc", "乙"], ["", "丙"]]);
     expect(emittedChunks(got).map((c) => c.chunk)).toEqual(["甲", "丙"]);
+  });
+});
+
+// 第三族影子（第 318 页）：能力断言的**绑定登记表**整行都是数据——`face` 逐字带着另一把尺产出的那句（它是匹配键），
+// `why` 给人读。两者按定义流不到任何受众面前，却恰好是最容易把「唯一的真生产者」垫成「2 处副本＝顶包」的东西：
+// 实测登记 6 条绑定，顶包候选从 10 涨到 11，把另一把尺的「只准下调」顶红。
+// 这条豁免只能开在**行**上：按文件开会吃掉同一份 probe 里真给模型看的句子（第 96 页那笔账），
+// 按 `why:` 这个键名开会吃掉 `src/agent/worker-shell-tools.ts:188`、`scripts/lib/eval-retry.ts:70` 两个真生产者。
+describe("配对行豁免：绑定登记表整行是数据，不是文案的生产者", () => {
+  const producerPath = "src/agent/prune.ts";
+  const bindingPath = "scripts/probe-claims.ts";
+  const nd = (sought: string): ProseNeedle => ({
+    file: "tests/prune.test.ts", line: 1, field: "detail", via: "字段直取", needle: sought, suppliedInTest: false,
+  });
+  const rowText = (needle: string): string =>
+    "export const BINDINGS = [\n" +
+    "  {\n" +
+    '    face: "src/agent/prune.ts#knob｜' + needle + '",\n' +
+    '    symbol: "knob",\n' +
+    '    testFile: "tests/prune.test.ts",\n' +
+    '    testCase: "每轮都落盘的那一支",\n' +
+    '    why: "那句话只在红的一支拼进 detail：' + needle + '",\n' +
+    "  },\n" +
+    "];\n" +
+    "export function bind() {\n  return 1;\n}\n";
+  const pairSources = (needle: string) => [
+    src(producerPath, 'function f() {\n  detail = "' + needle + '";\n}'),
+    src(bindingPath, rowText(needle)),
+  ];
+
+  it("整行都挡：匹配键与给人读的说明一起出去，真生产者那一处还在（copies 与 rawCopies 并排）", () => {
+    const needle = "门槛拨到多低都不落盘";
+    const [v] = classifyNeedles([nd(needle)], pairSources(needle));
+    // raw 是 2 而不是 3：副本按「文件＋函数」数一处（face 与 why 同在这份文件的顶层），
+    // 与 `copyCount` 既有口径一致——这里钉的是「挡完只剩真生产者那一处」。
+    expect([v!.kind, v!.copies, v!.rawCopies]).toEqual(["verbatim", 1, 2]);
+  });
+
+  it("反向 A：face 的值是**对象**（工具规格那一族）⇒ 行不豁免——行里的 description 是真给模型看的", () => {
+    const needle = "只跑哪一类";
+    const [v] = classifyNeedles([nd(needle)], [
+      src("src/tools/diagnose.ts", 'function spec() {\n  return {\n    face: { type: "string", description: "' + needle + '" },\n  };\n}\n'),
+      src(producerPath, 'function f() {\n  detail = "' + needle + '";\n}'),
+    ]);
+    expect([v!.kind, v!.copies, v!.rawCopies]).toEqual(["verbatim", 2, 2]);
+  });
+
+  it("反向 B：face 的值是枚举词（没有那段「file#fn｜」形状）⇒ 那是取值，不是配对键，行不豁免", () => {
+    const needle = "缺省没装这一档";
+    const [v] = classifyNeedles([nd(needle)], [
+      src("scripts/lib/knobs.ts", 'export const K = [\n  { face: "off-here", note: "' + needle + '" },\n];\nexport function g() {\n  return 1;\n}\n'),
+      src(producerPath, 'function f() {\n  detail = "' + needle + '";\n}'),
+    ]);
+    expect(v!.copies).toBe(2);
+  });
+
+  it("键名不是判据：why 是**会发出去的字段**，不在配对行里的 why 照算生产者（也不许进散文栏名单）", () => {
+    const needle = "超出可等待上限";
+    const [v] = classifyNeedles([nd(needle)], [
+      src("scripts/lib/eval-retry.ts", 'function plan() {\n  return { why: "' + needle + '" };\n}\n'),
+      src(producerPath, 'function f() {\n  detail = "' + needle + '";\n}'),
+    ]);
+    expect(v!.copies).toBe(2);
+    // 上面那条若哪天因为有人把 why 顺手加进散文栏而变绿，这一条要当场说出是谁改的口径。
+    expect(DOC_PROSE_KEYS).not.toContain("why");
+  });
+
+  it("只剩配对行当出处时不许读成 verbatim：那格要么漂、要么由测试自己点名（豁免不制造证人）", () => {
+    const needle = "只有登记表里有的一句";
+    const [v] = classifyNeedles([nd(needle)], [
+      src(producerPath, 'function f() {\n  detail = "别的文案";\n}'),
+      src(bindingPath, rowText(needle)),
+    ]);
+    // 后半句是这条用例的哨兵：先证明那句话**确实**躺在行里（副本按文件＋函数数＝1 处），
+    // 否则上面那个 drift 只是"夹具没写进去"的另一种说法（恒真判据，第 4 步拦的就是它）。
+    expect(copyCount(extractLiterals(bindingPath, rowText(needle)), needle), "行内出处本身要先成立").toBe(1);
+    // drift 那一支带的是 `zero`（raw 不补数）：豁免把池子清空后，不许再拿"影子也在"制造一个 verbatim。
+    expect([v!.kind, v!.copies, v!.rawCopies]).toEqual(["drift", 0, 0]);
+  });
+
+  it("豁免只到行、不到文件：含配对行的那份文件不许整份进影子池（同文件里的真文案还在面内）", () => {
+    const needle = "门槛拨到多低都不落盘";
+    // 夹具这一侧：这份文件既不是登记表也不是用例表 ⇒ 影子池认不出它
+    expect(shadowFilesOf(pairSources(needle))).toEqual([]);
+    // 同一份文件里、行外的那句必须**还在生产者池**——「按文件豁免」一旦开出来，先掉的是这一格
+    // （第 96 页那笔账的两种形状之一：另一种是整份 probe 被认成影子文件，见下面真仓那一半）。
+    const outside = "行外那句才是真文案";
+    const sameFile = [src(bindingPath, rowText(needle) + 'function out() {\n  note = "' + outside + '";\n}\n')];
+    const [v] = classifyNeedles([nd(outside)], sameFile);
+    expect([v!.kind, v!.copies]).toEqual(["verbatim", 1]);
+    // 真仓那一侧：绑定登记表住的那份 probe 也不许被认成影子文件
+    const here = resolve(fileURLToPath(import.meta.url), "../..");
+    const realBinding = "scripts/probe-promise-recall.ts";
+    expect(shadowFilesOf([src(realBinding, readFileSync(join(here, realBinding), "utf8"))])).toEqual([]);
+  });
+
+  it("形状谓词两侧：带「file#fn｜」的才算配对键，别的字符串不算", () => {
+    expect(isFaceRefChunk({ chunk: "src/a.ts#fn｜那句" })).toBe(true);
+    expect(isFaceRefChunk({ chunk: "off-here" })).toBe(false);
+    expect(isFaceRefChunk({ chunk: "src/a.ts#fn" })).toBe(false);
+  });
+
+  it("真仓现读：登记表那些行确实被认出来（且不是整文件豁免），两个近似物一个都没被误伤", () => {
+    const here = resolve(fileURLToPath(import.meta.url), "../..");
+    const realBinding = "scripts/probe-promise-recall.ts";
+    const chunks = extractLiterals(realBinding, readFileSync(join(here, realBinding), "utf8"));
+    const rows = chunks.filter((c) => c.pairRow === true);
+    expect(rows.length).toBeGreaterThanOrEqual(5);
+    expect([...new Set(rows.map((c) => c.key))].sort()).toEqual(["face", "symbol", "testCase", "testFile", "why"]);
+    // 整文件豁免没开：同一份 probe 里仍有大量行外字面量（真给受众看的句子照旧算生产者）
+    expect(chunks.some((c) => c.pairRow !== true)).toBe(true);
+    for (const p of ["src/tools/diagnose.ts", "scripts/lib/eval-assembly.ts", "src/agent/prune-batching.ts"]) {
+      expect(extractLiterals(p, readFileSync(join(here, p), "utf8")).some((c) => c.pairRow === true), p).toBe(false);
+    }
   });
 });
 

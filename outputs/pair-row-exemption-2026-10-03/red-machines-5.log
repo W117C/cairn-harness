@@ -1,0 +1,324 @@
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 3 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/prose-needle-scan.test.ts[2m > [22m配对行豁免：绑定登记表整行是数据，不是文案的生产者[2m > [22m整行都挡：匹配键与给人读的说明一起出去，真生产者那一处还在（copies 与 rawCopies 并排）
+[31m[1mAssertionError[22m: expected [ 'verbatim', 2, 2 ] to deeply equal [ 'verbatim', 1, 2 ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  [[22m
+[2m    "verbatim",[22m
+[32m-   1,[39m
+[31m+   2,[39m
+[2m    2,[22m
+[2m  ][22m
+
+[36m [2m❯[22m tests/prose-needle-scan.test.ts:[2m473:48[22m[39m
+    [90m471|[39m     // raw 是 2 而不是 3：副本按「文件＋函数」数一处（face 与 why 同在这份文件的顶层），
+    [90m472|[39m     // 与 `copyCount` 既有口径一致——这里钉的是「挡完只剩真生产者那一处」。
+    [90m473|[39m     expect([v!.kind, v!.copies, v!.rawCopies]).toEqual(["verbatim", 1,…
+    [90m   |[39m                                                [31m^[39m
+    [90m474|[39m   });
+    [90m475|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/prose-needle-scan.test.ts[2m > [22m配对行豁免：绑定登记表整行是数据，不是文案的生产者[2m > [22m只剩配对行当出处时不许读成 verbatim：那格要么漂、要么由测试自己点名（豁免不制造证人）
+[31m[1mAssertionError[22m: expected [ 'verbatim', 1, 1 ] to deeply equal [ 'drift', +0, +0 ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  [[22m
+[32m-   "drift",[39m
+[32m-   0,[39m
+[32m-   0,[39m
+[31m+   "verbatim",[39m
+[31m+   1,[39m
+[31m+   1,[39m
+[2m  ][22m
+
+[36m [2m❯[22m tests/prose-needle-scan.test.ts:[2m515:48[22m[39m
+    [90m513|[39m     expect(copyCount(extractLiterals(bindingPath, rowText(needle)), ne…
+    [90m514|[39m     // drift 那一支带的是 `zero`（raw 不补数）：豁免把池子清空后，不许再拿"影子也在"制造一个 verbatim。
+    [90m515|[39m     expect([v!.kind, v!.copies, v!.rawCopies]).toEqual(["drift", 0, 0]…
+    [90m   |[39m                                                [31m^[39m
+    [90m516|[39m   });
+    [90m517|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/prose-needle-scan.test.ts[2m > [22m真仓扫：这把尺自己不许空载[2m > [22m真仓读数必须在帽内——判卷直接吃 CLI 那个函数，不许自己再算一遍
+[31m[1mAssertionError[22m: expected { …(2) } to deeply equal { multi: '', bare: '' }[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  {[22m
+[2m    "bare": "",[22m
+[32m-   "multi": "",[39m
+[31m+   "multi": "❌ 水位上涨：顶包候选 11（已提交 11 ＋ 在飞 0）> 登记的 10（树＝core-only；只准下调，降法见任务 #20。两半都算账——在飞那半不是豁免，只是「谁把它推上去的」这条解释）",[39m
+[2m  }[22m
+
+[36m [2m❯[22m tests/prose-needle-scan.test.ts:[2m891:32[22m[39m
+    [90m889|[39m
+    [90m890|[39m   it("真仓读数必须在帽内——判卷直接吃 CLI 那个函数，不许自己再算一遍", () => {
+    [90m891|[39m     expect(ceilingBreaches(r)).toEqual({ multi: "", bare: "" });
+    [90m   |[39m                                [31m^[39m
+    [90m892|[39m     // 两半之和＝名单总数：分面漏一半（只数已提交／只数在飞）会在这儿红，且与树脏净无关。
+    [90m893|[39m     expect(r.committedMultiCopy + r.inFlightMultiCopy).toBe(r.multiCop…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯[22m[39m
+
+✅ M1-exemption-removed 红在「整行都挡：匹配键与给人读的说明一起出去，真生产者那一处还在（copies 与 rawCopies 并排）」（failed=3，21652ms，退 1）
+   其余红：只剩配对行当出处时不许读成 verbatim：那格要么漂、要么由测试自己点名（豁免不制造证人） / 真仓读数必须在帽内——判卷直接吃 CLI 那个函数，不许自己再算一遍
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/prose-needle-scan.test.ts[2m > [22m配对行豁免：绑定登记表整行是数据，不是文案的生产者[2m > [22m反向 B：face 的值是枚举词（没有那段「file#fn｜」形状）⇒ 那是取值，不是配对键，行不豁免
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/prose-needle-scan.test.ts:[2m491:23[22m[39m
+    [90m489|[39m       src(producerPath, 'function f() {\n  detail = "' + needle + '";\…
+    [90m490|[39m     ]);
+    [90m491|[39m     expect(v!.copies).toBe(2);
+    [90m   |[39m                       [31m^[39m
+    [90m492|[39m   });
+    [90m493|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/prose-needle-scan.test.ts[2m > [22m配对行豁免：绑定登记表整行是数据，不是文案的生产者[2m > [22m真仓现读：登记表那些行确实被认出来（且不是整文件豁免），两个近似物一个都没被误伤
+[31m[1mAssertionError[22m: src/tools/diagnose.ts: expected true to be false // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- false[39m
+[31m+ true[39m
+
+[36m [2m❯[22m tests/prose-needle-scan.test.ts:[2m550:106[22m[39m
+    [90m548|[39m     expect(chunks.some((c) => c.pairRow !== true)).toBe(true);
+    [90m549|[39m     for (const p of ["src/tools/diagnose.ts", "scripts/lib/eval-assemb…
+    [90m550|[39m       expect(extractLiterals(p, readFileSync(join(here, p), "utf8")).s…
+    [90m   |[39m                                                                                                          [31m^[39m
+    [90m551|[39m     }
+    [90m552|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+✅ M2-any-face-string-is-a-key 红在「反向 B：face 的值是枚举词（没有那段「file#fn｜」形状）⇒ 那是取值，不是配对键，行不豁免」（failed=2，18841ms，退 1）
+   其余红：真仓现读：登记表那些行确实被认出来（且不是整文件豁免），两个近似物一个都没被误伤
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 4 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/prose-needle-scan.test.ts[2m > [22m配对行豁免：绑定登记表整行是数据，不是文案的生产者[2m > [22m反向 A：face 的值是**对象**（工具规格那一族）⇒ 行不豁免——行里的 description 是真给模型看的
+[31m[1mAssertionError[22m: expected [ 'verbatim', 1, 2 ] to deeply equal [ 'verbatim', 2, 2 ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  [[22m
+[2m    "verbatim",[22m
+[32m-   2,[39m
+[31m+   1,[39m
+[2m    2,[22m
+[2m  ][22m
+
+[36m [2m❯[22m tests/prose-needle-scan.test.ts:[2m482:48[22m[39m
+    [90m480|[39m       src(producerPath, 'function f() {\n  detail = "' + needle + '";\…
+    [90m481|[39m     ]);
+    [90m482|[39m     expect([v!.kind, v!.copies, v!.rawCopies]).toEqual(["verbatim", 2,…
+    [90m   |[39m                                                [31m^[39m
+    [90m483|[39m   });
+    [90m484|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/prose-needle-scan.test.ts[2m > [22m配对行豁免：绑定登记表整行是数据，不是文案的生产者[2m > [22m反向 B：face 的值是枚举词（没有那段「file#fn｜」形状）⇒ 那是取值，不是配对键，行不豁免
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/prose-needle-scan.test.ts:[2m491:23[22m[39m
+    [90m489|[39m       src(producerPath, 'function f() {\n  detail = "' + needle + '";\…
+    [90m490|[39m     ]);
+    [90m491|[39m     expect(v!.copies).toBe(2);
+    [90m   |[39m                       [31m^[39m
+    [90m492|[39m   });
+    [90m493|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/prose-needle-scan.test.ts[2m > [22m配对行豁免：绑定登记表整行是数据，不是文案的生产者[2m > [22m真仓现读：登记表那些行确实被认出来（且不是整文件豁免），两个近似物一个都没被误伤
+[31m[1mAssertionError[22m: src/tools/diagnose.ts: expected true to be false // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- false[39m
+[31m+ true[39m
+
+[36m [2m❯[22m tests/prose-needle-scan.test.ts:[2m550:106[22m[39m
+    [90m548|[39m     expect(chunks.some((c) => c.pairRow !== true)).toBe(true);
+    [90m549|[39m     for (const p of ["src/tools/diagnose.ts", "scripts/lib/eval-assemb…
+    [90m550|[39m       expect(extractLiterals(p, readFileSync(join(here, p), "utf8")).s…
+    [90m   |[39m                                                                                                          [31m^[39m
+    [90m551|[39m     }
+    [90m552|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/prose-needle-scan.test.ts[2m > [22m真仓扫：这把尺自己不许空载[2m > [22m未登记的 drift（已提交态）＝ 0；豁免表为空 ⇒ stale 也必须为空（登记烂在这儿要红）
+[31m[1mAssertionError[22m: expected [ Array(1) ] to deeply equal [][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   "tests/eval-assembly.test.ts:装配表里查不到",[39m
+[31m+ ][39m
+
+[36m [2m❯[22m tests/prose-needle-scan.test.ts:[2m880:58[22m[39m
+    [90m878|[39m
+    [90m879|[39m   it("未登记的 drift（已提交态）＝ 0；豁免表为空 ⇒ stale 也必须为空（登记烂在这儿要红）", () => {
+    [90m880|[39m     expect(r.drift.map((d) => `${d.file}:${d.lostRun}`)).toEqual([]);
+    [90m   |[39m                                                          [31m^[39m
+    [90m881|[39m     expect(r.stale).toEqual([]);
+    [90m882|[39m     // 本轮实录：曾登记过两条（docs-check 的「30000」「no-such」），登记后不到一小时被别人的在飞改动
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯[22m[39m
+
+✅ M3-object-valued-face-counts 红在「反向 A：face 的值是**对象**（工具规格那一族）⇒ 行不豁免——行里的 description 是真给模型看的」（failed=4，19500ms，退 1）
+   其余红：反向 B：face 的值是枚举词（没有那段「file#fn｜」形状）⇒ 那是取值，不是配对键，行不豁免 / 真仓现读：登记表那些行确实被认出来（且不是整文件豁免），两个近似物一个都没被误伤 / 未登记的 drift（已提交态）＝ 0；豁免表为空 ⇒ stale 也必须为空（登记烂在这儿要红）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/prose-needle-scan.test.ts[2m > [22m配对行豁免：绑定登记表整行是数据，不是文案的生产者[2m > [22m键名不是判据：why 是**会发出去的字段**，不在配对行里的 why 照算生产者（也不许进散文栏名单）
+[31m[1mAssertionError[22m: expected [ 'desc', 'why' ] to not include 'why'[39m
+[36m [2m❯[22m tests/prose-needle-scan.test.ts:[2m502:32[22m[39m
+    [90m500|[39m     expect(v!.copies).toBe(2);
+    [90m501|[39m     // 上面那条若哪天因为有人把 why 顺手加进散文栏而变绿，这一条要当场说出是谁改的口径。
+    [90m502|[39m     expect(DOC_PROSE_KEYS).not.toContain("why");
+    [90m   |[39m                                [31m^[39m
+    [90m503|[39m   });
+    [90m504|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M4-why-joins-prose-keys 红在「键名不是判据：why 是**会发出去的字段**，不在配对行里的 why 照算生产者（也不许进散文栏名单）」（failed=1，19081ms，退 1）
+   其余红：（无）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 4 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/prose-needle-scan.test.ts[2m > [22m配对行豁免：绑定登记表整行是数据，不是文案的生产者[2m > [22m反向 A：face 的值是**对象**（工具规格那一族）⇒ 行不豁免——行里的 description 是真给模型看的
+[31m[1mAssertionError[22m: expected [ 'verbatim', 1, 2 ] to deeply equal [ 'verbatim', 2, 2 ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  [[22m
+[2m    "verbatim",[22m
+[32m-   2,[39m
+[31m+   1,[39m
+[2m    2,[22m
+[2m  ][22m
+
+[36m [2m❯[22m tests/prose-needle-scan.test.ts:[2m482:48[22m[39m
+    [90m480|[39m       src(producerPath, 'function f() {\n  detail = "' + needle + '";\…
+    [90m481|[39m     ]);
+    [90m482|[39m     expect([v!.kind, v!.copies, v!.rawCopies]).toEqual(["verbatim", 2,…
+    [90m   |[39m                                                [31m^[39m
+    [90m483|[39m   });
+    [90m484|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/prose-needle-scan.test.ts[2m > [22m配对行豁免：绑定登记表整行是数据，不是文案的生产者[2m > [22m反向 B：face 的值是枚举词（没有那段「file#fn｜」形状）⇒ 那是取值，不是配对键，行不豁免
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m tests/prose-needle-scan.test.ts:[2m491:23[22m[39m
+    [90m489|[39m       src(producerPath, 'function f() {\n  detail = "' + needle + '";\…
+    [90m490|[39m     ]);
+    [90m491|[39m     expect(v!.copies).toBe(2);
+    [90m   |[39m                       [31m^[39m
+    [90m492|[39m   });
+    [90m493|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/prose-needle-scan.test.ts[2m > [22m配对行豁免：绑定登记表整行是数据，不是文案的生产者[2m > [22m豁免只到行、不到文件：含配对行的那份文件不许整份进影子池（同文件里的真文案还在面内）
+[31m[1mAssertionError[22m: expected [ 'drift', +0 ] to deeply equal [ 'verbatim', 1 ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  [[22m
+[32m-   "verbatim",[39m
+[32m-   1,[39m
+[31m+   "drift",[39m
+[31m+   0,[39m
+[2m  ][22m
+
+[36m [2m❯[22m tests/prose-needle-scan.test.ts:[2m527:34[22m[39m
+    [90m525|[39m     const sameFile = [src(bindingPath, rowText(needle) + 'function out…
+    [90m526|[39m     const [v] = classifyNeedles([nd(outside)], sameFile);
+    [90m527|[39m     expect([v!.kind, v!.copies]).toEqual(["verbatim", 1]);
+    [90m   |[39m                                  [31m^[39m
+    [90m528|[39m     // 真仓那一侧：绑定登记表住的那份 probe 也不许被认成影子文件
+    [90m529|[39m     const here = resolve(fileURLToPath(import.meta.url), "../..");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/prose-needle-scan.test.ts[2m > [22m真仓扫：这把尺自己不许空载[2m > [22m未登记的 drift（已提交态）＝ 0；豁免表为空 ⇒ stale 也必须为空（登记烂在这儿要红）
+[31m[1mAssertionError[22m: expected [ 'tests/docs-check.test.ts:水位', …(9) ] to deeply equal [][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   "tests/docs-check.test.ts:水位",[39m
+[31m+   "tests/docs-check.test.ts:超出存量豁免",[39m
+[31m+   "tests/docs-check.test.ts:没有任何文档引用",[39m
+[31m+   "tests/docs-check.test.ts:CRED_UNNAMED_PAGE_CAP",[39m
+[31m+   "tests/docs-check.test.ts:在台账里已不再命中",[39m
+[31m+   "tests/docs-check.test.ts:理由只有",[39m
+[31m+   "tests/docs-check.test.ts:CRED_WEAK_WITNESS_CAP",[39m
+[31m+   "tests/docs-check.test.ts:目录一件工件都没入库",[39m
+[31m+   "tests/eval-assembly.test.ts:装配表里查不到",[39m
+[31m+   "tests/prune.test.ts:在此刻",[39m
+[31m+ ][39m
+
+[36m [2m❯[22m tests/prose-needle-scan.test.ts:[2m880:58[22m[39m
+    [90m878|[39m
+    [90m879|[39m   it("未登记的 drift（已提交态）＝ 0；豁免表为空 ⇒ stale 也必须为空（登记烂在这儿要红）", () => {
+    [90m880|[39m     expect(r.drift.map((d) => `${d.file}:${d.lostRun}`)).toEqual([]);
+    [90m   |[39m                                                          [31m^[39m
+    [90m881|[39m     expect(r.stale).toEqual([]);
+    [90m882|[39m     // 本轮实录：曾登记过两条（docs-check 的「30000」「no-such」），登记后不到一小时被别人的在飞改动
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯[22m[39m
+
+✅ M5-file-level-exemption 红在「豁免只到行、不到文件：含配对行的那份文件不许整份进影子池（同文件里的真文案还在面内）」（failed=4，17290ms，退 1）
+   其余红：反向 A：face 的值是**对象**（工具规格那一族）⇒ 行不豁免——行里的 description 是真给模型看的 / 反向 B：face 的值是枚举词（没有那段「file#fn｜」形状）⇒ 那是取值，不是配对键，行不豁免 / 未登记的 drift（已提交态）＝ 0；豁免表为空 ⇒ stale 也必须为空（登记烂在这儿要红）
+复原校验：与备份逐字节一致 ✅
+RED_MACHINES=OK

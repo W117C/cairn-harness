@@ -12794,6 +12794,82 @@ const MUTATIONS = [
     ),
     expectFail: "同一个决策点：topic 谓词与 validateTopic 的抛出对同一批输入必须同答（注入器筛的就是谓词，抄两份迟早漂）",
   },
+  // 第 318 页：绑定登记表被顶包候选尺数成副本 ⇒ 影子池加第三族（配对行）。六根锚点＝这一族的六个可松口处，
+  // 每台在四台造红里各红一条不同用例（红集合见 outputs/pair-row-exemption-2026-10-03/red-machines-5.log）。
+  {
+    id: "pair-row-exemption-removed-from-producer-pool",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "把配对行豁免从生产者池里摘掉 ⇒ 另一把尺的登记表自己替生产文案作证，"
+      + "唯一的真生产者被垫成「2 处副本＝顶包」（第 317 页实测：登记 6 条绑定，顶包候选 10→11，把「只准下调」顶红）",
+    apply: (s) => s.replace(
+      "chunks.filter((c) => !shadowPaths.has(c.path) && c.pairRow !== true)",
+      "chunks.filter((c) => !shadowPaths.has(c.path))",
+    ),
+    expectFail: "整行都挡：匹配键与给人读的说明一起出去，真生产者那一处还在（copies 与 rawCopies 并排）",
+  },
+  {
+    id: "pair-row-face-shape-check-dropped",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "形状检查放宽成「叫 face 的字符串都是配对键」⇒ 枚举值那一族被误当登记表。"
+      + "现读反例两处：`scripts/lib/eval-assembly.ts` 的 `face: \"off-here\"`、`src/tools/diagnose.ts` 的 `picked.push({ face: \"lint\", command: c })`"
+      + "（后者那一行旁边就是发出去的文案）——实测 M2 那台同时红在这条用例与真仓那条上",
+    apply: (s) => s.replace(
+      "return isFaceRefChunk({ chunk: decodeJs(pa.initializer.getText(source).slice(1, -1)) });",
+      "return true;",
+    ),
+    expectFail: "反向 B：face 的值是枚举词（没有那段「file#fn｜」形状）⇒ 那是取值，不是配对键，行不豁免",
+  },
+  {
+    id: "pair-row-face-value-kind-unchecked",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "连「值必须是字符串」这一层一起摘掉 ⇒ 工具规格里 `face: {…}` 那行被认成配对行，"
+      + "同一物体里那句 `description`（模型读到的工具说明）就此从副本计数里消失——豁免吃的是真生产者",
+    apply: (s) => s.replace(
+      "if (k !== ts.SyntaxKind.StringLiteral && k !== ts.SyntaxKind.NoSubstitutionTemplateLiteral) return false;\n    return isFaceRefChunk({ chunk: decodeJs(pa.initializer.getText(source).slice(1, -1)) });",
+      "return true;",
+    ),
+    expectFail: "反向 A：face 的值是**对象**（工具规格那一族）⇒ 行不豁免——行里的 description 是真给模型看的",
+  },
+  {
+    id: "pair-row-exemption-marked-only-on-face-key",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "豁免只落在 `face` 那一格、不落到整行 ⇒ 同一行里给人读的 `why` 仍替生产文案作证。"
+      + "这一格是第 317 页那笔红②的真凶（`why` 抄了「对照是空的」那句），只挡 face 等于没修",
+    apply: (s) => s.replace(
+      "out.push(pairRow ? { path, fn, key, chunk, pairRow: true } : { path, fn, key, chunk });",
+      "out.push(pairRow && key === FACE_REF_KEY ? { path, fn, key, chunk, pairRow: true } : { path, fn, key, chunk });",
+    ),
+    expectFail: "只剩配对行当出处时不许读成 verbatim：那格要么漂、要么由测试自己点名（豁免不制造证人）",
+  },
+  {
+    id: "prose-why-key-joined-doc-prose-keys",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "图省事按**键名**放宽（把 why 塞进给人读的散文栏名单）⇒ `src/agent/worker-shell-tools.ts:188`"
+      + " 与 `scripts/lib/eval-retry.ts:70` 两处真会发出去的 why 一起失去观测。这一台只有那半句名单断言看得见"
+      + "（`why` 不在生产者筛选路径上，copies 那一位同答两态 ⇒ 观测者是 `DOC_PROSE_KEYS` 那条 not.toContain）",
+    apply: (s) => s.replace(
+      'export const DOC_PROSE_KEYS: readonly string[] = ["desc"];',
+      'export const DOC_PROSE_KEYS: readonly string[] = ["desc", "why"];',
+    ),
+    expectFail: "键名不是判据：why 是**会发出去的字段**，不在配对行里的 why 照算生产者（也不许进散文栏名单）",
+  },
+  {
+    id: "pair-row-exemption-widened-to-whole-file",
+    src: "scripts/prose-needle-scan.ts",
+    test: "tests/prose-needle-scan.test.ts",
+    desc: "把豁免从「行」放宽到「文件」（含 `face:` 的文件整个进影子池）⇒ 同一份 probe 里真给受众看的句子被一起放走。"
+      + "第 96 页那笔账的形状（「27 比应有的低 1 格」＝豁免开太宽留下的账），所以这条必须有自己的针脚",
+    apply: (s) => s.replace(
+      "const shadowPaths = new Set(kinds.map((s) => s.path));",
+      "const shadowPaths = new Set(kinds.map((s) => s.path).concat(sources.filter((s) => s.text.includes(\"face:\")).map((s) => s.path)));",
+    ),
+    expectFail: "豁免只到行、不到文件：含配对行的那份文件不许整份进影子池（同文件里的真文案还在面内）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
