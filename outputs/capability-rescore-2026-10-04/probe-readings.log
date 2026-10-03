@@ -1,0 +1,147 @@
+# 探针族零花费现读 · 树=/Users/ze/Downloads/deepseek harness/.worktrees/p335b-cap
+
+=== ①问题→代码位置 的命中尺 ｜ probe-locate-recall ｜ exit=0
+  L09 shape=nl idents=1 ctx=0 target=src/agent/memory/inject.ts | 1024:A=第1(词面=第1,排名=第44) C=第44 B=第44[A词面=6/排名=59/tok=977 C排名=59/tok=918 B排名=59] | 2048:A=第1(词面=第1,排名=第44) C=第44 B=第44[A词面=6/排名=83/tok=1956 C排名=83/tok=1897 B排
+  L10 shape=nl idents=0 ctx=0 target=src/agent/map/rank.ts | 1024:A=MISS(词面=MISS,排名=MISS) C=MISS B=MISS[A词面=6/排名=59/tok=977 C排名=59/tok=918 B排名=59] | 2048:A=MISS(词面=MISS,排名=MISS) C=MISS B=MISS[A词面=6/排名=83/tok=1956 C排名=83/to
+  L11 shape=ident idents=1 ctx=0 target=src/agent/no-progress.ts | 1024:A=第10(词面=MISS,排名=第4) C=第4 B=MISS[A词面=6/排名=61/tok=999 C排名=61/tok=936 B排名=59] | 2048:A=第10(词面=MISS,排名=第4) C=第4 B=MISS[A词面=6/排名=85/tok=1987 C排名=85/tok=19
+  L12 shape=ident idents=2 ctx=1 target=src/main/settings.ts | 1024:A=第45(词面=MISS,排名=第39) C=第39 B=第36[A词面=6/排名=60/tok=985 C排名=60/tok=925 B排名=59] | 2048:A=第45(词面=MISS,排名=第39) C=第39 B=第36[A词面=6/排名=83/tok=1962 C排名=83/tok=1902
+  L13 shape=ident idents=3 ctx=1 target=src/main/sandbox.ts | 1024:A=第1(词面=第1,排名=MISS) C=MISS B=MISS[A词面=6/排名=59/tok=978 C排名=59/tok=918 B排名=59] | 2048:A=第1(词面=第1,排名=MISS) C=MISS B=MISS[A词面=6/排名=83/tok=1957 C排名=83/tok=1897 
+  L14 shape=ident idents=1 ctx=0 target=src/agent/model-surface.ts | 1024:A=MISS(词面=MISS,排名=MISS) C=MISS B=MISS[A词面=6/排名=59/tok=981 C排名=59/tok=918 B排名=59] | 2048:A=MISS(词面=MISS,排名=MISS) C=MISS B=MISS[A词面=6/排名=83/tok=1959 C
+  L-POS shape=sentinel idents=0 ctx=0 target=src/main/settings.ts | 1024:A=第42(词面=MISS,排名=第36) C=第36 B=第36[A词面=6/排名=59/tok=981 C排名=59/tok=918 B排名=59] | 2048:A=第42(词面=MISS,排名=第36) C=第36 B=第36[A词面=6/排名=83/tok=1960 C排名=83/tok
+  L-NEG shape=control idents=1 ctx=0 target=src/agent/definitely-not-a-real-file.ts | 1024:A=MISS(词面=MISS,排名=MISS) C=MISS B=MISS[A词面=6/排名=61/tok=1002 C排名=61/tok=936 B排名=59] | 2048:A=MISS(词面=MISS,排名=MISS) C=MISS B=MISS[A词面=
+  [locate-recall] 题数=16（其中真值题 14 条＋哨兵 1＋负控 1）· 题型分布 {"nl":10,"ident":4,"sentinel":1,"control":1}
+  [locate-recall] 预算 1024 tok ⇒ A 臂（条件化＋词面，生产形状）13/16 · C 臂（只条件化＝上一版）6/16 · B 臂（不条件化）5/16
+  [locate-recall] 预算 2048 tok ⇒ A 臂（条件化＋词面，生产形状）13/16 · C 臂（只条件化＝上一版）6/16 · B 臂（不条件化）5/16
+  [locate-recall] 预算 4096 tok ⇒ A 臂（条件化＋词面，生产形状）13/16 · C 臂（只条件化＝上一版）6/16 · B 臂（不条件化）5/16
+  [locate-recall] 词面通道：有检索行的格=48/48，平均列=6.0 个文件
+  [locate-recall] 增量归因：只有词面顶上的格=21（A−C 的功劳记在词面这一格）；C 命中而 A 两个面全丢=0（扣预算的代价）
+  [locate-recall] 负控 L-NEG 期望始终 MISS；正哨兵 L-POS 期望至少在 4096 命中（否则=图里真没有它）
+  [locate-recall] 条件化输入为空的题=10/16 ⇒ 这些题 C/B 两臂按构造同图，差值不许归因给条件化
+  [locate-recall] 覆盖面自述（1024 那一档、无词面）候选文件=608 进图=608 渲染进地图=59 tokens=918
+  [locate-recall] 自检 ✅ 正哨兵命中、负控未命中 ⇒ 上面的命中率可以引用
+
+=== ①地图召回（真实仓库语料） ｜ probe-map-recall ｜ exit=0
+  [map-recall] .ts 文件 618（有模块级声明的 578）· 声明 5244 · 图里有定义 5244 · 召回 1.0000
+  [map-recall] 漏抽名字 0 个；前 0：
+  [map-recall] 漏集指纹 da39a3ee5e6b
+  [map-recall] 整文件零抽取：0 个（这些文件在图里完全不存在，impact 只会回「没找到」）
+
+=== ①地图装配面（预算内塞得进多少） ｜ probe-map-compose ｜ exit=0
+  [compose] 候选面（生产端 scanSourceFilesAll 那一支）总数=608
+  [compose] 候选面按根目录：tests=296 src=173 scripts=109 apps=29 bin=1
+  [compose] 预算 1024：渲染文件=59 载荷=0 载荷占比=0.0% tokens=918 ／ 自述：候选=608 进图=608 帽=5000
+  [compose]   渲染面按根目录：src=49 scripts=4 apps=4 tests=2
+  [compose] 预算 2048：渲染文件=83 载荷=0 载荷占比=0.0% tokens=1897 ／ 自述：候选=608 进图=608 帽=5000
+  [compose]   渲染面按根目录：src=49 scripts=17 apps=15 tests=2
+  [compose] 预算 4096：渲染文件=124 载荷=0 载荷占比=0.0% tokens=3813 ／ 自述：候选=608 进图=608 帽=5000
+  [compose]   渲染面按根目录：scripts=58 src=49 apps=15 tests=2
+
+=== ①波及面结论的出处 ｜ probe-impact-provenance ｜ exit=0
+    ✅ 自证：同一份判据对「正证／反证成立／没有那张表」三态各给一个值（三态分开）
+    注入句（编辑 src/agent/ledger.ts）：[impact] src/agent/ledger.ts 定义符号的跨文件调用点（上 32，波及 16 个文件；其中 11 个符号在别的文件也有同名定义，波及数按名字图算 ⇒ 清单里可能混有无关文件；本次清单里 4 处只归得到别处那份同名定义（按 import 反证判定）；归属判定：1680 处已按「同名但另有出处」排除；完整清单见 impact_report 事件）：
+    tests/hook-session-end.test.ts: capture(L127), capture(L130)
+    tests/mutate-verify-gates.test.ts: clear(L872), clear(L882), clear(L887), clear(L897) 等 5 处
+    scripts/probe-promise-recall.ts: createObservationLedger(L872)
+    src/agent/solpi-runtime.ts: createObservationLedger(L52), createObservationLedger(L72)
+    tests/solpi-runtime.test.ts: createObservationLedger(L181), createObservationLedger(L186)
+    src/main/session-handlers.ts: deleteSession(L120)
+    …另有 10 个文件未列出（完整调用点清单在 impact_report 事件里）
+    注入句（编辑 src/agent/impact/index.ts）：[impact] src/agent/impact/index.ts 定义符号的跨文件调用点（上 126，波及 15 个文件；其中 4 个符号在别的文件也有同名定义，波及数按名字图算 ⇒ 清单里可能混有无关文件；归属判定：1680 处已按「同名但另有出处」排除；完整清单见 impact_report 事件）：
+    src/main/agent-runner.ts: affectedFilesOf(L410), defaultImpactHook(L1723)
+    tests/impact-admission.test.ts: affectedFilesOf(L37), affectedFilesOf(L41), affectedFilesOf(L42), affectedFilesOf(L43) 等 13 处
+    tests/impact-cap-policy.test.ts: affectedFilesOf(L115), affectedFilesOf(L125), affectedFilesOf(L183), buildImpact(L55) 等 13 处
+    scripts/probe-impact-provenance.ts: attributableToDef(L219), attributableToDef(L224), attributableToDef(L236), attributableToDef(L245) 等 12 处
+    tests/impact-attribution.test.ts: attributableToDef(L392), attributableToDef(L393), attributableToDef(L397), attributableToDef(L403) 等 25 处
+    scripts/measure-impact-cap-divergence.ts: buildImpact(L99), upward(L79), upward(L88)
+    …另有 9 个文件未列出（完整调用点清单在 impact_report 事件里）
+  [impact-provenance] 自检 ✅ 真仓取到数、数到同名大户、夹具真值面也跑到了 ⇒ 上面所有数可以引用
+
+=== ⑤摘要/收束的覆盖率 ｜ probe-summary-coverage ｜ exit=0
+  [summary-coverage] 候选面=608 个文件（取料面＝地图那一支 scanSourceFilesAll，含载荷目录排除；帽前全量，不是 400 那一切片）
+    有摘要·未截顶＝154（25.3%） 例：tests/write-line-delta.test.ts、tests/worker-role-budget.test.ts、tests/worker-report-clip.test.ts
+    有摘要·截在帽上（信息尾被切掉那一格）＝361（59.4%） 例：tests/zero-regression-conjunct.test.ts、tests/write-face.test.ts、tests/worker-spent-usd.test.ts
+    没有顶部注释（词面通道对它完全看不见）＝93（15.3%） 例：tests/worker-tool-specs.test.ts、tests/vitest.config.ts、tests/tools.test.ts
+    读不到（单独一格，绝不并进「没有注释」）＝0（0.0%） 例：（无）
+    ⇒ 词面通道可见的文件＝515/608（84.7%）
+    按顶层目录（有自述＝summarized＋truncated）：
+      tests        文件  296 有自述  252（85%） 其中截顶 154｜无注释   44｜读不到 0
+      src          文件  173 有自述  139（80%） 其中截顶 102｜无注释   34｜读不到 0
+      scripts      文件  109 有自述  108（99%） 其中截顶  97｜无注释    1｜读不到 0
+      apps         文件   29 有自述   15（52%） 其中截顶   8｜无注释   14｜读不到 0
+      bin          文件    1 有自述    1（100%） 其中截顶   0｜无注释    0｜读不到 0
+  [summary-coverage] 题集真值文件（去重 13 个）按同一把尺分格：
+    有摘要·未截顶＝3：src/agent/verify.ts、src/agent/map/rank.ts、src/main/settings.ts
+    有摘要·截在帽上（信息尾被切掉那一格）＝10：src/permissions/autonomy.ts、src/agent/no-progress.ts、src/agent/usage-attribution.ts、src/agent/tool-surface.ts、src/tools/snapshot.ts、src/tools/apply_patch.ts、src/main/scheduler.ts、src/agent/memory
+  [summary-coverage] 自检 ✅ 三个形状都数到了、哨兵落在 summarized ⇒ 上面的覆盖率可以引用
+
+=== ⑥压缩前附件回取 ｜ probe-prune-recall ｜ exit=0
+  [probe prune-recall] 未修缺陷探针：**不进 gate-manifest**，exit 1 = 缺陷还在（不是门红）
+    ✅ prune 真触发了（否则整支没有尺） — why=saved
+    ✅ c-old 那条打桩被改写过（含占位原串） — [Old tool result content cleared]
+  [原文已另存到会话附件（在工作区之外），模型侧读不到
+    ✅ ① 区外那案不再交绝对路径 — ；要通读请由用户打开该会话的附件目录]
+    ✅ ① 并且明说模型侧读不到（不假装可回取）
+    ✅ ② 附件仍然真写出（人还打开得到） — une-attachments/probe-415d0647-c-old.txt
+    ✅ ③ 反向哨兵：拿绝对路径去调 read_file 必须被拒 — read_file: 只允许 workspace 相对路径，收到绝对路径: /var/folders/pc/fqvmbm
+  [probe prune-recall] 全绿：区外那案已改口成诚实话，附件仍在盘上，绝对路径仍然被拒。
+
+=== ⑦shell 绕过面枚举 ｜ probe-shell-bypass ｜ exit=0
+    绿 降为必问                        "flock /tmp/l git push --force"             期望 ask@L2-ask-rule       实测 ask@L2-ask-rule
+    绿 降为必问                        "taskset -c 0 git push --force"             期望 ask@L2-ask-rule       实测 ask@L2-ask-rule
+    绿 降为必问                        "prlimit --nofile=1024 git push --force"    期望 ask@L2-ask-rule       实测 ask@L2-ask-rule
+    绿 降为必问                        "strace git push --force"                   期望 ask@L2-ask-rule       实测 ask@L2-ask-rule
+    绿 降为必问                        "busybox git push --force"                  期望 ask@L2-ask-rule       实测 ask@L2-ask-rule
+       对照：结构性面（载荷递归 / 链式段）本来就按 deny 生效，本裁不动它——
+    绿 仍绝对 deny                    "sh -c 'exec git push --force'"             期望 deny@L1-deny          实测 deny@L1-deny
+    绿 仍绝对 deny                    "env bash -c 'git push --force'"            期望 deny@L1-deny          实测 deny@L1-deny
+    绿 仍绝对 deny                    "cd /x && git push --force"                 期望 deny@L1-deny          实测 deny@L1-deny
+    绿 仍绝对 deny                    "true && sudo git push --force"             期望 deny@L1-deny          实测 deny@L1-deny
+  【⑧】子命令与危险选项**中间**插了参数——首词是 git 自己 ⇒ 照原样 deny
+    绿 规则层 deny                    "git push origin --force"                   期望 deny@L1-deny          实测 deny@L1-deny
+    绿 worker 闸同判                  "git push origin --force"                   期望 ok:false              实测 ok:false
+    绿 规则层 deny                    "git push --no-verify --force"              期望 deny@L1-deny          实测 deny@L1-deny
+    绿 worker 闸同判                  "git push --no-verify --force"              期望 ok:false              实测 ok:false
+    绿 规则层 deny                    "git push origin HEAD --force"              期望 deny@L1-deny          实测 deny@L1-deny
+    绿 worker 闸同判                  "git push origin HEAD --force"              期望 ok:false              实测 ok:false
+  合计：红 0 / 绿 97
+
+=== ⑦写租约闭合（A/B 两臂） ｜ probe-lease-closure-ab ｜ exit=0
+  [lease-ab] 图：608 文件／帽前候选 608｜帽 5000
+  [lease-ab] 三态（图自己带的）：kept=46951 dropped=1680 noEvidence=0
+    src/agent/ledger.ts：宽（旧行为）=126 文件｜窄（第 305 页后）=17 文件｜掉 109 个
+      留下的可归引用点=14 个｜掉出清单的前 3 个：apps/desktop/src/main/kernel-host.ts、apps/desktop/tests/m3-e2e.test.ts、scripts/autonomy-check.ts
+    src/agent/impact/index.ts：宽（旧行为）=16 文件｜窄（第 305 页后）=16 文件｜掉 0 个
+      留下的可归引用点=47 个｜掉出清单的前 3 个：（无）
+    src/events/index.ts：宽（旧行为）=99 文件｜窄（第 305 页后）=99 文件｜掉 0 个
+      留下的可归引用点=154 个｜掉出清单的前 3 个：（无）
+    src/agent/loop.ts：宽（旧行为）=34 文件｜窄（第 305 页后）=34 文件｜掉 0 个
+      留下的可归引用点=33 个｜掉出清单的前 3 个：（无）
+    src/main/settings.ts：宽（旧行为）=10 文件｜窄（第 305 页后）=10 文件｜掉 0 个
+      留下的可归引用点=11 个｜掉出清单的前 3 个：（无）
+    阴性对照：把 readFile 明确绑到别处的引用方=111 个文件，其中 109 个从窄闭包里掉出
+  [lease-ab] 自检 ✅ 两臂同分母、阳性对照没被窄掉、阴性对照真掉出去 ⇒ 上面所有数可以引用
+
+=== ⑧网络截断那格的锚点claim ｜ probe-web-anchor-claim ｜ exit=0
+  我交给 fetch 的写法            →  服务器在报文里看见的 req.url
+    /page                 →  /page        含片段=false
+    /page#api             →  /page        含片段=false
+    /page#install         →  /page        含片段=false
+    /page?q=1#api         →  /page?q=1    含片段=false
+  ✅ ①：四种写法上线的请求行里都没有 `#`（片段不上 HTTP 报文）
+  ✅ ②：三次换锚点取回的正文与基准**逐字相同** ⇒ 提示里把锚点列成出路＝让模型白跑一轮
+  ✅ ③：换 path 取回不同正文 ⇒ 取料真在按 URL 走，②的『相同』是片段无效造成的
+  [probe web-anchor-claim] 三件事都成立 ⇒ 截断提示里『换一个更精确的 URL（锚点…）』是假出路，改法见第 309 页
+
+=== ④goal 模式自身的边际上下文成本 ｜ goal-cost-probe ｜ exit=0
+  == goal 模式边际成本（提醒块；每续跑轮重送一次）==
+  缺省目标 8 轮 / 证据 stale | 字符=237 | token/轮=166 | 帽=700 未触帽 | 轮数=7 | 整目标付进输入的 token=4648（块数 7 × 每块 166，含重送） | glm-standard $0.009296（占位价） | openai-standard $0.009296 | anthropic-strong $0.023240
+  缺省目标 8 轮 / 证据 failed | 字符=214 | token/轮=153 | 帽=700 未触帽 | 轮数=7 | 整目标付进输入的 token=4284（块数 7 × 每块 153，含重送） | glm-standard $0.008568（占位价） | openai-standard $0.008568 | anthropic-strong $0.021420
+  缺省目标 8 轮 / 证据 absent | 字符=229 | token/轮=166 | 帽=700 未触帽 | 轮数=7 | 整目标付进输入的 token=4648（块数 7 × 每块 166，含重送） | glm-standard $0.009296（占位价） | openai-standard $0.009296 | anthropic-strong $0.023240
+  美元闸价格不可知那支（文案最长） | 字符=226 | token/轮=175 | 帽=700 未触帽 | 轮数=7 | 整目标付进输入的 token=4900（块数 7 × 每块 175，含重送） | glm-standard $0.009800（占位价） | openai-standard $0.009800 | anthropic-strong $0.024500
+  病态长目标（帽是否生效） | 字符=607 | token/轮=543 | 帽=700 未触帽 | 轮数=24 | 整目标付进输入的 token=162900（块数 24 × 每块 543，含重送） | glm-standard $0.325800（占位价） | openai-standard $0.325800 | anthropic-strong $0.814500
+  对照：人手打的一句「继续」≈ 2 token/轮；提醒块的**结构上界**（含重送）= 帽 700 × 24 块的三角级数 300 = 210000 token
+
+=== ⑩对账面（两次同配置读数的噪声带） ｜ eval-report ｜ exit=2
+  用法：node --import tsx scripts/eval/report.ts --baseline <readings.json> [--baseline <再来一份同配置的>] --candidate <readings.json>
+    噪声带需要**两份同配置**的基线；只给一份会把结论标成「判不出」。
+
