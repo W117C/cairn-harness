@@ -1,0 +1,6 @@
+落库面对账：路径 3088 条 —— 一致 3081，index 缺 1，index 更旧 0，别人新暂存 6｜一致率 99.8%
+  missingInIndex：bin/m0.mjs
+  stagedNew：bin/cairn.mjs、docs/optimization-plan-2026-10-02.md、scripts/repo-hygiene-check.ts、src/agent/security/merge-gate.ts、tests/repo-hygiene-check.test.ts、tests/security-merge-gate.test.ts
+[commit-surface] 那一笔（HEAD）动过 10 条路径 ⇒ 其中 0 条不在 index 上（＝下一次 plain commit 会把它们退掉）
+[commit-surface] 门面对账：scripts 面差异 21 支 ⇒ 门本体 9（scripts/autonomy-check.ts、scripts/compaction-check.ts、scripts/docs-check.ts、scripts/gate-check.ts、scripts/gym-check.ts、scripts/mutate-verify.mjs、scripts/repo-hygiene-check.ts、scripts/routing-check.ts、scripts/security-check.ts）｜非门 12
+  ⇒ 这些门的**打印面此刻不等于 HEAD 那把尺**：引它们的读数要写明取在哪棵树（第 337 页补实测：差一条规则而退码相同）

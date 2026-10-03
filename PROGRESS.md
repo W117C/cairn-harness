@@ -12299,4 +12299,17 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 10. **门与量纲（同轮声明）**：本簇**不进门表**——`scripts/gate-manifest.ts` 对 HEAD 是 7/0 在飞，且进门要同时改 workflow 与 `scripts/ci/README.md` 那两份手抄件（第 317 页三面闸那一族）。秒级读数：判卷 **27 条／219ms**；CLI 一次约 **2s**（含建图）；尺 #37 点名的语料级判卷 **11 份／231 条全绿／32.35s**（干净树）；`typecheck` **0 报错**。
 11. **欠账写清，不许读成「已验收」：本笔变异锚点 0 条**。`scripts/mutate-verify.mjs` 对 HEAD 是 8/8 在飞（隔壁正在改那张表），按第 336 页刚立的规矩不在别人在飞的面上插针脚。开 **#50**：等表让出后补 ≥3 条锚点（A 谓词取反、B lowlink 交回、C 类型边入图三处各一条，killer 分别指上面那三条用例），并**在锚点落库的同笔把这条记录销掉**。规则 217「尺与锚点同笔」这一格没做到就是没做到——写在这儿，免得「27 条判卷绿」被读成「这一格已验收」。
 
+## 2026-10-04 · 第 339 页：#47 与 #49 合成一把尺落库（落库面对账）——主树真实 index 现读 **3088 条路径：一致 3081（99.8%）／index 缺 1／index 更旧 0／别人新暂存 6**，而门本体面此刻有 **9 道门在飞**（`docs-check`、`mutate-verify`、`repo-hygiene-check`、`security-check`…）：「引门的读数要写明取在哪棵树」从今天起是可数的，不再是提醒
+
+1. **为什么合成一把**：#47（我刚落库的内容在不在真实 index 里）与 #49（盘上的门是不是 HEAD 那把）问的是同一件事的三个方向——**「我以为已经落库的那个世界现在还在不在」**。判据本体 `scripts/lib/commit-surface.ts`（四态分类 ＋ `landedGap` ＋ `gateFaceDiff` ＋ `driftSummary`），CLI `scripts/commit-surface-check.ts` 只取料与出声，判卷 `tests/commit-surface-check.test.ts` **22 条**。
+2. **故意不做自动同步**：多会话共用一个 git 身份（`author` 分辨不出会话）⇒「哪些路径是我的」只能由人给 rev。`--sync=<rev>` 的作用域被两件事同时夹住（**该笔动过 ∩ index 确认落后**），别人的 `stagedNew` 一条都不碰；造红 E 台专门证明「写动作漏出这个分支」会被判卷咬住。
+3. **读数（取料＝主树真实 index——这正是这一格要量的东西，不是"脏树偏差"）**：3088 条路径 ⇒ 一致 **3081**、index 缺 **1**、index 更旧 **0**、别人新暂存 **6**（一致率 **99.8%**）。那 1 条 missing 是 `bin/m0.mjs`（隔壁把 `m0.mjs` 改名 `cairn.mjs` 的暂存面另一半），属正常在飞；6 条 stagedNew 全是他们的（含 `scripts/repo-hygiene-check.ts`、`src/agent/security/merge-gate.ts` 与两份判卷）。
+4. **上一笔的修法被这把新尺独立复核**：`--landed=HEAD` ⇒ 第 338 页那一笔（`d1db9c5f`）动过 **10** 条路径，其中 **0** 条不在 index 上 ⇒ 第 336 页补立的「落库后同步真实 index」确实生效，而且从此有工具可查，不靠我记得。
+5. **★#49 第一次有数字**：`scripts` 面差异 **21** 支 ⇒ 门本体 **9**（`autonomy-check`／`compaction-check`／`docs-check`／`gate-check`／`gym-check`／`mutate-verify`／`repo-hygiene-check`／`routing-check`／`security-check`）｜非门 12。⇒ 此刻这 9 道门的**打印面不等于 HEAD 那把尺**（第 337 页补实测过其中一道：差一条规则而退码相同）。认证为什么一直做不下去，这一行就是答案的一半。
+6. **门清单不手抄**：`gateFaceDiff` 吃 `GATES`（唯一事实源 `scripts/gate-manifest.ts`），判卷里配一条真仓断言（`GATES.length > 20` 且 `scripts/docs-check.ts` 能归进门那一档）——第 317 页三面闸那笔的全部教训就是手抄件会漂。
+7. **判卷 22 条与造红五台**：合成输入四态各配正反两向、`对全部输入同答` 那一格、分母自证、空清单不许报「全对齐」、排序确定性、`landedGap` 两向、`gateFaceDiff` 两向，CLI 接线六条（含两处 `-z` 与「`update-index` 全文只出现一次」）。造红：**A** 把 `staleInIndex` 读成 `aligned` ⇒ 5 条同红（其中 3 条在 `landedGap`，因为它建在 `classifyDrift` 上——**同一根链，不是同一格缺分辨力**）；**B** `stagedNew` 读成 `missingInIndex` ⇒ 1 条（误报方向：把邻座在飞算成我的债）；**C** `landedGap` 不问哪格坏 ⇒ 1 条；**D** 门名不剥扩展名 ⇒ 2 条；**E** 把 `update-index` 漏到 `--sync` 分支外 ⇒ 接线判卷红。五台红在五组不同用例（重叠检测器 0 命中），跑完 lib/cli 逐字节复原。
+8. **我自己又踩的一格，写进账**：造红 A 台第一版替换成 `kind = "aligned"; void i;`——它把 `if/else` 链打断成语法错，vitest 报 **`no tests`** 而退出码非 0，**那台看起来"红了"其实一行判卷都没跑到**。改成 `kind = "aligned";` 之后才是真红 5 条。⇒ 归规则 206/248 那一族并升一格：**造红的"红"必须先证它跑到了判卷**（汇总行有 `Tests N failed` 计数），非 0 退出码本身不是证人。
+9. **门与量纲（同轮声明）**：本簇**不进门表**——`scripts/gate-manifest.ts` 在飞，且此刻 9 道门在飞时任何新门的读数都不可引用（这条正是本笔量出来的）。秒级：判卷 **22 条 ≈220ms**；CLI 一次 **≈1.5s**（三次 git 取料，主树真实 index）。**变异锚点 0 条**，与 **#50** 同因（`scripts/mutate-verify.mjs` 就在那 9 道门里）⇒ 并进 #50 一次补齐，不在这里另开格。
+10. **认证仍未做**（#39 前置未解）⇒ 本页不宣布「绿了」；`.worktrees/p339-surface` 在页与四份取证入库后当场回收（回收前：判卷 22 绿、`typecheck` 0 报错、树内只有本笔复制进去的 3 份文件）。
+
 
