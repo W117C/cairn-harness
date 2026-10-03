@@ -66,6 +66,18 @@ describe("投影 v2", () => {
     expect(rows[0]).toMatchObject({ ts: 1727848800000 });
     expect(projectStream([ev({ type: "user_message", content: "hi" })])[0]!.ts).toBeUndefined();
   });
+  it("live ts 消费面：混流各行 ts 独立透传，不互相污染（M2 终审 I-2 收口）", () => {
+    // 同一 projectStream 输入混有带/不带 ts 的事件：带戳行透传自身 ts，无戳行保持 undefined
+    // ——行与行互不污染。消费面（Stream 的 RowTime）对 undefined 不渲染时间戳列，属组件行为
+    // 守卫（已有），此处钉纯函数透传面：App 拿到的行数据足以支撑「旧日志无时间戳列」。
+    const rows = projectStream([
+      ev({ type: "user_message", content: "带戳", ts: 1727848800000 }),
+      ev({ type: "assistant_message", content: "无戳" }),
+      ev({ type: "tool_call", id: "t1", name: "read_file", args: {}, ts: 1727848801000 }),
+      ev({ type: "tool_result", callId: "t1", ok: true, output: "", ts: 1727848802000 }),
+    ]);
+    expect(rows.map((r) => r.ts)).toEqual([1727848800000, undefined, 1727848801000]);
+  });
   it("pendingClarify/Plan：请求未决给出，tool_result/plan_approved 收口", () => {
     const c = { type: "clarify_requested", callId: "q1", questions: [{ question: "选哪个？" }] };
     expect(pendingClarifyOf([ev(c)])!.callId).toBe("q1");

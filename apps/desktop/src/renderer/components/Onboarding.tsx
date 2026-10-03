@@ -1,8 +1,10 @@
 // 两步首启（M4-3，§2.4 onboarded 判据的 renderer 面）：Step1 选/添加工作区 → Step2 凭据
 // （选 demo 演示 或 配一家 key）⇒ 完成 setSettings({onboarded:true})。「跳过」允许——
 // 不强迫 key，demo 是唯一免 key 路径（保通机关见 onboardingCompletePatch 与 saveKey 的
-// 落盘次序：真实 provider 只在 key 保存成功那一刻才随之一并落盘，首启面永不留下
-// 「选了真家却没 key」的配置，无 key 完成恒保持 demo）。
+// 落盘次序：真实 provider 只在 key 保存成功那一刻才随之一并落盘，**本组件动作**永不留下
+// 「选了真家却没 key」的配置，无 key 完成恒保持 demo。M4-4 措辞收窄（T3 账本 deferred）：
+// 该保证只覆盖首启面自身动作——首启期侧栏 ⚙ 设置入口仍可达，可经 T2 面板配出「真家无 key」，
+// 不在本保通面内）。
 //
 // 首启面覆盖主区（App 侧按 needsOnboarding 裁决）：期间不渲染 composer——未配置就派活的
 // 窗口不存在。数据面全走已 wired 的 AgentApi：listProjects/addProject（M3 桥）、
