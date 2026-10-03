@@ -11,6 +11,7 @@ import { ErrorStrip } from "./components/ErrorStrip";
 import { ModelPicker } from "./components/ModelPicker";
 import { TokenPanel } from "./components/TokenPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { Onboarding, needsOnboarding } from "./components/Onboarding";
 
 declare global { interface Window { agent: import("../../../../src/main/ipc-protocol").AgentApi } }
 
@@ -48,6 +49,14 @@ export function App() {
   // M4-2 设置面板开关：侧栏底部⚙入口开（spec §6.1 左下角「设置」入口）；弹出面挂在 shell 根，
   // 无遮罩层（颜色只用既有变量），× 关闭。
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // M4-3 首启门（三态）：null = getSettings 在途——主区先不渲染（composer 是派活面，
+  // 「不知道是否首启」的窗口里不给）；true/false 落定后按 needsOnboarding 裁决首启面/主区。
+  const [onboarded, setOnboarded] = useState<boolean | null>(null);
+  // 载入失败 fail-open（按已引导处理）：首启面不是安全门——桥坏了把用户锁在向导里更糟
+  // （完成动作也要走同一座桥），demo 主区至少可见可诊断（报告已记录该取舍）。
+  useEffect(() => {
+    void window.agent.getSettings().then((s) => setOnboarded(s.onboarded)).catch(() => setOnboarded(true));
+  }, []);
 
   // 会话清单刷新：挂载一次 ＋ 新建会话后（新会话即刻进侧栏、落到归属工作区组）。
   const refreshSessions = useCallback(() => {
@@ -110,14 +119,24 @@ export function App() {
   // 添加工作区（M3-3 最小表单 → addProject 桥）：AddProjectInput 只填 path——名称缺省取路径末段、
   // defaultLocation 缺省同 path（project-registry canonical 化并查重）。成功后刷新注册清单＋会话清单：
   // main 侧 addProject handler 已同步 host.addWorkspace(record.path)（新工作区并入 host 扫描面），
-  // 新工作区的存量会话即刻可经 listSessions 出现。
-  const addWorkspace = useCallback(async (path: string) => {
-    await window.agent.addProject({ path });
+  // 新工作区的存量会话即刻可经 listSessions 出现。M4-3：返回 canonical 路径——首启面向导据此选中
+  // （registry 会 realpath 化，选中必须用返回值，不能用输入原文；侧栏表单忽略返回值不受影响）。
+  const addWorkspace = useCallback(async (path: string): Promise<string> => {
+    const record = await window.agent.addProject({ path });
     const registered = await window.agent.listProjects();
     setProjects(registered);
     setRegistryNotice(null);
     refreshSessions();
+    return record.path;
   }, [refreshSessions]);
+
+  // M4-3 完成：Onboarding 已把 onboarded:true 落盘成功（完成动作只此一键，见 onboardingCompletePatch）
+  // 后回调到这里——退出首启面；若首启配了真实 provider，顺带重拉 getProviderInfo（同 T2 收口，
+  // 目录/缺省显示立即跟上）。
+  const finishOnboarding = useCallback(() => {
+    setOnboarded(true);
+    void refreshProviderInfo();
+  }, [refreshProviderInfo]);
 
   const send = useCallback(async (text: string) => {
     // M3-3：新任务落当前选中的工作区（未切换＝缺省参 → host activeWorkspace）。
@@ -188,7 +207,9 @@ export function App() {
     <div className="shell">
       {/* M3-3 分组侧栏：分组点击只切 activeWorkspace（新任务归属），不 openSession、不扰在跑会话；
           会话行点击走守卫版 openSession（seq 竞态守卫）。M4-2 外包一层 .sidebar-col：
-          底部补「⚙ 设置」入口（brief 所指的占位此前未落，本笔按 spec 左下角入口补上）。 */}
+          底部补「⚙ 设置」入口（brief 所指的占位此前未落，本笔按 spec 左下角入口补上）。
+          M4-3：addWorkspace 现返回 canonical 路径（首启向导选中用）；侧栏表单签名不动，经适配
+          丢弃返回值——Sidebar 的 onAddWorkspace 仍收 Promise<void>。 */}
       <div className="sidebar-col">
         <Sidebar
           sessions={sessions}
@@ -199,81 +220,101 @@ export function App() {
           notice={registryNotice}
           onOpen={openSession}
           onSwitchWorkspace={setActiveWorkspace}
-          onAddWorkspace={addWorkspace}
+          onAddWorkspace={(path) => addWorkspace(path).then(() => undefined)}
         />
         <button className="btn-ghost settings-entry" onClick={() => setSettingsOpen(true)}>⚙ 设置</button>
       </div>
       <div className="main">
-        <div className="sessionbar">
-          <span style={{ fontWeight: 600 }}>{activeId ?? "m0"}</span>
-          {activeId !== null && (
-            <ModelPicker
-              infos={providerInfo ? [providerInfo] : []}
-              value={pickerValue}
-              disabled={running}
-              onChange={(registryId) => { selections.current.set(activeId, registryId); force((n) => n + 1); }}
-            />
-          )}
-          <span style={{ fontSize: 11, color: "var(--text-3)" }}>{phaseLabel}</span>
-          {/* spec §6.3：打断动作，运行中可见。M3-5 接线会话级：runCancel(activeId) → kernel-host
-              cancel(sessionId)（T2 per-session controller）——不再是无参失效窗口（host.cancel(undefined)
-              恒 {ok:false,"会话不在运行"}）。本地点击置态仅为即时反馈，真值由 send 收束响应校正。
-              不 confirm——误触代价是本轮 run 收束（fail-closed），不是数据损失。 */}
-          {running && (
-            <button
-              className="btn-ghost"
-              onClick={() => {
-                if (activeId === null) return; // running ⇒ 恒有活跃会话；守卫只防未来接线破坏该不变量
-                setStoppedIds((prev) => new Set(prev).add(activeId));
-                void window.agent.runCancel(activeId);
-              }}
-            >打断</button>
-          )}
-          <TokenPanel inputTokens={usage.inputTokens} outputTokens={usage.outputTokens} />
-        </div>
-        {/* M3-4 统一错误条：会话条下方，可关闭（× 清 lastError）；切会话即清（activate 内）。
-            三个来源同面：run !ok（error 文案）、澄清提交失败、方案决议失败。 */}
-        {lastError !== null && <ErrorStrip message={lastError} onDismiss={() => setLastError(null)} />}
-        <Stream rows={projectStream(events)} />
-        {/* M2-5 三卡同位互斥（ask > clarify > plan，一个三元链）：审批走 onAsk 状态，
-            澄清/方案走事件选择器；提交/决议后由事件收口（tool_result / plan_approved）自然消卡。 */}
-        {(ask || pendingClarify || pendingPlan) && (
-          <div style={{ padding: "0 16px" }}>
-            {ask ? (
-              <ApprovalCard ask={ask} onDecide={(approved, scope) => { void window.agent.decide(ask.askId, approved, scope); }} />
-            ) : pendingClarify ? (
-              <ClarifyCard
-                key={pendingClarify.callId}
-                callId={pendingClarify.callId}
-                questions={pendingClarify.questions}
-                onSubmit={(callId, answers) => {
-                  // M3-4：澄清提交失败（返回 false 或 reject）同面提示——fire-and-forget 不再静默
-                  // （M2 T5 deferred 收口）。
-                  void window.agent.submitClarify(callId, answers).then((ok) => {
-                    if (!ok) setLastError("澄清提交失败");
-                  }).catch((err: unknown) => {
-                    setLastError(`澄清提交失败：${err instanceof Error ? err.message : String(err)}`);
-                  });
-                }}
-              />
-            ) : pendingPlan ? (
-              <PlanCard
-                key={pendingPlan.callId}
-                callId={pendingPlan.callId}
-                plan={pendingPlan.plan}
-                onDecide={(approved, callId) => {
-                  // M3-4：方案决议失败（返回 false 或 reject）同面提示（同上）。
-                  void window.agent.decidePlan(approved, callId).then((ok) => {
-                    if (!ok) setLastError("方案决议失败");
-                  }).catch((err: unknown) => {
-                    setLastError(`方案决议失败：${err instanceof Error ? err.message : String(err)}`);
-                  });
-                }}
-              />
-            ) : null}
+        {/* M4-3 首启门（三态）：设置在途（null）只出安静载入面；needsOnboarding 真 ⇒ 两步首启
+            覆盖主区（composer 是派活面——未配置/未知配置都不给派活窗口）；false ⇒ 正常主区。 */}
+        {onboarded === null ? (
+          <div className="onboarding">
+            <div className="onboarding-card">
+              <h2>Cairn</h2>
+              <div className="settings-hint">正在载入设置…</div>
+            </div>
           </div>
+        ) : needsOnboarding({ onboarded }) ? (
+          <Onboarding
+            projects={projects}
+            onAddWorkspace={addWorkspace}
+            onSelectWorkspace={setActiveWorkspace}
+            onComplete={finishOnboarding}
+          />
+        ) : (
+          <>
+            <div className="sessionbar">
+              <span style={{ fontWeight: 600 }}>{activeId ?? "m0"}</span>
+              {activeId !== null && (
+                <ModelPicker
+                  infos={providerInfo ? [providerInfo] : []}
+                  value={pickerValue}
+                  disabled={running}
+                  onChange={(registryId) => { selections.current.set(activeId, registryId); force((n) => n + 1); }}
+                />
+              )}
+              <span style={{ fontSize: 11, color: "var(--text-3)" }}>{phaseLabel}</span>
+              {/* spec §6.3：打断动作，运行中可见。M3-5 接线会话级：runCancel(activeId) → kernel-host
+                  cancel(sessionId)（T2 per-session controller）——不再是无参失效窗口（host.cancel(undefined)
+                  恒 {ok:false,"会话不在运行"}）。本地点击置态仅为即时反馈，真值由 send 收束响应校正。
+                  不 confirm——误触代价是本轮 run 收束（fail-closed），不是数据损失。 */}
+              {running && (
+                <button
+                  className="btn-ghost"
+                  onClick={() => {
+                    if (activeId === null) return; // running ⇒ 恒有活跃会话；守卫只防未来接线破坏该不变量
+                    setStoppedIds((prev) => new Set(prev).add(activeId));
+                    void window.agent.runCancel(activeId);
+                  }}
+                >打断</button>
+              )}
+              <TokenPanel inputTokens={usage.inputTokens} outputTokens={usage.outputTokens} />
+            </div>
+            {/* M3-4 统一错误条：会话条下方，可关闭（× 清 lastError）；切会话即清（activate 内）。
+                三个来源同面：run !ok（error 文案）、澄清提交失败、方案决议失败。 */}
+            {lastError !== null && <ErrorStrip message={lastError} onDismiss={() => setLastError(null)} />}
+            <Stream rows={projectStream(events)} />
+            {/* M2-5 三卡同位互斥（ask > clarify > plan，一个三元链）：审批走 onAsk 状态，
+                澄清/方案走事件选择器；提交/决议后由事件收口（tool_result / plan_approved）自然消卡。 */}
+            {(ask || pendingClarify || pendingPlan) && (
+              <div style={{ padding: "0 16px" }}>
+                {ask ? (
+                  <ApprovalCard ask={ask} onDecide={(approved, scope) => { void window.agent.decide(ask.askId, approved, scope); }} />
+                ) : pendingClarify ? (
+                  <ClarifyCard
+                    key={pendingClarify.callId}
+                    callId={pendingClarify.callId}
+                    questions={pendingClarify.questions}
+                    onSubmit={(callId, answers) => {
+                      // M3-4：澄清提交失败（返回 false 或 reject）同面提示——fire-and-forget 不再静默
+                      // （M2 T5 deferred 收口）。
+                      void window.agent.submitClarify(callId, answers).then((ok) => {
+                        if (!ok) setLastError("澄清提交失败");
+                      }).catch((err: unknown) => {
+                        setLastError(`澄清提交失败：${err instanceof Error ? err.message : String(err)}`);
+                      });
+                    }}
+                  />
+                ) : pendingPlan ? (
+                  <PlanCard
+                    key={pendingPlan.callId}
+                    callId={pendingPlan.callId}
+                    plan={pendingPlan.plan}
+                    onDecide={(approved, callId) => {
+                      // M3-4：方案决议失败（返回 false 或 reject）同面提示（同上）。
+                      void window.agent.decidePlan(approved, callId).then((ok) => {
+                        if (!ok) setLastError("方案决议失败");
+                      }).catch((err: unknown) => {
+                        setLastError(`方案决议失败：${err instanceof Error ? err.message : String(err)}`);
+                      });
+                    }}
+                  />
+                ) : null}
+              </div>
+            )}
+            <Composer onSend={(t) => void send(t)} disabled={running} />
+          </>
         )}
-        <Composer onSend={(t) => void send(t)} disabled={running} />
       </div>
       {/* M4-2 设置面板：onSettingsSaved ⇒ 重拉 getProviderInfo（M2 deferred 刷新收口——
           settings.provider/model 变更成功后目录/缺省立即跟上）。 */}
