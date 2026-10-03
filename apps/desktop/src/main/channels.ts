@@ -51,4 +51,7 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   providerKeyStatus: "agent:provider-key-status",
   checkUpdate: "agent:check-update",
   openExternal: "agent:open-external",
+  // M4-5：dialog 选目录（M3 deferred 收口）——main 端 dialog.showOpenDialog({ openDirectory })，
+  // preload 程序化桥自动透传（桥面无逐通道代码，缺行才红）。
+  pickDirectory: "agent:pick-directory",
 };

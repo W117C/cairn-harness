@@ -14,7 +14,7 @@
 // M3 T2（每会话取消）：run 建 per-session AbortController 经 RunOverrides.signal 注入（零 core 改动），
 // cancel(sessionId) 只 abort 该会话的 controller；run 响应带 aborted 真值（desktop 扩展字段）。
 import { readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import type { AgentEvent } from "../../../../src/events";
 import type { RunRequest, RunResponse, SessionInfoPayload } from "../../../../src/main/ipc-protocol";
 import {
@@ -68,6 +68,15 @@ export interface KernelHost {
    *  成功后调用（同进程直调，不经 IPC、renderer 无感知自动生效）；入参须为 canonical 绝对路径
    *  （ProjectRegistry.add 的 realpath 产物），本出口不重复校验。 */
   addWorkspace(ws: string): void;
+  /** 动态缩面（M4-5）：addWorkspace 的逆操作——removeProject handler 成功后对称调用。
+   *  workspaces 数组移除（未注册 ⇒ 幂等静默，与 addWorkspace 去重对称）＋归属表清该组条目
+   *  ＋漂移快照按该组会话根前缀清理（过期基线残留会让重并后的 run 把「缩面期间的外部改动」
+   *  误判成 drift 拒绝——缩面即弃守，重并后由 openSession/run 重建基线）。
+   *  **该组有在跑会话（runControllers 有键）⇒ fail-visible throw**：在途 run 的收束基线会写进
+   *  已移除的组，取消/等收束是调用方前置动作（throw 经 IPC reject 上抛 renderer，不静默缩面）。
+   *  仅 main 进程内由 removeProject handler 成功后直调（同 addWorkspace，不经 IPC）；入参为
+   *  canonical 绝对路径（ProjectRecord.path，与 addWorkspace 同源），本出口不重复校验。 */
+  removeWorkspace(ws: string): void;
   /** 读回会话事件并登记归属/漂移基线；workspace 缺省时按归属表 → 全工作区扫描解析。 */
   openSession(id: string, workspace?: string): Promise<{ events: AgentEvent[] }>;
 }
@@ -249,6 +258,23 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       // 闭包按引用迭代，重复 push 会让新工作区被逐根扫描两遍、清单出重复条目。
       if (workspaces.includes(ws)) return;
       workspaces.push(ws);
+    },
+    removeWorkspace: (ws) => {
+      // 在跑拒绝（M4-5 fail-visible）：该组任一会话仍在 run（runControllers 有键）⇒ 拒绝缩面。
+      // 判据走归属表（owner: sid→ws，run 启动时已登记）——按 sid 逐个对组，命中即 throw。
+      for (const sid of runControllers.keys()) {
+        if (owner.get(sid) === ws) {
+          throw new Error(`工作区有正在运行的会话，无法移除: ${ws}`);
+        }
+      }
+      const i = workspaces.indexOf(ws);
+      if (i >= 0) workspaces.splice(i, 1); // 未注册 = 幂等（与 addWorkspace 去重对称）
+      for (const [sid, w] of owner) if (w === ws) owner.delete(sid); // 归属表清该组
+      // 漂移基线按 logPath 前缀（= 该组会话根 <ws>/.agent/sessions/）清理；Map 迭代中删当前键安全。
+      const prefix = `${wsRoot(ws)}${sep}`;
+      for (const logPath of drift.keys()) {
+        if (logPath.startsWith(prefix)) drift.delete(logPath);
+      }
     },
     createSession: async (workspace) => {
       const ws = workspace ?? deps.activeWorkspace;

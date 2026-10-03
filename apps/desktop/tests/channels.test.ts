@@ -18,7 +18,8 @@ describe("通道名表完整性", () => {
   it("invoke 通道表非空且每行通道名非空", () => {
     // 运行时计数钉（终审顺手项）：类型侧红线靠 tsconfig include 含 tests/ 才生效，
     // include 一收窄就哑火——表长在运行时也咬得住，漂移（AgentApi 增删方法）当场红。
-    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(39);
+    // M4-5：＋pickDirectory（dialog 选目录，M3 deferred 收口）⇒ 40。
+    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(40);
     const keys = Object.keys(INVOKE_CHANNELS) as (keyof typeof INVOKE_CHANNELS)[];
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) expect(INVOKE_CHANNELS[key]).toBeTruthy();
@@ -94,6 +95,8 @@ describe("通道名表完整性", () => {
       // 更新与外链（桌面壳职责，M4+）
       "checkUpdate",
       "openExternal",
+      // M4-5：dialog 选目录——新通道直接接真（wired 行＋AgentApi＋channels 三面同步），不进白名单。
+      "pickDirectory",
     ];
     const allKeys = Object.keys(INVOKE_CHANNELS) as (keyof typeof INVOKE_CHANNELS)[];
     const expected = allKeys.filter((k) => !whitelist.includes(k));

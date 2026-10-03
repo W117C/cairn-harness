@@ -7,7 +7,8 @@
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { createKernelHost, type KernelHost } from "../src/main/kernel-host";
 import { createSession as createSessionInRoot, pathOf } from "../../../src/main/sessions";
@@ -213,6 +214,93 @@ describe("M3 多工作区运行面", () => {
       await driftHost.openSession(s.id);
       const retry = await driftHost.run({ message: "demo", mode: "default", sessionId: s.id });
       expect(retry.ok, JSON.stringify(retry)).toBe(true);
+    },
+    60_000,
+  );
+});
+
+// ---- M4-5 removeWorkspace 缩面（removeProject 成功后的对称面）----
+describe("M4-5 removeWorkspace 缩面", () => {
+  it(
+    "缩面后该组不再经 listSessions 出现、createSession 白名单收窄；归属表与漂移基线同步清理",
+    async () => {
+      const wsD = join(dir, "ws-d");
+      mkdirSync(wsD, { recursive: true });
+      const shrink = createKernelHost({
+        workspaces: [wsA],
+        activeWorkspace: wsA,
+        userDataDir: userData,
+        outbox: (channel, payload) => {
+          outbox.push([channel, payload]);
+        },
+      });
+      // 并入 → 盘上既有会话（addProject 产品场景：createSessionInRoot 直落，显式名防跨根撞名）→
+      // openSession 登记归属＋漂移基线（open 即基线）——缩面清理判据的前提。
+      shrink.addWorkspace(wsD);
+      const sid = await createSessionInRoot(join(wsD, ".agent", "sessions"), "m4-5 缩面用会话");
+      await shrink.openSession(sid);
+      expect((await shrink.listSessions()).some((s) => s.id === sid && s.workspace === wsD)).toBe(true);
+      // 缩面：清单不再出现该组；createSession 白名单同步收窄（同表驱动，fail-visible）。
+      shrink.removeWorkspace(wsD);
+      expect((await shrink.listSessions()).every((s) => s.workspace !== wsD)).toBe(true);
+      await expect(shrink.createSession(wsD)).rejects.toThrow(/不在 workspaces/);
+      // 归属表清理的可观察面：同 id 不再解析到被移除工作区——扫描面已无该根 ⇒ openSession
+      // fail-visible「会话不存在」（若归属条目残留，会话仍会经被移除根解析成功）。
+      await expect(shrink.openSession(sid)).rejects.toThrow(/会话不存在/);
+      // 漂移基线清理的可观察面：缩面期间的外部追加不得误判 drift——基线若残留，重并后的
+      // run 会把「外部追加 ≠ 本端事件」判成外部修改拒绝；基线已清 ⇒ 无快照直接放行。
+      appendFileSync(
+        pathOf(join(wsD, ".agent", "sessions"), sid),
+        JSON.stringify({ type: "user_message", content: "CLI 插的" }) + "\n",
+      );
+      shrink.addWorkspace(wsD);
+      const res = await shrink.run({ message: "demo", mode: "default", sessionId: sid });
+      expect(res.ok, JSON.stringify(res)).toBe(true);
+    },
+    60_000,
+  );
+
+  it(
+    "该组有在跑会话 ⇒ fail-visible 拒绝缩面；run 收束后缩面放行（控制器零残留）",
+    async () => {
+      const wsE = join(dir, "ws-e");
+      mkdirSync(wsE, { recursive: true });
+      const busy = createKernelHost({
+        workspaces: [wsE],
+        activeWorkspace: wsE,
+        userDataDir: userData,
+        outbox: (channel, payload) => {
+          outbox.push([channel, payload]);
+        },
+      });
+      const s = await busy.createSession(wsE);
+      // 审批门剧本（M3A_MAIN_SCRIPT 第一优先，approval-e2e 同手法）：run 稳定卡在 run_shell 审批
+      // ⇒ per-session AbortController 确定在场——「在跑」判据不靠赶在收束前缩面的竞速。
+      process.env.M3A_MAIN_SCRIPT = join(
+        dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "fixtures", "agents", "main-approval-demo.jsonl",
+      );
+      try {
+        const runP = busy.run({ message: "demo", mode: "default", sessionId: s.id });
+        const ask = await vi.waitFor(() => {
+          const found = [...outbox]
+            .reverse()
+            .find(([c, p]) => c === "onAsk" && (p as { tool?: string }).tool === "run_shell");
+          expect(found).toBeDefined();
+          return found as readonly [string, { askId: string }];
+        }, { timeout: 10_000, interval: 100 });
+        // 在跑 ⇒ 拒绝缩面（错误点名工作区，不静默）
+        expect(() => busy.removeWorkspace(wsE)).toThrow(/正在运行/);
+        // 放行 run：批准后剧本跑完，控制器在 run 的 finally 清除
+        expect(busy.decide(ask[1].askId, true)).toBe(true);
+        const res = await runP;
+        expect(res.ok, JSON.stringify(res)).toBe(true);
+      } finally {
+        delete process.env.M3A_MAIN_SCRIPT;
+        void busy.cancel(s.id); // 失败路径兜底：不留悬挂 run（已收束时 {ok:false} 无害）
+      }
+      // 收束后缩面放行：控制器零残留不再阻断，清单同步收窄。
+      expect(() => busy.removeWorkspace(wsE)).not.toThrow();
+      expect((await busy.listSessions()).every((x) => x.workspace !== wsE)).toBe(true);
     },
     60_000,
   );

@@ -234,4 +234,7 @@ export interface AgentApi {
   checkUpdate(): Promise<UpdateCheckResult>;
   /** M4b §2.3：打开下载页（shell.openExternal，仅 http(s) 白名单——防 manifest 注入协议）。 */
   openExternal(url: string): Promise<{ ok: boolean; error?: string }>;
+  /** M4-5：dialog 选目录（侧栏添加工作区表单「浏览…」的后端；M3 deferred 收口）。
+   *  系统目录选择器（openDirectory，非模态）；取消/关窗 ⇒ null——文本手输兜底据此保留。 */
+  pickDirectory(): Promise<string | null>;
 }

@@ -1,7 +1,7 @@
 // Electron main 装配根（M1-6）：kernel-host 单点装配 + IPC 薄映射。
 // 装载通道：entry.cjs 注册 repo 根 tsx 后 require 本 TS 源——core 链零打包零漂移
 // （esbuild 打包会把 agent-runner 的 ROOT 漂进 <repo>/apps，fixtures 运行时静默落空）。
-import { app, BrowserWindow, ipcMain, safeStorage, webContents } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, webContents } from "electron";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -18,7 +18,13 @@ import { installProviderKeyBackend } from "../../../../src/main/provider-keys";
 import { injectStoredProviderKey } from "../../../../src/main/provider-key-inject";
 import { createKernelHost } from "./kernel-host";
 import { ProjectRegistry } from "../../../../src/main/project-registry";
-import { providerInfo } from "../../../../src/main/settings-handlers";
+import { handleProviderKeySet, providerInfo } from "../../../../src/main/settings-handlers";
+
+// M4-5 即时重注别名（providerKeySet 保存成功 → 免重启生效）：wired 表在装配段（whenReady）之前，
+// 若 wired 行直写 injectStoredProviderKey 调用，会把 T1 装配守卫（provider-keys.test 次序红线：
+// 「首个注入调用点须在 install 之后」）的锚位提前到装配段之前而转红。本地别名同一出口同一语义：
+// 启动注入的次序锚位不动，保存路径的运行期重注照常 fire-and-forget。
+const reinjectSavedProviderKey = injectStoredProviderKey;
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const distElectron = join(here, "..", "..", "dist-electron");
@@ -127,7 +133,34 @@ const wired: Partial<Record<InvokeChannel, (...args: unknown[]) => unknown>> = {
       host.addWorkspace(record.path);
       return record;
     }),
-  removeProject: (id) => projectRegistry.remove(id as string),
+  // M4-5 缩面对称（addWorkspace 的逆操作）：removeProject 成功后同步 host.removeWorkspace(record.path)
+  // ——被移除工作区退出扫描面（listSessions 不再出现该组）、归属表/漂移基线同步清理；该组有在跑
+  // 会话 ⇒ host.removeWorkspace fail-visible throw（IPC reject 上抛 renderer，不静默缩面）。
+  removeProject: (id) =>
+    projectRegistry.remove(id as string).then((record) => {
+      host.removeWorkspace(record.path);
+      return record;
+    }),
+  // M4-5：dialog 选目录（M3 deferred 收口，侧栏添加表单「浏览…」的后端）：非模态 showOpenDialog
+  // 只选目录（openDirectory）；取消/关窗 ⇒ filePaths 空 ⇒ null——renderer 据此保留手输兜底。
+  pickDirectory: async () => {
+    const picked = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+    return picked.filePaths[0] ?? null;
+  },
+  // M4-5 即时重注（M4-2 遗留收口）：key 保存成功后立即解密注入 provider env——免重启生效。
+  // env 优先语义由注入面自带（该家 env 已在 = 那一家零行为）；fire-and-forget，失败 console.error
+  // 留痕不被 void 吞（文案不含任何 key 值——明文零落盘的日志面纪律）。调用走 reinjectSavedProviderKey
+  // 别名（文件头注）：装配守卫（provider-keys.test）的「首个注入调用点」锚位保持在启动装配段。
+  providerKeySet: (provider, key) =>
+    handleProviderKeySet(provider as string, key as string).then((r) => {
+      if (r.ok) {
+        void reinjectSavedProviderKey().then(
+          () => undefined,
+          (error) => console.error("[byok-inject] 保存后重注失败（不影响保存结果）:", error),
+        );
+      }
+      return r;
+    }),
 };
 for (const [key, channel] of Object.entries(INVOKE_CHANNELS) as [InvokeChannel, string][]) {
   const handler = wired[key];

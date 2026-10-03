@@ -269,6 +269,7 @@ export function App() {
           onOpen={openSession}
           onSwitchWorkspace={setActiveWorkspace}
           onAddWorkspace={(path) => addWorkspace(path).then(() => undefined)}
+          onPickDirectory={() => window.agent.pickDirectory()}
         />
         <button className="btn-ghost settings-entry" onClick={() => setSettingsOpen(true)}>⚙ 设置</button>
       </div>

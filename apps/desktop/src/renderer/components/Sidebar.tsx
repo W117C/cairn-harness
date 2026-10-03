@@ -1,6 +1,6 @@
 // 分组侧栏（M3-3 方案 A）：会话按归属工作区分组，分组标题＝路径末段，点击分组＝切换
 // activeWorkspace（只决定**新任务**归属，不动任何在跑会话/当前流）；「＋ 添加工作区」
-// 最小表单（文本输入绝对路径 → addProject 桥；Electron 原生选目录需 preload 加桥——留 M4）。
+// 表单：文本输入绝对路径（手输兜底）＋「浏览…」系统目录选择（M4-5 pickDirectory 桥）。
 import { useState, type FormEvent } from "react";
 import type { SessionInfoPayload } from "../../../../../src/main/ipc-protocol";
 import { relativeTime } from "../projections";
@@ -70,6 +70,9 @@ export function Sidebar(props: {
   onSwitchWorkspace: (workspace: string) => void;
   /** addProject 桥调用（App 提供）；reject 时错误落表单内 fail-visible。 */
   onAddWorkspace: (path: string) => Promise<void>;
+  /** M4-5：系统目录选择（AgentApi.pickDirectory，main 端 dialog.showOpenDialog）。
+   *  必选而非 `?`：桥面缺行 typecheck 红，不用运行时 typeof 自证（getOnboarding 先例）。 */
+  onPickDirectory: () => Promise<string | null>;
   /** 注册表桥不可用等的提示行（fail-visible；null＝无）。 */
   notice?: string | null;
 }) {
@@ -99,6 +102,19 @@ export function Sidebar(props: {
     }
   };
 
+  // M4-5「浏览…」：系统目录选择 → 成功 ⇒ 填入路径输入框（picked 非 null 才动草稿）；
+  // 取消/关窗 ⇒ null 草稿不动。失败（桥 reject）落表单错误条 fail-visible。文本输入保留为
+  // 手输兜底——选择器缺席/取消两态下手输路径依旧可用。
+  const browse = async () => {
+    setError(null);
+    try {
+      const picked = await props.onPickDirectory();
+      if (picked !== null) setDraft(picked);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   return (
     <aside className="sidebar">
       <div className="group-title">M0 · 工作区</div>
@@ -125,7 +141,7 @@ export function Sidebar(props: {
           </div>
         );
       })}
-      {/* M3 最小表单：文本输入绝对路径＋确认调 addProject（dialog 选目录需 preload 加桥——M4）。 */}
+      {/* M3 最小表单 → M4-5 补「浏览…」：文本输入绝对路径（手输兜底）＋系统目录选择回填。 */}
       <button
         className="btn-ghost ws-add"
         onClick={() => { setAdding((v) => !v); setError(null); }}
@@ -139,6 +155,7 @@ export function Sidebar(props: {
             onChange={(e) => setDraft(e.target.value)}
           />
           <div className="ws-form-actions">
+            <button className="btn-ghost" type="button" disabled={busy} onClick={() => void browse()}>浏览…</button>
             <button className="btn-primary" type="submit" disabled={busy}>{busy ? "添加中…" : "添加"}</button>
             <button className="btn-ghost" type="button" disabled={busy} onClick={() => { setAdding(false); setError(null); }}>取消</button>
           </div>
