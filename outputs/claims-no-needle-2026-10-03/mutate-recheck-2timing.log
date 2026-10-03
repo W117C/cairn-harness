@@ -1,0 +1,56 @@
+[mutate-verify] checkout exit=0：.worktrees/gate-mutate-332 → 517ed95
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-332.lock）
+变异验证：2 条
+❌ near-cap-threshold-loosened — 贴帽阈值 0.8 改成 0.08 ⇒ 名单里塞进一堆离帽还远的用例，「点名」就失去了意义（同一条判卷里那句 ratio 断言就是拦这个的）。 ｜本机实测 1.1s／2 拍
+   基线就不是全绿（不应发生）:
+ests/head-cert-deps.test.ts > 贴帽读数：suiteRows／budgetFromTestSource／timingNearCapCell／timingCell（第 262 页） > 真机整表：把留档的那一次全量 json 喂进去，档位计数与逐行重数必须同分母
+AssertionError: 取不到成因的条数必须是 0（现读见 realdata.log）；不是 0 就先修取料，别把名单当准: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ tests/head-cert-deps.test.ts:1272:83
+    1270|     expect(cell.implicit).toBe(recount.implicit);
+    1271|     expect(cell.nonliteral).toBe(recount.nonliteral);
+    1272|     expect(cell.notResolved, `取不到成因的条数必须是 0（现读见 realdata.log）；不是 0 就先修…
+       |                                                                                   ^
+    1273|     expect(recount.explicit).toBeGreaterThan(0);
+    1274|     for (const n of cell.near) expect(n.ratio).toBeGreaterThanOrEqual(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+❌ timing-slowest-unsorted — 余量那一档不按占比排 ⇒ 印出来的三条可能都是轻的，最靠近帽的那条反而看不见；真机整表那条判卷拿独立重数的最大值对账（同分母），排错就红（第 264 页） ｜本机实测 1.0s／2 拍
+   基线就不是全绿（不应发生）:
+ests/head-cert-deps.test.ts > 贴帽读数：suiteRows／budgetFromTestSource／timingNearCapCell／timingCell（第 262 页） > 真机整表：把留档的那一次全量 json 喂进去，档位计数与逐行重数必须同分母
+AssertionError: 取不到成因的条数必须是 0（现读见 realdata.log）；不是 0 就先修取料，别把名单当准: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ tests/head-cert-deps.test.ts:1272:83
+    1270|     expect(cell.implicit).toBe(recount.implicit);
+    1271|     expect(cell.nonliteral).toBe(recount.nonliteral);
+    1272|     expect(cell.notResolved, `取不到成因的条数必须是 0（现读见 realdata.log）；不是 0 就先修…
+       |                                                                                   ^
+    1273|     expect(recount.explicit).toBeGreaterThan(0);
+    1274|     for (const n of cell.near) expect(n.ratio).toBeGreaterThanOrEqual(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+
+2 条判红（按类别分开数，修法各不同——见上一行起的分类名单）
+  ❌ 判红 2 条，按类别分开（修法各不同，混成一句会把人指错方向）：baseline-red 2
+  ❌ 判红·基线就不绿 ⇒ 本条判定被污染，不算存活的证据（2 条）：near-cap-threshold-loosened timing-slowest-unsorted
+REDKINDS=survived:0,misattributed:0,baseline-red:2,no-effect:0,syntax:0,restore-mismatch:0,vacuous:0
+[mutate-verify] 本次耗时 2.3s · 跑了 2/2 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 4 次／2 条（每条次数分布 2×2）· 单次中位 第1次 0.5s／第2次 0.5s· 最贵一条 near-cap-threshold-loosened 1.1s
+跑法单价：selector 4 拍·中位 0.53s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/deepseek harness/.git/dsh-tool-locks/mutate-verify-gate-mutate-332.lock）
