@@ -130,7 +130,7 @@ export function normalizeRel(raw: string): string | null {
   return out.length > 0 ? out.join("/") : null;
 }
 
-/** `../scripts/x.ts` 是相对**判卷自己**的目录：judge＝`tests/a/b.ts` ⇒ 基准目录 `tests/a`。 */
+/** `../` 打头的那个 rel 是相对**判卷自己**的目录，不是仓根：judge＝`tests/a/b.ts` ⇒ 基准目录 `tests/a`。 */
 function relFromJudge(judge: string, raw: string): string | null {
   const dir = judge.includes("/") ? judge.slice(0, judge.lastIndexOf("/")) : "";
   return normalizeRel(dir === "" ? raw : `${dir}/${raw}`);

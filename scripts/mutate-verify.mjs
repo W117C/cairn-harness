@@ -13248,7 +13248,7 @@ const MUTATIONS = [
     id: "text-readers-target-missing-counted-as-reader",
     src: "scripts/lib/text-readers.ts",
     test: "tests/text-readers.test.ts",
-    desc: "字面量指向盘上不存在的文件也当读取者 ⇒ 判卷里的合成路径（`scripts/gone.ts` 这种）进了清单，"
+    desc: "字面量指向盘上不存在的文件也当读取者 ⇒ 判卷里的合成路径（形如 `scripts/<不存在>.ts`）进了清单，"
       + "读起来像「有人在读这份文件」而实际没人读它（三态里的「没有」与「读不到」又被并成一格）",
     apply: (s) => s.replace("      if (h.target === null || h.targetMissing) continue;", "      if (h.target === null) continue;"),
     expectFail: "仓外面（node_modules／临时盘）、指不到盘上文件的字面量、判卷读自己——三种都不进清单",
