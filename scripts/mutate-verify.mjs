@@ -13207,6 +13207,15 @@ const MUTATIONS = [
     apply: (s) => s.replace("const why = expectFailReason(e, face);", "const why = null;"),
     expectFail: "★接线 跑器不再自己判每一枚名字（旧那串 if 不许回来）",
   },
+  {
+    id: "eval-heldout-face-drops-one-observation",
+    src: "scripts/loop-eval.ts",
+    test: "tests/eval-heldout.test.ts",
+    desc: "搬家只搬了一半：三枚观测里少交一枚（这里摘掉「装齐没有」那一枚）⇒ 分支静默拿到 `undefined`，"
+      + "held-out 落进「没有面」那一档，读起来像「这条没判」而不是「跑器没交」——第 327 页补这一格就是因为判卷只钉了 lib 那一半",
+    apply: (s) => s.replace("    heldOutInstallErrs: r.heldOutInstallErrs,\n", ""),
+    expectFail: "判卷把 spec 与观测分别交给 lib（跑器不许自己比一次 ok）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

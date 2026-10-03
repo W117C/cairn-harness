@@ -11807,3 +11807,32 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 
 10. **账**：#35 结案。下一笔候选：#32（贴帽判据改吃 `head-cert` 自产的 `suite.json`，不再依赖冻结留档）或 #33（typecheck 归因缺第三档，已记 4 例）。
    验证树 `.worktrees/gate-mutate-325`／`-326` 与仓根那六棵继续等用户点头回收。
+
+## 2026-10-03 · 第 327 页补：`5bdaf78` 门 22/22 全绿而**判卷两红**——搬走的那一支有两条**没锚点的**接线判卷在读它，这一格我自己踩了第二次
+
+1. **读数**：`head-cert --at=HEAD`（独立树 `.worktrees/head-cert-5bdaf78`）印
+   `认证门面=22 道（跑到 22）｜绿 22 道｜⚠️ 超预算 2`、`Test Files 1 failed | 288 passed (289)｜Tests 2 failed | 4023 passed (4025)｜exit=1`、
+   `TREE=5bdaf78 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔`、`并发判卷=起前 1 套／跑完 1 套`。
+   两条红都在 `tests/eval-heldout.test.ts` 的接线族：「装、跑、判三件事都在跑器里有人调」（`expected 0 to be greater than or equal to 1`）
+   与「判卷把 spec 与观测分别交给 lib」（`expected '' to contain 't.spec'`）。⇒ 这一笔**不构成认证**，先修再认。
+
+2. **成因是本页那一搬**（第 4 项写的"实现搬家把针脚顶掉"是同一族，这次是**另两根**）：`heldOutFailReasons(` 从前在跑器里，我把它收进 `lib/eval-expects` 的分支表，
+   而这两条判卷读的是 `scripts/loop-eval.ts` 的文本。`4025` 与本页预判一致（4017＋本笔 8 条）⇒ 不是隔壁插进来的用例，是我改的面。
+
+3. **为什么交笔前没抓到——这一条比修文本更值钱**：我跑了 typecheck、动过的两个判卷文件、六台造红、`--check-needles`（阻断 0）。
+   但这两条接线判卷**没有锚点指着**，而 `--check-needles` 只看锚点表里的针脚 ⇒ 表看不见"还有谁在读这段文本"。
+   本仓这条同族已经第二次命中（规则 252/253：改「给人读的东西」先查谁在用正则/文本读它）；上次写的是纪律，这次补的是尺：**搬家类改动必跑「所有读被搬文本的判卷文件」**，
+   取料＝`grep -l <被搬模块/被搬符号> tests/*.ts`，不是"我改了哪个文件就跑哪个"。本次这条清单里有 9 个判卷文件读 `loop-eval`，全量判卷一次就全覆盖——而**全量判卷正是我没跑的那一格**。
+
+4. **修法（针脚跟着搬家，并把另一半补上）**：⑴ 「装、跑、判…」改成「装与跑在跑器里有人调，判在分支表里有人调（旧位置不许留副本）」——正向读 `lib/eval-expects`，
+   反向钉 `evalSrc` 里不许再有 `heldOutFailReasons(`；⑵ 「判卷把 spec 与观测…」除了读新位置的三枚实参，**同时钉跑器那一半**：
+   `const face: ExpectFace = {` 里三枚观测（`heldOutSpec`／`heldOutRun`／`heldOutInstallErrs`）必须一起进那张面——少交一枚时分支只会静默拿到 `undefined`，
+   held-out 落进「没有面」那一档，读起来像"这条没判"而不是"跑器没交"。⑶ 新增锚点 `eval-heldout-face-drops-one-observation`（摘掉那一枚实参 ⇒ 红在第 ⑵ 条），
+   尺与锚点同笔。⑷ 本页第 9 项「刻意未做⑴」从此**闭掉 held-out 这一半**（其余判据字段仍无编译期相容断言，继续挂着，不许读成整格已做）。
+
+5. **归属与隔离**：`tests/eval-heldout.test.ts` 正被隔壁会话在飞改（三处 hunk 在 47／166／289 行区），我这两条在 445 行之后的接线族 ⇒ 只暂存自己的 hunk，
+   提交后 `git diff -- 该文件` 必须只剩隔壁那三处；隔壁那 3 处一行不碰、不替别人重写那一页。
+
+6. **改后复验**：`tests/eval-heldout.test.ts` 工作树 `Test Files 1 passed (1)｜Tests 35 passed (35)`（留档 `outputs/eval-expect-registry-2026-10-03/heldout-pins-fix.log`）——
+   这把只证"针脚对着盘上的面能绿"，因为工作树含隔壁在飞的 held-out 改动；**HEAD 态由重跑的认证树证明**。
+   `node --check scripts/mutate-verify.mjs` OK；锚点表 1395 → 1396。

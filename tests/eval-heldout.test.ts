@@ -401,11 +401,15 @@ describe("登记的隐藏文件确实在靶子之外", () => {
  * 因为这条判据的内容就是"谁在什么顺序上调了谁"，不在任何纯函数里面。 */
 describe("loop-eval 的 held-out 接线", () => {
   const evalSrc = readFileSync(join(REPO, "scripts/loop-eval.ts"), "utf8");
+  // 第 327 页把「判」那一支从跑器搬进分支表（`lib/eval-expects`）⇒ 针脚跟着搬家，旧位置同时钉死。
+  const branchSrc = readFileSync(join(REPO, "scripts/lib/eval-expects.ts"), "utf8");
 
-  it("装、跑、判三件事都在跑器里有人调", () => {
-    for (const callee of ["installHeldOut(", "runHeldOut(", "heldOutFailReasons("]) {
+  it("装与跑在跑器里有人调，判在分支表里有人调（旧位置不许留副本）", () => {
+    for (const callee of ["installHeldOut(", "runHeldOut("]) {
       expect(evalSrc.split(callee).length - 1).toBeGreaterThanOrEqual(1);
     }
+    expect(branchSrc.split("heldOutFailReasons(").length - 1).toBeGreaterThanOrEqual(1);
+    expect(evalSrc).not.toContain("heldOutFailReasons(");
   });
 
   /* 顺序不变量：隐藏文件必须**在改动清单算完之后**才装。
@@ -425,10 +429,18 @@ describe("loop-eval 的 held-out 接线", () => {
   });
 
   it("判卷把 spec 与观测分别交给 lib（跑器不许自己比一次 ok）", () => {
-    const call = evalSrc.slice(evalSrc.indexOf("heldOutFailReasons("), evalSrc.indexOf("heldOutFailReasons(") + 200);
-    expect(call).toContain("t.spec");
+    const at = branchSrc.indexOf("heldOutFailReasons(");
+    const call = branchSrc.slice(at, at + 200);
+    expect(call).toContain("r.heldOutSpec");
     expect(call).toContain("r.heldOutRun");
     expect(call).toContain("r.heldOutInstallErrs");
+    // 跑器那一半也得钉：三枚观测要一起进那张面。少喂一枚＝分支静默拿到 `undefined`，
+    // 而它落在「没有面」那一档，读起来像「这条没判」而不是「跑器没交」——搬家只搬了一半就是这么错的。
+    const fa = evalSrc.indexOf("const face: ExpectFace = {");
+    const face = evalSrc.slice(fa, fa + 400);
+    expect(face).toContain("heldOutSpec: t.spec?.heldOut");
+    expect(face).toContain("heldOutRun: r.heldOutRun");
+    expect(face).toContain("heldOutInstallErrs: r.heldOutInstallErrs");
   });
 
   it("读数行上有那枚令牌：没这一格与这一格过了要分得开", () => {
