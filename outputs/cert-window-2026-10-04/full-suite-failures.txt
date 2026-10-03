@@ -1,0 +1,59 @@
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/head-cert-deps.test.ts > 贴帽读数：suiteRows／budgetFromTestSource／timingNearCapCell／timingCell（第 262 页） > 真机整表：把留档的那一次全量 json 喂进去，档位计数与逐行重数必须同分母
+AssertionError: 取不到成因的条数必须是 0（现读见 realdata.log）；不是 0 就先修取料，别把名单当准: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ tests/head-cert-deps.test.ts:1272:83
+    1270|     expect(cell.implicit).toBe(recount.implicit);
+    1271|     expect(cell.nonliteral).toBe(recount.nonliteral);
+    1272|     expect(cell.notResolved, `取不到成因的条数必须是 0（现读见 realdata.log）；不是 0 就先修…
+       |                                                                                   ^
+    1273|     expect(recount.explicit).toBeGreaterThan(0);
+    1274|     for (const n of cell.near) expect(n.ratio).toBeGreaterThanOrEqual(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/mutate-needles-check.test.ts > 针脚红的归属（needleMoveCauseSuffix） > 真 git 一次：本仓那条已知死针脚必须被点到 1f16bea（第 121 页搬走文本的那笔）
+AssertionError: expected '1f16bea7' to be '1f16bea' // Object.is equality
+
+Expected: "1f16bea"
+Received: "1f16bea7"
+
+ ❯ tests/mutate-needles-check.test.ts:198:20
+    196|       run,
+    197|     );
+    198|     expect(c?.sha).toBe("1f16bea");
+       |                    ^
+    199|     expect(c?.subject).toContain("121");
+    200|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/prose-needle-scan.test.ts > 真仓扫：这把尺自己不许空载 > 真仓读数必须在帽内——判卷直接吃 CLI 那个函数，不许自己再算一遍
+AssertionError: expected { …(2) } to deeply equal { multi: '', bare: '' }
+
+- Expected
++ Received
+
+  {
+    "bare": "",
+-   "multi": "",
++   "multi": "❌ 水位上涨：顶包候选 11（已提交 11 ＋ 在飞 0）> 登记的 10（树＝core-only；只准下调，降法见任务 #20。两半都算账——在飞那半不是豁免，只是「谁把它推上去的」这条解释）",
+  }
+
+ ❯ tests/prose-needle-scan.test.ts:891:32
+    889|
+    890|   it("真仓读数必须在帽内——判卷直接吃 CLI 那个函数，不许自己再算一遍", () => {
+    891|     expect(ceilingBreaches(r)).toEqual({ multi: "", bare: "" });
+       |                                ^
+    892|     // 两半之和＝名单总数：分面漏一半（只数已提交／只数在飞）会在这儿红，且与树脏净无关。
+    893|     expect(r.committedMultiCopy + r.inFlightMultiCopy).toBe(r.multiCop…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+

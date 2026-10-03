@@ -104,6 +104,10 @@ export interface CycleVerdict {
 
 const norm = (c: readonly string[]): string => [...c].sort().join(" → ");
 
+/** 成员串的拼法＝唯一事实源。判卷要断这句就调它，别把整句抄进断言里：
+ *  抄进断言的那一刻起，改这串的渲染要动两处，而 prose-needle-scan 会把这一格报成顶包候选。 */
+export const cycleMembersLabel = (c: readonly string[]): string => c.join(" → ");
+
 /** 把「盘上数到的圈」与「已登记的债」对账。三态分开印，且**两向都要有牙**：
  *  新圈要出声（抓"有人加了环"），登记的那条没了也要出声（抓"登记表自己烂掉"）。 */
 export function classifyCycles(found: readonly string[][], debt: readonly CycleDebt[]): CycleVerdict {
@@ -128,7 +132,7 @@ export function cycleSummary(v: CycleVerdict): string {
 export function cycleFindings(v: CycleVerdict): CycleFinding[] {
   const out: CycleFinding[] = [];
   for (const c of v.fresh) {
-    out.push({ rule: "arch-cycle", detail: `新增运行期 import 环（未登记）：${c.join(" → ")} ⇒ 顶层使用圈内符号会撞 ESM TDZ；要么断圈，要么带页号出处登记成债` });
+    out.push({ rule: "arch-cycle", detail: `新增运行期 import 环（未登记）：${cycleMembersLabel(c)} ⇒ 顶层使用圈内符号会撞 ESM TDZ；要么断圈，要么带页号出处登记成债` });
   }
   for (const s of v.stale) {
     out.push({ rule: "arch-cycle", detail: `登记的环已不在盘上（${s}）⇒ 该从名单删掉，登记不删就是假存量` });

@@ -9,6 +9,7 @@ import {
   adjacencyOf,
   classifyCycles,
   cycleFindings,
+  cycleMembersLabel,
   cycleSummary,
   stronglyConnectedComponents,
 } from "../scripts/lib/arch-cycles.js";
@@ -92,7 +93,9 @@ describe("classifyCycles：三态各配「有它出声／没它闭嘴」（规�
   it("盘上有新圈 ⇒ fresh 红，且 detail 里点名成员与出口建议", () => {
     const v = classifyCycles([["x.ts", "y.ts"]], []);
     expect(v.fresh).toEqual([["x.ts", "y.ts"]]);
-    expect(cycleFindings(v)[0]?.detail).toContain("x.ts → y.ts");
+    // 成员串用生产那把拼法（cycleMembersLabel）算，不抄整句：抄进断言＝同一句活两处，改渲染要动两处，
+    // 而 prose-needle-scan 会把这一格报成顶包候选（第 342 页就是被这条帽撞红的）。
+    expect(cycleFindings(v)[0]?.detail).toContain(cycleMembersLabel(["x.ts", "y.ts"]));
     expect(cycleFindings(v)[0]?.detail).toContain("TDZ");
   });
   it("债与新圈同场 ⇒ 各归各，不互相吞（并集读数不能当「每一处都成立」的证人）", () => {

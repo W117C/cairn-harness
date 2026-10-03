@@ -1,0 +1,2 @@
+Preparing worktree (detached HEAD 74254586)
+HEAD is now at 74254586 第 341 页：仓根搬家把 16 棵验证树全打成 prunable——repair 前后的逐字读数（16→0）与"下一次 prune 就差一步"的危险形状；过期绝对路径在 HEAD 受管面只有 17 处／6 支文件（夹具 10／判卷合成输入 3／台账 3／docs 1），而 outputs/ 那 4786 处不许改（那是当时那趟读数的取料面，涂成今天的路径＝伪造证据）；字面过期≠缺陷这条今天实测：搬家后 40 条判卷绿（typecheck-triage 8＋goal-drift 7＋no-progress 25，368ms）⇒ 报"有旧路径"前先问谁把它当什么读；docs/solpi-port-proposal.md:293 那句现在时的事实在搬后已不成立，但该文件在隔壁手里（3/3）⇒ 只记不修；开 #52（worktree 注册表路径对账，现读 0 ⇒ 帽 0 零容忍）
