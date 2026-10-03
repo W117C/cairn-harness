@@ -3008,8 +3008,8 @@ const MUTATIONS = [
     id: "glm-default-name-ignores-env",
     src: "src/providers/glm.ts",
     test: "tests/worker-spent-usd.test.ts",
-    desc: "glmDefaultModelName 不读 CAIRN_MODEL ⇒ 与实际拨号名各算一份（本仓点名的「与 X 对齐」只是注释）",
-    apply: (s) => s.replace("  return process.env.CAIRN_MODEL ?? GLM_DEFAULT_MODEL;", "  return GLM_DEFAULT_MODEL;"),
+    desc: "glmDefaultModelName 不读 M0_MODEL ⇒ 与实际拨号名各算一份（本仓点名的「与 X 对齐」只是注释）",
+    apply: (s) => s.replace("  return process.env.M0_MODEL ?? GLM_DEFAULT_MODEL;", "  return GLM_DEFAULT_MODEL;"),
     expectFail: "glmDefaultModelName 与 streamGlm 真实拨号用的模型名逐字相等（防第四份 env 副本漂移）",
   },
   // ---- 门的执行计划（scripts/gate-manifest.gateCommand，tests/gate-manifest.test.ts）----
@@ -3824,7 +3824,7 @@ const MUTATIONS = [
     test: "tests/glm-tool-stream-switch.test.ts",
     desc: "关位被无视、永远发 tool_stream ⇒ 严格代理上 provider:check 与每个 worker spawn 第一跳 400（能力有、路径堵）",
     apply: (s) => s.replace("  return off ? undefined : { tool_stream: true };", "  return { tool_stream: true };"),
-    expectFail: "CAIRN_GLM_TOOL_STREAM=0：body 不再带该字段，其余字段逐字不变",
+    expectFail: "M0_GLM_TOOL_STREAM=0：body 不再带该字段，其余字段逐字不变",
   },
   {
     id: "glm-tool-stream-default-flipped-off",
@@ -6238,8 +6238,8 @@ const MUTATIONS = [
     id: "byok-injector-missing-envmap-falls-back",
     src: "src/main/provider-key-inject.ts",
     test: "tests/provider-keys.test.ts",
-    desc: "未登记 env 名的 provider 不崩、静默借用 glm 的变量名 ⇒ 白名单加一家而忘了登记映射时，用户以为「存了 key 就生效」，实际拿 CAIRN_API_KEY 去拨别家",
-    apply: (s) => s.replace("    const envName = envKeyOf(provider);", '    const envName = envKeyOf(provider) ?? "CAIRN_API_KEY";'),
+    desc: "未登记 env 名的 provider 不崩、静默借用 glm 的变量名 ⇒ 白名单加一家而忘了登记映射时，用户以为「存了 key 就生效」，实际拿 M0_API_KEY 去拨别家",
+    apply: (s) => s.replace("    const envName = envKeyOf(provider);", '    const envName = envKeyOf(provider) ?? "M0_API_KEY";'),
     expectFail: "未登记 env 名映射的 provider：崩，不许静默跳过那一家",
   },
   {
@@ -7495,7 +7495,7 @@ const MUTATIONS = [
       '      ...(usageModel !== "" ? { usage_model: usageModel } : {}),\n',
       "",
     ),
-    expectFail: "注入真拨模型 ⇒ 落 glmDefaultModelName 那一档，且跟着 CAIRN_MODEL 走（不是写死的名字）",
+    expectFail: "注入真拨模型 ⇒ 落 glmDefaultModelName 那一档，且跟着 M0_MODEL 走（不是写死的名字）",
   },
 
   // ── 第 149 页 · head-cert 进默认门表：共享树上多一个写点，收尾复核是它的前提
@@ -13148,10 +13148,10 @@ const MUTATIONS = [
     src: "src/cli.ts",
     test: "tests/cli-surface.test.ts",
     desc: "条件从「flag 与位置参数都给了」放宽成「只要两个位置参数就拒」⇒ help 首行那条主路 "
-      + "`cairn <目录> <任务>` 直接不能用，而只钉「同时给要拒」那条照旧绿。放行臂读的是「哪道闸先喊」，"
+      + "`m0 <目录> <任务>` 直接不能用，而只钉「同时给要拒」那条照旧绿。放行臂读的是「哪道闸先喊」，"
       + "所以两条合法形状各跑一次真进程，而不是比文案",
     apply: (s) => s.replace("if (flagWorkspace !== null && positional.length === 2) {", "if (positional.length === 2) {"),
-    expectFail: "工作区的两种合法形状各自放行（无条件拒会把 `cairn <目录> <任务>` 这条主路杀掉）",
+    expectFail: "工作区的两种合法形状各自放行（无条件拒会把 `m0 <目录> <任务>` 这条主路杀掉）",
   },
   {
     id: "impact-spec-cap-number-not-derived",
