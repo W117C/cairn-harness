@@ -11498,6 +11498,35 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
    #23 那条探针红照挂（唯一红）；#24/#26/#28/#32/#33 照挂。
    验证树：`.worktrees/gate-mutate-322`（本笔起树名进 `.worktrees/`）＋仓根那四棵（`gate-mutate-318`／`319`／`320`／`321`）与 `suite-refresh-318`，回收等用户点头。
 
+## 2026-10-03 · 第 323 页补 凭证（1/1）：`cd4df98` 认证通过——22/22 门绿、干净树 289 文件 3999 条全绿、两端独占；条数与文件数两条账同时对上（＋4 条／＋1 份）
+
+1. **认证读数**（`outputs/claims-goal-drift-2026-10-03/head-cert-cd4df98.log`，`CERT_EXIT=0`，数字取自 cert 自己落盘的 summary）：
+   认证门面=22 道（跑到 22）｜绿 22 道｜⚠️ 超预算 3；`Test Files 289 passed (289)｜Tests 3999 passed (3999)｜exit=0`；
+   并发判卷＝起前 0 套／跑完 0 套；`TREE=cd4df98 DIRTY_JUDGED=0 依赖完整=是 收尾复核=同一笔`；本趟墙钟 302.82s；
+   认证树 `.worktrees/gate-head-cert-323` 已自收（exit=0）。
+
+2. **两条账同时对上**：条数 3999 ＝ 上一笔凭证（`e06b04f`）3995 ＋ 4
+   （`goal-drift-reason` ＋3、`optional-tool-surface` ＋1；`compaction`／`plugin-role` 两处是**延长既有断言**，不加条数）；
+   文件数 289 ＝ 288 ＋ 1（本笔新建那一份判卷）。增量能自己解释自己，是认证之外第二道自查。
+
+3. **本笔锚点面**（`mutate-kill-323.log`）：表 1380 条，干净树按 `--changed-since=3059ec5` 派生 19 个变更文件 ⇒ 选中 **60 条**，
+   `全部变异被正确杀死`、129.1s、判卷 spawn 120 次／60 条、**坏拍 0**、单次中位 0.8s。四根新针脚逐条：
+   `compaction-overflow-summary-mechanism-note-dropped` 1.2s／`plugin-role-security-keys-warning-merged-into-unknown` 1.1s／
+   `glm-spec-web-fetch-truncation-promise-dropped`（✅ 在名单内）／`goal-drift-reason-lost-its-meaning` 0.6s。
+   —— 这里犯过一次读数错：我按记忆把第三根写成 `glm-spec-truncation-...`，`grep -c` 直接 0 命中；
+   表里的真名带 `web-fetch` 一段。**指针与 id 一律逐字取，不背**（规则 402 的第三次同型命中，本页按原句改回）。
+
+4. **落库后复跑的两把秒级尺**：`--check-needles` 从预提交的「阻断 1＝未入库面 1」回到 **阻断 0／未入库面 0／钉在飞文本 0**
+   （`needles-check-postcommit.log`）——这正是第 323 页 §5 预测的那次归零，两份读数都留了档；
+   `docs-check` 从预提交 2 条 D-11 红回到 **受检项全绿**（`docs-check-postcommit.log`，另 3 项未检＝STATE.md 不存在）。
+
+5. **#20 的第三个同表数据点**：`mutate-needles-check` 这一趟 26009ms（另两趟 21177／18845ms，表 1376→1380 条）。
+   三趟跨预算线上下 ⇒ 仍是负载不是水位；不抬帽、不改快尺。
+
+6. **账**：#25 最后一格（`glm-session.ts#note`）判卷与锚点已写好（新建独立用例保住唯一指向，因既有那条已被两根锚点指着）、
+   一台造红驱动待跑；#23 那条探针红照挂；#24 需要 `scripts/docs-check.ts`——该文件在隔壁手里（现读 47 增/5 删、8 个 hunk），**不动**；
+   #26/#28/#32/#33 照挂。验证树待回收：`gate-mutate-318`／`319`／`320`／`321`（仓根）＋`.worktrees/gate-mutate-322`／`.worktrees/gate-mutate-323` 与 `suite-refresh-318`。
+
 ## 2026-10-03 · 第 322 页补 凭证（1/1）：`e06b04f` 认证通过——22/22 门绿、干净树 288 文件 3995 条全绿、两端独占；这一笔同时把第 321 页那格红修掉了，所以两页共用一份凭证
 
 1. **认证读数**（`outputs/claims-cli-spec-2026-10-03/head-cert-e06b04f.log`，页上数字取自 cert 自己落盘的 `summary.txt`）：
