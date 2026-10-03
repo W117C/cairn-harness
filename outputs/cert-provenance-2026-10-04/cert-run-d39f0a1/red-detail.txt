@@ -1,0 +1,11 @@
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/head-cert-deps.test.ts[2m > [22m贴帽读数：suiteRows／budgetFromTestSource／timingNearCapCell／timingCell（第 262 页）[2m > [22m真机整表：把留档的那一次全量 json 喂进去，档位计数与逐行重数必须同分母
+[31m[1mAssertionError[22m: 取不到成因的条数必须是 0（现读见 realdata.log）；不是 0 就先修取料，别把名单当准: expected 2 to be +0 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 0[39m
+[31m+ 2[39m
+
