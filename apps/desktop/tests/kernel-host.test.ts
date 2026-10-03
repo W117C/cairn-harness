@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { createKernelHost, type KernelHost } from "../src/main/kernel-host";
-import { pathOf } from "../../../src/main/sessions";
+import { createSession as createSessionInRoot, pathOf } from "../../../src/main/sessions";
 
 const dir = mkdtempSync(join(tmpdir(), "m0-host-"));
 const workspace = join(dir, "ws");
@@ -60,6 +60,11 @@ describe("kernel-host 纵向装配", () => {
       expect(res.ok, JSON.stringify(res)).toBe(true);
       const events = outbox.filter(([ch]) => ch === "onEvent");
       expect(events.length).toBeGreaterThan(0);
+      // M2 悬账承接（终审 Important）：live ts 断言——core 统一盖戳（events/index.ts append
+      // 落盘处「盖在事件本身上」）后，outbox 收到的每条 onEvent 载荷 ts 必为 number
+      // （管线「先 log.append 后 onEvent」，盖戳先于 onEvent 下游可见）。旧链路生产者零散
+      // 自盖，真语料 282 条 tool_call 一条不带 ⇒ 事件时间面不可测；此行钉住统一盖戳不回退。
+      expect(events.every(([, p]) => typeof (p as { ts?: number }).ts === "number")).toBe(true);
       // worker 面（M1 账本 T3）：demo 剧本派两个 worker，事件流里应见 spawn 与至少一份终态回执。
       // 断言事件类型在场而非内容形状（worker 报告内容不钉死）。实测（2026-10-03）：
       // agent_spawned ×2；agent_result ×1——read-worker 在 run 窗口内收敛，slow-worker 仍
@@ -77,6 +82,17 @@ describe("kernel-host 纵向装配", () => {
 
   it("decide：未知 askId fail-closed 返回 false", () => {
     expect(host.decide("no-such-ask", true)).toBe(false);
+  });
+
+  it("createSession：未注册 workspace 被拒（fail-visible，堵 IPC 任意路径注入面）", async () => {
+    // M3 终审（Important）：renderer 可经 IPC 传任意路径建会话——无校验即凭空 mkdir
+    // <注入路径>/.agent/sessions。白名单外的路径在 mkdir 之前就被拒（与构造期
+    // activeWorkspace 校验同式），盘上不得留任何痕迹。缺省参（落 activeWorkspace）的
+    // 正路径已由首例 demo run 覆盖——此处不再另建空会话（会污染 openSession 用例的
+    // sessions[0] 取样）。
+    const injected = join(dir, "unregistered-ws");
+    await expect(host.createSession(injected)).rejects.toThrow(/不在 workspaces/);
+    expect(existsSync(injected)).toBe(false);
   });
 
   it("openSession：能读回刚落的会话", async () => {
@@ -137,10 +153,13 @@ describe("M3 多工作区运行面", () => {
         },
       });
       // 并入前：扫描面恰为 wsA（T1 装配定态）——wsC 的会话不经本 host 的 listSessions 出现。
+      // （M3 终审起 createSession 对未注册工作区 fail-visible——白名单外路径拒绝，本用例的
+      // wsC 会话改由 core createSessionInRoot 直接落盘，恰等价 addProject 产品场景：
+      // 盘上已有会话的工作区被并入扫描面。）
+      const createdId = await createSessionInRoot(join(wsC, ".agent", "sessions"));
       // 断言按 workspace 归属而非按 id 全表查：同进程多 host 实例共享盘上根，秒级时间戳名可跨
       // 实例同名（实例级 owner 表互不知晓，撞名修法保证的是 host 实例级唯一——单 main 进程单
       // host ⇒ 产品语义成立），wsA 根里可能有同名文件。
-      const created = await dyn.createSession(wsC);
       expect((await dyn.listSessions()).every((s) => s.workspace === wsA)).toBe(true);
       // 并入（重复两次）：立即出现且恰一条——幂等去重（workspaces 数组被 listSessions 按引用
       // 迭代，重复 push 会逐根扫描两遍、清单出重复条目）。
@@ -148,7 +167,7 @@ describe("M3 多工作区运行面", () => {
       dyn.addWorkspace(wsC);
       const listed = (await dyn.listSessions()).filter((s) => s.workspace === wsC);
       expect(listed).toHaveLength(1);
-      expect(listed[0]!.id).toBe(created.id);
+      expect(listed[0]!.id).toBe(createdId);
     },
   );
 

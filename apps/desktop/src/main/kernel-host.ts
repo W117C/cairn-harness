@@ -58,7 +58,10 @@ export interface KernelHost {
   /** 全工作区合并的会话清单，每条带 workspace 归组标记（T3 分组侧栏的数据源）。 */
   listSessions(): Promise<(SessionInfoPayload & { workspace: string })[]>;
   /** 新建会话；缺省落 activeWorkspace。参数是工作区不是会话名
-   *  （M3 起 id 恒为时间戳名——秒级粒度、host 级唯一，命名走 rename）。 */
+   *  （M3 起 id 恒为时间戳名——秒级粒度、host 级唯一，命名走 rename）。
+   *  M3 终审：显式传入的 workspace 须 ∈ workspaces（含 addWorkspace 动态并入），
+   *  未注册 ⇒ throw（与构造期 activeWorkspace 校验同式 fail-visible）——堵 IPC 注入面
+   *  （否则 renderer 可指任意路径，会话目录被凭空 mkdir）。 */
   createSession(workspace?: string): Promise<{ id: string }>;
   /** 动态并入一个工作区（M3-3 修复轮）：push 进扫描面（去重幂等）——新工作区的会话立即经
    *  listSessions 出现，归属表解析的兜底扫描同步生效。仅在 main 进程内由 addProject handler
@@ -249,6 +252,12 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
     },
     createSession: async (workspace) => {
       const ws = workspace ?? deps.activeWorkspace;
+      // M3 终审（Important）：显式 workspace 加白名单校验——与构造期 activeWorkspace 校验同式
+      // fail-visible。清单含 addWorkspace 动态并入（addProject 成功后），合法增量不被误拒；
+      // 未注册路径在 mkdir 之前就被拒，IPC 注入面（任意路径凭空建 .agent/sessions）收口。
+      if (!workspaces.includes(ws)) {
+        throw new Error(`workspace 不在 workspaces 里: ${ws}`);
+      }
       // ---- host 级 id 唯一（T1 审查强制前置，T3 收口）----
       // core createSession 缺省名到分钟、撞名规避只在各自根内（stat 同根文件）⇒ 同分钟跨工作区
       // 两建返回同名 id，归属表「后建覆盖先建」，先建会话的 run/open 被路由到后建工作区

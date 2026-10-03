@@ -9,6 +9,11 @@ import { fileURLToPath } from "node:url";
 import { INVOKE_CHANNELS, PUSH_CHANNELS } from "./channels";
 import type { InvokeChannel, PushChannel } from "./channels";
 import type { AddProjectInput } from "../../../../src/main/ipc-protocol";
+// M3 终审 Critical 修复：澄清/方案两卡自 M2 起端到端死路（wired 表漏行 ⇒ renderer 调用即
+// reject「No handler registered」）。与 decide 同式——main 进程 import core 出口后直调，
+// 不经 kernel-host 转手（两出口本就是为 IPC 处理函数而生的单例缝，见 agent-runner 各自头注）。
+import { handleClarifySubmit, handlePlanDecide } from "../../../../src/main/agent-runner";
+import type { ClarifyAnswerMap } from "../../../../src/events";
 import { createKernelHost } from "./kernel-host";
 import { ProjectRegistry } from "../../../../src/main/project-registry";
 import { providerInfo } from "../../../../src/main/settings-handlers";
@@ -74,6 +79,14 @@ const projectRegistry = new ProjectRegistry(join(userData, "projects.json"));
 const wired: Partial<Record<InvokeChannel, (...args: unknown[]) => unknown>> = {
   run: (req) => host.run(req as never),
   decide: (askId, approved, scope) => host.decide(askId as string, approved as boolean, scope as never),
+  // M3 终审 Critical（wired 表漏行三连之三、四）：channels 表/preload/AgentApi 自 M2 起有
+  // submitClarify 与 decidePlan，App.tsx（澄清卡/方案卡 onSubmit/onDecide）也早已在调，
+  // wired 表却从没这两行 ⇒ renderer 调用即 reject「No handler registered」，澄清与方案
+  // 两卡端到端死路。实现直调 core 出口（与 decide 同式）：handleClarifySubmit 同步返回
+  // boolean（ipcMain.handle 自动包成 resolve，AgentApi 的 Promise 形状不受影响）；
+  // ClarifyAnswerMap 与 ipc-protocol 的 ClarifyAnswers 同为 Record<string, string | string[]>。
+  submitClarify: (callId, answers) => handleClarifySubmit(callId as string, answers as ClarifyAnswerMap),
+  decidePlan: (approved, callId) => handlePlanDecide(approved as boolean, callId as string | undefined),
   // channels 表（T2）钉的键是 runCancel；KernelHost 方法名是 cancel（brief 快照里写 cancel 与表不符——映射类型红线拦下）。
   // M3-5 接线：renderer 打断按钮真实传 sessionId（ipc-protocol runCancel(sessionId?) 可选参，preload
   // 程序化桥自动透传）⇒ 会话级取消（T2 per-session controller）。渲染层不传 ⇒ undefined 直进
