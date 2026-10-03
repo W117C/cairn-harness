@@ -1,0 +1,17 @@
+# 同一棵树、只换 rank.ts 那一个文件的两臂（口径＝probe-summary-coverage 的汇总三行）
+## 臂 A＝HEAD 那份头注释（117 码点）
+  有摘要·未截顶＝154（25.3%） 例：src/agent/map/rank.ts、tests/write-line-delta.test.ts、tests/worker-role-budget.test.ts
+  有摘要·截在帽上（信息尾被切掉那一格）＝361（59.4%） 例：tests/zero-regression-conjunct.test.ts、tests/write-face.test.ts、tests/worker-spent-usd.test.ts
+  ⇒ 词面通道可见的文件＝515/608（84.7%）
+[summary-coverage] 题集真值文件（去重 13 个）按同一把尺分格：
+  有摘要·未截顶＝3：src/agent/verify.ts、src/agent/map/rank.ts、src/main/settings.ts
+  有摘要·截在帽上（信息尾被切掉那一格）＝10：src/permissions/autonomy.ts、src/agent/no-progress.ts、src/agent/usage-attribution.ts、src/agent/tool-surface.ts、src/tools/snapshot.ts、src/tools/apply_patch.ts、src/main/scheduler.ts、src/agent/memory/inject.ts、src/main/sandbox.ts、src/agent/model-surface.ts
+[summary-coverage] 自检 ✅ 三个形状都数到了、哨兵落在 summarized ⇒ 上面的覆盖率可以引用
+## 臂 B＝改后那份头注释（195 码点）
+  有摘要·未截顶＝154（25.3%） 例：src/agent/map/rank.ts、tests/write-line-delta.test.ts、tests/worker-role-budget.test.ts
+  有摘要·截在帽上（信息尾被切掉那一格）＝361（59.4%） 例：tests/zero-regression-conjunct.test.ts、tests/write-face.test.ts、tests/worker-spent-usd.test.ts
+  ⇒ 词面通道可见的文件＝515/608（84.7%）
+[summary-coverage] 题集真值文件（去重 13 个）按同一把尺分格：
+  有摘要·未截顶＝3：src/agent/verify.ts、src/agent/map/rank.ts、src/main/settings.ts
+  有摘要·截在帽上（信息尾被切掉那一格）＝10：src/permissions/autonomy.ts、src/agent/no-progress.ts、src/agent/usage-attribution.ts、src/agent/tool-surface.ts、src/tools/snapshot.ts、src/tools/apply_patch.ts、src/main/scheduler.ts、src/agent/memory/inject.ts、src/main/sandbox.ts、src/agent/model-surface.ts
+[summary-coverage] 自检 ✅ 三个形状都数到了、哨兵落在 summarized ⇒ 上面的覆盖率可以引用

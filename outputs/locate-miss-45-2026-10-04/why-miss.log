@@ -1,0 +1,70 @@
+L01 shape=nl target=src/permissions/autonomy.ts
+  档=截在帽上（摘要 220 码点／帽 220）
+  问句词 27 个：摘要里有 3、文件里有 11
+  摘要送不出的（文件里有）＝权限/一个/登记/具名/还是/该改/改哪/文件
+  摘要原文：M1c 评估管线（§11.7.1）：纯函数 evaluate(tool, args, session)，四层固定序、先命中先短路： L0 硬边界（只读档摘除 + M1b 方案门，deny 位次最前——摘除的工具规则库不能复活） → L1 d
+L02 shape=nl target=src/agent/verify.ts
+  档=有摘要·未截顶（摘要 170 码点／帽 220）
+  问句词 28 个：摘要里有 0、文件里有 15
+  摘要送不出的（文件里有）＝测试/失败/之后/要把/环境/没装/装工/工具
+  摘要原文：验证门执行器：按目标仓库的 verify 配置跑 lint/test。 配置来源（规格 §5.4）：①目标仓库 .agent/config.json 的 verify 字段；②缺省探测 package.json 的 scripts（lint
+L03 shape=nl target=src/agent/no-progress.ts
+  档=截在帽上（摘要 220 码点／帽 220）
+  问句词 34 个：摘要里有 6、文件里有 15
+  摘要送不出的（文件里有）＝模型/重复/连续/出声/这条/阶梯/现在/在哪
+  摘要原文：无进展检测（outcome-shaped）：跑的次数不是证据，**改了东西却没有前进**才是。 为什么不并进 `stuck.ts`：那两条既有规则量的是「同一个动作又做了一次」（action-shaped， OpenHands / Gemi
+L04 shape=nl target=src/agent/usage-attribution.ts
+  档=截在帽上（摘要 220 码点／帽 220）
+  问句词 25 个：摘要里有 8、文件里有 9
+  摘要送不出的（文件里有）＝层补
+  摘要原文：用量归因：一笔 `usage` 事件属于**哪个模型**。 为什么单独一层（2026-09-27 读数，outputs/cost-attribution-join-2026-09-27/）： 评估面的 `$ / 成功任务` 一直报「不可测」
+L05 shape=nl target=src/agent/tool-surface.ts
+  档=截在帽上（摘要 220 码点／帽 220）
+  问句词 26 个：摘要里有 6、文件里有 10
+  摘要送不出的（文件里有）＝只读/读档/从模/摘掉
+  摘要原文：运行时注入工具的**唯一清单**：生产与 G-B 对账（tests/tool-surface-parity.test.ts）共读这一份。 测试里再抄一张 = 第二个事实源，正是本仓判死过多次的形态。 进这张表的条件：该工具不在 src/to
+L06 shape=nl target=src/tools/snapshot.ts
+  档=截在帽上（摘要 220 码点／帽 220）
+  问句词 22 个：摘要里有 11、文件里有 12
+  摘要送不出的（文件里有）＝事后
+  摘要原文：覆盖前快照（agent-plan §10.4 评审拍板 D7）：主会话覆盖一个**已存在**的文件之前，把原件按字节 抄进 `.agent/snapshots/`，并把快照路径随 tool_result 落进事件流（snapshot_id）
+L07 shape=nl target=src/tools/apply_patch.ts
+  档=截在帽上（摘要 220 码点／帽 220）
+  问句词 30 个：摘要里有 3、文件里有 11
+  摘要送不出的（文件里有）＝丁是/应用/上下/下文/文对/对不/不上/要报
+  摘要原文：补丁级输入：一次调用落多处、跨文件，失败逐 hunk 归因。 存在的理由按基线读数排（`outputs/m2-apply-patch-2026-10-01/readings.md`）： ① 本仓真实提交里「一笔改动 = 中位 3–10 处 
+L08 shape=nl target=src/main/scheduler.ts
+  档=截在帽上（摘要 220 码点／帽 220）
+  问句词 13 个：摘要里有 3、文件里有 6
+  摘要送不出的（文件里有）＝常驻/的定/启动
+  摘要原文：定时任务调度器（§12.2.2/§12.2.3/§12.2.4 实现定稿）： - 双轨存储：任务定义 automations.json（原子写 tmp+rename）；调度日志 automations-journal.jsonl（appen
+L09 shape=nl target=src/agent/memory/inject.ts
+  档=截在帽上（摘要 220 码点／帽 220）
+  问句词 19 个：摘要里有 5、文件里有 7
+  摘要送不出的（文件里有）＝模型/一行
+  摘要原文：M2d 注入器（§8.1.5 定稿）：固定回注名单 + 总预算 + 双端超限治理 + 安全四件。 名单（记忆部分）：项目层 ARCHITECTURE.md（>4KB 只注大纲）+ DECISIONS.md 最近 N 条（默认 20） + m
+L10 shape=nl target=src/agent/map/rank.ts
+  档=有摘要·未截顶（摘要 117 码点／帽 220）
+  问句词 17 个：摘要里有 1、文件里有 5
+  摘要送不出的（文件里有）＝权重/提到/被引/引用
+  摘要原文：符号地图·图与排名（§6.4）：自实现邻接表 + aider 边权规则（mul·√num_refs）+ 个性化 PageRank 幂迭代。graphology 不支持 personalization → 自实现（§6.4 选型决议）。
+L11 shape=ident target=src/agent/no-progress.ts
+  档=截在帽上（摘要 220 码点／帽 220）
+  问句词 16 个：摘要里有 0、文件里有 4
+  摘要送不出的（文件里有）＝函数/在哪/文件/调用
+  摘要原文：无进展检测（outcome-shaped）：跑的次数不是证据，**改了东西却没有前进**才是。 为什么不并进 `stuck.ts`：那两条既有规则量的是「同一个动作又做了一次」（action-shaped， OpenHands / Gemi
+L12 shape=ident target=src/main/settings.ts
+  档=有摘要·未截顶（摘要 136 码点／帽 220）
+  问句词 18 个：摘要里有 2、文件里有 3
+  摘要送不出的（文件里有）＝影响
+  摘要原文：主进程 settings 存储（§10.7 layout.get|set + §13 设置页）：JSON 文件，原子写，加载时逐字段校验， 非法值回退默认（验收：写入后重新加载得到相同布局 / 非法布局值回退默认）。electron-fre
+L13 shape=ident target=src/main/sandbox.ts
+  档=截在帽上（摘要 220 码点／帽 220）
+  问句词 14 个：摘要里有 4、文件里有 6
+  摘要送不出的（文件里有）＝那条/sandbox
+  摘要原文：macOS Seatbelt 沙箱：写收敛到工作区 + 敏感目录拒读 + 默认断网（拍板：读先全开）。 坑一：SBPL 路径必须是 realpath（/tmp 实为 /private/tmp），否则规则静默失效； 路径不存在时按原样写入 p
+L14 shape=ident target=src/agent/model-surface.ts
+  档=截在帽上（摘要 220 码点／帽 220）
+  问句词 28 个：摘要里有 5、文件里有 8
+  摘要送不出的（文件里有）＝降配/不会/core
+  摘要原文：模型面（每请求固定成本）总预算。 「模型面」= 每一轮请求都要重送、且与本轮任务无关的那一坨：基础系统提示 + 工具规格 JSON。 装配探针把这一层叫 `cacheableBytes`（`src/agent/gym/probe.ts` 的

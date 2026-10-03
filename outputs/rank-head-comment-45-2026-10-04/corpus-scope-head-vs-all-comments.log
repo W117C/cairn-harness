@@ -1,0 +1,17 @@
+L01 src/permissions/autonomy.ts 词 27 ⇒ 头注释 3 ／注释行 10 ／全文 11
+L02 src/agent/verify.ts 词 28 ⇒ 头注释 0 ／注释行 12 ／全文 15
+L03 src/agent/no-progress.ts 词 34 ⇒ 头注释 6 ／注释行 10 ／全文 15
+L04 src/agent/usage-attribution.ts 词 25 ⇒ 头注释 8 ／注释行 9 ／全文 9
+L05 src/agent/tool-surface.ts 词 26 ⇒ 头注释 6 ／注释行 10 ／全文 10
+L06 src/tools/snapshot.ts 词 22 ⇒ 头注释 11 ／注释行 12 ／全文 12
+L07 src/tools/apply_patch.ts 词 30 ⇒ 头注释 3 ／注释行 6 ／全文 11
+L08 src/main/scheduler.ts 词 13 ⇒ 头注释 3 ／注释行 6 ／全文 6
+L09 src/agent/memory/inject.ts 词 19 ⇒ 头注释 5 ／注释行 7 ／全文 7
+L10 src/agent/map/rank.ts 词 17 ⇒ 头注释 1 ／注释行 4 ／全文 5
+L11 src/agent/no-progress.ts 词 16 ⇒ 头注释 0 ／注释行 1 ／全文 4
+L12 src/main/settings.ts 词 18 ⇒ 头注释 2 ／注释行 2 ／全文 3
+L13 src/main/sandbox.ts 词 14 ⇒ 头注释 4 ／注释行 6 ／全文 6
+L14 src/agent/model-surface.ts 词 28 ⇒ 头注释 5 ／注释行 7 ／全文 8
+----
+合计问句词 317 ⇒ 头注释送得出 57（18.0%）／全文注释行 102（32.2%）／整个文件 122（38.5%）
+⇒ 语料从「头注释」扩到「全文注释行」的边际＝45 个词（14.2 个百分点）；扩到「全文（含代码）」的边际＝65 个

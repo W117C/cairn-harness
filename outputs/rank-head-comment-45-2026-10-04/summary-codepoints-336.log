@@ -1,0 +1,4 @@
+改前(HEAD) 码点=117/帽 220 ⇒ 档=未截顶
+  符号地图·图与排名（§6.4）：自实现邻接表 + aider 边权规则（mul·√num_refs）+ 个性化 PageRank 幂迭代。graphology 不支持 personalization → 自实现（§6.4 选型决议）。
+改后(工作树) 码点=195/帽 220 ⇒ 档=未截顶
+  符号地图·图与排名（§6.4）：**排序权重都写在这一支**——对话里提到某标识符 ×10、它的定义所在文件被上下文引用过 ×50、 名字 ≥8 字符 ×10、从未被引用的 def 靠自环 0.1 保底；个性化 PageRank 的 personalizationBoost 缺省 ×10； 幂迭代自实现（graphology 不支持 personalization，§6.4 选型决议）。
