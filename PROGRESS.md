@@ -12250,4 +12250,11 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 3. **本笔落库内容**：`PROGRESS.md`（本页）＋被点名的两份工件 `commit-334b-run.log`(683B)、`commit-run.log`(1509B)＋那份红读数本身，一起走路 D 并与第 4 条那样同步 index。**落库后重跑 `docs-check` 的归零读数另开一份工件存证**（引用不能引自己刚造的东西，所以那份绿读数随存证笔入库，不在本页点名）。
 4. **一句话规矩**：以后页里写「从没入过库／没被点名所以没人喊」这类句子，**要么同一笔把它入库，要么别提**——点名＝立据，而 D-11 只认 HEAD。这一条不进 #47 的尺（那是量「盘上有、HEAD 没有」的存量），这是写页的人自己的动作。
 
+## 2026-10-04 · 第 336 页补三：隔壁那笔 `410cdb6c` 落在我的四笔之后——**我那三页台账与 5 条锚点都在 HEAD 里活着**（现读 7 处／5 处命中），所以第 336 页补那条 hazard 今天是**潜在**而不是已造成的损失；这一格必须补写，否则上一页那句「一次 plain commit 就能把刚落库的内容退掉」在台账里读起来像已经掉了东西
+
+1. **读数**：`git show "HEAD:PROGRESS.md" | grep -c "第 336 页"` ＝ **7**、`git show "HEAD:scripts/mutate-verify.mjs" | grep -c "cert-provenance-"` ＝ **5**、`git show "HEAD:src/agent/map/rank.ts"` 首行＝改后那份头注释。隔壁那笔动的路径只有两条（`apps/desktop/src/main/index.ts` `30/2`、`apps/desktop/tests/provider-keys.test.ts` `136/0`）⇒ 它走的也是 pathspec 形态，**没有提交整份共享 index**，所以我同步过去的那些条目这次没被用上。结论按这一格自己的边界写：**index 滞后是「下一次 plain commit 会退掉内容」的潜在面，不是今天已经掉了东西**；同步那一步仍然照做（成本 4 条命令，换来的是别人的 commit 形状不再和我赌运气）。
+2. **#43 的现读值变了，必须换掉旧数**：`repo-hygiene-check` 在 `410cdb6c` 之后面①＝ **`outputs/` 2016／已跟踪 3063 ＝ 65.8%（帽 60%）红**、面②绿（最大 2783 行 ≤ 2800，174 支）。任务 #43 的前提句写的是 `HEAD 60.20%`（第 334 页那一刻的读数）——**引用旧值前先问它取在哪个 sha**：从 60.20% 到 65.8% 这 5.6 个百分点里，我这四笔占 11 份工件（`locate-miss` 2 ＋ `rank-head-comment` 9），其余是隔壁与之前各笔。裁决仍是**合批工件／抬帽／改口径**三选一，我不自行动帽，等用户点头；证人 `outputs/rank-head-comment-45-2026-10-04/repo-hygiene-336.log`。
+3. **清场**：`.worktrees/p336-rank` 已回收（回收前一条 `git diff e9778be4 -- src/agent/map/rank.ts` 读数＝**空**，证明那棵树里没有只存在于盘上的内容；这是第 335 页 `.worktrees/p335-cap` 的先例＝自造读数树、无待裁结论、当场回收）。等用户点头的清单不因此变短（`gate-mutate-318…334`、`gate-head-cert@b4b4db3`、`gate-mutate-verify`、`suite-base-330`、`suite-refresh-318` 与仓库根那几棵照旧）。
+4. **账**：本笔只动 `PROGRESS.md`（本页，纯追加）＋那一份卫生门读数。四条落库＝`e9778be4`（页＋代码＋9 份工件）、`5273bafd`（补）、`11284849`（补二＋2 份被点名的工件）、`5684ec93`（归零读数）＋本笔；**认证仍未做**（#39 前置未解，隔壁此刻仍在 `apps/desktop/` 与改名面上落笔），所以这几笔的「绿」只到秒级尺那一层——`docs-check` 全绿、针脚体检阻断 0、`typecheck` 0、语料级判卷 11 份 231 条全绿，都各有留档。
+
 
