@@ -1,0 +1,19 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+ [32m✓[39m tests/eval-validity.test.ts [2m([22m[2m27 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/eval-heldout.test.ts [2m([22m[2m35 tests[22m[2m)[22m[33m 812[2mms[22m[39m
+ [32m✓[39m tests/eval-report.test.ts [2m([22m[2m28 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/eval-arms.test.ts [2m([22m[2m26 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/eval-task-set.test.ts [2m([22m[2m33 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/eval-assembly.test.ts [2m([22m[2m25 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/eval-retry.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m7 passed[39m[22m[90m (7)[39m
+[2m      Tests [22m [1m[32m188 passed[39m[22m[90m (188)[39m
+[2m   Start at [22m 15:17:20
+[2m   Duration [22m 1.56s[2m (tests 76%, transform 15%, import 7%, worker 1%)[22m
+
+[2m    Isolate [22m [33m7 workers spawned[39m[2m · ~61ms startup each (spawn + environment, per file)[22m
+[2m            [22m [2mat least ~367ms faster with [22m[33misolate: false[39m[2m — reuses workers across files instead of one per file[22m
+

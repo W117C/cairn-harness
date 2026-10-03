@@ -1,0 +1,10 @@
+[scan] 取料：git ls-files outputs ⇒ 47 份 .events.jsonl｜解得开 47 份
+  模型自己红→绿        1 份：outputs/eval-long30-2026-10-02/L30-long-horizon-rep1-base.events.jsonl
+  闸补的绿           0 份
+  红没回            2 份：outputs/loop-eval-2026-09-20-base/I2-rep1-base.events.jsonl、outputs/loop-eval-2026-09-20-short/I2-rep1-short.events.jsonl
+  归属不可知          0 份
+  一次绿            43 份
+  没验             1 份：outputs/ga-strategy-2026-09-20-rep2/supervise.events.jsonl
+  分母口径：有 verify 拍的趟次 46／全部 47 份
+  ⚠️ 在盘但未跟踪 1 份（不进上面的分母）：eval-b4-diag＝模型自己红→绿
+  ✅ 自证：同一拍序列里「一次绿」→「红后模型再绿」→「红后只有闸补的绿」= greenFirst → modelRecovery → harnessOnly（三态不同才算这把尺在动）

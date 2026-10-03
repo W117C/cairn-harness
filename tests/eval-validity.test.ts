@@ -11,7 +11,8 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { autoVerifyBeats, costSplit, moneyText, PRICE_UNKNOWN, priceFace, runValidity, tally, WHY_INTERRUPTED_PREFIX, WHY_NOT_STARTED } from "../scripts/lib/eval-validity";
+import { autoVerifyBeats, costSplit, moneyText, PRICE_UNKNOWN, priceFace, runValidity, tally, verifyRecovery, VERIFY_RECOVERY_WHY, WHY_INTERRUPTED_PREFIX, WHY_NOT_STARTED } from "../scripts/lib/eval-validity";
+import type { VerifyBeatFace, VerifyRecovery } from "../scripts/lib/eval-validity";
 
 const row = (requests: number, ok: boolean, fails: string[] = []) =>
   ({ r: { requests }, g: { ok, fails } });
@@ -165,5 +166,94 @@ describe("闸补拍的计数（autoVerifyBeats）", () => {
   it("脏值不算一拍：生产者只会写 true，truthy 判定会把 1／「true」收进分子", () => {
     const dirty = [{ auto: 1 as unknown as boolean }, { auto: "true" as unknown as boolean }, { auto: null as unknown as boolean }];
     expect(autoVerifyBeats(dirty)).toBe(0);
+  });
+});
+
+/* ── 第 325 页 · 返修那一格：红过之后那枚绿**算谁的账**（能力 5 的分子）───────
+ * 只看「最后一拍绿了」不够：收束闸会在模型收队前自己补一拍（`src/agent/loop.ts` 的 `verifyBeat`），
+ * 那一拍既可能是模型真改过盘之后的返修，也可能只是闸在替它收尾——旧的布尔位里两种读数长成一个样。
+ * 每个态一条用例：合在一条里，下面那几根锚点会全红在同一条上＝其中几根没有分辨力（第 324 页实测）。 */
+describe("返修那一格（verifyRecovery）：六态分开印，闸补的绿不记给模型", () => {
+  const beat = (ok: boolean, by: VerifyBeatFace["by"]): VerifyBeatFace => ({ ok, by });
+
+  it("没跑过 verify ⇒ noVerify：这是「没有尺」，不许被读成「没有返修」", () => {
+    expect(verifyRecovery([])).toBe("noVerify");
+  });
+
+  it("从头绿到底 ⇒ greenFirst：一次就过的趟次对这一格没有话可说", () => {
+    expect(verifyRecovery([beat(true, "model"), beat(true, "model")])).toBe("greenFirst");
+  });
+
+  it("只数**第一枚红之后**的绿：红之前那枚绿不能顶账", () => {
+    // 旧口径（只看最后一拍）会把这条读成"绿了"⇒ 白记一次成功返修
+    expect(verifyRecovery([beat(true, "model"), beat(false, "model")])).toBe("notRecovered");
+  });
+
+  it("红过、之后只有更多红（含闸补的那枚红拍）⇒ notRecovered，不许读成 harnessOnly", () => {
+    expect(verifyRecovery([beat(false, "model"), beat(false, "harness"), beat(false, "unknown")])).toBe("notRecovered");
+  });
+
+  it("★红过、绿了，但那几枚绿全是闸补的 ⇒ harnessOnly：账记 harness，不记模型", () => {
+    const r = verifyRecovery([beat(false, "model"), beat(true, "harness")]);
+    expect(r).toBe("harnessOnly");
+    // 「A＝B」必配「A≠旧值」：这一态与真返修必须是两个值，否则整格退化成一个布尔
+    expect(r).not.toBe("modelRecovery");
+  });
+
+  it("★红过、之后有一枚模型自己发的绿 ⇒ modelRecovery（这一格要的分子）", () => {
+    expect(verifyRecovery([beat(false, "model"), beat(true, "harness"), beat(true, "model")])).toBe("modelRecovery");
+  });
+
+  it("归属读不出的一拍在场时不许猜 ⇒ attributionUnknown（宁可说不出，也不替模型认账）", () => {
+    expect(verifyRecovery([beat(false, "model"), beat(true, "unknown")])).toBe("attributionUnknown");
+    expect(verifyRecovery([beat(false, "model"), beat(true, "harness"), beat(true, "unknown")])).toBe("attributionUnknown");
+  });
+
+  it("六态两两不同（哪一态与别的同值，那一格就只是装饰）", () => {
+    const cases: [VerifyRecovery, VerifyBeatFace[]][] = [
+      ["noVerify", []],
+      ["greenFirst", [beat(true, "model")]],
+      ["notRecovered", [beat(false, "model")]],
+      ["harnessOnly", [beat(false, "model"), beat(true, "harness")]],
+      ["modelRecovery", [beat(false, "model"), beat(true, "model")]],
+      ["attributionUnknown", [beat(false, "model"), beat(true, "unknown")]],
+    ];
+    const got = cases.map(([, b]) => verifyRecovery(b));
+    expect(new Set(got).size, got.join(",")).toBe(6);
+    cases.forEach(([want, b], i) => expect(verifyRecovery(b)).toBe(want));
+  });
+
+  it("每一态的措辞互不相同且都不空（读数行与失败原因共用这一份，抄成同一句就等于没分态）", () => {
+    const whys = Object.values(VERIFY_RECOVERY_WHY);
+    expect(whys.length).toBe(6);
+    expect(new Set(whys).size, "两态共用一句 ⇒ 打印出来的字不再指向具体那一格").toBe(6);
+    for (const w of whys) expect(w.trim().length).toBeGreaterThan(3);
+  });
+
+  // ↓↓ 消费者那半边（纯函数有判据不等于跑器在用它——本仓这条同族已第 13 次）。只钉标识符，不抄文案。
+  const runnerSrc = () => readFileSync(fileURLToPath(new URL("../scripts/loop-eval.ts", import.meta.url)), "utf8");
+
+  it("★接线① 跑器那一支吃的是这一格，不是「最后一拍绿没绿」（旧口径不许藏在同一支里当第二把尺）", () => {
+    const src = runnerSrc();
+    expect(src).toContain('if (e === "verifyRecovered" && r.verifyRecovery !== "modelRecovery")');
+    expect(src).not.toContain('e === "verifyRecovered" && r.verifyOkLast');
+  });
+
+  it("★接线② 那一格要进读数行、也要进汇总行（只算不印＝没出口）", () => {
+    const src = runnerSrc();
+    expect(src).toContain("RECOVERY_TOKEN[r.verifyRecovery]");
+    expect(src).toContain('const n = (s: VerifyRecovery) => states.filter((x) => x === s).length;');
+    expect(src).toContain('n("modelRecovery")');
+  });
+
+  it("★接线③ 归属判定吃的是生产端导出的那枚哨兵，且谓词只有 `verifyBeatFace` 一份", () => {
+    const src = runnerSrc();
+    expect(src).toContain("verifyBeatFace(v, verifyCallIds, HARNESS_VERIFY_CALL_ID)");
+    // 抄第二份字面量＝两份副本各漂各的（`cancel-name-constant-drifts` 同族）：这里宁可它读不到
+    expect(src).not.toContain('"harness-auto-verify"');
+    // 同一支谓词不许在跑器里再写一遍（第十三族：N 份副本宽度不同，最宽那份才是对的）
+    expect(src).not.toContain("v.auto === true || v.callId ===");
+    expect(readFileSync(fileURLToPath(new URL("../src/agent/loop.ts", import.meta.url)), "utf8"))
+      .toContain("const beat = await verifyBeat(HARNESS_VERIFY_CALL_ID, true);");
   });
 });

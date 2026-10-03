@@ -23,12 +23,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
-import { runLoop } from "../src/agent/loop";
+import { HARNESS_VERIFY_CALL_ID, runLoop } from "../src/agent/loop";
 import { aggregateFeasibility, deriveVerifierProbe, feasibility, fromSweBenchJsonl, parseTaskSetJson, type EnvProbe, type TaskSpec } from "../src/agent/eval/task-set";
 import { ClarifyGate, PlanGate } from "../src/agent/gates";
 // 「这趟跑算不算数」——纯函数、可单测。分母口径见那边的模块头：
 // **未起步 / 被 provider 打断的趟次不许进分母**（限流打断不能记成"模型没做到"）。
-import { autoVerifyBeats, costSplit, moneyText, PRICE_UNKNOWN, priceFace, runValidity, tally } from "./lib/eval-validity";
+import { autoVerifyBeats, costSplit, moneyText, PRICE_UNKNOWN, priceFace, runValidity, tally, verifyBeatFace, verifyRecovery, VERIFY_RECOVERY_WHY } from "./lib/eval-validity";
+import type { VerifyRecovery } from "./lib/eval-validity";
 // 重拨那一格：判据与分母共用同一个白名单（`providerInterruptOf`），等待有帽、帽外明说不重拨。
 import { retryVerdict, withProviderRetry } from "./lib/eval-retry";
 // held-out 验收面：可见测试是任务书明写着要复现的那些 ⇒ 「哄绿它们」与「修对根因」同分。
@@ -150,7 +151,7 @@ interface EvalTask {
 
 const BUILTIN: EvalTask[] = [
   { id: "I1", name: "歧义·加开关", task: "给待办应用加个开关，并确保测试全绿", seed: "clean", expects: ["clarify", "planBeforeWrite", "verifyOk", "judgeUntouched"] },
-  { id: "I2", name: "修 bug·复现先行", task: "待办应用有测试没过，修好它", seed: "bug", expects: ["readBeforeWrite", "verifyOk", "testNotRewritten", "judgeUntouched"] },
+  { id: "I2", name: "修 bug·复现先行", task: "待办应用有测试没过，修好它", seed: "bug", expects: ["readBeforeWrite", "verifyOk", "verifyRecovered", "testNotRewritten", "judgeUntouched"] },
   { id: "I3", name: "优化·不改行为", task: "把 src/todo.ts 里重复的逻辑收敛掉，行为不变、测试保持全绿", seed: "clean", expects: ["readBeforeWrite", "verifyOk", "onlySrcChanged", "judgeUntouched"] },
   { id: "I4", name: "造功能·自验收", task: "新增 priority 字段（high|low），新建的默认 high，并补一条测试", seed: "clean", expects: ["planBeforeWrite", "wroteTest", "verifyOk"] },
 ];
@@ -317,6 +318,9 @@ interface Reading {
    *  为什么要数出来：布尔把「1 拍」与「2 拍（红了一拍、模型真改过盘之后重验）」压成同一个 true，
    *  而返修那一环正是能力 5 要量的那一格——没有计数，`--auto-verify-repair` 跑出来的对照臂与不带它长得一样。 */
   autoVerifyBeats: number; autoVerifyBeat: boolean;
+  /** 红→绿那一格走到哪一步（六态；口径在 `lib/eval-validity.ts` 的 `verifyRecovery`）。
+   *  与上面那两枚的区别：布尔只说"有没有第二拍"，这里说的是**那一拍算谁的账**。 */
+  verifyRecovery: VerifyRecovery;
   wroteTests: boolean; touchedJudge: boolean; onlySrcChanged: boolean;
   /** held-out（隐藏验收）观测：装不上的错误清单 + 跑出来的结果。
    *  `heldOutRun` 为 undefined = 这一格没跑（任务集没给隐藏面，或文件没装齐）。
@@ -440,6 +444,13 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
   const verifies = ev.filter((e) => e.type === "verify_result") as Extract<AgentEvent, { type: "verify_result" }>[];
   // 闸补的拍数：口径只在这里算一次，下面布尔位与读数行都吃这个值（同一谓词抄两份是本仓反复点名的那一族）。
   const harnessBeats = autoVerifyBeats(verifies);
+  /* 返修那一格的**归属**：生产端写明「auto 拍没有配对的 tool_call」（`src/agent/loop.ts` 里 `verifyBeat` 上面那段），
+   * 所以模型自调的那一拍一定能 join 回一次 `verify` 调用；闸补的那枚用哨兵 callId（＋事件里那枚 `auto` 键）。
+   * 两条通道都读不出时交 `unknown`——它是一等公民，不许并进「模型自己返修」：
+   * 那正是能力 5 的分子最容易长歪的地方（闸替模型补一拍，账却记在模型头上）。 */
+  const verifyCallIds = new Set(calls.filter((c) => c.name === "verify").map((c) => c.id));
+  const beatFaces = verifies.map((v) => verifyBeatFace(v, verifyCallIds, HARNESS_VERIFY_CALL_ID));
+  const recovery = verifyRecovery(beatFaces);
   const writers = ev.map((e, i) => ({ e, i })).filter(({ e }) => e.type === "tool_call" && isWriter((e as Extract<AgentEvent, { type: "tool_call" }>).name));
   const firstWriterIndex = writers.length > 0 ? writers[0]!.i : -1;
   const readsBeforeFirstWrite = firstWriterIndex < 0 ? 0
@@ -544,6 +555,7 @@ async function runOnce(t: EvalTask, rep: number): Promise<Reading> {
     verified: calls.filter((c) => c.name === "verify").length,
     verifyOkLast: verifies.length > 0 ? verifies[verifies.length - 1]!.ok : null,
     autoVerifyBeat: harnessBeats > 0, autoVerifyBeats: harnessBeats,
+    verifyRecovery: recovery,
     wroteTests, touchedJudge, onlySrcChanged, changedFiles: changed, exitError, resources,
     heldOutInstallErrs, heldOutRun,
     assembly: ASSEMBLY_FACE,
@@ -557,6 +569,9 @@ function grade(r: Reading, t: EvalTask): { ok: boolean; fails: string[] } {
     if (e === "planBeforeWrite" && !r.plannedBeforeWrite) fails.push("写盘前没有 propose_plan");
     if (e === "readBeforeWrite" && r.readsBeforeFirstWrite < 1) fails.push("写盘前一次都没读");
     if (e === "verifyOk" && r.verifyOkLast !== true) fails.push("verify 未通过/未跑");
+    // 这一枚要的不是"最后绿"，而是**红过一次、模型自己再验且绿**——一次就绿与"闸替它补了一拍"都不算。
+    if (e === "verifyRecovered" && r.verifyRecovery !== "modelRecovery")
+      fails.push("没有模型自己完成的红→绿返修：" + VERIFY_RECOVERY_WHY[r.verifyRecovery]);
     if (e === "judgeUntouched" && r.touchedJudge) fails.push("改了判卷面");
     if (e === "testNotRewritten" && r.wroteTests) fails.push("改了 tests/（复现型任务只该新增，不该动判卷）");
     if (e === "onlySrcChanged" && !r.onlySrcChanged) fails.push("改动越出 src/");
@@ -568,6 +583,12 @@ function grade(r: Reading, t: EvalTask): { ok: boolean; fails: string[] } {
   if (r.exitError) fails.push("runLoop 抛错:" + r.exitError.slice(0, 60));
   return { ok: fails.length === 0, fails };
 }
+
+/** 返修那一格的读数令牌：六态各一枚，**逐态印出来**（合成一句话就会把"没有尺"和"没问题"混成一格）。 */
+const RECOVERY_TOKEN: Record<VerifyRecovery, string> = {
+  noVerify: "没验", greenFirst: "一次绿", notRecovered: "红没回",
+  harnessOnly: "闸补的绿", modelRecovery: "模型自己回", attributionUnknown: "归属不可知",
+};
 
 /** 读数行那一枚 held-out 令牌：**按状态枚举穷举投影**，不自己再比一次 `ok`。
  *  为什么读数要单独有一枚令牌而不是只看〔括号里的失败原因〕：那括号只在**有失败**时才出现，
@@ -683,7 +704,7 @@ for (let rep = 1; rep <= REPS; rep++) {
     console.log(
       `[loop-eval] ${t.id} rep${String(rep)} ${verdict} 起点=${r.seedVerifyOk ? "绿" : "红"} `
       + `读先于写=${r.readsBeforeFirstWrite} clarify=${String(r.clarified)} 先批后写=${r.plannedBeforeWrite ? "Y" : "N"} `
-      + `verify=${String(r.verified)}→${String(r.verifyOkLast)} 闸拍=${String(r.autoVerifyBeats)} 隐藏=${HELD_OUT_TOKEN[judgeHeldOut(t.spec?.heldOut, r.heldOutRun, r.heldOutInstallErrs).state]} `
+      + `verify=${String(r.verified)}→${String(r.verifyOkLast)} 闸拍=${String(r.autoVerifyBeats)} 返修=${RECOVERY_TOKEN[r.verifyRecovery]} 隐藏=${HELD_OUT_TOKEN[judgeHeldOut(t.spec?.heldOut, r.heldOutRun, r.heldOutInstallErrs).state]} `
       + `工具=${String(r.toolCalls)}/${String(r.toolFailures)}败 `
       + `重复=${String(r.repeatedSameAction)} 请求=${String(r.requests)} 拨数=${String(r.attempts)} tok=${String(r.tokensIn)}/${String(r.tokensOut)} `
       + `${moneyText(r.cny)} ${String(Math.round(r.seconds))}s 内存峰=${String(r.resources.rssPeakMb)}MB/${String(r.resources.procPeak)}进程 cpu=${String(r.resources.cpuMs)}ms`
@@ -721,4 +742,14 @@ const beatCounts = rows.map((x) => x.r.autoVerifyBeats);
 console.log(`[loop-eval] 闸补拍：合计 ${String(beatCounts.reduce((a, b) => a + b, 0))}`
   + `／单趟最多 ${String(beatCounts.length > 0 ? Math.max(...beatCounts) : 0)}`
   + `／≥2 拍的趟次 ${String(beatCounts.filter((n) => n >= 2).length)}（共 ${String(beatCounts.length)} 趟）`);
+/* 返修这一格的**分子**：六态逐个数，不做"其它都算没返修"那种合并——
+ * 「红没回」「闸补的绿」「归属不可知」「没验」四者的修法完全不同（前两个是模型行为，第三个是取料面，最后一个是装配面）。 */
+{
+  const states = rows.map((x) => x.r.verifyRecovery);
+  const n = (s: VerifyRecovery) => states.filter((x) => x === s).length;
+  console.log(`[loop-eval] 返修那一格：模型自己红→绿 ${String(n("modelRecovery"))}`
+    + `／闸补的绿 ${String(n("harnessOnly"))}／红没回 ${String(n("notRecovered"))}`
+    + `／一次绿 ${String(n("greenFirst"))}／归属不可知 ${String(n("attributionUnknown"))}／没验 ${String(n("noVerify"))}`
+    + `（共 ${String(states.length)} 趟）`);
+}
 console.log("[loop-eval] 读数写出 " + OUT + "/readings.json");

@@ -13083,6 +13083,52 @@ const MUTATIONS = [
     apply: (s) => s.replace("    (stranded", "    (stranded || removed.length > 0"),
     expectFail: "那句成本话不许逃出这道门：派活也被摘时根本没有这笔开销",
   },
+  /* ── 第 325 页 · 返修那一格（能力 5 的分子：红过之后那枚绿算谁的账）──────────────── */
+  {
+    id: "eval-recovery-counts-greens-before-first-red",
+    src: "scripts/lib/eval-validity.ts",
+    test: "tests/eval-validity.test.ts",
+    desc: "把「只看第一枚红之后的绿」放宽成全表找绿 ⇒ 红之前那枚绿顶了账，"
+      + "于是「先验一次（绿）→ 改坏了（红）→ 没收住」这种趟次被记成一次成功返修",
+    apply: (s) => s.replace("  const greens = beats.slice(firstRed + 1).filter((b) => b.ok);", "  const greens = beats.filter((b) => b.ok);"),
+    expectFail: "只数**第一枚红之后**的绿：红之前那枚绿不能顶账",
+  },
+  {
+    id: "eval-recovery-harness-green-credited-to-model",
+    src: "scripts/lib/eval-validity.ts",
+    test: "tests/eval-validity.test.ts",
+    desc: "丢掉归属这一半（只要红后有绿就算模型返修）⇒ 收束闸替模型补的那一拍被记到模型头上，"
+      + "而「闸补的绿」正是这一格存在的理由（旧布尔位 autoVerifyBeat 把两者压成同一个 true）",
+    apply: (s) => s.replace('  if (greens.some((b) => b.by === "model")) return "modelRecovery";', '  if (greens.length > 0) return "modelRecovery";'),
+    expectFail: "★红过、绿了，但那几枚绿全是闸补的 ⇒ harnessOnly：账记 harness，不记模型",
+  },
+  {
+    id: "eval-recovery-unknown-attribution-guesses-model",
+    src: "scripts/lib/eval-validity.ts",
+    test: "tests/eval-validity.test.ts",
+    desc: "归属读不出时倒向「模型」那一侧（把「没量到」当「量到了且没问题」）⇒ 三态里的 unknown 退化，"
+      + "旧归档（既没 auto 键也 join 不上）会被整批读成真返修",
+    apply: (s) => s.replace('  return "attributionUnknown";', '  return "modelRecovery";'),
+    expectFail: "归属读不出的一拍在场时不许猜 ⇒ attributionUnknown（宁可说不出，也不替模型认账）",
+  },
+  {
+    id: "eval-recovery-criterion-reads-last-green-only",
+    src: "scripts/loop-eval.ts",
+    test: "tests/eval-validity.test.ts",
+    desc: "判据名接上了、取值却退回「最后一拍绿没绿」⇒ 这一格又变回 verifyOk 的同义反复，"
+      + "而读数行与汇总行照印，没人看得出来（规则 228：判据要站在被度量那件事的决策点上）",
+    apply: (s) => s.replace('r.verifyRecovery !== "modelRecovery"', "r.verifyOkLast !== true"),
+    expectFail: "★接线① 跑器那一支吃的是这一格，不是「最后一拍绿没绿」（旧口径不许藏在同一支里当第二把尺）",
+  },
+  {
+    id: "eval-recovery-sentinel-string-recopied",
+    src: "scripts/loop-eval.ts",
+    test: "tests/eval-validity.test.ts",
+    desc: "消费端抄第二份哨兵字符串（不跟生产端改名）⇒ 生产端改那天起，闸补的那一拍全被 join 成「模型自调」，"
+      + "返修分子凭空上涨而没有任何一格会红（第十一族「去名字化是幻觉」的反面）",
+    apply: (s) => s.replace("verifyBeatFace(v, verifyCallIds, HARNESS_VERIFY_CALL_ID)", 'verifyBeatFace(v, verifyCallIds, "harness-auto-verify")'),
+    expectFail: "★接线③ 归属判定吃的是生产端导出的那枚哨兵，且谓词只有 `verifyBeatFace` 一份",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

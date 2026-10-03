@@ -1,0 +1,16 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m/Users/ze/Downloads/deepseek harness[39m
+
+[90mstderr[2m | tests/m3c.test.ts[2m > [22m[2mM3c 工具面裁剪与成本闸[2m > [22m[2m成本闸：缺省零行为 / 单价 0 无效化 / 超限拒绝新 spawn 并落流警告
+[22m[39m[budget] 会话成本上限 $1 设了，但既没填单价、价表里也查不到模型 "" ⇒ 这道闸本次不生效（不拿 $0 冒充实付）
+
+ [32m✓[39m tests/m3c.test.ts [2m([22m[2m25 tests[22m[2m)[22m[33m 17770[2mms[22m[39m
+   [32m✓[39m M3c pipeline 哑 sequencer（零 LLM） [2m(3)[22m
+     [33m[2m✓[22m[39m 未获批准 fail-closed；批准后 stages 变更请求被拒且落流[33m 15209[2mms[22m[39m
+ [32m✓[39m tests/worker-role-budget.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 23[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m2 passed[39m[22m[90m (2)[39m
+[2m      Tests [22m [1m[32m31 passed[39m[22m[90m (31)[39m
+[2m   Start at [22m 15:17:33
+[2m   Duration [22m 18.88s[2m (tests 95%, transform 3%, import 2%)[22m
+

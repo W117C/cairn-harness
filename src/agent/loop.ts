@@ -147,6 +147,10 @@ function redactVerifyResults(results: VerifyCommandResult[]): VerifyCommandResul
   }));
 }
 
+/** harness 收束前补的那一拍用这个哨兵 callId（它**没有**配对的 tool_call，见 `verifyBeat` 上面那段）。
+ *  导出是为了让下游（`scripts/loop-eval.ts` 的返修归因）不必再抄一遍这个字符串。 */
+export const HARNESS_VERIFY_CALL_ID = "harness-auto-verify";
+
 export async function runLoop(opts: LoopOptions): Promise<void> {
   const { workspace, userMessage, userMessageSkill, userMessageOrigin } = opts;
   const seen: AgentEvent[] = [];
@@ -585,7 +589,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
           console.warn("[verify] 可验面探测失败，跳过自动验证拍:", err instanceof Error ? err.message : String(err));
         }
         if (hasSurface) {
-          const beat = await verifyBeat("harness-auto-verify", true);
+          const beat = await verifyBeat(HARNESS_VERIFY_CALL_ID, true);
           autoBeats++;
           repairPending = false;
           wroteSinceAutoBeat = false;

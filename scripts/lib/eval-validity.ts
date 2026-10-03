@@ -63,6 +63,60 @@ export function autoVerifyBeats(rows: readonly { auto?: boolean }[]): number {
   return rows.reduce((n, r) => n + (r.auto === true ? 1 : 0), 0);
 }
 
+/** 一枚验证拍的**归属**（由调用方算好交进来：生产端的事实是「auto 拍没有配对的 tool_call」，
+ *  所以拿 `verify_result.callId` 去 join 模型 `tool_call.id`，再叠上哨兵 callId 与事件里那枚 `auto` 键）。
+ *  `unknown` 是一等公民：归属读不出时必须出声，不许由 `model` 或 `harness` 代替——
+ *  否则「闸替模型补了一拍」会被记成「模型自己返修过」，那正是能力 5 的分子最容易长歪的地方。 */
+export interface VerifyBeatFace { ok: boolean; by: "model" | "harness" | "unknown" }
+
+/** 返修这一格的终态，**六态分开印**（两两合一都会把「没有尺」读成「没问题」）：
+ *   - `noVerify`：这趟一次都没验 ⇒ 没有尺，不是"没返修"；
+ *   - `greenFirst`：从头绿到底（一次就过）⇒ 这一格对它没有话可说；
+ *   - `notRecovered`：红过，之后再没有绿；
+ *   - `harnessOnly`：红过、绿了，但那些绿**全部**是闸补的 ⇒ 记给 harness，不记给模型；
+ *   - `modelRecovery`：红过、之后有一枚模型自己发的绿 ⇒ 能力 5 要的分子；
+ *   - `attributionUnknown`：红过、之后有绿，但那些绿的归属读不出。 */
+export type VerifyRecovery =
+  | "noVerify" | "greenFirst" | "notRecovered" | "harnessOnly" | "modelRecovery" | "attributionUnknown";
+
+/** 由一枚 `verify_result` 事件算出它的归属。**跑器与留档扫描都吃这一支**——
+ *  同一谓词抄两份、宽度不同是本仓反复点名的那一族（第十三族）。
+ *  `harnessCallId` 由调用方把生产端那枚导出的哨兵传进来：这里不 import `src/agent/loop`，
+ *  为的是这一支保持纯函数（不拉进整个跑器），也让"有没有跟着生产端改名"变成**消费者**的一件事。 */
+export function verifyBeatFace(
+  v: { ok: boolean; auto?: boolean; callId: string },
+  modelVerifyCallIds: ReadonlySet<string>,
+  harnessCallId: string,
+): VerifyBeatFace {
+  return {
+    ok: v.ok,
+    by: v.auto === true || v.callId === harnessCallId ? "harness"
+      : modelVerifyCallIds.has(v.callId) ? "model" : "unknown",
+  };
+}
+
+/** 只看**第一枚红拍之后**的绿拍：红之前的绿拍与返修无关（那枚绿不能证明模型改过任何东西）。 */
+export function verifyRecovery(beats: readonly VerifyBeatFace[]): VerifyRecovery {
+  if (beats.length === 0) return "noVerify";
+  const firstRed = beats.findIndex((b) => !b.ok);
+  if (firstRed < 0) return "greenFirst";
+  const greens = beats.slice(firstRed + 1).filter((b) => b.ok);
+  if (greens.length === 0) return "notRecovered";
+  if (greens.some((b) => b.by === "model")) return "modelRecovery";
+  if (greens.every((b) => b.by === "harness")) return "harnessOnly";
+  return "attributionUnknown";
+}
+
+/** 读数行/失败原因用的措辞：一态一句，且**每句都点名下一步该看哪一格**。 */
+export const VERIFY_RECOVERY_WHY: Record<VerifyRecovery, string> = {
+  noVerify: "没跑过 verify（没有尺）",
+  greenFirst: "一次就绿（没有返修可谈）",
+  notRecovered: "红过之后再没绿过",
+  harnessOnly: "红过、绿了，但那几拍全是闸补的（不记给模型）",
+  modelRecovery: "红过、模型自己再验且绿",
+  attributionUnknown: "红过、之后有绿，但归属读不出（callId 既不在模型 tool_call 里、也没有 auto 键）",
+};
+
 /** 汇总口径：分母只数**算数**的趟次；一趟都不算数时**拒绝出数**（不许印 0/0 或 0/N）。 */
 export function tally(
   rows: readonly { r: RunFace; g: { ok: boolean; fails: string[] } }[],
