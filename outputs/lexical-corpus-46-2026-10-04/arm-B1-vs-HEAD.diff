@@ -1,0 +1,17 @@
+# 实验臂 B1 对 src/agent/map/retrieve.ts 的改动（本实验唯一的实现变量；树已复原，这份是改动本身留档）
+21c21
+< export const SUMMARY_MAX_CODEPOINTS = 220;
+---
+> export const SUMMARY_MAX_CODEPOINTS = 220; // 【#46 实验臂 B1：语料扩到全文注释行、帽不动】
+63c63,71
+<   return Array.from(flat).slice(0, SUMMARY_MAX_CODEPOINTS).join("");
+---
+>   // 【#46 实验臂 B｜顶注释之外的全部注释行也并进语料，帽不动】每文件的词集是 Set ⇒ 重复行不加权。
+>   const tailLines: string[] = [];
+>   for (const raw of src.split("\n")) {
+>     const l = raw.trim();
+>     if (l.startsWith("//")) tailLines.push(l.slice(2));
+>     else if (l.startsWith("/*") || l.startsWith("*")) tailLines.push(l.replace(/^\/?\*+/, "").replace(/\*\/\s*$/, ""));
+>   }
+>   const merged = (flat + " " + tailLines.join(" ")).replace(/\s+/g, " ").trim();
+>   return Array.from(merged).slice(0, SUMMARY_MAX_CODEPOINTS).join("");

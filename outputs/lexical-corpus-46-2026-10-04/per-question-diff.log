@@ -1,0 +1,20 @@
+基线＝arm-A-head-only.log（平均列 6.0）
+== 对照＝arm-B1-all-comments-cap220.log（平均列 6.0）
+  变差 5 题｜变好 1 题｜逐字不变 10 题
+  ↓ L01 src/permissions/autonomy.ts 词面 掉出检索行（原 第6） · 排名 =  · A 合 第6(词面=第6,排名=第10)→第16(词面=MISS,排名=第10)
+  ↓ L02 src/agent/verify.ts 词面 =  · 排名 差 1（第33→第34） · A 合 第39(词面=MISS,排名=第33)→第40(词面=MISS,排名=第34)
+  ↓ L05 src/agent/tool-surface.ts 词面 差 1（第5→第6） · 排名 =  · A 合 第5(词面=第5,排名=MISS)→第6(词面=第6,排名=MISS)
+  ↓ L09 src/agent/memory/inject.ts 词面 差 2（第1→第3） · 排名 =  · A 合 第1(词面=第1,排名=第44)→第3(词面=第3,排名=第44)
+  ↓ L-POS src/main/settings.ts 词面 =  · 排名 差 2（第34→第36） · A 合 第40(词面=MISS,排名=第34)→第42(词面=MISS,排名=第36)
+  ↑ L03 src/agent/no-progress.ts 词面 好 1（第2→第1） · 排名 =  · A 合 第2(词面=第2,排名=MISS)→第1(词面=第1,排名=MISS)
+== 对照＝arm-B2-all-comments-cap600.log（平均列 6.0）
+  变差 6 题｜变好 3 题｜逐字不变 7 题
+  ↓ L01 src/permissions/autonomy.ts 词面 掉出检索行（原 第6） · 排名 =  · A 合 第6(词面=第6,排名=第10)→第16(词面=MISS,排名=第10)
+  ↓ L02 src/agent/verify.ts 词面 =  · 排名 差 1（第33→第34） · A 合 第39(词面=MISS,排名=第33)→第40(词面=MISS,排名=第34)
+  ↓ L04 src/agent/usage-attribution.ts 词面 差 1（第1→第2） · 排名 =  · A 合 第1(词面=第1,排名=MISS)→第2(词面=第2,排名=MISS)
+  ↓ L05 src/agent/tool-surface.ts 词面 掉出检索行（原 第5） · 排名 =  · A 合 第5(词面=第5,排名=MISS)→MISS(词面=MISS,排名=MISS)
+  ↓ L09 src/agent/memory/inject.ts 词面 差 1（第1→第2） · 排名 =  · A 合 第1(词面=第1,排名=第44)→第2(词面=第2,排名=第44)
+  ↓ L-POS src/main/settings.ts 词面 =  · 排名 差 2（第34→第36） · A 合 第40(词面=MISS,排名=第34)→第42(词面=MISS,排名=第36)
+  ↑ L03 src/agent/no-progress.ts 词面 好 1（第2→第1） · 排名 =  · A 合 第2(词面=第2,排名=MISS)→第1(词面=第1,排名=MISS)
+  ↑ L07 src/tools/apply_patch.ts 词面 好 1（第5→第4） · 排名 =  · A 合 第5(词面=第5,排名=MISS)→第4(词面=第4,排名=MISS)
+  ↑ L08 src/main/scheduler.ts 词面 好 2（第3→第1） · 排名 =  · A 合 第3(词面=第3,排名=MISS)→第1(词面=第1,排名=MISS)
