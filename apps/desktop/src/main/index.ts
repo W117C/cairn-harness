@@ -11,6 +11,7 @@ import type { InvokeChannel, PushChannel } from "./channels";
 import type { AddProjectInput } from "../../../../src/main/ipc-protocol";
 import { createKernelHost } from "./kernel-host";
 import { ProjectRegistry } from "../../../../src/main/project-registry";
+import { providerInfo } from "../../../../src/main/settings-handlers";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const distElectron = join(here, "..", "..", "dist-electron");
@@ -85,6 +86,11 @@ const wired: Partial<Record<InvokeChannel, (...args: unknown[]) => unknown>> = {
   // createSession 首参 M3 起是工作区（原 name 槽位被 M3 接口接管）；渲染层现不传 ⇒ 缺省 activeWorkspace
   createSession: (workspace) => host.createSession(workspace as string | undefined),
   openSession: (id) => host.openSession(id as string),
+  // M3 小修（M1 六通道清单遗留缺口）：channels.ts 有 getProviderInfo 通道、preload 程序化桥自动
+  // 透传、App.tsx 挂载即调，wired 表却从没这行 ⇒ renderer 调用即 reject「No handler registered」，
+  // 模型选择器自 M2 起静默失效（providerInfo 恒 null）。实现直走 settings-handlers 的同名 read
+  // model（无参异步，kernel-host 已注入 resolveProviderKind 依赖面），选择器恢复真值目录。
+  getProviderInfo: () => providerInfo(),
   listProjects: () => projectRegistry.list(),
   addProject: (input) =>
     projectRegistry.add(input as AddProjectInput).then((record) => {
