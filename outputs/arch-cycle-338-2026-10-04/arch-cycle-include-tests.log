@@ -1,0 +1,4 @@
+[arch-cycle] 取料面＝scanSourceFilesAll ⇒ 域内 470 支（tests 含）｜解析失败 0 支
+[arch-cycle] import 声明 6784 条 ⇒ 运行边去自环 1113 条｜类型边跳过 1049｜外部/域外 3236
+[arch-cycle] 环对账：圈 1 条 —— 登记债 1，新圈 0，登记已失效 0｜登记面 1 条
+  ✅ 登记债：src/agent/glm-session.ts → src/agent/memory/inject.ts → src/agent/memory/lessons.ts → src/agent/worker-shell-tools.ts → src/agent/write-face.ts
