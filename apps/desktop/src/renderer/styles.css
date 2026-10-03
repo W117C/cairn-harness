@@ -66,3 +66,33 @@ body { margin: 0; font: 13px/1.6 -apple-system, "PingFang SC", sans-serif; color
 }
 .error-strip .msg { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--text-1); }
 .error-strip .btn-ghost { flex-shrink: 0; padding: 0 4px; font-size: 14px; line-height: 1; }
+/* M4-2 设置面板：侧栏外包 .sidebar-col（底面与右描边从 .sidebar 上移到包裹层），
+   底部补「⚙ 设置」入口；面板本体是左下弹出面（spec §6.1 设置入口开），无遮罩层——
+   颜色全用既有变量，不新加色。 */
+.sidebar-col { width: 240px; display: flex; flex-direction: column; min-height: 0; background: var(--surface); border-right: 1px solid var(--hairline); }
+.sidebar-col .sidebar { flex: 1; min-height: 0; width: auto; border-right: 0; overflow-y: auto; }
+.settings-entry { flex-shrink: 0; padding: 7px 10px; text-align: left; font-size: 11px; border-top: 1px solid var(--hairline); }
+.settings-popover {
+  position: fixed; left: 248px; bottom: 12px; z-index: 30;
+  width: 430px; max-width: calc(100vw - 260px); max-height: min(78vh, 640px); overflow-y: auto;
+  background: var(--canvas); border: 1px solid var(--hairline); border-radius: 10px;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 10px;
+}
+.settings-head { display: flex; align-items: center; gap: 8px; }
+.settings-head h2 { margin: 0; font-size: 13px; flex: 1; }
+.settings-head .btn-ghost { font-size: 14px; padding: 0 4px; }
+.settings-section { border: 1px solid var(--hairline); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.settings-section .sec-title { font-size: 10px; letter-spacing: .04em; color: var(--text-3); }
+.settings-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-2); cursor: pointer; }
+.settings-row select, .settings-row input[type="text"], .settings-keyrow input {
+  font: inherit; font-size: 11px; color: var(--text-1); background: transparent;
+  border: 1px solid var(--hairline); border-radius: 5px; padding: 2px 6px; outline: 0;
+}
+.settings-row input[type="text"] { flex: 1; min-width: 0; cursor: text; }
+.settings-keyrow { display: flex; align-items: center; gap: 6px; }
+.settings-keyrow input { flex: 1; min-width: 0; }
+.settings-keyrow .btn-primary { flex-shrink: 0; font-size: 11px; padding: 2px 10px; }
+.settings-hint { font-size: 10px; color: var(--text-3); }
+.settings-status { font-size: 10px; color: var(--text-2); }
+.settings-stored { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-1); padding: 1px 0; }
+.settings-stored .btn-ghost { margin-left: auto; font-size: 10px; }

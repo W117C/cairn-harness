@@ -10,6 +10,7 @@ import { PlanCard } from "./components/PlanCard";
 import { ErrorStrip } from "./components/ErrorStrip";
 import { ModelPicker } from "./components/ModelPicker";
 import { TokenPanel } from "./components/TokenPanel";
+import { SettingsPanel } from "./components/SettingsPanel";
 
 declare global { interface Window { agent: import("../../../../src/main/ipc-protocol").AgentApi } }
 
@@ -44,15 +45,25 @@ export function App() {
   // aborted 真值（kernel-host 扩展字段）。收束后 aborted 为假且标记在场 ⇒ 清除——「点了打断但 run
   // 其实没被打断」的假标记就此收口，不再覆盖到下次 send。
   const [stoppedIds, setStoppedIds] = useState<ReadonlySet<string>>(new Set());
+  // M4-2 设置面板开关：侧栏底部⚙入口开（spec §6.1 左下角「设置」入口）；弹出面挂在 shell 根，
+  // 无遮罩层（颜色只用既有变量），× 关闭。
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // 会话清单刷新：挂载一次 ＋ 新建会话后（新会话即刻进侧栏、落到归属工作区组）。
   const refreshSessions = useCallback(() => {
     void (window.agent.listSessions() as Promise<WorkspaceSession[]>).then(setSessions);
   }, []);
 
+  // M2 deferred 收口（M4-2）：providerInfo 此前只挂载拉一次 ⇒ settings.provider/model 变更后
+  // 目录与缺省显示永久滞后。刷新口提出来：挂载一次 ＋ 设置面板每笔 setSettings 成功后重拉
+  // （demo 选择协议闭环：settings.provider 改成 demo，选择器目录与缺省显示立刻真生效）。
+  const refreshProviderInfo = useCallback(() => {
+    return window.agent.getProviderInfo().then(setProviderInfo);
+  }, []);
+
   useEffect(() => {
     refreshSessions();
-    void window.agent.getProviderInfo().then(setProviderInfo);
+    void refreshProviderInfo();
     // 注册清单（CX-01 三通道，M3-3 修复轮起 main 侧 wired 接线）：失败 fail-visible——侧栏提示行
     // ＋全部会话垫「其他」组，不静默吞（分组纯函数对空注册表的语义就是零丢失）。
     void window.agent.listProjects().then((registered) => {
@@ -76,7 +87,7 @@ export function App() {
     const offAsk = window.agent.onAsk((p) => setAsk(p));
     const offDone = window.agent.onAskDone(() => setAsk(null));
     return () => { offEvent(); offAsk(); offDone(); };
-  }, [refreshSessions]);
+  }, [refreshSessions, refreshProviderInfo]);
 
   // activeId 的 ref/state 同点双写（ref 同步生效零竞态，state 驱动渲染）。
   // M3-4：切会话顺带清错误条——错误条画在当前会话条下方，跨会话残留会被误读成新会话的失败。
@@ -176,18 +187,22 @@ export function App() {
   return (
     <div className="shell">
       {/* M3-3 分组侧栏：分组点击只切 activeWorkspace（新任务归属），不 openSession、不扰在跑会话；
-          会话行点击走守卫版 openSession（seq 竞态守卫）。 */}
-      <Sidebar
-        sessions={sessions}
-        workspaces={projects.map((p) => p.path)}
-        activeId={activeId}
-        activeWorkspace={activeWorkspace}
-        running={runningSet.current}
-        notice={registryNotice}
-        onOpen={openSession}
-        onSwitchWorkspace={setActiveWorkspace}
-        onAddWorkspace={addWorkspace}
-      />
+          会话行点击走守卫版 openSession（seq 竞态守卫）。M4-2 外包一层 .sidebar-col：
+          底部补「⚙ 设置」入口（brief 所指的占位此前未落，本笔按 spec 左下角入口补上）。 */}
+      <div className="sidebar-col">
+        <Sidebar
+          sessions={sessions}
+          workspaces={projects.map((p) => p.path)}
+          activeId={activeId}
+          activeWorkspace={activeWorkspace}
+          running={runningSet.current}
+          notice={registryNotice}
+          onOpen={openSession}
+          onSwitchWorkspace={setActiveWorkspace}
+          onAddWorkspace={addWorkspace}
+        />
+        <button className="btn-ghost settings-entry" onClick={() => setSettingsOpen(true)}>⚙ 设置</button>
+      </div>
       <div className="main">
         <div className="sessionbar">
           <span style={{ fontWeight: 600 }}>{activeId ?? "m0"}</span>
@@ -260,6 +275,14 @@ export function App() {
         )}
         <Composer onSend={(t) => void send(t)} disabled={running} />
       </div>
+      {/* M4-2 设置面板：onSettingsSaved ⇒ 重拉 getProviderInfo（M2 deferred 刷新收口——
+          settings.provider/model 变更成功后目录/缺省立即跟上）。 */}
+      {settingsOpen && (
+        <SettingsPanel
+          onClose={() => setSettingsOpen(false)}
+          onSettingsSaved={() => void refreshProviderInfo()}
+        />
+      )}
     </div>
   );
 }
