@@ -1233,14 +1233,17 @@ describe("贴帽读数：suiteRows／budgetFromTestSource／timingNearCapCell／
   });
 
   it("真机整表：把留档的那一次全量 json 喂进去，档位计数与逐行重数必须同分母", () => {
-    // 取料=安静态全量 json（2026-10-03 那趟：树＝9dd1e8a、独占（起跑前 `pgrep -f vitest`=0）、286 文件／3952 条、162.45s）。
-    // 为什么又换了一份：上一份（judge-timeout-2026-10-02，树 188b7e3）里的标题是**旧**的——第 313 页把
-    // `tests/tool-choice.test.ts` 那条「重复探测只按…逐字相同结果判」改成了「…结果前 200 字相同…」（标题写着逐字而正文从不判窗口），
-    // 而这一格是**按标题回源码取显式预算**的 ⇒ 改名 ⇒ 那一条查不到 ⇒ `notResolved=1`。
+    // 取料=安静态全量 json（2026-10-03 第二份：树＝`e8a8ed5`、独占（起跑前后各采一次 `pgrep -f vitest`＝0）、
+    // 288 文件／3980 条、225.52s）。为什么又换一份：上一份（树 9dd1e8a）的标题是**那一笔**的——
+    // 第 317 页把绑定通道的条件对齐时改了 4 条判卷标题（①清单②源符号③标题④体内⑤区分度），
+    // 而这一格是**按标题回源码取显式预算**的 ⇒ 那 4 条查不到 ⇒ `notResolved=4`（第 317 页认证红①）。
     // 留档不许改（它是那一天的证据），所以照同一个先例：**换取料**而不是削判据——这格红的存在理由就是"标题漂移必须响"。
-    // 语料里的这一条红仍是本判卷自己（那天的红不影响时长读数）。⚠️ 刷新必须等独占窗口：
-    // 隔壁在连发单文件击杀时跑出来的时长是脏的，那份 json 一旦当"quiet"入档，此后每次认证都在读一个假基准。
-    const jsonPath = join(repoRoot, "outputs/judge-timeout-2026-10-03/suite-quiet.json");
+    // 语料里那一条红仍是本判卷自己（它当时读的就是旧的那份留档，不影响时长读数）。
+    // ⚠️ 两份读数的温度不同要写清楚：同一棵树第一趟（冷缓存）346.45s、第二趟 225.52s ⇒
+    // 入档的是**热的那一趟**（冷树那一趟的读数留在同目录 `suite-cold-first-run.log`，免得下一个人以为 225s 是冷树能跑出来的）。
+    // ⚠️ 刷新必须等独占窗口：隔壁在连发单文件击杀时跑出来的时长是脏的，那份 json 一旦当"quiet"入档，
+    // 此后每次认证都在读一个假基准。
+    const jsonPath = join(repoRoot, "outputs/suite-refresh-2026-10-03/suite-quiet.json");
     const rows = suiteRows(readFileSync(jsonPath, "utf8"), repoRoot + "/");
     expect(rows).not.toBeNull();
     const all = rows ?? [];
