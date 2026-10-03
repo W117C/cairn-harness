@@ -12027,3 +12027,15 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 
 11. **清场与账**：本笔未新建 worktree（落库后要开一棵核干净树）；等用户点头回收的清单照第 328 页不变。**账**：#38 结案（本笔），#37 的第二栏补齐；下一笔候选 #33（这页第 9 项又添一次现读，且现有三条锚点针脚要同笔改指）、#34、#32（记录结案）。
 
+## 2026-10-03 · 第 329 页凭证（1/1）：`324e28d` 认证通过——22/22 门绿、干净树 290 文件 **4051 条全绿（＝4039＋本笔 12 条，两棵树 title 级 ＋12／−0、十二条逐字全在同一份判卷）**、并发判卷两端独占 ⇒ 这一页的时间量可以引用
+
+1. **认证对象**：`324e28d`（第 329 页那一笔，22 个文件＝实现 2 ＋判卷 1 ＋锚点表 1 ＋台账 1 ＋dated 工件 17）。命令 `node --import tsx scripts/head-cert.ts --at=324e28d`，退出码 0，日志 `outputs/text-readers-corpus-2026-10-03/head-cert-324e28d.log` 与 `head-cert-summary-324e28d.txt`。
+2. **门**：`认证门面=22 道（跑到 22）｜绿 22 道｜⚠️ 超预算 1`——超的那道是 `sandbox:check 1857ms > 名单里的 1700ms`（只出声、不判红，规则 120 那一族）。`typecheck: tsc --noEmit 通过（0 条报错）✅`。
+3. **判卷**：`Test Files 290 passed (290)｜Tests 4051 passed (4051)｜exit=0（退出码直接取，不接管道）`、`Duration 206.53s`、`本趟墙钟 271.82s`。并发格 `并发判卷=起前 0 套／跑完 0 套（两端独占）` ⇒ 这两个时间量可以当读数引用（与第 328 页凭证同口径：不独占就只报条数不报时长）。
+4. **条数核对式（两棵树 title 级，不推算）**：`vitest list` 在 `.worktrees/suite-base-330`@`2abe0f7`（3929 行）与 `.worktrees/gate-mutate-330`@`324e28d`（3941 行）各跑一次，排序 `comm`＝**＋12／−0**，十二条逐字全在 `tests/text-readers.test.ts`（本笔唯一的判卷文件）⇒ `4039＋12＝4051` 与判卷逐字对上。这次没改任何既有用例标题，所以删除项是 0。取料两面：`title-diff-add.txt`／`title-diff-del.txt`。
+5. **杀锚**：`.worktrees/gate-mutate-330` 干净树 `--changed-since=2abe0f7` ⇒ `跑了 41/41 条`、`selector 82 拍·坏拍（选中≠1）0`、本次 56.5s。本笔 4 根新锚点逐条被杀：`text-readers-corpus-const-not-expanded`／`text-readers-corpus-face-not-load-bearing`／`text-reader-check-corpus-column-dropped`／`text-reader-check-corpus-cap-guard-dead`（日志 `mutate-kill-330.log`）。落库后 `钉在飞文本` 归零这一格由认证里的 `mutate-needles-check` 代跑（exit 0）。
+6. **等级**：`gates.log` 末行 `⚠️ 未证 8 项（连网/凭据限制未跑到的断言，或绿而零输出的门——不等于通过）` ⇒ **不得宣称全绿**；＝与 `cd4df98`／`a2b2bb3`／`98578b3`／`ebee005`／`4254a84`／`5bdaf78`／`22c440d` 同水位（第八笔同值）。
+7. **贴帽读数**（这一格是第 262 页立的那把尺）：`4051 条里 0 条用时 ≥ 有效预算 80%｜无显式预算按缺省算 3786 条｜标题非字面量 116 条｜预算没落到 0 条`；离帽最近仍是 `tests/m3c.test.ts` 那条自带 25000ms 的 61%。**门那一侧的新读数要记账**：`mutate-needles-check 19207ms／预算 20000ms＝96%`——本笔 +4 锚点的成本已经看得见，下一笔再加锚点前要先量一次这一道（超线只出声，但 96% 不是余量）。
+8. **顺带一处注释腐**（本笔凭证同一笔带上，改动只有注释）：`scripts/lib/text-readers.ts` 第二出口抬头把 `unknown` 那一档写成「参数切不出来，或助手没登记」，而终版只在参数切不出来时出声（助手识别窗口越界会误报假助手，一律出声会把表刷红）。实现与注释不合＝注释腐，按同笔修；这一格无判卷分辨力（注释不是判据取料面），所以写在页上而不是等尺喊。
+9. **清场**：本支新建 `.worktrees/gate-mutate-330`（@`324e28d`）与 `.worktrees/suite-base-330`（@`2abe0f7`，为条数核对式而建）；`head-cert-324e28d` 由 `head-cert` 自回收（`已回收认证树 exit=0`）。`常驻残留树=11` 的清单照第 329 页第 11 项——**回收要用户点头，本支只报数**。**账**：#38 结案（实现笔＋凭证笔两笔）；下一笔 #33（typecheck 第三档 `dirty-tracked`，第 329 页第 9 项给的是第二次现读，改它要同笔把 `scripts/mutate-verify.mjs` 里那三根现有锚点针脚改指）。
+

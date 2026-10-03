@@ -1,0 +1,12 @@
+tests/text-readers.test.ts > corpusJudgesFor：按面配，不按「有没有 corpus」配 > 两向证人·出声：改了 src 下的文件 ⇒ 遍历 src 的那份与列跟踪面的那份都要点名
+tests/text-readers.test.ts > corpusJudgesFor：按面配，不按「有没有 corpus」配 > 两向证人·闭嘴：只遍历 fixtures 的那份不许出现在改了 scripts 的清单里（清单变噪音就没人看）
+tests/text-readers.test.ts > corpusJudgesFor：按面配，不按「有没有 corpus」配 > 改动面为空 ⇒ 一份都不点（不许读成「所有语料级判卷都要跑」）
+tests/text-readers.test.ts > 第二出口的接线与真表现读 > ★两栏各印一行：并成一行就分不清是「少了一条」还是「少了一类」
+tests/text-readers.test.ts > 第二出口的接线与真表现读 > ★第二出口那一栏的帽要接进退出码（算出来不看＝恒绿）
+tests/text-readers.test.ts > 第二出口的接线与真表现读 > 真表现读：改了 src 与 scripts 各一个文件，第 328 页补那次报错的 dead-script-refs 必须被点名
+tests/text-readers.test.ts > 第二出口的接线与真表现读 > 第一栏顺手补上的那一格：`join(__dirname, ..)` 也是字面量读取者（从前读成运行期路径）
+tests/text-readers.test.ts > 第二出口：语料级读取者的三态（列仓内面／列临时盘／要人复认） > corpus 那一档必须点得出面，且三态相加＝分母；空文本全 0（对全部输入同答的哨兵）
+tests/text-readers.test.ts > 第二出口：语料级读取者的三态（列仓内面／列临时盘／要人复认） > ★参数是裸标识符时要展开同文件的常量定义（现读第一版在这一格静默失效：那条正则没有捕获组）
+tests/text-readers.test.ts > 第二出口：语料级读取者的三态（列仓内面／列临时盘／要人复认） > 仓内面才算，运行期目录不算，切不出来的那一档要出声（三态不许互相顶账）
+tests/text-readers.test.ts > 第二出口：语料级读取者的三态（列仓内面／列临时盘／要人复认） > 同文件自己写的遍历助手：调用处点得出面才算；点不出面的同名函数不许污染读数
+tests/text-readers.test.ts > 第二出口：语料级读取者的三态（列仓内面／列临时盘／要人复认） > 登记表自洽：每一枚助手的面都写在 SOURCE_FACES 里（抄第二份清单＝各写各的）

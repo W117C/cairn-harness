@@ -298,7 +298,9 @@ export function readerSummary(scans: readonly ReaderScan[]): string {
  * 三态（相加＝这一份判卷里数到的"列目录／列跟踪面"调用总数）：
  *  - `corpus`  ：列的是仓内某个源面（见 `SOURCE_FACES`），或调了已登记的语料助手，或用 git 列跟踪面 ⇒ 改了任何源面文件都该跑它；
  *  - `local`   ：列的是运行期才有的目录（临时盘、夹具副本）⇒ 对这一格无话可说；
- *  - `unknown` ：参数切不出来，或助手没登记 ⇒ **要人复认**（帽只准调低；新写法不许并进 `local`，那是把"我不认识"谎报成"没关系"）。 */
+ *  - `unknown` ：第一个参数切不出来 ⇒ **要人复认**（帽只准调低；新写法不许并进 `local`，那是把"我不认识"谎报成"没关系"）。
+ *    助手在遍历但这一次调用定不出面 ⇒ **不计**（既不算 corpus 也不算 unknown）：窗口式助手识别会误报同名假助手，
+ *    一律出声会让这张表被 `runCli`／`stripComments` 那一类刷红而再没人看（第 329 页现读第一版的读数）。 */
 
 const LIST_CALL_NAMES = ["readdirSync", "readdir"];
 const PROCESS_CALL_NAMES = ["execFileSync", "spawnSync", "execSync"];
