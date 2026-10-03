@@ -1,0 +1,33 @@
+尺读不出 5 格｜按面筛出的模型可见零段面 5 条（两数不等＝面的去重把同 file#fn 的多条并了，须点名）
+
+● src/agent/plugins/hooks.ts#run｜（mark=不支持）
+  原文：" 本轮不支持，跳过 + 警告（插件 "
+  最长连续中文 5 字 "本轮不支持"｜句里有 ${…}：否
+  门槛降到几字才挑得出段：min=5
+
+● src/agent/sequencer.ts#resolvePluginRole｜（mark=不认）
+  原文：" 不认识，已忽略（合法键："
+  最长连续中文 3 字 "不认识"｜句里有 ${…}：否
+  门槛降到几字才挑得出段：min=3
+
+● src/main/agent-runner.ts#handleAgentRun｜（mark=不支持）
+  原文："demo provider 不支持 thinking；当前只允许 off"
+  最长连续中文 5 字 "当前只允许"｜句里有 ${…}：否
+  门槛降到几字才挑得出段：min=5
+
+● src/main/scheduler.ts#scheduleTimeZoneNotes｜（mark=不认）
+  原文："」本机不认，按 "
+  最长连续中文 4 字 "本机不认"｜句里有 ${…}：否
+  门槛降到几字才挑得出段：min=4
+
+● src/providers/capabilities.ts#validateThinkingEffort｜（mark=不支持）
+  原文："模型 ${spec.id} 不支持 thinking=${JSON.stringify(value)}；当前只支持 ${cap.thinking.values.join(\", \")}"
+  最长连续中文 5 字 "当前只支持"｜句里有 ${…}：是
+  门槛降到几字才挑得出段：min=5
+
+门槛枚举（现读 6 字 ⇒ 5 格全不可判）：
+  min=5 可救 3 格
+  min=4 可救 1 格
+  min=3 可救 1 格
+跨插值取值这条路：插值段没有静态取值可给（运行期才知道）。
+而唯一句里有 ${…} 的那格（src/providers/capabilities.ts#validateThinkingEffort），把整句当文本切到的最长中文段仍是「当前只支持」（5 字 <6）⇒ 插值不是任何一格的卡点。

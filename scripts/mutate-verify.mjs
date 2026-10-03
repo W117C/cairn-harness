@@ -12528,6 +12528,34 @@ const MUTATIONS = [
     ),
     expectFail: "反向对照：往真仓那份源码里凭空加一句无人判的能力断言 ⇒ 帽当场被顶破（证明上一条不是恒真）",
   },
+  /* ── 第 331 页 · #34：第四态「尺读不出」从"有名字没账"变成有帽的一档 ───────────────── */
+  {
+    id: "claim-no-needle-merged-into-unwitnessed",
+    src: "scripts/probe-promise-recall.ts",
+    test: "tests/promise-recall-inventory.test.ts",
+    desc: "把「句里挑不出可判中文」那一档并进欠证人 ⇒ 看似「零容忍更严」，实际是把**尺读不出**谎报成「这句话没人判」。"
+      + "两格的修法相反：前者要么改文案要么给观测者，后者要补证人；混在一档里，下一次没人知道该修哪一个（规则 261/239）",
+    apply: (s) => s.replace("    if (runs.length === 0) { noNeedle.push(k); continue; }", "    if (runs.length === 0) { unwitnessed.push(k); continue; }"),
+    expectFail: "三态各占一格：witnessed／unwitnessed／noNeedle，一条都不许静默归进『没问题』",
+  },
+  {
+    id: "claim-no-needle-cap-raised-one-notch",
+    src: "scripts/probe-promise-recall.ts",
+    test: "tests/promise-recall-inventory.test.ts",
+    desc: "把第四态的帽抬一档（5→6）⇒ 「现读低于帽」那一半当场失去分辨力，"
+      + "而这一档存在的全部理由就是「帽等于干净树现读那一档、只准调低」——抬帽不是修尺，是把尺关掉",
+    apply: (s) => s.replace("export const CLAIM_NO_NEEDLE_CAP = 5;", "export const CLAIM_NO_NEEDLE_CAP = 6;"),
+    expectFail: "★第四态也有账（第 331 页 #34）：「尺读不出」超帽红、低于帽也红，帽＝干净树现读那一档",
+  },
+  {
+    id: "claim-no-needle-cap-computed-not-wired",
+    src: "scripts/probe-promise-recall.ts",
+    test: "tests/promise-recall-inventory.test.ts",
+    desc: "帽算出来了却拿常量去喂读数（印出来永远「正贴线」）⇒ 这一格从「没人管」变成「看着有人管」，"
+      + "比原来更坏。接线判卷钉的是**取料那一枚变量**在调用处，不钉函数名（规则 230）",
+    apply: (s) => s.replace("claimCountCeiling(cf.noNeedle.length, CLAIM_NO_NEEDLE_CAP)", "claimCountCeiling(0, CLAIM_NO_NEEDLE_CAP)"),
+    expectFail: "★接线：探针把第四态的帽印出来并接进红（算出来不接＝这一格还是没人管）",
+  },
   {
     id: "claim-whole-sentence-piece-double-count",
     src: "scripts/probe-promise-recall.ts",

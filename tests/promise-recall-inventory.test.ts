@@ -15,8 +15,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
-  CLAIM_BINDINGS, CLAIM_UNWITNESSED_CAP, PROMISE_MARKS, RUNNERS, UI_ROOTS, BINDING_SYMBOL_MAX_JUDGE_FILES, bindClaimFaces,
-  builderCoverage, claimWitnessCeiling,
+  CLAIM_BINDINGS, CLAIM_NO_NEEDLE_CAP, CLAIM_UNWITNESSED_CAP, PROMISE_MARKS, RUNNERS, UI_ROOTS, BINDING_SYMBOL_MAX_JUDGE_FILES, bindClaimFaces,
+  builderCoverage, claimCountCeiling, claimWitnessCeiling,
   claimWitnessFindings, claimWitnessRuns, isKnownRunner, promiseInventoryFindings, runnerVerdict,
   scanBuilderCallSites, scanCapNoticeCalls, scanClaimSites, scanPromiseSites,
   type ClaimSite, type ClaimWitnessFindings, type PromiseSite,
@@ -287,6 +287,27 @@ describe("能力断言的证人面：一句都不曾被点过才算欠（第 311
     expect(claimWitnessCeiling(mk(2), 3), "有人补了证人而帽没跟着调低 ⇒ 也要红").toMatchObject({ over: false, stale: true });
   });
 
+  it("★第四态也有账（第 331 页 #34）：「尺读不出」超帽红、低于帽也红，帽＝干净树现读那一档", () => {
+    // 这一档从前只在四态守恒里占一格：它既不算「有证人」也不算「欠证人」⇒ 那顶零容忍的帽永远管不到它，
+    // 五格可以在里面一直躺着不动。从现在起它有自己的一顶帽（只准调低）。
+    expect(CLAIM_NO_NEEDLE_CAP, "帽要等于干净树现读那一档（逐格点名见 outputs/claims-no-needle-2026-10-03/nowrite.log）").toBe(5);
+    expect(claimCountCeiling(6, CLAIM_NO_NEEDLE_CAP).over, "又多一句点不出名字的能力断言 ⇒ 红").toBe(true);
+    expect(claimCountCeiling(4, CLAIM_NO_NEEDLE_CAP).stale, "那一格配上了观测者或改了文案 ⇒ 帽要跟着调低，不许停在 5").toBe(true);
+    expect(claimCountCeiling(5, CLAIM_NO_NEEDLE_CAP), "正贴线：两头都不红").toMatchObject({ over: false, stale: false, margin: 0 });
+    // 反向哨兵：一支判定吃两顶帽（各抄一份迟早漂）⇒ 欠证人那顶必须走同一支函数
+    expect(claimWitnessCeiling({ unwitnessed: ["a", "b", "c"] }, 3)).toMatchObject({ over: false, stale: false, read: 3 });
+  });
+
+  it("★接线：探针把第四态的帽印出来并接进红（算出来不接＝这一格还是没人管）", () => {
+    const probe = readFileSync(fileURLToPath(new URL("../scripts/probe-promise-recall.ts", import.meta.url)), "utf8");
+    expect(probe).toContain("const needleCeil = claimCountCeiling(cf.noNeedle.length, CLAIM_NO_NEEDLE_CAP);");
+    expect(probe).toContain('"／尺读不出 " + String(cf.noNeedle.length)');
+    expect(probe).toMatch(/line\(!needleCeil\.over && !needleCeil\.stale \? "✅" : "❌"/u);
+    // 反向哨兵：把帽印出来却拿常量去算（读数永远是"正贴线"）
+    expect(probe).not.toContain("claimCountCeiling(0, CLAIM_NO_NEEDLE_CAP)");
+    expect(probe).toContain("return claimCountCeiling(findings.unwitnessed.length, cap);");
+  });
+
   it("真仓那一趟：分母非零、存量在帽内、四态相加＝分母（这条尺不许恒红也不许空载）", () => {
     const srcScope = trackedExistingFiles(ROOT, "src");
     const files = srcScope.files.map((p) => ({ path: p, text: readFileSync(join(ROOT, p), "utf8") }));
@@ -308,6 +329,9 @@ describe("能力断言的证人面：一句都不曾被点过才算欠（第 311
     const ceil = claimWitnessCeiling({ unwitnessed: bind.unwitnessed }, CLAIM_UNWITNESSED_CAP);
     expect(ceil.over, `欠证人的能力断言超出帽：\n${bind.unwitnessed.join("\n")}`).toBe(false);
     expect(ceil.stale, `现读 ${String(ceil.read)} 低于帽 ${String(ceil.cap)} ⇒ 把帽调下来（只准调低）`).toBe(false);
+    const needleCeil = claimCountCeiling(f.noNeedle.length, CLAIM_NO_NEEDLE_CAP);
+    expect(needleCeil.over, `「尺读不出」超出帽 ⇒ 又写了一句点不出名字的能力断言：\n${f.noNeedle.join("\n")}`).toBe(false);
+    expect(needleCeil.stale, `现读 ${String(needleCeil.read)} 低于帽 ${String(needleCeil.cap)} ⇒ 那一格配上了观测者或改了文案，把帽调下来`).toBe(false);
     expect(f.witnessed.length, "一条都没被判过＝这条尺没在工作").toBeGreaterThan(0);
   });
 

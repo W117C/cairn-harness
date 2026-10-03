@@ -243,6 +243,21 @@ export const CLAIM_MARKS: readonly string[] = [
  *  但抄之前要先证明这一格有行为观测者（请求计数／两支臂各钉一次），否则只是给文案换了个地方躺着。 */
 export const CLAIM_UNWITNESSED_CAP = 0;
 
+/** 第四态的帽（第 331 页，任务 #34）：这一档从前**只有名字没有账**——它既不进「有证人」也不进「欠证人」，
+ *  所以上面那顶零容忍的帽永远管不到它，五格可以在里面一直躺着。
+ *  现读 5（干净树 `c6a61eb` 那一趟，逐格见 `outputs/claims-no-needle-2026-10-03/nowrite.log`）：
+ *  `plugins/hooks.ts#run`、`sequencer.ts#resolvePluginRole`、`main/agent-runner.ts#handleAgentRun`、
+ *  `main/scheduler.ts#scheduleTimeZoneNotes`、`providers/capabilities.ts#validateThinkingEffort`。
+ *  其中四格是被 **ASCII 标识符**（`CC`／`thinking`／`off`／`demo provider`）把中文切成 <6 字的碎片，
+ *  只有一格是被 `${…}` 插值切碎 ⇒ 病根不是"尺不会跨插值"，是**那句话里没有一段够长、点得出名字的可判中文**。
+ *  所以这一档从现在起单独出帽、只准调低。出路两条：把那句改成点得出名字的（文案侧），
+ *  或给它配行为观测者再走绑定通道——"不可知"不再等于"不记账"。
+ *  **未选**「让针脚跨插值取值」，理由与反转条件：实测它只救得上面 1 格（另 4 格根本没有插值），
+ *  代价是把匹配从"逐字包含"换成带通配的模式匹配——那会把"其实没人判"读成"有证人"，
+ *  而这一维唯一不能错的方向就是这个（宁可说"没人判"，不许说"有人判"）。
+ *  反转条件：若哪天欠证人那一维要靠插值句补，先给模式匹配配一条**反例证人不算有证人**的判卷，再放开。 */
+export const CLAIM_NO_NEEDLE_CAP = 5;
+
 /** 证人候选段：句里**所有**够长的连续中文（先把 `${…}` 插值挖掉，再按非中文断开），门槛 6 字。
  *  为什么交"每一段"而不是"最长那一段"：一句能力断言往往分好几层，判卷通常只点其中一层
  *  （第 308 页那条就是——`并集` 那半被点 11 次、`不认 import` 那半 0 次）。
@@ -475,12 +490,17 @@ export const CLAIM_BINDINGS: readonly ClaimBinding[] = [
 /** 存量帽（计数类**不留余量**，同 `prose-needle-scan` 那族）。三态各自出声：
  *  `over`＝现读超过帽（新加的无人判能力断言）；`stale`＝现读低于帽（有人补了证人却没把帽调下来，
  *  登记表自己烂掉也要红）；`margin` 只是给读数用，不参与判定。 */
+/** 帽的三态（一处实现，两档共吃）：`over`＝新加的没人判；`stale`＝补了证人却没把帽调下来。
+ *  两向都要红，否则登记表自己烂掉是静默的（规则 235/248）。 */
+export function claimCountCeiling(read: number, cap: number): { over: boolean; stale: boolean; read: number; cap: number; margin: number } {
+  return { over: read > cap, stale: read < cap, read, cap, margin: cap - read };
+}
+
 export function claimWitnessCeiling(
   findings: Pick<ClaimWitnessFindings, "unwitnessed">,
   cap: number,
 ): { over: boolean; stale: boolean; read: number; cap: number; margin: number } {
-  const read = findings.unwitnessed.length;
-  return { over: read > cap, stale: read < cap, read, cap, margin: cap - read };
+  return claimCountCeiling(findings.unwitnessed.length, cap);
 }
 
 const siteKey = (s: { file: string; fn: string }): string => s.file + "#" + s.fn;
@@ -1132,19 +1152,24 @@ async function main(): Promise<void> {
       const bind = bindClaimFaces(cf, CLAIM_BINDINGS, material);
       const capped = { ...cf, unwitnessed: bind.unwitnessed };
       const ceil = claimWitnessCeiling(capped, CLAIM_UNWITNESSED_CAP);
+      const needleCeil = claimCountCeiling(cf.noNeedle.length, CLAIM_NO_NEEDLE_CAP);
       console.log("  ⚪ 能力断言证人面：面 " + String(claimSites.length) + " 处｜受众 " + JSON.stringify(cf.byAudience) +
         "｜模型可见 " + String(cf.modelSites) + " 格 ⇒ 有证人 " + String(cf.witnessed.length) +
         "／绑定 " + String(bind.bound.length) +
         "／欠证人 " + String(bind.unwitnessed.length) + "（帽 " + String(CLAIM_UNWITNESSED_CAP) +
         (ceil.over ? " ⇒ **超帽**" : ceil.stale ? " ⇒ **现读低于帽，把帽调下来**" : "，正贴线") + "）" +
-        "／挑不出段 " + String(cf.noNeedle.length) +
+        "／尺读不出 " + String(cf.noNeedle.length) + "（帽 " + String(CLAIM_NO_NEEDLE_CAP) +
+        (needleCeil.over ? " ⇒ **超帽**" : needleCeil.stale ? " ⇒ **现读低于帽，把帽调下来**" : "，正贴线") + "）" +
         "（四态相加＝" + String(cf.witnessed.length + bind.bound.length + bind.unwitnessed.length + cf.noNeedle.length) + "）");
       for (const k of bind.bound) console.log("      绑定：" + k);
       for (const k of bind.bad) console.log("      ❌ 登记表自己有病：" + k);
       for (const k of bind.unwitnessed) console.log("      欠证人：" + k);
-      for (const k of cf.noNeedle) console.log("      不可知（句里挑不出 ≥6 字连续中文，多半被插值切碎）：" + k);
+      for (const k of cf.noNeedle) console.log("      尺读不出（句里挑不出 ≥6 字可判中文；从前这一档叫「不可知／挑不出段」，第 331 页起它有帽）：" + k);
       line(bind.bad.length === 0 ? "✅" : "❌",
         `绑定表逐条过三件事（那一格在欠证人清单里、符号在那句所在源文件里、符号在被指认判卷里）：坏 ${String(bind.bad.length)} 条`);
+      line(!needleCeil.over && !needleCeil.stale ? "✅" : "❌",
+        `第四态「尺读不出」的帽：现读 ${String(needleCeil.read)} 对帽 ${String(needleCeil.cap)}`
+        + "（超出＝又写了一句点不出名字的能力断言；低于＝那一格配上了观测者或改了文案，帽要跟着调低，只准调低）");
       line(!ceil.over && !ceil.stale ? "✅" : "❌",
         `能力断言的帽：现读 ${String(ceil.read)} 对帽 ${String(ceil.cap)}（超出＝新加的无人判句子；低于＝补了证人没调帽）`);
     }

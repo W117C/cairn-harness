@@ -1,0 +1,16 @@
+面 44｜原句证人 33｜欠证人 6｜挑不出段 5
+
+● src/agent/plugins/hooks.ts#run｜
+  原文：" 本轮不支持，跳过 + 警告（插件 "
+
+● src/agent/sequencer.ts#resolvePluginRole｜
+  原文：" 不支持（CC 安全约束照抄 §9.6），已忽略"
+
+● src/main/agent-runner.ts#handleAgentRun｜
+  原文："demo provider 不支持 thinking；当前只允许 off"
+
+● src/main/scheduler.ts#scheduleTimeZoneNotes｜
+  原文："」本机不认，按 "
+
+● src/providers/capabilities.ts#validateThinkingEffort｜
+  原文："模型 ${spec.id} 不支持 thinking=${JSON.stringify(value)}；当前只支持 ${cap.thinking.values.join(\", \")}"
