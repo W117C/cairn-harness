@@ -22,7 +22,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import {
   attributionNote, attributeRefToDef, bindingSourceKey, emptyAttributionStats,
 } from "../src/agent/impact/attribution.js";
-import { buildImpact, closureFilesOf, contextNoteFor, downward, fileImpact, ImpactUnavailableError, upward, type ImpactGraph } from "../src/agent/impact/index.js";
+import { attributableToDef, buildImpact, closureFilesOf, contextNoteFor, downward, fileImpact, ImpactUnavailableError, upward, type ImpactGraph } from "../src/agent/impact/index.js";
 import { loadImpactIndex, saveImpactIndex, IMPACT_INDEX_SCHEMA_VERSION } from "../src/agent/impact/persist.js";
 import { __resetLangCache, __resetQueryCache } from "../src/agent/map/parse.js";
 import { TAGS_EXTRACT_VERSION } from "../src/agent/map/parse.js";
@@ -369,5 +369,44 @@ describe("接线（算出来不接＝本仓那一族）", () => {
   it("ImpactUnavailableError 的 fail-loud 那一支没被顺手改掉（本笔动了同一个 try 块）", () => {
     expect(idx).toMatch(/impact: tree-sitter unavailable/);
     expect(new ImpactUnavailableError("x").name).toBe("ImpactUnavailableError");
+  });
+});
+
+/* ── 第 326 页 · #19 的读数买回来的那一格：`attributableToDef`（点名一份定义的三态出口）──────
+ * 为什么要单独有这一支：`upward` 问的是"任一份同名定义归得上吗"，`downward` 逐份判——同一把判据两种宽度。
+ * 第 326 页量完（`outputs/impact-perdef-2026-10-03/perdef.log`）裁的是**不改口径**（90 个多定义符号上并集只比最宽那份多 5 处＝0.5%），
+ * 但那一支出口必须有：收窄的收益以后要是涨了，消费者不必再抄第三份 binding 构造（那才是本仓反复判死的那族）。 */
+describe("attributableToDef：点名一份定义时的三态出口（第 326 页，随读数买进来的那一格）", () => {
+  const g = (rows: [string, [string, string[]][]][]): ImpactGraph => {
+    const nameSources = new Map<string, Map<string, string[]>>();
+    for (const [file, names] of rows) {
+      const m = new Map<string, string[]>();
+      for (const [sym, srcs] of names) m.set(sym, srcs);
+      nameSources.set(file, m);
+    }
+    return { nameSources } as unknown as ImpactGraph;
+  };
+  const graph = g([["x.ts", [["f", ["b.ts"]]]], ["z.ts", [["f", ["b.ts"]]]], ["b.ts", [["f", ["a.ts"]]]]]);
+
+  it("正证在这一点上：x 把 f 绑到 b ⇒ 对 b 是 kept、对 a 是 dropped（同一处引用，两份定义两个答案）", () => {
+    expect(attributableToDef(graph, "x.ts", "f", "b.ts")).toBe("kept");
+    expect(attributableToDef(graph, "x.ts", "f", "a.ts")).toBe("dropped");
+  });
+
+  it("没有那张表就是没有判过：表里查不到这个文件 ⇒ no-evidence，不许读成 dropped（规则 261 那一族）", () => {
+    expect(attributableToDef(graph, "unlisted.ts", "f", "a.ts")).toBe("no-evidence");
+  });
+
+  it("引用方自己就是那份定义 ⇒ 一律 kept，哪怕它把这个名字绑去了别处", () => {
+    // 这一格是 `upward`/`downward` 早就有的"跳过 def 所在文件"那一步的**唯一收口点**：
+    // 放在调用方=两处各写一遍；放在这里=一次。反证型规则不许反过来把自己的定义摘掉。
+    expect(attributableToDef(graph, "b.ts", "f", "b.ts")).toBe("kept");
+  });
+
+  it("★接线 并集那一支吃的是这一份出口，不在 `attributableSomewhere` 里再构造一次 binding", () => {
+    const src = readFileSync(fileURLToPath(new URL("../src/agent/impact/index.ts", import.meta.url)), "utf8");
+    expect(src).toContain("if (attributableToDef(graph, refFile, symbol, defFile) !== \"dropped\") return true;");
+    // 旧的第三份 binding 构造不许回到那个函数里（helper 自己那一处不算：它就是唯一那一处）
+    expect(src).not.toMatch(/function attributableSomewhere[\s\S]{0,400}attributeRefToDef\(/);
   });
 });

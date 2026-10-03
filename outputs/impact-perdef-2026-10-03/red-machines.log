@@ -1,0 +1,653 @@
+M1-same-file-shortcut-dropped 基线：passed=1 failed=0 found=true（529ms）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/impact-attribution.test.ts[2m > [22mattributableToDef：点名一份定义时的三态出口（第 326 页，随读数买进来的那一格）[2m > [22m引用方自己就是那份定义 ⇒ 一律 kept，哪怕它把这个名字绑去了别处
+[31m[1mAssertionError[22m: expected 'dropped' to be 'kept' // Object.is equality[39m
+
+Expected: [32m"kept"[39m
+Received: [31m"dropped"[39m
+
+[36m [2m❯[22m tests/impact-attribution.test.ts:[2m403:59[22m[39m
+    [90m401|[39m     // 这一格是 `upward`/`downward` 早就有的"跳过 def 所在文件"那一步的**唯一收口点**：
+    [90m402|[39m     // 放在调用方=两处各写一遍；放在这里=一次。反证型规则不许反过来把自己的定义摘掉。
+    [90m403|[39m     expect(attributableToDef(graph, "b.ts", "f", "b.ts")).toBe("kept");
+    [90m   |[39m                                                           [31m^[39m
+    [90m404|[39m   });
+    [90m405|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M1-same-file-shortcut-dropped 红在「引用方自己就是那份定义 ⇒ 一律 kept，哪怕它把这个名字绑去了别处」（failed=1，444ms，退 1）
+M2-somewhere-recopies-binding 基线：passed=1 failed=0 found=true（420ms）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/impact-attribution.test.ts[2m > [22mattributableToDef：点名一份定义时的三态出口（第 326 页，随读数买进来的那一格）[2m > [22m★接线 并集那一支吃的是这一份出口，不在 `attributableSomewhere` 里再构造一次 binding
+[31m[1mAssertionError[22m: expected '// 影响面层（M7）：对目标仓库 js/ts/jsx 抽跨文件调用边（d…' to contain 'if (attributableToDef(graph, refFile,…'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- if (attributableToDef(graph, refFile, symbol, defFile) !== "dropped") return true;[39m
+[31m+ // 影响面层（M7）：对目标仓库 js/ts/jsx 抽跨文件调用边（def/ref 双端点），[39m
+[31m+ // 支持向上（谁调用我）/向下（我调用谁）查询。复用 map 层的 grammar 初始化与[39m
+[31m+ // tags 模式（`fileSymbols`：tags＋imports 两个出口 + {mtime,size} 磁盘缓存），不重写 tree-sitter。[39m
+[31m+ // 缓存只写应用数据目录（~/.m0-agent-loop/impact-tags），绝不写进用户仓库。[39m
+[31m+ // 与 map 的差异：map 静默降级（ok:false）；影响面是「改代码护栏」，grammar[39m
+[31m+ // 环境级失败必须 fail-loud（ImpactUnavailableError，文案含 unavailable）。[39m
+[31m+ import { createHash } from "node:crypto";[39m
+[31m+ import { mkdir, readFile, writeFile } from "node:fs/promises";[39m
+[31m+ import { homedir } from "node:os";[39m
+[31m+ import { join, resolve } from "node:path";[39m
+[31m+ import { fileSymbols, TAGS_EXTRACT_VERSION, TreeSitterUnavailableError, type ImportRef, type SymbolTag } from "../map/parse.js";[39m
+[31m+ import { resolveModuleSpecifier } from "../map/import-edge.js";[39m
+[31m+ import { applyFileCap, scanSourceFilesAll, type ScannedFile } from "../map/build.js";[39m
+[31m+ import { MAX_FILES_CEILING, MAX_FILES_DEFAULT } from "../map/cap.js";[39m
+[31m+ import { attributionNote, attributeRefToDef, bindingSourceKey, emptyAttributionStats, mixedSitesNote, type Attribution, type AttributionStats } from "./attribution.js";[39m
+[31m+ import { coverageNote, graphIsPartial } from "./coverage.js";[39m
+[31m+ import { currentCommitSha, impactIndexDirFor, loadImpactIndex, saveImpactIndex } from "./persist.js";[39m
+[31m+[39m
+[31m+ /** grammar 环境级失败（坏/缺失 wasm）：影响面是护栏能力，必须 fail-loud。[39m
+[31m+  *  文案固定含 "unavailable"（判卷锚点）。 */[39m
+[31m+ export class ImpactUnavailableError extends Error {[39m
+[31m+   override name = "ImpactUnavailableError";[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 调用点/定义点：workspace 相对路径 + 1-based 行号。 */[39m
+[31m+ export interface ImpactSite {[39m
+[31m+   symbol: string;[39m
+[31m+   file: string;[39m
+[31m+   line: number;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 跨文件调用边：from 文件在 refLine 处调用 symbol，其定义在 to 文件 defLine 处。 */[39m
+[31m+ export interface ImpactEdge {[39m
+[31m+   from: string;[39m
+[31m+   to: string;[39m
+[31m+   symbol: string;[39m
+[31m+   refLine: number;[39m
+[31m+   defLine: number;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ export interface ImpactGraph {[39m
+[31m+   /** 参与建图的源文件（workspace 相对，排序）。 */[39m
+[31m+   files: string[];[39m
+[31m+   /** 帽**切之前**的全量候选数（rg + 后缀过滤 + mtime 排序）。读端要靠它把「图非全量」[39m
+[31m+    *  说成带分母的一句话：`scanSourceFiles` 本来就是先取全量再 `applyFileCap` 切片，[39m
+[31m+    *  所以这个数不要第二次 rg（第 55 页「挤掉多少个要重扫全量候选，这一格不值一次 rg」[39m
+[31m+    *  那句理由在建图这一支不成立——切片就在这行发生）。 */[39m
+[31m+   candidates: number;[39m
+[31m+   /** **这一张图实际生效的帽**（`opts.maxFiles ?? MAX_FILES_DEFAULT`）。[39m
+[31m+    *  读端与回注摘要要说「＝帽 N」时用它，不许自己再解析一遍缺省——那是同族「两处各写一个数字」。 */[39m
+[31m+   cap: number;[39m
+[31m+   /** symbol → 定义点（可能多文件同名人）。 */[39m
+[31m+   defs: Map<string, ImpactSite[]>;[39m
+[31m+   /** symbol → 引用点（含同文件自引用；查询层负责过滤跨文件）。 */[39m
+[31m+   refs: Map<string, ImpactSite[]>;[39m
+[31m+   /** 跨文件调用边（from ≠ to，确定性排序）。 */[39m
+[31m+   edges: ImpactEdge[];[39m
+[31m+   /** 引用方文件 → 名字 → 该名字被绑到的来源（仓内 rel，或 `external:<说明符>`）。[39m
+[31m+    *  归属判据（`attribution.ts`）的取料面。**这一张表与 tags 同源同批**：另建一份就是[39m
+[31m+    *  第二套取料面（同族），持久化那一支漏带它 ⇒ 热载入的图会给出「无证据」满格的另一张图。 */[39m
+[31m+   nameSources: Map<string, Map<string, string[]>>;[39m
+[31m+   /** 边构造时的三态计数（kept／dropped／no-evidence）。读端要说「排除了几处」就得靠它带分母。 */[39m
+[31m+   attribution: AttributionStats;[39m
+[31m+   /** 本次实际重解析文件数（缓存未命中）。 */[39m
+[31m+   parsed: number;[39m
+[31m+   /** 本次命中 tags 缓存文件数。 */[39m
+[31m+   fromTagsCache: number;[39m
+[31m+   /** true = 本次图直接从持久化索引载入（零解析；parsed/fromTagsCache 因此为 0）。[39m
+[31m+    *  只在 `persistIndex` 开且索引命中时出现——读端可据此与「tags 缓存命中」区分开。 */[39m
+[31m+   fromIndex?: boolean;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ export interface BuildImpactOptions {[39m
+[31m+   workspace: string;[39m
+[31m+   /** tags 缓存目录（缺省 = 应用数据目录；测试给临时目录，避免污染用户主目录）。 */[39m
+[31m+   cacheDir?: string;[39m
+[31m+   /** 文件数帽（缺省＝安全阀 `MAX_FILES_DEFAULT`，同 map——09-30 起它不再是 400，见 `map/build.ts` 那段）。 */[39m
+[31m+   maxFiles?: number;[39m
+[31m+   /** 持久化索引开关。true ⇒ 同 git 提交＋全量文件指纹命中就直接载入 artifact（零解析，[39m
+[31m+    *  `fromIndex: true`）；任一文件变化 ⇒ 走既有 tags 缓存增量、建完覆写 artifact。[39m
+[31m+    *  缺省 false：既有判卷（impact.test.ts ⑭）钉死「直接调 buildImpact 的缺省行为＝tags[39m
+[31m+    *  缓存增量」这一语义；索引这层进程级热载由装配点显式开（`impact_query` 三个建图出口）。 */[39m
+[31m+   persistIndex?: boolean;[39m
+[31m+   /** 索引目录（缺省 = cacheDir 的兄弟目录 impact-index；测试注入临时目录用）。 */[39m
+[31m+   indexDir?: string;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 帽的上限。**数值的事实源在 `map/build.ts:MAX_FILES_CEILING`**，这里只是别名——[39m
+[31m+  *  从前两处各写一个 5000/400 ⇒ 一处调、另一处静默不跟（同族：第十四族"同一谓词多份副本"）。[39m
+[31m+  *  为什么要有这一位：`maxFiles` 现在由**模型**传（`impact_query` 的读端说明让它调），[39m
+[31m+  *  没有上界就等于给它一个"解析任意多个文件"的开关——建图是每文件一次 tree-sitter 解析。[39m
+[31m+  *  取 5000 的依据是本机实测（2026-09-24，本仓 448 个候选源码冷建）：**每文件 ≈1.9ms**，[39m
+[31m+  *  cap=400 → 827ms、全量 448 → 836ms ⇒ 5000 个 ≈10s，与一次模型往返（8.7–42s）同量级，[39m
+[31m+  *  且 tags 缓存按文件 `{mtime,size}` 记账，第二次只解析新增那批。[39m
+[31m+  *  09-30 同位补测（独立进程、两种顺序各跑一次，`outputs/impact-cap-decision-2026-09-30/`）：[39m
+[31m+  *  本仓候选 512 时 帽400 中位 1071ms → 全量 1247ms ⇒ **＋176ms／次建图**（同臂散布 ≤13ms）。 */[39m
+[31m+ export const IMPACT_MAX_FILES_CEILING = MAX_FILES_CEILING;[39m
+[31m+[39m
+[31m+ // ---- tags 磁盘缓存（同 map/build.ts 模式：{mtimeMs,size} 指纹；缓存只在 cacheDir 内）----[39m
+[31m+[39m
+[31m+ export function defaultImpactCacheDir(): string {[39m
+[31m+   return process.env.M7_IMPACT_TAGS_DIR ?? join(homedir(), ".m0-agent-loop", "impact-tags");[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ function cacheFileFor(dir: string, abs: string): string {[39m
+[31m+   const key = createHash("sha1").update(abs).digest("hex");[39m
+[31m+   return join(dir, key + ".json");[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ interface ImpactTagsCacheEntry {[39m
+[31m+   /** 抽取判据版本：与 map 侧同一把（`TAGS_EXTRACT_VERSION`），两份缓存各判各的但版本源只有一个。[39m
+[31m+    *  缺它 ⇒ 改 pattern 后这张图仍从盘上读回旧判据的 tags，新判据对未变更文件不生效。 */[39m
+[31m+   v: string;[39m
+[31m+   mtimeMs: number;[39m
+[31m+   size: number;[39m
+[31m+   tags: SymbolTag[];[39m
+[31m+   /** 跨文件依赖（`fileSymbols` 的第二个出口）。与 tags **同判同写**：只存 tags 的那一支[39m
+[31m+    *  会让归属判据永远拿不到证据（现象＝"改了实现，波及面一点没变"），与地图侧同一格病。 */[39m
+[31m+   imports: ImportRef[];[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ async function readTagsCache(dir: string, f: ScannedFile): Promise<{ tags: SymbolTag[]; imports: ImportRef[] } | null> {[39m
+[31m+   try {[39m
+[31m+     const raw = await readFile(cacheFileFor(dir, f.abs), "utf8");[39m
+[31m+     const e = JSON.parse(raw) as ImpactTagsCacheEntry;[39m
+[31m+     if (e.v !== TAGS_EXTRACT_VERSION) return null; // 判据换过（含旧条目无 v 字段）→ 作废[39m
+[31m+     if (e.mtimeMs === f.mtimeMs && e.size === f.size && Array.isArray(e.tags) && Array.isArray(e.imports)) {[39m
+[31m+       return { tags: e.tags, imports: e.imports };[39m
+[31m+     }[39m
+[31m+     return null; // 指纹变化 → miss（文件被改过）[39m
+[31m+   } catch {[39m
+[31m+     return null; // 无缓存/缓存损坏 → miss（下次覆写，不抛）[39m
+[31m+   }[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ async function writeTagsCache(dir: string, f: ScannedFile, tags: SymbolTag[], imports: ImportRef[]): Promise<void> {[39m
+[31m+   try {[39m
+[31m+     await mkdir(dir, { recursive: true });[39m
+[31m+     const entry: ImpactTagsCacheEntry = { v: TAGS_EXTRACT_VERSION, mtimeMs: f.mtimeMs, size: f.size, tags, imports };[39m
+[31m+     await writeFile(cacheFileFor(dir, f.abs), JSON.stringify(entry), "utf8");[39m
+[31m+   } catch (err) {[39m
+[31m+     // 缓存写失败不影响本次建图（下次全量重解析），与 map 同口径[39m
+[31m+     console.debug("[impact] tags 缓存写失败（忽略）:", err instanceof Error ? err.message : String(err));[39m
+[31m+   }[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // ---- 建图 ----[39m
+[31m+[39m
+[31m+ function addSites(map: Map<string, ImpactSite[]>, sym: string, site: ImpactSite): void {[39m
+[31m+   const arr = map.get(sym);[39m
+[31m+   if (!arr) map.set(sym, [site]);[39m
+[31m+   else arr.push(site);[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 构建跨文件调用图。增量：{mtime,size} 指纹未变的文件直接读 tags 缓存；[39m
+[31m+  *  `persistIndex` 开时再叠一层进程级热载：同 git 提交＋全量文件指纹命中 ⇒ 直接载入[39m
+[31m+  *  artifact（零解析，见 ./persist.ts）。[39m
+[31m+  *  错误契约：grammar 环境级失败（坏/缺失 wasm）抛 ImpactUnavailableError（fail-loud，[39m
+[31m+  *  文案含 unavailable）；单文件读/解析失败静默跳过（同 map）。 */[39m
+[31m+ export async function buildImpact(opts: BuildImpactOptions): Promise<ImpactGraph> {[39m
+[31m+   // 帽走 build.ts 那一个常量：读端（impact_query 的分诊）报「第几位 / 收录几个」用的是同一个数，[39m
+[31m+   // 两边各写一个 400 就会一处调、另一处静默说错话。[39m
+[31m+   // 切片前后两份都要：`candidates`（帽前全量）是读端覆盖面自述的分母，取它不要第二次 rg。[39m
+[31m+   const cap = opts.maxFiles ?? MAX_FILES_DEFAULT;[39m
+[31m+   const candidates = await scanSourceFilesAll(opts.workspace);[39m
+[31m+   const files = applyFileCap(candidates, cap);[39m
+[31m+   const dir = opts.cacheDir ?? defaultImpactCacheDir();[39m
+[31m+[39m
+[31m+   if (opts.persistIndex === true) {[39m
+[31m+     const wsAbs = resolve(opts.workspace);[39m
+[31m+     const sha = await currentCommitSha(opts.workspace);[39m
+[31m+     if (sha !== null) {[39m
+[31m+       const indexDir = opts.indexDir ?? impactIndexDirFor(dir);[39m
+[31m+       const loaded = await loadImpactIndex(indexDir, wsAbs, sha, files);[39m
+[31m+       if (loaded) return loaded;[39m
+[31m+       const graph = await buildGraphFromScan(candidates, files, cap, dir);[39m
+[31m+       await saveImpactIndex(indexDir, wsAbs, sha, graph, files);[39m
+[31m+       return graph;[39m
+[31m+     }[39m
+[31m+     // sha 取不到（非 git 仓/无提交）→ 落到下面：索引整层不参与（没有稳定键不发明弱键）。[39m
+[31m+   }[39m
+[31m+   return buildGraphFromScan(candidates, files, cap, dir);[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 从已扫描的文件清单建图（tags 缓存增量层）。载入/落盘的编排只在 `buildImpact`，[39m
+[31m+  *  这一支保持纯建图——两层缓存（tags 文件级、索引图级）的判据互不掺和。[39m
+[31m+  *  收 candidates 全量数组只为 return 里那一个 `.length`（帽前分母的锚点针脚钉着这个字面量）。 */[39m
+[31m+ async function buildGraphFromScan([39m
+[31m+   candidates: ScannedFile[],[39m
+[31m+   files: ScannedFile[],[39m
+[31m+   cap: number,[39m
+[31m+   dir: string,[39m
+[31m+ ): Promise<ImpactGraph> {[39m
+[31m+   const defs = new Map<string, ImpactSite[]>();[39m
+[31m+   const refs = new Map<string, ImpactSite[]>();[39m
+[31m+   /** 引用方文件 → 名字 → 该名字被 import 绑到的来源（rel 或 `external:<说明符>`）。 */[39m
+[31m+   const nameSources = new Map<string, Map<string, string[]>>();[39m
+[31m+   const attribution = emptyAttributionStats();[39m
+[31m+   let parsed = 0;[39m
+[31m+   let fromTagsCache = 0;[39m
+[31m+   const knownFiles = new Set(files.map((f) => f.rel));[39m
+[31m+[39m
+[31m+   for (const f of files) {[39m
+[31m+     let tags: SymbolTag[];[39m
+[31m+     let imports: ImportRef[];[39m
+[31m+     const hit = await readTagsCache(dir, f);[39m
+[31m+     if (hit) {[39m
+[31m+       tags = hit.tags;[39m
+[31m+       imports = hit.imports;[39m
+[31m+       fromTagsCache++;[39m
+[31m+     } else {[39m
+[31m+       let src: string;[39m
+[31m+       try {[39m
+[31m+         src = await readFile(f.abs, "utf8");[39m
+[31m+       } catch {[39m
+[31m+         console.debug(`[impact] 单文件读取失败（跳过）: ${f.rel}`);[39m
+[31m+         continue;[39m
+[31m+       }[39m
+[31m+       try {[39m
+[31m+         const ext = f.rel.slice(f.rel.lastIndexOf(".") + 1).toLowerCase();[39m
+[31m+         const sym = await fileSymbols(src, ext);[39m
+[31m+         tags = sym.tags;[39m
+[31m+         imports = sym.imports;[39m
+[31m+         parsed++;[39m
+[31m+         await writeTagsCache(dir, f, tags, imports);[39m
+[31m+       } catch (err) {[39m
+[31m+         if (err instanceof TreeSitterUnavailableError) {[39m
+[31m+           throw new ImpactUnavailableError([39m
+[31m+             "impact: tree-sitter unavailable（grammar 加载失败，无法计算影响面；" +[39m
+[31m+               (err instanceof Error ? err.message : String(err)) +[39m
+[31m+               "）",[39m
+[31m+           );[39m
+[31m+         }[39m
+[31m+         console.debug(`[impact] 单文件解析失败（跳过）: ${f.rel}`);[39m
+[31m+         continue;[39m
+[31m+       }[39m
+[31m+     }[39m
+[31m+     for (const t of tags) {[39m
+[31m+       if (t.kind === "def") addSites(defs, t.name, { symbol: t.name, file: f.rel, line: t.line });[39m
+[31m+       else addSites(refs, t.name, { symbol: t.name, file: f.rel, line: t.line });[39m
+[31m+     }[39m
+[31m+     // 归属取料：这一份文件把每个名字 import 绑到了哪儿。**外部包也算**（`node:fs` 的那个[39m
+[31m+     // `readFile` 正是"另有出处"的反证），键的构造只在 `bindingSourceKey` 一处。[39m
+[31m+     const perFile = new Map<string, string[]>();[39m
+[31m+     for (const ir of imports) {[39m
+[31m+       const key = bindingSourceKey(resolveModuleSpecifier(f.rel, ir.spec, knownFiles), ir.spec);[39m
+[31m+       const arr = perFile.get(ir.name);[39m
+[31m+       if (arr) {[39m
+[31m+         if (!arr.includes(key)) arr.push(key);[39m
+[31m+       } else perFile.set(ir.name, [key]);[39m
+[31m+     }[39m
+[31m+     nameSources.set(f.rel, perFile);[39m
+[31m+   }[39m
+[31m+[39m
+[31m+   /** 边构造 + 归属判据一起过：反证（同名但另有出处）才摘，没证据照名字图连——[39m
+[31m+    *  三态计数只在这一处发生（`upward`/`downward` 复用同一个谓词但不重复计数，[39m
+[31m+    *  否则同一件事会被两条支各数一遍，读数就成了两倍）。 */[39m
+[31m+   const seen = new Set<string>();[39m
+[31m+   const edges: ImpactEdge[] = [];[39m
+[31m+   for (const [sym, refSites] of refs) {[39m
+[31m+     const defSites = defs.get(sym);[39m
+[31m+     if (!defSites) continue;[39m
+[31m+     for (const r of refSites) {[39m
+[31m+       const binding = { known: nameSources.has(r.file), sources: nameSources.get(r.file)?.get(sym) ?? [] };[39m
+[31m+       for (const d of defSites) {[39m
+[31m+         if (d.file === r.file) continue;[39m
+[31m+         const verdict = attributeRefToDef(binding, d.file);[39m
+[31m+         if (verdict === "kept") attribution.kept++;[39m
+[31m+         else if (verdict === "dropped") attribution.dropped++;[39m
+[31m+         else attribution.noEvidence++;[39m
+[31m+         if (verdict === "dropped") continue;[39m
+[31m+         const key = [r.file, d.file, sym, r.line, d.line].join("\u241F");[39m
+[31m+         if (seen.has(key)) continue;[39m
+[31m+         seen.add(key);[39m
+[31m+         edges.push({ from: r.file, to: d.file, symbol: sym, refLine: r.line, defLine: d.line });[39m
+[31m+       }[39m
+[31m+     }[39m
+[31m+   }[39m
+[31m+   edges.sort((a, b) =>[39m
+[31m+     a.from === b.from[39m
+[31m+       ? a.to === b.to[39m
+[31m+         ? a.symbol === b.symbol[39m
+[31m+           ? a.refLine === b.refLine[39m
+[31m+             ? a.defLine - b.defLine[39m
+[31m+             : a.refLine - b.refLine[39m
+[31m+           : a.symbol.localeCompare(b.symbol)[39m
+[31m+         : a.to.localeCompare(b.to)[39m
+[31m+       : a.from.localeCompare(b.from),[39m
+[31m+   );[39m
+[31m+[39m
+[31m+   // 站点清单确定性排序（symbol, file, line）：raw map 与查询层同序，可重放[39m
+[31m+   for (const list of defs.values()) list.sort(siteOrder);[39m
+[31m+   for (const list of refs.values()) list.sort(siteOrder);[39m
+[31m+[39m
+[31m+   return {[39m
+[31m+     files: [...files.map((f) => f.rel)].sort(),[39m
+[31m+     candidates: candidates.length,[39m
+[31m+     cap,[39m
+[31m+     defs,[39m
+[31m+     refs,[39m
+[31m+     edges,[39m
+[31m+     nameSources,[39m
+[31m+     attribution,[39m
+[31m+     parsed,[39m
+[31m+     fromTagsCache,[39m
+[31m+   };[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // ---- 查询：向上（谁调用我）/向下（我调用谁）----[39m
+[31m+[39m
+[31m+ function siteOrder(a: ImpactSite, b: ImpactSite): number {[39m
+[31m+   if (a.symbol !== b.symbol) return a.symbol.localeCompare(b.symbol);[39m
+[31m+   return a.file === b.file ? a.line - b.line : a.file.localeCompare(b.file);[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ function sortedSites(sites: ImpactSite[]): ImpactSite[] {[39m
+[31m+   return [...sites].sort(siteOrder);[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 一处 (引用方文件, 名字) 对**某一份具体定义**的可归属性（三态；判据本体在 `attribution.ts`）。[39m
+[31m+  *  导出是为了让读端与探针吃**同一把**尺：`upward` 现在问的是"任一份归得上吗"（并集口径），[39m
+[31m+  *  而写/edit 回注那一支知道自己在改哪一份（任务 #19）。同一谓词抄第二份就会漂（第十三族）。 */[39m
+[31m+ export function attributableToDef(graph: ImpactGraph, refFile: string, symbol: string, defFile: string): Attribution {[39m
+[31m+   if (refFile === defFile) return "kept";[39m
+[31m+   const binding = { known: graph.nameSources.has(refFile), sources: graph.nameSources.get(refFile)?.get(symbol) ?? [] };[39m
+[31m+   return attributeRefToDef(binding, defFile);[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 这一处 (引用方文件, 名字) 能不能归给图里这些同名定义之一。[39m
+[31m+  *  与边构造吃**同一个**判据（`attributeRefToDef`）——两处各写一份就会漂（第十三族）。[39m
+[31m+  *  定义集合里没有任何"别处的"定义时不摘：那既不是假阳性也不是真阳性，今天的口径就这样。 */[39m
+[31m+ function attributableSomewhere(graph: ImpactGraph, refFile: string, symbol: string, defFiles: ReadonlySet<string>): boolean {[39m
+[31m+   let candidates = 0;[39m
+[31m+   for (const defFile of defFiles) {[39m
+[31m+     if (defFile === refFile) continue;[39m
+[31m+     candidates++;[39m
+[31m+     if (attributeRefToDef({ known: true, sources: [] }, defFile) !== "dropped") return true;[39m
+[31m+   }[39m
+[31m+   return candidates === 0;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 向上：跨文件调用 symbol 的位置清单（排除定义所在文件自身——「谁还在用我」）。 */[39m
+[31m+ export function upward(graph: ImpactGraph, symbol: string): ImpactSite[] {[39m
+[31m+   const refSites = graph.refs.get(symbol) ?? [];[39m
+[31m+   const defFiles = new Set((graph.defs.get(symbol) ?? []).map((d) => d.file));[39m
+[31m+   return sortedSites(refSites.filter((r) => !defFiles.has(r.file) && attributableSomewhere(graph, r.file, symbol, defFiles)));[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 向下：file 里引用到的、且定义在别的文件里的 symbol 的定义点清单（「我在调用谁」）。 */[39m
+[31m+ export function downward(graph: ImpactGraph, file: string): ImpactSite[] {[39m
+[31m+   const out = new Set<string>();[39m
+[31m+   const sites: ImpactSite[] = [];[39m
+[31m+   for (const [sym, refList] of graph.refs) {[39m
+[31m+     const mine = refList.filter((r) => r.file === file);[39m
+[31m+     if (mine.length === 0) continue;[39m
+[31m+     const binding = { known: graph.nameSources.has(file), sources: graph.nameSources.get(file)?.get(sym) ?? [] };[39m
+[31m+     for (const d of graph.defs.get(sym) ?? []) {[39m
+[31m+       if (d.file === file) continue;[39m
+[31m+       // 与 `upward` 同一把判据，但这里是"我对面那一份定义"——按 def 逐条判，[39m
+[31m+       // 不能像 upward 那样"任一命中即留"，否则会把反证成立的那份定义也带回来。[39m
+[31m+       if (attributeRefToDef(binding, d.file) === "dropped") continue;[39m
+[31m+       const key = d.file + "\u241F" + String(d.line) + "\u241F" + d.symbol;[39m
+[31m+       if (!out.has(key)) {[39m
+[31m+         out.add(key);[39m
+[31m+         sites.push(d);[39m
+[31m+       }[39m
+[31m+     }[39m
+[31m+   }[39m
+[31m+   return sortedSites(sites);[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // ---- loop 钩子（M7 创新点）：编辑后算该文件符号的向上影响面 ----[39m
+[31m+[39m
+[31m+ export const IMPACT_SITE_LIMIT = 200; // 事件里保留的调用点数量帽（面板/审计可查全量清单）[39m
+[31m+[39m
+[31m+ /** 回注 tool_result 的摘要预算：被广泛调用的符号单次写入会带出上百个调用点，[39m
+[31m+  *  逐条注入会把 tool_result 撑到数千 token（与「消耗 token 最少」直接冲突）。[39m
+[31m+  *  收紧为文件级汇聚 + 每文件限量符号；完整清单仍在 impact_report 事件里（面板可查）。 */[39m
+[31m+ export const IMPACT_CONTEXT_FILES = 6;[39m
+[31m+ export const IMPACT_CONTEXT_SYMBOLS_PER_FILE = 4;[39m
+[31m+[39m
+[31m+ export interface FileImpactReport {[39m
+[31m+   /** 被编辑文件（workspace 相对）。 */[39m
+[31m+   file: string;[39m
+[31m+   /** 该文件的定义符号（含局部 def——护栏宁多勿漏）。 */[39m
+[31m+   symbols: string[];[39m
+[31m+   /** 这些符号的跨文件调用点（限量）。 */[39m
+[31m+   up: ImpactSite[];[39m
+[31m+   /** 命中数量帽（true = 还有更多调用点未列出）。 */[39m
+[31m+   truncated: boolean;[39m
+[31m+   /** 这张图实际收录了多少个文件 —— 读端要靠它自述覆盖面：[39m
+[31m+    *  被帽截断时「波及 1 个文件」与「图只扫了仓库的一小截」在答案里长一模一样。 */[39m
+[31m+   graphFiles: number;[39m
+[31m+   /** 帽切之前的全量候选数（同 `ImpactGraph.candidates`，一路带到读端当分母）。[39m
+[31m+    *  不带它，file 支只能说「非全量」而说不出漏了几个 —— 三支自述里只有这一支的数[39m
+[31m+    *  要穿过 `fileImpact` 这一层，少接一层就是那一支静默回到没有分母的旧句子。 */[39m
+[31m+   graphCandidates: number;[39m
+[31m+   /** 这一张图生效的帽（同 `ImpactGraph.cap`）。注入摘要要说「＝帽 N」，就得知道 N 是几——[39m
+[31m+    *  少带这一位，回注那一侧要出声只能自己再解析一遍缺省（同族「两处各写一个数字」）。 */[39m
+[31m+   graphCap: number;[39m
+[31m+   /** 本文件的定义符号里，哪些**在别的文件也有一份同名定义**（按名字顺序）。[39m
+[31m+    *  符号图按名字连边 ⇒ 这些符号的向上清单是**各份定义的并集**，[39m
+[31m+    *  里面可能混着"另一份定义的调用方"。读端不点名，模型就无从知道该收窄。 */[39m
+[31m+   ambiguousSymbols: string[];[39m
+[31m+   /** 建这张图时边构造的三态归属计数（读端要说"排除了几处／几处没证据可判"就靠它带分母）。 */[39m
+[31m+   attribution: AttributionStats;[39m
+[31m+   /** 这份 `up` 清单里，有多少处**只**归得到别处那份同名定义（对本文件拿得出"另有出处"的反证）。[39m
+[31m+    *  有了它，那句「清单里可能混有无关文件」才从一句猜测变成可核对的数：模型知道混进几处、[39m
+[31m+    *  也就知道自己该把这份清单往哪一边收。不带这一位，读端只能继续说"可能"——而"可能"没有观测者。 */[39m
+[31m+   sitesOnlyToOtherDef: number;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 计算单个被编辑文件的影响面。文件不在图内（未扫描/不支持后缀/不存在）→ null（不发事件）。[39m
+[31m+  *  grammar 环境级失败 → 抛 ImpactUnavailableError（调用方按 fail-loud 处理）。[39m
+[31m+  *  `maxFiles` 是给**读端**留的透传位：`impact_query` 的三个建图出口必须吃同一个帽，[39m
+[31m+  *  少接一支就等于那支静默按缺省建图，而同一句说明会对不同输入报出不同的数。 */[39m
+[31m+ export async function fileImpact([39m
+[31m+   workspace: string,[39m
+[31m+   fileRel: string,[39m
+[31m+   cacheDir?: string,[39m
+[31m+   maxFiles?: number,[39m
+[31m+   persistIndex?: boolean,[39m
+[31m+ ): Promise<FileImpactReport | null> {[39m
+[31m+   const graph = await buildImpact({ workspace, cacheDir, maxFiles, persistIndex });[39m
+[31m+   const normalized = fileRel.replace(/\\/g, "/");[39m
+[31m+   if (!graph.files.includes(normalized)) return null;[39m
+[31m+   const symbols = [...graph.defs.keys()][39m
+[31m+     .filter((sym) => (graph.defs.get(sym) ?? []).some((d) => d.file === normalized))[39m
+[31m+     .sort();[39m
+[31m+   const all: ImpactSite[] = [];[39m
+[31m+   for (const sym of symbols) all.push(...upward(graph, sym));[39m
+[31m+   // 同名歧义：这个符号在别的文件也有一份定义 ⇒ 它的 upward 清单里混着"那份定义的调用方"。[39m
+[31m+   const ambiguousSymbols = symbols.filter([39m
+[31m+     (sym) => new Set((graph.defs.get(sym) ?? []).map((d) => d.file)).size > 1,[39m
+[31m+   );[39m
+[31m+   // 「清单里可能混有无关文件」今天可以从猜测升级成计数：`upward` 是**各份同名定义的并集**[39m
+[31m+   // （任一 def 归得上就留），所以这一处若**只**归得到别处那份定义，对本次编辑就不是后果。[39m
+[31m+   // 判据仍只有 `attributeRefToDef` 一把（这里只是把 defFile 换成被编辑的那个文件）——另写一份就漂。[39m
+[31m+   let sitesOnlyToOtherDef = 0;[39m
+[31m+   for (const s of all) {[39m
+[31m+     const binding = { known: graph.nameSources.has(s.file), sources: graph.nameSources.get(s.file)?.get(s.symbol) ?? [] };[39m
+[31m+     if (attributeRefToDef(binding, normalized) === "dropped") sitesOnlyToOtherDef++;[39m
+[31m+   }[39m
+[31m+   const up = sortedSites(all);[39m
+[31m+   const truncated = up.length > IMPACT_SITE_LIMIT;[39m
+[31m+   return {[39m
+[31m+     file: normalized,[39m
+[31m+     symbols,[39m
+[31m+     up: truncated ? up.slice(0, IMPACT_SITE_LIMIT) : up,[39m
+[31m+     truncated,[39m
+[31m+     graphFiles: graph.files.length,[39m
+[31m+     graphCandidates: graph.candidates,[39m
+[31m+     graphCap: graph.cap,[39m
+[31m+     ambiguousSymbols,[39m
+[31m+     attribution: graph.attribution,[39m
+[31m+     sitesOnlyToOtherDef,[39m
+[31m+   };[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** loop 注入的缺省钩子（verify 的 ExecFn 同族接口）：write_file/edit_file 成功后调用。[39m
+[31m+  *  返回 null = 不发事件（文件不在图内）；抛错 = loop 记 debug、跳过事件、loop 继续。 */[39m
+[31m+ export type ImpactHook = ([39m
+[31m+   fileRel: string,[39m
+[31m+ ) => Promise<{ event: import("../../events").ImpactReportEvent; contextNote: string } | null>;[39m
+[31m+[39m
+[31m+ /** 把调用点汇聚成紧凑摘要（文件级去重 + 每文件限量符号 + 文件限量）。[39m
+[31m+  *  膨胀度量：旧实现逐条注入最多 IMPACT_SITE_LIMIT 行 `symbol <- file:line`，[39m
+[31m+  *  广泛调用符号的单次写入输出可达数千 token；新实现按文件归并，[39m
+[31m+  *  上限约 IMPACT_CONTEXT_FILES * (IMPACT_CONTEXT_SYMBOLS_PER_FILE + 计数尾) 行。 */[39m
+[31m+ export function contextNoteFor(r: FileImpactReport): string {[39m
+[31m+   /* 覆盖面自述与查询端**共用同一把尺**（`impact/coverage.ts`）：图非全量时，这一句里的 N[39m
+[31m+    * 本身就是被帽切过的 ⇒ 不带上它，"波及 1 个文件"与"图只扫了仓库的一小截"在注入面长同一个样。[39m
+[31m+    *  缺省帽已是安全阀（`MAX_FILES_DEFAULT`），正常仓库收全 ⇒ 这一句今天多半为空，[39m
+[31m+    *  空的时候不改任何一个字节（有反向对照判卷钉着）。 */[39m
+[31m+   const cov = coverageNote(r.graphFiles, r.graphCap, r.graphCandidates);[39m
+[31m+   if (r.up.length === 0) {[39m
+[31m+     // 这条是**最常见**分支（改到没有跨文件引用的文件），而 symbols 含函数内局部名（base/boosted…），[39m
+[31m+     // 大文件能上百个 ⇒ 注入面按每文件符号帽收窄；全量仍在 impact_report 事件的 symbols 里（面板/审计不丢）。[39m
+[31m+     const cap = IMPACT_CONTEXT_SYMBOLS_PER_FILE;[39m
+[31m+     const listed = r.symbols.slice(0, cap).join(", ");[39m
+[31m+     const tail = r.symbols.length > cap ? ` 等 ${String(r.symbols.length)} 个（全量在 impact_report 事件）` : "";[39m
+[31m+     return `[impact] ${r.file}：定义符号 ${r.symbols.length ? listed + tail : "（无）"}，无跨文件调用点（波及半径为 0）` + cov;[39m
+[31m+   }[39m
+[31m+   const byFile = new Map<string, { symbol: string; line: number }[]>();[39m
+[31m+   for (const s of r.up) {[39m
+[31m+     let arr = byFile.get(s.file);[39m
+[31m+     if (!arr) {[39m
+[31m+       arr = [];[39m
+[31m+       byFile.set(s.file, arr);[39m
+[31m+     }[39m
+[31m+     arr.push({ symbol: s.symbol, line: s.line });[39m
+[31m+   }[39m
+[31m+   const files = [...byFile.keys()];[39m
+[31m+   const shown = files.slice(0, IMPACT_CONTEXT_FILES);[39m
+[31m+   // 同名歧义要说在**这句旁边**。此前它只在查询端（`tools/impact-query.ts`）那句里出现，而这条是[39m
+[31m+   // **缺省开**的写后回注（`settings.ts` 的 `impactAnalysis: true`）⇒ 模型只读到「波及 M 个文件」就会照着去动那 M 个文件，[39m
+[31m+   // 而 M 里可能混着"别处同名"的调用方（真仓读数：一个 `private readFile` 吸进 107 个文件的同名 ref）。[39m
+[31m+   // 同一份事实只在一个消费者嘴里说，是本仓反复判死的"只硬化一支"形状。[39m
+[31m+   // 归属计数（`attributionNote`）接在这句**之后**：那句是"有同名定义"的结构事实，这句是"这一张图判掉了多少"的[39m
+[31m+   // 度量事实——两者独立出现，摘掉任一都不许让另一句跟着变（判卷按两态各钉一条）。[39m
+[31m+   const mixed = mixedSitesNote(r.sitesOnlyToOtherDef);[39m
+[31m+   const ambiguity = (r.ambiguousSymbols.length > 0[39m
+[31m+     ? `；其中 ${String(r.ambiguousSymbols.length)} 个符号在别的文件也有同名定义，波及数按名字图算 ⇒ 清单里可能混有无关文件`[39m
+[31m+     : "") + mixed + attributionNote(r.attribution);[39m
+[31m+   const lines: string[] = [[39m
+[31m+     `[impact] ${r.file} 定义符号的跨文件调用点（上 ${r.up.length}${r.truncated ? "+" : ""}，波及 ${files.length} 个文件${ambiguity}；完整清单见 impact_report 事件）：`,[39m
+[31m+   ];[39m
+[31m+   for (const f of shown) {[39m
+[31m+     const arr = byFile.get(f)!;[39m
+[31m+     const syms = arr[39m
+[31m+       .slice(0, IMPACT_CONTEXT_SYMBOLS_PER_FILE)[39m
+[31m+       .map((s) => `${s.symbol}(L${s.line})`)[39m
+[31m+       .join(", ");[39m
+[31m+     const tail = arr.length > IMPACT_CONTEXT_SYMBOLS_PER_FILE ? ` 等 ${arr.length} 处` : "";[39m
+[31m+     lines.push(`  ${f}: ${syms}${tail}`);[39m
+[31m+   }[39m
+[31m+   if (files.length > shown.length) {[39m
+[31m+     lines.push(`  \u2026另有 ${files.length - shown.length} 个文件未列出（完整调用点清单在 impact_report 事件里）`);[39m
+[31m+   }[39m
+[31m+   return lines.join("\n") + cov;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ export function defaultImpactHook(workspace: string, cacheDir?: string): ImpactHook {[39m
+[31m+   return async (fileRel: string) => {[39m
+[31m+     const r = await fileImpact(workspace, fileRel, cacheDir);[39m
+[31m+     if (r === null) return null;[39m
+[31m+     return {[39m
+[31m+       event: {[39m
+[31m+         type: "impact_report",[39m
+[31m+         file: r.file,[39m
+[31m+         symbols: r.symbols,[39m
+[31m+         up: r.up,[39m
+[31m+         truncated: r.truncated,[39m
+[31m+       },[39m
+[31m+       contextNote: contextNoteFor(r),[39m
+[31m+     };[39m
+[31m+   };[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // ---- B1：把影响面从「回注给模型看的提示」升级成 spawn 准入判据 ----[39m
+[31m+ // 依据：多 agent 最大的未解项不是行冲突而是**写时语义冲突**（worktree 只解决物理层）。[39m
+[31m+ // 两个 worker 各改各的文件、glob 不相交，却都波及同一批调用点 ⇒ 合并时照样打架。[39m
+[31m+ // 这份数据在 M7 只用了一次（写后回注摘要），这里让它第二次变现。[39m
+[31m+[39m
+[31m+ /** glob → 仓库相对路径匹配（`**` 跨目录、`*` 段内、`?` 单字符）。 */[39m
+[31m+ export function globMatchesPath(glob: string, path: string): boolean {[39m
+[31m+   const g = glob.replace(/\\/g, "/");[39m
+[31m+   const p = path.replace(/\\/g, "/");[39m
+[31m+   let re = "";[39m
+[31m+   for (let i = 0; i < g.length; i++) {[39m
+[31m+     const c = g[i];[39m
+[31m+     if (c === "*") {[39m
+[31m+       if (g[i + 1] === "*") {[39m
+[31m+         re += ".*";[39m
+[31m+         i++;[39m
+[31m+         if (g[i + 1] === "/") i++; // `**/` 允许匹配零段目录[39m
+[31m+       } else re += "[^/]*";[39m
+[31m+     } else if (c === "?") re += "[^/]";[39m
+[31m+     else if ("\\^$.|+()[]{}".includes(c)) re += "\\" + c;[39m
+[31m+     else re += c;[39m
+[31m+   }[39m
+[31m+   return new RegExp("^" + re + "$").test(p);[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 一批（已在图内的）文件 ⇒ 它们的波及闭包（含自身，排序去重）。[39m
+[31m+  *  抽出来的理由：租约那条支以前把这段循环写在 `affectedFilesOf` 体内，判卷与探针要量它只能**自己再算一遍**[39m
+[31m+  *  ——第 305 页的归属判据接进 `upward` 之后，闭包跟着变窄，而当时没有任何一个观测者走的是生产那一条[39m
+[31m+  *  （第十三族③：同一位置双向偏差）。收成一处，两臂（宽/窄）与真仓读数都从这一个函数取。 */[39m
+[31m+ export function closureFilesOf(graph: ImpactGraph, files: readonly string[]): string[] {[39m
+[31m+   const out = new Set<string>();[39m
+[31m+   for (const file of files) {[39m
+[31m+     out.add(file);[39m
+[31m+     for (const sym of graph.defs.keys()) {[39m
+[31m+       if (!(graph.defs.get(sym) ?? []).some((d) => d.file === file)) continue;[39m
+[31m+       for (const site of upward(graph, sym)) out.add(site.file);[39m
+[31m+     }[39m
+[31m+   }[39m
+[31m+   return [...out].sort();[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 声明「要写这些 glob」⇒ 实际会波及哪些文件（含被声明文件自身，排序去重）。[39m
+[31m+  *  grammar/索引不可用 ⇒ 抛 ImpactUnavailableError（调用方按降级处理，不静默返回空集）。[39m
+[31m+  *[39m
+[31m+  *  「图非全量」必须**出声**（09-30 补，第 201 页的实测）：这一支的返回值直接进 spawn 准入——[39m
+[31m+  *  `semanticConflictsVia` 见空波及就 `return []`，其理由「无跨文件调用点，宁漏不误伤」**默认图是全的**，[39m
+[31m+  *  而 orchestrator 冲突 0 条时连审批卡都不发。从前钩子抛错会 `console.warn`、缺料什么都不说[39m
+[31m+  *  ⇒ 故障出声、缺料不出声。`maxFiles` 是给读端/判卷留的透传位（同 `fileImpact`）：生产缺省已是[39m
+[31m+  *  安全阀上限，正常仓库不会走到那句出声。 */[39m
+[31m+ export async function affectedFilesOf([39m
+[31m+   workspace: string,[39m
+[31m+   globs: readonly string[],[39m
+[31m+   cacheDir?: string,[39m
+[31m+   maxFiles?: number,[39m
+[31m+ ): Promise<string[]> {[39m
+[31m+   if (globs.length === 0) return [];[39m
+[31m+   const graph = await buildImpact({ workspace, cacheDir, maxFiles });[39m
+[31m+   if (graphIsPartial(graph.files.length, graph.candidates)) {[39m
+[31m+     console.warn([39m
+[31m+       `[impact] 语义租约：本图收录 ${String(graph.files.length)} 个文件＝帽 ${String(graph.cap)}，` +[39m
+[31m+         `另有 ${String(graph.candidates - graph.files.length)} 个候选没进这张图（非全量）` +[39m
+[31m+         "⇒ 下面的波及闭包可能不完整，**空波及不等于无冲突**",[39m
+[31m+     );[39m
+[31m+   }[39m
+[31m+   const declared = graph.files.filter((file) => globs.some((g) => globMatchesPath(g, file)));[39m
+[31m+   return closureFilesOf(graph, declared);[39m
+[31m+ }[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/impact-attribution.test.ts:[2m408:17[22m[39m
+    [90m406|[39m   it("★接线 并集那一支吃的是这一份出口，不在 `attributableSomewhere` 里再构造一次 binding", ()…
+    [90m407|[39m     const src = readFileSync(fileURLToPath(new URL("../src/agent/impac…
+    [90m408|[39m     expect(src).toContain("if (attributableToDef(graph, refFile, symbo…
+    [90m   |[39m                 [31m^[39m
+    [90m409|[39m     // 旧的第三份 binding 构造不许回到那个函数里（helper 自己那一处不算：它就是唯一那一处）
+    [90m410|[39m     expect(src).not.toMatch(/function attributableSomewhere[\s\S]{0,40…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M2-somewhere-recopies-binding 红在「★接线 并集那一支吃的是这一份出口，不在 `attributableSomewhere` 里再构造一次 binding」（failed=1，454ms，退 1）
+残骸校验：被测文件与开跑前逐字节一致 ✅（对照面＝开跑前的工作树，两台共用同一份备份）
+RED_MACHINES=OK

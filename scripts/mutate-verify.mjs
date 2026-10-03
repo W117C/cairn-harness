@@ -13129,6 +13129,28 @@ const MUTATIONS = [
     apply: (s) => s.replace("verifyBeatFace(v, verifyCallIds, HARNESS_VERIFY_CALL_ID)", 'verifyBeatFace(v, verifyCallIds, "harness-auto-verify")'),
     expectFail: "★接线③ 归属判定吃的是生产端导出的那枚哨兵，且谓词只有 `verifyBeatFace` 一份",
   },
+  /* ── 第 326 页 · #19 裁「不改口径」之后留下的那一格出口（attributableToDef）──────────── */
+  {
+    id: "impact-attributable-to-def-same-file-shortcut-dropped",
+    src: "src/agent/impact/index.ts",
+    test: "tests/impact-attribution.test.ts",
+    desc: "摘掉「引用方自己就是那份定义 ⇒ 一律 kept」这一步 ⇒ 反证型规则反过来把自己的定义摘掉"
+      + "（b.ts 里的 f 从 a.ts import 过东西，于是 b.ts 里那份定义反而不归 b.ts）；这一步从前散在两个调用方，收口到这里之后只剩一处",
+    apply: (s) => s.replace('  if (refFile === defFile) return "kept";', '  if (false && refFile === defFile) return "kept";'),
+    expectFail: "引用方自己就是那份定义 ⇒ 一律 kept，哪怕它把这个名字绑去了别处",
+  },
+  {
+    id: "impact-attributable-somewhere-recopies-binding",
+    src: "src/agent/impact/index.ts",
+    test: "tests/impact-attribution.test.ts",
+    desc: "并集那一支不走共享出口、自己再构造一份 binding ⇒ 三态里「没有那张表」这一档在并集口径下先消失，"
+      + "而逐份口径还在按它保守留（第十三族：同一谓词两份副本宽度不同，最宽那份才是对的——这回反过来了）",
+    apply: (s) => s.replace(
+      "    if (attributableToDef(graph, refFile, symbol, defFile) !== \"dropped\") return true;",
+      "    if (attributeRefToDef({ known: true, sources: [] }, defFile) !== \"dropped\") return true;",
+    ),
+    expectFail: "★接线 并集那一支吃的是这一份出口，不在 `attributableSomewhere` 里再构造一次 binding",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

@@ -12,7 +12,7 @@ import { fileSymbols, TAGS_EXTRACT_VERSION, TreeSitterUnavailableError, type Imp
 import { resolveModuleSpecifier } from "../map/import-edge.js";
 import { applyFileCap, scanSourceFilesAll, type ScannedFile } from "../map/build.js";
 import { MAX_FILES_CEILING, MAX_FILES_DEFAULT } from "../map/cap.js";
-import { attributionNote, attributeRefToDef, bindingSourceKey, emptyAttributionStats, mixedSitesNote, type AttributionStats } from "./attribution.js";
+import { attributionNote, attributeRefToDef, bindingSourceKey, emptyAttributionStats, mixedSitesNote, type Attribution, type AttributionStats } from "./attribution.js";
 import { coverageNote, graphIsPartial } from "./coverage.js";
 import { currentCommitSha, impactIndexDirFor, loadImpactIndex, saveImpactIndex } from "./persist.js";
 
@@ -317,16 +317,24 @@ function sortedSites(sites: ImpactSite[]): ImpactSite[] {
   return [...sites].sort(siteOrder);
 }
 
+/** 一处 (引用方文件, 名字) 对**某一份具体定义**的可归属性（三态；判据本体在 `attribution.ts`）。
+ *  导出是为了让读端与探针吃**同一把**尺：`upward` 现在问的是"任一份归得上吗"（并集口径），
+ *  而写/edit 回注那一支知道自己在改哪一份（任务 #19）。同一谓词抄第二份就会漂（第十三族）。 */
+export function attributableToDef(graph: ImpactGraph, refFile: string, symbol: string, defFile: string): Attribution {
+  if (refFile === defFile) return "kept";
+  const binding = { known: graph.nameSources.has(refFile), sources: graph.nameSources.get(refFile)?.get(symbol) ?? [] };
+  return attributeRefToDef(binding, defFile);
+}
+
 /** 这一处 (引用方文件, 名字) 能不能归给图里这些同名定义之一。
  *  与边构造吃**同一个**判据（`attributeRefToDef`）——两处各写一份就会漂（第十三族）。
  *  定义集合里没有任何"别处的"定义时不摘：那既不是假阳性也不是真阳性，今天的口径就这样。 */
 function attributableSomewhere(graph: ImpactGraph, refFile: string, symbol: string, defFiles: ReadonlySet<string>): boolean {
-  const binding = { known: graph.nameSources.has(refFile), sources: graph.nameSources.get(refFile)?.get(symbol) ?? [] };
   let candidates = 0;
   for (const defFile of defFiles) {
     if (defFile === refFile) continue;
     candidates++;
-    if (attributeRefToDef(binding, defFile) !== "dropped") return true;
+    if (attributableToDef(graph, refFile, symbol, defFile) !== "dropped") return true;
   }
   return candidates === 0;
 }
