@@ -1,0 +1,35 @@
+读取调用共 432 处，分桶：
+  A-裸字面量：12 处
+  B-join(REPO,：14 处
+  C-join(ROOT,：39 处
+  D-join(变量,：161 处
+  E-fileURLToPath：67 处
+  F-new URL：5 处
+  G-纯变量：100 处
+  Z-其他：34 处
+--- Z-其他 样本 ---
+   tests/cli-surface.test.ts :: logOf(), "utf8").split("\n").filter(Boolean).map((l) => (JSON.parse(l)
+   tests/cli-surface.test.ts :: logOf(), "utf8"); const r = runCli(["--workspace", ws, "--session", SE
+   tests/cli-surface.test.ts :: logOf(), "utf8")).toBe(before); }); // 支二：与支一只差 M1D_COMPACTION_DEMO 一个
+   tests/compact-wiring.test.ts :: pathOf(dir!, a), "utf8"); const res = await handleCompact({ sessionId:
+   tests/compact-wiring.test.ts :: pathOf(dir!, a), "utf8"), "拒绝就得一个字都不写").toBe(before); }); it("sessionI
+   tests/compact-wiring.test.ts :: pathOf(dir!, "没有这条会话"), "utf8")).rejects.toBeTruthy(); expect((await r
+   tests/edge-cases.test.ts :: attachmentPathFor(dir, "s1", evil), "utf8")).toBe("Z".repeat(120 * KB)
+   tests/env-cue-single-source.test.ts :: `${REPLAY_DIR}/${name}`, "utf8"); if (matcherDefLines(src).some((line)
+   tests/fork.test.ts :: s.path)).digest("hex"); expect(after).toBe(s.sha); }); it("在最后一个事件点上分支
+   tests/gate-failure-log.test.ts :: r.path, "utf8").split("\n")).toHaveLength(200); }); it("空输出也要留下文件：门红了却
+   tests/gate-failure-log.test.ts :: r.path, "utf8")).toBe(""); }); it("同一道门连红两次：后一次覆盖前一次，文件里只剩一份（不追加成长尾）",
+   tests/gate-failure-log.test.ts :: r.path, "utf8")).toBe("second"); }); it("写不进去只出声，不抛：抛出去会把一次红变成整表崩溃，门的结
+--- G-纯变量 样本 ---
+   tests/apply-patch-lf-shapes.test.ts :: abs); await expect(runIn(_ws, patch)).rejects.toThrow(); // fail-safe：
+   tests/apply-patch-lf-shapes.test.ts :: abs); expect(after.equals(before), "拒绝时文件必须逐字节不变").toBe(true); }); });
+   tests/apply-patch-lf-shapes.test.ts :: abs, "utf8"); expect(raw).toBe("line one\r\nline two\r\n"); // 行尾原样 })
+   tests/apply-patch-lf-shapes.test.ts :: abs); await expect(runIn(_ws, patch)).rejects.toThrow(); expect((await
+   tests/apply-patch-lf-shapes.test.ts :: abs)).equals(before)).toBe(true); }); }); }); describe("hunk 不按升序：拒绝（文
+   tests/apply-patch-lf-shapes.test.ts :: abs); const err = await runIn(_ws, patch).then(() => null, (e: Error) 
+   tests/apply-patch-lf-shapes.test.ts :: abs)).equals(before), "拒绝时必须逐字节不变").toBe(true); }); }); // ↑ 这条同时是一处**
+   tests/blocked-citation-face.test.ts :: abs, "utf8"), })); const ledgerTexts = (): { name: string; text: strin
+   tests/cli-fork-replay.test.ts :: p)).digest("hex"); /** 无凭据、无网络的子进程环境（照 tests/cli-exit-code.test.ts 的口径
+   tests/cli-fork-replay.test.ts :: src, "utf8").split("\n"); const newLines = readFileSync(target, "utf8"
+   tests/cli-fork-replay.test.ts :: target, "utf8").split("\n"); expect(newLines.slice(0, point.lastInclud
+   tests/cli-fork-replay.test.ts :: target, "utf8"); expect(grown).toContain("再来一轮"); expect(sha(src), "续跑

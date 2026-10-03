@@ -1,0 +1,56 @@
+[text-reader-check] 判卷语料 301 份｜读取调用 403 处｜认得出 54｜**要人复认 349**（帽 0，只准调低）
+  改动面 37 个文件（rev=e608eaa~2 ∪ 工作树）：
+  PROGRESS.md ← 1 份判卷在读
+      tests/docs-check.test.ts:423（url-relative，共 1 处）
+  （没有读取者）apps/desktop/scripts/smoke.mjs
+  （没有读取者）outputs/eval-expect-registry-2026-10-03/head-cert-4254a84.log
+  （没有读取者）outputs/eval-expect-registry-2026-10-03/head-cert-5bdaf78.log
+  （没有读取者）outputs/eval-expect-registry-2026-10-03/heldout-pins-fix.log
+  （没有读取者）outputs/eval-expect-registry-2026-10-03/mutate-kill-327.log
+  （没有读取者）outputs/eval-expect-registry-2026-10-03/mutate-kill-328.log
+  （没有读取者）outputs/eval-expect-registry-2026-10-03/needles-327-postcommit.log
+  （没有读取者）outputs/eval-expect-registry-2026-10-03/needles-4254a84.log
+  （没有读取者）outputs/eval-expect-registry-2026-10-03/prose-4254a84.log
+  （没有读取者）outputs/eval-expect-registry-2026-10-03/title-diff.txt
+  （没有读取者）outputs/eval-expect-registry-2026-10-03/typecheck-327post.log
+  scripts/docs-check.ts ← 1 份判卷在读
+      tests/docs-check.test.ts:747（url-relative，共 1 处）
+  （没有读取者）scripts/gate-manifest.ts
+  （没有读取者）scripts/lib/eval-heldout.ts
+  （没有读取者）scripts/lib/head-cert-deps.ts
+  （没有读取者）scripts/lib/text-readers.ts
+  scripts/mutate-verify.mjs ← 1 份判卷在读
+      tests/mutate-verify-gates.test.ts:645（url-relative，共 9 处）
+  （没有读取者）scripts/repo-hygiene-check.ts
+  （没有读取者）scripts/security-check.ts
+  （没有读取者）scripts/text-reader-check.ts
+  src/agent/orchestrator.ts ← 3 份判卷在读
+      tests/diff-review.test.ts:51（root-join，共 1 处）
+      tests/orchestrator-hold.test.ts:31（url-relative，共 1 处）
+      tests/usage-attribution.test.ts:420（url-relative，共 1 处）
+  （没有读取者）src/agent/security/merge-gate.ts
+  src/main/agent-runner.ts ← 9 份判卷在读
+      tests/automation-tool-surface.test.ts:129（root-join，共 1 处）
+      tests/budget-price-key.test.ts:71（url-relative，共 1 处）
+      tests/cli-surface.test.ts:317（root-join，共 1 处）
+      tests/goal-stop-decision.test.ts:237（url-relative，共 1 处）
+      tests/tool-surface-parity.test.ts:18（root-join，共 1 处）
+      tests/usage-attribution.test.ts:313（url-relative，共 1 处）
+      tests/verify-exec-sandbox.test.ts:94（url-relative，共 1 处）
+      tests/wiring-coverage.test.ts:175（root-join，共 1 处）
+      tests/write-face.test.ts:117（root-join，共 1 处）
+  （没有读取者）src/routing/bandit.ts
+  （没有读取者）tests/apply-patch-lf-shapes.test.ts
+  （没有读取者）tests/bandit-primitives.test.ts
+  （没有读取者）tests/cert-gate-face.test.ts
+  （没有读取者）tests/eval-heldout.test.ts
+  （没有读取者）tests/goal-drift.test.ts
+  （没有读取者）tests/head-cert-deps.test.ts
+  （没有读取者）tests/ledger-manifest.test.ts
+  （没有读取者）tests/memory-store-pure.test.ts
+  （没有读取者）tests/repo-hygiene-check.test.ts
+  （没有读取者）tests/security-merge-gate.test.ts
+  （没有读取者）tests/sidechat-core.test.ts
+  （没有读取者）tests/worktree-pure.test.ts
+  读取面：判卷 301 份里读取调用 403 处（认得出 54／**要人复认 349**——形状表盖不住的新写法）｜改动面 0 个文件里 0 个有判卷在读、0 个没有读取者
+  ❌ 要人复认 349 > 帽 0 ⇒ 形状表盖不住新写法，这把尺正在漏报（补 `SHAPES` 并同笔加一条只有它能看见的合成输入，别抬帽）

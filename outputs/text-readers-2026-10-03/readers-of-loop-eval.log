@@ -1,0 +1,8 @@
+[text-reader-check] 判卷语料 302 份｜读取调用 380 处 ⇒ 字面量 82／运行期路径 298／**形状不认识 0**（三态相加＝380，不等就是量法坏了）
+  scripts/loop-eval.ts ← 5 份判卷在读
+      要跑：tests/eval-assembly.test.ts（第 161 行起，literal-join，共 1 处）
+      要跑：tests/eval-heldout.test.ts（第 446 行起，literal-join，共 1 处）
+      要跑：tests/eval-retry.test.ts（第 170 行起，url-relative，共 1 处）
+      要跑：tests/eval-task-set.test.ts（第 373 行起，url-relative，共 1 处）
+      要跑：tests/eval-validity.test.ts（第 89 行起，url-relative，共 2 处）
+  ✅ 形状表覆盖当前全部读取写法（形状不认识 0 ≤ 帽 0）
