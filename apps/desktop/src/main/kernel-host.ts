@@ -36,7 +36,8 @@ import {
 } from "../../../../src/main/sessions";
 
 export interface KernelHostDeps {
-  /** 全部已注册工作区（绝对路径）；listSessions 按此清单逐根扫描。 */
+  /** 全部已注册工作区（绝对路径）；listSessions 按此清单逐根扫描。
+   *  M3-3 修复轮起可经 addWorkspace 动态扩（addProject 接线）。 */
   workspaces: string[];
   /** 当前工作区（新会话缺省归属）。必须 ∈ workspaces——装配错位当场炸，不让会话静默落错根。 */
   activeWorkspace: string;
@@ -59,6 +60,11 @@ export interface KernelHost {
   /** 新建会话；缺省落 activeWorkspace。参数是工作区不是会话名
    *  （M3 起 id 恒为时间戳名——秒级粒度、host 级唯一，命名走 rename）。 */
   createSession(workspace?: string): Promise<{ id: string }>;
+  /** 动态并入一个工作区（M3-3 修复轮）：push 进扫描面（去重幂等）——新工作区的会话立即经
+   *  listSessions 出现，归属表解析的兜底扫描同步生效。仅在 main 进程内由 addProject handler
+   *  成功后调用（同进程直调，不经 IPC、renderer 无感知自动生效）；入参须为 canonical 绝对路径
+   *  （ProjectRegistry.add 的 realpath 产物），本出口不重复校验。 */
+  addWorkspace(ws: string): void;
   /** 读回会话事件并登记归属/漂移基线；workspace 缺省时按归属表 → 全工作区扫描解析。 */
   openSession(id: string, workspace?: string): Promise<{ events: AgentEvent[] }>;
 }
@@ -233,6 +239,13 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
         }
       }
       return out;
+    },
+    addWorkspace: (ws) => {
+      // 动态并入扫描面（M3-3 修复轮）：唯一调用方是 main 进程 addProject handler（registry.add
+      // 成功后传 canonical realpath）。去重幂等——workspaces 数组被 listSessions/resolveSessionWs
+      // 闭包按引用迭代，重复 push 会让新工作区被逐根扫描两遍、清单出重复条目。
+      if (workspaces.includes(ws)) return;
+      workspaces.push(ws);
     },
     createSession: async (workspace) => {
       const ws = workspace ?? deps.activeWorkspace;

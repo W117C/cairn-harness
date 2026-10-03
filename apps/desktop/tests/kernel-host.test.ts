@@ -124,6 +124,35 @@ describe("M3 多工作区运行面", () => {
   );
 
   it(
+    "addWorkspace：动态并入扫描面——新工作区会话立即经 listSessions 出现，重复并入幂等",
+    async () => {
+      const wsC = join(dir, "ws-c");
+      mkdirSync(wsC, { recursive: true });
+      const dyn = createKernelHost({
+        workspaces: [wsA],
+        activeWorkspace: wsA,
+        userDataDir: userData,
+        outbox: (channel, payload) => {
+          outbox.push([channel, payload]);
+        },
+      });
+      // 并入前：扫描面恰为 wsA（T1 装配定态）——wsC 的会话不经本 host 的 listSessions 出现。
+      // 断言按 workspace 归属而非按 id 全表查：同进程多 host 实例共享盘上根，秒级时间戳名可跨
+      // 实例同名（实例级 owner 表互不知晓，撞名修法保证的是 host 实例级唯一——单 main 进程单
+      // host ⇒ 产品语义成立），wsA 根里可能有同名文件。
+      const created = await dyn.createSession(wsC);
+      expect((await dyn.listSessions()).every((s) => s.workspace === wsA)).toBe(true);
+      // 并入（重复两次）：立即出现且恰一条——幂等去重（workspaces 数组被 listSessions 按引用
+      // 迭代，重复 push 会逐根扫描两遍、清单出重复条目）。
+      dyn.addWorkspace(wsC);
+      dyn.addWorkspace(wsC);
+      const listed = (await dyn.listSessions()).filter((s) => s.workspace === wsC);
+      expect(listed).toHaveLength(1);
+      expect(listed[0]!.id).toBe(created.id);
+    },
+  );
+
+  it(
     "漂移检测：会话文件被外部追加后，下一次 run 被拒且报外部修改",
     async () => {
       const driftHost = createKernelHost({

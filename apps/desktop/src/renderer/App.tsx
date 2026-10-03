@@ -49,8 +49,8 @@ export function App() {
   useEffect(() => {
     refreshSessions();
     void window.agent.getProviderInfo().then(setProviderInfo);
-    // 注册清单（M1 全桥三通道首接 UI）：失败 fail-visible——侧栏提示行＋全部会话垫「其他」组，
-    // 不静默吞（分组纯函数对空注册表的语义就是零丢失）。
+    // 注册清单（CX-01 三通道，M3-3 修复轮起 main 侧 wired 接线）：失败 fail-visible——侧栏提示行
+    // ＋全部会话垫「其他」组，不静默吞（分组纯函数对空注册表的语义就是零丢失）。
     void window.agent.listProjects().then((registered) => {
       setProjects(registered);
       setRegistryNotice(null);
@@ -91,13 +91,16 @@ export function App() {
   }, [activate]);
 
   // 添加工作区（M3-3 最小表单 → addProject 桥）：AddProjectInput 只填 path——名称缺省取路径末段、
-  // defaultLocation 缺省同 path（project-registry canonical 化并查重）。成功后刷新注册清单。
+  // defaultLocation 缺省同 path（project-registry canonical 化并查重）。成功后刷新注册清单＋会话清单：
+  // main 侧 addProject handler 已同步 host.addWorkspace(record.path)（新工作区并入 host 扫描面），
+  // 新工作区的存量会话即刻可经 listSessions 出现。
   const addWorkspace = useCallback(async (path: string) => {
     await window.agent.addProject({ path });
     const registered = await window.agent.listProjects();
     setProjects(registered);
     setRegistryNotice(null);
-  }, []);
+    refreshSessions();
+  }, [refreshSessions]);
 
   const send = useCallback(async (text: string) => {
     // M3-3：新任务落当前选中的工作区（未切换＝缺省参 → host activeWorkspace）。

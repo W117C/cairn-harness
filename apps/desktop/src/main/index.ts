@@ -8,7 +8,9 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { INVOKE_CHANNELS, PUSH_CHANNELS } from "./channels";
 import type { InvokeChannel, PushChannel } from "./channels";
+import type { AddProjectInput } from "../../../../src/main/ipc-protocol";
 import { createKernelHost } from "./kernel-host";
+import { ProjectRegistry } from "../../../../src/main/project-registry";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const distElectron = join(here, "..", "..", "dist-electron");
@@ -58,7 +60,16 @@ const host = createKernelHost({
   },
 });
 
-// M1 切片：这六个通道接真；其余 invoke 通道 M2+ 逐个接线（channels 表已钉死清单）
+// CX-01 项目注册表（M3-3 修复轮接线）：构造注入路径落 userData/projects.json（project-registry.ts:125
+// 构造面 = new ProjectRegistry(filePath)）。文件不存在是空默认、结构损坏显式失败不静默覆盖；
+// M0_SMOKE 的 userData 已隔离到 mkdtemp，不碰真实数据。
+const projectRegistry = new ProjectRegistry(join(userData, "projects.json"));
+
+// M1 切片：这六个通道接真；其余 invoke 通道 M2+ 逐个接线（channels 表已钉死清单）。
+// M3-3 修复轮：补上 CX-01 三通道——M1 起 AgentApi/channels 表/preload 只有类型桥，wired 表从没这三行
+// ⇒ renderer 调用即 reject「No handler registered」。listProjects/removeProject 返回值直接透传；
+// addProject 透传之外在成功后同步 host.addWorkspace(record.path)：新工作区并入 host 扫描面
+// （main 进程内直调，不经 IPC、renderer 无感知自动生效；canonical realpath 由 registry.add 保证）。
 const wired: Partial<Record<InvokeChannel, (...args: unknown[]) => unknown>> = {
   run: (req) => host.run(req as never),
   decide: (askId, approved, scope) => host.decide(askId as string, approved as boolean, scope as never),
@@ -74,6 +85,13 @@ const wired: Partial<Record<InvokeChannel, (...args: unknown[]) => unknown>> = {
   // createSession 首参 M3 起是工作区（原 name 槽位被 M3 接口接管）；渲染层现不传 ⇒ 缺省 activeWorkspace
   createSession: (workspace) => host.createSession(workspace as string | undefined),
   openSession: (id) => host.openSession(id as string),
+  listProjects: () => projectRegistry.list(),
+  addProject: (input) =>
+    projectRegistry.add(input as AddProjectInput).then((record) => {
+      host.addWorkspace(record.path);
+      return record;
+    }),
+  removeProject: (id) => projectRegistry.remove(id as string),
 };
 for (const [key, channel] of Object.entries(INVOKE_CHANNELS) as [InvokeChannel, string][]) {
   const handler = wired[key];
