@@ -1,0 +1,17 @@
+两棵树 vitest list 的 title 级对照（原始清单太大不入库，取料命令见页内）：
+旧树＝.worktrees/gate-mutate-326 @ ebee005 →     3907 行
+新树＝.worktrees/gate-mutate-327 checkout --detach 4254a84 →     3915 行
+只在新树（＋10 条）：
+  ＋ tests/eval-heldout.test.ts > loop-eval 的 held-out 接线 > 装与跑在跑器里有人调，判在分支表里有人调（旧位置不许留副本）
+  ＋ tests/eval-task-set.test.ts > 判据名登记表 ↔ 判定分支表（#35：拼错的名字不许安静不生效） > unknownExpectNames：拼错的点名、登记的不误伤、空串进空出
+  ＋ tests/eval-task-set.test.ts > 判据名登记表 ↔ 判定分支表（#35：拼错的名字不许安静不生效） > ★两支键集相等：登记的每一枚都有分支，分支里的每一枚都登记（抄两份清单＝各写各的）
+  ＋ tests/eval-task-set.test.ts > 判据名登记表 ↔ 判定分支表（#35：拼错的名字不许安静不生效） > ★接线 跑器不再自己判每一枚名字（旧那串 if 不许回来）
+  ＋ tests/eval-task-set.test.ts > 判据名登记表 ↔ 判定分支表（#35：拼错的名字不许安静不生效） > 两向证人·出声：枚举的面里每一枚判据至少开口一次（恒 null 的分支＝那一格没在判）
+  ＋ tests/eval-task-set.test.ts > 判据名登记表 ↔ 判定分支表（#35：拼错的名字不许安静不生效） > 两向证人·闭嘴：枚举的面里每一枚判据至少过一次（恒出事的判据会把合法任务全判死）
+  ＋ tests/eval-task-set.test.ts > 判据名登记表 ↔ 判定分支表（#35：拼错的名字不许安静不生效） > 登记表非空，且 heldOut 那枚来自常量（抄第二份字符串就会漂）
+  ＋ tests/eval-task-set.test.ts > 判据名登记表 ↔ 判定分支表（#35：拼错的名字不许安静不生效） > 绕过解析（内建任务写错名）也要出声：入口自己那一支兜住
+  ＋ tests/eval-task-set.test.ts > 判据名登记表 ↔ 判定分支表（#35：拼错的名字不许安静不生效） > 解析期拒收：带未登记判据名的那条任务**不进分母**，且错误里点名那一枚
+  ＋ tests/eval-validity.test.ts > 返修那一格（verifyRecovery）：六态分开印，闸补的绿不记给模型 > ★接线① 那一支吃的是这一格，不是「最后一拍绿没绿」（旧口径不许藏在同一支里当第二把尺）
+只在旧树（−2 条，都是被改名的旧标题）：
+  － tests/eval-heldout.test.ts > loop-eval 的 held-out 接线 > 装、跑、判三件事都在跑器里有人调
+  － tests/eval-validity.test.ts > 返修那一格（verifyRecovery）：六态分开印，闸补的绿不记给模型 > ★接线① 跑器那一支吃的是这一格，不是「最后一拍绿没绿」（旧口径不许藏在同一支里当第二把尺）
