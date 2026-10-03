@@ -1,0 +1,404 @@
+M1-scratches-into-head 基线：passed=1 failed=0 found=true（447ms）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/typecheck-triage.test.ts[2m > [22mtypecheck 报错归因[2m > [22m全在未跟踪草稿：head 空、scratch 列出该文件，并明说 HEAD 类型干净
+[31m[1mAssertionError[22m: expected [ 'scripts/sidebar-probe.ts' ] to deeply equal [][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   "scripts/sidebar-probe.ts",[39m
+[31m+ ][39m
+
+[36m [2m❯[22m tests/typecheck-triage.test.ts:[2m20:20[22m[39m
+    [90m 18|[39m     const t = triageTypecheck([ERR_A, ERR_A2].join("\n"), new Set(["sc…
+    [90m 19|[39m     expect(t.total).toBe(1); // 同一文件多条错只算一个文件
+    [90m 20|[39m     expect(t.head).toEqual([]);
+    [90m   |[39m                    [31m^[39m
+    [90m 21|[39m     expect(t.scratch).toEqual(["scripts/sidebar-probe.ts"]);
+    [90m 22|[39m     const v = triageVerdict(t);
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M1-scratches-into-head 红在「全在未跟踪草稿：head 空、scratch 列出该文件，并明说 HEAD 类型干净」（failed=1，326ms，退 1）
+M2-clean-verdict-unearned 基线：passed=1 failed=0 found=true（324ms）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/typecheck-triage.test.ts[2m > [22mtypecheck 报错归因[2m > [22m★已跟踪但工作树脏 ⇒ 归「在飞改动中的 tracked」，既不算 HEAD 缺陷也不算草稿（两次现读的都是这一格）
+[31m[1mAssertionError[22m: 分不清就不许说这句（这一格要的是复认，不是假绿）: expected '[typecheck] 报错文件归因：HEAD 内 0／在飞改动中的 tr…' not to contain 'HEAD 态类型干净'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- HEAD 态类型干净[39m
+[31m+ [typecheck] 报错文件归因：HEAD 内 0／在飞改动中的 tracked 1／未跟踪草稿 1／工作树状态取不到 0（四档相加＝2，与分母 2 不等就是归因坏了）[39m
+[31m+ [typecheck] ⚠️ 未跟踪草稿（不属 HEAD 回归，属在飞改动）: scripts/sidebar-probe.ts[39m
+[31m+ [typecheck] ⚠️ tracked 但工作树脏（分不清是 HEAD 缺陷还是隔壁未提交的 hunk ⇒ 要证 HEAD 请开干净 worktree；这一格只归因、不豁免）: src/agent/loop.ts[39m
+[31m+ [typecheck] tracked 面没有报错 ⇒ HEAD 态类型干净（全部报错都在未跟踪草稿里；同 HEAD 开 worktree 跑 tsc 可复核）[39m
+
+[36m [2m❯[22m tests/typecheck-triage.test.ts:[2m49:47[22m[39m
+    [90m 47|[39m     const v = triageVerdict(t).join("\n");
+    [90m 48|[39m     expect(v).toContain("在飞改动中的 tracked 1");
+    [90m 49|[39m     expect(v, "分不清就不许说这句（这一格要的是复认，不是假绿）").not.toContain("HEAD 态类型干净");
+    [90m   |[39m                                               [31m^[39m
+    [90m 50|[39m     expect(v, "也不许反过来把它当已证的 HEAD 缺陷").not.toContain("HEAD 内 1");
+    [90m 51|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M2-clean-verdict-unearned 红在「★已跟踪但工作树脏 ⇒ 归「在飞改动中的 tracked」，既不算 HEAD 缺陷也不算草稿（两次现读的都是这一格）」（failed=1，319ms，退 1）
+M3-undetermined-read-as-defect 基线：passed=1 failed=0 found=true（324ms）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/typecheck-triage.test.ts[2m > [22mtypecheck 报错归因[2m > [22m零报错不打任何归因行；工作树状态取不到时归「没有归位」，两头结论都不许给
+[31m[1mAssertionError[22m: expected [] to deeply equal [ 'src/agent/loop.ts' ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [[39m
+[32m-   "src/agent/loop.ts",[39m
+[32m- ][39m
+[31m+ [][39m
+
+[36m [2m❯[22m tests/typecheck-triage.test.ts:[2m57:28[22m[39m
+    [90m 55|[39m     // untracked 那一路 git 失败仍是空集（保守：绝不为草稿开脱），但 dirty=null 表示"这一格没量到"
+    [90m 56|[39m     const t = triageTypecheck(ERR_B, CLEAN, null);
+    [90m 57|[39m     expect(t.undetermined).toEqual(["src/agent/loop.ts"]);
+    [90m   |[39m                            [31m^[39m
+    [90m 58|[39m     expect(t.head).toEqual([]);
+    [90m 59|[39m     const v = triageVerdict(t).join("\n");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M3-undetermined-read-as-defect 红在「零报错不打任何归因行；工作树状态取不到时归「没有归位」，两头结论都不许给」（failed=1，324ms，退 1）
+M4-dirty-set-not-wired 基线：passed=1 failed=0 found=true（341ms）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/typecheck-triage.test.ts[2m > [22mtypecheck 报错归因[2m > [22m★接线：门把 dirtyTrackedSet 真的传进归因（算出来不接＝恒绿）
+[31m[1mAssertionError[22m: expected '// `pnpm typecheck` 的门：跑 tsc、**原样转发输出…' to contain 'triageTypecheck(out, untrackedSet(pro…'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- triageTypecheck(out, untrackedSet(process.cwd()), dirtyTrackedSet(process.cwd()))[39m
+[31m+ // `pnpm typecheck` 的门：跑 tsc、**原样转发输出**、退出码照抄，只在红的时候多打几行归因[39m
+[31m+ // （哪些报错文件在 HEAD、哪些是别人未跟踪的在飞草稿、哪些是**已跟踪但工作树脏**——第三档是第 330 页补的，[39m
+[31m+ //  前两项分不开时，隔壁未提交的 hunk 会被读成「HEAD 内 N 个」，而 HEAD 其实干净）。[39m
+[31m+ // 归因逻辑在 scripts/lib/typecheck-triage.ts，那份是可单测的纯函数；这里只做进程编排，保持本仓「门的判定面可测」的既有分法。[39m
+[31m+ import { spawnSync } from "node:child_process";[39m
+[31m+ import { existsSync } from "node:fs";[39m
+[31m+ import { join } from "node:path";[39m
+[31m+ import { triageTypecheck, triageVerdict } from "./lib/typecheck-triage.js";[39m
+[31m+[39m
+[31m+ function untrackedSet(cwd: string): Set<string> {[39m
+[31m+   const r = spawnSync("git", ["ls-files", "--others", "--exclude-standard"], { cwd, encoding: "utf8" });[39m
+[31m+   // git 不可用 / 不是仓库 ⇒ 空集：所有报错都按「HEAD 内」处理（保守，绝不为草稿开脱而掩盖真错）[39m
+[31m+   if (r.status !== 0) return new Set();[39m
+[31m+   return new Set((r.stdout ?? "").split("\n").filter((x) => x !== ""));[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 工作树相对 HEAD **脏的已跟踪文件**（含已暂存那一半）。[39m
+[31m+  *  取不到时返回 `null` 而**不是空集**：空集＝"全都干净"⇒ 每条报错都会被记成 HEAD 缺陷（谎报）；[39m
+[31m+  *  `null` 让归因把它们放进「取不到」那一档并出声（规则 261：读不到与没有不许同形）。 */[39m
+[31m+ function dirtyTrackedSet(cwd: string): Set<string> | null {[39m
+[31m+   const r = spawnSync("git", ["diff", "--name-only", "HEAD"], { cwd, encoding: "utf8" });[39m
+[31m+   if (r.status !== 0) return null;[39m
+[31m+   return new Set((r.stdout ?? "").split("\n").filter((x) => x !== ""));[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ const LOCAL_TSC = join(process.cwd(), "node_modules", "typescript", "bin", "tsc");[39m
+[31m+ const run = existsSync(LOCAL_TSC)[39m
+[31m+   ? spawnSync(process.execPath, [LOCAL_TSC, "--noEmit"], { encoding: "utf8" })[39m
+[31m+   : spawnSync("tsc", ["--noEmit"], { encoding: "utf8" });[39m
+[31m+[39m
+[31m+ const out = (run.stdout ?? "") + (run.stderr ?? "");[39m
+[31m+ if (out !== "") process.stdout.write(out.endsWith("\n") ? out : out + "\n");[39m
+[31m+[39m
+[31m+ const code = run.status ?? 1;[39m
+[31m+ if (code !== 0) {[39m
+[31m+   for (const line of triageVerdict(triageTypecheck(out, untrackedSet(process.cwd()), new Set<string>()))) console.log(line);[39m
+[31m+ } else {[39m
+[31m+   // tsc 干净时一个字不吐（它的契约），而门禁现在把「绿而零输出」当成"查了没发现 与 没查 同形"按未证计。[39m
+[31m+   // 不豁免、不改判据 —— 让这道门自己把结论说出来：本仓的规矩是门说的话等于门测的事。[39m
+[31m+   console.log("typecheck: tsc --noEmit 通过（0 条报错）✅");[39m
+[31m+ }[39m
+[31m+ process.exit(code);[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/typecheck-triage.test.ts:[2m82:18[22m[39m
+    [90m 80|[39m   it("★接线：门把 dirtyTrackedSet 真的传进归因（算出来不接＝恒绿）", () => {
+    [90m 81|[39m     const gate = readFileSync(fileURLToPath(new URL("../scripts/typech…
+    [90m 82|[39m     expect(gate).toContain("triageTypecheck(out, untrackedSet(process.…
+    [90m   |[39m                  [31m^[39m
+    [90m 83|[39m     expect(gate).toContain('["diff", "--name-only", "HEAD"]');
+    [90m 84|[39m     expect(gate).toContain("function dirtyTrackedSet(cwd: string): Set…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M4-dirty-set-not-wired 红在「★接线：门把 dirtyTrackedSet 真的传进归因（算出来不接＝恒绿）」（failed=1，319ms，退 1）
+M5-dirty-set-fallback-empty 基线：passed=1 failed=0 found=true（318ms）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/typecheck-triage.test.ts[2m > [22mtypecheck 报错归因[2m > [22m★工作树状态取不到时返回 null，不许退回空集（空集＝向归因谎报「全都干净」）
+[31m[1mAssertionError[22m: expected '// `pnpm typecheck` 的门：跑 tsc、**原样转发输出…' to contain 'if (r.status !== 0) return null;'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- if (r.status !== 0) return null;[39m
+[31m+ // `pnpm typecheck` 的门：跑 tsc、**原样转发输出**、退出码照抄，只在红的时候多打几行归因[39m
+[31m+ // （哪些报错文件在 HEAD、哪些是别人未跟踪的在飞草稿、哪些是**已跟踪但工作树脏**——第三档是第 330 页补的，[39m
+[31m+ //  前两项分不开时，隔壁未提交的 hunk 会被读成「HEAD 内 N 个」，而 HEAD 其实干净）。[39m
+[31m+ // 归因逻辑在 scripts/lib/typecheck-triage.ts，那份是可单测的纯函数；这里只做进程编排，保持本仓「门的判定面可测」的既有分法。[39m
+[31m+ import { spawnSync } from "node:child_process";[39m
+[31m+ import { existsSync } from "node:fs";[39m
+[31m+ import { join } from "node:path";[39m
+[31m+ import { triageTypecheck, triageVerdict } from "./lib/typecheck-triage.js";[39m
+[31m+[39m
+[31m+ function untrackedSet(cwd: string): Set<string> {[39m
+[31m+   const r = spawnSync("git", ["ls-files", "--others", "--exclude-standard"], { cwd, encoding: "utf8" });[39m
+[31m+   // git 不可用 / 不是仓库 ⇒ 空集：所有报错都按「HEAD 内」处理（保守，绝不为草稿开脱而掩盖真错）[39m
+[31m+   if (r.status !== 0) return new Set();[39m
+[31m+   return new Set((r.stdout ?? "").split("\n").filter((x) => x !== ""));[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 工作树相对 HEAD **脏的已跟踪文件**（含已暂存那一半）。[39m
+[31m+  *  取不到时返回 `null` 而**不是空集**：空集＝"全都干净"⇒ 每条报错都会被记成 HEAD 缺陷（谎报）；[39m
+[31m+  *  `null` 让归因把它们放进「取不到」那一档并出声（规则 261：读不到与没有不许同形）。 */[39m
+[31m+ function dirtyTrackedSet(cwd: string): Set<string> | null {[39m
+[31m+   const r = spawnSync("git", ["diff", "--name-only", "HEAD"], { cwd, encoding: "utf8" });[39m
+[31m+   if (r.status !== 0) return new Set();[39m
+[31m+   return new Set((r.stdout ?? "").split("\n").filter((x) => x !== ""));[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ const LOCAL_TSC = join(process.cwd(), "node_modules", "typescript", "bin", "tsc");[39m
+[31m+ const run = existsSync(LOCAL_TSC)[39m
+[31m+   ? spawnSync(process.execPath, [LOCAL_TSC, "--noEmit"], { encoding: "utf8" })[39m
+[31m+   : spawnSync("tsc", ["--noEmit"], { encoding: "utf8" });[39m
+[31m+[39m
+[31m+ const out = (run.stdout ?? "") + (run.stderr ?? "");[39m
+[31m+ if (out !== "") process.stdout.write(out.endsWith("\n") ? out : out + "\n");[39m
+[31m+[39m
+[31m+ const code = run.status ?? 1;[39m
+[31m+ if (code !== 0) {[39m
+[31m+   for (const line of triageVerdict(triageTypecheck(out, untrackedSet(process.cwd()), dirtyTrackedSet(process.cwd())))) console.log(line);[39m
+[31m+ } else {[39m
+[31m+   // tsc 干净时一个字不吐（它的契约），而门禁现在把「绿而零输出」当成"查了没发现 与 没查 同形"按未证计。[39m
+[31m+   // 不豁免、不改判据 —— 让这道门自己把结论说出来：本仓的规矩是门说的话等于门测的事。[39m
+[31m+   console.log("typecheck: tsc --noEmit 通过（0 条报错）✅");[39m
+[31m+ }[39m
+[31m+ process.exit(code);[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/typecheck-triage.test.ts:[2m89:18[22m[39m
+    [90m 87|[39m   it("★工作树状态取不到时返回 null，不许退回空集（空集＝向归因谎报「全都干净」）", () => {
+    [90m 88|[39m     const gate = readFileSync(fileURLToPath(new URL("../scripts/typech…
+    [90m 89|[39m     expect(gate).toContain("if (r.status !== 0) return null;");
+    [90m   |[39m                  [31m^[39m
+    [90m 90|[39m     expect(gate).not.toMatch(/dirtyTrackedSet[\s\S]{0,240}return new S…
+    [90m 91|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M5-dirty-set-fallback-empty 红在「★工作树状态取不到时返回 null，不许退回空集（空集＝向归因谎报「全都干净」）」（failed=1，319ms，退 1）
+M6-column-prefix-merged 基线：passed=1 failed=0 found=true（338ms）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/text-readers.test.ts[2m > [22m第二出口的接线与真表现读[2m > [22m★两栏的名单前缀不同字，且第二栏另给一行可直接粘贴的整串
+[31m[1mAssertionError[22m: expected '/** 「谁在读这段文本」的取料与出口（第 328 页，任务 #37）。判…' to contain '`      必跑：${m.judge}'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- `      必跑：${m.judge}[39m
+[31m+ /** 「谁在读这段文本」的取料与出口（第 328 页，任务 #37）。判据本体在 `scripts/lib/text-readers.ts`。[39m
+[31m+  *[39m
+[31m+  *  为什么要有这把尺（读数来自第 327 页补）：把一支判据从 `scripts/loop-eval.ts` 搬进[39m
+[31m+  *  `scripts/lib/eval-expects.ts` 之后，typecheck、我动过的两个判卷、六台造红、`--check-needles`（阻断 0）全部安静，[39m
+[31m+  *  只有 `head-cert` 的全量判卷报 `Tests 2 failed | 4023 passed (4025)`——那两条红读的就是 loop-eval 的**源文本**。[39m
+[31m+  *  ⇒ 交笔轮缺一个便宜的读数：「我改了这些文件，还有哪些判卷把它们当文本在读，该一起跑」。[39m
+[31m+  *[39m
+[31m+  *  用法（事实源是本文件与 `package.json`，别处抄的命令会过期）：[39m
+[31m+  *    node --import tsx scripts/text-reader-check.ts                       # 改动面＝工作树 ∪ rev..HEAD（默认 rev＝HEAD~1）[39m
+[31m+  *    node --import tsx scripts/text-reader-check.ts --changed-since=<rev>  # 只问这一段改动[39m
+[31m+  *    node --import tsx scripts/text-reader-check.ts --readers-of=scripts/loop-eval.ts[39m
+[31m+  *    node --import tsx scripts/text-reader-check.ts --all                   # 全仓读取面（不问改动）[39m
+[31m+  *    node --import tsx scripts/text-reader-check.ts --no-face               # 连"没有读取者"的那些也印出来（默认只印清单，噪声省掉）[39m
+[31m+  *[39m
+[31m+  *  退出码两格：0＝出数了；1＝**两张形状表有一张开始瞎**（`UNKNOWN_CAP`／`CORPUS_UNKNOWN_CAP`，都只准调低）。[39m
+[31m+  *  「该跑哪些判卷」这一格刻意不做成阻断维（理由写在页上）：清单是线索，多列是安全方向；[39m
+[31m+  *  会拦人的只有"尺自己开始瞎了"那一格——那正是第 327 页缺的东西。[39m
+[31m+  *[39m
+[31m+  *  **两栏分开印**（第 329 页，任务 #38）：[39m
+[31m+  *   - 第一栏「谁读了这份文件」＝字面量点名的接线判卷（改动面逐个反查）；[39m
+[31m+  *   - 第二栏「改动面级判卷」＝遍历被改到的那个面的判卷（登记的语料助手／`readdirSync(源面)`／`git ls-files` 那几类）。[39m
+[31m+  *  并成一行就再也分不清"少了一条"还是"少了一类"——第 328 页补踩的正是后者：那一族在清单里整类缺失。 */[39m
+[31m+ import { execFileSync } from "node:child_process";[39m
+[31m+ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";[39m
+[31m+ import { join, resolve } from "node:path";[39m
+[31m+ import { corpusJudgesFor, corpusSummary, readerSummary, readersOf, scanJudgeForCorpusReaders, scanJudgeForReaders, type ReaderHit, type ReaderScan } from "./lib/text-readers";[39m
+[31m+[39m
+[31m+ const ROOT = resolve(import.meta.dirname, "..");[39m
+[31m+[39m
+[31m+ /** 存量帽（第 328 页现读登记，只准调低）：连第一个参数都切不出来的读取调用数。[39m
+[31m+  *  高于它＝有人写了新读法而这张表不知道 ⇒ 这把尺正在漏报；补 `classifyArg` 并同笔加一条只有它能看见的合成输入。 */[39m
+[31m+ export const UNKNOWN_CAP = 0;[39m
+[31m+[39m
+[31m+ /** 第二出口的存量帽（第 329 页现读登记，只准调低）：语料级判据里"要人复认"的列目录调用数。[39m
+[31m+  *  这一档涨上去的意思和上面一样——出现了没登记的语料助手／新写法，而那正是第 328 页补踩过的坑。 */[39m
+[31m+ export const CORPUS_UNKNOWN_CAP = 0;[39m
+[31m+[39m
+[31m+ const git = (args: readonly string[]): string | null => {[39m
+[31m+   try {[39m
+[31m+     return execFileSync("git", [...args], { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });[39m
+[31m+   } catch { return null; }[39m
+[31m+ };[39m
+[31m+[39m
+[31m+ /** 判卷语料＝`tests/` 下所有源码文件。这一面要数所有判卷，所以没有目录级豁免。 */[39m
+[31m+ function judgeCorpus(): { path: string; text: string }[] {[39m
+[31m+   const acc: { path: string; text: string }[] = [];[39m
+[31m+   const walk = (dir: string): void => {[39m
+[31m+     for (const name of readdirSync(dir)) {[39m
+[31m+       const p = join(dir, name);[39m
+[31m+       const st = statSync(p);[39m
+[31m+       if (st.isDirectory()) { if (!name.startsWith(".")) walk(p); continue; }[39m
+[31m+       if (!/\.(ts|mts)$/.test(name)) continue;[39m
+[31m+       acc.push({ path: p.slice(ROOT.length + 1).replaceAll("\\", "/"), text: readFileSync(p, "utf8") });[39m
+[31m+     }[39m
+[31m+   };[39m
+[31m+   walk(join(ROOT, "tests"));[39m
+[31m+   return acc;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 改动面＝工作树脏文件 ∪ `rev..HEAD`。git 取不到时**出声**，不许读成"没有改动"。 */[39m
+[31m+ function changedFiles(rev: string): { files: string[]; gitOk: boolean } {[39m
+[31m+   const a = git(["diff", "--name-only", `${rev}..HEAD`]);[39m
+[31m+   const b = git(["status", "--porcelain"]);[39m
+[31m+   if (a === null || b === null) return { files: [], gitOk: false };[39m
+[31m+   const set = new Set<string>();[39m
+[31m+   for (const l of a.split("\n")) if (l.trim() !== "") set.add(l.trim());[39m
+[31m+   for (const l of b.split("\n")) {[39m
+[31m+     const p = l.slice(2).trim().split(" -> ").pop();[39m
+[31m+     if (p && /\.(ts|mts|tsx|mjs)$/.test(p)) set.add(p);[39m
+[31m+   }[39m
+[31m+   return { files: [...set].sort(), gitOk: true };[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ function printReaders(read: Map<string, ReaderHit[]>, includeSilent: boolean): void {[39m
+[31m+   for (const [target, hits] of [...read.entries()].sort()) {[39m
+[31m+     const byJudge = new Map<string, ReaderHit[]>();[39m
+[31m+     for (const h of hits) {[39m
+[31m+       const list = byJudge.get(h.judge) ?? [];[39m
+[31m+       list.push(h);[39m
+[31m+       byJudge.set(h.judge, list);[39m
+[31m+     }[39m
+[31m+     if (hits.length === 0) {[39m
+[31m+       if (includeSilent) console.log(`  （没有读取者）${target}`);[39m
+[31m+       continue;[39m
+[31m+     }[39m
+[31m+     console.log(`  ${target} ← ${String(byJudge.size)} 份判卷在读`);[39m
+[31m+     for (const [judge, hs] of [...byJudge.entries()].sort()) {[39m
+[31m+       const shapes = [...new Set(hs.map((h) => h.shape))].join("/");[39m
+[31m+       console.log(`      要跑：${judge}（第 ${String(hs[0]!.line)} 行起，${shapes}，共 ${String(hs.length)} 处）`);[39m
+[31m+     }[39m
+[31m+   }[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ const argv = process.argv.slice(2);[39m
+[31m+ const flag = (name: string): string | null => {[39m
+[31m+   const hit = argv.find((a) => a.startsWith(`--${name}=`));[39m
+[31m+   return hit === undefined ? null : hit.slice(name.length + 3);[39m
+[31m+ };[39m
+[31m+ const exists = (rel: string): boolean => existsSync(join(ROOT, rel));[39m
+[31m+[39m
+[31m+ const corpus = judgeCorpus();[39m
+[31m+ const scans: ReaderScan[] = corpus.map((f) => scanJudgeForReaders(f.path, f.text, exists));[39m
+[31m+ const corpusScans = corpus.map((f) => scanJudgeForCorpusReaders(f.path, f.text));[39m
+[31m+ const unknown = scans.reduce((a, s) => a + s.unknown, 0);[39m
+[31m+ console.log(`[text-reader-check] 判卷语料 ${String(scans.length)} 份｜${readerSummary(scans)}`);[39m
+[31m+ if (unknown > 0) {[39m
+[31m+   // 复认要有名字：只印一个总数等于让人去猜哪一处新写法。逐条点名，但不截断到 0。[39m
+[31m+   for (const s of scans) for (const h of s.hits) {[39m
+[31m+     if (h.kind !== "unknown") continue;[39m
+[31m+     console.log(`      要复认：${s.judge}:${String(h.line)}（第一个参数切不出来）`);[39m
+[31m+   }[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ const only = flag("readers-of");[39m
+[31m+ const includeSilent = argv.includes("--all") || argv.includes("--no-face") || only !== null;[39m
+[31m+ if (only !== null) {[39m
+[31m+   printReaders(readersOf([only.replaceAll("\\", "/").replace(/^\.\//u, "")], scans), true);[39m
+[31m+ } else if (argv.includes("--all")) {[39m
+[31m+   const targets = new Set<string>();[39m
+[31m+   for (const s of scans) for (const h of s.hits) if (h.target !== null) targets.add(h.target);[39m
+[31m+   printReaders(readersOf([...targets].sort(), scans), includeSilent);[39m
+[31m+ } else {[39m
+[31m+   const rev = flag("changed-since") ?? "HEAD~1";[39m
+[31m+   const { files, gitOk } = changedFiles(rev);[39m
+[31m+   if (!gitOk) console.log(`  ❌ git 取不到改动面（rev=${rev}）⇒ 这一格**没有读数**，不等于"没有改动"`);[39m
+[31m+   else if (files.length === 0) console.log(`  改动面为空（rev=${rev}＋工作树）⇒ 没有要问的文件`);[39m
+[31m+   else {[39m
+[31m+     console.log(`  改动面 ${String(files.length)} 个文件（rev=${rev} ∪ 工作树）：`);[39m
+[31m+     printReaders(readersOf(files, scans), includeSilent);[39m
+[31m+     // 第二出口的**改动面那一半**：谁在遍历被改到的那个面，就要跑谁（与上面「谁读了这份文件」两栏分开印）。[39m
+[31m+     const mustRun = corpusJudgesFor(files, corpusScans);[39m
+[31m+     if (mustRun.length === 0) {[39m
+[31m+       console.log("  改动面级判卷：一份都没有 ⇒ 这一格**没有点名**（改动面没落在任何被登记遍历的面上，或第二出口瞎了）");[39m
+[31m+     } else {[39m
+[31m+       console.log(`  改动面级判卷 ${String(mustRun.length)} 份（改了这些面里的任何文件都要跑，不看谁读了哪一行）：`);[39m
+[31m+       // 前缀刻意与第一栏的「要跑：」不同字：两栏同前缀时，用 grep 取清单的人会串栏（第 330 页自己踩过一次——[39m
+[31m+       // 抄下来的"清单"里混进了汇总行那一串名字，vitest 收了 4 个文件而不是 11 个，还一片绿，看着像跑过了）。[39m
+[31m+       for (const m of mustRun) console.log(`      要跑：${m.judge}（遍历 ${m.faces.join("、")}）`);[39m
+[31m+       // 再给一行**可直接粘贴**的整串（第 330 页第二次踩同一个坑：zsh 不对未加引号的变量分词，[39m
+[31m+       // 逐行名单传进去变成一个参数，vitest 照跑不误、只跑了显式那几个文件）。一行一命令，不靠取料人会不会分词。[39m
+[31m+       console.log("      一次跑完：" + mustRun.map((m) => m.judge).join(" "));[39m
+[31m+     }[39m
+[31m+   }[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // 第二出口单独一栏——与上面那栏并成一行就分不清"少了一条"还是"少了一类"（第 328 页补踩的就是后者）[39m
+[31m+ console.log("  " + corpusSummary(corpusScans));[39m
+[31m+ const corpusUnknown = corpusScans.reduce((a, s) => a + s.unknown, 0);[39m
+[31m+ for (const s of corpusScans) {[39m
+[31m+   if (s.unknown === 0) continue;[39m
+[31m+   console.log(`      要复认：${s.judge}（${s.shapes.filter((x) => x.startsWith("unknown:")).join("、")}）`);[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ const corpusBad = corpusUnknown > CORPUS_UNKNOWN_CAP;[39m
+[31m+ if (corpusBad) {[39m
+[31m+   console.log(`  ❌ 语料级那一栏要人复认 ${String(corpusUnknown)} > 帽 ${String(CORPUS_UNKNOWN_CAP)}`[39m
+[31m+     + " ⇒ 出现了没登记的语料助手／新写法，第二出口正在漏报（登记进 `CORPUS_HELPERS` 并同笔补一条只有它能看见的合成输入，别抬帽）");[39m
+[31m+ }[39m
+[31m+ if (unknown > UNKNOWN_CAP) {[39m
+[31m+   console.log(`  ❌ 形状不认识 ${String(unknown)} > 帽 ${String(UNKNOWN_CAP)} ⇒ 这张表盖不住新写法，尺正在漏报`);[39m
+[31m+   process.exitCode = 1;[39m
+[31m+ } else if (corpusBad) {[39m
+[31m+   process.exitCode = 1;[39m
+[31m+ } else {[39m
+[31m+   console.log(`  ✅ 两张形状表都盖住当前写法（读取：形状不认识 ${String(unknown)} ≤ 帽 ${String(UNKNOWN_CAP)}；`[39m
+[31m+     + `语料级：要人复认 ${String(corpusUnknown)} ≤ 帽 ${String(CORPUS_UNKNOWN_CAP)}）`);[39m
+[31m+ }[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/text-readers.test.ts:[2m288:17[22m[39m
+    [90m286|[39m     const cli = readFileSync(fileURLToPath(new URL("../scripts/text-re…
+    [90m287|[39m     expect(cli).toContain("`      要跑：${judge}");
+    [90m288|[39m     expect(cli).toContain("`      必跑：${m.judge}");
+    [90m   |[39m                 [31m^[39m
+    [90m289|[39m     expect(cli).toContain('"      一次跑完："');
+    [90m290|[39m     expect(cli.match(/      要跑：/gu)?.length).toBe(1); // 「要跑：」只许出现在第一栏…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M6-column-prefix-merged 红在「★两栏的名单前缀不同字，且第二栏另给一行可直接粘贴的整串」（failed=1，342ms，退 1）
+残骸校验：三支被测文件与开跑前逐字节一致 ✅
+RED_MACHINES=OK

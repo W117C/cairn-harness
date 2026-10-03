@@ -278,6 +278,18 @@ describe("第二出口的接线与真表现读", () => {
     expect(cli).toContain("export const CORPUS_UNKNOWN_CAP = 0;");
   });
 
+  it("★两栏的名单前缀不同字，且第二栏另给一行可直接粘贴的整串", () => {
+    // 立这一格的两次现读都是**消费侧**的坑（第 330 页）：
+    // ⑴ 两栏同用「要跑：」时，`grep 要跑` 把汇总行那一串名字也抄进清单 ⇒ 取到 11 个"文件"、vitest 只收了 4 个、还全绿；
+    // ⑵ zsh 不对未加引号的变量分词 ⇒ 逐行名单变成一个参数，同样是"跑过了"的假象。
+    // ⇒ 栏分离（要跑／必跑）＋ 一行整串（粘贴即用，不靠取料人会不会分词）。
+    const cli = readFileSync(fileURLToPath(new URL("../scripts/text-reader-check.ts", import.meta.url)), "utf8");
+    expect(cli).toContain("`      要跑：${judge}");
+    expect(cli).toContain("`      必跑：${m.judge}");
+    expect(cli).toContain('"      一次跑完："');
+    expect(cli.match(/      要跑：/gu)?.length).toBe(1); // 「要跑：」只许出现在第一栏那一行
+  });
+
   it("真表现读：改了 src 与 scripts 各一个文件，第 328 页补那次报错的 dead-script-refs 必须被点名", () => {
     const corpus = ["tests/dead-script-refs.test.ts", "tests/plan-required.test.ts", "tests/eval-heldout.test.ts", "tests/env-cue-single-source.test.ts"];
     const cs = corpus.map((p) => cscan(readFileSync(fileURLToPath(new URL(`../${p}`, import.meta.url)), "utf8"), p));

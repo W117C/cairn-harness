@@ -1,0 +1,44 @@
+[text-reader-check] 判卷语料 302 份｜读取调用 386 处 ⇒ 字面量 117／运行期路径 269／**形状不认识 0**（三态相加＝386，不等就是量法坏了）
+  改动面 54 个文件（rev=HEAD~1 ∪ 工作树）：
+  scripts/docs-check.ts ← 1 份判卷在读
+      要跑：tests/docs-check.test.ts（第 698 行起，url-relative，共 2 处）
+  scripts/lib/head-cert-deps.ts ← 1 份判卷在读
+      要跑：tests/head-cert-deps.test.ts（第 999 行起，literal-join，共 1 处）
+  scripts/lib/text-readers.ts ← 1 份判卷在读
+      要跑：tests/text-readers.test.ts（第 156 行起，url-relative，共 1 处）
+  scripts/mutate-verify.mjs ← 2 份判卷在读
+      要跑：tests/mutate-verify-gates.test.ts（第 645 行起，url-relative，共 4 处）
+      要跑：tests/wiring-coverage.test.ts（第 176 行起，literal-join，共 1 处）
+  scripts/text-reader-check.ts ← 1 份判卷在读
+      要跑：tests/text-readers.test.ts（第 152 行起，url-relative，共 4 处）
+  scripts/typecheck.ts ← 1 份判卷在读
+      要跑：tests/typecheck-triage.test.ts（第 81 行起，url-relative，共 2 处）
+  src/agent/loop.ts ← 2 份判卷在读
+      要跑：tests/eval-validity.test.ts（第 259 行起，url-relative，共 1 处）
+      要跑：tests/tool-block-witness.test.ts（第 19 行起，url-relative，共 1 处）
+  src/agent/orchestrator.ts ← 3 份判卷在读
+      要跑：tests/diff-review.test.ts（第 51 行起，literal-join，共 1 处）
+      要跑：tests/orchestrator-hold.test.ts（第 31 行起，url-relative，共 1 处）
+      要跑：tests/usage-attribution.test.ts（第 314 行起，url-relative，共 2 处）
+  src/main/agent-runner.ts ← 11 份判卷在读
+      要跑：tests/automation-tool-surface.test.ts（第 129 行起，literal-join，共 1 处）
+      要跑：tests/budget-price-key.test.ts（第 71 行起，url-relative，共 1 处）
+      要跑：tests/cli-surface.test.ts（第 317 行起，literal-join，共 1 处）
+      要跑：tests/goal-stop-decision.test.ts（第 237 行起，url-relative，共 1 处）
+      要跑：tests/main-provider-runtime.test.ts（第 100 行起，url-relative，共 1 处）
+      要跑：tests/prompt-surface-check.test.ts（第 183 行起，url-relative，共 1 处）
+      要跑：tests/tool-surface-parity.test.ts（第 18 行起，literal-join，共 1 处）
+      要跑：tests/usage-attribution.test.ts（第 313 行起，url-relative，共 1 处）
+      要跑：tests/verify-exec-sandbox.test.ts（第 94 行起，url-relative，共 1 处）
+      要跑：tests/wiring-coverage.test.ts（第 175 行起，literal-join，共 1 处）
+      要跑：tests/write-face.test.ts（第 117 行起，literal-join，共 1 处）
+  改动面级判卷 7 份（改了这些面里的任何文件都要跑，不看谁读了哪一行）：
+      必跑：tests/dead-script-refs.test.ts（遍历 scripts/、src/）
+      必跑：tests/env-cue-single-source.test.ts（遍历 scripts/）
+      必跑：tests/evidence-typecheck.test.ts（遍历 git:ls-tree）
+      必跑：tests/goal-price.test.ts（遍历 src/）
+      必跑：tests/plan-required.test.ts（遍历 src/）
+      必跑：tests/prose-needle-scan.test.ts（遍历 git:ls-files、src/）
+      必跑：tests/replay-readings-registry.test.ts（遍历 scripts/）
+  列目录／列跟踪面 78 处 ⇒ 语料级 16／临时盘与副本 62／**要人复认 0**（三态相加＝78）｜语料级判卷 11 份⇒ 改动面碰到源面就要跑：tests/dead-script-refs.test.ts、tests/env-cue-single-source.test.ts、tests/eval-heldout.test.ts、tests/evidence-typecheck.test.ts、tests/goal-price.test.ts、tests/gym-long-replay.test.ts、tests/impact.test.ts、tests/plan-required.test.ts、tests/prose-needle-scan.test.ts、tests/replay-readings-registry.test.ts、tests/routing-events.test.ts
+  ✅ 两张形状表都盖住当前写法（读取：形状不认识 0 ≤ 帽 0；语料级：要人复认 0 ≤ 帽 0）

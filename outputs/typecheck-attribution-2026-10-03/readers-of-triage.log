@@ -1,0 +1,4 @@
+[text-reader-check] 判卷语料 302 份｜读取调用 386 处 ⇒ 字面量 117／运行期路径 269／**形状不认识 0**（三态相加＝386，不等就是量法坏了）
+  （没有读取者）scripts/lib/typecheck-triage.ts
+  列目录／列跟踪面 78 处 ⇒ 语料级 16／临时盘与副本 62／**要人复认 0**（三态相加＝78）｜语料级判卷 11 份⇒ 改动面碰到源面就要跑：tests/dead-script-refs.test.ts、tests/env-cue-single-source.test.ts、tests/eval-heldout.test.ts、tests/evidence-typecheck.test.ts、tests/goal-price.test.ts、tests/gym-long-replay.test.ts、tests/impact.test.ts、tests/plan-required.test.ts、tests/prose-needle-scan.test.ts、tests/replay-readings-registry.test.ts、tests/routing-events.test.ts
+  ✅ 两张形状表都盖住当前写法（读取：形状不认识 0 ≤ 帽 0；语料级：要人复认 0 ≤ 帽 0）

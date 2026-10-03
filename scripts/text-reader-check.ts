@@ -133,7 +133,12 @@ if (only !== null) {
       console.log("  改动面级判卷：一份都没有 ⇒ 这一格**没有点名**（改动面没落在任何被登记遍历的面上，或第二出口瞎了）");
     } else {
       console.log(`  改动面级判卷 ${String(mustRun.length)} 份（改了这些面里的任何文件都要跑，不看谁读了哪一行）：`);
-      for (const m of mustRun) console.log(`      要跑：${m.judge}（遍历 ${m.faces.join("、")}）`);
+      // 前缀刻意与第一栏的「要跑：」不同字：两栏同前缀时，用 grep 取清单的人会串栏（第 330 页自己踩过一次——
+      // 抄下来的"清单"里混进了汇总行那一串名字，vitest 收了 4 个文件而不是 11 个，还一片绿，看着像跑过了）。
+      for (const m of mustRun) console.log(`      必跑：${m.judge}（遍历 ${m.faces.join("、")}）`);
+      // 再给一行**可直接粘贴**的整串（第 330 页第二次踩同一个坑：zsh 不对未加引号的变量分词，
+      // 逐行名单传进去变成一个参数，vitest 照跑不误、只跑了显式那几个文件）。一行一命令，不靠取料人会不会分词。
+      console.log("      一次跑完：" + mustRun.map((m) => m.judge).join(" "));
     }
   }
 }

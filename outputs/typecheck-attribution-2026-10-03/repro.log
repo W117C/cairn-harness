@@ -1,0 +1,8 @@
+—— 旧口径的**分类**（把 dirty 传成空集＝所有 tracked 都算 HEAD；这正是第 329 页那句「HEAD 内 2 个」的来路）
+  [typecheck] 报错文件归因：HEAD 内 2／在飞改动中的 tracked 0／未跟踪草稿 0／工作树状态取不到 0（四档相加＝2，与分母 2 不等就是归因坏了）
+—— 新口径（四档；报错文本是当时的、工作树集合是此刻的 ⇒ 落进哪一档看隔壁现在提没提交，本趟这两个文件仍在飞）
+  [typecheck] 报错文件归因：HEAD 内 0／在飞改动中的 tracked 2／未跟踪草稿 0／工作树状态取不到 0（四档相加＝2，与分母 2 不等就是归因坏了）
+  [typecheck] ⚠️ tracked 但工作树脏（分不清是 HEAD 缺陷还是隔壁未提交的 hunk ⇒ 要证 HEAD 请开干净 worktree；这一格只归因、不豁免）: src/agent/verify.ts, src/permissions/command-shape.ts
+—— 造一格「在飞 tracked」（把报错文件强行标脏）看新口径怎么说
+  [typecheck] 报错文件归因：HEAD 内 1／在飞改动中的 tracked 1／未跟踪草稿 0／工作树状态取不到 0（四档相加＝2，与分母 2 不等就是归因坏了）
+  [typecheck] ⚠️ tracked 但工作树脏（分不清是 HEAD 缺陷还是隔壁未提交的 hunk ⇒ 要证 HEAD 请开干净 worktree；这一格只归因、不豁免）: src/agent/verify.ts

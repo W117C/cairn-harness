@@ -2714,8 +2714,8 @@ const MUTATIONS = [
     src: "scripts/lib/typecheck-triage.ts",
     test: "tests/typecheck-triage.test.ts",
     desc: "归因把所有报错都算成 HEAD 内 ⇒ 别人未跟踪的草稿又会被当本仓回归，白开一次 worktree 对照（已发生两次）",
-    apply: (s) => s.replace("    if (untracked.has(f)) scratch.push(f);", "    if (untracked.has(f) && false) scratch.push(f);"),
-    expectFail: "全在未跟踪草稿：tracked 空、scratch 列出该文件，并明说 HEAD 类型干净",
+    apply: (s) => s.replace("    if (untracked.has(f)) { scratch.push(f); continue; }", "    if (untracked.has(f)) { head.push(f); continue; }"),
+    expectFail: "全在未跟踪草稿：head 空、scratch 列出该文件，并明说 HEAD 类型干净",
   },
   {
     id: "typecheck-parse-trims-at-whitespace",
@@ -2729,9 +2729,35 @@ const MUTATIONS = [
     id: "typecheck-clean-verdict-unearned",
     src: "scripts/lib/typecheck-triage.ts",
     test: "tests/typecheck-triage.test.ts",
-    desc: "「HEAD 态类型干净」改成只要有报错就说 ⇒ 真有 HEAD 缺陷时照样给出一句假绿结论",
-    apply: (s) => s.replace("  if (t.tracked.length === 0) out.push(", "  if (t.total > 0) out.push("),
-    expectFail: "混合：草稿与 HEAD 缺陷分开列（HEAD 那部分照常是红，不给豁免）",
+    desc: "「HEAD 态类型干净」只看 `head` 一档空 ⇒ 报错全落在**在飞 tracked**（或工作树状态取不到）时照样给这句假绿结论。"
+      + "第 330 页补第三档时这条判据的形状跟着变：那句现在要三档都空才许说",
+    apply: (s) => s.replace("if (t.head.length === 0 && t.dirtyTracked.length === 0 && t.undetermined.length === 0) {", "if (t.head.length === 0) {"),
+    expectFail: "★已跟踪但工作树脏 ⇒ 归「在飞改动中的 tracked」，既不算 HEAD 缺陷也不算草稿（两次现读的都是这一格）",
+  },
+  {
+    id: "typecheck-undetermined-read-as-head-defect",
+    src: "scripts/lib/typecheck-triage.ts",
+    test: "tests/typecheck-triage.test.ts",
+    desc: "工作树状态取不到时把报错并进 `head` ⇒ 谎报「HEAD 内有缺陷」；这一格与「没量到」是两回事（规则 261：读不到与没有不许同形）",
+    apply: (s) => s.replace("    if (dirty === null) { undetermined.push(f); continue; }", "    if (dirty === null) { head.push(f); continue; }"),
+    expectFail: "零报错不打任何归因行；工作树状态取不到时归「没有归位」，两头结论都不许给",
+  },
+  {
+    id: "typecheck-dirty-set-not-wired",
+    src: "scripts/typecheck.ts",
+    test: "tests/typecheck-triage.test.ts",
+    desc: "取料算得出在飞文件却不传给归因（传个空集）⇒ 四档永远退化成两档，第三格白造（规则 230：接线要钉调用，不钉函数名）",
+    apply: (s) => s.replace("triageTypecheck(out, untrackedSet(process.cwd()), dirtyTrackedSet(process.cwd()))", "triageTypecheck(out, untrackedSet(process.cwd()), new Set<string>())"),
+    expectFail: "★接线：门把 dirtyTrackedSet 真的传进归因（算出来不接＝恒绿）",
+  },
+  {
+    id: "typecheck-dirty-set-fallback-empty",
+    src: "scripts/typecheck.ts",
+    test: "tests/typecheck-triage.test.ts",
+    desc: "git 失败时退回**空集**而不是 `null` ⇒ 空集在归因里的意思恰是「一个脏文件都没有」，于是每条报错都被记成 HEAD 缺陷；"
+      + "这一格与 `untrackedSet` 那一路（空集＝保守按 HEAD）极性相反，因为这里少的是「有没有量到」，不是「为谁开脱」",
+    apply: (s) => s.replace("  if (r.status !== 0) return null;", "  if (r.status !== 0) return new Set();"),
+    expectFail: "★工作树状态取不到时返回 null，不许退回空集（空集＝向归因谎报「全都干净」）",
   },
   {
     id: "mem-eviction-not-named",
@@ -13300,6 +13326,16 @@ const MUTATIONS = [
       + "而第二出口唯一的用途就是「我开始漏报一类了要喊」",
     apply: (s) => s.replace("const corpusBad = corpusUnknown > CORPUS_UNKNOWN_CAP;", "const corpusBad = false;"),
     expectFail: "★第二出口那一栏的帽要接进退出码（算出来不看＝恒绿）",
+  },
+  {
+    id: "text-reader-check-column-prefix-merged",
+    src: "scripts/text-reader-check.ts",
+    test: "tests/text-readers.test.ts",
+    desc: "把第二栏的「必跑：」改回「要跑：」＝两栏同名 ⇒ 用 grep 取清单的人会把汇总行那一串名字一起抄进来，"
+      + "而 vitest 收下不存在的文件名时并不报错（第 330 页自己踩的：清单说 11 份、实际只跑了 4 个文件，还全绿）。"
+      + "这条量的不是判卷，是**消费读数的那一步**——读数印得对不代表读得对",
+    apply: (s) => s.replace("      必跑：${m.judge}", "      要跑：${m.judge}"),
+    expectFail: "★两栏的名单前缀不同字，且第二栏另给一行可直接粘贴的整串",
   },
 ];
 
