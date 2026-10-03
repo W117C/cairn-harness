@@ -13023,6 +13023,46 @@ const MUTATIONS = [
     apply: (s) => s.replace("缺省＝上限 ${String(MAX_FILES_DEFAULT)}", "缺省＝上限 5007"),
     expectFail: "规格里那句 maxFiles 说明也不许承诺一条拧不动的出路（规格每轮重送，比文案更贵）",
   },
+  // 第 323 页：四格能力断言——其中一格（goal-drift 的理由）不是"补一句判卷"，是把那个字段接进出声的那一半。
+  {
+    id: "compaction-overflow-summary-mechanism-note-dropped",
+    src: "src/agent/compaction.ts",
+    test: "tests/compaction.test.ts",
+    desc: "把那句机制说明（原子单元整丢、最近 typed 用户消息未动）摘掉 ⇒ 读数只剩一个条数，"
+      + "读者无法判断『为什么最近那条用户消息还在』，也判断不出这是半分截断而不是按 token 精算；"
+      + "同一台的另半条钉住「条数必须由 compressed_event_ids 投影」——写死一个数就露馅",
+    apply: (s) => s.replace("（原子单元整丢、最近 typed 用户消息未动）", "（详见事件流日志）"),
+    expectFail: "不调摘要器；整单元丢最旧一半；keep-first 与最近 user 消息保留",
+  },
+  {
+    id: "plugin-role-security-keys-warning-merged-into-unknown",
+    src: "src/agent/sequencer.ts",
+    test: "tests/plugin-role-discoverability.test.ts",
+    desc: "把安全约束那三件的警告并回普通未知键（丢掉「CC 安全约束照抄 §9.6」这一件）⇒ 用户看不出为什么 "
+      + "hooks / permissionMode 被拒而 effort 只是「没落地」，本仓 §9.6 那条采纳口径就只剩注释在说",
+    apply: (s) => s.replace("不支持（CC 安全约束照抄 §9.6），已忽略", "未知，已忽略"),
+    expectFail: "安全约束那三件仍按原口径警告（本次改动不许把它们并入普通未知键）",
+  },
+  {
+    id: "glm-spec-web-fetch-truncation-promise-dropped",
+    src: "src/agent/glm-session.ts",
+    test: "tests/optional-tool-surface.test.ts",
+    desc: "把规格里那句「正文太长会被截断并提示换更精确的地址」摘掉 ⇒ 模型只知道自己拿到的是截断后的正文，"
+      + "不知道下一步该换地址（执行端那句提示仍会出来，但每轮重送的说明书不再预告它）；"
+      + "这条锚点同时靠判卷核「两边同源」：提示里若没有那条出路，规格就不许承诺",
+    apply: (s) => s.replace("——正文太长会被截断并提示换更精确的地址。", "。"),
+    expectFail: "web_fetch 那句「正文太长会被截断并提示换更精确的地址」：规格与提示两头都得有这一件",
+  },
+  {
+    id: "goal-drift-reason-lost-its-meaning",
+    src: "src/agent/goal-drift.ts",
+    test: "tests/goal-drift-reason.test.ts",
+    desc: "把 B 族那句理由改成不含「缩小交付面」的泛泛说明 ⇒ 读数行照样印「第 N 段[B:quantifier-narrowing]…」，"
+      + "但读者拿不到「这一族为什么算漂移」；这条是第 323 页那格的正解：不是把表里的话抄进判卷，"
+      + "而是让那个字段真有人读（finding 带 why、cell 印 why），所以改坏理由文案会红",
+    apply: (s) => s.replace('why: "量词收窄（只修 X 就够 / 其余不做）⇒ 单方面缩小交付面"', 'why: "量词收窄（一种写法）"'),
+    expectFail: "B 族命中：读数行里要点名「单方面缩小交付面」，不能只留一个族 id",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、

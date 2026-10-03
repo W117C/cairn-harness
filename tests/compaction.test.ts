@@ -354,6 +354,12 @@ describe("overflow 紧急半分截断", () => {
     expect(e.trigger).toBe("overflow");
     expect(e.reason).toBe("hard_buffer");
     expect(e.summary).toContain("紧急截断");
+    // 那句自述的两半各钉一次：条数要由 id 清单**投影**（写死一个数就露馅），机制说明要留在句子里
+    // （模型/运维据此才知道"最近那条用户消息为什么还在"，而不是只看到一个数字）。
+    expect(e.summary, "自述里的条数必须与 compressed_event_ids 同源").toContain(
+      "已按半分截断摘除 " + String(e.compressed_event_ids.length) + " 条最旧事件",
+    );
+    expect(e.summary).toContain("原子单元整丢、最近 typed 用户消息未动");
     expect(e.compressed_event_ids).not.toContain(1);
     expect(e.compressed_event_ids).not.toContain(9);
     expect(e.compressed_event_ids.length).toBeGreaterThanOrEqual(4); // 约一半

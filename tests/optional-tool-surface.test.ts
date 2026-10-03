@@ -15,6 +15,7 @@
 //   ③ 反面对照：都不摘时三把都在面上（否则上面几条可能全在空转）。
 import { describe, expect, it } from "vitest";
 import { OPTIONAL_TOOL_NAMES, sessionToolSpecs } from "../src/agent/glm-session";
+import { WEB_CONTENT_TRUNCATION_HINT } from "../src/tools/output-ring";
 
 const ALL_OPTIONAL = [
   ...OPTIONAL_TOOL_NAMES.goalTools,
@@ -77,5 +78,24 @@ describe("可选工具面：能力没开就不挂说明书", () => {
     const lean = names(ALL_OPTIONAL);
     expect(lean).toContain("verify");
     expect(lean).toContain("propose_plan");
+  });
+});
+
+// 说明书与执行端那一句提示**同源**（第 323 页）。`web_fetch` 的 description 里那句
+// 「正文太长会被截断并提示换更精确的地址」是模型每轮都在读的能力边界，而它承诺的那条出路
+// 其实写在另一个文件里（`output-ring.ts` 的截断提示）。此前两边各写各的：谁改了提示，
+// 说明书照样承诺——那是「话说了但没人兑现」的另一半（这里没人核这一对）。
+describe("说明书里的能力边界要与执行端真给的提示对齐", () => {
+  it("web_fetch 那句「正文太长会被截断并提示换更精确的地址」：规格与提示两头都得有这一件", () => {
+    const spec = sessionToolSpecs({ mode: "auto" }).specs.find((s) => s.function.name === "web_fetch");
+    expect(spec, "面上应当一直挂着 web_fetch（它不在可选名单里）").toBeTruthy();
+    const desc = spec?.function.description ?? "";
+    expect(desc).toContain("正文太长会被截断并提示换更精确的地址");
+    // 出路那半句的真身：提示里必须真给「更精确的 URL」这条路，否则说明书是在教人走空门
+    expect(WEB_CONTENT_TRUNCATION_HINT).toContain("更精确");
+    expect(WEB_CONTENT_TRUNCATION_HINT).toContain("URL");
+    // 反向：说明书不许把提示里根本没有的能力说成有（翻页／检索这一族由那一句自己否定）
+    expect(desc).toContain("不会翻页");
+    expect(WEB_CONTENT_TRUNCATION_HINT).toContain("不会替你翻页");
   });
 });

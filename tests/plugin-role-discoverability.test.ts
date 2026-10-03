@@ -36,6 +36,14 @@ describe("resolvePluginRole：不读的字段必须吭声", () => {
   it("安全约束那三件仍按原口径警告（本次改动不许把它们并入普通未知键）", () => {
     const r = resolvePluginRole({ name: "a", body: "b", frontmatter: { hooks: "x", permissionMode: "bypassPermissions" } });
     expect(r.warnings.filter((w) => w.includes("CC 安全约束"))).toHaveLength(2);
+    // 「照抄 §9.6」是这三件与普通未知键的**区别说明**：并进普通那一条，用户就看不出为什么这里更严。
+    for (const w of r.warnings) {
+      expect(w).toContain("安全约束照抄");
+      expect(w).toContain("不支持");
+      expect(w, "警告要说清结果是「已忽略」，不是被悄悄吃掉：" + w).toContain("已忽略");
+    }
+    expect(r.warnings.some((w) => w.includes("hooks")), "要点名是哪一件：" + r.warnings.join(" | ")).toBe(true);
+    expect(r.warnings.some((w) => w.includes("permissionMode"))).toBe(true);
   });
 
   it("笔误键必须点名合法键集：disallowed_tools 静默失效 = 工具面静默变宽", () => {

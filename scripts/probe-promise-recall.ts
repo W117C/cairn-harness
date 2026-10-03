@@ -210,7 +210,8 @@ export const CLAIM_MARKS: readonly string[] = [
 ];
 
 /** 欠证人的能力断言＝**存量帽**（只准调低）。
- *  现读 5 条（第 322 页又补三格原句证人之后）。帽只往下走过九档，每一档都留了取料面：
+ *  现读 1 条（第 323 页补四格之后，其中 goal-drift 那一格是"把没人读的字段接进出声的那一半"）。
+ *  帽只往下走过十档，每一档都留了取料面：
  *    29 第 311 页开张现读 → `outputs/terminal-audience-2026-10-03/measure-claims.log`
  *    28 第 312 页补 LESSONS 那句的证人 → `outputs/lesson-empty-evidence-2026-10-03/claims-recheck.log`
  *    25 第 313 页补换路提示两支文案 + no-progress 那句 → `outputs/repeat-nudge-honesty-2026-10-03/claims-recheck.log`
@@ -225,13 +226,17 @@ export const CLAIM_MARKS: readonly string[] = [
  *       → `outputs/claims-3faces-2026-10-03/claims-321.log`
  *     5 第 322 页再补三格（CLI 两道用法闸的拒因与合法形状 ×2／规格里那句文件数帽的数字来源）
  *       → `outputs/claims-cli-spec-2026-10-03/claims-322.log`
- *  最新一档的五个数：面 45、模型可见 43、原句证人 27、绑定 6、挑不出段 5（四态相加＝分母）。
+ *     1 第 323 页再补四格（overflow 截断的机制自述＋条数派生／插件角色那三件的「照抄 §9.6」／
+ *       web_fetch 说明书那句与执行端提示同源／goal-drift 把 `why` 接进 finding 与读数行）
+ *       → `outputs/claims-goal-drift-2026-10-03/claims-323.log`（未入库那份新判卷先读到 2，`git add` 之后才读到 1：
+ *         证人语料走 `git ls-files`＝"已跟踪"含暂存，所以这一档要在暂存之后量，落库后由 HEAD 供同一读数）
+ *  最新一档的五个数：面 45、模型可见 43、原句证人 31、绑定 6、挑不出段 5（四态相加＝分母）。
  *  计数类不留余量；补了证人不跟着把帽调下来同样要红。
  *  注意这一格的取料含 `tests/**` 全文——**判卷自己抄的那句生产原文也会当证人**，
  *  所以本文件的夹具一律用「探针假句……」这种对不上任何生产文案的串（第 311 页实测：照抄原句会让分母从 29 掉到 26）。
  *  这句话的另一半在第 319 页用上了：真判卷**就是要**抄那句原文（那才叫原句证人），
  *  但抄之前要先证明这一格有行为观测者（请求计数／两支臂各钉一次），否则只是给文案换了个地方躺着。 */
-export const CLAIM_UNWITNESSED_CAP = 5;
+export const CLAIM_UNWITNESSED_CAP = 1;
 
 /** 证人候选段：句里**所有**够长的连续中文（先把 `${…}` 插值挖掉，再按非中文断开），门槛 6 字。
  *  为什么交"每一段"而不是"最长那一段"：一句能力断言往往分好几层，判卷通常只点其中一层

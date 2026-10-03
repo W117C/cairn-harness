@@ -33,6 +33,8 @@ export interface GoalDriftFinding {
   turn: number;
   /** 命中的族（A/B/C）与规则名。 */
   rule: string;
+  /** 这一族为什么算漂移（原样来自规则表）。读数行只有 `rule` 时，读者只能去源码里查 id 的含义。 */
+  why: string;
   /** 命中的原文片段（截断到 200 字）。 */
   quote: string;
 }
@@ -67,7 +69,7 @@ export function goalDriftFindings(turns: readonly string[]): GoalDriftFinding[] 
       r.re.lastIndex = 0;
       const m = r.re.exec(text);
       if (m === null) continue;
-      out.push({ turn, rule: r.rule, quote: m[0].replace(/\s+/gu, " ").slice(0, 200) });
+      out.push({ turn, rule: r.rule, why: r.why, quote: m[0].replace(/\s+/gu, " ").slice(0, 200) });
     }
   });
   return out;
@@ -94,5 +96,5 @@ export function assistantTurnsFromEvents(events: readonly AgentEvent[]): string[
 export function goalDriftCell(findings: readonly GoalDriftFinding[]): string {
   if (findings.length === 0) return "目标漂移 0 处";
   return `目标漂移 ${String(findings.length)} 处：` +
-    findings.slice(0, 6).map((f) => `第 ${String(f.turn + 1)} 段[${f.rule}]「${f.quote}」`).join("；");
+    findings.slice(0, 6).map((f) => `第 ${String(f.turn + 1)} 段[${f.rule}]「${f.quote}」——${f.why}`).join("；");
 }
