@@ -1,0 +1,4 @@
+src/agent/verify.ts(119,44): error TS2304: Cannot find name 'onAbort'.
+src/permissions/command-shape.ts(76,24): error TS2367: This comparison appears to be unintentional because the types '"\"" | null' and '"'"' have no overlap.
+src/permissions/command-shape.ts(79,9): error TS2367: This comparison appears to be unintentional because the types '"\"" | null' and '"'"' have no overlap.
+[typecheck] 报错文件归因：HEAD 内 2 个 / 未跟踪草稿 0 个

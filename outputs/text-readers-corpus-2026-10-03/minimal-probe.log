@@ -1,0 +1,6 @@
+A join(REPO)   {"corpus":1,"local":0,"unknown":0,"shapes":["readdir-face"],"faces":["scripts/"]}
+B url const    {"corpus":1,"local":0,"unknown":0,"shapes":["readdir-face"],"faces":["scripts/"]}
+C inline url   {"corpus":1,"local":0,"unknown":0,"shapes":["readdir-face"],"faces":["scripts/"]}
+D inline join  {"corpus":1,"local":0,"unknown":0,"shapes":["readdir-face"],"faces":["scripts/"]}
+reader classify of bare ident: {"judge":"tests/env-cue-single-source.test.ts","line":1,"shape":"dynamic-identifier","kind":"dynamic","target":null,"targetMissing":false}
+reader classify of url expr  : {"judge":"tests/env-cue-single-source.test.ts","line":1,"shape":"url-relative","kind":"literal","target":"scripts/replay","targetMissing":false}

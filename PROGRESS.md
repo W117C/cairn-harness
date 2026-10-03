@@ -12000,3 +12000,30 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 8. **清场**：本笔新建 `.worktrees/gate-mutate-328`（@`4254a84`，核过 0 项）、`.worktrees/gate-mutate-329`（@`2501848`，0 项）；两棵 `head-cert-*` 由 `head-cert` 自回收。
    等用户点头回收的清单：仓根 `gate-mutate-318…321`＋`suite-refresh-318`、`.worktrees/gate-mutate-322/323/324/325/326/327/328/329`、`gate-head-cert@b4b4db3`、`.worktrees/gate-mutate-verify`（隔壁那棵不归我动）。
    **账**：#37 结案（三笔：实现 → 补笔 → 凭证，认证在第三笔之前那笔的修正版上）；下一笔候选 #38（这页读出来的缺口）、#33（typecheck 第三档，取料与针脚搬运清单已写进任务）、#36（花真钱，等点头）。
+
+## 2026-10-03 · 第 329 页：#38 给「谁在读这段文本」开出第二出口（语料级判卷单独成栏）——现读三次把形状表打回，第三次抓的是一个 TS 不报、门不喊、判卷还没写的静默失效
+
+1. **这一格为什么存在**（读数来自第 328 页补）：第一栏只会点名「字面量里写着某个文件」的判卷，而 `tests/dead-script-refs.test.ts` 走的是全量遍历、目标要运行期才知道 ⇒ 那一族在「该跑哪些判卷」的清单里是**整类缺失**。本笔把第二出口做出来，现读：`列目录／列跟踪面 78 处 ⇒ 语料级 16／临时盘与副本 62／要人复认 0（三态相加＝78）｜语料级判卷 11 份`，本笔改动面点名 `7 份`。帽 `CORPUS_UNKNOWN_CAP = 0`（现读 0 ⇒ 新写法进来就红，与 `UNKNOWN_CAP` 同口径，只准调低）。判卷 `tests/text-readers.test.ts` ＋12 条（14→26），锚点 4 根，这把秒级尺自己一趟 0.25–0.51s（现读三趟）。
+
+2. **形状事实源收成三族**：⑴ 参数里的字面量分段本身就是源面（`readdirSync(resolve(root, "src"))`——根是变量也算，宁可多列）；⑵ 参数是裸标识符 ⇒ 展开**同文件**的常量定义（`tests/env-cue-single-source.test.ts:15` 的 URL 形、`tests/replay-readings-registry.test.ts:18` 的 `join(__dirname, …)` 形）；⑶ 遍历动作藏在本文件自写的助手里 ⇒ 面从**调用处实参**解（`tests/goal-price.test.ts:16`、`tests/plan-required.test.ts:30` 的 `walkSources(join(__dirname, "..", "src"))`）。跨文件助手只能登记（`CORPUS_HELPERS` 现 1 枚 `collectScriptRefs`），登记表自洽由判卷逐枚核 `faces ⊂ SOURCE_FACES`——面**不写死在调用方**，抄第二份清单＝各写各的。
+
+3. **现读把第一版打回两次，两次都是「整类漏」而不是「一条漏」**：
+   ⑴ 只扫列目录调用点 ⇒ 字面量躺在另一行的那两份判卷被读成临时盘，第二出口仍然看不见那一类（也就是这一格存在的理由本身）。
+   ⑵ 改用「`function NAME(` 之后 1200 字里有没有列目录动作」识别本地助手 ⇒ **窗口越界**把 `runCli`／`stripComments`／`fingerprint`／`allSymbols` 全认成助手，再把它们的调用点一律算成「要人复认」，78 格里冒出四十多条假复认（那张表一红就再也无人看）。修法：助手只在**实参点得出面**时记账，点不出面的调用一次都不计——假助手因此无害，代价写在第 10 项。
+
+4. **第三次抓到的是静默失效，而它正是本尺要防的那一格**：匹配裸标识符那条正则写成 `/^[A-Za-z_$][\w$]*$/u`——**没有捕获组**，于是取 `bare[1]` 恒为 `undefined`，两处常量展开全部静默不生效。TS 不报（`RegExpExecArray` 按下标取就是 `string`，`!` 也是空操作），`--check-needles` 不报（尺自己加载得动、针脚在），判卷当时还没写。**抓法不是读代码**（读代码时它看着完全正确），是把最小输入喂进尺子看它说什么：`const X = join(REPO, "scripts/replay")` ＋ `readdirSync(X)` 应该 `corpus=1`，而它报 `local`、形状 `readdir-dynamic`。⇒ 固化为造红 M1 ＋ ★ 判卷各一条，并把「读数与预期反着来先怀疑量法」这条在本页的第二次命中写在源代码注释里（那两支 `bare[0]` 边上）。
+
+5. **顺手补掉第一栏的一格漏报**（同一支 `classifyArg` 加 `__dirname`／`__filename` 基准，两栏共用一份判定，不抄第二份）：`tests/gate-failure-log.test.ts:101` 的 `readFileSync(join(__dirname, "..", "scripts", "gates.ts"), "utf8")` 从前判成运行期路径 ⇒ 现在 `--readers-of=scripts/gates.ts` 点名 1 份。第一栏分母现读 `读取调用 380 处／字面量 112／运行期路径 268／形状不认识 0`。
+
+6. **两栏分开印**（#38 的原句要求）：第一栏逐份列「谁读了这份文件」，第二栏按**面**配「改动面级判卷 N 份」，并印一行就分不清是"少了一条"还是"少了一类"。判卷给了反向哨兵（同一句里同时出现两支汇总＝红），第二栏名单也**不吃**「有 corpus 就算」——只遍历 `fixtures/` 的那份不许出现在改了 `scripts/` 的清单里（清单变噪音就没人看，而 `faces` 那枚字段也会退化成注释；M2 造红钉的就是这个退化）。
+
+7. **本尺第一次被自己消费**：交笔轮按第二出口点名的 11 份，连同本笔动过的 `mutate-*` 判卷一起跑＝14 个判卷文件 **446 条全绿**（`outputs/text-readers-corpus-2026-10-03/judges-329-second-column.log`）。第 327 页缺的就是这一行——那一趟是认证树花 90 秒替我发现两条红。
+
+8. **四台造红**（一台一种病、各红在不同用例，跑完逐字节复原，残骸 0）：M1 `consts.get(bare[0])`→`consts.get("")` 红在「★参数是裸标识符时要展开同文件的常量定义」（314ms）；M2 `for (const face of s.faces)`→喂一个空面 红在「两向证人·闭嘴」（317ms）；M3 第二栏汇总不印 红在「★两栏各印一行」（318ms）；M4 `corpusBad = corpusUnknown > CORPUS_UNKNOWN_CAP`→`false` 红在「★第二出口那一栏的帽要接进退出码」（325ms）。四台开跑前各证过一次选择子基线（`passed=1 failed=0`），针脚命中数逐台核过恰好 1 处。
+
+9. **隔壁在飞面（只记不修，两条现读为证）**：主树 `src/agent/loop.ts`／`src/agent/verify.ts`／`src/permissions/command-shape.ts` 带着未提交改动 ⇒ ⑴ `--check-needles` 报 `verify-repeat-never-detected`、`verify-repeat-compares-first-line-only` 两根针脚 0 命中：工作树 `grep -c` ＝ 0 而 `git show HEAD:src/agent/loop.ts` ＝ 1 ⇒ **不是 HEAD 缺陷**，认证树（干净 worktree）不受影响；⑵ `scripts/typecheck.ts` 被弄红 4 条，而 triage 把它们归因成「HEAD 内 2 个」——**这正是 #33 那格的第二次现读**（tracked 文件带别人的在飞 hunk 被读成 HEAD 缺陷），修法（第三档 `dirty-tracked`）已写在任务里。另有一条同族现读归 #24：本页第一次跑 `docs-check` 时 D-11 把本页点名的证人记成「**第 307 页** 点名 …」——段边界只认 `###`，`##` 页的证人挂到了上一页名下（第二次命中，同一篇台账里第 328 页那批也是这样错挂的）。
+
+10. **刻意未做**：⑴ 没把它做成第 23 道门——清单是线索，拦人会逼人给豁免名单（第 328 页第 8 项同口径），会拦人的只有"尺自己开始瞎了"那一格；⑵ 常量展开只走**一层**、助手识别只看**同文件**，所以跨文件的本地助手仍要靠登记 `CORPUS_HELPERS`，而"有人新写了一枚遍历助手"这件事不会自己喊——留给下一次现读（帽子那一格只挡参数切不出来的写法）；⑶ 助手识别的窗口越界用"实参点不出面就不计"挡住了，代价是**真助手被喂运行期目录**时也不计，那一档与 `dynamic` 同口径，读数里看得见。
+
+11. **清场与账**：本笔未新建 worktree（落库后要开一棵核干净树）；等用户点头回收的清单照第 328 页不变。**账**：#38 结案（本笔），#37 的第二栏补齐；下一笔候选 #33（这页第 9 项又添一次现读，且现有三条锚点针脚要同笔改指）、#34、#32（记录结案）。
+

@@ -8,8 +8,8 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
-  findReadCallSites, normalizeRel, readerSummary, readersOf, scanJudgeForReaders,
-  type ReaderScan, type ReaderShape,
+  CORPUS_HELPERS, corpusJudgesFor, findReadCallSites, normalizeRel, readerSummary, readersOf, scanJudgeForCorpusReaders, scanJudgeForReaders,
+  SOURCE_FACES, corpusSummary, type CorpusScan, type ReaderScan, type ReaderShape,
 } from "../scripts/lib/text-readers";
 
 const always = (_rel: string): boolean => true;
@@ -155,5 +155,145 @@ describe("真表现读与接线", () => {
     expect(cli).not.toMatch(/text\.matchAll\(\/readFileSync/u);
     const lib = readFileSync(fileURLToPath(new URL("../scripts/lib/text-readers.ts", import.meta.url)), "utf8");
     expect(lib).toContain("export function findReadCallSites(text: string): number[] {");
+  });
+});
+
+/* ── 第二出口（第 329 页 · 任务 #38）：语料级读取者 ─────────────────────────────────
+ * 上面那一栏只会点名「字面量里写着某个文件」的判卷；`tests/dead-script-refs.test.ts` 走的是全量遍历，
+ * 目标要运行期才知道 ⇒ 那一族在清单里是**整类缺失**（第 328 页补实测：认证判卷当场报 1 红，新尺一句没喊）。
+ * 这一组的重点因此不是「能不能列出一份名单」，而是**两栏分开、且每一档都不许谎报**：
+ * 把遍历临时盘的判卷列进来＝清单变噪音（没人看），把遍历仓内面的列成"没关系"＝重演 #38 开场那一格。 */
+const cscan = (text: string, judge = "tests/x.test.ts"): CorpusScan => scanJudgeForCorpusReaders(judge, text);
+
+describe("第二出口：语料级读取者的三态（列仓内面／列临时盘／要人复认）", () => {
+  it("仓内面才算，运行期目录不算，切不出来的那一档要出声（三态不许互相顶账）", () => {
+    expect(cscan('const n = readdirSync(join(REPO, "scripts/replay"));\n').corpus).toBe(1);
+    expect(cscan('const n = readdirSync(join(REPO, "scripts/replay"));\n').faces).toEqual(["scripts/"]);
+    expect(cscan("const n = readdirSync(dir);\n").local).toBe(1);
+    expect(cscan("const n = readdirSync(dir);\n").corpus).toBe(0);
+    // 参数切成 `1 > 2 ? a : b`：形状真不认识 ⇒ 不许并进「临时盘」（那是把"我不认识"谎报成"没关系"）
+    const bad = cscan("const n = readdirSync(1 > 2 ? a : b);\n");
+    expect(bad.unknown).toBe(1);
+    expect(bad.local).toBe(0);
+  });
+
+  it("★参数是裸标识符时要展开同文件的常量定义（现读第一版在这一格静默失效：那条正则没有捕获组）", () => {
+    // 两种真机写法各有见证：`tests/env-cue-single-source.test.ts:15`（URL 形）与
+    // `tests/replay-readings-registry.test.ts:18`（join＋__dirname 形）。
+    const url = cscan('const DIR = fileURLToPath(new URL("../scripts/replay", import.meta.url));\nreaddirSync(DIR);\n');
+    expect(url.corpus, "常量把字面量藏在另一行，只按参数行找就会判成临时盘").toBe(1);
+    expect(url.faces).toEqual(["scripts/"]);
+    const joined = cscan('const DIR = join(__dirname, "..", "scripts", "replay");\nreaddirSync(DIR);\n');
+    expect(joined.faces).toEqual(["scripts/"]);
+    // 反向哨兵：解得出来但**不是**源面（临时盘）⇒ 归 local，且形状留名 readdir-const 供人复认
+    const tmp = cscan('const DIR = join(os.tmpdir(), "dsh-replay");\nreaddirSync(DIR);\n');
+    expect(tmp.corpus).toBe(0);
+    expect(tmp.local).toBe(1);
+    expect(tmp.shapes).toContain("readdir-const");
+  });
+
+  it("同文件自己写的遍历助手：调用处点得出面才算；点不出面的同名函数不许污染读数", () => {
+    const walker = [
+      "function walkSources(dir: string, out: string[] = []): string[] {",
+      "  for (const n of readdirSync(dir)) out.push(n);",
+      "  return out;",
+      "}",
+      'walkSources(join(__dirname, "..", "src"));\n',
+    ].join("\n");
+    const s = cscan(walker);
+    expect(s.corpus, "调用处点了 src，这一份就是语料级读取者").toBe(1);
+    expect(s.faces).toEqual(["src/"]);
+    // 假助手：名字里带 walk、函数体里没有列目录动作 ⇒ 一次都不该计
+    const fake = cscan('function walkNotes(dir: string): string { return dir; }\nwalkNotes("docs");\n');
+    expect(fake.listCalls).toBe(0);
+    // 真助手但这一次调用喂的是运行期目录 ⇒ 也不计（现读第一版把这类全列成"要复认"，一张表被 10 处假命中刷红）
+    const runtime = cscan('function walkAll(dir: string): string[] { return readdirSync(dir); }\nwalkAll(tmpDir);\n');
+    expect(runtime.corpus).toBe(0);
+    expect(runtime.unknown).toBe(0);
+    expect(runtime.listCalls).toBe(1); // 函数体里那一枚 readdirSync 才是列目录动作
+  });
+
+  it("corpus 那一档必须点得出面，且三态相加＝分母；空文本全 0（对全部输入同答的哨兵）", () => {
+    for (const text of [
+      'readdirSync(join(REPO, "src"));\n', "readdirSync(dir);\n", "readdirSync(1 > 2 ? a : b);\n",
+      'collectScriptRefs(root);\n', 'execFileSync("git", ["ls-files"], { cwd: root });\n',
+    ]) {
+      const s = cscan(text);
+      expect(s.corpus + s.local + s.unknown, text).toBe(s.listCalls);
+      if (s.corpus > 0) expect(s.faces.length, text).toBeGreaterThan(0);
+    }
+    expect(cscan("")).toEqual({ judge: "tests/x.test.ts", listCalls: 0, corpus: 0, local: 0, unknown: 0, faces: [], shapes: [] });
+  });
+
+  it("登记表自洽：每一枚助手的面都写在 SOURCE_FACES 里（抄第二份清单＝各写各的）", () => {
+    expect(CORPUS_HELPERS.length).toBeGreaterThan(0);
+    for (const h of CORPUS_HELPERS) {
+      expect(h.faces.length, h.name).toBeGreaterThan(0);
+      for (const f of h.faces) expect(SOURCE_FACES, `${h.name} 登记了没有的面：${f}`).toContain(f);
+    }
+  });
+});
+
+describe("corpusJudgesFor：按面配，不按「有没有 corpus」配", () => {
+  const faceOnly = (judge: string, text: string): CorpusScan => cscan(text, judge);
+  const scans = [
+    faceOnly("tests/walks-src.test.ts", 'readdirSync(join(REPO, "src"));\n'),
+    faceOnly("tests/walks-fixtures.test.ts", 'readdirSync(join(REPO, "fixtures/x"));\n'),
+    faceOnly("tests/git-tracked.test.ts", 'execFileSync("git", ["ls-files"], { cwd: root });\n'),
+  ];
+
+  it("两向证人·出声：改了 src 下的文件 ⇒ 遍历 src 的那份与列跟踪面的那份都要点名", () => {
+    const got = corpusJudgesFor(["src/agent/x.ts"], scans).map((m) => m.judge);
+    expect(got).toContain("tests/walks-src.test.ts");
+    expect(got).toContain("tests/git-tracked.test.ts");
+  });
+
+  it("两向证人·闭嘴：只遍历 fixtures 的那份不许出现在改了 scripts 的清单里（清单变噪音就没人看）", () => {
+    const got = corpusJudgesFor(["scripts/y.ts"], scans).map((m) => m.judge);
+    expect(got).not.toContain("tests/walks-fixtures.test.ts");
+    expect(got).toContain("tests/git-tracked.test.ts"); // 跟踪面没有前缀可配 ⇒ 任何路径都罩得住
+  });
+
+  it("改动面为空 ⇒ 一份都不点（不许读成「所有语料级判卷都要跑」）", () => {
+    expect(corpusJudgesFor([], scans)).toEqual([]);
+  });
+});
+
+describe("第二出口的接线与真表现读", () => {
+  it("★两栏各印一行：并成一行就分不清是「少了一条」还是「少了一类」", () => {
+    const cli = readFileSync(fileURLToPath(new URL("../scripts/text-reader-check.ts", import.meta.url)), "utf8");
+    expect(cli).toContain("console.log(`[text-reader-check] 判卷语料 ${String(scans.length)} 份｜${readerSummary(scans)}`)");
+    expect(cli).toContain('console.log("  " + corpusSummary(corpusScans));');
+    expect(cli).toContain("corpusJudgesFor(files, corpusScans)");
+    // 反向哨兵：两栏合印（同一句里同时出现两个汇总）＝这一格白造
+    expect(cli).not.toMatch(/readerSummary\(scans\)[\s\S]{0,40}corpusSummary\(corpusScans\)/u);
+  });
+
+  it("★第二出口那一栏的帽要接进退出码（算出来不看＝恒绿）", () => {
+    const cli = readFileSync(fileURLToPath(new URL("../scripts/text-reader-check.ts", import.meta.url)), "utf8");
+    expect(cli).toContain("corpusUnknown > CORPUS_UNKNOWN_CAP");
+    expect(cli).toContain("} else if (corpusBad) {");
+    expect(cli).toContain("process.exitCode = 1;");
+    // 帽本身不许有余量：现读 0，留 1 就等于放一枚新写法进来
+    expect(cli).toContain("export const CORPUS_UNKNOWN_CAP = 0;");
+  });
+
+  it("真表现读：改了 src 与 scripts 各一个文件，第 328 页补那次报错的 dead-script-refs 必须被点名", () => {
+    const corpus = ["tests/dead-script-refs.test.ts", "tests/plan-required.test.ts", "tests/eval-heldout.test.ts", "tests/env-cue-single-source.test.ts"];
+    const cs = corpus.map((p) => cscan(readFileSync(fileURLToPath(new URL(`../${p}`, import.meta.url)), "utf8"), p));
+    const got = corpusJudgesFor(["src/agent/x.ts", "scripts/lib/text-readers.ts"], cs).map((m) => m.judge);
+    expect(got, "这一族从前在清单里整类缺失").toContain("tests/dead-script-refs.test.ts");
+    expect(got).toContain("tests/env-cue-single-source.test.ts");
+    expect(got).toContain("tests/plan-required.test.ts");
+    expect(got, "它只遍历 fixtures/，改了 src＋scripts 不该点名它").not.toContain("tests/eval-heldout.test.ts");
+  });
+
+  it("第一栏顺手补上的那一格：`join(__dirname, ..)` 也是字面量读取者（从前读成运行期路径）", () => {
+    const cli = readFileSync(fileURLToPath(new URL("../scripts/text-reader-check.ts", import.meta.url)), "utf8");
+    expect(cli).toContain("flag(\"readers-of\")");
+    const s = scanJudgeForReaders("tests/gate-failure-log.test.ts",
+      'readFileSync(join(__dirname, "..", "scripts", "gates.ts"), "utf8");\n', always);
+    expect(s.hits[0]?.target).toBe("scripts/gates.ts");
+    expect(s.hits[0]?.shape).toBe("literal-join");
   });
 });

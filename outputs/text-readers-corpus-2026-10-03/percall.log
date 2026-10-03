@@ -1,0 +1,450 @@
+判卷语料 302 份，列目录／列跟踪面调用合计 78 处
+### tests/action-fusion.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/apply-patch-lf-shapes.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/apply-patch.test.ts  corpus=0 local=2 unknown=0 faces= shapes=readdir-dynamic
+    · " expect(await readdir(join(dir, \".agent\", \"snapshots\")).catch(() => [] as string[])).toEqual([]); await writeFile(join(dir, \"src\", \"a.ts\""
+    · " expect(await readdir(join(dir, \".agent\", \"snapshots\"))).not.toEqual([]); }); }); "
+### tests/ask-gate.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/assertion-health-scan.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+    · " void => { execFileSync(\"git\", args, { cwd: dir, stdio: \"ignore\" }); }; git([\"init\", \"-q\"]); mkdirSyncScripts(dir); writeFileS"
+    · "ry { execFileSync(\"git\", [\"init\", \"-q\"], { cwd: dir, stdio: \"ignore\" }); mkdirSyncScripts(dir); writeFileSync(join(dir, \"scrip"
+    · ": void { execFileSync(\"mkdir\", [\"-p\", join(dir, \"scripts\")], { stdio: \"ignore\" }); } describe(\"空断言 / 恒真式判据的边界（AST 化以后两头都不许失准）\", () => { con"
+### tests/auto-verify-repair-runner.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/auto-verify-repair.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/auto-verify-wiring.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/automation-tool-surface.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/autonomy.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/bandit-primitives.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/bandit-runtime.test.ts  corpus=0 local=1 unknown=0 faces= shapes=readdir-dynamic
+    · "esidue = (await readdir(work)).filter((n) => n.includes(\".tmp-\")); expect(residue, \"失败的那笔必须把自己留下的临时文件清掉\").toEqual([]); }); }); "
+### tests/base-system-discipline.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/blocked-citation-face.test.ts  corpus=0 local=1 unknown=0 faces= shapes=readdir-dynamic
+    · "repoRoot = execFileSync(\"git\", [\"rev-parse\", \"--show-toplevel\"], { encoding: \"utf8\" }).trim(); const ARCHIVE_REL = \"outputs/blocked-ledger-recov"
+    · "nst name of readdirSync(dir)) { const p = join(dir, name); if (statSync(p).isDirectory()) walk(p, out); else if (CITATION_EXTS.some("
+    · "gitBytes = execFileSync(\"git\", [\"show\", \"14d2736~1:BLOCKED.md\"], { maxBuffer: 128 * 1024 * 1024 }); const here = readFileSync(join(repoRoot,"
+### tests/budget-price-key.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/cancel-agents-tool.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/cap-notice-unit.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/cascade-wiring.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/cascade.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/cert-gate-face.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/chain-lease-held.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/clarify.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/cli-exit-code.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+    · "nst ROOT = execFileSync(\"git\", [\"rev-parse\", \"--show-toplevel\"], { encoding: \"utf8\" }).trim(); const BIN = join(ROOT, \"bin\", \"m0.mjs\"); /** 五个计"
+    · " const r = spawnSync(process.execPath, [BIN, \"--provider\", \"demo\", \"--mode\", \"auto\", \"--workspace\", ws, \"任意任务\"], { cwd: ROOT, enc"
+    · "nst logName = spawnSync(\"ls\", [sessionDir], { encoding: \"utf8\" }).stdout.trim().split(\"\\n\")[0] ?? \"\"; expect(logName).not.toBe(\"\"); cons"
+    · "onst events = spawnSync(\"cat\", [join(sessionDir, logName)], { encoding: \"utf8\" }).stdout .trim().split(\"\\n\").filter((l) => l !== \"\").map(("
+### tests/cli-fork-replay.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+    · "nst ROOT = execFileSync(\"git\", [\"rev-parse\", \"--show-toplevel\"], { encoding: \"utf8\" }).trim(); const BIN = join(ROOT, \"bin\", \"m0.mjs\"); const d"
+    · "{ const r = spawnSync(process.execPath, [BIN, \"--workspace\", ws, ...args], { cwd: ROOT, encoding: \"utf8\", env: cleanEnv(), inp"
+### tests/cli-plan-auto.test.ts  corpus=0 local=1 unknown=0 faces= shapes=readdir-const
+    · "nst ROOT = execFileSync(\"git\", [\"rev-parse\", \"--show-toplevel\"], { encoding: \"utf8\" }).trim(); const BIN = join(ROOT, \"bin\", \"m0.mjs\"); describ"
+    · "; const r = spawnSync(process.execPath, [ BIN, \"--provider\", \"demo\", \"--mode\", mode, \"--workspace\", ws, \"fix the failing test\", ], { cwd"
+    · "nst files = readdirSync(d).filter((f) => f.endsWith(\".jsonl\")).sort(); if (files.length === 0) return []; return readFileSync(join(d, files["
+### tests/cli-surface.test.ts  corpus=0 local=1 unknown=0 faces= shapes=readdir-const
+    · "nst ROOT = execFileSync(\"git\", [\"rev-parse\", \"--show-toplevel\"], { encoding: \"utf8\" }).trim(); const BIN = join(ROOT, \"bin\", \"m0.mjs\"); /** 真跑 "
+    · "} const r = spawnSync(process.execPath, [BIN, ...args], { cwd: ROOT, encoding: \"utf8\", env, input: \"\", ...(opts.timeout =="
+    · "nst files = readdirSync(log).filter((f) => f.endsWith(\".jsonl\")); expect(files, \"工作区里没有会话日志 ⇒ 这一轮根本没落盘\").toHaveLength(1); const types = "
+### tests/command-shape.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/compact-wiring.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/compaction-cost.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/compaction.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/context-auto-verify-note.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/context-dangling-tool-call.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/context-signals.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/cost-per-progress.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/dead-script-refs.test.ts  corpus=1 local=0 unknown=0 faces=scripts/,src/ shapes=helper:collectScriptRefs
+### tests/diagnose.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/diff-review.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+    · "tring => execFileSync(cmd, args, { encoding: \"utf8\", cwd, stdio: [\"ignore\", \"pipe\", \"pipe\"] }); const ROOT = exec(\"git\", [\"rev-parse\", \"--sho"
+    · "nst outside = spawnSync(\"ls\", [join(repo, \"..\", \"evil.txt\")], { encoding: \"utf8\" }); expect(outside.status, \"越界文件不该被创建/删除\").not.toBe(0); }"
+### tests/distill.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/docs-check.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+    · "onst out = execFileSync(\"git\", [\"cat-file\", \"--batch-check=%(objecttype)\"], { cwd: fileURLToPath(new URL(\"..\", import.meta.url)), "
+### tests/economics.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/edge-cases.test.ts  corpus=0 local=1 unknown=0 faces= shapes=readdir-const
+    · "t names = await readdir(dir); expect(names.length).toBe(1); // 落盘文件必须仍在附件目录内（resolve 后以 dir 为前缀）；digest 前缀保证不会退化成 \"..\" expect(resolv"
+### tests/edit-file-hint.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/env-cue-single-source.test.ts  corpus=2 local=0 unknown=0 faces=scripts/ shapes=readdir-face
+    · "nst name of readdirSync(REPLAY_DIR).filter((f) => f.endsWith(\".ts\")).sort()) { const src = readFileSync(`${REPLAY_DIR}/${name}`, \"utf8\"); "
+    · "nst names = readdirSync(REPLAY_DIR).filter((f) => f.endsWith(\".ts\")).sort(); expect(names.length, `复跑面只扫到 ${String(names.length)} 个文件`).toBe"
+### tests/eval-arms.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/eval-assembly.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/eval-heldout.test.ts  corpus=1 local=0 unknown=0 faces=fixtures/ shapes=readdir-face
+    · "t names = await readdir(join(REPO, \"fixtures/bench-heldout\"), { withFileTypes: true }); expect(names.length).toBeGreaterThan(0); }); }); "
+### tests/eval-report.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/eval-retry.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/eval-task-set.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/eval-validity.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/event-log-redaction.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/event-registry.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/events-tail-repair.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/events.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/evidence-typecheck.test.ts  corpus=1 local=0 unknown=0 faces=git:ls-tree shapes=git-ls-tree
+    · "repoRoot = execFileSync(\"git\", [\"rev-parse\", \"--show-toplevel\"], { encoding: \"utf8\" }).trim(); /** 真 tsc 原文（从 `outputs/foreign-witness-2026-10-"
+    · "onst raw = execFileSync(\"git\", gitOthersArgs(evidenceOthersPrefixes([\"outputs\"])), { cwd: repoRoot, encoding: \"utf8\" }); const fly = raw.spl"
+    · " = new Set(execFileSync(\"git\", [\"ls-tree\", \"-r\", \"--name-only\", \"HEAD\"], { cwd: repoRoot, encoding: \"utf8\" }).trim().split(\"\\n\")); for (cons"
+    · " const r = spawnSync(process.execPath, [\"--import\", TSX, GATE, ...args], { cwd, encoding: \"utf8\" }); return { status: r.status, out: (r.s"
+### tests/evidence.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/exec-outcome-face.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/facts.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/final-budget.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/fork.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/frozen-drift.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/gate-audit.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/gate-failure-log.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/gate-kill.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/gate-manifest.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/gated-tools.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/gates-scan.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/glm-tool-stream-switch.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/glm.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/goal-continue.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/goal-drift-reason.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/goal-drift.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/goal-price.test.ts  corpus=1 local=1 unknown=0 faces=src/ shapes=readdir-dynamic,walker:walkSources
+    · "(const e of readdirSync(dir)) { const p = join(dir, e); if (statSync(p).isDirectory()) walkSources(p, out); else if (p.endsWith(\".ts"
+### tests/goal-stop-decision.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/goal-trace.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/grep-context.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/grep-glob-edit.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+    · "Ctx(); execFileSync(\"git\", [\"init\", \"-q\", ws]); // rg 只在 git 仓库内应用 .gitignore await writeFile(join(ws, \".gitignore\"), \"gen/\\n\", \"utf8\");"
+### tests/gym-draft.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/gym-long-replay.test.ts  corpus=2 local=1 unknown=0 faces=fixtures/ shapes=readdir-const,walker:fingerprint
+    · " name of (await readdir(dir)).sort()) { const p = join(dir, name); if (existsSync(p) && (await readFile(p).catch(() => null))) { h"
+### tests/gym-probe.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/gym-real-provider-wiring.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/gym-rounds-e2e.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/gym-script.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/hardening2.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/hardening3.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/head-cert-deps.test.ts  corpus=0 local=2 unknown=0 faces= shapes=readdir-const,readdir-dynamic
+    · "repoRoot = execFileSync(\"git\", [\"rev-parse\", \"--show-toplevel\"], { encoding: \"utf8\" }).trim(); const listWorktrees = (cwd: string): string[] => "
+    · "ing[] => execFileSync(\"git\", [\"worktree\", \"list\", \"--porcelain\"], { cwd, encoding: \"utf8\" }) .split(\"\\n\") .filter((l) => l.startsWith("
+    · " const r = spawnSync(process.execPath, [\"--import\", \"tsx\", \"scripts/head-cert.ts\", \"--at=HEAD\", \"--skip-test\"], { cwd: repoRoot, "
+    · " string => execFileSync(\"git\", [\"show\", \"HEAD:\" + p], { cwd: repoRoot, encoding: \"utf8\" }); const got = headGateTableIntegrity(atHead(\"scrip"
+    · " return readdirSync(join(root, rel), { withFileTypes: true }) .map((e) => ({ name: e.name, dir: e.isDirectory() })); } catch"
+    · "itCommon = execFileSync(\"git\", [\"rev-parse\", \"--git-common-dir\"], { cwd: repoRoot, encoding: \"utf8\" }).trim(); const LOCK_AT = join(resolve(re"
+    · " const r = spawnSync(process.execPath, [\"--import\", \"tsx\", \"scripts/head-cert.ts\", \"--at=HEAD\", \"--tree=\" + WITNESS_TREE, \"--skip-test\""
+    · "rktreeList(execFileSync(\"git\", [\"worktree\", \"list\", \"--porcelain\"], { cwd: repoRoot, encoding: \"utf8\" }).trim() === \"\" ? null : execFileSync(\"gi"
+    · "\" ? null : execFileSync(\"git\", [\"worktree\", \"list\", \"--porcelain\"], { cwd: repoRoot, encoding: \"utf8\" })); expect(real, \"这台机器上真有 worktree，读到"
+    · "(repoRoot, execFileSync(\"git\", [\"rev-parse\", \"--git-common-dir\"], { cwd: repoRoot, encoding: \"utf8\" }).trim())); // 这根\"我在哪棵树\"的自证必须留着：链接树的 `."
+    · " try { execFileSync(\"git\", [\"merge-base\", \"--is-ancestor\", sha, \"HEAD\"], { cwd: repoRoot, encoding: \"utf8\", stdio: \"ignore\" }); return true;"
+    · " const r = spawnSync(\"git\", gitInflightArgs(), { cwd: p, encoding: \"utf8\" }); const v = r.status !== 0 ? null : (r.stdout ?? \"\").sp"
+    · " const r = spawnSync(\"git\", args, { cwd: repo, encoding: \"utf8\" }); return { status: r.status, out: (r.stdout ?? \"\") + (r.stderr ?? \"\")"
+    · "ngs.md\", ...readdirSync(archiveDir).filter((f) => f.endsWith(\".log\"))] .map((f) => join(archiveDir, f)) .filter((p) => existsSync(p)"
+    · " return execFileSync(\"git\", [\"show\", `${archiveRev}:${rel}`], { cwd: repoRoot, encoding: \"utf8\", maxBuffer: 64 * 1024 * 1024 }); } catc"
+### tests/head-import-face.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/helpers/memory-inject-mock.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/helpers/real-corpus.ts  corpus=0 local=2 unknown=0 faces= shapes=readdir-const,readdir-dynamic
+    · " names = readdirSync(d); } catch { return; } for (const n of names) { const p = join(d, n); let isDir = false; "
+    · " isDir = readdirSync(p).length >= 0; } catch { isDir = false; } if (isDir) walk(p); else if (n.endsWith(\".jso"
+### tests/helpers/stream-equals.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/hook-precompact-producer.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/hook-session-end.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/hooks-context-budget.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/hooks-input-contract.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/http-retry.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/impact-accuracy.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/impact-admission.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/impact-attribution.test.ts  corpus=0 local=3 unknown=0 faces= shapes=readdir-const
+    · " names = (await readdir(dir)).filter((n) => n.endsWith(\".json\")); expect(names.length, \"缓存目录写了条目\").toBeGreaterThan(0); const probe = nam"
+    · "tNames = (await readdir(indexDir)).filter((n) => n.endsWith(\".json\")); expect(artifactNames.length, \"落盘一份 artifact\").toBe(1); const arti"
+    · "t name = (await readdir(indexDir)).filter((n) => n.endsWith(\".json\"))[0]!; const artifactPath = join(indexDir, name); const raw = JSON.p"
+### tests/impact-cap-policy.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/impact-multilang.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/impact-note-bounds.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/impact-persistence.test.ts  corpus=0 local=6 unknown=0 faces= shapes=readdir-const
+    · " names = (await readdir(indexDir)).filter((f) => f.endsWith(\".json\")); if (names.length === 0) return null; expect(names.length).toBe(1); //"
+    · " expect((await readdir(indexDir)).filter((f) => f.endsWith(\".json\")).length).toBe(1); const g2 = await build(ws, cacheDir, indexDir, true);"
+    · "ctName = (await readdir(indexDir)).find((f) => f.endsWith(\".json\"))!; await writeFile(join(indexDir, artifactName), raw.slice(0, Math.floor("
+    · "ctName = (await readdir(indexDir)).find((f) => f.endsWith(\".json\"))!; const stale = JSON.parse(await readFile(join(indexDir, artifactName), "
+    · " expect((await readdir(indexDir)).length).toBe(0); }); it(\"⑧ 非 git 仓（sha 取不到）⇒ 索引整层不参与，建图照常\", async () => { const ws = await mkdtemp(j"
+    · " expect((await readdir(indexDir)).length).toBe(0); // 没有稳定键就不写索引 }); // 标题**一个字节都没改**：`tests/head-cert-deps.test.ts` 那条同分母尺是按留档语料里的标题回源码取预"
+### tests/impact-query.test.ts  corpus=0 local=1 unknown=0 faces= shapes=readdir-dynamic
+    · "onst e of await readdir(join(MINI_REPO, rel), { withFileTypes: true })) { const child = rel === \"\" ? e.name : rel + \"/\" + e.name; if"
+### tests/impact-runner-wiring.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/impact-wiring.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/impact.test.ts  corpus=2 local=1 unknown=0 faces=fixtures/ shapes=readdir-const,readdir-face
+    · "before = (await readdir(MINI_REPO)).sort(); const cacheDir = await mkdtemp(join(tmpdir(), \"impact-test-\")); await buildImpact({ workspac"
+    · " expect((await readdir(MINI_REPO)).sort()).toEqual(before); }); it(\"⑰缓存条目落在指定 cacheDir 内（sha1(absPath).json，4 条）\", async () => { const"
+    · "entries = await readdir(cacheDir); expect(entries.length).toBe(4); expect(entries.every((f) => f.endsWith(\".json\"))).toBe(true); }); "
+### tests/instruction-provenance.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/judge-frozen-gate.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/judge-input-face.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/judge-verdict-diff.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/ledger-manifest.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/ledger.test.ts  corpus=0 local=11 unknown=0 faces= shapes=readdir-dynamic
+    · "expect(await fs.readdir(root)).toEqual([]); }); it(\"archives strictly >10KB, content addresses and fsyncs durable text, preserving full even"
+    · "expect(await fs.readdir(root)).toEqual([]); const value = \"a\".repeat(LEDGER_THRESHOLD_BYTES + 1); const r = (await store.archive(input(v"
+    · "expect(await fs.readdir(dirname(r.path))).toEqual([`${r.sha256}.txt`]); }); it(\"counts entries separately and serializes concurrent allocati"
+    · "expect(await fs.readdir(dirname(r.path))).toEqual([]); await expect(ledger().recall({ id: repeated.id })).rejects.toMatchObject({ code: \"EST"
+    · "expect(await fs.readdir(dirname(r.path))).toEqual([]); expect(await ledger().capture(input())).toMatchObject({ text, archived: false, error:"
+    · "expect(await fs.readdir(root)).toEqual([]); const tool = createObservationRecallTool(a)!; expect(await tool.run({ id: r.id }, { workspac"
+    · "xpect((await fs.readdir(a.directory)).sort()).toEqual([\"index.json\", \"objects\"]); expect((await fs.readdir(join(a.directory, \"objects\"))).le"
+    · "xpect((await fs.readdir(join(a.directory, \"objects\"))).length).toBeLessThanOrEqual(1); const r = (await good.archive(input()))!; expect("
+    · "expect(await fs.readdir(dirname(r.path))).toEqual([]); }); it(\"honors short line pages and reclaims the final shared object on delete\", asyn"
+    · "expect(await fs.readdir(dirname(r.path))).toEqual([]); }); it(\"never treats raw buffers or a redaction mismatch as authorized archival input"
+    · "expect(await fs.readdir(root)).toEqual([]); expect(await a.capture(input(text + \"\\ud800\"))).toMatchObject({ archived: false, error: expect.s"
+### tests/license.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/line-delta.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/locate-recall-ruler.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/loop-error-event.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/loop-no-progress.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/loop-repeat-nudge.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/loop.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/lsp.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/m3c.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/main-provider-runtime.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/main-run-routing.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/map-build.test.ts  corpus=0 local=3 unknown=0 faces= shapes=readdir-dynamic
+    · "Entries = await readdir(ws, { recursive: true }); expect(wsEntries.some((p) => p.includes(\"symbol-map\") || p.endsWith(\".tags.json\"))).toBe(f"
+    · "Entries = await readdir(cacheDir); expect(cacheEntries.length).toBeGreaterThan(0); // 缓存在应用数据目录一侧 }); it(\"改一个文件 → 指纹变化重算且结果变化；tags 磁盘缓存"
+    · "entries = await readdir(cacheDir); expect(entries.length).toBe(total); // 紧接第二次构建（绕过渲染缓存）：tags 必须全命中，零重解析 const again = await b.buil"
+    · "靶子变成仓库 execFileSync(\"git\", [\"init\", \"-q\", ws]); await writeFile(join(ws, \".gitignore\"), \"gen/*.ts\\n\", \"utf8\"); await mkdir(join(ws, "
+### tests/map-import-edge.test.ts  corpus=0 local=1 unknown=0 faces= shapes=readdir-dynamic
+    · "t files = await readdir(dir); const staleTarget = files.find((n) => n.endsWith(\".json\")); expect(staleTarget, \"缓存目录里应有条目\").toBeTruthy();"
+### tests/map-parse.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/map-rank.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/map-render.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/map-retrieval.test.ts  corpus=0 local=1 unknown=0 faces= shapes=readdir-const
+    · "t names = await readdir(dir); expect(names.length, \"前提：缓存目录写了条目\").toBeGreaterThan(0); for (const name of names) { const raw = JSON"
+### tests/map-self-report.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/map-turn-gate.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/mcp-bounds.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/mcp-grade-gate.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/measure-impact-cap-divergence.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/memory-arch-outline-cap.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/memory-degradation.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/memory-eviction-notice.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/memory-inject-token-budget.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/memory-lesson-isolation.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/memory-lessons.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/memory-runner.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/memory-store-pure.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/memory.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/metering.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/mock-provider-rounds.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/mock.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/model-surface.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/mutate-anchor-titles.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+    · "{ const r = spawnSync(\"git\", [\"cat-file\", \"-e\", \"HEAD:\" + rel], { cwd: ROOT, encoding: \"utf8\" }); if (r.error !== undefined || r.status === "
+### tests/mutate-needles-check.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+    · " return execFileSync(\"git\", [...args], { cwd: resolve(__dirname, \"..\"), encoding: \"utf8\", stdio: [\"ignore\", \"pipe\", \"ignore\"] }); } cat"
+### tests/mutate-shards.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+    · "onst out = execFileSync(\"node\", [\"--import\", \"tsx\", ENTRY, ...args], { cwd, encoding: \"utf8\", maxBuffer: 32 * 1024 * 1024 }); return { statu"
+    · "\"repo\"); execFileSync(\"git\", [\"init\", \"-q\", repo], { encoding: \"utf8\" }); writeFileSync(join(repo, \"seed.txt\"), \"seed\"); execFileSync(\"git"
+    · "\"seed\"); execFileSync(\"git\", [\"-C\", repo, \"add\", \"-A\"]); execFileSync(\"git\", [\"-C\", repo, \"-c\", \"user.email=t@t\", \"-c\", \"user.name=t\", \"comm"
+    · " \"-A\"]); execFileSync(\"git\", [\"-C\", repo, \"-c\", \"user.email=t@t\", \"-c\", \"user.name=t\", \"commit\", \"-qm\", \"seed\"]); if (withDirtyFile) writeFi"
+    · ", \"wt\"); execFileSync(\"git\", [\"-C\", ROOT, \"worktree\", \"add\", \"--detach\", path, \"HEAD\"], { encoding: \"utf8\" }); symlinkSync(join(ROOT, \"node_"
+    · " try { execFileSync(\"git\", [\"-C\", ROOT, \"worktree\", \"remove\", \"--force\", path], { encoding: \"utf8\" }); } catch { /* 已经没了 */ } rmSync(b"
+### tests/mutate-verify-gates.test.ts  corpus=0 local=1 unknown=0 faces= shapes=readdir-dynamic
+    · "; const r = spawnSync(process.execPath, [script, \"--list\"], { encoding: \"utf8\", maxBuffer: 64 * 1024 * 1024 }); return (r.stdout ?? \"\").spli"
+    · "mptyTree = execFileSync(\"git\", [\"hash-object\", \"-t\", \"tree\", \"/dev/null\"], { encoding: \"utf8\" }).trim(); const r = spawnSync(process.execPat"
+    · " const r = spawnSync(process.execPath, [\"--import\", \"tsx\", script, \"--list\", \"--changed-since=\" + emptyTree], { encoding: \"utf8\", maxBu"
+    · " const r = spawnSync(process.execPath, [\"--import\", \"tsx\", script, \"--changed-since\"], { encoding: \"utf8\" }); expect(r.status).toBe(2); "
+    · " string[]) => spawnSync(process.execPath, [\"--import\", \"tsx\", script, ...args], { encoding: \"utf8\", maxBuffer: 64 * 1024 * 1024 }); const pi"
+    · " const r = spawnSync(process.execPath, [\"--import\", \"tsx\", script, \"--changed-since=no-such-rev-xyz\"], { encoding: \"utf8\" }); expect(r.st"
+    · " const r = spawnSync(process.execPath, [\"--import\", \"tsx\", \"-e\", `await import(${JSON.stringify(script)})`], { encoding: \"utf8\" }); expec"
+    · " const r = spawnSync(process.execPath, [\"--import\", \"tsx\", script, \"--list\"], { encoding: \"utf8\" }); expect(r.status).toBe(0); // 只给下"
+    · " const r = spawnSync(process.execPath, [\"--import\", \"tsx\", script, ...args], { cwd: repoRoot, encoding: \"utf8\" }); return { status: r.s"
+    · " const r = spawnSync(process.execPath, [\"--import\", \"tsx\", script, \"--list\"], { encoding: \"utf8\", maxBuffer: 64 * 1024 * 1024 }); expect("
+    · "=> execFileSync(\"git\", args, { cwd, encoding: \"utf8\" }).trim(); git([\"init\", \"-q\"], repo); writeFileSync(join(repo, \"a.txt\")"
+    · "repoRoot = execFileSync(\"git\", [\"rev-parse\", \"--show-toplevel\"], { encoding: \"utf8\" }).trim(); const ANCHOR = \"frozen-s3-9\"; const ANCHOR_SR"
+    · " try { es = readdirSync(abs, { withFileTypes: true }); } catch { return; } for (const e of es) { if (e.isDirectory()) walk(join(ab"
+    · " string => execFileSync(\"git\", args, { cwd: main, encoding: \"utf8\" }).trim(); git([\"init\", \"-q\"]); git([\"add\", \"-A\", \"--\", \"src\", \"scrip"
+    · "\"wt\"); execFileSync(\"git\", [\"worktree\", \"add\", \"--detach\", \"-q\", wt, \"HEAD\"], { cwd: main, encoding: \"utf8\" }); symlinkSync(join(repoRoo"
+    · " const r = spawnSync(process.execPath, [\"--import\", \"tsx\", script, \"--lock-tag=\" + tag, ANCHOR], { cwd, encoding: \"utf8\", maxBuffer: 64 * 102"
+    · " const r = spawnSync(process.execPath, [\"--import\", \"tsx\", join(f.main, \"scripts/mutate-verify.mjs\"), ANCHOR], { cwd: f.main, encoding: \"utf8"
+    · " string => execFileSync(\"git\", args, { cwd: f.main, encoding: \"utf8\" }).trim(); writeFileSync(join(f.main, ANCHOR_SRC), \"export const ANCH"
+    · " const r = spawnSync(process.execPath, [\"--import\", \"tsx\", join(f.main, \"scripts/mutate-verify.mjs\"), \"--in-worktree=.worktrees/head-only\", \""
+    · " const r = spawnSync(process.execPath, [\"--import\", \"tsx\", join(alias, \"scripts\", \"mutate-verify.mjs\"), ANCHOR], { cwd: f.main, encoding: \"ut"
+    · " const r = spawnSync(process.execPath, [\"--import\", \"tsx\", script, \"--in-worktree=\" + tree, \"no-such-id-zzz\"], { cwd: f.main, encoding: \"utf8"
+### tests/mutation-rerun-triage.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/net.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/no-progress.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/observation-capture.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/onboarding-groups.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/optional-tool-surface.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/orchestrator-construction-sites.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/orchestrator-hold.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/orchestrator-join.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/orchestrator-wait.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/output-ring.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/page-claim.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/path-boundary.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/permission-mode-single-source.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/permissions-tool-registry.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/permissions.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/plan-gate.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/plan-required.test.ts  corpus=2 local=1 unknown=0 faces=src/ shapes=readdir-dynamic,walker:walkSources
+    · "(const e of readdirSync(dir, { withFileTypes: true })) { const p = join(dir, e.name); if (e.isDirectory()) walkSources(p, out); // 渲"
+### tests/plugin-commands-dispatch.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/plugin-lsp-activation.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/plugin-role-discoverability.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/plugin-user-config.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/plugins-discover.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/plugins-hooks.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/plugins-mcp.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/plugins-skills.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/prefix-churn.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/process.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/project-registry.test.ts  corpus=0 local=1 unknown=0 faces= shapes=readdir-const
+    · " expect((await readdir(persistedDir)).filter((name) => name.includes(\".tmp-\"))).toEqual([]); const removed = await reloaded.remove(project"
+### tests/projection-invariant.test.ts  corpus=0 local=2 unknown=0 faces= shapes=readdir-const,readdir-dynamic
+    · "y { names = readdirSync(d); } catch { return; } for (const n of names) { const p = join(d, n); let isDir = false; "
+    · "y { isDir = readdirSync(p).length >= 0; } catch { isDir = false; } if (isDir) walk(p); else if (n.endsWith(\".jsonl\")) out.push(p"
+### tests/promise-recall-inventory.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+    · " void => { execFileSync(\"git\", args, { cwd: dir, stdio: \"ignore\" }); }; git([\"init\", \"-q\"]); mkdirSync(join(dir, \"scripts\")); "
+### tests/prompt-cache-breakpoints.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/prompt-cost.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+    · "onst out = execFileSync( process.execPath, [\"--import\", \"tsx\", \"scripts/replay/prompt-fixed-cost.ts\"], { cwd: root, encoding: "
+    · "onst out = execFileSync( process.execPath, [\"--import\", \"tsx\", \"scripts/replay/prompt-fixed-cost.ts\"], { cwd: root, encoding: "
+### tests/prompt-surface-check.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/prose-needle-scan.test.ts  corpus=2 local=0 unknown=0 faces=git:ls-files,src/ shapes=git-ls-files,readdir-face
+    · "nst root = execFileSync(\"git\", [\"rev-parse\", \"--show-toplevel\"], { encoding: \"utf8\" }).trim(); // 现读：这一趟扫真仓要 8.9s（`outputs/anchor-unit-price-a"
+    · "t listed = execFileSync(\"git\", [\"ls-files\", \"--\", \"tests\"], { cwd: root, encoding: \"utf8\" }) .split(\"\\n\").filter((l) => l.endsWith(\".test."
+    · "sRenderer = readdirSync(resolve(root, \"src\")).includes(\"renderer\"); expect(r.scope).toBe(treeScopeOf(hasRenderer)); expect(Object.keys(S"
+    · "onst out = execFileSync(\"git\", [\"status\", \"--porcelain\", \"-uall\", \"--\", \"tests\", \"src\", \"scripts\"], { cwd: root, encoding: \"utf8\", "
+    · "ring[]) => execFileSync(\"git\", args, { cwd: root, encoding: \"utf8\" }); g(\"init\", \"-q\"); g(\"config\", \"user.email\", \"probe@test.local\"); "
+    · "ring[]) => execFileSync(\"git\", args, { cwd: empty, encoding: \"utf8\" }); gg(\"init\", \"-q\"); gg(\"config\", \"user.email\", \"probe@test.loc"
+### tests/provider-cache-usage.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/provider-capabilities.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/provider-keys.test.ts  corpus=0 local=1 unknown=0 faces= shapes=readdir-dynamic
+    · " expect(await readdir(dir)).toEqual([]); }); it(\"明文零落盘：落盘文件只含密文 base64，扫不到明文 key；删 key 后明文消失\", async () => { installProviderKeyBacken"
+### tests/providers.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/prune-batching.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/prune-token-weight.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/prune.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/read-shape.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/recovery-parent-mode.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/recovery-restart-current-session.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/redact.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/refine-goal-tool.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/registry-rung.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/remember-secret-hygiene.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/remember.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/repair-loop-real-verify.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/replay-cascade-traffic.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/replay-corpus-inventory.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/replay-corpus.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/replay-gate-outcomes.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/replay-join-lapse.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/replay-latency.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/replay-prune-promise.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/replay-readings-registry.test.ts  corpus=1 local=0 unknown=0 faces=scripts/ shapes=readdir-face
+    · " names = (await readdir(REPLAY_DIR)).filter((f) => f.endsWith(\".ts\")); return Promise.all( names.map(async (n) => ({ path: rel(n), source:"
+### tests/replay-run-scorecard.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/replay-verify-cause-dating.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/replay-verify-cause-exec.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/repo-hygiene-check.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/reproducibility.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/routing-events.test.ts  corpus=1 local=0 unknown=0 faces=fixtures/ shapes=readdir-face
+    · " files = (await readdir(dirPath)).filter((f) => f.endsWith(\".jsonl\")); expect(files.length).toBeGreaterThan(0); for (const f of files) {"
+### tests/routing-policy.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/routing-pricing.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/run-attachments.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/runner-gates.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/runscope.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/sandbox.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/schedule.test.ts  corpus=0 local=1 unknown=0 faces= shapes=readdir-dynamic
+    · "t files = await readdir(dir); // 判「任何形态的临时文件残留」而不是只判旧命名（endsWith(\".tmp\")）：临时名一旦换形状， // 旧判据会静默变成恒真——原子写的失败分支正是靠「别把 tmp 留在盘上」露馅的。 expe"
+### tests/scheduler-wiring.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/secrets.test.ts  corpus=0 local=2 unknown=0 faces= shapes=readdir-dynamic
+    · "t left = (await readdir(dir)).filter((f) => f.includes(\".tmp-\")); expect(left).toEqual([]); }); it(\"写失败时 tmp 被清理，且不截断既有密文存储\", async () "
+    · "t left = (await readdir(dir)).filter((f) => f.includes(\".tmp-\")); expect(left).toEqual([]); // 失败分支也清理 tmp expect(await readFile(storePa"
+### tests/security-merge-gate.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/session-cost.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/session-metadata.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/session-organization.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/session-provider.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/session-prune-attachments.test.ts  corpus=0 local=3 unknown=0 faces= shapes=readdir-const,readdir-dynamic
+    · "nst n of (await readdir(atDir)).sort()) raws.push(await readFile(join(atDir, n), \"utf8\")); expect(raws.length).toBe(stubbed.length); // 每条被裁"
+    · "t first = await readdir(join(dir, \"prune-attachments\")); await oneRequest(); await oneRequest(); const after = await readdir(join(di"
+    · "t after = await readdir(join(dir, \"prune-attachments\")); expect(after.sort()).toEqual(first.sort()); }); }); "
+### tests/session-spend-ruler.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/session-tools.test.ts  corpus=0 local=1 unknown=0 faces= shapes=readdir-dynamic
+    · "t files = await readdir(join(sessionsRoot, \"session-data\"), { recursive: true }); const reports = files.filter(f => /run-.*\\.json$/.test(f)); "
+### tests/session-wiring.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/sessions.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/settings.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/shape-doc-cap.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/shell-bypass-composition.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/shell-family-cause.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/shell-tail.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/sidechat-core.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/skill-body-cap.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/skill-invocation-faces.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/skill-recall-address.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/skill-tool-policy.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/skill-user-invocation.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/snapshot-d7.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/solpi-receipt-integration.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/solpi-review-regression.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/solpi-runtime.test.ts  corpus=0 local=5 unknown=0 faces= shapes=readdir-const
+    · "t files = await readdir(root); const reportPath = files.find((f) => f.startsWith(\"run-\"))!; const report = JSON.parse(await readFile(joi"
+    · "entries = await readdir(root, { recursive: true }); expect(entries.some((e) => String(e).includes(\"observations\"))).toBe(true); }); it("
+    · "t files = await readdir(root); const report = JSON.parse(await readFile(join(root, files.find((f) => f.startsWith(\"run-\"))!), \"utf8\")) as { "
+    · "(join(root, readdirSync(root).find((f) => f.startsWith(\"run-\"))!), \"utf8\")) as { economics: unknown }; expect(report.economics).toEqual(econ"
+    · " await expect(readdir(directory)).rejects.toThrow(/ENOENT/); // 删除后同一入口重新打开：句柄失效（清单与对象都不在），不是\"读到旧内容\" await expect(createObservationLedger("
+### tests/spawn-arg-surface.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/src-execution-path.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/stream-redaction.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/subprocess-env-face.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/supervise-contract.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/supervise-evidence.test.ts  corpus=0 local=1 unknown=0 faces= shapes=readdir-dynamic
+    · "st kept = await readdir(join(repo, \".agents\")).then((d) => d.length > 0, () => false); expect(kept, \"旧实现先 rejectRings（含最终环）删掉 worktree 再回去"
+### tests/supervise-ring-verdict.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/tags-extract-version.test.ts  corpus=0 local=1 unknown=0 faces= shapes=readdir-dynamic
+    · "t files = await readdir(dir); expect(files.length, \"缓存目录里应恰好一条\").toBe(1); const file = files[0]!; // 键法本身也是判卷对象：改了键法而不改这里，下面这条会直接点名 cons"
+### tests/terminal-sync-window.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/text-budget-cjk.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/text-readers.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/timeout-text-single-source.test.ts  corpus=0 local=1 unknown=0 faces= shapes=readdir-dynamic
+    · "(const e of readdirSync(dir, { withFileTypes: true })) { const p = join(dir, e.name); if (e.isDirectory()) out.push(...readSrcTree(p, de"
+### tests/tool-block-witness.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/tool-choice.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/tool-surface-parity.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/tools.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/trust-fingerprint.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/turn-truncated.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/typecheck-triage.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/updater-safety-core.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/usage-attribution.test.ts  corpus=0 local=1 unknown=0 faces= shapes=readdir-dynamic
+    · "onst ent of readdirSync(dir, { withFileTypes: true })) { if (ent.name === \"node_modules\" || ent.name.startsWith(\".\")) continue; "
+### tests/user-agent-roles.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/utf8-text-safety.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+    · " void => { execFileSync(\"git\", args, { cwd: repo }); }; try { git([\"init\", \"-q\", \".\"]); git([\"config\", \"user.email\", \"t@example."
+    · "nst base = execFileSync(\"git\", [\"rev-parse\", \"HEAD\"], { cwd: repo, encoding: \"utf8\" }).trim(); await writeFile(join(repo, \"notes.md\"), \"中文"
+    · "nst once = execFileSync(\"git\", [\"diff\", base, \"--\", \"notes.md\"], { cwd: repo, maxBuffer: 64 * 1024 * 1024 }).toString(\"utf8\"); expect(ship"
+### tests/verify-attribution-exits.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/verify-cause.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/verify-exec-sandbox.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/verify-multiface.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/verify-probe.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/verify.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/vitest.config.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/wait-for-agents-tool.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/web-fetch.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+    · " const r = spawnSync(process.execPath, [\"--import\", \"tsx\", \"scripts/probe-web-anchor-claim.ts\"], { cwd: fileURLToPath(new URL(\"..\", imp"
+### tests/web-search.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/wiring-coverage.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/worker-attribution.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/worker-budget.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/worker-evidence-parent-context.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/worker-evidence.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/worker-hooks.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/worker-impact-query.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/worker-project-rules.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/worker-report-clip.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/worker-result-wire.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/worker-role-budget.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/worker-role.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/worker-sandbox-wiring.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/worker-spent-usd.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/worker-tool-specs.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/worktree-pure.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/write-face.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/write-line-delta.test.ts  corpus=0 local=0 unknown=0 faces= shapes=
+### tests/zero-regression-conjunct.test.ts  corpus=0 local=0 unknown=0 faces= shapes=

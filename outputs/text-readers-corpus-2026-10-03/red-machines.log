@@ -1,0 +1,415 @@
+M1-corpus-const-not-expanded 基线：passed=1 failed=0 found=true（414ms）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/text-readers.test.ts[2m > [22m第二出口：语料级读取者的三态（列仓内面／列临时盘／要人复认）[2m > [22m★参数是裸标识符时要展开同文件的常量定义（现读第一版在这一格静默失效：那条正则没有捕获组）
+[31m[1mAssertionError[22m: 常量把字面量藏在另一行，只按参数行找就会判成临时盘: expected +0 to be 1 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 1[39m
+[31m+ 0[39m
+
+[36m [2m❯[22m tests/text-readers.test.ts:[2m184:53[22m[39m
+    [90m182|[39m     // `tests/replay-readings-registry.test.ts:18`（join＋__dirname 形）。
+    [90m183|[39m     const url = cscan('const DIR = fileURLToPath(new URL("../scripts/r…
+    [90m184|[39m     expect(url.corpus, "常量把字面量藏在另一行，只按参数行找就会判成临时盘").toBe(1);
+    [90m   |[39m                                                     [31m^[39m
+    [90m185|[39m     expect(url.faces).toEqual(["scripts/"]);
+    [90m186|[39m     const joined = cscan('const DIR = join(__dirname, "..", "scripts",…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M1-corpus-const-not-expanded 红在「★参数是裸标识符时要展开同文件的常量定义（现读第一版在这一格静默失效：那条正则没有捕获组）」（failed=1，314ms，退 1）
+M2-corpus-face-not-load-bearing 基线：passed=1 failed=0 found=true（310ms）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/text-readers.test.ts[2m > [22mcorpusJudgesFor：按面配，不按「有没有 corpus」配[2m > [22m两向证人·闭嘴：只遍历 fixtures 的那份不许出现在改了 scripts 的清单里（清单变噪音就没人看）
+[31m[1mAssertionError[22m: expected [ 'tests/git-tracked.test.ts', …(2) ] to not include 'tests/walks-fixtures.test.ts'[39m
+[36m [2m❯[22m tests/text-readers.test.ts:[2m253:21[22m[39m
+    [90m251|[39m   it("两向证人·闭嘴：只遍历 fixtures 的那份不许出现在改了 scripts 的清单里（清单变噪音就没人看）", () => {
+    [90m252|[39m     const got = corpusJudgesFor(["scripts/y.ts"], scans).map((m) => m.…
+    [90m253|[39m     expect(got).not.toContain("tests/walks-fixtures.test.ts");
+    [90m   |[39m                     [31m^[39m
+    [90m254|[39m     expect(got).toContain("tests/git-tracked.test.ts"); // 跟踪面没有前缀可配 ⇒…
+    [90m255|[39m   });
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M2-corpus-face-not-load-bearing 红在「两向证人·闭嘴：只遍历 fixtures 的那份不许出现在改了 scripts 的清单里（清单变噪音就没人看）」（failed=1，317ms，退 1）
+M3-corpus-column-dropped 基线：passed=1 failed=0 found=true（318ms）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/text-readers.test.ts[2m > [22m第二出口的接线与真表现读[2m > [22m★两栏各印一行：并成一行就分不清是「少了一条」还是「少了一类」
+[31m[1mAssertionError[22m: expected '/** 「谁在读这段文本」的取料与出口（第 328 页，任务 #37）。判…' to contain 'console.log("  " + corpusSummary(corp…'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- console.log("  " + corpusSummary(corpusScans));[39m
+[31m+ /** 「谁在读这段文本」的取料与出口（第 328 页，任务 #37）。判据本体在 `scripts/lib/text-readers.ts`。[39m
+[31m+  *[39m
+[31m+  *  为什么要有这把尺（读数来自第 327 页补）：把一支判据从 `scripts/loop-eval.ts` 搬进[39m
+[31m+  *  `scripts/lib/eval-expects.ts` 之后，typecheck、我动过的两个判卷、六台造红、`--check-needles`（阻断 0）全部安静，[39m
+[31m+  *  只有 `head-cert` 的全量判卷报 `Tests 2 failed | 4023 passed (4025)`——那两条红读的就是 loop-eval 的**源文本**。[39m
+[31m+  *  ⇒ 交笔轮缺一个便宜的读数：「我改了这些文件，还有哪些判卷把它们当文本在读，该一起跑」。[39m
+[31m+  *[39m
+[31m+  *  用法（事实源是本文件与 `package.json`，别处抄的命令会过期）：[39m
+[31m+  *    node --import tsx scripts/text-reader-check.ts                       # 改动面＝工作树 ∪ rev..HEAD（默认 rev＝HEAD~1）[39m
+[31m+  *    node --import tsx scripts/text-reader-check.ts --changed-since=<rev>  # 只问这一段改动[39m
+[31m+  *    node --import tsx scripts/text-reader-check.ts --readers-of=scripts/loop-eval.ts[39m
+[31m+  *    node --import tsx scripts/text-reader-check.ts --all                   # 全仓读取面（不问改动）[39m
+[31m+  *    node --import tsx scripts/text-reader-check.ts --no-face               # 连"没有读取者"的那些也印出来（默认只印清单，噪声省掉）[39m
+[31m+  *[39m
+[31m+  *  退出码两格：0＝出数了；1＝**两张形状表有一张开始瞎**（`UNKNOWN_CAP`／`CORPUS_UNKNOWN_CAP`，都只准调低）。[39m
+[31m+  *  「该跑哪些判卷」这一格刻意不做成阻断维（理由写在页上）：清单是线索，多列是安全方向；[39m
+[31m+  *  会拦人的只有"尺自己开始瞎了"那一格——那正是第 327 页缺的东西。[39m
+[31m+  *[39m
+[31m+  *  **两栏分开印**（第 329 页，任务 #38）：[39m
+[31m+  *   - 第一栏「谁读了这份文件」＝字面量点名的接线判卷（改动面逐个反查）；[39m
+[31m+  *   - 第二栏「改动面级判卷」＝遍历被改到的那个面的判卷（登记的语料助手／`readdirSync(源面)`／`git ls-files` 那几类）。[39m
+[31m+  *  并成一行就再也分不清"少了一条"还是"少了一类"——第 328 页补踩的正是后者：那一族在清单里整类缺失。 */[39m
+[31m+ import { execFileSync } from "node:child_process";[39m
+[31m+ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";[39m
+[31m+ import { join, resolve } from "node:path";[39m
+[31m+ import { corpusJudgesFor, corpusSummary, readerSummary, readersOf, scanJudgeForCorpusReaders, scanJudgeForReaders, type ReaderHit, type ReaderScan } from "./lib/text-readers";[39m
+[31m+[39m
+[31m+ const ROOT = resolve(import.meta.dirname, "..");[39m
+[31m+[39m
+[31m+ /** 存量帽（第 328 页现读登记，只准调低）：连第一个参数都切不出来的读取调用数。[39m
+[31m+  *  高于它＝有人写了新读法而这张表不知道 ⇒ 这把尺正在漏报；补 `classifyArg` 并同笔加一条只有它能看见的合成输入。 */[39m
+[31m+ export const UNKNOWN_CAP = 0;[39m
+[31m+[39m
+[31m+ /** 第二出口的存量帽（第 329 页现读登记，只准调低）：语料级判据里"要人复认"的列目录调用数。[39m
+[31m+  *  这一档涨上去的意思和上面一样——出现了没登记的语料助手／新写法，而那正是第 328 页补踩过的坑。 */[39m
+[31m+ export const CORPUS_UNKNOWN_CAP = 0;[39m
+[31m+[39m
+[31m+ const git = (args: readonly string[]): string | null => {[39m
+[31m+   try {[39m
+[31m+     return execFileSync("git", [...args], { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });[39m
+[31m+   } catch { return null; }[39m
+[31m+ };[39m
+[31m+[39m
+[31m+ /** 判卷语料＝`tests/` 下所有源码文件。这一面要数所有判卷，所以没有目录级豁免。 */[39m
+[31m+ function judgeCorpus(): { path: string; text: string }[] {[39m
+[31m+   const acc: { path: string; text: string }[] = [];[39m
+[31m+   const walk = (dir: string): void => {[39m
+[31m+     for (const name of readdirSync(dir)) {[39m
+[31m+       const p = join(dir, name);[39m
+[31m+       const st = statSync(p);[39m
+[31m+       if (st.isDirectory()) { if (!name.startsWith(".")) walk(p); continue; }[39m
+[31m+       if (!/\.(ts|mts)$/.test(name)) continue;[39m
+[31m+       acc.push({ path: p.slice(ROOT.length + 1).replaceAll("\\", "/"), text: readFileSync(p, "utf8") });[39m
+[31m+     }[39m
+[31m+   };[39m
+[31m+   walk(join(ROOT, "tests"));[39m
+[31m+   return acc;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 改动面＝工作树脏文件 ∪ `rev..HEAD`。git 取不到时**出声**，不许读成"没有改动"。 */[39m
+[31m+ function changedFiles(rev: string): { files: string[]; gitOk: boolean } {[39m
+[31m+   const a = git(["diff", "--name-only", `${rev}..HEAD`]);[39m
+[31m+   const b = git(["status", "--porcelain"]);[39m
+[31m+   if (a === null || b === null) return { files: [], gitOk: false };[39m
+[31m+   const set = new Set<string>();[39m
+[31m+   for (const l of a.split("\n")) if (l.trim() !== "") set.add(l.trim());[39m
+[31m+   for (const l of b.split("\n")) {[39m
+[31m+     const p = l.slice(2).trim().split(" -> ").pop();[39m
+[31m+     if (p && /\.(ts|mts|tsx|mjs)$/.test(p)) set.add(p);[39m
+[31m+   }[39m
+[31m+   return { files: [...set].sort(), gitOk: true };[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ function printReaders(read: Map<string, ReaderHit[]>, includeSilent: boolean): void {[39m
+[31m+   for (const [target, hits] of [...read.entries()].sort()) {[39m
+[31m+     const byJudge = new Map<string, ReaderHit[]>();[39m
+[31m+     for (const h of hits) {[39m
+[31m+       const list = byJudge.get(h.judge) ?? [];[39m
+[31m+       list.push(h);[39m
+[31m+       byJudge.set(h.judge, list);[39m
+[31m+     }[39m
+[31m+     if (hits.length === 0) {[39m
+[31m+       if (includeSilent) console.log(`  （没有读取者）${target}`);[39m
+[31m+       continue;[39m
+[31m+     }[39m
+[31m+     console.log(`  ${target} ← ${String(byJudge.size)} 份判卷在读`);[39m
+[31m+     for (const [judge, hs] of [...byJudge.entries()].sort()) {[39m
+[31m+       const shapes = [...new Set(hs.map((h) => h.shape))].join("/");[39m
+[31m+       console.log(`      要跑：${judge}（第 ${String(hs[0]!.line)} 行起，${shapes}，共 ${String(hs.length)} 处）`);[39m
+[31m+     }[39m
+[31m+   }[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ const argv = process.argv.slice(2);[39m
+[31m+ const flag = (name: string): string | null => {[39m
+[31m+   const hit = argv.find((a) => a.startsWith(`--${name}=`));[39m
+[31m+   return hit === undefined ? null : hit.slice(name.length + 3);[39m
+[31m+ };[39m
+[31m+ const exists = (rel: string): boolean => existsSync(join(ROOT, rel));[39m
+[31m+[39m
+[31m+ const corpus = judgeCorpus();[39m
+[31m+ const scans: ReaderScan[] = corpus.map((f) => scanJudgeForReaders(f.path, f.text, exists));[39m
+[31m+ const corpusScans = corpus.map((f) => scanJudgeForCorpusReaders(f.path, f.text));[39m
+[31m+ const unknown = scans.reduce((a, s) => a + s.unknown, 0);[39m
+[31m+ console.log(`[text-reader-check] 判卷语料 ${String(scans.length)} 份｜${readerSummary(scans)}`);[39m
+[31m+ if (unknown > 0) {[39m
+[31m+   // 复认要有名字：只印一个总数等于让人去猜哪一处新写法。逐条点名，但不截断到 0。[39m
+[31m+   for (const s of scans) for (const h of s.hits) {[39m
+[31m+     if (h.kind !== "unknown") continue;[39m
+[31m+     console.log(`      要复认：${s.judge}:${String(h.line)}（第一个参数切不出来）`);[39m
+[31m+   }[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ const only = flag("readers-of");[39m
+[31m+ const includeSilent = argv.includes("--all") || argv.includes("--no-face") || only !== null;[39m
+[31m+ if (only !== null) {[39m
+[31m+   printReaders(readersOf([only.replaceAll("\\", "/").replace(/^\.\//u, "")], scans), true);[39m
+[31m+ } else if (argv.includes("--all")) {[39m
+[31m+   const targets = new Set<string>();[39m
+[31m+   for (const s of scans) for (const h of s.hits) if (h.target !== null) targets.add(h.target);[39m
+[31m+   printReaders(readersOf([...targets].sort(), scans), includeSilent);[39m
+[31m+ } else {[39m
+[31m+   const rev = flag("changed-since") ?? "HEAD~1";[39m
+[31m+   const { files, gitOk } = changedFiles(rev);[39m
+[31m+   if (!gitOk) console.log(`  ❌ git 取不到改动面（rev=${rev}）⇒ 这一格**没有读数**，不等于"没有改动"`);[39m
+[31m+   else if (files.length === 0) console.log(`  改动面为空（rev=${rev}＋工作树）⇒ 没有要问的文件`);[39m
+[31m+   else {[39m
+[31m+     console.log(`  改动面 ${String(files.length)} 个文件（rev=${rev} ∪ 工作树）：`);[39m
+[31m+     printReaders(readersOf(files, scans), includeSilent);[39m
+[31m+     // 第二出口的**改动面那一半**：谁在遍历被改到的那个面，就要跑谁（与上面「谁读了这份文件」两栏分开印）。[39m
+[31m+     const mustRun = corpusJudgesFor(files, corpusScans);[39m
+[31m+     if (mustRun.length === 0) {[39m
+[31m+       console.log("  改动面级判卷：一份都没有 ⇒ 这一格**没有点名**（改动面没落在任何被登记遍历的面上，或第二出口瞎了）");[39m
+[31m+     } else {[39m
+[31m+       console.log(`  改动面级判卷 ${String(mustRun.length)} 份（改了这些面里的任何文件都要跑，不看谁读了哪一行）：`);[39m
+[31m+       for (const m of mustRun) console.log(`      要跑：${m.judge}（遍历 ${m.faces.join("、")}）`);[39m
+[31m+     }[39m
+[31m+   }[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // 第二出口单独一栏——与上面那栏并成一行就分不清"少了一条"还是"少了一类"（第 328 页补踩的就是后者）[39m
+[31m+ void corpusSummary(corpusScans);[39m
+[31m+ const corpusUnknown = corpusScans.reduce((a, s) => a + s.unknown, 0);[39m
+[31m+ for (const s of corpusScans) {[39m
+[31m+   if (s.unknown === 0) continue;[39m
+[31m+   console.log(`      要复认：${s.judge}（${s.shapes.filter((x) => x.startsWith("unknown:")).join("、")}）`);[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ const corpusBad = corpusUnknown > CORPUS_UNKNOWN_CAP;[39m
+[31m+ if (corpusBad) {[39m
+[31m+   console.log(`  ❌ 语料级那一栏要人复认 ${String(corpusUnknown)} > 帽 ${String(CORPUS_UNKNOWN_CAP)}`[39m
+[31m+     + " ⇒ 出现了没登记的语料助手／新写法，第二出口正在漏报（登记进 `CORPUS_HELPERS` 并同笔补一条只有它能看见的合成输入，别抬帽）");[39m
+[31m+ }[39m
+[31m+ if (unknown > UNKNOWN_CAP) {[39m
+[31m+   console.log(`  ❌ 形状不认识 ${String(unknown)} > 帽 ${String(UNKNOWN_CAP)} ⇒ 这张表盖不住新写法，尺正在漏报`);[39m
+[31m+   process.exitCode = 1;[39m
+[31m+ } else if (corpusBad) {[39m
+[31m+   process.exitCode = 1;[39m
+[31m+ } else {[39m
+[31m+   console.log(`  ✅ 两张形状表都盖住当前写法（读取：形状不认识 ${String(unknown)} ≤ 帽 ${String(UNKNOWN_CAP)}；`[39m
+[31m+     + `语料级：要人复认 ${String(corpusUnknown)} ≤ 帽 ${String(CORPUS_UNKNOWN_CAP)}）`);[39m
+[31m+ }[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/text-readers.test.ts:[2m266:17[22m[39m
+    [90m264|[39m     const cli = readFileSync(fileURLToPath(new URL("../scripts/text-re…
+    [90m265|[39m     expect(cli).toContain("console.log(`[text-reader-check] 判卷语料 ${Str…
+    [90m266|[39m     expect(cli).toContain('console.log("  " + corpusSummary(corpusScan…
+    [90m   |[39m                 [31m^[39m
+    [90m267|[39m     expect(cli).toContain("corpusJudgesFor(files, corpusScans)");
+    [90m268|[39m     // 反向哨兵：两栏合印（同一句里同时出现两个汇总）＝这一格白造
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M3-corpus-column-dropped 红在「★两栏各印一行：并成一行就分不清是「少了一条」还是「少了一类」」（failed=1，318ms，退 1）
+M4-corpus-cap-guard-dead 基线：passed=1 failed=0 found=true（331ms）
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/text-readers.test.ts[2m > [22m第二出口的接线与真表现读[2m > [22m★第二出口那一栏的帽要接进退出码（算出来不看＝恒绿）
+[31m[1mAssertionError[22m: expected '/** 「谁在读这段文本」的取料与出口（第 328 页，任务 #37）。判…' to contain 'corpusUnknown > CORPUS_UNKNOWN_CAP'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- corpusUnknown > CORPUS_UNKNOWN_CAP[39m
+[31m+ /** 「谁在读这段文本」的取料与出口（第 328 页，任务 #37）。判据本体在 `scripts/lib/text-readers.ts`。[39m
+[31m+  *[39m
+[31m+  *  为什么要有这把尺（读数来自第 327 页补）：把一支判据从 `scripts/loop-eval.ts` 搬进[39m
+[31m+  *  `scripts/lib/eval-expects.ts` 之后，typecheck、我动过的两个判卷、六台造红、`--check-needles`（阻断 0）全部安静，[39m
+[31m+  *  只有 `head-cert` 的全量判卷报 `Tests 2 failed | 4023 passed (4025)`——那两条红读的就是 loop-eval 的**源文本**。[39m
+[31m+  *  ⇒ 交笔轮缺一个便宜的读数：「我改了这些文件，还有哪些判卷把它们当文本在读，该一起跑」。[39m
+[31m+  *[39m
+[31m+  *  用法（事实源是本文件与 `package.json`，别处抄的命令会过期）：[39m
+[31m+  *    node --import tsx scripts/text-reader-check.ts                       # 改动面＝工作树 ∪ rev..HEAD（默认 rev＝HEAD~1）[39m
+[31m+  *    node --import tsx scripts/text-reader-check.ts --changed-since=<rev>  # 只问这一段改动[39m
+[31m+  *    node --import tsx scripts/text-reader-check.ts --readers-of=scripts/loop-eval.ts[39m
+[31m+  *    node --import tsx scripts/text-reader-check.ts --all                   # 全仓读取面（不问改动）[39m
+[31m+  *    node --import tsx scripts/text-reader-check.ts --no-face               # 连"没有读取者"的那些也印出来（默认只印清单，噪声省掉）[39m
+[31m+  *[39m
+[31m+  *  退出码两格：0＝出数了；1＝**两张形状表有一张开始瞎**（`UNKNOWN_CAP`／`CORPUS_UNKNOWN_CAP`，都只准调低）。[39m
+[31m+  *  「该跑哪些判卷」这一格刻意不做成阻断维（理由写在页上）：清单是线索，多列是安全方向；[39m
+[31m+  *  会拦人的只有"尺自己开始瞎了"那一格——那正是第 327 页缺的东西。[39m
+[31m+  *[39m
+[31m+  *  **两栏分开印**（第 329 页，任务 #38）：[39m
+[31m+  *   - 第一栏「谁读了这份文件」＝字面量点名的接线判卷（改动面逐个反查）；[39m
+[31m+  *   - 第二栏「改动面级判卷」＝遍历被改到的那个面的判卷（登记的语料助手／`readdirSync(源面)`／`git ls-files` 那几类）。[39m
+[31m+  *  并成一行就再也分不清"少了一条"还是"少了一类"——第 328 页补踩的正是后者：那一族在清单里整类缺失。 */[39m
+[31m+ import { execFileSync } from "node:child_process";[39m
+[31m+ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";[39m
+[31m+ import { join, resolve } from "node:path";[39m
+[31m+ import { corpusJudgesFor, corpusSummary, readerSummary, readersOf, scanJudgeForCorpusReaders, scanJudgeForReaders, type ReaderHit, type ReaderScan } from "./lib/text-readers";[39m
+[31m+[39m
+[31m+ const ROOT = resolve(import.meta.dirname, "..");[39m
+[31m+[39m
+[31m+ /** 存量帽（第 328 页现读登记，只准调低）：连第一个参数都切不出来的读取调用数。[39m
+[31m+  *  高于它＝有人写了新读法而这张表不知道 ⇒ 这把尺正在漏报；补 `classifyArg` 并同笔加一条只有它能看见的合成输入。 */[39m
+[31m+ export const UNKNOWN_CAP = 0;[39m
+[31m+[39m
+[31m+ /** 第二出口的存量帽（第 329 页现读登记，只准调低）：语料级判据里"要人复认"的列目录调用数。[39m
+[31m+  *  这一档涨上去的意思和上面一样——出现了没登记的语料助手／新写法，而那正是第 328 页补踩过的坑。 */[39m
+[31m+ export const CORPUS_UNKNOWN_CAP = 0;[39m
+[31m+[39m
+[31m+ const git = (args: readonly string[]): string | null => {[39m
+[31m+   try {[39m
+[31m+     return execFileSync("git", [...args], { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });[39m
+[31m+   } catch { return null; }[39m
+[31m+ };[39m
+[31m+[39m
+[31m+ /** 判卷语料＝`tests/` 下所有源码文件。这一面要数所有判卷，所以没有目录级豁免。 */[39m
+[31m+ function judgeCorpus(): { path: string; text: string }[] {[39m
+[31m+   const acc: { path: string; text: string }[] = [];[39m
+[31m+   const walk = (dir: string): void => {[39m
+[31m+     for (const name of readdirSync(dir)) {[39m
+[31m+       const p = join(dir, name);[39m
+[31m+       const st = statSync(p);[39m
+[31m+       if (st.isDirectory()) { if (!name.startsWith(".")) walk(p); continue; }[39m
+[31m+       if (!/\.(ts|mts)$/.test(name)) continue;[39m
+[31m+       acc.push({ path: p.slice(ROOT.length + 1).replaceAll("\\", "/"), text: readFileSync(p, "utf8") });[39m
+[31m+     }[39m
+[31m+   };[39m
+[31m+   walk(join(ROOT, "tests"));[39m
+[31m+   return acc;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 改动面＝工作树脏文件 ∪ `rev..HEAD`。git 取不到时**出声**，不许读成"没有改动"。 */[39m
+[31m+ function changedFiles(rev: string): { files: string[]; gitOk: boolean } {[39m
+[31m+   const a = git(["diff", "--name-only", `${rev}..HEAD`]);[39m
+[31m+   const b = git(["status", "--porcelain"]);[39m
+[31m+   if (a === null || b === null) return { files: [], gitOk: false };[39m
+[31m+   const set = new Set<string>();[39m
+[31m+   for (const l of a.split("\n")) if (l.trim() !== "") set.add(l.trim());[39m
+[31m+   for (const l of b.split("\n")) {[39m
+[31m+     const p = l.slice(2).trim().split(" -> ").pop();[39m
+[31m+     if (p && /\.(ts|mts|tsx|mjs)$/.test(p)) set.add(p);[39m
+[31m+   }[39m
+[31m+   return { files: [...set].sort(), gitOk: true };[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ function printReaders(read: Map<string, ReaderHit[]>, includeSilent: boolean): void {[39m
+[31m+   for (const [target, hits] of [...read.entries()].sort()) {[39m
+[31m+     const byJudge = new Map<string, ReaderHit[]>();[39m
+[31m+     for (const h of hits) {[39m
+[31m+       const list = byJudge.get(h.judge) ?? [];[39m
+[31m+       list.push(h);[39m
+[31m+       byJudge.set(h.judge, list);[39m
+[31m+     }[39m
+[31m+     if (hits.length === 0) {[39m
+[31m+       if (includeSilent) console.log(`  （没有读取者）${target}`);[39m
+[31m+       continue;[39m
+[31m+     }[39m
+[31m+     console.log(`  ${target} ← ${String(byJudge.size)} 份判卷在读`);[39m
+[31m+     for (const [judge, hs] of [...byJudge.entries()].sort()) {[39m
+[31m+       const shapes = [...new Set(hs.map((h) => h.shape))].join("/");[39m
+[31m+       console.log(`      要跑：${judge}（第 ${String(hs[0]!.line)} 行起，${shapes}，共 ${String(hs.length)} 处）`);[39m
+[31m+     }[39m
+[31m+   }[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ const argv = process.argv.slice(2);[39m
+[31m+ const flag = (name: string): string | null => {[39m
+[31m+   const hit = argv.find((a) => a.startsWith(`--${name}=`));[39m
+[31m+   return hit === undefined ? null : hit.slice(name.length + 3);[39m
+[31m+ };[39m
+[31m+ const exists = (rel: string): boolean => existsSync(join(ROOT, rel));[39m
+[31m+[39m
+[31m+ const corpus = judgeCorpus();[39m
+[31m+ const scans: ReaderScan[] = corpus.map((f) => scanJudgeForReaders(f.path, f.text, exists));[39m
+[31m+ const corpusScans = corpus.map((f) => scanJudgeForCorpusReaders(f.path, f.text));[39m
+[31m+ const unknown = scans.reduce((a, s) => a + s.unknown, 0);[39m
+[31m+ console.log(`[text-reader-check] 判卷语料 ${String(scans.length)} 份｜${readerSummary(scans)}`);[39m
+[31m+ if (unknown > 0) {[39m
+[31m+   // 复认要有名字：只印一个总数等于让人去猜哪一处新写法。逐条点名，但不截断到 0。[39m
+[31m+   for (const s of scans) for (const h of s.hits) {[39m
+[31m+     if (h.kind !== "unknown") continue;[39m
+[31m+     console.log(`      要复认：${s.judge}:${String(h.line)}（第一个参数切不出来）`);[39m
+[31m+   }[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ const only = flag("readers-of");[39m
+[31m+ const includeSilent = argv.includes("--all") || argv.includes("--no-face") || only !== null;[39m
+[31m+ if (only !== null) {[39m
+[31m+   printReaders(readersOf([only.replaceAll("\\", "/").replace(/^\.\//u, "")], scans), true);[39m
+[31m+ } else if (argv.includes("--all")) {[39m
+[31m+   const targets = new Set<string>();[39m
+[31m+   for (const s of scans) for (const h of s.hits) if (h.target !== null) targets.add(h.target);[39m
+[31m+   printReaders(readersOf([...targets].sort(), scans), includeSilent);[39m
+[31m+ } else {[39m
+[31m+   const rev = flag("changed-since") ?? "HEAD~1";[39m
+[31m+   const { files, gitOk } = changedFiles(rev);[39m
+[31m+   if (!gitOk) console.log(`  ❌ git 取不到改动面（rev=${rev}）⇒ 这一格**没有读数**，不等于"没有改动"`);[39m
+[31m+   else if (files.length === 0) console.log(`  改动面为空（rev=${rev}＋工作树）⇒ 没有要问的文件`);[39m
+[31m+   else {[39m
+[31m+     console.log(`  改动面 ${String(files.length)} 个文件（rev=${rev} ∪ 工作树）：`);[39m
+[31m+     printReaders(readersOf(files, scans), includeSilent);[39m
+[31m+     // 第二出口的**改动面那一半**：谁在遍历被改到的那个面，就要跑谁（与上面「谁读了这份文件」两栏分开印）。[39m
+[31m+     const mustRun = corpusJudgesFor(files, corpusScans);[39m
+[31m+     if (mustRun.length === 0) {[39m
+[31m+       console.log("  改动面级判卷：一份都没有 ⇒ 这一格**没有点名**（改动面没落在任何被登记遍历的面上，或第二出口瞎了）");[39m
+[31m+     } else {[39m
+[31m+       console.log(`  改动面级判卷 ${String(mustRun.length)} 份（改了这些面里的任何文件都要跑，不看谁读了哪一行）：`);[39m
+[31m+       for (const m of mustRun) console.log(`      要跑：${m.judge}（遍历 ${m.faces.join("、")}）`);[39m
+[31m+     }[39m
+[31m+   }[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ // 第二出口单独一栏——与上面那栏并成一行就分不清"少了一条"还是"少了一类"（第 328 页补踩的就是后者）[39m
+[31m+ console.log("  " + corpusSummary(corpusScans));[39m
+[31m+ const corpusUnknown = corpusScans.reduce((a, s) => a + s.unknown, 0);[39m
+[31m+ for (const s of corpusScans) {[39m
+[31m+   if (s.unknown === 0) continue;[39m
+[31m+   console.log(`      要复认：${s.judge}（${s.shapes.filter((x) => x.startsWith("unknown:")).join("、")}）`);[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ const corpusBad = false;[39m
+[31m+ if (corpusBad) {[39m
+[31m+   console.log(`  ❌ 语料级那一栏要人复认 ${String(corpusUnknown)} > 帽 ${String(CORPUS_UNKNOWN_CAP)}`[39m
+[31m+     + " ⇒ 出现了没登记的语料助手／新写法，第二出口正在漏报（登记进 `CORPUS_HELPERS` 并同笔补一条只有它能看见的合成输入，别抬帽）");[39m
+[31m+ }[39m
+[31m+ if (unknown > UNKNOWN_CAP) {[39m
+[31m+   console.log(`  ❌ 形状不认识 ${String(unknown)} > 帽 ${String(UNKNOWN_CAP)} ⇒ 这张表盖不住新写法，尺正在漏报`);[39m
+[31m+   process.exitCode = 1;[39m
+[31m+ } else if (corpusBad) {[39m
+[31m+   process.exitCode = 1;[39m
+[31m+ } else {[39m
+[31m+   console.log(`  ✅ 两张形状表都盖住当前写法（读取：形状不认识 ${String(unknown)} ≤ 帽 ${String(UNKNOWN_CAP)}；`[39m
+[31m+     + `语料级：要人复认 ${String(corpusUnknown)} ≤ 帽 ${String(CORPUS_UNKNOWN_CAP)}）`);[39m
+[31m+ }[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/text-readers.test.ts:[2m274:17[22m[39m
+    [90m272|[39m   it("★第二出口那一栏的帽要接进退出码（算出来不看＝恒绿）", () => {
+    [90m273|[39m     const cli = readFileSync(fileURLToPath(new URL("../scripts/text-re…
+    [90m274|[39m     expect(cli).toContain("corpusUnknown > CORPUS_UNKNOWN_CAP");
+    [90m   |[39m                 [31m^[39m
+    [90m275|[39m     expect(cli).toContain("} else if (corpusBad) {");
+    [90m276|[39m     expect(cli).toContain("process.exitCode = 1;");
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+✅ M4-corpus-cap-guard-dead 红在「★第二出口那一栏的帽要接进退出码（算出来不看＝恒绿）」（failed=1，325ms，退 1）
+残骸校验：两支被测文件与开跑前逐字节一致 ✅
+RED_MACHINES=OK

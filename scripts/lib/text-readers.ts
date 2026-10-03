@@ -31,8 +31,9 @@
 export type ReaderShape = "literal-string" | "literal-join" | "url-relative" | "dynamic-identifier"
   | "dynamic-call" | "dynamic-template" | "dynamic-array" | "unknown";
 
-/** 仓内可能被人当文本读的面。清单只问这些前缀之下的目标（读 `node_modules` 不算接线判卷）。 */
-const SOURCE_FACES = ["src/", "scripts/", "tests/", "fixtures/", "docs/", "apps/"];
+/** 仓内可能被人当文本读的面。清单只问这些前缀之下的目标（读 `node_modules` 不算接线判卷）。
+ *  出口给判卷用：语料助手登记表里写的每一面都必须在这张表里（抄第二份清单＝各写各的）。 */
+export const SOURCE_FACES = ["src/", "scripts/", "tests/", "fixtures/", "docs/", "apps/"];
 
 export interface ReaderHit {
   judge: string;
@@ -56,9 +57,7 @@ export interface ReaderScan {
   unknown: number;
 }
 
-const READ_CALL_NAMES = ["readFileSync", "readFile", "readTextFileSync"];
-
-/** 在**代码上下文**里找读取调用的位置（返回每个调用左括号后第一个字符的下标）。
+/** 在**代码上下文**里找某个名字的调用位置（返回每个调用左括号后第一个字符的下标）。
  *
  *  为什么不能直接对全文跑正则（第 328 页第 3 项的现读抓出来的）：
  *  判卷文件里躺着大量**合成源码字符串**（夹具正文），里面有 `readFile(p: string)`、`readFileSync("x")` 这种写法；
@@ -66,9 +65,9 @@ const READ_CALL_NAMES = ["readFileSync", "readFile", "readTextFileSync"];
  *  所以这一步必须区分「代码」与「字符串/注释里的文本」：
  *   - 双引号／单引号：整段跳过；
  *   - 模板串：整段跳过，但 `${…}` 里是代码 ⇒ 进去继续找（那正是动态路径读写的常见写法）；
- *   - `//` 行注释与 `/* … *\/` 块注释：跳过；
+ *   - `//` 行注释与块注释：跳过；
  *   - 换行不算特殊字符（多行调用照样能找到）。 */
-export function findReadCallSites(text: string): number[] {
+export function findCallSites(text: string, names: readonly string[]): number[] {
   const out: number[] = [];
   type St = { kind: "code" } | { kind: "str"; quote: string } | { kind: "tmpl" } | { kind: "tmpl-expr"; depth: number };
   const stack: St[] = [{ kind: "code" }];
@@ -101,7 +100,7 @@ export function findReadCallSites(text: string): number[] {
     }
     // 名字前面是标识符字符就不是这个名字（`xreadFile(`）；带点号前缀算（`fs.readFileSync(`）。
     let matched: string | null = null;
-    for (const name of READ_CALL_NAMES) {
+    for (const name of names) {
       if (!text.startsWith(name, i)) continue;
       if (i > 0 && isIdent(text[i - 1]!)) continue;
       let j = i + name.length;
@@ -115,6 +114,12 @@ export function findReadCallSites(text: string): number[] {
     if (matched === null) i += 1;
   }
   return out;
+}
+
+/** 读取调用的入口名单。只认这一族 ⇒ 数到调用而下面四条形状都不中，就是 `unknown`。 */
+const READ_CALL_NAMES = ["readFileSync", "readFile", "readTextFileSync"];
+export function findReadCallSites(text: string): number[] {
+  return findCallSites(text, READ_CALL_NAMES);
 }
 
 /** 把 `../` 按判卷文件自己的目录展开，再归一化；逃出纳名目录返回 null。 */
@@ -193,12 +198,17 @@ function classifyArg(argRaw: string, ok: boolean, judge: string): { shape: Reade
       ? { shape: "dynamic-call", kind: "dynamic", rel: null }
       : { shape: "url-relative", kind: "literal", rel };
   }
-  // join(REPO|ROOT, "a", "b")：全字面量分段 ⇒ 仓内 rel
-  const absJoin = /^\s*join\(\s*(?:REPO|ROOT|root|MAIN_ROOT)\s*((?:\s*,\s*[^,()]+)*)\)/u.exec(trimmed);
+  // join(REPO|ROOT, "a", "b")／join(__dirname, "..", "a")：全字面量分段 ⇒ 仓内 rel
+  const absJoin = /^\s*join\(\s*(REPO|ROOT|root|MAIN_ROOT|repoRoot|__dirname|__filename)\s*((?:\s*,\s*[^,()]+)*)\)/u.exec(trimmed);
   if (absJoin !== null) {
-    const segs = stringLiterals(absJoin[1] ?? "");
+    const segs = stringLiterals(absJoin[2] ?? "");
     if (segs.length > 0 && segs.every((s) => !s.includes("$"))) {
-      return { shape: "literal-join", kind: "literal", rel: normalizeRel(segs.join("/")) };
+      const rawRel = segs.join("/");
+      // `__dirname` 的基准是**判卷自己所在目录**：`join(__dirname, "..", "scripts", "gates.ts")`＝仓内那份文件。
+      // 少兜这一层就会把真读取者读成「运行期路径」⇒ 第一栏点不出它的名字（`tests/gate-failure-log.test.ts:101` 现读命中）。
+      const rel = (absJoin[1] === "__dirname" || absJoin[1] === "__filename")
+        ? relFromJudge(judge, rawRel) : normalizeRel(rawRel);
+      return { shape: "literal-join", kind: "literal", rel };
     }
     return { shape: "dynamic-call", kind: "dynamic", rel: null };
   }
@@ -276,4 +286,189 @@ export function readerSummary(scans: readonly ReaderScan[]): string {
   const unknown = scans.reduce((a, s) => a + s.unknown, 0);
   return `读取调用 ${String(calls)} 处 ⇒ 字面量 ${String(literal)}／运行期路径 ${String(dynamic)}`
     + `／**形状不认识 ${String(unknown)}**（三态相加＝${String(literal + dynamic + unknown)}，不等就是量法坏了）`;
+}
+
+/* ── 第二出口：语料级读取者（第 329 页，任务 #38）───────────────────────────────────────
+ * 立这一格的读数来自第 328 页补：上面那一栏只会点名「字面量里写着某个文件」的判卷，
+ * 而 `tests/dead-script-refs.test.ts` 走的是 `collectScriptRefs(root)`——它遍历 `src/`＋`scripts/` 全量，
+ * 被读的目标要运行期才知道。于是那一族判卷在「该跑哪些判卷」的清单里是**整类缺失**：
+ * 本笔只改了两处散文，认证判卷当场报 1 红（而且并发判卷两端独占 ⇒ 不是负载），清单一个名字都没给。
+ * ⇒ 「少了一条」与「少了一类」是两种错；只有后者需要这个第二出口。
+ *
+ * 三态（相加＝这一份判卷里数到的"列目录／列跟踪面"调用总数）：
+ *  - `corpus`  ：列的是仓内某个源面（见 `SOURCE_FACES`），或调了已登记的语料助手，或用 git 列跟踪面 ⇒ 改了任何源面文件都该跑它；
+ *  - `local`   ：列的是运行期才有的目录（临时盘、夹具副本）⇒ 对这一格无话可说；
+ *  - `unknown` ：参数切不出来，或助手没登记 ⇒ **要人复认**（帽只准调低；新写法不许并进 `local`，那是把"我不认识"谎报成"没关系"）。 */
+
+const LIST_CALL_NAMES = ["readdirSync", "readdir"];
+const PROCESS_CALL_NAMES = ["execFileSync", "spawnSync", "execSync"];
+/** 进程调用里出现这些 git 子命令 ⇒ 它列的是**跟踪面**（等价于遍历源面）。 */
+const GIT_LIST_TOKENS = ["ls-files", "ls-tree"];
+
+/** 已登记的语料助手：实现自己在遍历源面，调用方看不见遍历动作。
+ *  `faces` 只能写 `SOURCE_FACES` 里已有的面（判卷逐条核这一点）——登记一个助手要同笔补一条只有它能看见的合成输入。 */
+export const CORPUS_HELPERS: ReadonlyArray<{ name: string; faces: readonly string[] }> = [
+  { name: "collectScriptRefs", faces: ["src/", "scripts/"] },
+];
+
+export interface CorpusScan {
+  judge: string;
+  listCalls: number;
+  corpus: number;
+  local: number;
+  unknown: number;
+  /** 命中的面（去重、排序）。`corpus` 却说不出面 ⇒ 这条读数不许存在。 */
+  faces: string[];
+  shapes: string[];
+}
+
+/** 一串路径分段拼起来是不是某个源面下的路径。是就返回那一面（含尾斜杠）。 */
+function faceOfSegments(segs: readonly string[]): string | null {
+  if (segs.length === 0) return null;
+  const rel = normalizeRel(segs.join("/"));
+  if (rel === null) return null;
+  return SOURCE_FACES.find((f) => rel === f.replace(/\/$/u, "") || rel.startsWith(f)) ?? null;
+}
+
+/** 「`git ls-files`／`ls-tree`」这一类面覆盖**任何**被跟踪文件，没有前缀可配 ⇒ 用这个标记存在。 */
+export const TRACKED_FACE = "git:";
+
+/** 一个登记的面罩不罩得住这个改动文件。 */
+function faceCovers(face: string, file: string): boolean {
+  return face.startsWith(TRACKED_FACE) || file.startsWith(face);
+}
+
+/** 判卷自己的模块级常量初始化式（`const REPLAY_DIR = join(__dirname, "..", "scripts", "replay")`）。
+ *  为什么必须有这张表（第 329 页现读抓出来的）：`tests/env-cue-single-source.test.ts` 与
+ *  `tests/replay-readings-registry.test.ts` 都是 `readdirSync(REPLAY_DIR)`——遍历的确实是仓内 `scripts/`，
+ *  但字面量躺在**另一行**的常量定义里。只按参数行找字面量就会把这两份判成「临时盘」，
+ *  于是第二出口仍然整类漏，而这一格正是 #38 开出来的理由。 */
+function constInitializers(text: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const m of text.matchAll(/^\s*(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*([^;\n]+)/gmu)) {
+    if (!out.has(m[1]!)) out.set(m[1]!, m[2]!);
+  }
+  return out;
+}
+
+/** 取**不算定义处**的调用位置（`function walkSources(` 自身不是一次调用）。 */
+function callSitesNotDefs(text: string, names: readonly string[]): number[] {
+  if (names.length === 0) return [];
+  return findCallSites(text, names).filter((at) => {
+    const before = text.slice(0, at - 1).trimEnd();
+    return !/\bfunction\s+[A-Za-z_$][\w$]*$/u.test(before);
+  });
+}
+
+/** 同文件里**自己写的遍历助手**：函数体里有列目录动作，遍历哪个面由调用处的实参决定。
+ *  现读见证：`tests/goal-price.test.ts:16` 与 `tests/plan-required.test.ts:30` 的
+ *  `function walkSources(dir) { … readdirSync(dir) … }` ＋ 调用处 `walkSources(join(__dirname, "..", "src"))`。
+ *  名字**不写成登记表**（登记会烂、也不会被新写法提醒），面也**不写死**（写死就没人核）。 */
+function localWalkerNames(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/gmu)) {
+    const at = (m.index ?? 0) + m[0].length;
+    if (findCallSites(text.slice(at, at + 1200), LIST_CALL_NAMES).length > 0) out.push(m[1]!);
+  }
+  return out;
+}
+
+export function scanJudgeForCorpusReaders(judge: string, text: string, lookAhead: number = 220): CorpusScan {
+  const faces = new Set<string>();
+  const shapes = new Set<string>();
+  const consts = constInitializers(text);
+  let listCalls = 0, corpus = 0, local = 0, unknown = 0;
+  const tally = (verdict: "corpus" | "local" | "unknown", shape: string, hit: readonly string[]): void => {
+    listCalls += 1;
+    shapes.add(verdict === "unknown" ? "unknown:" + shape : shape);
+    if (verdict === "corpus") { corpus += 1; for (const f of hit) faces.add(f); return; }
+    if (verdict === "local") { local += 1; return; }
+    unknown += 1;
+  };
+  /** 一个参数表达式指向哪个源面（解不出＝null）。三条出路按「先宽松后严格」排，都是为了宁可多列不可漏列：
+   *  ① 字面量分段本身就是面（`resolve(root, "src")` 这一类，根是变量也算）；
+   *  ② 交给第一栏那支 `classifyArg` 定 rel（`join(__dirname, "..", "src")`、`new URL("../x", import.meta.url)`）；
+   *  ③ 参数是裸标识符 ⇒ 展开同文件的常量定义**一次**（不迭代，防成环）。 */
+  const faceOfExpr = (expr: string, depth: number = 0): string | null => {
+    const byLiterals = faceOfSegments(stringLiterals(expr));
+    if (byLiterals !== null) return byLiterals;
+    const rel = classifyArg(expr, true, judge).rel;
+    if (rel !== null) return faceOfSegments([rel]);
+    if (depth > 0) return null;
+    // 整条正则已锚定 ⇒ `bare[0]` 就是那个标识符。**这里曾经写的是 `bare[1]`**：这条正则没有捕获组，
+    // 于是 `bare[1]` 恒为 undefined、两次常量展开静默失效，而 TS 不会报（`RegExpExecArray` 按下标取就是 string）。
+    // 现读抓到它的方式是「把最小输入喂进尺子，读数说 local」——不是靠读代码（读代码时它看着完全正确）。
+    const bare = /^[A-Za-z_$][\w$]*$/u.exec(expr.trim());
+    const init = bare === null ? undefined : consts.get(bare[0]);
+    return init === undefined ? null : faceOfExpr(init, 1);
+  };
+
+  for (const at of findCallSites(text, LIST_CALL_NAMES)) {
+    const { raw, ok } = firstArg(text.slice(at, at + lookAhead), lookAhead);
+    if (!ok || raw.trim() === "") { tally("unknown", "readdir", []); continue; }
+    const face = faceOfExpr(raw);
+    if (face !== null) { tally("corpus", "readdir-face", [face]); continue; }
+    const bare = /^[A-Za-z_$][\w$]*$/u.exec(raw.trim());
+    if (bare !== null && consts.has(bare[0])) { tally("local", "readdir-const", []); continue; }
+    // 参数里没有字面量分段 ⇒ 要么是运行期变量（临时盘／夹具副本），要么是我看不懂的新写法
+    if (/^[a-zA-Z_$(]/u.test(raw.trim())) { tally("local", "readdir-dynamic", []); continue; }
+    tally("unknown", "readdir", []);
+  }
+  for (const w of localWalkerNames(text)) {
+    for (const at of callSitesNotDefs(text, [w])) {
+      const { raw, ok } = firstArg(text.slice(at, at + lookAhead), lookAhead);
+      if (!ok) continue;
+      const face = faceOfExpr(raw);
+      // 只在**实参点得出面**时记账。定不出面的调用不计数：那一次遍历的目标是运行期才知道的（多半是临时盘），
+      // 把它算进「要人复认」会让这张表被 `stripComments`／`runCli` 一类同名假助手刷红（现读第一版就是这么炸的：
+      // 窗口式助手识别误报 10 处假 walker）。漏的那一格与 `dynamic` 同一口径，写在页上。
+      if (face !== null) tally("corpus", "walker:" + w, [face]);
+    }
+  }
+  for (const helper of CORPUS_HELPERS) {
+    for (const at of callSitesNotDefs(text, [helper.name])) {
+      tally("corpus", "helper:" + helper.name, helper.faces);
+    }
+  }
+  for (const at of callSitesNotDefs(text, PROCESS_CALL_NAMES)) {
+    const win = text.slice(at, at + lookAhead);
+    const tok = GIT_LIST_TOKENS.find((t) => win.includes(`"${t}"`) || win.includes(`'${t}'`) || win.includes("`" + t + "`"));
+    if (tok !== undefined) tally("corpus", "git-" + tok, [TRACKED_FACE + tok]);
+  }
+  return {
+    judge, listCalls, corpus, local, unknown,
+    faces: [...faces].sort(), shapes: [...shapes].sort(),
+  };
+}
+
+/** 反查第二出口：这些改动文件**各有哪些语料级判卷每次都要跑**。
+ *  只按登记的面配（`corpus` 那一档必须点得出面，否则这条读数不许存在）——按「有 corpus 就算」会把
+ *  只列 `fixtures/` 的那份也列进「改了 src 要跑什么」，那是把清单变成噪音，而噪音清单没人看。 */
+export function corpusJudgesFor(changed: readonly string[], scans: readonly CorpusScan[]): { judge: string; faces: string[] }[] {
+  const hits = new Map<string, Set<string>>();
+  for (const s of scans) {
+    if (s.corpus === 0) continue;
+    for (const face of s.faces) {
+      for (const f of changed) {
+        if (!faceCovers(face, f)) continue;
+        const set = hits.get(s.judge) ?? new Set<string>();
+        set.add(face);
+        hits.set(s.judge, set);
+      }
+    }
+  }
+  return [...hits.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .map(([j, set]) => ({ judge: j, faces: [...set].sort() }));
+}
+
+/** 第二出口的读数：一栏一句，**不许**与 `readerSummary` 并成一行（并成就分不清是哪一类漏了）。 */
+export function corpusSummary(scans: readonly CorpusScan[]): string {
+  const calls = scans.reduce((a, s) => a + s.listCalls, 0);
+  const corpus = scans.reduce((a, s) => a + s.corpus, 0);
+  const local = scans.reduce((a, s) => a + s.local, 0);
+  const unknown = scans.reduce((a, s) => a + s.unknown, 0);
+  const judges = scans.filter((s) => s.corpus > 0).map((s) => s.judge);
+  return `列目录／列跟踪面 ${String(calls)} 处 ⇒ 语料级 ${String(corpus)}／临时盘与副本 ${String(local)}`
+    + `／**要人复认 ${String(unknown)}**（三态相加＝${String(corpus + local + unknown)}）｜语料级判卷 ${String(judges.length)} 份`
+    + `⇒ 改动面碰到源面就要跑：${judges.length === 0 ? "（一份都没有——这本身就是缺口）" : judges.join("、")}`;
 }

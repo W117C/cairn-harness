@@ -12,19 +12,28 @@
  *    node --import tsx scripts/text-reader-check.ts --all                   # 全仓读取面（不问改动）
  *    node --import tsx scripts/text-reader-check.ts --no-face               # 连"没有读取者"的那些也印出来（默认只印清单，噪声省掉）
  *
- *  退出码两格：0＝出数了；1＝**形状不认识的读取调用超过登记帽**（`UNKNOWN_CAP`，只准调低）。
+ *  退出码两格：0＝出数了；1＝**两张形状表有一张开始瞎**（`UNKNOWN_CAP`／`CORPUS_UNKNOWN_CAP`，都只准调低）。
  *  「该跑哪些判卷」这一格刻意不做成阻断维（理由写在页上）：清单是线索，多列是安全方向；
- *  会拦人的只有"尺自己开始瞎了"那一格——那正是第 327 页缺的东西。 */
+ *  会拦人的只有"尺自己开始瞎了"那一格——那正是第 327 页缺的东西。
+ *
+ *  **两栏分开印**（第 329 页，任务 #38）：
+ *   - 第一栏「谁读了这份文件」＝字面量点名的接线判卷（改动面逐个反查）；
+ *   - 第二栏「改动面级判卷」＝遍历被改到的那个面的判卷（登记的语料助手／`readdirSync(源面)`／`git ls-files` 那几类）。
+ *  并成一行就再也分不清"少了一条"还是"少了一类"——第 328 页补踩的正是后者：那一族在清单里整类缺失。 */
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { readerSummary, readersOf, scanJudgeForReaders, type ReaderHit, type ReaderScan } from "./lib/text-readers";
+import { corpusJudgesFor, corpusSummary, readerSummary, readersOf, scanJudgeForCorpusReaders, scanJudgeForReaders, type ReaderHit, type ReaderScan } from "./lib/text-readers";
 
 const ROOT = resolve(import.meta.dirname, "..");
 
 /** 存量帽（第 328 页现读登记，只准调低）：连第一个参数都切不出来的读取调用数。
  *  高于它＝有人写了新读法而这张表不知道 ⇒ 这把尺正在漏报；补 `classifyArg` 并同笔加一条只有它能看见的合成输入。 */
 export const UNKNOWN_CAP = 0;
+
+/** 第二出口的存量帽（第 329 页现读登记，只准调低）：语料级判据里"要人复认"的列目录调用数。
+ *  这一档涨上去的意思和上面一样——出现了没登记的语料助手／新写法，而那正是第 328 页补踩过的坑。 */
+export const CORPUS_UNKNOWN_CAP = 0;
 
 const git = (args: readonly string[]): string | null => {
   try {
@@ -89,7 +98,9 @@ const flag = (name: string): string | null => {
 };
 const exists = (rel: string): boolean => existsSync(join(ROOT, rel));
 
-const scans: ReaderScan[] = judgeCorpus().map((f) => scanJudgeForReaders(f.path, f.text, exists));
+const corpus = judgeCorpus();
+const scans: ReaderScan[] = corpus.map((f) => scanJudgeForReaders(f.path, f.text, exists));
+const corpusScans = corpus.map((f) => scanJudgeForCorpusReaders(f.path, f.text));
 const unknown = scans.reduce((a, s) => a + s.unknown, 0);
 console.log(`[text-reader-check] 判卷语料 ${String(scans.length)} 份｜${readerSummary(scans)}`);
 if (unknown > 0) {
@@ -116,12 +127,36 @@ if (only !== null) {
   else {
     console.log(`  改动面 ${String(files.length)} 个文件（rev=${rev} ∪ 工作树）：`);
     printReaders(readersOf(files, scans), includeSilent);
+    // 第二出口的**改动面那一半**：谁在遍历被改到的那个面，就要跑谁（与上面「谁读了这份文件」两栏分开印）。
+    const mustRun = corpusJudgesFor(files, corpusScans);
+    if (mustRun.length === 0) {
+      console.log("  改动面级判卷：一份都没有 ⇒ 这一格**没有点名**（改动面没落在任何被登记遍历的面上，或第二出口瞎了）");
+    } else {
+      console.log(`  改动面级判卷 ${String(mustRun.length)} 份（改了这些面里的任何文件都要跑，不看谁读了哪一行）：`);
+      for (const m of mustRun) console.log(`      要跑：${m.judge}（遍历 ${m.faces.join("、")}）`);
+    }
   }
 }
 
+// 第二出口单独一栏——与上面那栏并成一行就分不清"少了一条"还是"少了一类"（第 328 页补踩的就是后者）
+console.log("  " + corpusSummary(corpusScans));
+const corpusUnknown = corpusScans.reduce((a, s) => a + s.unknown, 0);
+for (const s of corpusScans) {
+  if (s.unknown === 0) continue;
+  console.log(`      要复认：${s.judge}（${s.shapes.filter((x) => x.startsWith("unknown:")).join("、")}）`);
+}
+
+const corpusBad = corpusUnknown > CORPUS_UNKNOWN_CAP;
+if (corpusBad) {
+  console.log(`  ❌ 语料级那一栏要人复认 ${String(corpusUnknown)} > 帽 ${String(CORPUS_UNKNOWN_CAP)}`
+    + " ⇒ 出现了没登记的语料助手／新写法，第二出口正在漏报（登记进 `CORPUS_HELPERS` 并同笔补一条只有它能看见的合成输入，别抬帽）");
+}
 if (unknown > UNKNOWN_CAP) {
   console.log(`  ❌ 形状不认识 ${String(unknown)} > 帽 ${String(UNKNOWN_CAP)} ⇒ 这张表盖不住新写法，尺正在漏报`);
   process.exitCode = 1;
+} else if (corpusBad) {
+  process.exitCode = 1;
 } else {
-  console.log(`  ✅ 形状表覆盖当前全部读取写法（形状不认识 ${String(unknown)} ≤ 帽 ${String(UNKNOWN_CAP)}）`);
+  console.log(`  ✅ 两张形状表都盖住当前写法（读取：形状不认识 ${String(unknown)} ≤ 帽 ${String(UNKNOWN_CAP)}；`
+    + `语料级：要人复认 ${String(corpusUnknown)} ≤ 帽 ${String(CORPUS_UNKNOWN_CAP)}）`);
 }

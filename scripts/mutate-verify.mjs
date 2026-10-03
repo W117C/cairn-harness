@@ -13262,6 +13262,45 @@ const MUTATIONS = [
     apply: (s) => s.replace("if (unknown > UNKNOWN_CAP) {", "if (false) {"),
     expectFail: "★接线 CLI 吃的是代码态扫描器与那张帽，不是全文正则（旧写法不许回来）",
   },
+  /* ── 第 329 页 · #38：第二出口（语料级读取者）的三态与那一栏的接线 ─────────────────── */
+  {
+    id: "text-readers-corpus-const-not-expanded",
+    src: "scripts/lib/text-readers.ts",
+    test: "tests/text-readers.test.ts",
+    desc: "参数是裸标识符时不去展开同文件的常量定义 ⇒ `readdirSync(REPLAY_DIR)` 被读成「临时盘」，"
+      + "而字面量就在另一行。这一格是真踩出来的：那条匹配标识符的正则没有捕获组，取 `bare[1]` 恒为 undefined、"
+      + "TS 也不报（按下标取就是 string），于是整条展开静默失效——第一版现读把两份遍历 scripts 的判卷整类漏掉",
+    apply: (s) => s.replace("consts.get(bare[0])", "consts.get(\"\")"),
+    expectFail: "★参数是裸标识符时要展开同文件的常量定义（现读第一版在这一格静默失效：那条正则没有捕获组）",
+  },
+  {
+    id: "text-readers-corpus-face-not-load-bearing",
+    src: "scripts/lib/text-readers.ts",
+    test: "tests/text-readers.test.ts",
+    desc: "第二出口的名单退化成「有 corpus 命中就点名」、把登记的面丢掉 ⇒ 只遍历 fixtures 的判卷"
+      + "也会出现在改了 scripts 的清单里。多列看似安全，但清单变成噪音就没人再看，"
+      + "而 `faces` 这一枚字段也随之退化成注释（没人读它＝它错了也没人知道）",
+    apply: (s) => s.replace("    for (const face of s.faces) {", "    for (const face of [\"\"] as string[]) {"),
+    expectFail: "两向证人·闭嘴：只遍历 fixtures 的那份不许出现在改了 scripts 的清单里（清单变噪音就没人看）",
+  },
+  {
+    id: "text-reader-check-corpus-column-dropped",
+    src: "scripts/text-reader-check.ts",
+    test: "tests/text-readers.test.ts",
+    desc: "第二出口的汇总不印 ⇒ 只剩「改动面级判卷」那几行，读者无从知道这张表的**分母**是多少"
+      + "（78 处列目录调用里语料级 16 处），也就无从知道它是「量到了 0」还是「没接上电」",
+    apply: (s) => s.replace('console.log("  " + corpusSummary(corpusScans));', "void corpusSummary(corpusScans);"),
+    expectFail: "★两栏各印一行：并成一行就分不清是「少了一条」还是「少了一类」",
+  },
+  {
+    id: "text-reader-check-corpus-cap-guard-dead",
+    src: "scripts/text-reader-check.ts",
+    test: "tests/text-readers.test.ts",
+    desc: "语料级那一栏的帽算出来却不接退出码 ⇒ 出现了没登记的遍历写法时这把尺照样退 0，"
+      + "而第二出口唯一的用途就是「我开始漏报一类了要喊」",
+    apply: (s) => s.replace("const corpusBad = corpusUnknown > CORPUS_UNKNOWN_CAP;", "const corpusBad = false;"),
+    expectFail: "★第二出口那一栏的帽要接进退出码（算出来不看＝恒绿）",
+  },
 ];
 
 /** 从 apply 闭包里取回针脚原文（函数源码里的第一个字符串字面量；replace/replaceAll、
