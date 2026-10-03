@@ -1,0 +1,19 @@
+[zcode 2ce4a0c] 第 334 页：#41 第一半——认证那一趟的「温度＋它自己打出来的读数」落成可入库工件（这一步从前是我手工从 /tmp 抄三次，抄漏一次被 D-9 判红）
+ 20 files changed, 813 insertions(+), 8 deletions(-)
+ create mode 100644 outputs/cert-provenance-2026-10-04/baseline-334.log
+ create mode 100644 outputs/cert-provenance-2026-10-04/commit-334.txt
+ create mode 100644 outputs/cert-provenance-2026-10-04/docs-check-334-precommit.log
+ create mode 100644 outputs/cert-provenance-2026-10-04/docs-check-334-precommit2.log
+ create mode 100644 outputs/cert-provenance-2026-10-04/e2e-skip-test.log
+ create mode 100644 outputs/cert-provenance-2026-10-04/e2e-skip-test2.log
+ create mode 100644 outputs/cert-provenance-2026-10-04/e2e-skip-test2/provenance.md
+ create mode 100644 outputs/cert-provenance-2026-10-04/needles-334.log
+ create mode 100644 outputs/cert-provenance-2026-10-04/needles-334b.log
+ create mode 100644 outputs/cert-provenance-2026-10-04/red-machine-334.log
+ create mode 100644 outputs/cert-provenance-2026-10-04/red-machine-334.mjs
+ create mode 100644 outputs/cert-provenance-2026-10-04/red-machine-334b.log
+ create mode 100644 outputs/cert-provenance-2026-10-04/red-machine-334c.log
+ create mode 100644 outputs/cert-provenance-2026-10-04/typecheck-334.log
+ create mode 100644 outputs/cert-provenance-2026-10-04/typecheck-334b.log
+ create mode 100644 scripts/lib/head-cert-provenance.ts
+ create mode 100644 tests/head-cert-provenance.test.ts

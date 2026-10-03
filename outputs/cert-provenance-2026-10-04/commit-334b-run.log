@@ -1,0 +1,8 @@
+[zcode d39f0a1] 第 334 页补：把隔壁整仓改名（`M0_`→`CAIRN_`）卷进 HEAD 的 8 行逐字节退回去，并记下这件事的取料口径与一条 zsh 假读数
+ 7 files changed, 85 insertions(+)
+ create mode 100644 outputs/cert-provenance-2026-10-04/commit-334-fix.txt
+ create mode 100644 outputs/cert-provenance-2026-10-04/commit-334b.txt
+ create mode 100644 outputs/cert-provenance-2026-10-04/commit-fix-run.log
+ create mode 100644 outputs/cert-provenance-2026-10-04/foreign-sweep-evidence.log
+ create mode 100644 outputs/cert-provenance-2026-10-04/needles-334-afterfix.log
+ create mode 100644 outputs/cert-provenance-2026-10-04/needles-334-postcommit-beforefix.log
