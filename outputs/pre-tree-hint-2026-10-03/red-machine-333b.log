@@ -1,0 +1,38 @@
+
+### M1 摘掉开树前的那句打印（scripts/mutate-verify.mjs）
+退出码 1｜用例级红 1 条
+  × ★接线（顺序那一半）：主树在 `worktree add` **之前**调它——只在子进程里喊＝钱已经付了才响
+  | Test Files  1 failed (1)
+  | Tests  1 failed | 166 passed (167)
+  | ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+  复原逐字节一致 = true
+
+### M2 gitOk 挪成常量（scripts/mutate-verify.mjs）
+退出码 1｜用例级红 1 条
+  × ★接线（取料那一半）：gitOk 吃的是 diff 的退出码，不是常量
+  | Test Files  1 failed (1)
+  | Tests  1 failed | 166 passed (167)
+  | ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+  复原逐字节一致 = true
+
+### M3 摘掉「取不到」那一支（scripts/lib/mutate-gates.ts）
+退出码 1｜用例级红 1 条
+  × git 取不到清单 ⇒ 报『不可知』，不许读成『派生必然 0』（一次 git 失败不能被写成结论）
+  | Test Files  1 failed (1)
+  | Tests  1 failed | 166 passed (167)
+  | ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+  复原逐字节一致 = true
+
+### M4 every 改成 some（scripts/lib/mutate-gates.ts）
+退出码 1｜用例级红 1 条
+  × 三态分开出声：同一笔／纯台账／含一个真面要闭嘴（混合清单不许被 `some` 读成必然空）
+  | Test Files  1 failed (1)
+  | Tests  1 failed | 166 passed (167)
+  | ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+  复原逐字节一致 = true
+
+=== 汇总（每台应有自己那条红，两台同条＝其中一条没分辨力）===
+M1 摘掉开树前的那句打印（scripts/mutate-verify.mjs） ⇒ 红 1 条：★接线（顺序那一半）：主树在 `worktree add` **之前**调它——只在子进程里
+M2 gitOk 挪成常量（scripts/mutate-verify.mjs） ⇒ 红 1 条：★接线（取料那一半）：gitOk 吃的是 diff 的退出码，不是常量
+M3 摘掉「取不到」那一支（scripts/lib/mutate-gates.ts） ⇒ 红 1 条：git 取不到清单 ⇒ 报『不可知』，不许读成『派生必然 0』（一次 git 失败不能被写成
+M4 every 改成 some（scripts/lib/mutate-gates.ts） ⇒ 红 1 条：三态分开出声：同一笔／纯台账／含一个真面要闭嘴（混合清单不许被 `some` 读成必然空）

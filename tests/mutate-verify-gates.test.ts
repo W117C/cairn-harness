@@ -7,19 +7,19 @@ import { readFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { anchorFaces, auditExpectFails, auditPointerWiring, enclosingSymbol, enclosingSymbolSpan, returnExitsOf, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, anchorCostCell, costRollupOf, entryDisposition, escapeTitlePattern, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, judgeWithRetry, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, mutateTreeGuard, needleProblemLine, preflightRefusals, runModeCell, runModeFor, runReadingIsBad, restoreCheck, restoreDiffProblem, redVerdictCell, redKindsLine, selectChangedEntries, selectorAmbiguity, selectorCell, selectedTestCount, splitRunnable, testCaseBody, unverifiedCell, untrackedAnchorLine, untrackedAnchorPaths, vacuousRunLine, wiringCensus, type AnchorCostRow, type HeadState, type RestoreVerdict } from "../scripts/lib/mutate-gates";
+import { anchorFaces, auditExpectFails, auditPointerWiring, enclosingSymbol, enclosingSymbolSpan, returnExitsOf, looseOnlyPointers, baselineRedKind, blockingTotalOf, budgetMsOf, classifyArgs, costCell, anchorCostCell, costRollupOf, entryDisposition, escapeTitlePattern, failingTestText, headOnlyNeedleLine, headOnlyNeedleProblems, headPointerProblems, judgeWithRetry, killerAttributionOk, leftoverActionOf, leftoverBackupPaths, mutateTreeGuard, needleProblemLine, preflightRefusals, runModeCell, runModeFor, runReadingIsBad, restoreCheck, restoreDiffProblem, redVerdictCell, redKindsLine, selectChangedEntries, ledgerOnlyDerivationHint, selectorAmbiguity, selectorCell, selectedTestCount, splitRunnable, testCaseBody, unverifiedCell, untrackedAnchorLine, untrackedAnchorPaths, vacuousRunLine, wiringCensus, type AnchorCostRow, type HeadState, type RestoreVerdict } from "../scripts/lib/mutate-gates";
 import { checkAnchorTitles } from "../scripts/mutate-anchor-titles";
 
 /** 从锚点表取 `{id,test,expectFail}`：只走 `--list` 这条**不改源文件**的入口。
  *  以前这里 spawn `--check-needles`，结果在变异单跑时撞上门自己的备份文件预检 ⇒「读不到汇总行」
  *  把三条本来好好的锚点带红（第 138 页）。两把尺共用这一份取料，别各写一遍（第十三族）。 */
-function listAnchorRows(): { id: string; test: string; expectFail: string }[] {
+function listAnchorRows(): { id: string; src: string; test: string; expectFail: string }[] {
   const script = fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url));
   const r = spawnSync(process.execPath, [script, "--list"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   return (r.stdout ?? "").split("\n")
     .map((l) => l.split("\t"))
     .filter((p) => p.length >= 5 && p[4] !== undefined && p[4].startsWith("\""))
-    .map((p) => ({ id: p[0] ?? "", test: p[3] ?? "", expectFail: JSON.parse(p[4] ?? '""') as string }));
+    .map((p) => ({ id: p[0] ?? "", src: p[1] ?? "", test: p[3] ?? "", expectFail: JSON.parse(p[4] ?? '""') as string }));
 }
 
 function readRel(rel: string): string | null {
@@ -54,6 +54,59 @@ describe("budgetMsOf + classifyArgs 的值位（自我预算这条手段本身�
 
   it("未知 flag 照旧当场拒（新认的两个 flag 不放宽这条）", () => {
     expect(classifyArgs(["--budgett-ms", "600000"]).unknown).toEqual(["--budgett-ms"]);
+  });
+});
+
+/* 第 333 页 · #40：`--changed-since` 取错那一格的代价要**在开树之前**出声。
+   实测动因（第 331/332 页）：rev 取成"簇自己"那次，派生 0 条 ⇒ 脚本按安全方向退回整表 ⇒
+   1412 条跑了 2121.7s＝35.4 分钟；而那句 `ℹ️ 选中 0 条` 印在子进程里，那时 `worktree add` 与
+   `cp -al node_modules` 已经付过钱。这一格只出声、不拦（整表兜底是安全方向：少筛不等于漏验）。 */
+describe("ledgerOnlyDerivationHint：派生必然为 0 的三态，以及那句提示必须排在开树前", () => {
+  it("三态分开出声：同一笔／纯台账／含一个真面要闭嘴（混合清单不许被 `some` 读成必然空）", () => {
+    const same = ledgerOnlyDerivationHint({ files: [""], gitOk: true, prevRev: "abc1234" });
+    expect(same?.reason, "git 空 stdout 切出来就是那一个空串＝清单为空（给的 rev 与主检出 HEAD 同一笔）").toBe("same-rev");
+    expect(ledgerOnlyDerivationHint({ files: ["", ""], gitOk: true, prevRev: "abc1234" })?.reason, "尾换行不算一个文件（第 162 页那条口径在这支上同样成立）").toBe("same-rev");
+    expect(same?.line ?? "", "候选 rev 要印出来，不然人还得自己去查 HEAD~1 是哪一笔").toContain("HEAD~1=abc1234");
+    const ledger = ledgerOnlyDerivationHint({ files: ["PROGRESS.md", "outputs/x/a.log", ""], gitOk: true, prevRev: "abc1234" });
+    expect(ledger?.reason).toBe("ledger-only");
+    expect(ledger?.line ?? "", "条数要进句子，且那个空串不算一个文件（三项输入＝两个真文件；「3 个」与「1 个」不能读成同一个数）").toContain("2 个文件");
+    expect(ledgerOnlyDerivationHint({ files: ["src/a.ts"], gitOk: true, prevRev: "abc1234" }), "含一个真面⇒派生未必为 0，这一格必须闭嘴").toBeNull();
+    expect(ledgerOnlyDerivationHint({ files: ["PROGRESS.md", "src/a.ts"], gitOk: true, prevRev: "" }), "台账＋真面混在一起＝不是必然空（over-inclusive 的那一侧在这里是白喊）").toBeNull();
+  });
+
+  it("git 取不到清单 ⇒ 报『不可知』，不许读成『派生必然 0』（一次 git 失败不能被写成结论）", () => {
+    const unknown = ledgerOnlyDerivationHint({ files: [], gitOk: false, prevRev: "abc1234" });
+    expect(unknown?.reason, "取不到与空清单共用一条出口＝把没取到当已知").toBe("unknown");
+    expect(unknown?.line ?? "").not.toContain("必然 0 条");
+    expect(unknown?.line ?? "").toContain("取不到");
+  });
+
+  it("前提守卫：整张表里没有一枚锚点的两面落在台账文件上（漂了，上面那句「纯台账⇒必然 0」就是假推理）", () => {
+    const rows = listAnchorRows();
+    expect(rows.length, "一条锚点都没取到＝没有尺，不读成干净（规则 74）").toBeGreaterThan(0);
+    const bad = rows.filter((r) => r.src === "PROGRESS.md" || r.src.startsWith("outputs/") || r.test === "PROGRESS.md" || r.test.startsWith("outputs/"));
+    expect(bad, "锚点两面出现台账文件 ⇒ 派生不再必然为 0，这一格的前提要重登记：" + bad.map((b) => b.id + "→" + b.src + "|" + b.test).join("，")).toEqual([]);
+  });
+
+  it("★接线（顺序那一半）：主树在 `worktree add` **之前**调它——只在子进程里喊＝钱已经付了才响", () => {
+    const src = readFileSync(join(fileURLToPath(new URL("../", import.meta.url)), "scripts", "mutate-verify.mjs"), "utf8");
+    // 跨行正则，不用 `toContain(那行文字)`：锚点表就住在同一个文件里，表中的针脚字面就是这些原文 ⇒ 恒真（规则 236）。
+    expect(src, "整支调用没接上＝纯函数没人调").toMatch(/\n\s*const hint = ledgerOnlyDerivationHint\(\{ files:/u);
+    expect(src, "提示打印被摘掉＝派生必然 0 这件事又回到只有子进程知道").toMatch(/\n\s*if \(hint !== null\) console\.log\(/u);
+    const call = src.search(/\n\s*const hint = ledgerOnlyDerivationHint\(/u);
+    const add = src.search(/"worktree", "add"/u);
+    expect(add, "取不到开树那一行＝位置比不了，不许说「在前」").toBeGreaterThan(-1);
+    expect(call < add, "顺序反了＝提示排在开树之后，那笔整表的钱已经花掉").toBe(true);
+  });
+
+  it("★接线（取料那一半）：gitOk 吃的是 diff 的退出码，不是常量", () => {
+    const src = readFileSync(join(fileURLToPath(new URL("../", import.meta.url)), "scripts", "mutate-verify.mjs"), "utf8");
+    // 必须带**真实换行的跨行上下文**：这条针脚的字面（`gitOk: diff.status === 0`）在本文件里出现两次——
+    // 一次是源码，一次是锚点表把它当 needle 原样抄了一遍（那部分不需要转义，逐字相同）。
+    // 只 `toMatch(/gitOk: diff\.status === 0/)` 会因此**恒真**：第 333 页造红台 M2 实测存活（改成常量后 167 条全绿）。
+    // 表里那份前面跟的是 `s.replace("`，源码那份前面是换行＋缩进 ⇒ 拿换行做锚才分得开。
+    expect(src, "gitOk 挪成常量＝这一侧不再是「没取到」：写死 true 会把一次 git 失败读成「必然 0」，写死 false 会让这一格永远不出声").toMatch(
+      /\n\s*const hint = ledgerOnlyDerivationHint\(\{ files: \(diff\.stdout \?\? ""\)\.split\("\\n"\), gitOk: diff\.status === 0, prevRev \}\);/u);
   });
 });
 

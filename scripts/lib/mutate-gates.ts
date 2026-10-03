@@ -445,6 +445,35 @@ export function selectChangedEntries(
   return { ids, faceCount: changed.size, pickedCount: ids.length, total: entries.length };
 }
 
+/** `--changed-since` 派生**必然为 0** 的形状（第 333 页 #40）。
+ *  起因是一笔实测代价：把 rev 取成"簇自己"（`HEAD~1` 而簇是 `HEAD~1..HEAD`）⇒ 派生 0 条 ⇒ 脚本按安全方向
+ *  退回整表 ⇒ 一次本该约 60 秒的复认跑成 **1412 条／2121.7s＝35.4 分钟**。原来那句 `ℹ️ 选中 0 条`
+ *  印在子进程里，而那时 `worktree add` 与 `cp -al node_modules` 已经付过钱——响是响了，太晚。
+ *  这里只问"是不是必然空"，不重跑 `selectChangedEntries`：那要把整张表读进内存（子进程 `--list` 实测 ~1.6s），
+ *  而锚点的两面只落在 `scripts/ src/ tests/`（整表现读：1412 条里 0 条两面是台账文件）⇒ 清单里只有
+ *  PROGRESS.md／outputs/** 时可以直接断定派生为 0。那条"0 条台账面"的成立前提由判卷钉住，漂了就红。
+ *  **出声不拦**：整表兜底是安全方向（少筛不等于漏验），这一格只把那笔代价提前到秒级可见。 */
+export function ledgerOnlyDerivationHint(mat: {
+  files: readonly string[];
+  gitOk: boolean;
+  prevRev: string;
+}): { reason: "same-rev" | "ledger-only" | "unknown"; line: string } | null {
+  const files = mat.files.filter((p) => p !== "");
+  const prev = mat.prevRev === "" ? "取不到" : mat.prevRev;
+  // 取不到清单与"清单为空"是两件事：前者不许冒充后者（否则一次 git 失败就被读成「派生必然 0」）。
+  if (!mat.gitOk) {
+    return { reason: "unknown", line: `⚠️ 取不到 \`--changed-since\` 到 HEAD 的改动清单（git 不退 0）⇒ 不说"派生必然 0"，整表兜底照旧跑。` };
+  }
+  if (files.length === 0) {
+    return { reason: "same-rev", line: `⚠️ \`--changed-since\` 与主检出 HEAD 是同一笔 ⇒ 派生必然 0 条（这里要的是**簇之前那一笔**；候选 HEAD~1=${prev}）。整表兜底照旧跑，但那一趟不等于"本笔复验过"。` };
+  }
+  const isLedger = (p: string): boolean => p === "PROGRESS.md" || p.startsWith("outputs/");
+  if (files.every(isLedger)) {
+    return { reason: "ledger-only", line: `⚠️ \`--changed-since..HEAD\` 的 ${String(files.length)} 个文件全是台账（PROGRESS.md／outputs/**）⇒ 派生必然 0 条（锚点两面只在 scripts/ src/ tests/；候选 HEAD~1=${prev}）。整表兜底照旧跑，但那一趟不等于"本笔复验过"。` };
+  }
+  return null;
+}
+
 export function classifyArgs(args: readonly string[]): ArgPlan {
   // 先标出「flag + 它的值」这两个下标，后面两个过滤器都不再看它们。
   // 值位又是一个 flag（`--budget-ms --list`）时不吞：让 budgetMsOf 去报「没给值」，--list 照旧生效。

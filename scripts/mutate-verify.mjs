@@ -23,7 +23,7 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { acquireToolLock } from "./lib/tool-lock.ts";
 // 判据本体在 TS 侧（可被 tests/ 直接断言）；本脚本经 tsx 运行，见 package.json 的 mutate-verify。
-import { entryDisposition, mutateTreeGuard, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, auditPointerWiring, wiringCensus, expectFailProblemLine, killerAttributionOk, judgeWithRetry, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, costRollupOf, costCell, anchorCostCell, selectorAmbiguity, selectorCell, selectedTestCount, escapeTitlePattern, runModeFor, runReadingIsBad, vacuousRunLine, runModeCell, unverifiedCell, restoreDiffProblem, redVerdictCell, redKindsLine } from "./lib/mutate-gates.ts";
+import { entryDisposition, mutateTreeGuard, auditNeedles, backupPathOf, duplicateIds, leftoverBackupPaths, leftoverActionOf, splitRunnable, needleProblemLine, needleSeverity, needleMoveCause, classifyArgs, isLineWiseApply, budgetMsOf, untrackedAnchorPaths, untrackedAnchorLine, headOnlyNeedleProblems, headOnlyNeedleLine, anchorFaces, blockingTotalOf, auditExpectFails, looseOnlyPointers, auditPointerWiring, wiringCensus, expectFailProblemLine, killerAttributionOk, judgeWithRetry, failingTestText, headPointerProblems, baselineRedKind, selectChangedEntries, ledgerOnlyDerivationHint, costRollupOf, costCell, anchorCostCell, selectorAmbiguity, selectorCell, selectedTestCount, escapeTitlePattern, runModeFor, runReadingIsBad, vacuousRunLine, runModeCell, unverifiedCell, restoreDiffProblem, redVerdictCell, redKindsLine } from "./lib/mutate-gates.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VITEST = join(ROOT, "node_modules/vitest/vitest.mjs");
@@ -12556,6 +12556,43 @@ const MUTATIONS = [
     apply: (s) => s.replace("claimCountCeiling(cf.noNeedle.length, CLAIM_NO_NEEDLE_CAP)", "claimCountCeiling(0, CLAIM_NO_NEEDLE_CAP)"),
     expectFail: "★接线：探针把第四态的帽印出来并接进红（算出来不接＝这一格还是没人管）",
   },
+  /* ── 第 333 页 · #40：派生必然为 0 那一格，提示要在开树之前出声 ───────────────── */
+  {
+    id: "mutate-pre-tree-hint-not-printed",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "把主树那句提示的打印摘掉 ⇒ 纯函数还在、派生还是 0 条，但人要等子进程印 `ℹ️ 选中 0 条` 时才知道，"
+      + "而那时 worktree add 与 cp -al node_modules 已经付过钱（第 331 页实测：随后整表跑了 2121.7s）",
+    apply: (s) => s.replace("prevRev });\n      if (hint !== null) console.log(", "prevRev });\n      if (hint !== null && false) console.log("),
+    expectFail: "★接线（顺序那一半）：主树在 `worktree add` **之前**调它——只在子进程里喊＝钱已经付了才响",
+  },
+  {
+    id: "mutate-pre-tree-gitok-hardcoded",
+    src: "scripts/mutate-verify.mjs",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "把 gitOk 从 diff 的退出码挪成常量 ⇒ 两个方向都坏：写死 true 时一次 git 失败（rev 拼错、仓外路径）被读成「派生必然 0」，"
+      + "写死 false 时这一格永远只报「取不到」＝永远不出声（「没取到」与「已知为空」是两个数，规则 196/239）",
+    apply: (s) => s.replace("split(\"\\n\"), gitOk: diff.status === 0", "split(\"\\n\"), gitOk: false"),
+    expectFail: "★接线（取料那一半）：gitOk 吃的是 diff 的退出码，不是常量",
+  },
+  {
+    id: "mutate-gates-unknown-read-as-same-rev",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "摘掉「取不到」那一支 ⇒ gitOk 为假时走到空清单那条出口，喊成「rev 与 HEAD 同一笔、派生必然 0」，"
+      + "听起来像诊断，实际是没取到（不可知不许由 0 顶替）",
+    apply: (s) => s.replace("  if (!mat.gitOk) {", "  if (false) {"),
+    expectFail: "git 取不到清单 ⇒ 报『不可知』，不许读成『派生必然 0』（一次 git 失败不能被写成结论）",
+  },
+  {
+    id: "mutate-gates-ledger-some-instead-of-every",
+    src: "scripts/lib/mutate-gates.ts",
+    test: "tests/mutate-verify-gates.test.ts",
+    desc: "every 改成 some ⇒ 清单里有一个真面也照样喊「必然 0」——这里 over-inclusive 不是安全方向，"
+      + "它让人放弃一次本来该跑的复认（与「列目录助手要按能不能点出名字记账」第 329 页同型）",
+    apply: (s) => s.replace("  if (files.every(isLedger)) {", "  if (files.some(isLedger)) {"),
+    expectFail: "三态分开出声：同一笔／纯台账／含一个真面要闭嘴（混合清单不许被 `some` 读成必然空）",
+  },
   {
     id: "claim-whole-sentence-piece-double-count",
     src: "scripts/probe-promise-recall.ts",
@@ -13841,6 +13878,20 @@ if (plan.mode === "run" && (process.argv.slice(2).includes("--in-worktree") || p
   }
   const want = (() => { try { return execFileSync("git", ["rev-parse", "HEAD"], { cwd: mainRoot, encoding: "utf8" }).trim(); } catch { return ""; } })();
   if (want === "") { console.error("主检出取不到 HEAD ⇒ 没法切树，拒跑（不许拿一棵空树当隔离）"); process.exit(2); }
+  /* 第 333 页 #40：派生**必然为 0** 的两种形状要在开树之前出声。
+     实测代价：rev 取成"簇自己"那次，子进程那句 `ℹ️ 选中 0 条` 印出来时，`worktree add` 与
+     `cp -al node_modules` 已经付过钱，随后整表兜底跑了 2121.7s（1412/1412）——响是响了，太晚。
+     这里不重跑 selectChangedEntries（那要把整张表读进来），只按"改动清单是不是只有台账"判必然空。 */
+  {
+    const csArg = process.argv.slice(2).find((a) => a.startsWith("--changed-since="));
+    if (csArg !== undefined) {
+      const csRev = csArg.slice("--changed-since=".length).trim();
+      const diff = spawnSync("git", ["diff", "--name-only", `${csRev}..${want}`], { cwd: mainRoot, encoding: "utf8" });
+      const prevRev = (spawnSync("git", ["rev-parse", "--short", "HEAD~1"], { cwd: mainRoot, encoding: "utf8" }).stdout ?? "").trim();
+      const hint = ledgerOnlyDerivationHint({ files: (diff.stdout ?? "").split("\n"), gitOk: diff.status === 0, prevRev });
+      if (hint !== null) console.log(`[mutate-verify] ${hint.line}`);
+    }
+  }
   if (!existsSync(treeAbs)) {
     mkdirSync(dirname(treeAbs), { recursive: true });
     const added = spawnSync("git", ["worktree", "add", "--detach", treeRel, want], { cwd: mainRoot, encoding: "utf8" });
