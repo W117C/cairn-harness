@@ -11,6 +11,8 @@
 // （agent-runner.ts:2057/2058 实测口径）⇒ 多工作区并发 run 零 core 改动。
 // 漂移检测（Global Constraints）：每会话记 {size, mtimeMs} 快照（openSession 与本端 run 收束时刷新）；
 // run 启动前重读 stat，不一致 ⇒ 拒绝该次 run（不静默覆盖），快照比对只对 sessionMode 生效。
+// M3 T2（每会话取消）：run 建 per-session AbortController 经 RunOverrides.signal 注入（零 core 改动），
+// cancel(sessionId) 只 abort 该会话的 controller；run 响应带 aborted 真值（desktop 扩展字段）。
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentEvent } from "../../../../src/events";
@@ -18,7 +20,6 @@ import type { RunRequest, RunResponse, SessionInfoPayload } from "../../../../sr
 import {
   handleAgentDecide,
   handleAgentRun,
-  handleRunCancel,
   initMemoryHome,
   resolveProviderKind,
   setAppHooks,
@@ -45,11 +46,13 @@ export interface KernelHostDeps {
 
 export interface KernelHost {
   /** 会话模式（sessionId 在场）时工作区/日志路径由归属表给出并以 over 第一优先注入；
-   *  非会话模式原样透传（M2 语义逐字不变）。aborted 增强字段由 T2（每会话取消）填充。 */
+   *  非会话模式原样透传（M2 语义逐字不变）。aborted 增强字段（desktop 扩展，不进 ipc-protocol 类型）：
+   *  当且仅当该会话的 per-session controller 被 abort 时为 true——判定在包装返回处做。 */
   run(req: RunRequest & { workspace?: string }): Promise<RunResponse & { aborted?: boolean }>;
   decide(askId: string, approved: boolean, scope?: "once" | "session_kind" | "always"): boolean;
-  /** 会话级取消（替代无参 cancel）。T1 保持 M2 取消缝（handleRunCancel 取当前交互 run）——
-   *  per-session AbortController map 由 T2 在 run/cancel 两处落地（接口先行，语义 T2 接管）。 */
+  /** 会话级取消（M3 T2 接管 T1 的缝）：只 abort 该会话在跑 run 的 AbortController；
+   *  该会话不在运行 ⇒ { ok:false, error:"会话不在运行" }。不再走 M2 全局缝 handleRunCancel
+   *  （那只认最后注册的 interactiveRunAbort——并发会话下取消的是最后启动的那场，杀错对象）。 */
   cancel(sessionId: string): Promise<{ ok: boolean; error?: string }>;
   /** 全工作区合并的会话清单，每条带 workspace 归组标记（T3 分组侧栏的数据源）。 */
   listSessions(): Promise<(SessionInfoPayload & { workspace: string })[]>;
@@ -91,6 +94,13 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
 
   // ---- 会话→工作区归属表（M3 T1）：createSession/openSession 登记，run 时解析（缺省 activeWorkspace）。
   const owner = new Map<string, string>();
+
+  // ---- 每会话取消（M3 T2）：run 启动建 per-session AbortController，经 RunOverrides.signal 注入
+  //  （agent-runner.ts:1584 AbortSignal.any 并入运行信号 ⇒ 轮界 loop.ts:363 + 门等待 ask-gate.ts:92-97
+  //  + 长驻工具 loop.ts:484 全语义，实测见 task-2-report 勘误裁决）；run 收束清 map。
+  //  同会话并发 run 被 core 的 isSessionLogBusy 拒（第二场速死），首场的 controller 保持 canonical
+  //  ——set 只在缺位时发生、清只在还是自己时发生，cancel 永远指向真正在跑的那一场。
+  const runControllers = new Map<string, AbortController>();
 
   // ---- 漂移检测状态 ----
   // 快照按 logPath（=工作区×会话）记，不按裸 id：同一分钟在两工作区各建的会话 id 同名
@@ -190,21 +200,30 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
   return {
     run: async (req) => {
       const sessionId = req.sessionId;
-      if (sessionId === undefined) return handleAgentRun(req); // 非会话模式：临时日志，无归属无漂移
+      if (sessionId === undefined) return handleAgentRun(req); // 非会话模式：临时日志，无归属无漂移无可取消缝
       const ws = await resolveSessionWs(sessionId);
       const logPath = pathOf(wsRoot(ws), sessionId);
       if (await externalDrift(sessionId, logPath)) return { ok: false, error: DRIFT_ERROR };
+      const controller = new AbortController();
+      if (!runControllers.has(sessionId)) runControllers.set(sessionId, controller);
       try {
-        // T2 缝：per-session AbortController 在此建、`signal: controller.signal` 注入、收束清 map——
-        // 本任务按勘误窗口先不接（不传 signal），controller map 留 T2。
-        return await handleAgentRun(req, { sessionId, logPath, workspace: ws });
+        const res = await handleAgentRun(req, { sessionId, logPath, workspace: ws, signal: controller.signal });
+        // aborted 真值（desktop 扩展字段，不动 ipc-protocol 类型）：当且仅当本会话 controller 被 abort
+        return controller.signal.aborted ? { ...res, aborted: true } : res;
       } finally {
+        if (runControllers.get(sessionId) === controller) runControllers.delete(sessionId);
         await refreshSnapshot(sessionId, logPath); // 收束即基线；自身尾随写由下一场 run 启动前的归因放行
       }
     },
     decide: (askId, approved, scope) => handleAgentDecide(askId, approved, scope),
-    // handleRunCancel 是同步出口（返回值即结果）；宿主面对壳许诺 Promise——async 包装补齐缝。
-    cancel: async (sessionId) => handleRunCancel(),
+    // 会话级取消（M3 T2）：abort 该会话在跑 run 的 controller（经 RunOverrides.signal 全语义收束）；
+    // 不在跑 ⇒ fail-visible。M2 全局缝 handleRunCancel 不再经此出口（并发会话下它杀的是最后启动的 run）。
+    cancel: async (sessionId) => {
+      const controller = runControllers.get(sessionId);
+      if (controller === undefined) return { ok: false, error: "会话不在运行" };
+      controller.abort();
+      return { ok: true };
+    },
     listSessions: async () => {
       const out: (SessionInfoPayload & { workspace: string })[] = [];
       for (const ws of workspaces) {

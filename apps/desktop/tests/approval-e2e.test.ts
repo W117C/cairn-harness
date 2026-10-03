@@ -5,7 +5,7 @@
 // default 询问 / auto 放行）。args.model 缺席 ⇒ 零 worker spawn（不进 M3A_AGENTS_DEMO 通道）。
 // host 装配手法沿 kernel-host.test.ts：mkdtemp 工作区、seed settings provider=demo、outbox 收集、
 // env 清场与还原。两用例共用同一份 fixture 路径常量，各用独立工作区（同一个 marker 文件名，互不串扰）。
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -122,5 +122,68 @@ describe("审批→执行→打断 全链路（M3A_MAIN_SCRIPT 剧本 + default 
       expect(host.decide(ask.askId, true)).toBe(false);
     },
     30_000,
+  );
+
+  it(
+    "每会话取消：取消 A 不影响 B；A 返回 aborted:true 且 onAskDone fail-closed",
+    async () => {
+      // M3 T2（每会话取消）。M3A_MAIN_SCRIPT 是进程级通道且逐 run 读取（createProvider 顶部，
+      // agent-runner.ts:1379）⇒ 同进程并发两场 run 共用同一份审批剧本：A/B 各自的 provider
+      // 实例各自从头回放、各自把 run_shell 送审（独立 askId，共享 appAskGate 只登记不串场）。
+      // 这把隔离判据顶到最狠处：两场都停在门等待时取消 A——M2 全局缝（handleRunCancel abort
+      // 的是最后注册的 interactiveRunAbort = B 的 runAbort）会杀错 B 而 A 挂死；会话级 cancel 只许收 A。
+      rmSync(join(wsApprove, "approval-marker.tmp"), { force: true }); // 场 1 留下的 marker 清场（单独跑本例时本就不在）
+      outbox.length = 0;
+      const a = await host.createSession(wsCancel);
+      let b = await host.createSession(wsApprove);
+      if (b.id === a.id) b = await host.createSession(wsApprove); // 同分钟两根撞名规避（归属表覆盖），沿 kernel-host.test.ts 先例
+      const runA = host.run({ message: "建标记（将被打断）", mode: "default", sessionId: a.id });
+      const askA = await awaitRunShellAsk(); // A 先飞：第一张 run_shell 审批卡必属 A
+      const runB = host.run({ message: "建标记（照常跑完）", mode: "default", sessionId: b.id });
+      await vi.waitFor(
+        () =>
+          expect(
+            outbox.filter(([c, p]) => c === "onAsk" && (p as { tool?: string }).tool === "run_shell").length,
+          ).toBeGreaterThanOrEqual(2),
+        { timeout: 10_000, interval: 200 },
+      );
+      const askB = outbox
+        .map(([, p]) => p as { askId: string; tool: string })
+        .find((p) => p.tool === "run_shell" && p.askId !== askA.askId)!;
+      // 双双停在门等待 → 会话级取消 A
+      expect((await host.cancel(a.id)).ok).toBe(true);
+      // A 收束且带 aborted 真值（kernel-host 判 controller.signal.aborted 的 desktop 扩展字段）
+      const resA = await settleWithin(runA, 20_000, "A（取消场）run");
+      expect(resA.aborted, JSON.stringify(resA)).toBe(true);
+      // 门等待即时收束的实证（勘误窗口裁决）：AskGate onAbort 落 onAskDone reason=user；
+      // settleWithin 20s 本身就是「非延迟收束」的界——若取消够不着门等待，这里要等 60s 超时才收。
+      await vi.waitFor(() => expect(outbox.some(([c]) => c === "onAskDone")).toBe(true));
+      const doneOf = (askId: string) =>
+        outbox
+          .filter(([c]) => c === "onAskDone") // 先按通道过滤：onAsk 载荷同带 askId（无 outcome），不能混扫
+          .map(([, p]) => p as { askId: string; outcome: string; reason: string })
+          .find((p) => p.askId === askId);
+      const doneA = doneOf(askA.askId);
+      expect(doneA?.outcome).toBe("rejected");
+      expect(["user", "timeout", "unattended"]).toContain(doneA?.reason);
+      expect(doneA?.reason).toBe("user"); // 收束来源是取消（abort），不是门超时
+      // fail-closed：A 的 pending 同步出表 ⇒ 同一 askId 不可再决议
+      expect(host.decide(askA.askId, true)).toBe(false);
+      // A 无 marker（门未放行，工具未执行）
+      expect(existsSync(join(wsCancel, "approval-marker.tmp"))).toBe(false);
+      // B 完全不受影响：审批照常可决议、run 照常 ok、marker 落 B 的工作区
+      expect(host.decide(askB.askId, true)).toBe(true);
+      const resB = await settleWithin(runB, 20_000, "B（照常场）run");
+      expect(resB.ok, JSON.stringify(resB)).toBe(true);
+      expect(resB.aborted).toBeUndefined(); // aborted 当且仅当该会话 controller 被 abort
+      expect(existsSync(join(wsApprove, "approval-marker.tmp"))).toBe(true);
+      const doneB = doneOf(askB.askId);
+      expect(doneB?.outcome).toBe("approved");
+      expect(doneB?.reason).toBe("user");
+      // B 的会话流完整可读（归属表解析 + 取消未向 B 注入任何事件）
+      const openedB = await host.openSession(b.id);
+      expect(openedB.events.length).toBeGreaterThan(0);
+    },
+    60_000,
   );
 });
