@@ -12181,4 +12181,27 @@ verify 面 `textualKind` 用 `out.includes("[exit code: 127]")`，`cascade-traff
 9. **在飞面很宽，本笔之后我不碰它们**：`git status --porcelain -uno` 现读 **137** 份 tracked 文件带别人的改动（整仓改名 `M0_`→`CAIRN_`、`bin/{m0.mjs => cairn.mjs}` 已在暂存面）。⇒ #24（`docs-check.ts`）、#42（`mutate-verify.mjs`）、#23／#28／#5（`src/*`、`package.json`）此刻动手就是第二次卷走别人的 hunk；顺序上等他们这一笔入库，再按帽复认。
 10. **清场与账**：本笔自动落的那棵带时刻的目录已把 `provenance.md` 复制入库、空壳当场删掉（自己产的读数，不属于等点头那一类）。等用户点头回收：`.worktrees/gate-mutate-334`（本笔新建）＋第 329 页凭证第 9 项与第 330/332/333 页清单里那些。**账**：#41 第一半结案并认证复验（门全绿、判卷＋7 逐字对上、两端独占、时间量可引用）；#42／#43／#44 新开；#33 结案；#24 换成「并集对并集」；凭证统一等 #39 的前置；#36 仍等用户点头。下一笔候选：**#24**、**#41 第二半**、**#44**（三格都是"等面让出"那类，动手前先现读归属）。
 
+## 2026-10-04 · 第 335 页：十条能力的零花费现读（干净 HEAD 树 `a905d9a2`，16 段一次跑完）——把「门绿」和「这一格有数字」分开记；我第一版量错了一条命令，差点给仓里记一条假缺陷
+
+1. **这一页量什么、怎么量**：目标是那十条能力，但从前每一格的证据散在不同页里。本笔一次性现读：**跑在干净 HEAD 树** `.worktrees/p335-cap @ a905d9a2`（自造自回收），16 段读数的**全文合并进一份** `outputs/capability-rescore-2026-10-04/capability-readings.log`（按 #43 的方向合批，不再一读数一份文件），每段带退出码。记分口径三态：**有数字**／**只有绿**／**根本没有观测者**。
+2. **记分板（逐条，数字都来自上面那份 log）**：
+   | 能力 | 现读 | 态 |
+   |---|---|---|
+   | ①仓库级代码理解 | `map-check`：files=618 decls=5244 召回率=1.0000 漏抽=0 零抽取=0；渲染 tokens=917（帽 1024）；缓存全命中 608/608 | **有数字** |
+   | ①模型可见承诺的证人面 | `probe-promise-recall`：承诺面 10 处；能力断言面 46／模型可见 44＝有证人 33＋绑定 6＋欠证人 0（帽 0）＋尺读不出 5（帽 5），四态相加＝44 自检过；**红 1 条**＝`src/main/agent-runner.ts#body`（＝#23，等那份文件让出） | **有数字（带一格已知红）** |
+   | ②精确代码生成与编辑 | `gates.ts` 的断言体检：扫描面 **109** 个已跟踪且在盘的脚本，空断言／恒真式／暗卷段零断言／析取式弱断言 **✅ 零命中**；同一段自己报「未证 3 项（连网/凭据限制未跑到的断言，或**绿而零输出的门**——不等于通过）」 | **有数字**（见第 3 项：这一格我第一版量错了） |
+   | ③工具调用与环境操作 | `web-fetch-check` 7/7：反例 26（下限 20）漏过 0、正例 12 误拒 0、出网四档逐档点名、302→loopback 出网次数=1、上限 3 跳时次数=4、放行开关命中 0 | **有数字** |
+   | ④长程规划与失败重拨 | `tests/goal-drift.test.ts` 4/4 绿；`autonomy-check` 全过且明说「暗卷跳过（无 M0_API_KEY）」 | **只有绿**（漂移的 live 数字仍在归档轨迹那一侧，不在这条命令里） |
+   | ⑤执行-验证-修正 | `repair-loop-real-verify` 4/4、`auto-verify-repair` 7/7；`cost-per-progress` CP4 里点名「失败跑 1 条零前进」与「带 verified 边界的成功跑 4 条」 | **有数字** |
+   | ⑥记忆与上下文 | `memory-check` A–G 七面逐条过；`compaction-check`「断言全过，但有 **1 项未证**（不得宣称全绿）」 | **有数字** |
+   | ⑦安全与权限 | `security-check` 43✅/0❌（默认档＝report 明写）；`sandbox:check` 分支 A＝沙箱生效：工作区外写被拦、敏感目录读取、断网、审批通道 allow/deny 各一条 | **有数字**（S2 文件面那一格仍待 #44 复验） |
+   | ⑧人机协作 | `model-surface-check` 6/6：真实 BASE_SYSTEM 697 字符／装配面 10801 字符／22 条／帽 24000；`autonomy-check` 规则库六断言＋三档明卷 | **有数字** |
+   | ⑨工程化与成本 | `cost-per-progress-check` 4/4：比值 3300（worker 12900 原样列在 excludedWorkerTokens）、零前进＝measurable:false 不是 0 也不是 Infinity、死跑成本 68535、均值 22979（用 4 跳 2，跳过原因逐条点名） | **有数字** |
+   | ⑩评估与迭代（内部） | `replay-run-scorecard` 29/29 绿；`loop-eval --feasibility`：**可跑 0 / 分母 12**，逐条 blocker 都是「缺模型凭据（M0_API_KEY／M0_ENDPOINT）⇒ 未证不是通过」；装配面自报 `autoMemory:off-here autoVerify:off-here impactAnalysis:off-here promptCache:off-here subagentTools:same` | **外部基准那一半＝根本没有可达的观测面**（＝#36，要花真钱） |
+3. **★我第一版把「②绿而无读数」记成了仓里的缺陷，那是我的量法错**：我照脚本书名跑了 `node --import tsx scripts/assertion-health.ts` ⇒ `exit=0`、stdout **0 字节**、stderr **0 字节**。真实形状是：那份文件是**纯函数库**（`scanTautologies`／`scanEmptyAsserts`／`silentGreenGate`／`unverifiedBreakdown`，给 `scripts/gates.ts` 用），没有 main；`package.json` 里根本没有 `assertion-health` 这条 script（只有 `gates`）。改跑真门 `gates.ts --only=docs-check` 后它当场印出「扫描面 109／✅ 零命中」和「未证 3 项（……或**绿而零输出的门**——不等于通过）」——**"绿而无读数"这一格仓里早就有检测器，是我绕过它去量了一条不存在的命令**。⇒ 归进规则表新号 **429**：取读数前先确认这条命令自己会打印读数（直接跑纯函数库必然 0 字节退 0）；命令名要从 `package.json` 取，不靠记忆；一片 0 或空输出先怀疑量法。证人：`gates-scan-reading.log`＋log 里 ② 那段的两个 0 字节。
+4. **同趟又踩一次"别另抄一份剥色正则"**：第一版 `rescore.mjs` 自己写了 `"[" + ESC + "\\[[0-9;]*m"`，字符类没闭合 ⇒ 实际等价于「删掉任意一个 `m` 连同它前面的数字」，`[map-check]`→`ap-check]`、`src/main/…`→`src/ain/…`、`transform`→`transfor`，**数字看起来全对，字已经不对了**。第二版改成 `import { stripAnsi } from "../../scripts/lib/vitest-summary.ts"`，两版差异留在 `probe-strip.mjs`。⇒ 这条已在规则 236/253 那一族，但这次的落点是**读数管道**，不是判卷文本。
+5. **与旧口径的对齐（别再拿两套数互相打脸）**：memory 里那条「已实现仍 3/10」用的是"能力是否达成端到端产品效果"的口径；这一页用的是**"这一格今天能不能报出数字"**的口径，二者不可混用。按本页口径：**10 格里 8 格有数字、1 格只有绿（④的 live 漂移数字）、1 格没有可达观测面（⑩外部基准，缺凭据）**。这条区分本身就是这页的产物——以后复测都按这两栏分开报。
+6. **为什么本笔不动实现**：`git status --porcelain -uno` 现读 **137** 份 tracked 文件带隔壁在飞改动（整仓改名 `M0_`→`CAIRN_`、`bin/{m0.mjs => cairn.mjs}` 已在暂存面），本页要动的每一格（`scripts/assertion-health.ts`／`scripts/gates.ts`、`src/main/agent-runner.ts`、`scripts/docs-check.ts`、`scripts/mutate-verify.mjs`、`src/permissions/*`）都在里面。⇒ 按第 334 页补刚立的规矩：**不碰在飞面**，等让出后按 **#44 → #23 → #42 → #24 → #41 第二半** 顺序动手。
+7. **清场与账**：`.worktrees/p335-cap` 是本笔自造的取料树（只为在干净 HEAD 上跑读数，无待裁结论），页与工件入库后**当场回收**；等用户点头回收的树清单照旧（新增 `.worktrees/gate-mutate-334`）。**账**：本笔新增可点名读数一份合并 log＋门扫描留档＋两个探针脚本；#23 的已知红在 HEAD 上复现一次（`agent-runner#body`）；#44 的判据等入库复验；#36 仍是外部基准那条路的唯一出口，等用户点头。
+
 

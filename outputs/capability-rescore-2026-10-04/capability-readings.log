@@ -1,0 +1,384 @@
+# 十条能力零花费现读 · 树=/Users/ze/Downloads/deepseek harness/.worktrees/p335-cap
+
+=== ①仓库级代码理解 ｜ map-check ｜ exit=0
+  [map-check] 符号地图验收
+    ✅ ⓪工作区为临时副本（不改动受版本控制源码）（/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m）
+    ✅ 地图构建成功（ok=true，非空文本）（tokens=918 parsed=608 cached=0）
+    ✅ ①渲染结果 token ≤ 1024（tokens=917）
+    ✅ ②改小预算时输出确实变短（4096:16340 vs 1024:3665）
+    ✅ ②b 单行超 100 字符被截断
+    ✅ ④未改文件 → tags 缓存全命中（fromTagsCache=608/608）
+    ✅ ④b 指纹不变 → 渲染逐字相同
+    ✅ ⑤改一个文件 → 重算（parsed=1）（parsed=1 fromTagsCache=607）
+    ✅ ⑤b 结果变化（新符号入图）
+    ✅ ⑥用户仓库内无 tags 缓存文件
+    ✅ ⑥b 应用数据目录（tmp）缓存存在（entries=608）
+    ✅ ⑦真仓库召回：零抽取文件数 = 0（files=618 decls=5244 召回率=1.0000（读数）漏抽=0 零抽取=）
+  ✅ map-check 全部通过
+
+=== ①模型可见文本的证人面 ｜ probe-promise-recall ｜ exit=1
+  [probe promise-recall] 回取承诺的收口清单 + 最后一跳｜不进 gate-manifest，exit 1 = 缺陷还在或有承诺没判定
+  扫描面：src/ 在盘 173 支（另有 0 支已跟踪但不在盘 ⇒ 本清单不覆盖）｜承诺面 10 处
+    ⚪ 运维面（console.* 实参位），不欠模型最后一跳，但仍进清单 src/agent/prune.ts:265 [writePruneAttachments]「[prune] 附件写失败（回取不可用，不阻断）:」
+    面 src/agent/ledger.ts:293 [project]「 lines; obs_recall available]」
+    ✅ src/agent/ledger.ts#project ⇒ capture.error=无｜提示发了=true｜obs_recall ok=true｜页内含原文凭证=true｜worker 可达=false（INJECTED_TOOLS.obs_recall）⇒ 这句只对主会话兑现
+        量法：把句子里点名的 id 真拿去调 obs_recall（shipped：ObservationLedger + createObservationRecallTool），看回来的页里有没有原文凭证
+    面 src/agent/orchestrator-join.ts:213 [renderJoinPayload]「 —— 对其中单个 agent_id 再调一次 wait_for_agents 即可取回其摘要」
+    ✅ src/agent/orchestrator-join.ts#renderJoinPayload ⇒ 点名工具=wait_for_agents｜单次 re-wait 拿到摘要=是（长度 424）｜worker 可达=false ⇒ 这句承诺只对主会话兑现（面板/worker 侧收到就是空话）
+        量法：shapeJoinRows（整批帽）→ renderJoinPayload → shapeJoinRows（单 agent 再走一次）+ tool-surface 声明表
+    面 src/agent/plugins/skills.ts:366 [skillRecallSuffix]「 [全文见 」
+    面 src/agent/plugins/skills.ts:366 [skillRecallSuffix]「，用 read_file 按这个相对路径取回]」
+    ✅ src/agent/plugins/skills.ts#skillRecallSuffix ⇒ 区内那案：递「.agent/plugins/proj-suite/skills/big/SKILL.md」⇒ 读得到（绝对地址？否）｜区外那案：不递地址且明说读不到（合格）｜尾注原文：[skill 正文超 5000 token，已截断]
+  [正文已按预算截断；完整文件在工作区之外或不可解析，模型侧读不到，要通读请由用户打开]
+        量法：discoverPlugins（产品取 path 那一句）→ expandSkillInvocation（带真 workspace）→ 真 read_file
+    面 src/agent/prune.ts:162 [pruneRecallSuffix]「 [原文已存附件 」
+    面 src/agent/prune.ts:162 [pruneRecallSuffix]「，需要时 read_file 取回]」
+    ✅ src/agent/prune.ts#pruneRecallSuffix ⇒ exit=0｜  ✅ ③ 反向哨兵：拿绝对路径去调 read_file 必须被拒 — read_file: 只允许 workspace 相对路径，收到绝对路径: /var/folders/pc/fqvmbm / [probe prune-recall] 全绿：区外那案已改口成诚实话，附件仍在盘
+        量法：spawn scripts/probe-prune-recall.ts（既有复现器，本探针不重抄它的判据）
+    面 src/agent/solpi-runtime.ts:108 [candidate]「; 取全文 obs_recall id=」
+    ✅ src/agent/solpi-runtime.ts#candidate ⇒ 提示发了=true（id 已嵌在收据行里）｜obs_recall ok=true｜内含原文凭证=true｜worker 可达=false ⇒ 这句只对主会话兑现
+        量法：把句子里点名的 id 真拿去调 obs_recall（shipped：ObservationLedger + createObservationRecallTool），看回来的页里有没有原文凭证
+    面 src/main/agent-runner.ts:1853 [body]「 token（原文可从附件目录回取）」
+    ❌ src/main/agent-runner.ts#body ⇒ why=saved｜栏一（调用点形状）附件=0 条、占位=裸占位｜栏二（只给目录）附件=4 条、占位=读不到声明｜栏三（目录在工作区内）附件=4 条、占位=带可取路径 ⇒ 那句「原文可从附件目录回取」在此刻 **为假**：那一趟交的是裸占位，既没给地址也没给通道。假话在调用方那句括号里，不在 `computePrune`（它不
+        量法：computePrune 三栏：照调用点实参形状／只给目录／给目录且目录在工作区内——三栏之差就是那一格 0 的成因
+    面 src/tools/output-ring.ts:31 [WEB_CONTENT_TRUNCATION_HINT]「[下一步：这是页面正文，不是整站。#锚点不会改变取回的内容（片段不发往服务器，正文按同一位置截断）；」
+    ✅ src/tools/output-ring.ts#WEB_CONTENT_TRUNCATION_HINT ⇒ exit=0｜✅ ②：三次换锚点取回的正文与基准**逐字相同** ⇒ 提示里把锚点列成出路＝让模型白跑一轮 / ✅ ③：换 path 取回不同正文 ⇒ 取料真在按 URL 走，②的『相同』是片段无效造成的 / [probe web-anchor-claim] 三件事都成立 ⇒ 截断
+        量法：spawn scripts/probe-web-anchor-claim.ts（真起 loopback＋真 fetch：片段上不上线由服务器报，正文相同由三次请求比，换 path 必须不同当正控）
+    ✅ 判定归属表没有陈旧键
+    ⚪ #59 读数：模型可见承诺面 7 格（字面量 9 处），其中由 builder 发射 2 格 / 在调用方 inline 5 格
+        inline 那几格＝按 builder 调用收料会漏的：src/agent/ledger.ts#project | src/agent/orchestrator-join.ts#renderJoinPayload | src/agent/solpi-runtime.ts#candidate | src/main/agent-runner.ts#body | src/tools/out
+        builder 调用点 7 处，其中措辞网未收 7 处（`另有 N 条未列出` 那一族：属**省略量**而非**回取承诺**，不是缺陷）：src/agent/plugins/index.ts#triggerSkill | src/agent/plugins/skills.ts#expandSkillInvocation | src/agent/prune.ts#stub | src/t
+    ✅ 自证：追加一次 builder 调用 ⇒ 该支调用点从 0 变 1（没变 = 结构网恒假）
+    ⚪ 半句话读数（结构版）：`byteCapNotice` 调用 2 处｜下一步给了空串的 0 处｜`truncationNotice`（不说少了多少的那支老文案）调用 0 处
+    ✅ 自证：追加一处 `byteCapNotice(1, 2, "")` ⇒ 调用点 0→1、空下一步 1（都要动才算有分辨力）
+    ✅ 自证：往内存里那份源码追加一句承诺 ⇒ 该支清单从 1 变 2（没变 = 这条判据恒假）
+    ✅ 反向：同形状进模型可见根 ⇒ 仍欠判定（是）；进 UI_ROOTS ⇒ 认成 UI 面（是）
+    ⚪ 能力断言证人面：面 46 处｜受众 {"model":44,"operator":2,"ui":0}｜模型可见 44 格 ⇒ 有证人 33／绑定 6／欠证人 0（帽 0，正贴线）／尺读不出 5（帽 5，正贴线）（四态相加＝44）
+        绑定：src/agent/prune-batching.ts#thresholdKnobIsWired｜门槛拨到多低都不会多出落盘
+        绑定：src/agent/sidechat.ts#SIDECHAT_SYSTEM｜写向工具已从你的工具表摘除
+        绑定：src/agent/sidechat.ts#SIDECHAT_SYSTEM｜你的结论不会自动进入主会话
+        绑定：src/tools/impact-query.ts#unionNote｜清单仍是各份同名定义的并集
+        绑定：src/tools/output-ring.ts#WEB_CONTENT_TRUNCATION_HINT｜锚点不会改变取回的内容
+        绑定：src/tools/output-ring.ts#WEB_CONTENT_TRUNCATION_HINT｜本工具不会替你翻页
+        尺读不出（句里挑不出 ≥6 字可判中文；从前这一档叫「不可知／挑不出段」，第 331 页起它有帽）：src/agent/plugins/hooks.ts#run｜
+        尺读不出（句里挑不出 ≥6 字可判中文；从前这一档叫「不可知／挑不出段」，第 331 页起它有帽）：src/agent/sequencer.ts#resolvePluginRole｜
+        尺读不出（句里挑不出 ≥6 字可判中文；从前这一档叫「不可知／挑不出段」，第 331 页起它有帽）：src/main/agent-runner.ts#handleAgentRun｜
+        尺读不出（句里挑不出 ≥6 字可判中文；从前这一档叫「不可知／挑不出段」，第 331 页起它有帽）：src/main/scheduler.ts#scheduleTimeZoneNotes｜
+        尺读不出（句里挑不出 ≥6 字可判中文；从前这一档叫「不可知／挑不出段」，第 331 页起它有帽）：src/providers/capabilities.ts#validateThinkingEffort｜
+    ✅ 绑定表逐条过三件事（那一格在欠证人清单里、符号在那句所在源文件里、符号在被指认判卷里）：坏 0 条
+    ✅ 第四态「尺读不出」的帽：现读 5 对帽 5（超出＝又写了一句点不出名字的能力断言；低于＝那一格配上了观测者或改了文案，帽要跟着调低，只准调低）
+    ✅ 能力断言的帽：现读 0 对帽 0（超出＝新加的无人判句子；低于＝补了证人没调帽）
+  [probe promise-recall] 红 1 条 ⇒ 见上（要么是指向走不通的路，要么是新面没给判定）
+
+=== ②精确编辑（补丁形状与最小面） ｜ assertion-health ｜ exit=0
+
+=== ③工具调用与环境操作 ｜ web-fetch-check ｜ exit=0
+    ✅ WF1-该拒的 URL 逐条拒且说得出是哪一条 — 反例 26 条（下限 20）：漏过 0、拒了但没给理由 0
+    ✅ WF2-该放的 URL 一条都不误拒 — 正例 12 条（下限 8）：误拒 0
+    ✅ WF3-出网四档逐档点名都问，且出口是风险层 — 四档 read-only/default/guided/auto：没问的 0、出口/风险级不对的 0
+    ✅ WF4-重定向逐跳重校验，且第二跳没发出去 — 302→loopback：拒=true、出网次数=1（要 1）
+    ✅ WF5-重定向有上限，且上限这个数字是读代码读来的 — 上限 3 跳（顶格 5）：拒=true、出网次数=4（要 4）
+    ✅ WF6-外部正文包在'这是资料不是指令'的信封里且原文不丢 — 信封：问题 0 条
+    ✅ WF7-没有能关掉红线的开关 — 放行开关扫描：命中 0
+  [web-fetch-check] 7/7 通过（反例 26 / 正例 12，零网络零凭据）
+
+=== ④长程规划与目标漂移 ｜ vitest-goal-drift ｜ exit=0
+   RUN  v5.0.0 /Users/ze/Downloads/deepseek harness/.worktrees/p335-cap
+   ✓ tests/goal-drift.test.ts (4 tests) 6ms
+   Test Files  1 passed (1)
+        Tests  4 passed (4)
+     Start at  00:53:57
+     Duration  122ms (transform 55%, import 19%, tests 15%, worker 11%)
+
+=== ⑤执行-验证-修正（返修那一拍，真轨迹） ｜ vitest-repair ｜ exit=0
+   RUN  v5.0.0 /Users/ze/Downloads/deepseek harness/.worktrees/p335-cap
+   ✓ tests/repair-loop-real-verify.test.ts (4 tests) 284ms
+   Test Files  1 passed (1)
+        Tests  4 passed (4)
+     Start at  00:53:57
+     Duration  1.55s (transform 61%, import 20%, tests 19%)
+
+=== ⑤自动验证补的绿 ｜ vitest-autoverify ｜ exit=0
+   RUN  v5.0.0 /Users/ze/Downloads/deepseek harness/.worktrees/p335-cap
+   ✓ tests/auto-verify-repair.test.ts (7 tests) 9ms
+   Test Files  1 passed (1)
+        Tests  7 passed (7)
+     Start at  00:53:59
+     Duration  880ms (transform 84%, import 15%, tests 1%)
+
+=== ⑥记忆与上下文 ｜ memory-check ｜ exit=0
+  [memory-check] A 两层布局与读写/frontmatter
+    ✅ A1 kind=architecture → .agent/ARCHITECTURE.md
+    ✅ A2 kind=decision → .agent/DECISIONS.md 追加式，取代后旧条保留
+    ✅ A3 kind=preference → .agent/preferences.md
+    ✅ A4 kind=memory(project) → .agent/memory/<topic>.md + 索引 upsert
+    ✅ A5 scope=global → <memoryHome>/<topic>.md + 索引
+    ✅ A6 frontmatter 往返不丢字段（type/modified/正文），modified 为 ISO 时间戳
+    ✅ A7 用户删除：不存在 → 幂等 false
+  [memory-check] B 操作集与分型 / metadata 越权防线
+    ✅ B1 append 正常写入
+    ✅ B2 replace old_content 精确命中 → 改写
+    ✅ B3 replace 不命中报错（重试语义） — remember: old_content 与 spec-link 正文不精确匹配（replace 报错重试语义）
+    ✅ B4 空白 content → 无内容可沉淀（与调用失败分型） — remember: 无内容可沉淀（content 为空白，空变更显式报错）
+    ✅ B5 metadata 里的 scope 一律无效（只认顶层参数，mem0 三次越权同构防线）
+    ✅ B5b 只塞 metadata.scope（无顶层）→ 拒绝且不落盘
+    ✅ B6 全局层 + 根三文件 kind → 拒绝
+    ✅ B7 topic 路径穿越拒绝
+  [memory-check] C 注入预算 / 超限整行丢弃保尾部 / 元数据 / 大纲
+    ✅ C1 项目块：来源标注 + 块首立场声明
+    ✅ C2 全局块：来源标注
+    ✅ C3 预算元数据渲染进块 — chars_current=453
+    ✅ C4 小记忆注入 ≤ 6K token — 155 tokens
+    ✅ C5 超限 → 整行丢弃保尾部 + 截断提示
+    ✅ C6 预算不超（6K token） — 4226 tokens
+    ✅ C7 保尾：注入窗口内最后条目在、最早条目被丢
+    ✅ C8 全局块也有预算元数据
+    ✅ C9 >4KB ARCHITECTURE 只注大纲 — [ARCHITECTURE 大纲（原文 23185 字节 > 4KB，按需 read_file）]
+    ✅ C9b 大纲注入受控（含 [大纲] 标记，远小于 23KB 原文） — 2350 字节
+  [memory-check] D 索引硬上限写入端拒绝
+    ✅ D1 超 200 行 → index_overflow 拒绝（不静默截断，topic 不落盘） — remember: MEMORY.md 索引超硬上限（201 行 / 12648 字节，上限 200 行 / 25600 字节）——写入端拒
+  [memory-check] E 安全：仿冒标签 / 外部引用
+    ✅ E1 仿冒控制标签转义 + 行首角色标记中和
+    ✅ E2 工作区外引用默认拦下（fail-closed 停用）
+    ✅ E2b 工作区内引用不受影响
+    ✅ E3 首次批准对话框：批准 → 引用放行
+    ✅ E4 拒绝后引用停用且不再询问（持久停用）
+    ✅ E5 ~/ 与 ../ 引用识别为工作区外
+    ✅ E6 remember 描述：密钥卫生 + skip 纪律明文
+  [memory-check] F 会话结束自动沉淀（开关 / 合并审批 / 分型）
+    ✅ F1 开关关闭 → 完全不触发
+    ✅ F2 开启 → 3 次写入合并为 1 次审批请求 — {"kind":"saved","writes":3,"asks":1}
+    ✅ F2b 沉淀写入落盘
+    ✅ F2c 写入即事件（tool_call/tool_result 落事件流审计）
+    ✅ F3 拒绝 → 全部不写（文件逐字不变） — {"kind":"no_content"}
+    ✅ F4 provider 调用失败显式分型（不静默） — {"kind":"failed","why":"模型 429"}
+  [memory-check] G 生命周期 / 压缩接缝
+    ✅ G1 remember 工具面无 delete（删除仅用户经记忆面板）
+    ✅ G2 组装含记忆块（压缩前）
+    ✅ G3 runCompaction 产出压缩事件
+    ✅ G4 压缩后记忆块仍在（固定回注重注）
+    ✅ G5 压缩器不触记忆文件（canary 逐字不变）
+    ✅ G6 压缩器代码路径无 fs/记忆目录引用（静态）
+  ✅ memory-check 全部通过（两层布局/remember/注入预算/索引上限/安全/双轨/压缩接缝）
+
+=== ⑥上下文压缩 ｜ compaction-check ｜ exit=0
+  [compaction-check] 判卷文件冻结校验
+    ✅ 判卷文件 sha256 = 冻结基线
+  [compaction-check] 任务 5：200k 级长会话模拟（mock 摘要器明卷）
+    ✅ 长会话：压缩触发（比例条件 A）且产出 compaction 事件
+    ✅ 长会话①：摘要文本含原始目标关键词（不是把原文塞回去的假压缩）
+    ✅ 长会话②：tail 长度落在 clamp(可用×0.25, 2k, 15k) 区间
+    ✅ 长会话③：compressed_event_ids 不含固定回注名单（用户目标/当前 plan）
+    ✅ 长会话④：fresh start 投影（摘要注入 + 被压内容不可见）且重放投影 === 活投影、幂等
+    ✅ 长会话⑤：第二次压缩滚动合并——旧 compaction 事件永不被吞、旧摘要不再注入
+  [compaction-check] 任务 4：/compact 手动入口 + 压缩卡 payload
+    ✅ 手动触发产生 trigger=manual 事件且卡 payload 字段齐全
+  [compaction-check] 任务 3：质量闸三件套 + 降级链
+    ✅ 质量闸①：空摘要拒绝，不落流
+    ✅ 【反向验证钩子】质量闸②：膨胀拒绝（tokens_after ≥ tokens_before）——本闸被摘除时此断言变红
+    ✅ 质量闸③：最小进度拒绝（被压 < 可见×0.1）
+    ✅ 降级链：失败退避重试 1 次；连续 2 败停用摘要（auto 跳过、overflow 截断照走）
+    ✅ overflow 紧急：半分截断兜底（不调摘要器、keep-first 与最近 user 保留、必省 token）
+  [compaction-check] 任务 6：暗卷（真实 GLM）
+    暗卷跳过（无 M0_API_KEY）
+  UNVERIFIED=1
+  [compaction-check] 未证项（前提不成立、断言无从谈起——不等于通过）：
+    ⚠️  任务 6 暗卷：真实 GLM 摘要（无 M0_API_KEY，跳过）
+  [compaction-check] 断言全过，但有 1 项未证（不得宣称全绿）
+
+=== ⑦安全与权限 ｜ security-check ｜ exit=0
+  [security-check] 默认档 = report
+    ✅ DEFAULT_SETTINGS.safeMode = report（默认 report）
+  [security-check] A 变更集从事件流写动作重建
+    ✅ 重建出 2 条变更（write_file + edit_file）
+    ✅ write_file 的 content 进了变更集
+    ✅ edit_file 的 new_string 进了变更集（old/new 来自 tool_call）
+    ✅ changeSet refs 行数在场（报告可审计）
+  [security-check] C 危险 API 六类各命中一条
+    ✅ 六类命中：eval × 2
+    ✅ 六类命中：deserialization × 1
+    ✅ 六类命中：weak_random × 1
+    ✅ 六类命中：command_injection × 1
+    ✅ 六类命中：sql_injection × 1
+    ✅ 六类命中：path_traversal × 1
+  [security-check] B 密钥扫描（已知模式 + 高熵）
+    ✅ 已知模式命中：sk- 密钥
+    ✅ 高熵密钥串被命中（2 条）
+    ✅ 高熵命中落在被审文件（src/audit-demo.ts）
+    ✅ 熵探测：高熵串命中
+    ✅ 熵探测：低熵长标识符不误报
+    ✅ 干净代码零误报（clean-demo.ts）
+  [security-check] D findings 严格 schema + 行号落在变更集内
+    ✅ 全部 findings 通过严格 schema
+    ✅ findings 行号落在变更集内
+    ✅ schema 拒绝缺字段条目
+    ✅ schema 拒绝 line < 1
+  [security-check] E 注入防线（被审内容是数据不是指令）
+    ✅ 被审内容里的「忽略以上指令」不影响 findings 生成（数量一致：10）
+    ✅ 注入文本未压制任何类别（eval / 高熵密钥仍命中）
+  [security-check] G 输出扫描（报告进事件流前脱敏）
+    ✅ 输出扫描脱敏 sk- 密钥
+    ✅ 输出扫描脱敏高熵串
+    ✅ 输出扫描产出命中清单（可审计）
+    ✅ 普通高熵/模式密钥 = 脱敏不阻断
+    ✅ 私钥块 = 阻断（critical）
+  [security-check] F 触发与呈现（验证门收敛后 hook；off 不跑；不阻断主流程）
+    ✅ report + verify 收敛 → 触发
+    ✅ off → 不跑
+    ✅ report 但无 verify 收敛 → 不跑
+    ✅ 不改动主流程结果（工具/验证序列逐字一致）
+    ✅ off：无 security_report 事件
+    ✅ report：恰 +1 条 security_report 事件
+    ✅ 报告在验证门收敛后追加（末尾，不阻断）
+    ✅ 报告含 findings 汇总
+    ✅ 每条 finding 都带 path/title/description/line（面板按这些字段排版，缺一格就空一行）
+    ✅ summary.bySeverity 分级计数与 findings 条数一致（「共 N 条」与列表同源）
+    ✅ 每条 finding 的分类都进了 byCategory（分类汇总不漏项）
+    ✅ 报告进事件流前过输出扫描（findings 描述无完整密钥）
+    ✅ 报告携带变更集（可审计）
+    ✅ 无写动作 → 不产报告（零行为）
+  [security-check] 报告事件可重放（事件流契约）
+    ✅ security_report 事件 append/replay 往返无损
+  [security-check] 全部断言通过 ✅（43 ✅ / 0 ❌）
+
+=== ⑦沙箱 ｜ sandbox-check ｜ exit=0
+  [sandbox:check] 可写根 = /Users/ze/Downloads/deepseek harness/.worktrees/p335-cap/.tmp/sandbox-check-ws
+  [sandbox:check] 沙箱自检：available=true
+  [sandbox:check] 本轮走 **分支 A**（沙箱可用 → 断言沙箱生效）
+  [sandbox:check] ① 工作区内写
+    ✅ ① 工作区内写成功
+  [sandbox:check] ② 工作区外写（/private/tmp）
+      node:fs:2430 |     return binding.writeFileUtf8( |                    ^ |  | Error: EPERM: operation not permitted, open '/private/tmp/m0b-sbx-should-deny.txt' |     at Object.writeFileSync (node:
+    ✅ ② 沙箱确实 apply（已 apply）
+    ✅ ② 工作区外写被拒
+  [sandbox:check] ③ 敏感目录读取
+      ~/.ssh → node:fs:1590 |   const result = binding.readdir( |                          ^ |  | Error: EPERM: operation not permitted, scandir '/Users/ze/.ssh' |     at Object.readdirSync (node:fs:159
+    ✅ ③ 沙箱确实 apply（~/.ssh）（已 apply）
+    ✅ ③ ~/.ssh 读取被拒
+      Keychains → node:fs:1590 |   const result = binding.readdir( |                          ^ |  | Error: EPERM: operation not permitted, scandir '/Users/ze/Library/Keychains' |     at Object.readdirS
+    ✅ ③ 沙箱确实 apply（Keychains）（已 apply）
+    ✅ ③ ~/Library/Keychains 读取被拒
+  [sandbox:check] ④ 断网（connect 1.1.1.1:80）
+      node:events:497 |       throw er; // Unhandled 'error' event |       ^ |  | Error: connect EPERM 1.1.1.1:80 - Local (0.0.0.0:0) |     at internalConnect (node:net:1111:16) |     at defaultTriggerA
+    ✅ ④ 沙箱确实 apply（断网）（已 apply）
+    ✅ ④ 沙箱内无法建立 TCP 连接
+  [sandbox:check] ④b 网络审批通道：allow 支连得上本进程回环端口，deny 支连不上（不出网）
+      deny  → ERR:EPERM
+      allow → BODY:SBX-LOOPBACK-fd4656f50d831d18
+    ✅ ④b 沙箱确实 apply（回环连接）（已 apply）
+    ✅ ④b 缺省（deny）支拿不到网络（ERR:EPERM）
+    ✅ ④b **批准后（allow）支确实拿得到**（§11.4 那一行的唯一证据）（BODY:SBX-LOOPBACK-fd4656f50d831d18）
+  ④c 断网提示只贴在缺省支（同一条命令、同一份 OS 原文，两支必须一贴一不贴）
+    ✅ ④c 缺省支贴出可行动提示（[sandbox] 上述失败形如「被默认沙箱断网」而非命令写错：默认 profile 不放行任何网络。确需出网就重发同一条命令——权限层认网络类命令并只给一次性批准（网络放行永不免批）。）
+    ✅ ④c 放行支不得再贴「被断网」提示（那是假信号）（connect EPERM 1.1.1.1:80 - Local (0.0.0.0:0)）
+  [sandbox:check] ⑤ 超限输出留尾部结论（与 run_shell / verify 同一只头尾环）
+    ✅ ⑤ 沙箱确实 apply（超限输出）（已 apply）
+    ✅ ⑤ 超限提示报出省略量（32471 字符）
+    ✅ ⑤ 头部留住
+    ✅ ⑤ 尾部结论留住（只留头部时这条必红）
+  [sandbox:check] 全部断言通过（分支 A 沙箱生效）
+
+=== ⑧人机协作（档位与表面） ｜ model-surface-check ｜ exit=0
+  [model-surface-check] 真实 BASE_SYSTEM：697 字符｜装配面 10801 字符 / 22 条｜帽 24000 字符
+    ✅ MS1-固定面在帽内 — 固定面 11498 / 帽 24000 字符（system 697 + 工具 10801，22 条）
+    ✅ MS2-core 段在前 — 装配 28 条，core 整体在前=true
+    ✅ MS3-降配只做尾丢（前缀不变量） — 降配前 62 条 → 后 38 条（丢 24 把），前缀稳定 11476 字符
+    ✅ MS4-未超预算逐字不变 — 缺省装配 total=11498 ≤ 24000，逐字一致=true
+    ✅ MS5-省了谁必须说出去 — note 631 字符，点名 24/24 把丢弃工具
+    ✅ MS6-core 不得被自动砍 — unresolvable=true，core 全在=true（丢 30 把，仍超 51048 字符）
+    装配账（字符，降序，前 5）：
+      spawn_agent            1506  core
+      remember                968  core
+      automation_update       931  core
+      automation_create       925  core
+      system:base             697  system
+    合计 固定面 11498｜帽 24000｜占用 47.9%
+  [model-surface-check] 6/6 通过
+
+=== ⑧自主档 ｜ autonomy-check ｜ exit=0
+  [autonomy-check] 前置校验：判卷文件 sha256 与冻结基线一致
+    ✅ 判卷文件 sha256 = 冻结基线
+  [autonomy-check] 任务 2 规则库六断言
+    ✅ ①allow 命中放行（source=rule, rule_id=allow:run_shell:pnpm test#0）
+    ✅ ①未命中的命令落回档位层（default 档 ask）
+    ✅ ②deny 命中拦截（auto 档也拦）
+    ✅ ③『a && rm -rf /』全链 deny（任一段 deny 全链 deny）
+    ✅ ③对照：『echo hi && ls』不被误拦（ls 段 miss → 落回档位/风险层）
+    ✅ ④『git push origin main』取最长前缀 allow（git push origin）
+    ✅ ④『git push』命中 deny（前缀短于 allow 但仅 deny 命中）
+    ✅ ④『git push --force』命中 deny（不匹配更长 allow 前缀）
+    ✅ ④链式拆分 && || ; | 五段
+    ✅ ⑤坏 JSON 拒载（解析失败抛错，不静默回退默认）
+    ✅ ⑤schema 不合法拒载（behavior 越界同样拒载）
+    ✅ ⑥中断后重载：目标文件完好（合法 JSON，旧内容）
+    ✅ ⑥中断后目标文件逐字未变（半个文件不可见）
+    ✅ ⑥正常写入：v2 原子替换成功
+    ✅ ⑥写前清理残留临时文件（写入中断自愈）
+  [autonomy-check] 任务 6 明卷·默认档（fixtures/autonomy/default-flow.jsonl）
+  [memory] 会话结束沉淀: {"kind":"no_content"}
+    ✅ 默认档：第一次询问、第二次 scope 记忆放行（实际询问 1 次）
+    ✅ 默认档：审批卡带送审原因（默认档逐次审批）
+    ✅ 默认档：第一次 run_shell 经批准真实执行（输出含探针串）
+    ✅ 默认档：第二次同命令经 session_kind 记忆自动放行并真实执行（输出含探针串）
+    ✅ 默认档：手工批准不产生自动放行审计（audit 只记 rule|session_scope）
+    ✅ 默认档：第二次 tool_result 记 {"source":"session_scope","ruleId":"run_shell␟echo autonomy-shell-probe"}（§11.7.5 审计）
+    ✅ 默认档：事件序列 tool_call → tool_result → tool_call → tool_result 与 §4.6 走查一致
+    ✅ 默认档：session_kind 记忆不落盘（会话内存放行）
+    ✅ 默认档：2 次受管调用每一条都留下判定痕迹（gate/auto）
+  [autonomy-check] 任务 6 明卷·自主档（fixtures/autonomy/auto-flow.jsonl）
+  [memory] 会话结束沉淀: {"kind":"no_content"}
+    ✅ 自主档：普通命令零审批直接执行
+    ✅ 自主档：全程仅 critical 触发 1 次送审（实际 1 次）
+    ✅ 自主档：零审批（critical 送审被拒绝，无任何批准）
+    ✅ 自主档：『rm -rf /』被拦（critical 任何档位强制审批，自主档不是 bypass）
+    ✅ 自主档：2 次受管调用每一条都留下判定痕迹（gate/auto）
+  [autonomy-check] 任务 6 明卷·只读档（fixtures/autonomy/readonly-flow.jsonl）
+    ✅ 只读档：写向工具从工具表摘除（模型上下文不可见）
+    ✅ 只读档：读类工具保留
+    ✅ 剧本 readonly-flow.jsonl 的读目标存在：package.json
+    ✅ 只读档：零送审（摘除不是审批）
+    ✅ 只读档：read_file 照常执行
+    ✅ 只读档：write_file 兜底拦截（摘除写向工具）
+    ✅ 只读档：写目标文件确实没有落盘
+    ✅ 只读档：1 次受管调用每一条都留下判定痕迹（gate/auto）
+  [autonomy-check] 拒绝不生成规则（集成面）
+  [memory] 会话结束沉淀: {"kind":"no_content"}
+    ✅ 拒绝路径：没有生成任何 allow 条目（拒绝永不自动生成规则）
+  [autonomy-check] 暗卷跳过（无 M0_API_KEY）
+  UNVERIFIED=1
+    ✅ 收口时判卷文件 sha256 仍与冻结基线逐字一致
+  [autonomy-check] 全部断言通过
+
+=== ⑨成本可观测 ｜ cost-per-progress-check ｜ exit=0
+    ✅ CP1-分子只取与分母同的一面 — 主面 3300（期望 3300）、worker 12900（期望 12900，且必须原样出现在 excludedWorkerTokens 里）｜比值=3300
+    ✅ CP2-比值里不许混进 worker 开销 — tokensPerBoundary=3300（期望 3300 = 主面/边界数）；若把 worker 算进来会是 16200——那才是本门要挡的那个错
+    ✅ CP3-零前进是不可测不是 0 也不是 Infinity — measurable=false reason=no-progress-boundary 比值=null｜死跑成本=68535（应等于主面总额 68535）
+    ✅ CP4-均值只从可测样本取且点名跳过 — 均值=22979（期望 22979）用了 4 条、跳过 2 条[real-red-verify-stagnation:no-progress-boundary,synth-no-usage:no-usage]｜成功跑 4 条：带 verified 边界 4 条、取不到边界的 0 条｜失败跑里 1 条零前进（它们的整笔主面开销就是"死跑成本"，可点名
+  [cost-per-progress-check] 4/4 通过
+
+=== ⑩评估：每 run 终态记分卡 ｜ vitest-scorecard ｜ exit=0
+   RUN  v5.0.0 /Users/ze/Downloads/deepseek harness/.worktrees/p335-cap
+   ✓ tests/replay-run-scorecard.test.ts (29 tests) 8ms
+   Test Files  1 passed (1)
+        Tests  29 passed (29)
+     Start at  00:54:03
+     Duration  441ms (transform 82%, import 15%, tests 2%, worker 1%)
+
+=== ⑩基准可达性（零花费） ｜ loop-eval-feasibility ｜ exit=0
+  [feasibility] B1-bugfix-crossfile        不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+  [feasibility] B2-feature-export          不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+  [feasibility] B3-refactor-callsite       不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+  [feasibility] B4-bugfix-pagination       不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+  [feasibility] B5-bugfix-async            不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+  [feasibility] B6-feature-flag            不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+  [feasibility] B7-feature-csv             不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+  [feasibility] B8-feature-memo            不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+  [feasibility] B9-refactor-rename         不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+  [feasibility] B10-refactor-dedupe        不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+  [feasibility] B11-refactor-signature     不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+  [feasibility] B12-long-horizon           不可跑 ← 缺模型凭据（M0_API_KEY / M0_ENDPOINT）⇒ 跑不了真模型，属未证不是通过
+  [feasibility] 工具链自检 ✅ node --version
+  [feasibility] 可跑 0 / 分母 12（未发任何模型请求 ⇒ 零花费）
+  [feasibility] 装配面（产品缺省开的键 ↔ 本跑器）：autoMemory:off-here autoVerify:off-here impactAnalysis:off-here promptCache:off-here subagentTools:same
+  ⇒ 12 条任务全部不可跑 ⇒ 基准读数无从谈起，先看 blockers 里缺什么
+

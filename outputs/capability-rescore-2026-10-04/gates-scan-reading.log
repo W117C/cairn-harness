@@ -1,0 +1,20 @@
+== pnpm gates ==
+门清单（1 道，清单即事实源）：docs-check
+执行器：pnpm run
+  清单漂移校验：✅ GATES ↔ package.json scripts 一致（无孤儿验收脚本）
+
+  ▶ docs-check …  ✅ docs-check         exit=0  1884ms
+      └ UNVERIFIED=3
+
+== 断言体检（空断言 / 恒真式 / 暗卷段零断言 / 析取式弱断言）==
+  扫描面：109 个已跟踪且在盘的脚本（未跟踪草稿不判，口径同 tests/assertion-health-scan.test.ts）
+  ✅ 零命中
+
+== 汇总 ==
+  绿 1 / 1，红 0
+  逐道退出码：docs-check=0
+  认证面：判卷四面与 HEAD 逐字一致（工作树 = HEAD） ⇒ 本表即 HEAD 认证
+  ⚠️  未证 3 项（连网/凭据限制未跑到的断言，或绿而零输出的门——**不等于通过**）
+     逐道：docs-check 3
+     严格模式：DSH_STRICT_UNVERIFIED=1 或 --strict-unverified 可让未证直接判红
+  ⚠️  1 道门退出码全 0，但有 3 项未证——不得宣称「全部通过」
